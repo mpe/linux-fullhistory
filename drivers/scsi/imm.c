@@ -166,15 +166,8 @@ int imm_detect(Scsi_Host_Template * host)
 	 */
 	imm_hosts[i].mode = IMM_NIBBLE;
 
-	if (modes & PARPORT_MODE_PCPS2)
+	if (modes & PARPORT_MODE_TRISTATE)
 	    imm_hosts[i].mode = IMM_PS2;
-
-	if (modes & PARPORT_MODE_PCECPPS2) {
-	    w_ecr(ppb, 0x20);
-	    imm_hosts[i].mode = IMM_PS2;
-	}
-	if (modes & PARPORT_MODE_PCECPEPP)
-	    w_ecr(ppb, 0x80);
 
 	/* Done configuration */
 	imm_pb_release(i);

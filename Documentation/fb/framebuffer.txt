@@ -2,7 +2,7 @@
 			-----------------------
 
 Maintained by Geert Uytterhoeven <geert@linux-m68k.org>
-Last revised: November 7, 1998
+Last revised: October 7, 1999
 
 
 0. Introduction
@@ -304,7 +304,20 @@ applications, please refer to the following documentation:
       o linux/include/video/
 
 
-8. Downloading
+
+8. Mailing list
+---------------
+
+There's a _development_ mailing list at linux-fbdev@vuser.vu.union.edu,
+controlled by majordomo. Send an email with `help' in the message body to
+majordomo@vuser.vu.union.edu for subscription information.
+
+The mailing list is archived at
+
+    http://www.mail-archive.com/linux-fbdev@vuser.vu.union.edu/
+
+
+9. Downloading
 --------------
 
 All necessary files can be found at
@@ -313,8 +326,12 @@ All necessary files can be found at
 
 and on its mirrors.
 
+The latest version of fbset can be found at
+
+    http://www.cs.kuleuven.ac.be/~geert/bin/
+
   
-9. Credits                                                       
+10. Credits                                                       
 ----------                                                       
                 
 This readme was written by Geert Uytterhoeven, partly based on the original

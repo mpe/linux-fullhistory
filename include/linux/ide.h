@@ -46,9 +46,6 @@
 #ifndef OK_TO_RESET_CONTROLLER		/* 1 needed for good error recovery */
 #define OK_TO_RESET_CONTROLLER	1	/* 0 for use with AH2372A/B interface */
 #endif
-#ifndef FAKE_FDISK_FOR_EZDRIVE		/* 1 to help linux fdisk with EZDRIVE */
-#define FAKE_FDISK_FOR_EZDRIVE 	1	/* 0 to reduce kernel size */
-#endif
 #ifndef FANCY_STATUS_DUMPS		/* 1 for human-readable drive errors */
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
 #endif
@@ -262,9 +259,7 @@ typedef struct ide_drive_s {
 	unsigned nice2		: 1;	/* flag: give a share in our own bandwidth */
 	unsigned doorlocking	: 1;	/* flag: for removable only: door lock/unlock works */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
-#if FAKE_FDISK_FOR_EZDRIVE
-	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
+	unsigned remap_0_to_1	: 2;	/* 0=remap if ezdrive, 1=remap, 2=noremap */
 	unsigned ata_flash	: 1;	/* 1=present, 0=default */
 	byte		media;		/* disk, cdrom, tape, floppy, ... */
 	select_t	select;		/* basic drive/head select reg value */
@@ -282,8 +277,9 @@ typedef struct ide_drive_s {
 	byte		sect;		/* "real" sectors per track */
 	byte		bios_head;	/* BIOS/fdisk/LILO number of heads */
 	byte		bios_sect;	/* BIOS/fdisk/LILO sectors per track */
-	unsigned short	bios_cyl;	/* BIOS/fdisk/LILO number of cyls */
-	unsigned short	cyl;		/* "real" number of cyls */
+	unsigned int	bios_cyl;	/* BIOS/fdisk/LILO number of cyls */
+	unsigned int	cyl;		/* "real" number of cyls */
+	unsigned long	capacity;	/* total number of sectors */
 	unsigned int	drive_data;	/* for use by tuneproc/selectproc as needed */
 	void		  *hwif;	/* actually (ide_hwif_t *) */
 	wait_queue_head_t wqueue;	/* used to wait for drive in open() */
@@ -624,20 +620,18 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 /*
  * This routine is called from the partition-table code in genhd.c
  * to "convert" a drive to a logical geometry with fewer than 1024 cyls.
- *
- * The second parameter, "xparm", determines exactly how the translation
- * will be handled:
- *		 0 = convert to CHS with fewer than 1024 cyls
- *			using the same method as Ontrack DiskManager.
- *		 1 = same as "0", plus offset everything by 63 sectors.
- *		-1 = similar to "0", plus redirect sector 0 to sector 1.
- *		>1 = convert to a CHS geometry with "xparm" heads.
- *
- * Returns 0 if the translation was not possible, if the device was not
- * an IDE disk drive, or if a geometry was "forced" on the commandline.
- * Returns 1 if the geometry translation was successful.
  */
 int ide_xlate_1024 (kdev_t, int, int, const char *);
+
+/*
+ * Convert kdev_t structure into ide_drive_t * one.
+ */
+ide_drive_t *get_info_ptr (kdev_t i_rdev);
+
+/*
+ * Return the current idea about the total capacity of this drive.
+ */
+unsigned long current_capacity (ide_drive_t *drive);
 
 /*
  * Start a reset operation for an IDE interface.

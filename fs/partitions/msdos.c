@@ -26,6 +26,7 @@
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#include <linux/ide.h>	/* IDE xlate */
 
 #include <asm/system.h>
 

@@ -487,6 +487,15 @@ extern inline long strlen_user(const char *str)
 	return access_ok(VERIFY_READ,str,0) ? __strlen_user(str) : 0;
 }
 
+/* Returns: 0 if exception before NUL or reaching the supplied limit (N),
+ * a value greater than N if the limit would be exceeded, else strlen.  */
+extern long __strnlen_user(const char *, long);
+
+extern inline long strnlen_user(const char *str, long n)
+{
+	return access_ok(VERIFY_READ,str,0) ? __strnlen_user(str, n) : 0;
+}
+
 /*
  * About the exception table:
  *

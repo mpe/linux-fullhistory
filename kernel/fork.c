@@ -592,6 +592,12 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	struct task_struct *p;
 	DECLARE_MUTEX_LOCKED(sem);
 
+	if (clone_flags & CLONE_PID) {
+		/* This is only allowed from the boot up thread */
+		if (current->pid)
+			return -EPERM;
+	}
+	
 	current->vfork_sem = &sem;
 
 	p = alloc_task_struct();
@@ -610,8 +616,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	}
 
 	/*
-	 * Counter atomicity is protected by
-	 * the kernel lock
+	 * Counter increases are protected by
+	 * the kernel lock so nr_threads can't
+	 * increase under us (but it may decrease).
 	 */
 	if (nr_threads >= max_threads)
 		goto bad_fork_cleanup_count;
@@ -711,9 +718,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	write_lock_irq(&tasklist_lock);
 	SET_LINKS(p);
 	hash_pid(p);
+	nr_threads++;
 	write_unlock_irq(&tasklist_lock);
 
-	nr_threads++;
 	wake_up_process(p);		/* do this last */
 	++total_forks;
 
@@ -735,8 +742,6 @@ bad_fork_cleanup:
 		__MOD_DEC_USE_COUNT(p->exec_domain->module);
 	if (p->binfmt && p->binfmt->module)
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
-
-	nr_threads--;
 bad_fork_cleanup_count:
 	if (p->user)
 		free_uid(p);

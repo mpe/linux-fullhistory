@@ -242,6 +242,52 @@ CONFIG_DUMMY=m
 # Ethernet (10 or 100Mbit)
 #
 CONFIG_NET_ETHERNET=y
+# CONFIG_NET_VENDOR_3COM is not set
+# CONFIG_LANCE is not set
+# CONFIG_NET_VENDOR_SMC is not set
+# CONFIG_NET_VENDOR_RACAL is not set
+# CONFIG_DEPCA is not set
+# CONFIG_NET_ISA is not set
+CONFIG_NET_EISA=y
+# CONFIG_PCNET32 is not set
+# CONFIG_ACENIC is not set
+# CONFIG_APRICOT is not set
+# CONFIG_CS89x0 is not set
+# CONFIG_DE4X5 is not set
+# CONFIG_DEC_ELCP is not set
+# CONFIG_DGRS is not set
+CONFIG_EEXPRESS_PRO100=y
+# CONFIG_NE2K_PCI is not set
+# CONFIG_TLAN is not set
+# CONFIG_VIA_RHINE is not set
+# CONFIG_NET_POCKET is not set
+# CONFIG_FDDI is not set
+# CONFIG_PPP is not set
+# CONFIG_SLIP is not set
+
+#
+# Wireless LAN (non-hamradio)
+#
+# CONFIG_NET_RADIO is not set
+
+#
+# Token Ring driver support
+#
+# CONFIG_TR is not set
+# CONFIG_NET_FC is not set
+
+#
+# Wan interfaces
+#
+# CONFIG_WAN is not set
+
+#
+# PCMCIA network devices
+#
+CONFIG_PCMCIA_PCNET=y
+# CONFIG_PCMCIA_3C589 is not set
+CONFIG_PCMCIA_RAYCS=y
+CONFIG_PCMCIA_NETCARD=y
 
 #
 # Amateur Radio support

@@ -58,27 +58,10 @@ void die(const char * str, ...)
 	exit(1);
 }
 
-/* Reading of ld86 output (Minix format) */
-
-#define MINIX_HEADER_LEN 32
-
-void minix_open(const char *name)
+void file_open(const char *name)
 {
-	static byte hdr[] = { 0x01, 0x03, 0x10, 0x04, 0x20, 0x00, 0x00, 0x00 };
-	static u32 *lb = (u32 *) buf;
-
 	if ((fd = open(name, O_RDONLY, 0)) < 0)
 		die("Unable to open `%s': %m", name);
-	if (read(fd, buf, MINIX_HEADER_LEN) != MINIX_HEADER_LEN)
-		die("%s: Unable to read header", name);
-	if (memcmp(buf, hdr, sizeof(hdr)) || lb[5])
-		die("%s: Non-Minix header", name);
-	if (lb[3])
-		die("%s: Illegal data segment");
-	if (lb[4])
-		die("%s: Illegal bss segment");
-	if (lb[7])
-		die("%s: Illegal symbol table");
 }
 
 void usage(void)
@@ -125,7 +108,7 @@ int main(int argc, char ** argv)
 	}
 	fprintf(stderr, "Root device is (%d, %d)\n", major_root, minor_root);
 
-	minix_open(argv[1]);				    /* Copy the boot sector */
+	file_open(argv[1]);
 	i = read(fd, buf, sizeof(buf));
 	fprintf(stderr,"Boot sector %d bytes.\n",i);
 	if (i != 512)
@@ -138,7 +121,7 @@ int main(int argc, char ** argv)
 		die("Write call failed");
 	close (fd);
 
-	minix_open(argv[2]);				    /* Copy the setup code */
+	file_open(argv[2]);				    /* Copy the setup code */
 	for (i=0 ; (c=read(fd, buf, sizeof(buf)))>0 ; i+=c )
 		if (write(1, buf, c) != c)
 			die("Write call failed");
@@ -146,8 +129,8 @@ int main(int argc, char ** argv)
 		die("read-error on `setup'");
 	close (fd);
 
-	setup_sectors = (i + 511) / 512;		    /* Pad unused space with zeros */
-	/* for compatibility with ancient versions of LILO */
+	setup_sectors = (i + 511) / 512;	/* Pad unused space with zeros */
+	/* for compatibility with ancient versions of LILO. */
 	if (setup_sectors < SETUP_SECTS)
 		setup_sectors = SETUP_SECTS;
 	fprintf(stderr, "Setup is %d bytes.\n", i);
@@ -161,8 +144,7 @@ int main(int argc, char ** argv)
 		i += c;
 	}
 
-	if ((fd = open(argv[3], O_RDONLY, 0)) < 0)	    /* Copy the image itself */
-		die("Unable to open `%s': %m", argv[3]);
+	file_open(argv[3]);
 	if (fstat (fd, &sb))
 		die("Unable to stat `%s': %m", argv[3]);
 	sz = sb.st_size;
@@ -187,7 +169,7 @@ int main(int argc, char ** argv)
 	}
 	close(fd);
 
-	if (lseek(1, 497, SEEK_SET) != 497)		    /* Write sizes to the boot sector */
+	if (lseek(1, 497, SEEK_SET) != 497)		    /* Write sizes to the bootsector */
 		die("Output: seek failed");
 	buf[0] = setup_sectors;
 	if (write(1, buf, 1) != 1)

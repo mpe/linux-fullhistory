@@ -42,7 +42,7 @@
 #include <asm/system.h>
 #include <asm/semaphore.h>
 
-#include "pc_keyb.h"		/* mouse enable command.. */
+#include <linux/pc_keyb.h>		/* mouse enable command.. */
 
 
 /*
@@ -134,7 +134,7 @@ static void qp_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 	}
 	queue->head = head;
 	if (queue->fasync)
-		kill_fasync(queue->fasync, SIGIO);
+		kill_fasync(queue->fasync, SIGIO, POLL_IN);
 	wake_up_interruptible(&queue->proc_list);
 }
 

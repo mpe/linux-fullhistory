@@ -823,8 +823,8 @@ extern inline int task_on_runqueue(struct task_struct *p)
 extern inline void unhash_process(struct task_struct *p)
 {
 	if (task_on_runqueue(p)) BUG();
-	nr_threads--;
 	write_lock_irq(&tasklist_lock);
+	nr_threads--;
 	unhash_pid(p);
 	REMOVE_LINKS(p);
 	write_unlock_irq(&tasklist_lock);
