@@ -23,12 +23,12 @@
 
 
 struct tcphdr {
-	u16	source;
-	u16	dest;
-	u32	seq;
-	u32	ack_seq;
+	__u16	source;
+	__u16	dest;
+	__u32	seq;
+	__u32	ack_seq;
 #if defined(__i386__)
-	u16	res1:4,
+	__u16	res1:4,
 		doff:4,
 		fin:1,
 		syn:1,
@@ -38,7 +38,7 @@ struct tcphdr {
 		urg:1,
 		res2:2;
 #elif defined(__mc68000__)
-	u16	res2:2,
+	__u16	res2:2,
 		urg:1,
 		ack:1,
 		psh:1,
@@ -48,7 +48,7 @@ struct tcphdr {
 		doff:4,
 		res1:4;
 #elif defined(__alpha__)
-	u16	res1:4,
+	__u16	res1:4,
 		doff:4,
 		fin:1,
 		syn:1,
@@ -60,9 +60,9 @@ struct tcphdr {
 #else
 #error	"Adjust this structure for your cpu alignment rules"
 #endif	
-	u16	window;
-	u16	check;
-	u16	urg_ptr;
+	__u16	window;
+	__u16	check;
+	__u16	urg_ptr;
 };
 
 

@@ -444,8 +444,15 @@ static int inet_listen(struct socket *sock, int backlog)
 		return -EAGAIN;
 
 	/* We might as well re use these. */ 
+	/*
+	 * note that the backlog is "unsigned char", so truncate it
+	 * somewhere. We might as well truncate it to what everybody
+	 * else does..
+	 */
+	if (backlog > 5)
+		backlog = 5;
 	sk->max_ack_backlog = backlog;
-	if (sk->state != TCP_LISTEN) 
+	if (sk->state != TCP_LISTEN)
 	{
 		sk->ack_backlog = 0;
 		sk->state = TCP_LISTEN;
@@ -656,6 +663,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->ip_mc_loop=0;
 	sk->ip_mc_ttl=1;
 	*sk->ip_mc_name=0;
+	sk->ip_mc_list=NULL;
 #endif
   	
 	sk->state_change = def_callback1;

@@ -3,7 +3,7 @@ Tue Nov 29 15:43:50 1994  Eric Youngdale  (eric@andante.aib.com)
 	* Linux 1.1.68 released.
 
 	Add support for 12 byte vendor specific commands in scsi-generics,
-	more (i.e. the last manditory) low-level changes to support
+	more (i.e. the last mandatory) low-level changes to support
 	loadable modules, plus a few other changes people have requested
 	lately.  Changes by me (ERY) unless otherwise noted.  Spelling
 	changes appear from some unknown corner of the universe.

@@ -563,9 +563,9 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	struct sock *sk;
   	struct udphdr *uh;
 	unsigned short ulen;
-	int addr_type=IS_MYADDR;
+	int addr_type = IS_MYADDR;
 	
-	if(skb->dev->pa_addr!=daddr)
+	if(!dev || dev->pa_addr!=daddr)
 		addr_type=ip_chk_addr(daddr);
 		
 	/*
@@ -621,7 +621,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				else
 					skb1=skb;
 				if(skb1)
-					udp_deliver(sk, uh, skb1,skb->dev,saddr,daddr,len);
+					udp_deliver(sk, uh, skb1, dev,saddr,daddr,len);
 				sk=sknext;
 			}
 			while(sknext!=NULL);
@@ -648,7 +648,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
   	}
 
-	return udp_deliver(sk,uh,skb,skb->dev, saddr, daddr, len);
+	return udp_deliver(sk,uh,skb,dev, saddr, daddr, len);
 }
 
 static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, struct device *dev, long saddr, long daddr, int len)

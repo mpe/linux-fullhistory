@@ -2,6 +2,35 @@
 #define _ALPHA_TYPES_H
 
 /*
+ * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the
+ * header files exported to user space
+ */
+
+typedef signed char __s8;
+typedef unsigned char __u8;
+
+typedef signed short __s16;
+typedef unsigned short __u16;
+
+typedef signed int __s32;
+typedef unsigned int __u32;
+
+/*
+ * There are 32-bit compilers for the alpha out there..
+ */
+#if ((~0UL) == 0xffffffff)
+
+typedef signed long long __s64;
+typedef unsigned long long __u64;
+
+#else
+
+typedef signed long __s64;
+typedef unsigned long __u64;
+
+#endif
+
+/*
  * These aren't exported outside the kernel to avoid name space clashes
  */
 #ifdef __KERNEL__

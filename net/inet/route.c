@@ -23,6 +23,7 @@
  *		Alan Cox	:	MTU in route table
  *		Alan Cox	: 	MSS actually. Also added the window
  *					clamper.
+ *		Sam Lantinga	:	Fixed route matching in rt_del()
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -66,7 +67,7 @@ static struct rtable *rt_loopback = NULL;
  *	Remove a routing table entry.
  */
 
-static void rt_del(unsigned long dst)
+static void rt_del(unsigned long dst, char *devname)
 {
 	struct rtable *r, **rp;
 	unsigned long flags;
@@ -82,7 +83,9 @@ static void rt_del(unsigned long dst)
 	cli();
 	while((r = *rp) != NULL) 
 	{
-		if (r->rt_dst != dst) 
+		/* Make sure both the destination and the device match */
+		if ( r->rt_dst != dst ||
+		(devname != NULL && strcmp((r->rt_dev)->name,devname) != 0) )
 		{
 			rp = &r->rt_next;
 			continue;
@@ -467,9 +470,19 @@ static int rt_new(struct rtentry *r)
 static int rt_kill(struct rtentry *r)
 {
 	struct sockaddr_in *trg;
+	char *devname;
+	int err;
 
 	trg = (struct sockaddr_in *) &r->rt_dst;
-	rt_del(trg->sin_addr.s_addr);
+	if ((devname = r->rt_dev) != NULL) 
+	{
+		err = getname(devname, &devname);
+		if (err)
+			return err;
+	}
+	rt_del(trg->sin_addr.s_addr, devname);
+	if ( devname != NULL )
+		putname(devname);
 	return 0;
 }
 

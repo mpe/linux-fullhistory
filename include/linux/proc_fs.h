@@ -58,6 +58,16 @@ enum net_directory_inos {
 #ifdef CONFIG_INET_RARP
 	PROC_NET_RARP,
 #endif
+#ifdef CONFIG_IP_MULTICAST
+	PROC_NET_IGMP,
+#endif
+#ifdef CONFIG_IP_FIREWALL
+	PROC_NET_IPFWFWD,
+	PROC_NET_IPBLFWD,
+#endif
+#ifdef CONFIG_IP_ACCT
+	PROC_NET_IPACCT,
+#endif
 #endif
 #ifdef CONFIG_IPX
 	PROC_NET_IPX_ROUTE,

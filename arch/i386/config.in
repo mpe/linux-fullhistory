@@ -11,9 +11,20 @@ bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
+bool 'PCI bios support' CONFIG_PCI n
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
+#bool 'Use -mpentium flag for Pentium-specific optimizations' CONFIG_M586 n
+#if [ "$CONFIG_M586" = "n" ]; then
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
+#fi
+
+comment 'Screen saver mode'
+
+bool 'VESA Power Saving Protocol Support' CONFIG_VESA_PSPM n
+if [ "$CONFIG_VESA_PSPM" = "y" ]; then
+bool 'VESA PSPM Force Off' CONFIG_PSPM_FORCE_OFF n
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
@@ -60,7 +71,9 @@ bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
 bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
-bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n
+if [ "$CONFIG_PCI" = "y" ]; then
+  bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n
+fi
 bool 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 n
 bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
 bool 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC n

@@ -5,7 +5,7 @@
  *		Alan Cox <Alan.Cox@linux.org>	
  *
  *	WARNING:
- *		This is a 'prelimary' implementation... on your own head
+ *		This is a 'preliminary' implementation... on your own head
  *	be it.
  *
  *	This program is free software; you can redistribute it and/or

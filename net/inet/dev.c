@@ -1442,6 +1442,8 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFMEM:
 		case SIOCSIFMAP:
 		case SIOCSIFSLAVE:
+		case SIOCADDMULTI:
+		case SIOCDELMULTI:
 			if (!suser())
 				return -EPERM;
 			return dev_ifsioc(arg, cmd);

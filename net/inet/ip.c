@@ -876,7 +876,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	fp = qp->fragments;
 	while(fp != NULL)
 	{
-		if(count+fp->len>skb->len)
+		if(count+fp->len > skb->len)
 		{
 			printk("Invalid fragment list: Fragment over size.\n");
 			ip_free(qp);
@@ -1610,6 +1610,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		skb=ip_defrag(iph,skb,dev);
 		if(skb==NULL)
 			return 0;
+		skb->dev = dev;
 		iph=skb->h.iph;
 	}
 	

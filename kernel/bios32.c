@@ -41,16 +41,6 @@
 
 #include <asm/segment.h>
 
-/*
- * It would seem some PCI bioses are buggy, so we don't actually use these
- * routines unless we need to..
- */
-#ifdef CONFIG_SCSI_NCR53C7xx
- #define CONFIG_PCI
-#else
- #undef CONFIG_PCI
-#endif
-
 #define PCIBIOS_PCI_FUNCTION_ID 	0xb1XX
 #define PCIBIOS_PCI_BIOS_PRESENT 	0xb101
 #define PCIBIOS_FIND_PCI_DEVICE		0xb102

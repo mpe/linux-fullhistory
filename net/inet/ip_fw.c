@@ -214,7 +214,7 @@ int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
 				} 
 				/*
 				 * At this moment we surely know the protocol of this
-				 * packet and we'll check if it matches,then proceed futher..
+				 * packet and we'll check if it matches,then proceed further..
 				 */
 				if (proto==frwl_proto) 
 				{
@@ -387,7 +387,7 @@ addr_match:
 			} 
 			/*
 			 * At this moment we surely know the protocol of this
-			 * packet and we'll check if it matches,then proceed futher..
+			 * packet and we'll check if it matches,then proceed further..
 			 */
 			if (proto==frwl_proto) 
 			{
@@ -628,10 +628,7 @@ skip_check:
 	if (chtmp_prev)
 		chtmp_prev->next=ftmp;
 	else
-	{
         	*chainptr=ftmp;
-		printk("ip_fw: add_to_chain: Can't happen");
-	}
 	restore_flags(flags);
 	return(0);
 }
@@ -866,7 +863,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 /*
  *	Here we really working hard-adding new elements
- *	to blocking/forwarding chains or deleting'em
+ *	to blocking/forwarding chains or deleting 'em
  */
 
 	if ( stage == IP_FW_ADD_BLK || stage == IP_FW_ADD_FWD
@@ -905,3 +902,73 @@ int ip_fw_ctl(int stage, void *m, int len)
 	return(EINVAL);
 }
 #endif /* CONFIG_IP_FIREWALL */
+
+#if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
+
+static int ip_chain_procinfo(struct ip_fw *chain, char *buffer, char **start, off_t offset, int length)
+{
+	off_t pos=0, begin=0;
+	struct ip_fw *i;
+	unsigned long flags;
+	int len=0;
+	
+	
+	len=sprintf(buffer,"Firewall Rules\n");  
+	save_flags(flags);
+	cli();
+	
+	i=chain;
+	
+	while(i!=NULL)
+	{
+		len+=sprintf(buffer+len,"%08lX/%08lX->%08lX/%08lX %X ",
+			ntohl(i->src.s_addr),ntohl(i->src_mask.s_addr),
+			ntohl(i->dst.s_addr),ntohl(i->dst_mask.s_addr),
+			i->flags);
+		len+=sprintf(buffer+len,"%u %u %lu %lu ",
+			i->n_src_p,i->n_dst_p, i->p_cnt,i->b_cnt);
+		len+=sprintf(buffer+len,"%u %u %u %u %u %u %u %u %u %u\n",
+			i->ports[0],i->ports[1],i->ports[2],i->ports[3],	
+			i->ports[4],i->ports[5],i->ports[6],i->ports[7],	
+			i->ports[8],i->ports[9]);	
+		pos=begin+len;
+		if(pos<offset)
+		{
+			len=0;
+			begin=pos;
+		}
+		if(pos>offset+length)
+			break;
+		i=i->next;
+	}
+	restore_flags(flags);
+	*start=buffer+(offset-begin);
+	len-=(offset-begin);
+	if(len>length)
+		len=length;	
+	return len;
+}
+#endif
+
+#ifdef CONFIG_IP_ACCT
+
+int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(ip_acct_chain, buffer,start,offset,length);
+}
+
+#endif
+
+#ifdef CONFIG_IP_FIREWALL
+
+int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(ip_fw_blk_chain, buffer,start,offset,length);
+}
+
+int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(ip_fw_fwd_chain, buffer,start,offset,length);
+}
+
+#endif

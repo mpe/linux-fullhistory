@@ -22,7 +22,11 @@ STRIP   =strip
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
 else
+ifdef CONFIG_M586
+CFLAGS := $(CFLAGS) -mpentium
+else
 CFLAGS := $(CFLAGS) -m386
+endif
 endif
 
 zBoot/zSystem: zBoot/*.c zBoot/*.S tools/zSystem

@@ -472,7 +472,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       SCpnt->request.dev = -1;  /* Mark as not busy */
       (STp->buffer)->in_use = 0;
       STp->buffer = NULL;
-      STp->density = 0;   /* Clear the errorneus "residue" */
+      STp->density = 0;   /* Clear the erroneous "residue" */
       STp->write_prot = 0;
       STp->block_size = 0;
       STp->eof = ST_NOEOF;

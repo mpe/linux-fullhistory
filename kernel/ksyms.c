@@ -34,12 +34,13 @@
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #endif
+#ifdef CONFIG_PCI
+#include <pci.h>
+#endif
 
 #include <asm/irq.h>
 extern char floppy_track_buffer[];
 extern void set_device_ro(int dev,int flag);
-#include <linux/delay.h>
-#include <linux/locks.h>
   
 extern void *sys_call_table;
 
@@ -69,6 +70,18 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	/* system info variables */
 	X(EISA_bus),
 	X(wp_works_ok),
+
+#ifdef CONFIG_PCI
+	/* PCI BIOS support */
+	X(pcibios_find_class),
+	X(pcibios_find_device),
+	X(pcibios_read_config_byte),
+	X(pcibios_read_config_word),
+	X(pcibios_read_config_dword),
+	X(pcibios_write_config_byte),
+	X(pcibios_write_config_word),
+	X(pcibios_write_config_dword),
+#endif
 
 	/* process memory management */
 	X(verify_area),
