@@ -30,8 +30,13 @@
  *              variable handling, instead of using the old pcxxconfig.h
  *  1.5.6 April 16, 1996 Christoph Lameter: Pointer cleanup, macro cleanup.
  *		Call out devices changed to /dev/cudxx.
+ *  1.5.7 July 22, 1996 Martin Mares: CLOCAL fix, pcxe_table clearing.
+ *		David Nugent: Bug in pcxe_open.
+ *		Brian J. Murrell: Modem Control fixes, Majors correctly assigned
  *
  */
+#undef MODULE
+/* Module code is broken right now. Don't enable this unless you want to fix it */
 
 #undef SPEED_HACK
 /* If you define SPEED_HACK then you get the following Baudrate translation
@@ -41,6 +46,7 @@
    some distributions like Slackware 3.0 don't like these high baudrates.
 */
 
+#include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>
@@ -59,18 +65,24 @@
 #include <linux/tty_driver.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+
+#ifndef MODULE
+
+/* is* routines not available in modules
+** the need for this should go away when probing is done.  :-)
+** brian@ilinx.com
+*/
+
 #include <linux/ctype.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-#define VERSION 	"1.5.6"
-static char *banner = "Digiboard PC/X{i,e,eve} driver v1.5.6.  Christoph Lameter <clameter@fuller.edu>.";
-
-/*#define	DEFAULT_HW_FLOW	1 */
-/*#define	DEBUG_IOCTL */
+#define VERSION 	"1.5.7"
+static char *banner = "Digiboard PC/X{i,e,eve} driver v1.5.7";
 
 #include "digi.h"
 #include "fep.h"
@@ -144,6 +156,62 @@ static inline void assertgwinon(struct channel *ch);
 static inline void assertmemoff(struct channel *ch);
 
 #define TZ_BUFSZ 4096
+
+/* function definitions */
+#ifdef MODULE
+int		init_module(void);
+void		cleanup_module(void);
+
+/*
+ *	Loadable module initialization stuff.
+ */
+
+int init_module()
+{
+
+	return pcxe_init();
+
+}
+
+/*****************************************************************************/
+
+void cleanup_module()
+{
+
+	unsigned long	flags;
+	int crd, i;
+	int e1, e2;
+	struct board_info *bd;
+	struct channel *ch;
+
+	printk(KERN_INFO "Unloading PC/Xx: version %s\n", VERSION);
+
+	save_flags(flags);
+	cli();
+	timer_active &= ~(1 << DIGI_TIMER);
+	timer_table[DIGI_TIMER].fn = NULL;
+	timer_table[DIGI_TIMER].expires = 0;
+
+	if ((e1 = tty_unregister_driver(&pcxe_driver)))
+		printk("SERIAL: failed to unregister serial driver (%d)\n", e1);
+	if ((e2 = tty_unregister_driver(&pcxe_callout)))
+		printk("SERIAL: failed to unregister callout driver (%d)\n",e2);
+
+	for(crd=0; crd < numcards; crd++) {
+		bd = &boards[crd];
+		ch = digi_channels+bd->first_minor;
+		for(i=0; i < bd->numports; i++, ch++) {
+			kfree(ch->tmp_buf);
+		}
+		release_region(bd->port, 4);
+	}
+	kfree(digi_channels);
+	kfree(pcxe_termios_locked);
+	kfree(pcxe_termios);
+	kfree(pcxe_table);
+	restore_flags(flags);
+}
+#endif
 
 static inline struct channel *chan(register struct tty_struct *tty)
 {
@@ -289,7 +357,6 @@ static int pcxx_waitcarrier(struct tty_struct *tty,struct file *filp,struct chan
 }	
 
 
-/* static  ???why static??? */
 int pcxe_open(struct tty_struct *tty, struct file * filp)
 {
 	volatile struct board_chan *bc;
@@ -309,7 +376,7 @@ int pcxe_open(struct tty_struct *tty, struct file * filp)
 
 	for(boardnum=0;boardnum<numcards;boardnum++)
 		if ((line >= boards[boardnum].first_minor) && 
-			(line <= boards[boardnum].first_minor + boards[boardnum].numports))
+			(line < boards[boardnum].first_minor + boards[boardnum].numports))
 		break;
 
 	if(boardnum >= numcards || boards[boardnum].status == DISABLED ||
@@ -325,6 +392,8 @@ int pcxe_open(struct tty_struct *tty, struct file * filp)
 		return(-ENODEV);
 	}
 
+	/* flag the kernel that there is somebody using this guy */
+	MOD_INC_USE_COUNT;
 	/*
 	 * If the device is in the middle of being closed, then block
 	 * until it's done, and then try again.
@@ -393,6 +462,13 @@ int pcxe_open(struct tty_struct *tty, struct file * filp)
 				return -EBUSY;
 		}
 		else {
+			/* this has to be set in order for the "block until
+			 * CD" code to work correctly.  i'm not sure under
+			 * what circumstances asyncflags should be set to
+			 * ASYNC_NORMAL_ACTIVE though
+			 * brian@ilinx.com
+			 */
+			ch->asyncflags |= ASYNC_NORMAL_ACTIVE;
 			if ((retval = pcxx_waitcarrier(tty, filp, ch)) != 0)
 				return retval;
 		}
@@ -460,11 +536,26 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 		cli();
 
 		if(tty_hung_up_p(filp)) {
+			/* flag that somebody is done with this module */
+			MOD_DEC_USE_COUNT;
 			restore_flags(flags);
 			return;
 		}
+		/* this check is in serial.c, it won't hurt to do it here too */
+		if ((tty->count == 1) && (info->count != 1)) {
+			/*
+			 * Uh, oh.  tty->count is 1, which means that the tty
+			 * structure will be freed.  Info->count should always
+			 * be one in these conditions.  If it's greater than
+			 * one, we've got real problems, since it means the
+			 * serial port won't be shutdown.
+			 */
+			printk("pcxe_close: bad serial port count; tty->count is 1, info->count is %d\n", info->count);
+			info->count = 1;
+		}
 		if (info->count-- > 1) {
 			restore_flags(flags);
+			MOD_DEC_USE_COUNT;
 			return;
 		}
 		if (info->count < 0) {
@@ -495,6 +586,13 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 		tty->closing = 0;
 		info->event = 0;
 		info->tty = NULL;
+#ifndef MODULE
+/* ldiscs[] is not available in a MODULE
+** worth noting that while I'm not sure what this hunk of code is supposed
+** to do, it is not present in the serial.c driver.  Hmmm.  If you know,
+** please send me a note.  brian@ilinx.com
+** Dont know either what this is supposed to do clameter@waterf.org.
+*/
 		if(tty->ldisc.num != ldiscs[N_TTY].num) {
 			if(tty->ldisc.close)
 				(tty->ldisc.close)(tty);
@@ -503,6 +601,7 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 			if(tty->ldisc.open)
 				(tty->ldisc.open)(tty);
 		}
+#endif
 		if(info->blocked_open) {
 			if(info->close_delay) {
 				current->state = TASK_INTERRUPTIBLE;
@@ -514,6 +613,7 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 		info->asyncflags &= ~(ASYNC_NORMAL_ACTIVE|
 							  ASYNC_CALLOUT_ACTIVE|ASYNC_CLOSING);
 		wake_up_interruptible(&info->close_wait);
+		MOD_DEC_USE_COUNT;
 		restore_flags(flags);
 	}
 }
@@ -562,9 +662,12 @@ static int pcxe_write(struct tty_struct * tty, int from_user, const unsigned cha
 		cli();
 		globalwinon(ch);
 		head = bc->tin & (size - 1);
-		tail = bc->tout;
-		if (tail != bc->tout)
-			tail = bc->tout;
+		/* It seems to be necessary to make sure that the value is stable here somehow
+		   This is a rather odd pice of code here. */
+		do
+		{ tail = bc->tout;
+		} while (tail != bc->tout);
+		
 		tail &= (size - 1);
 		stlen = (head >= tail) ? (size - (head - tail) - 1) : (tail - head - 1);
 		count = MIN(stlen, count);
@@ -882,6 +985,11 @@ void pcxx_setup(char *str, int *ints)
 
 			case 4:
 				t2 = str;
+#ifndef MODULE
+/* is* routines not available in modules
+** the need for this should go away when probing is done.  :-)
+** brian@ilinx.com
+*/
 				while (isdigit(*t2))
 					t2++;
 
@@ -890,12 +998,18 @@ void pcxx_setup(char *str, int *ints)
 					printk("PC/Xx: Invalid port count %s\n", str);
 					return;
 				}
+#endif
 
 				board.numports = simple_strtoul(str, NULL, 0);
 				last = i;
 				break;
 
 			case 5:
+#ifndef MODULE
+/* is* routines not available in modules
+** the need for this should go away when probing is done.  :-)
+** brian@ilinx.com
+*/
 				t2 = str;
 				while (isxdigit(*t2))
 					t2++;
@@ -905,12 +1019,18 @@ void pcxx_setup(char *str, int *ints)
 					printk("PC/Xx: Invalid port count %s\n", str);
 					return;
 				}
+#endif
 
 				board.port = simple_strtoul(str, NULL, 16);
 				last = i;
 				break;
 
 			case 6:
+#ifndef MODULE
+/* is* routines not available in modules
+** the need for this should go away when probing is done.  :-)
+** brian@ilinx.com
+*/
 				t2 = str;
 				while (isxdigit(*t2))
 					t2++;
@@ -920,6 +1040,7 @@ void pcxx_setup(char *str, int *ints)
 					printk("PC/Xx: Invalid memory base %s\n", str);
 					return;
 				}
+#endif
 
 				board.membase = simple_strtoul(str, NULL, 16);
 				last = i;
@@ -958,10 +1079,6 @@ void pcxx_setup(char *str, int *ints)
 
 int pcxe_init(void)
 {
-#if 0
-	ulong save_loops_per_sec;
-#endif
-
 	ulong flags, memory_seg=0, memory_size;
 	int lowwater, i, crd, shrinkmem=0, topwin = 0xff00L, botwin=0x100L;
 	unchar *fepos, *memaddr, *bios, v;
@@ -998,6 +1115,7 @@ int pcxe_init(void)
 	pcxe_table =  kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_table)
 		panic("Unable to allocate pcxe_table struct");
+	memset(pcxe_table, 0, sizeof(struct tty_struct *) * nbdevs);
 
 	pcxe_termios = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_termios)
@@ -1007,7 +1125,6 @@ int pcxe_init(void)
 	if (!pcxe_termios_locked)
 		panic("Unable to allocate pcxe_termios_locked struct");
 
-
 	init_bh(DIGI_BH,do_pcxe_bh);
 	enable_bh(DIGI_BH);
 
@@ -1016,7 +1133,7 @@ int pcxe_init(void)
 
 	memset(&pcxe_driver, 0, sizeof(struct tty_driver));
 	pcxe_driver.magic = TTY_DRIVER_MAGIC;
-	pcxe_driver.name = "cud";
+	pcxe_driver.name = "ttyD";
 	pcxe_driver.major = DIGI_MAJOR; 
 	pcxe_driver.minor_start = 0;
 
@@ -1025,7 +1142,7 @@ int pcxe_init(void)
 	pcxe_driver.type = TTY_DRIVER_TYPE_SERIAL;
 	pcxe_driver.subtype = SERIAL_TYPE_NORMAL;
 	pcxe_driver.init_termios = tty_std_termios;
-	pcxe_driver.init_termios.c_cflag = B9600 | CS8 | CREAD | CLOCAL | HUPCL;
+	pcxe_driver.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL;
 	pcxe_driver.flags = TTY_DRIVER_REAL_RAW;
 	pcxe_driver.refcount = &pcxe_refcount;
 
@@ -1050,22 +1167,10 @@ int pcxe_init(void)
 	pcxe_driver.hangup = pcxe_hangup;
 
 	pcxe_callout = pcxe_driver;
-	pcxe_callout.name = "ttyD";
+	pcxe_callout.name = "cud";
 	pcxe_callout.major = DIGICU_MAJOR;
 	pcxe_callout.subtype = SERIAL_TYPE_CALLOUT;
-	pcxe_callout.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL;
-
-#if 0 
-
-/* strangely enough, this is FALSE */
-
-	/* 
-	 * loops_per_sec hasn't been set at this point :-(, so fake it out... 
-	 * I set it so that I can use the __delay() function.
-	 */
-	save_loops_per_sec = loops_per_sec;
-	loops_per_sec = 13L*500000L;
-#endif
+	pcxe_callout.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 
 	save_flags(flags);
 	cli();
@@ -1346,6 +1451,10 @@ load_fep:
 			ch->normal_termios = pcxe_driver.init_termios;
 			ch->open_wait = 0;
 			ch->close_wait = 0;
+			/* zero out flags as it is unassigned at this point
+			 * brian@ilinx.com
+			 */
+			ch->asyncflags = 0;
 		}
 
 		printk("PC/Xx: %s (%s) I/O=0x%x Mem=0x%lx Ports=%d\n", 
@@ -1610,7 +1719,7 @@ static unsigned termios2digi_c(struct channel *ch, unsigned cflag)
 		if (cflag & B115200) res|=1;
 	}
 	else ch->digiext.digi_flags &= ~DIGI_FAST;
-	res |= cflag & (CBAUD | PARODD | PARENB | CSTOPB | CSIZE);
+	res |= cflag & (CBAUD | PARODD | PARENB | CSTOPB | CSIZE | CLOCAL);
 	return res;
 }
 

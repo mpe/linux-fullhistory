@@ -150,7 +150,6 @@ static void rarp_destroy_dev(struct device *dev)
 		if (entry->dev == dev)
 		{
 			*pentry = entry->next;
-			sti();
 			rarp_release_entry(entry);
 		}
 		else

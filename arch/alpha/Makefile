@@ -14,8 +14,12 @@ ifdef CONFIG_CROSSCOMPILE
 # enable this for linking under OSF/1:
 LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
 else
-# enable this for linking under Linux:
-LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+ elf=$(shell if $(LD) --help | grep elf64alpha >/dev/null; then echo yes; fi)
+ ifeq ($(elf),yes)
+   LINKFLAGS = -static -Ttext 0xfffffc0000310000 -N
+ else
+   LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+ endif
 # GNU gcc/cc1/as can use pipes instead of temporary files
 CFLAGS := $(CFLAGS) -pipe
 endif

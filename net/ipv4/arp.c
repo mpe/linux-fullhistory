@@ -1138,6 +1138,7 @@ static void arp_send_q(struct arp_table *entry)
 			else
 				dev_queue_xmit(skb,skb->dev,skb->sk->priority);
 		}
+		cli();
 	}
 	restore_flags(flags);
 }

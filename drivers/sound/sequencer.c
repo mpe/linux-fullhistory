@@ -549,6 +549,7 @@ seq_chn_voice_event (unsigned char *event_rec)
 	  if (chn == 9)
 	    {
 	      synth_devs[dev]->set_instr (dev, voice, 128 + note);
+              synth_devs[dev]->chn_info[chn].pgm_num = 128 + note;
 	      note = 60;	/* Middle C */
 
 	    }

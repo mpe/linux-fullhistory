@@ -1163,6 +1163,9 @@ probe_sbmpu (struct address_info *hw_config)
 
   last_devc = 0;
 
+  if (hw_config->io_base <= 0)
+     return 0;
+
   if (check_region (hw_config->io_base, 4))
     {
       printk ("sbmpu: I/O port conflict (%x)\n", hw_config->io_base);

@@ -5,11 +5,12 @@
 
 /*
  * Entry into gdt where to find first TSS. GDT layout:
- *   0 - nul
- *   1 - kernel code segment
- *   2 - kernel data segment
- *   3 - user code segment
- *   4 - user data segment
+ *   0 - null
+ *   1 - not used
+ *   2 - kernel code segment
+ *   3 - kernel data segment
+ *   4 - user code segment
+ *   5 - user data segment
  * ...
  *   8 - TSS #0
  *   9 - LDT #0

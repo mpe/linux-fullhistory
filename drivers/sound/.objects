@@ -64,12 +64,8 @@ ifdef CONFIG_PSS
 	OBJS := $(OBJS)  pss.o
 endif
 
-ifdef CONFIG_SB
-	OBJS := $(OBJS) sb_card.o 
-endif
-
 ifdef CONFIG_SBDSP
-	OBJS := $(OBJS) sb_common.o sb_audio.o sb_mixer.o sb_midi.o
+	OBJS := $(OBJS) sb_card.o sb_common.o sb_audio.o sb_mixer.o sb_midi.o
 endif
 
 ifdef CONFIG_SEQUENCER

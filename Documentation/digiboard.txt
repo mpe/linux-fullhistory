@@ -45,8 +45,8 @@ Devices. Use the following script to generate the devices:
 # mkdigidev [<number of devices>]
 # 
 
-DIGI_MAJOR=22
-DIGICU_MAJOR=23
+DIGI_MAJOR=23
+DIGICU_MAJOR=22
 
 BOARDS=$1
 
@@ -60,8 +60,8 @@ do
   for c in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15;
   do
 	name=`expr $boardnum \* 16 + $c`
-	mknod /dev/cud$name c $DIGIMAJOR $name
-	mknod /dev/ttyD$name c $DIGICUMAJOR $name
+	mknod /dev/cud$name c $DIGI_CUMAJOR $name
+	mknod /dev/ttyD$name c $DIGI_MAJOR $name
   done
   boardnum=`expr $boardnum + 1`
 done
@@ -97,7 +97,7 @@ make digi
 +	digi)
 +		major1=`Major ttyD` || continue
 +		major2=`Major cud` || continue
-+		for i in 0 1 2 3 4 5 6 7 # 8 9 10 11 12 13 14 15
++		for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
 +		do
 +			makedev ttyD$i c $major1 `expr 32 + $i` $tty
 +			makedev cud$i c $major2 `expr 32 + $i` $dialout
@@ -152,3 +152,4 @@ for this device.  The driver does not currently recognise the board, nor
 does it want to initialize it.  At least not the EISA version.
 
 Mike McLagan <mike.mclagan@linux.org> 5, April 1996.
+

@@ -71,8 +71,7 @@ static void tune_dtc2278 (ide_drive_t *drive, byte pio)
 {
 	unsigned long flags;
 
-	if (pio == 255)
-		pio = ide_get_best_pio_mode(drive);
+	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
 
 	if (pio >= 3) {
 		save_flags(flags);
@@ -122,6 +121,8 @@ void init_dtc2278 (void)
 	ide_hwifs[0].chipset = ide_dtc2278;
 	ide_hwifs[1].chipset = ide_dtc2278;
 	ide_hwifs[0].tuneproc = &tune_dtc2278;
-	ide_hwifs[0].no_unmask = 1;
-	ide_hwifs[1].no_unmask = 1;
+	ide_hwifs[0].drives[0].no_unmask = 1;
+	ide_hwifs[0].drives[1].no_unmask = 1;
+	ide_hwifs[1].drives[0].no_unmask = 1;
+	ide_hwifs[1].drives[1].no_unmask = 1;
 }

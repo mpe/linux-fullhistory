@@ -26,7 +26,11 @@ http://slug.ctv.es/~alfredo/Cambios.html.
 valtozasokrol, az alabbi cimen megtalaljak Nyitrai Tamas forditasat:
 http://www.datanet.hu/generations/linux/newkernel.html.
 
-Last updated: July 21, 1996.
+   For people who prefer Japanse (thanks to Mitsuhiro Kojima): Kono
+bunshou no nihongo ban ha
+http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
+
+Last updated: July 29, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -41,7 +45,7 @@ Current Releases
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 1.01
-- Gpm			 1.09
+- Gpm			 1.10
 - SysVinit		 2.64
 - Util-linux		 2.5
 - Mount                  2.5k
@@ -81,6 +85,11 @@ LOADLIN is at
 ftp://sunsite.unc.edu/pub/Linux/system/Linux-boot/lodlin16.tgz.  If
 you're using more unusual loaders like SysLinux or etherboot, the
 latest versions are 1.3 and 2.0, respectively.
+
+   Ramdisk support does not work with the latest kernels if ramdisk=0
+option is present.  Many older distributions (mainly Slackware) have
+this option in their lilo.config file.  Comment it out and re-run lilo
+if you need ramdisks.
 
 The Linux C Library
 ===================
@@ -123,14 +132,8 @@ the old libc).  If you're feeling lazy, just comment out
 
    in linux/fs/locks.c and recompile.  If you're still running a.out,
 there's an unofficial libc-4.7.6 release out to which you can upgrade
-to fix this problem.
-
-The Termcap Library
-===================
-
-   The current Termcap release is 2.0.8. If you upgrade to this release
-read the `README' file contained into the package to get some important
-information about the `tgetent' function changes!
+to fix this problem.  Libc is available from
+ftp://sunsite.unc.edu/pub/Linux/GCC/.
 
 Procps utilities
 ================
@@ -138,18 +141,17 @@ Procps utilities
    Due to changes in the structure of the /proc filesystem, you need to
 upgrade procps to the latest release, currently 1.01.  Otherwise,
 you'll get floating point errors with some ps commands or other similar
-surprises.
+surprises.  Grab
+ftp://sunsite.unc.edu/pub/Linux/system/Status/ps/procps-1.01.tgz.
 
 Kernel Modules
 ==============
 
    Almost all drivers in 2.0.x can be modules, and kerneld is now
 incorporated into the kernel.  To take advantage of this, you'll need
-the latest version of the module support apps, currently 2.0.0. These
-should be available at the same place you picked up your kernel
-(ftp://ftp.funet.fi/pub/Linux/kernel/src/) or the home page,
-http://www.pi.se/blox/modules/index.html.  Note: If you try to load a
-module and get a message like
+the latest version of the module support apps. These are available at
+http://www.pi.se/blox/modules/modules-2.0.0.tar.gz.  Note: If you try to
+load a module and get a message like
 
    `gcc2_compiled, undefined Failed to load module!  The symbols from
 kernel 1.3.foo don't match 1.3.foo'
@@ -190,7 +192,8 @@ ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.64.tar.gz.
 
    If you're trying to run NCSA httpd, you might have problems with
 pre-spawning daemons.  Upgrade to the latest release (1.5.2), available
-from http://hoohoo.ncsa.uiuc.edu/.
+from http://hoohoo.ncsa.uiuc.edu/ or check out Apache
+(http://www.apache.org/).
 
    The new named pipe behavior also causes problems with Hylafax.  If
 you're running the hylafax daemon, it will just keep eating up CPU time
@@ -223,7 +226,7 @@ Uugetty
 
    Older uugettys will not allow use of a bidirectional serial line.  To
 fix this problem, upgrade to
-ftp://sunsite.unc.edu/pub/Linux/system/Serial/getty_ps-2.0.7h.tar.gz.
+ftp://sunsite.unc.edu/pub/Linux/system/Serial/getty_ps-2.0.7i.tar.gz.
 
 Kbd
 ===
@@ -253,7 +256,10 @@ the following as root:
    ln -s /usr/lib/terminfo/l/linux /usr/lib/terminfo/c/console
 
    Better yet, just get the latest official Linux termcap from
-ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz.  If you
+upgrade to this release read the `README' file contained into the
+package to get some important information about the `tgetent' function
+changes!
 
    Also, the console driver is now responsible for keeping track of
 correspondence between character codes and glyph bitmaps.  If you
@@ -265,7 +271,7 @@ Hdparm
 
    Hdparm has been upgraded to take advantage of the latest features of
 the kernel drivers.  The latest non-beta version can be found at
-ftp://sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/hdparm-2.9.tar.gz.
+ftp://sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/hdparm-3.0.tar.gz.
 
 IP Accounting
 =============
@@ -307,8 +313,17 @@ ISDN support
 ============
 
    The new kernels support ISDN.  You'll need ISDN utils available from
-ftp://ftp.franken.de/pub/isdn4linux/isdn4k-utils-2.0.0.tar.gz to try
+ftp://ftp.franken.de/pub/isdn4linux/v2.0/isdn4k-utils-2.0.tar.gz to try
 this.
+
+Frame Relay
+===========
+
+   Frame relay support for Linux is now available as well.  Currently,
+only Sangoma cards are supported, but the interface is such that others
+will be as drivers become available.  To use this, grab
+ftp://ftp.invlogic.com/linux/frad-0.15.tgz and
+ftp://ftp.invlogic.com/linux/routing.tgz.
 
 Networking
 ==========
@@ -369,30 +384,30 @@ like encrypted file systems and such.  To use it, you'll need a
 modified version of mount from
 ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5k.tar.gz; preliminary work
 on encrypted file system support can be found in
-ftp.funet.fi:/pub/OS/Linux/BETA/loop/des.1.tar.gz.
+ftp.funet.fi:/pub/Linux/BETA/loop/des.1.tar.gz.
 
 Multiple device
 ===============
 
    Multiple device support (allowing you to group several partitions
 into one logical device) has also been added.  Check out
-ftp://sweet-smoke.ufr-info-p7.ibp.fr/pub/Linux/md034.tar.gz to try this
+ftp://sweet-smoke.ufr-info-p7.ibp.fr/pub/Linux/md035.tar.gz to try this
 out.
 
 Arp
 ===
 
    Arp daemon support has been added.  Check out
-http://www.loran.com/~layes/arpd/index.html for more info and a copy of
-arpd.
+http://www.loran.com/~layes/arpd/index.html for more info and
+http://www.loran.com/~layes/arpd/arpd-1.0.2.tar.gz for a copy of arpd.
 
 Quota
 =====
 
    Quota support has also been added.  You need to get quotas-1.55 from
-ftp://ftp.funet.fi/pub/Linux/PEOPLE/Linus/subsystems/quota/all.tar.gz.
-You may need to copy its mntent.h over to /usr/include/mntent.h to get
-it to compile.
+ftp://ftp.funet.fi/pub/Linux/kernel/src/subsystems/quota/all.tar.gz. You
+may need to copy its mntent.h over to /usr/include/mntent.h to get it to
+compile.
 
 Process Accounting
 ==================
@@ -401,13 +416,18 @@ Process Accounting
 kernels. To use this feature, you'll need to get
 ftp://iguana.hut.fi/pub/linux/Kernel/process_accounting/acct_1.3.73.tar.gz.
 
-Bdflush
-=======
+Bdflush and Updated
+===================
 
    Bdflush has also been integrated into the new kernels, so those of
 you using it on older systems no longer need to hunt for the patches to
 implement it once you upgrade to 2.0.x.  You do still need to run the
-update daemon, however.
+update daemon, however.  You should probably upgrade to the latest
+updated, currently
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/updated-1.2.tar.gz.  This
+(and later) versions will not spawn a bdflush daemon, since that is now
+done by the kernel (kflushd).  If you upgrade, be sure to leave update
+in your init scripts and remove bdflush.
 
 APM support
 ===========
@@ -426,7 +446,7 @@ ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.0-960610.tar.gz
 
    For a version of Dosemu that works (well, at least as well as DOS
 ever works ;-), get
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.36.tgz
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.55.tgz
 or check out http://www.ednet.ns.ca/auto/rddc. Be sure to follow the
 instructions in README.newkernels about patching your include files, or
 it will not compile.
@@ -449,7 +469,15 @@ ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz.
    In the future, fdformat might disappear entirely, so get used to
 using superformat instead.
 
-NCR 83c510 SCSI Driver
+Cyclades Serial Driver
+======================
+
+   The Cyclades driver has been changed so that the minor numbers start
+at 0 instead of 32 (ie: ttyC0 should be major 19, minor 0 in the 2.0.x
+kernels while it used to be major 19, minor 32 in the older kernels).
+You can use mknod to manually fix this or use a newer version of MAKEDEV.
+
+NCR 53c810 SCSI Driver
 ======================
 
    Drivers for this card are now included in the standard linux source.
@@ -471,7 +499,7 @@ instead of Perl.
 using an old version of Perl, due to changes in libc.  Upgrade to a
 more current Perl to avoid any unpleasantness.
 
-groff
+Groff
 =====
 
    Those of you running Slackware may experience weirdness with man
@@ -481,6 +509,14 @@ when present at the end of a line, try setting an appropriate value
 environmental variable LESSCHARSET.  Another, and probably better,
 solution is to edit the file /usr/lib/man.config and change all
 `-Tlatin1' options to `-Tascii'.
+
+E2fsprogs
+=========
+
+   e2fsprogs 1.02 will work with the latest kernels, but it cannot be
+compiled on them.  If you need (or want) to compile your own copy,
+you'll need to get the latest version, currently available at
+ftp://tsx-11.mit.edu/pub/linux/packages/ext2fs/e2fsprogs-1.04.tar.gz.
 
 How to know the version of the installed programs
 *************************************************
@@ -573,8 +609,8 @@ ftp://sunsite.unc.edu/pub/Linux/system/Status/ps/procps-1.01.tgz
 Gpm mouse utilities
 ===================
 
-ftp://iride.unipv.it/pub/gpm/gpm-1.09.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.09.tar.gz
+ftp://iride.unipv.it/pub/gpm/gpm-1.10.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.10.tar.gz
 
 SysVinit utilities
 ==================

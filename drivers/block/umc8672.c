@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/umc8672.c	Version 0.04  May 09, 1996
+ *  linux/drivers/block/umc8672.c	Version 0.05  Jul 31, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
@@ -16,6 +16,8 @@
  *
  *  Version 0.02	now configs/compiles separate from ide.c  -ml
  *  Version 0.03	enhanced auto-tune, fix display bug
+ *  Version 0.05	replace sti() with restore_flags()  -ml
+ *			add detection of possible race condition  -ml
  */
 
 /*
@@ -81,10 +83,7 @@ static byte in_umc (char port)
 static void umc_set_speeds (byte speeds[])
 {
 	int i, tmp;
-	unsigned long flags;
 
-	save_flags(flags);
-	cli ();
 	outb_p (0x5A,0x108); /* enable umc */
 
 	out_umc (0xd7,(speedtab[0][speeds[2]] | (speedtab[0][speeds[3]]<<4)));
@@ -101,7 +100,6 @@ static void umc_set_speeds (byte speeds[])
 		out_umc (0xd8+i,speedtab[2][speeds[i]]);
 	}
 	outb_p (0xa5,0x108); /* disable umc */
-	restore_flags(flags);
 
 	printk ("umc8672: drive speeds [0 to 11]: %d %d %d %d\n",
 		speeds[0], speeds[1], speeds[2], speeds[3]);
@@ -109,36 +107,44 @@ static void umc_set_speeds (byte speeds[])
 
 static void tune_umc (ide_drive_t *drive, byte pio)
 {
-	if (pio == 255)
-		pio = ide_get_best_pio_mode(drive);
-	if (pio > 4)
-		pio = 4;
+	unsigned long flags;
+	ide_hwgroup_t *hwgroup = ide_hwifs[HWIF(drive)->index^1].hwgroup;
 
-	current_speeds[drive->name[2] - 'a'] = pio_to_umc[pio];
-	umc_set_speeds (current_speeds);
+	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
+	printk("%s: setting umc8672 to PIO mode%d (speed %d)\n", drive->name, pio, pio_to_umc[pio]);
+	save_flags(flags);
+	cli();
+	if (hwgroup && hwgroup->handler != NULL) {
+		printk("umc8672: other interface is busy: exiting tune_umc()\n");
+	} else {
+		current_speeds[drive->name[2] - 'a'] = pio_to_umc[pio];
+		umc_set_speeds (current_speeds);
+	}
+	restore_flags(flags);
 }
 
 void init_umc8672 (void)	/* called from ide.c */
 {
 	unsigned long flags;
 
+	save_flags(flags);
+	cli ();
 	if (check_region(0x108, 2)) {
+		restore_flags(flags);
 		printk("\numc8672: PORTS 0x108-0x109 ALREADY IN USE\n");
 		return;
 	}
-	save_flags(flags);
-	cli ();
 	outb_p (0x5A,0x108); /* enable umc */
 	if (in_umc (0xd5) != 0xa0)
 	{
-		sti ();
+		restore_flags(flags);
 		printk ("umc8672: not found\n");
 		return;  
 	}
 	outb_p (0xa5,0x108); /* disable umc */
-	restore_flags(flags);
 
 	umc_set_speeds (current_speeds);
+	restore_flags(flags);
 
 	request_region(0x108, 2, "umc8672");
 	ide_hwifs[0].chipset = ide_umc8672;

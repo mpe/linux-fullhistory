@@ -2,7 +2,7 @@
 * Header file for eata_pio.c Linux EATA-PIO SCSI driver *
 * (c) 1993-96 Michael Neuffer  	                        *
 *********************************************************
-* last change: 95/06/21					*
+* last change: 96/05/05					*
 ********************************************************/
 
 

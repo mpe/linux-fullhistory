@@ -967,6 +967,9 @@ static void do_mount_root(void)
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		floppy_eject();
+#ifdef CONFIG_BLK_DEV_RAM
+		printk(KERN_NOTICE "(Warning, this kernel has no ramdisk support)\n");
+#endif
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}
@@ -1065,7 +1068,7 @@ int change_root(kdev_t new_root_dev,const char *put_old)
 		umount_error = do_umount(old_root_dev,1);
 		if (umount_error) printk(KERN_ERR "error %d\n",umount_error);
 		else {
-			printk(KERN_NOTICE "okay\n");
+			printk("okay\n");
 			invalidate_buffers(old_root_dev);
 		}
 		return umount_error ? error : 0;

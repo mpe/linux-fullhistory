@@ -17,6 +17,8 @@
 
 #include <stdarg.h>
 
+#include "ksize.h"
+
 extern int vsprintf(char *, const char *, va_list);
 extern unsigned long switch_to_osf_pal(unsigned long nr,
 	struct pcb_struct * pcb_va, struct pcb_struct * pcb_pa,
@@ -152,8 +154,6 @@ void pal_init(void)
 	flush_tlb_all();
 }
 
-extern int _end;
-
 static inline long openboot(void)
 {
 	char bootdev[256];
@@ -173,7 +173,8 @@ static inline long close(long dev)
 static inline long load(long dev, unsigned long addr, unsigned long count)
 {
 	char bootfile[256];
-	long result;
+	extern char _end;
+	long result, boot_size = &_end - (char *) BOOT_ADDR;
 
 	result = dispatch(CCB_GET_ENV, ENV_BOOTED_FILE, bootfile, 255);
 	if (result < 0)
@@ -181,8 +182,9 @@ static inline long load(long dev, unsigned long addr, unsigned long count)
 	result &= 255;
 	bootfile[result] = '\0';
 	if (result)
-		printk("Boot file specification (%s) not implemented\n", bootfile);
-	return dispatch(CCB_READ, dev, count, addr, BOOT_SIZE/512 + 1);
+		printk("Boot file specification (%s) not implemented\n",
+		       bootfile);
+	return dispatch(CCB_READ, dev, count, addr, boot_size/512 + 1);
 }
 
 /*
@@ -219,9 +221,9 @@ void start_kernel(void)
 	}
 	dev &= 0xffffffff;
 	printk("Loading vmlinux ...");
-	i = load(dev, START_ADDR, START_SIZE);
+	i = load(dev, START_ADDR, KERNEL_SIZE);
 	close(dev);
-	if (i != START_SIZE) {
+	if (i != KERNEL_SIZE) {
 		printk("Failed (%lx)\n", i);
 		return;
 	}

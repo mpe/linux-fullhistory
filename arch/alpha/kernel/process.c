@@ -25,6 +25,7 @@
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/elfcore.h>
 
 #include <asm/reg.h>
 #include <asm/segment.h>
@@ -205,6 +206,14 @@ void dump_thread(struct pt_regs * pt, struct user * dump)
 	dump->regs[EF_A1]  = pt->r17;
 	dump->regs[EF_A2]  = pt->r18;
 	memcpy((char *)dump->regs + EF_SIZE, sw->fp, 32 * 8);
+}
+
+int dump_fpu (struct pt_regs * regs, elf_fpregset_t *r)
+{
+	/* switch stack follows right below pt_regs: */
+	struct switch_stack * sw = ((struct switch_stack *) regs) - 1;
+	memcpy(r, sw->fp, 32 * 8);
+	return 1;
 }
 
 /*

@@ -66,6 +66,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   else
      tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
+  tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 endmenu

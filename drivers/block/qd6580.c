@@ -47,10 +47,7 @@ static void tune_qd6580 (ide_drive_t *drive, byte pio)
 {
 	unsigned long flags;
 
-	if (pio == 255)
-		pio = ide_get_best_pio_mode (drive);
-	if (pio > 3)
-		pio = 3;
+	pio = ide_get_best_pio_mode(drive, pio, 3, NULL);
 
 	save_flags(flags);
 	cli();

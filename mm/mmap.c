@@ -823,7 +823,7 @@ int do_munmap(unsigned long addr, size_t len)
 	 * If the one of the segments is only being partially unmapped,
 	 * it will put new vm_area_struct(s) into the address space.
 	 */
-	while (free) {
+	do {
 		unsigned long st, end;
 
 		mpnt = free;
@@ -840,9 +840,10 @@ int do_munmap(unsigned long addr, size_t len)
 		zap_page_range(current->mm, st, end-st);
 		unmap_fixup(mpnt, st, end-st);
 		kfree(mpnt);
-	}
+	} while (free);
 
-	zap_page_range(current->mm, addr, len);
+	/* we could zap the page tables here too.. */
+
 	return 0;
 }
 

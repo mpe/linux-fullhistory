@@ -32,7 +32,7 @@
  *  Cambridge, MA 02139, USA.                               *
  *                                                          *
  ************************************************************
- *  last change: 95/03/28                 OS: Linux 1.3.80  *
+ *  last change: 96/07/16                  OS: Linux 2.0.8  *
  ************************************************************/
 
 /* Look in eata_pio.h for configuration information */
@@ -78,21 +78,6 @@ static unchar reg_IRQL[] =
 
 static ulong int_counter = 0;
 static ulong queue_counter = 0;
-
-void hprint(const char *str)
-{
-    char *hptr =(char *) 0x000b0000;
-    char *hptr2=(char *) 0x000b00a0; 
-    char *hptr3=(char *) 0x000b0f00;
-    int z;
-    
-    memmove(hptr,hptr2,24*80*2);
-    for (z=0; z<strlen(str); z++)
-	hptr3[z*2]=str[z];
-    for (; z<80; z++)
-	hptr3[z*2]=' ';
-}
-
 
 #include "eata_pio_proc.c"
  
@@ -268,11 +253,17 @@ void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
 
 inline uint eata_pio_send_command(uint base, unchar command)
 {
-    uint loop = R_LIMIT;
+    uint loop = HZ/2;
     
     while (inb(base + HA_RSTATUS) & HA_SBUSY)
 	if (--loop == 0)
 	    return(TRUE);
+
+    /* Enable interrupts for HBA.  It is not the best way to do it at this
+     * place, but I hope that it doesn't interfere with the IDE driver 
+     * initialization this way */
+
+    outb(HA_CTRL_8HEADS,base+HA_CTRLREG);
     
     outb(command, base + HA_WCOMMAND);
     return(FALSE);
@@ -405,7 +396,7 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 int eata_pio_abort(Scsi_Cmnd * cmd)
 {
     ulong flags;
-    uint loop = R_LIMIT;
+    uint loop = HZ;
     
     save_flags(flags);
     cli();
@@ -452,14 +443,13 @@ int eata_pio_abort(Scsi_Cmnd * cmd)
 
 int eata_pio_reset(Scsi_Cmnd * cmd, unsigned int dummy)
 {
-    uint x, z, time, limit = 0;
+    uint x, time, limit = 0;
     ulong flags;
     unchar success = FALSE;
     Scsi_Cmnd *sp; 
     
     save_flags(flags);
     cli();
-    hprint("reset");
     DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset called pid:%ld target:"
                            " %x lun: %x reason %x\n", cmd->pid, cmd->target, 
                            cmd->lun, cmd->abort_reason));
@@ -469,11 +459,6 @@ int eata_pio_reset(Scsi_Cmnd * cmd, unsigned int dummy)
 	restore_flags(flags);
 	DBG(DBG_ABNORM && DBG_DELAY, DELAY(1));
 	return (SCSI_RESET_ERROR);
-    }
-    
-    for (z = 0; z < MAXTARGET; z++) {
-	HD(cmd)->t_state[0][z] = RESET;
-	HD(cmd)->t_timeout[0][z] = NO_TIMEOUT;
     }
     
     /* force all slots to be free */
@@ -495,7 +480,7 @@ int eata_pio_reset(Scsi_Cmnd * cmd, unsigned int dummy)
     }
     
     /* hard reset the HBA  */
-    outb((uint) cmd->host->base+HA_WCOMMAND, EATA_CMD_RESET);
+    outb(EATA_CMD_RESET, (uint) cmd->host->base+HA_WCOMMAND);
     
     DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: board reset done.\n"));
     HD(cmd)->state = RESET;
@@ -586,7 +571,7 @@ char * get_pio_board_data(ulong base, uint irq, uint id, ulong cplen, ushort cpp
 
 int get_pio_conf_PIO(u32 base, struct get_conf *buf)
 {
-    ulong loop = R_LIMIT;
+    ulong loop = HZ/2;
     int z;
     ushort *p;
     
@@ -603,14 +588,14 @@ int get_pio_conf_PIO(u32 base, struct get_conf *buf)
 	printk(KERN_DEBUG "Issuing PIO READ CONFIG to HBA at %#x\n", base));
     eata_pio_send_command(base, EATA_CMD_PIO_READ_CONFIG);
 
-    loop = R_LIMIT;
+    loop = HZ/2;
     for (p = (ushort *) buf; 
 	 (long)p <= ((long)buf + (sizeof(struct get_conf) / 2)); p++) {
 	while (!(inb(base + HA_RSTATUS) & HA_SDRQ))
 	    if (--loop == 0)
 		return (FALSE);
 
-	loop = R_LIMIT;
+	loop = HZ/2;
 	*p = inw(base + HA_RDATA);
     }
     if (!(inb(base + HA_RSTATUS) & HA_SERROR)) {            /* Error ? */

@@ -15,6 +15,9 @@ else
   bool '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
   bool '   Support removable IDE interfaces (PCMCIA)' CONFIG_BLK_DEV_IDE_PCMCIA
   bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
+  if [ "$CONFIG_BLK_DEV_CMD640" = "y" ]; then
+    bool '     CMD640 enhanced support' CONFIG_BLK_DEV_CMD640_ENHANCED
+  fi
   if [ "$CONFIG_PCI" = "y" ]; then
     bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
     bool '   Intel 82371 PIIX (Triton I/II) DMA support' CONFIG_BLK_DEV_TRITON

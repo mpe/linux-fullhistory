@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.13  Jul 23, 1996
+ *  linux/drivers/block/cmd640.c	Version 0.97  Aug  4, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -7,8 +7,8 @@
 /*
  *  Original author:	abramov@cecmow.enet.dec.com (Igor Abramov)
  *
- *  Maintained by:	s0033las@sun10.vsz.bme.hu (Laszlo Peter)
- *			mlord@pobox.com (Mark Lord)
+ *  Maintained by:	mlord@pobox.com (Mark Lord)
+ *			with fanatical support from a legion of hackers!
  *
  *  This file provides support for the advanced features and bugs
  *  of IDE interfaces using the CMD Technologies 0640 IDE interface chip.
@@ -17,32 +17,45 @@
  *  to work on every motherboard design that uses this screwed chip seems
  *  bloody well impossible.  However, we're still trying.
  *
- *  We think version 0.12 should work for most folks.
- *  User feedback is essential.
+ *  Version 0.96 worked for just about everybody.
+ *  Version 0.97 should work for everyone
  *
+ *  User feedback is essential.  Many thanks to the beta test team:
+ *
+ *  A.Hartgers@stud.tue.nl, JZDQC@CUNYVM.CUNY.edu, abramov@cecmow.enet.dec.com,
+ *  bardj@utopia.ppp.sn.no, bart@gaga.tue.nl, bbol001@cs.auckland.ac.nz,
+ *  chrisc@dbass.demon.co.uk, dalecki@namu26.Num.Math.Uni-Goettingen.de,
+ *  derekn@vw.ece.cmu.edu, florian@btp2x3.phy.uni-bayreuth.de,
+ *  flynn@dei.unipd.it, gadio@netvision.net.il, godzilla@futuris.net,
+ *  j@pobox.com, jkemp1@mises.uni-paderborn.de, jtoppe@hiwaay.net,
+ *  kerouac@ssnet.com, meskes@informatik.rwth-aachen.de, hzoli@cs.elte.hu,
+ *  peter@udgaard.isgtec.com, phil@tazenda.demon.co.uk, roadcapw@cfw.com,
+ *  s0033las@sun10.vsz.bme.hu, schaffer@tam.cornell.edu, sjd@slip.net,
+ *  steve@ei.org, ulrpeg@bigcomm.gun.de, ism@tardis.ed.ac.uk, mack@cray.com
+ *  liug@mama.indstate.edu, and others.
  *
  *  Version 0.01	Initial version, hacked out of ide.c,
  *			and #include'd rather than compiled separately.
  *			This will get cleaned up in a subsequent release.
  *
- *  Version 0.02	Fixes for vlb initialization code, enable
- *			read-ahead for versions 'B' and 'C' of chip by
- *			default, some code cleanup.
+ *  Version 0.02	Fixes for vlb initialization code, enable prefetch
+ *			for versions 'B' and 'C' of chip by default,
+ *			some code cleanup.
  *
  *  Version 0.03	Added reset of secondary interface,
  *			and black list for devices which are not compatible
- *			with read ahead mode. Separate function for setting
- *			readahead is added, possibly it will be called some
+ *			with prefetch mode. Separate function for setting
+ *			prefetch is added, possibly it will be called some
  *			day from ioctl processing code.
  *
- *  Version 0.04	Now configs/compiles separate from ide.c  -ml
+ *  Version 0.04	Now configs/compiles separate from ide.c
  *
  *  Version 0.05	Major rewrite of interface timing code.
  *			Added new function cmd640_set_mode to set PIO mode
  *			from ioctl call. New drives added to black list.
  *
- *  Version 0.06	More code cleanup. Readahead is enabled only for
- *			detected hard drives, not included in readahead
+ *  Version 0.06	More code cleanup. Prefetch is enabled only for
+ *			detected hard drives, not included in prefetch
  *			black list.
  *
  *  Version 0.07	Changed to more conservative drive tuning policy.
@@ -51,21 +64,37 @@
  *			List of known drives extended by info provided by
  *			CMD at their ftp site.
  *
- *  Version 0.08	Added autotune/noautotune support.  -ml
+ *  Version 0.08	Added autotune/noautotune support.
  *
- *  Version 0.09	Try to be smarter about 2nd port enabling.  -ml
- *  Version 0.10	Be nice and don't reset 2nd port.  -ml
- *  Version 0.11	Try to handle more wierd situations.  -ml
+ *  Version 0.09	Try to be smarter about 2nd port enabling.
+ *  Version 0.10	Be nice and don't reset 2nd port.
+ *  Version 0.11	Try to handle more wierd situations.
  *
  *  Version 0.12	Lots of bug fixes from Laszlo Peter
- *			irq unmasking disabled for reliability.  -lp
- *			try to be even smarter about the second port.  -lp
- *			tidy up source code formatting.  -ml
- *  Version 0.13	permit irq unmasking again.  -ml
+ *			irq unmasking disabled for reliability.
+ *			try to be even smarter about the second port.
+ *			tidy up source code formatting.
+ *  Version 0.13	permit irq unmasking again.
+ *  Version 0.90	massive code cleanup, some bugs fixed.
+ *			defaults all drives to PIO mode0, prefetch off.
+ *			autotune is OFF by default, with compile time flag.
+ *			prefetch can be turned OFF/ON using "hdparm -p8/-p9"
+ *			 (requires hdparm-3.1 or newer)
+ *  Version 0.91	first release to linux-kernel list.
+ *  Version 0.92	move initial reg dump to separate callable function
+ *			change "readahead" to "prefetch" to avoid confusion
+ *  Version 0.95	respect original BIOS timings unless autotuning.
+ *			tons of code cleanup and rearrangement.
+ *			added CONFIG_BLK_DEV_CMD640_ENHANCED option
+ *			prevent use of unmask when prefetch is on
+ *  Version 0.96	prevent use of io_32bit when prefetch is off
+ *  Version 0.97	fix VLB secondary interface for sjd@slip.net
+ *			other minor tune-ups:  0.96 was very good.
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
@@ -78,8 +107,9 @@
 #include "ide.h"
 #include "ide_modes.h"
 
-#define PARANOID_ABOUT_CMD640	1	/* used to tag superstitious code */
-
+/*
+ * This flag is set in ide.c by the parameter:  ide0=cmd640_vlb
+ */
 int cmd640_vlb = 0;
 
 /*
@@ -120,70 +150,97 @@ int cmd640_vlb = 0;
 #define ARTTIM1 	0x55
 #define DRWTIM1		0x56
 #define ARTTIM23	0x57
-#define   DIS_RA2		0x04
-#define   DIS_RA3		0x08
+#define   ARTTIM23_DIS_RA2	0x04
+#define   ARTTIM23_DIS_RA3	0x08
 #define DRWTIM23	0x58
 #define BRST		0x59
 
-static ide_tuneproc_t cmd640_tune_drive;
+/*
+ * Registers and masks for easy access by drive index:
+ */
+static byte prefetch_regs[4]  = {CNTRL, CNTRL, ARTTIM23, ARTTIM23};
+static byte prefetch_masks[4] = {CNTRL_DIS_RA0, CNTRL_DIS_RA1, ARTTIM23_DIS_RA2, ARTTIM23_DIS_RA3};
 
-/* Interface to access cmd640x registers */
-void (*put_cmd640_reg)(int reg_no, int val);
-byte (*get_cmd640_reg)(int reg_no);
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
 
-enum { none, vlb, pci1, pci2 };
-static int	bus_type = none;
-static int	cmd640_chip_version;
-static int	cmd640_key;
-static int 	bus_speed; /* MHz */
+static byte arttim_regs[4] = {ARTTIM0, ARTTIM1, ARTTIM23, ARTTIM23};
+static byte drwtim_regs[4] = {DRWTIM0, DRWTIM1, DRWTIM23, DRWTIM23};
+
+/*
+ * Current cmd640 timing values for each drive.
+ * The defaults for each are the slowest possible timings.
+ */
+static byte setup_counts[4]    = {4, 4, 4, 4};     /* Address setup count (in clocks) */
+static byte active_counts[4]   = {16, 16, 16, 16}; /* Active count   (encoded) */
+static byte recovery_counts[4] = {16, 16, 16, 16}; /* Recovery count (encoded) */
+
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+
+/*
+ * These are initialized to point at the devices we control
+ */
+static ide_hwif_t  *cmd_hwif0, *cmd_hwif1;
+static ide_drive_t *cmd_drives[4];
+
+/*
+ * Interface to access cmd640x registers
+ */
+static unsigned int cmd640_key;
+static void (*put_cmd640_reg)(unsigned short reg, byte val);
+static byte (*get_cmd640_reg)(unsigned short reg);
+
+/*
+ * This is read from the CFR reg, and is used in several places.
+ */
+static unsigned int cmd640_chip_version;
 
 /*
  * The CMD640x chip does not support DWORD config write cycles, but some
  * of the BIOSes use them to implement the config services.
- * We use direct IO instead.
+ * Therefore, we must use direct IO instead.
  */
 
 /* PCI method 1 access */
 
-static void put_cmd640_reg_pci1(int reg_no, int val)
+static void put_cmd640_reg_pci1 (unsigned short reg, byte val)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	outl_p((reg_no & 0xfc) | cmd640_key, 0xcf8);
-	outb_p(val, (reg_no & 3) + 0xcfc);
+	outl_p((reg & 0xfc) | cmd640_key, 0xcf8);
+	outb_p(val, (reg & 3) | 0xcfc);
 	restore_flags(flags);
 }
 
-static byte get_cmd640_reg_pci1(int reg_no)
+static byte get_cmd640_reg_pci1 (unsigned short reg)
 {
 	byte b;
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	outl_p((reg_no & 0xfc) | cmd640_key, 0xcf8);
-	b = inb_p(0xcfc + (reg_no & 3));
+	outl_p((reg & 0xfc) | cmd640_key, 0xcf8);
+	b = inb_p((reg & 3) | 0xcfc);
 	restore_flags(flags);
 	return b;
 }
 
 /* PCI method 2 access (from CMD datasheet) */
 
-static void put_cmd640_reg_pci2(int reg_no, int val)
+static void put_cmd640_reg_pci2 (unsigned short reg, byte val)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
 	outb_p(0x10, 0xcf8);
-	outb_p(val, cmd640_key + reg_no);
+	outb_p(val, cmd640_key + reg);
 	outb_p(0, 0xcf8);
 	restore_flags(flags);
 }
 
-static byte get_cmd640_reg_pci2(int reg_no)
+static byte get_cmd640_reg_pci2 (unsigned short reg)
 {
 	byte b;
 	unsigned long flags;
@@ -191,7 +248,7 @@ static byte get_cmd640_reg_pci2(int reg_no)
 	save_flags(flags);
 	cli();
 	outb_p(0x10, 0xcf8);
-	b = inb_p(cmd640_key + reg_no);
+	b = inb_p(cmd640_key + reg);
 	outb_p(0, 0xcf8);
 	restore_flags(flags);
 	return b;
@@ -199,48 +256,51 @@ static byte get_cmd640_reg_pci2(int reg_no)
 
 /* VLB access */
 
-static void put_cmd640_reg_vlb(int reg_no, int val)
+static void put_cmd640_reg_vlb (unsigned short reg, byte val)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	outb_p(reg_no, cmd640_key + 8);
-	outb_p(val, cmd640_key + 0xc);
+	outb_p(reg, cmd640_key);
+	outb_p(val, cmd640_key + 4);
 	restore_flags(flags);
 }
 
-static byte get_cmd640_reg_vlb(int reg_no)
+static byte get_cmd640_reg_vlb (unsigned short reg)
 {
 	byte b;
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	outb_p(reg_no, cmd640_key + 8);
-	b = inb_p(cmd640_key + 0xc);
+	outb_p(reg, cmd640_key);
+	b = inb_p(cmd640_key + 4);
 	restore_flags(flags);
 	return b;
+}
+
+static int match_pci_cmd640_device (void)
+{
+	const byte ven_dev[4] = {0x95, 0x10, 0x40, 0x06};
+	unsigned int i;
+	for (i = 0; i < 4; i++) {
+		if (get_cmd640_reg(i) != ven_dev[i])
+			return 0;
+	}
+	return 1; /* success */
 }
 
 /*
  * Probe for CMD640x -- pci method 1
  */
-
-static int probe_for_cmd640_pci1(void)
+static int probe_for_cmd640_pci1 (void)
 {
-	long id;
-	int	k;
-
-	for (k = 0x80000000; k <= 0x8000f800; k += 0x800) {
-		outl(k, 0xcf8);
-		id = inl(0xcfc);
-		if (id != 0x06401095)
-			continue;
-		put_cmd640_reg = put_cmd640_reg_pci1;
-		get_cmd640_reg = get_cmd640_reg_pci1;
-		cmd640_key = k;
-		return 1;
+	get_cmd640_reg = get_cmd640_reg_pci1;
+	put_cmd640_reg = put_cmd640_reg_pci1;
+	for (cmd640_key = 0x80000000; cmd640_key <= 0x8000f800; cmd640_key += 0x800) {
+		if (match_pci_cmd640_device())
+			return 1; /* success */
 	}
 	return 0;
 }
@@ -248,24 +308,13 @@ static int probe_for_cmd640_pci1(void)
 /*
  * Probe for CMD640x -- pci method 2
  */
-
-static int probe_for_cmd640_pci2(void)
+static int probe_for_cmd640_pci2 (void)
 {
-	int i;
-	int v_id;
-	int d_id;
-
-	for (i = 0xc000; i <= 0xcf00; i += 0x100) {
-		outb(0x10, 0xcf8);
-		v_id = inw(i);
-		d_id = inw(i + 2);
-		outb(0, 0xcf8);
-		if (v_id != 0x1095 || d_id != 0x640)
-			continue;
-		put_cmd640_reg = put_cmd640_reg_pci2;
-		get_cmd640_reg = get_cmd640_reg_pci2;
-		cmd640_key = i;
-		return 1;
+	get_cmd640_reg = get_cmd640_reg_pci2;
+	put_cmd640_reg = put_cmd640_reg_pci2;
+	for (cmd640_key = 0xc000; cmd640_key <= 0xcf00; cmd640_key += 0x100) {
+		if (match_pci_cmd640_device())
+			return 1; /* success */
 	}
 	return 0;
 }
@@ -273,50 +322,22 @@ static int probe_for_cmd640_pci2(void)
 /*
  * Probe for CMD640x -- vlb
  */
-
-static int probe_for_cmd640_vlb(void) {
+static int probe_for_cmd640_vlb (void)
+{
 	byte b;
 
-	outb(CFR, 0x178);
-	b = inb(0x17c);
-	if (b == 0xff || b == 0 || (b & CFR_AT_VESA_078h)) {
-		outb(CFR, 0x78);
-		b = inb(0x7c);
-		if (b == 0xff || b == 0 || !(b & CFR_AT_VESA_078h))
-			return 0;
-		cmd640_key = 0x70;
-	} else {
-		cmd640_key = 0x170;
-	}
-	put_cmd640_reg = put_cmd640_reg_vlb;
 	get_cmd640_reg = get_cmd640_reg_vlb;
-	return 1;
+	put_cmd640_reg = put_cmd640_reg_vlb;
+	cmd640_key = 0x178;
+	b = get_cmd640_reg(CFR);
+	if (b == 0xff || b == 0x00 || (b & CFR_AT_VESA_078h)) {
+		cmd640_key = 0x78;
+		b = get_cmd640_reg(CFR);
+		if (b == 0xff || b == 0x00 || !(b & CFR_AT_VESA_078h))
+			return 0;
+	}
+	return 1; /* success */
 }
-
-#if 0
-/*
- * Low level reset for controller, actually it has nothing specific for
- * CMD640, but I don't know how to use standard reset routine before
- * we recognized any drives.
- */
-static void cmd640_reset_controller(int iface_no)
-{
-	int retry_count = 600;
-	int base_port = iface_no ? 0x170 : 0x1f0;
-
-	outb_p(4, base_port + 7);
-	udelay(5);
-	outb_p(0, base_port + 7);
-
-	do {
-		udelay(5);
-		retry_count -= 1;
-	} while ((inb_p(base_port + 7) & 0x80) && retry_count);
-
-	if (retry_count == 0)
-		printk("cmd640: failed to reset controller %d\n", iface_no);
-}
-#endif /* 0 */
 
 /*
  *  Returns 1 if an IDE interface/drive exists at 0x170,
@@ -324,516 +345,461 @@ static void cmd640_reset_controller(int iface_no)
  */
 static int secondary_port_responding (void)
 {
-	/*
-	 * Test for hardware at 0x170 (secondary IDE port).
-	 */
-	outb_p(0xa0, 0x170 + IDE_SELECT_OFFSET);	/* select drive0 */
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	outb_p(0x0a, 0x170 + IDE_SELECT_OFFSET);	/* select drive0 */
 	udelay(100);
-	if (inb_p(0x170 + IDE_SELECT_OFFSET) != 0xa0) {
-		outb_p(0xb0, 0x170 + IDE_SELECT_OFFSET); /* select drive1 */
+	if ((inb_p(0x170 + IDE_SELECT_OFFSET) & 0x1f) != 0x0a) {
+		outb_p(0x1a, 0x170 + IDE_SELECT_OFFSET); /* select drive1 */
 		udelay(100);
-		if (inb_p(0x170 + IDE_SELECT_OFFSET) != 0xb0)
-			return 0;	/* nothing is there */
+		if ((inb_p(0x170 + IDE_SELECT_OFFSET) & 0x1f) != 0x1a) {
+			restore_flags(flags);
+			return 0; /* nothing responded */
+		}
 	}
-	return 1;			/* something is there */
+	restore_flags(flags);
+	return 1; /* success */
 }
 
+#ifdef CMD640_DUMP_REGS
 /*
- * Probe for Cmd640x and initialize it if found
+ * Dump out all cmd640 registers.  May be called from ide.c
  */
-
-int ide_probe_for_cmd640x(void)
+void cmd640_dump_regs (void)
 {
-	int second_port_toggled = 0;
-	int second_port_cmd640 = 0;
-	byte b;
+	unsigned int reg = cmd640_vlb ? 0x50 : 0x00;
 
-	if (probe_for_cmd640_pci1()) {
-		bus_type = pci1;
-	} else if (probe_for_cmd640_pci2()) {
-		bus_type = pci2;
-	} else if (cmd640_vlb && probe_for_cmd640_vlb()) {
-		/* May be remove cmd640_vlb at all, and probe in any case */
-		bus_type = vlb;
+	/* Dump current state of chip registers */
+	printk("ide: cmd640 internal register dump:");
+	for (; reg <= 0x59; reg++) {
+		if (!(reg & 0x0f))
+			printk("\n%04x:", reg);
+		printk(" %02x", get_cmd640_reg(reg));
+	}
+	printk("\n");
+}
+#endif
+
+/*
+ * Check whether prefetch is on for a drive,
+ * and initialize the unmask flags for safe operation.
+ */
+static void check_prefetch (unsigned int index)
+{
+	ide_drive_t *drive = cmd_drives[index];
+	byte b = get_cmd640_reg(prefetch_regs[index]);
+
+	if (b & prefetch_masks[index]) {	/* is prefetch off? */
+		drive->no_unmask = 0;
+		drive->no_io_32bit = 1;
+		drive->io_32bit = 0;
 	} else {
-		return 0;
+		drive->no_unmask = 1;
+		drive->no_io_32bit = 0;
+		drive->unmask = 0;
 	}
-
-#ifdef PARANOID_ABOUT_CMD640
-	ide_hwifs[0].serialized = 1;	/* ensure this *always* gets set */
-	ide_hwifs[1].serialized = 1;	/* ensure this *always* gets set */
-#endif
-
-#if 0
-	/* Dump initial state of chip registers */
-	for (b = 0; b != 0xff; b++) {
-		printk(" %2x%c", get_cmd640_reg(b),
-				((b&0xf) == 0xf) ? '\n' : ',');
-	}
-#endif
-
-	/*
-	 * Undocumented magic. (There is no 0x5b port in specs)
-	 */
-
-	put_cmd640_reg(0x5b, 0xbd);
-	if (get_cmd640_reg(0x5b) != 0xbd) {
-		printk("ide: can't initialize cmd640 -- wrong value in 0x5b\n");
-		return 0;
-	}
-	put_cmd640_reg(0x5b, 0);
-
-	/*
-	 * Documented magic.
-	 */
-
-	cmd640_chip_version = get_cmd640_reg(CFR) & CFR_DEVREV;
-	if (cmd640_chip_version == 0) {
-		printk ("ide: wrong CMD640 version -- 0\n");
-		return 0;
-	}
-
-	/*
-	 * Setup the most conservative timings for all drives,
-	 */
-
-	put_cmd640_reg(CMDTIM, 0);
-
-	put_cmd640_reg(ARTTIM0, 0xc0);
-	put_cmd640_reg(ARTTIM1, 0xc0);
-	put_cmd640_reg(ARTTIM23, 0xcc); /* disable read-ahead for drives 2&3 */
-
-	put_cmd640_reg(DRWTIM0, 0);
-	put_cmd640_reg(DRWTIM1, 0);
-	put_cmd640_reg(DRWTIM23, 0);
-
-	/*
-	 * Set the maximum allowed bus speed (it is safest until we
-	 * 				      find how to detect bus speed)
-	 * Normally PCI bus runs at 33MHz, but often works overclocked to 40
-	 */
-	bus_speed = (bus_type == vlb) ? 50 : 40;
-
-	/*
-	 * Setup Control Register
-	 */
-	b = get_cmd640_reg(CNTRL);
-
-	/*
-	 * Disable readahead for drives at primary interface
-	 */
-	b |= (CNTRL_DIS_RA0 | CNTRL_DIS_RA1);
-	put_cmd640_reg(CNTRL, b);
-
-	if (!ide_hwifs[1].noprobe) {
-
-		if (secondary_port_responding()) {
-
-			if ((b & CNTRL_ENA_2ND) || (bus_type == vlb))
-				second_port_cmd640 = 1;
-
-		} else if (!(b & CNTRL_ENA_2ND) && (bus_type != vlb)) {
-
-			second_port_toggled = 1;
-			put_cmd640_reg(CNTRL, b | CNTRL_ENA_2ND); /* Enable second interface */
-
-			if (secondary_port_responding())
-				second_port_cmd640 = 1;
-			else {
-				second_port_toggled = 0;
-				put_cmd640_reg(CNTRL, b); /* Disable second interface */
-			}
-		}
-	}
-
-	/*
-	 * Note that we assume that the first interface is at 0x1f0,
-	 * and that the second interface, if enabled, is at 0x170.
-	 */
-	ide_hwifs[0].chipset = ide_cmd640;
-	ide_hwifs[0].tuneproc = &cmd640_tune_drive;
-#if 0
-	ide_hwifs[0].no_unmask = 1;
-#endif
-
-	if (ide_hwifs[0].drives[0].autotune == 0)
-		ide_hwifs[0].drives[0].autotune = 1;
-	if (ide_hwifs[0].drives[1].autotune == 0)
-		ide_hwifs[0].drives[1].autotune = 1;
-
-	/*
-	 * Initialize 2nd IDE port, if required
-	 */
-	if (second_port_cmd640) {
-
-#ifndef PARANOID_ABOUT_CMD640
-		ide_hwifs[0].serialized = 1;
-		ide_hwifs[1].serialized = 1;
-#endif
-
-		ide_hwifs[1].chipset = ide_cmd640;
-		ide_hwifs[1].tuneproc = &cmd640_tune_drive;
-#if 0
-		ide_hwifs[1].no_unmask = 1;
-#endif
-		if (ide_hwifs[1].drives[0].autotune == 0)
-			ide_hwifs[1].drives[0].autotune = 1;
-		if (ide_hwifs[1].drives[1].autotune == 0)
-			ide_hwifs[1].drives[1].autotune = 1;
-
-#if 0
-		/* reset the secondary interface */
-		cmd640_reset_controller(1);
-#endif
-	}
-
-	printk("ide: buggy CMD640%c interface on ",
-	       'A' - 1 + cmd640_chip_version);
-	switch (bus_type) {
-		case vlb :
-			printk("vlb (0x%x)", cmd640_key);
-			break;
-		case pci1:
-			printk("pci (0x%x)", cmd640_key);
-			break;
-		case pci2:
-			printk("pci (access method 2) (0x%x)", cmd640_key);
-			break;
-	}
-
-	/*
-	 * Tell everyone what we did to their system
-	 */
-	printk(":%s serialized, second port %s\n",
-		second_port_cmd640 ? "" : " not",
-		second_port_toggled ? "toggled" : "untouched");
-	return 1;
 }
-
-#if 0  /* not used anywhere */
-int cmd640_off(void) {
-	static int a = 0;
-	byte b;
-
-	if (bus_type == none || a == 1)
-		return 0;
-	a = 1;
-	b = get_cmd640_reg(CNTRL);
-	b &= ~CNTRL_ENA_2ND;
-	put_cmd640_reg(CNTRL, b);
-	return 1;
-}
-#endif /* 0 */
 
 /*
- * Sets readahead mode for specific drive
- *  in the future it could be called from ioctl
+ * Figure out which devices we control
  */
-
-static void set_readahead_mode(ide_drive_t* drive, int mode)
+static void setup_device_ptrs (void)
 {
-	static int masks[2][2] =
-		{
-			{CNTRL_DIS_RA0, CNTRL_DIS_RA1},
-			{DIS_RA2, 	DIS_RA3}
-		};
-	byte b;
+	unsigned int i;
 
-	int interface_number = HWIF(drive)->index;
-	int drive_number = drive->select.b.unit;
-
-	int port = (interface_number == 0) ? CNTRL : ARTTIM23;
-	int mask = masks[interface_number][drive_number];
-
-	b = get_cmd640_reg(port);
-
-	/*
-	 * I don't know why it is necessary, but without this my machine
-	 * locks up, if bus_speed is not correct. And it even allows me
-	 * to use 32 bit transfers on the primary port (hdparm -c1).
-	 */
-	if ((interface_number == 0) && mode)
-		b|=0x27;
-
-	if (mode)
-		b &= ~mask;	/* Enable readahead for specific drive */
-	else
-		b |= mask;	/* Disable readahead for specific drive */
-
-	put_cmd640_reg(port, b);
-}
-
-static const struct readahead_black_list {
-	const char* 	name;
-	int		mode;
-} drives_ra[] = {
-	{ "QUANTUM LIGHTNING 540A", 0 },
-	{ "ST3655A",	0 },
-	{ "SAMSUNG",	0 },	/* Be conservative */
-	{ NULL,		0 }
-};
-
-static int strmatch(const char* pattern, const char* name) {
-	char c1, c2;
-
-	while (1) {
-		c1 = *pattern++;
-		c2 = *name++;
-		if (c1 == 0) {
-			return 0;
-		}
-		if (c1 != c2)
-			return 1;
-	}
-}
-
-static int known_drive_readahead(char* name) {
-	int i;
-
-	for (i = 0; drives_ra[i].name != NULL; i++) {
-		if (strmatch(drives_ra[i].name, name) == 0) {
-			return drives_ra[i].mode;
+	cmd_hwif0 = &ide_hwifs[0]; /* default, if not found below */
+	cmd_hwif1 = &ide_hwifs[1]; /* default, if not found below */
+	for (i = 0; i < MAX_HWIFS; i++) {
+		ide_hwif_t *hwif = &ide_hwifs[i];
+		if (hwif->chipset == ide_unknown || hwif->chipset == ide_generic) {
+			if (hwif->io_base == 0x1f0)
+				cmd_hwif0 = hwif;
+			else if (hwif->io_base == 0x170)
+				cmd_hwif1 = hwif;
 		}
 	}
-	return -1;
+	cmd_drives[0] = &cmd_hwif0->drives[0];
+	cmd_drives[1] = &cmd_hwif0->drives[1];
+	cmd_drives[2] = &cmd_hwif1->drives[0];
+	cmd_drives[3] = &cmd_hwif1->drives[1];
 }
 
-static int arttim[4]  = {2, 2, 2, 2};	/* Address setup count (in clocks) */
-static int a_count[4] = {1, 1, 1, 1};	/* Active count   (encoded) */
-static int r_count[4] = {1, 1, 1, 1};	/* Recovery count (encoded) */
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
 
 /*
- * Convert address setup count from number of clocks
- * to representation used by controller
+ * Sets prefetch mode for a drive.
  */
-
-inline static int pack_arttim(int clocks)
+static void set_prefetch_mode (unsigned int index, int mode)
 {
-	if (clocks <= 2) return 0x40;
-	else if (clocks == 3) return 0x80;
-	else if (clocks == 4) return 0x00;
-	else return 0xc0;
+	ide_drive_t *drive = cmd_drives[index];
+	int reg = prefetch_regs[index];
+	byte b;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	b = get_cmd640_reg(reg);
+	if (mode) {	/* want prefetch on? */
+		drive->no_unmask = 1;
+		drive->unmask = 0;
+		drive->no_io_32bit = 0;
+		b &= ~prefetch_masks[index];	/* enable prefetch */
+	} else {
+		drive->no_unmask = 0;
+		drive->no_io_32bit = 1;
+		drive->io_32bit = 0;
+		b |= prefetch_masks[index];	/* disable prefetch */
+	}
+	put_cmd640_reg(reg, b);
+	restore_flags(flags);
 }
 
 /*
  * Pack active and recovery counts into single byte representation
  * used by controller
  */
-
-inline static int pack_counts(int act_count, int rec_count)
+inline static byte pack_nibbles (byte upper, byte lower)
 {
-	return ((act_count & 0x0f)<<4) | (rec_count & 0x0f);
+	return ((upper & 0x0f) << 4) | (lower & 0x0f);
 }
 
-inline int max(int a, int b) { return a > b ? a : b; }
-inline int max4(int *p) { return max(p[0], max(p[1], max(p[2], p[3]))); }
-
 /*
- * Set timing parameters
+ * This routine retrieves the initial drive timings from the chipset.
  */
-
-static void cmd640_set_timing(int if_num, int dr_num)
+static void retrieve_drive_counts (unsigned int index)
 {
-	int	b_reg;
-	int	ac, rc, at;
 	byte b;
 
 	/*
-	 * Set address setup count and drive read/write timing registers.
-	 * Primary interface has individual count/timing registers for
-	 * each drive. Secondary interface has common set of registers, and
-	 * we should set timings for the slowest drive.
+	 * Get the internal setup timing, and convert to clock count
 	 */
-
-	if (if_num == 0) {
-		b_reg = dr_num ? ARTTIM1 : ARTTIM0;
-		at = arttim[dr_num];
-		ac = a_count[dr_num];
-		rc = r_count[dr_num];
-		b = pack_arttim(at);
-	} else {
-		b_reg = ARTTIM23;
-		at = max(arttim[2], arttim[3]);
-		ac = max(a_count[2], a_count[3]);
-		rc = max(r_count[2], r_count[3]);
-
-		/*
-		 * Protect the readahead bits
-		 */
-		b = pack_arttim(at) | (get_cmd640_reg(ARTTIM23) & (DIS_RA2 | DIS_RA3));
+	b = get_cmd640_reg(arttim_regs[index]) & ~0x3f;
+	switch (b) {
+		case 0x00: b = 4; break;
+		case 0x80: b = 3; break;
+		case 0x40: b = 2; break;
+		default:   b = 5; break;
 	}
-
-	put_cmd640_reg(b_reg, b);
-	put_cmd640_reg(b_reg + 1, pack_counts(ac, rc));
+	setup_counts[index] = b;
 
 	/*
-	 * Update CMDTIM (IDE Command Block Timing Register)
+	 * Get the active/recovery counts
 	 */
-
-	ac = max4(a_count);
-	rc = max4(r_count);
-	put_cmd640_reg(CMDTIM, pack_counts(ac, rc));
+	b = get_cmd640_reg(drwtim_regs[index]);
+	active_counts[index]   = (b >> 4)   ? (b >> 4)   : 0x10;
+	recovery_counts[index] = (b & 0x0f) ? (b & 0x0f) : 0x10;
 }
+
 
 /*
- * Standard timings for PIO modes
+ * This routine writes the prepared setup/active/recovery counts
+ * for a drive into the cmd640 chipset registers to active them.
  */
-
-static const struct pio_timing {
-	int	mc_time;	/* Address setup (ns) min */
-	int	av_time;	/* Active pulse (ns) min */
-	int	ds_time;	/* Cycle time (ns) min = Active pulse + Recovery pulse */
-} pio_timings[6] = {
-	{ 70,	165,	600 },	/* PIO Mode 0 */
-	{ 50,	125,	383 },	/* PIO Mode 1 */
-	{ 30,	100,	240 },	/* PIO Mode 2 */
-	{ 30,	80,	180 },	/* PIO Mode 3 w/IORDY */
-	{ 25,	70,	125 },	/* PIO Mode 4 w/IORDY -- should be 120, not 125 */
-	{ 20,	50,	100 }	/* PIO Mode 5 w/IORDY (nonstandard) */
-};
-
-static void cmd640_timings_to_clocks(int mc_time, int av_time, int ds_time,
-				int clock_time, int drv_idx)
+static void program_drive_counts (unsigned int index)
 {
-	int a, b;
+	unsigned long flags;
+	byte setup_count    = setup_counts[index];
+	byte active_count   = active_counts[index];
+	byte recovery_count = recovery_counts[index];
 
-	arttim[drv_idx] = (mc_time + clock_time - 1)/clock_time;
-
-	a = (av_time + clock_time - 1)/clock_time;
-	if (a < 2)
-		a = 2;
-	b = (ds_time + clock_time - 1)/clock_time - a;
-	if (b < 2)
-		b = 2;
-	if (b > 0x11) {
-		a += b - 0x11;
-		b = 0x11;
+	/*
+	 * Set up address setup count and drive read/write timing registers.
+	 * Primary interface has individual count/timing registers for
+	 * each drive.  Secondary interface has one common set of registers,
+	 * so we merge the timings, using the slowest value for each timing.
+	 */
+	if (index > 1) {
+		unsigned int mate;
+		if (cmd_drives[mate = index ^ 1]->present) {
+			if (setup_count < setup_counts[mate])
+				setup_count = setup_counts[mate];
+			if (active_count < active_counts[mate])
+				active_count = active_counts[mate];
+			if (recovery_count < recovery_counts[mate])
+				recovery_count = recovery_counts[mate];
+		}
 	}
-	if (a > 0x10)
-		a = 0x10;
-	if (cmd640_chip_version > 1)
-		b -= 1;
-	if (b > 0x10)
-		b = 0x10;
 
-	a_count[drv_idx] = a;
-	r_count[drv_idx] = b;
-}
+	/*
+	 * Convert setup_count to internal chipset representation
+	 */
+	switch (setup_count) {
+		case 4:	 setup_count = 0x00;
+		case 3:	 setup_count = 0x80;
+		case 2:	 setup_count = 0x40;
+		default: setup_count = 0xc0; /* case 5 */
+	}
 
-static void set_pio_mode(int if_num, int drv_num, int mode_num) {
-	int p_base;
-	int i;
-
-	p_base = if_num ? 0x170 : 0x1f0;
-
-	outb_p(3, p_base + IDE_FEATURE_OFFSET);
-	outb_p(mode_num | 0x08, p_base + IDE_NSECTOR_OFFSET);
-	outb_p((drv_num | 0x0a) << 4, p_base + IDE_SELECT_OFFSET);
-	outb_p(WIN_SETFEATURES, p_base + IDE_COMMAND_OFFSET);
-
-	for (i = 0; (i < 100) && (inb(p_base + IDE_STATUS_OFFSET) & BUSY_STAT); i++)
-		udelay(10000);
+	/*
+	 * Now that everything is ready, program the new timings
+	 */
+	save_flags (flags);
+	cli();
+	/*
+	 * Program the address_setup clocks into ARTTIM reg,
+	 * and then the active/recovery counts into the DRWTIM reg
+	 * (this converts counts of 16 into counts of zero -- okay).
+	 */
+	setup_count |= get_cmd640_reg(arttim_regs[index]) & 0x3f;
+	put_cmd640_reg(arttim_regs[index], setup_count);
+	put_cmd640_reg(drwtim_regs[index], pack_nibbles(active_count, recovery_count));
+	restore_flags(flags);
 }
 
 /*
  * Set a specific pio_mode for a drive
  */
+static void cmd640_set_mode (unsigned int index, byte pio_mode, unsigned int cycle_time)
+{
+	int setup_time, active_time, recovery_time, clock_time;
+	byte setup_count, active_count, recovery_count, recovery_count2, cycle_count;
+	int bus_speed = ide_system_bus_speed();
 
-static void cmd640_set_mode(ide_drive_t* drive, byte pio_mode, int ds_time) {
-	int interface_number;
-	int drive_number;
-	int clock_time; /* ns */
-	int mc_time, av_time;
+	if (pio_mode > 5)
+		pio_mode = 5;
+	setup_time  = ide_pio_timings[pio_mode].setup_time;
+	active_time = ide_pio_timings[pio_mode].active_time;
+	recovery_time = cycle_time - (setup_time + active_time);
+	clock_time = 1000 / bus_speed;
+	cycle_count = (cycle_time + clock_time - 1) / clock_time; 
 
-	if (pio_mode > 5) return;
+	setup_count = (setup_time + clock_time - 1) / clock_time;
 
-	interface_number = HWIF(drive)->index;
-	drive_number = drive->select.b.unit;
-	clock_time = 1000/bus_speed;
+	active_count = (active_time + clock_time - 1) / clock_time;
+	if (active_count < 2)
+		active_count = 2; /* minimum allowed by cmd640 */
 
-	mc_time = pio_timings[pio_mode].mc_time;
-	av_time = pio_timings[pio_mode].av_time;
-	ds_time = (ds_time != 0) ? ds_time : pio_timings[pio_mode].ds_time;
+	recovery_count = (recovery_time + clock_time - 1) / clock_time;
+	recovery_count2 = cycle_count - (setup_count + active_count);
+	if (recovery_count2 > recovery_count)
+		recovery_count = recovery_count2;
+	if (recovery_count < 2)
+		recovery_count = 2; /* minimum allowed by cmd640 */
+	if (recovery_count > 17) {
+		active_count += recovery_count - 17;
+		recovery_count = 17;
+	}
+	if (active_count > 16)
+		active_count = 16; /* maximum allowed by cmd640 */
+	if (cmd640_chip_version > 1)
+		recovery_count -= 1;  /* cmd640b uses (count + 1)*/
+	if (recovery_count > 16)
+		recovery_count = 16; /* maximum allowed by cmd640 */
 
-	cmd640_timings_to_clocks(mc_time, av_time, ds_time, clock_time,
-				interface_number*2 + drive_number);
-	set_pio_mode(interface_number, drive_number, pio_mode);
-	cmd640_set_timing(interface_number, drive_number);
+	setup_counts[index]    = setup_count;
+	active_counts[index]   = active_count;
+	recovery_counts[index] = recovery_count;
+
+	/*
+	 * In a perfect world, we might set the drive pio mode here
+	 * (using WIN_SETFEATURE) before continuing.
+	 *
+	 * But we do not, because:
+	 *	1) this is the wrong place to do it (proper is do_special() in ide.c)
+	 * 	2) in practice this is rarely, if ever, necessary
+	 */
+	program_drive_counts (index);
 }
 
 /*
- * Drive PIO mode "autoconfiguration".
+ * Drive PIO mode selection:
  */
+static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
+{
+	ide_pio_data_t  d;
+	unsigned int index = 0;
 
-static void cmd640_tune_drive(ide_drive_t *drive, byte pio_mode) {
-	int max_pio;
-	int ds_time;
-	int readahead;	/* there is a global named read_ahead */
-	int overridden;
-	int iordy;
-	struct hd_driveid* id;
-
-	if (pio_mode != 255) {
-		cmd640_set_mode(drive, pio_mode, 0);
+	while (drive != cmd_drives[index]) {
+		if (++index > 3) {
+			printk("%s: bad news in cmd640_tune_drive\n", drive->name);
+			return;
+		}
+	}
+	/*
+	 * If the user asks for pio_mode 9 (no such mode),
+	 * we take it to mean "turn ON prefetch" for this drive.
+	 *
+	 * If the user asks for pio_mode 8 (no such mode),
+	 * we take it to mean "turn OFF prefetch" for this drive.
+	 */
+	if ((mode_wanted & 0xfe) == 0x08) {	/* program prefetch? */
+		mode_wanted &= 1;
+		set_prefetch_mode(index, mode_wanted);
+		printk("%s: %sabled cmd640 prefetch\n", drive->name, mode_wanted ? "en" : "dis");
 		return;
 	}
 
-	overridden = 0;
-	iordy = 0;
-	id = drive->id;
+	(void) ide_get_best_pio_mode (drive, mode_wanted, 5, &d);
+	cmd640_set_mode (index, d.pio_mode, d.cycle_time);
 
-	if ((max_pio = ide_scan_pio_blacklist(id->model)) != -1) {
-		ds_time = pio_timings[max_pio].ds_time;
-		overridden = 1;
-		iordy = (max_pio > 2);
+	printk ("%s: selected cmd640 PIO mode%d (%dns) %s/IORDY%s\n",
+		drive->name,
+		d.pio_mode,
+		d.cycle_time,
+		d.use_iordy ? "w" : "wo",
+		d.overridden ? " (overriding vendor mode)" : "");
+}
+
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+
+/*
+ * Probe for a cmd640 chipset, and initialize it if found.  Called from ide.c
+ */
+int ide_probe_for_cmd640x (void)
+{
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
+	int second_port_toggled = 0;
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+	int second_port_cmd640 = 0;
+	const char *bus_type, *port2;
+	unsigned int index;
+	byte b, cfr;
+
+	if (cmd640_vlb && probe_for_cmd640_vlb()) {
+		bus_type = "VLB";
 	} else {
-		max_pio = id->tPIO;
-		ds_time = pio_timings[max_pio].ds_time;
-		if (id->field_valid & 2) {
-			if ((id->capability & 8) && (id->eide_pio_modes & 7)) {
-				if (id->eide_pio_modes & 4) max_pio = 5;
-				else if (id->eide_pio_modes & 2) max_pio = 4;
-				else max_pio = 3;
-				ds_time = id->eide_pio_iordy;
-				iordy = 1;
-			} else {
-				ds_time = id->eide_pio;
-			}
-			if (ds_time == 0) {
-				ds_time = pio_timings[max_pio].ds_time;
-				iordy = (max_pio > 2);
-			}
-		}
-
-		/*
-		 * Conservative "downgrade"
-		 */
-		if (max_pio < 4 && max_pio != 0) {
-			max_pio--;
-			overridden = 1;
-			iordy = (max_pio > 2);
-			ds_time = pio_timings[max_pio].ds_time;
-		}
+		cmd640_vlb = 0;
+		if (probe_for_cmd640_pci1())
+			bus_type = "PCI (type1)";
+		else if (probe_for_cmd640_pci2())
+			bus_type = "PCI (type2)";
+		else
+			return 0;
 	}
+	/*
+	 * Undocumented magic (there is no 0x5b reg in specs)
+	 */
+	put_cmd640_reg(0x5b, 0xbd);
+	if (get_cmd640_reg(0x5b) != 0xbd) {
+		printk("ide: cmd640 init failed: wrong value in reg 0x5b\n");
+		return 0;
+	}
+	put_cmd640_reg(0x5b, 0);
 
-	cmd640_set_mode(drive, max_pio, ds_time);
+#ifdef CMD640_DUMP_REGS
+	CMD640_DUMP_REGS;
+#endif
 
 	/*
-	 * Disable (or set) readahead mode
+	 * Documented magic begins here
 	 */
-
-	readahead = 0;
-	if (cmd640_chip_version > 1) {	/* Mmmm.. probably should be > 2 ?? */
-		readahead = known_drive_readahead(id->model);
-		if (readahead == -1)
-	        	readahead = 1;	/* Mmmm.. probably be 0 ?? */
-		set_readahead_mode(drive, readahead);
+	cfr = get_cmd640_reg(CFR);
+	cmd640_chip_version = cfr & CFR_DEVREV;
+	if (cmd640_chip_version == 0) {
+		printk ("ide: bad cmd640 revision: %d\n", cmd640_chip_version);
+		return 0;
 	}
 
-	printk ("Drive Timing: PIO Mode %d (%dns) %s/IORDY%s, Read-ahead: %s\n",
-		max_pio,
-		ds_time,
-		iordy ? "w" : "wo",
-		overridden ? " (overriding vendor mode)" : "",
-		readahead ? "enabled" : "disabled");
+	/*
+	 * Initialize data for primary port
+	 */
+	setup_device_ptrs ();
+	printk("%s: buggy cmd640%c interface on %s, config=0x%02x\n",
+	       cmd_hwif0->name, 'a' + cmd640_chip_version - 1, bus_type, cfr);
+	cmd_hwif0->chipset = ide_cmd640;
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
+	cmd_hwif0->tuneproc = &cmd640_tune_drive;
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+
+	/*
+	 * Ensure compatibility by always using the slowest timings
+	 * for access to the drive's command register block,
+	 * and reset the prefetch burstsize to default (512 bytes).
+	 *
+	 * Maybe we need a way to NOT do these on *some* systems?
+	 */
+	put_cmd640_reg(CMDTIM, 0);
+	put_cmd640_reg(BRST, 0x40);
+
+	/*
+	 * Try to enable the secondary interface, if not already enabled
+	 */
+	if (cmd_hwif1->noprobe) {
+		port2 = "not probed";
+	} else {
+		b = get_cmd640_reg(CNTRL);
+		if (secondary_port_responding()) {
+			if ((b & CNTRL_ENA_2ND)) {
+				second_port_cmd640 = 1;
+				port2 = "okay";
+			} else if (cmd640_vlb) {
+				second_port_cmd640 = 1;
+				port2 = "alive";
+			} else
+				port2 = "not cmd640";
+		} else {
+			put_cmd640_reg(CNTRL, b ^ CNTRL_ENA_2ND); /* toggle the bit */
+			if (secondary_port_responding()) {
+				second_port_cmd640 = 1;
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
+				second_port_toggled = 1;
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+				port2 = "enabled";
+			} else {
+				put_cmd640_reg(CNTRL, b); /* restore original setting */
+				port2 = "not responding";
+			}
+		}
+	}
+
+	/*
+	 * Initialize data for secondary cmd640 port, if enabled
+	 */
+	if (second_port_cmd640) {
+		cmd_hwif0->serialized = 1;
+		cmd_hwif1->serialized = 1;
+		cmd_hwif1->chipset = ide_cmd640;
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
+		cmd_hwif1->tuneproc = &cmd640_tune_drive;
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+	}
+	printk("%s: %sserialized, secondary interface %s\n", cmd_hwif1->name,
+		cmd_hwif0->serialized ? "" : "not ", port2);
+
+	/*
+	 * Establish initial timings/prefetch for all drives.
+	 * Do not unnecessarily disturb any prior BIOS setup of these.
+	 */
+	for (index = 0; index < (2 + (second_port_cmd640 << 1)); index++) {
+		ide_drive_t *drive = cmd_drives[index];
+#ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
+		if (drive->autotune || ((index > 1) && second_port_toggled)) {
+	 		/*
+	 		 * Reset timing to the slowest speed and turn off prefetch.
+			 * This way, the drive identify code has a better chance.
+			 */
+			setup_counts    [index] = 4;	/* max possible */
+			active_counts   [index] = 16;	/* max possible */
+			recovery_counts [index] = 16;	/* max possible */
+			program_drive_counts (index);
+			set_prefetch_mode (index, 0);
+			printk("cmd640: drive%d timings/prefetch cleared\n", index);
+		} else {
+			/*
+			 * Record timings/prefetch without changing them.
+			 * This preserves any prior BIOS setup.
+			 */
+			retrieve_drive_counts (index);
+			check_prefetch (index);
+			printk("cmd640: drive%d timings/prefetch(%s) preserved\n",
+				index, drive->no_io_32bit ? "off" : "on");
+		}
+#else
+		/*
+		 * Set the drive unmask flags to match the prefetch setting
+		 */
+		check_prefetch (index);
+		printk("cmd640: drive%d timings/prefetch(%s) preserved\n",
+			index, drive->no_io_32bit ? "off" : "on");
+#endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
+	}
+
+#ifdef CMD640_DUMP_REGS
+	CMD640_DUMP_REGS;
+#endif
+	return 1;
 }
+

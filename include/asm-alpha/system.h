@@ -17,6 +17,7 @@
  */
 #define BOOT_PCB	0x20000000
 #define BOOT_ADDR	0x20000000
+/* Remove when official MILO sources have ELF support: */
 #define BOOT_SIZE	(16*1024)
 
 #define KERNEL_START	0xfffffc0000300000
@@ -27,6 +28,7 @@
 #define ZERO_PGE	0xfffffc000030A000
 
 #define START_ADDR	0xfffffc0000310000
+/* Remove when official MILO sources have ELF support: */
 #define START_SIZE	(2*1024*1024)
 
 #ifndef __ASSEMBLY__

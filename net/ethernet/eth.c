@@ -273,7 +273,7 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 	int ip_length;
 
 	IS_SKB(dest);
-	eth=(struct ethhdr *)dest->data;
+	eth=(struct ethhdr *)src;
 	if(eth->h_proto!=htons(ETH_P_IP))
 	{
 		memcpy(dest->data,src,length);

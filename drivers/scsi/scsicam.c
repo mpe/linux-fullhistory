@@ -22,6 +22,7 @@
 #include <linux/genhd.h>
 #include <linux/kernel.h>
 #include <linux/blk.h>
+#include <asm/unaligned.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
@@ -121,7 +122,8 @@ static int partsize(struct buffer_head *bh, unsigned long capacity,
     	    end_head * end_sector + end_sector;
 
 	/* This is the actual _sector_ number at the end */
-	logical_end = largest->start_sect + largest->nr_sects;
+	logical_end = get_unaligned(&largest->start_sect)
+			+ get_unaligned(&largest->nr_sects);
 
 	/* This is for >1023 cylinders */
         ext_cyl= (logical_end-(end_head * end_sector + end_sector))

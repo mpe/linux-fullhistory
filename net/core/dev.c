@@ -617,7 +617,10 @@ void net_bh(void)
 			cli();
 			skb_push(skb,offset);	/* Put header back on for bridge */
 			if(br_receive_frame(skb))
+			{
+				sti();
 				continue;
+			}
 			/*
 			 *	Pull the MAC header off for the copy going to
 			 *	the upper layers.

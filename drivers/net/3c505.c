@@ -491,7 +491,6 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 			return TRUE;
 			break;
 		case ASF_PCB_NAK:
-			cli();
 			printk("%s: send_pcb got NAK\n", dev->name);
 			goto abort;
 			break;

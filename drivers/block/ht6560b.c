@@ -201,10 +201,8 @@ static void tune_ht6560b (ide_drive_t *drive, byte pio)
 		if (drive->media != ide_disk)
 			pio = 0; /* some cdroms don't like fast modes (?) */
 		else
-			pio = ide_get_best_pio_mode (drive);
+			pio = ide_get_best_pio_mode(drive, pio, 5, NULL);
 	}
-	if (pio > 5)
-		pio = 5;
 	unit = drive->select.b.unit;
 	hwif = HWIF(drive)->index;
 	ht6560b_timings[hwif][unit] = pio_to_timings[pio];

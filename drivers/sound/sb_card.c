@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SB)
+#if defined(CONFIG_SBDSP)
 
 #include "sb_mixer.h"
 #include "sb.h"

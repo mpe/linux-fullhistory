@@ -41,7 +41,7 @@ CONFIG_TGA_CONSOLE=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 CONFIG_BINFMT_AOUT=y
-# CONFIG_BINFMT_ELF is not set
+CONFIG_BINFMT_ELF=y
 
 #
 # Floppy, IDE, and other block devices

@@ -1002,6 +1002,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    cli();
 		    if (request_irq(irq_level,aha1542_intr_handle, 0, "aha1542", NULL)) {
 			    printk("Unable to allocate IRQ for adaptec controller.\n");
+			    restore_flags(flags);
 			    goto unregister;
 		    }
 		    
@@ -1009,6 +1010,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 			    if (request_dma(dma_chan,"aha1542")) {
 				    printk("Unable to allocate DMA channel for Adaptec.\n");
 				    free_irq(irq_level, NULL);
+				    restore_flags(flags);
 				    goto unregister;
 			    }
 			    

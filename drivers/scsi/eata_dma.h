@@ -4,7 +4,7 @@
 *             mike@i-Connect.Net                        *
 *             neuffer@mail.uni-mainz.de                 *
 *********************************************************
-* last change: 96/05/05                                 *
+* last change: 96/06/26                                 *
 ********************************************************/
 
 #ifndef _EATA_DMA_H
@@ -17,7 +17,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "8d"
+#define VER_SUB   "8g"
 
 
 /************************************************************************
@@ -25,7 +25,12 @@
  ************************************************************************/
 
 #define CHECKPAL        0        /* EISA pal checking on/off            */
-#define NEWSTUFF        0        /* Some changes for ISA/EISA boards    */
+#define CHECK_BLINK     1        /* Switch Blink state check off, might *
+                                  * be nessessary for some MIPS machines*/ 
+#define CRIPPLE_QUEUE   0        /* Only enable this if the interrupt 
+                                  * controller on your motherboard is 
+                                  * broken and you are experiencing 
+                                  * massive interrupt losses */
 
 /************************************************************************
  * Debug options.                                                       * 

@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.3.7 $$Date: 1996/04/19 21:06:18 $";
+"$Revision: 1.36.3.7A $$Date: 1996/07/27 10:25:50 $";
 /*
  *  linux/drivers/char/cyclades.c
  *
@@ -2250,6 +2250,13 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
                         (unsigned long *) arg);
             break;
         case TIOCSSOFTCAR:
+            error = verify_area(VERIFY_READ, (void *) arg
+                                 ,sizeof(unsigned long *));
+            if (error) {
+                 ret_val = error;
+                 break;
+            }
+
             arg = get_fs_long((unsigned long *) arg);
             tty->termios->c_cflag =
                     ((tty->termios->c_cflag & ~CLOCAL) |
@@ -2275,6 +2282,12 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
                                    (struct serial_struct *) arg);
             break;
         case TIOCSSERIAL:
+            error = verify_area(VERIFY_READ, (void *) arg
+                                ,sizeof(struct serial_struct));
+            if (error){
+                ret_val = error;
+                break;
+            }
             ret_val = set_serial_info(info,
                                    (struct serial_struct *) arg);
             break;
@@ -2646,6 +2659,8 @@ cy_open(struct tty_struct *tty, struct file * filp)
 	return retval;
     }
 
+    MOD_INC_USE_COUNT;
+
     retval = block_til_ready(tty, filp, info);
     if (retval) {
 #ifdef SERIAL_DEBUG_OPEN
@@ -2661,7 +2676,6 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #ifdef SERIAL_DEBUG_OPEN
     printk("cy_open done\n");/**/
 #endif
-    MOD_INC_USE_COUNT;
     return 0;
 } /* cy_open */
 

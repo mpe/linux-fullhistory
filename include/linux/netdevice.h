@@ -27,7 +27,6 @@
 #include <linux/config.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
-#include <linux/skbuff.h>
 
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
@@ -51,6 +50,10 @@
 #define IS_BROADCAST	3		/* address is a valid broadcast	*/
 #define IS_INVBCAST	4		/* Wrong netmask bcast not for us (unused)*/
 #define IS_MULTICAST	5		/* Multicast IP address */
+
+#ifdef __KERNEL__
+
+#include <linux/skbuff.h>
 
 /*
  *	We tag multicasts with these structures.
@@ -201,8 +204,6 @@ struct packet_type {
   struct packet_type	*next;
 };
 
-
-#ifdef __KERNEL__
 
 #include <linux/interrupt.h>
 #include <linux/notifier.h>

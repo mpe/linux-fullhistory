@@ -22,6 +22,7 @@ typedef long		__kernel_time_t;
 typedef long		__kernel_clock_t;
 typedef int		__kernel_daddr_t;
 typedef char *		__kernel_caddr_t;
+typedef unsigned long	__kernel_sigset_t;	/* at least 32 bits */
 
 #ifdef __GNUC__
 typedef long long	__kernel_loff_t;
@@ -60,7 +61,7 @@ static __inline__ void __FD_CLR(unsigned long fd, __kernel_fd_set *fdsetp)
 }
 
 #undef __FD_ISSET
-static __inline__ int __FD_ISSET(unsigned long fd, __kernel_fd_set *p)
+static __inline__ int __FD_ISSET(unsigned long fd, const __kernel_fd_set *p)
 { 
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -79,10 +80,21 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 
 	if (__builtin_constant_p(__FDSET_LONGS)) {
 		switch (__FDSET_LONGS) {
-			case 8:
-				tmp[0] = 0; tmp[1] = 0; tmp[2] = 0; tmp[3] = 0;
-				tmp[4] = 0; tmp[5] = 0; tmp[6] = 0; tmp[7] = 0;
-				return;
+		      case 16:
+			tmp[ 0] = 0; tmp[ 1] = 0; tmp[ 2] = 0; tmp[ 3] = 0;
+			tmp[ 4] = 0; tmp[ 5] = 0; tmp[ 6] = 0; tmp[ 7] = 0;
+			tmp[ 8] = 0; tmp[ 9] = 0; tmp[10] = 0; tmp[11] = 0;
+			tmp[12] = 0; tmp[13] = 0; tmp[14] = 0; tmp[15] = 0;
+			return;
+
+		      case 8:
+			tmp[ 0] = 0; tmp[ 1] = 0; tmp[ 2] = 0; tmp[ 3] = 0;
+			tmp[ 4] = 0; tmp[ 5] = 0; tmp[ 6] = 0; tmp[ 7] = 0;
+			return;
+
+		      case 4:
+			tmp[ 0] = 0; tmp[ 1] = 0; tmp[ 2] = 0; tmp[ 3] = 0;
+			return;
 		}
 	}
 	i = __FDSET_LONGS;

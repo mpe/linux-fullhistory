@@ -15,12 +15,42 @@
 
 #if defined(CONFIG_BLK_DEV_CMD640) || defined(CONFIG_IDE_CHIPSETS)
 
+/*
+ * Standard (generic) timings for PIO modes, from ATA2 specification.
+ * These timings are for access to the IDE data port register *only*.
+ * Some drives may specify a mode, while also specifying a different
+ * value for cycle_time (from drive identification data).
+ */
+typedef struct ide_pio_timings_s {
+	int	setup_time;	/* Address setup (ns) minimum */
+	int	active_time;	/* Active pulse (ns) minimum */
+	int	cycle_time;	/* Cycle time (ns) minimum = (setup + active + recovery) */
+} ide_pio_timings_t;
+
+typedef struct ide_pio_data_s {
+	byte pio_mode;
+	byte use_iordy;
+	byte overridden;
+	byte blacklisted;
+	unsigned int cycle_time;
+} ide_pio_data_t;
+	
 #ifndef _IDE_C
 
 int ide_scan_pio_blacklist (char *model);
-unsigned int ide_get_best_pio_mode (ide_drive_t *drive);
+byte ide_get_best_pio_mode (ide_drive_t *drive, byte mode_wanted, byte max_mode, ide_pio_data_t *d);
+extern const ide_pio_timings_t ide_pio_timings[6];
 
 #else /* _IDE_C */
+
+const ide_pio_timings_t ide_pio_timings[6] = {
+	{ 70,	165,	600 },	/* PIO Mode 0 */
+	{ 50,	125,	383 },	/* PIO Mode 1 */
+	{ 30,	100,	240 },	/* PIO Mode 2 */
+	{ 30,	80,	180 },	/* PIO Mode 3 with IORDY */
+	{ 25,	70,	120 },	/* PIO Mode 4 with IORDY */
+	{ 20,	50,	100 }	/* PIO Mode 5 with IORDY (nonstandard) */
+};
 
 /*
  * Black list. Some drives incorrectly report their maximal PIO mode,
@@ -31,6 +61,7 @@ static struct ide_pio_info {
 	int		pio;
 } ide_pio_blacklist [] = {
 /*	{ "Conner Peripherals 1275MB - CFS1275A", 4 }, */
+	{ "Conner Peripherals 540MB - CFS540A", 3 },
 
 	{ "WDC AC2700",  3 },
 	{ "WDC AC2540",  3 },
@@ -38,6 +69,7 @@ static struct ide_pio_info {
 	{ "WDC AC2340",  3 },
 	{ "WDC AC2250",  0 },
 	{ "WDC AC2200",  0 },
+	{ "WDC AC21200", 4 },
 	{ "WDC AC2120",  0 },
 	{ "WDC AC2850",  3 },
 	{ "WDC AC1270",  3 },
@@ -46,7 +78,6 @@ static struct ide_pio_info {
 	{ "WDC AC280",   0 },
 /*	{ "WDC AC21000", 4 }, */
 	{ "WDC AC31000", 3 },
-/*	{ "WDC AC21200", 4 }, */
 	{ "WDC AC31200", 3 },
 /*	{ "WDC AC31600", 4 }, */
 
@@ -112,31 +143,80 @@ int ide_scan_pio_blacklist (char *model)
 }
 
 /*
- * This routine returns the recommended PIO mode for a given drive,
+ * This routine returns the recommended PIO settings for a given drive,
  * based on the drive->id information and the ide_pio_blacklist[].
  * This is used by most chipset support modules when "auto-tuning".
  */
-unsigned int ide_get_best_pio_mode (ide_drive_t *drive)
-{
-	unsigned int pio = 0;
-	struct hd_driveid *id = drive->id;
 
-	if (id != NULL) {
-		if (HWIF(drive)->chipset != ide_cmd640 && !strcmp("QUANTUM FIREBALL1080A", id->model))
-			pio = 4;
-		else
-			pio = ide_scan_pio_blacklist(id->model);
-		if (pio == -1) {
-			pio = (id->tPIO < 2) ? id->tPIO : 2;
-			if (id->field_valid & 2) {
-				byte modes = id->eide_pio_modes;
-				if      (modes & 4)	pio = 5;
-				else if (modes & 2)	pio = 4;
-				else if (modes & 1)	pio = 3;
+/*
+ * Drive PIO mode auto selection
+ */
+byte ide_get_best_pio_mode (ide_drive_t *drive, byte mode_wanted, byte max_mode, ide_pio_data_t *d)
+{
+	int pio_mode;
+	int cycle_time = 0;
+	int use_iordy = 0;
+	struct hd_driveid* id = drive->id;
+	int overridden  = 0;
+	int blacklisted = 0;
+
+	if (mode_wanted != 255) {
+		pio_mode = mode_wanted;
+	} else if (!drive->id) {
+		pio_mode = 0;
+	} else if ((pio_mode = ide_scan_pio_blacklist(id->model)) != -1) {
+		overridden = 1;
+		blacklisted = 1;
+		use_iordy = (pio_mode > 2);
+	} else {
+		pio_mode = id->tPIO;
+		if (pio_mode > 2) {	/* 2 is maximum allowed tPIO value */
+			pio_mode = 2;
+			overridden = 1;
+		}
+		if (id->field_valid & 2) {	  /* drive implements ATA2? */
+			if (id->capability & 8) { /* drive supports use_iordy? */
+				use_iordy = 1;
+				cycle_time = id->eide_pio_iordy;
+				if (id->eide_pio_modes & 7) {
+					overridden = 0;
+					if (id->eide_pio_modes & 4)
+						pio_mode = 5;
+					else if (id->eide_pio_modes & 2)
+						pio_mode = 4;
+					else
+						pio_mode = 3;
+				}
+			} else {
+				cycle_time = id->eide_pio;
 			}
 		}
+
+		/*
+		 * Conservative "downgrade" for all pre-ATA2 drives
+		 */
+		if (pio_mode && pio_mode < 4) {
+			pio_mode--;
+			overridden = 1;
+#if 0
+			use_iordy = (pio_mode > 2);
+#endif
+			if (cycle_time && cycle_time < ide_pio_timings[pio_mode].cycle_time)
+				cycle_time = 0; /* use standard timing */
+		}
 	}
-	return pio;
+	if (pio_mode > max_mode) {
+		pio_mode = max_mode;
+		cycle_time = 0;
+	}
+	if (d) {
+		d->pio_mode = pio_mode;
+		d->cycle_time = cycle_time ? cycle_time : ide_pio_timings[pio_mode].cycle_time;
+		d->use_iordy = use_iordy;
+		d->overridden = overridden;
+		d->blacklisted = blacklisted;
+	}
+	return pio_mode;
 }
 
 #endif /* _IDE_C */

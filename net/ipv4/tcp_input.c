@@ -1295,7 +1295,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 					 * and lost it from the queue before
 					 * changing the ack properly].
 					 */
-					printk(KERN_ERR "Lost timer or fin packet in tcp_fin.");
+					printk(KERN_ERR "Lost timer or fin packet in tcp_fin.\n");
 				}
 			}
 			tcp_set_state(sk,TCP_CLOSING);

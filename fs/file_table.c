@@ -23,12 +23,16 @@ int max_files = NR_FILE;
  */
 static inline void insert_file_free(struct file *file)
 {
-	file->f_count = 0;
-	file->f_next = first_file;
-	file->f_prev = first_file->f_prev;
-	file->f_next->f_prev = file;
-	file->f_prev->f_next = file;
+	struct file *next, *prev;
+
+	next = first_file;
 	first_file = file;
+	file->f_count = 0;
+	prev = next->f_prev;
+	file->f_next = next;
+	next->f_prev = file;
+	file->f_prev = prev;
+	prev->f_next = file;
 }
 
 /*
@@ -36,11 +40,15 @@ static inline void insert_file_free(struct file *file)
  */
 static inline void remove_file_free(struct file *file)
 {
-	if (first_file == file)
-		first_file = first_file->f_next;
-	file->f_next->f_prev = file->f_prev;
-	file->f_prev->f_next = file->f_next;
+	struct file *next, *prev;
+
+	next = file->f_next;
+	prev = file->f_prev;
 	file->f_next = file->f_prev = NULL;
+	if (first_file == file)
+		first_file = next;
+	next->f_prev = prev;
+	prev->f_next = next;
 }
 
 /*
@@ -48,10 +56,14 @@ static inline void remove_file_free(struct file *file)
  */
 static inline void put_last_free(struct file *file)
 {
-	file->f_prev = first_file->f_prev;
-	file->f_prev->f_next = file;
-	file->f_next = first_file;
-	file->f_next->f_prev = file;
+	struct file *next, *prev;
+
+	next = first_file;
+	file->f_next = next;
+	prev = next->f_prev;
+	next->f_prev = file;
+	file->f_prev = prev;
+	prev->f_next = file;
 }
 
 /*

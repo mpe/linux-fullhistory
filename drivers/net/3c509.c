@@ -430,7 +430,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy) {
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 40)
+		if (tickssofar < 40*HZ/100)
 			return 1;
 		printk("%s: transmit timed out, Tx_status %2.2x status %4.4x "
 			   "Tx FIFO room %d.\n",

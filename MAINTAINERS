@@ -150,13 +150,13 @@ S:	Maintained
 EATA-DMA SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net
-L:	linux-scsi@vger.rutgers.edu
+L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 EATA-PIO SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net
-L:	linux-scsi@vger.rutgers.edu
+L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 FRAME RELAY DLCI/FRAD (Sangoma drivers too)

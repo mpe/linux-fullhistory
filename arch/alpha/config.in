@@ -68,7 +68,7 @@ then
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_CIA y
 else
-	# EV5 and newer supports all rounding modes in hw:
+	# EV45 and older do not support all rounding modes in hw:
 	define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 fi
 

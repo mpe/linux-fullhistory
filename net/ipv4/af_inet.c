@@ -814,7 +814,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		
 	/* check this error. */
 	if (sk->state != TCP_CLOSE)
-		return(-EIO);
+		return(-EINVAL);
 	if(addr_len<sizeof(struct sockaddr_in))
 		return -EINVAL;
 		
@@ -1104,6 +1104,12 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		destroy_sock(sk2);
 		newsock->data = NULL;
 		return err;
+	}
+	if (sk2->state == TCP_CLOSE)
+	{
+		destroy_sock(sk2);
+		newsock->data=NULL;
+		return -ECONNABORTED;
 	}
 	newsock->state = SS_CONNECTED;
 	return(0);

@@ -351,7 +351,7 @@ If this still does not help,
      aztGetQChannelInfo()   repeated several times
      aztGetToc()
      aztGetQChannelInfo()   repeated several times
-     a list of track informations
+     a list of track information
      do_aztcd_request()  }  
      azt_transfer()    } repeated several times
      azt_poll          }

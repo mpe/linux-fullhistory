@@ -401,6 +401,9 @@ int chr_dev_init(void)
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
 #endif
+#ifdef CONFIG_PCWATCHDOG
+	pcwatchdog_init();
+#endif
 #if CONFIG_ISDN
 	isdn_init();
 #endif

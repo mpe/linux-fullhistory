@@ -41,6 +41,13 @@
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
 #endif
 
+#ifdef CONFIG_BLK_DEV_CMD640
+#if 1
+void cmd640_dump_regs (void);
+#define CMD640_DUMP_REGS cmd640_dump_regs() /* for debugging cmd640 chipset */
+#endif
+#endif  /* CONFIG_BLK_DEV_CMD640 */
+
 #if defined(CONFIG_BLK_DEV_IDECD) || defined(CONFIG_BLK_DEV_IDETAPE)
 #define CONFIG_BLK_DEV_IDEATAPI 1
 #endif
@@ -291,7 +298,7 @@ typedef union {
 		unsigned set_geometry	: 1;	/* respecify drive geometry */
 		unsigned recalibrate	: 1;	/* seek to cyl 0      */
 		unsigned set_multmode	: 1;	/* set multmode count */
-		unsigned set_pio	: 1;	/* set pio mode */
+		unsigned set_tune	: 1;	/* tune interface for drive */
 		unsigned reserved	: 4;	/* unused */
 		} b;
 	} special_t;
@@ -317,6 +324,8 @@ typedef struct ide_drive_s {
 	unsigned using_dma	: 1;	/* disk is using dma for read/write */
 	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
+	unsigned no_unmask	: 1;	/* disallow setting unmask bit */
+	unsigned no_io_32bit	: 1;	/* disallow enabling 32bit I/O */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 #if FAKE_FDISK_FOR_EZDRIVE
@@ -328,7 +337,7 @@ typedef struct ide_drive_s {
 	byte		ready_stat;	/* min status value for drive ready */
 	byte		mult_count;	/* current multiple sector setting */
 	byte 		mult_req;	/* requested multiple sector setting */
-	byte 		pio_req;	/* requested drive pio setting */
+	byte 		tune_req;	/* requested drive tuning setting */
 	byte		io_32bit;	/* 0=16-bit, 1=32-bit, 2/3=32bit+sync */
 	byte		bad_wstat;	/* used for ignoring WRERR_STAT */
 	byte		sect0;		/* offset of first sector for DM6:DDO */
@@ -422,7 +431,6 @@ typedef struct hwif_s {
 	unsigned	noprobe    : 1;	/* don't probe for this interface */
 	unsigned	present    : 1;	/* this interface exists */
 	unsigned	serialized : 1;	/* serialized operation with mate hwif */
-	unsigned	no_unmask  : 1;	/* disallow setting unmask bits */
 	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
 #ifdef CONFIG_BLK_DEV_PROMISE
 	unsigned	is_promise2: 1;	/* 2nd i/f on promise DC4030 */
@@ -461,11 +469,10 @@ typedef struct hwgroup_s {
  * should be using pointers to a drive (ide_drive_t *) or 
  * pointers to a hwif (ide_hwif_t *), rather than indexing this
  * structure directly (the allocation/layout may change!).
+ *
  */
-#ifdef _IDE_C
-	ide_hwif_t	ide_hwifs[MAX_HWIFS];	/* master data repository */
-#else
-extern	ide_hwif_t	ide_hwifs[];
+#ifndef _IDE_C
+extern	ide_hwif_t	ide_hwifs[];		/* master data repository */
 #endif
 
 /*
@@ -597,6 +604,14 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
  * stat/err are used only when (HWGROUP(drive)->rq->cmd == IDE_DRIVE_CMD).
  */
 void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
+
+/*
+ * ide_system_bus_speed() returns what we think is the system VESA/PCI
+ * bus speed (in Mhz).  This is used for calculating interface PIO timings.
+ * The default is 40 for known PCI systems, 50 otherwise.
+ * The "idebus=xx" parameter can be used to override this value.
+ */
+int ide_system_bus_speed (void);
 
 /*
  * ide_multwrite() transfers a block of up to mcount sectors of data

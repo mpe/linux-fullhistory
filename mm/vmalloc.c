@@ -306,7 +306,7 @@ void * vremap(unsigned long offset, unsigned long size)
 	void * addr;
 	struct vm_struct * area;
 
-	if (offset < high_memory)
+	if (MAP_NR(offset) < MAP_NR(high_memory))
 		return NULL;
 	if (offset & ~PAGE_MASK)
 		return NULL;

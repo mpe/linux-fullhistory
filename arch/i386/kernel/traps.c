@@ -173,8 +173,12 @@ DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
-DO_ERROR(15, SIGSEGV, "reserved", reserved, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
+
+asmlinkage void do_reserved(struct pt_regs * regs, long error_code)
+{
+	printk("Uhhuh.. Reserved trap code, whazzup? (%ld)\n", error_code);
+}
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {

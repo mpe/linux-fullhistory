@@ -41,7 +41,7 @@
 #undef __FDMASK
 #define	__FDMASK(d)	(1UL << ((d) % __NFDBITS))
 
-typedef struct {
+typedef struct fd_set {
 	unsigned long fds_bits [__FDSET_LONGS];
 } __kernel_fd_set;
 

@@ -40,6 +40,10 @@ endif
 
 ifeq ($(CONFIG_DIGI),y)
 L_OBJS += pcxx.o
+else
+  ifeq ($(CONFIG_DIGI),m)
+  M_OBJS += pcxx.o
+  endif
 endif
 
 ifeq ($(CONFIG_CYCLADES),y)
@@ -189,6 +193,16 @@ else
   M_OBJS += scc.o
   endif
 endif  
+
+ifeq ($(CONFIG_PCWATCHDOG),y)
+M = y
+L_OBJS += pcwd.o
+else
+  ifeq ($(CONFIG_PCWATCHDOG),m)
+  M_OBJS += pcwd.o
+  MM = m
+  endif
+endif
 
 ifeq ($(CONFIG_BAYCOM),y)
 L_OBJS += baycom.o

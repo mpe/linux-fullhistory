@@ -167,19 +167,6 @@ struct proc_dir_entry proc_scsi_scsi = {
 #endif
 
 /*
- *  As the scsi do command functions are intelligent, and may need to
- *  redo a command, we need to keep track of the last command
- *  executed on each one.
- */
-
-#define WAS_RESET       0x01
-#define WAS_TIMEDOUT    0x02
-#define WAS_SENSE       0x04
-#define IS_RESETTING    0x08
-#define IS_ABORTING     0x10
-#define ASKED_FOR_SENSE 0x20
-
-/*
  *  This is the number  of clock ticks we should wait before we time out
  *  and abort the command.  This is for  where the scsi.c module generates
  *  the command, not where it originates from a higher level, in which
@@ -878,8 +865,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 	SCpnt->internal_timeout |= IN_RESET2;
         scsi_reset (SCpnt,
 		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_BUS_RESET);
-	return;
-	
+        return;
     case (IN_ABORT | IN_RESET | IN_RESET2):
 	/* Obviously the bus reset didn't work.
 	 * Let's try even harder and call for an HBA reset.
@@ -1204,6 +1190,15 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG_DELAY
     unsigned long clock;
 #endif
+
+#if DEBUG
+    unsigned long *ret = 0;
+#ifdef __mips__
+    __asm__ __volatile__ ("move\t%0,$31":"=r"(ret));
+#else
+   ret =  __builtin_return_address(0);
+#endif
+#endif
     
     host = SCpnt->host;
     
@@ -1393,9 +1388,9 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
     SCpnt->serial_number = 0;
     SCpnt->bufflen = bufflen;
     SCpnt->buffer = buffer;
-    SCpnt->flags=0;
-    SCpnt->retries=0;
-    SCpnt->allowed=retries;
+    SCpnt->flags = 0;
+    SCpnt->retries = 0;
+    SCpnt->allowed = retries;
     SCpnt->done = done;
     SCpnt->timeout_per_command = timeout;
 
@@ -1413,7 +1408,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 
     /* Start the timer ticking.  */
 
-    SCpnt->internal_timeout = 0;
+    SCpnt->internal_timeout = NORMAL_TIMEOUT;
     SCpnt->abort_reason = 0;
     internal_cmnd (SCpnt);
 
@@ -1580,7 +1575,8 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		if (SCpnt->flags & WAS_SENSE)
 		{
 #ifdef DEBUG
-		    printk ("In scsi_done, GOOD status, COMMAND COMPLETE, parsing sense information.\n");
+		    printk ("In scsi_done, GOOD status, COMMAND COMPLETE, "
+                            "parsing sense information.\n");
 #endif
 		    SCpnt->flags &= ~WAS_SENSE;
 #if 0	/* This cannot possibly be correct. */
@@ -1628,7 +1624,8 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		else
 		{
 #ifdef DEBUG
-		    printk("COMMAND COMPLETE message returned, status = FINISHED. \n");
+		    printk("COMMAND COMPLETE message returned, "
+                           "status = FINISHED. \n");
 #endif
 		    exit =  DRIVER_OK;
 		    status = FINISHED;
@@ -2402,8 +2399,15 @@ int scsi_free(void *obj, unsigned int len)
 {
     unsigned int page, sector, nbits, mask;
     unsigned long flags;
-    
+
 #ifdef DEBUG
+    unsigned long ret = 0;
+
+#ifdef __mips__
+    __asm__ __volatile__ ("move\t%0,$31":"=r"(ret));
+#else
+   ret = __builtin_return_address(0);
+#endif
     printk("scsi_free %p %d\n",obj, len);
 #endif
     
@@ -2422,9 +2426,14 @@ int scsi_free(void *obj, unsigned int len)
 
             save_flags(flags);
             cli();
-            if((dma_malloc_freelist[page] & (mask << sector)) != (mask<<sector))
+            if((dma_malloc_freelist[page] & 
+                (mask << sector)) != (mask<<sector)){
+#ifdef DEBUG
+		printk("scsi_free(obj=%p, len=%d) called from %08lx\n", 
+                       obj, len, ret);
+#endif
                 panic("scsi_free:Trying to free unused memory");
-
+            }
             dma_free_sectors += nbits;
             dma_malloc_freelist[page] &= ~(mask << sector);
             restore_flags(flags);

@@ -328,9 +328,9 @@ repeat:
 #endif
 
 /*
- * Read-ahead profiling informations
- * ---------------------------------
- * Every PROFILE_MAXREADCOUNT, the following informations are written 
+ * Read-ahead profiling information
+ * --------------------------------
+ * Every PROFILE_MAXREADCOUNT, the following information is written 
  * to the syslog:
  *   Percentage of asynchronous read-ahead.
  *   Average of read-ahead fields context value.

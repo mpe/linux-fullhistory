@@ -938,7 +938,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 			if (cpu == i) {
 				utime = ticks-system;
 				stime = system;
-			} else if (smp_proc_in_lock[i]) {
+			} else if (smp_proc_in_lock[j]) {
 				utime = 0;
 				stime = ticks;
 			}

@@ -623,7 +623,7 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	 * and then put it into the queue to be sent.
 	 */
 
-	buff = sock_wmalloc(NULL, MAX_RESET_SIZE, 1, GFP_ATOMIC);
+	buff = alloc_skb(MAX_RESET_SIZE, GFP_ATOMIC);
 	if (buff == NULL) 
 	  	return;
 

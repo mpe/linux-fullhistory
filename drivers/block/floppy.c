@@ -1231,7 +1231,6 @@ static void fdc_specify(void)
 		/*DPRINT("FIFO enabled\n");*/
 	}
 
-#ifndef __sparc__
 	switch (raw_cmd->rate & 0x03) {
 		case 3:
 			dtr = 1000;
@@ -1286,7 +1285,6 @@ static void fdc_specify(void)
 		output_byte(FDCS->spec1 = spec1);
 		output_byte(FDCS->spec2 = spec2);
 	}
-#endif
 } /* fdc_specify */
 
 /* Set the FDC's data transfer rate on behalf of the specified drive.

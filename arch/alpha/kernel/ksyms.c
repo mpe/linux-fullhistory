@@ -8,6 +8,8 @@
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/user.h>
+#include <linux/elfcore.h>
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 
@@ -23,6 +25,10 @@ extern void __divlu (void);
 extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
+
+extern void dump_thread(struct pt_regs *, struct user *);
+extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
+
 
 static struct symbol_table arch_symbol_table = {
 #include <linux/symtab_begin.h>
@@ -62,11 +68,16 @@ static struct symbol_table arch_symbol_table = {
 	X(strstr),
 	X(strtok),
 	X(strchr),
-	X(hwrpb),
 	X(memcmp),
 	X(memmove),
 	X(__memcpy),
 	X(__constant_c_memset),
+
+	X(dump_thread),
+	X(dump_fpu),
+	X(hwrpb),
+	X(wrusp),
+
 	/*
 	 * The following are special because they're not called
 	 * explicitly (the C compiler or assembler generates them in

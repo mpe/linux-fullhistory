@@ -165,53 +165,55 @@
 #define __NR_uname			339
 #define __NR_nanosleep			340
 #define __NR_mremap			341
+#define __NR_nfsctl			342
 
-#ifdef __LIBRARY__
-
-/*
- * Duh, the alpha gcc compiler doesn't allow us to specify regs
- * yet. I'll have to see about this later..
- */
+#if defined(__LIBRARY__) && defined(__GNUC__)
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
-#define _syscall0(type,name) \
-type name(void) \
-{ \
-	return (type) -1; \
+#define _syscall0(type, name)						\
+type name(void)								\
+{									\
+	extern long syscall (int, ...);					\
+	return syscall(__NR_##name));					\
 }
 
-#define _syscall1(type,name,type1,arg1) \
-type name(type1 arg1) \
-{ \
-	return (type) -1; \
+#define _syscall1(type,name,type1,arg1)					\
+type name(type1 arg1)							\
+{									\
+	extern long syscall (int, ...);					\
+	return syscall(__NR_##name, arg1);				\
 }
 
-#define _syscall2(type,name,type1,arg1,type2,arg2) \
-type name(type1 arg1,type2 arg2) \
-{ \
-	return (type) -1; \
+#define _syscall2(type,name,type1,arg1,type2,arg2)			\
+type name(type1 arg1,type2 arg2)					\
+{									\
+	extern long syscall (int, ...);					\
+	return syscall(__NR_##name, arg1, arg2);				\
 }
 
-#define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3) \
-type name(type1 arg1,type2 arg2,type3 arg3) \
-{ \
-	return (type) -1; \
+#define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3)		\
+type name(type1 arg1,type2 arg2,type3 arg3)				\
+{									\
+	extern long syscall (int, ...);					\
+	return syscall(__NR_##name, arg1, arg2, arg3);			\
 }
 
 #define _syscall4(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4) \
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
-{ \
-	return (type) -1; \
+type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4)		 \
+{									 \
+	extern long syscall (int, ...);					 \
+	return syscall(__NR_##name, arg1, arg2, arg3, arg4);		 \
 } 
 
 #define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4, \
-	  type5,arg5) \
-type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
-{ \
-	return (type) -1; \
+	  type5,arg5)							 \
+type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5)	 \
+{									 \
+	extern long syscall (int, ...);					 \
+	return syscall(__NR_##name, arg1, arg2, arg3, arg4);		 \
 }
 
-#endif /* __LIBRARY__ */
+#endif /* __LIBRARY__ && __GNUC__ */
 
 #ifdef __KERNEL_SYSCALLS__
 

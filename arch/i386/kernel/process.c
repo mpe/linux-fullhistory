@@ -332,7 +332,7 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 /*
  * fill in the fpu structure for a core dump..
  */
-int dump_fpu (struct user_i387_struct* fpu)
+int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {
 	int fpvalid;
 
@@ -377,7 +377,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 	dump->regs = *regs;
 
-	dump->u_fpvalid = dump_fpu (&dump->i387);
+	dump->u_fpvalid = dump_fpu (regs, &dump->i387);
 }
 
 asmlinkage int sys_fork(struct pt_regs regs)

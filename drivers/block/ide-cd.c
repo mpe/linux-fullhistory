@@ -105,6 +105,7 @@
  *                        special help from Jeff Lightfoot 
  *                        <jeffml@netcom.com>
  * 3.15a July 9, 1996 -- Improved Sanyo 3 CD changer identification
+ * 3.16  Jul 28, 1996 -- Fix from Gadi to reduce kernel stack usage for ioctl.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2308,7 +2309,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		int stat, lba;
 		struct atapi_toc *toc;
 		struct cdrom_read_audio ra;
-		char buf[CD_FRAMESIZE_RAW];
+		char *buf;
 
 		/* Make sure the TOC is up to date. */
 		stat = cdrom_read_toc (drive, NULL);
@@ -2342,17 +2343,23 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		if (lba < 0 || lba >= toc->capacity)
 			return -EINVAL;
 
+		buf = (char *) kmalloc (CD_FRAMESIZE_RAW, GFP_KERNEL);
+		if (buf == NULL)
+			return -ENOMEM;
+
 		while (ra.nframes > 0) {
 			stat = cdrom_read_block (drive, 1, lba, buf,
 						 CD_FRAMESIZE_RAW, NULL);
-			if (stat) return stat;
+			if (stat) break;
+
 			memcpy_tofs (ra.buf, buf, CD_FRAMESIZE_RAW);
 			ra.buf += CD_FRAMESIZE_RAW;
 			--ra.nframes;
 			++lba;
 		}
 
-		return 0;
+		kfree (buf);
+		return stat;
 	}
 
 	case CDROMREADMODE1:
@@ -2360,7 +2367,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		struct cdrom_msf msf;
 		int blocksize, format, stat, lba;
 		struct atapi_toc *toc;
-		char buf[CD_FRAMESIZE_RAW0];
+		char *buf;
 
 		if (cmd == CDROMREADMODE1) {
 			blocksize = CD_FRAMESIZE;
@@ -2388,12 +2395,17 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		if (lba < 0 || lba >= toc->capacity)
 			return -EINVAL;
 
+		buf = (char *) kmalloc (CD_FRAMESIZE_RAW0, GFP_KERNEL);
+		if (buf == NULL)
+			return -ENOMEM;
+
 		stat = cdrom_read_block (drive, format, lba, buf, blocksize,
 					 NULL);
-		if (stat) return stat;
+		if (stat == 0)
+			memcpy_tofs ((char *)arg, buf, blocksize);
 
-		memcpy_tofs ((char *)arg, buf, blocksize);
-		return 0;
+		kfree (buf);
+		return stat;
 	}
 
 	case CDROM_GET_UPC: {

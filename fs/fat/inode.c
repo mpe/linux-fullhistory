@@ -23,6 +23,7 @@
 #include "tables.h"
 
 #include <asm/segment.h>
+#include <asm/unaligned.h>
 
 
 
@@ -242,7 +243,8 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 #define ROUND_TO_MULTIPLE(n,m) ((n) && (m) ? (n)+(m)-1-((n)-1)%(m) : 0)
     /* don't divide by zero */
 
-	logical_sector_size = CF_LE_W(*(unsigned short *) &b->sector_size);
+	logical_sector_size =
+		CF_LE_W(get_unaligned((unsigned short *) &b->sector_size));
 	sector_mult = logical_sector_size >> SECTOR_BITS;
 	MSDOS_SB(sb)->cluster_size = b->cluster_size*sector_mult;
 	MSDOS_SB(sb)->fats = b->fats;
@@ -250,14 +252,16 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	MSDOS_SB(sb)->fat_length = CF_LE_W(b->fat_length)*sector_mult;
 	MSDOS_SB(sb)->dir_start = (CF_LE_W(b->reserved)+b->fats*CF_LE_W(
 	    b->fat_length))*sector_mult;
-	MSDOS_SB(sb)->dir_entries = CF_LE_W(*((unsigned short *) &b->dir_entries
-	    ));
+	MSDOS_SB(sb)->dir_entries =
+		CF_LE_W(get_unaligned((unsigned short *) &b->dir_entries));
 	MSDOS_SB(sb)->data_start = MSDOS_SB(sb)->dir_start+ROUND_TO_MULTIPLE((
 	    MSDOS_SB(sb)->dir_entries << MSDOS_DIR_BITS) >> SECTOR_BITS,
 	    sector_mult);
-	data_sectors = (CF_LE_W(*((unsigned short *) &b->sectors)) ?
-	    CF_LE_W(*((unsigned short *) &b->sectors)) :
-	    CF_LE_L(b->total_sect))*sector_mult-MSDOS_SB(sb)->data_start;
+	data_sectors = CF_LE_W(get_unaligned((unsigned short *) &b->sectors));
+	if (!data_sectors) {
+		data_sectors = CF_LE_L(b->total_sect);
+	}
+	data_sectors = data_sectors * sector_mult - MSDOS_SB(sb)->data_start;
 	error = !b->cluster_size || !sector_mult;
 	if (!error) {
 		MSDOS_SB(sb)->clusters = b->cluster_size ? data_sectors/

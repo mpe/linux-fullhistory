@@ -297,6 +297,7 @@ void pcbit_fsm_event(struct pcbit_dev *dev, struct pcbit_chan *chan,
 		
 		printk(KERN_DEBUG "fsm error: event %x on state %x\n", 
                        event, chan->fsm_state);
+		restore_flags(flags);
 		return;
 	}
 

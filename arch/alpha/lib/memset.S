@@ -103,4 +103,8 @@ end:
 	ret $31,($26),1		/* E1 */
 	.end __memset
 
-.weakext memset, __memset
+#ifdef __ELF__
+ .weak memset; memset = __memset
+#else
+ .weakext memset, __memset
+#endif

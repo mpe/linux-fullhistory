@@ -128,4 +128,8 @@ char * bcopy(const char * src, char * dest, size_t n)
  * gcc-2.7.1 and newer generate calls to memset and memcpy.  So we
  * need to define that here:
  */
-asm (".weakext memcpy, __memcpy");
+#ifdef __ELF__
+ asm (".weak memcpy; memcpy = __memcpy");
+#else
+ asm (".weakext memcpy, __memcpy");
+#endif

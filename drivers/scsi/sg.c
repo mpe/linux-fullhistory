@@ -276,7 +276,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
      * wrong.
      */
     memcpy(device->header.sense_buffer, SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
-    device->header.result=SCpnt->result;
+    device->header.result = (SCpnt->sense_buffer[0] == 0 ? 0 : EIO);
 
     /*
      * Now wake up the process that is waiting for the
