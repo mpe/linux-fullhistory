@@ -248,7 +248,7 @@ int sdla_z80_poll(struct device *dev, int z80_addr, int jiffs, char resp1, char 
 	temp += z80_addr & SDLA_ADDR_MASK;
 	
 	resp = ~resp1;
-	while ((jiffies < done) && (resp != resp1) && (!resp2 || (resp != resp2)))
+	while (time_before(jiffies, done) && (resp != resp1) && (!resp2 || (resp != resp2)))
 	{
 		if (jiffies != now)
 		{
@@ -257,7 +257,7 @@ int sdla_z80_poll(struct device *dev, int z80_addr, int jiffs, char resp1, char 
 			resp = *temp;
 		}
 	}
-	return(jiffies < done ? jiffies - start : -1);
+	return(time_before(jiffies, done) ? jiffies - start : -1);
 }
 
 /* constants for Z80 CPU speed */
@@ -444,7 +444,7 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
 
 	waiting = 1;
 	len = 0;
-	while (waiting && (jiffies <= jiffs))
+	while (waiting && time_before_eq(jiffies, jiffs))
 	{
 		if (waiting++ % 3) 
 		{

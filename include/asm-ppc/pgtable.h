@@ -121,6 +121,7 @@ extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
 #define _PAGE_DIRTY	0x080	/* C: page changed */
 #define _PAGE_ACCESSED	0x100	/* R: page referenced */
 #define _PAGE_HWWRITE	0x200	/* software: _PAGE_RW & _PAGE_DIRTY */
+#define _PAGE_SHARED	0
 
 #else
 #define _PAGE_PRESENT	0x0001	/* Page is valid */
@@ -147,28 +148,23 @@ extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
 
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 
+#ifdef __SMP__
+#define _PAGE_BASE	_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_COHERENT
+#else
+#define _PAGE_BASE	_PAGE_PRESENT | _PAGE_ACCESSED
+#endif
+#define _PAGE_WRENABLE	_PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE
+
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
 
-#ifndef CONFIG_8xx
-#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
-				 _PAGE_ACCESSED)
-#define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
-#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
-#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | \
-				 _PAGE_HWWRITE | _PAGE_ACCESSED)
-#define PAGE_KERNEL_CI	__pgprot(_PAGE_PRESENT | _PAGE_NO_CACHE | _PAGE_RW | \
-				 _PAGE_HWWRITE | _PAGE_DIRTY | _PAGE_ACCESSED)
-#else
-#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
-				 _PAGE_ACCESSED | _PAGE_SHARED)
-#define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
-#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
-#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | \
-				 _PAGE_SHARED | _PAGE_ACCESSED)
-#define PAGE_KERNEL_CI	__pgprot(_PAGE_PRESENT | _PAGE_NO_CACHE | _PAGE_RW | \
-				 _PAGE_SHARED | _PAGE_DIRTY | _PAGE_ACCESSED)
-#endif /* CONFIG_8xx */
-     
+#define PAGE_SHARED	__pgprot(_PAGE_BASE | _PAGE_RW | _PAGE_USER | \
+				 _PAGE_SHARED)
+#define PAGE_COPY	__pgprot(_PAGE_BASE | _PAGE_USER)
+#define PAGE_READONLY	__pgprot(_PAGE_BASE | _PAGE_USER)
+#define PAGE_KERNEL	__pgprot(_PAGE_BASE | _PAGE_WRENABLE | _PAGE_SHARED)
+#define PAGE_KERNEL_CI	__pgprot(_PAGE_BASE | _PAGE_WRENABLE | _PAGE_SHARED | \
+				 _PAGE_NO_CACHE )
+
 /*
  * The PowerPC can only do execute protection on a segment (256MB) basis,
  * not on a page basis.  So we consider execute permission the same as read.

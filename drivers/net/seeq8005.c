@@ -247,10 +247,10 @@ __initfunc(static int seeq8005_probe1(struct device *dev, int ioaddr))
 			outw(0x5a5a, SEEQ_BUFFER);
 		}
 		j=jiffies+HZ;
-		while ( ((inw(SEEQ_STATUS) & SEEQSTAT_FIFO_EMPTY) != SEEQSTAT_FIFO_EMPTY) && jiffies < j )
+		while ( ((inw(SEEQ_STATUS) & SEEQSTAT_FIFO_EMPTY) != SEEQSTAT_FIFO_EMPTY) && time_before(jiffies, j) )
 			mb();
 		outw( 0 , SEEQ_DMAAR);
-		while ( ((inw(SEEQ_STATUS) & SEEQSTAT_WINDOW_INT) != SEEQSTAT_WINDOW_INT) && jiffies < j+HZ)
+		while ( ((inw(SEEQ_STATUS) & SEEQSTAT_WINDOW_INT) != SEEQSTAT_WINDOW_INT) && time_before(jiffies, j+HZ))
 			mb();
 		if ( (inw(SEEQ_STATUS) & SEEQSTAT_WINDOW_INT) == SEEQSTAT_WINDOW_INT)
 			outw( SEEQCMD_WINDOW_INT_ACK | (inw(SEEQ_STATUS)& SEEQCMD_INT_MASK), SEEQ_CMD);
@@ -707,7 +707,7 @@ static void hardware_send_packet(struct device * dev, char *buf, int length)
 	
 	/* drain FIFO */
 	tmp = jiffies;
-	while ( (((status=inw(SEEQ_STATUS)) & SEEQSTAT_FIFO_EMPTY) == 0) && (jiffies < tmp + HZ))
+	while ( (((status=inw(SEEQ_STATUS)) & SEEQSTAT_FIFO_EMPTY) == 0) && (jiffies - tmp < HZ))
 		mb();
 	
 	/* doit ! */
@@ -729,7 +729,7 @@ inline void wait_for_buffer(struct device * dev)
 	int status;
 	
 	tmp = jiffies + HZ;
-	while ( ( ((status=inw(SEEQ_STATUS)) & SEEQSTAT_WINDOW_INT) != SEEQSTAT_WINDOW_INT) && jiffies < tmp)
+	while ( ( ((status=inw(SEEQ_STATUS)) & SEEQSTAT_WINDOW_INT) != SEEQSTAT_WINDOW_INT) && time_before(jiffies, tmp))
 		mb();
 		
 	if ( (status & SEEQSTAT_WINDOW_INT) == SEEQSTAT_WINDOW_INT)

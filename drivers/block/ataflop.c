@@ -1838,7 +1838,7 @@ __initfunc(static int fd_test_drive_present( int drive ))
 	FDC_WRITE (FDCREG_TRACK, 0xff00);
 	FDC_WRITE( FDCREG_CMD, FDCCMD_RESTORE | FDCCMDADD_H | FDCSTEP_6 );
 
-	for( ok = 0, timeout = jiffies + 2*HZ+HZ/2; jiffies < timeout; ) {
+	for( ok = 0, timeout = jiffies + 2*HZ+HZ/2; time_before(jiffies, timeout); ) {
 		if (!(mfp.par_dt_reg & 0x20))
 			break;
 	}

@@ -5,6 +5,7 @@
  * Copyright (C) 1998 Randy Gobbel.
  */
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -59,7 +60,6 @@ struct bmac_data {
 	int rx_fill;
 	int rx_empty;
 	struct sk_buff *tx_bufs[N_TX_RING];
-	char *tx_double[N_TX_RING]; /* yuck--double buffering */
 	int tx_fill;
 	int tx_empty;
 	unsigned char tx_fullup;
@@ -297,7 +297,7 @@ bmac_mif_read(struct device *dev, unsigned int addr)
 	val = bmac_mif_readbits(dev, 17);
 	bmwrite(dev, MIFCSR, 4);
 	MIFDELAY;
-	printk(KERN_DEBUG "bmac_mif_read(%x) -> %x\n", addr, val);
+	/* printk(KERN_DEBUG "bmac_mif_read(%x) -> %x\n", addr, val); */
 	return val;
 }
 
@@ -438,9 +438,11 @@ bmac_init_chip(struct device *dev)
 			bmac_mif_write(dev, 4, 0xa1);
 			bmac_mif_write(dev, 0, 0x1200);
 		}
+#if 0
 		/* XXX debugging */
 		bmac_mif_read(dev, 0);
 		bmac_mif_read(dev, 4);
+#endif
 	}
 	bmac_init_registers(dev);
 	return 1;
@@ -488,23 +490,15 @@ static inline void bmac_set_timeout(struct device *dev)
 }
 
 static void
-bmac_construct_xmt(struct sk_buff *skb, volatile struct dbdma_cmd *cp,
-		   char *doubleBuf)
+bmac_construct_xmt(struct sk_buff *skb, volatile struct dbdma_cmd *cp)
 {
-	void *vaddr, *page_break;
+	void *vaddr;
 	unsigned long baddr;
 	unsigned long len;
 
 	len = skb->len;
 	vaddr = skb->data;
 	baddr = virt_to_bus(vaddr);
-	page_break = round_page(vaddr);
-	if (trunc_page(vaddr) != trunc_page(vaddr+len) &&
-	    (unsigned long)round_page(baddr) != virt_to_bus(page_break))  {
-		baddr = virt_to_bus(doubleBuf);
-		XXDEBUG(("bmac: double buffering, double=%#08x, skb->data=%#08x, len=%d\n", doubleBuf, skb->data, len));
-	} else
-		flush_page_to_ram((unsigned long)vaddr);
 
 	dbdma_setcmd(cp, (OUTPUT_LAST | INTR_ALWAYS | WAIT_IFCLR), len, baddr, 0);
 }
@@ -530,17 +524,8 @@ bitrev(unsigned char b)
 static int
 bmac_init_tx_ring(struct bmac_data *bp)
 {
-	int i;
 	volatile struct dbdma_regs *td = bp->tx_dma;
-	char *addr;
 
-	if (!bp->tx_allocated) {
-		/* zero out tx cmds, alloc space for double buffering */
-		addr = (char *)kmalloc(ETHERMTU * N_TX_RING, GFP_DMA);
-		if (addr == NULL) return 0;
-		for (i = 0; i < N_TX_RING; i++, addr += ETHERMTU) bp->tx_double[i] = addr;
-		bp->tx_allocated = 1;
-	}
 	memset((char *)bp->tx_cmds, 0, (N_TX_RING+1) * sizeof(struct dbdma_cmd));
 
 	bp->tx_empty = 0;
@@ -615,7 +600,7 @@ static int bmac_transmit_packet(struct sk_buff *skb, struct device *dev)
 
 	dbdma_setcmd(&bp->tx_cmds[i], DBDMA_STOP, 0, 0, 0);
 
-	bmac_construct_xmt(skb, &bp->tx_cmds[bp->tx_fill], bp->tx_double[bp->tx_fill]);
+	bmac_construct_xmt(skb, &bp->tx_cmds[bp->tx_fill]);
 
 	bp->tx_bufs[bp->tx_fill] = skb;
 	bp->tx_fill = i;
@@ -1177,6 +1162,8 @@ static int bmac_reset_and_enable(struct device *dev, int enable)
 {
 	struct bmac_data *bp = dev->priv;
 	unsigned long flags;
+	struct sk_buff *skb;
+	unsigned char *data;
 
 	save_flags(flags); cli();
 	bp->reset_and_enabled = 0;
@@ -1187,16 +1174,17 @@ static int bmac_reset_and_enable(struct device *dev, int enable)
 		bmac_start_chip(dev);
 		bmwrite(dev, INTDISABLE, EnableNormal);
 		bp->reset_and_enabled = 1;
-		/* 	{ */
-		/* 	    unsigned char random_packet[100]; */
-		/* 	    unsigned int i; */
-		/* 	    struct sk_buff *skb = dev_alloc_skb(RX_BUFLEN+2); */
-		/* 	    unsigned char *data = skb_put(skb, sizeof(random_packet)); */
-		/* XXDEBUG(("transmitting random packet\n")); */
-		/* 	    for (i = 0; i < sizeof(random_packet); i++) data[i] = i; */
-		/* 	    bmac_transmit_packet(skb, dev); */
-		/* XXDEBUG(("done transmitting random packet\n")); */
-		/* 	} */
+
+		/*
+		 * It seems that the bmac can't receive until it's transmitted
+		 * a packet.  So we give it a dummy packet to transmit.
+		 */
+		skb = dev_alloc_skb(ETHERMINPACKET);
+		data = skb_put(skb, ETHERMINPACKET);
+		memset(data, 0, ETHERMINPACKET);
+		memcpy(data, dev->dev_addr, 6);
+		memcpy(data+6, dev->dev_addr, 6);
+		bmac_transmit_packet(skb, dev);
 	}
 	restore_flags(flags);
 	return 1;
@@ -1241,8 +1229,13 @@ bmac_probe(struct device *dev)
 		dev->priv = kmalloc(PRIV_BYTES, GFP_KERNEL);
 		if (dev->priv == 0) return -ENOMEM;
 	}
+
+#ifdef MODULE
+	bmac_devs = dev;
+#endif
     
-	dev->base_addr = bmacs->addrs[0].address;
+	dev->base_addr = (unsigned long)
+		ioremap(bmacs->addrs[0].address, bmacs->addrs[0].size);
 	dev->irq = bmacs->intrs[0].line;
 
 	bmwrite(dev, INTDISABLE, DisableAll);
@@ -1257,7 +1250,7 @@ bmac_probe(struct device *dev)
 		}
 	}
     
-	printk(KERN_INFO "%s: BMAC at", dev->name);
+	printk(KERN_INFO "%s: BMAC%s at", dev->name, (is_bmac_plus? "+": ""));
 	rev = addr[0] == 0 && addr[1] == 0xA0;
 	for (j = 0; j < 6; ++j) {
 		dev->dev_addr[j] = rev? bitrev(addr[j]): addr[j];
@@ -1280,9 +1273,11 @@ bmac_probe(struct device *dev)
     
 	bp = (struct bmac_data *) dev->priv;
 	memset(bp, 0, sizeof(struct bmac_data));
-	bp->tx_dma = (volatile struct dbdma_regs *) bmacs->addrs[1].address;
+	bp->tx_dma = (volatile struct dbdma_regs *)
+		ioremap(bmacs->addrs[1].address, bmacs->addrs[1].size);
 	bp->tx_dma_intr = bmacs->intrs[1].line;
-	bp->rx_dma = (volatile struct dbdma_regs *) bmacs->addrs[2].address;
+	bp->rx_dma = (volatile struct dbdma_regs *)
+		ioremap(bmacs->addrs[2].address, bmacs->addrs[2].size);
 	bp->rx_dma_intr = bmacs->intrs[2].line;
     
 	bp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(bp + 1);
@@ -1370,8 +1365,6 @@ static int bmac_close(struct device *dev)
 		}
 	}
 	bp->rx_allocated = 0;
-	XXDEBUG(("bmac: free doubles\n"));/*MEMORY LEAK BELOW!!! FIX!!! */
-	if (bp->tx_double[0] != NULL) kfree(bp->tx_double[0]);
 	XXDEBUG(("bmac: free tx bufs\n"));
 	for (i = 0; i<N_TX_RING; i++) {
 		if (bp->tx_bufs[i] != NULL) {
@@ -1379,7 +1372,6 @@ static int bmac_close(struct device *dev)
 			bp->tx_bufs[i] = NULL;
 		}
 	}
-	bp->tx_allocated = 0;
 	bp->reset_and_enabled = 0;
 	XXDEBUG(("bmac: all bufs freed\n"));
 
@@ -1539,3 +1531,32 @@ bmac_proc_info(char *buffer, char **start, off_t offset, int length, int dummy)
   
 	return len;
 }
+
+#ifdef MODULE
+
+MODULE_AUTHOR("Randy Gobbel/Paul Mackerras");
+MODULE_DESCRIPTION("PowerMac BMAC ethernet driver.");
+
+int init_module(void)
+{
+    int res;
+   
+    if(bmac_devs != NULL)
+        return -EBUSY;
+    res = bmac_probe(NULL);
+    return res;
+}
+void cleanup_module(void)
+{
+    struct bmac_data *bp = (struct bmac_data *) bmac_devs->priv;
+    unregister_netdev(bmac_devs);
+
+    free_irq(bmac_devs->irq, bmac_misc_intr);
+    free_irq(bp->tx_dma_intr, bmac_txdma_intr);
+    free_irq(bp->rx_dma_intr, bmac_rxdma_intr);
+
+    kfree(bmac_devs);
+    bmac_devs = NULL;
+}
+
+#endif

@@ -10,6 +10,7 @@
 #include <linux/skbuff.h>
 #include <linux/firewall.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <asm/semaphore.h>
 
 struct semaphore firewall_sem = MUTEX; 
@@ -89,6 +90,7 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 			struct firewall_ops *f=fw->next;
 			*nl = f;
 			up(&firewall_sem); 
+			synchronize_bh();
 			return 0;
 		}
 		nl=&((*nl)->next);

@@ -1029,7 +1029,7 @@ static void csi_m(int currcons)
 				  */
 				translate = set_translate(charset == 0
 						? G0_charset
-						: G1_charset);
+						: G1_charset,currcons);
 				disp_ctrl = 0;
 				toggle_meta = 0;
 				break;
@@ -1037,7 +1037,7 @@ static void csi_m(int currcons)
 				  * Select first alternate font, lets
 				  * chars < 32 be displayed as ROM chars.
 				  */
-				translate = set_translate(IBMPC_MAP);
+				translate = set_translate(IBMPC_MAP,currcons);
 				disp_ctrl = 1;
 				toggle_meta = 0;
 				break;
@@ -1045,7 +1045,7 @@ static void csi_m(int currcons)
 				  * Select second alternate font, toggle
 				  * high bit before displaying as ROM char.
 				  */
-				translate = set_translate(IBMPC_MAP);
+				translate = set_translate(IBMPC_MAP,currcons);
 				disp_ctrl = 1;
 				toggle_meta = 1;
 				break;
@@ -1328,7 +1328,7 @@ static void restore_cur(int currcons)
 	color		= s_color;
 	G0_charset	= saved_G0;
 	G1_charset	= saved_G1;
-	translate	= set_translate(charset ? G1_charset : G0_charset);
+	translate	= set_translate(charset ? G1_charset : G0_charset,currcons);
 	update_attr(currcons);
 	need_wrap = 0;
 }
@@ -1343,7 +1343,7 @@ static void reset_terminal(int currcons, int do_clear)
 	bottom		= video_num_lines;
 	vc_state	= ESnormal;
 	ques		= 0;
-	translate	= set_translate(LAT1_MAP);
+	translate	= set_translate(LAT1_MAP,currcons);
 	G0_charset	= LAT1_MAP;
 	G1_charset	= GRAF_MAP;
 	charset		= 0;
@@ -1426,12 +1426,12 @@ static void do_con_trol(struct tty_struct *tty, unsigned int currcons, int c)
 		return;
 	case 14:
 		charset = 1;
-		translate = set_translate(G1_charset);
+		translate = set_translate(G1_charset,currcons);
 		disp_ctrl = 1;
 		return;
 	case 15:
 		charset = 0;
-		translate = set_translate(G0_charset);
+		translate = set_translate(G0_charset,currcons);
 		disp_ctrl = 0;
 		return;
 	case 24: case 26:
@@ -1738,7 +1738,7 @@ static void do_con_trol(struct tty_struct *tty, unsigned int currcons, int c)
 		else if (c == 'K')
 			G0_charset = USER_MAP;
 		if (charset == 0)
-			translate = set_translate(G0_charset);
+			translate = set_translate(G0_charset,currcons);
 		vc_state = ESnormal;
 		return;
 	case ESsetG1:
@@ -1751,7 +1751,7 @@ static void do_con_trol(struct tty_struct *tty, unsigned int currcons, int c)
 		else if (c == 'K')
 			G1_charset = USER_MAP;
 		if (charset == 1)
-			translate = set_translate(G1_charset);
+			translate = set_translate(G1_charset,currcons);
 		vc_state = ESnormal;
 		return;
 	default:

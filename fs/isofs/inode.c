@@ -409,11 +409,13 @@ static unsigned int isofs_get_last_session(kdev_t dev)
   struct cdrom_multisession ms_info;
   unsigned int vol_desc_start;
   struct inode inode_fake;
+  struct file_operations *fops;
   extern struct file_operations * get_blkfops(unsigned int);
   int i;
 
   vol_desc_start=0;
-  if (get_blkfops(MAJOR(dev))->ioctl!=NULL)
+  fops = get_blkfops(MAJOR(dev));
+  if (fops && fops->ioctl)
     {
       /* Whoops.  We must save the old FS, since otherwise
        * we would destroy the kernels idea about FS on root
@@ -536,17 +538,10 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	    vdp = (struct iso_volume_descriptor *)bh->b_data;
 	    hdp = (struct hs_volume_descriptor *)bh->b_data;
 	    
-	    if (strncmp (hdp->id, HS_STANDARD_ID, sizeof hdp->id) == 0) {
-		if (isonum_711 (hdp->type) != ISO_VD_PRIMARY)
-		    goto out_freebh;
-		
-		s->u.isofs_sb.s_high_sierra = 1;
-		high_sierra = 1;
-		opt.rock = 'n';
-		h_pri = (struct hs_primary_descriptor *)vdp;
-		goto root_found;
-	    }
-
+	    /* Due to the overlapping physical location of the descriptors, 
+	     * ISO CDs can match hdp->id==HS_STANDARD_ID as well. To ensure 
+	     * proper identification in this case, we first check for ISO.
+	     */
 	    if (strncmp (vdp->id, ISO_STANDARD_ID, sizeof vdp->id) == 0) {
 		if (isonum_711 (vdp->type) == ISO_VD_END)
 		    break;
@@ -580,8 +575,20 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 		    }
 		}
 #endif
-		/* Just skip any volume descriptors we don't recognize */
+	    } else {
+	        if (strncmp (hdp->id, HS_STANDARD_ID, sizeof hdp->id) == 0) {
+		    if (isonum_711 (hdp->type) != ISO_VD_PRIMARY)
+		        goto out_freebh;
+		
+		    s->u.isofs_sb.s_high_sierra = 1;
+		    high_sierra = 1;
+		    opt.rock = 'n';
+		    h_pri = (struct hs_primary_descriptor *)vdp;
+		    goto root_found;
+		}
 	    }
+
+            /* Just skip any volume descriptors we don't recognize */
 
 	    brelse(bh);
 	    bh = NULL;
@@ -1105,8 +1112,9 @@ void isofs_read_inode(struct inode * inode)
 	}
 
 	/* There are defective discs out there - we do this to protect
-	   ourselves.  A cdrom will never contain more than 800Mb */
-	if((inode->i_size < 0 || inode->i_size > 800000000) &&
+	   ourselves.  A cdrom will never contain more than 800Mb 
+	   .. but a DVD may be up to 1Gig (Ulrich Habel) */
+	if((inode->i_size < 0 || inode->i_size > 1073741824) &&
 	    inode->i_sb->u.isofs_sb.s_cruft == 'n') {
 	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';

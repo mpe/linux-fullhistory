@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.38 1998/12/02 21:23:49 cort Exp $
+ * $Id: smp.c,v 1.39 1998/12/28 10:28:51 paulus Exp $
  *
  * Smp support for ppc.
  *
@@ -43,6 +43,7 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 int first_cpu_booted = 0;
+cycles_t cacheflush_time;
 
 /* all cpu mappings are 1-1 -- Cort */
 int cpu_number_map[NR_CPUS] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,};
@@ -144,7 +145,14 @@ void smp_message_recv(void)
 
 void smp_send_reschedule(int cpu)
 {
-	smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);
+	/* This is only used if `cpu' is running an idle task,
+	   so it will reschedule itself anyway... */
+	/*smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);*/
+}
+
+void smp_send_stop(void)
+{
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_STOP_CPU, 0, 0);
 }
 
 spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
@@ -185,11 +193,12 @@ void __init smp_boot_cpus(void)
 	extern void __secondary_start(void);
 	int i;
 	struct task_struct *p;
-	
+	unsigned long a;
+
         printk("Entering SMP Mode...\n");
 	
 	first_cpu_booted = 1;
-	dcbf(&first_cpu_booted);
+	/*dcbf(&first_cpu_booted);*/
 
 	for (i = 0; i < NR_CPUS; i++) {
 		prof_counter[i] = 1;
@@ -200,7 +209,13 @@ void __init smp_boot_cpus(void)
         smp_store_cpu_info(0);
         active_kernel_processor = 0;
 	current->processor = 0;
-	
+
+	/*
+	 * XXX very rough, assumes 20 bus cycles to read a cache line,
+	 * timebase increments every 4 bus cycles, 32kB L1 data cache.
+	 */
+	cacheflush_time = 5 * 1024;
+
 	if ( _machine != _MACH_Pmac )
 	{
 		printk("SMP not supported on this machine.\n");
@@ -213,10 +228,16 @@ void __init smp_boot_cpus(void)
 	if ( !p )
 		panic("No idle task for secondary processor\n");
 	p->processor = 1;
+	p->has_cpu = 1;
 	current_set[1] = p;
 
 	/* need to flush here since secondary bat's aren't setup */
-	dcbf((void *)&current_set[1]);
+	/* XXX ??? */
+	for (a = KERNELBASE; a < KERNELBASE + 0x800000; a += 32)
+		asm volatile("dcbf 0,%0" : : "r" (a) : "memory");
+	asm volatile("sync");
+
+	/*dcbf((void *)&current_set[1]);*/
 	/* setup entry point of secondary processor */
 	*(volatile unsigned long *)(0xf2800000) =
 		(unsigned long)__secondary_start-KERNELBASE;
@@ -238,7 +259,7 @@ void __init smp_boot_cpus(void)
 	if(cpu_callin_map[1]) {
 		printk("Processor %d found.\n", smp_num_cpus);
 		smp_num_cpus++;
-#if 0 /* this sync's the decr's, but we don't want this now -- Cort */
+#if 1 /* this sync's the decr's, but we don't want this now -- Cort */
 		set_dec(decrementer_count);
 #endif
 	} else {
@@ -287,6 +308,7 @@ void __init smp_callin(void)
 	while(!smp_commenced)
 		barrier();
 	__sti();
+	printk("SMP %d: smp_callin done\n", current->processor);
 }
 
 void __init smp_setup(char *str, int *ints)

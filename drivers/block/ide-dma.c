@@ -68,8 +68,9 @@
  *       SIIG's UltraIDE Pro CN-2449
  * TTI   HPT343 Chipset "Modified SCSI Class" but reports as an
  *       unknown storage device.
- * NEW	check_drive_lists(ide_drive_t *drive, int good_bad)
+ * NEW	 check_drive_lists(ide_drive_t *drive, int good_bad)
  */
+
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -91,9 +92,8 @@
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
 				 "CONNER CTMA 4000",
+				 "CONNER CTT8000-A",
 				 "ST34342A",	/* for Sun Ultra */
-				 "WDC AC2340F",	/* DMA mode1 */
-				 "WDC AC2340H",	/* DMA mode1 */
 				 NULL};
 
 /*
@@ -101,7 +101,10 @@ const char *good_dma_drives[] = {"Micropolis 2112A",
  * of drives which supposedly support (U)DMA but which are
  * known to corrupt data with this interface under Linux.
  */
-const char *bad_dma_drives[] = {"WDC AC22100H",
+const char *bad_dma_drives[] = {"WDC AC11000H",
+				"WDC AC22100H",
+				"WDC AC32500H",
+				"WDC AC33100H",
  				NULL};
 
 /*
@@ -331,8 +334,8 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			return 0;
 		case ide_dma_end: /* returns 1 on error, 0 otherwise */
 			drive->waiting_for_dma = 0;
-			dma_stat = inb(dma_base+2);
-			outb(inb(dma_base)&~1, dma_base);		/* stop DMA */
+			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+			dma_stat = inb(dma_base+2);		/* get DMA status */
 			outb(dma_stat|6, dma_base+2);	/* clear the INTR & ERROR bits */
 			return (dma_stat & 7) != 4;	/* verify good DMA status */
 		case ide_dma_test_irq: /* returns 1 if dma irq issued, 0 otherwise */

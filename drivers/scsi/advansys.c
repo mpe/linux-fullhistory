@@ -3941,6 +3941,8 @@ int
 advansys_proc_info(char *buffer, char **start, off_t offset, int length, 
                    int hostno, int inout)
 {
+#ifdef CONFIG_PROC_FS
+
     struct Scsi_Host    *shp;
     asc_board_t         *boardp;
     int                 i;
@@ -4147,9 +4149,12 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
     ASC_DBG1(1, "advansys_proc_info: totcnt %d\n", totcnt);
 
     return totcnt;
+#else /* CONFIG_PROC_FS */
+    return 0;
+#endif /* CONFIG_PROC_FS */
+
 }
 #endif /* version >= v1.3.0 */
-
 /*
  * advansys_detect()
  *

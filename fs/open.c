@@ -523,19 +523,27 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 	newattrs.ia_gid = group;
 	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
 	/*
-	 * If the owner has been changed, remove the setuid bit
+	 * If the user or group of a non-directory has been changed by a
+	 * non-root user, remove the setuid bit.
+	 * 19981026	David C Niemi <niemi@tux.org>
+	 *
 	 */
-	if (inode->i_mode & S_ISUID) {
+	if ((inode->i_mode & S_ISUID) == S_ISUID &&
+		!S_ISDIR(inode->i_mode)
+		&& current->fsuid) 
+	{
 		newattrs.ia_mode &= ~S_ISUID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	/*
-	 * If the group has been changed, remove the setgid bit
-	 *
-	 * Don't remove the setgid bit if no group execute bit.
-	 * This is a file marked for mandatory locking.
+	 * Likewise, if the user or group of a non-directory has been changed
+	 * by a non-root user, remove the setgid bit UNLESS there is no group
+	 * execute bit (this would be a file marked for mandatory locking).
+	 * 19981026	David C Niemi <niemi@tux.org>
 	 */
-	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) 
+		&& !S_ISDIR(inode->i_mode) && current->fsuid) 
+	{
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}

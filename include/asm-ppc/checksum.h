@@ -83,13 +83,13 @@ static inline unsigned long csum_tcpudp_nofold(unsigned long saddr,
 						   unsigned int sum) 
 {
     __asm__("
-	add %0,%0,%1
-	add %0,%0,%2
-	add %0,%0,%0
-	addi %0,%0,0
+	addc %0,%0,%1
+	adde %0,%0,%2
+	adde %0,%0,%3
+	addze %0,%0
 	"
 	: "=r" (sum)
-	: "r" (daddr), "r"(saddr), "r"((ntohs(len)<<16)+proto*256), "0"(sum));
+	: "r" (daddr), "r"(saddr), "r"((proto<<16)+len), "0"(sum));
     return sum;
 }
 

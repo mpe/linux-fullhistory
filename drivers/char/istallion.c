@@ -2311,7 +2311,7 @@ static void stli_waituntilsent(struct tty_struct *tty, int timeout)
 		if (signal_pending(current))
 			break;
 		stli_delay(2);
-		if (jiffies >= tend)
+		if (time_after_eq(jiffies, tend))
 			break;
 	}
 }

@@ -312,10 +312,55 @@ __initfunc(static void check_cx686_cpuid_slop(void))
 	}
 }
 
+/*
+ * Check wether we are able to run this kernel safely with this
+ * configuration.  Various configs imply certain minimum requirements
+ * of the machine:
+ *
+ * - In order to run on a i386, we need to be compiled for i386
+ *   (for due to lack of "invlpg" and working WP on a i386)
+ * - In order to run on anything without a TSC, we need to be
+ *   compiled for a i486.
+ * - In order to work on a Pentium/SMP machine, we need to be
+ *   compiled for a Pentium or lower, as a PPro config implies
+ *   a properly working local APIC without the need to do extra
+ *   reads from the APIC.
+ */
+__initfunc(static void check_config(void))
+{
+	/* Configuring for a i386 will boot on anything */
+#ifndef CONFIG_M386
+	/* Configuring for an i486 only implies 'invlpg' and a working WP bit */
+	if (boot_cpu_data.x86 == 3)
+		panic("Kernel requires i486+ for 'invlpg' and other features");
+
+#ifndef CONFIG_M486
+
+#ifndef CONFIG_M586
+	/* Configuring for a PPro implies that we have an IO-APIC without the read-before-write bug */
+
+#endif	/* CONFIG_M586 */
+#endif	/* CONFIG_M486 */
+#endif	/* CONFIG_M386 */
+
+/* If we configured ourselves for a TSC, we'd better have one! */
+#ifdef CONFIG_TSC
+	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC))
+		panic("Kernel compiled for Pentium+, requires TSC");
+#endif
+
+/* If we were told we had a good APIC for SMP, we'd better be a PPro */
+#ifdef CONFIG_GOOD_APIC
+	if (smp_found_config && boot_cpu_data.x86 <= 5)
+		panic("Kernel compiled for PPro+, assumes local APIC without read-before-write bug");
+#endif
+}
+
 __initfunc(static void check_bugs(void))
 {
 	check_cyrix_cpu();
 	identify_cpu(&boot_cpu_data);
+	check_config();
 #ifndef __SMP__
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);

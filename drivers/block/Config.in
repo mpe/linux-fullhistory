@@ -69,7 +69,7 @@ else
       bool '     QDI QD6580 support' CONFIG_BLK_DEV_QD6580
       bool '     UMC-8672 support' CONFIG_BLK_DEV_UMC8672
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-        if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+        if [ "$CONFIG_BLK_DEV_IDEDISK" = "y" ]; then
         bool '     PROMISE DC4030 support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC4030
 	 fi
       fi

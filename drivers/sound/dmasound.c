@@ -2084,8 +2084,7 @@ static ssize_t pmac_ctx_s16(const u_char *userPtr, size_t userCount,
 	int utotal, ftotal;
 
 	frameLeft >>= 2;
-	if (stereo)
-		userCount >>= 1;
+	userCount >>= (stereo? 2: 1);
 	ftotal = frameLeft;
 	utotal = userCount;
 	while (frameLeft) {
@@ -2130,8 +2129,7 @@ static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
 	int utotal, ftotal;
 
 	frameLeft >>= 2;
-	if (stereo)
-		userCount >>= 1;
+	userCount >>= (stereo? 2: 1);
 	ftotal = frameLeft;
 	utotal = userCount;
 	while (frameLeft) {

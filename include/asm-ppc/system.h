@@ -5,7 +5,15 @@
 #include <asm/processor.h>
 #include <asm/atomic.h>
 
+/*
+ * Memory barrier.
+ * The sync instruction guarantees that all memory accesses initiated
+ * by this processor have been performed (with respect to all other
+ * mechanisms that access memory).
+ */
 #define mb()  __asm__ __volatile__ ("sync" : : : "memory")
+#define rmb()  __asm__ __volatile__ ("sync" : : : "memory")
+#define wmb()  __asm__ __volatile__ ("sync" : : : "memory")
 
 #define __save_flags(flags)	({\
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })

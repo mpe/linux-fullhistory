@@ -900,7 +900,7 @@ unsigned long probe_irq_on(void)
 	/*
 	 * Wait for spurious interrupts to trigger
 	 */
-	for (delay = jiffies + HZ/10; delay > jiffies; )
+	for (delay = jiffies + HZ/10; time_after(delay, jiffies); )
 		/* about 100ms delay */ synchronize_irq();
 
 	/*

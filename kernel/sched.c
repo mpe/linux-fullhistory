@@ -155,6 +155,15 @@ send:
 }
 #endif /* __SMP__ */
 
+/*
+ * If there is a dependency between p1 and p2,
+ * don't be too eager to go into the slow schedule.
+ * In particular, if p1 and p2 both want the kernel
+ * lock, there is no point in trying to make them
+ * extremely parallel..
+ */
+#define related(p1,p2) ((p1)->lock_depth && (p2)->lock_depth)
+
 static inline void reschedule_idle(struct task_struct * p)
 {
 
@@ -197,7 +206,7 @@ static inline void reschedule_idle(struct task_struct * p)
 	 *
 	 * [We can switch to something more finegrained in 2.3.]
 	 */
-	if ((current->avg_slice < cacheflush_time) && !in_interrupt())
+	if ((current->avg_slice < cacheflush_time) && related(current, p))
 		return;
 
 	reschedule_idle_slow(p);

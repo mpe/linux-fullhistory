@@ -564,10 +564,10 @@ int try_to_free_pages(unsigned int gfp_mask, int count)
 	
 		priority = 5;
 		do {
+			shrink_dcache_memory(priority, gfp_mask);
 			free_memory(shrink_mmap(priority, gfp_mask));
 			free_memory(shm_swap(priority, gfp_mask));
 			free_memory(swap_out(priority, gfp_mask));
-			shrink_dcache_memory(priority, gfp_mask);
 		} while (--priority >= 0);
 		retval = 0;
 done:

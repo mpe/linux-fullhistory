@@ -500,7 +500,7 @@ int eata_pio_reset(Scsi_Cmnd * cmd, unsigned int dummy)
     HD(cmd)->state = RESET;
     
     time = jiffies;
-    while (jiffies < (time + (3 * HZ)) && limit++ < 10000000);
+    while (time_before(jiffies, time + 3 * HZ) && limit++ < 10000000);
     
     DBG(DBG_ABNORM, printk(KERN_WARNING "eata_pio_reset: interrupts disabled, "
                            "loops %d.\n", limit));

@@ -962,7 +962,7 @@ char * get_board_data(u32 base, u32 irq, u32 id)
     eata_send_command((u32) cp, (u32) base, EATA_CMD_DMA_SEND_CP);
     
     i = jiffies + (3 * HZ);
-    while (fake_int_happened == FALSE && jiffies <= i) 
+    while (fake_int_happened == FALSE && time_before_eq(jiffies, i)) 
 	barrier();
     
     DBG(DBG_INTR3, printk(KERN_DEBUG "fake_int_result: %#x hbastat %#x "
@@ -973,7 +973,7 @@ char * get_board_data(u32 base, u32 irq, u32 id)
     scsi_init_free((void *)cp, sizeof(struct eata_ccb));
     scsi_init_free((void *)sp, sizeof(struct eata_sp));
     
-    if ((fake_int_result & HA_SERROR) || jiffies > i){
+    if ((fake_int_result & HA_SERROR) || time_after(jiffies, i)){
 	printk(KERN_WARNING "eata_dma: trying to reset HBA at %x to clear "
 	       "possible blink state\n", base); 
 	/* hard reset the HBA  */

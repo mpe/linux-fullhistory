@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.68 1998/11/15 19:59:02 cort Exp $
+ * $Id: process.c,v 1.69 1998/12/28 10:28:49 paulus Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -182,13 +182,6 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	if ( prev->tss.regs->msr & MSR_FP )
 		smp_giveup_fpu(prev);
 
-	/* be noisy about processor changes for debugging -- Cort */
-	if ( (new->last_processor != NO_PROC_ID) &&
-	     (new->last_processor != new->processor) )
-		printk("switch_to(): changing cpu's %d -> %d %s/%d\n",
-		       new->last_processor,new->processor,
-		       new->comm,new->pid);
-	
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* __SMP__ */

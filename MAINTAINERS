@@ -181,12 +181,6 @@ M:	kas@fi.muni.cz
 W:	http://www.fi.muni.cz/~kas/cosa/
 S:	Maintained
 
-COSA/SRP SYNC SERIAL DRIVER
-P:	Jan "Yenya" Kasprzak
-M:	kas@fi.muni.cz
-W:	http://www.fi.muni.cz/~kas/cosa/
-S:	Maintained
-
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org
@@ -350,10 +344,10 @@ M:	perex@jcu.cz
 S:	Maintained
 
 IDE DRIVER [GENERAL]
-P:	Mark Lord
-M:	mlord@pobox.com
+P:	Andre Hedrick
+M:	hedrick@astro.dyer.vanderbilt.edu
 L:	linux-kernel@vger.rutgers.edu
-S:	Odd Fixes
+S:	Maintained
 
 IDE/ATAPI CDROM DRIVER 
 P:	Jens Axboe
@@ -405,6 +399,13 @@ KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
 M:	hpa@zytor.com
 L:	autofs@linux.kernel.org
+S:	Maintained
+
+KERNEL NFSD
+P:	G. Allen Morris III
+M:	gam3@acm.org
+L:	nfs-devel@linux.kernel.org (Linux NFS)
+W:	http://csua.berkeley.edu/~gam3/knfsd
 S:	Maintained
 
 LAPB module

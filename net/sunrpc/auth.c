@@ -117,7 +117,7 @@ rpcauth_gc_credcache(struct rpc_auth *auth)
 				printk("RPC: rpcauth_gc_credcache looping!\n");
 				break;
 			}
-			if (!cred->cr_count && time_after(jiffies, cred->cr_expire)) {
+			if (!cred->cr_count && time_before(cred->cr_expire, jiffies)) {
 				*q = cred->cr_next;
 				cred->cr_next = free;
 				free = cred;
@@ -160,7 +160,7 @@ rpcauth_lookup_credcache(struct rpc_task *task)
 
 	nr = RPC_DO_ROOTOVERRIDE(task)? 0 : (current->uid % RPC_CREDCACHE_NR);
 
-	if (time_after(jiffies, auth->au_nextgc))
+	if (time_before(auth->au_nextgc, jiffies))
 		rpcauth_gc_credcache(auth);
 
 	q = &auth->au_credcache[nr];

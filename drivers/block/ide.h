@@ -438,6 +438,8 @@ read_proc_t proc_ide_read_geometry;
 	*start = page + off;		\
 	return len;			\
 }
+#else
+#define PROC_IDE_READ_RETURN(page,start,off,count,eof,len) return 0;
 #endif
 
 /*

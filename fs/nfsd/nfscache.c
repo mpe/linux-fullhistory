@@ -314,8 +314,8 @@ nfsd_cache_append(struct svc_rqst *rqstp, struct svc_buf *data)
 				data->len);
 		return 0;
 	}
-	memcpy(resp->buf, data->buf, data->len);
-	resp->buf += ((data->len + 3) >> 2);
+	memcpy(resp->buf, data->buf, data->len << 2);
+	resp->buf += data->len;
 	resp->len += data->len;
 	return 1;
 }

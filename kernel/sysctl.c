@@ -28,7 +28,7 @@
 #include <linux/nfs_fs.h>
 #endif
 
-#if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
+#if defined(CONFIG_SYSCTL)
 
 /* External variables not in a header file. */
 extern int panic_timeout;
@@ -36,6 +36,8 @@ extern int console_loglevel, C_A_D;
 extern int bdf_prm[], bdflush_min[], bdflush_max[];
 extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
 extern int sysctl_overcommit_memory;
+extern int nr_queued_signals, max_queued_signals;
+
 #ifdef CONFIG_KMOD
 extern char modprobe_path[];
 #endif
@@ -70,7 +72,9 @@ static struct ctl_table_header root_table_header =
 
 static ctl_table kern_table[];
 static ctl_table vm_table[];
+#ifdef CONFIG_NET
 extern ctl_table net_table[];
+#endif
 static ctl_table proc_table[];
 static ctl_table fs_table[];
 static ctl_table debug_table[];
@@ -123,18 +127,20 @@ struct inode_operations proc_sys_inode_operations =
 
 extern struct proc_dir_entry proc_sys_root;
 
-extern int inodes_stat[];
-extern int dentry_stat[];
 static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
+extern int inodes_stat[];
+extern int dentry_stat[];
 
 /* The default sysctl tables: */
 
 static ctl_table root_table[] = {
 	{CTL_KERN, "kernel", NULL, 0, 0555, kern_table},
 	{CTL_VM, "vm", NULL, 0, 0555, vm_table},
+#ifdef CONFIG_NET
 	{CTL_NET, "net", NULL, 0, 0555, net_table},
+#endif
 	{CTL_PROC, "proc", NULL, 0, 0555, proc_table},
 	{CTL_FS, "fs", NULL, 0, 0555, fs_table},
 	{CTL_DEBUG, "debug", NULL, 0, 0555, debug_table},
@@ -195,6 +201,10 @@ static ctl_table kern_table[] = {
 	{KERN_ACCT, "acct", &acct_parm, 3*sizeof(int),
 	0644, NULL, &proc_dointvec},
 #endif
+	{KERN_RTSIGNR, "rtsig-nr", &nr_queued_signals, sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{KERN_RTSIGMAX, "rtsig-max", &max_queued_signals, sizeof(int),
+	 0644, NULL, &proc_dointvec},
 	{0}
 };
 
@@ -868,14 +878,14 @@ int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 
 #else /* CONFIG_PROC_FS */
 
-int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
-			  void *buffer, size_t *lenp)
-{
-  return -ENOSYS; 
-}
-
 int proc_dostring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
+			    void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
 }
@@ -1055,7 +1065,7 @@ int do_struct (
 }
 
 
-#else /* CONFIG_PROC_FS && CONFIG_SYSCTL */
+#else /* CONFIG_SYSCTL */
 
 
 extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
@@ -1111,7 +1121,4 @@ void unregister_sysctl_table(struct ctl_table_header * table)
 {
 }
 
-#endif /* CONFIG_PROC_FS && CONFIG_SYSCTL */
-
-
-
+#endif /* CONFIG_SYSCTL */

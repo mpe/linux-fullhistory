@@ -64,6 +64,9 @@ SECTIONS
   __ex_table : { *(__ex_table) }
   __stop___ex_table = .;
 
+  . = ALIGN(32);
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
+
   . = ALIGN(4096);
   __init_begin = .;
   .text.init : { *(.text.init) }

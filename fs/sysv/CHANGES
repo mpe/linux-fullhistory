@@ -38,3 +38,8 @@ Thu Dec 10 1998   AV
 			Removed dead code - mknod is never asked to
 			create a symlink or directory. Incidentially,
 			it wouldn't do it right if it would be called.
+
+Sat Dec 26 1998   KGB
+	*    inode.c (detect_sysv4):
+			Added detection of expanded s_type field (0x10,
+			0x20 and 0x30).  Forced read-only access in this case.

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.97 1998/11/08 13:21:27 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.98 1998/12/12 06:43:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -80,15 +80,28 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 		int tcp_header_size = tp->tcp_header_len;
 		struct tcphdr *th;
+		int sysctl_flags;
 
+#define SYSCTL_FLAG_TSTAMPS	0x1
+#define SYSCTL_FLAG_WSCALE	0x2
+#define SYSCTL_FLAG_SACK	0x4
+
+		sysctl_flags = 0;
 		if(tcb->flags & TCPCB_FLAG_SYN) {
 			tcp_header_size = sizeof(struct tcphdr) + TCPOLEN_MSS;
-			if(sysctl_tcp_timestamps)
+			if(sysctl_tcp_timestamps) {
 				tcp_header_size += TCPOLEN_TSTAMP_ALIGNED;
-			if(sysctl_tcp_window_scaling)
+				sysctl_flags |= SYSCTL_FLAG_TSTAMPS;
+			}
+			if(sysctl_tcp_window_scaling) {
 				tcp_header_size += TCPOLEN_WSCALE_ALIGNED;
-			if(sysctl_tcp_sack && !sysctl_tcp_timestamps)
-				tcp_header_size += TCPOLEN_SACKPERM_ALIGNED;
+				sysctl_flags |= SYSCTL_FLAG_WSCALE;
+			}
+			if(sysctl_tcp_sack) {
+				sysctl_flags |= SYSCTL_FLAG_SACK;
+				if(!sysctl_tcp_timestamps)
+					tcp_header_size += TCPOLEN_SACKPERM_ALIGNED;
+			}
 		} else if(tp->sack_ok && tp->num_sacks) {
 			/* A SACK is 2 pad bytes, a 2 byte header, plus
 			 * 2 32-bit sequence numbers for each SACK block.
@@ -118,9 +131,9 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 			 */
 			th->window	= htons(tp->rcv_wnd);
 			tcp_syn_build_options((__u32 *)(th + 1), tp->mss_clamp,
-					      sysctl_tcp_timestamps,
-					      sysctl_tcp_sack,
-					      sysctl_tcp_window_scaling,
+					      (sysctl_flags & SYSCTL_FLAG_TSTAMPS),
+					      (sysctl_flags & SYSCTL_FLAG_SACK),
+					      (sysctl_flags & SYSCTL_FLAG_WSCALE),
 					      tp->rcv_wscale,
 					      TCP_SKB_CB(skb)->when);
 		} else {
@@ -134,6 +147,9 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 		tcp_statistics.TcpOutSegs++;
 		tp->af_specific->queue_xmit(skb);
 	}
+#undef SYSCTL_FLAG_TSTAMPS
+#undef SYSCTL_FLAG_WSCALE
+#undef SYSCTL_FLAG_SACK
 }
 
 /* This is the main buffer sending routine. We queue the buffer

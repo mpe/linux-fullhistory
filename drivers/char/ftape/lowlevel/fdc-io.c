@@ -1348,21 +1348,12 @@ int fdc_grab_irq_and_dma(void)
 	if (fdc.hook == &do_ftape) {
 		/*  Get fast interrupt handler.
 		 */
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,3,70)
 		if (request_irq(fdc.irq, ftape_interrupt,
 				SA_INTERRUPT, "ft", ftape_id)) {
 			TRACE_ABORT(-EIO, ft_t_bug,
 				    "Unable to grab IRQ%d for ftape driver",
 				    fdc.irq);
 		}
-#else
-		if (request_irq(fdc.irq, ftape_interrupt, SA_INTERRUPT,
-				ftape_id)) {
-			TRACE_ABORT(-EIO, ft_t_bug,
-				    "Unable to grab IRQ%d for ftape driver",
-				    fdc.irq);
-		}
-#endif
 		if (request_dma(fdc.dma, ftape_id)) {
 #if LINUX_VERSION_CODE >= KERNEL_VER(1,3,70)
 			free_irq(fdc.irq, ftape_id);
@@ -1373,7 +1364,6 @@ int fdc_grab_irq_and_dma(void)
 			      "Unable to grab DMA%d for ftape driver",
 			      fdc.dma);
 		}
-		enable_irq(fdc.irq);
 	}
 	if (ft_fdc_base != 0x3f0 && (ft_fdc_dma == 2 || ft_fdc_irq == 6)) {
 		/* Using same dma channel or irq as standard fdc, need
@@ -1395,12 +1385,7 @@ int fdc_release_irq_and_dma(void)
 	if (fdc.hook == &do_ftape) {
 		disable_dma(fdc.dma);	/* just in case... */
 		free_dma(fdc.dma);
-		disable_irq(fdc.irq);
-#if LINUX_VERSION_CODE >= KERNEL_VER(1,3,70)
 		free_irq(fdc.irq, ftape_id);
-#else
-                free_irq(fdc.irq);
-#endif
 	}
 	if (ft_fdc_base != 0x3f0 && (ft_fdc_dma == 2 || ft_fdc_irq == 6)) {
 		/* Using same dma channel as standard fdc, need to

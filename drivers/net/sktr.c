@@ -1020,7 +1020,7 @@ static void sktr_timer_chk(unsigned long data)
 		return;
 
 	sktr_chk_outstanding_cmds(dev);
-	if(tp->LastSendTime + SEND_TIMEOUT < jiffies
+	if(time_before(tp->LastSendTime + SEND_TIMEOUT, jiffies)
 		&& (tp->QueueSkb < MAX_TX_QUEUE || tp->TplFree != tp->TplBusy))
 	{
 		/* Anything to send, but stalled to long */
@@ -1526,11 +1526,11 @@ static void sktr_wait(unsigned long time)
 {
 	long tmp;
 
-	tmp = time/(1000000/HZ);
+	tmp = jiffies + time/(1000000/HZ);
 	do {
-		current->state 		= TASK_INTERRUPTIBLE;
+  		current->state 		= TASK_INTERRUPTIBLE;
 		tmp = schedule_timeout(tmp);
-	} while(tmp);
+	} while(time_after(tmp, jiffies));
 
 	return;
 }

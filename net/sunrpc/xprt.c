@@ -543,7 +543,7 @@ xprt_complete_rqst(struct rpc_xprt *xprt, struct rpc_rqst *req, int copied)
 		pkt_cnt++;
 		pkt_len += req->rq_slen + copied;
 		pkt_rtt += jiffies - req->rq_xtime;
-		if (time_after(jiffies, nextstat)) {
+		if (time_before(nextstat, jiffies)) {
 			printk("RPC: %lu %ld cwnd\n", jiffies, xprt->cwnd);
 			printk("RPC: %ld %ld %ld %ld stat\n",
 					jiffies, pkt_cnt, pkt_len, pkt_rtt);
@@ -936,6 +936,7 @@ xprt_transmit(struct rpc_task *task)
 	struct rpc_timeout *timeo;
 	struct rpc_rqst	*req = task->tk_rqstp;
 	struct rpc_xprt	*xprt = req->rq_xprt;
+	int status;
 
 	/*DEBUG*/int ac_debug=xprt->snd_sent;
 	
@@ -993,9 +994,17 @@ xprt_transmit(struct rpc_task *task)
 	 * the pending list now:
 	 */
 	start_bh_atomic();
-	rpc_add_wait_queue(&xprt->pending, task);
-	task->tk_callback = NULL;
+	status = rpc_add_wait_queue(&xprt->pending, task);
+	if (!status)
+		task->tk_callback = NULL;
 	end_bh_atomic();
+
+	if (status)
+	{
+		printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
+		task->tk_status = status;
+		return;
+	}
 
 	/* Continue transmitting the packet/record. We must be careful
 	 * to cope with writespace callbacks arriving _after_ we have

@@ -1,3 +1,4 @@
+#include <linux/config.h>
 
 void swap_statistics(u8 *p)
 {
@@ -67,6 +68,8 @@ int eata_set_info(char *buffer, int length, struct Scsi_Host *HBA_ptr)
 int eata_proc_info(char *buffer, char **start, off_t offset, int length, 
 		   int hostno, int inout)
 {
+
+#ifdef CONFIG_PROC_FS
 
     Scsi_Device *scd, SDev;
     struct Scsi_Host *HBA_ptr;
@@ -466,6 +469,9 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     DBG(DBG_PROC, printk("3pos: %ld offset: %ld len: %d\n", pos, offset, len));
     
     return (len);     
+#else /* CONFIG_PROC_FS */
+    return 0;
+#endif        
 }
 
 /*

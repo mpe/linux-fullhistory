@@ -244,14 +244,14 @@ extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val)
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%2\n"
-	"	bis %3,%3,%1\n"
+	"	bis $31,%3,%1\n"
 	"	stl_c %1,%2\n"
 	"	beq %1,2f\n"
 	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
-	: "r" (val), "m" (*m));
+	: "rI" (val), "m" (*m));
 
 	return val;
 }
@@ -262,14 +262,14 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 
 	__asm__ __volatile__(
 	"1:	ldq_l %0,%2\n"
-	"	bis %3,%3,%1\n"
+	"	bis $31,%3,%1\n"
 	"	stq_c %1,%2\n"
 	"	beq %1,2f\n"
 	".section .text2,\"ax\"\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
-	: "r" (val), "m" (*m));
+	: "rI" (val), "m" (*m));
 
 	return val;
 }

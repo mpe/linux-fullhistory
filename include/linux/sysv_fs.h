@@ -98,7 +98,9 @@ struct xenix_super_block {
 	char		s_fill[371];
 	s32		s_magic;	/* version of file system */
 	s32		s_type;		/* type of file system: 1 for 512 byte blocks
-								2 for 1024 byte blocks */
+								2 for 1024 byte blocks
+								3 for 2048 byte blocks */
+								
 };
 
 /* Xenix free list block on disk */

@@ -1098,7 +1098,7 @@ dgrs_download(struct device *dev0))
 	 */
 	proc_reset(dev0, 0);
 
-	for (i = jiffies + 8 * HZ; i > jiffies; )
+	for (i = jiffies + 8 * HZ; time_after(i, jiffies); )
 	{
 		if (priv0->bcomm->bc_status >= BC_RUN)
 			break;
@@ -1196,7 +1196,7 @@ dgrs_probe1(struct device *dev))
 		return (rc);
 
 	priv->intrcnt = 0;
-	for (i = jiffies + 2*HZ + HZ/2; i > jiffies; )
+	for (i = jiffies + 2*HZ + HZ/2; time_after(i, jiffies); )
 		if (priv->intrcnt >= 2)
 			break;
 	if (priv->intrcnt < 2)

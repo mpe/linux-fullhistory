@@ -41,6 +41,7 @@
 /*****************************************************************************/
 
 #include <linux/config.h>
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -58,10 +59,8 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/hdlcdrv.h>
-#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 /* prototypes for ax25_encapsulate and ax25_rebuild_header */
 #include <net/ax25.h> 
-#endif /* CONFIG_AX25 || CONFIG_AX25_MODULE */
 
 /* make genksyms happy */
 #include <linux/ip.h>

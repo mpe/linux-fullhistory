@@ -244,6 +244,12 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	argp->buf += 5;
 	argp->len -= 5;
 
+	/* Used by nfsd to only allow the NULL procedure for amd. */
+	if (rqstp->rq_auth && !rqstp->rq_client && proc) {
+		auth_stat = rpc_autherr_badcred;
+		goto err_bad_auth;
+	}
+
 	/*
 	 * Decode auth data, and add verifier to reply buffer.
 	 * We do this before anything else in order to get a decent

@@ -56,7 +56,9 @@ if [ "$CONFIG_INET" = "y" ]; then
   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
   fi
-  tristate 'NFS server support' CONFIG_NFSD
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'NFS server support' CONFIG_NFSD
+  fi
   if [ "$CONFIG_NFSD" != "n" ]; then
     bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
   fi

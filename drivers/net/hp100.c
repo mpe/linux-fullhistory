@@ -2796,9 +2796,9 @@ static int hp100_down_vg_link( struct device *dev )
   time=jiffies+(HZ/4);
   do{
     if ( hp100_inb( VG_LAN_CFG_1 ) & HP100_LINK_CABLE_ST ) break;
-  } while (time>jiffies);
+  } while (time_after(time, jiffies));
 
-  if ( jiffies >= time )       /* no signal->no logout */
+  if ( time_before_eq(jiffies, time) )       /* no signal->no logout */
     return 0;
 
   /* Drop the VG Link by clearing the link up cmd and load addr.*/
@@ -2810,10 +2810,10 @@ static int hp100_down_vg_link( struct device *dev )
   time=jiffies+(HZ/2);
   do{
     if ( !(hp100_inb( VG_LAN_CFG_1) & HP100_LINK_UP_ST) ) break;
-  } while(time>jiffies);
+  } while(time_after(time, jiffies));
 
 #ifdef HP100_DEBUG
-  if (jiffies>=time)
+  if (time_before_eq(jiffies, time))
     printk("hp100: %s: down_vg_link: Link does not go down?\n", dev->name);
 #endif
 
@@ -2848,7 +2848,7 @@ static int hp100_down_vg_link( struct device *dev )
       time=jiffies+(HZ*5);
       do{
         if( !(hp100_inb(MAC_CFG_4) & HP100_MAC_SEL_ST) ) break;
-      } while(time>jiffies);
+      } while(time_after(time, jiffies));
 
       hp100_orb( HP100_AUTO_MODE, MAC_CFG_3); /* Autosel back on */
       hp100_outl(savelan, 10_LAN_CFG_1);
@@ -2857,9 +2857,9 @@ static int hp100_down_vg_link( struct device *dev )
   time=jiffies+(3*HZ); /* Timeout 3s */
   do {
     if ( (hp100_inb( VG_LAN_CFG_1 )&HP100_LINK_CABLE_ST) == 0) break;
-  } while (time>jiffies);
+  } while (time_after(time, jiffies));
   
-  if(time<=jiffies)
+  if(time_before_eq(time, jiffies))
     {
 #ifdef HP100_DEBUG
       printk( "hp100: %s: down_vg_link: timeout\n", dev->name );
@@ -2868,7 +2868,7 @@ static int hp100_down_vg_link( struct device *dev )
     }
   
   time=jiffies+(2*HZ); /* This seems to take a while.... */
-  do {} while (time>jiffies);
+  do {} while (time_after(time, jiffies));
   
   return 0;
 }
@@ -2918,7 +2918,7 @@ static int hp100_login_to_vg_hub( struct device *dev, u_short force_relogin )
       time = jiffies + (HZ/10); 
       do {
         if (~(hp100_inb( VG_LAN_CFG_1 )& HP100_LINK_UP_ST) ) break;
-      } while (time>jiffies);
+      } while (time_after(time, jiffies));
 
       /* Start an addressed training and optionally request promiscuous port */
       if ( (dev->flags) & IFF_PROMISC )
@@ -2955,9 +2955,9 @@ static int hp100_login_to_vg_hub( struct device *dev, u_short force_relogin )
       time = jiffies + ( 1*HZ ); /* 1 sec timeout for cable st */
       do {
         if ( hp100_inb( VG_LAN_CFG_1 ) & HP100_LINK_CABLE_ST ) break;
-      } while ( jiffies < time );
+      } while ( time_before(jiffies, time) );
       
-      if ( jiffies >= time )
+      if ( time_after_eq(jiffies, time) )
 	{
 #ifdef HP100_DEBUG_TRAINING
 	  printk( "hp100: %s: Link cable status not ok? Training aborted.\n", dev->name );
@@ -2979,11 +2979,11 @@ static int hp100_login_to_vg_hub( struct device *dev, u_short force_relogin )
 #endif
 		break;
 	      }
-	  } while ( time > jiffies );
+	  } while ( time_after(time, jiffies) );
 	}
       
       /* If LINK_UP_ST is set, then we are logged into the hub. */
-      if ( (jiffies<=time) && (val & HP100_LINK_UP_ST) )
+      if ( time_before_eq(jiffies, time) && (val & HP100_LINK_UP_ST) )
         {
 #ifdef HP100_DEBUG_TRAINING
           printk( "hp100: %s: Successfully logged into the HUB.\n", dev->name);

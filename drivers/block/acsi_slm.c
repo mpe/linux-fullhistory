@@ -101,17 +101,8 @@ not be guaranteed. There are several ways to assure this:
 		cmd[1] = (cmd[1] & ~0xe0) | (lun)<<5;	\
 	} while(0)
 
-#define	START_TIMER(to)							\
-    do {										\
-        del_timer( &slm_timer );				\
-        slm_timer.expires = jiffies + (to);			\
-        add_timer( &slm_timer );				\
-	} while(0)
-
-#define	STOP_TIMER()							\
-    do {										\
-        del_timer( &slm_timer );				\
-	} while(0)
+#define	START_TIMER(to)	mod_timer(&slm_timer, jiffies + (to))
+#define	STOP_TIMER()	del_timer(&slm_timer)
 
 
 static char slmreqsense_cmd[6] = { 0x03, 0, 0, 0, 0, 0 };

@@ -1093,32 +1093,33 @@ check_type:
 	/*
 	 * Security: Check that the export is valid for dentry <gam3@acm.org>
 	 */
+	error = 0;
 	if (fh->fh_dev != fh->fh_xdev) {
 		printk("fh_verify: Security: export on other device"
 		       " (%d, %d).\n", fh->fh_dev, fh->fh_xdev);
-		goto out;
+		error = nfserr_stale;
 	} else if (exp->ex_dentry != dentry) {
 		struct dentry *tdentry = dentry;
-		int err2 = 0;
 
-		error = nfserr_stale;
 		do {
 			tdentry = tdentry->d_parent;
-			if (exp->ex_dentry == tdentry) {
-				error = 0;
+			if (exp->ex_dentry == tdentry)
 				break;
-			}
-			if ((err2 = nfsd_permission(exp, tdentry, MAY_READ))) {
-				error = err2;
-#ifdef NFSD_PARANOIA
-				goto out1;
-#else
-				goto out;
-#endif
+			/* executable only by root and we can't be root */
+			if (current->fsuid &&
+			    !(tdentry->d_inode->i_uid  &&
+			        (tdentry->d_inode->i_mode & S_IXUSR)) &&
+			    !(tdentry->d_inode->i_gid &&
+			        (tdentry->d_inode->i_mode & S_IXGRP)) &&
+			    !(tdentry->d_inode->i_mode & S_IXOTH) && 
+			    (exp->ex_flags & NFSEXP_ROOTSQUASH)) {
+				error = nfserr_stale;
+dprintk("fh_verify: no root_squashed access.\n");
 			}
 		} while ((tdentry != tdentry->d_parent));
-		if (error) {
-			printk("fh_verify: Security: %s/%s bad export.\n",
+		if (exp->ex_dentry != tdentry) {
+			error = nfserr_stale;
+			printk("nfsd Security: %s/%s bad export.\n",
 			       dentry->d_parent->d_name.name,
 			       dentry->d_name.name);
 			goto out;
@@ -1126,14 +1127,14 @@ check_type:
 	}
 
 	/* Finally, check access permissions. */
-	error = nfsd_permission(exp, dentry, access);
+	if (!error) {
+		error = nfsd_permission(exp, dentry, access);
+	}
 #ifdef NFSD_PARANOIA
-out1:
 if (error)
 printk("fh_verify: %s/%s permission failure, acc=%x, error=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, access, error);
 #endif
-
 out:
 	return error;
 }

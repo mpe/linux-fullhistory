@@ -425,7 +425,7 @@ int acsi_wait_for_IRQ( unsigned timeout )
 {
 	if (INT_LEVEL < 6) {
 		unsigned long maxjif;
-		for( maxjif = jiffies + timeout; jiffies < maxjif; )
+		for( maxjif = jiffies + timeout; time_before(jiffies, maxjif); )
 			if (!(mfp.par_dt_reg & 0x20)) return( 1 );
 	}
 	else {
@@ -442,7 +442,7 @@ int acsi_wait_for_noIRQ( unsigned timeout )
 {
 	if (INT_LEVEL < 6) {
 		unsigned long maxjif;
-		for( maxjif = jiffies + timeout; jiffies < maxjif; )
+		for( maxjif = jiffies + timeout; time_before(jiffies, maxjif); )
 			if (mfp.par_dt_reg & 0x20) return( 1 );
 	}
 	else {

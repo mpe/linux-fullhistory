@@ -791,7 +791,7 @@ static inline short WAIT (unsigned port, unsigned mask, unsigned allof, unsigned
     register unsigned WAITbits;
     register unsigned long WAITtimeout = jiffies + WAITnexttimeout;
 
-    while (jiffies <= WAITtimeout) {
+    while (time_before_eq(jiffies, WAITtimeout)) {
 	WAITbits = inb (port) & mask;
 
 	if (((WAITbits & allof) == allof) && ((WAITbits & noneof) == 0))
@@ -806,7 +806,7 @@ static inline void delay (unsigned how_long)
 {
     register unsigned long time = jiffies + how_long;
 
-    while (jiffies < time);
+    while (time_before(jiffies, time));
 }
 
 
@@ -868,7 +868,7 @@ static inline Scb *alloc_scbs (int needed)
 	    spin_unlock_irq(&io_request_lock);
 	    for (now = jiffies; now == jiffies; );	/* wait a jiffy */
 	    spin_lock_irq(&io_request_lock);
-	} while (freescbs < needed && jiffies <= timeout);
+	} while (freescbs < needed && time_before_eq(jiffies, timeout));
 	/*
 	 *  If we get here with enough free Scbs, we can take them.
 	 *  Otherwise, we timed out and didn't get enough.
@@ -1247,7 +1247,7 @@ int wd7000_diagnostics (Adapter *host, int code)
      */
     mail_out (host, (struct scb *) &icb);
     timeout = jiffies + WAITnexttimeout;	/* wait up to 2 seconds */
-    while (icb.phase && jiffies < timeout)
+    while (icb.phase && time_before(jiffies, timeout))
 	barrier ();		/* wait for completion */
 
     if (icb.phase) {

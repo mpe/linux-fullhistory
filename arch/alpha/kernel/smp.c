@@ -30,7 +30,14 @@
 
 #include "proto.h"
 
-struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;
+#define DEBUG_SMP 0
+#if DEBUG_SMP
+#define DBGS(args)	printk args
+#else
+#define DBGS(args)
+#endif
+
+struct ipi_msg_flush_tb_struct ipi_msg_flush_tb __cacheline_aligned;
 
 struct cpuinfo_alpha cpu_data[NR_CPUS];
 
@@ -39,7 +46,6 @@ spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 unsigned int boot_cpu_id = 0;
 static int smp_activated = 0;
-static unsigned long ipicnt[NR_CPUS] = {0,}; /* IPI counts */
 
 int smp_found_config = 0; /* Have we found an SMP box */
 static int max_cpus = -1;
@@ -53,10 +59,12 @@ int smp_threads_ready = 0;
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
 volatile unsigned long smp_spinning[NR_CPUS] = { 0, };
 
+cycles_t cacheflush_time;
+
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 
-volatile int ipi_bits[NR_CPUS];
+volatile int ipi_bits[NR_CPUS] __cacheline_aligned;
 
 unsigned long boot_cpu_palrev;
 
@@ -73,87 +81,80 @@ static void smp_setup_percpu_timer(void);
 static void secondary_cpu_start(int, struct task_struct *);
 static void send_cpu_msg(char *, int);
 
-/* process bootcommand SMP options, like "nosmp" and "maxcpus=" */
-__initfunc(void smp_setup(char *str, int *ints))
+/* Process bootcommand SMP options, like "nosmp" and "maxcpus=" */
+void __init
+smp_setup(char *str, int *ints)
 {
 	if (ints && ints[0] > 0)
 		max_cpus = ints[1];
-        else
+	else
 		max_cpus = 0;
 }
 
-void smp_store_cpu_info(int id)
+static void __init
+smp_store_cpu_info(int id)
 {
 	/* This is it on Alpha, so far. */
-        cpu_data[id].loops_per_sec = loops_per_sec;
+	cpu_data[id].loops_per_sec = loops_per_sec;
 }
 
-void smp_commence(void)
+void __init
+smp_commence(void)
 {
 	/* Lets the callin's below out of their loop. */
 	mb();
 	smp_commenced = 1;
 }
 
-void smp_callin(void)
+void __init
+smp_callin(void)
 {
-        int cpuid = hard_smp_processor_id();
+	int cpuid = hard_smp_processor_id();
 
-#if 0
-	printk("CALLIN %d state 0x%lx\n", cpuid, current->state);
-#endif
+	DBGS(("CALLIN %d state 0x%lx\n", cpuid, current->state));
 #ifdef HUH
-        local_flush_cache_all();
-        local_flush_tlb_all();
+	local_flush_cache_all();
+	local_flush_tlb_all();
 #endif
 #if 0
-        set_irq_udt(mid_xlate[boot_cpu_id]);
+	set_irq_udt(mid_xlate[boot_cpu_id]);
 #endif
 
-        /* Get our local ticker going. */
-        smp_setup_percpu_timer();
+	/* Get our local ticker going. */
+	smp_setup_percpu_timer();
 
 #if 0
-        calibrate_delay();
+	calibrate_delay();
 #endif
-        smp_store_cpu_info(cpuid);
+	smp_store_cpu_info(cpuid);
 #ifdef HUH
-        local_flush_cache_all();
-        local_flush_tlb_all();
+	local_flush_cache_all();
+	local_flush_tlb_all();
 #endif
 
-        /* Allow master to continue. */
-        set_bit(cpuid, (unsigned long *)&cpu_callin_map[cpuid]);
+	/* Allow master to continue. */
+	set_bit(cpuid, (unsigned long *)&cpu_callin_map[cpuid]);
 #ifdef HUH
-        local_flush_cache_all();
-        local_flush_tlb_all();
+	local_flush_cache_all();
+	local_flush_tlb_all();
 #endif
 
 #ifdef NOT_YET
-        while(!task[cpuid] || current_set[cpuid] != task[cpuid])
-                barrier();
-#endif /* NOT_YET */
+	while(!task[cpuid] || current_set[cpuid] != task[cpuid])
+	        barrier();
+#endif
 
-#if 0
-        /* Fix idle thread fields. */
-        __asm__ __volatile__("ld [%0], %%g6\n\t"
-                             : : "r" (&current_set[cpuid])
-                             : "memory" /* paranoid */);
-        current->mm->mmap->vm_page_prot = PAGE_SHARED;
-        current->mm->mmap->vm_start = PAGE_OFFSET;
-        current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
-#endif
-        
 #ifdef HUH
-        local_flush_cache_all();
-        local_flush_tlb_all();
+	local_flush_cache_all();
+	local_flush_tlb_all();
 #endif
 #if 0
-        __sti();
+	__sti();
 #endif
 }
 
-asmlinkage int start_secondary(void *unused)
+asmlinkage int __init
+start_secondary(void *unused)
 {
 	extern asmlinkage void entInt(void);
 	extern void paging_init_secondary(void);
@@ -163,35 +164,83 @@ asmlinkage int start_secondary(void *unused)
 	trap_init();
 	wrent(entInt, 0);
 
-        smp_callin();
-        while (!smp_commenced)
+	smp_callin();
+	while (!smp_commenced)
 		barrier();
 #if 1
-printk("start_secondary: commencing CPU %d current %p\n",
-       hard_smp_processor_id(), current);
+	printk("start_secondary: commencing CPU %d current %p\n",
+	       hard_smp_processor_id(), current);
 #endif
-        cpu_idle(NULL);
+	cpu_idle(NULL);
 }
+
+static void __init
+smp_tune_scheduling (void)
+{
+	/*
+	 * Rough estimation for SMP scheduling, this is the number of
+	 * cycles it takes for a fully memory-limited process to flush
+	 * the SMP-local cache.
+	 *
+	 * We are not told how much cache there is, so we have to guess.
+	 */
+
+	struct percpu_struct *cpu;
+	unsigned long on_chip_cache;
+	unsigned long freq;
+
+	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
+	switch (cpu->type)
+	{
+	case EV45_CPU:
+		on_chip_cache = 16 + 16;
+		break;
+
+	case EV5_CPU:
+	case EV56_CPU:
+		on_chip_cache = 8 + 8 + 96;
+		break;
+
+	case PCA56_CPU:
+		on_chip_cache = 16 + 8;
+		break;
+
+	case EV6_CPU:
+		on_chip_cache = 64 + 64;
+		break;
+
+	default:
+		on_chip_cache = 8 + 8;
+		break;
+	}
+
+	freq = hwrpb->cycle_freq ? : est_cycle_freq;
+
+	/* Magic estimation stolen from x86 port.  */
+	cacheflush_time = freq / 1024 * on_chip_cache / 5000;
+}
+
 
 /*
  *      Cycle through the processors sending START msgs to boot each.
  */
-void smp_boot_cpus(void)
+void __init
+smp_boot_cpus(void)
 {
-        int cpucount = 0;
-        int i, first, prev;
+	int cpucount = 0;
+	int i, first, prev;
 
-        printk("smp_boot_cpus: Entering SMP Mode...\n");
+	printk("Entering SMP Mode.\n");
 
 #if 0
-        __sti();
+	__sti();
 #endif
 
-        for(i=0; i < NR_CPUS; i++) {
+	for(i=0; i < NR_CPUS; i++) {
 		cpu_number_map[i] = -1;
 		cpu_logical_map[i] = -1;
-                prof_counter[i] = 1;
-                prof_multiplier[i] = 1;
+	        prof_counter[i] = 1;
+	        prof_multiplier[i] = 1;
 		ipi_bits[i] = 0;
 	}
 
@@ -199,159 +248,155 @@ void smp_boot_cpus(void)
 	cpu_logical_map[0] = boot_cpu_id;
 	current->processor = boot_cpu_id; /* ??? */
 
-        smp_store_cpu_info(boot_cpu_id);
+	smp_store_cpu_info(boot_cpu_id);
+	smp_tune_scheduling();
 #ifdef NOT_YET
-        printk("CPU%d: ", boot_cpu_id);
-        print_cpu_info(&cpu_data[boot_cpu_id]);
-        set_irq_udt(mid_xlate[boot_cpu_id]);
-#endif /* NOT_YET */
-        smp_setup_percpu_timer();
-#ifdef HUH
-        local_flush_cache_all();
+	printk("CPU%d: ", boot_cpu_id);
+	print_cpu_info(&cpu_data[boot_cpu_id]);
+	set_irq_udt(mid_xlate[boot_cpu_id]);
 #endif
-        if (smp_num_probed == 1)
+	smp_setup_percpu_timer();
+#ifdef HUH
+	local_flush_cache_all();
+#endif
+	if (smp_num_probed == 1)
 		return;  /* Not an MP box. */
 
 #if NOT_YET
-        /*
-         * If SMP should be disabled, then really disable it!
-         */
-        if (!max_cpus)
+	/*
+	 * If SMP should be disabled, then really disable it!
+	 */
+	if (!max_cpus)
 	{
 		smp_found_config = 0;
-                printk(KERN_INFO "SMP mode deactivated.\n");
-        }
-#endif /* NOT_YET */
+	        printk(KERN_INFO "SMP mode deactivated.\n");
+	}
+#endif
 
-        for (i = 0; i < NR_CPUS; i++) {
+	for (i = 0; i < NR_CPUS; i++) {
 
 		if (i == boot_cpu_id)
 			continue;
 
-                if (cpu_present_map & (1 << i)) {
-                        struct task_struct *idle;
-                        int timeout;
+	        if (cpu_present_map & (1 << i)) {
+	                struct task_struct *idle;
+	                int timeout;
 
-                        /* Cook up an idler for this guy. */
-                        kernel_thread(start_secondary, NULL, CLONE_PID);
-                        idle = task[++cpucount];
+	                /* Cook up an idler for this guy. */
+	                kernel_thread(start_secondary, NULL, CLONE_PID);
+	                idle = task[++cpucount];
 			if (!idle)
 				panic("No idle process for CPU %d", i);
-                        idle->processor = i;
+	                idle->processor = i;
 
-#if 0
-printk("smp_boot_cpus: CPU %d state 0x%lx flags 0x%lx\n",
-       i, idle->state, idle->flags);
-#endif
+			DBGS(("smp_boot_cpus: CPU %d state 0x%lx flags 0x%lx\n",
+			      i, idle->state, idle->flags));
 
-                        /* whirrr, whirrr, whirrrrrrrrr... */
+	                /* whirrr, whirrr, whirrrrrrrrr... */
 #ifdef HUH
-                        local_flush_cache_all();
+	                local_flush_cache_all();
 #endif
-                        secondary_cpu_start(i, idle);
+	                secondary_cpu_start(i, idle);
 
-                        /* wheee... it's going... wait for 5 secs...*/
-                        for (timeout = 0; timeout < 50000; timeout++) {
+	                /* wheee... it's going... wait for 5 secs...*/
+	                for (timeout = 0; timeout < 50000; timeout++) {
 				if (cpu_callin_map[i])
 					break;
-                                udelay(100);
-                        }
-                        if (cpu_callin_map[i]) {
+	                        udelay(100);
+	                }
+	                if (cpu_callin_map[i]) {
 				/* Another "Red Snapper". */
 				cpu_number_map[i] = cpucount;
-                                cpu_logical_map[cpucount] = i;
-                        } else {
+	                        cpu_logical_map[cpucount] = i;
+	                } else {
 				cpucount--;
-                                printk("smp_boot_cpus: Processor %d"
+	                        printk("smp_boot_cpus: Processor %d"
 				       " is stuck 0x%lx.\n", i, idle->flags);
-                        }
-                }
-                if (!(cpu_callin_map[i])) {
+	                }
+	        }
+	        if (!(cpu_callin_map[i])) {
 			cpu_present_map &= ~(1 << i);
-                        cpu_number_map[i] = -1;
-                }
-        }
+	                cpu_number_map[i] = -1;
+	        }
+	}
 #ifdef HUH
-        local_flush_cache_all();
+	local_flush_cache_all();
 #endif
-        if (cpucount == 0) {
+	if (cpucount == 0) {
 		printk("smp_boot_cpus: ERROR - only one Processor found.\n");
-                cpu_present_map = (1 << smp_processor_id());
-        } else {
+	        cpu_present_map = (1 << smp_processor_id());
+	} else {
 		unsigned long bogosum = 0;
-                for (i = 0; i < NR_CPUS; i++) {
+	        for (i = 0; i < NR_CPUS; i++) {
 			if (cpu_present_map & (1 << i))
 				bogosum += cpu_data[i].loops_per_sec;
-                }
-                printk("smp_boot_cpus: Total of %d Processors activated"
+	        }
+	        printk("smp_boot_cpus: Total of %d Processors activated"
 		       " (%lu.%02lu BogoMIPS).\n",
-                       cpucount + 1,
-                       (bogosum + 2500)/500000,
-                       ((bogosum + 2500)/5000)%100);
-                smp_activated = 1;
-                smp_num_cpus = cpucount + 1;
-        }
+	               cpucount + 1,
+	               (bogosum + 2500)/500000,
+	               ((bogosum + 2500)/5000)%100);
+	        smp_activated = 1;
+	        smp_num_cpus = cpucount + 1;
+	}
 
-        /* Setup CPU list for IRQ distribution scheme. */
-        first = prev = -1;
-        for (i = 0; i < NR_CPUS; i++) {
+	/* Setup CPU list for IRQ distribution scheme. */
+	first = prev = -1;
+	for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_present_map & (1 << i)) {
 			if (first == -1)
 				first = i;
 			if (prev != -1)
 				cpu_data[i].next = i;
-                        prev = i;
-                }
-        }
-        cpu_data[prev].next = first;
+	                prev = i;
+	        }
+	}
+	cpu_data[prev].next = first;
 
-        /* Ok, they are spinning and ready to go. */
-        smp_processors_ready = 1;
+	/* Ok, they are spinning and ready to go. */
+	smp_processors_ready = 1;
 }
 
-__initfunc(void ioapic_pirq_setup(char *str, int *ints))
+static void __init
+smp_setup_percpu_timer(void)
 {
-  /* this is prolly INTEL-specific */
-}
+	int cpu = smp_processor_id();
 
-static void smp_setup_percpu_timer(void)
-{
-        int cpu = smp_processor_id();
-
-        prof_counter[cpu] = prof_multiplier[cpu] = 1;
+	prof_counter[cpu] = prof_multiplier[cpu] = 1;
 #ifdef NOT_YET
-        load_profile_irq(mid_xlate[cpu], lvl14_resolution);
-        if (cpu == boot_cpu_id)
+	load_profile_irq(mid_xlate[cpu], lvl14_resolution);
+	if (cpu == boot_cpu_id)
 		enable_pil_irq(14);
 #endif
 }
 
 extern void update_one_process(struct task_struct *p, unsigned long ticks,
-                               unsigned long user, unsigned long system,
+	                       unsigned long user, unsigned long system,
 			       int cpu);
 
-void smp_percpu_timer_interrupt(struct pt_regs *regs)
+void
+smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
 	int cpu = smp_processor_id();
 
 #ifdef NOT_YET
-        clear_profile_irq(mid_xlate[cpu]);
-        if(!user_mode(regs))
+	clear_profile_irq(mid_xlate[cpu]);
+	if(!user_mode(regs))
 		alpha_do_profile(regs->pc);
 #endif
 
-        if (!--prof_counter[cpu]) {
+	if (!--prof_counter[cpu]) {
 		int user = user_mode(regs);
-                if (current->pid) {
+	        if (current->pid) {
 			update_one_process(current, 1, user, !user, cpu);
 
-                        if (--current->counter < 0) {
+	                if (--current->counter < 0) {
 				current->counter = 0;
-                                current->need_resched = 1;
-                        }
+	                        current->need_resched = 1;
+	                }
 
-                        spin_lock(&ticker_lock);
-                        if (user) {
+	                spin_lock(&ticker_lock);
+	                if (user) {
 				if (current->priority < DEF_PRIORITY) {
 					kstat.cpu_nice++;
 					kstat.per_cpu_nice[cpu]++;
@@ -359,93 +404,86 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 					kstat.cpu_user++;
 					kstat.per_cpu_user[cpu]++;
 				}
-                        } else {
+	                } else {
 				kstat.cpu_system++;
 				kstat.per_cpu_system[cpu]++;
-                        }
-                        spin_unlock(&ticker_lock);
-                }
-                prof_counter[cpu] = prof_multiplier[cpu];
-        }
+	                }
+	                spin_unlock(&ticker_lock);
+	        }
+	        prof_counter[cpu] = prof_multiplier[cpu];
+	}
 }
 
-int setup_profiling_timer(unsigned int multiplier)
+int __init
+setup_profiling_timer(unsigned int multiplier)
 {
 #ifdef NOT_YET
-        int i;
-        unsigned long flags;
+	int i;
+	unsigned long flags;
 
-        /* Prevent level14 ticker IRQ flooding. */
-        if((!multiplier) || (lvl14_resolution / multiplier) < 500)
-                return -EINVAL;
+	/* Prevent level14 ticker IRQ flooding. */
+	if((!multiplier) || (lvl14_resolution / multiplier) < 500)
+	        return -EINVAL;
 
-        save_and_cli(flags);
-        for(i = 0; i < NR_CPUS; i++) {
-                if(cpu_present_map & (1 << i)) {
-                        load_profile_irq(mid_xlate[i], lvl14_resolution / multip
+	save_and_cli(flags);
+	for(i = 0; i < NR_CPUS; i++) {
+	        if(cpu_present_map & (1 << i)) {
+	                load_profile_irq(mid_xlate[i], lvl14_resolution / multip
 lier);
-                        prof_multiplier[i] = multiplier;
-                }
-        }
-        restore_flags(flags);
+	                prof_multiplier[i] = multiplier;
+	        }
+	}
+	restore_flags(flags);
 
-        return 0;
+	return 0;
 
 #endif
   return -EINVAL;
 }
 
-/* Only broken Intel needs this, thus it should not even be referenced globally.
-*/
-__initfunc(void initialize_secondary(void))
+/* Only broken Intel needs this, thus it should not even be
+   referenced globally.  */
+
+void __init
+initialize_secondary(void)
 {
-	printk("initialize_secondary: entry\n");
 }
 
-static void
+static void __init
 secondary_cpu_start(int cpuid, struct task_struct *idle)
 {
 	struct percpu_struct *cpu;
-        int timeout;
+	int timeout;
 	  
 	cpu = (struct percpu_struct *)
 		((char*)hwrpb
-			+ hwrpb->processor_offset
-			+ cpuid * hwrpb->processor_size);
+		 + hwrpb->processor_offset
+		 + cpuid * hwrpb->processor_size);
 
-	/* set context to idle thread this CPU will use when running */
-	/* assumption is that the idle thread is all set to go... ??? */
+	/* Set context to idle thread this CPU will use when running
+	   assumption is that the idle thread is all set to go... ??? */
 	memcpy(&cpu->hwpcb[0], &idle->tss, sizeof(struct pcb_struct));
 	cpu->hwpcb[4] = cpu->hwpcb[0]; /* UNIQUE set to KSP ??? */
-#if 0
-printk("KSP 0x%lx PTBR 0x%lx VPTBR 0x%lx\n",
-       cpu->hwpcb[0], cpu->hwpcb[2], hwrpb->vptb);
-printk("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
-       cpuid, idle->state, idle->tss.pal_flags);
-#endif
 
-	/* setup HWRPB fields that SRM uses to activate secondary CPU */
-	 hwrpb->CPU_restart = __start_cpu;
-	 hwrpb->CPU_restart_data = (unsigned long) idle;
+	DBGS(("KSP 0x%lx PTBR 0x%lx VPTBR 0x%lx\n",
+	      cpu->hwpcb[0], cpu->hwpcb[2], hwrpb->vptb));
+	DBGS(("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
+	      cpuid, idle->state, idle->tss.pal_flags));
 
-	 /* recalculate and update the HWRPB checksum */
-	 {
-	   unsigned long sum, *lp1, *lp2;
-	   sum = 0;
-	   lp1 = (unsigned long *)hwrpb;
-	   lp2 = &hwrpb->chksum;
-	   while (lp1 < lp2)
-	     sum += *lp1++;
-	   *lp2 = sum;
-	 }
+	/* Setup HWRPB fields that SRM uses to activate secondary CPU */
+	hwrpb->CPU_restart = __start_cpu;
+	hwrpb->CPU_restart_data = (unsigned long) idle;
+
+	/* Recalculate and update the HWRPB checksum */
+	hwrpb_update_checksum(hwrpb);
 
 	/*
 	 * Send a "start" command to the specified processor.
 	 */
 
 	/* SRM III 3.4.1.3 */
-	cpu->flags |= 0x22; /* turn on Context Valid and Restart Capable */
-	cpu->flags &= ~1;/* turn off Bootstrap In Progress */
+	cpu->flags |= 0x22;	/* turn on Context Valid and Restart Capable */
+	cpu->flags &= ~1;	/* turn off Bootstrap In Progress */
 	mb();
 
 	send_cpu_msg("START\r\n", cpuid);
@@ -454,7 +492,7 @@ printk("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
 	for (timeout = 10000; !(cpu->flags & 1); timeout--) {
 		if (timeout <= 0) {
 			printk("Processor %d failed to start\n", cpuid);
-                                /* needed for pset_info to work */
+	                        /* needed for pset_info to work */
 #if 0
 			ipc_processor_enable(cpu_to_processor(cpunum));
 #endif
@@ -462,49 +500,61 @@ printk("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
 		}
 		mdelay(1);
 	}
-#if 0
-	printk("secondary_cpu_start: SUCCESS for CPU %d!!!\n", cpuid);
-#endif
+	DBGS(("secondary_cpu_start: SUCCESS for CPU %d!!!\n", cpuid));
 }
 
 static void
 send_cpu_msg(char *str, int cpuid)
 {
 	struct percpu_struct *cpu;
-        register char *cp1, *cp2;
-        unsigned long cpumask;
-        int timeout;
+	register char *cp1, *cp2;
+	unsigned long cpumask;
+	size_t len;
+	int timeout;
 
-	  
 	cpu = (struct percpu_struct *)
 		((char*)hwrpb
-			+ hwrpb->processor_offset
-			+ cpuid * hwrpb->processor_size);
+		 + hwrpb->processor_offset
+		 + cpuid * hwrpb->processor_size);
 
-        cpumask = (1L << cpuid);
-        for (timeout = 10000; (hwrpb->txrdy & cpumask); timeout--) {
-                if (timeout <= 0) {
-                        printk("Processor %x not ready\n", cpuid);
-                        return;
-                }
-                mdelay(1);
-        }
+	cpumask = (1L << cpuid);
+	if (hwrpb->txrdy & cpumask)
+		goto delay1;
+	ready1:
 
-        cp1 = (char *) &cpu->ipc_buffer[1];
-        cp2 = str;
-        while (*cp2) *cp1++ = *cp2++;
-        *(unsigned int *)&cpu->ipc_buffer[0] = cp2 - str; /* hack */
+	cp2 = str;
+	len = strlen(cp2);
+	*(unsigned int *)&cpu->ipc_buffer[0] = len;
+	cp1 = (char *) &cpu->ipc_buffer[1];
+	memcpy(cp1, cp2, len);
 
-        /* atomic test and set */
-        set_bit(cpuid, &hwrpb->rxrdy);
+	/* atomic test and set */
+	set_bit(cpuid, &hwrpb->rxrdy);
 
-        for (timeout = 10000; (hwrpb->txrdy & cpumask); timeout--) {
-                if (timeout <= 0) {
-                        printk("Processor %x not ready\n", cpuid);
-                        return;
-                }
-                mdelay(1);
-        }
+	if (hwrpb->txrdy & cpumask)
+		goto delay2;
+	ready2:
+	return;
+
+delay1:
+	for (timeout = 10000; timeout > 0; --timeout) {
+		if (!(hwrpb->txrdy & cpumask))
+			goto ready1;
+		udelay(100);
+	}
+	goto timeout;
+
+delay2:
+	for (timeout = 10000; timeout > 0; --timeout) {
+		if (!(hwrpb->txrdy & cpumask))
+			goto ready2;
+		udelay(100);
+	}
+	goto timeout;
+
+timeout:
+	printk("Processor %x not ready\n", cpuid);
+	return;
 }
 
 /*
@@ -512,7 +562,8 @@ send_cpu_msg(char *str, int cpuid)
  *
  * called from arch/alpha/kernel/setup.c:setup_arch() when __SMP__ defined
  */
-__initfunc(void setup_smp(void))
+void __init
+setup_smp(void)
 {
 	struct percpu_struct *cpubase, *cpu;
 	int i;
@@ -523,10 +574,10 @@ __initfunc(void setup_smp(void))
 	}
 
 	if (hwrpb->nr_processors > 1) {
-#if 0
-printk("setup_smp: nr_processors 0x%lx\n",
-       hwrpb->nr_processors);
-#endif
+
+		DBGS(("setup_smp: nr_processors %ld\n",
+		      hwrpb->nr_processors));
+
 		cpubase = (struct percpu_struct *)
 			((char*)hwrpb + hwrpb->processor_offset);
 		boot_cpu_palrev = cpubase->pal_revision;
@@ -541,12 +592,11 @@ printk("setup_smp: nr_processors 0x%lx\n",
 				if (i != boot_cpu_id)
 				  cpu->pal_revision = boot_cpu_palrev;
 			}
-#if 0
-printk("setup_smp: CPU %d: flags 0x%lx type 0x%lx\n",
-       i, cpu->flags, cpu->type);
- printk("setup_smp: CPU %d: PAL rev 0x%lx\n",
-	i, cpu->pal_revision);
-#endif
+
+			DBGS(("setup_smp: CPU %d: flags 0x%lx type 0x%lx\n",
+			      i, cpu->flags, cpu->type));
+			DBGS(("setup_smp: CPU %d: PAL rev 0x%lx\n",
+			      i, cpu->pal_revision));
 		}
 	} else {
 		smp_num_probed = 1;
@@ -560,132 +610,59 @@ printk("setup_smp: CPU %d: flags 0x%lx type 0x%lx\n",
 static void
 secondary_console_message(void)
 {
-        int mycpu, i, cnt;
+	int mycpu, i, cnt;
 	unsigned long txrdy = hwrpb->txrdy;
 	char *cp1, *cp2, buf[80];
-        struct percpu_struct *cpu;
+	struct percpu_struct *cpu;
 
-        mycpu = hard_smp_processor_id();
+	DBGS(("secondary_console_message: TXRDY 0x%lx.\n", txrdy));
 
-#if 0
-printk("secondary_console_message: TXRDY 0x%lx.\n", txrdy);
-#endif
-	 for (i = 0; i < NR_CPUS; i++) {
-	   if (txrdy & (1L << i)) {
-#if 0
-printk("secondary_console_message: TXRDY contains CPU %d.\n", i);
-#endif
-	     cpu = (struct percpu_struct *)
-	       ((char*)hwrpb
-		+ hwrpb->processor_offset
-		+ i * hwrpb->processor_size);
-#if 1
-	     printk("secondary_console_message: on %d from %d"
-		    " HALT_REASON 0x%lx FLAGS 0x%lx\n",
-		    mycpu, i, cpu->halt_reason, cpu->flags);
-#endif
-	     cnt = cpu->ipc_buffer[0] >> 32;
-	     if (cnt <= 0 || cnt >= 80)
-	       strcpy(buf,"<<< BOGUS MSG >>>");
-	     else {
-	       cp1 = (char *) &cpu->ipc_buffer[11];
-	       cp2 = buf;
-	       while (cnt--) {
-		 if (*cp1 == '\r' || *cp1 == '\n') {
-		   *cp2++ = ' '; cp1++;
-		 } else
-		   *cp2++ = *cp1++;
-	       }
-	       *cp2 = 0;
-	     }
-#if 1
-	     printk("secondary_console_message: on %d message is '%s'\n",
-		    mycpu, buf);
-#endif
-	   }
+	mycpu = hard_smp_processor_id();
+
+	for (i = 0; i < NR_CPUS; i++) {
+		if (!(txrdy & (1L << i)))
+			continue;
+
+		DBGS(("secondary_console_message: "
+		      "TXRDY contains CPU %d.\n", i));
+
+		cpu = (struct percpu_struct *)
+		  ((char*)hwrpb
+		   + hwrpb->processor_offset
+		   + i * hwrpb->processor_size);
+
+ 		printk("secondary_console_message: on %d from %d"
+		       " HALT_REASON 0x%lx FLAGS 0x%lx\n",
+		       mycpu, i, cpu->halt_reason, cpu->flags);
+
+		cnt = cpu->ipc_buffer[0] >> 32;
+		if (cnt <= 0 || cnt >= 80)
+			strcpy(buf, "<<< BOGUS MSG >>>");
+		else {
+			cp1 = (char *) &cpu->ipc_buffer[11];
+			cp2 = buf;
+			strcpy(cp2, cp1);
+			
+			while ((cp2 = strchr(cp2, '\r')) != 0) {
+				*cp2 = ' ';
+				if (cp2[1] == '\n')
+					cp2[1] = ' ';
+			}
 		}
-	 hwrpb->txrdy = 0;
-	 return;
-}
 
-static int
-halt_on_panic(unsigned int this_cpu)
-{
-	halt();
-	return 0;
-}
-
-static int
-local_flush_tlb_all(unsigned int this_cpu)
-{
-	tbia();
-	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	return 0;
-}
-
-static int
-local_flush_tlb_mm(unsigned int this_cpu)
-{
-	struct mm_struct * mm = ipi_msg_flush_tb.p.flush_mm;
-	if (mm == current->mm)
-		flush_tlb_current(mm);
-	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	return 0;
-}
-
-static int
-local_flush_tlb_page(unsigned int this_cpu)
-{
-	struct vm_area_struct * vma = ipi_msg_flush_tb.p.flush_vma;
-	struct mm_struct * mm = vma->vm_mm;
-
-	if (mm == current->mm)
-		flush_tlb_current_page(mm, vma, ipi_msg_flush_tb.flush_addr);
-	clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
-	return 0;
-}
-
-static int
-wrapper_local_flush_tlb_page(unsigned int this_cpu)
-{
-#if 0
-	int cpu = smp_processor_id();
-
-	if (cpu) {
-	  printk("wrapper: ipi_msg_flush_tb.flush_addr 0x%lx [%d]\n",
-		 ipi_msg_flush_tb.flush_addr, atomic_read(&global_irq_count));
+		printk("secondary_console_message: on %d message is '%s'\n",
+		       mycpu, buf);
 	}
-#endif
-	local_flush_tlb_page(this_cpu);
-	return 0;
-}
 
-static int
-unknown_ipi(unsigned int this_cpu)
-{
-	printk("unknown_ipi() on CPU %d:  ", this_cpu);
-	return 1;
+	hwrpb->txrdy = 0;
 }
 
 enum ipi_message_type {
-  CPU_STOP,
-  TLB_ALL,
-  TLB_MM,
-  TLB_PAGE,
-  TLB_RANGE
-};
-
-static int (* ipi_func[32])(unsigned int) = {
-  halt_on_panic,
-  local_flush_tlb_all,
-  local_flush_tlb_mm,
-  wrapper_local_flush_tlb_page,
-  local_flush_tlb_mm,		/* a.k.a. local_flush_tlb_range */
-  unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi,
-  unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi,
-  unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi,
-  unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi, unknown_ipi,
-  unknown_ipi, unknown_ipi, unknown_ipi
+	IPI_TLB_ALL,
+	IPI_TLB_MM,
+	IPI_TLB_PAGE,
+	IPI_RESCHEDULE,
+	IPI_CPU_STOP
 };
 
 void
@@ -693,122 +670,165 @@ handle_ipi(struct pt_regs *regs)
 {
 	int this_cpu = smp_processor_id();
 	volatile int * pending_ipis = &ipi_bits[this_cpu];
-	int ops;
+	unsigned long ops, which;
 
-	mb();		/* Order bit setting and interrupt. */
-#if 0
-	printk("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
-	       this_cpu, *pending_ipis, regs->pc);
-#endif
-	while ((ops = *pending_ipis)) {
-		int first;
-		for (first = 0; (ops & 1) == 0; ++first, ops >>= 1)
-			; /* look for the first thing to do */
-		clear_bit(first, pending_ipis);
-		mb();	/* Order bit clearing and data access. */
-		if ((*ipi_func[first])(this_cpu))
-			printk("%d\n", first);
-		mb();	/* Order data access and bit clearing. */
+	DBGS(("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
+	      this_cpu, *pending_ipis, regs->pc));
+
+	mb();	/* Order interrupt and bit testing. */
+	while ((ops = xchg(pending_ipis, 0)) != 0) {
+	  mb();	/* Order bit clearing and data access. */
+	  do {
+		unsigned long which;
+
+		which = ops & -ops;
+		ops &= ~which;
+		which = ffz(~which);
+
+		if (which < IPI_RESCHEDULE) {
+			if (which == IPI_TLB_ALL)
+				tbia();
+			else if (which == IPI_TLB_MM) {
+				struct mm_struct * mm;
+				mm = ipi_msg_flush_tb.p.flush_mm;
+				if (mm == current->mm)
+					flush_tlb_current(mm);
+			}
+			else /* IPI_TLB_PAGE */ {
+				struct vm_area_struct * vma;
+				struct mm_struct * mm;
+				unsigned long addr;
+
+				vma = ipi_msg_flush_tb.p.flush_vma;
+				mm = vma->vm_mm;
+				addr = ipi_msg_flush_tb.flush_addr;
+
+				if (mm == current->mm)
+					flush_tlb_current_page(mm, vma, addr);
+			}
+			clear_bit(this_cpu, &ipi_msg_flush_tb.flush_tb_mask);
+		}
+		else if (which == IPI_RESCHEDULE) {
+			/* Reschedule callback.  Everything to be done
+			   is done by the interrupt return path.  */
+		}
+		else if (which == IPI_CPU_STOP) {
+			halt();
+		}
+		else {
+			printk(KERN_CRIT "unknown_ipi() on CPU %ld: %d\n",
+			       this_cpu, which);
+		}
+	  } while (ops);
+	  mb();	/* Order data access and bit testing. */
 	}
+
+	cpu_data[this_cpu].ipi_count++;
+
 	if (hwrpb->txrdy)
-	  secondary_console_message();
+		secondary_console_message();
 }
 
-void
-send_ipi_message(long to_whom, enum ipi_message_type operation)
+static void
+send_ipi_message(unsigned long to_whom, enum ipi_message_type operation)
 {
-	int i;
-	unsigned int j;
+	long i, j;
 
-	mb();			/* Order out-of-band data and bit setting. */
-	for (i = 0, j = 1; i < NR_CPUS; ++i, j += j) {
-		if ((to_whom & j) == 0)
-			continue;
-		set_bit(operation, &ipi_bits[i]);
-		mb();		/* Order bit setting and interrupt. */
-		wripir(i);
+	/* Reduce the number of memory barriers by doing two loops,
+	   one to set the bits, one to invoke the interrupts.  */
+
+	mb();	/* Order out-of-band data and bit setting. */
+
+	for (i = 0, j = 1; i < NR_CPUS; ++i, j <<= 1) {
+		if (to_whom & j)
+			set_bit(operation, &ipi_bits[i]);
+	}
+
+	mb();	/* Order bit setting and interrupt. */
+
+	for (i = 0, j = 1; i < NR_CPUS; ++i, j <<= 1) {
+		if (to_whom & j)
+			wripir(i);
 	}
 }
 
 int
 smp_info(char *buffer)
 {
-	int i;
+	long i;
 	unsigned long sum = 0;
 	for (i = 0; i < NR_CPUS; i++)
-		sum += ipicnt[i];
+		sum += cpu_data[i].ipi_count;
 
-        return sprintf(buffer, "CPUs probed %d active %d map 0x%x IPIs %ld\n",
+	return sprintf(buffer, "CPUs probed %d active %d map 0x%x IPIs %ld\n",
 		       smp_num_probed, smp_num_cpus, cpu_present_map, sum);
 }
 
-/* wrapper for call from panic() */
 void
-smp_message_pass(int target, int msg, unsigned long data, int wait)
+smp_send_reschedule(int cpu)
 {
-	int me = smp_processor_id();
+	send_ipi_message(1 << cpu, IPI_RESCHEDULE);
+}
 
-	if (msg != MSG_STOP_CPU)
-		goto barf;
-
-	send_ipi_message(CPU_STOP, cpu_present_map ^ (1 << me));
-	return;
-barf:
-	printk("Yeeee, trying to send SMP msg(%d) on CPU %d\n", msg, me);
-	panic("Bogon SMP message pass.");
+void
+smp_send_stop(void)
+{
+	unsigned long to_whom = cpu_present_map ^ (1 << smp_processor_id());
+	send_ipi_message(to_whom, IPI_CPU_STOP);
 }
 
 void
 flush_tlb_all(void)
 {
-	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
-	int timeout = 10000;
+	unsigned long to_whom = cpu_present_map ^ (1 << smp_processor_id());
+	long timeout = 1000000;
 
 	spin_lock_own(&kernel_flag, "flush_tlb_all");
 
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
-	send_ipi_message(to_whom, TLB_ALL);
+	send_ipi_message(to_whom, IPI_TLB_ALL);
 	tbia();
 
-	while (ipi_msg_flush_tb.flush_tb_mask) {
-		if (--timeout < 0) {
-			printk("flush_tlb_all: STUCK on CPU %d mask 0x%x\n",
-			       smp_processor_id(),
-			       ipi_msg_flush_tb.flush_tb_mask);
-			ipi_msg_flush_tb.flush_tb_mask = 0;
-			break;
-		}
-		/* Wait for all clear from other CPUs. */
-		udelay(100);
+	while (ipi_msg_flush_tb.flush_tb_mask && --timeout) {
+		udelay(1);
+		barrier();
+	}
+
+	if (timeout == 0) {
+		printk("flush_tlb_all: STUCK on CPU %d mask 0x%x\n",
+		       smp_processor_id(),
+		       ipi_msg_flush_tb.flush_tb_mask);
+		ipi_msg_flush_tb.flush_tb_mask = 0;
 	}
 }
 
 void
 flush_tlb_mm(struct mm_struct *mm)
 {
-	unsigned int to_whom = cpu_present_map ^ (1 << smp_processor_id());
-	int timeout = 10000;
+	unsigned long to_whom = cpu_present_map ^ (1 << smp_processor_id());
+	long timeout = 1000000;
 
 	spin_lock_own(&kernel_flag, "flush_tlb_mm");
 
-	ipi_msg_flush_tb.p.flush_mm = mm;
 	ipi_msg_flush_tb.flush_tb_mask = to_whom;
-	send_ipi_message(to_whom, TLB_MM);
+	ipi_msg_flush_tb.p.flush_mm = mm;
+	send_ipi_message(to_whom, IPI_TLB_MM);
 
 	if (mm != current->mm)
 		flush_tlb_other(mm);
 	else
 		flush_tlb_current(mm);
 
-	while (ipi_msg_flush_tb.flush_tb_mask) {
-	  if (--timeout < 0) {
-	    printk("flush_tlb_mm: STUCK on CPU %d mask 0x%x\n",
-		   smp_processor_id(), ipi_msg_flush_tb.flush_tb_mask);
-	    ipi_msg_flush_tb.flush_tb_mask = 0;
-	    break;
-	  }
-	  udelay(100);
-		; /* Wait for all clear from other CPUs. */
+	while (ipi_msg_flush_tb.flush_tb_mask && --timeout) {
+		udelay(1);
+		barrier();
+	}
+
+	if (timeout == 0) {
+		printk("flush_tlb_mm: STUCK on CPU %d mask 0x%x\n",
+		       smp_processor_id(),
+		       ipi_msg_flush_tb.flush_tb_mask);
+		ipi_msg_flush_tb.flush_tb_mask = 0;
 	}
 }
 
@@ -816,68 +836,40 @@ void
 flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 {
 	int cpu = smp_processor_id();
-	unsigned int to_whom = cpu_present_map ^ (1 << cpu);
+	unsigned long to_whom = cpu_present_map ^ (1 << cpu);
 	struct mm_struct * mm = vma->vm_mm;
-	int timeout = 10000;
+	int timeout = 1000000;
 
 	spin_lock_own(&kernel_flag, "flush_tlb_page");
 
+	ipi_msg_flush_tb.flush_tb_mask = to_whom;
 	ipi_msg_flush_tb.p.flush_vma = vma;
 	ipi_msg_flush_tb.flush_addr = addr;
-	ipi_msg_flush_tb.flush_tb_mask = to_whom;
-	send_ipi_message(to_whom, TLB_PAGE);
+	send_ipi_message(to_whom, IPI_TLB_PAGE);
 
 	if (mm != current->mm)
 		flush_tlb_other(mm);
 	else
 		flush_tlb_current_page(mm, vma, addr);
 
-	while (ipi_msg_flush_tb.flush_tb_mask) {
-	  if (--timeout < 0) {
-	    printk("flush_tlb_page: STUCK on CPU %d [0x%x,0x%lx,%d]\n",
-		   cpu, ipi_msg_flush_tb.flush_tb_mask, addr,
-		   global_irq_holder);
-	    ipi_msg_flush_tb.flush_tb_mask = 0;
-	    break;
-	  }
-	  udelay(100);
-		; /* Wait for all clear from other CPUs. */
+	while (ipi_msg_flush_tb.flush_tb_mask && --timeout) {
+		udelay(1);
+		barrier();
+	}
+
+	if (timeout == 0) {
+		printk("flush_tlb_page: STUCK on CPU %d mask 0x%x\n",
+		       smp_processor_id(),
+		       ipi_msg_flush_tb.flush_tb_mask);
+		ipi_msg_flush_tb.flush_tb_mask = 0;
 	}
 }
 
 void
 flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-#if 0
+	/* On the Alpha we always flush the whole user tlb.  */
 	flush_tlb_mm(mm);
-#else
-	unsigned int to_whom;
-	int timeout;
-
-	timeout = 10000;
-	to_whom = cpu_present_map ^ (1 << smp_processor_id());
-
-	spin_lock_own(&kernel_flag, "flush_tlb_range");
-
-	ipi_msg_flush_tb.p.flush_mm = mm;
-	ipi_msg_flush_tb.flush_tb_mask = to_whom;
-	send_ipi_message(to_whom, TLB_MM);
-
-	if (mm != current->mm)
-		flush_tlb_other(mm);
-	else
-		flush_tlb_current(mm);
-
-	while (ipi_msg_flush_tb.flush_tb_mask) {
-	  if (--timeout < 0) {
-	    printk("flush_tlb_range: STUCK on CPU %d mask 0x%x\n",
-		   smp_processor_id(), ipi_msg_flush_tb.flush_tb_mask);
-	    ipi_msg_flush_tb.flush_tb_mask = 0;
-	    break;
-	  }
-	  udelay(100); /* Wait for all clear from other CPUs. */
-	}
-#endif
 }
 
 #if DEBUG_SPINLOCK
@@ -902,8 +894,8 @@ spinlock_restore_ipl(long prev)
 
 #else
 
-#define spinlock_raise_ipl(LOCK)	0
-#define spinlock_restore_ipl(PREV)	((void)0)
+#define spinlock_raise_ipl(LOCK)	((LOCK), 0)
+#define spinlock_restore_ipl(PREV)	((void)(PREV))
 
 #endif /* MANAGE_SPINLOCK_IPL */
 

@@ -119,19 +119,21 @@ extern __inline int max(int a,int b)
  * function prototypes:
  */
 static void cache_APIC_registers (void);
-
+static void stop_this_cpu (void);
 
 static int smp_b_stepping = 0;				/* Set if we find a B stepping CPU			*/
 
 static int max_cpus = -1;				/* Setup configured maximum number of CPUs to activate	*/
 int smp_found_config=0;					/* Have we found an SMP box 				*/
 
-unsigned long cpu_present_map = 0;			/* Bitmask of existing CPUs 				*/
+unsigned long cpu_present_map = 0;			/* Bitmask of physically existing CPUs 				*/
+unsigned long cpu_online_map = 0;			/* Bitmask of currently online CPUs 				*/
 int smp_num_cpus = 1;					/* Total count of live CPUs 				*/
 int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical number		*/
 volatile int __cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
-volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
+static volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
+static volatile unsigned long cpu_callout_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map that's also checked in the spinlock */
 volatile unsigned long kstack_ptr;			/* Stack vector for booting CPUs			*/
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per CPU bogomips and other parameters 		*/
@@ -694,16 +696,55 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 	return memory_start;
 }
 
+extern void calibrate_delay(void);
+
 void __init smp_callin(void)
 {
-	extern void calibrate_delay(void);
-	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
+	int cpuid;
+	unsigned long timeout;
 
 	/*
-	 *	Activate our APIC
+	 * (This works even if the APIC is not enabled.)
+	 */
+	cpuid = GET_APIC_ID(apic_read(APIC_ID));
+
+	SMP_PRINTK(("CPU#%d waiting for CALLOUT\n", cpuid));
+
+	/*
+	 * STARTUP IPIs are fragile beasts as they might sometimes
+	 * trigger some glue motherboard logic. Complete APIC bus
+	 * silence for 1 second, this overestimates the time the
+	 * boot CPU is spending to send the up to 2 STARTUP IPIs
+	 * by a factor of two. This should be enough.
+	 */
+
+	/*
+	 * Waiting 2s total for startup (udelay is not yet working)
+	 */
+	timeout = jiffies + 2*HZ;
+	while (time_before(jiffies,timeout))
+	{
+		/*
+		 * Has the boot CPU finished it's STARTUP sequence?
+		 */
+		if (test_bit(cpuid, (unsigned long *)&cpu_callout_map[0]))
+			break;
+	}
+
+	while (!time_before(jiffies,timeout)) {
+		printk("BUG: CPU%d started up but did not get a callout!\n",
+			cpuid);
+		stop_this_cpu();
+	}
+
+	/*
+	 * the boot CPU has finished the init stage and is spinning
+	 * on callin_map until we finish. We are free to set up this
+	 * CPU, first the APIC. (this is probably redundant on most
+	 * boards)
 	 */
 	
-	SMP_PRINTK(("CALLIN %d %d\n",hard_smp_processor_id(), smp_processor_id()));
+	SMP_PRINTK(("CALLIN, before enable_local_APIC().\n"));
 	enable_local_APIC();
 
 	/*
@@ -711,7 +752,12 @@ void __init smp_callin(void)
 	 */
 	setup_APIC_clock();
 
- 	sti();
+ 	__sti();
+
+#ifdef CONFIG_MTRR
+	/*  Must be done before calibration delay is computed  */
+	mtrr_init_secondary_cpu ();
+#endif
 	/*
 	 *	Get our bogomips.
 	 */
@@ -738,10 +784,11 @@ extern int cpu_idle(void * unused);
  */
 int __init start_secondary(void *unused)
 {
-#ifdef CONFIG_MTRR
-	/*  Must be done before calibration delay is computed  */
-	mtrr_init_secondary_cpu ();
-#endif
+	/*
+	 * Dont put anything before smp_callin(), SMP
+	 * booting is too fragile that we want to limit the
+	 * things done here to the most necessary things.
+	 */
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
 		/* nothing */ ;
@@ -917,12 +964,18 @@ static void __init do_boot_cpu(int i)
 		apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
 
 		SMP_PRINTK(("Startup point 1.\n"));
+
 		timeout = 0;
+		SMP_PRINTK(("Waiting for send to finish...\n"));
 		do {
-			SMP_PRINTK(("Sleeping.\n")); mdelay(1000);
-			udelay(10);
-		} while ( (send_status = (apic_read(APIC_ICR) & 0x1000))
-			  && (timeout++ < 1000));
+			SMP_PRINTK(("+"));
+			udelay(100);
+			send_status = apic_read(APIC_ICR) & 0x1000;
+		} while (send_status && (timeout++ < 1000));
+
+		/*
+		 * Give the other CPU some time to accept the IPI.
+		 */
 		udelay(200);
 		accept_status = (apic_read(APIC_ESR) & 0xEF);
 	}
@@ -935,6 +988,13 @@ static void __init do_boot_cpu(int i)
 
 	if ( !(send_status || accept_status) )
 	{
+		/*
+		 * allow APs to start initializing.
+		 */
+		SMP_PRINTK(("Before Callout %d.\n", i));
+		set_bit(i, (unsigned long *)&cpu_callout_map[0]);
+		SMP_PRINTK(("After Callout %d.\n", i));
+
 		for(timeout=0;timeout<50000;timeout++)
 		{
 			if (cpu_callin_map[0]&(1<<i))
@@ -980,6 +1040,7 @@ extern unsigned long cpu_hz;
 
 static void smp_tune_scheduling (void)
 {
+	unsigned long cachesize;
 	/*
 	 * Rough estimation for SMP scheduling, this is the number of
 	 * cycles it takes for a fully memory-limited process to flush
@@ -990,7 +1051,21 @@ static void smp_tune_scheduling (void)
 	 *  L1 cache), on PIIs it's around 50-100 usecs, depending on
 	 *  the cache size)
 	 */
-	cacheflush_time = cpu_hz/1024*boot_cpu_data.x86_cache_size/5000;
+
+	if (boot_cpu_data.x86 <= 4) {
+		/*
+		 * this basically disables processor-affinity
+		 * scheduling on <=i486 based SMP boards.
+		 */
+		cacheflush_time = 0;
+	} else {
+		cachesize = boot_cpu_data.x86_cache_size;
+		if (cachesize == -1)
+			cachesize = 8; /* Pentiums */
+
+		cacheflush_time = cpu_hz/1024*cachesize/5000;
+	}
+
 	printk("per-CPU timeslice cutoff: %ld.%ld usecs.\n",
 		(long)cacheflush_time/(cpu_hz/1000000),
 		((long)cacheflush_time*100/(cpu_hz/1000000)) % 100);
@@ -1032,7 +1107,13 @@ void __init smp_boot_cpus(void)
 	printk("CPU%d: ", boot_cpu_id);
 	print_cpu_info(&cpu_data[boot_cpu_id]);
 
+	/*
+	 * not necessary because the MP table should list the boot
+	 * CPU too, but we do it for the sake of robustness anyway.
+	 * (and for the case when a non-SMP board boots an SMP kernel)
+	 */
 	cpu_present_map |= (1 << hard_smp_processor_id());
+
 	cpu_number_map[boot_cpu_id] = 0;
 
 	/*
@@ -1106,6 +1187,14 @@ void __init smp_boot_cpus(void)
 	 *	Now scan the CPU present map and fire up the other CPUs.
 	 */
 
+	/*
+	 * Add all detected CPUs. (later on we can down individual
+	 * CPUs which will change cpu_online_map but not necessarily
+	 * cpu_present_map. We are pretty much ready for hot-swap CPUs.)
+	 */
+	cpu_online_map = cpu_present_map;
+	mb();
+
 	SMP_PRINTK(("CPU map: %lx\n", cpu_present_map));
 
 	for(i=0;i<NR_CPUS;i++)
@@ -1116,7 +1205,7 @@ void __init smp_boot_cpus(void)
 		if (i == boot_cpu_id)
 			continue;
 
-		if ((cpu_present_map & (1 << i))
+		if ((cpu_online_map & (1 << i))
 		    && (max_cpus < 0 || max_cpus > cpucount+1))
 		{
 			do_boot_cpu(i);
@@ -1126,9 +1215,9 @@ void __init smp_boot_cpus(void)
 		 *	Make sure we unmap all failed CPUs
 		 */
 		
-		if (cpu_number_map[i] == -1 && (cpu_present_map & (1 << i))) {
-			printk("CPU #%d not responding. Removing from cpu_present_map.\n",i);
-			cpu_present_map &= ~(1 << i);
+		if (cpu_number_map[i] == -1 && (cpu_online_map & (1 << i))) {
+			printk("CPU #%d not responding. Removing from cpu_online_map.\n",i);
+			cpu_online_map &= ~(1 << i);
                 }
         }
 
@@ -1168,14 +1257,14 @@ void __init smp_boot_cpus(void)
 	if (cpucount==0)
 	{
 		printk(KERN_ERR "Error: only one processor found.\n");
-		cpu_present_map=(1<<hard_smp_processor_id());
+		cpu_online_map = (1<<hard_smp_processor_id());
 	}
 	else
 	{
 		unsigned long bogosum=0;
 		for(i=0;i<32;i++)
 		{
-			if (cpu_present_map&(1<<i))
+			if (cpu_online_map&(1<<i))
 				bogosum+=cpu_data[i].loops_per_sec;
 		}
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
@@ -1213,7 +1302,7 @@ smp_done:
  * Silly serialization to work around CPU bug in P5s.
  * We can safely turn it off on a 686.
  */
-#if defined(CONFIG_M686) & !defined(SMP_DEBUG)
+#ifdef CONFIG_GOOD_APIC
 # define FORCE_APIC_SERIALIZATION 0
 #else
 # define FORCE_APIC_SERIALIZATION 1
@@ -1386,44 +1475,51 @@ void smp_flush_tlb(void)
 	unsigned long flags;
 
 	/*
-	 * The assignment is safe because it's volatile so the
-	 * compiler cannot reorder it, because the i586 has
-	 * strict memory ordering and because only the kernel
-	 * lock holder may issue a tlb flush. If you break any
-	 * one of those three change this to an atomic bus
-	 * locked or.
+	 * it's important that we do not generate any APIC traffic
+	 * until the AP CPUs have booted up!
 	 */
-
-	smp_invalidate_needed = cpu_present_map;
-
-	/*
-	 * Processors spinning on some lock with IRQs disabled
-	 * will see this IRQ late. The smp_invalidate_needed
-	 * map will ensure they don't do a spurious flush tlb
-	 * or miss one.
-	 */
-	
-	__save_flags(flags);
-	__cli();
-
-	send_IPI_allbutself(INVALIDATE_TLB_VECTOR);
-
-	/*
-	 * Spin waiting for completion
-	 */
-
-	stuck = 50000000;
-	while (smp_invalidate_needed) {
+	if (cpu_online_map) {
 		/*
-		 * Take care of "crossing" invalidates
+		 * The assignment is safe because it's volatile so the
+		 * compiler cannot reorder it, because the i586 has
+		 * strict memory ordering and because only the kernel
+		 * lock holder may issue a tlb flush. If you break any
+		 * one of those three change this to an atomic bus
+		 * locked or.
 		 */
-		if (test_bit(cpu, &smp_invalidate_needed))
+
+		smp_invalidate_needed = cpu_online_map;
+
+		/*
+		 * Processors spinning on some lock with IRQs disabled
+		 * will see this IRQ late. The smp_invalidate_needed
+		 * map will ensure they don't do a spurious flush tlb
+		 * or miss one.
+		 */
+	
+		__save_flags(flags);
+		__cli();
+
+		send_IPI_allbutself(INVALIDATE_TLB_VECTOR);
+
+		/*
+		 * Spin waiting for completion
+		 */
+
+		stuck = 50000000;
+		while (smp_invalidate_needed) {
+			/*
+			 * Take care of "crossing" invalidates
+			 */
+			if (test_bit(cpu, &smp_invalidate_needed))
 			clear_bit(cpu, &smp_invalidate_needed);
-		--stuck;
-		if (!stuck) {
-			printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);
-			break;
+			--stuck;
+			if (!stuck) {
+				printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);
+				break;
+			}
 		}
+		__restore_flags(flags);
 	}
 
 	/*
@@ -1431,7 +1527,6 @@ void smp_flush_tlb(void)
 	 */
 	local_flush_tlb();
 
-	__restore_flags(flags);
 }
 
 
@@ -1584,14 +1679,24 @@ asmlinkage void smp_invalidate_interrupt(void)
 	ack_APIC_irq();
 }
 
+static void stop_this_cpu (void)
+{
+	/*
+	 * Remove this CPU:
+	 */
+	clear_bit(smp_processor_id(), &cpu_online_map);
+
+	if (cpu_data[smp_processor_id()].hlt_works_ok)
+		for(;;) __asm__("hlt");
+	for (;;);
+}
+
 /*
  *	CPU halt call-back
  */
 asmlinkage void smp_stop_cpu_interrupt(void)
 {
-	if (cpu_data[smp_processor_id()].hlt_works_ok)
-		for(;;) __asm__("hlt");
-	for (;;) ;
+	stop_this_cpu();
 }
 
 void (*mtrr_hook) (void) = NULL;

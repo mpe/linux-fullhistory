@@ -14,8 +14,24 @@ comment 'Processor type and features'
 choice 'Processor family' \
 	"386			CONFIG_M386	\
 	 486/Cx486		CONFIG_M486	\
-	 Pentium/K5/5x86/6x86	CONFIG_M586	\
-	 PPro/K6/6x86MX		CONFIG_M686" Pentium
+	 586/K5/5x86/6x86	CONFIG_M586	\
+	 Pentium/TSC		CONFIG_M586TSC	\
+	 PPro/K6/6x86MX		CONFIG_M686" PPro
+#
+# Define implied options from the CPU selection here
+#
+if [ "$CONFIG_M386" != "n" ]; then
+  define_bool CONFIG_WP_WORKS_OK y
+  define_bool CONFIG_INVLPG y
+  define_bool CONFIG_BSWAP y
+fi
+if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586TSC" = "y" ]; then
+  define_bool CONFIG_TSC y
+fi
+if [ "$CONFIG_M686" = "y" ]; then
+  define_bool CONFIG_GOOD_APIC y
+fi
+
 bool 'Math emulation' CONFIG_MATH_EMULATION
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP
@@ -36,15 +52,14 @@ comment 'General setup'
 bool 'Networking support' CONFIG_NET
 bool 'PCI support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
-  unset CONFIG_PCI_BIOS CONFIG_PCI_DIRECT
   choice 'PCI access mode' \
 	"BIOS		CONFIG_PCI_GOBIOS	\
 	 Direct		CONFIG_PCI_GODIRECT	\
 	 Any		CONFIG_PCI_GOANY"	Any
-  if [ -n "$CONFIG_PCI_GOBIOS" -o -n "$CONFIG_PCI_GOANY" ]; then
+  if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
     define_bool CONFIG_PCI_BIOS y
   fi
-  if [ -n "$CONFIG_PCI_GODIRECT" -o -n "$CONFIG_PCI_GOANY" ]; then
+  if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
     define_bool CONFIG_PCI_DIRECT y
   fi
   bool '   PCI quirks' CONFIG_PCI_QUIRKS

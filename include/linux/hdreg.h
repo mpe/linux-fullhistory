@@ -52,6 +52,13 @@
 #define WIN_SETIDLE1		0xE3
 #define WIN_SETIDLE2		0x97
 
+#define WIN_STANDBYNOW1		0xE0
+#define WIN_STANDBYNOW2		0x94
+#define WIN_SLEEPNOW1		0xE6
+#define WIN_SLEEPNOW2		0x99
+#define WIN_CHECKPOWERMODE1	0xE5
+#define WIN_CHECKPOWERMODE2	0x98
+
 #define WIN_DOORLOCK		0xde	/* lock door on removable drives */
 #define WIN_DOORUNLOCK		0xdf	/* unlock door on removable drives */
 
@@ -59,6 +66,7 @@
 #define WIN_MULTWRITE		0xC5	/* write sectors using multiple mode */
 #define WIN_SETMULT		0xC6	/* enable/disable multiple mode */
 #define WIN_IDENTIFY		0xEC	/* ask drive to identify itself	*/
+#define WIN_IDENTIFY_DMA	0xEE	/* same as WIN_IDENTIFY, but DMA */
 #define WIN_SETFEATURES		0xEF	/* set special drive features */
 #define WIN_READDMA		0xc8	/* read sectors using DMA transfers */
 #define WIN_WRITEDMA		0xca	/* write sectors using DMA transfers */
@@ -84,6 +92,14 @@
 #define SMART_DISABLE		0xd9
 #define SMART_STATUS		0xda
 #define SMART_AUTO_OFFLINE	0xdb
+
+/* WIN_SECURITY sub-commands */
+#define SECURITY_SET_PASSWORD		0xBA	/* 0xF1 */
+#define SECURITY_UNLOCK			0xBB	/* 0xF2 */
+#define SECURITY_ERASE_PREPARE		0xBC	/* 0xF3 */
+#define SECURITY_ERASE_UNIT		0xBD	/* 0xF4 */
+#define SECURITY_FREEZE_LOCK		0xBE	/* 0xF5 */
+#define SECURITY_DISABLE_PASSWORD	0xBF	/* 0xF6 */
 
 /* Bits for HD_ERROR */
 #define MARK_ERR	0x01	/* Bad address mark */
@@ -184,14 +200,54 @@ struct hd_driveid {
 	unsigned short  word79;
 	unsigned short  word80;
 	unsigned short  word81;
-	unsigned short  word82;
-	unsigned short  word83;
+	unsigned short  command_sets;	/* bits 0:Smart 1:Security 2:Removable 3:PM */
+	unsigned short  word83;		/* bits 14:Smart Enabled 13:0 zero */
 	unsigned short  word84;
 	unsigned short  word85;
 	unsigned short  word86;
 	unsigned short  word87;
 	unsigned short  dma_ultra;
-	unsigned short  reserved[167];
+	unsigned short	word89;		/* reserved (word 89) */
+	unsigned short	word90;		/* reserved (word 90) */
+	unsigned short	word91;		/* reserved (word 91) */
+	unsigned short	word92;		/* reserved (word 92) */
+	unsigned short	word93;		/* reserved (word 93) */
+	unsigned short	word94;		/* reserved (word 94) */
+	unsigned short	word95;		/* reserved (word 95) */
+	unsigned short	word96;		/* reserved (word 96) */
+	unsigned short	word97;		/* reserved (word 97) */
+	unsigned short	word98;		/* reserved (word 98) */
+	unsigned short	word99;		/* reserved (word 99) */
+	unsigned short	word100;	/* reserved (word 100) */
+	unsigned short	word101;	/* reserved (word 101) */
+	unsigned short	word102;	/* reserved (word 102) */
+	unsigned short	word103;	/* reserved (word 103) */
+	unsigned short	word104;	/* reserved (word 104) */
+	unsigned short	word105;	/* reserved (word 105) */
+	unsigned short	word106;	/* reserved (word 106) */
+	unsigned short	word107;	/* reserved (word 107) */
+	unsigned short	word108;	/* reserved (word 108) */
+	unsigned short	word109;	/* reserved (word 109) */
+	unsigned short	word110;	/* reserved (word 110) */
+	unsigned short	word111;	/* reserved (word 111) */
+	unsigned short	word112;	/* reserved (word 112) */
+	unsigned short	word113;	/* reserved (word 113) */
+	unsigned short	word114;	/* reserved (word 114) */
+	unsigned short	word115;	/* reserved (word 115) */
+	unsigned short	word116;	/* reserved (word 116) */
+	unsigned short	word117;	/* reserved (word 117) */
+	unsigned short	word118;	/* reserved (word 118) */
+	unsigned short	word119;	/* reserved (word 119) */
+	unsigned short	word120;	/* reserved (word 120) */
+	unsigned short	word121;	/* reserved (word 121) */
+	unsigned short	word122;	/* reserved (word 122) */
+	unsigned short	word123;	/* reserved (word 123) */
+	unsigned short	word124;	/* reserved (word 124) */
+	unsigned short	word125;	/* reserved (word 125) */
+	unsigned short	word126;	/* reserved (word 126) */
+	unsigned short	word127;	/* reserved (word 127) */
+	unsigned short	security;	/* bits 0:support 1:enabled 2:locked 3:frozen */
+	unsigned short	reserved[127];
 };
 
 /*

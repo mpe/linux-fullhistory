@@ -8,6 +8,8 @@
  * with the IRQ handling routines in irq.c.
  */
 
+#include <linux/config.h>
+
 #define STANDARD_INIT_IRQ_PROLOG	\
 	outb(0, DMA1_RESET_REG);	\
 	outb(0, DMA2_RESET_REG);	\

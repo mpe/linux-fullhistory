@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.90 1998/12/10 02:39:46 cort Exp $
+ * $Id: irq.c,v 1.91 1998/12/28 10:28:47 paulus Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -457,7 +457,6 @@ static inline void wait_on_bh(void)
 }
 
 
-#define MAXCOUNT 100000000
 static inline void wait_on_irq(int cpu)
 {
 	int count = MAXCOUNT;
@@ -510,7 +509,7 @@ static inline void wait_on_irq(int cpu)
 void synchronize_bh(void)
 {
 	if (atomic_read(&global_bh_count) && !in_interrupt())
-			wait_on_bh();
+		wait_on_bh();
 }
 
 
@@ -532,6 +531,8 @@ void synchronize_irq(void)
 
 static inline void get_irqlock(int cpu)
 {
+	unsigned int loops = MAXCOUNT;
+
 	if (test_and_set_bit(0,&global_irq_lock)) {
 		/* do we already hold the lock? */
 		if ((unsigned char) cpu == global_irq_holder)
@@ -539,12 +540,17 @@ static inline void get_irqlock(int cpu)
 		/* Uhhuh.. Somebody else got it. Wait.. */
 		do {
 			do {
-				
+				if (loops-- == 0) {
+					printk("get_irqlock(%d) waiting, global_irq_holder=%d\n", cpu, global_irq_holder);
+#ifdef CONFIG_XMON
+					xmon(0);
+#endif
+				}
 			} while (test_bit(0,&global_irq_lock));
 		} while (test_and_set_bit(0,&global_irq_lock));		
 	}
 	/* 
-	 * We also to make sure that nobody else is running
+	 * We also need to make sure that nobody else is running
 	 * in an interrupt context. 
 	 */
 	wait_on_irq(cpu);
@@ -640,7 +646,7 @@ void __global_restore_flags(unsigned long flags)
 
 #endif /* __SMP__ */
 
-asmlinkage void do_IRQ(struct pt_regs *regs)
+asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
 {
 	int irq;
 	unsigned long bits;
@@ -659,15 +665,39 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 #ifdef __SMP__
 	if ( cpu != 0 )
 	{
-		if (!atomic_read(&n_lost_interrupts))
+		if (!isfake)
 		{
 			extern void smp_message_recv(void);
+#ifdef CONFIG_XMON
+			static int xmon_2nd;
+			if (xmon_2nd)
+				xmon(regs);
+#endif
 			smp_message_recv();
 			goto out;
 		}
 		/* could be here due to a do_fake_interrupt call but we don't
 		   mess with the controller from the second cpu -- Cort */
 		goto out;
+	}
+
+	{
+		unsigned int loops = MAXCOUNT;
+		while (test_bit(0, &global_irq_lock)) {
+			if (smp_processor_id() == global_irq_holder) {
+				printk("uh oh, interrupt while we hold global irq lock!\n");
+#ifdef CONFIG_XMON
+				xmon(0);
+#endif
+				break;
+			}
+			if (loops-- == 0) {
+				printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
+#ifdef CONFIG_XMON
+				xmon(0);
+#endif
+			}
+		}
 	}
 #endif /* __SMP__ */			
 

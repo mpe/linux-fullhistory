@@ -689,7 +689,8 @@ ret_from_smpfork:
 	.set at
 	mb	/* Make the changed data visible before the freed lock. */
 	stq	$31,scheduler_lock	
-	br	ret_from_sys_call
+	lda	$26,ret_from_sys_call
+	jsr	$31,schedule_tail
 	.set noat
 .end ret_from_smpfork
 #endif /* __SMP__ */

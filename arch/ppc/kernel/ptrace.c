@@ -362,7 +362,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_PEEKDATA: {
 			unsigned long tmp;
 
+			down(&child->mm->mmap_sem);
 			ret = read_long(child, addr, &tmp);
+			up(&child->mm->mmap_sem);
 			if (ret < 0)
 				goto out;
 			ret = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
@@ -410,7 +412,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
       /* If I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA:
+			down(&child->mm->mmap_sem);
 			ret = write_long(child,addr,data);
+			up(&child->mm->mmap_sem);
 			goto out;
 
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */

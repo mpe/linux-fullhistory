@@ -159,6 +159,7 @@ extern int smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
+extern unsigned long cpu_online_map;
 extern volatile int cpu_number_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
 extern void smp_flush_tlb(void);

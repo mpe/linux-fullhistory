@@ -44,6 +44,11 @@ static void			nfsd(struct svc_rqst *rqstp);
 struct timeval			nfssvc_boot = { 0, 0 };
 static int			nfsd_active = 0;
 
+/*
+ * Maximum number of nfsd processes
+ */
+#define	NFSD_MAXSERVS		128
+
 int
 nfsd_svc(unsigned short port, int nrservs)
 {
@@ -52,19 +57,30 @@ nfsd_svc(unsigned short port, int nrservs)
 
 	dprintk("nfsd: creating service\n");
 	error = -EINVAL;
-	if (nrservs < 0)
+	if (nrservs <= 0)
 		goto out;
 	if (nrservs > NFSD_MAXSERVS)
 		nrservs = NFSD_MAXSERVS;
+	nfsd_nservers = nrservs;
 
 	error = -ENOMEM;
+	nfsd_racache_init();     /* Readahead param cache */
+	if (nfsd_nservers == 0)
+		goto out;
+	  
 	serv = svc_create(&nfsd_program, NFSD_BUFSIZE, NFSSVC_XDRSIZE);
-	if (serv == NULL) 
+	if (serv == NULL)
 		goto out;
 
-	if ((error = svc_makesock(serv, IPPROTO_UDP, port)) < 0
-	 || (error = svc_makesock(serv, IPPROTO_TCP, port)) < 0)
+	error = svc_makesock(serv, IPPROTO_UDP, port);
+	if (error < 0)
 		goto failure;
+
+#if 0	/* Don't even pretend that TCP works. It doesn't. */
+	error = svc_makesock(serv, IPPROTO_TCP, port);
+	if (error < 0)
+		goto failure;
+#endif
 
 	while (nrservs--) {
 		error = svc_create_thread(nfsd, serv);
@@ -93,6 +109,8 @@ nfsd(struct svc_rqst *rqstp)
 	exit_mm(current);
 	current->session = 1;
 	current->pgrp = 1;
+	/* Let svc_process check client's authentication. */
+	rqstp->rq_auth = 1;
 	sprintf(current->comm, "nfsd");
 
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
@@ -127,22 +145,13 @@ nfsd(struct svc_rqst *rqstp)
 		 * port probes on port 2049 by unauthorized clients.
 		 */
 		rqstp->rq_client = exp_getclient(&rqstp->rq_addr);
-		if (!rqstp->rq_client) {
-			printk(KERN_WARNING "nfsd: unauthenticated request "
-				"from (%08lx:%d)\n",
-				ntohl(rqstp->rq_addr.sin_addr.s_addr),
-				ntohs(rqstp->rq_addr.sin_port));
-			svc_drop(rqstp);
-			serv->sv_stats->rpcbadclnt++;
-		} else {
-			/* Process request with signals blocked.  */
-			spin_lock_irq(&current->sigmask_lock);
-			siginitsetinv(&current->blocked, ALLOWED_SIGS);
-			recalc_sigpending(current);
-			spin_unlock_irq(&current->sigmask_lock);
-			
-			svc_process(serv, rqstp);
-		}
+		/* Process request with signals blocked.  */
+		spin_lock_irq(&current->sigmask_lock);
+		siginitsetinv(&current->blocked, ALLOWED_SIGS);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+
+		svc_process(serv, rqstp);
 
 		/* Unlock export hash tables */
 		exp_unlock();
@@ -166,6 +175,8 @@ nfsd(struct svc_rqst *rqstp)
 		printk("nfsd: last server exiting\n");
 		/* revoke all exports */
 		nfsd_export_shutdown();
+		/* release read-ahead cache */
+	        nfsd_racache_shutdown();
 	}
 
 	/* Destroy the thread */

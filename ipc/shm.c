@@ -624,6 +624,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 	unsigned int id, idx;
 
 	id = SWP_OFFSET(code) & SHM_ID_MASK;
+#ifdef DEBUG_SHM
 	if (id != (SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK)) {
 		printk ("shm_swap_in: code id = %d and shmd id = %ld differ\n",
 			id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
@@ -633,12 +634,17 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		printk ("shm_swap_in: id=%d too big. proc mem corrupted\n", id);
 		return BAD_PAGE;
 	}
+#endif
 	shp = shm_segs[id];
+
+#ifdef DEBUG_SHM
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {
 		printk ("shm_swap_in: id=%d invalid. Race.\n", id);
 		return BAD_PAGE;
 	}
+#endif
 	idx = (SWP_OFFSET(code) >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
+#ifdef DEBUG_SHM
 	if (idx != (offset >> PAGE_SHIFT)) {
 		printk ("shm_swap_in: code idx = %u and shmd idx = %lu differ\n",
 			idx, offset >> PAGE_SHIFT);
@@ -648,6 +654,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		printk ("shm_swap_in : too large page index. id=%d\n", id);
 		return BAD_PAGE;
 	}
+#endif
 
 	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {

@@ -319,7 +319,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define ASKED_FOR_SENSE 0x20
 
 
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/pgtable.h>
 #define CONTIGUOUS_BUFFERS(X,Y) \
 	(virt_to_phys((X)->b_data+(X)->b_size-1)+1==virt_to_phys((Y)->b_data))

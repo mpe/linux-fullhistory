@@ -597,7 +597,7 @@ int get_cpuinfo(char * buffer)
 
 	for(n=0; n<NR_CPUS; n++, c++) {
 #ifdef __SMP__
-		if (!(cpu_present_map & (1<<n)))
+		if (!(cpu_online_map & (1<<n)))
 			continue;
 #endif
 		p += sprintf(p,"processor\t: %d\n"

@@ -379,8 +379,8 @@ static void __init borken_init (void)
 {
   register int count = 0, start = jiffies + 1, stop = start + 25;
 
-  while (jiffies < start) ;
-  for (; jiffies < stop; ++count) ;
+  while (time_before(jiffies, start)) ;
+  for (; time_before(jiffies, stop); ++count) ;
 
 /*
  * Ok, we now have a count for .25 seconds.  Convert to a
@@ -903,9 +903,9 @@ static int internal_command (unsigned char target, unsigned char lun,
 
       while (((STATUS | STATUS | STATUS) &
               (STAT_BSY | STAT_SEL)) &&
-             (!st0x_aborted) && (jiffies < clock));
+             (!st0x_aborted) && time_before(jiffies, clock));
 
-      if (jiffies > clock)
+      if (time_after(jiffies, clock))
         return retcode (DID_BUS_BUSY);
       else if (st0x_aborted)
         return retcode (st0x_aborted);

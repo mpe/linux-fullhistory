@@ -54,11 +54,14 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Forwarding between high speed interfaces' CONFIG_NET_HW_FLOWCONTROL
   bool 'CPU is too slow to handle full bandwidth' CONFIG_CPU_IS_SLOW
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'QoS and/or fair queueing'
   bool 'QoS and/or fair queueing' CONFIG_NET_SCHED
   if [ "$CONFIG_NET_SCHED" = "y" ]; then
     source net/sched/Config.in
   fi
 #  bool 'Network code profiler' CONFIG_NET_PROFILE
+  endmenu
   fi
 fi
 endmenu

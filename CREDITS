@@ -147,7 +147,8 @@ M: Krzysztof G. Baranowski
 E: kgb@manjak.knm.org.pl
 P: 1024/FA6F16D1 96 D1 1A CF 5F CA 69 EC  F9 4F 36 1F 6D 60 7B DA
 D: Maintainer of the System V file system.
-D: SystemV fs update for 2.1.x dcache.
+D: System V fs update for 2.1.x dcache.
+D: Forward ported a couple of SCSI drivers.
 D: Various bugfixes.
 S: ul. Koscielna 12a
 S: 62-300 Wrzesnia

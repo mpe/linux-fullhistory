@@ -615,6 +615,112 @@ exp_getclientbyname(char *ident)
 	return NULL;
 }
 
+struct flags {
+	int flag;
+	char *name[2];
+} expflags[] = {
+	{ NFSEXP_READONLY, {"ro", "rw"}},
+	{ NFSEXP_INSECURE_PORT, {"insecure", ""}},
+	{ NFSEXP_ROOTSQUASH, {"root_squash", "no_root_squash"}},
+	{ NFSEXP_ALLSQUASH, {"all_squash", ""}},
+	{ NFSEXP_ASYNC, {"async", ""}},
+	{ NFSEXP_GATHERED_WRITES, {"wdelay", ""}},
+	{ NFSEXP_UIDMAP, {"uidmap", ""}},
+	{ NFSEXP_KERBEROS, { "kerberos", ""}},
+	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
+	{ NFSEXP_CROSSMNT, {"crossmnt", ""}},
+	{ 0, {"", ""}}
+};
+
+static int
+exp_flags(char *buffer, int flag)
+{
+    int len = 0, first = 0;
+    struct flags *flg = expflags;
+
+    for (;flg->flag;flg++) {
+        int state = (flg->flag & flag)?0:1;
+        if (!flg->flag)
+		break;
+        if (*flg->name[state]) {
+		len += sprintf(buffer + len, "%s%s",
+                               first++?",":"", flg->name[state]);
+        }
+    }
+    return len;
+}
+
+int
+exp_procfs_exports(char *buffer, char **start, off_t offset,
+                             int length, int *eof, void *data)
+{
+	struct svc_clnthash	**hp, **head, *tmp;
+	struct svc_client	*clp;
+	svc_export *exp;
+	off_t	pos = 0;
+        off_t	begin = 0;
+        int	len = 0;
+	int	i,j;
+
+        len += sprintf(buffer, "# Version 1.0\n");
+        len += sprintf(buffer+len, "# Path Client(Flags) # IPs\n");
+
+	for (clp = clients; clp; clp = clp->cl_next) {
+		for (i = 0; i < NFSCLNT_EXPMAX; i++) {
+			exp = clp->cl_export[i];
+			while (exp) {
+				int first = 0;
+				len += sprintf(buffer+len, "%s\t", exp->ex_path);
+				len += sprintf(buffer+len, "%s", clp->cl_ident);
+				len += sprintf(buffer+len, "(");
+
+				len += exp_flags(buffer+len, exp->ex_flags);
+				len += sprintf(buffer+len, ") # ");
+				for (j = 0; j < clp->cl_naddr; j++) {
+					struct in_addr	addr = clp->cl_addr[j]; 
+
+					head = &clnt_hash[CLIENT_HASH(addr.s_addr)];
+					for (hp = head; (tmp = *hp) != NULL; hp = &(tmp->h_next)) {
+						if (tmp->h_addr.s_addr == addr.s_addr) {
+							if (first++) len += sprintf(buffer+len, "%s", " ");
+							if (tmp->h_client != clp)
+								len += sprintf(buffer+len, "(");
+							len += sprintf(buffer+len, "%ld.%ld.%ld.%ld",
+									htonl(addr.s_addr) >> 24 & 0xff,
+									htonl(addr.s_addr) >> 16 & 0xff,
+									htonl(addr.s_addr) >>  8 & 0xff,
+									htonl(addr.s_addr) >>  0 & 0xff);
+							if (tmp->h_client != clp)
+							  len += sprintf(buffer+len, ")");
+							break;
+						}
+					}
+				}
+				exp = exp->ex_next;
+
+				buffer[len++]='\n';
+
+				pos=begin+len;
+				if(pos<offset) {
+					len=0;
+					begin=pos;
+				}
+				if (pos > offset + length)
+					goto done;
+			}
+		}
+	}
+
+	*eof = 1;
+
+done:
+	*start = buffer + (offset - begin);
+	len -= (offset - begin);
+	if ( len > length )
+		len = length;
+	return len;
+}
+
 /*
  * Add or modify a client.
  * Change requests may involve the list of host addresses. The list of

@@ -541,7 +541,9 @@ sys_ptrace(long request, long pid, long addr, long data,
 	/* When I and D space are separate, these will need to be fixed.  */
 	case PTRACE_PEEKTEXT: /* read word at location addr. */
 	case PTRACE_PEEKDATA:
+		down(&child->mm->mmap_sem);
 		ret = read_long(child, addr, &tmp);
+		up(&child->mm->mmap_sem);
 		DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
 		if (ret < 0)
 			goto out;
@@ -560,7 +562,9 @@ sys_ptrace(long request, long pid, long addr, long data,
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
 		DBG(DBG_MEM, ("poke %#lx<-%#lx\n", addr, data));
+		down(&child->mm->mmap_sem);
 		ret = write_long(child, addr, data);
+		up(&child->mm->mmap_sem);
 		goto out;
 
 	case PTRACE_POKEUSR: /* write the specified register */

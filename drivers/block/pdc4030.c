@@ -92,13 +92,13 @@ int pdc4030_cmd(ide_drive_t *drive, byte cmd)
 	timeout = HZ * 10;
 	timeout += jiffies;
 	do {
-		if(jiffies > timeout) {
+		if(time_after(jiffies, timeout)) {
 			return 2; /* device timed out */
 		}
 		/* This is out of delay_10ms() */
 		/* Delays at least 10ms to give interface a chance */
 		timer = jiffies + (HZ + 99)/100 + 1;
-		while (timer > jiffies);
+		while (time_after(timer, jiffies));
 		status_val = IN_BYTE(IDE_SECTOR_REG);
 	} while (status_val != 0x50 && status_val != 0x70);
 
@@ -257,7 +257,7 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 	struct request *rq;
 
         if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
-            if (jiffies < hwgroup->poll_timeout) {
+            if (time_before(jiffies, hwgroup->poll_timeout)) {
                 ide_set_handler (drive, &promise_write_pollfunc, 1);
                 return; /* continue polling... */
             }
@@ -335,7 +335,7 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 		if(IN_BYTE(IDE_SELECT_REG) & 0x01)
 		    return;
 		udelay(1);
-	    } while (jiffies < timeout);
+	    } while (time_before(jiffies, timeout));
 	    printk("%s: reading: No DRQ and not waiting - Odd!\n",
 		   drive->name);
 	    return;

@@ -338,6 +338,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VIA,		VIA_86C100A,	"VT 86C100A"),
 	DEVICE( VIA,		VIA_82C597_1,	"VT 82C597 Apollo VP3 AGP"),
 	DEVICE( VIA,		VIA_82C598_1,	"VT 82C598 Apollo MVP3 AGP"),
+	DEVICE( SMC2,		SMC2_1211TX,	"1211 TX"),
 	DEVICE( VORTEX,		VORTEX_GDT60x0,	"GDT 60x0"),
 	DEVICE( VORTEX,		VORTEX_GDT6000B,"GDT 6000b"),
 	DEVICE( VORTEX,		VORTEX_GDT6x10,	"GDT 6110/6510"),
@@ -482,6 +483,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( S3,		S3_ViRGE_MXP,	"ViRGE/MX+"),
 	DEVICE( S3,		S3_ViRGE_MXPMV,	"ViRGE/MX+MV"),
 	DEVICE( S3,		S3_SONICVIBES,	"SonicVibes"),
+	DEVICE( DCI,		DCI_PCCOM4,	"PC COM PCI Bus 4 port serial Adapter"),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
 	DEVICE( INTEL,		INTEL_82424,	"82424ZX Saturn"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
@@ -739,6 +741,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_INIT:		return "Initio Corp";
 	      case PCI_VENDOR_ID_TTI:		return "Triones Technologies, Inc.";
 	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
+	      case PCI_VENDOR_ID_SMC2:		return "SMC";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
 	      case PCI_VENDOR_ID_EF:		return "Efficient Networks";
 	      case PCI_VENDOR_ID_FORE:		return "Fore Systems";
@@ -787,6 +790,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_AVANCE:	return "Avance";
 	      case PCI_VENDOR_ID_NETVIN:	return "NetVin";
 	      case PCI_VENDOR_ID_S3:		return "S3 Inc.";
+	      case PCI_VENDOR_ID_DCI:		return "Decision Computer Int.";
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
 	      case PCI_VENDOR_ID_KTI:		return "KTI";
 	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";

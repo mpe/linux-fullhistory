@@ -475,7 +475,7 @@ void shrink_dcache_parent(struct dentry * parent)
  * too much.
  *
  * Priority:
- *   0 - very urgent: schrink everything
+ *   0 - very urgent: shrink everything
  *  ...
  *   6 - base-level: try to shrink a bit.
  */

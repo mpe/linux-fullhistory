@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.162 1998/11/07 11:50:26 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.163 1998/11/30 15:24:22 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -265,7 +265,7 @@ unsigned short tcp_good_socknum(void)
 	struct tcp_bind_bucket *tb;
 	int low = sysctl_local_port_range[0];
 	int high = sysctl_local_port_range[1];
-	int remaining = high - low + 1;
+	int remaining = (high - low) + 1;
 	int rover;
 
 	SOCKHASH_LOCK();

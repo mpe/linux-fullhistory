@@ -42,7 +42,7 @@ static __inline__ unsigned long end_name_hash(unsigned long hash)
 }
 
 /* Compute the hash for a name string. */
-static __inline__ unsigned int full_name_hash(const char * name, unsigned int len)
+static __inline__ unsigned int full_name_hash(const unsigned char * name, unsigned int len)
 {
 	unsigned long hash = init_name_hash();
 	while (len--)

@@ -499,15 +499,22 @@ nlmsvc_callback_exit(struct rpc_task *task)
 /*
  * NLM Server procedures.
  */
-#define nlmsvc_proc_none	NULL
-#define nlmsvc_encode_norep	NULL
-#define nlmsvc_decode_norep	NULL
-#define nlmsvc_decode_testres	NULL
-#define nlmsvc_proc_test_res	NULL
-#define nlmsvc_proc_lock_res	NULL
-#define nlmsvc_proc_cancel_res	NULL
-#define nlmsvc_proc_unlock_res	NULL
-#define nlmsvc_proc_granted_res	NULL
+
+#define nlmsvc_encode_norep	nlmsvc_encode_void
+#define nlmsvc_decode_norep	nlmsvc_decode_void
+#define nlmsvc_decode_testres	nlmsvc_decode_void
+#define nlmsvc_decode_lockres	nlmsvc_decode_void
+#define nlmsvc_decode_unlockres	nlmsvc_decode_void
+#define nlmsvc_decode_cancelres	nlmsvc_decode_void
+#define nlmsvc_decode_grantedres	nlmsvc_decode_void
+
+#define nlmsvc_proc_none	nlmsvc_proc_null
+#define nlmsvc_proc_test_res	nlmsvc_proc_null
+#define nlmsvc_proc_lock_res	nlmsvc_proc_null
+#define nlmsvc_proc_cancel_res	nlmsvc_proc_null
+#define nlmsvc_proc_unlock_res	nlmsvc_proc_null
+#define nlmsvc_proc_granted_res	nlmsvc_proc_null
+
 struct nlm_void			{ int dummy; };
 
 #define PROC(name, xargt, xrest, argt, rest)	\
@@ -533,10 +540,10 @@ struct svc_procedure		nlmsvc_procedures[] = {
   PROC(unlock_msg,	unlockargs,	norep,		args,	void),
   PROC(granted_msg,	testargs,	norep,		args,	void),
   PROC(test_res,	testres,	norep,		res,	void),
-  PROC(lock_res,	res,		norep,		res,	void),
-  PROC(cancel_res,	res,		norep,		res,	void),
-  PROC(unlock_res,	res,		norep,		res,	void),
-  PROC(granted_res,	res,		norep,		res,	void),
+  PROC(lock_res,	lockres,	norep,		res,	void),
+  PROC(cancel_res,	cancelres,	norep,		res,	void),
+  PROC(unlock_res,	unlockres,	norep,		res,	void),
+  PROC(granted_res,	grantedres,	norep,		res,	void),
   PROC(none,		void,		void,		void,	void),
   PROC(none,		void,		void,		void,	void),
   PROC(none,		void,		void,		void,	void),

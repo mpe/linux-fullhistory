@@ -610,16 +610,6 @@ _GLOBAL(__kernel_thread)
 	bnelr			/* return if parent */
 	mtlr	r4              /* fn addr in lr */
 	mr	r3,r5	        /* load arg and call fn */
-#if 0/*def __SMP__*/
-	/* drop scheduler_lock since schedule() called us */
-	lis	r4,scheduler_lock@ha
-	li	r5,0
-	stw	r5,scheduler_lock@l+4(r4)	/* owner_pc */
-	stw	r5,scheduler_lock@l+8(r4)	/* owner_cpu */
-	stw	r5,scheduler_lock@l(r4)
-	sync
-	isync
-#endif /* __SMP__ */
 	blrl
 	li	r0,__NR_exit	/* exit after child exits */
         li	r3,0

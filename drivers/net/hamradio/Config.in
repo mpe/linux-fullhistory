@@ -13,8 +13,8 @@ fi
     
 tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX
 tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
-tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR
-tristate 'BAYCOM epp driver for AX.25' CONFIG_BAYCOM_EPP
+dep_tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR $CONFIG_PARPORT
+dep_tristate 'BAYCOM epp driver for AX.25' CONFIG_BAYCOM_EPP $CONFIG_PARPORT
 
 tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM
 if [ "$CONFIG_SOUNDMODEM" != "n" ]; then

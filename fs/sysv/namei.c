@@ -9,6 +9,7 @@
  *
  *  sysv/namei.c
  *  Copyright (C) 1993  Bruno Haible
+ *  Copyright (C) 1997, 1998  Krzysztof G. Baranowski
  */
 
 

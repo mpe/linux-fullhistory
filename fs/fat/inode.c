@@ -366,7 +366,9 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 			CF_LE_W(b->info_sector) * logical_sector_size + 0x1e0;
 		fsinfo = (struct fat_boot_fsinfo *)
 			&bh->b_data[MSDOS_SB(sb)->fsinfo_offset];
-		if (CF_LE_L(fsinfo->signature) != 0x61417272) {
+		if ((MSDOS_SB(sb)->fsinfo_offset - sizeof(MSDOS_SB(sb)->fsinfo_offset) + 1)> bh->b_size) 
+		    	printk("fat_read_super: Bad fsinfo_offset\n");
+		else if (CF_LE_L(fsinfo->signature) != 0x61417272) {
 			printk("fat_read_super: Did not find valid FSINFO "
 				"signature. Found 0x%x\n",
 				CF_LE_L(fsinfo->signature));

@@ -118,10 +118,7 @@ static inline unsigned long do_fast_gettimeoffset(void)
 
 #define TICK_SIZE tick
 
-/*
- * Older CPU's don't have the rdtsc instruction..
- */
-#if CPU < 586
+#ifndef CONFIG_TSC
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs

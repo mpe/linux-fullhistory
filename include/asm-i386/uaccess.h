@@ -4,6 +4,7 @@
 /*
  * User space memory access functions
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/page.h>
 
@@ -44,7 +45,7 @@ extern int __verify_write(const void *, unsigned long);
 		:"1" (addr),"g" (size),"g" (current->addr_limit.seg)); \
 	flag; })
 
-#if CPU > 386
+#ifdef CONFIG_WP_WORKS_OK
 
 #define access_ok(type,addr,size) (__range_ok(addr,size) == 0)
 

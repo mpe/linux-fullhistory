@@ -128,7 +128,7 @@ void		rpc_killall_tasks(struct rpc_clnt *);
 void		rpc_execute(struct rpc_task *);
 void		rpc_run_child(struct rpc_task *parent, struct rpc_task *child,
 					rpc_action action);
-void		rpc_add_wait_queue(struct rpc_wait_queue *, struct rpc_task *);
+int		rpc_add_wait_queue(struct rpc_wait_queue *, struct rpc_task *);
 void		rpc_remove_wait_queue(struct rpc_task *);
 void		rpc_sleep_on(struct rpc_wait_queue *, struct rpc_task *,
 					rpc_action action, rpc_action timer);

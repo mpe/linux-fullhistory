@@ -12,7 +12,8 @@ struct cpuinfo_alpha {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
-};
+	unsigned long ipi_count;
+} __attribute__((aligned(32)));
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];
 
@@ -35,9 +36,6 @@ static __inline__ unsigned char hard_smp_processor_id(void)
 
 #define smp_processor_id()	(current->processor)
 #define cpu_logical_map(cpu)	(cpu)
-
-/* For the benefit of panic.  */
-void smp_message_pass(int target, int msg, unsigned long data, int wait);
 
 #endif /* __SMP__ */
 

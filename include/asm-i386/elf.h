@@ -32,8 +32,16 @@ typedef struct user_i387_struct elf_fpregset_t;
    This provides a mean for the dynamic linker to call DT_FINI functions for
    shared libraries that have been loaded before the code runs.
 
-   A value of 0 tells we have no such handler.  */
-#define ELF_PLAT_INIT(_r)	_r->edx = 0
+   A value of 0 tells we have no such handler. 
+
+   We might as well make sure everything else is cleared too (except for %esp),
+   just to make things more deterministic.
+ */
+#define ELF_PLAT_INIT(_r)	do { \
+	_r->ebx = 0; _r->ecx = 0; _r->edx = 0; \
+	_r->esi = 0; _r->edi = 0; _r->ebp = 0; \
+	_r->eax = 0; \
+} while (0)
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	4096

@@ -592,7 +592,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, EINVAL);
 			goto out;
 		}
+		down(&child->mm->mmap_sem);
 		res = read_long(child, addr, &tmp);
+		up(&child->mm->mmap_sem);
 		if (res < 0) {
 			pt_error_return(regs, -res);
 			goto out;
@@ -619,8 +621,10 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, EINVAL);
 			goto out;
 		}
+		down(&child->mm->mmap_sem);
 		vma = find_extend_vma(child, addr);
 		res = write_long(child, addr, data);
+		up(&child->mm->mmap_sem);
 		if(res < 0)
 			pt_error_return(regs, -res);
 		else
@@ -761,7 +765,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			goto out;
 		}
 		while(len) {
+			down(&child->mm->mmap_sem);
 			res = read_byte(child, src, &tmp);
+			up(&child->mm->mmap_sem);
 			if(res < 0) {
 				pt_error_return(regs, -res);
 				goto out;
@@ -788,7 +794,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			unsigned long tmp;
 
 			__get_user(tmp, src);
+			down(&child->mm->mmap_sem);
 			res = write_byte(child, dest, tmp);
+			up(&child->mm->mmap_sem);
 			if(res < 0) {
 				pt_error_return(regs, -res);
 				goto out;

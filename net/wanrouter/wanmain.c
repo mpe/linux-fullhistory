@@ -32,6 +32,7 @@
 *                               kernel space (for big firmwares)
 *****************************************************************************/
 
+#include <linux/config.h>
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
 #include <linux/kernel.h>
@@ -87,10 +88,8 @@ static int delete_interface (wan_device_t* wandev, char* name, int forse);
  *	Global Data
  */
 
-#ifdef MODULE
 static char fullname[]		= "WAN Router";
 static char copyright[]		= "(c) 1995-1997 Sangoma Technologies Inc.";
-#endif
 static char modname[]		= ROUTER_NAME;	/* short module name */
 wan_device_t * router_devlist	= NULL;	/* list of registered devices */
 static int devcnt		= 0;

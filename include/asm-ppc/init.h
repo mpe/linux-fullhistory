@@ -31,6 +31,9 @@
 #define __FINIT	.previous
 #define __INITDATA	.section	".data.init",#alloc,#write
 
+#define __cacheline_aligned __attribute__ \
+			 ((__section__ (".data.cacheline_aligned")))
+
 #else /* not egcs */
 
 #define __init
@@ -52,5 +55,7 @@
 #define __openfirmware
 #define __openfirmwaredata
 #define __openfirmwarefunc(x) x
+
+#define __cacheline_aligned
 #endif /* egcs */
 #endif

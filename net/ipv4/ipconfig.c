@@ -411,96 +411,6 @@ static struct bootp_pkt *ic_xmit_bootp __initdata = NULL; /* Packet being transm
 static struct bootp_pkt *ic_recv_bootp __initdata = NULL; /* Packet being received */
 
 /*
- *  Dirty tricks for BOOTP packet routing.  We replace the standard lookup function
- *  for the local fib by our version which does fake lookups and returns our private
- *  fib entries. Ugly, but it seems to be the simplest way to do the job.
- */
-
-static void *ic_old_local_lookup __initdata = NULL;	/* Old local routing table lookup function */
-static struct fib_info *ic_bootp_tx_fib __initdata = NULL; /* Our fake fib entries */
-static struct fib_info *ic_bootp_rx_fib __initdata = NULL;
-
-__initfunc(static int ic_bootp_route_lookup(struct fib_table *tb, const struct rt_key *key,
-	struct fib_result *res))
-{
-	static u32 ic_brl_zero = 0;
-
-	DBG(("BOOTP: Route lookup: %d:%08x -> %d:%08x: ", key->iif, key->src, key->oif, key->dst));
-	res->scope = RT_SCOPE_UNIVERSE;
-	res->prefix = &ic_brl_zero;
-	res->prefixlen = 0;
-	res->nh_sel = 0;
-	if (key->src == 0 && key->dst == 0xffffffff && key->iif == loopback_dev.ifindex) { /* Packet output */
-		DBG(("Output\n"));
-		res->type = RTN_UNICAST;
-		res->fi = ic_bootp_tx_fib;
-	} else if (key->iif && key->iif != loopback_dev.ifindex && key->oif == 0) {	/* Packet input */
-		DBG(("Input\n"));
-		res->type = RTN_LOCAL;
-		res->fi = ic_bootp_rx_fib;
-	} else if (!key->iif && !key->oif && !key->src) {	/* Address check by inet_addr_type() */
-		DBG(("Check\n"));
-		res->type = RTN_UNICAST;
-		res->fi = ic_bootp_tx_fib;
-	} else {
-		DBG(("Drop\n"));
-		return -EINVAL;
-	}
-	return 0;
-}
-
-__initfunc(static int ic_set_bootp_route(struct ic_device *d))
-{
-	struct fib_info *f = ic_bootp_tx_fib;
-	struct fib_nh *n = &f->fib_nh[0];
-
-	n->nh_dev = d->dev;
-	n->nh_oif = n->nh_dev->ifindex;
-	rt_cache_flush(0);
-	return 0;
-}
-
-__initfunc(static int ic_bootp_route_init(void))
-{
-	int size = sizeof(struct fib_info) + sizeof(struct fib_nh);
-	struct fib_info *rf, *tf;
-	struct fib_nh *nh;
-
-	if (!(rf = ic_bootp_rx_fib = kmalloc(size, GFP_KERNEL)) ||
-	    !(tf = ic_bootp_tx_fib = kmalloc(size, GFP_KERNEL)))
-		return -1;
-
-	memset(rf, 0, size);
-	rf->fib_nhs = 1;
-	nh = &rf->fib_nh[0];
-	nh->nh_scope = RT_SCOPE_UNIVERSE;
-
-	memset(tf, 0, size);
-	rf->fib_nhs = 1;
-	nh = &rf->fib_nh[0];
-	nh->nh_dev = ic_first_dev->dev;
-	nh->nh_scope = RT_SCOPE_UNIVERSE;
-	nh->nh_oif = nh->nh_dev->ifindex;
-
-	/* Dirty trick: replace standard routing table lookup by our function */
-	ic_old_local_lookup = local_table->tb_lookup;
-	local_table->tb_lookup = ic_bootp_route_lookup;
-
-	return 0;
-}
-
-__initfunc(static void ic_bootp_route_cleanup(void))
-{
-	if (ic_old_local_lookup)
-		local_table->tb_lookup = ic_old_local_lookup;
-	if (ic_bootp_rx_fib)
-		kfree_s(ic_bootp_rx_fib, sizeof(struct fib_info) + sizeof(struct fib_nh));
-	if (ic_bootp_tx_fib)
-		kfree_s(ic_bootp_tx_fib, sizeof(struct fib_info) + sizeof(struct fib_nh));
-}
-
-
-/*
  *  Allocation and freeing of BOOTP packet buffers.
  */
 __initfunc(static int ic_bootp_alloc(void))
@@ -677,10 +587,9 @@ __initfunc(static int ic_bootp_init(void))
 	/* Add fake zero addresses to all interfaces */
 	if (ic_bootp_addrs_add() < 0)
 		return -1;
-
-	/* Initialize BOOTP routing */
-	if (ic_bootp_route_init() < 0)
-		return -1;
+	
+	/* Setting the addresses automatically creates appropriate
+	   routes. */	
 
 	/* Initialize common portion of BOOTP request */
 	memset(ic_xmit_bootp, 0, sizeof(struct bootp_pkt));
@@ -699,7 +608,6 @@ __initfunc(static int ic_bootp_init(void))
 	ic_bootp_xmit_sock->sk->broadcast = 1;
 	ic_bootp_xmit_sock->sk->reuse = 1;
 	ic_bootp_recv_sock->sk->reuse = 1;
-	ic_set_bootp_route(ic_first_dev);
 	if (ic_udp_bind(ic_bootp_recv_sock, INADDR_ANY, 68) ||
 	    ic_udp_bind(ic_bootp_xmit_sock, INADDR_ANY, 68) ||
 	    ic_udp_connect(ic_bootp_xmit_sock, INADDR_BROADCAST, 67))
@@ -718,7 +626,6 @@ __initfunc(static void ic_bootp_cleanup(void))
 	ic_udp_close(ic_bootp_recv_sock);
 	ic_bootp_addrs_del();
 	ic_bootp_free();
-	ic_bootp_route_cleanup();
 }
 
 
@@ -735,7 +642,6 @@ __initfunc(static int ic_bootp_send_if(struct ic_device *d, u32 jiffies))
 	memset(b->hw_addr, 0, sizeof(b->hw_addr));
 	memcpy(b->hw_addr, dev->dev_addr, dev->addr_len);
 	b->secs = htons(jiffies / HZ);
-	ic_set_bootp_route(d);
 	return ic_udp_send(ic_bootp_xmit_sock, b, sizeof(struct bootp_pkt));
 }
 

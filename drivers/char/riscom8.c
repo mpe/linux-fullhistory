@@ -228,7 +228,7 @@ extern inline void rc_long_delay(unsigned long delay)
 {
 	unsigned long i;
 	
-	for (i = jiffies + delay; i > jiffies; ) ;
+	for (i = jiffies + delay; time_after(i,jiffies); ) ;
 }
 
 /* Reset and setup CD180 chip */
@@ -1172,8 +1172,8 @@ static void rc_close(struct tty_struct * tty, struct file * filp)
 		timeout = jiffies+HZ;
 		while(port->IER & IER_TXEMPTY)  {
 			current->state = TASK_INTERRUPTIBLE;
-			schedule_timeout(port->timeout);
-			if (jiffies > timeout)
+ 			schedule_timeout(port->timeout);
+			if (time_after(jiffies, timeout))
 				break;
 		}
 	}

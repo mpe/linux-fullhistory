@@ -1,5 +1,5 @@
 /*
- * $Id: locks.c,v 1.20 1998/10/08 01:17:32 cort Exp $
+ * $Id: locks.c,v 1.21 1998/12/28 10:28:53 paulus Exp $
  *
  * Locks for smp ppc 
  * 
@@ -18,7 +18,7 @@
 #define DEBUG_LOCKS 1
 
 #undef INIT_STUCK
-#define INIT_STUCK 0xffffffff
+#define INIT_STUCK 200000000 /*0xffffffff*/
 
 void _spin_lock(spinlock_t *lock)
 {
@@ -76,9 +76,9 @@ void _spin_unlock(spinlock_t *lp)
 		      lp->owner_pc,lp->lock);
 #endif /* DEBUG_LOCKS */
 	lp->owner_pc = lp->owner_cpu = 0;
-	eieio();
-	lp->lock = 0;
-	eieio();
+	eieio();	/* actually I believe eieio only orders */
+	lp->lock = 0;	/* non-cacheable accesses (on 604 at least) */
+	eieio();	/*  - paulus. */
 }
 		
 /*

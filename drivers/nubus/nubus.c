@@ -632,7 +632,9 @@ void nubus_init(void)
 	nubus_init_via();
 	printk("Scanning nubus slots.\n");
 	nubus_probe_bus();
+#ifdef CONFIG_PROC_FS
 	proc_register(&proc_root, &proc_nubus);
+#endif
 }
 
 	

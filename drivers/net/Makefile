@@ -1035,13 +1035,6 @@ endif
 #
 # HIPPI adapters
 #
-ifeq ($(CONFIG_CERN_HIPPI),y)
-L_OBJS += cern_hippi.o
-else
-  ifeq ($(CONFIG_CERN_HIPPI),m)
-  M_OBJS += cern_hippi.o
-  endif
-endif
 
 ifeq ($(CONFIG_ROADRUNNER),y)
 L_OBJS += rrunner.o

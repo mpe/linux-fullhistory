@@ -38,7 +38,9 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for NETjet card' CONFIG_HISAX_NETJET
     bool 'HiSax Support for Niccy PnP/PCI card' CONFIG_HISAX_NICCY
     if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
+      if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
         bool 'HiSax Support for Am7930' CONFIG_HISAX_AMD7930
+      fi
     fi
 fi
 if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then

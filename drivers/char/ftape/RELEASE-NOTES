@@ -423,9 +423,7 @@ Another simple bugfix version.
 
 This release is a simple bugfix version.
 
-- Linux/SMP: ftape *should* work, if you remember to add the symbol __SMP__
-  to the Makefile (you know what I'm talking about, if you're playing with
-  Linux/SMP :).
+- Linux/SMP: ftape *should* work.
 - FC-10/20: Only accepts IRQs 3-7, or 9.  If IRQ 9, properly tell the card
   to use IRQ 2.  Thanks to Greg Crider (gcrider@iclnet.org) for finding and
   locating this bug and testing the patch.

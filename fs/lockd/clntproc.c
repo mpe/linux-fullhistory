@@ -125,7 +125,8 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 
 	/* If we're cleaning up locks because the process is exiting,
 	 * perform the RPC call asynchronously. */
-	if (cmd == F_SETLK && fl->fl_type == F_UNLCK
+	if ((cmd == F_SETLK || cmd == F_SETLKW)
+	    && fl->fl_type == F_UNLCK
 	    && (current->flags & PF_EXITING)) {
 		sigfillset(&current->blocked);	/* Mask all signals */
 		recalc_sigpending(current);
@@ -144,7 +145,8 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 
 	if (cmd == F_GETLK) {
 		status = nlmclnt_test(call, fl);
-	} else if (cmd == F_SETLK && fl->fl_type == F_UNLCK) {
+	} else if ((cmd == F_SETLK || cmd == F_SETLKW)
+		   && fl->fl_type == F_UNLCK) {
 		status = nlmclnt_unlock(call, fl);
 	} else if (cmd == F_SETLK || cmd == F_SETLKW) {
 		call->a_args.block = (cmd == F_SETLKW)? 1 : 0;

@@ -12,4 +12,28 @@
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 
+typedef unsigned long cycles_t;
+
+/*
+ * For the "cycle" counter we use the timebase lower half.
+ * Currently only used on SMP.
+ *
+ * Since SMP kernels won't run on the PPC601 CPU (which doesn't have
+ * the timebase register) anyway, we don't bother checking the CPU version.
+ */
+
+extern cycles_t cacheflush_time;
+
+static inline cycles_t get_cycles(void)
+{
+#ifdef __SMP__
+	cycles_t ret;
+
+	__asm__("mftb %0" : "=r" (ret) : );
+	return ret;
+#else
+	return 0;
+#endif
+}
+
 #endif

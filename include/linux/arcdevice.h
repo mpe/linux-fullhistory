@@ -192,7 +192,7 @@ extern int arcnet_debug;
 
 
 
-#define JIFFER(time) for (delayval=jiffies+time; jiffies<delayval;) ;
+#define JIFFER(time) for (delayval=jiffies+time; time_before(jiffies,delayval);) ;
 
 	/* a complete ARCnet packet */
 union ArcPacket

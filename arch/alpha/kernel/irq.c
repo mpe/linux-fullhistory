@@ -11,6 +11,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/kernel.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>

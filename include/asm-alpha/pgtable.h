@@ -175,7 +175,7 @@ struct ipi_msg_flush_tb_struct {
 		struct vm_area_struct *	flush_vma;
 	} p;
 	unsigned long flush_addr;
-  /*	unsigned long flush_end; */ /* not used by local_flush_tlb_range */
+	unsigned long flush_end;
 };
 
 extern struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;

@@ -52,6 +52,8 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 	struct nlm_file	*file;
 	unsigned int	hash;
 	u32		nfserr;
+	uid_t		saved_cr_uid;
+	struct svc_cred	*cred;
 
 	dprintk("lockd: nlm_file_lookup(%s/%u)\n",
 		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
@@ -80,11 +82,19 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 
 	/* Open the file. Note that this must not sleep for too long, else
 	 * we would lock up lockd:-) So no NFS re-exports, folks.
+	 *
+	 * We have to make sure we have the right credential to open
+	 * the file.
 	 */
+	cred = &rqstp->rq_cred;
+	saved_cr_uid = cred->cr_uid;
+	cred->cr_uid = 0;
 	if ((nfserr = nlmsvc_ops->fopen(rqstp, fh, &file->f_file)) != 0) {
 		dprintk("lockd: open failed (nfserr %ld)\n", ntohl(nfserr));
+		cred->cr_uid = saved_cr_uid;
 		goto out_free;
 	}
+	cred->cr_uid = saved_cr_uid;
 
 	file->f_next = nlm_files[hash];
 	nlm_files[hash] = file;

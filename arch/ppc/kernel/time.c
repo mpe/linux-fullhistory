@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.38 1998/11/16 15:56:15 cort Exp $
+ * $Id: time.c,v 1.39 1998/12/28 10:28:51 paulus Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -78,6 +78,26 @@ void timer_interrupt(struct pt_regs * regs)
 	unsigned dcache_locked = unlock_dcache();
 	
 	hardirq_enter(cpu);
+#ifdef __SMP__
+	{
+		unsigned int loops = 100000000;
+		while (test_bit(0, &global_irq_lock)) {
+			if (smp_processor_id() == global_irq_holder) {
+				printk("uh oh, interrupt while we hold global irq lock!\n");
+#ifdef CONFIG_XMON
+				xmon(0);
+#endif
+				break;
+			}
+			if (loops-- == 0) {
+				printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
+#ifdef CONFIG_XMON
+				xmon(0);
+#endif
+			}
+		}
+	}
+#endif /* __SMP__ */			
 	
 	while ((dval = get_dec()) < 0) {
 		/*
@@ -150,12 +170,15 @@ void do_gettimeofday(struct timeval *tv)
 	save_flags(flags);
 	cli();
 	*tv = xtime;
+	/* XXX we don't seem to have the decrementers synced properly yet */
+#ifndef __SMP__
 	tv->tv_usec += (decrementer_count - get_dec())
 	    * count_period_num / count_period_den;
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
+#endif
 	restore_flags(flags);
 }
 

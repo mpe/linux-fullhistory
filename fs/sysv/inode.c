@@ -15,6 +15,7 @@
  *
  *  sysv/inode.c
  *  Copyright (C) 1993  Bruno Haible
+ *  Copyright (C) 1997, 1998  Krzysztof G. Baranowski
  *
  *  This file contains code for allocating/freeing inodes and for read/writing
  *  the superblock.
@@ -179,12 +180,25 @@ static const char* detect_sysv4 (struct super_block *sb, struct buffer_head *bh)
 		return NULL;
 	if (sbd->s_time < 315532800) /* this is likely to happen on SystemV2 FS */
 		return NULL;
-	if (sbd->s_type > 3 || sbd->s_type < 1)
+	if ((sbd->s_type > 3 || sbd->s_type < 1) && (sbd->s_type > 0x30 || sbd->s_type < 0x10))
 		return NULL;
-	detected_bs(sbd->s_type, sb);
+
+	/* On Interactive Unix (ISC) Version 4.0/3.x s_type field = 0x10,
+	   0x20 or 0x30 indicates that symbolic links and the 14-character
+	   filename limit is gone. Due to lack of information about this
+           feature read-only mode seems to be a reasonable approach... -KGB */
+
+	if (sbd->s_type >= 0x10) {
+		printk("SysV FS: can't handle long file names on %s, "
+		       "forcing read-only mode.\n", kdevname(sb->s_dev));
+		sb->s_flags |= MS_RDONLY;
+	}
+
+	detected_bs(sbd->s_type >= 0x10 ? (sbd->s_type >> 4) : sbd->s_type, sb);
 	sb->sv_type = FSTYPE_SYSV4;
 	return "SystemV";
 }
+
 static struct super_block * detected_sysv4 (struct super_block *sb, struct buffer_head *bh)
 {
 	struct sysv4_super_block * sbd;

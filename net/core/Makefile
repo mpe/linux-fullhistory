@@ -12,7 +12,9 @@ O_TARGET := core.o
 O_OBJS	:= sock.o skbuff.o iovec.o datagram.o scm.o
 
 ifeq ($(CONFIG_SYSCTL),y)
+ifeq ($(CONFIG_NET),y)
 O_OBJS += sysctl_net_core.o
+endif
 endif
 
 ifdef CONFIG_FILTER

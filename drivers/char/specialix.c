@@ -353,7 +353,7 @@ extern inline void sx_long_delay(unsigned long delay)
 {
 	unsigned long i;
 	
-	for (i = jiffies + delay; i > jiffies; ) ;
+	for (i = jiffies + delay; time_after(i, jiffies); ) ;
 }
 
 
@@ -1073,7 +1073,7 @@ static void sx_change_speed(struct specialix_board *bp, struct specialix_port *p
 	/* Set baud rate for port */
 	tmp = (((SX_OSCFREQ + baud_table[baud]/2) / baud_table[baud] +
 		CD186x_TPC/2) / CD186x_TPC);
-	if ((tmp < 0x10) && (again < jiffies)) { 
+	if ((tmp < 0x10) && time_before(again, jiffies)) { 
 		again = jiffies + HZ * 60;
 		/* Page 48 of version 2.0 of the CL-CD1865 databook */
 		if (tmp >= 12) {
@@ -1551,8 +1551,8 @@ static void sx_close(struct tty_struct * tty, struct file * filp)
 		timeout = jiffies+HZ;
 		while(port->IER & IER_TXEMPTY) {
 			current->state = TASK_INTERRUPTIBLE;
-			schedule_timeout(port->timeout);
-			if (jiffies > timeout) {
+ 			schedule_timeout(port->timeout);
+			if (time_after(jiffies, timeout)) {
 				printk (KERN_INFO "Timeout waiting for close\n");
 				break;
 			}

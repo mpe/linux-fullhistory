@@ -106,7 +106,8 @@ struct svc_rqst {
 	u32			rq_prot;	/* IP protocol */
 	unsigned short		rq_verfed  : 1,	/* reply has verifier */
 				rq_userset : 1,	/* auth->setuser OK */
-				rq_secure  : 1;	/* secure port */
+				rq_secure  : 1,	/* secure port */
+				rq_auth    : 1;	/* check client */
 
 	void *			rq_argp;	/* decoded arguments */
 	void *			rq_resp;	/* xdr'd results */

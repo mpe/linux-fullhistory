@@ -1346,11 +1346,11 @@ handle_reset(struct mesh_state *ms)
 static void
 do_mesh_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 {
-	/*unsigned long flags;*/
+	unsigned long flags;
 
-	/*spin_lock_irqsave(&io_request_lock, flags);*/
+	spin_lock_irqsave(&io_request_lock, flags);
 	mesh_interrupt(irq, dev_id, ptregs);
-	/*spin_unlock_irqrestore(&io_request_lock, flags);*/
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static void handle_error(struct mesh_state *ms)
@@ -1643,6 +1643,7 @@ mesh_done(struct mesh_state *ms, int start_next)
 static void
 mesh_completed(struct mesh_state *ms, Scsi_Cmnd *cmd)
 {
+#if 0
 	if (ms->completed_q == NULL)
 		ms->completed_q = cmd;
 	else
@@ -1651,6 +1652,9 @@ mesh_completed(struct mesh_state *ms, Scsi_Cmnd *cmd)
 	cmd->host_scribble = NULL;
 	queue_task(&ms->tqueue, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
+#else
+	(*cmd->scsi_done)(cmd);
+#endif
 }
 
 /*

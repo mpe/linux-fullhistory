@@ -11,17 +11,16 @@
 #include <linux/types.h>
 #include <linux/net.h>
 #include <linux/in.h>
-#include <net/sock.h>
-#include <net/dst.h>
-#include <net/checksum.h>
-#include <net/pkt_sched.h>
 #include <linux/netdevice.h>
-#include <linux/etherdevice.h>
 #include <linux/fddidevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
 #include <net/neighbour.h>
 #include <net/snmp.h>
+#include <net/dst.h>
+#include <net/checksum.h>
+#include <linux/etherdevice.h>
+#include <net/pkt_sched.h>
 
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
@@ -29,6 +28,7 @@
 
 #ifdef CONFIG_INET
 #include <linux/ip.h>
+#include <linux/etherdevice.h>
 #include <net/protocol.h>
 #include <net/arp.h>
 #include <net/ip.h>
@@ -38,18 +38,12 @@
 #include <net/route.h>
 #include <net/scm.h>
 #include <net/inet_common.h>
+#include <net/pkt_sched.h>
 #include <linux/inet.h>
 #include <linux/mroute.h>
 #include <linux/igmp.h>
 
 extern struct net_proto_family inet_family_ops;
-
-#ifdef CONFIG_DLCI_MODULE
-extern int (*dlci_ioctl_hook)(unsigned int, void *);
-EXPORT_SYMBOL(dlci_ioctl_hook);
-#endif
-
-#endif
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
@@ -62,6 +56,7 @@ EXPORT_SYMBOL(dlci_ioctl_hook);
 extern int tcp_tw_death_row_slot;
 #endif
 
+#endif
 
 #include <linux/rtnetlink.h>
 
@@ -87,6 +82,10 @@ extern void destroy_8023_client(struct datalink_proto *);
 
 #ifdef CONFIG_ATALK_MODULE
 #include <net/sock.h>
+#include <net/dst.h>
+#include <net/checksum.h>
+#include <linux/etherdevice.h>
+#include <net/pkt_sched.h>
 #endif
 
 #ifdef CONFIG_SYSCTL
@@ -136,6 +135,9 @@ EXPORT_SYMBOL(sock_no_sendmsg);
 EXPORT_SYMBOL(sock_no_recvmsg);
 EXPORT_SYMBOL(sock_rfree);
 EXPORT_SYMBOL(sock_wfree);
+EXPORT_SYMBOL(sock_wmalloc);
+EXPORT_SYMBOL(sock_rmalloc);
+EXPORT_SYMBOL(sock_rspace);
 EXPORT_SYMBOL(skb_recv_datagram);
 EXPORT_SYMBOL(skb_free_datagram);
 EXPORT_SYMBOL(skb_copy_datagram);
@@ -222,6 +224,7 @@ EXPORT_SYMBOL(ip_route_output);
 EXPORT_SYMBOL(icmp_send);
 EXPORT_SYMBOL(ip_options_compile);
 EXPORT_SYMBOL(arp_send);
+EXPORT_SYMBOL(arp_broken_ops);
 EXPORT_SYMBOL(ip_id_count);
 EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
@@ -233,12 +236,15 @@ EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(ip_cmsg_recv);
 EXPORT_SYMBOL(__release_sock);
-EXPORT_SYMBOL(arp_find);
-EXPORT_SYMBOL(ip_rcv);
-EXPORT_SYMBOL(arp_rcv);
 
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
+
+#ifdef CONFIG_DLCI_MODULE
+extern int (*dlci_ioctl_hook)(unsigned int, void *);
+EXPORT_SYMBOL(dlci_ioctl_hook);
+#endif
+
 
 #ifdef CONFIG_IPV6
 EXPORT_SYMBOL(ipv6_addr_type);
@@ -273,7 +279,6 @@ EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(net_timer);
 /* UDP/TCP exported functions for TCPv6 */
-EXPORT_SYMBOL(sock_rspace);
 EXPORT_SYMBOL(udp_ioctl);
 EXPORT_SYMBOL(udp_connect);
 EXPORT_SYMBOL(udp_sendmsg);
@@ -370,8 +375,17 @@ EXPORT_SYMBOL(rtnl_rlockct);
 EXPORT_SYMBOL(rtnl_lock);
 EXPORT_SYMBOL(rtnl_unlock);
 
-EXPORT_SYMBOL(sock_wmalloc);
-EXPORT_SYMBOL(sock_rmalloc);
+                  
+/* Used by at least ipip.c.  */
+EXPORT_SYMBOL(ipv4_config);
+EXPORT_SYMBOL(dev_open);
+
+EXPORT_SYMBOL(ip_rcv);
+EXPORT_SYMBOL(arp_rcv);
+EXPORT_SYMBOL(arp_tbl);
+EXPORT_SYMBOL(arp_find);
+
+#endif  /* CONFIG_INET */
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
@@ -395,12 +409,6 @@ EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
 EXPORT_SYMBOL(tr_freedev);
 #endif
-                  
-/* Used by at least ipip.c.  */
-EXPORT_SYMBOL(ipv4_config);
-EXPORT_SYMBOL(dev_open);
-
-#endif  /* CONFIG_INET */
 
 /* Device callback registration */
 EXPORT_SYMBOL(register_netdevice_notifier);
@@ -445,10 +453,11 @@ EXPORT_SYMBOL(netdev_fc_xoff);
 EXPORT_SYMBOL(dev_base);
 EXPORT_SYMBOL(dev_close);
 EXPORT_SYMBOL(dev_mc_add);
+EXPORT_SYMBOL(dev_mc_delete);
+EXPORT_SYMBOL(dev_mc_upload);
 EXPORT_SYMBOL(n_tty_ioctl);
 EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
-EXPORT_SYMBOL(dev_mc_delete);
 
 EXPORT_SYMBOL(if_port_text);
 

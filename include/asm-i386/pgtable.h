@@ -41,7 +41,7 @@
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
-#ifdef CONFIG_M386
+#ifndef CONFIG_INVLPG
 #define __flush_tlb_one(addr) flush_tlb()
 #else
 #define __flush_tlb_one(addr) \
@@ -218,18 +218,16 @@ static inline void flush_tlb_range(struct mm_struct *mm,
  * memory. 
  */
 #define _PAGE_PRESENT	0x001
-#define _PAGE_PROTNONE	0x002		/* If not present */
-#define _PAGE_RW	0x002		/* If present */
+#define _PAGE_RW	0x002
 #define _PAGE_USER	0x004
 #define _PAGE_WT	0x008
 #define _PAGE_PCD	0x010
 #define _PAGE_ACCESSED	0x020
 #define _PAGE_DIRTY	0x040
-#define _PAGE_4M	0x080	/* 4 MB page, Pentium+.. */
+#define _PAGE_4M	0x080	/* 4 MB page, Pentium+, if present.. */
 #define _PAGE_GLOBAL	0x100	/* Global TLB entry PPro+ */
 
-#define _PAGE_READABLE  (_PAGE_PRESENT)             
-#define _PAGE_WRITABLE  (_PAGE_PRESENT | _PAGE_RW)
+#define _PAGE_PROTNONE	0x080	/* If not present */
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
@@ -340,21 +338,17 @@ extern inline int pte_read(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
 extern inline int pte_exec(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
 extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_DIRTY; }
 extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
+extern inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_RW; }
 
 extern inline pte_t pte_rdprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_USER; return pte; }
 extern inline pte_t pte_exprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_USER; return pte; }
 extern inline pte_t pte_mkclean(pte_t pte)	{ pte_val(pte) &= ~_PAGE_DIRTY; return pte; }
 extern inline pte_t pte_mkold(pte_t pte)	{ pte_val(pte) &= ~_PAGE_ACCESSED; return pte; }
+extern inline pte_t pte_wrprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_RW; return pte; }
 extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= _PAGE_DIRTY; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= _PAGE_ACCESSED; return pte; }
-
-/*
- * These are harder, as writability is two bits, not one..
- */
-extern inline int pte_write(pte_t pte)		{ return (pte_val(pte) & _PAGE_WRITABLE) == _PAGE_WRITABLE; }
-extern inline pte_t pte_wrprotect(pte_t pte)	{ pte_val(pte) &= ~((pte_val(pte) & _PAGE_PRESENT) << 1); return pte; }
 extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pte; }
 
 /*
@@ -589,9 +583,9 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 {
 }
 
-#define SWP_TYPE(entry) (((entry) >> 2) & 0x3f)
+#define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 8))
+#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
 
 #define module_map      vmalloc
 #define module_unmap    vfree

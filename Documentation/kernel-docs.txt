@@ -1,0 +1,331 @@
+
+   
+ INDEX OF DOCUMENTATION FOR PEOPLE INTERESTED IN WRITING AND/OR UNDERSTANDING
+                               THE LINUX KERNEL.
+                                       
+		Juan-Mariano de Goyeneche <jmseyas@dit.upm.es>
+   
+   
+   /*
+    * The latest version of this document may be found at: 
+    *   http://www.dit.upm.es/~jmseyas/linux/kernel/hackers-docs.html
+    */
+
+   The need for a document like this one became apparent in the
+   linux-kernel mailing list as the same questions, asking for pointers
+   to information, appeared again and again.
+   
+   Fortunately, as more and more people get to GNU/Linux, more and more
+   get interested in the Kernel. But reading the sources is not always
+   enough. It is easy to understand the code, but miss the concepts, the
+   philosophy and design decissions behind this code.
+   
+   Unfortunately, not many documents are available for beginners to
+   start. And, even if they exist, there was no "well-known" place which
+   kept track of them. These lines try to cover this lack. All documents
+   available on line known by the author are listed, while some reference
+   books are also mentioned.
+   
+   PLEASE, if you know any paper not listed here or write a new document,
+   send me an e-mail, and I'll include a reference to it here. Any
+   corrections, ideas or comments are also wellcomed.
+   
+   The papers that follow are listed in no particular order. All are
+   catalogued with the following fields: the document's "Title", the
+   "Author"/s, the "URL" where they can be found, some "Keywords"
+   helpfull when searching for specific topics, and a brief "Description"
+   of the Document.
+   
+   Enjoy!
+   
+   
+   ON-LINE DOCS:
+   
+          + Title: "The Linux Kernel"
+            Author: David A. Rusling.
+            URL: http://sunsite.unc.edu/linux/LDP/tlk/tlk.html
+            Keywords: everything!, book.
+            Description: On line, 200 pages book describing most
+            aspects of the Linux Kernel. Probably, the first reference
+            for beginners. Lots of illustrations explaining data
+            structures use and relationships in the purest Richard W.
+            Stevens' style. Contents: "1.-Hardware Basics, 2.-Software
+            Basics, 3.-Memory Management, 4.-Processes, 5.-Interprocess
+            Communication Mechanisms, 6.-PCI, 7.-Interrupts and Interrupt
+            Handling, 8.-Device Drivers, 9.-The File system,
+            10.-Networks, 11.-Kernel Mechanisms, 12.-Modules, 13.-The
+            Linux Kernel Sources, A.-Linux Data Structures, B.-The Alpha
+            AXP Processor, C.-Useful Web and FTP Sites, D.-The GNU
+            General Public License, Glossary". In short: a must have.
+   
+          + Title: "The Linux Kernel Hackers' Guide"
+            Author: Michael K.Johnson and others.
+            URL: http://www.redhat.com:8080/HyperNews/get/khg.html
+            Keywords: everything!
+            Description: No more Postscript book-like version. Only
+            HTML now. Many people have contributed. The interface is
+            similar to web available mailing lists archives. You can find
+            some articles and then some mails asking questions about them
+            and/or complementing previous contributions. A little bit
+            anarchic in this aspect, but with some valuable information
+            in some cases.
+       
+          + Title: "Tour Of the Linux Kernel Source"
+            Author: Vijo Cherian.
+            URL: http://www.svrec.ernet.in/~vijo/tolks/tolks.html
+            Keywords:
+            Description: The name says it all. A tour of the sources,
+            describing directories, files, variables, data structures...
+            It covers general stuff, device drivers, filesystems, IPC and
+            Network Code.
+       
+          + Title: "Overview of the Virtual File System"
+            Author: Richard Gooch.
+            URL: http://www.atnf.csiro.au/~rgooch/linux/vfs.txt
+            Keywords: VFS, File System, mounting filesystems, opening
+            files, dentries,
+            dcache. Description: Brief introduction to the Linux
+            Virtual File System. What is it, how it works, operations
+            taken when opening a file or mounting a file system and
+            description of important data structures explaining the
+            purpose of each of their entries.
+   
+          + Title: "The Linux RAID-1, 4, 5 Code"
+            Author: Ingo Molnar, Gadi Oxman and Miguel de Icaza.
+            URL: http://www.ssc.com/lj/issue44/2391.html
+            Keywords: RAID, MD driver.
+            Description: Linux Journal Kernel Korner article. Here is
+            it's abstract: "A description of the implementation of the
+            RAID-1, RAID-4 and RAID-5 personalities of the MD device
+            driver in the Linux kernel, providing users with high
+            performance and reliable, secondary-storage capability using
+            software".
+   
+          + Title: "Dynamic Kernels: Modularized Device Drivers"
+            Author: Alessandro Rubini.
+            URL: http://www.ssc.com/lj/issue23/1219.html
+            Keywords: device driver, module, loading/unloading modules,
+            allocating
+            resources. Description: Linux Journal Kernel Korner
+            article. Here is it's abstract: "This is the first of a
+            series of four articles co-authored by Alessandro Rubini and
+            Georg Zezchwitz which present a practical approach to writing
+            Linux device drivers as kernel loadable modules. This
+            installment presents an introduction to the topic, preparing
+            the reader to understand next month's installment".
+   
+          + Title: "Dynamic Kernels: Discovery"
+            Author: Alessandro Rubini.
+            URL: http://www.ssc.com/lj/issue24/kk24.html
+            Keywords: character driver, init_module, clean_up module,
+            autodetection,
+            mayor number, minor number, file operations, open(), close().
+            Description: Linux Journal Kernel Korner article. Here is
+            it's abstract: "This article, the second of four, introduces
+            part of the actual code to create custom module implementing
+            a character device driver. It describes the code for module
+            initialization and cleanup, as well as the open() and close()
+            system calls".
+   
+          + Title: "The Devil's in the Details"
+            Author: Georg v. Zezschwitz and Alessandro Rubini.
+            URL: http://www.ssc.com/lj/issue25/kk25.html
+            Keywords: read(), write(), select(), ioctl(), blocking/non
+            blocking mode,
+            interrupt handler. Description: Linux Journal Kernel Korner
+            article. Here is it's abstract: "This article, the third of
+            four on writing character device drivers, introduces concepts
+            of reading, writing, and using ioctl-calls".
+   
+          + Title: "Dissecting Interrupts and Browsing DMA"
+            Author: Alessandro Rubini and Georg v. Zezschwitz.
+            URL: http://www.ssc.com/lj/issue26/interrupt.html
+            Keywords: interrupts, irqs, DMA, bottom halves, task
+            queues.
+            Description: Linux Journal Kernel Korner article. Here is
+            it's abstract: "This is the fourth in a series of articles
+            about writing character device drivers as loadable kernel
+            modules. This month, we further investigate the field of
+            interrupt handling. Though it is conceptually simple,
+            practical limitations and constraints make this an
+            ``interesting'' part of device driver writing, and several
+            different facilities have been provided for different
+            situations. We also investigate the complex topic of DMA".
+   
+          + Title: "Network Buffers And Memory Management"
+            Author: Alan Cox.
+            URL: http://www.ssc.com/lj/issue30/kk30.html
+            Keywords: sk_buffs, network devices, protocol/link layer
+            variables, network
+            devices flags, transmit, receive, configuration, multicast.
+            Description: Linux Journal Kernel Korner. Here is the
+            abstract: "Writing a network device driver for Linux is
+            fundamentally simple---most of the complexity (other than
+            talking to the hardware) involves managing network packets in
+            memory".
+       
+          + Title: "An Introduction to the Linux 1.3.x Networking Code"
+            Author: Vipul Gupta.
+            URL:
+            http://anchor.cs.binghamton.edu/courses/cs628/linux-net.html
+            Keywords: files, sk_buffs.
+            Description: A short description of files under the net/
+            directory. Each file has a one or two lines paragrahp
+            description. sk_buffs explained, too, with some beatiful
+            pictures. A little bit outdated.
+   
+          + Title: "Linux ioctl() Primer"
+            Author: Vipul Gupta.
+            URL:
+            http://anchor.cs.binghamton.edu/courses/cs628/ioctl.html
+            Keywords: ioctl, socket.
+            Description: Little description and examples on the use and
+            implementation of the ioctl() system call. A little bit
+            biased towards sockets.
+       
+          + Title: "Writing Linux Device Drivers"
+            Author: Michael K. Johnson.
+            URL: http://www.redhat.com/~johnsonm/devices.html
+            Keywords: files, VFS, file operations, kernel interface,
+            character vs
+            block devices, I/O access, hardware interrupts, DMA, access
+            to user memory, memory allocation, timers. Description:
+            Introductory 50-minutes (sic) tutorial on writing device
+            drivers. 12 pages written by the same author of the "Kernel
+            Hackers' Guide" which give a very good overview of the topic.
+   
+          + Title: "The Venus kernel interface"
+            Author: Peter J. Braam.
+            URL:
+            http://www.coda.cs.cmu.edu/doc/html/kernel-venus-protocol.html
+            Keywords: coda, filesystem, venus, cache manager.
+            Description: "This document describes the communication
+            between Venus and kernel level file system code needed for
+            the operation of the Coda filesystem. This version document
+            is meant to describe the current interface (version 1.0) as
+            well as improvements we envisage".
+       
+          + Title: "Programming PCI-Devices under Linux"
+            Author: Claus Schroeter.
+            URL:
+            ftp://ftp.llp.fu-berlin.de/pub/linux/LINUX-LAB/whitepapers/pc
+            ip.ps.gz
+            Keywords: PCI, device, busmastering.
+            Description: 6 pages tutorial on PCI programming under
+            Linux. Gives the basic concepts on the architecture of the
+            PCI subsystem, as long as basic functions and macros to
+            read/write the devices and perform busmastering.
+       
+          + Title: "Writing Character Device Driver for Linux"
+            Author: R. Baruch and C. Schroeter.
+            URL:
+            ftp://ftp.llp.fu-berlin.de/pub/linux/LINUX-LAB/whitepapers/dr
+            ivers.ps.gz
+            Keywords: character device drivers, I/O, signals, DMA,
+            accesing ports in user space, kernel environment.
+            Description: 68 pages paper on writing character drivers. A
+            little bit old (1.993, 1.994) although still useful.
+       
+       
+       
+     * BOOKS: (Not on-line)
+       
+          + Title: "Linux Device Drivers"
+            Author: Alessandro Rubini.
+            Publisher: O'Reilly &Associates.
+            Date: 1998.
+            ISBN: 1-56592-292-1
+       
+          + Title: "Linux Kernel Internals"
+            Author: Michael Beck.
+            Publisher: Addison-Wesley.
+            Date: 1997.
+            ISBN: 0-201-33143-8 (second edition)
+       
+          + Title: "The Design of the UNIX Operating System"
+            Author: Maurice J. Bach.
+            Publisher: Prentice Hall.
+            Date: 1986.
+            ISBN: ???
+   
+          + Title: "The Design and Implementation of the 4.3 BSD UNIX
+            Operating System"
+            Author: Samuel J. Leffler, Marshall Kirk McKusick, Michael
+            J. Karels, John S. Quarterman.
+            Publisher: Addison-Wesley.
+            Date: 1989 (reprinted with corrections on October, 1990).
+            ISBN: 0-201-06196-1
+       
+          + Title: "The Design and Implementation of the 4.4 BSD UNIX
+            Operating System"
+            Author: Marshall Kirk McKusick, Keith Bostic, Michael J.
+            Karels, John S. Quarterman.
+            Publisher: Addison-Wesley.
+            Date: 1996.
+            ISBN: 0-201-54979-4
+   
+          + Title: "Programmation Linux 2.0 API systeme et
+            fonctionnement du noyau"
+            Author: Remy Card, Eric Dumas, Franck Mevel.
+            Publisher: Eyrolles.
+            Date: 1997.
+            Pages: 520. ISBN: 2-212-08932-5
+       
+          + Title: "Unix internals -- the new frontiers"
+            Author: Uresh Vahalia.
+            Publisher: Prentice Hall.
+            Date: 1996.
+            Pages: 600. ISBN: 0-13-101908-2
+   
+       
+     * MISCELLANEOUS:
+       
+          + Name: Linux Source Driver.
+            URL: http://lsd.linux.cz
+            Keywords: Browsing.
+            Description: "Linux Source Driver (LSD) is an application,
+            which can make browsing source codes of Linux kernel easier
+            than you can imagine. You can select between multiple
+            versions of kernel (e.g. 0.01, 1.0.0, 2.0.33, 2.0.34pre13,
+            2.0.0, 2.1.101 etc.). With LSD you can search Linux kernel
+            (fulltext, macros, types, functions and variables) and LSD
+            can generate patches for you on the fly (files, directories
+            or kernel)".
+       
+          + Name: Linux Weekly News.
+            URL: http://lwn.net
+            Keywords: last kernel news.
+            Description: The title says it all. There's a fixed kernel
+            section summarizing developers' work, bug fixes, new features
+            and versions produced during the week. Published every
+            thursday.
+       
+          + Name: CuTTiNG.eDGe.LiNuX.
+            URL: http://edge.linuxhq.com
+            Keywords: changelist.
+            Description: Site which provides the changelist for every
+            kernel release. What's new, what's better, what's changed.
+            Myrdraal reads the patchs and describes them. Pointers to the
+            patches are there, too.
+   
+          + Name: New linux-kernel Mailing List FAQ.
+            URL: Original site:
+            http://www.altern.org/andrebalsa/doc/lkml-faq.html
+            URL: U.S. mirror site:
+            http://www.ececs.uc.edu/~rreilova/linux/lkml-faq.html
+            Keywords: linux-kernel mailing list FAQ.
+            Description: linux-kernel is a mailing list for developers
+            to communicate. This FAQ builds on the previous linux-kernel
+            mailing list FAQ maintained by Frohwalt Egerer, who no longer
+            maintains it. Read it to see how to join the mailing list.
+            Dozens of interesting questions regarding the list, Linux,
+            developers (who is ...?), terms (what is...?) are answered
+            here too. Just read it.
+       
+          + Name: "Linux Virtual File System"
+            Author: Peter J. Braam.
+            URL: http://www.coda.cs.cmu.edu/doc/talks/linuxvfs
+            Keywords: slides, VFS, inode, superblock, dentry, dcache.
+            Description: Set of slides, presumably from a presentation
+            on the Linux VFS layer. Covers version 2.1.x, with dentries
+            and the dcache.

@@ -129,6 +129,7 @@ EXPORT_SYMBOL(__mark_inode_dirty);
 EXPORT_SYMBOL(get_empty_filp);
 EXPORT_SYMBOL(init_private_file);
 EXPORT_SYMBOL(fput);
+EXPORT_SYMBOL(put_filp);
 EXPORT_SYMBOL(check_disk_change);
 EXPORT_SYMBOL(invalidate_buffers);
 EXPORT_SYMBOL(invalidate_inodes);
@@ -360,6 +361,7 @@ EXPORT_SYMBOL(event);
 EXPORT_SYMBOL(__down);
 EXPORT_SYMBOL(__down_interruptible);
 EXPORT_SYMBOL(__up);
+EXPORT_SYMBOL(brw_page);
 
 /* all busmice */
 EXPORT_SYMBOL(add_mouse_randomness);

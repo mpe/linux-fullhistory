@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.141 1998/11/18 02:12:07 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.143 1998/12/20 20:20:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -301,7 +301,7 @@ static void tcp_sacktag_write_queue(struct sock *sk, struct tcp_sack_block *sp, 
 			/* The retransmission queue is always in order, so
 			 * we can short-circuit the walk early.
 			 */
-			if(!before(start_seq, TCP_SKB_CB(skb)->end_seq))
+			if(after(TCP_SKB_CB(skb)->seq, start_seq))
 				break;
 
 			/* We play conservative, we don't allow SACKS to partially
@@ -598,6 +598,13 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 	unsigned long now = jiffies;
 	int acked = 0;
 
+	/* If we are retransmitting, and this ACK clears up to
+	 * the retransmit head, or further, then clear our state.
+	 */
+	if (tp->retrans_head != NULL &&
+	    !before(ack, TCP_SKB_CB(tp->retrans_head)->end_seq))
+		tp->retrans_head = NULL;
+
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head)) {
 		struct tcp_skb_cb *scb = TCP_SKB_CB(skb); 
 		__u8 sacked = scb->sacked;
@@ -625,6 +632,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 			if(tp->fackets_out)
 				tp->fackets_out--;
 		} else {
+			/* This is pure paranoia. */
 			tp->retrans_head = NULL;
 		}		
 		tp->packets_out--;
@@ -633,9 +641,6 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 		__skb_unlink(skb, skb->list);
 		kfree_skb(skb);
 	}
-
-	if (acked)
-		tp->retrans_head = NULL;
 	return acked;
 }
 
@@ -740,7 +745,6 @@ static __inline__ void tcp_ack_packets_out(struct sock *sk, struct tcp_opt *tp)
 	 * congestion window is handled properly by that code.
 	 */
 	if (tp->retransmits) {
-		tp->retrans_head = NULL;
 		tcp_xmit_retransmit_queue(sk);
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	} else {
@@ -1657,9 +1661,12 @@ static inline void tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long len
 	}
 }
 
-/*
- * Clean first the out_of_order queue, then the receive queue until
- * the socket is in its memory limits again.
+/* Clean the out_of_order queue if we can, trying to get
+ * the socket within its memory limits again.
+ *
+ * Return less than zero if we should stop dropping frames
+ * until the socket owning process reads some of the data
+ * to stabilize the situation.
  */
 static int prune_queue(struct sock *sk)
 {
@@ -1670,8 +1677,8 @@ static int prune_queue(struct sock *sk)
 
 	net_statistics.PruneCalled++; 
 
-	/* First Clean the out_of_order queue. */
-	/* Start with the end because there are probably the least
+	/* Clean the out_of_order queue.
+	 * Start with the end because there are probably the least
 	 * useful packets (crossing fingers).
 	 */
 	while ((skb = __skb_dequeue_tail(&tp->out_of_order_queue))) { 
@@ -1681,35 +1688,32 @@ static int prune_queue(struct sock *sk)
 			return 0;
 	}
 	
-	/* Now continue with the receive queue if it wasn't enough.
-	 * But only do this if we are really being abused.
+	/* If we are really being abused, tell the caller to silently
+	 * drop receive data on the floor.  It will get retransmitted
+	 * and hopefully then we'll have sufficient space.
+	 *
+	 * We used to try to purge the in-order packets too, but that
+	 * turns out to be deadly and fraught with races.  Consider:
+	 *
+	 * 1) If we acked the data, we absolutely cannot drop the
+	 *    packet.  This data would then never be retransmitted.
+	 * 2) It is possible, with a proper sequence of events involving
+	 *    delayed acks and backlog queue handling, to have the user
+	 *    read the data before it gets acked.  The previous code
+	 *    here got this wrong, and it lead to data corruption.
+	 * 3) Too much state changes happen when the FIN arrives, so once
+	 *    we've seen that we can't remove any in-order data safely.
+	 *
+	 * The net result is that removing in-order receive data is too
+	 * complex for anyones sanity.  So we don't do it anymore.  But
+	 * if we are really having our buffer space abused we stop accepting
+	 * new receive data.
 	 */
-	while ((atomic_read(&sk->rmem_alloc) >= (sk->rcvbuf * 2)) &&
-	       (skb = skb_peek_tail(&sk->receive_queue))) {
-		/* Never toss anything when we've seen the FIN.
-		 * It's just too complex to recover from it.
-		 */
-		if(skb->h.th->fin)
-			break;
+	if(atomic_read(&sk->rmem_alloc) < (sk->rcvbuf << 1))
+		return 0;
 
-		/* Never remove packets that have been already acked */
-		if (before(TCP_SKB_CB(skb)->end_seq, tp->last_ack_sent+1)) {
-			SOCK_DEBUG(sk, "prune_queue: hit acked data c=%x,%x,%x\n",
-				   tp->copied_seq, TCP_SKB_CB(skb)->end_seq,
-				   tp->last_ack_sent);
-			return -1;
-		}
-
-		net_statistics.RcvPruned += skb->len; 
-
-		__skb_unlink(skb, skb->list);
-		tp->rcv_nxt = TCP_SKB_CB(skb)->seq;
-		SOCK_DEBUG(sk, "prune_queue: removing %x-%x (c=%x)\n",
-			   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
-			   tp->copied_seq); 
-		kfree_skb(skb);
-	}
-	return 0;
+	/* Massive buffer overcommit. */
+	return -1;
 }
 
 /*

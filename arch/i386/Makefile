@@ -35,6 +35,10 @@ ifdef CONFIG_M586
 CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=586
 endif
 
+ifdef CONFIG_M586TSC
+CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=586
+endif
+
 ifdef CONFIG_M686
 CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686
 endif

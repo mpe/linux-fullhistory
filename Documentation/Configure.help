@@ -91,6 +91,9 @@ CONFIG_SMP
   single-CPU machines.  On a single-CPU machine, a non-SMP kernel
   will run faster than an SMP kernel.
 
+  i486 based SMP boards don't boot CONFIG_M586/M686 kernels. CONFIG_M686
+  SMP kernels might not work on all Pentium based boards.
+
   People using multiprocessor machines should also say Y to "Enhanced
   Real Time Clock Support", below.  The "Advanced Power Management"
   code will be disabled in an SMP kernel.
@@ -1557,23 +1560,23 @@ CONFIG_M386
   This is the processor type of your CPU. This information is used for
   optimizing purposes. In order to compile a kernel that can run on
   all x86 CPU types (albeit not optimally fast), you can specify
-  "386" here. If you specify one of "486" or "Pentium" or "PPro",
-  then the kernel will run on all x86 architectures except on 386.
+  "386" here.
+
+  If you specify one of "486" or "Pentium" or "PPro", then the kernel
+  will not necessarily run on earlier architectures (ie a Pentium
+  optimized kernel will run on a PPro, but not necessarily on a i486).
 
   Here are the settings recommended for greatest speed:
    - "386" for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX and
      Cyrix/TI 486DLC/DLC2. Only "386" kernels will run on a 386 class
      machine.
    - "486" for the AMD/Cyrix/IBM/Intel DX4 or 486DX/DX2/SL/SX/SX2,
-     AMD/Cyrix 5x86, NexGen Nx586 and UMC U5D or U5S
-   - "Pentium" for the AMD K5, K6 and K6-3D, Cyrix MediaGX,
-     Cyrix/IBM/National Semiconductor 6x86 and GXm, IDT Centaur
-     WinChip C6, and Intel Pentium/Pentium MMX
+     AMD/Cyrix 5x86, NexGen Nx586 and UMC U5D or U5S.
+   - "586" for generic Pentium CPU's, possibly lacking the TSC register.
+   - "Pentium" for the Intel Pentium/Pentium MMX, AMD K5, K6 and K6-3D.
+     This option will assume that you have a time stamp counter.
    - "PPro" for the Cyrix/IBM/National Semiconductor 6x86MX, MII and
-     Intel Pentium II/Pentium Pro
-
-  In rare cases, it can make sense to specify "Pentium" even if
-  running on a 486: the kernel will be smaller but slower.
+     Intel Pentium II/Pentium Pro.
 
   If you don't know what to do, choose "386".
 
@@ -3776,14 +3779,19 @@ CONFIG_SCSI_U14_34F_MAX_TAGS
   given SCSI device. Go with the default unless you know what you're
   doing. Minimum is 2 and maximum is 8.
 
-Future Domain 16xx SCSI/AHA 2920 support
+Future Domain 16xx SCSI/AHA-2920A support
 CONFIG_SCSI_FUTURE_DOMAIN
   This is support for Future Domain's 16-bit SCSI host adapters
   (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and
   other adapters based on the Future Domain chipsets (Quantum
-  ISA-200S, ISA-250MG; Adaptec AHA-2920; and at least one IBM board).
+  ISA-200S, ISA-250MG; Adaptec AHA-2920A; and at least one IBM board).
   It is explained in section 3.7 of the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. 
+
+  NOTE: Newer Adaptec AHA-2920C boards use the Adaptec AIC-7850 chip and
+  should use the aic7xxx driver (CONFIG_SCSI_AIC7XXX).  The Future Domain
+  driver works with the older Adaptec AHA-2920A boards with a Future Domain
+  chip on them.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

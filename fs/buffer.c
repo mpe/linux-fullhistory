@@ -424,10 +424,14 @@ void invalidate_buffers(kdev_t dev)
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
 {
-	if (bh->b_pprev) {
-		if(bh->b_next)
-			bh->b_next->b_pprev = bh->b_pprev;
-		*bh->b_pprev = bh->b_next;
+	struct buffer_head **pprev = bh->b_pprev;
+	if (pprev) {
+		struct buffer_head * next = bh->b_next;
+		if (next) {
+			next->b_pprev = pprev;
+			bh->b_next = NULL;
+		}
+		*pprev = next;
 		bh->b_pprev = NULL;
 	}
 }
@@ -551,14 +555,19 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		nr_buffers_type[bh->b_list]++;
 
 		/* Put the buffer in new hash-queue if it has a device. */
+		bh->b_next = NULL;
+		bh->b_pprev = NULL;
 		if (bh->b_dev) {
 			struct buffer_head **bhp = &hash(bh->b_dev, bh->b_blocknr);
-			if((bh->b_next = *bhp) != NULL)
-				(*bhp)->b_pprev = &bh->b_next;
+			struct buffer_head *next = *bhp;
+
+			if (next) {
+				bh->b_next = next;
+				next->b_pprev = &bh->b_next;
+			}
 			*bhp = bh;
-			bh->b_pprev = bhp;	/* Exists in bh hashes. */
-		} else
-			bh->b_pprev = NULL;	/* Not in bh hashes. */
+			bh->b_pprev = bhp;
+		}
 	}
 }
 

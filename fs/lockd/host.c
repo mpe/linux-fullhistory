@@ -92,7 +92,7 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 	/* Lock hash table */
 	down(&nlm_host_sema);
 
-	if (time_after(jiffies, next_gc))
+	if (time_after_eq(jiffies, next_gc))
 		nlm_gc_hosts();
 
 	for (hp = &nlm_hosts[hash]; (host = *hp); hp = &host->h_next) {
@@ -173,19 +173,22 @@ nlm_bind_host(struct nlm_host *host)
 	/* If we've already created an RPC client, check whether
 	 * RPC rebind is required */
 	if ((clnt = host->h_rpcclnt) != NULL) {
-		if (time_after(jiffies, host->h_nextrebind)) {
+		if (time_after_eq(jiffies, host->h_nextrebind)) {
 			clnt->cl_port = 0;
 			host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 			dprintk("lockd: next rebind in %ld jiffies\n",
 					host->h_nextrebind - jiffies);
 		}
 	} else {
-		uid_t		saved_euid = current->euid;
+		uid_t saved_fsuid = current->fsuid;
+		kernel_cap_t saved_cap = current->cap_effective;
 
 		/* Create RPC socket as root user so we get a priv port */
-		current->euid = 0;
+		current->fsuid = 0;
+		cap_raise (current->cap_effective, CAP_NET_BIND_SERVICE);
 		xprt = xprt_create_proto(host->h_proto, &host->h_addr, NULL);
-		current->euid = saved_euid;
+		current->fsuid = saved_fsuid;
+		current->cap_effective = saved_cap;
 		if (xprt == NULL)
 			goto forgetit;
 
@@ -219,7 +222,7 @@ void
 nlm_rebind_host(struct nlm_host *host)
 {
 	dprintk("lockd: rebind host %s\n", host->h_name);
-	if (host->h_rpcclnt && time_after(jiffies, host->h_nextrebind)) {
+	if (host->h_rpcclnt && time_after_eq(jiffies, host->h_nextrebind)) {
 		host->h_rpcclnt->cl_port = 0;
 		host->h_nextrebind = jiffies + NLM_HOST_REBIND;
 	}
@@ -298,7 +301,7 @@ nlm_gc_hosts(void)
 		q = &nlm_hosts[i];
 		while ((host = *q) != NULL) {
 			if (host->h_count || host->h_inuse
-			 || time_before_eq(jiffies, host->h_expires)) {
+			 || time_before(jiffies, host->h_expires)) {
 				q = &host->h_next;
 				continue;
 			}

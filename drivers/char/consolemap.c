@@ -7,6 +7,8 @@
  * aeb, 950210
  *
  * Support for multiple unimaps by Jakub Jelinek <jj@ultra.linux.cz>, July 1998
+ *
+ * Fix bug in inverse translation. Stanislav Voronyi <stas@cnti.uanet.kharkov.ua>, Dec 1998
  */
 
 #include <linux/kd.h>
@@ -167,7 +169,7 @@ static unsigned short translations[][256] = {
 
 #define MAX_GLYPH 512		/* Max possible glyph value */
 
-static int inv_translate;
+static int inv_translate[MAX_NR_CONSOLES];
 
 struct uni_pagedir {
 	u16 		**uni_pgdir[32];
@@ -204,9 +206,9 @@ static void set_inverse_transl(struct vc_data *conp, struct uni_pagedir *p, int 
 	}
 }
 
-unsigned short *set_translate(int m)
+unsigned short *set_translate(int m,int currcons)
 {
-	inv_translate = m;
+	inv_translate[currcons] = m;
 	return translations[m];
 }
 
@@ -220,14 +222,13 @@ unsigned short *set_translate(int m)
 unsigned char inverse_translate(struct vc_data *conp, int glyph)
 {
 	struct uni_pagedir *p;
-	
 	if (glyph < 0 || glyph >= MAX_GLYPH)
 		return 0;
 	else if (!(p = (struct uni_pagedir *)*conp->vc_uni_pagedir_loc) ||
-		 !p->inverse_translations[inv_translate])
+		 !p->inverse_translations[inv_translate[conp->vc_num]])
 		return glyph;
 	else
-		return p->inverse_translations[inv_translate][glyph];
+		return p->inverse_translations[inv_translate[conp->vc_num]][glyph];
 }
 
 static void update_user_maps(void)

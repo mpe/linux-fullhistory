@@ -1567,7 +1567,7 @@ ibmmca_detect (Scsi_Host_Template * template)
 
   /* first look for the SCSI integrated on the motherboard */
   pos2 = mca_read_stored_pos(MCA_INTEGSCSI, 2);
-  if (pos2 != 0xff) {
+//  if (pos2 != 0xff) {
     if ((pos2 & 1) == 0) {
       port = IM_IO_PORT + ((pos2 & 0x0e) << 2);
     } else {
@@ -1584,7 +1584,7 @@ ibmmca_detect (Scsi_Host_Template * template)
           mca_set_adapter_procfn(MCA_INTEGSCSI, (MCA_ProcFn) ibmmca_getinfo,
                                  shpnt);
         }
-    }
+//    }
 
   /* now look for other adapters */
   list_size = sizeof(subsys_list) / sizeof(struct subsys_list_struct);

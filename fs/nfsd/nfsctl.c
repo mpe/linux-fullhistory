@@ -21,6 +21,7 @@
 #include <linux/version.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <linux/nfs.h>
 #include <linux/sunrpc/svc.h>
@@ -53,6 +54,24 @@ static int	nfsctl_getfd(struct nfsctl_fdparm *, struct knfs_fh *);
 
 static int	initialized = 0;
 
+#ifdef CONFIG_PROC_FS
+
+int exp_procfs_exports(char *buffer, char **start, off_t offset,
+                             int length, int *eof, void *data);
+
+void proc_export_init(void)
+{
+	struct proc_dir_entry *nfs_export_ent = NULL;
+
+	if (!(nfs_export_ent = create_proc_entry("fs/nfs", S_IFDIR, 0)))
+		return;
+	if (!(nfs_export_ent = create_proc_entry("fs/nfs/exports", 0, 0)))
+		return;
+	nfs_export_ent->read_proc = exp_procfs_exports;
+}
+
+#endif
+
 /*
  * Initialize nfsd
  */
@@ -66,8 +85,10 @@ nfsd_init(void)
 	nfsd_cache_init();	/* RPC reply cache */
 	nfsd_export_init();	/* Exports table */
 	nfsd_lockd_init();	/* lockd->nfsd callbacks */
-	nfsd_racache_init();	/* Readahead param cache */
 	nfsd_fh_init();		/* FH table */
+#ifdef CONFIG_PROC_FS
+	proc_export_init();
+#endif
 	initialized = 1;
 }
 
@@ -290,6 +311,8 @@ cleanup_module(void)
 	nfsd_cache_shutdown();
 	nfsd_fh_free();
 #ifdef CONFIG_PROC_FS
+	remove_proc_entry("fs/nfs/exports", NULL);
+	remove_proc_entry("fs/nfs", NULL);
 	nfsd_stat_shutdown();
 #endif
 	nfsd_lockd_shutdown();

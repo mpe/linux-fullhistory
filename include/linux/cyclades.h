@@ -581,6 +581,7 @@ struct cyclades_port {
 #define	CyISA_Ywin	0x2000
 
 #define CyPCI_Ywin 	0x4000
+#define CyPCI_Yctl 	0x80
 #define CyPCI_Zctl 	CTRL_WINDOW_SIZE
 #define CyPCI_Zwin 	0x80000
 #define CyPCI_Ze_win 	(2 * CyPCI_Zwin)

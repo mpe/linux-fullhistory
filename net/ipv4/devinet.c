@@ -208,9 +208,16 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 {
 	struct in_ifaddr *ifa1, **ifap, **last_primary;
 
-	if (ifa->ifa_local == 0) {
-		inet_free_ifa(ifa);
-		return 0;
+	/* Allow 0.0.0.0, but it must be the only address to avoid
+           multiple matches. */
+	if (in_dev->ifa_list) {
+		if (ifa->ifa_local == 0) {
+			inet_free_ifa(ifa);
+			return 0;
+		}
+
+		if (in_dev->ifa_list->ifa_local == 0)
+			inet_del_ifa(in_dev, &in_dev->ifa_list, 1);
 	}
 
 	ifa->ifa_flags &= ~IFA_F_SECONDARY;
@@ -1001,18 +1008,12 @@ static void devinet_sysctl_unregister(struct ipv4_devconf *p)
 
 __initfunc(int inet_add_bootp_addr(struct device *dev))
 {
-	struct in_device *in_dev = dev->ip_ptr;
 	struct in_ifaddr *ifa;
 
-	if (!in_dev && !(in_dev = inetdev_init(dev)))
-		return -ENOBUFS;
 	if (!(ifa = inet_alloc_ifa()))
 		return -ENOBUFS;
-	ifa->ifa_dev = in_dev;
-	in_dev->ifa_list = ifa;
-	rtmsg_ifa(RTM_NEWADDR, ifa);
-	notifier_call_chain(&inetaddr_chain, NETDEV_UP, ifa);
-	return 0;
+
+	return inet_set_ifa(dev, ifa);
 }
 
 __initfunc(void inet_del_bootp_addr(struct device *dev))

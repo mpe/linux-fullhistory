@@ -21,6 +21,10 @@
  *		  - Make sure other end is OK, before sending a packet.
  *		  - Fix immediate timer problem.
  *
+ *		Al Viro
+ *		  - Changed {enable,disable}_irq handling to make it work
+ *		    with new ("stack") semantics.
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -119,6 +123,9 @@ static const char *version = "NET3 PLIP version 2.3-parport gniibe@mri.co.jp\n";
 #define NET_DEBUG 1
 #endif
 static unsigned int net_debug = NET_DEBUG;
+
+#define ENABLE(irq) enable_irq(irq)
+#define DISABLE(irq) disable_irq(irq)
 
 /* In micro second */
 #define PLIP_DELAY_UNIT		   1
@@ -333,6 +340,7 @@ static int plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 #define OK        0
 #define TIMEOUT   1
 #define ERROR     2
+#define HS_TIMEOUT	3
 
 typedef int (*plip_func)(struct device *dev, struct net_local *nl,
 			 struct plip_local *snd, struct plip_local *rcv);
@@ -371,13 +379,22 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 		      int error)
 {
 	unsigned char c0;
+	/*
+	 * This is tricky. If we got here from the beginning of send (either
+	 * with ERROR or HS_TIMEOUT) we have IRQ enabled. Otherwise it's
+	 * already disabled. With the old variant of {enable,disable}_irq()
+	 * extra disable_irq() was a no-op. Now it became mortal - it's
+	 * unbalanced and thus we'll never re-enable IRQ (until rmmod plip,
+	 * that is). So we have to treat HS_TIMEOUT and ERROR from send
+	 * in a special way.
+	 */
 
 	spin_lock_irq(&nl->lock);
 	if (nl->connection == PLIP_CN_SEND) {
 
 		if (error != ERROR) { /* Timeout */
 			nl->timeout_count++;
-			if ((snd->state == PLIP_PK_TRIGGER
+			if ((error == HS_TIMEOUT
 			     && nl->timeout_count <= 10)
 			    || nl->timeout_count <= 3) {
 				spin_unlock_irq(&nl->lock);
@@ -387,7 +404,8 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 			c0 = inb(PAR_STATUS(dev));
 			printk(KERN_WARNING "%s: transmit timeout(%d,%02x)\n",
 			       dev->name, snd->state, c0);
-		}
+		} else
+			error = HS_TIMEOUT;
 		nl->enet_stats.tx_errors++;
 		nl->enet_stats.tx_aborted_errors++;
 	} else if (nl->connection == PLIP_CN_RECEIVE) {
@@ -419,8 +437,10 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 		snd->skb = NULL;
 	}
 	spin_unlock_irq(&nl->lock);
-	disable_irq(dev->irq);
-	synchronize_irq();
+	if (error == HS_TIMEOUT) {
+		DISABLE(dev->irq);
+		synchronize_irq();
+	}
 	outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 	dev->tbusy = 1;
 	nl->connection = PLIP_CN_ERROR;
@@ -498,7 +518,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 	switch (rcv->state) {
 	case PLIP_PK_TRIGGER:
-		disable_irq(dev->irq);
+		DISABLE(dev->irq);
 		/* Don't need to synchronize irq, as we can safely ignore it */
 		outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 		dev->interrupt = 0;
@@ -518,7 +538,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 				nl->connection = PLIP_CN_SEND;
 				queue_task(&nl->deferred, &tq_timer);
 				outb(PAR_INTR_ON, PAR_CONTROL(dev));
-				enable_irq(dev->irq);
+				ENABLE(dev->irq);
 				return OK;
 			}
 		} else {
@@ -592,13 +612,13 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			queue_task(&nl->immediate, &tq_immediate);
 			mark_bh(IMMEDIATE_BH);
 			outb(PAR_INTR_ON, PAR_CONTROL(dev));
-			enable_irq(dev->irq);
+			ENABLE(dev->irq);
 			return OK;
 		} else {
 			nl->connection = PLIP_CN_NONE;
 			spin_unlock_irq(&nl->lock);
 			outb(PAR_INTR_ON, PAR_CONTROL(dev));
-			enable_irq(dev->irq);
+			ENABLE(dev->irq);
 			return OK;
 		}
 	}
@@ -674,7 +694,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	switch (snd->state) {
 	case PLIP_PK_TRIGGER:
 		if ((inb(PAR_STATUS(dev)) & 0xf8) != 0x80)
-			return TIMEOUT;
+			return HS_TIMEOUT;
 
 		/* Trigger remote rx interrupt. */
 		outb(0x08, data_addr);
@@ -691,12 +711,16 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 			c0 = inb(PAR_STATUS(dev));
 			if (c0 & 0x08) {
 				spin_unlock_irq(&nl->lock);
-				disable_irq(dev->irq);
+				DISABLE(dev->irq);
 				synchronize_irq();
 				if (nl->connection == PLIP_CN_RECEIVE) {
 					/* Interrupted.
 					   We don't need to enable irq,
 					   as it is soon disabled.    */
+					/* Yes, we do. New variant of
+					   {enable,disable}_irq *counts*
+					   them.  -- AV  */
+					ENABLE(dev->irq);
 					nl->enet_stats.collisions++;
 					return OK;
 				}
@@ -711,7 +735,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 			spin_unlock_irq(&nl->lock);
 			if (--cx == 0) {
 				outb(0x00, data_addr);
-				return TIMEOUT;
+				return HS_TIMEOUT;
 			}
 		}
 
@@ -760,7 +784,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 		nl->is_deferred = 1;
 		queue_task(&nl->deferred, &tq_timer);
 		outb(PAR_INTR_ON, PAR_CONTROL(dev));
-		enable_irq(dev->irq);
+		ENABLE(dev->irq);
 		return OK;
 	}
 	return OK;
@@ -800,7 +824,7 @@ plip_error(struct device *dev, struct net_local *nl,
 		dev->tbusy = 0;
 		dev->interrupt = 0;
 		outb(PAR_INTR_ON, PAR_CONTROL(dev));
-		enable_irq(dev->irq);
+		ENABLE(dev->irq);
 		mark_bh(NET_BH);
 	} else {
 		nl->is_deferred = 1;
@@ -1000,7 +1024,7 @@ plip_close(struct device *dev)
 
 	dev->tbusy = 1;
 	dev->start = 0;
-	disable_irq(dev->irq);
+	DISABLE(dev->irq);
 	synchronize_irq();
 
 #ifdef NOTDEF
