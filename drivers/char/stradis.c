@@ -343,6 +343,7 @@ static u32 debiread(struct saa7146 *saa, u32 config, int addr, int count)
 	return result;
 }
 
+#if 0 /* unused */
 /* MUST be a multiple of 8 bytes and 8-byte aligned and < 32768 bytes */
 /* data copied into saa->dmadebi buffer, caller must re-enable interrupts */
 static void ibm_block_dram_read(struct saa7146 *saa, int address, int bytes)
@@ -375,6 +376,7 @@ static void ibm_block_dram_read(struct saa7146 *saa, int address, int bytes)
 		buf[j] = debiread(saa, debNormal, IBM_MP2_DRAM_DATA, 4);
 	}
 }
+#endif /* unused */
 
 static void do_irq_send_data(struct saa7146 *saa)
 {

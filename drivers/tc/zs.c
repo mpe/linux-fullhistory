@@ -559,10 +559,6 @@ static void do_softint(void *private_)
 	}
 }
 
-static void rs_timer(void)
-{
-}
-
 static int startup(struct dec_serial * info)
 {
 	unsigned long flags;
@@ -1665,8 +1661,6 @@ int __init zs_init(void)
 
 	/* Setup base handler, and timer table. */
 	init_bh(SERIAL_BH, do_serial_bh);
-	timer_table[RS_TIMER].fn = rs_timer;
-	timer_table[RS_TIMER].expires = 0;
 
 	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)

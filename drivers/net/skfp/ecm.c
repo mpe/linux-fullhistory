@@ -432,8 +432,8 @@ int cmd ;
 static void prop_actions(smc)
 struct s_smc *smc ;
 {
-	int	port_in ;
-	int	port_out ;
+	int	port_in = 0 ;
+	int	port_out = 0 ;
 
 	RS_SET(smc,RS_EVENT) ;
 	switch (smc->s.sas) {

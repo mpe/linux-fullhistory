@@ -1043,7 +1043,6 @@ int lmc_probe (struct net_device *dev) /*fold00*/
 {
     int pci_index = 0;
     unsigned long pci_ioaddr;
-    unsigned short pci_command;
     unsigned int pci_irq_line;
     u16 vendor, subvendor, device, subdevice;
     u32 foundaddr = 0;

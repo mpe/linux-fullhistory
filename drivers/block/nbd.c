@@ -517,7 +517,7 @@ int nbd_init(void)
 		register_disk(NULL, MKDEV(MAJOR_NR,i), 1, &nbd_fops,
 				nbd_bytesizes[i]>>9);
 	}
-	devfs_handle = devfs_mk_dir (NULL, "nbd", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "nbd", NULL);
 	devfs_register_series (devfs_handle, "%u", MAX_NBD,
 			       DEVFS_FL_DEFAULT, MAJOR_NR, 0,
 			       S_IFBLK | S_IRUSR | S_IWUSR,
@@ -530,6 +530,7 @@ int nbd_init(void)
 void cleanup_module(void)
 {
 	devfs_unregister (devfs_handle);
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 
 	if (unregister_blkdev(MAJOR_NR, "nbd") != 0)
 		printk("nbd: cleanup_module failed\n");

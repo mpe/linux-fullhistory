@@ -1393,8 +1393,10 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 {
 	uhci_t *s = (uhci_t*) urb->dev->bus->hcpriv;
 	urb_priv_t *urb_priv = urb->hcpriv;
+#ifdef ISO_SANITY_CHECK
 	int pipe=urb->pipe;
 	int maxsze = usb_maxpacket (urb->dev, pipe, usb_pipeout (pipe));
+#endif
 	int n, ret, last=0;
 	uhci_desc_t *td, **tdm;
 	int status, destination;
@@ -1422,18 +1424,18 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 			tdm[n] = 0;
 			continue;
 		}
-		
-		if(urb->iso_frame_desc[n].length > maxsze) {
+
 #ifdef ISO_SANITY_CHECK
+		if(urb->iso_frame_desc[n].length > maxsze) {
 			err("submit_iso: urb->iso_frame_desc[%d].length(%d)>%d",n , urb->iso_frame_desc[n].length, maxsze);
 			tdm[n] = 0;
 			ret=-EINVAL;
 			goto inval;
-#endif
 		}
-		
+		else
+#endif
 		ret = alloc_td (&td, UHCI_PTR_DEPTH);
-	inval:
+
 		if (ret) {
 			int i;	// Cleanup allocated TDs
 

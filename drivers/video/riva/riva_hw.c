@@ -592,7 +592,7 @@ static void nv4CalcArbitration
 )
 {
     int data, pagemiss, cas,width, video_enable, color_key_enable, bpp, align;
-    int nvclks, mclks, pclks, vpagemiss, crtpagemiss, vbs;
+    int nvclks, mclks, pclks, vpagemiss, crtpagemiss, vbs=0;
     int found, mclk_extra, mclk_loop, cbs, m1, p1;
     int mclk_freq, pclk_freq, nvclk_freq, mp_enable;
     int us_m, us_n, us_p, video_drain_rate, crtc_drain_rate;

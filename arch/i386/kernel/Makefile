@@ -35,12 +35,16 @@ obj-$(CONFIG_MTRR)	+= mtrr.o
 obj-$(CONFIG_X86_MSR)	+= msr.o
 obj-$(CONFIG_X86_CPUID)	+= cpuid.o
 obj-$(CONFIG_MICROCODE)	+= microcode.o
-obj-$(CONFIG_ACPI)	+= acpi.o
 obj-$(CONFIG_APM)	+= apm.o
 obj-$(CONFIG_SMP)	+= smp.o smpboot.o trampoline.o
 obj-$(CONFIG_X86_LOCAL_APIC)	+= apic.o
 obj-$(CONFIG_X86_IO_APIC)	+= io_apic.o mpparse.o
 obj-$(CONFIG_X86_VISWS_APIC)	+= visws_apic.o
+
+# if the interpreter is used, it overrides acpi.c
+ifneq ($(CONFIG_ACPI_INTERPRETER),y)
+obj-$(CONFIG_ACPI)	+= acpi.o
+endif
 
 O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
 OX_OBJS		:= $(filter	$(export-objs), $(obj-y))

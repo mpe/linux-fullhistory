@@ -1872,7 +1872,7 @@ static void show_floppy(void)
 	if (timer_pending(&fd_timer))
 		printk("fd_timer.function=%p\n", fd_timer.function);
 	if (timer_pending(&fd_timeout)){
-		printk("timer_table=%p\n",fd_timeout.function);
+		printk("timer_function=%p\n",fd_timeout.function);
 		printk("expires=%lu\n",fd_timeout.expires-jiffies);
 		printk("now=%lu\n",jiffies);
 	}
@@ -4109,7 +4109,7 @@ int __init floppy_init(void)
 
 	raw_cmd = NULL;
 
-	devfs_handle = devfs_mk_dir (NULL, "floppy", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "floppy", NULL);
 	if (devfs_register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
 		printk("Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
@@ -4143,6 +4143,7 @@ int __init floppy_init(void)
 	if (fdc_state[0].address == -1) {
 		devfs_unregister_blkdev(MAJOR_NR,"fd");
 		del_timer(&fd_timeout);
+		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 		return -ENODEV;
 	}
 #if N_FDC > 1

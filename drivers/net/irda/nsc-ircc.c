@@ -1989,7 +1989,6 @@ static void nsc_ircc_suspend(struct nsc_ircc_cb *self)
 
 static void nsc_ircc_wakeup(struct nsc_ircc_cb *self)
 {
-	struct net_device *dev = self->netdev;
 	int iobase;
 
 	if (!self->io.suspended)

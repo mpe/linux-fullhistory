@@ -11,7 +11,8 @@ SUB_DIRS     := block char net parport sound misc
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi ide scsi sbus cdrom isdn pnp i2o \
 				ieee1394 macintosh video dio zorro fc4 \
-				usb nubus tc atm pcmcia i2c telephony
+				usb nubus tc atm pcmcia i2c telephony \
+				acpi mtd
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -28,6 +29,11 @@ else
   ifeq ($(CONFIG_PCMCIA),m)
   MOD_SUB_DIRS += pcmcia
   endif
+endif
+
+ifdef CONFIG_MTD
+SUB_DIRS += mtd
+MOD_SUB_DIRS += mtd
 endif
 
 ifdef CONFIG_SBUS
@@ -178,6 +184,11 @@ else
   ifeq ($(CONFIG_I2C),m)
   MOD_SUB_DIRS += i2c
   endif
+endif
+
+ifeq ($(CONFIG_ACPI),y)
+SUB_DIRS += acpi
+MOD_SUB_DIRS += acpi
 endif
 
 include $(TOPDIR)/Rules.make

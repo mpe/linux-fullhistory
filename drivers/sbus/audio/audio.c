@@ -2175,7 +2175,7 @@ int unregister_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
 	/* Unregister ourselves with devfs */
 	for (i=0; i < sizeof (dev_list) / sizeof (*dev_list); i++) {
 		sparcaudio_mkname (name_buf, dev_list[i].name, drv->index);
-		de = devfs_find_handle (devfs_handle, name_buf, 0, 0, 0,
+		de = devfs_find_handle (devfs_handle, name_buf, 0, 0,
 					DEVFS_SPECIAL_CHR, 0);
 		devfs_unregister (de);
 	}
@@ -2219,7 +2219,7 @@ int __init sparcaudio_init(void)
 	if (devfs_register_chrdev(SOUND_MAJOR, "sparcaudio", &sparcaudio_fops))
 		return -EIO;
 
-	devfs_handle = devfs_mk_dir (NULL, "sound", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "sound", NULL);
 	
 #ifdef CONFIG_SPARCAUDIO_AMD7930
 	amd7930_init();

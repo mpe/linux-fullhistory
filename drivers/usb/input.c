@@ -401,7 +401,7 @@ static int __init input_init(void)
 		printk(KERN_ERR "input: unable to register char major %d", INPUT_MAJOR);
 		return -EBUSY;
 	}
-	input_devfs_handle = devfs_mk_dir(NULL, "input", 5, NULL);
+	input_devfs_handle = devfs_mk_dir(NULL, "input", NULL);
 	return 0;
 }
 

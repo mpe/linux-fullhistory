@@ -479,7 +479,7 @@ static int coda_rename(struct inode *old_dir, struct dentry *old_dentry,
         CDEBUG(D_INODE, "old: %s, (%d length), new: %s"
 	       "(%d length). old:d_count: %d, new:d_count: %d\n", 
 	       old_name, old_length, new_name, new_length,
-	       old_dentry->d_count, new_dentry->d_count);
+	       atomic_read(&old_dentry->d_count), atomic_read(&new_dentry->d_count));
 
         error = venus_rename(old_dir->i_sb, coda_i2f(old_dir), 
 			     coda_i2f(new_dir), old_length, new_length, 
@@ -582,7 +582,7 @@ int coda_open(struct inode *i, struct file *f)
 	coda_vfs_stat.open++;
 
         CDEBUG(D_SPECIAL, "OPEN inode number: %ld, count %d, flags %o.\n", 
-	       f->f_dentry->d_inode->i_ino, f->f_dentry->d_count, flags);
+	       f->f_dentry->d_inode->i_ino, atomic_read(&f->f_dentry->d_count), flags);
 
 	error = venus_open(i->i_sb, coda_i2f(i), coda_flags, &ino, &dev); 
 	if (error) {
@@ -779,21 +779,21 @@ exit:
 /* called when a cache lookup succeeds */
 static int coda_dentry_revalidate(struct dentry *de, int flags)
 {
-	int valid = 1;
 	struct inode *inode = de->d_inode;
 	struct coda_inode_info *cii;
 	ENTRY;
 
 	if (!inode)
 		return 1;
+	lock_kernel();
 	if (coda_isroot(inode))
-		return 1;
+		goto out;
 	if (is_bad_inode(inode))
-		return 0;
+		goto bad;
 
 	cii = ITOC(de->d_inode);
 	if (! (cii->c_flags & (C_PURGE | C_FLUSH)) )
-		return valid;
+		goto out;
 
 	shrink_dcache_parent(de);
 
@@ -801,17 +801,22 @@ static int coda_dentry_revalidate(struct dentry *de, int flags)
 	if (cii->c_flags & C_FLUSH) 
 		coda_flag_inode_children(inode, C_FLUSH);
 
-	if (de->d_count > 1) {
+	if (atomic_read(&de->d_count) > 1) {
 		/* pretend it's valid, but don't change the flags */
 		CDEBUG(D_DOWNCALL, "BOOM for: ino %ld, %s\n",
 		       de->d_inode->i_ino, coda_f2s(&cii->c_fid));
-		return 1;
+		goto out;
 	}
 
 	/* clear the flags. */
 	cii->c_flags &= ~(C_VATTR | C_PURGE | C_FLUSH);
 
+bad:
+	unlock_kernel();
 	return 0;
+out:
+	unlock_kernel();
+	return 1;
 }
 
 /*
@@ -857,8 +862,9 @@ int coda_revalidate_inode(struct dentry *dentry)
 	       dentry->d_name.len, dentry->d_name.name,
 	       dentry->d_parent->d_name.len, dentry->d_parent->d_name.name);
 
+	lock_kernel();
 	if ( cii->c_flags == 0 )
-		return 0;
+		goto ok;
 
 	if (cii->c_flags & (C_VATTR | C_PURGE | C_FLUSH)) {
 		error = venus_getattr(inode->i_sb, &(cii->c_fid), &attr);
@@ -890,6 +896,8 @@ int coda_revalidate_inode(struct dentry *dentry)
 		cii->c_flags &= ~(C_VATTR | C_PURGE | C_FLUSH);
 	}
 
+ok:
+	unlock_kernel();
 	return 0;
 
 return_bad_inode:
@@ -899,6 +907,7 @@ return_bad_inode:
 		iput(container);
 	}
 	make_bad_inode(inode);
+	unlock_kernel();
 	return -EIO;
 }
 

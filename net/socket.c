@@ -70,6 +70,7 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/cache.h>
+#include <linux/module.h>
 
 #if defined(CONFIG_KMOD) && defined(CONFIG_NET)
 #include <linux/kmod.h>
@@ -261,6 +262,55 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 	return __put_user(klen, ulen);
 }
 
+#define SOCKFS_MAGIC 0x534F434B
+static int sockfs_statfs(struct super_block *sb, struct statfs *buf)
+{
+	buf->f_type = SOCKFS_MAGIC;
+	buf->f_bsize = 1024;
+	buf->f_namelen = 255;
+	return 0;
+}
+
+static struct super_operations sockfs_ops = {
+	statfs:		sockfs_statfs,
+};
+
+static struct super_block * sockfs_read_super(struct super_block *sb, void *data, int silent)
+{
+	struct inode *root = get_empty_inode();
+	if (!root)
+		return NULL;
+	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
+	root->i_uid = root->i_gid = 0;
+	root->i_atime = root->i_mtime = root->i_ctime = CURRENT_TIME;
+	root->i_sb = sb;
+	root->i_dev = sb->s_dev;
+	sb->s_blocksize = 1024;
+	sb->s_blocksize_bits = 10;
+	sb->s_magic = SOCKFS_MAGIC;
+	sb->s_op	= &sockfs_ops;
+	sb->s_root = d_alloc(NULL, &(const struct qstr) { "socket:", 7, 0 });
+	if (!sb->s_root) {
+		iput(root);
+		return NULL;
+	}
+	sb->s_root->d_sb = sb;
+	sb->s_root->d_parent = sb->s_root;
+	d_instantiate(sb->s_root, root);
+	return sb;
+}
+
+static struct vfsmount *sock_mnt;
+static DECLARE_FSTYPE(sock_fs_type, "sockfs", sockfs_read_super,
+	FS_NOMOUNT|FS_SINGLE);
+static int sockfs_delete_dentry(struct dentry *dentry)
+{
+	return 1;
+}
+static struct dentry_operations sockfs_dentry_operations = {
+	d_delete:	sockfs_delete_dentry,
+};
+
 /*
  *	Obtains the first available file descriptor and sets it up for use.
  *
@@ -281,6 +331,8 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 static int sock_map_fd(struct socket *sock)
 {
 	int fd;
+	struct qstr this;
+	char name[32];
 
 	/*
 	 *	Find a file descriptor suitable for return to the user. 
@@ -296,15 +348,21 @@ static int sock_map_fd(struct socket *sock)
 			goto out;
 		}
 
-		file->f_dentry = d_alloc_root(sock->inode);
-		/* MOUNT_REWRITE: set to sockfs internal vfsmnt */
-		file->f_vfsmnt = NULL;
+		sprintf(name, "[%lu]", sock->inode->i_ino);
+		this.name = name;
+		this.len = strlen(name);
+		this.hash = sock->inode->i_ino;
+
+		file->f_dentry = d_alloc(sock_mnt->mnt_sb->s_root, &this);
 		if (!file->f_dentry) {
 			put_filp(file);
 			put_unused_fd(fd);
 			fd = -ENOMEM;
 			goto out;
 		}
+		file->f_dentry->d_op = &sockfs_dentry_operations;
+		d_add(file->f_dentry, sock->inode);
+		file->f_vfsmnt = mntget(sock_mnt);
 
 		sock->file = file;
 		file->f_op = &socket_file_ops;
@@ -1669,6 +1727,8 @@ void __init sock_init(void)
 #ifdef CONFIG_NETFILTER
 	netfilter_init();
 #endif
+	register_filesystem(&sock_fs_type);
+	sock_mnt = kern_mount(&sock_fs_type);
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

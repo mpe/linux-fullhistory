@@ -1144,18 +1144,11 @@ static int __init ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 	unsigned char *p;
 	int  i;
 
-	dev = init_etherdev(NULL, 0 );
-
-	/* construct private data for the 885 ethernet */
-	dev->priv = kmalloc( sizeof( struct ncr885e_private ), GFP_KERNEL );
-
-	if ( dev->priv == NULL ) {
-		release_region( ioaddr, NCR885E_TOTAL_SIZE );
+	dev = init_etherdev( NULL, sizeof( struct ncr885e_private ) );
+	if (!dev)
 		return -ENOMEM;
-	}
 
-	sp = (struct ncr885e_private *) dev->priv;
-	memset( sp, 0, sizeof( struct ncr885e_private ));
+	sp = dev->priv;
 
 	/* snag the station address and display it */
 	for( i = 0; i < 3; i++ ) {
@@ -1210,7 +1203,8 @@ static int __init ncr885e_probe(void)
 	unsigned short cmd;
 	unsigned char irq, latency;
 
-	while(( pdev = pci_find_device( PCI_VENDOR_ID_NCR, 
+	/* use 'if' not 'while' where because driver only supports one device */
+	if (( pdev = pci_find_device( PCI_VENDOR_ID_NCR, 
 					PCI_DEVICE_ID_NCR_53C885_ETHERNET,
 					pdev )) != NULL ) {
 
@@ -1219,47 +1213,27 @@ static int __init ncr885e_probe(void)
 			printk( KERN_INFO "%s", version );
 		}
 
-		/* Use I/O space */
-		pci_read_config_dword( pdev, PCI_BASE_ADDRESS_0, &ioaddr );
-		pci_read_config_byte( pdev, PCI_INTERRUPT_LINE, &irq );
+		if (pci_enable_device(pdev))
+			continue;
 
-		ioaddr &= ~3;
+		/* Use I/O space */
+		ioaddr = pci_resource_start (pdev, 0);
+		irq = pdev->irq;
+
 		/* Adjust around the Grackle... */
 #ifdef CONFIG_GEMINI
 		ioaddr |= 0xfe000000;
 #endif
 
-		if ( check_region( ioaddr, NCR885E_TOTAL_SIZE ))
+		if ( !request_region( ioaddr, NCR885E_TOTAL_SIZE, "ncr885e" ))
 			continue;
 
 		/* finish off the probe */
 		if ( !(ncr885e_probe1(ioaddr, irq ))) {
-
 			chips++;
-
-			/* Access is via I/O space, bus master enabled... */
-			pci_read_config_word( pdev, PCI_COMMAND, &cmd );
-
-			if ( !(cmd & PCI_COMMAND_MASTER) ) {
-				printk( KERN_INFO "  PCI master bit not set! Now setting.\n");
-				cmd |= PCI_COMMAND_MASTER;
-				pci_write_config_word( pdev, PCI_COMMAND, cmd );
-			}
-
-			if ( !(cmd & PCI_COMMAND_IO) ) {
-				printk( KERN_INFO "  Enabling I/O space.\n" );
-				cmd |= PCI_COMMAND_IO;
-				pci_write_config_word( pdev, PCI_COMMAND, cmd );
-			}
-
-			pci_read_config_byte( pdev, PCI_LATENCY_TIMER, &latency );
-
-			if ( latency < 10 ) {
-				printk( KERN_INFO "  PCI latency timer (CFLT) is unreasonably"
-					" low at %d.  Setting to 255.\n", latency );
-				pci_write_config_byte( pdev, PCI_LATENCY_TIMER, 255 );
-			}
-		}
+			pci_set_master (pdev);
+		} else
+			release_region( ioaddr, NCR885E_TOTAL_SIZE );
 	}
 
 	if ( !chips )
@@ -1401,14 +1375,10 @@ init_module(void)
 
 static void __exit cleanup_module(void)
 {
-	struct ncr885e_private *np;
-
 	if ( root_dev ) {
-
 		unregister_netdev( root_dev );
-		np = (struct ncr885e_private *) root_dev->priv;
 		release_region( root_dev->base_addr, NCR885E_TOTAL_SIZE );
-		kfree( root_dev->priv );
+		kfree( root_dev );
 		root_dev = NULL;
 	}  
 }

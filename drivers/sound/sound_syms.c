@@ -53,7 +53,8 @@ extern int softoss_dev;
 EXPORT_SYMBOL(softoss_dev);
 
 /* Locking */
-#include "soundmodule.h"
+extern struct notifier_block *sound_locker;
+extern void sound_notifier_chain_register(struct notifier_block *);
 EXPORT_SYMBOL(sound_locker);
 EXPORT_SYMBOL(sound_notifier_chain_register);
 

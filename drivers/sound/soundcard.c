@@ -43,7 +43,7 @@
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
-#include "soundmodule.h"
+#include <linux/notifier.h>
 
 
 struct notifier_block *sound_locker=(struct notifier_block *)0;
@@ -572,7 +572,7 @@ static void soundcard_register_devfs (int do_register)
 			else {
 				devfs_handle_t de;
 				
-				de = devfs_find_handle (NULL, name_buf, 0, 0, 0,
+				de = devfs_find_handle (NULL, name_buf, 0, 0,
 					DEVFS_SPECIAL_CHR, 0);
 				devfs_unregister (de);
 			}

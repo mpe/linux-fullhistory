@@ -51,7 +51,7 @@ static const char *const smt_class_name[] = {
 #define LAST_CLASS	(SMT_PMF_SET)
 
 static const struct fddi_addr SMT_Unknown = {
-	0,0,0x1f,0,0,0
+	{ 0,0,0x1f,0,0,0 }
 } ;
 
 /*

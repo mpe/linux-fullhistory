@@ -527,6 +527,10 @@ static int matroxfb_dh_ioctl(struct inode* inode,
 					return -EINVAL;
 				if (tmp & ACCESS_FBINFO(output.ph))
 					return -EINVAL;
+				if (tmp & MATROXFB_OUTPUT_CONN_DFP)
+					return -EINVAL;
+				if ((ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_DFP) && tmp)
+					return -EINVAL;
 				if (tmp == ACCESS_FBINFO(output.sh))
 					return 0;
 				ACCESS_FBINFO(output.sh) = tmp;
@@ -542,7 +546,11 @@ static int matroxfb_dh_ioctl(struct inode* inode,
 			{
 				u_int32_t tmp;
 
-				tmp = ACCESS_FBINFO(output.all) & ~ACCESS_FBINFO(output.ph);
+				/* we do not support DFP from CRTC2 */
+				tmp = ACCESS_FBINFO(output.all) & ~ACCESS_FBINFO(output.ph) & ~MATROXFB_OUTPUT_CONN_DFP;
+				/* CRTC1 in DFP mode disables CRTC2 at all (I know, I'm lazy) */
+				if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_DFP)
+					tmp = 0;
 				put_user_ret(tmp, (u_int32_t*)arg, -EFAULT);
 				return 0;
 			}
@@ -675,6 +683,10 @@ static int matroxfb_dh_regit(CPMINFO struct matroxfb_dh_fb_info* m2info) {
 	if (ACCESS_FBINFO(output.all) & MATROXFB_OUTPUT_CONN_SECONDARY) {
 		ACCESS_FBINFO(output.sh) |= MATROXFB_OUTPUT_CONN_SECONDARY;
 		ACCESS_FBINFO(output.ph) &= ~MATROXFB_OUTPUT_CONN_SECONDARY;
+		if (ACCESS_FBINFO(output.all) & MATROXFB_OUTPUT_CONN_DFP) {
+			ACCESS_FBINFO(output.sh) &= ~MATROXFB_OUTPUT_CONN_DFP;
+			ACCESS_FBINFO(output.ph) &= ~MATROXFB_OUTPUT_CONN_DFP;
+		}
 	}
 
 	matroxfb_dh_set_var(&matroxfb_dh_defined, -2, &m2info->fbcon);

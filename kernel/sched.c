@@ -1007,12 +1007,23 @@ asmlinkage long sys_sched_get_priority_min(int policy)
 asmlinkage long sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 {
 	struct timespec t;
+	struct task_struct *p;
+	int retval = -EINVAL;
 
-	t.tv_sec = 0;
-	t.tv_nsec = 150000;
-	if (copy_to_user(interval, &t, sizeof(struct timespec)))
-		return -EFAULT;
-	return 0;
+	if (pid < 0)
+		goto out_nounlock;
+
+	retval = -ESRCH;
+	read_lock(&tasklist_lock);
+	p = find_process_by_pid(pid);
+	if (p)
+		jiffies_to_timespec(p->policy & SCHED_FIFO ? 0 : p->priority,
+				    &t);
+	read_unlock(&tasklist_lock);
+	if (p)
+		retval = copy_to_user(interval, &t, sizeof(t)) ? -EFAULT : 0;
+out_nounlock:
+	return retval;
 }
 
 static void show_task(struct task_struct * p)

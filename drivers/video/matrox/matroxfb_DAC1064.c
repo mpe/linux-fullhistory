@@ -169,9 +169,9 @@ static void matroxfb_DAC1064_cursor(struct display* p, int mode, int x, int y) {
 
 	if (mode == CM_ERASE) {
 		if (ACCESS_FBINFO(cursor.state) != CM_ERASE) {
+			del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 			matroxfb_DAC_lock_irqsave(flags);
 			ACCESS_FBINFO(cursor.state) = CM_ERASE;
-			del_timer(&ACCESS_FBINFO(cursor.timer));
 			outDAC1064(PMINFO M1064_XCURCTRL, M1064_XCURCTRL_DIS);
 			matroxfb_DAC_unlock_irqrestore(flags);
 		}
@@ -184,6 +184,7 @@ static void matroxfb_DAC1064_cursor(struct display* p, int mode, int x, int y) {
 	y -= p->var.yoffset;
 	if (p->var.vmode & FB_VMODE_DOUBLE)
 		y *= 2;
+	del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 	matroxfb_DAC_lock_irqsave(flags);
 	if ((x != ACCESS_FBINFO(cursor.x)) || (y != ACCESS_FBINFO(cursor.y)) || ACCESS_FBINFO(cursor.redraw)) {
 		ACCESS_FBINFO(cursor.redraw) = 0;
@@ -339,16 +340,18 @@ void DAC1064_global_init(CPMINFO struct matrox_hw_state* hw) {
 #if defined(CONFIG_FB_MATROX_MAVEN) || defined(CONFIG_FB_MATROX_MAVEN_MODULE)
 	if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_SECONDARY) {
 		hw->DACreg[POS1064_XPIXCLKCTRL] = M1064_XPIXCLKCTRL_PLL_UP | M1064_XPIXCLKCTRL_EN | M1064_XPIXCLKCTRL_SRC_EXT;
-		hw->DACreg[POS1064_XMISCCTRL] |= G400_XMISCCTRL_MFC_MAFC | G400_XMISCCTRL_VDO_MAFC12;
-	} else if (ACCESS_FBINFO(output.sh) & MATROXFB_OUTPUT_CONN_SECONDARY)
-		hw->DACreg[POS1064_XMISCCTRL] |= G400_XMISCCTRL_MFC_MAFC | G400_XMISCCTRL_VDO_C2_MAFC12;
+		hw->DACreg[POS1064_XMISCCTRL] |= GX00_XMISCCTRL_MFC_MAFC | G400_XMISCCTRL_VDO_MAFC12;
+	} else if (ACCESS_FBINFO(output.sh) & MATROXFB_OUTPUT_CONN_SECONDARY) {
+		hw->DACreg[POS1064_XMISCCTRL] |= GX00_XMISCCTRL_MFC_MAFC | G400_XMISCCTRL_VDO_C2_MAFC12;
+	} else 
+#endif	
+	if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_DFP)
+		hw->DACreg[POS1064_XMISCCTRL] |= GX00_XMISCCTRL_MFC_PANELLINK | G400_XMISCCTRL_VDO_MAFC12;
 	else
-		hw->DACreg[POS1064_XMISCCTRL] |= G400_XMISCCTRL_MFC_DIS;
+		hw->DACreg[POS1064_XMISCCTRL] |= GX00_XMISCCTRL_MFC_DIS;
+
 	if ((ACCESS_FBINFO(output.ph) | ACCESS_FBINFO(output.sh)) & MATROXFB_OUTPUT_CONN_PRIMARY)
 		hw->DACreg[POS1064_XMISCCTRL] |= M1064_XMISCCTRL_DAC_EN;
-#else
-	hw->DACreg[POS1064_XMISCCTRL] |= M1064_XMISCCTRL_MFC_DIS | M1064_XMISCCTRL_DAC_EN;
-#endif
 }
 
 void DAC1064_global_restore(CPMINFO const struct matrox_hw_state* hw) {

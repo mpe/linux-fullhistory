@@ -1603,17 +1603,21 @@ sony535_init(void)
 
 				sony_toc = (struct s535_sony_toc *)
 					kmalloc(sizeof *sony_toc, GFP_KERNEL);
-				if (sony_toc == NULL)
+				if (sony_toc == NULL) {
+					blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 					return -ENOMEM;
+				}
 				last_sony_subcode = (struct s535_sony_subcode *)
 					kmalloc(sizeof *last_sony_subcode, GFP_KERNEL);
 				if (last_sony_subcode == NULL) {
+					blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 					kfree(sony_toc);
 					return -ENOMEM;
 				}
 				sony_buffer = (Byte **)
 					kmalloc(4 * sony_buffer_sectors, GFP_KERNEL);
 				if (sony_buffer == NULL) {
+					blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 					kfree(sony_toc);
 					kfree(last_sony_subcode);
 					return -ENOMEM;
@@ -1624,6 +1628,7 @@ sony535_init(void)
 					if (sony_buffer[i] == NULL) {
 						while (--i>=0)
 							kfree(sony_buffer[i]);
+						blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 						kfree(sony_buffer);
 						kfree(sony_toc);
 						kfree(last_sony_subcode);
@@ -1690,7 +1695,7 @@ sony535_exit(void)
 	kfree_s(sony_buffer, 4 * sony_buffer_sectors);
 	kfree_s(last_sony_subcode, sizeof *last_sony_subcode);
 	kfree_s(sony_toc, sizeof *sony_toc);
-	devfs_unregister(devfs_find_handle(NULL, CDU535_HANDLE, 0, 0, 0,
+	devfs_unregister(devfs_find_handle(NULL, CDU535_HANDLE, 0, 0,
 					   DEVFS_SPECIAL_BLK, 0));
 	if (devfs_unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
 		printk("Uh oh, couldn't unregister " CDU535_HANDLE "\n");

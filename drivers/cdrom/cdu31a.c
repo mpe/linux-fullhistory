@@ -3544,6 +3544,7 @@ cdu31a_init(void)
    }
 errout0:
    printk("Unable to register CDU-31a with Uniform cdrom driver\n");
+   blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
    if (devfs_unregister_blkdev(MAJOR_NR, "cdu31a"))    
    {
       printk("Can't unregister block device for cdu31a\n");
@@ -3568,6 +3569,8 @@ cdu31a_exit(void)
       printk("Can't unregister cdu31a\n");
       return;
    }
+
+   blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 
    if (cdu31a_irq > 0)
       free_irq(cdu31a_irq, NULL);

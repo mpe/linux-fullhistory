@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.152 2000/06/22 17:44:47 davem Exp $
+/* $Id: sys_sparc32.c,v 1.153 2000/06/26 23:20:24 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1266,14 +1266,12 @@ asmlinkage int old32_readdir(unsigned int fd, struct old_linux_dirent32 *dirent,
 	buf.count = 0;
 	buf.dirent = dirent;
 
-	lock_kernel();
 	error = vfs_readdir(file, fillonedir, &buf);
 	if (error < 0)
 		goto out_putf;
 	error = buf.count;
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -1333,7 +1331,6 @@ asmlinkage int sys32_getdents(unsigned int fd, struct linux_dirent32 *dirent, un
 	buf.count = count;
 	buf.error = 0;
 
-	lock_kernel();
 	error = vfs_readdir(file, filldir, &buf);
 	if (error < 0)
 		goto out_putf;
@@ -1344,7 +1341,6 @@ asmlinkage int sys32_getdents(unsigned int fd, struct linux_dirent32 *dirent, un
 		error = count - buf.count;
 	}
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -1587,7 +1583,6 @@ asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 	struct nameidata nd;
 	int error;
 
-	lock_kernel();
 	error = user_path_walk(filename, &nd);
 	if (!error) {
 		struct inode *inode = nd.dentry->d_inode;
@@ -1602,7 +1597,6 @@ asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 
 		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -1611,7 +1605,6 @@ asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 	struct nameidata nd;
 	int error;
 
-	lock_kernel();
 	error = user_path_walk_link(filename, &nd);
 	if (!error) {
 		struct inode *inode = nd.dentry->d_inode;
@@ -1626,7 +1619,6 @@ asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 
 		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -1635,15 +1627,13 @@ asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
 	struct file *f;
 	int err = -EBADF;
 
-	lock_kernel();
 	f = fget(fd);
 	if (f) {
-		struct dentry *dentry = f->f_dentry;
-		struct inode *inode = dentry->d_inode;
+		struct inode *inode = f->f_dentry->d_inode;
 
 		if (inode->i_op &&
 		    inode->i_op->revalidate)
-			err = inode->i_op->revalidate(dentry);
+			err = inode->i_op->revalidate(f->f_dentry);
 		else
 			err = 0;
 		if (!err)
@@ -1651,7 +1641,6 @@ asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
 
 		fput(f);
 	}
-	unlock_kernel();
 	return err;
 }
 

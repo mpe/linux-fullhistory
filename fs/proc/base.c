@@ -40,18 +40,9 @@ int proc_pid_status(struct task_struct*,char*);
 int proc_pid_statm(struct task_struct*,char*);
 int proc_pid_cpu(struct task_struct*,char*);
 
-/* MOUNT_REWRITE: make all files have non-NULL ->f_vfsmnt (pipefs, sockfs) */
-/* Until then... */
-#define NULL_VFSMNT	/* remove as soon as pipefs and sockfs will be there */
-
 static int proc_fd_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
 	if (inode->u.proc_i.file) {
-#ifdef NULL_VFSMNT
-		if (!inode->u.proc_i.file->f_vfsmnt)
-			mntget(*mnt);
-		else
-#endif
 		*mnt = mntget(inode->u.proc_i.file->f_vfsmnt);
 		*dentry = dget(inode->u.proc_i.file->f_dentry);
 		return 0;
@@ -101,8 +92,10 @@ static int proc_cwd_link(struct inode *inode, struct dentry **dentry, struct vfs
 		atomic_inc(&fs->count);
 	task_unlock(inode->u.proc_i.task);
 	if (fs) {
+		read_lock(&fs->lock);
 		*mnt = mntget(fs->pwdmnt);
 		*dentry = dget(fs->pwd);
+		read_unlock(&fs->lock);
 		result = 0;
 		put_fs_struct(fs);
 	}
@@ -119,8 +112,10 @@ static int proc_root_link(struct inode *inode, struct dentry **dentry, struct vf
 		atomic_inc(&fs->count);
 	task_unlock(inode->u.proc_i.task);
 	if (fs) {
+		read_lock(&fs->lock);
 		*mnt = mntget(fs->rootmnt);
 		*dentry = dget(fs->root);
+		read_unlock(&fs->lock);
 		result = 0;
 		put_fs_struct(fs);
 	}
@@ -216,15 +211,19 @@ static int proc_permission(struct inode *inode, int mask)
 {
 	struct dentry *de, *base, *root;
 	struct vfsmount *our_vfsmnt, *vfsmnt, *mnt;
+	int res = 0;
 
 	if (standard_permission(inode, mask) != 0)
 		return -EACCES;
 
-	base = current->fs->root;
-	our_vfsmnt = current->fs->rootmnt;
 	if (proc_root_link(inode, &root, &vfsmnt)) /* Ewww... */
 		return -ENOENT;
+	read_lock(&current->fs->lock);
+	our_vfsmnt = mntget(current->fs->rootmnt);
+	base = dget(current->fs->root);
+	read_unlock(&current->fs->lock);
 
+	spin_lock(&dcache_lock);
 	de = root;
 	mnt = vfsmnt;
 
@@ -237,14 +236,18 @@ static int proc_permission(struct inode *inode, int mask)
 
 	if (!is_subdir(de, base))
 		goto out;
+	spin_unlock(&dcache_lock);
 
+exit:
+	dput(base);
+	mntput(our_vfsmnt);
 	dput(root);
 	mntput(mnt);
-	return 0;
+	return res;
 out:
-	dput(root);
-	mntput(mnt);
-	return -EACCES;
+	spin_unlock(&dcache_lock);
+	res = -EACCES;
+	goto exit;
 }
 
 static ssize_t pid_maps_read(struct file * file, char * buf,
@@ -396,9 +399,6 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *inode = dentry->d_inode;
 	int error;
-#ifdef NULL_VFSMNT
-	struct vfsmount *dummy = mntget(nd->mnt);
-#endif
 
 	/* We don't need a base pointer in the /proc filesystem */
 	path_release(nd);
@@ -410,9 +410,6 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 	error = inode->u.proc_i.op.proc_get_link(inode, &nd->dentry, &nd->mnt);
 	nd->last_type = LAST_BIND;
 out:
-#ifdef NULL_VFSMNT
-	mntput(dummy);
-#endif
 	return error;
 }
 
@@ -420,29 +417,15 @@ static int do_proc_readlink(struct dentry *dentry, struct vfsmount *mnt,
 			    char * buffer, int buflen)
 {
 	struct inode * inode;
-	char * tmp = (char*)__get_free_page(GFP_KERNEL), *path, *pattern;
+	char * tmp = (char*)__get_free_page(GFP_KERNEL), *path;
 	int len;
 
 	if (!tmp)
 		return -ENOMEM;
 		
-	/* Check for special dentries.. */
-	pattern = NULL;
 	inode = dentry->d_inode;
-	if (inode && IS_ROOT(dentry)) {
-		if (S_ISSOCK(inode->i_mode))
-			pattern = "socket:[%lu]";
-		if (S_ISFIFO(inode->i_mode))
-			pattern = "pipe:[%lu]";
-	}
-	
-	if (pattern) {
-		len = sprintf(tmp, pattern, inode->i_ino);
-		path = tmp;
-	} else {
-		path = d_path(dentry, mnt, tmp, PAGE_SIZE);
-		len = tmp + PAGE_SIZE - 1 - path;
-	}
+	path = d_path(dentry, mnt, tmp, PAGE_SIZE);
+	len = tmp + PAGE_SIZE - 1 - path;
 
 	if (len < buflen)
 		buflen = len;

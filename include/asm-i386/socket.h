@@ -41,8 +41,8 @@
 
 #define SO_PEERNAME		28
 
-/* Nast libc5 fixup - bletch */
-#if defined(__KERNEL__)
+/* Nasty libc5 fixup - bletch */
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
 /* Socket types. */
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
 #define SOCK_DGRAM	2		/* datagram (conn.less) socket	*/

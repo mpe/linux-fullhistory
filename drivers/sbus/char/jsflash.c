@@ -701,5 +701,6 @@ void cleanup_module(void) {
 	misc_deregister(&jsf_dev);
 	if (unregister_blkdev(JSFD_MAJOR, "jsfd") != 0)
 		printk("jsfd: cleanup_module failed\n");
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
 #endif

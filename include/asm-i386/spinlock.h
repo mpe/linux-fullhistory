@@ -36,6 +36,7 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED (spinlock_t) { 1 SPINLOCK_MAGIC_INIT }
 
 #define spin_lock_init(x)	do { *(x) = SPIN_LOCK_UNLOCKED; } while(0)
+
 /*
  * Simple spin lock operations.  There are two variants, one clears IRQ's
  * on the local processor, one does not.
@@ -128,6 +129,8 @@ typedef struct {
 #endif
 
 #define RW_LOCK_UNLOCKED (rwlock_t) { RW_LOCK_BIAS RWLOCK_MAGIC_INIT }
+
+#define rwlock_init(x)	do { *(x) = RW_LOCK_UNLOCKED; } while(0)
 
 /*
  * On x86, we implement read-write locks as a 32-bit counter

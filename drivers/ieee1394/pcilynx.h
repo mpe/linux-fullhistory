@@ -12,7 +12,7 @@
 
 #define PCI_DEVICE_ID_TI_PCILYNX 0x8000
 #define MAX_PCILYNX_CARDS        4
-#define LOCALRAM_SIZE            64
+#define LOCALRAM_SIZE            4096
 
 #define NUM_ISORCV_PCL           4
 #define MAX_ISORCV_SIZE          2048
@@ -50,23 +50,27 @@ struct ti_lynx {
         void *aux_port;
 
 
+#ifdef CONFIG_IEEE1394_PCILYNX_PORTS
         atomic_t aux_intr_seen;
         wait_queue_head_t aux_intr_wait;
 
         void *mem_dma_buffer;
+        dma_addr_t mem_dma_buffer_dma;
         struct semaphore mem_dma_mutex;
         wait_queue_head_t mem_dma_intr_wait;
+#endif
 
         /*
-         * use local RAM of LOCALRAM_SIZE (in kB) for PCLs, which allows for 
+         * use local RAM of LOCALRAM_SIZE bytes for PCLs, which allows for 
          * LOCALRAM_SIZE * 8 PCLs (each sized 128 bytes);
          * the following is an allocation bitmap 
          */
-        u8 pcl_bmap[LOCALRAM_SIZE];
+        u8 pcl_bmap[LOCALRAM_SIZE / 1024];
 
-#ifndef CONFIG_IEEE1394_LYNXRAM
+#ifndef CONFIG_IEEE1394_PCILYNX_LOCALRAM
 	/* point to PCLs memory area if needed */
 	void *pcl_mem;
+        dma_addr_t pcl_mem_dma;
 #endif
 
         /* PCLs for local mem / aux transfers */
@@ -81,16 +85,21 @@ struct ti_lynx {
 
         pcl_t rcv_pcl_start, rcv_pcl;
         void *rcv_page;
+        dma_addr_t rcv_page_dma;
         int rcv_active;
 
-        pcl_t async_pcl_start, async_pcl;
-        struct hpsb_packet *async_queue;
-        spinlock_t async_queue_lock;
+        struct {
+                pcl_t pcl_start, pcl;
+                struct hpsb_packet *queue;
+                spinlock_t queue_lock;
+                dma_addr_t header_dma, data_dma;
+        } async;
 
         struct {
                 pcl_t pcl[NUM_ISORCV_PCL];
                 u32 stat[NUM_ISORCV_PCL];
                 void *page[ISORCV_PAGES];
+                dma_addr_t page_dma[ISORCV_PAGES];
                 pcl_t pcl_start;
                 int chan_count;
                 int next, last, used, running;
@@ -381,11 +390,7 @@ inline static void get_pcl(const struct ti_lynx *lynx, pcl_t pclid,
 
 inline static u32 pcl_bus(const struct ti_lynx *lynx, pcl_t pclid)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
-        return lynx->dev->base_address[1] + pclid * sizeof(struct ti_pcl);
-#else
-        return lynx->dev->resource[1].start + pclid * sizeof(struct ti_pcl);
-#endif
+        return pci_resource_start(lynx->dev, 1) + pclid * sizeof(struct ti_pcl);
 }
 
 #else /* CONFIG_IEEE1394_PCILYNX_LOCALRAM */
@@ -407,7 +412,7 @@ inline static void get_pcl(const struct ti_lynx *lynx, pcl_t pclid,
 
 inline static u32 pcl_bus(const struct ti_lynx *lynx, pcl_t pclid)
 {
-        return virt_to_bus(lynx->pcl_mem) + pclid * sizeof(struct ti_pcl);
+        return lynx->pcl_mem_dma + pclid * sizeof(struct ti_pcl);
 }
 
 #endif /* CONFIG_IEEE1394_PCILYNX_LOCALRAM */

@@ -602,7 +602,7 @@ static int awc_event(event_t event, int priority,
 
 
         
-static int aironet_cs_init(void)
+static int __init aironet_cs_init(void)
 {
 	servinfo_t serv;
 
@@ -619,7 +619,7 @@ static int aironet_cs_init(void)
 	return 0;
 }
 
-static void aironet_cs_exit(void)
+static void __exit aironet_cs_exit(void)
 {
 	DEBUG(0, "awc_cs: unloading %c ",'\n');
 	unregister_pcmcia_driver(&dev_info);
@@ -635,5 +635,5 @@ static void aironet_cs_exit(void)
 }
 
 module_init(aironet_cs_init);
-module_exit(aironet_cs_init);
+module_exit(aironet_cs_exit);
 

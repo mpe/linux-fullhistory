@@ -1,11 +1,10 @@
-
 #ifndef IEEE1394_RAW1394_H
 #define IEEE1394_RAW1394_H
 
 #define RAW1394_DEVICE_MAJOR      171
 #define RAW1394_DEVICE_NAME       "raw1394"
 
-#define RAW1394_KERNELAPI_VERSION 2
+#define RAW1394_KERNELAPI_VERSION 3
 
 /* state: opened */
 #define RAW1394_REQ_INITIALIZE    1
@@ -45,24 +44,27 @@
 #define RAW1394_ERROR_TIMEOUT     (-1102)
 
 
+#include <asm/types.h>
+
 struct raw1394_request {
-        int type;
-        int error;
-        int misc;
+        __u32 type;
+        __s32 error;
+        __u32 misc;
 
-        unsigned int generation;
-        octlet_t address;
+        __u32 generation;
+        __u32 length;
 
-        unsigned long tag;
+        __u64 address;
 
-        size_t length;
-        quadlet_t *sendb;
-        quadlet_t *recvb;
+        __u64 tag;
+
+        __u64 sendb;
+        __u64 recvb;
 };
 
 struct raw1394_khost_list {
-        int nodes;
-        char name[32];
+        __u32 nodes;
+        __u8 name[32];
 };
 
 #ifdef __KERNEL__

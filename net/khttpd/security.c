@@ -113,11 +113,7 @@ struct file *OpenFileForSecurity(char *Filename)
 #endif
 	/* Rule no. 3 -- Does the file exist ? */
 
-	lock_kernel();
-		
 	filp = filp_open(Filename, O_RDONLY, 0);
-	
-	unlock_kernel();
 	
 	if (IS_ERR(filp))
 		return NULL;

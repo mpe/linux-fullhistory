@@ -514,6 +514,7 @@ static int findintfif(struct usb_device *dev, unsigned int ifn)
 
 extern struct list_head usb_driver_list;
 
+#if 0
 static int finddriver(struct usb_driver **driver, char *name)
 {
 	struct list_head *tmp;
@@ -533,6 +534,7 @@ static int finddriver(struct usb_driver **driver, char *name)
 
 	return -EINVAL;
 }
+#endif
 
 /*
  * file operations
@@ -714,6 +716,27 @@ static int proc_resetep(struct dev_state *ps, void *arg)
 	usb_settoggle(ps->dev, ep & 0xf, !(ep & USB_DIR_IN), 0);
 	return 0;
 }
+
+static int proc_clearhalt(struct dev_state *ps, void *arg)
+{
+	unsigned int ep;
+	int pipe;
+	int ret;
+
+	get_user_ret(ep, (unsigned int *)arg, -EFAULT);
+	if ((ret = findintfep(ps->dev, ep)) < 0)
+		return ret;
+	if ((ret = checkintf(ps, ret)))
+		return ret;
+	if (ep & USB_DIR_IN)
+                pipe = usb_rcvbulkpipe(ps->dev, ep & 0x7f);
+        else
+                pipe = usb_sndbulkpipe(ps->dev, ep & 0x7f);
+
+	usb_clear_halt(ps->dev, pipe);
+	return 0;
+}
+		
 
 static int proc_getdriver(struct dev_state *ps, void *arg)
 {
@@ -1119,6 +1142,12 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 
 	case USBDEVFS_RESET:
 		ret = proc_resetdevice(ps);
+		break;
+	
+	case USBDEVFS_CLEAR_HALT:
+		ret = proc_clearhalt(ps, (void *)arg);
+		if (ret >= 0)
+			inode->i_mtime = CURRENT_TIME;
 		break;
 
 	case USBDEVFS_GETDRIVER:

@@ -228,6 +228,8 @@ tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
 source drivers/parport/Config.in
 endmenu
 
+source drivers/mtd/Config.in
+
 source drivers/pnp/Config.in
 
 source drivers/block/Config.in

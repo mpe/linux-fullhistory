@@ -4,6 +4,9 @@
  * Transaction support.
  *
  * Copyright (C) 1999 Andreas E. Bombe
+ *
+ * This code is licensed under the GPL.  See the file COPYING in the root
+ * directory of the kernel sources for details.
  */
 
 #include <linux/sched.h>
@@ -152,38 +155,58 @@ void fill_iso_packet(struct hpsb_packet *packet, int length, int channel,
  * Return value: The allocated transaction label or -1 if there was no free
  * tlabel and @wait is false.
  */
+static int __get_tlabel(struct hpsb_host *host, nodeid_t nodeid)
+{
+	int tlabel;
+
+	if (host->tlabel_count) {
+		host->tlabel_count--;
+
+		if (host->tlabel_pool[0] != ~0) {
+			tlabel = ffz(host->tlabel_pool[0]);
+			host->tlabel_pool[0] |= 1 << tlabel;
+		} else {
+			tlabel = ffz(host->tlabel_pool[1]);
+			host->tlabel_pool[1] |= 1 << tlabel;
+			tlabel += 32;
+		}
+		return tlabel;
+	}
+	return -1;	
+}
+
 int get_tlabel(struct hpsb_host *host, nodeid_t nodeid, int wait)
 {
         unsigned long flags;
         int tlabel;
+	wait_queue_t wq;
 
-        while (1) {
-                spin_lock_irqsave(&host->tlabel_lock, flags);
+	spin_lock_irqsave(&host->tlabel_lock, flags);
 
-                if (host->tlabel_count) {
-                        host->tlabel_count--;
+        tlabel = __get_tlabel(host, nodeid);
+	if (tlabel != -1 || !wait) {
+		spin_unlock_irqrestore(&host->tlabel_lock, flags);
+		return tlabel;
+	}
 
-                        if (host->tlabel_pool[0] != ~0) {
-                                tlabel = ffz(host->tlabel_pool[0]);
-                                host->tlabel_pool[0] |= 1 << tlabel;
-                        } else {
-                                tlabel = ffz(host->tlabel_pool[1]);
-                                host->tlabel_pool[1] |= 1 << tlabel;
-                                tlabel += 32;
-                        }
-                
-                        spin_unlock_irqrestore(&host->tlabel_lock, flags);
-                        return tlabel;
-                }
+	init_waitqueue_entry(&wq, current);
+	add_wait_queue(&host->tlabel_wait, &wq);
 
-                spin_unlock_irqrestore(&host->tlabel_lock, flags);
+	for (;;) {
+                set_current_state(TASK_UNINTERRUPTIBLE);
+                tlabel = __get_tlabel(host, nodeid);
+		if (tlabel != -1) break;
+		
+		spin_unlock_irqrestore(&host->tlabel_lock, flags);
+		schedule();
+		spin_lock_irqsave(&host->tlabel_lock, flags);
+	}
 
-                if (wait) {
-                        sleep_on(&host->tlabel_wait);
-                } else {
-                        return -1;
-                }
-        }
+	spin_unlock_irqrestore(&host->tlabel_lock, flags);
+	set_current_state(TASK_RUNNING);
+	remove_wait_queue(&host->tlabel_wait, &wq);
+
+	return tlabel;
 }
 
 /**

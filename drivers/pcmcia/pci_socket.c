@@ -28,6 +28,14 @@
 
 #include "pci_socket.h"
 
+
+extern struct socket_info_t *pcmcia_register_socket (int slot,
+		struct pccard_operations *vtable, int use_bus_pm);
+extern void pcmcia_unregister_socket (struct socket_info_t *socket);
+extern void pcmcia_suspend_socket (struct socket_info_t *socket);
+extern void pcmcia_resume_socket (struct socket_info_t *socket);
+
+
 /*
  * Arbitrary define. This is the array of active cardbus
  * entries.
@@ -161,45 +169,87 @@ static struct pccard_operations pci_socket_operations = {
 	pci_proc_setup
 };
 
-static int __init add_pci_socket(int nr, struct pci_dev *dev, struct pci_socket_ops *ops)
+static int __devinit add_pci_socket(int nr, struct pci_dev *dev, struct pci_socket_ops *ops)
 {
 	pci_socket_t *socket = nr + pci_socket_array;
 
 	memset(socket, 0, sizeof(*socket));
 	socket->dev = dev;
 	socket->op = ops;
+	dev->driver_data = socket;
 	init_waitqueue_head(&socket->wait);
 	return socket->op->open(socket);
 }
 
-static int __init pci_socket_init(void)
+static int __devinit
+cardbus_probe (struct pci_dev *dev, const struct pci_device_id *id)
 {
-	struct pci_dev *dev = NULL;
-	int nr = 0;
+	int	s;
 
-	while ((dev = pci_find_class(PCI_CLASS_BRIDGE_CARDBUS << 8, dev)) != NULL) {
-		printk("Adding cardbus controller %d: %s\n", nr, dev->name);
-		add_pci_socket(nr, dev, &yenta_operations);
-		nr++;
+	for (s = 0; s < MAX_SOCKETS; s++) {
+		if (pci_socket_array [s].dev == 0) {
+			add_pci_socket (s, dev, &yenta_operations);
+			pci_socket_array [s].pcmcia_socket =
+				pcmcia_register_socket (s,
+					&pci_socket_operations,
+					1);
+			return 0;
+		}
 	}
-
-	if (nr <= 0)
-		return -1;
-	register_ss_entry(nr, &pci_socket_operations);
-	return 0;
+	return -1;
 }
 
-static void __exit pci_socket_exit(void)
+static void __devexit cardbus_remove (struct pci_dev *dev)
 {
-	int i;
+	pci_socket_t *socket = (pci_socket_t *) dev->driver_data;
 
-	unregister_ss_entry(&pci_socket_operations);
-	for (i = 0; i < MAX_SOCKETS; i++) {
-		pci_socket_t *socket = pci_socket_array + i;
+	pcmcia_unregister_socket (socket->pcmcia_socket);
+	if (socket->op && socket->op->close)
+		socket->op->close(socket);
+	dev->driver_data = 0;
+}
 
-		if (socket->op && socket->op->close)
-			socket->op->close(socket);
-	}
+static void cardbus_suspend (struct pci_dev *dev)
+{
+	pci_socket_t *socket = (pci_socket_t *) dev->driver_data;
+	pcmcia_suspend_socket (socket->pcmcia_socket);
+}
+
+static void cardbus_resume (struct pci_dev *dev)
+{
+	pci_socket_t *socket = (pci_socket_t *) dev->driver_data;
+	pcmcia_resume_socket (socket->pcmcia_socket);
+}
+
+
+static struct pci_device_id cardbus_table [] = { {
+	class:		PCI_CLASS_BRIDGE_CARDBUS << 8,
+	class_mask:	~0,
+
+	vendor:		PCI_ANY_ID,
+	device:		PCI_ANY_ID,
+	subvendor:	PCI_ANY_ID,
+	subdevice:	PCI_ANY_ID,
+}, { /* all zeroes */ }
+};
+
+static struct pci_driver pci_cardbus_driver = {
+	name:		"cardbus",
+	id_table:	cardbus_table,
+	probe:		cardbus_probe,
+	remove:		cardbus_remove,
+	suspend:	cardbus_suspend,
+	resume:		cardbus_resume,
+};
+
+static int __devinit pci_socket_init(void)
+{
+	return pci_module_init (&pci_cardbus_driver);
+}
+
+static void __devexit pci_socket_exit (void)
+{
+	pci_unregister_driver (&pci_cardbus_driver);
 }
 
 module_init(pci_socket_init);

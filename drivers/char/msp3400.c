@@ -85,7 +85,9 @@ static int amsound = 0;    /* hard-wire AM sound at 6.5 Hz (france),
 			      the autoscan seems work well only with FM... */
 static int simple  = -1;   /* use short programming (>= msp3410 only) */
 static int dolby   = 0;
+#ifdef REGISTER_MIXER
 static int mixer   = -1;
+#endif
 
 struct msp3400c {
 	int simple;

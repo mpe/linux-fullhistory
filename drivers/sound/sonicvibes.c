@@ -535,7 +535,7 @@ static void frobindir(struct sv_state *s, unsigned char idx, unsigned char mask,
 static unsigned setpll(struct sv_state *s, unsigned char reg, unsigned rate)
 {
 	unsigned long flags;
-	unsigned char r, m, n;
+	unsigned char r, m=0, n=0;
 	unsigned xm, xn, xr, xd, metric = ~0U;
 	/* the warnings about m and n used uninitialized are bogus and may safely be ignored */
 

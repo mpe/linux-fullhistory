@@ -469,9 +469,9 @@ void vcs_make_devfs (unsigned int index, int unregister)
     sprintf (name, "a%u", index + 1);
     if (unregister)
     {
-	devfs_unregister ( devfs_find_handle (devfs_handle, name + 1, 0, 0, 0,
+	devfs_unregister ( devfs_find_handle (devfs_handle, name + 1, 0, 0,
 					      DEVFS_SPECIAL_CHR, 0) );
-	devfs_unregister ( devfs_find_handle (devfs_handle, name, 0, 0, 0,
+	devfs_unregister ( devfs_find_handle (devfs_handle, name, 0, 0,
 					      DEVFS_SPECIAL_CHR, 0) );
     }
     else
@@ -495,7 +495,7 @@ int __init vcs_init(void)
 	if (error)
 		printk("unable to get major %d for vcs device", VCS_MAJOR);
 
-	devfs_handle = devfs_mk_dir (NULL, "vcc", 3, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "vcc", NULL);
 	devfs_register (devfs_handle, "0", DEVFS_FL_DEFAULT,
 			VCS_MAJOR, 0,
 			S_IFCHR | S_IRUSR | S_IWUSR, &vcs_fops, NULL);

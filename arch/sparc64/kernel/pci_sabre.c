@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.19 2000/04/15 13:07:51 davem Exp $
+/* $Id: pci_sabre.c,v 1.20 2000/06/26 19:40:27 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -641,14 +641,28 @@ static unsigned int __init sabre_irq_build(struct pci_controller_info *p,
 	bucket = __bucket(build_irq(pil, inofixup, iclr, imap));
 	bucket->flags |= IBF_PCI;
 
-	/* XXX We still need to code up support for this in irq.c
-	 * XXX It's easy to code up since only one SIMBA can exist
-	 * XXX in a machine and this is where the sync register is. -DaveM
-	 */
 	if (pdev) {
 		struct pcidev_cookie *pcp = pdev->sysdata;
-		if (pdev->bus->number != pcp->pbm->pci_first_busno)
+
+		/* When a device lives behind a bridge deeper in the
+		 * PCI bus topology than APB, a special sequence must
+		 * run to make sure all pending DMA transfers at the
+		 * time of IRQ delivery are visible in the coherency
+		 * domain by the cpu.  This sequence is to perform
+		 * a read on the far side of the non-APB bridge, then
+		 * perform a read of Sabre's DMA write-sync register.
+		 *
+		 * Currently, the PCI_CONFIG register for the device
+		 * is used for this read from the far side of the bridge.
+		 */
+		if (pdev->bus->number != pcp->pbm->pci_first_busno) {
 			bucket->flags |= IBF_DMA_SYNC;
+			bucket->synctab_ent = dma_sync_reg_table_entry++;
+			dma_sync_reg_table[bucket->synctab_ent] =
+				(unsigned long) sabre_pci_config_mkaddr(
+					pcp->pbm,
+					pdev->bus->number, pdev->devfn, PCI_COMMAND);
+		}
 	}
 	return __irq(bucket);
 }
@@ -1399,7 +1413,10 @@ void __init sabre_init(int pnode)
 	 * First REG in property is base of entire SABRE register space.
 	 */
 	p->controller_regs = pr_regs[0].phys_addr;
-	printk("PCI: Found SABRE, main regs at %016lx\n", p->controller_regs);
+	pci_dma_wsync = p->controller_regs + SABRE_WRSYNC;
+
+	printk("PCI: Found SABRE, main regs at %016lx, wsync at %016lx\n",
+	       p->controller_regs, pci_dma_wsync);
 
 	/* Error interrupts are enabled later after the bus scan. */
 	sabre_write(p->controller_regs + SABRE_PCICTRL,

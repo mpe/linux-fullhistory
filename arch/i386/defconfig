@@ -91,6 +91,11 @@ CONFIG_ACPI=y
 # CONFIG_APM is not set
 
 #
+# Memory Technology Devices (MTD)
+#
+# CONFIG_MTD is not set
+
+#
 # Parallel port support
 #
 # CONFIG_PARPORT is not set
@@ -506,6 +511,7 @@ CONFIG_AUTOFS4_FS=y
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_JFFS_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_RAMFS is not set
 CONFIG_ISO9660_FS=y

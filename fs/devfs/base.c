@@ -476,6 +476,11 @@
 	       Changed interface to <devfs_register>.
 	       Work sponsored by SGI.
   v0.101
+    20000622   Richard Gooch <rgooch@atnf.csiro.au>
+	       Simplified interface to <devfs_mk_symlink> and <devfs_mk_dir>.
+	       Simplified interface to <devfs_find_handle>.
+	       Work sponsored by SGI.
+  v0.102
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -510,7 +515,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define DEVFS_VERSION            "0.101 (20000621)"
+#define DEVFS_VERSION            "0.102 (20000622)"
 
 #define DEVFS_NAME "devfs"
 
@@ -1440,27 +1445,19 @@ void devfs_unregister (devfs_handle_t de)
  *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
  *		new name is relative to the root of the devfs.
  *	@name: The name of the entry.
- *	@namelen: The number of characters in @name, not including a %NULL
- *		terminator. If this is 0, then @name must be %NULL-terminated and the
- *		length is computed internally.
  *	@flags: A set of bitwise-ORed flags (DEVFS_FL_*).
  *	@link: The destination name.
- *	@linklength: The number of characters in @link, not including a %NULL
- *		terminator. If this is 0, then @link must be %NULL-terminated and the
- *		length is computed internally.
  *	@handle: The handle to the symlink entry is written here. This may be %NULL.
  *	@info: An arbitrary pointer which will be associated with the entry.
  *
  *	Returns 0 on success, else a negative error code is returned.
  */
 
-int devfs_mk_symlink (devfs_handle_t dir,
-		      const char *name, unsigned int namelen,
-		      unsigned int flags,
-		      const char *link, unsigned int linklength,
-		      devfs_handle_t *handle, void *info)
+int devfs_mk_symlink (devfs_handle_t dir, const char *name, unsigned int flags,
+		      const char *link, devfs_handle_t *handle, void *info)
 {
     int is_new;
+    unsigned int linklength;
     char *newname;
     struct devfs_entry *de;
 
@@ -1474,14 +1471,14 @@ int devfs_mk_symlink (devfs_handle_t dir,
     if (devfs_debug & DEBUG_REGISTER)
 	printk ("%s: devfs_mk_symlink(%s)\n", DEVFS_NAME, name);
 #endif
-    if (namelen < 1) namelen = strlen (name);
     if (link == NULL)
     {
 	printk ("%s: devfs_mk_symlink(): NULL link pointer\n", DEVFS_NAME);
 	return -EINVAL;
     }
-    if (linklength < 1) linklength = strlen (link);
-    de = search_for_entry (dir, name, namelen, TRUE, TRUE, &is_new, FALSE);
+    linklength = strlen (link);
+    de = search_for_entry (dir, name, strlen (name), TRUE, TRUE, &is_new,
+			   FALSE);
     if (de == NULL) return -ENOMEM;
     if (!S_ISLNK (de->mode) && de->registered)
     {
@@ -1493,7 +1490,7 @@ int devfs_mk_symlink (devfs_handle_t dir,
     de->mode = S_IFLNK | S_IRUGO | S_IXUGO;
     de->info = info;
     de->show_unreg = ( (boot_options & OPTION_SHOW)
-			|| (flags & DEVFS_FL_SHOW_UNREG) ) ? TRUE : FALSE;
+		       || (flags & DEVFS_FL_SHOW_UNREG) ) ? TRUE : FALSE;
     de->hide = (flags & DEVFS_FL_HIDE) ? TRUE : FALSE;
     /*  Note there is no need to fiddle the dentry cache if the symlink changes
 	as the symlink follow method is called every time it's needed  */
@@ -1533,9 +1530,6 @@ int devfs_mk_symlink (devfs_handle_t dir,
  *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
  *		new name is relative to the root of the devfs.
  *	@name: The name of the entry.
- *	@namelen: The number of characters in @name, not including a %NULL
- *		terminator. If this is 0, then @name must be %NULL-terminated and the
- *		length is computed internally.
  *	@info: An arbitrary pointer which will be associated with the entry.
  *
  *	Use of this function is optional. The devfs_register() function
@@ -1545,8 +1539,7 @@ int devfs_mk_symlink (devfs_handle_t dir,
  *	On failure %NULL is returned.
  */
 
-devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
-			     unsigned int namelen, void *info)
+devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name, void *info)
 {
     int is_new;
     struct devfs_entry *de;
@@ -1556,8 +1549,8 @@ devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
 	printk ("%s: devfs_mk_dir(): NULL name pointer\n", DEVFS_NAME);
 	return NULL;
     }
-    if (namelen < 1) namelen = strlen (name);
-    de = search_for_entry (dir, name, namelen, TRUE, TRUE, &is_new, FALSE);
+    de = search_for_entry (dir, name, strlen (name), TRUE, TRUE, &is_new,
+			   FALSE);
     if (de == NULL)
     {
 	printk ("%s: devfs_mk_dir(): could not create entry: \"%s\"\n",
@@ -1596,9 +1589,6 @@ devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
  *	@dir: The handle to the parent devfs directory entry. If this is %NULL the
  *		name is relative to the root of the devfs.
  *	@name: The name of the entry.
- *	@namelen: The number of characters in @name, not including a %NULL
- *		terminator. If this is 0, then @name must be %NULL-terminated and the
- *		length is computed internally.
  *	@major: The major number. This is used if @name is %NULL.
  *	@minor: The minor number. This is used if @name is %NULL.
  *	@type: The type of special file to search for. This may be either
@@ -1611,15 +1601,14 @@ devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
  *	devfs_get_flags(), or devfs_set_flags(). On failure %NULL is returned.
  */
 
-devfs_handle_t devfs_find_handle (devfs_handle_t dir,
-				  const char *name, unsigned int namelen,
+devfs_handle_t devfs_find_handle (devfs_handle_t dir, const char *name,
 				  unsigned int major, unsigned int minor,
 				  char type, int traverse_symlinks)
 {
     devfs_handle_t de;
 
     if ( (name != NULL) && (name[0] == '\0') ) name = NULL;
-    de = find_entry (dir, name, namelen, major, minor, type,
+    de = find_entry (dir, name, 0, major, minor, type,
 		     traverse_symlinks);
     if (de == NULL) return NULL;
     if (!de->registered) return NULL;
@@ -2306,7 +2295,7 @@ static void devfs_read_inode (struct inode *inode)
 #endif
 }   /*  End Function devfs_read_inode  */
 
-static void devfs_write_inode (struct inode *inode, int unused)
+static void devfs_write_inode (struct inode *inode)
 {
     int index;
     struct devfs_entry *de;
@@ -2564,6 +2553,7 @@ static void devfs_d_iput (struct dentry *dentry, struct inode *inode)
 {
     struct devfs_entry *de;
 
+    lock_kernel();
     de = get_devfs_entry_from_vfs_inode (inode);
 #ifdef CONFIG_DEVFS_DEBUG
     if (devfs_debug & DEBUG_D_IPUT)
@@ -2574,6 +2564,7 @@ static void devfs_d_iput (struct dentry *dentry, struct inode *inode)
     {
 	de->inode.dentry = NULL;
     }
+    unlock_kernel();
     iput (inode);
 }   /*  End Function devfs_d_iput  */
 
@@ -2647,9 +2638,12 @@ static int devfs_d_delete (struct dentry *dentry)
 static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
 {
     devfs_handle_t de = dentry->d_fsdata;
-    struct inode *dir = dentry->d_parent->d_inode;
-    struct fs_info *fs_info = dir->i_sb->u.generic_sbp;
+    struct inode *dir;
+    struct fs_info *fs_info;
 
+    lock_kernel();
+    dir = dentry->d_parent->d_inode;
+    fs_info = dir->i_sb->u.generic_sbp;
     if (!de || de->registered)
     {
 	if ( !dentry->d_inode && is_devfsd_or_child (fs_info) )
@@ -2675,7 +2669,7 @@ static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
 		de = search_for_entry_in_dir (parent, dentry->d_name.name,
 					      dentry->d_name.len, FALSE);
 	    }
-	    if (de == NULL) return 1;
+	    if (de == NULL) goto out;
 	    /*  Create an inode, now that the driver information is available
 	     */
 	    if (de->no_persistence) update_devfs_inode_from_entry (de);
@@ -2683,17 +2677,19 @@ static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
 	    else de->inode.mode =
 		     (de->mode & ~S_IALLUGO) | (de->inode.mode & S_IALLUGO);
 	    if ( ( inode = get_vfs_inode (dir->i_sb, de, dentry) ) == NULL )
-		return 1;
+		goto out;
 #ifdef CONFIG_DEVFS_DEBUG
 	    if (devfs_debug & DEBUG_I_LOOKUP)
 		printk ("%s: d_revalidate(): new VFS inode(%u): %p  devfs_entry: %p\n",
 			DEVFS_NAME, de->inode.ino, inode, de);
 #endif
 	    d_instantiate (dentry, inode);
-	    return 1;
+	    goto out;
 	}
     }
     if ( wait_for_devfsd_finished (fs_info) ) dentry->d_op = &devfs_dops;
+out:
+    unlock_kernel();
     return 1;
 }   /*  End Function devfs_d_revalidate_wait  */
 
@@ -2857,8 +2853,8 @@ static int devfs_symlink (struct inode *dir, struct dentry *dentry,
     parent = get_devfs_entry_from_vfs_inode (dir);
     if (parent == NULL) return -EINVAL;
     if (!parent->registered) return -ENOENT;
-    err = devfs_mk_symlink (parent, dentry->d_name.name, dentry->d_name.len,
-			    DEVFS_FL_NONE, symname, 0, &de, NULL);
+    err = devfs_mk_symlink (parent, dentry->d_name.name, DEVFS_FL_NONE,
+			    symname, &de, NULL);
 #ifdef CONFIG_DEVFS_DEBUG
     if (devfs_debug & DEBUG_DISABLED)
 	printk ("%s: symlink(): errcode from <devfs_mk_symlink>: %d\n",
@@ -3046,14 +3042,20 @@ static int devfs_mknod (struct inode *dir, struct dentry *dentry, int mode,
 
 static int devfs_readlink (struct dentry *dentry, char *buffer, int buflen)
 {
-    struct devfs_entry *de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    struct devfs_entry *de;
+    lock_kernel();
+    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    unlock_kernel();
 
     return vfs_readlink (dentry, buffer, buflen, de->u.symlink.linkname);
 }   /*  End Function devfs_readlink  */
 
 static int devfs_follow_link (struct dentry *dentry, struct nameidata *nd)
 {
-    struct devfs_entry *de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    struct devfs_entry *de;
+    lock_kernel();
+    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    unlock_kernel();
 
     return vfs_follow_link (nd, de->u.symlink.linkname);
 }   /*  End Function devfs_follow_link  */

@@ -57,7 +57,7 @@ static int iiDelayed = 0;	// Set when the iiResetDelay function is
 							// called. Cleared when ANY board is reset.
 static struct timer_list * pDelayTimer;   // Used by iiDelayTimer
 static wait_queue_head_t pDelayWait;    // Used by iiDelayTimer
-static spinlock_t Dl_spinlock;
+static rwlock_t Dl_spinlock;
 
 //********
 //* Code *

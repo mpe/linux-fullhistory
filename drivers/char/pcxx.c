@@ -151,9 +151,11 @@ struct tty_driver pcxe_driver;
 struct tty_driver pcxe_callout;
 static int pcxe_refcount;
 
+static struct timer_list pcxx_timer;
+
 DECLARE_TASK_QUEUE(tq_pcxx);
 
-static void pcxxpoll(void);
+static void pcxxpoll(unsigned long dummy);
 static void pcxxdelay(int);
 static void fepcmd(struct channel *, int, int, int, int, int);
 static void pcxe_put_char(struct tty_struct *, unsigned char);
@@ -216,9 +218,7 @@ void cleanup_module()
 
 	save_flags(flags);
 	cli();
-	timer_active &= ~(1 << DIGI_TIMER);
-	timer_table[DIGI_TIMER].fn = NULL;
-	timer_table[DIGI_TIMER].expires = 0;
+	del_timer_sync(&pcxx_timer);
 	remove_bh(DIGI_BH);
 
 	if ((e1 = tty_unregister_driver(&pcxe_driver)))
@@ -1199,8 +1199,8 @@ int __init pcxe_init(void)
 
 	init_bh(DIGI_BH,do_pcxe_bh);
 
-	timer_table[DIGI_TIMER].fn = pcxxpoll;
-	timer_table[DIGI_TIMER].expires = 0;
+	init_timer(&pcxx_timer);
+	pcxx_timer.function = pcxxpoll;
 
 	memset(&pcxe_driver, 0, sizeof(struct tty_driver));
 	pcxe_driver.magic = TTY_DRIVER_MAGIC;
@@ -1620,7 +1620,7 @@ load_fep:
 	/*
 	 * Start up the poller to check for events on all enabled boards
 	 */
-	timer_active |= 1 << DIGI_TIMER;
+	mod_timer(&pcxx_timer, HZ/25);
 
 	if (verbose)
 		printk(KERN_NOTICE "PC/Xx: Driver with %d card(s) ready.\n", enabled_cards);
@@ -1629,7 +1629,7 @@ load_fep:
 }
 
 
-static void pcxxpoll(void)
+static void pcxxpoll(unsigned long dummy)
 {
 	unsigned long flags;
 	int crd;
@@ -1660,9 +1660,7 @@ static void pcxxpoll(void)
 		memoff(ch);
 	}
 
-	timer_table[DIGI_TIMER].fn = pcxxpoll;
-	timer_table[DIGI_TIMER].expires = jiffies + HZ/25;
-	timer_active |= 1 << DIGI_TIMER;
+	mod_timer(&pcxx_timer, jiffies + HZ/25);
 	restore_flags(flags);
 }
 

@@ -117,9 +117,7 @@ asmlinkage long sys_uselib(const char * library)
 	if (error)
 		goto exit;
 
-	lock_kernel();
 	file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
-	unlock_kernel();
 	error = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out;
@@ -340,10 +338,8 @@ struct file *open_exec(const char *name)
 	struct file *file;
 	int err = 0;
 
-	lock_kernel();
 	if (path_init(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
 		err = path_walk(name, &nd);
-	unlock_kernel();
 	file = ERR_PTR(err);
 	if (!err) {
 		inode = nd.dentry->d_inode;
@@ -352,9 +348,7 @@ struct file *open_exec(const char *name)
 			int err = permission(inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
-				lock_kernel();
 				file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
-				unlock_kernel();
 				if (!IS_ERR(file)) {
 					err = deny_write_access(file);
 					if (err) {
@@ -936,8 +930,8 @@ int do_coredump(long signr, struct pt_regs * regs)
 		goto close_fail;
 	if (!binfmt->core_dump(signr, regs, file))
 		goto close_fail;
-	filp_close(file, NULL);
 	unlock_kernel();
+	filp_close(file, NULL);
 	return 1;
 
 close_fail:

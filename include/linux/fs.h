@@ -86,7 +86,9 @@ extern int max_super_blocks, nr_super_blocks;
 			   */
 #define FS_SINGLE	8 /*
 			   * Filesystem that can have only one superblock;
-			   * kernel-wide vfsmnt is kept in ->kern_mnt.
+			   * kernel-wide vfsmnt is placed in ->kern_mnt by
+			   * kern_mount() which must be called _after_
+			   * register_filesystem().
 			   */
 #define FS_NOMOUNT	16 /* Never mount from userland */
 #define FS_LITTER	32 /* Keeps the tree in dcache */

@@ -278,7 +278,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 		 * is pointless work.
 		 */
 		scsi_initialize_queue(SDpnt, shpnt);
-		blk_queue_headactive(&SDpnt->request_queue, 0);
 		SDpnt->request_queue.queuedata = (void *) SDpnt;
 		/* Make sure we have something that is valid for DMA purposes */
 		scsi_result = ((!shpnt->unchecked_isa_dma)
@@ -425,8 +424,10 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	}
 
 	/* Last device block does not exist.  Free memory. */
-	if (SDpnt != NULL)
+	if (SDpnt != NULL) {
+		blk_cleanup_queue(&SDpnt->request_queue);
 		kfree((char *) SDpnt);
+	}
 
 	/* If we allocated a buffer so we could do DMA, free it now */
 	if (scsi_result != &scsi_result0[0] && scsi_result != NULL) {
@@ -594,7 +595,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
         sprintf (devname, "host%d/bus%d/target%d/lun%d",
                  SDpnt->host->host_no, SDpnt->channel, SDpnt->id, SDpnt->lun);
         if (SDpnt->de) printk ("DEBUG: dir: \"%s\" already exists\n", devname);
-        else SDpnt->de = devfs_mk_dir (scsi_devfs_handle, devname, 0, NULL);
+        else SDpnt->de = devfs_mk_dir (scsi_devfs_handle, devname, NULL);
 
 	for (sdtpnt = scsi_devicelist; sdtpnt;
 	     sdtpnt = sdtpnt->next)
@@ -691,8 +692,6 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	 * is pointless work.
 	 */
 	scsi_initialize_queue(SDpnt, shpnt);
-	blk_queue_headactive(&SDpnt->request_queue, 0);
-	SDpnt->request_queue.queuedata = (void *) SDpnt;
 	SDpnt->host = shpnt;
 	initialize_merge_fn(SDpnt);
 

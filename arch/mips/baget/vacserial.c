@@ -115,6 +115,9 @@ static struct console sercons;
 static void autoconfig(struct serial_state * info);
 static void change_speed(struct async_struct *info);
 static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
+static void rs_timer(unsigned long dummy);
+
+static struct timer_list vacs_timer;
 
 /*
  * Here we define the default xmit fifo size used for each type of
@@ -750,8 +753,7 @@ static int startup(struct async_struct * info)
 	/*
 	 * Set up serial timers...
 	 */
-	timer_table[RS_TIMER].expires = jiffies + 2*HZ/100;
-	timer_active |= 1 << RS_TIMER;
+	mod_timer(&vacs_timer, jiffies + 2*HZ/100);
 
 	/*
 	 * and set the speed of the serial port
@@ -2255,7 +2257,7 @@ EXPORT_SYMBOL(unregister_serial);
  *  Important function for VAC UART check and reanimation.
  */
 
-static void rs_timer(void)
+static void rs_timer(unsigned long dummy)
 {
         static unsigned long last_strobe = 0;
         struct async_struct *info;
@@ -2285,8 +2287,7 @@ static void rs_timer(void)
                 }
         }
         last_strobe = jiffies;
-        timer_table[RS_TIMER].expires = jiffies + RS_STROBE_TIME;
-        timer_active |= 1 << RS_TIMER;
+        mod_timer(&vacs_timer, jiffies + RS_STROBE_TIME);
 
 	/*
 	 *  It looks this code for case we share IRQ with console...
@@ -2301,7 +2302,7 @@ static void rs_timer(void)
 #endif
                 restore_flags(flags);
 
-                timer_table[RS_TIMER].expires = jiffies + IRQ_timeout[0] - 2;
+                mod_timer(&vacs_timer, jiffies + IRQ_timeout[0] - 2);
         }
 }
  
@@ -2323,8 +2324,9 @@ int __init rs_init(void)
 #endif
 
 	init_bh(SERIAL_BH, do_serial_bh);
-	timer_table[RS_TIMER].fn = rs_timer;
-	timer_table[RS_TIMER].expires = 0;
+	init_timer(&vacs_timer);
+	vacs_timer.function = rs_timer;
+	vacs_timer.expires = 0;
 
 	for (i = 0; i < NR_IRQS; i++) {
 		IRQ_ports[i] = 0;
@@ -2528,9 +2530,7 @@ void cleanup_module(void)
 	save_flags(flags);
 	cli();
 
-	timer_active &= ~(1 << RS_TIMER);
-	timer_table[RS_TIMER].fn = NULL;
-	timer_table[RS_TIMER].expires = 0;
+	del_timer_sync(&vacs_timer);
         remove_bh(SERIAL_BH);
 
 	if ((e1 = tty_unregister_driver(&serial_driver)))

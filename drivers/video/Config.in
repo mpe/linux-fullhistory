@@ -119,7 +119,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 fi
 	 tristate '  ATI Mach64 display support (EXPERIMENTAL)' CONFIG_FB_ATY
 	 tristate '  ATI Rage 128 display support (EXPERIMENTAL)' CONFIG_FB_ATY128
-	 bool '  3Dfx Banshee/Voodoo3 display support (EXPERIMENTAL)' CONFIG_FB_3DFX
+	 tristate '  3Dfx Banshee/Voodoo3 display support (EXPERIMENTAL)' CONFIG_FB_3DFX
 	 tristate '  SIS 630/540 display support (EXPERIMENTAL)' CONFIG_FB_SIS
       fi
    fi
@@ -240,7 +240,7 @@ if [ "$CONFIG_FB" = "y" ]; then
               "$CONFIG_FB_IGA" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
 	      "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
 	      "$CONFIG_FB_P9100" = "m" -o "$CONFIG_FB_ATY128" = "m" -o \
-	      "$CONFIG_FB_RIVA" = "m" -o \
+	      "$CONFIG_FB_RIVA" = "m" -o "$CONFIG_FB_3DFX" = "m" -o \
 	      "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_CYBER2000" = "m" -o \
 	      "$CONFIG_FB_SA1100" = "m" -o "$CONFIG_FB_SIS" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB8 m
@@ -263,7 +263,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	      "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
 	      "$CONFIG_FB_VIRTUAL" = "m" -o "$CONFIG_FB_TBOX" = "m" -o \
-	      "$CONFIG_FB_Q40" = "m" -o \
+	      "$CONFIG_FB_Q40" = "m" -o "$CONFIG_FB_3DFX" = "m" -o \
 	      "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
 	      "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_CYBER" = "m" -o \
 	      "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
@@ -306,6 +306,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	      "$CONFIG_FB_TGA" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
 	      "$CONFIG_FB_MATROX" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
 	      "$CONFIG_FB_RIVA" = "m" -o "$CONFIG_FB_ATY128" = "m" -o \
+	      "$CONFIG_FB_3DFX" = "m" -o \
 	      "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_SIS" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB32 m
 	 fi

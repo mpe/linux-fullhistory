@@ -489,12 +489,8 @@ sys32_execve(abi64_no_regargs, struct pt_regs regs)
 	 *  `munmap' if the `execve' failes.
 	 */
 	down(&current->mm->mmap_sem);
-	lock_kernel();
-
 	av = (char **) do_mmap_pgoff(0, 0, len, PROT_READ | PROT_WRITE,
 				     MAP_PRIVATE | MAP_ANONYMOUS, 0);
-
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (IS_ERR(av))

@@ -352,9 +352,9 @@ static void matroxfb_ti3026_cursor(struct display* p, int mode, int x, int y) {
 
 	if (mode == CM_ERASE) {
 		if (ACCESS_FBINFO(cursor.state) != CM_ERASE) {
+			del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 			matroxfb_DAC_lock_irqsave(flags);
 			ACCESS_FBINFO(cursor.state) = CM_ERASE;
-			del_timer(&ACCESS_FBINFO(cursor.timer));
 			outTi3026(PMINFO TVP3026_XCURCTRL, ACCESS_FBINFO(currenthw->DACreg[POS3026_XCURCTRL]));
 			matroxfb_DAC_unlock_irqrestore(flags);
 		}
@@ -367,6 +367,7 @@ static void matroxfb_ti3026_cursor(struct display* p, int mode, int x, int y) {
 	y -= p->var.yoffset;
 	if (p->var.vmode & FB_VMODE_DOUBLE)
 		y *= 2;
+	del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 	matroxfb_DAC_lock_irqsave(flags);
 	if ((x != ACCESS_FBINFO(cursor.x)) || (y != ACCESS_FBINFO(cursor.y)) || ACCESS_FBINFO(cursor.redraw)) {
 		ACCESS_FBINFO(cursor.redraw) = 0;

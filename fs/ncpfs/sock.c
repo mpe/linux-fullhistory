@@ -79,15 +79,11 @@ static int _send(struct socket *sock, const void *buff, int len)
 	return err;
 }
 
-#define NCP_SLACK_SPACE 1024
-
 static int do_ncp_rpc_call(struct ncp_server *server, int size,
 		struct ncp_reply_header* reply_buf, int max_reply_size)
 {
 	struct file *file;
-	struct inode *inode;
 	struct socket *sock;
-	mm_segment_t fs;
 	int result;
 	char *start = server->packet;
 	poll_table wait_table;
@@ -98,8 +94,6 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 	int major_timeout_seen;
 	int acknowledge_seen;
 	int n;
-	sigset_t old_set;
-	unsigned long mask, flags;
 
 	/* We have to check the result, so store the complete header */
 	struct ncp_request_header request =
@@ -108,13 +102,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 	struct ncp_reply_header reply;
 
 	file = server->ncp_filp;
-	inode = file->f_dentry->d_inode;
-	sock = &inode->u.socket_i;
-	/* N.B. this isn't needed ... check socket type? */
-	if (!sock) {
-		printk(KERN_ERR "ncp_rpc_call: socki_lookup failed\n");
-		return -EBADF;
-	}
+	sock = &file->f_dentry->d_inode->u.socket_i;
 
 	init_timeout = server->m.time_out;
 	max_timeout = NCP_MAX_RPC_TIMEOUT;
@@ -122,26 +110,6 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 	major_timeout_seen = 0;
 	acknowledge_seen = 0;
 
-	spin_lock_irqsave(&current->sigmask_lock, flags);
-	old_set = current->blocked;
-	mask = sigmask(SIGKILL) | sigmask(SIGSTOP);
-	if (server->m.flags & NCP_MOUNT_INTR) {
-		/* FIXME: This doesn't seem right at all.  So, like,
-		   we can't handle SIGINT and get whatever to stop?
-		   What if we've blocked it ourselves?  What about
-		   alarms?  Why, in fact, are we mucking with the
-		   sigmask at all? -- r~ */
-		if (current->sig->action[SIGINT - 1].sa.sa_handler == SIG_DFL)
-			mask |= sigmask(SIGINT);
-		if (current->sig->action[SIGQUIT - 1].sa.sa_handler == SIG_DFL)
-			mask |= sigmask(SIGQUIT);
-	}
-	siginitsetinv(&current->blocked, mask);
-	recalc_sigpending(current);
-	spin_unlock_irqrestore(&current->sigmask_lock, flags);
-
-	fs = get_fs();
-	set_fs(get_ds());
 	for (n = 0, timeout = init_timeout;; n++, timeout <<= 1) {
 		/*
 		DDPRINTK("ncpfs: %08lX:%02X%02X%02X%02X%02X%02X:%04X\n",
@@ -289,13 +257,167 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 		result = -EIO;
 	}
 
-	spin_lock_irqsave(&current->sigmask_lock, flags);
-	current->blocked = old_set;
-	recalc_sigpending(current);
-	spin_unlock_irqrestore(&current->sigmask_lock, flags);
-	
-	set_fs(fs);
 	return result;
+}
+
+static int do_tcp_rcv(struct ncp_server *server, void *buffer, size_t len) {
+	poll_table wait_table;
+	struct poll_table_entry entry;
+	struct file *file;
+	struct socket *sock;
+	int init_timeout;
+	size_t dataread;
+	int result = 0;
+	
+	file = server->ncp_filp;
+	sock = &file->f_dentry->d_inode->u.socket_i;
+	
+	dataread = 0;
+
+	init_timeout = server->m.time_out * 20;
+	
+	/* hard-mounted volumes have no timeout, except connection close... */
+	if (!(server->m.flags & NCP_MOUNT_SOFT))
+		init_timeout = 0x7FFF0000;
+
+	while (len) {
+		wait_table.nr = 0;
+		wait_table.entry = &entry;
+		/* mb() is not necessary because ->poll() will serialize
+		   instructions adding the wait_table waitqueues in the
+		   waitqueue-head before going to calculate the mask-retval. */
+		__set_current_state(TASK_INTERRUPTIBLE);
+		if (!(sock->ops->poll(file, sock, &wait_table) & POLLIN)) {
+			init_timeout = schedule_timeout(init_timeout);
+			remove_wait_queue(entry.wait_address, &entry.wait);
+			fput(file);
+			current->state = TASK_RUNNING;
+			if (signal_pending(current)) {
+				return -ERESTARTSYS;
+			}
+			if (!init_timeout) {
+				return -EIO;
+			}
+		} else if (wait_table.nr) {
+			remove_wait_queue(entry.wait_address, &entry.wait);
+			fput(file);
+		}
+		current->state = TASK_RUNNING;
+
+		result = _recv(sock, buffer, len, MSG_DONTWAIT);
+		if (result < 0) {
+			if (result == -EAGAIN) {
+				DDPRINTK("ncpfs: tcp: bad select ready\n");
+				continue;
+			}
+			return result;
+		}
+		if (result == 0) {
+			printk(KERN_ERR "ncpfs: tcp: EOF on socket\n");
+			return -EIO;
+		}
+		if (result > len) {
+			printk(KERN_ERR "ncpfs: tcp: bug in recvmsg\n");
+			return -EIO;			
+		}
+		dataread += result;
+		buffer += result;
+		len -= result;
+	}
+	return 0;
+}	
+
+#define NCP_TCP_XMIT_MAGIC	(0x446D6454)
+#define NCP_TCP_XMIT_VERSION	(1)
+#define NCP_TCP_RCVD_MAGIC	(0x744E6350)
+
+static int do_ncp_tcp_rpc_call(struct ncp_server *server, int size,
+		struct ncp_reply_header* reply_buf, int max_reply_size)
+{
+	struct file *file;
+	struct socket *sock;
+	int result;
+	struct iovec iov[2];
+	struct msghdr msg;
+	struct scm_cookie scm;
+	__u32 ncptcp_rcvd_hdr[2];
+	__u32 ncptcp_xmit_hdr[4];
+	int   datalen;
+
+	/* We have to check the result, so store the complete header */
+	struct ncp_request_header request =
+	*((struct ncp_request_header *) (server->packet));
+
+	file = server->ncp_filp;
+	sock = &file->f_dentry->d_inode->u.socket_i;
+	
+	ncptcp_xmit_hdr[0] = htonl(NCP_TCP_XMIT_MAGIC);
+	ncptcp_xmit_hdr[1] = htonl(size + 16);
+	ncptcp_xmit_hdr[2] = htonl(NCP_TCP_XMIT_VERSION);
+	ncptcp_xmit_hdr[3] = htonl(max_reply_size + 8);
+
+	DDPRINTK("ncpfs: req.typ: %04X, con: %d, "
+		 "seq: %d",
+		 request.type,
+		 (request.conn_high << 8) + request.conn_low,
+		 request.sequence);
+	DDPRINTK(" func: %d\n",
+		 request.function);
+
+	iov[1].iov_base = (void *) server->packet;
+	iov[1].iov_len = size;
+	iov[0].iov_base = ncptcp_xmit_hdr;
+	iov[0].iov_len = 16;
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_control = NULL;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 2;
+	msg.msg_flags = MSG_NOSIGNAL;
+
+	result = scm_send(sock, &msg, &scm);
+	if (result < 0) {
+		return result;
+	}
+	result = sock->ops->sendmsg(sock, &msg, size + 16, &scm);
+	scm_destroy(&scm);
+	if (result < 0) {
+		printk(KERN_ERR "ncpfs: tcp: Send failed: %d\n", result);
+		return result;
+	}
+rstrcv:
+	result = do_tcp_rcv(server, ncptcp_rcvd_hdr, 8);
+	if (result)
+		return result;
+	if (ncptcp_rcvd_hdr[0] != htonl(NCP_TCP_RCVD_MAGIC)) {
+		printk(KERN_ERR "ncpfs: tcp: Unexpected reply type %08X\n", ntohl(ncptcp_rcvd_hdr[0]));
+		return -EIO;
+	}
+	datalen = ntohl(ncptcp_rcvd_hdr[1]);
+	if (datalen < 8 + sizeof(*reply_buf) || datalen > max_reply_size + 8) {
+		printk(KERN_ERR "ncpfs: tcp: Unexpected reply len %d\n", datalen);
+		return -EIO;
+	}
+	datalen -= 8;
+	result = do_tcp_rcv(server, reply_buf, datalen);
+	if (result)
+		return result;
+	if (reply_buf->type != NCP_REPLY) {
+		DDPRINTK("ncpfs: tcp: Unexpected NCP type %02X\n", reply_buf->type);
+		goto rstrcv;
+	}
+	if (request.type == NCP_ALLOC_SLOT_REQUEST)
+		return datalen;
+	if (reply_buf->sequence != request.sequence) {
+		printk(KERN_ERR "ncpfs: tcp: Bad sequence number\n");
+		return -EIO;
+	}
+	if ((reply_buf->conn_low != request.conn_low) ||
+	    (reply_buf->conn_high != request.conn_high)) {
+		printk(KERN_ERR "ncpfs: tcp: Connection number mismatch\n");
+		return -EIO;
+	}
+	return datalen;
 }
 
 /*
@@ -305,6 +427,8 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 static int ncp_do_request(struct ncp_server *server, int size,
 		void* reply, int max_reply_size)
 {
+	struct file *file;
+	struct socket *sock;
 	int result;
 
 	if (server->lock == 0) {
@@ -320,7 +444,50 @@ static int ncp_do_request(struct ncp_server *server, int size,
 		sign_packet(server, &size);
 	}
 #endif /* CONFIG_NCPFS_PACKET_SIGNING */
-	result = do_ncp_rpc_call(server, size, reply, max_reply_size);
+	file = server->ncp_filp;
+	sock = &file->f_dentry->d_inode->u.socket_i;
+	/* N.B. this isn't needed ... check socket type? */
+	if (!sock) {
+		printk(KERN_ERR "ncp_rpc_call: socki_lookup failed\n");
+		result = -EBADF;
+	} else {
+		mm_segment_t fs;
+		sigset_t old_set;
+		unsigned long mask, flags;
+
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		old_set = current->blocked;
+		mask = sigmask(SIGKILL) | sigmask(SIGSTOP);
+		if (server->m.flags & NCP_MOUNT_INTR) {
+			/* FIXME: This doesn't seem right at all.  So, like,
+			   we can't handle SIGINT and get whatever to stop?
+			   What if we've blocked it ourselves?  What about
+			   alarms?  Why, in fact, are we mucking with the
+			   sigmask at all? -- r~ */
+			if (current->sig->action[SIGINT - 1].sa.sa_handler == SIG_DFL)
+				mask |= sigmask(SIGINT);
+			if (current->sig->action[SIGQUIT - 1].sa.sa_handler == SIG_DFL)
+				mask |= sigmask(SIGQUIT);
+		}
+		siginitsetinv(&current->blocked, mask);
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+		
+		fs = get_fs();
+		set_fs(get_ds());
+
+		if (sock->type == SOCK_STREAM)
+			result = do_ncp_tcp_rpc_call(server, size, reply, max_reply_size);
+		else
+			result = do_ncp_rpc_call(server, size, reply, max_reply_size);
+
+		set_fs(fs);
+
+		spin_lock_irqsave(&current->sigmask_lock, flags);
+		current->blocked = old_set;
+		recalc_sigpending(current);
+		spin_unlock_irqrestore(&current->sigmask_lock, flags);
+	}
 
 	DDPRINTK("do_ncp_rpc_call returned %d\n", result);
 
@@ -424,12 +591,6 @@ int ncp_disconnect(struct ncp_server *server)
 
 void ncp_lock_server(struct ncp_server *server)
 {
-#if 0
-	/* For testing, only 1 process */
-	if (server->lock != 0) {
-		DPRINTK("ncpfs: server locked!!!\n");
-	}
-#endif
 	down(&server->sem);
 	if (server->lock)
 		printk(KERN_WARNING "ncp_lock_server: was locked!\n");

@@ -102,6 +102,7 @@
 #ifdef CONFIG_VT
 extern void con_init_devfs (void);
 #endif
+extern int rio_init(void);
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)
@@ -2028,7 +2029,7 @@ void tty_unregister_devfs (struct tty_driver *driver, unsigned minor)
 	tty.driver = *driver;
 	tty.device = MKDEV(driver->major, minor);
 	
-	handle = devfs_find_handle (NULL, tty_name (&tty, buf), 0,
+	handle = devfs_find_handle (NULL, tty_name (&tty, buf),
 				    driver->major, minor,
 				    DEVFS_SPECIAL_CHR, 0);
 	devfs_unregister (handle);

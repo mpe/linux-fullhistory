@@ -152,6 +152,7 @@ endif
 
 DRIVERS-$(CONFIG_SOUND) += drivers/sound/sounddrivers.o
 DRIVERS-$(CONFIG_PCI) += drivers/pci/pci.a
+DRIVERS-$(CONFIG_MTD) += drivers/mtd/mtdlink.o
 DRIVERS-$(CONFIG_PCMCIA) += drivers/pcmcia/pcmcia.o
 DRIVERS-$(CONFIG_PCMCIA_NETCARD) += drivers/net/pcmcia/pcmcia_net.o
 DRIVERS-$(CONFIG_PCMCIA_CHRDEV) += drivers/char/pcmcia/pcmcia_char.o
@@ -332,6 +333,7 @@ modules_install:
 	if [ -f USB_STORAGE_MODULES ]; then inst_mod USB_STORAGE_MODULES   usb;   fi; \
 	if [ -f USB_SERIAL_MODULES   ]; then inst_mod USB_SERIAL_MODULES   usb;   fi; \
 	if [ -f IEEE1394_MODULES ]; then inst_mod IEEE1394_MODULES ieee1394; fi; \
+	if [ -f MTD_MODULES ]; then inst_mod MTD_MODULES     mtd;   fi; \
 	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
 	if [ -f PCMCIA_NET_MODULES ]; then inst_mod PCMCIA_NET_MODULES pcmcia; fi; \
 	if [ -f PCMCIA_CHAR_MODULES ]; then inst_mod PCMCIA_CHAR_MODULES pcmcia; fi; \

@@ -13,6 +13,8 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/param.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include "autofs_i.h"
 
 static int autofs_root_readdir(struct file *,void *,filldir_t);
@@ -140,28 +142,39 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
  */
 static int autofs_revalidate(struct dentry * dentry, int flags)
 {
-	struct inode * dir = dentry->d_parent->d_inode;
-	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
+	struct inode * dir;
+	struct autofs_sb_info *sbi;
 	struct autofs_dir_ent *ent;
+	int res;
+
+	lock_kernel();
+	dir = dentry->d_parent->d_inode;
+	sbi = autofs_sbi(dir->i_sb);
 
 	/* Pending dentry */
 	if ( dentry->d_flags & DCACHE_AUTOFS_PENDING ) {
 		if (autofs_oz_mode(sbi))
-			return 1;
+			res = 1;
 		else
-			return try_to_fill_dentry(dentry, dir->i_sb, sbi);
+			res = try_to_fill_dentry(dentry, dir->i_sb, sbi);
+		unlock_kernel();
+		return res;
 	}
 
 	/* Negative dentry.. invalidate if "old" */
-	if (!dentry->d_inode)
+	if (!dentry->d_inode) {
+		unlock_kernel();
 		return (dentry->d_time - jiffies <= AUTOFS_NEGATIVE_TIMEOUT);
+	}
 		
 	/* Check for a non-mountpoint directory */
 	if ( S_ISDIR(dentry->d_inode->i_mode) && !d_mountpoint(dentry) ) {
 		if (autofs_oz_mode(sbi))
-			return 1;
+			res = 1;
 		else
-			return try_to_fill_dentry(dentry, dir->i_sb, sbi);
+			res = try_to_fill_dentry(dentry, dir->i_sb, sbi);
+		unlock_kernel();
+		return res;
 	}
 
 	/* Update the usage list */
@@ -170,6 +183,7 @@ static int autofs_revalidate(struct dentry * dentry, int flags)
 		if ( ent )
 			autofs_update_usage(&sbi->dirhash,ent);
 	}
+	unlock_kernel();
 	return 1;
 }
 

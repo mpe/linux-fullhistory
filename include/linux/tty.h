@@ -345,7 +345,6 @@ extern int kmsg_redirect;
 extern void con_init(void);
 extern void console_init(void);
 
-extern int rs_init(void);
 extern int lp_init(void);
 extern int pty_init(void);
 extern void tty_init(void);

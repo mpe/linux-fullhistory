@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.41 2000/06/22 11:42:25 davem Exp $
+/* $Id: sys_sparc.c,v 1.42 2000/06/26 23:20:24 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -92,14 +92,12 @@ asmlinkage int sparc_pipe(struct pt_regs *regs)
 	int fd[2];
 	int error;
 
-	lock_kernel();
 	error = do_pipe(fd);
 	if (error)
 		goto out;
 	regs->u_regs[UREG_I1] = fd[1];
 	error = fd[0];
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -227,8 +225,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	len = PAGE_ALIGN(len);
 	retval = -EINVAL;
 
-	lock_kernel();
-
 	if (current->thread.flags & SPARC_FLAG_32BIT) {
 		if (len > 0xf0000000UL ||
 		    ((flags & MAP_FIXED) && addr > 0xf0000000UL - len))
@@ -245,7 +241,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	up(&current->mm->mmap_sem);
 
 out_putf:
-	unlock_kernel();
 	if (file)
 		fput(file);
 out:

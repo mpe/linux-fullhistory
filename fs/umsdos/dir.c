@@ -96,9 +96,8 @@ static int umsdos_dir_once (	void *buf,
  */
  
 static int umsdos_readdir_x (struct inode *dir, struct file *filp,
-				void *dirbuf, int internal_read,
-				struct umsdos_dirent *u_entry,
-				int follow_hlink, filldir_t filldir)
+				void *dirbuf, struct umsdos_dirent *u_entry,
+				filldir_t filldir)
 {
 	struct dentry *demd;
 	off_t start_fpos;
@@ -107,8 +106,7 @@ static int umsdos_readdir_x (struct inode *dir, struct file *filp,
 
 	umsdos_startlookup (dir);
 
-	if (filp->f_pos == UMSDOS_SPECIAL_DIRFPOS &&
-	    dir == pseudo_root && !internal_read) {
+	if (filp->f_pos == UMSDOS_SPECIAL_DIRFPOS && dir == pseudo_root) {
 
 		/*
 		 * We don't need to simulate this pseudo directory
@@ -218,7 +216,7 @@ Printk (("Found %s/%s, ino=%ld, flags=%x\n",
 dret->d_parent->d_name.name, info.fake.fname, dret->d_inode->i_ino,
 entry.flags));
 		/* check whether to resolve a hard-link */
-		if ((entry.flags & UMSDOS_HLINK) && follow_hlink &&
+		if ((entry.flags & UMSDOS_HLINK) &&
 		    !inode->u.umsdos_i.i_is_hlink) {
 			dret = umsdos_solve_hlink (dret);
 			ret = PTR_ERR(dret);
@@ -239,8 +237,7 @@ dret->d_parent->d_name.name, dret->d_name.name);
 		 * infinite recursion (/DOS/linux/DOS/linux/...) while
 		 * walking the file system.
 		 */
-		if (inode != pseudo_root &&
-		    (internal_read || !(entry.flags & UMSDOS_HIDDEN))) {
+		if (inode != pseudo_root && !(entry.flags & UMSDOS_HIDDEN)) {
 			if (filldir (dirbuf, entry.name, entry.name_len,
 				 cur_f_pos, inode->i_ino) < 0) {
 				new_filp.f_pos = cur_f_pos;
@@ -317,7 +314,7 @@ static int UMSDOS_readdir (struct file *filp, void *dirbuf, filldir_t filldir)
 		struct umsdos_dirent entry;
 
 		bufk.count = 0;
-		ret = umsdos_readdir_x (dir, filp, &bufk, 0, &entry, 1, 
+		ret = umsdos_readdir_x (dir, filp, &bufk, &entry, 
 					umsdos_dir_once);
 		if (bufk.count == 0)
 			break;
@@ -650,10 +647,15 @@ out_fail:
  */
 char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 {
-	struct dentry * old_root = current->fs->root;
+	struct dentry * old_root;
 	char * path;
 
+	read_lock(&current->fs->lock);
+	old_root = dget(current->fs->root);
+	read_unlock(&current->fs->lock);
+	spin_lock(&dcache_lock);
 	path = __d_path(dentry, NULL, dentry->d_sb->s_root, NULL, buffer, len);
+	spin_unlock(&dcache_lock);
 
 	if (*path == '/')
 		path++; /* skip leading '/' */
@@ -664,6 +666,7 @@ char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 		path -= (UMSDOS_PSDROOT_LEN+1);
 		memcpy(path, UMSDOS_PSDROOT_NAME, UMSDOS_PSDROOT_LEN);
 	}
+	dput(old_root);
 
 	return path;
 }

@@ -1529,7 +1529,7 @@ int __init scsi_dev_init(void)
 
 	/* Yes we're here... */
 
-        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", 4, NULL);
+        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", NULL);
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
@@ -2646,7 +2646,7 @@ int init_module(void)
 
 	scsi_loadable_module_flag = 1;
 
-        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", 4, NULL);
+        scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", NULL);
         scsi_host_no_init (scsihosts);
 	/*
 	 * This is where the processing takes place for most everything

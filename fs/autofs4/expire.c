@@ -22,6 +22,7 @@ static int is_tree_busy(struct vfsmount *mnt)
 	struct list_head *next;
 	int count;
 
+	spin_lock(&dcache_lock);
 	count = atomic_read(&mnt->mnt_count);
 repeat:
 	next = this_parent->mnt_mounts.next;
@@ -38,8 +39,10 @@ resume:
 			goto repeat;
 		}
 		/* root is busy if any leaf is busy */
-		if (atomic_read(&p->mnt_count) > 1)
+		if (atomic_read(&p->mnt_count) > 1) {
+			spin_unlock(&dcache_lock);
 			return 1;
+		}
 	}
 	/*
 	 * All done at this level ... ascend and resume the search.
@@ -49,6 +52,7 @@ resume:
 		this_parent = this_parent->mnt_parent;
 		goto resume;
 	}
+	spin_unlock(&dcache_lock);
 
 	DPRINTK(("is_tree_busy: count=%d\n", count));
 	return count != 0; /* remaining users? */
@@ -77,6 +81,7 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 
 	timeout = sbi->exp_timeout;
 
+	spin_lock(&dcache_lock);
 	for(tmp = root->d_subdirs.next;
 	    tmp != &root->d_subdirs; 
 	    tmp = tmp->next) {
@@ -110,6 +115,7 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 		}
 		p = mntget(mnt);
 		d = dget(dentry);
+		spin_unlock(&dcache_lock);
 		while(d_mountpoint(d) && follow_down(&p, &d))
 			;
 
@@ -119,13 +125,17 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 			DPRINTK(("autofs_expire: returning %p %.*s\n",
 				 dentry, dentry->d_name.len, dentry->d_name.name));
 			/* Start from here next time */
+			spin_lock(&dcache_lock);
 			list_del(&root->d_subdirs);
 			list_add(&root->d_subdirs, &dentry->d_child);
+			spin_unlock(&dcache_lock);
 			return dentry;
 		}
 		dput(d);
 		mntput(p);
+		spin_lock(&dcache_lock);
 	}
+	spin_unlock(&dcache_lock);
 
 	return NULL;
 }

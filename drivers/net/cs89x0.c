@@ -1558,7 +1558,10 @@ init_module(void)
 
 #if DEBUGGING
 	net_debug = debug;
+#else
+	debug = 0;
 #endif
+
 	dev_cs89x0.irq = irq;
 	dev_cs89x0.base_addr = io;
 

@@ -89,7 +89,7 @@ void	poly_tan(FPU_REG *st0_ptr)
 	{
 	  FPU_settag0(TAG_Valid);
 	  significand(st0_ptr) = 0x8a51e04daabda360LL;
-	  setexponent16(st0_ptr, 0x41 + EXTENDED_Ebias | SIGN_Negative);
+	  setexponent16(st0_ptr, (0x41 + EXTENDED_Ebias) | SIGN_Negative);
 	  return;
 	}
 

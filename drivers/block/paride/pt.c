@@ -312,7 +312,7 @@ int pt_init (void)      /* preliminary initialisation */
                 return -1;
         }
 
-	devfs_handle = devfs_mk_dir (NULL, "pt", 2, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "pt", NULL);
 	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
 			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &pt_fops, NULL);

@@ -1007,7 +1007,7 @@ int slm_init( void )
 	BufferP = SLMBuffer;
 	SLMState = IDLE;
 	
-	devfs_handle = devfs_mk_dir (NULL, "slm", 3, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "slm", NULL);
 	devfs_register_series (devfs_handle, "%u", MAX_SLM, DEVFS_FL_DEFAULT,
 			       MAJOR_NR, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &slm_fops, NULL);

@@ -1029,7 +1029,7 @@ int __init bpp_init(void)
 		instances[idx].opened = 0;
 		probeLptPort(idx);
 	}
-	devfs_handle = devfs_mk_dir (NULL, "bpp", 3, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "bpp", NULL);
 	devfs_register_series (devfs_handle, "%u", BPP_NO, DEVFS_FL_DEFAULT,
 			       BPP_MAJOR, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &bpp_fops, NULL);

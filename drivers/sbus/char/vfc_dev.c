@@ -672,7 +672,7 @@ static int vfc_probe(void)
 		kfree(vfc_dev_lst);
 		return -EIO;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "vfc", 3, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "vfc", NULL);
 
 	instance = 0;
 	for_all_sbusdev(sdev, sbus) {

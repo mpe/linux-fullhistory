@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
+#include <linux/smp_lock.h>
 
 #include "rock.h"
 
@@ -466,6 +467,7 @@ static int rock_ridge_symlink_readpage(struct file *file, struct page *page)
 		panic ("Cannot have symlink with high sierra variant of iso filesystem\n");
 
 	block = inode->i_ino >> bufbits;
+	lock_kernel();
 	bh = bread(inode->i_dev, block, bufsize);
 	if (!bh)
 		goto out_noread;
@@ -518,6 +520,7 @@ static int rock_ridge_symlink_readpage(struct file *file, struct page *page)
 		goto fail;
 	brelse(bh);
 	*rpnt = '\0';
+	unlock_kernel();
 	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
@@ -535,6 +538,7 @@ static int rock_ridge_symlink_readpage(struct file *file, struct page *page)
 	printk("symlink spans iso9660 blocks\n");
       fail:
 	brelse(bh);
+	unlock_kernel();
 	SetPageError(page);
 	kunmap(page);
 	UnlockPage(page);

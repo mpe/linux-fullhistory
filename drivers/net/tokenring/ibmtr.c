@@ -295,7 +295,9 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	struct tok_info *ti=0;
 	__u32 cd_chanid;
 	unsigned char *tchanid, ctemp;
+#ifndef PCMCIA
 	unsigned long timeout;
+#endif
 
 #ifndef MODULE
 #ifndef PCMCIA

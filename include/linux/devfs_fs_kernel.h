@@ -58,15 +58,12 @@ extern devfs_handle_t devfs_register (devfs_handle_t dir, const char *name,
 				      unsigned int major, unsigned int minor,
 				      umode_t mode, void *ops, void *info);
 extern void devfs_unregister (devfs_handle_t de);
-extern int devfs_mk_symlink (devfs_handle_t dir,
-			     const char *name, unsigned int namelen,
-			     unsigned int flags,
-			     const char *link, unsigned int linklength,
+extern int devfs_mk_symlink (devfs_handle_t dir, const char *name,
+			     unsigned int flags, const char *link,
 			     devfs_handle_t *handle, void *info);
 extern devfs_handle_t devfs_mk_dir (devfs_handle_t dir, const char *name,
-				    unsigned int namelen, void *info);
-extern devfs_handle_t devfs_find_handle (devfs_handle_t dir,
-					 const char *name,unsigned int namelen,
+				    void *info);
+extern devfs_handle_t devfs_find_handle (devfs_handle_t dir, const char *name,
 					 unsigned int major,unsigned int minor,
 					 char type, int traverse_symlinks);
 extern int devfs_get_flags (devfs_handle_t de, unsigned int *flags);
@@ -117,23 +114,19 @@ static inline void devfs_unregister (devfs_handle_t de)
 {
     return;
 }
-static inline int devfs_mk_symlink (devfs_handle_t dir,
-				    const char *name, unsigned int namelen,
-				    unsigned int flags,
-				    const char *link, unsigned int linklength,
+static inline int devfs_mk_symlink (devfs_handle_t dir, const char *name,
+				    unsigned int flags, const char *link,
 				    devfs_handle_t *handle, void *info)
 {
     return 0;
 }
 static inline devfs_handle_t devfs_mk_dir (devfs_handle_t dir,
-					   const char *name,
-					   unsigned int namelen, void *info)
+					   const char *name, void *info)
 {
     return NULL;
 }
 static inline devfs_handle_t devfs_find_handle (devfs_handle_t dir,
 						const char *name,
-						unsigned int namelen,
 						unsigned int major,
 						unsigned int minor,
 						char type,

@@ -222,19 +222,17 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 {
 	struct z8530_dev *dev;
 	struct sv11_device *sv;
-	int i;
 	unsigned long flags;
 	
 	/*
 	 *	Get the needed I/O space
 	 */
 	 
-	if(check_region(iobase, 8))
+	if(!request_region(iobase, 8, "Comtrol SV11"))
 	{	
 		printk(KERN_WARNING "hostess: I/O 0x%X already in use.\n", iobase);
 		return NULL;
 	}
-	request_region(iobase, 8, "Comtrol SV11");
 	
 	sv=(struct sv11_device *)kmalloc(sizeof(struct sv11_device), GFP_KERNEL);
 	if(!sv)

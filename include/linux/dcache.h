@@ -1,10 +1,10 @@
 #ifndef __LINUX_DCACHE_H
 #define __LINUX_DCACHE_H
 
+#ifdef __KERNEL__
+
 #include <asm/atomic.h>
 #include <linux/mount.h>
-
-#ifdef __KERNEL__
 
 /*
  * linux/include/linux/dcache.h
@@ -57,7 +57,7 @@ static __inline__ unsigned int full_name_hash(const unsigned char * name, unsign
 #define DNAME_INLINE_LEN 16
 
 struct dentry {
-	int d_count;
+	atomic_t d_count;
 	unsigned int d_flags;
 	struct inode  * d_inode;	/* Where the name belongs to - NULL is negative */
 	struct dentry * d_parent;	/* parent directory */
@@ -92,7 +92,16 @@ struct dentry_operations {
  * might be a negative dentry which has no information associated with
  * it */
 
-
+/*
+locking rules:
+		big lock	dcache_lock	may block
+d_revalidate:	no		no		yes
+d_hash		no		no		yes
+d_compare:	no		yes		no
+d_delete:	no		yes		no
+d_release:	no		no		yes
+d_iput:		no		no		yes
+ */
 
 /* d_flags entries */
 #define DCACHE_AUTOFS_PENDING 0x0001    /* autofs: "under construction" */
@@ -106,6 +115,8 @@ struct dentry_operations {
 					 * If this dentry points to a directory, then
 					 * s_nfsd_free_path semaphore will be down
 					 */
+
+extern spinlock_t dcache_lock;
 
 /**
  * d_drop - drop a dentry
@@ -126,8 +137,10 @@ struct dentry_operations {
 
 static __inline__ void d_drop(struct dentry * dentry)
 {
+	spin_lock(&dcache_lock);
 	list_del(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_hash);
+	spin_unlock(&dcache_lock);
 }
 
 static __inline__ int dname_external(struct dentry *d)
@@ -200,10 +213,6 @@ extern int d_validate(struct dentry *, struct dentry *, unsigned int, unsigned i
 
 extern char * __d_path(struct dentry *, struct vfsmount *, struct dentry *,
 	struct vfsmount *, char *, int);
-/* write full pathname into buffer and return start of pathname */
-#define d_path(dentry, vfsmnt, buffer, buflen) \
-	__d_path(dentry, vfsmnt, current->fs->root, current->fs->rootmnt, \
-	buffer, buflen)
   
 /* Allocation counts.. */
 
@@ -219,7 +228,7 @@ extern char * __d_path(struct dentry *, struct vfsmount *, struct dentry *,
 static __inline__ struct dentry * dget(struct dentry *dentry)
 {
 	if (dentry)
-		dentry->d_count++;
+		atomic_inc(&dentry->d_count);
 	return dentry;
 }
 
@@ -235,13 +244,17 @@ static __inline__ int d_unhashed(struct dentry *dentry)
 	return list_empty(&dentry->d_hash);
 }
 
-extern void dput(struct dentry *);
+extern void __dput(struct dentry *);
+static __inline__ void dput(struct dentry *dentry)
+{
+	if (dentry && atomic_dec_and_test(&dentry->d_count))
+		__dput(dentry);
+}
 
 static __inline__ int d_mountpoint(struct dentry *dentry)
 {
 	return !list_empty(&dentry->d_vfsmnt);
 }
-
 
 #endif /* __KERNEL__ */
 

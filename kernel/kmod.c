@@ -32,6 +32,8 @@ static inline void
 use_init_fs_context(void)
 {
 	struct fs_struct *our_fs, *init_fs;
+	struct dentry *root, *pwd;
+	struct vfsmount *rootmnt, *pwdmnt;
 
 	/*
 	 * Make modprobe's fs context be a copy of init's.
@@ -49,23 +51,35 @@ use_init_fs_context(void)
 	 * We created the exec_modprobe thread without CLONE_FS,
 	 * so we can update the fields in our fs context freely.
 	 */
-	lock_kernel();
 
-	our_fs = current->fs;
 	init_fs = init_task.fs;
+	read_lock(&init_fs->lock);
+	rootmnt = mntget(init_fs->rootmnt);
+	root = dget(init_fs->root);
+	pwdmnt = mntget(init_fs->pwdmnt);
+	pwd = dget(init_fs->pwd);
+	read_unlock(&init_fs->lock);
+
+	/* FIXME - unsafe ->fs access */
+	our_fs = current->fs;
 	our_fs->umask = init_fs->umask;
-	set_fs_root(our_fs, init_fs->rootmnt, init_fs->root);
-	set_fs_pwd(our_fs, init_fs->pwdmnt, init_fs->pwd);
+	set_fs_root(our_fs, rootmnt, root);
+	set_fs_pwd(our_fs, pwdmnt, pwd);
+	write_lock(&our_fs->lock);
 	if (our_fs->altroot) {
 		struct vfsmount *mnt = our_fs->altrootmnt;
 		struct dentry *dentry = our_fs->altroot;
 		our_fs->altrootmnt = NULL;
 		our_fs->altroot = NULL;
+		write_unlock(&our_fs->lock);
 		dput(dentry);
 		mntput(mnt);
-	}
-
-	unlock_kernel();
+	} else 
+		write_unlock(&our_fs->lock);
+	dput(root);
+	mntput(rootmnt);
+	dput(pwd);
+	mntput(pwdmnt);
 }
 
 int exec_usermodehelper(char *program_path, char *argv[], char *envp[])

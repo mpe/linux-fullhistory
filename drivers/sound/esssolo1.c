@@ -273,6 +273,7 @@ static void write_ctrl(struct solo1_state *s, unsigned char reg, unsigned char d
 	write_seq(s, data);
 }
 
+#if 0 /* unused */
 static unsigned char read_ctrl(struct solo1_state *s, unsigned char reg)
 {
         unsigned char r;
@@ -282,6 +283,7 @@ static unsigned char read_ctrl(struct solo1_state *s, unsigned char reg)
 	read_seq(s, &r);
 	return r;
 }
+#endif /* unused */
 
 static void write_mixer(struct solo1_state *s, unsigned char reg, unsigned char data)
 {

@@ -373,7 +373,7 @@ struct mgsl_struct {
 /*
  * The size of the serial xmit buffer is 1 page, or 4096 bytes
  */
-#define SERIAL_XMIT_SIZE 4096
+/* #define SERIAL_XMIT_SIZE 4096 */ /* defined in include/linux/serial.h */
 
 
 /*
@@ -7428,7 +7428,6 @@ BOOLEAN mgsl_memory_test( struct mgsl_struct *info )
 }	/* End Of mgsl_memory_test() */
 
 
-#pragma optimize( "", off )
 /* mgsl_load_pci_memory()
  * 
  * 	Load a large block of data into the PCI shared memory.
@@ -7483,7 +7482,7 @@ void mgsl_load_pci_memory( char* TargetPtr, const char* SourcePtr,
 	for ( Index = 0 ; Index < Intervalcount ; Index++ )
 	{
 		memcpy(TargetPtr, SourcePtr, PCI_LOAD_INTERVAL);
-		Dummy = *((unsigned long *)TargetPtr);
+		Dummy = *((volatile unsigned long *)TargetPtr);
 		TargetPtr += PCI_LOAD_INTERVAL;
 		SourcePtr += PCI_LOAD_INTERVAL;
 	}
@@ -7491,7 +7490,6 @@ void mgsl_load_pci_memory( char* TargetPtr, const char* SourcePtr,
 	memcpy( TargetPtr, SourcePtr, count % PCI_LOAD_INTERVAL );
 
 }	/* End Of mgsl_load_pci_memory() */
-#pragma optimize( "", on )
 
 void mgsl_trace_block(struct mgsl_struct *info,const char* data, int count, int xmit)
 {

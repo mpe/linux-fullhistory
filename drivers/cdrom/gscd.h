@@ -74,11 +74,10 @@
 #define READ_DATA(port, buf, nr) insb(port, buf, nr)
 
 #define SET_TIMER(func, jifs) \
-	((timer_table[GSCD_TIMER].expires = jiffies + jifs), \
-	(timer_table[GSCD_TIMER].fn = func), \
-	(timer_active |= 1<<GSCD_TIMER))
+	((mod_timer(&gscd_timer, jiffies + jifs)), \
+	(gscd_timer.function = func))
 
-#define CLEAR_TIMER		timer_active &= ~(1<<GSCD_TIMER)
+#define CLEAR_TIMER		del_timer_sync(&gscd_timer)
 
 #define MAX_TRACKS		104
 

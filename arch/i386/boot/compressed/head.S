@@ -43,6 +43,7 @@ startup_32:
 	movl %eax,0x000000	# loop forever if it isn't
 	cmpl %eax,0x100000
 	je 1b
+
 /*
  * Initialize eflags.  Some BIOS's leave bits like NT set.  This would
  * confuse the debugger if this code is traced.
@@ -64,10 +65,14 @@ startup_32:
  * Do the decompression, and jump to the new kernel..
  */
 	subl $16,%esp	# place for structure on the stack
-	pushl %esp	# address of structure as first arg
+	movl %esp,%eax
+	pushl %esi	# real mode pointer as second arg
+	pushl %eax	# address of structure as first arg
 	call SYMBOL_NAME(decompress_kernel)
 	orl  %eax,%eax 
 	jnz  3f
+	popl %esi	# discard address
+	popl %esi	# real mode pointer
 	xorl %ebx,%ebx
 	ljmp $(__KERNEL_CS), $0x100000
 
@@ -82,11 +87,14 @@ startup_32:
 	movl $0x1000,%edi
 	movl $move_routine_end,%ecx
 	subl %esi,%ecx
+	addl $3,%ecx
+	shrl $2,%ecx
 	cld
 	rep
-	movsb
+	movsl
 
 	popl %esi	# discard the address
+	popl %ebx	# real mode pointer
 	popl %esi	# low_buffer_start
 	popl %ecx	# lcount
 	popl %edx	# high_buffer_start
@@ -100,18 +108,21 @@ startup_32:
  * if we were high loaded. This _must_ PIC-code !
  */
 move_routine_start:
+	movl %ecx,%ebp
+	shrl $2,%ecx
+	rep
+	movsl
+	movl %ebp,%ecx
+	andl $3,%ecx
 	rep
 	movsb
 	movl %edx,%esi
 	movl %eax,%ecx	# NOTE: rep movsb won't move if %ecx == 0
+	addl $3,%ecx
+	shrl $2,%ecx
 	rep
-	movsb
+	movsl
+	movl %ebx,%esi	# Restore setup pointer
 	xorl %ebx,%ebx
-/*
- * Well, the kernel relies on %esp pointing into low mem,
- * with the decompressor loaded high this is no longer true,
- * so we set esp here.
- */
-	mov  $0x90000,%esp
 	ljmp $(__KERNEL_CS), $0x100000
 move_routine_end:

@@ -275,9 +275,6 @@ extern void imsttfb_of_init(struct device_node *dp);
 #ifdef CONFIG_FB_CT65550
 extern void chips_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CT65550 */
-#ifdef CONFIG_FB_MATROX
-extern int matrox_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_MATROX */
 #ifdef CONFIG_FB_CONTROL
 extern void control_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CONTROL */
@@ -411,12 +408,6 @@ static int __init offb_init_driver(struct device_node *dp)
 	return 1;
     }
 #endif /* CONFIG_FB_CT65550 */
-#ifdef CONFIG_FB_MATROX
-    if (!strncmp(dp->name, "MTRX", 4)) {
-	matrox_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_MATROX */
 #ifdef CONFIG_FB_CONTROL
     if(!strcmp(dp->name, "control")) {
 	control_of_init(dp);

@@ -306,7 +306,7 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 	return s;
 
 out_no_root:
-	printk(KERN_ERR "proc_read_super: get root inode failed\n");
+	printk(KERN_ERR "shm_read_super: get root inode failed\n");
 	iput(root_inode);
 out_unlock:
 	return NULL;
@@ -1136,7 +1136,6 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		up(&shm_ids.sem);
 
 		sprintf (name, SHM_FMT, shmid);
-		lock_kernel();
 		dentry = lookup_one(name, lock_parent(shm_sb->s_root));
 		unlock_dir(shm_sb->s_root);
 		err = PTR_ERR(dentry);
@@ -1153,7 +1152,6 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		}
 		dput (dentry);
 	bad_dentry:
-		unlock_kernel();
 		return err;
 	}
 
@@ -1247,7 +1245,6 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 
 	sprintf (name, SHM_FMT, shmid);
 
-	lock_kernel();
 	mntget(shm_fs_type.kern_mnt);
 	dentry = lookup_one(name, lock_parent(shm_sb->s_root));
 	unlock_dir(shm_sb->s_root);
@@ -1265,7 +1262,6 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  prot, flags, 0);
 	up(&current->mm->mmap_sem);
-	unlock_kernel();
 	if (IS_ERR(*raddr))
 		err = PTR_ERR(*raddr);
 	else
@@ -1277,7 +1273,6 @@ bad_file1:
 	dput(dentry);
 bad_file:
 	mntput(shm_fs_type.kern_mnt);
-	unlock_kernel();
 	if (err == -ENOENT)
 		return -EINVAL;
 	return err;
@@ -1301,7 +1296,6 @@ static int shm_remove_name(int id)
 	char name[SHM_FMT_LEN+1];
 
 	sprintf (name, SHM_FMT, id);
-	lock_kernel();
 	dir = lock_parent(shm_sb->s_root);
 	dentry = lookup_one(name, dir);
 	error = PTR_ERR(dentry);
@@ -1321,7 +1315,6 @@ static int shm_remove_name(int id)
 		dput(dentry);
 	}
 	unlock_dir(dir);
-	unlock_kernel();
 	return error;
 }
 

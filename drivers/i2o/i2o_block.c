@@ -1664,6 +1664,7 @@ int i2o_block_init(void)
 	if(i2o_install_handler(&i2o_block_handler)<0)
 	{
 		unregister_blkdev(MAJOR_NR, "i2o_block");
+		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 		printk(KERN_ERR "i2o_block: unable to register OSM.\n");
 		return -EINVAL;
 	}
@@ -1729,6 +1730,11 @@ void cleanup_module(void)
 	 */
 	if (unregister_blkdev(MAJOR_NR, "i2o_block") != 0)
 		printk("i2o_block: cleanup_module failed\n");
+
+	/*
+	 * free request queue
+	 */
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 
 	if(evt_running) {
 		i = kill_proc(evt_pid, SIGTERM, 1);

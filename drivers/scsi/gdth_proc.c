@@ -1057,7 +1057,6 @@ static int gdth_update_timeout(int hanum, Scsi_Cmnd *scp, int timeout)
     oldto = scp->timeout_per_command;
     scp->timeout_per_command = timeout;
 
-#if LINUX_VERSION_CODE >= 0x02014B
     if (timeout == 0) {
         del_timer(&scp->eh_timeout);
         scp->eh_timeout.data = (unsigned long) NULL;
@@ -1069,17 +1068,5 @@ static int gdth_update_timeout(int hanum, Scsi_Cmnd *scp, int timeout)
         scp->eh_timeout.expires = jiffies + timeout;
         add_timer(&scp->eh_timeout);
     }
-#else
-    if (timeout > 0) {
-        if (timer_table[SCSI_TIMER].expires == 0) {
-            timer_table[SCSI_TIMER].expires = jiffies + timeout;
-            timer_active |= 1 << SCSI_TIMER;
-        } else {
-            if (jiffies + timeout < timer_table[SCSI_TIMER].expires)
-                timer_table[SCSI_TIMER].expires = jiffies + timeout;
-        }
-    }
-#endif
-
     return oldto;
 }

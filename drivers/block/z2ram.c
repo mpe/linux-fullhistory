@@ -399,6 +399,8 @@ cleanup_module( void )
     if ( unregister_blkdev( MAJOR_NR, DEVICE_NAME ) != 0 )
 	printk( KERN_ERR DEVICE_NAME ": unregister of device failed\n");
 
+    blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
+
     if ( current_device != -1 )
     {
 	i = 0;

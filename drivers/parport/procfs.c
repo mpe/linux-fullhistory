@@ -198,7 +198,7 @@ static int do_hardware_modes (ctl_table *table, int write,
 			      size_t *lenp)
 {
 	struct parport *port = (struct parport *)table->extra1;
-	char buffer[20];
+	char buffer[40];
 	int len = 0;
 
 	if (filp->f_pos) {

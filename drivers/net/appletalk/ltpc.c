@@ -1239,6 +1239,7 @@ int __init ltpc_probe(struct net_device *dev)
 	return 0;
 }
 
+#ifndef MODULE
 /* handles "ltpc=io,irq,dma" kernel command lines */
 static int __init ltpc_setup(char *str)
 {
@@ -1270,6 +1271,12 @@ static int __init ltpc_setup(char *str)
 }
 
 __setup("ltpc=", ltpc_setup);
+#endif /* MODULE */
+
+MODULE_PARM(debug, "i");
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(dma, "i");
 
 #ifdef MODULE
 
@@ -1279,12 +1286,7 @@ static struct net_device dev_ltpc = {
 	 	0x0, 0,
 	 	0, 0, 0, NULL, ltpc_probe };
 
-MODULE_PARM(debug, "i");
-MODULE_PARM(io, "i");
-MODULE_PARM(irq, "i");
-MODULE_PARM(dma, "i");
-
-int init_module(void)
+int __init init_module(void)
 {
 	int err, result;
 	
@@ -1306,8 +1308,9 @@ int init_module(void)
 		return 0;
 	}
 }
+#endif
 
-void cleanup_module(void)
+static void __exit ltpc_cleanup(void)
 {
 	long timeout;
 
@@ -1360,5 +1363,5 @@ void cleanup_module(void)
 
 	if(debug&DEBUG_VERBOSE) printk("returning from cleanup_module\n");
 }
-#endif /* MODULE */
 
+module_exit(ltpc_cleanup);

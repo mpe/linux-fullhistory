@@ -83,14 +83,12 @@ sys_pipe (long arg0, long arg1, long arg2, long arg3,
 	int fd[2];
 	int retval;
 
-	lock_kernel();
 	retval = do_pipe(fd);
 	if (retval)
 		goto out;
 	retval = fd[0];
 	regs->r9 = fd[1];
   out:
-	unlock_kernel();
 	return retval;
 }
 
@@ -132,11 +130,7 @@ do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, un
 	}
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
-
 	addr = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (file)

@@ -36,7 +36,6 @@ asmlinkage int sys_pipe(abi64_no_regargs, struct pt_regs regs)
 	int fd[2];
 	int error, res;
 
-	lock_kernel();
 	error = do_pipe(fd);
 	if (error) {
 		res = error;
@@ -45,7 +44,6 @@ asmlinkage int sys_pipe(abi64_no_regargs, struct pt_regs regs)
 	regs.regs[3] = fd[1];
 	res = fd[0];
 out:
-	unlock_kernel();
 	return res;
 }
 
@@ -56,7 +54,6 @@ sys_mmap(unsigned long addr, size_t len, unsigned long prot,
 	struct file * file = NULL;
 	unsigned long error = -EFAULT;
 
-	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
 		file = fget(fd);
@@ -71,7 +68,6 @@ sys_mmap(unsigned long addr, size_t len, unsigned long prot,
         if (file)
                 fput(file);
 out:
-	unlock_kernel();
 
 	return error;
 }

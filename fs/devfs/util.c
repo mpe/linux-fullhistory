@@ -30,6 +30,9 @@
                Changed operations pointer type to void *.
     20000621   Richard Gooch <rgooch@atnf.csiro.au>
                Changed interface to <devfs_register_series>.
+    20000622   Richard Gooch <rgooch@atnf.csiro.au>
+               Took account of interface change to <devfs_mk_symlink>.
+               Took account of interface change to <devfs_mk_dir>.
 */
 #include <linux/module.h>
 #include <linux/init.h>
@@ -97,7 +100,7 @@ void __init devfs_make_root (const char *name)
 	_devfs_convert_name (dest + 2, name + 7, (name[4] == 'h') ? 1 : 0);
     }
     else return;
-    devfs_mk_symlink (NULL, name, 0, DEVFS_FL_DEFAULT, dest, 0, NULL,NULL);
+    devfs_mk_symlink (NULL, name, DEVFS_FL_DEFAULT, dest, NULL, NULL);
 }   /*  End Function devfs_make_root  */
 
 
@@ -114,13 +117,13 @@ void devfs_register_tape (devfs_handle_t de)
     static unsigned int tape_counter = 0;
     static devfs_handle_t tape_dir = NULL;
 
-    if (tape_dir == NULL) tape_dir = devfs_mk_dir (NULL, "tapes", 5, NULL);
+    if (tape_dir == NULL) tape_dir = devfs_mk_dir (NULL, "tapes", NULL);
     parent = devfs_get_parent (de);
     pos = devfs_generate_path (parent, dest + 3, sizeof dest - 3);
     if (pos < 0) return;
     strncpy (dest + pos, "../", 3);
     sprintf (name, "tape%u", tape_counter++);
-    devfs_mk_symlink (tape_dir, name, 0, DEVFS_FL_DEFAULT, dest + pos, 0,
+    devfs_mk_symlink (tape_dir, name, DEVFS_FL_DEFAULT, dest + pos,
 		      &slave, NULL);
     devfs_auto_unregister (de, slave);
 }   /*  End Function devfs_register_tape  */

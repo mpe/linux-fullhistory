@@ -126,8 +126,6 @@ static void bond_set_multicast_list(struct net_device *master)
 		slave->dev->flags = master->flags;
 		slave->dev->set_multicast_list(slave->dev);
 	}
-
-	return 0;
 }
 
 static int bond_enslave(struct net_device *master, struct net_device *dev)
@@ -182,7 +180,7 @@ static int bond_release(struct net_device *master, struct net_device *dev)
 		}
 	}
 
-	return 0;
+	return;
 }
 
 /* It is pretty silly, SIOCSIFHWADDR exists to make this. */

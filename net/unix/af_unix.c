@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.99 2000/06/22 11:42:32 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.100 2000/06/26 23:20:27 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -381,10 +381,8 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 	}
 
 	if (dentry) {
-		lock_kernel();
 		dput(dentry);
 		mntput(mnt);
-		unlock_kernel();
 	}
 
 	sock_put(sk);
@@ -574,14 +572,10 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 	int err = 0;
 	
 	if (sunname->sun_path[0]) {
-		/* Do not believe to VFS, grab kernel lock */
-		lock_kernel();
 		if (path_init(sunname->sun_path, LOOKUP_POSITIVE, &nd))
 			err = path_walk(sunname->sun_path, &nd);
-		if (err) {
-			unlock_kernel();
+		if (err)
 			goto fail;
-		}
 		err = permission(nd.dentry->d_inode,MAY_WRITE);
 		if (err)
 			goto put_fail;
@@ -594,7 +588,6 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 			goto put_fail;
 
 		path_release(&nd);
-		unlock_kernel();
 
 		err=-EPROTOTYPE;
 		if (u->type != type) {
@@ -611,7 +604,6 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 
 put_fail:
 	path_release(&nd);
-	unlock_kernel();
 fail:
 	*error=err;
 	return NULL;
@@ -660,7 +652,6 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	atomic_set(&addr->refcnt, 1);
 
 	if (sunaddr->sun_path[0]) {
-		lock_kernel();
 		err = 0;
 		/*
 		 * Get the parent directory, calculate the hash for last
@@ -707,7 +698,6 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		up(&nd.dentry->d_inode->i_sem);
 		dput(nd.dentry);
 		nd.dentry = dentry;
-		unlock_kernel();
 
 		addr->hash = UNIX_HASH_SIZE;
 	}
@@ -748,7 +738,6 @@ out_mknod_unlock:
 out_mknod:
 	path_release(&nd);
 out_mknod_parent:
-	unlock_kernel();
 	if (err==-EEXIST)
 		err=-EADDRINUSE;
 	unix_release_addr(addr);
@@ -963,11 +952,8 @@ restart:
 		newsk->protinfo.af_unix.addr=other->protinfo.af_unix.addr;
 	}
 	if (other->protinfo.af_unix.dentry) {
-		/* Damn, even dget is not SMP safe. It becomes ridiculous... */
-		lock_kernel();
 		newsk->protinfo.af_unix.dentry=dget(other->protinfo.af_unix.dentry);
 		newsk->protinfo.af_unix.mnt=mntget(other->protinfo.af_unix.mnt);
-		unlock_kernel();
 	}
 
 	/* Set credentials */

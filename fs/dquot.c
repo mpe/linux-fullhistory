@@ -1027,40 +1027,43 @@ void dquot_initialize(struct inode *inode, short type)
 	unsigned int id = 0;
 	short cnt;
 
-	if (S_ISREG(inode->i_mode) ||
-            S_ISDIR(inode->i_mode) ||
-            S_ISLNK(inode->i_mode)) {
-		/* We don't want to have quotas on quota files - nasty deadlocks possible */
-		if (is_quotafile(inode))
-			return;
-		for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
-			if (type != -1 && cnt != type)
-				continue;
+	if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode) &&
+            !S_ISLNK(inode->i_mode))
+		return;
+	lock_kernel();
+	/* We don't want to have quotas on quota files - nasty deadlocks possible */
+	if (is_quotafile(inode)) {
+		unlock_kernel();
+		return;
+	}
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		if (type != -1 && cnt != type)
+			continue;
 
-			if (!sb_has_quota_enabled(inode->i_sb, cnt))
-				continue;
+		if (!sb_has_quota_enabled(inode->i_sb, cnt))
+			continue;
 
-			if (inode->i_dquot[cnt] == NODQUOT) {
-				switch (cnt) {
-					case USRQUOTA:
-						id = inode->i_uid;
-						break;
-					case GRPQUOTA:
-						id = inode->i_gid;
-						break;
-				}
-				dquot = dqget(inode->i_sb, id, cnt);
-				if (dquot == NODQUOT)
-					continue;
-				if (inode->i_dquot[cnt] != NODQUOT) {
-					dqput(dquot);
-					continue;
-				} 
-				inode->i_dquot[cnt] = dquot;
-				inode->i_flags |= S_QUOTA;
+		if (inode->i_dquot[cnt] == NODQUOT) {
+			switch (cnt) {
+				case USRQUOTA:
+					id = inode->i_uid;
+					break;
+				case GRPQUOTA:
+					id = inode->i_gid;
+					break;
 			}
+			dquot = dqget(inode->i_sb, id, cnt);
+			if (dquot == NODQUOT)
+				continue;
+			if (inode->i_dquot[cnt] != NODQUOT) {
+				dqput(dquot);
+				continue;
+			} 
+			inode->i_dquot[cnt] = dquot;
+			inode->i_flags |= S_QUOTA;
 		}
 	}
+	unlock_kernel();
 }
 
 /*
@@ -1073,6 +1076,7 @@ void dquot_drop(struct inode *inode)
 	struct dquot *dquot;
 	short cnt;
 
+	lock_kernel();
 	inode->i_flags &= ~S_QUOTA;
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
 		if (inode->i_dquot[cnt] == NODQUOT)
@@ -1081,6 +1085,7 @@ void dquot_drop(struct inode *inode)
 		inode->i_dquot[cnt] = NODQUOT;
 		dqput(dquot);
 	}
+	unlock_kernel();
 }
 
 /*
@@ -1208,6 +1213,8 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr)
 	/* Arguably we could consider that as error, but... no fs - no quota */
 	if (!inode->i_sb)
 		return 0;
+
+	lock_kernel();
 	/*
 	 * Find out if this filesystem uses i_blocks.
 	 */
@@ -1315,6 +1322,7 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr)
 		}
 	}
 
+	unlock_kernel();
 	return 0;
 put_all:
 	for (disc = 0; disc < cnt; disc++) {
@@ -1328,6 +1336,7 @@ put_all:
 			dqput(transfer_from[disc]);
 		}
 	}
+	unlock_kernel();
 	return error;
 }
 

@@ -309,50 +309,63 @@ static void reset_socket(u_long i);
 static void unreset_socket(u_long i);
 static void parse_events(void *info, u_int events);
 
+socket_info_t *pcmcia_register_socket (int slot,
+	struct pccard_operations * ss_entry,
+	int use_bus_pm)
+{
+    socket_info_t *s;
+    int i;
+
+    DEBUG(0, "cs: pcmcia_register_socket(0x%p)\n", ss_entry);
+
+    s = kmalloc(sizeof(struct socket_info_t), GFP_KERNEL);
+    memset(s, 0, sizeof(socket_info_t));
+
+    s->ss_entry = ss_entry;
+    s->sock = slot;
+    s->setup.data = sockets;
+    s->setup.function = &setup_socket;
+    s->shutdown.data = sockets;
+    s->shutdown.function = &shutdown_socket;
+    /* base address = 0, map = 0 */
+    s->cis_mem.flags = 0;
+    s->cis_mem.speed = cis_speed;
+    s->use_bus_pm = use_bus_pm;
+    s->erase_busy.next = s->erase_busy.prev = &s->erase_busy;
+    spin_lock_init(&s->lock);
+    
+    for (i = 0; i < sockets; i++)
+	if (socket_table[i] == NULL) break;
+    socket_table[i] = s;
+    if (i == sockets) sockets++;
+
+    init_socket(s);
+    ss_entry->inquire_socket(slot, &s->cap);
+#ifdef CONFIG_PROC_FS
+    if (proc_pccard) {
+	char name[3];
+	sprintf(name, "%02d", i);
+	s->proc = proc_mkdir(name, proc_pccard);
+	if (s->proc)
+	    ss_entry->proc_setup(slot, s->proc);
+#ifdef PCMCIA_DEBUG
+	if (s->proc)
+	    create_proc_read_entry("clients", 0, s->proc,
+				   proc_read_clients, s);
+#endif
+    }
+#endif
+    return s;
+} /* pcmcia_register_socket */
+
 int register_ss_entry(int nsock, struct pccard_operations * ss_entry)
 {
-    int i, ns;
-    socket_info_t *s;
+    int ns;
 
     DEBUG(0, "cs: register_ss_entry(%d, 0x%p)\n", nsock, ss_entry);
 
     for (ns = 0; ns < nsock; ns++) {
-	s = kmalloc(sizeof(struct socket_info_t), GFP_KERNEL);
-	memset(s, 0, sizeof(socket_info_t));
-    
-	s->ss_entry = ss_entry;
-	s->sock = ns;
-	s->setup.data = sockets;
-	s->setup.function = &setup_socket;
-	s->shutdown.data = sockets;
-	s->shutdown.function = &shutdown_socket;
-	/* base address = 0, map = 0 */
-	s->cis_mem.flags = 0;
-	s->cis_mem.speed = cis_speed;
-	s->erase_busy.next = s->erase_busy.prev = &s->erase_busy;
-	spin_lock_init(&s->lock);
-	
-	for (i = 0; i < sockets; i++)
-	    if (socket_table[i] == NULL) break;
-	socket_table[i] = s;
-	if (i == sockets) sockets++;
-
-	init_socket(s);
-	ss_entry->inquire_socket(ns, &s->cap);
-#ifdef CONFIG_PROC_FS
-	if (proc_pccard) {
-	    char name[3];
-	    sprintf(name, "%02d", i);
-	    s->proc = proc_mkdir(name, proc_pccard);
-	    if (s->proc)
-		ss_entry->proc_setup(ns, s->proc);
-#ifdef PCMCIA_DEBUG
-	    if (s->proc)
-		create_proc_read_entry("clients", 0, s->proc,
-				       proc_read_clients, s);
-#endif
-	}
-#endif
+	pcmcia_register_socket (ns, ss_entry, 0);
     }
     
     return 0;
@@ -360,49 +373,57 @@ int register_ss_entry(int nsock, struct pccard_operations * ss_entry)
 
 /*====================================================================*/
 
-void unregister_ss_entry(struct pccard_operations * ss_entry)
+void pcmcia_unregister_socket(socket_info_t *s)
 {
-    int i, j;
-    socket_info_t *s = NULL;
+    int j, socket = -1;
     client_t *client;
 
-#ifdef CONFIG_PROC_FS
-    for (i = 0; i < sockets; i++) {
-	s = socket_table[i];
-	if (s->ss_entry != ss_entry) continue;
-	if (proc_pccard) {
-	    char name[3];
-	    sprintf(name, "%02d", i);
-#ifdef PCMCIA_DEBUG
-	    remove_proc_entry("clients", s->proc);
-#endif
-	    remove_proc_entry(name, proc_pccard);
+    for (j = 0; j < MAX_SOCK; j++)
+	if (socket_table [j] == s) {
+	    socket = j;
+	    break;
 	}
+    if (socket < 0)
+	return;
+
+#ifdef CONFIG_PROC_FS
+    if (proc_pccard) {
+	char name[3];
+	sprintf(name, "%02d", socket);
+#ifdef PCMCIA_DEBUG
+	remove_proc_entry("clients", s->proc);
+#endif
+	remove_proc_entry(name, proc_pccard);
     }
 #endif
 
-    for (;;) {
-	for (i = 0; i < sockets; i++) {
-	    s = socket_table[i];
-	    if (s->ss_entry == ss_entry) break;
-	}
-	if (i == sockets)
-	    break;
-	shutdown_socket(i);
-	release_cis_mem(s);
-	while (s->clients) {
-	    client = s->clients;
-	    s->clients = s->clients->next;
-	    kfree(client);
-	}
-	s->ss_entry = NULL;
-	kfree(s);
-	socket_table[i] = NULL;
-	for (j = i; j < sockets-1; j++)
-	    socket_table[j] = socket_table[j+1];
-	sockets--;
+    shutdown_socket(socket);
+    release_cis_mem(s);
+    while (s->clients) {
+	client = s->clients;
+	s->clients = s->clients->next;
+	kfree(client);
     }
-    
+    s->ss_entry = NULL;
+    kfree(s);
+
+    socket_table[socket] = NULL;
+    for (j = socket; j < sockets-1; j++)
+	socket_table[j] = socket_table[j+1];
+    sockets--;
+} /* pcmcia_unregister_socket */
+
+void unregister_ss_entry(struct pccard_operations * ss_entry)
+{
+    int i;
+
+    for (i = 0; i < sockets; i++) {
+	socket_info_t *socket = socket_table[i];
+	if (socket->ss_entry == ss_entry)
+	    pcmcia_unregister_socket (socket);
+	else
+	    i++;
+    }
 } /* unregister_ss_entry */
 
 /*======================================================================
@@ -675,35 +696,51 @@ static void parse_events(void *info, u_int events)
     
 ======================================================================*/
 
+void pcmcia_suspend_socket (socket_info_t *s)
+{
+    if ((s->state & SOCKET_PRESENT) && !(s->state & SOCKET_SUSPEND)) {
+	send_event(s, CS_EVENT_PM_SUSPEND, CS_EVENT_PRI_LOW);
+	suspend_socket(s);
+	s->state |= SOCKET_SUSPEND;
+    }
+}
+
+void pcmcia_resume_socket (socket_info_t *s)
+{
+    int	stat;
+
+    /* Do this just to reinitialize the socket */
+    init_socket(s);
+    get_socket_status(s, &stat);
+
+    /* If there was or is a card here, we need to do something
+    about it... but parse_events will sort it all out. */
+    if ((s->state & SOCKET_PRESENT) || (stat & SS_DETECT))
+	parse_events(s, SS_DETECT);
+}
+
 static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
-    int i, stat;
+    int i;
     socket_info_t *s;
-    
+
+    /* only for busses that don't suspend/resume slots directly */
+
     switch (rqst) {
     case PM_SUSPEND:
 	DEBUG(1, "cs: received suspend notification\n");
 	for (i = 0; i < sockets; i++) {
-	    s = socket_table[i];
-	    if ((s->state & SOCKET_PRESENT) &&
-		!(s->state & SOCKET_SUSPEND)){
-		send_event(s, CS_EVENT_PM_SUSPEND, CS_EVENT_PRI_LOW);
-		suspend_socket(s);
-		s->state |= SOCKET_SUSPEND;
-	    }
+	    s = socket_table [i];
+	    if (!s->use_bus_pm)
+		pcmcia_suspend_socket (socket_table [i]);
 	}
 	break;
     case PM_RESUME:
 	DEBUG(1, "cs: received resume notification\n");
 	for (i = 0; i < sockets; i++) {
-	    s = socket_table[i];
-	    /* Do this just to reinitialize the socket */
-	    init_socket(s);
-	    get_socket_status(s, &stat);
-	    /* If there was or is a card here, we need to do something
-	       about it... but parse_events will sort it all out. */
-       	    if ((s->state & SOCKET_PRESENT) || (stat & SS_DETECT))
-		parse_events(s, SS_DETECT);
+	    s = socket_table [i];
+	    if (!s->use_bus_pm)
+		pcmcia_resume_socket (socket_table [i]);
 	}
 	break;
     }
@@ -2330,6 +2367,11 @@ EXPORT_SYMBOL(MTDHelperEntry);
 #ifdef CONFIG_PROC_FS
 EXPORT_SYMBOL(proc_pccard);
 #endif
+
+EXPORT_SYMBOL(pcmcia_register_socket);
+EXPORT_SYMBOL(pcmcia_unregister_socket);
+EXPORT_SYMBOL(pcmcia_suspend_socket);
+EXPORT_SYMBOL(pcmcia_resume_socket);
 
 static int __init init_pcmcia_cs(void)
 {

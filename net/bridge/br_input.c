@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_input.c,v 1.5 2000/03/30 01:22:23 davem Exp $
+ *	$Id: br_input.c,v 1.6 2000/06/26 18:09:17 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -80,7 +80,9 @@ static void __br_handle_frame(struct sk_buff *skb)
 		}
 	}
 
-	if (!memcmp(dest, bridge_ula, 5) && !(dest[5] & 0xF0))
+	if (br->stp_enabled &&
+	    !memcmp(dest, bridge_ula, 5) &&
+	    !(dest[5] & 0xF0))
 		goto handle_special_frame;
 
 	if (p->state == BR_STATE_LEARNING ||

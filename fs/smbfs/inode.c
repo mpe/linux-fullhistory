@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/file.h>
 #include <linux/dcache.h>
+#include <linux/smp_lock.h>
 
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
@@ -230,6 +231,7 @@ smb_revalidate_inode(struct dentry *dentry)
 	 * If this is a file opened with write permissions,
 	 * the inode will be up-to-date.
 	 */
+	lock_kernel();
 	if (S_ISREG(inode->i_mode) && smb_is_open(inode))
 	{
 		if (inode->u.smbfs_i.access != SMB_O_RDONLY)
@@ -267,6 +269,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 			smb_invalid_dir_cache(inode);
 	}
 out:
+	unlock_kernel();
 	return error;
 }
 

@@ -127,6 +127,8 @@ static struct channel digi_channels[MAX_ALLOC];
 -------------------------------------------------------------------------- */
 static struct channel *card_ptr[MAXCARDS];
 
+static struct timer_list epca_timer;
+
 /* ---------------------- Begin function prototypes --------------------- */
 
 /* ----------------------------------------------------------------------
@@ -1564,11 +1566,10 @@ void cleanup_module()
 	struct channel    *ch;
 	unsigned long     flags;
 
+	del_timer_sync(&epca_timer);
 
 	save_flags(flags);
 	cli();
-
-	timer_table[DIGI_TIMER].fn = 0;
 
 	if ((tty_unregister_driver(&pc_driver)) ||  
 	    (tty_unregister_driver(&pc_callout)))
@@ -1918,12 +1919,12 @@ int __init pc_init(void)
 	   Start up the poller to check for events on all enabled boards
 	---------------------------------------------------------------------- */
 
-	timer_table[DIGI_TIMER].fn = (void *)epcapoll;
-	timer_table[DIGI_TIMER].expires = 0;
+	init_timer(&epca_timer);
+	epca_timer.function = epcapoll;
+	mod_timer(&epca_timer, jiffies + HZ/25);
 
 	restore_flags(flags);
 
-	timer_active |= 1 << DIGI_TIMER;
 	return 0;
 
 } /* End pc_init */
@@ -2267,12 +2268,9 @@ static void epcapoll(unsigned long ignored)
 
 	} /* End for each card */
 
-	timer_table[DIGI_TIMER].fn = (void *)epcapoll;
-	timer_table[DIGI_TIMER].expires = jiffies + (HZ / 25);
-	timer_active |= 1 << DIGI_TIMER;
+	mod_timer(&epca_timer, jiffies + (HZ / 25));
 
 	restore_flags(flags);
-
 } /* End epcapoll */
 
 /* --------------------- Begin doevent  ------------------------ */

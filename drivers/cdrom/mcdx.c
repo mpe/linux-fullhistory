@@ -1016,6 +1016,7 @@ void __exit mcdx_exit(void)
     if (devfs_unregister_blkdev(MAJOR_NR, "mcdx") != 0) {
         xwarn("cleanup() unregister_blkdev() failed\n");
     }
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 #if !MCDX_QUIET
 	else xinfo("cleanup() succeeded\n");
 #endif
@@ -1143,6 +1144,7 @@ int __init mcdx_init_drive(int drive)
 		      MCDX,
 		      stuffp->wreg_data, stuffp->irq, stuffp->irq);
 		stuffp->irq = 0;
+		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 		kfree(stuffp);
 		return 0;
 	}
@@ -1184,6 +1186,7 @@ int __init mcdx_init_drive(int drive)
 		kfree(stuffp);
 		if (devfs_unregister_blkdev(MAJOR_NR, "mcdx") != 0)
         		xwarn("cleanup() unregister_blkdev() failed\n");
+		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 		return 2;
         }
         printk(msg);

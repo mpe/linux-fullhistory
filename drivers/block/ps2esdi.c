@@ -232,6 +232,7 @@ cleanup_module(void)
 	free_dma(dma_arb_level);
   	free_irq(PS2ESDI_IRQ, NULL)
 	devfs_unregister_blkdev(MAJOR_NR, "ed");
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
 #endif /* MODULE */
 

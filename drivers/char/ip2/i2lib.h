@@ -228,10 +228,10 @@ typedef struct _i2ChanStr
 	struct tq_struct	tqueue_status;
 	struct tq_struct	tqueue_hangup;
 
-	spinlock_t Ibuf_spinlock;
-	spinlock_t Obuf_spinlock;
-	spinlock_t Cbuf_spinlock;
-	spinlock_t Pbuf_spinlock;
+	rwlock_t Ibuf_spinlock;
+	rwlock_t Obuf_spinlock;
+	rwlock_t Cbuf_spinlock;
+	rwlock_t Pbuf_spinlock;
 
 } i2ChanStr, *i2ChanStrPtr;
 

@@ -2023,6 +2023,7 @@ void ide_unregister (unsigned int index)
 			drive->id = NULL;
 		}
 		drive->present = 0;
+		blk_cleanup_queue(&drive->queue);
 	}
 	if (d->present)
 		hwgroup->drive = d;
@@ -2048,7 +2049,6 @@ void ide_unregister (unsigned int index)
 	kfree(blksize_size[hwif->major]);
 	kfree(max_sectors[hwif->major]);
 	kfree(max_readahead[hwif->major]);
-	blk_cleanup_queue(BLK_DEFAULT_QUEUE(hwif->major));
 	blk_dev[hwif->major].data = NULL;
 	blk_dev[hwif->major].queue = NULL;
 	blksize_size[hwif->major] = NULL;
@@ -3594,7 +3594,7 @@ int __init ide_init (void)
 
 	if (!banner_printed) {
 		printk(KERN_INFO "Uniform Multi-Platform E-IDE driver " REVISION "\n");
-		ide_devfs_handle = devfs_mk_dir (NULL, "ide", 3, NULL);
+		ide_devfs_handle = devfs_mk_dir (NULL, "ide", NULL);
 		system_bus_speed = ide_system_bus_speed();
 		banner_printed = 1;
 	}

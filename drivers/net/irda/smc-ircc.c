@@ -83,7 +83,9 @@ static int  ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static void ircc_dma_xmit(struct ircc_cb *self, int iobase, int bofs);
 static void ircc_change_speed(void *priv, __u32 speed);
 static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+#if 0 /* unused */
 static int  ircc_is_receiving(struct ircc_cb *self);
+#endif /* unused */
 
 static int  ircc_net_open(struct net_device *dev);
 static int  ircc_net_close(struct net_device *dev);
@@ -789,7 +791,6 @@ static int ircc_dma_receive(struct ircc_cb *self, int iobase)
  */
 static void ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
 {
-	unsigned long flags;
 	struct sk_buff *skb;
 	int len, msgcnt;
 
@@ -893,6 +894,7 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock(&self->lock);
 }
 
+#if 0 /* unused */
 /*
  * Function ircc_is_receiving (self)
  *
@@ -915,6 +917,7 @@ static int ircc_is_receiving(struct ircc_cb *self)
 	
 	return status;
 }
+#endif /* unused */
 
 /*
  * Function ircc_net_open (dev)
@@ -990,8 +993,6 @@ static int ircc_net_close(struct net_device *dev)
 
 static void ircc_suspend(struct ircc_cb *self)
 {
-	int i = 10;
-
 	MESSAGE("%s, Suspending\n", driver_name);
 
 	if (self->io.suspended)
@@ -1004,7 +1005,6 @@ static void ircc_suspend(struct ircc_cb *self)
 
 static void ircc_wakeup(struct ircc_cb *self)
 {
-	struct net_device *dev = self->netdev;
 	unsigned long flags;
 
 	if (!self->io.suspended)

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.125 2000/06/22 11:42:25 davem Exp $
+/* $Id: sys_sunos.c,v 1.126 2000/06/26 23:20:24 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -68,7 +68,6 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	struct file * file = NULL;
 	unsigned long retval, ret_type;
 
-	lock_kernel();
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
 		if (cnt++ < 10)
@@ -127,7 +126,6 @@ out_putf:
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return retval;
 }
 
@@ -363,7 +361,6 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	if (!file)
 		goto out;
 
-	lock_kernel();
 	error = -EINVAL;
 	if (cnt < (sizeof(struct sunos_dirent) + 255))
 		goto out_putf;
@@ -385,7 +382,6 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	}
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -444,7 +440,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	if (!file)
 		goto out;
 
-	lock_kernel();
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
 		goto out_putf;
@@ -466,7 +461,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsi
 	}
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;

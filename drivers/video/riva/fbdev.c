@@ -402,7 +402,7 @@ static int __devinit riva_init_disp (struct rivafb_info *rinfo)
 	disp->var = rivafb_default_var;
 	info->disp = disp;
 
-#warning FIXME: assure that disp->cmap is completely filled out
+	/* FIXME: assure that disp->cmap is completely filled out */
 
 	disp->screen_base = rinfo->fb_base;
 	disp->visual = FB_VISUAL_PSEUDOCOLOR;
@@ -727,7 +727,7 @@ static int rivafb_get_fix (struct fb_fix_screeninfo *fix, int con,
 
 	fix->line_length = p->line_length;
 
-#warning FIXME: set up MMIO region, export via FB_ACCEL_xxx
+	/* FIXME: set up MMIO region, export via FB_ACCEL_xxx */
 	fix->mmio_start = 0;
 	fix->mmio_len = 0;
 	fix->accel = FB_ACCEL_NONE;
@@ -960,7 +960,7 @@ static int rivafb_set_var (struct fb_var_screeninfo *var, int con,
 
 	dsp->type = FB_TYPE_PACKED_PIXELS;
 
-#warning FIXME: verify that the above code sets dsp->* fields correctly
+	/* FIXME: verify that the above code sets dsp->* fields correctly */
 
 	memcpy (&dsp->var, &v, sizeof (v));
 

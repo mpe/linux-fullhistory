@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/locks.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"
@@ -154,7 +155,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 
 	error = -EIO;
 	freelen = ncp_read_bounce_size(bufsize);
-	freepage = kmalloc(freelen, GFP_NFS);
+	freepage = vmalloc(freelen);
 	if (!freepage)
 		goto outrel;
 	error = 0;
@@ -180,7 +181,7 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			break;
 		}
 	}
-	kfree(freepage);
+	vfree(freepage);
 
 	*ppos = pos;
 
@@ -239,7 +240,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	already_written = 0;
 
-	bouncebuffer = kmalloc(bufsize, GFP_NFS);
+	bouncebuffer = vmalloc(bufsize);
 	if (!bouncebuffer) {
 		errno = -EIO;	/* -ENOMEM */
 		goto outrel;
@@ -267,7 +268,7 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			break;
 		}
 	}
-	kfree(bouncebuffer);
+	vfree(bouncebuffer);
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 	
 	*ppos = pos;

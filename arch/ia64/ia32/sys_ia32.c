@@ -111,12 +111,10 @@ int stack)
 	 *  `munmap' if the `execve' failes.
 	 */
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 
 	av = (char **) do_mmap_pgoff(0, 0UL, len, PROT_READ | PROT_WRITE,
 				     MAP_PRIVATE | MAP_ANONYMOUS, 0);
 
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (IS_ERR(av))
@@ -258,11 +256,15 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 		return -EINVAL;
 	if (!file->f_op->read)
 		return -EINVAL;
+	lock_kernel();
 	if (file->f_op->llseek) {
-		if (file->f_op->llseek(file,off,0) != off)
+		if (file->f_op->llseek(file,off,0) != off) {
+			unlock_kernel();
 			return -EINVAL;
+		}
 	} else
 		file->f_pos = off;
+	unlock_kernel();
 	r = file->f_op->read(file, (char *)addr, len, &file->f_pos);
 	return (r < 0) ? -EINVAL : addr;
 }
@@ -292,7 +294,6 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
 
-	lock_kernel();
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
 		file = fget(a.fd);
@@ -302,9 +303,7 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
 	if ((a.flags & MAP_FIXED) && ((a.addr & ~PAGE_MASK) || (a.offset & ~PAGE_MASK))) {
-		unlock_kernel();
 		error = do_mmap_fake(file, a.addr, a.len, a.prot, a.flags, a.offset);
-		lock_kernel();
 	} else {
 		down(&current->mm->mmap_sem);
 		error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
@@ -313,7 +312,6 @@ sys32_mmap(struct mmap_arg_struct *arg)
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -323,14 +321,12 @@ sys32_pipe(int *fd)
 	int retval;
 	int fds[2];
 
-	lock_kernel();
 	retval = do_pipe(fds);
 	if (retval)
 		goto out;
 	if (copy_to_user(fd, fds, sizeof(fds)))
 		retval = -EFAULT;
   out:
-	unlock_kernel();
 	return retval;
 }
 

@@ -27,6 +27,7 @@
 
 #include "ip2types.h"
 #include <asm/io.h>  /* For inb, etc */
+#include <linux/version.h>
 
 //------------------------------------
 // Defines for I/O instructions:
@@ -61,7 +62,7 @@ typedef int spinlock_t;
 //#define SAVE_AND_DISABLE_INTS(a,b)	spin_lock_irqsave(a,b)
 //#define RESTORE_INTS(a,b)         	spin_unlock_irqrestore(a,b)
 
-#define LOCK_INIT(a)	spin_lock_init(a)
+#define LOCK_INIT(a)	rwlock_init(a)
 
 #define SAVE_AND_DISABLE_INTS(a,b) { \
 	/* printk("get_lock: 0x%x,%4d,%s\n",(int)a,__LINE__,__FILE__);*/ \

@@ -113,6 +113,8 @@ source drivers/parport/Config.in
 
 endmenu
 
+source drivers/mtd/Config.in
+
 source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then

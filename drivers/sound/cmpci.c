@@ -312,7 +312,6 @@ struct cm_state {
 /* --------------------------------------------------------------------- */
 
 static struct cm_state *devs = NULL;
-static struct cm_state *devaudio = NULL;
 static unsigned long wavetable_mem = 0;
 
 /* --------------------------------------------------------------------- */
@@ -2462,10 +2461,8 @@ int __init init_cmpci(void)
 	err_irq:
 		if(s->iosynth)
 			release_region(s->iosynth, CM_EXTENT_SYNTH);
-	err_region1:
 		if(s->iomidi)
 			release_region(s->iomidi, CM_EXTENT_MIDI);
-	err_region4:
 		release_region(s->iobase, CM_EXTENT_CODEC);
 	err_region5:
 		kfree_s(s, sizeof(struct cm_state));

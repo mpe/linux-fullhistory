@@ -25,6 +25,7 @@
 #include <linux/file.h>
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/init.h>
 
 #include <linux/ncp_fs.h>
@@ -261,7 +262,10 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct ncp_server *server;
 	struct file *ncp_filp;
 	struct inode *root_inode;
+	struct inode *sock_inode;
+	struct socket *sock;
 	int error;
+	int default_bufsize;
 #ifdef CONFIG_NCPFS_PACKET_SIGNING
 	int options;
 #endif
@@ -313,8 +317,17 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	ncp_filp = fget(data.ncp_fd);
 	if (!ncp_filp)
 		goto out_bad_file;
-	if (!S_ISSOCK(ncp_filp->f_dentry->d_inode->i_mode))
+	sock_inode = ncp_filp->f_dentry->d_inode;
+	if (!S_ISSOCK(sock_inode->i_mode))
 		goto out_bad_file2;
+	sock = &sock_inode->u.socket_i;
+	if (!sock)
+		goto out_bad_file2;
+		
+	if (sock->type == SOCK_STREAM)
+		default_bufsize = 61440;
+	else
+		default_bufsize = 1024;
 
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
@@ -364,8 +377,10 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	server->dentry_ttl = 0;	/* no caching */
 
+#undef NCP_PACKET_SIZE
+#define NCP_PACKET_SIZE 65536
 	server->packet_size = NCP_PACKET_SIZE;
-	server->packet = ncp_kmalloc(NCP_PACKET_SIZE, GFP_KERNEL);
+	server->packet = vmalloc(NCP_PACKET_SIZE);
 	if (server->packet == NULL)
 		goto out_no_packet;
 
@@ -377,13 +392,13 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	DPRINTK("ncp_read_super: NCP_SBP(sb) = %x\n", (int) NCP_SBP(sb));
 
 #ifdef CONFIG_NCPFS_PACKET_SIGNING
-	if (ncp_negotiate_size_and_options(server, NCP_DEFAULT_BUFSIZE,
+	if (ncp_negotiate_size_and_options(server, default_bufsize,
 		NCP_DEFAULT_OPTIONS, &(server->buffer_size), &options) == 0)
 	{
 		if (options != NCP_DEFAULT_OPTIONS)
 		{
 			if (ncp_negotiate_size_and_options(server, 
-				NCP_DEFAULT_BUFSIZE,
+				default_bufsize,
 				options & 2, 
 				&(server->buffer_size), &options) != 0)
 				
@@ -396,7 +411,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	}
 	else 
 #endif	/* CONFIG_NCPFS_PACKET_SIGNING */
-	if (ncp_negotiate_buffersize(server, NCP_DEFAULT_BUFSIZE,
+	if (ncp_negotiate_buffersize(server, default_bufsize,
   				     &(server->buffer_size)) != 0)
 		goto out_no_bufsize;
 	DPRINTK("ncpfs: bufsize = %d\n", server->buffer_size);
@@ -447,7 +462,7 @@ out_disconnect:
 out_no_connect:
 	printk(KERN_ERR "ncp_read_super: Failed connection, error=%d\n", error);
 out_free_packet:
-	ncp_kfree_s(server->packet, server->packet_size);
+	vfree(server->packet);
 	goto out_free_server;
 out_no_packet:
 	printk(KERN_ERR "ncp_read_super: could not alloc packet\n");
@@ -508,7 +523,7 @@ static void ncp_put_super(struct super_block *sb)
 		ncp_kfree_s(server->priv.data, server->priv.len);
 	if (server->auth.object_name)
 		ncp_kfree_s(server->auth.object_name, server->auth.object_name_len);
-	ncp_kfree_s(server->packet, server->packet_size);
+	vfree(server->packet);
 
 }
 

@@ -419,6 +419,48 @@ out:
 }
 
 /*
+ * Check if there is any memory pressure (free_pages < pages_low)
+ */
+static inline int memory_pressure(void)
+{
+	pg_data_t *pgdat = pgdat_list;
+
+	do {
+		int i;
+		for(i = 0; i < MAX_NR_ZONES; i++) {
+			zone_t *zone = pgdat->node_zones+ i;
+			if (zone->size &&
+			    zone->free_pages < zone->pages_low)
+				return 1;
+		}
+		pgdat = pgdat->node_next;
+	} while (pgdat);
+
+	return 0;
+}
+
+/*
+ * Check if there is any memory pressure (free_pages < pages_low)
+ */
+static inline int keep_kswapd_awake(void)
+{
+	pg_data_t *pgdat = pgdat_list;
+
+	do {
+		int i;
+		for(i = 0; i < MAX_NR_ZONES; i++) {
+			zone_t *zone = pgdat->node_zones+ i;
+			if (zone->size &&
+			    zone->zone_wake_kswapd)
+				return 1;
+		}
+		pgdat = pgdat->node_next;
+	} while (pgdat);
+
+	return 0;
+}
+
+/*
  * We need to make the locks finer granularity, but right
  * now we need this so that we can do page allocations
  * without holding the kernel lock etc.
@@ -442,11 +484,23 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 
 	priority = 64;
 	do {
+		if (current->need_resched) {
+			schedule();
+			/* time has passed - pressure too? */
+			if (!memory_pressure())
+				goto done;
+		}
+
 		while (shrink_mmap(priority, gfp_mask)) {
 			if (!--count)
 				goto done;
 		}
 
+		/* not (been) low on memory - it is
+		 * pointless to try to swap out.
+		 */
+		if (!keep_kswapd_awake())
+			goto done;
 
 		/* Try to get rid of some shared memory pages.. */
 		if (gfp_mask & __GFP_IO) {
@@ -457,8 +511,18 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 			 */
 			count -= shrink_dcache_memory(priority, gfp_mask);
 			count -= shrink_icache_memory(priority, gfp_mask);
-			if (count <= 0)
+			/*
+			 * Not currently working, see fixme in shrink_?cache_memory
+			 * In the inner funtions there is a comment:
+			 * "To help debugging, a zero exit status indicates
+			 *  all slabs were released." (-arca?)
+			 * lets handle it in a primitive but working way...
+			 *	if (count <= 0)
+			 *		goto done;
+			 */
+			if (!keep_kswapd_awake())
 				goto done;
+
 			while (shm_swap(priority, gfp_mask)) {
 				if (!--count)
 					goto done;
@@ -477,7 +541,8 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 			if (--swap_count < 0)
 				break;
 
-	} while (--priority >= 0);
+		priority--;
+	} while (priority >= 0);
 
 	/* Always end on a shrink_mmap.. */
 	while (shrink_mmap(0, gfp_mask)) {
@@ -486,7 +551,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	}
 	/* We return 1 if we are freed some page */
 	return (count != FREE_COUNT);
-
+ 
 done:
 	return 1;
 }
@@ -530,29 +595,14 @@ int kswapd(void *unused)
 	tsk->flags |= PF_MEMALLOC;
 
 	for (;;) {
-		pg_data_t *pgdat;
-		int something_to_do = 0;
-
-		pgdat = pgdat_list;
-		do {
-			int i;
-			for(i = 0; i < MAX_NR_ZONES; i++) {
-				zone_t *zone = pgdat->node_zones+ i;
-				if (tsk->need_resched)
-					schedule();
-				if (!zone->size || !zone->zone_wake_kswapd)
-					continue;
-				if (zone->free_pages < zone->pages_low)
-					something_to_do = 1;
-				do_try_to_free_pages(GFP_KSWAPD);
-			}
-			pgdat = pgdat->node_next;
-		} while (pgdat);
-
-		if (!something_to_do) {
-			tsk->state = TASK_INTERRUPTIBLE;
-			interruptible_sleep_on(&kswapd_wait);
+		if (!keep_kswapd_awake()) {
+			/* wake up regulary to do an early attempt too free
+			 * pages - pages will not actually be freed.
+			 */
+			interruptible_sleep_on_timeout(&kswapd_wait, HZ);
 		}
+
+		do_try_to_free_pages(GFP_KSWAPD);
 	}
 }
 
@@ -580,6 +630,12 @@ int try_to_free_pages(unsigned int gfp_mask)
 		retval = do_try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
 	}
+	else {
+		/* make sure kswapd runs */
+		if (waitqueue_active(&kswapd_wait))
+			wake_up_interruptible(&kswapd_wait);
+	}
+
 	return retval;
 }
 

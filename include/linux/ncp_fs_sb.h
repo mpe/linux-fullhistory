@@ -13,7 +13,6 @@
 
 #ifdef __KERNEL__
 
-#define NCP_DEFAULT_BUFSIZE 1024
 #define NCP_DEFAULT_OPTIONS 0		/* 2 for packet signatures */
 
 struct ncp_server {

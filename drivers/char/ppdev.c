@@ -105,9 +105,9 @@ static void pp_attach (struct parport *port)
 		return;
 	}
 
-	add->next = pp_port_list;
 	add->port = port;
 	down (&pp_port_list_lock);
+	add->next = pp_port_list;
 	pp_port_list = add;
 	up (&pp_port_list_lock);
 }
@@ -663,7 +663,7 @@ static int __init ppdev_init (void)
 			PP_MAJOR);
 		return -EIO;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "parports", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "parports", NULL);
 	devfs_register_series (devfs_handle, "%u", PARPORT_MAX,
 			       DEVFS_FL_DEFAULT, PP_MAJOR, 0,
 			       S_IFCHR | S_IRUGO | S_IWUGO,

@@ -1576,3 +1576,19 @@ Work sponsored by SGI
 - Changed interface to <devfs_register>
 
 - Changed interface to <devfs_register_series>
+===============================================================================
+Changes for patch v173
+
+Work sponsored by SGI
+
+- Simplified interface to <devfs_mk_symlink>
+
+- Simplified interface to <devfs_mk_dir>
+
+- Simplified interface to <devfs_find_handle>
+===============================================================================
+Changes for patch v174
+
+Work sponsored by SGI
+
+- Updated README from master HTML file

@@ -2080,12 +2080,13 @@ int __init optcd_init(void)
 
 void __exit optcd_exit(void)
 {
-	devfs_unregister(devfs_find_handle(NULL, "optcd", 0, 0, 0,
+	devfs_unregister(devfs_find_handle(NULL, "optcd", 0, 0,
 					   DEVFS_SPECIAL_BLK, 0));
 	if (devfs_unregister_blkdev(MAJOR_NR, "optcd") == -EINVAL) {
 		printk(KERN_ERR "optcd: what's that: can't unregister\n");
 		return;
 	}
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	release_region(optcd_port, 4);
 	printk(KERN_INFO "optcd: module released.\n");
 }

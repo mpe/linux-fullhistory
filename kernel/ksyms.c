@@ -149,6 +149,7 @@ EXPORT_SYMBOL(__user_walk);
 EXPORT_SYMBOL(lookup_one);
 EXPORT_SYMBOL(lookup_hash);
 EXPORT_SYMBOL(sys_close);
+EXPORT_SYMBOL(dcache_lock);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
 EXPORT_SYMBOL(d_validate);
@@ -212,7 +213,7 @@ EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
 EXPORT_SYMBOL(locks_mandatory_area);
-EXPORT_SYMBOL(dput);
+EXPORT_SYMBOL(__dput);
 EXPORT_SYMBOL(have_submounts);
 EXPORT_SYMBOL(d_find_alias);
 EXPORT_SYMBOL(d_prune_aliases);
@@ -360,8 +361,6 @@ EXPORT_SYMBOL(mod_timer);
 EXPORT_SYMBOL(tq_timer);
 EXPORT_SYMBOL(tq_immediate);
 EXPORT_SYMBOL(tq_scheduler);
-EXPORT_SYMBOL(timer_active);
-EXPORT_SYMBOL(timer_table);
 
 #ifdef CONFIG_SMP
 /* Various random spinlocks we want to export */

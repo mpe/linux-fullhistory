@@ -615,7 +615,6 @@ int __init SK_init(struct net_device *dev)
 } /* End of SK_init */
 
 
-static int io = 0; /* 0 == probe */
 MODULE_AUTHOR("Patrick J.D. Weichmann");
 MODULE_DESCRIPTION("Schneider & Koch G16 Ethernet Device Driver");
 MODULE_PARM(io, "i");
@@ -623,6 +622,8 @@ MODULE_PARM_DESC(io, "0 to probe common ports (unsafe), or the I/O base of the b
 
 
 #ifdef MODULE
+static int io = 0; /* 0 == probe */
+
 static int __init SK_init_module (void)
 {
 	int rc;

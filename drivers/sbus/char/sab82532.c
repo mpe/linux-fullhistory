@@ -2391,9 +2391,6 @@ void cleanup_module(void)
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
 	cli();
-	timer_active &= ~(1 << RS_TIMER);
-	timer_table[RS_TIMER].fn = NULL;
-	timer_table[RS_TIMER].expires = 0;
         remove_bh(SERIAL_BH);
 	if ((e1 = tty_unregister_driver(&serial_driver)))
 		printk("SERIAL: failed to unregister serial driver (%d)\n",

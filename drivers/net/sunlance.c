@@ -1287,7 +1287,6 @@ static void lance_set_multicast(struct net_device *dev)
 static void lance_set_multicast_retry(unsigned long _opaque)
 {
 	struct net_device *dev = (struct net_device *) _opaque;
-	struct lance_private *lp = (struct lance_private *) dev->priv;
 
 	lance_set_multicast(dev);
 }

@@ -202,15 +202,21 @@ static inline int ramfs_positive(struct dentry *dentry)
  */
 static int ramfs_empty(struct dentry *dentry)
 {
-	struct list_head *list = dentry->d_subdirs.next;
+	struct list_head *list;
+
+	spin_lock(&dcache_lock);
+	list = dentry->d_subdirs.next;
 
 	while (list != &dentry->d_subdirs) {
 		struct dentry *de = list_entry(list, struct dentry, d_child);
 
-		if (ramfs_positive(de))
+		if (ramfs_positive(de)) {
+			spin_unlock(&dcache_lock);
 			return 0;
+		}
 		list = list->next;
 	}
+	spin_unlock(&dcache_lock);
 	return 1;
 }
 

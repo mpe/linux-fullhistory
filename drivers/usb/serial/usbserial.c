@@ -14,6 +14,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/03/2000) gkh
+ *	Added more debugging to serial_ioctl call
+ * 
  * (06/25/2000) gkh
  *	Changed generic_write_bulk_callback to not call wake_up_interruptible
  *	directly, but to have port_softint do it at a safer time.
@@ -644,7 +647,7 @@ static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned in
 		return -ENODEV;
 	}
 
-	dbg(__FUNCTION__ " - port %d", port->number);
+	dbg(__FUNCTION__ " - port %d, cmd 0x%.4x", port->number, cmd);
 
 	if (!port->active) {
 		dbg (__FUNCTION__ " - port not open");

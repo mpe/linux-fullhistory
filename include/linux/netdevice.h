@@ -365,7 +365,7 @@ struct net_device
 #define HAVE_CHANGE_MTU
 	int			(*change_mtu)(struct net_device *dev, int new_mtu);
 
-#define HAVE_TX_TIMOUT
+#define HAVE_TX_TIMEOUT
 	void			(*tx_timeout) (struct net_device *dev);
 
 	int			(*hard_header_parse)(struct sk_buff *skb,

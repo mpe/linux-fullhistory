@@ -125,7 +125,7 @@ static unsigned int net_debug = NET_DEBUG;
 #include <linux/timer.h>
 static void atp_timed_checker(unsigned long ignored);
 static struct net_device *atp_timed_dev;
-static struct timer_list atp_timer = {NULL, NULL, 0, 0, atp_timed_checker};
+static struct timer_list atp_timer = { function: atp_timed_checker };
 #endif
 
 /* Index to functions, as function prototypes. */

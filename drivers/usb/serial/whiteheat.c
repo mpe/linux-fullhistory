@@ -11,6 +11,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/04/2000) gkh
+ *	Added support for port settings. Baud rate can now be changed. Line signals
+ *	are not transferred to and from the tty layer yet, but things seem to be 
+ *	working well now.
+ *
  * (05/04/2000) gkh
  *	First cut at open and close commands. Data can flow through the ports at
  *	default speeds now.
@@ -55,6 +60,7 @@
 /* function prototypes for the Connect Tech WhiteHEAT serial converter */
 static int  whiteheat_open		(struct usb_serial_port *port, struct file *filp);
 static void whiteheat_close		(struct usb_serial_port *port, struct file *filp);
+static int  whiteheat_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 static void whiteheat_set_termios	(struct usb_serial_port *port, struct termios * old);
 static void whiteheat_throttle		(struct usb_serial_port *port);
 static void whiteheat_unthrottle	(struct usb_serial_port *port);
@@ -93,6 +99,7 @@ struct usb_serial_device_type whiteheat_device = {
 	close:			whiteheat_close,
 	throttle:		whiteheat_throttle,
 	unthrottle:		whiteheat_unthrottle,
+	ioctl:			whiteheat_ioctl,
 	set_termios:		whiteheat_set_termios,
 	shutdown:		whiteheat_shutdown,
 };
@@ -101,6 +108,13 @@ struct whiteheat_private {
 	__u8			command_finished;
 	wait_queue_head_t	wait_command;	/* for handling sleeping while waiting for a command to finish */
 };
+
+
+/* local function prototypes */
+static inline void set_rts	(struct usb_serial_port *port, unsigned char rts);
+static inline void set_dtr	(struct usb_serial_port *port, unsigned char dtr);
+static inline void set_break	(struct usb_serial_port *port, unsigned char brk);
+
 
 
 #define COMMAND_PORT		4
@@ -116,7 +130,7 @@ static void command_port_write_callback (struct urb *urb)
 	int i;
 #endif
 
-	dbg ("command_port_write_callback");
+	dbg (__FUNCTION__);
 
 	if (urb->status) {
 		dbg ("nonzero urb status: %d", urb->status);
@@ -125,7 +139,7 @@ static void command_port_write_callback (struct urb *urb)
 
 #ifdef DEBUG
 	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", urb->actual_length);
 		for (i = 0; i < urb->actual_length; ++i) {
 			printk ("%.2x ", data[i]);
 		}
@@ -145,16 +159,16 @@ static void command_port_read_callback (struct urb *urb)
 	int i;
 #endif
 
-	dbg ("command_port_write_callback");
+	dbg (__FUNCTION__);
 
 	if (urb->status) {
-		dbg ("nonzero urb status: %d", urb->status);
+		dbg (__FUNCTION__ " - nonzero urb status: %d", urb->status);
 		return;
 	}
 
 #ifdef DEBUG
 	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", urb->actual_length);
 		for (i = 0; i < urb->actual_length; ++i) {
 			printk ("%.2x ", data[i]);
 		}
@@ -179,7 +193,7 @@ static int whiteheat_send_cmd (struct usb_serial *serial, __u8 command, __u8 *da
 	int timeout;
 	__u8 *transfer_buffer;
 
-	dbg("whiteheat_send_cmd: %d", command);
+	dbg(__FUNCTION__" - command %d", command);
 
 	port = &serial->port[COMMAND_PORT];
 	info = (struct whiteheat_private *)port->private;
@@ -189,8 +203,10 @@ static int whiteheat_send_cmd (struct usb_serial *serial, __u8 command, __u8 *da
 	transfer_buffer[0] = command;
 	memcpy (&transfer_buffer[1], data, datasize);
 	port->write_urb->transfer_buffer_length = datasize + 1;
-	if (usb_submit_urb (port->write_urb))
-		dbg ("submit urb failed");
+	if (usb_submit_urb (port->write_urb)) {
+		dbg (__FUNCTION__" - submit urb failed");
+		return -1;
+	}
 
 	/* wait for the command to complete */
 	timeout = COMMAND_TIMEOUT;
@@ -199,6 +215,7 @@ static int whiteheat_send_cmd (struct usb_serial *serial, __u8 command, __u8 *da
 	}
 
 	if (info->command_finished == FALSE) {
+		dbg (__FUNCTION__ " - command timed out.");
 		return -1;
 	}
 
@@ -212,10 +229,10 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 	struct usb_serial_port 		*command_port;
 	struct whiteheat_private	*info;
 
-	dbg("whiteheat_open port %d", port->number);
+	dbg(__FUNCTION__" - port %d", port->number);
 
 	if (port->active) {
-		dbg ("device already open");
+		dbg (__FUNCTION__ " - device already open");
 		return -EINVAL;
 	}
 	port->active = 1;
@@ -225,7 +242,7 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 	if (command_port->private == NULL) {
 		info = (struct whiteheat_private *)kmalloc (sizeof(struct whiteheat_private), GFP_KERNEL);
 		if (info == NULL) {
-			err("out of memory");
+			err(__FUNCTION__ " - out of memory");
 			return -ENOMEM;
 		}
 		
@@ -238,7 +255,7 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 	
 	/* Start reading from the device */
 	if (usb_submit_urb(port->read_urb))
-		dbg("usb_submit_urb(read bulk) failed");
+		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
 
 	/* send an open port command */
 	open_command.port = port->number - port->minor;
@@ -247,9 +264,9 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 	/* Need to do device specific setup here (control lines, baud rate, etc.) */
 	/* FIXME!!! */
 
-	dbg("whiteheat_open exit");
+	dbg(__FUNCTION__ " - exit");
 	
-	return (0);
+	return 0;
 }
 
 
@@ -257,7 +274,7 @@ static void whiteheat_close(struct usb_serial_port *port, struct file * filp)
 {
 	struct whiteheat_min_set	close_command;
 	
-	dbg("whiteheat_close port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	/* send a close command to the port */
 	close_command.port = port->number - port->minor;
@@ -273,30 +290,102 @@ static void whiteheat_close(struct usb_serial_port *port, struct file * filp)
 }
 
 
+static int whiteheat_ioctl (struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg)
+{
+	dbg(__FUNCTION__ " - port %d, cmd 0x%.4x", port->number, cmd);
+
+	return -ENOIOCTLCMD;
+}
+
+
 static void whiteheat_set_termios (struct usb_serial_port *port, struct termios *old_termios)
 {
 	unsigned int cflag = port->tty->termios->c_cflag;
+	struct whiteheat_port_settings port_settings;
 
-	dbg("whiteheat_set_termios port %d", port->number);
+	dbg(__FUNCTION__ " -port %d", port->number);
 
 	/* check that they really want us to change something */
 	if (old_termios) {
 		if ((cflag == old_termios->c_cflag) &&
 		    (RELEVANT_IFLAG(port->tty->termios->c_iflag) == RELEVANT_IFLAG(old_termios->c_iflag))) {
-			dbg("nothing to change...");
+			dbg(__FUNCTION__ " - nothing to change...");
 			return;
 		}
 	}
 
-	/* do the parsing of the cflag to see what to set the line to */
-	/* FIXME!! */
+	if ((!port->tty) || (!port->tty->termios)) {
+		dbg(__FUNCTION__" - no tty structures");
+		return;
+	}
+	
+	/* get the byte size */
+	switch (cflag & CSIZE) {
+		case CS5:	port_settings.bits = 5;   break;
+		case CS6:	port_settings.bits = 6;   break;
+		case CS7:	port_settings.bits = 7;   break;
+		default:
+		case CS8:	port_settings.bits = 8;   break;
+	}
+	dbg(__FUNCTION__ " - data bits = %d", port_settings.bits);
+	
+	/* determine the parity */
+	if (cflag & PARENB)
+		if (cflag & PARODD)
+			port_settings.parity = 'o';
+		else
+			port_settings.parity = 'e';
+	else
+		port_settings.parity = 'n';
+	dbg(__FUNCTION__ " - parity = %c", port_settings.parity);
 
+	/* figure out the stop bits requested */
+	if (cflag & CSTOPB)
+		port_settings.stop = 2;
+	else
+		port_settings.stop = 1;
+	dbg(__FUNCTION__ " - stop bits = %d", port_settings.stop);
+
+	
+	/* figure out the flow control settings */
+	if (cflag & CRTSCTS)
+		port_settings.hflow = (WHITEHEAT_CTS_FLOW | WHITEHEAT_RTS_FLOW);
+	else
+		port_settings.hflow = 0;
+	dbg(__FUNCTION__ " - hardware flow control = %s %s %s %s",
+	    (port_settings.hflow | WHITEHEAT_CTS_FLOW) ? "CTS" : "",
+	    (port_settings.hflow | WHITEHEAT_RTS_FLOW) ? "RTS" : "",
+	    (port_settings.hflow | WHITEHEAT_DSR_FLOW) ? "DSR" : "",
+	    (port_settings.hflow | WHITEHEAT_DTR_FLOW) ? "DTR" : "");
+	
+	/* determine software flow control */
+	if (I_IXOFF(port->tty))
+		port_settings.sflow = 'b';
+	else
+		port_settings.sflow = 'n';
+	dbg(__FUNCTION__ " - software flow control = %c", port_settings.sflow);
+	
+	port_settings.xon = START_CHAR(port->tty);
+	port_settings.xoff = STOP_CHAR(port->tty);
+	dbg(__FUNCTION__ " - XON = %2x, XOFF = %2x", port_settings.xon, port_settings.xoff);
+
+	/* get the baud rate wanted */
+	port_settings.baud = tty_get_baud_rate(port->tty);
+	dbg(__FUNCTION__ " - baud rate = %d", port_settings.baud);
+
+	/* handle any settings that aren't specified in the tty structure */
+	port_settings.lloop = 0;
+	
+	/* now send the message to the device */
+	whiteheat_send_cmd (port->serial, WHITEHEAT_SETUP_PORT, (__u8 *)&port_settings, sizeof(port_settings));
+	
 	return;
 }
 
+
 static void whiteheat_throttle (struct usb_serial_port *port)
 {
-	dbg("whiteheat_throttle port %d", port->number);
+	dbg(__FUNCTION__" - port %d", port->number);
 
 	/* Change the control signals */
 	/* FIXME!!! */
@@ -307,7 +396,7 @@ static void whiteheat_throttle (struct usb_serial_port *port)
 
 static void whiteheat_unthrottle (struct usb_serial_port *port)
 {
-	dbg("whiteheat_unthrottle port %d", port->number);
+	dbg(__FUNCTION__" - port %d", port->number);
 
 	/* Change the control signals */
 	/* FIXME!!! */
@@ -334,7 +423,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 	int response;
 	const struct whiteheat_hex_record *record;
 	
-	dbg("whiteheat_startup");
+	dbg(__FUNCTION__);
 	
 	response = ezusb_set_reset (serial, 1);
 
@@ -343,7 +432,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 		response = ezusb_writememory (serial, record->address, 
 				(unsigned char *)record->data, record->data_size, 0xa0);
 		if (response < 0) {
-			err("ezusb_writememory failed for loader (%d %04X %p %d)", 
+			err(__FUNCTION__ " - ezusb_writememory failed for loader (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);
 			break;
 		}
@@ -360,7 +449,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 		response = ezusb_writememory (serial, record->address, 
 				(unsigned char *)record->data, record->data_size, 0xa3);
 		if (response < 0) {
-			err("ezusb_writememory failed for first firmware step (%d %04X %p %d)", 
+			err(__FUNCTION__ " - ezusb_writememory failed for first firmware step (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);
 			break;
 		}
@@ -374,7 +463,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 		response = ezusb_writememory (serial, record->address, 
 				(unsigned char *)record->data, record->data_size, 0xa0);
 		if (response < 0) {
-			err("ezusb_writememory failed for second firmware step (%d %04X %p %d)", 
+			err(__FUNCTION__" - ezusb_writememory failed for second firmware step (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);
 			break;
 		}
@@ -392,9 +481,9 @@ static void whiteheat_shutdown (struct usb_serial *serial)
 {
 	struct usb_serial_port 		*command_port;
 
-	dbg("whiteheat_shutdown");
+	dbg(__FUNCTION__);
 
-	/* set up some stuff for our command port */
+	/* free up our private data for our command port */
 	command_port = &serial->port[COMMAND_PORT];
 	if (command_port->private != NULL) {
 		kfree (command_port->private);
@@ -402,5 +491,37 @@ static void whiteheat_shutdown (struct usb_serial *serial)
 	}
 
 	return;
+}
+
+
+
+
+static void set_command (struct usb_serial_port *port, unsigned char state, unsigned char command)
+{
+	struct whiteheat_rdb_set rdb_command;
+	
+	/* send a set rts command to the port */
+	rdb_command.port = port->number - port->minor;
+	rdb_command.state = state;
+
+	whiteheat_send_cmd (port->serial, command, (__u8 *)&rdb_command, sizeof(rdb_command));
+}
+
+
+static inline void set_rts (struct usb_serial_port *port, unsigned char rts)
+{
+	set_command (port, rts, WHITEHEAT_SET_RTS);
+}
+
+
+static inline void set_dtr (struct usb_serial_port *port, unsigned char dtr)
+{
+	set_command (port, dtr, WHITEHEAT_SET_DTR);
+}
+
+
+static inline void set_break (struct usb_serial_port *port, unsigned char brk)
+{
+	set_command (port, brk, WHITEHEAT_SET_BREAK);
 }
 

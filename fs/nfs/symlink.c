@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/smp_lock.h>
 
 /* Symlink caching in the page cache is even more simplistic
  * and straight-forward than readdir caching.
@@ -36,8 +37,10 @@ static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
 	 * in host byte order, followed by the string.  The
 	 * XDR response verification will NULL terminate it.
 	 */
+	lock_kernel();
 	error = NFS_PROTO(inode)->readlink(dentry, buffer,
 					   PAGE_CACHE_SIZE - sizeof(u32)-4);
+	unlock_kernel();
 	if (error < 0)
 		goto error;
 	SetPageUptodate(page);

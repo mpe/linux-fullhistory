@@ -466,6 +466,13 @@ fail_page:
 }
 
 static struct vfsmount *pipe_mnt;
+static int pipefs_delete_dentry(struct dentry *dentry)
+{
+	return 1;
+}
+static struct dentry_operations pipefs_dentry_operations = {
+	d_delete:	pipefs_delete_dentry,
+};
 
 static struct inode * get_pipe_inode(void)
 {
@@ -534,14 +541,15 @@ int do_pipe(int *fd)
 	j = error;
 
 	error = -ENOMEM;
-	sprintf(name, "%lu", inode->i_ino);
+	sprintf(name, "[%lu]", inode->i_ino);
 	this.name = name;
 	this.len = strlen(name);
-	/* We don't care for hash - it will never be looked up */
+	this.hash = inode->i_ino; /* will go */
 	dentry = d_alloc(pipe_mnt->mnt_sb->s_root, &this);
+	dentry->d_op = &pipefs_dentry_operations;
 	if (!dentry)
 		goto close_f12_inode_i_j;
-	d_instantiate(dentry, inode);
+	d_add(dentry, inode);
 	f1->f_vfsmnt = f2->f_vfsmnt = mntget(mntget(pipe_mnt));
 	f1->f_dentry = f2->f_dentry = dget(dentry);
 
@@ -633,7 +641,9 @@ static int __init init_pipe_fs(void)
 	if (!err) {
 		pipe_mnt = kern_mount(&pipe_fs_type);
 		err = PTR_ERR(pipe_mnt);
-		if (!IS_ERR(pipe_mnt))
+		if (IS_ERR(pipe_mnt))
+			unregister_filesystem(&pipe_fs_type);
+		else
 			err = 0;
 	}
 	return err;

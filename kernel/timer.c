@@ -162,7 +162,7 @@ static inline void internal_add_timer(struct timer_list *timer)
 
 /* Initialize both explicitly - let's try to have them in the same cache line */
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
-volatile unsigned long timer_sequence = 0xfee1bad;
+volatile struct timer_list *running_timer = NULL;
 
 void add_timer(struct timer_list *timer)
 {
@@ -311,25 +311,6 @@ repeat:
 	spin_unlock_irq(&timerlist_lock);
 }
 
-
-static inline void run_old_timers(void)
-{
-	struct timer_struct *tp;
-	unsigned long mask;
-
-	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
-		if (mask > timer_active)
-			break;
-		if (!(mask & timer_active))
-			continue;
-		if (time_after(tp->expires, jiffies))
-			continue;
-		timer_active &= ~mask;
-		tp->fn();
-		sti();
-	}
-}
-
 spinlock_t tqueue_lock = SPIN_LOCK_UNLOCKED;
 
 void tqueue_bh(void)
@@ -341,9 +322,6 @@ void immediate_bh(void)
 {
 	run_task_queue(&tq_immediate);
 }
-
-unsigned long timer_active;
-struct timer_struct timer_table[32];
 
 /*
  * this routine handles the overflow of the microsecond field
@@ -682,7 +660,6 @@ static inline void update_times(void)
 void timer_bh(void)
 {
 	update_times();
-	run_old_timers();
 	run_timer_list();
 }
 

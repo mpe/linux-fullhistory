@@ -22,10 +22,10 @@
 #define O_DIRECT	0400000	/* direct disk access hint - currently ignored */
 
 #define F_DUPFD		0	/* dup */
-#define F_GETFD		1	/* get f_flags */
-#define F_SETFD		2	/* set f_flags */
-#define F_GETFL		3	/* more flags (cloexec) */
-#define F_SETFL		4
+#define F_GETFD		1	/* get close_on_exec */
+#define F_SETFD		2	/* set/clear close_on_exec */
+#define F_GETFL		3	/* get file->f_flags */
+#define F_SETFL		4	/* set file->f_flags */
 #define F_GETLK		5
 #define F_SETLK		6
 #define F_SETLKW	7

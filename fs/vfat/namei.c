@@ -81,9 +81,12 @@ static struct dentry_operations vfat_dentry_ops[4] = {
 static int vfat_revalidate(struct dentry *dentry, int flags)
 {
 	PRINTK1(("vfat_revalidate: %s\n", dentry->d_name.name));
+	spin_lock(&dcache_lock);
 	if (dentry->d_time == dentry->d_parent->d_inode->i_version) {
+		spin_unlock(&dcache_lock);
 		return 1;
 	}
+	spin_unlock(&dcache_lock);
 	return 0;
 }
 

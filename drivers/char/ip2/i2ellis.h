@@ -352,7 +352,7 @@ typedef struct _i2eBordStr
 
 	// Ring-buffers of channel structures whose channels have particular needs.
 
-	spinlock_t	Fbuf_spinlock;
+	rwlock_t	Fbuf_spinlock;
 	volatile
 	unsigned short i2Fbuf_strip;	// Strip index
 	volatile 
@@ -360,7 +360,7 @@ typedef struct _i2eBordStr
 	void  *i2Fbuf[CH_QUEUE_SIZE];	// An array of channel pointers
 									// of channels who need to send
 									// flow control packets.
-	spinlock_t	Dbuf_spinlock;
+	rwlock_t	Dbuf_spinlock;
 	volatile
 	unsigned short i2Dbuf_strip;	// Strip index
 	volatile
@@ -368,7 +368,7 @@ typedef struct _i2eBordStr
 	void  *i2Dbuf[CH_QUEUE_SIZE];	// An array of channel pointers
 									// of channels who need to send
 									// data or in-line command packets.
-	spinlock_t	Bbuf_spinlock;
+	rwlock_t	Bbuf_spinlock;
 	volatile
 	unsigned short i2Bbuf_strip;	// Strip index
 	volatile
@@ -397,8 +397,8 @@ typedef struct _i2eBordStr
 	unsigned long debugInlineCount;
 	unsigned long debugBypassCount;
 	
-	spinlock_t	read_fifo_spinlock;
-	spinlock_t	write_fifo_spinlock;
+	rwlock_t	read_fifo_spinlock;
+	rwlock_t	write_fifo_spinlock;
 
 #ifdef	CONFIG_DEVFS_FS
 	/* Device handles into devfs */

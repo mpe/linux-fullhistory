@@ -2338,7 +2338,6 @@ int specialix_init(void)
 #ifdef CONFIG_PCI
 	if (pci_present()) {
 		struct pci_dev *pdev = NULL;
-		unsigned int tint;
 
 		i=0;
 		while (i <= SX_NBOARD) {

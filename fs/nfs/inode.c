@@ -542,7 +542,7 @@ nfs_statfs(struct super_block *sb, struct statfs *buf)
 static int
 nfs_free_dentries(struct inode *inode)
 {
-	struct list_head *tmp, *head = &inode->i_dentry;
+	struct list_head *tmp, *head;
 	int unhashed;
 
 	if (S_ISDIR(inode->i_mode)) {
@@ -553,13 +553,16 @@ nfs_free_dentries(struct inode *inode)
 		}
 	}
 	d_prune_aliases(inode);
+	spin_lock(&dcache_lock);
+	head = &inode->i_dentry;
 	tmp = head;
 	unhashed = 0;
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
-		if (d_unhashed(dentry))
+		if (list_empty(&dentry->d_hash))
 			unhashed++;
 	}
+	spin_unlock(&dcache_lock);
 	return unhashed;
 }
 
@@ -913,15 +916,22 @@ __nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		inode->i_ino);
 
-	if (!inode || is_bad_inode(inode))
+	lock_kernel();
+	if (!inode || is_bad_inode(inode)) {
+		unlock_kernel();
 		return -ESTALE;
+	}
 
 	while (NFS_REVALIDATING(inode)) {
 		status = nfs_wait_on_inode(inode, NFS_INO_REVALIDATING);
-		if (status < 0)
+		if (status < 0) {
+			unlock_kernel();
 			return status;
-		if (time_before(jiffies,NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
+		}
+		if (time_before(jiffies,NFS_READTIME(inode)+NFS_ATTRTIMEO(inode))) {
+			unlock_kernel();
 			return 0;
+		}
 	}
 	NFS_FLAGS(inode) |= NFS_INO_REVALIDATING;
 
@@ -968,6 +978,7 @@ __nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 out:
 	NFS_FLAGS(inode) &= ~NFS_INO_REVALIDATING;
 	wake_up(&inode->i_wait);
+	unlock_kernel();
 	return status;
 }
 

@@ -391,7 +391,7 @@ int init_coda_psdev(void)
 		     CODA_PSDEV_MAJOR);
               return -EIO;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "coda", 4, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "coda", NULL);
 	devfs_register_series (devfs_handle, "%u", MAX_CODADEVS, DEVFS_FL_NONE,
 			       CODA_PSDEV_MAJOR, 0,
 			       S_IFCHR | S_IRUSR | S_IWUSR,

@@ -1,3 +1,30 @@
+2000-06-30  Petr Vandrovec  <vandrove@vc.cvut.cz>
+
+	* procfs.c (do_hardware_modes): Generated string can be up to 34
+	chars long.
+
+2000-06-20  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c (parport_pc_compat_write_block_pio): Warn about
+	change_mode failures.
+	(parport_pc_ecp_write_block_pio): Likewise.
+	(parport_pc_ecp_read_block_pio): Likewise.
+
+2000-06-20  Gunther Mayer  <gunther.mayer@braunschweig.okersurf.de>
+
+	* parport_pc.c (parport_SPP_supported): Warn more about possibly
+	incorrect parameters.
+
+2000-06-15  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_ECP_supported): Set PARPORT_MODE_COMPAT
+	for ECP ports, since they can all do hardware accelerated
+	compatibility mode (I assume).
+
+2000-06-13  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (cleanup_module): Remark about possible bugs.
+
 2000-06-13  Tim Waugh  <twaugh@redhat.com>
 
 	* procfs.c: Break 'hardware' out into separate files.

@@ -68,8 +68,6 @@ void UMSDOS_put_super (struct super_block *sb)
 	Printk ((KERN_DEBUG "UMSDOS_put_super: entering\n"));
 	if (saved_root) {
 		shrink_dcache_parent(saved_root);
-printk("UMSDOS_put_super: freeing saved root, d_count=%d\n",
-saved_root->d_count);
 		dput(saved_root);
 		saved_root = NULL;
 		pseudo_root = NULL;

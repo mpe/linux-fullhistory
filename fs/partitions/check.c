@@ -341,13 +341,13 @@ static void devfs_register_disc (struct gendisk *dev, int minor)
 	else {
 		/*  Unaware driver: construct "real" directory  */
 		sprintf (dirname, "../%s/disc%d", dev->major_name, devnum);
-		dir = devfs_mk_dir (NULL, dirname + 3, 0, NULL);
+		dir = devfs_mk_dir (NULL, dirname + 3, NULL);
 	}
 	if (!devfs_handle)
-		devfs_handle = devfs_mk_dir (NULL, "discs", 5, NULL);
+		devfs_handle = devfs_mk_dir (NULL, "discs", NULL);
 	sprintf (symlink, "disc%u", disc_counter++);
-	devfs_mk_symlink (devfs_handle, symlink, 0, DEVFS_FL_DEFAULT,
-			  dirname + pos, 0, &slave, NULL);
+	devfs_mk_symlink (devfs_handle, symlink, DEVFS_FL_DEFAULT,
+			  dirname + pos, &slave, NULL);
 	dev->part[minor].de =
 	    devfs_register (dir, "disc", devfs_flags, dev->major, minor,
 			    S_IFBLK | S_IRUSR | S_IWUSR, dev->fops, NULL);

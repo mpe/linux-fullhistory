@@ -5752,7 +5752,7 @@ int __init SBPCD_INIT(void)
 	
 	request_region(CDo_command,4,major_name);
 	
-	devfs_handle = devfs_mk_dir (NULL, "sbp", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "sbp", NULL);
 	for (j=0;j<NR_SBPCD;j++)
 	{
 		struct cdrom_device_info * sbpcd_infop;
@@ -5779,6 +5779,7 @@ int __init SBPCD_INIT(void)
 				printk("Can't unregister %s\n", major_name);
 			}
 			release_region(CDo_command,4);
+			blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 			return -EIO;
 		}
 #ifdef MODULE
@@ -5794,6 +5795,7 @@ int __init SBPCD_INIT(void)
 		if (sbpcd_infop == NULL)
 		{
                         release_region(CDo_command,4);
+			blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
                         return -ENOMEM;
 		}
 		D_S[j].sbpcd_infop = sbpcd_infop;
@@ -5845,7 +5847,7 @@ void sbpcd_exit(void)
 		return;
 	}
 	release_region(CDo_command,4);
-	
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	devfs_unregister (devfs_handle);
 	for (j=0;j<NR_SBPCD;j++)
 	{

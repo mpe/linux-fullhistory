@@ -480,14 +480,12 @@ asmlinkage int solaris_statvfs(u32 path, u32 buf)
 	struct nameidata nd;
 	int error;
 
-	lock_kernel();
 	error = user_path_walk((const char *)A(path),&nd);
 	if (!error) {
 		struct inode * inode = nd.dentry->d_inode;
 		error = report_statvfs(inode, buf);
 		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -499,9 +497,7 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 	error = -EBADF;
 	file = fget(fd);
 	if (file) {
-		lock_kernel();
 		error = report_statvfs(file->f_dentry->d_inode, buf);
-		unlock_kernel();
 		fput(file);
 	}
 

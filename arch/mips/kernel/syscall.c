@@ -42,7 +42,6 @@ asmlinkage int sys_pipe(struct pt_regs regs)
 	int fd[2];
 	int error, res;
 
-	lock_kernel();
 	error = do_pipe(fd);
 	if (error) {
 		res = error;
@@ -51,7 +50,6 @@ asmlinkage int sys_pipe(struct pt_regs regs)
 	regs.regs[3] = fd[1];
 	res = fd[0];
 out:
-	unlock_kernel();
 	return res;
 }
 
@@ -71,11 +69,7 @@ do_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
 	}
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
-
 	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (file)

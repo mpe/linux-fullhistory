@@ -190,7 +190,7 @@ int __init init_netlink(void)
 		printk(KERN_ERR "netlink: unable to get major %d\n", NETLINK_MAJOR);
 		return -EIO;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "netlink", 7, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "netlink", NULL);
 	/*  Someone tell me the official names for the uppercase ones  */
 	make_devfs_entries ("route", 0);
 	make_devfs_entries ("skip", 1);

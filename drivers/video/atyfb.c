@@ -612,6 +612,7 @@ static inline void aty_st_8(unsigned int regindex, u8 val,
     writeb (val, info->ati_regbase + regindex);
 }
 
+#if defined(CONFIG_PPC) || defined(CONFIG_PMAC_PBOOK)
 static void aty_st_lcd(int index, u32 val, const struct fb_info_aty *info)
 {
     unsigned long temp;
@@ -633,6 +634,7 @@ static u32 aty_ld_lcd(int index, const struct fb_info_aty *info)
     /* read the register value */
     return aty_ld_le32(LCD_DATA, info);
 }
+#endif
 
     /*
      *  Generic Mach64 routines

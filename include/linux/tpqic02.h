@@ -663,10 +663,9 @@ struct tpstatus {	/* sizeof(short)==2), LSB first */
 #define TIM_R	(8*60*HZ)	/* 8 minutes (retensioning) */
 #define TIM_F	(2*3600*HZ)	/* est. 1.2hr for full tape read/write+2 retens */
 
-#define TIMERON(t)	timer_table[QIC02_TAPE_TIMER].expires = jiffies + (t); \
-			timer_active |= (1<<QIC02_TAPE_TIMER)
-#define TIMEROFF	timer_active &= ~(1<<QIC02_TAPE_TIMER)
-#define TIMERCONT	timer_active |= (1<<QIC02_TAPE_TIMER)
+#define TIMERON(t)	mod_timer(&tp_timer, jiffies + (t))
+#define TIMEROFF	del_timer_sync(&tp_timer);
+#define TIMERCONT	add_timer(&tp_timer);
 
 
 typedef char flag;

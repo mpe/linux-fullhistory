@@ -183,6 +183,15 @@ const char * cdevname(kdev_t dev)
 	sprintf(buffer, "%s(%d,%d)", name, MAJOR(dev), MINOR(dev));
 	return buffer;
 }
+  
+static int sock_no_open(struct inode *irrelevant, struct file *dontcare)
+{
+	return -ENXIO;
+}
+
+static struct file_operations bad_sock_fops = {
+	open:		sock_no_open
+};
 
 void init_special_inode(struct inode *inode, umode_t mode, int rdev)
 {
@@ -197,7 +206,7 @@ void init_special_inode(struct inode *inode, umode_t mode, int rdev)
 	} else if (S_ISFIFO(mode))
 		inode->i_fop = &def_fifo_fops;
 	else if (S_ISSOCK(mode))
-		;
+		inode->i_fop = &bad_sock_fops;
 	else
 		printk(KERN_DEBUG "init_special_inode: bogus imode (%o)\n", mode);
 }

@@ -518,11 +518,7 @@ static struct comx_protocol comx25_protocol = {
 	NULL 
 };
 
-#ifdef MODULE
-#define comx_proto_lapb_init init_module
-#endif
-
-__initfunc(int comx_proto_lapb_init(void))
+int __init comx_proto_lapb_init(void)
 {
 	int ret;
 
@@ -532,11 +528,13 @@ __initfunc(int comx_proto_lapb_init(void))
 	return comx_register_protocol(&comx25_protocol);
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit comx_proto_lapb_exit(void)
 {
 	comx_unregister_protocol(comxlapb_protocol.name);
 	comx_unregister_protocol(comx25_protocol.name);
 }
-#endif /* MODULE */
 
+#ifdef MODULE
+module_init(comx_proto_lapb_init);
+#endif
+module_exit(comx_proto_lapb_exit);

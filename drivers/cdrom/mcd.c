@@ -182,7 +182,7 @@ static char tocUpToDate;
 static char mcdVersion;
 
 static void mcd_transfer(void);
-static void mcd_poll(void);
+static void mcd_poll(unsigned long dummy);
 static void mcd_invalidate_buffers(void);
 static void hsg2msf(long hsg, struct msf *msf);
 static void bin2bcd(unsigned char *p);
@@ -202,6 +202,8 @@ static int mcd_tray_move(struct cdrom_device_info * cdi, int position);
 int mcd_audio_ioctl(struct cdrom_device_info * cdi, unsigned int cmd,
                       void * arg);
 int mcd_drive_status(struct cdrom_device_info * cdi, int slot_nr);
+
+static struct timer_list mcd_timer;
 
 static struct cdrom_device_ops mcd_dops = {
   mcd_open,                   /* open */
@@ -705,7 +707,7 @@ do_mcd_request(request_queue_t * q)
 
 
 static void
-mcd_poll(void)
+mcd_poll(unsigned long dummy)
 {
   int st;
 
@@ -787,7 +789,7 @@ mcd_poll(void)
 #ifdef TEST3
     printk("MCD_S_IDLE\n");
 #endif
-    return;
+    goto out;
 
 
 
@@ -829,7 +831,7 @@ mcd_poll(void)
 	mcd_state = MCD_S_IDLE;
 	while (CURRENT_VALID)
 	  end_request(0);
-	return;
+	goto out;
       }
 
       outb(MCMD_SET_MODE, MCDPORT(0));
@@ -869,7 +871,7 @@ mcd_poll(void)
 	mcd_state = MCD_S_IDLE;
 	while (CURRENT_VALID)
 	  end_request(0);
-	return;
+	goto out;
       }
 
       if (CURRENT_VALID) {
@@ -1071,13 +1073,13 @@ mcd_poll(void)
       }
     } else {
       mcd_state = MCD_S_IDLE;
-      return;
+      goto out;
     }
     break;
 
   default:
     printk("mcd: invalid state %d\n", mcd_state);
-    return;
+    goto out;
   }
 
  ret:
@@ -1087,6 +1089,8 @@ mcd_poll(void)
   }
 
   SET_TIMER(mcd_poll, 1);
+out:
+  return;
 }
 
 
@@ -1169,6 +1173,7 @@ static void cleanup(int level)
       printk(KERN_WARNING "Can't unregister major mcd\n");
       return;
     }
+    blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
   default:
   }
 }
@@ -1369,7 +1374,7 @@ sendMcdCmd(int cmd, struct mcd_Play_msf *params)
  */
 
 static void
-mcdStatTimer(void)
+mcdStatTimer(unsigned long dummy)
 {
 	if (!(inb(MCDPORT(1)) & MFL_STATUS))
 	{
@@ -1659,6 +1664,7 @@ Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 void __exit mcd_exit(void)
 {
   cleanup(3);
+  del_timer_sync(&mcd_timer);
 }
 
 #ifdef MODULE

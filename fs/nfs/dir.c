@@ -29,6 +29,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/nfs_mount.h>
 #include <linux/pagemap.h>
+#include <linux/smp_lock.h>
 
 #define NFS_PARANOIA 1
 /* #define NFS_DEBUG_VERBOSE 1 */
@@ -489,6 +490,9 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
 
+	lock_kernel();
+	dir = dentry->d_parent;
+	dir_i = dir->d_inode;
 	/*
 	 * If we don't have an inode, let's look at the parent
 	 * directory mtime to get a hint about how often we
@@ -538,10 +542,10 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
  out_valid_renew:
 	nfs_renew_times(dentry);
 out_valid:
+	unlock_kernel();
 	return 1;
 out_bad:
-	if (!list_empty(&dentry->d_subdirs))
-		shrink_dcache_parent(dentry);
+	shrink_dcache_parent(dentry);
 	/* If we have submounts, don't unhash ! */
 	if (have_submounts(dentry))
 		goto out_valid;
@@ -550,6 +554,7 @@ out_bad:
 	nfs_zap_caches(dir_i);
 	if (inode && S_ISDIR(inode->i_mode))
 		nfs_zap_caches(inode);
+	unlock_kernel();
 	return 0;
 }
 
@@ -587,8 +592,11 @@ __inline__ void nfs_fh_free(struct nfs_fh *p)
  */
 static void nfs_dentry_release(struct dentry *dentry)
 {
-	if (dentry->d_fsdata)
+	if (dentry->d_fsdata) {
+		lock_kernel();
 		nfs_fh_free(dentry->d_fsdata);
+		unlock_kernel();
+	}
 }
 
 /*
@@ -602,9 +610,13 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 		struct inode *dir_i = dir->d_inode;
 		int error;
 		
+		lock_kernel();
+		dir = dentry->d_parent;
+		dir_i = dir->d_inode;
 		nfs_zap_caches(dir_i);
 		NFS_CACHEINV(inode);
 		error = NFS_PROTO(dir_i)->remove(dir, &dentry->d_name);
+		unlock_kernel();
 	}
 	iput(inode);
 }
@@ -803,13 +815,13 @@ static int nfs_sillyrename(struct inode *dir_i, struct dentry *dentry)
 
 	dfprintk(VFS, "NFS: silly-rename(%s/%s, ct=%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name, 
-		dentry->d_count);
+		atomic_read(&dentry->d_count));
 
 	/*
 	 * Note that a silly-renamed file can be deleted once it's
 	 * no longer in use -- it's just an ordinary file now.
 	 */
-	if (dentry->d_count == 1) {
+	if (atomic_read(&dentry->d_count) == 1) {
 		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
 		goto out;  /* No need to silly rename. */
 	}
@@ -889,11 +901,11 @@ static int nfs_safe_remove(struct dentry *dentry)
 		d_drop(dentry);
 		rehash = 1;
 	}
-	if (dentry->d_count > 1) {
+	if (atomic_read(&dentry->d_count) > 1) {
 #ifdef NFS_PARANOIA
 		printk("nfs_safe_remove: %s/%s busy, d_count=%d\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name,
-			dentry->d_count);
+			atomic_read(&dentry->d_count));
 #endif
 		goto out;
 	}
@@ -1051,7 +1063,7 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	dfprintk(VFS, "NFS: rename(%s/%s -> %s/%s, ct=%d)\n",
 		 old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
 		 new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
-		 new_dentry->d_count);
+		 atomic_read(&new_dentry->d_count));
 
 	/*
 	 * First check whether the target is busy ... we can't
@@ -1065,7 +1077,7 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		goto go_ahead;
 	if (S_ISDIR(new_inode->i_mode))
 		goto out;
-	else if (new_dentry->d_count > 1) {
+	else if (atomic_read(&new_dentry->d_count) > 1) {
 		int err;
 		/* copy the target dentry's name */
 		dentry = d_alloc(new_dentry->d_parent,
@@ -1083,12 +1095,12 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		}
 
 		/* dentry still busy? */
-		if (new_dentry->d_count > 1) {
+		if (atomic_read(&new_dentry->d_count) > 1) {
 #ifdef NFS_PARANOIA
 			printk("nfs_rename: target %s/%s busy, d_count=%d\n",
 			       new_dentry->d_parent->d_name.name,
 			       new_dentry->d_name.name,
-			       new_dentry->d_count);
+			       atomic_read(&new_dentry->d_count));
 #endif
 			goto out;
 		}
@@ -1098,7 +1110,7 @@ go_ahead:
 	/*
 	 * ... prune child dentries and writebacks if needed.
 	 */
-	if (old_dentry->d_count > 1) {
+	if (atomic_read(&old_dentry->d_count) > 1) {
 		nfs_wb_all(old_inode);
 		shrink_dcache_parent(old_dentry);
 	}

@@ -35,9 +35,7 @@ asmlinkage int sys_pipe(unsigned long r4, unsigned long r5,
 	int fd[2];
 	int error;
 
-	lock_kernel();
 	error = do_pipe(fd);
-	unlock_kernel();
 	if (!error) {
 		regs.regs[1] = fd[1];
 		return fd[0];
@@ -60,10 +58,7 @@ do_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
 	}
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
-
 	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (file)

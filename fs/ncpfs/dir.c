@@ -21,6 +21,7 @@
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 #include <linux/locks.h>
+#include <linux/smp_lock.h>
 
 #include <linux/ncp_fs.h>
 
@@ -253,7 +254,7 @@ leave_me:;
 
 
 static int
-ncp_lookup_validate(struct dentry * dentry, int flags)
+__ncp_lookup_validate(struct dentry * dentry, int flags)
 {
 	struct ncp_server *server;
 	struct inode *dir = dentry->d_parent->d_inode;
@@ -315,6 +316,16 @@ finished:
 	return val;
 }
 
+static int
+ncp_lookup_validate(struct dentry * dentry, int flags)
+{
+	int res;
+	lock_kernel();
+	res = __ncp_lookup_validate(dentry, flags);
+	unlock_kernel();
+	return res;
+}
+
 /* most parts from nfsd_d_validate() */
 static int
 ncp_d_validate(struct dentry *dentry)
@@ -361,26 +372,38 @@ ncp_dget_fpos(struct dentry *dentry, struct dentry *parent, unsigned long fpos)
 	struct dentry *dent = dentry;
 	struct list_head *next;
 
-	if (ncp_d_validate(dent))
-		if ((dent->d_parent == parent) &&
-		    ((unsigned long)dent->d_fsdata == fpos))
-			goto out;
+	if (ncp_d_validate(dent)) {
+		if (dent->d_parent == parent &&
+		   (unsigned long)dent->d_fsdata == fpos) {
+			if (!dent->d_inode) {
+				dput(dent);
+				dent = NULL;
+			}
+			return dent;
+		}
+		dput(dent);
+	}
 
 	/* If a pointer is invalid, we search the dentry. */
+	spin_lock(&dcache_lock);
 	next = parent->d_subdirs.next;
 	while (next != &parent->d_subdirs) {
 		dent = list_entry(next, struct dentry, d_child);
-		if ((unsigned long)dent->d_fsdata == fpos)
+		if ((unsigned long)dent->d_fsdata == fpos) {
+			if (dent->d_inode)
+				dget(dent);
+			else
+				dent = NULL;
+			spin_unlock(&dcache_lock);
 			goto out;
+		}
 		next = next->next;
 	}
+	spin_unlock(&dcache_lock);
 	return NULL;
 
 out:
-	if (dent->d_inode)
-		return dget(dent);
-
-	return NULL;
+	return dent;
 }
 
 static time_t ncp_obtain_mtime(struct dentry *dentry)

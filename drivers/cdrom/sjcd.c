@@ -1577,8 +1577,10 @@ sjcd_cleanup(void)
 {
   if( (devfs_unregister_blkdev(MAJOR_NR, "sjcd") == -EINVAL) )
     printk( "SJCD: cannot unregister device.\n" );
-  else
+  else {
     release_region( sjcd_base, 4 );
+    blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
+  }
 
   return(0);
 }
@@ -1586,8 +1588,7 @@ sjcd_cleanup(void)
 
 void __exit sjcd_exit(void)
 {
-  devfs_unregister(devfs_find_handle(NULL, "sjcd", 0, 0, 0, DEVFS_SPECIAL_BLK,
-				     0));
+  devfs_unregister(devfs_find_handle(NULL, "sjcd", 0, 0, DEVFS_SPECIAL_BLK,0));
   if ( sjcd_cleanup() )
     printk( "SJCD: module: cannot be removed.\n" );
   else

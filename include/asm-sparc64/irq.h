@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.18 2000/05/09 17:40:15 davem Exp $
+/* $Id: irq.h,v 1.19 2000/06/26 19:40:27 davem Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -42,10 +42,10 @@ struct ino_bucket {
 	/* Miscellaneous flags. */
 /*0x06*/unsigned char flags;
 
-	/* Unused right now, but we will use it for proper
-	 * enable_irq()/disable_irq() nesting.
+	/* This is used to deal with IBF_DMA_SYNC on
+	 * Sabre systems.
 	 */
-/*0x07*/unsigned char __unused;
+/*0x07*/unsigned char synctab_ent;
 
 	/* Reference to handler for this IRQ.  If this is
 	 * non-NULL this means it is active and should be
@@ -68,6 +68,12 @@ struct ino_bucket {
 /*0x18*/unsigned long imap;
 
 };
+
+#ifdef CONFIG_PCI
+extern unsigned long pci_dma_wsync;
+extern unsigned long dma_sync_reg_table[256];
+extern unsigned char dma_sync_reg_table_entry;
+#endif
 
 /* IMAP/ICLR register defines */
 #define IMAP_VALID		0x80000000	/* IRQ Enabled		*/

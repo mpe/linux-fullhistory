@@ -395,7 +395,7 @@ static int __init cosa_init(void)
 		cosa_cards[i].num = -1;
 	for (i=0; io[i] != 0 && i < MAX_CARDS; i++)
 		cosa_probe(io[i], irq[i], dma[i]);
-	devfs_handle = devfs_mk_dir (NULL, "cosa", 4, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "cosa", NULL);
 	devfs_register_series (devfs_handle, "%u", nr_cards, DEVFS_FL_DEFAULT,
 			       cosa_major, 0,
 			       S_IFCHR | S_IRUSR | S_IWUSR,

@@ -54,7 +54,6 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 	struct file *file = NULL;
 	unsigned long retval, ret_type;
 
-	lock_kernel();
 	/* Do we need it here? */
 	set_personality(PER_SVR4);
 	if (flags & MAP_NORESERVE) {
@@ -107,7 +106,6 @@ out_putf:
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return (u32) retval;
 }
 

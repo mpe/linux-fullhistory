@@ -16,11 +16,11 @@
 #include <asm/pgtable.h>
 #include <asm/desc.h>
 
-
-#define CL_MAGIC_ADDR	0x90020
-#define CL_MAGIC	0xA33F
-#define CL_BASE_ADDR	0x90000
-#define CL_OFFSET	0x90022
+#define OLD_CL_MAGIC_ADDR	0x90020
+#define OLD_CL_MAGIC		0xA33F
+#define OLD_CL_BASE_ADDR	0x90000
+#define OLD_CL_OFFSET		0x90022
+#define NEW_CL_POINTER		0x228	/* Relative to real mode data */
 
 /*
  * References to members of the boot_cpu_data structure.
@@ -38,6 +38,8 @@
 
 /*
  * swapper_pg_dir is the main page directory, address 0x00101000
+ *
+ * On entry, %esi points to the real-mode code as a 32-bit pointer.
  */
 ENTRY(stext)
 ENTRY(_stext)
@@ -54,6 +56,7 @@ startup_32:
 #ifdef CONFIG_SMP
 	orw %bx,%bx
 	jz 1f
+
 /*
  *	New page tables may be in 4Mbyte page mode and may
  *	be using the global pages. 
@@ -113,6 +116,7 @@ startup_32:
 	jmp checkCPUtype
 1:
 #endif CONFIG_SMP
+
 /*
  * Clear BSS first so that there are no surprises...
  */
@@ -123,6 +127,7 @@ startup_32:
 	cld
 	rep
 	stosb
+
 /*
  * start system 32-bit setup. We need to re-do some of the things done
  * in 16-bit mode for the "real" operations.
@@ -139,8 +144,9 @@ startup_32:
  * Copy bootup parameters out of the way. First 2kB of
  * _empty_zero_page is for boot parameters, second 2kB
  * is for the command line.
+ *
+ * Note: %esi still has the pointer to the real-mode data.
  */
-	movl $0x90000,%esi
 	movl $ SYMBOL_NAME(empty_zero_page),%edi
 	movl $512,%ecx
 	cld
@@ -150,11 +156,15 @@ startup_32:
 	movl $512,%ecx
 	rep
 	stosl
-	cmpw $(CL_MAGIC),CL_MAGIC_ADDR
+	movl SYMBOL_NAME(empty_zero_page)+NEW_CL_POINTER,%esi
+	andl %esi,%esi
+	jnz 2f			# New command line protocol
+	cmpw $(OLD_CL_MAGIC),OLD_CL_MAGIC_ADDR
 	jne 1f
+	movzwl OLD_CL_OFFSET,%esi
+	addl $(OLD_CL_BASE_ADDR),%esi
+2:
 	movl $ SYMBOL_NAME(empty_zero_page)+2048,%edi
-	movzwl CL_OFFSET,%esi
-	addl $(CL_BASE_ADDR),%esi
 	movl $512,%ecx
 	rep
 	movsl
@@ -455,7 +465,7 @@ ENTRY(gdt_table)
 	.quad 0x00009a0000000000	/* 0x50 APM CS 16 code (16 bit) */
 	.quad 0x0040920000000000	/* 0x58 APM DS    data */
 	.fill NR_CPUS*4,8,0		/* space for TSS's and LDT's */
-
+		
 /*
  * This is to aid debugging, the various locking macros will be putting
  * code fragments here.  When an oops occurs we'd rather know that it's

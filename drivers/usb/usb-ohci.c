@@ -307,7 +307,7 @@ static void ohci_dump_roothub (ohci_t *controller, int verbose)
 
 static void ohci_dump (ohci_t *controller, int verbose)
 {
-	dbg ("OHCI controller %p state", controller->regs);
+	dbg ("OHCI controller %s state", controller->ohci_dev->slot_name);
 
 	// dumps some of the state we know about
 	ohci_dump_status (controller);
@@ -831,8 +831,8 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
 		}
 		break;
       
-    case INT: 
-      	int_branch = ed->int_branch;
+	case INT: 
+		int_branch = ed->int_branch;
 		interval = ed->int_interval;
 
 		for (i = 0; i < ep_rev (6, interval); i += inter) {
@@ -1392,6 +1392,14 @@ static int rh_send_irq (ohci_t * ohci, void * rh_data, int rh_len)
 	__u8 data[8];
 
 	num_ports = readl (&ohci->regs->roothub.a) & RH_A_NDP; 
+	if (num_ports > MAX_ROOT_PORTS) {
+		err ("bogus NDP=%d for OHCI %s", num_ports,
+			ohci->ohci_dev->slot_name);
+		err ("rereads as NDP=%d",
+			readl (&ohci->regs->roothub.a) & RH_A_NDP);
+		/* retry later; "should not happen" */
+		return 0;
+	}
 	*(__u8 *) data = (readl (&ohci->regs->roothub.status) & (RH_HS_LPSC | RH_HS_OCIC))
 		? 1: 0;
 	ret = *(__u8 *) data;
@@ -1424,8 +1432,12 @@ static void rh_int_timer_do (unsigned long ptr)
 	ohci_t * ohci = urb->dev->bus->hcpriv;
 
 	if (ohci->disabled)
-	    return;
-	
+		return;
+
+	/* ignore timers firing during PM suspend, etc */
+	if ((ohci->hc_control & OHCI_CTRL_HCFS) != OHCI_USB_OPER)
+		return;
+
 	if(ohci->rh.send) { 
 		len = rh_send_irq (ohci, urb->transfer_buffer, urb->transfer_buffer_length);
 		if (len > 0) {
@@ -1702,7 +1714,9 @@ static int hc_reset (ohci_t * ohci)
 	/* Disable HC interrupts */
 	writel (OHCI_INTR_MIE, &ohci->regs->intrdisable);
 
-	dbg("USB HC reset_hc: %x ;", readl (&ohci->regs->control));
+	dbg("USB HC reset_hc %s: ctrl = %x ;",
+		ohci->ohci_dev->slot_name,
+		readl (&ohci->regs->control));
 
   	/* Reset USB (needed by some controllers) */
 	writel (0, &ohci->regs->control);
@@ -1793,17 +1807,24 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 
 	if ((ohci->hcca.done_head != 0) && !(le32_to_cpup (&ohci->hcca.done_head) & 0x01)) {
 		ints =  OHCI_INTR_WDH;
-	} else { 
- 		if ((ints = (readl (&regs->intrstatus) & readl (&regs->intrenable))) == 0)
-			return;
+	} else if ((ints = (readl (&regs->intrstatus) & readl (&regs->intrenable))) == 0) {
+		return;
 	} 
 
 	// dbg("Interrupt: %x frame: %x", ints, le16_to_cpu (ohci->hcca.frame_no));
 
 	if (ints & OHCI_INTR_UE) {
 		ohci->disabled++;
-		err ("OHCI Unrecoverable Error, controller disabled");
+		err ("OHCI Unrecoverable Error, controller %s disabled",
+			ohci->ohci_dev->slot_name);
 		// e.g. due to PCI Master/Target Abort
+
+#ifndef	DEBUG
+		// FIXME: be optimistic, hope that bug won't repeat often.
+		// Make some non-interrupt context restart the controller.
+		// Count and limit the retries though; either hardware or
+		// software errors can go forever...
+#endif
 	}
   
 	if (ints & OHCI_INTR_WDH) {
@@ -1823,7 +1844,8 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 		if (ohci->ed_rm_list[!frame] != NULL) {
 			dl_del_list (ohci, !frame);
 		}
-		if (ohci->ed_rm_list[frame] != NULL) writel (OHCI_INTR_SF, &regs->intrenable);	
+		if (ohci->ed_rm_list[frame] != NULL)
+			writel (OHCI_INTR_SF, &regs->intrenable);	
 	}
 	writel (ints, &regs->intrstatus);
 	writel (OHCI_INTR_MIE, &regs->intrenable);	
@@ -1885,20 +1907,20 @@ static ohci_t * hc_alloc_ohci (void * mem_base)
 
 static void hc_release_ohci (ohci_t * ohci)
 {	
-	dbg("USB HC release ohci");
+	dbg ("USB HC release ohci %s", ohci->ohci_dev->slot_name);
 
 	/* disconnect all devices */    
 	if (ohci->bus->root_hub)
 		usb_disconnect (&ohci->bus->root_hub);
 
-	hc_reset (ohci);
-	writel (OHCI_USB_RESET, &ohci->regs->control);
-	wait_ms (10);
+	if (!ohci->disabled)
+		hc_reset (ohci);
 	
 	if (ohci->irq >= 0) {
 		free_irq (ohci->irq, ohci);
 		ohci->irq = -1;
 	}
+	ohci->ohci_dev->driver_data = 0;
 
 	usb_deregister_bus (ohci->bus);
 	usb_free_bus (ohci->bus);
@@ -1926,13 +1948,15 @@ static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
 #endif
 	printk(KERN_INFO __FILE__ ": USB OHCI at membase 0x%lx, IRQ %s\n",
 		(unsigned long)	mem_base, bufp);
-	printk(KERN_INFO __FILE__ ": %s\n", dev->name);
+	printk(KERN_INFO __FILE__ ": pci slot %s, %s\n", dev->slot_name, dev->name);
     
 	ohci = hc_alloc_ohci (mem_base);
 	if (!ohci) {
 		return -ENOMEM;
 	}
 
+	ohci->ohci_dev = dev;
+	dev->driver_data = ohci;
 	INIT_LIST_HEAD (&ohci->ohci_hcd_list);
 	list_add (&ohci->ohci_hcd_list, &ohci_hcd_list);
 
@@ -1960,7 +1984,6 @@ static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
 #ifdef	DEBUG
 		ohci_dump (ohci, 1);
 #endif
-
 		return 0;
  	}	
  	err("request interrupt %d failed", irq);
@@ -2037,7 +2060,7 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 		switch (rqst) {
 		case PM_SUSPEND:
 			/* act as if usb suspend can always be used */
-			dbg("USB suspend: %p", ohci->regs);
+			dbg("USB suspend: %s", ohci->ohci_dev->slot_name);
 			ohci->hc_control = OHCI_USB_SUSPEND;
 			writel (ohci->hc_control, &ohci->regs->control);
 			wait_ms (10);
@@ -2050,7 +2073,7 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 			switch (temp) {
 
 			case OHCI_USB_RESET:	// lost power
-				dbg("USB reset: %p", ohci->regs);
+				dbg("USB reset: %s", ohci->ohci_dev->slot_name);
 				ohci->disabled = 1;
 				if (ohci->bus->root_hub)
 					usb_disconnect (&ohci->bus->root_hub);
@@ -2058,14 +2081,16 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 				if ((temp = hc_reset (ohci)) < 0
 					|| (temp = hc_start (ohci)) < 0) {
 					ohci->disabled = 1;
-					err ("can't restart, %d", temp);
+					err ("can't restart %s, %d",
+						ohci->ohci_dev->slot_name,
+						temp);
 				}
 				dbg ("reset done");
 				break;
 
 			case OHCI_USB_SUSPEND:	// host wakeup
 			case OHCI_USB_RESUME:	// remote wakeup
-				dbg("USB resume: %p", ohci->regs);
+				dbg("USB resume: %s", ohci->ohci_dev->slot_name);
 				ohci->hc_control = OHCI_USB_RESUME;
 				writel (ohci->hc_control, &ohci->regs->control);
 				wait_ms (20);

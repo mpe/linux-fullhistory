@@ -1741,12 +1741,14 @@ static int msync_interval(struct vm_area_struct * vma,
 {
 	if (vma->vm_file && vma->vm_ops && vma->vm_ops->sync) {
 		int error;
+		lock_kernel();
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
 		if (!error && (flags & MS_SYNC)) {
 			struct file * file = vma->vm_file;
 			if (file && file->f_op && file->f_op->fsync)
 				error = file->f_op->fsync(file, file->f_dentry, 1);
 		}
+		unlock_kernel();
 		return error;
 	}
 	return 0;
@@ -1759,7 +1761,6 @@ asmlinkage long sys_msync(unsigned long start, size_t len, int flags)
 	int unmapped_error, error = -EINVAL;
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
 	if (start & ~PAGE_MASK)
 		goto out;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
@@ -1805,7 +1806,6 @@ asmlinkage long sys_msync(unsigned long start, size_t len, int flags)
 		vma = vma->vm_next;
 	}
 out:
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 	return error;
 }
@@ -2021,13 +2021,9 @@ static long madvise_dontneed(struct vm_area_struct * vma,
 	if (vma->vm_flags & VM_LOCKED)
 		return -EINVAL;
 
-	lock_kernel();	/* is this really necessary? */
-
 	flush_cache_range(vma->vm_mm, start, end);
 	zap_page_range(vma->vm_mm, start, end - start);
 	flush_tlb_range(vma->vm_mm, start, end);
-
-	unlock_kernel();
 	return 0;
 }
 

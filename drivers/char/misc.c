@@ -134,8 +134,11 @@ static int misc_open(struct inode * inode, struct file * file)
 
 	old_fops = file->f_op;
 	file->f_op = fops_get(c->fops);
-	if (file->f_op && file->f_op->open)
-		err=file->f_op->open(inode,file);
+	if (file->f_op) {
+		err = 0;
+		if (file->f_op->open)
+			err=file->f_op->open(inode,file);
+	}
 	if (err) {
 		fops_put(file->f_op);
 		file->f_op = fops_get(old_fops);
@@ -190,7 +193,7 @@ int misc_register(struct miscdevice * misc)
 	if (misc->minor < DYNAMIC_MINORS)
 		misc_minors[misc->minor >> 3] |= 1 << (misc->minor & 7);
 	if (!devfs_handle)
-		devfs_handle = devfs_mk_dir (NULL, "misc", 4, NULL);
+		devfs_handle = devfs_mk_dir (NULL, "misc", NULL);
 	misc->devfs_handle =
 	    devfs_register (devfs_handle, misc->name, DEVFS_FL_NONE,
 			    MISC_MAJOR, misc->minor,

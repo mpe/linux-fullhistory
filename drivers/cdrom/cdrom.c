@@ -389,7 +389,7 @@ int register_cdrom(struct cdrom_device_info *cdi)
 		cdi->options |= (int) CDO_CHECK_TYPE;
 
 	if (!devfs_handle)
-		devfs_handle = devfs_mk_dir (NULL, "cdroms", 6, NULL);
+		devfs_handle = devfs_mk_dir (NULL, "cdroms", NULL);
 	sprintf (vname, "cdrom%u", cdrom_counter++);
 	if (cdi->de) {
 		int pos;
@@ -400,9 +400,9 @@ int register_cdrom(struct cdrom_device_info *cdi)
 					   sizeof rname - 3);
 		if (pos >= 0) {
 			strncpy (rname + pos, "../", 3);
-			devfs_mk_symlink (devfs_handle, vname, 0,
+			devfs_mk_symlink (devfs_handle, vname,
 					  DEVFS_FL_DEFAULT,
-					  rname + pos, 0, &slave, NULL);
+					  rname + pos, &slave, NULL);
 			devfs_auto_unregister (cdi->de, slave);
 		}
 	}
@@ -2617,7 +2617,7 @@ static int __init cdrom_init(void)
 #ifdef CONFIG_SYSCTL
 	cdrom_sysctl_register();
 #endif
-	devfs_handle = devfs_mk_dir(NULL, "cdroms", 6, NULL);
+	devfs_handle = devfs_mk_dir(NULL, "cdroms", NULL);
 	return 0;
 }
 

@@ -333,7 +333,7 @@ int hpfs_unlink(struct inode *dir, struct dentry *dentry)
 		if (rep)
 			goto ret;
 		d_drop(dentry);
-		if (dentry->d_count > 1 ||
+		if (atomic_read(&dentry->d_count) > 1 ||
 		    permission(inode, MAY_WRITE) ||
 		    get_write_access(inode)) {
 			d_rehash(dentry);
@@ -408,18 +408,21 @@ int hpfs_symlink_readpage(struct file *file, struct page *page)
 	int err;
 
 	err = -EIO;
+	lock_kernel();
 	if (!(fnode = hpfs_map_fnode(i->i_sb, i->i_ino, &bh)))
 		goto fail;
 	err = hpfs_read_ea(i->i_sb, fnode, "SYMLINK", link, PAGE_SIZE);
 	brelse(bh);
 	if (err)
 		goto fail;
+	unlock_kernel();
 	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
 	return 0;
 
 fail:
+	unlock_kernel();
 	SetPageError(page);
 	kunmap(page);
 	UnlockPage(page);

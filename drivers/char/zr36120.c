@@ -153,6 +153,7 @@ void __init handle_chipset(void)
 
 static void zoran_set_geo(struct zoran* ztv, struct vidinfo* i);
 
+#if 0 /* unused */
 static
 void zoran_dump(struct zoran *ztv)
 {
@@ -169,6 +170,7 @@ void zoran_dump(struct zoran *ztv)
 		p += sprintf(p, "%08x ",zrread(i));
 	}
 }
+#endif /* unused */
 
 static
 void reap_states(struct zoran* ztv)

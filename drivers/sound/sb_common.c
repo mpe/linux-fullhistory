@@ -28,7 +28,6 @@
 
 #include "sound_config.h"
 #include "sound_firmware.h"
-#include "soundmodule.h"
 
 #include "mpu401.h"
 

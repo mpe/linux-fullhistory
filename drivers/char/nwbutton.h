@@ -28,8 +28,6 @@ static void button_sequence_finished (unsigned long parameters);
 static void button_handler (int irq, void *dev_id, struct pt_regs *regs);
 static int button_read (struct file *filp, char *buffer,
 			size_t count, loff_t *ppos);
-static int button_open (struct inode *inode, struct file *filp);
-static int button_release (struct inode *inode, struct file *filp);
 int button_init (void);
 int button_add_callback (void (*callback) (void), int count);
 int button_del_callback (void (*callback) (void));

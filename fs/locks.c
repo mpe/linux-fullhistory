@@ -1057,6 +1057,16 @@ void locks_remove_posix(struct file *filp, fl_owner_t owner)
 	/*
 	 * For POSIX locks we free all locks on this file for the given task.
 	 */
+	if (!inode->i_flock) {
+		/*
+		 * Notice that something might be grabbing a lock right now.
+		 * Consider it as a race won by us - event is async, so even if
+		 * we miss the lock added we can trivially consider it as added
+		 * after we went through this call.
+		 */
+		return;
+	}
+	lock_kernel();
 repeat:
 	before = &inode->i_flock;
 	while ((fl = *before) != NULL) {
@@ -1066,6 +1076,7 @@ repeat:
 		}
 		before = &fl->fl_next;
 	}
+	unlock_kernel();
 }
 
 /*
@@ -1076,7 +1087,10 @@ void locks_remove_flock(struct file *filp)
 	struct inode * inode = filp->f_dentry->d_inode; 
 	struct file_lock file_lock, *fl;
 	struct file_lock **before;
+	if (!inode->i_flock)
+		return;
 
+	lock_kernel();
 repeat:
 	before = &inode->i_flock;
 	while ((fl = *before) != NULL) {
@@ -1099,6 +1113,7 @@ repeat:
 		}
 		before = &fl->fl_next;
 	}
+	unlock_kernel();
 }
 
 /* The following two are for the benefit of lockd.

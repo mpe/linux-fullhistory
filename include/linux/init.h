@@ -43,11 +43,14 @@
  * Used for initialization calls..
  */
 typedef int (*initcall_t)(void);
+typedef void (*exitcall_t)(void);
 
 extern initcall_t __initcall_start, __initcall_end;
 
 #define __initcall(fn)								\
 	static initcall_t __initcall_##fn __init_call = fn
+#define __exitcall(fn)								\
+	static exitcall_t __exitcall_##fn __exit_call = fn
 
 /*
  * Used for kernel command line parameter setup
@@ -75,6 +78,7 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __exitdata	__attribute__ ((unused, __section__ (".data.exit")))
 #define __initsetup	__attribute__ ((unused,__section__ (".setup.init")))
 #define __init_call	__attribute__ ((unused,__section__ (".initcall.init")))
+#define __exit_call	__attribute__ ((unused,__section__ (".exitcall.exit")))
 
 /* For assembly routines */
 #define __INIT		.section	".text.init","ax"
@@ -82,7 +86,7 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __INITDATA	.section	".data.init","aw"
 
 #define module_init(x)	__initcall(x);
-#define module_exit(x)	/* nothing */
+#define module_exit(x)	__exitcall(x);
 
 #else
 
@@ -98,8 +102,21 @@ extern struct kernel_param __setup_start, __setup_end;
 
 /* Not sure what version aliases were introduced in, but certainly in 2.91.66.  */
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
-#define module_init(x)	int init_module(void) __attribute__((alias(#x)));
-#define module_exit(x)	void cleanup_module(void) __attribute__((alias(#x)));
+/* These macros create a dummy inline: gcc 2.9x does not count alias
+ as usage, hence the `unused function' warning when __init functions
+ are declared static. We use the dummy __*_module_inline functions
+ both to kill the warning and check the type of the init/cleanup
+ function. */
+typedef int (*__init_module_func_t)(void);
+typedef void (*__cleanup_module_func_t)(void);
+#define module_init(x) \
+	int init_module(void) __attribute__((alias(#x))); \
+	extern inline __init_module_func_t __init_module_inline(void) \
+	{ return x; }
+#define module_exit(x) \
+	void cleanup_module(void) __attribute__((alias(#x))); \
+	extern inline __cleanup_module_func_t __cleanup_module_inline(void) \
+	{ return x; }
 #else
 #define module_init(x)	int init_module(void) { return x(); }
 #define module_exit(x)	void cleanup_module(void) { x(); }

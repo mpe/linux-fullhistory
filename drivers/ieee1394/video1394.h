@@ -20,6 +20,8 @@
 #ifndef _VIDEO_1394_H
 #define _VIDEO_1394_H
 
+#define VIDEO1394_DRIVER_NAME "video1394"
+
 #define VIDEO1394_MAX_SIZE 0x400000
 
 enum {
@@ -31,8 +33,12 @@ enum {
 enum {
 	VIDEO1394_LISTEN_CHANNEL = 0,
 	VIDEO1394_UNLISTEN_CHANNEL,
-	VIDEO1394_QUEUE_BUFFER,
-	VIDEO1394_WAIT_BUFFER
+	VIDEO1394_LISTEN_QUEUE_BUFFER,
+	VIDEO1394_LISTEN_WAIT_BUFFER,
+	VIDEO1394_TALK_CHANNEL,
+	VIDEO1394_UNTALK_CHANNEL,
+	VIDEO1394_TALK_QUEUE_BUFFER,
+	VIDEO1394_TALK_WAIT_BUFFER
 };
 
 struct video1394_mmap {
@@ -40,6 +46,8 @@ struct video1394_mmap {
 	int sync_tag;
 	int nb_buffers;
 	int buf_size;
+	int packet_size;
+	int fps;
 };
 
 struct video1394_wait {
@@ -47,4 +55,5 @@ struct video1394_wait {
 	int buffer;
 };
 
-#endif	
+
+#endif

@@ -5,8 +5,9 @@
  *
  *	Fixes
  *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs;
- *					thanks to Eric Gilmore for
- *					testing these extensively
+ *					thanks to Eric Gilmore
+ *					and Rolf G. Tews
+ *					for testing these extensively
  */
 
 #include <linux/config.h>

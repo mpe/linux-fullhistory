@@ -1,0 +1,43 @@
+mainmenu_option next_comment
+comment 'Memory Technology Devices (MTD)'
+
+tristate 'Memory Technology Device (MTD) support' CONFIG_MTD
+
+if [ "$CONFIG_MTD" != "n" ]; then
+	dep_tristate 'Common Flash Interface (CFI) support' CONFIG_MTD_CFI $CONFIG_MTD
+	dep_tristate 'CFI support for Intel/Sharp Extended Command Set chips' CONFIG_MTD_CFI_INTELEXT $CONFIG_CFI	
+	dep_tristate 'CFI chips in virtual memory map' CONFIG_MTD_NORA $CONFIG_MTD_CFI
+	dep_tristate 'CFI chips in physical memory map' CONFIG_MTD_PHYSMAP $CONFIG_MTD_CFI
+	dep_tristate 'CFI chips on RPXLite PPC board' CONFIG_MTD_RPXLITE $CONFIG_MTD_CFI
+	dep_tristate 'M-Systems Disk-On-Chip 1000 support' CONFIG_MTD_DOC1000 $CONFIG_MTD
+	dep_tristate 'M-Systems Disk-On-Chip 2000' CONFIG_MTD_DOC2000 $CONFIG_MTD
+	dep_tristate 'M-Systems Disk-On-Chip Millennium' CONFIG_MTD_DOC2001 $CONFIG_MTD
+	if [ "$CONFIG_MTD_DOC2001" = "y" -o "$CONFIG_MTD_DOC2000" = "y" ]; then
+		define_bool CONFIG_MTD_DOCPROBE y
+	else
+	  if [ "$CONFIG_MTD_DOC2001" = "m" -o "$CONFIG_MTD_DOC2000" = "m" ]; then
+		define_bool CONFIG_MTD_DOCPROBE m
+	  else
+		define_bool CONFIG_MTD_DOCPROBE n
+	  fi
+	fi
+	dep_tristate 'Use extra onboard system memory as MTD device' CONFIG_MTD_SLRAM $CONFIG_MTD
+	dep_tristate 'Octagon 5066 SBC onboard flash support' CONFIG_MTD_OCTAGON $CONFIG_MTD
+	dep_tristate 'Tempustech VMAX SBC301 onboard flash support' CONFIG_MTD_VMAX $CONFIG_MTD
+	dep_tristate 'Mixcom piggyback flash card support' CONFIG_MTD_MIXMEM $CONFIG_MTD
+	dep_tristate 'Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD
+	if [ "$CONFIG_MTD_PMC551" != "n" ]; then
+	  bool 'PMC551 256M DRAM Bugfix' CONFIG_MTD_PMC551_BUGFIX
+	fi
+	dep_tristate 'Debugging RAM test driver' CONFIG_MTD_MTDRAM $CONFIG_MTD
+
+	dep_tristate 'FTL (Flash Translation Layer) support' CONFIG_FTL $CONFIG_MTD
+	dep_tristate 'NFTL (NAND Flash Translation Layer) support' CONFIG_NFTL $CONFIG_MTD
+	if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_NFTL" != "n" ]; then
+	  bool 'Write support for NFTL (EXPERIMENTAL)' CONFIG_NFTL_RW
+	fi
+	dep_tristate 'Direct blockdevice access to MTD devices' CONFIG_MTD_BLOCK $CONFIG_MTD
+	dep_tristate 'Direct chardevice access to MTD devices' CONFIG_MTD_CHAR $CONFIG_MTD
+fi
+
+endmenu

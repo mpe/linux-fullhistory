@@ -6452,6 +6452,14 @@ CONFIG_IEEE1394_PCILYNX_LOCALRAM
 
   If unsure, say N.
 
+Support for non-IEEE1394 local ports
+CONFIG_IEEE1394_PCILYNX_PORTS
+  This option enables driver code to access the RAM, ROM and AUX ports
+  of the PCILynx through character devices in /dev.  If you don't know
+  what this is about then you won't need it.
+  
+  If unsure, say N.
+
 Adaptec AIC-5800 IEEE 1394 support
 CONFIG_IEEE1394_AIC5800
   Say Y here if you have a IEEE 1394 controller using the Adaptec
@@ -12448,10 +12456,15 @@ CONFIG_ACPI
   below, then ACPI has precedence in the sense that, if your hardware
   supports ACPI, it will be used and APM won't.
 
-  To compile this driver as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt. The module will be called 
-  acpi.o.
+ACPI interpreter (EXPERIMENTAL)
+CONFIG_ACPI_INTERPRETER
+  If you say Y here, an ACPI interpreter will be included in your
+  kernel, eventually making the full range of ACPI features
+  available on systems that support ACPI.  Note, this option will
+  enlarge your kernel by about 120K.
+
+  The interpreter is currently experimental so only say Y if
+  you know what you are doing.
 
 Enter S1 for sleep (EXPERIMENTAL)
 CONFIG_ACPI_S1_SLEEP

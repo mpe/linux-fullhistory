@@ -233,6 +233,7 @@ int		addr)	/* VPD address */
 		2:	error,	data verify error
 
  */
+#if 0 /* unused */
 static int	VpdWriteDWord(
 SK_AC		*pAC,	/* pAC pointer */
 SK_IOC		IoC,	/* IO Context */
@@ -264,6 +265,7 @@ SK_U32		data)	/* VPD data to write */
 	}
 	return(0) ;
 }
+#endif /* unused */
 
 /*
  *	Read one Stream of 'len' bytes of VPD data, starting at 'addr' from

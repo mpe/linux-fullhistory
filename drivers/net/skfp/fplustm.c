@@ -69,9 +69,9 @@ static	char cam_warning [] = "E_SMT_004: CAM still busy\n";
 			}	\
 		}
 
-const struct fddi_addr fddi_broadcast = {0xff,0xff,0xff,0xff,0xff,0xff};
-static const struct fddi_addr null_addr = {0,0,0,0,0,0} ;
-static const struct fddi_addr dbeacon_multi = {0x01,0x80,0xc2,0x00,0x01,0x00};
+const struct fddi_addr fddi_broadcast = {{0xff,0xff,0xff,0xff,0xff,0xff}};
+static const struct fddi_addr null_addr = {{0,0,0,0,0,0}};
+static const struct fddi_addr dbeacon_multi = {{0x01,0x80,0xc2,0x00,0x01,0x00}};
 
 static const u_short my_said = 0xffff ;	/* short address (n.u.) */
 static const u_short my_sagp = 0xffff ;	/* short group address (n.u.) */

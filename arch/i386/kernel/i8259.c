@@ -363,6 +363,8 @@ void __init init_8259A(int auto_eoi)
 		 * when acking.
 		 */
 		i8259A_irq_type.ack = disable_8259A_irq;
+	else
+		i8259A_irq_type.ack = mask_and_ack_8259A;
 
 	udelay(100);		/* wait for 8259A to initialize */
 

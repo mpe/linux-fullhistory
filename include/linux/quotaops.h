@@ -96,10 +96,8 @@ extern __inline__ int DQUOT_TRANSFER(struct dentry *dentry, struct iattr *iattr)
 	int error = -EDQUOT;
 
 	if (dentry->d_inode->i_sb->dq_op) {
-		lock_kernel();
 		dentry->d_inode->i_sb->dq_op->initialize(dentry->d_inode, -1);
 		error = dentry->d_inode->i_sb->dq_op->transfer(dentry, iattr);
-		unlock_kernel();
 	} else {
 		error = notify_change(dentry, iattr);
 	}

@@ -46,6 +46,7 @@
  *                    removed some pre-2.2 kernel compatibility cruft
  *   0.10 10.08.1999  Check if parport can do SPP and is safe to access during interrupt contexts
  *   0.11 12.02.2000  adapted to softnet driver interface
+ *   0.12 03.07.2000  fix interface name handling
  */
 
 /*****************************************************************************/
@@ -65,7 +66,7 @@
 
 /*static*/ const char sm_drvname[] = "soundmodem";
 static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.11 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "soundmodem: version 0.12 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -648,8 +649,9 @@ static int __init init_soundmodem(void)
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = sm_device+i;
-		sprintf(dev->name, "sm%d", i);
+		char ifname[IFNAMSIZ];
 
+		sprintf(ifname, "sm%d", i);
 		if (!mode[i])
 			set_hw = 0;
 		else {
@@ -671,7 +673,7 @@ static int __init init_soundmodem(void)
 		}
 		if (!set_hw)
 			iobase[i] = irq[i] = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), dev->name, iobase[i], irq[i], dma[i]);
+		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), ifname, iobase[i], irq[i], dma[i]);
 		if (!j) {
 			sm = (struct sm_state *)dev->priv;
 			sm->hdrv.ptt_out.dma2 = dma2[i];

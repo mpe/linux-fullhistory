@@ -88,25 +88,25 @@ int elevator_default_merge(request_queue_t *q, struct request **req,
 		head = head->next;
 
 	while ((entry = entry->prev) != head && !starving) {
-		*req = blkdev_entry_to_request(entry);
-		latency += (*req)->nr_segments;
-		if (elevator_sequence_before((*req)->elevator_sequence, sequence))
+		struct request *__rq = *req = blkdev_entry_to_request(entry);
+		latency += __rq->nr_segments;
+		if (elevator_sequence_before(__rq->elevator_sequence, sequence))
 			starving = 1;
 		if (latency < 0)
 			continue;
-		if ((*req)->sem)
+		if (__rq->sem)
 			continue;
-		if ((*req)->cmd != rw)
+		if (__rq->cmd != rw)
 			continue;
-		if ((*req)->nr_sectors + count > *max_sectors)
+		if (__rq->nr_sectors + count > *max_sectors)
 			continue;
-		if ((*req)->rq_dev != bh->b_rdev)
+		if (__rq->rq_dev != bh->b_rdev)
 			continue;
-		if ((*req)->sector + (*req)->nr_sectors == bh->b_rsector) {
-			if (latency - (*req)->nr_segments < 0)
+		if (__rq->sector + __rq->nr_sectors == bh->b_rsector) {
+			if (latency - __rq->nr_segments < 0)
 				break;
 			action = ELEVATOR_BACK_MERGE;
-		} else if ((*req)->sector - count == bh->b_rsector) {
+		} else if (__rq->sector - count == bh->b_rsector) {
 			if (starving)
 				break;
 			action = ELEVATOR_FRONT_MERGE;
@@ -161,31 +161,45 @@ int elevator_linus_merge(request_queue_t *q, struct request **req,
 			 int *max_sectors, int *max_segments)
 {
 	struct list_head *entry, *head = &q->queue_head;
-	unsigned int count = bh->b_size >> 9;
+	unsigned int count = bh->b_size >> 9, ret = ELEVATOR_NO_MERGE;
 
 	entry = head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
 
 	while ((entry = entry->prev) != head) {
-		*req = blkdev_entry_to_request(entry);
-		if (!(*req)->elevator_sequence)
+		struct request *__rq = *req = blkdev_entry_to_request(entry);
+		if (!__rq->elevator_sequence)
 			break;
-		if ((*req)->sem)
+		if (__rq->sem)
 			continue;
-		if ((*req)->cmd != rw)
+		if (__rq->cmd != rw)
 			continue;
-		if ((*req)->nr_sectors + count > *max_sectors)
+		if (__rq->nr_sectors + count > *max_sectors)
 			continue;
-		if ((*req)->rq_dev != bh->b_rdev)
+		if (__rq->rq_dev != bh->b_rdev)
 			continue;
-		if ((*req)->sector + (*req)->nr_sectors == bh->b_rsector)
-			return ELEVATOR_BACK_MERGE;
-		if ((*req)->sector - count == bh->b_rsector)
-			return ELEVATOR_FRONT_MERGE;
-		(*req)->elevator_sequence--;
+		if (__rq->sector + __rq->nr_sectors == bh->b_rsector) {
+			ret = ELEVATOR_BACK_MERGE;
+			break;
+		}
+		if (__rq->sector - count == bh->b_rsector) {
+			ret = ELEVATOR_FRONT_MERGE;
+			break;
+		}
 	}
-	return ELEVATOR_NO_MERGE;
+
+	/*
+	 * second pass scan of requests that got passed over, if any
+	 */
+	if (ret != ELEVATOR_NO_MERGE && *req) {
+		while ((entry = entry->next) != &q->queue_head) {
+			struct request *tmp = blkdev_entry_to_request(entry);
+			tmp->elevator_sequence--;
+		}
+	}
+
+	return ret;
 }
 
 /*
@@ -213,18 +227,18 @@ int elevator_noop_merge(request_queue_t *q, struct request **req,
 
 	entry = head;
 	while ((entry = entry->prev) != head) {
-		*req = blkdev_entry_to_request(entry);
-		if ((*req)->sem)
+		struct request *__rq = *req = blkdev_entry_to_request(entry);
+		if (__rq->sem)
 			continue;
-		if ((*req)->cmd != rw)
+		if (__rq->cmd != rw)
 			continue;
-		if ((*req)->nr_sectors + count > *max_sectors)
+		if (__rq->nr_sectors + count > *max_sectors)
 			continue;
-		if ((*req)->rq_dev != bh->b_rdev)
+		if (__rq->rq_dev != bh->b_rdev)
 			continue;
-		if ((*req)->sector + (*req)->nr_sectors == bh->b_rsector)
+		if (__rq->sector + __rq->nr_sectors == bh->b_rsector)
 			return ELEVATOR_BACK_MERGE;
-		if ((*req)->sector - count == bh->b_rsector)
+		if (__rq->sector - count == bh->b_rsector)
 			return ELEVATOR_FRONT_MERGE;
 	}
 	return ELEVATOR_NO_MERGE;

@@ -130,7 +130,7 @@
        
      * Title: "Dynamic Kernels: Discovery"
        Author: Alessandro Rubini.
-       URL: http://www.ssc.com/lj/issue24/kk24.html
+       URL: http://www2.linuxjournal.com/lj-issues/issue24/1220.html
        Keywords: character driver, init_module, clean_up module,
        autodetection,
        mayor number, minor number, file operations, open(), close().
@@ -142,7 +142,7 @@
        
      * Title: "The Devil's in the Details"
        Author: Georg v. Zezschwitz and Alessandro Rubini.
-       URL: http://www.ssc.com/lj/issue25/kk25.html
+       URL: http://www2.linuxjournal.com/lj-issues/issue25/1221.html
        Keywords: read(), write(), select(), ioctl(), blocking/non
        blocking mode, interrupt handler.
        Description: Linux Journal Kernel Korner article. Here is it's
@@ -178,7 +178,7 @@
        
      * Title: "Network Buffers And Memory Management"
        Author: Alan Cox.
-       URL: http://www.ssc.com/lj/issue30/kk30.html
+       URL: http://www2.linuxjournal.com/lj-issues/issue30/1312.html
        Keywords: sk_buffs, network devices, protocol/link layer
        variables, network devices flags, transmit, receive,
        configuration, multicast.
@@ -406,6 +406,77 @@
        different". Freely redistributable under the conditions of the GNU
        General Public License.
        
+     * Title: "Porting Linux 2.0 Drivers To Linux 2.2: Changes and New
+       Features "
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-05/gear_01.html
+       Keywords: ports, porting.
+       Description: Article from Linux Magazine on porting from 2.0 to
+       2.2 kernels.
+       
+     * Title: "Porting Device Drivers To Linux 2.2: part II"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-06/gear_01.html
+       Keywords: ports, porting.
+       Description: Second part on porting from 2.0 to 2.2 kernels.
+       
+     * Title: "How To Make Sure Your Driver Will Work On The Power
+       Macintosh"
+       Author: Paul Mackerras.
+       URL: http://www.linux-mag.com/1999-07/gear_01.html
+       Keywords: Mac, Power Macintosh, porting, drivers, compatibility.
+       Description: The title says it all.
+       
+     * Title: "An Introduction to SCSI Drivers"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-08/gear_01.html
+       Keywords: SCSI, device, driver.
+       Description: The title says it all.
+       
+     * Title: "Advanced SCSI Drivers And Other Tales"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-09/gear_01.html
+       Keywords: SCSI, device, driver, advanced.
+       Description: The title says it all.
+       
+     * Title: "Writing Linux Mouse Drivers"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-10/gear_01.html
+       Keywords: mouse, driver, gpm.
+       Description: The title says it all.
+       
+     * Title: "More on Mouse Drivers"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-11/gear_01.html
+       Keywords: mouse, driver, gpm, races, asynchronous I/O.
+       Description: The title still says it all.
+       
+     * Title: "Writing Video4linux Radio Driver"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/1999-12/gear_01.html
+       Keywords: video4linux, driver, radio, radio devices.
+       Description: The title says it all.
+       
+     * Title: "Video4linux Drivers, Part 1: Video-Capture Device"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/2000-01/gear_01.html
+       Keywords: video4linux, driver, video capture, capture devices,
+       camera driver.
+       Description: The title says it all.
+       
+     * Title: "Video4linux Drivers, Part 2: Video-capture Devices"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/2000-02/gear_01.html
+       Keywords: video4linux, driver, video capture, capture devices,
+       camera driver, control, query capabilities, capability, facility.
+       Description: The title says it all.
+       
+     * Title: "PCI Management in Linux 2.2"
+       Author: Alan Cox.
+       URL: http://www.linux-mag.com/2000-03/gear_01.html
+       Keywords: PCI, bus, bus-mastering.
+       Description: The title says it all.
+       
      BOOKS: (Not on-line)
    
      * Title: "Linux Device Drivers"
@@ -475,7 +546,7 @@
        ISBN: 0-13-101908-2
        
      * Title: "Linux Core Kernel Commentary. Guide to Insider's Knowledge
-       on the Core Kernel od the Linux Code"
+       on the Core Kernel of the Linux Code"
        Author: Scott Maxwell.
        Publisher: Coriolis.
        Date: 1999.
@@ -598,9 +669,10 @@
      * Name: "linux-kernel mailing list archives and search engines"
        URL: http://www.uwsg.indiana.edu/hypermail/linux/kernel/index.html
        URL: http://www.kernelnotes.org/lnxlists/linux-kernel/
+       URL: http://www.geocrawler.com
        Keywords: linux-kernel, archives, search.
        Description: Some of the linux-kernel mailing list archivers. If
        you have a better/another one, please let me know.
      _________________________________________________________________
    
-   Document last updated on Mon Apr 17 18:07:07 CEST 2000
+   Document last updated on Thu Jun 1 21:58:18 CEST 2000DATE$

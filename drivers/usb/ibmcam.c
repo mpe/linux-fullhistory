@@ -2933,11 +2933,11 @@ static int ibmcam_find_struct(void)
  * 1/22/00  Moved camera init code to ibmcam_open()
  * 1/27/00  Changed to use static structures, added locking.
  * 5/24/00  Corrected to prevent race condition (MOD_xxx_USE_COUNT).
+ * 7/3/00   Fixed endianness bug.
  */
 static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_ibmcam *ibmcam = NULL;
-	const unsigned char *p_rev;
 	const struct usb_interface_descriptor *interface;
 	const struct usb_endpoint_descriptor *endpoint;
 	int devnum, model=0;
@@ -2955,20 +2955,24 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 
 	/* Check the version/revision */
-	p_rev = (const unsigned char *) &dev->descriptor.bcdDevice;
-	if (p_rev[1] == 0x00 && p_rev[0] == 0x02) {
+	switch (dev->descriptor.bcdDevice) {
+	case 0x0002:
 		if (ifnum != 2)
 			return NULL;
-		printk(KERN_INFO "IBM USB camera found (model 1).\n");
+		printk(KERN_INFO "IBM USB camera found (model 1, rev. 0x%04x).\n",
+			dev->descriptor.bcdDevice);
 		model = IBMCAM_MODEL_1;
-	} else if (p_rev[1] == 0x03 && p_rev[0] == 0x0A) {
+		break;
+	case 0x030A:
 		if (ifnum != 0)
 			return NULL;
-		printk(KERN_INFO "IBM USB camera found (model 2).\n");
+		printk(KERN_INFO "IBM USB camera found (model 2, rev. 0x%04x).\n",
+			dev->descriptor.bcdDevice);
 		model = IBMCAM_MODEL_2;
-	} else {
-		printk(KERN_ERR "IBM camera revision=%02x.%02x not supported\n",
-		       p_rev[1], p_rev[0]);
+		break;
+	default:
+		printk(KERN_ERR "IBM camera with revision 0x%04x is not supported.\n",
+			dev->descriptor.bcdDevice);
 		return NULL;
 	}
 

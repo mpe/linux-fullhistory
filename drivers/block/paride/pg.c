@@ -307,7 +307,7 @@ int pg_init (void)      /* preliminary initialisation */
 		  if (PG.present) pi_release(PI);
 		return -1;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "pg", 2, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "pg", NULL);
 	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
 			       major, 0, S_IFCHR | S_IRUSR | S_IWUSR,
 			       &pg_fops, NULL);

@@ -355,7 +355,7 @@ static void fd_select_side( int side );
 static void fd_select_drive( int drive );
 static void fd_deselect( void );
 static void fd_motor_off_timer( unsigned long dummy );
-static void check_change( void );
+static void check_change( unsigned long dummy );
 static __inline__ void set_head_settle_flag( void );
 static __inline__ int get_head_settle_flag( void );
 static void floppy_irq (int irq, void *dummy, struct pt_regs *fp);
@@ -391,14 +391,16 @@ static int floppy_release( struct inode * inode, struct file * filp );
 /************************* End of Prototypes **************************/
 
 static struct timer_list motor_off_timer =
-	{ NULL, NULL, 0, 0, fd_motor_off_timer };
+	{ function: fd_motor_off_timer };
 static struct timer_list readtrack_timer =
-	{ NULL, NULL, 0, 0, fd_readtrack_check };
+	{ function: fd_readtrack_check };
 
 static struct timer_list timeout_timer =
-	{ NULL, NULL, 0, 0, fd_times_out };
+	{ function: fd_times_out };
 
-
+static struct timer_list fd_timer =
+	{ function: check_change };
+	
 static inline void
 start_motor_off_timer(void)
 {
@@ -407,10 +409,9 @@ start_motor_off_timer(void)
 }
 
 static inline void
-start_check_change_timer(void)
+start_check_change_timer(unsigned long dummy)
 {
-	timer_table[FLOPPY_TIMER].expires = jiffies + CHECK_CHANGE_DELAY;
-	timer_active |= (1 << FLOPPY_TIMER);
+	mod_timer(&fd_timer, jiffies + CHECK_CHANGE_DELAY);
 }
 
 static inline void
@@ -1309,12 +1310,11 @@ static void finish_fdc_done( int dummy )
 	stop_timeout();
 	NeedSeek = 0;
 
-	if ((timer_active & (1 << FLOPPY_TIMER)) &&
-	    time_before(timer_table[FLOPPY_TIMER].expires, jiffies + 5))
+	if (timer_pending(&fd_timer) && time_before(fd_timer.expires, jiffies + 5))
 		/* If the check for a disk change is done too early after this
 		 * last seek command, the WP bit still reads wrong :-((
 		 */
-		timer_table[FLOPPY_TIMER].expires = jiffies + 5;
+		mod_timer(&fd_timer, jiffies + 5);
 	else
 		start_check_change_timer();
 	start_motor_off_timer();
@@ -1990,10 +1990,6 @@ int __init atari_floppy_init (void)
 	SelectedDrive = -1;
 	BufferDrive = -1;
 
-	/* initialize check_change timer */
-	timer_table[FLOPPY_TIMER].fn = check_change;
-	timer_active &= ~(1 << FLOPPY_TIMER);
-
 	DMABuffer = atari_stram_alloc( BUFFER_SIZE+512, NULL, "ataflop" );
 	if (!DMABuffer) {
 		printk(KERN_ERR "atari_floppy_init: cannot get dma buffer\n");
@@ -2072,8 +2068,7 @@ void cleanup_module (void)
 	unregister_blkdev(MAJOR_NR, "fd");
 
 	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
-	timer_active &= ~(1 << FLOPPY_TIMER);
-	timer_table[FLOPPY_TIMER].fn = 0;
+	del_timer_sync(&fd_timer);
 	atari_stram_free( DMABuffer );
 }
 #endif

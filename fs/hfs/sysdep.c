@@ -17,6 +17,7 @@
 #include <linux/hfs_fs_sb.h>
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
+#include <linux/smp_lock.h>
 
 static int hfs_revalidate_dentry(struct dentry *, int);
 static int hfs_hash_dentry(struct dentry *, struct qstr *);
@@ -83,7 +84,9 @@ static void hfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
+	lock_kernel();
 	entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE(inode->i_ino))] = NULL;
+	unlock_kernel();
 	iput(inode);
 }
 
@@ -93,6 +96,7 @@ static int hfs_revalidate_dentry(struct dentry *dentry, int flags)
 	int diff;
 
 	/* fix up inode on a timezone change */
+	lock_kernel();
 	if (inode && 
 	    (diff = (hfs_to_utc(0) - HFS_I(inode)->tz_secondswest))) {
 		inode->i_ctime += diff;
@@ -100,5 +104,6 @@ static int hfs_revalidate_dentry(struct dentry *dentry, int flags)
 		inode->i_mtime += diff;
 		HFS_I(inode)->tz_secondswest += diff;
 	}
+	unlock_kernel();
 	return 1;
 }

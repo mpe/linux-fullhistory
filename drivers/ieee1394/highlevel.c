@@ -2,6 +2,9 @@
  * IEEE 1394 for Linux
  *
  * Copyright (C) 1999 Andreas E. Bombe
+ *
+ * This code is licensed under the GPL.  See the file COPYING in the root
+ * directory of the kernel sources for details.
  */
 
 #include <linux/config.h>

@@ -114,7 +114,6 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto dput_and_out;
 
-	lock_kernel();
 	error = get_write_access(inode);
 	if (error)
 		goto dput_and_out;
@@ -125,7 +124,6 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 		error = do_truncate(nd.dentry, length);
 	}
 	put_write_access(inode);
-	unlock_kernel();
 
 dput_and_out:
 	path_release(&nd);
@@ -161,11 +159,9 @@ static inline long do_sys_ftruncate(unsigned int fd, loff_t length)
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto out_putf;
 
-	lock_kernel();
 	error = locks_verify_truncate(inode, file, length);
 	if (!error)
 		error = do_truncate(dentry, length);
-	unlock_kernel();
 out_putf:
 	fput(file);
 out:
@@ -335,8 +331,6 @@ asmlinkage long sys_chdir(const char * filename)
 	struct nameidata nd;
 	char *name;
 
-	lock_kernel();
-	
 	name = getname(filename);
 	error = PTR_ERR(name);
 	if (IS_ERR(name))
@@ -358,7 +352,6 @@ asmlinkage long sys_chdir(const char * filename)
 dput_and_out:
 	path_release(&nd);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -383,11 +376,9 @@ asmlinkage long sys_fchdir(unsigned int fd)
 	if (!S_ISDIR(inode->i_mode))
 		goto out_putf;
 
-	lock_kernel();
 	error = permission(inode, MAY_EXEC);
 	if (!error)
 		set_fs_pwd(current->fs, mnt, dentry);
-	unlock_kernel();
 out_putf:
 	fput(file);
 out:
@@ -400,8 +391,6 @@ asmlinkage long sys_chroot(const char * filename)
 	struct nameidata nd;
 	char *name;
 
-	lock_kernel();
-	
 	name = getname(filename);
 	error = PTR_ERR(name);
 	if (IS_ERR(name))
@@ -428,7 +417,6 @@ asmlinkage long sys_chroot(const char * filename)
 dput_and_out:
 	path_release(&nd);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -457,9 +445,7 @@ asmlinkage long sys_fchmod(unsigned int fd, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	lock_kernel();
 	err = notify_change(dentry, &newattrs);
-	unlock_kernel();
 
 out_putf:
 	fput(file);
@@ -658,7 +644,9 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	if (inode->i_sb)
 		file_move(f, &inode->i_sb->s_files);
 	if (f->f_op && f->f_op->open) {
+		lock_kernel();
 		error = f->f_op->open(inode,f);
+		unlock_kernel();
 		if (error)
 			goto cleanup_all;
 	}
@@ -755,10 +743,7 @@ asmlinkage long sys_open(const char * filename, int flags, int mode)
 	if (!IS_ERR(tmp)) {
 		fd = get_unused_fd();
 		if (fd >= 0) {
-			struct file * f;
-			lock_kernel();
-			f = filp_open(tmp, flags, mode);
-			unlock_kernel();
+			struct file *f = filp_open(tmp, flags, mode);
 			error = PTR_ERR(f);
 			if (IS_ERR(f))
 				goto out_error;
@@ -801,8 +786,11 @@ int filp_close(struct file *filp, fl_owner_t id)
 		return 0;
 	}
 	retval = 0;
-	if (filp->f_op && filp->f_op->flush)
+	if (filp->f_op && filp->f_op->flush) {
+		lock_kernel();
 		retval = filp->f_op->flush(filp);
+		unlock_kernel();
+	}
 	locks_remove_posix(filp, id);
 	fput(filp);
 	return retval;
@@ -832,9 +820,7 @@ int do_close(unsigned int fd, int release)
 	if (release)
 		__put_unused_fd(files, fd);
 	write_unlock(&files->file_lock);
-	lock_kernel();
 	error = filp_close(filp, files);
-	unlock_kernel();
 out:
 	return error;
 out_unlock:

@@ -782,7 +782,7 @@ int __init loop_init(void)
 		       MAJOR_NR);
 		return -EIO;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "loop", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "loop", NULL);
 	devfs_register_series (devfs_handle, "%u", max_loop, DEVFS_FL_DEFAULT,
 			       MAJOR_NR, 0,
 			       S_IFBLK | S_IRUSR | S_IWUSR | S_IRGRP,

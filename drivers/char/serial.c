@@ -46,6 +46,9 @@
  *  5/00: Support for the RSA-DV II/S card added.
  *	  Kiyokazu SUTO <suto@ks-and-ks.ne.jp>
  * 
+ *  6/00: Remove old-style timer, use timer_list
+ *        Andrew Morton <andrewm@uow.edu.au>
+ *
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
@@ -232,6 +235,8 @@ static DECLARE_TASK_QUEUE(tq_serial);
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
 
+static struct timer_list serial_timer;
+
 /* serial subtype definitions */
 #ifndef SERIAL_TYPE_NORMAL
 #define SERIAL_TYPE_NORMAL	1
@@ -304,11 +309,10 @@ static struct serial_state rs_table[RS_TABLE_SIZE] = {
 
 #if (defined(ENABLE_SERIAL_PCI) || defined(ENABLE_SERIAL_PNP))
 #define NR_PCI_BOARDS	8
-#ifdef MODULE
 /* We don't unregister PCI boards right now */
 static struct pci_board_inst	serial_pci_board[NR_PCI_BOARDS];
 static int serial_pci_board_idx = 0;
-#endif
+
 #ifndef IS_PCI_REGION_IOPORT
 #define IS_PCI_REGION_IOPORT(dev, r) (pci_resource_flags((dev), (r)) & \
 				      IORESOURCE_IO)
@@ -1023,7 +1027,7 @@ static void do_softint(void *private_)
  * passable results for a 16550A.  (Although at the expense of much
  * CPU overhead).
  */
-static void rs_timer(void)
+static void rs_timer(unsigned long dummy)
 {
 	static unsigned long last_strobe = 0;
 	struct async_struct *info;
@@ -1057,8 +1061,7 @@ static void rs_timer(void)
 		}
 	}
 	last_strobe = jiffies;
-	timer_table[RS_TIMER].expires = jiffies + RS_STROBE_TIME;
-	timer_active |= 1 << RS_TIMER;
+	mod_timer(&serial_timer, jiffies + RS_STROBE_TIME);
 
 	if (IRQ_ports[0]) {
 		save_flags(flags); cli();
@@ -1069,7 +1072,7 @@ static void rs_timer(void)
 #endif
 		restore_flags(flags);
 
-		timer_table[RS_TIMER].expires = jiffies + IRQ_timeout[0] - 2;
+		mod_timer(&serial_timer, jiffies + IRQ_timeout[0] - 2);
 	}
 }
 
@@ -1380,8 +1383,7 @@ static int startup(struct async_struct * info)
 	/*
 	 * Set up serial timers...
 	 */
-	timer_table[RS_TIMER].expires = jiffies + 2*HZ/100;
-	timer_active |= 1 << RS_TIMER;
+	mod_timer(&serial_timer, jiffies + 2*HZ/100);
 
 	/*
 	 * Set up the tty->alt_speed kludge
@@ -4979,12 +4981,12 @@ static void __init probe_serial_pnp(void)
 /*
  * The serial driver boot-time initialization code!
  */
-int __init rs_init(void)
+static int __init rs_init(void)
 {
 	int i;
 	struct serial_state * state;
 
-	if (timer_table[RS_TIMER].fn) {
+	if (serial_timer.function) {
 		printk("RS_TIMER already set, another serial driver "
 		       "already loaded?\n");
 #ifdef MODULE
@@ -4995,8 +4997,9 @@ int __init rs_init(void)
 	}
 
 	init_bh(SERIAL_BH, do_serial_bh);
-	timer_table[RS_TIMER].fn = rs_timer;
-	timer_table[RS_TIMER].expires = 0;
+	init_timer(&serial_timer);
+	serial_timer.function = rs_timer;
+	mod_timer(&serial_timer, jiffies + RS_STROBE_TIME);
 
 	for (i = 0; i < NR_IRQS; i++) {
 		IRQ_ports[i] = 0;
@@ -5267,8 +5270,7 @@ void unregister_serial(int line)
 	restore_flags(flags);
 }
 
-#ifdef MODULE
-void rs_fini(void) 
+static void __exit rs_fini(void) 
 {
 	unsigned long flags;
 	int e1, e2;
@@ -5276,10 +5278,8 @@ void rs_fini(void)
 	struct async_struct *info;
 
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
+	del_timer_sync(&serial_timer);
 	save_flags(flags); cli();
-	timer_active &= ~(1 << RS_TIMER);
-	timer_table[RS_TIMER].fn = NULL;
-	timer_table[RS_TIMER].expires = 0;
         remove_bh(SERIAL_BH);
 	if ((e1 = tty_unregister_driver(&serial_driver)))
 		printk("serial: failed to unregister serial driver (%d)\n",
@@ -5325,7 +5325,6 @@ void rs_fini(void)
 		free_page(pg);
 	}
 }
-#endif /* MODULE */
 
 module_init(rs_init);
 module_exit(rs_fini);

@@ -329,7 +329,7 @@ static long bh_counter = 0;
  * selected, the board is serviced periodically to see if anything needs doing.
  */
 #define  POLL_TIMEOUT   (jiffies + 1)
-static struct timer_list PollTimer = { NULL, NULL,       0,   0, ip2_poll };
+static struct timer_list PollTimer = { {NULL, NULL},       0,   0, ip2_poll };
 //                                     next, prev, expires,data, func()
 static char  TimerOn = 0;
 
@@ -862,7 +862,7 @@ old_ip2_init(void)
 		 */
 #ifdef	CONFIG_DEVFS_FS
 		if (!devfs_handle)
-			devfs_handle = devfs_mk_dir (NULL, "ip2", 3, NULL);
+			devfs_handle = devfs_mk_dir (NULL, "ip2", NULL);
 #endif
 
 		for( i = 0; i < IP2_MAX_BOARDS; ++i ) {
@@ -2568,10 +2568,10 @@ set_serial_info( i2ChanStrPtr pCh, struct serial_struct *new_info )
 	 * base. Also line nunber as such is meaningless but we use it for our
 	 * array index so it is fixed also.
 	 */
-	if ( ns.irq  	    != ip2config.irq
-	    || (int) ns.port      != ((int) pCh->pMyBord->i2eBase)
-	    || ns.baud_base != pCh->BaudBase
-	    || ns.line      != pCh->port_index ) {
+	if ( (ns.irq  	    != ip2config.irq[pCh->port_index])
+	    || ((int) ns.port      != ((int) (pCh->pMyBord->i2eBase)))
+	    || (ns.baud_base != pCh->BaudBase)
+	    || (ns.line      != pCh->port_index) ) {
 		return -EINVAL;
 	}
 

@@ -425,9 +425,12 @@ fail_nomem:
 static inline struct fs_struct *__copy_fs_struct(struct fs_struct *old)
 {
 	struct fs_struct *fs = kmalloc(sizeof(*old), GFP_KERNEL);
+	/* We don't need to lock fs - think why ;-) */
 	if (fs) {
 		atomic_set(&fs->count, 1);
+		fs->lock = RW_LOCK_UNLOCKED;
 		fs->umask = old->umask;
+		read_lock(&old->lock);
 		fs->rootmnt = mntget(old->rootmnt);
 		fs->root = dget(old->root);
 		fs->pwdmnt = mntget(old->pwdmnt);
@@ -439,6 +442,7 @@ static inline struct fs_struct *__copy_fs_struct(struct fs_struct *old)
 			fs->altrootmnt = NULL;
 			fs->altroot = NULL;
 		}	
+		read_unlock(&old->lock);
 	}
 	return fs;
 }

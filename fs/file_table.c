@@ -124,8 +124,11 @@ static void __fput(struct file *filp)
 	struct vfsmount * mnt = filp->f_vfsmnt;
 	struct inode * inode = dentry->d_inode;
 
-	if (filp->f_op && filp->f_op->release)
+	if (filp->f_op && filp->f_op->release) {
+		lock_kernel();
 		filp->f_op->release(inode, filp);
+		unlock_kernel();
+	}
 	fops_put(filp->f_op);
 	filp->f_dentry = NULL;
 	filp->f_vfsmnt = NULL;
@@ -138,10 +141,8 @@ static void __fput(struct file *filp)
 
 void _fput(struct file *file)
 {
-	lock_kernel();
-	locks_remove_flock(file);	/* Still need the */
-	__fput(file);			/* big lock here. */
-	unlock_kernel();
+	locks_remove_flock(file);
+	__fput(file);
 
 	file_list_lock();
 	list_del(&file->f_list);

@@ -528,7 +528,7 @@ int check_disk_change(kdev_t dev)
 	if (bdops == NULL) {
 		devfs_handle_t de;
 
-		de = devfs_find_handle (NULL, NULL, 0, i, MINOR (dev),
+		de = devfs_find_handle (NULL, NULL, i, MINOR (dev),
 					DEVFS_SPECIAL_BLK, 0);
 		if (de) bdops = devfs_get_ops (de);
 	}

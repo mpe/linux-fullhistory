@@ -2089,7 +2089,7 @@ int capi_init(void)
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 		devfs_unregister_chrdev(capi_rawmajor, "capi/r%d");
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
-		devfs_unregister(devfs_find_handle(NULL, "capi20", 0,
+		devfs_unregister(devfs_find_handle(NULL, "capi20",
 						   capi_major, 0,
 						   DEVFS_SPECIAL_CHR, 0));
 		return -EIO;
@@ -2112,13 +2112,13 @@ int capi_init(void)
 		for (j = 0; j < CAPINC_NR_PORTS; j++) {
 			char devname[32];
 			sprintf(devname, "capi/r%u", j);
-			devfs_unregister(devfs_find_handle(NULL, devname, 0, capi_rawmajor, j, DEVFS_SPECIAL_CHR, 0));
+			devfs_unregister(devfs_find_handle(NULL, devname, capi_rawmajor, j, DEVFS_SPECIAL_CHR, 0));
 		}
 		capinc_tty_exit();
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 		(void) detach_capi_interface(&cuser);
 		devfs_unregister_chrdev(capi_major, "capi20");
-		devfs_unregister(devfs_find_handle(NULL, "capi20", 0,
+		devfs_unregister(devfs_find_handle(NULL, "capi20",
 						   capi_major, 0,
 						   DEVFS_SPECIAL_CHR, 0));
 		MOD_DEC_USE_COUNT;
@@ -2144,7 +2144,7 @@ void cleanup_module(void)
 	(void)proc_exit();
 
 	devfs_unregister_chrdev(capi_major, "capi20");
-	devfs_unregister(devfs_find_handle(NULL, "isdn/capi20", 0, capi_major, 0, DEVFS_SPECIAL_CHR, 0));
+	devfs_unregister(devfs_find_handle(NULL, "isdn/capi20", capi_major, 0, DEVFS_SPECIAL_CHR, 0));
 
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 	capinc_tty_exit();
@@ -2152,7 +2152,7 @@ void cleanup_module(void)
 	for (j = 0; j < CAPINC_NR_PORTS; j++) {
 		char devname[32];
 		sprintf(devname, "capi/r%u", j);
-		devfs_unregister(devfs_find_handle(NULL, devname, 0, capi_rawmajor, j, DEVFS_SPECIAL_CHR, 0));
+		devfs_unregister(devfs_find_handle(NULL, devname, capi_rawmajor, j, DEVFS_SPECIAL_CHR, 0));
 	}
 #endif
 	(void) detach_capi_interface(&cuser);

@@ -152,14 +152,17 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 	/* now to find a dentry.
 	 * If possible, get a well-connected one
 	 */
+	spin_lock(&dcache_lock);
 	for (lp = inode->i_dentry.next; lp != &inode->i_dentry ; lp=lp->next) {
 		result = list_entry(lp,struct dentry, d_alias);
 		if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
 			dget(result);
+			spin_unlock(&dcache_lock);
 			iput(inode);
 			return result;
 		}
 	}
+	spin_unlock(&dcache_lock);
 	result = d_alloc_root(inode);
 	if (result == NULL) {
 		iput(inode);
@@ -192,8 +195,10 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 	/* tdentry will have been made a "child" of target (the parent of target)
 	 * make it an IS_ROOT instead
 	 */
+	spin_lock(&dcache_lock);
 	list_del(&tdentry->d_child);
 	tdentry->d_parent = tdentry;
+	spin_unlock(&dcache_lock);
 	d_rehash(target);
 	dput(tdentry);
 
@@ -205,6 +210,7 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 		while (target) {
 			target->d_flags &= ~DCACHE_NFSD_DISCONNECTED;
 			parent = target;
+			spin_lock(&dcache_lock);
 			if (list_empty(&parent->d_subdirs))
 				target = NULL;
 			else {
@@ -217,6 +223,7 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 					       parent->d_name.name, target->d_name.name);
 #endif
 			}
+			spin_unlock(&dcache_lock);
 		}
 	}
 	return 0;
@@ -247,6 +254,7 @@ struct dentry *nfsd_findparent(struct dentry *child)
 		 * else make a root dentry
 		 */
 		struct list_head *aliases = &tdentry->d_inode->i_dentry;
+		spin_lock(&dcache_lock);
 		if (aliases->next != aliases) {
 			pdentry = list_entry(aliases->next, struct dentry, d_alias);
 			if (pdentry == tdentry)
@@ -255,6 +263,7 @@ struct dentry *nfsd_findparent(struct dentry *child)
 				pdentry = NULL;
 			if (pdentry) dget(pdentry);
 		}
+		spin_unlock(&dcache_lock);
 		if (pdentry == NULL) {
 			pdentry = d_alloc_root(igrab(tdentry->d_inode));
 			if (pdentry) {
@@ -289,16 +298,20 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
 	 * to a lookup (though nobody does this yet).  In this case, just succeed.
 	 */
 	if (child->d_parent == parent) goto out;
-	/* Possibly a new dentry has been made for this child->d_inode in parent by
-	 * a lookup.  In this case return that dentry. caller must notice and act accordingly
+	/* Possibly a new dentry has been made for this child->d_inode in
+	 * parent by a lookup.  In this case return that dentry. caller must
+	 * notice and act accordingly
 	 */
+	spin_lock(&dcache_lock);
 	for (lp = child->d_inode->i_dentry.next; lp != &child->d_inode->i_dentry ; lp=lp->next) {
 		tmp = list_entry(lp,struct dentry, d_alias);
 		if (tmp->d_parent == parent) {
 			child = dget(tmp);
+			spin_unlock(&dcache_lock);
 			goto out;
 		}
 	}
+	spin_unlock(&dcache_lock);
 	/* well, if we can find a name for child in parent, it should be safe to splice it in */
 	err = get_ino_name(parent, &qs, child->d_inode->i_ino);
 	if (err)

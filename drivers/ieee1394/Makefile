@@ -53,13 +53,20 @@ else
 endif
 
 ifeq ($(CONFIG_IEEE1394_OHCI1394),y)
-L_OBJS += ohci1394.o
+LX_OBJS += ohci1394.o
 else
   ifeq ($(CONFIG_IEEE1394_OHCI1394),m)
-  M_OBJS += ohci1394.o
+  MX_OBJS += ohci1394.o
   endif
 endif
 
+ifeq ($(CONFIG_IEEE1394_VIDEO1394),y)
+L_OBJS += video1394.o
+else
+  ifeq ($(CONFIG_IEEE1394_VIDEO1394),m)
+  M_OBJS += video1394.o
+  endif
+endif
 
 ifeq ($(CONFIG_IEEE1394_RAWIO),y)
 L_OBJS += raw1394.o

@@ -646,7 +646,7 @@ static void aic_irq_handler(int irq, void *dev_id, struct pt_regs *regs)
 		phyid = phyid & 0x3F;
 		handle_selfid(aic, host, phyid, isroot, rcv_bytes);
 	    } else {
-		hpsb_packet_received(host, aic->rcv_page, rcv_bytes);
+		hpsb_packet_received(host, aic->rcv_page, rcv_bytes, 0);
 	    };
 	} else {
 	    PRINT(KERN_ERR, aic->id, 

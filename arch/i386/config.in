@@ -209,9 +209,10 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 bool 'Power Management support' CONFIG_PM
 
-dep_tristate '  ACPI support' CONFIG_ACPI $CONFIG_PM
+bool '  ACPI support' CONFIG_ACPI $CONFIG_PM
 if [ "$CONFIG_ACPI" != "n" ]; then
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '    ACPI interpreter (EXPERIMENTAL)' CONFIG_ACPI_INTERPRETER
       bool '    Enter S1 for sleep (EXPERIMENTAL)' CONFIG_ACPI_S1_SLEEP
    fi
 fi
@@ -229,6 +230,8 @@ if [ "$CONFIG_APM" != "n" ]; then
 fi
 
 endmenu
+
+source drivers/mtd/Config.in
 
 source drivers/parport/Config.in
 

@@ -2437,10 +2437,6 @@ int __init rs_8xx_init(void)
 	volatile	immap_t		*immap;
 	
 	init_bh(SERIAL_BH, do_serial_bh);
-#if 0
-	timer_table[RS_TIMER].fn = rs_8xx_timer;
-	timer_table[RS_TIMER].expires = 0;
-#endif
 
 	show_serial_version();
 

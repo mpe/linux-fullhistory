@@ -70,7 +70,7 @@ start:
 # This is the setup header, and it must start at %cs:2 (old 0x9020:2)
 
 		.ascii	"HdrS"		# header signature
-		.word	0x0201		# header version number (>= 0x0105)
+		.word	0x0202		# header version number (>= 0x0105)
 					# or else old loadlin-1.5 will fail)
 realmode_swtch:	.word	0, 0		# default_switch, SETUPSEG
 start_sys_seg:	.word	SYSSEG
@@ -128,9 +128,27 @@ ramdisk_size:	.long	0		# its size in bytes
 bootsect_kludge:
 		.word  bootsect_helper, SETUPSEG
 
-heap_end_ptr:	.word	modelist+1024	# space from here (exclusive) down to
+heap_end_ptr:	.word	modelist+1024	# (Header version 0x0201 or later)
+					# space from here (exclusive) down to
 					# end of setup code can be used by setup
 					# for local heap purposes.
+
+pad1:		.word	0
+cmd_line_ptr:	.long 0			# (Header version 0x0202 or later)
+					# If nonzero, a 32-bit pointer
+					# to the kernel command line.
+					# The command line should be
+					# located between the start of
+					# setup and the end of low
+					# memory (0xa0000), or it may
+					# get overwritten before it
+					# gets read.  If this field is
+					# used, there is no longer
+					# anything magical about the
+					# 0x90000 segment; the setup
+					# can be located anywhere in
+					# low memory 0x10000 or higher.
+
 trampoline:	call	start_of_setup
 		.space	1024
 # End of setup header #####################################################
@@ -551,7 +569,14 @@ end_move:
 # then we load the segment descriptors
 	movw	%cs, %ax			# aka SETUPSEG
 	movw	%ax, %ds
+		
+# Check whether we need to be downward compatible with version <=201
+	cmpl	$0, cmd_line_ptr
+	jne	end_move_self		# loader uses version >=202 features
+	cmpb	$0x20, type_of_loader
+	je	end_move_self		# bootsect loader, we know of it
 
+# Boot loader doesnt support boot protocol version 2.02.
 # If we have our code not at 0x90000, we need to move it there now.
 # We also then need to move the params behind it (commandline)
 # Because we would overwrite the code on the current IP, we move
@@ -597,6 +622,11 @@ move_self_here:
 	movw	%dx, %ss
 end_move_self:					# now we are at the right place
 	lidt	idt_48				# load idt with 0,0
+	xorl	%eax, %eax			# Compute gdt_base
+	movw	%ds, %ax			# (Convert %ds:gdt to a linear ptr)
+	shll	$4, %eax
+	addl	$gdt, %eax
+	movl	%eax, (gdt_48+2)
 	lgdt	gdt_48				# load gdt with whatever is
 						# appropriate
 
@@ -615,8 +645,7 @@ end_move_self:					# now we are at the right place
 # time on certain systems; Toshiba Tecras are known to have this
 # problem.  The memory location used here (0x200) is the int 0x80
 # vector, which should be safe to use.
-	push    %ds
-	push    %es
+
 	xorw	%ax, %ax			# segment 0x0000
 	movw	%ax, %fs
 	decw	%ax				# segment 0xffff (HMA)
@@ -663,7 +692,10 @@ a20_wait:
 
 flush_instr:
 	xorw	%bx, %bx			# Flag to indicate a boot
-
+	xorl	%esi, %esi			# Pointer to real-mode code
+	movw	%cs, %si
+	subw	$DELTA_INITSEG, %si
+	shll	$4, %esi			# Convert to 32-bit pointer
 # NOTE: For high loaded big kernels we need a
 #	jmpi    0x100000,__KERNEL_CS
 #
@@ -852,7 +884,7 @@ gdt_48:
 	.word	0x8000				# gdt limit=2048,
 						#  256 GDT entries
 
-	.word	512+gdt, 0x9			# gdt base = 0X9xxxx
+	.word	0, 0				# gdt base (filled in later)
 
 # Include video setup & detection code
 

@@ -148,34 +148,40 @@ request_queue_t *blk_get_queue(kdev_t dev)
 	return ret;
 }
 
+static int __block_cleanup_queue(struct list_head *head)
+{
+	struct list_head *entry;
+	struct request *rq;
+	int i = 0;
+
+	if (list_empty(head))
+		return 0;
+
+	entry = head->next;
+	do {
+		rq = list_entry(entry, struct request, table);
+		entry = entry->next;
+		list_del(&rq->table);
+		kmem_cache_free(request_cachep, rq);
+		i++;
+	} while (!list_empty(head));
+
+	return i;
+}
+
 /*
  * Hopefully the low level driver has finished any out standing requests
  * first...
  */
 void blk_cleanup_queue(request_queue_t * q)
 {
-	struct list_head *entry;
-	struct request *rq;
-	int i = QUEUE_NR_REQUESTS;
+	int count = QUEUE_NR_REQUESTS;
 
-	if (list_empty(&q->request_freelist))
-		return;
+	count -= __block_cleanup_queue(&q->request_freelist[READ]);
+	count -= __block_cleanup_queue(&q->request_freelist[WRITE]);
 
-	if (q->queue_requests)
-		BUG();
-
-	entry = &q->request_freelist;
-	entry = entry->next;
-	do {
-		rq = list_entry(entry, struct request, table);
-		entry = entry->next;
-		list_del(&rq->table);
-		kmem_cache_free(request_cachep, rq);
-		i--;
-	} while (!list_empty(&q->request_freelist));
-
-	if (i)
-		printk("blk_cleanup_queue: leaked requests (%d)\n", i);
+	if (count)
+		printk("blk_cleanup_queue: leaked requests (%d)\n", count);
 
 	memset(q, 0, sizeof(*q));
 }
@@ -280,10 +286,9 @@ static void blk_init_free_list(request_queue_t *q)
 	for (i = 0; i < QUEUE_NR_REQUESTS; i++) {
 		rq = kmem_cache_alloc(request_cachep, SLAB_KERNEL);
 		rq->rq_status = RQ_INACTIVE;
-		list_add(&rq->table, &q->request_freelist);
+		list_add(&rq->table, &q->request_freelist[i & 1]);
 	}
 
-	q->queue_requests = 0;
 	init_waitqueue_head(&q->wait_for_request);
 	spin_lock_init(&q->request_lock);
 }
@@ -291,7 +296,8 @@ static void blk_init_free_list(request_queue_t *q)
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
 	INIT_LIST_HEAD(&q->queue_head);
-	INIT_LIST_HEAD(&q->request_freelist);
+	INIT_LIST_HEAD(&q->request_freelist[READ]);
+	INIT_LIST_HEAD(&q->request_freelist[WRITE]);
 	elevator_init(&q->elevator, ELEVATOR_LINUS);
 	blk_init_free_list(q);
 	q->request_fn     	= rfn;
@@ -342,19 +348,37 @@ void generic_unplug_device(void *data)
  */
 static inline struct request *get_request(request_queue_t *q, int rw)
 {
-	register struct request *rq = NULL;
+	struct list_head *list = &q->request_freelist[rw];
+	struct request *rq;
 
-	if (!list_empty(&q->request_freelist)) {
-		if ((q->queue_requests > QUEUE_WRITES_MAX) && (rw == WRITE))
-			return NULL;
-
-		rq = blkdev_free_rq(&q->request_freelist);
-		list_del(&rq->table);
-		rq->rq_status = RQ_ACTIVE;
-		rq->special = NULL;
-		rq->q = q;
-		q->queue_requests++;
+	/*
+	 * Reads get preferential treatment and are allowed to steal
+	 * from the write free list if necessary.
+	 */
+	if (!list_empty(list)) {
+		rq = blkdev_free_rq(list);
+		goto got_rq;
 	}
+
+	/*
+	 * if the WRITE list is non-empty, we know that rw is READ
+	 * and that the READ list is empty. allow reads to 'steal'
+	 * from the WRITE list.
+	 */
+	if (!list_empty(&q->request_freelist[WRITE])) {
+		list = &q->request_freelist[WRITE];
+		rq = blkdev_free_rq(list);
+		goto got_rq;
+	}
+
+	return NULL;
+
+got_rq:
+	list_del(&rq->table);
+	rq->free_list = list;
+	rq->rq_status = RQ_ACTIVE;
+	rq->special = NULL;
+	rq->q = q;
 	return rq;
 }
 
@@ -486,9 +510,9 @@ void inline blkdev_release_request(struct request *req)
 	/*
 	 * Request may not have originated from ll_rw_blk
 	 */
-	if (req->q) {
-		list_add(&req->table, &req->q->request_freelist);
-		req->q->queue_requests--;
+	if (req->free_list) {
+		list_add(&req->table, req->free_list);
+		req->free_list = NULL;
 		wake_up(&req->q->wait_for_request);
 	}
 }
@@ -557,7 +581,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 	int max_segments = MAX_SEGMENTS;
 	struct request * req = NULL;
 	int rw_ahead, max_sectors, el_ret;
-	struct list_head *head = &q->queue_head;
+	struct list_head *head;
 	int latency;
 	elevator_t *elevator = &q->elevator;
 
@@ -602,12 +626,6 @@ static inline void __make_request(request_queue_t * q, int rw,
 				goto end_io;	/* Hmmph! Nothing to write */
 			refile_buffer(bh);
 		do_write:
-			/*
-			 * We don't allow the write-requests to fill up the
-			 * queue completely:  we want some room for reads,
-			 * as they take precedence. The last third of the
-			 * requests are only for reads.
-			 */
 			kstat.pgpgout++;
 			break;
 		default:
@@ -646,17 +664,17 @@ static inline void __make_request(request_queue_t * q, int rw,
 	spin_lock_irq(&io_request_lock);
 	elevator_default_debug(q, bh->b_rdev);
 
-	if (list_empty(head)) {
-		q->plug_device_fn(q, bh->b_rdev); /* is atomic */
-		goto get_rq;
-	}
-
 	/*
 	 * skip first entry, for devices with active queue head
 	 */
 	head = &q->queue_head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
+
+	if (list_empty(head)) {
+		q->plug_device_fn(q, bh->b_rdev); /* is atomic */
+		goto get_rq;
+	}
 
 	el_ret = elevator->elevator_merge_fn(q, &req, bh, rw, &max_sectors, &max_segments);
 	switch (el_ret) {
@@ -843,7 +861,6 @@ static void __ll_rw_block(int rw, int nr, struct buffer_head * bhs[],
 sorry:
 	for (i = 0; i < nr; i++)
 		buffer_IO_error(bhs[i]);
-	return;
 }
 
 void ll_rw_block(int rw, int nr, struct buffer_head * bh[])

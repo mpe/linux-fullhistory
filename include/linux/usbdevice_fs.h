@@ -140,6 +140,7 @@ struct usbdevfs_hub_portinfo {
 #define USBDEVFS_IOCTL             _IOWR('U', 18, struct usbdevfs_ioctl)
 #define USBDEVFS_HUB_PORTINFO      _IOR('U', 19, struct usbdevfs_hub_portinfo)
 #define USBDEVFS_RESET             _IO('U', 20)
+#define USBDEVFS_CLEAR_HALT        _IOR('U', 21, unsigned int)
 
 /* --------------------------------------------------------------------- */
 

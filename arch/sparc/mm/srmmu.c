@@ -125,7 +125,7 @@ int srmmu_cache_pagetables;
 void *srmmu_nocache_pool;
 void *srmmu_nocache_bitmap;
 int srmmu_nocache_low;
-int srmmu_nocache_used;
+unsigned long srmmu_nocache_used;
 spinlock_t srmmu_nocache_spinlock;
 
 /* This makes sense. Honest it does - Anton */
@@ -1127,8 +1127,6 @@ void __init srmmu_inherit_prom_mappings(unsigned long start,unsigned long end)
 	}
 }
 
-static unsigned long end_of_phys_memory __initdata = 0;
-
 #define KERNEL_PTE(page_shifted) ((page_shifted)|SRMMU_CACHE|SRMMU_PRIV|SRMMU_VALID)
 
 /* Create a third-level SRMMU 16MB page mapping. */
@@ -1268,8 +1266,8 @@ static int srmmu_mmu_info(char *buf)
 	return sprintf(buf, 
 		"MMU type\t: %s\n"
 		"contexts\t: %d\n"
-		"nocache total\t: %d\n"
-		"nocache used\t: %d\n"
+		"nocache total\t: %lu\n"
+		"nocache used\t: %lu\n"
 		, srmmu_name,
 		num_contexts,
 		SRMMU_NOCACHE_SIZE,

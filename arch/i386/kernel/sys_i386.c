@@ -31,9 +31,7 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	int fd[2];
 	int error;
 
-	lock_kernel();
 	error = do_pipe(fd);
-	unlock_kernel();
 	if (!error) {
 		if (copy_to_user(fildes, fd, 2*sizeof(int)))
 			error = -EFAULT;
@@ -58,11 +56,7 @@ static inline long do_mmap2(
 	}
 
 	down(&current->mm->mmap_sem);
-	lock_kernel();
-
 	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-
-	unlock_kernel();
 	up(&current->mm->mmap_sem);
 
 	if (file)

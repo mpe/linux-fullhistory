@@ -145,7 +145,6 @@ static void floppy_off(unsigned int nr);
 /* Hard disk:  timeout is 6 seconds. */
 #define DEVICE_NAME "hard disk"
 #define DEVICE_INTR do_hd
-#define DEVICE_TIMEOUT HD_TIMER
 #define TIMEOUT_VALUE (6*HZ)
 #define DEVICE_REQUEST do_hd_request
 #define DEVICE_NR(device) (MINOR(device)>>6)
@@ -404,26 +403,7 @@ static void floppy_off(unsigned int nr);
 static void (*DEVICE_INTR)(void) = NULL;
 #endif
 
-#ifdef DEVICE_TIMEOUT
-
-#define SET_TIMER \
-((timer_table[DEVICE_TIMEOUT].expires = jiffies + TIMEOUT_VALUE), \
-(timer_active |= 1<<DEVICE_TIMEOUT))
-
-#define CLEAR_TIMER \
-timer_active &= ~(1<<DEVICE_TIMEOUT)
-
-#define SET_INTR(x) \
-if ((DEVICE_INTR = (x)) != NULL) \
-	SET_TIMER; \
-else \
-	CLEAR_TIMER;
-
-#else
-
 #define SET_INTR(x) (DEVICE_INTR = (x))
-
-#endif /* DEVICE_TIMEOUT */
 
 #ifdef DEVICE_REQUEST
 static void (DEVICE_REQUEST)(request_queue_t *);

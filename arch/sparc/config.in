@@ -73,6 +73,8 @@ bool 'PROM console' CONFIG_PROM_CONSOLE
 source drivers/video/Config.in
 endmenu
 
+source drivers/mtd/Config.in
+
 if [ "$CONFIG_SUN4" != "y" ]; then
    source drivers/sbus/char/Config.in
    source drivers/sbus/audio/Config.in

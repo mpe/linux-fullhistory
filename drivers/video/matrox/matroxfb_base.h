@@ -56,10 +56,10 @@
 #include <video/fbcon-cfb24.h>
 #include <video/fbcon-cfb32.h>
 
-#if defined(CONFIG_FB_OF)
 #if defined(CONFIG_FB_COMPAT_XPMAC)
 #include <asm/vc_ioctl.h>
 #endif
+#if defined(CONFIG_PPC)
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <video/macmodes.h>
@@ -544,7 +544,7 @@ struct matrox_fb_info {
 		struct timer_list timer;
 			      } cursor;
 	struct { unsigned red, green, blue, transp; } palette[256];
-#if defined(CONFIG_FB_OF) && defined(CONFIG_FB_COMPAT_XPMAC)
+#if defined(CONFIG_FB_COMPAT_XPMAC)
 	char	matrox_name[32];
 #endif
 /* These ifdefs must be last! They differ for module & non-module compiles */

@@ -14,8 +14,9 @@
  *
  *	Fixes
  *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs;
- *					thanks to Eric Gilmore for
- *					testing these extensively
+ *					thanks to Eric Gilmore
+ *					and Rolf G. Tews
+ *					for testing these extensively
  */
 
 #include <linux/mm.h>
@@ -26,6 +27,7 @@
 #include <linux/sched.h>
 #include <linux/config.h>
 #include <linux/smp_lock.h>
+#include <linux/mc146818rtc.h>
 
 #include <asm/io.h>
 #include <asm/smp.h>
@@ -227,9 +229,9 @@ static int __init find_irq_entry(int apic, int pin, int type)
 }
 
 /*
- * Find the pin to which IRQ0 (ISA) is connected
+ * Find the pin to which IRQ[irq] (ISA) is connected
  */
-static int __init find_timer_pin(int type)
+static int __init find_isa_irq_pin(int irq, int type)
 {
 	int i;
 
@@ -240,7 +242,7 @@ static int __init find_timer_pin(int type)
 		     mp_bus_id_to_type[lbus] == MP_BUS_EISA ||
 		     mp_bus_id_to_type[lbus] == MP_BUS_MCA) &&
 		    (mp_irqs[i].mpc_irqtype == type) &&
-		    (mp_irqs[i].mpc_srcbusirq == 0x00))
+		    (mp_irqs[i].mpc_srcbusirq == irq))
 
 			return mp_irqs[i].mpc_dstirq;
 	}
@@ -1246,6 +1248,22 @@ static inline void init_IO_APIC_traps(void)
 	}
 }
 
+static void enable_lapic_irq (unsigned int irq)
+{
+	unsigned long v;
+
+	v = apic_read(APIC_LVT0);
+	apic_write_around(APIC_LVT0, v & ~APIC_LVT_MASKED);
+}
+
+static void disable_lapic_irq (unsigned int irq)
+{
+	unsigned long v;
+
+	v = apic_read(APIC_LVT0);
+	apic_write_around(APIC_LVT0, v | APIC_LVT_MASKED);
+}
+
 static void ack_lapic_irq (unsigned int irq)
 {
 	ack_APIC_irq();
@@ -1257,8 +1275,8 @@ static struct hw_interrupt_type lapic_irq_type = {
 	"local-APIC-edge",
 	NULL, /* startup_irq() not used for IRQ0 */
 	NULL, /* shutdown_irq() not used for IRQ0 */
-	NULL, /* enable_irq() not used for IRQ0 */
-	NULL, /* disable_irq() not used for IRQ0 */
+	enable_lapic_irq,
+	disable_lapic_irq,
 	ack_lapic_irq,
 	end_lapic_irq
 };
@@ -1295,6 +1313,61 @@ static void setup_nmi (void)
 }
 
 /*
+ * This looks a bit hackish but it's about the only one way of sending
+ * a few INTA cycles to 8259As and any associated glue logic.  ICR does
+ * not support the ExtINT mode, unfortunately.  We need to send these
+ * cycles as some i82489DX-based boards have glue logic that keeps the
+ * 8259A interrupt line asserted until INTA.  --macro
+ */
+static inline void unlock_ExtINT_logic(void)
+{
+	int pin, i;
+	struct IO_APIC_route_entry entry0, entry1;
+	unsigned char save_control, save_freq_select;
+
+	pin = find_isa_irq_pin(8, mp_INT);
+	if (pin == -1)
+		return;
+
+	*(((int *)&entry0) + 1) = io_apic_read(0, 0x11 + 2 * pin);
+	*(((int *)&entry0) + 0) = io_apic_read(0, 0x10 + 2 * pin);
+	clear_IO_APIC_pin(0, pin);
+
+	memset(&entry1, 0, sizeof(entry1));
+
+	entry1.dest_mode = 0;			/* physical delivery */
+	entry1.mask = 0;			/* unmask IRQ now */
+	entry1.dest.physical.physical_dest = hard_smp_processor_id();
+	entry1.delivery_mode = dest_ExtINT;
+	entry1.polarity = entry0.polarity;
+	entry1.trigger = 0;
+	entry1.vector = 0;
+
+	io_apic_write(0, 0x11 + 2 * pin, *(((int *)&entry1) + 1));
+	io_apic_write(0, 0x10 + 2 * pin, *(((int *)&entry1) + 0));
+
+	save_control = CMOS_READ(RTC_CONTROL);
+	save_freq_select = CMOS_READ(RTC_FREQ_SELECT);
+	CMOS_WRITE((save_freq_select & ~RTC_RATE_SELECT) | 0x6,
+		   RTC_FREQ_SELECT);
+	CMOS_WRITE(save_control | RTC_PIE, RTC_CONTROL);
+
+	i = 100;
+	while (i-- > 0) {
+		mdelay(10);
+		if ((CMOS_READ(RTC_INTR_FLAGS) & RTC_PF) == RTC_PF)
+			i -= 10;
+	}
+
+	CMOS_WRITE(save_control, RTC_CONTROL);
+	CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
+	clear_IO_APIC_pin(0, pin);
+
+	io_apic_write(0, 0x11 + 2 * pin, *(((int *)&entry0) + 1));
+	io_apic_write(0, 0x10 + 2 * pin, *(((int *)&entry0) + 0));
+}
+
+/*
  * This code may look a bit paranoid, but it's supposed to cooperate with
  * a wide range of boards and BIOS bugs.  Fortunately only the timer IRQ
  * is so screwy.  Thanks to Brian Perkins for testing/hacking this beast
@@ -1325,8 +1398,8 @@ static inline void check_timer(void)
 	timer_ack = 1;
 	enable_8259A_irq(0);
 
-	pin1 = find_timer_pin(mp_INT);
-	pin2 = find_timer_pin(mp_ExtINT);
+	pin1 = find_isa_irq_pin(0, mp_INT);
+	pin2 = find_isa_irq_pin(0, mp_ExtINT);
 
 	printk(KERN_INFO "..TIMER: vector=%d pin1=%d pin2=%d\n", vector, pin1, pin2);
 
@@ -1381,6 +1454,21 @@ static inline void check_timer(void)
 	irq_desc[0].handler = &lapic_irq_type;
 	apic_write_around(APIC_LVT0, APIC_DM_FIXED | vector);	/* Fixed mode */
 	enable_8259A_irq(0);
+
+	if (timer_irq_works()) {
+		printk(" works.\n");
+		return;
+	}
+	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_FIXED | vector);
+	printk(" failed.\n");
+
+	printk(KERN_INFO "...trying to set up timer as ExtINT IRQ...");
+
+	init_8259A(0);
+	make_8259A_irq(0);
+	apic_write_around(APIC_LVT0, APIC_DM_EXTINT);
+
+	unlock_ExtINT_logic();
 
 	if (timer_irq_works()) {
 		printk(" works.\n");

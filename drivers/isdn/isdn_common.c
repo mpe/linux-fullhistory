@@ -2603,7 +2603,7 @@ static void isdn_init_devfs(void)
 	int i;
 #  endif
 
-	devfs_handle = devfs_mk_dir (NULL, "isdn", 4, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "isdn", NULL);
 #  ifdef CONFIG_ISDN_PPP
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		char buf[8];

@@ -52,8 +52,7 @@ struct hpsb_packet {
          * overwritten to allow in-place byte swapping.  Neither of these is
          * CRCed (the sizes also don't include CRC), but contain space for at
          * least one additional quadlet to allow in-place CRCing.  The memory is
-         * also guaranteed to have physical mapping (virt_to_bus() is meaningful
-         * on these pointers).
+         * also guaranteed to be DMA mappable.
          */
         quadlet_t *header;
         quadlet_t *data;
@@ -145,7 +144,12 @@ void hpsb_packet_sent(struct hpsb_host *host, struct hpsb_packet *packet,
  * immediately), with the header (i.e. the first four quadlets) in machine byte
  * order and the data block in big endian.  *data can be safely overwritten
  * after this call.
+ *
+ * If the packet is a write request, write_acked is to be set to true if it was
+ * ack_complete'd already, false otherwise.  This arg is ignored for any other
+ * packet type.
  */
-void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size);
+void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size,
+                          int write_acked);
 
 #endif /* _IEEE1394_CORE_H */

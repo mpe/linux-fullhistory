@@ -184,9 +184,7 @@ asmlinkage int sys_pipe(int *fildes)
 	int fd[2];
 	int error;
 
-	lock_kernel();
 	error = do_pipe(fd);
-	unlock_kernel();
 	if (!error) {
 		if (copy_to_user(fildes, fd, 2*sizeof(int)))
 			error = -EFAULT;
@@ -201,7 +199,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 	struct file * file = NULL;
 	int ret = -EBADF;
 
-	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (!(file = fget(fd)))
 			goto out;
@@ -214,7 +211,6 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return ret;
 }
 

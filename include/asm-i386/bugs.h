@@ -52,11 +52,12 @@ __setup("no387", no_387);
 
 static char __initdata fpu_error = 0;
 
-static void __init copro_timeout(void)
+static struct timer_list copro_timer __initdata = {{0, 0}, 0};
+
+static void __init copro_timeout(unsigned long dummy)
 {
 	fpu_error = 1;
-	timer_table[COPRO_TIMER].expires = jiffies+HZ;
-	timer_active |= 1<<COPRO_TIMER;
+	mod_timer(&copro_timer, jiffies+HZ);
 	printk(KERN_ERR "387 failed: trying to reset\n");
 	send_sig(SIGFPE, current, 1);
 	outb_p(0,0xf1);
@@ -118,15 +119,15 @@ static void __init check_fpu(void)
 	 * should get there first..
 	 */
 	printk(KERN_INFO "Checking 386/387 coupling... ");
-	timer_table[COPRO_TIMER].expires = jiffies+HZ/2;
-	timer_table[COPRO_TIMER].fn = copro_timeout;
-	timer_active |= 1<<COPRO_TIMER;
+	init_timer(&copro_timer);
+	copro_timer.function = copro_timeout;
+	mod_timer(&copro_timer, jiffies+HZ/2);
 	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
 	control_word &= 0xffc0;
 	__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
 	outb_p(inb_p(0x21) | (1 << 2), 0x21);
 	__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
-	timer_active &= ~(1<<COPRO_TIMER);
+	del_timer(&copro_timer);
 	if (fpu_error)
 		return;
 	if (!ignore_irq13) {

@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/smp_lock.h>
 
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
@@ -202,6 +203,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, age);
 
 	if (inode)
 	{
+		lock_kernel();
 		if (is_bad_inode(inode))
 		{
 #ifdef SMBFS_PARANOIA
@@ -211,6 +213,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 			valid = 0;
 		} else if (!valid)
 			valid = (smb_revalidate_inode(dentry) == 0);
+		unlock_kernel();
 	} else
 	{
 	/*

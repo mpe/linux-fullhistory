@@ -5,6 +5,9 @@
  *               highlevel or lowlevel code
  *
  * Copyright (C) 1999, 2000 Andreas E. Bombe
+ *
+ * This code is licensed under the GPL.  See the file COPYING in the root
+ * directory of the kernel sources for details.
  */
 
 #include <linux/config.h>
@@ -534,7 +537,7 @@ struct hpsb_packet *create_reply_packet(struct hpsb_host *host, quadlet_t *data,
                 if (packet == NULL) break
 
 void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
-                            size_t size)
+                            size_t size, int write_acked)
 {
         struct hpsb_packet *packet;
         int length, rcode, extcode;
@@ -548,7 +551,8 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
                 addr = (((u64)(data[1] & 0xffff)) << 32) | data[2];
                 rcode = highlevel_write(host, source, data+3, addr, 4);
 
-                if (((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
+                if (!write_acked
+                    && ((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
                         /* not a broadcast write, reply */
                         PREP_REPLY_PACKET(0);
                         fill_async_write_resp(packet, rcode);
@@ -561,7 +565,8 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
                 rcode = highlevel_write(host, source, data+4, addr,
                                         data[3]>>16);
 
-                if (((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
+                if (!write_acked
+                    && ((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
                         /* not a broadcast write, reply */
                         PREP_REPLY_PACKET(0);
                         fill_async_write_resp(packet, rcode);
@@ -644,7 +649,8 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
 #undef PREP_REPLY_PACKET
 
 
-void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size)
+void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size,
+                          int write_acked)
 {
         int tcode;
 
@@ -672,7 +678,7 @@ void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size)
         case TCODE_READQ:
         case TCODE_READB:
         case TCODE_LOCK_REQUEST:
-                handle_incoming_packet(host, tcode, data, size);
+                handle_incoming_packet(host, tcode, data, size, write_acked);
                 break;
 
 

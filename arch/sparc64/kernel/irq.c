@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.87 2000/05/09 17:40:13 davem Exp $
+/* $Id: irq.c,v 1.88 2000/06/26 19:40:27 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -60,6 +60,19 @@ unsigned int __up_workvec[16] __attribute__ ((aligned (64)));
 #define irq_work(__cpu, __pil)	&(__up_workvec[(void)(__cpu), (__pil)])
 #else
 #define irq_work(__cpu, __pil)	&(cpu_data[(__cpu)].irq_worklists[(__pil)])
+#endif
+
+#ifdef CONFIG_PCI
+/* This is a table of physical addresses used to deal with SA_DMA_SYNC.
+ * It is used for PCI only to synchronize DMA transfers with IRQ delivery
+ * for devices behind busses other than APB on Sabre systems.
+ *
+ * Currently these physical addresses are just config space accesses
+ * to the command register for that device.
+ */
+unsigned long pci_dma_wsync;
+unsigned long dma_sync_reg_table[256];
+unsigned char dma_sync_reg_table_entry = 0;
 #endif
 
 /* This is based upon code in the 32-bit Sparc kernel written mostly by
@@ -280,8 +293,6 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 			/*
 			 * Check wether we _should_ use DMA Write Sync
 			 * (for devices behind bridges behind APB). 
-			 *
-			 * XXX: Not implemented, yet.
 			 */
 			if (bucket->flags & IBF_DMA_SYNC)
 				irqflags |= SA_DMA_SYNC;
@@ -719,14 +730,14 @@ void handler_irq(int irq, struct pt_regs *regs)
 	/* 'cpu' is the MID (ie. UPAID), calculate the MID
 	 * of our buddy.
 	 */
-	if(should_forward != 0) {
+	if (should_forward != 0) {
 		buddy = cpu_number_map(cpu) + 1;
 		if (buddy >= NR_CPUS ||
 		    (buddy = cpu_logical_map(buddy)) == -1)
 			buddy = cpu_logical_map(0);
 
 		/* Voo-doo programming. */
-		if(cpu_data[buddy].idle_volume < FORWARD_VOLUME)
+		if (cpu_data[buddy].idle_volume < FORWARD_VOLUME)
 			should_forward = 0;
 		buddy <<= 26;
 	}
@@ -752,25 +763,29 @@ void handler_irq(int irq, struct pt_regs *regs)
 #else
 	bp = __bucket(xchg32(irq_work(cpu, irq), 0));
 #endif
-	for( ; bp != NULL; bp = nbp) {
+	for ( ; bp != NULL; bp = nbp) {
 		unsigned char flags = bp->flags;
 
 		nbp = __bucket(bp->irq_chain);
-		if((flags & IBF_ACTIVE) != 0) {
-			if((flags & IBF_MULTI) == 0) {
+		if ((flags & IBF_ACTIVE) != 0) {
+			if ((flags & IBF_DMA_SYNC) != 0) {
+				upa_readl(dma_sync_reg_table[bp->synctab_ent]);
+				upa_readq(pci_dma_wsync);
+			}
+			if ((flags & IBF_MULTI) == 0) {
 				struct irqaction *ap = bp->irq_info;
 				ap->handler(__irq(bp), ap->dev_id, regs);
 			} else {
 				void **vector = (void **)bp->irq_info;
 				int ent;
-				for(ent = 0; ent < 4; ent++) {
+				for (ent = 0; ent < 4; ent++) {
 					struct irqaction *ap = vector[ent];
-					if(ap != NULL)
+					if (ap != NULL)
 						ap->handler(__irq(bp), ap->dev_id, regs);
 				}
 			}
 			/* Only the dummy bucket lacks IMAP/ICLR. */
-			if(bp->pil != 0) {
+			if (bp->pil != 0) {
 #ifdef CONFIG_SMP
 				/* Ok, here is what is going on:
 				 * 1) Retargeting IRQs on Starfire is very

@@ -4,6 +4,9 @@
  * Raw interface to the bus
  *
  * Copyright (C) 1999, 2000 Andreas E. Bombe
+ *
+ * This code is licensed under the GPL.  See the file COPYING in the root
+ * directory of the kernel sources for details.
  */
 
 #include <linux/kernel.h>
@@ -13,7 +16,12 @@
 #include <linux/fs.h>
 #include <linux/poll.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include <asm/uaccess.h>
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,0)
+#include <linux/devfs_fs_kernel.h>
+#endif
 
 #include "ieee1394.h"
 #include "ieee1394_types.h"
@@ -23,6 +31,8 @@
 #include "ieee1394_transactions.h"
 #include "raw1394.h"
 
+
+static devfs_handle_t devfs_handle = NULL;
 
 LIST_HEAD(host_info_list);
 static int host_count = 0;
@@ -257,7 +267,7 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
                         req->req.type = RAW1394_REQ_ISO_RECEIVE;
                         req->req.generation = get_hpsb_generation();
                         req->req.misc = 0;
-                        req->req.recvb = fi->iso_buffer;
+                        req->req.recvb = (u64)fi->iso_buffer;
                         req->req.length = MIN(length, fi->iso_buffer_length);
                         
                         list_add_tail(&req->list, &reqs);
@@ -326,7 +336,7 @@ static void fcp_request(struct hpsb_host *host, int nodeid, int direction,
                         req->req.type = RAW1394_REQ_FCP_REQUEST;
                         req->req.generation = get_hpsb_generation();
                         req->req.misc = nodeid | (direction << 16);
-                        req->req.recvb = (quadlet_t *)fi->fcp_buffer;
+                        req->req.recvb = (u64)fi->fcp_buffer;
                         req->req.length = length;
                         
                         list_add_tail(&req->list, &reqs);
@@ -343,7 +353,7 @@ static void fcp_request(struct hpsb_host *host, int nodeid, int direction,
 }
 
 
-static int dev_read(struct file *file, char *buffer, size_t count,
+static ssize_t dev_read(struct file *file, char *buffer, size_t count,
                     loff_t *offset_is_ignored)
 {
         struct file_info *fi = (struct file_info *)file->private_data;
@@ -376,7 +386,8 @@ static int dev_read(struct file *file, char *buffer, size_t count,
         req = list_entry(lh, struct pending_request, list);
 
         if (req->req.length) {
-                if (copy_to_user(req->req.recvb, req->data, req->req.length)) {
+                if (copy_to_user((void *)req->req.recvb, req->data,
+                                 req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                 }
         }
@@ -507,7 +518,7 @@ static void handle_iso_listen(struct file_info *fi, struct pending_request *req)
                 } else {
                         fi->listen_channels |= 1ULL << channel;
                         hpsb_listen_channel(hl_handle, fi->host, channel);
-                        fi->iso_buffer = req->req.recvb;
+                        fi->iso_buffer = (void *)req->req.recvb;
                         fi->iso_buffer_length = req->req.length;
                 }
         } else {
@@ -563,7 +574,7 @@ static int handle_local_request(struct file_info *fi,
                 break;
 
         case RAW1394_REQ_ASYNC_WRITE:
-                if (copy_from_user(req->data, req->req.sendb, 
+                if (copy_from_user(req->data, (void *)req->req.sendb, 
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -588,7 +599,7 @@ static int handle_local_request(struct file_info *fi,
                         }
                 }
 
-                if (copy_from_user(req->data, req->req.sendb,
+                if (copy_from_user(req->data, (void *)req->req.sendb,
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -646,7 +657,7 @@ static int handle_remote_request(struct file_info *fi,
                 if (req->req.length == 4) {
                         quadlet_t x;
 
-                        if (copy_from_user(&x, req->req.sendb, 4)) {
+                        if (copy_from_user(&x, (void *)req->req.sendb, 4)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
 
@@ -658,7 +669,7 @@ static int handle_remote_request(struct file_info *fi,
                                                         req->req.length);
                         if (!packet) return -ENOMEM;
 
-                        if (copy_from_user(packet->data, req->req.sendb,
+                        if (copy_from_user(packet->data, (void *)req->req.sendb,
                                            req->req.length)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
@@ -684,7 +695,7 @@ static int handle_remote_request(struct file_info *fi,
                                               req->req.misc);
                 if (!packet) return -ENOMEM;
 
-                if (copy_from_user(packet->data, req->req.sendb,
+                if (copy_from_user(packet->data, (void *)req->req.sendb,
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -761,12 +772,12 @@ static int state_connected(struct file_info *fi, struct pending_request *req)
 }
 
 
-static int dev_write(struct file *file, const char *buffer, size_t count,
+static ssize_t dev_write(struct file *file, const char *buffer, size_t count,
                      loff_t *offset_is_ignored)
 {
         struct file_info *fi = (struct file_info *)file->private_data;
         struct pending_request *req;
-        int retval = 0;
+        ssize_t retval = 0;
 
         if (count != sizeof(struct raw1394_request)) {
                 return -EINVAL;
@@ -828,8 +839,11 @@ static int dev_open(struct inode *inode, struct file *file)
                 return -ENXIO;
         }
 
+        V22_COMPAT_MOD_INC_USE_COUNT;
+
         fi = kmalloc(sizeof(struct file_info), SLAB_KERNEL);
         if (fi == NULL) {
+                V22_COMPAT_MOD_DEC_USE_COUNT;
                 return -ENOMEM;
         }
         
@@ -898,6 +912,7 @@ static int dev_release(struct inode *inode, struct file *file)
 
         kfree(fi);
 
+        V22_COMPAT_MOD_DEC_USE_COUNT;
         return 0;
 }
 
@@ -910,7 +925,7 @@ static struct hpsb_highlevel_ops hl_ops = {
 };
 
 static struct file_operations file_ops = {
-	owner:	  THIS_MODULE,
+        OWNER_THIS_MODULE
         read:     dev_read, 
         write:    dev_write, 
         poll:     dev_poll, 
@@ -926,18 +941,24 @@ int init_raw1394(void)
                 return -ENOMEM;
         }
 
-        if (register_chrdev(RAW1394_DEVICE_MAJOR, RAW1394_DEVICE_NAME, 
-                            &file_ops)) {
-                HPSB_ERR("raw1394 failed to allocate device major");
+	devfs_handle = devfs_register(NULL, RAW1394_DEVICE_NAME, DEVFS_FL_NONE,
+                                      RAW1394_DEVICE_MAJOR, 0,
+                                      S_IFCHR | S_IRUSR | S_IWUSR, &file_ops,
+                                      NULL);
+
+        if (devfs_register_chrdev(RAW1394_DEVICE_MAJOR, RAW1394_DEVICE_NAME, 
+                                  &file_ops)) {
+                HPSB_ERR("raw1394 failed to register /dev/raw1394 device");
                 return -EBUSY;
         }
-
+	printk(KERN_INFO "raw1394: /dev/%s device initialized\n", RAW1394_DEVICE_NAME);
         return 0;
 }
 
 void cleanup_raw1394(void)
 {
-        unregister_chrdev(RAW1394_DEVICE_MAJOR, RAW1394_DEVICE_NAME);
+        devfs_unregister_chrdev(RAW1394_DEVICE_MAJOR, RAW1394_DEVICE_NAME);
+	devfs_unregister(devfs_handle);
         hpsb_unregister_highlevel(hl_handle);
 }
 

@@ -66,6 +66,9 @@
  *
  * Resurrected character buffers in videoram plus lots of other trickery
  * by Martin Mares <mj@atrey.karlin.mff.cuni.cz>, July 1998
+ *
+ * Removed old-style timers, introduced console_timer, made timer
+ * deletion SMP-safe.  17Jun00, Andrew Morton <andrewm@uow.edu.au>
  */
 
 #include <linux/module.h>
@@ -139,7 +142,7 @@ static struct consw *con_driver_map[MAX_NR_CONSOLES];
 static int con_open(struct tty_struct *, struct file *);
 static void vc_init(unsigned int console, unsigned int rows,
 		    unsigned int cols, int do_clear);
-static void blank_screen(void);
+static void blank_screen(unsigned long dummy);
 static void gotoxy(int currcons, int new_x, int new_y);
 static void save_cur(int currcons);
 static void reset_terminal(int currcons, int do_clear);
@@ -147,6 +150,7 @@ static void con_flush_chars(struct tty_struct *tty);
 static void set_vesa_blanking(unsigned long arg);
 static void set_cursor(int currcons);
 static void hide_cursor(int currcons);
+static void unblank_screen_t(unsigned long dummy);
 
 static int printable = 0;		/* Is console ready for printing? */
 
@@ -195,6 +199,8 @@ static int scrollback_delta = 0;
  * the console on our behalf.
  */
 int (*console_blank_hook)(int) = NULL;
+
+static struct timer_list console_timer;
 
 /*
  *	Low-Level Functions
@@ -2417,11 +2423,10 @@ void __init con_init(void)
 	if (tty_register_driver(&console_driver))
 		panic("Couldn't register console driver\n");
 
-	timer_table[BLANK_TIMER].fn = blank_screen;
-	timer_table[BLANK_TIMER].expires = 0;
+	init_timer(&console_timer);
+	console_timer.function = blank_screen;
 	if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
+		mod_timer(&console_timer, jiffies + blankinterval);
 	}
 
 	/*
@@ -2589,15 +2594,14 @@ static void vesa_powerdown(void)
     }
 }
 
-static void vesa_powerdown_screen(void)
+static void vesa_powerdown_screen(unsigned long dummy)
 {
-	timer_active &= ~(1<<BLANK_TIMER);
-	timer_table[BLANK_TIMER].fn = unblank_screen;
+	console_timer.function = unblank_screen_t;	/* I don't have a clue why this is necessary */
 
 	vesa_powerdown();
 }
 
-void do_blank_screen(int entering_gfx)
+static void timer_do_blank_screen(int entering_gfx, int from_timer_handler)
 {
 	int currcons = fg_console;
 	int i;
@@ -2622,13 +2626,15 @@ void do_blank_screen(int entering_gfx)
 	}
 
 	hide_cursor(currcons);
+	if (!from_timer_handler)
+		del_timer_sync(&console_timer);
 	if (vesa_off_interval) {
-		timer_table[BLANK_TIMER].fn = vesa_powerdown_screen;
-		timer_table[BLANK_TIMER].expires = jiffies + vesa_off_interval;
-		timer_active |= (1<<BLANK_TIMER);
+		console_timer.function = vesa_powerdown_screen;
+		mod_timer(&console_timer, jiffies + vesa_off_interval);
 	} else {
-		timer_active &= ~(1<<BLANK_TIMER);
-		timer_table[BLANK_TIMER].fn = unblank_screen;
+		if (!from_timer_handler)
+			del_timer_sync(&console_timer);
+		console_timer.function = unblank_screen_t;
 	}
 
 	save_screen(currcons);
@@ -2644,6 +2650,16 @@ void do_blank_screen(int entering_gfx)
 		sw->con_blank(vc_cons[currcons].d, vesa_blank_mode + 1);
 }
 
+void do_blank_screen(int entering_gfx)
+{
+	timer_do_blank_screen(entering_gfx, 0);
+}
+
+static void unblank_screen_t(unsigned long dummy)
+{
+	unblank_screen();
+}
+
 void unblank_screen(void)
 {
 	int currcons;
@@ -2655,10 +2671,9 @@ void unblank_screen(void)
 		printk("unblank_screen: tty %d not allocated ??\n", fg_console+1);
 		return;
 	}
-	timer_table[BLANK_TIMER].fn = blank_screen;
+	console_timer.function = blank_screen;
 	if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
+		mod_timer(&console_timer, jiffies + blankinterval);
 	}
 
 	currcons = fg_console;
@@ -2671,23 +2686,21 @@ void unblank_screen(void)
 	set_cursor(fg_console);
 }
 
-static void blank_screen(void)
+static void blank_screen(unsigned long dummy)
 {
-	do_blank_screen(0);
+	timer_do_blank_screen(0, 1);
 }
 
 void poke_blanked_console(void)
 {
-	timer_active &= ~(1<<BLANK_TIMER);
+	del_timer(&console_timer);	/* Can't use _sync here: called from tasklet */
 	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
 		return;
 	if (console_blanked) {
-		timer_table[BLANK_TIMER].fn = unblank_screen;
-		timer_table[BLANK_TIMER].expires = jiffies;	/* Now */
-		timer_active |= 1<<BLANK_TIMER;
+		console_timer.function = unblank_screen_t;
+		mod_timer(&console_timer, jiffies);	/* Now */
 	} else if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
+		mod_timer(&console_timer, jiffies + blankinterval);
 	}
 }
 

@@ -5307,7 +5307,7 @@ int __init stli_init(void)
 	if (devfs_register_chrdev(STL_SIOMEMMAJOR, "staliomem", &stli_fsiomem))
 		printk("STALLION: failed to register serial memory device\n");
 
-	devfs_handle = devfs_mk_dir (NULL, "staliomem", 9, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "staliomem", NULL);
 	devfs_register_series (devfs_handle, "%u", 4, DEVFS_FL_DEFAULT,
 			       STL_SIOMEMMAJOR, 0,
 			       S_IFCHR | S_IRUSR | S_IWUSR,

@@ -576,6 +576,9 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			goto out;
 	}
 
+	err = -EMSGSIZE;
+	if ((unsigned)len > sk->sndbuf-32)
+		goto out;
 	err = -ENOBUFS;
 	skb = alloc_skb(len, GFP_KERNEL);
 	if (skb==NULL)

@@ -23,9 +23,8 @@ struct request {
 	int elevator_sequence;
 	struct list_head table;
 
-	/*
-	 * queue free list belongs to
-	 */
+	struct list_head *free_list;
+
 	volatile int rq_status;	/* should split this into a few status bits */
 #define RQ_INACTIVE		(-1)
 #define RQ_ACTIVE		1
@@ -70,16 +69,14 @@ typedef void (unplug_device_fn) (void *q);
 /*
  * Default nr free requests per queue
  */
-#define QUEUE_NR_REQUESTS	512
-#define QUEUE_WRITES_MAX	((2 * QUEUE_NR_REQUESTS) / 3)
+#define QUEUE_NR_REQUESTS	256
 
 struct request_queue
 {
 	/*
 	 * the queue request freelist, one for reads and one for writes
 	 */
-	struct list_head	request_freelist;
-	int			queue_requests;
+	struct list_head	request_freelist[2];
 
 	/*
 	 * Together with queue_head for cacheline sharing

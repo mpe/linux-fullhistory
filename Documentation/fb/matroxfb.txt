@@ -191,6 +191,10 @@ nocross4MB - pixel line must not cross 4MB boundary. It is default for
 	     limitations which do not allow this. But this option is
 	     incompatible with some (if not all yet released) versions of
 	     XF86_FBDev.
+dfp      - enables digital flat panel interface. This option is incompatible with
+           secondary (TV) output - if DFP is active, TV output must be
+	   inactive and vice versa. DFP always uses same timming as primary
+	   (monitor) output.
 vesa:X   - selects startup videomode. X is number from 0 to 0x1FF, see table
            above for detailed explanation. Default is 640x480x8bpp if driver
 	   has 8bpp support. Otherwise first available of 640x350x4bpp,

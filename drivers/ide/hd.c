@@ -105,6 +105,24 @@ static int hd_sizes[MAX_HD<<6];
 static int hd_blocksizes[MAX_HD<<6];
 static int hd_hardsectsizes[MAX_HD<<6];
 
+static struct timer_list device_timer;
+
+#define SET_TIMER 							\
+	do {								\
+		mod_timer(&device_timer, jiffies + TIMEOUT_VALUE);	\
+	} while (0)
+
+#define CLEAR_TIMER del_timer(&device_timer);
+
+#undef SET_INTR
+
+#define SET_INTR(x) \
+if ((DEVICE_INTR = (x)) != NULL) \
+	SET_TIMER; \
+else \
+	CLEAR_TIMER;
+
+
 #if (HD_DELAY > 0)
 unsigned long last_req;
 
@@ -471,7 +489,7 @@ static void recal_intr(void)
  * This is another of the error-routines I don't know what to do with. The
  * best idea seems to just set reset, and start all over again.
  */
-static void hd_times_out(void)
+static void hd_times_out(unsigned long dummy)
 {
 	unsigned int dev;
 
@@ -527,7 +545,7 @@ static void hd_request(void)
 	if (DEVICE_INTR)
 		return;
 repeat:
-	timer_active &= ~(1<<HD_TIMER);
+	del_timer(&device_timer);
 	sti();
 	INIT_REQUEST;
 	if (reset) {
@@ -683,7 +701,7 @@ static void hd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	void (*handler)(void) = DEVICE_INTR;
 
 	DEVICE_INTR = NULL;
-	timer_active &= ~(1<<HD_TIMER);
+	del_timer(&device_timer);
 	if (!handler)
 		handler = unexpected_hd_interrupt;
 	handler();
@@ -814,7 +832,8 @@ int __init hd_init(void)
 	read_ahead[MAJOR_NR] = 8;		/* 8 sector (4kB) read-ahead */
 	hd_gendisk.next = gendisk_head;
 	gendisk_head = &hd_gendisk;
-	timer_table[HD_TIMER].fn = hd_times_out;
+	init_timer(&device_timer);
+	device_timer.function = hd_times_out;
 	hd_geninit();
 	return 0;
 }

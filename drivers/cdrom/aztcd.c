@@ -1819,12 +1819,13 @@ int __init aztcd_init(void)
 
 void __exit aztcd_exit(void)
 {
-  devfs_unregister(devfs_find_handle(NULL, "aztcd", 0, 0, 0, DEVFS_SPECIAL_BLK,
+  devfs_unregister(devfs_find_handle(NULL, "aztcd", 0, 0, DEVFS_SPECIAL_BLK,
 				     0));
   if ((devfs_unregister_blkdev(MAJOR_NR, "aztcd") == -EINVAL))    
     { printk("What's that: can't unregister aztcd\n");
       return;
     }
+  blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
   if ((azt_port==0x1f0)||(azt_port==0x170))  
     { SWITCH_IDE_MASTER;
       release_region(azt_port,8);  /*IDE-interface*/

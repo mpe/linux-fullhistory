@@ -913,14 +913,6 @@ static int startup(struct sun_serial * info)
 	info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
 
 	/*
-	 * Set up serial timers...
-	 */
-#if 0  /* Works well and stops the machine. */
-	timer_table[RS_TIMER].expires = jiffies + 2;
-	timer_active |= 1 << RS_TIMER;
-#endif
-
-	/*
 	 * and set the speed of the serial port
 	 */
 	change_speed(info);
@@ -2404,8 +2396,6 @@ int __init zs_init(void)
 
 	/* Setup base handler, and timer table. */
 	init_bh(SERIAL_BH, do_serial_bh);
-	timer_table[RS_TIMER].fn = zs_timer;
-	timer_table[RS_TIMER].expires = 0;
 
 	show_serial_version();
 

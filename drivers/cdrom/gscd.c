@@ -95,7 +95,7 @@ static void gscd_bin2bcd          (unsigned char *p);
 /* Schnittstellen zum Kern/FS */
 
 static void do_gscd_request       (request_queue_t *);
-static void __do_gscd_request     (void);
+static void __do_gscd_request     (unsigned long dummy);
 static int  gscd_ioctl            (struct inode *, struct file *, unsigned int, unsigned long);
 static int  gscd_open             (struct inode *, struct file *);
 static int  gscd_release          (struct inode *, struct file *);
@@ -160,6 +160,7 @@ static int  AudioStart_f;
 static int  AudioEnd_m;
 static int  AudioEnd_f;
  
+static struct timer_list gscd_timer;
 
 static struct block_device_operations gscd_fops = {
 	open:			gscd_open,
@@ -271,23 +272,24 @@ long offs;
 
 static void do_gscd_request (request_queue_t * q)
 {
-  __do_gscd_request();
+  __do_gscd_request(0);
 }
 
-static void __do_gscd_request (void)
+static void __do_gscd_request (unsigned long dummy)
 {
 unsigned int block,dev;
 unsigned int nsect;
 
 repeat:
-	if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE) return;
+	if (QUEUE_EMPTY || CURRENT->rq_status == RQ_INACTIVE)
+		goto out;
 	INIT_REQUEST;
 	dev = MINOR(CURRENT->rq_dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
 
 	if (QUEUE_EMPTY || CURRENT -> sector == -1)
-		return;
+		goto out;
 
 	if (CURRENT -> cmd != READ)
 	{
@@ -318,6 +320,8 @@ repeat:
 #endif
 
 	gscd_read_cmd ();
+out:
+	return;
 }
 
 
@@ -992,13 +996,16 @@ long err;
 void __exit exit_gscd(void)
 {
 
-   devfs_unregister(devfs_find_handle(NULL, "gscd", 0, 0, 0, DEVFS_SPECIAL_BLK,
+   del_timer_async(&gscd_timer);
+
+   devfs_unregister(devfs_find_handle(NULL, "gscd", 0, 0, DEVFS_SPECIAL_BLK,
 				      0));
    if ((devfs_unregister_blkdev(MAJOR_NR, "gscd" ) == -EINVAL))
    {
       printk("What's that: can't unregister GoldStar-module\n" );
       return;
    }
+   blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
    release_region (gscd_port,4);
    printk(KERN_INFO "GoldStar-module released.\n" );
 }

@@ -331,6 +331,7 @@ void cleanup_module(void)
 		iounmap((void*)hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
 		del_timer(&hba[i]->timer);
+		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i));
 		remove_proc_entry(hba[i]->devname, proc_array);
 		kfree(hba[i]->cmd_pool);
 		kfree(hba[i]->cmd_pool_bits);

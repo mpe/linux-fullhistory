@@ -66,6 +66,7 @@
  *   0.7  03.08.1999  adapt to Linus' new __setup/__initcall
  *   0.8  10.08.1999  use module_init/module_exit
  *   0.9  12.02.2000  adapted to softnet driver interface
+ *   0.10 03.07.2000  fix interface name handling
  */
 
 /*****************************************************************************/
@@ -88,7 +89,7 @@
 
 static const char bc_drvname[] = "baycom_ser_fdx";
 static const char bc_drvinfo[] = KERN_INFO "baycom_ser_fdx: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_ser_fdx: version 0.9 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "baycom_ser_fdx: version 0.10 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -628,14 +629,15 @@ static int __init init_baycomserfdx(void)
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = baycom_device+i;
-		sprintf(dev->name, "bcsf%d", i);
+		char ifname[IFNAMSIZ];
 
+		sprintf(ifname, "bcsf%d", i);
 		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
 			iobase[i] = irq[i] = 0;
 		j = hdlcdrv_register_hdlcdrv(dev, &ser12_ops, sizeof(struct baycom_state),
-					     dev->name, iobase[i], irq[i], 0);
+					     ifname, iobase[i], irq[i], 0);
 		if (!j) {
 			bc = (struct baycom_state *)dev->priv;
 			if (set_hw && baycom_setmode(bc, mode[i]))

@@ -19,7 +19,7 @@ MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
 		nfsd nls devpts devfs adfs partitions qnx4 udf bfs cramfs \
-		openpromfs autofs4 ramfs
+		openpromfs autofs4 ramfs jffs
 
 SUB_DIRS :=
 
@@ -227,6 +227,14 @@ SUB_DIRS += efs
 else
   ifeq ($(CONFIG_EFS_FS),m)
   MOD_SUB_DIRS += efs
+  endif
+endif
+
+ifeq ($(CONFIG_JFFS_FS),y)
+SUB_DIRS += jffs
+else
+  ifeq ($(CONFIG_JFFS_FS),m)
+  MOD_SUB_DIRS += jffs
   endif
 endif
 

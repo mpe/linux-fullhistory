@@ -64,8 +64,8 @@ static const u_short plist_raf_alc_res[] = { SMT_P0012, SMT_P320B, SMT_P320F,
 static const u_short plist_raf_chg_req[] = { SMT_P320B, SMT_P320F, SMT_P3210,
 					SMT_P001A, 0 } ;
 
-static const struct fddi_addr smt_sba_da = {0x80,0x01,0x43,0x00,0x80,0x0C} ;
-static const struct fddi_addr null_addr = {0,0,0,0,0,0} ;
+static const struct fddi_addr smt_sba_da = {{0x80,0x01,0x43,0x00,0x80,0x0C}} ;
+static const struct fddi_addr null_addr = {{0,0,0,0,0,0}} ;
 
 /*
 	-------------------------------------------------------------

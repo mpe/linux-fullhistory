@@ -57,6 +57,9 @@ fi
 
 source fs/Config.in
 
+# Not sure about this one. dwmw2
+# source drivers/mtd/Config.in
+
 # source drivers/char/Config.in
 
 mainmenu_option next_comment

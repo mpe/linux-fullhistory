@@ -580,6 +580,17 @@ static void save_match (ide_hwif_t *hwif, ide_hwif_t *new, ide_hwif_t **match)
 #endif /* MAX_HWIFS > 1 */
 
 /*
+ * init request queue
+ */
+static void ide_init_queue(ide_drive_t *drive)
+{
+	request_queue_t *q = &drive->queue;
+
+	q->queuedata = HWGROUP(drive);
+	blk_init_queue(q, do_ide_request);
+}
+
+/*
  * This routine sets up the irq for an ide interface, and creates a new
  * hwgroup for the irq/hwif if none was previously assigned.
  *
@@ -677,6 +688,7 @@ static int init_irq (ide_hwif_t *hwif)
 			hwgroup->drive = drive;
 		drive->next = hwgroup->drive->next;
 		hwgroup->drive->next = drive;
+		ide_init_queue(drive);
 	}
 	if (!hwgroup->hwif) {
 		hwgroup->hwif = HWIF(hwgroup->drive);
@@ -780,16 +792,13 @@ static void init_gendisk (ide_hwif_t *hwif)
 				 (hwif->channel && hwif->mate) ? hwif->mate->index : hwif->index,
 				 hwif->channel, unit, hwif->drives[unit].lun);
 			hwif->drives[unit].de =
-				devfs_mk_dir (ide_devfs_handle, name, 0, NULL);
+				devfs_mk_dir (ide_devfs_handle, name, NULL);
 		}
 	}
 }
 
 static int hwif_init (ide_hwif_t *hwif)
 {
-	request_queue_t *q;
-	unsigned int unit;
-
 	if (!hwif->present)
 		return 0;
 	if (!hwif->irq) {
@@ -839,12 +848,6 @@ static int hwif_init (ide_hwif_t *hwif)
 	blk_dev[hwif->major].queue = ide_get_queue;
 	read_ahead[hwif->major] = 8;	/* (4kB) */
 	hwif->present = 1;	/* success */
-
-	for (unit = 0; unit < MAX_DRIVES; ++unit) {
-		q = &hwif->drives[unit].queue;
-		q->queuedata = hwif->hwgroup;
-		blk_init_queue(q, do_ide_request);
-	}
 
 #if (DEBUG_SPINLOCK > 0)
 {

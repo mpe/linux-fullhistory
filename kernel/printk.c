@@ -471,6 +471,14 @@ int unregister_console(struct console * console)
 		}
 	}
 	
+	/* If last console is removed, we re-enable picking the first
+	 * one that gets registered. Without that, pmac early boot console
+	 * would prevent fbcon from taking over.
+	 */
+	if (console_drivers == NULL)
+		preferred_console = -1;
+		
+
 	spin_unlock_irqrestore(&console_lock, flags);
 	return res;
 }

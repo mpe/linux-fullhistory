@@ -289,6 +289,7 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
 #define MAX_ERRORS			8	/* After this many errors the driver
 						 * will give up. */
 
+static struct timer_list fd_timer;
 
 #define	START_MOTOR_OFF_TIMER(delay)			\
     do {						\
@@ -299,8 +300,7 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
 
 #define	START_CHECK_CHANGE_TIMER(delay)				\
     do {							\
-        timer_table[FLOPPY_TIMER].expires = jiffies + (delay);	\
-        timer_active |= (1 << FLOPPY_TIMER);			\
+        mod_timer(&fd_timer, jiffies + (delay));		\
 	} while(0)
 
 #define	START_TIMEOUT()					     \
@@ -340,7 +340,7 @@ static void fd_select_side(int side);
 static void fd_select_drive(int drive);
 static void fd_deselect(void);
 static void fd_motor_off_timer(unsigned long dummy);
-static void check_change(void);
+static void check_change(unsigned long dummy);
 static __inline__ void set_head_settle_flag(void);
 static __inline__ int get_head_settle_flag(void);
 static void floppy_irqconsequencehandler(void);
@@ -501,7 +501,7 @@ static void fd_motor_off_timer(unsigned long dummy)
  * as possible) and keep track of the current state of the write protection.
  */
 
-static void check_change(void)
+static void check_change(unsigned long dummy)
 {
 	static int drive = 0;
 
@@ -1093,12 +1093,12 @@ static void finish_fdc_done(int dummy)
 	STOP_TIMEOUT();
 	NeedSeek = 0;
 
-	if ((timer_active & (1 << FLOPPY_TIMER)) &&
-	    time_after(jiffies + 5, timer_table[FLOPPY_TIMER].expires)) 
+	if (timer_pending(&fd_timer) &&
+	    time_after(jiffies + 5, fd_timer.expires)) 
 		/* If the check for a disk change is done too early after this
 		 * last seek command, the WP bit still reads wrong :-((
 		 */
-		timer_table[FLOPPY_TIMER].expires = jiffies + 5;
+		mod_timer(&fd_timer, jiffies + 5);
 	else {
 		/*      START_CHECK_CHANGE_TIMER( CHECK_CHANGE_DELAY ); */
 	};
@@ -1602,9 +1602,9 @@ int fd1772_init(void)
 #endif
 
 	/* initialize check_change timer */
-	timer_table[FLOPPY_TIMER].fn = check_change;
-	timer_active &= ~(1 << FLOPPY_TIMER);
-
+	init_timer(&fd_timer);
+	fd_timer.function = check_change;
+}
 
 #ifdef TRACKBUFFER
   DMABuffer = (char *)kmalloc((MAX_SECTORS+1)*512,GFP_KERNEL); /* Atari uses 512 - I want to eventually cope with 1K sectors */

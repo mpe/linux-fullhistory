@@ -63,7 +63,7 @@ extern int msnd_classic_init(void);
 extern int msnd_pinnacle_init(void);
 #endif
 #ifdef CONFIG_SOUND_CMPCI
-extern init_cmpci(void);
+extern int init_cmpci(void);
 #endif
 
 /*
@@ -559,7 +559,7 @@ int soundcore_init(void)
 		printk(KERN_ERR "soundcore: sound device already in use.\n");
 		return -EBUSY;
 	}
-	devfs_handle = devfs_mk_dir (NULL, "sound", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "sound", NULL);
 	/*
 	 *	Now init non OSS drivers
 	 */

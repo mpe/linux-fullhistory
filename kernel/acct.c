@@ -75,7 +75,7 @@ static volatile int acct_active;
 static volatile int acct_needcheck;
 static struct file *acct_file;
 static struct timer_list acct_timer;
-static int do_acct_process(long, struct file *);
+static void do_acct_process(long, struct file *);
 
 /*
  * Called whenever the timer says to check the free space.
@@ -91,11 +91,14 @@ static void acct_timeout(unsigned long unused)
 static int check_free_space(struct file *file)
 {
 	struct statfs sbuf;
-	int res = acct_active;
+	int res;
 	int act;
 
+	lock_kernel();
+	res = acct_active;
 	if (!file || !acct_needcheck)
-		return res;
+		goto out;
+	unlock_kernel();
 
 	/* May block */
 	if (vfs_statfs(file->f_dentry->d_inode->i_sb, &sbuf))
@@ -112,8 +115,12 @@ static int check_free_space(struct file *file)
 	 * If some joker switched acct_file under us we'ld better be
 	 * silent and _not_ touch anything.
 	 */
-	if (file != acct_file)
-		return act ? (act>0) : res;
+	lock_kernel();
+	if (file != acct_file) {
+		if (act)
+			res = act>0;
+		goto out;
+	}
 
 	if (acct_active) {
 		if (act < 0) {
@@ -131,7 +138,10 @@ static int check_free_space(struct file *file)
 	acct_needcheck = 0;
 	acct_timer.expires = jiffies + ACCT_TIMEOUT*HZ;
 	add_timer(&acct_timer);
-	return acct_active;
+	res = acct_active;
+out:
+	unlock_kernel();
+	return res;
 }
 
 /*
@@ -149,7 +159,6 @@ asmlinkage long sys_acct(const char *name)
 	if (!capable(CAP_SYS_PACCT))
 		return -EPERM;
 
-	lock_kernel();
 	if (name) {
 		tmp = getname(name);
 		error = PTR_ERR(tmp);
@@ -172,6 +181,7 @@ asmlinkage long sys_acct(const char *name)
 	}
 
 	error = 0;
+	lock_kernel();
 	if (acct_file) {
 		old_acct = acct_file;
 		del_timer(&acct_timer);
@@ -183,18 +193,18 @@ asmlinkage long sys_acct(const char *name)
 		acct_file = file;
 		acct_needcheck = 0;
 		acct_active = 1;
-		/* Its been deleted if it was used before so this is safe */
+		/* It's been deleted if it was used before so this is safe */
 		init_timer(&acct_timer);
 		acct_timer.function = acct_timeout;
 		acct_timer.expires = jiffies + ACCT_TIMEOUT*HZ;
 		add_timer(&acct_timer);
 	}
+	unlock_kernel();
 	if (old_acct) {
 		do_acct_process(0,old_acct);
 		filp_close(old_acct, NULL);
 	}
 out:
-	unlock_kernel();
 	return error;
 out_err:
 	filp_close(file, NULL);
@@ -203,8 +213,10 @@ out_err:
 
 void acct_auto_close(kdev_t dev)
 {
+	lock_kernel();
 	if (acct_file && acct_file->f_dentry->d_inode->i_dev == dev)
-		sys_acct((char *)NULL);
+		sys_acct(NULL);
+	unlock_kernel();
 }
 
 /*
@@ -256,26 +268,20 @@ static comp_t encode_comp_t(unsigned long value)
  */
 
 /*
- *  do_acct_process does all actual work.
+ *  do_acct_process does all actual work. Caller holds the reference to file.
  */
-static int do_acct_process(long exitcode, struct file *file)
+static void do_acct_process(long exitcode, struct file *file)
 {
 	struct acct ac;
 	mm_segment_t fs;
 	unsigned long vsize;
-	struct inode *inode;
 
 	/*
 	 * First check to see if there is enough free_space to continue
 	 * the process accounting system.
 	 */
-	if (!file)
-		return 0;
-	get_file(file);
-	if (!check_free_space(file)) {
-		fput(file);
-		return 0;
-	}
+	if (!check_free_space(file))
+		return;
 
 	/*
 	 * Fill the accounting struct with the needed info as recorded
@@ -330,12 +336,9 @@ static int do_acct_process(long exitcode, struct file *file)
          */
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	inode = file->f_dentry->d_inode;
 	file->f_op->write(file, (char *)&ac,
 			       sizeof(struct acct), &file->f_pos);
 	set_fs(fs);
-	fput(file);
-	return 0;
 }
 
 /*
@@ -343,7 +346,17 @@ static int do_acct_process(long exitcode, struct file *file)
  */
 int acct_process(long exitcode)
 {
-	return do_acct_process(exitcode, acct_file);
+	struct file *file = NULL;
+	lock_kernel();
+	if (acct_file) {
+		file = acct_file;
+		get_file(file);
+		unlock_kernel();
+		do_acct_process(exitcode, acct_file);
+		fput(file);
+	} else
+		unlock_kernel();
+	return 0;
 }
 
 #else

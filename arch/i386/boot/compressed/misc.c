@@ -73,11 +73,13 @@ static void gzip_release(void **);
 /*
  * This is set up by the setup-routine at boot-time
  */
-#define EXT_MEM_K (*(unsigned short *)0x90002)
+static unsigned char *real_mode; /* Pointer to real-mode data */
+
+#define EXT_MEM_K   (*(unsigned short *)(real_mode + 0x2))
 #ifndef STANDARD_MEMORY_BIOS_CALL
-#define ALT_MEM_K (*(unsigned long *) 0x901e0)
+#define ALT_MEM_K   (*(unsigned long *)(real_mode + 0x1e0))
 #endif
-#define SCREEN_INFO (*(struct screen_info *)0x90000)
+#define SCREEN_INFO (*(struct screen_info *)(real_mode+0))
 
 extern char input_data[];
 extern int input_len;
@@ -97,13 +99,13 @@ static void puts(const char *);
   
 extern int end;
 static long free_mem_ptr = (long)&end;
-static long free_mem_end_ptr = 0x90000;
- 
+static long free_mem_end_ptr;
+
 #define INPLACE_MOVE_ROUTINE  0x1000
 #define LOW_BUFFER_START      0x2000
-#define LOW_BUFFER_END       0x90000
-#define LOW_BUFFER_SIZE      ( LOW_BUFFER_END - LOW_BUFFER_START )
+#define LOW_BUFFER_MAX       0x90000
 #define HEAP_SIZE             0x3000
+static unsigned int low_buffer_end, low_buffer_size;
 static int high_loaded =0;
 static uch *high_buffer_start /* = (uch *)(((ulg)&end) + HEAP_SIZE)*/;
 
@@ -256,7 +258,7 @@ static void flush_window_high(void)
     in = window;
     for (n = 0; n < outcnt; n++) {
 	ch = *output_data++ = *in++;
-	if ((ulg)output_data == LOW_BUFFER_END) output_data=high_buffer_start;
+	if ((ulg)output_data == low_buffer_end) output_data=high_buffer_start;
 	c = crc_32_tab[((int)c ^ ch) & 0xff] ^ (c >> 8);
     }
     crc = c;
@@ -312,10 +314,13 @@ void setup_output_buffer_if_we_run_high(struct moveparams *mv)
 	if ((ALT_MEM_K > EXT_MEM_K ? ALT_MEM_K : EXT_MEM_K) < (3*1024)) error("Less than 4MB of memory.\n");
 #endif	
 	mv->low_buffer_start = output_data = (char *)LOW_BUFFER_START;
+	low_buffer_end = ((unsigned int)real_mode > LOW_BUFFER_MAX
+	  ? LOW_BUFFER_MAX : (unsigned int)real_mode) & ~0xfff;
+	low_buffer_size = low_buffer_end - LOW_BUFFER_START;
 	high_loaded = 1;
 	free_mem_end_ptr = (long)high_buffer_start;
-	if ( (0x100000 + LOW_BUFFER_SIZE) > ((ulg)high_buffer_start)) {
-		high_buffer_start = (uch *)(0x100000 + LOW_BUFFER_SIZE);
+	if ( (0x100000 + low_buffer_size) > ((ulg)high_buffer_start)) {
+		high_buffer_start = (uch *)(0x100000 + low_buffer_size);
 		mv->hcount = 0; /* say: we need not to move high_buffer */
 	}
 	else mv->hcount = -1;
@@ -324,17 +329,21 @@ void setup_output_buffer_if_we_run_high(struct moveparams *mv)
 
 void close_output_buffer_if_we_run_high(struct moveparams *mv)
 {
-	mv->lcount = bytes_out;
-	if (bytes_out > LOW_BUFFER_SIZE) {
-		mv->lcount = LOW_BUFFER_SIZE;
-		if (mv->hcount) mv->hcount = bytes_out - LOW_BUFFER_SIZE;
+	if (bytes_out > low_buffer_size) {
+		mv->lcount = low_buffer_size;
+		if (mv->hcount)
+			mv->hcount = bytes_out - low_buffer_size;
+	} else {
+		mv->lcount = bytes_out;
+		mv->hcount = 0;
 	}
-	else mv->hcount = 0;
 }
 
 
-int decompress_kernel(struct moveparams *mv)
+int decompress_kernel(struct moveparams *mv, void *rmode)
 {
+	real_mode = rmode;
+
 	if (SCREEN_INFO.orig_video_mode == 7) {
 		vidmem = (char *) 0xb0000;
 		vidport = 0x3b4;
@@ -356,4 +365,3 @@ int decompress_kernel(struct moveparams *mv)
 	if (high_loaded) close_output_buffer_if_we_run_high(mv);
 	return high_loaded;
 }
-

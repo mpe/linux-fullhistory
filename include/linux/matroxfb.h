@@ -8,6 +8,7 @@ struct matroxioc_output_mode {
 	__u32	output;		/* which output */
 #define MATROXFB_OUTPUT_PRIMARY		0x0000
 #define MATROXFB_OUTPUT_SECONDARY	0x0001
+#define MATROXFB_OUTPUT_DFP		0x0002
 	__u32	mode;		/* which mode */
 #define MATROXFB_OUTPUT_MODE_PAL	0x0001
 #define MATROXFB_OUTPUT_MODE_NTSC	0x0002
@@ -19,6 +20,7 @@ struct matroxioc_output_mode {
 /* bitfield */
 #define MATROXFB_OUTPUT_CONN_PRIMARY	(1 << MATROXFB_OUTPUT_PRIMARY)
 #define MATROXFB_OUTPUT_CONN_SECONDARY	(1 << MATROXFB_OUTPUT_SECONDARY)
+#define MATROXFB_OUTPUT_CONN_DFP	(1 << MATROXFB_OUTPUT_DFP)
 /* connect these outputs to this framebuffer */
 #define MATROXFB_SET_OUTPUT_CONNECTION	_IOW('n',0xF8,sizeof(__u32))
 /* which outputs are connected to this framebuffer */

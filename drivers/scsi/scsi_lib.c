@@ -87,6 +87,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 	SCpnt->request.cmd = SPECIAL;
 	SCpnt->request.special = (void *) SCpnt;
 	SCpnt->request.q = NULL;
+	SCpnt->request.free_list = NULL;
 	SCpnt->request.nr_segments = 0;
 
 	/*

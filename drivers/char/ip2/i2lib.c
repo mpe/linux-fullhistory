@@ -529,7 +529,7 @@ i2QueueCommands(int type, i2ChanStrPtr pCh, int timeout, int nCommands,
 	unsigned short channel;
 	int cnt;
 	unsigned long flags = 0;
-	spinlock_t *lock_var_p = NULL;
+	rwlock_t *lock_var_p = NULL;
 
 	// Make sure the channel exists, otherwise do nothing
 	if ( !i2Validate ( pCh ) ) {

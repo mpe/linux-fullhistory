@@ -691,6 +691,8 @@ sub dump_function {
 		$type = $arg;
 		$type =~ s/([^\(]+\(\*)$param/\1/;
 	    } else {
+		# evil magic to get fixed array parameters to work
+		$arg =~ s/(.+\s+)(.+)\[.*/\1* \2/;
 #		print STDERR "SCAN ARG: '$arg'\n";
 		@args = split('\s', $arg);
 
@@ -718,7 +720,7 @@ sub dump_function {
 	    }
             if ($parameters{$param} eq "") {
 	        $parameters{$param} = "-- undescribed --";
-	        print STDERR "Warning($lineno): Function parameter '$param' not described in '$function_name'\n";
+	        print STDERR "Warning($file:$lineno): Function parameter '$param' not described in '$function_name'\n";
 	    }
 
 	    push @parameterlist, $param;
@@ -780,6 +782,7 @@ $section = $section_default;
 
 $lineno = 0;
 foreach $file (@ARGV) {
+    chomp($file);
     if (!open(IN,"<$file")) {
 	print STDERR "Error: Cannot open file $file\n";
 	next;

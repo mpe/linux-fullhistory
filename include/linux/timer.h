@@ -5,36 +5,6 @@
 #include <linux/list.h>
 
 /*
- * Old-style timers. Please don't use for any new code.
- *
- * Numbering of these timers should be consecutive to minimize
- * processing delays. [MJ]
- */
-
-#define BLANK_TIMER	0	/* Console screen-saver */
-#define BEEP_TIMER	1	/* Console beep */
-#define RS_TIMER	2	/* RS-232 ports */
-#define SWAP_TIMER	3	/* Background pageout */
-#define BACKGR_TIMER    4	/* io_request background I/O */
-#define HD_TIMER	5	/* Old IDE driver */
-#define FLOPPY_TIMER	6	/* Floppy */
-#define QIC02_TAPE_TIMER 7	/* QIC 02 tape */
-#define MCD_TIMER	8	/* Mitsumi CDROM */
-#define GSCD_TIMER	9	/* Goldstar CDROM */
-#define COMTROL_TIMER	10	/* Comtrol serial */
-#define DIGI_TIMER	11	/* Digi serial */
-
-#define COPRO_TIMER	31	/* 387 timeout for buggy hardware (boot only) */
-
-struct timer_struct {
-	unsigned long expires;
-	void (*fn)(void);
-};
-
-extern unsigned long timer_active;
-extern struct timer_struct timer_table[32];
-
-/*
  * This is completely separate from the above, and is the
  * "new and improved" way of handling timers more dynamically.
  * Hopefully efficient and general enough for most things.
@@ -52,10 +22,9 @@ struct timer_list {
 	unsigned long expires;
 	unsigned long data;
 	void (*function)(unsigned long);
-	unsigned long sequence;
 };
 
-extern volatile unsigned long timer_sequence;
+extern volatile struct timer_list *running_timer;
 extern void add_timer(struct timer_list * timer);
 extern int del_timer(struct timer_list * timer);
 
@@ -71,9 +40,6 @@ extern void it_real_fn(unsigned long);
 static inline void init_timer(struct timer_list * timer)
 {
 	timer->list.next = timer->list.prev = NULL;
-#ifdef CONFIG_SMP
-	timer->sequence = timer_sequence-1;
-#endif
 }
 
 static inline int timer_pending (const struct timer_list * timer)
@@ -82,9 +48,9 @@ static inline int timer_pending (const struct timer_list * timer)
 }
 
 #ifdef CONFIG_SMP
-#define timer_enter(t) do { (t)->sequence = timer_sequence; mb(); } while (0)
-#define timer_exit() do { timer_sequence++; } while (0)
-#define timer_is_running(t) ((t)->sequence == timer_sequence)
+#define timer_enter(t) do { running_timer = t; mb(); } while (0)
+#define timer_exit() do { running_timer = NULL; } while (0)
+#define timer_is_running(t) (running_timer == t)
 #define timer_synchronize(t) while (timer_is_running(t)) barrier()
 extern int del_timer_sync(struct timer_list * timer);
 #else

@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/03/2000) gkh
+ *	Added visor_set_ioctl and visor_set_termios functions (they don't do much
+ *	of anything, but are good for debugging.)
+ * 
  * (06/25/2000) gkh
  *	Fixed bug in visor_unthrottle that should help with the disconnect in PPP
  *	bug that people have been reporting.
@@ -59,6 +63,8 @@ static void visor_close		(struct usb_serial_port *port, struct file *filp);
 static void visor_throttle	(struct usb_serial_port *port);
 static void visor_unthrottle	(struct usb_serial_port *port);
 static int  visor_startup	(struct usb_serial *serial);
+static int  visor_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
+static void visor_set_termios	(struct usb_serial_port *port, struct termios *old_termios);
 
 /* All of the device info needed for the Handspring Visor */
 static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
@@ -79,6 +85,8 @@ struct usb_serial_device_type handspring_device = {
 	throttle:		visor_throttle,
 	unthrottle:		visor_unthrottle,
 	startup:		visor_startup,
+	ioctl:			visor_ioctl,
+	set_termios:		visor_set_termios,
 };
 
 
@@ -210,4 +218,79 @@ static int  visor_startup (struct usb_serial *serial)
 	/* continue on with initialization */
 	return (0);
 }
+
+
+static int visor_ioctl (struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg)
+{
+	dbg(__FUNCTION__ " - port %d, cmd 0x%.4x", port->number, cmd);
+
+	return -ENOIOCTLCMD;
+}
+
+
+/* This function is all nice and good, but we don't change anything based on it :) */
+static void visor_set_termios (struct usb_serial_port *port, struct termios *old_termios)
+{
+	unsigned int cflag = port->tty->termios->c_cflag;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+
+	/* check that they really want us to change something */
+	if (old_termios) {
+		if ((cflag == old_termios->c_cflag) &&
+		    (RELEVANT_IFLAG(port->tty->termios->c_iflag) == RELEVANT_IFLAG(old_termios->c_iflag))) {
+			dbg(__FUNCTION__ " - nothing to change...");
+			return;
+		}
+	}
+
+	if ((!port->tty) || (!port->tty->termios)) {
+		dbg(__FUNCTION__" - no tty structures");
+		return;
+	}
+
+	/* get the byte size */
+	switch (cflag & CSIZE) {
+		case CS5:	dbg(__FUNCTION__ " - data bits = 5");   break;
+		case CS6:	dbg(__FUNCTION__ " - data bits = 6");   break;
+		case CS7:	dbg(__FUNCTION__ " - data bits = 7");   break;
+		default:
+		case CS8:	dbg(__FUNCTION__ " - data bits = 8");   break;
+	}
+	
+	/* determine the parity */
+	if (cflag & PARENB)
+		if (cflag & PARODD)
+			dbg(__FUNCTION__ " - parity = odd");
+		else
+			dbg(__FUNCTION__ " - parity = even");
+	else
+		dbg(__FUNCTION__ " - parity = none");
+
+	/* figure out the stop bits requested */
+	if (cflag & CSTOPB)
+		dbg(__FUNCTION__ " - stop bits = 2");
+	else
+		dbg(__FUNCTION__ " - stop bits = 1");
+
+	
+	/* figure out the flow control settings */
+	if (cflag & CRTSCTS)
+		dbg(__FUNCTION__ " - RTS/CTS is enabled");
+	else
+		dbg(__FUNCTION__ " - RTS/CTS is disabled");
+	
+	/* determine software flow control */
+	if (I_IXOFF(port->tty))
+		dbg(__FUNCTION__ " - XON/XOFF is enabled, XON = %2x, XOFF = %2x", START_CHAR(port->tty), STOP_CHAR(port->tty));
+	else
+		dbg(__FUNCTION__ " - XON/XOFF is disabled");
+
+	/* get the baud rate wanted */
+	dbg(__FUNCTION__ " - baud rate = %d", tty_get_baud_rate(port->tty));
+
+	return;
+}
+
+
 

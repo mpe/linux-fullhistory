@@ -714,7 +714,9 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 	/* Set up parallel port FIFO mode.*/
 	parport_pc_data_forward (port); /* Must be in PS2 mode */
 	parport_pc_frob_control (port, PARPORT_CONTROL_STROBE, 0);
-	change_mode (port, ECR_PPF); /* Parallel port FIFO */
+	r = change_mode (port, ECR_PPF); /* Parallel port FIFO */
+	if (r)  printk (KERN_DEBUG "%s: Warning change_mode ECR_PPF failed\n", port->name);
+
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* Write the data to the FIFO. */
@@ -793,7 +795,8 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 				 PARPORT_CONTROL_STROBE |
 				 PARPORT_CONTROL_AUTOFD,
 				 0);
-	change_mode (port, ECR_ECP); /* ECP FIFO */
+	r = change_mode (port, ECR_ECP); /* ECP FIFO */
+	if (r) printk (KERN_DEBUG "%s: Warning change_mode ECR_ECP failed\n", port->name);
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
 	/* Write the data to the FIFO. */
@@ -917,7 +920,8 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 				 PARPORT_CONTROL_STROBE |
 				 PARPORT_CONTROL_AUTOFD,
 				 0);
-	change_mode (port, ECR_ECP); /* ECP FIFO */
+	r = change_mode (port, ECR_ECP); /* ECP FIFO */
+	if (r) printk (KERN_DEBUG "%s: Warning change_mode ECR_ECP failed\n", port->name);
 	port->ieee1284.phase = IEEE1284_PH_REV_DATA;
 
 	/* Do the transfer. */
@@ -1412,6 +1416,12 @@ static int __devinit get_superio_irq (struct parport *p)
 
 /*
  * Checks for port existence, all ports support SPP MODE
+ * Returns: 
+ *         0           :  No parallel port at this adress
+ *  PARPORT_MODE_PCSPP :  SPP port detected 
+ *                        (if the user specified an ioport himself,
+ *                         this shall always be the case!)
+ *
  */
 static int __devinit parport_SPP_supported(struct parport *pb)
 {
@@ -1447,8 +1457,8 @@ static int __devinit parport_SPP_supported(struct parport *pb)
 	if (user_specified)
 		/* That didn't work, but the user thinks there's a
 		 * port here. */
-		printk (KERN_DEBUG "0x%lx: CTR: wrote 0x%02x, read 0x%02x\n",
-			pb->base, w, r);
+		printk (KERN_DEBUG "parport 0x%lx (WARNING): CTR: "
+			"wrote 0x%02x, read 0x%02x\n", pb->base, w, r);
 
 	/* Try the data register.  The data lines aren't tri-stated at
 	 * this stage, so we expect back what we wrote. */
@@ -1463,11 +1473,15 @@ static int __devinit parport_SPP_supported(struct parport *pb)
 			return PARPORT_MODE_PCSPP;
 	}
 
-	if (user_specified)
+	if (user_specified) {
 		/* Didn't work, but the user is convinced this is the
 		 * place. */
-		printk (KERN_DEBUG "0x%lx: DATA: wrote 0x%02x, read 0x%02x\n",
-			pb->base, w, r);
+		printk (KERN_DEBUG "parport 0x%lx (WARNING): DATA: "
+			"wrote 0x%02x, read 0x%02x\n", pb->base, w, r);
+		printk (KERN_DEBUG "parport 0x%lx: You gave this address, "
+			"but there is probably no parallel port there!\n",
+			pb->base);
+	}
 
 	/* It's possible that we can't read the control register or
 	 * the data register.  In that case just believe the user. */
@@ -1692,7 +1706,7 @@ static int __devinit parport_ECP_supported(struct parport *pb)
 
 	/* Go back to mode 000 */
 	frob_econtrol (pb, 0xe0, ECR_SPP << 5);
-	pb->modes |= PARPORT_MODE_ECP;
+	pb->modes |= PARPORT_MODE_ECP | PARPORT_MODE_COMPAT;
 
 	return 1;
 }
@@ -2598,6 +2612,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	/* We ought to keep track of which ports are actually ours. */
 	struct parport *p = parport_enumerate(), *tmp;
 
 	if (!user_specified)

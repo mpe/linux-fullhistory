@@ -1591,9 +1591,8 @@ static void smc_set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
 static struct net_device devSMC9194 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	"", /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,  /* I/O address, IRQ */
 	0, 0, 0, NULL, smc_init };

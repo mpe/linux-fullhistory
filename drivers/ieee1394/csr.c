@@ -4,6 +4,9 @@
  * CSR implementation, iso/bus manager implementation.
  *
  * Copyright (C) 1999 Andreas E. Bombe
+ *
+ * This code is licensed under the GPL.  See the file COPYING in the root
+ * directory of the kernel sources for details.
  */
 
 #include <linux/string.h>

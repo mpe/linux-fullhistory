@@ -217,6 +217,7 @@ void exit_files(struct task_struct *tsk)
 }
 static inline void __put_fs_struct(struct fs_struct *fs)
 {
+	/* No need to hold fs->lock if we are killing it */
 	if (atomic_dec_and_test(&fs->count)) {
 		dput(fs->root);
 		mntput(fs->rootmnt);
@@ -437,11 +438,11 @@ NORET_TYPE void do_exit(long code)
 	tsk->flags |= PF_EXITING;
 	del_timer_sync(&tsk->real_timer);
 
-	lock_kernel();
 fake_volatile:
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
 #endif
+	lock_kernel();
 	sem_exit();
 	__exit_mm(tsk);
 	__exit_files(tsk);

@@ -1571,7 +1571,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 #ifdef CONFIG_IPX_INTERN
 			len += sprintf(buffer+len,
 				       "%08lX:%02X%02X%02X%02X%02X%02X:%04X  ",
-                                       (long unsigned int) htonl(s->protinfo.af_ipx.intrfc->if_netnum),
+                                       (unsigned long) htonl(s->protinfo.af_ipx.intrfc->if_netnum),
 				       s->protinfo.af_ipx.node[0],
 				       s->protinfo.af_ipx.node[1],
 				       s->protinfo.af_ipx.node[2],
@@ -1581,7 +1581,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 				       htons(s->protinfo.af_ipx.port));
 #else
 			len += sprintf(buffer+len,"%08lX:%04X  ",
-				       htonl(i->if_netnum),
+				       (unsigned long)htonl(i->if_netnum),
 				       htons(s->protinfo.af_ipx.port));
 #endif	/* CONFIG_IPX_INTERN */
 
@@ -1591,7 +1591,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 			{
 				len += sprintf(buffer+len,
 					"%08lX:%02X%02X%02X%02X%02X%02X:%04X  ",
-					(long unsigned int) htonl(s->protinfo.af_ipx.dest_addr.net),
+					(unsigned long) htonl(s->protinfo.af_ipx.dest_addr.net),
 					s->protinfo.af_ipx.dest_addr.node[0],
 					s->protinfo.af_ipx.dest_addr.node[1],
 					s->protinfo.af_ipx.dest_addr.node[2],

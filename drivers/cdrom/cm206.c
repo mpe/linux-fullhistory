@@ -1285,6 +1285,7 @@ static void cleanup(int level)
       printk("Can't unregister major cm206\n");
       return;
     }
+    blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
   case 3: 
     free_irq(cm206_irq, NULL);
   case 2: 

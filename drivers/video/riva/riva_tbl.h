@@ -60,6 +60,8 @@ static unsigned RivaTablePTIMER[][2] =
     {0x00000050, 0x00000000},
     {0x00000040, 0xFFFFFFFF}
 };
+
+#if 0
 static unsigned RivaTableFIFO[][2] =
 {
     {0x00000000, 0x80000000},
@@ -70,6 +72,8 @@ static unsigned RivaTableFIFO[][2] =
     {0x00002800, 0x80000012},
     {0x00003800, 0x80000013}
 };
+#endif
+
 static unsigned nv3TablePFIFO[][2] =
 {
     {0x00000140, 0x00000000},

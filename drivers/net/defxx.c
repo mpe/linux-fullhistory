@@ -195,16 +195,12 @@
  *							device open.  Updated transmit path to post a
  *							single fragment which includes PRH->end of data.
  *		Mar 2000	AC		Did various cleanups for 2.3.x
+ *		Jun 2000	jgarzik		PCI and resource alloc cleanups
  */
-
-/* Version information string - should be updated prior to each new release!!! */
-
-static const char *version = "defxx.c:v1.05 2000/03/26  Lawrence V. Stefani (stefani@lkg.dec.com) and others\n";
 
 /* Include files */
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -226,6 +222,10 @@ static const char *version = "defxx.c:v1.05 2000/03/26  Lawrence V. Stefani (ste
 
 #include "defxx.h"
 
+/* Version information string - should be updated prior to each new release!!! */
+static char version[] __initdata =
+	"defxx.c:v1.05a 2000/06/11  Lawrence V. Stefani (stefani@lkg.dec.com) and others\n";
+
 #define DYNAMIC_BUFFERS 1
 
 #define SKBUFF_RX_COPYBREAK 200
@@ -234,10 +234,6 @@ static const char *version = "defxx.c:v1.05 2000/03/26  Lawrence V. Stefani (ste
  * alignment for compatibility with old EISA boards.
  */
 #define NEW_SKB_SIZE (PI_RCV_DATA_K_SIZE_MAX+128)
-
-/* Define global routines */
-
-int	dfx_probe(void);
 
 /* Define module-wide (static) routines */
 
@@ -428,22 +424,92 @@ static inline void dfx_port_read_long(
  */
 
 static struct net_device *bp_root;
+static int version_disp;
+static int have_pci_driver;
 
-int __init dfx_probe(void)
+static struct pci_device_id dfx_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, PCI_ANY_ID, PCI_ANY_ID, },
+	{ 0, }
+};
+MODULE_DEVICE_TABLE(pci, dfx_pci_tbl);
+
+static int __init dfx_init_one (struct pci_dev *pdev,
+				const struct pci_device_id *ent)
+{
+	struct net_device *dev;
+	DFX_board_t		*bp;			/* board pointer */
+	int port;
+	
+	if (!version_disp) {	/* display version info if adapter is found */
+		version_disp = 1;	/* set display flag to TRUE so that */
+		printk (version);	/* we only display this string ONCE */
+	}
+
+	if (pci_enable_device (pdev))
+		goto err_out;
+	pci_set_master (pdev);
+
+	/* Get I/O base address from PCI Configuration Space */
+	port = pci_resource_start (pdev, 1);
+
+	if (!request_region (port, PFI_K_CSR_IO_LEN, "defxx")) {
+		printk (KERN_ERR
+			"defxx: I/O range allocated to adapter (0x%X-0x%X) is already being used!\n",
+			port, (port + PFI_K_CSR_IO_LEN - 1));
+		goto err_out;
+	}
+
+	/* Allocate a new device structure for this adapter */
+	dev = dfx_alloc_device (port);
+	if (dev == NULL) {
+		printk (KERN_ERR "defxx: alloc device failed\n");
+		goto err_out_region;
+	}
+
+	/* Initialize board structure with bus-specific info */
+	bp = (DFX_board_t *) dev->priv;
+	bp->dev = dev;
+	bp->next = bp_root;
+	bp_root = dev;
+	bp->bus_type = DFX_BUS_TYPE_PCI;
+	bp->pci_dev = pdev;
+	
+	/*
+	 * FIXME FIXME FIXME
+	 * Suck!  The original driver didn't clean up after
+	 * itself at this stage, so we won't either.  Someone
+	 * needs to go back and see what (if anything) we need
+	 * to free here...  -jgarzik
+	 */
+	if (dfx_driver_init (dev) != DFX_K_SUCCESS) {
+		dev->base_addr = 0;	/* clear port address field in device structure on failure */
+		goto err_out_region;
+	}
+
+	return 0;
+
+err_out_region:
+	release_region (port, PFI_K_CSR_IO_LEN);
+err_out:
+	return -ENODEV;
+};
+
+static struct pci_driver dfx_driver = {
+	name:		"defxx",
+	id_table:	dfx_pci_tbl,
+	probe:		dfx_init_one,
+};
+
+static int __init dfx_probe(void)
 {
 	int				i;				/* used in for loops */
-	int				version_disp;	/* was version info string already displayed? */
-	int				port_len;		/* length of port address range (in bytes) */
 	u16				port;			/* temporary I/O (port) address */
-	struct pci_dev *		pdev = NULL;		/* PCI device record */
-	u16				command;		/* PCI Configuration space Command register val */
 	u32				slot_id;		/* EISA hardware (slot) ID read from adapter */
 	DFX_board_t		*bp;			/* board pointer */
 	struct net_device *dev;
 
 	DBG_printk("In dfx_probe...\n");
 
-	version_disp = 0;				/* default to version string not displayed */
 	already_probed = 1;				/* set global flag */
 
 	/* Scan for FDDI EISA controllers */
@@ -463,9 +529,7 @@ int __init dfx_probe(void)
 			port = (i << 12);					/* recalc base addr */
 
 			/* Verify port address range is not already being used */
-
-			port_len = PI_ESIC_K_CSR_IO_LEN;
-			if (check_region(port, port_len) == 0)
+			if (request_region(port, PI_ESIC_K_CSR_IO_LEN, "defxx"))
 			{
 				/* Allocate a new device structure for this adapter */
 
@@ -485,70 +549,17 @@ int __init dfx_probe(void)
 				}
 			}
 			else
-				printk("I/O range allocated to adapter (0x%X-0x%X) is already being used!\n", port, (port + port_len-1));
+				printk("I/O range allocated to adapter (0x%X-0x%X) is already being used!\n",
+				       port, (port + PI_ESIC_K_CSR_IO_LEN-1));
 		}
 	}
 
 	/* Scan for FDDI PCI controllers */
-
-	if (pci_present())						/* is PCI even present? */
-		while ((pdev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, pdev)))
-		{
-			if (!version_disp)					/* display version info if adapter is found */
-			{
-				version_disp = 1;				/* set display flag to TRUE so that */
-				printk(version);				/* we only display this string ONCE */
-			}
-
-			if (pci_enable_device(pdev))
-				continue;
-
-			/* Verify that I/O enable bit is set (PCI slot is enabled) */
-
-			pci_read_config_word(pdev, PCI_COMMAND, &command);
-			if ((command & PCI_COMMAND_IO) == 0)
-				printk(KERN_ERR "defxx: I/O enable bit not set!  Verify that slot is enabled\n");
-			else
-			{
-				/* Turn off memory mapped space and enable mastering */
-
-				command |= PCI_COMMAND_MASTER;
-				command &= ~PCI_COMMAND_MEMORY;
-				pci_write_config_word(pdev, PCI_COMMAND, command);
-
-				/* Get I/O base address from PCI Configuration Space */
-
-				port = pci_resource_start (pdev, 1);
-
-				/* Verify port address range is not already being used */
-
-				port_len = PFI_K_CSR_IO_LEN;
-
-				if (check_region(port, port_len) == 0)
-				{
-					/* Allocate a new device structure for this adapter */
-
-					dev = dfx_alloc_device(port);
-					if (dev != NULL)
-					{
-						/* Initialize board structure with bus-specific info */
-
-						bp = (DFX_board_t *) dev->priv;
-						bp->dev = dev;
-						bp->next = bp_root;
-						bp_root = dev;
-						bp->bus_type = DFX_BUS_TYPE_PCI;
-						bp->pci_dev = pdev;
-						if (dfx_driver_init(dev) == DFX_K_SUCCESS)
-							num_boards++;		/* only increment global board count on success */
-						else
-							dev->base_addr = 0;	/* clear port address field in device structure on failure */
-					}
-				}
-				else
-					printk(KERN_ERR "defxx: I/O range allocated to adapter (0x%X-0x%X) is already being used!\n", port, (port + port_len-1));
-			}
-		}
+	i = pci_register_driver (&dfx_driver);
+	if (i > 0) {
+		num_boards += i;
+		have_pci_driver = 1;
+	}
 
 	/*
 	 * If we're at this point we're going through dfx_probe() for the first
@@ -556,10 +567,7 @@ int __init dfx_probe(void)
 	 * Otherwise, return failure (-ENODEV).
 	 */
 
-	if (num_boards > 0)
-		return(0);
-	else
-		return(-ENODEV);
+	return (num_boards > 0) ? 0 : -ENODEV;
 }
 
 
@@ -3464,28 +3472,34 @@ void dfx_xmt_flush(
 	}
 
 
-#ifdef MODULE
 
-int init_module(void)
-{
-	if(dfx_probe()<0)
-		return -ENODEV;
-	return 0;
-}
-
-void cleanup_module(void)
+static void __exit dfx_cleanup(void)
 {
 	while(bp_root!=NULL)
 	{
 		struct net_device *tmp=bp_root;
 		DFX_board_t *priv=tmp->priv;
 		bp_root=priv->next;
+		
+		/* FIXME: need to unregister FDDI device here?
+		 * The original driver didn't do it, but I think so..
+		 *	-jgarzik
+		 */
+		
+		if (priv->bus_type == DFX_BUS_TYPE_EISA)
+			release_region(tmp->base_addr, PI_ESIC_K_CSR_IO_LEN);
+		else
+			release_region(tmp->base_addr, PFI_K_CSR_IO_LEN);
+		
 		kfree(tmp->priv);
 		kfree(tmp);
 	}
+	if (have_pci_driver)
+		pci_unregister_driver(&dfx_driver);
 }
 
-#endif
+module_init(dfx_probe);
+module_exit(dfx_cleanup);
 
 
 /*

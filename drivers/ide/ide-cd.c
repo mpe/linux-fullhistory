@@ -1768,6 +1768,9 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 	if (stat)
 		toc->capacity = 0x1fffff;
 
+	HWIF(drive)->gd->sizes[drive->select.b.unit << PARTN_BITS] = (toc->capacity * SECTORS_PER_FRAME) >> (BLOCK_SIZE_BITS - 9);
+	drive->part[0].nr_sects = toc->capacity * SECTORS_PER_FRAME;
+
 	/* Remember that we've read this stuff. */
 	CDROM_STATE_FLAGS (drive)->toc_valid = 1;
 
@@ -2066,11 +2069,11 @@ int ide_cdrom_get_last_session (struct cdrom_device_info *cdi,
 	struct request_sense sense;
 	int ret;
 
-	toc = info->toc;
-	if (!CDROM_STATE_FLAGS(drive)->toc_valid || toc == NULL)
+	if (!CDROM_STATE_FLAGS(drive)->toc_valid || info->toc == NULL)
 		if ((ret = cdrom_read_toc(drive, &sense)))
 			return ret;
 
+	toc = info->toc;
 	ms_info->addr.lba = toc->last_session_lba;
 	ms_info->xa_flag = toc->xa_flag;
 
@@ -2614,11 +2617,10 @@ static ide_module_t ide_cdrom_module = {
 /* options */
 char *ignore = NULL;
 
-#ifdef MODULE
 MODULE_PARM(ignore, "s");
 MODULE_DESCRIPTION("ATAPI CD-ROM Driver");
 
-void __exit ide_cdrom_exit(void)
+static void __exit ide_cdrom_exit(void)
 {
 	ide_drive_t *drive;
 	int failed = 0;
@@ -2630,7 +2632,6 @@ void __exit ide_cdrom_exit(void)
 		}
 	ide_unregister_module (&ide_cdrom_module);
 }
-#endif /* MODULE */
  
 int ide_cdrom_init(void)
 {

@@ -8,13 +8,9 @@
  */
 
  
-#define MODSTR "ohci: "
-
-
 static int cc_to_error[16] = { 
 
 /* mapping of the OHCI CC status to error codes */ 
-#ifdef USB_ST_CRC /* status codes */
 	/* No  Error  */               USB_ST_NOERROR,
 	/* CRC Error  */               USB_ST_CRC,
 	/* Bit Stuff  */               USB_ST_BITSTUFF,
@@ -33,28 +29,6 @@ static int cc_to_error[16] = {
 	/* Not Access */               USB_ST_NORESPONSE 
 };
 
-#else  /* error codes */
-	/* No  Error  */               0,
-	/* CRC Error  */               -EILSEQ,
-	/* Bit Stuff  */               -EPROTO,
-	/* Data Togg  */               -EILSEQ,
-	/* Stall      */               -EPIPE,
-	/* DevNotResp */               -ETIMEDOUT,
-	/* PIDCheck   */               -EPROTO,
-	/* UnExpPID   */               -EPROTO,
-	/* DataOver   */               -EOVERFLOW,
-	/* DataUnder  */               -EREMOTEIO,
-	/* reservd    */               -ETIMEDOUT,
-	/* reservd    */               -ETIMEDOUT,
-	/* BufferOver */               -ECOMM,
-	/* BuffUnder  */               -ECOMM,
-	/* Not Access */               -ETIMEDOUT,
-	/* Not Access */               -ETIMEDOUT  
-};
-#define USB_ST_URB_PENDING		-EINPROGRESS
-#endif
-
- 
 
 struct ed;
 struct td;
@@ -410,6 +384,7 @@ typedef struct ohci {
 	struct usb_bus * bus;    
 	struct usb_device * dev[128];
 	struct virt_root_hub rh;
+	struct pci_dev *ohci_dev;
 } ohci_t;
 
 

@@ -146,7 +146,6 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 	buf.count = count;
 	buf.error = 0;
 
-	lock_kernel();
 	error = vfs_readdir(file, osf_filldir, &buf);
 	if (error < 0)
 		goto out_putf;
@@ -156,7 +155,6 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 		error = count - buf.count;
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -230,7 +228,6 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	struct file *file = NULL;
 	unsigned long ret = -EBADF;
 
-	lock_kernel();
 #if 0
 	if (flags & (_MAP_HASSEMAPHORE | _MAP_INHERIT | _MAP_UNALIGNED))
 		printk("%s: unimplemented OSF mmap flags %04lx\n", 
@@ -248,7 +245,6 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -320,9 +316,7 @@ asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs *buffer, unsigned
 	retval = -EBADF;
 	file = fget(fd);
 	if (file) {
-		lock_kernel();
 		retval = do_osf_statfs(file->f_dentry, buffer, bufsiz);
-		unlock_kernel();
 		fput(file);
 	}
 	return retval;
@@ -491,14 +485,12 @@ asmlinkage int sys_pipe(int a0, int a1, int a2, int a3, int a4, int a5,
 	int fd[2];
 	int error;
 
-	lock_kernel();
 	error = do_pipe(fd);
 	if (error)
 		goto out;
 	(&regs)->r20 = fd[1];
 	error = fd[0];
 out:
-	unlock_kernel();
 	return error;
 }
 

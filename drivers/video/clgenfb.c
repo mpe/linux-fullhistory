@@ -2557,7 +2557,6 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 #endif				/* CONFIG_FB_OF */
 	struct pci_dev *pdev;
 	unsigned long board_addr, board_size;
-	u16 tmp16;
 
 	DPRINTK ("ENTER\n");
 
@@ -2618,14 +2617,12 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 	}
 
 	if (!request_mem_region(board_addr, board_size, "clgenfb")) {
-		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lx, abort\n",
 		       board_addr);
 		return -1;
 	}
 #if 0 /* if the system didn't claim this region, we would... */
 	if (!request_mem_region(0xA0000, 65535, "clgenfb")) {
-		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lx, abort\n",
 		       0xA0000L);
 		release_mem_region(board_addr, board_size);

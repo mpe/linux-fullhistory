@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.49 2000/06/22 11:42:25 davem Exp $
+/* $Id: sys_sunos32.c,v 1.50 2000/06/26 23:20:24 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -68,7 +68,6 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	struct file *file = NULL;
 	unsigned long retval, ret_type;
 
-	lock_kernel();
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
 		if (cnt++ < 10)
@@ -113,7 +112,6 @@ out_putf:
 	if (file)
 		fput(file);
 out:
-	unlock_kernel();
 	return (u32) retval;
 }
 
@@ -321,8 +319,6 @@ asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 	if(!file)
 		goto out;
 
-	lock_kernel();
-
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_dirent) + 255))
 		goto out_putf;
@@ -344,7 +340,6 @@ asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 	}
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -406,8 +401,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 	if(!file)
 		goto out;
 
-	lock_kernel();
-
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
 		goto out_putf;
@@ -429,7 +422,6 @@ asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 	}
 
 out_putf:
-	unlock_kernel();
 	fput(file);
 out:
 	return error;

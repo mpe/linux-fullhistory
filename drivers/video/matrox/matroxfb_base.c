@@ -97,7 +97,6 @@
 
 #if defined(CONFIG_FB_OF)
 unsigned char nvram_read_byte(int);
-int matrox_of_init(struct device_node *dp);
 static int default_vmode = VMODE_NVRAM;
 static int default_cmode = CMODE_NVRAM;
 #endif
@@ -192,7 +191,7 @@ static void matroxfb_remove(WPMINFO int dummy) {
 	}
 	matroxfb_unregister_device(MINFO);
 	unregister_framebuffer(&ACCESS_FBINFO(fbcon));
-	del_timer(&ACCESS_FBINFO(cursor.timer));
+	del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 #ifdef CONFIG_MTRR
 	if (ACCESS_FBINFO(mtrr.vram_valid))
 		mtrr_del(ACCESS_FBINFO(mtrr.vram), ACCESS_FBINFO(video.base), ACCESS_FBINFO(video.len));
@@ -827,7 +826,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 			/* copy last setting... */
 			memcpy(hw, ohw, sizeof(*hw));
 
-			del_timer(&ACCESS_FBINFO(cursor.timer));
+			del_timer_sync(&ACCESS_FBINFO(cursor.timer));
 			ACCESS_FBINFO(cursor.state) = CM_ERASE;
 
 			ACCESS_FBINFO(hw_switch->init(PMINFO hw, &mt, display));
@@ -845,7 +844,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 			hw->CRTC[0x0C] = (pos & 0xFF00) >> 8;
 			hw->CRTCEXT[0] = (hw->CRTCEXT[0] & 0xF0) | ((pos >> 16) & 0x0F) | ((pos >> 14) & 0x40);
 			hw->CRTCEXT[8] = pos >> 21;
-			if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_PRIMARY) {
+			if (ACCESS_FBINFO(output.ph) & (MATROXFB_OUTPUT_CONN_PRIMARY | MATROXFB_OUTPUT_CONN_DFP)) {
 				if (ACCESS_FBINFO(primout))
 					ACCESS_FBINFO(primout)->compute(MINFO, &mt, hw);
 			}
@@ -856,7 +855,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 				up_read(&ACCESS_FBINFO(altout.lock));
 			}
 			ACCESS_FBINFO(hw_switch->restore(PMINFO hw, ohw, display));
-			if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_PRIMARY) {
+			if (ACCESS_FBINFO(output.ph) & (MATROXFB_OUTPUT_CONN_PRIMARY | MATROXFB_OUTPUT_CONN_DFP)) {
 				if (ACCESS_FBINFO(primout))
 					ACCESS_FBINFO(primout)->program(MINFO, hw);
 			}
@@ -869,7 +868,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 			ACCESS_FBINFO(cursor.redraw) = 1;
 			ACCESS_FBINFO(currenthw) = hw;
 			ACCESS_FBINFO(newhw) = ohw;
-			if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_PRIMARY) {
+			if (ACCESS_FBINFO(output.ph) & (MATROXFB_OUTPUT_CONN_PRIMARY | MATROXFB_OUTPUT_CONN_DFP)) {
 				if (ACCESS_FBINFO(primout))
 					ACCESS_FBINFO(primout)->start(MINFO);
 			}
@@ -881,7 +880,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 			}
 			matrox_cfbX_init(PMINFO display);
 			do_install_cmap(PMINFO display);
-#if defined(CONFIG_FB_OF) && defined(CONFIG_FB_COMPAT_XPMAC)
+#if defined(CONFIG_FB_COMPAT_XPMAC)
 			if (console_fb_info == &ACCESS_FBINFO(fbcon)) {
 				int vmode, cmode;
 
@@ -899,7 +898,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 				display_info.cmap_data_address = 0;
 				display_info.disp_reg_address = ACCESS_FBINFO(mmio.base);
 			}
-#endif /* CONFIG_FB_OF && CONFIG_FB_COMPAT_XPMAC */
+#endif /* CONFIG_FB_COMPAT_XPMAC */
 		}
 	}
 	return 0;
@@ -1065,6 +1064,13 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 							up_read(&ACCESS_FBINFO(crtc2.lock));
 						}
 						return 0;
+					case MATROXFB_OUTPUT_DFP:
+						if (!(ACCESS_FBINFO(output.all) & MATROXFB_OUTPUT_CONN_DFP))
+							return -ENXIO;
+						if (mom.mode!= MATROXFB_OUTPUT_MODE_MONITOR)
+							return -EINVAL;
+						/* mode did not change... */
+						return 0;
 					default:
 						return -EINVAL;
 				}
@@ -1091,6 +1097,11 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 						if (val)
 							return val;
 						break;
+					case MATROXFB_OUTPUT_DFP:
+						if (!(ACCESS_FBINFO(output.all) & MATROXFB_OUTPUT_CONN_DFP))
+							return -ENXIO;
+						mom.mode = MATROXFB_OUTPUT_MODE_MONITOR;
+						break;
 					default:
 						return -EINVAL;
 				}
@@ -1106,6 +1117,12 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 					return -EINVAL;
 				if (tmp & ACCESS_FBINFO(output.sh))
 					return -EINVAL;
+				if (tmp & MATROXFB_OUTPUT_CONN_DFP) {
+					if (tmp & MATROXFB_OUTPUT_CONN_SECONDARY)
+						return -EINVAL;
+					if (ACCESS_FBINFO(output.sh))
+						return -EINVAL;
+				}
 				if (tmp == ACCESS_FBINFO(output.ph))
 					return 0;
 				ACCESS_FBINFO(output.ph) = tmp;
@@ -1122,6 +1139,10 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 				u_int32_t tmp;
 
 				tmp = ACCESS_FBINFO(output.all) & ~ACCESS_FBINFO(output.sh);
+				if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_DFP)
+					tmp &= ~MATROXFB_OUTPUT_CONN_SECONDARY;
+				if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_SECONDARY)
+					tmp &= ~MATROXFB_OUTPUT_CONN_DFP;
 				put_user_ret(tmp, (u_int32_t*)arg, -EFAULT);
 				return 0;
 			}
@@ -1290,6 +1311,7 @@ static int sync = -1;			/* "matrox:sync:xxxxx" */
 static unsigned int fv = 0;		/* "matrox:fv:xxxxx" */
 static unsigned int fh = 0;		/* "matrox:fh:xxxxxk" */
 static unsigned int maxclk = 0;		/* "matrox:maxclk:xxxxM" */
+static int dfp = 0;			/* "matrox:dfp */
 static char fontname[64];		/* "matrox:font:xxxxx" */
 
 #ifndef MODULE
@@ -1386,11 +1408,13 @@ static struct video_board vbG400		= {0x2000000, 0x1000000, FB_ACCEL_MATROX_MGAG4
 #define DEVF_TEXT16B		0x0400
 #define DEVF_CRTC2		0x0800
 #define DEVF_MAVEN_CAPABLE	0x1000
+#define DEVF_PANELLINK_CAPABLE	0x2000
 
 #define DEVF_GCORE	(DEVF_VIDEO64BIT | DEVF_SWAPS | DEVF_CROSS4MB | DEVF_DDC_8_2)
+#define DEVF_G2CORE	(DEVF_GCORE | DEVF_ANY_VXRES | DEVF_MAVEN_CAPABLE | DEVF_PANELLINK_CAPABLE)
 #define DEVF_G100	(DEVF_GCORE) /* no doc, no vxres... */
-#define DEVF_G200	(DEVF_GCORE | DEVF_ANY_VXRES | DEVF_MAVEN_CAPABLE)
-#define DEVF_G400	(DEVF_GCORE | DEVF_ANY_VXRES | DEVF_MAVEN_CAPABLE | DEVF_SUPPORT32MB | DEVF_TEXT16B | DEVF_CRTC2)
+#define DEVF_G200	(DEVF_G2CORE)
+#define DEVF_G400	(DEVF_G2CORE | DEVF_SUPPORT32MB | DEVF_TEXT16B | DEVF_CRTC2)
 
 static struct board {
 	unsigned short vendor, device, rev, svid, sid;
@@ -1586,6 +1610,12 @@ static int initMatrox2(WPMINFO struct display* d, struct board* b){
 	ACCESS_FBINFO(devflags.precise_width) = !(b->flags & DEVF_ANY_VXRES);
 	ACCESS_FBINFO(devflags.crtc2) = b->flags & DEVF_CRTC2;
 	ACCESS_FBINFO(devflags.maven_capable) = b->flags & DEVF_MAVEN_CAPABLE;
+	if (b->flags & DEVF_PANELLINK_CAPABLE) {
+		ACCESS_FBINFO(output.all) |= MATROXFB_OUTPUT_CONN_DFP;
+		if (dfp)
+			ACCESS_FBINFO(output.ph) |= MATROXFB_OUTPUT_CONN_DFP;
+	}
+
 	ACCESS_FBINFO(devflags.textstep) = ACCESS_FBINFO(devflags.vgastep) * ACCESS_FBINFO(devflags.textmode);
 	ACCESS_FBINFO(devflags.textvram) = 65536 / ACCESS_FBINFO(devflags.textmode);
 
@@ -1791,7 +1821,7 @@ static int initMatrox2(WPMINFO struct display* d, struct board* b){
 	}
 
 	/* FIXME: Where to move this?! */
-#if defined(CONFIG_FB_OF)
+#if defined(CONFIG_PPC)
 #if defined(CONFIG_FB_COMPAT_XPMAC)
 	strcpy(ACCESS_FBINFO(matrox_name), "MTRX,");	/* OpenFirmware naming convension */
 	strncat(ACCESS_FBINFO(matrox_name), b->name, 26);
@@ -1817,7 +1847,7 @@ static int initMatrox2(WPMINFO struct display* d, struct board* b){
 			vesafb_defined = var; /* Note: mac_vmode_to_var() doesnot set all parameters */
 		}
 	}
-#endif
+#endif /* CONFIG_PPC */
 	vesafb_defined.xres_virtual = vesafb_defined.xres;
 	if (nopan) {
 		vesafb_defined.yres_virtual = vesafb_defined.yres;
@@ -2383,6 +2413,8 @@ int __init matroxfb_setup(char *options) {
 				blink = value;
 			else if (!strcmp(this_opt, "grayscale"))
 				grayscale = value;
+			else if (!strcmp(this_opt, "dfp"))
+				dfp = value;
 			else {
 				strncpy(videomode, this_opt, sizeof(videomode)-1);
 			}
@@ -2406,21 +2438,6 @@ int __init matroxfb_init(void)
 	/* never return failure, user can hotplug matrox later... */
 	return 0;
 }
-
-#if defined(CONFIG_FB_OF)
-int __init matrox_of_init(struct device_node *dp){
-	DBG("matrox_of_init");
-
-	if (disabled)
-		return -ENXIO;
-	if (!initialized) {
-		initialized = 1;
-		matrox_init();
-	}
-	/* failure? */
-	return 0;
-}
-#endif	/* CONFIG_FB_OF */
 
 #else
 
@@ -2500,6 +2517,8 @@ MODULE_PARM(grayscale, "i");
 MODULE_PARM_DESC(grayscale, "Sets display into grayscale. Works perfectly with paletized videomode (4, 8bpp), some limitations apply to 16, 24 and 32bpp videomodes (default=nograyscale)");
 MODULE_PARM(cross4MB, "i");
 MODULE_PARM_DESC(cross4MB, "Specifies that 4MB boundary can be in middle of line. (default=autodetected)");
+MODULE_PARM(dfp, "i");
+MODULE_PARM_DESC(dfp, "Specifies whether to use digital flat panel interface of G200/G400 (0 or 1) (default=0)");
 #ifdef CONFIG_FB_OF
 MODULE_PARM(vmode, "i");
 MODULE_PARM_DESC(vmode, "Specify the vmode mode number that should be used (640x480 default)");

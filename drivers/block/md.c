@@ -804,6 +804,7 @@ static void free_mddev (mddev_t *mddev)
 	del_mddev_mapping(mddev, MKDEV(MD_MAJOR, mdidx(mddev)));
 	md_list_del(&mddev->all_mddevs);
 	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
+	blk_cleanup_queue(&mddev->queue);
 	kfree(mddev);
 }
 
@@ -3627,7 +3628,7 @@ int md__init md_init (void)
 		printk (KERN_ALERT "Unable to get major %d for md\n", MD_MAJOR);
 		return (-1);
 	}
-	devfs_handle = devfs_mk_dir (NULL, "md", 0, NULL);
+	devfs_handle = devfs_mk_dir (NULL, "md", NULL);
 	devfs_register_series (devfs_handle, "%u",MAX_MD_DEVS,DEVFS_FL_DEFAULT,
 				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR,
 				&md_fops, NULL);
