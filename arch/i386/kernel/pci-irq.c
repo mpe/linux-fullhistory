@@ -128,14 +128,13 @@ static void eisa_set_level_irq(unsigned int irq)
 static int pirq_ali_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	static unsigned char irqmap[16] = { 0, 9, 3, 10, 4, 5, 7, 6, 1, 11, 0, 12, 0, 14, 0, 15 };
+	u8 x;
+	unsigned reg;
+
 	pirq--;
-	if (pirq < 8) {
-		u8 x;
-		unsigned reg = 0x48 + (pirq >> 1);
-		pci_read_config_byte(router, reg, &x);
-		return irqmap[(pirq & 1) ? (x >> 4) : (x & 0x0f)];
-	}
-	return 0;
+	reg = 0x48 + (pirq >> 1);
+	pci_read_config_byte(router, reg, &x);
+	return irqmap[(pirq & 1) ? (x >> 4) : (x & 0x0f)];
 }
 
 static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -143,7 +142,7 @@ static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 	static unsigned char irqmap[16] = { 0, 8, 0, 2, 4, 5, 7, 6, 0, 1, 3, 9, 11, 0, 13, 15 };
 	unsigned int val = irqmap[irq];
 	pirq--;
-	if (val && pirq < 8) {
+	if (val) {
 		u8 x;
 		unsigned reg = 0x48 + (pirq >> 1);
 		pci_read_config_byte(router, reg, &x);

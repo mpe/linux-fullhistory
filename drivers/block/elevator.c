@@ -83,10 +83,10 @@ int elevator_default_merge(request_queue_t *q, struct request **req,
 	latency = orig_latency = elevator_request_latency(elevator, rw);
 	sequence = elevator->sequence;
 	
+	entry = head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
 
-	entry = head;
 	while ((entry = entry->prev) != head && !starving) {
 		*req = blkdev_entry_to_request(entry);
 		latency += (*req)->nr_segments;
@@ -161,10 +161,10 @@ int elevator_linus_merge(request_queue_t *q, struct request **req,
 	struct list_head *entry, *head = &q->queue_head;
 	unsigned int count = bh->b_size >> 9;
 
+	entry = head;
 	if (q->head_active && !q->plugged)
 		head = head->next;
 
-	entry = head;
 	while ((entry = entry->prev) != head) {
 		*req = blkdev_entry_to_request(entry);
 		if (!(*req)->elevator_sequence)

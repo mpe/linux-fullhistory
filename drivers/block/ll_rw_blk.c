@@ -709,15 +709,11 @@ get_rq:
 
 		req = __get_request_wait(q, rw);
 		spin_lock_irq(&io_request_lock);
-
-		/*
-		 * revalidate elevator, queue request_lock was dropped
-		 */
-		head = &q->queue_head;
-		if (q->head_active && !q->plugged)
-			head = head->next;
-
 	}
+
+	head = &q->queue_head;
+	if (q->head_active && !q->plugged)
+		head = head->next;
 
 /* fill up the request-info, and add it to the queue */
 	req->cmd = rw;

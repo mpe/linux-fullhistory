@@ -136,7 +136,7 @@ extern void IO_APIC_init_uniprocessor (void);
  * If we use the IO-APIC for IRQ routing, disable automatic
  * assignment of PCI IRQ's.
  */
-#define io_apic_assign_pci_irqs (!mp_irq_entries)
+#define io_apic_assign_pci_irqs (mp_irq_entries != 0)
 
 #else  /* !CONFIG_X86_IO_APIC */
 #define io_apic_assign_pci_irqs 0
