@@ -4,7 +4,7 @@
 /*
  * This file contains the definitions for the IO ports and errors etc. for XT hard disk controllers (at least the DTC 5150X).
  *
- * Author: Pat Mackinlay, smackinla@cc.curtin.edu.au
+ * Author: Pat Mackinlay, pat@it.com.au
  * Date: 29/09/92
  *
  * Revised: 01/01/93, ...

@@ -31,7 +31,7 @@
 #define MCD_STATUS_DELAY	100
 
 /* number of times to retry a command before giving up */
-#define MCD_RETRY_ATTEMPTS      3
+#define MCD_RETRY_ATTEMPTS      5
 
 /* port access macro */
 #define MCDPORT(x)		(mcd_port + (x))
@@ -64,6 +64,7 @@
 #define MCMD_SET_VOLUME		0xAE		/* set audio level */
 #define MCMD_PLAY_READ		0xC0		/* play or read data */
 #define MCMD_GET_VERSION  	0xDC
+#define MCMD_EJECT		0xF6            /* eject (FX drive) */
 
 /* borrowed from hd.c */
 

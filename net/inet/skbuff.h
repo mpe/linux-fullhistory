@@ -79,7 +79,7 @@ struct sk_buff {
   unsigned char			data[0];
 };
 
-#define SK_WMEM_MAX	8192
+#define SK_WMEM_MAX	32767
 #define SK_RMEM_MAX	32767
 
 #define SK_FREED_SKB	0x0DE2C0DE

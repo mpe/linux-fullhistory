@@ -34,14 +34,6 @@ sys_call.o: sys_call.s
 sched.o: sched.c
 	$(CC) $(CFLAGS) $(PROFILING) -fno-omit-frame-pointer -c $<
 
-ksyms.lst: ksyms.S ../include/linux/autoconf.h
-	$(CPP) $(CFLAGS) $< > $@
- 
-ksyms.s: ksyms.sh ksyms.lst
-	sh $< > $@
-
-ksyms.o: ksyms.s
-
 dep:
 	$(CPP) -M *.c > .depend
 

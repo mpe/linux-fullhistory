@@ -1,7 +1,7 @@
 /*
  *  linux/mm/memory.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  */
 
 /*
@@ -28,6 +28,11 @@
  * 20.12.91  -  Ok, making the swap-device changeable like the root.
  */
 
+/*
+ * 05.04.94  -  Multi-page memory management added for v1.1.
+ * 		Idea by Alex Bligh (alex@cconcepts.co.uk)
+ */
+
 #include <asm/system.h>
 #include <linux/config.h>
 
@@ -48,17 +53,14 @@ extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 extern void sound_mem_init(void);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 
+/*
+ * The free_area_list arrays point to the queue heads of the free areas
+ * of different sizes
+ */
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
-unsigned long free_page_list = 0;
-/*
- * The secondary free_page_list is used for malloc() etc things that
- * may need pages during interrupts etc. Normal get_free_page() operations
- * don't touch it, so it stays as a kind of "panic-list", that can be
- * accessed when all other mm tricks have failed.
- */
-int nr_secondary_pages = 0;
-unsigned long secondary_page_list = 0;
+struct mem_list free_area_list[NR_MEM_LISTS];
+unsigned char * free_area_map[NR_MEM_LISTS];
 
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl": :"S" (from),"D" (to),"c" (1024):"cx","di","si")
@@ -978,8 +980,7 @@ void show_mem(void)
 	int shared = 0;
 
 	printk("Mem-info:\n");
-	printk("Free pages:      %6dkB\n",nr_free_pages<<(PAGE_SHIFT-10));
-	printk("Secondary pages: %6dkB\n",nr_secondary_pages<<(PAGE_SHIFT-10));
+	show_free_areas();
 	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
 	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
@@ -1052,7 +1053,7 @@ void mem_init(unsigned long start_low_mem,
 	int codepages = 0;
 	int reservedpages = 0;
 	int datapages = 0;
-	unsigned long tmp;
+	unsigned long tmp, mask;
 	unsigned short * p;
 	extern int etext;
 
@@ -1067,22 +1068,34 @@ void mem_init(unsigned long start_low_mem,
 	start_mem = (unsigned long) p;
 	while (p > mem_map)
 		*--p = MAP_PAGE_RESERVED;
+
+	/* set up the free-area data structures */
+	for (mask = PAGE_MASK, tmp = 0 ; tmp < NR_MEM_LISTS ; tmp++, mask <<= 1) {
+		unsigned long bitmap_size;
+		free_area_list[tmp].prev = free_area_list[tmp].next = &free_area_list[tmp];
+		end_mem = (end_mem + ~mask) & mask;
+		bitmap_size = end_mem >> (PAGE_SHIFT + tmp);
+		bitmap_size = (bitmap_size + 7) >> 3;
+		free_area_map[tmp] = (unsigned char *) start_mem;
+		memset((void *) start_mem, 0, bitmap_size);
+		start_mem += bitmap_size;
+	}
+
+	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);
 	start_mem = PAGE_ALIGN(start_mem);
 	while (start_low_mem < 0xA0000) {
 		mem_map[MAP_NR(start_low_mem)] = 0;
 		start_low_mem += PAGE_SIZE;
 	}
-	while (start_mem < end_mem) {
+	while (start_mem < high_memory) {
 		mem_map[MAP_NR(start_mem)] = 0;
 		start_mem += PAGE_SIZE;
 	}
 #ifdef CONFIG_SOUND
 	sound_mem_init();
 #endif
-	free_page_list = 0;
-	nr_free_pages = 0;
-	for (tmp = 0 ; tmp < end_mem ; tmp += PAGE_SIZE) {
+	for (tmp = 0 ; tmp < high_memory ; tmp += PAGE_SIZE) {
 		if (mem_map[MAP_NR(tmp)]) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)
 				reservedpages++;
@@ -1092,14 +1105,13 @@ void mem_init(unsigned long start_low_mem,
 				datapages++;
 			continue;
 		}
-		*(unsigned long *) tmp = free_page_list;
-		free_page_list = tmp;
-		nr_free_pages++;
+		mem_map[MAP_NR(tmp)] = 1;
+		free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",
 		tmp >> 10,
-		end_mem >> 10,
+		high_memory >> 10,
 		codepages << (PAGE_SHIFT-10),
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));

@@ -1,6 +1,6 @@
 VERSION = 1
-PATCHLEVEL = 0
-SUBLEVEL = 6
+PATCHLEVEL = 1
+SUBLEVEL = 0
 
 all:	Version zImage
 
@@ -9,6 +9,7 @@ all:	Version zImage
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
+ROOT	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 
 #
 # Make "config" the default target if there is no configuration file or
@@ -76,7 +77,7 @@ AS	=as
 LD	=ld
 LDFLAGS	=#-qmagic
 HOSTCC	=gcc
-CC	=gcc -D__KERNEL__
+CC	=gcc -D__KERNEL__ -I$(ROOT)/include
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar

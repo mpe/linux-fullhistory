@@ -30,6 +30,11 @@ extern void adjust_clock(void);
 
 #define	PZERO	15
 
+asmlinkage int sys_ni_syscall(void)
+{
+	return -EINVAL;
+}
+
 static int proc_sel(struct task_struct *p, int which, int who)
 {
 	switch (which) {

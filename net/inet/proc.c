@@ -95,7 +95,7 @@ get__netinfo(struct proto *pro, char *buffer, int format)
 		if (timer_active)
 			add_timer(&sp->timer);
 		/* Is place in buffer too rare? then abort. */
-		if (pos > buffer+PAGE_SIZE-80) {
+		if (pos > buffer+PAGE_SIZE-90) {
 			printk("oops, too many %s sockets for netinfo.\n",
 					pro->name);
 			return(strlen(buffer));

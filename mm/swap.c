@@ -1,7 +1,7 @@
 /*
  *  linux/mm/swap.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
+ *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  */
 
 /*
@@ -45,7 +45,6 @@ static struct swap_info_struct {
 	unsigned long max;
 } swap_info[MAX_SWAPFILES];
 
-extern unsigned long free_page_list;
 extern int shm_swap (int);
 
 /*
@@ -486,16 +485,18 @@ static int try_to_free_page(void)
 	return 0;
 }
 
-/*
- * Note that this must be atomic, or bad things will happen when
- * pages are requested in interrupts (as malloc can do). Thus the
- * cli/sti's.
- */
-static inline void add_mem_queue(unsigned long addr, unsigned long * queue)
+static inline void add_mem_queue(struct mem_list * head, struct mem_list * entry)
 {
-	addr &= PAGE_MASK;
-	*(unsigned long *) addr = *queue;
-	*queue = addr;
+	entry->prev = head;
+	entry->next = head->next;
+	entry->next->prev = entry;
+	head->next = entry;
+}
+
+static inline void remove_mem_queue(struct mem_list * head, struct mem_list * entry)
+{
+	entry->next->prev = entry->prev;
+	entry->prev->next = entry->next;
 }
 
 /*
@@ -509,27 +510,40 @@ static inline void add_mem_queue(unsigned long addr, unsigned long * queue)
  * With the above two rules, you get a straight-line execution path
  * for the normal case, giving better asm-code.
  */
-void free_page(unsigned long addr)
+
+/*
+ * Buddy system. Hairy. You really aren't expected to understand this
+ */
+static inline void free_pages_ok(unsigned long addr, unsigned long order)
+{
+	unsigned long index = addr >> (PAGE_SHIFT + 1 + order);
+	unsigned long mask = PAGE_MASK << order;
+
+	addr &= mask;
+	nr_free_pages += 1 << order;
+	while (order < NR_MEM_LISTS-1) {
+		if (!change_bit(index, free_area_map[order]))
+			break;
+		remove_mem_queue(free_area_list+order, (struct mem_list *) (addr ^ (1+~mask)));
+		order++;
+		index >>= 1;
+		mask <<= 1;
+		addr &= mask;
+	}
+	add_mem_queue(free_area_list+order, (struct mem_list *) addr);
+}
+
+void free_pages(unsigned long addr, unsigned long order)
 {
 	if (addr < high_memory) {
+		unsigned long flag;
 		unsigned short * map = mem_map + MAP_NR(addr);
-
 		if (*map) {
 			if (!(*map & MAP_PAGE_RESERVED)) {
-				unsigned long flag;
-
 				save_flags(flag);
 				cli();
-				if (!--*map) {
-					if (nr_secondary_pages < MAX_SECONDARY_PAGES) {
-						add_mem_queue(addr,&secondary_page_list);
-						nr_secondary_pages++;
-						restore_flags(flag);
-						return;
-					}
-					add_mem_queue(addr,&free_page_list);
-					nr_free_pages++;
-				}
+				if (!--*map)
+					free_pages_ok(addr, order);
 				restore_flags(flag);
 			}
 			return;
@@ -541,57 +555,43 @@ void free_page(unsigned long addr)
 }
 
 /*
- * This is one ugly macro, but it simplifies checking, and makes
- * this speed-critical place reasonably fast, especially as we have
- * to do things with the interrupt flag etc.
- *
- * Note that this #define is heavily optimized to give fast code
- * for the normal case - the if-statements are ordered so that gcc-2.2.2
- * will make *no* jumps for the normal code. Don't touch unless you
- * know what you are doing.
+ * Some ugly macros to speed up __get_free_pages()..
  */
-#define REMOVE_FROM_MEM_QUEUE(queue,nr) \
-	cli(); \
-	if ((result = queue) != 0) { \
-		if (!(result & ~PAGE_MASK) && result < high_memory) { \
-			queue = *(unsigned long *) result; \
-			if (!mem_map[MAP_NR(result)]) { \
-				mem_map[MAP_NR(result)] = 1; \
-				nr--; \
-last_free_pages[index = (index + 1) & (NR_LAST_FREE_PAGES - 1)] = result; \
-				restore_flags(flag); \
-				return result; \
-			} \
-			printk("Free page %08lx has mem_map = %d\n", \
-				result,mem_map[MAP_NR(result)]); \
-		} else \
-			printk("Result = 0x%08lx - memory map destroyed\n", result); \
-		queue = 0; \
-		nr = 0; \
-	} else if (nr) { \
-		printk(#nr " is %d, but " #queue " is empty\n",nr); \
-		nr = 0; \
-	} \
-	restore_flags(flag)
+#define RMQUEUE(order) \
+do { struct mem_list * queue = free_area_list+order; \
+     unsigned long new_order = order; \
+	do { struct mem_list *next = queue->next; \
+		if (queue != next) { \
+			queue->next = next->next; \
+			next->next->prev = queue; \
+			mark_used((unsigned long) next, new_order); \
+			nr_free_pages -= 1 << order; \
+			restore_flags(flags); \
+			EXPAND(next, order, new_order); \
+			return (unsigned long) next; \
+		} new_order++; queue++; \
+	} while (new_order < NR_MEM_LISTS); \
+} while (0)
 
-/*
- * Get physical address of first (actually last :-) free page, and mark it
- * used. If no free pages left, return 0.
- *
- * Note that this is one of the most heavily called functions in the kernel,
- * so it's a bit timing-critical (especially as we have to disable interrupts
- * in it). See the above macro which does most of the work, and which is
- * optimized for a fast normal path of execution.
- */
-unsigned long __get_free_page(int priority)
+static inline int mark_used(unsigned long addr, unsigned long order)
 {
-	unsigned long result, flag;
-	static unsigned long index = 0;
+	return change_bit(addr >> (PAGE_SHIFT+1+order), free_area_map[order]);
+}
 
-	/* this routine can be called at interrupt time via
-	   malloc.  We want to make sure that the critical
-	   sections of code have interrupts disabled. -RAB
-	   Is this code reentrant? */
+#define EXPAND(addr,low,high) \
+do { unsigned long size = PAGE_SIZE << high; \
+	while (high > low) { \
+		high--; size >>= 1; cli(); \
+		add_mem_queue(free_area_list+high, addr); \
+		mark_used((unsigned long) addr, high); \
+		restore_flags(flags); \
+		addr = (void *) (size + (unsigned long) addr); \
+	} mem_map[MAP_NR((unsigned long) addr)] = 1; \
+} while (0)
+
+unsigned long __get_free_pages(int priority, unsigned long order)
+{
+	unsigned long flags;
 
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
@@ -601,16 +601,44 @@ unsigned long __get_free_page(int priority)
 			priority = GFP_ATOMIC;
 		}
 	}
-	save_flags(flag);
+	save_flags(flags);
 repeat:
-	REMOVE_FROM_MEM_QUEUE(free_page_list,nr_free_pages);
-	if (priority == GFP_BUFFER)
+	cli();
+	if ((priority==GFP_ATOMIC) || nr_free_pages > MAX_SECONDARY_PAGES) {
+		RMQUEUE(order);
+		restore_flags(flags);
 		return 0;
-	if (priority != GFP_ATOMIC)
-		if (try_to_free_page())
-			goto repeat;
-	REMOVE_FROM_MEM_QUEUE(secondary_page_list,nr_secondary_pages);
+	}
+	restore_flags(flags);
+        if (priority != GFP_BUFFER && try_to_free_page())
+		goto repeat;
 	return 0;
+}
+
+/*
+ * Show free area list (used inside shift_scroll-lock stuff)
+ * We also calculate the percentage fragmentation. We do this by counting the
+ * memory on each free list with the exception of the first item on the list.
+ */
+void show_free_areas(void)
+{
+ 	unsigned long order, flags;
+ 	unsigned long total = 0;
+
+	printk("Free pages:      %6dkB\n ( ",nr_free_pages<<(PAGE_SHIFT-10));
+	save_flags(flags);
+	cli();
+ 	for (order=0 ; order < NR_MEM_LISTS; order++) {
+		struct mem_list * tmp;
+		unsigned long nr = 0;
+		for (tmp = free_area_list[order].next ; tmp != free_area_list + order ; tmp = tmp->next) {
+			nr ++;
+		}
+		total += nr * (4 << order);
+		printk("%lu*%ukB ", nr, 4 << order);
+	}
+	restore_flags(flags);
+	printk("= %lukB)\n", total);
 }
 
 /*

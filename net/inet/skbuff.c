@@ -458,7 +458,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 
 void kfree_skbmem(void *mem,unsigned size)
 {
-	struct sk_buff *x=mem;
+	struct sk_buff *x=(struct sk_buff *) mem;
 	IS_SKB(x);
 	if(x->magic_debug_cookie==SK_GOOD_SKB)
 	{

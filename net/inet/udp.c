@@ -263,21 +263,6 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 
   skb->len = tmp + sizeof(struct udphdr) + len;	/* len + UDP + IP + MAC */
   skb->dev = dev;
-#ifdef OLD
-  /*
-   * This code used to hack in some form of fragmentation.
-   * I removed that, since it didn't work anyway, and it made the
-   * code a bad thing to read and understand. -FvK
-   */
-  if (len > dev->mtu) {
-#else
-  if (skb->len > 4095)
-  {
-#endif    
-	printk("UDP: send: length %d > mtu %d (ignored)\n", len, dev->mtu);
-	sk->prot->wfree(sk, skb->mem_addr, skb->mem_len);
-	return(-EMSGSIZE);
-  }
 
   /* Fill in the UDP header. */
   uh = (struct udphdr *) buff;

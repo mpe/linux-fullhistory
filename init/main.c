@@ -78,7 +78,6 @@ extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
-extern unsigned long simple_strtoul(const char *,char **,unsigned int);
 
 extern void hd_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
@@ -267,7 +266,7 @@ static void parse_options(char *line)
 {
 	char *next;
 	char *devnames[] = { "hda", "hdb", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
-	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xC00, 0xC40, 0};
+	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
 	int args, envs;
 
 	if (!*line)

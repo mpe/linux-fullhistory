@@ -244,14 +244,6 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   }
 
   skb->len = tmp + len;
-  
-  if(dev!=NULL && skb->len > 4095)
-  {
-  	kfree_skb(skb, FREE_WRITE);
-  	release_sock(sk);
-  	return(-EMSGSIZE);
-  }
-  
   sk->prot->queue_xmit(sk, dev, skb, 1);
   release_sock(sk);
   return(len);

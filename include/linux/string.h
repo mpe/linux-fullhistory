@@ -7,6 +7,10 @@
 #define NULL ((void *) 0)
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * This string-include defines all string functions as inline
  * functions. Use gcc. It also assumes ds=es=data space, this should be
@@ -415,5 +419,9 @@ __asm__("cld\n\t"
 	:"cx","di","memory");
 return s;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

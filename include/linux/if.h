@@ -24,6 +24,7 @@
 
 
 /* Structure defining a queue for a network interface. */
+#ifdef not_yet_in_linux
 struct ifnet {
   char		*if_name;		/* name, e.g. ``en'' or ``lo''	*/
   short		if_unit;		/* sub-unit for device driver	*/
@@ -33,13 +34,11 @@ struct ifnet {
   int		if_metric;		/* routing metric (not used)	*/
   struct	ifaddr *if_addrlist;	/* linked list of addrs per if	*/
   struct	ifqueue {
-#ifdef not_yet_in_linux
 	struct mbuf	*ifq_head;
 	struct mbuf	*ifq_tail;
 	int		ifq_len;
 	int		ifq_maxlen;
 	int		ifq_drops;
-#endif
   } if_snd;				/* output queue			*/
 
   /* Procedure handles. */
@@ -59,6 +58,7 @@ struct ifnet {
   /* Linked list: pointer to next interface. */
   struct ifnet	*if_next;
 };
+#endif
 
 /* Standard interface flags. */
 #define	IFF_UP		0x1		/* interface is up		*/

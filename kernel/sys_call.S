@@ -41,6 +41,7 @@
  */
 
 #include <linux/segment.h>
+#include <linux/sys.h>
 
 EBX		= 0x00
 ECX		= 0x04
@@ -87,7 +88,7 @@ ENOSYS = 38
 .globl _invalid_TSS,_segment_not_present,_stack_segment
 .globl _general_protection,_reserved
 .globl _alignment_check,_page_fault
-.globl ret_from_sys_call
+.globl ret_from_sys_call, _sys_call_table
 
 #define SAVE_ALL \
 	cld; \
@@ -163,8 +164,11 @@ _system_call:
 	pushl %eax			# save orig_eax
 	SAVE_ALL
 	movl $-ENOSYS,EAX(%esp)
-	cmpl _NR_syscalls,%eax
+	cmpl $(NR_syscalls),%eax
 	jae ret_from_sys_call
+	movl _sys_call_table(,%eax,4),%eax
+	testl %eax,%eax
+	je ret_from_sys_call
 	movl _current,%ebx
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
 	movl $0,errno(%ebx)
@@ -172,7 +176,7 @@ _system_call:
 	movl %edx,dbgreg6(%ebx)  # save current hardware debugging status
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne 1f
-	call _sys_call_table(,%eax,4)
+	call *%eax
 	movl %eax,EAX(%esp)		# save the return value
 	movl errno(%ebx),%edx
 	negl %edx
@@ -388,3 +392,144 @@ _alignment_check:
 _page_fault:
 	pushl $_do_page_fault
 	jmp error_code
+
+.data
+.align 4
+_sys_call_table:
+	.long _sys_setup		/* 0 */
+	.long _sys_exit
+	.long _sys_fork
+	.long _sys_read
+	.long _sys_write
+	.long _sys_open			/* 5 */
+	.long _sys_close
+	.long _sys_waitpid
+	.long _sys_creat
+	.long _sys_link
+	.long _sys_unlink		/* 10 */
+	.long _sys_execve
+	.long _sys_chdir
+	.long _sys_time
+	.long _sys_mknod
+	.long _sys_chmod		/* 15 */
+	.long _sys_chown
+	.long _sys_break
+	.long _sys_stat
+	.long _sys_lseek
+	.long _sys_getpid		/* 20 */
+	.long _sys_mount
+	.long _sys_umount
+	.long _sys_setuid
+	.long _sys_getuid
+	.long _sys_stime		/* 25 */
+	.long _sys_ptrace
+	.long _sys_alarm
+	.long _sys_fstat
+	.long _sys_pause
+	.long _sys_utime		/* 30 */
+	.long _sys_stty
+	.long _sys_gtty
+	.long _sys_access
+	.long _sys_nice
+	.long _sys_ftime		/* 35 */
+	.long _sys_sync
+	.long _sys_kill
+	.long _sys_rename
+	.long _sys_mkdir
+	.long _sys_rmdir		/* 40 */
+	.long _sys_dup
+	.long _sys_pipe
+	.long _sys_times
+	.long _sys_prof
+	.long _sys_brk			/* 45 */
+	.long _sys_setgid
+	.long _sys_getgid
+	.long _sys_signal
+	.long _sys_geteuid
+	.long _sys_getegid		/* 50 */
+	.long _sys_acct
+	.long _sys_phys
+	.long _sys_lock
+	.long _sys_ioctl
+	.long _sys_fcntl		/* 55 */
+	.long _sys_mpx
+	.long _sys_setpgid
+	.long _sys_ulimit
+	.long _sys_olduname
+	.long _sys_umask		/* 60 */
+	.long _sys_chroot
+	.long _sys_ustat
+	.long _sys_dup2
+	.long _sys_getppid
+	.long _sys_getpgrp		/* 65 */
+	.long _sys_setsid
+	.long _sys_sigaction
+	.long _sys_sgetmask
+	.long _sys_ssetmask
+	.long _sys_setreuid		/* 70 */
+	.long _sys_setregid
+	.long _sys_sigsuspend
+	.long _sys_sigpending
+	.long _sys_sethostname
+	.long _sys_setrlimit		/* 75 */
+	.long _sys_getrlimit
+	.long _sys_getrusage
+	.long _sys_gettimeofday
+	.long _sys_settimeofday
+	.long _sys_getgroups		/* 80 */
+	.long _sys_setgroups
+	.long _sys_select
+	.long _sys_symlink
+	.long _sys_lstat
+	.long _sys_readlink		/* 85 */
+	.long _sys_uselib
+	.long _sys_swapon
+	.long _sys_reboot
+	.long _sys_readdir
+	.long _sys_mmap			/* 90 */
+	.long _sys_munmap
+	.long _sys_truncate
+	.long _sys_ftruncate
+	.long _sys_fchmod
+	.long _sys_fchown		/* 95 */
+	.long _sys_getpriority
+	.long _sys_setpriority
+	.long _sys_profil
+	.long _sys_statfs
+	.long _sys_fstatfs		/* 100 */
+	.long _sys_ioperm
+	.long _sys_socketcall
+	.long _sys_syslog
+	.long _sys_setitimer
+	.long _sys_getitimer		/* 105 */
+	.long _sys_newstat
+	.long _sys_newlstat
+	.long _sys_newfstat
+	.long _sys_uname
+	.long _sys_iopl			/* 110 */
+	.long _sys_vhangup
+	.long _sys_idle
+	.long _sys_vm86
+	.long _sys_wait4
+	.long _sys_swapoff		/* 115 */
+	.long _sys_sysinfo
+	.long _sys_ipc
+	.long _sys_fsync
+	.long _sys_sigreturn
+	.long _sys_clone		/* 120 */
+	.long _sys_setdomainname
+	.long _sys_newuname
+	.long _sys_modify_ldt
+	.long _sys_adjtimex
+	.long _sys_mprotect		/* 125 */
+	.long _sys_sigprocmask
+	.long _sys_create_module
+	.long _sys_init_module
+	.long _sys_delete_module
+	.long _sys_get_kernel_syms	/* 130 */
+	.long _sys_quotactl
+	.long _sys_getpgid
+	.long _sys_fchdir
+	.long _sys_bdflush
+
+	.space (NR_syscalls-130)*4

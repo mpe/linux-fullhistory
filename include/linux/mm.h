@@ -92,22 +92,31 @@ struct page_info {
 };
 /* end of planning stage */
 
-extern volatile short free_page_ptr; /* used by malloc and tcp/ip. */
+/*
+ * Free area management
+ */
 
 extern int nr_swap_pages;
 extern int nr_free_pages;
-extern unsigned long free_page_list;
-extern int nr_secondary_pages;
-extern unsigned long secondary_page_list;
 
 #define MAX_SECONDARY_PAGES 20
+#define NR_MEM_LISTS 6
+
+struct mem_list {
+	struct mem_list * next;
+	struct mem_list * prev;
+};
+
+extern struct mem_list free_area_list[NR_MEM_LISTS];
+extern unsigned char * free_area_map[NR_MEM_LISTS];
 
 /*
  * This is timing-critical - most of the time in getting a new page
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
-extern unsigned long __get_free_page(int priority);
+#define __get_free_page(priority) __get_free_pages((priority),0)
+extern unsigned long __get_free_pages(int priority, unsigned long gfporder);
 extern inline unsigned long get_free_page(int priority)
 {
 	unsigned long page;
@@ -121,9 +130,12 @@ extern inline unsigned long get_free_page(int priority)
 	return page;
 }
 
-/* memory.c */
+/* memory.c & swap.c*/
 
-extern void free_page(unsigned long addr);
+#define free_page(addr) free_pages((addr),0)
+extern void free_pages(unsigned long addr, unsigned long order);
+
+extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
 extern void free_page_tables(struct task_struct * tsk);

@@ -1655,7 +1655,7 @@ sock_wfree(struct sock *sk, void *mem, unsigned long size)
 {
   DPRINTF((DBG_INET, "sock_wfree(sk=%X, mem=%X, size=%d)\n", sk, mem, size));
 
-  IS_SKB(mem);
+  IS_SKB((struct sk_buff *) mem);
   kfree_skbmem(mem, size);
   if (sk) {
 	sk->wmem_alloc -= size;
@@ -1675,7 +1675,7 @@ void
 sock_rfree(struct sock *sk, void *mem, unsigned long size)
 {
   DPRINTF((DBG_INET, "sock_rfree(sk=%X, mem=%X, size=%d)\n", sk, mem, size));
-  IS_SKB(mem);
+  IS_SKB((struct sk_buff *) mem);
   kfree_skbmem(mem, size);
   if (sk) {
 	sk->rmem_alloc -= size;

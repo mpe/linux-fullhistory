@@ -152,22 +152,6 @@ get_firstr(struct sock *sk)
   return skb_dequeue(&sk->rqueue);
 }
 
-/*
- *	Difference between two values in tcp ack terms.
- */
-
-static long
-diff(unsigned long seq1, unsigned long seq2)
-{
-  long d;
-
-  d = seq1 - seq2;
-  if (d > 0) return(d);
-
-  /* I hope this returns what I want. */
-  return(~d+1);
-}
-
 /* This routine picks a TCP windows for a socket based on
    the following constraints
    

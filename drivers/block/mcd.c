@@ -476,9 +476,23 @@ printk("VOL %d %d\n", volctrl.channel0 & 0xFF, volctrl.channel1 & 0xFF);
 #endif
 		return 0;
 
-	case CDROMEJECT:     /* Eject the drive - N/A */
+	case CDROMEJECT:
+ 	       /* all drives can atleast stop! */
+ 		if (audioStatus == CDROM_AUDIO_PLAY) {
+ 		  outb(MCMD_STOP, MCDPORT(0));
+ 		  i = getMcdStatus(MCD_STATUS_DELAY);
+ 		}
+ 
+ 		audioStatus = CDROM_AUDIO_NO_STATUS;
+ 
+		outb(MCMD_EJECT, MCDPORT(0));
+		/*
+		 * the status (i) shows failure on all but the FX drives.
+		 * But nothing we can do about that in software!
+		 * So just read the status and forget it. - Jon.
+		 */
+ 		i = getMcdStatus(MCD_STATUS_DELAY);
 		return 0;
-
 	default:
 		return -EINVAL;
 	}
