@@ -1800,12 +1800,11 @@ int paste_selection(struct tty_struct *tty)
 	if (! *bp)
 		return 0;
 	unblank_screen();
-	while (*bp)
-	{
+	while (*bp) {
 		put_tty_queue(*bp, &tty->read_q);
 		bp++;
+		TTY_READ_FLUSH(tty);
 	}
-	TTY_READ_FLUSH(tty);
 	return 0;
 }
 

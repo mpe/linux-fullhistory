@@ -956,7 +956,11 @@ int shrink_buffers(unsigned int priority)
 	bh = free_list;
 	i = nr_buffers >> priority;
 	for ( ; i-- > 0 ; bh = bh->b_next_free) {
-		if (bh->b_count || !bh->b_this_page)
+		if (bh->b_count) {
+			put_last_free(bh);
+			continue;
+		}
+		if (!bh->b_this_page)
 			continue;
 		if (bh->b_lock)
 			if (priority)
@@ -973,6 +977,29 @@ int shrink_buffers(unsigned int priority)
 			return 1;
 	}
 	return 0;
+}
+
+void show_buffers(void)
+{
+	struct buffer_head * bh;
+	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
+
+	printk("Buffer memory:   %6dkB\n",buffermem>>10);
+	printk("Buffer heads:    %6d\n",nr_buffer_heads);
+	printk("Buffer blocks:   %6d\n",nr_buffers);
+	bh = free_list;
+	do {
+		found++;
+		if (bh->b_lock)
+			locked++;
+		if (bh->b_dirt)
+			dirty++;
+		if (bh->b_count)
+			used++, lastused = found;
+		bh = bh->b_next_free;
+	} while (bh != free_list);
+	printk("Buffer mem: %d buffers, %d used (last=%d), %d locked, %d dirty\n",
+		found, used, lastused, locked, dirty);
 }
 
 /*

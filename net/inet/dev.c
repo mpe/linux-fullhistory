@@ -193,81 +193,49 @@ ip_addr_match(unsigned long me, unsigned long him)
 
 
 /* Check the address for our address, broadcasts, etc. */
-int
-chk_addr(unsigned long addr)
+int chk_addr(unsigned long addr)
 {
-  struct device *dev;
-  unsigned long dst;
+	struct device *dev;
+	unsigned long mask;
 
-  DPRINTF((DBG_DEV, "chk_addr(%s) --> ", in_ntoa(addr)));
-  dst = ntohl(addr);
+	/* Accept both `all ones' and `all zeros' as BROADCAST. */
+	if (addr == INADDR_ANY || addr == INADDR_BROADCAST)
+		return IS_BROADCAST;
 
-  /* Accept both `all ones' and `all zeros' as BROADCAST. */
-  if (dst == INADDR_ANY || dst == INADDR_BROADCAST) {
-	DPRINTF((DBG_DEV, "BROADCAST\n"));
-	return(IS_BROADCAST);
-  }
+	mask = get_mask(addr);
 
-  /* Accept all of the `loopback' class A net. */
-  if ((dst & IN_CLASSA_NET) == 0x7F000000L) {
-	DPRINTF((DBG_DEV, "LOOPBACK\n"));
+	/* Accept all of the `loopback' class A net. */
+	if ((addr & mask) == htonl(0x7F000000L))
+		return IS_MYADDR;
 
-	/*
-	 * We force `loopback' to be equal to MY_ADDR.
-	 */
-	return(IS_MYADDR);
-	/* return(IS_LOOPBACK); */
-  }
-
-  /* OK, now check the interface addresses. */
-  for (dev = dev_base; dev != NULL; dev = dev->next) {
-        if (!(dev->flags&IFF_UP))
-	        continue;
-	if ((dev->pa_addr == 0)/* || (dev->flags&IFF_PROMISC)*/)
-	        return(IS_MYADDR);
-	/* Is it the exact IP address? */
-	if (addr == dev->pa_addr) {
-		DPRINTF((DBG_DEV, "MYADDR\n"));
-		return(IS_MYADDR);
-	}
-
-	/* Nope. Check for a subnetwork broadcast. */
-	if ((addr & dev->pa_mask) == (dev->pa_addr & dev->pa_mask)) {
-		if ((addr & ~dev->pa_mask) == 0) {
-			DPRINTF((DBG_DEV, "SUBBROADCAST-0\n"));
-			return(IS_BROADCAST);
+	/* OK, now check the interface addresses. */
+	for (dev = dev_base; dev != NULL; dev = dev->next) {
+		if (!(dev->flags & IFF_UP))
+			continue;
+		if ((dev->pa_addr == 0)/* || (dev->flags&IFF_PROMISC)*/)
+			return IS_MYADDR;
+		/* Is it the exact IP address? */
+		if (addr == dev->pa_addr)
+			return IS_MYADDR;
+		/* Is it our broadcast address? */
+		if ((dev->flags & IFF_BROADCAST) && addr == dev->pa_brdaddr)
+			return IS_BROADCAST;
+		/* Nope. Check for a subnetwork broadcast. */
+		if (((addr ^ dev->pa_addr) & dev->pa_mask) == 0) {
+			if ((addr & ~dev->pa_mask) == 0)
+				return IS_BROADCAST;
+			if ((addr & ~dev->pa_mask) == ~dev->pa_mask)
+				return IS_BROADCAST;
 		}
-		if (((addr & ~dev->pa_mask) | dev->pa_mask)
-						== INADDR_BROADCAST) {
-			DPRINTF((DBG_DEV, "SUBBROADCAST-1\n"));
-			return(IS_BROADCAST);
+		/* Nope. Check for Network broadcast. */
+		if (((addr ^ dev->pa_addr) & mask) == 0) {
+			if ((addr & ~mask) == 0)
+				return IS_BROADCAST;
+			if ((addr & ~mask) == ~mask)
+				return IS_BROADCAST;
 		}
 	}
-
-	/* Nope. Check for Network broadcast. */
-	if(IN_CLASSA(dst)) {
-	  if( addr == (dev->pa_addr | 0xffffff00)) {
-	    DPRINTF((DBG_DEV, "CLASS A BROADCAST-1\n"));
-	    return(IS_BROADCAST);
-	  }
-	}
-	else if(IN_CLASSB(dst)) {
-	  if( addr == (dev->pa_addr | 0xffff0000)) {
-	    DPRINTF((DBG_DEV, "CLASS B BROADCAST-1\n"));
-	    return(IS_BROADCAST);
-	  }
-	}
-	else {   /* IN_CLASSC */
-	  if( addr == (dev->pa_addr | 0xff000000)) {
-	    DPRINTF((DBG_DEV, "CLASS C BROADCAST-1\n"));
-	    return(IS_BROADCAST);
-	  }
-	}
-  }
-
-  DPRINTF((DBG_DEV, "NONE\n"));
-  
-  return(0);		/* no match at all */
+	return 0;		/* no match at all */
 }
 
 

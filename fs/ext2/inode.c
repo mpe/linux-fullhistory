@@ -69,10 +69,11 @@ void ext2_discard_prealloc (struct inode * inode)
 {
 #ifdef EXT2_PREALLOCATE
 	if (inode->u.ext2_i.i_prealloc_count) {
+		int i = inode->u.ext2_i.i_prealloc_count;
+		inode->u.ext2_i.i_prealloc_count = 0;
 		ext2_free_blocks (inode->i_sb,
 				  inode->u.ext2_i.i_prealloc_block,
-				  inode->u.ext2_i.i_prealloc_count);
-		inode->u.ext2_i.i_prealloc_count = 0;
+				  i);
 	}
 #endif
 }

@@ -764,7 +764,6 @@ static struct sk_buff *ip_glue(struct ipq *qp)
    	skb->len = (len - qp->maclen);
    	skb->h.raw = skb->data;
    	skb->free = 1;
-   	skb->lock = 1;
  
    	/* Copy the original MAC and IP headers into the new buffer. */
    	ptr = (unsigned char *) skb->h.raw;

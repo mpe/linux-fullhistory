@@ -981,9 +981,6 @@ void show_mem(void)
 	printk("Free pages:      %6dkB\n",nr_free_pages<<(PAGE_SHIFT-10));
 	printk("Secondary pages: %6dkB\n",nr_secondary_pages<<(PAGE_SHIFT-10));
 	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-	printk("Buffer memory:   %6dkB\n",buffermem>>10);
-	printk("Buffer heads:    %6d\n",nr_buffer_heads);
-	printk("Buffer blocks:   %6d\n",nr_buffers);
 	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
 		total++;
@@ -998,6 +995,7 @@ void show_mem(void)
 	printk("%d free pages\n",free);
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
+	show_buffers();
 }
 
 /*

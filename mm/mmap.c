@@ -113,9 +113,9 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		mask |= PAGE_READONLY;
 	if (prot & PROT_WRITE)
 		if ((flags & MAP_TYPE) == MAP_PRIVATE)
-			mask |= PAGE_COW;
+			mask |= PAGE_COPY;
 		else
-			mask |= PAGE_RW;
+			mask |= PAGE_SHARED;
 	if (!mask)
 		return -EINVAL;
 

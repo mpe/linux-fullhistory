@@ -78,6 +78,7 @@ extern void		ip_queue_xmit(struct sock *sk,
 				      struct device *dev, struct sk_buff *skb,
 				      int free);
 extern void		ip_retransmit(struct sock *sk, int all);
+extern void		ip_do_retransmit(struct sock *sk, int all);
 extern int 		ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen);
 extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
 

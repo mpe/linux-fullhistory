@@ -136,6 +136,8 @@ static struct blist blacklist[] =
    {"SEAGATE", "ST296","921"},   /* Responds to all lun */
    {"SONY","CD-ROM CDU-541","4.3d"},
    {"TANDBERG","TDC 3600","U07"},  /* Locks up if polled for lun != 0 */
+   {"TEAC","CD-ROM","1.06"},	/* causes failed REQUEST SENSE on lun 1 for seagate
+				 * controller, which causes SCSI code to reset bus.*/
    {"TEXEL","CD-ROM","1.06"},   /* causes failed REQUEST SENSE on lun 1 for seagate
 				 * controller, which causes SCSI code to reset bus.*/
    {NULL, NULL, NULL}};	

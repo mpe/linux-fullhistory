@@ -550,6 +550,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					return set_selection(arg);
 				case 3:
 					return paste_selection(tty);
+				case 4:
+					unblank_screen();
+					return 0;
 #endif /* CONFIG_SELECTION */
 				default: 
 					return -EINVAL;

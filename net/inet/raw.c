@@ -115,7 +115,7 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   /* Now we need to copy this into memory. */
   skb->sk = sk;
   skb->len = len + skb->ip_hdr->ihl*sizeof(long);
-  skb->h.raw = skb->ip_hdr;
+  skb->h.raw = (unsigned char *) skb->ip_hdr;
   skb->dev = dev;
   skb->saddr = daddr;
   skb->daddr = saddr;

@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 15
-ALPHA =
+ALPHA = a
 
 all:	Version zImage
 

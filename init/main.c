@@ -326,6 +326,17 @@ static void parse_options(char *line)
 	envp_init[envs+1] = NULL;
 }
 
+static void copy_options(char * to, char * from)
+{
+	char c = ' ';
+
+	do {
+		if (c == ' ' && !memcmp("mem=", from, 4))
+			memory_end = simple_strtoul(from+4, &from, 0);
+		c = *(to++) = *(from++);
+	} while (c);
+}
+
 static void copro_timeout(void)
 {
 	fpu_error = 1;
@@ -351,7 +362,7 @@ asmlinkage void start_kernel(void)
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= PAGE_MASK;
 	ramdisk_size = RAMDISK_SIZE;
-	strcpy(command_line,COMMAND_LINE);
+	copy_options(command_line,COMMAND_LINE);
 #ifdef CONFIG_MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;

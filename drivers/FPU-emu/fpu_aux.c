@@ -17,6 +17,9 @@
 #include "control_w.h"
 
 
+static void fnop(void)
+{
+}
 
 void fclex(void)
 {
@@ -47,9 +50,16 @@ void finit()
   FPU_entry_eip = ip_offset = 0;
 }
 
+/*
+ * These are nops on the i387..
+ */
+#define feni fnop
+#define fdisi fnop
+#define fsetpm fnop
+
 static FUNC const finit_table[] = {
-  Un_impl, Un_impl, fclex, finit,
-  Un_impl, FPU_illegal, FPU_illegal, FPU_illegal
+  feni, fdisi, fclex, finit,
+  fsetpm, FPU_illegal, FPU_illegal, FPU_illegal
 };
 
 void finit_()
@@ -74,11 +84,6 @@ void fstsw_()
   (fstsw_table[FPU_rm])();
 }
 
-
-
-static void fnop(void)
-{
-}
 
 static FUNC const fp_nop_table[] = {
   fnop, FPU_illegal, FPU_illegal, FPU_illegal,
