@@ -11,6 +11,7 @@
 #include <linux/ioctl.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/highuid.h>
 
 #include <linux/smb_fs.h>
 #include <linux/smb_mount.h>
@@ -27,6 +28,9 @@ smb_ioctl(struct inode *inode, struct file *filp,
 	switch (cmd)
 	{
 	case SMB_IOC_GETMOUNTUID:
+		result = put_user(high2lowuid(server->mnt->mounted_uid), (old_uid_t *) arg);
+		break;
+	case SMB_IOC_GETMOUNTUID32:
 		result = put_user(server->mnt->mounted_uid, (uid_t *) arg);
 		break;
 

@@ -6,7 +6,6 @@
  *	Copyright 1998 Martin Mares
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <asm/dma.h>	/* isa_dma_bridge_buggy */

@@ -2241,14 +2241,24 @@ S3 Trio frame buffer device support
 CONFIG_FB_S3TRIO
   If you have a S3 Trio say Y. Say N for S3 Virge. 
 
-ATI Mach64 display support
-CONFIG_FB_ATY (EXPERIMENTAL)
+ATI Mach64 display support (EXPERIMENTAL)
+CONFIG_FB_ATY
   This driver supports graphics boards with the ATI Mach64 chips.
   Say Y if you have such a graphics board.
 
   The driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want). The
   module will be called atyfb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+ATI Rage128 display support (EXPERIMENTAL)
+CONFIG_FB_ATY128
+  This driver supports graphics boards with the ATI Rage128 chips.
+  Say Y if you have such a graphics board.
+
+  The driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want). The
+  module will be called aty128fb.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
 PowerMac "control" frame buffer device support
@@ -6360,7 +6370,7 @@ CONFIG_WANPIPE_PPP
 Cyclom 2X(tm) multiprotocol cards (EXPERIMENTAL)
 CONFIG_CYCLADES_SYNC
   Cyclom 2X from Cyclades Corporation (http://www.cyclades.com and
-  http://www.cyclades.com.br ) is an intelligent multiprotocol WAN
+  http://www.cyclades.com.br) is an intelligent multiprotocol WAN
   adapter with data transfer rates up to 512 Kbps. These cards support
   the X.25 and SNA related protocols. If you have one or more of these
   cards, say Y to this option. The next questions will ask you about
@@ -6376,7 +6386,7 @@ CONFIG_CYCLADES_SYNC
   Feel free to contact me or the cycsyn-devel mailing list at
   acme@conectiva.com.br and cycsyn-devel@bazar.conectiva.com.br for
   additional details, I hope to have documentation available as soon
-  as possible.
+  as possible (Cyclades Brazil is writing the Documentation).
 
   The driver will be compiled as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8038,12 +8048,9 @@ CONFIG_USB_CPIA
 USB OV511 Camera support
 CONFIG_USB_OV511
   Say Y here if you want to connect this type of camera to your
-  computer's USB port. See drivers/usb/README.ov511 for more
+  computer's USB port. See Documentation/usb/ov511.txt for more
   information and for a list of supported cameras.
   
-  NOTE: This code is experimental and you will not get video with it
-  yet.
-
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called ov511.o. If you want to compile it as a
@@ -8114,6 +8121,17 @@ CONFIG_USB_PROC
 
   Note that you must say Y to global "/proc filesystem support" under
   Filesystems for this to work.
+
+USB device file system
+CONFIG_USB_DEVICEFS
+  This file system implements a "devices" file, that lists
+  the currently connected to your USB busses, a "drivers" file
+  that lists the USB kernel client drivers currently loaded,
+  and for every connected device a file named "xxx/yyy", where
+  xxx is the bus number and yyy the device number, that can be used
+  by userspace drivers to talk to the device.
+
+  Most users want to say Y here.
 
 DABUSB driver
 CONFIG_USB_DABUSB
@@ -8597,11 +8615,11 @@ CONFIG_ROMFS_FS
   If you don't know whether you need it, then you don't need it:
   answer N.
 
-QNX filesystem support (read only) (EXPERIMENTAL)
+QNX4 filesystem support (read only) (EXPERIMENTAL)
 CONFIG_QNX4FS_FS  
   This is the filesystem used by the operating system QNX 4. Say Y if
   you intend to mount QNX hard disks or floppies. Unless you say Y to
-  "QNXFS read-write support" below, you will only be able to read
+  "QNX4FS write support" below, you will only be able to read
   these filesystems.
 
   This filesystem support is also available as a module ( = code which
@@ -8609,11 +8627,12 @@ CONFIG_QNX4FS_FS
   want). The module is called qnx4.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. 
 
-  If unsure, say N.
+  If you don't know whether you need it, then you don't need it:
+  answer N.
 
-QNXFS write support (DANGEROUS)
+QNX4FS write support (DANGEROUS)
 CONFIG_QNX4FS_RW
-  Say Y if you want to test write support for QNX filesystems.
+  Say Y if you want to test write support for QNX4 filesystems.
 
 Kernel automounter support
 CONFIG_AUTOFS_FS
@@ -12276,10 +12295,11 @@ CONFIG_DIO
 
 Processor Type
 CONFIG_6xx
-  There are two types of PowerPC chips supported. The more common
-  types (601,603,604,740,750) and the embedded versions (821 and 860).
-  Unless you are building a kernel for one of the embedded boards
-  using the 821 or 860 choose 6xx.
+  There are three types of PowerPC chips supported. The more common
+  types (601, 603, 604, 740, 750), the Motorola embedded versions (821,
+  823, 850, 855, 860), and the IBM embedded versions (403 and 405).
+  Unless you are building a kernel for one of the embedded processor
+  systems, choose 6xx.
 
 Machine Type
 CONFIG_PMAC
@@ -13520,7 +13540,7 @@ CONFIG_I2C_CHARDEV
 # LocalWords:  ACTiSYS Dongle dongle dongles esi actisys IrMate tekram BVM MVME
 # LocalWords:  BVME BVME WRITETHROUGH copyback writethrough fwmark syncookie tu
 # LocalWords:  alphalinux GOBIOS csn chemnitz nat ACARD AMI MegaRAID megaraid
-# LocalWords:  QNXFS ISI isicom xterms Apollos VPN RCPCI rcpci sgi visws pcmcia
+# LocalWords:  QNX4FS ISI isicom xterms Apollos VPN RCPCI rcpci sgi visws pcmcia
 # LocalWords:  IrLPT UIRCC Tecra Strebel jstrebel suse Eichwalder ke INI INIA
 # LocalWords:  FCP qlogicfc sym isapnp DTLK DoubleTalk rcsys dtlk DMAP SGIVW ar
 # LocalWords:  dmabuf EcoRadio MUTEFREQ GIrBIL girbil tepkom vol mha diplom PQS

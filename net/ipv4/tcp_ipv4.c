@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.193 2000/01/06 00:42:01 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.194 2000/01/09 02:19:41 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -443,9 +443,7 @@ static __inline__ void __tcp_v4_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
 	write_unlock(lock);
 }
 
@@ -477,7 +475,7 @@ void tcp_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		sk->prot->inuse--;
+		sock_prot_dec_use(sk->prot);
 	}
 	write_unlock_bh(lock);
 }
@@ -670,9 +668,7 @@ unique:
 
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
 	write_unlock_bh(&head->lock);
 
 #ifdef CONFIG_TCP_TW_RECYCLE
@@ -978,7 +974,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int err;
 
 	if (len < (iph->ihl << 2) + ICMP_MIN_LENGTH) { 
-		icmp_statistics.IcmpInErrors++; 
+		ICMP_INC_STATS_BH(IcmpInErrors); 
 		return;
 	}
 #if ICMP_MIN_LENGTH < 14
@@ -990,7 +986,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 
 	sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev->ifindex);
 	if (sk == NULL) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
 		return;
 	}
 	if (sk->state == TCP_TIME_WAIT) {
@@ -1003,12 +999,12 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	 * servers this needs to be solved differently.
 	 */
 	if (sk->lock.users != 0)
-		net_statistics.LockDroppedIcmps++;
+		NET_INC_STATS_BH(LockDroppedIcmps);
 
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq);
 	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
-		net_statistics.OutOfWindowIcmps++;
+		NET_INC_STATS(OutOfWindowIcmps);
 		goto out;
 	}
 
@@ -1082,12 +1078,12 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			BUG_TRAP(sk->lock.users == 0);
 			tp = &sk->tp_pinfo.af_tcp;
 			if (!between(seq, tp->snd_una, tp->snd_nxt)) {
-				net_statistics.OutOfWindowIcmps++;
+				NET_INC_STATS(OutOfWindowIcmps);
 				goto out;
 			}
 		} else {
 			if (seq != req->snt_isn) {
-				net_statistics.OutOfWindowIcmps++;
+				NET_INC_STATS(OutOfWindowIcmps);
 				goto out;
 			}
 
@@ -1112,7 +1108,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (!no_flags && !th->syn)
 			goto out;
 		if (sk->lock.users == 0) {
-			tcp_statistics.TcpAttemptFails++;
+			TCP_INC_STATS_BH(TcpAttemptFails);
 			sk->err = err;
 			/* Wake people up to see the error (see connect in sock.c) */
 			sk->error_report(sk);
@@ -1216,8 +1212,8 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 
 	ip_send_reply(tcp_socket->sk, skb, &arg, sizeof rth);
 
-	tcp_statistics.TcpOutSegs++;
-	tcp_statistics.TcpOutRsts++;
+	TCP_INC_STATS_BH(TcpOutSegs);
+	TCP_INC_STATS_BH(TcpOutRsts);
 }
 
 /* The code following below sending ACKs in SYN-RECV and TIME-WAIT states
@@ -1267,7 +1263,7 @@ static void tcp_v4_send_ack(struct sk_buff *skb, u32 seq, u32 ack, u32 win, u32 
 
 	ip_send_reply(tcp_socket->sk, skb, &arg, arg.iov[0].iov_len);
 
-	tcp_statistics.TcpOutSegs++;
+	TCP_INC_STATS_BH(TcpOutSegs);
 }
 
 static void tcp_v4_timewait_ack(struct sock *sk, struct sk_buff *skb)
@@ -1303,12 +1299,12 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 			   req->af.v4_req.loc_addr,
 			   RT_TOS(sk->protinfo.af_inet.tos) | RTO_CONN | sk->localroute,
 			   sk->bound_dev_if)) {
-		ip_statistics.IpOutNoRoutes++;
+		IP_INC_STATS_BH(IpOutNoRoutes);
 		return;
 	}
 	if(opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway) {
 		ip_rt_put(rt);
-		ip_statistics.IpOutNoRoutes++;
+		IP_INC_STATS_BH(IpOutNoRoutes);
 		return;
 	}
 
@@ -1488,7 +1484,7 @@ dropbacklog:
 	if (!want_cookie) 
 		BACKLOG(sk)--;
 drop:
-	tcp_statistics.TcpAttemptFails++;
+	TCP_INC_STATS_BH(TcpAttemptFails);
 	return 0;
 }
 
@@ -1692,7 +1688,7 @@ discard:
 	return 0;
 
 csum_err:
-	tcp_statistics.TcpInErrs++;
+	TCP_INC_STATS_BH(TcpInErrs);
 	goto discard;
 }
 
@@ -1715,7 +1711,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	__skb_pull(skb, skb->h.raw - skb->data);
 
 	/* Count it even if it's bad */
-	tcp_statistics.TcpInSegs++;
+	TCP_INC_STATS_BH(TcpInSegs);
 
 	if (len < sizeof(struct tcphdr))
 		goto bad_packet;
@@ -1755,7 +1751,7 @@ process:
 no_tcp_socket:
 	if (tcp_csum_verify(skb)) {
 bad_packet:
-		tcp_statistics.TcpInErrs++;
+		TCP_INC_STATS_BH(TcpInErrs);
 	} else {
 		tcp_v4_send_reset(skb);
 	}
@@ -1771,7 +1767,7 @@ discard_and_relse:
 
 do_time_wait:
 	if (tcp_csum_verify(skb)) {
-		tcp_statistics.TcpInErrs++;
+		TCP_INC_STATS_BH(TcpInErrs);
 		goto discard_and_relse;
 	}
 	switch(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
@@ -2218,11 +2214,7 @@ struct proto tcp_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
 	"TCP",				/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };
-
-
 
 void __init tcp_v4_init(struct net_proto_family *ops)
 {

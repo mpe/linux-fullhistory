@@ -287,6 +287,7 @@ int
 copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	    struct task_struct * p, struct pt_regs * regs)
 {
+	unsigned long msr;
 	struct pt_regs * childregs, *kregs;
 #ifdef __SMP__
 	extern void ret_from_smpfork(void);
@@ -310,7 +311,8 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 #else	
 	kregs->nip = (unsigned long)ret_from_syscall;
 #endif	
-	kregs->msr = MSR_KERNEL;
+	asm volatile("mfmsr %0" : "=r" (msr):);
+	kregs->msr = msr;
 	kregs->gpr[1] = (unsigned long)childregs - STACK_FRAME_OVERHEAD;
 	kregs->gpr[2] = (unsigned long)p;
 	

@@ -1143,6 +1143,29 @@ int pcmcia_get_next_window(window_handle_t *win, win_req_t *req)
     return pcmcia_get_window(win, (*win)->index+1, req);
 }
 
+/*=====================================================================
+
+    Return the PCI device associated with a card..
+
+======================================================================*/
+
+#ifdef CONFIG_CARDBUS
+
+struct pci_bus *pcmcia_lookup_bus(client_handle_t handle)
+{
+	socket_info_t *s;
+
+	if (CHECK_HANDLE(handle))
+		return NULL;
+	s = SOCKET(handle);
+	if (!(s->state & SOCKET_CARDBUS))
+		return NULL;
+
+	return s->cap.cb_dev->subordinate;
+}
+
+#endif
+
 /*======================================================================
 
     Get the current socket state bits.  We don't support the latched

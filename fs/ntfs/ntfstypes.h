@@ -72,11 +72,11 @@ typedef __kernel_mode_t ntmode_t;
 #endif
 #ifndef NTFS_UID_T
 #define NTFS_UID_T
-typedef __kernel_uid_t ntfs_uid_t;
+typedef uid_t ntfs_uid_t;
 #endif
 #ifndef NTFS_GID_T
 #define NTFS_GID_T
-typedef __kernel_gid_t ntfs_gid_t;
+typedef gid_t ntfs_gid_t;
 #endif
 #ifndef NTFS_SIZE_T
 #define NTFS_SIZE_T

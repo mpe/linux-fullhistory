@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.43 2000/01/06 00:42:08 davem Exp $
+ *	$Id: route.c,v 1.44 2000/01/09 02:19:51 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1176,7 +1176,7 @@ int ipv6_route_ioctl(unsigned int cmd, void *arg)
 
 int ip6_pkt_discard(struct sk_buff *skb)
 {
-	ipv6_statistics.Ip6OutNoRoutes++;
+	IP6_INC_STATS(Ip6OutNoRoutes);
 	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
 	kfree_skb(skb);
 	return 0;

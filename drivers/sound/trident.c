@@ -29,6 +29,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.05 Jan 08 2000 Luca Montecchiani <m.luca@iname.com>
+ *     adapt to 2.3.x new __setup/__initcall
  *  v0.04 Dec 31 1999 Ollie Lho
  *	Multiple Open, useing Middle Loop Interrupt to smooth playback
  *  v0.03 Dec 24 1999 Ollie Lho
@@ -68,7 +70,7 @@
 
 #undef DEBUG
 
-#define DRIVER_VERSION "0.03"
+#define DRIVER_VERSION "0.05"
 
 #define TRIDENT_FMT_STEREO     0x01
 #define TRIDENT_FMT_16BIT      0x02
@@ -2921,11 +2923,7 @@ static int trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_in
 	return 1; 
 }
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init init_trident(void)
-#endif
+static int __init init_trident(void)
 {
 	struct pci_dev *pcidev = NULL;
 	int foundone = 0;
@@ -2951,15 +2949,14 @@ int __init init_trident(void)
 	return 0;
 }
 
-#ifdef MODULE
-MODULE_AUTHOR("Alan Cox <alan@redhat.com>");
+MODULE_AUTHOR("Alan Cox, Aaron Holtzman, Ollie Lho");
 MODULE_DESCRIPTION("Trident 4DWave/SiS 7018 PCI Audio Driver");
 
 #ifdef DEBUG
 MODULE_PARM(debug,"i");
 #endif
 
-void cleanup_module(void)
+static void __exit cleanup_trident(void)
 {
 	while (devs != NULL) {
 		/* Kill interrupts, and SP/DIF */
@@ -2978,6 +2975,8 @@ void cleanup_module(void)
 		devs = devs->next;
 	}
 }
-#endif /* MODULE */
+
+module_init(init_trident);
+module_exit(cleanup_trident);
 
 

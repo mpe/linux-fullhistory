@@ -83,7 +83,7 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 				switch (code) {
 					case REL_X:	list->dx += value; break;
 					case REL_Y:	list->dy -= value; break;
-					case REL_WHEEL:	if (list->mode) list->dz += value; break;
+					case REL_WHEEL:	if (list->mode) list->dz -= value; break;
 				}
 				break;
 

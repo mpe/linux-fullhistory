@@ -8,6 +8,7 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/smp_lock.h>
+#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 
@@ -45,8 +46,8 @@ static int cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
 	tmp.st_nlink = inode->i_nlink;
-	tmp.st_uid = inode->i_uid;
-	tmp.st_gid = inode->i_gid;
+	SET_OLDSTAT_UID(tmp, inode->i_uid);
+	SET_OLDSTAT_GID(tmp, inode->i_gid);
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;
@@ -67,8 +68,8 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;
 	tmp.st_nlink = inode->i_nlink;
-	tmp.st_uid = inode->i_uid;
-	tmp.st_gid = inode->i_gid;
+	SET_STAT_UID(tmp, inode->i_uid);
+	SET_STAT_GID(tmp, inode->i_gid);
 	tmp.st_rdev = kdev_t_to_nr(inode->i_rdev);
 	tmp.st_size = inode->i_size;
 	tmp.st_atime = inode->i_atime;

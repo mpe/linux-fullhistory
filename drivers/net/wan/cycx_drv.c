@@ -1,12 +1,12 @@
 /*
 * cycx_drv.c	Cyclom 2X Support Module.
 *
-*		This module is a library of common hardware-specific
+*		This module is a library of common hardware specific
 *		functions used by the Cyclades Cyclom 2X sync card.
 *
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-*
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+*
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on sdladrv.c by Gene Kozin <genek@compuserve.com>
 *
@@ -15,15 +15,16 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* 1999/11/11	acme		set_current_state(TASK_INTERRUPTIBLE), code cleanup
+* 1999/11/11	acme		set_current_state(TASK_INTERRUPTIBLE), code
+*				cleanup
 * 1999/11/08	acme		init_cyc2x deleted, doing nothing
 * 1999/11/06	acme		back to read[bw], write[bw] and memcpy_to and
 *				fromio to use dpmbase ioremaped
-* 1999/10/26	acme		use isa_read[bw], isa_write[bw] and isa_memcpy_to
-*				and fromio
+* 1999/10/26	acme		use isa_read[bw], isa_write[bw] & isa_memcpy_to
+*				& fromio
 * 1999/10/23	acme		cleanup to only supports cyclom2x: all the other
-*				boards are no longer manufactured by cyclades, if
-*				someone wants to support them... be my guest!
+*				boards are no longer manufactured by cyclades,
+*				if someone wants to support them... be my guest!
 * 1999/05/28    acme		cycx_intack & cycx_intde gone for good
 * 1999/05/18	acme		lots of unlogged work, submitting to Linus...
 * 1999/01/03	acme		more judicious use of data types
@@ -65,7 +66,7 @@
 #include <asm/io.h>		/* read[wl], write[wl], ioremap, iounmap */
 
 #define	MOD_VERSION	0
-#define	MOD_RELEASE	4
+#define	MOD_RELEASE	5
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
@@ -103,7 +104,8 @@ static u16 checksum(u8 *buf, u32 len);
 /* private data */
 static char modname[] = "cycx_drv";
 static char fullname[] = "Cyclom 2X Support Module";
-static char copyright[]	= "(c) 1998, 1999 Arnaldo Carvalho de Melo";
+static char copyright[] = "(c) 1998-2000 Arnaldo Carvalho de Melo "
+			  "<acme@conectiva.com.br>";
 
 /* Hardware configuration options.
  * These are arrays of configuration options used by verification routines.
@@ -130,8 +132,9 @@ static u32 cycx_2x_irq_options[]  = { 7, 3, 5, 9, 10, 11, 12, 15 };
 #ifdef MODULE
 int init_module(void)
 {
-	printk(KERN_INFO "%s v%u.%u %s\n",
-		fullname, MOD_VERSION, MOD_RELEASE, copyright);
+	printk(KERN_INFO "%s v%u.%u %s\n", fullname, MOD_VERSION, MOD_RELEASE,
+			 copyright);
+
 	return 0;
 }
 /* Module 'remove' entry point.
@@ -198,6 +201,7 @@ EXPORT_SYMBOL(cycx_down);
 int cycx_down(cycxhw_t *hw)
 {
 	iounmap((u32 *)hw->dpmbase);
+
 	return 0;
 }
 
@@ -226,7 +230,9 @@ int cycx_exec(u32 addr)
 
 	while (cyc2x_readw(addr)) {
 		udelay(1000);
-		if (++i > 50) return -1;
+		
+		if (++i > 50)
+			return -1;
 	}
 
 	return 0;
@@ -271,7 +277,8 @@ static int memory_exists(u32 addr)
 		cyc2x_writew(TEST_PATTERN, addr + 0x10);
 
 		if (cyc2x_readw(addr + 0x10) == TEST_PATTERN)
-			if (cyc2x_readw(addr + 0x10) == TEST_PATTERN) return 1;
+			if (cyc2x_readw(addr + 0x10) == TEST_PATTERN)
+				return 1;
 
 		delay_cycx(1);
 	}
@@ -298,6 +305,7 @@ static int buffer_load(u32 addr, u8 *buffer, u32 cnt)
 {
 	cyc2x_memcpy_toio(addr + DATA_OFFSET, buffer, cnt);
 	cyc2x_writew(GEN_BOOT_DAT, addr + CMD_OFFSET);
+
 	return wait_cyc(addr);
 }
 
@@ -434,38 +442,39 @@ static int load_cyc2x(cycxhw_t *hw, cfm_t *cfm, u32 len)
 	if (((len - sizeof(cfm_t) - 1) != cfm->info.codesize) ||
 */
 	if (cksum != cfm->checksum) {
-		printk(KERN_ERR "%s:" __FUNCTION__ ": firmware corrupted!\n", modname);
+		printk(KERN_ERR "%s:" __FUNCTION__ ": firmware corrupted!\n",
+				modname);
 		printk(KERN_ERR " cdsize = 0x%x (expected 0x%lx)\n",
-                       len - sizeof(cfm_t) - 1, cfm->info.codesize);
+				len - sizeof(cfm_t) - 1, cfm->info.codesize);
                 printk(KERN_ERR " chksum = 0x%x (expected 0x%x)\n",
-                       cksum, cfm->checksum);
+				cksum, cfm->checksum);
 		return -EINVAL;
 	}
 
 	/* If everything is ok, set reset, data and code pointers */
 
-	img_hdr = (cycx_header_t*)(((u8*) cfm) + sizeof(cfm_t) - 1);
+	img_hdr = (cycx_header_t*)(((u8*)cfm) + sizeof(cfm_t) - 1);
 #ifdef FIRMWARE_DEBUG
 	printk(KERN_INFO "%s:" __FUNCTION__ ": image sizes\n", modname);
 	printk(KERN_INFO " reset=%lu\n", img_hdr->reset_size);
 	printk(KERN_INFO "  data=%lu\n", img_hdr->data_size);
 	printk(KERN_INFO "  code=%lu\n", img_hdr->code_size);
 #endif
-	reset_image = ((u8 *) img_hdr) + sizeof(cycx_header_t);
+	reset_image = ((u8 *)img_hdr) + sizeof(cycx_header_t);
 	data_image = reset_image + img_hdr->reset_size;
 	code_image = data_image + img_hdr->data_size;
 
 	/*---- Start load ----*/
         /* Announce */
 	printk(KERN_INFO "%s: loading firmware %s (ID=%u)...\n", modname,
-		(cfm->descr[0] != '\0') ? cfm->descr : "unknown firmware",
-		cfm->info.codeid);
+			 cfm->descr[0] ? cfm->descr : "unknown firmware",
+			 cfm->info.codeid);
 
 	for (i = 0 ; i < 5 ; i++) {
 		/* Reset Cyclom hardware */
 		if (!reset_cyc2x(hw->dpmbase)) {
-			printk(KERN_ERR "%s: dpm problem or board not "
-					"found.\n", modname);
+			printk(KERN_ERR "%s: dpm problem or board not found\n",
+					modname);
 			return -EINVAL;
 		}
 
@@ -536,6 +545,7 @@ static void cycx_bootcfg(cycxhw_t *hw)
 static int detect_cyc2x(u32 addr)
 {
 	reset_cyc2x(addr);
+
 	return memory_exists(addr);
 }
 
@@ -560,6 +570,7 @@ static int reset_cyc2x(u32 addr)
 	delay_cycx(2);
 	cyc2x_writeb(0, addr + RST_DISABLE);
 	delay_cycx(2);
+
 	return memory_exists(addr);
 }
 

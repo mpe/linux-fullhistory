@@ -560,8 +560,8 @@ void unmap_kiobuf (struct kiobuf *iobuf)
 		map = iobuf->maplist[i];
 		
 		if (map && iobuf->locked) {
-			__free_page(map);
 			UnlockPage(map);
+			__free_page(map);
 		}
 	}
 	

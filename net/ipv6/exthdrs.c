@@ -7,7 +7,7 @@
  *	Andi Kleen		<ak@muc.de>
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: exthdrs.c,v 1.9 1999/05/17 23:47:35 davem Exp $
+ *	$Id: exthdrs.c,v 1.10 2000/01/09 02:19:55 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -198,7 +198,7 @@ static u8* ipv6_routing_header(struct sk_buff **skb_ptr, u8 *nhptr)
 	struct rt0_hdr *rthdr;
 
 	if (((hdr->hdrlen+1)<<3) > skb->tail - skb->h.raw) {
-		ipv6_statistics.Ip6InHdrErrors++;
+		IP6_INC_STATS_BH(Ip6InHdrErrors);
 		kfree_skb(skb);
 		return NULL;
 	}
@@ -468,7 +468,7 @@ static int ipv6_hop_jumbo(struct sk_buff *skb, u8 *ptr)
 	}
 
 	if (pkt_len > skb->len - sizeof(struct ipv6hdr)) {
-		ipv6_statistics.Ip6InTruncatedPkts++;
+		IP6_INC_STATS_BH(Ip6InTruncatedPkts);
 		goto drop;
 	}
 	skb_trim(skb, pkt_len + sizeof(struct ipv6hdr));

@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.45 1999/09/06 04:58:03 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.46 2000/01/09 02:19:32 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -479,7 +479,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if (optlen<1)
 				goto e_inval;
 			if(val==-1)
-				val = ip_statistics.IpDefaultTTL;
+				val = sysctl_ip_default_ttl;
 			if(val<1||val>255)
 				goto e_inval;
 			sk->protinfo.af_inet.ttl=val;

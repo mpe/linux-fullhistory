@@ -99,7 +99,41 @@ int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 	}
 	err = 0;
 out:
-	return err; 
+	return err;
+}
+
+/* Copy and checkum skb to user iovec. Caller _must_ check that
+   skb will fit to this iovec.
+ */
+
+int copy_and_csum_toiovec(struct iovec *iov, struct sk_buff *skb, int hlen)
+{
+	unsigned int csum;
+	int chunk = skb->len - hlen;
+
+	/* Skip filled elements. Pretty silly, look at mecpy_toiove, though 8) */
+	while (iov->iov_len == 0)
+		iov++;
+
+	if (iov->iov_len < chunk) {
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, chunk+hlen, skb->csum)))
+			goto csum_error;
+		if (memcpy_toiovec(iov, skb->h.raw + hlen, chunk))
+			goto csum_error;
+	} else {
+		int err = 0;
+		csum = csum_partial(skb->h.raw, hlen, skb->csum);
+		csum = csum_and_copy_to_user(skb->h.raw+hlen, iov->iov_base,
+					     chunk, csum, &err);
+		if (err || ((unsigned short)csum_fold(csum)))
+			goto csum_error;
+		iov->iov_len -= chunk;
+		iov->iov_base += chunk;
+	}
+	return 0;
+
+csum_error:
+	return -EFAULT;
 }
 
 /*

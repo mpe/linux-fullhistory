@@ -50,8 +50,8 @@ struct ext2_sb_info {
 	unsigned long s_block_bitmap_number[EXT2_MAX_GROUP_LOADED];
 	struct buffer_head * s_block_bitmap[EXT2_MAX_GROUP_LOADED];
 	unsigned long  s_mount_opt;
-	unsigned short s_resuid;
-	unsigned short s_resgid;
+	uid_t s_resuid;
+	gid_t s_resgid;
 	unsigned short s_mount_state;
 	unsigned short s_pad;
 	int s_addr_per_block_bits;

@@ -120,7 +120,6 @@ struct dn_scp                                   /* Session Control Port */
 
 /*
  * src,dst : Source and Destination DECnet addresses
- * neigh: Address from which we've just got this skb.
  * hops : Number of hops through the network
  * dst_port, src_port : NSP port numbers
  * services, info : Useful data extracted from conninit messages
@@ -134,13 +133,12 @@ struct dn_scp                                   /* Session Control Port */
  *
  * As a general policy, this structure keeps all addresses in network
  * byte order, and all else in host byte order. Thus dst, src, dst_port
- * src_port and neigh are in network order. All else is in host order.
+ * and src_port are in network order. All else is in host order.
  * 
  */
 struct dn_skb_cb {
 	unsigned short dst;
 	unsigned short src;
-	unsigned short neigh;
 	unsigned short hops;
 	unsigned short dst_port;
 	unsigned short src_port;
@@ -184,7 +182,7 @@ extern struct sock *dn_sklist_find_listener(struct sockaddr_dn *addr);
 extern struct sock *dn_find_by_skb(struct sk_buff *skb);
 #define DN_ASCBUF_LEN 7
 extern char *dn_addr2asc(dn_address, char *);
-extern void dn_destroy_sock(struct sock *sk);
+extern int dn_destroy_timer(struct sock *sk);
 
 extern int dn_sockaddr2username(struct sockaddr_dn *addr, unsigned char *buf, unsigned char type);
 extern int dn_username2sockaddr(unsigned char *data, int len, struct sockaddr_dn *addr, unsigned char *type);
@@ -196,7 +194,6 @@ extern void dn_stop_fast_timer(struct sock *sk);
 
 extern dn_address decnet_address;
 extern unsigned char decnet_ether_address[6];
-extern int decnet_node_type;
 extern int decnet_debug_level;
 extern int decnet_time_wait;
 extern int decnet_dn_count;

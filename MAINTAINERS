@@ -264,9 +264,8 @@ S:	Maintained
 DECnet NETWORK LAYER
 P:	Steven Whitehouse
 M:	SteveW@ACM.org
-W:	http://www.sucs.swan.ac.uk/~rohan/
-W:	http://www-sigproc.eng.cam.ac.uk/~sjw44/
-L:	netdev@oss.sgi.com
+W:	http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html
+L:	linux-decnet@dreamtime.org
 S:	Maintained
 
 DEVICE NUMBER REGISTRY
@@ -754,9 +753,23 @@ M:	promise@pnd-pc.demon.co.uk
 W:	http://www.pnd-pc.demon.co.uk/promise/
 S:	Maintained
 
+RAGE128 FRAMEBUFFER DISPLAY DRIVER
+P:	Brad Douglas
+M:	brad@neruo.com
+P:	Anthony Tong
+M:	atong@uiuc.edu
+L:	linux-fbdev@vcuser.vc.union.edu
+S:	Maintained
+
 RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER
 P:	Corey Thomas
 M:	corey@world.std.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+QNX4 FILESYSTEM
+P:	Anders Larsen
+M:	al@alarsen.net
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

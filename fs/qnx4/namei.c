@@ -33,7 +33,6 @@ static int qnx4_match(int len, const char *name,
 		      struct buffer_head *bh, unsigned long *offset)
 {
 	struct qnx4_inode_entry *de;
-	struct qnx4_link_info *le;
 	int namelen, thislen;
 
 	if (bh == NULL) {
@@ -80,8 +79,7 @@ static struct buffer_head *qnx4_find_entry(int len, struct inode *dir,
 	block = offset = blkofs = 0;
 	while (blkofs * QNX4_BLOCK_SIZE + offset < dir->i_size) {
 		if (!bh) {
-			block = qnx4_block_map( dir, blkofs );
-			bh = qnx4_bread(dir, block, 0);
+			bh = qnx4_bread(dir, blkofs, 0);
 			if (!bh) {
 				blkofs++;
 				continue;
@@ -89,6 +87,7 @@ static struct buffer_head *qnx4_find_entry(int len, struct inode *dir,
 		}
 		*res_dir = (struct qnx4_inode_entry *) (bh->b_data + offset);
 		if (qnx4_match(len, name, bh, &offset)) {
+			block = qnx4_block_map( dir, blkofs );
 			*ino = block * QNX4_INODES_PER_BLOCK +
 			    (offset / QNX4_DIR_ENTRY_SIZE) - 1;
 			return bh;

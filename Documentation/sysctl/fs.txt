@@ -23,6 +23,8 @@ Currently, these files are in /proc/sys/fs:
 - inode-max
 - inode-nr
 - inode-state
+- overflowuid
+- overflowgid
 - super-max
 - super-nr
 
@@ -114,6 +116,18 @@ Nr_free_inodes represents the number of free inodes (?) and
 preshrink is nonzero when the nr_inodes > inode-max and the
 system needs to prune the inode list instead of allocating
 more.
+
+==============================================================
+
+overflowgid & overflowuid:
+
+Some filesystems only support 16-bit UIDs and GIDs, although in Linux
+UIDs and GIDs are 32 bits. When one of these filesystems is mounted
+with writes enabled, any UID or GID that would exceed 65535 is translated
+to a fixed value before being written to disk.
+
+These sysctls allow you to change the value of the fixed UID and GID.
+The default is 65534.
 
 ==============================================================
 

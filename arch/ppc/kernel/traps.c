@@ -194,7 +194,6 @@ void
 ProgramCheckException(struct pt_regs *regs)
 {
 #if defined(CONFIG_4xx)
-	unsigned int instr;
 	unsigned int esr = mfspr(SPRN_ESR);
 
 	if (esr & ESR_PTR) {

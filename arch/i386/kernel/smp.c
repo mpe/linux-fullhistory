@@ -397,9 +397,7 @@ static void flush_tlb_all_ipi(void* info)
 
 void flush_tlb_all(void)
 {
-	if (cpu_online_map ^ (1 << smp_processor_id()))
-		while (smp_call_function (flush_tlb_all_ipi,0,0,1) == -EBUSY)
-			mb();
+	smp_call_function (flush_tlb_all_ipi,0,1,1);
 
 	do_flush_tlb_all_local();
 }
@@ -438,50 +436,45 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
  * [SUMMARY] Run a function on all other CPUs.
  * <func> The function to run. This must be fast and non-blocking.
  * <info> An arbitrary pointer to pass to the function.
- * <nonatomic> If true, we might schedule away to lock the mutex
+ * <nonatomic> currently unused.
  * <wait> If true, wait (atomically) until function has completed on other CPUs.
  * [RETURNS] 0 on success, else a negative status code. Does not return until
  * remote CPUs are nearly ready to execute <<func>> or are or have executed.
+ *
+ * You must not call this function with disabled interrupts or from a
+ * hardware interrupt handler, you may call it from a bottom half handler.
  */
 {
 	struct call_data_struct data;
 	int ret, cpus = smp_num_cpus-1;
-	static DECLARE_MUTEX(lock);
+	static spinlock_t lock = SPIN_LOCK_UNLOCKED;
 	unsigned long timeout;
 
-	if (nonatomic)
-		down(&lock);
-	else
-		if (down_trylock(&lock))
-			return -EBUSY;
+	if(cpus == 0)
+		return 0;
 
-	call_data = &data;
 	data.func = func;
 	data.info = info;
 	atomic_set(&data.started, 0);
 	data.wait = wait;
 	if (wait)
 		atomic_set(&data.finished, 0);
-	mb();
 
+	spin_lock_bh(&lock);
+	call_data = &data;
 	/* Send a message to all other CPUs and wait for them to respond */
 	send_IPI_allbutself(CALL_FUNCTION_VECTOR);
 
 	/* Wait for response */
-	timeout = jiffies + HZ;
-	while ((atomic_read(&data.started) != cpus)
-			&& time_before(jiffies, timeout))
+	/* FIXME: lock-up detection, backtrace on lock-up */
+	while(atomic_read(&data.started) != cpus)
 		barrier();
-	ret = -ETIMEDOUT;
-	if (atomic_read(&data.started) != cpus)
-		goto out;
+
 	ret = 0;
 	if (wait)
 		while (atomic_read(&data.finished) != cpus)
 			barrier();
-out:
-	call_data = NULL;
-	up(&lock);
+	spin_unlock_bh(&lock);
 	return 0;
 }
 
@@ -504,14 +497,12 @@ static void stop_this_cpu (void * dummy)
 
 void smp_send_stop(void)
 {
-	unsigned long flags;
+	smp_call_function(stop_this_cpu, NULL, 1, 0);
+	smp_num_cpus = 1;
 
-	__save_flags(flags);
 	__cli();
-        smp_call_function(stop_this_cpu, NULL, 1, 0);
 	disable_local_APIC();
-	__restore_flags(flags);
-
+	__sti();
 }
 
 /*
@@ -834,21 +825,18 @@ static unsigned int calibration_result;
 
 void __init setup_APIC_clocks(void)
 {
-	unsigned long flags;
-
-	__save_flags(flags);
 	__cli();
 
 	calibration_result = calibrate_APIC_clock();
-
-	smp_call_function(setup_APIC_timer, (void *)calibration_result, 1, 1);
-
 	/*
 	 * Now set up the timer for real.
 	 */
 	setup_APIC_timer((void *)calibration_result);
 
-	__restore_flags(flags);
+	__sti();
+
+	/* and update all other cpus */
+	smp_call_function(setup_APIC_timer, (void *)calibration_result, 1, 1);
 }
 
 /*

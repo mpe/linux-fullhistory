@@ -108,7 +108,9 @@ enum
  	KERN_MSGMNI=42,		/* int: msg queue identifiers */
  	KERN_SEM=43,		/* struct: sysv semaphore limits */
  	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
- 	KERN_SHMMNI=45		/* int: shm array identifiers */
+ 	KERN_SHMMNI=45,		/* int: shm array identifiers */
+	KERN_OVERFLOWUID=46,	/* int: overflow UID */
+	KERN_OVERFLOWGID=47	/* int: overflow GID */
 };
 
 
@@ -472,7 +474,7 @@ enum {
 	NET_DECNET_CONF_DEV_T1 = 2,
 	NET_DECNET_CONF_DEV_T2 = 3,
 	NET_DECNET_CONF_DEV_T3 = 4,
-	NET_DECNET_CONF_DEV_COST = 5,
+	NET_DECNET_CONF_DEV_FORWARDING = 5,
 	NET_DECNET_CONF_DEV_BLKSIZE = 6,
 	NET_DECNET_CONF_DEV_STATE = 7
 };
@@ -491,7 +493,9 @@ enum
 	FS_MAXFILE=7,	/* int:maximum number of filedescriptors that can be allocated */
 	FS_DENTRY=8,
 	FS_NRSUPER=9,	/* int:current number of allocated super_blocks */
-	FS_MAXSUPER=10 	/* int:maximum number of super_blocks that can be allocated */
+	FS_MAXSUPER=10,	/* int:maximum number of super_blocks that can be allocated */
+	FS_OVERFLOWUID=11,	/* int: overflow UID */
+	FS_OVERFLOWGID=12	/* int: overflow GID */
 };
 
 /* CTL_DEBUG names: */

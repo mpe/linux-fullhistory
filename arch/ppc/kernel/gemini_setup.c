@@ -330,7 +330,7 @@ void __init gemini_init_IRQ(void)
 	int i;
 
 	/* gemini has no 8259 */
-	open_pic.irq_offset = 0;
+	open_pic_irq_offset = 0;
 	for( i=0; i < NR_IRQS; i++ ) 
 		irq_desc[i].handler = &open_pic;
 	openpic_init(1);
@@ -515,7 +515,7 @@ void gemini_post_irq(int irq)
 	 * We do it this way since our irq_desc[irq].handler can change
 	 * with RTL and no longer be open_pic -- Cort
 	 */
-	if ( irq >= open_pic.irq_offset)
+	if ( irq >= open_pic_irq_offset)
 		openpic_eoi( smp_processor_id() );
 }
 

@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.39 1999/08/14 03:51:35 anton Exp $
+/* $Id: wof.S,v 1.40 2000/01/08 16:38:18 anton Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -395,7 +395,7 @@ C_LABEL(spwin_srmmu_stackchk):
 	 */
 	/* Check results of callers andcc %sp, 0x7, %g0 */
 	bne	spwin_user_stack_is_bolixed
-	 GET_PAGE_OFFSET(glob_tmp)
+	 sethi   %hi(PAGE_OFFSET), %glob_tmp
 	cmp	%glob_tmp, %sp
 	bleu	spwin_user_stack_is_bolixed
 	 mov	AC_M_SFSR, %glob_tmp

@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.45 1999/08/30 10:17:10 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.46 2000/01/09 02:19:36 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -211,8 +211,8 @@ static void ip_expire(unsigned long arg)
   	}
   
 	/* Send an ICMP "Fragment Reassembly Timeout" message. */
-	ip_statistics.IpReasmTimeout++;
-	ip_statistics.IpReasmFails++;   
+	IP_INC_STATS_BH(IpReasmTimeout);
+	IP_INC_STATS_BH(IpReasmFails);
 	icmp_send(qp->fragments->skb, ICMP_TIME_EXCEEDED, ICMP_EXC_FRAGTIME, 0);
 
 out:
@@ -395,7 +395,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	iph = skb->nh.iph;
 	iph->frag_off = 0;
 	iph->tot_len = htons(count);
-	ip_statistics.IpReasmOKs++;
+	IP_INC_STATS_BH(IpReasmOKs);
 	return skb;
 
 out_invalid:
@@ -414,7 +414,7 @@ out_oversize:
 			"Oversized IP packet from %d.%d.%d.%d.\n",
 			NIPQUAD(qp->iph->saddr));
 out_fail:
-	ip_statistics.IpReasmFails++;
+	IP_INC_STATS_BH(IpReasmFails);
 	return NULL;
 }
 
@@ -428,7 +428,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	int flags, offset;
 	int i, ihl, end;
 	
-	ip_statistics.IpReasmReqds++;
+	IP_INC_STATS_BH(IpReasmReqds);
 
 	spin_lock(&ipfrag_lock);
 
@@ -599,7 +599,7 @@ out_oversize:
 	/* the skb isn't in a fragment, so fall through to free it */
 out_freeskb:
 	kfree_skb(skb);
-	ip_statistics.IpReasmFails++;
+	IP_INC_STATS_BH(IpReasmFails);
 	if (qp)
 		goto out_timer;
 	goto out;

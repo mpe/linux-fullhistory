@@ -319,13 +319,12 @@ Parallel Ports
 ==============
 
    As of 2.1.33, parallel port support can now by handled by the parport
-driver.  Be aware that with Plug-and-Play support turned on, your
-parallel port may no longer be where you expect it; for example, LPT1
-(under DOS) was sometimes /dev/lp1 in Linux, but will probably be
-/dev/lp0 with the new Plug-and-Play driver.  If printing breaks with
-the new driver, try checking your lpd configuration.  A good source of
-more information is the Documentation/parport.txt file included with
-the kernel.
+driver.  Be aware that your parallel port may no longer be where you
+expect it; for example, LPT1 (under DOS) was sometimes /dev/lp1 in
+Linux, but will probably be /dev/lp0 with the new parport driver.  If
+printing breaks with the new driver, try checking your lpd
+configuration.  A good source of more information is the
+Documentation/parport.txt file included with the kernel.
 
 Setserial
 =========

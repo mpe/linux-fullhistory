@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.100 1999/12/21 04:05:02 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.101 2000/01/09 02:19:38 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -115,7 +115,7 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
-struct linux_mib net_statistics;
+struct linux_mib net_statistics[NR_CPUS*2];
 
 atomic_t inet_sock_nr;
 
@@ -397,7 +397,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &tcp_keepalive_timer;
 
-	sk->protinfo.af_inet.ttl=ip_statistics.IpDefaultTTL;
+	sk->protinfo.af_inet.ttl=sysctl_ip_default_ttl;
 
 	sk->protinfo.af_inet.mc_loop=1;
 	sk->protinfo.af_inet.mc_ttl=1;

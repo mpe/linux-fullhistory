@@ -374,8 +374,8 @@ void ndisc_send_na(struct net_device *dev, struct neighbour *neigh,
 
 	dev_queue_xmit(skb);
 
-	icmpv6_statistics.Icmp6OutNeighborAdvertisements++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+	ICMP6_INC_STATS(Icmp6OutNeighborAdvertisements);
+	ICMP6_INC_STATS(Icmp6OutMsgs);
 }        
 
 void ndisc_send_ns(struct net_device *dev, struct neighbour *neigh,
@@ -436,8 +436,8 @@ void ndisc_send_ns(struct net_device *dev, struct neighbour *neigh,
 	/* send it! */
 	dev_queue_xmit(skb);
 
-	icmpv6_statistics.Icmp6OutNeighborSolicits++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+	ICMP6_INC_STATS(Icmp6OutNeighborSolicits);
+	ICMP6_INC_STATS(Icmp6OutMsgs);
 }
 
 void ndisc_send_rs(struct net_device *dev, struct in6_addr *saddr,
@@ -487,8 +487,8 @@ void ndisc_send_rs(struct net_device *dev, struct in6_addr *saddr,
 	/* send it! */
 	dev_queue_xmit(skb);
 
-	icmpv6_statistics.Icmp6OutRouterSolicits++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+	ICMP6_INC_STATS(Icmp6OutRouterSolicits);
+	ICMP6_INC_STATS(Icmp6OutMsgs);
 }
 		   
 
@@ -912,8 +912,8 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 
 	dev_queue_xmit(buff);
 
-	icmpv6_statistics.Icmp6OutRedirects++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+	ICMP6_INC_STATS(Icmp6OutRedirects);
+	ICMP6_INC_STATS(Icmp6OutMsgs);
 }
 
 static __inline__ struct neighbour *

@@ -63,13 +63,13 @@
 
 #define OV511_I2C_RETRIES 3
 
-/* Video Size 384 x 288 x 3 bytes for RGB */
-#define MAX_FRAME_SIZE (320 * 240 * 3)
+/* Video Size 640 x 480 x 3 bytes for RGB */
+#define MAX_FRAME_SIZE (640 * 480 * 3)
 
 // FIXME - Force CIF to make some apps happy for the moment. Should find a 
 //         better way to do this.
-#define DEFAULT_WIDTH 320
-#define DEFAULT_HEIGHT 240
+#define DEFAULT_WIDTH 640
+#define DEFAULT_HEIGHT 480
 
 char kernel_version[] = UTS_RELEASE;
 
@@ -200,7 +200,9 @@ int ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char val
 		USB_TYPE_CLASS | USB_RECIP_DEVICE,
 		0, (__u16)reg, &value, 1, HZ);	
 			
+#if 0
 	PDEBUG("reg write: 0x%02X:0x%02X\n", reg, value);
+#endif
 			
 	return rc;
 }
@@ -217,7 +219,9 @@ int ov511_reg_read(struct usb_device *dev, unsigned char reg)
 		USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_DEVICE,
 		0, (__u16)reg, buffer, 1, HZ);
                                
+#if 0
 	PDEBUG("reg read: 0x%02X:0x%02X\n", reg, buffer[0]);
+#endif
 	
 	if(rc < 0)
 		return rc;
@@ -229,7 +233,9 @@ int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char val
 {
 	int rc, retries;
 
+#if 0
 	PDEBUG("i2c write: 0x%02X:0x%02X\n", reg, value);
+#endif
 	/* Three byte write cycle */
 	for(retries = OV511_I2C_RETRIES;;) {
 		/* Select camera register */
@@ -309,13 +315,63 @@ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 	}
 
 	value = ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);
+#if 0
 	PDEBUG("i2c read: 0x%02X:0x%02X\n", reg, value);
+#endif
 		
 	/* This is needed to make ov511_i2c_write() work */
 	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
 	if (rc < 0) return rc;
 	
 	return (value);
+}
+
+static void ov511_dump_i2c_range( struct usb_device *dev, int reg1, int regn)
+{
+	int i;
+	int rc;
+	for(i=reg1; i<=regn; i++) {
+	  rc = ov511_i2c_read(dev, i);
+	}
+}
+
+static void ov511_dump_i2c_regs( struct usb_device *dev)
+{
+	PDEBUG("I2C REGS\n");
+	ov511_dump_i2c_range(dev, 0x00, 0x38);
+}
+
+static void ov511_dump_reg_range( struct usb_device *dev, int reg1, int regn)
+{
+	int i;
+	int rc;
+	for(i=reg1; i<=regn; i++) {
+	  rc = ov511_reg_read(dev, i);
+	  PDEBUG("OV511[0x%X] = 0x%X\n", i, rc);
+	}
+}
+
+static void ov511_dump_regs( struct usb_device *dev)
+{
+	PDEBUG("CAMERA INTERFACE REGS\n");
+	ov511_dump_reg_range(dev, 0x10, 0x1f);
+	PDEBUG("DRAM INTERFACE REGS\n");
+	ov511_dump_reg_range(dev, 0x20, 0x23);
+	PDEBUG("ISO FIFO REGS\n");
+	ov511_dump_reg_range(dev, 0x30, 0x31);
+	PDEBUG("PIO REGS\n");
+	ov511_dump_reg_range(dev, 0x38, 0x39);
+	ov511_dump_reg_range(dev, 0x3e, 0x3e);
+	PDEBUG("I2C REGS\n");
+	ov511_dump_reg_range(dev, 0x40, 0x49);
+	PDEBUG("SYSTEM CONTROL REGS\n");
+	ov511_dump_reg_range(dev, 0x50, 0x53);
+	ov511_dump_reg_range(dev, 0x5e, 0x5f);
+	PDEBUG("OmniCE REGS\n");
+	ov511_dump_reg_range(dev, 0x70, 0x79);
+	ov511_dump_reg_range(dev, 0x80, 0x9f);
+	ov511_dump_reg_range(dev, 0xa0, 0xbf);
+
 }
 
 int ov511_reset(struct usb_device *dev, unsigned char reset_type)
@@ -399,8 +455,68 @@ int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 	return 0;
 }
 
-/* How much data is left in the scratch buf? */
-#define scratch_left(x)	(ov511->scratchlen - (int)((char *)x - (char *)ov511->scratch))
+/***************************************************************
+
+For a 640x480 images, data shows up in 1200 384 byte segments.  The
+first 128 bytes of each segment are probably some combo of UV but I
+haven't figured it out yet.  The next 256 bytes are apparently Y
+data and represent 4 squares of 8x8 pixels as follows:
+
+  0  1 ...  7    64  65 ...  71   ...  192 193 ... 199
+  8  9 ... 15    72  73 ...  79        200 201 ... 207
+       ...              ...                    ...
+ 56 57 ... 63   120 121     127        248 249 ... 255
+
+Right now I'm only moving the Y data and haven't figured out
+the UV data.
+
+If OV511_DUMPPIX is defined, _parse_data just dumps the
+incoming segments, verbatim, in order, into the frame.
+When used with vidcat -f ppm -s 640x480 this puts the data
+on the standard output and can be analyzed with the parseppm.c
+utility I wrote.  That's a much faster way for figuring out how
+this data is scrambled.
+
+****************************************************************/ 
+
+static void ov511_parse_data(unsigned char * pIn,
+			    unsigned char * pOut,
+			    int iSegment)
+			    
+{
+
+#ifndef OV511_DUMPPIX
+	int i, j, k, l, m;
+	int iOut;
+	unsigned char * pOut1;
+#define HDIV 8
+#define WDIV (256/HDIV)
+	i = iSegment / (DEFAULT_WIDTH/ WDIV);
+	j = iSegment - i * (DEFAULT_WIDTH/ WDIV);
+	iOut = (i*HDIV*DEFAULT_WIDTH + j*WDIV) * 3;
+	pOut += iOut;
+	pIn += 128;
+	for(k=0; k<4; k++) {
+	    pOut1 = pOut;
+	    for(l=0; l<8; l++) {
+	      for(m=0; m<8; m++) {
+		*pOut1++ = *pIn;
+		*pOut1++ = *pIn;
+		*pOut1++ = *pIn++;
+	      }
+	      pOut1 += (DEFAULT_WIDTH - 8) * 3;
+	    }
+	    pOut += 8 * 3;
+	}
+#else
+	/* Just dump pix data straight out for debug */
+	int i;
+	pOut += iSegment * 384;
+	for(i=0; i<384; i++) {
+	  *pOut++ = *pIn++;
+	}
+#endif
+}
 
 static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 {
@@ -421,7 +537,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 
 		if (!n) continue;
 
-		aPackNum[i] = n ? cdata[512] : -1;
+		aPackNum[i] = n ? cdata[992] : -1;
 
 		if (st){ 
 			// Macro - must be in braces!
@@ -436,7 +552,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		     cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
 		    (cdata[8] & 8) && (cdata[8] & 0x80)) {
 
-		    PDEBUG("Found Frame End!, packnum = %d\n", (int)(cdata[512]));
+		    PDEBUG("Found Frame End!, packnum = %d\n", (int)(cdata[992]));
 		    PDEBUG("Current frame = %d\n", ov511->curframe);
 
 		    if (frame->scanstate == STATE_LINES) {
@@ -452,35 +568,47 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		else if ((cdata[0] | cdata[1] | cdata[2] | cdata[3] | 
 			  cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
 			 (cdata[8] & 8)) {
-		    PDEBUG("ov511: Found Frame Start!, packnum = %d\n", (int)(cdata[512]));
+			PDEBUG("ov511: Found Frame Start!, packnum = %d\n", (int)(cdata[992]));
+			PDEBUG("ov511: Frame Header Byte = 0x%x\n", (int)(cdata[8]));
 		    frame->scanstate = STATE_LINES;
-		    frame->curpix = 0;
+			frame->segment = 0;
 		}
 
 		/* Are we in a frame? */
-		else if (frame->scanstate == STATE_LINES) {
-		  unsigned char *f = frame->data + 3 * frame->curpix;
-		  int i;
-		  if (frame->curpix <= 320 * 240 - 256) {
-		    for (i=0; i<256; i++) {
-		      *f++ = *cdata;
-		      *f++ = *cdata;
-		      *f++ = *cdata++;
-		      *f++ = *cdata;
-		      *f++ = *cdata;
-		      *f++ = *cdata++;
-		    }
-		    frame->curpix += 512;
+		if (frame->scanstate == STATE_LINES) {
+			unsigned char * pData;
+			int iPix;
+
+			/* Deal with leftover from last segment, if any */
+			if (frame->segment) {
+			  pData = ov511->scratch;
+			  iPix = - ov511->scratchlen;
+			  memmove(pData + ov511->scratchlen, cdata, iPix+384);
 		  } else {
-		    PDEBUG("Too many pixels!\n");
+			  pData = &cdata[iPix = 9];
 		  }
+
+			/* Parse the segments */
+			while(iPix <= 992 - 384 && frame->segment < 1200) {
+			  ov511_parse_data(pData, frame->data, frame->segment);
+			  frame->segment++;
+			  iPix += 384;
+			  pData = &cdata[iPix];
 		}
 
+			/* Save extra data for next time */
+			if (frame->segment < 1200) {
+			  memmove(ov511->scratch, pData, 992 - iPix);
+			  ov511->scratchlen = 992 - iPix;
+			}
+		}
 	}
 
+#if 0
 	PDEBUG("pn: %d %d %d %d %d %d %d %d %d %d\n",
 	       aPackNum[0], aPackNum[1], aPackNum[2], aPackNum[3], aPackNum[4],
 	       aPackNum[5],aPackNum[6], aPackNum[7], aPackNum[8], aPackNum[9]);
+#endif
 	return totlen;
 }
 
@@ -544,24 +672,179 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 	ov511->cursbuf = 0;
 	ov511->scratchlen = 0;
 
-	ov511_set_packet_size(ov511, 512);
+	ov511_reg_write(ov511->dev, 0x10, 0x00);
+	ov511_reg_write(ov511->dev, 0x11, 0x01);
+	ov511_reg_write(ov511->dev, 0x12, 0x4f);
+	ov511_reg_write(ov511->dev, 0x13, 0x3d);
+	ov511_reg_write(ov511->dev, 0x14, 0x00);
+	ov511_reg_write(ov511->dev, 0x15, 0x00);
+	ov511_reg_write(ov511->dev, 0x16, 0x01); /* 01 */
+	ov511_reg_write(ov511->dev, 0x17, 0x00);
+	ov511_reg_write(ov511->dev, 0x18, 0x03);
+	ov511_reg_write(ov511->dev, 0x19, 0x00);
+	ov511_reg_write(ov511->dev, 0x1a, 0x4f);
+	ov511_reg_write(ov511->dev, 0x1b, 0x3b);
+	ov511_reg_write(ov511->dev, 0x1c, 0x00);
+	ov511_reg_write(ov511->dev, 0x1d, 0x00);
+	ov511_reg_write(ov511->dev, 0x1e, 0x01);
+	ov511_reg_write(ov511->dev, 0x1f, 0x06);
 	
-#define OV511_COLOR_BAR_TEST
-#ifdef OV511_COLOR_BAR_TEST
-	{
-	  int rc;
-	  rc = ov511_i2c_read(ov511->dev, 0x12);
-	  rc = ov511_i2c_write(ov511->dev, 0x12, 0x3f);
-	  rc = ov511_i2c_read(ov511->dev, 0x12);
-	  rc = ov511_i2c_read(ov511->dev, 0x13);
-	  rc = ov511_i2c_write(ov511->dev, 0x14, 0x4);
-	  rc = ov511_i2c_read(ov511->dev, 0x14);
-	  rc = ov511_i2c_write(ov511->dev, 0x28, 0x60);
-	  rc = ov511_i2c_read(ov511->dev, 0x28);
-	  ov511_reg_write(ov511->dev, OV511_REG_CAMERA_DATA_INPUT_SELECT,
-			      0);
-	}
-#endif
+	ov511_reg_write(ov511->dev, 0x20, 0x01);
+	ov511_reg_write(ov511->dev, 0x21, 0x01);
+	ov511_reg_write(ov511->dev, 0x22, 0x01);
+	ov511_reg_write(ov511->dev, 0x23, 0x1a);
+
+	ov511_reg_write(ov511->dev, 0x30, 0x1f);
+	ov511_reg_write(ov511->dev, 0x31, 0x03);
+	ov511_reg_write(ov511->dev, 0x38, 0x00);
+	ov511_reg_write(ov511->dev, 0x39, 0x00);
+	ov511_reg_write(ov511->dev, 0x3e, 0x00);
+
+	ov511_reg_write(ov511->dev, 0x50, 0x00);
+	ov511_reg_write(ov511->dev, 0x51, 0x00);
+	ov511_reg_write(ov511->dev, 0x52, 0x01);
+	ov511_reg_write(ov511->dev, 0x53, 0x01);
+	ov511_reg_write(ov511->dev, 0x5e, 0x5a);
+	ov511_reg_write(ov511->dev, 0x5f, 0x00);
+
+	ov511_reg_write(ov511->dev, 0x70, 0x01); /* 3f */
+	ov511_reg_write(ov511->dev, 0x71, 0x01); /* 3f */
+	ov511_reg_write(ov511->dev, 0x72, 0x01);
+	ov511_reg_write(ov511->dev, 0x73, 0x01);
+	ov511_reg_write(ov511->dev, 0x74, 0x01);
+	ov511_reg_write(ov511->dev, 0x75, 0x01);
+	ov511_reg_write(ov511->dev, 0x76, 0x01);
+	ov511_reg_write(ov511->dev, 0x77, 0x01);
+	ov511_reg_write(ov511->dev, 0x78, 0x00);
+	ov511_reg_write(ov511->dev, 0x79, 0x00); /* 03 */
+
+	ov511_reg_write(ov511->dev, 0x80, 0x10);
+	ov511_reg_write(ov511->dev, 0x81, 0x21);
+	ov511_reg_write(ov511->dev, 0x82, 0x32);
+	ov511_reg_write(ov511->dev, 0x83, 0x43);
+	ov511_reg_write(ov511->dev, 0x84, 0x11);
+	ov511_reg_write(ov511->dev, 0x85, 0x21);
+	ov511_reg_write(ov511->dev, 0x86, 0x32);
+	ov511_reg_write(ov511->dev, 0x87, 0x44);
+	ov511_reg_write(ov511->dev, 0x88, 0x11);
+	ov511_reg_write(ov511->dev, 0x89, 0x22);
+	ov511_reg_write(ov511->dev, 0x8a, 0x43);
+	ov511_reg_write(ov511->dev, 0x8b, 0x44);
+	ov511_reg_write(ov511->dev, 0x8c, 0x22);
+	ov511_reg_write(ov511->dev, 0x8d, 0x32);
+	ov511_reg_write(ov511->dev, 0x8e, 0x44);
+	ov511_reg_write(ov511->dev, 0x8f, 0x44);
+	ov511_reg_write(ov511->dev, 0x90, 0x22);
+	ov511_reg_write(ov511->dev, 0x91, 0x43);
+	ov511_reg_write(ov511->dev, 0x92, 0x54);
+	ov511_reg_write(ov511->dev, 0x93, 0x55);
+	ov511_reg_write(ov511->dev, 0x94, 0x33);
+	ov511_reg_write(ov511->dev, 0x95, 0x44);
+	ov511_reg_write(ov511->dev, 0x96, 0x55);
+	ov511_reg_write(ov511->dev, 0x97, 0x55);
+	ov511_reg_write(ov511->dev, 0x98, 0x43);
+	ov511_reg_write(ov511->dev, 0x99, 0x44);
+	ov511_reg_write(ov511->dev, 0x9a, 0x55);
+	ov511_reg_write(ov511->dev, 0x9b, 0x55);
+	ov511_reg_write(ov511->dev, 0x9c, 0x44);
+	ov511_reg_write(ov511->dev, 0x9d, 0x44);
+	ov511_reg_write(ov511->dev, 0x9e, 0x55);
+	ov511_reg_write(ov511->dev, 0x9f, 0x55);
+
+	ov511_reg_write(ov511->dev, 0xa0, 0x20);
+	ov511_reg_write(ov511->dev, 0xa1, 0x32);
+	ov511_reg_write(ov511->dev, 0xa2, 0x44);
+	ov511_reg_write(ov511->dev, 0xa3, 0x44);
+	ov511_reg_write(ov511->dev, 0xa4, 0x22);
+	ov511_reg_write(ov511->dev, 0xa5, 0x42);
+	ov511_reg_write(ov511->dev, 0xa6, 0x44);
+	ov511_reg_write(ov511->dev, 0xa7, 0x44);
+	ov511_reg_write(ov511->dev, 0xa8, 0x22);
+	ov511_reg_write(ov511->dev, 0xa9, 0x43);
+	ov511_reg_write(ov511->dev, 0xaa, 0x44);
+	ov511_reg_write(ov511->dev, 0xab, 0x44);
+	ov511_reg_write(ov511->dev, 0xac, 0x43);
+	ov511_reg_write(ov511->dev, 0xad, 0x44);
+	ov511_reg_write(ov511->dev, 0xae, 0x44);
+	ov511_reg_write(ov511->dev, 0xaf, 0x44);
+	ov511_reg_write(ov511->dev, 0xb0, 0x44);
+	ov511_reg_write(ov511->dev, 0xb1, 0x44);
+	ov511_reg_write(ov511->dev, 0xb2, 0x44);
+	ov511_reg_write(ov511->dev, 0xb3, 0x44);
+	ov511_reg_write(ov511->dev, 0xb4, 0x44);
+	ov511_reg_write(ov511->dev, 0xb5, 0x44);
+	ov511_reg_write(ov511->dev, 0xb6, 0x44);
+	ov511_reg_write(ov511->dev, 0xb7, 0x44);
+	ov511_reg_write(ov511->dev, 0xb8, 0x44);
+	ov511_reg_write(ov511->dev, 0xb9, 0x44);
+	ov511_reg_write(ov511->dev, 0xba, 0x44);
+	ov511_reg_write(ov511->dev, 0xbb, 0x44);
+	ov511_reg_write(ov511->dev, 0xbc, 0x44);
+	ov511_reg_write(ov511->dev, 0xbd, 0x44);
+	ov511_reg_write(ov511->dev, 0xbe, 0x44);
+	ov511_reg_write(ov511->dev, 0xbf, 0x44);
+
+	ov511_i2c_write(ov511->dev, 0x13, 0x01); /* 01 */
+	ov511_i2c_write(ov511->dev, 0x00, 0x1E); /* 1E */
+	ov511_i2c_write(ov511->dev, 0x01, 0x80); /* 80 */
+	ov511_i2c_write(ov511->dev, 0x02, 0x80); /* 80 */
+	ov511_i2c_write(ov511->dev, 0x03, 0x86); /* 86 */
+	ov511_i2c_write(ov511->dev, 0x04, 0x80);
+	ov511_i2c_write(ov511->dev, 0x05, 0xff); /* ff */
+	ov511_i2c_write(ov511->dev, 0x06, 0x5a);
+	ov511_i2c_write(ov511->dev, 0x07, 0xd4);
+	ov511_i2c_write(ov511->dev, 0x08, 0x80);
+	ov511_i2c_write(ov511->dev, 0x09, 0x80);
+	ov511_i2c_write(ov511->dev, 0x0a, 0x80);
+	ov511_i2c_write(ov511->dev, 0x0b, 0xe0);
+	ov511_i2c_write(ov511->dev, 0x0c, 0x1f); /* 1f */
+	ov511_i2c_write(ov511->dev, 0x0d, 0x1f); /* 1f */
+	ov511_i2c_write(ov511->dev, 0x0e, 0x15); /* 15 */
+	ov511_i2c_write(ov511->dev, 0x0f, 0x03);
+	ov511_i2c_write(ov511->dev, 0x10, 0xff);
+	ov511_i2c_write(ov511->dev, 0x11, 0x01);
+	ov511_i2c_write(ov511->dev, 0x12, 0x24); /* 24 */
+	ov511_i2c_write(ov511->dev, 0x14, 0x04);
+	ov511_i2c_write(ov511->dev, 0x15, 0x01);
+	ov511_i2c_write(ov511->dev, 0x16, 0x06);
+	ov511_i2c_write(ov511->dev, 0x17, 0x38);
+	ov511_i2c_write(ov511->dev, 0x18, 0x03);
+	ov511_i2c_write(ov511->dev, 0x19, 0x05);
+	ov511_i2c_write(ov511->dev, 0x1a, 0xf4);
+	ov511_i2c_write(ov511->dev, 0x1b, 0x28);
+	ov511_i2c_write(ov511->dev, 0x1c, 0x7f);
+	ov511_i2c_write(ov511->dev, 0x1d, 0xa2);
+	ov511_i2c_write(ov511->dev, 0x1e, 0xc4);
+	ov511_i2c_write(ov511->dev, 0x1f, 0x04);
+	ov511_i2c_write(ov511->dev, 0x20, 0x1c);
+	ov511_i2c_write(ov511->dev, 0x21, 0x80);
+	ov511_i2c_write(ov511->dev, 0x22, 0x80);
+	ov511_i2c_write(ov511->dev, 0x23, 0x2a);
+	ov511_i2c_write(ov511->dev, 0x24, 0x10); /* 10 */
+	ov511_i2c_write(ov511->dev, 0x25, 0x8a); /* 8a */
+	ov511_i2c_write(ov511->dev, 0x26, 0x70);
+	ov511_i2c_write(ov511->dev, 0x27, 0xc2);
+	ov511_i2c_write(ov511->dev, 0x28, 0x24);
+	ov511_i2c_write(ov511->dev, 0x29, 0x11);
+	ov511_i2c_write(ov511->dev, 0x2a, 0x04);
+	ov511_i2c_write(ov511->dev, 0x2b, 0xac);
+	ov511_i2c_write(ov511->dev, 0x2c, 0xfe);
+	ov511_i2c_write(ov511->dev, 0x2d, 0x93);
+	ov511_i2c_write(ov511->dev, 0x2e, 0x80);
+	ov511_i2c_write(ov511->dev, 0x2f, 0xb0);
+	ov511_i2c_write(ov511->dev, 0x30, 0x71);
+	ov511_i2c_write(ov511->dev, 0x31, 0x90);
+	ov511_i2c_write(ov511->dev, 0x32, 0x22);
+	ov511_i2c_write(ov511->dev, 0x33, 0x20);
+	ov511_i2c_write(ov511->dev, 0x34, 0x8b);
+	ov511_i2c_write(ov511->dev, 0x35, 0x9e);
+	ov511_i2c_write(ov511->dev, 0x36, 0x7f);
+	ov511_i2c_write(ov511->dev, 0x37, 0x7f);
+	ov511_i2c_write(ov511->dev, 0x38, 0x81);
+	
+	ov511_dump_i2c_regs(ov511->dev);
+
+	ov511_set_packet_size(ov511, 993);
 
 	/* We double buffer the Iso lists */
 	urb = usb_alloc_urb(FRAMES_PER_DESC);
@@ -1265,13 +1548,25 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	if (rc < 0) {
 		printk("ov511: Unable to read camera bridge registers\n");
 		return NULL;
-	} else if (rc == 3) {  /* D-Link DSB-C300 */
+	}
+	
+	switch(ov511->customid = rc) {
+	case 0: /* This also means that no custom ID was set */
+		printk("ov511: Camera is probably a MediaForte MV300\n");
+		break;
+	case 3:
 		printk("ov511: Camera is a D-Link DSB-C300\n");
-		ov511->customid = 3;
-	} else if (rc == 21) { /* Creative Labs WebCam 3 */
+		break;
+	case 21:
 		printk("ov511: Camera is a Creative Labs WebCam 3\n");
-		ov511->customid = 21;		
-	} else {
+		break;
+	case 100:
+		printk("ov511: Camera is a Lifeview RoboCam\n");
+		break;
+	case 102:
+		printk("ov511: Camera is a AverMedia InterCam Elite\n");
+		break;
+	default:
 		printk("ov511: Specific camera type (%d) not recognized\n", rc);
 		printk("ov511: Please contact mmcclelland@delphi.com to request\n");
 		printk("ov511: support for your camera.\n");

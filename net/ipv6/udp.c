@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.47 2000/01/05 21:27:54 davem Exp $
+ *	$Id: udp.c,v 1.48 2000/01/09 02:19:53 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -45,7 +45,7 @@
 
 #include <net/checksum.h>
 
-struct udp_mib udp_stats_in6;
+struct udp_mib udp_stats_in6[NR_CPUS*2];
 
 /* Grrr, addr_type already calculated by caller, but I don't want
  * to add some silly "cookie" argument to this method just for that.
@@ -130,9 +130,7 @@ static void udp_v6_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
  	sock_hold(sk);
  	write_unlock_bh(&udp_hash_lock);
 }
@@ -145,7 +143,7 @@ static void udp_v6_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		sk->prot->inuse--;
+		sock_prot_dec_use(sk->prot);
 		__sock_put(sk);
 	}
 	write_unlock_bh(&udp_hash_lock);
@@ -494,8 +492,8 @@ static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 #if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
 	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
 		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
-			udp_stats_in6.UdpInErrors++;
-			ipv6_statistics.Ip6InDiscards++;
+			UDP6_INC_STATS_BH(UdpInErrors);
+			IP6_INC_STATS_BH(Ip6InDiscards);
 			kfree_skb(skb);
 			return 0;
 		}
@@ -503,13 +501,13 @@ static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	}
 #endif
 	if (sock_queue_rcv_skb(sk,skb)<0) {
-		udp_stats_in6.UdpInErrors++;
-		ipv6_statistics.Ip6InDiscards++;
+		UDP6_INC_STATS_BH(UdpInErrors);
+		IP6_INC_STATS_BH(Ip6InDiscards);
 		kfree_skb(skb);
 		return 0;
 	}
-  	ipv6_statistics.Ip6InDelivers++;
-	udp_stats_in6.UdpInDatagrams++;
+  	IP6_INC_STATS_BH(Ip6InDelivers);
+	UDP6_INC_STATS_BH(UdpInDatagrams);
 	return 0;
 }
 
@@ -607,7 +605,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	if (ulen > len || len < sizeof(*uh)) {
 		if (net_ratelimit())
 			printk(KERN_DEBUG "UDP: short packet: %d/%ld\n", ulen, len);
-		udp_stats_in6.UdpInErrors++;
+		UDP6_INC_STATS_BH(UdpInErrors);
 		kfree_skb(skb);
 		return(0);
 	}
@@ -667,7 +665,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 		    (unsigned short)csum_fold(csum_partial((char*)uh, len, skb->csum)))
 			goto discard;
 #endif
-		udp_stats_in6.UdpNoPorts++;
+		UDP6_INC_STATS_BH(UdpNoPorts);
 
 		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_PORT_UNREACH, 0, dev);
 
@@ -676,7 +674,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	}
 	if (0/*sk->user_callback &&
 	    sk->user_callback(sk->user_data, skb) == 0*/) {
-		udp_stats_in6.UdpInDatagrams++;
+		UDP6_INC_STATS_BH(UdpInDatagrams);
 		sock_put(sk);
 		return(0);
 	}
@@ -688,7 +686,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	return(0);
 	
 discard:
-	udp_stats_in6.UdpInErrors++;
+	UDP6_INC_STATS_BH(UdpInErrors);
 	kfree_skb(skb);
 	return(0);	
 }
@@ -885,7 +883,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	if (err < 0)
 		return err;
 
-	udp_stats_in6.UdpOutDatagrams++;
+	UDP6_INC_STATS_USER(UdpOutDatagrams);
 	return ulen;
 }
 
@@ -1002,8 +1000,6 @@ struct proto udpv6_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
 	"UDP",				/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };
 
 void __init udpv6_init(void)

@@ -635,9 +635,23 @@ struct proto {
 	unsigned short		max_header;
 	unsigned long		retransmits;
 	char			name[32];
-	int			inuse, highestinuse;
+
+	struct {
+		int inuse;
+		u8  __pad[SMP_CACHE_BYTES - sizeof(int)];
+	} stats[NR_CPUS];
 };
 
+/* Called with local bh disabled */
+static void __inline__ sock_prot_inc_use(struct proto *prot)
+{
+	prot->stats[smp_processor_id()].inuse++;
+}
+
+static void __inline__ sock_prot_dec_use(struct proto *prot)
+{
+	prot->stats[smp_processor_id()].inuse--;
+}
 
 /* About 10 seconds */
 #define SOCK_DESTROY_TIME (10*HZ)
@@ -731,6 +745,7 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 extern void *sock_kmalloc(struct sock *sk, int size, int priority);
 extern void sock_kfree_s(struct sock *sk, void *mem, int size);
 
+extern int copy_and_csum_toiovec(struct iovec *iov, struct sk_buff *skb, int hlen);
 
 /*
  * Functions to fill in entries in struct proto_ops when a protocol

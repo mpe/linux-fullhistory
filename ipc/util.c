@@ -18,6 +18,7 @@
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/malloc.h>
+#include <linux/highuid.h>
 
 #if defined(CONFIG_SYSVIPC)
 
@@ -67,7 +68,7 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size)
 int ipc_findkey(struct ipc_ids* ids, key_t key)
 {
 	int id;
-	struct ipc_perm* p;
+	struct kern_ipc_perm* p;
 
 	for (id = 0; id <= ids->max_id; id++) {
 		p = ids->entries[id].p;
@@ -108,7 +109,7 @@ static int grow_ary(struct ipc_ids* ids, int newsize)
 	return ids->size;
 }
 
-int ipc_addid(struct ipc_ids* ids, struct ipc_perm* new, int size)
+int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size)
 {
 	int id;
 
@@ -135,9 +136,9 @@ found:
 	return id;
 }
 
-struct ipc_perm* ipc_rmid(struct ipc_ids* ids, int id)
+struct kern_ipc_perm* ipc_rmid(struct ipc_ids* ids, int id)
 {
-	struct ipc_perm* p;
+	struct kern_ipc_perm* p;
 	int lid = id % SEQ_MULTIPLIER;
 	if(lid > ids->size)
 		BUG();
@@ -186,7 +187,7 @@ void ipc_free(void* ptr, int size)
  * Check user, group, other permissions for access
  * to ipc resources. return 0 if allowed
  */
-int ipcperms (struct ipc_perm *ipcp, short flag)
+int ipcperms (struct kern_ipc_perm *ipcp, short flag)
 {	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
 	int requested_mode, granted_mode;
 
@@ -202,6 +203,43 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 		return -1;
 
 	return 0;
+}
+
+/*
+ * Functions to convert between the kern_ipc_perm structure and the
+ * old/new ipc_perm structures
+ */
+
+void kernel_to_ipc64_perm (struct kern_ipc_perm *in, struct ipc64_perm *out)
+{
+	out->key	= in->key;
+	out->uid	= in->uid;
+	out->gid	= in->gid;
+	out->cuid	= in->cuid;
+	out->cgid	= in->cgid;
+	out->mode	= in->mode;
+	out->seq	= in->seq;
+}
+
+void ipc64_perm_to_ipc_perm (struct ipc64_perm *in, struct ipc_perm *out)
+{
+	out->key	= in->key;
+	out->uid	= NEW_TO_OLD_UID(in->uid);
+	out->gid	= NEW_TO_OLD_GID(in->gid);
+	out->cuid	= NEW_TO_OLD_UID(in->cuid);
+	out->cgid	= NEW_TO_OLD_GID(in->cgid);
+	out->mode	= in->mode;
+	out->seq	= in->seq;
+}
+
+int ipc_parse_version (int *cmd)
+{
+	if (*cmd & IPC_64) {
+		*cmd ^= IPC_64;
+		return IPC_64;
+	} else {
+		return IPC_OLD;
+	}
 }
 
 #else

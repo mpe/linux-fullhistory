@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.9 1999/08/23 06:30:34 davem Exp $
+ *  $Id: syncookies.c,v 1.10 2000/01/09 02:19:35 davem Exp $
  *
  *  Missing: IPv6 support. 
  */
@@ -60,7 +60,7 @@ __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb,
 		;
 	*mssp = msstab[mssind]+1;
 
-	net_statistics.SyncookiesSent++;
+	NET_INC_STATS_BH(SyncookiesSent);
 
 	return secure_tcp_syn_cookie(skb->nh.iph->saddr, skb->nh.iph->daddr,
 				     skb->h.th->source, skb->h.th->dest,
@@ -137,11 +137,11 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 
 	mss = cookie_check(skb, cookie);
 	if (mss == 0) {
-	 	net_statistics.SyncookiesFailed++;
+	 	NET_INC_STATS_BH(SyncookiesFailed);
 		return sk;
 	}
 
-	net_statistics.SyncookiesRecv++;
+	NET_INC_STATS_BH(SyncookiesRecv);
 
 	req = tcp_openreq_alloc();
 	if (req == NULL)

@@ -20,7 +20,7 @@
  *
  */
 
-#include "../kernel/ppc_asm.h"
+#include "../kernel/ppc_asm.tmpl"
 
 	.text
 

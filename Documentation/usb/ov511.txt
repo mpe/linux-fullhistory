@@ -4,20 +4,21 @@ Readme for Linux device driver for the OmniVision OV511 USB to camera bridge IC
 
 INTRODUCTION:
 
-This is a preliminary version of my OV511 Linux device driver. At the moment,
-it does not do much more than detect the chip and initialize it. As trivial
-as this sounds, it represents many hours of my work. Since OmniVision refused
-to release the full specs to me, I had to write code to probe out the register
-read/write commands. Some code is in place to allow a frame to be grabbed, but
-it is nowhere near complete.
+This is a preliminary version of my OV511 Linux device driver. Currently, it can
+grab a frame in black-and-white at 640x480 using the vidcat utility. Color,
+variable image size, and compatibility with other apps are currently under
+development.
 
 SUPPORTED CAMERAS:
-____________________________________________
-Manufacturer     | Model        | Custom ID 
------------------+--------------+-----------
-D-Link           | DSB-C300	    | 3
-Creative Labs    | WebCam 3     | 21
---------------------------------------------
+________________________________________________________
+Manufacturer     | Model          | Custom ID | Status
+-----------------+----------------+-----------+---------
+MediaForte       | MV300          | 0         | Untested
+D-Link           | DSB-C300	      | 3         | Working
+Creative Labs    | WebCam 3       | 21        | Working
+Lifeview         | RoboCam        |	100       | Untested
+AverMedia        | InterCam Elite | 102       | Untested
+--------------------------------------------------------
 
 Any camera using the OV511 and the OV7610 CCD should work with this driver. The
 driver only detects known cameras though, based on their custom id number. If
@@ -36,19 +37,6 @@ WHAT YOU NEED:
   
 WHAT NEEDS TO BE DONE:
 
-In short, a lot. 
-
-UPDATE:
-Currently, the control messages are working fine ("vendor commands"; for
-reading and writing the OV511 registers.) The I2C bus commands for reading and
-writing the camera (OV7610) registers are implemented and working, with at least
-one person's camera. The isochronous-in endpoint for video data is finally
-producing data, but since ov511_parse_data() is not implemented you will not see
-a picture yet.
-
-Support for specific CCD's will have to be implemented as well (such as the
-OV7610.) 
-
 The rest of the work will involve implementing support for all the different
 resolutions, color depths, etc. Also, while support for the OV511's proprietary
 lossy compression is apparently not necessary (the code currently disables it,)
@@ -66,5 +54,5 @@ CREDITS:
 
 The code is based in no small part on the CPiA driver by Johannes Erdfelt,
 Randy Dunlap, and others. Big thanks to them for their pioneering work on that
-and the USB stack. Thanks to Bret Wallach for getting camera reg IO and ISOC
-working.
+and the USB stack. Thanks to Bret Wallach for getting camera reg IO , ISOC, and
+preliminary image capture working.

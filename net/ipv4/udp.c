@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.76 2000/01/05 21:27:51 davem Exp $
+ * Version:	$Id: udp.c,v 1.77 2000/01/09 02:19:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -120,7 +120,7 @@
  *	Snmp MIB for the UDP layer
  */
 
-struct udp_mib		udp_statistics;
+struct udp_mib		udp_statistics[NR_CPUS*2];
 
 struct sock *udp_hash[UDP_HTABLE_SIZE];
 rwlock_t udp_hash_lock = RW_LOCK_UNLOCKED;
@@ -205,9 +205,7 @@ static void udp_v4_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
  	sock_hold(sk);
 	write_unlock_bh(&udp_hash_lock);
 }
@@ -220,7 +218,7 @@ static void udp_v4_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		sk->prot->inuse--;
+		sock_prot_dec_use(sk->prot);
 		__sock_put(sk);
 	}
 	write_unlock_bh(&udp_hash_lock);
@@ -326,13 +324,13 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int err;
 
 	if (len < (iph->ihl<<2)+sizeof(struct udphdr)) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
 		return;
 	}
 
 	sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source, skb->dev->ifindex);
 	if (sk == NULL) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
     	  	return;	/* No socket for error */
 	}
 
@@ -610,7 +608,7 @@ out:
 	if (free)
 		kfree(ipc.opt);
 	if (!err) {
-		udp_statistics.UdpOutDatagrams++;
+		UDP_INC_STATS_USER(UdpOutDatagrams);
 		return len;
 	}
 	return err;
@@ -748,7 +746,7 @@ out:
 
 #ifdef CONFIG_UDP_DELAY_CSUM
 csum_copy_err:
-	udp_statistics.UdpInErrors++;
+	UDP_INC_STATS_BH(UdpInErrors);
 
 	/* Clear queue. */
 	if (flags&MSG_PEEK) {
@@ -836,9 +834,9 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 #if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
 	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
 		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
-			udp_statistics.UdpInErrors++;
-			ip_statistics.IpInDiscards++;
-			ip_statistics.IpInDelivers--;
+			UDP_INC_STATS_BH(UdpInErrors);
+			IP_INC_STATS_BH(IpInDiscards);
+			ip_statistics[smp_processor_id()*2].IpInDelivers--;
 			kfree_skb(skb);
 			return -1;
 		}
@@ -847,13 +845,13 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 #endif
 
 	if (sock_queue_rcv_skb(sk,skb)<0) {
-		udp_statistics.UdpInErrors++;
-		ip_statistics.IpInDiscards++;
-		ip_statistics.IpInDelivers--;
+		UDP_INC_STATS_BH(UdpInErrors);
+		IP_INC_STATS_BH(IpInDiscards);
+		ip_statistics[smp_processor_id()*2].IpInDelivers--;
 		kfree_skb(skb);
 		return -1;
 	}
-	udp_statistics.UdpInDatagrams++;
+	UDP_INC_STATS_BH(UdpInDatagrams);
 	return 0;
 }
 
@@ -947,7 +945,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
   	uh = skb->h.uh;
 	__skb_pull(skb, skb->h.raw - skb->data);
 
-  	ip_statistics.IpInDelivers++;
+  	IP_INC_STATS_BH(IpInDelivers);
 
 	/*
 	 *	Validate the packet and the UDP length.
@@ -957,7 +955,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 
 	if (ulen > len || ulen < sizeof(*uh)) {
 		NETDEBUG(printk(KERN_DEBUG "UDP: short packet: %d/%d\n", ulen, len));
-		udp_statistics.UdpInErrors++;
+		UDP_INC_STATS_BH(UdpInErrors);
 		kfree_skb(skb);
 		return(0);
 	}
@@ -983,7 +981,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		if (udp_checksum_verify(skb, uh, ulen, saddr, daddr, 0))
 			goto csum_error;
 
-  		udp_statistics.UdpNoPorts++;
+		UDP_INC_STATS_BH(UdpNoPorts);
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 
 		/*
@@ -1019,7 +1017,7 @@ csum_error:
 			NIPQUAD(daddr),
 			ntohs(uh->dest),
 			ulen));
-	udp_statistics.UdpInErrors++;
+	UDP_INC_STATS_BH(UdpInErrors);
 	kfree_skb(skb);
 	return(0);
 }
@@ -1112,6 +1110,4 @@ struct proto udp_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
  	"UDP",				/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };

@@ -260,8 +260,6 @@ static void dn_nsp_disc_init(struct sock *sk, struct sk_buff *skb)
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	unsigned short reason;
 
-	/* printk(KERN_DEBUG "DECnet: discinit %d\n", skb->len); */
-
 	if (skb->len < 2)
 		goto out;
 
@@ -283,8 +281,6 @@ static void dn_nsp_disc_init(struct sock *sk, struct sk_buff *skb)
 	scp->addrrem = cb->src_port;
 	sk->state    = TCP_CLOSE;
 
-	/* printk(KERN_DEBUG "DECnet: discinit\n"); */
-
 	switch(scp->state) {
 		case DN_CI:
 		case DN_CD:
@@ -299,10 +295,15 @@ static void dn_nsp_disc_init(struct sock *sk, struct sk_buff *skb)
 			break;
 	}
 
-	if (!sk->dead)
+	if (!sk->dead) {
+		if (sk->socket->state != SS_UNCONNECTED)
+			sk->socket->state = SS_DISCONNECTING;
 		sk->state_change(sk);
+	}
 
-	dn_destroy_sock(sk);
+	dn_nsp_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC, GFP_ATOMIC);
+	scp->persist_fxn = dn_destroy_timer;
+	scp->persist = dn_nsp_persist(sk);
 
 out:
 	kfree_skb(skb);
@@ -343,10 +344,14 @@ static void dn_nsp_disc_conf(struct sock *sk, struct sk_buff *skb)
 			scp->state = DN_CN;
 	}
 
-	if (!sk->dead)
+	if (!sk->dead) {
+		if (sk->socket->state != SS_UNCONNECTED)
+			sk->socket->state = SS_DISCONNECTING;
 		sk->state_change(sk);
+	}
 
-	dn_destroy_sock(sk);
+	scp->persist_fxn = dn_destroy_timer;
+	scp->persist = dn_nsp_persist(sk);
 
 out:
 	kfree_skb(skb);
@@ -519,6 +524,18 @@ static void dn_returned_conn_init(struct sock *sk, struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
+static void dn_nsp_no_socket(struct sk_buff *skb)
+{
+	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
+
+	switch(cb->nsp_flags) {
+		case 0x28: /* Connect Confirm */
+			dn_nsp_return_disc(skb, NSP_DISCCONF, NSP_REASON_NL);
+	}
+
+	kfree_skb(skb);
+}
+
 static int dn_nsp_rx_packet(struct sk_buff *skb)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
@@ -615,6 +632,8 @@ got_it:
 
 		return ret;
 	}
+
+	dn_nsp_no_socket(skb);
 	return 1;
 
 free_out:

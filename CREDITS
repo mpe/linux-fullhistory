@@ -905,9 +905,9 @@ S: Germany
 
 N: Jauder Ho
 E: jauderho@carumba.com
-W: http://www.carumba.com/~jauderho/
+W: http://www.carumba.com/
 D: bug toaster (A1 sauce makes all the difference)
-D: Transmeta BOFH in my copius free time
+D: Random linux hacker
 
 N: Dirk Hohndel
 E: hohndel@suse.de
@@ -1455,9 +1455,9 @@ D: USB hacking
 D: miscellaneous Makefile & Config.in fixes
 D: Cyclom 2X synchronous card driver
 D: i18n for minicom, net-tools, util-linux, fetchmail, etc
-S: Conectiva Informática LTDA
-S: R. Prof. Rubens Elke Braga, 558 - Parolin
-S: 80220-320 Curitiba - Paraná
+S: Conectiva S.A.
+S: R. Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Paraná
 S: Brazil
 
 N: Michael Meskes
@@ -2068,13 +2068,13 @@ S: USA
 
 N: Marcelo W. Tosatti
 E: marcelo@conectiva.com.br
-W: http://lie-br.conectiva.com.br/~marcelo/
+W: http://bazar.conectiva.com.br/~marcelo/
 D: Miscellaneous kernel hacker
-D: Cyclom 2X driver hacker
+D: Cyclom 2X driver, drbd hacker
 D: linuxconf apache & proftpd module maintainer
-S: Conectiva Informática LTDA
-S: R. Prof. Rubens Elke Braga, 558 - Parolin
-S: 80220-320 Curitiba - Paraná
+S: Conectiva S.A.
+S: R. Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Paraná
 S: Brazil
 
 N: Stefan Traby
@@ -2314,6 +2314,7 @@ E: SteveW@ACM.org
 W: http://www-sigproc.eng.cam.ac.uk/~sjw44/
 D: Linux DECnet project: http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html
 D: Minor debugging of other networking protocols.
+D: Misc bug fixes and filesystem development
 
 N: Hans-Joachim Widmaier
 E: hjw@zvw.de

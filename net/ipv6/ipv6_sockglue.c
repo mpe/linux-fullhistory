@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.29 1999/08/31 07:04:06 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.30 2000/01/09 02:19:49 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -50,7 +50,8 @@
 
 #include <asm/uaccess.h>
 
-struct ipv6_mib ipv6_statistics={0, };
+struct ipv6_mib ipv6_statistics[NR_CPUS*2];
+
 struct packet_type ipv6_packet_type =
 {
 	__constant_htons(ETH_P_IPV6), 
@@ -165,13 +166,21 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 
 			if (sk->protocol == IPPROTO_TCP) {
 				struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-				
+
+				local_bh_disable();
+				sock_prot_dec_use(sk->prot);
+				sock_prot_inc_use(&tcp_prot);
+				local_bh_enable();
 				sk->prot = &tcp_prot;
 				tp->af_specific = &ipv4_specific;
 				sk->socket->ops = &inet_stream_ops;
 				sk->family = PF_INET;
 				tcp_sync_mss(sk, tp->pmtu_cookie);
 			} else {
+				local_bh_disable();
+				sock_prot_dec_use(sk->prot);
+				sock_prot_inc_use(&udp_prot);
+				local_bh_enable();
 				sk->prot = &udp_prot;
 				sk->socket->ops = &inet_dgram_ops;
 			}

@@ -57,8 +57,11 @@ ifdef CONFIG_SMP
 O_OBJS += smp.o
 endif
 
-ifeq ($(CONFIG_OAK),y)
-  O_OBJS += oak_setup.o
+ifeq ($(CONFIG_4xx),y)
+  O_OBJS += ppc4xx_pic.o
+  ifeq ($(CONFIG_OAK),y)
+    O_OBJS += oak_setup.o
+  endif
 endif
 
 ifeq ($(CONFIG_8xx),y)

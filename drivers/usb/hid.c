@@ -38,7 +38,6 @@
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/smp_lock.h>
-#include <linux/config.h>
 #include <linux/spinlock.h>
 
 #undef DEBUG

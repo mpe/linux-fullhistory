@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.23 2000/01/06 00:42:07 davem Exp $
+ *	$Id: ip6_output.c,v 1.24 2000/01/09 02:19:49 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -81,7 +81,7 @@ int ip6_output(struct sk_buff *skb)
 			}
 		}
 
-		ipv6_statistics.Ip6OutMcastPkts++;
+		IP6_INC_STATS(Ip6OutMcastPkts);
 	}
 
 	if (hh) {
@@ -158,7 +158,7 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	ipv6_addr_copy(&hdr->daddr, first_hop);
 
 	if (skb->len <= dst->pmtu) {
-		ipv6_statistics.Ip6OutRequests++;
+		IP6_INC_STATS(Ip6OutRequests);
 		return dst->output(skb);
 	}
 
@@ -358,7 +358,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 			skb = skb_copy(last_skb, sk->allocation);
 
 			if (skb == NULL) {
-				ipv6_statistics.Ip6FragFails++;
+				IP6_INC_STATS(Ip6FragFails);
 				kfree_skb(last_skb);
 				return -ENOMEM;
 			}
@@ -386,8 +386,8 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 				break;
 			}
 
-			ipv6_statistics.Ip6FragCreates++;
-			ipv6_statistics.Ip6OutRequests++;
+			IP6_INC_STATS(Ip6FragCreates);
+			IP6_INC_STATS(Ip6OutRequests);
 			err = dst->output(skb);
 			if (err) {
 				kfree_skb(last_skb);
@@ -397,7 +397,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 	}
 
 	if (err) {
-		ipv6_statistics.Ip6FragFails++;
+		IP6_INC_STATS(Ip6FragFails);
 		kfree_skb(last_skb);
 		return -EFAULT;
 	}
@@ -411,9 +411,9 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 
 	skb_put(last_skb, last_len);
 
-	ipv6_statistics.Ip6FragCreates++;
-	ipv6_statistics.Ip6FragOKs++;
-	ipv6_statistics.Ip6OutRequests++;
+	IP6_INC_STATS(Ip6FragCreates);
+	IP6_INC_STATS(Ip6FragOKs);
+	IP6_INC_STATS(Ip6OutRequests);
 	return dst->output(last_skb);
 }
 
@@ -473,7 +473,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		dst = ip6_route_output(sk, fl);
 
 	if (dst->error) {
-		ipv6_statistics.Ip6OutNoRoutes++;
+		IP6_INC_STATS(Ip6OutNoRoutes);
 		dst_release(dst);
 		return -ENETUNREACH;
 	}
@@ -552,7 +552,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 					  flags & MSG_DONTWAIT, &err);
 
 		if (skb == NULL) {
-			ipv6_statistics.Ip6OutDiscards++;
+			IP6_INC_STATS(Ip6OutDiscards);
 			goto out;
 		}
 
@@ -581,7 +581,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 			      0, length);
 
 		if (!err) {
-			ipv6_statistics.Ip6OutRequests++;
+			IP6_INC_STATS(Ip6OutRequests);
 			err = dst->output(skb);
 		} else {
 			err = -EFAULT;
@@ -711,7 +711,7 @@ int ip6_forward(struct sk_buff *skb)
 		/* Again, force OUTPUT device used as source address */
 		skb->dev = dst->dev;
 		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, dst->pmtu, skb->dev);
-		ipv6_statistics.Ip6InTooBigErrors++;
+		IP6_INC_STATS_BH(Ip6InTooBigErrors);
 		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
@@ -725,11 +725,11 @@ int ip6_forward(struct sk_buff *skb)
  
 	hdr->hop_limit--;
 
-	ipv6_statistics.Ip6OutForwDatagrams++;
+	IP6_INC_STATS_BH(Ip6OutForwDatagrams);
 	return dst->output(skb);
 
 drop:
-	ipv6_statistics.Ip6InAddrErrors++;
+	IP6_INC_STATS_BH(Ip6InAddrErrors);
 	kfree_skb(skb);
 	return -EINVAL;
 }

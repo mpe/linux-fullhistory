@@ -38,7 +38,7 @@ int usb_ov511_init(void);
 int usb_dc2xx_init(void);
 int usb_scanner_init(void);
 int usb_printer_init(void);
-int usb_scsi_init(void);
+int usb_stor_init(void);
 int usb_serial_init(void);
 int dabusb_init(void);
 int hid_init(void);
@@ -65,7 +65,8 @@ void cleanup_module(void)
 #ifdef CONFIG_USB_PROC
 	proc_usb_cleanup ();
 #endif
-	usb_hub_cleanup();	
+        usbdevfs_cleanup();
+	usb_hub_cleanup();
 
 }
 
@@ -82,6 +83,7 @@ int usb_init(void)
 #ifdef CONFIG_USB_PROC
 	proc_usb_init();
 #endif
+        usbdevfs_init();
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE
@@ -110,7 +112,7 @@ int usb_init(void)
 	usb_dc2xx_init();
 #endif
 #ifdef CONFIG_USB_SCSI
-	usb_scsi_init();
+	usb_stor_init();
 #endif
 #ifdef CONFIG_USB_DABUSB
 	dabusb_init();

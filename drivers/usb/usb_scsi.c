@@ -770,24 +770,24 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
 	SPRINTF ("Host scsi%d: usb-scsi\n", hostno);
 
 	/* print product and vendor strings */
-	if (!us->pusb_dev) {
+	tmp_ptr = kmalloc(256, GFP_KERNEL);
+	if (!us->pusb_dev || !tmp_ptr) {
 		SPRINTF("Vendor: Unknown Vendor\n");
 		SPRINTF("Product: Unknown Product\n");
 	} else {
 		SPRINTF("Vendor: ");
-		tmp_ptr = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer);
-		if (!tmp_ptr)
-			SPRINTF("Unknown Vendor\n");
-		else
+		if (usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer, tmp_ptr, 256) > 0)
 			SPRINTF("%s\n", tmp_ptr);
+		else
+			SPRINTF("Unknown Vendor\n");
     
 		SPRINTF("Product: ");
-		tmp_ptr = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct);
-		if (!tmp_ptr)
-			SPRINTF("Unknown Vendor\n");
-		else
+		if (usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct, tmp_ptr, 256) > 0)
 			SPRINTF("%s\n", tmp_ptr);
+		else
+			SPRINTF("Unknown Vendor\n");
 	}
+	kfree(tmp_ptr);
 
 	SPRINTF("Protocol: ");
 	switch (us->protocol) {
@@ -1196,9 +1196,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
 	int i;
-	char *mf;		     /* manufacturer */
-	char *prod;		     /* product */
-	char *serial;		     /* serial number */
+	char mf[32];		     /* manufacturer */
+	char prod[32];		     /* product */
+	char serial[32];	     /* serial number */
 	struct us_data *ss = NULL;
 	unsigned int flags = 0;
 	GUID(guid);		     /* Global Unique Identifier */
@@ -1211,9 +1211,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* clear the GUID and fetch the strings */
 	GUID_CLEAR(guid);
-	mf = usb_string(dev, dev->descriptor.iManufacturer);
-	prod = usb_string(dev, dev->descriptor.iProduct);
-	serial = usb_string(dev, dev->descriptor.iSerialNumber);
+	usb_string(dev, dev->descriptor.iManufacturer, mf, sizeof(mf));
+	usb_string(dev, dev->descriptor.iProduct, prod, sizeof(prod));
+	usb_string(dev, dev->descriptor.iSerialNumber, serial, sizeof(serial));
 
 	/* let's examine the device now */
 
@@ -1234,12 +1234,11 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	US_DEBUGP("USB Mass Storage device detected\n");
 
 	/* Create a GUID for this device */
-	if (dev->descriptor.iSerialNumber &&
-	    usb_string(dev, dev->descriptor.iSerialNumber) ) {
+	if (dev->descriptor.iSerialNumber && serial[0]) {
 		/* If we have a serial number, and it's a non-NULL string */
 		make_guid(guid, dev->descriptor.idVendor, 
 			  dev->descriptor.idProduct,
-			  usb_string(dev, dev->descriptor.iSerialNumber));
+			  serial);
 	} else {
 		/* We don't have a serial number, so we use 0 */
 		make_guid(guid, dev->descriptor.idVendor, 

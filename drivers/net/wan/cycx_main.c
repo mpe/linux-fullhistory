@@ -3,7 +3,7 @@
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on sdlamain.c by Gene Kozin <genek@compuserve.com> &
 *			 Jaspreet Singh	<jaspreet@sangoma.com>
@@ -13,6 +13,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/01/08	acme		cleanup
 * 1999/11/06	acme		cycx_down back to life (it needs to be
 *				called to iounmap the dpmbase)
 * 1999/08/09	acme		removed references to enable_tx_int
@@ -48,7 +49,7 @@ MODULE_DESCRIPTION("Cyclom 2X Sync Card Driver.");
 /* Defines & Macros */
 
 #define	DRV_VERSION	0		/* version number */
-#define	DRV_RELEASE	4		/* release (minor version) number */
+#define	DRV_RELEASE	5		/* release (minor version) number */
 #define	MAX_CARDS	1		/* max number of adapters */
 
 #ifndef	CONFIG_CYCLOMX_CARDS		/* configurable option */
@@ -76,7 +77,8 @@ static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs);
 /* private data */
 static char drvname[]	= "cyclomx";
 static char fullname[]	= "CYCLOM 2X(tm) Sync Card Driver";
-static char copyright[]	= "(c) 1998, 1999 Arnaldo Carvalho de Melo";
+static char copyright[] = "(c) 1998-2000 Arnaldo Carvalho de Melo "
+			  "<acme@conectiva.com.br>";
 static int ncards = CONFIG_CYCLOMX_CARDS;
 static cycx_t *card_array = NULL;	/* adapter data space */
 
@@ -88,7 +90,7 @@ static cycx_t *card_array = NULL;	/* adapter data space */
  * o allocate adapter data space
  * o initialize static data
  * o register all cards with WAN router
- * o calibrate CYCX shared memory access delay.
+ * o calibrate Cyclom 2X shared memory access delay.
  *
  * Return:	0	Ok
  *		< 0	error.
@@ -110,7 +112,8 @@ int __init cyclomx_init (void)
 	ncards = max(ncards, 1);
 	card_array = kmalloc(sizeof(cycx_t) * ncards, GFP_KERNEL);
 
-	if (card_array == NULL) return -ENOMEM;
+	if (!card_array)
+		return -ENOMEM;
 
 	memset(card_array, 0, sizeof(cycx_t) * ncards);
 
@@ -136,7 +139,8 @@ int __init cyclomx_init (void)
 		}
 	}
 
-	if (cnt) ncards = cnt;	/* adjust actual number of cards */
+	if (cnt)
+		ncards = cnt;	/* adjust actual number of cards */
 	else {
 		kfree(card_array);
 		err = -ENODEV;
@@ -165,13 +169,12 @@ void cleanup_module (void)
 #endif
 /* WAN Device Driver Entry Points */
 /*
- * Setup/confugure WAN link driver.
+ * Setup/configure WAN link driver.
  * o check adapter state
  * o make sure firmware is present in configuration
  * o allocate interrupt vector
- * o setup CYCLOM X hardware
+ * o setup Cyclom 2X hardware
  * o call appropriate routine to perform protocol-specific initialization
- * o mark I/O region as used
  *
  * This function is called when router handles ROUTER_SETUP IOCTL. The
  * configuration structure is in kernel memory (including extended data, if
@@ -184,13 +187,15 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	int irq;
 
 	/* Sanity checks */
-	if (!wandev || !wandev->private || !conf) return -EFAULT;
+	if (!wandev || !wandev->private || !conf)
+		return -EFAULT;
 
 	card = wandev->private;
 
-	if (wandev->state != WAN_UNCONFIGURED) return -EBUSY;
+	if (wandev->state != WAN_UNCONFIGURED)
+		return -EBUSY;
 
-	if (!conf->data_size || (conf->data == NULL)) {
+	if (!conf->data_size || !conf->data) {
 		printk(KERN_ERR "%s: firmware not found in configuration "
 				"data!\n", wandev->name);
 		return -EINVAL;
@@ -213,7 +218,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 
 	/* Configure hardware, load firmware, etc. */
 	memset(&card->hw, 0, sizeof(cycxhw_t));
-	card->hw.irq = (conf->irq == 9) ? 2 : conf->irq;
+	card->hw.irq = irq;
 	card->hw.dpmbase = conf->maddr;
 	card->hw.dpmsize = CYCX_WINDOWSIZE;
 	card->hw.fwid = CFID_X25_2X;
@@ -230,7 +235,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 		return err;
 	}
 
-	/* Intialize WAN device data space */
+	/* Initialize WAN device data space */
 	wandev->irq       = irq;
 	wandev->dma       = wandev->ioport = 0;
 	wandev->maddr     = (unsigned long*)card->hw.dpmbase;
@@ -241,7 +246,9 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	/* Protocol-specific initialization */
 	switch (card->hw.fwid) {
 #ifdef CONFIG_CYCLOMX_X25
-		case CFID_X25_2X: err = cyx_init(card, conf); break;
+		case CFID_X25_2X:
+			err = cyx_init(card, conf);
+			break;
 #endif
 		default:
 			printk(KERN_ERR "%s: this firmware is not supported!\n",
@@ -271,15 +278,19 @@ static int shutdown (wan_device_t *wandev)
 	cycx_t *card;
 
 	/* sanity checks */
-	if (!wandev || !wandev->private) return -EFAULT;
+	if (!wandev || !wandev->private)
+		return -EFAULT;
 
-	if (wandev->state == WAN_UNCONFIGURED) return 0;
+	if (wandev->state == WAN_UNCONFIGURED)
+		return 0;
 
 	card = wandev->private;
 	wandev->state = WAN_UNCONFIGURED;
 	cycx_down(&card->hw);
-	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name, wandev->irq);
+	printk(KERN_INFO "%s: irq %d being freed!\n", wandev->name,
+			wandev->irq);
 	free_irq(wandev->irq, card);
+
 	return 0;
 }
 
@@ -289,7 +300,9 @@ static int shutdown (wan_device_t *wandev)
  * o perform requested action
  *
  * This function is called when router handles one of the reserved user
- * IOCTLs.  Note that 'arg' stil points to user address space.
+ * IOCTLs.  Note that 'arg' still points to user address space.
+ *
+ * no reserved ioctls for the cyclom 2x up to now
  */
 static int ioctl (wan_device_t *wandev, unsigned cmd, unsigned long arg)
 {
@@ -298,8 +311,8 @@ static int ioctl (wan_device_t *wandev, unsigned cmd, unsigned long arg)
 
 /* Miscellaneous */
 /*
- * CYCX Interrupt Service Routine.
- * o acknowledge CYCX hardware interrupt.
+ * Cyclom 2X Interrupt Service Routine.
+ * o acknowledge Cyclom 2X hardware interrupt.
  * o call protocol-specific interrupt service routine, if any.
  */
 static void cycx_isr (int irq, void *dev_id, struct pt_regs *regs)
@@ -347,27 +360,22 @@ void cyclomx_close (cycx_t *card)
 void cyclomx_set_state (cycx_t *card, int state)
 {
 	unsigned long host_cpu_flags;
+	char *string_state = NULL;
 
 	spin_lock_irqsave(&card->lock, host_cpu_flags);
 
 	if (card->wandev.state != state) {
 		switch (state) {
 			case WAN_CONNECTED:
-				printk (KERN_INFO "%s: link connected!\n",
-						  card->devname);
-				break;
-
-			case WAN_CONNECTING:
-				printk (KERN_INFO "%s: link connecting...\n",
-						  card->devname);
+				string_state = "connected!";
 				break;
 
 			case WAN_DISCONNECTED:
-				printk (KERN_INFO "%s: link disconnected!\n",
-						  card->devname);
+				string_state = "disconnected!";
 				break;
 		}
 
+		printk(KERN_INFO "%s: link %s\n", card->devname, string_state);
 		card->wandev.state = state;
 	}
 

@@ -106,10 +106,10 @@
 
 #define STREAM_BUF_SIZE	(PAGE_SIZE * 4)
 
-#define SCRATCH_BUF_SIZE (STREAM_BUF_SIZE * 2)
+#define SCRATCH_BUF_SIZE 384
 
 #define FRAMES_PER_DESC		10  /* FIXME - What should this be? */
-#define FRAME_SIZE_PER_DESC	512	/* FIXME - Shouldn't be hardcoded */
+#define FRAME_SIZE_PER_DESC	993	/* FIXME - Shouldn't be hardcoded */
 
 // FIXME - should this be 0x81 (endpoint address) or 0x01 (endpoint number)?
 #define OV511_ENDPOINT_ADDRESS 0x81 /* Address of isoc endpoint */
@@ -166,6 +166,7 @@ struct ov511_frame {
 
 	int curline;		/* Line of frame we're working on */
 	int curpix;
+	int segment;		/* Segment from the incoming data */
 
 	long scanlength;	/* uncompressed, raw data length of frame */
 	long bytes_read;	/* amount of scanlength that has been read from *data */

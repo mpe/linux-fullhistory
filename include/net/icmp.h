@@ -25,7 +25,10 @@
 #include <net/protocol.h>
 
 extern struct icmp_err icmp_err_convert[];
-extern struct icmp_mib icmp_statistics;
+extern struct icmp_mib icmp_statistics[NR_CPUS*2];
+#define ICMP_INC_STATS(field)		SNMP_INC_STATS(icmp_statistics, field)
+#define ICMP_INC_STATS_BH(field)	SNMP_INC_STATS_BH(icmp_statistics, field)
+#define ICMP_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(icmp_statistics, field)
 
 extern void	icmp_send(struct sk_buff *skb_in,  int type, int code,
 			  unsigned long info);

@@ -385,13 +385,12 @@ static void yenta_proc_setup(pci_socket_t *socket, struct proc_dir_entry *base)
 	/* Not done yet */
 }
 
-static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static unsigned int yenta_events(pci_socket_t *socket)
 {
 	u8 csc;
 	u32 cb_event;
 	unsigned int events;
-	pci_socket_t *socket = (pci_socket_t *) dev_id;
-
+	
 	/* Clear interrupt status for the event */
 	cb_event = cb_readl(socket, CB_SOCKET_EVENT);
 	cb_writel(socket, CB_SOCKET_EVENT, cb_event);
@@ -407,16 +406,50 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		events |= (csc & I365_CSC_BVD2) ? SS_BATWARN : 0;
 		events |= (csc & I365_CSC_READY) ? SS_READY : 0;
 	}
-
-	if (events && socket->handler)
-		socket->handler(socket->info, events);
-
-	mod_timer(&socket->timer, jiffies + HZ);
+	return events;
 }
 
-static void yenta_timer(unsigned long data)
+static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	yenta_interrupt(0, (pci_socket_t *) data, NULL);
+	unsigned int events;
+	pci_socket_t *socket = (pci_socket_t *) dev_id;
+
+	events = yenta_events(socket);
+	if (events) {
+		socket->events |= events;
+		wake_up_interruptible(&socket->wait);
+	}
+}
+
+/*
+ * Watch a socket every second (and possibly in a
+ * more timely manner if the state change interrupt
+ * works..)
+ */
+static int socket_thread(void * data)
+{
+	pci_socket_t * socket = (pci_socket_t *) data;
+	DECLARE_WAITQUEUE(wait, current);
+
+	daemonize();
+	strcpy(current->comm, "CardBus Watcher");
+
+	do {
+		unsigned int events = socket->events | yenta_events(socket);
+
+		if (events) {
+			socket->events = 0;
+			if (socket->handler)
+				socket->handler(socket->info, events);
+		}
+
+		current->state = TASK_INTERRUPTIBLE;
+		add_wait_queue(&socket->wait, &wait);
+		if (!socket->events)
+			schedule_timeout(HZ);
+		remove_wait_queue(&socket->wait, &wait);
+	} while (!signal_pending(current));
+	return 0;
 }
 
 static unsigned int yenta_probe_irq(pci_socket_t *socket)
@@ -645,22 +678,13 @@ static int yenta_open(pci_socket_t *socket)
 	/* Set up the bridge regions.. */
 	yenta_allocate_resources(socket);
 
-	/*
-	 * Always poll the socket too, just in case the cardbus interrupt
-	 * doesn't exist (it happens), or we just lose an interrupt..
-	 */
-	init_timer(&socket->timer);
-	socket->timer.expires = jiffies + HZ;
-	socket->timer.data = (unsigned long)socket;
-	socket->timer.function = yenta_timer;
-	add_timer(&socket->timer);
-
 	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
 		socket->cb_irq = dev->irq;
 
 	/* And figure out what the dang thing can do for the PCMCIA layer... */
 	yenta_get_socket_capabilities(socket);
 
+	kernel_thread(socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
 	return 0;
 }

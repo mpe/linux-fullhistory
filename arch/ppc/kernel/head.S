@@ -287,7 +287,8 @@ turn_on_mmu:
 	stw	r2,GPR2(r21);	\
 	stw	r1,0(r21);	\
 	tovirt(r1,r21);			/* set new kernel sp */	\
-	SAVE_4GPRS(3, r21);
+	SAVE_4GPRS(3, r21);	\
+	SAVE_GPR(7, r21);
 /*
  * Note: code which follows this uses cr0.eq (set if from kernel),
  * r21, r22 (SRR0), and r23 (SRR1).
@@ -374,7 +375,7 @@ HardwareInterrupt:
 	.globl do_IRQ_intercept
 do_IRQ_intercept:
 	.long	do_IRQ;
-	.long	ret_from_except
+	.long	ret_from_int
 #else
 	bl	apus_interrupt_entry
 #endif /* CONFIG_APUS */
@@ -424,7 +425,7 @@ Decrementer:
 	.globl timer_interrupt_intercept
 timer_interrupt_intercept:
 	.long	timer_interrupt
-	.long	ret_from_except
+	.long	ret_from_int
 
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
 	STD_EXCEPTION(0xb00, Trap_0b, UnknownException)
@@ -674,7 +675,6 @@ DataStoreTLBMiss:
 transfer_to_handler:
 	stw	r22,_NIP(r21)
 	stw	r23,_MSR(r21)
-	SAVE_GPR(7, r21)
 	SAVE_4GPRS(8, r21)
 	SAVE_8GPRS(12, r21)
 	SAVE_8GPRS(24, r21)

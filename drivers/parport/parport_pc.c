@@ -153,9 +153,7 @@ static int get_fifo_residue (struct parport *p)
 	const struct parport_pc_private *priv = p->physport->private_data;
 
 	/* Prevent further data transfer. */
-	parport_frob_control (p,
-			      PARPORT_CONTROL_STROBE,
-			      PARPORT_CONTROL_STROBE);
+	frob_econtrol (p, 0xe0, ECR_TST << 5);
 
 	/* Adjust for the contents of the FIFO. */
 	for (residue = priv->fifo_depth; ; residue--) {
@@ -171,7 +169,6 @@ static int get_fifo_residue (struct parport *p)
 
 	/* Reset the FIFO. */
 	frob_econtrol (p, 0xe0, ECR_PS2 << 5);
-	parport_frob_control (p, PARPORT_CONTROL_STROBE, 0);
 
 	/* Now change to config mode and clean up. FIXME */
 	frob_econtrol (p, 0xe0, ECR_CNF << 5);
@@ -500,7 +497,7 @@ static size_t parport_pc_fifo_write_block_pio (struct parport *port,
 			ret = 0;
 			if (!time_before (jiffies, expire)) {
 				/* Timed out. */
-				printk (KERN_DEBUG "Timed out\n");
+				printk (KERN_DEBUG "FIFO write timed out\n");
 				break;
 			}
 			ecrval = inb (ECONTROL (port));
@@ -601,7 +598,7 @@ static size_t parport_pc_fifo_write_block_dma (struct parport *port,
 		ret = 0;
 		if (!time_before (jiffies, expire)) {
 			/* Timed out. */
-			printk (KERN_DEBUG "Timed out\n");
+			printk (KERN_DEBUG "DMA write timed out\n");
 			break;
 		}
 		/* Is serviceIntr set? */
@@ -677,9 +674,7 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 		printk (KERN_DEBUG "%s: FIFO is stuck\n", port->name);
 
 		/* Prevent further data transfer. */
-		parport_frob_control (port,
-				      PARPORT_CONTROL_STROBE,
-				      PARPORT_CONTROL_STROBE);
+		frob_econtrol (port, 0xe0, ECR_TST << 5);
 
 		/* Adjust for the contents of the FIFO. */
 		for (written -= priv->fifo_depth; ; written++) {
@@ -692,9 +687,6 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 
 		/* Reset the FIFO and return to PS2 mode. */
 		frob_econtrol (port, 0xe0, ECR_PS2 << 5);
-
-		/* De-assert strobe. */
-		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 	}
 
 	parport_wait_peripheral (port,
@@ -748,9 +740,7 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 		printk (KERN_DEBUG "%s: FIFO is stuck\n", port->name);
 
 		/* Prevent further data transfer. */
-		parport_frob_control (port,
-				      PARPORT_CONTROL_STROBE,
-				      PARPORT_CONTROL_STROBE);
+		frob_econtrol (port, 0xe0, ECR_TST);
 
 		/* Adjust for the contents of the FIFO. */
 		for (written -= priv->fifo_depth; ; written++) {
@@ -763,9 +753,6 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 
 		/* Reset the FIFO and return to PS2 mode. */
 		frob_econtrol (port, 0xe0, ECR_PS2 << 5);
-
-		/* De-assert strobe. */
-		parport_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 
 		/* Host transfer recovery. */
 		parport_pc_data_reverse (port); /* Must be in PS2 mode */
@@ -878,7 +865,7 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 			ret = 0;
 			if (!time_before (jiffies, expire)) {
 				/* Timed out. */
-				printk (KERN_DEBUG "Timed out\n");
+				printk (KERN_DEBUG "PIO read timed out\n");
 				break;
 			}
 			ecrval = inb (ECONTROL (port));

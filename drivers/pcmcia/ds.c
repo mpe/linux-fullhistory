@@ -46,6 +46,7 @@
 #include <linux/ioctl.h>
 #include <linux/proc_fs.h>
 #include <linux/poll.h>
+#include <linux/pci.h>
 
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>
@@ -429,15 +430,55 @@ static int get_device_info(int i, bind_info_t *bind_info, int first)
     socket_info_t *s = &socket_table[i];
     socket_bind_t *b;
     dev_node_t *node;
-    
+
+#ifdef CONFIG_CARDBUS
+    /*
+     * Some unbelievably ugly code to associate the PCI cardbus
+     * device and its driver with the PCMCIA "bind" information.
+     */
+    {
+	struct pci_bus *bus;
+
+	bus = pcmcia_lookup_bus(s->handle);
+	if (bus) {
+	    	struct list_head *list;
+		struct pci_dev *dev = NULL;
+		
+		list = bus->devices.next;
+		while (list != &bus->devices) {
+			struct pci_dev *pdev = pci_dev_b(list);
+			list = list->next;
+
+			if (first) {
+				dev = pdev;
+				break;
+			}
+
+			/* Try to handle "next" here some way? */
+		}
+		if (dev && dev->driver) {
+			strncpy(bind_info->name, dev->driver->name, DEV_NAME_LEN);
+			bind_info->name[DEV_NAME_LEN-1] = '\0';
+			bind_info->major = 0;
+			bind_info->minor = 0;
+			bind_info->next = NULL;
+			return 0;
+		}
+	}
+    }
+#endif
+
     for (b = s->bind; b; b = b->next)
 	if (strcmp((char *)b->driver->dev_info,
 		   (char *)bind_info->dev_info) == 0)
 	    break;
     if (b == NULL) return -ENODEV;
-    if ((b->instance == NULL) ||
-	(b->instance->state & DEV_CONFIG_PENDING))
+
+    if (b->instance == NULL)
 	return -EAGAIN;
+    if (b->instance->state & DEV_CONFIG_PENDING)
+	return -EAGAIN;
+
     if (first)
 	node = b->instance->dev;
     else

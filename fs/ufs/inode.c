@@ -54,11 +54,11 @@
 static void ufs_print_inode(struct inode * inode)
 {
 	unsigned swab = inode->i_sb->u.ufs_sb.s_swab;
-	printk("ino %lu  mode 0%6.6o  nlink %d  uid %d  uid32 %u"
-	       "  gid %d  gid32 %u  size %lu blocks %lu\n",
+	printk("ino %lu  mode 0%6.6o  nlink %d  uid %d  gid %d"
+	       "  size %lu blocks %lu\n",
 	       inode->i_ino, inode->i_mode, inode->i_nlink,
-	       inode->i_uid, inode->u.ufs_i.i_uid, inode->i_gid, 
-	       inode->u.ufs_i.i_gid, inode->i_size, inode->i_blocks);
+	       inode->i_uid, inode->i_gid, 
+	       inode->i_size, inode->i_blocks);
 	printk("  db <%u %u %u %u %u %u %u %u %u %u %u %u>\n",
 		SWAB32(inode->u.ufs_i.i_u1.i_data[0]),
 		SWAB32(inode->u.ufs_i.i_u1.i_data[1]),
@@ -578,17 +578,10 @@ void ufs_read_inode (struct inode * inode)
 		ufs_error (sb, "ufs_read_inode", "inode %lu has zero nlink\n", inode->i_ino);
 	
 	/*
-	 * Linux has only 16-bit uid and gid, so we can't support EFT.
-	 * Files are dynamically chown()ed to root.
+	 * Linux now has 32-bit uid and gid, so we can support EFT.
 	 */
-	inode->i_uid = inode->u.ufs_i.i_uid = ufs_get_inode_uid(ufs_inode);
-	inode->i_gid = inode->u.ufs_i.i_gid = ufs_get_inode_gid(ufs_inode);
-	if (inode->u.ufs_i.i_uid >= UFS_USEEFT) {
-		inode->i_uid = 0;
-	}
-	if (inode->u.ufs_i.i_gid >= UFS_USEEFT) {
-		inode->i_gid = 0;
-	}
+	inode->i_uid = ufs_get_inode_uid(ufs_inode);
+	inode->i_gid = ufs_get_inode_gid(ufs_inode);
 	
 	/*
 	 * Linux i_size can be 32 on some architectures. We will mark 
@@ -678,15 +671,8 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	ufs_inode->ui_mode = SWAB16(inode->i_mode);
 	ufs_inode->ui_nlink = SWAB16(inode->i_nlink);
 
-	if (inode->i_uid == 0 && inode->u.ufs_i.i_uid >= UFS_USEEFT)
-		ufs_set_inode_uid (ufs_inode, inode->u.ufs_i.i_uid);
-	else
-		ufs_set_inode_uid (ufs_inode, inode->i_uid);
-
-	if (inode->i_gid == 0 && inode->u.ufs_i.i_gid >= UFS_USEEFT)
-		ufs_set_inode_gid (ufs_inode, inode->u.ufs_i.i_gid);
-	else
-		ufs_set_inode_gid (ufs_inode, inode->i_gid);
+	ufs_set_inode_uid (ufs_inode, inode->i_uid);
+	ufs_set_inode_gid (ufs_inode, inode->i_gid);
 		
 	ufs_inode->ui_size = SWAB64((u64)inode->i_size);
 	ufs_inode->ui_atime.tv_sec = SWAB32(inode->i_atime);

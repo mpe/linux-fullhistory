@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.49 2000/01/06 00:41:56 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.50 2000/01/09 02:19:32 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -1157,7 +1157,7 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 		   to blackhole.
 		 */
 
-		ip_statistics.IpFragFails++;
+		IP_INC_STATS_BH(IpFragFails);
 		ip_rt_put(rt);
 		return;
 	}

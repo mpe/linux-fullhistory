@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.176 1999/12/20 05:19:46 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.177 2000/01/09 02:19:39 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1314,7 +1314,7 @@ static void __tcp_tw_hashdance(struct sock *sk, struct tcp_tw_bucket *tw)
 	spin_unlock(&bhead->lock);
 
 	/* Step 4: Un-charge protocol socket in-use count. */
-	sk->prot->inuse--;
+	sock_prot_dec_use(sk->prot);
 }
 
 /* 
@@ -1365,7 +1365,7 @@ void tcp_time_wait(struct sock *sk)
 
 		/* CLOSE the SK. */
 		if(sk->state == TCP_ESTABLISHED)
-			tcp_statistics.TcpCurrEstab--;
+			tcp_statistics[smp_processor_id()*2].TcpCurrEstab--;
 		sk->state = TCP_CLOSE;
 	} else {
 		/* Sorry, we're out of memory, just CLOSE this
@@ -2018,13 +2018,13 @@ static int prune_queue(struct sock *sk)
 
 	SOCK_DEBUG(sk, "prune_queue: c=%x\n", tp->copied_seq);
 
-	net_statistics.PruneCalled++; 
+	NET_INC_STATS_BH(PruneCalled);
 
 	/* First, purge the out_of_order queue. */
 	skb = __skb_dequeue_tail(&tp->out_of_order_queue);
 	if(skb != NULL) {
 		/* Free it all. */
-		do {	net_statistics.OfoPruned += skb->len; 
+		do {	net_statistics[smp_processor_id()*2].OfoPruned += skb->len; 
 			kfree_skb(skb);
 			skb = __skb_dequeue_tail(&tp->out_of_order_queue);
 		} while(skb != NULL);
@@ -2179,7 +2179,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				tcp_data_snd_check(sk);
 				return 0;
 			} else { /* Header too small */
-				tcp_statistics.TcpInErrs++;
+				TCP_INC_STATS_BH(TcpInErrs);
 				goto discard;
 			}
 		} else if (TCP_SKB_CB(skb)->ack_seq == tp->snd_una &&
@@ -2267,7 +2267,7 @@ slow_path:
 
 	if(th->syn && TCP_SKB_CB(skb)->seq != tp->syn_seq) {
 		SOCK_DEBUG(sk, "syn in established state\n");
-		tcp_statistics.TcpInErrs++;
+		TCP_INC_STATS_BH(TcpInErrs);
 		tcp_reset(sk);
 		return 1;
 	}
@@ -2592,7 +2592,7 @@ embryonic_reset:
 	tp->syn_backlog--;
 	tcp_dec_slow_timer(TCP_SLT_SYNACK);
 
-	net_statistics.EmbryonicRsts++;
+	NET_INC_STATS_BH(EmbryonicRsts);
 	if (!(flg & TCP_FLAG_RST))
 		req->class->send_reset(skb);
 

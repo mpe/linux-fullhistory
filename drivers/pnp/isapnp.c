@@ -272,6 +272,12 @@ static int isapnp_next_rdp(void)
 			return 0;
 		}
 		rdp += RDP_STEP;
+		/*
+		 *	We cannot use NE2000 probe spaces for ISAPnP or we
+		 *	will lock up machines.
+		 */
+		if(rdp >= 0x280 && rdp <= 0x380)
+			continue;
 	}
 	return -1;
 }
@@ -284,12 +290,8 @@ static inline void isapnp_set_rdp(void)
 }
 
 /*
- *	This code is badly broken. We cannot simply pick ports as the 
- *	ISAPnP specification implies. We should try 4 or 5 safe ports
- *	then bale by default.
- *
- *	This code touches NE2K cards or other devices and your box is
- *	history.
+ *	Perform an isolation. The port selection code now tries to avoid
+ *	"dangerous to read" ports.
  */
 
 static int __init isapnp_isolate_rdp_select(void)
@@ -982,11 +984,11 @@ static int __init isapnp_build_device_list(void)
 		card->device = (header[3] << 8) | header[2];
 		card->serial = (header[7] << 24) | (header[6] << 16) | (header[5] << 8) | header[4];
 		isapnp_checksum_value = 0x00;
+		INIT_LIST_HEAD(&card->devices);
 		isapnp_parse_resource_map(card);
 		if (isapnp_checksum_value != 0x00)
 			printk("isapnp: checksum for device %i is not valid (0x%x)\n", csn, isapnp_checksum_value);
 		card->checksum = isapnp_checksum_value;
-		INIT_LIST_HEAD(&card->devices);
 
 		list_add_tail(&card->node, &isapnp_cards);
 	}
@@ -1620,7 +1622,10 @@ static int isapnp_check_dma(struct isapnp_cfgtmp *cfg, int dma, int idx)
 	int i;
 	struct pci_dev *dev;
 
-	if (dma < 0 || dma == 4 || dma > 7)
+	/* Some machines allow DMA 0, but others don't. In fact on some 
+	   boxes DMA 0 is the memory refresh. Play safe */
+	   
+	if (dma < 1 || dma == 4 || dma > 7)
 		return 1;
 	for (i = 0; i < 8; i++) {
 		if (isapnp_reserve_dma[i] == dma)

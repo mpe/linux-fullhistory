@@ -32,6 +32,9 @@ usb-scsi-objs		:= usb_scsi.o
 ifeq ($(CONFIG_USB_PROC),y)
 	usbcore-objs	+= proc_usb.o
 endif
+ifeq ($(CONFIG_USB_DEVICEFS),y)
+	usbcore-objs	+= devio.o inode.o drivers.o devices.o
+endif
 ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
 	usb-scsi-objs	+= usb_scsi_debug.o
 endif

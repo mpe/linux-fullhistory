@@ -5,7 +5,7 @@ O_OBJS   := af_decnet.o dn_nsp_in.o dn_nsp_out.o dn_route.o dn_dev.o dn_neigh.o 
 M_OBJS	 := $(O_TARGET)
 
 ifeq ($(CONFIG_DECNET_ROUTER),y)
-O_OBJS += dn_fib.o
+O_OBJS += dn_fib.o dn_rules.o dn_table.o
 endif
 
 ifeq ($(CONFIG_DECNET_RAW),y)

@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.10 1999/12/15 22:25:02 davem Exp $
+/*  $Id: asyncd.c,v 1.11 2000/01/08 20:22:19 davem Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -263,10 +263,11 @@ int asyncd(void *unused)
 		save_flags(flags); cli();
 
 		while (!async_queue) {
-			spin_lock_irq(&current->sigmask_lock);
+			spin_lock(&current->sigmask_lock);
 			flush_signals(current);
-			spin_unlock_irq(&current->sigmask_lock);
+			spin_unlock(&current->sigmask_lock);
 			interruptible_sleep_on(&asyncd_wait);
+			__sti(); cli(); /* acquire gloabl_irq_lock */
 		}
 
 		restore_flags(flags);

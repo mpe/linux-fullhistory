@@ -2,7 +2,8 @@
 * cycx_drv.h	CYCX Support Module.  Kernel API Definitions.
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
+*
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on sdladrv.h by Gene Kozin <genek@compuserve.com>
 *

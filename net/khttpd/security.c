@@ -131,7 +131,7 @@ struct file *OpenFileForSecurity(char *Filename)
 	
 	if ((permission & sysctl_khttpd_permreq)==0)
 	{
-		if (filp!=NULL);
+		if (filp!=NULL)
 			fput(filp);
 		filp=NULL;
 		return NULL;

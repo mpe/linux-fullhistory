@@ -1,10 +1,10 @@
 /*
-* cyclomx.h	CYCLOM X Multiprotocol WAN Link Driver.
+* cyclomx.h	Cyclom 2X WAN Link Driver.
 *		User-level API definitions.
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on wanpipe.h by Gene Kozin <genek@compuserve.com>
 *
@@ -15,8 +15,8 @@
 * ============================================================================
 * 1999/05/19	acme		wait_queue_head_t wait_stats(support for 2.3.*)
 * 1999/01/03	acme		judicious use of data types
-* Dec 27, 1998	Arnaldo		cleanup: PACKED not needed
-* Aug 08, 1998	Arnaldo		Version 0.0.1
+* 1998/12/27	acme		cleanup: PACKED not needed
+* 1998/08/08	acme		Version 0.0.1
 */
 #ifndef	_CYCLOMX_H
 #define	_CYCLOMX_H
@@ -28,8 +28,8 @@
 #ifdef	__KERNEL__
 /* Kernel Interface */
 
-#include <linux/cycx_drv.h>	/* CYCLOM X support module API definitions */
-#include <linux/cycx_cfm.h>	/* CYCLOM X firmware module definitions */
+#include <linux/cycx_drv.h>	/* Cyclom 2X support module API definitions */
+#include <linux/cycx_cfm.h>	/* Cyclom 2X firmware module definitions */
 #ifdef CONFIG_CYCLOMX_X25
 #include <linux/cycx_x25.h>
 #endif

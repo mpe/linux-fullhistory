@@ -502,7 +502,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       PRINTK("nicstar%d: setting PCI latency timer to %d.\n", i, NS_PCI_LATENCY);
       for (j = 1; j < 4; j++)
       {
-         if (pci_write_config_byte(pcidev, PCI_LATENCY_TIMER, NS_PCI_LATENCY) != 0);
+         if (pci_write_config_byte(pcidev, PCI_LATENCY_TIMER, NS_PCI_LATENCY) != 0)
 	    break;
       }
       if (j == 4)

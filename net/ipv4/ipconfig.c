@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.24 1999/08/20 00:35:14 davem Exp $
+ *  $Id: ipconfig.c,v 1.25 2000/01/09 02:19:31 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -116,7 +116,7 @@ static int __init ic_open_devs(void)
 	unsigned short oflags;
 
 	last = &ic_first_dev;
-	read_lock(&dev_base_lock);
+	rtnl_shlock();
 	for (dev = dev_base; dev; dev = dev->next) {
 		if (user_dev_name[0] ? !strcmp(dev->name, user_dev_name) :
 		    (!(dev->flags & IFF_LOOPBACK) &&
@@ -148,7 +148,7 @@ static int __init ic_open_devs(void)
 			DBG(("IP-Config: Opened %s (able=%d)\n", dev->name, able));
 		}
 	}
-	read_unlock(&dev_base_lock);
+	rtnl_shunlock();
 
 	*last = NULL;
 

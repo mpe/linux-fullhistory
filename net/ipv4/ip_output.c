@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.76 2000/01/06 00:41:57 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.77 2000/01/09 02:19:31 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -82,6 +82,7 @@
  */
 
 int sysctl_ip_dynaddr = 0;
+int sysctl_ip_default_ttl = IPDEFTTL;
 
 /* Generate a checksum for an outgoing IP datagram. */
 __inline__ void ip_send_check(struct iphdr *iph)
@@ -228,7 +229,7 @@ int ip_mc_output(struct sk_buff *skb)
 	/*
 	 *	If the indicated interface is up and running, send the packet.
 	 */
-	ip_statistics.IpOutRequests++;
+	IP_INC_STATS(IpOutRequests);
 #ifdef CONFIG_IP_ROUTE_NAT
 	if (rt->rt_flags & RTCF_NAT)
 		ip_do_nat(skb);
@@ -285,7 +286,7 @@ int ip_output(struct sk_buff *skb)
 	struct rtable *rt = (struct rtable*)skb->dst;
 #endif
 
-	ip_statistics.IpOutRequests++;
+	IP_INC_STATS(IpOutRequests);
 
 #ifdef CONFIG_IP_ROUTE_NAT
 	if (rt->rt_flags&RTCF_NAT)
@@ -436,7 +437,7 @@ int ip_queue_xmit(struct sk_buff *skb)
 		       ip_queue_xmit2);
 
 no_route:
-	ip_statistics.IpOutNoRoutes++;
+	IP_INC_STATS(IpOutNoRoutes);
 	kfree_skb(skb);
 	return -EHOSTUNREACH;
 }
@@ -644,14 +645,14 @@ static int ip_build_xmit_slow(struct sock *sk,
 	} while (offset >= 0);
 
 	if (nfrags>1)
-		ip_statistics.IpFragCreates += nfrags;
+		ip_statistics[smp_processor_id()*2 + !in_interrupt()].IpFragCreates += nfrags;
 out:
 	return 0;
 
 error:
-	ip_statistics.IpOutDiscards++;
+	IP_INC_STATS(IpOutDiscards);
 	if (nfrags>1)
-		ip_statistics.IpFragCreates += nfrags;
+		ip_statistics[smp_processor_id()*2 + !in_interrupt()].IpFragCreates += nfrags;
 	return err; 
 }
 
@@ -757,7 +758,7 @@ error_fault:
 	err = -EFAULT;
 	kfree_skb(skb);
 error:
-	ip_statistics.IpOutDiscards++;
+	IP_INC_STATS(IpOutDiscards);
 	return err; 
 }
 
@@ -893,7 +894,7 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		 *	Put this fragment into the sending queue.
 		 */
 
-		ip_statistics.IpFragCreates++;
+		IP_INC_STATS(IpFragCreates);
 
 		iph->tot_len = htons(len + hlen);
 
@@ -904,12 +905,12 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 			goto fail;
 	}
 	kfree_skb(skb);
-	ip_statistics.IpFragOKs++;
+	IP_INC_STATS(IpFragOKs);
 	return err;
 
 fail:
 	kfree_skb(skb); 
-	ip_statistics.IpFragFails++;
+	IP_INC_STATS(IpFragFails);
 	return err;
 }
 

@@ -20,6 +20,7 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
+#include <linux/highuid.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -1044,8 +1045,8 @@ static void V1_minix_read_inode(struct inode * inode)
 	raw_inode = ((struct minix_inode *) bh->b_data) +
 		    (ino-1)%MINIX_INODES_PER_BLOCK;
 	inode->i_mode = raw_inode->i_mode;
-	inode->i_uid = raw_inode->i_uid;
-	inode->i_gid = raw_inode->i_gid;
+	inode->i_uid = (uid_t)raw_inode->i_uid;
+	inode->i_gid = (gid_t)raw_inode->i_gid;
 	inode->i_nlink = raw_inode->i_nlinks;
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
@@ -1092,8 +1093,8 @@ static void V2_minix_read_inode(struct inode * inode)
 	raw_inode = ((struct minix2_inode *) bh->b_data) +
 		    (ino-1)%MINIX2_INODES_PER_BLOCK;
 	inode->i_mode = raw_inode->i_mode;
-	inode->i_uid = raw_inode->i_uid;
-	inode->i_gid = raw_inode->i_gid;
+	inode->i_uid = (uid_t)raw_inode->i_uid;
+	inode->i_gid = (gid_t)raw_inode->i_gid;
 	inode->i_nlink = raw_inode->i_nlinks;
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = raw_inode->i_mtime;
@@ -1149,8 +1150,8 @@ static struct buffer_head * V1_minix_update_inode(struct inode * inode)
 	raw_inode = ((struct minix_inode *)bh->b_data) +
 		(ino-1)%MINIX_INODES_PER_BLOCK;
 	raw_inode->i_mode = inode->i_mode;
-	raw_inode->i_uid = inode->i_uid;
-	raw_inode->i_gid = inode->i_gid;
+	raw_inode->i_uid = fs_high2lowuid(inode->i_uid);
+	raw_inode->i_gid = fs_high2lowgid(inode->i_gid);
 	raw_inode->i_nlinks = inode->i_nlink;
 	raw_inode->i_size = inode->i_size;
 	raw_inode->i_time = inode->i_mtime;
@@ -1187,8 +1188,8 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 	raw_inode = ((struct minix2_inode *)bh->b_data) +
 		(ino-1)%MINIX2_INODES_PER_BLOCK;
 	raw_inode->i_mode = inode->i_mode;
-	raw_inode->i_uid = inode->i_uid;
-	raw_inode->i_gid = inode->i_gid;
+	raw_inode->i_uid = fs_high2lowuid(inode->i_uid);
+	raw_inode->i_gid = fs_high2lowgid(inode->i_gid);
 	raw_inode->i_nlinks = inode->i_nlink;
 	raw_inode->i_size = inode->i_size;
 	raw_inode->i_mtime = inode->i_mtime;

@@ -104,123 +104,6 @@ static int parse_addr(dn_address *addr, char *str)
 	return 0;
 }
 
-static char *node2str(int n)
-{
-	switch(n) {
-		case DN_RT_INFO_ENDN:
-			return "EndNode\n";
-		case DN_RT_INFO_L1RT:
-			return "Level 1 Router\n";
-		case DN_RT_INFO_L2RT:
-			return "Level 2 Router\n";
-	}
-
-	return "Unknown\n";
-}
-
-static int dn_node_type_strategy(ctl_table *table, int *name, int nlen,
-				void *oldval, size_t *oldlenp,
-				void *newval, size_t newlen,
-				void **context)
-{
-	int len;
-	int type;
-
-	if (oldval && oldlenp) {
-		if (get_user(len, oldlenp))
-			return -EFAULT;
-		if (len) {
-			if (len != sizeof(int))
-				return -EINVAL;
-			if (put_user(decnet_node_type, (int *)oldval))
-				return -EFAULT;
-		}
-	}
-
-	if (newval && newlen) {
-		if (newlen != sizeof(int))
-			return -EINVAL;
-
-		if (get_user(type, (int *)newval))
-			return -EFAULT;
-
-		switch(type) {
-			case DN_RT_INFO_ENDN: /* EndNode        */
-#ifdef CONFIG_DECNET_ROUTER
-			case DN_RT_INFO_L1RT: /* Level 1 Router */
-			case DN_RT_INFO_L2RT: /* Level 2 Router */
-#endif
-				break;
-			default:
-				return -EINVAL;
-		}
-
-		if (decnet_node_type != type) {
-			dn_dev_devices_off();
-			decnet_node_type = type;
-			dn_dev_devices_on();
-		}
-	}
-	return 0;
-}
-
-static int dn_node_type_handler(ctl_table *table, int write, 
-				struct file * filp,
-				void *buffer, size_t *lenp)
-{
-	char *s = node2str(decnet_node_type);
-	int len = strlen(s);
-
-	if (!*lenp || (filp->f_pos && !write)) {
-		*lenp = 0;
-		return 0;
-	}
-
-	if (write) {
-		char c = *(char *)buffer;
-		int type = 0;
-
-		switch(c) {
-			case 'e':
-			case 'E':
-			case '0':
-				type = DN_RT_INFO_ENDN;
-				break;
-#ifdef CONFIG_DECNET_ROUTER
-			case 'r':
-			case '1':
-				type = DN_RT_INFO_L1RT;
-				break;
-			case 'R':
-			case '2':
-				type = DN_RT_INFO_L2RT;
-				break;
-#endif /* CONFIG_DECNET_ROUTER */
-			default:
-				return -EINVAL;	
-		}
-
-		if (decnet_node_type != type) {
-			dn_dev_devices_off();
-			decnet_node_type = type;
-			dn_dev_devices_on();
-		}
-
-		filp->f_pos += 1;
-
-		return 0;
-	}
-
-	if (len > *lenp) len = *lenp;
-
-	if (copy_to_user(buffer, s, len))
-		return -EFAULT;
-
-	*lenp = len;
-	filp->f_pos += len;
-
-	return 0;
-}
 
 static int dn_node_address_strategy(ctl_table *table, int *name, int nlen,
 				void *oldval, size_t *oldlenp,
@@ -374,6 +257,7 @@ static int dn_def_dev_handler(ctl_table *table, int write,
 	}
 
 	if (write) {
+		int i;
 
 		if (*lenp > 16)
 			return -E2BIG;
@@ -382,6 +266,9 @@ static int dn_def_dev_handler(ctl_table *table, int write,
 			return -EFAULT;
 
 		devname[*lenp] = 0;
+		for(i = 0; i < (*lenp); i++)
+			if (devname[i] == '\n')
+				devname[i] = 0;
 
 		if ((dev = __dev_get_by_name(devname)) == NULL)
 			return -ENODEV;
@@ -416,9 +303,6 @@ static int dn_def_dev_handler(ctl_table *table, int write,
 }
 
 static ctl_table dn_table[] = {
-	{NET_DECNET_NODE_TYPE, "node_type", NULL, 1, 0644, NULL,
-	dn_node_type_handler, dn_node_type_strategy, NULL,
-	NULL, NULL},
 	{NET_DECNET_NODE_ADDRESS, "node_address", NULL, 7, 0644, NULL,
 	dn_node_address_handler, dn_node_address_strategy, NULL,
 	NULL, NULL},

@@ -55,7 +55,7 @@ static int max_cpus = -1;
 int skip_ioapic_setup = 0;
 
 /* Total count of live CPUs */
-int smp_num_cpus = 0;
+int smp_num_cpus = 1;
 /* Internal processor count */
 static unsigned int num_processors = 1;
 
@@ -80,8 +80,6 @@ struct cpuinfo_x86 cpu_data[NR_CPUS];
 /* Processor that is doing the boot up */
 static unsigned int boot_cpu_id = 0;
 
-/* Tripped once we need to start cross invalidating */
-static int smp_activated = 0;
 /* Set when the idlers are all forked */
 int smp_threads_ready = 0;
 
@@ -1641,7 +1639,6 @@ void __init smp_boot_cpus(void)
 			(bogosum+2500)/500000,
 			((bogosum+2500)/5000)%100);
 		dprintk("Before bogocount - setting activated=1.\n");
-		smp_activated = 1;
 	}
 	smp_num_cpus = cpucount + 1;
 

@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.51 1999/08/31 06:54:35 davem Exp $
+/* $Id: loadmmu.c,v 1.52 2000/01/08 16:38:20 anton Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -19,7 +19,6 @@
 #include <asm/mmu_context.h>
 #include <asm/oplib.h>
 
-unsigned long page_offset = 0xf0000000;
 unsigned long stack_top = 0xf0000000 - PAGE_SIZE;
 
 struct ctx_list *ctx_list_pool;

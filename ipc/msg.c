@@ -66,15 +66,15 @@ struct msg_msg {
 
 /* one msq_queue structure for each present queue on the system */
 struct msg_queue {
-	struct ipc_perm q_perm;
-	__kernel_time_t q_stime;	/* last msgsnd time */
-	__kernel_time_t q_rtime;	/* last msgrcv time */
-	__kernel_time_t q_ctime;	/* last change time */
-	unsigned int  q_cbytes;		/* current number of bytes on queue */
-	unsigned int  q_qnum;		/* number of messages in queue */
-	unsigned int  q_qbytes;		/* max number of bytes on queue */
-	__kernel_ipc_pid_t q_lspid;	/* pid of last msgsnd */
-	__kernel_ipc_pid_t q_lrpid;	/* last receive pid */
+	struct kern_ipc_perm q_perm;
+	time_t q_stime;			/* last msgsnd time */
+	time_t q_rtime;			/* last msgrcv time */
+	time_t q_ctime;			/* last change time */
+	unsigned long q_cbytes;		/* current number of bytes on queue */
+	unsigned long q_qnum;		/* number of messages in queue */
+	unsigned long q_qbytes;		/* max number of bytes on queue */
+	pid_t q_lspid;			/* pid of last msgsnd */
+	pid_t q_lrpid;			/* last receive pid */
 
 	struct list_head q_messages;
 	struct list_head q_receivers;
@@ -329,15 +329,108 @@ asmlinkage long sys_msgget (key_t key, int msgflg)
 	return ret;
 }
 
+static inline unsigned long copy_msqid_to_user(void *buf, struct msqid64_ds *in, int version)
+{
+	switch(version) {
+	case IPC_64:
+		return copy_to_user (buf, in, sizeof(*in));
+	case IPC_OLD:
+	    {
+		struct msqid_ds out;
+
+		memset(&out,0,sizeof(out));
+
+		ipc64_perm_to_ipc_perm(&in->msg_perm, &out.msg_perm);
+
+		out.msg_stime		= in->msg_stime;
+		out.msg_rtime		= in->msg_rtime;
+		out.msg_ctime		= in->msg_ctime;
+
+		if(in->msg_cbytes > USHRT_MAX)
+			out.msg_cbytes	= USHRT_MAX;
+		else
+			out.msg_cbytes	= in->msg_cbytes;
+		out.msg_lcbytes		= in->msg_cbytes;
+
+		if(in->msg_qnum > USHRT_MAX)
+			out.msg_qnum	= USHRT_MAX;
+		else
+			out.msg_qnum	= in->msg_qnum;
+
+		if(in->msg_qbytes > USHRT_MAX)
+			out.msg_qbytes	= USHRT_MAX;
+		else
+			out.msg_qbytes	= in->msg_qbytes;
+		out.msg_lqbytes		= in->msg_qbytes;
+
+		out.msg_lspid		= in->msg_lspid;
+		out.msg_lrpid		= in->msg_lrpid;
+
+		return copy_to_user (buf, &out, sizeof(out));
+	    }
+	default:
+		return -EINVAL;
+	}
+}
+
+struct msq_setbuf {
+	unsigned long	qbytes;
+	uid_t		uid;
+	gid_t		gid;
+	mode_t		mode;
+};
+
+static inline unsigned long copy_msqid_from_user(struct msq_setbuf *out, void *buf, int version)
+{
+	switch(version) {
+	case IPC_64:
+	    {
+		struct msqid64_ds tbuf;
+
+		if (copy_from_user (&tbuf, buf, sizeof (tbuf)))
+			return -EFAULT;
+
+		out->qbytes		= tbuf.msg_qbytes;
+		out->uid		= tbuf.msg_perm.uid;
+		out->gid		= tbuf.msg_perm.gid;
+		out->mode		= tbuf.msg_perm.mode;
+
+		return 0;
+	    }
+	case IPC_OLD:
+	    {
+		struct msqid_ds tbuf_old;
+
+		if (copy_from_user (&tbuf_old, buf, sizeof (tbuf_old)))
+			return -EFAULT;
+
+		out->uid		= tbuf_old.msg_perm.uid;
+		out->gid		= tbuf_old.msg_perm.gid;
+		out->mode		= tbuf_old.msg_perm.mode;
+
+		if(tbuf_old.msg_qbytes == 0)
+			out->qbytes	= tbuf_old.msg_lqbytes;
+		else
+			out->qbytes	= tbuf_old.msg_qbytes;
+
+		return 0;
+	    }
+	default:
+		return -EINVAL;
+	}
+}
+
 asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 {
-	int err;
+	int err, version;
 	struct msg_queue *msq;
-	struct msqid_ds tbuf;
-	struct ipc_perm *ipcp;
+	struct msq_setbuf setbuf;
+	struct kern_ipc_perm *ipcp;
 	
 	if (msqid < 0 || cmd < 0)
 		return -EINVAL;
+
+	version = ipc_parse_version(&cmd);
 
 	switch (cmd) {
 	case IPC_INFO: 
@@ -376,11 +469,14 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 	case MSG_STAT:
 	case IPC_STAT:
 	{
+		struct msqid64_ds tbuf;
 		int success_return;
 		if (!buf)
 			return -EFAULT;
 		if(cmd == MSG_STAT && msqid > msg_ids.size)
 			return -EINVAL;
+
+		memset(&tbuf,0,sizeof(tbuf));
 
 		msq = msg_lock(msqid);
 		if (msq == NULL)
@@ -398,40 +494,24 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		if (ipcperms (&msq->q_perm, S_IRUGO))
 			goto out_unlock;
 
-		memset(&tbuf,0,sizeof(tbuf));
-		tbuf.msg_perm   = msq->q_perm;
-		/* tbuf.msg_{first,last}: not reported.*/
+		kernel_to_ipc64_perm(&msq->q_perm, &tbuf.msg_perm);
 		tbuf.msg_stime  = msq->q_stime;
 		tbuf.msg_rtime  = msq->q_rtime;
 		tbuf.msg_ctime  = msq->q_ctime;
-		if(msq->q_cbytes > USHRT_MAX)
-			tbuf.msg_cbytes = USHRT_MAX;
-		 else
-			tbuf.msg_cbytes = msq->q_cbytes;
-		tbuf.msg_lcbytes = msq->q_cbytes;
-		
-		if(msq->q_qnum > USHRT_MAX)
-			tbuf.msg_qnum = USHRT_MAX;
-		 else
-			tbuf.msg_qnum   = msq->q_qnum;
-
-		if(msq->q_qbytes > USHRT_MAX)
-			tbuf.msg_qbytes = USHRT_MAX;
-		 else
-			tbuf.msg_qbytes = msq->q_qbytes;
-		tbuf.msg_lqbytes = msq->q_qbytes;
-
+		tbuf.msg_cbytes = msq->q_cbytes;
+		tbuf.msg_qnum   = msq->q_qnum;
+		tbuf.msg_qbytes = msq->q_qbytes;
 		tbuf.msg_lspid  = msq->q_lspid;
 		tbuf.msg_lrpid  = msq->q_lrpid;
 		msg_unlock(msqid);
-		if (copy_to_user (buf, &tbuf, sizeof(*buf)))
+		if (copy_msqid_to_user(buf, &tbuf, version))
 			return -EFAULT;
 		return success_return;
 	}
 	case IPC_SET:
 		if (!buf)
 			return -EFAULT;
-		if (copy_from_user (&tbuf, buf, sizeof (*buf)))
+		if (copy_msqid_from_user (&setbuf, buf, version))
 			return -EFAULT;
 		break;
 	case IPC_RMID:
@@ -459,19 +539,14 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 	switch (cmd) {
 	case IPC_SET:
 	{
-		int newqbytes;
-		if(tbuf.msg_qbytes == 0)
-			newqbytes = tbuf.msg_lqbytes;
-		 else
-		 	newqbytes = tbuf.msg_qbytes;
-		if (newqbytes > msg_ctlmnb && !capable(CAP_SYS_RESOURCE))
+		if (setbuf.qbytes > msg_ctlmnb && !capable(CAP_SYS_RESOURCE))
 			goto out_unlock_up;
-		msq->q_qbytes = newqbytes;
+		msq->q_qbytes = setbuf.qbytes;
 
-		ipcp->uid = tbuf.msg_perm.uid;
-		ipcp->gid =  tbuf.msg_perm.gid;
+		ipcp->uid = setbuf.uid;
+		ipcp->gid = setbuf.gid;
 		ipcp->mode = (ipcp->mode & ~S_IRWXUGO) | 
-			(S_IRWXUGO & tbuf.msg_perm.mode);
+			(S_IRWXUGO & setbuf.mode);
 		msq->q_ctime = CURRENT_TIME;
 		/* sleeping receivers might be excluded by
 		 * stricter permissions.

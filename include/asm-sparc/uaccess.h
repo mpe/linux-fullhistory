@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.20 1999/11/23 08:56:45 davem Exp $
+/* $Id: uaccess.h,v 1.21 2000/01/08 16:38:23 anton Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -34,10 +34,10 @@
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 
-/* We have there a nice not-mapped page at page_offset - PAGE_SIZE, so that this test
+/* We have there a nice not-mapped page at PAGE_OFFSET - PAGE_SIZE, so that this test
  * can be fairly lightweight.
  * No one can read/write anything from userland in the kernel space by setting
- * large size and address near to page_offset - a fault will break his intentions.
+ * large size and address near to PAGE_OFFSET - a fault will break his intentions.
  */
 #define __user_ok(addr,size) ((addr) < STACK_TOP)
 #define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))

@@ -18,6 +18,7 @@
  *    Steve Whitehouse:  Fixes to check alloc'd skbs are non NULL!
  *                       Moved output state machine into one function
  *    Steve Whitehouse:  New output state machine
+ *         Paul Koning:  Connect Confirm message fix.
  */
 
 /******************************************************************************
@@ -463,14 +464,24 @@ void dn_nsp_delayed_ack(struct sock *sk)
 		dn_nsp_send_data_ack(sk);
 }
 
-void dn_send_conn_conf (struct sock *sk)
+static int dn_nsp_retrans_conn_conf(struct sock *sk)
+{
+	struct dn_scp *scp = &sk->protinfo.dn;
+
+	if (scp->state == DN_CC)
+		dn_send_conn_conf(sk, GFP_ATOMIC);
+
+	return 0;
+}
+
+void dn_send_conn_conf(struct sock *sk, int gfp)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 	struct sk_buff *skb = NULL;
         struct nsp_conn_init_msg *msg;
-	unsigned short int aux;
+	unsigned char len = scp->conndata_out.opt_optl;
 
-	if ((skb = dn_alloc_skb(sk, 50 + scp->conndata_out.opt_optl, GFP_KERNEL)) == NULL)
+	if ((skb = dn_alloc_skb(sk, 50 + scp->conndata_out.opt_optl, gfp)) == NULL)
 		return;
 
         msg = (struct nsp_conn_init_msg *)skb_put(skb, sizeof(*msg));
@@ -481,45 +492,88 @@ void dn_send_conn_conf (struct sock *sk)
         msg->info = 0x03;
         msg->segsize = dn_htons(0x05B3);
 
-	if (scp->conndata_out.opt_optl > 0) {
-		aux = scp->conndata_out.opt_optl;
-		*skb_put(skb,1) = aux;
-		memcpy(skb_put(skb, aux), scp->conndata_out.opt_data, aux);
-	}
+	*skb_put(skb,1) = len;
+
+	if (len > 0) 
+		memcpy(skb_put(skb, len), scp->conndata_out.opt_data, len);
 	
 
-	dn_nsp_send(skb);	
+	dn_nsp_send(skb);
+
+	scp->persist = dn_nsp_persist(sk);
+	scp->persist_fxn = dn_nsp_retrans_conn_conf;
 }
 
-void dn_send_disc (struct sock *sk, unsigned char msgflg, unsigned short reason)
+
+static __inline__ void dn_nsp_do_disc(struct sock *sk, unsigned char msgflg, 
+			unsigned short reason, int gfp, struct dst_entry *dst,
+			int ddl, unsigned char *dd, __u16 rem, __u16 loc)
 {
-	struct dn_scp *scp = &sk->protinfo.dn;
 	struct sk_buff *skb = NULL;
-	int ddl = (msgflg == NSP_DISCINIT || msgflg == 0x38) ? (1 + scp->discdata_out.opt_optl) : 0;
-	int size = 7 + ddl;
+	int size = 7 + (ddl ? (ddl + 1) : 0);
 	unsigned char *msg;
 
-	if ((skb = dn_alloc_skb(sk, size, GFP_ATOMIC)) == NULL)
+	if ((dst == NULL) || (rem == 0)) {
+		if (net_ratelimit())
+			printk(KERN_DEBUG "DECnet: dn_nsp_do_disc: BUG! Please report this to SteveW@ACM.org rem=%u dst=%p\n", (unsigned)rem, dst);
+		return;
+	}
+
+	if ((skb = dn_alloc_skb(sk, size, gfp)) == NULL)
 		return;
 
-	if (reason == 0) reason = scp->discdata_out.opt_status;
-	
 	msg = skb_put(skb, size);
 	*msg++ = msgflg;
-	*(__u16 *)msg = scp->addrrem;
+	*(__u16 *)msg = rem;
 	msg += 2;
-	*(__u16 *)msg = scp->addrloc;
+	*(__u16 *)msg = loc;
 	msg += 2;
 	*(__u16 *)msg = dn_htons(reason);
 	msg += 2;
 
 	if (ddl) {
-		*msg++ = scp->discdata_out.opt_optl;
-		memcpy(msg, scp->discdata_out.opt_data, scp->discdata_out.opt_optl);
+		*msg++ = ddl;
+		memcpy(msg, dd, ddl);
 	}
 
-	dn_nsp_send(skb);	
+	/*
+	 * This doesn't go via the dn_nsp_send() fucntion since we need
+	 * to be able to send disc packets out which have no socket
+	 * associations.
+	 */
+	skb->dst = dst_clone(dst);
+	skb->dst->output(skb);
 }
+
+
+void dn_nsp_send_disc(struct sock *sk, unsigned char msgflg, 
+			unsigned short reason, int gfp)
+{
+	struct dn_scp *scp = &sk->protinfo.dn;
+	int ddl = 0;
+
+	if (msgflg == NSP_DISCINIT)
+		ddl = scp->discdata_out.opt_optl;
+
+	if (reason == 0)
+		reason = scp->discdata_out.opt_status;
+
+	dn_nsp_do_disc(sk, msgflg, reason, gfp, sk->dst_cache, ddl, 
+		scp->discdata_out.opt_data, scp->addrrem, scp->addrloc);
+}
+
+
+void dn_nsp_return_disc(struct sk_buff *skb, unsigned char msgflg, 
+			unsigned short reason)
+{
+	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
+	int ddl = 0;
+	int gfp = GFP_ATOMIC;
+
+	dn_nsp_do_disc(NULL, msgflg, reason, gfp, skb->dst, ddl, 
+			NULL, cb->src_port, cb->dst_port);
+}
+
 
 void dn_nsp_send_lnk(struct sock *sk, unsigned short flgs)
 {
@@ -543,8 +597,6 @@ void dn_nsp_send_lnk(struct sock *sk, unsigned short flgs)
 	msg1->segnum = dn_htons(cb->segnum = (scp->numoth++ & 0x0FFF));
         msg1->lsflgs = flgs;
 
-	/* printk(KERN_DEBUG "dn_nsp_send_lnk: %02x\n", flgs); */
-	
 	dn_nsp_queue_xmit(sk, skb, 1);
 
 	scp->persist = dn_nsp_persist(sk);
@@ -556,10 +608,8 @@ static int dn_nsp_retrans_conninit(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 
-	if (scp->state == DN_CI) {
+	if (scp->state == DN_CI)
 		dn_nsp_send_conninit(sk, NSP_RCI);
-		scp->persist = dn_nsp_persist(sk);
-	}
 
 	return 0;
 }

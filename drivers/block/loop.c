@@ -643,7 +643,7 @@ static int lo_open(struct inode *inode, struct file *file)
 static int lo_release(struct inode *inode, struct file *file)
 {
 	struct loop_device *lo;
-	int	dev, err;
+	int	dev;
 
 	if (!inode)
 		return 0;
@@ -664,7 +664,7 @@ static int lo_release(struct inode *inode, struct file *file)
 			xfer_funcs[type]->unlock(lo);
 		MOD_DEC_USE_COUNT;
 	}
-	return err;
+	return 0;
 }
 
 static struct block_device_operations lo_fops = {

@@ -15,6 +15,7 @@
 #include <linux/ioctl.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/highuid.h>
 
 #include <linux/ncp_fs.h>
 
@@ -128,7 +129,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return -EINVAL;
 		}
 		/* TODO: info.addr = server->m.serv_addr; */
-		info.mounted_uid	= server->m.mounted_uid;
+		info.mounted_uid	= NEW_TO_OLD_UID(server->m.mounted_uid);
 		info.connection		= server->connection;
 		info.buffer_size	= server->buffer_size;
 		info.volume_number	= NCP_FINFO(inode)->volNumber;
@@ -143,9 +144,14 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		    && (current->uid != server->m.mounted_uid)) {
 			return -EACCES;
 		}
-		if ((result = verify_area(VERIFY_WRITE, (uid_t *) arg,
-					  sizeof(uid_t))) != 0) {
-			return result;
+		put_user(high2lowuid(server->m.mounted_uid), (old_uid_t *) arg);
+		return 0;
+
+	case NCP_IOC_GETMOUNTUID32:
+
+		if ((permission(inode, MAY_READ) != 0)
+		    && (current->uid != server->m.mounted_uid)) {
+			return -EACCES;
 		}
 		put_user(server->m.mounted_uid, (uid_t *) arg);
 		return 0;

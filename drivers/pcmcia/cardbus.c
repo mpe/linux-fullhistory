@@ -319,9 +319,10 @@ int cb_alloc(socket_info_t * s)
 		dev->devfn = i;
 		dev->vendor = vend;
 		pci_readw(dev, PCI_DEVICE_ID, &dev->device);
-		dev->hdr_type = hdr;
+		dev->hdr_type = hdr & 0x7f;
 
 		pci_setup_device(dev);
+
 		/* FIXME: Do we need to enable the expansion ROM? */
 		for (r = 0; r < 7; r++) {
 			struct resource *res = dev->resource + r;

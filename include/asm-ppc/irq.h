@@ -9,50 +9,47 @@ extern void disable_irq(unsigned int);
 extern void disable_irq_nosync(unsigned int);
 extern void enable_irq(unsigned int);
 
-#ifndef CONFIG_8xx
-
-#ifdef CONFIG_APUS
-#define enable_irq m68k_enable_irq
-#define disable_irq m68k_disable_irq
-#include <asm-m68k/irq.h>
-#undef enable_irq
-#undef disable_irq
-#else /* CONFIG_APUS */
+#if defined(CONFIG_4xx)
 
 /*
- * this is the # irq's for all ppc arch's (pmac/chrp/prep)
- * so it is the max of them all - which happens to be powermac
- * at present (G3 powermacs have 64).
+ * The PowerPC 403 cores' Asynchronous Interrupt Controller (AIC) has
+ * 32 possible interrupts, a majority of which are not implemented on
+ * all cores. There are six configurable, external interrupt pins and
+ * there are eight internal interrupts for the on-chip serial port
+ * (SPU), DMA controller, and JTAG controller.
+ *
+ * The PowerPC 405 cores' Universal Interrupt Controller (UIC) has 32
+ * possible interrupts as well. There are seven, configurable external
+ * interrupt pins and there are 17 internal interrupts for the on-chip
+ * serial port, DMA controller, on-chip Ethernet controller, PCI, etc.
+ *
  */
-#define NR_IRQS			128
 
-#endif /* CONFIG_APUS */
+#define	NR_IRQS		32
 
-#define NUM_8259_INTERRUPTS	16
-#define IRQ_8259_CASCADE	16
-#define openpic_to_irq(n)	((n)+NUM_8259_INTERRUPTS)
-#define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
+#define	AIC_INT0	(0)
+#define	AIC_INT4	(4)
+#define	AIC_INT5	(5)
+#define	AIC_INT6	(6)
+#define	AIC_INT7	(7)
+#define	AIC_INT8	(8)
+#define	AIC_INT9	(9)
+#define	AIC_INT10	(10)
+#define	AIC_INT11	(11)
+#define	AIC_INT27	(27)
+#define	AIC_INT28	(28)
+#define	AIC_INT29	(29)
+#define	AIC_INT30	(30)
+#define	AIC_INT31	(31)
 
-#ifndef CONFIG_APUS
-/*
- * This gets called from serial.c, which is now used on
- * powermacs as well as prep/chrp boxes.
- * Prep and chrp both have cascaded 8259 PICs.
- */
-static __inline__ int irq_cannonicalize(int irq)
+
+static __inline__ int
+irq_cannonicalize(int irq)
 {
-	if (ppc_md.irq_cannonicalize)
-	{
-		return ppc_md.irq_cannonicalize(irq);
-	}
-	else
-	{
-		return irq;
-	}
+	return (irq);
 }
-#endif
 
-#else /* CONFIG_8xx */
+#elif defined(CONFIG_8xx)
 
 /* The MPC8xx cores have 16 possible interrupts.  There are eight
  * possible level sensitive interrupts assigned and generated internally
@@ -120,6 +117,49 @@ static __inline__ int irq_cannonicalize(int irq)
 	return irq;
 }
 
-#endif /* CONFIG_8xx */
+#else
+
+#ifdef CONFIG_APUS
+#define enable_irq m68k_enable_irq
+#define disable_irq m68k_disable_irq
+#include <asm-m68k/irq.h>
+#undef enable_irq
+#undef disable_irq
+#else /* CONFIG_APUS */
+
+/*
+ * this is the # irq's for all ppc arch's (pmac/chrp/prep)
+ * so it is the max of them all - which happens to be powermac
+ * at present (G3 powermacs have 64).
+ */
+#define NR_IRQS			128
+
+#endif /* CONFIG_APUS */
+
+#define NUM_8259_INTERRUPTS	16
+#define IRQ_8259_CASCADE	16
+#define openpic_to_irq(n)	((n)+NUM_8259_INTERRUPTS)
+#define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
+
+#ifndef CONFIG_APUS
+/*
+ * This gets called from serial.c, which is now used on
+ * powermacs as well as prep/chrp boxes.
+ * Prep and chrp both have cascaded 8259 PICs.
+ */
+static __inline__ int irq_cannonicalize(int irq)
+{
+	if (ppc_md.irq_cannonicalize)
+	{
+		return ppc_md.irq_cannonicalize(irq);
+	}
+	else
+	{
+		return irq;
+	}
+}
+#endif /* !CONFIG_APUS */
 
 #endif
+
+#endif /* _ASM_IRQ_H */

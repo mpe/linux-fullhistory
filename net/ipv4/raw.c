@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.45 2000/01/06 00:41:58 davem Exp $
+ * Version:	$Id: raw.c,v 1.46 2000/01/09 02:19:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -75,9 +75,7 @@ static void raw_v4_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
  	sock_hold(sk);
 	write_unlock_bh(&raw_v4_lock);
 }
@@ -90,7 +88,7 @@ static void raw_v4_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		sk->prot->inuse--;
+		sock_prot_dec_use(sk->prot);
 		__sock_put(sk);
 	}
 	write_unlock_bh(&raw_v4_lock);
@@ -214,7 +212,7 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 
 	if (sk->protinfo.af_inet.recverr)
 		ip_icmp_error(sk, skb, err, 0, info, (u8 *)(skb->h.icmph + 1));
-		
+
 	if (sk->protinfo.af_inet.recverr || harderr) {
 		sk->err = err;
 		sk->error_report(sk);
@@ -227,12 +225,12 @@ static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 	
 	if (sock_queue_rcv_skb(sk,skb)<0)
 	{
-		ip_statistics.IpInDiscards++;
+		IP_INC_STATS(IpInDiscards);
 		kfree_skb(skb);
 		return -1;
 	}
 
-	ip_statistics.IpInDelivers++;
+	IP_INC_STATS(IpInDelivers);
 	return 0;
 }
 
@@ -674,6 +672,4 @@ struct proto raw_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
 	"RAW",				/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };

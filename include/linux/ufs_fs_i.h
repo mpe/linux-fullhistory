@@ -22,8 +22,8 @@ struct ufs_inode_info {
 	__u32	i_flags;
 	__u32	i_gen;
 	__u32	i_shadow;
-	__u32	i_uid;
-	__u32	i_gid;
+	__u32	i_unused1;
+	__u32	i_unused2;
 	__u32	i_oeftflag;
 	__u16	i_osync;
 	__u32	i_lastfrag;

@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.41 2000/01/06 00:42:03 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.42 2000/01/09 02:19:37 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -132,7 +132,7 @@ ctl_table ipv4_table[] = {
          &ipv4_devconf.forwarding, sizeof(int), 0644, NULL,
          &ipv4_sysctl_forward,&ipv4_sysctl_forward_strategy},
         {NET_IPV4_DEFAULT_TTL, "ip_default_ttl",
-         &ip_statistics.IpDefaultTTL, sizeof(int), 0644, NULL,
+         &sysctl_ip_default_ttl, sizeof(int), 0644, NULL,
          &proc_dointvec},
         {NET_IPV4_AUTOCONFIG, "ip_autoconfig",
          &ipv4_config.autoconfig, sizeof(int), 0644, NULL,

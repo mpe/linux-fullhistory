@@ -1973,7 +1973,7 @@ static void aec_stop(int board)
 
 		ixj_WriteDSPCommand(0x0700, board);
 	}
-	if (ixj[board].play_mode != -1 && ixj[board].rec_mode != -1);
+	if (ixj[board].play_mode != -1 && ixj[board].rec_mode != -1)
 	{
 		ixj_WriteDSPCommand(0xB002, board);	// AEC Stop
 

@@ -410,9 +410,12 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 		hps->oep = endpoint[1].bEndpointAddress;
 	}
 
-	ident = usb_string(dev, dev->descriptor.iProduct); /* usb_string allocates memory using kmalloc() so kfree() needs to be called afterwards when the pointer is no longer needed. */
-	info("USB Scanner (%s) found at address %d", ident, dev->devnum);
-	kfree(ident);
+	ident = kmalloc(256, GFP_KERNEL);
+	if (ident) {
+		usb_string(dev, dev->descriptor.iProduct, ident, 256);
+		info("USB Scanner (%s) found at address %d", ident, dev->devnum);
+		kfree(ident);
+	}
 
 	dbg("probe_scanner: using bulk endpoints - In: %x  Out: %x", hps->iep, hps->oep);
 

@@ -26,12 +26,8 @@
 #define I2OSWDEL		_IOWR(I2O_MAGIC_NUMBER,7,struct i2o_sw_xfer)
 #define I2OVALIDATE		_IOR(I2O_MAGIC_NUMBER,8,u32)
 #define I2OHTML			_IOWR(I2O_MAGIC_NUMBER,9,struct i2o_html)
-
-/* On hold until we figure this out
-#define I2OEVTREG		_IO(I2O_MAGIC_NUMBER,10)
-#define I2OEVTCLR		_IO(I2O_MAGIC_NUMBER,11)
-#define I2OEVTGET		_IO(I2O_MAGIC_NUMBER,12)
- */
+#define I2OEVTREG		_IOW(I2O_MAGIC_NUMBER,10,struct i2o_evt_id)
+#define I2OEVTGET		_IOR(I2O_MAGIC_NUMBER,11,struct i2o_evt_info)
 
 struct i2o_cmd_hrtlct
 {
@@ -71,6 +67,33 @@ struct i2o_html
 	unsigned int *reslen;	/* Length in bytes of reply buffer */
 	void *qbuf;		/* Pointer to HTTP query string */
 	unsigned int qlen;	/* Length in bytes of query string buffer */
+};
+
+#define I2O_EVT_Q_LEN 32
+
+struct i2o_evt_id
+{
+	unsigned int iop;
+	unsigned int tid;
+	unsigned int evt_mask;
+};
+
+//
+// Event data size = frame size - message header + evt indicator
+#define I2O_EVT_DATA_SIZE 88
+
+struct i2o_evt_info
+{
+	struct i2o_evt_id id;
+	unsigned char evt_data[I2O_EVT_DATA_SIZE];
+ 	unsigned int data_size;
+};
+
+struct i2o_evt_get
+{
+	struct i2o_evt_info info;
+	int pending;
+	int lost;
 };
 
 
@@ -263,8 +286,12 @@ typedef struct _i2o_status_block {
 
 struct i2o_message
 {
-	u32	version_size;
-	u32	function_addr;
+	u8	version_offset;
+	u8	flags;
+	u16	size;
+	u32	target_tid:12;
+	u32	init_tid:12;
+	u32	function:8;	
 	u32	initiator_context;
 	/* List follows */
 };
@@ -471,14 +498,8 @@ extern inline void i2o_flush_reply(struct i2o_controller *c, u32 m)
 	I2O_REPLY_WRITE32(c,m);
 }
 
-
-struct i2o_controller *i2o_controller_chain;
-
-extern int i2o_quiesce_controller(struct i2o_controller *);
-extern int i2o_clear_controller(struct i2o_controller *);
 extern int i2o_install_controller(struct i2o_controller *);
 extern int i2o_delete_controller(struct i2o_controller *);
-extern int i2o_activate_controller(struct i2o_controller *);
 extern void i2o_unlock_controller(struct i2o_controller *);
 extern struct i2o_controller *i2o_find_controller(int);
 extern int i2o_status_get(struct i2o_controller *);
@@ -487,8 +508,6 @@ extern int i2o_num_controllers;
 extern int i2o_install_handler(struct i2o_handler *);
 extern int i2o_remove_handler(struct i2o_handler *);
 
-extern int i2o_install_device(struct i2o_controller *, struct i2o_device *);
-extern int i2o_delete_device(struct i2o_device *);
 extern int i2o_claim_device(struct i2o_device *, struct i2o_handler *, u32);
 extern int i2o_release_device(struct i2o_device *, struct i2o_handler *, u32);
 
@@ -505,14 +524,13 @@ extern int i2o_query_table(int, struct i2o_controller *, int, int, int, void *,
 extern int i2o_clear_table(struct i2o_controller *, int, int); 
 extern int i2o_row_add_table(struct i2o_controller *, int, int, int, void *,
 			     int);
-extern int i2o_row_delete_table(struct i2o_controller *, int, int, int, void *,
-				int);
 
 extern int i2o_event_register(struct i2o_controller *, int, int, u32); 
 extern int i2o_event_ack(struct i2o_controller *, int, int, u32, void *, int);
 
 extern void i2o_run_queue(struct i2o_controller *);
 extern void i2o_report_status(const char *, const char *, u32 *);
+extern void i2o_dump_message(u32 *);
 
 extern const char *i2o_get_class_name(int);
 

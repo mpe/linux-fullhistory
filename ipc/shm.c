@@ -29,9 +29,18 @@
 
 #include "util.h"
 
-struct shmid_kernel /* extend struct shmis_ds with private fields */
+struct shmid_kernel /* private to the kernel */
 {	
-	struct shmid_ds		u;
+	struct {
+		struct kern_ipc_perm	shm_perm;
+		size_t			shm_segsz;
+		time_t			shm_atime;
+		time_t			shm_dtime;
+		time_t			shm_ctime;
+		pid_t			shm_cpid;
+		pid_t			shm_lpid;
+		unsigned long		shm_nattch;
+	} u;
 	unsigned long		shm_npages; /* size of segment (pages) */
 	pte_t			**shm_dir;  /* ptr to array of ptrs to frames -> SHMMAX */ 
 	struct vm_area_struct	*attaches;  /* descriptors for attaches */
@@ -89,7 +98,6 @@ static int shm_swp = 0; /* number of shared memory pages that are in swap */
 /* some statistics */
 static ulong swap_attempts = 0;
 static ulong swap_successes = 0;
-static ulong used_segs = 0;
 
 void __init shm_init (void)
 {
@@ -303,19 +311,112 @@ out_up:
 	return;
 }
 
+static inline unsigned long copy_shmid_to_user(void *buf, struct shmid64_ds *in, int version)
+{
+	switch(version) {
+	case IPC_64:
+		return copy_to_user(buf, in, sizeof(*in));
+	case IPC_OLD:
+	    {
+		struct shmid_ds out;
+
+		ipc64_perm_to_ipc_perm(&in->shm_perm, &out.shm_perm);
+		out.shm_segsz	= in->shm_segsz;
+		out.shm_atime	= in->shm_atime;
+		out.shm_dtime	= in->shm_dtime;
+		out.shm_ctime	= in->shm_ctime;
+		out.shm_cpid	= in->shm_cpid;
+		out.shm_lpid	= in->shm_lpid;
+		out.shm_nattch	= in->shm_nattch;
+
+		return copy_to_user(buf, &out, sizeof(out));
+	    }
+	default:
+		return -EINVAL;
+	}
+}
+
+struct shm_setbuf {
+	uid_t	uid;
+	gid_t	gid;
+	mode_t	mode;
+};	
+
+static inline unsigned long copy_shmid_from_user(struct shm_setbuf *out, void *buf, int version)
+{
+	switch(version) {
+	case IPC_64:
+	    {
+		struct shmid64_ds tbuf;
+
+		if (copy_from_user(&tbuf, buf, sizeof(tbuf)))
+			return -EFAULT;
+
+		out->uid	= tbuf.shm_perm.uid;
+		out->gid	= tbuf.shm_perm.gid;
+		out->mode	= tbuf.shm_perm.mode;
+
+		return 0;
+	    }
+	case IPC_OLD:
+	    {
+		struct shmid_ds tbuf_old;
+
+		if (copy_from_user(&tbuf_old, buf, sizeof(tbuf_old)))
+			return -EFAULT;
+
+		out->uid	= tbuf_old.shm_perm.uid;
+		out->gid	= tbuf_old.shm_perm.gid;
+		out->mode	= tbuf_old.shm_perm.mode;
+
+		return 0;
+	    }
+	default:
+		return -EINVAL;
+	}
+}
+
+static inline unsigned long copy_shminfo_to_user(void *buf, struct shminfo64 *in, int version)
+{
+	switch(version) {
+	case IPC_64:
+		return copy_to_user(buf, in, sizeof(*in));
+	case IPC_OLD:
+	    {
+		struct shminfo out;
+
+		if(in->shmmax > INT_MAX)
+			out.shmmax = INT_MAX;
+		else
+			out.shmmax = (int)in->shmmax;
+
+		out.shmmin	= in->shmmin;
+		out.shmmni	= in->shmmni;
+		out.shmseg	= in->shmseg;
+		out.shmall	= in->shmall; 
+
+		return copy_to_user(buf, &out, sizeof(out));
+	    }
+	default:
+		return -EINVAL;
+	}
+}
+
 asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
-	struct shmid_ds tbuf;
+	struct shm_setbuf setbuf;
 	struct shmid_kernel *shp;
-	int err;
+	int err, version;
 
 	if (cmd < 0 || shmid < 0)
 		return -EINVAL;
 
+	version = ipc_parse_version(&cmd);
+
 	switch (cmd) { /* replace with proc interface ? */
 	case IPC_INFO:
 	{
-		struct shminfo shminfo;
+		struct shminfo64 shminfo;
 
 		memset(&shminfo,0,sizeof(shminfo));
 		shminfo.shmmni = shminfo.shmseg = shm_ctlmni;
@@ -323,7 +424,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shminfo.shmall = shm_ctlall;
 
 		shminfo.shmmin = SHMMIN;
-		if(copy_to_user (buf, &shminfo, sizeof(struct shminfo)))
+		if(copy_shminfo_to_user (buf, &shminfo, version))
 			return -EFAULT;
 		/* reading a integer is always atomic */
 		err= shm_ids.max_id;
@@ -337,7 +438,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 		memset(&shm_info,0,sizeof(shm_info));
 		shm_lockall();
-		shm_info.used_ids = used_segs;
+		shm_info.used_ids = shm_ids.in_use;
 		shm_info.shm_rss = shm_rss;
 		shm_info.shm_tot = shm_tot;
 		shm_info.shm_swp = shm_swp;
@@ -353,8 +454,9 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	case SHM_STAT:
 	case IPC_STAT:
 	{
-		struct shmid_ds tmp;
+		struct shmid64_ds tbuf;
 		int result;
+		memset(&tbuf, 0, sizeof(tbuf));
 		shp = shm_lock(shmid);
 		if(shp==NULL)
 			return -EINVAL;
@@ -372,9 +474,16 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err=-EACCES;
 		if (ipcperms (&shp->u.shm_perm, S_IRUGO))
 			goto out_unlock;
-		memcpy(&tmp,&shp->u,sizeof(tmp));
+		kernel_to_ipc64_perm(&shp->u.shm_perm, &tbuf.shm_perm);
+		tbuf.shm_segsz	= shp->u.shm_segsz;
+		tbuf.shm_atime	= shp->u.shm_atime;
+		tbuf.shm_dtime	= shp->u.shm_dtime;
+		tbuf.shm_ctime	= shp->u.shm_ctime;
+		tbuf.shm_cpid	= shp->u.shm_cpid;
+		tbuf.shm_lpid	= shp->u.shm_lpid;
+		tbuf.shm_nattch	= shp->u.shm_nattch;
 		shm_unlock(shmid);
-		if(copy_to_user (buf, &tmp, sizeof(tmp)))
+		if(copy_shmid_to_user (buf, &tbuf, version))
 			return -EFAULT;
 		return result;
 	}
@@ -384,7 +493,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 /* Allow superuser to lock segment in memory */
 /* Should the pages be faulted in here or leave it to user? */
 /* need to determine interaction with current->swappable */
-		struct ipc_perm *ipcp;
+		struct kern_ipc_perm *ipcp;
 		if (!capable(CAP_IPC_LOCK))
 			return -EPERM;
 
@@ -417,7 +526,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	}
 
 	if (cmd == IPC_SET) {
-		if(copy_from_user (&tbuf, buf, sizeof (*buf)))
+		if(copy_shmid_from_user (&setbuf, buf, version))
 			return -EFAULT;
 	}
 	down(&shm_ids.sem);
@@ -437,10 +546,10 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 	switch (cmd) {
 	case IPC_SET:
-		shp->u.shm_perm.uid = tbuf.shm_perm.uid;
-		shp->u.shm_perm.gid = tbuf.shm_perm.gid;
+		shp->u.shm_perm.uid = setbuf.uid;
+		shp->u.shm_perm.gid = setbuf.gid;
 		shp->u.shm_perm.mode = (shp->u.shm_perm.mode & ~S_IRWXUGO)
-			| (tbuf.shm_perm.mode & S_IRWXUGO);
+			| (setbuf.mode & S_IRWXUGO);
 		shp->u.shm_ctime = CURRENT_TIME;
 		break;
 	case IPC_RMID:

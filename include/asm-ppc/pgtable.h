@@ -4,20 +4,21 @@
 #include <linux/config.h>
 
 #ifndef __ASSEMBLY__
+#include <linux/sched.h>
 #include <linux/threads.h>
 #include <asm/processor.h>		/* For TASK_SIZE */
 #include <asm/mmu.h>
 #include <asm/page.h>
 
-#ifndef CONFIG_8xx
-struct mm_struct;
-struct vm_area_struct;
+#if defined(CONFIG_4xx)
 extern void local_flush_tlb_all(void);
 extern void local_flush_tlb_mm(struct mm_struct *mm);
 extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
 extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
-			    unsigned long end);
-#else /* CONFIG_8xx */
+                           unsigned long end);
+extern inline void flush_hash_page(unsigned context, unsigned long va)
+	{ }
+#elif defined(CONFIG_8xx)
 #define __tlbia()	asm volatile ("tlbia" : : )
 
 extern inline void local_flush_tlb_all(void)
@@ -32,6 +33,14 @@ extern inline void local_flush_tlb_range(struct mm_struct *mm,
 	{ __tlbia(); }
 extern inline void flush_hash_page(unsigned context, unsigned long va)
 	{ }
+#else
+struct mm_struct;
+struct vm_area_struct;
+extern void local_flush_tlb_all(void);
+extern void local_flush_tlb_mm(struct mm_struct *mm);
+extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
+			    unsigned long end);
 #endif
 
 #define flush_tlb_all local_flush_tlb_all
@@ -148,8 +157,59 @@ extern unsigned long ioremap_bot, ioremap_base;
  * Bits in a linux-style PTE.  These match the bits in the
  * (hardware-defined) PowerPC PTE as closely as possible.
  */
-#ifndef CONFIG_8xx
-/* Definitions for 60x, 740/750, etc. */
+
+#if defined(CONFIG_4xx)
+/*
+ * At present, all PowerPC 400-class processors share a similar TLB
+ * architecture. The instruction and data sides share a unified, 64-entry,
+ * fully-associative TLB which is maintained under software control. In
+ * addition, the instruction side has a hardware-managed, 4-entry, fully-
+ * associative TLB which serves as a first level to the shared TLB. These
+ * two TLBs are known as the UTLB and ITLB, respectively.
+ */
+
+#define        PPC4XX_TLB_SIZE 64
+
+/*
+ * TLB entries are defined by a "high" tag portion and a "low" data portion.
+ * On all architectures, the data portion is 32-bits.
+ */
+
+#define	TLB_LO          1
+#define	TLB_HI          0
+       
+#define	TLB_DATA        TLB_LO
+#define	TLB_TAG         TLB_HI
+
+/* Tag portion */
+
+#define TLB_EPN_MASK    0xFFFFFC00      /* Effective Page Number */
+#define TLB_PAGESZ_MASK 0x00000380
+#define TLB_PAGESZ(x)   (((x) & 0x7) << 7)
+#define   PAGESZ_1K		0
+#define   PAGESZ_4K             1
+#define   PAGESZ_16K            2
+#define   PAGESZ_64K            3
+#define   PAGESZ_256K           4
+#define   PAGESZ_1M             5
+#define   PAGESZ_4M             6
+#define   PAGESZ_16M            7
+#define TLB_VALID       0x00000040      /* Entry is valid */
+
+/* Data portion */
+                 
+#define TLB_RPN_MASK    0xFFFFFC00      /* Real Page Number */
+#define TLB_PERM_MASK   0x00000300
+#define TLB_EX          0x00000200      /* Instruction execution allowed */
+#define TLB_WR          0x00000100      /* Writes permitted */
+#define TLB_ZSEL_MASK   0x000000F0
+#define TLB_ZSEL(x)     (((x) & 0xF) << 4)
+#define TLB_ATTR_MASK   0x0000000F
+#define TLB_W           0x00000008      /* Caching is write-through */
+#define TLB_I           0x00000004      /* Caching is inhibited */
+#define TLB_M           0x00000002      /* Memory is coherent */
+#define TLB_G           0x00000001      /* Memory is guarded from prefetch */
+
 #define _PAGE_PRESENT	0x001	/* software: pte contains a translation */
 #define _PAGE_USER	0x002	/* matches one of the PP bits */
 #define _PAGE_RW	0x004	/* software: user write access allowed */
@@ -160,9 +220,8 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define _PAGE_DIRTY	0x080	/* C: page changed */
 #define _PAGE_ACCESSED	0x100	/* R: page referenced */
 #define _PAGE_HWWRITE	0x200	/* software: _PAGE_RW & _PAGE_DIRTY */
-#define _PAGE_SHARED	0
-
-#else
+#define	_PAGE_SHARED	0
+#elif defined(CONFIG_8xx)
 /* Definitions for 8xx embedded chips. */
 #define _PAGE_PRESENT	0x0001	/* Page is valid */
 #define _PAGE_NO_CACHE	0x0002	/* I: cache inhibit */
@@ -183,8 +242,20 @@ extern unsigned long ioremap_bot, ioremap_base;
  * protection.
  */
 #define _PAGE_HWWRITE	_PAGE_DIRTY
-
-#endif /* CONFIG_8xx */
+#else
+/* Definitions for 60x, 740/750, etc. */
+#define _PAGE_PRESENT	0x001	/* software: pte contains a translation */
+#define _PAGE_USER	0x002	/* matches one of the PP bits */
+#define _PAGE_RW	0x004	/* software: user write access allowed */
+#define _PAGE_GUARDED	0x008
+#define _PAGE_COHERENT	0x010	/* M: enforce memory coherence (SMP systems) */
+#define _PAGE_NO_CACHE	0x020	/* I: cache inhibit */
+#define _PAGE_WRITETHRU	0x040	/* W: cache write-through */
+#define _PAGE_DIRTY	0x080	/* C: page changed */
+#define _PAGE_ACCESSED	0x100	/* R: page referenced */
+#define _PAGE_HWWRITE	0x200	/* software: _PAGE_RW & _PAGE_DIRTY */
+#define _PAGE_SHARED	0
+#endif
 
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 

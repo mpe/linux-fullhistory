@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.42 1999/08/20 11:05:27 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.44 2000/01/09 02:19:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -148,7 +148,7 @@
  *	SNMP management statistics
  */
 
-struct ip_mib ip_statistics={2,IPDEFTTL,};	/* Forwarding=No, Default TTL=64 */
+struct ip_mib ip_statistics[NR_CPUS*2];
 
 /*
  *	Process Router Attention IP option
@@ -368,7 +368,7 @@ static inline int ip_rcv_finish(struct sk_buff *skb)
 	return skb->dst->input(skb);
 
 inhdr_error:
-	ip_statistics.IpInHdrErrors++;
+	IP_INC_STATS_BH(IpInHdrErrors);
 drop:
         kfree_skb(skb);
         return(0);
@@ -387,7 +387,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto drop;
 
-	ip_statistics.IpInReceives++;
+	IP_INC_STATS_BH(IpInReceives);
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
 		goto out;
@@ -403,14 +403,14 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 	 *	4.	Doesn't have a bogus length
 	 */
 
-	if (skb->len < sizeof(struct iphdr))
+	if (skb->len < sizeof(struct iphdr) || skb->len < (iph->ihl<<2))
 		goto inhdr_error; 
 	if (iph->ihl < 5 || iph->version != 4 || ip_fast_csum((u8 *)iph, iph->ihl) != 0)
 		goto inhdr_error; 
 
 	{
 		__u32 len = ntohs(iph->tot_len); 
-		if (skb->len < len)
+		if (skb->len < len || len < (iph->ihl<<2))
 			goto inhdr_error;
 
 		/* Our transport medium may have padded the buffer out. Now we know it
@@ -424,7 +424,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 		       ip_rcv_finish);
 
 inhdr_error:
-	ip_statistics.IpInHdrErrors++;
+	IP_INC_STATS_BH(IpInHdrErrors);
 drop:
         kfree_skb(skb);
 out:

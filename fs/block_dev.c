@@ -605,7 +605,7 @@ int blkdev_put(struct block_device *bdev, int kind)
 	down(&bdev->bd_sem);
 	/* syncing will go here */
 	if (kind == BDEV_FILE || kind == BDEV_FS)
-		sync_dev(rdev);
+		fsync_dev(rdev);
 	if (atomic_dec_and_test(&bdev->bd_openers)) {
 		/* invalidating buffers will go here */
 		invalidate_buffers(rdev);

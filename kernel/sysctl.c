@@ -25,6 +25,7 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/sysrq.h>
+#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 
@@ -41,6 +42,10 @@ extern int bdf_prm[], bdflush_min[], bdflush_max[];
 extern int sysctl_overcommit_memory;
 extern int max_threads;
 extern int nr_queued_signals, max_queued_signals;
+
+/* this is needed for the proc_dointvec_minmax for overflow UID and GID */
+static int maxolduid = 65535;
+static int minolduid = 0;
 
 #ifdef CONFIG_KMOD
 extern char modprobe_path[];
@@ -242,6 +247,12 @@ static ctl_table kern_table[] = {
 	{KERN_MAX_THREADS, "threads-max", &max_threads, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{KERN_RANDOM, "random", NULL, 0, 0555, random_table},
+	{KERN_OVERFLOWUID, "overflowuid", &overflowuid, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &minolduid, &maxolduid},
+	{KERN_OVERFLOWGID, "overflowgid", &overflowgid, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &minolduid, &maxolduid},
 	{0}
 };
 
@@ -289,6 +300,12 @@ static ctl_table fs_table[] = {
 	 0644, NULL, &proc_dointvec},
 	{FS_DENTRY, "dentry-state", &dentry_stat, 6*sizeof(int),
 	 0444, NULL, &proc_dointvec},
+	{FS_OVERFLOWUID, "overflowuid", &fs_overflowuid, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &minolduid, &maxolduid},
+	{FS_OVERFLOWGID, "overflowgid", &fs_overflowgid, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &minolduid, &maxolduid},
 	{0}
 };
 

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.84 2000/01/07 18:15:14 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.85 2000/01/08 16:38:18 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -123,7 +123,6 @@ EXPORT_SYMBOL_NOVERS(___down_write);
 EXPORT_SYMBOL_NOVERS(___up_read);
 EXPORT_SYMBOL_NOVERS(___up_write);
 
-EXPORT_SYMBOL(page_offset);
 EXPORT_SYMBOL(sparc_valid_addr_bitmap);
 
 #ifndef CONFIG_SUN4
@@ -176,7 +175,6 @@ EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(__smp_processor_id));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(enable_irq));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(disable_irq));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(__irq_itoa));
-EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_v2p));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_unlockarea));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_lockarea));
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_get_scsi_sgl));

@@ -3,7 +3,7 @@
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on sdla_x25.h by Gene Kozin <74604.152@compuserve.com>
 *
@@ -13,9 +13,8 @@
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
 * 1999/01/03	acme		judicious use of data types
-*
 * 1999/01/02	acme		#define X25_ACK_N3	0x4411
-* Dec 28, 1998	Arnaldo		cleanup: lot'o'things removed
+* 1998/12/28	acme		cleanup: lot'o'things removed
 *					 commands listed,
 *					 TX25Cmd & TX25Config structs
 *					 typedef'ed
@@ -31,7 +30,7 @@
 #define	X25_MBOX_OFFS	0x300	/* general mailbox block */
 #define	X25_RXMBOX_OFFS	0x340	/* receive mailbox */
 
-/* DATA STRUCTURES */
+/* Data Structures */
 /* X.25 Command Block. */
 typedef struct X25Cmd
 {

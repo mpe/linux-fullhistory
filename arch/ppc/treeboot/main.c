@@ -24,12 +24,21 @@
  *
  */
 
-#include "nonstdio.h"
-#include "zlib.h"
+#include <asm/board.h>
+
+#include "../coffboot/nonstdio.h"
+#include "../coffboot/zlib.h"
 #include "irSect.h"
 
 
 /* Preprocessor Defines */
+
+/*
+ * Location of the IBM boot ROM function pointer address for retrieving
+ * the board information structure.
+ */
+
+#define	BOARD_INFO_VECTOR	0xFFFE0B50
 
 #define	RAM_SIZE	(4 * 1024 * 1024)
 
@@ -58,6 +67,17 @@
 char *avail_ram;	/* Indicates start of RAM available for heap */
 char *end_avail;	/* Indicates end of RAM available for heap */
 
+bd_t	board_info;
+
+/*
+ * XXX - Until either the IBM boot ROM provides a way of passing arguments to
+ *       the program it launches or until I/O is working in the boot loader,
+ *       this is a good spot to pass in command line arguments to the kernel
+ *       (e.g. console=tty0).
+ */
+
+static char *cmdline = "";
+
 
 /* Function Prototypes */
 
@@ -75,10 +95,16 @@ void start(void)
 {
     void *options;
     int ns, oh, i;
-    unsigned sa, len;
+    unsigned long sa, len;
     void *dst;
     unsigned char *im;
-    unsigned initrd_start, initrd_size;
+    unsigned long initrd_start, initrd_size;
+    bd_t *(*get_board_info)(void) = 
+	    (bd_t *(*)(void))(*(unsigned long *)BOARD_INFO_VECTOR);
+    bd_t *bip = NULL;
+
+    if ((bip = get_board_info()) != NULL)
+	    memcpy(&board_info, bip, sizeof(bd_t));
 
     /* setup_bats(RAM_START); */
 
@@ -96,6 +122,7 @@ void start(void)
 
 	end_avail = (char *)initrd_start;
     } else {
+	initrd_start = initrd_size = 0;
 	end_avail = (char *)RAM_END;
     }
 
@@ -117,16 +144,20 @@ void start(void)
 
 	/* I'm not sure what the 0x200000 parameter is for, but it works. */
 
-	gunzip(dst, 0x200000, cp, &len);
+	gunzip(dst, 0x200000, cp, (int *)&len);
     } else {
 	memmove(dst, im, len);
     }
 
-    /* flush_cache(dst, len); */
+    flush_cache(dst, len);
 
     sa = (unsigned long)dst;
 
-    (*(void (*)())sa)();
+    (*(void (*)())sa)(&board_info,
+		      initrd_start,
+		      initrd_start + initrd_size,
+		      cmdline,
+		      cmdline + strlen(cmdline));
 
     pause();
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.15 1999/08/20 11:06:27 davem Exp $
+ *	$Id: reassembly.c,v 1.16 2000/01/09 02:19:51 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -135,7 +135,7 @@ static void frag_prune(void)
 
 	spin_lock(&ip6_frag_lock);
 	while ((fq = ipv6_frag_queue.next) != &ipv6_frag_queue) {
-		ipv6_statistics.Ip6ReasmFails++;
+		IP6_INC_STATS_BH(Ip6ReasmFails);
 		fq_free(fq);
 		if (atomic_read(&ip6_frag_mem) <= sysctl_ip6frag_low_thresh) {
 			spin_unlock(&ip6_frag_lock);
@@ -158,7 +158,7 @@ u8* ipv6_reassembly(struct sk_buff **skbp, __u8 *nhptr)
 
 	hdr = skb->nh.ipv6h;
 
-	ipv6_statistics.Ip6ReasmReqds++;
+	IP6_INC_STATS_BH(Ip6ReasmReqds);
 
 	/* Jumbo payload inhibits frag. header */
 	if (hdr->payload_len==0) {
@@ -228,8 +228,8 @@ static void frag_expire(unsigned long data)
 
 	frag = fq->fragments;
 
-	ipv6_statistics.Ip6ReasmTimeout++;
-	ipv6_statistics.Ip6ReasmFails++;
+	IP6_INC_STATS_BH(Ip6ReasmTimeout);
+	IP6_INC_STATS_BH(Ip6ReasmFails);
 
 	if (frag == NULL) {
 		spin_unlock(&ip6_frag_lock);
@@ -272,7 +272,7 @@ static void create_frag_entry(struct sk_buff *skb,
 						GFP_ATOMIC);
 
 	if (fq == NULL) {
-		ipv6_statistics.Ip6ReasmFails++;
+		IP6_INC_STATS_BH(Ip6ReasmFails);
 		kfree_skb(skb);
 		return;
 	}
@@ -450,7 +450,7 @@ static u8* reasm_frag(struct frag_queue *fq, struct sk_buff **skb_in)
 	if (payload_len > 65535) {
 		if (net_ratelimit())
 			printk(KERN_DEBUG "reasm_frag: payload len = %d\n", payload_len);
-		ipv6_statistics.Ip6ReasmFails++;
+		IP6_INC_STATS_BH(Ip6ReasmFails);
 		fq_free(fq);
 		return NULL;
 	}
@@ -458,7 +458,7 @@ static u8* reasm_frag(struct frag_queue *fq, struct sk_buff **skb_in)
 	if ((skb = dev_alloc_skb(sizeof(struct ipv6hdr) + payload_len))==NULL) {
 		if (net_ratelimit())
 			printk(KERN_DEBUG "reasm_frag: no memory for reassembly\n");
-		ipv6_statistics.Ip6ReasmFails++;
+		IP6_INC_STATS_BH(Ip6ReasmFails);
 		fq_free(fq);
 		return NULL;
 	}
@@ -505,6 +505,6 @@ static u8* reasm_frag(struct frag_queue *fq, struct sk_buff **skb_in)
 
 	frag_kfree_s(fq, sizeof(*fq));
 
-	ipv6_statistics.Ip6ReasmOKs++;
+	IP6_INC_STATS_BH(Ip6ReasmOKs);
 	return nhptr;
 }

@@ -12,6 +12,8 @@
                 - Swansea University Computer Society DECnet Archive
                   (contains kernel patches and info)
                 - Mirror of userland tools on ftp.dreamtime.org
+                - Mirror of Alexey Kuznetsov's iproute2 package and
+                  other utilities
 
         ftp://ftp.dreamtime.org/pub/linux/decnet/
                 - Patrick Caulfield's archive of userland tools and
@@ -39,10 +41,16 @@ The kernel command line takes options looking like the following:
 
     decnet=1,2,1
 
-the first two numbers are the node address 1,2 = 1.2 (yes, you must use
-commas when specifying them). The third number is the level number for routers
-and is optional. It is probably a good idea to set the DECnet address on boot
-like this rather than trying to do it later.
+the first two numbers are the node address 1,2 = 1.2 For 2.2.xx kernels
+and early 2.3.xx kernels, you must use a comma when specifying the
+DECnet address like this. For more recent 2.3.xx kernels, you may
+use almost charecter except space, although a `.` would be the most
+obvious choice :-)
+
+The third number is the level number for routers and is optional. In fact
+this option may go away shortly in favour if settings for each interface
+seperately. It is probably a good idea to set the DECnet address and type
+on boot like this rather than trying to do it later.
 
 There are also equivalent options for modules. The node address and type can
 also be set through the /proc/sys/net/decnet/ files, as can other system
@@ -71,7 +79,23 @@ is available. Usually this will be eth0, for example:
 There is a list of what the other files under /proc/sys/net/decnet/ do
 on the kernel patch web site (shown above).
 
-4) How can I tell if its working ?
+4) Run time kernel configuration
+
+This is either done through the sysctl/proc interface (see the kernel web
+pages for details on what the various options do) or through the iproute2
+package in the same way as IPv4/6 configuration is performed.
+
+Documentation for iproute2 is included with the package, although there is
+as yet no specific section on DECnet, most of the features apply to both
+IP and DECnet, albeit with DECnet addresses instead of IP addresses and
+a reduced functionality.
+
+If you want to configure a DECnet router you'll need the iproute2 package
+since its the _only_ way to add and delete routes currently. Eventually
+there will be a routing daemon to send and receive routing messages for
+each interface and update the kernel routing tables accordingly.
+
+5) How can I tell if its working ?
 
 Here is a quick guide of what to look for in order to know if your DECnet
 kernel subsystem is working.
@@ -102,11 +126,11 @@ kernel subsystem is working.
      network, and see if you can obtain the same results.
    - At this point you are on your own... :-)
 
-5) How to send a bug report
+6) How to send a bug report
 
 If you've found a bug and want to report it, then there are several things
 you can do to help me work out exactly what it is that is wrong. Useful
-information (a lot of which is essential) includes:
+information (_most_ of which _is_ _essential_) includes:
 
  - What kernel version are you running ?
  - What version of the patch are you running ?
@@ -121,10 +145,10 @@ information (a lot of which is essential) includes:
  - How can the problem be reproduced ?
  - Can you use tcpdump to get a trace ? (N.B. Most (all?) versions of 
    tcpdump don't understand how to dump DECnet properly, so including
-   the hex listing of the packet contents is essential, usually the -x flag.
+   the hex listing of the packet contents is _essential_, usually the -x flag.
    You may also need to increase the length grabbed with the -s flag)
 
-6) Mailing list
+7) Mailing list
 
 If you are keen to get involved in development, or want to ask questions
 about configuration, or even just report bugs, then there is a mailing
@@ -134,7 +158,7 @@ subscribe linux-decnet
 
 as the body of the message.
 
-7) Legal Info
+8) Legal Info
 
 The Linux DECnet project team have placed their code under the GPL. The
 software is provided "as is" and without warranty express or implied.

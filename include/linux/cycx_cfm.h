@@ -1,9 +1,10 @@
 /*
-* cycx_cfm.h	CYCLOM X Multiprotocol WAN Link Driver.
-*		Definitions for the CYCLOM X Firmware Module (CFM).
+* cycx_cfm.h	Cyclom 2X WAN Link Driver.
+*		Definitions for the Cyclom 2X Firmware Module (CFM).
 *
 * Author:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-* Copyright:	(c) 1998, 1999 Arnaldo Carvalho de Melo
+*
+* Copyright:	(c) 1998-2000 Arnaldo Carvalho de Melo
 *
 * Based on sdlasfm.h by Gene Kozin <74604.152@compuserve.com>
 *
@@ -12,7 +13,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
-* Aug 08, 1998	Arnaldo		Initial version.
+* 1998/08/08	acme		Initial version.
 */
 #ifndef	_CYCX_CFM_H
 #define	_CYCX_CFM_H
@@ -31,25 +32,25 @@
 /* Firmware Commands */
 #define GEN_POWER_ON	0x1280
 
-#define GEN_SET_SEG	0x1401	/* boot segment setting.        */
-#define GEN_BOOT_DAT	0x1402	/* boot data.                   */
-#define GEN_START	0x1403	/* board start.                 */
-#define GEN_DEFPAR	0x1404	/* buffer length for boot.      */
+#define GEN_SET_SEG	0x1401	/* boot segment setting. */
+#define GEN_BOOT_DAT	0x1402	/* boot data. */
+#define GEN_START	0x1403	/* board start. */
+#define GEN_DEFPAR	0x1404	/* buffer length for boot. */
 
-/* Adapter types */
+/* Adapter Types */
 #define CYCX_2X		2
+/* for now only the 2X is supported, no plans to support 8X or 16X */
 #define CYCX_8X		8
 #define CYCX_16X	16
 
 #define	CFID_X25_2X	5200
-
 
 /* Data Types */
 
 typedef struct	cfm_info		/* firmware module information */
 {
 	unsigned short	codeid;		/* firmware ID */
-	unsigned short	version;	/* firmaware version number */
+	unsigned short	version;	/* firmware version number */
 	unsigned short	adapter[CFM_MAX_CYCX]; /* compatible adapter types */
 	unsigned long	memsize;	/* minimum memory size */
 	unsigned short	reserved[2];	/* reserved */
@@ -61,7 +62,7 @@ typedef struct	cfm_info		/* firmware module information */
 	unsigned long	datasize;	/* configuration data size */
 } cfm_info_t;
 
-typedef struct cfm			/* CYCX firmware file structire */
+typedef struct cfm			/* CYCX firmware file structure */
 {
 	char		signature[80];	/* CFM file signature */
 	unsigned short	version;	/* file format version */

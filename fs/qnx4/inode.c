@@ -22,6 +22,7 @@
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/init.h>
+#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 
@@ -98,8 +99,8 @@ static void qnx4_write_inode(struct inode *inode)
 	raw_inode = ((struct qnx4_inode_entry *) bh->b_data) +
 	    (ino % QNX4_INODES_PER_BLOCK);
 	raw_inode->di_mode = inode->i_mode;
-	raw_inode->di_uid = inode->i_uid;
-	raw_inode->di_gid = inode->i_gid;
+	raw_inode->di_uid = fs_high2lowuid(inode->i_uid);
+	raw_inode->di_gid = fs_high2lowgid(inode->i_gid);
 	raw_inode->di_nlink = inode->i_nlink;
 	raw_inode->di_size = inode->i_size;
 	raw_inode->di_mtime = inode->i_mtime;
@@ -147,23 +148,16 @@ static int qnx4_remount(struct super_block *sb, int *flags, char *data)
 	return 0;
 }
 
-struct buffer_head *inode_getblk(struct inode *inode, int nr,
+struct buffer_head *qnx4_getblk(struct inode *inode, int nr,
 				 int create)
 {
-	int tmp;
-	int tst;
 	struct buffer_head *result = NULL;
 
-	tst = nr;
-      repeat:
-	tmp = tst;
-	if (tmp) {
-		result = getblk(inode->i_dev, tmp, QNX4_BLOCK_SIZE);
-		if (tmp == tst) {
-			return result;
-		}
-		brelse(result);
-		goto repeat;
+	if ( nr >= 0 )
+		nr = qnx4_block_map( inode, nr );
+	if (nr) {
+		result = getblk(inode->i_dev, nr, QNX4_BLOCK_SIZE);
+		return result;
 	}
 	if (!create) {
 		return NULL;
@@ -190,7 +184,7 @@ struct buffer_head *qnx4_bread(struct inode *inode, int block, int create)
 {
 	struct buffer_head *bh;
 
-	bh = inode_getblk(inode, block, create);
+	bh = qnx4_getblk(inode, block, create);
 	if (!bh || buffer_uptodate(bh)) {
 		return bh;
 	}
@@ -211,15 +205,12 @@ int qnx4_get_block( struct inode *inode, long iblock, struct buffer_head *bh, in
 	QNX4DEBUG(("qnx4: qnx4_get_block inode=[%ld] iblock=[%ld]\n",inode->i_ino,iblock));
 
 	phys = qnx4_block_map( inode, iblock );
-	if ( phys )
-	{
+	if ( phys ) {
 		// logical block is before EOF
 		bh->b_dev     = inode->i_dev;
 		bh->b_blocknr = phys;
 		bh->b_state  |= (1UL << BH_Mapped);
-	}
-	else if ( create )
-	{
+	} else if ( create ) {
 		// to be done.
 	}
 	return 0;
@@ -235,44 +226,35 @@ unsigned long qnx4_block_map( struct inode *inode, long iblock )
 	struct qnx4_inode_info *qnx4_inode = &inode->u.qnx4_i;
 	qnx4_nxtnt_t nxtnt = qnx4_inode->i_num_xtnts;
 
-	if ( iblock < qnx4_inode->i_first_xtnt.xtnt_size )
-	{
+	if ( iblock < qnx4_inode->i_first_xtnt.xtnt_size ) {
 		// iblock is in the first extent. This is easy.
 		block = qnx4_inode->i_first_xtnt.xtnt_blk + iblock - 1;
-	}
-	else
-	{
+	} else {
 		// iblock is beyond first extent. We have to follow the extent chain.
 		i_xblk = qnx4_inode->i_xblk;
 		offset = iblock - qnx4_inode->i_first_xtnt.xtnt_size;
 		ix = 0;
-		while ( --nxtnt > 0 )
-		{
-			if ( ix == 0 )
-			{
+		while ( --nxtnt > 0 ) {
+			if ( ix == 0 ) {
 				// read next xtnt block.
 				bh = bread( inode->i_dev, i_xblk - 1, QNX4_BLOCK_SIZE );
-				if ( !bh )
-				{
+				if ( !bh ) {
 					QNX4DEBUG(("qnx4: I/O error reading xtnt block [%ld])\n", i_xblk - 1));
 					return -EIO;
 				}
 				xblk = (struct qnx4_xblk*)bh->b_data;
-				if ( memcmp( xblk->xblk_signature, "IamXblk", 7 ) )
-				{
+				if ( memcmp( xblk->xblk_signature, "IamXblk", 7 ) ) {
 					QNX4DEBUG(("qnx4: block at %ld is not a valid xtnt\n", qnx4_inode->i_xblk));
-					break;
+					return -EIO;
 				}
 			}
-			if ( offset < xblk->xblk_xtnts[ix].xtnt_size )
-			{
+			if ( offset < xblk->xblk_xtnts[ix].xtnt_size ) {
 				// got it!
 				block = xblk->xblk_xtnts[ix].xtnt_blk + offset - 1;
 				break;
 			}
 			offset -= xblk->xblk_xtnts[ix].xtnt_size;
-			if ( ++ix > QNX4_MAX_XTNTS_PER_XBLK )
-			{
+			if ( ++ix >= xblk->xblk_num_xtnts ) {
 				i_xblk = xblk->xblk_next_xblk;
 				ix = 0;
 				brelse( bh );
@@ -468,8 +450,8 @@ static void qnx4_read_inode(struct inode *inode)
 	    (ino % QNX4_INODES_PER_BLOCK);
 
 	inode->i_mode = raw_inode->di_mode;
-	inode->i_uid = raw_inode->di_uid;
-	inode->i_gid = raw_inode->di_gid;
+	inode->i_uid = (uid_t)raw_inode->di_uid;
+	inode->i_gid = (gid_t)raw_inode->di_gid;
 	inode->i_nlink = raw_inode->di_nlink;
 	inode->i_size = raw_inode->di_size;
 	inode->i_mtime = raw_inode->di_mtime;

@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.62 1999/12/23 01:43:37 davem Exp $
+ *	Version: $Id: icmp.c,v 1.63 2000/01/09 02:19:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -285,7 +285,7 @@
  *	Statistics
  */
  
-struct icmp_mib icmp_statistics;
+struct icmp_mib icmp_statistics[NR_CPUS*2];
 
 /* An array of errno for error messages from dest unreach. */
 /* RFC 1122: 3.2.2.1 States that NET_UNREACH, HOS_UNREACH and SR_FAIELD MUST be considered 'transient errs'. */
@@ -468,8 +468,8 @@ static void icmp_out_count(int type)
 {
 	if (type>NR_ICMP_TYPES)
 		return;
-	(*icmp_pointers[type].output)++;
-	icmp_statistics.IcmpOutMsgs++;
+	(icmp_pointers[type].output)[(smp_processor_id()*2+!in_interrupt())*sizeof(struct icmp_mib)/sizeof(unsigned long)]++;
+	ICMP_INC_STATS(IcmpOutMsgs);
 }
  
 /*
@@ -527,9 +527,12 @@ static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 
 	sk->protinfo.af_inet.tos = skb->nh.iph->tos;
 	daddr = ipc.addr = rt->rt_src;
-	ipc.opt = &icmp_param->replyopts;
-	if (ipc.opt->srr)
-		daddr = icmp_param->replyopts.faddr;
+	ipc.opt = NULL;
+	if (icmp_param->replyopts.optlen) {
+		ipc.opt = &icmp_param->replyopts;
+		if (ipc.opt->srr)
+			daddr = icmp_param->replyopts.faddr;
+	}
 	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
 		goto out;
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
@@ -561,49 +564,41 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	struct ipcm_cookie ipc;
 	u32 saddr;
 	u8  tos;
-	
+
+	if (!rt)
+		return;
+
 	/*
 	 *	Find the original header
 	 */
-	 
 	iph = skb_in->nh.iph;
-	
+
 	/*
 	 *	No replies to physical multicast/broadcast
 	 */
-	 
 	if (skb_in->pkt_type!=PACKET_HOST)
 		return;
-		
+
 	/*
 	 *	Now check at the protocol level
 	 */
-	if (!rt) {
-		if (net_ratelimit())
-			printk(KERN_DEBUG "icmp_send: destinationless packet\n");
-		return;
-	}
 	if (rt->rt_flags&(RTCF_BROADCAST|RTCF_MULTICAST))
 		return;
-	 
-		
+
 	/*
 	 *	Only reply to fragment 0. We byte re-order the constant
 	 *	mask for efficiency.
 	 */
-	 
 	if (iph->frag_off&htons(IP_OFFSET))
 		return;
-		
+
 	/* 
 	 *	If we send an ICMP error to an ICMP error a mess would result..
 	 */
-	 
 	if (icmp_pointers[type].error) {
 		/*
 		 *	We are an error, check if we are replying to an ICMP error
 		 */
-		 
 		if (iph->protocol==IPPROTO_ICMP) {
 			icmph = (struct icmphdr *)((char *)iph + (iph->ihl<<2));
 			/*
@@ -649,7 +644,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	 */
 	if (ip_route_output(&rt, iph->saddr, saddr, RT_TOS(tos), 0))
 		goto out;
-	
+
 	if (ip_options_echo(&icmp_param.replyopts, skb_in)) 
 		goto ende;
 
@@ -719,7 +714,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 */
 
 	if(len<sizeof(struct iphdr)) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
 		return;
 	}
 		
@@ -841,7 +836,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	unsigned long ip;
 
 	if (len < sizeof(struct iphdr)) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
 		return; 
 	}
 		
@@ -910,7 +905,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 */
 	 
 	if(len<12) {
-		icmp_statistics.IcmpInErrors++;
+		ICMP_INC_STATS_BH(IcmpInErrors);
 		return;
 	}
 	
@@ -1024,7 +1019,7 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	struct icmphdr *icmph = skb->h.icmph;
 	struct rtable *rt = (struct rtable*)skb->dst;
 
-	icmp_statistics.IcmpInMsgs++;
+	ICMP_INC_STATS_BH(IcmpInMsgs);
 
 	/*
 	 *	18 is the highest 'known' ICMP type. Anything else is a mystery
@@ -1060,14 +1055,14 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	}
 
 	len -= sizeof(struct icmphdr);
-	(*icmp_pointers[icmph->type].input)++;
+	icmp_pointers[icmph->type].input[smp_processor_id()*2*sizeof(struct icmp_mib)/sizeof(unsigned long)]++;
 	(icmp_pointers[icmph->type].handler)(icmph, skb, len);
 
 drop:
 	kfree_skb(skb);
 	return 0;
 error:
-	icmp_statistics.IcmpInErrors++;
+	ICMP_INC_STATS_BH(IcmpInErrors);
 	goto drop;
 }
 
@@ -1096,37 +1091,37 @@ int sysctl_icmp_echoreply_time = 0; /* don't limit it per default. */
  
 static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
 /* ECHO REPLY (0) */
- { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0, &sysctl_icmp_echoreply_time},
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &icmp_statistics[0].IcmpOutEchoReps, &icmp_statistics[0].IcmpInEchoReps, icmp_discard, 0, &sysctl_icmp_echoreply_time},
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
 /* DEST UNREACH (3) */
- { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1, &sysctl_icmp_destunreach_time },
+ { &icmp_statistics[0].IcmpOutDestUnreachs, &icmp_statistics[0].IcmpInDestUnreachs, icmp_unreach, 1, &sysctl_icmp_destunreach_time },
 /* SOURCE QUENCH (4) */
- { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, },
+ { &icmp_statistics[0].IcmpOutSrcQuenchs, &icmp_statistics[0].IcmpInSrcQuenchs, icmp_unreach, 1, },
 /* REDIRECT (5) */
- { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1, },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &icmp_statistics[0].IcmpOutRedirects, &icmp_statistics[0].IcmpInRedirects, icmp_redirect, 1, },
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
 /* ECHO (8) */
- { &icmp_statistics.IcmpOutEchos, &icmp_statistics.IcmpInEchos, icmp_echo, 0, },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &icmp_statistics[0].IcmpOutEchos, &icmp_statistics[0].IcmpInEchos, icmp_echo, 0, },
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics[0].IcmpInErrors, icmp_discard, 1, },
 /* TIME EXCEEDED (11) */
- { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1, &sysctl_icmp_timeexceed_time },
+ { &icmp_statistics[0].IcmpOutTimeExcds, &icmp_statistics[0].IcmpInTimeExcds, icmp_unreach, 1, &sysctl_icmp_timeexceed_time },
 /* PARAMETER PROBLEM (12) */
- { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_unreach, 1, &sysctl_icmp_paramprob_time },
+ { &icmp_statistics[0].IcmpOutParmProbs, &icmp_statistics[0].IcmpInParmProbs, icmp_unreach, 1, &sysctl_icmp_paramprob_time },
 /* TIMESTAMP (13) */
- { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0,  },
+ { &icmp_statistics[0].IcmpOutTimestamps, &icmp_statistics[0].IcmpInTimestamps, icmp_timestamp, 0,  },
 /* TIMESTAMP REPLY (14) */
- { &icmp_statistics.IcmpOutTimestampReps, &icmp_statistics.IcmpInTimestampReps, icmp_discard, 0, },
+ { &icmp_statistics[0].IcmpOutTimestampReps, &icmp_statistics[0].IcmpInTimestampReps, icmp_discard, 0, },
 /* INFO (15) */
  { &dummy, &dummy, icmp_discard, 0, },
 /* INFO REPLY (16) */
  { &dummy, &dummy, icmp_discard, 0, },
 /* ADDR MASK (17) */
- { &icmp_statistics.IcmpOutAddrMasks, &icmp_statistics.IcmpInAddrMasks, icmp_address, 0,  },
+ { &icmp_statistics[0].IcmpOutAddrMasks, &icmp_statistics[0].IcmpInAddrMasks, icmp_address, 0,  },
 /* ADDR MASK REPLY (18) */
- { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_address_reply, 0, }
+ { &icmp_statistics[0].IcmpOutAddrMaskReps, &icmp_statistics[0].IcmpInAddrMaskReps, icmp_address_reply, 0, }
 };
 
 void __init icmp_init(struct net_proto_family *ops)

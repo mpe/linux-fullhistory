@@ -550,6 +550,8 @@ struct usb_bus {
 
 	/* procfs entry */
 	struct proc_dir_entry *proc_entry;
+        /* usbdevfs inode list */
+        struct list_head inodes;
 };
 
 #define USB_MAXCHILDREN (8)	/* This is arbitrary */
@@ -574,13 +576,15 @@ struct usb_device {
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
 
-	char *string;			/* pointer to the last string read from the device */
 	int string_langid;		/* language ID for strings */
   
 	void *hcpriv;			/* Host Controller private data */
 	
 	/* procfs entry */
 	struct proc_dir_entry *proc_entry;
+        /* usbdevfs inode list */
+        struct list_head inodes;
+        struct list_head filelist;
 
 	/*
 	 * Child devices - these can be either new devices
@@ -746,7 +750,7 @@ int usb_get_report(struct usb_device *dev, unsigned char type,
 	unsigned char id, unsigned char index, void *buf, int size);
 int usb_set_report(struct usb_device *dev, unsigned char type,
 	unsigned char id, unsigned char index, void *buf, int size);
-char *usb_string(struct usb_device *dev, int index);
+int usb_string(struct usb_device *dev, int index, char *buf, size_t size);
 int usb_clear_halt(struct usb_device *dev, int endp);
 
 #define usb_get_extra_descriptor(ifpoint,type,ptr)\
@@ -786,12 +790,19 @@ void usb_show_string(struct usb_device *dev, char *id, int index);
 #ifdef DEBUG
 #define dbg(format, arg...) printk(KERN_DEBUG __FILE__ ": " format "\n", ## arg)
 #else
-#define dbg(format, arg...)
+#define dbg(format, arg...) do {} while (0)
 #endif
 #define err(format, arg...) printk(KERN_ERR __FILE__ ": " format "\n", ## arg)
 #define info(format, arg...) printk(KERN_INFO __FILE__ ": " format "\n", ## arg)
 #define warn(format, arg...) printk(KERN_WARNING __FILE__ ": " format "\n", ## arg)
 
+
+/*
+ * bus and driver list
+ */
+
+extern struct list_head usb_driver_list;
+extern struct list_head usb_bus_list;
 
 /*
  * procfs stuff
@@ -808,6 +819,36 @@ extern inline void proc_usb_remove_bus(struct usb_bus *bus) {}
 extern inline void proc_usb_add_device(struct usb_device *dev) {}
 extern inline void proc_usb_remove_device(struct usb_device *dev) {}
 #endif
+
+/*
+ * USB device fs stuff
+ */
+
+#ifdef CONFIG_USB_DEVICEFS
+
+/*
+ * these are expected to be called from the USB core/hub thread
+ * with the kernel lock held
+ */
+extern void usbdevfs_add_bus(struct usb_bus *bus);
+extern void usbdevfs_remove_bus(struct usb_bus *bus);
+extern void usbdevfs_add_device(struct usb_device *dev);
+extern void usbdevfs_remove_device(struct usb_device *dev);
+
+extern int usbdevfs_init(void);
+extern void usbdevfs_cleanup(void);
+
+#else /* CONFIG_USB_DEVICEFS */
+
+extern inline void usbdevfs_add_bus(struct usb_bus *bus) {}
+extern inline void usbdevfs_remove_bus(struct usb_bus *bus) {}
+extern inline void usbdevfs_add_device(struct usb_device *dev) {}
+extern inline void usbdevfs_remove_device(struct usb_device *dev) {}
+
+extern inline int usbdevfs_init(void) { return 0; }
+extern inline void usbdevfs_cleanup(void) { }
+
+#endif /* CONFIG_USB_DEVICEFS */
 
 #endif  /* __KERNEL__ */
 

@@ -554,6 +554,7 @@ int dn_neigh_elist(struct net_device *dev, unsigned char *ptr, int n)
 	struct dn_neigh *dn;
 	struct neigh_table *tbl = &dn_neigh_table;
 	unsigned char *rs = ptr;
+	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
 
 	read_lock_bh(&tbl->lock);
 
@@ -564,7 +565,7 @@ int dn_neigh_elist(struct net_device *dev, unsigned char *ptr, int n)
 			dn = (struct dn_neigh *)neigh;
 			if (!(dn->flags & (DN_NDFLAG_R1|DN_NDFLAG_R2)))
 				continue;
-			if (decnet_node_type == DN_RT_INFO_L1RT && (dn->flags & DN_NDFLAG_R2))
+			if (dn_db->parms.forwarding == 1 && (dn->flags & DN_NDFLAG_R2))
 				continue;
 			if (t == n)
 				rs = dn_find_slot(ptr, n, dn->priority);
@@ -654,12 +655,10 @@ void __init dn_neigh_init(void)
 #endif /* CONFIG_PROC_FS */
 }
 
-#ifdef CONFIG_DECNET_MODULE
-void dn_neigh_cleanup(void)
+void __exit dn_neigh_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
 	proc_net_remove("decnet_neigh");
 #endif /* CONFIG_PROC_FS */
 	neigh_table_clear(&dn_neigh_table);
 }
-#endif /* CONFIG_DECNET_MODULE */

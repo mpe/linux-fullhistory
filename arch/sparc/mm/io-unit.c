@@ -1,4 +1,4 @@
-/* $Id: io-unit.c,v 1.18 1999/12/28 04:28:55 anton Exp $
+/* $Id: io-unit.c,v 1.19 2000/01/08 17:01:18 anton Exp $
  * io-unit.c:  IO-UNIT specific routines for memory management.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
@@ -102,7 +102,7 @@ nexti:	scan = find_next_zero_bit(iounit->bmap, limit, scan);
 			goto nexti;
 	iounit->rotor[j - 1] = (scan < limit) ? scan : iounit->limit[j - 1];
 	scan -= npages;
-	iopte = MKIOPTE(mmu_v2p(vaddr & PAGE_MASK));
+	iopte = MKIOPTE(__pa(vaddr & PAGE_MASK));
 	vaddr = IOUNIT_DMA_BASE + (scan << PAGE_SHIFT) + (vaddr & ~PAGE_MASK);
 	for (k = 0; k < npages; k++, iopte = __iopte(iopte_val(iopte) + 0x100), scan++) {
 		set_bit(scan, iounit->bmap);
@@ -198,7 +198,7 @@ static void iounit_map_dma_area(unsigned long va, __u32 addr, int len)
 				struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
 
 				iopte = (iopte_t *)(iounit->page_table + i);
-				*iopte = __iopte(MKIOPTE(mmu_v2p(page)));
+				*iopte = __iopte(MKIOPTE(__pa(page)));
 			}
 		}
 		addr += PAGE_SIZE;
@@ -284,6 +284,6 @@ __u32 iounit_map_dma_page(__u32 vaddr, void *addr, struct sbus_bus *sbus)
 	int scan = (vaddr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
 	
-	iounit->page_table[scan] = MKIOPTE(mmu_v2p(((unsigned long)addr) & PAGE_MASK));
+	iounit->page_table[scan] = MKIOPTE(__pa(((unsigned long)addr) & PAGE_MASK));
 	return vaddr + (((unsigned long)addr) & ~PAGE_MASK);
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.24 1999/08/20 11:06:18 davem Exp $
+ *	$Id: icmp.c,v 1.25 2000/01/09 02:19:54 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -58,7 +58,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-struct icmpv6_mib icmpv6_statistics;
+struct icmpv6_mib icmpv6_statistics[NR_CPUS*2];
 
 /*
  *	ICMP socket for flow control.
@@ -237,7 +237,7 @@ static inline int icmpv6_xrlim_allow(struct sock *sk, int type,
 	 */
 	dst = ip6_route_output(sk, fl);
 	if (dst->error) {
-		ipv6_statistics.Ip6OutNoRoutes++;
+		IP6_INC_STATS(Ip6OutNoRoutes);
 	} else if (dst->dev && (dst->dev->flags&IFF_LOOPBACK)) {
 		res = 1;
 	} else {
@@ -388,8 +388,8 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
 	if (type >= ICMPV6_DEST_UNREACH && type <= ICMPV6_PARAMPROB)
-		(&icmpv6_statistics.Icmp6OutDestUnreachs)[type-1]++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+		(&(icmpv6_statistics[smp_processor_id()*2].Icmp6OutDestUnreachs))[type-1]++;
+	ICMP6_INC_STATS_BH(Icmp6OutMsgs);
 out:
 	icmpv6_xmit_unlock();
 }
@@ -439,8 +439,8 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
-	icmpv6_statistics.Icmp6OutEchoReplies++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+	ICMP6_INC_STATS_BH(Icmp6OutEchoReplies);
+	ICMP6_INC_STATS_BH(Icmp6OutMsgs);
 
 	icmpv6_xmit_unlock_bh();
 }
@@ -513,7 +513,7 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 	int ulen;
 	int type;
 
-	icmpv6_statistics.Icmp6InMsgs++;
+	ICMP6_INC_STATS_BH(Icmp6InMsgs);
 
 	if (len < sizeof(struct icmp6hdr))
 		goto discard_it;
@@ -556,9 +556,9 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 	type = hdr->icmp6_type;
 
 	if (type >= ICMPV6_DEST_UNREACH && type <= ICMPV6_PARAMPROB)
-		(&icmpv6_statistics.Icmp6InDestUnreachs)[type-ICMPV6_DEST_UNREACH]++;
+		(&icmpv6_statistics[smp_processor_id()*2].Icmp6InDestUnreachs)[type-ICMPV6_DEST_UNREACH]++;
 	else if (type >= ICMPV6_ECHO_REQUEST && type <= NDISC_REDIRECT)
-		(&icmpv6_statistics.Icmp6InEchos)[type-ICMPV6_ECHO_REQUEST]++;
+		(&icmpv6_statistics[smp_processor_id()*2].Icmp6InEchos)[type-ICMPV6_ECHO_REQUEST]++;
 
 	switch (type) {
 
@@ -631,7 +631,7 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 	return 0;
 
 discard_it:
-	icmpv6_statistics.Icmp6InErrors++;
+	ICMP6_INC_STATS_BH(Icmp6InErrors);
 	kfree_skb(skb);
 	return 0;
 }

@@ -147,10 +147,17 @@ struct ipv4_config
 };
 
 extern struct ipv4_config ipv4_config;
-extern struct ip_mib	ip_statistics;
-extern struct linux_mib	net_statistics;
+extern struct ip_mib	ip_statistics[NR_CPUS*2];
+#define IP_INC_STATS(field)		SNMP_INC_STATS(ip_statistics, field)
+#define IP_INC_STATS_BH(field)		SNMP_INC_STATS_BH(ip_statistics, field)
+#define IP_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(ip_statistics, field)
+extern struct linux_mib	net_statistics[NR_CPUS*2];
+#define NET_INC_STATS(field)		SNMP_INC_STATS(net_statistics, field)
+#define NET_INC_STATS_BH(field)		SNMP_INC_STATS_BH(net_statistics, field)
+#define NET_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(net_statistics, field)
 
 extern int sysctl_local_port_range[2];
+extern int sysctl_ip_default_ttl;
 
 #ifdef CONFIG_INET
 extern __inline__ int ip_send(struct sk_buff *skb)

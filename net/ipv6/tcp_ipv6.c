@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.115 2000/01/06 00:42:09 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.116 2000/01/09 02:19:52 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -219,9 +219,7 @@ static __inline__ void __tcp_v6_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
 	write_unlock(lock);
 }
 
@@ -410,9 +408,7 @@ unique:
 
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
 	write_unlock_bh(&head->lock);
 
 #ifdef CONFIG_TCP_TW_RECYCLE
@@ -692,7 +688,7 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	sk = tcp_v6_lookup(daddr, th->dest, saddr, th->source, skb->dev->ifindex);
 
 	if (sk == NULL) {
-		icmpv6_statistics.Icmp6InErrors++;
+		ICMP6_INC_STATS_BH(Icmp6InErrors);
 		return;
 	}
 
@@ -703,12 +699,12 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 	bh_lock_sock(sk);
 	if (sk->lock.users)
-		net_statistics.LockDroppedIcmps++;
+		NET_INC_STATS_BH(LockDroppedIcmps);
 
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq); 
 	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
-		net_statistics.OutOfWindowIcmps++;
+		NET_INC_STATS_BH(OutOfWindowIcmps);
 		goto out;
 	}
 
@@ -781,12 +777,12 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 			tp = &sk->tp_pinfo.af_tcp;
 			if (!between(seq, tp->snd_una, tp->snd_nxt)) {
-				net_statistics.OutOfWindowIcmps++;
+				NET_INC_STATS_BH(OutOfWindowIcmps);
 				goto out;
 			}
 		} else {
 			if (seq != req->snt_isn) {
-				net_statistics.OutOfWindowIcmps++;
+				NET_INC_STATS_BH(OutOfWindowIcmps);
 				goto out;
 			}
 
@@ -802,7 +798,7 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	case TCP_SYN_RECV:  /* Cannot happen.
 			       It can, it SYNs are crossed. --ANK */ 
 		if (sk->lock.users == 0) {
-			tcp_statistics.TcpAttemptFails++;
+			TCP_INC_STATS_BH(TcpAttemptFails);
 			sk->err = err;
 			sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
 
@@ -996,7 +992,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 	return 0;
 
 drop:
-	tcp_statistics.TcpAttemptFails++;
+	TCP_INC_STATS_BH(TcpAttemptFails);
 	return 0; /* don't send reset */
 }
 
@@ -1238,8 +1234,8 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 
 	if (buff->dst->error == 0) {
 		ip6_xmit(NULL, buff, &fl, NULL);
-		tcp_statistics.TcpOutSegs++;
-		tcp_statistics.TcpOutRsts++;
+		TCP_INC_STATS_BH(TcpOutSegs);
+		TCP_INC_STATS_BH(TcpOutRsts);
 		return;
 	}
 
@@ -1304,7 +1300,7 @@ static void tcp_v6_send_ack(struct sk_buff *skb, u32 seq, u32 ack, u32 win, u32 
 
 	if (buff->dst->error == 0) {
 		ip6_xmit(NULL, buff, &fl, NULL);
-		tcp_statistics.TcpOutSegs++;
+		TCP_INC_STATS_BH(TcpOutSegs);
 		return;
 	}
 
@@ -1437,7 +1433,7 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	 *	is currently called with bh processing disabled.
 	 */
 
-  	ipv6_statistics.Ip6InDelivers++;
+  	IP6_INC_STATS_BH(Ip6InDelivers);
 
 	/* 
 	 * This doesn't check if the socket has enough room for the packet.
@@ -1526,7 +1522,7 @@ discard:
 	kfree_skb(skb);
 	return 0;
 csum_err:
-	tcp_statistics.TcpInErrs++;
+	TCP_INC_STATS_BH(TcpInErrs);
 	goto discard;
 
 
@@ -1587,7 +1583,7 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 	 *	Count it even if it's bad.
 	 */
 
-	tcp_statistics.TcpInSegs++;
+	TCP_INC_STATS_BH(TcpInSegs);
 
 	if (len < sizeof(struct tcphdr))
 		goto bad_packet;
@@ -1624,7 +1620,7 @@ process:
 no_tcp_socket:
 	if (tcp_v6_csum_verify(skb)) {
 bad_packet:
-		tcp_statistics.TcpInErrs++;
+		TCP_INC_STATS_BH(TcpInErrs);
 	} else {
 		tcp_v6_send_reset(skb);
 	}
@@ -1644,7 +1640,7 @@ discard_and_relse:
 
 do_time_wait:
 	if (tcp_v6_csum_verify(skb)) {
-		tcp_statistics.TcpInErrs++;
+		TCP_INC_STATS_BH(TcpInErrs);
 		sock_put(sk);
 		goto discard_it;
 	}
@@ -2124,8 +2120,6 @@ struct proto tcpv6_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
 	"TCPv6",			/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };
 
 static struct inet6_protocol tcpv6_protocol =

@@ -9,6 +9,7 @@
  *	Copyright 1997 -- 2000 Martin Mares <mj@suse.cz>
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>

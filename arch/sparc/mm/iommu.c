@@ -1,4 +1,4 @@
-/* $Id: iommu.c,v 1.16 1999/12/28 04:28:54 anton Exp $
+/* $Id: iommu.c,v 1.17 2000/01/08 17:01:18 anton Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -36,13 +36,13 @@ extern void viking_mxcc_flush_page(unsigned long page);
 static inline void iommu_map_dvma_pages_for_iommu(struct iommu_struct *iommu)
 {
 	unsigned long kern_end = (unsigned long) high_memory;
-	unsigned long first = page_offset;
+	unsigned long first = PAGE_OFFSET;
 	unsigned long last = kern_end;
 	iopte_t *iopte = iommu->page_table;
 
 	iopte += ((first - iommu->start) >> PAGE_SHIFT);
 	while(first <= last) {
-		*iopte++ = __iopte(MKIOPTE(mmu_v2p(first)));
+		*iopte++ = __iopte(MKIOPTE(__pa(first)));
 		first += PAGE_SIZE;
 	}
 }
@@ -71,7 +71,7 @@ iommu_init(int iommund, struct sbus_bus *sbus)
 	vers = (iommu->regs->control & IOMMU_CTRL_VERS) >> 24;
 	tmp = iommu->regs->control;
 	tmp &= ~(IOMMU_CTRL_RNGE);
-	switch(page_offset & 0xf0000000) {
+	switch(PAGE_OFFSET & 0xf0000000) {
 	case 0xf0000000:
 		tmp |= (IOMMU_RNGE_256MB | IOMMU_CTRL_ENAB);
 		iommu->plow = iommu->start = 0xf0000000;
@@ -135,7 +135,7 @@ iommu_init(int iommund, struct sbus_bus *sbus)
 		}
 	}
 	flush_tlb_all();
-	iommu->regs->base = mmu_v2p((unsigned long) iommu->page_table) >> 4;
+	iommu->regs->base = __pa((unsigned long) iommu->page_table) >> 4;
 	iommu_invalidate(iommu->regs);
 
 	sbus->iommu = iommu;
@@ -249,10 +249,10 @@ static void iommu_map_dma_area(unsigned long va, __u32 addr, int len)
 
 			set_pte(ptep, pte_val(mk_pte(page, dvma_prot)));
 			if (ipte_cache != 0) {
-				iopte_val(*iopte++) = MKIOPTE(mmu_v2p(page));
+				iopte_val(*iopte++) = MKIOPTE(__pa(page));
 			} else {
 				iopte_val(*iopte++) =
-					MKIOPTE(mmu_v2p(page)) & ~IOPTE_CACHE;
+					MKIOPTE(__pa(page)) & ~IOPTE_CACHE;
 			}
 		}
 		addr += PAGE_SIZE;

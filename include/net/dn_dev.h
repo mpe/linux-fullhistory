@@ -45,10 +45,11 @@ struct dn_ifaddr {
  * device will come up. In the dn_dev structure, it is the actual
  * state.
  *
- * The cost field is used in the routing algorithm.
+ * Things have changed here. I've killed timer1 since its a user space
+ * issue for a user space routing deamon to sort out. The kernel does
+ * not need to be bothered with it.
  *
  * Timers:
- * t1 - Routing timer, send routing messages when it expires
  * t2 - Rate limit timer, min time between routing and hello messages
  * t3 - Hello timer, send hello messages when it expires
  *
@@ -56,30 +57,27 @@ struct dn_ifaddr {
  * up() - Called to initialize device, return value can veto use of
  *        device with DECnet.
  * down() - Called to turn device off when it goes down
- * timer1() - Called when timer 1 goes off
  * timer3() - Called when timer 3 goes off
  * 
  * sysctl - Hook for sysctl things
  *
  */
 struct dn_dev_parms {
-	int type;	          /* ARPHRD_xxx                     */
-	int mode;	          /* Broadcast, Unicast, Mulitpoint */
+	int type;	          /* ARPHRD_xxx                         */
+	int mode;	          /* Broadcast, Unicast, Mulitpoint     */
 #define DN_DEV_BCAST  1
 #define DN_DEV_UCAST  2
 #define DN_DEV_MPOINT 4
-	int state;                /* Initial state                  */
-	int cost;	          /* Default cost of device         */
-	unsigned short blksize;   /* Block Size                     */
-	unsigned long t1;         /* Default value of t1            */
-	unsigned long t2;         /* Default value of t2            */
-	unsigned long t3;         /* Default value of t3            */
-	int priority;             /* Priority to be a router        */
-	char *name;               /* Name for sysctl                */
-	int ctl_name;             /* Index for sysctl               */
+	int state;                /* Initial state                      */
+	int forwarding;	          /* 0=EndNode, 1=L1Router, 2=L2Router  */
+	unsigned short blksize;   /* Block Size                         */
+	unsigned long t2;         /* Default value of t2                */
+	unsigned long t3;         /* Default value of t3                */
+	int priority;             /* Priority to be a router            */
+	char *name;               /* Name for sysctl                    */
+	int ctl_name;             /* Index for sysctl                   */
 	int  (*up)(struct net_device *);
 	void (*down)(struct net_device *);
-	void (*timer1)(struct net_device *);
 	void (*timer3)(struct net_device *);
 	void *sysctl;
 };
@@ -91,7 +89,7 @@ struct dn_dev {
 	struct dn_dev_parms parms;
 	char use_long;
         struct timer_list timer;
-        unsigned long t3, t1;
+        unsigned long t3;
 	struct neigh_parms *neigh_parms;
 	unsigned char addr[ETH_ALEN];
 	struct neighbour *router; /* Default router on circuit */
@@ -124,33 +122,34 @@ struct dn_long_packet
 
 /*------------------------- DRP - Routing messages ---------------------*/
 
-        struct endnode_hello_message
-        {
-                unsigned char   msgflg          __attribute__((packed));
-                unsigned char   tiver[3]        __attribute__((packed));
-                unsigned char   id[6]           __attribute__((packed));
-                unsigned char   iinfo           __attribute__((packed));
-                unsigned short  blksize         __attribute__((packed));
-                unsigned char   area            __attribute__((packed));
-                unsigned char   seed[8]         __attribute__((packed));
-                unsigned char   neighbor[6]     __attribute__((packed));
-                unsigned short  timer           __attribute__((packed));
-                unsigned char   mpd             __attribute__((packed));
-                unsigned char   datalen         __attribute__((packed));
-                unsigned char   data[2]         __attribute__((packed));
-        };
-        struct rtnode_hello_message
-        {
-                unsigned char   msgflg          __attribute__((packed));
-                unsigned char   tiver[3]        __attribute__((packed));
-                unsigned char   id[6]           __attribute__((packed));
-                unsigned char   iinfo           __attribute__((packed));
-                unsigned short  blksize         __attribute__((packed));
-                unsigned char   priority        __attribute__((packed));
-                unsigned char   area            __attribute__((packed));
-                unsigned short  timer           __attribute__((packed));
-                unsigned char   mpd             __attribute__((packed));
-        };
+struct endnode_hello_message
+{
+	unsigned char   msgflg          __attribute__((packed));
+        unsigned char   tiver[3]        __attribute__((packed));
+        unsigned char   id[6]           __attribute__((packed));
+        unsigned char   iinfo           __attribute__((packed));
+        unsigned short  blksize         __attribute__((packed));
+        unsigned char   area            __attribute__((packed));
+        unsigned char   seed[8]         __attribute__((packed));
+        unsigned char   neighbor[6]     __attribute__((packed));
+        unsigned short  timer           __attribute__((packed));
+        unsigned char   mpd             __attribute__((packed));
+        unsigned char   datalen         __attribute__((packed));
+        unsigned char   data[2]         __attribute__((packed));
+};
+
+struct rtnode_hello_message
+{
+	unsigned char   msgflg          __attribute__((packed));
+        unsigned char   tiver[3]        __attribute__((packed));
+        unsigned char   id[6]           __attribute__((packed));
+        unsigned char   iinfo           __attribute__((packed));
+        unsigned short  blksize         __attribute__((packed));
+        unsigned char   priority        __attribute__((packed));
+        unsigned char   area            __attribute__((packed));
+        unsigned short  timer           __attribute__((packed));
+        unsigned char   mpd             __attribute__((packed));
+};
 
 
 extern void dn_dev_init(void);

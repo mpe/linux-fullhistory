@@ -70,8 +70,8 @@ void efs_read_inode(struct inode *inode) {
     
 	inode->i_mode  = be16_to_cpu(efs_inode->di_mode);
 	inode->i_nlink = be16_to_cpu(efs_inode->di_nlink);
-	inode->i_uid   = be16_to_cpu(efs_inode->di_uid);
-	inode->i_gid   = be16_to_cpu(efs_inode->di_gid);
+	inode->i_uid   = (uid_t)be16_to_cpu(efs_inode->di_uid);
+	inode->i_gid   = (gid_t)be16_to_cpu(efs_inode->di_gid);
 	inode->i_size  = be32_to_cpu(efs_inode->di_size);
 	inode->i_atime = be32_to_cpu(efs_inode->di_atime);
 	inode->i_mtime = be32_to_cpu(efs_inode->di_mtime);

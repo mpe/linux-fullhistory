@@ -25,6 +25,11 @@
  *              Steve Whitehouse : Dave Miller's dynamic hash table sizing and
  *                                 Alexey Kuznetsov's finer grained locking
  *                                 from ipv4/route.c.
+ *              Steve Whitehouse : Routing is now starting to look like a
+ *                                 sensible set of code now, mainly due to
+ *                                 my copying the IPv4 routing code. The
+ *                                 hooks here are modified and will continue
+ *                                 to evolve for a while.
  */
 
 /******************************************************************************
@@ -82,17 +87,23 @@ extern struct neigh_table dn_neigh_table;
 
 static unsigned char dn_hiord_addr[6] = {0xAA,0x00,0x04,0x00,0x00,0x00};
 
+int dn_rt_min_delay = 2*HZ;
+int dn_rt_max_delay = 10*HZ;
+static unsigned long dn_rt_deadline = 0;
+
 static int dn_dst_gc(void);
 static struct dst_entry *dn_dst_check(struct dst_entry *, __u32);
 static struct dst_entry *dn_dst_reroute(struct dst_entry *, struct sk_buff *skb);
 static struct dst_entry *dn_dst_negative_advice(struct dst_entry *);
 static void dn_dst_link_failure(struct sk_buff *);
 static int dn_route_input(struct sk_buff *);
+static void dn_run_flush(unsigned long dummy);
 
 static struct dn_rt_hash_bucket *dn_rt_hash_table;
 static unsigned dn_rt_hash_mask;
 
 static struct timer_list dn_route_timer = { NULL, NULL, 0, 0L, NULL };
+static struct timer_list dn_rt_flush_timer = { NULL, NULL, 0, 0L, dn_run_flush };
 int decnet_dst_gc_interval = 2;
 
 static struct dst_ops dn_dst_ops = {
@@ -109,12 +120,12 @@ static struct dst_ops dn_dst_ops = {
 	ATOMIC_INIT(0)
 };
 
-static __inline__ unsigned dn_hash(unsigned short dest)
+static __inline__ unsigned dn_hash(unsigned short src, unsigned short dst)
 {
-	unsigned short tmp = dest;
-	tmp ^= (dest >> 3);
-	tmp ^= (dest >> 5);
-	tmp ^= (dest >> 10);
+	unsigned short tmp = src ^ dst;
+	tmp ^= (tmp >> 3);
+	tmp ^= (tmp >> 5);
+	tmp ^= (tmp >> 10);
 	return dn_rt_hash_mask & (unsigned)tmp;
 }
 
@@ -155,8 +166,10 @@ static int dn_dst_gc(void)
 	unsigned long expire = 10 * HZ;
 
 	for(i = 0; i <= dn_rt_hash_mask; i++) {
+
 		write_lock_bh(&dn_rt_hash_table[i].lock);
 		rtp = &dn_rt_hash_table[i].chain;
+
 		for(; (rt=*rtp); rtp = &rt->u.rt_next) {
 			if (atomic_read(&rt->u.dst.__refcnt) ||
 					(now - rt->u.dst.lastuse) < expire)
@@ -199,9 +212,8 @@ static void dn_dst_link_failure(struct sk_buff *skb)
 	return;
 }
 
-static void dn_insert_route(struct dn_route *rt)
+static void dn_insert_route(struct dn_route *rt, unsigned hash)
 {
-	unsigned hash = dn_hash(rt->rt_daddr);
 	unsigned long now = jiffies;
 
 	write_lock_bh(&dn_rt_hash_table[hash].lock);
@@ -236,6 +248,43 @@ nothing_to_declare:
 		write_unlock_bh(&dn_rt_hash_table[i].lock);
 	}
 }
+
+static spinlock_t dn_rt_flush_lock = SPIN_LOCK_UNLOCKED;
+
+void dn_rt_cache_flush(int delay)
+{
+	unsigned long now = jiffies;
+	int user_mode = !in_interrupt();
+
+	if (delay < 0)
+		delay = dn_rt_min_delay;
+
+	spin_lock_bh(&dn_rt_flush_lock);
+
+	if (del_timer(&dn_rt_flush_timer) && delay > 0 && dn_rt_deadline) {
+		long tmo = (long)(dn_rt_deadline - now);
+
+		if (user_mode && tmo < dn_rt_max_delay - dn_rt_min_delay)
+			tmo = 0;
+
+		if (delay > tmo)
+			delay = tmo;
+	}
+
+	if (delay <= 0) {
+		spin_unlock_bh(&dn_rt_flush_lock);
+		dn_run_flush(0);
+		return;
+	}
+
+	if (dn_rt_deadline == 0)
+		dn_rt_deadline = now + dn_rt_max_delay;
+
+	dn_rt_flush_timer.expires = now + delay;
+	add_timer(&dn_rt_flush_timer);
+	spin_unlock_bh(&dn_rt_flush_lock);
+}
+
 
 static int dn_route_rx_packet(struct sk_buff *skb)
 {
@@ -531,33 +580,49 @@ static int dn_route_output_slow(struct dst_entry **pprt, dn_address dst, dn_addr
 	struct net_device *dev = decnet_default_device;
 	struct neighbour *neigh = NULL;
 	struct dn_dev *dn_db;
-
-
+	unsigned hash;
 #ifdef CONFIG_DECNET_ROUTER
-	if (decnet_node_type != DN_RT_INFO_ENDN) {
-		struct dn_fib_res res;
-		int err = 0;
+	struct dn_fib_key key;
+	struct dn_fib_res res;
+	int err;
 
-		res.res_addr = dst;
-		res.res_mask = 0;
-		res.res_ifindex = 0;
-		res.res_proto = RTN_UNSPEC;
-		res.res_cost = 0;
+	key.src = src;
+	key.dst = dst;
+	key.iif = 0;
+	key.oif = 0;
+	key.fwmark = 0;
+	key.scope = RT_SCOPE_UNIVERSE;
 
-		if ((err = dn_fib_resolve(&res)) == 0) {
-
-			if (!res.res_fa || (res.res_fa->fa_type != RTN_UNICAST))
-				return -EPROTO;
-
-			if ((neigh = neigh_clone(res.res_fa->fa_neigh)) != NULL)
-				goto got_route;
-
-			return -ENOBUFS;
+	if ((err = dn_fib_lookup(&key, &res)) == 0) {
+		switch(res.type) {
+			case RTN_UNICAST:
+				/*
+				 * This method of handling multipath
+				 * routes is a hack and will change.
+				 * It works for now though.
+				 */
+				if (res.fi->fib_nhs)
+					dn_fib_select_multipath(&key, &res);
+				neigh = __neigh_lookup(&dn_neigh_table, &DN_FIB_RES_GW(res), DN_FIB_RES_DEV(res), 1);
+				err = -ENOBUFS;
+				if (!neigh)
+					break;
+				err = 0;
+				break;
+			case RTN_UNREACHABLE:
+				err = -EHOSTUNREACH;
+				break;
+			default:
+				err = -EINVAL;
 		}
-
-		if (err != -ENOENT)
+		dn_fib_res_put(&res);
+		if (err < 0)
 			return err;
+		goto got_route;
 	}
+
+	if (err != -ESRCH)
+		return err;
 #endif 
 
 	/* Look in On-Ethernet cache first */
@@ -594,13 +659,16 @@ got_route:
 
 	dn_db = (struct dn_dev *)neigh->dev->dn_ptr;
 	
-	rt->rt_saddr = src;
-	rt->rt_daddr = dst;
-	rt->rt_oif = neigh->dev->ifindex;
-	rt->rt_iif = 0;
+	rt->key.saddr  = src;
+	rt->rt_saddr   = src;
+	rt->key.daddr  = dst;
+	rt->rt_daddr   = dst;
+	rt->key.oif    = neigh ? neigh->dev->ifindex : -1;
+	rt->key.iif    = 0;
+	rt->key.fwmark = 0;
 
 	rt->u.dst.neighbour = neigh;
-	rt->u.dst.dev = neigh->dev;
+	rt->u.dst.dev = neigh ? neigh->dev : NULL;
 	rt->u.dst.lastuse = jiffies;
 	rt->u.dst.output = dn_output;
 	rt->u.dst.input  = dn_rt_bug;
@@ -608,7 +676,8 @@ got_route:
 	if (dn_dev_islocal(neigh->dev, rt->rt_daddr))
 		rt->u.dst.input = dn_nsp_rx;
 
-	dn_insert_route(rt);
+	hash = dn_hash(rt->key.saddr, rt->key.daddr);
+	dn_insert_route(rt, hash);
 	*pprt = &rt->u.dst;
 
 	return 0;
@@ -616,16 +685,16 @@ got_route:
 
 int dn_route_output(struct dst_entry **pprt, dn_address dst, dn_address src, int flags)
 {
-	unsigned hash = dn_hash(dst);
+	unsigned hash = dn_hash(src, dst);
 	struct dn_route *rt = NULL;
 
 	if (!(flags & MSG_TRYHARD)) {
 		read_lock_bh(&dn_rt_hash_table[hash].lock);
 		for(rt = dn_rt_hash_table[hash].chain; rt; rt = rt->u.rt_next) {
-			if ((dst == rt->rt_daddr) &&
-					(src == rt->rt_saddr) &&
-					(rt->rt_iif == 0) &&
-					(rt->rt_oif != 0)) {
+			if ((dst == rt->key.daddr) &&
+					(src == rt->key.saddr) &&
+					(rt->key.iif == 0) &&
+					(rt->key.oif != 0)) {
 				rt->u.dst.lastuse = jiffies;
 				dst_hold(&rt->u.dst);
 				rt->u.dst.__use++;
@@ -649,6 +718,15 @@ static int dn_route_input_slow(struct sk_buff *skb)
 	struct neighbour *neigh = NULL;
 	int (*dnrt_input)(struct sk_buff *skb);
 	int (*dnrt_output)(struct sk_buff *skb);
+	u32 fwmark = 0;
+	unsigned hash;
+	dn_address saddr = cb->src;
+	dn_address daddr = cb->dst;
+#ifdef CONFIG_DECNET_ROUTER
+	struct dn_fib_key key;
+	struct dn_fib_res res;
+	int err;
+#endif
 
 	if (dev == NULL)
 		return -EINVAL;
@@ -683,6 +761,8 @@ static int dn_route_input_slow(struct sk_buff *skb)
 	 */
 	dnrt_input  = dn_nsp_rx;
 	dnrt_output = dn_output;
+	saddr = cb->dst;
+	daddr = cb->src;
 
 	if ((neigh = neigh_lookup(&dn_neigh_table, &cb->src, dev)) != NULL)
 		goto add_entry;
@@ -705,9 +785,49 @@ non_local_input:
 	 * Destination is another node... find next hop in
 	 * routing table here.
 	 */
-	if (decnet_node_type == DN_RT_INFO_ENDN)
-		goto add_entry;
 
+	key.src = cb->src;
+	key.dst = cb->dst;
+	key.iif = dev->ifindex;
+	key.oif = 0;
+	key.scope = RT_SCOPE_UNIVERSE;
+
+#ifdef CONFIG_DECNET_ROUTE_FWMASK
+	if (skb->nfreason == NF_REASON_FOR_ROUTING)
+		key.fwmark = skb->fwmark;
+	else
+		key.fwmark = 0;
+#else
+	key.fwmark = 0;
+#endif
+
+	if ((err = dn_fib_lookup(&key, &res)) == 0) {
+		switch(res.type) {
+			case RTN_UNICAST:
+				if (res.fi->fib_nhs)
+					dn_fib_select_multipath(&key, &res);
+				neigh = __neigh_lookup(&dn_neigh_table, &DN_FIB_RES_GW(res), DN_FIB_RES_DEV(res), 1);
+				err = -ENOBUFS;
+				if (!neigh)
+					break;
+				err = 0;
+				dnrt_input = dn_forward;
+				fwmark = key.fwmark;
+				break;
+			case RTN_UNREACHABLE:
+				dnrt_input = dn_blackhole;
+				fwmark = key.fwmark;
+				break;
+			default:
+				err = -EINVAL;
+		}
+		dn_fib_res_put(&res);
+		if (err < 0)
+			return err;
+		goto add_entry;
+	}
+
+	return err;
 
 #endif /* CONFIG_DECNET_ROUTER */
 
@@ -718,18 +838,22 @@ add_entry:
                 return -EINVAL;
         }
 
-	rt->rt_saddr = cb->dst;
-	rt->rt_daddr = cb->src;
-	rt->rt_oif = 0;
-	rt->rt_iif = dev->ifindex;
+	rt->key.saddr  = cb->src;
+	rt->rt_saddr   = saddr;
+	rt->key.daddr  = cb->dst;
+	rt->rt_daddr   = daddr;
+	rt->key.oif    = 0;
+	rt->key.iif    = dev->ifindex;
+	rt->key.fwmark = fwmark;
 
 	rt->u.dst.neighbour = neigh;
-	rt->u.dst.dev = dev;
+	rt->u.dst.dev = neigh ? neigh->dev : NULL;
 	rt->u.dst.lastuse = jiffies;
 	rt->u.dst.output = dnrt_output;
 	rt->u.dst.input = dnrt_input;
 
-	dn_insert_route(rt);
+	hash = dn_hash(rt->key.saddr, rt->key.daddr);
+	dn_insert_route(rt, hash);
 	skb->dst = (struct dst_entry *)rt;
 
 	return 0;
@@ -739,17 +863,22 @@ int dn_route_input(struct sk_buff *skb)
 {
 	struct dn_route *rt;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-	unsigned hash = dn_hash(cb->src);
+	unsigned hash = dn_hash(cb->src, cb->dst);
 
 	if (skb->dst)
 		return 0;
 
 	read_lock(&dn_rt_hash_table[hash].lock);
 	for(rt = dn_rt_hash_table[hash].chain; rt != NULL; rt = rt->u.rt_next) {
-		if ((rt->rt_saddr == cb->dst) &&
-				(rt->rt_daddr == cb->src) &&
-				(rt->rt_oif == 0) &&
-				(rt->rt_iif == cb->iif)) {
+		if ((rt->key.saddr == cb->src) &&
+				(rt->key.daddr == cb->dst) &&
+				(rt->key.oif == 0) &&
+#ifdef CONFIG_DECNET_ROUTE_FWMASK
+				(rt->key.fwmark == (skb->nfreason ==
+							NF_REASON_FOR_ROUTING
+							? skb->nfmark : 0)) &&
+#endif
+				(rt->key.iif == cb->iif)) {
 			rt->u.dst.lastuse = jiffies;
 			dst_hold(&rt->u.dst);
 			rt->u.dst.__use++;
@@ -953,6 +1082,7 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
 					);
 
 
+
 	                pos = begin + len;
 	
         	        if (pos < offset) {
@@ -998,48 +1128,51 @@ void __init dn_route_init(void)
 	for(order = 0; (1UL << order) < goal; order++)
 		/* NOTHING */;
 
-	/*
-	 * Only want 1024 entries max, since the table is very, very unlikely
-	 * to be larger than that.
-	 */
-	while(order && ((((1UL << order) * PAGE_SIZE) / 
-				sizeof(struct dn_rt_hash_bucket)) >= 2048))
-		order--;
+        /*
+         * Only want 1024 entries max, since the table is very, very unlikely
+         * to be larger than that.
+         */
+        while(order && ((((1UL << order) * PAGE_SIZE) / 
+                                sizeof(struct dn_rt_hash_bucket)) >= 2048))
+                order--;
 
-	do {
-		dn_rt_hash_mask = (1UL << order) * PAGE_SIZE /
-			sizeof(struct dn_rt_hash_bucket);
-		while(dn_rt_hash_mask & (dn_rt_hash_mask - 1))
-			dn_rt_hash_mask--;
-		dn_rt_hash_table = (struct dn_rt_hash_bucket *)
-			__get_free_pages(GFP_ATOMIC, order);
-	} while (dn_rt_hash_table == NULL && --order > 0);
+        do {
+                dn_rt_hash_mask = (1UL << order) * PAGE_SIZE /
+                        sizeof(struct dn_rt_hash_bucket);
+                while(dn_rt_hash_mask & (dn_rt_hash_mask - 1))
+                        dn_rt_hash_mask--;
+                dn_rt_hash_table = (struct dn_rt_hash_bucket *)
+                        __get_free_pages(GFP_ATOMIC, order);
+        } while (dn_rt_hash_table == NULL && --order > 0);
 
 	if (!dn_rt_hash_table)
-		panic("Failed to allocate DECnet route cache hash table\n");
+                panic("Failed to allocate DECnet route cache hash table\n");
 
-	printk(KERN_INFO "DECnet: Routing cache hash table of %u buckets, %dKbytes\n", dn_rt_hash_mask, (dn_rt_hash_mask*sizeof(struct dn_rt_hash_bucket))/1024);
+	printk(KERN_INFO 
+		"DECnet: Routing cache hash table of %u buckets, %dKbytes\n", 
+		dn_rt_hash_mask, 
+		(dn_rt_hash_mask*sizeof(struct dn_rt_hash_bucket))/1024);
 
 	dn_rt_hash_mask--;
-	for(i = 0; i <= dn_rt_hash_mask; i++) {
-		dn_rt_hash_table[i].lock = RW_LOCK_UNLOCKED;
-		dn_rt_hash_table[i].chain = NULL;
-	}
+        for(i = 0; i <= dn_rt_hash_mask; i++) {
+                dn_rt_hash_table[i].lock = RW_LOCK_UNLOCKED;
+                dn_rt_hash_table[i].chain = NULL;
+        }
 
-	dn_dst_ops.gc_thresh = (dn_rt_hash_mask + 1);
+        dn_dst_ops.gc_thresh = (dn_rt_hash_mask + 1);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_create("decnet_cache",0,decnet_cache_get_info);
 #endif /* CONFIG_PROC_FS */
 }
 
-#ifdef CONFIG_DECNET_MODULE
-void dn_route_cleanup(void)
+void __exit dn_route_cleanup(void)
 {
 	del_timer(&dn_route_timer);
 	dn_run_flush(0);
+
 #ifdef CONFIG_PROC_FS
 	proc_net_remove("decnet_cache");
 #endif /* CONFIG_PROC_FS */
 }
-#endif /* CONFIG_DECNET_MODULE */
+

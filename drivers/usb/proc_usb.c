@@ -121,9 +121,6 @@ static char *format_endpt =
  * However, these will come from functions that return ptrs to each of them.
  */
 
-extern struct list_head *usb_driver_get_list (void);
-extern struct list_head *usb_bus_get_list (void);
-
 extern struct proc_dir_entry *proc_bus;
 
 static struct proc_dir_entry *usbdir = NULL, *driversdir = NULL;
@@ -293,49 +290,35 @@ static char *usb_dump_device_descriptor(char *start, char *end, const struct usb
 /*
  * Dump the different strings that this device holds.
  */
-static char *usb_dump_device_strings (char *start, char *end, const struct usb_device *dev)
+static char *usb_dump_device_strings (char *start, char *end, struct usb_device *dev)
 {
+	char *buf;
+
 	if (start > end)
 		return start;
-
+	buf = kmalloc(256, GFP_KERNEL);
+	if (!buf)
+		return start;
 	if (dev->descriptor.iManufacturer) {
-		char * string = usb_string ((struct usb_device *)dev, 
-					dev->descriptor.iManufacturer);
-		if (string) {
-			start += sprintf (start, format_string_manufacturer,
-					string
-					);
-		if (start > end)
-			return start;
-								
-		}
-	}
-
+		if (usb_string(dev, dev->descriptor.iManufacturer, buf, 256) > 0)
+			start += sprintf(start, format_string_manufacturer, buf);
+	}				
+	if (start > end)
+		goto out;
 	if (dev->descriptor.iProduct) {
-		char * string = usb_string ((struct usb_device *)dev, 
-					dev->descriptor.iProduct);
-		if (string) {
-			start += sprintf (start, format_string_product,
-					string
-					);
-		if (start > end)
-			return start;
-
-		}
+		if (usb_string(dev, dev->descriptor.iProduct, buf, 256) > 0)
+			start += sprintf(start, format_string_product, buf);
 	}
-
+	if (start > end)
+		goto out;
 #ifdef ALLOW_SERIAL_NUMBER
 	if (dev->descriptor.iSerialNumber) {
-		char * string = usb_string ((struct usb_device *)dev, 
-					dev->descriptor.iSerialNumber);
-		if (string) {
-			start += sprintf (start, format_string_serialnumber,
-					string
-					);
-		}
+		if (usb_string(dev, dev->descriptor.iSerialNumber, buf, 256) > 0)
+			start += sprintf(start, format_string_serialnumber, buf);
 	}
 #endif
-
+ out:
+	kfree(buf);
 	return start;
 }
 
@@ -432,7 +415,7 @@ static char *usb_device_dump(char *start, char *end, const struct usb_device *us
 
 static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
-	struct list_head *usb_bus_list, *buslist;
+	struct list_head *buslist;
 	struct usb_bus *bus;
 	char *page, *end;
 	ssize_t ret = 0;
@@ -447,9 +430,8 @@ static ssize_t usb_device_read(struct file *file, char *buf, size_t nbytes, loff
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	pos = *ppos;
-	usb_bus_list = usb_bus_get_list();
 	/* enumerate busses */
-	for (buslist = usb_bus_list->next; buslist != usb_bus_list; buslist = buslist->next) {
+	for (buslist = usb_bus_list.next; buslist != &usb_bus_list; buslist = buslist->next) {
 		bus = list_entry(buslist, struct usb_bus, bus_list);
 		end = usb_device_dump(page, page + (PAGE_SIZE - 100), bus->root_hub, bus, 0, 0, 0);
 		len = end - page;
@@ -525,8 +507,7 @@ static int usb_device_release(struct inode *inode, struct file *file)
  */
 static ssize_t usb_driver_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
-	struct list_head *usb_driver_list = usb_driver_get_list();
-	struct list_head *tmp = usb_driver_list->next;
+	struct list_head *tmp = usb_driver_list.next;
 	char *page, *start, *end;
 	ssize_t ret = 0;
 	unsigned int pos, len;
@@ -542,7 +523,7 @@ static ssize_t usb_driver_read(struct file *file, char *buf, size_t nbytes, loff
 	start = page;
 	end = page + (PAGE_SIZE - 100);
 	pos = *ppos;
-	for (; tmp != usb_driver_list; tmp = tmp->next) {
+	for (; tmp != &usb_driver_list; tmp = tmp->next) {
 		struct usb_driver *driver = list_entry(tmp, struct usb_driver, driver_list);
 		start += sprintf (start, "%s\n", driver->name);
 		if (start > end) {

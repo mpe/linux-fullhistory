@@ -69,4 +69,9 @@ extern int	udp_rcv(struct sk_buff *skb, unsigned short len);
 extern int	udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern int	udp_disconnect(struct sock *sk, int flags);
 
+extern struct udp_mib udp_statistics[NR_CPUS*2];
+#define UDP_INC_STATS(field)		SNMP_INC_STATS(udp_statistics, field)
+#define UDP_INC_STATS_BH(field)		SNMP_INC_STATS_BH(udp_statistics, field)
+#define UDP_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(udp_statistics, field)
+
 #endif	/* _UDP_H */

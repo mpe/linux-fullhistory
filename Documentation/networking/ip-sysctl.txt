@@ -13,29 +13,9 @@ ip_forward - BOOLEAN
 ip_default_ttl - INTEGER
 	default 64
 
-ip_addrmask_agent - BOOLEAN
-	Reply to ICMP ADDRESS MASK requests.
-	default TRUE (router)
-		FALSE (host)
-
-ip_bootp_agent - BOOLEAN
-	Accept packets with source address of sort 0.b.c.d
-	and destined to this host, broadcast or multicast.
-	Such packets are silently ignored otherwise.
-
-	default FALSE
-
 ip_no_pmtu_disc - BOOLEAN
 	Disable Path MTU Discovery.
 	default FALSE
-
-ip_fib_model - INTEGER
-	0 - (DEFAULT) Standard model. All routes are in class MAIN.
-	1 - default routes go to class DEFAULT. This mode should
-	    be very convenient for small ISPs making policy routing.
-	2 - RFC1812 compliant model.
-	    Interface routes are in class MAIN.
-	    Gateway routes are in class DEFAULT.
 
 IP Fragmentation:
 
@@ -187,18 +167,17 @@ proxy_arp - BOOLEAN
 	Do proxy arp.
 
 shared_media - BOOLEAN
-	undocumented.
+	Send(router) or accept(host) RFC1620 shared media redirects.
+	Overrides ip_secure_redirects.
+	default TRUE
 
 secure_redirects - BOOLEAN
 	Accept ICMP redirect messages only for gateways,
 	listed in default gateway list.
 	default TRUE
 
-redirects - BOOLEAN
-	Send(router) or accept(host) RFC1620 shared media redirects.
-	Overrides ip_secure_redirects.
-	default TRUE (should be FALSE for distributed version,
-		      but I use it...)
+send_redirects - BOOLEAN
+	Send redirects, if router. Default: TRUE
 
 bootp_relay - BOOLEAN
 	Accept packets with source address 0.b.c.d destined
@@ -213,27 +192,17 @@ accept_source_route - BOOLEAN
 	default TRUE (router)
 		FALSE (host)
 
-rp_filter - INTEGER
-	2 - do source validation by reversed path, as specified in RFC1812
+rp_filter - BOOLEAN
+	1 - do source validation by reversed path, as specified in RFC1812
 	    Recommended option for single homed hosts and stub network
 	    routers. Could cause troubles for complicated (not loop free)
 	    networks running a slow unreliable protocol (sort of RIP),
 	    or using static routes.
 
-	1 - (DEFAULT) Weaker form of RP filtering: drop all the packets
-	    that look as sourced at a directly connected interface, but
-	    were input from another interface.
-	    
 	0 - No source validation. 
 
-	NOTE: do not disable this option! All BSD derived routing software
-	(sort of gated, routed etc. etc.) is confused by such packets,
-	even if they are valid. When enabled it also prevents ip spoofing
-	in some limited fashion.
-
-	NOTE: this option is turned on per default only when ip_forwarding
-	is on. For non-forwarding hosts it doesn't make much sense and 
-	makes some legal multihoming configurations impossible.
+	Default value is 0. Note that some distribution enable it
+	in startip scripts.
 
 Alexey Kuznetsov.
 kuznet@ms2.inr.ac.ru
@@ -241,4 +210,4 @@ kuznet@ms2.inr.ac.ru
 Updated by:
 Andi Kleen
 ak@muc.de
-$Id: ip-sysctl.txt,v 1.10 2000/01/06 00:41:42 davem Exp $
+$Id: ip-sysctl.txt,v 1.11 2000/01/08 20:32:41 davem Exp $

@@ -6,7 +6,10 @@
  * Paul Mackerras' version and mine for PReP and Pmac.
  */
 
+#include <linux/config.h>
 #include <linux/mc146818rtc.h>
+
+#include <asm/processor.h>
 
 /* time.c */
 extern unsigned decrementer_count;
@@ -22,13 +25,18 @@ int via_calibrate_decr(void);
 /* Accessor functions for the decrementer register. */
 static __inline__ unsigned int get_dec(void)
 {
-	unsigned int ret;
-
-	asm volatile("mfspr %0,22" : "=r" (ret) :);
-	return ret;
+#if defined(CONFIG_4xx)
+	return (mfspr(SPRN_PIT));
+#else
+	return (mfspr(SPRN_DEC));
+#endif
 }
 
 static __inline__ void set_dec(unsigned int val)
 {
-	asm volatile("mtspr 22,%0" : : "r" (val));
+#if defined(CONFIG_4xx)
+	mtspr(SPRN_PIT, val);
+#else
+	mtspr(SPRN_DEC, val);
+#endif
 }

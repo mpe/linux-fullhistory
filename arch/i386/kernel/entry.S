@@ -416,15 +416,15 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_time)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
-	.long SYMBOL_NAME(sys_lchown)
+	.long SYMBOL_NAME(sys_lchown16)
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
 	.long SYMBOL_NAME(sys_mount)
 	.long SYMBOL_NAME(sys_oldumount)
-	.long SYMBOL_NAME(sys_setuid)
-	.long SYMBOL_NAME(sys_getuid)
+	.long SYMBOL_NAME(sys_setuid16)
+	.long SYMBOL_NAME(sys_getuid16)
 	.long SYMBOL_NAME(sys_stime)		/* 25 */
 	.long SYMBOL_NAME(sys_ptrace)
 	.long SYMBOL_NAME(sys_alarm)
@@ -446,11 +446,11 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_times)
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old prof syscall holder */
 	.long SYMBOL_NAME(sys_brk)		/* 45 */
-	.long SYMBOL_NAME(sys_setgid)
-	.long SYMBOL_NAME(sys_getgid)
+	.long SYMBOL_NAME(sys_setgid16)
+	.long SYMBOL_NAME(sys_getgid16)
 	.long SYMBOL_NAME(sys_signal)
-	.long SYMBOL_NAME(sys_geteuid)
-	.long SYMBOL_NAME(sys_getegid)		/* 50 */
+	.long SYMBOL_NAME(sys_geteuid16)
+	.long SYMBOL_NAME(sys_getegid16)	/* 50 */
 	.long SYMBOL_NAME(sys_acct)
 	.long SYMBOL_NAME(sys_umount)					/* recycled never used phys() */
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old lock syscall holder */
@@ -470,8 +470,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sigaction)
 	.long SYMBOL_NAME(sys_sgetmask)
 	.long SYMBOL_NAME(sys_ssetmask)
-	.long SYMBOL_NAME(sys_setreuid)		/* 70 */
-	.long SYMBOL_NAME(sys_setregid)
+	.long SYMBOL_NAME(sys_setreuid16)	/* 70 */
+	.long SYMBOL_NAME(sys_setregid16)
 	.long SYMBOL_NAME(sys_sigsuspend)
 	.long SYMBOL_NAME(sys_sigpending)
 	.long SYMBOL_NAME(sys_sethostname)
@@ -480,8 +480,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_getrusage)
 	.long SYMBOL_NAME(sys_gettimeofday)
 	.long SYMBOL_NAME(sys_settimeofday)
-	.long SYMBOL_NAME(sys_getgroups)	/* 80 */
-	.long SYMBOL_NAME(sys_setgroups)
+	.long SYMBOL_NAME(sys_getgroups16)	/* 80 */
+	.long SYMBOL_NAME(sys_setgroups16)
 	.long SYMBOL_NAME(old_select)
 	.long SYMBOL_NAME(sys_symlink)
 	.long SYMBOL_NAME(sys_lstat)
@@ -495,7 +495,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_truncate)
 	.long SYMBOL_NAME(sys_ftruncate)
 	.long SYMBOL_NAME(sys_fchmod)
-	.long SYMBOL_NAME(sys_fchown)		/* 95 */
+	.long SYMBOL_NAME(sys_fchown16)		/* 95 */
 	.long SYMBOL_NAME(sys_getpriority)
 	.long SYMBOL_NAME(sys_setpriority)
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old profil syscall holder */
@@ -538,8 +538,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sysfs)		/* 135 */
 	.long SYMBOL_NAME(sys_personality)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* for afs_syscall */
-	.long SYMBOL_NAME(sys_setfsuid)
-	.long SYMBOL_NAME(sys_setfsgid)
+	.long SYMBOL_NAME(sys_setfsuid16)
+	.long SYMBOL_NAME(sys_setfsgid16)
 	.long SYMBOL_NAME(sys_llseek)		/* 140 */
 	.long SYMBOL_NAME(sys_getdents)
 	.long SYMBOL_NAME(sys_select)
@@ -564,14 +564,14 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
-	.long SYMBOL_NAME(sys_setresuid)
-	.long SYMBOL_NAME(sys_getresuid)	/* 165 */
+	.long SYMBOL_NAME(sys_setresuid16)
+	.long SYMBOL_NAME(sys_getresuid16)	/* 165 */
 	.long SYMBOL_NAME(sys_vm86)
 	.long SYMBOL_NAME(sys_query_module)
 	.long SYMBOL_NAME(sys_poll)
 	.long SYMBOL_NAME(sys_nfsservctl)
-	.long SYMBOL_NAME(sys_setresgid)	/* 170 */
-	.long SYMBOL_NAME(sys_getresgid)
+	.long SYMBOL_NAME(sys_setresgid16)	/* 170 */
+	.long SYMBOL_NAME(sys_getresgid16)
 	.long SYMBOL_NAME(sys_prctl)
 	.long SYMBOL_NAME(sys_rt_sigreturn)
 	.long SYMBOL_NAME(sys_rt_sigaction)
@@ -582,7 +582,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_rt_sigsuspend)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
-	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_chown16)
 	.long SYMBOL_NAME(sys_getcwd)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
@@ -598,6 +598,25 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_stat64)		/* 195 */
 	.long SYMBOL_NAME(sys_lstat64)
 	.long SYMBOL_NAME(sys_fstat64)
+	.long SYMBOL_NAME(sys_lchown)
+	.long SYMBOL_NAME(sys_getuid)
+	.long SYMBOL_NAME(sys_getgid)		/* 200 */
+	.long SYMBOL_NAME(sys_geteuid)
+	.long SYMBOL_NAME(sys_getegid)
+	.long SYMBOL_NAME(sys_setreuid)
+	.long SYMBOL_NAME(sys_setregid)
+	.long SYMBOL_NAME(sys_getgroups)	/* 205 */
+	.long SYMBOL_NAME(sys_setgroups)
+	.long SYMBOL_NAME(sys_fchown)
+	.long SYMBOL_NAME(sys_setresuid)
+	.long SYMBOL_NAME(sys_getresuid)
+	.long SYMBOL_NAME(sys_setresgid)	/* 210 */
+	.long SYMBOL_NAME(sys_getresgid)
+	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_setuid)
+	.long SYMBOL_NAME(sys_setgid)
+	.long SYMBOL_NAME(sys_setfsuid)		/* 215 */
+	.long SYMBOL_NAME(sys_setfsgid)
 
 
 	/*
@@ -606,6 +625,6 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-197
+	.rept NR_syscalls-216
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.27 1999/12/09 00:52:49 davem Exp $
+ *	$Id: mcast.c,v 1.28 2000/01/09 02:19:50 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -528,10 +528,10 @@ void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 
 	dev_queue_xmit(skb);
 	if (type == ICMPV6_MGM_REDUCTION)
-		icmpv6_statistics.Icmp6OutGroupMembReductions++;
+		ICMP6_INC_STATS(Icmp6OutGroupMembReductions);
 	else
-		icmpv6_statistics.Icmp6OutGroupMembResponses++;
-	icmpv6_statistics.Icmp6OutMsgs++;
+		ICMP6_INC_STATS(Icmp6OutGroupMembResponses);
+	ICMP6_INC_STATS(Icmp6OutMsgs);
 }
 
 static void igmp6_join_group(struct ifmcaddr6 *ma)

@@ -29,8 +29,9 @@
 #endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
-
+#ifdef CONFIG_OAK
 #include "oak_setup.h"
+#endif /* CONFIG_OAK */
 
 extern void pmac_init(unsigned long r3,
                       unsigned long r4,
@@ -71,7 +72,13 @@ extern void gemini_init(unsigned long r3,
 extern boot_infos_t *boot_infos;
 char saved_command_line[256];
 unsigned char aux_device_present;
-struct int_control_struct int_control;
+struct int_control_struct int_control =
+{
+	__no_use_cli,
+	__no_use_sti,
+	__no_use_restore_flags,
+	__no_use_save_flags
+};
 struct ide_machdep_calls ppc_ide_md;
 int parse_bootinfo(void);
 
@@ -89,20 +96,13 @@ unsigned long SYSRQ_KEY;
 
 struct machdep_calls ppc_md;
 
-/* copy of the residual data */
-#ifndef CONFIG_8xx
-extern unsigned char __res[sizeof(RESIDUAL)];
-#else
-extern unsigned char __res[sizeof(bd_t)];
-#endif
-
 /*
  * Perhaps we can put the pmac screen_info[] here
  * on pmac as well so we don't need the ifdef's.
  * Until we get multiple-console support in here
  * that is.  -- Cort
  */ 
-#ifndef CONFIG_8xx
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 struct screen_info screen_info = {
 	0, 25,			/* orig-x, orig-y */
 	0,			/* unused */
@@ -126,7 +126,7 @@ void __init pmac_find_display(void)
 {
 }
 
-#else /* CONFIG_8xx */
+#else /* CONFIG_4xx || CONFIG_8xx */
 
 /* We need this to satisfy some external references until we can
  * strip the kernel down.
@@ -142,7 +142,7 @@ struct screen_info screen_info = {
 	0,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
-#endif /* CONFIG_8xx */
+#endif /* !CONFIG_4xx && !CONFIG_8xx */
 
 void machine_restart(char *cmd)
 {
@@ -193,6 +193,7 @@ int get_cpuinfo(char *buffer)
 	unsigned long len = 0;
 	unsigned long bogosum = 0;
 	unsigned long i;
+	unsigned int pvr;
 	unsigned short maj, min;
 	
 #ifdef __SMP__
@@ -215,45 +216,75 @@ int get_cpuinfo(char *buffer)
 		len += sprintf(len+buffer,"processor\t: %lu\n",i);
 		len += sprintf(len+buffer,"cpu\t\t:  ");
 
-		switch (GET_PVR >> 16)
+		pvr = GET_PVR;
+	
+		switch (PVR_VER(pvr))
 		{
-		case 1:
+		case 0x0001:
 			len += sprintf(len+buffer, "601\n");
 			break;
-		case 3:
+		case 0x0003:
 			len += sprintf(len+buffer, "603\n");
 			break;
-		case 4:
+		case 0x0004:
 			len += sprintf(len+buffer, "604\n");
 			break;
-		case 6:
+		case 0x0006:
 			len += sprintf(len+buffer, "603e\n");
 			break;
-		case 7:
-			len += sprintf(len+buffer, "603ev\n");
+		case 0x0007:
+			len += sprintf(len+buffer, "603");
+			if (((pvr >> 12) & 0xF) == 1) {
+				pvr ^= 0x00001000;	/* revision fix-up */
+				len += sprintf(len+buffer, "r\n");
+			} else {
+				len += sprintf(len+buffer, "ev\n");
+			}
 			break;
-		case 8:
-			len += sprintf(len+buffer, "750\n");
+		case 0x0008:		/* 740/750(P) */
+		case 0x1008:
+			len += sprintf(len+buffer, "750%s\n",
+				       PVR_VER(pvr) == 0x1008 ? "P" : "");
 			len += sprintf(len+buffer, "temperature \t: %lu C\n",
 				       cpu_temp());
 			break;
-		case 9:
-			len += sprintf(len+buffer, "604e\n");
+		case 0x0009:		/* 604e/604r */
+		case 0x000A:
+			len += sprintf(len+buffer, "604");
+
+			if (PVR_VER(pvr) == 0x000A ||
+			    ((pvr >> 12) & 0xF) != 0) {
+				pvr &= ~0x00003000;	/* revision fix-up */
+				len += sprintf(len+buffer, "r\n");
+			} else {
+				len += sprintf(len+buffer, "e\n");
+			}
 			break;
-		case 10:
-			len += sprintf(len+buffer, "604ev5 (MachV)\n");
+		case 0x000C:
+			len += sprintf(len+buffer, "7400\n");
 			break;
-		case 12:
-			len += sprintf(len+buffer, "7400 (G4)\n");
+		case 0x0020:
+			len += sprintf(len+buffer, "403G");
+			switch ((pvr >> 8) & 0xFF) {
+			case 0x02:
+				len += sprintf(len+buffer, "C\n");    
+				break;				      
+			case 0x14:
+				len += sprintf(len+buffer, "CX\n");
+				break;
+			}
 			break;
-		case 50:
+		case 0x0050:
 			len += sprintf(len+buffer, "821\n");
-		case 80:
-			len += sprintf(len+buffer, "860\n");
+			break;
+		case 0x0081:
+			len += sprintf(len+buffer, "8240\n");
+			break;
+		case 0x4011:
+			len += sprintf(len+buffer, "405GP\n");
 			break;
 		default:
-			len += sprintf(len+buffer, "unknown (%lx)\n",
-				       GET_PVR>>16);
+			len += sprintf(len+buffer, "unknown (%08x)\n", pvr);
 			break;
 		}
 		
@@ -292,6 +323,22 @@ int get_cpuinfo(char *buffer)
 			len += ppc_md.setup_residual(buffer + len);
 		}
 		
+		switch (PVR_VER(pvr))
+		{
+		case 0x0020:
+			maj = PVR_MAJ(pvr) + 1;
+			min = PVR_MIN(pvr);
+			break;
+		case 0x1008:
+			maj = ((pvr >> 8) & 0xFF) - 1;
+			min = pvr & 0xFF;
+			break;
+		default:
+			maj = (pvr >> 8) & 0xFF;
+			min = pvr & 0xFF;
+			break;
+		}
+
 		len += sprintf(len+buffer, "revision\t: %hd.%hd\n", maj, min);
 
 		len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
@@ -362,11 +409,6 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
-	int_control.int_sti = __no_use_sti;
-	int_control.int_cli = __no_use_cli;
-	int_control.int_save_flags = __no_use_save_flags;
-	int_control.int_restore_flags = __no_use_restore_flags;
-
 	parse_bootinfo();
 	
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);

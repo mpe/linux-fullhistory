@@ -14,6 +14,7 @@
 #include <asm/cprefix.h>
 #include <asm/ptrace.h>
 #include <asm/asmmacro.h>
+#include <asm/page.h>
 
 #define EX(x,y,a,b,z) 				\
 98: 	x,y;					\
@@ -355,7 +356,7 @@ short_aligned_end:
 97:
 	mov	%o2, %g3
 fixupretl:
-	GET_PAGE_OFFSET(g1)
+	sethi   %hi(PAGE_OFFSET), %g1
 	cmp	%o0, %g1
 	blu	1f
 	 cmp	%o1, %g1

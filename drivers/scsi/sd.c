@@ -19,6 +19,7 @@
  *       scsi disks using eight major numbers.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #ifdef MODULE
 /*

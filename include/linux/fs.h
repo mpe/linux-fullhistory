@@ -277,6 +277,7 @@ extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned long
 #include <linux/udf_fs_i.h>
 #include <linux/ncp_fs_i.h>
 #include <linux/proc_fs_i.h>
+#include <linux/usbdev_fs_i.h>
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -414,6 +415,7 @@ struct inode {
 		struct ncp_inode_info		ncpfs_i;
 		struct proc_inode_info		proc_i;
 		struct socket			socket_i;
+		struct usbdev_inode_info        usbdev_i;
 		void				*generic_ip;
 	} u;
 };
@@ -545,6 +547,7 @@ extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 #include <linux/bfs_fs_sb.h>
 #include <linux/udf_fs_sb.h>
 #include <linux/ncp_fs_sb.h>
+#include <linux/usbdev_fs_sb.h>
 
 extern struct list_head super_blocks;
 
@@ -592,6 +595,7 @@ struct super_block {
 		struct bfs_sb_info	bfs_sb;
 		struct udf_sb_info	udf_sb;
 		struct ncp_sb_info	ncpfs_sb;
+		struct usbdev_sb_info   usbdevfs_sb;
 		void			*generic_sbp;
 	} u;
 	/*
@@ -769,6 +773,7 @@ extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
+extern int blkdev_close(struct inode *, struct file *);
 extern struct file_operations def_blk_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
 extern int blkdev_get(struct block_device *, mode_t, unsigned, int);
@@ -810,7 +815,8 @@ extern void refile_buffer(struct buffer_head * buf);
 #define BUF_CLEAN	0
 #define BUF_LOCKED	1	/* Buffers scheduled for write */
 #define BUF_DIRTY	2	/* Dirty buffers, not yet scheduled for write */
-#define NR_LIST		3
+#define BUF_PROTECTED	3	/* Ramdisk persistent storage */
+#define NR_LIST		4
 
 /*
  * This is called by bh->b_end_io() handlers when I/O has completed.
@@ -834,6 +840,19 @@ extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
 	if (atomic_set_buffer_clean(bh))
 		__mark_buffer_clean(bh);
+}
+
+#define atomic_set_buffer_protected(bh) test_and_set_bit(BH_Protected, &(bh)->b_state)
+
+extern inline void __mark_buffer_protected(struct buffer_head *bh)
+{
+	refile_buffer(bh);
+}
+
+extern inline void mark_buffer_protected(struct buffer_head * bh)
+{
+	if (!atomic_set_buffer_protected(bh))
+		__mark_buffer_protected(bh);
 }
 
 extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
@@ -1006,6 +1025,7 @@ extern int change_root(kdev_t, const char *);
 
 extern ssize_t char_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t block_read(struct file *, char *, size_t, loff_t *);
+extern int block_fsync(struct file *, struct dentry *);
 extern int read_ahead[];
 
 extern ssize_t char_write(struct file *, const char *, size_t, loff_t *);

@@ -39,9 +39,6 @@
 	or	%tmp, %lo(C_LABEL(cpu_offset)), %tmp; \
 	ld	[%tmp + %reg], %reg;
 
-#define GET_PAGE_OFFSET(reg) \
-	sethi	BTFIXUP_SETHI_INIT(page_offset,0xf0000000), %reg;
-
 /* All trap entry points _must_ begin with this macro or else you
  * lose.  It makes sure the kernel has a proper window so that
  * c-code can be called.

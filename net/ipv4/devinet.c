@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.35 1999/08/31 07:03:20 davem Exp $
+ *	Version: $Id: devinet.c,v 1.36 2000/01/09 02:19:46 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -730,7 +730,7 @@ u32 inet_select_addr(const struct net_device *dev, u32 dst, int scope)
 	read_unlock(&in_dev->lock);
 	read_unlock(&inetdev_lock);
 
-	if (addr || scope >= RT_SCOPE_LINK)
+	if (addr)
 		return addr;
 
 	/* Not loopback addresses on loopback should be preferred
@@ -745,7 +745,8 @@ u32 inet_select_addr(const struct net_device *dev, u32 dst, int scope)
 
 		read_lock(&in_dev->lock);
 		for_primary_ifa(in_dev) {
-			if (ifa->ifa_scope <= scope) {
+			if (ifa->ifa_scope != RT_SCOPE_LINK &&
+			    ifa->ifa_scope <= scope) {
 				read_unlock(&in_dev->lock);
 				read_unlock(&inetdev_lock);
 				read_unlock(&dev_base_lock);
@@ -1001,8 +1002,6 @@ void inet_forward_change()
 	read_unlock(&dev_base_lock);
 
 	rt_cache_flush(0);
-
-	ip_statistics.IpForwarding = on ? 1 : 2;
 }
 
 static

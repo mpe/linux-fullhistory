@@ -39,11 +39,13 @@ ifeq ($(CONFIG_PMAC),y)
 hack-coff: hack-coff.c
 	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
 
-znetboot: vmlinux.coff zImage
+znetboot: vmlinux.coff vmlinux.elf zImage
 	cp vmlinux.coff $(TFTPIMAGE)
+	cp vmlinux.elf $(TFTPIMAGE).elf
 
 znetboot.initrd: vmlinux.coff.initrd
 	cp vmlinux.coff.initrd $(TFTPIMAGE)
+	cp vmlinux.elf.initrd $(TFTPIMAGE).elf
 
 floppy: zImage
 #	mount -t hfs /dev/fd0 /mnt

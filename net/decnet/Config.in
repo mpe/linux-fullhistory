@@ -4,5 +4,8 @@
 bool '  DECnet: SIOCGIFCONF support' CONFIG_DECNET_SIOCGIFCONF 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool '  DECnet: router support (EXPERIMENTAL)' CONFIG_DECNET_ROUTER
+   if [ "$CONFIG_DECNET_ROUTER"  = "y" ]; then
+      bool '    DECnet: use FWMARK value as routing key' CONFIG_DECNET_ROUTE_FWMARK
+   fi
 fi
 bool '  DECnet: raw socket support' CONFIG_DECNET_RAW

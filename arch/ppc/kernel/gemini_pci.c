@@ -229,13 +229,11 @@ __init void layout_bus( struct pci_bus *bus )
 {
 	struct pci_dev *dev;
 
-	if (!bus->devices && !bus->children)
-		return;
-
 	io_base = ALIGN(io_base, 4*KB);
 	mem_base = ALIGN(mem_base, 4*KB);
 
-	for( dev = bus->devices; dev; dev = dev->sibling ) {
+	pci_for_each_dev(dev)
+	{
 		if (((dev->class >> 16) != PCI_BASE_CLASS_BRIDGE) ||
 		    ((dev->class >> 8) == PCI_CLASS_BRIDGE_OTHER))
 			layout_dev( dev );

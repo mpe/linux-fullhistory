@@ -116,7 +116,7 @@ source drivers/pcmcia/Config.in
 
 source drivers/parport/Config.in
 
-if [ "$CONFIG_8xx" != "y" ]; then
+if [ "$CONFIG_4xx" != "y" -a "$CONFIG_8xx" != "y" ]; then
   bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
   bool 'Support for frame buffer devices' CONFIG_FB
   if [ "$CONFIG_FB" = "y" ]; then

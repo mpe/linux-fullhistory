@@ -306,6 +306,7 @@ EXPORT_SYMBOL(tcp_destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
+EXPORT_SYMBOL(copy_and_csum_toiovec);
 EXPORT_SYMBOL(tcp_keepalive_timer);
 EXPORT_SYMBOL(tcp_v4_lookup_listener);
 /* UDP/TCP exported functions for TCPv6 */

@@ -16,9 +16,10 @@
 
 #include <asm/shmparam.h>
 
+/* Obsolete, used only for backwards compatibility and libc5 compiles */
 struct shmid_ds {
 	struct ipc_perm		shm_perm;	/* operation perms */
-	size_t			shm_segsz;	/* size of segment (bytes) */
+	int			shm_segsz;	/* size of segment (bytes) */
 	__kernel_time_t		shm_atime;	/* last attach time */
 	__kernel_time_t		shm_dtime;	/* last detach time */
 	__kernel_time_t		shm_ctime;	/* last change time */
@@ -29,6 +30,9 @@ struct shmid_ds {
 	void 			*shm_unused2;	/* ditto - used by DIPC */
 	void			*shm_unused3;	/* unused */
 };
+
+/* Include the definition of shmid64_ds and shminfo64 */
+#include <asm/shmbuf.h>
 
 /* permission flag for shmget */
 #define SHM_R		0400	/* or S_IRUGO from <linux/stat.h> */
@@ -47,8 +51,9 @@ struct shmid_ds {
 #define SHM_STAT 	13
 #define SHM_INFO 	14
 
+/* Obsolete, used only for backwards compatibility */
 struct	shminfo {
-	size_t shmmax;
+	int shmmax;
 	int shmmin;
 	int shmmni;
 	int shmseg;

@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.37 1999/12/15 22:39:19 davem Exp $
+ * Version:	$Id: proc.c,v 1.38 2000/01/09 02:19:30 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -50,6 +50,17 @@
 #include <net/sock.h>
 #include <net/raw.h>
 
+static int fold_prot_inuse(struct proto *proto)
+{
+	int res = 0;
+	int cpu;
+
+	for (cpu=0; cpu<smp_num_cpus; cpu++)
+		res += proto->stats[cpu].inuse;
+
+	return res;
+}
+
 /*
  *	Report socket allocation statistics [mea@utu.fi]
  */
@@ -60,12 +71,12 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
 
 	int len  = socket_get_info(buffer,start,offset,length);
 
-	len += sprintf(buffer+len,"TCP: inuse %d highest %d\n",
-		       tcp_prot.inuse, tcp_prot.highestinuse);
-	len += sprintf(buffer+len,"UDP: inuse %d highest %d\n",
-		       udp_prot.inuse, udp_prot.highestinuse);
-	len += sprintf(buffer+len,"RAW: inuse %d highest %d\n",
-		       raw_prot.inuse, raw_prot.highestinuse);
+	len += sprintf(buffer+len,"TCP: inuse %d\n",
+		       fold_prot_inuse(&tcp_prot));
+	len += sprintf(buffer+len,"UDP: inuse %d\n",
+		       fold_prot_inuse(&udp_prot));
+	len += sprintf(buffer+len,"RAW: inuse %d\n",
+		       fold_prot_inuse(&raw_prot));
 	if (offset >= len)
 	{
 		*start = buffer;
@@ -80,6 +91,17 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
+static unsigned long fold_field(unsigned long *begin, int sz, int nr)
+{
+	unsigned long res = 0;
+	int i;
+
+	sz /= sizeof(unsigned long);
+
+	for (i=0; i<2*smp_num_cpus; i++)
+		res += begin[i*sz + nr];
+	return res;
+}
 
 /* 
  *	Called from the PROCfs module. This outputs /proc/net/snmp.
@@ -87,65 +109,35 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
  
 int snmp_get_info(char *buffer, char **start, off_t offset, int length)
 {
-	extern struct tcp_mib tcp_statistics;
-	extern struct udp_mib udp_statistics;
-	int len;
-/*
-  extern unsigned long tcp_rx_miss, tcp_rx_hit1,tcp_rx_hit2;
-*/
+	extern int sysctl_ip_default_ttl;
+	int len, i;
 
 	len = sprintf (buffer,
 		"Ip: Forwarding DefaultTTL InReceives InHdrErrors InAddrErrors ForwDatagrams InUnknownProtos InDiscards InDelivers OutRequests OutDiscards OutNoRoutes ReasmTimeout ReasmReqds ReasmOKs ReasmFails FragOKs FragFails FragCreates\n"
-		"Ip: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
-		    ip_statistics.IpForwarding, ip_statistics.IpDefaultTTL, 
-		    ip_statistics.IpInReceives, ip_statistics.IpInHdrErrors, 
-		    ip_statistics.IpInAddrErrors, ip_statistics.IpForwDatagrams, 
-		    ip_statistics.IpInUnknownProtos, ip_statistics.IpInDiscards, 
-		    ip_statistics.IpInDelivers, ip_statistics.IpOutRequests, 
-		    ip_statistics.IpOutDiscards, ip_statistics.IpOutNoRoutes, 
-		    ip_statistics.IpReasmTimeout, ip_statistics.IpReasmReqds, 
-		    ip_statistics.IpReasmOKs, ip_statistics.IpReasmFails, 
-		    ip_statistics.IpFragOKs, ip_statistics.IpFragFails, 
-		    ip_statistics.IpFragCreates);
-		    		
+		"Ip: %d %d", ipv4_devconf.forwarding ? 1 : 2, sysctl_ip_default_ttl);
+	for (i=0; i<offsetof(struct ip_mib, __pad)/sizeof(unsigned long); i++)
+		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)ip_statistics, sizeof(struct ip_mib), i));
+
 	len += sprintf (buffer + len,
-		"Icmp: InMsgs InErrors InDestUnreachs InTimeExcds InParmProbs InSrcQuenchs InRedirects InEchos InEchoReps InTimestamps InTimestampReps InAddrMasks InAddrMaskReps OutMsgs OutErrors OutDestUnreachs OutTimeExcds OutParmProbs OutSrcQuenchs OutRedirects OutEchos OutEchoReps OutTimestamps OutTimestampReps OutAddrMasks OutAddrMaskReps\n"
-		"Icmp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
-		    icmp_statistics.IcmpInMsgs, icmp_statistics.IcmpInErrors,
-		    icmp_statistics.IcmpInDestUnreachs, icmp_statistics.IcmpInTimeExcds,
-		    icmp_statistics.IcmpInParmProbs, icmp_statistics.IcmpInSrcQuenchs,
-		    icmp_statistics.IcmpInRedirects, icmp_statistics.IcmpInEchos,
-		    icmp_statistics.IcmpInEchoReps, icmp_statistics.IcmpInTimestamps,
-		    icmp_statistics.IcmpInTimestampReps, icmp_statistics.IcmpInAddrMasks,
-		    icmp_statistics.IcmpInAddrMaskReps, icmp_statistics.IcmpOutMsgs,
-		    icmp_statistics.IcmpOutErrors, icmp_statistics.IcmpOutDestUnreachs,
-		    icmp_statistics.IcmpOutTimeExcds, icmp_statistics.IcmpOutParmProbs,
-		    icmp_statistics.IcmpOutSrcQuenchs, icmp_statistics.IcmpOutRedirects,
-		    icmp_statistics.IcmpOutEchos, icmp_statistics.IcmpOutEchoReps,
-		    icmp_statistics.IcmpOutTimestamps, icmp_statistics.IcmpOutTimestampReps,
-		    icmp_statistics.IcmpOutAddrMasks, icmp_statistics.IcmpOutAddrMaskReps);
-	
+		"\nIcmp: InMsgs InErrors InDestUnreachs InTimeExcds InParmProbs InSrcQuenchs InRedirects InEchos InEchoReps InTimestamps InTimestampReps InAddrMasks InAddrMaskReps OutMsgs OutErrors OutDestUnreachs OutTimeExcds OutParmProbs OutSrcQuenchs OutRedirects OutEchos OutEchoReps OutTimestamps OutTimestampReps OutAddrMasks OutAddrMaskReps\n"
+		  "Icmp:");
+	for (i=0; i<offsetof(struct icmp_mib, __pad)/sizeof(unsigned long); i++)
+		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)icmp_statistics, sizeof(struct icmp_mib), i));
+
 	len += sprintf (buffer + len,
-		"Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts\n"
-		"Tcp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
-		    tcp_statistics.TcpRtoAlgorithm, tcp_statistics.TcpRtoMin,
-		    tcp_statistics.TcpRtoMax, tcp_statistics.TcpMaxConn,
-		    tcp_statistics.TcpActiveOpens, tcp_statistics.TcpPassiveOpens,
-		    tcp_statistics.TcpAttemptFails, tcp_statistics.TcpEstabResets,
-		    tcp_statistics.TcpCurrEstab, tcp_statistics.TcpInSegs,
-		    tcp_statistics.TcpOutSegs, tcp_statistics.TcpRetransSegs,
-		    tcp_statistics.TcpInErrs, tcp_statistics.TcpOutRsts);
-		
+		"\nTcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts\n"
+		  "Tcp:");
+	for (i=0; i<offsetof(struct tcp_mib, __pad)/sizeof(unsigned long); i++)
+		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)tcp_statistics, sizeof(struct tcp_mib), i));
+
 	len += sprintf (buffer + len,
-		"Udp: InDatagrams NoPorts InErrors OutDatagrams\nUdp: %lu %lu %lu %lu\n",
-		    udp_statistics.UdpInDatagrams, udp_statistics.UdpNoPorts,
-		    udp_statistics.UdpInErrors, udp_statistics.UdpOutDatagrams);	    
-/*	
-	  len += sprintf( buffer + len,
-	  	"TCP fast path RX:  H2: %ul H1: %ul L: %ul\n",
-	  		tcp_rx_hit2,tcp_rx_hit1,tcp_rx_miss);
-*/
-	
+		"\nUdp: InDatagrams NoPorts InErrors OutDatagrams\n"
+		  "Udp:");
+	for (i=0; i<offsetof(struct udp_mib, __pad)/sizeof(unsigned long); i++)
+		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)udp_statistics, sizeof(struct udp_mib), i));
+
+	len += sprintf (buffer + len, "\n");
+
 	if (offset >= len)
 	{
 		*start = buffer;
@@ -166,23 +158,17 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length)
  
 int netstat_get_info(char *buffer, char **start, off_t offset, int length)
 {
-	extern struct linux_mib net_statistics;
-	int len;
+	int len, i;
 
 	len = sprintf(buffer,
 		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed"
 		      " EmbryonicRsts PruneCalled RcvPruned OfoPruned"
 		      " OutOfWindowIcmps LockDroppedIcmps\n" 	
-		      "TcpExt: %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
-		      net_statistics.SyncookiesSent,
-		      net_statistics.SyncookiesRecv,
-		      net_statistics.SyncookiesFailed,
-		      net_statistics.EmbryonicRsts,
-		      net_statistics.PruneCalled,
-		      net_statistics.RcvPruned,
-		      net_statistics.OfoPruned,
-		      net_statistics.OutOfWindowIcmps,
-		      net_statistics.LockDroppedIcmps);
+		      "TcpExt:");
+	for (i=0; i<offsetof(struct linux_mib, __pad)/sizeof(unsigned long); i++)
+		len += sprintf(buffer+len, " %lu", fold_field((unsigned long*)net_statistics, sizeof(struct linux_mib), i));
+
+	len += sprintf (buffer + len, "\n");
 
 	if (offset >= len)
 	{

@@ -46,6 +46,7 @@ CONFIG_KCORE_ELF=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
+# CONFIG_PCI_NAMES is not set
 
 #
 # PCMCIA/CardBus support
@@ -161,6 +162,7 @@ CONFIG_BLK_DEV_SR_VENDOR=y
 #
 # Some SCSI devices (e.g. CD jukebox) support multiple LUNs
 #
+# CONFIG_SCSI_DEBUG_QUEUES is not set
 # CONFIG_SCSI_MULTI_LUN is not set
 CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_LOGGING is not set
@@ -243,7 +245,6 @@ CONFIG_NCR885E=y
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
-# CONFIG_YELLOWFIN is not set
 # CONFIG_RTL8139 is not set
 # CONFIG_DM9102 is not set
 # CONFIG_AT1700 is not set
@@ -251,6 +252,13 @@ CONFIG_NCR885E=y
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
+
+#
+# Ethernet (1000 Mbit)
+#
+# CONFIG_YELLOWFIN is not set
+# CONFIG_ACENIC is not set
+# CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set
 # CONFIG_PPP is not set
@@ -310,10 +318,20 @@ CONFIG_UNIX98_PTYS=y
 CONFIG_UNIX98_PTY_COUNT=256
 
 #
+# I2C support
+#
+# CONFIG_I2C is not set
+
+#
 # Mice
 #
 # CONFIG_BUSMOUSE is not set
 # CONFIG_MOUSE is not set
+
+#
+# Joysticks
+#
+# CONFIG_JOYSTICK is not set
 # CONFIG_QIC02_TAPE is not set
 
 #
@@ -327,11 +345,6 @@ CONFIG_UNIX98_PTY_COUNT=256
 # Video For Linux
 #
 # CONFIG_VIDEO_DEV is not set
-
-#
-# Joystick support
-#
-# CONFIG_JOYSTICK is not set
 # CONFIG_DTLK is not set
 # CONFIG_R3964 is not set
 # CONFIG_APPLICOM is not set
@@ -341,9 +354,10 @@ CONFIG_UNIX98_PTY_COUNT=256
 #
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
+# CONFIG_AGP is not set
 
 #
-# Support for USB
+# USB support
 #
 # CONFIG_USB is not set
 
@@ -358,9 +372,9 @@ CONFIG_UNIX98_PTY_COUNT=256
 # CONFIG_BFS_FS is not set
 # CONFIG_FAT_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_CRAMFS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
-# CONFIG_UDF_FS is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_NTFS_FS is not set
 # CONFIG_HPFS_FS is not set
@@ -370,16 +384,17 @@ CONFIG_DEVPTS_FS=y
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
+# CONFIG_UDF_FS is not set
 # CONFIG_UFS_FS is not set
 
 #
 # Network File Systems
 #
 # CONFIG_CODA_FS is not set
-# CONFIG_NFS_FS is not set
+CONFIG_NFS_FS=y
 # CONFIG_NFSD is not set
-# CONFIG_SUNRPC is not set
-# CONFIG_LOCKD is not set
+CONFIG_SUNRPC=y
+CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
 # CONFIG_NCP_FS is not set
 
@@ -403,4 +418,4 @@ CONFIG_MSDOS_PARTITION=y
 #
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_KGDB is not set
-# CONFIG_XMON is not set
+CONFIG_XMON=y

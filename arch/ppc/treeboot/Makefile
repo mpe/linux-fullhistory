@@ -21,9 +21,9 @@ MKEVIMG	= mkevimg -l
 MKIRIMG	= mkirimg
 
 CFLAGS	= -O -fno-builtin -I$(TOPDIR)/include
-LD_ARGS = -e _start -T ld.script -Ttext 80200000 -Bstatic
+LD_ARGS = -e _start -T ld.script -Ttext 0x00200000 -Bstatic
 
-OBJS	= crt0.o main.o misc.o string.o zlib.o irSect.o
+OBJS	= crt0.o main.o misc.o irSect.o ../coffboot/string.o ../coffboot/zlib.o 
 LIBS	=
 
 treeboot: $(OBJS) ld.script

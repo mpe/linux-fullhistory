@@ -29,6 +29,7 @@
 #include <linux/personality.h>
 #include <linux/elfcore.h>
 #include <linux/init.h>
+#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
@@ -1160,8 +1161,8 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 	psinfo.pr_zomb = psinfo.pr_sname == 'Z';
 	psinfo.pr_nice = current->priority-15;
 	psinfo.pr_flag = current->flags;
-	psinfo.pr_uid = current->uid;
-	psinfo.pr_gid = current->gid;
+	psinfo.pr_uid = NEW_TO_OLD_UID(current->uid);
+	psinfo.pr_gid = NEW_TO_OLD_GID(current->gid);
 	{
 		int i, len;
 

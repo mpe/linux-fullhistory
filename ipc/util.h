@@ -24,7 +24,7 @@ struct ipc_ids {
 };
 
 struct ipc_id {
-	struct ipc_perm* p;
+	struct kern_ipc_perm* p;
 };
 
 
@@ -32,12 +32,12 @@ void __init ipc_init_ids(struct ipc_ids* ids, int size);
 
 /* must be called with ids->sem acquired.*/
 int ipc_findkey(struct ipc_ids* ids, key_t key);
-int ipc_addid(struct ipc_ids* ids, struct ipc_perm* new, int size);
+int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size);
 
 /* must be called with both locks acquired. */
-struct ipc_perm* ipc_rmid(struct ipc_ids* ids, int id);
+struct kern_ipc_perm* ipc_rmid(struct ipc_ids* ids, int id);
 
-int ipcperms (struct ipc_perm *ipcp, short flg);
+int ipcperms (struct kern_ipc_perm *ipcp, short flg);
 
 /* for rare, potentially huge allocations.
  * both function can sleep
@@ -50,9 +50,9 @@ extern inline void ipc_lockall(struct ipc_ids* ids)
 	spin_lock(&ids->ary);
 }
 
-extern inline struct ipc_perm* ipc_get(struct ipc_ids* ids, int id)
+extern inline struct kern_ipc_perm* ipc_get(struct ipc_ids* ids, int id)
 {
-	struct ipc_perm* out;
+	struct kern_ipc_perm* out;
 	int lid = id % SEQ_MULTIPLIER;
 	if(lid > ids->size)
 		return NULL;
@@ -65,9 +65,9 @@ extern inline void ipc_unlockall(struct ipc_ids* ids)
 {
 	spin_unlock(&ids->ary);
 }
-extern inline struct ipc_perm* ipc_lock(struct ipc_ids* ids, int id)
+extern inline struct kern_ipc_perm* ipc_lock(struct ipc_ids* ids, int id)
 {
-	struct ipc_perm* out;
+	struct kern_ipc_perm* out;
 	int lid = id % SEQ_MULTIPLIER;
 	if(lid > ids->size)
 		return NULL;
@@ -89,10 +89,13 @@ extern inline int ipc_buildid(struct ipc_ids* ids, int id, int seq)
 	return SEQ_MULTIPLIER*seq + id;
 }
 
-extern inline int ipc_checkid(struct ipc_ids* ids, struct ipc_perm* ipcp, int uid)
+extern inline int ipc_checkid(struct ipc_ids* ids, struct kern_ipc_perm* ipcp, int uid)
 {
 	if(uid/SEQ_MULTIPLIER != ipcp->seq)
 		return 1;
 	return 0;
 }
 
+void kernel_to_ipc64_perm(struct kern_ipc_perm *in, struct ipc64_perm *out);
+void ipc64_perm_to_ipc_perm(struct ipc64_perm *in, struct ipc_perm *out);
+int ipc_parse_version (int *cmd);

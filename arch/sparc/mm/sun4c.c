@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.182 1999/12/27 06:30:04 anton Exp $
+/* $Id: sun4c.c,v 1.183 2000/01/08 16:38:20 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -67,20 +67,6 @@ extern int num_segmaps, num_contexts;
 /* Flushing the cache. */
 struct sun4c_vac_props sun4c_vacinfo;
 unsigned long sun4c_kernel_faults;
-
-/* convert a virtual address to a physical address and vice
- * versa. Easy on the 4c
- */
-static unsigned long sun4c_v2p(unsigned long vaddr)
-{
-	return (vaddr - PAGE_OFFSET);
-}
-
-static unsigned long sun4c_p2v(unsigned long vaddr)
-{
-	return (vaddr + PAGE_OFFSET);
-}
-
 
 /* Invalidate every sun4c cache line tag. */
 void sun4c_flush_all(void)
@@ -2731,9 +2717,6 @@ void __init ld_mmu_sun4c(void)
 	BTFIXUPSET_CALL(mmu_flush_dma_area, sun4c_flush_dma_area, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(mmu_inval_dma_area, sun4c_inval_dma_area, BTFIXUPCALL_NORM);
 
-        BTFIXUPSET_CALL(mmu_v2p, sun4c_v2p, BTFIXUPCALL_NORM);
-        BTFIXUPSET_CALL(mmu_p2v, sun4c_p2v, BTFIXUPCALL_NORM);
-	
 	/* Task struct and kernel stack allocating/freeing. */
 	BTFIXUPSET_CALL(alloc_task_struct, sun4c_alloc_task_struct, BTFIXUPCALL_NORM);
 

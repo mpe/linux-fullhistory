@@ -102,9 +102,11 @@ xmon_write(void *handle, void *ptr, int nb)
     if (!scc_initialized)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
+#ifdef CONFIG_ADB	    
 	while ((*sccc & TXRDY) == 0)
 	    if (sys_ctrler == SYS_CTRLER_PMU)
 		pmu_poll();
+#endif /* CONFIG_ADB */
 	buf_access();
 	if ( console && (*p != '\r'))
 		printk("%c", *p);
@@ -195,9 +197,11 @@ xmon_read(void *handle, void *ptr, int nb)
     if (!scc_initialized)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
+#ifdef CONFIG_ADB	    
 	while ((*sccc & RXRDY) == 0)
 	    if (sys_ctrler == SYS_CTRLER_PMU)
 		pmu_poll();
+#endif /* CONFIG_ADB */
 	buf_access();
 #if 0	
 	if ( 0/*console*/ )

@@ -27,6 +27,12 @@
 extern "C" {
 #endif
 
+/*
+ * The "residual" board information structure the boot loader passes
+ * into the kernel.
+ */
+
+extern unsigned char __res[];
 
 
 #ifdef __cplusplus

@@ -8,14 +8,14 @@ vmlist_access_lock/vmlist_modify_lock
 --------------------------------------
 
 Page stealers pick processes out of the process pool and scan for 
-the best process to steal pages from. To guarantee the existance 
+the best process to steal pages from. To guarantee the existence 
 of the victim mm, a mm_count inc and a mmdrop are done in swap_out().
 Page stealers hold kernel_lock to protect against a bunch of races.
 The vma list of the victim mm is also scanned by the stealer, 
 and the vmlist_lock is used to preserve list sanity against the
-process adding/deleting to the list. This also gurantees existance
-of the vma. Vma existance is not guranteed once try_to_swap_out() 
-drops the vmlist lock. To gurantee the existance of the underlying 
+process adding/deleting to the list. This also guarantees existence
+of the vma. Vma existence is not guaranteed once try_to_swap_out() 
+drops the vmlist lock. To guarantee the existence of the underlying 
 file structure, a get_file is done before the swapout() method is 
 invoked. The page passed into swapout() is guaranteed not to be reused
 for a different purpose because the page reference count due to being
@@ -102,7 +102,7 @@ counts on the corresponding swaphandles, maintained in the "swap_map"
 array, and the "highest_bit" and "lowest_bit" fields.
 
 Both of these are spinlocks, and are never acquired from intr level. The
-locking heirarchy is swap_list_lock -> swap_device_lock.
+locking hierarchy is swap_list_lock -> swap_device_lock.
 
 To prevent races between swap space deletion or async readahead swapins
 deciding whether a swap handle is being used, ie worthy of being read in

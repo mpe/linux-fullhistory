@@ -12,9 +12,26 @@
 #include <linux/reboot.h>
 #include <linux/prctl.h>
 #include <linux/init.h>
+#include <linux/highuid.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
+
+/*
+ * this is where the system-wide overflow UID and GID are defined, for
+ * architectures that now have 32-bit UID/GID but didn't in the past
+ */
+
+int overflowuid = DEFAULT_OVERFLOWUID;
+int overflowgid = DEFAULT_OVERFLOWGID;
+
+/*
+ * the same as above, but for filesystems which can only store a 16-bit
+ * UID and GID. as such, this is needed on all architectures
+ */
+
+int fs_overflowuid = DEFAULT_FS_OVERFLOWUID;
+int fs_overflowgid = DEFAULT_FS_OVERFLOWUID;
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes

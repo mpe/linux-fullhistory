@@ -4,13 +4,16 @@ The following people have contributed to this code (in alphabetical
 order by last name).  I'm sure this list should be longer, its
 difficult to maintain, add yourself with a patch if desired.
 
+  Georg Acher <acher@informatik.tu-muenchen.de>
   Alan Cox <alan@lxorguk.ukuu.org.uk>
   Johannes Erdfelt <jerdfelt@sventech.com>
+  Deti Fliegl <deti@fliegl.de>
   ham <ham@unsuave.com>
   Bradley M Keryan <keryan@andrew.cmu.edu>
   Paul Mackerras <paulus@cs.anu.edu.au>
   David E. Nelson <dnelson@jump.net>
   Vojtech Pavlik <vojtech@suse.cz>
+  Thomas Sailer <sailer@ife.ee.ethz.ch>
   Gregory P. Smith <greg@electricrain.com>
   Linus Torvalds <torvalds@transmeta.com>
   Roman Weissgaerber <weissg@vienna.at>

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.14 1999/08/30 12:14:56 davem Exp $
+ *	$Id: ip6_input.c,v 1.15 2000/01/09 02:19:54 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -46,7 +46,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto drop;
 
-	ipv6_statistics.Ip6InReceives++;
+	IP6_INC_STATS_BH(Ip6InReceives);
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
 		goto out;
@@ -73,7 +73,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	if (hdr->nexthdr == NEXTHDR_HOP) {
 		skb->h.raw = (u8*)(hdr+1);
 		if (!ipv6_parse_hopopts(skb, &hdr->nexthdr)) {
-			ipv6_statistics.Ip6InHdrErrors++;
+			IP6_INC_STATS_BH(Ip6InHdrErrors);
 			return 0;
 		}
 	}
@@ -84,9 +84,9 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	return skb->dst->input(skb);
 
 truncated:
-	ipv6_statistics.Ip6InTruncatedPkts++;
+	IP6_INC_STATS_BH(Ip6InTruncatedPkts);
 err:
-	ipv6_statistics.Ip6InHdrErrors++;
+	IP6_INC_STATS_BH(Ip6InHdrErrors);
 drop:
 	kfree_skb(skb);
 out:
@@ -175,7 +175,7 @@ int ip6_input(struct sk_buff *skb)
 	 *	not found: send ICMP parameter problem back
 	 */
 	if (!found) {
-		ipv6_statistics.Ip6InUnknownProtos++;
+		IP6_INC_STATS_BH(Ip6InUnknownProtos);
 		icmpv6_param_prob(skb, ICMPV6_UNK_NEXTHDR, nhptr);
 	}
 
@@ -188,7 +188,7 @@ int ip6_mc_input(struct sk_buff *skb)
 	int deliver = 0;
 	int discard = 1;
 
-	ipv6_statistics.Ip6InMcastPkts++;
+	IP6_INC_STATS_BH(Ip6InMcastPkts);
 
 	hdr = skb->nh.ipv6h;
 	if (ipv6_chk_mcast_addr(skb->dev, &hdr->daddr))

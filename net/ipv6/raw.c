@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.30 1999/12/15 22:39:51 davem Exp $
+ *	$Id: raw.c,v 1.31 2000/01/09 02:19:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -53,9 +53,7 @@ static void raw_v6_hash(struct sock *sk)
 		(*skp)->pprev = &sk->next;
 	*skp = sk;
 	sk->pprev = skp;
-	sk->prot->inuse++;
-	if(sk->prot->highestinuse < sk->prot->inuse)
-		sk->prot->highestinuse = sk->prot->inuse;
+	sock_prot_inc_use(sk->prot);
  	sock_hold(sk);
  	write_unlock_bh(&raw_v6_lock);
 }
@@ -68,7 +66,7 @@ static void raw_v6_unhash(struct sock *sk)
 			sk->next->pprev = sk->pprev;
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
-		sk->prot->inuse--;
+		sock_prot_dec_use(sk->prot);
 		__sock_put(sk);
 	}
 	write_unlock_bh(&raw_v6_lock);
@@ -259,12 +257,12 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	if (sock_queue_rcv_skb(sk,skb)<0) {
-		ipv6_statistics.Ip6InDiscards++;
+		IP6_INC_STATS_BH(Ip6InDiscards);
 		kfree_skb(skb);
 		return 0;
 	}
 
-	ipv6_statistics.Ip6InDelivers++;
+	IP6_INC_STATS_BH(Ip6InDelivers);
 	return 0;
 }
 
@@ -785,6 +783,4 @@ struct proto rawv6_prot = {
 	128,				/* max_header */
 	0,				/* retransmits */
 	"RAW",				/* name */
-	0,				/* inuse */
-	0				/* highestinuse */
 };

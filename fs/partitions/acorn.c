@@ -14,9 +14,10 @@
 #include <linux/genhd.h>
 #include <linux/fs.h>
 
+#include "check.h"
 #include "acorn.h"
 
-extern void add_gd_partition(struct gendisk *hd, unsigned int minor, unsigned int start, unsigned int size);
+extern void add_gd_partition(struct gendisk *hd, int minor, int start, int size);
 
 static void
 adfspart_setgeometry(kdev_t dev, unsigned int secspertrack, unsigned int heads,

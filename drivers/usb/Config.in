@@ -8,13 +8,14 @@ tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
-   dep_tristate '  UHCI (Intel PIIX4, VIA, and others) support' CONFIG_USB_UHCI $CONFIG_USB
-   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, and others) support' CONFIG_USB_OHCI_HCD $CONFIG_USB
+   dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
+   dep_tristate '  OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI_HCD $CONFIG_USB
 
 comment 'Miscellaneous USB options'
    if [ "$CONFIG_PROC_FS" != "n" ]; then
       bool '  /proc/bus/usb support' CONFIG_USB_PROC
    fi
+   bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
 
 comment 'USB Devices'
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB

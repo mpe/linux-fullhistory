@@ -19,6 +19,8 @@ extern struct sk_buff *dn_alloc_skb(struct sock *sk, int size, int pri);
 extern int dn_route_output(struct dst_entry **pprt, dn_address dst, dn_address src, int flags);
 extern int dn_cache_dump(struct sk_buff *skb, struct netlink_callback *cb);
 extern int dn_cache_getroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
+extern void dn_rt_cache_flush(int delay);
+
 /* Masks for flags field */
 #define DN_RT_F_PID 0x07 /* Mask for packet type                      */
 #define DN_RT_F_PF  0x80 /* Padding Follows                           */
@@ -56,16 +58,31 @@ extern int dn_cache_getroute(struct sk_buff *skb, struct nlmsghdr *nlh, void *ar
 #define DN_RT_INFO_NOML 0x20 /* No Multicast traffic accepted */
 #define DN_RT_INFO_BLKR 0x40 /* Blocking Requested            */
 
-
+/*
+ * The key structure is what we used to look up the route.
+ * The rt_saddr & rt_daddr entries are the same as key.saddr & key.daddr
+ * except for local input routes, where the rt_saddr = key.daddr and
+ * rt_daddr = key.saddr to allow the route to be used for returning
+ * packets to the originating host.
+ */
 struct dn_route {
 	union {
 		struct dst_entry dst;
 		struct dn_route *rt_next;
 	} u;
+	struct {
+		unsigned short saddr;
+		unsigned short daddr;
+		int iif;
+		int oif;
+		u32 fwmark;
+	} key;
 	unsigned short rt_saddr;
 	unsigned short rt_daddr;
-	int rt_iif;
-	int rt_oif;
+	unsigned char rt_type;
+	unsigned char rt_scope;
+	unsigned char rt_protocol;
+	unsigned char rt_table;
 };
 
 extern void dn_route_init(void);

@@ -17,6 +17,8 @@
  *          Steve Whitehouse : Fixed bug which sometimes killed timer
  *          Steve Whitehouse : Multiple ifaddr support
  *          Steve Whitehouse : SIOCGIFCONF is now a compile time option
+ *          Steve Whitehouse : /proc/sys/net/decnet/conf/<sys>/forwarding
+ *          Steve Whitehouse : Removed timer1 - its a user space issue now
  */
 
 #include <linux/config.h>
@@ -59,23 +61,23 @@ static void rtmsg_ifa(int event, struct dn_ifaddr *ifa);
 
 static int dn_eth_up(struct net_device *);
 static void dn_send_brd_hello(struct net_device *dev);
+#if 0
 static void dn_send_ptp_hello(struct net_device *dev);
+#endif
 
 static struct dn_dev_parms dn_dev_list[] =  {
 {
 	ARPHRD_ETHER, /* Ethernet */
 	DN_DEV_BCAST,
 	DN_DEV_S_RU,
-	1,
+	0,
 	1498,
-	10,
 	1,
 	10,
 	0,
 	"ethernet",
 	NET_DECNET_CONF_ETHER,
 	dn_eth_up,
-	NULL,
 	NULL,
 	dn_send_brd_hello,
 	NULL
@@ -84,15 +86,13 @@ static struct dn_dev_parms dn_dev_list[] =  {
 	ARPHRD_IPGRE, /* DECnet tunneled over GRE in IP */
 	DN_DEV_BCAST,
 	DN_DEV_S_RU,
-	2,
+	0,
 	1400,
-	10,
 	1,
 	10,
 	0,
 	"ipgre",
 	NET_DECNET_CONF_GRE,
-	NULL,
 	NULL,
 	NULL,
 	dn_send_brd_hello,
@@ -103,15 +103,13 @@ static struct dn_dev_parms dn_dev_list[] =  {
 	ARPHRD_X25, /* Bog standard X.25 */
 	DN_DEV_UCAST,
 	DN_DEV_S_DS,
-	5,
+	0,
 	230,
-	10 * 60,
 	1,
 	120,
 	0,
 	"x25",
 	NET_DECNET_CONF_X25,
-	NULL,
 	NULL,
 	NULL,
 	dn_send_ptp_hello,
@@ -123,15 +121,13 @@ static struct dn_dev_parms dn_dev_list[] =  {
 	ARPHRD_PPP, /* DECnet over PPP */
 	DN_DEV_BCAST,
 	DN_DEV_S_RU,
-	5,
+	0,
 	230,
-	10,
 	1,
 	10,
 	0,
 	"ppp",
 	NET_DECNET_CONF_PPP,
-	NULL,
 	NULL,
 	NULL,
 	dn_send_brd_hello,
@@ -143,15 +139,13 @@ static struct dn_dev_parms dn_dev_list[] =  {
 	ARPHRD_DDCMP, /* DECnet over DDCMP */
 	DN_DEV_UCAST,
 	DN_DEV_S_DS,
-	5,
+	0,
 	230,
-	10 * 60,
 	1,
 	120,
 	0,
 	"ddcmp",
 	NET_DECNET_CONF_DDCMP,
-	NULL,
 	NULL,
 	NULL,
 	dn_send_ptp_hello,
@@ -164,13 +158,11 @@ static struct dn_dev_parms dn_dev_list[] =  {
 	DN_DEV_S_RU,
 	0,
 	1498,
-	10,
 	1,
 	10,
 	0,
 	"loopback",
 	NET_DECNET_CONF_LOOPBACK,
-	NULL,
 	NULL,
 	NULL,
 	dn_send_brd_hello,
@@ -188,22 +180,20 @@ static int min_t2[] = { 1 };
 static int max_t2[] = { 60 }; /* No max specified, but this seems sensible */
 static int min_t3[] = { 1 };
 static int max_t3[] = { 8191 }; /* Must fit in 16 bits when multiplied by BCT3MULT or T3MULT */
-#ifdef CONFIG_DECNET_ROUTER
-static int min_t1[] = { 1 };
-static int max_t1[] = { 8191 }; /* No max specified, so made it the same as t3 */
-static int min_cost[] = { 0 };
-static int max_cost[] = { 25 }; /* From DECnet spec */
+
 static int min_priority[] = { 0 };
 static int max_priority[] = { 127 }; /* From DECnet spec */
-#endif /* CONFIG_DECNET_ROUTER */
+
+static int dn_forwarding_proc(ctl_table *, int, struct file *,
+			void *, size_t *);
+static int dn_forwarding_sysctl(ctl_table *table, int *name, int nlen,
+			void *oldval, size_t *oldlenp,
+			void *newval, size_t newlen,
+			void **context);
 
 static struct dn_dev_sysctl_table {
 	struct ctl_table_header *sysctl_header;
-#ifdef CONFIG_DECNET_ROUTER
-	ctl_table dn_dev_vars[6];
-#else
-	ctl_table dn_dev_vars[3];
-#endif
+	ctl_table dn_dev_vars[5];
 	ctl_table dn_dev_dev[2];
 	ctl_table dn_dev_conf_dir[2];
 	ctl_table dn_dev_proto_dir[2];
@@ -211,20 +201,16 @@ static struct dn_dev_sysctl_table {
 } dn_dev_sysctl = {
 	NULL,
 	{
-#ifdef CONFIG_DECNET_ROUTER
-	{NET_DECNET_CONF_DEV_COST, "cost", (void *)DN_DEV_PARMS_OFFSET(cost),
+	{NET_DECNET_CONF_DEV_FORWARDING, "forwarding",
+	(void *)DN_DEV_PARMS_OFFSET(forwarding),
 	sizeof(int), 0644, NULL,
-	proc_dointvec_minmax, sysctl_intvec,
-	NULL, &min_cost, &max_cost},
-	{NET_DECNET_CONF_DEV_PRIORITY, "priority", (void *)DN_DEV_PARMS_OFFSET(priority),
+	dn_forwarding_proc, dn_forwarding_sysctl,
+	NULL, NULL, NULL},
+	{NET_DECNET_CONF_DEV_PRIORITY, "priority",
+	(void *)DN_DEV_PARMS_OFFSET(priority),
 	sizeof(int), 0644, NULL,
 	proc_dointvec_minmax, sysctl_intvec,
 	NULL, &min_priority, &max_priority},
-	{NET_DECNET_CONF_DEV_T1, "t1", (void *)DN_DEV_PARMS_OFFSET(t1),
-	sizeof(int), 0644, NULL,
-	proc_dointvec_minmax, sysctl_intvec,
-	NULL, &min_t1, &max_t1},
-#endif
 	{NET_DECNET_CONF_DEV_T2, "t2", (void *)DN_DEV_PARMS_OFFSET(t2),
 	sizeof(int), 0644, NULL,
 	proc_dointvec_minmax, sysctl_intvec,
@@ -274,6 +260,7 @@ static void dn_dev_sysctl_register(struct net_device *dev, struct dn_dev_parms *
 	t->dn_dev_proto_dir[0].de = NULL;
 	t->dn_dev_root_dir[0].child = t->dn_dev_proto_dir;
 	t->dn_dev_root_dir[0].de = NULL;
+	t->dn_dev_vars[0].extra1 = (void *)dev;
 
 	t->sysctl_header = register_sysctl_table(t->dn_dev_root_dir, 0);
 	if (t->sysctl_header == NULL)
@@ -291,6 +278,90 @@ static void dn_dev_sysctl_unregister(struct dn_dev_parms *parms)
 		kfree(t);
 	}
 }
+
+
+static int dn_forwarding_proc(ctl_table *table, int write, 
+				struct file *filep,
+				void *buffer, size_t *lenp)
+{
+#ifdef CONFIG_DECNET_ROUTER
+	struct net_device *dev = table->extra1;
+	struct dn_dev *dn_db;
+	int err;
+	int tmp, old;
+
+	if (table->extra1 == NULL)
+		return -EINVAL;
+
+	dn_db = dev->dn_ptr;
+	old = dn_db->parms.forwarding;
+
+	err = proc_dointvec(table, write, filep, buffer, lenp);
+
+	if ((err >= 0) && write) {
+		if (dn_db->parms.forwarding < 0)
+			dn_db->parms.forwarding = 0;
+		if (dn_db->parms.forwarding > 2)
+			dn_db->parms.forwarding = 2;
+		/*
+		 * What an ugly hack this is... its works, just. It
+		 * would be nice if sysctl/proc were just that little
+		 * bit more flexible so I don't have to write a special
+		 * routine, or suffer hacks like this - SJW
+		 */
+		tmp = dn_db->parms.forwarding;
+		dn_db->parms.forwarding = old;
+		if (dn_db->parms.down)
+			dn_db->parms.down(dev);
+		dn_db->parms.forwarding = tmp;
+		if (dn_db->parms.up)
+			dn_db->parms.up(dev);
+	}
+
+	return err;
+#else
+	return -EINVAL;
+#endif
+}
+
+static int dn_forwarding_sysctl(ctl_table *table, int *name, int nlen,
+			void *oldval, size_t *oldlenp,
+			void *newval, size_t newlen,
+			void **context)
+{
+#ifdef CONFIG_DECNET_ROUTER
+	struct net_device *dev = table->extra1;
+	struct dn_dev *dn_db;
+	int value;
+
+	if (table->extra1 == NULL)
+		return -EINVAL;
+
+	dn_db = dev->dn_ptr;
+
+	if (newval && newlen) {
+		if (newlen != sizeof(int))
+			return -EINVAL;
+
+		get_user(value, (int *)newval);
+		if (value < 0)
+			return -EINVAL;
+		if (value > 2)
+			return -EINVAL;
+
+		if (dn_db->parms.down)
+			dn_db->parms.down(dev);
+		dn_db->parms.forwarding = value;
+		if (dn_db->parms.up)
+			dn_db->parms.up(dev);
+	}
+
+	return 0;
+#else
+	return -EINVAL;
+#endif
+}
+
 #else /* CONFIG_SYSCTL */
 static void dn_dev_sysctl_unregister(struct dn_dev_parms *parms)
 {
@@ -370,19 +441,6 @@ static int dn_dev_set_ifa(struct net_device *dev, struct dn_ifaddr *ifa)
 		ifa->ifa_scope = RT_SCOPE_HOST;
 
 	return dn_dev_insert_ifa(dn_db, ifa);
-}
-
-static struct dn_dev *dn_dev_by_index(int ifindex)
-{
-	struct net_device *dev;
-	struct dn_dev *dn_dev = NULL;
-	dev = dev_get_by_index(ifindex);
-	if (dev) {
-		dn_dev = dev->dn_ptr;
-		dev_put(dev);
-	}
-
-	return dn_dev;
 }
 
 
@@ -471,6 +529,18 @@ rarok:
 }
 
 #ifdef CONFIG_RTNETLINK
+static struct dn_dev *dn_dev_by_index(int ifindex)
+{
+	struct net_device *dev;
+	struct dn_dev *dn_dev = NULL;
+	dev = dev_get_by_index(ifindex);
+	if (dev) {
+		dn_dev = dev->dn_ptr;
+		dev_put(dev);
+	}
+
+	return dn_dev;
+}
 
 static int dn_dev_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 {
@@ -577,39 +647,6 @@ static void rtmsg_ifa(int event, struct dn_ifaddr *ifa)
 	netlink_broadcast(rtnl, skb, 0, RTMGRP_DECnet_IFADDR, GFP_KERNEL);
 }
 
-static int dn_dev_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
-				int type, u32 pid, u32 seq)
-{
-	struct ifinfomsg *r;
-	struct nlmsghdr *nlh;
-	unsigned char *b = skb->tail;
-	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
-	unsigned char priority = dn_db->parms.priority;
-	unsigned short cost = dn_db->parms.cost;
-
-	nlh = NLMSG_PUT(skb, pid, seq, type, sizeof(*r));
-	if (pid) nlh->nlmsg_flags |= NLM_F_MULTI;
-	r = NLMSG_DATA(nlh);
-
-	r->ifi_family = AF_DECnet;
-	r->ifi_type   = dev->type;
-	r->ifi_index  = dev->ifindex;
-	r->ifi_flags  = dev->flags;
-	r->ifi_change = ~0U;
-
-	RTA_PUT(skb, IFLA_IFNAME, strlen(dev->name)+1, dev->name);
-	RTA_PUT(skb, IFLA_COST, sizeof(unsigned short), &cost);
-	RTA_PUT(skb, IFLA_PRIORITY, sizeof(unsigned char), &priority);
-
-	nlh->nlmsg_len = skb->tail - b;
-	return skb->len;
-
-nlmsg_failure:
-rtattr_failure:
-	skb_trim(skb, b - skb->data);
-	return -1;
-}
-
 static int dn_dev_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx, dn_idx;
@@ -648,45 +685,6 @@ done:
 	return skb->len;
 }
 
-static int dn_dev_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
-{
-	int idx;
-	int s_idx = cb->args[0];
-	struct net_device *dev;
-
-	read_lock(&dev_base_lock);
-	for(dev=dev_base, idx=0; dev; dev = dev->next) {
-		if (!dev->dn_ptr)
-			continue;
-		idx++;
-		if (idx < s_idx)
-			continue;
-		if (dn_dev_fill_ifinfo(skb, dev, RTM_NEWLINK, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq) <= 0)
-			break;
-	}
-	read_unlock(&dev_base_lock);
-	cb->args[0] = idx;
-
-	return skb->len;
-}
-
-static void dn_dev_ifinfo(int type, struct net_device *dev)
-{
-	struct sk_buff *skb;
-	int size = NLMSG_GOODSIZE;
-
-	skb = alloc_skb(size, GFP_KERNEL);
-	if (!skb)
-		return;
-
-	if (dn_dev_fill_ifinfo(skb, dev, type, 0, 0) < 0) {
-		kfree_skb(skb);
-		return;
-	}
-
-	NETLINK_CB(skb).dst_groups = RTMGRP_LINK;
-	netlink_broadcast(rtnl, skb, 0, NETLINK_CB(skb).dst_groups, GFP_KERNEL);
-}
 #endif /* CONFIG_RTNETLINK */
 
 static void dn_send_endnode_hello(struct net_device *dev)
@@ -793,7 +791,8 @@ static void dn_send_router_hello(struct net_device *dev)
 	*ptr++ = 0;
 	memcpy(ptr, decnet_ether_address, ETH_ALEN);
 	ptr += ETH_ALEN;
-	*ptr++ = (unsigned char)decnet_node_type;
+	*ptr++ = dn_db->parms.forwarding == 1 ? 
+			DN_RT_INFO_L1RT : DN_RT_INFO_L2RT;
 	*((unsigned short *)ptr) = dn_htons(dn_db->parms.blksize);
 	ptr += 2;
 	*ptr++ = 0; /* Priority */
@@ -829,7 +828,9 @@ static void dn_send_router_hello(struct net_device *dev)
 
 static void dn_send_brd_hello(struct net_device *dev)
 {
-	if (decnet_node_type == DN_RT_INFO_ENDN)
+	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
+
+	if (dn_db->parms.forwarding == 0)
 		dn_send_endnode_hello(dev);
 	else
 		dn_send_router_hello(dev);
@@ -841,14 +842,16 @@ static void dn_send_brd_hello(struct net_device *dev)
 }
 #endif
 
+#if 0
 static void dn_send_ptp_hello(struct net_device *dev)
 {
 	int tdlen = 16;
 	int size = dev->hard_header_len + 2 + 4 + tdlen;
 	struct sk_buff *skb = dn_alloc_skb(NULL, size, GFP_ATOMIC);
-	/* struct dn_dev *dn_db = dev->dn_ptr; */
-	unsigned char *ptr;
+	struct dn_dev *dn_db = dev->dn_ptr;
 	int i;
+	unsigned char *ptr;
+	struct dn_neigh *dn = (struct dn_neigh *)dn_db->router;
 
 	if (skb == NULL)
 		return ;
@@ -865,27 +868,24 @@ static void dn_send_ptp_hello(struct net_device *dev)
 	for(i = 0; i < tdlen; i++)
 		*ptr++ = 0252;
 
-#if 0
-	if (dn_db->router) {
-		struct dn_neigh *dn = (struct dn_neigh *)dn_db->router;
-		if (memcmp(dn->addr, decnet_ether_address, ETH_ALEN) == 0) {
-			struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
+	if (dn_am_i_a_router(dn, dn_db)) {
+		struct sk_buff *skb2 = skb_copy(skb, GFP_ATOMIC);
+		if (skb2) {
 			dn_rt_finish_output(skb2, dn_rt_all_end_mcast);
 		}
 	}
-#endif
 
 	dn_rt_finish_output(skb, dn_rt_all_rt_mcast);
 }
+#endif
 
 static int dn_eth_up(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 
-	if (decnet_node_type == DN_RT_INFO_ENDN)
+	if (dn_db->parms.forwarding == 0)
 		dev_mc_add(dev, dn_rt_all_end_mcast, ETH_ALEN, 0);
-
-	if (decnet_node_type == DN_RT_INFO_L1RT || decnet_node_type == DN_RT_INFO_L2RT)
+	else
 		dev_mc_add(dev, dn_rt_all_rt_mcast, ETH_ALEN, 0);
 
 	dev_mc_upload(dev);
@@ -902,18 +902,6 @@ static void dn_dev_timer_func(unsigned long arg)
 	struct net_device *dev = (struct net_device *)arg;
 	struct dn_dev *dn_db = dev->dn_ptr;
 
-#ifdef CONFIG_DECNET_ROUTER
-	if (decnet_node_type == DN_RT_INFO_L1RT || decnet_node_type == DN_RT_INFO_L2RT) {
-		if (dn_db->t1 <= dn_db->parms.t2) {
-			if (dn_db->parms.timer1)
-				dn_db->parms.timer1(dev);
-			dn_db->t1 = dn_db->parms.t1;
-		} else {
-			dn_db->t1 -= dn_db->parms.t2;
-		}
-	}
-#endif /* CONFIG_DECNET_ROUTER */
-
 	if (dn_db->t3 <= dn_db->parms.t2) {
 		if (dn_db->parms.timer3)
 			dn_db->parms.timer3(dev);
@@ -928,11 +916,6 @@ static void dn_dev_timer_func(unsigned long arg)
 static void dn_dev_set_timer(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
-
-#ifdef CONFIG_DECNET_ROUTER
-	if (dn_db->parms.t2 > dn_db->parms.t1)
-		dn_db->parms.t2 = dn_db->parms.t1;
-#endif
 
 	if (dn_db->parms.t2 > dn_db->parms.t3)
 		dn_db->parms.t2 = dn_db->parms.t3;
@@ -987,10 +970,6 @@ struct dn_dev *dn_dev_create(struct net_device *dev, int *err)
 
 	dn_dev_set_timer(dev);
 
-#ifdef CONFIG_RTNETLINK
-	dn_dev_ifinfo(RTM_NEWLINK, dev);
-#endif
-
 	*err = 0;
 	return dn_db;
 }
@@ -1033,10 +1012,6 @@ static void dn_dev_delete(struct net_device *dev)
 
 	del_timer(&dn_db->timer);
 	synchronize_bh();
-
-#ifdef CONFIG_RTNETLINK
-	dn_dev_ifinfo(RTM_DELLINK, dev);
-#endif
 
 	dn_dev_sysctl_unregister(&dn_db->parms);
 
@@ -1190,10 +1165,10 @@ static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int len
 		if ((dn_db = (struct dn_dev *)dev->dn_ptr) == NULL)
 			continue;
 
-                len += sprintf(buffer + len, "%-8s %1s     %04lu %04lu   %04lu %04lu   %04hu    %03d %02x    %-10s %-7s %-7s\n",
+                len += sprintf(buffer + len, "%-8s %1s     %04u %04u   %04lu %04lu   %04hu    %03d %02x    %-10s %-7s %-7s\n",
                              	dev->name ? dev->name : "???",
                              	dn_type2asc(dn_db->parms.mode),
-                             	dn_db->t1, dn_db->parms.t1,
+                             	0, 0,
 				dn_db->t3, dn_db->parms.t3,
 				dn_db->parms.blksize,
 				dn_db->parms.priority,
@@ -1229,13 +1204,14 @@ static struct rtnetlink_link dnet_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 {
 	{ NULL,			NULL,			},
 	{ NULL,			NULL,			},
-	{ NULL,			dn_dev_dump_ifinfo,	},
+	{ NULL,			NULL,			},
 	{ NULL,			NULL,			},
 
 	{ dn_dev_rtm_newaddr,	NULL,			},
 	{ dn_dev_rtm_deladdr,	NULL,			},
 	{ NULL,			dn_dev_dump_ifaddr,	},
 	{ NULL,			NULL,			},
+
 #ifdef CONFIG_DECNET_ROUTER
 	{ dn_fib_rtm_newroute,	NULL,			},
 	{ dn_fib_rtm_delroute,	NULL,			},
@@ -1252,10 +1228,17 @@ static struct rtnetlink_link dnet_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 	{ NULL,			NULL,			},
 	{ NULL,			NULL,			},
 
+#ifdef CONFIG_DECNET_ROUTER
+	{ dn_fib_rtm_newrule,	NULL,			},
+	{ dn_fib_rtm_delrule,	NULL,			},
+	{ NULL,			dn_fib_dump_rules,	},
+	{ NULL,			NULL,			}
+#else
 	{ NULL,			NULL,			},
 	{ NULL,			NULL,			},
 	{ NULL,			NULL,			},
 	{ NULL,			NULL,			}
+#endif
 };
 #endif /* CONFIG_RTNETLINK */
 
@@ -1284,8 +1267,7 @@ void __init dn_dev_init(void)
 #endif /* CONFIG_SYSCTL */
 }
 
-#if defined(CONFIG_DECNET_MODULE)
-void dn_dev_cleanup(void)
+void __exit dn_dev_cleanup(void)
 {
 #ifdef CONFIG_RTNETLINK
 	rtnetlink_links[PF_DECnet] = NULL;
@@ -1309,4 +1291,3 @@ void dn_dev_cleanup(void)
 
 	dn_dev_devices_off();
 }
-#endif /* CONFIG_DECNET_MODULE */

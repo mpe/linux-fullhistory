@@ -374,6 +374,7 @@ int el3_probe(struct net_device *dev)
 	
 	((struct el3_private *)dev->priv)->mca_slot = mca_slot;
 	((struct el3_private *)dev->priv)->next_dev = el3_root_dev;
+	((struct el3_private *)dev->priv)->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
 	el3_root_dev = dev;
 
 	if (el3_debug > 0)
@@ -433,9 +434,6 @@ el3_open(struct net_device *dev)
 	outw(TxReset, ioaddr + EL3_CMD);
 	outw(RxReset, ioaddr + EL3_CMD);
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
-
-	/* Set the spinlock before grabbing IRQ! */
-	((struct el3_private *)dev->priv)->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
 
 	if (request_irq(dev->irq, &el3_interrupt, 0, dev->name, dev)) {
 		return -EAGAIN;

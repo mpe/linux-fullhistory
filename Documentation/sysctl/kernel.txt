@@ -28,6 +28,8 @@ show up in /proc/sys/kernel:
 - modprobe                    ==> Documentation/kmod.txt
 - osrelease
 - ostype
+- overflowgid
+- overflowuid
 - panic
 - powersave-nap               [ PPC only ]
 - printk
@@ -123,6 +125,18 @@ needs a little more clarification however. The '#5' means that
 this is the fifth kernel built from this source base and the
 date behind it indicates the time the kernel was built.
 The only way to tune these values is to rebuild the kernel :-)
+
+==============================================================
+
+overflowgid & overflowuid:
+
+if your architecture did not always support 32-bit UIDs (i.e. arm, i386,
+m68k, sh, and sparc32), a fixed UID and GID will be returned to
+applications that use the old 16-bit UID/GID system calls, if the actual
+UID or GID would exceed 65535.
+
+These sysctls allow you to change the value of the fixed UID and GID.
+The default is 65534.
 
 ==============================================================
 

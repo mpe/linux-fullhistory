@@ -6,6 +6,7 @@
  */
 #include <linux/version.h>
 #include <linux/kernel.h>
+#include <linux/slab.h>
 
 #define DEBUG
 
@@ -175,9 +176,12 @@ void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *desc)
 
 void usb_show_string(struct usb_device *dev, char *id, int index)
 {
-	char *p = usb_string(dev, index);
+	char *buf;
 
-	if (p != 0)
-		printk(KERN_INFO "%s: %s\n", id, p);
+	if (!(buf = kmalloc(256, GFP_KERNEL)))
+		return;
+	if (usb_string(dev, index, buf, 256) > 0)
+		printk(KERN_INFO "%s: %s\n", id, buf);
+	kfree(buf);
 }
 

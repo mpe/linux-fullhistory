@@ -135,7 +135,6 @@ static void dn_keepalive(struct sock *sk);
  */
 dn_address decnet_address = 0;
 unsigned char decnet_ether_address[ETH_ALEN] = { 0xAA, 0x00, 0x04, 0x00, 0x00, 0x00 };
-int decnet_node_type = DN_RT_INFO_ENDN;
 
 static struct proto_ops dn_proto_ops;
 rwlock_t dn_hash_lock = RW_LOCK_UNLOCKED;
@@ -484,10 +483,9 @@ static void dn_keepalive(struct sock *sk)
  * When socket is dead & no packets have been sent for a
  * certain amount of time, they are removed by this
  * routine. Also takes care of sending out DI & DC
- * frames at correct times. This is called by both
- * socket level and interrupt driven code.
+ * frames at correct times.
  */
-static int dn_destroy_timer(struct sock *sk)
+int dn_destroy_timer(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 
@@ -495,13 +493,13 @@ static int dn_destroy_timer(struct sock *sk)
 
 	switch(scp->state) {
 		case DN_DI:
-			dn_send_disc(sk, NSP_DISCINIT, 0);
+			dn_nsp_send_disc(sk, NSP_DISCINIT, 0, GFP_ATOMIC);
 			if (scp->nsp_rxtshift >= decnet_di_count)
 				scp->state = DN_CN;
 			return 0;
 
 		case DN_DR:
-			dn_send_disc(sk, NSP_DISCINIT, 0);
+			dn_nsp_send_disc(sk, NSP_DISCINIT, 0, GFP_ATOMIC);
 			if (scp->nsp_rxtshift >= decnet_dr_count)
 				scp->state = DN_DRC;
 			return 0;
@@ -509,7 +507,7 @@ static int dn_destroy_timer(struct sock *sk)
 		case DN_DN:
 			if (scp->nsp_rxtshift < decnet_dn_count) {
 				/* printk(KERN_DEBUG "dn_destroy_timer: DN\n"); */
-				dn_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC);
+				dn_nsp_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC, GFP_ATOMIC);
 				return 0;
 			}
 	}
@@ -529,7 +527,7 @@ static int dn_destroy_timer(struct sock *sk)
 	return 0;
 }
 
-void dn_destroy_sock(struct sock *sk)
+static void dn_destroy_sock(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 
@@ -548,11 +546,10 @@ void dn_destroy_sock(struct sock *sk)
 
 	switch(scp->state) {
 		case DN_DN:
-			dn_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC);
+			dn_nsp_send_disc(sk, NSP_DISCCONF, NSP_REASON_DC, GFP_KERNEL);
 			scp->persist_fxn = dn_destroy_timer;
 			scp->persist = dn_nsp_persist(sk);
 			break;
-		case DN_CD:
 		case DN_CR:
 			scp->state = DN_DR;
 			goto disc_reject;
@@ -561,7 +558,7 @@ void dn_destroy_sock(struct sock *sk)
 		case DN_DI:
 		case DN_DR:
 disc_reject:
-			dn_send_disc(sk, NSP_DISCINIT, 0);
+			dn_nsp_send_disc(sk, NSP_DISCINIT, 0, GFP_KERNEL);
 		case DN_NC:
 		case DN_NR:
 		case DN_RJ:
@@ -569,6 +566,7 @@ disc_reject:
 		case DN_CN:
 		case DN_DRC:
 		case DN_CI:
+		case DN_CD:
 			scp->persist_fxn = dn_destroy_timer;
 			scp->persist = dn_nsp_persist(sk);
 			break;
@@ -1041,7 +1039,7 @@ static int dn_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	if (newsk->protinfo.dn.accept_mode == ACC_IMMED) {
 		newsk->protinfo.dn.state = DN_CC;
-        	dn_send_conn_conf(newsk);
+        	dn_send_conn_conf(newsk, GFP_KERNEL);
 		err = dn_wait_accept(newsock, flags);
 	}
 
@@ -1392,7 +1390,7 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 				return -EINVAL;
 
 			scp->state = DN_CC;
-			dn_send_conn_conf(sk);
+			dn_send_conn_conf(sk, GFP_KERNEL);
 			err = dn_wait_accept(sock, sock->file->f_flags);
 			return err;
 
@@ -1403,7 +1401,7 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 
 			scp->state = DN_DR;
 			sk->shutdown = SHUTDOWN_MASK;
-			dn_send_disc(sk, 0x38, 0);
+			dn_nsp_send_disc(sk, 0x38, 0, GFP_KERNEL);
 			break;
 
 #ifdef CONFIG_DECNET_FW
@@ -1426,7 +1424,7 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
                         if (copy_from_user(&tmp_fw, optval, optlen))
                                 return -EFAULT;
                         err = dn_fw_ctl(optname, &tmp_fw, optlen);
-                        return -err;    /* -0 is 0 after all */
+                        return err;
 #endif
 		default:
 		case DSO_LINKINFO:
@@ -1540,7 +1538,7 @@ static int dn_wait_run(struct sock *sk, int flags)
 
 		case DN_CR:
 			scp->state = DN_CC;
-			dn_send_conn_conf(sk);
+			dn_send_conn_conf(sk, GFP_KERNEL);
 			return dn_wait_accept(sk->socket, (flags & MSG_DONTWAIT) ? O_NONBLOCK : 0);
 		case DN_CI:
 		case DN_CC:
@@ -2072,6 +2070,8 @@ void dn_unregister_sysctl(void);
 
 void __init decnet_proto_init(struct net_proto *pro)
 {
+        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.38s (C) 1995-1999 Linux DECnet Project Team\n");
+
 	sock_register(&dn_family_ops);
 	dev_add_pack(&dn_dix_packet_type);
 	register_netdevice_notifier(&dn_dev_notifier);
@@ -2084,10 +2084,6 @@ void __init decnet_proto_init(struct net_proto *pro)
 	dn_neigh_init();
 	dn_route_init();
 
-#ifdef CONFIG_DECNET_FW
-	dn_fw_init();
-#endif /* CONFIG_DECNET_FW */
-
 #ifdef CONFIG_DECNET_ROUTER
 	dn_fib_init();
 #endif /* CONFIG_DECNET_ROUTER */
@@ -2095,7 +2091,6 @@ void __init decnet_proto_init(struct net_proto *pro)
 #ifdef CONFIG_SYSCTL
 	dn_register_sysctl();
 #endif /* CONFIG_SYSCTL */
-        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.15s (C) 1995-1999 Linux DECnet Project Team\n");
 
 }
 
@@ -2104,26 +2099,10 @@ static int __init decnet_setup(char *str)
 {
 	unsigned short area = simple_strtoul(str, &str, 0);
 	unsigned short node = simple_strtoul(*str > 0 ? ++str : str, &str, 0);
-	unsigned short type = simple_strtoul(*str > 0 ? ++str : str, &str, 0);
+	/* unsigned short type = simple_strtoul(*str > 0 ? ++str : str, &str, 0); */
 
 	decnet_address = dn_htons(area << 10 | node);
 	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
-
-	switch(type) {
-		default:
-			printk(KERN_INFO "Invalid DECnet node type, switching to EndNode\n");
-		case 0:
-			decnet_node_type = DN_RT_INFO_ENDN;
-			break;
-#ifdef CONFIG_DECNET_ROUTER
-		case 1:
-			decnet_node_type = DN_RT_INFO_L1RT;
-			break;
-		case 2:
-			decnet_node_type = DN_RT_INFO_L2RT;
-			break;
-#endif /* CONFIG_DECNET_ROUTER */
-	}
 
 	return 0;
 }
@@ -2137,18 +2116,11 @@ MODULE_DESCRIPTION("The Linux DECnet Network Protocol");
 MODULE_AUTHOR("Linux DECnet Project Team");
 
 static int addr[2] = {0, 0};
-#ifdef CONFIG_DECNET_ROUTER
-static int type = 0;
-#endif
 
 MODULE_PARM(addr, "2i");
 MODULE_PARM_DESC(addr, "The DECnet address of this machine: area,node");
-#ifdef CONFIG_DECNET_ROUTER
-MODULE_PARM(type, "i");
-MODULE_PARM_DESC(type, "The type of this DECnet node: 0=EndNode, 1,2=Router");
-#endif
 
-int init_module(void)
+int __init init_module(void)
 {
 	if (addr[0] > 63 || addr[0] < 0) {
 		printk(KERN_ERR "DECnet: Area must be between 0 and 63");
@@ -2163,31 +2135,12 @@ int init_module(void)
 	decnet_address = dn_htons((addr[0] << 10) | addr[1]);
 	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
 
-#ifdef CONFIG_DECNET_ROUTER
-	switch(type) {
-		case 0:
-			decnet_node_type = DN_RT_INFO_ENDN;
-			break;
-		case 1:
-			decnet_node_type = DN_RT_INFO_L1RT;
-			break;
-		case 2:
-			decnet_node_type = DN_RT_INFO_L2RT;
-			break;
-		default:
-			printk(KERN_ERR "DECnet: Node type must be between 0 and 2 inclusive\n");
-			return 1;
-	}
-#else
-	decnet_node_type = DN_RT_INFO_ENDN;
-#endif
-
 	decnet_proto_init(NULL);
 
 	return 0;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 #ifdef CONFIG_SYSCTL
 	dn_unregister_sysctl();
@@ -2198,10 +2151,6 @@ void cleanup_module(void)
 	dn_route_cleanup();
 	dn_neigh_cleanup();
 	dn_dev_cleanup();
-
-#ifdef CONFIG_DECNET_FW
-	/* dn_fw_cleanup(); */
-#endif /* CONFIG_DECNET_FW */
 
 #ifdef CONFIG_DECNET_ROUTER
 	dn_fib_cleanup();

@@ -29,7 +29,7 @@
 /*
  * TODO List
  *
- * - Add support for any version 2.0 spec changes once 2.0 IRTOS is
+ * - Add support for any version 2.0 spec changes once 2.0 IRTOS
  *   is available to test with
  * - Clean up code to use official structure definitions 
  */
@@ -63,8 +63,6 @@ typedef struct _i2o_proc_entry_t
 	read_proc_t *read_proc;		/* read func */
 	write_proc_t *write_proc;	/* write func */
 } i2o_proc_entry;
-
-static int proc_context = 0;
 
 static int i2o_proc_read_lct(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_hrt(char *, char **, off_t, int, int *, void *);
@@ -101,8 +99,6 @@ static void i2o_proc_remove_controller(struct i2o_controller *,
 				       struct proc_dir_entry * );
 static int create_i2o_procfs(void);
 static int destroy_i2o_procfs(void);
-static void i2o_proc_reply(struct i2o_handler *, struct i2o_controller *,
-			   struct i2o_message *);
 
 static int i2o_proc_read_lan_dev_info(char *, char **, off_t, int, int *,
 				      void *);
@@ -132,17 +128,6 @@ static int i2o_proc_read_lan_fddi_stats(char *, char **, off_t, int, int *,
 					void *);
 
 static struct proc_dir_entry *i2o_proc_dir_root;
-
-/*
- * Message handler
- */
-static struct i2o_handler i2o_proc_handler =
-{
-	(void *)i2o_proc_reply,
-	"I2O procfs Layer",
-	0,
-	0xffffffff	// All classes
-};
 
 /*
  * IOP specific entries...write field just in case someone 
@@ -255,9 +240,6 @@ static i2o_proc_entry lan_fddi_entries[] =
 	{NULL, 0, NULL, NULL}
 };
 
-
-static u32 i2o_proc_token = 0;
-
 static char *chtostr(u8 *chars, int n)
 {
 	char tmp[256];
@@ -294,12 +276,6 @@ static char* bus_strings[] =
 };
 
 static spinlock_t i2o_proc_lock = SPIN_LOCK_UNLOCKED;
-
-void i2o_proc_reply(struct i2o_handler *phdlr, struct i2o_controller *pctrl,
-		    struct i2o_message *pmsg)
-{
-	i2o_proc_token = I2O_POST_WAIT_OK;
-}
 
 int i2o_proc_read_hrt(char *buf, char **start, off_t offset, int len, 
 		      int *eof, void *data)
@@ -681,7 +657,7 @@ int i2o_proc_read_status(char *buf, char **start, off_t offset, int len,
 				c->status_block->expected_lct_size);
 
 	len += sprintf(buf+len,"IOP Capabilities\n");
-	len += sprintf(buf+len,"   Context Field Size Support : ");
+	len += sprintf(buf+len,"    Context Field Size Support : ");
 	switch (c->status_block->iop_capabilities & 0x0000003) {
 		case 0:
 			len += sprintf(buf+len,"Supports only 32-bit context fields\n");
@@ -700,7 +676,7 @@ int i2o_proc_read_status(char *buf, char **start, off_t offset, int len,
 		default:
 			len += sprintf(buf+len,"0x%08x\n",c->status_block->iop_capabilities);
 	}
-	len += sprintf(buf+len,"   Current Context Field Size : ");
+	len += sprintf(buf+len,"    Current Context Field Size : ");
 	switch (c->status_block->iop_capabilities & 0x0000000C) {
 		case 0:
 			len += sprintf(buf+len,"not configured\n");
@@ -718,11 +694,11 @@ int i2o_proc_read_status(char *buf, char **start, off_t offset, int len,
 		default:
 			len += sprintf(buf+len,"\n");
 	}
-	len += sprintf(buf+len,"   Inbound Peer Support       : %s\n",
+	len += sprintf(buf+len,"    Inbound Peer Support       : %s\n",
 			(c->status_block->iop_capabilities & 0x00000010) ? "Supported" : "Not supported");
-	len += sprintf(buf+len,"   Outbound Peer Support      : %s\n",
+	len += sprintf(buf+len,"    Outbound Peer Support      : %s\n",
 			(c->status_block->iop_capabilities & 0x00000020) ? "Supported" : "Not supported");
-	len += sprintf(buf+len,"   Peer to Peer Support       : %s\n",
+	len += sprintf(buf+len,"    Peer to Peer Support       : %s\n",
 			(c->status_block->iop_capabilities & 0x00000040) ? "Supported" : "Not supported");
 
 	len += sprintf(buf+len, "Desired private memory size   : %d kB\n", 
@@ -790,17 +766,17 @@ int i2o_proc_read_hw(char *buf, char **start, off_t offset, int len,
 	len += sprintf(buf+len, "Non-Volatile Mem : %dkB\n", work32[2]>>10);
 
 	hwcap = work32[3];
-	len += sprintf(buf+len, "Capabilities :\n");
-	if(hwcap&0x00000001)
-		len += sprintf(buf+len, "   Self-booting\n");
-	if(hwcap&0x00000002)
-		len += sprintf(buf+len, "   Upgradable IRTOS\n");
-	if(hwcap&0x00000004)
-		len += sprintf(buf+len, "   Supports downloading DDMs\n");
-	if(hwcap&0x00000008)
-		len += sprintf(buf+len, "   Supports installing DDMs\n");
-	if(hwcap&0x00000010)
-		len += sprintf(buf+len, "   Battery-backed RAM\n");
+	len += sprintf(buf+len, "Capabilities : 0x%08x\n", hwcap);
+	len += sprintf(buf+len, "   [%s] Self booting\n",
+			(hwcap&0x00000001) ? "+" : "-");
+	len += sprintf(buf+len, "   [%s] Upgradable IRTOS\n",
+			(hwcap&0x00000002) ? "+" : "-");
+	len += sprintf(buf+len, "   [%s] Supports downloading DDMs\n",
+			(hwcap&0x00000004) ? "+" : "-");
+	len += sprintf(buf+len, "   [%s] Supports installing DDMs\n",
+			(hwcap&0x00000008) ? "+" : "-");
+	len += sprintf(buf+len, "   [%s] Battery-backed RAM\n",
+			(hwcap&0x00000010) ? "+" : "-");
 
 	spin_unlock(&i2o_proc_lock);
 
@@ -1695,23 +1671,23 @@ int i2o_proc_read_sensors(char *buf, char **start, off_t offset, int len,
 		 break;
 	}			
 
-	len += sprintf(buf+len, "Event_enable          : 0x%02X\n", result.event_enable);
-	if (result.event_enable & 0x01)
-		len += sprintf(buf+len, "\tOperational state change. \n");
-	if (result.event_enable & 0x02)
-		len += sprintf(buf+len, "\tLow catastrophic. \n");
-	if (result.event_enable & 0x04)
-		len += sprintf(buf+len, "\tLow reading. \n");
-	if (result.event_enable & 0x08)
-		len += sprintf(buf+len, "\tLow warning. \n");
-	if (result.event_enable & 0x10)
-		len += sprintf(buf+len, "\tChange back to normal from out of range state. \n");
-	if (result.event_enable & 0x20)
-		len += sprintf(buf+len, "\tHigh warning. \n");
-	if (result.event_enable & 0x40)
-		len += sprintf(buf+len, "\tHigh reading. \n");
-	if (result.event_enable & 0x80)
-		len += sprintf(buf+len, "\tHigh catastrophic. \n");
+	len += sprintf(buf+len, "Event_enable : 0x%02X\n", result.event_enable);
+	len += sprintf(buf+len, "    [%s] Operational state change. \n",
+			(result.event_enable & 0x01) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] Low catastrophic. \n",
+			(result.event_enable & 0x02) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] Low reading. \n",
+			(result.event_enable & 0x04) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] Low warning. \n",
+			(result.event_enable & 0x08) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] Change back to normal from out of range state. \n",
+			(result.event_enable & 0x10) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] High warning. \n",
+			(result.event_enable & 0x20) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] High reading. \n",
+			(result.event_enable & 0x40) ? "+" : "-" );
+	len += sprintf(buf+len, "    [%s] High catastrophic. \n",
+			(result.event_enable & 0x80) ? "+" : "-" );
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2187,38 +2163,37 @@ int i2o_proc_read_lan_mac_addr(char *buf, char **start, off_t offset, int len,
 		       work8[16],work8[17],work8[18],work8[19],
 		       work8[20],work8[21],work8[22],work8[23]);
 
-	len += sprintf(buf+len, "HW/DDM capabilities : 0x%08x\n", work32[7]);
-	len += sprintf(buf+len, "    Unicast packets %ssupported\n",
-		       (work32[7]&0x00000001)?"":"not ");
-	len += sprintf(buf+len, "    Promiscuous mode %ssupported\n",
-		       (work32[7]&0x00000002)?"":"not");
-	len += sprintf(buf+len, "    Promiscuous multicast mode %ssupported\n",
-		       (work32[7]&0x00000004)?"":"not ");
-	len += sprintf(buf+len,"    Broadcast reception disabling %ssupported\n",
-		       (work32[7]&0x00000100)?"":"not ");
-	len += sprintf(buf+len,"    Multicast reception disabling %ssupported\n",
-		       (work32[7]&0x00000200)?"":"not ");
-	len += sprintf(buf+len,"    Functional address disabling %ssupported\n",
-		       (work32[7]&0x00000400)?"":"not ");
-	len += sprintf(buf+len, "    MAC reporting %ssupported\n",
-		       (work32[7]&0x00000800)?"":"not ");
+	len += sprintf(buf+len,"HW/DDM capabilities : 0x%08x\n", work32[7]);
+	len += sprintf(buf+len,"    [%s] Unicast packets supported\n",
+		       (work32[7]&0x00000001)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Promiscuous mode supported\n",
+		       (work32[7]&0x00000002)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Promiscuous multicast mode supported\n",
+		       (work32[7]&0x00000004)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Broadcast reception disabling supported\n",
+		       (work32[7]&0x00000100)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Multicast reception disabling supported\n",
+		       (work32[7]&0x00000200)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Functional address disabling supported\n",
+		       (work32[7]&0x00000400)?"+":"-");
+	len += sprintf(buf+len,"    [%s] MAC reporting supported\n",
+		       (work32[7]&0x00000800)?"+":"-");
 
-	len += sprintf(buf+len, "Filter mask : 0x%08x\n", work32[6]);
-	len += sprintf(buf+len, "    Unicast packets %s\n",
-		(work32[6]&0x00000001)?"rejected":"enabled");
-	len += sprintf(buf+len, "    Promiscuous mode %s\n",
-		(work32[6]&0x00000002)?"enabled":"disabled");
-	len += sprintf(buf+len, "    Promiscuous multicast mode %s\n",
-		(work32[6]&0x00000004)?"enabled":"disabled");	
-	len += sprintf(buf+len, "    Broadcast packets %s\n",
-		(work32[6]&0x00000100)?"rejected":"enabled");
-	len += sprintf(buf+len, "    Multicast packets %s\n",
-		(work32[6]&0x00000200)?"rejected":"enabled");
-	len += sprintf(buf+len, "    Functional address %s\n",
-		       (work32[6]&0x00000400)?"ignored":"enabled");
+	len += sprintf(buf+len,"Filter mask : 0x%08x\n", work32[6]);
+	len += sprintf(buf+len,"    [%s] Unicast packets disable\n",
+		(work32[6]&0x00000001)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Promiscuous mode enable\n",
+		(work32[6]&0x00000002)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Promiscuous multicast mode enable\n",
+		(work32[6]&0x00000004)?"+":"-");	
+	len += sprintf(buf+len,"    [%s] Broadcast packets disable\n",
+		(work32[6]&0x00000100)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Multicast packets disable\n",
+		(work32[6]&0x00000200)?"+":"-");
+	len += sprintf(buf+len,"    [%s] Functional address disable\n",
+		       (work32[6]&0x00000400)?"+":"-");
 		       
-	if (work32[7]&0x00000800)
-	{		       
+	if (work32[7]&0x00000800) {
 		len += sprintf(buf+len, "    MAC reporting mode : ");
 		if (work32[6]&0x00000800)
 			len += sprintf(buf+len, "Pass only priority MAC packets to user\n");
@@ -2321,28 +2296,10 @@ int i2o_proc_read_lan_batch_control(char *buf, char **start, off_t offset,
 		len += sprintf(buf+len, ", toggle");
 	len += sprintf(buf+len, "\n");
 
-	if(d->i2oversion == 0x00) { /* Reserved in 1.53 and 2.0 */
-		len += sprintf(buf+len, "Rising load delay      : %d ms\n",
-			       work32[1]/10);
-		len += sprintf(buf+len, "Rising load threshold  : %d ms\n",
-			       work32[2]/10);
-		len += sprintf(buf+len, "Falling load delay     : %d ms\n",
-			       work32[3]/10);
-		len += sprintf(buf+len, "Falling load threshold : %d ms\n",
-			       work32[4]/10);
-	}
-
-	len += sprintf(buf+len, "Max Rx batch count     : %d\n", work32[5]);
-	len += sprintf(buf+len, "Max Rx batch delay     : %d\n", work32[6]);
-
-	if(d->i2oversion == 0x00) {
-		len += sprintf(buf+len,
-			       "Transmission completion reporting delay : %d ms\n",
-			       work32[7]);
-	} else {
-		len += sprintf(buf+len, "Max Tx batch delay : %d\n", work32[7]);
-		len += sprintf(buf+len, "Max Tx batch count : %d\n", work32[8]);
-	}
+	len += sprintf(buf+len, "Max Rx batch count : %d\n", work32[5]);
+	len += sprintf(buf+len, "Max Rx batch delay : %d\n", work32[6]);
+	len += sprintf(buf+len, "Max Tx batch delay : %d\n", work32[7]);
+	len += sprintf(buf+len, "Max Tx batch count : %d\n", work32[8]);
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2374,37 +2331,35 @@ int i2o_proc_read_lan_operation(char *buf, char **start, off_t offset, int len,
 				(work32[1]&0x2)?"by host":"by DDM");
 	len += sprintf(buf+len, "Packet orphan limit           : %d\n", work32[2]);
 
-	len += sprintf(buf+len, "Tx modes :\n");
-	if (work32[3]&0x00000004)
-		len += sprintf(buf+len, "    HW CRC supressed\n");
-	else
-		len += sprintf(buf+len, "    HW CRC\n");
-	if (work32[3]&0x00000100)
-		len += sprintf(buf+len, "    HW IPv4 checksumming\n");
-	if (work32[3]&0x00000200)
-		len += sprintf(buf+len, "    HW TCP checksumming\n");
-	if (work32[3]&0x00000400)
-		len += sprintf(buf+len, "    HW UDP checksumming\n");
-	if (work32[3]&0x00000800)
-		len += sprintf(buf+len, "    HW RSVP checksumming\n");
-	if (work32[3]&0x00001000)
-		len += sprintf(buf+len, "    HW ICMP checksumming\n");
-	if (work32[3]&0x00002000)
-		len += sprintf(buf+len, "    Loopback packet not delivered\n");
+	len += sprintf(buf+len, "Tx modes : 0x%08x\n", work32[3]);
+	len += sprintf(buf+len, "    [%s] HW CRC supression\n",
+			(work32[3]&0x00000004) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW IPv4 checksum\n",
+			(work32[3]&0x00000100) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW TCP checksum\n",
+			(work32[3]&0x00000200) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW UDP checksum\n",
+			(work32[3]&0x00000400) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW RSVP checksum\n",
+			(work32[3]&0x00000800) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW ICMP checksum\n",
+			(work32[3]&0x00001000) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] Loopback supression enable\n",
+			(work32[3]&0x00002000) ? "+" : "-");
 
-	len += sprintf(buf+len, "Rx modes :\n");
-	if (work32[4]&0x00000004)
-		len += sprintf(buf+len, "    FCS in payload\n");
-	if (work32[4]&0x00000100)
-		len += sprintf(buf+len, "    HW IPv4 checksum validation\n");
-	if (work32[4]&0x00000200)
-		len += sprintf(buf+len, "    HW TCP checksum validation\n");
-	if (work32[4]&0x00000400)
-		len += sprintf(buf+len, "    HW UDP checksum validation\n");
-	if (work32[4]&0x00000800)
-		len += sprintf(buf+len, "    HW RSVP checksum validation\n");
-	if (work32[4]&0x00001000)
-		len += sprintf(buf+len, "    HW ICMP checksum validation\n");
+	len += sprintf(buf+len, "Rx modes : 0x%08x\n", work32[4]);
+	len += sprintf(buf+len, "    [%s] FCS in payload\n",
+			(work32[4]&0x00000004) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW IPv4 checksum validation\n",
+			(work32[4]&0x00000100) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW TCP checksum validation\n",
+			(work32[4]&0x00000200) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW UDP checksum validation\n",
+			(work32[4]&0x00000400) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW RSVP checksum validation\n",
+			(work32[4]&0x00000800) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] HW ICMP checksum validation\n",
+			(work32[4]&0x00001000) ? "+" : "-");
  
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2471,16 +2426,8 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 		len += sprintf(buf+len, "Unspecified\n");
 	}
 	
-	if (d->i2oversion == 0x00) /* Reserved in 1.53 and 2.0 */
-	{
-		len += sprintf(buf+len, "Bad packets handled by : %s\n",
-			       (result.reserved == 0xFF)?"host":"DDM");
-	}
-	else
-	{
-		len += sprintf(buf+len, "Duplex mode target     : ");
-		switch (result.duplex_mode_target)
-		{
+	len += sprintf(buf+len, "Duplex mode target     : ");
+	switch (result.duplex_mode_target){
 		case 0:
 			len += sprintf(buf+len, "Half duplex\n");
 			break;
@@ -2489,13 +2436,12 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 			break;
 		default:
 			len += sprintf(buf+len, "\n");
-		}
-
-		len += sprintf(buf+len, "Connector type target  : %s\n",
-			       i2o_get_connector_type(result.connector_type_target));
-		len += sprintf(buf+len, "Connection type target : %s\n",
-			       i2o_get_connection_type(result.connection_type_target));
 	}
+
+	len += sprintf(buf+len, "Connector type target  : %s\n",
+		       i2o_get_connector_type(result.connector_type_target));
+	len += sprintf(buf+len, "Connection type target : %s\n",
+		       i2o_get_connection_type(result.connection_type_target));
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2568,46 +2514,34 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf,     "Max SG Elements per packet : %d\n", work32[0]);
-	len += sprintf(buf+len, "Max SG Elements per chain  : %d\n", work32[1]);
-	len += sprintf(buf+len, "Max outstanding packets    : %d\n", work32[2]);
-	len += sprintf(buf+len, "Max packets per request    : %d\n", work32[3]);
+	len += sprintf(buf,     "Tx Max SG elements per packet : %d\n", work32[0]);
+	len += sprintf(buf+len, "Tx Max SG elements per chain  : %d\n", work32[1]);
+	len += sprintf(buf+len, "Tx Max outstanding packets    : %d\n", work32[2]);
+	len += sprintf(buf+len, "Tx Max packets per request    : %d\n", work32[3]);
 
-	len += sprintf(buf+len, "Tx modes :\n");
-	if(work32[4]&0x00000002)
-		len += sprintf(buf+len, "    No DA in SGL\n");
-	if(work32[4]&0x00000004)
-		len += sprintf(buf+len, "    CRC suppression\n");
-	if(work32[4]&0x00000008)
-		len += sprintf(buf+len, "    Loop suppression\n");
-	if(work32[4]&0x00000010)
-		len += sprintf(buf+len, "    MAC insertion\n");
-	if(work32[4]&0x00000020)
-		len += sprintf(buf+len, "    RIF insertion\n");
-	if(work32[4]&0x00000100)
-		len += sprintf(buf+len, "    IPv4 checksum\n");
-	if(work32[4]&0x00000200)
-		len += sprintf(buf+len, "    TCP checksum\n");
-	if(work32[4]&0x00000400)
-		len += sprintf(buf+len, "    UDP checksum\n");
-	if(work32[4]&0x00000800)
-		len += sprintf(buf+len, "    RSVP checksum\n");
-	if(work32[4]&0x00001000)
-		len += sprintf(buf+len, "    ICMP checksum\n");
-	if (d->i2oversion == 0x00)
-	{
-		if(work32[4]&0x00008000)
-			len += sprintf(buf+len, "    Loopback enabled\n");
-		if(work32[4]&0x00010000)
-			len += sprintf(buf+len, "    Loopback suppression enabled\n");
-	}
-	else
-	{
-		if(work32[4]&0x00010000)
-			len += sprintf(buf+len, "    Loopback enabled\n");
-		if(work32[4]&0x00020000)
-			len += sprintf(buf+len, "    Loopback suppression enabled\n");
-	}
+	len += sprintf(buf+len, "Tx modes : 0x%08x\n", work32[4]);
+	len += sprintf(buf+len, "    [%s] No DA in SGL\n",
+				(work32[4]&0x00000002) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] CRC suppression\n",
+				(work32[4]&0x00000004) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] MAC insertion\n",
+				(work32[4]&0x00000010) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] RIF insertion\n",
+				(work32[4]&0x00000020) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] IPv4 checksum generation\n",
+				(work32[4]&0x00000100) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] TCP checksum generation\n",
+				(work32[4]&0x00000200) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] UDP checksum generation\n",
+				(work32[4]&0x00000400) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] RSVP checksum generation\n",
+				(work32[4]&0x00000800) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] ICMP checksum generation\n",
+				(work32[4]&0x00001000) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] Loopback enabled\n",
+				(work32[4]&0x00010000) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] Loopback suppression enabled\n",
+				(work32[4]&0x00020000) ? "+" : "-");
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -2632,15 +2566,25 @@ int i2o_proc_read_lan_rx_info(char *buf, char **start, off_t offset, int len,
 		return len;
 	}
 
-	len += sprintf(buf,"Max size of chain element : %d\n", work32[0]);
-	len += sprintf(buf+len, "Max number of buckets     : %d\n", work32[1]);
+	len += sprintf(buf     ,"Rx Max size of chain element : %d\n", work32[0]);
+	len += sprintf(buf+len, "Rx Max Buckets               : %d\n", work32[1]);
+	len += sprintf(buf+len, "Rx Max Buckets in Reply      : %d\n", work32[3]);
+	len += sprintf(buf+len, "Rx Max Packets in Bucket     : %d\n", work32[4]);
+	len += sprintf(buf+len, "Rx Max Buckets in Post       : %d\n", work32[5]);
 
-	if (d->i2oversion > 0x00) { /* not in 1.5 */
-		len += sprintf(buf+len, "RxModes                   : %d\n", work32[2]);
-		len += sprintf(buf+len, "RxMaxBucketsReply         : %d\n", work32[3]);
-		len += sprintf(buf+len, "RxMaxPacketsPerBuckets    : %d\n", work32[4]);
-		len += sprintf(buf+len, "RxMaxPostBuckets          : %d\n", work32[5]);
-	}
+	len += sprintf(buf+len, "Rx Modes : 0x%08x\n", work32[2]);
+	len += sprintf(buf+len, "    [%s] FCS reception\n",
+				(work32[2]&0x00000004) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] IPv4 checksum validation \n",
+				(work32[2]&0x00000100) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] TCP checksum validation \n",
+				(work32[2]&0x00000200) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] UDP checksum validation \n",
+				(work32[2]&0x00000400) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] RSVP checksum validation \n",
+				(work32[2]&0x00000800) ? "+" : "-");
+	len += sprintf(buf+len, "    [%s] ICMP checksum validation \n",
+				(work32[2]&0x00001000) ? "+" : "-");
 
 	spin_unlock(&i2o_proc_lock);
 	return len;
@@ -3344,14 +3288,6 @@ int __init i2o_proc_init(void)
 	if(create_i2o_procfs())
 		return -EBUSY;
 
-	if (i2o_install_handler(&i2o_proc_handler) < 0)
-	{
-		printk(KERN_ERR "i2o_proc: Unable to install PROC handler.\n");
-		return 0;
-	}
-
-	proc_context = i2o_proc_handler.context;
-
 	return 0;
 }
 
@@ -3364,6 +3300,5 @@ MODULE_DESCRIPTION("I2O procfs Handler");
 void cleanup_module(void)
 {
 	destroy_i2o_procfs();
-	i2o_remove_handler(&i2o_proc_handler);
 }
 #endif

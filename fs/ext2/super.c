@@ -151,6 +151,9 @@ static int parse_options (char * options, unsigned long * sb_block,
 			*value++ = 0;
 		if (!strcmp (this_char, "bsddf"))
 			clear_opt (*mount_options, MINIX_DF);
+		else if (!strcmp (this_char, "nouid32")) {
+			set_opt (*mount_options, NO_UID32);
+		}
 		else if (!strcmp (this_char, "check")) {
 			if (!value || !*value)
 				set_opt (*mount_options, CHECK_NORMAL);

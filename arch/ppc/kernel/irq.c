@@ -294,11 +294,10 @@ void ppc_irq_dispatch_handler(struct pt_regs *regs, int irq)
 	}
 }
 
-asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
+asmlinkage int do_IRQ(struct pt_regs *regs, int isfake)
 {
 	int cpu = smp_processor_id();
 	int irq;
-
         hardirq_enter( cpu );
 
 	/* every arch is required to have a get_irq -- Cort */
@@ -320,9 +319,8 @@ asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
 
  out:	
         hardirq_exit( cpu );
+	return 1; /* lets ret_from_int know we can do checks */
 }
-
-
 
 unsigned long probe_irq_on (void)
 {

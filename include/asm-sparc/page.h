@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.45 1999/07/03 08:58:05 davem Exp $
+/* $Id: page.h,v 1.46 2000/01/08 16:38:22 anton Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -28,31 +28,13 @@
 #ifndef __ASSEMBLY__
 
 #define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
+
 #define PAGE_BUG(page) do { \
-				BUG(); } while (0)
+	BUG(); \
+} while (0)
 
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
-
-extern unsigned long page_offset;
-
-BTFIXUPDEF_SETHI_INIT(page_offset,0xf0000000)
-
-#ifdef MODULE
-#define 	PAGE_OFFSET  (page_offset)
-#else
-#define		PAGE_OFFSET  BTFIXUP_SETHI(page_offset)
-#endif
-
-/* translate between physical and virtual addresses */
-BTFIXUPDEF_CALL_CONST(unsigned long, mmu_v2p, unsigned long)
-BTFIXUPDEF_CALL_CONST(unsigned long, mmu_p2v, unsigned long)
-
-#define mmu_v2p(vaddr) BTFIXUP_CALL(mmu_v2p)(vaddr)
-#define mmu_p2v(paddr) BTFIXUP_CALL(mmu_p2v)(paddr)
-
-#define __pa(x)    (mmu_v2p((unsigned long)(x)))
-#define __va(x)    ((void *)(mmu_p2v((unsigned long)(x))))
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in
@@ -273,19 +255,19 @@ BTFIXUPDEF_SETHI(sparc_unmapped_base)
 
 #define TASK_UNMAPPED_BASE	BTFIXUP_SETHI(sparc_unmapped_base)
 
-/* to align the pointer to the (next) page boundary */
-#define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)
-
-/* Now, to allow for very large physical memory configurations we
- * place the page pool both above the kernel and below the kernel.
- */
-#define MAP_NR(addr) ((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
-
 #else /* !(__ASSEMBLY__) */
 
 #define __pgprot(x)	(x)
 
 #endif /* !(__ASSEMBLY__) */
+
+/* to align the pointer to the (next) page boundary */
+#define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)
+
+#define PAGE_OFFSET	0xf0000000
+#define __pa(x)                 ((unsigned long)(x) - PAGE_OFFSET)
+#define __va(x)                 ((void *)((unsigned long) (x) + PAGE_OFFSET))
+#define MAP_NR(addr)            (__pa(addr) >> PAGE_SHIFT)
 
 #endif /* __KERNEL__ */
 

@@ -24,6 +24,7 @@
 #include <linux/locks.h>
 #include <linux/smp_lock.h>
 #include <linux/sched.h>
+#include <linux/highuid.h>
 
 
 
@@ -661,8 +662,12 @@ void ext2_read_inode (struct inode * inode)
 	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
 
 	inode->i_mode = le16_to_cpu(raw_inode->i_mode);
-	inode->i_uid = le16_to_cpu(raw_inode->i_uid);
-	inode->i_gid = le16_to_cpu(raw_inode->i_gid);
+	inode->i_uid = (uid_t)le16_to_cpu(raw_inode->i_uid_low);
+	inode->i_gid = (gid_t)le16_to_cpu(raw_inode->i_gid_low);
+	if(!(test_opt (inode->i_sb, NO_UID32))) {
+		inode->i_uid |= le16_to_cpu(raw_inode->i_uid_high) << 16;
+		inode->i_gid |= le16_to_cpu(raw_inode->i_gid_high) << 16;
+	}
 	inode->i_nlink = le16_to_cpu(raw_inode->i_links_count);
 	inode->i_size = le32_to_cpu(raw_inode->i_size);
 	inode->i_atime = le32_to_cpu(raw_inode->i_atime);
@@ -801,8 +806,26 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
 
 	raw_inode->i_mode = cpu_to_le16(inode->i_mode);
-	raw_inode->i_uid = cpu_to_le16(inode->i_uid);
-	raw_inode->i_gid = cpu_to_le16(inode->i_gid);
+	if(!(test_opt(inode->i_sb, NO_UID32))) {
+		raw_inode->i_uid_low = cpu_to_le16(low_16_bits(inode->i_uid));
+		raw_inode->i_gid_low = cpu_to_le16(low_16_bits(inode->i_gid));
+/*
+ * Fix up interoperability with old kernels. Otherwise, old inodes get
+ * re-used with the upper 16 bits of the uid/gid intact
+ */
+		if(!inode->u.ext2_i.i_dtime) {
+			raw_inode->i_uid_high = cpu_to_le16(high_16_bits(inode->i_uid));
+			raw_inode->i_gid_high = cpu_to_le16(high_16_bits(inode->i_gid));
+		} else {
+			raw_inode->i_uid_high = 0;
+			raw_inode->i_gid_high = 0;
+		}
+	} else {
+		raw_inode->i_uid_low = cpu_to_le16(fs_high2lowuid(inode->i_uid));
+		raw_inode->i_gid_low = cpu_to_le16(fs_high2lowgid(inode->i_gid));
+		raw_inode->i_uid_high = 0;
+		raw_inode->i_gid_high = 0;
+	}
 	raw_inode->i_links_count = cpu_to_le16(inode->i_nlink);
 	raw_inode->i_size = cpu_to_le32(inode->i_size);
 	raw_inode->i_atime = cpu_to_le32(inode->i_atime);

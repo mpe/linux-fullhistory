@@ -39,8 +39,8 @@ static void usb_check_support(struct usb_device *);
 /*
  * We have a per-interface "registered driver" list.
  */
-static LIST_HEAD(usb_driver_list);
-static LIST_HEAD(usb_bus_list);
+LIST_HEAD(usb_driver_list);
+LIST_HEAD(usb_bus_list);
 
 static struct usb_busmap busmap;
 
@@ -240,6 +240,7 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 	bus->bandwidth_isoc_reqs = 0;
 
 	INIT_LIST_HEAD(&bus->bus_list);
+        INIT_LIST_HEAD(&bus->inodes);
 
 	return bus;
 }
@@ -268,6 +269,8 @@ void usb_register_bus(struct usb_bus *bus)
 	/* Add it to the list of buses */
 	list_add(&bus->bus_list, &usb_bus_list);
 
+	usbdevfs_add_bus(bus);
+
 	info("new USB bus registered, assigned bus number %d", bus->busnum);
 }
 
@@ -283,6 +286,8 @@ void usb_deregister_bus(struct usb_bus *bus)
 	list_del(&bus->bus_list);
 
 	proc_usb_remove_bus(bus);
+
+        usbdevfs_remove_bus(bus);
 
 	clear_bit(bus->busnum, busmap.busmap);
 }
@@ -443,6 +448,8 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bus *bus)
 	dev->bus = bus;
 	dev->parent = parent;
 	atomic_set(&dev->refcnt, 1);
+        INIT_LIST_HEAD(&dev->inodes);
+        INIT_LIST_HEAD(&dev->filelist);
 
 	dev->bus->op->allocate(dev);
 
@@ -1154,11 +1161,6 @@ void usb_destroy_configuration(struct usb_device *dev)
 		kfree(cf->interface);
 	}
 	kfree(dev->config);
-
-	if (dev->string) {
-		kfree(dev->string);
-		dev->string = 0;
- 	}
 }
 			
 void usb_init_root_hub(struct usb_device *dev)
@@ -1230,6 +1232,7 @@ void usb_disconnect(struct usb_device **pdev)
 
 	/* remove /proc/bus/usb entry */
 	proc_usb_remove_device(dev);
+        usbdevfs_remove_device(dev);
 
 	/* Free up the device itself, including its device number */
 	if (dev->devnum > 0)
@@ -1491,6 +1494,11 @@ int usb_get_configuration(struct usb_device *dev)
 		return -1;
 	}
 
+	if (dev->descriptor.bNumConfigurations < 1) {
+		warn("not enough configurations");
+		return -1;
+	}
+
 	dev->config = (struct usb_config_descriptor *)
 		kmalloc(dev->descriptor.bNumConfigurations *
 		sizeof(struct usb_config_descriptor), GFP_KERNEL);
@@ -1547,54 +1555,45 @@ int usb_get_configuration(struct usb_device *dev)
 	return result;
 }
 
-char *usb_string(struct usb_device *dev, int index)
+int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 {
-	int i, len, ret;
-	char *ptr;
-	union {
-		unsigned char buffer[256];
-		struct usb_string_descriptor desc;
-	} u;
+	unsigned char *tbuf;
+	int err;
+	unsigned int u, idx;
 
-	if (index <= 0)
-		return 0;
-	if (dev->string)
-		kfree (dev->string);
-
-	if (dev->string_langid == 0) {
-		/* read string descriptor 0 */
-		ret = usb_get_string(dev, 0, 0, u.buffer, 4);
-		if (ret >= 0 && u.desc.bLength >= 4)
-			dev->string_langid = le16_to_cpup(&u.desc.wData[0]);
-		else
-			err("error getting string");
-		dev->string_langid |= 0x10000;	/* so it's non-zero */
+	if (size <= 0 || !buf)
+		return -EINVAL;
+	buf[0] = 0;
+	tbuf = kmalloc(256, GFP_KERNEL);
+	if (!tbuf)
+		return -ENOMEM;
+	/*
+	 * is this two step process necessary? can't we just
+	 * ask for a maximum length string and then take the length
+	 * that was returned?
+	 */
+	err = usb_get_string(dev, dev->string_langid, index, tbuf, 4);
+	if (err < 0)
+		goto errout;
+	err = usb_get_string(dev, dev->string_langid, index, tbuf, tbuf[0]);
+	if (err < 0)
+		goto errout;
+	size--;
+	for (idx = 0, u = 2; u < tbuf[0]; u += 2) {
+		if (idx >= size)
+			break;
+		if (tbuf[u+1]) {
+			buf[idx++] = '?';  /* non ASCII character */
+			continue;
+		}
+		buf[idx++] = tbuf[u];
 	}
+	buf[idx] = 0;
+	err = idx;
 
-	if (usb_get_string(dev, dev->string_langid, index, u.buffer, 4) < 0 ||
-	    ((ret = usb_get_string(dev, dev->string_langid, index, u.buffer,
-			      u.desc.bLength)) < 0)) {
-		err("error retrieving string");
-		return NULL;
-	}
-
-	if (ret > 0) ret /= 2;		/* going from 16-bit chars to 8-bit */
-	len = u.desc.bLength / 2;	/* includes terminating null */
-					/* after removing bLength & bDescType */
-	if (ret < len) len = ret;	/* use min of (ret, len) */
-
-	ptr = kmalloc(len, GFP_KERNEL);
-	if (!ptr) {
-		err("couldn't allocate memory for string");
-		return NULL;
-	}
-
-	for (i = 0; i < len - 1; ++i)
-		ptr[i] = le16_to_cpup(&u.desc.wData[i]);
-	ptr[i] = 0;
-
-	dev->string = ptr;
-	return ptr;
+ errout:
+	kfree(tbuf);
+	return err;
 }
 
 /*
@@ -1606,10 +1605,10 @@ char *usb_string(struct usb_device *dev, int index)
  */
 int usb_new_device(struct usb_device *dev)
 {
+	unsigned char *buf;
 	int addr, err;
 
-	info("USB new device connect, assigned device number %d",
-		dev->devnum);
+	info("USB new device connect, assigned device number %d", dev->devnum);
  
 	dev->maxpacketsize = 0;		/* Default to 8 byte max packet size */
 	dev->epmaxpacketin [0] = 8;
@@ -1657,8 +1656,7 @@ int usb_new_device(struct usb_device *dev)
 		return 1;
 	}
 
-	err=usb_get_configuration(dev);
-	
+	err = usb_get_configuration(dev);
 	if (err < 0) {
 		err("unable to get configuration (error=%d)", err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
@@ -1674,6 +1672,21 @@ int usb_new_device(struct usb_device *dev)
 		err("failed to set default configuration");
 		return -1;
 	}
+	/* get langid for strings */
+	buf = kmalloc(256, GFP_KERNEL);
+	if (!buf) {
+		err("out of memory\n");
+	} else {
+		err = usb_get_string(dev, 0, 0, buf, 4);
+		if (err < 0) {
+			err("error getting string descriptor 0 (error=%d)\n", err);
+		} else if (buf[0] < 4) {
+			err("string descriptpr 0 too short\n");
+		} else
+			dev->string_langid = buf[2] | (buf[3]<< 8);
+		kfree(buf);
+		info("USB device number %d default language ID 0x%x", dev->devnum, dev->string_langid);
+	}
 
 	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	usb_show_string(dev, "Product", dev->descriptor.iProduct);
@@ -1681,6 +1694,7 @@ int usb_new_device(struct usb_device *dev)
 
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
 	proc_usb_add_device(dev);
+        usbdevfs_add_device(dev);
 
 	/* find drivers willing to handle this device */
 	usb_find_drivers(dev);

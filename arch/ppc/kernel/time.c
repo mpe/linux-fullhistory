@@ -68,7 +68,7 @@ unsigned count_period_den;	/* count_period_num / count_period_den us */
  * with interrupts disabled.
  * We set it up to overflow again in 1/HZ seconds.
  */
-void timer_interrupt(struct pt_regs * regs)
+int timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
 	unsigned long cpu = smp_processor_id();
@@ -141,6 +141,7 @@ void timer_interrupt(struct pt_regs * regs)
 		ppc_md.heartbeat();
 	
 	hardirq_exit(cpu);
+	return 1; /* lets ret_from_int know we can do checks */
 }
 
 /*

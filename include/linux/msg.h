@@ -11,6 +11,7 @@
 #define MSG_NOERROR     010000  /* no error if message is too big */
 #define MSG_EXCEPT      020000  /* recv any msg except of specified type.*/
 
+/* Obsolete, used only for backwards compatibility and libc5 compiles */
 struct msqid_ds {
 	struct ipc_perm msg_perm;
 	struct msg *msg_first;		/* first message on queue,unused  */
@@ -26,6 +27,9 @@ struct msqid_ds {
 	__kernel_ipc_pid_t msg_lspid;	/* pid of last msgsnd */
 	__kernel_ipc_pid_t msg_lrpid;	/* last receive pid */
 };
+
+/* Include the definition of msqid64_ds */
+#include <asm/msgbuf.h>
 
 /* message buffer for msgsnd and msgrcv calls */
 struct msgbuf {

@@ -27,10 +27,8 @@
 #include <linux/config.h>
 
 #include <asm/processor.h>
-#include <asm/4xx.h>
-#include <asm/403gcx.h>
-#include <asm/405gp.h>
 #include <asm/page.h>
+#include <asm/pgtable.h>
 #include <asm/mmu.h>
 
 #include "ppc_asm.h"
@@ -58,7 +56,7 @@
 ### execution begins here, the following registers contain valid, yet
 ### optional, information:
 ###
-###   r3 - ???
+###   r3 - Board info structure pointer (DRAM, frequency, MAC address, etc.)
 ###   r4 - Starting address of the init RAM disk
 ###   r5 - Ending address of the init RAM disk
 ###   r6 - Start of kernel command line string (e.g. "mem=96m")
@@ -80,17 +78,55 @@ _GLOBAL(_start)
 
 	li	r24,0
 
-	## Establish exception vector base
+	## We should still be executing code at physical address 0x0000xxxx
+	## at this point. However, start_here is at virtual address
+	## 0xC000xxxx. So, set up a TLB mapping to cover this once
+	## translation is enabled.
+
+	lis	r3,KERNELBASE@h		# Load the kernel virtual address
+	addis	r3,r3,KERNELBASE@l
+	tophys(r4,r3)			# Load the kernel physical address
+
+	## Save the existing PID and load the kernel PID.
+		
+	mfspr	r7,SPRN_PID		# Save the old PID
+	li	r0,0
+	mtspr	SPRN_PID,r0		# Load the kernel PID
+
+	## Configure and load entry into TLB slot 0.
 	
-	lis	r0,KERNELBASE@h
+	clrrwi	r4,r4,10		# Mask off the real page number
+
+	## XXX - Temporarily set the TLB_I bit because of cache issues that
+	##       seem to foul-up the exception handling code.
+
+	ori	r4,r4,(TLB_WR | TLB_EX | TLB_I)	# Set the write and execute bits
+	
+	clrrwi	r3,r3,10		# Mask off the effective page number
+	ori	r3,r3,(TLB_VALID | TLB_PAGESZ(PAGESZ_16M))
+
+	tlbwe	r4,r0,TLB_DATA		# Load the data portion of the entry
+	tlbwe	r3,r0,TLB_TAG		# Load the tag portion of the entry
+	isync
+	
+	mtspr	SPRN_PID,r7		# Restore the existing PID
+	
+	## Establish the exception vector base
+	
+	lis	r4,KERNELBASE@h		# EVPR only uses the high 16-bits
+	tophys(r0,r4)			# Use the physical address
 	mtspr	SPRN_EVPR,r0
 
-	## Jump to the main PowerPC kernel start-up code
-	
-1:	lis	r7,start_here@ha
-	addi	r7,r7,start_here@l
-	mtlr	r7
-	blr
+	## Enable the MMU and jump to the main PowerPC kernel start-up code
+
+	mfmsr	r0			# Get the machine state register
+	ori	r0,r0,(MSR_DR | MSR_IR)	# Enable data and instr. translation
+	mtspr	SPRN_SRR1,r0		# Set up the new machine state register
+	lis	r0,start_here@h		
+	ori	r0,r0,start_here@l	
+	mtspr	SPRN_SRR0,r0		# Set up the new instruction pointer
+	rfi				# Jump to start_here w/ translation on
+
 
 ###
 ### Exception vector entry code. This code runs with address translation
@@ -129,7 +165,8 @@ _GLOBAL(_start)
 	stw	r2,GPR2(r21);		/* Save r2 on the stack		   */\
 	stw	r1,0(r21);						     \
 	tovirt(r1,r21);			/* Set-up new kernel stack pointer */\
-	SAVE_4GPRS(3, r21);		/* Save r3 through r6 on the stack */
+	SAVE_4GPRS(3, r21);		/* Save r3 through r6 on the stack */\
+	SAVE_GPR(7, r21);		/* Save r7 on the stack		   */
 
 	## Common exception code for standard (non-critical) exceptions.
 
@@ -166,7 +203,7 @@ label:
 	START_EXCEPTION(n, label);					     \
 	STND_EXCEPTION_PROLOG;						     \
 	addi	r3,r1,STACK_FRAME_OVERHEAD;				     \
-	li	r0,STND_EXC;						     \
+	li	r7,STND_EXC;						     \
 	li	r20,MSR_KERNEL;						     \
 	FINISH_EXCEPTION(func)
 
@@ -175,22 +212,9 @@ label:
 	START_EXCEPTION(n, label);					     \
 	CRIT_EXCEPTION_PROLOG;						     \
 	addi	r3,r1,STACK_FRAME_OVERHEAD;				     \
-	li	r0,CRIT_EXC;						     \
+	li	r7,CRIT_EXC;						     \
 	li	r20,MSR_KERNEL;						     \
 	FINISH_EXCEPTION(func)
-
-
-#define	INTR_EXCEPTION(n, label, func)					     \
-	START_EXCEPTION(n, label);					     \
-	STND_EXCEPTION_PROLOG;						     \
-	addi	r3,r1,STACK_FRAME_OVERHEAD;				     \
-	li	r0,STND_EXC;						     \
-	li	r20,MSR_KERNEL;						     \
-	li	r4,0;							     \
-	bl	transfer_to_handler;					     \
-_GLOBAL(do_IRQ_intercept);						     \
-	.long	func;							     \
-	.long	ret_from_except
 
 	
 ###
@@ -214,7 +238,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	mfspr	r4,SPRN_DEAR		# Grab the DEAR, save it, pass as arg2
 	stw	r4,_DEAR(r21)
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC		# This is a standard exception
+	li	r7,STND_EXC		# This is a standard exception
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		# Copy EE bit from the saved MSR
 	FINISH_EXCEPTION(do_page_fault)	# do_page_fault(regs, ESR, DEAR)
@@ -226,15 +250,24 @@ _GLOBAL(do_IRQ_intercept);						     \
 	mr	r4,r22			# Pass SRR0 as arg2
 	mr	r5,r23			# Pass SRR1 as arg3
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC		# This is a standard exception
+	li	r7,STND_EXC		# This is a standard exception
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		# Copy EE bit from the saved MSR
 	FINISH_EXCEPTION(do_page_fault)	# do_page_fault(regs, SRR0, SRR1)
 	
 ### 0x0500 - External Interrupt Exception
 
-	INTR_EXCEPTION(0x0500,	HardwareInterrupt,	do_IRQ)
-	
+	START_EXCEPTION(0x0500, HardwareInterrupt)
+	STND_EXCEPTION_PROLOG
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r7,STND_EXC
+	li	r20,MSR_KERNEL
+	li	r4,0
+	bl	transfer_to_handler
+_GLOBAL(do_IRQ_intercept)
+	.long	do_IRQ
+	.long	ret_from_except
+
 ### 0x0600 - Alignment Exception
 	
 	START_EXCEPTION(0x0600, Alignment)
@@ -242,7 +275,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	mfspr	r4,SPRN_DEAR		# Grab the DEAR and save it
 	stw	r4,_DEAR(r21)
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC		# This is a standard exception
+	li	r7,STND_EXC		# This is a standard exception
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		# Copy EE bit from the saved MSR
 	FINISH_EXCEPTION(AlignmentException)
@@ -252,7 +285,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	START_EXCEPTION(0x0700,	ProgramCheck)
 	STND_EXCEPTION_PROLOG
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC		# This is a standard exception
+	li	r7,STND_EXC		# This is a standard exception
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		# Copy EE bit from the saved MSR
 	FINISH_EXCEPTION(ProgramCheckException)
@@ -266,7 +299,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	START_EXCEPTION(0x0C00,	SystemCall)
 	STND_EXCEPTION_PROLOG
 	stw	r3,ORIG_GPR3(r21)
-	li	r0,STND_EXC		# This is a standard exception
+	li	r7,STND_EXC		# This is a standard exception
 	li	r20,MSR_KERNEL
 	rlwimi	r20,r23,0,16,16		# Copy EE bit from the saved MSR
 	FINISH_EXCEPTION(DoSyscall)
@@ -275,11 +308,21 @@ _GLOBAL(do_IRQ_intercept);						     \
 	STND_EXCEPTION(0x0E00,	Trap_0E,		UnknownException)
 	STND_EXCEPTION(0x0F00,	Trap_0F,		UnknownException)
 
-#if 0
 ### 0x1000 - Programmable Interval Timer (PIT) Exception
 
-	STND_EXCEPTION(0x1000,	PITException,		UnknownException)
+	START_EXCEPTION(0x1000,	Decrementer)
+	STND_EXCEPTION_PROLOG
+	lis	r0,TSR_PIS@h		# Set-up the PIT exception mask
+	mtspr	SPRN_TSR,r0		# Clear the PIT exception
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r7,STND_EXC		# This is a standard exception
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler
+_GLOBAL(timer_interrupt_intercept)
+	.long	timer_interrupt
+	.long	ret_from_except
 
+#if 0
 ### 0x1010 - Fixed Interval Timer (FIT) Exception
 	
 	STND_EXCEPTION(0x1010,	FITException,		UnknownException)
@@ -294,7 +337,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	START_EXCEPTION(0x1100,	DTLBMiss)
 	STND_EXCEPTION_PROLOG
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC
+	li	r7,STND_EXC
 	li	r20,MSR_KERNEL
 	FINISH_EXCEPTION(UnknownException)
 
@@ -303,7 +346,7 @@ _GLOBAL(do_IRQ_intercept);						     \
 	START_EXCEPTION(0x1200,	ITLBMiss)
 	STND_EXCEPTION_PROLOG
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r0,STND_EXC
+	li	r7,STND_EXC
 	li	r20,MSR_KERNEL
 	FINISH_EXCEPTION(UnknownException)	
 
@@ -341,7 +384,6 @@ _GLOBAL(do_IRQ_intercept);						     \
 _GLOBAL(transfer_to_handler)
 	stw	r22,_NIP(r21)		# Save the faulting IP on the stack
 	stw	r23,_MSR(r21)		# Save the exception MSR on the stack
-	SAVE_GPR(7, r21)		# Save r7 on the stack
 	SAVE_4GPRS(8, r21)		# Save r8 through r11 on the stack
 	SAVE_8GPRS(12, r21)		# Save r12 through r19 on the stack
 	SAVE_8GPRS(24, r21)		# Save r24 through r31 on the stack
@@ -367,7 +409,7 @@ _GLOBAL(transfer_to_handler)
 	bgt-	stack_ovf		# If r2 < r1 < r2 + TASK_STRUCT_SIZE
 	lwz	r24,0(r23)		# Virtual address of the handler
 	lwz	r23,4(r23)		# Handler return pointer
-	cmpwi	cr0,r0,STND_EXC		# What type of exception is this?
+	cmpwi	cr0,r7,STND_EXC		# What type of exception is this?
 	bne	3f			# It is a critical exception...
 
 	## Standard exception jump path
@@ -432,67 +474,10 @@ _GLOBAL(giveup_fpu)
 	
 _GLOBAL(abort)
 	mfspr	r13,SPRN_DBCR
-	ori	r13,r13,DBCR_RST(SYSTEM)@h
+	oris	r13,r13,DBCR_RST(SYSTEM)@h
 	mtspr	SPRN_DBCR,r13
 
-	
-###
-### This code is jumped-to from the startup code. It copies the kernel
-### image from wherever it happens to be currently running at in physical
-### address space to physical address 0.
-###
-### In general, for a running Linux/PPC system:
-###   Kernel Physical Address (KPA) = 0x00000000
-###   Kernel Virtual Address (KVA)  = 0xC0000000
-###
- 
-#if 0
-relocate_kernel:
-	lis	r9,0x426f		/* if booted from BootX, don't */
-	addi	r9,r9,0x6f58		/* translate source addr */
-	cmpw	r31,r9			/* (we have to on chrp) */
-	beq	7f
-	rlwinm	r4,r4,0,8,31		/* translate source address */
-	add	r4,r4,r3		/* to region mapped with BATs */
-7:	addis	r9,r26,klimit@ha	/* fetch klimit */
-	lwz	r25,klimit@l(r9)
-	addis	r25,r25,-KERNELBASE@h
-	li	r6,0			/* Destination offset */
-	li	r5,0x4000		/* # bytes of memory to copy */
-	bl	copy_and_flush		/* copy the first 0x4000 bytes */
-	addi	r0,r3,4f@l		/* jump to the address of 4f */
-	mtctr	r0			/* in copy and do the rest. */
-	bctr				/* jump to the copy */
-4:	mr	r5,r25
-	bl	copy_and_flush		/* copy the rest */
-	b	turn_on_mmu
 
-/*
- * Copy routine used to copy the kernel to start at physical address 0
- * and flush and invalidate the caches as needed.
- * r3 = dest addr, r4 = source addr, r5 = copy limit, r6 = start offset
- * on exit, r3, r4, r5 are unchanged, r6 is updated to be >= r5.
- */
-copy_and_flush:
-	addi	r5,r5,-4
-	addi	r6,r6,-4
-4:	li	r0,8
-	mtctr	r0
-3:	addi	r6,r6,4			/* copy a cache line */
-	lwzx	r0,r6,r4
-	stwx	r0,r6,r3
-	bdnz	3b
-	dcbst	r6,r3			/* write it to memory */
-	sync
-	icbi	r6,r3			/* flush the icache line */
-	cmplw	0,r6,r5
-	blt	4b
-	isync
-	addi	r5,r5,4
-	addi	r6,r6,4
-	blr
-#endif
-	
 ### 
 ### This is where the main kernel code starts.
 ### 

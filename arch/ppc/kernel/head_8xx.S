@@ -197,7 +197,8 @@ turn_on_mmu:
 	stw	r2,GPR2(r21);	\
 	stw	r1,0(r21);	\
 	tovirt(r1,r21);			/* set new kernel sp */	\
-	SAVE_4GPRS(3, r21);
+	SAVE_4GPRS(3, r21);	\
+	SAVE_GPR(7, r21);
 /*
  * Note: code which follows this uses cr0.eq (set if from kernel),
  * r21, r22 (SRR0), and r23 (SRR1).
@@ -591,7 +592,6 @@ transfer_to_handler:
 	lis	r22,MSR_POW@h
 	andc	r23,r23,r22
 	stw	r23,_MSR(r21)
-	SAVE_GPR(7, r21)
 	SAVE_4GPRS(8, r21)
 	SAVE_8GPRS(12, r21)
 	SAVE_8GPRS(24, r21)

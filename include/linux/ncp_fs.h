@@ -124,6 +124,8 @@ struct ncp_nls_ioctl
 #define NCP_IOC_GETDENTRYTTL		_IOW('n', 12, __u32)
 #define NCP_IOC_SETDENTRYTTL		_IOR('n', 12, __u32)
 
+#define	NCP_IOC_GETMOUNTUID32		_IOW('n', 13, __kernel_uid32_t)
+
 /*
  * The packet size to allocate. One page should be enough.
  */

@@ -18,7 +18,7 @@
 /* Tunable parameters first */
 
 #define I2O_BUCKET_COUNT 	256
-#define I2O_BUCKET_THRESH	8
+#define I2O_BUCKET_THRESH	18 /* 9 buckets in one message */
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030

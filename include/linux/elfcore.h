@@ -71,8 +71,8 @@ struct elf_prpsinfo
 	char	pr_zomb;	/* zombie */
 	char	pr_nice;	/* nice val */
 	unsigned long pr_flag;	/* flags */
-	uid_t	pr_uid;
-	gid_t	pr_gid;
+	__kernel_uid_t	pr_uid;
+	__kernel_gid_t	pr_gid;
 	pid_t	pr_pid, pr_ppid, pr_pgrp, pr_sid;
 	/* Lots missing */
 	char	pr_fname[16];	/* filename of executable */

@@ -209,8 +209,6 @@ set_phys_avail(struct mem_pieces *mp)
 	kstart = __pa(_stext);	/* should be 0 */
 	ksize = PAGE_ALIGN(klimit - _stext);
 
-	printk("kstart = 0x%08lx, ksize = 0x%08lx\n", kstart, ksize);
-
 	mem_pieces_remove(&phys_avail, kstart, ksize, 0);
 	mem_pieces_remove(&phys_avail, 0, 0x4000, 0);
 

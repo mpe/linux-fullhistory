@@ -37,8 +37,7 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	while (filp->f_pos < inode->i_size) {
 		blknum = qnx4_block_map( inode, filp->f_pos / QNX4_BLOCK_SIZE );
 		bh = bread(inode->i_dev, blknum, QNX4_BLOCK_SIZE);
-		if(bh==NULL)
-		{
+		if(bh==NULL) {
 			printk(KERN_ERR "qnx4_readdir: bread failed (%ld)\n", blknum);
 			break;
 		}
@@ -57,8 +56,7 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 					QNX4DEBUG(("qnx4_readdir:%.*s\n", size, de->di_fname));
 					if ( ( de->di_status & QNX4_FILE_LINK ) == 0 )
 						ino = blknum * QNX4_INODES_PER_BLOCK + ix - 1;
-					else
-					{
+					else {
 						le  = (struct qnx4_link_info*)de;
 						ino = ( le->dl_inode_blk - 1 ) *
 							QNX4_INODES_PER_BLOCK +

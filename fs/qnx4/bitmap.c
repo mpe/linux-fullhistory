@@ -86,6 +86,8 @@ unsigned long qnx4_count_free_inodes(struct super_block *sb)
 	return qnx4_count_free_blocks(sb) * QNX4_INODES_PER_BLOCK;	/* FIXME */
 }
 
+#ifdef CONFIG_QNX4FS_RW
+
 int qnx4_is_free(struct super_block *sb, long block)
 {
 	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
@@ -114,8 +116,6 @@ int qnx4_is_free(struct super_block *sb, long block)
 
 	return ret;
 }
-
-#ifdef CONFIG_QNX4FS_RW
 
 int qnx4_set_bitmap(struct super_block *sb, long block, int busy)
 {

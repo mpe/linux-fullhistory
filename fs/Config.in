@@ -53,9 +53,9 @@ if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
    bool '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   tristate 'QNX filesystem support (read only) (EXPERIMENTAL)' CONFIG_QNX4FS_FS
+   tristate 'QNX4 filesystem support (read only) (EXPERIMENTAL)' CONFIG_QNX4FS_FS
    if [ "$CONFIG_QNX4FS_FS" != "n" ]; then
-      bool '  QNXFS write support (DANGEROUS)' CONFIG_QNX4FS_RW
+      bool '  QNX4FS write support (DANGEROUS)' CONFIG_QNX4FS_RW
    fi    
 fi
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS

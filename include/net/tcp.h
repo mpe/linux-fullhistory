@@ -488,7 +488,11 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 
 
 extern struct proto tcp_prot;
-extern struct tcp_mib tcp_statistics;
+
+extern struct tcp_mib tcp_statistics[NR_CPUS*2];
+#define TCP_INC_STATS(field)		SNMP_INC_STATS(tcp_statistics, field)
+#define TCP_INC_STATS_BH(field)		SNMP_INC_STATS_BH(tcp_statistics, field)
+#define TCP_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(tcp_statistics, field)
 
 extern void			tcp_put_port(struct sock *sk);
 extern void			__tcp_put_port(struct sock *sk);
@@ -980,7 +984,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	switch (state) {
 	case TCP_ESTABLISHED:
 		if (oldstate != TCP_ESTABLISHED)
-			tcp_statistics.TcpCurrEstab++;
+			TCP_INC_STATS(TcpCurrEstab);
 		break;
 
 	case TCP_CLOSE:
@@ -988,7 +992,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)
-			tcp_statistics.TcpCurrEstab--;
+			tcp_statistics[smp_processor_id()*2+!in_interrupt()].TcpCurrEstab--;
 	}
 
 	/* Change state AFTER socket is unhashed to avoid closed

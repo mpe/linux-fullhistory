@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.38 1999/08/14 03:51:36 anton Exp $
+/* $Id: wuf.S,v 1.39 2000/01/08 16:38:18 anton Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -300,7 +300,7 @@ C_LABEL(srmmu_fwin_stackchk):
 
 	/* Caller did 'andcc %sp, 0x7, %g0' */
 	bne	fwin_user_stack_is_bolixed
-	 GET_PAGE_OFFSET(l5)
+	 sethi   %hi(PAGE_OFFSET), %l5
 
 	/* Check if the users stack is in kernel vma, then our
 	 * trial and error technique below would succeed for

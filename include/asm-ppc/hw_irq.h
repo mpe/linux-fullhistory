@@ -34,7 +34,7 @@ struct int_control_struct
 extern struct int_control_struct int_control;
 extern unsigned long timer_interrupt_intercept;
 extern unsigned long do_IRQ_intercept;
-void timer_interrupt(struct pt_regs *);
+int timer_interrupt(struct pt_regs *);
 
 extern void __no_use_sti(void);
 extern void __no_use_cli(void);

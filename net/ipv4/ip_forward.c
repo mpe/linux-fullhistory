@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.45 1999/08/20 11:05:16 davem Exp $
+ * Version:	$Id: ip_forward.c,v 1.46 2000/01/09 02:19:37 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -45,7 +45,7 @@ static inline int ip_forward_finish(struct sk_buff *skb)
 {
 	struct ip_options * opt	= &(IPCB(skb)->opt);
 
-	ip_statistics.IpForwDatagrams++;
+	IP_INC_STATS_BH(IpForwDatagrams);
 
 	if (opt->optlen == 0) {
 #ifdef CONFIG_NET_FASTROUTE
@@ -147,7 +147,7 @@ int ip_forward(struct sk_buff *skb)
 		       ip_forward_finish);
 
 frag_needed:
-	ip_statistics.IpFragFails++;
+	IP_INC_STATS_BH(IpFragFails);
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
         goto drop;
 

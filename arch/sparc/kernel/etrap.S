@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.30 1999/08/14 03:51:08 anton Exp $
+/* $Id: etrap.S,v 1.31 2000/01/08 16:38:18 anton Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -278,7 +278,7 @@ tsetup_sun4c_onepage:
 C_LABEL(tsetup_srmmu_stackchk):
 	/* Check results of callers andcc %sp, 0x7, %g0 */
 	bne	trap_setup_user_stack_is_bolixed
-	 GET_PAGE_OFFSET(glob_tmp)
+	 sethi   %hi(PAGE_OFFSET), %glob_tmp
 
 	cmp	%glob_tmp, %sp
 	bleu,a	1f

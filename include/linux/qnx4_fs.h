@@ -2,8 +2,8 @@
  *  Name                         : qnx4_fs.h
  *  Author                       : Richard Frowijn
  *  Function                     : qnx4 global filesystem definitions
- *  Version                      : 1.0.1
- *  Last modified                : 1999-12-13
+ *  Version                      : 1.0.2
+ *  Last modified                : 2000-01-06
  *
  *  History                      : 23-03-1998 created
  */
@@ -41,41 +41,41 @@
  * This is the original qnx4 inode layout on disk.
  */
 struct qnx4_inode_entry {
-	char di_fname[QNX4_SHORT_NAME_MAX];
-	qnx4_off_t di_size;
-	qnx4_xtnt_t di_first_xtnt;
-	unsigned long di_xblk;
-	time_t di_ftime;
-	time_t di_mtime;
-	time_t di_atime;
-	time_t di_ctime;
-	qnx4_nxtnt_t di_num_xtnts;
-	mode_t di_mode;
-	qnx4_muid_t di_uid;
-	qnx4_mgid_t di_gid;
-	qnx4_nlink_t di_nlink;
-	char di_zero[4];
-	qnx4_ftype_t di_type;
-	unsigned char di_status;
+	char		di_fname[QNX4_SHORT_NAME_MAX];
+	qnx4_off_t	di_size;
+	qnx4_xtnt_t	di_first_xtnt;
+	__u32		di_xblk;
+	__s32		di_ftime;
+	__s32		di_mtime;
+	__s32		di_atime;
+	__s32		di_ctime;
+	qnx4_nxtnt_t	di_num_xtnts;
+	qnx4_mode_t	di_mode;
+	qnx4_muid_t	di_uid;
+	qnx4_mgid_t	di_gid;
+	qnx4_nlink_t	di_nlink;
+	__u8		di_zero[4];
+	qnx4_ftype_t	di_type;
+	__u8		di_status;
 };
 
 struct qnx4_link_info {
-	char dl_fname[QNX4_NAME_MAX];
-	unsigned long dl_inode_blk;
-	unsigned char dl_inode_ndx;
-	unsigned char dl_spare[10];
-	unsigned char dl_status;
+	char		dl_fname[QNX4_NAME_MAX];
+	__u32		dl_inode_blk;
+	__u8		dl_inode_ndx;
+	__u8		dl_spare[10];
+	__u8		dl_status;
 };
 
 struct qnx4_xblk {
-	unsigned long xblk_next_xblk;
-	unsigned long xblk_prev_xblk;
-	unsigned char xblk_num_xtnts;
-	char xblk_spare[3];
-	long xblk_num_blocks;
-	qnx4_xtnt_t xblk_xtnts[QNX4_MAX_XTNTS_PER_XBLK];
-	char xblk_signature[8];
-	qnx4_xtnt_t xblk_first_xtnt;
+	__u32		xblk_next_xblk;
+	__u32		xblk_prev_xblk;
+	__u8		xblk_num_xtnts;
+	__u8		xblk_spare[3];
+	__s32		xblk_num_blocks;
+	qnx4_xtnt_t	xblk_xtnts[QNX4_MAX_XTNTS_PER_XBLK];
+	char		xblk_signature[8];
+	qnx4_xtnt_t	xblk_first_xtnt;
 };
 
 struct qnx4_super_block {

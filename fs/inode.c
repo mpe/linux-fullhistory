@@ -51,6 +51,7 @@
 static LIST_HEAD(inode_in_use);
 static LIST_HEAD(inode_unused);
 static struct list_head inode_hashtable[HASH_SIZE];
+static LIST_HEAD(anon_hash_chain); /* for inodes with NULL i_sb */
 
 /*
  * A simple spinlock to protect the list manipulations.
@@ -632,7 +633,9 @@ struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find
 
 void insert_inode_hash(struct inode *inode)
 {
-	struct list_head *head = inode_hashtable + hash(inode->i_sb, inode->i_ino);
+	struct list_head *head = &anon_hash_chain;
+	if (inode->i_sb)
+		head = inode_hashtable + hash(inode->i_sb, inode->i_ino);
 	spin_lock(&inode_lock);
 	list_add(&inode->i_hash, head);
 	spin_unlock(&inode_lock);

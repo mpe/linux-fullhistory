@@ -274,17 +274,19 @@ struct task_struct {
 	struct exec_domain *exec_domain;
 	volatile long need_resched;
 
-/* various fields */
+	cycles_t avg_slice;
+	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
+/* begin intel cache line */
 	long counter;
 	long priority;
-	cycles_t avg_slice;
-/* SMP and runqueue state */
+	unsigned long policy;
+/* memory management info */
+	struct mm_struct *mm, *active_mm;
 	int has_cpu;
 	int processor;
-	int last_processor;
-	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
-	struct task_struct *next_task, *prev_task;
 	struct list_head run_list;
+	struct task_struct *next_task, *prev_task;
+	int last_processor;
 
 /* task state */
 	struct linux_binfmt *binfmt;
@@ -313,7 +315,7 @@ struct task_struct {
 
 	wait_queue_head_t wait_chldexit;	/* for wait4() */
 	struct semaphore *vfork_sem;		/* for vfork() */
-	unsigned long policy, rt_priority;
+	unsigned long rt_priority;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
@@ -346,10 +348,6 @@ struct task_struct {
 	struct fs_struct *fs;
 /* open file information */
 	struct files_struct *files;
-
-/* memory management info */
-	struct mm_struct *mm, *active_mm;
-
 /* signal handlers */
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 	struct signal_struct *sig;
@@ -398,16 +396,20 @@ struct task_struct {
  */
 #define INIT_TASK(name) \
 /* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
-/* counter */	DEF_PRIORITY,DEF_PRIORITY,0, \
-/* SMP */	0,0,0,-1, \
-/* schedlink */	&init_task,&init_task, LIST_HEAD_INIT(init_task.run_list), \
+/* avg_slice */	0, -1, \
+/* counter */	DEF_PRIORITY,DEF_PRIORITY,SCHED_OTHER, \
+/* mm */	NULL, &init_mm, \
+/* has_cpu */	0,0, \
+/* run_list */	LIST_HEAD_INIT(init_task.run_list), \
+/* next_task */	&init_task,&init_task, \
+/* last_proc */	0, \
 /* binfmt */	NULL, \
 /* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
 /* pidhash */	NULL, NULL, \
 /* chld wait */	__WAIT_QUEUE_HEAD_INITIALIZER(name.wait_chldexit), NULL, \
-/* timeout */	SCHED_OTHER,0,0,0,0,0,0,0, \
+/* timeout */	0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \
 /* per CPU times */ {0, }, {0, }, \
@@ -426,7 +428,6 @@ struct task_struct {
 /* thread */	INIT_THREAD, \
 /* fs */	&init_fs, \
 /* files */	&init_files, \
-/* mm */	NULL, &init_mm, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 /* exec cts */	0,0, \
 /* exit_sem */	__MUTEX_INITIALIZER(name.exit_sem),	\

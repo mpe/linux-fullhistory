@@ -33,6 +33,7 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
+#include <linux/highuid.h>
 #include <asm/byteorder.h>
 #include <asm/uaccess.h>
 
@@ -1032,8 +1033,8 @@ static void sysv_read_inode(struct inode *inode)
 		mode = from_coh_imode(mode);
 	/* SystemV FS: kludge permissions if ino==SYSV_ROOT_INO ?? */
 	inode->i_mode = mode;
-	inode->i_uid = raw_inode->i_uid;
-	inode->i_gid = raw_inode->i_gid;
+	inode->i_uid = (uid_t)raw_inode->i_uid;
+	inode->i_gid = (gid_t)raw_inode->i_gid;
 	inode->i_nlink = raw_inode->i_nlink;
 	if (sb->sv_convert) {
 		inode->i_size = from_coh_ulong(raw_inode->i_size);
@@ -1113,8 +1114,8 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 	if (sb->sv_kludge_symlinks)
 		mode = to_coh_imode(mode);
 	raw_inode->i_mode = mode;
-	raw_inode->i_uid = inode->i_uid;
-	raw_inode->i_gid = inode->i_gid;
+	raw_inode->i_uid = fs_high2lowuid(inode->i_uid);
+	raw_inode->i_gid = fs_high2lowgid(inode->i_gid);
 	raw_inode->i_nlink = inode->i_nlink;
 	if (sb->sv_convert) {
 		raw_inode->i_size = to_coh_ulong(inode->i_size);
