@@ -1156,6 +1156,8 @@ struct pci_bus *pcmcia_lookup_bus(client_handle_t handle)
 	return s->cap.cb_dev->subordinate;
 }
 
+EXPORT_SYMBOL(pcmcia_lookup_bus);
+
 #endif
 
 /*======================================================================
@@ -2188,7 +2190,7 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     {
 	memory_handle_t m;
         int ret = pcmcia_open_memory(a1, a2, &m);
-        (memory_handle_t *)a1 = m;
+        *(memory_handle_t *)a1 = m;
 	return  ret;
     }
         break;
@@ -2202,7 +2204,7 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     {
 	eraseq_handle_t w;
         int ret = pcmcia_register_erase_queue(a1, a2, &w);
-        (eraseq_handle_t *)a1 = w;
+        *(eraseq_handle_t *)a1 = w;
 	return  ret;
     }
         break;
@@ -2227,7 +2229,7 @@ int CardServices(int func, void *a1, void *a2, void *a3)
     {
 	window_handle_t w;
         int ret = pcmcia_request_window(a1, a2, &w);
-        (window_handle_t *)a1 = w;
+        *(window_handle_t *)a1 = w;
 	return  ret;
     }
         break;
@@ -2297,7 +2299,6 @@ EXPORT_SYMBOL(pcmcia_get_next_window);
 EXPORT_SYMBOL(pcmcia_get_status);
 EXPORT_SYMBOL(pcmcia_get_tuple_data);
 EXPORT_SYMBOL(pcmcia_insert_card);
-EXPORT_SYMBOL(pcmcia_lookup_bus);
 EXPORT_SYMBOL(pcmcia_map_mem_page);
 EXPORT_SYMBOL(pcmcia_modify_configuration);
 EXPORT_SYMBOL(pcmcia_modify_window);

@@ -38,6 +38,8 @@ static void ac97_set_mixer(struct ac97_codec *codec, unsigned int oss_mixer, uns
 static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask);
 static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned long arg);
 
+#define arraysize(x)	(sizeof(x)/sizeof((x)[0]))
+
 static struct {
 	unsigned int id;
 	char *name;
@@ -380,7 +382,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 				return -EINVAL;
 
 			/* do we ever want to touch the hardware? */
-			val = codec->read_mixer(card, i);
+			val = codec->read_mixer(codec, i);
 			/* val = codec->mixer_state[i]; */
 			break;
 		}
@@ -494,9 +496,11 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	if ((cap = codec->codec_read(codec, AC97_RESET)) & 0x8000)
 		return 0;
 	
+	codec->name = NULL;
+	codec->codec_init = NULL;
 	id1 = codec->codec_read(codec, AC97_VENDOR_ID1);
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
-	for (i = 0, codec->name = NULL; i < arraysize (ac97_codec_ids[i]); i++) {
+	for (i = 0; i < arraysize(ac97_codec_ids); i++) {
 		if (ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
 			codec->name = ac97_codec_ids[i].name;
 			codec->codec_init = ac97_codec_ids[i].init;
