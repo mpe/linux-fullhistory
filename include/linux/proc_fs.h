@@ -139,7 +139,7 @@ enum scsi_directory_inos {
 struct proc_dir_entry {
 	unsigned short low_ino;
 	unsigned short namelen;
-	char * name;
+	const char * name;
 };
 
 extern struct super_block *proc_read_super(struct super_block *,void *,int);

@@ -75,7 +75,7 @@
     
 */
 
-static char *version =
+static const char *version =
     "3c501.c: 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov).\n";
 
 /*
@@ -223,7 +223,7 @@ el1_probe1(struct device *dev, int ioaddr)
 {
     #ifndef MODULE
 
-    char *mname;		/* Vendor name */
+    const char *mname;		/* Vendor name */
     unsigned char station_addr[6];
     int autoirq = 0;
     int i;

@@ -189,7 +189,7 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
 static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd);
 static void print_dsa (struct Scsi_Host *host, u32 *dsa);
 static int print_insn (struct Scsi_Host *host, u32 *insn,
-    char *prefix, int kernel);
+    const char *prefix, int kernel);
 
 static void NCR53c8xx_dsa_fixup (struct NCR53c7x0_cmd *cmd);
 static void NCR53c8x0_init_fixup (struct Scsi_Host *host);
@@ -3344,7 +3344,7 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
     unsigned char dcmd, sbcl;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
     	host->hostdata;
-    char *phase;
+    const char *phase;
     NCR53c7x0_local_setup(host);
 
     if (!cmd) {
@@ -3712,7 +3712,7 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
  */
 
 static int print_insn (struct Scsi_Host *host, u32 *insn,
-    char *prefix, int kernel) {
+    const char *prefix, int kernel) {
     char buf[80], 		/* Temporary buffer and pointer */
 	*tmp;			
     unsigned char dcmd;		/* dcmd register for *insn */

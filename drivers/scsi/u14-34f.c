@@ -275,7 +275,7 @@ struct hostdata {
    };
 
 static struct Scsi_Host * sh[MAX_BOARDS + 1];
-static char* driver_name = "Ux4F";
+static const char* driver_name = "Ux4F";
 static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)

@@ -186,7 +186,7 @@
     =========================================================================
 */
 
-static char *version = "depca.c:v0.41 5/26/95 davies@wanton.lkg.dec.com\n";
+static const char *version = "depca.c:v0.41 5/26/95 davies@wanton.lkg.dec.com\n";
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -1438,7 +1438,7 @@ static struct device *alloc_device(struct device *dev, u_long iobase)
 static void DepcaSignature(char *name, u_long paddr)
 {
   u_int i,j,k;
-  char *signatures[] = DEPCA_SIGNATURE;
+  const char *signatures[] = DEPCA_SIGNATURE;
   char tmpstr[16];
 
   for (i=0;i<16;i++) {                  /* copy the first 16 bytes of ROM to */
@@ -1622,7 +1622,7 @@ static int load_packet(struct device *dev, struct sk_buff *skb)
 static int EISA_signature(char *name, s32 eisa_id)
 {
   u_int i;
-  char *signatures[] = DEPCA_SIGNATURE;
+  const char *signatures[] = DEPCA_SIGNATURE;
   char ManCode[DEPCA_STRLEN];
   union {
     s32 ID;

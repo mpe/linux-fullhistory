@@ -62,7 +62,7 @@ static struct nr_neigh *nr_neigh_list = NULL;
  *	Add a new route to a node, and in the process add the node and the
  *	neighbour if it is new.
  */
-static int nr_add_node(ax25_address *nr, char *mnemonic, ax25_address *ax25,
+static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax25,
 	ax25_digi *ax25_digi, struct device *dev, int quality, int obs_count)
 {
 	struct nr_node  *nr_node;

@@ -63,7 +63,7 @@ extern int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 			 int offset, int count, char *data,
 			 struct nfs_fattr *fattr, int fs);
 extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-			  int offset, int count, char *data,
+			  int offset, int count, const char *data,
 			  struct nfs_fattr *fattr);
 extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 			   const char *name, struct nfs_sattr *sattr,

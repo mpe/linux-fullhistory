@@ -230,10 +230,9 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 	ino &= 0x0000ffff;
-	if (ino == PROC_PID_INO ||
-	    (p->dumpable && p->uid == p->euid && p->gid == p->egid)) {
-		inode->i_uid = p->uid;
-		inode->i_gid = p->gid;
+	if (ino == PROC_PID_INO || p->dumpable) {
+		inode->i_uid = p->euid;
+		inode->i_gid = p->egid;
 	}
 	switch (ino) {
 		case PROC_PID_INO:

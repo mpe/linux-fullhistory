@@ -368,7 +368,7 @@ static unsigned short ints[] = { 3, 5, 10, 11, 12, 14, 15, 0 };
 */
 
 struct signature {
-   char *signature;
+   const char *signature;
    int  sig_offset;
    int  sig_length;
    int  major_bios_version;

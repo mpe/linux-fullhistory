@@ -98,10 +98,10 @@ typedef struct {
 /* this structure defines a ROM BIOS signature */
 typedef struct {
 	u_long offset;
-	char *string;
+	const char *string;
 	void (*init_controller)(u_char *address);
 	void (*init_drive)(u_char drive);
-	char *name;
+	const char *name;
 } XD_SIGNATURE;
 
 u_long xd_init (u_long mem_start,u_long mem_end);

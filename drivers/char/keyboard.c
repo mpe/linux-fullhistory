@@ -856,8 +856,8 @@ static void do_fn(unsigned char value, char up_flag)
 
 static void do_pad(unsigned char value, char up_flag)
 {
-	static char *pad_chars = "0123456789+-*/\015,.?";
-	static char *app_map = "pqrstuvwxylSRQMnn?";
+	static const char *pad_chars = "0123456789+-*/\015,.?";
+	static const char *app_map = "pqrstuvwxylSRQMnn?";
 
 	if (up_flag)
 		return;		/* no action, if this is a key release */
@@ -913,7 +913,7 @@ static void do_pad(unsigned char value, char up_flag)
 
 static void do_cur(unsigned char value, char up_flag)
 {
-	static char *cur_chars = "BDCA";
+	static const char *cur_chars = "BDCA";
 	if (up_flag)
 		return;
 

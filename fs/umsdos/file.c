@@ -49,7 +49,7 @@ static int UMSDOS_file_read(
 static int UMSDOS_file_write(
 	struct inode *inode,
 	struct file *filp,
-	char *buf,
+	const char *buf,
     int count)
 {
 	return msdos_file_write(inode,filp,buf,count);

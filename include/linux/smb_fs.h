@@ -130,7 +130,7 @@ int smb_proc_close(struct smb_server *server, struct smb_dirent *finfo);
 int smb_proc_read(struct smb_server *server, struct smb_dirent *finfo, 
 		  off_t offset, long count, char *data, int fs);
 int smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
-		   off_t offset, int count, char *data);
+		   off_t offset, int count, const char *data);
 int smb_proc_create(struct smb_server *server, const char *path,
                     int len, struct smb_dirent *entry);
 int smb_proc_mknew(struct smb_server *server, const char *path, int len,

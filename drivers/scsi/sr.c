@@ -1131,8 +1131,6 @@ int init_module(void) {
 
 void cleanup_module( void) 
 {
-    int i;
-    
     if (MOD_IN_USE) {
 	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
 	return;

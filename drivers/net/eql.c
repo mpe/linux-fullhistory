@@ -16,7 +16,7 @@
  *    Phone: 1-703-847-0040 ext 103
  */
 
-static char *version = 
+static const char *version = 
 	"Equalizer: $Revision: 3.12 $ $Date: 1995/01/19 $ Simon Janes (simon@ncm.com)\n";
 
 #include <linux/config.h>

@@ -128,7 +128,7 @@ smb_file_read(struct inode *inode, struct file *file, char *buf, int count)
 }
 
 static int 
-smb_file_write(struct inode *inode, struct file *file, char *buf, int count)
+smb_file_write(struct inode *inode, struct file *file, const char *buf, int count)
 {
 	int result, bufsize, to_write, already_written;
         off_t pos;

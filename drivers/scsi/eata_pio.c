@@ -76,7 +76,7 @@ static uint internal_command_finished = TRUE;
 static ulong int_counter = 0;
 static ulong queue_counter = 0;
 
-void hprint(char *str)
+void hprint(const char *str)
 {
     char *hptr =(char *) 0x000b0000;
     char *hptr2=(char *) 0x000b00a0; 

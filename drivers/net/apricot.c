@@ -19,7 +19,7 @@
 
 */
 
-static char *version = "apricot.c:v0.2 05/12/94\n";
+static const char *version = "apricot.c:v0.2 05/12/94\n";
 
 #ifdef MODULE
 #include <linux/module.h>

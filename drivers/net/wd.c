@@ -17,7 +17,7 @@
 	Thanks to Russ Nelson (nelson@crnwyr.com) for loaning me a WD8013.
 */
 
-static char *version =
+static const char *version =
 	"wd.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/kernel.h>
@@ -103,7 +103,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	int checksum = 0;
 	int ancient = 0;			/* An old card without config registers. */
 	int word16 = 0;				/* 0 = 8 bit, 1 = 16 bit */
-	char *model_name;
+	const char *model_name;
 
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);

@@ -137,7 +137,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 	unsigned long num;
 	int i, base;
 	char * str;
-	char *s;
+	const char *s;
 
 	int flags;		/* flags to number() */
 

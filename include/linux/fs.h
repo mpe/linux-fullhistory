@@ -336,7 +336,7 @@ typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
 struct file_operations {
 	int (*lseek) (struct inode *, struct file *, off_t, int);
 	int (*read) (struct inode *, struct file *, char *, int);
-	int (*write) (struct inode *, struct file *, char *, int);
+	int (*write) (struct inode *, struct file *, const char *, int);
 	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
@@ -381,7 +381,7 @@ struct super_operations {
 
 struct file_system_type {
 	struct super_block *(*read_super) (struct super_block *, void *, int);
-	char *name;
+	const char *name;
 	int requires_dev;
 	struct file_system_type * next;
 };
@@ -419,7 +419,7 @@ extern struct file_operations read_pipe_fops;
 extern struct file_operations write_pipe_fops;
 extern struct file_operations rdwr_pipe_fops;
 
-extern struct file_system_type *get_fs_type(char *name);
+extern struct file_system_type *get_fs_type(const char *name);
 
 extern int fs_may_mount(dev_t dev);
 extern int fs_may_umount(dev_t dev, struct inode * mount_root);
@@ -515,8 +515,8 @@ extern int char_read(struct inode *, struct file *, char *, int);
 extern int block_read(struct inode *, struct file *, char *, int);
 extern int read_ahead[];
 
-extern int char_write(struct inode *, struct file *, char *, int);
-extern int block_write(struct inode *, struct file *, char *, int);
+extern int char_write(struct inode *, struct file *, const char *, int);
+extern int block_write(struct inode *, struct file *, const char *, int);
 
 extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
 

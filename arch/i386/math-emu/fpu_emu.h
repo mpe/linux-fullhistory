@@ -133,9 +133,9 @@ extern unsigned char const data_sizes_16[32];
 
 
 #define reg_move(x, y) { \
-		 *(short *)&((y)->sign) = *(short *)&((x)->sign); \
-		 *(long *)&((y)->exp) = *(long *)&((x)->exp); \
-		 *(long long *)&((y)->sigl) = *(long long *)&((x)->sigl); }
+		 *(short *)&((y)->sign) = *(const short *)&((x)->sign); \
+		 *(long *)&((y)->exp) = *(const long *)&((x)->exp); \
+		 *(long long *)&((y)->sigl) = *(const long long *)&((x)->sigl); }
 
 #define significand(x) ( ((unsigned long long *)&((x)->sigl))[0] )
 

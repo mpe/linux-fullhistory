@@ -310,7 +310,7 @@ struct hostdata {
    };
 
 static struct Scsi_Host * sh[MAX_BOARDS + 1];
-static char* driver_name = "EATA";
+static const char* driver_name = "EATA";
 static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
@@ -364,7 +364,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    unsigned char irq, dma_channel, subversion;
    unsigned char protocol_rev;
    struct eata_info info;
-   char *board_status;
+   const char *board_status;
 
    /* Allowed DMA channels for ISA (0 indicates reserved) */
    unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };

@@ -336,7 +336,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
  *	of two things. Firstly we will bin packets even within the window
  *	in order to get the data we are waiting for into the memory limit.
  *	Secondly we bin common duplicate forms at receive time
- *      Better heuristics welcome
+ *	Better heuristics welcome
  */
    
 int tcp_select_window(struct sock *sk)
@@ -1456,7 +1456,7 @@ extern __inline int tcp_build_header(struct tcphdr *th, struct sock *sk, int pus
  *	and starts the transmit system.
  */
 
-static int tcp_write(struct sock *sk, unsigned char *from,
+static int tcp_write(struct sock *sk, const unsigned char *from,
 	  int len, int nonblock, unsigned flags)
 {
 	int copied = 0;
@@ -1576,11 +1576,11 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 
 		if ((skb = tcp_dequeue_partial(sk)) != NULL) 
 		{
-		        int hdrlen;
+			int hdrlen;
 
-		         /* IP header + TCP header */
+			 /* IP header + TCP header */
 			hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
-			         + sizeof(struct tcphdr);
+				 + sizeof(struct tcphdr);
 	
 			/* Add more stuff to the end of skb->len */
 			if (!(flags & MSG_OOB)) 
@@ -1777,7 +1777,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
  *	This is just a wrapper. 
  */
 
-static int tcp_sendto(struct sock *sk, unsigned char *from,
+static int tcp_sendto(struct sock *sk, const unsigned char *from,
 	   int len, int nonblock, unsigned flags,
 	   struct sockaddr_in *addr, int addr_len)
 {
@@ -2586,10 +2586,10 @@ static void tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *t
 
 /*
  *	Look for tcp options. Parses everything but only knows about MSS.
- *      This routine is always called with the packet containing the SYN.
- *      However it may also be called with the ack to the SYN.  So you
- *      can't assume this is always the SYN.  It's always called after
- *      we have set up sk->mtu to our own MTU.
+ *	This routine is always called with the packet containing the SYN.
+ *	However it may also be called with the ack to the SYN.  So you
+ *	can't assume this is always the SYN.  It's always called after
+ *	we have set up sk->mtu to our own MTU.
  *
  *	We need at minimum to add PAWS support here. Possibly large windows
  *	as Linux gets deployed on 100Mb/sec networks.
@@ -3452,7 +3452,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 				sk->backoff = 0;
 			}
 			flag |= (2|4);	/* 2 is really more like 'don't adjust the rtt 
-			                   In this case as we just set it up */
+					   In this case as we just set it up */
 			cli();
 			oskb = sk->send_head;
 			IS_SKB(oskb);
@@ -3495,7 +3495,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	if (skb_peek(&sk->write_queue) != NULL) 
 	{
 		if (after (sk->window_seq+1, sk->write_queue.next->h.seq) &&
-		        (sk->retransmits == 0 || 
+			(sk->retransmits == 0 || 
 			 sk->ip_xmit_timeout != TIME_WRITE ||
 			 before(sk->write_queue.next->h.seq, sk->rcv_ack_seq + 1))
 			&& sk->packets_out < sk->cong_window) 
@@ -3514,7 +3514,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
  			/*
  			 *	Data to queue but no room.
  			 */
- 	        	reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
+ 			reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
  		}		
 	}
 	else

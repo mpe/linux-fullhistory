@@ -1566,7 +1566,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 	return ax25_rcv(skb, dev, &port_call, ptype);
 }
 
-static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
+static int ax25_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
 	unsigned flags, struct sockaddr *usip, int addr_len)
 {
 	struct sock *sk = (struct sock *)sock->data;
@@ -1716,12 +1716,12 @@ static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		
 }
 
-static int ax25_send(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags)
+static int ax25_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return ax25_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
 }
 
-static int ax25_write(struct socket *sock, char *ubuf, int size, int noblock)
+static int ax25_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
 	return ax25_send(sock, ubuf, size, noblock, 0);
 }
@@ -1910,7 +1910,7 @@ int ax25_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	ax25_cb *ax25;
 	struct device *dev;
-	char *devname;
+	const char *devname;
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;

@@ -172,6 +172,7 @@
 #define PCI_DEVICE_ID_ADAPTEC_2940	0x7178
 #define PCI_DEVICE_ID_ADAPTEC_294x	0x7078
 #define PCI_DEVICE_ID_ADAPTEC_7850	0x5078
+#define PCI_DEVICE_ID_ADAPTEC_7872	0x7278
 
 #define PCI_VENDOR_ID_DPT               0x1044   
 #define PCI_DEVICE_ID_DPT               0xa400  
@@ -351,6 +352,8 @@
 #define PCI_VENDOR_ID_VORTEX		0x1119
 #define PCI_DEVICE_ID_VORTEX_GDT	0x0001
 
+#define PCI_VENDOR_ID_HP		0x103c
+#define PCI_DEVICE_ID_HP_J2585A		0x1030
 
 /*
  * The PCI interface treats multi-function devices as independent
@@ -430,7 +433,7 @@ extern unsigned long pci_init (unsigned long mem_start, unsigned long mem_end);
 
 extern struct pci_dev_info *pci_lookup_dev (unsigned int vendor,
 					    unsigned int dev);
-extern char *pci_strbioserr (int error);
+extern const char *pci_strbioserr (int error);
 extern const char *pci_strclass (unsigned int class);
 extern const char *pci_strvendor (unsigned int vendor);
 extern const char *pci_strdev (unsigned int vendor, unsigned int device);

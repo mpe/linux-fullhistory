@@ -98,7 +98,7 @@ long scc_init(long kmem_start);
 
 int scc_open(struct tty_struct *tty, struct file *filp);
 static void scc_close(struct tty_struct *tty, struct file *filp);
-int scc_write(struct tty_struct *tty, int from_user, unsigned char *buf, int count);
+int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
 static void scc_put_char(struct tty_struct *tty, unsigned char ch);
 static void scc_flush_chars(struct tty_struct *tty);
 static int scc_write_room(struct tty_struct *tty);
@@ -1988,7 +1988,7 @@ static inline void check_tx_queue(register struct scc_channel *scc)
 /* ----> tx routine: decode KISS data and scc_enqueue it <---- */
 
 /* send raw frame to SCC. used for AX.25 */
-int scc_write(struct tty_struct *tty, int from_user, unsigned char *buf, int count)
+int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
 {
 	unsigned long flags;
 	static unsigned char *p;

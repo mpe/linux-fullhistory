@@ -154,13 +154,13 @@ void print_status (int status) {
 struct error_info{
     unsigned char code1, code2;
     unsigned short int devices;
-    char * text;
+    const char * text;
 };
 
 struct error_info2{
     unsigned char code1, code2_min, code2_max;
     unsigned short int devices;
-    char * text;
+    const char * text;
 };
 
 static struct error_info2 additional2[] =
@@ -367,7 +367,7 @@ static struct error_info additional[] =
 #endif
 
 #if (CONSTANTS & CONST_SENSE)
-static char *snstext[] = {
+static const char *snstext[] = {
     "None","Recovered Error","Not Ready","Medium Error","Hardware Error",
     "Illegal Request","Unit Attention","Data Protect","Blank Check",
     "Key=9","Copy Aborted","Aborted Command","End-Of-Medium",
@@ -376,12 +376,12 @@ static char *snstext[] = {
 
 
 /* Print sense information */
-void print_sense(char * devclass, Scsi_Cmnd * SCpnt)
+void print_sense(const char * devclass, Scsi_Cmnd * SCpnt)
 {
     int i, s;
     int sense_class, valid, code;
     unsigned char * sense_buffer = SCpnt->sense_buffer;
-    char * error = NULL;
+    const char * error = NULL;
     int dev = SCpnt->request.dev;
     
     sense_class = (sense_buffer[0] >> 4) & 0x07;

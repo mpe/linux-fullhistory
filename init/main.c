@@ -145,7 +145,7 @@ char *get_options(char *str, int *ints)
 }
 
 struct {
-	char *str;
+	const char *str;
 	void (*setup_func)(char *, int *);
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
@@ -305,7 +305,7 @@ static void calibrate_delay(void)
 static void parse_options(char *line)
 {
 	char *next;
-	static char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	static const char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
 	static int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
 	int args, envs;
 

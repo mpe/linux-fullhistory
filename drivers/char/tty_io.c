@@ -94,7 +94,7 @@ struct wait_queue * keypress_wait = NULL;
 static void initialize_tty_struct(struct tty_struct *tty);
 
 static int tty_read(struct inode *, struct file *, char *, int);
-static int tty_write(struct inode *, struct file *, char *, int);
+static int tty_write(struct inode *, struct file *, const char *, int);
 static int tty_select(struct inode *, struct file *, int, select_table *);
 static int tty_open(struct inode *, struct file *);
 static void tty_release(struct inode *, struct file *);
@@ -292,7 +292,7 @@ static int hung_up_tty_read(struct inode * inode, struct file * file, char * buf
 	return 0;
 }
 
-static int hung_up_tty_write(struct inode * inode, struct file * file, char * buf, int count)
+static int hung_up_tty_write(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	return -EIO;
 }
@@ -720,7 +720,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	return i;
 }
 
-static int tty_write(struct inode * inode, struct file * file, char * buf, int count)
+static int tty_write(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	int i, is_console;
 	struct tty_struct * tty;
@@ -748,7 +748,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 #endif
 	if (tty->ldisc.write)
 		/* XXX casts are for what kernel-wide prototypes should be. */
-		i = (tty->ldisc.write)(tty,file,(unsigned char *)buf,(unsigned int)count);
+		i = (tty->ldisc.write)(tty,file,(const unsigned char *)buf,(unsigned int)count);
 	else
 		i = -EIO;
 	if (i > 0)
@@ -1681,7 +1681,7 @@ int tty_unregister_driver(struct tty_driver *driver)
 	int	retval;
 	struct tty_driver *p;
 	int	found = 0;
-	char *othername = NULL;
+	const char *othername = NULL;
 	
 	if (*driver->refcount)
 		return -EBUSY;

@@ -380,20 +380,6 @@ disable_interrupts(void)
    outb(curr_control_reg, sony_cd_control_reg);
 }
 
-static void
-cdu31a_interrupt(int irq, struct pt_regs *regs)
-{
-   disable_interrupts();
-   if (cdu31a_irq_wait != NULL)
-   {
-      wake_up(&cdu31a_irq_wait);
-   }
-   else
-   {
-      printk("CDU31A: Got an interrupt but nothing was waiting\n");
-   }
-}
-
 /*
  * Wait a little while (used for polling the drive).  If in initialization,
  * setting a timeout doesn't work, so just loop for a while.
@@ -526,6 +512,50 @@ write_cmd(unsigned char cmd)
 {
    outb(curr_control_reg | SONY_RES_RDY_INT_EN_BIT, sony_cd_control_reg);
    outb(cmd, sony_cd_cmd_reg);
+}
+
+static void
+cdu31a_interrupt(int irq, struct pt_regs *regs)
+{
+   unsigned char val;
+
+   if (abort_read_started)
+   {
+      /* We might be waiting for an abort to finish.  Don't
+         disable interrupts yet, though, because we handle
+         this one here. */
+      /* Clear out the result registers. */
+      while (is_result_reg_not_empty())
+      {
+         val = read_result_register();
+      }
+      clear_data_ready();
+      clear_result_ready();
+
+      /* Clear out the data */
+      while (is_data_requested())
+      {
+         val = read_data_register();
+      }
+      abort_read_started = 0;
+
+      /* If something was waiting, wake it up now. */
+      if (cdu31a_irq_wait != NULL)
+      {
+         disable_interrupts();
+         wake_up(&cdu31a_irq_wait);
+      }
+   }
+   else if (cdu31a_irq_wait != NULL)
+   {
+      disable_interrupts();
+      wake_up(&cdu31a_irq_wait);
+   }
+   else
+   {
+      disable_interrupts();
+      printk("CDU31A: Got an interrupt but nothing was waiting\n");
+   }
 }
 
 /*
@@ -2270,7 +2300,7 @@ exit_read_audio:
 }
 
 static int
-do_sony_cd_cmd_chk(char *name,
+do_sony_cd_cmd_chk(const char *name,
                    unsigned char cmd,
                    unsigned char *params,
                    unsigned int num_params,
@@ -2788,7 +2818,7 @@ static struct file_operations scd_fops = {
 
 
 /* The different types of disc loading mechanisms supported */
-static char *load_mech[] = { "caddy", "tray", "pop-up", "unknown" };
+static const char *load_mech[] = { "caddy", "tray", "pop-up", "unknown" };
 
 static void
 get_drive_configuration(unsigned short base_io,

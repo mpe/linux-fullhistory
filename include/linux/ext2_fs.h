@@ -427,7 +427,7 @@ extern void ext2_check_blocks_bitmap (struct super_block *);
 extern unsigned long ext2_count_free (struct buffer_head *, unsigned);
 
 /* dir.c */
-extern int ext2_check_dir_entry (char *, struct inode *,
+extern int ext2_check_dir_entry (const char *, struct inode *,
 				 struct ext2_dir_entry *, struct buffer_head *,
 				 unsigned long);
 

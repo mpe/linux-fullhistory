@@ -338,7 +338,7 @@ void aha152x_done( int error );
 void aha152x_setup( char *str, int *ints );
 
 static void aha152x_reset_ports(void);
-static void aha152x_panic(char *msg);
+static void aha152x_panic(const char *msg);
 
 static void disp_ports(void);
 static void show_command(Scsi_Cmnd *ptr);
@@ -2274,7 +2274,7 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
 /* 
  * Dump the current driver status and panic...
  */
-static void aha152x_panic(char *msg)
+static void aha152x_panic(const char *msg)
 {
   printk("\naha152x_panic: %s\n", msg);
   show_queues();

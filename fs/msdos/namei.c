@@ -23,7 +23,7 @@
 
 /* MS-DOS "device special files" */
 
-static char *reserved_names[] = {
+static const char *reserved_names[] = {
     "CON     ","PRN     ","NUL     ","AUX     ",
     "LPT1    ","LPT2    ","LPT3    ","LPT4    ",
     "COM1    ","COM2    ","COM3    ","COM4    ",
@@ -41,7 +41,8 @@ static char bad_if_strict[] = "+=,; ";
 static int msdos_format_name(char conv,const char *name,int len,char *res,
   int dot_dirs)
 {
-	char *walk,**reserved;
+	char *walk;
+	const char **reserved;
 	unsigned char c;
 	int space;
 
@@ -177,7 +178,7 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 
 /* Creates a directory entry (name is already formatted). */
 
-static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
+static int msdos_create_entry(struct inode *dir,const char *name,int is_dir,
     struct inode **result)
 {
 	struct super_block *sb = dir->i_sb;

@@ -320,7 +320,7 @@ static __inline__ void initialize_SCp(Scsi_Cmnd *cmd) {
 #ifdef NDEBUG
 static struct {
     unsigned char mask;
-    char * name;} 
+    const char * name;} 
 signals[] = {{ SR_DBP, "PARITY"}, { SR_RST, "RST" }, { SR_BSY, "BSY" }, 
     { SR_REQ, "REQ" }, { SR_MSG, "MSG" }, { SR_CD,  "CD" }, { SR_IO, "IO" }, 
     { SR_SEL, "SEL" }, {0, NULL}}, 
@@ -371,7 +371,7 @@ static void NCR5380_print(struct Scsi_Host *instance) {
 
 static struct {
     unsigned char value;
-    char *name;
+    const char *name;
 } phases[] = {
 {PHASE_DATAOUT, "DATAOUT"}, {PHASE_DATAIN, "DATAIN"}, {PHASE_CMDOUT, "CMDOUT"},
 {PHASE_STATIN, "STATIN"}, {PHASE_MSGOUT, "MSGOUT"}, {PHASE_MSGIN, "MSGIN"},

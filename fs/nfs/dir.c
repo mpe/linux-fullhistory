@@ -253,7 +253,7 @@ static void nfs_lookup_cache_add(struct inode *dir, const char *filename,
 	entry->fhandle = *fhandle;
 	entry->fattr = *fattr;
 	entry->expiration_date = jiffies + (S_ISDIR(fattr->mode)
-		? NFS_SERVER(dir)->acdirmax : NFS_SERVER(dir)->acregmax);
+		? NFS_SERVER(dir)->acdirmin : NFS_SERVER(dir)->acregmin);
 }
 
 static void nfs_lookup_cache_remove(struct inode *dir, struct inode *inode,

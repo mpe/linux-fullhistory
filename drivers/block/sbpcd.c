@@ -494,24 +494,24 @@ static struct cdrom_multisession ms_info;
 static unsigned char msgnum=0;
 static char msgbuf[80];
 
-static char *str_sb = "SoundBlaster";
-static char *str_sb_l = "soundblaster";
-static char *str_lm = "LaserMate";
-static char *str_sp = "SPEA";
-static char *str_sp_l = "spea";
-char *type;
+static const char *str_sb = "SoundBlaster";
+static const char *str_sb_l = "soundblaster";
+static const char *str_lm = "LaserMate";
+static const char *str_sp = "SPEA";
+static const char *str_sp_l = "spea";
+const char *type;
 
 #if !(SBPCD_ISSUE-1)
-static char *major_name="sbpcd";
+static const char *major_name="sbpcd";
 #endif
 #if !(SBPCD_ISSUE-2)
-static char *major_name="sbpcd2";
+static const char *major_name="sbpcd2";
 #endif
 #if !(SBPCD_ISSUE-3)
-static char *major_name="sbpcd3";
+static const char *major_name="sbpcd3";
 #endif
 #if !(SBPCD_ISSUE-4)
-static char *major_name="sbpcd4";
+static const char *major_name="sbpcd4";
 #endif
 
 /*==========================================================================*/
@@ -691,7 +691,7 @@ static struct timer_list audio_timer = { NULL, NULL, 0, 0, mark_timeout_audio};
 /*
  * DDI interface
  */
-static void msg(int level, char *fmt, ...)
+static void msg(int level, const char *fmt, ...)
 {
 	char buf[256];
 	va_list args;
@@ -4983,7 +4983,7 @@ static struct file_operations sbpcd_fops =
 #if (SBPCD_ISSUE-1)
 static
 #endif
-void sbpcd_setup(char *s, int *p)
+void sbpcd_setup(const char *s, int *p)
 {
 	setup_done++;
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);

@@ -33,8 +33,8 @@
 	/* attribute bits that are copied "as is" */
 
 #define DELETED_FLAG 0xe5 /* marks file as deleted when in name[0] */
-#define IS_FREE(n) (!*(n) || *(unsigned char *) (n) == DELETED_FLAG || \
-  *(unsigned char *) (n) == FD_FILL_BYTE)
+#define IS_FREE(n) (!*(n) || *(const unsigned char *) (n) == DELETED_FLAG || \
+  *(const unsigned char *) (n) == FD_FILL_BYTE)
 
 #define MSDOS_VALID_MODE (S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO)
 	/* valid file mode bits */
@@ -112,7 +112,7 @@ struct fat_cache {
 
 /* misc.c */
 
-extern void fs_panic(struct super_block *s,char *msg);
+extern void fs_panic(struct super_block *s,const char *msg);
 extern int is_binary(char conversion,char *extension);
 extern void lock_creation(void);
 extern void unlock_creation(void);
@@ -123,7 +123,7 @@ extern int date_dos2unix(__u16 time, __u16 date);
 extern void date_unix2dos(int unix_date,__u16 *time, __u16 *date);
 extern int msdos_get_entry(struct inode *dir,loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de);
-extern int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,
+extern int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de,int *ino);
 extern int msdos_parent_ino(struct inode *dir,int locked);
 extern int msdos_subdirs(struct inode *dir);
@@ -175,7 +175,7 @@ extern int msdos_readdir (struct inode *inode, struct file *filp,
 extern struct inode_operations msdos_file_inode_operations;
 extern struct inode_operations msdos_file_inode_operations_1024;
 extern int msdos_file_read(struct inode *, struct file *, char *, int);
-extern int msdos_file_write(struct inode *, struct file *, char *, int);
+extern int msdos_file_write(struct inode *, struct file *, const char *, int);
 extern struct inode_operations msdos_file_inode_operations_no_bmap;
 
 extern void msdos_truncate(struct inode *inode);

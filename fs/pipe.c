@@ -69,7 +69,7 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	return 0;
 }
 	
-static int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)
+static int pipe_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
 	int chars = 0, free = 0, written = 0;
 	char *pipebuf;
@@ -121,7 +121,12 @@ static int pipe_lseek(struct inode * inode, struct file * file, off_t offset, in
 	return -ESPIPE;
 }
 
-static int bad_pipe_rw(struct inode * inode, struct file * filp, char * buf, int count)
+static int bad_pipe_r(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	return -EBADF;
+}
+
+static int bad_pipe_w(struct inode * inode, struct file * filp, const char * buf, int count)
 {
 	return -EBADF;
 }
@@ -265,7 +270,7 @@ static void pipe_rdwr_release(struct inode * inode, struct file * filp)
 struct file_operations connecting_fifo_fops = {
 	pipe_lseek,
 	connect_read,
-	bad_pipe_rw,
+	bad_pipe_w,
 	NULL,		/* no readdir */
 	connect_select,
 	pipe_ioctl,
@@ -278,7 +283,7 @@ struct file_operations connecting_fifo_fops = {
 struct file_operations read_fifo_fops = {
 	pipe_lseek,
 	pipe_read,
-	bad_pipe_rw,
+	bad_pipe_w,
 	NULL,		/* no readdir */
 	fifo_select,
 	pipe_ioctl,
@@ -290,7 +295,7 @@ struct file_operations read_fifo_fops = {
 
 struct file_operations write_fifo_fops = {
 	pipe_lseek,
-	bad_pipe_rw,
+	bad_pipe_r,
 	pipe_write,
 	NULL,		/* no readdir */
 	fifo_select,
@@ -317,7 +322,7 @@ struct file_operations rdwr_fifo_fops = {
 struct file_operations read_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
-	bad_pipe_rw,
+	bad_pipe_w,
 	NULL,		/* no readdir */
 	pipe_select,
 	pipe_ioctl,
@@ -329,7 +334,7 @@ struct file_operations read_pipe_fops = {
 
 struct file_operations write_pipe_fops = {
 	pipe_lseek,
-	bad_pipe_rw,
+	bad_pipe_r,
 	pipe_write,
 	NULL,		/* no readdir */
 	pipe_select,

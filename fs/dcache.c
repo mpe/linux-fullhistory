@@ -104,7 +104,7 @@ static inline void update_lru(struct dir_cache_entry * de)
  */
 static inline unsigned long namehash(const char * name, int len)
 {
-	return len * *(unsigned char *) name;
+	return len * *(const unsigned char *) name;
 }
 
 /*

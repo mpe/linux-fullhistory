@@ -69,7 +69,7 @@ static int sock_lseek(struct inode *inode, struct file *file, off_t offset,
 		      int whence);
 static int sock_read(struct inode *inode, struct file *file, char *buf,
 		     int size);
-static int sock_write(struct inode *inode, struct file *file, char *buf,
+static int sock_write(struct inode *inode, struct file *file, const char *buf,
 		      int size);
 
 static void sock_close(struct inode *inode, struct file *file);
@@ -337,7 +337,7 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
  *	readable by the user process.
  */
 
-static int sock_write(struct inode *inode, struct file *file, char *ubuf, int size)
+static int sock_write(struct inode *inode, struct file *file, const char *ubuf, int size)
 {
 	struct socket *sock;
 	int err;

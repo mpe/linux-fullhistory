@@ -35,7 +35,7 @@
 #include <linux/ext2_fs.h>
 
 static int ext2_file_read (struct inode *, struct file *, char *, int);
-static int ext2_file_write (struct inode *, struct file *, char *, int);
+static int ext2_file_write (struct inode *, struct file *, const char *, int);
 static void ext2_release_file (struct inode *, struct file *);
 
 /*
@@ -229,7 +229,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 }
 
 static int ext2_file_write (struct inode * inode, struct file * filp,
-			    char * buf, int count)
+			    const char * buf, int count)
 {
 	const loff_t two_gb = 2147483647;
 	loff_t pos;

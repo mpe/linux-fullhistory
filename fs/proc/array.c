@@ -146,7 +146,7 @@ static int read_profile(struct inode *inode, struct file *file, char *buf, int c
 }
 
 /* Writing to /proc/profile resets the counters */
-static int write_profile(struct inode * inode, struct file * file, char * buf, int count)
+static int write_profile(struct inode * inode, struct file * file, const char * buf, int count)
 {
     int i=prof_len;
 

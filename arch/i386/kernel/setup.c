@@ -103,7 +103,7 @@ void setup_arch(char **cmdline_p,
 	init_task.mm->brk = TASK_SIZE + (unsigned long) &_end;
 
 	for (;;) {
-		if (c == ' ' && *(unsigned long *)from == *(unsigned long *)"mem=") {
+		if (c == ' ' && *(const unsigned long *)from == *(const unsigned long *)"mem=") {
 			memory_end = simple_strtoul(from+4, &from, 0);
 			if ( *from == 'K' || *from == 'k' ) {
 				memory_end = memory_end << 10;
@@ -136,7 +136,7 @@ void setup_arch(char **cmdline_p,
 
 int get_cpuinfo(char * buffer)
 {
-	char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
+	static const char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
 				"DX/2-WB","DX/4"},
 			{"Pentium 60/66","Pentium 90/100","3",
 				"4","5","6","7","8"}};

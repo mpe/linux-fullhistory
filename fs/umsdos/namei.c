@@ -450,7 +450,7 @@ static int umsdos_symlink_x(
 		struct file filp;
 		filp.f_pos = 0;
 		/* Make the inode acceptable to MSDOS */
-		ret = umsdos_file_write_kmem (inode,&filp,(char*)symname,len);
+		ret = umsdos_file_write_kmem (inode,&filp,symname,len);
 		iput (inode);
 		if (ret >= 0){
 			if (ret != len){

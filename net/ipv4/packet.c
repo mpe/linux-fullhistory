@@ -141,7 +141,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
  *	protocol layers and you must therefore supply it with a complete frame
  */
  
-static int packet_sendto(struct sock *sk, unsigned char *from, int len,
+static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
 	      int noblock, unsigned flags, struct sockaddr_in *usin,
 	      int addr_len)
 {
@@ -224,7 +224,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
  *	always fail but we include it for completeness and future expansion.
  */
 
-static int packet_write(struct sock *sk, unsigned char *buff, 
+static int packet_write(struct sock *sk, const unsigned char *buff, 
 	     int len, int noblock,  unsigned flags)
 {
 	return(packet_sendto(sk, buff, len, noblock, flags, NULL, 0));

@@ -424,7 +424,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 		if (!perm)
 			return -EPERM;
-		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbentry));
+		i = verify_area(VERIFY_READ, (const void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
 		if ((i = get_user(&a->kb_index)) >= NR_KEYS)

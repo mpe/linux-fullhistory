@@ -72,7 +72,7 @@ struct net_local
 
 extern int		wavelan_probe(device *);	/* See Space.c */
 
-static char		*version	= "wavelan.c:v7 95/4/8\n";
+static const char	*version	= "wavelan.c:v7 95/4/8\n";
 
 /*
  * Entry point forward declarations.
@@ -494,7 +494,7 @@ wavelan_ack(device *dev)
  */
 static
 int
-wavelan_synchronous_cmd(device *dev, char *str)
+wavelan_synchronous_cmd(device *dev, const char *str)
 {
 	unsigned short	ioaddr;
 	net_local	*lp;
@@ -749,7 +749,7 @@ wavelan_hardware_reset(device *dev)
 #if	STRUCT_CHECK == 1
 
 static
-char	*
+const char	*
 wavelan_struct_check(void)
 {
 #define	SC(t,s,n)	if (sizeof(t) != s) return n
@@ -2447,7 +2447,7 @@ wavelan_dev_show(device *dev)
 {
 	printk("dev:");
 	printk(" start=%d,", dev->start);
-	printk(" tbusy=%d,", dev->tbusy);
+	printk(" tbusy=%ld,", dev->tbusy);
 	printk(" interrupt=%d,", dev->interrupt);
 	printk(" trans_start=%ld,", dev->trans_start);
 	printk(" flags=0x%x,", dev->flags);

@@ -267,13 +267,14 @@ int msdos_file_read(
 int msdos_file_write(
 	struct inode *inode,
 	struct file *filp,
-	char *buf,
+	const char *buf,
 	int count)
 {
 	struct super_block *sb = inode->i_sb;
 	int sector,offset,size,left,written;
 	int error,carry;
-	char *start,*to,ch;
+	const char *start;
+	char *to,ch;
 	struct buffer_head *bh;
 	int binary_mode = MSDOS_I(inode)->i_binary;
 

@@ -18,7 +18,7 @@
 	The timer-based reset code was written by Bill Carlson, wwc@super.org.
 */
 
-static char *version =
+static const char *version =
 	"atp.c:v1.01 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 /*

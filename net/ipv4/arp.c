@@ -25,7 +25,7 @@
  *		Alan Cox	:	Allow >4K in /proc
  *		Alan Cox	:	Make ARP add its own protocol entry
  *
- *              Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
+ *		Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
  *		Stephen Henson	:	Add AX25 support to arp_get_info()
  *		Alan Cox	:	Drop data when a device is downed.
  *		Alan Cox	:	Use init_timer().
@@ -33,14 +33,26 @@
  *		Martin Seine	:	Move the arphdr structure
  *					to if_arp.h for compatibility.
  *					with BSD based programs.
- *              Andrew Tridgell :       Added ARP netmask code and
- *                                      re-arranged proxy handling.
+ *		Andrew Tridgell :       Added ARP netmask code and
+ *					re-arranged proxy handling.
  *		Alan Cox	:	Changed to use notifiers.
  *		Niibe Yutaka	:	Reply for this device or proxies only.
  *		Alan Cox	:	Don't proxy across hardware types!
  *		Jonathan Naylor :	Added support for NET/ROM.
+ *		Mike Shaver     :       RFC1122 checks.
  */
 
+/* RFC1122 Status:
+   2.3.2.1 (ARP Cache Validation):
+     MUST provide mechanism to flush stale cache entries (OK)
+     SHOULD be able to configure cache timeout (NOT YET)
+     MUST throttle ARP retransmits (OK)
+   2.3.2.2 (ARP Packet Queue):
+     SHOULD save at least one packet from each "conversation" with an
+       unresolved IP address.  (OK)
+   950727 -- MS
+*/
+      
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
@@ -111,6 +123,10 @@ struct arp_table
  *	If an arp request is send, ARP_RES_TIME is the timeout value until the
  *	next request is send.
  */
+
+/* RFC1122: OK.  Throttles ARPing, as per 2.3.2.1. (MUST) */
+/* The recommended minimum timeout is 1 second per destination. */
+/* Is this a per-destination timeout? -- MS [YES AC]*/
 
 #define ARP_RES_TIME		(250*(HZ/10))
 
@@ -184,7 +200,7 @@ unsigned long arp_cache_stamp;
 
 /*
  *	The last bits in the IP address are used for the cache lookup.
- *      A special entry is used for proxy arp entries
+ *	A special entry is used for proxy arp entries
  */
 
 #define HASH(paddr) 		(htonl(paddr) & (ARP_TABLE_SIZE - 1))
@@ -197,6 +213,8 @@ unsigned long arp_cache_stamp;
  *	the queue, can be deleted, since ARP_TIMEOUT is much greater than
  *	ARP_MAX_TRIES*ARP_RES_TIME.
  */
+
+/* RFC1122: Looks good.  Prevents stale ARP entries, as per 2.3.2.1. (MUST) */
 
 static void arp_check_expire(unsigned long dummy)
 {
@@ -219,7 +237,9 @@ static void arp_check_expire(unsigned long dummy)
 				*pentry = entry->next;	/* remove from list */
 				arp_cache_stamp++;
 				del_timer(&entry->timer);	/* Paranoia */
-				kfree_s(entry, sizeof(struct arp_table));
+				kfree_s(entry, sizeof(struct arp_table)); 
+				/* Don't have to remove packets in entry->skb. */
+				/* See comments above. */
 			}
 			else
 				pentry = &entry->next;	/* go to next entry */
@@ -431,6 +451,11 @@ static void arp_expire_request (unsigned long arg)
 	/* proxy entries shouldn't really time out so this is really
 	   only here for completeness
 	*/
+
+	/* RFC1122: They *can* be timed out, according to 2.3.2.1. */
+	/* They recommend a minute. -- MS */
+	/* The world doesn't work this way -- AC */
+
 	if (entry->flags & ATF_PUBL)
 	  pentry = &arp_tables[PROXY_HASH];
 	else
@@ -453,6 +478,10 @@ static void arp_expire_request (unsigned long arg)
 	/*
 	 *	We should never arrive here.
 	 */
+
+	/* Should we perhaps flush the ARP table (except the ones we're */
+	/* publishing, if we can trust the queue that much) at this */
+	/* point? -- MS */
 }
 
 
@@ -474,6 +503,10 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
 	{
 		printk("arp_send_q: incomplete entry for %s\n",
 				in_ntoa(entry->ip));
+		/* Can't flush the skb, because RFC1122 says to hang on to */
+		/* at least one from any unresolved entry.  --MS */
+		/* Whats happened is that someone has 'unresolved' the entry
+		   as we got to use it - this 'can't happen' -- AC */
 		return;
 	}
 
@@ -580,6 +613,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
+		/* Should this be an error/printk?  Seems like something */
+		/* you'd want to know about. Unless it's just !IFF_NOARP. -- MS */
 	}
 
 /*
@@ -588,6 +623,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	match the protocol the device speaks.  If it doesn't, there is a
  *	problem, so toss the packet.
  */
+/* Again, should this be an error/printk? -- MS */
+
   	switch(dev->type)
   	{
 #ifdef CONFIG_AX25
@@ -681,6 +718,10 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /* 
  *	Replies to other machines get tossed. 
  */
+
+ /* Should we reset the expiry timers for an entry that isn't for us, if we */
+ /* have it in the cache? RFC1122 suggests it. -- MS */
+
 			kfree_skb(skb, FREE_READ);
 			return 0;
 		}
@@ -882,6 +923,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 		case IS_MULTICAST:
 			if(dev->type==ARPHRD_ETHER || dev->type==ARPHRD_IEEE802)
 			{
+				/* What exactly does this do? -- MS */
 				haddr[0]=0x01;
 				haddr[1]=0x00;
 				haddr[2]=0x5e;
@@ -914,8 +956,8 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 
 	if (entry != NULL) 	/* It exists */
 	{
-	        if (!(entry->flags & ATF_COM))
-	        {
+		if (!(entry->flags & ATF_COM))
+		{
 			/*
 			 *	A request was already send, but no reply yet. Thus
 			 *	queue the packet with the previous attempt
@@ -954,7 +996,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 		entry->last_used = jiffies;
 		entry->flags = 0;
 		entry->ip = paddr;
-	        entry->mask = DEF_ARP_NETMASK;
+		entry->mask = DEF_ARP_NETMASK;
 		memset(entry->ha, 0, dev->addr_len);
 		entry->hlen = dev->addr_len;
 		entry->htype = dev->type;
@@ -1072,15 +1114,15 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length)
 	*start=buffer+(offset-begin);	/* Start of wanted data */
 	len-=(offset-begin);		/* Start slop */
 	if(len>length)
-		len=length;		        /* Ending slop */
+		len=length;			/* Ending slop */
 	return len;
 }
 
 
 /*
  *	This will find an entry in the ARP table by looking at the IP address.
- *      If proxy is PROXY_EXACT then only exact IP matches will be allowed
- *      for proxy entries, otherwise the netmask will be used
+ *	If proxy is PROXY_EXACT then only exact IP matches will be allowed
+ *	for proxy entries, otherwise the netmask will be used
  */
 
 static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy)
@@ -1095,7 +1137,7 @@ static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy)
 	if (!entry && proxy != PROXY_NONE)
 	for (entry=arp_tables[PROXY_HASH]; entry != NULL; entry = entry->next)
 	  if ((proxy==PROXY_EXACT) ? (entry->ip==paddr)
-	                           : !((entry->ip^paddr)&entry->mask)) 
+				   : !((entry->ip^paddr)&entry->mask)) 
 	    break;	  
 
 	return entry;
@@ -1249,7 +1291,7 @@ static int arp_req_set(struct arpreq *req)
 	
 	if (entry == NULL)
 	{
-	        unsigned long hash = HASH(ip);
+		unsigned long hash = HASH(ip);
 		if (r.arp_flags & ATF_PUBL)
 		  hash = PROXY_HASH;
 

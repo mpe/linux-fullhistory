@@ -34,6 +34,7 @@
  *		Alan Cox	:	Tightened even more.
  *		Arnt Gulbrandsen:	Misplaced #endif with net redirect and break
  *		A.N.Kuznetsov	:	ICMP timestamp still used skb+1
+ *		Mike Shaver	:	RFC1122 checks.
  * 
  *
  *		This program is free software; you can redistribute it and/or
@@ -41,6 +42,69 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+
+/* RFC1122 Status: (boy, are there a lot of rules for ICMP)
+   3.2.2 (Generic ICMP stuff)
+     MUST discard messages of unknown type. (OK)
+     MUST copy at least the first 8 bytes from the offending packet
+       when sending ICMP errors. (OK)
+     MUST pass received ICMP errors up to protocol level. (OK)
+     SHOULD send ICMP errors with TOS == 0. (OK)
+     MUST NOT send ICMP errors in reply to:
+       ICMP errors (OK)
+       Broadcast/multicast datagrams (OK)
+       MAC broadcasts (OK)
+       Non-initial fragments (OK)
+       Datagram with a source address that isn't a single host. (OK)
+  3.2.2.1 (Destination Unreachable)
+    All the rules govern the IP layer, and are dealt with in ip.c, not here.
+  3.2.2.2 (Redirect)
+    Host SHOULD NOT send ICMP_REDIRECTs.  (OK)
+    MUST update routing table in response to host or network redirects. 
+      (host OK, network NOT YET) [Intentionally -- AC]
+    SHOULD drop redirects if they're not from directly connected gateway
+      (OK -- we drop it if it's not from our old gateway, which is close
+       enough)
+  3.2.2.3 (Source Quench)
+    MUST pass incoming SOURCE_QUENCHs to transport layer (OK)
+    Other requirements are dealt with at the transport layer.
+  3.2.2.4 (Time Exceeded)
+    MUST pass TIME_EXCEEDED to transport layer (OK)
+    Other requirements dealt with at IP (generating TIME_EXCEEDED).
+  3.2.2.5 (Parameter Problem)
+    SHOULD generate these, but it doesn't say for what.  So we're OK. =)
+    MUST pass received PARAMPROBLEM to transport layer (NOT YET)
+    	[Solaris 2.X seems to assert EPROTO when this occurs] -- AC
+  3.2.2.6 (Echo Request/Reply)
+    MUST reply to ECHO_REQUEST, and give app to do ECHO stuff (OK, OK)
+    MAY discard broadcast ECHO_REQUESTs. (We don't, but that's OK.)
+    MUST reply using same source address as the request was sent to.
+      We're OK for unicast ECHOs, and it doesn't say anything about
+      how to handle broadcast ones, since it's optional.
+    MUST copy data from REQUEST to REPLY (OK)
+      unless it would require illegal fragmentation (MUST) (NOT YET)
+    MUST pass REPLYs to transport/user layer (OK)
+    MUST use any provided source route (reversed) for REPLY. (NOT YET)
+ 3.2.2.7 (Information Request/Reply)
+   MUST NOT implement this. (I guess that means silently discard...?) (OK)
+ 3.2.2.8 (Timestamp Request/Reply)
+   MAY implement (OK)
+   SHOULD be in-kernel for "minimum variability" (OK)
+   MAY discard broadcast REQUESTs.  (OK, but see source for inconsistency)
+   MUST reply using same source address as the request was sent to. (OK)
+   MUST reverse source route, as per ECHO (NOT YET)
+   MUST pass REPLYs to transport/user layer (requires RAW, just like ECHO) (OK)
+   MUST update clock for timestamp at least 15 times/sec (OK)
+   MUST be "correct within a few minutes" (OK)
+ 3.2.2.9 (Address Mask Request/Reply)
+   MAY implement (OK)
+   MUST send a broadcast REQUEST if using this system to set netmask
+     (OK... we don't use it)
+   MUST discard received REPLYs if not using this system (OK)
+   MUST NOT send replies unless specifically made agent for this sort
+     of thing. (NOT YET)
+*/
+
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -180,6 +244,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 			icmp_statistics.IcmpOutSrcQuenchs++;
 			break;
 		case ICMP_REDIRECT:
+		/* RFC1122: (3.2.2.2) Sorta bad.  SHOULDN'T send */
+		/* ICMP_REDIRECTs unless we're a gateway. -- MS */
+		/* We don't .. this path isnt invoked -- AC */
 			icmp_statistics.IcmpOutRedirects++;
 			break;
 		case ICMP_ECHO:
@@ -227,6 +294,11 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 */
 
 	our_addr = dev->pa_addr;
+
+	/* RFC1122: (3.2.2).  MUST NOT send ICMP in reply to */
+	/* packet with a source IP address that doesn't define a single */
+	/* host. -- MS.  Checked higher up -- AC */
+
 	if (iph->daddr != our_addr && ip_chk_addr(iph->daddr) == IS_MYADDR)
 		our_addr = iph->daddr;
 	offset = ip_build_header(skb, our_addr, iph->saddr,
@@ -250,6 +322,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 *	Fill in the frame
 	 */
 	 
+	/* RFC1122: SHOULD send with TOS == 0, and I guess this does. */
+	/* Perhaps it should be explicit? -- MS */
+
 	icmph = (struct icmphdr *) (skb->data + offset);
 	icmph->type = type;
 	icmph->code = code;
@@ -257,6 +332,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	icmph->un.gateway = info;	/* This might not be meant for 
 					   this form of the union but it will
 					   be right anyway */
+
+	/* RFC1122: OK. Copies the minimum 8 bytes unchanged from the offending */
+	/* packet (MUST) as per 3.2.2. -- MS */
 	memcpy(icmph + 1, iph, sizeof(struct iphdr) + 8);
 
 	icmph->checksum = ip_compute_csum((unsigned char *)icmph,
@@ -332,6 +410,10 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb)
 		/* 
 		 *	Pass it off to everyone who wants it. 
 		 */
+
+		/* RFC1122: OK. Passes appropriate ICMP errors to the */
+		/* appropriate protocol layer (MUST), as per 3.2.2. */
+
 		if (iph->protocol == ipprot->protocol && ipprot->err_handler) 
 		{
 			ipprot->err_handler(err, (unsigned char *)(icmph + 1),
@@ -469,6 +551,12 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	 */
 	icmphr = (struct icmphdr *) (skb2->data + offset);
 	memcpy((char *) icmphr, (char *) icmph, len);
+
+	/* Are we copying the data from the ECHO datagram? */
+	/* We're supposed to, and it looks like we are. -- MS */
+	/* We're also supposed to truncate it if it would force */
+	/* illegal fragmentation. *sigh*  */
+
 	icmphr->type = ICMP_ECHOREPLY;
 	icmphr->code = 0;
 	icmphr->checksum = 0;
@@ -587,11 +675,20 @@ static void icmp_info(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 /* 
  *	Handle ICMP_ADDRESS_MASK requests. 
  */
+
+/* RFC1122 (3.2.2.9).  A host MUST only send replies to */
+/* ADDRESS_MASK requests if it's been configured as an address mask */
+/* agent.  Receiving a request doesn't constitute implicit permission to */
+/* act as one. Of course, implementing this correctly requires (SHOULD) */
+/* a way to turn the functionality on and off.  Another one for sysctl(), */
+/* I guess. -- MS */
+/* Botched with a CONFIG option for now - Linus add scts sysctl please.. */
  
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
 	  unsigned long saddr, unsigned long daddr, int len,
 	  struct options *opt)
 {
+#ifdef CONFIG_IP_ADDR_AGENT
 	struct icmphdr *icmphr;
 	struct sk_buff *skb2;
 	int size, offset;
@@ -647,7 +744,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 
 	/* Ship it out - free it when done */
 	ip_queue_xmit((struct sock *)NULL, ndev, skb2, 1);
-
+#endif
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
 }
@@ -699,6 +796,11 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if (ip_chk_addr(daddr) != IS_MYADDR)
 	{
 		if (icmph->type != ICMP_ECHO) 
+		/* RFC1122: We're allowed to reply to ICMP_TIMESTAMP */
+		/* requests in the same manner as ICMP_ECHO (optionally */
+		/* drop those to a bcast/mcast), so perhaps we should be */
+		/* consistent? -- MS */
+
 		{
 			icmp_statistics.IcmpInErrors++;
 			kfree_skb(skb1, FREE_READ);
@@ -738,6 +840,9 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 			icmp_timestamp(icmph, skb1, dev, saddr, daddr, len, opt);
 			return 0;
 		case ICMP_TIMESTAMPREPLY:
+		/* RFC1122: MUST pass TIMESTAMPREPLY messages up to app layer, */
+		/* just as with ECHOREPLY.  You have to use raw to get that */
+		/* functionality, just as with ECHOREPLY. Close enough. -- MS */
 			icmp_statistics.IcmpInTimestampReps++;
 			kfree_skb(skb1,FREE_READ);
 			return 0;
@@ -762,6 +867,8 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 			kfree_skb(skb1, FREE_READ);
 			return(0);
 		default:
+			/* RFC1122: OK.  Silently discarding weird ICMP (MUST), */
+			/* as per 3.2.2. -- MS */
 			icmp_statistics.IcmpInErrors++;
 			kfree_skb(skb1, FREE_READ);
 			return(0);

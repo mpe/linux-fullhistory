@@ -780,7 +780,7 @@ load_elf_library(int fd){
  * These are the only things you should do on a core-file: use only these
  * functions to write out all the necessary info.
  */
-static int dump_write(struct file *file, void *addr, int nr)
+static int dump_write(struct file *file, const void *addr, int nr)
 {
 	return file->f_op->write(file->f_inode, file, addr, nr) == nr;
 }
@@ -818,7 +818,7 @@ static inline int maydump(struct vm_area_struct *vma)
 /* An ELF note in memory */
 struct memelfnote
 {
-	char *name;
+	const char *name;
 	int type;
 	unsigned int datasz;
 	void *data;

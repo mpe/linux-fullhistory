@@ -37,7 +37,7 @@ extern int autoirq_report(int waittime);
    things in there should be here!) */
 /* You have one of these per-board */
 struct ei_device {
-  char *name;
+  const char *name;
   void (*reset_8390)(struct device *);
   void (*block_output)(struct device *, int, const unsigned char *, int);
   int  (*block_input)(struct device *, int, char *, int);

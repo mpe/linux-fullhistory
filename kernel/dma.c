@@ -40,7 +40,7 @@
 
 struct dma_chan {
 	int  lock;
-	char *device_id;
+	const char *device_id;
 };
 
 static struct dma_chan dma_chan_busy[MAX_DMA_CHANNELS] = {
@@ -69,7 +69,7 @@ int get_dma_list(char *buf)
 } /* get_dma_list */
 
 
-int request_dma(unsigned int dmanr, char * device_id)
+int request_dma(unsigned int dmanr, const char * device_id)
 {
 	if (dmanr >= MAX_DMA_CHANNELS)
 		return -EINVAL;

@@ -558,7 +558,7 @@ extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
 extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int	  scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern void print_command(unsigned char *);
-extern void print_sense(char *,	 Scsi_Cmnd *);
+extern void print_sense(const char *,	 Scsi_Cmnd *);
 
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)

@@ -33,7 +33,7 @@
 static int proc_readscsi(struct inode * inode, struct file * file,
 			 char * buf, int count);
 static int proc_writescsi(struct inode * inode, struct file * file,
-			 char * buf, int count);
+			 const char * buf, int count);
 static int proc_readscsidir(struct inode *, struct file *, 
 			    void *, filldir_t filldir);
 static int proc_lookupscsi(struct inode *,const char *,int,struct inode **);
@@ -282,7 +282,7 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 
 
 static int proc_writescsi(struct inode * inode, struct file * file,
-			 char * buf, int count)
+			 const char * buf, int count)
 {
     int ret = 0;
     char * page;

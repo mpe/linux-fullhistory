@@ -46,6 +46,7 @@
  *		Alan Cox	:	Cache last socket
  *		Alan Cox	:	Route cache
  *		Jon Peatfield	:	Minor efficientcy fix to sendto().
+ *		Mike Shaver	:	RFC1122 checks.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -54,6 +55,32 @@
  *		2 of the License, or (at your option) any later version.
  */
  
+/* RFC1122 Status:
+   4.1.3.1 (Ports):
+     SHOULD send ICMP_PORT_UNREACHABLE in reponse to datagrams to 
+       an un-listened port. (OK)
+   4.1.3.2 (IP Options)
+     MUST pass IP options from IP -> application (OK)
+     MUST allow application to specify IP options (OK)
+   4.1.3.3 (ICMP Messages)
+     MUST pass ICMP error messages to application (OK)
+   4.1.3.4 (UDP Checksums)
+     MUST provide facility for checksumming (OK)
+     MAY allow application to control checksumming (OK)
+     MUST default to checksumming on (OK)
+     MUST discard silently datagrams with bad csums (OK)
+   4.1.3.5 (UDP Multihoming)
+     MUST allow application to specify source address (OK)
+     SHOULD be able to communicate the chosen src addr up to application
+       when application doesn't choose (NOT YET - doesnt seem to be in the BSD API)
+       [Does opening a SOCK_PACKET and snooping your output count 8)]
+   4.1.3.6 (Invalid Addresses)
+     MUST discard invalid source addresses (NOT YET -- will be implemented
+       in IP, so UDP will eventually be OK.  Right now it's a violation.)
+     MUST only send datagrams with one of our addresses (NOT YET - ought to be OK )
+   950728 -- MS
+*/
+
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/types.h>
@@ -81,7 +108,7 @@
 #include <net/checksum.h>
 
 /*
- *	SNMP MIB for the UDP layer
+ *	Snmp MIB for the UDP layer
  */
 
 struct udp_mib		udp_statistics;
@@ -158,6 +185,10 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	 *	client code people.
 	 */
 	 
+	/* RFC1122: OK.  Passes ICMP errors back to application, as per */
+	/* 4.1.3.3. */
+	/* After the comment above, that should be no surprise. */
+
 	if (icmp_err_convert[err & 0xff].fatal)
 	{
 		sk->err = icmp_err_convert[err & 0xff].errno;
@@ -176,7 +207,7 @@ struct udpfakehdr
 	struct udphdr uh;
 	int daddr;
 	int other;
-	char *from;
+	const char *from;
 	int wcheck;
 };
 
@@ -186,10 +217,11 @@ struct udpfakehdr
  *	for direct user->board I/O transfers. That one will be fun.
  */
  
-static void udp_getfrag(void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static void udp_getfrag(const void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
-	char *src, *dst;
+	const char *src;
+	char *dst;
 	unsigned int len;
 
 	if (offset) 
@@ -225,10 +257,11 @@ static void udp_getfrag(void *p, int saddr, char * to, unsigned int offset, unsi
  *	this is a valid decision.
  */
  
-static void udp_getfrag_nosum(void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static void udp_getfrag_nosum(const void *p, int saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
-	char *src, *dst;
+	const char *src;
+	char *dst;
 	unsigned int len;
 
 	if (offset) 
@@ -254,7 +287,7 @@ static void udp_getfrag_nosum(void *p, int saddr, char * to, unsigned int offset
  */
  
 static int udp_send(struct sock *sk, struct sockaddr_in *sin,
-		      unsigned char *from, int len, int rt) 
+		      const unsigned char *from, int len, int rt) 
 {
 	int ulen = len + sizeof(struct udphdr);
 	int a;
@@ -268,6 +301,17 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	ufh.other = (htons(ulen) << 16) + IPPROTO_UDP*256;
 	ufh.from = from;
 	ufh.wcheck = 0;
+
+	/* RFC1122 Violation: there is no provision for passing IP options */
+	/* from the application layer to the IP one.  It's a MUST (4.1.3.2), */
+	/* but it looks like it'd require some work on ip_build_xmit. */
+	/* Alan says he's got a Cunning Plan. -- MS */
+
+	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
+	/* 4.1.3.4. It's configurable by the application via setsockopt() */
+	/* (MAY) and it defaults to on (MUST).  Almost makes up for the */
+	/* violation above. -- MS */
+
 	if(sk->no_check)
 		a = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
 			sin->sin_addr.s_addr, rt, IPPROTO_UDP);
@@ -281,7 +325,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 }
 
 
-static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
+static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int noblock,
 	   unsigned flags, struct sockaddr_in *usin, int addr_len)
 {
 	struct sockaddr_in sin;
@@ -320,6 +364,16 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
   	 *	broadcasting of data.
   	 */
   	 
+	/* RFC1122: OK.  Allows the application to select the specific */
+	/* source address for an outgoing packet (MUST) as per 4.1.3.5. */
+	/* Optional addition: a mechanism for telling the application what */
+	/* address was used. (4.1.3.5, MAY) -- MS */
+
+	/* RFC1122: MUST ensure that all outgoing packets have one */
+	/* of this host's addresses as a source addr.(4.1.3.6) - bind in  */
+	/* af_inet.c checks these. It does need work to allow BSD style */
+	/* bind to multicast as is done by xntpd		*/
+
   	if(usin->sin_addr.s_addr==INADDR_ANY)
   		usin->sin_addr.s_addr=ip_my_addr();
   		
@@ -340,7 +394,7 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
  *	In BSD SOCK_DGRAM a write is just like a send.
  */
 
-static int udp_write(struct sock *sk, unsigned char *buff, int len, int noblock,
+static int udp_write(struct sock *sk, const unsigned char *buff, int len, int noblock,
 	  unsigned flags)
 {
 	return(udp_sendto(sk, buff, len, noblock, flags, NULL, 0));
@@ -545,6 +599,13 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
 	}
 
+	/* RFC1122 warning: According to 4.1.3.6, we MUST discard any */
+	/* datagram which has an invalid source address, either here or */
+	/* in IP. */
+	/* Right now, IP isn't doing it, and neither is UDP. It's on the */
+	/* FIXME list for IP, though, so I wouldn't worry about it. */
+	/* (That's the Right Place to do it, IMHO.) -- MS */
+
 	if (uh->check && (
 		( skb->ip_summed && udp_check(uh, len, saddr, daddr, skb->csum ) ) ||
 		( !skb->ip_summed && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
@@ -553,6 +614,10 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 		/* <mea@utu.fi> wants to know, who sent it, to
 		   go and stomp on the garbage sender... */
+
+	  /* RFC1122: OK.  Discards the bad packet silently (as far as */
+	  /* the network is concered, anyway) as per 4.1.3.4 (MUST). */
+
 		NETDEBUG(printk("UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
 		       ntohl(saddr),ntohs(uh->source),
 		       ntohl(daddr),ntohs(uh->dest),
@@ -644,6 +709,9 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
+	/* I assume this includes the IP options, as per RFC1122 (4.1.3.2). */
+	/* If not, please let me know. -- MS */
+
 	if (sock_queue_rcv_skb(sk,skb)<0) 
 	{
 		udp_statistics.UdpInErrors++;
@@ -692,4 +760,3 @@ struct proto udp_prot = {
 	0, 0,
 	{NULL,}
 };
-

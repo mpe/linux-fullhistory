@@ -24,7 +24,7 @@
 	practice this rarely happens.
 */
 
-static char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
+static const  char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -227,7 +227,7 @@ int el3_probe(struct device *dev)
 	request_region(dev->base_addr, 16,"3c509");
 
 	{
-		char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
+		const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
 		printk("%s: 3c509 at %#3.3lx tag %d, %s port, address ",
 			   dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
 	}

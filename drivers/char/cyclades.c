@@ -1561,7 +1561,7 @@ cy_flush_chars(struct tty_struct *tty)
  */
 static int
 cy_write(struct tty_struct * tty, int from_user,
-           unsigned char *buf, int count)
+          const unsigned char *buf, int count)
 {
   struct cyclades_port *info = (struct cyclades_port *)tty->driver_data;
   unsigned long flags;

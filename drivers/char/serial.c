@@ -1293,7 +1293,7 @@ static void rs_flush_chars(struct tty_struct *tty)
 }
 
 static int rs_write(struct tty_struct * tty, int from_user,
-		    unsigned char *buf, int count)
+		    const unsigned char *buf, int count)
 {
 	int	c, total = 0;
 	struct async_struct *info = (struct async_struct *)tty->driver_data;

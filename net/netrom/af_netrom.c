@@ -1006,7 +1006,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	return 1;
 }
 
-static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
+static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
 	unsigned flags, struct sockaddr *usip, int addr_len)
 {
 	struct sock *sk = (struct sock *)sock->data;
@@ -1112,12 +1112,12 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	return len;
 }
 
-static int nr_send(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags)
+static int nr_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return nr_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
 }
 
-static int nr_write(struct socket *sock, char *ubuf, int size, int noblock)
+static int nr_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
 	return nr_send(sock, ubuf, size, noblock, 0);
 }
@@ -1288,7 +1288,7 @@ int nr_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
 	struct device *dev;
-	char *devname;
+	const char *devname;
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;

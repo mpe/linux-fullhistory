@@ -18,7 +18,7 @@
 	  The Crynwr packet driver.
 */
 
-static char *version =
+static const char *version =
 	"hp.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/kernel.h>
@@ -100,7 +100,7 @@ int hp_probe(struct device *dev)
 int hp_probe1(struct device *dev, int ioaddr)
 {
 	int i, board_id, wordmode;
-	char *name;
+	const char *name;
 
 	/* Check for the HP physical address, 08 00 09 xx xx xx. */
 	/* This really isn't good enough: we may pick up HP LANCE boards

@@ -658,7 +658,7 @@ smb_proc_read(struct smb_server *server, struct smb_dirent *finfo,
 
 int
 smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
-               off_t offset, int count, char *data)
+               off_t offset, int count, const char *data)
 {
         int res = 0;
         char *buf = server->packet;
@@ -1513,7 +1513,7 @@ smb_proc_dskattr(struct super_block *super, struct smb_dskattr *attr)
 
 struct smb_prots {
 	enum smb_protocol prot;
-	char *name;
+	const char *name;
 };
 
 /* smb_proc_reconnect: We expect the server to be locked, so that you

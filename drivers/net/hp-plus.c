@@ -18,7 +18,7 @@
 	programming information.
 */
 
-static char *version =
+static const char *version =
 "hp-plus.c:v1.10 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/string.h>		/* Important -- this inlines word moves. */
@@ -144,7 +144,7 @@ int hpp_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	unsigned char checksum = 0;
-	char *name = "HP-PC-LAN+";
+	const char *name = "HP-PC-LAN+";
 	int mem_start;
 
 	/* Check for the HP+ signature, 50 48 0x 53. */

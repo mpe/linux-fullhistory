@@ -1457,7 +1457,7 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return(0);
 }
 
-static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
+static int atalk_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
 	unsigned flags, struct sockaddr *sat, int addr_len)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
@@ -1634,7 +1634,7 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	return len;
 }
 
-static int atalk_send(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags)
+static int atalk_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return atalk_sendto(sock,ubuf,size,noblock,flags,NULL,0);
 }
@@ -1690,7 +1690,7 @@ static int atalk_recvfrom(struct socket *sock, void *ubuf, int size, int noblock
 }		
 
 
-static int atalk_write(struct socket *sock, char *ubuf, int size, int noblock)
+static int atalk_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
 	return atalk_send(sock,ubuf,size,noblock,0);
 }

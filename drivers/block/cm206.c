@@ -1129,7 +1129,7 @@ int probe_irq(int nr) {
 #define ERROR  -EIO
 
 static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
-void parse_options() 
+void parse_options(void) 
 {
   int i;
   for (i=0; i<2; i++) {

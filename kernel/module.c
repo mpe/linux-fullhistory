@@ -512,7 +512,7 @@ free_modules( void)
 int get_module_list(char *buf)
 {
 	char *p;
-	char *q;
+	const char *q;
 	int i;
 	struct module *mp;
 	struct module_ref *ref;

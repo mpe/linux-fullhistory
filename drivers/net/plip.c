@@ -32,7 +32,7 @@
  *     So, this PLIP can't communicate the PLIP of Linux v1.0.
  */
 
-static char *version = "NET3 PLIP version 2.0 gniibe@mri.co.jp\n";
+static const char *version = "NET3 PLIP version 2.0 gniibe@mri.co.jp\n";
 
 /*
   Sources:

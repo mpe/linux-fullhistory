@@ -168,7 +168,7 @@ int get_filesystem_list(char * buf)
 	return len;
 }
 
-struct file_system_type *get_fs_type(char *name)
+struct file_system_type *get_fs_type(const char *name)
 {
 	struct file_system_type * fs = file_systems;
 	
@@ -254,7 +254,7 @@ void put_super(dev_t dev)
 		sb->s_op->put_super(sb);
 }
 
-static struct super_block * read_super(dev_t dev,char *name,int flags,
+static struct super_block * read_super(dev_t dev,const char *name,int flags,
 				       void *data, int silent)
 {
 	struct super_block * s;
@@ -428,7 +428,7 @@ asmlinkage int sys_umount(char * name)
  * We also have to flush all inode-data for this device, as the new mount
  * might need new info.
  */
-static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * data)
+static int do_mount(dev_t dev, const char * dir, const char * type, int flags, void * data)
 {
 	struct inode * dir_i;
 	struct super_block * sb;
@@ -554,7 +554,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	struct file_operations * fops;
 	dev_t dev;
 	int retval;
-	char * t;
+	const char * t;
 	unsigned long flags = 0;
 	unsigned long page = 0;
 

@@ -44,7 +44,7 @@ struct inet_protocol {
   unsigned char		protocol;
   unsigned char		copy:1;
   void			*data;
-  char 			*name;
+  const char		*name;
 };
 
 

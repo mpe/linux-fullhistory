@@ -36,7 +36,7 @@ static char bin_extensions[] =
  * read-only. The file system can be made writable again by remounting it.
  */
 
-void fs_panic(struct super_block *s,char *msg)
+void fs_panic(struct super_block *s,const char *msg)
 {
 	int not_ro;
 
@@ -365,7 +365,7 @@ int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 	    (*number)++; \
     }
 
-static int raw_scan_sector(struct super_block *sb,int sector,char *name,
+static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
     int *number,int *ino,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de)
 {
@@ -406,7 +406,7 @@ static int raw_scan_sector(struct super_block *sb,int sector,char *name,
  * requested entry is found or the end of the directory is reached.
  */
 
-static int raw_scan_root(struct super_block *sb,char *name,int *number,int *ino,
+static int raw_scan_root(struct super_block *sb,const char *name,int *number,int *ino,
     struct buffer_head **res_bh,struct msdos_dir_entry **res_de)
 {
 	int count,cluster;
@@ -424,7 +424,7 @@ static int raw_scan_root(struct super_block *sb,char *name,int *number,int *ino,
  * requested entry is found or the end of the directory is reached.
  */
 
-static int raw_scan_nonroot(struct super_block *sb,int start,char *name,
+static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
     int *number,int *ino,struct buffer_head **res_bh,struct msdos_dir_entry
     **res_de)
 {
@@ -460,7 +460,7 @@ static int raw_scan_nonroot(struct super_block *sb,int start,char *name,
  *       being created.
  */
 
-static int raw_scan(struct super_block *sb,int start,char *name,int *number,
+static int raw_scan(struct super_block *sb,int start,const char *name,int *number,
     int *ino,struct buffer_head **res_bh,struct msdos_dir_entry **res_de)
 {
 	if (start)
@@ -532,7 +532,7 @@ int msdos_subdirs(struct inode *dir)
  * for an empty directory slot (name is NULL). Returns an error code or zero.
  */
 
-int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,
+int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de,int *ino)
 {
 	int res;

@@ -127,18 +127,18 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, long saddr
  *	Callback support is trivial for SOCK_RAW
  */
   
-static void raw_getfrag(void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
+static void raw_getfrag(const void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	memcpy_fromfs(to, (unsigned char *)p+offset, fraglen);
+	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
 }
 
 /*
  *	IPPROTO_RAW needs extra work.
  */
  
-static void raw_getrawfrag(void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
+static void raw_getrawfrag(const void *p, int saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	memcpy_fromfs(to, (unsigned char *)p+offset, fraglen);
+	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
 	if(offset==0)
 	{
 		struct iphdr *iph=(struct iphdr *)to;
@@ -155,7 +155,7 @@ static void raw_getrawfrag(void *p, int saddr, char *to, unsigned int offset, un
 	}
 }
 
-static int raw_sendto(struct sock *sk, unsigned char *from, 
+static int raw_sendto(struct sock *sk, const unsigned char *from, 
 	int len, int noblock, unsigned flags, struct sockaddr_in *usin, int addr_len)
 {
 	int err;
@@ -207,7 +207,7 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 }
 
 
-static int raw_write(struct sock *sk, unsigned char *buff, int len, int noblock,
+static int raw_write(struct sock *sk, const unsigned char *buff, int len, int noblock,
 	   unsigned flags)
 {
 	return(raw_sendto(sk, buff, len, noblock, flags, NULL, 0));

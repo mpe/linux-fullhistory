@@ -44,7 +44,7 @@ int umsdos_file_read_kmem(
 int umsdos_file_write_kmem(
 	struct inode *inode,
 	struct file *filp,
-	char *buf,
+	const char *buf,
 	int count)
 {
 	int ret;

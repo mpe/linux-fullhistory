@@ -26,7 +26,7 @@
 
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
-static char *version =
+static const char *version =
     "ne.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/kernel.h>
@@ -61,7 +61,7 @@ static unsigned int netcard_portlist[] =
 
 #ifdef CONFIG_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
-static struct { char *name8, *name16; unsigned char SAprefix[4];}
+static struct { const char *name8, *name16; unsigned char SAprefix[4];}
 bad_clone_list[] = {
     {"DE100", "DE200", {0x00, 0xDE, 0x01,}},
     {"DE120", "DE220", {0x00, 0x80, 0xc8,}},
@@ -148,7 +148,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     int i;
     unsigned char SA_prom[32];
     int wordlength = 2;
-    char *name = NULL;
+    const char *name = NULL;
     int start_page, stop_page;
     int neX000, ctron;
     int reg0 = inb_p(ioaddr);

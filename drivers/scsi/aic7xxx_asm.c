@@ -26,9 +26,8 @@
  *
  * A <label> is an <undef-sym> ending in a colon.  Spaces, tabs, and commas
  * are token separators.
- *
  *-M*************************************************************************/
-static char id[] = "$Id: aic7xxx_asm.c,v 1.8 1995/05/25 06:25:36 root Exp $";
+static char id[] = "$Id: aic7xxx_asm.c,v 2.0 1995/08/02 05:28:42 deang Exp $";
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -56,7 +55,7 @@ FILE *ifp, *ofp;
 unsigned char M[MEMORY][4];
 
 void 
-error(char *s)
+error(const char *s)
 {
 	fprintf(stderr, "%s: %s at line %d\n", filename, s, lineno);
 	exit(EXIT_FAILURE);
@@ -262,7 +261,7 @@ rescan:
 #define NA	-1		/* not applicable */
 
 struct {
-	char *name;
+	const char *name;
 	int n;			/* number of operands, including opcode */
 	unsigned int op;	/* immediate or L?|pos_from_0 */
 	unsigned int dest;	/* NA, pos_from_0, or I|immediate */
@@ -329,7 +328,7 @@ eval_operand(char **a, int spec)
 
 	static struct {
 		unsigned int what;
-		char *name;
+		const char *name;
 		int value;
 	} jmptab[] = {
 		{ LO,	"jmp",		8  },

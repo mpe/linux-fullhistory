@@ -553,8 +553,8 @@ ipxitf_add_local_route(ipx_interface *intrfc)
 	return ipxrtr_add_route(intrfc->if_netnum, intrfc, NULL);
 }
 
-static char * ipx_frame_name(unsigned short);
-static char * ipx_device_name(ipx_interface *);
+static const char * ipx_frame_name(unsigned short);
+static const char * ipx_device_name(ipx_interface *);
 static int ipxrtr_route_skb(struct sk_buff *);
 
 static int 
@@ -986,7 +986,7 @@ ipxrtr_delete(long net)
 }
 
 static int
-ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, void *ubuf, int len)
+ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, const void *ubuf, int len)
 {
 	struct sk_buff *skb;
 	ipx_interface *intrfc;
@@ -1103,7 +1103,7 @@ static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
-static char *
+static const char *
 ipx_frame_name(unsigned short frame)
 {
 	switch (ntohs(frame)) {
@@ -1115,7 +1115,7 @@ ipx_frame_name(unsigned short frame)
 	}
 }
 
-static char *
+static const char *
 ipx_device_name(ipx_interface *intrfc)
 {
 	return (intrfc->if_internal ? "Internal" :
@@ -1687,7 +1687,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return ipxitf_rcv(intrfc, skb);
 }
 
-static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
+static int ipx_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
 	unsigned flags, struct sockaddr *usip, int addr_len)
 {
 	ipx_socket *sk=(ipx_socket *)sock->data;
@@ -1730,7 +1730,7 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	return len;
 }
 
-static int ipx_send(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags)
+static int ipx_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return ipx_sendto(sock,ubuf,size,noblock,flags,NULL,0);
 }
@@ -1780,7 +1780,7 @@ static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	return(truesize);
 }		
 
-static int ipx_write(struct socket *sock, char *ubuf, int size, int noblock)
+static int ipx_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
 	return ipx_send(sock,ubuf,size,noblock,0);
 }

@@ -31,7 +31,7 @@
 #include <linux/malloc.h>
 
 static int nfs_file_read(struct inode *, struct file *, char *, int);
-static int nfs_file_write(struct inode *, struct file *, char *, int);
+static int nfs_file_write(struct inode *, struct file *, const char *, int);
 static int nfs_fsync(struct inode *, struct file *);
 
 static struct file_operations nfs_file_operations = {
@@ -190,7 +190,7 @@ static int nfs_file_read(struct inode *inode, struct file *file, char *buf,
 	return i + hunk;
 }
 
-static int nfs_file_write(struct inode *inode, struct file *file, char *buf,
+static int nfs_file_write(struct inode *inode, struct file *file, const char *buf,
 			  int count)
 {
 	int result, hunk, i, n, pos;

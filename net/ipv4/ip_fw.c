@@ -128,7 +128,7 @@ struct ip_fw *ip_acct_chain;
  */
 
 static unsigned short masq_port = PORT_MASQ_BEGIN;
-static char *strProt[] = {"UDP","TCP"};
+static const char *strProt[] = {"UDP","TCP"};
 struct ip_masq *ip_msq_hosts;
 
 #endif

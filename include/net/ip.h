@@ -98,12 +98,12 @@ extern int 		ip_setsockopt(struct sock *sk, int level, int optname, char *optval
 extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
 extern void		ip_init(void);
 extern int		ip_build_xmit(struct sock *sk,
-				      void getfrag (void *,
+				      void getfrag (const void *,
 						    int,
 						    char *,
 						    unsigned int,
 						    unsigned int),
-				      void *frag,
+				      const void *frag,
 				      unsigned short int length,
 				      int daddr,
 				      int flags,

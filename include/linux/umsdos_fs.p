@@ -26,7 +26,7 @@ int umsdos_file_read_kmem (struct inode *inode,
 	 int count);
 int umsdos_file_write_kmem (struct inode *inode,
 	 struct file *filp,
-	 char *buf,
+	 const char *buf,
 	 int count);
 int umsdos_emd_dir_write (struct inode *emd_dir,
 	 struct file *filp,

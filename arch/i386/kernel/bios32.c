@@ -363,7 +363,7 @@ int pcibios_write_config_dword (unsigned char bus,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-char *pcibios_strerror (int error)
+const char *pcibios_strerror (int error)
 {
 	static char buf[80];
 

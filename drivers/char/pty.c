@@ -110,7 +110,7 @@ static void pty_unthrottle(struct tty_struct * tty)
 }
 
 static int pty_write(struct tty_struct * tty, int from_user,
-		       unsigned char *buf, int count)
+		       const unsigned char *buf, int count)
 {
 	struct tty_struct *to = tty->link;
 	int	c=0, n, r;

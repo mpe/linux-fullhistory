@@ -82,7 +82,7 @@
 struct device *init_etherdev(struct device *dev, int sizeof_private,
 			     unsigned long *mem_startp);
 
-static char *version =
+static const char *version =
 "PI: V0.8 ALPHA April 23 1995 David Perry (dp@hydra.carleton.ca)\n";
 
 /* The following #define is only really required for the PI card, not

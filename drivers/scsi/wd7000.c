@@ -204,9 +204,9 @@ static const Config configs[] = {
  *  added for the Future Domain version.
  */
 typedef struct signature {
-    void    *sig;           /* String to look for */
-    unsigned ofs;           /* offset from BIOS base address */
-    unsigned len;           /* length of string */
+    const void *sig;           /* String to look for */
+    unsigned    ofs;           /* offset from BIOS base address */
+    unsigned    len;           /* length of string */
 } Signature;
 
 static const Signature signatures[] = {

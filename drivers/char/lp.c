@@ -157,7 +157,7 @@ static void lp_interrupt(int irq, struct pt_regs *regs)
 	wake_up(&lp->lp_wait_q);
 }
 
-static int lp_write_interrupt(struct inode * inode, struct file * file, char * buf, int count)
+static int lp_write_interrupt(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 	unsigned long copy_size;
@@ -223,11 +223,12 @@ static int lp_write_interrupt(struct inode * inode, struct file * file, char * b
 }
 
 static int lp_write_polled(struct inode * inode, struct file * file,
-			   char * buf, int count)
+			   const char * buf, int count)
 {
 	int  retval;
 	unsigned int minor = MINOR(inode->i_rdev);
-	char c, *temp = buf;
+	char c;
+	const char *temp = buf;
 
 #ifdef LP_DEBUG
 	if (jiffies-lp_last_call > LP_TIME(minor)) {
@@ -296,7 +297,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 	return temp-buf;
 }
 
-static int lp_write(struct inode * inode, struct file * file, char * buf, int count)
+static int lp_write(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	if (LP_IRQ(MINOR(inode->i_rdev)))
 		return lp_write_interrupt(inode, file, buf, count);

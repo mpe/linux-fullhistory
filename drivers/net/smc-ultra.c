@@ -37,7 +37,7 @@
 	use the non-8390-compatible "Altego" mode. (No support currently planned.)
 */
 
-static char *version =
+static const char *version =
 	"smc-ultra.c:v1.12 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/kernel.h>
@@ -111,7 +111,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;
-	char *model_name;
+	const char *model_name;
 	unsigned char eeprom_irq = 0;
 	/* Values from various config regs. */
 	unsigned char num_pages, irqreg, addr;

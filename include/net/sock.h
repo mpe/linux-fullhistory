@@ -220,10 +220,10 @@ struct proto {
   void			(*close)(struct sock *sk, int timeout);
   int			(*read)(struct sock *sk, unsigned char *to,
 				int len, int nonblock, unsigned flags);
-  int			(*write)(struct sock *sk, unsigned char *to,
+  int			(*write)(struct sock *sk, const unsigned char *to,
 				 int len, int nonblock, unsigned flags);
   int			(*sendto)(struct sock *sk,
-				  unsigned char *from, int len, int noblock,
+				  const unsigned char *from, int len, int noblock,
 				  unsigned flags, struct sockaddr_in *usin,
 				  int addr_len);
   int			(*recvfrom)(struct sock *sk,

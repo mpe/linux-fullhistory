@@ -22,7 +22,7 @@
 
   */
 
-static char *version =
+static const char *version =
     "8390.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 /*

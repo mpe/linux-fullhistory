@@ -98,7 +98,7 @@
 
 struct tty_driver {
 	int	magic;		/* magic number for this structure */
-	char	*name;
+	const char	*name;
 	int	name_base;	/* offset of printed name */
 	short	major;		/* major device number */
 	short	minor_start;	/* start of minor device number*/
@@ -124,7 +124,7 @@ struct tty_driver {
 	int  (*open)(struct tty_struct * tty, struct file * filp);
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	int  (*write)(struct tty_struct * tty, int from_user,
-		      unsigned char *buf, int count);
+		      const unsigned char *buf, int count);
 	void (*put_char)(struct tty_struct *tty, unsigned char ch);
 	void (*flush_chars)(struct tty_struct *tty);
 	int  (*write_room)(struct tty_struct *tty);

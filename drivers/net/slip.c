@@ -617,7 +617,7 @@ slip_receive_room(struct tty_struct *tty)
  * and sent on to some IP layer for further processing.
  */
 static void
-slip_receive_buf(struct tty_struct *tty, unsigned char *cp, char *fp, int count)
+slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int count)
 {
 	struct slip *sl = (struct slip *) tty->disc_data;
 

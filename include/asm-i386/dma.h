@@ -264,7 +264,7 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 
 
 /* These are in kernel/dma.c: */
-extern int request_dma(unsigned int dmanr, char * device_id);	/* reserve a DMA channel */
+extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
 
 

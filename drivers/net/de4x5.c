@@ -141,7 +141,7 @@
     =========================================================================
 */
 
-static char *version = "de4x5.c:v0.32 6/26/95 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.32 6/26/95 davies@wanton.lkg.dec.com\n";
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -2163,7 +2163,7 @@ static void dce_ms_delay(u32 msec)
 static int EISA_signature(char *name, s32 eisa_id)
 {
   u_int i;
-  char *signatures[] = DE4X5_SIGNATURE;
+  const char *signatures[] = DE4X5_SIGNATURE;
   char ManCode[DE4X5_STRLEN];
   union {
     s32 ID;

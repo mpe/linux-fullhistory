@@ -51,7 +51,7 @@
 
 */
 
-static char *version =
+static const char *version =
 	"eepro.c: v0.07a 6/5/95 Bao C. Ha (bao@saigon.async.com)\n";
 
 /* Always include 'config.h' first in case the user wants to turn on
@@ -313,7 +313,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 	int i;
 	int eepro;	/* a flag, TRUE=1 for the EtherExpress Pro/10,
 			   FALSE = 0 for other 82595-based lan cards. */
-	char *ifmap[] = {"AUI", "10Base2", "10BaseT"};
+	const char *ifmap[] = {"AUI", "10Base2", "10BaseT"};
 	enum iftype { AUI=0, BNC=1, TPE=2 };
 
 	/* Now, we are going to check for the signature of the

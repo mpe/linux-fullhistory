@@ -15,7 +15,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "lance.c:v1.08 4/10/95 dplatt@3do.com\n";
+static const char *version = "lance.c:v1.08 4/10/95 dplatt@3do.com\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -194,7 +194,7 @@ struct lance_private {
 	struct lance_rx_head rx_ring[RX_RING_SIZE];
 	struct lance_tx_head tx_ring[TX_RING_SIZE];
 	struct lance_init_block		init_block;
-	char *name;
+	const char *name;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	long rx_buffs;				/* Address of Rx and Tx buffers. */
@@ -220,7 +220,7 @@ struct lance_private {
    reportedly has the same ID as the '965. */
 static struct lance_chip_type {
 	int id_number;
-	char *name;
+	const char *name;
 	int flags;
 } chip_table[] = {
 	{0x0000, "LANCE 7990",				/* Ancient lance chip.  */
@@ -337,7 +337,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
 	int i, reset_val, lance_version;
-	char *chipname;
+	const char *chipname;
 	/* Flags for specific chips or boards. */
 	unsigned char hpJ2405A = 0;						/* HP ISA adaptor */
 	int hp_builtin = 0;					/* HP on-board ethernet. */

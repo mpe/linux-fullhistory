@@ -134,7 +134,7 @@ read_mbr:
 	 *  Check for Disk Manager v6.0x with geometry translation
 	 */
 	if (!tested_for_dm6++) {	/* only check for DM6 *once* */
-		extern int ide_xlate_1024(dev_t, int, char *);
+		extern int ide_xlate_1024(dev_t, int, const char *);
 		/* check for DM6 with Dynamic Drive Overlay (DDO) */
 		if (p->sys_ind == DM6_PARTITION) {
 			/*

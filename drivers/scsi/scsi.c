@@ -175,9 +175,9 @@ static void scsi_dump_status(void);
 #define BLIST_SINGLELUN 0x10
 
 struct dev_info{
-    char * vendor;
-    char * model;
-    char * revision; /* Latest revision known to be bad.  Not used yet */
+    const char * vendor;
+    const char * model;
+    const char * revision; /* Latest revision known to be bad.  Not used yet */
     unsigned flags;
 };
 
@@ -1267,7 +1267,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
      * the completion function for the high level driver.
      */
     
-    memcpy ((void *) SCpnt->data_cmnd , (void *) cmnd, 12);
+    memcpy ((void *) SCpnt->data_cmnd , (const void *) cmnd, 12);
 #if 0
     SCpnt->host = host;
     SCpnt->channel = channel;
@@ -1282,7 +1282,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
     SCpnt->done = done;
     SCpnt->timeout_per_command = timeout;
 
-    memcpy ((void *) SCpnt->cmnd , (void *) cmnd, 12);
+    memcpy ((void *) SCpnt->cmnd , (const void *) cmnd, 12);
     /* Zero the sense buffer.  Some host adapters automatically request
      * sense on error.  0 is not a valid sense code.  
      */

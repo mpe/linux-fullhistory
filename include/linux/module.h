@@ -46,7 +46,7 @@ struct module_ref {
 
 struct internal_symbol {
 	void *addr;
-	char *name;
+	const char *name;
 	};
 
 struct symbol_table { /* received from "insmod" */
@@ -64,7 +64,7 @@ struct module {
 	struct module *next;
 	struct module_ref *ref;	/* the list of modules that refer to me */
 	struct symbol_table *symtab;
-	char *name;
+	const char *name;
 	int size;			/* size of module in pages */
 	void* addr;			/* address of module */
 	int state;

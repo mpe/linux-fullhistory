@@ -85,7 +85,7 @@ void FPU_illegal(void)
 void emu_printall()
 {
   int i;
-  static char *tag_desc[] = { "Valid", "Zero", "ERROR", "ERROR",
+  static const char *tag_desc[] = { "Valid", "Zero", "ERROR", "ERROR",
                               "DeNorm", "Inf", "NaN", "Empty" };
   unsigned char byte1, FPU_modrm;
   unsigned long address = FPU_ORIG_EIP;
@@ -212,7 +212,7 @@ printk(" CW: ic=%d rc=%ld%ld pc=%ld%ld iem=%d     ef=%d%d%d%d%d%d\n",
 
 static struct {
   int type;
-  char *name;
+  const char *name;
 } exception_names[] = {
   { EX_StackOver, "stack overflow" },
   { EX_StackUnder, "stack underflow" },

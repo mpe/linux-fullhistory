@@ -28,7 +28,7 @@
  *
  * NOTE! unlike strncmp, isofs_match returns 1 for success, 0 for failure.
  */
-static int isofs_match(int len,const char * name, char * compare, int dlen)
+static int isofs_match(int len,const char * name, const char * compare, int dlen)
 {
 	if (!compare)
 		return 0;

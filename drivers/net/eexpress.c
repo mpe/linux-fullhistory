@@ -22,7 +22,7 @@
         Changed to support io= irq= by Alan Cox <Alan.Cox@linux.org>
 */
 
-static char *version =
+static const char *version =
 	"eexpress.c:v0.07 1/19/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
@@ -375,7 +375,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	   interface to minimize bogus bug reports. */
 	{
 		char irqmap[] = {0, 9, 3, 4, 5, 10, 11, 0};
-		char *ifmap[] = {"AUI", "BNC", "10baseT"};
+		const char *ifmap[] = {"AUI", "BNC", "10baseT"};
 		enum iftype {AUI=0, BNC=1, TP=2};
 		unsigned short setupval = read_eeprom(ioaddr, 0);
 

@@ -32,7 +32,7 @@ typedef asmlinkage void (*lcall7_func)(struct pt_regs *);
  * offset of the handler is hard coded in kernel/sys_call.S.
  */
 struct exec_domain {
-	char *name;
+	const char *name;
 	lcall7_func handler;
 	unsigned char pers_low, pers_high;
 	unsigned long * signal_map;

@@ -119,7 +119,7 @@
 	 	<jojo@repas.de>
 */
 
-static char *version =
+static const char *version =
  "arcnet.c:v1.92 ALPHA 95/07/11 Avery Pennarun <apenwarr@foxnet.net>\n";
  
 /**************************************************************************/

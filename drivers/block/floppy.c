@@ -311,7 +311,7 @@ static int inr; /* size of reply buffer, when called from interrupt */
  */
 static struct {
 	struct floppy_drive_params params;
-	char *name; /* name printed while booting */
+	const char *name; /* name printed while booting */
 } default_drive_params[]= {
 /* NOTE: the time values in jiffies should be in msec!
  CMOS drive type
@@ -545,7 +545,7 @@ static inline void set_debugt(void)
 #endif
 }
 
-static inline void debugt(char *message)
+static inline void debugt(const char *message)
 {
 #ifdef DEBUGT
   if ( DP->flags & DEBUGT )
@@ -557,10 +557,10 @@ typedef void (*timeout_fn)(unsigned long);
 static struct timer_list fd_timeout ={ NULL, NULL, 0, 0, 
 					       (timeout_fn) floppy_shutdown };
 
-static char *timeout_message;
+static const char *timeout_message;
 
 #ifdef CONFIG_FLOPPY_SANITY
-static void is_alive(char *message)
+static void is_alive(const char *message)
 {
 	/* this routine checks whether the floppy driver is "alive" */
 	if (fdc_busy && command_status < 2 && !fd_timeout.prev){
@@ -593,7 +593,7 @@ static int output_log_pos=0;
 
 
 
-static void reschedule_timeout(int drive, char *message, int marg)
+static void reschedule_timeout(int drive, const char *message, int marg)
 {
 	if (drive == CURRENTD )
 		drive = current_drive;
@@ -2801,7 +2801,7 @@ static int fd_copyout(void *param, volatile void *address, int size)
 #define COPYOUT(x) (fd_copyout( (void *)param, &(x), sizeof(x)))
 #define COPYIN(x) (memcpy_fromfs( &(x), (void *) param, sizeof(x)),0)
 
-static char *drive_name(int type, int drive )
+static const char *drive_name(int type, int drive )
 {
 	struct floppy_struct *floppy;	
 
@@ -2924,7 +2924,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	struct format_descr tmp_format_req;
 	int i,device,drive,type,cnt;
 	struct floppy_struct *this_floppy;
-	char *name;
+	const char *name;
 
 	device = inode->i_rdev;
 	switch (cmd) {
@@ -3151,7 +3151,7 @@ static int floppy_read(struct inode * inode, struct file * filp,
 }
 
 static int floppy_write(struct inode * inode, struct file * filp,
-			char * buf, int count)
+			const char * buf, int count)
 {
 	int block;
 	int ret;
@@ -3523,7 +3523,7 @@ static void set_cmos(int *ints, int dummy)
 }
 		
 static struct param_table {
-	char *name;
+	const char *name;
 	void (*fn)(int *ints, int param);
 	int def_param;
 } config_params[]={

@@ -2178,7 +2178,7 @@ void hdd_setup(char *str, int *ints)
 	ide_setup (str, ints);
 }
 
-int ide_xlate_1024 (dev_t full_dev, int need_offset, char *msg)
+int ide_xlate_1024 (dev_t full_dev, int need_offset, const char *msg)
 {
 	ide_dev_t *dev;
 	byte head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0}, *heads = head_vals;

@@ -13,7 +13,7 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
+unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /*
  * the same as csum_partial, but copies from src while it
@@ -23,7 +23,7 @@ unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy( char *src, char *dst, int len, int sum);
+unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 
 
 /*
@@ -33,7 +33,7 @@ unsigned int csum_partial_copy( char *src, char *dst, int len, int sum);
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy_fromuser( char *src, char *dst, int len, int sum);
+unsigned int csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum);
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,

@@ -713,7 +713,7 @@ static void do_timer(int irq, struct pt_regs * regs)
 	sti();
 }
 
-asmlinkage int sys_alarm(long seconds)
+asmlinkage unsigned int sys_alarm(unsigned int seconds)
 {
 	struct itimerval it_new, it_old;
 
@@ -772,7 +772,7 @@ asmlinkage int sys_nice(long increment)
 static void show_task(int nr,struct task_struct * p)
 {
 	unsigned long free;
-	static char * stat_nam[] = { "R", "S", "D", "Z", "T", "W" };
+	static const char * stat_nam[] = { "R", "S", "D", "Z", "T", "W" };
 
 	printk("%-8s %3d ", p->comm, (p == current) ? -nr : nr);
 	if (((unsigned) p->state) < sizeof(stat_nam)/sizeof(char *))

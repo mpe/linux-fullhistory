@@ -713,7 +713,7 @@ static void setup_mailboxes(int bse, struct Scsi_Host * shpnt)
     aha1542_intr_reset(bse);
 }
 
-static int aha1542_getconfig(int base_io, unsigned char * irq_level, unsigned char * dma_chan)
+static int aha1542_getconfig(int base_io, unsigned char * irq_level, unsigned char * dma_chan, unsigned char * scsi_id)
 {
   unchar inquiry_cmd[] = {CMD_RETCONF };
   unchar inquiry_result[3];
@@ -775,6 +775,7 @@ static int aha1542_getconfig(int base_io, unsigned char * irq_level, unsigned ch
     printk("Unable to determine Adaptec IRQ level.  Disabling board\n");
     return -1;
   };
+  *scsi_id=inquiry_result[2] & 7;
   return 0;
 }
 
@@ -855,7 +856,7 @@ static int aha1542_query(int base_io, int * transl)
 /* called from init/main.c */
 void aha1542_setup( char *str, int *ints)
 {
-    char *ahausage = "aha1542: usage: aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]\n";
+    const char *ahausage = "aha1542: usage: aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]\n";
     static int setup_idx = 0;
     int setup_portbase;
 
@@ -918,6 +919,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 {
     unsigned char dma_chan;
     unsigned char irq_level;
+    unsigned char scsi_id;
     unsigned long flags;
     unsigned int base_io;
     int trans;
@@ -977,9 +979,9 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 	    }
 		    if(aha1542_query(base_io, &trans))  goto unregister;
 		    
-		    if (aha1542_getconfig(base_io, &irq_level, &dma_chan) == -1)  goto unregister;
+		    if (aha1542_getconfig(base_io, &irq_level, &dma_chan, &scsi_id) == -1)  goto unregister;
 		    
-		    printk("Configuring Adaptec at IO:%x, IRQ %d",base_io, irq_level);
+		    printk("Configuring Adaptec (SCSI-ID %d) at IO:%x, IRQ %d", scsi_id, base_io, irq_level);
 		    if (dma_chan != 0xFF)
 			    printk(", DMA priority %d", dma_chan);
 		    printk("\n");

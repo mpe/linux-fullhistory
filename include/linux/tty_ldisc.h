@@ -22,7 +22,7 @@ struct tty_ldisc {
 	int	(*read)(struct tty_struct * tty, struct file * file,
 			unsigned char * buf, unsigned int nr);
 	int	(*write)(struct tty_struct * tty, struct file * file,
-			 unsigned char * buf, unsigned int nr);	
+			 const unsigned char * buf, unsigned int nr);	
 	int	(*ioctl)(struct tty_struct * tty, struct file * file,
 			 unsigned int cmd, unsigned long arg);
 	void	(*set_termios)(struct tty_struct *tty, struct termios * old);
@@ -33,7 +33,7 @@ struct tty_ldisc {
 	/*
 	 * The following routines are called from below.
 	 */
-	void	(*receive_buf)(struct tty_struct *, unsigned char *cp,
+	void	(*receive_buf)(struct tty_struct *, const unsigned char *cp,
 			       char *fp, int count);
 	int	(*receive_room)(struct tty_struct *);
 	void	(*write_wakeup)(struct tty_struct *);

@@ -42,6 +42,8 @@
  *                      Modularization.
  *	- Jan 1995	Bjorn Ekwall
  *			Use ip_fast_csum from ip.h
+ *	- July 1995	Christos A. Polyzols 
+ *			Spotted bug in tcp option checking
  *
  *
  *	This module is a difficult issue. It's clearly inet code but it's also clearly
@@ -355,7 +357,7 @@ found:
 	 || ip->ttl != cs->cs_ip.ttl
 	 || th->doff != cs->cs_tcp.doff
 	 || (ip->ihl > 5 && memcmp(ip+1,cs->cs_ipopt,((ip->ihl)-5)*4) != 0)
-	 || (th->doff > 5 && memcmp(th+1,cs->cs_tcpopt,((th->doff)-5)*4 != 0))){
+	 || (th->doff > 5 && memcmp(th+1,cs->cs_tcpopt,((th->doff)-5)*4) != 0)){
 		goto uncompressed;
 	}
 

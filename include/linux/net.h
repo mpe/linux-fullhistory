@@ -102,18 +102,18 @@ struct proto_ops {
 			 int *usockaddr_len, int peer);
   int	(*read)		(struct socket *sock, char *ubuf, int size,
 			 int nonblock);
-  int	(*write)	(struct socket *sock, char *ubuf, int size,
+  int	(*write)	(struct socket *sock, const char *ubuf, int size,
 			 int nonblock);
   int	(*select)	(struct socket *sock, int sel_type,
 			 select_table *wait);
   int	(*ioctl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);
   int	(*listen)	(struct socket *sock, int len);
-  int	(*send)		(struct socket *sock, void *buff, int len, int nonblock,
+  int	(*send)		(struct socket *sock, const void *buff, int len, int nonblock,
 			 unsigned flags);
   int	(*recv)		(struct socket *sock, void *buff, int len, int nonblock,
 			 unsigned flags);
-  int	(*sendto)	(struct socket *sock, void *buff, int len, int nonblock,
+  int	(*sendto)	(struct socket *sock, const void *buff, int len, int nonblock,
 			 unsigned flags, struct sockaddr *, int addr_len);
   int	(*recvfrom)	(struct socket *sock, void *buff, int len, int nonblock,
 			 unsigned flags, struct sockaddr *, int *addr_len);
@@ -127,7 +127,7 @@ struct proto_ops {
 };
 
 struct net_proto {
-	char *name;		/* Protocol name */
+	const char *name;		/* Protocol name */
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 

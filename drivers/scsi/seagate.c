@@ -95,7 +95,7 @@ static int incommand;			/*
 						in some command phase.
 					*/
 
-static void *base_address = NULL;	/*
+static const void *base_address = NULL;	/*
 						Where the card ROM starts,
 						used to calculate memory mapped
 						register location.
@@ -153,7 +153,7 @@ static const char *  seagate_bases[] = {
 };
 
 typedef struct {
-	char *signature ;
+	const char *signature ;
 	unsigned offset;
 	unsigned length;
 	unsigned char type;
@@ -327,10 +327,10 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 
 	for (i = 0; i < (sizeof (seagate_bases) / sizeof (char  * )); ++i)
 		for (j = 0; !base_address && j < NUM_SIGNATURES; ++j)
-		if (!memcmp ((void *) (seagate_bases[i] +
-		    signatures[j].offset), (void *) signatures[j].signature,
+		if (!memcmp ((const void *) (seagate_bases[i] +
+		    signatures[j].offset), (const void *) signatures[j].signature,
 		    signatures[j].length)) {
-			base_address = (void *) seagate_bases[i];
+			base_address = (const void *) seagate_bases[i];
 			controller_type = signatures[j].type;
 		}
 #endif /* OVERRIDE */
@@ -341,8 +341,8 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 
 	if (base_address)
 		{
-		st0x_cr_sr =(void *) (((unsigned char *) base_address) + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
-		st0x_dr = (void *) (((unsigned char *) base_address ) + (controller_type == SEAGATE ? 0x1c00 : 0x1e00));
+		st0x_cr_sr =(void *) (((const unsigned char *) base_address) + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
+		st0x_dr = (void *) (((const unsigned char *) base_address ) + (controller_type == SEAGATE ? 0x1c00 : 0x1e00));
 #ifdef DEBUG
 		printk("%s detected. Base address = %x, cr = %x, dr = %x\n", tpnt->name, base_address, st0x_cr_sr, st0x_dr);
 #endif
@@ -1307,8 +1307,8 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 			while (((status_read = STATUS) & STAT_BSY) && 
 			       ((status_read & REQ_MASK) == REQ_CMDOUT))
 				if (status_read & STAT_REQ) {
-					DATA = *(unsigned char *) cmnd;
-					cmnd = 1+(unsigned char *) cmnd;
+					DATA = *(const unsigned char *) cmnd;
+					cmnd = 1+(const unsigned char *) cmnd;
 #ifdef SLOW_HANDSHAKE
 					if (borken) 
 						borken_wait();

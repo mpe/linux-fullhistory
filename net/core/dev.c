@@ -185,7 +185,7 @@ void dev_remove_pack(struct packet_type *pt)
  *	Find an interface by name.
  */
  
-struct device *dev_get(char *name)
+struct device *dev_get(const char *name)
 {
 	struct device *dev;
 

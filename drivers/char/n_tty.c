@@ -525,10 +525,10 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 	put_tty_queue(c, tty);
 }	
 
-static void n_tty_receive_buf(struct tty_struct *tty, unsigned char *cp,
+static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 			      char *fp, int count)
 {
-	unsigned char *p;
+	const unsigned char *p;
 	char *f, flags = 0;
 	int	i;
 
@@ -912,11 +912,11 @@ do_it_again:
 }
 
 static int write_chan(struct tty_struct * tty, struct file * file,
-		      unsigned char * buf, unsigned int nr)
+		      const unsigned char * buf, unsigned int nr)
 {
 	struct wait_queue wait = { current, NULL };
 	int c;
-	unsigned char *b = buf;
+	const unsigned char *b = buf;
 	int retval = 0;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */

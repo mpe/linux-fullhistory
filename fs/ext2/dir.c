@@ -69,11 +69,11 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL			/* smap */
 };
 
-int ext2_check_dir_entry (char * function, struct inode * dir,
+int ext2_check_dir_entry (const char * function, struct inode * dir,
 			  struct ext2_dir_entry * de, struct buffer_head * bh,
 			  unsigned long offset)
 {
-	char * error_msg = NULL;
+	const char * error_msg = NULL;
 
 	if (de->rec_len < EXT2_DIR_REC_LEN(1))
 		error_msg = "rec_len is smaller than minimal";

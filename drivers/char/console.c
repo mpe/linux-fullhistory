@@ -1006,7 +1006,7 @@ static void csi_m(int currcons)
 	update_attr(currcons);
 }
 
-static void respond_string(char * p, struct tty_struct * tty)
+static void respond_string(const char * p, struct tty_struct * tty)
 {
 	while (*p) {
 		tty_insert_flip_char(tty, *p, 0);
@@ -1409,7 +1409,7 @@ static void con_start(struct tty_struct *tty)
 }
 
 static int con_write(struct tty_struct * tty, int from_user,
-		     unsigned char *buf, int count)
+		     const unsigned char *buf, int count)
 {
 	int c, tc, ok, n = 0;
 	unsigned int currcons;
@@ -1991,7 +1991,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  */
 long con_init(long kmem_start)
 {
-	char *display_desc = "????";
+	const char *display_desc = "????";
 	int currcons = 0;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;

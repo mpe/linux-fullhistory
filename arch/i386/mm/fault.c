@@ -20,7 +20,7 @@
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 
-extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void die_if_kernel(const char *,struct pt_regs *,long);
 
 /*
  * This routine handles page faults.  It determines the address,

@@ -126,7 +126,7 @@
     =========================================================================
 */
 
-static char *version = "ewrk3.c:v0.32 1/16/95 davies@wanton.lkg.dec.com\n";
+static const char *version = "ewrk3.c:v0.32 1/16/95 davies@wanton.lkg.dec.com\n";
 
 #ifdef MODULE
 #include <linux/module.h>

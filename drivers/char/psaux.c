@@ -372,7 +372,7 @@ static int open_qp(struct inode * inode, struct file * file)
  * Write to the aux device.
  */
 
-static int write_aux(struct inode * inode, struct file * file, char * buffer, int count)
+static int write_aux(struct inode * inode, struct file * file, const char * buffer, int count)
 {
 	int i = count;
 
@@ -394,7 +394,7 @@ static int write_aux(struct inode * inode, struct file * file, char * buffer, in
  * Write to the 82C710 mouse device.
  */
 
-static int write_qp(struct inode * inode, struct file * file, char * buffer, int count)
+static int write_qp(struct inode * inode, struct file * file, const char * buffer, int count)
 {
 	int i = count;
 

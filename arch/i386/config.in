@@ -180,7 +180,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	fi
 	bool 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	bool 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
-	bool 'HP 10/100VG PCLAN (257X series) support' CONFIG_HP100 y
+	bool 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100 y
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi

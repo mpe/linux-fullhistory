@@ -12,7 +12,7 @@
 */
 
 /*
-   Changes by Peter De Schrijver (stud11@cc4.kuleuven.ac.be) :
+   Changes by Peter De Schrijver (Peter.Deschrijver@linux.cc.kuleuven.ac.be) :
 	
 	+ changed name to ibmtr.c in anticipation of other tr boards.
 	+ changed reset code and adapter open code.
@@ -37,7 +37,7 @@
 #define FALSE 0
 #define TRUE (!FALSE)
 
-static char *version = "ibmtr.c:v1.1.48 8/7/94 Peter De Schrijver and Mark Swanson\n"
+static const char *version = "ibmtr.c:v1.1.48 8/7/94 Peter De Schrijver and Mark Swanson\n"
                        "           modified 10/3/94 David W. Morris\n";
 
 static char pcchannelid[]={0x05, 0x00, 0x04, 0x09,
@@ -120,7 +120,7 @@ int DummyCallCount=0;
 /*  This routine combined with the #DEFINE DPRINTD serves
     to workaround the gcc apparent bug.   in tr_tx() */
 
-static void DummyCall(char * fmt,...) {DummyCallCount++;return;}
+static void DummyCall(const char * fmt,...) {DummyCallCount++;return;}
 
 static void PrtChanID(char *pcid, short stride) {
   short i, j;

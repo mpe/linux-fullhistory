@@ -144,7 +144,7 @@ static inline int *xdr_decode_string2(int *p, char **string, unsigned int *len,
 }
 
 
-static inline int *xdr_encode_data(int *p, char *data, int len)
+static inline int *xdr_encode_data(int *p, const char *data, int len)
 {
 	int quadlen = QUADLEN(len);
 	
@@ -423,7 +423,7 @@ retry:
 }
 
 int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-		   int offset, int count, char *data, struct nfs_fattr *fattr)
+		   int offset, int count, const char *data, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
 	int status;

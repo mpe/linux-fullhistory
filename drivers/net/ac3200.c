@@ -14,7 +14,7 @@
 	by glee@ardnassak.math.clemson.edu.
   */
 
-static char *version =
+static const char *version =
 	"ac3200.c:v1.01 7/1/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/kernel.h>
@@ -44,7 +44,7 @@ static char *version =
 static unsigned char config2irqmap[8] = {15, 12, 11, 10, 9, 7, 5, 3};
 static int addrmap[8] =
 {0xFF0000, 0xFE0000, 0xFD0000, 0xFFF0000, 0xFFE0000, 0xFFC0000,  0xD0000, 0 };
-static char *port_name[4] = { "10baseT", "invalid", "AUI", "10base2"};
+static const char *port_name[4] = { "10baseT", "invalid", "AUI", "10base2"};
 
 #define config2irq(configval)	config2irqmap[((configval) >> 3) & 7]
 #define config2mem(configval)	addrmap[(configval) & 7]

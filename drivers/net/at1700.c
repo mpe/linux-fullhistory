@@ -28,7 +28,7 @@
 	response to inb()s from other device probes!
 */
 
-static char *version =
+static const char *version =
 	"at1700.c:v1.12 1/18/95  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
@@ -228,7 +228,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	   0x1800 == use coax interface
 	   */
 	{
-		char *porttype[] = {"auto-sense", "10baseT", "auto-sense", "10base2"};
+		const char *porttype[] = {"auto-sense", "10baseT", "auto-sense", "10base2"};
 		ushort setup_value = read_eeprom(ioaddr, 12);
 
 		dev->if_port = setup_value >> 8;

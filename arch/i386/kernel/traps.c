@@ -93,7 +93,7 @@ int kstack_depth_to_print = 24;
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-/*static*/ void die_if_kernel(char * str, struct pt_regs * regs, long err)
+/*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
 	int i;
 	unsigned long esp;

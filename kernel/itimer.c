@@ -15,11 +15,26 @@
 
 #include <asm/segment.h>
 
+/*
+ * change timeval to jiffies, trying to avoid the 
+ * most obvious overflows..
+ *
+ * The tv_*sec values are signed, but nothing seems to 
+ * indicate whether we really should use them as signed values
+ * when doing itimers. POSIX doesn't mention this (but if
+ * alarm() uses itimers without checking, we have to use unsigned
+ * arithmetic).
+ */
 static unsigned long tvtojiffies(struct timeval *value)
 {
-	return((unsigned long )value->tv_sec * HZ +
-		(unsigned long )(value->tv_usec + (1000000 / HZ - 1)) /
-		(1000000 / HZ));
+	unsigned long sec = (unsigned) value->tv_sec;
+	unsigned long usec = (unsigned) value->tv_usec;
+
+	if (sec > (unsigned) (LONG_MAX / HZ))
+		return LONG_MAX;
+	usec += 1000000 / HZ - 1;
+	usec /= 1000000 / HZ;
+	return HZ*sec+usec;
 }
 
 static void jiffiestotv(unsigned long jiffies, struct timeval *value)

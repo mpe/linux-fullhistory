@@ -117,7 +117,7 @@ st_chk_result(Scsi_Cmnd * SCpnt)
   int dev = SCpnt->request.dev;
   int result = SCpnt->result;
   unsigned char * sense = SCpnt->sense_buffer, scode;
-  char *stp;
+  const char *stp;
 
   if (!result /* && SCpnt->sense_buffer[0] == 0 */ )
     return 0;
@@ -753,14 +753,14 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 
 /* Write command */
 	static int
-st_write(struct inode * inode, struct file * filp, char * buf, int count)
+st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
     int dev;
     int total, do_count, blks, retval, transfer;
     int write_threshold;
     int doing_write = 0;
     static unsigned char cmd[10];
-    char *b_point;
+    const char *b_point;
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
     unsigned int flags;

@@ -339,7 +339,7 @@ static unsigned long buffaddr;	/* aligned physical address of buffer */
 
 
 /* This translates minor numbers to the corresponding recording format: */
-static char *format_names[] = {
+static const char *format_names[] = {
 	"not set",	/* for dumb drives unable to handle format selection */
 	"11",		/* extinct */
 	"24",
@@ -371,7 +371,7 @@ static char *format_names[] = {
  */
 static struct exception_list_type {
 	unsigned short mask, code;
-	char *msg;
+	const char *msg;
 	/* EXC_nr attribute should match with tpqic02.h */
 } exception_list[] = {
 	{0, 0,
@@ -424,7 +424,7 @@ static struct exception_list_type {
 
 
 
-static void tpqputs(unsigned long flags, char *s)
+static void tpqputs(unsigned long flags, const char *s)
 {
 	if ((flags & TPQD_ALWAYS) || (flags & QIC02_TAPE_DEBUG))
 		printk(TPQIC02_NAME ": %s\n", s);
@@ -2090,7 +2090,7 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
  * tape device again. The driver will detect an exception status in (No Cartridge)
  * and force a rewind. After that tar may continue writing.
  */
-static int qic02_tape_write(struct inode * inode, struct file * filp, char * buf, int count)
+static int qic02_tape_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
 	int error;
 	dev_t dev = inode->i_rdev;
@@ -2163,7 +2163,7 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, char * buf
 
 		/* copy from user to DMA buffer and initiate transfer. */
 		if (bytes_todo>0) {
-			memcpy_fromfs( (void *) buffaddr, (void *) buf, bytes_todo);
+			memcpy_fromfs( (void *) buffaddr, (const void *) buf, bytes_todo);
 
 /****************** similar problem with read() at FM could happen here at EOT.
  ******************/
@@ -2425,14 +2425,6 @@ static int qic02_tape_open(struct inode * inode, struct file * filp)
 
 	return 0;
 } /* qic02_tape_open */
-
-
-
-static int qic02_tape_readdir(struct inode * inode, struct file * filp, struct dirent * dp, int count)
-{
-	return -ENOTDIR;	/* not supported */
-} /* qic02_tape_readdir */
-
 
 
 static void qic02_tape_release(struct inode * inode, struct file * filp)
@@ -2791,7 +2783,7 @@ static struct file_operations qic02_tape_fops = {
 	qic02_tape_lseek,		/* not allowed */
 	qic02_tape_read,		/* read */
 	qic02_tape_write,		/* write */
-	qic02_tape_readdir,		/* not allowed */
+	NULL,				/* readdir not allowed */
 	NULL,				/* select ??? */
 	qic02_tape_ioctl,		/* ioctl */
 	NULL,				/* mmap not allowed */

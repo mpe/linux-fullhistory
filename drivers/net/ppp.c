@@ -136,11 +136,11 @@ static int ppp_lock(struct ppp *);
 static void ppp_unlock(struct ppp *);
 static void ppp_add_fcs(struct ppp *);
 static int ppp_check_fcs(struct ppp *);
-static void ppp_print_buffer(const char *,char *,int,int);
+static void ppp_print_buffer(const char *,const char *,int,int);
 
 static int ppp_read(struct tty_struct *, struct file *, unsigned char *,
 		    unsigned int);
-static int ppp_write(struct tty_struct *, struct file *, unsigned char *,
+static int ppp_write(struct tty_struct *, struct file *, const unsigned char *,
 		     unsigned int);
 static int ppp_ioctl(struct tty_struct *, struct file *, unsigned int,
 		     unsigned long);
@@ -151,7 +151,7 @@ static void ppp_close(struct tty_struct *);
 
 #ifdef NEW_TTY_DRIVERS
 static int ppp_receive_room(struct tty_struct *tty);
-static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
+static void ppp_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 			    char *fp, int count);
 static void ppp_write_wakeup(struct tty_struct *tty);
 #else
@@ -918,7 +918,7 @@ static int ppp_receive_room(struct tty_struct *tty)
 }
 
 
-static void ppp_receive_buf(struct tty_struct *tty, unsigned char *cp,
+static void ppp_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 			    char *fp, int count)
 {
   register struct ppp *ppp = ppp_find (tty);
@@ -1350,7 +1350,7 @@ ppp_stuff_char(struct ppp *ppp, unsigned char c)
 */
 
 static int
-ppp_write(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned int nr)
+ppp_write(struct tty_struct *tty, struct file *file, const unsigned char *buf, unsigned int nr)
 {
   struct ppp *ppp = ppp_find(tty);
   int i;
@@ -2021,7 +2021,7 @@ ppp_check_fcs(struct ppp *ppp)
 
 static char hex[] = "0123456789ABCDEF";
 
-static inline void ppp_print_hex (register char *out, char *in, int count)
+static inline void ppp_print_hex (register char *out, const char *in, int count)
 {
   register unsigned char next_ch;
 
@@ -2035,7 +2035,7 @@ static inline void ppp_print_hex (register char *out, char *in, int count)
   }
 }
 
-static inline void ppp_print_char (register char *out, char *in, int count)
+static inline void ppp_print_char (register char *out, const char *in, int count)
 {
   register unsigned char next_ch;
 
@@ -2054,7 +2054,7 @@ static inline void ppp_print_char (register char *out, char *in, int count)
   *out = '\0';
 }
 
-static void ppp_print_buffer(const char *name, char *buf, int count, int seg)
+static void ppp_print_buffer(const char *name, const char *buf, int count, int seg)
 {
   char line [44];
   int  old_fs = get_fs();

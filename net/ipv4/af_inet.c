@@ -1194,7 +1194,7 @@ static int inet_read(struct socket *sock, char *ubuf, int size, int noblock)
 	return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock, 0));
 }
 
-static int inet_send(struct socket *sock, void *ubuf, int size, int noblock, 
+static int inet_send(struct socket *sock, const void *ubuf, int size, int noblock, 
 	       unsigned flags)
 {
 	struct sock *sk = (struct sock *) sock->data;
@@ -1208,15 +1208,15 @@ static int inet_send(struct socket *sock, void *ubuf, int size, int noblock,
 	/* We may need to bind the socket. */
 	if(inet_autobind(sk)!=0)
 		return(-EAGAIN);
-	return(sk->prot->write(sk, (unsigned char *) ubuf, size, noblock, flags));
+	return(sk->prot->write(sk, (const unsigned char *) ubuf, size, noblock, flags));
 }
 
-static int inet_write(struct socket *sock, char *ubuf, int size, int noblock)
+static int inet_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
 	return inet_send(sock,ubuf,size,noblock,0);
 }
 
-static int inet_sendto(struct socket *sock, void *ubuf, int size, int noblock, 
+static int inet_sendto(struct socket *sock, const void *ubuf, int size, int noblock, 
 	    unsigned flags, struct sockaddr *sin, int addr_len)
 {
 	struct sock *sk = (struct sock *) sock->data;
@@ -1232,7 +1232,7 @@ static int inet_sendto(struct socket *sock, void *ubuf, int size, int noblock,
 	/* We may need to bind the socket. */
 	if(inet_autobind(sk)!=0)
 		return -EAGAIN;
-	return(sk->prot->sendto(sk, (unsigned char *) ubuf, size, noblock, flags, 
+	return(sk->prot->sendto(sk, (const unsigned char *) ubuf, size, noblock, flags, 
 			   (struct sockaddr_in *)sin, addr_len));
 }
 

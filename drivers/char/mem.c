@@ -30,7 +30,7 @@ static int read_ram(struct inode * inode, struct file * file,char * buf, int cou
 	return -EIO;
 }
 
-static int write_ram(struct inode * inode, struct file * file,char * buf, int count)
+static int write_ram(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	return -EIO;
 }
@@ -60,7 +60,7 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 	return read;
 }
 
-static int write_mem(struct inode * inode, struct file * file,char * buf, int count)
+static int write_mem(struct inode * inode, struct file * file,const char * buf, int count)
 {
 	unsigned long p = file->f_pos;
 	int written;
@@ -134,10 +134,10 @@ static int read_port(struct inode * inode,struct file * file,char * buf, int cou
 	return tmp-buf;
 }
 
-static int write_port(struct inode * inode,struct file * file,char * buf, int count)
+static int write_port(struct inode * inode,struct file * file,const char * buf, int count)
 {
 	unsigned int i = file->f_pos;
-	char * tmp = buf;
+	const char * tmp = buf;
 
 	while (count-- > 0 && i < 65536) {
 		outb(get_user(tmp),i);
@@ -153,7 +153,7 @@ static int read_null(struct inode * node,struct file * file,char * buf,int count
 	return 0;
 }
 
-static int write_null(struct inode * inode,struct file * file,char * buf, int count)
+static int write_null(struct inode * inode,struct file * file, const char * buf, int count)
 {
 	return count;
 }
@@ -183,7 +183,7 @@ static int read_full(struct inode * node,struct file * file,char * buf,int count
 	return count;
 }
 
-static int write_full(struct inode * inode,struct file * file,char * buf, int count)
+static int write_full(struct inode * inode,struct file * file, const char * buf, int count)
 {
 	return -ENOSPC;
 }

@@ -71,17 +71,17 @@ static int unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
 			      int *usockaddr_len, int peer);
 static int unix_proto_read(struct socket *sock, char *ubuf, int size,
 			   int nonblock);
-static int unix_proto_write(struct socket *sock, char *ubuf, int size,
+static int unix_proto_write(struct socket *sock, const char *ubuf, int size,
 			    int nonblock);
 static int unix_proto_select(struct socket *sock, int sel_type, select_table * wait);
 static int unix_proto_ioctl(struct socket *sock, unsigned int cmd,
 			    unsigned long arg);
 static int unix_proto_listen(struct socket *sock, int backlog);
-static int unix_proto_send(struct socket *sock, void *buff, int len,
+static int unix_proto_send(struct socket *sock, const void *buff, int len,
 			    int nonblock, unsigned flags);
 static int unix_proto_recv(struct socket *sock, void *buff, int len,
 			    int nonblock, unsigned flags);
-static int unix_proto_sendto(struct socket *sock, void *buff, int len,
+static int unix_proto_sendto(struct socket *sock, const void *buff, int len,
 			      int nonblock, unsigned flags,
 			      struct sockaddr *addr, int addr_len);
 static int unix_proto_recvfrom(struct socket *sock, void *buff, int len,
@@ -160,7 +160,7 @@ static int unix_proto_getsockopt(struct socket *sock, int level, int optname,
  *	SendTo() doesn't matter as we also have no Datagram support!
  */
 
-static int unix_proto_sendto(struct socket *sock, void *buff, int len, int nonblock, 
+static int unix_proto_sendto(struct socket *sock, const void *buff, int len, int nonblock, 
 		  unsigned flags,  struct sockaddr *addr, int addr_len)
 {
 	return(-EOPNOTSUPP);
@@ -186,12 +186,12 @@ static int unix_proto_shutdown(struct socket *sock, int how)
  *	Send data to a unix socket.
  */
  
-static int unix_proto_send(struct socket *sock, void *buff, int len, int nonblock,
+static int unix_proto_send(struct socket *sock, const void *buff, int len, int nonblock,
 		unsigned flags)
 {
 	if (flags != 0) 
 		return(-EINVAL);
-	return(unix_proto_write(sock, (char *) buff, len, nonblock));
+	return(unix_proto_write(sock, (const char *) buff, len, nonblock));
 }
 
 
@@ -676,7 +676,7 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
  *	peer has disconnected, which we check other ways.
  */
  
-static int unix_proto_write(struct socket *sock, char *ubuf, int size, int nonblock)
+static int unix_proto_write(struct socket *sock, const char *ubuf, int size, int nonblock)
 {
 	struct unix_proto_data *pupd;
 	int todo, space;

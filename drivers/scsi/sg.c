@@ -289,7 +289,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 #define SG_SEND 0
 #define SG_REC  1
 
-static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
+static int sg_write(struct inode *inode,struct file *filp,const char *buf,int count)
 {
     int			  bsize,size,amt,i;
     unsigned char	  cmnd[MAX_COMMAND_SIZE];
@@ -298,7 +298,6 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
     int			  direction;
     unsigned char	  opcode;
     Scsi_Cmnd		* SCpnt;
-    int			  sgcnt;
     
     if ((i=verify_area(VERIFY_READ,buf,count)))
 	return i;

@@ -135,7 +135,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( QLOGIC,		QLOGIC_ISP1020,	"ISP1020"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1022,	"ISP1022"),
 	DEVICE( X,		X_AGX016,	"ITT AGX016"),
-	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b")
+	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b"),
+	DEVICE( HP,		HP_J2585A,	"J2585A")
 };
 
 
@@ -157,9 +158,9 @@ struct pci_dev_info dev_info[] = {
  * optimizations...
  */
 struct optimization_type {
-	char	*type;
-	char	*off;
-	char	*on;
+	const char	*type;
+	const char	*off;
+	const char	*on;
 } bridge_optimization[] = {
 	{"Cache L2",			"write trough",	"write back"},
 	{"CPU-PCI posted write",	"off",		"on"},
@@ -233,7 +234,7 @@ struct pci_dev_info *pci_lookup_dev(unsigned int vendor, unsigned int dev)
 }
 
 
-char *pci_strbioserr (int error)
+const char *pci_strbioserr (int error)
 {
 	switch (error) {
 	      case PCIBIOS_SUCCESSFUL:		return "SUCCESSFUL";
@@ -337,6 +338,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
 	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
+	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
 	      default:				return "Unknown vendor";
 	}
 }

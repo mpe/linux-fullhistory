@@ -64,7 +64,7 @@ typedef struct	SHT
     int (*proc_info)(char *, char **, off_t, int, int, int);
     
     /* driver name that will appear in the /proc/scsi directory */
-    char *procname;
+    const char *procname;
     
     /* low_ino of the drivers /proc/scsi entry. Defined in proc_fs.h */
     unsigned short low_ino;
@@ -73,7 +73,7 @@ typedef struct	SHT
      * The name pointer is a pointer to the name of the SCSI
      * device detected.
      */
-    char *name;
+    const char *name;
     
     /*
      * The detect function shall return non zero on detection,
@@ -335,8 +335,8 @@ extern int scsicam_bios_param (Disk *, int, int *);
 struct Scsi_Device_Template
 {
     struct Scsi_Device_Template * next;
-    char * name;
-    char * tag;
+    const char * name;
+    const char * tag;
     int * usage_count;		  /* Used for loadable modules */
     unsigned char scsi_type;
     unsigned char major;

@@ -118,12 +118,12 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 }
 
 static int
-vcs_write(struct inode *inode, struct file *file, char *buf, int count)
+vcs_write(struct inode *inode, struct file *file, const char *buf, int count)
 {
 	unsigned long p = file->f_pos;
 	unsigned int cons = MINOR(inode->i_rdev);
 	int viewed, attr, size, written;
-	char *buf0;
+	const char *buf0;
 	unsigned short *org;
 
 	attr = (cons & 128);
@@ -169,7 +169,7 @@ vcs_write(struct inode *inode, struct file *file, char *buf, int count)
 			org++;
 		}
 		while (count > 1) {
-			scr_writew(get_user((unsigned short *) buf), org++);
+			scr_writew(get_user((const unsigned short *) buf), org++);
 			buf += 2;
 			count -= 2;
 		}

@@ -57,30 +57,30 @@
  *
  *********************************************************/
 
-static char * filename = __FILE__;
+static const char * filename = __FILE__;
 
-static char * null_msg = "*** NULL at %s:%s (line %d) ***\n";
+static const char * null_msg = "*** NULL at %s:%s (line %d) ***\n";
 #define CHECK_NULL(p) \
 	if (!p) printk(null_msg, filename,__FUNCTION__,__LINE__)
 
-static char * timeout_msg = "*** timeout at %s:%s (line %d) ***\n";
+static const char * timeout_msg = "*** timeout at %s:%s (line %d) ***\n";
 #define TIMEOUT_MSG(lineno) \
 	printk(timeout_msg, filename,__FUNCTION__,(lineno))
 
-static char * invalid_pcb_msg =
+static const char * invalid_pcb_msg =
 	"*** invalid pcb length %d at %s:%s (line %d) ***\n";
 #define INVALID_PCB_MSG(len) \
 	printk(invalid_pcb_msg, (len),filename,__FUNCTION__,__LINE__)
 
-static char * search_msg = "%s: Looking for 3c505 adapter at address %#x...";
+static const char * search_msg = "%s: Looking for 3c505 adapter at address %#x...";
 
-static char * stilllooking_msg = "still looking...";
+static const char * stilllooking_msg = "still looking...";
 
-static char * found_msg = "found.\n";
+static const char * found_msg = "found.\n";
 
-static char * notfound_msg = "not found (reason = %d)\n";
+static const char * notfound_msg = "not found (reason = %d)\n";
 
-static char * couldnot_msg = "%s: 3c505 not found\n";
+static const char * couldnot_msg = "%s: 3c505 not found\n";
 
 /*********************************************************
  *
@@ -1261,7 +1261,7 @@ elp_sense (struct device * dev)
 {
 	int timeout;
 	int addr=dev->base_addr;
-	char *name=dev->name;
+	const char *name=dev->name;
 
 	byte orig_HCR=inb_control(addr),
 		orig_HSR=inb_status(addr);

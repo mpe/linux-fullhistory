@@ -30,7 +30,7 @@
 #include <linux/minix_fs.h>
 
 static int minix_file_read(struct inode *, struct file *, char *, int);
-static int minix_file_write(struct inode *, struct file *, char *, int);
+static int minix_file_write(struct inode *, struct file *, const char *, int);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -190,7 +190,7 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 	return read;
 }
 
-static int minix_file_write(struct inode * inode, struct file * filp, char * buf, int count)
+static int minix_file_write(struct inode * inode, struct file * filp, const char * buf, int count)
 {
 	off_t pos;
 	int written,c;

@@ -396,7 +396,7 @@ probe_pss_mpu (struct address_info *hw_config)
     }
 
 #ifdef EXCLUDE_MIDI
-  return 0
+  return 0;
 #else
   return probe_mpu401 (hw_config);
 #endif

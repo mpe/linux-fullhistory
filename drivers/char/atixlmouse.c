@@ -113,7 +113,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 }
 
 
-static int write_mouse(struct inode * inode, struct file * file, char * buffer, int count)
+static int write_mouse(struct inode * inode, struct file * file, const char * buffer, int count)
 {
 	return -EINVAL;
 }
