@@ -42,13 +42,10 @@ static inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 #undef s
 }
 
-#define page_hash(inode,offset) page_hash_table[_page_hashfn(inode,offset)]
+#define page_hash(inode,offset) (page_hash_table+_page_hashfn(inode,offset))
 
-static inline struct page * find_page(struct inode * inode, unsigned long offset)
+static inline struct page * __find_page(struct inode * inode, unsigned long offset, struct page *page)
 {
-	struct page *page;
-
-	page = page_hash(inode, offset);
 	goto inside;
 	for (;;) {
 		page = page->next_hash;
@@ -67,9 +64,14 @@ not_found:
 	return page;
 }
 
+static inline struct page *find_page(struct inode * inode, unsigned long offset)
+{
+	return __find_page(inode, offset, *page_hash(inode, offset));
+}
+
 static inline void remove_page_from_hash_queue(struct page * page)
 {
-	struct page **p = &page_hash(page->inode,page->offset);
+	struct page **p = page_hash(page->inode,page->offset);
 
 	page_cache_size--;
 	if (page->next_hash)
@@ -81,10 +83,8 @@ static inline void remove_page_from_hash_queue(struct page * page)
 	page->next_hash = page->prev_hash = NULL;
 }
 
-static inline void add_page_to_hash_queue(struct inode * inode, struct page * page)
+static inline void __add_page_to_hash_queue(struct page * page, struct page **p)
 {
-	struct page **p = &page_hash(inode,page->offset);
-
 	page_cache_size++;
 	set_bit(PG_referenced, &page->flags);
 	page->age = PAGE_AGE_VALUE;
@@ -93,6 +93,12 @@ static inline void add_page_to_hash_queue(struct inode * inode, struct page * pa
 		page->next_hash->prev_hash = page;
 	*p = page;
 }
+
+static inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
+{
+	__add_page_to_hash_queue(page, page_hash(inode,offset));
+}
+
 
 static inline void remove_page_from_inode_queue(struct page * page)
 {

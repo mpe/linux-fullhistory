@@ -1046,10 +1046,6 @@ static struct buffer_head * get_unused_buffer_head(void)
 		return NULL;
 	bh = unused_list;
 	unused_list = bh->b_next_free;
-	bh->b_next_free = NULL;
-	bh->b_data = NULL;
-	bh->b_size = 0;
-	bh->b_state = 0;
 	return bh;
 }
 
@@ -1070,11 +1066,18 @@ static struct buffer_head * create_buffers(unsigned long page, unsigned long siz
 		bh = get_unused_buffer_head();
 		if (!bh)
 			goto no_grow;
+
+		bh->b_dev = B_FREE;  /* Flag as unused */
 		bh->b_this_page = head;
 		head = bh;
-		bh->b_data = (char *) (page+offset);
+
+		bh->b_state = 0;
+		bh->b_next_free = NULL;
+		bh->b_count = 0;
 		bh->b_size = size;
-		bh->b_dev = B_FREE;  /* Flag as unused */
+
+		bh->b_data = (char *) (page+offset);
+		bh->b_list = 0;
 	}
 	return head;
 /*
@@ -1128,13 +1131,11 @@ static inline void free_async_buffers (struct buffer_head * bh)
  * This function expects the page to be locked and may return before I/O is complete.
  * You then have to check page->locked, page->uptodate, and maybe wait on page->wait.
  */
-int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int bmap)
+int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 {
 	struct buffer_head *bh, *prev, *next, *arr[MAX_BUF_PER_PAGE];
 	int block, nr;
-	struct page *page;
 
-	page = mem_map + MAP_NR(address);
 	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
 	clear_bit(PG_uptodate, &page->flags);
@@ -1144,7 +1145,7 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	 * They do _not_ show up in the buffer hash table!
 	 * They are _not_ registered in page->buffers either!
 	 */
-	bh = create_buffers(address, size);
+	bh = create_buffers(page_address(page), size);
 	if (!bh) {
 		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);
@@ -1336,7 +1337,7 @@ int generic_readpage(struct inode * inode, struct page * page)
 	} while (i > 0);
 
 	/* IO start */
-	brw_page(READ, page_address(page), inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
+	brw_page(READ, page, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
 	return 0;
 }
 
@@ -1422,7 +1423,7 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 			return 0;
 		if (tmp->b_count || buffer_protected(tmp) ||
 		    buffer_dirty(tmp) || buffer_locked(tmp) ||
-		    buffer_waiting(bh))
+		    buffer_waiting(tmp))
 			return 0;
 		if (priority && buffer_touched(tmp))
 			return 0;

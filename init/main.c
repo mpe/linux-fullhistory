@@ -959,8 +959,17 @@ static int init(void * unused)
 		}
 	}
 #endif
+	
+	/*
+	 *	This keeps serial console MUCH cleaner, but does assume
+	 *	the console driver checks there really is a video device
+	 *	attached (Sparc effectively does).
+	 */
 
-	(void) open("/dev/tty1",O_RDWR,0);
+	if ((open("/dev/tty1",O_RDWR,0) < 0) &&
+	    (open("/dev/ttyS0",O_RDWR,0) < 0))
+		printk("Unable to open a initial console.\n");
+			
 	(void) dup(0);
 	(void) dup(0);
 

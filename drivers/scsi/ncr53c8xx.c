@@ -4325,6 +4325,7 @@ static int ncr_detach(ncb_p np, int irq)
 	lcb_p lp;
 	int target, lun;
 	int i;
+	u_char scntl3;
 
 	printf("%s: releasing host resources\n", ncr_name(np));
 
@@ -4371,12 +4372,15 @@ static int ncr_detach(ncb_p np, int irq)
 
 	/*
 	**	Reset NCR chip
+	**	Preserve scntl3 for automatic clock detection.
 	*/
 
 	printf("%s: resetting chip\n", ncr_name(np));
+	scntl3 = INB (nc_scntl3);
 	OUTB (nc_istat,  SRST);
 	DELAY (1000);
 	OUTB (nc_istat,  0   );
+	OUTB (nc_scntl3, scntl3);
 
 	/*
 	**	Release Memory mapped IO region and IO mapped region
@@ -7353,7 +7357,7 @@ static void ncr_getclock (ncb_p np, u_char scntl3)
 	 */
 
 	if ((scntl3 & 7) < 3) {
-		printf ("%s: assuming 40MHz clock", ncr_name(np));
+		printf ("%s: assuming 40MHz clock\n", ncr_name(np));
 		scntl3 = 3; /* assume 40MHz if no value supplied by BIOS */
 	}
 

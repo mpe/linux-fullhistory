@@ -132,7 +132,7 @@ void stdma_release(void)
 
 int stdma_others_waiting(void)
 {
-	return stdma_wait != NULL;
+	return waitqueue_active(&stdma_wait);
 }
 
 

@@ -380,8 +380,9 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 			continue;
 		if (filp->private_data != tty)
 			continue;
-		if (filp->f_inode
-		    && filp->f_inode->i_rdev == CONSOLE_DEV)
+		if (!filp->f_inode)
+			continue;
+		if (filp->f_inode->i_rdev == CONSOLE_DEV)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;

@@ -618,7 +618,9 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 *	Build and send the packet.
 	 */
 
-	icmp_build_xmit(&icmp_param, saddr, iph->saddr, ((iph->tos & 0x38) | 6));
+	icmp_build_xmit(&icmp_param, saddr, iph->saddr, 
+			icmp_pointers[type].error ? 
+			(iph->tos & 0x1E) | 0xC0 : iph->tos);
 }
 
 

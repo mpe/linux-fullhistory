@@ -258,7 +258,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 			    eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr),
 			    elf_prot,
 			    elf_type,
-			    ELF_PAGESTART(eppnt->p_offset));
+			    eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr));
 	    
 	    if (error > -1024UL) {
 	      /* Real error */
@@ -585,7 +585,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					elf_prot,
 					(MAP_FIXED | MAP_PRIVATE |
 					 MAP_DENYWRITE | MAP_EXECUTABLE),
-					ELF_PAGESTART(elf_ppnt->p_offset));
+					(elf_ppnt->p_offset -
+					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
 			
 #ifdef LOW_ELF_STACK
 			if (ELF_PAGESTART(elf_ppnt->p_vaddr) < elf_stack) 
@@ -802,10 +803,12 @@ do_load_elf_library(int fd){
 	/* Now use mmap to map the library into memory. */
 	error = do_mmap(file,
 			ELF_PAGESTART(elf_phdata->p_vaddr),
-			elf_phdata->p_filesz + ELF_PAGEOFFSET(elf_phdata->p_vaddr),
+			(elf_phdata->p_filesz +
+			 ELF_PAGEOFFSET(elf_phdata->p_vaddr)),
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
-			ELF_PAGESTART(elf_phdata->p_offset));
+			(elf_phdata->p_offset -
+			 ELF_PAGEOFFSET(elf_phdata->p_vaddr)));
 
 	k = elf_phdata->p_vaddr + elf_phdata->p_filesz;
 	if (k > elf_bss) elf_bss = k;

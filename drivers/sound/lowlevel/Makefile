@@ -9,7 +9,7 @@ endif
 endif
 
 lowlevel.o:	$(OBJS)
-	ld -r -o lowlevel.o $(OBJS)
+	$(LD) -r -o lowlevel.o $(OBJS)
 
 clean:
 	rm -f core x y z *~ *.o

@@ -144,7 +144,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
 
-	if (addr > TASK_SIZE || len > TASK_SIZE || addr > TASK_SIZE-len)
+	if (len > TASK_SIZE || addr > TASK_SIZE-len)
 		return -EINVAL;
 
 	/* offset overflow? */
@@ -198,8 +198,6 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 
 	if (flags & MAP_FIXED) {
 		if (addr & ~PAGE_MASK)
-			return -EINVAL;
-		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
 		addr = get_unmapped_area(addr, len);

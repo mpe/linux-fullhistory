@@ -87,7 +87,7 @@ good_area:
 	if (error_code & 1) {
 #ifdef TEST_VERIFY_AREA
 		if (regs->cs == KERNEL_CS)
-			printk("WP fault at %08x\n", regs->eip);
+			printk("WP fault at %08lx\n", regs->eip);
 #endif
 		do_wp_page(current, vma, address, error_code & 2);
 		return;

@@ -227,7 +227,7 @@ void UMSDOS_read_inode(struct inode *inode)
 	if (S_ISDIR(inode->i_mode)
 		&& (inode->u.umsdos_i.u.dir_info.creating != 0
 			|| inode->u.umsdos_i.u.dir_info.looking != 0
-			|| inode->u.umsdos_i.u.dir_info.p != NULL)){
+			|| waitqueue_active(&inode->u.umsdos_i.u.dir_info.p))){
 		Printk (("read inode %d %d %p\n"
 			,inode->u.umsdos_i.u.dir_info.creating
 			,inode->u.umsdos_i.u.dir_info.looking

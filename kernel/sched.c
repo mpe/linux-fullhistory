@@ -1180,8 +1180,10 @@ static int setscheduler(pid_t pid, int policy,
 
 	p->policy = policy;
 	p->rt_priority = lp.sched_priority;
+	cli();
 	if (p->next_run)
 		move_last_runqueue(p);
+	sti();
 	schedule();
 
 	return 0;
@@ -1237,8 +1239,9 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 
 asmlinkage int sys_sched_yield(void)
 {
+	cli();
 	move_last_runqueue(current);
-
+	sti();
 	return 0;
 }
 

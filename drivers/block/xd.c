@@ -752,6 +752,8 @@ int init_module(void)
 void cleanup_module(void)
 {
 	unregister_blkdev(MAJOR_NR, "xd");
+	free_irq(xd_irq, NULL);
+	free_dma(xd_dma);
 }
 #endif /* MODULE */
 

@@ -168,9 +168,10 @@ void swap_after_unlock_page (unsigned long entry)
  * asynchronous function now --- we must call wait_on_page afterwards
  * if synchronous IO is required.  
  */
-void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
+void ll_rw_page(int rw, kdev_t dev, unsigned long offset, char * buffer)
 {
-	int block = page;
+	int block = offset;
+	struct page *page;
 
 	switch (rw) {
 		case READ:
@@ -185,7 +186,8 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 		default:
 			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
-	if (set_bit(PG_locked, &mem_map[MAP_NR(buffer)].flags))
+	page = mem_map + MAP_NR(buffer);
+	if (set_bit(PG_locked, &page->flags))
 		panic ("ll_rw_page: page already locked");
-	brw_page(rw, (unsigned long) buffer, dev, &block, PAGE_SIZE, 0);
+	brw_page(rw, page, dev, &block, PAGE_SIZE, 0);
 }

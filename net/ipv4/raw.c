@@ -236,6 +236,10 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 		memcpy(&sin, usin, sizeof(sin));
 		if (sin.sin_family && sin.sin_family != AF_INET) 
 			return(-EINVAL);
+		/*
+		 *	Protocol type is host ordered byte.
+		 */
+		sin.sin_port=ntohs(sin.sin_port);
 	}
 	else 
 	{

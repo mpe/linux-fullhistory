@@ -53,6 +53,7 @@ __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 
 #define flush_tlb() __flush_tlb()
 #define flush_tlb_all() __flush_tlb()
+#define local_flush_tlb() __flush_tlb()
 
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {

@@ -137,7 +137,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	for (i = 0; i < 4; i++)
 		if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID) {
 			printk("EISA ID mismatch, %8x vs %8x.\n",
-				   inl(ioaddr + AC_EISA_ID), AC_EISA_ID); 
+				   inl(ioaddr + AC_ID_PORT), AC_EISA_ID); 
 			return ENODEV;
 		}
 

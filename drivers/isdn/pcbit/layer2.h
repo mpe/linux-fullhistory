@@ -14,7 +14,7 @@
 #ifndef LAYER2_H
 #define LAYER2_H
 
-#include <bytesex.h>
+#include <asm/byteorder.h>
 
 #define BANK1 0x0000U /* PC -> Board */
 #define BANK2 0x01ffU /* Board -> PC */
@@ -85,7 +85,7 @@
 */
 
 struct msg_fmt {
-#if __BYTE_ORDER == 1234              /* Little Endian */
+#ifdef __LITTLE_ENDIAN              /* Little Endian */
   u_char scmd;
   u_char cmd;
   u_char proc;

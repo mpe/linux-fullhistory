@@ -34,7 +34,7 @@ http://www.datanet.hu/generations/linux/Changes.html (English).
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: August 29, 1996.
+Last updated: September 02, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -350,8 +350,10 @@ Frame Relay
    Frame relay support for Linux is now available as well.  Currently,
 only Sangoma cards are supported, but the interface is such that others
 will be as drivers become available.  To use this, grab
-ftp://ftp.invlogic.com/linux/frad-0.15.tgz and
-ftp://ftp.invlogic.com/linux/routing.tgz.
+ftp://linux.invlogic.com/pub/fr/frad-0.15.tgz (soon to be
+frad-0.20.tgz).  Another package of interest is
+ftp://linux.invlogic.com/pub/routing/routing.tgz (which allows Linux to
+make routing decisions based on packet source).
 
 Networking
 ==========

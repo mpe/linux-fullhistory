@@ -77,7 +77,7 @@
   ((M) == SCSI_DISK_MAJOR	\
    || (M) == SCSI_CDROM_MAJOR)
 
-static inline int scsi_blk_major(int m) {
+static __inline__ int scsi_blk_major(int m) {
 	return SCSI_BLK_MAJOR(m);
 }
 

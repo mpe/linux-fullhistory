@@ -564,7 +564,7 @@ rpc_closesock(struct rpc_sock *rsock)
 	unsigned long	t0 = jiffies;
 
 	rsock->shutdown = 1;
-	while (rsock->pending || rsock->backlog) {
+	while (rsock->pending || waitqueue_active(&rsock->backlog)) {
 		interruptible_sleep_on(&rsock->shutwait);
 		if (current->signal & ~current->blocked)
 			return -EINTR;

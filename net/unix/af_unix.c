@@ -863,6 +863,12 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		return -EINVAL;
 	}
 		
+	if(sk->shutdown&SEND_SHUTDOWN)
+	{
+		send_sig(SIGPIPE,current,0);
+		return -EPIPE;
+	}
+	
 	if(sunaddr!=NULL)
 	{
 		if(sock->type==SOCK_STREAM)
@@ -973,10 +979,27 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 				sock->state=SS_UNCONNECTED;
 				sti();
 				kfree_skb(skb, FREE_WRITE);
+				/*
+				 *	Check with 1003.1g - what should
+				 *	datagram error
+				 */
+				if (!sent)
+					sent = -ECONNRESET;
+				return sent;
+			}
+			/*
+			 *	Stream sockets SIGPIPE
+			 */
+			if(sock->type==SOCK_STREAM && other->dead)
+			{
+				kfree_skb(skb, FREE_WRITE);
+				sti();
 				if(!sent)
-					return -ECONNRESET;
-				else
-					return sent;
+				{
+					send_sig(SIGPIPE,current,0);
+					sent = -EPIPE;
+				}
+				return sent;
 			}
 		}
 		else

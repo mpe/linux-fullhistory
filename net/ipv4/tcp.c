@@ -958,6 +958,7 @@ static int do_tcp_sendmsg(struct sock *sk,
 			{
 				if (copied)
 					return copied;
+				send_sig(SIGPIPE,current,0);
 				return -EPIPE;
 			}
 
