@@ -38,7 +38,7 @@ asmlinkage long sys_pipe(int __user *fildes)
 	return error;
 }
 
-long sys_mmap(unsigned long addr, unsigned long len, unsigned long prot, unsigned long flags,
+asmlinkage long sys_mmap(unsigned long addr, unsigned long len, unsigned long prot, unsigned long flags,
 	unsigned long fd, unsigned long off)
 {
 	long error;
