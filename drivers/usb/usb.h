@@ -149,6 +149,7 @@ typedef struct {
 #define USB_ST_REMOVED		0x100
 #define USB_ST_TIMEOUT		0x110
 #define USB_ST_INTERNALERROR	-1
+#define USB_ST_NOTSUPPORTED	-2
 
 /*
  * USB device number allocation bitmap. There's one bitmap
@@ -289,6 +290,11 @@ struct usb_operations {
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
 	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 	int (*release_irq)(void* handle);
+	void *(*alloc_isoc)(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id);
+	void (*delete_isoc)(struct usb_device *dev, void *_isodesc);
+	int (*sched_isoc)(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
+	int (*unsched_isoc)(struct usb_device *usb_dev, void *_isodesc);
+	int (*compress_isoc)(struct usb_device *usb_dev, void *_isodesc);
 };
 
 /*
@@ -309,8 +315,8 @@ struct usb_device {
 	int devnum;			/* Device number on USB bus */
 	int slow;			/* Slow device? */
 	int maxpacketsize;		/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
-	int toggle[2];			/* one bit for each endpoint ([0] = IN, [1] = OUT) */
-	int halted;			/* endpoint halts */
+	unsigned int toggle[2];		/* one bit for each endpoint ([0] = IN, [1] = OUT) */
+	unsigned int halted;		/* endpoint halts */
 	struct usb_config_descriptor *actconfig;/* the active configuration */
 	int epmaxpacket[16];		/* endpoint specific maximums */
 	int ifnum;			/* active interface number */
@@ -356,6 +362,13 @@ void usb_driver_purge(struct usb_driver *,struct usb_device *);
 extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
 extern void usb_destroy_configuration(struct usb_device *dev);
 
+extern void *usb_allocate_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len,
+					int maxsze, usb_device_irq completed, void *dev_id);
+extern void usb_delete_isochronous (struct usb_device *dev, void *_isodesc);
+extern int usb_schedule_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
+extern int usb_unschedule_isochronous (struct usb_device *usb_dev, void *_isodesc);
+extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc);
+
 /*
  * Calling this entity a "pipe" is glorifying it. A USB pipe
  * is something embarrassingly simple: it basically consists
@@ -380,7 +393,7 @@ extern void usb_destroy_configuration(struct usb_device *dev);
  *  - device:		bits 8-14
  *  - endpoint:		bits 15-18
  *  - Data0/1:		bit 19
- *  - speed:		bit 26		(00 = Full, 01 = Low Speed)
+ *  - speed:		bit 26		(0 = Full, 1 = Low Speed)
  *  - pipe type:	bits 30-31	(00 = isochronous, 01 = interrupt, 10 = control, 11 = bulk)
  *
  * Why? Because it's arbitrary, and whatever encoding we select is really
@@ -392,19 +405,18 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 #define usb_maxpacket(dev,pipe)	((dev)->epmaxpacket[usb_pipeendpoint(pipe)])
 #define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
 
+#define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
 #define usb_pipedevice(pipe)	(((pipe) >> 8) & 0x7f)
+#define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 #define usb_pipeendpoint(pipe)	(((pipe) >> 15) & 0xf)
 #define usb_pipedata(pipe)	(((pipe) >> 19) & 1)
-#define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
 #define usb_pipeslow(pipe)	(((pipe) >> 26) & 1)
-
 #define usb_pipetype(pipe)	(((pipe) >> 30) & 3)
 #define usb_pipeisoc(pipe)	(usb_pipetype((pipe)) == 0)
 #define usb_pipeint(pipe)	(usb_pipetype((pipe)) == 1)
 #define usb_pipecontrol(pipe)	(usb_pipetype((pipe)) == 2)
 #define usb_pipebulk(pipe)	(usb_pipetype((pipe)) == 3)
 
-#define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 #define PIPE_DEVEP_MASK		0x0007ff00
 
 /* The D0/D1 toggle bits */
@@ -448,10 +460,12 @@ int usb_get_device_descriptor(struct usb_device *dev);
 int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size);
 int usb_clear_port_feature(struct usb_device *dev, int port, int feature);
 int usb_set_port_feature(struct usb_device *dev, int port, int feature);
+int usb_get_status (struct usb_device *dev, int type, int target, void *data);
 int usb_get_hub_status(struct usb_device *dev, void *data);
 int usb_get_port_status(struct usb_device *dev, int port, void *data);
 int usb_get_protocol(struct usb_device *dev);
 int usb_set_protocol(struct usb_device *dev, int protocol);
+int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_idle(struct usb_device *dev, int duration, int report_id);
 int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_configuration(struct usb_device *dev, int configuration);

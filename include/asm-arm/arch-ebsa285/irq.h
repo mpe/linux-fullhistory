@@ -159,6 +159,8 @@ static __inline__ void irq_init_irq(void)
 	if (isa_irq != -1) {
 		/*
 		 * Setup, and then probe for an ISA PIC
+		 * If the PIC is not there, then we
+		 * ignore the PIC.
 		 */
 		outb(0x11, PIC_LO);
 		outb(_ISA_IRQ(0), PIC_MASK_LO);	/* IRQ number		*/

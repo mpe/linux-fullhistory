@@ -54,8 +54,8 @@ static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_
  */
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
-	struct soft_thread_struct * t = &current->thread;
-	struct hard_thread_struct * tss = init_tss + smp_processor_id();
+	struct thread_struct * t = &current->thread;
+	struct tss_struct * tss = init_tss + smp_processor_id();
 
 	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
 		return -EINVAL;

@@ -280,12 +280,44 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 }
 
 
+static void *sohci_alloc_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+{
+	return NULL;
+}
+
+static void sohci_delete_isochronous (struct usb_device *dev, void *_isodesc)
+{
+	return;
+}
+
+static int sohci_sched_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+static int sohci_unsched_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+static int sohci_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+
 struct usb_operations sohci_device_operations = {
 	sohci_usb_allocate,
 	sohci_usb_deallocate,
 	sohci_control_msg,
 	sohci_bulk_msg,
 	sohci_request_irq,
+	NULL,	/* FIXME: should be release_irq/remove_irq */
+	sohci_alloc_isochronous,
+	sohci_delete_isochronous,
+	sohci_sched_isochronous,
+	sohci_unsched_isochronous,
+	sohci_compress_isochronous
 };
 
  

@@ -12,8 +12,8 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 
-struct resource pci_io_resource = { "PCI IO", 0x0000, 0xFFFF };
-struct resource pci_mem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF };
+struct resource ioport_resource = { "PCI IO", 0x0000, 0xFFFF };
+struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF };
 
 /*
  * This generates reports for /proc/ioports and /proc/memory
@@ -49,7 +49,7 @@ int get_resource_list(struct resource *root, char *buf, int size)
 	char *fmt;
 
 	fmt = "        %08lx-%08lx : %s\n";
-	if (root == &pci_io_resource)
+	if (root == &ioport_resource)
 		fmt = "        %04lx-%04lx : %s\n";
 	return do_resource_list(root->child, fmt, 8, buf, buf + size) - buf;
 }	
@@ -179,7 +179,7 @@ void __init reserve_setup(char *str, int *ints)
 			res->start = ints[i];
 			res->end = res->start + ints[i] - 1;
 			res->child = NULL;
-			if (request_resource(&pci_io_resource, res) == 0)
+			if (request_resource(&ioport_resource, res) == 0)
 				reserved = x+1;
 		}
 	}

@@ -195,7 +195,10 @@ usb_kbd_probe(struct usb_device *dev)
         kbd->dev = dev;
         dev->private = kbd;
 
-        usb_set_configuration(dev, dev->config[0].bConfigurationValue);
+        if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+		printk (KERN_INFO " Failed usb_set_configuration: kbd\n");
+		goto probe_err;
+	}
         usb_set_protocol(dev, 0);
         usb_set_idle(dev, 0, 0);
         
@@ -206,9 +209,14 @@ usb_kbd_probe(struct usb_device *dev)
                         kbd);
 
         list_add(&kbd->list, &usb_kbd_list);
+	
+	return 0;
     }
 
-    return 0;
+probe_err:
+    if (kbd)
+    	kfree (kbd);
+    return -1;
 }
 
 static void

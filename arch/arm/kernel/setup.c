@@ -309,7 +309,8 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * mem
 	case MACH_TYPE_EBSA110:
 		/* EBSA110 locks if we execute 'wait for interrupt' */
 		disable_hlt();
-		params = NULL;
+		if (params && params->u1.s.page_size != 4096)
+			params = NULL;
 		break;
 
 	case MACH_TYPE_EBSA285:

@@ -43,9 +43,9 @@ void show_td(struct uhci_td * td)
 		spid = "?";
 		break;
 	}
-	printk("MaxLen=%x %sEndPt=%x Dev=%x, PID=%x(%s) ",
+	printk("MaxLen=%x DT%d EndPt=%x Dev=%x, PID=%x(%s) ",
 		td->info >> 21,
-		 ((td->info >> 19) & 1) ? "DT " : "",
+		 ((td->info >> 19) & 1),
 		 (td->info >> 15) & 15,
 		 (td->info >> 8) & 127,
 		 (td->info & 0xff),

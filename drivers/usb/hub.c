@@ -26,10 +26,8 @@ static spinlock_t hub_list_lock = SPIN_LOCK_UNLOCKED;
 /* List of hubs needing servicing */
 static struct list_head hub_event_list;
 
-#ifdef MODULE
 /* List containing all of the hubs (for cleanup) */
 static struct list_head all_hubs_list;
-#endif
 
 /* PID of khubd */
 static int khubd_pid = 0;

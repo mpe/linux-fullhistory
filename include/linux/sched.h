@@ -35,7 +35,6 @@ extern unsigned long event;
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
-#define CLONE_TLB	0x00008000	/* system thread does lazy TLB flushing (kernel-internal only!) */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -194,7 +193,7 @@ struct mm_struct {
 #define INIT_MM(name) {					\
 		&init_mmap, NULL, NULL,			\
 		swapper_pg_dir, 			\
-		ATOMIC_INIT(1), 1,			\
+		ATOMIC_INIT(2), 1,			\
 		__MUTEX_INITIALIZER(name.mmap_sem),	\
 		SPIN_LOCK_UNLOCKED,			\
 		0,					\
@@ -302,13 +301,14 @@ struct task_struct {
 	struct sem_undo *semundo;
 	struct sem_queue *semsleeping;
 /* CPU-specific state of this task */
-	struct soft_thread_struct thread;
+	struct thread_struct thread;
 /* filesystem information */
 	struct fs_struct *fs;
 /* open file information */
 	struct files_struct *files;
+
 /* memory management info */
-	struct mm_struct *mm;
+	struct mm_struct *mm, *active_mm;
 
 /* signal handlers */
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
@@ -334,7 +334,6 @@ struct task_struct {
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
 #define PF_VFORK	0x00001000	/* Wake up parent in mm_release */
-#define PF_LAZY_TLB	0x00002000	/* thread does lazy TLB switching */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
@@ -381,7 +380,7 @@ struct task_struct {
 /* thread */	INIT_THREAD, \
 /* fs */	&init_fs, \
 /* files */	&init_files, \
-/* mm */	&init_mm, \
+/* mm */	NULL, &init_mm, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 }
 

@@ -32,6 +32,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_CLPS7110	9
 #define MACH_TYPE_ARCHIMEDES	10
 #define MACH_TYPE_A5K		11
+#define MACH_TYPE_SA1100	12	/* not allocated!!! */
 
 /*
  * Sort out a definition for machine_arch_type

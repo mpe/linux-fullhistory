@@ -40,5 +40,7 @@
 #define FLUSH_BASE		0xdf000000
 #define PCIO_BASE		0xf0000000
 
+#define PARAMS_BASE		(PAGE_OFFSET + 0x400)
+
 #endif
 

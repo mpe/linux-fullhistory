@@ -100,7 +100,7 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 {
   switch (channel) {
-#ifdef CONFIG_BLK_DEV_FD
+#ifdef CONFIG_BLK_DEV_FD1772
     case DMA_VIRTUAL_FLOPPY0: { /* Data DMA */
         extern unsigned int fdc1772_bytestogo;
 

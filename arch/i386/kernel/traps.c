@@ -199,6 +199,9 @@ void die(const char * str, struct pt_regs * regs, long err)
 	spin_lock_irq(&die_lock);
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_registers(regs);
+
+spin_lock_irq(&die_lock);
+
 	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
 }

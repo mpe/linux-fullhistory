@@ -512,7 +512,7 @@ void forget_segments(void)
 	/*
 	 * Load the LDT entry of init_task.
 	 */
-	load_LDT(init_task.mm);
+	load_LDT(&init_mm);
 }
 
 /*
@@ -539,7 +539,7 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 		:"=&a" (retval), "=&S" (d0)
 		:"0" (__NR_clone), "i" (__NR_exit),
 		 "r" (arg), "r" (fn),
-		 "b" (flags | CLONE_VM | CLONE_TLB)
+		 "b" (flags | CLONE_VM)
 		: "memory");
 	return retval;
 }
@@ -566,13 +566,15 @@ void flush_thread(void)
 
 void release_thread(struct task_struct *dead_task)
 {
-	void * ldt = dead_task->mm->segments;
+	if (dead_task->mm) {
+		void * ldt = dead_task->mm->segments;
 
-	// temporary debugging check
-	if (ldt) {
-		printk("WARNING: dead process %8s still has LDT? <%p>\n",
-				dead_task->comm, ldt);
-		BUG();
+		// temporary debugging check
+		if (ldt) {
+			printk("WARNING: dead process %8s still has LDT? <%p>\n",
+					dead_task->comm, ldt);
+			BUG();
+		}
 	}
 }
 
@@ -735,9 +737,9 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 extern int cpus_initialized;
 void __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
-	struct soft_thread_struct *prev = &prev_p->thread,
+	struct thread_struct *prev = &prev_p->thread,
 				 *next = &next_p->thread;
-	struct hard_thread_struct *tss = init_tss + smp_processor_id();
+	struct tss_struct *tss = init_tss + smp_processor_id();
 
 	unlazy_fpu(prev_p);
 
@@ -753,8 +755,10 @@ void __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->fs));
 	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->gs));
 
-	/* Re-load LDT if necessary */
-	if (prev_p->mm->segments != next_p->mm->segments)
+	/*
+	 * Re-load LDT if necessary
+	 */
+	if (prev_p->active_mm->segments != next_p->active_mm->segments)
 		load_LDT(next_p->mm);
 
 	/* Re-load page tables */

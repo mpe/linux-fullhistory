@@ -96,7 +96,7 @@ struct cpuinfo_x86 {
 #define X86_FEATURE_AMD3D	0x80000000
 
 extern struct cpuinfo_x86 boot_cpu_data;
-extern struct hard_thread_struct init_tss[NR_CPUS];
+extern struct tss_struct init_tss[NR_CPUS];
 
 #ifdef __SMP__
 extern struct cpuinfo_x86 cpu_data[];
@@ -221,7 +221,7 @@ extern unsigned int mca_pentium_flag;
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
  */
 #define IO_BITMAP_SIZE	32
-#define IO_BITMAP_OFFSET offsetof(struct hard_thread_struct,io_bitmap)
+#define IO_BITMAP_OFFSET offsetof(struct tss_struct,io_bitmap)
 #define INVALID_IO_BITMAP_OFFSET 0x8000
 
 struct i387_hard_struct {
@@ -259,7 +259,7 @@ typedef struct {
 	unsigned long seg;
 } mm_segment_t;
 
-struct hard_thread_struct {
+struct tss_struct {
 	unsigned short	back_link,__blh;
 	unsigned long	esp0;
 	unsigned short	ss0,__ss0h;
@@ -290,7 +290,7 @@ struct hard_thread_struct {
 	unsigned long __cacheline_filler[5];
 };
 
-struct soft_thread_struct {
+struct thread_struct {
 	unsigned long	esp0;
 	unsigned long	cr3;
 	unsigned long	eip;
@@ -392,7 +392,7 @@ extern void forget_segments(void);
 /*
  * Return saved PC of a blocked thread.
  */
-extern inline unsigned long thread_saved_pc(struct soft_thread_struct *t)
+extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
 	return ((unsigned long *)t->esp)[3];
 }

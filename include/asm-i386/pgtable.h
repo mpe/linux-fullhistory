@@ -307,9 +307,6 @@ extern pte_t * __bad_pagetable(void);
 do { \
 	unsigned long __pgdir = __pa(pgdir); \
 	(tsk)->thread.cr3 = __pgdir; \
-	/* do not inherit lazy-TLB after exec() */ \
-	if ((pgdir != swapper_pg_dir) && ((tsk)->flags & PF_LAZY_TLB)) \
-		(tsk)->flags &= ~PF_LAZY_TLB; \
 	if ((tsk) == current) \
 		__asm__ __volatile__("movl %0,%%cr3": :"r" (__pgdir)); \
 } while (0)

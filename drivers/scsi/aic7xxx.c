@@ -269,7 +269,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.17"
+#define AIC7XXX_C_VERSION  "5.1.19"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -7411,47 +7411,6 @@ read_seeprom(struct aic7xxx_host *p, int offset,
 
 /*+F*************************************************************************
  * Function:
- *   write_brdctl
- *
- * Description:
- *   Writes a value to the BRDCTL register.
- *-F*************************************************************************/
-static void
-write_brdctl(struct aic7xxx_host *p, unsigned char value)
-{
-  unsigned char brdctl;
-
-  if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895)
-  {
-    brdctl = BRDSTB;
-    if (p->flags & AHC_CHNLB)
-      brdctl |= BRDCS;
-  }
-  else if (p->features & AHC_ULTRA2)
-    brdctl = 0;
-  else
-    brdctl = BRDSTB | BRDCS;
-  aic_outb(p, brdctl, BRDCTL);
-  udelay(1);
-  brdctl |= value;
-  aic_outb(p, brdctl, BRDCTL);
-  udelay(1);
-  if (p->features & AHC_ULTRA2)
-    brdctl |= BRDSTB_ULTRA2;
-  else
-    brdctl &= ~BRDSTB;
-  aic_outb(p, brdctl, BRDCTL);
-  udelay(1);
-  if (p->features & AHC_ULTRA2)
-    brdctl = 0;
-  else
-    brdctl &= ~BRDCS;
-  aic_outb(p, brdctl, BRDCTL);
-  udelay(1);
-}
-
-/*+F*************************************************************************
- * Function:
  *   read_brdctl
  *
  * Description:
@@ -7462,22 +7421,73 @@ read_brdctl(struct aic7xxx_host *p)
 {
   unsigned char brdctl, value;
 
-  if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895)
+  if (p->features & AHC_ULTRA2)
   {
-    brdctl = BRDRW;
-    if (p->flags & AHC_CHNLB)
-      brdctl |= BRDCS;
-  }
-  else if (p->features & AHC_ULTRA2)
     brdctl = BRDRW_ULTRA2;
-  else
-    brdctl = BRDRW | BRDCS;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(4);
+    return(aic_inb(p, BRDCTL));
+  }
+  brdctl = BRDRW;
+  if ( !((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895) ||
+        (p->flags & AHC_CHNLB) )
+  {
+    brdctl |= BRDCS;
+  }
   aic_outb(p, brdctl, BRDCTL);
   udelay(1);
   value = aic_inb(p, BRDCTL);
   aic_outb(p, 0, BRDCTL);
   udelay(1);
   return (value);
+}
+
+/*+F*************************************************************************
+ * Function:
+ *   write_brdctl
+ *
+ * Description:
+ *   Writes a value to the BRDCTL register.
+ *-F*************************************************************************/
+static void
+write_brdctl(struct aic7xxx_host *p, unsigned char value)
+{
+  unsigned char brdctl;
+
+  if (p->features & AHC_ULTRA2)
+  {
+    brdctl = value;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(4);
+    brdctl |= BRDSTB_ULTRA2;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(4);
+    brdctl &= ~BRDSTB_ULTRA2;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(4);
+    read_brdctl(p);
+  }
+  else
+  {
+    brdctl = BRDSTB;
+    if ( !((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895) ||
+          (p->flags & AHC_CHNLB) )
+    {
+      brdctl |= BRDCS;
+    }
+    brdctl = BRDSTB | BRDCS;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(1);
+    brdctl |= value;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(1);
+    brdctl &= ~BRDSTB;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(1);
+    brdctl &= ~BRDCS;
+    aic_outb(p, brdctl, BRDCTL);
+    udelay(1);
+  }
 }
 
 /*+F*************************************************************************
@@ -7769,9 +7779,9 @@ configure_termination(struct aic7xxx_host *p)
                  p->host_no);
       }
     }
+    aic_outb(p, sxfrctl1, SXFRCTL1);
     write_brdctl(p, brddat);
     release_seeprom(p);
-    aic_outb(p, sxfrctl1, SXFRCTL1);
   }
 }
 
@@ -8085,7 +8095,11 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     /* Select channel B */
     aic_outb(p, aic_inb(p, SBLKCTL) | SELBUSB, SBLKCTL);
 
-    term = ((p->flags & AHC_TERM_ENB_B) != 0) ? STPWEN : 0;
+    if ((p->flags & AHC_SEEPROM_FOUND) || (aic7xxx_override_term != -1))
+      term = (aic_inb(p, SXFRCTL1) & STPWEN);
+    else
+      term = ((p->flags & AHC_TERM_ENB_B) ? STPWEN : 0);
+
     aic_outb(p, p->scsi_id_b, SCSIID);
     scsi_conf = aic_inb(p, SCSICONF + 1);
     aic_outb(p, DFON | SPIOEN, SXFRCTL0);
@@ -8099,11 +8113,18 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     aic_outb(p, aic_inb(p, SBLKCTL) & ~SELBUSB, SBLKCTL);
   }
 
-  term = ((p->flags & AHC_TERM_ENB_SE_LOW) != 0) ? STPWEN : 0;
   if (p->features & AHC_ULTRA2)
+  {
     aic_outb(p, p->scsi_id, SCSIID_ULTRA2);
+  }
   else
+  {
     aic_outb(p, p->scsi_id, SCSIID);
+  }
+  if ((p->flags & AHC_SEEPROM_FOUND) || (aic7xxx_override_term != -1))
+    term = (aic_inb(p, SXFRCTL1) & STPWEN);
+  else
+    term = ((p->flags & (AHC_TERM_ENB_A|AHC_TERM_ENB_LVD)) ? STPWEN : 0);
   scsi_conf = aic_inb(p, SCSICONF);
   aic_outb(p, DFON | SPIOEN, SXFRCTL0);
   aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
@@ -8793,27 +8814,33 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
     }
     if (p->flags & AHC_NEWEEPROM_FMT)
     {
-      if ( (sc->device_flags[i] & CFNEWULTRAFORMAT) &&
-          !(p->features & AHC_ULTRA2) )
+      if ( !(p->features & AHC_ULTRA2) )
       {
         /*
          * I know of two different Ultra BIOSes that do this differently.
          * One on the Gigabyte 6BXU mb that wants flags[i] & CFXFER to
-         * be == to 0x03 and SYNCISULTRA to be true to mean 40MByte/s
+         * be == to 0x03 and SYNCHISULTRA to be true to mean 40MByte/s
          * while on the IBM Netfinity 5000 they want the same thing
          * to be something else, while flags[i] & CFXFER == 0x03 and
-         * SYNCISULTRA false should be 40MByte/s.  So, we set both to
+         * SYNCHISULTRA false should be 40MByte/s.  So, we set both to
          * 40MByte/s and the lower speeds be damned.  People will have
          * to select around the conversely mapped lower speeds in order
          * to select lower speeds on these boards.
          */
-        if ((sc->device_flags[i] & (CFXFER)) == 0x03)
+        if ( (sc->device_flags[i] & CFNEWULTRAFORMAT) &&
+            ((sc->device_flags[i] & CFXFER) == 0x03) )
         {
           sc->device_flags[i] &= ~CFXFER;
           sc->device_flags[i] |= CFSYNCHISULTRA;
         }
+        if (sc->device_flags[i] & CFSYNCHISULTRA)
+        {
+          p->ultraenb |= mask;
+        }
       }
-      if (sc->device_flags[i] & CFSYNCHISULTRA)
+      else if ( !(sc->device_flags[i] & CFNEWULTRAFORMAT) &&
+                 (p->features & AHC_ULTRA2) &&
+		 (sc->device_flags[i] & CFSYNCHISULTRA) )
       {
         p->ultraenb |= mask;
       }
@@ -9034,11 +9061,44 @@ aic7xxx_detect(Scsi_Host_Template *template)
 
 
 #if defined(__i386__) || defined(__alpha__)
+#ifdef CONFIG_PCI
+  /*
+   * PCI-bus chipset probe.
+   */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
+  if (pci_present())
+  {
+    if (pci_find_device(PCI_VENDOR_ID_INTEL,
+                        PCI_DEVICE_ID_INTEL_82450GX,
+                        NULL))
+      aic7xxx_no_probe = 1;
+    if (pci_find_device(PCI_VENDOR_ID_INTEL,
+                        PCI_DEVICE_ID_INTEL_82451NX,
+                        NULL))
+      aic7xxx_no_probe = 1;
+  }
+#else
+#define PCI_DEVICE_ID_INTEL_82451NX 0x84ca
+  if (pcibios_present())
+  {
+    unsigned char pci_bus, pci_devfn;
+    if (!(pcibios_find_device(PCI_VENDOR_ID_INTEL,
+                              PCI_DEVICE_ID_INTEL_82450GX,
+                              0, &pci_bus, &pci_devfn)) )
+      aic7xxx_no_probe = 1;
+    if (!(pcibios_find_device(PCI_VENDOR_ID_INTEL,
+                              PCI_DEVICE_ID_INTEL_82451NX,
+                              0, &pci_bus, &pci_devfn)) )
+      aic7xxx_no_probe = 1;
+  }
+#endif /* LINUX_VERSION_CODE */
+#endif /* CONFIG_PCI */
   /*
    * EISA/VL-bus card signature probe.
    */
   slot = MINSLOT;
-  while ( (slot <= MAXSLOT) && !(aic7xxx_no_probe) )
+  while ( (slot <= MAXSLOT) && 
+         !(aic7xxx_no_probe) )
   {
     base = SLOTBASE(slot) + MINREG;
 
@@ -9296,6 +9356,10 @@ aic7xxx_detect(Scsi_Host_Template *template)
        AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED,
        AHC_AIC7860_FE,                                       7,
        32, C46 },
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_38602, AHC_AIC7860,
+       AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED,
+       AHC_AIC7860_FE,                                       7,
+       32, C46 },
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7860, AHC_AIC7860,
        AHC_PAGESCBS | AHC_NEWEEPROM_FMT | AHC_BIOS_ENABLED,
        AHC_AIC7860_FE,                                       7,
@@ -9474,6 +9538,23 @@ aic7xxx_detect(Scsi_Host_Template *template)
           temp_p->pci_device_fn = pdev->devfn;
           temp_p->base = pdev->base_address[0];
           temp_p->mbase = pdev->base_address[1];
+          temp_p->base &= PCI_BASE_ADDRESS_IO_MASK;
+          temp_p->mbase &= PCI_BASE_ADDRESS_MEM_MASK;
+          current_p = list_p;
+	  while(current_p)
+	  {
+	    if ( ((current_p->pci_bus == temp_p->pci_bus) &&
+	          (current_p->pci_device_fn == temp_p->pci_device_fn)) ||
+                  (current_p->base == temp_p->base) )
+	    {
+              /* duplicate PCI entry, skip it */
+	      kfree(temp_p);
+	      temp_p = NULL;
+	    }
+	    current_p = current_p->next;
+	  }
+	  if ( temp_p == NULL )
+            continue;
           if (aic7xxx_verbose & VERBOSE_PROBE2)
             printk("aic7xxx: <%s> at PCI %d/%d\n", 
               board_names[aic_pdevs[i].board_name_index],
@@ -9507,11 +9588,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
 #else  /* LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92) */
           temp_p->pci_bus = pci_bus;
           temp_p->pci_device_fn = pci_devfn;
-          if (aic7xxx_verbose & VERBOSE_PROBE2)
-            printk("aic7xxx: <%s> at PCI %d/%d\n", 
-              board_names[aic_pdevs[i].board_name_index],
-              PCI_SLOT(temp_p->pci_device_fn),
-              PCI_FUNC(temp_p->pci_device_fn));
           pcibios_read_config_byte(pci_bus, pci_devfn, PCI_INTERRUPT_LINE,
             &pci_irq);
           temp_p->irq = pci_irq;
@@ -9521,6 +9597,28 @@ aic7xxx_detect(Scsi_Host_Template *template)
           pcibios_read_config_dword(pci_bus, pci_devfn, PCI_BASE_ADDRESS_1,
             &mmapbase);
           temp_p->mbase = mmapbase;
+          temp_p->base &= PCI_BASE_ADDRESS_IO_MASK;
+          temp_p->mbase &= PCI_BASE_ADDRESS_MEM_MASK;
+          current_p = list_p;
+	  while(current_p)
+	  {
+	    if ( ((current_p->pci_bus == temp_p->pci_bus) &&
+	          (current_p->pci_device_fn == temp_p->pci_device_fn)) ||
+                  (current_p->base == temp_p->base) )
+	    {
+              /* duplicate PCI entry, skip it */
+	      kfree(temp_p);
+	      temp_p = NULL;
+	    }
+	    current_p = current_p->next;
+	  }
+	  if ( temp_p == NULL )
+            continue;
+          if (aic7xxx_verbose & VERBOSE_PROBE2)
+            printk("aic7xxx: <%s> at PCI %d/%d\n", 
+              board_names[aic_pdevs[i].board_name_index],
+              PCI_SLOT(temp_p->pci_device_fn),
+              PCI_FUNC(temp_p->pci_device_fn));
           pcibios_read_config_word(pci_bus, pci_devfn, PCI_COMMAND, &command);
           if (aic7xxx_verbose & VERBOSE_PROBE2)
           {
@@ -9548,12 +9646,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
 #endif /* AIC7XXX_STRICT_PCI_SETUP */
 #endif /* LINUIX_VERSION_CODE > KERNEL_VERSION(2,1,92) */
 
-          /*
-           * The first bit (LSB) of PCI_BASE_ADDRESS_0 is always set, so
-           * we mask it off.
-           */
-          temp_p->base &= PCI_BASE_ADDRESS_IO_MASK;
-          temp_p->mbase &= PCI_BASE_ADDRESS_MEM_MASK;
           temp_p->unpause = INTEN;
           temp_p->pause = temp_p->unpause | PAUSE;
           if ( ((temp_p->base == 0) &&
@@ -9571,6 +9663,9 @@ aic7xxx_detect(Scsi_Host_Template *template)
           }
 
 #ifdef MMAPIO
+          if ( !(temp_p->flags & AHC_MULTI_CHANNEL) ||
+               ((temp_p->chip != (AHC_AIC7870 | AHC_PCI)) &&
+                (temp_p->chip != (AHC_AIC7880 | AHC_PCI))) )
           {
             unsigned long page_offset, base;
 

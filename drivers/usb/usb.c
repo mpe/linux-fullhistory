@@ -1,5 +1,5 @@
 /*
- * driver/usb/usb.c
+ * drivers/usb/usb.c
  *
  * (C) Copyright Linus Torvalds 1999
  *
@@ -647,6 +647,19 @@ int usb_set_port_feature(struct usb_device *dev, int port, int feature)
 	return dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev,0), &dr, NULL, 0);
 }
 
+int usb_get_status (struct usb_device *dev, int type, int target, void *data)
+{
+	devrequest dr;
+
+	dr.requesttype = USB_DIR_IN | type;	/* USB_RECIP_DEVICE, _INTERFACE, or _ENDPOINT */
+	dr.request = USB_REQ_GET_STATUS;
+	dr.value = 0;
+	dr.index = target;
+	dr.length = 2;
+
+	return dev->bus->op->control_msg (dev, usb_rcvctrlpipe (dev,0), &dr, data, 2);
+}
+
 int usb_get_hub_status(struct usb_device *dev, void *data)
 {
 	devrequest dr;
@@ -928,7 +941,7 @@ int usb_get_stringtable(struct usb_device *dev)
 		return -1;
 
 	/* get space for strings and index */
-	dev->stringindex = kmalloc(sizeof(char *)*maxindex, GFP_KERNEL);
+	dev->stringindex = kmalloc(sizeof(char *) * (maxindex+1), GFP_KERNEL);
 	if (!dev->stringindex)
 		return -1;
 	dev->stringtable = kmalloc(totalchars, GFP_KERNEL);
@@ -939,7 +952,7 @@ int usb_get_stringtable(struct usb_device *dev)
 	}
 
 	/* fill them in */
-	memset(dev->stringindex, 0, sizeof(char *)*maxindex);
+	memset(dev->stringindex, 0, sizeof(char *) * (maxindex+1));
 	for (i=1, string = dev->stringtable; i <= maxindex; i++) {
 		if (usb_get_string(dev, langid, i, buffer, bLengths[i]))
 			continue;
@@ -1095,6 +1108,32 @@ void usb_new_device(struct usb_device *dev)
 void* usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	return dev->bus->op->request_irq(dev, pipe, handler, period, dev_id);
+}
+
+
+void *usb_allocate_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+{
+	return usb_dev->bus->op->alloc_isoc (usb_dev, pipe, data, len, maxsze, completed, dev_id);
+}
+
+void usb_delete_isochronous (struct usb_device *dev, void *_isodesc)
+{
+	return dev->bus->op->delete_isoc (dev, _isodesc);
+}
+
+int usb_schedule_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+{
+	return usb_dev->bus->op->sched_isoc (usb_dev, _isodesc, _pisodesc);
+}
+
+int usb_unschedule_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return usb_dev->bus->op->unsched_isoc (usb_dev, _isodesc);
+}
+
+int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return usb_dev->bus->op->compress_isoc (usb_dev, _isodesc);
 }
 
 int usb_release_irq(struct usb_device *dev, void* handle)

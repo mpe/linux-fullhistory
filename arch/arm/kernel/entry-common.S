@@ -132,7 +132,8 @@ ENTRY(sys_call_table)
 SYMBOL_NAME(sys_syscall):
 		eor	r6, r0, #OS_NUMBER << 20
 		cmp	r6, #NR_syscalls	@ check range
-		ldmleib	sp, {r0 - r4}		@ get our args
+		add	ip, sp, #4
+		ldmleib	ip, {r0 - r4}		@ get our args
 		strle	r4, [sp]		@ Put our arg on the stack
 		ldrle	pc, [r5, r6, lsl #2]
 		mov	r0, #-ENOSYS

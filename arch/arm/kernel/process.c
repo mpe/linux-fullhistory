@@ -209,8 +209,7 @@ void flush_thread(void)
 {
 	int i;
 
-	for (i = 0; i < NR_DEBUGS; i++)
-		current->tss.debug[i] = 0;
+	memset(&current->tss.debug, 0, sizeof(current->tss.debug));
 	current->used_math = 0;
 	current->flags &= ~PF_USEDFPU;
 }
@@ -255,8 +254,6 @@ int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
-	int i;
-
 	dump->magic = CMAGIC;
 	dump->start_code = current->mm->start_code;
 	dump->start_stack = regs->ARM_sp & ~(PAGE_SIZE - 1);
@@ -265,8 +262,11 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize = (current->mm->brk - current->mm->start_data + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	dump->u_ssize = 0;
 
-	for (i = 0; i < NR_DEBUGS; i++)
-		dump->u_debugreg[i] = current->tss.debug[i];  
+	dump->u_debugreg[0] = current->tss.debug.bp[0].address;
+	dump->u_debugreg[1] = current->tss.debug.bp[1].address;
+	dump->u_debugreg[2] = current->tss.debug.bp[0].insn;
+	dump->u_debugreg[3] = current->tss.debug.bp[1].insn;
+	dump->u_debugreg[4] = current->tss.debug.nsaved;
 
 	if (dump->start_stack < 0x04000000)
 		dump->u_ssize = (0x04000000 - dump->start_stack) >> PAGE_SHIFT;

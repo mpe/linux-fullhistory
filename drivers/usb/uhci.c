@@ -344,6 +344,7 @@ static void uhci_remove_irq_list(struct uhci_td *td)
 	spin_unlock_irqrestore(&irqlist_lock, flags);
 }
 
+
 /*
  * Request a interrupt handler..
  *
@@ -360,7 +361,7 @@ static void* uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 	unsigned int destination, status;
 
 	/* Destination: pipe destination with INPUT */
-	destination = (pipe & 0x0007ff00) | 0x69;
+	destination = (pipe & PIPE_DEVEP_MASK) | 0x69;
 
 	/* Status:    slow/fast,      Interrupt,   Active,    Short Packet Detect     Infinite Errors */
 	status = (pipe & (1 << 26)) | (1 << 24) | (1 << 23)   |   (1 << 29)       |    (0 << 27);
@@ -371,7 +372,8 @@ static void* uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
 
 	td->link = 1;
 	td->status = status;			/* In */
-	td->info = destination | (7 << 21) | (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19);	/* 8 bytes of data */
+	td->info = destination | ((usb_maxpacket(usb_dev, pipe) - 1) << 21) |
+		(usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19);
 	td->buffer = virt_to_bus(dev->data);
 	td->first = td;
 	td->qh = interrupt_qh;
@@ -490,7 +492,7 @@ int uhci_release_irq(void* handle)
  * Isochronous thread operations
  */
 
-int uhci_compress_isochronous(struct usb_device *usb_dev, void *_isodesc)
+static int uhci_compress_isochronous(struct usb_device *usb_dev, void *_isodesc)
 {
 	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
 	char *data = isodesc->data;
@@ -517,7 +519,7 @@ if ((isodesc->td[i].status >> 16) & 0xFF)
 	return totlen;
 }
 
-int uhci_unsched_isochronous(struct usb_device *usb_dev, void *_isodesc)
+static int uhci_unschedule_isochronous(struct usb_device *usb_dev, void *_isodesc)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci *uhci = dev->uhci;
@@ -540,7 +542,7 @@ int uhci_unsched_isochronous(struct usb_device *usb_dev, void *_isodesc)
 }
 	
 /* td points to the one td we allocated for isochronous transfers */
-int uhci_sched_isochronous(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+static int uhci_schedule_isochronous(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci *uhci = dev->uhci;
@@ -550,7 +552,7 @@ int uhci_sched_isochronous(struct usb_device *usb_dev, void *_isodesc, void *_pi
 
 	if (isodesc->frame != -1) {
 		printk("isoc queue not removed\n");
-		uhci_unsched_isochronous(usb_dev, isodesc);
+		uhci_unschedule_isochronous(usb_dev, isodesc);
 	}
 
 	/* Insert TD into list */
@@ -592,7 +594,7 @@ printk("last at frame %d\n", (frame + i - 1) % 1024);
 /*
  * Initialize isochronous queue
  */
-void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+static void *uhci_allocate_isochronous(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	unsigned long destination, status;
@@ -631,7 +633,7 @@ void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void
 		td = &isodesc->td[i];
 
 		/* The "pipe" thing contains the destination in bits 8--18 */
-		destination = (pipe & 0x0007ff00);
+		destination = (pipe & PIPE_DEVEP_MASK);
 
 		if (usb_pipeout(pipe))
 			destination |= 0xE1;	/* OUT */
@@ -667,13 +669,13 @@ void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void
 	return isodesc;
 }
 
-void uhci_delete_isochronous(struct usb_device *usb_dev, void *_isodesc)
+static void uhci_delete_isochronous(struct usb_device *usb_dev, void *_isodesc)
 {
 	struct uhci_iso_td *isodesc = (struct uhci_iso_td *)_isodesc;
 
 	/* If it's still scheduled, unschedule them */
 	if (isodesc->frame)
-		uhci_unsched_isochronous(usb_dev, isodesc);
+		uhci_unschedule_isochronous(usb_dev, isodesc);
 
 	/* Remove it from the IRQ list */
 	uhci_remove_irq_list(&isodesc->td[isodesc->num - 1]);
@@ -783,7 +785,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
  * information, that's just ridiculously high. Most
  * control messages have just a few bytes of data.
  */
-static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void *cmd, void *data, int len)
+static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *first, *td, *prevtd;
@@ -797,7 +799,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	first = td = uhci_td_allocate(dev);
 
 	/* The "pipe" thing contains the destination in bits 8--18, 0x2D is SETUP */
-	destination = (pipe & 0x0007ff00) | 0x2D;
+	destination = (pipe & PIPE_DEVEP_MASK) | 0x2D;
 
 	/* Status:    slow/fast,       Active,    Short Packet Detect     Three Errors */
 	status = (pipe & (1 << 26)) | (1 << 23)   |   (1 << 29)       |    (3 << 27);
@@ -858,7 +860,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 
 	td->backptr = &prevtd->link;
 	td->status = (status /* & ~(3 << 27) */) | (1 << 24);	/* no limit on final packet */
-	td->info = destination | (0x7ff << 21);		/* 0 bytes of data */
+	td->info = destination | (UHCI_NULL_DATA_SIZE << 21);	/* 0 bytes of data */
 	td->buffer = 0;
 	td->first = first;
 	td->link = 1;					/* Terminate */
@@ -888,7 +890,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	}
 
 	if (uhci_debug && ret) {
-		__u8 *p = cmd;
+		__u8 *p = (__u8 *)cmd;
 
 		printk("Failed cmd - %02X %02X %02X %02X %02X %02X %02X %02X\n",
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
@@ -1015,10 +1017,10 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	  I FORGOT WHAT IT EXACTLY DOES
 	*/
 	if (usb_pipeout(pipe)) {
-		destination = (pipe & 0x0007ff00) | 0xE1;
+		destination = (pipe & PIPE_DEVEP_MASK) | 0xE1;
 	}
 	else {
-		destination = (pipe & 0x0007ff00) | 0x69;
+		destination = (pipe & PIPE_DEVEP_MASK) | 0x69;
 	}
 
 	/* Status:    slow/fast,       Active,    Short Packet Detect     Three Errors */
@@ -1176,6 +1178,11 @@ struct usb_operations uhci_device_operations = {
 	uhci_bulk_msg,
 	uhci_request_irq,
 	uhci_release_irq,
+	uhci_allocate_isochronous,
+	uhci_delete_isochronous,
+	uhci_schedule_isochronous,
+	uhci_unschedule_isochronous,
+	uhci_compress_isochronous
 };
 
 /*
@@ -1243,6 +1250,9 @@ static void uhci_connect_change(struct uhci *uhci, unsigned int port, unsigned i
 	 * and find out what it wants to do..
 	 */
 	usb_dev = uhci_usb_allocate(root_hub->usb);
+	if (!usb_dev)
+		return;
+	
 	dev = usb_dev->hcpriv;
 
 	dev->uhci = uhci;
@@ -1673,8 +1683,8 @@ static int uhci_control_thread(void * __uhci)
 				printk("UHCI queue dump:\n");
 				show_queues(uhci);
 			} else if (signr == SIGUSR2) {
-				printk("UHCI debug toggle\n");
 				uhci_debug = !uhci_debug;
+				printk("UHCI debug toggle = %x\n", uhci_debug);
 			} else {
 				break;
 			}

@@ -330,7 +330,6 @@ __initfunc(void test_wp_bit(void))
 	printk("Checking if this processor honours the WP bit even in supervisor mode... ");
 	pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_READONLY));
 	local_flush_tlb();
-	current->mm->mmap->vm_start += PAGE_SIZE;
 	__asm__ __volatile__(
 		"jmp 1f; 1:\n"
 		"movb %0,%1\n"
@@ -342,7 +341,6 @@ __initfunc(void test_wp_bit(void))
 		:"memory");
 	pg0[0] = old;
 	local_flush_tlb();
-	current->mm->mmap->vm_start -= PAGE_SIZE;
 	if (boot_cpu_data.wp_works_ok < 0) {
 		boot_cpu_data.wp_works_ok = 0;
 		printk("No.\n");

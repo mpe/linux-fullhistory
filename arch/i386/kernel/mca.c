@@ -332,7 +332,7 @@ __initfunc(void mca_init(void))
 	restore_flags(flags);
 
 	for (i = 0; i < MCA_STANDARD_RESOURCES; i++)
-		request_resource(&pci_io_resource, mca_standard_resources + i);
+		request_resource(&ioport_resource, mca_standard_resources + i);
 
 #ifdef CONFIG_PROC_FS
 	mca_do_proc_init();

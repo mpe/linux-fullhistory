@@ -231,7 +231,10 @@ static int acm_probe(struct usb_device *dev)
 			continue;
 
 		printk("USB ACM found\n");
-		usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue);
+		if (usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue)) {
+			printk (KERN_INFO " Failed usb_set_configuration: ACM\n");
+			continue;
+		}
 		acm->dev=dev;
 		acm->readendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[0].bEndpointAddress;
 		acm->writeendp=dev->config[cfgnum].altsetting[0].interface[1].endpoint[1].bEndpointAddress;

@@ -14,14 +14,8 @@
  * This all means that kernel threads have about as much overhead as
  * a function call ...
  */
-#define get_mmu_context(prev, next) \
-	do { if (next->flags & PF_LAZY_TLB) \
-		{ mmget(prev->mm); next->mm = prev->mm; \
-			next->thread.cr3 = prev->thread.cr3; } } while(0)
-
-#define put_mmu_context(prev, next) \
-	do { if (prev->flags & PF_LAZY_TLB) \
-			{ mmput(prev->mm); } } while(0)
+#define get_mmu_context(next) do { } while (0)
+#define set_mmu_context(prev,next) do { next->thread.cr3 = prev->thread.cr3; } while(0)
 
 #define init_new_context(mm)	do { } while(0)
 /*

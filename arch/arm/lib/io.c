@@ -1,3 +1,5 @@
+#include <linux/module.h>
+
 #include <asm/io.h>
 
 /*
@@ -40,3 +42,8 @@ void _memset_io(unsigned long dst, int c, unsigned long count)
 		dst++;
 	}
 }
+
+EXPORT_SYMBOL(_memcpy_fromio);
+EXPORT_SYMBOL(_memcpy_toio);
+EXPORT_SYMBOL(_memset_io);
+

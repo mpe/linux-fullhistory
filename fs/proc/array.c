@@ -742,7 +742,7 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 {
 	struct mm_struct * mm = p->mm;
 
-	if (mm && mm != &init_mm) {
+	if (mm) {
 		struct vm_area_struct * vma = mm->mmap;
 		unsigned long data = 0, stack = 0;
 		unsigned long exec = 0, lib = 0;
@@ -868,7 +868,7 @@ static int get_stat(int pid, char * buffer)
 		return 0;
 	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
-	if (tsk->mm && tsk->mm != &init_mm) {
+	if (tsk->mm) {
 		struct vm_area_struct *vma = tsk->mm->mmap;
 		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
@@ -1025,7 +1025,7 @@ static int get_statm(int pid, char * buffer)
 	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
-	if (tsk->mm && tsk->mm != &init_mm) {
+	if (tsk->mm) {
 		struct vm_area_struct * vma = tsk->mm->mmap;
 
 		while (vma) {
@@ -1111,7 +1111,7 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 	if (!p)
 		goto freepage_out;
 
-	if (!p->mm || p->mm == &init_mm || count == 0)
+	if (!p->mm || count == 0)
 		goto getlen_out;
 
 	/* Check whether the mmaps could change if we sleep */
@@ -1378,8 +1378,6 @@ static int process_unauthorized(int type, int pid)
 		ok = p->dumpable;
 		if(!cap_issubset(p->cap_permitted, current->cap_permitted))
 			ok=0;			
-		if(!p->mm)	/* Scooby scooby doo where are you ? */
-			p=NULL;
 	}
 		
 	read_unlock(&tasklist_lock);

@@ -53,6 +53,8 @@
 #define   USBPORTSC_PR		0x0200	/* Port Reset */
 #define   USBPORTSC_SUSP	0x1000	/* Suspend */
 
+#define UHCI_NULL_DATA_SIZE	0x7ff	/* for UHCI controller TD */
+
 struct uhci_qh {
 	unsigned int link;	/* Next queue */
 	unsigned int element;	/* Queue element pointer */
@@ -237,12 +239,6 @@ struct uhci_td *uhci_link_to_td(unsigned int element);
 void show_td(struct uhci_td * td);
 void show_status(struct uhci *uhci);
 void show_queues(struct uhci *uhci);
-
-int uhci_compress_isochronous(struct usb_device *usb_dev, void *_isodesc);
-int uhci_unsched_isochronous(struct usb_device *usb_dev, void *_isodesc);
-int uhci_sched_isochronous(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
-void *uhci_alloc_isochronous(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id);
-void uhci_delete_isochronous(struct usb_device *dev, void *_isodesc);
 
 #endif
 

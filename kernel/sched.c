@@ -622,8 +622,12 @@ signed long schedule_timeout(signed long timeout)
  * cleans up all remaining scheduler things, without impacting the
  * common case.
  */
-static inline void __schedule_tail (struct task_struct *prev)
+static inline void __schedule_tail(struct task_struct *prev)
 {
+	if (!prev->mm) {
+		mmput(prev->active_mm);
+		prev->active_mm = NULL;
+	}
 #ifdef __SMP__
 	if ((prev->state == TASK_RUNNING) &&
 			(prev != idle_task(smp_processor_id())))
@@ -633,7 +637,7 @@ static inline void __schedule_tail (struct task_struct *prev)
 #endif /* __SMP__ */
 }
 
-void schedule_tail (struct task_struct *prev)
+void schedule_tail(struct task_struct *prev)
 {
 	__schedule_tail(prev);
 }
@@ -781,9 +785,19 @@ still_running_back:
 	 * but prev is set to (the just run) 'last' process by switch_to().
 	 * This might sound slightly confusing but makes tons of sense.
 	 */
-	get_mmu_context(prev, next);
+	{
+		struct mm_struct *mm = next->mm;
+		if (!mm) {
+			mm = prev->active_mm;
+			set_mmu_context(prev,next);
+			if (next->active_mm) BUG();
+			next->active_mm = mm;
+			mmget(mm);
+		}
+	}
+
+	get_mmu_context(next);
 	switch_to(prev, next, prev);
-	put_mmu_context(prev, next);
 	__schedule_tail(prev);
 
 same_process:
@@ -1931,7 +1945,7 @@ static void show_task(struct task_struct * p)
 		printk("%5d ", p->p_cptr->pid);
 	else
 		printk("      ");
-	if (p->flags & PF_LAZY_TLB)
+	if (!p->mm)
 		printk(" (L-TLB) ");
 	else
 		printk(" (NOTLB) ");
@@ -2029,6 +2043,5 @@ void __init sched_init(void)
 	 * The boot idle thread does lazy MMU switching as well:
 	 */
 	mmget(&init_mm);
-	current->flags |= PF_LAZY_TLB;
 }
 

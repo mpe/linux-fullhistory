@@ -1714,12 +1714,13 @@ S: 75019 Paris
 S: France
 
 N: Rik van Riel
-E: H.H.vanRiel@humbolt.geo.uu.nl
-W: http://humbolt.geo.uu.nl/
-D: Maintainer of the mm-patches page (see www.linuxhq.com)
-D: Documentation/sysctl/*, kswapd fixes, random kernel hacker
-S: Vorenkampsweg 1
-S: NL-9488 TG  Zeijerveld
+E: riel@nl.linux.org
+W: http://www.nl.linux.org/~riel/
+D: Linux-MM site, Documentation/sysctl/*, swap/mm readaround
+D: clustering contributor, kswapd fixes, random kernel hacker,
+D: nl.linux.org maintainer, minor scheduler additions
+S: IJsselstraat 23a
+S: 9725 GA  Groningen
 S: The Netherlands
 
 N: William E. Roadcap

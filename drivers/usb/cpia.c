@@ -23,7 +23,6 @@
 #include <asm/io.h>
 
 #include "usb.h"
-#include "uhci.h"
 #include "cpia.h"
 
 #define MAX_FRAME_SIZE (384 * 288 * 3)
@@ -478,10 +477,10 @@ printk("no frame available\n");
 
 	sbuf = &cpia->sbuf[cpia->receivesbuf];
 
-	uhci_unsched_isochronous(dev, sbuf->isodesc);
+	usb_unschedule_isochronous(dev, sbuf->isodesc);
 
 	/* Do something to it now */
-	sbuf->len = uhci_compress_isochronous(dev, sbuf->isodesc);
+	sbuf->len = usb_compress_isochronous(dev, sbuf->isodesc);
 
 	if (sbuf->len)
 	printk("%d bytes received\n", sbuf->len);
@@ -498,7 +497,7 @@ printk("no frame available\n");
 	}
 
 	/* Reschedule this block of Isochronous desc */
-	uhci_sched_isochronous(dev, sbuf->isodesc, cpia->sbuf[(cpia->receivesbuf + 2) % 3].isodesc);
+	usb_schedule_isochronous(dev, sbuf->isodesc, cpia->sbuf[(cpia->receivesbuf + 2) % 3].isodesc);
 
 	/* Move to the next one */
 	cpia->receivesbuf = (cpia->receivesbuf + 1) % 3;
@@ -521,18 +520,18 @@ int cpia_init_isoc(struct usb_cpia *cpia)
 	cpia->state = STATE_SCANNING;
 
 	/* Allocate all of the memory necessary */
-	cpia->sbuf[0].isodesc = uhci_alloc_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[0].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
-	cpia->sbuf[1].isodesc = uhci_alloc_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[1].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
-	cpia->sbuf[2].isodesc = uhci_alloc_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[2].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
+	cpia->sbuf[0].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[0].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
+	cpia->sbuf[1].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[1].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
+	cpia->sbuf[2].isodesc = usb_allocate_isochronous(dev, usb_rcvisocpipe(dev,1), cpia->sbuf[2].data, STREAM_BUF_SIZE, 960, cpia_isoc_irq, cpia);
 
 	printk("isodesc[0] @ %p\n", cpia->sbuf[0].isodesc);
 	printk("isodesc[1] @ %p\n", cpia->sbuf[1].isodesc);
 	printk("isodesc[2] @ %p\n", cpia->sbuf[2].isodesc);
 
 	/* Schedule the queues */
-	uhci_sched_isochronous(dev, cpia->sbuf[0].isodesc, NULL);
-	uhci_sched_isochronous(dev, cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
-	uhci_sched_isochronous(dev, cpia->sbuf[2].isodesc, cpia->sbuf[1].isodesc);
+	usb_schedule_isochronous(dev, cpia->sbuf[0].isodesc, NULL);
+	usb_schedule_isochronous(dev, cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
+	usb_schedule_isochronous(dev, cpia->sbuf[2].isodesc, cpia->sbuf[1].isodesc);
 
 	if (usb_set_interface(cpia->dev, 1, 3)) {
 		printk("cpia_set_interface error\n");
@@ -561,18 +560,18 @@ void cpia_stop_isoc(struct usb_cpia *cpia)
 	/* Set packet size to 0 */
 	if (usb_set_interface(cpia->dev, 1, 0)) {
 		printk("cpia_set_interface error\n");
-		return -EINVAL;
+		return /* -EINVAL */;
 	}
 
 	/* Unschedule all of the iso td's */
-	uhci_unsched_isochronous(dev, cpia->sbuf[2].isodesc);
-	uhci_unsched_isochronous(dev, cpia->sbuf[1].isodesc);
-	uhci_unsched_isochronous(dev, cpia->sbuf[0].isodesc);
+	usb_unschedule_isochronous(dev, cpia->sbuf[2].isodesc);
+	usb_unschedule_isochronous(dev, cpia->sbuf[1].isodesc);
+	usb_unschedule_isochronous(dev, cpia->sbuf[0].isodesc);
 
 	/* Delete them all */
-	uhci_delete_isochronous(dev, cpia->sbuf[2].isodesc);
-	uhci_delete_isochronous(dev, cpia->sbuf[1].isodesc);
-	uhci_delete_isochronous(dev, cpia->sbuf[0].isodesc);
+	usb_delete_isochronous(dev, cpia->sbuf[2].isodesc);
+	usb_delete_isochronous(dev, cpia->sbuf[1].isodesc);
+	usb_delete_isochronous(dev, cpia->sbuf[0].isodesc);
 }
 
 /* Video 4 Linux API */
@@ -980,7 +979,7 @@ static long cpia_read(struct video_device *dev, char *buf, unsigned long count, 
 	struct usb_cpia *cpia = (struct usb_cpia *)dev;
 	int len;
 
-	printk("cpia_read: %d bytes\n", count);
+	printk("cpia_read: %ld bytes\n", count);
 #if 0
 	len = cpia_capture(cpia, buf, count);
 
@@ -995,7 +994,7 @@ static int cpia_mmap(struct video_device *dev, const char *adr, unsigned long si
 	unsigned long start = (unsigned long)adr;
 	unsigned long page, pos;
 
-	printk("mmap: %d (%X) bytes\n", size, size);
+	printk("mmap: %ld (%lX) bytes\n", size, size);
 	if (size > (((2 * MAX_FRAME_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
 		return -EINVAL;
 
@@ -1048,7 +1047,10 @@ static void usb_cpia_configure(struct usb_cpia *cpia)
 	unsigned char camerastat[8];
 	unsigned char *buf;
 
-	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
+	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+		printk (KERN_INFO " Failed usb_set_configuration: CPIA\n");
+		return;
+	}
 
 	if (usb_cpia_get_version(dev, version)) {
 		printk("cpia_get_version error\n");

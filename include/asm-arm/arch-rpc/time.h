@@ -151,7 +151,7 @@ extern __inline__ unsigned long get_rtc_time(void)
 	 */
 	buf[4] &= 0x1f;
 	buf[3] &= 0x3f;
-printk("Year %4d mon %02X day %02X hour %02X min %02X sec %02X\n", year, buf[4], buf[3], buf[2], buf[1], buf[0]);
+
 	for (i = 0; i < 5; i++)
 		BCD_TO_BIN(buf[i]);
 
@@ -175,6 +175,9 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		else
 			last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 	}
+
+	if (!user_mode(regs))
+		do_profile(instruction_pointer(regs));
 }
 
 static struct irqaction timerirq = {

@@ -5,7 +5,7 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o checksum.o delay.o io.o memcpy.o \
+L_OBJS   := backtrace.o bitops.o checksum.o delay.o memcpy.o \
 	    semaphore.o string.o system.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
@@ -24,6 +24,8 @@ endif
 
 ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
+else
+  LX_OBJS += io.o
 endif
 
 ifeq ($(MACHINE),footbridge)

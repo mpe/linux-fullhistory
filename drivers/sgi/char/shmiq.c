@@ -214,6 +214,8 @@ shmiq_ioctl (struct inode *inode, struct file *f, unsigned int cmd, unsigned lon
 			goto bad_file;
 
 		v = shmiq_manage_file (file);
+		if (v<0)
+			fput(file);
 		return v;
 
 		/*

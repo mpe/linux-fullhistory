@@ -387,3 +387,9 @@ asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs
 		code, regs->ARM_pc, instr, regs->ARM_lr, regs->ARM_sp);
 }
 #endif
+
+asmlinkage void __div0(void)
+{
+	printk("Awooga, division by zero in kernel.\n");
+	__backtrace();
+}

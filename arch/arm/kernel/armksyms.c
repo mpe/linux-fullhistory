@@ -116,10 +116,6 @@ EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
 
-EXPORT_SYMBOL(_memcpy_fromio);
-EXPORT_SYMBOL(_memcpy_toio);
-EXPORT_SYMBOL(_memset_io);
-
 	/* address translation */
 #ifndef __virt_to_phys__is_a_macro
 EXPORT_SYMBOL(__virt_to_phys);

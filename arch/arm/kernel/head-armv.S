@@ -72,6 +72,8 @@ ENTRY(_stext)
  *  r1 = 6 -> CATS
  *  r1 = 7 -> tbox
  *  r1 = 8 -> SA110/21285 as co-processor
+ *  r1 = 9 -> CL-PS7110 system
+ *  r1 = 12 -> SA1100 based system
  */
 
 __entry:	teq	r0, #0					@ check for illegal entry...
@@ -245,6 +247,12 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		.long	DC21285_ARMCSR_BASE			@ Physical I/O base address
 		.long	0x7cf00000 >> 18			@ Virtual I/O base address
 
+		@ SA1100
+		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0xc0000000
+		.long	0xc0000000
+		.long	0x80000000				@ IO mapping will change when kernel gets on its feet
+		.long	0x3800
+
 .LCProcTypes:	@ ARM6 / 610
 		.long	0x41560600
 		.long	0xffffff00
@@ -266,9 +274,9 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		b	.Larmv3_flush_late			@ arm v3 flush & ctrl late setup
 		mov	pc, lr
 
-		@ StrongARM
-		.long	0x4401a100
-		.long	0xfffffff0
+		@ StrongARM-110 and StrongARM-1100
+		.long	0x4401a100				@ 4401a100 and 4401a110
+		.long	0xffffffe0
 		.long	0x00000c02
 		b	.Larmv4_flush_early
 		b	.Lsa_fastclock

@@ -31,6 +31,5 @@ union task_union init_task_union
  * section. Since TSS's are completely CPU-local, we want them
  * on exact cacheline boundaries, to eliminate cacheline ping-pong.
  */ 
-struct hard_thread_struct init_tss[NR_CPUS] __cacheline_aligned =
-					{ [0 ... NR_CPUS-1] = INIT_TSS };
+struct tss_struct init_tss[NR_CPUS] __cacheline_aligned = { [0 ... NR_CPUS-1] = INIT_TSS };
 

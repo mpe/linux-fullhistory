@@ -232,6 +232,9 @@ static inline int dup_mmap(struct mm_struct * mm)
 	struct vm_area_struct * mpnt, *tmp, **pprev;
 	int retval;
 
+	/* Kill me slowly. UGLY! FIXME! */
+	memcpy(&mm->start_code, &current->mm->start_code, 15*sizeof(unsigned long));
+
 	flush_cache_mm(current->mm);
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
@@ -289,9 +292,6 @@ fail_nomem:
 
 /*
  * Allocate and initialize an mm_struct.
- *
- * NOTE! The mm mutex will be locked until the
- * caller decides that all systems are go..
  */
 struct mm_struct * mm_alloc(void)
 {
@@ -299,23 +299,11 @@ struct mm_struct * mm_alloc(void)
 
 	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
 	if (mm) {
-		*mm = *current->mm;
+		memset(mm, 0, sizeof(*mm));
 		init_new_context(mm);
 		atomic_set(&mm->count, 1);
-		mm->map_count = 0;
-		mm->def_flags = 0;
-		init_MUTEX_LOCKED(&mm->mmap_sem);
+		init_MUTEX(&mm->mmap_sem);
 		mm->page_table_lock = SPIN_LOCK_UNLOCKED;
-		/*
-		 * Leave mm->pgd set to the parent's pgd
-		 * so that pgd_offset() is always valid.
-		 */
-		mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
-
-		/* It has not run yet, so cannot be present in anyone's
-		 * cache or tlb.
-		 */
-		mm->cpu_vm_mask = 0;
 	}
 	return mm;
 }
@@ -366,14 +354,23 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->cmin_flt = tsk->cmaj_flt = 0;
 	tsk->nswap = tsk->cnswap = 0;
 
+	/*
+	 * Are we cloning a kernel thread?
+	 */
+	mm = current->mm;
+	if (!mm) {
+		tsk->active_mm = NULL;
+		return 0;
+	}
+
 	if (clone_flags & CLONE_VM) {
-		mmget(current->mm);
+		mmget(mm);
 		/*
 		 * No need to worry about the LDT descriptor for the
 		 * cloned task, LDTs get magically loaded at
 		 * __switch_to time if necessary.
 		 */
-		SET_PAGE_DIR(tsk, current->mm->pgd);
+		SET_PAGE_DIR(tsk, mm->pgd);
 		return 0;
 	}
 
@@ -383,18 +380,23 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		goto fail_nomem;
 
 	tsk->mm = mm;
+	tsk->active_mm = mm;
+
+	mm->pgd = pgd_alloc();
+	if (!mm->pgd)
+		goto free_mm;
+
 	/*
 	 * child gets a private LDT (if there was an LDT in the parent)
 	 */
 	copy_segments(tsk, mm);
 
-	retval = new_page_tables(tsk);
-	if (retval)
-		goto free_mm;
+	down(&current->mm->mmap_sem);
 	retval = dup_mmap(mm);
+	up(&current->mm->mmap_sem);
 	if (retval)
 		goto free_pt;
-	up(&mm->mmap_sem);
+	SET_PAGE_DIR(tsk, mm->pgd);
 	return 0;
 
 free_mm:
@@ -536,8 +538,6 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 		new_flags &= ~(PF_PTRACED|PF_TRACESYS);
 	if (clone_flags & CLONE_VFORK)
 		new_flags |= PF_VFORK;
-	if ((clone_flags & CLONE_TLB) && capable(CAP_SYS_ADMIN))
-		new_flags |= PF_LAZY_TLB;
 	p->flags = new_flags;
 }
 
@@ -560,7 +560,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	*p = *current;
 
-	down(&current->mm->mmap_sem);
 	lock_kernel();
 
 	retval = -EAGAIN;
@@ -679,7 +678,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 bad_fork:
 	unlock_kernel();
-	up(&current->mm->mmap_sem);
 fork_out:
 	if ((clone_flags & CLONE_VFORK) && (retval > 0)) 
 		down(&sem);

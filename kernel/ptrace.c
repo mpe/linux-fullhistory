@@ -39,6 +39,8 @@ repeat:
 	if (!pte_present(*pgtable))
 		goto fault_in_page;
 	page = pte_page(*pgtable);
+	if (write && (!pte_write(*pgtable) || !pte_dirty(*pgtable)))
+		goto fault_in_page;
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	flush_cache_page(vma, addr);

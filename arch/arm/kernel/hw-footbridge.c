@@ -866,8 +866,63 @@ EXPORT_SYMBOL(cpld_modify);
 #define DEFAULT_LEDS	GPIO_GREEN_LED
 #endif
 
+/*
+ * CATS stuff
+ */
+#ifdef CONFIG_CATS
+
+#define CONFIG_PORT	0x370
+#define INDEX_PORT	(CONFIG_PORT)
+#define DATA_PORT	(CONFIG_PORT + 1)
+
+static void __init cats_hw_init(void)
+{
+	/* Set Aladdin to CONFIGURE mode */
+	outb(0x51, CONFIG_PORT);
+	outb(0x23, CONFIG_PORT);
+
+	/* Select logical device 3 */
+	outb(0x07, INDEX_PORT);
+	outb(0x03, DATA_PORT);
+
+	/* Set parallel port to DMA channel 3, ECP+EPP1.9, 
+	   enable EPP timeout */
+	outb(0x74, INDEX_PORT);
+	outb(0x03, DATA_PORT);
+	
+	outb(0xf0, INDEX_PORT);
+	outb(0x0f, DATA_PORT);
+
+	outb(0xf1, INDEX_PORT);
+	outb(0x07, DATA_PORT);
+
+	/* Select logical device 4 */
+	outb(0x07, INDEX_PORT);
+	outb(0x04, DATA_PORT);
+
+	/* UART1 high speed mode */
+	outb(0xf0, INDEX_PORT);
+	outb(0x02, DATA_PORT);
+
+	/* Select logical device 5 */
+	outb(0x07, INDEX_PORT);
+	outb(0x05, DATA_PORT);
+
+	/* UART2 high speed mode */
+	outb(0xf0, INDEX_PORT);
+	outb(0x02, DATA_PORT);
+
+	/* Set Aladdin to RUN mode */
+	outb(0xbb, CONFIG_PORT);
+}
+
+#endif
+
 __initfunc(void hw_init(void))
 {
+	extern void register_isa_ports(unsigned int, unsigned int, 
+				       unsigned int);
+	register_isa_ports(DC21285_PCI_MEM, DC21285_PCI_IO, 0);
 #ifdef CONFIG_ARCH_NETWINDER
 	/*
 	 * this ought to have a better home...
@@ -888,6 +943,9 @@ __initfunc(void hw_init(void))
 		spin_unlock_irqrestore(&gpio_lock, flags);
 	}
 #endif
+
+	if (machine_is_cats())
+		cats_hw_init();
 
 	leds_event(led_start);
 }

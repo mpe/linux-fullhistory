@@ -59,209 +59,24 @@ static inline long put_stack_long(struct task_struct *task, int offset,
 	return 0;
 }
 
-/*
- * This routine gets a long from any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- */
-static unsigned long get_long(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr)
+static int
+read_long(struct task_struct *child, unsigned long addr, unsigned long *res)
 {
-	pgd_t *pgdir;
-	pmd_t *pgmiddle;
-	pte_t *pgtable;
-	unsigned long page;
+	int copied;
 
-repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return 0;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return 0;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
- 
-	if(MAP_NR(page) >= max_mapnr)
-		return 0;
-	page += addr & ~PAGE_MASK;
-	return *(unsigned long *)page;
+	copied = access_process_vm(child, addr, res, sizeof(*res), 0);
+
+	return copied != sizeof(*res) ? -EIO : 0;
 }
 
-/*
- * This routine puts a long into any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- *
- * Now keeps R/W state of the page so that a text page stays readonly
- * even if a debugger scribbles breakpoints into it.  -M.U-
- */
-static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long addr,
-	unsigned long data)
+static int
+write_long(struct task_struct *child, unsigned long addr, unsigned long val)
 {
-	pgd_t *pgdir;
-	pmd_t *pgmiddle;
-	pte_t *pgtable;
-	unsigned long page;
+	int copied;
 
-repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
-	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	
-	if (MAP_NR(page) < max_mapnr) {
-		page += addr & ~PAGE_MASK;
+	copied = access_process_vm(child, addr, &val, sizeof(val), 1);
 
-		flush_cache_range(vma->vm_mm, addr, addr + sizeof(unsigned long));
-
-		*(unsigned long *)page = data;
-
-		clean_cache_area(page, sizeof(unsigned long));
-
-		set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-		flush_tlb_page(vma, addr & PAGE_MASK);
-	}
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls get_long() to read a long.
- */
-static int read_long(struct task_struct * tsk, unsigned long addr,
-	unsigned long * result)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
-		unsigned long low,high;
-		struct vm_area_struct * vma_high = vma;
-
-		if (addr + sizeof(long) >= vma->vm_end) {
-			vma_high = vma->vm_next;
-			if (!vma_high || vma_high->vm_start != vma->vm_end)
-				return -EIO;
-		}
-		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
-		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
-		switch (addr & (sizeof(long)-1)) {
-			case 1:
-				low >>= 8;
-				low |= high << 24;
-				break;
-			case 2:
-				low >>= 16;
-				low |= high << 16;
-				break;
-			case 3:
-				low >>= 24;
-				low |= high << 8;
-				break;
-		}
-		*result = low;
-	} else
-		*result = get_long(tsk, vma, addr);
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls put_long() to write a long.
- */
-static int write_long(struct task_struct * tsk, unsigned long addr,
-	unsigned long data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
-		unsigned long low,high;
-		struct vm_area_struct * vma_high = vma;
-
-		if (addr + sizeof(long) >= vma->vm_end) {
-			vma_high = vma->vm_next;
-			if (!vma_high || vma_high->vm_start != vma->vm_end)
-				return -EIO;
-		}
-		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
-		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
-		switch (addr & (sizeof(long)-1)) {
-			case 0: /* shouldn't happen, but safety first */
-				low = data;
-				break;
-			case 1:
-				low &= 0x000000ff;
-				low |= data << 8;
-				high &= ~0xff;
-				high |= data >> 24;
-				break;
-			case 2:
-				low &= 0x0000ffff;
-				low |= data << 16;
-				high &= ~0xffff;
-				high |= data >> 16;
-				break;
-			case 3:
-				low &= 0x00ffffff;
-				low |= data << 24;
-				high &= ~0xffffff;
-				high |= data >> 8;
-				break;
-		}
-		put_long(tsk, vma, addr & ~(sizeof(long)-1),low);
-		put_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1),high);
-	} else
-		put_long(tsk, vma, addr, data);
-	return 0;
+	return copied != sizeof(val) ? -EIO : 0;
 }
 
 /*
@@ -350,19 +165,12 @@ printk ("=%08lX ", val);
 	return val;
 }
 
-int ptrace_set_bpt (struct task_struct *child)
+static unsigned long
+get_branch_address(struct task_struct *child, unsigned long pc, unsigned long insn)
 {
-	unsigned long insn, pc, alt;
-	int i, nsaved = 0, res;
+	unsigned long alt = 0;
 
-	pc = pc_pointer (get_stack_long (child, 15/*REG_PC*/));
-
-	res = read_long (child, pc, &insn);
-	if (res < 0)
-		return res;
-
-	child->tss.debug[nsaved++] = alt = pc + 4;
-printk ("ptrace_set_bpt: insn=%08lX pc=%08lX ", insn, pc);
+printk(KERN_DEBUG "ptrace_set_bpt: insn=%08lX pc=%08lX ", insn, pc);
 	switch (insn & 0x0e100000) {
 	case 0x00000000:
 	case 0x00100000:
@@ -423,7 +231,7 @@ printk ("ldr ");
 					alt -= ptrace_getldrop2 (child, insn);
 			}
 			if (read_long (child, alt, &alt) < 0)
-				alt = pc + 4; /* not valid */
+				alt = 0; /* not valid */
 			else
 				alt = pc_pointer (alt);
 		}
@@ -440,7 +248,7 @@ printk ("ldrimm ");
 					alt -= insn & 0xfff;
 			}
 			if (read_long (child, alt, &alt) < 0)
-				alt = pc + 4; /* not valid */
+				alt = 0; /* not valid */
 			else
 				alt = pc_pointer (alt);
 		}
@@ -473,7 +281,7 @@ printk ("ldm ");
 			base = ptrace_getrn (child, insn);
 
 			if (read_long (child, base + nr_regs, &alt) < 0)
-				alt = pc + 4; /* not valid */
+				alt = 0; /* not valid */
 			else
 				alt = pc_pointer (alt);
 			break;
@@ -499,22 +307,55 @@ printk ("b/bl ");
 	    break;
 	}
 printk ("=%08lX\n", alt);
-	if (alt != pc + 4)
-		child->tss.debug[nsaved++] = alt;
 
-	for (i = 0; i < nsaved; i++) {
-		res = read_long (child, child->tss.debug[i], &insn);
-		if (res >= 0) {
-			child->tss.debug[i + 2] = insn;
-			res = write_long (child, child->tss.debug[i], BREAKINST);
+	return alt;
+}
+
+static int
+add_breakpoint(struct task_struct *child, struct debug_info *dbg, unsigned long addr)
+{
+	int nr = dbg->nsaved;
+	int res = -EINVAL;
+
+	if (nr < 2) {
+		res = read_long(child, addr, &dbg->bp[nr].insn);
+		if (res == 0)
+			res = write_long(child, addr, BREAKINST);
+
+		if (res == 0) {
+			dbg->bp[nr].address = addr;
+			dbg->nsaved += 1;
 		}
-		if (res < 0) {
-			child->tss.debug[4] = 0;
-			return res;
+	} else
+		printk(KERN_DEBUG "add_breakpoint: too many breakpoints\n");
+
+	return res;
+}
+
+int ptrace_set_bpt (struct task_struct *child)
+{
+	struct debug_info *dbg = &child->tss.debug;
+	unsigned long insn, pc, alt;
+	int res;
+
+	pc = pc_pointer (get_stack_long (child, 15/*REG_PC*/));
+
+	res = read_long(child, pc, &insn);
+	if (res >= 0) {
+		res = 0;
+
+		dbg->nsaved = 0;
+
+		res = add_breakpoint(child, dbg, pc + 4);
+
+		if (res == 0) {
+			alt = get_branch_address(child, pc, insn);
+			if (alt)
+				res = add_breakpoint(child, dbg, alt);
 		}
 	}
-	child->tss.debug[4] = nsaved;
-	return 0;
+
+	return res;
 }
 
 /* Ensure no single-step breakpoint is pending.  Returns non-zero
@@ -522,16 +363,24 @@ printk ("=%08lX\n", alt);
  */
 int ptrace_cancel_bpt (struct task_struct *child)
 {
-	int i, nsaved = child->tss.debug[4];
+	struct debug_info *dbg = &child->tss.debug;
+	unsigned long tmp;
+	int i, nsaved = dbg->nsaved;
 
-	child->tss.debug[4] = 0;
+	dbg->nsaved = 0;
 
 	if (nsaved > 2) {
 		printk ("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
 		nsaved = 2;
 	}
-	for (i = 0; i < nsaved; i++)
-		write_long (child, child->tss.debug[i], child->tss.debug[i + 2]);
+
+	for (i = 0; i < nsaved; i++) {
+		read_long(child, dbg->bp[i].address, &tmp);
+		if (tmp != BREAKINST)
+			printk(KERN_ERR "ptrace_cancel_bpt: weirdness\n");
+		write_long(child, dbg->bp[i].address, dbg->bp[i].insn);
+	}
+
 	return nsaved != 0;
 }
 
@@ -598,8 +447,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			unsigned long tmp;
 
 			ret = read_long(child, addr, &tmp);
-			if (ret >= 0)
-				ret = put_user(tmp, (unsigned long *)data);
+			if (ret)
+				put_user(tmp, (unsigned long *) data);
 			goto out;
 		}
 
@@ -619,7 +468,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_POKETEXT:				/* write the word at location addr. */
 		case PTRACE_POKEDATA:
-			ret = write_long(child,addr,data);
+			ret = write_long(child, addr, data);
 			goto out;
 
 		case PTRACE_POKEUSR:				/* write the word at location addr in the USER area */
@@ -665,7 +514,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				goto out;
-			child->tss.debug[4] = -1;
+			child->tss.debug.nsaved = -1;
 			child->flags &= ~PF_TRACESYS;
 			wake_up_process(child);
 			child->exit_code = data;

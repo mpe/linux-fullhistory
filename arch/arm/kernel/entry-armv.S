@@ -244,6 +244,10 @@ irq_prio_ebsa110:
 		movne	\irqnr, #IRQ_PCI
 		bne	1001f
 
+		tst	\irqstat, #IRQ_MASK_DOORBELLHOST
+		movne	\irqnr, #IRQ_DOORBELLHOST
+		bne     1001f
+	
 		tst	\irqstat, #IRQ_MASK_I2OINPOST
 		movne	\irqnr, #IRQ_I2OINPOST
 		bne	1001f

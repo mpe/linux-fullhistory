@@ -33,8 +33,9 @@ static char led_state;
 static char hw_led_state;
 
 static spinlock_t leds_lock = SPIN_LOCK_UNLOCKED;
+extern spinlock_t gpio_lock;
 
-#ifdef CONFIG_ARCH_EBSA285
+#ifdef CONFIG_FOOTBRIDGE
 
 static void __ebsa285_text ebsa285_leds_event(led_event_t evt)
 {
@@ -226,8 +227,9 @@ __initfunc(void
 init_leds_event(led_event_t evt))
 {
 	switch (machine_arch_type) {
-#ifdef CONFIG_ARCH_EBSA285
+#ifdef CONFIG_FOOTBRIDGE
 	case MACH_TYPE_EBSA285:
+	case MACH_TYPE_CO285:
 		leds_event = ebsa285_leds_event;
 		break;
 #endif

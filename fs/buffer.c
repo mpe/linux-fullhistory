@@ -1969,6 +1969,7 @@ asmlinkage int sys_bdflush(int func, long data)
 		goto out;
 
 	if (func == 1) {
+#if 0
 		struct mm_struct *user_mm;
 		/*
 		 * bdflush will spend all of it's time in kernel-space,
@@ -1978,14 +1979,16 @@ asmlinkage int sys_bdflush(int func, long data)
 		 */
 		user_mm = current->mm;
 		mmget(user_mm);
-		current->flags |= PF_LAZY_TLB;
+		current->mm = NULL;
+#endif
 
 		error = sync_old_buffers();
 
-		current->flags &= ~PF_LAZY_TLB;
-		SET_PAGE_DIR(current, user_mm->pgd);
-		mmput(current->mm);
+#if 0
 		current->mm = user_mm;
+		mmput(current->active_mm);
+		current->active_mm = user_mm;
+#endif
 
 		goto out;
 	}

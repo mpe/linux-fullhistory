@@ -368,7 +368,7 @@ static int exec_mmap(void)
 	struct mm_struct * mm, * old_mm;
 	int retval;
 
-	if (atomic_read(&current->mm->count) == 1) {
+	if (current->mm && atomic_read(&current->mm->count) == 1) {
 		flush_cache_mm(current->mm);
 		mm_release();
 		release_segments(current->mm);
@@ -385,10 +385,12 @@ static int exec_mmap(void)
 	mm->cpu_vm_mask = (1UL << smp_processor_id());
 	mm->total_vm = 0;
 	mm->rss = 0;
+
 	/*
 	 * Make sure we have a private LDT if needed ...
 	 */
-	copy_segments(current, mm);
+	if (current->mm)
+		copy_segments(current, mm);
 
 	old_mm = current->mm;
 	current->mm = mm;
@@ -396,9 +398,9 @@ static int exec_mmap(void)
 	if (retval)
 		goto fail_restore;
 	activate_context(current);
-	up(&mm->mmap_sem);
 	mm_release();
-	mmput(old_mm);
+	if (old_mm)
+		mmput(old_mm);
 	return 0;
 
 	/*

@@ -390,7 +390,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	/* request I/O space for devices used on all i[345]86 PCs */
 	for (i = 0; i < STANDARD_RESOURCES; i++)
-		request_resource(&pci_io_resource, standard_resources+i);
+		request_resource(&ioport_resource, standard_resources+i);
 	request_resource(keyboard_resources, &kbd_status_resource);
 
 #ifdef CONFIG_VT
@@ -1010,7 +1010,7 @@ unsigned long cpu_initialized = 0;
 void cpu_init (void)
 {
 	int nr = smp_processor_id();
-	struct hard_thread_struct * t = &init_tss[nr];
+	struct tss_struct * t = &init_tss[nr];
 
 	if (test_and_set_bit(nr,&cpu_initialized)) {
 		printk("CPU#%d ALREADY INITIALIZED!!!!!!!!!\n", nr);
@@ -1033,12 +1033,13 @@ void cpu_init (void)
 	/*
 	 * set up and load the per-CPU TSS and LDT
 	 */
+	mmget(&init_mm);
+	current->active_mm = &init_mm;
 	t->esp0 = current->thread.esp0;
 	set_tss_desc(nr,t);
 	gdt_table[__TSS(nr)].b &= 0xfffffdff;
 	load_TR(nr);
-
-	load_LDT(current->mm);
+	load_LDT(&init_mm);
 
 	/*
 	 * Clear all 6 debug registers:

@@ -293,7 +293,10 @@ static int mouse_probe(struct usb_device *dev)
 
 	printk("USB mouse found\n");
 
-	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
+	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+		printk (KERN_INFO " Failed usb_set_configuration: mouse\n");
+		return -1;
+	}
 
 	/* these are used to request the irq when the mouse is opened */
 	mouse->dev = dev;

@@ -732,9 +732,9 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 		if(retval) {
 			set_fs(old_fs);
 			printk("Unable to load IRIX ELF interpreter\n");
-			kfree(elf_phdata);
 			send_sig(SIGSEGV, current, 0);
-			return 0;
+			retval = 0;
+			goto out_file;
 		}
 	}
 

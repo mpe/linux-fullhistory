@@ -65,7 +65,7 @@
 asmlinkage struct pt_regs * FASTCALL(save_v86_state(struct kernel_vm86_regs * regs));
 struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 {
-	struct hard_thread_struct *tss;
+	struct tss_struct *tss;
 	struct pt_regs *ret;
 	unsigned long tmp;
 
@@ -211,7 +211,7 @@ out:
 
 static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk)
 {
-	struct hard_thread_struct *tss;
+	struct tss_struct *tss;
 /*
  * make sure the vm86() system call doesn't try to do anything silly
  */

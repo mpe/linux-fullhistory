@@ -22,17 +22,6 @@
 
 extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
 
-/*
- * String version of IO memory access ops:
- */
-extern void _memcpy_fromio(void *, unsigned long, unsigned long);
-extern void _memcpy_toio(unsigned long, const void *, unsigned long);
-extern void _memset_io(unsigned long, int, unsigned long);
-
-#define memcpy_fromio(to,from,len)	_memcpy_fromio((to),(unsigned long)(from),(len))
-#define memcpy_toio(to,from,len)	_memcpy_toio((unsigned long)(to),(from),(len))
-#define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
-
 #endif
 
 #include <asm/hardware.h>
@@ -121,8 +110,12 @@ __IO(l,"",long)
  * This macro will give you the translated IO address for this particular
  * architecture, which can be used with the out_t... functions.
  */
+#ifdef __ioaddrc
 #define ioaddr(port)	\
   (__builtin_constant_p((port)) ? __ioaddrc((port)) : __ioaddr((port)))
+#else
+#define ioaddr(port) __ioaddr((port))
+#endif
 
 #ifndef ARCH_IO_DELAY
 /*
@@ -203,6 +196,19 @@ __IO(l,"",long)
 #define writew(v,p)	panic("writew called, but not implemented")
 #define writel(v,p)	panic("writel called, but not implemented")
 
+#endif
+
+#ifndef memcpy_fromio
+/*
+ * String version of IO memory access ops:
+ */
+extern void _memcpy_fromio(void *, unsigned long, unsigned long);
+extern void _memcpy_toio(unsigned long, const void *, unsigned long);
+extern void _memset_io(unsigned long, int, unsigned long);
+
+#define memcpy_fromio(to,from,len)	_memcpy_fromio((to),(unsigned long)(from),(len))
+#define memcpy_toio(to,from,len)	_memcpy_toio((unsigned long)(to),(from),(len))
+#define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
 #endif
 
 /*

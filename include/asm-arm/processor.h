@@ -40,12 +40,20 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 #include <asm/arch/processor.h>
 #include <asm/proc/processor.h>
 
+struct debug_info {
+	int				nsaved;
+	struct {
+		unsigned long		address;
+		unsigned long		insn;
+	} bp[2];
+};
+
 struct thread_struct {
 	unsigned long			address;	  /* Address of fault	*/
 	unsigned long			trap_no;	  /* Trap number	*/
 	unsigned long			error_code;	  /* Error code of trap	*/
 	union fp_state			fpstate;	  /* FPE save state	*/
-	unsigned long			debug[NR_DEBUGS]; /* Debug/ptrace	*/
+	struct debug_info		debug;		  /* Debug/ptrace	*/
 	struct context_save_struct	*save;		  /* context save	*/
 	unsigned long			memmap;		  /* page tables	*/
 	EXTRA_THREAD_STRUCT

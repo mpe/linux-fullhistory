@@ -81,7 +81,10 @@ static int usb_audio_probe(struct usb_device *dev)
 
 		endpoint = &interface->endpoint[0];
 
-//        	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
+//        	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+//			printk (KERN_INFO " Failed usb_set_configuration: Audio\n");
+//			break;
+//		}
 //        	usb_set_protocol(dev, 0);
 //        	usb_set_idle(dev, 0, 0);
         
@@ -92,8 +95,13 @@ static int usb_audio_probe(struct usb_device *dev)
                         aud);
 
 		list_add(&aud->list, &usb_audio_list);
+		
+		return 0;
 	}
-	return 0;
+	
+	if (aud)
+		kfree (aud);
+	return -1;
 }
 
 static void usb_audio_disconnect(struct usb_device *dev)

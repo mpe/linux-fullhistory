@@ -1571,6 +1571,32 @@ static int ohci_usb_deallocate(struct usb_device *usb_dev)
 }
 
 
+static void *ohci_alloc_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
+{
+	return NULL;
+}
+
+static void ohci_delete_isochronous (struct usb_device *dev, void *_isodesc)
+{
+	return;
+}
+
+static int ohci_sched_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+static int ohci_unsched_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+static int ohci_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
+{
+	return USB_ST_NOTSUPPORTED;
+}
+
+
 /*
  * functions for the generic USB driver
  */
@@ -1581,6 +1607,11 @@ struct usb_operations ohci_device_operations = {
 	ohci_bulk_msg,
 	ohci_request_irq,
 	ohci_release_irq,
+	ohci_alloc_isochronous,
+	ohci_delete_isochronous,
+	ohci_sched_isochronous,
+	ohci_unsched_isochronous,
+	ohci_compress_isochronous
 };
 
 

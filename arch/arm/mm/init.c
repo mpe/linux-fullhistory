@@ -247,7 +247,7 @@ void free_initmem (void)
 			  (unsigned long)(&__netwinder_end),
 			  "netwinder");
 
-	if (!machine_is_ebsa285() && !machine_is_cats())
+	if (!machine_is_ebsa285() && !machine_is_cats() && !machine_is_co285())
 		free_area((unsigned long)(&__ebsa285_begin),
 			  (unsigned long)(&__ebsa285_end),
 			  "ebsa285/cats");

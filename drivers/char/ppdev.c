@@ -50,10 +50,6 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-/* The device minor encodes the parport number and (arbitrary) 
- * pardevice number as (port << 4) | dev. */
-#define PP_PORT(minor) ((minor >> 4) & 0xf)
-
 struct pp_struct {
 	struct pardevice * pdev;
 	wait_queue_head_t irq_wait;
@@ -176,7 +172,7 @@ static ssize_t pp_read (struct file * file, char * buf, size_t count,
 
 	if (!(pp->flags & PP_CLAIMED)) {
 		/* Don't have the port claimed */
-		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
+		printk (KERN_DEBUG CHRDEV "%x: claim the port first\n",
 			minor);
 		return -EINVAL;
 	}
@@ -230,7 +226,7 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 
 	if (!(pp->flags & PP_CLAIMED)) {
 		/* Don't have the port claimed */
-		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
+		printk (KERN_DEBUG CHRDEV "%x: claim the port first\n",
 			minor);
 		return -EINVAL;
 	}
@@ -281,7 +277,6 @@ static void pp_irq (int irq, void * private, struct pt_regs * unused)
 
 static int register_device (int minor, struct pp_struct *pp)
 {
-	unsigned int portnum = PP_PORT (minor);
 	struct parport * port;
 	struct pardevice * pdev = NULL;
 	char *name;
@@ -291,10 +286,10 @@ static int register_device (int minor, struct pp_struct *pp)
 	if (name == NULL)
 		return -ENOMEM;
 
-	sprintf (name, CHRDEV "%02x", minor);
+	sprintf (name, CHRDEV "%x", minor);
 	port = parport_enumerate (); /* FIXME: use attach/detach */
 
-	while (port && port->number != portnum)
+	while (port && port->number != minor)
 		port = port->next;
 
 	if (!port) {
@@ -329,7 +324,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 	if (cmd == PPCLAIM) {
 		if (pp->flags & PP_CLAIMED) {
 			printk (KERN_DEBUG CHRDEV
-				"%02x: you've already got it!\n", minor);
+				"%x: you've already got it!\n", minor);
 			return -EINVAL;
 		}
 
@@ -351,7 +346,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 	if (cmd == PPEXCL) {
 		if (pp->pdev) {
-			printk (KERN_DEBUG CHRDEV "%02x: too late for PPEXCL; "
+			printk (KERN_DEBUG CHRDEV "%x: too late for PPEXCL; "
 				"already registered\n", minor);
 			if (pp->flags & PP_EXCL)
 				/* But it's not really an error. */
@@ -378,7 +373,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 	/* Everything else requires the port to be claimed, so check
 	 * that now. */
 	if ((pp->flags & PP_CLAIMED) == 0) {
-		printk (KERN_DEBUG CHRDEV "%02x: claim the port first\n",
+		printk (KERN_DEBUG CHRDEV "%x: claim the port first\n",
 			minor);
 		return -EINVAL;
 	}
@@ -454,7 +449,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		return ret;
 
 	default:
-		printk (KERN_DEBUG CHRDEV "%02x: What? (cmd=0x%x)\n", minor,
+		printk (KERN_DEBUG CHRDEV "%x: What? (cmd=0x%x)\n", minor,
 			cmd);
 		return -EINVAL;
 	}
@@ -466,10 +461,9 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 static int pp_open (struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR (inode->i_rdev);
-	unsigned int portnum = PP_PORT (minor);
 	struct pp_struct *pp;
 
-	if (portnum >= PARPORT_MAX)
+	if (minor >= PARPORT_MAX)
 		return -ENXIO;
 
 	pp = kmalloc (GFP_KERNEL, sizeof (struct pp_struct));
@@ -499,7 +493,7 @@ static int pp_release (struct inode * inode, struct file * file)
 
 	if (pp->flags & PP_CLAIMED) {
 		parport_release (pp->pdev);
-		printk (KERN_DEBUG CHRDEV "%02x: released pardevice because "
+		printk (KERN_DEBUG CHRDEV "%x: released pardevice because "
 			"user-space forgot\n", minor);
 	}
 
@@ -507,7 +501,7 @@ static int pp_release (struct inode * inode, struct file * file)
 		kfree (pp->pdev->name);
 		parport_unregister_device (pp->pdev);
 		pp->pdev = NULL;
-		printk (KERN_DEBUG CHRDEV "%02x: unregistered pardevice\n",
+		printk (KERN_DEBUG CHRDEV "%x: unregistered pardevice\n",
 			minor);
 	}
 

@@ -40,7 +40,7 @@ static void send_sig_all(int sig, int even_init)
 	struct task_struct *p;
 
 	for_each_task(p) {
-		if (p->pid && p->mm != &init_mm) {	    /* Not swapper nor kernel thread */
+		if (p->mm) {				    /* Not swapper nor kernel thread */
 			if (p->pid == 1 && even_init)	    /* Ugly hack to kill init */
 				p->pid = 0x8000;
 			force_sig(sig, p);
