@@ -216,7 +216,7 @@ void ext2_free_inode (struct inode * inode)
 		es->s_free_inodes_count =
 			cpu_to_le32(le32_to_cpu(es->s_free_inodes_count) + 1);
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
-		inode->i_dirt = 0;
+		mark_inode_dirty(inode);
 	}
 	mark_buffer_dirty(bh, 1);
 	if (sb->s_flags & MS_SYNCHRONOUS) {
@@ -240,7 +240,7 @@ static void inc_inode_version (struct inode * inode,
 			       int mode)
 {
 	inode->u.ext2_i.i_version++;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 
 	return;
 }
@@ -416,7 +416,7 @@ repeat:
 			mode |= S_ISGID;
 	} else
 		inode->i_gid = current->fsgid;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	inode->i_ino = j;
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = 0;

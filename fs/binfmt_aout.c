@@ -214,7 +214,6 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
-	inode->i_status |= ST_MODIFIED;
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);

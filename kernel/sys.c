@@ -399,8 +399,6 @@ int acct_process(long exitcode)
 
       acct_file.f_op->write(acct_file.f_inode, &acct_file,
                              (char *)&ac, sizeof(struct acct));
-      /* inode->i_status |= ST_MODIFIED is willingly *not* done here */
-
       set_fs(fs);
    }
    return 0;

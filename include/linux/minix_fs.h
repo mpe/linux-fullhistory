@@ -88,19 +88,18 @@ struct minix_dir_entry {
 
 #ifdef __KERNEL__
 
-extern int minix_lookup(struct inode * dir,const char * name, int len,
+extern int minix_lookup(struct inode * dir, struct qstr *name,
                         struct inode ** result);
-extern int minix_create(struct inode * dir,const char * name, int len, int mode,
-	struct inode ** result);
-extern int minix_mkdir(struct inode * dir, const char * name, int len, int mode);
-extern int minix_rmdir(struct inode * dir, const char * name, int len);
-extern int minix_unlink(struct inode * dir, const char * name, int len);
-extern int minix_symlink(struct inode * inode, const char * name, int len,
+extern int minix_create(struct inode * dir, struct dentry *dentry, int mode);
+extern int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode);
+extern int minix_rmdir(struct inode * dir, struct dentry *dentry);
+extern int minix_unlink(struct inode * dir, struct dentry *dentry);
+extern int minix_symlink(struct inode * inode, struct dentry *dentry,
 	const char * symname);
-extern int minix_link(struct inode * oldinode, struct inode * dir, const char * name, int len);
-extern int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
-extern int minix_rename(struct inode * old_dir, const char * old_name, int old_len,
-			struct inode * new_dir, const char * new_name, int new_len);
+extern int minix_link(struct inode * oldinode, struct inode * dir, struct dentry *dentry);
+extern int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev);
+extern int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
+			struct inode * new_dir, struct dentry *new_dentry);
 extern struct inode * minix_new_inode(const struct inode * dir);
 extern void minix_free_inode(struct inode * inode);
 extern unsigned long minix_count_free_inodes(struct super_block *sb);

@@ -884,7 +884,6 @@ static int load_elf_library(int fd)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
-	file->f_inode->i_status |= ST_MODIFIED;
 	return file->f_op->write(file->f_inode, file, addr, nr) == nr;
 }
 

@@ -15,6 +15,7 @@
 #include <linux/net.h>
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
+#include <linux/list.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -78,9 +79,6 @@ extern int max_files, nr_files;
 			   */
 #define FS_IBASKET      8 /* FS does callback to free_ibasket() if space gets low. */
 
-/* public flags for i_status */
-#define ST_MODIFIED 1024
-
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
  */
@@ -126,7 +124,12 @@ extern int max_files, nr_files;
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
 #define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
-#define DO_UPDATE_ATIME(inode) (!IS_NOATIME(inode) && !IS_RDONLY(inode))
+
+#define UPDATE_ATIME(inode) \
+	if (!IS_NOATIME(inode) && !IS_RDONLY(inode)) { \
+		inode->i_atime = CURRENT_TIME; \
+		mark_inode_dirty(inode); \
+	}
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -300,10 +303,8 @@ struct iattr {
 #include <linux/quota.h>
 
 struct inode {
-	struct inode 		*i_hash_next;
-	struct inode		*i_hash_prev;
-	struct inode		*i_next;
-	struct inode		*i_prev;
+	struct list_head	i_hash;
+	struct list_head	i_list;
 
 	unsigned long		i_ino;
 	kdev_t			i_dev;
@@ -330,24 +331,13 @@ struct inode {
 	struct page		*i_pages;
 	struct dquot		*i_dquot[MAXQUOTAS];
 
-	struct inode		*i_lru_next;
-	struct inode		*i_lru_prev;
-
-	struct inode		*i_basket_next;
-	struct inode		*i_basket_prev;
 	struct dentry		*i_dentry;
 
-	unsigned short		i_status;
-	unsigned short		i_reuse_count;
+	unsigned int		i_state;
 
 	unsigned int		i_flags;
-	unsigned char		i_lock;
-	unsigned char		i_dirt;
 	unsigned char		i_pipe;
 	unsigned char		i_sock;
-
-	unsigned char		i_level;
-	unsigned short		i_fill;
 
 	int			i_writecount;
 	unsigned int		i_attr_flags;
@@ -368,6 +358,17 @@ struct inode {
 		void				*generic_ip;
 	} u;
 };
+
+/* Inode state bits.. */
+#define I_DIRTY		0
+#define I_LOCK		1
+
+extern void __mark_inode_dirty(struct inode *);
+static inline void mark_inode_dirty(struct inode *inode)
+{
+	if (!test_and_set_bit(I_DIRTY, &inode->i_state))
+		__mark_inode_dirty(inode);
+}
 
 struct file {
 	struct file		*f_next, **f_pprev;
@@ -735,42 +736,12 @@ extern inline void vfs_unlock(void)
 
 /* Not to be used by ordinary vfs users */
 extern void _get_inode(struct inode * inode);
-extern blocking void __iput(struct inode * inode);
-
-extern blocking void _iput(struct inode * inode);
-extern inline blocking void iput(struct inode * inode)
-{
-	if (inode) {
-		extern void wake_up_interruptible(struct wait_queue **q);
-
-		if (inode->i_pipe)
-			wake_up_interruptible(&inode->u.pipe_i.wait);
-
-		/* It does not matter if somebody re-increments it in between,
-		 * only the _last_ user needs to call _iput().
-		 */
-		if (atomic_dec_and_test(&inode->i_count))
-			_iput(inode);
-	}
-}
+extern void iput(struct inode * inode);
 
 extern blocking struct inode * iget(struct super_block * sb, unsigned long nr);
-extern blocking void _clear_inode(struct inode * inode, int external, int verbose);
-extern blocking inline void clear_inode(struct inode * inode)
-{
-	vfs_lock();
-	_clear_inode(inode, 1, 1);
-	vfs_unlock();
-}
-extern blocking struct inode * _get_empty_inode(void);
-extern inline blocking struct inode * get_empty_inode(void)
-{
-	struct inode * inode;
-	vfs_lock();
-	inode = _get_empty_inode();
-	vfs_unlock();
-	return inode;
-}
+extern blocking void clear_inode(struct inode * inode);
+extern blocking struct inode * get_empty_inode(void);
+
 /* Please prefer to use this function in future, instead of using
  * a get_empty_inode()/insert_inode_hash() combination.
  * It allows for better checking and less race conditions.

@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/dalloc.h>
 #include <linux/init.h>
 
 #include <asm/system.h>
@@ -125,15 +126,13 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
  * it really _is_ a minix filesystem, and to check the size
  * of the directory entry.
  */
-static const char * minix_checkroot(struct super_block *s)
+static const char * minix_checkroot(struct super_block *s, struct inode *dir)
 {
-	struct inode * dir;
 	struct buffer_head *bh;
 	struct minix_dir_entry *de;
 	const char * errmsg;
 	int dirsize;
 
-	dir = s->s_mounted;
 	if (!S_ISDIR(dir->i_mode))
 		return "root directory is not a directory";
 
@@ -172,7 +171,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	int i, block;
 	kdev_t dev = s->s_dev;
 	const char * errmsg;
-
+	struct inode *root_inode;
+	
 	if (32 != sizeof (struct minix_inode))
 		panic("bad V1 i-node size");
 	if (64 != sizeof(struct minix2_inode))
@@ -272,8 +272,9 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
 	s->s_op = &minix_sops;
-	s->s_mounted = iget(s,MINIX_ROOT_INO);
-	if (!s->s_mounted) {
+	root_inode = iget(s,MINIX_ROOT_INO);
+	s->s_root = d_alloc_root(root_inode, NULL);
+	if (!s->s_root) {
 		s->s_dev = 0;
 		brelse(bh);
 		if (!silent)
@@ -282,11 +283,11 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 
-	errmsg = minix_checkroot(s);
+	errmsg = minix_checkroot(s, root_inode);
 	if (errmsg) {
 		if (!silent)
 			printk("MINIX-fs: %s\n", errmsg);
-		iput (s->s_mounted);
+		d_delete(s->s_root); /* XXX Is this enough? */
 		s->s_dev = 0;
 		brelse (bh);
 		MOD_DEC_USE_COUNT;

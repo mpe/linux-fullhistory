@@ -201,5 +201,4 @@ void proc_read_inode(struct inode * inode)
 
 void proc_write_inode(struct inode * inode)
 {
-	inode->i_dirt=0;
 }

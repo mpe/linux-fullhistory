@@ -256,10 +256,7 @@ asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 		iput(inode);
 		goto out;
 	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode);
 	error = inode->i_op->readlink(inode,buf,bufsiz);
 	iput(inode);
 out:

@@ -122,7 +122,7 @@ static inline void remove_suid(struct inode *inode)
 	mode &= inode->i_mode;
 	if (mode && !suser()) {
 		inode->i_mode &= ~mode;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 }
 
@@ -251,7 +251,7 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 		inode->u.ext2_i.i_osync--;
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	filp->f_pos = pos;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return written;
 }
 

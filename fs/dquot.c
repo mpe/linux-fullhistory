@@ -241,7 +241,6 @@ static void write_dquot(struct dquot *dquot)
 	if (filp->f_op->write(filp->f_inode, filp,
 	   (char *)&dquot->dq_dqb, sizeof(struct dqblk)) == sizeof(struct dqblk))
 		dquot->dq_flags &= ~DQ_MOD;
-	/* inode->i_status |= ST_MODIFIED is willingly *not* done here */
 
 	up(&dquot->dq_mnt->mnt_sem);
 	set_fs(fs);

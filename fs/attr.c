@@ -74,7 +74,7 @@ void inode_setattr(struct inode * inode, struct iattr * attr)
 			if (!fsuser() && !in_group_p(inode->i_gid))
 				inode->i_mode &= ~S_ISGID;
 		}
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 }
 

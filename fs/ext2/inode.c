@@ -38,7 +38,7 @@ void ext2_put_inode (struct inode * inode)
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	ext2_update_inode(inode, IS_SYNC(inode));
 	inode->i_size = 0;
 	if (inode->i_blocks)
@@ -248,7 +248,7 @@ repeat:
 	if (IS_SYNC(inode) || inode->u.ext2_i.i_osync)
 		ext2_sync_inode (inode);
 	else
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	return result;
 }
 
@@ -322,7 +322,7 @@ repeat:
 	}
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks += blocks;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	inode->u.ext2_i.i_next_alloc_block = new_block;
 	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	brelse (bh);
@@ -591,7 +591,6 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = cpu_to_le32(inode->u.ext2_i.i_data[block]);
 	mark_buffer_dirty(bh, 1);
-	inode->i_dirt = 0;
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -671,7 +670,7 @@ int ext2_notify_change(struct inode *inode, struct iattr *iattr)
 		inode->i_flags &= ~S_IMMUTABLE;
 		inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;
 	}
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 
 	return 0;
 }

@@ -225,7 +225,7 @@ extern void ufs_put_inode(struct inode * inode);
 extern void ufs_print_inode (struct inode *);
 
 /* ufs_namei.c */
-extern int ufs_lookup (struct inode *, const char *, int, struct inode **);
+extern int ufs_lookup (struct inode *, struct qstr *, struct inode **);
 
 /* ufs_super.c */
 extern void ufs_warning (struct super_block *, const char *, const char *, ...)

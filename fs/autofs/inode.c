@@ -274,5 +274,4 @@ static void autofs_read_inode(struct inode *inode)
 
 static void autofs_write_inode(struct inode *inode)
 {
-        inode->i_dirt = 0;
 }

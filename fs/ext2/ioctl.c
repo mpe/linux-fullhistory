@@ -62,7 +62,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		else
 			inode->i_flags &= ~MS_NOATIME;
 		inode->i_ctime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		return 0;
 	case EXT2_IOC_GETVERSION:
 		return put_user(inode->u.ext2_i.i_version, (int *) arg);
@@ -74,7 +74,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		if (get_user(inode->u.ext2_i.i_version, (int *) arg))
 			return -EFAULT;	
 		inode->i_ctime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		return 0;
 	default:
 		return -ENOTTY;

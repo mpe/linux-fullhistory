@@ -481,12 +481,12 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_mode = opt.mode & 0777;
 	s->s_blocksize = opt.blocksize;
 	s->s_blocksize_bits = blocksize_bits;
-	s->s_mounted = iget(s, (isonum_733(rootp->extent) +
+	s->s_root = d_alloc_root(iget(s, (isonum_733(rootp->extent) +
 			    isonum_711(rootp->ext_attr_length))
-				<< s -> u.isofs_sb.s_log_zone_size);
+				<< s -> u.isofs_sb.s_log_zone_size), NULL);
 	unlock_super(s);
 
-	if (!(s->s_mounted)) {
+	if (!(s->s_root)) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
 		MOD_DEC_USE_COUNT;

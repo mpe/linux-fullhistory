@@ -136,9 +136,10 @@ static int autofs_root_lookup(struct inode *dir, struct qstr *str, struct inode 
 			return -EACCES;
 		}
 		
-		if ( !oz_mode && S_ISDIR(res->i_mode) && res->i_sb == dir->i_sb ) {
+		if ( !oz_mode && S_ISDIR(res->i_mode) && res->i_dentry->d_covers == res->i_dentry ) {
 			/* Not a mount point yet, call 1-800-DAEMON */
 			DPRINTK(("autofs: waiting on non-mountpoint dir, inode = %lu, pid = %u, pgrp = %u\n", res->i_ino, current->pid, current->pgrp));
+			iput(res);
 			res = NULL;
 			up(&dir->i_sem);
 			status = autofs_wait(sbi,str);

@@ -90,7 +90,6 @@ int do_truncate(struct inode *inode, unsigned long length)
 		vmtruncate(inode, length);
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
-		inode->i_status |= ST_MODIFIED;
 	}
 	up(&inode->i_sem);
 	return error;
@@ -436,12 +435,7 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	inode->i_dirt = 1;
 	err = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!err)
-		omirr_printall(inode, " M %ld %ld ", CURRENT_TIME, newattrs.ia_mode);
-#endif
 out:
 	unlock_kernel();
 	return err;
@@ -471,12 +465,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!error)
-		omirr_printall(inode, " M %ld %ld ", CURRENT_TIME, newattrs.ia_mode);
-#endif
 iput_and_out:
 	iput(inode);
 out:
@@ -528,7 +517,6 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	inode->i_dirt = 1;
 	if (inode->i_sb && inode->i_sb->dq_op) {
 		inode->i_sb->dq_op->initialize(inode, -1);
 		error = -EDQUOT;
@@ -539,11 +527,6 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
 		error = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!error)
-		omirr_printall(inode, " O %d %d ", CURRENT_TIME,
-				newattrs.ia_uid, newattrs.ia_gid);
-#endif
 out:
 	unlock_kernel();
 	return error;
@@ -590,7 +573,6 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	inode->i_dirt = 1;
 	if (inode->i_sb->dq_op) {
 		inode->i_sb->dq_op->initialize(inode, -1);
 		error = -EDQUOT;
@@ -601,11 +583,6 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
 		error = notify_change(inode, &newattrs);
-#ifdef CONFIG_OMIRR
-	if(!error)
-		omirr_printall(inode, " O %d %d ", CURRENT_TIME,
-				newattrs.ia_uid, newattrs.ia_gid);
-#endif
 iput_and_out:
 	iput(inode);
 out:

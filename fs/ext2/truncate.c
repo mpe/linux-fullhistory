@@ -91,7 +91,7 @@ repeat:
 		}
 		*p = 0;
 		inode->i_blocks -= blocks;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		bforget(bh);
 		if (free_count == 0) {
 			block_to_free = tmp;
@@ -172,7 +172,7 @@ repeat:
 		}
 /*		ext2_free_blocks (inode, tmp, 1); */
 		inode->i_blocks -= blocks;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	if (free_count > 0)
 		ext2_free_blocks (inode, block_to_free, free_count);
@@ -187,7 +187,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
@@ -259,7 +259,7 @@ repeat:
 		}
 /*		ext2_free_blocks (inode, tmp, 1); */
 		inode->i_blocks -= blocks;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	if (free_count > 0)
 		ext2_free_blocks (inode, block_to_free, free_count);
@@ -274,7 +274,7 @@ repeat:
 			tmp = le32_to_cpu(*p);
 			*p = cpu_to_le32(0);
 			inode->i_blocks -= blocks;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
@@ -334,7 +334,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
@@ -393,7 +393,7 @@ repeat:
 			tmp = le32_to_cpu(*p);
 			*p = cpu_to_le32(0);
 			inode->i_blocks -= blocks;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
@@ -452,7 +452,7 @@ repeat:
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			ext2_free_blocks (inode, tmp, 1);
 		}
 	if (IS_SYNC(inode) && buffer_dirty(tind_bh)) {
@@ -486,7 +486,7 @@ void ext2_truncate (struct inode * inode)
 		retry |= trunc_tindirect (inode);
 		if (!retry)
 			break;
-		if (IS_SYNC(inode) && inode->i_dirt)
+		if (IS_SYNC(inode) && test_bit(I_DIRTY, &inode->i_state))
 			ext2_sync_inode (inode);
 		current->counter = 0;
 		schedule ();
@@ -510,5 +510,5 @@ void ext2_truncate (struct inode * inode)
 		}
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 }

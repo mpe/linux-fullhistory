@@ -753,10 +753,7 @@ page_read_error:
 	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
-	if (DO_UPDATE_ATIME(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode)
 	if (!read)
 		read = error;
 	return read;
@@ -919,7 +916,6 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	retval = -EIO;
 	if (size == file->f_op->write(inode, file, (const char *) page, size))
 		retval = 0;
-	/* inode->i_status |= ST_MODIFIED is willingly *not* done here */
 	set_fs(old_fs);
 	return retval;
 }
@@ -1189,10 +1185,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->readpage)
 		return -ENOEXEC;
-	if (DO_UPDATE_ATIME(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode);
 	vma->vm_inode = inode;
 	atomic_inc(&inode->i_count);
 	vma->vm_ops = ops;

@@ -363,7 +363,6 @@ nfs_notify_change(struct inode *inode, struct iattr *attr)
 		nfs_truncate_dirty_pages(inode, sattr.size);
 		nfs_refresh_inode(inode, &fattr);
 	}
-	inode->i_dirt = 0;
 	return error;
 }
 

@@ -252,7 +252,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 				de->inode = le32_to_cpu(0);
 				de->rec_len = le16_to_cpu(sb->s_blocksize);
 				dir->i_size = offset + sb->s_blocksize;
-				dir->i_dirt = 1;
+				mark_inode_dirty(dir);
 			} else {
 
 				ext2_debug ("skipping to next block\n");
@@ -297,7 +297,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			 * and/or different from the directory change time.
 			 */
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
-			dir->i_dirt = 1;
+			mark_inode_dirty(dir);
 			dir->i_version = ++event;
 			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
@@ -366,11 +366,11 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 
 	inode->i_op = &ext2_file_inode_operations;
 	inode->i_mode = mode;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
 	if (!bh) {
 		inode->i_nlink--;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		iput (inode);
 		return err;
 	}
@@ -423,11 +423,11 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = to_kdev_t(rdev);
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
 	if (!bh) {
 		inode->i_nlink--;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		iput(inode);
 		return err;
 	}
@@ -465,7 +465,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	dir_block = ext2_bread (inode, 0, 1, &err);
 	if (!dir_block) {
 		inode->i_nlink--;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		iput (inode);
 		return err;
 	}
@@ -486,11 +486,11 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_mode = S_IFDIR | (mode & (S_IRWXUGO|S_ISVTX) & ~current->fs->umask);
 	if (dir->i_mode & S_ISGID)
 		inode->i_mode |= S_ISGID;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
 	if (!bh) {
 		inode->i_nlink = 0;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		iput (inode);
 		return err;
 	}
@@ -502,7 +502,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		wait_on_buffer (bh);
 	}
 	dir->i_nlink++;
-	dir->i_dirt = 1;
+	mark_inode_dirty(dir);
 	d_instantiate(dentry, inode, D_DIR);
 	brelse (bh);
 	return 0;
@@ -640,10 +640,10 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 			      inode->i_nlink);
 	inode->i_version = ++event;
 	inode->i_nlink = 0;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	dir->i_nlink--;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	dir->i_dirt = 1;
+	mark_inode_dirty(dir);
 	d_delete(dentry);
 
 end_rmdir:
@@ -701,9 +701,9 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 		wait_on_buffer (bh);
 	}
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	dir->i_dirt = 1;
+	mark_inode_dirty(dir);
 	inode->i_nlink--;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	inode->i_ctime = dir->i_ctime;
 	retval = 0;
 	d_delete(dentry);	/* This also frees the inode */
@@ -738,7 +738,7 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 		name_block = ext2_bread (inode, 0, 1, &err);
 		if (!name_block) {
 			inode->i_nlink--;
-			inode->i_dirt = 1;
+			mark_inode_dirty(inode);
 			iput (inode);
 			return err;
 		}
@@ -758,12 +758,12 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 		brelse (name_block);
 	}
 	inode->i_size = i;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
 	if (!bh) {
 		inode->i_nlink--;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 		iput (inode);
 		return err;
 	}
@@ -808,7 +808,7 @@ int ext2_link (struct inode * inode, struct inode * dir, struct dentry *dentry)
 	brelse (bh);
 	inode->i_nlink++;
 	inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode, 0);
 	return 0;
@@ -953,21 +953,21 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	if (new_inode) {
 		new_inode->i_nlink--;
 		new_inode->i_ctime = CURRENT_TIME;
-		new_inode->i_dirt = 1;
+		mark_inode_dirty(new_inode);
 	}
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
-	old_dir->i_dirt = 1;
+	mark_inode_dirty(old_dir);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = le32_to_cpu(new_dir->i_ino);
 		mark_buffer_dirty(dir_bh, 1);
 		old_dir->i_nlink--;
-		old_dir->i_dirt = 1;
+		mark_inode_dirty(old_dir);
 		if (new_inode) {
 			new_inode->i_nlink--;
-			new_inode->i_dirt = 1;
+			mark_inode_dirty(new_inode);
 		} else {
 			new_dir->i_nlink++;
-			new_dir->i_dirt = 1;
+			mark_inode_dirty(new_dir);
 		}
 	}
 	mark_buffer_dirty(old_bh,  1);

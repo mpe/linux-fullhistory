@@ -1125,8 +1125,7 @@ random_read(struct inode * inode, struct file * file, char * buf, unsigned long 
 	 * update the access time.
 	 */
 	if (inode && count != 0) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		UPDATE_ATIME(inode);
 	}
 	
 	return (count ? count : retval);
@@ -1182,7 +1181,7 @@ random_write(struct inode * inode, struct file * file,
 	}
 	if ((ret > 0) && inode) {
 		inode->i_mtime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 	return ret;
 }

@@ -75,10 +75,7 @@ static long pipe_read(struct inode * inode, struct file * filp,
 	PIPE_LOCK(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	if (read) {
-		if (DO_UPDATE_ATIME(inode)) {
-			inode->i_atime = CURRENT_TIME;
-			inode->i_dirt = 1;
-		}
+		UPDATE_ATIME(inode);
 		return read;
 	}
 	if (PIPE_WRITERS(*inode))
@@ -132,7 +129,7 @@ static long pipe_write(struct inode * inode, struct file * filp,
 		free = 1;
 	}
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	return written;
 }
 
@@ -423,11 +420,13 @@ int do_pipe(int *fd)
 	j = error;
 
 	f1->f_inode = f2->f_inode = inode;
+
 	/* read file */
 	f1->f_pos = f2->f_pos = 0;
 	f1->f_flags = O_RDONLY;
 	f1->f_op = &read_pipe_fops;
 	f1->f_mode = 1;
+
 	/* write file */
 	f2->f_flags = O_WRONLY;
 	f2->f_op = &write_pipe_fops;

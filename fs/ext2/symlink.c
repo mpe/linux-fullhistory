@@ -65,10 +65,7 @@ static struct dentry * ext2_follow_link(struct inode * inode, struct dentry *bas
 		}
 		link = bh->b_data;
 	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode);
 	base = lookup_dentry(link, base, 1);
 	if (bh)
 		brelse(bh);
@@ -101,10 +98,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 		i++;
 	if (copy_to_user(buffer, link, i))
 		i = -EFAULT;
- 	if (DO_UPDATE_ATIME(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+ 	UPDATE_ATIME(inode);
 	if (bh)
 		brelse (bh);
 	return i;
