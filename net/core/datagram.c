@@ -18,6 +18,7 @@
  *		Darryl Miles	:	Fixed non-blocking SOCK_SEQPACKET.
  *		Linus Torvalds	:	BSD semantic fixes.
  *		Alan Cox	:	Datagram iovec handling
+ *		Darryl Miles	:	Fixed non-blocking SOCK_STREAM.
  *
  */
 
@@ -47,6 +48,7 @@
  * Interrupts off so that no packet arrives before we begin sleeping.
  * Otherwise we might miss our wake up
  */
+
 static inline void wait_for_packet(struct sock * sk)
 {
 	unsigned long flags;
@@ -60,6 +62,16 @@ static inline void wait_for_packet(struct sock * sk)
 	lock_sock(sk);
 }
 
+/*
+ *	Is a socket 'connection oriented' ?
+ */
+ 
+static inline int connection_based(struct sock *sk)
+{
+	if(sk->type==SOCK_SEQPACKET || sk->type==SOCK_STREAM)
+		return 1;
+	return 0;
+}
 
 /*
  *	Get a datagram skbuff, understands the peeking, nonblocking wakeups and possible
@@ -92,7 +104,7 @@ restart:
 
 		/* Sequenced packets can come disconnected. If so we report the problem */
 		error = -ENOTCONN;
-		if(sk->type==SOCK_SEQPACKET && sk->state!=TCP_ESTABLISHED)
+		if(connection_based(sk) && sk->state!=TCP_ESTABLISHED)
 			goto no_packet;
 
 		/* User doesn't want to wait */
@@ -186,7 +198,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 				return 1;
 			if (sk->shutdown & RCV_SHUTDOWN)
 				return 1;
-			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_CLOSE)
+			if (connection_based(sk) && sk->state==TCP_CLOSE)
 			{
 				/* Connection closed: Wake up */
 				return(1);
@@ -203,7 +215,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 				return 1;
 			if (sk->shutdown & SEND_SHUTDOWN)
 				return 1;
-			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_SYN_SENT)
+			if (connection_based(sk) && sk->state==TCP_SYN_SENT)
 			{
 				/* Connection still in progress */
 				break;

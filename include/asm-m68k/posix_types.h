@@ -27,6 +27,10 @@ typedef char *		__kernel_caddr_t;
 typedef long long	__kernel_loff_t;
 #endif
 
+typedef struct {
+	int	val[2];
+} __kernel_fsid_t;
+
 #undef	__FD_SET
 #define	__FD_SET(d, set)	((set)->fds_bits[__FDELT(d)] |= __FDMASK(d))
 

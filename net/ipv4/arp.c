@@ -4,14 +4,15 @@
  *
  * This module implements the Address Resolution Protocol ARP (RFC 826),
  * which is used to convert IP addresses (or in the future maybe other
- * high-level addresses into a low-level hardware address (like an Ethernet
+ * high-level addresses) into a low-level hardware address (like an Ethernet
  * address).
  *
  * FIXME:
  *	Experiment with better retransmit timers
  *	Clean up the timer deletions
- *	If you create a proxy entry set your interface address to the address
- *	and then delete it, proxies may get out of sync with reality - check this
+ *	If you create a proxy entry, set your interface address to the address
+ *	and then delete it, proxies may get out of sync with reality - 
+ *	check this.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,11 +20,12 @@
  * 2 of the License, or (at your option) any later version.
  *
  * Fixes:
- *		Alan Cox	:	Removed the ethernet assumptions in Florian's code
- *		Alan Cox	:	Fixed some small errors in the ARP logic
+ *		Alan Cox	:	Removed the ethernet assumptions in 
+ *					Florian's code
+ *		Alan Cox	:	Fixed some small errors in the ARP 
+ *					logic
  *		Alan Cox	:	Allow >4K in /proc
  *		Alan Cox	:	Make ARP add its own protocol entry
- *
  *		Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
  *		Stephen Henson	:	Add AX25 support to arp_get_info()
  *		Alan Cox	:	Drop data when a device is downed.
@@ -46,7 +48,8 @@
  *					during arp_rcv.
  *		Russ Nelson	:	Tidied up a few bits.
  *		Alexey Kuznetsov:	Major changes to caching and behaviour,
- *					eg intelligent arp probing and generation
+ *					eg intelligent arp probing and 
+ *					generation
  *					of host down events.
  *		Alan Cox	:	Missing unlock in device events.
  *		Eckes		:	ARP ioctl control errors.
@@ -54,12 +57,13 @@
  *		Manuel Rodriguez:	Gratuitous ARP.
  *              Jonathan Layes  :       Added arpd support through kerneld 
  *                                      message queue (960314)
+ *		Mike Shaver	:	/proc/sys/net/ipv4/arp_* support
  */
 
 /* RFC1122 Status:
    2.3.2.1 (ARP Cache Validation):
      MUST provide mechanism to flush stale cache entries (OK)
-     SHOULD be able to configure cache timeout (NOT YET)
+     SHOULD be able to configure cache timeout (OK)
      MUST throttle ARP retransmits (OK)
    2.3.2.2 (ARP Packet Queue):
      SHOULD save at least one packet from each "conversation" with an
@@ -121,12 +125,9 @@
  *	and dynamic routing.
  */
 
-#ifndef CONFIG_ARPD
-#define ARP_TIMEOUT		(600*HZ)
-#else
 #define ARP_TIMEOUT		(60*HZ)
-#define ARPD_TIMEOUT		(600*HZ)
-#endif
+
+int sysctl_arp_timeout = ARP_TIMEOUT;
 
 /*
  *	How often is ARP cache checked for expire.
@@ -135,11 +136,13 @@
 
 #define ARP_CHECK_INTERVAL	(60*HZ)
 
+int sysctl_arp_check_interval = ARP_CHECK_INTERVAL;
+
 /*
  *	Soft limit on ARP cache size.
- *	Note that this number should be greater, than
- *	number of simultaneously opened sockets, else
- *	hardware header cache will be not efficient.
+ *	Note that this number should be greater than
+ *	number of simultaneously opened sockets, or else
+ *	hardware header cache will not be efficient.
  */
 
 #if RT_CACHE_DEBUG >= 2
@@ -162,12 +165,16 @@
 
 #define ARP_RES_TIME		(5*HZ)
 
+int sysctl_arp_res_time = ARP_RES_TIME;
+
 /*
  *	The number of times an broadcast arp request is send, until
  *	the host is considered temporarily unreachable.
  */
 
 #define ARP_MAX_TRIES		3
+
+int sysctl_arp_max_tries = ARP_MAX_TRIES;
 
 /*
  *	The entry is reconfirmed by sending point-to-point ARP
@@ -183,11 +190,15 @@
 
 #define ARP_CONFIRM_INTERVAL	(300*HZ)
 
+int sysctl_arp_confirm_interval = ARP_CONFIRM_INTERVAL;
+
 /*
  *	We wait for answer to unicast request for ARP_CONFIRM_TIMEOUT.
  */
 
 #define ARP_CONFIRM_TIMEOUT	ARP_RES_TIME
+
+int sysctl_arp_confirm_timeout = ARP_CONFIRM_TIMEOUT;
 
 /*
  *	The number of times an unicast arp request is retried, until
@@ -197,6 +208,8 @@
  */
 
 #define ARP_MAX_PINGS		1
+
+int sysctl_arp_max_pings = ARP_MAX_PINGS;
 
 /*
  *	When a host is dead, but someone tries to connect it,
@@ -210,6 +223,8 @@
  */
 
 #define ARP_DEAD_RES_TIME	(60*HZ)
+
+int sysctl_arp_dead_res_time = ARP_DEAD_RES_TIME;
 
 /*
  *	This structure defines the ARP mapping cache.
@@ -741,7 +756,7 @@ static int arp_force_expire(void)
 				cli();
 				users = arp_count_hhs(entry);
 
-				if (!users && now - entry->last_used > ARP_TIMEOUT)
+				if (!users && now - entry->last_used > sysctl_arp_timeout)
 				{
 					*pentry = entry->next;
 					restore_flags(flags);
@@ -820,7 +835,7 @@ static void arp_check_expire(unsigned long dummy)
 				}
 
 				cli();
-				if (now - entry->last_used > ARP_TIMEOUT
+				if (now - entry->last_used > sysctl_arp_timeout
 				    && !arp_count_hhs(entry))
 				{
 					*pentry = entry->next;
@@ -833,11 +848,11 @@ static void arp_check_expire(unsigned long dummy)
 				}
 				sti();
 				if (entry->last_updated
-				    && now - entry->last_updated > ARP_CONFIRM_INTERVAL
+				    && now - entry->last_updated > sysctl_arp_confirm_interval
 				    && !(entry->flags & ATF_PERM))
 				{
 					struct device * dev = entry->dev;
-					entry->retries = ARP_MAX_TRIES+ARP_MAX_PINGS;
+					entry->retries = sysctl_arp_max_tries+sysctl_arp_max_pings;
 					del_timer(&entry->timer);
 					entry->timer.expires = jiffies + ARP_CONFIRM_TIMEOUT;
 					add_timer(&entry->timer);
@@ -859,7 +874,7 @@ static void arp_check_expire(unsigned long dummy)
 	 *	Set the timer again.
 	 */
 
-	arp_timer.expires = jiffies + ARP_CHECK_INTERVAL;
+	arp_timer.expires = jiffies + sysctl_arp_check_interval;
 	add_timer(&arp_timer);
 }
 
@@ -909,7 +924,7 @@ static void arp_expire_request (unsigned long arg)
 	 */
 	
 	if ((entry->flags & ATF_COM) && entry->last_updated
-	    && jiffies - entry->last_updated <= ARP_CONFIRM_INTERVAL)
+	    && jiffies - entry->last_updated <= sysctl_arp_confirm_interval)
 	{
 		restore_flags(flags);
 		arp_unlock();
@@ -926,10 +941,10 @@ static void arp_expire_request (unsigned long arg)
 		printk("arp_expire_request: %08x timed out\n", entry->ip);
 #endif
 		/* Set new timer. */
-		entry->timer.expires = jiffies + ARP_RES_TIME;
+		entry->timer.expires = jiffies + sysctl_arp_res_time;
 		add_timer(&entry->timer);
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr,
-			 entry->retries > ARP_MAX_TRIES ? entry->ha : NULL,
+			 entry->retries > sysctl_arp_max_tries ? entry->ha : NULL,
 			 dev->dev_addr, NULL);
 		arp_unlock();
 		return;
@@ -956,7 +971,7 @@ static void arp_expire_request (unsigned long arg)
 #if RT_CACHE_DEBUG >= 2
 		printk("arp_expire_request: %08x is dead\n", entry->ip);
 #endif
-		entry->retries = ARP_MAX_TRIES;
+		entry->retries = sysctl_arp_max_tries;
 		entry->flags &= ~ATF_COM;
 		arp_invalidate_hhs(entry);
 		restore_flags(flags);
@@ -967,7 +982,7 @@ static void arp_expire_request (unsigned long arg)
 		entry->last_updated = 0;
 		arpd_update(entry);
 
-		entry->timer.expires = jiffies + ARP_DEAD_RES_TIME;
+		entry->timer.expires = jiffies + sysctl_arp_dead_res_time;
 		add_timer(&entry->timer);
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr, 
 			 NULL, dev->dev_addr, NULL);
@@ -1317,7 +1332,7 @@ struct arp_table * arp_new_entry(u32 paddr, struct device *dev, struct hh_cache 
 			atomic_inc(&hh->hh_refcnt);
 			hh->hh_arp = (void*)entry;
 		}
-		entry->timer.expires = jiffies + ARP_RES_TIME;
+		entry->timer.expires = jiffies + sysctl_arp_res_time;
 
 		if (skb != NULL)
 		{
@@ -1331,7 +1346,7 @@ struct arp_table * arp_new_entry(u32 paddr, struct device *dev, struct hh_cache 
 			entry->next = arp_tables[hash];
 			arp_tables[hash] = entry;
 			add_timer(&entry->timer);
-			entry->retries = ARP_MAX_TRIES;
+			entry->retries = sysctl_arp_max_tries;
 #ifdef CONFIG_ARPD
 			if (!arpd_not_running)
 				arpd_lookup(paddr, dev);
@@ -1573,8 +1588,8 @@ static void arp_run_bh()
 				entry->next = arp_tables[hash];
 				arp_tables[hash] = entry;
 				restore_flags(flags);
-				entry->timer.expires = jiffies + ARP_RES_TIME;
-				entry->retries = ARP_MAX_TRIES;
+				entry->timer.expires = jiffies + sysctl_arp_res_time;
+				entry->retries = sysctl_arp_max_tries;
 				entry->last_used = jiffies;
 				if (!(entry->flags & ATF_COM))
 				{

@@ -129,7 +129,9 @@ static void
 ncp_put_inode(struct inode *inode)
 {
         struct nw_file_info *finfo = NCP_FINFO(inode);
+	struct super_block *sb = inode->i_sb;
 
+	lock_super(sb);
         if (finfo->opened != 0)
 	{
                 if (ncp_close_file(NCP_SERVER(inode), finfo->file_handle)!=0)
@@ -152,6 +154,7 @@ ncp_put_inode(struct inode *inode)
         }                
 
 	clear_inode(inode);
+	unlock_super(sb);
 }
 
 struct super_block *

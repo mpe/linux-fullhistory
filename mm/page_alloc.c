@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/swapctl.h>
+#include <linux/interrupt.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */

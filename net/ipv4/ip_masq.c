@@ -568,8 +568,108 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	return 0;
  }
 
+
 /*
- *	Handle ICMP messages.
+ *	Handle ICMP messages in forward direction.
+ *	Find any that might be relevant, check against existing connections,
+ *	forward to masqueraded host if relevant.
+ *	Currently handles error types - unreachable, quench, ttl exceeded
+ */
+
+int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+ 	struct iphdr	*iph   = skb->h.iph;
+	struct icmphdr  *icmph = (struct icmphdr *)((char *)iph + (iph->ihl<<2));
+	struct iphdr    *ciph;	/* The ip header contained within the ICMP */
+	__u16	        *pptr;	/* port numbers from TCP/UDP contained header */
+	struct ip_masq	*ms;
+	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Incoming forward ICMP (%d) %lX -> %lX\n",
+	        icmph->type,
+ 		ntohl(iph->saddr), ntohl(iph->daddr));
+#endif
+
+	/* 
+	 * Work through seeing if this is for us.
+	 * These checks are supposed to be in an order that
+	 * means easy things are checked first to speed up
+	 * processing.... however this means that some
+	 * packets will manage to get a long way down this
+	 * stack and then be rejected, but thats life
+	 */
+	if ((icmph->type != ICMP_DEST_UNREACH) &&
+	    (icmph->type != ICMP_SOURCE_QUENCH) &&
+	    (icmph->type != ICMP_TIME_EXCEEDED))
+		return 0;
+
+	/* Now find the contained IP header */
+	ciph = (struct iphdr *) (icmph + 1);
+
+	/* We are only interested ICMPs generated from TCP or UDP packets */
+	if ((ciph->protocol != IPPROTO_UDP) && (ciph->protocol != IPPROTO_TCP))
+		return 0;
+
+	/* 
+	 * Find the ports involved - this packet was 
+	 * incoming so the ports are right way round
+	 * (but reversed relative to outer IP header!)
+	 */
+	pptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
+	if (ntohs(pptr[1]) < PORT_MASQ_BEGIN ||
+ 	    ntohs(pptr[1]) > PORT_MASQ_END)
+ 		return 0;
+
+	/* Ensure the checksum is correct */
+	if (ip_compute_csum((unsigned char *) icmph, len)) 
+	{
+		/* Failed checksum! */
+		printk(KERN_INFO "MASQ: forward ICMP: failed checksum from %s!\n", 
+		       in_ntoa(iph->saddr));
+		return(-1);
+	}
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Handling forward ICMP for %lX:%X -> %lX:%X\n",
+	       ntohl(ciph->saddr), ntohs(pptr[0]),
+	       ntohl(ciph->daddr), ntohs(pptr[1]));
+#endif
+
+	/* This is pretty much what ip_masq_in_get() does */
+	ms = ip_masq_in_get_2(ciph->protocol, ciph->saddr, pptr[0], ciph->daddr, pptr[1]);
+
+	if (ms == NULL)
+		return 0;
+
+	/* Now we do real damage to this packet...! */
+	/* First change the source IP address, and recalc checksum */
+	iph->saddr = ms->maddr;
+	ip_send_check(iph);
+	
+	/* Now change the *dest* address in the contained IP */
+	ciph->daddr = ms->maddr;
+	ip_send_check(ciph);
+	
+	/* the TCP/UDP dest port - cannot redo check */
+	pptr[1] = ms->mport;
+
+	/* And finally the ICMP checksum */
+	icmph->checksum = 0;
+	icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Rewrote forward ICMP to %lX:%X -> %lX:%X\n",
+	       ntohl(ciph->saddr), ntohs(pptr[0]),
+	       ntohl(ciph->daddr), ntohs(pptr[1]));
+#endif
+
+	return 1;
+}
+
+/*
+ *	Handle ICMP messages in reverse (demasquerade) direction.
  *	Find any that might be relevant, check against existing connections,
  *	forward to masqueraded host if relevant.
  *	Currently handles error types - unreachable, quench, ttl exceeded
@@ -586,7 +686,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
 
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Incoming ICMP (%d) %lX -> %lX\n",
+ 	printk("Incoming reverse ICMP (%d) %lX -> %lX\n",
 	        icmph->type,
  		ntohl(iph->saddr), ntohl(iph->daddr));
 #endif
@@ -616,12 +716,13 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 	if (ip_compute_csum((unsigned char *) icmph, len)) 
 	{
 		/* Failed checksum! */
-		printk(KERN_INFO "MASQ: ICMP: failed checksum from %s!\n", in_ntoa(iph->saddr));
+		printk(KERN_INFO "MASQ: reverse ICMP: failed checksum from %s!\n", 
+		       in_ntoa(iph->saddr));
 		return(-1);
 	}
 
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Handling ICMP for %lX:%X -> %lX:%X\n",
+ 	printk("Handling reverse ICMP for %lX:%X -> %lX:%X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 #endif
@@ -649,7 +750,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 	icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Rewrote ICMP to %lX:%X -> %lX:%X\n",
+ 	printk("Rewrote reverse ICMP to %lX:%X -> %lX:%X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 #endif

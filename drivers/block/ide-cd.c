@@ -98,6 +98,8 @@
  *                        from Gerhard Zuber <zuber@berlin.snafu.de>.
  *                       Let open succeed even if there's no loaded disc.
  * 3.13  May 19, 1996 -- Fixes for changer code.
+ * 3.14  May 29, 1996 -- Add work-around for Vertos 600.
+ *                        (From Hennus Bergman <hennus@sky.ow.nl>.)
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2597,6 +2599,13 @@ void ide_cdrom_setup (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 1;
 		}
 
+		else if (strcmp (drive->id->model, "V006E0DS") == 0 &&
+		    drive->id->fw_rev[4] == '1' &&
+		    drive->id->fw_rev[6] <= '2') {
+			/* Vertos 600 ESD. */
+			CDROM_CONFIG_FLAGS (drive)->toctracks_as_bcd = 1;
+		}
+
 		else if (strcmp (drive->id->model,
 				 "NEC CD-ROM DRIVE:260") == 0 &&
 			 strcmp (drive->id->fw_rev, "1.01") == 0) {
@@ -2624,14 +2633,15 @@ void ide_cdrom_setup (ide_drive_t *drive)
 
 
 /*
- * TODO:
- *  CDROMRESET
- *  Lock the door when a read request completes successfully and the
- *   door is not already locked.  Also try to reorganize to reduce
- *   duplicated functionality between read and ioctl paths?
- *  Establish interfaces for an IDE port driver, and break out the cdrom
- *   code into a loadable module.
- *  Support changers better.
+ * TODO (for 2.1?):
+ *  Avoid printing error messages for expected errors from the drive.
+ *  Integrate with generic cdrom driver.
+ *  Query the drive to find what features are available
+ *   before trying to use them.
+ *  Integrate spindown time adjustment patch.
+ *  Modularize.
+ *  CDROMRESET ioctl.
+ *  Better support for changers.
  */
 
 

@@ -1099,7 +1099,7 @@ no_grow:
 static inline void after_unlock_page (struct page * page)
 {
 	if (clear_bit(PG_decr_after, &page->flags))
-		nr_async_pages--;
+		atomic_dec(&nr_async_pages);
 	if (clear_bit(PG_free_after, &page->flags))
 		free_page(page_address(page));
 	if (clear_bit(PG_swap_unlock_after, &page->flags))
@@ -1250,11 +1250,12 @@ void unlock_buffer(struct buffer_head * bh)
 	struct buffer_head *tmp;
 	struct page *page;
 
-	clear_bit(BH_Lock, &bh->b_state);
-	wake_up(&bh->b_wait);
-
-	if (!test_bit(BH_FreeOnIO, &bh->b_state))
+	if (!test_bit(BH_FreeOnIO, &bh->b_state)) {
+		/* This is a normal buffer. */
+		clear_bit(BH_Lock, &bh->b_state);
+		wake_up(&bh->b_wait);
 		return;
+	}
 	/* This is a temporary buffer used for page I/O. */
 	page = mem_map + MAP_NR(bh->b_data);
 	if (!PageLocked(page)) {
@@ -1268,17 +1269,18 @@ void unlock_buffer(struct buffer_head * bh)
 	}
 	/* Async buffer_heads are here only as labels for IO, and get
            thrown away once the IO for this page is complete.  IO is
-           deemed complete once all buffers have been visited
-           (b_count==0) and are now unlocked. */
-	bh->b_count--;
+           deemed complete once all buffers have been unlocked. */
 	if (!test_bit(BH_Uptodate, &bh->b_state))
 		set_bit(PG_error, &page->flags);
+	clear_bit(BH_Lock, &bh->b_state);
+	wake_up(&bh->b_wait);
 	for (tmp = bh; tmp=tmp->b_this_page, tmp!=bh; ) {
-		if (test_bit(BH_Lock, &tmp->b_state) || tmp->b_count)
+		if (test_bit(BH_Lock, &tmp->b_state))
 			return;
 	}
 	/* OK, the async IO on this page is complete. */
-	clear_bit(PG_locked, &page->flags);
+	if (!clear_bit(PG_locked, &page->flags))
+		return;
 	wake_up(&page->wait);
 	free_async_buffers(bh);
 	after_unlock_page(page);

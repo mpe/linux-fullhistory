@@ -35,7 +35,7 @@ fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
-if [ "$CONFIG_EXPERIMENTAL = "y" ]; then
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Amiga FFS filesystem support (EXPERIMENTAL)' CONFIG_AFFS_FS
   if [ "$CONFIG_AFFS_FS" != "n" ]; then
     define_bool CONFIG_AMIGA_PARTITION y
@@ -43,7 +43,7 @@ if [ "$CONFIG_EXPERIMENTAL = "y" ]; then
 fi
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then
-  bool "BSD disklabel (FreeBSD partition tables) support" CONFIG_BSD_DISKLABEL
-  bool "SMD disklabel (Sun partition tables) support" CONFIG_SMD_DISKLABEL
+  bool 'BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
+  bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
 fi
 endmenu

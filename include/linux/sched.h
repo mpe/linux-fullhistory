@@ -11,7 +11,6 @@
 
 #include <asm/param.h>	/* for HZ */
 
-extern unsigned long intr_count;
 extern unsigned long event;
 
 #include <linux/binfmts.h>

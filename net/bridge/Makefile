@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := bridge.o
-O_OBJS	 := br.o br_tree.o
+O_OBJS	 := br.o br_tree.o sysctl_net_bridge.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

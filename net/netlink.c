@@ -63,6 +63,21 @@ int netlink_donothing(struct sk_buff *skb)
 	return -EINVAL;
 }
 
+static int netlink_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+{
+	unsigned int minor = MINOR(inode->i_rdev);
+	switch (sel_type) {
+	case SEL_IN:
+		if (skb_peek(&skb_queue_rd[minor])!=NULL)
+			return 1;
+		select_wait(&read_space_wait[minor], wait);
+		break;
+	case SEL_OUT:
+		return 1;
+	}
+	return 0;
+}
+
 /*
  *	Write a message to the kernel side of a communication link
  */
@@ -161,7 +176,7 @@ static struct file_operations netlink_fops = {
 	netlink_read,
 	netlink_write,
 	NULL,		/* netlink_readdir */
-	NULL,		/* netlink_select */
+	netlink_select,
 	netlink_ioctl,
 	NULL,		/* netlink_mmap */
 	netlink_open,

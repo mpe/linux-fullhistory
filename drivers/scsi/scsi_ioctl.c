@@ -171,7 +171,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
     unsigned char opcode;
     int inlen, outlen, cmdlen;
     int needed, buf_needed;
-    int result;
+    int timeout, retries, result;
     
     if (!buffer)
 	return -EINVAL;
@@ -239,6 +239,22 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
      */
     cmd[1] = ( cmd[1] & 0x1f ) | (dev->lun << 5);
     
+    switch (opcode)
+      {
+      case FORMAT_UNIT:
+	timeout =  2 * 60 * 60 * HZ; /* 2 Hours */
+	retries = 1;
+	break;
+      case START_STOP:
+	timeout =  60 * HZ;	/* 60 seconds */
+	retries = 1;
+	break;
+      default:
+	timeout = MAX_TIMEOUT;
+	retries = MAX_RETRIES;
+	break;
+      }
+
 #ifndef DEBUG_NO_CMD
     
     SCpnt = allocate_device(NULL, dev, 1);
@@ -246,8 +262,8 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
-	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
-		    MAX_RETRIES);
+	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,
+		    timeout, retries);
 	down(&sem);
     }
     

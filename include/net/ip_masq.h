@@ -85,6 +85,7 @@ extern int ip_masq_init(void);
  *	functions called from ip layer
  */
 extern int ip_fw_masquerade(struct sk_buff **, struct device *);
+extern int ip_fw_masq_icmp(struct sk_buff **, struct device *);
 extern int ip_fw_demasquerade(struct sk_buff **, struct device *);
 
 /*

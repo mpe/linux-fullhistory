@@ -933,7 +933,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	/*
 	 * Maybe we can take some stuff off of the write queue,
 	 * and put it onto the xmit queue.
-	 * FIXME: (?) There is bizzare case being tested here, to check if
+	 * FIXME: (?) There is bizarre case being tested here, to check if
 	 * the data at the head of the queue ends before the start of
 	 * the sequence we already ACKed. This does not appear to be
 	 * a case that can actually occur. Why are we testing it?
@@ -1679,7 +1679,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct sock *sk;
 	int syn_ok=0;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-	int r;
+	int r=0;
 #endif
 
 	/*

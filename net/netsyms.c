@@ -31,6 +31,10 @@
 #include <linux/net_alias.h>
 #endif
 
+#ifdef CONFIG_NETLINK
+#include <net/netlink.h>
+#endif
+
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
 #endif
@@ -173,6 +177,12 @@ static struct symbol_table net_syms = {
 	X(arp_query),
 #endif  /* CONFIG_INET */
 
+#ifdef CONFIG_NETLINK
+	X(netlink_attach),
+	X(netlink_detach),
+	X(netlink_post),
+#endif /* CONFIG_NETLINK */
+	
 #include <linux/symtab_end.h>
 };
 

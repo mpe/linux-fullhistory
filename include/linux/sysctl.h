@@ -70,33 +70,41 @@ struct __sysctl_args {
 #define VM_MAXID	5
 
 /* CTL_NET names: */
+#define NET_CORE        1
+#define NET_ETHER       2
+#define NET_802         3
+#define NET_UNIX        4
+#define NET_IPV4        5
+#define NET_IPX         6
+#define NET_ATALK       7
+#define NET_NETROM      8
+#define NET_AX25        9
+#define NET_BRIDGE	10
 
 /* /proc/sys/net/core */
-#define NET_CORE		0x01000000
 
 /* /proc/sys/net/ethernet */
-#define NET_ETHER		0x02000000
 
 /* /proc/sys/net/802 */
-#define NET_802         	0x03000000
 
 /* /proc/sys/net/unix */
-#define NET_UNIX		0x04000000
 
 /* /proc/sys/net/ipv4 */
-#define NET_IPV4		0x05000000
+#define NET_IPV4_ARP_RES_TIME           1
+#define NET_IPV4_ARP_DEAD_RES_TIME      2
+#define NET_IPV4_ARP_MAX_TRIES          3
+#define NET_IPV4_ARP_TIMEOUT            4
+#define NET_IPV4_ARP_CHECK_INTERVAL     5
+#define NET_IPV4_ARP_CONFIRM_INTERVAL   6
+#define NET_IPV4_ARP_CONFIRM_TIMEOUT	7
 
 /* /proc/sys/net/ipx */
-#define NET_IPX			0x06000000
 
 /* /proc/sys/net/appletalk */
-#define NET_ATALK		0x07000000
 
 /* /proc/sys/net/netrom */
-#define NET_NETROM		0x08000000
 
 /* /proc/sys/net/ax25 */
-#define NET_AX25		0x09000000
 
 /* CTL_PROC names: */
 

@@ -32,7 +32,7 @@ All audio mode commands have the one of the following form:
 where xx is a two-character code and v are alphanumerical parameters.
 The following commands are supported:
 
-        AT+VNH=x         Auto hangup settting. NO EFFECT, supported
+        AT+VNH=x         Auto hangup setting. NO EFFECT, supported
                          for compatibility only.
         AT+VNH?          Always reporting "1"
         AT+VNH=?         Always reporting "1"
@@ -100,7 +100,7 @@ General behavior and description of data formats/protocol.
     <DLE>c                  FAX calling tone received.
     <DLE>b                  busy tone received.
     <DLE>q                  quiet. Silence detected after non-silence.
-    <DLE>s                  silence. Silence dectected from the
+    <DLE>s                  silence. Silence detected from the
                             start of recording.
 
     Any character sent by the application, except XON (0x11) or XOFF (0x13)
@@ -109,7 +109,7 @@ General behavior and description of data formats/protocol.
   Audio playback.
 
     When sending audio data, upon AT+VTX command, emulator responds with
-    CONNECT, and starts transfering data from application to the phone line.
+    CONNECT, and starts transferring data from application to the phone line.
     The same DLE sequences apply to this mode.
 
 

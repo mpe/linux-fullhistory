@@ -627,7 +627,7 @@ function parse_config_files () {
 	#
 	for i in MCmenu*
 	do
-		source $i
+		source ./$i
 	done
 
 	rm -f MCmenu*
@@ -646,9 +646,30 @@ function activate_menu () {
 		comment_ctr=0		#So comment lines get unique tags
 
 		$1 "$default"		#Create the lxdialog menu & functions
-		. MCradiolists		#Source the menu's functions
 
-		. MCmenu 2>MCdialog.out	#Activate the lxdialog menu
+		if [ "$?" != "0" ]
+		then
+			clear
+			cat <<EOM
+
+Menuconfig has encountered a possible error in one of the kernel's
+configuration files and is unable to continue.
+
+Please report this to the author <roadcapw@cfw.com>.  You may also
+send a problem report to linux-kernel@vger.rutgers.edu or post a
+message to the linux.dev.kernel news group.
+
+Please indicate the kernel version you are trying to configure and
+which menu you were trying to enter when this error occured.
+
+EOM
+			cleanup
+			exit 1
+		fi
+
+		. ./MCradiolists		#Source the menu's functions
+
+		. ./MCmenu 2>MCdialog.out	#Activate the lxdialog menu
 		ret=$?
 
 		read selection <MCdialog.out
@@ -677,6 +698,32 @@ function activate_menu () {
 			;;
 		255|1)
 			break
+			;;
+		139)
+			stty sane
+			clear
+			cat <<EOM
+
+There seems to be a problem with the lxdialog companion utility which is
+built prior to running Menuconfig.  Usually this is an indicator that you
+have upgraded/downgraded your ncurses libraries and did not remove the 
+old ncurses header file(s) in /usr/include or /usr/include/ncurses.
+
+It is VERY important that you have only one set of ncurses header files
+and that those files are properly version matched to the ncurses libraries 
+installed on your machine.
+
+You may also need to rebuild lxdialog.  This can be done by moving to
+the /usr/src/linux/scripts/lxdialog directory and issuing the 
+"make clean all" command.
+
+If you have verified that your ncurses install is correct, you may email
+the author <roadcapw@cfw.com> or post a message on the linux.dev.kernel
+news group for additional assistance. 
+
+EOM
+			cleanup
+			exit 139
 			;;
 		esac
 	done
@@ -719,7 +766,7 @@ last retrieved.  Leave blank to abort."\
 			else
 				echo -ne "\007"
 				$DIALOG	--backtitle "$backtitle" \
-					--infobox "File does not exit!"  3 38
+					--infobox "File does not exist!"  3 38
 				sleep 2
 			fi
 		else
@@ -815,7 +862,7 @@ function load_config_file () {
 	! /# .* is not set.*/ { print }
 	' $1 >.tmpconfig
 
-	source .tmpconfig
+	source ./.tmpconfig
 	rm -f .tmpconfig
 }
 

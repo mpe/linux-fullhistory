@@ -1103,7 +1103,7 @@ static int isdn_tty_ioctl(struct tty_struct *tty, struct file *file,
                         return isdn_tty_set_modem_info(info, cmd, (uint *) arg);
                 case TIOCSERGETLSR:	/* Get line status register */
 #ifdef ISDN_DEBUG_MODEM_IOCTL
-                        printk(KERN_DEBUG "ttyI%d ioctl TIOSERGETLSR\n", info->line);
+                        printk(KERN_DEBUG "ttyI%d ioctl TIOCSERGETLSR\n", info->line);
 #endif
                         error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(uint));
                         if (error)

@@ -15,6 +15,7 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/ncp_fs.h>
+#include <linux/locks.h>
 #include "ncplib_kernel.h"
 #include <linux/malloc.h>
 
@@ -44,8 +45,10 @@ ncp_make_open(struct inode *i, int right)
 
         DPRINTK("ncp_make_open: dirent->opened = %d\n", finfo->opened);
 
+	lock_super(i->i_sb);
         if (finfo->opened == 0)
 	{
+		finfo->access = -1;
                 /* tries max. rights */
 		if (ncp_open_create_file_or_subdir(NCP_SERVER(i),
 						   NULL, NULL,
@@ -63,11 +66,9 @@ ncp_make_open(struct inode *i, int right)
 		{
 			finfo->access = O_RDONLY;
 		}
-		else
-		{
-			return -EACCES;
-		}
         }
+
+	unlock_super(i->i_sb);
 
         if (   ((right == O_RDONLY) && (   (finfo->access == O_RDONLY)
                                         || (finfo->access == O_RDWR)))

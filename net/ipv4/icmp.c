@@ -16,18 +16,26 @@
  *	Fixes:
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Multicast ping reply as self.
- *		Alan Cox	:	Fix atomicity lockup in ip_build_xmit call
- *		Alan Cox	:	Added 216,128 byte paths to the MTU code.
+ *		Alan Cox	:	Fix atomicity lockup in ip_build_xmit 
+ *					call.
+ *		Alan Cox	:	Added 216,128 byte paths to the MTU 
+ *					code.
  *		Martin Mares	:	RFC1812 checks.
- *		Martin Mares	:	Can be configured to follow redirects if acting
- *					as a router _without_ a routing protocol (RFC 1812).
- *		Martin Mares	:	Echo requests may be configured to be ignored (RFC 1812).
- *		Martin Mares	:	Limitation of ICMP error message transmit rate (RFC 1812).
- *		Martin Mares	:	TOS and Precedence set correctly (RFC 1812).
- *		Martin Mares	:	Now copying as much data from the original packet
- *					as we can without exceeding 576 bytes (RFC 1812).
+ *		Martin Mares	:	Can be configured to follow redirects 
+ *					if acting as a router _without_ a
+ *					routing protocol (RFC 1812).
+ *		Martin Mares	:	Echo requests may be configured to 
+ *					be ignored (RFC 1812).
+ *		Martin Mares	:	Limitation of ICMP error message 
+ *					transmit rate (RFC 1812).
+ *		Martin Mares	:	TOS and Precedence set correctly 
+ *					(RFC 1812).
+ *		Martin Mares	:	Now copying as much data from the 
+ *					original packet as we can without
+ *					exceeding 576 bytes (RFC 1812).
  *	Willy Konynenberg	:	Transparent proxying support.
- *
+ *		Keith Owens	:	RFC1191 correction for 4.2BSD based 
+ *					path MTU bug.
  *
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
@@ -81,7 +89,8 @@
  *   MAY discard broadcast REQUESTs.  (OK, but see source for inconsistency)
  *   MUST reply using same source address as the request was sent to. (OK)
  *   MUST reverse source route, as per ECHO (NOT YET)
- *   MUST pass REPLYs to transport/user layer (requires RAW, just like ECHO) (OK)
+ *   MUST pass REPLYs to transport/user layer (requires RAW, just like 
+ *	ECHO) (OK)
  *   MUST update clock for timestamp at least 15 times/sec (OK)
  *   MUST be "correct within a few minutes" (OK)
  * 3.2.2.9 (Address Mask Request/Reply)
@@ -108,10 +117,11 @@
  *   MUST use one of addresses for the interface the orig. packet arrived as
  *     source address (OK)
  *  4.3.2.5 (TOS and Precedence)
- *   SHOULD leave TOS set to the same value unless the packet would be discarded
- *     for that reason (OK)
+ *   SHOULD leave TOS set to the same value unless the packet would be 
+ *     discarded for that reason (OK)
  *   MUST use TOS=0 if not possible to leave original value (OK)
- *   MUST leave IP Precedence for Source Quench messages (OK -- not sent at all)
+ *   MUST leave IP Precedence for Source Quench messages (OK -- not sent 
+ *	at all)
  *   SHOULD use IP Precedence = 6 (Internetwork Control) or 7 (Network Control)
  *     for all other error messages (OK, we use 6)
  *   MAY allow configuration of IP Precedence (OK -- not done)
@@ -137,7 +147,8 @@
  *     is enabled on the interface (OK -- ignores)
  *  4.3.3.3 (Source Quench)
  *   SHOULD NOT originate SQ messages (OK)
- *   MUST be able to limit SQ rate if originates them (OK as we don't send them)
+ *   MUST be able to limit SQ rate if originates them (OK as we don't 
+ *	send them)
  *   MAY ignore SQ messages it receives (OK -- we don't)
  *  4.3.3.4 (Time Exceeded)
  *   Requirements dealt with at IP (generating TIME_EXCEEDED).
@@ -166,16 +177,19 @@
  *   MUST reply using same source address as the request was sent to. (OK)
  *   MUST use reversed Source Route if possible (NOT YET)
  *   SHOULD update Record Route / Timestamp options (??)
- *   MUST pass REPLYs to transport/user layer (requires RAW, just like ECHO) (OK)
+ *   MUST pass REPLYs to transport/user layer (requires RAW, just like 
+ *	ECHO) (OK)
  *   MUST update clock for timestamp at least 16 times/sec (OK)
  *   MUST be "correct within a few minutes" (OK)
  * 4.3.3.9 (Address Mask Request/Reply)
- *   MUST have support for receiving AMRq and responding with AMRe (OK, but only as a
- *     compile-time option)
- *   SHOULD have option for each interface for AMRe's, MUST default to NO (NOT YET)
+ *   MUST have support for receiving AMRq and responding with AMRe (OK, 
+ *	but only as a compile-time option)
+ *   SHOULD have option for each interface for AMRe's, MUST default to 
+ *	NO (NOT YET)
  *   MUST NOT reply to AMRq before knows the correct AM (OK)
- *   MUST NOT respond to AMRq with source address 0.0.0.0 on physical interfaces
- *     having multiple logical i-faces with different masks (NOT YET)
+ *   MUST NOT respond to AMRq with source address 0.0.0.0 on physical
+ *    	interfaces having multiple logical i-faces with different masks
+ *	(NOT YET)
  *   SHOULD examine all AMRe's it receives and check them (NOT YET)
  *   SHOULD log invalid AMRe's (AM+sender) (NOT YET)
  *   MUST NOT use contents of AMRe to determine correct AM (OK)
@@ -192,8 +206,8 @@
  *   SHOULD NOT generate Host Isolated codes (OK)
  *   SHOULD use Communication Administratively Prohibited when administratively
  *     filtering packets (NOT YET -- bug-to-bug compatibility)
- *   MAY include config option for not generating the above and silently discard
- *     the packets instead (OK)
+ *   MAY include config option for not generating the above and silently
+ *	discard the packets instead (OK)
  *   MAY include config option for not generating Precedence Violation and
  *     Precedence Cutoff messages (OK as we don't generate them at all)
  *   MUST use Host Unreachable or Dest. Host Unknown codes whenever other hosts
@@ -344,7 +358,7 @@ struct socket icmp_socket;
 /*
  *	Send an ICMP frame.
  */
- 
+
 
 /*
  *	Initialize the transmit rate limitation mechanism.
@@ -370,7 +384,8 @@ static void xrlim_init(void)
  *	Check transmit rate limitation for given message.
  *
  *	RFC 1812: 4.3.2.8 SHOULD be able to limit error message rate
- *			  SHOULD allow setting of rate limits (we allow in the source)
+ *			  SHOULD allow setting of rate limits (we allow 
+ *			  in the source)
  */
 
 static int xrlim_allow(int type, __u32 addr)
@@ -385,7 +400,8 @@ static int xrlim_allow(int type, __u32 addr)
 	if (!r)
 		return 1;
 
-	for (c = r->cache; c < &r->cache[XRLIM_CACHE_SIZE]; c++)	/* Cache lookup */
+	for (c = r->cache; c < &r->cache[XRLIM_CACHE_SIZE]; c++)	
+	  /* Cache lookup */
 		if (c->daddr == addr)
 			break;
 
@@ -644,6 +660,22 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			{
 				unsigned short old_mtu = ntohs(iph->tot_len);
 				unsigned short new_mtu = ntohs(icmph->un.echo.sequence);
+
+				/*
+				 * RFC1191 5.  4.2BSD based router can return incorrect
+				 * Total Length.  If current mtu is unknown or old_mtu
+				 * is not less than current mtu, reduce old_mtu by 4 times
+				 * the header length.
+				 */
+
+				if (skb->sk == NULL /* can this happen? */
+					|| skb->sk->ip_route_cache == NULL
+					|| skb->sk->ip_route_cache->rt_mtu <= old_mtu)
+				{
+					NETDEBUG(printk(KERN_INFO "4.2BSD based fragmenting router between here and %s, mtu corrected from %d", in_ntoa(iph->daddr), old_mtu));
+					old_mtu -= 4 * iph->ihl;
+					NETDEBUG(printk(" to %d\n", old_mtu));
+				}
 
 				if (new_mtu < 68 || new_mtu >= old_mtu)
 				{

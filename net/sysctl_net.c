@@ -3,6 +3,13 @@
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net directories for each protocol family. [MS]
+ *
+ * $Log: sysctl_net.c,v $
+ * Revision 1.2  1996/05/08  20:24:40  shaver
+ * Added bits for NET_BRIDGE and the NET_IPV4_ARP stuff and
+ * NET_IPV4_IP_FORWARD.
+ *
+ *
  */
 
 #include <linux/config.h>
@@ -35,6 +42,10 @@ extern ctl_table core_table[], unix_table[];
 extern ctl_table ether_table[], e802_table[];
 #endif
 
+#ifdef CONFIG_BRIDGE
+extern ctl_table bridge_table[];
+#endif
+
 ctl_table net_table[] = {
 	{NET_CORE,   "core",      NULL, 0, 0555, core_table},      
         {NET_UNIX,   "unix",      NULL, 0, 0555, unix_table},
@@ -56,6 +67,9 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_AX25
 	{NET_AX25,   "ax25",      NULL, 0, 0555, ax25_table},
+#endif
+#ifdef CONFIG_BRIDGE
+        {NET_BRIDGE, "bridge",    NULL, 0, 0555, bridge_table},
 #endif
 	{0}
 };

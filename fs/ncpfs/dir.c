@@ -14,6 +14,7 @@
 #include <linux/ncp_fs.h>
 #include <asm/segment.h>
 #include <linux/errno.h>
+#include <linux/locks.h>
 #include "ncplib_kernel.h"
 
 struct ncp_dirent {
@@ -807,6 +808,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 
 	memcpy(name, __name, len);
 	name[len] = 0;
+	lock_super(dir->i_sb);
 	result_info = ncp_find_dir_inode(dir, name);
 
         if (result_info != 0)
@@ -820,6 +822,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
                    inode number */
 
                 *result = iget(dir->i_sb, ncp_info_ino(server, result_info));
+		unlock_super(dir->i_sb);
                 iput(dir);
 
                 if (*result == NULL)
@@ -881,6 +884,7 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 		}
 		if (res != 0)
 		{
+			unlock_super(dir->i_sb);
                         iput(dir);
                         return -ENOENT;
                 }
@@ -891,10 +895,12 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 
 	if (!(*result = ncp_iget(dir, &finfo)))
 	{
+		unlock_super(dir->i_sb);
 		iput(dir);
 		return -EACCES;
 	}
 
+	unlock_super(dir->i_sb);
 	iput(dir);
 	return 0;
 }
@@ -924,6 +930,7 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 	_name[len] = '\0';
 	str_upper(_name);
 
+	lock_super(dir->i_sb);
 	if (ncp_open_create_file_or_subdir(NCP_SERVER(dir),
 					   NCP_ISTRUCT(dir), _name,
 					   OC_MODE_CREATE|OC_MODE_OPEN|
@@ -931,6 +938,7 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 					   0, AR_READ|AR_WRITE,
 					   &finfo) != 0)
 	{
+		unlock_super(dir->i_sb);
 		iput(dir);
 		return -EACCES;
 	}
@@ -943,10 +951,12 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 	if (!(*result = ncp_iget(dir, &finfo)) < 0)
 	{
 		ncp_close_file(NCP_SERVER(dir), finfo.file_handle);
+		unlock_super(dir->i_sb);
 		iput(dir);
 		return -EINVAL;
 	}
 
+	unlock_super(dir->i_sb);
 	iput(dir);
 	return 0;	
 }

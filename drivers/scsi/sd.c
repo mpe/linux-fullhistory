@@ -34,6 +34,8 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/interrupt.h>
+
 #include <asm/system.h>
 
 #define MAJOR_NR SCSI_DISK_MAJOR

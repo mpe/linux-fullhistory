@@ -38,18 +38,20 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#include <asm/system.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
-#include <asm/irq.h>
-#include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
-#include<linux/stat.h>
-
+#include <linux/stat.h>
 #include <linux/blk.h>
+#include <linux/interrupt.h>
+
+#include <asm/system.h>
+#include <asm/irq.h>
+#include <asm/dma.h>
+
 #include "scsi.h"
 #include "hosts.h"
 #include "constants.h"

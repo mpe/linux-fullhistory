@@ -926,6 +926,9 @@ play_event (unsigned char *q)
 
 	  dev = q[2];
 
+	  if (dev < 0 || dev >= num_midis)
+	     break;
+
 	  if (!midi_devs[dev]->putc (dev, q[1]))
 	    {
 	      /*

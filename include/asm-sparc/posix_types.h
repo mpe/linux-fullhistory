@@ -34,6 +34,10 @@ typedef char *                 __kernel_caddr_t;
 typedef long long	__kernel_loff_t;
 #endif
 
+typedef struct {
+	int	val[2];
+} __kernel_fsid_t;
+
 #undef __FD_SET
 static __inline__ void __FD_SET(unsigned long fd, __kernel_fd_set *fdsetp)
 {

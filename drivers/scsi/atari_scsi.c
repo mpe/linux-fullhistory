@@ -87,6 +87,7 @@
 #include <linux/delay.h>
 #include <linux/mm.h>
 #include <linux/blk.h>
+#include <linux/interrupt.h>
 
 #include <asm/bootinfo.h>
 #include <asm/atarihw.h>

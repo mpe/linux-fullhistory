@@ -14,6 +14,7 @@
 #include <linux/stat.h>
 #include <linux/malloc.h>
 #include <linux/kerneld.h>
+#include <linux/interrupt.h>
 
 #include <asm/segment.h>
 

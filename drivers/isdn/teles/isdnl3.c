@@ -2,7 +2,7 @@
  *
  * $Log: isdnl3.c,v $
  * Revision 1.6  1996/05/21 11:33:50  keil
- * Adding SETUP_ACKNOWLEGDE as answer of a SETUP message.
+ * Adding SETUP_ACKNOWLEDGE as answer of a SETUP message.
  *
  * Revision 1.5  1996/05/18 01:37:16  fritz
  * Added spelling corrections and some minor changes

@@ -82,6 +82,9 @@
  *  be compiled with different options than the kernel itself.
  *  Andy Walker (andy@lysaker.kvaerner.no), May 15, 1996.
  *
+ *  Added a couple of missing wake_up() calls.
+ *  Andy Walker (andy@lysaker.kvaerner.no), May 15, 1996.
+ *
  *  TODO: Do not honour mandatory locks on remote file systems. This matches
  *        the SVR4 semantics and neatly sidesteps a pile of awkward issues that
  *        would otherwise have to be addressed.
@@ -882,9 +885,12 @@ repeat:
 			locks_insert_lock(before, left);
 		}
 		right->fl_start = caller->fl_end + 1;
+		wake_up(&right->fl_wait);
 	}
-	if (left)
+	if (left) {
 		left->fl_end = caller->fl_start - 1;
+		wake_up(&left->fl_wait);
+	}
 	return (0);
 }
 

@@ -735,7 +735,7 @@ D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
 
 N: Volker Lendecke
-E: lendecke@namu01.gwdg.de
+E: lendecke@namu01.Num.Math.Uni-Goettingen.de
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 D: NCP filesystem support (to mount NetWare volumes)
 S: Innersteweg 11

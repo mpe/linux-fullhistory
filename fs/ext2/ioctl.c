@@ -37,11 +37,12 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 			return err;
 		flags = get_user((int *) arg);
 		/*
-		 * The IMMUTABLE flag can only be changed by the super user
-		 * when the security level is zero.
+		 * The IMMUTABLE and APPEND_ONLY flags can only be changed by
+		 * the super user when the security level is zero.
 		 */
-		if ((flags & EXT2_IMMUTABLE_FL) ^
-		    (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)) {
+		if ((flags & (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL)) ^
+		    (inode->u.ext2_i.i_flags &
+		     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
 			/* This test looks nicer. Thanks to Pauline Middelink */
 			if (!fsuser() || securelevel > 0)
 				return -EPERM;

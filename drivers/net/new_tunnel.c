@@ -261,6 +261,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 		 * and new_skb->ip_hdr is the IP header of the old packet.
 		 */
 		new_skb->ip_hdr = (struct iphdr *) skb_put(new_skb, skb->len);
+		new_skb->dev = skb->dev;
 		memcpy(new_skb->ip_hdr, skb->data, skb->len);
 		memset(new_skb->proto_priv, 0, sizeof(skb->proto_priv));
 

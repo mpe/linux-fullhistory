@@ -61,7 +61,7 @@ void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 
 	if (sk->retransmit_timer.expires < jiffies) {
 		/* We can get here if we reset the timer on an event
-		 * that could not fire because the interupts where disabled.
+		 * that could not fire because the interrupts were disabled.
 		 * make sure it happens soon.
 		 */
 		sk->retransmit_timer.expires = jiffies+2;

@@ -8,8 +8,10 @@
  * Authors:	see ip.c
  *
  * Fixes:
- *		Many		:	Split from ip.c , see ip_input.c for history.
- *		Dave Gregorich	:	NULL ip_rt_put fix for multicast routing.
+ *		Many		:	Split from ip.c , see ip_input.c for 
+ *					history.
+ *		Dave Gregorich	:	NULL ip_rt_put fix for multicast 
+ *					routing.
  *		Jos Vos		:	Add call_out_firewall before sending,
  *					use output device for accounting.
  *		Jos Vos		:	Call forward firewall after routing
@@ -225,6 +227,23 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifdef CONFIG_FIREWALL
 	if(!(is_frag&IPFWD_MASQUERADED))
 	{
+#ifdef CONFIG_IP_MASQUERADE
+		/* 
+		 *	Check that any ICMP packets are not for a 
+		 *	masqueraded connection.  If so rewrite them
+		 *	and skip the firewall checks
+		 */
+		if (iph->protocol == IPPROTO_ICMP)
+		{
+			if ((fw_res = ip_fw_masq_icmp(&skb, dev2)) < 0)
+				/* Problem - ie bad checksum */
+				return -1;
+
+			if (fw_res)
+				/* ICMP matched - skip firewall */
+				goto skip_call_fw_firewall;
+		}
+#endif
 		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL);
 		switch (fw_res) {
 		case FW_ACCEPT:
@@ -236,6 +255,10 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		default:
 			return -1;
 		}
+
+#ifdef CONFIG_IP_MASQUERADE
+		skip_call_fw_firewall:
+#endif		
 	}
 #endif
 

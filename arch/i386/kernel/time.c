@@ -122,7 +122,7 @@ static unsigned long do_fast_gettimeoffset(void)
 	/*
  	 * Due to rounding errors (and jiffies inconsistencies),
 	 * we need to check the result so that we'll get a timer
-	 * that is monotonous.
+	 * that is monotonic.
 	 */
 	if (edx >= 997670/HZ)
 		edx = 997670/HZ-1;
