@@ -318,6 +318,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			 */
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			dir->i_dirt = 1;
+			dir->i_version = ++event;
 			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
 			*err = 0;
@@ -923,8 +924,10 @@ static int do_ext2_rename (struct inode * old_dir, const char * old_name,
 
 	goto start_up;
 try_again:
-	if (new_bh && new_de)
+	if (new_bh && new_de) {
 		ext2_delete_entry(new_de, new_bh);
+		new_dir->i_version = ++event;
+	}
 	brelse (old_bh);
 	brelse (new_bh);
 	brelse (dir_bh);
@@ -1002,6 +1005,7 @@ start_up:
 					 &retval);
 	if (!new_bh)
 		goto end_rename;
+	new_dir->i_version = ++event;
 	/*
 	 * sanity checking before doing the rename - avoid races
 	 */
@@ -1015,7 +1019,6 @@ start_up:
 	 * ok, that's it
 	 */
 	new_de->inode = old_inode->i_ino;
-	new_dir->i_version = ++event;
 	dcache_add(new_dir, new_de->name, new_de->name_len, new_de->inode);
 	retval = ext2_delete_entry (old_de, old_bh);
 	if (retval == -ENOENT)

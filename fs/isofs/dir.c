@@ -22,6 +22,9 @@
 #include <linux/sched.h>
 #include <linux/locks.h>
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int isofs_readdir(struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations isofs_dir_operations = {
@@ -228,7 +231,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			put_fs_byte(0,i+dirent->d_name);
 			put_fs_word(i,&dirent->d_reclen);
 			brelse(bh);
-			return i;
+			return ROUND_UP(NAME_OFFSET(dirent) + i + 1);
 		}
 	      }
 	/* We go here for any condition we cannot handle.  We also drop through

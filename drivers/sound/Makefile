@@ -54,7 +54,11 @@ config: configure /usr/include/sys/soundcard.h
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
 	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h
-	@echo \#define SOUND_CONFIG_DOMAIN \"`domainname`\" >> local.h
+	@if [ -x /bin/dnsdomainname ]; then \
+           echo \#define SOUND_CONFIG_DOMAIN \"`dnsdomainname`\"; \
+         else \
+           echo \#define SOUND_CONFIG_DOMAIN \"`domainname`\"; \
+         fi >> local.h
 
 clrconf:
 	rm -f local.h .depend

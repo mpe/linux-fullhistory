@@ -117,6 +117,9 @@
 
 /* notation */
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 #define little_ushort(x) (*(unsigned short *) &(x))
 typedef void nonconst;
 
@@ -1345,13 +1348,13 @@ static int hpfs_readdir(struct inode *inode, struct file *filp,
 	case 0:
 		write_one_dirent(dirent, ".", 1, inode->i_ino, lc);
 		filp->f_pos = -1;
-		return 1;
+		return ROUND_UP(NAME_OFFSET(dirent) + 2);
 
 	case -1:
 		write_one_dirent(dirent, "..", 2,
 				 inode->i_hpfs_parent_dir, lc);
 		filp->f_pos = 1;
-		return 2;
+		return ROUND_UP(NAME_OFFSET(dirent) + 3);
 
 	case -2:
 		return 0;
@@ -1371,7 +1374,7 @@ static int hpfs_readdir(struct inode *inode, struct file *filp,
 		write_one_dirent(dirent, de->name, namelen, ino, lc);
 		brelse4(&qbh);
 
-		return namelen;
+		return ROUND_UP(NAME_OFFSET(dirent) + namelen + 1);
 	}
 }
 

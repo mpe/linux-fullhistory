@@ -20,6 +20,9 @@
 #include <linux/ext_fs.h>
 #include <linux/stat.h>
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int ext_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EISDIR;
@@ -65,6 +68,7 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
 	unsigned int i;
+	unsigned int ret;
 	off_t offset;
 	char c;
 	struct buffer_head * bh;
@@ -74,15 +78,23 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		return -EBADF;
 	if ((filp->f_pos & 7) != 0)
 		return -EBADF;
-	while (filp->f_pos < inode->i_size) {
+	ret = 0;
+	while (!ret && filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
 		bh = ext_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
 		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}
+		for (i = 0; i < 1024 && i < offset; ) {
+			de = (struct ext_dir_entry *) (bh->b_data + i);
+			if (!de->rec_len)
+				break;
+			i += de->rec_len;
+		}
+		offset = i;
 		de = (struct ext_dir_entry *) (offset + bh->b_data);
-		while (offset < 1024 && filp->f_pos < inode->i_size) {
+		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
 			if (de->rec_len < 8 || de->rec_len % 8 != 0 ||
 			    de->rec_len < de->name_len + 8 ||
 			    (de->rec_len + (off_t) filp->f_pos - 1) / 1024 > ((off_t) filp->f_pos / 1024)) {
@@ -106,8 +118,8 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 					put_fs_long(de->inode,&dirent->d_ino);
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);
-					brelse(bh);
-					return i;
+					ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);
+					break;
 				}
 			}
 			de = (struct ext_dir_entry *) ((char *) de 
@@ -115,5 +127,5 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		}
 		brelse(bh);
 	}
-	return 0;
+	return ret;
 }

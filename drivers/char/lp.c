@@ -514,4 +514,12 @@ int init_module(void)
 	return 0;
 }
 
+void cleanup_module(void)
+{
+       if(MOD_IN_USE)
+               printk("lp: busy - remove delayed\n");
+       else
+               unregister_chrdev(LP_MAJOR,"lp");
+}
+
 #endif

@@ -25,9 +25,9 @@
 
 
 /* Define the following if you don't like that your drives seek audibly
- * after a disk change
+ * after a disk change (but it may not work correctly for everybody)
  */
-#define SILENT_DC_CLEAR
+/* #define SILENT_DC_CLEAR */
 
 
 /* End of configuration */
@@ -304,7 +304,7 @@ static struct floppy_struct floppy_type[32] = {
 	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,"CompaQ"},	/*  9 2.88MB 3.5"   */
 
 	{ 2880,18,2,80,0,0x25,0x00,0xDF,0x02,"h1440" }, /* 10 1.44MB 5.25"  */
-	{ 3360,21,2,80,0,0x1C,0x00,0xCF,0x6C,"H1680" }, /* 11 1.68MB 3.5"   */
+	{ 3360,21,2,80,0,0x1C,0x00,0xCF,0x0C,"H1680" }, /* 11 1.68MB 3.5"   */
 	{  820,10,2,41,1,0x25,0x01,0xDF,0x2E,"h410"  },	/* 12 410KB 5.25"   */
 	{ 1640,10,2,82,0,0x25,0x02,0xDF,0x2E,"H820"  },	/* 13 820KB 3.5"    */
 	{ 2952,18,2,82,0,0x25,0x00,0xDF,0x02,"h1476" },	/* 14 1.48MB 5.25"  */
@@ -317,8 +317,8 @@ static struct floppy_struct floppy_type[32] = {
 	{ 1760,11,2,80,0,0x1C,0x09,0xCF,0x6C,"h880"  }, /* 20 880KB 5.25"   */
 	{ 2080,13,2,80,0,0x1C,0x01,0xCF,0x6C,"D1040" }, /* 21 1.04MB 3.5"   */
 	{ 2240,14,2,80,0,0x1C,0x19,0xCF,0x6C,"D1120" }, /* 22 1.12MB 3.5"   */
-	{ 3200,20,2,80,0,0x1C,0x20,0xCF,0x6C,"h1600" }, /* 23 1.6MB 5.25"   */
-	{ 3520,22,2,80,0,0x1C,0x08,0xCF,0x6C,"H1760" }, /* 24 1.76MB 3.5"   */
+	{ 3200,20,2,80,0,0x1C,0x20,0xCF,0x2C,"h1600" }, /* 23 1.6MB 5.25"   */
+	{ 3520,22,2,80,0,0x1C,0x08,0xCF,0x2e,"H1760" }, /* 24 1.76MB 3.5"   */
 	{ 3840,24,2,80,0,0x1C,0x20,0xCF,0x6C,"H1920" }, /* 25 1.92MB 3.5"   */
 	{ 6400,40,2,80,0,0x25,0x5B,0xCF,0x6C,"E3200" }, /* 26 3.20MB 3.5"   */
 	{ 7040,44,2,80,0,0x25,0x5B,0xCF,0x6C,"E3520" }, /* 27 3.52MB 3.5"   */
@@ -326,7 +326,7 @@ static struct floppy_struct floppy_type[32] = {
 
 	{ 3680,23,2,80,0,0x1C,0x10,0xCF,0x6C,"H1840" }, /* 29 1.84MB 3.5"   */
 	{ 1600,10,2,80,0,0x25,0x02,0xDF,0x2E,"D800"  },	/* 30 800KB 3.5"    */
-	{ 3200,20,2,80,0,0x1C,0x00,0xCF,0x6C,"H1600" }, /* 31 1.6MB 3.5"    */
+	{ 3200,20,2,80,0,0x1C,0x00,0xCF,0x2C,"H1600" }, /* 31 1.6MB 3.5"    */
 };
 
 #define	NUMBER(x)	(sizeof(x) / sizeof(*(x)))
@@ -1278,9 +1278,10 @@ static void recal_interrupt(void)
 			debugt("recal interrupt need 1 recal:");
 #endif
 			/* after a second recalibrate, we still haven't
-			 * reached track 0. Probably no drive */
-			DRS->track = PROVEN_ABSENT;
-			cont->done(0);
+			 * reached track 0. Probably no drive. Raise an
+			 * error, as failing immediately might upset 
+			 * computers possessed by the Devil :-) */
+			cont->error();
 			cont->redo();
 			return;
 		case NEED_2_RECAL:
@@ -1691,7 +1692,7 @@ static void setup_format_params(void)
 	int count,head_shift,track_shift;
 
 	raw_cmd.flags = FD_RAW_WRITE | FD_RAW_INTR | FD_RAW_SPIN |
-		FD_RAW_NEED_DISK | FD_RAW_NEED_SEEK;
+		/*FD_RAW_NEED_DISK |*/ FD_RAW_NEED_SEEK;
 	raw_cmd.rate = floppy->rate & 0x3;
 	raw_cmd.cmd_count = NR_F;
 	COMMAND = FM_MODE(floppy,FD_FORMAT);

@@ -13,6 +13,9 @@
 #include <linux/minix_fs.h>
 #include <linux/stat.h>
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int minix_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EISDIR;
@@ -57,7 +60,8 @@ struct inode_operations minix_dir_inode_operations = {
 static int minix_readdir(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
-	unsigned int offset,i;
+	unsigned int offset,i,ret;
+	int version;
 	char c;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
@@ -68,17 +72,19 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 	info = &inode->i_sb->u.minix_sb;
 	if (filp->f_pos & (info->s_dirsize - 1))
 		return -EBADF;
-	while (filp->f_pos < inode->i_size) {
+	ret = 0;
+	while (!ret && filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
 		bh = minix_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
 		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}
-		while (offset < 1024 && filp->f_pos < inode->i_size) {
+		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
 			de = (struct minix_dir_entry *) (offset + bh->b_data);
 			offset += info->s_dirsize;
 			filp->f_pos += info->s_dirsize;
+retry:
 			if (de->inode) {
 				for (i = 0; i < info->s_namelen; i++)
 					if ((c = de->name[i]) != 0)
@@ -86,15 +92,17 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 					else
 						break;
 				if (i) {
+					version = inode->i_version;
 					put_fs_long(de->inode,&dirent->d_ino);
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);
-					brelse(bh);
-					return i;
+					if (version != inode->i_version)
+						goto retry;
+					ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);
 				}
 			}
 		}
 		brelse(bh);
 	}
-	return 0;
+	return ret;
 }

@@ -19,6 +19,9 @@
 
 #include "xiafs_mac.h"
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int xiafs_dir_read(struct inode *, struct file *, char *, int);
 static int xiafs_readdir(struct inode *, struct file *, struct dirent *, int);
 
@@ -65,7 +68,7 @@ static int xiafs_dir_read(struct inode * inode,
 static int xiafs_readdir(struct inode * inode, 
 		       struct file * filp, struct dirent * dirent, int count)
 {
-    u_int offset, i;
+    u_int offset, i,ret;
     struct buffer_head * bh;
     struct xiafs_direct * de;
 
@@ -73,15 +76,24 @@ static int xiafs_readdir(struct inode * inode,
         return -EBADF;
     if (inode->i_size & (XIAFS_ZSIZE(inode->i_sb) - 1) )
         return -EBADF;
-    while (filp->f_pos < inode->i_size) {
+    ret = 0;
+    while (!ret && filp->f_pos < inode->i_size) {
         offset = filp->f_pos & (XIAFS_ZSIZE(inode->i_sb) - 1);
 	bh = xiafs_bread(inode, filp->f_pos >> XIAFS_ZSIZE_BITS(inode->i_sb),0);
 	if (!bh) {
 	    filp->f_pos += XIAFS_ZSIZE(inode->i_sb)-offset;
 	    continue;
 	}
+	for (i = 0; i < XIAFS_ZSIZE(inode->i_sb) && i < offset; ) {
+	    de = (struct xiafs_direct *) (bh->b_data + i);
+	    if (!de->d_rec_len)
+		break;
+	    i += de->d_rec_len;
+	}
+	offset = i;
 	de = (struct xiafs_direct *) (offset + bh->b_data);
-	while (offset < XIAFS_ZSIZE(inode->i_sb) && filp->f_pos < inode->i_size) {
+	
+	while (!ret && offset < XIAFS_ZSIZE(inode->i_sb) && filp->f_pos < inode->i_size) {
 	    if (de->d_ino > inode->i_sb->u.xiafs_sb.s_ninodes ||
 		de->d_rec_len < 12 || 
 		(char *)de+de->d_rec_len > XIAFS_ZSIZE(inode->i_sb)+bh->b_data ||
@@ -100,12 +112,12 @@ static int xiafs_readdir(struct inode * inode,
 		put_fs_byte(0,i+dirent->d_name);
 		put_fs_long(de->d_ino,&dirent->d_ino);
 		put_fs_word(i,&dirent->d_reclen);
-		brelse(bh);
 		if (!IS_RDONLY (inode)) {
 		    inode->i_atime=CURRENT_TIME;		    
 		    inode->i_dirt=1;
 		}
-		return i;
+		ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);
+		break;
 	    }
 	    de = (struct xiafs_direct *) (offset + bh->b_data);
 	}

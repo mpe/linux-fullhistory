@@ -289,6 +289,7 @@ extern void stop_tty(struct tty_struct * tty);
 extern void start_tty(struct tty_struct * tty);
 extern int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc);
 extern int tty_register_driver(struct tty_driver *driver);
+extern int tty_unregister_driver(struct tty_driver *driver);
 extern int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp,
 			     int buflen);
 

@@ -92,7 +92,8 @@ static int proc_fd_dupf(struct inode * inode, struct file * f)
 
 	new_f->f_count++;
 	current->files->fd[fd] = new_f;
-	f->f_count--;
+	if (!--f->f_count)
+		iput(f->f_inode);
 	return 0;
 }
 

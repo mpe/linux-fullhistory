@@ -13,8 +13,14 @@
 #include <asm/segment.h>
 
 /*
- * Count is not yet used: but we'll probably support reading several entries
- * at once in the future. Use count=1 in the library for future expansions.
+ * Count is now a supported feature, but currently only the ext2fs
+ * uses it.  A count value of 1 is supported for compatibility with
+ * earlier libraries, but larger values are supported: count should
+ * indicate the total buffer space available for filling with dirents.
+ * The d_off entry in the dirents will then indicate the offset from
+ * each dirent to the next, and the return value will indicate the
+ * number of bytes written.  All dirents will be written at
+ * word-aligned addresses.  [sct Oct 1994]
  */
 asmlinkage int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 {
@@ -62,8 +68,10 @@ asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	}
 	if (tmp < 0)
 		return -EINVAL;
-	file->f_pos = tmp;
-	file->f_reada = 0;
+	if (tmp != file->f_pos) {
+		file->f_pos = tmp;
+		file->f_reada = 0;
+	}
 	return file->f_pos;
 }
 

@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
+#include <linux/tty.h>
 #include <linux/serial.h>
 #ifdef CONFIG_INET
 #include <linux/netdevice.h>
@@ -91,6 +92,9 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(unregister_chrdev),
 	X(register_blkdev),
 	X(unregister_blkdev),
+	X(tty_register_driver),
+	X(tty_unregister_driver),
+	X(tty_std_termios),
 
 	/* block device driver support */
 	X(block_read),

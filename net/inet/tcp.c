@@ -83,6 +83,7 @@
  *		Matt Dillon	:	Yet more small nasties remove from the TCP code
  *					(Be very nice to this man if tcp finally works 100%) 8)
  *		Alan Cox	:	BSD accept semantics. 
+ *	Peter De Schrijver	:	ENOTCONN check missing in tcp_sendto().
  *
  *
  * To Fix:
@@ -1221,15 +1222,17 @@ static int tcp_sendto(struct sock *sk, unsigned char *from,
 {
 	if (flags & ~(MSG_OOB|MSG_DONTROUTE))
 		return -EINVAL;
-	if (addr_len < sizeof(*addr)) 
-		return(-EINVAL);
+	if (!tcp_connected(sk->state))
+		return -ENOTCONN;
+	if (addr_len < sizeof(*addr))
+		return -EINVAL;
 	if (addr->sin_family && addr->sin_family != AF_INET) 
-		return(-EINVAL);
+		return -EINVAL;
 	if (addr->sin_port != sk->dummy_th.dest) 
-		return(-EISCONN);
+		return -EISCONN;
 	if (addr->sin_addr.s_addr != sk->daddr) 
-		return(-EISCONN);
-	return(tcp_write(sk, from, len, nonblock, flags));
+		return -EISCONN;
+	return tcp_write(sk, from, len, nonblock, flags);
 }
 
 
@@ -2238,7 +2241,7 @@ static void tcp_close(struct sock *sk, int timeout)
 				/* The +1 is not needed because the FIN takes up seq
 				   is not read!!! */
 				if(skb->len > 0 && after(skb->h.th->seq + skb->len , sk->copied_seq))
-					need_reset = 1;
+					need_reset = 0;
 				kfree_skb(skb, FREE_READ);
 			}
 			if(sk->debug)

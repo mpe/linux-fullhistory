@@ -14,6 +14,9 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 
 static int msdos_dir_read(struct inode * inode,struct file * filp, char * buf,int count)
 {
@@ -73,7 +76,7 @@ int msdos_readdir(
 			put_fs_long(MSDOS_ROOT_INO,&dirent->d_ino);
 			put_fs_byte(0,dirent->d_name+i);
 			put_fs_word(i,&dirent->d_reclen);
-			return i;
+			return ROUND_UP(NAME_OFFSET(dirent) + i + 1);
 		}
 	}
 	if (filp->f_pos & (sizeof(struct msdos_dir_entry)-1)) return -ENOENT;
@@ -110,7 +113,7 @@ int msdos_readdir(
 				memcpy_tofs(dirent->d_name,bufname,i+1);
 				put_fs_word(i,&dirent->d_reclen);
 				brelse(bh);
-				return i;
+				return ROUND_UP(NAME_OFFSET(dirent) + i + 1);
 			}
 		}
 	}

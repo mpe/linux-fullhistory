@@ -20,6 +20,9 @@
 #include <linux/sysv_fs.h>
 #include <linux/stat.h>
 
+#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int sysv_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	return -EISDIR;
@@ -100,7 +103,7 @@ static int sysv_readdir(struct inode * inode, struct file * filp,
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);
 					brelse(bh);
-					return i;
+					return ROUND_UP(NAME_OFFSET(dirent)+i+1);
 				}
 			}
 		}

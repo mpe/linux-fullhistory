@@ -71,7 +71,6 @@ struct hd_geometry {
 #define HDIO_SETUNMASKINTR	0x303
 #define HDIO_GETMULTCOUNT	0x304
 #define HDIO_SETMULTCOUNT	0x305
-#define HDIO_SETFEATURE  	0x306
 #define HDIO_GETIDENTITY 	0x307
 #endif
 
