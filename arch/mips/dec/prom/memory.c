@@ -149,8 +149,8 @@ void prom_free_prom_memory (void)
 
 	addr = PAGE_SIZE;
 	while (addr < end) {
-		ClearPageReserved(mem_map + MAP_NR(addr));
-		set_page_count(mem_map + MAP_NR(addr), 1);
+		ClearPageReserved(virt_to_page(addr));
+		set_page_count(virt_to_page(addr), 1);
 		free_page(addr);
 		addr += PAGE_SIZE;
 	}

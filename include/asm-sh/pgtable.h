@@ -62,7 +62,7 @@ extern void flush_icache_page(struct vm_area_struct *vma, struct page *pg);
  * for zero-mapped memory areas etc..
  */
 extern unsigned long empty_zero_page[1024];
-#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+#define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
 #endif /* !__ASSEMBLY__ */
 
@@ -156,7 +156,6 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
 #define pte_none(x)	(!pte_val(x))
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(xp)	do { set_pte(xp, __pte(0)); } while (0)
-#define pte_pagenr(x)	((unsigned long)(((pte_val(x) -__MEMORY_START) >> PAGE_SHIFT)))
 
 #define pmd_none(x)	(!pmd_val(x))
 #define pmd_present(x)	(pmd_val(x) & _PAGE_PRESENT)
@@ -169,7 +168,7 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
  */
 #define page_address(page)  ((page)->virtual)
 #define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
-#define pte_page(x) (mem_map+pte_pagenr(x))
+#define pte_page(x) (mem_map+(unsigned long)(((pte_val(x) -__MEMORY_START) >> PAGE_SHIFT)))
 
 /*
  * The following only work if pte_present() is true.

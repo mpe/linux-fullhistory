@@ -36,7 +36,7 @@
 /*
  * From a kernel address, get the "struct page *"
  */
-#define page_cache_entry(x)	(mem_map + MAP_NR(x))
+#define page_cache_entry(x)	virt_to_page(x)
 
 extern unsigned int page_hash_bits;
 #define PAGE_HASH_BITS (page_hash_bits)

@@ -110,7 +110,7 @@ static unsigned int get_user_insn(unsigned long tpc)
 	if(!pte_present(pte))
 		goto out;
 
-	pa  = phys_base + (pte_pagenr(pte) << PAGE_SHIFT);
+	pa  = phys_base + (sparc64_pte_pagenr(pte) << PAGE_SHIFT);
 	pa += (tpc & ~PAGE_MASK);
 
 	/* Use phys bypass so we don't pollute dtlb/dcache. */

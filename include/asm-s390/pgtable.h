@@ -41,7 +41,7 @@ extern pgd_t swapper_pg_dir[] __attribute__ ((aligned (4096)));
  * for zero-mapped memory areas etc..
  */
 extern unsigned long empty_zero_page[1024];
-#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+#define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 #endif /* !__ASSEMBLY__ */
 
 /* Certain architectures need to do special things when PTEs
@@ -272,7 +272,6 @@ extern inline int pte_none(pte_t pte)           { return ((pte_val(pte) & (_PAGE
 extern inline int pte_present(pte_t pte)        { return pte_val(pte) & _PAGE_PRESENT; }
 extern inline void pte_clear(pte_t *ptep)       { pte_val(*ptep) = _PAGE_INVALID; }
 #define PTE_INIT(x) pte_clear(x)
-extern inline int pte_pagenr(pte_t pte)	        { return ((unsigned long)((pte_val(pte) >> PAGE_SHIFT))); }
 
 extern inline int pmd_none(pmd_t pmd)           { return pmd_val(pmd) & _PAGE_TABLE_INV; }
 extern inline int pmd_bad(pmd_t pmd)            { return (pmd_val(pmd) == 0); }
@@ -337,7 +336,7 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & PAGE_MASK) | pgprot_val(newprot); return pte; }
 
 #define page_address(page)  ((page)->virtual)
-#define pte_page(x) (mem_map+pte_pagenr(x))
+#define pte_page(x) (mem_map+(unsigned long)((pte_val(pte) >> PAGE_SHIFT)))
 
 #define pmd_page(pmd) \
 ((unsigned long) __va(pmd_val(pmd) & PAGE_MASK))

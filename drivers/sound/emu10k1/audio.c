@@ -38,6 +38,7 @@
 #include "audio.h"
 #include <linux/sched.h>
 #include <linux/smp_lock.h>
+#include <linux/wrapper.h>
 
 static void calculate_ofrag(struct woinst *);
 static void calculate_ifrag(struct wiinst *);
@@ -918,7 +919,7 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 
 			/* Now mark the pages as reserved, otherwise remap_page_range doesn't do what we want */
 			for (i = 0; i < wave_out->wavexferbuf->numpages; i++)
-				set_bit(PG_reserved, &mem_map[MAP_NR(wave_out->pagetable[i])].flags);
+				mem_map_reserve(virt_to_page(wave_out->pagetable[i]));
 		}
 
 		size = vma->vm_end - vma->vm_start;
@@ -1137,7 +1138,7 @@ static int emu10k1_audio_release(struct inode *inode, struct file *file)
 
 				/* Undo marking the pages as reserved */
 				for (i = 0; i < woinst->wave_out->wavexferbuf->numpages; i++)
-					set_bit(PG_reserved, &mem_map[MAP_NR(woinst->wave_out->pagetable[i])].flags);
+					mem_map_reserve(virt_to_page(woinst->wave_out->pagetable[i]));
 			}
 
 			woinst->mapped = 0;

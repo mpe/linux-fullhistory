@@ -1564,11 +1564,11 @@ static void free_pg_vec(unsigned long *pg_vec, unsigned order, unsigned len)
 
 	for (i=0; i<len; i++) {
 		if (pg_vec[i]) {
-			unsigned long map, mapend;
+			struct page *page, *pend;
 
-			mapend = MAP_NR(pg_vec[i] + (PAGE_SIZE << order) - 1);
-			for (map = MAP_NR(pg_vec[i]); map <= mapend; map++)
-				clear_bit(PG_reserved, &mem_map[map].flags);
+			pend = virt_to_page(pg_vec[i] + (PAGE_SIZE << order) - 1);
+			for (page = virt_to_page(pg_vec[i]); page <= pend; page++)
+				mem_map_unreserve(page);
 			free_pages(pg_vec[i], order);
 		}
 	}
@@ -1616,14 +1616,14 @@ static int packet_set_ring(struct sock *sk, struct tpacket_req *req, int closing
 		memset(pg_vec, 0, req->tp_block_nr*sizeof(unsigned long*));
 
 		for (i=0; i<req->tp_block_nr; i++) {
-			unsigned long map, mapend;
+			struct page *page, *pend;
 			pg_vec[i] = __get_free_pages(GFP_KERNEL, order);
 			if (!pg_vec[i])
 				goto out_free_pgvec;
 
-			mapend = MAP_NR(pg_vec[i] + (PAGE_SIZE << order) - 1);
-			for (map = MAP_NR(pg_vec[i]); map <= mapend; map++)
-				set_bit(PG_reserved, &mem_map[map].flags);
+			pend = virt_to_page(pg_vec[i] + (PAGE_SIZE << order) - 1);
+			for (page = virt_to_page(pg_vec[i]); page <= pend; page++)
+				mem_map_reserve(page);
 		}
 		/* Page vector is allocated */
 

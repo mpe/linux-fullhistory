@@ -1320,7 +1320,7 @@ static __u32 sun4c_get_scsi_one(char *bufptr, unsigned long len, struct sbus_bus
 	unsigned long page;
 
 	page = ((unsigned long)bufptr) & PAGE_MASK;
-	if (MAP_NR(page) > max_mapnr) {
+	if (!VALID_PAGE(virt_to_page(page))) {
 		sun4c_flush_page(page);
 		return (__u32)bufptr; /* already locked */
 	}
@@ -2095,7 +2095,7 @@ static int sun4c_pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 static int sun4c_pmd_bad(pmd_t pmd)
 {
 	return (((pmd_val(pmd) & ~PAGE_MASK) != PGD_TABLE) ||
-		(MAP_NR(pmd_val(pmd)) > max_mapnr));
+		(!VALID_PAGE(virt_to_page(pmd_val(pmd)))));
 }
 
 static int sun4c_pmd_present(pmd_t pmd)
@@ -2650,7 +2650,7 @@ void __init ld_mmu_sun4c(void)
 
 	BTFIXUPSET_CALL(set_pte, sun4c_set_pte, BTFIXUPCALL_STO1O0);
 
-	BTFIXUPSET_CALL(pte_pagenr, sun4c_pte_pagenr, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(sparc_pte_pagenr, sun4c_pte_pagenr, BTFIXUPCALL_NORM);
 #if PAGE_SHIFT <= 12	
 	BTFIXUPSET_CALL(pmd_page, sun4c_pmd_page, BTFIXUPCALL_ANDNINT(PAGE_SIZE - 1));
 #else

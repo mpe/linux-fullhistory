@@ -11,7 +11,6 @@ extern struct page *highmem_start_page;
 #include <asm/highmem.h>
 
 /* declarations for linux/mm/highmem.c */
-extern unsigned long highmem_mapnr;
 FASTCALL(unsigned int nr_free_highpages(void));
 
 extern struct page * prepare_highmem_swapout(struct page *);

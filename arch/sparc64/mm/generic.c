@@ -18,14 +18,14 @@ static inline void forget_pte(pte_t page)
 	if (pte_none(page))
 		return;
 	if (pte_present(page)) {
-		unsigned long nr = pte_pagenr(page);
-		if (nr >= max_mapnr || PageReserved(mem_map+nr))
+		struct page *ptpage = pte_page(page);
+		if ((!VALID_PAGE(ptpage)) || PageReserved(ptpage))
 			return;
 		/* 
 		 * free_page() used to be able to clear swap cache
 		 * entries.  We may now have to do it manually.  
 		 */
-		free_page_and_swap_cache(mem_map+nr);
+		free_page_and_swap_cache(ptpage);
 		return;
 	}
 	swap_free(pte_to_swp_entry(page));

@@ -210,7 +210,7 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 			
 			do {
 				pte_t pte = *src_pte;
-				unsigned long page_nr;
+				struct page *ptepage;
 				
 				/* copy_one_pte */
 
@@ -221,9 +221,9 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 					set_pte(dst_pte, pte);
 					goto cont_copy_pte_range;
 				}
-				page_nr = pte_pagenr(pte);
-				if (page_nr >= max_mapnr || 
-				    PageReserved(mem_map+page_nr)) {
+				ptepage = pte_page(pte);
+				if ((!VALID_PAGE(ptepage)) || 
+				    PageReserved(ptepage)) {
 					set_pte(dst_pte, pte);
 					goto cont_copy_pte_range;
 				}
@@ -236,7 +236,7 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				if (vma->vm_flags & VM_SHARED)
 					pte = pte_mkclean(pte);
 				set_pte(dst_pte, pte_mkold(pte));
-				get_page(mem_map + page_nr);
+				get_page(ptepage);
 			
 cont_copy_pte_range:		address += PAGE_SIZE;
 				if (address >= end)
@@ -262,14 +262,14 @@ nomem:
 static inline int free_pte(pte_t page)
 {
 	if (pte_present(page)) {
-		unsigned long nr = pte_pagenr(page);
-		if (nr >= max_mapnr || PageReserved(mem_map+nr))
+		struct page *ptpage = pte_page(page);
+		if ((!VALID_PAGE(ptpage)) || PageReserved(ptpage))
 			return 0;
 		/* 
 		 * free_page() used to be able to clear swap cache
 		 * entries.  We may now have to do it manually.  
 		 */
-		free_page_and_swap_cache(mem_map+nr);
+		free_page_and_swap_cache(ptpage);
 		return 1;
 	}
 	swap_free(pte_to_swp_entry(page));
@@ -409,7 +409,7 @@ static struct page * follow_page(unsigned long address)
 
 static inline struct page * get_page_map(struct page *page)
 {
-	if (page > (mem_map + max_mapnr))
+	if (!VALID_PAGE(page))
 		return 0;
 	return page;
 }
@@ -711,12 +711,12 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		unsigned long mapnr;
+		struct page *page;
 		pte_t oldpage = *pte;
 		pte_clear(pte);
 
-		mapnr = MAP_NR(__va(phys_addr));
-		if (mapnr >= max_mapnr || PageReserved(mem_map+mapnr))
+		page = virt_to_page(__va(phys_addr));
+		if ((!VALID_PAGE(page)) || PageReserved(page))
  			set_pte(pte, mk_pte_phys(phys_addr, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
@@ -818,13 +818,11 @@ static inline void break_cow(struct vm_area_struct * vma, struct page *	old_page
 static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	unsigned long address, pte_t *page_table, pte_t pte)
 {
-	unsigned long map_nr;
 	struct page *old_page, *new_page;
 
-	map_nr = pte_pagenr(pte);
-	if (map_nr >= max_mapnr)
+	old_page = pte_page(pte);
+	if (!VALID_PAGE(old_page))
 		goto bad_wp_page;
-	old_page = mem_map + map_nr;
 	
 	/*
 	 * We can avoid the copy if:
@@ -883,7 +881,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 
 bad_wp_page:
 	spin_unlock(&mm->page_table_lock);
-	printk("do_wp_page: bogus page at address %08lx (nr %ld)\n",address,map_nr);
+	printk("do_wp_page: bogus page at address %08lx (page 0x%lx)\n",address,(unsigned long)old_page);
 	return -1;
 }
 
@@ -920,7 +918,7 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 		return;
 	flush_cache_page(vma, address);
 	page = pte_page(pte);
-	if ((page-mem_map >= max_mapnr) || PageReserved(page))
+	if ((!VALID_PAGE(page)) || PageReserved(page))
 		return;
 	offset = address & ~PAGE_MASK;
 	memclear_highpage_flush(page, offset, PAGE_SIZE - offset);

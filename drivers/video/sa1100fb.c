@@ -36,6 +36,7 @@
 #include <linux/init.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
+#include <linux/wrapper.h>
 
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -730,8 +731,8 @@ __init sa1100fb_map_video_memory(void)
 	u_int  required_pages;
 	u_int  extra_pages;
 	u_int  order;
-        u_int  i;
         char   *allocated_region;
+	struct page *page;
 
 	if (VideoMemRegion != NULL)
 		return -EINVAL;
@@ -757,9 +758,9 @@ __init sa1100fb_map_video_memory(void)
 
         /* Set reserved flag for fb memory to allow it to be remapped into */
         /* user space by the common fbmem driver using remap_page_range(). */
-        for(i = MAP_NR(VideoMemRegion);                                  
-            i < MAP_NR(VideoMemRegion + ALLOCATED_FB_MEM_SIZE); i++) 
-          set_bit(PG_reserved, &mem_map[i].flags);
+	for(page = virt_to_page(VideoMemRegion); 
+	    page < virt_to_page(VideoMemRegion + ALLOCATED_FB_MEM_SIZE); page++)
+	  mem_map_reserve(page);
 
 	/* Remap the fb memory to a non-buffered, non-cached region */
 	VideoMemRegion = (u_char *)__ioremap((u_long)VideoMemRegion_phys,

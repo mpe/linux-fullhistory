@@ -220,7 +220,7 @@ struct page * read_swap_cache_async(swp_entry_t entry, int wait)
 	new_page_addr = __get_free_page(GFP_USER);
 	if (!new_page_addr)
 		goto out_free_swap;	/* Out of memory */
-	new_page = mem_map + MAP_NR(new_page_addr);
+	new_page = virt_to_page(new_page_addr);
 
 	/*
 	 * Check the swap cache again, in case we stalled above.

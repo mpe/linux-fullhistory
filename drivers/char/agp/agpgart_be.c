@@ -141,8 +141,8 @@ static unsigned long agp_alloc_page(void)
 	if (pt == NULL) {
 		return 0;
 	}
-	atomic_inc(&mem_map[MAP_NR(pt)].count);
-	set_bit(PG_locked, &mem_map[MAP_NR(pt)].flags);
+	atomic_inc(&virt_to_page(pt)->count);
+	set_bit(PG_locked, &virt_to_page(pt)->flags);
 	atomic_inc(&agp_bridge.current_memory_agp);
 	return (unsigned long) pt;
 }
@@ -154,9 +154,9 @@ static void agp_destroy_page(unsigned long page)
 	if (pt == NULL) {
 		return;
 	}
-	atomic_dec(&mem_map[MAP_NR(pt)].count);
-	clear_bit(PG_locked, &mem_map[MAP_NR(pt)].flags);
-	wake_up(&mem_map[MAP_NR(pt)].wait);
+	atomic_dec(&virt_to_page(pt)->count);
+	clear_bit(PG_locked, &virt_to_page(pt)->flags);
+	wake_up(&virt_to_page(pt)->wait);
 	free_page((unsigned long) pt);
 	atomic_dec(&agp_bridge.current_memory_agp);
 }
@@ -541,6 +541,7 @@ static int agp_generic_create_gatt_table(void)
 	int num_entries;
 	int i;
 	void *temp;
+	struct page *page;
 
 	/* The generic routines can't handle 2 level gatt's */
 	if (agp_bridge.size_type == LVL2_APER_SIZE) {
@@ -622,9 +623,8 @@ static int agp_generic_create_gatt_table(void)
 	}
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (i = MAP_NR(table); i < MAP_NR(table_end); i++) {
-		set_bit(PG_reserved, &mem_map[i].flags);
-	}
+	for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+		set_bit(PG_reserved, &page->flags);
 
 	agp_bridge.gatt_table_real = (unsigned long *) table;
 	CACHE_FLUSH();
@@ -633,9 +633,8 @@ static int agp_generic_create_gatt_table(void)
 	CACHE_FLUSH();
 
 	if (agp_bridge.gatt_table == NULL) {
-		for (i = MAP_NR(table); i < MAP_NR(table_end); i++) {
-			clear_bit(PG_reserved, &mem_map[i].flags);
-		}
+		for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+			clear_bit(PG_reserved, &page->flags);
 
 		free_pages((unsigned long) table, page_order);
 
@@ -653,10 +652,10 @@ static int agp_generic_create_gatt_table(void)
 
 static int agp_generic_free_gatt_table(void)
 {
-	int i;
 	int page_order;
 	char *table, *table_end;
 	void *temp;
+	struct page *page;
 
 	temp = agp_bridge.current_size;
 
@@ -691,9 +690,8 @@ static int agp_generic_free_gatt_table(void)
 	table = (char *) agp_bridge.gatt_table_real;
 	table_end = table + ((PAGE_SIZE * (1 << page_order)) - 1);
 
-	for (i = MAP_NR(table); i < MAP_NR(table_end); i++) {
-		clear_bit(PG_reserved, &mem_map[i].flags);
-	}
+	for (page = virt_to_page(table); page < get_mem_map(table_end); page++)
+		clear_bit(PG_reserved, &page->flags);
 
 	free_pages((unsigned long) agp_bridge.gatt_table_real, page_order);
 	return 0;
@@ -1500,13 +1498,13 @@ static int amd_create_page_map(amd_page_map *page_map)
 	if (page_map->real == NULL) {
 		return -ENOMEM;
 	}
-	set_bit(PG_reserved, &mem_map[MAP_NR(page_map->real)].flags);
+	set_bit(PG_reserved, &virt_to_page(page_map->real)->flags);
 	CACHE_FLUSH();
 	page_map->remapped = ioremap_nocache(virt_to_phys(page_map->real), 
 					    PAGE_SIZE);
 	if (page_map->remapped == NULL) {
 		clear_bit(PG_reserved, 
-			  &mem_map[MAP_NR(page_map->real)].flags);
+			  &virt_to_page(page_map->real)->flags);
 		free_page((unsigned long) page_map->real);
 		page_map->real = NULL;
 		return -ENOMEM;
@@ -1524,7 +1522,7 @@ static void amd_free_page_map(amd_page_map *page_map)
 {
 	iounmap(page_map->remapped);
 	clear_bit(PG_reserved, 
-		  &mem_map[MAP_NR(page_map->real)].flags);
+		  &virt_to_page(page_map->real)->flags);
 	free_page((unsigned long) page_map->real);
 }
 

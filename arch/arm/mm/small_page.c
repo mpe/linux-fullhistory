@@ -142,12 +142,10 @@ no_page:
 static void __free_small_page(unsigned long spage, struct order *order)
 {
 	unsigned long flags;
-	unsigned long nr;
 	struct page *page;
 
-	nr = MAP_NR(spage);
-	if (nr < max_mapnr) {
-		page = mem_map + nr;
+	page = virt_to_page(spage);
+	if (VALID_PAGE(page)) {
 
 		/*
 		 * The container-page must be marked Reserved

@@ -109,6 +109,7 @@
 #include <linux/malloc.h>
 #include <linux/soundcard.h>
 #include <linux/pci.h>
+#include <linux/wrapper.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/init.h>
@@ -591,13 +592,13 @@ static void start_adc(struct cm_state *s)
 
 static void dealloc_dmabuf(struct dmabuf *db)
 {
-	unsigned long map, mapend;
+	struct page *pstart, *pend;
 
 	if (db->rawbuf) {
 		/* undo marking the pages as reserved */
-		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
-		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
-			clear_bit(PG_reserved, &mem_map[map].flags);	
+		pend = virt_to_page(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
+		for (pstart = virt_to_page(db->rawbuf); pstart <= pend; pstart++)
+			mem_map_unreserve(pstart);
 		free_pages((unsigned long)db->rawbuf, db->buforder);
 	}
 	db->rawbuf = NULL;
@@ -614,7 +615,7 @@ static int prog_dmabuf(struct cm_state *s, unsigned rec)
 	int order;
 	unsigned bytepersec;
 	unsigned bufs;
-	unsigned long map, mapend;
+	struct page *pstart, *pend;
 	unsigned char fmt;
 	unsigned long flags;
 
@@ -646,9 +647,9 @@ static int prog_dmabuf(struct cm_state *s, unsigned rec)
 			printk(KERN_DEBUG "cmpci: DMA buffer beyond 16MB: busaddr 0x%lx  size %ld\n", 
 			       virt_to_bus(db->rawbuf), PAGE_SIZE << db->buforder);
 		/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
-		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
-		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
-			set_bit(PG_reserved, &mem_map[map].flags);
+		pend = virt_to_page(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
+		for (pstart = virt_to_page(db->rawbuf); pstart <= pend; pstart++)
+			mem_map_reserve(pstart);
 	}
 	bytepersec = rate << sample_shift[fmt];
 	bufs = PAGE_SIZE << db->buforder;

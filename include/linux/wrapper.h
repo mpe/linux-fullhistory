@@ -29,8 +29,8 @@
 #define vma_get_end(v) v->vm_end
 #define vma_get_page_prot(v) v->vm_page_prot
 
-#define mem_map_reserve(p) set_bit(PG_reserved, &mem_map[p].flags)
-#define mem_map_unreserve(p) clear_bit(PG_reserved, &mem_map[p].flags)
-#define mem_map_inc_count(p) atomic_inc(&(mem_map[p].count))
-#define mem_map_dec_count(p) atomic_dec(&(mem_map[p].count))
+#define mem_map_reserve(p) set_bit(PG_reserved, &p->flags)
+#define mem_map_unreserve(p) clear_bit(PG_reserved, &p->flags)
+#define mem_map_inc_count(p) atomic_inc(&(p->count))
+#define mem_map_dec_count(p) atomic_dec(&(p->count))
 #endif

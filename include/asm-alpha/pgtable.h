@@ -141,7 +141,7 @@ extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE(vaddr)	(mem_map + MAP_NR(ZERO_PGE))
+#define ZERO_PAGE(vaddr)	(virt_to_page(ZERO_PGE))
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -209,8 +209,7 @@ extern inline void pmd_set(pmd_t * pmdp, pte_t * ptep)
 extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 { pgd_val(*pgdp) = _PAGE_TABLE | ((((unsigned long) pmdp) - PAGE_OFFSET) << (32-PAGE_SHIFT)); }
 
-#define pte_pagenr(x)	((unsigned long)((pte_val(x) >> 32)))
-#define pte_page(x)	(mem_map+pte_pagenr(x))
+#define pte_page(x)	(mem_map+(unsigned long)((pte_val(x) >> 32)))
 
 extern inline unsigned long pmd_page(pmd_t pmd)
 { return PAGE_OFFSET + ((pmd_val(pmd) & _PFN_MASK) >> (32-PAGE_SHIFT)); }

@@ -293,8 +293,8 @@ void free_initmem(void)
 
 	addr = (unsigned long)&__init_begin;
 	for (; addr < (unsigned long)&__init_end; addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		set_page_count(mem_map+MAP_NR(addr), 1);
+		virt_to_page(addr)->flags &= ~(1 << PG_reserved);
+		set_page_count(virt_to_page(addr), 1);
 		free_page(addr);
 	}
 }

@@ -24,7 +24,6 @@ static int access_one_page(struct mm_struct * mm, struct vm_area_struct * vma, u
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
 	pte_t * pgtable;
-	unsigned long mapnr;
 	unsigned long maddr; 
 	struct page *page;
 
@@ -42,11 +41,10 @@ repeat:
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable))
 		goto fault_in_page;
-	mapnr = pte_pagenr(*pgtable);
 	if (write && (!pte_write(*pgtable) || !pte_dirty(*pgtable)))
 		goto fault_in_page;
-	page = mem_map + mapnr;
-	if ((mapnr >= max_mapnr) || PageReserved(page))
+	page = pte_page(*pgtable);
+	if ((!VALID_PAGE(page)) || PageReserved(page))
 		return 0;
 	flush_cache_page(vma, addr);
 

@@ -247,7 +247,7 @@ static void iommu_map_dma_area(unsigned long va, __u32 addr, int len)
 			pmdp = pmd_offset(pgdp, addr);
 			ptep = pte_offset(pmdp, addr);
 
-			set_pte(ptep, mk_pte(mem_map + MAP_NR(page), dvma_prot));
+			set_pte(ptep, mk_pte(virt_to_page(page), dvma_prot));
 			if (ipte_cache != 0) {
 				iopte_val(*iopte++) = MKIOPTE(__pa(page));
 			} else {

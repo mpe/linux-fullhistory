@@ -217,7 +217,7 @@ extern unsigned long get_wchan(struct task_struct *p);
 #define THREAD_SIZE (2*PAGE_SIZE)
 extern struct task_struct * alloc_task_struct(void);
 extern void free_task_struct(struct task_struct *);
-#define get_task_struct(tsk)      atomic_inc(&mem_map[MAP_NR(tsk)].count)
+#define get_task_struct(tsk)      atomic_inc(&virt_to_page(tsk)->count)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

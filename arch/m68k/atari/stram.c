@@ -305,7 +305,7 @@ void __init atari_stram_reserve_pages(unsigned long start_mem)
 
 	/* always reserve first page of ST-RAM, the first 2 kB are
 	 * supervisor-only! */
-	set_bit( PG_reserved, &mem_map[MAP_NR(stram_start)].flags );
+	set_bit( PG_reserved, &virt_to_page(stram_start)->flags );
 
 #ifdef CONFIG_STRAM_SWAP
 	if (!max_swap_size) {
@@ -699,7 +699,7 @@ static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
 		if (pte_page(pte) != page)
 			return;
 		if (0 /* isswap */)
-			mem_map[MAP_NR(pte_page(pte))].offset = page;
+			virt_to_page(pte_page(pte))->offset = page;
 		else
 			/* We will be removing the swap cache in a moment, so... */
 			set_pte(dir, pte_mkdirty(pte));
@@ -716,7 +716,7 @@ static inline void unswap_pte(struct vm_area_struct * vma, unsigned long
 		DPRINTK( "unswap_pte: replacing entry %08lx by new page %08lx",
 				 entry, page );
 		set_pte(dir, pte_mkdirty(__mk_pte(page,vma->vm_page_prot)));
-		atomic_inc(&mem_map[MAP_NR(page)].count);
+		atomic_inc(&virt_to_page(page)->count);
 		++vma->vm_mm->rss;
 	}
 	swap_free(entry);
@@ -1291,7 +1291,7 @@ static int get_gfp_order( unsigned long size )
 /* reserve a range of pages in mem_map[] */
 static void reserve_region( unsigned long addr, unsigned long end )
 {
-	mem_map_t *mapp = &mem_map[MAP_NR(addr)];
+	mem_map_t *mapp = virt_to_page(addr);
 
 	for( ; addr < end; addr += PAGE_SIZE, ++mapp )
 		set_bit( PG_reserved, &mapp->flags );

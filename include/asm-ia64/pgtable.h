@@ -169,12 +169,6 @@
 #define page_address(page)	((void *) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT)))
 
 /*
- * Given a PTE, return the index of the mem_map[] entry corresponding
- * to the page frame the PTE.
- */
-#define pte_pagenr(x)		((unsigned long) ((pte_val(x) & _PFN_MASK) >> PAGE_SHIFT))
-
-/*
  * Now for some cache flushing routines.  This is the kind of stuff
  * that can be very expensive, so try to avoid them whenever possible.
  */
@@ -250,7 +244,7 @@ extern pmd_t *ia64_bad_pagetable (void);
 #define pte_present(pte)		(pte_val(pte) & (_PAGE_P | _PAGE_PROTNONE))
 #define pte_clear(pte)			(pte_val(*(pte)) = 0UL)
 /* pte_page() returns the "struct page *" corresponding to the PTE: */
-#define pte_page(pte)			(mem_map + pte_pagenr(pte))
+#define pte_page(pte)			(mem_map + (unsigned long) ((pte_val(pte) & _PFN_MASK) >> PAGE_SHIFT))
 
 #define pmd_set(pmdp, ptep) 		(pmd_val(*(pmdp)) = __pa(ptep))
 #define pmd_none(pmd)			(!pmd_val(pmd))
@@ -418,7 +412,7 @@ do {												\
  * for zero-mapped memory areas etc..
  */
 extern unsigned long empty_zero_page[1024];
-#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+#define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
 # endif /* !__ASSEMBLY__ */
 

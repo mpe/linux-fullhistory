@@ -173,8 +173,8 @@ free_initmem (void)
 
 	addr = (unsigned long) &__init_begin;
 	for (; addr < (unsigned long) &__init_end; addr += PAGE_SIZE) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
-		set_page_count(&mem_map[MAP_NR(addr)], 1);
+		clear_bit(PG_reserved, &virt_to_page(addr)->flags);
+		set_page_count(virt_to_page(addr), 1);
 		free_page(addr);
 		++totalram_pages;
 	}
@@ -188,8 +188,8 @@ free_initrd_mem(unsigned long start, unsigned long end)
 	if (start < end)
 		printk ("Freeing initrd memory: %ldkB freed\n", (end - start) >> 10);
 	for (; start < end; start += PAGE_SIZE) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start)].flags);
-		set_page_count(&mem_map[MAP_NR(start)], 1);
+		clear_bit(PG_reserved, &virt_to_page(start)->flags);
+		set_page_count(virt_to_page(start), 1);
 		free_page(start);
 		++totalram_pages;
 	}
@@ -372,7 +372,7 @@ count_reserved_pages (u64 start, u64 end, void *arg)
 	unsigned long *count = arg;
 	struct page *pg;
 
-	for (pg = mem_map + MAP_NR(start); pg < mem_map + MAP_NR(end); ++pg)
+	for (pg = virt_to_page(start); pg < virt_to_page(end); ++pg)
 		if (PageReserved(pg))
 			++num_reserved;
 	*count += num_reserved;
@@ -409,7 +409,7 @@ mem_init (void)
 	       datasize >> 10, initsize >> 10);
 
 	/* install the gate page in the global page table: */
-	put_gate_page(mem_map + MAP_NR(__start_gate_section), GATE_ADDR);
+	put_gate_page(virt_to_page(__start_gate_section), GATE_ADDR);
 
 #ifndef CONFIG_IA64_SOFTSDV_HACKS
 	/*

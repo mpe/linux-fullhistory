@@ -326,7 +326,7 @@ static int lvm_snapshot_alloc_iobuf_pages(struct kiobuf * iobuf, int sectors)
 			if (!addr)
 				goto out;
 			iobuf->pagelist[i] = addr;
-			page = mem_map + MAP_NR(addr);
+			page = virt_to_page(addr);
 		}
 #endif
 

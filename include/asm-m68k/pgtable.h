@@ -172,7 +172,7 @@ extern pte_t * __bad_pagetable(void);
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE(vaddr)	(mem_map + MAP_NR(empty_zero_page))
+#define ZERO_PAGE(vaddr)	(virt_to_page(empty_zero_page))
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
@@ -228,7 +228,6 @@ extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 #define pte_none(pte)		(!pte_val(pte))
 #define pte_present(pte)	(pte_val(pte) & (_PAGE_PRESENT | _PAGE_FAKE_SUPER))
 #define pte_clear(ptep)		({ pte_val(*(ptep)) = 0; })
-#define pte_pagenr(pte)		((__pte_page(pte) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
 #define pmd_bad(pmd)		((pmd_val(pmd) & _DESCTYPE_MASK) != _PAGE_TABLE)
@@ -248,7 +247,7 @@ extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 /* Permanent address of a page. */
 #define page_address(page)	((page)->virtual)
 #define __page_address(page)	(PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
-#define pte_page(pte)		(mem_map+pte_pagenr(pte))
+#define pte_page(pte)		(mem_map+((__pte_page(pte) - PAGE_OFFSET) >> PAGE_SHIFT))
 
 #define pte_ERROR(e) \
 	printk("%s:%d: bad pte %p(%08lx).\n", __FILE__, __LINE__, &(e), pte_val(e))

@@ -417,8 +417,8 @@ static inline void free_memmap(unsigned long start, unsigned long end)
 	start = __phys_to_virt(start);
 	end   = __phys_to_virt(end);
 
-	pg    = PAGE_ALIGN((unsigned long)(mem_map + MAP_NR(start)));
-	pgend = ((unsigned long)(mem_map + MAP_NR(end))) & PAGE_MASK;
+	pg    = PAGE_ALIGN((unsigned long)(virt_to_page(start)));
+	pgend = ((unsigned long)(virt_to_page(end))) & PAGE_MASK;
 
 	start = __virt_to_phys(pg);
 	end   = __virt_to_phys(pgend);

@@ -22,8 +22,6 @@
 #include <linux/swap.h>
 #include <linux/slab.h>
 
-unsigned long highmem_mapnr;
-
 /*
  * Take one locked page, return another low-memory locked page.
  */
@@ -61,7 +59,7 @@ struct page * prepare_highmem_swapout(struct page * page)
 	 * we stored its data into the new regular_page.
 	 */
 	page_cache_release(page);
-	new_page = mem_map + MAP_NR(regular_page);
+	new_page = virt_to_page(regular_page);
 	LockPage(new_page);
 	return new_page;
 }

@@ -797,8 +797,8 @@ void __init free_initmem(void)
 #define FREESEC(START,END,CNT) do { \
 	a = (unsigned long)(&START); \
 	for (; a < (unsigned long)(&END); a += PAGE_SIZE) { \
-	  	clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags); \
-		set_page_count(mem_map+MAP_NR(a), 1); \
+	  	clear_bit(PG_reserved, &virt_to_page(a)->flags); \
+		set_page_count(virt_to_page(a), 1); \
 		free_page(a); \
 		CNT++; \
 	} \
@@ -865,8 +865,8 @@ void __init free_initmem(void)
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
 	for (; start < end; start += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(start));
-		set_page_count(mem_map+MAP_NR(start), 1);
+		ClearPageReserved(virt_to_page(start));
+		set_page_count(virt_to_page(start), 1);
 		free_page(start);
 		totalram_pages++;
 	}
@@ -1187,7 +1187,7 @@ void __init mem_init(void)
 	   make sure the ramdisk pages aren't reserved. */
 	if (initrd_start) {
 		for (addr = initrd_start; addr < initrd_end; addr += PAGE_SIZE)
-			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+			clear_bit(PG_reserved, &virt_to_page(addr)->flags);
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
@@ -1196,17 +1196,17 @@ void __init mem_init(void)
 	if ( rtas_data )
 		for (addr = rtas_data; addr < PAGE_ALIGN(rtas_data+rtas_size) ;
 		     addr += PAGE_SIZE)
-			SetPageReserved(mem_map + MAP_NR(addr));
+			SetPageReserved(virt_to_page(addr));
 #endif /* defined(CONFIG_ALL_PPC) */
 	if ( sysmap_size )
 		for (addr = (unsigned long)sysmap;
 		     addr < PAGE_ALIGN((unsigned long)sysmap+sysmap_size) ;
 		     addr += PAGE_SIZE)
-			SetPageReserved(mem_map + MAP_NR(addr));
+			SetPageReserved(virt_to_page(addr));
 	
 	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
 	     addr += PAGE_SIZE) {
-		if (!PageReserved(mem_map + MAP_NR(addr)))
+		if (!PageReserved(virt_to_page(addr)))
 			continue;
 		if (addr < (ulong) etext)
 			codepages++;

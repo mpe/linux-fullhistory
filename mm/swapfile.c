@@ -645,7 +645,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 		goto bad_swap;
 	}
 
-	lock_page(mem_map + MAP_NR(swap_header));
+	lock_page(virt_to_page(swap_header));
 	rw_swap_page_nolock(READ, SWP_ENTRY(type,0), (char *) swap_header, 1);
 
 	if (!memcmp("SWAP-SPACE",swap_header->magic.magic,10))

@@ -48,11 +48,10 @@ static inline void *dmaalloc(size_t size)
 	}
 	addr = __get_dma_pages(GFP_KERNEL, get_order(size));
 	if (addr) {
-		int i;
+		struct page *page;
 
-		for (i = MAP_NR(addr); i < MAP_NR(addr+size); i++) {
-			mem_map_reserve(i);
-		}
+		for (page = virt_to_page(addr); page < get_mem_map(addr+size); page++)
+			mem_map_reserve(page);
 	}
 	return (void *)addr;
 }
@@ -60,12 +59,11 @@ static inline void *dmaalloc(size_t size)
 static inline void dmafree(void *addr, size_t size)
 {
 	if (size > 0) {
-		int i;
+		struct page *page;
 
-		for (i = MAP_NR((unsigned long)addr);
-		     i < MAP_NR((unsigned long)addr+size); i++) {
-			mem_map_unreserve (i);
-		}
+		for (page = virt_to_page((unsigned long)addr);
+		     page < virt_to_page((unsigned long)addr+size); page++)
+			mem_map_unreserve(page);
 		free_pages((unsigned long) addr, get_order(size));
 	}
 }

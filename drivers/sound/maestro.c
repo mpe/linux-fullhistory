@@ -199,6 +199,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/smp_lock.h>
+#include <linux/wrapper.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
 
@@ -2819,7 +2820,7 @@ allocate_buffers(struct ess_state *s)
 {
 	void *rawbuf=NULL;
 	int order,i;
-	unsigned long mapend,map;
+	struct page *page, *pend;
 
 	/* alloc as big a chunk as we can */
 	for (order = (dsps_order + (16-PAGE_SHIFT) + 1); order >= (dsps_order + 2 + 1); order--)
@@ -2865,17 +2866,16 @@ allocate_buffers(struct ess_state *s)
 	}
 
 	/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
-	mapend = MAP_NR(rawbuf + (PAGE_SIZE << order) - 1);
-	for (map = MAP_NR(rawbuf); map <= mapend; map++) {
-		set_bit(PG_reserved, &mem_map[map].flags);
-	}
+	pend = virt_to_page(rawbuf + (PAGE_SIZE << order) - 1);
+	for (page = virt_to_page(rawbuf); page <= pend; page++)
+		mem_map_reserve(page);
 
 	return 0;
 } 
 static void
 free_buffers(struct ess_state *s)
 {
-	unsigned long map, mapend;
+	struct page *page, *pend;
 
 	s->dma_dac.rawbuf = s->dma_adc.rawbuf = NULL;
 	s->dma_dac.mapped = s->dma_adc.mapped = 0;
@@ -2884,9 +2884,9 @@ free_buffers(struct ess_state *s)
 	M_printk("maestro: freeing %p\n",s->card->dmapages);
 	/* undo marking the pages as reserved */
 
-	mapend = MAP_NR(s->card->dmapages + (PAGE_SIZE << s->card->dmaorder) - 1);
-	for (map = MAP_NR(s->card->dmapages); map <= mapend; map++)
-		clear_bit(PG_reserved, &mem_map[map].flags);    
+	pend = virt_to_page(s->card->dmapages + (PAGE_SIZE << s->card->dmaorder) - 1);
+	for (page = virt_to_page(s->card->dmapages); page <= pend; page++)
+		mem_map_unreserve(page);
 
 	free_pages((unsigned long)s->card->dmapages,s->card->dmaorder);
 	s->card->dmapages = NULL;

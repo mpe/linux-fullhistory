@@ -109,6 +109,7 @@
 #include <linux/spinlock.h>
 #include <linux/smp_lock.h>
 #include <linux/ac97_codec.h>
+#include <linux/wrapper.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 #include <linux/bitops.h>
@@ -925,7 +926,7 @@ static int alloc_dmabuf(struct trident_state *state)
 	struct dmabuf *dmabuf = &state->dmabuf;
 	void *rawbuf;
 	int order;
-	unsigned long map, mapend;
+	struct page *page, *pend;
 
 	/* alloc as big a chunk as we can, FIXME: is this necessary ?? */
 	for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
@@ -946,9 +947,9 @@ static int alloc_dmabuf(struct trident_state *state)
 	dmabuf->buforder = order;
 	
 	/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
-	mapend = MAP_NR(rawbuf + (PAGE_SIZE << order) - 1);
-	for (map = MAP_NR(rawbuf); map <= mapend; map++)
-		set_bit(PG_reserved, &mem_map[map].flags);
+	pend = virt_to_page(rawbuf + (PAGE_SIZE << order) - 1);
+	for (page = virt_to_page(rawbuf); page <= pend; page++)
+		mem_map_reserve(page);
 
 	return 0;
 }
@@ -957,13 +958,13 @@ static int alloc_dmabuf(struct trident_state *state)
 static void dealloc_dmabuf(struct trident_state *state)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
-	unsigned long map, mapend;
+	struct page *page, *pend;
 
 	if (dmabuf->rawbuf) {
 		/* undo marking the pages as reserved */
-		mapend = MAP_NR(dmabuf->rawbuf + (PAGE_SIZE << dmabuf->buforder) - 1);
-		for (map = MAP_NR(dmabuf->rawbuf); map <= mapend; map++)
-			clear_bit(PG_reserved, &mem_map[map].flags);
+		pend = virt_to_page(dmabuf->rawbuf + (PAGE_SIZE << dmabuf->buforder) - 1);
+		for (page = virt_to_page(dmabuf->rawbuf); page <= pend; page++)
+			mem_map_unreserve(page);
 		pci_free_consistent(state->card->pci_dev, PAGE_SIZE << dmabuf->buforder,
 				    dmabuf->rawbuf, dmabuf->dma_handle);
 	}

@@ -274,7 +274,7 @@ extern unsigned long ioremap_bot, ioremap_base;
  * for zero-mapped memory areas etc..
  */
 extern unsigned long empty_zero_page[1024];
-#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+#define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -303,7 +303,6 @@ extern pte_t * __bad_pagetable(void);
 #define pte_none(pte)		(!pte_val(pte))
 #define pte_present(pte)	(pte_val(pte) & _PAGE_PRESENT)
 #define pte_clear(ptep)		do { pte_val(*(ptep)) = 0; } while (0)
-#define pte_pagenr(x)		((unsigned long)((pte_val(x) >> PAGE_SHIFT)))
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
 #define	pmd_bad(pmd)		((pmd_val(pmd) & ~PAGE_MASK) != 0)
@@ -315,7 +314,7 @@ extern pte_t * __bad_pagetable(void);
  */
 #define page_address(page)  ((page)->virtual)
 #define pages_to_mb(x)		((x) >> (20-PAGE_SHIFT))
-#define pte_page(x)		(mem_map+pte_pagenr(x))
+#define pte_page(x)		(mem_map+(unsigned long)((pte_val(x) >> PAGE_SHIFT)))
 
 #ifndef __ASSEMBLY__
 /*

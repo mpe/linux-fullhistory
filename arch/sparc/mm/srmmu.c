@@ -612,7 +612,7 @@ static void srmmu_free_task_struct(struct task_struct *tsk)
 
 static void srmmu_get_task_struct(struct task_struct *tsk)
 {
-	atomic_inc(&mem_map[MAP_NR(tsk)].count);
+	atomic_inc(&virt_to_page(tsk)->count);
 }
 
 /* tsunami.S */
@@ -2153,7 +2153,7 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(set_pte, srmmu_set_pte, BTFIXUPCALL_SWAPO0O1);
 	BTFIXUPSET_CALL(switch_mm, srmmu_switch_mm, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(pte_pagenr, srmmu_pte_pagenr, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(sparc_pte_pagenr, srmmu_pte_pagenr, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pmd_page, srmmu_pmd_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pgd_page, srmmu_pgd_page, BTFIXUPCALL_NORM);
 

@@ -298,20 +298,20 @@ void __init smp4d_boot_cpus(void)
 	}
 
 	/* Free unneeded trap tables */
-	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu1));
-	set_page_count(mem_map + MAP_NR(trapbase_cpu1), 1);
+	ClearPageReserved(virt_to_page(trapbase_cpu1));
+	set_page_count(virt_to_page(trapbase_cpu1), 1);
 	free_page((unsigned long)trapbase_cpu1);
 	totalram_pages++;
 	num_physpages++;
 
-	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu2));
-	set_page_count(mem_map + MAP_NR(trapbase_cpu2), 1);
+	ClearPageReserved(virt_to_page(trapbase_cpu2));
+	set_page_count(virt_to_page(trapbase_cpu2), 1);
 	free_page((unsigned long)trapbase_cpu2);
 	totalram_pages++;
 	num_physpages++;
 
-	ClearPageReserved(mem_map + MAP_NR(trapbase_cpu3));
-	set_page_count(mem_map + MAP_NR(trapbase_cpu3), 1);
+	ClearPageReserved(virt_to_page(trapbase_cpu3));
+	set_page_count(virt_to_page(trapbase_cpu3), 1);
 	free_page((unsigned long)trapbase_cpu3);
 	totalram_pages++;
 	num_physpages++;

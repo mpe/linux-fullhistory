@@ -80,7 +80,7 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
 #define pte_clear(ptep)		set_pte((ptep), __pte(0))
 
 #ifndef CONFIG_DISCONTIGMEM
-#define pte_pagenr(pte)		((unsigned long)(((pte_val(pte) - PHYS_OFFSET) >> PAGE_SHIFT)))
+#define pte_page(x)		(mem_map + (unsigned long)(((pte_val(pte) - PHYS_OFFSET) >> PAGE_SHIFT)))
 #else
 /*
  * I'm not happy with this - we needlessly convert a physical address
@@ -88,7 +88,7 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
  * which, if __va and __pa are expensive causes twice the expense for
  * zero gain. --rmk
  */
-#define pte_pagenr(pte)		MAP_NR(__va(pte_val(pte)))
+#define pte_page(x)		(mem_map + MAP_NR(__va(pte_val(pte))))
 #endif
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
@@ -99,7 +99,6 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
  */
 #define page_address(page)	((page)->virtual)
 #define pages_to_mb(x)		((x) >> (20 - PAGE_SHIFT))
-#define pte_page(x)		(mem_map + pte_pagenr(x))
 
 /*
  * Conversion functions: convert a page and protection to a page entry,

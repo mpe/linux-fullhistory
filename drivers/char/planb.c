@@ -136,13 +136,12 @@ static int grabbuf_alloc(struct planb *pb)
 								|GFP_DMA, 0);
 		if (!pb->rawbuf[i])
 			break;
-		set_bit(PG_reserved, &mem_map[MAP_NR(pb->rawbuf[i])].flags);
+		mem_map_reserve(virt_to_page(pb->rawbuf[i]));
 	}
 	if (i-- < npage) {
 		printk(KERN_DEBUG "PlanB: init_grab: grab buffer not allocated\n");
 		for (; i > 0; i--) {
-			clear_bit(PG_reserved,
-				&mem_map[MAP_NR(pb->rawbuf[i])].flags);
+			mem_map_unreserve(virt_to_page(pb->rawbuf[i]));
 			free_pages((unsigned long)pb->rawbuf[i], 0);
 		}
 		kfree(pb->rawbuf);
@@ -435,8 +434,7 @@ static void planb_prepare_close(struct planb *pb)
 	}
 	if(pb->rawbuf) {
 		for (i = 0; i < pb->rawbuf_size; i++) {
-			clear_bit(PG_reserved,
-				&mem_map[MAP_NR(pb->rawbuf[i])].flags);
+			mem_map_unreserve(virt_to_page(pb->rawbuf[i]));
 			free_pages((unsigned long)pb->rawbuf[i], 0);
 		}
 		kfree(pb->rawbuf);

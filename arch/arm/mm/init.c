@@ -534,8 +534,8 @@ void __init paging_init(struct meminfo *mi)
 	memzero(zero_page, PAGE_SIZE);
 	memzero(bad_page, PAGE_SIZE);
 
-	empty_zero_page = mem_map + MAP_NR(zero_page);
-	empty_bad_page  = mem_map + MAP_NR(bad_page);
+	empty_zero_page = virt_to_page(zero_page);
+	empty_bad_page  = virt_to_page(bad_page);
 	empty_bad_pte_table = ((pte_t *)bad_table) + TABLE_OFFSET;
 }
 
@@ -598,7 +598,7 @@ void __init mem_init(void)
 static inline void free_area(unsigned long addr, unsigned long end, char *s)
 {
 	unsigned int size = (end - addr) >> 10;
-	struct page *page = mem_map + MAP_NR(addr);
+	struct page *page = virt_to_page(addr);
 
 	for (; addr < end; addr += PAGE_SIZE, page ++) {
 		ClearPageReserved(page);
@@ -632,8 +632,8 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 
 	if (!keep_initrd) {
 		for (addr = start; addr < end; addr += PAGE_SIZE) {
-			ClearPageReserved(mem_map + MAP_NR(addr));
-			set_page_count(mem_map+MAP_NR(addr), 1);
+			ClearPageReserved(virt_to_page(addr));
+			set_page_count(virt_to_page(addr), 1);
 			free_page(addr);
 			totalram_pages++;
 		}

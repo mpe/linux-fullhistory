@@ -496,7 +496,7 @@ static inline void * kmem_getpages (kmem_cache_t *cachep, unsigned long flags)
 static inline void kmem_freepages (kmem_cache_t *cachep, void *addr)
 {
 	unsigned long i = (1<<cachep->gfporder);
-	struct page *page = mem_map + MAP_NR(addr);
+	struct page *page = virt_to_page(addr);
 
 	/* free_pages() does not clear the type bit - we do that.
 	 * The pages have been unlinked from their cache-slab,
@@ -1115,7 +1115,7 @@ static int kmem_cache_grow (kmem_cache_t * cachep, int flags)
 
 	/* Nasty!!!!!! I hope this is OK. */
 	i = 1 << cachep->gfporder;
-	page = mem_map + MAP_NR(objp);
+	page = virt_to_page(objp);
 	do {
 		SET_PAGE_CACHE(page, cachep);
 		SET_PAGE_SLAB(page, slabp);
@@ -1321,9 +1321,9 @@ alloc_new_slab_nolock:
  */
 
 #if DEBUG
-# define CHECK_NR(nr)						\
+# define CHECK_NR(pg)						\
 	do {							\
-		if (nr >= max_mapnr) {				\
+		if (!VALID_PAGE(pg)) {				\
 			printk(KERN_ERR "kfree: out of range ptr %lxh.\n", \
 				(unsigned long)objp);		\
 			BUG();					\
@@ -1331,6 +1331,7 @@ alloc_new_slab_nolock:
 	} while (0)
 # define CHECK_PAGE(page)					\
 	do {							\
+		CHECK_NR(page);					\
 		if (!PageSlab(page)) {				\
 			printk(KERN_ERR "kfree: bad ptr %lxh.\n", \
 				(unsigned long)objp);		\
@@ -1339,23 +1340,21 @@ alloc_new_slab_nolock:
 	} while (0)
 
 #else
-# define CHECK_NR(nr)	do { } while (0)
-# define CHECK_PAGE(nr)	do { } while (0)
+# define CHECK_PAGE(pg)	do { } while (0)
 #endif
 
 static inline void kmem_cache_free_one(kmem_cache_t *cachep, void *objp)
 {
 	slab_t* slabp;
 
-	CHECK_NR(MAP_NR(objp));
-	CHECK_PAGE(mem_map + MAP_NR(objp));
+	CHECK_PAGE(virt_to_page(objp));
 	/* reduces memory footprint
 	 *
 	if (OPTIMIZE(cachep))
 		slabp = (void*)((unsigned long)objp&(~(PAGE_SIZE-1)));
 	 else
 	 */
-	slabp = GET_PAGE_SLAB(mem_map + MAP_NR(objp));
+	slabp = GET_PAGE_SLAB(virt_to_page(objp));
 
 #if DEBUG
 	if (cachep->flags & SLAB_DEBUG_INITIAL)
@@ -1452,8 +1451,7 @@ static inline void __kmem_cache_free (kmem_cache_t *cachep, void* objp)
 #ifdef CONFIG_SMP
 	cpucache_t *cc = cc_data(cachep);
 
-	CHECK_NR(MAP_NR(objp));
-	CHECK_PAGE(mem_map + MAP_NR(objp));
+	CHECK_PAGE(virt_to_page(objp));
 	if (cc) {
 		int batchcount;
 		if (cc->avail < cc->limit) {
@@ -1536,9 +1534,8 @@ void kmem_cache_free (kmem_cache_t *cachep, void *objp)
 {
 	unsigned long flags;
 #if DEBUG
-	CHECK_NR(MAP_NR(objp));
-	CHECK_PAGE(mem_map + MAP_NR(objp));
-	if (cachep != GET_PAGE_CACHE(mem_map + MAP_NR(objp)))
+	CHECK_PAGE(virt_to_page(objp));
+	if (cachep != GET_PAGE_CACHE(virt_to_page(objp)))
 		BUG();
 #endif
 
@@ -1562,9 +1559,8 @@ void kfree (const void *objp)
 	if (!objp)
 		return;
 	local_irq_save(flags);
-	CHECK_NR(MAP_NR(objp));
-	CHECK_PAGE(mem_map + MAP_NR(objp));
-	c = GET_PAGE_CACHE(mem_map + MAP_NR(objp));
+	CHECK_PAGE(virt_to_page(objp));
+	c = GET_PAGE_CACHE(virt_to_page(objp));
 	__kmem_cache_free(c, (void*)objp);
 	local_irq_restore(flags);
 }

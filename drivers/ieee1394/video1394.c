@@ -221,7 +221,7 @@ static void * rvmalloc(unsigned long size)
 		while (size > 0) 
                 {
 	                page = kvirt_to_pa(adr);
-			mem_map_reserve(MAP_NR(__va(page)));
+			mem_map_reserve(virt_to_page(__va(page)));
 			adr+=PAGE_SIZE;
 			size-=PAGE_SIZE;
 		}
@@ -239,7 +239,7 @@ static void rvfree(void * mem, unsigned long size)
 		while (size > 0) 
                 {
 	                page = kvirt_to_pa(adr);
-			mem_map_unreserve(MAP_NR(__va(page)));
+			mem_map_unreserve(virt_to_page(__va(page)));
 			adr+=PAGE_SIZE;
 			size-=PAGE_SIZE;
 		}

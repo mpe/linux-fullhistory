@@ -126,7 +126,7 @@ void rw_swap_page(int rw, struct page *page, int wait)
  */
 void rw_swap_page_nolock(int rw, swp_entry_t entry, char *buf, int wait)
 {
-	struct page *page = mem_map + MAP_NR(buf);
+	struct page *page = virt_to_page(buf);
 	
 	if (!PageLocked(page))
 		PAGE_BUG(page);

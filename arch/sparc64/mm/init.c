@@ -1242,7 +1242,7 @@ void free_initmem (void)
 		page = (addr +
 			((unsigned long) __va(phys_base)) -
 			((unsigned long) &empty_zero_page));
-		p = mem_map + MAP_NR(page);
+		p = virt_to_page(page);
 
 		ClearPageReserved(p);
 		set_page_count(p, 1);
@@ -1257,7 +1257,7 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 	if (start < end)
 		printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
 	for (; start < end; start += PAGE_SIZE) {
-		struct page *p = mem_map + MAP_NR(start);
+		struct page *p = virt_to_page(start);
 
 		ClearPageReserved(p);
 		set_page_count(p, 1);

@@ -810,8 +810,9 @@ static	void sscape_write_host_ctrl2(sscape_info *devc, int a, int b)
 static int sscape_alloc_dma(sscape_info *devc)
 {
 	char *start_addr, *end_addr;
-	int i, dma_pagesize;
+	int dma_pagesize;
 	int sz, size;
+	struct page *page;
 
 	if (devc->raw_buf != NULL) return 0;	/* Already done */
 	dma_pagesize = (devc->dma < 4) ? (64 * 1024) : (128 * 1024);
@@ -848,23 +849,24 @@ static int sscape_alloc_dma(sscape_info *devc)
 	devc->raw_buf = start_addr;
 	devc->raw_buf_phys = virt_to_bus(start_addr);
 
-	for (i = MAP_NR(start_addr); i <= MAP_NR(end_addr); i++)
-		set_bit(PG_reserved, &mem_map[i].flags);;
+	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+		mem_map_reserve(page);
 	return 1;
 }
 
 static void sscape_free_dma(sscape_info *devc)
 {
-	int sz, size, i;
+	int sz, size;
 	unsigned long start_addr, end_addr;
+	struct page *page;
 
 	if (devc->raw_buf == NULL) return;
 	for (sz = 0, size = PAGE_SIZE; size < devc->buffsize; sz++, size <<= 1);
 	start_addr = (unsigned long) devc->raw_buf;
 	end_addr = start_addr + devc->buffsize;
 
-	for (i = MAP_NR(start_addr); i <= MAP_NR(end_addr); i++)
-		clear_bit(PG_reserved, &mem_map[i].flags);;
+	for (page = virt_to_page(start_addr); page <= get_mem_map(end_addr); page++)
+		mem_map_unreserve(page);
 
 	free_pages((unsigned long) devc->raw_buf, sz);
 	devc->raw_buf = NULL;

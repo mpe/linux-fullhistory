@@ -338,6 +338,9 @@ extern unsigned long FASTCALL(get_zeroed_page(int gfp_mask));
 #define __get_dma_pages(gfp_mask, order) \
 		__get_free_pages((gfp_mask) | GFP_DMA,(order))
 
+#define virt_to_page(kaddr)	(mem_map + MAP_NR(kaddr))
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
+
 /*
  * The old interface name will be removed in 2.5:
  */

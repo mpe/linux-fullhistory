@@ -245,7 +245,7 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 
 		pgd_val(ret[PTRS_PER_PGD])
-		  = pte_val(mk_pte(mem_map + MAP_NR(ret), PAGE_KERNEL));
+		  = pte_val(mk_pte(virt_to_page(ret), PAGE_KERNEL));
 	}
 	return ret;
 }

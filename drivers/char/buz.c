@@ -199,7 +199,7 @@ static int v4l_fbuffer_alloc(struct zoran *zr)
 			zr->v4l_gbuf[i].fbuffer_phys = virt_to_phys(mem);
 			zr->v4l_gbuf[i].fbuffer_bus = virt_to_bus(mem);
 			for (off = 0; off < v4l_bufsize; off += PAGE_SIZE)
-				mem_map_reserve(MAP_NR(mem + off));
+				mem_map_reserve(virt_to_page(mem + off));
 			DEBUG(printk(BUZ_INFO ": V4L frame %d mem 0x%x (bus: 0x%x=%d)\n", i, mem, virt_to_bus(mem), virt_to_bus(mem)));
 		} else {
 			return -ENOBUFS;
@@ -221,7 +221,7 @@ static void v4l_fbuffer_free(struct zoran *zr)
 
 		mem = zr->v4l_gbuf[i].fbuffer;
 		for (off = 0; off < v4l_bufsize; off += PAGE_SIZE)
-			mem_map_unreserve(MAP_NR(mem + off));
+			mem_map_unreserve(virt_to_page(mem + off));
 		kfree((void *) zr->v4l_gbuf[i].fbuffer);
 		zr->v4l_gbuf[i].fbuffer = NULL;
 	}
@@ -286,7 +286,7 @@ static int jpg_fbuffer_alloc(struct zoran *zr)
 			zr->jpg_gbuf[i].frag_tab[0] = virt_to_bus((void *) mem);
 			zr->jpg_gbuf[i].frag_tab[1] = ((zr->jpg_bufsize / 4) << 1) | 1;
 			for (off = 0; off < zr->jpg_bufsize; off += PAGE_SIZE)
-				mem_map_reserve(MAP_NR(mem + off));
+				mem_map_reserve(virt_to_page(mem + off));
 		} else {
 			/* jpg_bufsize is alreay page aligned */
 			for (j = 0; j < zr->jpg_bufsize / PAGE_SIZE; j++) {
@@ -297,7 +297,7 @@ static int jpg_fbuffer_alloc(struct zoran *zr)
 				}
 				zr->jpg_gbuf[i].frag_tab[2 * j] = virt_to_bus((void *) mem);
 				zr->jpg_gbuf[i].frag_tab[2 * j + 1] = (PAGE_SIZE / 4) << 1;
-				mem_map_reserve(MAP_NR(mem));
+				mem_map_reserve(virt_to_page(mem));
 			}
 
 			zr->jpg_gbuf[i].frag_tab[2 * j - 1] |= 1;
@@ -329,7 +329,7 @@ static void jpg_fbuffer_free(struct zoran *zr)
 			if (zr->jpg_gbuf[i].frag_tab[0]) {
 				mem = (unsigned char *) bus_to_virt(zr->jpg_gbuf[i].frag_tab[0]);
 				for (off = 0; off < zr->jpg_bufsize; off += PAGE_SIZE)
-					mem_map_unreserve(MAP_NR(mem + off));
+					mem_map_unreserve(virt_to_page(mem + off));
 				kfree((void *) mem);
 				zr->jpg_gbuf[i].frag_tab[0] = 0;
 				zr->jpg_gbuf[i].frag_tab[1] = 0;
@@ -338,7 +338,7 @@ static void jpg_fbuffer_free(struct zoran *zr)
 			for (j = 0; j < zr->jpg_bufsize / PAGE_SIZE; j++) {
 				if (!zr->jpg_gbuf[i].frag_tab[2 * j])
 					break;
-				mem_map_unreserve(MAP_NR(bus_to_virt(zr->jpg_gbuf[i].frag_tab[2 * j])));
+				mem_map_unreserve(virt_to_page(bus_to_virt(zr->jpg_gbuf[i].frag_tab[2 * j])));
 				free_page((unsigned long) bus_to_virt(zr->jpg_gbuf[i].frag_tab[2 * j]));
 				zr->jpg_gbuf[i].frag_tab[2 * j] = 0;
 				zr->jpg_gbuf[i].frag_tab[2 * j + 1] = 0;

@@ -153,10 +153,10 @@ void __init mem_init(void)
 #if 0
 #ifndef CONFIG_SUN3
 		if (virt_to_phys ((void *)tmp) >= mach_max_dma_address)
-			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
+			clear_bit(PG_DMA, &virt_to_page(tmp)->flags);
 #endif
 #endif
-		if (PageReserved(mem_map+MAP_NR(tmp))) {
+		if (PageReserved(virt_to_page(tmp))) {
 			if (tmp >= (unsigned long)&_text
 			    && tmp < (unsigned long)&_etext)
 				codepages++;
@@ -168,7 +168,7 @@ void __init mem_init(void)
 			continue;
 		}
 #if 0
-		set_page_count(mem_map+MAP_NR(tmp), 1);
+		set_page_count(virt_to_page(tmp), 1);
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start ||
 		    (tmp < (initrd_start & PAGE_MASK) || tmp >= initrd_end))
@@ -202,8 +202,8 @@ void __init mem_init(void)
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
 	for (; start < end; start += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(start));
-		set_page_count(mem_map+MAP_NR(start), 1);
+		ClearPageReserved(virt_to_page(start));
+		set_page_count(virt_to_page(start), 1);
 		free_page(start);
 		totalram_pages++;
 	}

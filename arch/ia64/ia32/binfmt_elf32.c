@@ -81,9 +81,9 @@ void ia64_elf32_init(struct pt_regs *regs)
 {
 	int nr;
 
-	put_shared_page(current, mem_map + MAP_NR(ia32_gdt_table), IA32_PAGE_OFFSET);
+	put_shared_page(current, virt_to_page(ia32_gdt_table), IA32_PAGE_OFFSET);
 	if (PAGE_SHIFT <= IA32_PAGE_SHIFT)
-		put_shared_page(current, mem_map + MAP_NR(ia32_tss), IA32_PAGE_OFFSET + PAGE_SIZE);
+		put_shared_page(current, virt_to_page(ia32_tss), IA32_PAGE_OFFSET + PAGE_SIZE);
 
 	nr = smp_processor_id();
 	

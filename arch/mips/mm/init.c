@@ -120,7 +120,8 @@ unsigned long empty_zero_page, zero_page_mask;
 
 static inline unsigned long setup_zero_pages(void)
 {
-	unsigned long order, size, pg;
+	unsigned long order, size;
+	struct page *page;
 
 	switch (mips_cputype) {
 	case CPU_R4000SC:
@@ -137,11 +138,11 @@ static inline unsigned long setup_zero_pages(void)
 	if (!empty_zero_page)
 		panic("Oh boy, that early out of memory?");
 
-	pg = MAP_NR(empty_zero_page);
-	while (pg < MAP_NR(empty_zero_page) + (1 << order)) {
-		set_bit(PG_reserved, &mem_map[pg].flags);
-		set_page_count(mem_map + pg, 0);
-		pg++;
+	page = virt_to_page(empty_zero_page);
+	while (page < virt_to_page(empty_zero_page + (PAGE_SIZE << order))) {
+		set_bit(PG_reserved, &page->flags);
+		set_page_count(page, 0);
+		page++;
 	}
 
 	size = PAGE_SIZE << order;
@@ -309,8 +310,8 @@ void __init mem_init(void)
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
 	for (; start < end; start += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(start));
-		set_page_count(mem_map+MAP_NR(start), 1);
+		ClearPageReserved(virt_to_page(start));
+		set_page_count(virt_to_page(start), 1);
 		free_page(start);
 		totalram_pages++;
 	}
@@ -329,8 +330,8 @@ void free_initmem(void)
     
 	addr = (unsigned long) &__init_begin;
 	while (addr < (unsigned long) &__init_end) {
-		ClearPageReserved(mem_map + MAP_NR(addr));
-		set_page_count(mem_map + MAP_NR(addr), 1);
+		ClearPageReserved(virt_to_page(addr));
+		set_page_count(virt_to_page(addr), 1);
 		free_page(addr);
 		totalram_pages++;
 		addr += PAGE_SIZE;

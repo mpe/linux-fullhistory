@@ -86,7 +86,7 @@ static void __free_pages_ok (struct page *page, unsigned long order)
 		BUG();
 	if (page->mapping)
 		BUG();
-	if (page-mem_map >= max_mapnr)
+	if (!VALID_PAGE(page))
 		BUG();
 	if (PageSwapCache(page))
 		BUG();
@@ -350,14 +350,14 @@ void __free_pages(struct page *page, unsigned long order)
 
 void free_pages(unsigned long addr, unsigned long order)
 {
-	unsigned long map_nr;
+	struct page *fpage;
 
 #ifdef CONFIG_DISCONTIGMEM
 	if (addr == 0) return;
 #endif
-	map_nr = MAP_NR(addr);
-	if (map_nr < max_mapnr)
-		__free_pages(mem_map + map_nr, order);
+	fpage = virt_to_page(addr);
+	if (VALID_PAGE(fpage))
+		__free_pages(fpage, order);
 }
 
 /*

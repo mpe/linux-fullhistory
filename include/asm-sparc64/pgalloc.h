@@ -125,7 +125,7 @@ extern struct pgtable_cache_struct {
 
 extern __inline__ void free_pgd_fast(pgd_t *pgd)
 {
-	struct page *page = mem_map + MAP_NR(pgd);
+	struct page *page = virt_to_page(pgd);
 
 	if (!page->pprev_hash) {
 		(unsigned long *)page->next_hash = pgd_quicklist;

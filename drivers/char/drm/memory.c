@@ -246,7 +246,7 @@ unsigned long drm_alloc_pages(int order, int area)
 	for (addr = address, sz = bytes;
 	     sz > 0;
 	     addr += PAGE_SIZE, sz -= PAGE_SIZE) {
-		mem_map_reserve(MAP_NR(addr));
+		mem_map_reserve(virt_to_page(addr));
 	}
 	
 	return address;
@@ -267,7 +267,7 @@ void drm_free_pages(unsigned long address, int order, int area)
 		for (addr = address, sz = bytes;
 		     sz > 0;
 		     addr += PAGE_SIZE, sz -= PAGE_SIZE) {
-			mem_map_unreserve(MAP_NR(addr));
+			mem_map_unreserve(virt_to_page(addr));
 		}
 		free_pages(address, order);
 	}

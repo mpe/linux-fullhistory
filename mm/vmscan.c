@@ -45,7 +45,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if (!pte_present(pte))
 		goto out_failed;
 	page = pte_page(pte);
-	if ((page-mem_map >= max_mapnr) || PageReserved(page))
+	if ((!VALID_PAGE(page)) || PageReserved(page))
 		goto out_failed;
 
 	if (mm->swap_cnt)
