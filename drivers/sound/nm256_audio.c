@@ -1467,7 +1467,7 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	case SNDCTL_DSP_SETFMT:
-	    if (get_user(ret, (int *) arg)
+	    if (get_user(ret, (int *) arg))
 		return -EFAULT;
 
 	    if (ret != 0) {

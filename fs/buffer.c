@@ -1514,6 +1514,9 @@ static int __block_commit_write(struct inode *inode, struct page *page,
 	    bh != head || !block_start;
 	    block_start=block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
+	    	/* This can happen for the truncate case */
+	    	if (!buffer_mapped(bh))
+	    		continue;
 		if (block_end <= from || block_start >= to) {
 			if (!buffer_uptodate(bh))
 				partial = 1;
@@ -1721,24 +1724,12 @@ int generic_commit_write(struct file *file, struct page *page,
 	return 0;
 }
 
-/*
- * If it would be '74 that would go into libc...
- */
-int mem_is_zero(char *p, unsigned len)
-{
-	while (len--)
-		if (*p++)
-			return 0;
-	return 1;
-}
-
 int block_zero_page(struct address_space *mapping, loff_t from, unsigned length)
 {
 	unsigned long index = from >> PAGE_CACHE_SHIFT;
 	unsigned offset = from & (PAGE_CACHE_SIZE-1);
 	struct inode *inode = (struct inode *)mapping->host;
 	struct page *page;
-	char *kaddr;
 	int err;
 
 	if (!length)
@@ -1747,21 +1738,19 @@ int block_zero_page(struct address_space *mapping, loff_t from, unsigned length)
 	page = read_cache_page(mapping, index,
 				(filler_t *)mapping->a_ops->readpage, NULL);
 	err = PTR_ERR(page);
-	if (ERR_PTR(page))
+	if (IS_ERR(page))
 		goto out;
 	lock_page(page);
 	err = -EIO;
 	if (!Page_Uptodate(page))
 		goto unlock;
-	kaddr = (char*)kmap(page);
-	err = 0;
-	if (mem_is_zero(kaddr+offset, length))
-		goto unmap;
-	memset(kaddr+offset, 0, length);
+
+	memset((char *) kmap(page) + offset, 0, length);
 	flush_dcache_page(page);
 	__block_commit_write(inode, page, offset, offset+length);
-unmap:
 	kunmap(page);
+	err = 0;
+
 unlock:
 	UnlockPage(page);
 	page_cache_release(page);

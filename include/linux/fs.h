@@ -1050,9 +1050,20 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
  * This should be a per-architecture thing, to allow different
  * error and pointer decisions.
  */
-#define ERR_PTR(err)	((void *)((long)(err)))
-#define PTR_ERR(ptr)	((long)(ptr))
-#define IS_ERR(ptr)	((unsigned long)(ptr) > (unsigned long)(-1000))
+static inline void *ERR_PTR(long error)
+{
+	return (void *) error;
+}
+
+static inline long PTR_ERR(const void *ptr)
+{
+	return (long) ptr;
+}
+
+static inline long IS_ERR(const void *ptr)
+{
+	return (unsigned long)ptr > (unsigned long)-1000L;
+}
 
 /*
  * The bitmask for a lookup event:
@@ -1162,7 +1173,7 @@ extern int block_sync_page(struct page *);
 
 int generic_block_bmap(struct address_space *, long, get_block_t *);
 int generic_commit_write(struct file *, struct page *, unsigned, unsigned);
-int block_zero_page(struct address_space *mapping, loff_t, unsigned);
+int block_zero_page(struct address_space *, loff_t, unsigned);
 
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
