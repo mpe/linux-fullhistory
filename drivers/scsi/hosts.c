@@ -147,12 +147,12 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     hname = (tpnt->proc_name) ?  tpnt->proc_name : "";
     hname_len = strlen(hname);
     for (shn = scsi_host_no_list;shn;shn = shn->next) {
-	if (!(shn->host_registered) && shn->loaded_as_module && 
+	if (!(shn->host_registered) && 
 	    (hname_len > 0) && (0 == strncmp(hname, shn->name, hname_len))) {
 	    flag_new = 0;
 	    retval->host_no = shn->host_no;
 	    shn->host_registered = 1;
-	    shn->loaded_as_module = scsi_loadable_module_flag;
+	    shn->loaded_as_module = 1;
 	    break;
 	}
     }
@@ -161,7 +161,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->host_failed = 0;
     if(j > 0xffff) panic("Too many extra bytes requested\n");
     retval->extra_bytes = j;
-    retval->loaded_as_module = scsi_loadable_module_flag;
+    retval->loaded_as_module = 1;
     if (flag_new) {
 	shn = (Scsi_Host_Name *) kmalloc(sizeof(Scsi_Host_Name), GFP_ATOMIC);
 	shn->name = kmalloc(hname_len + 1, GFP_ATOMIC);
@@ -170,7 +170,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	shn->name[hname_len] = 0;
 	shn->host_no = max_scsi_hosts++;
 	shn->host_registered = 1;
-	shn->loaded_as_module = scsi_loadable_module_flag;
+	shn->loaded_as_module = 1;
 	shn->next = NULL;
 	if (scsi_host_no_list) {
 	    for (shn2 = scsi_host_no_list;shn2->next;shn2 = shn2->next)

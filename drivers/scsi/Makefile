@@ -137,7 +137,7 @@ obj-m		:= $(filter-out	$(obj-y), $(obj-m))
 int-m		:= $(filter-out	$(int-y), $(int-m))
 
 # Take multi-part drivers out of obj-y and put components in.
-# obj-y		:= $(filter-out	$(list-multi), $(obj-y)) $(int-y)
+obj-y		:= $(filter-out	$(list-multi), $(obj-y)) $(int-y)
 
 O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
 OX_OBJS		:= $(filter	$(export-objs), $(obj-y))

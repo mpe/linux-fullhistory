@@ -459,7 +459,6 @@ extern void build_proc_dir_entries(Scsi_Host_Template  *);
 
 extern int next_scsi_host;
 
-extern int scsi_loadable_module_flag;
 unsigned int scsi_init(void);
 extern struct Scsi_Host * scsi_register(Scsi_Host_Template *, int j);
 extern void scsi_unregister(struct Scsi_Host * i);

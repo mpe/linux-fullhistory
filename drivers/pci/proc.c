@@ -46,8 +46,8 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 	const struct inode *ino = file->f_dentry->d_inode;
 	const struct proc_dir_entry *dp = ino->u.generic_ip;
 	struct pci_dev *dev = dp->data;
-	int pos = *ppos;
-	int cnt, size;
+	unsigned int pos = *ppos;
+	unsigned int cnt, size;
 
 	/*
 	 * Normal users can read only the standardized portion of the

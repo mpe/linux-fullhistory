@@ -1375,8 +1375,6 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
 
-int scsi_loadable_module_flag;	/* Set after we scan builtin drivers */
-
 /*
  * Function:    scsi_release_commandblocks()
  *
@@ -1440,10 +1438,9 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 		    kmalloc(sizeof(Scsi_Cmnd),
 				     GFP_ATOMIC |
 				(host->unchecked_isa_dma ? GFP_DMA : 0));
-		memset(SCpnt, 0, sizeof(Scsi_Cmnd));
 		if (NULL == SCpnt)
 			break;	/* If not, the next line will oops ... */
-		memset(&SCpnt->eh_timeout, 0, sizeof(SCpnt->eh_timeout));
+		memset(SCpnt, 0, sizeof(Scsi_Cmnd));
 		SCpnt->host = host;
 		SCpnt->device = SDpnt;
 		SCpnt->target = SDpnt->id;
@@ -1978,8 +1975,6 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	struct Scsi_Device_Template *sdtpnt;
 	struct Scsi_Host *sh1;
 	struct Scsi_Host *shpnt;
-	Scsi_Host_Template *SHT;
-	Scsi_Host_Template *SHTp;
 	char name[10];	/* host_no>=10^9? I don't think so. */
 
 	/*
@@ -2115,7 +2110,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 
 	for (shpnt = scsi_hostlist; shpnt; shpnt = sh1) {
 		sh1 = shpnt->next;
-		if (shpnt->hostt != tpnt || !shpnt->loaded_as_module)
+		if (shpnt->hostt != tpnt)
 			continue;
 		pcount = next_scsi_host;
 		/* Remove the /proc/scsi directory entry */
@@ -2129,7 +2124,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 			 * written host adapters.
 			 */
 			if (shpnt->irq)
-			free_irq(shpnt->irq, NULL);
+				free_irq(shpnt->irq, NULL);
 			if (shpnt->dma_channel != 0xff)
 				free_dma(shpnt->dma_channel);
 			if (shpnt->io_port && shpnt->n_io_port)
@@ -2158,24 +2153,21 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	       (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
 #endif
 
-	/* There were some hosts that were loaded at boot time, so we cannot
-	   do any more than this */
-	if (tpnt->present)
-		return;
+	/* Remove it from the linked list and /proc */
+	if (tpnt->present) {
+		Scsi_Host_Template **SHTp = &scsi_hosts;
+		Scsi_Host_Template *SHT;
 
-	/* OK, this is the very last step.  Remove this host adapter from the
-	   linked list. */
-	for (SHTp = NULL, SHT = scsi_hosts; SHT; SHTp = SHT, SHT = SHT->next)
-		if (SHT == tpnt) {
-			if (SHTp)
-				SHTp->next = SHT->next;
-			else
-				scsi_hosts = SHT->next;
-			SHT->next = NULL;
-			break;
+		while ((SHT = *SHTp) != NULL) {
+			if (SHT == tpnt) {
+				*SHTp = SHT->next;
+				break;
+			}
+			SHTp = &SHT->next;
 		}
-	/* Rebuild the /proc/scsi directory entries */
-	remove_proc_entry(tpnt->proc_name, proc_scsi);
+		/* Rebuild the /proc/scsi directory entries */
+		remove_proc_entry(tpnt->proc_name, proc_scsi);
+	}
 	MOD_DEC_USE_COUNT;
 }
 
@@ -2513,8 +2505,6 @@ static int __init init_scsi(void)
 	}
 	generic->write_proc = proc_scsi_gen_write;
 #endif
-
-	scsi_loadable_module_flag = 1;
 
         scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", NULL);
         scsi_host_no_init (scsihosts);
