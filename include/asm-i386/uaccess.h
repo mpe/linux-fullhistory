@@ -217,6 +217,8 @@ extern void __put_user_8(void);
  *
  * Returns zero on success, or -EFAULT on error.
  */
+#ifdef CONFIG_X86_WP_WORKS_OK
+
 #define put_user(x,ptr)						\
 ({	int __ret_pu;						\
 	__chk_user_ptr(ptr);					\
@@ -229,6 +231,21 @@ extern void __put_user_8(void);
 	}							\
 	__ret_pu;						\
 })
+
+#else
+#define put_user(x,ptr)						\
+({								\
+ 	int __ret_pu;						\
+	__typeof__(*(ptr)) __pus_tmp = x;			\
+	__ret_pu=0;						\
+	if(unlikely(__copy_to_user_ll(ptr, &__pus_tmp,		\
+				sizeof(*(ptr))) != 0))		\
+ 		__ret_pu=-EFAULT;				\
+ 	__ret_pu;						\
+ })
+
+
+#endif
 
 /**
  * __get_user: - Get a simple variable from user space, with less checking.
