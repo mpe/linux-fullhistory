@@ -1626,11 +1626,11 @@ sub process_state3_type($$) {
 
 # replace <, >, and &
 sub xml_escape($) {
-	shift;
-	s/\&/\\\\\\amp;/g;
-	s/\</\\\\\\lt;/g;
-	s/\>/\\\\\\gt;/g;
-	return $_;
+	my $text = shift;
+	$text =~ s/\&/\\\\\\amp;/g;
+	$text =~ s/\</\\\\\\lt;/g;
+	$text =~ s/\>/\\\\\\gt;/g;
+	return $text;
 }
 
 sub process_file($) {
