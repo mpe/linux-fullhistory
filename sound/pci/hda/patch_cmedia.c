@@ -112,9 +112,9 @@ static struct hda_verb cmi9880_ch2_init[] = {
 
 /* 3-stack / 6 channel */
 static struct hda_verb cmi9880_ch6_init[] = {
-	/* set line-in PIN for input */
+	/* set line-in PIN for output */
 	{ 0x0c, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
-	/* set mic PIN for input, also enable vref */
+	/* set mic PIN for output */
 	{ 0x0d, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
 	/* route front PCM (DAC1) to HP */
 	{ 0x0f, AC_VERB_SET_CONNECT_SEL, 0x00 },
@@ -123,9 +123,9 @@ static struct hda_verb cmi9880_ch6_init[] = {
 
 /* 3-stack+front / 8 channel */
 static struct hda_verb cmi9880_ch8_init[] = {
-	/* set line-in PIN for input */
+	/* set line-in PIN for output */
 	{ 0x0c, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
-	/* set mic PIN for input, also enable vref */
+	/* set mic PIN for output */
 	{ 0x0d, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x40 },
 	/* route rear-surround PCM (DAC4) to HP */
 	{ 0x0f, AC_VERB_SET_CONNECT_SEL, 0x03 },
