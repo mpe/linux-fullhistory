@@ -86,8 +86,7 @@ static DECLARE_TASK_QUEUE(tq_serial);
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
 
-/* serial supmac_irq_hw *) 0xf3000010,
-btype definitions */
+/* serial subtype definitions */
 #define SERIAL_TYPE_NORMAL	1
 #define SERIAL_TYPE_CALLOUT	2
 

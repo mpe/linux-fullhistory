@@ -105,7 +105,7 @@ void __init console_setup(char *str, int *ints)
 
 
 /*
- * Commands to sys_syslog:
+ * Commands to do_syslog:
  *
  * 	0 -- Close the log.  Currently a NOP.
  * 	1 -- Open the log. Currently a NOP.
@@ -117,7 +117,7 @@ void __init console_setup(char *str, int *ints)
  * 	7 -- Enable printk's to console
  *	8 -- Set level of messages printed to console
  */
-asmlinkage int sys_syslog(int type, char * buf, int len)
+int do_syslog(int type, char * buf, int len)
 {
 	unsigned long i, j, count, flags;
 	int do_clear = 0;
@@ -125,8 +125,6 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 	int error = -EPERM;
 
 	lock_kernel();
-	if ((type != 3) && !capable(CAP_SYS_ADMIN))
-		goto out;
 	error = 0;
 	switch (type) {
 	case 0:		/* Close log */
@@ -227,6 +225,14 @@ out:
 	unlock_kernel();
 	return error;
 }
+
+asmlinkage int sys_syslog(int type, char * buf, int len)
+{
+	if ((type != 3) && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	return do_syslog(type, buf, len);
+}
+
 
 spinlock_t console_lock;
 

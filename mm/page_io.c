@@ -66,6 +66,11 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		printk("Internal error: bad swap-device\n");
 		return;
 	}
+
+	/* Don't allow too many pending pages in flight.. */
+	if (atomic_read(&nr_async_pages) > SWAP_CLUSTER_MAX)
+		wait = 1;
+
 	p = &swap_info[type];
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max) {

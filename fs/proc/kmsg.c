@@ -17,23 +17,23 @@
 extern unsigned long log_size;
 extern struct wait_queue * log_wait;
 
-asmlinkage int sys_syslog(int type, char * bug, int count);
+extern int do_syslog(int type, char * bug, int count);
 
 static int kmsg_open(struct inode * inode, struct file * file)
 {
-	return sys_syslog(1,NULL,0);
+	return do_syslog(1,NULL,0);
 }
 
 static int kmsg_release(struct inode * inode, struct file * file)
 {
-	(void) sys_syslog(0,NULL,0);
+	(void) do_syslog(0,NULL,0);
 	return 0;
 }
 
 static ssize_t kmsg_read(struct file * file, char * buf,
 			 size_t count, loff_t *ppos)
 {
-	return sys_syslog(2,buf,count);
+	return do_syslog(2,buf,count);
 }
 
 static unsigned int kmsg_poll(struct file *file, poll_table * wait)
