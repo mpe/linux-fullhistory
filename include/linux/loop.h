@@ -17,7 +17,7 @@
        
 struct loop_device {
 	int		lo_number;
-	struct inode	*lo_inode;
+	struct dentry	*lo_dentry;
 	int		lo_refcnt;
 	kdev_t		lo_device;
 	int		lo_offset;

@@ -166,8 +166,8 @@ static void figure_loop_size(struct loop_device *lo)
 {
 	int	size;
 
-	if (S_ISREG(lo->lo_inode->i_mode))
-		size = (lo->lo_inode->i_size - lo->lo_offset) / BLOCK_SIZE;
+	if (S_ISREG(lo->lo_dentry->d_inode->i_mode))
+		size = (lo->lo_dentry->d_inode->i_size - lo->lo_offset) / BLOCK_SIZE;
 	else {
 		kdev_t lodev = lo->lo_device;
 		if (blk_size[MAJOR(lodev)])
@@ -195,7 +195,7 @@ repeat:
 	if (MINOR(current_request->rq_dev) >= MAX_LOOP)
 		goto error_out;
 	lo = &loop_dev[MINOR(current_request->rq_dev)];
-	if (!lo->lo_inode || !lo->transfer)
+	if (!lo->lo_dentry || !lo->transfer)
 		goto error_out;
 
 	blksize = BLOCK_SIZE;
@@ -229,13 +229,14 @@ repeat:
 		printk("unknown loop device command (%d)?!?", current_request->cmd);
 		goto error_out;
 	}
+	spin_unlock_irq(&io_request_lock);
 	while (len > 0) {
 		real_block = block;
 		if (lo->lo_flags & LO_FLAGS_DO_BMAP) {
-			real_block = bmap(lo->lo_inode, block);
+			real_block = bmap(lo->lo_dentry->d_inode, block);
 			if (!real_block) {
 				printk("loop: block %d not present\n", block);
-				goto error_out;
+				goto error_out_lock;
 			}
 		}
 		bh = getblk(lo->lo_device, real_block, blksize);
@@ -243,7 +244,7 @@ repeat:
 			printk("loop: device %s: getblk(-, %d, %d) returned NULL",
 			       kdevname(lo->lo_device),
 			       block, blksize);
-			goto error_out;
+			goto error_out_lock;
 		}
 		if (!buffer_uptodate(bh) && ((current_request->cmd == READ) ||
 					(offset || (len < blksize)))) {
@@ -251,7 +252,7 @@ repeat:
 			wait_on_buffer(bh);
 			if (!buffer_uptodate(bh)) {
 				brelse(bh);
-				goto error_out;
+				goto error_out_lock;
 			}
 		}
 		size = blksize - offset;
@@ -262,7 +263,7 @@ repeat:
 				   dest_addr, size)) {
 			printk("loop: transfer error block %d\n", block);
 			brelse(bh);
-			goto error_out;
+			goto error_out_lock;
 		}
 		if (current_request->cmd == WRITE) {
 			mark_buffer_uptodate(bh, 1);
@@ -274,10 +275,13 @@ repeat:
 		offset = 0;
 		block++;
 	}
+	spin_lock_irq(&io_request_lock);
 	current_request->next=CURRENT;
 	CURRENT=current_request;
 	end_request(1);
 	goto repeat;
+error_out_lock:
+	spin_lock_irq(&io_request_lock);
 error_out:
 	current_request->next=CURRENT;
 	CURRENT=current_request;
@@ -292,14 +296,15 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 	int error;
 
 	MOD_INC_USE_COUNT;
+
+	error = -EBUSY;
+	if (lo->lo_dentry)
+		goto out;
+
 	error = -EBADF;
 	file = fget(arg);
 	if (!file)
 		goto out;
-
-	error = -EBUSY;
-	if (lo->lo_inode)
-		goto out_putf;
 
 	error = -EINVAL;
 	inode = file->f_dentry->d_inode;
@@ -328,9 +333,8 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		set_device_ro(dev, 0);
 	}
 
-	/* N.B. Should keep the file or dentry ... */
-	inode->i_count++;
-	lo->lo_inode = inode;
+	lo->lo_dentry = file->f_dentry;
+	lo->lo_dentry->d_count++;
 	lo->transfer = NULL;
 	figure_loop_size(lo);
 
@@ -344,17 +348,17 @@ out:
 
 static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 {
-	struct inode *inode = lo->lo_inode;
+	struct dentry *dentry = lo->lo_dentry;
 
-	if (!inode)
+	if (!dentry)
 		return -ENXIO;
 	if (lo->lo_refcnt > 1)	/* we needed one fd for the ioctl */
 		return -EBUSY;
 
-	if (S_ISBLK(inode->i_mode))
-		blkdev_release (inode);
-	lo->lo_inode = NULL;
-	iput(inode);
+	if (S_ISBLK(dentry->d_inode->i_mode))
+		blkdev_release (dentry->d_inode);
+	lo->lo_dentry = NULL;
+	dput(dentry);
 	lo->lo_device = 0;
 	lo->lo_encrypt_type = 0;
 	lo->lo_offset = 0;
@@ -372,7 +376,7 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	struct loop_info info;
 	int err;
 
-	if (!lo->lo_inode)
+	if (!lo->lo_dentry)
 		return -ENXIO;
 	if (!arg)
 		return -EINVAL;
@@ -432,7 +436,7 @@ static int loop_get_status(struct loop_device *lo, struct loop_info *arg)
 	struct loop_info	info;
 	int err;
 	
-	if (!lo->lo_inode)
+	if (!lo->lo_dentry)
 		return -ENXIO;
 	if (!arg)
 		return -EINVAL;
@@ -441,8 +445,8 @@ static int loop_get_status(struct loop_device *lo, struct loop_info *arg)
 		return err;
 	memset(&info, 0, sizeof(info));
 	info.lo_number = lo->lo_number;
-	info.lo_device = kdev_t_to_nr(lo->lo_inode->i_dev);
-	info.lo_inode = lo->lo_inode->i_ino;
+	info.lo_device = kdev_t_to_nr(lo->lo_dentry->d_inode->i_dev);
+	info.lo_inode = lo->lo_dentry->d_inode->i_ino;
 	info.lo_rdevice = kdev_t_to_nr(lo->lo_device);
 	info.lo_offset = lo->lo_offset;
 	info.lo_flags = lo->lo_flags;
@@ -483,7 +487,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	case LOOP_GET_STATUS:
 		return loop_get_status(lo, (struct loop_info *) arg);
 	case BLKGETSIZE:   /* Return device size */
-		if (!lo->lo_inode)
+		if (!lo->lo_dentry)
 			return -ENXIO;
 		if (!arg)
 			return -EINVAL;
