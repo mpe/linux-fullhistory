@@ -21,6 +21,7 @@
  *		Alan Cox	:	Transmit queue code does relevant stunts to
  *					keep the queue safe.
  *		Alan Cox	:	Fixed double lock.
+ *		Alan Cox	:	Fixed promisc NULL pointer trap
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -439,9 +440,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		/*
 		 *	Packet is now solely the responsibility of the driver
 		 */
-#ifdef CONFIG_SLAVE_BALANCING	
-		dev->pkt_queue--;
-#endif
 		return;
 	}
 
@@ -1080,19 +1078,24 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 					dev->slave=NULL;
 				}
 #endif				
+
+				if( dev->set_multicast_list!=NULL)
+				{
 				
-				/*
-				 *	Has promiscuous mode been turned off
-				 */	
-				if ( (old_flags & IFF_PROMISC) && ((dev->flags & IFF_PROMISC) == 0))
-			 		dev->set_multicast_list(dev,0,NULL);
+					/*
+					 *	Has promiscuous mode been turned off
+					 */	
+				
+					if ( (old_flags & IFF_PROMISC) && ((dev->flags & IFF_PROMISC) == 0))
+			 			dev->set_multicast_list(dev,0,NULL);
 			 		
-			 	/*
-			 	 *	Has it been turned on
-			 	 */
+			 		/*
+			 		 *	Has it been turned on
+			 		 */
 	
-				if ( (dev->flags & IFF_PROMISC) && ((old_flags & IFF_PROMISC) == 0))
-			  		dev->set_multicast_list(dev,-1,NULL);
+					if ( (dev->flags & IFF_PROMISC) && ((old_flags & IFF_PROMISC) == 0))
+			  			dev->set_multicast_list(dev,-1,NULL);
+			  	}
 			  		
 			  	/*
 			  	 *	Have we downed the interface
@@ -1364,11 +1367,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 {
 	switch(cmd) 
 	{
-		/*
-		 *	The old old setup ioctl. Even its name and this entry will soon be
-		 *	just so much ionization on a backup tape.
-		 */
-
 		case SIOCGIFCONF:
 			(void) dev_ifconf((char *) arg);
 			return 0;

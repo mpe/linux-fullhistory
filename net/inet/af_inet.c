@@ -15,6 +15,12 @@
  * Changes (see also sock.c)
  *
  *		A.N.Kuznetsov	:	Socket death error in accept().
+ *		John Richardson :	Fix non blocking error in connect()
+ *					so sockets that fail to connect
+ *					don't return -EINPROGRESS.
+ *		Alan Cox	:	Asynchronous I/O support
+ *		Alan Cox	:	Keep correct socket pointer on sock structures
+ *					when accept() ed
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -461,7 +467,10 @@ static void def_callback1(struct sock *sk)
 static void def_callback2(struct sock *sk,int len)
 {
 	if(!sk->dead)
+	{
 		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket);
+	}
 }
 
 
@@ -875,6 +884,12 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 			return(err);
   		sock->state = SS_CONNECTING;
 	}
+	
+	if (sk->state > TCP_FIN_WAIT2 && sock->state==SS_CONNECTING)
+	{
+		sock->state=SS_UNCONNECTED;
+		return -ETIMEDOUT;
+	}
 
 	if (sk->state != TCP_ESTABLISHED &&(flags & O_NONBLOCK)) 
 	  	return(-EINPROGRESS);
@@ -966,6 +981,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	}
 	newsock->data = (void *)sk2;
 	sk2->sleep = newsock->wait;
+	sk2->socket = newsock;
 	newsock->conn = NULL;
 	if (flags & O_NONBLOCK) 
 		return(0);
@@ -979,6 +995,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 			sti();
 			sk1->pair = sk2;
 			sk2->sleep = NULL;
+			sk2->socket=NULL;
 			newsock->data = NULL;
 			return(-ERESTARTSYS);
 		}
@@ -1318,7 +1335,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("NET3 TCP/IP protocols stack v016\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.017\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

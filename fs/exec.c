@@ -631,12 +631,8 @@ restart_interp:
 		bprm.e_uid = (i & S_ISUID) ? bprm.inode->i_uid : current->euid;
 		bprm.e_gid = (i & S_ISGID) ? bprm.inode->i_gid : current->egid;
 	}
-	if (current->euid == bprm.inode->i_uid)
-		i >>= 6;
-	else if (in_group_p(bprm.inode->i_gid))
-		i >>= 3;
-	if (!(i & 1) &&
-	    !((bprm.inode->i_mode & 0111) && suser())) {
+	if (!permission(bprm.inode, MAY_EXEC) ||
+	    (!(bprm.inode->i_mode & 0111) && fsuser())) {
 		retval = -EACCES;
 		goto exec_error2;
 	}

@@ -24,6 +24,7 @@
  *					of inet_bh() with this socket being handled it goes
  *					BOOM! Have to stop timer going off if net_bh is
  *					active or the destroy causes crashes.
+ *		Alan Cox	:	Cleaned up unused code.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -103,26 +104,9 @@ void net_timer (unsigned long data)
 	sk->inuse = 1;
 	sti();
 
-#ifdef NOTDEF
-	/* 
-	 * what the hell is this doing here?  this belongs in tcp.c.
-	 * I believe that this code is the cause of a lot of timer
-	 * screwups, especially during close (like FIN_WAIT1 states
-	 * with a KEEPOPEN timeout rather then a WRITE timeout).
-	 */
-	if (skb_peek(&sk->write_queue) && 
-	      before(sk->window_seq, sk->write_queue.next->h.seq) &&
-	      sk->send_head == NULL &&
-	      sk->ack_backlog == 0 &&
-	      sk->state != TCP_TIME_WAIT)
-		reset_timer(sk, TIME_PROBE0, sk->rto);
-	else if (sk->keepopen)
-		reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
-#endif
-
 	/* Always see if we need to send an ack. */
 
-	if (sk->ack_backlog) 
+	if (sk->ack_backlog && !sk->zapped) 
 	{
 		sk->prot->read_wakeup (sk);
 		if (! sk->dead)

@@ -313,8 +313,7 @@ static void rs_start(struct tty_struct *tty)
 		return;
 	
 	save_flags(flags); cli();
-	if (info->xmit_cnt && !info->xmit_buf &&
-	    !(info->IER & UART_IER_THRI)) {
+	if (info->xmit_cnt && info->xmit_buf && !(info->IER & UART_IER_THRI)) {
 		info->IER |= UART_IER_THRI;
 		serial_out(info, UART_IER, info->IER);
 	}

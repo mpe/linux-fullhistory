@@ -28,6 +28,9 @@
  *	Revision 0.26:  Device drop kills IPX routes via it. (needed for modules)
  *	Revision 0.27:  Autobind <Mark Evans>
  *	Revision 0.28:  Small fix for multiple local networks <Thomas Winder>
+ *	Revision 0.29:  Assorted major errors removed <Mark Evans>
+ *			Small correction to promisc mode error fix <Alan Cox>
+ *			Asynchronous I/O support.
  *
  *			
  *
@@ -563,7 +566,10 @@ static void def_callback1(struct sock *sk)
 static void def_callback2(struct sock *sk, int len)
 {
 	if(!sk->dead)
+	{
 		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket);
+	}
 }
 
 static int ipx_create(struct socket *sock, int protocol)
@@ -861,7 +867,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		int free_it=0;
 		
 		/* Rule: Don't forward packets that have exceeded the hop limit. This is fixed at 16 in IPX */
-		if((ipx->ipx_tctrl==16) || (dev->flags & IFF_PROMISC))
+		if((ipx->ipx_tctrl==16) || (skb->pkt_type!=PACKET_HOST))
 		{
 			kfree_skb(skb,FREE_READ);
 			return(0);
@@ -1354,7 +1360,7 @@ void ipx_proto_init(struct net_proto *pro)
 	if ((p8022_datalink = register_8022_client(val, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with 802.2\n");
 	
-	printk("Swansea University Computer Society IPX 0.28 BETA for NET3.016\n");
+	printk("Swansea University Computer Society IPX 0.29 BETA for NET3.017\n");
 	
 }
 #endif

@@ -17,7 +17,9 @@
  *					top level.
  *		Alan Cox	:	Move address structures to/from user
  *					mode above the protocol layers.
- *		Rob Janssen	:	Allow 0 length sends
+ *		Rob Janssen	:	Allow 0 length sends.
+ *		Alan Cox	:	Asynchronous I/O support (cribbed from the
+ *					tty drivers).
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -62,6 +64,8 @@ static void sock_close(struct inode *inode, struct file *file);
 static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
+static int sock_fasync(struct inode *inode, struct file *filp, int on);
+		   
 
 
 /*
@@ -78,7 +82,9 @@ static struct file_operations socket_file_ops = {
 	sock_ioctl,
 	NULL,			/* mmap */
 	NULL,			/* no special open code... */
-	sock_close
+	sock_close,
+	NULL,			/* no fsync */
+	sock_fasync
 };
 
 /*
@@ -256,6 +262,7 @@ static struct socket *sock_alloc(int wait)
 				sock->data = NULL;
 				sock->conn = NULL;
 				sock->iconn = NULL;
+				sock->fasync_list = NULL;
 			/*
 			 * This really shouldn't be necessary, but everything
 			 * else depends on inodes, so we grab it.
@@ -467,7 +474,7 @@ static int sock_select(struct inode *inode, struct file *file, int sel_type, sel
 }
 
 
-void sock_close(struct inode *inode, struct file *file)
+void sock_close(struct inode *inode, struct file *filp)
 {
 	struct socket *sock;
 
@@ -483,10 +490,72 @@ void sock_close(struct inode *inode, struct file *file)
 		printk("NET: sock_close: can't find socket for inode!\n");
 		return;
 	}
-
+	sock_fasync(inode, filp, 0);
 	sock_release(sock);
 }
 
+/*
+ *	Update the socket async list
+ */
+ 
+static int sock_fasync(struct inode *inode, struct file *filp, int on)
+{
+	struct fasync_struct *fa, *fna=NULL, **prev;
+	struct socket *sock;
+	unsigned long flags;
+	
+	if (on)
+	{
+		fna=(struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
+		if(fna==NULL)
+			return -ENOMEM;
+	}
+
+	sock = socki_lookup(inode);
+	
+	prev=&(sock->fasync_list);
+	
+	save_flags(flags);
+	cli();
+	
+	for(fa=*prev; fa!=NULL; prev=&fa->fa_next,fa=*prev)
+		if(fa->fa_file==filp)
+			break;
+	
+	if(on)
+	{
+		if(fa!=NULL)
+		{
+			kfree_s(fna,sizeof(struct fasync_struct));
+			restore_flags(flags);
+			return 0;
+		}
+		fna->fa_file=filp;
+		fna->magic=FASYNC_MAGIC;
+		fna->fa_next=sock->fasync_list;
+		sock->fasync_list=fna;
+	}
+	else
+	{
+		if(fa!=NULL)
+		{
+			*prev=fa->fa_next;
+			kfree_s(fa,sizeof(struct fasync_struct));
+		}
+	}
+	restore_flags(flags);
+	return 0;
+}
+
+int sock_wake_async(struct socket *sock)
+{
+	if(sock->fasync_list==NULL)
+		return -1;
+	kill_fasync(sock->fasync_list, SIGIO);
+	return 0;
+}
+
+	
 /*
  *	Wait for a connection.
  */
@@ -1265,6 +1334,32 @@ int sock_register(int family, struct proto_ops *ops)
 	return(-ENOMEM);
 }
 
+/*
+ *	This function is called by a protocol handler that wants to
+ *	remove its address family, and have it unlinked from the
+ *	SOCKET module.
+ */
+ 
+int sock_unregister(int family)
+{
+	int i;
+
+	cli();
+	for(i = 0; i < NPROTO; i++) 
+	{
+		if (pops[i] == NULL) 
+			continue;
+		if(pops[i]->family == family)
+		{
+			pops[i]=NULL;
+			sti();
+			return(i);
+		}
+	}
+	sti();
+	return(-ENOENT);
+}
+
 void proto_init(void)
 {
 	extern struct net_proto protocols[];	/* Network protocols */
@@ -1286,7 +1381,7 @@ void sock_init(void)
 	struct socket *sock;
 	int i;
 
-	printk("Swansea University Computer Society NET3.016\n");
+	printk("Swansea University Computer Society NET3.017\n");
 
 	/*
 	 *	Release all sockets. 

@@ -71,6 +71,7 @@ asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	if (tmp != file->f_pos) {
 		file->f_pos = tmp;
 		file->f_reada = 0;
+		file->f_version = ++event;
 	}
 	return file->f_pos;
 }
@@ -109,6 +110,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 		return -EINVAL;
 	file->f_pos = tmp;
 	file->f_reada = 0;
+	file->f_version = ++event;
 	memcpy_tofs(result, &file->f_pos, sizeof(loff_t));
 	return 0;
 }

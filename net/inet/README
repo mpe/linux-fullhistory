@@ -1,155 +1,16 @@
-Changes for 1.1.21
+Changes for NET3.017
 
-o	Small bug fix in the apricot xen-ii driver code (Mark Evans)
-o	DE600 changes + DE620 driver (Bj0rn Eckwall)
-o	WWW error return bug fixed (Everyone!)
-o	SLIP default address is now better
-o	Small changes to PLIP (Niibe)
-o	Added PF_UNSPEC	(Dominic Kubla)
-o	TCP fastpath for receive.
-o	Turbo charged tcp checksum routine (Arnt Gulbrandsen)
-o	PPP locking bug fixes (Florian La Roche)
+This is mostly small stuff as follows:
 
-To Do
+o	accept()ed socket don't end up with an invalid sk->socket and give bogus
+	netstat output.
+o	FASYNC/SIGIO now works with sockets.
+o	Fixed the permissions on F_SETOWN for all. Its now as broken/working
+	as other systems. Really we need something like a 32bit generation
+	number on processes.
+o	ARP allows proxy for whole networks (a la cisco routers)
+o	TCP sendto() reports ENOTCONN in the right cases
+o	Removed some surplus uncommented code from tcp.c
+o	Fixed protocol violation during closedown in tcp.c
+	[Still not got the window < MSS bug fix included]
 
-o	Include the HP onboard lance fixes.
-o	Fix Unix domain sockets.
-o	Fix the _SLOW_ TCP window calculation junk in tcp_data/tcp_ack.
-o	Make the dev_add_proto() list hashed by protocol type.
-o	Remove the call to dev->header_type - load it into the skbuff.
-	instead to avoid the extra calls and cache misses.
-o	Include new sk_buff skb_push() code and move toward using it.
-o	Fix the PI driver so pi0a can be down when pi0b is up without getting
-	crashes. Also fix the stuff to allow piconfig to set the parameters.
-o	Make AX.25 set the packet type - certainly before it hits IP.
-o	sk_buff building at the top level - pure kernel interfaces to the
-	protocol layers
-o	Clean up NFS, merge NFS/TCP code.
-o	SIGIO
-o	IP forwarding use of options properly (needs new sk_buff code)
-o	Reroute TCP retransmits if needed (needs new sk_buffs)
-
-
-Changes for 1.1.20
-
-o	All read/write buffers are validated at the top level _only_
-o	All address structures are moved to and from user mode at the top
-	level. Thus you can now issue proto->bind(....) calls and related
-	functions such as connect from another kernel task. All thats left
-	to fix now is a kernel alloc_socket()/free_socket() and accompanying
-	proto->make_kernel(socket)
-o	Small fixes to address behaviour caused by the above
-o	Max NFS size of 16K bytes
-o	Added the apricot driver as a test (#'ed out in config.in)
-o	Fixed a missing function definition in net_init.c
-o	Added G4KLX ax25_router code
-o	Added Niibe's PLIP driver and altered it to support timer
-	configuration and IRQ/port setting. Added if_plip.h. Comments and
-	feedback appreciated on this (both to Niibe and me).
-o	Added AF_MAX/PF_MAX defines
-o	Added a note that the DE600 driver also works for a noname 'PE1200'.
-o	Network buffer statistics on shift-scroll_lock
-o	Fixed a serious race in the device driver code. This was causing odd
-	crashes with the Lance drivers, lockups with the ne2000 cards and
-	a few other 'bad' goings on. All drivers are effected. See
-	README.DEV if porting a driver to this revision.
-
-	If you see entries in your 'free while locked' count, those would
-	typically have crashed a pre 1.20 kernel.
-
-o	TCP keeps the timers above 0.2sec round-trip time because of the use of
-	delayed ACK's by BSD style kernels.
-o	Fixed a small BSD error in the return from datagram socket
-	recv/recvfrom() calls when data is truncated. BSD returns the true
-	length of the message, Linux returned the amount copied which broke
-	programs that did a MSG_PEEK with a small buffer and grew it if need
-	be (some of the AV/RTP stuff notably).
-o	Added TIOCINQ/OUTQ to AX.25 and IPX.
-o	Added driver ioctl() calls to IPX.
-o	Corrected the skb->len==0 in the tcp_data reset on shutdown to check
-	skb->copied_seq.
-o	IP options reflect onto SO_PRIORITY.
-o	When a driver is downed its ARP entries are flushed. Should solve
-	the occasional crash when taking out a modular driver.
-o	Added Donald's multicast reception while promiscuous fix for the
-	8390 drivers.
-o	Potential ARP TCP-retransmit clear race fixed. Incredibly
-	unlikely to occur but no doubt it will 8(.
-
-
-Fixes added for 1.1.19
-
-o	Unix domain bind error code.
-o	skb->localroute starts cleared.
-o	Compiles with networking disabled
-
-Fixes added for 1.1.18
-
-o	Dummy driver includes correctly.
-o	PPP fixes from A.L.
-o	ifslave fixes
-o	Small error causing nfsd to coredump fixed by Linus.
-
-Fixes added for 1.1.17
-
-o	Charles Hedrick's fixes broken fragmentation totally. Mended.
-o	Contributed 'dummy' device added. Apparently some slip people want it.
-o	Tried to kill the memory problems with fragments by setting things
-	up more carefully and guarding them.
-o	Module fixes by Bj0rn.
-o	PLIP fix by Tanabe.
-
-Fixes added for 1.1.16
-
-o	Charles Hedricks fixes to TCP.
-o	Small fixes all over the place.
-
-Fixes added for 1.1.15
-
-o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
-	(sort of).
-o	Integrated new AX.25 - this will be ready for the big time in a few
-	releases.
-
-Fixes added for 1.1.14
-
-o	Compiles properly on the whole 8)
-o	Yet more Unix /proc protection.
-o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
-	(sort of).
-
-This fixes the following from the 1.1.12 release (see the relevant files
-for the credits to authors).
-
-o	RARP compiles in properly
-o	Using new Tytso TTY drivers
-o	IP forwarding is configurable
-o	PC/TCP support
-o	AX.25 builds fine without SLIP driver (just PI)
-o	MTU recognized in routing table (but only by TCP currently)
-o	AX.25 PI driver merged into AX.25 code and kernel stubs
-o	UNIX /proc trap hopefully fixed
-o	DDI removed totally ready to use the PCMCIA people's stuff
-o	Unix domain lock/unlock now static (needlessly visible before)
-o	Split net/inet/sock.c into generic and IP components
-o	NFS client works correctly with 8K NFS
-o	Non IP builds work correctly
-o	Renamed inet_bh etc to net_bh to reflect true nature
-o	TCP handling of poor routes much improved
-o	TCP connect timing fixed
-o	Incredibly unlikely SLIP memory leak removed
-o	Loopback maintains IFF_LOOPBACK flag
-o	Johnathon Naylor(G4KLX) AX.25 changes
-o	Out of sync bug in lance driver fixed.
-o	First cut at ethernet loadable modules
-o	PCMCIA people have ifmap stuff. Will extend this to other drivers.
-o	New de600.c
-o	Clean up of IP layer - sorted a lot of redundant and duplicated code
-	out.
-o	Removed all the old non working debugging junk from the kernel.
-o	Removed all the devices the kernel used to use as a legacy from
-	FvK's days writing the linux networking.
-o	Greg Page's latest and greatest IPX fixes (including 802.2). Now
-	I've got the stuff to write a free Netware client too and some
-	volunteers to do it.
-o	Fixed the 1.1.12 ARP fragment bug.

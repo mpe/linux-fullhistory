@@ -4,6 +4,9 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
+ *	Fixes:	
+ *		Alan Cox	:	Fixed the worst of the load balancer bugs.
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -373,21 +376,10 @@ void kfree_skb(struct sk_buff *skb, int rw)
 				skb->sk->wmem_alloc-=skb->mem_len;
 			if(!skb->sk->dead)
 				skb->sk->write_space(skb->sk);
-#ifdef CONFIG_SLAVE_BALANCING
-			if(skb->in_dev_queue && skb->dev!=NULL)
-				skb->dev->pkt_queue--;
-#endif
-			kfree_skbmem(skb,skb->mem_len);
 		}
 	}
 	else
-	{
-#ifdef CONFIG_SLAVE_BALANCING
-		if(skb->in_dev_queue && skb->dev!=NULL)
-			skb->dev->pkt_queue--;
-#endif
 		kfree_skbmem(skb, skb->mem_len);
-	}
 }
 
 /*

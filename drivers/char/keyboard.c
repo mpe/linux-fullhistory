@@ -305,7 +305,7 @@ static void keyboard_interrupt(int int_pt_regs)
 		}
 		/* strange ... */
 		reply_expected = 1;
-#ifdef KBD_REPORT_ERR
+#if 0
 		printk("keyboard reply expected - got %02x\n", scancode);
 #endif
 	}

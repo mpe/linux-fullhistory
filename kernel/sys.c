@@ -322,7 +322,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	if (ruid != (uid_t) -1 ||
 	    (euid != (uid_t) -1 && euid != old_ruid))
 		current->suid = current->euid;
-	current->fsuid = euid;
+	current->fsuid = current->euid;
 	return 0;
 }
 

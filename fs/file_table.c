@@ -79,6 +79,7 @@ repeat:
 			memset(f,0,sizeof(*f));
 			put_last_free(f);
 			f->f_count = 1;
+			f->f_version = ++event;
 			return f;
 		}
 	if (nr_files < NR_FILE) {

@@ -131,5 +131,5 @@ static int xiafs_readdir(struct inode * inode,
 	inode->i_atime=CURRENT_TIME;		    
 	inode->i_dirt=1;
     }
-    return 0;
+    return ret;
 }

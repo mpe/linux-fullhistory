@@ -52,6 +52,7 @@ struct arpreq {
   struct sockaddr	arp_pa;		/* protocol address		*/
   struct sockaddr	arp_ha;		/* hardware address		*/
   int			arp_flags;	/* flags			*/
+  struct sockaddr       arp_netmask;    /* netmask (only for proxy arps) */
 };
 
 /* ARP Flag values. */
@@ -59,6 +60,8 @@ struct arpreq {
 #define	ATF_PERM	0x04		/* permanent entry		*/
 #define	ATF_PUBL	0x08		/* publish entry		*/
 #define	ATF_USETRAILERS	0x10		/* has requested trailers	*/
+#define ATF_NETMASK     0x20            /* want to use a netmask (only
+					   for proxy entries) */
 
 /*
  *	This structure defines an ethernet arp header.

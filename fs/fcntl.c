@@ -115,7 +115,24 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			 */
 			return filp->f_owner;
 		case F_SETOWN:
-			filp->f_owner = arg; /* XXX security implications? */
+			/*
+			 *	Add the security checks - AC. Without this there is a massive
+			 *	Linux security hole here - consider what happens if you do 
+			 *	something like 
+			 *		fcntl(0,F_SETOWN,some_root_process);
+			 *		getchar();
+			 *	and input a line!
+			 *
+			 *	BTW: Don't try this for fun. Several Unix systems I tried this on
+			 *	fall for the trick!
+			 *
+			 *	I had to fix this botch job as Linux kill_fasync asserts
+			 *	priv making it a free all user process killer!
+			 */
+			if(!suser() && current->pgrp != -arg &&
+				current->pid != arg)
+					return -EPERM;
+			filp->f_owner = arg;
 			if (S_ISSOCK (filp->f_inode->i_mode))
 				sock_fcntl (filp, F_SETOWN, arg);
 			return 0;

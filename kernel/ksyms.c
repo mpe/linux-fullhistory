@@ -28,6 +28,7 @@
 #include <linux/tty.h>
 #include <linux/serial.h>
 #ifdef CONFIG_INET
+#include <linux/net.h>
 #include <linux/netdevice.h>
 #endif
 
@@ -169,6 +170,10 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	/* Miscellaneous access points */
 	X(si_meminfo),
 
+	/* socket layer registration */
+	X(sock_register),
+	X(sock_unregister),
+
 #ifdef CONFIG_FTAPE
 	/* The next labels are needed for ftape driver.  */
 	X(ftape_big_buffer),
@@ -187,6 +192,12 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(dev_rint),
 	X(dev_tint),
 	X(irq2dev_map),
+	X(dev_add_pack),
+	X(dev_remove_pack),
+	X(dev_get),
+	X(dev_ioctl),
+	X(dev_queue_xmit),
+	X(dev_base),
 #endif
 
 	/********************************************************

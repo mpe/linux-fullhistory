@@ -1,3 +1,11 @@
+Tue Oct 18 10:02:43 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_start): Removed an incorrect '!' that was
+		preventing transmit interrupts from being re-enabled in
+		rs_start().  Fortunately in most cases it would be
+		re-enabled elsewhere, but this still should be fixed
+		corectly.
+
 Sun Oct  9 23:46:03 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* tty_io.c (do_tty_hangup): If the tty driver flags

@@ -77,6 +77,7 @@ struct socket {
   struct socket		*next;
   struct wait_queue	**wait;		/* ptr to place to wait on	*/
   struct inode		*inode;
+  struct fasync_struct  *fasync_list;	/* Asynchronous wake up list	*/
 };
 
 #define SOCK_INODE(S)	((S)->inode)
@@ -128,7 +129,9 @@ struct net_proto {
 };
 
 extern int	sock_awaitconn(struct socket *mysock, struct socket *servsock);
+extern int	sock_wake_async(struct socket *sock);
 extern int	sock_register(int family, struct proto_ops *ops);
+extern int	sock_unregister(int family);
 
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

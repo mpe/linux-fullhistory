@@ -233,6 +233,7 @@ struct file {
 	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
 	struct inode * f_inode;
 	struct file_operations * f_op;
+	unsigned long f_version;
 	void *private_data;	/* needed for tty driver, and maybe others */
 };
 

@@ -81,9 +81,6 @@ struct linger {
 /* IPX options */
 #define IPX_TYPE	1
 
-/* AX.25 options */
-#define AX25_WINDOW	1
-
 /* TCP options - this way around because someone left a set in the c library includes */
 #define TCP_NODELAY	1
 #define TCP_MAXSEG	2
