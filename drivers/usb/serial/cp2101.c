@@ -30,16 +30,14 @@
 /*
  * Function Prototypes
  */
-int cp2101_get_config(struct usb_serial_port*, u8);
-int cp2101_set_config(struct usb_serial_port*, u8, u16);
-int cp2101_open(struct usb_serial_port*, struct file*);
+static int cp2101_open(struct usb_serial_port*, struct file*);
 static void cp2101_cleanup(struct usb_serial_port*);
-void cp2101_close(struct usb_serial_port*, struct file*);
-void cp2101_get_termios(struct usb_serial_port*);
+static void cp2101_close(struct usb_serial_port*, struct file*);
+static void cp2101_get_termios(struct usb_serial_port*);
 static void cp2101_set_termios(struct usb_serial_port*, struct termios*);
 static void cp2101_break_ctl(struct usb_serial_port*, int);
 static int cp2101_startup (struct usb_serial *);
-void cp2101_shutdown(struct usb_serial*);
+static void cp2101_shutdown(struct usb_serial*);
 
 
 static int debug;
@@ -60,7 +58,7 @@ static struct usb_driver cp2101_driver = {
 	.id_table	= id_table,
 };
 
-struct usb_serial_device_type cp2101_device = {
+static struct usb_serial_device_type cp2101_device = {
 	.owner			= THIS_MODULE,
 	.name			= "CP2101",
 	.id_table		= id_table,
@@ -118,7 +116,7 @@ struct usb_serial_device_type cp2101_device = {
 #define BREAK_OFF		0x0001
 
 
-int cp2101_get_config(struct usb_serial_port* port, u8 request)
+static int cp2101_get_config(struct usb_serial_port* port, u8 request)
 {
 	struct usb_serial *serial = port->serial;
 	unsigned char buf[4];
@@ -151,7 +149,7 @@ int cp2101_get_config(struct usb_serial_port* port, u8 request)
 	return value;
 }
 
-int cp2101_set_config(struct usb_serial_port* port, u8 request, u16 value)
+static int cp2101_set_config(struct usb_serial_port* port, u8 request, u16 value)
 {
 	struct usb_serial *serial = port->serial;
 	int result;
@@ -172,7 +170,7 @@ int cp2101_set_config(struct usb_serial_port* port, u8 request, u16 value)
 	return 0;
 }
 
-int cp2101_open (struct usb_serial_port *port, struct file *filp)
+static int cp2101_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
 	int result;
@@ -221,7 +219,7 @@ static void cp2101_cleanup (struct usb_serial_port *port)
 	}
 }
 
-void cp2101_close (struct usb_serial_port *port, struct file * filp)
+static void cp2101_close (struct usb_serial_port *port, struct file * filp)
 {
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
@@ -237,7 +235,7 @@ void cp2101_close (struct usb_serial_port *port, struct file * filp)
 /* Reads the baud rate, data bits, parity and stop bits from the device*/
 /* Corrects any unsupported values*/
 /* Configures the termios structure to reflect the state of the device*/
-void cp2101_get_termios (struct usb_serial_port *port)
+static void cp2101_get_termios (struct usb_serial_port *port)
 {
 	unsigned int cflag;
 	int baud;
@@ -544,7 +542,7 @@ static int cp2101_startup (struct usb_serial *serial)
 	return 0;
 }
 
-void cp2101_shutdown (struct usb_serial *serial)
+static void cp2101_shutdown (struct usb_serial *serial)
 {
 	int i;
 
