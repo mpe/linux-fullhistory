@@ -1,6 +1,8 @@
 #ifndef _LINUX_SWAP_H
 #define _LINUX_SWAP_H
 
+#include <asm/page.h>
+
 #define SWAP_FLAG_PREFER	0x8000	/* set if swap priority specified */
 #define SWAP_FLAG_PRIO_MASK	0x7fff
 #define SWAP_FLAG_PRIO_SHIFT	0
@@ -25,6 +27,13 @@ union swap_header {
 };
 
 #ifdef __KERNEL__
+
+/*
+ * Max bad pages in the new format..
+ */
+#define __swapoffset(x) ((unsigned long)&((union swap_header *)0)->x)
+#define MAX_SWAP_BADPAGES \
+	((__swapoffset(magic.magic) - __swapoffset(info.badpages)) / sizeof(int))
 
 #undef DEBUG_SWAP
 

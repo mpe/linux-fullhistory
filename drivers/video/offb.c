@@ -400,8 +400,10 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
     }
 #endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
-    if (s3triofb_init_of(dp))
+    if (!strncmp(dp->name, "S3Trio", 6)) {
+    	s3triofb_init_of(dp);
 	return 1;
+    }
 #endif /* CONFIG_FB_S3TRIO */
 #ifdef CONFIG_FB_IMSTT
     if (!strncmp(dp->name, "IMS,tt", 6)) {

@@ -7,7 +7,7 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-ALL_SUB_DIRS := irlan ircomm compressors
+ALL_SUB_DIRS := irlan ircomm irlpt compressors
 SUB_DIRS :=
 MOD_SUB_DIRS :=
 
@@ -36,6 +36,15 @@ O_OBJS += irlan/irlan.o
 else
   ifeq ($(CONFIG_IRLAN),m)
   MOD_SUB_DIRS += irlan
+  endif
+endif
+
+ifeq ($(CONFIG_IRLPT),y)
+SUB_DIRS += irlpt
+O_OBJS += irlpt/irlpt.o
+else
+  ifeq ($(CONFIG_IRLPT),m)
+  MOD_IN_SUB_DIRS += irlpt
   endif
 endif
 

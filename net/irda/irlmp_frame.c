@@ -1,15 +1,16 @@
 /*********************************************************************
  *                
  * Filename:      irlmp_frame.c
- * Version:       0.1
+ * Version:       0.8
  * Description:   IrLMP frame implementation
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Wed Dec  9 01:25:47 1998
+ * Modified at:   Sat Jan 16 22:14:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -28,18 +29,17 @@
 
 #include <net/irda/irda.h>
 #include <net/irda/irlap.h>
+#include <net/irda/timer.h>
 #include <net/irda/irlmp.h>
 #include <net/irda/irlmp_frame.h>
 
 static struct lsap_cb *irlmp_find_lsap( struct lap_cb *self, __u8 dlsap, 
-					__u8 slsap, int status);
+					__u8 slsap, int status, hashbin_t *);
 
 inline void irlmp_send_data_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
 				 int expedited, struct sk_buff *skb)
 {
 	__u8 *frame;
-
-	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
@@ -104,9 +104,6 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 	__u8  slsap_sel;   /* Source (this) LSAP address */
 	__u8  dlsap_sel;   /* Destination LSAP address */
 	struct lsap_cb *lsap;
-
-	
-	DEBUG( 4, "irlmp_link_data_indication()\n");
 	
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
@@ -119,11 +116,8 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 	 *  The next statements may be confusing, but we do this so that 
 	 *  destination LSAP of received frame is source LSAP in our view
 	 */
-	slsap_sel = fp[0] & ~CONTROL_BIT; 
+	slsap_sel = fp[0] & LSAP_MASK; 
 	dlsap_sel = fp[1];
-	
-	DEBUG( 4, "slsap_sel = %02x, dlsap_sel = %02x\n", slsap_sel, 
-	       dlsap_sel);
 	
 	/*
 	 *  Check if this is an incoming connection, since we must deal with
@@ -132,11 +126,19 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 	if (( fp[0] & CONTROL_BIT) && ( fp[2] == CONNECT_CMD)) {
 		DEBUG( 4,"Incoming connection, source LSAP=%d, dest LSAP=%d\n",
 		       slsap_sel, dlsap_sel);
+		
+		/* Try to find LSAP among the unconnected LSAPs */
 		lsap = irlmp_find_lsap( self, dlsap_sel, slsap_sel, 
-					CONNECT_CMD);
+					CONNECT_CMD, irlmp->unconnected_lsaps);
+		
+		/* Maybe LSAP was already connected, so try one more time */
+		if ( !lsap)
+		     lsap = irlmp_find_lsap( self, dlsap_sel, slsap_sel, 0,
+					     self->lsaps);
 	} else
-		lsap = irlmp_find_lsap( self, dlsap_sel, slsap_sel, 0);
-
+		lsap = irlmp_find_lsap( self, dlsap_sel, slsap_sel, 0, 
+					self->lsaps);
+	
 	if ( lsap == NULL) {
 		DEBUG( 0, "IrLMP, Sorry, no LSAP for received frame!\n");
 		DEBUG( 0, __FUNCTION__ 
@@ -146,8 +148,7 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 			DEBUG( 0, __FUNCTION__ 
 			       "(), received control frame %02x\n", fp[2]);
 		} else {
-			DEBUG( 0, __FUNCTION__ 
-			       "(), received data frame\n");
+			DEBUG( 0, __FUNCTION__ "(), received data frame\n");
 		}
 		dev_kfree_skb( skb);
 		return;
@@ -157,10 +158,8 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 	 *  Check if we received a control frame? 
 	 */
 	if ( fp[0] & CONTROL_BIT) {
-		/* DEBUG( 0, "irlmp_input: Got control frame\n"); */
 		switch( fp[2]) {
 		case CONNECT_CMD:
-			DEBUG( 4, "irlmp_input: CONNECT_CMD\n");
 			lsap->lap = self;
 			irlmp_do_lsap_event( lsap, LM_CONNECT_INDICATION, skb);
 			break;
@@ -168,7 +167,7 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 			irlmp_do_lsap_event( lsap, LM_CONNECT_CONFIRM, skb);
 			break;
 		case DISCONNECT:
-			DEBUG( 4, "irlmp_input: Disconnect indication!\n");
+			DEBUG( 4, __FUNCTION__ "(), Disconnect indication!\n");
 			irlmp_do_lsap_event( lsap, LM_DISCONNECT_INDICATION, 
 					     skb);
 			break;
@@ -179,8 +178,8 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 			DEBUG( 0, "Access mode cnf not implemented!\n");
 			break;
 		default:
-			DEBUG( 0, "irlmp_input: Unknown control frame %02x\n",
-			       fp[2]);
+			DEBUG( 0, __FUNCTION__ 
+			       "(), Unknown control frame %02x\n", fp[2]);
 			break;
 		}
 	} else if ( reliable == LAP_RELIABLE) {
@@ -202,7 +201,7 @@ void irlmp_link_disconnect_indication( struct lap_cb *lap,
 				       LAP_REASON reason, 
 				       struct sk_buff *userdata)
 {
-	DEBUG( 4, "irlmp_link_disconnect_indication()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( lap != NULL, return;);
 	ASSERT( lap->magic == LMP_LAP_MAGIC, return;);
@@ -226,7 +225,7 @@ void irlmp_link_disconnect_indication( struct lap_cb *lap,
 void irlmp_link_connect_indication( struct lap_cb *self, struct qos_info *qos,
 				    struct sk_buff *skb) 
 {
-	DEBUG( 4, "irlmp_link_connect_indication()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	/* Copy QoS settings for this session */
 	self->qos = qos;
@@ -265,24 +264,53 @@ void irlmp_link_connect_confirm( struct lap_cb *self, struct qos_info *qos,
  */
 void irlmp_link_discovery_confirm( struct lap_cb *self, hashbin_t *log)
 {
-	DEBUG( 4, "irlmp_link_connect_confirm()\n");
+/* 	DISCOVERY *discovery; */
+	hashbin_t *old_log;
+
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
 
-	if ( self->cachelog)
-		hashbin_delete( self->cachelog, (FREE_FUNC) kfree);
+	ASSERT( self->cachelog != NULL, return;);
 
+	/*
+	 *  If log is missing this means that IrLAP was unable to perform the
+	 *  discovery, so restart discovery again with just the half timeout
+	 *  of the normal one.
+	 */
+	if ( !log) {
+		irlmp_start_discovery_timer( irlmp, 150);
+		return;
+	}
+
+#if 0
+	discovery = hashbin_remove_first( log);
+	while ( discovery) {
+		DEBUG( 0, __FUNCTION__ "(), found %s\n", discovery->info);
+
+		/* Remove any old discovery of this device */
+		hashbin_remove( self->cachelog, discovery->daddr, NULL);
+
+		/* Insert the new one */
+		hashbin_insert( self->cachelog, (QUEUE *) discovery, 
+				discovery->daddr, NULL);
+
+		discovery = hashbin_remove_first( log);
+	}
+#endif
+	old_log = self->cachelog;
 	self->cachelog = log;
+	hashbin_delete( old_log, (FREE_FUNC) kfree);
       
 	irlmp_do_lap_event( self, LM_LAP_DISCOVERY_CONFIRM, NULL);
+
+	DEBUG( 4, __FUNCTION__ "() -->\n");
 }
 
 #ifdef CONFIG_IRDA_CACHE_LAST_LSAP
-void irlmp_update_cache( struct lsap_cb *self)
+__inline__ void irlmp_update_cache( struct lsap_cb *self)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
-
 	/* Update cache entry */
 	irlmp->cache.dlsap_sel = self->dlsap_sel;
 	irlmp->cache.slsap_sel = self->slsap_sel;
@@ -292,27 +320,19 @@ void irlmp_update_cache( struct lsap_cb *self)
 #endif
 
 /*
- * Function irlmp_find_handle (dlsap, slsap)
+ * Function irlmp_find_handle (self, dlsap_sel, slsap_sel, status, queue)
  *
  *    Find handle assosiated with destination and source LSAP
  *
  */
 static struct lsap_cb *irlmp_find_lsap( struct lap_cb *self, __u8 dlsap_sel,
-					__u8 slsap_sel, int status) 
+					__u8 slsap_sel, int status,
+					hashbin_t *queue) 
 {
 	struct lsap_cb *lsap;
-	hashbin_t *queue;
-	
-	DEBUG( 4, "irlmp_find_lsap: dlsap_sel=0x%02x, slsap_sel=0x%02x\n", 
-	       dlsap_sel, slsap_sel);
 	
 	ASSERT( self != NULL, return NULL;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return NULL;);
-
-	if ( status)
-		queue = irlmp->unconnected_lsaps;
-	else
-		queue = self->lsaps;
 
 	/* 
 	 *  Optimize for the common case. We assume that the last frame
@@ -333,14 +353,11 @@ static struct lsap_cb *irlmp_find_lsap( struct lap_cb *self, __u8 dlsap_sel,
 	lsap = ( struct lsap_cb *) hashbin_get_first( queue);
 	while ( lsap != NULL) {
 		/* 
-		 *  Check if source LSAP (in our view!) match, and if
-		 *  dest LSAP is equal to LM_ANY, which is the case
-		 *  for incomming connections 
+		 *  If this is an incomming connection, then the destination 
+		 *  LSAP selector may have been specified as LM_ANY so that 
+		 *  any client can connect. In that case we only need to check
+		 *  if the source LSAP (in our view!) match!
 		 */
-		DEBUG( 4, "irlmp_find_lsap: "
-		       "LSAP: lsap->dlsap=%d, lsap->slsap=%d\n", 
-		       lsap->dlsap_sel, lsap->slsap_sel);
-		
 		if (( status == CONNECT_CMD) && 
 		    ( lsap->slsap_sel == slsap_sel) &&      
 		    ( lsap->dlsap_sel == LSAP_ANY)) 
@@ -371,3 +388,5 @@ static struct lsap_cb *irlmp_find_lsap( struct lap_cb *self, __u8 dlsap_sel,
 	/* Sorry not found! */
 	return NULL;
 }
+
+

@@ -144,7 +144,7 @@ int shrink_mmap(int priority, int gfp_mask)
 		if (PageSkip(page)) {
 			/* next_hash is overloaded for PageSkip */
 			page = page->next_hash;
-			clock = page->map_nr;
+			clock = page - mem_map;
 		}
 		
 		count--;

@@ -247,6 +247,19 @@ extern int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsi
 				/* ---- EXTERNAL VARIABLES ---- */
 extern HCS tul_hcs[];
 
+struct id {
+  int vendor_id;
+  int device_id;
+};
+
+const struct id id_table[] = {
+  { INI_VENDOR_ID, I950_DEVICE_ID },
+  { INI_VENDOR_ID, I940_DEVICE_ID },
+  { INI_VENDOR_ID, I935_DEVICE_ID },
+  { INI_VENDOR_ID, 0x0002 },
+  { DMX_VENDOR_ID, 0x0002 },
+};
+
 /*
  *  queue services:
  */
@@ -338,64 +351,27 @@ int tul_NewReturnNumberOfAdapters(void)
 	int iAdapters = 0;
 	long dRegValue;
 	WORD wBIOS;
+	const int iNumIdEntries = sizeof(id_table)/sizeof(id_table[0]);
+	int i = 0;
 
 	init_i91uAdapter_table();
 
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I950_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I940_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I935_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, 0x0002, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
+	for (i=0; i < iNumIdEntries; i++) {
+		struct id curId = id_table[i];
+		while ((pDev = pci_find_device(curId.vendor_id, curId.device_id, pDev)) != NULL) {
+			pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
+			wBIOS = (UWORD) (dRegValue & 0xFF);
+			if (((dRegValue & 0xFF00) >> 8) == 0xFF)
+				dRegValue = 0;
+			wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
+			if (Addi91u_into_Adapter_table(wBIOS,
+							(pDev->base_address[0] & 0xFFFE),
+						       	pDev->irq,
+						       	pDev->bus->number,
+					       		(pDev->devfn >> 3)
+		    		) == 0)
+				iAdapters++;
+		}
 	}
 
 	return (iAdapters);

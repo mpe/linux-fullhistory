@@ -4,20 +4,13 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/config.h>
-#include <linux/types.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
-#include <linux/major.h>
-#include <linux/tty.h>
+#include <linux/mm.h>
 #include <linux/miscdevice.h>
 #include <linux/tpqic02.h>
 #include <linux/ftape.h>
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
 #include <linux/mman.h>
-#include <linux/mm.h>
 #include <linux/random.h>
 #include <linux/init.h>
 #include <linux/joystick.h>

@@ -125,7 +125,7 @@ void __free_page(struct page *page)
 		if (PageSwapCache(page))
 			panic ("Freeing swap cache page");
 		page->flags &= ~(1 << PG_referenced);
-		free_pages_ok(page->map_nr, 0);
+		free_pages_ok(page - mem_map, 0);
 		return;
 	}
 }
@@ -163,7 +163,7 @@ do { struct free_area_struct * area = free_area+order; \
 			if (!dma || CAN_DMA(ret)) { \
 				unsigned long map_nr; \
 				(prev->next = ret->next)->prev = prev; \
-				map_nr = ret->map_nr; \
+				map_nr = ret - mem_map; \
 				MARK_USED(map_nr, new_order, area); \
 				nr_free_pages -= 1 << order; \
 				EXPAND(ret, map_nr, order, new_order, area); \
@@ -189,6 +189,8 @@ do { unsigned long size = 1 << high; \
 	atomic_set(&map->count, 1); \
 } while (0)
 
+int low_on_memory = 0;
+
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
@@ -212,19 +214,18 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		 * further thought.
 		 */
 		if (!(current->flags & PF_MEMALLOC)) {
-			static int trashing = 0;
 			int freed;
 
 			if (nr_free_pages > freepages.min) {
-				if (!trashing)
+				if (!low_on_memory)
 					goto ok_to_allocate;
-				if (nr_free_pages > freepages.low) {
-					trashing = 0;
+				if (nr_free_pages >= freepages.high) {
+					low_on_memory = 0;
 					goto ok_to_allocate;
 				}
 			}
 
-			trashing = 1;
+			low_on_memory = 1;
 			current->flags |= PF_MEMALLOC;
 			freed = try_to_free_pages(gfp_mask);
 			current->flags &= ~PF_MEMALLOC;
@@ -322,7 +323,6 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 		--p;
 		atomic_set(&p->count, 0);
 		p->flags = (1 << PG_DMA) | (1 << PG_reserved);
-		p->map_nr = p - mem_map;
 	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {

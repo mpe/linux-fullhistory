@@ -52,7 +52,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_AMIGA (m68k_machtype == MACH_AMIGA)
 #else
-#  define CONFIG_AMIGA_ONLY
+#  define MACH_AMIGA_ONLY
 #  define MACH_IS_AMIGA (1)
 #  define MACH_TYPE (MACH_AMIGA)
 #endif
@@ -63,7 +63,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_ATARI (m68k_machtype == MACH_ATARI)
 #else
-#  define CONFIG_ATARI_ONLY
+#  define MACH_ATARI_ONLY
 #  define MACH_IS_ATARI (1)
 #  define MACH_TYPE (MACH_ATARI)
 #endif
@@ -74,7 +74,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_HP300) || defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
 #  define MACH_IS_MAC (m68k_machtype == MACH_MAC)
 #else
-#  define CONFIG_MAC_ONLY
+#  define MACH_MAC_ONLY
 #  define MACH_IS_MAC (1)
 #  define MACH_TYPE (MACH_MAC)
 #endif
@@ -91,7 +91,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_APOLLO (m68k_machtype == MACH_APOLLO)
 #else
-#  define CONFIG_APOLLO_ONLY
+#  define MACH_APOLLO_ONLY
 #  define MACH_IS_APOLLO (1)
 #  define MACH_TYPE (MACH_APOLLO)
 #endif
@@ -102,7 +102,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_APOLLO) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_MVME16x (m68k_machtype == MACH_MVME16x)
 #else
-#  define CONFIG_MVME16x_ONLY
+#  define MACH_MVME16x_ONLY
 #  define MACH_IS_MVME16x (1)
 #  define MACH_TYPE (MACH_MVME16x)
 #endif
@@ -113,7 +113,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x) || defined(CONFIG_HP300)
 #  define MACH_IS_BVME6000 (m68k_machtype == MACH_BVME6000)
 #else
-#  define CONFIG_BVME6000_ONLY
+#  define MACH_BVME6000_ONLY
 #  define MACH_IS_BVME6000 (1)
 #  define MACH_TYPE (MACH_BVME6000)
 #endif
@@ -124,7 +124,7 @@ extern unsigned long m68k_machtype;
 	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
 #  define MAC_IS_HP300 (m68k_machtype == MACH_HP300)
 #else
-#  define CONFIG_HP300_ONLY
+#  define MACH_HP300_ONLY
 #  define MACH_IS_HP300 (1)
 #  define MACH_TYPE (MACH_HP300)
 #endif
@@ -260,6 +260,7 @@ extern int m68k_is040or060;
 
 #define CPU_TYPE (m68k_cputype)
 
+
     /*
      *  Miscellaneous
      */
@@ -268,7 +269,8 @@ extern int m68k_is040or060;
 #define CL_SIZE		256
 
 #ifndef __ASSEMBLY__
-extern int m68k_num_memory;		/* # of memory blocks found */
+extern int m68k_num_memory;		/* # of memory blocks found (and used) */
+extern int m68k_realnum_memory;		/* real # of memory blocks found */
 extern struct mem_info m68k_memory[NUM_MEMINFO];/* memory description */
 
 struct mem_info {

@@ -193,6 +193,7 @@
 #define __NR_sendfile		187
 #define __NR_getpmsg		188	/* some people actually want streams */
 #define __NR_putpmsg		189	/* some people actually want streams */
+#define __NR_vfork		190
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */
@@ -322,49 +323,6 @@ static inline _syscall1(int,close,int,fd)
 static inline _syscall1(int,_exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 static inline _syscall1(int,delete_module,const char *,name)
-
-/*
- * This is the mechanism for creating a new kernel thread.
- *
- * NOTE! Only a kernel-only process(ie the swapper or direct descendants
- * who haven't done an "execve()") should use this: it will work within
- * a system call from a "real" process, but the process memory space will
- * not be free'd until both the parent and the child have exited.
- */
-static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
-{
-	pid_t pid;
-	mm_segment_t fs;
-
-	fs = get_fs();
-	set_fs (KERNEL_DS);
-
-	{
-	register long retval __asm__ ("d0");
-	register long clone_arg __asm__ ("d1") = flags | CLONE_VM;
-
-	__asm__ __volatile__
-	  ("clrl %%d2\n\t"
-	   "trap #0\n\t"		/* Linux/m68k system call */
-	   "tstl %0\n\t"		/* child or parent */
-	   "jne 1f\n\t"			/* parent - jump */
-	   "lea %%sp@(-8192),%6\n\t"	/* reload current */
-	   "movel %3,%%sp@-\n\t"	/* push argument */
-	   "jsr %4@\n\t"		/* call fn */
-	   "movel %0,%%d1\n\t"		/* pass exit value */
-	   "movel %2,%0\n\t"		/* exit */
-	   "trap #0\n"
-	   "1:"
-	   : "=d" (retval)
-	   : "0" (__NR_clone), "i" (__NR_exit),
-	     "r" (arg), "a" (fn), "d" (clone_arg), "r" (current)
-	   : "d0", "d2");
-	pid = retval;
-	}
-
-	set_fs (fs);
-	return pid;
-}
 
 static inline pid_t wait(int * wait_stat)
 {

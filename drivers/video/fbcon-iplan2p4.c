@@ -10,7 +10,6 @@
  *  more details.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/console.h>
@@ -18,6 +17,7 @@
 #include <linux/fb.h>
 
 #include <asm/byteorder.h>
+#include <asm/setup.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-iplan2p4.h>
@@ -35,7 +35,7 @@
 /* Perform the m68k movepl operation.  */
 static inline void movepl(u8 *d, u32 val)
 {
-#if defined __mc68000__ && !defined CONFIG_OPTIMIZE_060
+#if defined __mc68000__ && !defined CPU_M68060_ONLY
     asm volatile ("movepl %1,%0@(0)" : : "a" (d), "d" (val));
 #else
     d[0] = (val >> 24) & 0xff;

@@ -207,6 +207,7 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #define SENSE_SIZE		14
 
 #define INI_VENDOR_ID   0x1101	/* Initio's PCI vendor ID       */
+#define DMX_VENDOR_ID   0x134a	/* Domex's PCI vendor ID       */
 #define I950_DEVICE_ID	0x9500	/* Initio's inic-950 product ID   */
 #define I940_DEVICE_ID	0x9400	/* Initio's inic-940 product ID   */
 #define I935_DEVICE_ID	0x9401	/* Initio's inic-935 product ID   */

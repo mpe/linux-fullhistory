@@ -55,11 +55,6 @@ static void hp300_kbd_leds(unsigned int leds)
 {
 }
 
-/* for "kbd-reset" cmdline param */
-__initfunc(void hp300_kbd_reset_setup(char *str, int i))
-{
-}
-
 static void hp300_get_model(char *model)
 {
   strcpy(model, "HP9000/300");
@@ -74,7 +69,6 @@ __initfunc(void config_hp300(void))
   mach_init_IRQ        = hp300_init_IRQ;
   mach_request_irq     = hp300_request_irq;
   mach_free_irq        = hp300_free_irq;
-  kbd_reset_setup      = hp300_kbd_reset_setup;
   mach_get_model       = hp300_get_model;
   mach_get_irq_list    = hp300_get_irq_list;
   mach_gettimeoffset   = hp300_gettimeoffset;

@@ -541,7 +541,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef __SMP__
 	{ "nosmp", smp_setup },
 	{ "maxcpus=", smp_setup },
-#ifdef __i386__
+#ifdef CONFIG_X86_IO_APIC
 	{ "noapic", ioapic_setup },
 	{ "pirq=", ioapic_pirq_setup },
 #endif

@@ -4,6 +4,15 @@
 
 if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
+  if [ "$CONFIG_APUS" = "y" ]; then
+    bool 'Permedia2 support' CONFIG_FB_PM2
+    if [ "$CONFIG_FB_PM2" = "y" ]; then
+      bool '  enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
+      if [ "$CONFIG_APUS" = "y" ]; then
+        bool '  Phase5 CVisionPPC/BVisionPPC support' CONFIG_FB_PM2_CVPPC
+      fi
+    fi
+  fi
   if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
     bool 'Acorn VIDC support' CONFIG_FB_ACORN
   fi
@@ -22,7 +31,6 @@ if [ "$CONFIG_FB" = "y" ]; then
     tristate 'Amiga CyberVision support' CONFIG_FB_CYBER
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
-      bool 'Amiga CyberVisionPPC support (experimental)' CONFIG_FB_CVPPC
       tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
       tristate 'Amiga CLgen driver' CONFIG_FB_CLGEN
     fi
@@ -157,7 +165,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_CYBER" = "y" -o \
 	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
          "$CONFIG_FB_IGA" = "y" -o "$CONFIG_FB_MATROX" = "y" -o \
-         "$CONFIG_FB_CT65550" = "y" ]; then
+         "$CONFIG_FB_CT65550" = "y" -o "$CONFIG_FB_PM2" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
@@ -170,7 +178,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_CYBER" = "m" -o \
 	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
            "$CONFIG_FB_IGA" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
-           "$CONFIG_FB_CT65550" = "m" ]; then
+           "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_PM2" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi
     fi
@@ -180,7 +188,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
 	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_CYBER" = "y" -o \
 	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
-	 "$CONFIG_FB_CT65550" = "y" -o "$CONFIG_FB_MATROX" = "y" ]; then
+	 "$CONFIG_FB_CT65550" = "y" -o "$CONFIG_FB_MATROX" = "y" -o \
+	 "$CONFIG_FB_PM2" = "y" ]; then
       define_bool CONFIG_FBCON_CFB16 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
@@ -189,18 +198,19 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
 	   "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_CYBER" = "m" -o \
  	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
- 	   "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_MATROX" = "m" ]; then
+ 	   "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
+	   "$CONFIG_FB_PM2" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB16 m
       fi
     fi
     if [ "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
 	 "$CONFIG_FB_CLGEN" = "y" -o "$CONFIG_FB_VESA" = "y" -o \
-	  "$CONFIG_FB_MATROX" = "y" ]; then
+	  "$CONFIG_FB_MATROX" = "y" -o "$CONFIG_FB_PM2" = "y" ]; then
       define_bool CONFIG_FBCON_CFB24 y
     else
       if [ "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
 	   "$CONFIG_FB_CLGEN" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
-	   "$CONFIG_FB_MATROX" = "m" ]; then
+	   "$CONFIG_FB_MATROX" = "m" -o "$CONFIG_FB_PM2" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB24 m
       fi
     fi
@@ -208,14 +218,14 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
 	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
 	 "$CONFIG_FB_TGA" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
-	 "$CONFIG_FB_MATROX" = "y" ]; then
+	 "$CONFIG_FB_MATROX" = "y" -o "$CONFIG_FB_PM2" = "y" ]; then
       define_bool CONFIG_FBCON_CFB32 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" -o \
 	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
 	   "$CONFIG_FB_TGA" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
-	   "$CONFIG_FB_MATROX" = "m" ]; then
+	   "$CONFIG_FB_MATROX" = "m" -o "$CONFIG_FB_PM2" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB32 m
       fi
     fi

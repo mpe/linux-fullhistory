@@ -420,7 +420,7 @@ struct file {
 	struct file_operations	*f_op;
 	mode_t			f_mode;
 	loff_t			f_pos;
-	unsigned short 		f_count, f_flags;
+	unsigned int 		f_count, f_flags;
 	unsigned long 		f_reada, f_ramax, f_raend, f_ralen, f_rawin;
 	struct fown_struct	f_owner;
 

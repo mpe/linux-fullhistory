@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:29:31 1998
- * Modified at:   Mon Dec 14 20:11:07 1998
+ * Modified at:   Wed Jan 13 21:21:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
@@ -49,7 +49,7 @@ hashbin_t *hashbin_new( int type)
 {
 	hashbin_t* hashbin;
 	
-	DEBUG( 4, "hashbin_create()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	/*
 	 * Allocate new hashbin
@@ -353,19 +353,19 @@ void *hashbin_remove_first( hashbin_t *hashbin)
 }
 
 
-/*
- * Function hashbin_remove (hashbin, name)
+/* 
+ *  Function hashbin_remove (hashbin, hashv, name)
  *
  *    Remove entry with the given name
  *
  */
 void* hashbin_remove( hashbin_t* hashbin, __u32 hashv, char* name)
 {
-	int   bin, found = FALSE;
+	int bin, found = FALSE;
 	unsigned long flags = 0;
 	QUEUE* entry;
 
-	DEBUG( 4, "hashbin_remove()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( hashbin != NULL, return NULL;);
 	ASSERT( hashbin->magic == HB_MAGIC, return NULL;);

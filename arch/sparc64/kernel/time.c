@@ -53,9 +53,10 @@ static __inline__ void timer_check_rtc(void)
 	static long last_rtc_update=0;
 
 	/* Determine when to update the Mostek clock. */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1)) {
+	if ((time_status & STA_UNSYNC) == 0 &&
+	    xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
 		if (set_rtc_mmss(xtime.tv_sec) == 0)
 			last_rtc_update = xtime.tv_sec;
 		else
@@ -458,10 +459,11 @@ void do_settimeofday(struct timeval *tv)
 	}
 
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
-
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti();
 }
 

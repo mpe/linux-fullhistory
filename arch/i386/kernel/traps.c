@@ -34,6 +34,14 @@
 #include <asm/debugreg.h>
 #include <asm/desc.h>
 
+#include <asm/smp.h>
+
+#ifdef CONFIG_X86_VISWS_APIC
+#include <asm/fixmap.h>
+#include <asm/cobalt.h>
+#include <asm/lithium.h>
+#endif
+
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
 
@@ -569,9 +577,100 @@ void set_ldt_desc(unsigned int n, void *addr, unsigned int size)
 	_set_tssldt_desc(gdt_table+FIRST_LDT_ENTRY+(n<<1), (int)addr, ((size << 3) - 1), 0x82);
 }
 
+#ifdef CONFIG_X86_VISWS_APIC
+
+/*
+ * On Rev 005 motherboards legacy device interrupt lines are wired directly
+ * to Lithium from the 307.  But the PROM leaves the interrupt type of each
+ * 307 logical device set appropriate for the 8259.  Later we'll actually use
+ * the 8259, but for now we have to flip the interrupt types to
+ * level triggered, active lo as required by Lithium.
+ */
+
+#define	REG	0x2e	/* The register to read/write */
+#define	DEV	0x07	/* Register: Logical device select */
+#define	VAL	0x2f	/* The value to read/write */
+
+static void
+superio_outb(int dev, int reg, int val)
+{
+	outb(DEV, REG);
+	outb(dev, VAL);
+	outb(reg, REG);
+	outb(val, VAL);
+}
+
+static int __attribute__ ((unused))
+superio_inb(int dev, int reg)
+{
+	outb(DEV, REG);
+	outb(dev, VAL);
+	outb(reg, REG);
+	return inb(VAL);
+}
+
+#define	FLOP	3	/* floppy logical device */
+#define	PPORT	4	/* parallel logical device */
+#define	UART5	5	/* uart2 logical device (not wired up) */
+#define	UART6	6	/* uart1 logical device (THIS is the serial port!) */
+#define	IDEST	0x70	/* int. destination (which 307 IRQ line) reg. */
+#define	ITYPE	0x71	/* interrupt type register */
+
+/* interrupt type bits */
+#define	LEVEL	0x01	/* bit 0, 0 == edge triggered */
+#define	ACTHI	0x02	/* bit 1, 0 == active lo */
+
+static void
+superio_init(void)
+{
+	if (visws_board_type == VISWS_320 && visws_board_rev == 5) {
+		superio_outb(UART6, IDEST, 0);	/* 0 means no intr propagated */
+		printk("SGI 320 rev 5: disabling 307 uart1 interrupt\n");
+	}
+}
+
+static void
+lithium_init(void)
+{
+	set_fixmap(FIX_LI_PCIA, LI_PCI_A_PHYS);
+	printk("Lithium PCI Bridge A, Bus Number: %d\n",
+				li_pcia_read16(LI_PCI_BUSNUM) & 0xff);
+	set_fixmap(FIX_LI_PCIB, LI_PCI_B_PHYS);
+	printk("Lithium PCI Bridge B (PIIX4), Bus Number: %d\n",
+				li_pcib_read16(LI_PCI_BUSNUM) & 0xff);
+
+	/* XXX blindly enables all interrupts */
+	li_pcia_write16(LI_PCI_INTEN, 0xffff);
+	li_pcib_write16(LI_PCI_INTEN, 0xffff);
+}
+
+static void
+cobalt_init(void)
+{
+	/*
+	 * On normal SMP PC this is used only with SMP, but we have to
+	 * use it and set it up here to start the Cobalt clock
+	 */
+	set_fixmap(FIX_APIC_BASE, APIC_PHYS_BASE);
+	printk("Local APIC ID %lx\n", apic_read(APIC_ID));
+	printk("Local APIC Version %lx\n", apic_read(APIC_VERSION));
+
+	set_fixmap(FIX_CO_CPU, CO_CPU_PHYS);
+	printk("Cobalt Revision %lx\n", co_cpu_read(CO_CPU_REV));
+
+	set_fixmap(FIX_CO_APIC, CO_APIC_PHYS);
+	printk("Cobalt APIC ID %lx\n", co_apic_read(CO_APIC_ID));
+
+	/* Enable Cobalt APIC being careful to NOT change the ID! */
+	co_apic_write(CO_APIC_ID, co_apic_read(CO_APIC_ID)|CO_APIC_ENABLE);
+
+	printk("Cobalt APIC enabled: ID reg %lx\n", co_apic_read(CO_APIC_ID));
+}
+#endif
 void __init trap_init(void)
 {
-	int i;
+	/* Initially up all of the IDT to jump to unexpected */
+	init_unexpected_irq();
 
 	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
 		EISA_bus = 1;
@@ -594,8 +693,6 @@ void __init trap_init(void)
 	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
-	for (i=18;i<48;i++)
-		set_trap_gate(i,&reserved);
 	set_system_gate(0x80,&system_call);
 
 	/* set up GDT task & ldt entries */
@@ -606,4 +703,9 @@ void __init trap_init(void)
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
 	load_TR(0);
 	load_ldt(0);
+#ifdef CONFIG_X86_VISWS_APIC
+	superio_init();
+	lithium_init();
+	cobalt_init();
+#endif
 }

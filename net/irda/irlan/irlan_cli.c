@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon Dec 14 10:44:07 1998
+ * Modified at:   Mon Jan 18 13:24:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -143,11 +143,9 @@ __initfunc(int irlan_client_init( void))
  */
 void irlan_client_cleanup(void) 
 {
-	DEBUG( 0, "--> irlan_client_cleanup\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	irlmp_unregister_layer( S_LAN, CLIENT);
-
-	DEBUG( 4, "irlan_client_cleanup -->\n");
 }
 
 /*
@@ -244,7 +242,7 @@ void irlan_discovery_indication( DISCOVERY *discovery)
       	if ( self != NULL) {
 		ASSERT( self->magic == IRLAN_MAGIC, return;);
 
-		DEBUG( 0, "Found instance!\n");
+		DEBUG( 4, __FUNCTION__ "(), Found instance!\n");
 		if ( self->state == IRLAN_IDLE) {
 			/* daddr may have changed! */
 			self->daddr = daddr;
@@ -311,10 +309,10 @@ void irlan_client_disconnect_indication( void *instance, void *sap,
 	DEBUG( 4, __FUNCTION__ "(), reason=%d\n", reason);
 	
 	if ( tsap == self->tsap_data) {
-		DEBUG( 0, "IrLAN, data channel disconnected by peer!\n");
+		DEBUG( 4, "IrLAN, data channel disconnected by peer!\n");
 		self->connected = FALSE;
 	} else if ( tsap == self->tsap_ctrl) {
-		DEBUG( 0, "IrLAN, control channel disconnected by peer!\n");
+		DEBUG( 4, "IrLAN, control channel disconnected by peer!\n");
 	} else {
 		DEBUG( 0, "Error, disconnect on unknown handle!\n");
 	}

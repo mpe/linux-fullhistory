@@ -3,6 +3,7 @@
 
 #include <linux/config.h>
 #include <linux/linkage.h>
+#include <asm/current.h>
 #include <asm/system.h>
 #include <asm/atomic.h>
 
@@ -16,12 +17,23 @@
 
 struct semaphore {
 	atomic_t count;
+	unsigned long owner, owner_depth;
 	atomic_t waking;
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL })
-#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL })
+/*
+ * Because we want the non-contention case to be
+ * fast, we save the stack pointer into the "owner"
+ * field, and to get the true task pointer we have
+ * to do the bit masking. That moves the masking
+ * operation into the slow path.
+ */
+#define semaphore_owner(sem) \
+	((struct task_struct *)((2*PAGE_MASK) & (sem)->owner))
+
+#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), 0, 0, ATOMIC_INIT(0), NULL })
+#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), 0, 1, ATOMIC_INIT(0), NULL })
 
 asmlinkage void __down_failed(void /* special register calling convention */);
 asmlinkage int  __down_failed_interruptible(void  /* params in registers */);
@@ -46,7 +58,9 @@ static inline int waking_non_zero(struct semaphore *sem, struct task_struct *tsk
 
 	save_flags(flags);
 	cli();
-	if (atomic_read(&sem->waking) > 0) {
+	if (atomic_read(&sem->waking) > 0 || (owner_depth && semaphore_owner(sem) == tsk)) {
+		sem->owner = (unsigned long)tsk;
+		sem->owner_depth++;
 		atomic_dec(&sem->waking);
 		ret = 1;
 	}
@@ -56,7 +70,7 @@ static inline int waking_non_zero(struct semaphore *sem, struct task_struct *tsk
 
 	__asm__ __volatile__
 	  ("1:	movel	%2,%0\n"
-	   "	jeq	3f\n"
+	   "    jeq	3f\n"
 	   "2:	movel	%0,%1\n"
 	   "	subql	#1,%1\n"
 	   "	casl	%0,%1,%2\n"
@@ -65,6 +79,13 @@ static inline int waking_non_zero(struct semaphore *sem, struct task_struct *tsk
 	   "	jne	2b\n"
 	   "3:"
 	   : "=d" (ret), "=d" (tmp), "=m" (sem->waking));
+
+	ret |= ((sem->owner_depth != 0) && (semaphore_owner(sem) == tsk));
+	if (ret) {
+		sem->owner = (unsigned long)tsk;
+		sem->owner_depth++;
+	}
+
 #endif
 	return ret;
 }
@@ -80,7 +101,9 @@ extern inline void down(struct semaphore * sem)
 	__asm__ __volatile__(
 		"| atomic down operation\n\t"
 		"subql #1,%0@\n\t"
-		"jmi 2f\n"
+		"jmi 2f\n\t"
+		"movel %%sp,4(%0)\n"
+		"movel #1,8(%0)\n\t"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
 		".even\n"
@@ -101,6 +124,9 @@ extern inline int down_interruptible(struct semaphore * sem)
 		"| atomic interruptible down operation\n\t"
 		"subql #1,%1@\n\t"
 		"jmi 2f\n\t"
+		"movel %%sp,4(%1)\n"
+		"moveql #1,%0\n"
+		"movel %0,8(%1)\n"
 		"clrl %0\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
@@ -125,6 +151,7 @@ extern inline void up(struct semaphore * sem)
 	register struct semaphore *sem1 __asm__ ("%a1") = sem;
 	__asm__ __volatile__(
 		"| atomic up operation\n\t"
+		"subql #1,8(%0)\n\t"
 		"addql #1,%0@\n\t"
 		"jle 2f\n"
 		"1:\n"

@@ -227,9 +227,12 @@
  *                        "Ville Hallik" <ville.hallik@mail.ee>.
  *                      - other minor stuff.
  *
+ * 4.52  Jan 19, 1999  -- Jens Axboe <axboe@image.dk>
+ *                      - Detect DVD-ROM/RAM drives
+ *
  *************************************************************************/
 
-#define IDECD_VERSION "4.51"
+#define IDECD_VERSION "4.52"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -2857,6 +2860,14 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->cd_r = 1;
 	if (buf.cap.cd_rw_write)
 		CDROM_CONFIG_FLAGS (drive)->cd_rw = 1;
+	if (buf.cap.test_write)
+		CDROM_CONFIG_FLAGS (drive)->test_write = 1;
+	if (buf.cap.dvd_ram_read || buf.cap.dvd_r_read || buf.cap.dvd_rom)
+		CDROM_CONFIG_FLAGS (drive)->dvd = 1;
+	if (buf.cap.dvd_ram_write)
+		CDROM_CONFIG_FLAGS (drive)->dvd_r = 1;
+	if (buf.cap.dvd_r_write)
+		CDROM_CONFIG_FLAGS (drive)->dvd_rw = 1;
 
 #if ! STANDARD_ATAPI
 	if (CDROM_STATE_FLAGS (drive)->sanyo_slot > 0) {
@@ -2892,18 +2903,26 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
 	}
 
-        printk ("%s: ATAPI %dX CDROM", 
-        	drive->name, CDROM_CONFIG_FLAGS (drive)->max_speed);
+	printk ("%s: ATAPI %dX %s", 
+        	drive->name, CDROM_CONFIG_FLAGS (drive)->max_speed,
+		(CDROM_CONFIG_FLAGS (drive)->dvd) ? "DVD-ROM" : "CD-ROM");
+
+	if (CDROM_CONFIG_FLAGS (drive)->dvd_r|CDROM_CONFIG_FLAGS (drive)->dvd_rw)
+        	printk (" DVD%s%s", 
+        	(CDROM_CONFIG_FLAGS (drive)->dvd_r)? "-RAM" : "", 
+        	(CDROM_CONFIG_FLAGS (drive)->dvd_rw)? "/RW" : "");
+
         if (CDROM_CONFIG_FLAGS (drive)->cd_r|CDROM_CONFIG_FLAGS (drive)->cd_rw) 
         	printk (" CD%s%s", 
         	(CDROM_CONFIG_FLAGS (drive)->cd_r)? "-R" : "", 
         	(CDROM_CONFIG_FLAGS (drive)->cd_rw)? "/RW" : "");
+
         if (CDROM_CONFIG_FLAGS (drive)->is_changer) 
         	printk (" changer w/%d slots", nslots);
         else 	
         	printk (" drive");
-	printk (", %dkB Cache\n", 
-        	ntohs(buf.cap.buffer_size) );
+
+	printk (", %dkB Cache\n", ntohs(buf.cap.buffer_size));
 
 	return nslots;
 }
@@ -2954,6 +2973,10 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->is_changer = 0;
 	CDROM_CONFIG_FLAGS (drive)->cd_r = 0;
 	CDROM_CONFIG_FLAGS (drive)->cd_rw = 0;
+	CDROM_CONFIG_FLAGS (drive)->test_write = 0;
+	CDROM_CONFIG_FLAGS (drive)->dvd = 0;
+	CDROM_CONFIG_FLAGS (drive)->dvd_r = 0;
+	CDROM_CONFIG_FLAGS (drive)->dvd_rw = 0;
 	CDROM_CONFIG_FLAGS (drive)->no_eject = 1;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
 	

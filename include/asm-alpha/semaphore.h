@@ -72,13 +72,13 @@ extern void __up_wakeup(struct semaphore * sem);
  *			count = -1, waking = 0, depth = 2;
  *	up(&sem)
  *		dec depth
- *			count = -1, waking = 0, depth = 0;
+ *			count = -1, waking = 0, depth = 1;
  *		atomic inc and test sends us to slow path
- *			count = 0, waking = 0, depth = 0;
+ *			count = 0, waking = 0, depth = 1;
  *		notice !(depth < 0) and don't call __up.
  *	up(&sem)
  *		dec depth
- *			count = 0, waking = 0, depth = -1;
+ *			count = 0, waking = 0, depth = 0;
  *		atomic inc and test succeeds.
  *			count = 1, waking = 0, depth = 0;
  */
@@ -227,7 +227,7 @@ extern inline void up(struct semaphore * sem)
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
 		"3:	lda	$24,%1\n"
-		"	bge	%2,4b\n"
+		"	bgt	%2,4b\n"
 		"	jsr	$28,__up_wakeup\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"

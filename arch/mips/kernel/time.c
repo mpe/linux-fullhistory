@@ -6,6 +6,9 @@
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
  *
+ * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
+ *
  * $Id: time.c,v 1.6 1998/08/17 13:57:44 ralf Exp $
  */
 #include <linux/errno.h>
@@ -255,9 +258,11 @@ void do_settimeofday(struct timeval *tv)
 	}
 
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = MAXPHASE;
-	time_esterror = MAXPHASE;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti();
 }
 
@@ -267,6 +272,9 @@ void do_settimeofday(struct timeval *tv)
  * nowtime is written into the registers of the CMOS clock, it will
  * jump to the next second precisely 500 ms later. Check the Motorola
  * MC146818A or Dallas DS12887 data sheet for details.
+ *
+ * BUG: This routine does not handle hour overflow properly; it just
+ *      sets the minutes. Usually you won't notice until after reboot!
  */
 static int set_rtc_mmss(unsigned long nowtime)
 {
@@ -303,8 +311,12 @@ static int set_rtc_mmss(unsigned long nowtime)
 		}
 		CMOS_WRITE(real_seconds,RTC_SECONDS);
 		CMOS_WRITE(real_minutes,RTC_MINUTES);
-	} else
-		retval = -1;
+	} else {
+		printk(KERN_WARNING
+		       "set_rtc_mmss: can't update from %d to %d\n",
+		       cmos_minutes, real_minutes);
+ 		retval = -1;
+	}
 
 	/* The following flags have to be released exactly in this order,
 	 * otherwise the DS12887 (popular MC146818A clone with integrated
@@ -336,9 +348,10 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
+	if ((time_status & STA_UNSYNC) == 0 &&
+	    xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2)
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else

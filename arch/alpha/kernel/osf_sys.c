@@ -1128,11 +1128,16 @@ asmlinkage int osf_utimes(const char *filename, struct timeval32 *tvs)
 	return ret;
 }
 
+#define MAX_SELECT_SECONDS \
+	((unsigned long) (MAX_SCHEDULE_TIMEOUT / HZ)-1)
+
 asmlinkage int
 osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 	   struct timeval32 *tvp)
 {
-	fd_set_buffer *fds;
+	fd_set_bits fds;
+	char *bits;
+	size_t size;
 	unsigned long timeout;
 	int ret;
 
@@ -1145,28 +1150,46 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 		    || (ret = __get_user(usec, &tvp->tv_usec)))
 			goto out_nofds;
 
-		timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
-		timeout += sec * HZ;
+		ret = -EINVAL;
+		if (sec < 0 || usec < 0)
+			goto out_nofds;
+
+		if ((unsigned long) sec < MAX_SELECT_SECONDS) {
+			timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
+			timeout += sec * (unsigned long) HZ;
+		}
 	}
 
-	ret = -ENOMEM;
-	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
-	if (!fds)
-		goto out_nofds;
 	ret = -EINVAL;
-	if (n < 0)
-		goto out;
-	if (n > KFDS_NR)
-		n = KFDS_NR;
-	if ((ret = get_fd_set(n, inp->fds_bits, fds->in)) ||
-	    (ret = get_fd_set(n, outp->fds_bits, fds->out)) ||
-	    (ret = get_fd_set(n, exp->fds_bits, fds->ex)))
-		goto out;
-	zero_fd_set(n, fds->res_in);
-	zero_fd_set(n, fds->res_out);
-	zero_fd_set(n, fds->res_ex);
+	if (n < 0 || n > KFDS_NR)
+		goto out_nofds;
 
-	ret = do_select(n, fds, &timeout);
+	/*
+	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
+	 * since we used fdset we need to allocate memory in units of
+	 * long-words. 
+	 */
+	ret = -ENOMEM;
+	size = FDS_BYTES(n);
+	bits = kmalloc(6 * size, GFP_KERNEL);
+	if (!bits)
+		goto out_nofds;
+	fds.in      = (unsigned long *)  bits;
+	fds.out     = (unsigned long *) (bits +   size);
+	fds.ex      = (unsigned long *) (bits + 2*size);
+	fds.res_in  = (unsigned long *) (bits + 3*size);
+	fds.res_out = (unsigned long *) (bits + 4*size);
+	fds.res_ex  = (unsigned long *) (bits + 5*size);
+
+	if ((ret = get_fd_set(n, inp->fds_bits, fds.in)) ||
+	    (ret = get_fd_set(n, outp->fds_bits, fds.out)) ||
+	    (ret = get_fd_set(n, exp->fds_bits, fds.ex)))
+		goto out;
+	zero_fd_set(n, fds.res_in);
+	zero_fd_set(n, fds.res_out);
+	zero_fd_set(n, fds.res_ex);
+
+	ret = do_select(n, &fds, &timeout);
 
 	/* OSF does not copy back the remaining time.  */
 
@@ -1179,12 +1202,12 @@ osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
 		ret = 0;
 	}
 
-	set_fd_set(n, inp->fds_bits, fds->res_in);
-	set_fd_set(n, outp->fds_bits, fds->res_out);
-	set_fd_set(n, exp->fds_bits, fds->res_ex);
+	set_fd_set(n, inp->fds_bits, fds.res_in);
+	set_fd_set(n, outp->fds_bits, fds.res_out);
+	set_fd_set(n, exp->fds_bits, fds.res_ex);
 
 out:
-	free_page((unsigned long) fds);
+	kfree(bits);
 out_nofds:
 	return ret;
 }
@@ -1304,7 +1327,6 @@ asmlinkage int osf_usleep_thread(struct timeval32 *sleep, struct timeval32 *rema
 {
 	struct timeval tmp;
 	unsigned long ticks;
-	unsigned long tmp_timeout;
 
 	if (get_tv32(&tmp, sleep))
 		goto fault;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Mon Dec 14 14:24:05 1998
+ * Modified at:   Tue Jan 19 22:58:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Resrved.
@@ -76,7 +76,7 @@ __inline__ void irlap_insert_mtt( struct irlap_cb *self, struct sk_buff *skb)
 }
 
 /*
- * Function irlap_send_connect_snrm_cmd (void)
+ * Function irlap_send_snrm_cmd (void)
  *
  *    Transmits a connect SNRM command frame
  */
@@ -564,7 +564,6 @@ void irlap_send_rr_frame( struct irlap_cb *self, int command)
 	if ( self->recycle_rr_skb) {
 		DEBUG( 4, __FUNCTION__ "(), recycling skb!\n");
 		skb = self->recycle_rr_skb;
-		skb->stamp.tv_sec = 0;
 		self->recycle_rr_skb = NULL;
 	}
 #endif      
@@ -640,7 +639,7 @@ static void irlap_recv_rr_frame( struct irlap_cb *self, struct sk_buff *skb,
 
 		/*  
 		 *  Set skb to NULL, so that the state machine will not 
-		 *  deallocate it.
+		 *  try to deallocate it.
 		 */
 		skb = NULL;  
 	}
@@ -652,11 +651,6 @@ static void irlap_recv_rr_frame( struct irlap_cb *self, struct sk_buff *skb,
 		irlap_do_event( self, RECV_RR_RSP, skb, info);
 }
 
-/*
- * Function irlap_send_rr_frame ()
- *
- *    Build and transmit RR (Receive Ready) frame
- */
 void irlap_send_frmr_frame( struct irlap_cb *self, int command)
 {
 	struct sk_buff *skb = NULL;
@@ -805,8 +799,6 @@ void irlap_send_data_primary_poll( struct irlap_cb *self, struct sk_buff *skb)
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
 
-	IS_SKB( skb, return;);
-
 	/* Initialize variables */
 	tx_skb = NULL;
 
@@ -888,8 +880,6 @@ void irlap_send_data_secondary_final( struct irlap_cb *self,
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
 
-	IS_SKB( skb,return;);
-
 	/* Is this reliable or unreliable data? */
 	if ( skb->data[1] == I_FRAME) {
 
@@ -949,8 +939,6 @@ void irlap_send_data_secondary( struct irlap_cb *self, struct sk_buff *skb)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
-
-	IS_SKB( skb, return;);
 
 	/* Is this reliable or unreliable data? */
 	if ( skb->data[1] == I_FRAME) {
@@ -1066,8 +1054,7 @@ void irlap_resend_rejected_frames( struct irlap_cb *self, int command)
 
 	while ( skb_queue_len( &self->tx_list) > 0) {
 		
-		DEBUG( 0, "irlap_resend_rejected_frames: "
-		       "sending additional frames!\n");
+		DEBUG( 0, __FUNCTION__ "(), sending additional frames!\n");
 		if (( skb_queue_len( &self->tx_list) > 0) && 
 		    ( self->window > 0)) {
 			skb = skb_dequeue( &self->tx_list); 
@@ -1141,8 +1128,7 @@ void irlap_send_i_frame( struct irlap_cb *self, struct sk_buff *skb,
 	
 	/* Insert next to receive (Vr) */
 	frame[1] |= (self->vr << 5);  /* insert nr */
-
-#if 0	
+#if 0
 	{
 		int vr, vs, pf;
 		
@@ -1151,7 +1137,7 @@ void irlap_send_i_frame( struct irlap_cb *self, struct sk_buff *skb,
 		vs = (frame[1] >> 1) & 0x07;
 		pf = (frame[1] >> 4) & 0x01;
 		
-		DEBUG( 4, __FUNCTION__ "(), vs=%d, vr=%d, p=%d, %ld\n", 
+		DEBUG( 0, __FUNCTION__ "(), vs=%d, vr=%d, p=%d, %ld\n", 
 		       vs, vr, pf, jiffies);
 	}
 #endif	
@@ -1351,7 +1337,7 @@ int irlap_input( struct sk_buff *skb, struct device *netdev,
 			self->stats.rx_packets++;
 			break;
 		case RNR:
-			DEBUG( 3, "*** RNR frame received! pf = %d ***\n", 
+			DEBUG( 4, "*** RNR frame received! pf = %d ***\n", 
 			       info.pf >> 4);
 			irlap_recv_rnr_frame( self, skb, &info);
 			self->stats.rx_packets++;

@@ -36,6 +36,7 @@
 #include <linux/ctype.h>
 #include <linux/file.h>
 #include <linux/console.h>
+#include <linux/poll.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -178,6 +179,7 @@ EXPORT_SYMBOL(get_unused_fd);
 EXPORT_SYMBOL(vfs_rmdir);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
+EXPORT_SYMBOL(__pollwait);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

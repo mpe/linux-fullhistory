@@ -46,12 +46,6 @@ struct bi_record {
     unsigned long data[0];		/* data */
 };
 
-#else /* __ASSEMBLY__ */
-
-BIR_tag		= 0
-BIR_size	= BIR_tag+2
-BIR_data	= BIR_size+2
-
 #endif /* __ASSEMBLY__ */
 
 
@@ -287,14 +281,6 @@ struct compat_bi_Macintosh
 	unsigned long adbdelay;
 	unsigned long timedbra;
 };
-#else
-
-#define BI_videoaddr	BI_un
-#define BI_videorow	BI_videoaddr+4
-#define BI_videodepth	BI_videorow+4
-#define BI_dimensions	BI_videodepth+4
-#define BI_args		BI_dimensions+4
-#define BI_cpuid	BI_args+56
 
 #endif
 

@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.9 $$Date: 1998/12/30 18:18:30 $";
+"$Revision: 2.2.1.10 $$Date: 1999/01/20 16:14:29 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,10 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.1.10 1999/01/20 16:14:29 ivan
+ * Removed all unnecessary page-alignement operations in ioremap calls
+ * (ioremap is currently safe for these operations).
+ *
  * Revision 2.2.1.9  1998/12/30 18:18:30 ivan
  * Changed access to PLX PCI bridge registers from I/O to MMIO, in 
  * order to make PLX9050-based boards work with certain motherboards.
@@ -4461,8 +4465,7 @@ cy_detect_isa(void))
                 /* probe for CD1400... */
 
 #if !defined(__alpha__)
-		cy_isa_address = ioremap((unsigned int)cy_isa_address,
-                                                       CyISA_Ywin);
+		cy_isa_address = ioremap((ulong)cy_isa_address, CyISA_Ywin);
 #endif
                 cy_isa_nchan = CyPORTS_PER_CHIP * 
                      cyy_init_card(cy_isa_address,0);
@@ -4583,11 +4586,11 @@ cy_detect_pci(void))
 		pdev->bus->number, pdev->devfn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
-            printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
-		(ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
+            printk("Cyclom-Y/PCI:found  winaddr=0x%lx ctladdr=0x%lx\n",
+		(ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 #endif
-                cy_pci_addr0  &= PCI_BASE_ADDRESS_MEM_MASK;
-                cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_addr0  &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #if defined(__alpha__)
                 if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
@@ -4595,21 +4598,21 @@ cy_detect_pci(void))
 			pdev->bus->number, pdev->devfn);
 		    printk("rev_id=%d) IRQ%d\n",
 		        cyy_rev_id, (int)cy_pci_irq);
-                    printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
-		        (ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
+                    printk("Cyclom-Y/PCI:found  winaddr=0x%lx ctladdr=0x%lx\n",
+		        (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 	            printk("Cyclom-Y/PCI not supported for low addresses in "
                            "Alpha systems.\n");
 		    i--;
 	            continue;
                 }
 #else
-		    cy_pci_addr0  = (ulong) ioremap(cy_pci_addr0, CyPCI_Yctl);
-		    cy_pci_addr2 = (ulong) ioremap(cy_pci_addr2, CyPCI_Ywin);
+		    cy_pci_addr0 = (ulong)ioremap(cy_pci_addr0, CyPCI_Yctl);
+		    cy_pci_addr2 = (ulong)ioremap(cy_pci_addr2, CyPCI_Ywin);
 #endif
 
 #ifdef CY_PCI_DEBUG
-            printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ioaddr=0x%lx\n",
-		(u_long)cy_pci_addr2, (u_long)cy_pci_addr1);
+            printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ctladdr=0x%lx\n",
+		(u_long)cy_pci_addr2, (u_long)cy_pci_addr0);
 #endif
                 cy_pci_nchan = (unsigned short)(CyPORTS_PER_CHIP * 
                        cyy_init_card((volatile ucchar *)cy_pci_addr2, 1));
@@ -4708,20 +4711,14 @@ cy_detect_pci(void))
 #endif
                 cy_pci_addr0 &= PCI_BASE_ADDRESS_MEM_MASK;
 #if !defined(__alpha__)
-                cy_pci_addr0 = (unsigned int) ioremap(
-                               cy_pci_addr0 & PAGE_MASK,
-                               PAGE_ALIGN(CyPCI_Zctl))
-                               + (cy_pci_addr0 & (PAGE_SIZE-1));
+                cy_pci_addr0 = (ulong)ioremap(cy_pci_addr0, CyPCI_Zctl);
 #endif
 		mailbox = (uclong)cy_readl(&((struct RUNTIME_9060 *) 
 			   cy_pci_addr0)->mail_box_0);
                 cy_pci_addr2 &= PCI_BASE_ADDRESS_MEM_MASK;
 		if (mailbox == ZE_V1) {
 #if !defined(__alpha__)
-               	    cy_pci_addr2 = (unsigned int) ioremap(
-	            	cy_pci_addr2 & PAGE_MASK,
-	            	PAGE_ALIGN(CyPCI_Ze_win))
-	            	+ (cy_pci_addr2 & (PAGE_SIZE-1));
+               	    cy_pci_addr2 = (ulong)ioremap(cy_pci_addr2, CyPCI_Ze_win);
 #endif
 		    if (ZeIndex == NR_CARDS) {
 			printk("Cyclades-Ze/PCI found at 0x%lx ",
@@ -4737,10 +4734,7 @@ cy_detect_pci(void))
 		    continue;
 		} else {
 #if !defined(__alpha__)
-                    cy_pci_addr2 = (unsigned int) ioremap(
-			cy_pci_addr2 & PAGE_MASK,
-			PAGE_ALIGN(CyPCI_Zwin))
-			+ (cy_pci_addr2 & (PAGE_SIZE-1));
+                    cy_pci_addr2 = (ulong)ioremap(cy_pci_addr2, CyPCI_Zwin);
 #endif
 		}
 

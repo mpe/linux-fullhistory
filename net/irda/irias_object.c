@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irias_object.c
- * Version:       0.1
+ * Version:       0.3
  * Description:   IAS object database and functions
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:50:04 1998
- * Modified at:   Sat Dec  5 13:54:39 1998
+ * Modified at:   Tue Dec 15 09:19:43 1998
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.

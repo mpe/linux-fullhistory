@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irda_device.c
- * Version:       
- * Description:   
+ * Version:       0.3
+ * Description:   Abstract device driver layer and helper functions
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Mon Dec 14 19:18:51 1998
+ * Modified at:   Mon Jan 18 11:05:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -122,8 +122,6 @@ int irda_device_open( struct irda_device *self, char *name, void *priv)
 	int result;
 	int i=0;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");     
-
 	/* Check that a minimum of allocation flags are specified */
 	ASSERT(( self->rx_buff.flags & (GFP_KERNEL|GFP_ATOMIC)) != 0, 
 	       return -1;);
@@ -160,7 +158,6 @@ int irda_device_open( struct irda_device *self, char *name, void *priv)
 
 	/* A pointer to the low level implementation */
 	self->priv = priv;
-	strncpy( self->name, name, 16);
 
 	/* Initialize IrDA net device */
 	do {
@@ -172,16 +169,25 @@ int irda_device_open( struct irda_device *self, char *name, void *priv)
 	self->netdev.next = NULL;
 
 	if (( result = register_netdev( &self->netdev)) != 0) {
-		DEBUG( 0, "IrDA Device, register_netdev() failed!\n");
+		DEBUG( 0, __FUNCTION__ "(), register_netdev() failed!\n");
 		return -1;
 	}
+
+	/* 
+	 * Make the description for the device. self->netdev.name will get
+	 * a name like "irda0" and the self->descriptin will get a name
+	 * like "irda0 <-> irtty0" 
+	 */
+	strncpy( self->description, self->name, 4);
+	strcat( self->description, " <-> ");
+	strncat( self->description, name, 23);
 
 	hashbin_insert( irda_device, (QUEUE *) self, (int) self, NULL);
 
 	/* Open network device */
 	dev_open( &self->netdev);
 
-	printk( "IrDA irda_device %s registered.\n", self->name);
+	printk( "IrDA device %s registered.\n", self->name);
 
 	irda_device_set_media_busy( self, FALSE);
         
@@ -536,7 +542,7 @@ void setup_dma( int channel, char *buffer, int count, int mode)
  *
  */
 int irda_device_proc_read( char *buf, char **start, off_t offset, int len, 
-		      int unused)
+			   int unused)
 {
 	struct irda_device *self;
 	unsigned long flags;
@@ -548,7 +554,11 @@ int irda_device_proc_read( char *buf, char **start, off_t offset, int len,
 
 	self = (struct irda_device *) hashbin_get_first( irda_device);
 	while ( self != NULL) {
-		len += sprintf( buf+len, "Irda_Device name: %s\n", self->name);
+		len += sprintf( buf+len, "device name: %s\n", self->name);
+		len += sprintf( buf+len, "description: %s\n", 
+				self->description);
+		len += sprintf( buf+len, "  tbusy=%s\n", self->netdev.tbusy ? 
+				"TRUE" : "FALSE");
 		len += sprintf( buf+len, "  bps\tmaxtt\tdsize\twinsize\taddbofs\tmintt\tldisc\n");
 		
 		len += sprintf( buf+len, "  %d\t", 

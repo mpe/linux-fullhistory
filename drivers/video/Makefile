@@ -79,6 +79,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FB_PM2),y)
+L_OBJS += pm2fb.o
+CONFIG_FBGEN_BUILTIN = y
+endif
+
 ifeq ($(CONFIG_FB_APOLLO),y)
 L_OBJS += dnfb.o
 endif
@@ -121,11 +126,6 @@ else
   ifeq ($(CONFIG_FB_CYBER),m)
   M_OBJS += cyberfb.o
   endif
-endif
-
-ifeq ($(CONFIG_FB_CVPPC),y)
-L_OBJS += cvppcfb.o
-CONFIG_FBGEN_BUILTIN = y
 endif
 
 ifeq ($(CONFIG_FB_MAC),y)

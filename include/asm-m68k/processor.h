@@ -72,6 +72,8 @@ static inline void release_thread(struct task_struct *dead_task)
 {
 }
 
+extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
+
 #define copy_segments(nr, tsk, mm)	do { } while (0)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)

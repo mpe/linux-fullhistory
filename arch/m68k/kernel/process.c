@@ -56,16 +56,13 @@ asmlinkage void ret_from_exception(void);
  */
 asmlinkage int sys_idle(void)
 {
-	int ret = -EPERM;
-
-	lock_kernel();
 	if (current->pid != 0)
-		goto out;
+		return -EPERM;
 
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
+	current->priority = 0;
 	current->counter = -100;
-	for (;;){
+	for (;;) {
 		if (!current->need_resched)
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 			/* block out HSYNC on the atari (falcon) */
@@ -73,14 +70,9 @@ asmlinkage int sys_idle(void)
 #else /* portable version */
 			__asm__("stop #0x2000" : : : "cc");
 #endif /* machine compilation types */ 
-		check_pgt_cache();
-		run_task_queue(&tq_scheduler);
 		schedule();
+		check_pgt_cache();
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
 }
 
 void machine_restart(char * __unused)
@@ -115,6 +107,44 @@ void show_regs(struct pt_regs * regs)
 		printk("USP: %08lx\n", rdusp());
 }
 
+/*
+ * Create a kernel thread
+ */
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	int pid;
+	mm_segment_t fs;
+
+	fs = get_fs();
+	set_fs (KERNEL_DS);
+
+	{
+	register long retval __asm__ ("d0");
+	register long clone_arg __asm__ ("d1") = flags | CLONE_VM;
+
+	__asm__ __volatile__
+	  ("clrl %%d2\n\t"
+	   "trap #0\n\t"		/* Linux/m68k system call */
+	   "tstl %0\n\t"		/* child or parent */
+	   "jne 1f\n\t"			/* parent - jump */
+	   "lea %%sp@(-8192),%6\n\t"	/* reload current */
+	   "movel %3,%%sp@-\n\t"	/* push argument */
+	   "jsr %4@\n\t"		/* call fn */
+	   "movel %0,%%d1\n\t"		/* pass exit value */
+	   "movel %2,%0\n\t"		/* exit */
+	   "trap #0\n"
+	   "1:"
+	   : "=d" (retval)
+	   : "0" (__NR_clone), "i" (__NR_exit),
+	     "r" (arg), "a" (fn), "d" (clone_arg), "r" (current)
+	   : "d0", "d2");
+	pid = retval;
+	}
+
+	set_fs (fs);
+	return pid;
+}
+
 void flush_thread(void)
 {
 	unsigned long zero = 0;
@@ -137,6 +167,19 @@ asmlinkage int m68k_fork(struct pt_regs *regs)
 	return do_fork(SIGCHLD, rdusp(), regs);
 }
 
+asmlinkage int m68k_vfork(struct pt_regs *regs)
+{
+	int     child;
+	struct semaphore sem = MUTEX_LOCKED;
+
+	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(), regs);
+
+	if (child > 0)
+		down(&sem);
+
+	return child;
+}
+
 asmlinkage int m68k_clone(struct pt_regs *regs)
 {
 	unsigned long clone_flags;
@@ -147,7 +190,7 @@ asmlinkage int m68k_clone(struct pt_regs *regs)
 	newsp = regs->d2;
 	if (!newsp)
 		newsp = rdusp();
-	return do_fork(clone_flags, newsp, regs);
+	return do_fork(clone_flags & ~CLONE_VFORK, newsp, regs);
 }
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,

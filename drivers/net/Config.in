@@ -85,17 +85,15 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'AT1700/1720 support (EXPERIMENTAL)' CONFIG_AT1700
-    fi
+    tristate 'AT1700/1720 support' CONFIG_AT1700
     tristate 'Cabletron E21xx support' CONFIG_E2100
     tristate 'DEPCA, DE10x, DE200, DE201, DE202, DE422 support' CONFIG_DEPCA
     tristate 'EtherWORKS 3 (DE203, DE204, DE205) support' CONFIG_EWRK3
     tristate 'EtherExpress 16 support' CONFIG_EEXPRESS
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'EtherExpressPro support' CONFIG_EEXPRESS_PRO
-      tristate 'FMV-181/182/183/184 support' CONFIG_FMV18X
     fi
+    tristate 'FMV-181/182/183/184 support' CONFIG_FMV18X
     tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
     tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
     tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100

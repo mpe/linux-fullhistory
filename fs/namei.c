@@ -882,8 +882,16 @@ static inline int do_mkdir(const char * pathname, int mode)
 	if (IS_ERR(dentry))
 		goto exit;
 
+	/*
+	 * EEXIST is kind of a strange error code to
+	 * return, but basically if the dentry was moved
+	 * or unlinked while we locked the parent, we
+	 * do know that it _did_ exist before, and as
+	 * such it makes perfect sense.. In contrast,
+	 * ENOENT doesn't make sense for mkdir.
+	 */
 	dir = lock_parent(dentry);
-	error = -ENOENT;
+	error = -EEXIST;
 	if (!check_parent(dir, dentry))
 		goto exit_lock;
 

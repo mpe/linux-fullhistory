@@ -58,6 +58,37 @@ static void free_wait(poll_table * p)
 	}
 }
 
+void __pollwait(struct file * filp, struct wait_queue ** wait_address, poll_table *p)
+{
+	for (;;) {
+		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
+			struct poll_table_entry * entry;
+ok_table:
+		 	entry = p->entry + p->nr;
+		 	entry->filp = filp;
+		 	filp->f_count++;
+			entry->wait_address = wait_address;
+			entry->wait.task = current;
+			entry->wait.next = NULL;
+			add_wait_queue(wait_address,&entry->wait);
+			p->nr++;
+			return;
+		}
+		if (p->next == NULL) {
+			poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
+			if (!tmp)
+				return;
+			tmp->nr = 0;
+			tmp->entry = (struct poll_table_entry *)(tmp + 1);
+			tmp->next = NULL;
+			p->next = tmp;
+			p = tmp;
+			goto ok_table;
+		}
+		p = p->next;
+	}
+}
+
 #define __IN(fds, n)		(fds->in + n)
 #define __OUT(fds, n)		(fds->out + n)
 #define __EX(fds, n)		(fds->ex + n)

@@ -60,7 +60,6 @@ static int atari_get_hardware_list(char *buffer);
 extern int atari_keyb_init(void);
 extern int atari_kbdrate (struct kbd_repeat *);
 extern void atari_kbd_leds (unsigned int);
-extern void atari_kbd_reset_setup(char*, int);
 /* atari specific irq functions */
 extern void atari_init_IRQ (void);
 extern int atari_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
@@ -251,7 +250,6 @@ __initfunc(void config_atari(void))
     mach_keyb_init       = atari_keyb_init;
     mach_kbdrate         = atari_kbdrate;
     mach_kbd_leds        = atari_kbd_leds;
-    kbd_reset_setup      = atari_kbd_reset_setup;
     mach_init_IRQ        = atari_init_IRQ;
     mach_request_irq     = atari_request_irq;
     mach_free_irq        = atari_free_irq;

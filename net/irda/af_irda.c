@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Mon Dec 14 10:39:45 1998
+ * Modified at:   Thu Jan 14 13:42:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.x
  * 
@@ -703,7 +703,7 @@ static struct notifier_block irda_dev_notifier = {
  */
 void irda_proto_init(struct net_proto *pro)
 {
-	DEBUG( 0, __FUNCTION__ "\n");
+	DEBUG( 4, __FUNCTION__ "\n");
 
 	/* sock_register( irda_proto_ops.family, &irda_proto_ops); */
 	irda_packet_type.type = htons(ETH_P_IRDA);
@@ -723,7 +723,7 @@ void irda_proto_init(struct net_proto *pro)
  */
 void irda_proto_cleanup(void)
 {
-	DEBUG( 0, __FUNCTION__ "\n");
+	DEBUG( 4, __FUNCTION__ "\n");
 
 	irda_packet_type.type = htons(ETH_P_IRDA);
         dev_remove_pack(&irda_packet_type);

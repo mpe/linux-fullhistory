@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 24 22:12:06 1998
- * Modified at:   Wed Dec  9 01:29:22 1998
+ * Modified at:   Thu Jan  7 10:35:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -27,12 +27,18 @@
 #include <linux/sysctl.h>
 #include <asm/segment.h>
 
+#include <net/irda/irda.h>
+
 #define NET_IRDA 412 /* Random number */
-enum { DISCOVERY=1, DEVNAME, COMPRESSION };
+enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG };
 
 extern int sysctl_discovery;
 int sysctl_compression = 0;
 extern char sysctl_devname[];
+
+#ifdef CONFIG_IRDA_DEBUG
+extern unsigned int irda_debug;
+#endif
 
 /* One file */
 static ctl_table irda_table[] = {
@@ -42,6 +48,10 @@ static ctl_table irda_table[] = {
 	  65, 0644, NULL, &proc_dostring, &sysctl_string},
 	{ COMPRESSION, "compression", &sysctl_compression,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
+#ifdef CONFIG_IRDA_DEBUG
+	{ DEBUG, "debug", &irda_debug,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+#endif
 	{ 0 }
 };
 

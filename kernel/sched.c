@@ -7,6 +7,8 @@
  *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
  *              make semaphores SMP safe
  *  1997-01-28  Modified by Finn Arne Gangstad to make timers scale better.
+ *  1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
  *  1998-11-19	Implemented schedule_timeout() and related stuff
  *		by Andrea Arcangeli
  *  1998-12-24	Fixed a xtime SMP race (we need the xtime_lock rw spinlock to
@@ -65,8 +67,8 @@ long time_offset = 0;		/* time adjustment (us) */
 long time_constant = 2;		/* pll time constant */
 long time_tolerance = MAXFREQ;	/* frequency tolerance (ppm) */
 long time_precision = 1;	/* clock precision (us) */
-long time_maxerror = MAXPHASE;	/* maximum error (us) */
-long time_esterror = MAXPHASE;	/* estimated error (us) */
+long time_maxerror = NTP_PHASE_LIMIT;	/* maximum error (us) */
+long time_esterror = NTP_PHASE_LIMIT;	/* estimated error (us) */
 long time_phase = 0;		/* phase offset (scaled us) */
 long time_freq = ((1000000 + HZ/2) % HZ - HZ/2) << SHIFT_USEC;	/* frequency offset (scaled ppm) */
 long time_adj = 0;		/* tick adjust (scaled 1 / HZ) */
@@ -1116,8 +1118,11 @@ static void second_overflow(void)
 
     /* Bump the maxerror field */
     time_maxerror += time_tolerance >> SHIFT_USEC;
-    if ( time_maxerror > MAXPHASE )
-        time_maxerror = MAXPHASE;
+    if ( time_maxerror > NTP_PHASE_LIMIT ) {
+        time_maxerror = NTP_PHASE_LIMIT;
+	time_state = TIME_ERROR;	/* p. 17, sect. 4.3, (b) */
+	time_status |= STA_UNSYNC;
+    }
 
     /*
      * Leap second processing. If in leap-insert state at
@@ -1141,7 +1146,7 @@ static void second_overflow(void)
 	if (xtime.tv_sec % 86400 == 0) {
 	    xtime.tv_sec--;
 	    time_state = TIME_OOP;
-	    printk("Clock: inserting leap second 23:59:60 UTC\n");
+	    printk(KERN_NOTICE "Clock: inserting leap second 23:59:60 UTC\n");
 	}
 	break;
 
@@ -1149,7 +1154,7 @@ static void second_overflow(void)
 	if ((xtime.tv_sec + 1) % 86400 == 0) {
 	    xtime.tv_sec++;
 	    time_state = TIME_WAIT;
-	    printk("Clock: deleting leap second 23:59:59 UTC\n");
+	    printk(KERN_NOTICE "Clock: deleting leap second 23:59:59 UTC\n");
 	}
 	break;
 
@@ -1197,7 +1202,7 @@ static void second_overflow(void)
      * the pll and the PPS signal.
      */
     pps_valid++;
-    if (pps_valid == PPS_VALID) {
+    if (pps_valid == PPS_VALID) {	/* PPS signal lost */
 	pps_jitter = MAXTIME;
 	pps_stabil = MAXFREQ;
 	time_status &= ~(STA_PPSSIGNAL | STA_PPSJITTER |
@@ -1212,17 +1217,38 @@ static void second_overflow(void)
 	    (SHIFT_USEC + SHIFT_HZ - SHIFT_SCALE);
 
 #if HZ == 100
-    /* compensate for (HZ==100) != 128. Add 25% to get 125; => only 3% error */
+    /* Compensate for (HZ==100) != (1 << SHIFT_HZ).
+     * Add 25% and 3.125% to get 128.125; => only 0.125% error (p. 14)
+     */
     if (time_adj < 0)
-	time_adj -= -time_adj >> 2;
+	time_adj -= (-time_adj >> 2) + (-time_adj >> 5);
     else
-	time_adj += time_adj >> 2;
+	time_adj += (time_adj >> 2) + (time_adj >> 5);
 #endif
 }
 
 /* in the NTP reference this is called "hardclock()" */
 static void update_wall_time_one_tick(void)
 {
+	if ( (time_adjust_step = time_adjust) != 0 ) {
+	    /* We are doing an adjtime thing. 
+	     *
+	     * Prepare time_adjust_step to be within bounds.
+	     * Note that a positive time_adjust means we want the clock
+	     * to run faster.
+	     *
+	     * Limit the amount of the step to be in the range
+	     * -tickadj .. +tickadj
+	     */
+	     if (time_adjust > tickadj)
+		time_adjust_step = tickadj;
+	     else if (time_adjust < -tickadj)
+		time_adjust_step = -tickadj;
+	     
+	    /* Reduce by this step the amount of time left  */
+	    time_adjust -= time_adjust_step;
+	}
+	xtime.tv_usec += tick + time_adjust_step;
 	/*
 	 * Advance the phase, once it gets to one microsecond, then
 	 * advance the tick more.
@@ -1231,37 +1257,13 @@ static void update_wall_time_one_tick(void)
 	if (time_phase <= -FINEUSEC) {
 		long ltemp = -time_phase >> SHIFT_SCALE;
 		time_phase += ltemp << SHIFT_SCALE;
-		xtime.tv_usec += tick + time_adjust_step - ltemp;
+		xtime.tv_usec -= ltemp;
 	}
 	else if (time_phase >= FINEUSEC) {
 		long ltemp = time_phase >> SHIFT_SCALE;
 		time_phase -= ltemp << SHIFT_SCALE;
-		xtime.tv_usec += tick + time_adjust_step + ltemp;
-	} else
-		xtime.tv_usec += tick + time_adjust_step;
-
-	if (time_adjust) {
-	    /* We are doing an adjtime thing. 
-	     *
-	     * Modify the value of the tick for next time.
-	     * Note that a positive delta means we want the clock
-	     * to run fast. This means that the tick should be bigger
-	     *
-	     * Limit the amount of the step for *next* tick to be
-	     * in the range -tickadj .. +tickadj
-	     */
-	     if (time_adjust > tickadj)
-		time_adjust_step = tickadj;
-	     else if (time_adjust < -tickadj)
-		time_adjust_step = -tickadj;
-	     else
-		time_adjust_step = time_adjust;
-	     
-	    /* Reduce by this step the amount of time left  */
-	    time_adjust -= time_adjust_step;
+		xtime.tv_usec += ltemp;
 	}
-	else
-	    time_adjust_step = 0;
 }
 
 /*

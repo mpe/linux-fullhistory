@@ -28,8 +28,9 @@
 #include <asm/atari_stram.h>
 #endif
 
+#undef DEBUG
+
 extern void die_if_kernel(char *,struct pt_regs *,long);
-extern void init_kpointer_table(void);
 extern void show_net_buffers(void);
 
 int do_check_pgt_cache(int low, int high)
@@ -122,17 +123,14 @@ void show_mem(void)
 unsigned long mm_cachebits = 0;
 #endif
 
-pte_t *kernel_page_table (unsigned long *memavailp)
+static pte_t *__init kernel_page_table(unsigned long *memavailp)
 {
 	pte_t *ptablep;
 
-	if (memavailp) {
-		ptablep = (pte_t *)*memavailp;
-		*memavailp += PAGE_SIZE;
-	}
-	else
-		ptablep = (pte_t *)__get_free_page(GFP_KERNEL);
+	ptablep = (pte_t *)*memavailp;
+	*memavailp += PAGE_SIZE;
 
+	clear_page((unsigned long)ptablep);
 	flush_page_to_ram((unsigned long) ptablep);
 	flush_tlb_kernel_page((unsigned long) ptablep);
 	nocache_page ((unsigned long)ptablep);
@@ -140,198 +138,163 @@ pte_t *kernel_page_table (unsigned long *memavailp)
 	return ptablep;
 }
 
-__initfunc(static unsigned long
-map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
+static pmd_t *last_pgtable __initdata = NULL;
+
+static pmd_t *__init kernel_ptr_table(unsigned long *memavailp)
 {
-#define ONEMEG	(1024*1024)
-#define L3TREESIZE (256*1024)
+	if (!last_pgtable) {
+		unsigned long pmd, last;
+		int i;
 
-	static unsigned long mem_mapped = 0;
-	static unsigned long virtaddr = 0;
-	static pte_t *ktablep = NULL;
-	unsigned long *kpointerp;
-	unsigned long physaddr;
-	extern pte_t *kpt;
-	int pindex;   /* index into pointer table */
-	pgd_t *page_dir = pgd_offset_k (virtaddr);
-
-	if (!pgd_present (*page_dir)) {
-		/* we need a new pointer table */
-		kpointerp = (unsigned long *) get_kpointer_table ();
-		pgd_set (page_dir, (pmd_t *) kpointerp);
-		memset (kpointerp, 0, PTRS_PER_PMD * sizeof (pmd_t));
-	}
-	else
-		kpointerp = (unsigned long *) pgd_page (*page_dir);
-
-	/*
-	 * pindex is the offset into the pointer table for the
-	 * descriptors for the current virtual address being mapped.
-	 */
-	pindex = (virtaddr >> 18) & 0x7f;
-
-#ifdef DEBUG
-	printk ("mm=%ld, kernel_pg_dir=%p, kpointerp=%p, pindex=%d\n",
-		mem_mapped, kernel_pg_dir, kpointerp, pindex);
-#endif
-
-	/*
-	 * if this is running on an '040, we already allocated a page
-	 * table for the first 4M.  The address is stored in kpt by
-	 * arch/head.S
-	 *
-	 */
-	if (CPU_IS_040_OR_060 && mem_mapped == 0)
-		ktablep = kpt;
-
-	for (physaddr = addr;
-	     physaddr < addr + size;
-	     mem_mapped += L3TREESIZE, virtaddr += L3TREESIZE) {
-
-#ifdef DEBUG
-		printk ("pa=%#lx va=%#lx ", physaddr, virtaddr);
-#endif
-
-		if (pindex > 127 && mem_mapped >= 32*ONEMEG) {
-			/* we need a new pointer table every 32M */
-#ifdef DEBUG
-			printk ("[new pointer]");
-#endif
-
-			kpointerp = (unsigned long *)get_kpointer_table ();
-			pgd_set(pgd_offset_k(virtaddr), (pmd_t *)kpointerp);
-			pindex = 0;
+		last = (unsigned long)kernel_pg_dir;
+		for (i = 0; i < PTRS_PER_PGD; i++) {
+			if (!pgd_val(kernel_pg_dir[i]))
+				continue;
+			pmd = pgd_page(kernel_pg_dir[i]);
+			if (pmd > last)
+				last = pmd;
 		}
 
-		if (CPU_IS_040_OR_060) {
-			int i;
-			unsigned long ktable;
-
-			/* Don't map the first 4 MB again. The pagetables
-			 * for this range have already been initialized
-			 * in boot/head.S. Otherwise the pages used for
-			 * tables would be reinitialized to copyback mode.
-			 */
-
-			if (mem_mapped < 4 * ONEMEG)
-			{
+		last_pgtable = (pmd_t *)last;
 #ifdef DEBUG
-				printk ("Already initialized\n");
+		printk("kernel_ptr_init: %p\n", last_pgtable);
 #endif
-				physaddr += L3TREESIZE;
-				pindex++;
+	}
+
+	if (((unsigned long)(last_pgtable + PTRS_PER_PMD) & ~PAGE_MASK) == 0) {
+		last_pgtable = (pmd_t *)*memavailp;
+		*memavailp += PAGE_SIZE;
+
+		clear_page((unsigned long)last_pgtable);
+		flush_page_to_ram((unsigned long)last_pgtable);
+		flush_tlb_kernel_page((unsigned long)last_pgtable);
+		nocache_page((unsigned long)last_pgtable);
+	} else
+		last_pgtable += PTRS_PER_PMD;
+
+	return last_pgtable;
+}
+
+static unsigned long __init
+map_chunk (unsigned long addr, long size, unsigned long *memavailp)
+{
+#define PTRTREESIZE (256*1024)
+#define ROOTTREESIZE (32*1024*1024)
+	static unsigned long virtaddr = 0;
+	unsigned long physaddr;
+	pgd_t *pgd_dir;
+	pmd_t *pmd_dir;
+	pte_t *pte_dir;
+
+	physaddr = (addr | m68k_supervisor_cachemode |
+		    _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_DIRTY);
+	if (CPU_IS_040_OR_060)
+		physaddr |= _PAGE_GLOBAL040;
+
+	while (size > 0) {
+#ifdef DEBUG
+		if (!(virtaddr & (PTRTREESIZE-1)))
+			printk ("\npa=%#lx va=%#lx ", physaddr & PAGE_MASK,
+				virtaddr);
+#endif
+		pgd_dir = pgd_offset_k(virtaddr);
+		if (virtaddr && CPU_IS_020_OR_030) {
+			if (!(virtaddr & (ROOTTREESIZE-1)) &&
+			    size >= ROOTTREESIZE) {
+#ifdef DEBUG
+				printk ("[very early term]");
+#endif
+				pgd_val(*pgd_dir) = physaddr;
+				size -= ROOTTREESIZE;
+				virtaddr += ROOTTREESIZE;
+				physaddr += ROOTTREESIZE;
 				continue;
 			}
+		}
+		if (!pgd_present(*pgd_dir)) {
+			pmd_dir = kernel_ptr_table(memavailp);
 #ifdef DEBUG
-			printk ("[setup table]");
+			printk ("[new pointer %p]", pmd_dir);
 #endif
+			pgd_set(pgd_dir, pmd_dir);
+		} else
+			pmd_dir = pmd_offset(pgd_dir, virtaddr);
 
-			/*
-			 * 68040, use page tables pointed to by the
-			 * kernel pointer table.
-			 */
-
-			if ((pindex & 15) == 0) {
-				/* Need new page table every 4M on the '040 */
+		if (CPU_IS_020_OR_030) {
+			if (virtaddr) {
+#ifdef DEBUG
+				printk ("[early term]");
+#endif
+				pmd_dir->pmd[(virtaddr/PTRTREESIZE) & 15] = physaddr;
+				physaddr += PTRTREESIZE;
+			} else {
+				int i;
+#ifdef DEBUG
+				printk ("[zero map]");
+#endif
+				pte_dir = (pte_t *)kernel_ptr_table(memavailp);
+				pmd_dir->pmd[0] = virt_to_phys(pte_dir) |
+					_PAGE_TABLE | _PAGE_ACCESSED;
+				pte_val(*pte_dir++) = 0;
+				physaddr += PAGE_SIZE;
+				for (i = 1; i < 64; physaddr += PAGE_SIZE, i++)
+					pte_val(*pte_dir++) = physaddr;
+			}
+			size -= PTRTREESIZE;
+			virtaddr += PTRTREESIZE;
+		} else {
+			if (!pmd_present(*pmd_dir)) {
 #ifdef DEBUG
 				printk ("[new table]");
 #endif
-				ktablep = kernel_page_table (memavailp);
+				pte_dir = kernel_page_table(memavailp);
+				pmd_set(pmd_dir, pte_dir);
 			}
+			pte_dir = pte_offset(pmd_dir, virtaddr);
 
-			ktable = virt_to_phys(ktablep);
-
-			/*
-			 * initialize section of the page table mapping
-			 * this 256K portion.
-			 */
-			for (i = 0; i < 64; i++) {
-				pte_val(ktablep[i]) = physaddr | _PAGE_PRESENT
-				  | m68k_supervisor_cachemode | _PAGE_GLOBAL040
-					| _PAGE_ACCESSED;
-				physaddr += PAGE_SIZE;
-			}
-			ktablep += 64;
-
-			/*
-			 * make the kernel pointer table point to the
-			 * kernel page table.  Each entries point to a
-			 * 64 entry section of the page table.
-			 */
-
-			kpointerp[pindex++] = ktable | _PAGE_TABLE | _PAGE_ACCESSED;
-		} else {
-			/*
-			 * 68030, use early termination page descriptors.
-			 * Each one points to 64 pages (256K).
-			 */
-#ifdef DEBUG
-			printk ("[early term] ");
-#endif
-			if (virtaddr == 0UL) {
-				/* map the first 256K using a 64 entry
-				 * 3rd level page table.
-				 * UNMAP the first entry to trap
-				 * zero page (NULL pointer) references
-				 */
-				int i;
-				unsigned long *tbl;
-				
-				tbl = (unsigned long *)get_kpointer_table();
-
-				kpointerp[pindex++] = virt_to_phys(tbl) | _PAGE_TABLE |_PAGE_ACCESSED;
-
-				for (i = 0; i < 64; i++, physaddr += PAGE_SIZE)
-					tbl[i] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
-				
-				/* unmap the zero page */
-				tbl[0] = 0;
-			} else {
-				/* not the first 256K */
-				kpointerp[pindex++] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
-#ifdef DEBUG
-				printk ("%lx=%lx ", virt_to_phys(&kpointerp[pindex-1]),
-					kpointerp[pindex-1]);
-#endif
-				physaddr += 64 * PAGE_SIZE;
-			}
+			if (virtaddr) {
+				if (!pte_present(*pte_dir))
+					pte_val(*pte_dir) = physaddr;
+			} else
+				pte_val(*pte_dir) = 0;
+			size -= PAGE_SIZE;
+			virtaddr += PAGE_SIZE;
+			physaddr += PAGE_SIZE;
 		}
-#ifdef DEBUG
-		printk ("\n");
-#endif
-	}
 
-	return mem_mapped;
+	}
+#ifdef DEBUG
+	printk("\n");
+#endif
+
+	return virtaddr;
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
+extern void init_pointer_table(unsigned long ptable);
 
 /* References to section boundaries */
 
 extern char _text, _etext, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
 
-extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
-
 /*
  * paging_init() continues the virtual memory environment setup which
  * was begun by the code in arch/head.S.
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem,
-				     unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem,
+				 unsigned long end_mem)
 {
 	int chunk;
 	unsigned long mem_avail = 0;
 
 #ifdef DEBUG
 	{
-		extern pte_t *kpt;
-		printk ("start of paging_init (%p, %p, %lx, %lx, %lx)\n",
-			kernel_pg_dir, kpt, availmem, start_mem, end_mem);
+		extern unsigned long availmem;
+		printk ("start of paging_init (%p, %lx, %lx, %lx)\n",
+			kernel_pg_dir, availmem, start_mem, end_mem);
 	}
 #endif
-
-	init_kpointer_table();
 
 	/* Fix the cache mode in the page descriptors for the 680[46]0.  */
 	if (CPU_IS_040_OR_060) {
@@ -366,6 +329,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 				       m68k_memory[chunk].size, &start_mem);
 
 	}
+
 	flush_tlb_all();
 #ifdef DEBUG
 	printk ("memory available is %ldKB\n", mem_avail >> 10);
@@ -385,21 +349,16 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 	start_mem += PAGE_SIZE;
 	memset((void *)empty_zero_page, 0, PAGE_SIZE);
 
-#if 0
 	/* 
 	 * allocate the "swapper" page directory and
 	 * record in task 0 (swapper) tss 
 	 */
-	swapper_pg_dir = (pgd_t *)get_kpointer_table();
-
-	init_mm.pgd = swapper_pg_dir;
-#endif
-
-	memset (swapper_pg_dir, 0, sizeof(pgd_t)*PTRS_PER_PGD);
+	init_mm.pgd = (pgd_t *)kernel_ptr_table(&start_mem);
+	memset (init_mm.pgd, 0, sizeof(pgd_t)*PTRS_PER_PGD);
 
 	/* setup CPU root pointer for swapper task */
 	task[0]->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
-	task[0]->tss.crp[1] = virt_to_phys (swapper_pg_dir);
+	task[0]->tss.crp[1] = virt_to_phys(init_mm.pgd);
 
 #ifdef DEBUG
 	printk ("task 0 pagedir at %p virt, %#lx phys\n",
@@ -430,16 +389,16 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 #ifdef DEBUG
 	printk ("before free_area_init\n");
 #endif
-
-	return PAGE_ALIGN(free_area_init (start_mem, end_mem));
+	return PAGE_ALIGN(free_area_init(start_mem, end_mem));
 }
 
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
 	unsigned long tmp;
+	int i;
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
@@ -480,6 +439,14 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 			free_page(tmp);
 	}
+
+	/* insert pointer tables allocated so far into the tablelist */
+	init_pointer_table((unsigned long)kernel_pg_dir);
+	for (i = 0; i < PTRS_PER_PGD; i++) {
+		if (pgd_val(kernel_pg_dir[i]))
+			init_pointer_table(pgd_page(kernel_pg_dir[i]));
+	}
+
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data, %dk init)\n",
 	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
 	       max_mapnr << (PAGE_SHIFT-10),

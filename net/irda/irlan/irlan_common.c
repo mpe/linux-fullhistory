@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon Dec 14 10:43:05 1998
+ * Modified at:   Tue Jan 19 23:11:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -23,7 +23,7 @@
  ********************************************************************/
 
 #include <linux/config.h>
-#include <linux/module.h> 
+#include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/string.h>

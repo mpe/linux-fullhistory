@@ -325,12 +325,15 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = 0;
 		goto out;
 	}
-	if (pid == 1)		/* you may not mess with init */
-		goto out;
 	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	if (!child)
 		goto out;
 	ret = -EPERM;
+	if (pid == 1)		/* you may not mess with init */
+		goto out;
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			goto out;

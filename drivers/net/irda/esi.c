@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      esi.c
- * Version:       1.0
+ * Version:       1.1
  * Description:   Driver for the Extended Systems JetEye PC
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Mon Dec 14 11:48:22 1998
+ * Modified at:   Mon Jan 18 11:30:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
@@ -68,7 +68,7 @@ void esi_cleanup(void)
 
 static void esi_open( struct irda_device *idev, int type)
 {
-	strcat( idev->name, " <-> esi");
+	strcat( idev->description, " <-> esi");
 
 	idev->io.dongle_id = type;
 
@@ -90,12 +90,10 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 {
 	struct irtty_cb *self;
 	struct tty_struct *tty;
-	int arg = 0;
+	int arg = TIOCM_OUT2;
         struct termios old_termios;
 	int cflag;
 	mm_segment_t fs;
-	
-	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -118,16 +116,16 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 	switch (baud) {
 	case 19200:
 		cflag |= B19200;
-		arg = TIOCM_DTR;
+		arg |= TIOCM_DTR;
 		break;
 	case 115200:
 		cflag |= B115200;
-		arg = TIOCM_RTS | TIOCM_DTR;
+		arg |= TIOCM_RTS | TIOCM_DTR;
 		break;
 	case 9600:
 	default:
 		cflag |= B9600;
-		arg = TIOCM_RTS;
+		arg |= TIOCM_RTS;
 		break;
 	}
 		
@@ -146,7 +144,7 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 	set_fs( get_ds());
 
 	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, (unsigned long) &arg)) { 
-		DEBUG(0, "error setting ESI speed!\n");
+		DEBUG( 0, __FUNCTION__ "(), error setting ESI speed!\n");
 	}
 	set_fs(fs);
 }
@@ -193,3 +191,4 @@ void cleanup_module(void)
 }
 
 #endif
+

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Wed Nov  4 15:10:41 1998
+ * Modified at:   Thu Jan  7 14:17:31 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998 Dag Brattli <dagb@cs.uit.no>
@@ -30,7 +30,7 @@
 #include <linux/skbuff.h>
 #include <linux/types.h>
 
-#include <irda_device.h>
+#include <net/irda/irda_device.h>
 
 #define SPEED_DEFAULT 9600
 #define SPEED_MAX     115200

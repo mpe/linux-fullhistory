@@ -55,9 +55,6 @@ extern char m68k_command_line[CL_SIZE];
 
 void *mac_env;		/* Loaded by the boot asm */
 
-/* The logical video addr. determined by head.S - testing */
-extern unsigned long mac_videobase;
-
 /* The phys. video addr. - might be bogus on some machines */
 unsigned long mac_orig_videoaddr;
 
@@ -65,7 +62,6 @@ unsigned long mac_orig_videoaddr;
 extern int mac_keyb_init(void);
 extern int mac_kbdrate(struct kbd_repeat *k);
 extern void mac_kbd_leds(unsigned int leds);
-extern void mac_kbd_reset_setup(char*, int);
 
 /* Mac specific irq functions */
 extern void mac_init_IRQ (void);
@@ -241,9 +237,7 @@ __initfunc(int mac_parse_bootinfo(const struct bi_record *record))
 	    mac_bi_data.id = *data;
 	    break;
 	case BI_MAC_VADDR:
-	    /* save booter supplied videobase; use the one mapped in head.S! */
-	    mac_orig_videoaddr = *data;
-	    mac_bi_data.videoaddr = mac_videobase;
+	    mac_bi_data.videoaddr = VIDEOMEMBASE + (*data & ~VIDEOMEMMASK);
 	    break;
 	case BI_MAC_VDEPTH:
 	    mac_bi_data.videodepth = *data;
@@ -307,7 +301,6 @@ __initfunc(void config_mac(void))
     mach_keyb_init       = mac_keyb_init;
     mach_kbdrate         = mac_kbdrate;
     mach_kbd_leds        = mac_kbd_leds;
-    kbd_reset_setup      = mac_kbd_reset_setup;
     mach_init_IRQ        = mac_init_IRQ;
     mach_request_irq     = mac_request_irq;
     mach_free_irq        = mac_free_irq;

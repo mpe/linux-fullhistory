@@ -1146,8 +1146,7 @@ __initfunc(void cyberfb_init(void))
 	DPRINTK("board_addr=%08lx\n", board_addr);
 	DPRINTK("board_size=%08lx\n", board_size);
 
-	cv64_mem = kernel_map (board_addr, board_size, KERNELMAP_NOCACHE_SER,
-			       NULL);
+	cv64_mem = ioremap(board_addr, board_size);
 	cv64_regs = (volatile char *)(cv64_mem + 0x02000000);
 	cv64_fbmem = cv64_mem + 0x01400000;
 	DPRINTK("cv64_mem=%08lx cv64_regs=%08lx cv64_fbmem=%08lx\n",

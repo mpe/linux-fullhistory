@@ -46,6 +46,9 @@
 
 #define DEFAULT_CURSOR_BLINK_RATE       (2*HZ/5)
 
+#define CURSOR_SHAPE			1
+#define CURSOR_BLINK			2
+
     /*
      *  Interface used by the world
      */
@@ -457,7 +460,7 @@ sbusfb_cursor_timer_handler(unsigned long dev_addr)
         
 	if (!fb->setcursor) return;
                                 
-	if (fb->cursor.mode != 2) {
+	if (fb->cursor.mode & CURSOR_BLINK) {
 		fb->cursor.enable ^= 1;
 		fb->setcursor(fb);
 	}
@@ -472,14 +475,14 @@ static void sbusfb_cursor(struct display *p, int mode, int x, int y)
 	
 	switch (mode) {
 	case CM_ERASE:
-		fb->cursor.mode = 2;
+		fb->cursor.mode &= ~CURSOR_BLINK;
 		fb->cursor.enable = 0;
 		(*fb->setcursor)(fb);
 		break;
 				  
 	case CM_MOVE:
 	case CM_DRAW:
-		if (fb->cursor.mode) {
+		if (fb->cursor.mode & CURSOR_SHAPE) {
 			fb->cursor.size.fbx = fontwidth(p);
 			fb->cursor.size.fby = fontheight(p);
 			fb->cursor.chot.fbx = 0;
@@ -492,8 +495,8 @@ static void sbusfb_cursor(struct display *p, int mode, int x, int y)
 			fb->cursor.bits[1][fontheight(p) - 1] = (0xffffffff << (32 - fontwidth(p)));
 			(*fb->setcursormap) (fb, hw_cursor_cmap, hw_cursor_cmap, hw_cursor_cmap);
 			(*fb->setcurshape) (fb);
-			fb->cursor.mode = 0;
 		}
+		fb->cursor.mode = CURSOR_BLINK;
 		if (fontwidthlog(p))
 			fb->cursor.cpos.fbx = (x << fontwidthlog(p)) + fb->x_margin;
 		else
@@ -684,7 +687,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  			lastconsole = info->display_fg->vc_num; 
  			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
  				return -EINVAL; /* Don't let graphics programs hide our nice text cursor */
-			fb->cursor.mode = 2; /* Forget state of our text cursor */
+			fb->cursor.mode = CURSOR_SHAPE; /* Forget state of our text cursor */
 		}
 		return sbus_hw_scursor ((struct fbcursor *) arg, fb);
 
@@ -761,7 +764,7 @@ static int sbusfbcon_switch(int con, struct fb_info *info)
 		if (lastconsole != con && 
 		    (fontwidth(&fb_display[lastconsole]) != fontwidth(&fb_display[con]) ||
 		     fontheight(&fb_display[lastconsole]) != fontheight(&fb_display[con])))
-			fb->cursor.mode = 1;
+			fb->cursor.mode |= CURSOR_SHAPE;
 	}
 	x_margin = (fb_display[con].var.xres_virtual - fb_display[con].var.xres) / 2;
 	y_margin = (fb_display[con].var.yres_virtual - fb_display[con].var.yres) / 2;
@@ -889,7 +892,7 @@ static int sbusfb_set_font(struct display *p, int width, int height)
 	p->var.xres = w - 2*x_margin;
 	p->var.yres = h - 2*y_margin;
 	
-	fb->cursor.mode = 1;
+	fb->cursor.mode |= CURSOR_SHAPE;
 	
 	if (fb->margins)
 		fb->margins(fb, p, x_margin, y_margin);
@@ -1076,6 +1079,7 @@ sizechange:
 			add_timer(&fb->cursor.timer);
 		}
 	}
+	fb->cursor.mode = CURSOR_SHAPE;
 	fb->dispsw.set_font = sbusfb_set_font;
 	fb->setup = fb->dispsw.setup;
 	fb->dispsw.setup = sbusfb_disp_setup;

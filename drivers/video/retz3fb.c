@@ -1455,8 +1455,7 @@ __initfunc(void retz3fb_init(void))
 	board_addr = (unsigned long)cd->cd_BoardAddr;
 	board_size = (unsigned long)cd->cd_BoardSize;
 
-	zinfo->base = kernel_map (board_addr, board_size,
-				   KERNELMAP_NOCACHE_SER, NULL);
+	zinfo->base = ioremap(board_addr, board_size);
 	zinfo->regs = (unsigned char *)(zinfo->base);
 	zinfo->fbmem = zinfo->base + VIDEO_MEM_OFFSET;
 	/* Get memory size - for now we asume its a 4MB board */

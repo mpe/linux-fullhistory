@@ -1,13 +1,13 @@
 /*********************************************************************
  *                
  * Filename:      actisys.c
- * Version:       0.3
+ * Version:       0.4
  * Description:   Implementation for the ACTiSYS IR-220L and IR-220L+ 
  *                dongles
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon Dec 14 11:50:32 1998
+ * Modified at:   Mon Jan 18 11:30:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -95,7 +95,7 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 {
         struct irtty_cb *self;
         struct tty_struct *tty;
-        int arg = 0;
+        int arg;
         struct termios old_termios;
 	int cflag;
         int current_baudrate;
@@ -132,7 +132,7 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 		DEBUG( 0, __FUNCTION__ "(), Clearing RTS\n");
 		
 		/* Set DTR, clear RTS */
-		arg = TIOCM_DTR;
+		arg = TIOCM_DTR|TIOCM_OUT2;
 		
 		fs = get_fs();
 		set_fs( get_ds());
@@ -149,7 +149,7 @@ static void actisys_change_speed( struct irda_device *idev, int baudrate)
 		schedule_timeout(2);
 
 		/* Set DTR, Set RTS */
-                arg = TIOCM_DTR | TIOCM_RTS;
+                arg = TIOCM_DTR | TIOCM_RTS |TIOCM_OUT2;
 
 		fs = get_fs();
 		set_fs( get_ds());
@@ -237,7 +237,7 @@ static void actisys_reset( struct irda_device *idev, int unused)
 		return;
 
 	DEBUG( 0, __FUNCTION__ "(), Clearing DTR\n");
-	arg = TIOCM_RTS;
+	arg = TIOCM_RTS | TIOCM_OUT2;
 
 	fs = get_fs();
 	set_fs( get_ds());
@@ -245,7 +245,7 @@ static void actisys_reset( struct irda_device *idev, int unused)
 	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
 				(unsigned long) &arg)) 
 	{ 
-		DEBUG( 0, __FUNCTION__"(), Ioctl error!\n");
+		DEBUG( 0, __FUNCTION__"(), ioctl error!\n");
 	}
 	set_fs(fs);
 
@@ -254,7 +254,7 @@ static void actisys_reset( struct irda_device *idev, int unused)
 	schedule_timeout(2);
 	
 	DEBUG( 0, __FUNCTION__ "(), Setting DTR\n");
-	arg = TIOCM_RTS | TIOCM_DTR;
+	arg = TIOCM_RTS | TIOCM_DTR | TIOCM_OUT2;
 	
 	fs = get_fs();
 	set_fs( get_ds());
@@ -262,7 +262,7 @@ static void actisys_reset( struct irda_device *idev, int unused)
 	if ( tty->driver.ioctl( tty, NULL, TIOCMSET, 
 				(unsigned long) &arg)) 
 	{ 
-		DEBUG( 0, __FUNCTION__"(), Ioctl error!\n");
+		DEBUG( 0, __FUNCTION__"(), ioctl error!\n");
 	}
 	set_fs(fs);
 

@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.16 1998/12/21 05:14:39 davem Exp $
+/* $Id: creatorfb.c,v 1.17 1998/12/28 11:23:37 jj Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -342,6 +342,7 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 	int x, y, w, h;
 	
+	FFBWait(fbc);
 	FFBFifo(fbc, 6);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol_ec(p,conp)];
 	fbc->drawop = FFB_DRAWOP_RECTANGLE;
@@ -360,7 +361,6 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	fbc->bx = x + fb->x_margin;
 	fbc->bh = h;
 	fbc->bw = w;
-	FFBWait(fbc);
 }
 
 static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
@@ -368,6 +368,7 @@ static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
+	FFBWait(fbc);
 	FFBFifo(fbc, 2);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_bgcol(p,s)];
 	fbc->drawop = FFB_DRAWOP_RECTANGLE;
@@ -379,7 +380,6 @@ static void ffb_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 		fbc->bw = boxes[2] - boxes[0];
 		boxes += 4;
 	}
-	FFBWait(fbc);
 }
 
 static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
@@ -404,6 +404,7 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 		xy += (xx << fontwidthlog(p)) + fb->s.ffb.xy_margin;
 	else
 		xy += (xx * fontwidth(p)) + fb->s.ffb.xy_margin;
+	FFBWait(fbc);
 	FFBFifo(fbc, 5);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,c)];
 	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,c)];
@@ -420,7 +421,6 @@ static void ffb_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 			fd += 2;
 		}
 	}
-	FFBWait(fbc);
 }
 
 static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -431,6 +431,7 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	int i, xy;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
+	FFBWait(fbc);
 	FFBFifo(fbc, 2);
 	fbc->fg = ((u32 *)p->dispsw_data)[attr_fgcol(p,*s)];
 	fbc->bg = ((u32 *)p->dispsw_data)[attr_bgcol(p,*s)];
@@ -520,7 +521,6 @@ static void ffb_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		}
 		xy += fontwidth(p);
 	}
-	FFBWait(fbc);
 }
 
 static void ffb_revc(struct display *p, int xx, int yy)
@@ -618,6 +618,7 @@ static void ffb_switch_from_graph (struct fb_info_sbusfb *fb)
 {
 	register struct ffb_fbc *fbc = fb->s.ffb.fbc;
 
+	FFBWait(fbc);
 	FFBFifo(fbc, 4);
 	fbc->ppc = FFB_PPC_VCE_DISABLE|FFB_PPC_TBE_OPAQUE|FFB_PPC_APE_DISABLE|FFB_PPC_CS_CONST;
 	fbc->fbc = 0x2000707f;
@@ -635,7 +636,9 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
 	struct linux_prom64_registers regs[2*PROMREG_MAX];
-	int i;
+	int i, afb = 0;
+	unsigned int btype;
+	char name[64];
 
 	if (prom_getproperty(fb->prom_node, "reg", (void *) regs, sizeof(regs)) <= 0)
 		return NULL;
@@ -644,10 +647,22 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	if (!disp->dispsw_data)
 		return NULL;
 	memset(disp->dispsw_data, 0, 16 * sizeof(u32));
+
+	prom_getstring(fb->prom_node, "name", name, sizeof(name));
+	if (!strcmp(name, "SUNW,afb"))
+		afb = 1;
+		
+	btype = prom_getintdefault(fb->prom_node, "board_type", 0);
 		
 	strcpy(fb->info.modename, "Creator");
-		
-	strcpy(fix->id, "Creator");
+	if (!afb) {
+		if ((btype & 7) == 3)
+		    strcpy(fix->id, "Creator 3D");
+		else
+		    strcpy(fix->id, "Creator");
+	} else
+		strcpy(fix->id, "Elite 3D");
+	
 	fix->visual = FB_VISUAL_TRUECOLOR;
 	fix->line_length = 8192;
 	fix->accel = FB_ACCEL_SUN_CREATOR;
@@ -693,7 +708,7 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	                
 	i = prom_getintdefault (fb->prom_node, "board_type", 8);
 	                                                        
-	sprintf(idstring, "Creator at %016lx type %d DAC %d", regs[0].phys_addr, i, fb->s.ffb.dac_rev);
+	sprintf(idstring, "%s at %016lx type %d DAC %d", fix->id, regs[0].phys_addr, i, fb->s.ffb.dac_rev);
 	
 	return idstring;
 }

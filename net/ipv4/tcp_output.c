@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.100 1999/01/16 08:31:06 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.101 1999/01/20 07:20:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -544,8 +544,10 @@ static __inline__ void update_retrans_head(struct sock *sk)
 	
 	tp->retrans_head = tp->retrans_head->next;
 	if((tp->retrans_head == tp->send_head) ||
-	   (tp->retrans_head == (struct sk_buff *) &sk->write_queue))
+	   (tp->retrans_head == (struct sk_buff *) &sk->write_queue)) {
 		tp->retrans_head = NULL;
+		tp->rexmt_done = 1;
+	}
 }
 
 /* This retransmits one SKB.  Policy decisions and retransmit queue
@@ -610,7 +612,8 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff *skb;
 
-	if (tp->retrans_head == NULL)
+	if (tp->retrans_head == NULL &&
+	    tp->rexmt_done == 0)
 		tp->retrans_head = skb_peek(&sk->write_queue);
 	if (tp->retrans_head == tp->send_head)
 		tp->retrans_head = NULL;

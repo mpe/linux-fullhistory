@@ -13,6 +13,16 @@
 #ifndef _ASM_MACHW_H_
 #define _ASM_MACHW_H_
 
+/*
+ * head.S maps the videomem to VIDEOMEMBASE
+ */
+
+#define VIDEOMEMBASE	0xf0000000
+#define VIDEOMEMSIZE	(4096*1024)
+#define VIDEOMEMMASK	(-4096*1024)
+
+#ifndef __ASSEMBLY__
+
 #include <linux/types.h>
 
 /* Mac SCSI Controller 5380 */
@@ -142,5 +152,7 @@ struct {
 } mac_hw_present;
 
 /* extern struct mac_hw_present mac_hw_present; */
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* linux/machw.h */

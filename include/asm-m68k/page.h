@@ -8,7 +8,7 @@
 
 #ifdef __KERNEL__
 
-#include<linux/config.h>
+#include <asm/setup.h>
 
 #define STRICT_MM_TYPECHECKS
 
@@ -18,7 +18,7 @@
 /*
  * We don't need to check for alignment etc.
  */
-#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+#ifdef CPU_M68040_OR_M68060_ONLY
 static inline void copy_page(unsigned long to, unsigned long from)
 {
   unsigned long tmp;

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      tekram.c
- * Version:       0.3
+ * Version:       0.4
  * Description:   Implementation of the Tekram IrMate IR-210B dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon Dec 14 11:48:37 1998
+ * Modified at:   Mon Jan 18 11:30:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -148,7 +148,7 @@ static void tekram_change_speed( struct irda_device *dev, int baud)
 
 	/* Set DTR, Clear RTS */
 	DEBUG( 0, __FUNCTION__ "(), Setting DTR, Clearing RTS\n");
-	arg = TIOCM_DTR;
+	arg = TIOCM_DTR | TIOCM_OUT2;
 	
 	fs = get_fs();
 	set_fs( get_ds());
@@ -173,7 +173,7 @@ static void tekram_change_speed( struct irda_device *dev, int baud)
         
 	/* Set DTR, Set RTS */
 	DEBUG( 0, __FUNCTION__ "(), Setting DTR, Setting RTS\n");
-	arg = TIOCM_DTR | TIOCM_RTS;
+	arg = TIOCM_DTR | TIOCM_RTS | TIOCM_OUT2;
 	
 	fs = get_fs();
 	set_fs( get_ds());
@@ -226,7 +226,7 @@ void tekram_reset( struct irda_device *dev, int unused)
 		return;
 
 	DEBUG( 0, __FUNCTION__ "(), Power off dongle\n");
-	arg = TIOCM_RTS | TIOCM_DTR;
+	arg = TIOCM_RTS | TIOCM_DTR | TIOCM_OUT2;
 	
 	fs = get_fs();
 	set_fs( get_ds());
@@ -244,7 +244,7 @@ void tekram_reset( struct irda_device *dev, int unused)
 	
 	DEBUG( 0, __FUNCTION__ "(), Set DTR, clear RTS\n");
 	/* Set DTR, clear RTS */
-	arg = TIOCM_DTR;
+	arg = TIOCM_DTR | TIOCM_OUT2;
 	
 	fs = get_fs();
 	set_fs( get_ds());
@@ -261,6 +261,8 @@ void tekram_reset( struct irda_device *dev, int unused)
 
 	DEBUG( 0, __FUNCTION__ "(), STATE3\n");
 	/* Clear DTR, clear RTS */
+	arg = TIOCM_OUT2;
+
 	fs = get_fs();
 	set_fs( get_ds());
 	

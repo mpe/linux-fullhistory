@@ -627,11 +627,11 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		p->highest_bit = swap_header->info.last_page - 1;
 		p->max	       = swap_header->info.last_page;
 
-		if (p->max >= 0x7fffffffL/PAGE_SIZE ||
-		    (void *) &swap_header->info.badpages[(int) swap_header->info.nr_badpages-1] >= (void *) swap_header->magic.magic) {
-			error = -EINVAL;
+		error = -EINVAL;
+		if (swap_header->info.nr_badpages > MAX_SWAP_BADPAGES)
 			goto bad_swap;
-		}
+		if (p->max >= SWP_OFFSET(SWP_ENTRY(0,~0UL)))
+			goto bad_swap;
 		
 		/* OK, set up the swap map and apply the bad block list */
 		if (!(p->swap_map = vmalloc (p->max * sizeof(short)))) {

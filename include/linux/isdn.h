@@ -1,9 +1,3 @@
-/* Changes for X.25 support:
-   Added ISDN_NET_ENCAP_X25IFACE macro.
-   Additional field in isdn_net_dev_s and isdn_net_local to support
-   generic encapsulation protocols. 
-*/
-
 /* $Id: isdn.h,v 1.37 1998/02/22 19:45:24 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
@@ -25,6 +19,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ *
+ * Note: This file differs from the corresponding revision as present in the
+ * isdn4linux CVS repository because some later bug fixes have been extracted
+ * from the repository and merged into this file. -- Henner Eisen
  *
  * $Log: isdn.h,v $
  * Revision 1.37  1998/02/22 19:45:24  fritz
@@ -800,6 +798,7 @@ typedef struct isdn_devt {
   int               v110emu[ISDN_MAX_CHANNELS];/* V.110 emulator-mode 0=none */
   atomic_t          v110use[ISDN_MAX_CHANNELS];/* Usage-Semaphore for stream */
   isdn_v110_stream  *v110[ISDN_MAX_CHANNELS];  /* V.110 private data         */
+  struct semaphore  sem;                       /* serialize list access*/
 } isdn_dev;
 
 extern isdn_dev *dev;

@@ -34,8 +34,10 @@
 #include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/entry.h>
+#include <asm/errno.h>
 #include <asm/setup.h>
 #include <asm/segment.h>
+#include <asm/traps.h>
 
 #include "m68k_defs.h"
 
@@ -43,7 +45,7 @@
 .globl SYMBOL_NAME(resume), SYMBOL_NAME(ret_from_exception)
 .globl SYMBOL_NAME(ret_from_signal)
 .globl SYMBOL_NAME(inthandler), SYMBOL_NAME(sys_call_table)
-.globl SYMBOL_NAME(sys_fork), SYMBOL_NAME(sys_clone)
+.globl SYMBOL_NAME(sys_fork), SYMBOL_NAME(sys_clone), SYMBOL_NAME(sys_vfork)
 .globl SYMBOL_NAME(ret_from_interrupt), SYMBOL_NAME(bad_interrupt)
 
 .text
@@ -65,24 +67,24 @@ ENTRY(trap)
 
 ENTRY(reschedule)
 	| save top of frame
-	movel	%sp,%curptr@(TS_ESP0)
+	movel	%sp,%curptr@(TASK_TSS+TSS_ESP0)
 
 	pea	SYMBOL_NAME(ret_from_exception)
 	jmp	SYMBOL_NAME(schedule)
 
 badsys:
-	movel	#-LENOSYS,LPT_OFF_D0(%sp)
+	movel	#-ENOSYS,PT_D0(%sp)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 do_trace:
-	movel	#-LENOSYS,LPT_OFF_D0(%sp)	| needed for strace
+	movel	#-ENOSYS,PT_D0(%sp)	| needed for strace
 	subql	#4,%sp
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
 	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
-	movel	%d0,%sp@(LPT_OFF_D0)	| save the return value
+	movel	%d0,%sp@(PT_D0)		| save the return value
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
@@ -98,34 +100,34 @@ ENTRY(system_call)
 
 	GET_CURRENT(%d0)
 	| save top of frame
-	movel	%sp,%curptr@(TS_ESP0)
+	movel	%sp,%curptr@(TASK_TSS+TSS_ESP0)
 
 	cmpl	#NR_syscalls,%d2
 	jcc	badsys
-	btst	#LPF_TRACESYS_BIT,%curptr@(LTASK_FLAGS+LPF_TRACESYS_OFF)
+	btst	#PF_TRACESYS_BIT,%curptr@(TASK_FLAGS+PF_TRACESYS_OFF)
 	jne	do_trace
 	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
-	movel	%d0,%sp@(LPT_OFF_D0)	| save the return value
+	movel	%d0,%sp@(PT_D0)		| save the return value
 
 SYMBOL_NAME_LABEL(ret_from_exception)
-	btst	#5,%sp@(LPT_OFF_SR)	| check if returning to kernel
+	btst	#5,%sp@(PT_SR)		| check if returning to kernel
 	bnes	2f			| if so, skip resched, signals
 	| only allow interrupts when we are really the last one on the
 	| kernel stack, otherwise stack overflow can occur during
 	| heavy interupt load
 	andw	#ALLOWINT,%sr
-	tstl	%curptr@(LTASK_NEEDRESCHED)
+	tstl	%curptr@(TASK_NEEDRESCHED)
 	jne	SYMBOL_NAME(reschedule)
 	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
 	jeq	2f
 					| check for delayed trace
-	bclr	#LPF_DTRACE_BIT,%curptr@(LTASK_FLAGS+LPF_DTRACE_OFF)
+	bclr	#PF_DTRACE_BIT,%curptr@(TASK_FLAGS+PF_DTRACE_OFF)
 	jne	do_delayed_trace
 5:
-	tstl	%curptr@(LTASK_STATE)	| state
+	tstl	%curptr@(TASK_STATE)	| state
 	jne	SYMBOL_NAME(reschedule)
 
-	tstl	%curptr@(LTASK_SIGPENDING)
+	tstl	%curptr@(TASK_SIGPENDING)
 	jne	Lsignal_return
 2:	RESTORE_ALL
 
@@ -141,7 +143,7 @@ Lsignal_return:
 	RESTORE_ALL
 
 do_delayed_trace:
-	bclr	#7,%sp@(LPT_OFF_SR)	| clear trace bit in SR
+	bclr	#7,%sp@(PT_SR)		| clear trace bit in SR
 	pea	1			| send SIGTRAP
 	movel	%curptr,%sp@-
 	pea	LSIGTRAP
@@ -158,7 +160,7 @@ SYMBOL_NAME_LABEL(inthandler)
 	GET_CURRENT(%d0)
 	addql	#1,SYMBOL_NAME(local_irq_count)
 					|  put exception # in d0
-	bfextu %sp@(LPT_OFF_FORMATVEC){#4,#10},%d0
+	bfextu %sp@(PT_VECTOR){#4,#10},%d0
 
 	movel	%sp,%sp@-
 	movel	%d0,%sp@- 		|  put vector # on stack
@@ -172,7 +174,7 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 	RESTORE_ALL
 1:
 #if 1
-	bfextu  %sp@(LPT_OFF_SR){#5,#3},%d0	| Check for nested interrupt.
+	bfextu  %sp@(PT_SR){#5,#3},%d0	| Check for nested interrupt.
 #if MAX_NOINT_IPL > 0
 	cmpiw	#MAX_NOINT_IPL,%d0
 #endif
@@ -210,6 +212,14 @@ ENTRY(sys_clone)
 	RESTORE_SWITCH_STACK
 	rts
 
+ENTRY(sys_vfork)
+	SAVE_SWITCH_STACK	
+	pea	%sp@(SWITCH_STACK_SIZE)
+	jbsr	SYMBOL_NAME(m68k_vfork)
+	addql	#4,%sp
+	RESTORE_SWITCH_STACK
+	rts
+
 ENTRY(sys_sigsuspend)
 	SAVE_SWITCH_STACK
 	pea	%sp@(SWITCH_STACK_SIZE)
@@ -240,37 +250,31 @@ ENTRY(sys_rt_sigreturn)
 
 SYMBOL_NAME_LABEL(resume)
 	/*
-	 * Beware - when entering resume, offset of tss is in d1,
-	 * prev (the current task) is in a0, next (the new task)
-	 * is in a1 and d2.b is non-zero if the mm structure is
-	 * shared between the tasks, so don't change these
+	 * Beware - when entering resume, prev (the current task) is
+	 * in a0, next (the new task) is in a1,so don't change these
 	 * registers until their contents are no longer needed.
 	 */
 
-	/* offset of tss struct (processor state) from beginning
-	   of task struct */
-	addl	%d1,%a0
-
 	/* save sr */
-	movew	%sr,%a0@(LTSS_SR)
+	movew	%sr,%a0@(TASK_TSS+TSS_SR)
 
 	/* save fs (sfc,%dfc) (may be pointing to kernel memory) */
 	movec	%sfc,%d0
-	movew	%d0,%a0@(LTSS_FS)
+	movew	%d0,%a0@(TASK_TSS+TSS_FS)
 
 	/* save usp */
 	/* it is better to use a movel here instead of a movew 8*) */
 	movec	%usp,%d0
-	movel	%d0,%a0@(LTSS_USP)
+	movel	%d0,%a0@(TASK_TSS+TSS_USP)
 
 	/* save non-scratch registers on stack */
 	SAVE_SWITCH_STACK
 
 	/* save current kernel stack pointer */
-	movel	%sp,%a0@(LTSS_KSP)
+	movel	%sp,%a0@(TASK_TSS+TSS_KSP)
 
 	/* save floating point context */
-	fsave	%a0@(LTSS_FPCTXT+27*4)
+	fsave	%a0@(TASK_TSS+TSS_FPSTATE)
 
 #if defined(CONFIG_M68060)
 #if !defined(CPU_M68060_ONLY)
@@ -278,27 +282,27 @@ SYMBOL_NAME_LABEL(resume)
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
-	tstb	%a0@(LTSS_FPCTXT+27*4+2)
+	tstb	%a0@(TASK_TSS+TSS_FPSTATE+2)
 	jeq	3f
 #if !defined(CPU_M68060_ONLY)
 	jra	2f
 #endif
 #endif /* CONFIG_M68060 */
 #if !defined(CPU_M68060_ONLY)
-1:	tstb	%a0@(LTSS_FPCTXT+27*4)
+1:	tstb	%a0@(TASK_TSS+TSS_FPSTATE)
 	jeq	3f
 #endif
-2:	fmovemx	%fp0-%fp7,%a0@(LTSS_FPCTXT)
-	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(LTSS_FPCTXT+24*4)
+2:	fmovemx	%fp0-%fp7,%a0@(TASK_TSS+TSS_FPREG)
+	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(TASK_TSS+TSS_FPCNTL)
 3:
 
-	/* get pointer to tss struct (a1 contains new task) */
+	/* switch to new task (a1 contains new task) */
 	movel	%a1,%curptr
-	addl	%d1,%a1
 
 	/* Skip address space switching if they are the same. */
-	tstb	%d2
-	jne	4f
+	movel	%a0@(TASK_MM),%d0
+	cmpl	%a1@(TASK_MM),%d0
+	jeq	4f
 
 #if defined(CPU_M68020_OR_M68030) && defined(CPU_M68040_OR_M68060)
 	/* 68040 or 68060 ? */
@@ -316,7 +320,7 @@ SYMBOL_NAME_LABEL(resume)
 	movec	%d0,%cacr
 
 	/* switch the root pointer */
-	pmove	%a1@(LTSS_CRP),%crp
+	pmove	%a1@(TASK_TSS+TSS_CRP),%crp
 #endif
 
 #if defined(CPU_M68020_OR_M68030) && defined(CPU_M68040_OR_M68060)
@@ -333,7 +337,7 @@ SYMBOL_NAME_LABEL(resume)
 	pflushan
 
 	/* switch the root pointer */
-	movel	%a1@(LTSS_CRP+4),%d0
+	movel	%a1@(TASK_TSS+TSS_CRP+4),%d0
 	movec	%d0,%urp
 
 #if defined (CONFIG_M68060)
@@ -359,37 +363,37 @@ SYMBOL_NAME_LABEL(resume)
 	beqs	1f
 #endif
 	/* The 060 FPU keeps status in bits 15-8 of the first longword */
-	tstb	%a1@(LTSS_FPCTXT+27*4+2)
+	tstb	%a1@(TASK_TSS+TSS_FPSTATE+2)
 	jeq	3f
 #if !defined(CPU_M68060_ONLY)
 	jra	2f
 #endif
 #endif /* CONFIG_M68060 */
 #if !defined(CPU_M68060_ONLY)
-1:	tstb	%a1@(LTSS_FPCTXT+27*4)
+1:	tstb	%a1@(TASK_TSS+TSS_FPSTATE)
 	jeq	3f
 #endif	
-2:	fmovemx	%a1@(LTSS_FPCTXT),%fp0-%fp7
-	fmoveml	%a1@(LTSS_FPCTXT+24*4),%fpcr/%fpsr/%fpiar
-3:	frestore %a1@(LTSS_FPCTXT+27*4)
+2:	fmovemx	%a1@(TASK_TSS+TSS_FPREG),%fp0-%fp7
+	fmoveml	%a1@(TASK_TSS+TSS_FPCNTL),%fpcr/%fpsr/%fpiar
+3:	frestore %a1@(TASK_TSS+TSS_FPSTATE)
 
 	/* restore the kernel stack pointer */
-	movel	%a1@(LTSS_KSP),%sp
+	movel	%a1@(TASK_TSS+TSS_KSP),%sp
 
 	/* restore non-scratch registers */
 	RESTORE_SWITCH_STACK
 
 	/* restore user stack pointer */
-	movel	%a1@(LTSS_USP),%a0
+	movel	%a1@(TASK_TSS+TSS_USP),%a0
 	movel	%a0,%usp
 
 	/* restore fs (sfc,%dfc) */
-	movew	%a1@(LTSS_FS),%a0
+	movew	%a1@(TASK_TSS+TSS_FS),%a0
 	movec	%a0,%sfc
 	movec	%a0,%dfc
 
 	/* restore status register */
-	movew	%a1@(LTSS_SR),%sr
+	movew	%a1@(TASK_TSS+TSS_SR),%sr
 
 	rts
 
@@ -586,6 +590,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_sendfile)
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
+	.long SYMBOL_NAME(sys_vfork)            /* 190 */
 
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)

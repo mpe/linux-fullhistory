@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Mon Dec 14 20:09:42 1998
+ * Modified at:   Mon Jan 18 15:32:03 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -205,6 +205,7 @@ static int irtty_open( struct tty_struct *tty)
 	/* The only value we must override it the baudrate */
 	self->idev.qos.baud_rate.bits = IR_9600|IR_19200|IR_38400|IR_57600|
 		IR_115200;
+	self->idev.qos.min_turn_time.bits = 0x03;
 	irda_qos_bits_to_value( &self->idev.qos);
 
 	/* Specify which buffer allocation policy we need */
@@ -468,7 +469,6 @@ static void irtty_receive_buf( struct tty_struct *tty, const unsigned
 		 */
 		async_unwrap_char( &self->idev, *cp++);
 		/* self->rx_over_errors++; */
-
 	}
 }
 
@@ -586,9 +586,9 @@ static void irtty_write_wakeup( struct tty_struct *tty)
 
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 
-
 		idev->netdev.tbusy = 0; /* Unlock */
 		idev->stats.tx_packets++;
+		idev->stats.tx_bytes += idev->tx_buff.len;
 
 		/* Tell network layer that we want more frames */
 		mark_bh( NET_BH);

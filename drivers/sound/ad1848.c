@@ -2420,7 +2420,7 @@ void unload_ms_sound(struct address_info *hw_config)
 	ad1848_unload(hw_config->io_base + 4,
 		      hw_config->irq,
 		      hw_config->dma,
-		      hw_config->dma, 0);
+		      hw_config->dma2, 0);
 	sound_unload_audiodev(hw_config->slots[0]);
 	release_region(hw_config->io_base, 4);
 }

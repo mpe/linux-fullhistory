@@ -470,7 +470,7 @@ static inline pte_t *srmmu_get_pte_fast(void)
 		(unsigned int)ret->pprev_hash = mask & ~tmp;
 		if (!(mask & ~tmp))
 			pte_quicklist = (unsigned long *)ret->next_hash;
-		ret = (struct page *)(PAGE_OFFSET + (ret->map_nr << PAGE_SHIFT) + off);
+		ret = (struct page *)(page_address(ret) + off);
 		pgtable_cache_size--;
 	}
 	spin_unlock(&pte_spinlock);
@@ -508,7 +508,7 @@ static inline pgd_t *srmmu_get_pgd_fast(void)
 		(unsigned int)ret->pprev_hash = mask & ~tmp;
 		if (!(mask & ~tmp))
 			pgd_quicklist = (unsigned long *)ret->next_hash;
-		ret = (struct page *)(PAGE_OFFSET + (ret->map_nr << PAGE_SHIFT) + off);
+		ret = (struct page *)(page_address(ret) + off);
 		pgd_cache_size--;
 	}
 	spin_unlock(&pgd_spinlock);
@@ -682,7 +682,7 @@ static void srmmu_set_pgdir(unsigned long address, pgd_t entry)
 	spin_lock(&pgd_spinlock);
 	address >>= SRMMU_PGDIR_SHIFT;
 	for (page = (struct page *)pgd_quicklist; page; page = page->next_hash) {
-		pgd_t *pgd = (pgd_t *)(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+		pgd_t *pgd = (pgd_t *)page_address(page);
 		unsigned int mask = (unsigned int)page->pprev_hash;
 		
 		if (mask & 1)
@@ -2817,7 +2817,7 @@ static int srmmu_check_pgt_cache(int low, int high)
 				page->next_hash = NULL;
 				page->pprev_hash = NULL;
 				pgtable_cache_size -= 16;
-				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				__free_page(page);
 				freed++;
 				if (page2)
 					page = page2->next_hash;
@@ -2843,7 +2843,7 @@ static int srmmu_check_pgt_cache(int low, int high)
 				page->next_hash = NULL;
 				page->pprev_hash = NULL;
 				pgd_cache_size -= 4;
-				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				__free_page(page);
 				freed++;
 				if (page2)
 					page = page2->next_hash;

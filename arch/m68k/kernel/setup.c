@@ -48,6 +48,7 @@ extern int end;
 extern unsigned long availmem;
 
 int m68k_num_memory = 0;
+int m68k_realnum_memory = 0;
 struct mem_info m68k_memory[NUM_MEMINFO];
 
 static struct mem_info m68k_ramdisk = { 0, 0 };
@@ -62,8 +63,6 @@ void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initd
 int (*mach_keyb_init) (void) __initdata;
 int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
-/* machine dependent "kbd-reset" setup function */
-void (*kbd_reset_setup) (char *, int) __initdata = NULL;
 /* machine dependent irq functions */
 void (*mach_init_IRQ) (void) __initdata;
 void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;
@@ -159,6 +158,7 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 	record = (struct bi_record *)((u_long)record+record->size);
     }
 
+    m68k_realnum_memory = m68k_num_memory;
 #ifdef CONFIG_SINGLE_MEMORY_CHUNK
     if (m68k_num_memory > 1) {
 	printk("Ignoring last %i chunks of physical memory\n",
@@ -398,9 +398,9 @@ void floppy_eject(void)
 }
 #endif
 
-__initfunc(unsigned long arch_kbd_init(void))
+/* for "kbd-reset" cmdline param */
+void __init kbd_reset_setup(char *str, int *ints)
 {
-	return mach_keyb_init();
 }
 
 void arch_gettod(int *year, int *mon, int *day, int *hour,

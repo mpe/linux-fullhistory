@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Wed Dec  9 02:26:45 1998
+ * Modified at:   Tue Dec 15 09:21:50 1998
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998, Thomas Davis, <ratbert@radiks.net>, 
@@ -330,7 +330,6 @@ int proc_discovery_read( char *buf, char **start, off_t offset, int len,
 		return len;
 
 	len = sprintf(buf, "IrLMP: Discovery log:\n\n");	
-
 
 	save_flags(flags);
 	cli();

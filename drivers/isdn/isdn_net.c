@@ -20,6 +20,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ * Note: This file differs from the corresponding revision as present in the
+ * isdn4linux CVS repository because some later bug fixes have been extracted
+ * from the repository and merged into this file. -- Henner Eisen
+ *
  * $Log: isdn_net.c,v $
  * Revision 1.55  1998/02/23 19:38:22  fritz
  * Corrected check for modified feature-flags.
@@ -243,7 +247,7 @@
 #include <linux/module.h>
 #include <linux/isdn.h>
 #include <net/arp.h>
-#include <net/icmp.h>
+#include <net/dst.h>
 #ifndef DEV_NUMBUFFS
 #include <net/pkt_sched.h>
 #endif
@@ -277,9 +281,18 @@ char *isdn_net_revision = "$Revision: 1.55 $";
 static void
 isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 {
-	printk(KERN_DEBUG "isdn_net: %s: %s, send ICMP\n",
-	       dev->name, reason);
-	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
+
+	if(skb) {
+
+		u_short proto = ntohs(skb->protocol);
+
+		printk(KERN_DEBUG "isdn_net: %s: %s, signalling dst_link_failure %s\n",
+		       dev->name,
+		       (reason != NULL) ? reason : "unknown",
+		       (proto != ETH_P_IP) ? "Protocol != ETH_P_IP" : "");
+		
+		dst_link_failure(skb);
+	}
 }
 
 static void
@@ -610,6 +623,13 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 							
 							if (!(isdn_net_xmit(&p->dev, lp, lp->first_skb)))
 								lp->first_skb = NULL;
+						} else {
+							/*
+							 * dev.tbusy is usually cleared implicitly by isdn_net_xmit(,,lp->first_skb).
+							 * With an empty lp->first_skb, we need to do this ourselves
+							 */
+							lp->netdev->dev.tbusy = 0;
+							mark_bh(NET_BH);
 						}
 						return 1;
 				}
@@ -2696,7 +2716,8 @@ isdn_net_addphone(isdn_net_ioctl_phone * phone)
 }
 
 /*
- * Return a string of all phone-numbers of an interface.
+ * Copy a string of all phone-numbers of an interface to user space.
+ * This might sleep and must be called with the isdn semaphore down.
  */
 int
 isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
@@ -2706,22 +2727,17 @@ isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 	int more = 0;
 	int count = 0;
 	isdn_net_phone *n;
-	int flags;
-	int ret;
 
 	if (!p)
 		return -ENODEV;
-	save_flags(flags);
-	cli();
 	inout &= 1;
 	for (n = p->local->phone[inout]; n; n = n->next) {
 		if (more) {
 			put_user(' ', phones++);
 			count++;
 		}
-		if ((ret = copy_to_user(phones, n->num, strlen(n->num) + 1))) {
-			restore_flags(flags);
-			return ret;
+		if (copy_to_user(phones, n->num, strlen(n->num) + 1)) {
+			return -EFAULT;
 		}
 		phones += strlen(n->num);
 		count += strlen(n->num);
@@ -2729,7 +2745,6 @@ isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 	}
 	put_user(0, phones);
 	count++;
-	restore_flags(flags);
 	return count;
 }
 
@@ -2760,6 +2775,7 @@ isdn_net_delphone(isdn_net_ioctl_phone * phone)
 				else
 					p->local->phone[inout] = n->next;
 				kfree(n);
+				restore_flags(flags);
 				return 0;
 			}
 			m = n;

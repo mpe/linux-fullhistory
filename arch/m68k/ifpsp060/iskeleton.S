@@ -36,6 +36,7 @@
 
 #include <linux/linkage.h>
 #include <asm/entry.h>
+#include "../kernel/m68k_defs.h"
 
 
 |################################
@@ -69,12 +70,12 @@
 	.global		_060_isp_done
 _060_isp_done:
 	btst	#0x5,%sp@		| supervisor bit set in saved SR?
-	beq	Lnotkern
+	beq	.Lnotkern
 	rte
-Lnotkern:
+.Lnotkern:
 	SAVE_ALL_INT
 	GET_CURRENT(%d0)
-	tstl	%curptr@(LTASK_NEEDRESCHED)
+	tstl	%curptr@(TASK_NEEDRESCHED)
 	jne	SYMBOL_NAME(ret_from_exception)	| deliver signals,
 						| reschedule etc..
 	RESTORE_ALL

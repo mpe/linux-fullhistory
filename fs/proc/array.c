@@ -1085,8 +1085,7 @@ static int get_statm(int pid, char * buffer)
 			vma = vma->vm_next;
 		}
 		release_mm(mm); 
-	} else
-		return 0; 
+	}
 	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
 		       size, resident, share, trs, lrs, drs, dt);
 }

@@ -36,6 +36,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SHARP_FIR),y)
+L_OBJS += uircc.o irport.o
+else
+  ifeq ($(CONFIG_SHARP_FIR),m)
+  M_OBJS += uircc.o irport.o
+  endif
+endif
+
 ifeq ($(CONFIG_ESI_DONGLE),y)
 L_OBJS += esi.o
 else

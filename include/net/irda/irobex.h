@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jul  4 22:43:57 1998
- * Modified at:   Mon Oct 19 12:32:33 1998
+ * Modified at:   Wed Jan 13 15:55:28 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -50,13 +50,22 @@ struct irobex_ioc_t {
 #define IROBEX_IOCSDISCONNECT _IOW(IROBEX_IOC_MAGIC, 2, 4)
 #define IROBEX_IOC_MAXNR 2
 
-
 #define IROBEX_MAX_HEADER (TTP_HEADER+LMP_HEADER+LAP_HEADER)
+
+typedef enum {
+	OBEX_IDLE,       /* Doing nothing */
+	OBEX_DISCOVER,   /* Trying to discovery remote device */
+	OBEX_QUERY,      /* Querying remote LM-IAS */
+	OBEX_CONN,       /* Trying to connect to remote device */
+	OBEX_DATA,       /* Data transfer ready */
+} OBEX_STATE;
 
 struct irobex_cb {
 	QUEUE queue;        /* Must be first! */
 
         int magic;          /* magic used to detect corruption of the struct */
+
+	OBEX_STATE state;   /* Current state */
 
 	__u32 saddr;        /* my local address */
 	__u32 daddr;        /* peer address */
@@ -64,7 +73,6 @@ struct irobex_cb {
 
         char devname[9];    /* name of the registered device */
 	struct tsap_cb *tsap;
-	int connected;
 	int eof;
 
 	__u8 dtsap_sel;         /* remote TSAP address */
@@ -80,11 +88,6 @@ struct irobex_cb {
 
 	struct wait_queue *read_wait;
 	struct wait_queue *write_wait;
-
-	/* These wait queues are used for setting up a connections */
-	struct wait_queue *connect_wait;
-	struct wait_queue *discover_wait;
-	struct wait_queue *ias_wait;
 
 	struct fasync_struct *async;
 
@@ -121,13 +124,11 @@ void irobex_register_server( struct irobex_cb *self);
 
 void irobex_watchdog_timer_expired( unsigned long data);
 
-inline void irobex_start_watchdog_timer( struct irobex_cb *self, 
-						int timeout) 
+inline void irobex_start_watchdog_timer( struct irobex_cb *self, int timeout) 
 {
 	irda_start_timer( &self->watchdog_timer, timeout, (unsigned long) self,
 			  irobex_watchdog_timer_expired);
 }
-
 
 extern struct irobex_cb *irobex;
 

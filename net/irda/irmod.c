@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon Dec 14 20:10:28 1998
+ * Modified at:   Tue Jan 19 23:34:18 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -33,7 +33,11 @@
 #include <net/irda/iriap.h>
 #include <net/irda/irttp.h>
 
-struct irda irda; /* One global instance */
+struct irda_cb irda; /* One global instance */
+
+#ifdef CONFIG_IRDA_DEBUG
+__u32 irda_debug = IRDA_DEBUG;
+#endif
 
 extern void irda_proc_register(void);
 extern void irda_proc_unregister(void);
@@ -50,6 +54,8 @@ extern int irlan_client_init(void);
 extern int irlan_server_init(void);
 extern int ircomm_init(void);
 extern int irvtd_init(void);
+extern int irlpt_client_init(void);
+extern int irlpt_server_init(void);
 
 static int irda_open( struct inode * inode, struct file *file);
 static int irda_ioctl( struct inode *inode, struct file *filp, 
@@ -99,6 +105,8 @@ __initfunc(int irda_init(void))
 	
 	misc_register( &irda.dev);
 
+	irda.in_use = FALSE;
+
 	/* 
 	 * Initialize modules that got compiled into the kernel 
 	 */
@@ -117,6 +125,14 @@ __initfunc(int irda_init(void))
 #ifdef CONFIG_IRCOMM
 	ircomm_init();
 	irvtd_init();
+#endif
+
+#ifdef CONFIG_IRLPT_CLIENT
+	irlpt_client_init();
+#endif
+
+#ifdef CONFIG_IRLPT_SERVER
+	irlpt_server_init();
 #endif
 
 	return 0;
@@ -206,6 +222,12 @@ void irda_execute_as_process( void *self, TODO_CALLBACK callback, __u32 param)
 	struct irda_todo *new;
 	struct irmanager_event event;
 
+	/* Make sure irmanager is running */
+	if ( !irda.in_use) {
+		printk( KERN_ERR "irmanager is not running!\n");
+		return;
+	}
+
 	/* Make new todo event */
 	new = (struct irda_todo *) kmalloc( sizeof(struct irda_todo),
 					    GFP_ATOMIC);
@@ -239,6 +261,12 @@ void irmanager_notify( struct irmanager_event *event)
 	
 	DEBUG( 4, __FUNCTION__ "()\n");
 
+	/* Make sure irmanager is running */
+	if ( !irda.in_use) {
+		printk( KERN_ERR "irmanager is not running!\n");
+		return;
+	}
+
 	/* Make new IrDA Event */
 	new = (struct irda_event *) kmalloc( sizeof(struct irda_event),
 					     GFP_ATOMIC);
@@ -259,6 +287,12 @@ static int irda_open( struct inode * inode, struct file *file)
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 
+	if ( irda.in_use) {
+		DEBUG( 0, __FUNCTION__ "(), irmanager is already running!\n");
+		return -1;
+	}
+	irda.in_use = TRUE;
+		
 	MOD_INC_USE_COUNT;
 
 	return 0;
@@ -312,6 +346,8 @@ static int irda_close( struct inode *inode, struct file *file)
 	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	MOD_DEC_USE_COUNT;
+
+	irda.in_use = FALSE;
 
 	return 0;
 }

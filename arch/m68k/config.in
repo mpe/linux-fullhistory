@@ -44,6 +44,7 @@ bool 'HP9000/300 support' CONFIG_HP300
 if [ "$CONFIG_HP300" = "y" ]; then
   bool 'DIO bus support' CONFIG_DIO
 fi
+define_bool CONFIG_SUN3 n
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 fi
@@ -129,24 +130,24 @@ mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 
 if [ "$CONFIG_AMIGA" = "y" ]; then
-  tristate 'A3000 WD33C93A support' CONFIG_A3000_SCSI
+  dep_tristate 'A3000 WD33C93A support' CONFIG_A3000_SCSI $CONFIG_SCSI
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
   fi
 fi
 if [ "$CONFIG_ZORRO" = "y" ]; then
-  tristate 'A2091 WD33C93A support' CONFIG_A2091_SCSI
-  tristate 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI
-  bool 'CyberStorm SCSI support' CONFIG_CYBERSTORM_SCSI
-  bool 'CyberStorm Mk II SCSI support' CONFIG_CYBERSTORMII_SCSI
-  bool 'Blizzard 2060 SCSI support' CONFIG_BLZ2060_SCSI
-  bool 'Blizzard 1230IV/1260 SCSI support' CONFIG_BLZ1230_SCSI
-  bool 'Fastlane SCSI support' CONFIG_FASTLANE_SCSI
+  dep_tristate 'A2091 WD33C93A support' CONFIG_A2091_SCSI $CONFIG_SCSI
+  dep_tristate 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI $CONFIG_SCSI
+  dep_tristate 'CyberStorm SCSI support' CONFIG_CYBERSTORM_SCSI $CONFIG_SCSI
+  dep_tristate 'CyberStorm Mk II SCSI support' CONFIG_CYBERSTORMII_SCSI $CONFIG_SCSI
+  dep_tristate 'Blizzard 2060 SCSI support' CONFIG_BLZ2060_SCSI $CONFIG_SCSI
+  dep_tristate 'Blizzard 1230IV/1260 SCSI support' CONFIG_BLZ1230_SCSI $CONFIG_SCSI
+  dep_tristate 'Fastlane SCSI support' CONFIG_FASTLANE_SCSI $CONFIG_SCSI
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
     bool 'Blizzard PowerUP 603e+ SCSI' CONFIG_BLZ603EPLUS_SCSI
-#    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
+    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi
@@ -162,7 +163,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
   bool 'MAC NCR5380 SCSI' CONFIG_MAC_SCSI
-  bool 'MAC NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP
+  dep_tristate 'MAC NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP $CONFIG_SCSI
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 

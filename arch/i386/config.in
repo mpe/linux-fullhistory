@@ -70,6 +70,17 @@ if [ "$CONFIG_PCI" = "y" ]; then
   bool '   Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 fi
 bool 'MCA support' CONFIG_MCA
+bool 'SGI Visual Workstation support' CONFIG_VISWS
+if [ "$CONFIG_VISWS" = "y" ]; then
+  define_bool CONFIG_X86_VISWS_APIC y
+  define_bool CONFIG_X86_LOCAL_APIC y
+else
+  if [ "$CONFIG_SMP" = "y" ]; then
+    define_bool CONFIG_X86_IO_APIC y
+    define_bool CONFIG_X86_LOCAL_APIC y
+  fi
+fi
+
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL

@@ -2,6 +2,9 @@
  *  linux/arch/m68k/mm/kmap.c
  *
  *  Copyright (C) 1997 Roman Hodek
+ *
+ *  10/01/99 cleaned up the code and changing to the same interface
+ *	     used by other architectures		/Roman Zippel
  */
 
 #include <linux/mm.h>
@@ -9,250 +12,88 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 
 #include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/io.h>
 #include <asm/system.h>
 
+#undef DEBUG
 
-extern pte_t *kernel_page_table (unsigned long *memavailp);
-
-/* Granularity of kernel_map() allocations */
-#define KMAP_STEP	(256*1024)
-
-/* Size of pool of KMAP structures; that is needed, because kernel_map() can
- * be called at times where kmalloc() isn't initialized yet. */
-#define	KMAP_POOL_SIZE	16
-
-/* structure for maintainance of kmap regions */
-typedef struct kmap {
-	struct kmap *next, *prev;	/* linking of list */
-	unsigned long addr;			/* start address of region */
-	unsigned long mapaddr;		/* address returned to user */
-	unsigned long size;			/* size of region */
-	unsigned free : 1;			/* flag whether free or allocated */
-	unsigned kmalloced : 1;		/* flag whether got this from kmalloc() */
-	unsigned pool_alloc : 1;	/* flag whether got this is alloced in pool */
-} KMAP;
-
-KMAP kmap_pool[KMAP_POOL_SIZE] = {
-	{ NULL, NULL, KMAP_START, KMAP_START, KMAP_END-KMAP_START, 1, 0, 1 },
-	{ NULL, NULL, 0, 0, 0, 0, 0, 0 },
-};
+#define PTRTREESIZE	(256*1024)
 
 /*
- * anchor of kmap region list
- *
- * The list is always ordered by addresses, and regions are always adjacent,
- * i.e. there must be no holes between them!
+ * For 040/060 we can use the virtual memory area like other architectures,
+ * but for 020/030 we want to use early termination page descriptor and we
+ * can't mix this with normal page descriptors, so we have to copy that code
+ * (mm/vmalloc.c) and return appriorate aligned addresses.
  */
-KMAP *kmap_regions = &kmap_pool[0];
 
-/* for protecting the kmap_regions list against races */
-static struct semaphore kmap_sem = MUTEX;
+#ifdef CPU_M68040_OR_M68060_ONLY
 
+#define IO_SIZE		PAGE_SIZE
 
-
-/*
- * Low-level allocation and freeing of KMAP structures
- */
-static KMAP *alloc_kmap( int use_kmalloc )
+static inline struct vm_struct *get_io_area(unsigned long size)
 {
-	KMAP *p;
-	int i;
-
-	/* first try to get from the pool if possible */
-	for( i = 0; i < KMAP_POOL_SIZE; ++i ) {
-		if (!kmap_pool[i].pool_alloc) {
-			kmap_pool[i].kmalloced = 0;
-			kmap_pool[i].pool_alloc = 1;
-			return( &kmap_pool[i] );
-		}
-	}
-	
-	if (use_kmalloc && (p = (KMAP *)kmalloc( sizeof(KMAP), GFP_KERNEL ))) {
-		p->kmalloced = 1;
-		return( p );
-	}
-	
-	return( NULL );
-}
-
-static void free_kmap( KMAP *p )
-{
-	if (p->kmalloced)
-		kfree( p );
-	else
-		p->pool_alloc = 0;
+	return get_vm_area(size);
 }
 
 
-/*
- * Get a free region from the kmap address range
- */
-static KMAP *kmap_get_region( unsigned long size, int use_kmalloc )
+static inline void free_io_area(void *addr)
 {
-	KMAP *p, *q;
-
-	/* look for a suitable free region */
-	for( p = kmap_regions; p; p = p->next )
-		if (p->free && p->size >= size)
-			break;
-	if (!p) {
-		printk( KERN_ERR "kernel_map: address space for "
-				"allocations exhausted\n" );
-		return( NULL );
-	}
-	
-	if (p->size > size) {
-		/* if free region is bigger than we need, split off the rear free part
-		 * into a new region */
-		if (!(q = alloc_kmap( use_kmalloc ))) {
-			printk( KERN_ERR "kernel_map: out of memory\n" );
-			return( NULL );
-		}
-		q->addr = p->addr + size;
-		q->size = p->size - size;
-		p->size = size;
-		q->free = 1;
-
-		q->prev = p;
-		q->next = p->next;
-		p->next = q;
-		if (q->next) q->next->prev = q;
-	}
-	
-	p->free = 0;
-	return( p );
+	return vfree((void *)(PAGE_MASK & (unsigned long)addr));
 }
 
+#else
 
-/*
- * Free a kernel_map region again
- */
-static void kmap_put_region( KMAP *p )
+#define IO_SIZE		(256*1024)
+
+static struct vm_struct *iolist = NULL;
+
+static struct vm_struct *get_io_area(unsigned long size)
 {
-	KMAP *q;
+	unsigned long addr;
+	struct vm_struct **p, *tmp, *area;
 
-	p->free = 1;
-
-	/* merge with previous region if possible */
-	q = p->prev;
-	if (q && q->free) {
-		if (q->addr + q->size != p->addr) {
-			printk( KERN_ERR "kernel_malloc: allocation list destroyed\n" );
-			return;
-		}
-		q->size += p->size;
-		q->next = p->next;
-		if (p->next) p->next->prev = q;
-		free_kmap( p );
-		p = q;
-	}
-
-	/* merge with following region if possible */
-	q = p->next;
-	if (q && q->free) {
-		if (p->addr + p->size != q->addr) {
-			printk( KERN_ERR "kernel_malloc: allocation list destroyed\n" );
-			return;
-		}
-		p->size += q->size;
-		p->next = q->next;
-		if (q->next) q->next->prev = p;
-		free_kmap( q );
-	}
-}
-
-
-/*
- * kernel_map() helpers
- */
-static inline pte_t *
-pte_alloc_kernel_map(pmd_t *pmd, unsigned long address,
-		     unsigned long *memavailp)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t *page = kernel_page_table(memavailp);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_set(pmd, page);
-				memset( page, 0, PAGE_SIZE );
-				return page + address;
-			}
-			pmd_set(pmd, BAD_PAGETABLE);
-			return NULL;
-		}
-		if (memavailp)
-			panic("kernel_map: slept during init?!?");
-		cache_page((unsigned long) page);
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk( KERN_ERR "Bad pmd in pte_alloc_kernel_map: %08lx\n",
-		       pmd_val(*pmd));
-		pmd_set(pmd, BAD_PAGETABLE);
+	area = (struct vm_struct *)kmalloc(sizeof(*area), GFP_KERNEL);
+	if (!area)
 		return NULL;
+	addr = KMAP_START;
+	for (p = &iolist; (tmp = *p) ; p = &tmp->next) {
+		if (size + addr < (unsigned long)tmp->addr)
+			break;
+		if (addr > KMAP_END-size)
+			return NULL;
+		addr = tmp->size + (unsigned long)tmp->addr;
 	}
-	return (pte_t *) pmd_page(*pmd) + address;
+	area->addr = (void *)addr;
+	area->size = size + IO_SIZE;
+	area->next = *p;
+	*p = area;
+	return area;
 }
 
-static inline void
-kernel_map_pte(pte_t *pte, unsigned long address, unsigned long size,
-	       unsigned long phys_addr, pgprot_t prot)
+static inline void free_io_area(void *addr)
 {
-	unsigned long end;
+	struct vm_struct **p, *tmp;
 
-	address &= ~PMD_MASK;
-	end = address + size;
-	if (end > PMD_SIZE)
-		end = PMD_SIZE;
-	do {
-		pte_val(*pte) = phys_addr + pgprot_val(prot);
-		address += PAGE_SIZE;
-		phys_addr += PAGE_SIZE;
-		pte++;
-	} while (address < end);
-}
-
-static inline int
-kernel_map_pmd (pmd_t *pmd, unsigned long address, unsigned long size,
-		unsigned long phys_addr, pgprot_t prot,
-		unsigned long *memavailp)
-{
-	unsigned long end;
-
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
-	phys_addr -= address;
-
-	if (CPU_IS_040_OR_060) {
-		do {
-			pte_t *pte = pte_alloc_kernel_map(pmd, address, memavailp);
-			if (!pte)
-				return -ENOMEM;
-			kernel_map_pte(pte, address, end - address,
-				       address + phys_addr, prot);
-			address = (address + PMD_SIZE) & PMD_MASK;
-			pmd++;
-		} while (address < end);
-	} else {
-		/* On the 68030 we use early termination page descriptors.
-		   Each one points to 64 pages (256K). */
-		int i = (address >> (PMD_SHIFT-4)) & 15;
-		do {
-			(&pmd_val(*pmd))[i++] = (address + phys_addr) | pgprot_val(prot);
-			address += PMD_SIZE / 16;
-		} while (address < end);
+	if (!addr)
+		return;
+	addr = (void *)((unsigned long)addr & -IO_SIZE);
+	for (p = &iolist ; (tmp = *p) ; p = &tmp->next) {
+		if (tmp->addr == addr) {
+			*p = tmp->next;
+			__iounmap(tmp->addr, tmp->size);
+			kfree(tmp);
+			return;
+		}
 	}
-	return 0;
 }
 
+#endif
 
 /*
  * Map some physical address range into the kernel address space. The
@@ -260,304 +101,245 @@ kernel_map_pmd (pmd_t *pmd, unsigned long address, unsigned long size,
  */
 /* Rewritten by Andreas Schwab to remove all races. */
 
-unsigned long kernel_map(unsigned long phys_addr, unsigned long size,
-			 int cacheflag, unsigned long *memavailp)
+void *__ioremap(unsigned long physaddr, unsigned long size, int cacheflag)
 {
-	unsigned long retaddr, from, end;
-	pgd_t *dir;
-	pgprot_t prot;
-	KMAP *kmap;
+	struct vm_struct *area;
+	unsigned long virtaddr, retaddr;
+	long offset;
+	pgd_t *pgd_dir;
+	pmd_t *pmd_dir;
+	pte_t *pte_dir;
 
-	/* Round down 'phys_addr' to 256 KB and adjust size */
-	retaddr = phys_addr & (KMAP_STEP-1);
-	size += retaddr;
-	phys_addr &= ~(KMAP_STEP-1);
-	/* Round up the size to 256 KB. It doesn't hurt if too much is
-	   mapped... */
-	size = (size + KMAP_STEP - 1) & ~(KMAP_STEP-1);
-	
-	down( &kmap_sem );
-	kmap = kmap_get_region(size, memavailp == NULL);
-	if (!kmap) {
-		up(&kmap_sem);
-		return 0;
-	}
-	from = kmap->addr;
-	retaddr += from;
-	kmap->mapaddr = retaddr;
-	end = from + size;
-	up( &kmap_sem );
+	/*
+	 * Don't allow mappings that wrap..
+	 */
+	if (!size || size > physaddr + size)
+		return NULL;
 
+#ifdef DEBUG
+	printk("ioremap: 0x%lx,0x%lx(%d) - ", physaddr, size, cacheflag);
+#endif
+	/*
+	 * Mappings have to be aligned
+	 */
+	offset = physaddr & (IO_SIZE - 1);
+	physaddr &= -IO_SIZE;
+	size = (size + offset + IO_SIZE - 1) & -IO_SIZE;
+
+	/*
+	 * Ok, go for it..
+	 */
+	area = get_io_area(size);
+	if (!area)
+		return NULL;
+
+	virtaddr = (unsigned long)area->addr;
+	retaddr = virtaddr + offset;
+#ifdef DEBUG
+	printk("0x%lx,0x%lx,0x%lx", physaddr, virtaddr, retaddr);
+#endif
+
+	/*
+	 * add cache and table flags to physical address
+	 */
 	if (CPU_IS_040_OR_060) {
-		pgprot_val(prot) = (_PAGE_PRESENT | _PAGE_GLOBAL040 |
-				    _PAGE_ACCESSED | _PAGE_DIRTY);
+		physaddr |= (_PAGE_PRESENT | _PAGE_GLOBAL040 |
+			     _PAGE_ACCESSED | _PAGE_DIRTY);
 		switch (cacheflag) {
-		case KERNELMAP_FULL_CACHING:
-			pgprot_val(prot) |= _PAGE_CACHE040;
+		case IOMAP_FULL_CACHING:
+			physaddr |= _PAGE_CACHE040;
 			break;
-		case KERNELMAP_NOCACHE_SER:
+		case IOMAP_NOCACHE_SER:
 		default:
-			pgprot_val(prot) |= _PAGE_NOCACHE_S;
+			physaddr |= _PAGE_NOCACHE_S;
 			break;
-		case KERNELMAP_NOCACHE_NONSER:
-			pgprot_val(prot) |= _PAGE_NOCACHE;
+		case IOMAP_NOCACHE_NONSER:
+			physaddr |= _PAGE_NOCACHE;
 			break;
-		case KERNELMAP_NO_COPYBACK:
-			pgprot_val(prot) |= _PAGE_CACHE040W;
+		case IOMAP_WRITETHROUGH:
+			physaddr |= _PAGE_CACHE040W;
 			break;
 		}
-	} else
-		pgprot_val(prot) = (_PAGE_PRESENT | _PAGE_ACCESSED |
-				    _PAGE_DIRTY |
-				    ((cacheflag == KERNELMAP_FULL_CACHING ||
-				      cacheflag == KERNELMAP_NO_COPYBACK)
-				     ? 0 : _PAGE_NOCACHE030));
-
-	phys_addr -= from;
-	dir = pgd_offset_k(from);
-	while (from < end) {
-		pmd_t *pmd = pmd_alloc_kernel(dir, from);
-
-		if (kernel_map_pmd(pmd, from, end - from, phys_addr + from,
-				   prot, memavailp)) {
-			printk( KERN_ERR "kernel_map: out of memory\n" );
-			return 0UL;
-		}
-		from = (from + PGDIR_SIZE) & PGDIR_MASK;
-		dir++;
-	}
-
-	return retaddr;
-}
-
-
-/*
- * kernel_unmap() helpers
- */
-static inline void pte_free_kernel_unmap( pmd_t *pmd )
-{
-	unsigned long page = pmd_page(*pmd);
-	mem_map_t *pagemap = &mem_map[MAP_NR(page)];
-	
-	pmd_clear(pmd);
-	cache_page(page);
-
-	if (PageReserved( pagemap )) {
-		/* need to unreserve pages that were allocated with memavailp != NULL;
-		 * this works only if 'page' is page-aligned */
-		if (page & ~PAGE_MASK)
-			return;
-		clear_bit( PG_reserved, &pagemap->flags );
-		atomic_set( &pagemap->count, 1 );
-	}
-	free_page( page );
-}
-
-/*
- * This not only unmaps the requested region, but also loops over the whole
- * pmd to determine whether the other pte's are clear (so that the page can be
- * freed.) If so, it returns 1, 0 otherwise.
- */
-static inline int
-kernel_unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
-{
-	pte_t *pte;
-	unsigned long addr2, end, end2;
-	int all_clear = 1;
-
-	if (pmd_none(*pmd))
-		return( 0 );
-	if (pmd_bad(*pmd)) {
-		printk( KERN_ERR "kernel_unmap_pte_range: bad pmd (%08lx)\n",
-				pmd_val(*pmd) );
-		pmd_clear(pmd);
-		return( 0 );
-	}
-	address &= ~PMD_MASK;
-	addr2 = 0;
-	pte = pte_offset(pmd, addr2);
-	end = address + size;
-	if (end > PMD_SIZE)
-		end = PMD_SIZE;
-	end2 = addr2 + PMD_SIZE;
-	while( addr2 < end2 ) {
-		if (!pte_none(*pte)) {
-			if (address <= addr2 && addr2 < end)
-				pte_clear(pte);
-			else
-				all_clear = 0;
-		}
-		++pte;
-		addr2 += PAGE_SIZE;
-	}
-	return( all_clear );
-}
-
-static inline void
-kernel_unmap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
-{
-	pmd_t * pmd;
-	unsigned long end;
-
-	if (pgd_none(*dir))
-		return;
-	if (pgd_bad(*dir)) {
-		printk( KERN_ERR "kernel_unmap_pmd_range: bad pgd (%08lx)\n",
-				pgd_val(*dir) );
-		pgd_clear(dir);
-		return;
-	}
-	pmd = pmd_offset(dir, address);
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
-	
-	if (CPU_IS_040_OR_060) {
-		do {
-			if (kernel_unmap_pte_range(pmd, address, end - address))
-				pte_free_kernel_unmap( pmd );
-			address = (address + PMD_SIZE) & PMD_MASK;
-			pmd++;
-		} while (address < end);
 	} else {
-		/* On the 68030 clear the early termination descriptors */
-		int i = (address >> (PMD_SHIFT-4)) & 15;
-		do {
-			(&pmd_val(*pmd))[i++] = 0;
-			address += PMD_SIZE / 16;
-		} while (address < end);
+		physaddr |= (_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_DIRTY);
+		switch (cacheflag) {
+		case IOMAP_NOCACHE_SER:
+		case IOMAP_NOCACHE_NONSER:
+		default:
+			physaddr |= _PAGE_NOCACHE030;
+			break;
+		case IOMAP_FULL_CACHING:
+		case IOMAP_WRITETHROUGH:
+			break;
+		}
 	}
+
+	while (size > 0) {
+#ifdef DEBUG
+		if (!(virtaddr & (PTRTREESIZE-1)))
+			printk ("\npa=%#lx va=%#lx ", physaddr, virtaddr);
+#endif
+		pgd_dir = pgd_offset_k(virtaddr);
+		pmd_dir = pmd_alloc_kernel(pgd_dir, virtaddr);
+		if (!pmd_dir) {
+			printk("ioremap: no mem for pmd_dir\n");
+			return NULL;
+		}
+
+		if (CPU_IS_020_OR_030) {
+			pmd_dir->pmd[(virtaddr/PTRTREESIZE)&-16] = physaddr;
+			physaddr += PTRTREESIZE;
+			virtaddr += PTRTREESIZE;
+			size -= PTRTREESIZE;
+		} else {
+			pte_dir = pte_alloc_kernel(pmd_dir, virtaddr);
+			if (!pte_dir) {
+				printk("ioremap: no mem for pte_dir\n");
+				return NULL;
+			}
+
+			pte_val(*pte_dir) = physaddr;
+			virtaddr += PAGE_SIZE;
+			physaddr += PAGE_SIZE;
+			size -= PAGE_SIZE;
+		}
+	}
+#ifdef DEBUG
+	printk("\n");
+#endif
+	flush_tlb_all();
+
+	return (void *)retaddr;
 }
 
 /*
- * Unmap a kernel_map()ed region again
+ * Unmap a ioremap()ed region again
  */
-void kernel_unmap( unsigned long addr )
+void iounmap(void *addr)
 {
-	unsigned long end;
-	pgd_t *dir;
-	KMAP *p;
+	free_io_area(addr);
+}
 
-	down( &kmap_sem );
-	
-	/* find region for 'addr' in list; must search for mapaddr! */
-	for( p = kmap_regions; p; p = p->next )
-		if (!p->free && p->mapaddr == addr)
-			break;
-	if (!p) {
-		printk( KERN_ERR "kernel_unmap: trying to free invalid region\n" );
-		return;
-	}
-	addr = p->addr;
-	end = addr + p->size;
-	kmap_put_region( p );
+/*
+ * __iounmap unmaps nearly everything, so be careful
+ * it doesn't free currently pointer/page tables anymore but it
+ * wans't used anyway and might be added later.
+ */
+void __iounmap(void *addr, unsigned long size)
+{
+	unsigned long virtaddr = (unsigned long)addr;
+	pgd_t *pgd_dir;
+	pmd_t *pmd_dir;
+	pte_t *pte_dir;
 
-	dir = pgd_offset_k( addr );
-	while( addr < end ) {
-		kernel_unmap_pmd_range( dir, addr, end - addr );
-		addr = (addr + PGDIR_SIZE) & PGDIR_MASK;
-		dir++;
+	while (size > 0) {
+		pgd_dir = pgd_offset_k(virtaddr);
+		if (pgd_bad(*pgd_dir)) {
+			printk("iounmap: bad pgd(%08lx)\n", pgd_val(*pgd_dir));
+			pgd_clear(pgd_dir);
+			return;
+		}
+		pmd_dir = pmd_offset(pgd_dir, virtaddr);
+
+		if (CPU_IS_020_OR_030) {
+			int pmd_off = (virtaddr/PTRTREESIZE) & -16;
+
+			if ((pmd_dir->pmd[pmd_off] & _DESCTYPE_MASK) == _PAGE_PRESENT) {
+				pmd_dir->pmd[pmd_off] = 0;
+				virtaddr += PTRTREESIZE;
+				size -= PTRTREESIZE;
+				continue;
+			}
+		}
+
+		if (pmd_bad(*pmd_dir)) {
+			printk("iounmap: bad pmd (%08lx)\n", pmd_val(*pmd_dir));
+			pmd_clear(pmd_dir);
+			return;
+		}
+		pte_dir = pte_offset(pmd_dir, virtaddr);
+
+		pte_val(*pte_dir) = 0;
+		virtaddr += PAGE_SIZE;
+		size -= PAGE_SIZE;
 	}
-	
-	up( &kmap_sem );
-	/* flushing for a range would do, but there's no such function for kernel
-	 * address space... */
+
 	flush_tlb_all();
 }
-
-
-/*
- * kernel_set_cachemode() helpers
- */
-static inline void set_cmode_pte( pmd_t *pmd, unsigned long address,
-				  unsigned long size, unsigned cmode )
-{	pte_t *pte;
-	unsigned long end;
-
-	if (pmd_none(*pmd))
-		return;
-
-	pte = pte_offset( pmd, address );
-	address &= ~PMD_MASK;
-	end = address + size;
-	if (end >= PMD_SIZE)
-		end = PMD_SIZE;
-
-	for( ; address < end; pte++ ) {
-		pte_val(*pte) = (pte_val(*pte) & ~_PAGE_NOCACHE) | cmode;
-		address += PAGE_SIZE;
-	}
-}
-
-
-static inline void set_cmode_pmd( pgd_t *dir, unsigned long address,
-				  unsigned long size, unsigned cmode )
-{
-	pmd_t *pmd;
-	unsigned long end;
-
-	if (pgd_none(*dir))
-		return;
-
-	pmd = pmd_offset( dir, address );
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
-
-	if ((pmd_val(*pmd) & _DESCTYPE_MASK) == _PAGE_PRESENT) {
-		/* 68030 early termination descriptor */
-		pmd_val(*pmd) = (pmd_val(*pmd) & ~_PAGE_NOCACHE) | cmode;
-		return;
-	}
-	else {
-		/* "normal" tables */
-		for( ; address < end; pmd++ ) {
-			set_cmode_pte( pmd, address, end - address, cmode );
-			address = (address + PMD_SIZE) & PMD_MASK;
-		}
-	}
-}
-
 
 /*
  * Set new cache mode for some kernel address space.
  * The caller must push data for that range itself, if such data may already
  * be in the cache.
  */
-void kernel_set_cachemode( unsigned long address, unsigned long size,
-						   unsigned cmode )
+void kernel_set_cachemode(void *addr, unsigned long size, int cmode)
 {
-	pgd_t *dir = pgd_offset_k( address );
-	unsigned long end = address + size;
-	
+	unsigned long virtaddr = (unsigned long)addr;
+	pgd_t *pgd_dir;
+	pmd_t *pmd_dir;
+	pte_t *pte_dir;
+
 	if (CPU_IS_040_OR_060) {
-		switch( cmode ) {
-		  case KERNELMAP_FULL_CACHING:
+		switch (cmode) {
+		case IOMAP_FULL_CACHING:
 			cmode = _PAGE_CACHE040;
 			break;
-		  case KERNELMAP_NOCACHE_SER:
-		  default:
+		case IOMAP_NOCACHE_SER:
+		default:
 			cmode = _PAGE_NOCACHE_S;
 			break;
-		  case KERNELMAP_NOCACHE_NONSER:
+		case IOMAP_NOCACHE_NONSER:
 			cmode = _PAGE_NOCACHE;
 			break;
-		  case KERNELMAP_NO_COPYBACK:
+		case IOMAP_WRITETHROUGH:
 			cmode = _PAGE_CACHE040W;
 			break;
 		}
-	} else
-		cmode = ((cmode == KERNELMAP_FULL_CACHING ||
-				  cmode == KERNELMAP_NO_COPYBACK)    ?
-			 0 : _PAGE_NOCACHE030);
-
-	for( ; address < end; dir++ ) {
-		set_cmode_pmd( dir, address, end - address, cmode );
-		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+	} else {
+		switch (cmode) {
+		case IOMAP_NOCACHE_SER:
+		case IOMAP_NOCACHE_NONSER:
+		default:
+			cmode = _PAGE_NOCACHE030;
+			break;
+		case IOMAP_FULL_CACHING:
+		case IOMAP_WRITETHROUGH:
+			cmode = 0;
+		}
 	}
-	/* flushing for a range would do, but there's no such function for kernel
-	 * address space... */
+
+	while (size > 0) {
+		pgd_dir = pgd_offset_k(virtaddr);
+		if (pgd_bad(*pgd_dir)) {
+			printk("iocachemode: bad pgd(%08lx)\n", pgd_val(*pgd_dir));
+			pgd_clear(pgd_dir);
+			return;
+		}
+		pmd_dir = pmd_offset(pgd_dir, virtaddr);
+
+		if (CPU_IS_020_OR_030) {
+			int pmd_off = (virtaddr/PTRTREESIZE) & -16;
+
+			if ((pmd_dir->pmd[pmd_off] & _DESCTYPE_MASK) == _PAGE_PRESENT) {
+				pmd_dir->pmd[pmd_off] = (pmd_dir->pmd[pmd_off] &
+							 _CACHEMASK040) | cmode;
+				virtaddr += PTRTREESIZE;
+				size -= PTRTREESIZE;
+				continue;
+			}
+		}
+
+		if (pmd_bad(*pmd_dir)) {
+			printk("iocachemode: bad pmd (%08lx)\n", pmd_val(*pmd_dir));
+			pmd_clear(pmd_dir);
+			return;
+		}
+		pte_dir = pte_offset(pmd_dir, virtaddr);
+
+		pte_val(*pte_dir) = (pte_val(*pte_dir) & _CACHEMASK040) | cmode;
+		virtaddr += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	}
+
 	flush_tlb_all();
 }

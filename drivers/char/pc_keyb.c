@@ -744,7 +744,7 @@ static int __init detect_auxiliary_port(void)
 
 	if (status & KBD_STAT_OBF) {
 		val = inb(KBD_DATA_REG);
-		if (val == 0x5a && (status & KBD_STAT_MOUSE_OBF)) {
+		if (status & KBD_STAT_MOUSE_OBF) {
 			printk(KERN_INFO "Detected PS/2 Mouse Port.\n");
 			retval = 1;
 		}

@@ -16,7 +16,7 @@
 #define __INITDATA	.section	".data.init",#alloc,#write
 
 #define __cacheline_aligned __attribute__ \
-			 ((__section__ (".data.cacheline_aligned")))
+		((__aligned__(16), __section__ (".data.cacheline_aligned")))
 
 #else
 
@@ -30,8 +30,8 @@
 #define __INIT
 #define __FINIT
 #define __INITDATA
-#define __cacheline_aligned
+#define __cacheline_aligned __attribute__ ((__aligned__(16)))
 
 #endif /* CONFIG_KGDB */
-	
+
 #endif

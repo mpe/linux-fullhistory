@@ -17,6 +17,9 @@
  * This is then divided by 4, providing a 8192 Hz clock into the PIT.
  * Since it is not possible to get a nice 100 Hz clock out of this, without
  * creating a software PLL, I have set HZ to 128.  -- Dan
+ *
+ * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 
 #include <linux/config.h>
@@ -195,6 +198,11 @@ void do_settimeofday(struct timeval *tv)
 	xtime.tv_sec = tv->tv_sec;
 	xtime.tv_usec = tv->tv_usec - frac_tick;
 	set_dec(frac_tick * count_period_den / count_period_num);
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	restore_flags(flags);
 }
 

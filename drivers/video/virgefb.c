@@ -50,7 +50,15 @@
 
 #if 1
 #define vgawb_3d(reg,dat) \
-                (*((unsigned char *)(CyberVGARegs + (reg ^ 3))) = dat)
+	if (cv3d_on_zorro2) { \
+	*((unsigned char volatile *)((Cyber_vcode_switch_base) + 0x04)) = \
+	(0x01 & 0xffff); asm volatile ("nop"); \
+	} \
+	(*((unsigned char *)(CyberVGARegs + (reg ^ 3))) = dat); \
+	if (cv3d_on_zorro2) { \
+	*((unsigned char volatile *)((Cyber_vcode_switch_base) + 0x04)) = \
+	(0x02 & 0xffff); asm volatile ("nop"); \
+	}
 #define vgaww_3d(reg,dat) \
                 (*((unsigned word *)(CyberVGARegs + (reg ^ 2))) = swab16(dat))
 #define vgawl_3d(reg,dat) \
@@ -155,6 +163,9 @@ static volatile char *CyberRegs;
 static volatile unsigned long CyberVGARegs; /* ++Andre: for CV64/3D, see macros at the beginning */
 static unsigned long CyberMem_phys;
 static unsigned long CyberRegs_phys;
+static unsigned long Cyber_register_base;
+static unsigned long Cyber_vcode_switch_base;
+static unsigned char cv3d_on_zorro2;
  
 
 /*
@@ -345,7 +356,11 @@ static int Cyber_init(void)
 	memset ((char*)CyberMem, 0, 1600 * 1200);
 
 	/* Disable hardware cursor */
-	CyberSize = 0x00400000; /* 4 MB */
+	if (cv3d_on_zorro2) {
+		CyberSize = 0x00380000; /* 3.5 MB , we need some space for the registers? */
+	} else {
+		CyberSize = 0x00400000; /* 4 MB */
+	}
 
 	vgawb_3d(0x3c8, 255);
 	vgawb_3d(0x3c9, 56);
@@ -1045,21 +1060,26 @@ __initfunc(void virgefb_init(void))
 
 		CyberMem_phys = board_addr;
 		CyberMem = ZTWO_VADDR(CyberMem_phys);
-		printk("CV3D detected running in Z2 mode ... not yet supported!\n");
-		return;
+		CyberVGARegs = (unsigned long) \
+			ZTWO_VADDR(board_addr + 0x003c0000);
+		CyberRegs_phys = (unsigned long)(board_addr + 0x003e0000);
+		CyberRegs = (unsigned char *)ZTWO_VADDR(CyberRegs_phys);
+		Cyber_register_base = (unsigned long) \
+			ZTWO_VADDR(board_addr + 0x003c8000);
+		Cyber_vcode_switch_base = (unsigned long) \
+			ZTWO_VADDR(board_addr + 0x003a0000);
+		cv3d_on_zorro2 = 1;
+		printk("CV3D detected running in Z2 mode.\n");
 	}
 	else
 	{
-		CyberVGARegs = kernel_map(board_addr +0x0c000000, 0x00010000,
-					       KERNELMAP_NOCACHE_SER, NULL);
+		CyberVGARegs = ioremap(board_addr +0x0c000000, 0x00010000);
 
 		CyberRegs_phys = board_addr + 0x05000000;
 		CyberMem_phys  = board_addr + 0x04800000;
-		CyberRegs = (char *)kernel_map(CyberRegs_phys,
-					       0x00010000,
-					       KERNELMAP_NOCACHE_SER, NULL);
-		CyberMem = kernel_map(CyberMem_phys, 0x00400000,
-				      KERNELMAP_NOCACHE_SER, NULL);
+		CyberRegs = ioremap(CyberRegs_phys, 0x00010000);
+		CyberMem = ioremap(CyberMem_phys, 0x00400000);
+		cv3d_on_zorro2 = 0;
 		printk("CV3D detected running in Z3 mode\n");
 	}
 
@@ -1084,8 +1104,10 @@ __initfunc(void virgefb_init(void))
 	virgefb_set_disp(-1, &fb_info);
 	do_install_cmap(0, &fb_info);
 
-	if (register_framebuffer(&fb_info) < 0)
+	if (register_framebuffer(&fb_info) < 0) {
+		printk("virgefb.c: register_framebuffer failed\n");
 		return;
+	}
 
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);

@@ -11,9 +11,13 @@
 #ifndef _M68K_TRAPS_H
 #define _M68K_TRAPS_H
 
+#ifndef __ASSEMBLY__
+
 typedef void (*e_vector)(void);
 
 extern e_vector vectors[];
+
+#endif
 
 #define VEC_BUSERR  (2)
 #define VEC_ADDRERR (3)
@@ -63,8 +67,11 @@ extern e_vector vectors[];
 #define VEC_FPUNSUP (55)
 #define	VEC_UNIMPEA (60)
 #define	VEC_UNIMPII (61)
+#define VEC_USER    (64)
 
 #define VECOFF(vec) ((vec)<<2)
+
+#ifndef __ASSEMBLY__
 
 /* Status register bits */
 #define PS_T  (0x8000)
@@ -237,5 +244,7 @@ struct frame {
 	    } fmtb;
     } un;
 };
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _M68K_TRAPS_H */

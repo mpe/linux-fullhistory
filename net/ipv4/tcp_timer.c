@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.56 1998/11/30 15:18:12 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.57 1999/01/20 07:20:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -468,6 +468,7 @@ void tcp_retransmit_timer(unsigned long data)
 
 	/* Retransmission. */
 	tp->retrans_head = NULL;
+	tp->rexmt_done = 0;
 	tp->fackets_out = 0;
 	tp->retrans_out = 0;
 	if (tp->retransmits == 0) {

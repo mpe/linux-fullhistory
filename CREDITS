@@ -2095,6 +2095,14 @@ S: Geert-Grooteplein Noord 21
 S: 6525 EZ Nijmegen
 S: The Netherlands
 
+N: Ulrich Windl
+E: Ulrich.Windl@rz.uni-regensburg.de
+P: 1024/E843660D CF D7 43 A1 5A 49 14 25  7C 04 A0 6E 4C 3A AC 6D
+D: Supports NTP on Linux.  Added PPS code.  Fixed bugs in adjtimex().
+S: Alte Regensburger Str. 11a
+S: 93149 Nittenau
+S: Germany
+
 N: Lars Wirzenius
 E: liw@iki.fi
 D: Linux System Administrator's Guide

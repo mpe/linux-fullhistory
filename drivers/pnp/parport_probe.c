@@ -105,13 +105,13 @@ int parport_probe(struct parport *port, char *buffer, int len)
 	parport_claim_or_block(dev);
 
 	switch (parport_ieee1284_nibble_mode_ok(port, 4)) {
-	case 1:
+	case 2:
 		current->state=TASK_INTERRUPTIBLE;
 		/* HACK: wait 10ms because printer seems to ack wrong */
 		schedule_timeout((HZ+99)/100);	
 		result = read_polled(port, buffer, len);
 		break;
-	case 0:
+	default:
 		result = -EIO;
 		break;
 	}

@@ -25,34 +25,13 @@ typedef struct poll_table_struct {
 
 #define __MAX_POLL_TABLE_ENTRIES ((PAGE_SIZE - sizeof (poll_table)) / sizeof (struct poll_table_entry))
 
+extern void __pollwait(struct file * filp, struct wait_queue ** wait_address, poll_table *p);
+
 extern inline void poll_wait(struct file * filp, struct wait_queue ** wait_address, poll_table *p)
 {
-	struct poll_table_entry * entry;
-
-	if (!p || !wait_address)
-		return;
-	while (p->nr >= __MAX_POLL_TABLE_ENTRIES && p->next != NULL)
-		p = p->next;
-	if (p->nr >= __MAX_POLL_TABLE_ENTRIES) {
-		poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
-		if (!tmp)
-			return;
-		tmp->nr = 0;
-		tmp->entry = (struct poll_table_entry *)(tmp + 1);
-		tmp->next = NULL;
-		p->next = tmp;
-		p = tmp;
-	}
- 	entry = p->entry + p->nr;
- 	entry->filp = filp;
- 	filp->f_count++;
-	entry->wait_address = wait_address;
-	entry->wait.task = current;
-	entry->wait.next = NULL;
-	add_wait_queue(wait_address,&entry->wait);
-	p->nr++;
+	if (p && wait_address)
+		__pollwait(filp, wait_address, p);
 }
-
 
 /*
  * For the kernel fd_set we use a fixed set-size for allocation purposes.
@@ -70,15 +49,6 @@ extern inline void poll_wait(struct file * filp, struct wait_queue ** wait_addre
 #define KFDS_64BLOCK ((PAGE_SIZE/(6*64))*64)
 #define KFDS_NR (KFDS_64BLOCK*8 > NR_OPEN ? NR_OPEN : KFDS_64BLOCK*8)
 typedef unsigned long kernel_fd_set[KFDS_NR/__NFDBITS];
-
-/*
- * XXX - still used by alpha osf and sparc32 compatiblity.
- */
-
-typedef struct {
-	kernel_fd_set in, out, ex;
-	kernel_fd_set res_in, res_out, res_ex;
-} fd_set_buffer;
 
 /*
  * Scaleable version of the fd_set.

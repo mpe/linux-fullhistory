@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Haris Zukanovic <haris@stud.cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Thu Dec 10 21:18:25 1998
+ * Modified at:   Mon Jan 18 10:52:10 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
@@ -85,8 +85,9 @@ struct iobuff_t {
 struct irda_device {
 	QUEUE q; /* Must be first */
 
-        int  magic;	/* our magic bullet */
-	char name[16];
+        int  magic;	       /* Our magic bullet */
+	char name[16];         /* Name of device "irda0" */
+	char description[32];  /* Something like "irda0 <-> ttyS0" */
 
 	struct irlap_cb *irlap; /* The link layer we are connected to  */
 	struct device netdev;   /* Yes! we are some kind of netdevice */

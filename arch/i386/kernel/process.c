@@ -785,6 +785,21 @@ asmlinkage int sys_clone(struct pt_regs regs)
 }
 
 /*
+ * This is trivial, and on the face of it looks like it
+ * could equally well be done in user mode.
+ *
+ * Not so, for quite unobvious reasons - register pressure.
+ * In user mode vfork() cannot have a stack frame, and if
+ * done by calling the "clone()" system call directly, you
+ * do not have enough call-clobbered registers to hold all
+ * the information you need.
+ */
+asmlinkage int sys_vfork(struct pt_regs regs)
+{
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.esp, &regs);
+}
+
+/*
  * sys_execve() executes a new program.
  */
 asmlinkage int sys_execve(struct pt_regs regs)

@@ -5,6 +5,9 @@
  *
  * This file contains the m68k-specific time handling details.
  * Most of the stuff is located in the machine specific files.
+ *
+ * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 
 #include <linux/config.h> /* CONFIG_HEARTBEAT */
@@ -65,9 +68,10 @@ static void timer_interrupt(int irq, void *dummy, struct pt_regs * regs)
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1)) {
+	if ((time_status & STA_UNSYNC) == 0 &&
+	    xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else
@@ -146,27 +150,38 @@ void time_init(void)
 	mach_sched_init(timer_interrupt);
 }
 
+extern rwlock_t xtime_lock;
+
 /*
  * This version of gettimeofday has near microsecond resolution.
  */
 void do_gettimeofday(struct timeval *tv)
 {
+	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
+	unsigned long usec, sec, lost;
 
-	save_flags(flags);
-	cli();
-	*tv = xtime;
-	tv->tv_usec += mach_gettimeoffset();
-	if (tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
+	read_lock_irqsave(&xtime_lock, flags);
+	usec = mach_gettimeoffset();
+	lost = lost_ticks;
+	if (lost)
+		usec += lost * (1000000/HZ);
+	sec = xtime.tv_sec;
+	usec += xtime.tv_usec;
+	read_unlock_irqrestore(&xtime_lock, flags);
+
+	while (usec >= 1000000) {
+		usec -= 1000000;
+		sec++;
 	}
-	restore_flags(flags);
+
+	tv->tv_sec = sec;
+	tv->tv_usec = usec;
 }
 
 void do_settimeofday(struct timeval *tv)
 {
-	cli();
+	write_lock_irq(&xtime_lock);
 	/* This is revolting. We need to set the xtime.tv_usec
 	 * correctly. However, the value in this location is
 	 * is value at the last tick.
@@ -175,14 +190,16 @@ void do_settimeofday(struct timeval *tv)
 	 */
 	tv->tv_usec -= mach_gettimeoffset();
 
-	if (tv->tv_usec < 0) {
+	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;
 		tv->tv_sec--;
 	}
 
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = MAXPHASE;
-	time_esterror = MAXPHASE;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti();
 }

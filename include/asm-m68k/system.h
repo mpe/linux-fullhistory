@@ -46,11 +46,8 @@ asmlinkage void resume(void);
 #define switch_to(prev,next) { \
   register void *_prev __asm__ ("a0") = (prev); \
   register void *_next __asm__ ("a1") = (next); \
-  register int _tssoff __asm__ ("d1") = (int)&((struct task_struct *)0)->tss; \
-  register char _shared __asm__ ("d2") = ((prev)->mm == (next)->mm); \
-  __asm__ __volatile__("jbsr " SYMBOL_NAME_STR(resume) "\n\t" \
-		       : : "a" (_prev), "a" (_next), "d" (_tssoff), \
-		           "d" (_shared) \
+  __asm__ __volatile__("jbsr " SYMBOL_NAME_STR(resume) \
+		       : : "a" (_prev), "a" (_next) \
 		       : "d0", "d1", "d2", "d3", "d4", "d5", "a0", "a1"); \
 }
 
@@ -60,7 +57,7 @@ asmlinkage void resume(void);
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((volatile struct __xchg_dummy *)(x))
 
-#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC) && !defined(CONFIG_HADES) && !defined(CONFIG_VME) && !defined(CONFIG_APOLLO)
+#if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
 /* block out HSYNC on the atari */
 #define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
 #else /* portable version */

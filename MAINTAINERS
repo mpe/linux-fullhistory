@@ -641,6 +641,13 @@ M:	Kai.Makisara@metla.fi
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+SGI VISUAL WORKSTATION 320 AND 540
+P:	Bent Hagemark
+M:	bh@sgi.com
+P:	Ingo Molnar
+M:	mingo@redhat.com
+S:	Maintained
+
 SMB FILESYSTEM
 P:	Volker Lendecke
 M:	vl@kki.org

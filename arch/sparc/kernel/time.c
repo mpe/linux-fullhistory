@@ -11,6 +11,9 @@
  * Support for MicroSPARC-IIep, PCI CPU.
  *
  * This file handles the Sparc specific time handling details.
+ *
+ * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -89,9 +92,10 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	do_timer(regs);
 
 	/* Determine when to update the Mostek clock. */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1)) {
+	if ((time_status & STA_UNSYNC) == 0 &&
+	    xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else
@@ -495,12 +499,18 @@ static void sbus_do_settimeofday(struct timeval *tv)
 	}
 #endif
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti();
 }
 
+/*
+ * BUG: This routine does not handle hour overflow properly; it just
+ *      sets the minutes. Usually you won't notice until after reboot!
+ */
 static int set_rtc_mmss(unsigned long nowtime)
 {
 	int real_seconds, real_minutes, mostek_minutes;
@@ -531,9 +541,13 @@ static int set_rtc_mmss(unsigned long nowtime)
 				iregs->clk.int_sec=real_seconds;
 				iregs->clk.int_min=real_minutes;
 				intersil_start(iregs);
-			} else 
+			} else {
+				printk(KERN_WARNING
+			       "set_rtc_mmss: can't update from %d to %d\n",
+				       cmos_minutes, real_minutes);
 				return -1;
-
+			}
+			
 			return 0;
 		}
 #endif

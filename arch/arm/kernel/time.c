@@ -9,7 +9,7 @@
  *
  * 1994-07-02  Alan Modra
  *             fixed set_rtc_mmss, fixed time.year for >= 2000, new mktime
- * 1997-09-10  Updated NTP code according to technical memorandum Jan '96
+ * 1998-12-20  Updated NTP code according to technical memorandum Jan '96
  *             "A Kernel Model for Precision Timekeeping" by Dave Mills
  */
 #include <linux/errno.h>
@@ -125,9 +125,11 @@ void do_settimeofday(struct timeval *tv)
 	}
 
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = MAXPHASE;
-	time_esterror = MAXPHASE;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	sti ();
 }
 

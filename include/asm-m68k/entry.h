@@ -37,25 +37,8 @@
 
 #define curptr a2
 
-/*
- * these are offsets into the task-struct
- */
-LTASK_STATE	 =  0
-LTASK_FLAGS	 =  4
-LTASK_SIGPENDING =  8
-LTASK_ADDRLIMIT	 = 12
-LTASK_EXECDOMAIN = 16
-LTASK_NEEDRESCHED = 20
-
-LTSS_KSP	= 0
-LTSS_USP	= 4
-LTSS_SR		= 8
-LTSS_FS		= 10
-LTSS_CRP	= 12
-LTSS_FPCTXT	= 24
-
 /* the following macro is used when enabling interrupts */
-#if defined(CONFIG_ATARI_ONLY) && !defined(CONFIG_HADES)
+#if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
 	/* block out HSYNC on the atari */
 #define ALLOWINT 0xfbff
 #define	MAX_NOINT_IPL	3
@@ -65,22 +48,20 @@ LTSS_FPCTXT	= 24
 #define	MAX_NOINT_IPL	0
 #endif /* machine compilation types */ 
 
-LPT_OFF_D0	  = 0x20
-LPT_OFF_ORIG_D0	  = 0x24
-LPT_OFF_SR	  = 0x2C
-LPT_OFF_FORMATVEC = 0x32
-
 LFLUSH_I_AND_D = 0x00000808
-LENOSYS = 38
 LSIGTRAP = 5
 
-LPF_TRACESYS_OFF = 3
-LPF_TRACESYS_BIT = 5
-LPF_PTRACED_OFF = 3
-LPF_PTRACED_BIT = 4
-LPF_DTRACE_OFF = 1
-LPF_DTRACE_BIT = 5
+/* process bits for task_struct.flags */
+PF_TRACESYS_OFF = 3
+PF_TRACESYS_BIT = 5
+PF_PTRACED_OFF = 3
+PF_PTRACED_BIT = 4
+PF_DTRACE_OFF = 1
+PF_DTRACE_BIT = 5
 
+#define SAVE_ALL_INT save_all_int
+#define SAVE_ALL_SYS save_all_sys
+#define RESTORE_ALL restore_all
 /*
  * This defines the normal kernel pt-regs layout.
  *
@@ -92,56 +73,68 @@ LPF_DTRACE_BIT = 5
  * a -1 in the orig_d0 field signifies
  * that the stack frame is NOT for syscall
  */
-#define SAVE_ALL_INT				\
-	clrl	%sp@-;		/* stk_adj */	\
-	pea	-1:w;		/* orig d0 */	\
-	movel	%d0,%sp@-;	/* d0 */	\
+.macro	save_all_int
+	clrl	%sp@-		| stk_adj
+	pea	-1:w		| orig d0
+	movel	%d0,%sp@-	| d0
 	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-
+.endm
 
-#define SAVE_ALL_SYS				\
-	clrl	%sp@-;		/* stk_adj */	\
-	movel	%d0,%sp@-;	/* orig d0 */	\
-	movel	%d0,%sp@-;	/* d0 */	\
-	moveml  %d1-%d5/%a0-%a1/%curptr,%sp@-
+.macro	save_all_sys
+	clrl	%sp@-		| stk_adj
+	movel	%d0,%sp@-	| orig d0
+	movel	%d0,%sp@-	| d0
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-
+.endm
 #else
 /* Need to save the "missing" registers for kgdb...
  */
-#define SAVE_ALL_INT					\
-	clrl	%sp@-;		/* stk_adj */		\
-	pea	-1:w;		/* orig d0 */		\
-	movel	%d0,%sp@-;	/* d0 */		\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;		\
-	moveml	%d6-%d7,kgdb_registers+GDBOFFA_D6;	\
+.macro	save_all_int
+	clrl	%sp@-		| stk_adj
+	pea	-1:w		| orig d0
+	movel	%d0,%sp@-	| d0
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-
+	moveml	%d6-%d7,kgdb_registers+GDBOFFA_D6
 	moveml	%a3-%a6,kgdb_registers+GDBOFFA_A3
+.endm
 
-#define SAVE_ALL_SYS					\
-	clrl	%sp@-;		/* stk_adj */		\
-	movel	%d0,%sp@-;	/* orig d0 */		\
-	movel	%d0,%sp@-;	/* d0 */		\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;		\
-	moveml	%d6-%d7,kgdb_registers+GDBOFFA_D6;	\
+.macro	save_all_sys
+	clrl	%sp@-		| stk_adj
+	movel	%d0,%sp@-	| orig d0
+	movel	%d0,%sp@-	| d0
+	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-
+	moveml	%d6-%d7,kgdb_registers+GDBOFFA_D6
 	moveml	%a3-%a6,kgdb_registers+GDBOFFA_A3
+.endm
 #endif
 
-#define RESTORE_ALL			\
-	moveml	%sp@+,%a0-%a1/%curptr/%d1-%d5;	\
-	movel	%sp@+,%d0;		\
-	addql	#4,%sp;	 /* orig d0 */	\
-	addl	%sp@+,%sp; /* stk adj */	\
+.macro	restore_all
+	moveml	%sp@+,%a0-%a1/%curptr/%d1-%d5
+	movel	%sp@+,%d0
+	addql	#4,%sp		| orig d0
+	addl	%sp@+,%sp	| stk adj
 	rte
+.endm
 
 #define SWITCH_STACK_SIZE (6*4+4)	/* includes return address */
 
-#define SAVE_SWITCH_STACK \
+#define SAVE_SWITCH_STACK save_switch_stack
+#define RESTORE_SWITCH_STACK restore_switch_stack
+#define GET_CURRENT(tmp) get_current tmp
+
+.macro	save_switch_stack
 	moveml	%a3-%a6/%d6-%d7,%sp@-
+.endm
 
-#define RESTORE_SWITCH_STACK \
+.macro	restore_switch_stack
 	moveml	%sp@+,%a3-%a6/%d6-%d7
+.endm
 
-#define GET_CURRENT(tmp) \
-	movel	%sp,tmp; \
-	andw	&-8192,tmp; \
-	movel	tmp,%curptr;
+.macro	get_current reg=%d0
+	movel	%sp,\reg
+	andw	#-8192,\reg
+	movel	\reg,%curptr
+.endm
 
 #else /* C source */
 

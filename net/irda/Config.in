@@ -14,6 +14,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       source net/irda/irlan/Config.in
       source net/irda/irobex/Config.in
       source net/irda/ircomm/Config.in
+      source net/irda/irlpt/Config.in
 
       bool 'IrDA protocol options' CONFIG_IRDA_OPTIONS
       if [ "$CONFIG_IRDA_OPTIONS" != "n" ] ; then
@@ -21,6 +22,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
         bool '   Cache last LSAP' CONFIG_IRDA_CACHE_LAST_LSAP
 	bool '   Fast RRs' CONFIG_IRDA_FAST_RR
         bool '   Recycle RRs' CONFIG_IRDA_RECYCLE_RR
+	bool '   Debug information' CONFIG_IRDA_DEBUG
       fi
     fi
 

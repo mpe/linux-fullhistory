@@ -52,7 +52,6 @@ static void amiga_sched_init(void (*handler)(int, void *, struct pt_regs *));
 /* amiga specific keyboard functions */
 extern int amiga_keyb_init(void);
 extern int amiga_kbdrate (struct kbd_repeat *);
-extern void amiga_kbd_reset_setup(char*, int);
 /* amiga specific irq functions */
 extern void amiga_init_IRQ (void);
 extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
@@ -343,7 +342,6 @@ __initfunc(void config_amiga(void))
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
   mach_kbdrate         = amiga_kbdrate;
-  kbd_reset_setup      = amiga_kbd_reset_setup;
   mach_init_IRQ        = amiga_init_IRQ;
   mach_default_handler = &amiga_default_handler;
   mach_request_irq     = amiga_request_irq;

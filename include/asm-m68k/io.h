@@ -43,6 +43,35 @@
 #define outb(x,addr) ((void) writeb(x,addr))
 #define outb_p(x,addr) outb(x,addr)
 
+
+/* Values for nocacheflag and cmode */
+#define IOMAP_FULL_CACHING		0
+#define IOMAP_NOCACHE_SER		1
+#define IOMAP_NOCACHE_NONSER		2
+#define IOMAP_WRITETHROUGH		3
+
+extern void *__ioremap(unsigned long physaddr, unsigned long size, int cacheflag);
+extern void __iounmap(void *addr, unsigned long size);
+
+extern inline void *ioremap(unsigned long physaddr, unsigned long size)
+{
+	return __ioremap(physaddr, size, IOMAP_NOCACHE_SER);
+}
+extern inline void *ioremap_nocache(unsigned long physaddr, unsigned long size)
+{
+	return __ioremap(physaddr, size, IOMAP_NOCACHE_SER);
+}
+extern inline void *ioremap_writethrough(unsigned long physaddr, unsigned long size)
+{
+	return __ioremap(physaddr, size, IOMAP_WRITETHROUGH);
+}
+extern inline void *ioremap_fullcache(unsigned long physaddr, unsigned long size)
+{
+	return __ioremap(physaddr, size, IOMAP_FULL_CACHING);
+}
+
+extern void iounmap(void *addr);
+
 #endif /* __KERNEL__ */
 
 #endif /* _M68K_IO_H */

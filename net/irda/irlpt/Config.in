@@ -1,0 +1,7 @@
+
+dep_tristate 'IrLPT protocol' CONFIG_IRLPT $CONFIG_IRDA
+
+if [ "$CONFIG_IRLPT" != "n" ]; then
+  dep_tristate '   IrLPT client support' CONFIG_IRLPT_CLIENT $CONFIG_IRLPT
+  dep_tristate '   IrLPT server support' CONFIG_IRLPT_SERVER $CONFIG_IRLPT
+fi

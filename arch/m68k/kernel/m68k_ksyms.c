@@ -13,6 +13,7 @@
 #include <asm/machdep.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 #include <asm/semaphore.h>
 #include <asm/checksum.h>
 #include <asm/hardirq.h>
@@ -37,21 +38,22 @@ EXPORT_SYMBOL(mm_ptov);
 EXPORT_SYMBOL(mm_end_of_chunk);
 #endif
 EXPORT_SYMBOL(mm_vtop_fallback);
+EXPORT_SYMBOL(m68k_realnum_memory);
 EXPORT_SYMBOL(m68k_memory);
-EXPORT_SYMBOL(kernel_map);
+EXPORT_SYMBOL(__ioremap);
+EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL(m68k_debug_device);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
-EXPORT_SYMBOL(strtok);
-EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(kernel_set_cachemode);
+EXPORT_SYMBOL(kernel_thread);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

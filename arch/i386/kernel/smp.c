@@ -36,7 +36,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
-#include <asm/i82489.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
@@ -198,6 +197,19 @@ void ack_APIC_irq(void)
 	apic_write(APIC_EOI, 0);
 }
 
+#ifdef CONFIG_X86_VISWS_APIC
+/*
+ * hacky!
+ */
+int __init smp_scan_config(unsigned long base, unsigned long length)
+{
+	cpu_present_map |= 2; /* or in id 1 */
+	apic_version[1] |= 0x10; /* integrated APIC */
+	num_processors = 2;
+
+	return 1;
+} 
+#else
 /*
  *	Checksum an MP configuration block.
  */
@@ -567,6 +579,7 @@ int __init smp_scan_config(unsigned long base, unsigned long length)
 
 	return 0;
 }
+#endif
 
 /*
  *	Trampoline 80x86 program as an array.
@@ -673,7 +686,9 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 	memory_start = PAGE_ALIGN(memory_start);
 	if (smp_found_config) {
 		apic_phys = mp_lapic_addr;
+#ifdef CONFIG_X86_IO_APIC
 		ioapic_phys = mp_ioapic_addr;
+#endif
 	} else {
 		/*
 		 * set up a fake all zeroes page to simulate the
@@ -687,11 +702,13 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 		memory_start += 2*PAGE_SIZE;
 	}
 
+#ifdef CONFIG_X86_IO_APIC
 	set_fixmap(FIX_APIC_BASE,apic_phys);
 	set_fixmap(FIX_IO_APIC_BASE,ioapic_phys);
 
 	printk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
 	printk("mapped IOAPIC to %08lx (%08lx)\n", fix_to_virt(FIX_IO_APIC_BASE), ioapic_phys);
+#endif
 
 	return memory_start;
 }
@@ -1117,6 +1134,7 @@ void __init smp_boot_cpus(void)
 
 	cpu_number_map[boot_cpu_id] = 0;
 
+#ifdef CONFIG_X86_IO_APIC
 	/*
 	 *	If we don't conform to the Intel MPS standard, get out
 	 *	of here now!
@@ -1129,6 +1147,7 @@ void __init smp_boot_cpus(void)
 		cpu_online_map = cpu_present_map;
 		goto smp_done;
 	}
+#endif
 
 	/*
 	 *	If SMP should be disabled, then really disable it!
@@ -1282,14 +1301,15 @@ void __init smp_boot_cpus(void)
 	SMP_PRINTK(("Boot done.\n"));
 
 	cache_APIC_registers();
+#ifdef CONFIG_X86_IO_APIC
 	/*
 	 * Here we can be sure that there is an IO-APIC in the system. Let's
 	 * go and set it up:
 	 */
 	if (!skip_ioapic_setup) 
 		setup_IO_APIC();
-
 smp_done:
+#endif
 }
 
 

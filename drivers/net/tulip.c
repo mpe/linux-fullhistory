@@ -279,7 +279,7 @@ static struct tulip_chip_table {
 	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM,
 	tulip_timer },
   { PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP_21142,
-	"Digital DS21142/3 Tulip", 256, 0x0801fbff,
+	"Digital DS21142/3 Tulip", 128, 0x0801fbff,
 	HAS_MII | HAS_MEDIA_TABLE, t21142_timer },
   { PCI_VENDOR_ID_LITEON, 0x0002,
 	"Lite-On 82c168 PNIC", 256, 0x0001ebef, HAS_MII, pnic_timer },
@@ -2397,7 +2397,6 @@ tulip_rx(struct device *dev)
 				memcpy(skb_put(skb, pkt_len),
 					   bus_to_virt(tp->rx_ring[entry].buffer1), pkt_len);
 #else
-#warning Code untested
 				eth_copy_and_sum(skb, bus_to_virt(tp->rx_ring[entry].buffer1),
 								 pkt_len, 0);
 				skb_put(skb, pkt_len);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Wed Dec  9 02:19:23 1998
+ * Modified at:   Tue Dec 15 16:00:35 1998
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -24,10 +24,12 @@
  ********************************************************************/
 
 #include <linux/config.h>
-#include <asm/byteorder.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/string.h>
+#include <linux/init.h>
+
+#include <asm/byteorder.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irttp.h>
@@ -50,7 +52,7 @@ static void iriap_disconnect_indication( void *instance, void *sap,
  *    Initializes the IrIAP layer, called by the module initialization code
  *    in irmod.c 
  */
-int iriap_init(void) 
+__initfunc(int iriap_init(void))
 {
 	struct ias_object *obj;
 
@@ -102,15 +104,11 @@ int iriap_init(void)
  */
 void iriap_cleanup(void) 
 {
-	DEBUG( 4, "--> iriap_cleanup\n");
-
 	irlmp_unregister_layer( S_COMPUTER, SERVER | CLIENT);
 	irlmp_unregister_layer( S_PNP, SERVER);
 	
 	hashbin_delete( iriap, (FREE_FUNC) __iriap_close);
-	hashbin_delete( objects, (FREE_FUNC) __irias_delete_object);
-	
-	DEBUG( 4, "iriap_cleanup -->\n");
+	hashbin_delete( objects, (FREE_FUNC) __irias_delete_object);	
 }
 
 /*

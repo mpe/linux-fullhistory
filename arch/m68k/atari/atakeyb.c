@@ -861,8 +861,3 @@ int atari_kbdrate( struct kbd_repeat *k )
 	
 	return( 0 );
 }
-
-/* for "kbd-reset" cmdline param */
-__initfunc(void atari_kbd_reset_setup(char *str, int *ints))
-{
-}

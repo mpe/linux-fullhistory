@@ -11,8 +11,9 @@
 #ifndef _ASM_FIXMAP_H
 #define _ASM_FIXMAP_H
 
-#include <asm/page.h>
+#include <linux/config.h>
 #include <linux/kernel.h>
+#include <asm/page.h>
 
 /*
  * Here we define all the compile-time 'special' virtual
@@ -40,9 +41,17 @@
  * fix-mapped?
  */
 enum fixed_addresses {
-#ifdef __SMP__
-	FIX_APIC_BASE,
+#ifdef CONFIG_X86_LOCAL_APIC
+	FIX_APIC_BASE,	/* local (CPU) APIC) -- required for SMP or not */
+#endif
+#ifdef CONFIG_X86_IO_APIC
 	FIX_IO_APIC_BASE,
+#endif
+#ifdef CONFIG_X86_VISWS_APIC
+	FIX_CO_CPU,	/* Cobalt timer */
+	FIX_CO_APIC,	/* Cobalt APIC Redirection Table */ 
+	FIX_LI_PCIA,	/* Lithium PCI Bridge A */
+	FIX_LI_PCIB,	/* Lithium PCI Bridge B */
 #endif
 	__end_of_fixed_addresses
 };

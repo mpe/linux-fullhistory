@@ -29,12 +29,19 @@ LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds
 # without -fno-strength-reduce the 53c7xx.c driver fails ;-(
 CFLAGS += -pipe -fno-strength-reduce -ffixed-a2
 
-ifdef CONFIG_OPTIMIZE_040
+# enable processor switch if compiled only for a single cpu
+ifndef CONFIG_M68020
+ifndef CONFIG_M68030
+
+ifndef CONFIG_M68060
 CFLAGS := $(CFLAGS) -m68040
 endif
 
-ifdef CONFIG_OPTIMIZE_060
+ifndef CONFIG_M68040
 CFLAGS := $(CFLAGS) -m68060
+endif
+
+endif
 endif
 
 ifdef CONFIG_KGDB

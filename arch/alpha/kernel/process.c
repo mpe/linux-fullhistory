@@ -266,12 +266,8 @@ int alpha_clone(unsigned long clone_flags, unsigned long usp,
 
 int alpha_vfork(struct switch_stack * swstack)
 {
-	int child;
-
-	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
 			(struct pt_regs *) (swstack+1));
-
-	return child;
 }
 
 extern void ret_from_sys_call(void);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Wed Dec  9 01:35:53 1998
+ * Modified at:   Sat Jan 16 22:05:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -110,18 +110,16 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 #endif
 	tx_buff[n++] = EOF;
 	
-	DEBUG( 6, "async_wrap() -->\n");
-	
 	return n;
 }
 
 /*
- * Function async_bump (irdev)
+ * Function async_bump (idev)
  *
  *    Got a frame, make a copy of it, and pass it up the stack!
  *
  */
-static __inline__ void async_bump( struct irda_device *irdev, __u8 *buf, 
+static __inline__ void async_bump( struct irda_device *idev, __u8 *buf, 
 				   int len)
 {
        	struct sk_buff *skb;
@@ -130,36 +128,31 @@ static __inline__ void async_bump( struct irda_device *irdev, __u8 *buf,
 	if (skb == NULL)  {
 		printk( KERN_INFO __FUNCTION__ "() memory squeeze, " 
 			"dropping frame.\n");
-		irdev->stats.rx_dropped++;
+		idev->stats.rx_dropped++;
 		return;
 	}
 
 	/*  Align to 20 bytes */
 	skb_reserve( skb, 1);
 	
-	/* For finding out how much time we use to
-	   send a frame */
-	do_gettimeofday( &skb->stamp);
-
 	ASSERT( len-2 > 0, return;);
 
         /* Copy data without CRC */
 	skb_put( skb, len-2);
 	memcpy( skb->data, buf, len-2); 
 	
-	irdev->rx_buff.len = 0;
+	idev->rx_buff.len = 0;
 	/* 
 	 *  Feed it to IrLAP layer 
 	 */
 	/* memcpy(skb_put(skb,count), ax->rbuff, count); */
-	skb->dev = &irdev->netdev;
+	skb->dev = &idev->netdev;
 	skb->mac.raw  = skb->data;
 	skb->protocol = htons(ETH_P_IRDA);
 
 	netif_rx( skb);
-	irdev->stats.rx_packets++;
-	
-        /* irlap_input( skb, skb->dev, NULL); */
+	idev->stats.rx_packets++;
+	idev->stats.rx_bytes += skb->len;	
 }
  
 /*
@@ -168,18 +161,16 @@ static __inline__ void async_bump( struct irda_device *irdev, __u8 *buf,
  *    Parse and de-stuff frame received from the IR-port
  *
  */
-void async_unwrap_char( struct irda_device *irdev, __u8 byte) 
+void async_unwrap_char( struct irda_device *idev, __u8 byte) 
 {
-	DEBUG( 6, "async_unwrap()\n");
-
 	/* State machine for receiving frames */	   
-	switch( irdev->rx_buff.state) {
+	switch( idev->rx_buff.state) {
 	case OUTSIDE_FRAME:
 		if ( byte == BOF) {
-			irdev->rx_buff.state = BEGIN_FRAME;
-			irdev->rx_buff.in_frame = TRUE;
+			idev->rx_buff.state = BEGIN_FRAME;
+			idev->rx_buff.in_frame = TRUE;
 		} else if ( byte == EOF) {
-			irda_device_set_media_busy( irdev, TRUE);
+			irda_device_set_media_busy( idev, TRUE);
 		}
 		break;
 	case BEGIN_FRAME:
@@ -189,20 +180,22 @@ void async_unwrap_char( struct irda_device *irdev, __u8 byte)
 			break;
 		case CE:
 			/* Stuffed byte */
-			irdev->rx_buff.state = LINK_ESCAPE;
+			idev->rx_buff.state = LINK_ESCAPE;
 			break;
 		case EOF:
 			/* Abort frame */
-			DEBUG( 0, "Frame abort (1)\n");
-			irdev->rx_buff.state = OUTSIDE_FRAME;
+			idev->rx_buff.state = OUTSIDE_FRAME;
+
+			idev->stats.rx_errors++;
+			idev->stats.rx_frame_errors++;
 			break;
 		default:
 			/* Got first byte of frame */
-			if ( irdev->rx_buff.len < irdev->rx_buff.truesize)  {
-				irdev->rx_buff.data[ irdev->rx_buff.len++] = byte;
+			if ( idev->rx_buff.len < idev->rx_buff.truesize)  {
+				idev->rx_buff.data[ idev->rx_buff.len++] = byte;
 			
-				irdev->rx_buff.fcs = IR_FCS ( INIT_FCS, byte);
-				irdev->rx_buff.state = INSIDE_FRAME;
+				idev->rx_buff.fcs = IR_FCS( INIT_FCS, byte);
+				idev->rx_buff.state = INSIDE_FRAME;
 			} else 
 				printk( "Rx buffer overflow\n");
 			break;
@@ -213,9 +206,9 @@ void async_unwrap_char( struct irda_device *irdev, __u8 byte)
 		case BOF:
 			/* New frame? */
 			DEBUG( 4, "New frame?\n");
-			irdev->rx_buff.state = BEGIN_FRAME;
-			irdev->rx_buff.len = 0;
-			irda_device_set_media_busy( irdev, TRUE);
+			idev->rx_buff.state = BEGIN_FRAME;
+			idev->rx_buff.len = 0;
+			irda_device_set_media_busy( idev, TRUE);
 			break;
 		case CE:
 			DEBUG( 4, "WARNING: State not defined\n");
@@ -223,8 +216,8 @@ void async_unwrap_char( struct irda_device *irdev, __u8 byte)
 		case EOF:
 			/* Abort frame */
 			DEBUG( 0, "Abort frame (2)\n");
-			irdev->rx_buff.state = OUTSIDE_FRAME;
-			irdev->rx_buff.len = 0;
+			idev->rx_buff.state = OUTSIDE_FRAME;
+			idev->rx_buff.len = 0;
 			break;
 		default:
 			/* 
@@ -232,11 +225,11 @@ void async_unwrap_char( struct irda_device *irdev, __u8 byte)
 			 *  following CE, IrLAP p.114 
 			 */
 			byte ^= IR_TRANS;
-			if ( irdev->rx_buff.len < irdev->rx_buff.truesize)  {
-				irdev->rx_buff.data[ irdev->rx_buff.len++] = byte;
+			if ( idev->rx_buff.len < idev->rx_buff.truesize)  {
+				idev->rx_buff.data[ idev->rx_buff.len++] = byte;
 			
-				irdev->rx_buff.fcs = IR_FCS( irdev->rx_buff.fcs, byte);
-				irdev->rx_buff.state = INSIDE_FRAME;
+				idev->rx_buff.fcs = IR_FCS( idev->rx_buff.fcs, byte);
+				idev->rx_buff.state = INSIDE_FRAME;
 			} else 
 				printk( "Rx buffer overflow\n");
 			break;
@@ -246,41 +239,40 @@ void async_unwrap_char( struct irda_device *irdev, __u8 byte)
 		switch ( byte) {
 		case BOF:
 			/* New frame? */
-			DEBUG( 4, "New frame?\n");
-			irdev->rx_buff.state = BEGIN_FRAME;
-			irdev->rx_buff.len = 0;
-			irda_device_set_media_busy( irdev, TRUE);
+			idev->rx_buff.state = BEGIN_FRAME;
+			idev->rx_buff.len = 0;
+			irda_device_set_media_busy( idev, TRUE);
 			break;
 		case CE:
 			/* Stuffed char */
-			irdev->rx_buff.state = LINK_ESCAPE;
+			idev->rx_buff.state = LINK_ESCAPE;
 			break;
 		case EOF:
 			/* End of frame */
-			irdev->rx_buff.state = OUTSIDE_FRAME;
-			irdev->rx_buff.in_frame = FALSE;
+			idev->rx_buff.state = OUTSIDE_FRAME;
+			idev->rx_buff.in_frame = FALSE;
 			
 			/* 
 			 *  Test FCS and deliver frame if it's good
 			 */			
-			if ( irdev->rx_buff.fcs == GOOD_FCS) {
-				async_bump( irdev, irdev->rx_buff.data, 
-					    irdev->rx_buff.len);
+			if ( idev->rx_buff.fcs == GOOD_FCS) {
+				async_bump( idev, idev->rx_buff.data, 
+					    idev->rx_buff.len);
 			} else {
-				/* 
-				 *  Wrong CRC, discard frame! 
-				 */
-				DEBUG( 0, "Received frame has wrong CRC\n");
-				irda_device_set_media_busy( irdev, TRUE); 
-				irdev->rx_buff.len = 0;
+				/* Wrong CRC, discard frame!  */
+				irda_device_set_media_busy( idev, TRUE); 
+				idev->rx_buff.len = 0;
+
+				idev->stats.rx_errors++;
+				idev->stats.rx_crc_errors++;
 			}			
 			break;
 		default:
 			/* Next byte of frame */
-			if ( irdev->rx_buff.len < irdev->rx_buff.truesize)  {
-				irdev->rx_buff.data[ irdev->rx_buff.len++] = byte;
+			if ( idev->rx_buff.len < idev->rx_buff.truesize)  {
+				idev->rx_buff.data[ idev->rx_buff.len++] = byte;
 				
-				irdev->rx_buff.fcs = IR_FCS( irdev->rx_buff.fcs, byte);
+				idev->rx_buff.fcs = IR_FCS( idev->rx_buff.fcs, byte);
 			} else 
 				printk( "Rx buffer overflow\n");
 			break;

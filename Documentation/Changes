@@ -2,13 +2,13 @@ Intro
 =====
 
 This document is designed to provide a list of the minimum levels of
-software necessary to run the 2.1.x kernels, as well as provide brief
+software necessary to run the 2.2 kernels, as well as provide brief
 instructions regarding any other "Gotchas" users may encounter when
 trying life on the Bleeding Edge.  If upgrading from a pre-2.0.x
 kernel, please consult the Changes file included with 2.0.x kernels for
 additional information; most of that information will not be repeated
 here.  Basically, this document assumes that your system is already
-functional and running at least 2.0.x.
+functional and running at least 2.0.x kernels.
 
    It is originally based on my "Changes" file for 2.0.x kernels and
 therefore owes credit to the same people as that file (Jared Mauch,
@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: December 12, 1998
+Last updated: January 18, 1999
 Current Author: Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 
 Current Minimal Requirements
@@ -57,12 +57,12 @@ running, the suggested command should tell you.
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; basename --v
 - Autofs                 3.1.1                   ; automount --version
-- NFS                    2.2beta37               ; showmount --version
+- NFS                    2.2beta40               ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
-- Pcmcia-cs              3.0.6                   ; cardmgr -V
+- Pcmcia-cs              3.0.7                   ; cardmgr -V
 - PPP                    2.3.5                   ; pppd -v
-- Util-linux             2.9                     ; chsh -v
+- Util-linux             2.9g                    ; chsh -v
 
 Upgrade notes
 *************
@@ -81,19 +81,21 @@ the corresponding ttyS* device instead (e.g., cua0 -> ttyS0, cua1 ->
 ttyS1, etc.).
 
    In addition, some software still works, but needs to be compiled
-against 2.1 headers for complete functionality.  Fdutils binaries
+against 2.2 headers for complete functionality.  Fdutils binaries
 compiled under 2.0 or earlier kernels should be replaced with ones
-compiled under 2.1, for example.
+compiled under 2.2, for example.
 
-   As of 2.1.115, support for the deprecated major 4 /dev/ttyp* devices 
-was removed.  If necessary (eg, you get "out of pty" error messages when 
-you obviously are not out of pty's), create major 3 /dev/tty* and major 2 
-/dev/pty* devices (see Documentation/devices.txt for more information).  
+   As of 2.1.115, support for the deprecated major 4 /dev/ttyp* devices
+was removed.  If necessary (eg, you get "out of pty" error messages when
+you obviously are not out of pty's), create major 3 /dev/tty* and major
+2 /dev/pty* devices (see Documentation/devices.txt for more
+information).  In general, you should make sure that your /dev
+directory is up-to-date if you are experiencing any problems.
 
    Optional support for Unix98 pty devices has also been added. If you
-want to use the Unix98 ptys, you should be running at least glibc-2.0.9x, 
-and you must switch completely to Unix98 pty's.  The general procedure 
-for configuring Unix98 pty support is:
+want to use the Unix98 ptys, you should be running at least
+glibc-2.0.9x, and you must switch completely to Unix98 pty's.  The
+general procedure for configuring Unix98 pty support is:
 
 - Compile your kernel with CONFIG_UNIX98_PTYS and CONFIG_DEVPTS_FS.
 - mknod /dev/ptmx c 5 2
@@ -119,7 +121,7 @@ need to download the fbset utilities.
 Libc (libc5)
 ============
 
-   Linux-2.1.x is ELF-only.  You can still compile a.out apps if you
+   Linux-2.2 is ELF-only.  You can still compile a.out apps if you
 really want, but your kernel must be compiled ELF.  If you can't
 currently compile ELF, consult the ELF howto at
 http://metalab.unc.edu/mdw/HOWTO/ELF-HOWTO.html and upgrade your system
@@ -163,8 +165,8 @@ the following before calling ldconfig:
 Modules
 =======
 
-   You need to upgrade to the latest version of modutils-2.1.x for
-development kernels.  This version will also work with 2.0.x kernels.
+   You need to upgrade to the latest version of modutils for the Linux
+2.2 kernel.  This version will also work with your 2.0 kernel.
 
    As of 2.1.90-pre1, kerneld has been replaced by a kernel thread,
 kmod.  See Documentation/kmod.txt for more information.  The main
@@ -199,7 +201,7 @@ your system, you don't have to upgrade just so the kernel will work
    Note that the latest compilers (egcs, pgcc, gcc 2.8) may do Bad
 Things while compiling your kernel, particularly if absurd
 optimizations (like -O9) are used.  Caveat emptor.  Currently, the only
-C compiler available in a binary distribution is egcs.  Version 1.0.2
+C compiler available in a binary distribution is egcs.  Version 1.0.3
 seems okay; if you have to have a binary, you may be successful using
 that.  In general, however, gcc-2.7.2.3 is known to be stable, while
 egcs and others have not been as thoroughly tested yet.
@@ -240,7 +242,13 @@ http://www.rustcorp.com/linux/ipchains/ , and use that instead of
 ipfwadm.
 
    To use masq forwarding you will need to obtain "ipmasqadm,"
-available from http://juanjox.linuxhq.com/
+available from http://juanjox.linuxhq.com/ .
+
+   DHCP clients for 2.0 do not work with the new networking code in the
+2.2 kernel.  You will need to upgrade your dhcpcd / dhcpclient.
+
+   The ISDN code in the stock 2.0 kernel may not work for you.  If it
+doesn't, look in ftp://ftp.suse.com/pub/isdn4linux for updated versions.
 
 Memory
 ======
@@ -261,10 +269,10 @@ choice of user-land NFS or kernel-level NFS (knfs).
 Util-linux (including mount)
 ============================
 
-   Among other changes in the 2.1.x development, the 128 meg limit on
-IA32 swap partition sizes has been eliminated.  To use larger swap
-spaces, you need the new mkswap found in util-linux.  You also need to
-upgrade this to get the latest version of mount.
+   Among other changes made in the development of Linux kernel 2.2, the
+128 meg limit on IA32 swap partition sizes has been eliminated.  To use
+larger swap spaces, you need the new mkswap found in util-linux.  You
+also need to upgrade util-linux to get the latest version of mount.
 
 RPM
 ===
@@ -275,7 +283,7 @@ you need to upgrade RPM to version 2.2.7 or later.
 DOSEMU
 ======
 
-   A new "stable" version of DOSEMU is available for 2.1.x kernels.
+   A new "stable" version of DOSEMU is available for 2.2 kernels.
 Upgrade to 0.98.4 or later.
 
 Loadlin
@@ -325,6 +333,15 @@ Bash
 cause problems when compiling modules.  Upgrade to at least 1.14 to fix
 this problem.
 
+Sysklogd
+========
+
+   Older versions of sysklogd sometimes segfault under 2.2 kernels.
+Upgrading to the latest release fixes that problem as well as adding
+support for new features like system power-off on halt (with
+appropriate incantations of halt; see the man page) and automatic
+decoding of kernel oopses.
+
 Ncpfs
 =====
 
@@ -335,10 +352,10 @@ SMBfs
 =====
 
    To mount SMB (Samba / Windows) shares, you'll need to use the
-smbmount utility included with recent Samba releases.
+smbmount utility included with release 2.0 of Samba.
 Documentation/filesystems/smbfs.txt has more information about this.
-Note that smbmount must have been built against 2.1.x headers to work
-with 2.1.x; if all else fails, recompile it and hope it works ;-).  In
+Note that smbmount must have been built against 2.2 headers to work
+with 2.2; if all else fails, recompile it and hope it works ;-).  In
 addition, Mike Warfield has a script and some information at
 http://www.wittsend.com/mhw/smbmount.html that you will probably find
 useful.
@@ -358,19 +375,19 @@ networking will need to upgrade your pppd.
 iBCS
 ====
 
-   A new version of iBCS is necessary for 2.1 kernels.
+   A new version of iBCS is necessary for 2.2 kernels.
 
 AppleTalk
 =========
 
    Use the Asun version of netatalk for AppleTalk support, as Umich's
-version is not compatible with 2.1 kernels.
+version is not compatible with 2.2 kernels.
 
 Psmisc
 ======
 
    fuser, which comes with psmisc, reads /proc/*/fd/* to do its job.
-Upgrade psmisc if 2.1 changes to /proc broke the version you're using.
+Upgrade psmisc if 2.2 changes to /proc broke the version you're using.
 
 Tunelp
 ======
@@ -404,6 +421,15 @@ backing up your copy of rvplayer, and then editing it by:
 if=/dev/zero of=rvplayer bs=1 count=1 seek=665986 conv=notrunc
 
    If you're lucky, you'll then have sound....
+
+   You may also need to edit it with
+
+   dd if=/dev/zero of=rvplayer bs=1 count=1 seek=702554 conv=notrunc
+
+   as well.  Alternately, download rpopen from
+http://onramp.i2k.com/~jeffd/rpopen/ and pre-load it before you run
+rvplayer (it's a shared object which blocks rvplayer from doing the
+NONBLOCKing open of /dev/dsp).
 
 Quotas
 ======
@@ -553,7 +579,7 @@ Util-linux
 ==========
 
 The 2.9 release:
-ftp://ftp.win.tue.nl/pub/linux/util/util-linux-2.9.tar.gz
+ftp://ftp.win.tue.nl/pub/linux/util/util-linux-2.9g.tar.gz
 
 Autofs
 ======
@@ -564,9 +590,9 @@ ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-3.1.1.tar.gz
 NFS
 ===
 
-The user-land 2.2beta37 release:
-ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta37.tar.gz
-ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta37.tar.gz
+The user-land 2.2beta40 release:
+ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta40.tar.gz
+ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/nfs-server-2.2beta40.tar.gz
 
 The kernel-level 12/04/98 release:
 ftp://ftp.yggdrasil.com/private/hjl/knfsd-981204.tar.gz
@@ -584,6 +610,12 @@ Ypbind
 
 The 3.3 release:
 ftp://ftp.uni-paderborn.de/pub/linux/local/yp/ypbind-3.3.tar.gz
+
+Sysklogd
+========
+
+The 1.3-30 release:
+ftp://metalab.unc.edu/pub/Linux/system/daemons/sysklogd-1.3-30.tar.gz
 
 Bash
 ====
@@ -603,14 +635,14 @@ ftp://ftp.gwdg.de/pub/linux/misc/ncpfs/ncpfs-2.2.0.tgz
 SMBfs
 =====
 
-The 1.9.18p10 release of Samba:
-ftp://ftp.samba.org/pub/samba/samba-1.9.18p10.tar.gz
+The 2.0.0 release of Samba:
+ftp://ftp.samba.org/pub/samba/samba-2.0.0.tar.gz
 
 Pcmcia-cs
 =========
 
-The 3.0.6 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.6.tar.gz
+The 3.0.7 release:
+ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.7.tar.gz
 
 Setserial
 =========
@@ -637,6 +669,15 @@ IP Masq Adm
 
 The 0.4.2 release:
 http://juanjox.linuxhq.com/ipmasqadm-0.4.2.tar.gz
+
+DHCP clients
+============
+
+The 2.0b1p18 ISC dhcpclient release:
+ftp://ftp.isc.org/isc/dhcp/test/dhcp-2.0b1pl8.tar.gz
+
+The 1.3.17-pl2 PhysTech dhcpcd release:
+ftp://ftp.phystech.com/pub/dhcpcd-1.3.17-pl2.tar.gz
 
 iBCS
 ====
@@ -693,7 +734,7 @@ Other Info
 
    Please remember that most of these utils are available on your
 favorite local linux mirror.  If you can, please get them from a closer
-site before checking metalab.
+site before checking metalab or tsx-11.
 
    You may also want to check for updated versions of this software in a
 package format for the distribution you use.
@@ -702,20 +743,17 @@ package format for the distribution you use.
 distribution), most of these are available in RPM format.  Check around
 your favorite Red Hat mirror site before installing the non-RPM
 version.  Remember, you might need to use the --force option to get the
-upgrade to install.  ftp://contrib.redhat.com/ will have almost
-everything you need, and Red Hat 5.2 ships with most necessary software.
+upgrade to install.  ftp://contrib.redhat.com/ ,
+ftp://developer.redhat.com/ , or ftp://rawhide.redhat.com/  will have
+almost everything you need, and Red Hat 5.2 ships with most necessary
+software.
 
    Those of you running Debian (or a different distribution that
 supports .deb packages) can look in the "unstable" and
 "project/experimental" directories of your favorite Debian mirror.  The
 Debian 2.0 release ships with most packages you need as well.
 
-   For others, David Bourgin has put together a package of everything
-necessary to quickly and easily upgrade to 2.1.x.  See
-ftp://ftp.wsc.com/pub/freeware/linux/update.linux/kernel-v2.1.x/ for
-more information and the files.
-
-Please send info about any other packages that 2.1.x "broke" or about
-any new features of 2.1.x that require extra or new packages for use to
-Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
+Please send info about any other packages that 2.2 "broke" or about any
+new features of 2.2 that require extra or new packages for use to Chris
+Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 

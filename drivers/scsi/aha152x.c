@@ -566,6 +566,7 @@ static struct signature {
   { "Adaptec BIOS:AVA-282X",         0xc, 21 },  /* Adaptec 282x */
   { "Adaptec IBM Dock II SCSI",   0x2edd, 24 },  /* IBM Thinkpad Dock II */
   { "Adaptec BIOS:AHA-1532P",       0x1c, 22 },  /* IBM Thinkpad Dock II SCSI */
+  { "DTC3520A Host Adapter BIOS", 0x318a, 26 },  /* DTC 3520A ISA SCSI */
 };
 #define SIGNATURE_COUNT (sizeof(signatures) / sizeof(struct signature))
 #endif

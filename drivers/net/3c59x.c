@@ -1245,7 +1245,7 @@ static void vortex_timer(unsigned long data)
 			printk(KERN_DEBUG "%s: Media selection failed, now trying "
 				   "%s port.\n",
 				   dev->name, media_tbl[dev->if_port].name);
-		  next_tick = RUN_AT(media_tbl[dev->if_port].wait);
+		  next_tick = media_tbl[dev->if_port].wait;
 		}
 		outw((media_status & ~(Media_10TP|Media_SQE)) |
 			 media_tbl[dev->if_port].media_bits, ioaddr + Wn4_Media);

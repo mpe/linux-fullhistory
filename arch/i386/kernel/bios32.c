@@ -352,6 +352,10 @@ __initfunc(int pci_sanity_check(struct pci_access *a))
 {
 	u16 dfn, x;
 
+#ifdef CONFIG_VISWS
+	return 1;       /* Lithium PCI Bridges are non-standard */
+#endif
+
 	if (pci_probe & PCI_NO_CHECKS)
 		return 1;
 	for(dfn=0; dfn < 0x100; dfn++)
@@ -1051,7 +1055,7 @@ __initfunc(void pcibios_fixup_devices(void))
 				pci_write_config_word(dev, PCI_COMMAND, cmd);
 			}
 		}
-#ifdef __SMP__
+#if defined(CONFIG_X86_IO_APIC)
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
 		 */

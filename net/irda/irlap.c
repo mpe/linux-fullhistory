@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irlap.c
- * Version:       0.3
+ * Version:       0.8
  * Description:   An IrDA LAP driver for Linux
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon Dec 14 11:54:42 1998
+ * Modified at:   Sat Jan 16 22:19:27 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -208,7 +208,7 @@ void irlap_close( struct irlap_cb *self)
  */
 void irlap_connect_indication( struct irlap_cb *self, struct sk_buff *skb) 
 {
-	DEBUG( 4, "irlap_connect_indication()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
@@ -257,7 +257,7 @@ void irlap_connect_request( struct irlap_cb *self, __u32 daddr,
 	if ( self->state == LAP_NDM) {
 		irlap_do_event( self, CONNECT_REQUEST, NULL, NULL);
 	} else {
-		DEBUG( 0, "irlap_connect_request() Wrong state!\n");
+		DEBUG( 0, __FUNCTION__ "() Wrong state!\n");
 		
 		irlap_disconnect_indication( self, LAP_MEDIA_BUSY);
 	}
@@ -295,8 +295,6 @@ inline void irlap_data_indication( struct irlap_cb *self, struct sk_buff *skb)
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
 
-	IS_SKB( skb, return;);
-
 	/* Hide LAP header from IrLMP layer */
 	skb_pull( skb, LAP_ADDR_HEADER+LAP_CTRL_HEADER);
 
@@ -321,13 +319,11 @@ inline void irlap_data_indication( struct irlap_cb *self, struct sk_buff *skb)
  */
 void irlap_unit_data_indication( struct irlap_cb *self, struct sk_buff *skb)
 {
-	DEBUG( 4, __FUNCTION__ "()\n"); 
+	DEBUG( 0, __FUNCTION__ "()\n"); 
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
-
-	IS_SKB( skb, return;);
 
 	/* Hide LAP header from IrLMP layer */
 	skb_pull( skb, LAP_ADDR_HEADER+LAP_CTRL_HEADER);
@@ -342,9 +338,7 @@ void irlap_unit_data_indication( struct irlap_cb *self, struct sk_buff *skb)
 		}
 	}
 #endif
-	
-	irlmp_link_data_indication( self->notify.instance, LAP_UNRELIABLE, 
-				    skb);
+	irlmp_link_data_indication(self->notify.instance, LAP_UNRELIABLE, skb);
 }
 
 /*
@@ -361,8 +355,6 @@ inline void irlap_data_request( struct irlap_cb *self, struct sk_buff *skb,
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( skb != NULL, return;);
-
-	IS_SKB( skb, return;);
 
 	DEBUG( 4, "irlap_data_request: tx_list=%d\n", 
 		   skb_queue_len( &self->tx_list));
@@ -392,8 +384,6 @@ inline void irlap_data_request( struct irlap_cb *self, struct sk_buff *skb,
 		skb->data[1] = UI_FRAME;
 	}
 
-	IS_SKB( skb, return;);
-
 	/* 
 	 *  Send event if this frame only if we are in the right state 
 	 *  FIXME: udata should be sent first! (skb_queue_head?)
@@ -408,7 +398,6 @@ inline void irlap_data_request( struct irlap_cb *self, struct sk_buff *skb,
 			skb = skb_dequeue( &self->tx_list);
 			
 			ASSERT( skb != NULL, return;);
-			IS_SKB( skb, return;);
 		}
 		irlap_do_event( self, SEND_I_CMD, skb, NULL);
 	} else
@@ -479,8 +468,6 @@ void irlap_discovery_request( struct irlap_cb *self, DISCOVERY *discovery)
 {
 	struct irlap_info info;
 	
-	DEBUG( 4, __FUNCTION__ "()\n"); 
-
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( discovery != NULL, return;);
@@ -506,26 +493,22 @@ void irlap_discovery_request( struct irlap_cb *self, DISCOVERY *discovery)
  	} 
 }
 
-
 /*
  * Function irlap_discovery_confirm (log)
  *
  *    A device has been discovered in front of this station, we
  *    report directly to LMP.
  */
-void irlap_discovery_confirm( struct irlap_cb *self, 
-			      hashbin_t *discovery_log) 
+void irlap_discovery_confirm( struct irlap_cb *self, hashbin_t *discovery_log) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
-
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	
 	ASSERT( self->notify.instance != NULL, return;);
-
+	
 	/* Inform IrLMP */
 	irlmp_link_discovery_confirm( self->notify.instance, discovery_log);
-
+	
 	/* 
 	 *  IrLMP has now the responsibilities for the discovery_log 
 	 */
@@ -538,8 +521,7 @@ void irlap_discovery_confirm( struct irlap_cb *self,
  *    Somebody is trying to discover us!
  *
  */
-inline void irlap_discovery_indication( struct irlap_cb *self, 
-					DISCOVERY *discovery) 
+void irlap_discovery_indication( struct irlap_cb *self, DISCOVERY *discovery) 
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 
@@ -587,7 +569,10 @@ void irlap_reset_indication( struct irlap_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	
-	irlap_do_event( self, RESET_REQUEST, NULL, NULL);
+	if ( self->state == LAP_RESET_WAIT)
+		irlap_do_event( self, RESET_REQUEST, NULL, NULL);
+	else
+		irlap_do_event( self, RESET_RESPONSE, NULL, NULL);
 }
 
 /*
@@ -598,7 +583,7 @@ void irlap_reset_indication( struct irlap_cb *self)
  */
 void irlap_reset_confirm(void)
 {
-	DEBUG( 0, __FUNCTION__ "() Not implemented!\n");	
+	DEBUG( 0, __FUNCTION__ "()\n");
 }
 
 /*
@@ -616,8 +601,6 @@ int irlap_generate_rand_time_slot( int S, int s)
 
 	slot = s + jiffies % (S-s);
 	
-	DEBUG( 4, "S=%d, s=%d, rnd=%d\n", S, s, slot);
-
 	ASSERT(( slot >= s) || ( slot < S), return 0;);
 	
 	return slot;
@@ -687,9 +670,7 @@ int irlap_validate_ns_received( struct irlap_cb *self, int ns)
 	ASSERT( self != NULL, return -ENODEV;);
 	ASSERT( self->magic == LAP_MAGIC, return -EBADR;);
 
-	/* 
-	 *  ns as expected?
-	 */
+	/*  ns as expected?  */
 	if ( ns == self->vr) {
 		DEBUG( 4, "*** irlap_validate_ns_received: expected!\n");
 		return NS_EXPECTED;
@@ -713,9 +694,7 @@ int irlap_validate_nr_received( struct irlap_cb *self, int nr)
 	ASSERT( self != NULL, return -ENODEV;);
 	ASSERT( self->magic == LAP_MAGIC, return -EBADR;);
 
-	/* 
-	 *  nr as expected?
-	 */
+	/*  nr as expected?  */
 	if ( nr == self->vs) {
 		DEBUG( 4, "*** irlap_validate_nr_received: expected!\n");
 		return NR_EXPECTED;
@@ -726,24 +705,14 @@ int irlap_validate_nr_received( struct irlap_cb *self, int nr)
 	 *  ns numbers of the frames in the current window wrap.
 	 */
 	if ( self->va < self->vs) {
-		if (( nr >= self->va) && ( nr <= self->vs)) {
-			DEBUG( 4, "*** irlap_validate_nr_received:"
-			       " unexpected nr, no wrap\n");
+		if (( nr >= self->va) && ( nr <= self->vs))
 			return NR_UNEXPECTED;
-		}
 	} else {
-		if (( nr >= self->va) || ( nr <= self->vs)) {
-			DEBUG( 4, "*** irlap_validate_nr_received:"
-			       " unexpected nr, wrapped\n");
+		if (( nr >= self->va) || ( nr <= self->vs)) 
 			return NR_UNEXPECTED;
-		}
-	}	
-
+	}
+	
 	/* Invalid nr!  */
-	DEBUG( 4, "irlap_validate_nr_received: invalid nr!, "
-	       " vs=%d, vr=%d, va=%d, nr=%d\n",
-	       self->vs, self->vr, self->va, nr);
-
 	return NR_INVALID;
 }
 
@@ -760,9 +729,7 @@ void irlap_initiate_connection_state( struct irlap_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 
-	/*
-	 * Next to send and next to receive
-	 */
+	/* Next to send and next to receive */
 	self->vs = self->vr = 0;
 
 	/* Last frame which got acked (0 - 1) % 8 */
@@ -792,9 +759,7 @@ void irlap_wait_min_turn_around( struct irlap_cb *self, struct qos_info *qos)
 	ASSERT( self->magic == LAP_MAGIC, return;);
 	ASSERT( qos != NULL, return;);
 
-	/*
-	 *  Get QoS values.
-	 */
+	/* Get QoS values.  */
 	speed = qos->baud_rate.value;
 	usecs = qos->min_turn_time.value;
 
@@ -828,24 +793,23 @@ void irlap_flush_all_queues( struct irlap_cb *self)
 {
 	struct sk_buff* skb;
 
-	DEBUG( 4, "irlap_flush_all_queues()\n");
-
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
 
-	/*
-	 *  Free transmission queue
-	 */
-	while (( skb = skb_dequeue( &self->tx_list)) != NULL) {
+	/* Free transmission queue */
+	while (( skb = skb_dequeue( &self->tx_list)) != NULL)
 		dev_kfree_skb( skb);
-	}
 	
-	/*
-	 *  Free sliding window buffered packets
-	 */
-	while (( skb = skb_dequeue( &self->wx_list)) != NULL) {
+	/* Free sliding window buffered packets */
+	while (( skb = skb_dequeue( &self->wx_list)) != NULL)
 		dev_kfree_skb( skb);
-	}
+
+#ifdef CONFIG_IRDA_RECYCLE_RR
+	if ( self->recycle_rr_skb) { 
+ 		dev_kfree_skb( self->recycle_rr_skb);
+ 		self->recycle_rr_skb = NULL;
+ 	}
+#endif
 }
 
 /*
@@ -972,9 +936,13 @@ void irlap_init_qos_capabilities( struct irlap_cb *self,
 
 	/* Use 500ms in IrLAP for now */
 	self->qos_rx.max_turn_time.bits &= 0x03;
+	self->qos_rx.max_turn_time.bits &= 0x01;
 
 	/* Set data size */
 	/* self->qos_rx.data_size.bits &= 0x03; */
+
+	/* Set disconnect time */
+	self->qos_rx.link_disc_time.bits &= 0x07;
 
 	irda_qos_bits_to_value( &self->qos_rx);
 }
@@ -987,7 +955,7 @@ void irlap_init_qos_capabilities( struct irlap_cb *self,
  */
 void irlap_apply_default_connection_parameters( struct irlap_cb *self)
 {
-	DEBUG( 4, "irlap_apply_default_connection_parameters()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
@@ -1062,13 +1030,6 @@ void irlap_apply_connection_parameters( struct irlap_cb *self,
 	self->poll_timeout = qos->max_turn_time.value / 10;
 	self->final_timeout = qos->max_turn_time.value / 10;
 	self->wd_timeout = self->poll_timeout * 2;
-
-	DEBUG( 4, __FUNCTION__ "(), Setting poll timeout = %d\n", 
-	       self->poll_timeout);
-	DEBUG( 4, __FUNCTION__ "(), Setting final timeout = %d\n", 
-	       self->final_timeout);
-	DEBUG( 4, __FUNCTION__ "(), Setting wd timeout = %d\n", 
-	       self->wd_timeout);
 
 #ifdef CONFIG_IRDA_COMPRESSION
 	if ( qos->compression.value) {

@@ -11,19 +11,6 @@
 #ifndef _VIDEO_FONT_H
 #define _VIDEO_FONT_H
 
-#ifdef __ASSEMBLY__
-
-#ifdef __mc68000__
-#define FBCON_FONT_DESC_idx	0
-#define FBCON_FONT_DESC_name	(FBCON_FONT_DESC_idx   +4)
-#define FBCON_FONT_DESC_width	(FBCON_FONT_DESC_name  +4)
-#define FBCON_FONT_DESC_height	(FBCON_FONT_DESC_width +4)
-#define FBCON_FONT_DESC_data	(FBCON_FONT_DESC_height+4)
-#define FBCON_FONT_DESC_pref	(FBCON_FONT_DESC_data  +4)
-#endif
-
-#else /* __ASSEMBLY__ */
-
 #include <linux/types.h>
 
 struct fbcon_font_desc {
@@ -60,7 +47,5 @@ extern struct fbcon_font_desc *fbcon_get_default_font(int xres, int yres);
 
 /* Max. length for the name of a predefined font */
 #define MAX_FONT_NAME	32
-
-#endif /* __ASSEMBLY__ */
 
 #endif /* _VIDEO_FONT_H */

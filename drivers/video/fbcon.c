@@ -536,13 +536,14 @@ static void fbcon_setup(int con, int init, int logo)
     conp->vc_can_do_color = p->var.bits_per_pixel != 1;
     conp->vc_complement_mask = conp->vc_can_do_color ? 0x7700 : 0x0800;
     if (charcnt == 256) {
-    	p->conp->vc_hi_font_mask = 0;
+    	conp->vc_hi_font_mask = 0;
     	p->fgshift = 8;
     	p->bgshift = 12;
     	p->charmask = 0xff;
     } else {
-    	p->conp->vc_hi_font_mask = 0x100;
-    	p->conp->vc_complement_mask <<= 1;
+    	conp->vc_hi_font_mask = 0x100;
+    	if (conp->vc_can_do_color)
+	    conp->vc_complement_mask <<= 1;
     	p->fgshift = 9;
     	p->bgshift = 13;
     	p->charmask = 0x1ff;
@@ -1333,13 +1334,14 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
     p->_fontheight = h;
     if (p->conp->vc_hi_font_mask && cnt == 256) {
     	p->conp->vc_hi_font_mask = 0;
-    	p->conp->vc_complement_mask >>= 1;
+    	if (p->conp->vc_can_do_color)
+	    p->conp->vc_complement_mask >>= 1;
     	p->fgshift--;
     	p->bgshift--;
     	p->charmask = 0xff;
 
 	/* ++Edmund: reorder the attribute bits */
-	{
+	if (p->conp->vc_can_do_color) {
 	    struct vc_data *conp = p->conp;
 	    unsigned short *cp = (unsigned short *) conp->vc_origin;
 	    int count = conp->vc_screenbuf_size/2;
@@ -1355,7 +1357,8 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 
     } else if (!p->conp->vc_hi_font_mask && cnt == 512) {
     	p->conp->vc_hi_font_mask = 0x100;
-    	p->conp->vc_complement_mask <<= 1;
+    	if (p->conp->vc_can_do_color)
+	    p->conp->vc_complement_mask <<= 1;
     	p->fgshift++;
     	p->bgshift++;
     	p->charmask = 0x1ff;
@@ -1367,12 +1370,20 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 	    int count = conp->vc_screenbuf_size/2;
 	    unsigned short c;
 	    for (; count > 0; count--, cp++) {
+	        unsigned short newc;
 	        c = scr_readw(cp);
-		scr_writew(((c & 0xff00) << 1) | (c & 0xff), cp);
+		if (conp->vc_can_do_color)
+		    newc = ((c & 0xff00) << 1) | (c & 0xff);
+		else
+		    newc = c & ~0x100;
+		scr_writew(newc, cp);
 	    }
 	    c = conp->vc_video_erase_char;
-	    conp->vc_video_erase_char = ((c & 0xff00) << 1) | (c & 0xff);
-	    conp->vc_attr <<= 1;
+	    if (conp->vc_can_do_color) {
+		conp->vc_video_erase_char = ((c & 0xff00) << 1) | (c & 0xff);
+		conp->vc_attr <<= 1;
+	    } else
+	        conp->vc_video_erase_char = c & ~0x100;
 	}
 
     }
@@ -1420,7 +1431,10 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
     int w = op->width;
     int h = op->height;
     int size = h;
-    int i, j, k;
+    int i, k;
+#ifndef CONFIG_FBCON_FONTWIDTH8_ONLY
+    int j;
+#endif
     u8 *new_data, *data = op->data, *p;
 
 #ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
@@ -1837,7 +1851,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	    int line_length = p->line_length;
 
 	    /* for support of Atari interleaved planes */
-#define MAP_X(x)	(line_length ? x : (x & ~1)*depth + (x & 1))
+#define MAP_X(x)	(line_length ? (x) : ((x) & ~1)*depth + ((x) & 1))
 #else
 #define MAP_X(x)	(x)
 #endif
@@ -1848,7 +1862,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	    src = logo;
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
 		for( x1 = 0; x1 < LOGO_LINE; x1++, src += logo_depth ) {
-		    dst = fb + y1*line + MAP_X(x1);
+		    dst = fb + y1*line + MAP_X(x/8+x1);
 		    for( bit = 0; bit < logo_depth; bit++ ) {
 			val = 0;
 			for( mask = 0x80, i = 0; i < 8; mask >>= 1, i++ ) {
@@ -1867,7 +1881,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	    if (depth > logo_depth) {
 		for( y1 = 0; y1 < LOGO_H; y1++ ) {
 		    for( x1 = 0; x1 < LOGO_LINE; x1++ ) {
-			dst = fb + y1*line + MAP_X(x1) + logo_depth*plane;
+			dst = fb + y1*line + MAP_X(x/8+x1) + logo_depth*plane;
 			for( i = logo_depth; i < depth; i++, dst += plane )
 			    *dst = (i == logo_depth && logo_depth == 4)
 				   ? 0xff : 0x00;

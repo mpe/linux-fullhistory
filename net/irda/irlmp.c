@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Mon Dec 14 11:54:08 1998
+ * Modified at:   Sat Jan 16 22:13:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -373,8 +373,8 @@ void irlmp_connect_request( struct lsap_cb *self, __u8 dlsap_sel, __u32 daddr,
 	if ( userdata == NULL) {
 		skb = dev_alloc_skb( 64);
 		if (skb == NULL) {
-			DEBUG( 0, "irlmp_connect_request: "
-			       "Could not allocate an sk_buff of length %d\n",
+			DEBUG( 0, __FUNCTION__ 
+			       "(), Could not allocate sk_buff of length %d\n",
 			       64);
 			return;
 		}
@@ -596,7 +596,7 @@ void irlmp_disconnect_indication( struct lsap_cb *self, LM_REASON reason,
 {
 	struct lsap_cb *lsap;
 
-	DEBUG( 4, "irlmp_disconnect_indication()\n");	
+	DEBUG( 4, __FUNCTION__ "()\n");	
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
@@ -625,10 +625,9 @@ void irlmp_disconnect_indication( struct lsap_cb *self, LM_REASON reason,
 
 	/* FIXME: the reasons should be extracted somewhere else? */
 	if ( userdata) {
-		DEBUG( 4, "irlmp_disconnect_indication: reason=%02x\n", 
-		       userdata->data[3]);
+		DEBUG( 4, __FUNCTION__ "(), reason=%02x\n", userdata->data[3]);
 	}
-
+	
 	/*
 	 *  Inform service user
 	 */
@@ -648,7 +647,7 @@ void irlmp_discovery_request( int nslots)
 {
 	struct lap_cb *lap;
 
-	DEBUG( 4, "irlmp_discovery_request()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( irlmp != NULL, return;);
 
@@ -702,7 +701,6 @@ void irlmp_check_services( DISCOVERY *discovery)
 	printk( KERN_INFO "IrDA Discovered: %s\n", discovery->info);
 	printk( KERN_INFO "    Services: ");
 
-
 	service = irlmp_hint_to_service( discovery->hint);
 	if (service != NULL) {
 		/*
@@ -746,20 +744,10 @@ void irlmp_discovery_confirm( struct lap_cb *self, hashbin_t *log)
 {
 	DISCOVERY *discovery;
 	
-	DEBUG( 4, "irlmp_discovery_confirm()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
-
-	/*
-	 *  If log is missing this means that IrLAP was unable to perform the
-	 *  discovery, so restart discovery again with just the half timeout
-	 *  of the normal one.
-	 */
-	if ( !log) {
-		irlmp_start_discovery_timer( irlmp, 150);
-		return;
-	}
 
 	/*
 	 *  Now, check all discovered devices (if any)
@@ -798,8 +786,10 @@ void irlmp_discovery_indication( struct lap_cb *self, DISCOVERY *discovery)
 	/*
 	 *  Create a new discovery log if neccessary
 	 */
-	if ( self->cachelog == NULL)
-		self->cachelog = hashbin_new( HB_LOCAL);
+	/* if ( self->cachelog == NULL) */
+/* 		self->cachelog = hashbin_new( HB_LOCAL); */
+	ASSERT( self->cachelog != NULL, return;);
+
 	/*
 	 *  Insert this discovery device into the discovery_log if its
 	 *  not there already
@@ -932,7 +922,7 @@ void irlmp_udata_indication( struct lsap_cb *self, struct sk_buff *skb)
  */
 void irlmp_connectionless_data_request( struct sk_buff *skb)
 {
-	DEBUG( 0, __FUNCTION__ "()\n"); 
+	DEBUG( 0, __FUNCTION__ "(), Sorry not implemented\n"); 
 }
 
 /*

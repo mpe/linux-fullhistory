@@ -10,14 +10,78 @@
 
 #include <linux/stddef.h>
 #include <linux/sched.h>
+#include <linux/kernel_stat.h>
+#include <asm/bootinfo.h>
+#include <asm/irq.h>
+#include <asm/amigahw.h>
+#include <video/font.h>
 
 #define DEFINE(sym, val) \
 	asm volatile("\n#define " #sym " %c0" : : "i" (val))
 
 int main(void)
 {
-	DEFINE(TS_TSS, offsetof(struct task_struct, tss));
-	DEFINE(TS_ESP0, offsetof(struct task_struct, tss.esp0));
-	DEFINE(TS_FPU, offsetof(struct task_struct, tss.fp));
+	/* offsets into the task struct */
+	DEFINE(TASK_STATE, offsetof(struct task_struct, state));
+	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
+	DEFINE(TASK_SIGPENDING, offsetof(struct task_struct, sigpending));
+	DEFINE(TASK_NEEDRESCHED, offsetof(struct task_struct, need_resched));
+	DEFINE(TASK_TSS, offsetof(struct task_struct, tss));
+	DEFINE(TASK_MM, offsetof(struct task_struct, mm));
+
+	/* offsets into the thread struct */
+	DEFINE(TSS_KSP, offsetof(struct thread_struct, ksp));
+	DEFINE(TSS_USP, offsetof(struct thread_struct, usp));
+	DEFINE(TSS_SR, offsetof(struct thread_struct, sr));
+	DEFINE(TSS_FS, offsetof(struct thread_struct, fs));
+	DEFINE(TSS_CRP, offsetof(struct thread_struct, crp));
+	DEFINE(TSS_ESP0, offsetof(struct thread_struct, esp0));
+	DEFINE(TSS_FPREG, offsetof(struct thread_struct, fp));
+	DEFINE(TSS_FPCNTL, offsetof(struct thread_struct, fpcntl));
+	DEFINE(TSS_FPSTATE, offsetof(struct thread_struct, fpstate));
+
+	/* offsets into the pt_regs */
+	DEFINE(PT_D0, offsetof(struct pt_regs, d0));
+	DEFINE(PT_ORIG_D0, offsetof(struct pt_regs, orig_d0));
+	DEFINE(PT_SR, offsetof(struct pt_regs, sr));
+
+	/* bitfields are a bit difficult */
+	DEFINE(PT_VECTOR, offsetof(struct pt_regs, pc) + 4);
+
+	/* offsets into the irq_handler struct */
+	DEFINE(IRQ_HANDLER, offsetof(struct irq_node, handler));
+	DEFINE(IRQ_DEVID, offsetof(struct irq_node, dev_id));
+	DEFINE(IRQ_NEXT, offsetof(struct irq_node, next));
+
+	/* offsets into the kernel_stat struct */
+	DEFINE(STAT_IRQ, offsetof(struct kernel_stat, irqs));
+
+	/* offsets into the bi_record struct */
+	DEFINE(BIR_TAG, offsetof(struct bi_record, tag));
+	DEFINE(BIR_SIZE, offsetof(struct bi_record, size));
+	DEFINE(BIR_DATA, offsetof(struct bi_record, data));
+
+	/* offsets into fbcon_font_desc (video/font.h) */
+	DEFINE(FBCON_FONT_DESC_IDX, offsetof(struct fbcon_font_desc, idx));
+	DEFINE(FBCON_FONT_DESC_NAME, offsetof(struct fbcon_font_desc, name));
+	DEFINE(FBCON_FONT_DESC_WIDTH, offsetof(struct fbcon_font_desc, width));
+	DEFINE(FBCON_FONT_DESC_HEIGHT, offsetof(struct fbcon_font_desc, height));
+	DEFINE(FBCON_FONT_DESC_DATA, offsetof(struct fbcon_font_desc, data));
+	DEFINE(FBCON_FONT_DESC_PREF, offsetof(struct fbcon_font_desc, pref));
+
+	/* offsets into the custom struct */
+	DEFINE(CUSTOMBASE, &custom);
+	DEFINE(C_INTENAR, offsetof(struct CUSTOM, intenar));
+	DEFINE(C_INTREQR, offsetof(struct CUSTOM, intreqr));
+	DEFINE(C_INTENA, offsetof(struct CUSTOM, intena));
+	DEFINE(C_INTREQ, offsetof(struct CUSTOM, intreq));
+	DEFINE(C_SERDATR, offsetof(struct CUSTOM, serdatr));
+	DEFINE(C_SERDAT, offsetof(struct CUSTOM, serdat));
+	DEFINE(C_SERPER, offsetof(struct CUSTOM, serper));
+	DEFINE(CIAABASE, &ciaa);
+	DEFINE(CIABBASE, &ciab);
+	DEFINE(C_PRA, offsetof(struct CIA, pra));
+	DEFINE(ZTWOBASE, zTwoBase);
+
 	return 0;
 }

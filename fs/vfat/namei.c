@@ -1656,8 +1656,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		} else {
 			drop_aliases(new_dentry);
 		}
+		res = vfat_remove_entry(new_dir,&sinfo,new_inode);
 	}
-	res = vfat_remove_entry(new_dir,&sinfo,new_inode);
 	if (res)
 		goto rename_done;
 

@@ -1221,6 +1221,8 @@ static void setterm_command(int currcons)
 			break;
 		case 8:	/* store colors as defaults */
 			def_color = attr;
+			if (hi_font_mask == 0x100)
+				def_color >>= 1;
 			default_attr(currcons);
 			update_attr(currcons);
 			break;
@@ -1894,7 +1896,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 			if (decim)
 				insert_char(currcons, 1);
 			scr_writew(himask ?
-				     ((attr & ~himask) << 8) + ((tc & 0x100) ? himask : 0) + (tc & 0xff) :
+				     ((attr << 8) & ~himask) + ((tc & 0x100) ? himask : 0) + (tc & 0xff) :
 				     (attr << 8) + tc,
 				   (u16 *) pos);
 			if (DO_UPDATE && draw_x < 0) {

@@ -39,7 +39,15 @@ OX_OBJS += apm.o
 endif
 
 ifdef CONFIG_SMP
-O_OBJS += io_apic.o smp.o trampoline.o
+O_OBJS += smp.o trampoline.o
+endif
+
+ifdef CONFIG_X86_IO_APIC
+O_OBJS += io_apic.o
+endif
+
+ifdef CONFIG_X86_VISWS_APIC
+O_OBJS += visws_apic.o
 endif
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h

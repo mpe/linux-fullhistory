@@ -69,6 +69,7 @@ extern int irq_vector[NR_IRQS];
 
 extern void init_IRQ_SMP(void);
 extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
+extern int setup_x86_irq(unsigned int, struct irqaction *);
 
 /*
  * Various low-level irq details needed by irq.c, process.c,
@@ -77,16 +78,19 @@ extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
  * Interrupt entry/exit code at both C and assembly level
  */
 
+extern void no_action(int cpl, void *dev_id, struct pt_regs *regs);
 extern void mask_irq(unsigned int irq);
 extern void unmask_irq(unsigned int irq);
 extern void disable_8259A_irq(unsigned int irq);
 extern int i8259A_irq_pending(unsigned int irq);
 extern void ack_APIC_irq(void);
+extern void FASTCALL(send_IPI_self(int vector));
+extern void smp_send_mtrr(void);
+extern void init_VISWS_APIC_irqs(void);
 extern void setup_IO_APIC(void);
 extern int IO_APIC_get_PCI_irq_vector(int bus, int slot, int fn);
 extern void make_8259A_irq(unsigned int irq);
-extern void FASTCALL(send_IPI_self(int vector));
-extern void smp_send_mtrr(void);
+extern void send_IPI(int dest, int vector);
 extern void init_pic_mode(void);
 extern void print_IO_APIC(void);
 
@@ -103,11 +107,7 @@ extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
 extern char ioapic_OEM_ID [16];
 extern char ioapic_Product_ID [16];
 
-extern spinlock_t irq_controller_lock; /*
-					* Protects both the 8259 and the
-					* IO-APIC
-					*/
-
+extern spinlock_t irq_controller_lock;
 
 #ifdef __SMP__
 

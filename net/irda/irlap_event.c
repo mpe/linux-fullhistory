@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Mon Dec 14 14:16:00 1998
+ * Modified at:   Tue Jan 19 22:58:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>,
@@ -68,6 +68,8 @@ static int irlap_state_xmit_s ( struct irlap_cb *self, IRLAP_EVENT event,
 				struct sk_buff *skb, struct irlap_info *info);
 static int irlap_state_sclose ( struct irlap_cb *self, IRLAP_EVENT event, 
 				struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_reset_check( struct irlap_cb *, IRLAP_EVENT event, 
+				    struct sk_buff *, struct irlap_info *);
 
 static char *irlap_event[] = {
 	"DISCOVERY_REQUEST",
@@ -76,6 +78,7 @@ static char *irlap_event[] = {
 	"DISCONNECT_REQUEST",
 	"DATA_REQUEST",
 	"RESET_REQUEST",
+	"RESET_RESPONSE",
 	"SEND_I_CMD",
 	"RECV_DISCOVERY_XID_CMD",
 	"RECV_DISCOVERY_XID_RSP",
@@ -115,6 +118,7 @@ char *irlap_state[] = {
 	"LAP_NRM_S",
 	"LAP_XMIT_S",
 	"LAP_SCLOSE",
+	"LAP_RESET_CHECK",
 };
 
 static int (*state[])( struct irlap_cb *self, IRLAP_EVENT event, 
@@ -134,6 +138,7 @@ static int (*state[])( struct irlap_cb *self, IRLAP_EVENT event,
 	irlap_state_nrm_s,
 	irlap_state_xmit_s,
 	irlap_state_sclose,
+	irlap_state_reset_check,
 };
 
 /*
@@ -145,8 +150,6 @@ static int (*state[])( struct irlap_cb *self, IRLAP_EVENT event,
 static void irlap_poll_timer_expired( unsigned long data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
-	
-	DEBUG( 4, "Poll timer expired!\n");
 	
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LAP_MAGIC, return;);
@@ -252,8 +255,7 @@ void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event,
  *
  */
 void irlap_next_state( struct irlap_cb *self, IRLAP_STATE state) 
-{
-	
+{	
 	if ( !self || self->magic != LAP_MAGIC) {
 		DEBUG( 4, "irlap_next_state: I have lost myself!\n");
 		return;
@@ -285,7 +287,7 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 	DISCOVERY *discovery_rsp;
 	int ret = 0;
 	
-	DEBUG( 4, "irlap_state_ndm()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == LAP_MAGIC, return -1;);
@@ -404,7 +406,7 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 		ASSERT( info != NULL, return -1;);
 		ASSERT( info->discovery != NULL, return -1;);
 
-		DEBUG( 4, "irlap_state_query(), daddr=%08x\n", 
+		DEBUG( 4, __FUNCTION__ "(), daddr=%08x\n", 
 		       info->discovery->daddr);
 
 		hashbin_insert( self->discovery_log, 
@@ -443,7 +445,7 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 		}
 		break;
 	default:
-		DEBUG( 4, "irlap_state_query: Unknown event %d, %s\n", event, 
+		DEBUG( 4, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
 		       irlap_event[event]);
 
 		if ( skb != NULL) {
@@ -468,14 +470,14 @@ static int irlap_state_reply( struct irlap_cb *self, IRLAP_EVENT event,
 	DISCOVERY *discovery_rsp;
 	int ret=0;
 
-	DEBUG( 4, "irlap_state_reply()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == LAP_MAGIC, return -1;);
 
 	switch( event) {
 	case QUERY_TIMER_EXPIRED:
-		DEBUG( 0, "irlap_state_reply: QUERY_TIMER_EXPIRED <%ld>\n",
+		DEBUG( 0, __FUNCTION__ "(), QUERY_TIMER_EXPIRED <%ld>\n",
 		       jiffies);
 		irlap_next_state( self, LAP_NDM);
 		break;
@@ -532,7 +534,7 @@ static int irlap_state_conn( struct irlap_cb *self, IRLAP_EVENT event,
 {
 	int ret = 0;
 
-	DEBUG( 0, __FUNCTION__ "(), event=%s\n", irlap_event[ event]);
+	DEBUG( 4, __FUNCTION__ "(), event=%s\n", irlap_event[ event]);
 
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == LAP_MAGIC, return -1;);
@@ -564,14 +566,14 @@ static int irlap_state_conn( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 
 	case RECV_SNRM_CMD:
-		DEBUG( 3, "irlap_state_conn: event RECV_SNRM_CMD!\n");
+		DEBUG( 3, __FUNCTION__ "(), event RECV_SNRM_CMD!\n");
 #if 0
 		irlap_next_state( self, LAP_NDM);
 #endif
 		break;
 
 	case RECV_DISCOVERY_XID_CMD:
-		DEBUG( 3, "irlap_state_conn: event RECV_DISCOVER_XID_CMD!\n");
+		DEBUG( 3, __FUNCTION__ "(), event RECV_DISCOVER_XID_CMD!\n");
 		irlap_next_state( self, LAP_NDM);
 		break;
 
@@ -581,7 +583,7 @@ static int irlap_state_conn( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 
 	default:
-		DEBUG( 0, "irlap_state_conn: Unknown event %d, %s\n", event, 
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
 		       irlap_event[event]);
 		ret = -1;
 		break;
@@ -631,7 +633,7 @@ static int irlap_state_setup( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 
 	case RECV_SNRM_CMD:
-		DEBUG( 0, "irlap_state_setup: SNRM battle!\n");
+		DEBUG( 4, __FUNCTION__ "(), SNRM battle!\n");
 
 		ASSERT( skb != NULL, return 0;);
 		ASSERT( info != NULL, return 0;);
@@ -672,7 +674,6 @@ static int irlap_state_setup( struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_initiate_connection_state( self);
 
 		/* Negotiate connection parameters */
-		IS_SKB( skb, return -1;);
 		ASSERT( skb->len > 10, return -1;);
 		skb_pull( skb, 10);
 
@@ -741,7 +742,7 @@ static int irlap_state_xmit_p( struct irlap_cb *self, IRLAP_EVENT event,
 	switch( event) {
 	case SEND_I_CMD:
 		ASSERT( skb != NULL, return -1;);
-		DEBUG( 4, "irlap_state_xmit: Window=%d\n", self->window);
+		DEBUG( 4, __FUNCTION__ "(), Window=%d\n", self->window);
 		
 		/*
 		 *  Only send frame if send-window > 0.
@@ -790,7 +791,7 @@ static int irlap_state_xmit_p( struct irlap_cb *self, IRLAP_EVENT event,
 			self->fast_RR = FALSE;
 #endif
 		} else {
-			DEBUG( 0, __FUNCTION__ 
+			DEBUG( 4, __FUNCTION__ 
 			       "(), Unable to send! remote busy?\n");
 			skb_queue_head( &self->tx_list, skb);
 
@@ -869,7 +870,7 @@ static int irlap_state_pclose( struct irlap_cb *self, IRLAP_EVENT event,
 		}
 		break;
 	default:
-		DEBUG( 0, "irlap_state_pclose: Unknown event %d\n", event);
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
 		ret = -1;
 		break;	
 	}
@@ -897,7 +898,7 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 
 	switch( event) {
 	case RECV_RR_RSP:
-		DEBUG( 4, "irlap_state_nrm_p: RECV_RR_FRAME: "
+		DEBUG( 4, __FUNCTION__ "(), RECV_RR_FRAME: "
 		       "Retrans:%d, nr=%d, va=%d, vs=%d, vr=%d\n",
 		       self->retry_count, info->nr, self->va, self->vs, 
 		       self->vr);
@@ -1074,8 +1075,8 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 				/* Keep state */
 				irlap_next_state( self, LAP_NRM_P);
 			} else {
-				DEBUG( 4, "*** irlap_state_nrm_p:"
-				       " missing or duplicate frame!\n");
+				DEBUG( 4, __FUNCTION__
+				       "(), missing or duplicate frame!\n");
 				
 				/* Update Nr received */
 				irlap_update_nr_received( self, info->nr);
@@ -1321,7 +1322,7 @@ int irlap_state_reset_wait( struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_next_state( self, LAP_PCLOSE);
 		break;
 	default:
-		DEBUG( 0, "irlap_state_reset_wait: Unknown event %s\n", 
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %s\n", 
 		       irlap_event[event]);
 		ret = -1;
 		break;	
@@ -1402,7 +1403,7 @@ int irlap_state_reset( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 
 	default:
-		DEBUG( 0, "irlap_state_reset: Unknown event %s\n", 
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %s\n", 
 		       irlap_event[ event]);
 		ret = -1;
 		break;	
@@ -1429,9 +1430,6 @@ static int irlap_state_xmit_s( struct irlap_cb *self, IRLAP_EVENT event,
 	
 	switch( event) {
 	case SEND_I_CMD:
-		ASSERT( skb != NULL, return -1;);
-		DEBUG( 4, "irlap_state_xmit: Window=%d\n", self->window);
-		
 		/*
 		 *  Send frame only if send window > 1
 		 */ 
@@ -1463,16 +1461,16 @@ static int irlap_state_xmit_s( struct irlap_cb *self, IRLAP_EVENT event,
 			if (( self->window > 1) && 
 			    skb_queue_len( &self->tx_list) > 0) 
 			{   
-				DEBUG( 4, "irlap_state_xmit: window > 1\n");
+				DEBUG( 4, __FUNCTION__ "(), window > 1\n");
 				irlap_send_data_secondary( self, skb);
 				irlap_next_state( self, LAP_XMIT_S);
 			} else {
-				DEBUG( 4, "irlap_state_xmit: window <= 1\n");
+				DEBUG( 4, "(), window <= 1\n");
 				irlap_send_data_secondary_final( self, skb);
 				irlap_next_state( self, LAP_NRM_S);
 			}
 		} else {
-			DEBUG( 0, "Unable to send!\n");
+			DEBUG( 0, __FUNCTION__ "(), Unable to send!\n");
 			skb_queue_head( &self->tx_list, skb);
 			ret = -EPROTO;
 		}
@@ -1545,7 +1543,7 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 			/* Keep state */
 			irlap_next_state( self, LAP_NRM_S); 
 		} else {
-			DEBUG( 0, "irlap_state_nrm_s: **** "
+			DEBUG( 0, __FUNCTION__ "(), "
 			       "invalid nr not implemented!\n");
 		} 
 		if ( skb)
@@ -1732,23 +1730,17 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 		}
 		break;
 	case RECV_SNRM_CMD:
-#if 1
 		del_timer( &self->wd_timer);
 		DEBUG( 0, "irlap_state_nrm_s: received SNRM cmd\n");
-		irlap_next_state( self, LAP_RESET);
-#else
-		irlap_wait_min_turn_around( &self->qos_session);
-		irlap_send_ua_response_frame( &self->qos_session);
-		irda_start_timer( WD_TIMER, self->wd_timeout);
-		irlap_next_state( self, LAP_SCLOSE)
-		
-#endif
+		irlap_next_state( self, LAP_RESET_CHECK);
+
+		irlap_reset_indication( self);
 		break;
 	case WD_TIMER_EXPIRED:
 		DEBUG( 4, "WD_TIMER_EXPIRED: %ld\n", jiffies);
 	
 		/*
-		 *  Wait until  retry_count * n matches negotiated threshold/
+		 *  Wait until retry_count * n matches negotiated threshold/
 		 *  disconnect time (note 2 in IrLAP p. 82)
 		 */
 		DEBUG( 0, "retry_count = %d\n", self->retry_count);
@@ -1767,7 +1759,7 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 			
 			/* Always switch state before calling upper layers */
 			irlap_next_state( self, LAP_NDM);
-			
+
 			irlap_disconnect_indication( self, LAP_NO_RESPONSE);
 		}
 		break;
@@ -1808,7 +1800,7 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 
 	default:
-		DEBUG( 0, "irlap_state_nrm_s: Unknown event %d, (%s)\n", 
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %d, (%s)\n", 
 		       event, irlap_event[event]);
 		ret = -1;
 		break;
@@ -1829,3 +1821,42 @@ static int irlap_state_sclose( struct irlap_cb *self, IRLAP_EVENT event,
 
 	return -1;
 }
+
+static int irlap_state_reset_check( struct irlap_cb *self, IRLAP_EVENT event, 
+				   struct sk_buff *skb, 
+				   struct irlap_info *info) 
+{
+	int ret = 0;
+
+	DEBUG( 0, __FUNCTION__ "(), event=%s\n", irlap_event[ event]); 
+
+	ASSERT( self != NULL, return -ENODEV;);
+	ASSERT( self->magic == LAP_MAGIC, return -EBADR;);
+	
+	switch( event) {
+	case RESET_RESPONSE:
+		irlap_send_ua_response_frame( self, &self->qos_rx);
+		irlap_initiate_connection_state( self);
+		irlap_start_wd_timer( self, WD_TIMEOUT);
+		irlap_flush_all_queues( self);
+		
+		irlap_next_state( self, LAP_NRM_S);
+		break;
+	case DISCONNECT_REQUEST:
+		irlap_wait_min_turn_around( self, &self->qos_tx);
+		/* irlap_send_rd_frame(self); */
+		irlap_start_wd_timer( self, WD_TIMEOUT);
+		break;
+	default:
+		DEBUG( 0, __FUNCTION__ "(), Unknown event %d, (%s)\n", 
+		       event, irlap_event[event]);
+		ret = -1;
+		break;
+	}
+
+	return ret;
+}
+
+
+
+

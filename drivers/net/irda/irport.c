@@ -1,10 +1,8 @@
 /*********************************************************************
  *		  
  * Filename:	  irport.c
- * Version:	  0.1
- * Description:   Serial driver for IrDA. The functions in this file
- *                may be used by FIR drivers, but this file knows
- *                nothing about FIR drivers!!!
+ * Version:	  0.8
+ * Description:   Serial driver for IrDA. 
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
@@ -25,37 +23,90 @@
  *     provide warranty for any of this software. This material is 
  *     provided "AS-IS" and at no charge.
  *
+ *     NOTICE:
+ *
+ *     This driver is ment to be a small serial driver to be used for
+ *     IR-chipsets that has a UART (16550) compatibility mode. If your
+ *     chipset is is UART only, you should probably use IrTTY instead since
+ *     the Linux serial driver is probably more robust and optimized.
+ *
+ *     The functions in this file may be used by FIR drivers, but this
+ *     driver knows nothing about FIR drivers so don't ever insert such
+ *     code into this file. Instead you should code your FIR driver in a
+ *     separate file, and then call the functions in this file if
+ *     necessary. This is becase it is difficult to use the Linux serial
+ *     driver with a FIR driver becase they must share interrupts etc. Most
+ *     FIR chipsets can function in advanced SIR mode, and you should
+ *     probably use that mode instead of the UART compatibility mode (and
+ *     then just forget about this file)
+ *
  ********************************************************************/
 
-/* #include <linux/module.h> */
+#include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
-#include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <linux/errno.h>
+#include <linux/config.h>
+#include <linux/init.h>
 
 #include <linux/skbuff.h>
 #include <linux/serial_reg.h>
 
-#include "irda.h"
-#include "ircompat.h"
-#include "irport.h"
-#include "timer.h"
-#include "crc.h"
-#include "wrapper.h"
-#include "irlap_frame.h"
+#include <net/irda/irda.h>
+#include <net/irda/irmod.h>
+#include <net/irda/wrapper.h>
+#include <net/irda/irport.h>
 
-#define IO_EXTENT	8
+#define IO_EXTENT 8
+
+static unsigned int io[]  = { 0x3e8, ~0, ~0, ~0 };
+static unsigned int irq[] = { 11, 0, 0, 0 };
 
 static void irport_write_wakeup( struct irda_device *idev);
-static int irport_write( int iobase, int fifo_size, __u8 *buf, int len);
+static int  irport_write( int iobase, int fifo_size, __u8 *buf, int len);
 static void irport_receive( struct irda_device *idev);
+
+__initfunc(int irport_init(void))
+{
+/* 	int i; */
+
+/* 	for ( i=0; (io[i] < 2000) && (i < 4); i++) { */
+/* 		int ioaddr = io[i]; */
+/* 		if (check_region(ioaddr, IO_EXTENT)) */
+/* 			continue; */
+/* 		if (irport_open( i, io[i], io2[i], irq[i], dma[i]) == 0) */
+/* 			return 0; */
+/* 	} */
+/* 	return -ENODEV; */
+	return 0;
+}
+
+/*
+ * Function pc87108_cleanup ()
+ *
+ *    Close all configured chips
+ *
+ */
+#ifdef MODULE
+static void irport_cleanup(void)
+{
+	int i;
+
+        DEBUG( 4, __FUNCTION__ "()\n");
+
+	/* for ( i=0; i < 4; i++) { */
+/* 		if ( dev_self[i]) */
+/* 			irport_close( &(dev_self[i]->idev)); */
+/* 	} */
+}
+#endif /* MODULE */
 
 /*
  * Function irport_open (void)
@@ -65,14 +116,14 @@ static void irport_receive( struct irda_device *idev);
  */
 int irport_open( int iobase)
 {
+	DEBUG( 0, __FUNCTION__ "(), iobase=%#x\n", iobase);
+
 	/* Initialize UART */
-	outb_p( UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
-	outb_p(( UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), 
-	       iobase+UART_MCR);
+	outb( UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
+	outb(( UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2), iobase+UART_MCR);
 	
 	/* Turn on interrups */
-	outb_p(( UART_IER_THRI |UART_IER_RLSI | UART_IER_RDI), 
-	       iobase+UART_IER); 
+	outb(( UART_IER_THRI |UART_IER_RLSI | UART_IER_RDI), iobase+UART_IER); 
 	
 	return 0;
 }
@@ -88,10 +139,10 @@ void irport_close( int iobase)
 	DEBUG( 0, __FUNCTION__ "()\n");
 
 	/* Reset UART */
-	outb_p( 0, iobase+UART_MCR);
+	outb( 0, iobase+UART_MCR);
 
 	/* Turn off interrupts */
-	outb_p( 0, iobase+UART_IER); 
+	outb( 0, iobase+UART_IER); 
 }
 
 /*
@@ -108,8 +159,10 @@ void irport_change_speed( int iobase, int speed)
 
 	DEBUG( 0, __FUNCTION__ "(), Setting speed to: %d\n", speed);
 
+	DEBUG( 0, __FUNCTION__ "(), iobase=%#x\n", iobase);
+
 	/* Turn off interrupts */
-	outb_p( 0, iobase+UART_IER); 
+	outb( 0, iobase+UART_IER); 
 
 	divisor = SPEED_MAX/speed;
 	
@@ -118,15 +171,14 @@ void irport_change_speed( int iobase, int speed)
 	/* IrDA ports use 8N1 */
 	lcr = UART_LCR_WLEN8;
 	
-	outb_p( UART_LCR_DLAB | lcr, iobase+UART_LCR); /* Set DLAB */
-	outb_p( divisor & 0xff,      iobase+UART_DLL); /* Set speed	*/
-	outb_p( divisor >> 8,	     iobase+UART_DLM);
-	outb_p( lcr,		     iobase+UART_LCR); /* Set 8N1	*/
-	outb_p( fcr,		     iobase+UART_FCR); /* Enable FIFO's */
+	outb( UART_LCR_DLAB | lcr, iobase+UART_LCR); /* Set DLAB */
+	outb( divisor & 0xff,      iobase+UART_DLL); /* Set speed */
+	outb( divisor >> 8,	   iobase+UART_DLM);
+	outb( lcr,		   iobase+UART_LCR); /* Set 8N1	*/
+	outb( fcr,		   iobase+UART_FCR); /* Enable FIFO's */
 
 	/* Turn on interrups */
-	outb_p(( UART_IER_THRI |UART_IER_RLSI | UART_IER_RDI), 
-	       iobase+UART_IER); 
+	outb( UART_IER_THRI|UART_IER_RLSI|UART_IER_RDI, iobase+UART_IER); 
 }
 
 /*
@@ -149,21 +201,25 @@ void irport_interrupt( int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 
-	iobase = idev->io.iobase;
-	iir    = inb( iobase + UART_IIR);
+	idev->netdev.interrupt = 1;
 
+	iobase = idev->io.iobase2;
+
+	iir = inb(iobase + UART_IIR);
 	do {
 		status = inb( iobase+UART_LSR);
 		
-		if ( status & UART_LSR_DR) {
+		if (status & UART_LSR_DR) {
 	       		/* Receive interrupt */
-			irport_receive( idev);
+			irport_receive(idev);
 		}
-		if ( status & UART_LSR_THRE) {
+		if (status & UART_LSR_THRE) {
 	       		/* Transmitter ready for data */
-			irport_write_wakeup( idev);
+			irport_write_wakeup(idev);
 		}
-	} while ( !(inb( iobase+UART_IIR) & UART_IIR_NO_INT));
+	} while (!(inb(iobase+UART_IIR) & UART_IIR_NO_INT));
+
+	idev->netdev.interrupt = 0;
 }
 
 /*
@@ -179,16 +235,11 @@ static void irport_write_wakeup( struct irda_device *idev)
 	
 	DEBUG( 4, __FUNCTION__ "() <%ld>\n", jiffies);
 	
-	/* 
-	 *  First make sure we're connected. 
-	 */
 	ASSERT( idev != NULL, return;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
 
-	/*
-	 *  Finished with frame?
-	 */
-	if ( idev->tx.ptr == idev->tx.len)  {
+	/* Finished with frame?  */
+	if ( idev->tx_buff.offset == idev->tx_buff.len)  {
 
 		/* 
 		 *  Now serial buffer is almost free & we can start 
@@ -201,16 +252,16 @@ static void irport_write_wakeup( struct irda_device *idev)
 
 		/* Schedule network layer, so we can get some more frames */
 		mark_bh( NET_BH);
+
 		return;
 	}
-	/*
-	 *  Write data left in transmit buffer
-	 */
-	count = idev->tx.len - idev->tx.ptr;
-	actual = irport_write( idev->io.iobase, idev->io.fifo_size, 
-			       idev->tx.head, count);
-	idev->tx.ptr += actual;
-	idev->tx.head += actual;
+
+	/* Write data left in transmit buffer */
+	count = idev->tx_buff.len - idev->tx_buff.offset;
+	actual = irport_write( idev->io.iobase2, idev->io.fifo_size, 
+			       idev->tx_buff.head, count);
+	idev->tx_buff.offset += actual;
+	idev->tx_buff.head += actual;
 }
 
 /*
@@ -223,7 +274,8 @@ static int irport_write( int iobase, int fifo_size, __u8 *buf, int len)
 {
 	int actual = 0;
 
-	if (!(inb_p( iobase+UART_LSR) & UART_LSR_THRE)) {
+	/* Tx FIFO should be empty! */
+	if (!(inb( iobase+UART_LSR) & UART_LSR_THRE)) {
 		DEBUG( 0, __FUNCTION__ "(), failed, fifo not empty!\n");
 		return -1;
 	}
@@ -265,18 +317,10 @@ int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
 		return -EBUSY;
 	}
 	
-	idev = (struct irda_device *)  dev->priv;
+	idev = (struct irda_device *) dev->priv;
 
 	ASSERT( idev != NULL, return -1;);
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return -1;);
-
-	if ( skb == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), skb==NULL\n");
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,0)
-		dev_tint(dev); 
-#endif
-		return 0;
-	}
 
 	/* Lock transmit buffer */
 	if ( irda_lock( (void *) &dev->tbusy) == FALSE)
@@ -285,18 +329,17 @@ int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
         /*  
 	 *  Transfer skb to tx_buff while wrapping, stuffing and making CRC 
 	 */
-	idev->tx.len = async_wrap_skb( skb, idev->tx.buff, idev->tx.buffsize);
-
-	actual = irport_write( idev->io.iobase, idev->io.fifo_size, 
-			       idev->tx.buff, idev->tx.len);
-
-	idev->tx.ptr = actual;
-	idev->tx.head = idev->tx.buff + actual;
-
-	IS_SKB( skb, return 0;);
-	FREE_SKB_MAGIC( skb);
-	DEV_KFREE_SKB( skb, FREE_WRITE);
-
+	idev->tx_buff.len = async_wrap_skb( skb, idev->tx_buff.data, 
+					    idev->tx_buff.truesize);
+	
+	actual = irport_write( idev->io.iobase2, idev->io.fifo_size, 
+			       idev->tx_buff.data, idev->tx_buff.len);
+	
+	idev->tx_buff.offset = actual;
+	idev->tx_buff.head = idev->tx_buff.data + actual;
+	
+	dev_kfree_skb( skb);
+	
 	return 0;
 }
         
@@ -308,29 +351,29 @@ int irport_hard_xmit( struct sk_buff *skb, struct device *dev)
  */
 static void irport_receive( struct irda_device *idev) 
 {
-	__u8 byte = 0x00;
 	int iobase;
 
 	if ( !idev)
 		return;
 
-	DEBUG( 0, __FUNCTION__ "()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
-	iobase = idev->io.iobase;
+	iobase = idev->io.iobase2;
 
-	if ( idev->rx.len == 0) {
-		idev->rx.head = idev->rx.buff;
-	}
-
-	/* 
-	 *  Receive all characters in FIFO 
+	if ( idev->rx_buff.len == 0)
+		idev->rx_buff.head = idev->rx_buff.data;
+	
+	/*  
+	 * Receive all characters in Rx FIFO, unwrap and unstuff them. 
+         * async_unwrap_char will deliver all found frames  
 	 */
 	do {
-		byte = inb_p( iobase+UART_RX);
-		async_unwrap_char( idev, byte);
+		async_unwrap_char( idev, inb( iobase+UART_RX));
 		
-	} while ( inb_p( iobase+UART_LSR) & UART_LSR_DR);	
+	} while ( inb( iobase+UART_LSR) & UART_LSR_DR);	
 }
+
+#ifdef MODULE
 
 /*
  * Function cleanup_module (void)
@@ -338,24 +381,24 @@ static void irport_receive( struct irda_device *idev)
  *    
  *
  */
-/* void cleanup_module(void) */
-/* { */
-/* 	DEBUG( 3, "IrPORT: cleanup_module!\n"); */
-/* 	irport_cleanup(irport_drv); */
-/* } */
+void cleanup_module(void)
+{
+	irport_cleanup();
+}
 
 /*
  * Function init_module (void)
  *
  *    
- *
  */
-/* int init_module(void) */
-/* { */
-/* 	if (irport_init() < 0) { */
-/* 		cleanup_module(); */
-/* 		return 1; */
-/* 	} */
-/* 	return(0); */
-/* } */
+int init_module(void)
+{
+	if (irport_init() < 0) {
+		cleanup_module();
+		return 1;
+	}
+	return(0);
+}
+
+#endif /* MODULE */
 

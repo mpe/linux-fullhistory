@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Mon Dec  7 01:40:35 1998
+ * Modified at:   Tue Jan 12 14:56:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -89,9 +89,11 @@ struct irda_todo {
 /*
  *  Main structure for the IrDA device (not much here :-)
  */
-struct irda {
+struct irda_cb {
 	struct miscdevice dev;	
 	struct wait_queue *wait_queue;
+
+	int in_use;
 
 	QUEUE *event_queue; /* Events queued for the irmanager */
 	QUEUE *todo_queue;  /* Todo list */

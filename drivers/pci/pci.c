@@ -28,6 +28,9 @@
 #endif
 
 struct pci_bus pci_root;
+#ifdef CONFIG_VISWS
+struct pci_bus pci_other;
+#endif
 struct pci_dev *pci_devices = NULL;
 static struct pci_dev **pci_last_dev_p = &pci_devices;
 static int pci_reverse __initdata = 0;
@@ -382,6 +385,11 @@ __initfunc(void pci_init(void))
 
 	memset(&pci_root, 0, sizeof(pci_root));
 	pci_root.subordinate = pci_scan_bus(&pci_root);
+#ifdef CONFIG_VISWS
+	pci_other.number = 1; /* XXX unless bridge(s) on pci_root */
+	pci_other.subordinate = pci_scan_bus(&pci_other);
+	pci_root.next = &pci_other;
+#endif
 
 	/* give BIOS a chance to apply platform specific fixes: */
 	pcibios_fixup();

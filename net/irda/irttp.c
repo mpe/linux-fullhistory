@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Mon Dec 14 11:53:19 1998
+ * Modified at:   Tue Jan 19 23:56:58 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -289,8 +289,6 @@ int irttp_data_request( struct tsap_cb *self, struct sk_buff *skb)
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == TTP_TSAP_MAGIC, return -1;);
 	ASSERT( skb != NULL, return -1;);
-
-	IS_SKB( skb, return -1;);
 
 	/* Check that nothing bad happens */
 	if (( skb->len == 0) || ( !self->connected)) {
@@ -1044,12 +1042,12 @@ void irttp_disconnect_indication( void *instance, void *sap, LM_REASON reason,
 	DEBUG( 4, "irttp_disconnect_indication()\n");
 
 	self = ( struct tsap_cb *) instance;
-
+	
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == TTP_TSAP_MAGIC, return;);
-
+	
 	self->connected = FALSE;
-
+	
 	/* 
 	 *  Use callback to notify layer above 
 	 */
@@ -1207,7 +1205,6 @@ static struct sk_buff *irttp_reassemble_skb( struct tsap_cb *self)
 {
 	struct sk_buff *skb, *frag;
 	int n = 0;  /* Fragment index */
-	int i = 1;  /* Fragment nr */
 
       	ASSERT( self != NULL, return NULL;);
 	ASSERT( self->magic == TTP_TSAP_MAGIC, return NULL;);
@@ -1227,11 +1224,9 @@ static struct sk_buff *irttp_reassemble_skb( struct tsap_cb *self)
 	 *  Copy all fragments to a new buffer
 	 */
 	while (( frag = skb_dequeue( &self->rx_fragments)) != NULL) {
-		DEBUG( 4, __FUNCTION__ "(), copying fragment %d with len=%d\n",
-		       i++, (int) frag->len);
 		memcpy( skb->data+n, frag->data, frag->len);
 		n += frag->len;
-
+		
 		dev_kfree_skb( frag);
 	}
 	DEBUG( 4, __FUNCTION__ "(), frame len=%d\n", n);
@@ -1256,7 +1251,6 @@ static void irttp_fragment_skb( struct tsap_cb *self, struct sk_buff *skb)
 {
 	struct sk_buff *frag;
 	__u8 *frame;
-	int i = 0;
 
 	DEBUG( 4, __FUNCTION__ "()\n");
 
@@ -1306,10 +1300,6 @@ static void irttp_fragment_skb( struct tsap_cb *self, struct sk_buff *skb)
 		/* Hide the copied data from the original skb */
 		skb_pull( skb, self->max_seg_size);
 		
-		/* Queue segment */
-		DEBUG( 4, __FUNCTION__ "(), queuing segment %d with len=%d\n", 
-		       i++, (int) frag->len);
-
 		skb_queue_tail( &self->tx_queue, frag);
 	}
 }

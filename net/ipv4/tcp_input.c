@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.150 1999/01/16 08:31:08 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.153 1999/01/20 07:20:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -100,8 +100,10 @@ static void tcp_delack_estimator(struct tcp_opt *tp)
 		tp->lrcvtime = jiffies;
 
 		/* Help sender leave slow start quickly,
-		 * this sets our initial ato value.
+		 * and also makes sure we do not take this
+		 * branch ever again for this connection.
 		 */
+		tp->ato = 1;
 		tcp_enter_quickack_mode(tp);
 	} else {
 		int m = jiffies - tp->lrcvtime;
@@ -314,7 +316,8 @@ static void tcp_sacktag_write_queue(struct sock *sk, struct tcp_sack_block *sp, 
 			if(!after(start_seq, TCP_SKB_CB(skb)->seq) &&
 			   !before(end_seq, TCP_SKB_CB(skb)->end_seq)) {
 				/* If this was a retransmitted frame, account for it. */
-				if(TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_RETRANS)
+				if((TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_RETRANS) &&
+				   tp->retrans_out)
 					tp->retrans_out--;
 				TCP_SKB_CB(skb)->sacked |= TCPCB_SACKED_ACKED;
 

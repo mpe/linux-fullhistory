@@ -12,6 +12,8 @@
  *      precision CMOS clock update
  * 1996-05-03    Ingo Molnar
  *      fixed time warps in do_[slow|fast]_gettimeoffset()
+ * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
+ *		"A Kernel Model for Precision Timekeeping" by Dave Mills
  * 1998-09-05    (Various)
  *	More robust do_fast_gettimeoffset() algorithm implemented
  *	(works with APM, Cyrix 6x86MX and Centaur C6),
@@ -63,12 +65,14 @@
 #include <linux/timex.h>
 #include <linux/config.h>
 
+#include <asm/fixmap.h>
+#include <asm/cobalt.h>
+
 /*
  * for x86_do_profile()
  */
 #include "irq.h"
 
-extern int setup_x86_irq(int, struct irqaction *);
 
 unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
 
@@ -286,9 +290,11 @@ void do_settimeofday(struct timeval *tv)
 	}
 
 	xtime = *tv;
-	time_state = TIME_BAD;
-	time_maxerror = MAXPHASE;
-	time_esterror = MAXPHASE;
+	time_adjust = 0;		/* stop active adjtime() */
+	time_status |= STA_UNSYNC;
+	time_state = TIME_ERROR;	/* p. 24, (a) */
+	time_maxerror = NTP_PHASE_LIMIT;
+	time_esterror = NTP_PHASE_LIMIT;
 	write_unlock_irq(&xtime_lock);
 }
 
@@ -366,6 +372,10 @@ static long last_rtc_update = 0;
  */
 static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+#ifdef CONFIG_VISWS
+	/* Clear the interrupt */
+	co_cpu_write(CO_CPU_STAT,co_cpu_read(CO_CPU_STAT) & ~CO_STAT_TIMEINTR);
+#endif
 	do_timer(regs);
 /*
  * In the SMP case we use the local APIC timer interrupt to do the
@@ -385,9 +395,10 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1)) {
+	if ((time_status & STA_UNSYNC) == 0 &&
+	    xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
+	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
 		if (set_rtc_mmss(xtime.tv_sec) == 0)
 			last_rtc_update = xtime.tv_sec;
 		else
@@ -663,5 +674,22 @@ __initfunc(void time_init(void))
 			printk("Detected %ld Hz processor.\n", cpu_hz);
 		}
 	}
+
+#ifdef CONFIG_VISWS
+	printk("Starting Cobalt Timer system clock\n");
+
+	/* Set the countdown value */
+	co_cpu_write(CO_CPU_TIMEVAL, CO_TIME_HZ/HZ);
+
+	/* Start the timer */
+	co_cpu_write(CO_CPU_CTRL, co_cpu_read(CO_CPU_CTRL) | CO_CTRL_TIMERUN);
+
+	/* Enable (unmask) the timer interrupt */
+	co_cpu_write(CO_CPU_CTRL, co_cpu_read(CO_CPU_CTRL) & ~CO_CTRL_TIMEMASK);
+
+	/* Wire cpu IDT entry to s/w handler (and Cobalt APIC to IDT) */
+	setup_x86_irq(CO_IRQ_TIMER, &irq0);
+#else
 	setup_x86_irq(0, &irq0);
+#endif
 }

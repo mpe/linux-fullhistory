@@ -1398,6 +1398,15 @@ CONFIG_MCA
   Documentation/mca.txt (and especially the web page given there)
   before attempting to build an MCA bus kernel.
 
+SGI Visal Workstation support
+CONFIG_VISWS
+  The SGI Visual Workstation series is an IA32-based workstation
+  based on SGI systems chips with some legacy PC hardware attached.
+  Say Y here to create a kernel to run on the SGI 320 or 540.
+  A kernel compiled for the Visual Workstation will not run on other
+  PC boards and vice versa.
+  See Documentation/sgi-visws.txt for more.
+
 System V IPC
 CONFIG_SYSVIPC
   Inter Process Communication is a suite of library functions and
@@ -7111,24 +7120,19 @@ CONFIG_ADFS_FS
 
   If unsure, say N.
 
-/dev/pts filesystem (experimental)
+/dev/pts filesystem for Unix98 PTYs
 CONFIG_DEVPTS_FS
   You should say Y here if you said Y to "Unix98 PTY support" above.
   You'll then get a virtual filesystem which can be mounted on
   /dev/pts with "mount -t devpts". This, together with the pseudo
   terminal master multiplexer /dev/ptmx, is used for pseudo terminal
-  support as described in the Open Group's Unix98 standard: in order
+  support as described in The Open Group's Unix98 standard: in order
   to acquire a pseudo terminal, a process opens /dev/ptmx; the number
   of the pseudo terminal is then made available to the process and the
   pseudo terminal slave can be accessed as /dev/pts/<number>. What was
   traditionally /dev/ttyp2 will then be /dev/pts/2, for example. The
   GNU C library glibc 2.1 contains the requisite support for this mode
-  of operation.
-
-  This code is also available as a module called devpts.o ( = code
-  which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
+  of operation; you also need clients that use the Unix98 API.
 
 Unixware slices support (EXPERIMENTAL)
 CONFIG_UNIXWARE_DISKLABEL
@@ -10594,6 +10598,14 @@ CONFIG_IRDA_RECYCLE_RR
 
   If unsure, say Y.
 
+IrDA Debug
+CONFIG_IRDA_DEBUG
+  Say Y here if you want the IrDA subsystem to write debug information to
+  your syslog. You can change the debug level in
+  /proc/sys/net/irda/debug
+
+  If unsure, say Y (since it makes it easier to find the bugs).
+
 IrLAP Compression support
 CONFIG_IRDA_COMPRESSION
   Compression is _not_ part of the IrDA(tm) protocol specification,
@@ -10659,6 +10671,31 @@ CONFIG_IRCOMM
   will create two modules called ircomm and ircomm_tty. For more
   information go to http://www.pluto.dti.ne.jp/~thiguchi/irda/
 
+IrLPT Protocol
+CONFIG_IRLPT
+  Say Y here if you want to build support for the IrLPT protocol. If
+  you want to compile it as a module, say M here and read
+  Documentation/modules.txt. IrLPT makes it possible to print
+  documents to IrDA capable printers.
+
+IrLPT Client Protocol 
+CONFIG_IRLPT_CLIENT
+  Say Y here if you want to build support for the IrLPT client
+  protocol. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The IrLPT client protocol can be used to
+  print documents to IrDA compatible printers like the HP-5MP, or
+  IrLPT printer adapters like the ACTiSYS IR-100M.
+
+IrLPT Server Protocol 
+CONFIG_IRLPT_SERVER
+  Say Y here if you want to build support for the IrLPT server
+  protocol. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The IrLPT server protocol makes it
+  possible to use a Linux machine as an infrared printer server for
+  other laptops. So if your Linux machine has a cable connection to a
+  printer, then other laptops can use the Linux machine to print out 
+  documents using infrared communication.
+
 IrTTY IrDA Device Driver
 CONFIG_IRTTY_SIR
   Say Y here if you want to build support for the IrTTY line
@@ -10686,6 +10723,13 @@ CONFIG_NSC_FIR
   read Documentation/modules.txt. This drivers currently only supports
   the ACTiSYS IR2000B ISA card and supports SIR, MIR and FIR (4Mbps)
   speeds.
+
+Sharp UIRCC IrDA Device Driver
+CONFIG_SHARP_FIR
+  Say Y here if you want to build support for the Sharp UIRCC IrDA
+  chipset. If you want to compile it as a module, say M here and
+  read Documentation/modules.txt. This chipset is used by the Toshiba
+  Tecra laptops.
 
 ESI JetEye PC Dongle
 CONFIG_ESI_DONGLE

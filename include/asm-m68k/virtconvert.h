@@ -18,7 +18,7 @@
  * Change virtual addresses to physical addresses and vv.
  */
 extern unsigned long mm_vtop(unsigned long addr) __attribute__ ((const));
-extern unsigned long mm_vtop_fallback (unsigned long);
+extern unsigned long mm_vtop_fallback (unsigned long) __attribute__ ((const));
 extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
 
 #ifdef CONFIG_SINGLE_MEMORY_CHUNK

@@ -62,6 +62,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
@@ -669,7 +670,7 @@ static void tt_get_par( struct atafb_par *par )
 	addr = ((shifter.bas_hi & 0xff) << 16) |
 	       ((shifter.bas_md & 0xff) << 8)  |
 	       ((shifter.bas_lo & 0xff));
-	par->screen_base = PTOV(addr);
+	par->screen_base = phys_to_virt(addr);
 }
 
 static void tt_set_par( struct atafb_par *par )
@@ -1502,7 +1503,7 @@ static void falcon_get_par( struct atafb_par *par )
 	addr = (shifter.bas_hi & 0xff) << 16 |
 	       (shifter.bas_md & 0xff) << 8  |
 	       (shifter.bas_lo & 0xff);
-	par->screen_base = PTOV(addr);
+	par->screen_base = phys_to_virt(addr);
 
 	/* derived parameters */
 	hw->ste_mode = (hw->f_shift & 0x510)==0 && hw->st_shift==0x100;
@@ -1929,7 +1930,7 @@ static void stste_get_par( struct atafb_par *par )
 	       ((shifter.bas_md & 0xff) << 8);
 	if (ATARIHW_PRESENT(EXTD_SHIFTER))
 		addr |= (shifter.bas_lo & 0xff);
-	par->screen_base = PTOV(addr);
+	par->screen_base = phys_to_virt(addr);
 }
 
 static void stste_set_par( struct atafb_par *par )
@@ -2026,7 +2027,7 @@ static int stste_detect( void )
 static void stste_set_screen_base(unsigned long s_base)
 {
 	unsigned long addr;
-	addr= VTOP(s_base);
+	addr= virt_to_phys(s_base);
 	/* Setup Screen Memory */
 	shifter.bas_hi=(unsigned char) ((addr & 0xff0000) >> 16);
   	shifter.bas_md=(unsigned char) ((addr & 0x00ff00) >> 8);
@@ -2297,7 +2298,7 @@ static int ext_detect( void )
 static void set_screen_base(unsigned long s_base)
 {
 	unsigned long addr;
-	addr= VTOP(s_base);
+	addr= virt_to_phys(s_base);
 	/* Setup Screen Memory */
 	shifter.bas_hi=(unsigned char) ((addr & 0xff0000) >> 16);
   	shifter.bas_md=(unsigned char) ((addr & 0x00ff00) >> 8);
@@ -2819,9 +2820,9 @@ __initfunc(void atafb_init(void))
 		if (CPU_IS_040_OR_060) {
 			/* On a '040+, the cache mode of video RAM must be set to
 			 * write-through also for internal video hardware! */
-			cache_push( VTOP(screen_base), screen_len );
+			cache_push( virt_to_phys(screen_base), screen_len );
 			kernel_set_cachemode( screen_base, screen_len,
-								  KERNELMAP_NO_COPYBACK );
+					      IOMAP_WRITETHROUGH );
 		}
 #ifdef ATAFB_EXT
 	}
@@ -2829,11 +2830,9 @@ __initfunc(void atafb_init(void))
 		/* Map the video memory (physical address given) to somewhere
 		 * in the kernel address space.
 		 */
-		external_addr = kernel_map(external_addr, external_len,
-					   KERNELMAP_NO_COPYBACK, NULL);
+		external_addr = ioremap_writethrough(external_addr, external_len);
 		if (external_vgaiobase)
-			external_vgaiobase = kernel_map(external_vgaiobase,
-				0x10000, KERNELMAP_NOCACHE_SER, NULL);
+			external_vgaiobase = ioremap(external_vgaiobase, 0x10000 );
 		screen_base      =
 		real_screen_base = external_addr;
 		screen_len       = external_len & PAGE_MASK;

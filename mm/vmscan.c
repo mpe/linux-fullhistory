@@ -407,12 +407,7 @@ int kswapd(void *unused)
 	current->session = 1;
 	current->pgrp = 1;
 	strcpy(current->comm, "kswapd");
-
-	/*
-	 * Hey, if somebody wants to kill us, be our guest. 
-	 * Don't come running to mama if things don't work.
-	 */
-	siginitsetinv(&current->blocked, sigmask(SIGKILL));
+	sigfillset(&current->blocked);
 	
 	/*
 	 * Tell the memory management that we're a "memory allocator",
@@ -429,23 +424,29 @@ int kswapd(void *unused)
 	current->flags |= PF_MEMALLOC;
 
 	while (1) {
-		if (signal_pending(current))
-			break;
-		current->state = TASK_INTERRUPTIBLE;
-		run_task_queue(&tq_disk);
-		schedule_timeout(HZ);
+		int tmo;
 
 		/*
-		 * kswapd isn't even meant to keep up with anything,
-		 * so just a few pages per second is plenty: the only
-		 * point is to make sure that the system doesn't stay
-		 * forever in a really bad memory squeeze.
+		 * Wake up once a second to see if we need to make
+		 * more memory available. When we get into a low
+		 * memory situation, we start waking up more often.
+		 *
+		 * We consider "freepages.low" to be low on memory,
+		 * but we also try to be aggressive if other processes
+		 * are low on memory and would otherwise block when
+		 * calling __get_free_page().
 		 */
-		if (nr_free_pages < freepages.high)
-			try_to_free_pages(GFP_KSWAPD);
+		tmo = HZ;
+		if (nr_free_pages < freepages.high) {
+			if (nr_free_pages < freepages.low || low_on_memory) {
+				if (try_to_free_pages(GFP_KSWAPD))
+					tmo = (HZ+9)/10;
+			}
+		}
+		run_task_queue(&tq_disk);
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(tmo);
 	}
-
-	return 0;
 }
 
 /*
@@ -475,11 +476,13 @@ int try_to_free_pages(unsigned int gfp_mask)
 		}
 
 		/* Try to get rid of some shared memory pages.. */
-		while (shm_swap(priority, gfp_mask)) {
-			if (!--count)
-				goto done;
+		if (gfp_mask & __GFP_IO) {
+			while (shm_swap(priority, gfp_mask)) {
+				if (!--count)
+					goto done;
+			}
 		}
-	
+
 		/* Then, try to page stuff out.. */
 		while (swap_out(priority, gfp_mask)) {
 			if (!--count)

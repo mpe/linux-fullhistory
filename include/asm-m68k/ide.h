@@ -449,7 +449,7 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
  * an interrupt, and in that case it does nothing. Hope that is reasonable and
  * works. (Roman)
  */
-#ifdef CONFIG_ATARI_ONLY
+#ifdef MACH_ATARI_ONLY
 #define	ide__sti()					\
     do {						\
 	if (!in_interrupt()) __sti();			\

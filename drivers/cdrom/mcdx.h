@@ -77,7 +77,6 @@
 /* *** make the following line uncommented, if you're sure,
  * *** all configuration is done */
 /* #define I_WAS_HERE */
-#define I_WAS_HERE   /* delete this line, it's for heiko only */
 
 /*	The name of the device */
 #define MCDX "mcdx"	

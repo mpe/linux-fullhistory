@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Mon Dec 14 11:40:24 1998
+ * Modified at:   Mon Dec 28 08:46:16 1998
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -128,9 +128,6 @@ static int  pc87108_net_close( struct device *dev);
 __initfunc(int pc87108_init(void))
 {
 	int i;
-
-	DEBUG( 0, __FUNCTION__ "()\n");
-
 
 	for ( i=0; (io[i] < 2000) && (i < 4); i++) {
 		int ioaddr = io[i];
@@ -369,12 +366,12 @@ static int pc87108_probe( int iobase, int board_addr, int irq, int dma)
 
 	/* Receiver frame length */
 	switch_bank( iobase, BANK4);
-	outb( 4000 & 0xff, iobase+6);
-	outb(( 4000 >> 8) & 0x1f, iobase+7);
+	outb( 2048 & 0xff, iobase+6);
+	outb(( 2048 >> 8) & 0x1f, iobase+7);
 
 	/* Transmitter frame length */
-	outb( 4000 & 0xff, iobase+4);
-	outb(( 4000 >> 8) & 0x1f, iobase+5);
+	outb( 2048 & 0xff, iobase+4);
+	outb(( 2048 >> 8) & 0x1f, iobase+5);
 	
 	DEBUG( 0, "PC87108 driver loaded. Version: 0x%02x\n", version);
 
@@ -676,7 +673,12 @@ static void pc87108_change_speed( struct irda_device *idev, int speed)
 
 	/* Set FIFO threshold to TX17, RX16 */
 	switch_bank( iobase, BANK0);
-	outb( FCR_RXTH|FCR_TXTH|FCR_TXSR|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
+	outb( FCR_RXTH|     /* Set Rx FIFO threshold */
+	      FCR_TXTH|     /* Set Tx FIFO threshold */
+	      FCR_TXSR|     /* Reset Tx FIFO */
+	      FCR_RXSR|     /* Reset Rx FIFO */
+	      FCR_FIFO_EN,  /* Enable FIFOs */
+	      iobase+FCR);
 	/* outb( 0xa7, iobase+FCR); */
 	
 	/* Set FIFO size to 32 */
@@ -894,7 +896,7 @@ static void pc87108_dma_xmit_complete( struct irda_device *idev)
 		idev->stats.tx_errors++;
 		idev->stats.tx_fifo_errors++;
 		
-		/* Clear bit, by writing 1 to it */
+		/* Clear bit, by writing 1 into it */
 		outb( ASCR_TXUR, iobase+ASCR);
 	} else {
 		idev->stats.tx_packets++;
@@ -1049,7 +1051,7 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 				/* Put this entry back in fifo */
 				st_fifo->head--;
 				st_fifo->len++;
-				st_fifo->entries[ st_fifo->head].status = status;
+				st_fifo->entries[st_fifo->head].status = status;
 				st_fifo->entries[ st_fifo->head].len = len;
 
 				/* Restore bank register */

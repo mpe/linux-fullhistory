@@ -12,8 +12,12 @@
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	This is a device driver for the Allied Telesis AT1700, which is a
-	straight-forward Fujitsu MB86965 implementation.
+	This is a device driver for the Allied Telesis AT1700, and
+        Fujitsu FMV-181/182/181A/182A/183/184/183A/184A, which are
+	straight-forward Fujitsu MB86965 implementations.
+
+	Modification for Fujitsu FMV-18X cards is done by Yutaka Tamiya
+	(tamy@flab.fujitsu.co.jp). 
 
   Sources:
     The Fujitsu MB86965 datasheet.
@@ -81,7 +85,7 @@ static int at1700_probe_list[] = {
 /*
  *	MCA
  */
-
+#ifdef CONFIG_MCA	
 static int at1700_ioaddr_pattern[] = {
 	0x00, 0x04, 0x01, 0x05, 0x02, 0x06, 0x03, 0x07
 };
@@ -94,6 +98,7 @@ static int at1700_irq_pattern[] = {
 	0x00, 0x00, 0x00, 0x30, 0x70, 0xb0, 0x00, 0x00,
 	0x00, 0xf0, 0x34, 0x74, 0xb4, 0x00, 0x00, 0xf4, 0x00
 };
+#endif
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
@@ -109,6 +114,8 @@ struct net_local {
 	unsigned char mc_filter[8];
 	uint jumpered:1;			/* Set iff the board has jumper config. */
 	uint tx_started:1;			/* Packets are on the Tx queue. */
+	uint tx_queue_ready:1;			/* Tx queue is ready to be sent. */
+	uint rx_started:1;			/* Packets are Rxing. */
 	uint invalid_irq:1;
 	uchar tx_queue;				/* Number of packet on the Tx queue. */
 	char mca_slot;				/* -1 means ISA */
@@ -129,10 +136,13 @@ struct net_local {
 /* Run-time register bank 2 definitions. */
 #define DATAPORT		8		/* Word-wide DMA or programmed-I/O dataport. */
 #define TX_START		10
+#define COL16CNTL		11		/* Controll Reg for 16 collisions */
 #define MODE13			13
 /* Configuration registers only on the '865A/B chips. */
 #define EEPROM_Ctrl 	16
 #define EEPROM_Data 	17
+#define CARDSTATUS	16			/* FMV-18x Card Status */
+#define CARDSTATUS1	17			/* FMV-18x Card Status */
 #define IOCONFIG		18		/* Either read the jumper, or move the I/O. */
 #define IOCONFIG1		19
 #define	SAPROM			20		/* The station address PROM, if no EEPROM. */
@@ -214,9 +224,9 @@ int at1700_probe(struct device *dev)
 int at1700_probe1(struct device *dev, int ioaddr)
 {
 	char fmv_irqmap[4] = {3, 7, 10, 15};
+	char fmv_irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};
 	char at1700_irqmap[8] = {3, 4, 5, 9, 10, 11, 14, 15};
 	unsigned int i, irq, is_fmv18x = 0, is_at1700 = 0;
-	int l_i;
 	int slot;
 	
 		/* Resetting the chip doesn't reset the ISA interface, so don't bother.
@@ -238,16 +248,17 @@ int at1700_probe1(struct device *dev, int ioaddr)
 	/* redone for multi-card detection by ZP Gu (zpg@castle.net) */
 	/* now works as a module */
 
-	if( MCA_bus ) {
+	if (MCA_bus) {
 		int j;
+		int l_i;
 		u_char pos3, pos4;
 
-		for( j = 0; at1720_mca_adapters[j].name != NULL; j ++ ) {
+		for (j = 0; at1720_mca_adapters[j].name != NULL; j ++) {
 			slot = 0;
-			while( slot != MCA_NOTFOUND ) {
+			while (slot != MCA_NOTFOUND) {
 				
 				slot = mca_find_unused_adapter( at1720_mca_adapters[j].id, slot );
-				if( slot == MCA_NOTFOUND ) break;
+				if (slot == MCA_NOTFOUND) break;
 
 				/* if we get this far, an adapter has been detected and is
 				enabled */
@@ -292,15 +303,16 @@ int at1700_probe1(struct device *dev, int ioaddr)
 		&& read_eeprom(ioaddr, 4) == 0x0000
 		&& (read_eeprom(ioaddr, 5) & 0xff00) == 0xF400)
 		is_at1700 = 1;
-	else if (fmv18x_probe_list[inb(ioaddr + IOCONFIG) & 0x07] == ioaddr
-		&& inb(ioaddr + SAPROM    ) == 0x00
+	else if (inb(ioaddr   + SAPROM    ) == 0x00
 		&& inb(ioaddr + SAPROM + 1) == 0x00
 		&& inb(ioaddr + SAPROM + 2) == 0x0e)
 		is_fmv18x = 1;
 	else
 		return -ENODEV;
 			
+#ifdef CONFIG_MCA
 found:
+#endif
 
 		/* Reset the internal state machines. */
 	outb(0, ioaddr + RESET);
@@ -312,24 +324,46 @@ found:
 	if (is_at1700)
 		irq = at1700_irqmap[(read_eeprom(ioaddr, 12)&0x04)
 						   | (read_eeprom(ioaddr, 0)>>14)];
-	else
-		if (is_fmv18x)
+	else {
+		/* Check PnP mode for FMV-183/184/183A/184A. */
+		/* This PnP routine is very poor. IO and IRQ should be known. */
+		if (inb(ioaddr + CARDSTATUS1) & 0x20) {
+			irq = dev->irq;
+			for (i = 0; i < 8; i++) {
+				if (irq == fmv_irqmap_pnp[i])
+					break;
+			}
+			if (i == 8)
+				return -ENODEV;
+		} else {
+			if (fmv18x_probe_list[inb(ioaddr + IOCONFIG) & 0x07] != ioaddr)
+				return -ENODEV;
 			irq = fmv_irqmap[(inb(ioaddr + IOCONFIG)>>6) & 0x03];
-	
+		}
+	}
+
 	/* Grab the region so that we can find another board if the IRQ request
 	   fails. */
 	request_region(ioaddr, AT1700_IO_EXTENT, dev->name);
 
-	printk("%s: AT1700 found at %#3x, IRQ %d, address ", dev->name,
-		   ioaddr, irq);
+	printk("%s: %s found at %#3x, IRQ %d, address ", dev->name,
+		   is_at1700 ? "AT1700" : "FMV-18X", ioaddr, irq);
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
-	for(i = 0; i < 3; i++) {
-		unsigned short eeprom_val = read_eeprom(ioaddr, 4+i);
-		printk("%04x", eeprom_val);
-		((unsigned short *)dev->dev_addr)[i] = ntohs(eeprom_val);
+	if (is_at1700) {
+		for(i = 0; i < 3; i++) {
+			unsigned short eeprom_val = read_eeprom(ioaddr, 4+i);
+			printk("%04x", eeprom_val);
+			((unsigned short *)dev->dev_addr)[i] = ntohs(eeprom_val);
+		}
+	} else {
+		for(i = 0; i < 6; i++) {
+			unsigned char val = inb(ioaddr + SAPROM + i);
+			printk("%02x", val);
+			dev->dev_addr[i] = val;
+		}
 	}
 
 	/* The EEPROM word 12 bit 0x0400 means use regular 100 ohm 10baseT signals,
@@ -340,32 +374,44 @@ found:
 	   */
 	{
 		const char *porttype[] = {"auto-sense", "10baseT", "auto-sense", "10base2"};
-		ushort setup_value = read_eeprom(ioaddr, 12);
-
-		dev->if_port = setup_value >> 8;
+		if (is_at1700) {
+			ushort setup_value = read_eeprom(ioaddr, 12);
+			dev->if_port = setup_value >> 8;
+		} else {
+			ushort setup_value = inb(ioaddr + CARDSTATUS);
+			switch (setup_value & 0x07) {
+			case 0x01: /* 10base5 */
+			case 0x02: /* 10base2 */
+				dev->if_port = 0x18; break;
+			case 0x04: /* 10baseT */
+				dev->if_port = 0x08; break;
+			default:   /* auto-sense */
+				dev->if_port = 0x00; break;
+			}
+		}
 		printk(" %s interface.\n", porttype[(dev->if_port>>3) & 3]);
 	}
-
-	/* Set the station address in bank zero. */
-	outb(0xe0, ioaddr + CONFIG_1);
-	for (i = 0; i < 6; i++)
-		outb(dev->dev_addr[i], ioaddr + 8 + i);
-
-	/* Switch to bank 1 and set the multicast table to accept none. */
-	outb(0xe4, ioaddr + CONFIG_1);
-	for (i = 0; i < 8; i++)
-		outb(0x00, ioaddr + 8 + i);
 
 	/* Set the configuration register 0 to 32K 100ns. byte-wide memory, 16 bit
 	   bus access, two 4K Tx queues, and disabled Tx and Rx. */
 	outb(0xda, ioaddr + CONFIG_0);
 
-	/* Switch to bank 2 and lock our I/O address. */
-	outb(0xe8, ioaddr + CONFIG_1);
-	outb(dev->if_port, MODE13);
-
-	/* Power-down the chip.  Aren't we green! */
+	/* Set the station address in bank zero. */
 	outb(0x00, ioaddr + CONFIG_1);
+	for (i = 0; i < 6; i++)
+		outb(dev->dev_addr[i], ioaddr + 8 + i);
+
+	/* Switch to bank 1 and set the multicast table to accept none. */
+	outb(0x04, ioaddr + CONFIG_1);
+	for (i = 0; i < 8; i++)
+		outb(0x00, ioaddr + 8 + i);
+
+
+	/* Switch to bank 2 */
+	/* Lock our I/O address, and set manual processing mode for 16 collisions. */
+	outb(0x08, ioaddr + CONFIG_1);
+	outb(dev->if_port, ioaddr + MODE13);
+	outb(0x00, ioaddr + COL16CNTL);
 
 	if (net_debug)
 		printk(version);
@@ -456,34 +502,28 @@ static int net_open(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
-	int i;
-
-	/* Powerup the chip, initialize config register 1, and select bank 0. */
-	outb(0xe0, ioaddr + CONFIG_1);
-
-	/* Set the station address in bank zero. */
-	for (i = 0; i < 6; i++)
-		outb(dev->dev_addr[i], ioaddr + 8 + i);
-
-	/* Switch to bank 1 and set the multicast table to accept none. */
-	outb(0xe4, ioaddr + CONFIG_1);
-	for (i = 0; i < 8; i++)
-		outb(0x00, ioaddr + 8 + i);
 
 	/* Set the configuration register 0 to 32K 100ns. byte-wide memory, 16 bit
 	   bus access, and two 4K Tx queues. */
-	outb(0xda, ioaddr + CONFIG_0);
+	outb(0x5a, ioaddr + CONFIG_0);
 
-	/* Switch to register bank 2, enable the Rx and Tx. */
-	outw(0xe85a, ioaddr + CONFIG_0);
+	/* Powerup, switch to register bank 2, and enable the Rx and Tx. */
+	outb(0xe8, ioaddr + CONFIG_1);
 
 	lp->tx_started = 0;
+	lp->tx_queue_ready = 1;
+	lp->rx_started = 0;
 	lp->tx_queue = 0;
 	lp->tx_queue_len = 0;
 
-	/* Turn on Rx interrupts, leave Tx interrupts off until packet Tx. */
-	outb(0x00, ioaddr + TX_INTR);
+	/* Turn on hardware Tx and Rx interrupts. */
+	outb(0x82, ioaddr + TX_INTR);
 	outb(0x81, ioaddr + RX_INTR);
+
+	/* Enable the IRQ on boards of fmv18x it is feasible. */
+	if (lp->jumpered) {
+		outb(0x80, ioaddr + IOCONFIG1);
+	}
 
 	dev->tbusy = 0;
 	dev->interrupt = 0;
@@ -518,10 +558,14 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		outw(0xffff, ioaddr + 24);
 		outw(0xffff, ioaddr + TX_STATUS);
 		outw(0xe85a, ioaddr + CONFIG_0);
-		outw(0x8100, ioaddr + TX_INTR);
+		outw(0x8182, ioaddr + TX_INTR);
+		outb(0x00, ioaddr + TX_START);
+		outb(0x03, ioaddr + COL16CNTL);
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
 		lp->tx_started = 0;
+		lp->tx_queue_ready = 1;
+		lp->rx_started = 0;
 		lp->tx_queue = 0;
 		lp->tx_queue_len = 0;
 	}
@@ -534,14 +578,20 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
 
-		/* Turn off the possible Tx interrupts. */
-		outb(0x00, ioaddr + TX_INTR);
+		/* We may not start transmitting unless we finish transferring
+		   a packet into the Tx queue. During executing the following
+		   codes we possibly catch a Tx interrupt. Thus we flag off
+		   tx_queue_ready, so that we prevent the interrupt routine
+		   (net_interrupt) to start transmitting. */
+		lp->tx_queue_ready = 0;
+		{
+			outw(length, ioaddr + DATAPORT);
+			outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
 
-		outw(length, ioaddr + DATAPORT);
-		outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
-
-		lp->tx_queue++;
-		lp->tx_queue_len += length + 2;
+			lp->tx_queue++;
+			lp->tx_queue_len += length + 2;
+		}
+		lp->tx_queue_ready = 1;
 
 		if (lp->tx_started == 0) {
 			/* If the Tx is idle, always trigger a transmit. */
@@ -554,9 +604,6 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		} else if (lp->tx_queue_len < 4096 - 1502)
 			/* Yes, there is room for one more packet. */
 			dev->tbusy = 0;
-
-		/* Turn on Tx interrupts back on. */
-		outb(0x82, ioaddr + TX_INTR);
 	}
 	dev_kfree_skb (skb);
 
@@ -585,14 +632,35 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (net_debug > 4)
 		printk("%s: Interrupt with status %04x.\n", dev->name, status);
-	if (status & 0xff00
-		||  (inb(ioaddr + RX_MODE) & 0x40) == 0) {			/* Got a packet(s). */
+	if (lp->rx_started == 0 &&
+	    (status & 0xff00 || (inb(ioaddr + RX_MODE) & 0x40) == 0)) {
+		/* Got a packet(s).
+		   We cannot execute net_rx more than once at the same time for
+		   the same device. During executing net_rx, we possibly catch a
+		   Tx interrupt. Thus we flag on rx_started, so that we prevent
+		   the interrupt routine (net_interrupt) to dive into net_rx
+		   again. */
+		lp->rx_started = 1;
+		outb(0x00, ioaddr + RX_INTR);	/* Disable RX intr. */
 		net_rx(dev);
+		outb(0x81, ioaddr + RX_INTR);	/* Enable  RX intr. */
+		lp->rx_started = 0;
 	}
 	if (status & 0x00ff) {
-		if (status & 0x80) {
+		if (status & 0x02) {
+			/* More than 16 collisions occurred */
+			if (net_debug > 4)
+				printk("%s: 16 Collision occur during Txing.\n", dev->name);
+			/* Cancel sending a packet. */
+			outb(0x03, ioaddr + COL16CNTL);
+			lp->stats.collisions++;
+		}
+		if (status & 0x82) {
 			lp->stats.tx_packets++;
-			if (lp->tx_queue) {
+			/* The Tx queue has any packets and is not being
+			   transferred a packet from the host, start
+			   transmitting. */
+			if (lp->tx_queue && lp->tx_queue_ready) {
 				outb(0x80 | lp->tx_queue, ioaddr + TX_START);
 				lp->tx_queue = 0;
 				lp->tx_queue_len = 0;
@@ -601,8 +669,6 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				mark_bh(NET_BH);	/* Inform upper layers. */
 			} else {
 				lp->tx_started = 0;
-				/* Turn on Tx interrupts off. */
-				outb(0x00, ioaddr + TX_INTR);
 				dev->tbusy = 0;
 				mark_bh(NET_BH);	/* Inform upper layers. */
 			}
@@ -698,7 +764,7 @@ net_rx(struct device *dev)
 /* The inverse routine to net_open(). */
 static int net_close(struct device *dev)
 {
-/*	struct net_local *lp = (struct net_local *)dev->priv;*/
+	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
 	dev->tbusy = 1;
@@ -709,13 +775,11 @@ static int net_close(struct device *dev)
 
 	/* No statistic counters on the chip to update. */
 
-#if 0
-	/* Disable the IRQ on boards where it is feasible. */
+	/* Disable the IRQ on boards of fmv18x where it is feasible. */
 	if (lp->jumpered) {
 		outb(0x00, ioaddr + IOCONFIG1);
 		free_irq(dev->irq, dev);
 	}
-#endif
 
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);
@@ -820,6 +884,10 @@ static struct device dev_at1700 = {
 static int io = 0x260;
 static int irq = 0;
 
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(net_debug, "i");
+
 int init_module(void)
 {
 	if (io == 0)
@@ -836,14 +904,14 @@ int init_module(void)
 void
 cleanup_module(void)
 {
-	struct net_local *lp = dev_at1700.priv;
-	unregister_netdev(&dev_at1700);
 #ifdef CONFIG_MCA	
+	struct net_local *lp = dev_at1700.priv;
 	if(lp->mca_slot)
 	{
 		mca_mark_as_unused(lp->mca_slot);
 	}
 #endif	
+	unregister_netdev(&dev_at1700);
 	kfree(dev_at1700.priv);
 	dev_at1700.priv = NULL;
 

@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.93 1998/12/18 18:33:13 geert Exp $
+/*  $Id: atyfb.c,v 1.98 1999/01/14 08:50:53 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -222,6 +222,7 @@ struct fb_info_aty {
 	u32 cfb32[16];
 #endif
     } fbcon_cmap;
+    u8 blitter_may_be_busy;
 #ifdef __sparc__
     u8 open;
     u8 mmaped;
@@ -320,8 +321,7 @@ static char *strtoke(char *s, const char *ct);
 #endif
 
 static void reset_engine(const struct fb_info_aty *info);
-static void init_engine(const struct atyfb_par *par,
-			const struct fb_info_aty *info);
+static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info);
 static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info);
 static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info);
 #if defined(__sparc__) || defined(DEBUG)
@@ -533,10 +533,11 @@ static inline void wait_for_fifo(u16 entries, const struct fb_info_aty *info)
 	   ((u32)(0x8000 >> entries)));
 }
 
-static inline void wait_for_idle(const struct fb_info_aty *info)
+static inline void wait_for_idle(struct fb_info_aty *info)
 {
     wait_for_fifo(16, info);
     while ((aty_ld_le32(GUI_STAT, info) & 1)!= 0);
+    info->blitter_may_be_busy = 0;
 }
 
 static void reset_engine(const struct fb_info_aty *info)
@@ -553,8 +554,7 @@ static void reset_engine(const struct fb_info_aty *info)
 			  BUS_FIFO_ERR_ACK, info);
 }
 
-static void init_engine(const struct atyfb_par *par,
-			const struct fb_info_aty *info)
+static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 {
     u32 pitch_value;
 
@@ -872,7 +872,8 @@ aty_set_cursor(struct fb_info_aty *fb, int on)
 			    aty_ld_le32(GEN_TEST_CNTL, fb) & ~HWCURSOR_ENABLE,
 			    fb);
 	}
-	wait_for_idle(fb);
+	if (fb->blitter_may_be_busy)
+		wait_for_idle(fb);
 }
 
 static void
@@ -1608,6 +1609,7 @@ static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
 	return err;
 
     if ((((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID) ||
+	 (Gx == GV_CHIP_ID) || (Gx == GW_CHIP_ID) || (Gx == GZ_CHIP_ID) ||
 	 (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) ||
 	 (Gx == GI_CHIP_ID) || (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID) ||
 	 (Gx == VU_CHIP_ID)) && (info->ram_type >= SDRAM))
@@ -1703,6 +1705,8 @@ static void atyfb_set_par(const struct atyfb_par *par,
 
     info->current_par = *par;
 
+    if (info->blitter_may_be_busy)
+	wait_for_idle(info);
     aty_set_crtc(info, &par->crtc);
     aty_st_8(CLOCK_CNTL, 0, info);
     aty_st_8(CLOCK_CNTL, CLOCK_STROBE, info);
@@ -1717,8 +1721,8 @@ static void atyfb_set_par(const struct atyfb_par *par,
 		break;
 	}
 	aty_set_pll_gx(info, &par->pll.gx);
-	aty_st_le32(BUS_CNTL, 0x890e20f1, info);
-	aty_st_le32(DAC_CNTL, 0x47052100, info);
+	aty_st_le32(BUS_CNTL, 0x590e10ff, info);
+	aty_st_le32(DAC_CNTL, 0x47012100, info);
 
 	/* Don't forget MEM_CNTL */
 	i = aty_ld_le32(MEM_CNTL, info) & 0xf0ffffff;
@@ -2472,9 +2476,13 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 					       (Rev == 0x48))) ||
 		       ((Gx == VT_CHIP_ID) && ((Rev == 0x01) ||
 					       (Rev == 0x9a))) ||
-		       (Gx == VU_CHIP_ID)) {
+		       Gx == VU_CHIP_ID) {
 		/* VTA4 or VTB */
 		pll = 200;
+	    } else if (Gx == VV_CHIP_ID) {
+		/* VT4 */
+		pll = 230;
+		mclk = 83;
 	    } else if (Gx == VT_CHIP_ID) {
 		/* other VT */
 		pll = 135;
@@ -2486,15 +2494,19 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 		       (Gx == GU_CHIP_ID)) {
 		/* RAGE II+ */
 		pll = 200;
+	    } else if (Gx == GV_CHIP_ID || Gx == GW_CHIP_ID ||
+		       Gx == GZ_CHIP_ID) {
+		/* RAGE IIC */
+		pll = 230;
+		mclk = 83;
 	    } else if (Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
 		       Gx == GI_CHIP_ID || Gx == GP_CHIP_ID ||
-		       Gx == GQ_CHIP_ID || Gx == VV_CHIP_ID ||
-		       Gx == GV_CHIP_ID || Gx == GW_CHIP_ID ||
-		       Gx == GZ_CHIP_ID || Gx == LD_CHIP_ID ||
-		       Gx == LG_CHIP_ID || Gx == LB_CHIP_ID ||
+		       Gx == GQ_CHIP_ID || Gx == LB_CHIP_ID ||
+		       Gx == LD_CHIP_ID || Gx == LG_CHIP_ID ||
 		       Gx == LI_CHIP_ID || Gx == LP_CHIP_ID) {
-		/* RAGE PRO or IIC */
+		/* RAGE PRO or LT PRO */
 		pll = 230;
+		mclk = 100;
 	    } else {
 		/* other RAGE */
 		pll = 135;
@@ -3023,12 +3035,9 @@ __initfunc(void atyfb_init(void))
 	 *  Map the video memory (physical address given) to somewhere in the
 	 *  kernel address space.
 	 */
-	info->frame_buffer = kernel_map(phys_vmembase[m64_num],
-					phys_size[m64_num],
-					KERNELMAP_NOCACHE_SER, NULL);
+	info->frame_buffer = ioremap(phys_vmembase[m64_num], phys_size[m64_num]);
 	info->frame_buffer_phys = info->frame_buffer;
-	info->ati_regbase = kernel_map(phys_guiregbase[m64_num], 0x10000,
-				       KERNELMAP_NOCACHE_SER, NULL)+0xFC00ul;
+	info->ati_regbase = ioremap(phys_guiregbase[m64_num], 0x10000)+0xFC00ul;
 	info->ati_regbase_phys = info->ati_regbase;
 
 	if (!aty_init(info, "ISA bus")) {
@@ -3416,6 +3425,7 @@ static inline void draw_rect(s16 x, s16 y, u16 width, u16 height,
     wait_for_fifo(2, info);
     aty_st_le32(DST_Y_X, (x << 16) | y, info);
     aty_st_le32(DST_HEIGHT_WIDTH, (width << 16) | height, info);
+    info->blitter_may_be_busy = 1;
 }
 
 static inline void aty_rectcopy(int srcx, int srcy, int dstx, int dsty,
@@ -3578,14 +3588,15 @@ static void fbcon_aty_clear(struct vc_data *conp, struct display *p, int sy,
 static void fbcon_aty8_putc(struct vc_data *conp, struct display *p, int c,
 			    int yy, int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb8_putc(conp, p, c, yy, xx);
 }
 
@@ -3593,20 +3604,36 @@ static void fbcon_aty8_putcs(struct vc_data *conp, struct display *p,
 			     const unsigned short *s, int count, int yy,
 			     int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_aty8_clear_margins(struct vc_data *conp, struct display *p,
+				     int bottom_only)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
+
+#ifdef __sparc__
+    if (fb->mmaped && currcon == fb->vtconsole)
+	return;
+#endif
+
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
+    fbcon_cfb8_clear_margins(conp, p, bottom_only);
 }
 
 static struct display_switch fbcon_aty8 = {
     fbcon_cfb8_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty8_putc,
-    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_aty8_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
@@ -3615,14 +3642,15 @@ static struct display_switch fbcon_aty8 = {
 static void fbcon_aty16_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb16_putc(conp, p, c, yy, xx);
 }
 
@@ -3630,20 +3658,36 @@ static void fbcon_aty16_putcs(struct vc_data *conp, struct display *p,
 			      const unsigned short *s, int count, int yy,
 			      int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb16_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_aty16_clear_margins(struct vc_data *conp, struct display *p,
+				      int bottom_only)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
+
+#ifdef __sparc__
+    if (fb->mmaped && currcon == fb->vtconsole)
+	return;
+#endif
+
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
+    fbcon_cfb16_clear_margins(conp, p, bottom_only);
 }
 
 static struct display_switch fbcon_aty16 = {
     fbcon_cfb16_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty16_putc,
-    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
+    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, NULL, fbcon_aty16_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
@@ -3652,14 +3696,15 @@ static struct display_switch fbcon_aty16 = {
 static void fbcon_aty24_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb24_putc(conp, p, c, yy, xx);
 }
 
@@ -3667,20 +3712,36 @@ static void fbcon_aty24_putcs(struct vc_data *conp, struct display *p,
 			      const unsigned short *s, int count, int yy,
 			      int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb24_putcs(conp, p, s, count, yy, xx);
 }
 
+static void fbcon_aty24_clear_margins(struct vc_data *conp, struct display *p,
+				      int bottom_only)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
+
+#ifdef __sparc__
+    if (fb->mmaped && currcon == fb->vtconsole)
+	return;
+#endif
+
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
+    fbcon_cfb24_clear_margins(conp, p, bottom_only);
+}
+
 static struct display_switch fbcon_aty24 = {
-    fbcon_cfb24_setup, fbcon_cfb24_bmove, fbcon_cfb24_clear, fbcon_aty24_putc,
-    fbcon_aty24_putcs, fbcon_cfb24_revc, NULL, NULL, fbcon_cfb24_clear_margins,
+    fbcon_cfb24_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty24_putc,
+    fbcon_aty24_putcs, fbcon_cfb24_revc, NULL, NULL, fbcon_aty24_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
@@ -3689,14 +3750,15 @@ static struct display_switch fbcon_aty24 = {
 static void fbcon_aty32_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb32_putc(conp, p, c, yy, xx);
 }
 
@@ -3704,20 +3766,36 @@ static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
 			      const unsigned short *s, int count, int yy,
 			      int xx)
 {
-#ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
 
+#ifdef __sparc__
     if (fb->mmaped && currcon == fb->vtconsole)
 	return;
 #endif
 
-    wait_for_idle((struct fb_info_aty *)p->fb_info);
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb32_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_aty32_clear_margins(struct vc_data *conp, struct display *p,
+				      int bottom_only)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)(p->fb_info);
+
+#ifdef __sparc__
+    if (fb->mmaped && currcon == fb->vtconsole)
+	return;
+#endif
+
+    if (fb->blitter_may_be_busy)
+	wait_for_idle((struct fb_info_aty *)p->fb_info);
+    fbcon_cfb32_clear_margins(conp, p, bottom_only);
 }
 
 static struct display_switch fbcon_aty32 = {
     fbcon_cfb32_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty32_putc,
-    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, NULL, fbcon_cfb32_clear_margins,
+    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, NULL, fbcon_aty32_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif

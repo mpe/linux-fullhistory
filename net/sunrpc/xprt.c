@@ -655,10 +655,7 @@ tcp_input_record(struct rpc_xprt *xprt)
 		reclen = ntohl(xprt->tcp_reclen);
 		dprintk("RPC:      reclen %08x\n", reclen);
 		xprt->tcp_more = (reclen & 0x80000000)? 0 : 1;
-		if (!(reclen &= 0x7fffffff)) {
-			printk(KERN_NOTICE "RPC:      empty TCP record.\n");
-			return -ENOTCONN;	/* break connection */
-		}
+		reclen &= 0x7fffffff;
 		xprt->tcp_total += reclen;
 		xprt->tcp_reclen = reclen;
 

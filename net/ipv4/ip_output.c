@@ -35,6 +35,9 @@
  *		Andi Kleen	:	Split fast and slow ip_build_xmit path 
  *					for decreased register pressure on x86 
  *					and more readibility. 
+ *		Marc Boucher	:	When call_out_firewall returns FW_QUEUE,
+ *					silently abort send instead of failing
+ *					with -EPERM.
  */
 
 #include <asm/uaccess.h>
@@ -128,8 +131,10 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 
 	dev = rt->u.dst.dev;
 
+#ifdef CONFIG_FIREWALL
 	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT)
 		goto drop;
+#endif
 
 	ip_send_check(iph);
 
@@ -137,8 +142,10 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	skb->dst->output(skb);
 	return;
 
+#ifdef CONFIG_FIREWALL
 drop:
 	kfree_skb(skb);
+#endif
 }
 
 int __ip_finish_output(struct sk_buff *skb)
@@ -284,8 +291,10 @@ void ip_queue_xmit(struct sk_buff *skb)
 
 	dev = rt->u.dst.dev;
 
+#ifdef CONFIG_FIREWALL
 	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT) 
 		goto drop;
+#endif
 
 	/* This can happen when the transport layer has segments queued
 	 * with a cached route, and by the time we get here things are
@@ -546,9 +555,19 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	Account for the fragment.
 		 */
 
-		if(!err &&
-		   call_out_firewall(PF_INET, rt->u.dst.dev, skb->nh.iph, NULL, &skb) < FW_ACCEPT)
-			err = -EPERM;
+#ifdef CONFIG_FIREWALL
+		if(!err) {
+			int fw_res;
+
+			fw_res = call_out_firewall(PF_INET, rt->u.dst.dev, skb->nh.iph, NULL, &skb);
+			if(fw_res == FW_QUEUE) {
+				kfree_skb(skb);
+				skb = NULL;
+			} else if(fw_res < FW_ACCEPT) {
+				err = -EPERM;
+			}
+		}
+#endif
 
 		if (err) { 
 			ip_statistics.IpOutDiscards++;
@@ -564,7 +583,7 @@ int ip_build_xmit_slow(struct sock *sk,
 		nfrags++;
 
 		err = 0; 
-		if (rt->u.dst.output(skb)) {
+		if (skb && rt->u.dst.output(skb)) {
 			err = -ENETDOWN;
 			ip_statistics.IpOutDiscards++;	
 			break;
@@ -663,8 +682,20 @@ int ip_build_xmit(struct sock *sk,
 	if (err) 
 		err = -EFAULT;
 
-	if(!err && call_out_firewall(PF_INET, rt->u.dst.dev, iph, NULL, &skb) < FW_ACCEPT) 
-		err = -EPERM;
+#ifdef CONFIG_FIREWALL
+	if(!err) {
+		int fw_res;
+
+		fw_res = call_out_firewall(PF_INET, rt->u.dst.dev, iph, NULL, &skb);
+		if(fw_res == FW_QUEUE) {
+			/* re-queued elsewhere; silently abort this send */
+			kfree_skb(skb);
+			return 0;
+		}
+		if(fw_res < FW_ACCEPT)
+			err = -EPERM;
+	}
+#endif
 
 	if (err) { 
 		kfree_skb(skb);

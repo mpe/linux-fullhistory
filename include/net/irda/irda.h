@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Mon Nov  2 14:49:11 1998
+ * Modified at:   Sat Jan 16 01:23:15 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -39,21 +39,22 @@
 #define PACK __attribute__((packed))
 
 /* use 0 for production, 1 for verification, >2 for debug */
-#ifndef NET_DEBUG
-#define NET_DEBUG 3
-static unsigned int net_debug = NET_DEBUG;
+#ifdef CONFIG_IRDA_DEBUG
 
-#define DEBUG(n, args...) if (net_debug >= (n)) printk( KERN_DEBUG args)
+extern __u32 irda_debug;
+
+#define IRDA_DEBUG 3
+
+#define DEBUG(n, args...) if (irda_debug >= (n)) printk( KERN_DEBUG args)
 #define ASSERT(expr, func) \
 if(!(expr)) { \
         printk( "Assertion failed! %s,%s,%s,line=%d\n",\
         #expr,__FILE__,__FUNCTION__,__LINE__); \
         ##func}
 #else
-#error
 #define DEBUG(n, args...)
 #define ASSERT(expr, func)
-#endif /* NET_DEBUG */
+#endif /* CONFIG_IRDA_DEBUG */
 
 #ifdef CHECK_SKB
 static unsigned int check_skb = CHECK_SKB;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Mon Dec 14 13:58:27 1998
+ * Modified at:   Thu Dec 17 11:58:10 1998
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -45,6 +45,7 @@ typedef enum {
 	LAP_NRM_S,       /* Normal response mode as secondary */
 	LAP_XMIT_S,
 	LAP_SCLOSE,
+	LAP_RESET_CHECK,
 } IRLAP_STATE;
 
 /* IrLAP Events */
@@ -56,6 +57,7 @@ typedef enum {
 	DISCONNECT_REQUEST,
 	DATA_REQUEST,
 	RESET_REQUEST,
+	RESET_RESPONSE,
 
 	/* Send events */
 	SEND_I_CMD,

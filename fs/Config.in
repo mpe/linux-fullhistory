@@ -35,7 +35,11 @@ fi
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
-  tristate '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
+  # It compiles as a module for testing only.  It should not be used
+  # as a module in general.  If we make this "tristate", a bunch of people
+  # who don't know what they are doing turn it on and complain when it
+  # breaks.
+  bool '/dev/pts filesystem for Unix98 PTYs' CONFIG_DEVPTS_FS
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'QNX filesystem support (EXPERIMENTAL)' CONFIG_QNX4FS_FS

@@ -18,6 +18,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ * Note: This file differs from the corresponding revision as present in the
+ * isdn4linux CVS repository because some later bug fixes have been extracted
+ * from the repository and merged into this file. -- Henner Eisen
+ *
  * $Log: isdn_ppp.c,v $
  * Revision 1.33  1998/02/20 17:11:54  fritz
  * Changes for recent kernels.
@@ -500,11 +504,10 @@ isdn_ppp_release(int min, struct file *file)
 static int
 get_arg(void *b, void *val, int len)
 {
-	int r;
 	if (len <= 0)
 		len = sizeof(unsigned long);
-	if ((r = copy_from_user((void *) val, b, len)))
-		return r;
+	if (copy_from_user((void *) val, b, len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -514,13 +517,12 @@ get_arg(void *b, void *val, int len)
 static int
 set_arg(void *b, unsigned long val, void *str)
 {
-	int r;
 	if (!str) {
-		if ((r = copy_to_user(b, (void *) &val, 4)))
-			return r;
+		if (copy_to_user(b, (void *) &val, 4))
+			return -EFAULT;
 	} else {
-		if ((r = copy_to_user(b, str, val)))
-			return r;
+		if (copy_to_user(b, str, val))
+			return -EFAULT;
 	}
 	return 0;
 }
@@ -1851,13 +1853,14 @@ isdn_ppp_dev_ioctl_stats(int slot, struct ifreq *ifr, struct device *dev)
 		}
 #endif
 	}
-	return copy_to_user(res, &t, sizeof(struct ppp_stats));
+	if( copy_to_user(res, &t, sizeof(struct ppp_stats))) return -EFAULT;
+	return 0;
 }
 
 int
 isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
-	int error;
+	int error=0;
 	char *r;
 	int len;
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
@@ -1873,7 +1876,7 @@ isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		case SIOCGPPPVER:
 			r = (char *) ifr->ifr_ifru.ifru_data;
 			len = strlen(PPP_VERSION) + 1;
-			error = copy_to_user(r, PPP_VERSION, len);
+			if(copy_to_user(r, PPP_VERSION, len)) error = -EFAULT;
 			break;
 		case SIOCGPPPSTATS:
 			error = isdn_ppp_dev_ioctl_stats(lp->ppp_slot, ifr, dev);

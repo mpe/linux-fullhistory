@@ -54,8 +54,8 @@ extern void macfb_init(void);
 extern void macfb_setup(char *options, int *ints);
 extern void cyberfb_init(void);
 extern void cyberfb_setup(char *options, int *ints);
-extern void cvppcfb_init(void);
-extern void cvppcfb_setup(char *options, int *ints);
+extern void pm2fb_init(void);
+extern void pm2fb_setup(char *options, int *ints);
 extern void retz3fb_init(void);
 extern void retz3fb_setup(char *options, int *ints);
 extern void clgenfb_init(void);
@@ -112,8 +112,8 @@ static struct {
 #ifdef CONFIG_FB_CYBER
 	{ "cyber", cyberfb_init, cyberfb_setup },
 #endif
-#ifdef CONFIG_FB_CVPPC
-	{ "cvppcfb", cvppcfb_init, cvppcfb_setup },
+#ifdef CONFIG_FB_PM2
+	{ "pm2fb", pm2fb_init, pm2fb_setup },
 #endif
 #ifdef CONFIG_FB_CLGEN
 	{ "clgen", clgenfb_init, clgenfb_setup },

@@ -125,12 +125,10 @@ typedef struct page {
 	unsigned long offset;
 	struct page *next_hash;
 	atomic_t count;
-	unsigned int unused;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
 	struct wait_queue *wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	unsigned long map_nr;	/* page->map_nr == page - mem_map */
 } mem_map_t;
 
 /* Page flag bit values */
@@ -263,6 +261,8 @@ extern inline unsigned long get_free_page(int gfp_mask)
 		clear_page(page);
 	return page;
 }
+
+extern int low_on_memory;
 
 /* memory.c & swap.c*/
 

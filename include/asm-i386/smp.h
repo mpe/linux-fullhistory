@@ -1,12 +1,20 @@
 #ifndef __ASM_SMP_H
 #define __ASM_SMP_H
 
-#ifdef __SMP__
+/*
+ * We need the APIC definitions automatically as part of 'smp.h'
+ */
+#include <linux/config.h>
+#ifdef CONFIG_X86_LOCAL_APIC
 #ifndef ASSEMBLY
-
+#include <asm/fixmap.h>
 #include <asm/i82489.h>
 #include <asm/bitops.h>
-#include <asm/fixmap.h>
+#endif
+#endif
+
+#ifdef __SMP__
+#ifndef ASSEMBLY
 
 #include <linux/tasks.h>
 #include <linux/ptrace.h>
@@ -186,25 +194,6 @@ extern inline int cpu_logical_map(int cpu)
 extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);		/* Store per CPU info (like the initial udelay numbers */
-
-/*
- *	APIC handlers: Note according to the Intel specification update
- *	you should put reads between APIC writes.
- *	Intel Pentium processor specification update [11AP, pg 64]
- *	"Back to Back Assertions of HOLD May Cause Lost APIC Write Cycle"
- */
-
-#define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
-
-extern __inline void apic_write(unsigned long reg, unsigned long v)
-{
-	*((volatile unsigned long *)(APIC_BASE+reg))=v;
-}
-
-extern __inline unsigned long apic_read(unsigned long reg)
-{
-	return *((volatile unsigned long *)(APIC_BASE+reg));
-}
 
 /*
  * This function is needed by all SMP systems. It must _always_ be valid

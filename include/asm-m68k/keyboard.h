@@ -52,9 +52,9 @@ static __inline__ void kbd_leds(unsigned char leds)
 
 #ifdef CONFIG_MAGIC_SYSRQ
 #define kbd_is_sysrq(keycode)	((keycode) == mach_sysrq_key && \
-								 (up_flag || \
-								  (shift_state & mach_sysrq_shift_mask) == \
-								  mach_sysrq_shift_state))
+				 (up_flag || \
+				  (shift_state & mach_sysrq_shift_mask) == \
+				  mach_sysrq_shift_state))
 #define kbd_sysrq_xlate			mach_sysrq_xlate
 #endif
 

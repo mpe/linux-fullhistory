@@ -623,6 +623,7 @@ static u_short maxfmode, chipset;
 
 static u_long videomemory, spritememory;
 static u_long videomemorysize;
+static u_long videomemory_phys;
 
 	/*
 	 * This is the earliest allowed start of fetching display data.
@@ -1479,8 +1480,7 @@ static int amifb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_fix_screeninfo fix;
 
 			ami_encode_fix(&fix, &par);
-			display->screen_base = 
-				phys_to_virt ((unsigned long) fix.smem_start);
+			display->screen_base = (char *)videomemory;
 			display->visual = fix.visual;
 			display->type = fix.type;
 			display->type_aux = fix.type_aux;
@@ -1877,6 +1877,18 @@ default_chipset:
 	assignchunk(copdisplay.list[1][0], copins *, chipptr, COPLISTSIZE);
 	assignchunk(copdisplay.list[1][1], copins *, chipptr, COPLISTSIZE);
 
+	/*
+	 * access the videomem with writethrough cache
+	 */
+	videomemory_phys = (u_long)ZTWO_PADDR(videomemory);
+#if 1
+	videomemory = (u_long)ioremap_writethrough(videomemory_phys, videomemorysize);
+#endif
+	if (!videomemory) {
+		printk("amifb: WARNING! unable to map videomem cached writethrough\n");
+		videomemory = ZTWO_VADDR(videomemory_phys);
+	}
+
 	memset(dummysprite, 0, DUMMYSPRITEMEMSIZE);
 
 	/*
@@ -2126,7 +2138,7 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, amifb_name);
-	fix->smem_start = (char*) virt_to_phys((void *)videomemory);
+	fix->smem_start = (char *)videomemory_phys;
 	fix->smem_len = videomemorysize;
 
 #ifdef FBCON_HAS_MFB
@@ -2742,16 +2754,16 @@ static int ami_update_par(void)
 		par->bpl1mod = par->bpl2mod;
 
 	if (par->yoffset) {
-		par->bplpt0 = ZTWO_PADDR((u_long)videomemory + par->next_line*par->yoffset + move);
+		par->bplpt0 = videomemory_phys + par->next_line*par->yoffset + move;
 		if (par->vmode & FB_VMODE_YWRAP) {
 			if (par->yoffset > par->vyres-par->yres) {
-				par->bplpt0wrap = ZTWO_PADDR((u_long)videomemory + move);
+				par->bplpt0wrap = videomemory_phys + move;
 				if (par->bplcon0 & BPC0_LACE && mod2(par->diwstrt_v+par->vyres-par->yoffset))
 					par->bplpt0wrap += par->next_line;
 			}
 		}
 	} else
-		par->bplpt0 = ZTWO_PADDR((u_long)videomemory + move);
+		par->bplpt0 = videomemory_phys + move;
 
 	if (par->bplcon0 & BPC0_LACE && mod2(par->diwstrt_v))
 		par->bplpt0 += par->next_line;

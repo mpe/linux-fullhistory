@@ -39,7 +39,7 @@ extern unsigned long mac_rowbytes;
 extern void mac_serial_print(char *);
 
 #define DEBUG_HEADS
-#define DEBUG_SCREEN
+#undef DEBUG_SCREEN
 #define DEBUG_SERIAL
 
 /*

@@ -6,6 +6,7 @@
  *
  *	Alan Cox <Alan.Cox@linux.org>, 1995.
  */
+#define		APIC_PHYS_BASE	0xfee00000 /* IA s/w dev Vol 3, Section 7.4 */
  
 #define		APIC_ID		0x20
 #define			GET_APIC_ID(x)		(((x)>>24)&0x0F)
@@ -84,5 +85,17 @@
 #define			APIC_TDR_DIV_32		0x8
 #define			APIC_TDR_DIV_64		0x9
 #define			APIC_TDR_DIV_128	0xA
+
+#define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
+
+extern __inline void apic_write(unsigned long reg, unsigned long v)
+{
+	*((volatile unsigned long *)(APIC_BASE+reg))=v;
+}
+
+extern __inline unsigned long apic_read(unsigned long reg)
+{
+	return *((volatile unsigned long *)(APIC_BASE+reg));
+}
 
 #endif

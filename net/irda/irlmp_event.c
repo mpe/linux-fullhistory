@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Wed Dec  9 01:48:48 1998
+ * Modified at:   Sat Jan 16 22:22:29 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -119,7 +119,7 @@ void irlmp_do_lsap_event( struct lsap_cb *self, IRLMP_EVENT event,
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
 
-	DEBUG( 4, "do_lsap_event: EVENT = %s, STATE = %s\n",
+	DEBUG( 4, __FUNCTION__ "(), EVENT = %s, STATE = %s\n",
 	       irlmp_event[ event], irlmp_state[ self->lsap_state]);
 
 	(*lsap_state[ self->lsap_state]) ( self, event, skb);
@@ -137,7 +137,7 @@ void irlmp_do_lap_event( struct lap_cb *self, IRLMP_EVENT event,
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
 	
-	DEBUG( 4, "do_lap_event: EVENT = %s, STATE = %s\n",
+	DEBUG( 4, __FUNCTION__ "(), EVENT = %s, STATE = %s\n",
 	       irlmp_event[event], 
 	       irlmp_state[self->lap_state]);
 
@@ -152,9 +152,7 @@ void irlmp_discovery_timer_expired( unsigned long data)
 	
 	irlmp_discovery_request( 8);
 
-	/*
-	 *  Restart timer
-	 */
+	/* Restart timer */
 	irlmp_start_discovery_timer( irlmp, 300);
 }
 
@@ -185,7 +183,7 @@ void irlmp_watchdog_timer_expired( unsigned long data)
 static void irlmp_state_standby( struct lap_cb *self, IRLMP_EVENT event, 
 				 struct sk_buff *skb)
 {	
-	DEBUG( 4, "irlmp_state_standby()\n"); 
+	DEBUG( 4, __FUNCTION__ "()\n"); 
 	ASSERT( self->irlap != NULL, return;);
 	
 	switch( event) {
@@ -241,7 +239,7 @@ static void irlmp_state_u_connect( struct lap_cb *self, IRLMP_EVENT event,
 	struct lsap_cb *lsap;
 	struct lsap_cb *lsap_current;
 	
-	DEBUG( 4, "irlmp_state_u_connect()\n"); 
+	DEBUG( 4, __FUNCTION__ "()\n"); 
 
 	switch( event) {
 	case LM_LAP_CONNECT_CONFIRM:
@@ -250,14 +248,12 @@ static void irlmp_state_u_connect( struct lap_cb *self, IRLMP_EVENT event,
 
 		lsap = ( struct lsap_cb *) hashbin_get_first( self->lsaps);
 		while ( lsap != NULL) {
-			irlmp_do_lsap_event( lsap, 
-					     LM_LAP_CONNECT_CONFIRM,
-					     skb); 
+			irlmp_do_lsap_event(lsap, LM_LAP_CONNECT_CONFIRM, skb);
 			lsap = (struct lsap_cb*) hashbin_get_next(self->lsaps);
 		}		
 		break;
 	case LM_LAP_DISCONNECT_INDICATION:
-		DEBUG( 0, __FUNCTION__ "(), IRLAP_DISCONNECT_INDICATION\n");
+		DEBUG( 4, __FUNCTION__ "(), IRLAP_DISCONNECT_INDICATION\n");
 	
 		irlmp_next_lap_state( self, LAP_STANDBY);
 
@@ -277,13 +273,15 @@ static void irlmp_state_u_connect( struct lap_cb *self, IRLMP_EVENT event,
 		}
 		break;
 	case LM_LAP_DISCONNECT_REQUEST:
-		DEBUG( 0, __FUNCTION__ "(), LM_LAP_DISCONNECT_REQUEST\n");
-		/* irlmp_next_lap_state( self, LAP_STANDBY); */
+		DEBUG( 4, __FUNCTION__ "(), LM_LAP_DISCONNECT_REQUEST\n");
 
+		irlmp_next_lap_state( self, LAP_STANDBY);
+
+		/* FIXME */
 /* 		irlap_disconnect_request( self->irlap); */
 		break;
 	default:
-		DEBUG( 4, "irlmp_state_u_connect: Unknown event\n");
+		DEBUG( 4, __FUNCTION__ "(), Unknown event\n");
 		break;
 	}	
 }
@@ -300,11 +298,11 @@ static void irlmp_state_active( struct lap_cb *self, IRLMP_EVENT event,
 	struct lsap_cb *lsap;
 	struct lsap_cb *lsap_current;
 
-	DEBUG( 4, "irlmp_state_active()\n"); 
+	DEBUG( 4, __FUNCTION__ "()\n"); 
 
  	switch( event) {
 	case LM_LAP_CONNECT_REQUEST:
-		DEBUG( 4, "irlmp_state_active(), LS_CONNECT_REQUEST\n");
+		DEBUG( 4, __FUNCTION__ "(), LS_CONNECT_REQUEST\n");
 
 		/*
 		 *  LAP connection allready active, just bounce back! Since we 
@@ -379,14 +377,14 @@ static void irlmp_state_disconnected( struct lsap_cb *self, IRLMP_EVENT event,
 {
 	struct lsap_cb *lsap;
 
-	DEBUG( 4, "irlmp_state_disconnected()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
 
 	switch( event) {
 	case LM_CONNECT_REQUEST:
-		DEBUG( 4, "irlmp_state_disconnected: LM_CONNECT_REQUEST\n");
+		DEBUG( 4, __FUNCTION__ "(), LM_CONNECT_REQUEST\n");
 		irlmp_next_lsap_state( self, LSAP_SETUP_PEND);
 
 		irlmp_do_lap_event( self->lap, LM_LAP_CONNECT_REQUEST, NULL);
@@ -433,7 +431,7 @@ static void irlmp_state_connect( struct lsap_cb *self, IRLMP_EVENT event,
 				 struct sk_buff *skb) 
 {
 
-	DEBUG( 4, "irlmp_state_connect()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 	
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
@@ -464,7 +462,7 @@ static void irlmp_state_connect( struct lsap_cb *self, IRLMP_EVENT event,
 static void irlmp_state_connect_pend( struct lsap_cb *self, IRLMP_EVENT event,
 				      struct sk_buff *skb) 
 {
-	DEBUG( 4, "irlmp_state_connect_pend()\n");
+	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
@@ -508,7 +506,7 @@ static void irlmp_state_dtr( struct lsap_cb *self, IRLMP_EVENT event,
 {
 	LM_REASON reason;
 
- 	DEBUG( 4, "irlmp_state_dtr()\n");
+ 	DEBUG( 4, __FUNCTION__ "()\n");
 
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == LMP_LSAP_MAGIC, return;);
@@ -584,7 +582,7 @@ static void irlmp_state_dtr( struct lsap_cb *self, IRLMP_EVENT event,
 
 		break;
 	default:
-		DEBUG( 4, "irlmp_state_dtr: Unknown event %d\n", event);
+		DEBUG( 4, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;	
 	}	
 }
@@ -629,7 +627,7 @@ static void irlmp_state_setup( struct lsap_cb *self, IRLMP_EVENT event,
 		irlmp_disconnect_indication( self, reason, skb);
 		break;
 	default:
-		DEBUG( 4, "irlmp_state_setup: Unknown event %d\n", event);
+		DEBUG( 4, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;	
 	}
 }
@@ -664,23 +662,22 @@ static void irlmp_state_setup_pend( struct lsap_cb *self, IRLMP_EVENT event,
 		irlmp_next_lsap_state( self, LSAP_DISCONNECTED);
 		break;
 	case LM_WATCHDOG_TIMEOUT:
-		DEBUG( 0, "irlmp_state_setup_pend() WATCHDOG_TIMEOUT!\n");
+		DEBUG( 0, __FUNCTION__ "() WATCHDOG_TIMEOUT!\n");
 
 		/* FIXME: should we do a disconnect_indication? */
-		return;
 		ASSERT( self->lap != NULL, return;);
 		irlmp_do_lap_event( self->lap, LM_LAP_DISCONNECT_REQUEST, NULL);
 		irlmp_next_lsap_state( self, LSAP_DISCONNECTED);
 		break;
 	default:
-		DEBUG( 4, "irlmp_state_setup_pend: Unknown event %d\n", event);
+		DEBUG( 4, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;	
 	}
 }
 
 void irlmp_next_lap_state( struct lap_cb *self, IRLMP_STATE state) 
 {
-	DEBUG( 4, "LMP LAP = %s\n", irlmp_state[state]);
+	DEBUG( 4, __FUNCTION__ "(), LMP LAP = %s\n", irlmp_state[state]);
 	self->lap_state = state;
 }
 
@@ -688,6 +685,6 @@ void irlmp_next_lsap_state( struct lsap_cb *self, LSAP_STATE state)
 {
 	ASSERT( self != NULL, return;);
 
-	DEBUG( 4, "LMP LSAP = %s\n", irlsap_state[state]);
+	DEBUG( 4, __FUNCTION__ "(), LMP LSAP = %s\n", irlsap_state[state]);
 	self->lsap_state = state;
 }
