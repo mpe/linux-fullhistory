@@ -286,7 +286,7 @@ struct ip6t_get_entries
 	unsigned int size;
 
 	/* The entries. */
-	unsigned char entries[0];
+	struct ip6t_entry entrytable[0];
 };
 
 /* Standard return verdict, or do jump. */

@@ -169,11 +169,15 @@ static unsigned int ip_confirm(unsigned int hooknum,
 			       const struct net_device *out,
 			       int (*okfn)(struct sk_buff *))
 {
-	/* We've seen it coming out the other side: confirm */
+	/* We've seen it coming out the other side: confirm (only if
+           new packet: REJECT can generate TCP RESET response, or ICMP
+           errors) */
 	if ((*pskb)->nfct) {
 		struct ip_conntrack *ct
 			= (struct ip_conntrack *)(*pskb)->nfct->master;
-		if (!(ct->status & IPS_CONFIRMED))
+		/* ctinfo is the index of the nfct inside the conntrack */
+		if ((*pskb)->nfct - ct->infos == IP_CT_NEW
+		    && !(ct->status & IPS_CONFIRMED))
 			ip_conntrack_confirm(ct);
 	}
 	return NF_ACCEPT;
@@ -191,7 +195,8 @@ static unsigned int ip_refrag(unsigned int hooknum,
 	if ((*pskb)->nfct) {
 		struct ip_conntrack *ct
 			= (struct ip_conntrack *)(*pskb)->nfct->master;
-		if (!(ct->status & IPS_CONFIRMED))
+		if ((*pskb)->nfct - ct->infos == IP_CT_NEW
+		    && !(ct->status & IPS_CONFIRMED))
 			ip_conntrack_confirm(ct);
 	}
 

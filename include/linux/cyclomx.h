@@ -13,6 +13,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/07/13    acme		remove crap #if KERNEL_VERSION > blah
 * 2000/01/21    acme            rename cyclomx_open to cyclomx_mod_inc_use_count
 *                               and cyclomx_close to cyclomx_mod_dec_use_count
 * 1999/05/19	acme		wait_queue_head_t wait_stats(support for 2.3.*)
@@ -58,11 +59,7 @@ typedef struct cycx {
 	spinlock_t lock;
 	char in_isr;			/* interrupt-in-service flag */
 	char buff_int_mode_unbusy;      /* flag for carrying out dev_tint */
-#if (LINUX_VERSION_CODE >= 0x20300)
 	wait_queue_head_t wait_stats;  /* to wait for the STATS indication */
-#else
-	struct wait_queue* wait_stats;  /* to wait for the STATS indication */
-#endif
 	u32 mbox;			/* -> mailbox */
 	void (*isr)(struct cycx* card);	/* interrupt service routine */
 	int (*exec)(struct cycx* card, void* u_cmd, void* u_data);

@@ -1,5 +1,5 @@
 /*
- * $Id: pmc551.c,v 1.7 2000/07/03 10:01:38 dwmw2 Exp $
+ * $Id: pmc551.c,v 1.8 2000/07/14 07:53:31 dwmw2 Exp $
  *
  * PMC551 PCI Mezzanine Ram Device
  *
@@ -53,6 +53,7 @@
  *       hang w/ a reboot beeing the only chance at recover.
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/uaccess.h>
@@ -343,7 +344,7 @@ out:
  */
 static u32 fixup_pmc551 (struct pci_dev *dev)
 {
-#ifdef PMC551_DRAM_BUG
+#ifdef CONFIG_MTD_PMC551_BUGFIX
         u32 dram_data;
 #endif
         u32 size, dcmd;
@@ -362,7 +363,7 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
          * row mux values.  We fix them here, but this will break other
          * memory configurations.
          */
-#ifdef PMC551_DRAM_BUG
+#ifdef CONFIG_MTD_PMC551_BUGFIX
         pci_read_config_dword(dev, PMC551_DRAM_BLK0, &dram_data);
         size = PMC551_DRAM_BLK_GET_SIZE(dram_data);
         dram_data = PMC551_DRAM_BLK_SET_COL_MUX(dram_data, 0x5);
@@ -386,7 +387,7 @@ static u32 fixup_pmc551 (struct pci_dev *dev)
         dram_data = PMC551_DRAM_BLK_SET_COL_MUX(dram_data, 0x5);
         dram_data = PMC551_DRAM_BLK_SET_ROW_MUX(dram_data, 0x9);
         pci_write_config_dword(dev, PMC551_DRAM_BLK3, dram_data);
-#endif /* PMC551_DRAM_BUG */
+#endif /* CONFIG_MTD_PMC551_BUGFIX */
 
         /*
          * Oops .. something went wrong
@@ -550,7 +551,7 @@ int __init init_pmc551(void)
 
 
         printk(KERN_NOTICE "Ramix PMC551 PCI Mezzanine Ram Driver. (C) 1999,2000 Nortel Networks.\n");
-        printk(KERN_INFO "$Id: pmc551.c,v 1.7 2000/07/03 10:01:38 dwmw2 Exp $\n");
+        printk(KERN_INFO "$Id: pmc551.c,v 1.8 2000/07/14 07:53:31 dwmw2 Exp $\n");
 
         if(!pci_present()) {
                 printk(KERN_NOTICE "pmc551: PCI not enabled.\n");

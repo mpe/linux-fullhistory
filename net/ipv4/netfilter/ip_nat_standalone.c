@@ -84,9 +84,8 @@ ip_nat_fn(unsigned int hooknum,
 	case IP_CT_RELATED:
 	case IP_CT_RELATED+IP_CT_IS_REPLY:
 		if ((*pskb)->nh.iph->protocol == IPPROTO_ICMP) {
-			icmp_reply_translation(*pskb, ct, hooknum,
-					       CTINFO2DIR(ctinfo));
-			return NF_ACCEPT;
+			return icmp_reply_translation(*pskb, ct, hooknum,
+						      CTINFO2DIR(ctinfo));
 		}
 		/* Fall thru... (Only ICMPs can be IP_CT_IS_REPLY) */
 	case IP_CT_NEW:

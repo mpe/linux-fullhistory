@@ -54,7 +54,7 @@ void __init amiga_init_sound(void)
 }
 
 static void nosound( unsigned long ignored );
-static struct timer_list sound_timer = { NULL, NULL, 0, 0, nosound };
+static struct timer_list sound_timer = { function: nosound };
 
 void amiga_mksound( unsigned int hz, unsigned int ticks )
 {

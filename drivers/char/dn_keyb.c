@@ -51,8 +51,7 @@ static u_char *shadow_buf=&debug_buf2[0];
 static short debug_buf_count=0;
 static int debug_buf_overrun=0,debug_timer_running=0;
 static unsigned long debug_buffer_updated=0;
-static struct timer_list debug_keyb_timer = { NULL, NULL, 0, 0,
-											  debug_keyb_timer_handler };
+static struct timer_list debug_keyb_timer = { function: debug_keyb_timer_handler };
 #endif
 
 static u_short dnplain_map[NR_KEYS] __initdata = {

@@ -329,8 +329,7 @@ static long bh_counter = 0;
  * selected, the board is serviced periodically to see if anything needs doing.
  */
 #define  POLL_TIMEOUT   (jiffies + 1)
-static struct timer_list PollTimer = { {NULL, NULL},       0,   0, ip2_poll };
-//                                     next, prev, expires,data, func()
+static struct timer_list PollTimer = { function: ip2_poll };
 static char  TimerOn = 0;
 
 #ifdef IP2DEBUG_TRACE

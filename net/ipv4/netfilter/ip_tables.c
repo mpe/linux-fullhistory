@@ -1029,7 +1029,7 @@ get_entries(const struct ipt_get_entries *entries,
 			 t->private->number);
 		if (entries->size == t->private->size)
 			ret = copy_entries_to_user(t->private->size,
-						   t, uptr->entries);
+						   t, uptr->entrytable);
 		else {
 			duprintf("get_entries: I've got %u not %u!\n",
 				 t->private->size,

@@ -56,7 +56,7 @@ static void ( *mac_special_bell )( unsigned int, unsigned int, unsigned int ) = 
 /*
  * our timer to start/continue/stop the bell
  */
-static struct timer_list mac_sound_timer = { NULL, NULL, 0, 0, mac_nosound };
+static struct timer_list mac_sound_timer = { function: mac_nosound };
 
 /*
  * Sort of initialize the sound chip (called from mac_mksound on the first

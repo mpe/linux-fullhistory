@@ -1,205 +1,110 @@
-# $Id: Makefile,v 1.21 2000/07/13 10:42:55 dwmw2 Exp $
-
-# Uncomment this to enable the DBG macro (see mtd.h)
-#CFLAGS+= -DZDBG
+#
+# Makefile for the memory technology device drivers.
+#
+# Note! Dependencies are done automagically by 'make dep', which also
+# removes any old dependencies. DON'T put your own dependencies here
+# unless it's something special (ie not a .c file).
+#
+# Note 2! The CFLAGS definitions are now inherited from the
+# parent makes..
+#
+# $Id: Makefile,v 1.22 2000/07/14 08:10:52 dwmw2 Exp $
 
 ifndef CONFIG_MTD
+
 # We're being invoked outside a normal kernel build. Fake it
 EXTRA_CFLAGS= -I$(shell pwd)/../include
 
-HWDRIVERS = slram.o docprobe.o doc1000.o nora.o physmap.o rpxlite.o vmax301.o octagon-5066.o pmc551.o mtdram.o
-USERDRIVERS = ftl.o nftl.o mtdblock.o mtdchar.o
-MIX_OBJS = mtdcore.o mapped.o doc2000.o doc2001.o cfi_probe.o cfi_cmdset_0001.o
-MI_OBJS = $(HWDRIVERS) $(USERDRIVERS)
+MIX_OBJS = mtdcore.o doc2000.o doc2001.o cfi_probe.o cfi_cmdset_0001.o \
+	map_ram.o map_rom.o cfi_cmdset_0002.o
+MI_OBJS = doc1000.o docprobe.o slram.o pmc551.o mtdram.o physmap.o \
+	nora.o octagon-5066.o pnc2000.o rpxlite.o vmax301.o mtdchar.o \
+	mtdblock.o ftl.o nftl.o
+
 CFLAGS_nftl.o := -DCONFIG_NFTL_RW
-else
+CFLAGS_mtdram.o := -DCONFIG_MTDRAM_TOTAL_SIZE=4096 -DCONFIG_MTDRAM_ERASE_SIZE=128
+CFLAGS_physmap.o := -DCONFIG_MTD_PHYSMAP_START=0x8000000 -DCONFIG_MTD_PHYSMAP_LEN=0x4000000
+
+else 
+
+O_OBJS          :=
+OX_OBJS         :=
+M_OBJS          :=
+MX_OBJS         :=
+
+# Object file lists.
+
+obj-y           :=
+obj-m           :=
+obj-n           :=
+obj-            :=
 
 O_TARGET	:= mtdlink.o
 SUB_DIRS	:=
 ALL_SUB_DIRS 	:=
+MOD_SUB_DIRS	:=
 MOD_LIST_NAME	:= MTD_MODULES
 
+export-objs	:=	mtdcore.o doc2000.o doc2001.o cfi_probe.o cfi_cmdset_0001.o cfi_cmdset_0002.o
+list-multi	:=
 
-ifeq ($(CONFIG_MTD),y)
-  OX_OBJS += mtdcore.o mapped.o
-else
-  ifeq ($(CONFIG_MTD),m)
-    MX_OBJS += mtdcore.o mapped.o
-  endif
-endif
+# MTD devices
+obj-$(CONFIG_MTD)		+= mtdcore.o
+obj-$(CONFIG_MTD_DOC1000)	+= doc1000.o
+obj-$(CONFIG_MTD_DOC2000)	+= doc2000.o
+obj-$(CONFIG_MTD_DOC2001)	+= doc2001.o
+obj-$(CONFIG_MTD_DOCPROBE)	+= docprobe.o
+obj-$(CONFIG_MTD_SLRAM)		+= slram.o
+obj-$(CONFIG_MTD_PMC551)	+= pmc551.o
+obj-$(CONFIG_MTD_MTDRAM)	+= mtdram.o
 
-ifeq ($(CONFIG_MTD_NORA),y)
-  O_OBJS += nora.o
-else
-  ifeq ($(CONFIG_MTD_NORA),m)
-    M_OBJS += nora.o
-  endif
-endif
+# Chip drivers
+obj-$(CONFIG_MTD_JEDEC)		+= jedec.o
+obj-$(CONFIG_MTD_RAM)		+= map_ram.o
+obj-$(CONFIG_MTD_ROM)		+= map_rom.o
+obj-$(CONFIG_MTD_CFI)		+= cfi_probe.o
+obj-$(CONFIG_MTD_CFI_INTELEXT)	+= cfi_cmdset_0001.o
+obj-$(CONFIG_MTD_CFI_AMDSTD)	+= cfi_cmdset_0002.o
 
-ifeq ($(CONFIG_MTD_RPXLITE),y)
-  O_OBJS += rpxlite.o
-else
-  ifeq ($(CONFIG_MTD_RPXLITE),m)
-    M_OBJS += rpxlite.o
-  endif
-endif
+# Chip mappings
+obj-$(CONFIG_MTD_PHYSMAP)	+= physmap.o
+obj-$(CONFIG_MTD_MIXMEM)	+= mixmem.o
+obj-$(CONFIG_MTD_NORA)		+= nora.o
+obj-$(CONFIG_MTD_OCTAGON)	+= octagon-5066.o
+obj-$(CONFIG_MTD_PNC2000)	+= pnc2000.o
+obj-$(CONFIG_MTD_RPXLITE)	+= rpxlite.o
+obj-$(CONFIG_MTD_VMAX)		+= vmax301.o
 
-ifeq ($(CONFIG_MTD_PHYSMAP),y)
-  O_OBJS += physmap.o
-else
-  ifeq ($(CONFIG_MTD_PHYSMAP),m)
-    M_OBJS += physmap.o
-  endif
-endif
+# Users
+obj-$(CONFIG_MTD_CHAR)		+= mtdchar.o
+obj-$(CONFIG_MTD_BLOCK)		+= mtdblock.o
+obj-$(CONFIG_FTL)		+= ftl.o
+obj-$(CONFIG_NFTL)		+= nftl.o
 
-ifeq ($(CONFIG_MTD_CFI),y)
-  OX_OBJS += cfi_probe.o
-else
-  ifeq ($(CONFIG_MTD_CFI),m)
-    MX_OBJS += cfi_probe.o
-  endif
-endif
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
 
-ifeq ($(CONFIG_MTD_CFI_INTELEXT),y)
-  OX_OBJS += cfi_cmdset_0001.o
-else
-  ifeq ($(CONFIG_MTD_CFI_INTELEXT),m)
-    MX_OBJS += cfi_cmdset_0001.o
-  endif
-endif
+multi-y         := $(filter $(list-multi), $(obj-y))
+multi-m         := $(filter $(list-multi), $(obj-m))
+int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
 
-ifeq ($(CONFIG_MTD_CFI_AMDSTD),y)
-  OX_OBJS += cfi_cmdset_0002.o
-else
-  ifeq ($(CONFIG_MTD_CFI_AMDSTD),m)
-    MX_OBJS += cfi_cmdset_0002.o
-  endif
-endif
+# Files that are both resident and modular: remove from modular.
 
-ifeq ($(CONFIG_MTD_DOC1000),y)
-  O_OBJS += doc1000.o
-else
-  ifeq ($(CONFIG_MTD_DOC1000),m)
-    M_OBJS += doc1000.o
-  endif
-endif
+obj-m           := $(filter-out $(obj-y), $(obj-m))
+int-m           := $(filter-out $(int-y), $(int-m))
 
-ifeq ($(CONFIG_MTD_DOC2000),y)
-  OX_OBJS += doc2000.o
-else
-  ifeq ($(CONFIG_MTD_DOC2000),m)
-    MX_OBJS += doc2000.o
-  endif
-endif
+# Take multi-part drivers out of obj-y and put components in.
 
-ifeq ($(CONFIG_MTD_DOC2001),y)
-  OX_OBJS += doc2001.o
-else
-  ifeq ($(CONFIG_MTD_DOC2001),m)
-    MX_OBJS += doc2001.o
-  endif
-endif
+obj-y           := $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
-ifeq ($(CONFIG_MTD_DOCPROBE),y)
-  O_OBJS += docprobe.o
-else
-  ifeq ($(CONFIG_MTD_DOCPROBE),m)
-    M_OBJS += docprobe.o
-  endif
-endif
+# Translate to Rules.make lists.
 
-ifeq ($(CONFIG_MTD_SLRAM),y)
-  O_OBJS += slram.o
-else
-  ifeq ($(CONFIG_MTD_SLRAM),m)
-    M_OBJS += slram.o
-  endif
-endif
+O_OBJS          := $(filter-out $(export-objs), $(obj-y))
+OX_OBJS         := $(filter     $(export-objs), $(obj-y))
+M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
 
-ifeq ($(CONFIG_MTD_OCTAGON),y)
-  O_OBJS += octagon-5066.o
-else
-  ifeq ($(CONFIG_MTD_OCTAGON),m)
-    M_OBJS += octagon-5066.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_PMC551),y)
-  O_OBJS += pmc551.o
-else
-  ifeq ($(CONFIG_MTD_PMC551),m)
-    M_OBJS += pmc551.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_PMC551_BUGFIX),y)
-  CFLAGS_pmc551.o += -DPMC551_DRAM_BUG
-endif
-
-ifeq ($(CONFIG_MTD_VMAX),y)
-  O_OBJS += vmax301.o
-else
-  ifeq ($(CONFIG_MTD_VMAX),m)
-    M_OBJS += vmax301.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_MIXMEM),y)
-  O_OBJS += mixmem.o
-else
-  ifeq ($(CONFIG_MTD_MIXMEM),m)
-    M_OBJS += mixmem.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_MTDRAM),y)
-  O_OBJS += mtdram.o
-else
-  ifeq ($(CONFIG_MTD_MTDRAM),m)
-    M_OBJS += mtdram.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_PNC2000),y)
-  O_OBJS += pnc2000.o
-else
-  ifeq ($(CONFIG_MTD_PNC2000),m)
-    M_OBJS += pnc2000.o
-  endif
-endif
-
-ifeq ($(CONFIG_FTL),y)
-  O_OBJS += ftl.o
-else
-  ifeq ($(CONFIG_FTL),m)
-    M_OBJS += ftl.o
-  endif
-endif
-
-ifeq ($(CONFIG_NFTL),y)
-  O_OBJS += nftl.o
-else
-  ifeq ($(CONFIG_NFTL),m)
-    M_OBJS += nftl.o
-  endif
-endif
-
-ifeq ($(CONFIG_MTD_BLOCK),y)
-  O_OBJS += mtdblock.o
-else
-  ifeq ($(CONFIG_MTD_BLOCK),m)
-    M_OBJS += mtdblock.o
-  endif
-endif
-
-
-ifeq ($(CONFIG_MTD_CHAR),y)
-  O_OBJS += mtdchar.o
-else
-  ifeq ($(CONFIG_MTD_CHAR),m)
-    M_OBJS += mtdchar.o
-  endif
-endif
 
 endif
 

@@ -104,7 +104,7 @@ static void dn_run_flush(unsigned long dummy);
 static struct dn_rt_hash_bucket *dn_rt_hash_table;
 static unsigned dn_rt_hash_mask;
 
-static struct timer_list dn_route_timer = { function: NULL };
+static struct timer_list dn_route_timer;
 static struct timer_list dn_rt_flush_timer = { function: dn_run_flush };
 int decnet_dst_gc_interval = 2;
 

@@ -244,7 +244,7 @@ static int ipq_set_verdict(ipq_queue_t *q,
 {
 	ipq_queue_element_t *e;
 
-	if (v->value < 0 || v->value > NF_MAX_VERDICT)
+	if (v->value > NF_MAX_VERDICT)
 		return -EINVAL;
 	e = ipq_dequeue(q, id_cmp, v->id);
 	if (e == NULL)
@@ -309,10 +309,9 @@ static inline int dev_cmp(ipq_queue_element_t *e, unsigned long ifindex)
 		if (e->info->indev->ifindex == ifindex)
 			return 1;
 	if (e->info->outdev)
-		if (e->info->outdev->ifindex == ifindex);
+		if (e->info->outdev->ifindex == ifindex)
 			return 1;
 	return 0;
-	
 }
 
 /* Drop any queued packets associated with device ifindex */

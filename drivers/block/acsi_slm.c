@@ -270,7 +270,7 @@ static int slm_get_pagesize( int device, int *w, int *h );
 /************************* End of Prototypes **************************/
 
 
-static struct timer_list slm_timer = { NULL, NULL, 0, 0, slm_test_ready };
+static struct timer_list slm_timer = { function: slm_test_ready };
 
 static struct file_operations slm_fops = {
 	owner:		THIS_MODULE,

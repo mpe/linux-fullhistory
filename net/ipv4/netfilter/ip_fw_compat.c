@@ -71,7 +71,8 @@ confirm_connection(struct sk_buff *skb)
 		struct ip_conntrack *ct
 			= (struct ip_conntrack *)skb->nfct->master;
 
-		if (!(ct->status & IPS_CONFIRMED))
+		if (skb->nfct - ct->infos == IP_CT_NEW
+		    && !(ct->status & IPS_CONFIRMED))
 			ip_conntrack_confirm(ct);
 	}
 }

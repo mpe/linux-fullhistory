@@ -7,6 +7,7 @@
 #include <linux/ip.h>
 #include <net/icmp.h>
 #include <net/ip.h>
+#include <net/tcp.h>
 struct in_device;
 #include <net/route.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
@@ -17,6 +18,113 @@ struct in_device;
 #else
 #define DEBUGP(format, args...)
 #endif
+
+/* Send RST reply */
+static void send_reset(struct sk_buff *oldskb)
+{
+	struct sk_buff *nskb;
+	struct tcphdr *tcph;
+	struct rtable *rt;
+	unsigned int tcplen;
+	int needs_ack;
+
+	/* Clone skb (skb is about to be dropped, so we don't care) */
+	nskb = skb_clone(oldskb, GFP_ATOMIC);
+	if (!nskb)
+		return;
+
+	/* This packet will not be the same as the other: clear nf fields */
+	nf_conntrack_put(nskb->nfct);
+	nskb->nfct = NULL;
+	nskb->nfcache = 0;
+#ifdef CONFIG_NETFILTER_DEBUG
+	nskb->nf_debug = 0;
+#endif
+
+	/* IP header checks: fragment, too short. */
+	if (nskb->nh.iph->frag_off & htons(IP_OFFSET)
+	    || nskb->len < (nskb->nh.iph->ihl<<2) + sizeof(struct tcphdr))
+		goto free_nskb;
+
+	tcph = (struct tcphdr *)((u_int32_t*)nskb->nh.iph + nskb->nh.iph->ihl);
+	tcplen = nskb->len - nskb->nh.iph->ihl*4;
+
+	/* Check checksum. */
+	if (tcp_v4_check(tcph, tcplen, nskb->nh.iph->saddr,
+			 nskb->nh.iph->daddr,
+			 csum_partial((char *)tcph, tcplen, 0)) != 0)
+		goto free_nskb;
+
+	/* No RST for RST. */
+	if (tcph->rst)
+		goto free_nskb;
+
+	nskb->nh.iph->daddr = xchg(&nskb->nh.iph->saddr, nskb->nh.iph->daddr);
+	tcph->source = xchg(&tcph->dest, tcph->source);
+
+	/* Truncate to length (no data) */
+	tcph->doff = sizeof(struct tcphdr)/4;
+	skb_trim(nskb, nskb->nh.iph->ihl*4 + sizeof(struct tcphdr));
+
+	if (tcph->ack) {
+		needs_ack = 0;
+		tcph->seq = tcph->ack_seq;
+		tcph->ack_seq = 0;
+	} else {
+		needs_ack = 1;
+		tcph->seq = 0;
+		tcph->ack_seq = htonl(ntohl(tcph->seq) + tcph->syn + tcph->fin
+				      + tcplen - (tcph->doff<<2));
+	}
+
+	/* Reset flags */
+	((u_int8_t *)tcph)[13] = 0;
+	tcph->rst = 1;
+	if (needs_ack)
+		tcph->ack = 1;
+
+	tcph->window = 0;
+	tcph->urg_ptr = 0;
+
+	/* Adjust TCP checksum */
+	tcph->check = 0;
+	tcph->check = tcp_v4_check(tcph, sizeof(struct tcphdr),
+				   nskb->nh.iph->saddr,
+				   nskb->nh.iph->daddr,
+				   csum_partial((char *)tcph,
+						sizeof(struct tcphdr), 0));
+
+	/* Adjust IP TTL, DF */
+	nskb->nh.iph->ttl = MAXTTL;
+	/* Set DF, id = 0 */
+	nskb->nh.iph->frag_off = htons(IP_DF);
+	nskb->nh.iph->id = 0;
+
+	/* Adjust IP checksum */
+	nskb->nh.iph->check = 0;
+	nskb->nh.iph->check = ip_fast_csum((unsigned char *)nskb->nh.iph, 
+					   nskb->nh.iph->ihl);
+
+	/* Routing */
+	if (ip_route_output(&rt, nskb->nh.iph->daddr, nskb->nh.iph->saddr,
+			    RT_TOS(nskb->nh.iph->tos) | RTO_CONN,
+			    0) != 0)
+		goto free_nskb;
+
+	dst_release(nskb->dst);
+	nskb->dst = &rt->u.dst;
+
+	/* "Never happens" */
+	if (nskb->len > nskb->dst->pmtu)
+		goto free_nskb;
+
+	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, nskb, NULL, nskb->dst->dev,
+		ip_finish_output);
+	return;
+
+ free_nskb:
+	kfree_skb(nskb);
+}
 
 static unsigned int reject(struct sk_buff **pskb,
 			   unsigned int hooknum,
@@ -43,6 +151,12 @@ static unsigned int reject(struct sk_buff **pskb,
     	case IPT_ICMP_PORT_UNREACHABLE:
     		icmp_send(*pskb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
     		break;
+    	case IPT_ICMP_NET_PROHIBITED:
+    		icmp_send(*pskb, ICMP_DEST_UNREACH, ICMP_NET_ANO, 0);
+    		break;
+	case IPT_ICMP_HOST_PROHIBITED:
+    		icmp_send(*pskb, ICMP_DEST_UNREACH, ICMP_HOST_ANO, 0);
+    		break;
     	case IPT_ICMP_ECHOREPLY: {
 		struct icmphdr *icmph  = (struct icmphdr *)
 			((u_int32_t *)(*pskb)->nh.iph + (*pskb)->nh.iph->ihl);
@@ -64,6 +178,9 @@ static unsigned int reject(struct sk_buff **pskb,
 		}
 	}
 	break;
+	case IPT_TCP_RESET:
+		send_reset(*pskb);
+		break;
 	}
 
 	return NF_DROP;
@@ -96,7 +213,7 @@ static int check(const char *tablename,
 
 	/* Only allow these for packet filtering. */
 	if (strcmp(tablename, "filter") != 0) {
-		DEBUGP("REJECT: bad table `%s'.\n", table);
+		DEBUGP("REJECT: bad table `%s'.\n", tablename);
 		return 0;
 	}
 	if ((hook_mask & ~((1 << NF_IP_LOCAL_IN)
@@ -116,6 +233,18 @@ static int check(const char *tablename,
 		/* Must contain ICMP match. */
 		if (IPT_MATCH_ITERATE(e, find_ping_match) == 0) {
 			DEBUGP("REJECT: ECHOREPLY illegal for non-ping\n");
+			return 0;
+		}
+	} else if (rejinfo->with == IPT_TCP_RESET) {
+		/* Must specify that it's a TCP packet */
+		if (e->ip.proto != IPPROTO_TCP
+		    || (e->ip.invflags & IPT_INV_PROTO)) {
+			DEBUGP("REJECT: TCP_RESET illegal for non-tcp\n");
+			return 0;
+		}
+		/* Only for local input.  Rest is too dangerous. */
+		if ((hook_mask & ~(1 << NF_IP_LOCAL_IN)) != 0) {
+			DEBUGP("REJECT: TCP_RESET only from INPUT\n");
 			return 0;
 		}
 	}

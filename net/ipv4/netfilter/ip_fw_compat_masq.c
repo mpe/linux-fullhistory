@@ -105,7 +105,7 @@ check_for_masq_error(struct sk_buff *skb)
 	/* Wouldn't be here if not tracked already => masq'ed ICMP
            ping or error related to masq'd connection */
 	IP_NF_ASSERT(ct);
-	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+	if (ctinfo == IP_CT_RELATED) {
 		icmp_reply_translation(skb, ct, NF_IP_PRE_ROUTING,
 				       CTINFO2DIR(ctinfo));
 		icmp_reply_translation(skb, ct, NF_IP_POST_ROUTING,

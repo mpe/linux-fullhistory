@@ -632,6 +632,8 @@ static int __init SK_init_module (void)
 	if (!SK_dev)
 		return -ENOMEM;
 	
+	SK_dev->base_addr = io;
+
 	rc = SK_init (SK_dev);
 	if (rc) {
 		unregister_netdev (SK_dev);

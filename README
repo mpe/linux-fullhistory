@@ -169,14 +169,18 @@ COMPILING the kernel:
    Please note that you can still run a.out user programs with this
    kernel.
 
- - Do a "make zImage" to create a compressed kernel image.  If you want
+ - Do a "make bzImage" to create a compressed kernel image.  If you want
    to make a boot disk (without root filesystem or LILO), insert a floppy
-   in your A: drive, and do a "make zdisk".  It is also possible to do
-   "make zlilo" if you have lilo installed to suit the kernel makefiles,
+   in your A: drive, and do a "make bzdisk".  It is also possible to do
+   "make bzlilo" if you have lilo installed to suit the kernel makefiles,
    but you may want to check your particular lilo setup first. 
 
- - If your kernel is too large for "make zImage", use "make bzImage"
-   instead.
+ - In the unlikely event that your system cannot boot bzImage kernels you
+   can still compile your kernel as zImage. However, since zImage support
+   will be removed at some point in the future in favor of bzImage we
+   encourage people having problems with booting bzImage kernels to report
+   these, with detailed hardware configuration information, to the
+   linux-kernel mailing list and to H. Peter Anvin <hpa+linux@zytor.com>.
 
  - If you configured any of the parts of the kernel as `modules', you
    will have to do "make modules" followed by "make modules_install".
@@ -192,11 +196,11 @@ COMPILING the kernel:
    do a "make modules_install".
 
  - In order to boot your new kernel, you'll need to copy the kernel
-   image (found in /usr/src/linux/arch/i386/boot/zImage after compilation)
+   image (found in /usr/src/linux/arch/i386/boot/bzImage after compilation)
    to the place where your regular bootable kernel is found. 
 
    For some, this is on a floppy disk, in which case you can "cp
-   /usr/src/linux/arch/i386/boot/zImage /dev/fd0" to make a bootable
+   /usr/src/linux/arch/i386/boot/bzImage /dev/fd0" to make a bootable
    floppy.  Please note that you can not boot a kernel by
    directly dumping it to a 720k double-density 3.5" floppy.  In this
    case, it is highly recommended that you install LILO on your
@@ -204,11 +208,11 @@ COMPILING the kernel:
 
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo.conf.  The
-   kernel image file is usually /vmlinuz, or /zImage, or /etc/zImage. 
-   To use the new kernel, save a copy of the old image and copy the new
-   image over the old one.  Then, you MUST RERUN LILO to update the
-   loading map!! If you don't, you won't be able to boot the new kernel
-   image. 
+   kernel image file is usually /vmlinuz, /boot/vmlinuz, /bzImage or
+   /boot/bzImage.  To use the new kernel, save a copy of the old image
+   and copy the new image over the old one.  Then, you MUST RERUN LILO
+   to update the loading map!! If you don't, you won't be able to boot
+   the new kernel image.
 
    Reinstalling LILO is usually a matter of running /sbin/lilo. 
    You may wish to edit /etc/lilo.conf to specify an entry for your
@@ -260,9 +264,9 @@ IF SOMETHING GOES WRONG:
    the above example it's due to a bad kernel pointer). More information
    on making sense of the dump is in Documentation/oops-tracing.txt
 
- - You can use the "ksymoops" program to make sense of the dump.  Find
-   the C++ sources under the scripts/ directory to avoid having to do
-   the dump lookup by hand:
+ - You can use the "ksymoops" program to make sense of the dump.  This
+   utility can be downloaded from ftp://ftp.ocs.com.au/pub/ksymoops .
+   Alternately you can do the dump lookup by hand:
 
  - In debugging dumps like the above, it helps enormously if you can
    look up what the EIP value means.  The hex value as such doesn't help

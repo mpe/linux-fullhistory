@@ -114,14 +114,14 @@ static DECLARE_WAIT_QUEUE_HEAD(ps2esdi_int);
 static DECLARE_WAIT_QUEUE_HEAD(ps2esdi_wait_open);
 
 int no_int_yet;
-static int access_count[MAX_HD] = {0,};
-static char ps2esdi_valid[MAX_HD] = {0,};
-static int ps2esdi_sizes[MAX_HD << 6] = {0,};
-static int ps2esdi_blocksizes[MAX_HD << 6] = {0,};
-static int ps2esdi_drives = 0;
+static int access_count[MAX_HD];
+static char ps2esdi_valid[MAX_HD];
+static int ps2esdi_sizes[MAX_HD << 6];
+static int ps2esdi_blocksizes[MAX_HD << 6];
+static int ps2esdi_drives;
 static struct hd_struct ps2esdi[MAX_HD << 6];
 static u_short io_base;
-static struct timer_list esdi_timer = {{NULL, NULL}, 0, 0L, ps2esdi_reset_timer};
+static struct timer_list esdi_timer = { function: ps2esdi_reset_timer };
 static int reset_status;
 static int ps2esdi_slot = -1;
 int tp720esdi = 0;		/* Is it Integrated ESDI of ThinkPad-720? */

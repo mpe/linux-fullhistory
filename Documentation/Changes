@@ -317,12 +317,12 @@ o  ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-
 
 Netfilter
 ---------
-o  http://netfilter.filewatcher.org/iptables-1.1.0.tar.bz2
-     <http://netfilter.filewatcher.org/iptables-1.1.0.tar.bz2>
-o  http://www.samba.org/netfilter/iptables-1.1.0.tar.bz2
-     <http://www.samba.org/netfilter/iptables-1.1.0.tar.bz2>
-o  http://netfilter.kernelnotes.org/iptables-1.1.0.tar.bz2
-     <http://netfilter.kernelnotes.org/iptables-1.1.0.tar.bz2>
+o  http://netfilter.filewatcher.org/iptables-1.1.1.tar.bz2
+     <http://netfilter.filewatcher.org/iptables-1.1.1.tar.bz2>
+o  http://www.samba.org/netfilter/iptables-1.1.1.tar.bz2
+     <http://www.samba.org/netfilter/iptables-1.1.1.tar.bz2>
+o  http://netfilter.kernelnotes.org/iptables-1.1.1.tar.bz2
+     <http://netfilter.kernelnotes.org/iptables-1.1.1.tar.bz2>
 
 Ip-route2
 ---------

@@ -548,9 +548,9 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 		if (!--count)
 			goto done;
 	}
-	/* We return 1 if we are freed some page, or
-	 * there are no memory pressure remaining   */
-	return (count != FREE_COUNT || !memory_pressure());
+	/* Return 1 if any page is freed, or
+	 * there are no more memory pressure   */
+	return (count < FREE_COUNT || !memory_pressure());
  
 done:
 	return 1;

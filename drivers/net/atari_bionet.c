@@ -158,7 +158,7 @@ static int bionet_close(struct net_device *dev);
 static struct net_device_stats *net_get_stats(struct net_device *dev);
 static void bionet_tick(unsigned long);
 
-static struct timer_list bionet_timer = { NULL, NULL, 0, 0, bionet_tick };
+static struct timer_list bionet_timer = { function: bionet_tick };
 
 #define STRAM_ADDR(a)	(((a) & 0xff000000) == 0)
 

@@ -3010,7 +3010,8 @@ static void set_rx_mode(struct net_device *dev)
 			/* Same setup recently queued, we need not add it. */
 		} else {
 			unsigned long flags;
-			unsigned int entry, dummy = -1;
+			unsigned int entry;
+			int dummy = -1;
 
 			save_flags(flags); cli();
 			entry = tp->cur_tx++ % TX_RING_SIZE;

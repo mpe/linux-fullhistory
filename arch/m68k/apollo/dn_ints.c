@@ -128,8 +128,7 @@ static void dn_nosound (unsigned long ignored) {
 
 void dn_mksound( unsigned int count, unsigned int ticks ) {
 
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
-       										 dn_nosound };
+	static struct timer_list sound_timer = { function: dn_nosound };
 
 	del_timer( &sound_timer );
 	if(count) {

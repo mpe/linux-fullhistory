@@ -122,7 +122,7 @@ static void attach_driver_chain(struct parport *port)
 
 	spin_lock (&driverlist_lock);
 	for (i = 0, drv = driver_chain; drv && i < count; drv = drv->next)
-		attach[i] = drv->attach;
+		attach[i++] = drv->attach;
 	spin_unlock (&driverlist_lock);
 
 	for (count = 0; count < i; count++)
@@ -181,6 +181,9 @@ int parport_register_driver (struct parport_driver *drv)
 	struct parport **ports;
 	int count = 0, i;
 
+	if (!portlist)
+		get_lowlevel_driver ();
+
 	/* We have to take the portlist lock for this to be sure
 	 * that port is valid for the duration of the callback. */
 
@@ -201,7 +204,7 @@ int parport_register_driver (struct parport_driver *drv)
 		spin_lock (&parportlist_lock);
 		for (i = 0, port = portlist; port && i < count;
 		     port = port->next)
-			ports[i] = port;
+			ports[i++] = port;
 		spin_unlock (&parportlist_lock);
 
 		for (count = 0; count < i; count++)
@@ -209,9 +212,6 @@ int parport_register_driver (struct parport_driver *drv)
 
 		kfree (ports);
 	}
-
-	if (!portlist)
-		get_lowlevel_driver ();
 
 	spin_lock (&driverlist_lock);
 	drv->next = driver_chain;

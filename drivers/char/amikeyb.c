@@ -176,7 +176,7 @@ static unsigned int key_repeat_rate  = DEFAULT_KEYB_REP_RATE;
 
 static unsigned char rep_scancode;
 static void amikeyb_rep(unsigned long ignore);
-static struct timer_list amikeyb_rep_timer = {NULL, NULL, 0, 0, amikeyb_rep};
+static struct timer_list amikeyb_rep_timer = {function: amikeyb_rep};
 
 static void amikeyb_rep(unsigned long ignore)
 {

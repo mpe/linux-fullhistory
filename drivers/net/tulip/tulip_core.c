@@ -19,8 +19,6 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.7 (June 17, 2000)\n";
-
 #include <linux/module.h>
 #include "tulip.h"
 #include <linux/pci.h>
@@ -28,6 +26,9 @@ static const char version[] = "Linux Tulip driver version 0.9.7 (June 17, 2000)\
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
 #include <asm/unaligned.h>
+
+static char version[] __devinitdata =
+	"Linux Tulip driver version 0.9.8 (July 13, 2000)\n";
 
 
 /* A few user-configurable values. */
@@ -948,7 +949,8 @@ static void set_rx_mode(struct net_device *dev)
 		if (tp->cur_tx - tp->dirty_tx > TX_RING_SIZE - 2) {
 			/* Same setup recently queued, we need not add it. */
 		} else {
-			unsigned int entry, dummy = -1;
+			unsigned int entry;
+			int dummy = -1;
 
 			/* Now add this frame to the Tx list. */
 

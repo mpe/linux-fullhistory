@@ -272,7 +272,7 @@ static unsigned int key_repeat_delay = DEFAULT_KEYB_REP_DELAY;
 static unsigned int key_repeat_rate  = DEFAULT_KEYB_REP_RATE;
 
 static unsigned char rep_scancode;
-static struct timer_list atakeyb_rep_timer = { NULL, NULL, 0, 0, atakeyb_rep };
+static struct timer_list atakeyb_rep_timer = { function: atakeyb_rep };
 
 static void atakeyb_rep( unsigned long ignore )
 

@@ -735,7 +735,7 @@ do_bindings(struct ip_conntrack *ct,
 	} else return NF_ACCEPT;
 }
 
-void
+unsigned int
 icmp_reply_translation(struct sk_buff *skb,
 		       struct ip_conntrack *conntrack,
 		       unsigned int hooknum,
@@ -749,6 +749,22 @@ icmp_reply_translation(struct sk_buff *skb,
 	struct ip_nat_info *info = &conntrack->nat.info;
 
 	IP_NF_ASSERT(skb->len >= iph->ihl*4 + sizeof(struct icmphdr));
+	/* Must be RELATED */
+	IP_NF_ASSERT(skb->nfct - (struct ip_conntrack *)skb->nfct->master
+		     == IP_CT_RELATED
+		     || skb->nfct - (struct ip_conntrack *)skb->nfct->master
+		     == IP_CT_RELATED+IP_CT_IS_REPLY);
+
+	/* Redirects on non-null nats must be dropped, else they'll
+           start talking to each other without our translation, and be
+           confused... --RR */
+	if (hdr->type == ICMP_REDIRECT) {
+		/* Don't care about races here. */
+		if (info->initialized
+		    != ((1 << IP_NAT_MANIP_SRC) | (1 << IP_NAT_MANIP_DST))
+		    || info->num_manips != 0)
+			return NF_DROP;
+	}
 
 	DEBUGP("icmp_reply_translation: translating error %p hook %u dir %s\n",
 	       skb, hooknum, dir == IP_CT_DIR_ORIGINAL ? "ORIG" : "REPLY");
@@ -810,6 +826,8 @@ icmp_reply_translation(struct sk_buff *skb,
 	hdr->checksum = 0;
 	hdr->checksum = ip_compute_csum((unsigned char *)hdr,
 					sizeof(*hdr) + datalen);
+
+	return NF_ACCEPT;
 }
 
 int ip_nat_helper_register(struct ip_nat_helper *me)

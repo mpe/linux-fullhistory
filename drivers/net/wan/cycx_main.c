@@ -13,6 +13,8 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* 2000/07/13	acme		remove useless #ifdef MODULE and crap
+*							#if KERNEL_VERSION > blah
 * 2000/07/06	acme		__exit at cyclomx_cleanup
 * 2000/04/02	acme		dprintk and cycx_debug
 * 				module_init/module_exit
@@ -50,22 +52,18 @@
 
 unsigned int cycx_debug = 0;
 
-#ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
 MODULE_DESCRIPTION("Cyclom 2X Sync Card Driver.");
 MODULE_PARM(debug, "i");
 MODULE_PARM_DESC(debug, "cyclomx debug level");
-#endif
 
 /* Defines & Macros */
 
 #define	DRV_VERSION	0		/* version number */
-#define	DRV_RELEASE	8		/* release (minor version) number */
+#define	DRV_RELEASE	9		/* release (minor version) number */
 #define	MAX_CARDS	1		/* max number of adapters */
 
-#ifndef	CONFIG_CYCLOMX_CARDS		/* configurable option */
 #define	CONFIG_CYCLOMX_CARDS 1
-#endif
 
 /* Function Prototypes */
 
@@ -225,11 +223,7 @@ static int setup (wan_device_t *wandev, wandev_conf_t *conf)
 	card->hw.dpmsize = CYCX_WINDOWSIZE;
 	card->hw.fwid = CFID_X25_2X;
 	card->lock = SPIN_LOCK_UNLOCKED;
-#if LINUX_VERSION_CODE >= 0x020300
 	init_waitqueue_head(&card->wait_stats);
-#else
-	card->wait_stats = NULL;
-#endif
 	err = cycx_setup(&card->hw, conf->data, conf->data_size);
 
 	if (err) {
