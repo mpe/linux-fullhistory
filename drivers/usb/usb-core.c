@@ -132,6 +132,9 @@ int usb_init(void)
 #ifdef CONFIG_USB_UHCI
 	uhci_init();
 #endif
+#ifdef CONFIG_USB_UHCI_ALT
+	uhci_init();
+#endif
 #ifdef CONFIG_USB_OHCI
 	ohci_hcd_init(); 
 #endif

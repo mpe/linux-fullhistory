@@ -391,10 +391,6 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 						 argp->tname, argp->tlen,
 				 		 &newfh, &argp->attrs);
 
-	if (!nfserr) {
-		argp->attrs.ia_valid &= ~ATTR_SIZE;
-		nfserr = nfsd_setattr(rqstp, &newfh, &argp->attrs);
-	}
 
 	fh_put(&argp->ffh);
 	fh_put(&newfh);

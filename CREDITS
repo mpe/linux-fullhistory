@@ -287,6 +287,13 @@ N: Erik Inge Bolsø
 E: knan@mo.himolde.no
 D: Misc kernel hacks
 
+N: Andreas E. Bombe
+E: andreas.bombe@munich.netsurf.de
+W: http://home.pages.de/~andreas.bombe/
+P: 1024/04880A44 72E5 7031 4414 2EB6 F6B4  4CBD 1181 7032 0488 0A44
+D: IEEE 1394 subsystem rewrite and maintainer
+D: Texas Instruments PCILynx IEEE 1394 driver
+
 N: Zoltán Böszörményi
 E: zboszor@mail.externet.hu
 D: MTRR emulation with Cyrix style ARR registers, Athlon MTRR support
@@ -1306,6 +1313,14 @@ S: Post Office Box 371
 S: North Little Rock, Arkansas 72115
 S: USA
 
+N: Stephan Linz
+E: linz@mazet.de
+E: Stephan.Linz@gmx.de
+W: http://www.crosswinds.net/~tuxer
+D: PCILynx patch to work with 1394a PHY and without local RAM
+S: (ask for current address)
+S: Germany
+
 N: Siegfried "Frieder" Loeffler (dg1sek)
 E: floeff@tunix.mathematik.uni-stuttgart.de, fl@LF.net
 W: http://www.mathematik.uni-stuttgart.de/~floeff
@@ -1702,6 +1717,13 @@ S: Demonstratsii 8-382
 S: Tula 300000
 S: Russia
 
+N: Gordon Peters
+E: GordPeters@smarttech.com
+D: Isochronous receive for IEEE 1394 driver (OHCI module).
+D: Bugfixes for the aforementioned.
+S: Calgary, Alberta
+S: Canada
+
 N: Johnnie Peters
 E: jpeters@phx.mcd.mot.com
 D: Motorola PowerPC changes for PReP
@@ -1735,6 +1757,12 @@ D: "Unix fuer Jedermann" a German introduction to linux (see my web page)
 S: M"ullerstr. 69
 S: 13349 Berlin
 S: Germany
+
+N: Emanuel Pirker
+E: epirker@edu.uni-klu.ac.at
+D: AIC5800 IEEE 1394, RAW I/O on 1394
+D: Starter of Linux1394 effort
+S: ask per mail for current address
 
 N: Ken Pizzini
 E: ken@halcyon.com
@@ -1851,6 +1879,13 @@ D: Contributed to asynchronous read-ahead improvement
 S: 21 Rue Carnot
 S: 95170 Deuil La Barre
 S: France
+
+N: Sebastien Rougeaux
+E: Sebastien.Rougeaux@syseng.anu.edu.au
+D: IEEE 1394 OHCI module
+S: Research School of Information Science and Engineering
+S: The Australian National University, ACT 0200
+S: Australia
 
 N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it

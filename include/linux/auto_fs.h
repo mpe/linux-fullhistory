@@ -20,8 +20,14 @@
 #include <linux/ioctl.h>
 #include <asm/types.h>
 
+/* This header file describes a range of autofs interface versions;
+   the new implementation ("autofs4") supports them all, but the old
+   implementation only supports v3.  */
 #define AUTOFS_MIN_PROTO_VERSION 3	/* Min version we support */
-#define AUTOFS_PROTO_VERSION 4		/* Current version */
+#define AUTOFS_MAX_PROTO_VERSION 4	/* Max (current) version */
+
+/* Backwards compat for autofs v3; it just implements a version */
+#define AUTOFS_PROTO_VERSION 3		/* v3 version */
 
 /*
  * Architectures where both 32- and 64-bit binaries can be executed

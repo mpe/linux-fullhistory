@@ -553,17 +553,17 @@ extern inline int pcibios_present(void) { return 0; }
 _PCI_NOP_ALL(read, *)
 _PCI_NOP_ALL(write,)
 
-extern inline struct pci_dev *pci_find_device(unsigned int vendor, unsigned int device, struct pci_dev *from)
+extern inline struct pci_dev *pci_find_device(unsigned int vendor, unsigned int device, const struct pci_dev *from)
 { return NULL; }
 
-extern inline struct pci_dev *pci_find_class(unsigned int class, struct pci_dev *from)
+extern inline struct pci_dev *pci_find_class(unsigned int class, const struct pci_dev *from)
 { return NULL; }
 
 extern inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn)
 { return NULL; }
 
 extern inline struct pci_dev *pci_find_subsys(unsigned int vendor, unsigned int device,
-unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from)
+unsigned int ss_vendor, unsigned int ss_device, const struct pci_dev *from)
 { return NULL; }
 
 extern inline void pci_set_master(struct pci_dev *dev) { }

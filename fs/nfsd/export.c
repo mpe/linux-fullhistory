@@ -611,6 +611,7 @@ struct flags {
 	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
 	{ NFSEXP_CROSSMNT, {"nohide", ""}},
 	{ NFSEXP_NOSUBTREECHECK, {"no_subtree_check", ""}},
+	{ NFSEXP_NOAUTHNLM, {"no_auth_nlm", ""}},
 	{ 0, {"", ""}}
 };
 

@@ -92,6 +92,10 @@ typedef struct _agp_allocate {
 	int key;		/* tag of allocation            */
 	size_t pg_count;	/* number of pages              */
 	__u32 type;		/* 0 == normal, other devspec   */
+   	__u32 physical;         /* device specific (some devices  
+				 * need a phys address of the     
+				 * actual page behind the gatt    
+				 * table)                        */
 } agp_allocate;
 
 typedef struct _agp_bind {
@@ -160,6 +164,10 @@ typedef struct _agp_allocate {
 	int key;		/* tag of allocation            */
 	size_t pg_count;	/* number of pages              */
 	u32 type;		/* 0 == normal, other devspec   */
+	u32 physical;           /* device specific (some devices  
+				 * need a phys address of the     
+				 * actual page behind the gatt    
+				 * table)                        */
 } agp_allocate;
 
 typedef struct _agp_bind {

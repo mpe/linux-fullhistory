@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Sun Oct 31 20:01:17 1999
+ * Modified at:   Fri Jan 28 13:15:24 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
- *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 

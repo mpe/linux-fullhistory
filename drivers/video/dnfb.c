@@ -5,18 +5,21 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/config.h>
 #include <linux/interrupt.h>
 #include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/irq.h>
+#include <asm/amigahw.h>
+#include <asm/amigaints.h>
 #include <asm/apollohw.h>
 #include <linux/fb.h>
 #include <linux/module.h>
-
+#include "dn_accel.h"
+#include <video/fbcon.h>
 #include <video/fbcon.h>
 #include <video/fbcon-mfb.h>
-
 
 /* apollo video HW definitions */
 
@@ -30,16 +33,16 @@
  * deals with control 1 and 3b deals with Color LUT reg.
  */
 
-#define AP_IOBASE       0x5d80          /* Base address of 1 plane board. */
-#define AP_STATUS       0x5d80          /* Status register.  Read */
-#define AP_WRITE_ENABLE 0x5d80          /* Write Enable Register Write */
-#define AP_DEVICE_ID    0x5d81          /* Device ID Register. Read */
-#define AP_ROP_1        0x5d82          /* Raster Operation reg. Write Word */
-#define AP_DIAG_MEM_REQ 0x5d84          /* Diagnostic Memory Request. Write Word */
-#define AP_CONTROL_0    0x5d88          /* Control Register 0.  Read/Write */
-#define AP_CONTROL_1    0x5d8a          /* Control Register 1.  Read/Write */
-#define AP_CONTROL_3A   0x5d8e          /* Control Register 3a. Read/Write */
-#define AP_CONTROL_2    0x5d8c          /* Control Register 2. Read/Write */
+#define AP_IOBASE       0x3b0          /* Base address of 1 plane board. */
+#define AP_STATUS       isaIO2mem(AP_IOBASE+0) /* Status register.  Read */
+#define AP_WRITE_ENABLE isaIO2mem(AP_IOBASE+0) /* Write Enable Register Write */
+#define AP_DEVICE_ID    isaIO2mem(AP_IOBASE+1) /* Device ID Register. Read */
+#define AP_ROP_1        isaIO2mem(AP_IOBASE+2) /* Raster Operation reg. Write Word */
+#define AP_DIAG_MEM_REQ isaIO2mem(AP_IOBASE+4) /* Diagnostic Memory Request. Write Word */
+#define AP_CONTROL_0    isaIO2mem(AP_IOBASE+8) /* Control Register 0.  Read/Write */
+#define AP_CONTROL_1    isaIO2mem(AP_IOBASE+0xa) /* Control Register 1.  Read/Write */
+#define AP_CONTROL_3A   isaIO2mem(AP_IOBASE+0xe) /* Control Register 3a. Read/Write */
+#define AP_CONTROL_2    isaIO2mem(AP_IOBASE+0xc) /* Control Register 2. Read/Write */
 
 
 #define FRAME_BUFFER_START 0x0FA0000
@@ -112,44 +115,57 @@
 #endif
 
 
+void dn_video_setup(char *options, int *ints);
+
 /* frame buffer operations */
 
-static int dnfb_open(struct fb_info *info, int user);
-static int dnfb_release(struct fb_info *info, int user);
-static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
-			struct fb_info *info);
-static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info);
-static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info);
-static int dnfb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
+static int dn_fb_open(struct fb_info *info,int user);
+static int dn_fb_release(struct fb_info *info,int user);
+static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con, 
 			 struct fb_info *info);
-static int dnfb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
+static int dn_fb_get_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info);
-static int dnfb_pan_display(struct fb_var_screeninfo *var, int con,
-			    struct fb_info *info);
-static int dnfb_ioctl(struct inode *inode, struct file *file,
-		      unsigned int cmd, unsigned long arg, int con,
-		      struct fb_info *info);
+static int dn_fb_set_var(struct fb_var_screeninfo *var, int isactive,
+			 struct fb_info *info);
+static int dn_fb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
+			  struct fb_info *info);
+static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
+			  struct fb_info *info);
+static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info);
+static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+		       unsigned long arg, int con, struct fb_info *info);
 
-static int dnfbcon_switch(int con, struct fb_info *info);
-static int dnfbcon_updatevar(int con, struct fb_info *info);
-static void dnfbcon_blank(int blank, struct fb_info *info);
+static int dnfbcon_switch(int con,struct fb_info *info);
+static int dnfbcon_updatevar(int con,struct fb_info *info);
+static void dnfbcon_blank(int blank,struct fb_info *info);
 
-static void dnfb_set_disp(int con, struct fb_info *info);
+static void dn_fb_set_disp(int con,struct fb_info *info);
 
 static struct display disp[MAX_NR_CONSOLES];
 static struct fb_info fb_info;
-static struct fb_ops dnfb_ops = { 
-	dnfb_open,dnfb_release, dnfb_get_fix, dnfb_get_var, dnfb_set_var,
-	dnfb_get_cmap, dnfb_set_cmap, dnfb_pan_display, dnfb_ioctl
+static struct fb_ops dn_fb_ops = { 
+	dn_fb_open,dn_fb_release, dn_fb_get_fix, dn_fb_get_var, dn_fb_set_var,
+	dn_fb_get_cmap, dn_fb_set_cmap, dn_fb_pan_display, dn_fb_ioctl
 };
 
 static int currcon=0;
 
-static char dnfb_name[]="Apollo";
+#define NUM_TOTAL_MODES 1
+struct fb_var_screeninfo dn_fb_predefined[] = {
 
-static int dnfb_open(struct fb_info *info, int user)
+	{ 0, },
+
+};
+
+static char dn_fb_name[]="Apollo ";
+
+/* accel stuff */
+#define USE_DN_ACCEL
+
+static struct display_switch dispsw_apollofb;
+
+static int dn_fb_open(struct fb_info *info,int user)
 {
         /*
          * Nothing, only a usage count for the moment
@@ -159,18 +175,17 @@ static int dnfb_open(struct fb_info *info, int user)
         return(0);
 }
 
-static int dnfb_release(struct fb_info *info, int user)
+static int dn_fb_release(struct fb_info *info,int user)
 {
         MOD_DEC_USE_COUNT;
         return(0);
 }
 
-static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
-			struct fb_info *info)
-{
-	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
+static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info) {
+
 	strcpy(fix->id,"Apollo Mono");
-	fix->smem_start=FRAME_BUFFER_START+IO_BASE;
+	fix->smem_start=(FRAME_BUFFER_START+IO_BASE);
 	fix->smem_len=FRAME_BUFFER_LEN;
 	fix->type=FB_TYPE_PACKED_PIXELS;
 	fix->type_aux=0;
@@ -184,10 +199,9 @@ static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 
 }
         
-static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info)
-{
-	memset(var, 0, sizeof(struct fb_var_screeninfo));
+static int dn_fb_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info) {
+		
 	var->xres=1280;
 	var->yres=1024;
 	var->xres_virtual=2048;
@@ -212,9 +226,10 @@ static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
 
 }
 
-static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info)
-{
+static int dn_fb_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info) {
+
+        printk("fb_set_var\n");
 	if(var->xres!=1280) 
 		return -EINVAL;
 	if(var->yres!=1024)
@@ -254,119 +269,284 @@ static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
 
 }
 
-static int dnfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
-			 struct fb_info *info)
-{
+static int dn_fb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
+			  struct fb_info *info) {
+
 	printk("get cmap not supported\n");
 
 	return -EINVAL;
 }
 
-static int dnfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
-			 struct fb_info *info)
-{
+static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
+			  struct fb_info *info) {
+
 	printk("set cmap not supported\n");
 
 	return -EINVAL;
 
 }
 
-static int dnfb_pan_display(struct fb_var_screeninfo *var, int con,
-			    struct fb_info *info)
-{
+static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info) {
+
 	printk("panning not supported\n");
 
 	return -EINVAL;
 
 }
 
-static int dnfb_ioctl(struct inode *inode, struct file *file,
-		      unsigned int cmd, unsigned long arg, int con,
-		      struct fb_info *info)
-{
+static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+		    unsigned long arg, int con, struct fb_info *info) {
+
+	printk("no IOCTLs as of yet.\n");
+
 	return -EINVAL;
+
 }
 
-static void dnfb_set_disp(int con, struct fb_info *info)
-{
-  struct fb_fix_screeninfo fix;
+static void dn_fb_set_disp(int con, struct fb_info *info) {
 
-  dnfb_get_fix(&fix, con, info);
+  struct fb_fix_screeninfo fix;
+  struct display *display;
+  
+  dn_fb_get_fix(&fix,con, info);
+
+  if (con>=0)
+	display=&fb_display[con];
+  else
+	display=&disp[0];
+
   if(con==-1) 
     con=0;
 
-   disp[con].screen_base = fix.smem_start;
-   disp[con].visual = fix.visual;
-   disp[con].type = fix.type;
-   disp[con].type_aux = fix.type_aux;
-   disp[con].ypanstep = fix.ypanstep;
-   disp[con].ywrapstep = fix.ywrapstep;
-   disp[con].can_soft_blank = 1;
-   disp[con].inverse = 0;
-   disp[con].line_length = fix.line_length;
+   display->screen_base = (u_char *)fix.smem_start;
+   display->visual = fix.visual;
+   display->type = fix.type;
+   display->type_aux = fix.type_aux;
+   display->ypanstep = fix.ypanstep;
+   display->ywrapstep = fix.ywrapstep;
+   display->can_soft_blank = 1;
+   display->inverse = 0;
+   display->line_length = fix.line_length;
 #ifdef FBCON_HAS_MFB
-   disp[con].dispsw = &fbcon_mfb;
+   display->dispsw = &fbcon_mfb;
 #else
-   disp[con].dispsw = &fbcon_dummy;
+   display->dispsw=&fbcon_dummy;
 #endif
+
 }
   
-int dnfb_init(void)
-{
+unsigned long dnfb_init(unsigned long mem_start) {
+
+	int err;
+       
+
 	fb_info.changevar=NULL;
-	strcpy(&fb_info.modename[0],dnfb_name);
+	strcpy(&fb_info.modename[0],dn_fb_name);
 	fb_info.fontname[0]=0;
 	fb_info.disp=disp;
 	fb_info.switch_con=&dnfbcon_switch;
 	fb_info.updatevar=&dnfbcon_updatevar;
 	fb_info.blank=&dnfbcon_blank;	
 	fb_info.node = -1;
-	fb_info.fbops = &dnfb_ops;
-	fb_info.flags = FBINFO_FLAG_DEFAULT;
+	fb_info.fbops = &dn_fb_ops;
 	
-        outb(RESET_CREG, AP_CONTROL_3A);
-        outw(0x0, AP_WRITE_ENABLE);
-        outb(NORMAL_MODE,AP_CONTROL_0); 
-        outb((AD_BLT | DST_EQ_SRC | NORM_CREG1), AP_CONTROL_1);
-        outb(S_DATA_PLN, AP_CONTROL_2);
-        outw(SWAP(0x3),AP_ROP_1);
+        dn_fb_get_var(&disp[0].var,0, &fb_info);
 
-        dnfb_get_var(&disp[0].var, 0, &fb_info);
-	dnfb_set_disp(-1, &fb_info);
-
-	if (register_framebuffer(&fb_info) < 0) {
-		printk(KERN_ERR "unable to register apollo frame buffer\n");
-		return -EINVAL;
+	dn_fb_set_disp(-1, &fb_info);
+	
+	err=register_framebuffer(&fb_info);
+	if(err < 0) {
+		panic("unable to register apollo frame buffer\n");
 	}
  
-        printk("fb%d: apollo frame buffer alive and kicking !\n",
-	       GET_FB_IDX(fb_info.node));
-	return 0;
+	/* now we have registered we can safely setup the hardware */
+
+        outb(RESET_CREG,  AP_CONTROL_3A);
+        outw(0x0,  AP_WRITE_ENABLE);
+        outb(NORMAL_MODE, AP_CONTROL_0); 
+        outb((AD_BLT | DST_EQ_SRC | NORM_CREG1),  AP_CONTROL_1);
+        outb(S_DATA_PLN,  AP_CONTROL_2);
+        outw(SWAP(0x3), AP_ROP_1);
+
+        printk("apollo frame buffer alive and kicking !\n");
+
+
+	return mem_start;
+
 }	
 
 	
-static int dnfbcon_switch(int con, struct fb_info *info)
-{ 
+static int dnfbcon_switch(int con,  struct fb_info *info) { 
+
 	currcon=con;
 	
 	return 0;
 
 }
 
-static int dnfbcon_updatevar(int con, struct fb_info *info)
-{
+static int dnfbcon_updatevar(int con,  struct fb_info *info) {
+
 	return 0;
+
 }
 
-static void dnfbcon_blank(int blank, struct fb_info *info)
-{
+static void dnfbcon_blank(int blank,  struct fb_info *info) {
+
 	if(blank)  {
-        	outb(0, AP_CONTROL_3A);
-		outb((AD_BLT | DST_EQ_SRC | NORM_CREG1) & ~ENAB_DISP,
-		     AP_CONTROL_1);
+        	outb(0x0,  AP_CONTROL_3A);
 	}
 	else {
-	        outb(1, AP_CONTROL_3A);
-        	outb((AD_BLT | DST_EQ_SRC | NORM_CREG1), AP_CONTROL_1);
+	        outb(0x1,  AP_CONTROL_3A);
 	}
+
+	return ;
+
 }
+
+void dn_video_setup(char *options, int *ints) {
+	
+	return;
+
+}
+
+void dn_bitblt(struct display *p,int x_src,int y_src, int x_dest, int y_dest,
+               int x_count, int y_count) {
+
+	int incr,y_delta,pre_read=0,x_end,x_word_count;
+	ushort *src,dummy;
+	uint start_mask,end_mask,dest;
+	short i,j;
+
+	incr=(y_dest<=y_src) ? 1 : -1 ;
+
+	src=(ushort *)(p->screen_base+ y_src*p->next_line+(x_src >> 4));
+	dest=y_dest*(p->next_line >> 1)+(x_dest >> 4);
+	
+	if(incr>0) {
+		y_delta=(p->next_line*8)-x_src-x_count;
+		x_end=x_dest+x_count-1;
+		x_word_count=(x_end>>4) - (x_dest >> 4) + 1;
+		start_mask=0xffff0000 >> (x_dest & 0xf);
+		end_mask=0x7ffff >> (x_end & 0xf);
+		outb((((x_dest & 0xf) - (x_src &0xf))  % 16)|(0x4 << 5),AP_CONTROL_0);
+		if((x_dest & 0xf) < (x_src & 0xf))
+			pre_read=1;
+	}
+	else {
+		y_delta=-((p->next_line*8)-x_src-x_count);
+		x_end=x_dest-x_count+1;
+		x_word_count=(x_dest>>4) - (x_end >> 4) + 1;
+		start_mask=0x7ffff >> (x_dest & 0xf);
+		end_mask=0xffff0000 >> (x_end & 0xf);
+		outb(((-((x_src & 0xf) - (x_dest &0xf))) % 16)|(0x4 << 5),AP_CONTROL_0);
+		if((x_dest & 0xf) > (x_src & 0xf))
+			pre_read=1;
+	}
+
+	for(i=0;i<y_count;i++) {
+
+		outb(0xc | (dest >> 16), AP_CONTROL_3A);
+			
+		if(pre_read) {
+			dummy=*src;
+			src+=incr;
+		}
+
+		if(x_word_count) {
+			outb(start_mask,AP_WRITE_ENABLE);
+			*src=dest;
+			src+=incr;
+			dest+=incr;
+			outb(0,AP_WRITE_ENABLE);
+
+			for(j=1;j<(x_word_count-1);j++) {
+				*src=dest;
+				src+=incr;	
+				dest+=incr;
+			}
+
+			outb(start_mask,AP_WRITE_ENABLE);
+			*src=dest;
+			dest+=incr;
+			src+=incr;
+		}
+		else {
+			outb(start_mask | end_mask, AP_WRITE_ENABLE);
+			*src=dest;
+			dest+=incr;
+			src+=incr;
+		}
+		src+=(y_delta/16);
+		dest+=(y_delta/16);
+	}
+	outb(NORMAL_MODE,AP_CONTROL_0);
+}
+
+static void bmove_apollofb(struct display *p, int sy, int sx, int dy, int dx,
+		      int height, int width)
+{
+
+    int fontheight,fontwidth;
+
+    fontheight=fontheight(p);
+    fontwidth=fontwidth(p);
+
+#ifdef USE_DN_ACCEL
+    dn_bitblt(p,sx,sy*fontheight,dx,dy*fontheight,width*fontwidth,
+	      height*fontheight);
+#else
+    u_char *src, *dest;
+    u_int rows;
+
+    if (sx == 0 && dx == 0 && width == p->next_line) {
+	src = p->screen_base+sy*fontheight*width;
+	dest = p->screen_base+dy*fontheight*width;
+	mymemmove(dest, src, height*fontheight*width);
+    } else if (dy <= sy) {
+	src = p->screen_base+sy*fontheight*next_line+sx;
+	dest = p->screen_base+dy*fontheight*next_line+dx;
+	for (rows = height*fontheight; rows--;) {
+	    mymemmove(dest, src, width);
+	    src += p->next_line;
+	    dest += p->next_line;
+	}
+    } else {
+	src = p->screen_base+((sy+height)*fontheight-1)*p->next_line+sx;
+	dest = p->screen_base+((dy+height)*fontheight-1)*p->next_line+dx;
+	for (rows = height*fontheight; rows--;) {
+	    mymemmove(dest, src, width);
+	    src -= p->next_line;
+	    dest -= p->next_line;
+	}
+    }
+#endif
+}
+
+static void clear_apollofb(struct vc_data *conp, struct display *p, int sy, int sx,
+		      int height, int width)
+{
+	fbcon_mfb_clear(conp,p,sy,sx,height,width);
+}
+
+static void putc_apollofb(struct vc_data *conp, struct display *p, int c, int yy,
+		     int xx)
+{
+	fbcon_mfb_putc(conp,p,c,yy,xx);
+}
+
+static void putcs_apollofb(struct vc_data *conp, struct display *p, const char *s,
+		      int count, int yy, int xx)
+{
+	fbcon_mfb_putcs(conp,p,s,count,yy,xx);
+}
+
+static void rev_char_apollofb(struct display *p, int xx, int yy)
+{
+	fbcon_mfb_revc(p,xx,yy);
+}
+
+static struct display_switch dispsw_apollofb = {
+    fbcon_mfb_setup, bmove_apollofb, clear_apollofb,
+    putc_apollofb, putcs_apollofb, rev_char_apollofb
+};

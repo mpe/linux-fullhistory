@@ -35,8 +35,9 @@
 #define MAY_NOP			0
 #define MAY_SATTR		8
 #define MAY_TRUNC		16
-#if (MAY_SATTR | MAY_TRUNC) & (MAY_READ | MAY_WRITE | MAY_EXEC)
-# error "please use a different value for MAY_SATTR or MAY_TRUNC."
+#define MAY_LOCK		32
+#if (MAY_SATTR | MAY_TRUNC | MAY_LOCK) & (MAY_READ | MAY_WRITE | MAY_EXEC)
+# error "please use a different value for MAY_SATTR or MAY_TRUNC or MAY_LOCK."
 #endif
 #define MAY_CREATE		(MAY_EXEC|MAY_WRITE)
 #define MAY_REMOVE		(MAY_EXEC|MAY_WRITE|MAY_TRUNC)

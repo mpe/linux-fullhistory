@@ -373,6 +373,7 @@ static int sd_init_command(Scsi_Cmnd * SCpnt)
 static int sd_open(struct inode *inode, struct file *filp)
 {
 	int target;
+	Scsi_Device * SDev;
 	target = DEVICE_NR(inode->i_rdev);
 
 	SCSI_LOG_HLQUEUE(1, printk("target=%d, max=%d\n", target, sd_template.dev_max));
@@ -412,13 +413,14 @@ static int sd_open(struct inode *inode, struct file *filp)
 		if ((rscsi_disks[target].write_prot) && (filp->f_mode & 2))
 			return -EROFS;
 	}
+	SDev = rscsi_disks[target].device;
 	/*
 	 * It is possible that the disk changing stuff resulted in the device
 	 * being taken offline.  If this is the case, report this to the user,
 	 * and don't pretend that
 	 * the open actually succeeded.
 	 */
-	if (!rscsi_disks[target].device->online) {
+	if (!SDev->online) {
 		return -ENXIO;
 	}
 	/*
@@ -428,13 +430,14 @@ static int sd_open(struct inode *inode, struct file *filp)
 	if (sd_sizes[SD_PARTITION(inode->i_rdev)] == 0)
 		return -ENXIO;
 
-	if (rscsi_disks[target].device->removable)
-		if (!rscsi_disks[target].device->access_count)
-			sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
+	if (SDev->removable)
+		if (!SDev->access_count)
+			if (scsi_block_when_processing_errors(SDev))
+				scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, NULL);
 
-	rscsi_disks[target].device->access_count++;
-	if (rscsi_disks[target].device->host->hostt->module)
-		__MOD_INC_USE_COUNT(rscsi_disks[target].device->host->hostt->module);
+	SDev->access_count++;
+	if (SDev->host->hostt->module)
+		__MOD_INC_USE_COUNT(SDev->host->hostt->module);
 	if (sd_template.module)
 		__MOD_INC_USE_COUNT(sd_template.module);
 	return 0;
@@ -443,17 +446,20 @@ static int sd_open(struct inode *inode, struct file *filp)
 static int sd_release(struct inode *inode, struct file *file)
 {
 	int target;
+	Scsi_Device * SDev;
 
 	target = DEVICE_NR(inode->i_rdev);
+	SDev = rscsi_disks[target].device;
 
-	rscsi_disks[target].device->access_count--;
+	SDev->access_count--;
 
-	if (rscsi_disks[target].device->removable) {
-		if (!rscsi_disks[target].device->access_count)
-			sd_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+	if (SDev->removable) {
+		if (!SDev->access_count)
+			if (scsi_block_when_processing_errors(SDev))
+				scsi_ioctl(SDev, SCSI_IOCTL_DOORUNLOCK, NULL);
 	}
-	if (rscsi_disks[target].device->host->hostt->module)
-		__MOD_DEC_USE_COUNT(rscsi_disks[target].device->host->hostt->module);
+	if (SDev->host->hostt->module)
+		__MOD_DEC_USE_COUNT(SDev->host->hostt->module);
 	if (sd_template.module)
 		__MOD_DEC_USE_COUNT(sd_template.module);
 	return 0;
@@ -580,17 +586,17 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 {
 	int retval;
 	int target;
-	struct inode inode;
 	int flag = 0;
+	Scsi_Device * SDev;
 
 	target = DEVICE_NR(full_dev);
+	SDev = rscsi_disks[target].device;
 
-	if (target >= sd_template.dev_max ||
-	    !rscsi_disks[target].device) {
+	if (target >= sd_template.dev_max || !SDev) {
 		printk("SCSI disk request error: invalid device.\n");
 		return 0;
 	}
-	if (!rscsi_disks[target].device->removable)
+	if (!SDev->removable)
 		return 0;
 
 	/*
@@ -599,13 +605,12 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	 * can deal with it then.  It is only because of unrecoverable errors
 	 * that we would ever take a device offline in the first place.
 	 */
-	if (rscsi_disks[target].device->online == FALSE) {
+	if (SDev->online == FALSE) {
 		rscsi_disks[target].ready = 0;
-		rscsi_disks[target].device->changed = 1;
+		SDev->changed = 1;
 		return 1;	/* This will force a flush, if called from
 				 * check_disk_change */
 	}
-	inode.i_rdev = full_dev;	/* This is all we really need here */
 
 	/* Using Start/Stop enables differentiation between drive with
 	 * no cartridge loaded - NOT READY, drive with changed cartridge -
@@ -613,7 +618,9 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 	 * This also handles drives that auto spin down. eg iomega jaz 1GB
 	 * as this will spin up the drive.
 	 */
-	retval = sd_ioctl(&inode, NULL, SCSI_IOCTL_START_UNIT, 0);
+	retval = -ENODEV;
+	if (scsi_block_when_processing_errors(SDev))
+		retval = scsi_ioctl(SDev, SCSI_IOCTL_START_UNIT, NULL);
 
 	if (retval) {		/* Unable to test, unit probably not ready.
 				 * This usually means there is no disc in the
@@ -622,7 +629,7 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 				 * again.  */
 
 		rscsi_disks[target].ready = 0;
-		rscsi_disks[target].device->changed = 1;
+		SDev->changed = 1;
 		return 1;	/* This will force a flush, if called from
 				 * check_disk_change */
 	}
@@ -634,9 +641,9 @@ static int check_scsidisk_media_change(kdev_t full_dev)
 
 	rscsi_disks[target].ready = 1;	/* FLOPTICAL */
 
-	retval = rscsi_disks[target].device->changed;
+	retval = SDev->changed;
 	if (!flag)
-		rscsi_disks[target].device->changed = 0;
+		SDev->changed = 0;
 	return retval;
 }
 

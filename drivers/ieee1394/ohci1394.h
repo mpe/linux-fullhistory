@@ -20,9 +20,15 @@
 
 #define MAX_OHCI1394_CARDS        4
 
-#define AR_RESP_BUF_SIZE          4096
-#define AR_RESP_PRG_SIZE          256
-#define AT_REQ_PRG_SIZE           256
+#define OHCI1394_MAX_AT_REQ_RETRIES       1
+#define OHCI1394_MAX_AT_RESP_RETRIES      1
+#define OHCI1394_MAX_PHYS_RESP_RETRIES    4
+
+#define AR_RESP_NUM_DESC                  4 /* number of AR resp descriptors */
+#define AR_RESP_BUF_SIZE               4096 /* size of AR resp buffers */
+#define AR_RESP_SPLIT_PACKET_BUF_SIZE   256 /* split packet buffer */
+#define AR_RESP_TOTAL_BUF_SIZE         (AR_RESP_BUF_SIZE * AR_RESP_NUM_DESC)
+#define AT_REQ_PRG_SIZE                256
 
 #define IR_RECV_BUF_SIZE          4096 /* 4096 bytes/buffer */
 #define IR_SPLIT_PACKET_BUF_SIZE  8192 /* size of buffer for split packets */
@@ -49,8 +55,18 @@ struct ti_ohci {
         quadlet_t *csr_config_rom; /* buffer for csr config rom */
 
         /* asynchronous receive */
-        struct dma_cmd *AR_resp_prg;
-        quadlet_t *AR_resp_buf;
+        struct dma_cmd **AR_resp_prg;
+        quadlet_t **AR_resp_buf;
+        unsigned int AR_resp_buf_bh_ind;
+        unsigned int AR_resp_buf_bh_offset;
+        unsigned int AR_resp_buf_th_ind;
+        unsigned int AR_resp_buf_th_offset;
+	int AR_resp_bytes_left;
+        quadlet_t *AR_resp_spb;
+        spinlock_t AR_resp_lock;
+
+        /* async receive task */
+        struct tq_struct AR_resp_pdl_task;
 
         /* asynchronous transmit */
         struct dma_cmd *AT_req_prg;

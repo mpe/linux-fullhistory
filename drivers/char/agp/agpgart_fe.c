@@ -298,7 +298,7 @@ static agp_memory *agp_allocate_memory_wrap(size_t pg_count, u32 type)
 	agp_memory *memory;
 
 	memory = agp_allocate_memory(pg_count, type);
-
+   printk("memory : %p\n", memory);
 	if (memory == NULL) {
 		return NULL;
 	}
@@ -911,6 +911,7 @@ static int agpioc_allocate_wrap(agp_file_private * priv, unsigned long arg)
 		return -ENOMEM;
 	}
 	alloc.key = memory->key;
+	alloc.physical = memory->physical;
 
 	if (copy_to_user((void *) arg, &alloc, sizeof(agp_allocate))) {
 		agp_free_memory_wrap(memory);

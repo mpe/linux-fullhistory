@@ -43,6 +43,7 @@
 #include <linux/tty.h>
 #include <linux/interrupt.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
@@ -57,6 +58,8 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 #include <asm/mvme16xhw.h>
+#include <asm/bootinfo.h>
+#include <asm/setup.h>
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -144,7 +147,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
+DECLARE_MUTEX(tmp_buf_sem);
 
 /*
  * This is used to look up the divisor speeds and the timeouts
@@ -2501,8 +2504,8 @@ scrn[1] = '\0';
 		info->tqueue.data = info;
 		info->callout_termios =cy_callout_driver.init_termios;
 		info->normal_termios = cy_serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
 		/* info->session */
 		/* info->pgrp */
 /*** !!!!!!!! this may expose new bugs !!!!!!!!! *********/
@@ -2728,7 +2731,7 @@ void console_setup(char *str, int *ints)
  * that serial167_init() doesn't leave the chip non-functional.
  */
 
-void serial167_write(struct console *co, const char *str, unsigned count)
+void serial167_console_write(struct console *co, const char *str, unsigned count)
 {
 	volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
 	unsigned long flags;
@@ -2786,6 +2789,95 @@ void serial167_write(struct console *co, const char *str, unsigned count)
 	base_addr[CyIER] = ier;
 
 	restore_flags(flags);
+}
+
+/* This is a hack; if there are multiple chars waiting in the chip we
+ * discard all but the last one, and return that.  The cd2401 is not really
+ * designed to be driven in polled mode.
+ */
+
+int serial167_console_wait_key(struct console *co)
+{
+	volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
+	unsigned long flags;
+	volatile u_char sink;
+	u_char ier;
+	int port;
+	int keypress = 0;
+
+	save_flags(flags); cli();
+
+	/* Ensure receiver is enabled! */
+
+	port = 0;
+	base_addr[CyCAR] = (u_char)port;
+	while (base_addr[CyCCR])
+		;
+	base_addr[CyCCR] = CyENB_RCVR;
+	ier = base_addr[CyIER];
+	base_addr[CyIER] = CyRxData;
+
+	while (!keypress) {
+		if (pcc2chip[PccSCCRICR] & 0x20)
+		{
+			/* We have an Rx int. Acknowledge it */
+			sink = pcc2chip[PccRPIACKR];
+			if ((base_addr[CyLICR] >> 2) == port) {
+				int cnt = base_addr[CyRFOC];
+				while (cnt-- > 0)
+				{
+					keypress = base_addr[CyRDR];
+				}
+				base_addr[CyREOIR] = 0;
+			}
+			else
+				base_addr[CyREOIR] = CyNOTRANS;
+		}
+	}
+
+	base_addr[CyIER] = ier;
+
+	restore_flags(flags);
+
+	return keypress;
+}
+
+
+static kdev_t serial167_console_device(struct console *c)
+{
+	return MKDEV(TTY_MAJOR, 64 + c->index);
+}
+
+
+static int __init serial167_console_setup(struct console *co, char *options)
+{
+	return 0;
+}
+
+
+static struct console sercons = {
+	"ttyS",
+	serial167_console_write,
+	NULL,
+	serial167_console_device,
+	serial167_console_wait_key,
+	NULL,
+	serial167_console_setup,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
+};
+
+
+void __init serial167_console_init(void)
+{
+	if (vme_brdtype == VME_TYPE_MVME166 ||
+			vme_brdtype == VME_TYPE_MVME167 ||
+			vme_brdtype == VME_TYPE_MVME177) {
+		mvme167_serial_console_setup(0);
+		register_console(&sercons);
+	}
 }
 
 #ifdef CONFIG_REMOTE_DEBUG

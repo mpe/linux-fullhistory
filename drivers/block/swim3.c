@@ -241,10 +241,6 @@ static int floppy_ioctl(struct inode *inode, struct file *filp,
 			unsigned int cmd, unsigned long param);
 static int floppy_open(struct inode *inode, struct file *filp);
 static int floppy_release(struct inode *inode, struct file *filp);
-static ssize_t floppy_read(struct file *filp, char *buf,
-			   size_t count, loff_t *ppos);
-static ssize_t floppy_write(struct file *filp, const char *buf,
-			    size_t count, loff_t *ppos);
 static int floppy_check_change(kdev_t dev);
 static int floppy_revalidate(kdev_t dev);
 static int swim3_add_device(struct device_node *swims);
@@ -986,42 +982,6 @@ static int floppy_revalidate(kdev_t dev)
 
 	release_drive(fs);
 	return ret;
-}
-
-static ssize_t floppy_read(struct file *filp, char *buf,
-			   size_t count, loff_t *ppos)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-	struct floppy_state *fs;
-	int devnum = MINOR(inode->i_rdev);
-
-	if (devnum >= floppy_count)
-		return -ENODEV;
-		
-	fs = &floppy_states[devnum];
-	if (fs->ejected)
-		return -ENXIO;
-	return block_read(filp, buf, count, ppos);
-}
-
-static ssize_t floppy_write(struct file * filp, const char * buf,
-			    size_t count, loff_t *ppos)
-{
-	struct inode * inode = filp->f_dentry->d_inode;
-	struct floppy_state *fs;
-	int devnum = MINOR(inode->i_rdev);
-
-	if (devnum >= floppy_count)
-		return -ENODEV;
-	check_disk_change(inode->i_rdev);
-	fs = &floppy_states[devnum];
-	if (fs->ejected)
-		return -ENXIO;
-	if (fs->write_prot < 0)
-		fs->write_prot = swim3_readbit(fs, WRITE_PROT);
-	if (fs->write_prot)
-		return -EROFS;
-	return block_write(filp, buf, count, ppos);
 }
 
 static void floppy_off(unsigned int nr)

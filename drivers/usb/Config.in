@@ -9,6 +9,7 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
+   dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
    dep_tristate '  OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI $CONFIG_USB
 
 comment 'Miscellaneous USB options'

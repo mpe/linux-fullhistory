@@ -6,12 +6,12 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sun Dec 12 13:46:40 1999
+ * Modified at:   Fri Jan 28 13:21:09 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -41,19 +41,19 @@ static inline int stuff_byte(__u8 byte, __u8 *buf);
 
 static void state_outside_frame(struct net_device *dev, 
 				struct net_device_stats *stats, 
-				struct iobuff_t *rx_buff, __u8 byte);
+				iobuff_t *rx_buff, __u8 byte);
 static void state_begin_frame(struct net_device *dev, 
 			      struct net_device_stats *stats, 
-			      struct iobuff_t *rx_buff, __u8 byte);
+			      iobuff_t *rx_buff, __u8 byte);
 static void state_link_escape(struct net_device *dev, 
 			      struct net_device_stats *stats, 
-			      struct iobuff_t *rx_buff, __u8 byte);
+			      iobuff_t *rx_buff, __u8 byte);
 static void state_inside_frame(struct net_device *dev, 
 			       struct net_device_stats *stats, 
-			       struct iobuff_t *rx_buff, __u8 byte);
+			       iobuff_t *rx_buff, __u8 byte);
 
 static void (*state[])(struct net_device *dev, struct net_device_stats *stats, 
-		       struct iobuff_t *rx_buff, __u8 byte) = 
+		       iobuff_t *rx_buff, __u8 byte) = 
 { 
 	state_outside_frame,
 	state_begin_frame,
@@ -180,7 +180,7 @@ inline void async_bump(struct net_device *dev, struct net_device_stats *stats,
 		return;
 	}
 
-	/*  Align IP header to 20 bytes */
+	/* Align IP header to 20 bytes */
 	skb_reserve(skb, 1);
 	
         /* Copy data without CRC */
@@ -205,7 +205,7 @@ inline void async_bump(struct net_device *dev, struct net_device_stats *stats,
  */
 inline void async_unwrap_char(struct net_device *dev, 
 			      struct net_device_stats *stats, 
-			      struct iobuff_t *rx_buff, __u8 byte)
+			      iobuff_t *rx_buff, __u8 byte)
 {
 	(*state[rx_buff->state])(dev, stats, rx_buff, byte);
 }
@@ -218,7 +218,7 @@ inline void async_unwrap_char(struct net_device *dev,
  */
 static void state_outside_frame(struct net_device *dev, 
 				struct net_device_stats *stats, 
-				struct iobuff_t *rx_buff, __u8 byte)
+				iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF:
@@ -245,7 +245,7 @@ static void state_outside_frame(struct net_device *dev,
  */
 static void state_begin_frame(struct net_device *dev, 
 			      struct net_device_stats *stats, 
-			      struct iobuff_t *rx_buff, __u8 byte)
+			      iobuff_t *rx_buff, __u8 byte)
 {
 	/* Time to initialize receive buffer */
 	rx_buff->data = rx_buff->head;
@@ -276,14 +276,14 @@ static void state_begin_frame(struct net_device *dev,
 }
 
 /*
- * Function state_link_escape (idev, byte)
+ * Function state_link_escape (dev, byte)
  *
  *    Found link escape character
  *
  */
 static void state_link_escape(struct net_device *dev, 
 			      struct net_device_stats *stats, 
-			      struct iobuff_t *rx_buff, __u8 byte)
+			      iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF: /* New frame? */
@@ -315,14 +315,14 @@ static void state_link_escape(struct net_device *dev,
 }
 
 /*
- * Function state_inside_frame (idev, byte)
+ * Function state_inside_frame (dev, byte)
  *
  *    Handle bytes received within a frame
  *
  */
 static void state_inside_frame(struct net_device *dev, 
 			       struct net_device_stats *stats,
-			       struct iobuff_t *rx_buff, __u8 byte)
+			       iobuff_t *rx_buff, __u8 byte)
 {
 	int ret = 0; 
 

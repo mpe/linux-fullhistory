@@ -1,6 +1,8 @@
 #ifndef _M68K_SEMAPHORE_H
 #define _M68K_SEMAPHORE_H
 
+#define RW_LOCK_BIAS		 0x01000000
+
 #ifndef __ASSEMBLY__
 
 #include <linux/linkage.h>
@@ -205,11 +207,38 @@ struct rw_semaphore {
 	atomic_t		writers;
 #endif
 };
-#endif /* __ASSEMBLY__ */
 
-#define RW_LOCK_BIAS		 0x01000000
+#if WAITQUEUE_DEBUG
+#define __RWSEM_DEBUG_INIT	, ATOMIC_INIT(0), ATOMIC_INIT(0)
+#else
+#define __RWSEM_DEBUG_INIT	/* */
+#endif
 
-#ifndef __ASSEMBLY__
+#define __RWSEM_INITIALIZER(name,count) \
+{ ATOMIC_INIT(count), 0, 0, 0, 0, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait), \
+	__WAIT_QUEUE_HEAD_INITIALIZER((name).write_bias_wait) \
+	__SEM_DEBUG_INIT(name) __RWSEM_DEBUG_INIT }
+
+#define __DECLARE_RWSEM_GENERIC(name,count) \
+	struct rw_semaphore name = __RWSEM_INITIALIZER(name,count)
+
+#define DECLARE_RWSEM(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS)
+#define DECLARE_RWSEM_READ_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS-1)
+#define DECLARE_RWSEM_WRITE_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,0)
+
+extern inline void init_rwsem(struct rw_semaphore *sem)
+{
+	atomic_set(&sem->count, RW_LOCK_BIAS);
+	sem->read_bias_granted = 0;
+	sem->write_bias_granted = 0;
+	init_waitqueue_head(&sem->wait);
+	init_waitqueue_head(&sem->write_bias_wait);
+#if WAITQUEUE_DEBUG
+	sem->__magic = (long)&sem->__magic;
+	atomic_set(&sem->readers, 0);
+	atomic_set(&sem->writers, 0);
+#endif
+}
 
 extern inline void down_read(struct rw_semaphore *sem)
 {

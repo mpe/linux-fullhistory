@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Mon Dec 13 12:05:31 1999
+ * Modified at:   Fri Jan 14 10:46:56 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     Copyright (c) 1998 Thomas Davis, <ratbert@radiks.net>,
  *
  *     This program is free software; you can redistribute it and/or 
@@ -121,23 +121,27 @@ struct dongle_reg {
 };
 
 /* Chip specific info */
-struct chipio_t {
-        int iobase, iobase2;  /* IO base */
-        int io_ext, io_ext2;  /* Length of iobase */
-	int membase;          /* Shared memory base */
+typedef struct {
+	int cfg_base;         /* Config register IO base */
+        int sir_base;         /* SIR IO base */
+	int fir_base;         /* FIR IO base */
+	int mem_base;         /* Shared memory base */
+        int sir_ext;          /* Length of SIR iobase */
+	int fir_ext;          /* Length of FIR iobase */
         int irq, irq2;        /* Interrupts used */
+        int dma, dma2;        /* DMA channel(s) used */
         int fifo_size;        /* FIFO size */
-
-        int dma, dma2;        /* DMA channel used */
         int irqflags;         /* interrupt flags (ie, SA_SHIRQ|SA_INTERRUPT) */
 	int direction;        /* Link direction, used by some FIR drivers */
-
+	int enabled;          /* Powered on? */
+	int suspended;        /* Suspended by APM */
 	__u32 speed;          /* Currently used speed */
+	__u32 new_speed;      /* Speed we must change to when Tx is finished */
 	int dongle_id;        /* Dongle or transceiver currently used */
-};
+} chipio_t;
 
 /* IO buffer specific info (inspired by struct sk_buff) */
-struct iobuff_t {
+typedef struct {
 	int state;            /* Receiving state (transmit state not used) */
 	int in_frame;         /* True if receiving frame */
 
@@ -148,7 +152,7 @@ struct iobuff_t {
 	int len;	      /* length of data */
 	int truesize;	      /* total size of buffer */
 	__u16 fcs;
-};
+} iobuff_t;
 
 /* Function prototypes */
 int  irda_device_init(void);

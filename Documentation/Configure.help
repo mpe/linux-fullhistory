@@ -7504,14 +7504,16 @@ CONFIG_IBMOL
   Linux Token Ring Project site for the latest information at
   http://www.linuxtr.net
 
-Generic TMS380 Token Ring ISA/PCI adapter support
+Generic TMS380 Token Ring ISA/PCI/MCA/EISA adapter support
 CONFIG_TMS380TR
   This driver provides generic support for token ring adapters
   based on the Texas Instruments TMS380 series chipsets.  This
   includes the SysKonnect TR4/16(+) ISA (SK-4190), SysKonnect
   TR4/16(+) PCI (SK-4590), SysKonnect TR4/16 PCI (SK-4591),
-  Compaq 4/16 PCI, Thomas-Conrad TC4048 4/16 PCI, and Intel 
-  TokenExpress 4/16 and PRO ISA adapters.
+  Compaq 4/16 PCI, Thomas-Conrad TC4048 4/16 PCI, and several
+  Madge adapters.  If selected, you will be asked to select
+  which cards to support below.  If you're using modules, each
+  class of card will be supported by a seperate module.
 
   If you have such an adapter and would like to use it, say Y or M and
   read the Token-Ring mini-HOWTO, available from
@@ -7520,9 +7522,28 @@ CONFIG_TMS380TR
   Also read the file linux/Documentation/networking/tms380tr.txt or check
   http://www.auk.cx/tms380tr/
 
+Generic TMS380 PCI support
+CONFIG_TMSPCI
+  This tms380 module supports generic TMS380-based PCI cards.
+
+  These cards are known to work:
+     - Compaq 4/16 TR PCI
+     - SysKonnect TR4/16 PCI (SK-4590/SK-4591)
+     - Thomas-Conrad TC4048 PCI 4/16
+     - 3Com Token Link Velocity
+
+Madge Smart 16/4 PCI Mk2 support
+CONFIG_ABYSS
+  This tms380 module supports the Madge Smart 16/4 PCI Mk2 cards (51-02).
+
+Madge Smart 16/4 Ringode MicroChannel 
+CONFIG_MADGEMC
+  This tms380 module supports the Madge Smart 16/4 MC16 and MC32
+  MicroChannel adapters
+
 SMC ISA TokenRing adapter support
 CONFIG_SMCTR
-  This is support for the ISA SMC Token Ring cards, specifically
+  This is support for the ISA and MCA SMC Token Ring cards, specifically
   SMC TokenCard Elite (8115T) and SMC TokenCard Elite/A (8115T/A) adapters.
 
   If you have such an adapter and would like to use it, say Y or M and
@@ -7926,6 +7947,25 @@ CONFIG_USB_UHCI
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called usb-uhci.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+  
+UHCI (intel PIIX4, VIA, ...) alternate (JE) support?
+CONFIG_USB_UHCI_ALT
+  This is an alternate driver for UHCI support. It has been commonly
+  been referred to as the "JE driver".
+
+  The Universal Host Controller Interface is a standard by Intel for
+  accessing the USB hardware in the PC (which is also called the USB
+  host controller). If your USB host controller conforms to this
+  standard, say Y. All recent boards with Intel PCI chipsets (like
+  intel 430TX, 440FX, 440LX, 440BX, i810, i820) conform to this standard.
+  Also all VIA PCI chipsets (like VIA VP2, VP3, MVP3, Apollo Pro, Apollo
+  Pro II or Apollo Pro 133).
+  If unsure, say Y.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
 OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support?
@@ -8734,6 +8774,30 @@ CONFIG_AUTOFS_FS
 
   If you are not a part of a fairly large, distributed network, you
   probably do not need an automounter, and can say N here.
+
+  If you want to use the newer version of autofs with more features,
+  say N here and select automounter v4.
+
+Kernel automounter v4 support
+CONFIG_AUTOFS4_FS
+  The automounter is a tool to automatically mount remote filesystems
+  on demand. This implementation is partially kernel-based to reduce
+  overhead in the already-mounted case; this is unlike the BSD
+  automounter (amd), which is a pure user space daemon.
+
+  To use the automounter you need the user-space tools from
+  ftp://ftp.kernel.org/pub/linux/daemons/autofs/testing-v4 ; you also
+  want to answer Y to "NFS filesystem support", below.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called autofs4.o.  You will need to add "alias autofs autofs4" to
+  your modules configuration file.
+
+  If you are not a part of a fairly large, distributed network or don't
+  have a laptop which needs to dynamically reconfigure to the local
+  network, you probably do not need an automounter, and can say N here.
 
 EFS filesystem support (read only) (EXPERIMENTAL)
 CONFIG_EFS_FS
@@ -10865,20 +10929,6 @@ CONFIG_SOUND_SB
   You can say M here to compile this driver as a module; the module is
   called sb.o.
 
-Generic OPL2/OPL3 FM synthesizer support
-CONFIG_SOUND_ADLIB
-  Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
-  Answering Y is usually a safe and recommended choice, however some
-  cards may have software (TSR) FM emulation. Enabling FM support with
-  these cards may cause trouble (I don't currently know of any such
-  cards, however). 
-
-  Please read the file Documentation/sound/OPL3 if your card has an
-  OPL3 chip.
-
-  If unsure, say Y.
-  
-
 #Loopback MIDI device support
 #CONFIG_SOUND_VMIDI
 ###
@@ -11154,8 +11204,16 @@ CONFIG_SOUND_MIDI
 
 FM synthesizer (YM3812/OPL-3) support
 CONFIG_SOUND_YM3812
-  Answer Y here, unless you know you will not need the option.
+  Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
+  Answering Y is usually a safe and recommended choice, however some
+  cards may have software (TSR) FM emulation. Enabling FM support with
+  these cards may cause trouble (I don't currently know of any such
+  cards, however).
+  Please read the file Documentation/sound/OPL3 if your card has an
+  OPL3 chip.
 
+  If unsure, say Y.
+ 
 Sun Audio support
 CONFIG_SUN_AUDIO
   This is support for the sound cards on Sun workstations. The code
@@ -11322,6 +11380,20 @@ CONFIG_SOUND_SONICVIBES
   lspci -n and look for the PCI ID 5333:CA00. This driver 
   differs slightly from OSS/Free, so PLEASE READ
   Documentation/sound/sonicvibes.
+
+Trident 4DWave DX/NX or SiS 7018 PCI Audio Core
+CONFIG_SOUND_TRIDENT
+  Say Y or M if you have a PCI sound card utilizing the Trident
+  4DWave-DX/NX chipset or your mother board chipset has SiS 7018
+  built-in. The SiS 7018 PCI Audio Core is embedded in SiS960 
+  Super South Bridge and SiS540/630 Single Chipset.
+
+  Use lspci -n to find out if your sound card or chipset uses
+  Trident 4DWave or SiS 7018. PCI ID 1023:2000 or 1023:2001 stands
+  for Trident 4Dwave. PCI ID 1039:7018 stands for SiS7018.
+
+  This driver differs slightly from OSS/Free, so PLEASE READ the
+  comments at of driver/sound/trident.c
 
 Rockwell WaveArtist
 CONFIG_SOUND_WAVEARTIST
@@ -13191,8 +13263,7 @@ CONFIG_IRCOMM
   and makes it possible to use all existing applications that
   understands TTY's with an infrared link. Thus you should be able to
   use application like PPP, minicom and others. Enabling this option
-  will create two modules called ircomm and ircomm_tty. For more
-  information go to http://www.pluto.dti.ne.jp/~thiguchi/irda/
+  will create two modules called ircomm and ircomm-tty.
 
 IrTTY IrDA Device Driver
 CONFIG_IRTTY_SIR
@@ -13242,11 +13313,10 @@ CONFIG_WINBOND_FIR
 
 NSC PC87108 IrDA Device Driver
 CONFIG_NSC_FIR
-  Say Y here if you want to build support for the NSC PC87108 IrDA
-  chipset. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt. This drivers currently only supports
-  the ACTiSYS IR2000B ISA card and supports SIR, MIR and FIR (4Mbps)
-  speeds.
+  Say Y here if you want to build support for the NSC PC87108 and
+  PC87338 IrDA chipsets. If you want to compile it as a module, say M 
+  here and read Documentation/modules.txt. This driver supports SIR, 
+  MIR and FIR (4Mbps) speeds.
 
 Toshiba Type-O IR Port Device Driver
 CONFIG_TOSHIBA_FIR
@@ -13262,7 +13332,7 @@ CONFIG_ESI_DONGLE
   and read Documentation/modules.txt. The ESI dongle attaches to the
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for ESI dongles you will have to
-  insert "irattach -d esi" in the /etc/irda/drivers script.
+  start irattach like this: "irattach -d esi".
 
 ACTiSYS IR-220L and IR220L+ dongle
 CONFIG_ACTISYS_DONGLE
@@ -13271,8 +13341,8 @@ CONFIG_ACTISYS_DONGLE
   say M here and read Documentation/modules.txt. The ACTiSYS dongles
   attaches to the normal 9-pin serial port connector, and can
   currently only be used by IrTTY. To activate support for ACTiSYS
-  dongles you will have to insert "irattach -d actisys" or
-  "irattach -d actisys_plus" in the/etc/irda/drivers script.
+  dongles you will have to start irattach like this: 
+  "irattach -d actisys" or "irattach -d actisys+".
 
 Tekram IrMate 210B dongle
 CONFIG_TEKRAM_DONGLE
@@ -13281,7 +13351,7 @@ CONFIG_TEKRAM_DONGLE
   and read Documentation/modules.txt. The Tekram dongle attaches to
   the normal 9-pin serial port connector, and can currently only be
   used by IrTTY. To activate support for Tekram dongles you will have
-  to insert "irattach -d tekram" in the /etc/irda/drivers script.
+  to start irattach like this: "irattach -d tekram".
 
 Greenwich GIrBIL dongle
 CONFIG_GIRBIL_DONGLE
@@ -13299,17 +13369,7 @@ CONFIG_LITELINK_DONGLE
   Documentation/modules.txt. The Parallax dongle attaches to the
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for Parallax dongles you will have to
-  insert "irattach -d litelink" in the /etc/irda/drivers script.
-
-Adaptec Airport 1000 and 2000 dongle
-CONFIG_AIRPORT_DONGLE
-  Say Y here if you want to build support for the Adaptec Airport 1000
-  and 2000 dongles. If you want to compile it as a module, say M here
-  and read Documentation/modules.txt. The module will be called
-  airport.o. The Airport dongle attaches to the normal 9-pin serial
-  port connector, and can currently only be used by IrTTY. To activate
-  support for Airport dongles you will have to insert "irattach -d
-  airport" in the /etc/irda/drivers script.
+  start irattach like this "irattach -d litelink".
 
 VME (Motorola and BVM) support
 CONFIG_VME
@@ -13427,6 +13487,7 @@ CONFIG_KHTTPD
   The kHTTPd is experimental. Be careful when using it on a production
   machine. Also note that kHTTPd doesn't support virtual servers yet.
 
+#
 I2C support
 CONFIG_I2C
   I2C (pronounce: I-square-C) is a slow bus protocol developed by
@@ -13479,7 +13540,6 @@ CONFIG_I2C_CHARDEV
   files, usually found in the /dev directory on your system. They
   make it possible to have user-space programs use the I2C bus.
 
-#
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DOS, DMA, FAT, FTP, Internet, 
 #               Intel, IRQ, Linux, MSDOS, NetWare, NetWinder, NFS, 

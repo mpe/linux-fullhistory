@@ -22,7 +22,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-elektor.c,v 1.13 1999/12/21 23:45:58 frodo Exp $ */
+/* $Id: i2c-elektor.c,v 1.16 2000/01/24 02:06:33 mds Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
@@ -30,23 +30,9 @@
 #include <linux/delay.h>
 #include <linux/malloc.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= 0x020135
 #include <linux/init.h>
-#else
-#define __init 
-#endif
 #include <asm/irq.h>
 #include <asm/io.h>
-
-/* 2.0.0 kernel compatibility */
-#if LINUX_VERSION_CODE < 0x020100
-#define MODULE_AUTHOR(noone)
-#define MODULE_DESCRIPTION(none)
-#define MODULE_PARM(no,param)
-#define MODULE_PARM_DESC(no,description)
-#define EXPORT_SYMBOL(noexport)
-#define EXPORT_NO_SYMBOLS
-#endif
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-pcf.h>
@@ -87,55 +73,47 @@ static int pcf_pending;
 
 static void pcf_isa_setbyte(void *data, int ctl, int val)
 {
-   if (ctl) {
-      if (gpi.pi_irq > 0) {
-	 DEB3(printk("i2c-elektor.o: Write control 0x%x\n", val|I2C_PCF_ENI));
-	 outb(val | I2C_PCF_ENI, CTRL);
-      } else {
-	 DEB3(printk("i2c-elektor.o: Write control 0x%x\n", val));
-	 outb(val, CTRL);
-      }
-   } else {
-      DEB3(printk("i2c-elektor.o: Write data 0x%x\n", val));
-      outb(val, DATA);
-   }
+	if (ctl) {
+		if (gpi.pi_irq > 0) {
+			DEB3(printk("i2c-elektor.o: Write control 0x%x\n",
+			     val|I2C_PCF_ENI));
+			outb(val | I2C_PCF_ENI, CTRL);
+		} else {
+			 DEB3(printk("i2c-elektor.o: Write control 0x%x\n", val));
+			 outb(val, CTRL);
+		}
+	} else {
+		DEB3(printk("i2c-elektor.o: Write data 0x%x\n", val));
+		outb(val, DATA);
+	}
 }
 
 static int pcf_isa_getbyte(void *data, int ctl)
 {
-   int val;
+	int val;
 
-   if (ctl) {
-      val = inb(CTRL);
-      DEB3(printk("i2c-elektor.o: Read control 0x%x\n", val));
-   } else {
-      val = inb(DATA);
-      DEB3(printk("i2c-elektor.o: Read data 0x%x\n", val));
-   }
-   return (val);
+	if (ctl) {
+		val = inb(CTRL);
+		DEB3(printk("i2c-elektor.o: Read control 0x%x\n", val));
+	} else {
+		val = inb(DATA);
+		DEB3(printk("i2c-elektor.o: Read data 0x%x\n", val));
+	}
+	return (val);
 }
 
 static int pcf_isa_getown(void *data)
 {
-   return (gpi.pi_own);
+	return (gpi.pi_own);
 }
 
 
 static int pcf_isa_getclock(void *data)
 {
-   return (gpi.pi_clock);
+	return (gpi.pi_clock);
 }
 
 
-
-#if LINUX_VERSION_CODE < 0x02017f
-static void schedule_timeout(int j)
-{
-	current->state   = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + j;
-	schedule();
-}
-#endif
 
 #if 0
 static void pcf_isa_sleep(unsigned long timeout)
@@ -147,64 +125,53 @@ static void pcf_isa_sleep(unsigned long timeout)
 
 static void pcf_isa_waitforpin(void) {
 
-   int timeout = 2;
+	int timeout = 2;
 
-   if (gpi.pi_irq > 0) {
-      cli();
-      if (pcf_pending == 0) {
-#if LINUX_VERSION_CODE < 0x02017f
-	 current->timeout = jiffies + timeout * HZ;
-	 interruptible_sleep_on(&pcf_wait);
-#else
-	 interruptible_sleep_on_timeout(&pcf_wait, timeout*HZ );
-#endif
-      }
-      else
-	 pcf_pending = 0;
-      sti();
-#if LINUX_VERSION_CODE < 0x02017f
-      current->timeout = 0;
-#endif
-   }
-   else {
-      udelay(100);
-   }
+	if (gpi.pi_irq > 0) {
+		cli();
+	if (pcf_pending == 0) {
+		interruptible_sleep_on_timeout(&pcf_wait, timeout*HZ );
+	} else
+		pcf_pending = 0;
+		sti();
+	} else {
+		udelay(100);
+	}
 }
 
 
 static void pcf_isa_handler(int this_irq, void *dev_id, struct pt_regs *regs) {
-
-   pcf_pending = 1;
-   wake_up_interruptible(&pcf_wait);
+	pcf_pending = 1;
+	wake_up_interruptible(&pcf_wait);
 }
 
 
 static int pcf_isa_init(void)
 {
-   if (check_region(gpi.pi_base, 2) < 0 ) {
-      return -ENODEV;
-   } else {
-      request_region(gpi.pi_base, 2, "i2c (isa bus adapter)");
-   }
-   if (gpi.pi_irq > 0) {
-      if (request_irq(gpi.pi_irq, pcf_isa_handler, 0, "PCF8584", 0) < 0) {
-	 printk("i2c-elektor.o: Request irq%d failed\n", gpi.pi_irq);
-	 gpi.pi_irq = 0;
-      }
-      else
-	 enable_irq(gpi.pi_irq);
-   }
-   return 0;
+	if (check_region(gpi.pi_base, 2) < 0 ) {
+		return -ENODEV;
+	} else {
+		request_region(gpi.pi_base, 2, "i2c (isa bus adapter)");
+	}
+	if (gpi.pi_irq > 0) {
+		if (request_irq(gpi.pi_irq, pcf_isa_handler, 0, "PCF8584", 0)
+		    < 0) {
+		printk("i2c-elektor.o: Request irq%d failed\n", gpi.pi_irq);
+		gpi.pi_irq = 0;
+	} else
+		enable_irq(gpi.pi_irq);
+	}
+	return 0;
 }
 
 
 static void pcf_isa_exit(void)
 {
-   if (gpi.pi_irq > 0) {
-      disable_irq(gpi.pi_irq);
-      free_irq(gpi.pi_irq, 0);
-   }
-   release_region(gpi.pi_base , 2);
+	if (gpi.pi_irq > 0) {
+		disable_irq(gpi.pi_irq);
+		free_irq(gpi.pi_irq, 0);
+	}
+	release_region(gpi.pi_base , 2);
 }
 
 
@@ -222,14 +189,14 @@ static int pcf_isa_unreg(struct i2c_client *client)
 static void pcf_isa_inc_use(struct i2c_adapter *adap)
 {
 #ifdef MODULE
-  MOD_INC_USE_COUNT;
+	MOD_INC_USE_COUNT;
 #endif
 }
 
 static void pcf_isa_dec_use(struct i2c_adapter *adap)
 {
 #ifdef MODULE
-  MOD_DEC_USE_COUNT;
+	MOD_DEC_USE_COUNT;
 #endif
 }
 
@@ -262,41 +229,41 @@ static struct i2c_adapter pcf_isa_ops = {
 int __init i2c_pcfisa_init(void) 
 {
 
-   struct i2c_pcf_isa *pisa = &gpi;
+	struct i2c_pcf_isa *pisa = &gpi;
 
-   printk("i2c-elektor.o: i2c pcf8584-isa adapter module\n");
-   if (base == 0)
-      pisa->pi_base = DEFAULT_BASE;
-   else
-      pisa->pi_base = base;
+	printk("i2c-elektor.o: i2c pcf8584-isa adapter module\n");
+	if (base == 0)
+		pisa->pi_base = DEFAULT_BASE;
+	else
+		pisa->pi_base = base;
 
-   if (irq == 0)
-      pisa->pi_irq = DEFAULT_IRQ;
-   else
-      pisa->pi_irq = irq;
+	if (irq == 0)
+		pisa->pi_irq = DEFAULT_IRQ;
+	else
+		pisa->pi_irq = irq;
 
-   if (clock == 0)
-      pisa->pi_clock = DEFAULT_CLOCK;
-   else
-      pisa->pi_clock = clock;
+	if (clock == 0)
+		pisa->pi_clock = DEFAULT_CLOCK;
+	else
+		pisa->pi_clock = clock;
 
-   if (own == 0)
-      pisa->pi_own = DEFAULT_OWN;
-   else
-      pisa->pi_own = own;
+	if (own == 0)
+		pisa->pi_own = DEFAULT_OWN;
+	else
+		pisa->pi_own = own;
 
-   pcf_isa_data.data = (void *)pisa;
+	pcf_isa_data.data = (void *)pisa;
 #if (LINUX_VERSION_CODE >= 0x020301)
-   init_waitqueue_head(&pcf_wait);
+	init_waitqueue_head(&pcf_wait);
 #endif
-   if (pcf_isa_init() == 0) {
-      if (i2c_pcf_add_bus(&pcf_isa_ops) < 0)
-        return -ENODEV;
-   } else {
-      return -ENODEV;
-   }
-   printk("i2c-elektor.o: found device at %#x.\n", pisa->pi_base);
-   return 0;
+	if (pcf_isa_init() == 0) {
+		if (i2c_pcf_add_bus(&pcf_isa_ops) < 0)
+			return -ENODEV;
+	} else {
+		return -ENODEV;
+	}
+	printk("i2c-elektor.o: found device at %#x.\n", pisa->pi_base);
+	return 0;
 }
 
 
@@ -313,7 +280,7 @@ MODULE_PARM(own, "i");
 
 int init_module(void) 
 {
-   return i2c_pcfisa_init();
+	return i2c_pcfisa_init();
 }
 
 void cleanup_module(void) 

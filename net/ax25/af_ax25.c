@@ -1313,7 +1313,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct
 	int lv;
 	int addr_len = msg->msg_namelen;
 
-	if (msg->msg_flags & ~(MSG_DONTWAIT|MSG_OOB|MSG_EOR))
+	if (msg->msg_flags & ~(MSG_DONTWAIT|MSG_EOR))
 		return -EINVAL;
 
 	if (sk->zapped)

@@ -1595,17 +1595,34 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 	tbuf = kmalloc(256, GFP_KERNEL);
 	if (!tbuf)
 		return -ENOMEM;
+
+	/* get langid for strings if it's not yet known */
+	if (!dev->have_langid) {
+		err = usb_get_string(dev, 0, 0, tbuf, 4);
+		if (err < 0) {
+			err("error getting string descriptor 0 (error=%d)", err);
+			goto errout;
+		} else if (tbuf[0] < 4) {
+			err("string descriptor 0 too short");
+			err = -EINVAL;
+			goto errout;
+		} else {
+			dev->have_langid = -1;
+			dev->string_langid = tbuf[2] | (tbuf[3]<< 8);
+				/* always use the first langid listed */
+			info("USB device number %d default language ID 0x%x",
+				dev->devnum, dev->string_langid);
+		}
+	}
+
 	/*
-	 * is this two step process necessary? can't we just
-	 * ask for a maximum length string and then take the length
-	 * that was returned?
+	 * Just ask for a maximum length string and then take the length
+	 * that was returned.
 	 */
-	err = usb_get_string(dev, dev->string_langid, index, tbuf, 4);
+	err = usb_get_string(dev, dev->string_langid, index, tbuf, 255);
 	if (err < 0)
 		goto errout;
-	err = usb_get_string(dev, dev->string_langid, index, tbuf, tbuf[0]);
-	if (err < 0)
-		goto errout;
+	info("actual string desc. length = %d", err);
 
 	size--;		/* leave room for trailing NULL char in output buffer */
 	for (idx = 0, u = 2; u < err; u += 2) {
@@ -1633,7 +1650,6 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
  */
 int usb_new_device(struct usb_device *dev)
 {
-	unsigned char *buf;
 	int addr, err;
 	int tmp;
 
@@ -1708,21 +1724,6 @@ int usb_new_device(struct usb_device *dev)
 	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
 		err("failed to set default configuration");
 		return -1;
-	}
-	/* get langid for strings */
-	buf = kmalloc(256, GFP_KERNEL);
-	if (!buf) {
-		err("out of memory\n");
-	} else {
-		err = usb_get_string(dev, 0, 0, buf, 4);
-		if (err < 0) {
-			err("error getting string descriptor 0 (error=%d)\n", err);
-		} else if (buf[0] < 4) {
-			err("string descriptpr 0 too short\n");
-		} else
-			dev->string_langid = buf[2] | (buf[3]<< 8);
-		kfree(buf);
-		info("USB device number %d default language ID 0x%x", dev->devnum, dev->string_langid);
 	}
 
 	if (dev->descriptor.iManufacturer)

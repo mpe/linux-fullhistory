@@ -125,15 +125,15 @@ static int usblp_check_status(struct usblp *usblp)
 	if (status & LP_PERRORP) {
 	
 		if (status & LP_POUTPA) {
-			printk(KERN_INFO "usblp%d: out of paper", usblp->minor);
+			info("usblp%d: out of paper", usblp->minor);
 			return -ENOSPC;
 		}
 		if (~status & LP_PSELECD) {
-			printk(KERN_INFO "usblp%d: off-line", usblp->minor);
+			info("usblp%d: off-line", usblp->minor);
 			return -EIO;
 		}
 		if (~status & LP_PERRORP) {
-			printk(KERN_INFO "usblp%d: on fire", usblp->minor);
+			info("usblp%d: on fire", usblp->minor);
 			return -EIO;
 		}
 	}
@@ -229,18 +229,19 @@ static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, 
 
 		if (usblp->writeurb.status == -EINPROGRESS) {
 			usb_unlink_urb(&usblp->writeurb);
-			printk(KERN_ERR "usblp%d: timed out\n", usblp->minor);
+			err("usblp%d: timed out", usblp->minor);
 			return -EIO;
 		}
 
 		if (!usblp->dev)
 			return -ENODEV;
 
-		if (!usblp->writeurb.status)
+		if (!usblp->writeurb.status) {
 			writecount += usblp->writeurb.transfer_buffer_length;
-		else {
+			usblp->writeurb.transfer_buffer_length = 0;
+		} else {
 			if (!(retval = usblp_check_status(usblp))) {
-				printk(KERN_ERR "usblp%d: error %d writing to printer\n",
+				err("usblp%d: error %d writing to printer",
 					usblp->minor, usblp->writeurb.status);
 				return -EIO;
 			}
@@ -287,7 +288,7 @@ static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t 
 		return -ENODEV;
 
 	if (usblp->readurb.status) {
-		printk(KERN_ERR "usblp%d: error %d reading from printer\n",
+		err("usblp%d: error %d reading from printer",
 			usblp->minor, usblp->readurb.status);
 		usb_submit_urb(&usblp->readurb);
 		return -EIO;
@@ -389,7 +390,7 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 			buf + USBLP_BUF_SIZE, USBLP_BUF_SIZE, usblp_bulk, usblp);
 	}
 
-	printk(KERN_INFO "usblp%d: USB %sdirectional printer dev %d if %d alt %d\n",
+	info("usblp%d: USB %sdirectional printer dev %d if %d alt %d",
 		minor, bidir ? "Bi" : "Uni", dev->devnum, ifnum, alts);
 
 	return usblp_table[minor] = usblp;

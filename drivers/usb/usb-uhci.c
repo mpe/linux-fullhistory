@@ -43,7 +43,7 @@
 
 #include "usb.h"
 #include "usb-uhci.h"
-#include "uhci-debug.h"
+#include "usb-uhci-debug.h"
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>

@@ -978,7 +978,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	unsigned char *asmptr;
 	int size;
 
-	if (msg->msg_flags & ~(MSG_DONTWAIT|MSG_OOB|MSG_EOR))
+	if (msg->msg_flags & ~(MSG_DONTWAIT|MSG_EOR))
 		return -EINVAL;
 
 	if (sk->zapped)

@@ -32,37 +32,6 @@
 
 static char *rcsid = "$Id: toshoboe.c,v 1.91 1999/06/29 14:21:06 root Exp $";
 
-/* 
- * $Log: toshoboe.c,v $
- * Revision 1.9  1999/06/29 14:21:06  root
- * *** empty log message ***
- *
- * Revision 1.8  1999/06/29 14:15:08  root
- * *** empty log message ***
- *
- * Revision 1.7  1999/06/29 13:46:42  root
- * *** empty log message ***
- *
- * Revision 1.6  1999/06/29 12:31:03  root
- * *** empty log message ***
- *
- * Revision 1.5  1999/05/12 12:24:39  root
- * *** empty log message ***
- *
- * Revision 1.4  1999/05/12 11:55:08  root
- * *** empty log message ***
- *
- * Revision 1.3  1999/05/09 01:33:12  root
- * *** empty log message ***
- *
- * Revision 1.2  1999/05/09 01:30:38  root
- * *** empty log message ***
- *
- * Revision 1.1  1999/05/09 01:25:04  root
- * Initial revision
- * 
- */
-
 /* Define this to have only one frame in the XMIT or RECV queue */
 /* Toshiba's drivers do this, but it disables back to back tansfers */
 /* I think that the chip may have some problems certainly, I have */
@@ -682,7 +651,7 @@ toshoboe_close (struct toshoboe_cb *self)
       toshoboe_disablebm (self);
     }
 
-  release_region (self->io.iobase, self->io.io_ext);
+  release_region (self->io.sir_base, self->io.sir_ext);
 
 
   for (i = 0; i < TX_SLOTS; ++i)
@@ -754,17 +723,17 @@ toshoboe_open (struct pci_dev *pci_dev)
   self->pdev = pci_dev;
   self->base = pci_dev->resource[0].start;
 
-  self->io.iobase = self->base;
+  self->io.sir_base = self->base;
   self->io.irq = pci_dev->irq;
-  self->io.io_ext = CHIP_IO_EXTENT;
+  self->io.sir_ext = CHIP_IO_EXTENT;
   self->io.speed = 9600;
 
   /* Lock the port that we need */
-  i = check_region (self->io.iobase, self->io.io_ext);
+  i = check_region (self->io.sir_base, self->io.sir_ext);
   if (i < 0)
     {
       IRDA_DEBUG (0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
-             self->io.iobase);
+             self->io.sir_base);
 
       dev_self[i] = NULL;
       kfree (self);
@@ -864,13 +833,12 @@ toshoboe_open (struct pci_dev *pci_dev)
 
     }
 
-  request_region (self->io.iobase, self->io.io_ext, driver_name);
+  request_region (self->io.sir_base, self->io.sir_ext, driver_name);
 
   if (!(dev = dev_alloc("irda%d", &err))) {
 	  ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 	  return -ENOMEM;
   }
-
   dev->priv = (void *) self;
   self->netdev = dev;
   
@@ -1025,7 +993,7 @@ int __init toshoboe_init (void)
       if (pci_dev)
         {
           printk (KERN_WARNING "ToshOboe: Found 701 chip at 0x%0lx irq %d\n",
-                  pci_dev->resource[0].start,
+		  pci_dev->resource[0].start,
                   pci_dev->irq);
 
           if (!toshoboe_open (pci_dev))

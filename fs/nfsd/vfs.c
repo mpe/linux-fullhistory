@@ -46,19 +46,12 @@
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 #define NFSD_PARANOIA
 
-/* Open mode for nfsd_open */
-#define OPEN_READ	0
-#define OPEN_WRITE	1
 
-/* Hack until we have a macro check for mandatory locks. */
-#ifndef IS_ISMNDLK
-/* We must ignore files (but only file) which might have mandatory
+/* We must ignore files (but only files) which might have mandatory
  * locks on them because there is no way to know if the accesser has
  * the lock.
  */
-#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP|S_IFMT)) \
-			 == (S_ISGID|S_IFREG))
-#endif
+#define IS_ISMNDLK(i)	(S_ISREG((i)->i_mode) && MANDATORY_LOCK(i))
 
 /* Check for dir entries '.' and '..' */
 #define isdotent(n, l)	(l < 3 && n[0] == '.' && (l == 1 || n[1] == '.'))
@@ -427,18 +420,17 @@ out:
 
 /*
  * Open an existing file or directory.
- * The wflag argument indicates write access.
+ * The access argument indicates the type of open (read/write/lock)
  * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
-			int wflag, struct file *filp)
+			int access, struct file *filp)
 {
 	struct dentry	*dentry;
 	struct inode	*inode;
-	int		access, err;
+	int		err;
 
-	access = wflag? MAY_WRITE : MAY_READ;
 	err = fh_verify(rqstp, fhp, type, access);
 	if (err)
 		goto out;
@@ -455,24 +447,27 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto out;
 
-	if (wflag && (err = get_write_access(inode)) != 0)
+	if ((access & MAY_WRITE) && (err = get_write_access(inode)) != 0)
 		goto out_nfserr;
 
 	memset(filp, 0, sizeof(*filp));
 	filp->f_op    = inode->i_op->default_file_ops;
 	atomic_set(&filp->f_count, 1);
-	filp->f_flags = wflag? O_WRONLY : O_RDONLY;
-	filp->f_mode  = wflag? FMODE_WRITE : FMODE_READ;
 	filp->f_dentry = dentry;
-
-	if (wflag)
+	if (access & MAY_WRITE) {
+		filp->f_flags = O_WRONLY;
+		filp->f_mode  = FMODE_WRITE;
 		DQUOT_INIT(inode);
+	} else {
+		filp->f_flags = O_RDONLY;
+		filp->f_mode  = FMODE_READ;
+	}
 
 	err = 0;
 	if (filp->f_op && filp->f_op->open) {
 		err = filp->f_op->open(inode, filp);
 		if (err) {
-			if (wflag)
+			if (access & MAY_WRITE)
 				put_write_access(inode);
 
 			/* I nearly added put_filp() call here, but this filp
@@ -581,7 +576,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	int		err;
 	struct file	file;
 
-	err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_READ, &file);
+	err = nfsd_open(rqstp, fhp, S_IFREG, MAY_READ, &file);
 	if (err)
 		goto out;
 	err = nfserr_perm;
@@ -648,7 +643,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 	if (!cnt)
 		goto out;
-	err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_WRITE, &file);
+	err = nfsd_open(rqstp, fhp, S_IFREG, MAY_WRITE, &file);
 	if (err)
 		goto out;
 	err = nfserr_perm;
@@ -774,7 +769,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct file	file;
 	int		err;
 
-	if ((err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_WRITE, &file)) != 0)
+	if ((err = nfsd_open(rqstp, fhp, S_IFREG, MAY_WRITE, &file)) != 0)
 		return err;
 
 	if (file.f_op && file.f_op->fsync) {
@@ -1204,6 +1199,8 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				iap->ia_valid &= ATTR_MODE /* ~(ATTR_MODE|ATTR_UID|ATTR_GID)*/;
 				if (iap->ia_valid) {
 					iap->ia_valid |= ATTR_CTIME;
+					iap->ia_mode = (iap->ia_mode&S_IALLUGO)
+						| S_IFLNK;
 					err = notify_change(dnew, iap);
 					if (!err && EX_ISSYNC(fhp->fh_export))
 						write_inode_now(dentry->d_inode);
@@ -1532,7 +1529,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	if (offset > ~(u32) 0)
 		goto out;
 
-	err = nfsd_open(rqstp, fhp, S_IFDIR, OPEN_READ, &file);
+	err = nfsd_open(rqstp, fhp, S_IFDIR, MAY_READ, &file);
 	if (err)
 		goto out;
 
@@ -1650,13 +1647,14 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	if (acc == MAY_NOP)
 		return 0;
 #if 0
-	dprintk("nfsd: permission 0x%x%s%s%s%s%s mode 0%o%s%s%s\n",
+	dprintk("nfsd: permission 0x%x%s%s%s%s%s%s mode 0%o%s%s%s\n",
 		acc,
 		(acc & MAY_READ)?	" read"  : "",
 		(acc & MAY_WRITE)?	" write" : "",
 		(acc & MAY_EXEC)?	" exec"  : "",
 		(acc & MAY_SATTR)?	" sattr" : "",
 		(acc & MAY_TRUNC)?	" trunc" : "",
+		(acc & MAY_LOCK)?	" lock"  : "",
 		inode->i_mode,
 		IS_IMMUTABLE(inode)?	" immut" : "",
 		IS_APPEND(inode)?	" append" : "",
@@ -1674,6 +1672,15 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	if ((acc & MAY_TRUNC) && IS_APPEND(inode))
 		return nfserr_perm;
 
+	if (acc & MAY_LOCK) {
+		/* If we cannot rely on authentication in NLM requests,
+		 * just allow locks, others require read permission
+		 */
+		if (exp->ex_flags & NFSEXP_NONLMAUTH)
+			return 0;
+		else
+			acc = MAY_READ;
+	}
 	/*
 	 * The file owner always gets access permission. This is to make
 	 * file access work even when the client has done a fchmod(fd, 0).

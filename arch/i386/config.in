@@ -22,7 +22,7 @@ choice 'Processor family' \
 	 586/K5/5x86/6x86	CONFIG_M586	\
 	 Pentium/TSC		CONFIG_M586TSC	\
 	 PPro/6x86MX		CONFIG_M686 \
-	 K6/II/II		CONFIG_MK6 \
+	 K6/II/III		CONFIG_MK6 \
 	 Athlon                 CONFIG_MK7" PPro
 #
 # Define implied options from the CPU selection here

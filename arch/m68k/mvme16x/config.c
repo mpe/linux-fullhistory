@@ -145,6 +145,7 @@ void __init config_mvme16x(void)
     p_bdid p = &mvme_bdid;
     char id[40];
 
+    mach_max_dma_address = 0xffffffff;
     mach_sched_init      = mvme16x_sched_init;
     mach_keyb_init       = mvme16x_keyb_init;
     mach_kbdrate         = mvme16x_kbdrate;

@@ -495,8 +495,8 @@ static int handle_local_request(struct file_info *fi,
 
                 if (req->req.length == 8) {
                         req->req.error = highlevel_lock(fi->host, req->data,
-                                                        addr, req->data[0],
-                                                        req->data[1],
+                                                        addr, req->data[1],
+                                                        req->data[0],
                                                         req->req.misc);
                         req->req.length = 4;
                 } else {
@@ -567,6 +567,32 @@ static int handle_remote_request(struct file_info *fi,
                 break;
 
         case RAW1394_REQ_LOCK:
+                if ((req->req.misc != EXTCODE_FETCH_ADD)
+                    && (req->req.misc != EXTCODE_LITTLE_ADD)) {
+                        if (req->req.length != 4) {
+                                req->req.error = RAW1394_ERROR_INVALID_ARG;
+                                break;
+                        }
+                } else {
+                        if (req->req.length != 8) {
+                                req->req.error = RAW1394_ERROR_INVALID_ARG;
+                                break;
+                        }
+                }
+
+                packet = hpsb_make_lockpacket(fi->host, node, addr,
+                                              req->req.misc);
+                if (!packet) return -ENOMEM;
+
+                if (copy_from_user(packet->data, req->req.sendb,
+                                   req->req.length)) {
+                        req->req.error = RAW1394_ERROR_MEMFAULT;
+                        break;
+                }
+
+                req->req.length = 4;
+                break;
+
         case RAW1394_REQ_LOCK64:
         default:
                 req->req.error = RAW1394_ERROR_STATE_ORDER;

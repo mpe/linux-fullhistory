@@ -128,6 +128,14 @@ static int tty_fasync(int fd, struct file * filp, int on);
 #ifdef CONFIG_SX
 extern int sx_init (void);
 #endif
+#if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
+extern int vme_scc_init (void);
+extern long vme_scc_console_init(void);
+#endif
+#ifdef CONFIG_SERIAL167
+extern int serial167_init(void);
+extern long serial167_console_init(void);
+#endif
 #ifdef CONFIG_8xx
 extern console_8xx_init(void);
 extern int rs_8xx_init(void);
@@ -2090,9 +2098,15 @@ void __init console_init(void)
 #ifdef CONFIG_SERIAL_CONSOLE
 #ifdef CONFIG_8xx
 	console_8xx_init();
-#else 	
+#elif defined(CONFIG_SERIAL) 	
 	serial_console_init();
 #endif /* CONFIG_8xx */
+#if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
+	vme_scc_console_init();
+#endif
+#if defined(CONFIG_SERIAL167)
+	serial167_console_init();
+#endif
 #endif
 }
 
@@ -2176,6 +2190,9 @@ void __init tty_init(void)
 #ifdef CONFIG_SERIAL
 	rs_init();
 #endif
+#if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
+	vme_scc_init();
+#endif
 #ifdef CONFIG_COMPUTONE
 	ip2_init();
 #endif
@@ -2185,7 +2202,7 @@ void __init tty_init(void)
 #ifdef CONFIG_ROCKETPORT
 	rp_init();
 #endif
-#ifdef CONFIG_MVME16x
+#ifdef CONFIG_SERIAL167
 	serial167_init();
 #endif
 #ifdef CONFIG_CYCLADES

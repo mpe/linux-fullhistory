@@ -103,10 +103,6 @@ static inline int copy_from_user(void *to,const void *from, int c)
 #include "generic_serial.h"
 
 
-#ifndef MODULE
-extern void my_hd (unsigned char *ptr, int n);
-#endif
-
 static char *                  tmp_buf; 
 static DECLARE_MUTEX(tmp_buf_sem);
 
@@ -119,8 +115,8 @@ int gs_debug = 0;
 #define gs_dprintk(f, str...) /* nothing */
 #endif
 
-#define func_enter() gs_dprintk (SX_DEBUG_FLOW, "gs: enter " __FUNCTION__ "\n")
-#define func_exit()  gs_dprintk (SX_DEBUG_FLOW, "gs: exit  " __FUNCTION__ "\n")
+#define func_enter() gs_dprintk (GS_DEBUG_FLOW, "gs: enter " __FUNCTION__ "\n")
+#define func_exit()  gs_dprintk (GS_DEBUG_FLOW, "gs: exit  " __FUNCTION__ "\n")
 
 
 
@@ -856,7 +852,6 @@ void gs_set_termios (struct tty_struct * tty,
 
 	if (gs_debug & GS_DEBUG_TERMIOS) {
 		gs_dprintk (GS_DEBUG_TERMIOS, "termios structure (%p):\n", tiosp);
-		my_hd ((unsigned char *)tiosp, sizeof (struct termios));
 	}
 
 #if 0

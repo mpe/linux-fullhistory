@@ -132,6 +132,7 @@ void __init config_bvme6000(void)
     bvme6000_set_vectors();
 #endif
 
+    mach_max_dma_address = 0xffffffff;
     mach_sched_init      = bvme6000_sched_init;
     mach_keyb_init       = bvme6000_keyb_init;
     mach_kbdrate         = bvme6000_kbdrate;

@@ -101,6 +101,7 @@ static int mvme147_get_hardware_list(char *buffer)
 
 void __init config_mvme147(void)
 {
+	mach_max_dma_address	= 0x01000000;
 	mach_sched_init		= mvme147_sched_init;
 	mach_keyb_init		= mvme147_keyb_init;
 	mach_kbdrate		= mvme147_kbdrate;

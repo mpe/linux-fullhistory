@@ -311,10 +311,6 @@ void atari_init_midi_port( int cflag )
 
 void __init atari_debug_init(void)
 {
-#ifdef CONFIG_KGDB
-    /* the m68k_debug_device is used by the GDB stub, do nothing here */
-    return;
-#endif
     if (!strcmp( m68k_debug_device, "ser" )) {
 	/* defaults to ser2 for a Falcon and ser1 otherwise */
 	strcpy( m68k_debug_device, MACH_IS_FALCON ? "ser2" : "ser1" );

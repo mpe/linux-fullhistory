@@ -77,6 +77,12 @@
 #define ADD_MASK 0x3000		/*  Mask it use of the ADD_PORT register */
 #define ADD_SIG 0x3000		/*  Expected ID signature */
 
+/* On Macs, we only need use the ISA I/O stuff until we do MEMORY_ON */
+#ifdef CONFIG_MAC
+#define LCSLOTBASE 0xfee00000
+#define MMIOBASE 0x40000
+#endif
+
 #define CHIP_EISA_ID_SIG 0x630E   /*  Product ID Code for Crystal Chip (CS8900 spec 4.3) */
 
 #ifdef IBMEIPKT

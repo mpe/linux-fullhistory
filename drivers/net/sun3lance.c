@@ -21,7 +21,7 @@
   
 */
 
-static char *version = "sun3lance.c: v1.0 12/12/96  Sam Creasey (sammy@users.qual.net)\n";
+static char *version = "sun3lance.c: v1.1 11/17/1999  Sam Creasey (sammy@oh.verio.com)\n";
 
 #include <linux/module.h>
 
@@ -263,6 +263,8 @@ static int __init lance_probe( struct net_device *dev)
 	int 			i;
 	static int 		did_version = 0;
 	int found = 0;
+	volatile unsigned short *ioaddr_probe;
+	unsigned short tmp1, tmp2;
 
 	/* LANCE_OBIO can be found within the IO pmeg with some effort */
 	for(ioaddr = 0xfe00000; ioaddr < (0xfe00000 +
@@ -281,6 +283,23 @@ static int __init lance_probe( struct net_device *dev)
 	
 	if(!found)
 		return 0;
+
+	/* test to see if there's really a lance here */
+	/* (CSRO_INIT shouldn't be readable) */
+	
+	ioaddr_probe = (volatile unsigned short *)ioaddr;
+	tmp1 = ioaddr_probe[0];
+	tmp2 = ioaddr_probe[1];
+
+	ioaddr_probe[1] = CSR0;
+	ioaddr_probe[0] = CSR0_INIT | CSR0_STOP;
+
+	if(ioaddr_probe[0] != CSR0_STOP) {
+		ioaddr_probe[0] = tmp1;
+		ioaddr_probe[1] = tmp2;
+
+		return 0;
+	}
 
 	init_etherdev( dev, sizeof(struct lance_private) );
 	if (!dev->priv)

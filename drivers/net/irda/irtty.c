@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Wed Jan  5 14:00:13 2000
+ * Modified at:   Fri Jan 14 21:02:27 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -233,6 +233,8 @@ static int irtty_open(struct tty_struct *tty)
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return -ENOMEM;
 	}
+	/* dev_alloc doesn't clear the struct */
+	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
 
 	dev->priv = (void *) self;
 	self->netdev = dev;
@@ -654,6 +656,7 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	self->tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
 
 	dev->trans_start = jiffies;
+	self->stats.tx_bytes += self->tx_buff.len;
 
 	if (self->tty->driver.write)
 		actual = self->tty->driver.write(self->tty, 0, 
@@ -662,9 +665,6 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Hide the part we just transmitted */
 	self->tx_buff.data += actual;
 	self->tx_buff.len -= actual;
-
-	self->stats.tx_packets++;
-	self->stats.tx_bytes += self->tx_buff.len;
 
 	dev_kfree_skb(skb);
 
@@ -709,6 +709,8 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 
 		self->tx_buff.data += actual;
 		self->tx_buff.len  -= actual;
+
+		self->stats.tx_packets++;		      
 	} else {		
 		/* 
 		 *  Now serial buffer is almost free & we can start 

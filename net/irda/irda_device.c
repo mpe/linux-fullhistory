@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Oct  9 09:22:27 1999
- * Modified at:   Wed Jan  5 14:17:16 2000
+ * Modified at:   Sun Jan 23 17:41:24 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
@@ -55,7 +55,8 @@
 #include <net/irda/wrapper.h>
 
 extern int irtty_init(void);
-extern int pc87108_init(void);
+extern int nsc_ircc_init(void);
+extern int ircc_init(void);
 extern int w83977af_init(void);
 extern int esi_init(void);
 extern int tekram_init(void);
@@ -121,7 +122,7 @@ int __init irda_device_init( void)
 	w83977af_init();
 #endif
 #ifdef CONFIG_NSC_FIR
-	pc87108_init();
+	nsc_ircc_init();
 #endif
 #ifdef CONFIG_TOSHIBA_FIR
 	toshoboe_init();
@@ -143,9 +144,6 @@ int __init irda_device_init( void)
 #endif
 #ifdef CONFIG_LITELINK_DONGLE
 	litelink_init();
-#endif
-#ifdef CONFIG_AIRPORT_DONGLE
- 	airport_init();
 #endif
 #ifdef CONFIG_OLD_BELKIN
  	old_belkin_init();

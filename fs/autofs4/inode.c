@@ -140,7 +140,7 @@ static int parse_options(char *options, int *pipefd, uid_t *uid, gid_t *gid,
 	*gid = current->gid;
 	*pgrp = current->pgrp;
 
-	*minproto = *maxproto = AUTOFS_PROTO_VERSION;
+	*minproto = *maxproto = AUTOFS_MAX_PROTO_VERSION;
 
 	*pipefd = -1;
 
@@ -278,15 +278,15 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 
 	/* Couldn't this be tested earlier? */
 	if (maxproto < AUTOFS_MIN_PROTO_VERSION ||
-	    minproto > AUTOFS_PROTO_VERSION) {
+	    minproto > AUTOFS_MAX_PROTO_VERSION) {
 		printk("autofs: kernel does not match daemon version "
 		       "daemon (%d, %d) kernel (%d, %d)\n",
 			minproto, maxproto,
-			AUTOFS_MIN_PROTO_VERSION, AUTOFS_PROTO_VERSION);
+			AUTOFS_MIN_PROTO_VERSION, AUTOFS_MAX_PROTO_VERSION);
 		goto fail_dput;
 	}
 
-	sbi->version = maxproto > AUTOFS_PROTO_VERSION ? AUTOFS_PROTO_VERSION : maxproto;
+	sbi->version = maxproto > AUTOFS_MAX_PROTO_VERSION ? AUTOFS_MAX_PROTO_VERSION : maxproto;
 
 	DPRINTK(("autofs: pipe fd = %d, pgrp = %u\n", pipefd, sbi->oz_pgrp));
 	pipe = fget(pipefd);

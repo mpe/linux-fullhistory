@@ -30,7 +30,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 	fh.fh_handle = *f;
 	fh.fh_export = NULL;
 
-	nfserr = nfsd_open(rqstp, &fh, S_IFREG, 0, filp);
+	nfserr = nfsd_open(rqstp, &fh, S_IFREG, MAY_LOCK, filp);
 	if (!nfserr)
 		dget(filp->f_dentry);
 	fh_put(&fh);

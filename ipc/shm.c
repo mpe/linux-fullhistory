@@ -840,6 +840,15 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	idx = (address - shmd->vm_start) >> PAGE_SHIFT;
 	idx += shmd->vm_pgoff;
 
+	/*
+	 * A shared mapping past the last page of the file is an error
+	 * and results in a SIGBUS, so logically a shared mapping past 
+	 * the end of a shared memory segment should result in SIGBUS
+	 * as well.
+	 */
+	if (idx >= shp->shm_npages) { 
+		return NULL;
+	}
 	down(&shp->sem);
 	if(shp != shm_lock(shp->id))
 		BUG();

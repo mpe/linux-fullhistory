@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Wed Jan  5 15:11:21 2000
+ * Modified at:   Fri Jan 28 12:10:59 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -183,21 +183,21 @@ int w83977af_open(int i, unsigned int iobase, unsigned int irq,
 	dev_self[i] = self;
 
 	/* Initialize IO */
-	self->io.iobase    = iobase;
+	self->io.fir_base   = iobase;
         self->io.irq       = irq;
-        self->io.io_ext    = CHIP_IO_EXTENT;
+        self->io.fir_ext   = CHIP_IO_EXTENT;
         self->io.dma       = dma;
         self->io.fifo_size = 32;
 
 	/* Lock the port that we need */
-	ret = check_region(self->io.iobase, self->io.io_ext);
+	ret = check_region(self->io.fir_base, self->io.fir_ext);
 	if (ret < 0) { 
 		IRDA_DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
-		      self->io.iobase);
+		      self->io.fir_base);
 		/* w83977af_cleanup( self);  */
 		return -ENODEV;
 	}
-	request_region(self->io.iobase, self->io.io_ext, driver_name);
+	request_region(self->io.fir_base, self->io.fir_ext, driver_name);
 
 	/* Initialize QoS for this device */
 	irda_init_max_qos_capabilies(&self->qos);
@@ -243,9 +243,6 @@ int w83977af_open(int i, unsigned int iobase, unsigned int irq,
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return -ENOMEM;
 	}
-	/* dev_alloc doesn't clear the struct, so lets do a little hack */
-	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
-
 	dev->priv = (void *) self;
 	self->netdev = dev;
 
@@ -282,7 +279,7 @@ static int w83977af_close(struct w83977af_ir *self)
 
 	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
-        iobase = self->io.iobase;
+        iobase = self->io.fir_base;
 
 #ifdef CONFIG_USE_W977_PNP
 	/* enter PnP configuration mode */
@@ -301,14 +298,12 @@ static int w83977af_close(struct w83977af_ir *self)
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
-		/* Must free the old-style 2.2.x device */
-		kfree(self->netdev);
 	}
 
 	/* Release the PORT that this driver is using */
 	IRDA_DEBUG(0 , __FUNCTION__ "(), Releasing Region %03x\n", 
-	      self->io.iobase);
-	release_region(self->io.iobase, self->io.io_ext);
+	      self->io.fir_base);
+	release_region(self->io.fir_base, self->io.fir_ext);
 
 	if (self->tx_buff.head)
 		kfree(self->tx_buff.head);
@@ -426,7 +421,7 @@ void w83977af_change_speed(struct w83977af_ir *self, __u32 speed)
 	int iobase; 
 	__u8 set;
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Update accounting for new speed */
 	self->io.speed = speed;
@@ -510,7 +505,7 @@ int w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	
 	self = (struct w83977af_ir *) dev->priv;
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	IRDA_DEBUG(4, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies, 
 		   (int) skb->len);
@@ -692,7 +687,7 @@ void w83977af_dma_xmit_complete(struct w83977af_ir *self)
 
 	ASSERT(self != NULL, return;);
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Save current set */
 	set = inb(iobase+SSR);
@@ -748,7 +743,7 @@ int w83977af_dma_receive(struct w83977af_ir *self)
 
 	IRDA_DEBUG(4, __FUNCTION__ "\n");
 
-	iobase= self->io.iobase;
+	iobase= self->io.fir_base;
 
 	/* Save current set */
 	set = inb(iobase+SSR);
@@ -822,12 +817,12 @@ int w83977af_dma_receive_complete(struct w83977af_ir *self)
 
 	st_fifo = &self->st_fifo;
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Save current set */
 	set = inb(iobase+SSR);
 	
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Read status FIFO */
 	switch_bank(iobase, SET5);
@@ -948,7 +943,7 @@ static void w83977af_pio_receive(struct w83977af_ir *self)
 
 	ASSERT(self != NULL, return;);
 	
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 	
 	/*  Receive all characters in Rx FIFO */
 	do {
@@ -973,11 +968,11 @@ static __u8 w83977af_sir_interrupt(struct w83977af_ir *self, int isr)
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), isr=%#x\n", isr);
 	
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 	/* Transmit FIFO low on data */
 	if (isr & ISR_TXTH_I) {
 		/* Write data left in transmit buffer */
-		actual = w83977af_pio_write(self->io.iobase, 
+		actual = w83977af_pio_write(self->io.fir_base, 
 					    self->tx_buff.data, 
 					    self->tx_buff.len, 
 					    self->io.fifo_size);
@@ -1042,7 +1037,7 @@ static __u8 w83977af_fir_interrupt(struct w83977af_ir *self, int isr)
 	__u8 set;
 	int iobase;
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 	set = inb(iobase+SSR);
 	
 	/* End of frame detected in FIFO */
@@ -1131,7 +1126,7 @@ static void w83977af_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	dev->interrupt = 1;
 
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Save current bank */
 	set = inb(iobase+SSR);
@@ -1171,7 +1166,7 @@ static int w83977af_is_receiving(struct w83977af_ir *self)
 	ASSERT(self != NULL, return FALSE;);
 
 	if (self->io.speed > 115200) {
-		iobase = self->io.iobase;
+		iobase = self->io.fir_base;
 
 		/* Check if rx FIFO is not empty */
 		set = inb(iobase+SSR);
@@ -1225,7 +1220,7 @@ static int w83977af_net_open(struct net_device *dev)
 	
 	ASSERT(self != NULL, return 0;);
 	
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	if (request_irq(self->io.irq, w83977af_interrupt, 0, dev->name, 
 			(void *) dev)) {
@@ -1290,7 +1285,7 @@ static int w83977af_net_close(struct net_device *dev)
 	
 	ASSERT(self != NULL, return 0;);
 	
-	iobase = self->io.iobase;
+	iobase = self->io.fir_base;
 
 	/* Stop device */
 	dev->tbusy = 1;

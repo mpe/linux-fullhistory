@@ -931,7 +931,7 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 		err("ov511_init_isoc: usb_run_isoc(0) ret %d", err);
 	err = usb_submit_urb(ov511->sbuf[1].urb);
 	if (err)
-		err("ov511_init_isoc: usb_run_isoc(1) ret %d\n", err);
+		err("ov511_init_isoc: usb_run_isoc(1) ret %d", err);
 
 	ov511->streaming = 1;
 

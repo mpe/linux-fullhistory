@@ -29,16 +29,36 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.11 Jan 27 2000 Ollie Lho
+ *	DMA bug, scheduler latency, second try
+ *  v0.10 Jan 24 2000 Ollie Lho
+ *	DMA bug fixed, found kernel scheduling problem
+ *  v0.09 Jan 20 2000 Ollie Lho
+ *	Clean up of channel register access routine (prepare for channel binding)
+ *  v0.08 Jan 14 2000 Ollie Lho
+ *	Isolation of AC97 codec code
+ *  v0.07 Jan 13 2000 Ollie Lho
+ *	Get rid of ugly old low level access routines (e.g. CHRegs.lp****)
+ *  v0.06 Jan 11 2000 Ollie Lho
+ *	Preliminary support for dual (more ?) AC97 codecs
  *  v0.05 Jan 08 2000 Luca Montecchiani <m.luca@iname.com>
- *     adapt to 2.3.x new __setup/__initcall
+ *	adapt to 2.3.x new __setup/__init call
  *  v0.04 Dec 31 1999 Ollie Lho
- *	Multiple Open, useing Middle Loop Interrupt to smooth playback
+ *	Multiple Open, using Middle Loop Interrupt to smooth playback
  *  v0.03 Dec 24 1999 Ollie Lho
  *	mem leak in prog_dmabuf and dealloc_dmabuf removed
  *  v0.02 Dec 15 1999 Ollie Lho
  *	SiS 7018 support added, playback O.K.
  *  v0.01 Alan Cox et. al.
  *	Initial Release in kernel 2.3.30, does not work
+ * 
+ *  ToDo
+ *	Clean up of low level channel register access code. (done)
+ *        Fix the bug on dma buffer management in update_ptr, read/write, drain_dac (done)
+ *	Dual AC97 codecs support (done partially, need channel binding to test)
+ *	Recording support
+ *	Mmap support
+ *	"Channel Binding" ioctl extension
  */
       
 #include <linux/config.h>
@@ -66,34 +86,40 @@
 #endif
 
 #include "trident.h"
-#include "ac97.h"
+#include "ac97_codec.h"
 
 #undef DEBUG
 
-#define DRIVER_VERSION "0.05"
+#define DRIVER_VERSION "0.11"
 
-#define TRIDENT_FMT_STEREO     0x01
-#define TRIDENT_FMT_16BIT      0x02
-#define TRIDENT_FMT_MASK       0x03
-#define TRIDENT_DAC_SHIFT      0   
-#define TRIDENT_ADC_SHIFT      4
-
-#define TRIDENT_ENABLE_PE      1
-#define TRIDENT_ENABLE_RE      2
-#define DAC_RUNNING            1
-#define ADC_RUNNING            2
-
+/* magic numbers to protect our data structures */
 #define TRIDENT_CARD_MAGIC	0x5072696E /* "Prin" */
 #define TRIDENT_STATE_MAGIC	0x63657373 /* "cess" */
 
-/* number of instances of opening /dev/dsp, can your CPU handle this ? */
-#define NR_DSPS		32
+/* The first 32 channels are called Bank A. They are (should be) reserved
+   for MIDI synthesizer. But since that is not supported yet, we can (ab)use
+   them to play PCM samples */
+#undef ABUSE_BANK_A
 
+/* maxinum number of instances of opening /dev/dspN, can your CPU handle this ?
+   NOTE: If /dev/dsp is opened O_RDWR (i.e. full duplex) it will consume 2 HW
+   channels */
+#ifdef ABUSE_BANK_A
+#define NR_HW_CH		64
+#else
+#define NR_HW_CH		32
+#endif
+
+/* maxinum nuber of AC97 codecs connected, AC97 2.0 defined 4, but 7018 and 4D-NX only
+   have 2 SDATA_IN lines (currently) */
+#define NR_AC97		2
+
+/* minor number of /dev/dspW */
 #define SND_DEV_DSP16	5 
 
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
-static const char *sample_format[] = {"8 bits Mono", "8 bits Stereo", "16 bits Mono", "16 bits Stereo"};
+
 static const char invalid_magic[] = KERN_CRIT "trident: invalid magic value in %s\n";
 
 struct pci_audio_info {
@@ -108,52 +134,12 @@ static struct pci_audio_info pci_audio_devices[] = {
 	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_7018, "SiS 7018 PCI Audio"}
 };
 
-static struct {
-	unsigned int id;
-	char *name;
-} snd_ac97_codec_ids[] = {
-	{0x414B4D00, "Asahi Kasei AK4540"    },
-	{0x41445340, "Analog Devices AD1881" },
-	{0x43525900, "Cirrus Logic CS4297"   },
-	{0x43525913, "Cirrus Logic CS4297A"  },
-	{0x43525931, "Cirrus Logic CS4299"   },
-	{0x4e534331, "National Semiconductor LM4549"},
-	{0x83847600, "SigmaTel STAC????"     },
-	{0x83847604, "SigmaTel STAC9701/3/4/5"},
-	{0x83847605, "SigmaTel STAC9704"      },
-	{0x83847608, "SigmaTel STAC9708"      },
-	{0x83847609, "SigmaTel STAC9721/23"   },
-	{0x00000000, NULL}
-};
-
-typedef struct tChannelControl
-{
-    // register data
-    unsigned int *  lpChStart;
-    unsigned int *  lpChStop;
-    unsigned int *  lpChAint;
-    unsigned int *  lpChAinten;
-
-    // register addresses
-    unsigned int *  lpAChStart;
-    unsigned int *  lpAChStop;
-    unsigned int *  lpAChAint;
-    unsigned int *  lpAChAinten;
-    
-    unsigned int data[16];
-
-} CHANNELCONTROL;
-
 /* "software" or virtual channel, an instance of opened /dev/dsp */
 struct trident_state {
 	unsigned int magic;
 	struct trident_card *card;	/* Card info */
 
-	/* wave stuff */
-	unsigned int rateadc, ratedac;
-	unsigned char fmt, enable;
-
-	/* single opne lock mechanism, should be removed */
+	/* single open lock mechanism, only used for recording */
 	struct semaphore open_sem;
 	wait_queue_head_t open_wait;
 
@@ -164,26 +150,33 @@ struct trident_state {
 	int virt;
 
 	struct dmabuf {
+		/* wave sample stuff */
+		unsigned int rate;
+		unsigned char fmt, enable;
+
+		/* hardware channel */
+		struct trident_channel *channel;
+
+		/* OSS buffer manangemeent stuff */
 		void *rawbuf;
 		unsigned buforder;
 		unsigned numfrag;
 		unsigned fragshift;
 
-		/* hardware channel number */
-		int chan;
+		/* our buffer acts like a circular ring */
+		unsigned hwptr;		/* where dma last started, update by update_ptr */
+		unsigned swptr;		/* where driver last clear/filled, updated by read/write */
+		int count;		/* bytes to be comsumed by dma machine */
+		unsigned total_bytes;	/* total bytes dmaed by hardware */
 
-		/* XXX zab - swptr only in here so that it can be referenced by
-		   clear_advance, as far as I can tell :( */
-		unsigned hwptr, swptr;
-		unsigned total_bytes;
-		int count;
-		unsigned error; /* over/underrun */
-		wait_queue_head_t wait;
+		unsigned error;		/* number of over/underruns */
+		wait_queue_head_t wait;	/* put process on wait queue when no more space in buffer */
 
 		/* redundant, but makes calculations easier */
 		unsigned fragsize;
 		unsigned dmasize;
 		unsigned fragsamples;
+
 		/* OSS stuff */
 		unsigned mapped:1;
 		unsigned ready:1;
@@ -192,44 +185,45 @@ struct trident_state {
 		int ossmaxfrags;
 		unsigned subdivision;
 	} dma_dac, dma_adc;
-
-	u8 bDMAStart;
-
 };
 
 /* hardware channels */
 struct trident_channel {
-	int chan; /* channel number */
-	u32 lba;
-	u32 eso;
+	int  num;	/* channel number */
+	u32 lba;	/* reg 0xe4 */
+	u32 eso;	/* reg 0xe8 */
 	u32 delta;
-	u16 attribute;
-	
+	u16 attribute;	/* reg 0xec */
+	u16 fm_vol;
+	u32 control;	/* reg 0xf0 */
 };
 
-struct trident_pcm_bank {
-	/* registers to control bank operations */
+struct trident_pcm_bank_address {
 	u32 start;
 	u32 stop;
 	u32 aint;
 	u32 aint_en;
+};
+static struct trident_pcm_bank_address bank_a_addrs =
+{
+	T4D_START_A,
+	T4D_STOP_A,
+	T4D_AINT_A,
+	T4D_AINTEN_A
+};
+static struct trident_pcm_bank_address bank_b_addrs =
+{
+	T4D_START_B,
+	T4D_STOP_B,
+	T4D_AINT_B,
+	T4D_AINTEN_B
+};
+struct trident_pcm_bank {
+	/* register addresses to control bank operations */
+	struct trident_pcm_bank_address *addresses;
 	/* each bank has 32 channels */
 	u32 bitmap; /* channel allocation bitmap */
-	//struct trident_channel channels[32];
-};
-
-struct trident_mixer {
-	int modcnt;
-	int supported_mixers;
-	int stereo_mixers;
-	int record_sources;
-
-	/* the caller must guarantee arg sanity before calling these */
-	/* int (*read_mixer)(struct trident_card *card, int index);*/
-	void (*write_mixer)(struct trident_card *card,int mixer, unsigned int left,
-			    unsigned int right);
-	int (*recmask_io)(struct trident_card *card,int rw,int mask);
-	unsigned int mixer_state[SOUND_MIXER_NRDEVICES];
+	struct trident_channel channels[32];
 };
 
 struct trident_card {
@@ -239,7 +233,7 @@ struct trident_card {
 	struct trident_card *next;
 
 	/* The trident has a certain amount of cross channel interaction
-	   so we use a single per card lock */	   
+	   so we use a single per card lock */
 	spinlock_t lock;
 
 	/* PCI device stuff */
@@ -249,286 +243,225 @@ struct trident_card {
 
 	/* soundcore stuff */
 	int dev_audio;
-	int dev_mixer;
 
-	struct trident_mixer mix;
-	struct trident_state *channels[NR_DSPS];
+	/* structures for abstraction of hardware facilities, codecs, banks and channels*/
+	struct ac97_codec *ac97_codec[NR_AC97];
+	struct trident_pcm_bank banks[NR_BANKS];
+	struct trident_state *states[NR_HW_CH];
 
 	/* hardware resources */
 	unsigned long iobase;
 	u32 irq;
-
-	/* hardware channel allocation bitmap */
-	u32 bitmap[2];
-
-	/* ugly stupid thing, remove ASAP */
-	CHANNELCONTROL ChRegs;
-	int ChanDwordCount;
 };
 
 static struct trident_card *devs = NULL;
 
-/*
- *	Trident support library routines
- */
- 
-/*---------------------------------------------------------------------------
-   void ResetAinten( struct trident_state *trident, int ChannelNum)
-  
-   Description: This routine will disable interrupts and ack any 
-		existing interrupts for specified channel.
-  
-   Parameters:	trident - pointer to target device class for 4DWave.
-		ChannelNum - channel number 
-  
-   returns:	TRUE if everything went ok, else FALSE.
-  
-  ---------------------------------------------------------------------------*/
+static void trident_ac97_set(struct ac97_codec *codec, u8 reg, u16 val);
+static u16 trident_ac97_get(struct ac97_codec *codec, u8 reg);
 
-static void ResetAinten(struct trident_card * trident, int ChannelNum)
-{
-	unsigned int dwMask;
-	unsigned int x = ChannelNum >> 5;
-	unsigned int ChanDwordCount = trident->ChanDwordCount;
+static int trident_open_mixdev(struct inode *inode, struct file *file);
+static int trident_release_mixdev(struct inode *inode, struct file *file);
+static int trident_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int cmd,
+				unsigned long arg);
+static loff_t trident_llseek(struct file *file, loff_t offset, int origin);
 
-	IReadAinten(&trident->ChRegs);
-	dwMask = 1 << (ChannelNum & 0x1f);
-	trident->ChRegs.lpChAinten[x] &= ~dwMask;
-	IWriteAinten(&trident->ChRegs);
-	// Ack the channel in case the interrupt was set before we disable it.
-	outl(dwMask, TRID_REG(trident, trident->ChRegs.lpAChAint[x]));
-}
-
-/*---------------------------------------------------------------------------
-   void EnableEndInterrupts( struct trident_card *trident)
-  
-   Description: This routine will enable end of loop interrupts.
-		End of loop interrupts will occur when a running
-		channel reaches ESO.
-  
-   Parameters:	trident - pointer to target device class for 4DWave.
-  
-   returns:	TRUE if everything went ok, else FALSE.
-  
-  ---------------------------------------------------------------------------*/
-
-static int trident_enable_end_interrupts(struct trident_card * trident)
+static int trident_enable_loop_interrupts(struct trident_card * card)
 {
 	u32 global_control;
 
-	global_control = inl(TRID_REG(trident, T4D_LFO_GC_CIR));
+	global_control = inl(TRID_REG(card, T4D_LFO_GC_CIR));
 
-	switch (trident->pci_id)
+	switch (card->pci_id)
 	{
 	case PCI_DEVICE_ID_SI_7018:
-		global_control |= (ENDLP_IE | BANK_B_EN);
+		global_control |= (ENDLP_IE | MIDLP_IE| BANK_B_EN);
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		global_control |= ENDLP_IE;
+		global_control |= (ENDLP_IE | MIDLP_IE);
 		break;
 	default:
 		return FALSE;
 	}
 
-	outl(global_control, TRID_REG(trident, T4D_LFO_GC_CIR));
+	outl(global_control, TRID_REG(card, T4D_LFO_GC_CIR));
 
 #ifdef DEBUG
-	printk("trident: Enable End Interrupts, globctl = 0x%08X\n", global_control);
+	printk("trident: Enable Loop Interrupts, globctl = 0x%08X\n",
+	       global_control);
 #endif
 	return (TRUE);
 }
 
-static int trident_enable_middle_interrupts(struct trident_card * trident)
+static int trident_disable_loop_interrupts(struct trident_card * card)
 {
 	u32 global_control;
 
-	global_control = inl(TRID_REG(trident, T4D_LFO_GC_CIR));
-
-	switch (trident->pci_id)
-	{
-	case PCI_DEVICE_ID_SI_7018:
-		global_control |= (MIDLP_IE | BANK_B_EN);
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-	default:
-		global_control |= MIDLP_IE;
-		break;
-	}
-
-	outl(global_control, TRID_REG(trident, T4D_LFO_GC_CIR));
+	global_control = inl(TRID_REG(card, T4D_LFO_GC_CIR));
+	global_control &= ~(ENDLP_IE | MIDLP_IE);
+	outl(global_control, TRID_REG(card, T4D_LFO_GC_CIR));
 
 #ifdef DEBUG
-	printk("trident: Enable Middle Interrupts, globctl = 0x%08X\n", global_control);
-#endif
-	return (TRUE);
-}
-/*---------------------------------------------------------------------------
-   void DisableEndInterrupts( struct trident_card *trident)
-  
-   Description: This routine will disable end of loop interrupts.
-		End of loop interrupts will occur when a running
-		channel reaches ESO.
-  
-   Parameters:	
-		trident - pointer to target device class for 4DWave.
-  
-   returns:	TRUE if everything went ok, else FALSE.
-  
-  ---------------------------------------------------------------------------*/
-
-static int trident_disable_end_interrupts(struct trident_card * trident)
-{
-	u32 global_control;
-
-	global_control = inl(TRID_REG(trident, T4D_LFO_GC_CIR));
-	global_control &= ~ENDLP_IE;
-	outl(global_control, TRID_REG(trident, T4D_LFO_GC_CIR));
-
-#ifdef DEBUG
-	printk("trident: Disabled End Interrupts, globctl = 0x%08X\n", global_control);
+	printk("trident: Disabled Loop Interrupts, globctl = 0x%08X\n",
+	       global_control);
 #endif
 	return (TRUE);
 }
 
-static int trident_disable_middle_interrupts(struct trident_card * trident)
+static void trident_enable_voice_irq(struct trident_card * card, unsigned int channel)
 {
-	u32 global_control;
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 reg, addr = bank->addresses->aint_en;
 
-	global_control = inl(TRID_REG(trident, T4D_LFO_GC_CIR));
-	global_control &= ~MIDLP_IE;
-	outl(global_control, TRID_REG(trident, T4D_LFO_GC_CIR));
+	reg = inl(TRID_REG(card, addr));
+	reg |= mask;
+	outl(reg, TRID_REG(card, addr));
 
 #ifdef DEBUG
-	printk("trident: Disabled Middle Interrupts, globctl = 0x%08X\n", global_control);
+	reg = inl(TRID_REG(card, T4D_AINTEN_B));
+	printk("trident: enabled IRQ on channel %d, AINTEN_B = 0x%08x\n",
+	       channel, reg);
 #endif
-	return (TRUE);
 }
-/*---------------------------------------------------------------------------
-   void trident_enable_voice_irq( unsigned int HwChannel )
-  
-    Description: Enable an interrupt channel, any channel 0 thru n.
-		 This routine automatically handles the fact that there are
-		 more than 32 channels available.
-  
-    Parameters : HwChannel - Channel number 0 thru n.
-		 trident - pointer to target device class for 4DWave.
-  
-    Return Value: None.
-  
-  ---------------------------------------------------------------------------*/
-void trident_enable_voice_irq(struct trident_card * trident, unsigned int channel)
+
+static void trident_disable_voice_irq(struct trident_card * card, unsigned int channel)
 {
-	unsigned int bank, mask, ChanDwordCount;
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 reg, addr = bank->addresses->aint_en;
+	
+	reg = inl(TRID_REG(card, addr));
+	reg &= ~mask;
+	outl(reg, TRID_REG(card, addr));
+	
+	/* Ack the channel in case the interrupt was set before we disable it. */
+	outl(mask, TRID_REG(card, bank->addresses->aint));
+
+#ifdef DEBUG
+	reg = inl(TRID_REG(card, T4D_AINTEN_B));
+	printk("trident: disabled IRQ on channel %d, AINTEN_B = 0x%08x\n",
+	       channel, reg);
+#endif
+}
+
+static void trident_start_voice(struct trident_card * card, unsigned int channel)
+{
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 addr = bank->addresses->start;
+
+#ifdef DEBUG
 	u32 reg;
+#endif
 
-	bank = channel >> 5;
-	mask = 1 << (channel & 0x1f);
-
-	ChanDwordCount = trident->ChanDwordCount;
-
-	IReadAinten(&trident->ChRegs);
-	trident->ChRegs.lpChAinten[bank] |= mask;
-	IWriteAinten(&trident->ChRegs);
+	outl(mask, TRID_REG(card, addr));
 
 #ifdef DEBUG
-	reg = inl(TRID_REG(trident, T4D_AINTEN_B));
-	printk("trident: enabled IRQ on channel %d\n", channel);
+	reg = inl(TRID_REG(card, T4D_START_B));
+	printk("trident: start voice on channel %d, START_B  = 0x%08x\n",
+	       channel, reg);
 #endif
 }
 
-/*---------------------------------------------------------------------------
-   void trident_disable_voice_irq( unsigned int HwChannel )
-  
-    Description: Disable an interrupt channel, any channel 0 thru n.
-		 This routine automatically handles the fact that there are
-		 more than 32 channels available.
-  
-    Parameters : HwChannel - Channel number 0 thru n.
-		 trident - pointer to target device class for 4DWave.
-  
-    Return Value: None.
-  
-  ---------------------------------------------------------------------------*/
-void trident_disable_voice_irq(struct trident_card * trident, unsigned int channel)
+static void trident_stop_voice(struct trident_card * card, unsigned int channel)
 {
-	unsigned int bank, mask, ChanDwordCount;
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 addr = bank->addresses->stop;
+
+#ifdef DEBUG
 	u32 reg;
+#endif
 
-	bank = channel >> 5;
-	mask = 1 << (channel & 0x1f);
-
-	ChanDwordCount = trident->ChanDwordCount;
-	IReadAinten(&trident->ChRegs);
-	trident->ChRegs.lpChAinten[bank] &= ~mask;
-	IWriteAinten(&trident->ChRegs);
+	outl(mask, TRID_REG(card, addr));
 
 #ifdef DEBUG
-	reg = inl(TRID_REG(trident, T4D_AINTEN_B));
-	printk("trident: disabled IRQ on channel %d\n", channel);
+	reg = inl(TRID_REG(card, T4D_STOP_B));
+	printk("trident: stop voice on channel %d,  STOP_B  = 0x%08x\n",
+	       channel, reg);
 #endif
 }
 
-/*---------------------------------------------------------------------------
-   unsigned int AllocateChannelPCM( void )
-  
-    Description: Allocate hardware channel by reverse order (63-0).
-  
-    Parameters :  trident - pointer to target device class for 4DWave.
-  
-    Return Value: hardware channel - 0-63 or -1 when no channel is available
-  
-  ---------------------------------------------------------------------------*/
-
-static int trident_alloc_pcm_channel(struct trident_card *trident)
+static int trident_check_channel_interrupt(struct trident_card * card, int channel)
 {
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 reg, addr = bank->addresses->aint;
+
+	reg = inl(TRID_REG(card, addr));
+
+#ifdef DEBUG
+	if (reg & mask)
+		printk("trident: channel %d has interrupt, AINT_B = 0x%08x\n",
+		       channel, reg);
+#endif
+	return (reg & mask) ? TRUE : FALSE;
+}
+
+static void trident_ack_channel_interrupt(struct trident_card * card, int channel)
+{
+	unsigned int mask = 1 << (channel & 0x1f);
+	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
+	u32 reg, addr = bank->addresses->aint;
+
+	reg = inl(TRID_REG(card, addr));
+	reg &= mask;
+	outl(reg, TRID_REG(card, addr));
+
+#ifdef DEBUG
+	reg = inl(TRID_REG(card, T4D_AINT_B));
+	printk("trident: Ack channel %d interrupt, AINT_B = 0x%08x\n",
+	       channel, reg);
+#endif
+}
+
+static struct trident_channel * trident_alloc_pcm_channel(struct trident_card *card)
+{
+	struct trident_pcm_bank *bank;
 	int idx;
 
-	if (trident->bitmap[BANK_B] == ~0UL) {
+	bank = &card->banks[BANK_B];
+	if (bank->bitmap == ~0UL) {
 		/* no more free channels avaliable */
 		printk(KERN_ERR "trident: no more channels available on Bank B.\n");
-		return -1;
+#ifdef ABUSE_BANK_A
+		goto bank_a;
+#endif
+		return NULL;
 	}
 	for (idx = 31; idx >= 0; idx--) {
-		if (!(trident->bitmap[BANK_B] & (1 << idx))) {
-			trident->bitmap[BANK_B] |= 1 << idx;
-			return idx + 32;
+		if (!(bank->bitmap & (1 << idx))) {
+			struct trident_channel *channel = &bank->channels[idx];
+			bank->bitmap |= 1 << idx;
+			channel->num = idx + 32;
+			return channel;
 		}
 	}
 
 #ifdef ABUSE_BANK_A
 	/* channels in Bank A should be reserved for synthesizer 
 	   not for normal use (channels in Bank A can't record) */
-	if (trident->bitmap[BANK_A] == ~0UL) {
+ bank_a:
+	bank = &card->banks[BANK_A];
+	if (bank->bitmap == ~0UL) {
 		/* no more free channels avaliable */
-		printk(KERN_ERR "trident: no channels available on Bank A.\n");
-		return -1;
+		printk(KERN_ERR "trident: no more channels available on Bank A.\n");
+		return NULL;
 	}
 	for (idx = 31; idx >= 0; idx--) {
-		if (!(trident->bitmap[BANK_A] & (1 << idx))) {
-			trident->bitmap[BANK_A] |= 1 << idx;
-			return idx;
+		if (!(bank->bitmap & (1 << idx))) {
+			struct trident_channel *channel = &bank->channels[idx];
+			banks->bitmap |= 1 << idx;
+			channel->num = idx;
+			return channels;
 		}
 	}
 #endif
-
-	return -1;
+	return NULL;
 }
 
-/*---------------------------------------------------------------------------
-   void FreeChannelPCM( int channel )
-  
-    Description: Free hardware channel.
-  
-    Parameters :  trident - pointer to target device class for 4DWave.
-                  channel - hardware channel number 0-63
-  
-    Return Value: none
-  
-  ---------------------------------------------------------------------------*/
-
-static void trident_free_pcm_channel(struct trident_card *trident, int channel)
+static void trident_free_pcm_channel(struct trident_card *card, int channel)
 {
 	int bank;
 
@@ -543,236 +476,74 @@ static void trident_free_pcm_channel(struct trident_card *trident, int channel)
 	bank = channel >> 5;
 	channel = channel & 0x1f;
 
-	if (trident->bitmap[bank] & (1 << (channel))) {
-		trident->bitmap[bank] &= ~(1 << (channel));
+	if (card->banks[bank].bitmap & (1 << (channel))) {
+		card->banks[bank].bitmap &= ~(1 << (channel));
 	}
 }
 
-/*---------------------------------------------------------------------------
-   void trident_start_voice( ULONG HwChannel )
-  
-    Description: Start a channel, any channel 0 thru n.
-		 This routine automatically handles the fact that there are
-		 more than 32 channels available.
-  
-    Parameters : HwChannel - Channel number 0 thru n.
-		 trident - pointer to target device class for 4DWave.
-  
-    Return Value: None.
-  
-  ---------------------------------------------------------------------------*/
-void trident_start_voice(struct trident_card * trident, unsigned int channel)
+/* called with spin lock held */
+static int trident_load_channel_registers(struct trident_card *card, u32 *data, unsigned int channel)
 {
-	unsigned int bank = channel >> 5;
-	unsigned int mask = 1 << (channel & 0x1f);
+	int i;
 
-	outl(mask, TRID_REG(trident, trident->ChRegs.lpAChStart[bank]));
-#ifdef DEBUG
-	printk("trident: start voice on channel %d\n", channel);
-#endif
+	if (channel > 63)
+		return FALSE;
+
+	/* select hardware channel to write */
+	outb(channel, TRID_REG(card, T4D_LFO_GC_CIR));
+	/* output the channel registers */
+	for (i = 0; i < CHANNEL_REGS; i++) {
+		outl(data[i], TRID_REG(card, CHANNEL_START + 4*i));
+	}
+
+	return TRUE;
 }
 
-/*---------------------------------------------------------------------------
-   void trident_stop_voice( ULONG HwChannel )
-  
-    Description: Stop a channel, any channel 0 thru n.
-		 This routine automatically handles the fact that there are
-		 more than 32 channels available.
-  
-    Parameters : HwChannel - Channel number 0 thru n.
-		 trident - pointer to target device class for 4DWave.
-  
-    Return Value: None.
-  
-  ---------------------------------------------------------------------------*/
-void trident_stop_voice(struct trident_card * trident, unsigned int channel)
+/* called with spin lock held */
+static int trident_write_voice_regs(struct trident_state *state, unsigned int rec)
 {
-	unsigned int bank = channel >> 5;
-	unsigned int mask = 1 << (channel & 0x1f);
+	unsigned int data[CHANNEL_REGS + 1];
+	struct trident_channel *channel;
 
-	outl(mask, TRID_REG(trident, trident->ChRegs.lpAChStop[bank]));
-#ifdef DEBUG
-	printk("trident: stop voice on channel %d\n", channel);
-#endif
-}
+	if (rec)
+		channel = state->dma_adc.channel;
+	else
+		channel = state->dma_dac.channel;
 
-/*---------------------------------------------------------------------------
-   int DidChannelInterrupt( )
-  
-   Description:	 Check if interrupt channel occurred.
-  
-   Parameters :	 trident - pointer to target device class for 4DWave.
-  
-   Return Value: TRUE if interrupt occurred, else FALSE.
-  
-  ---------------------------------------------------------------------------*/
-static int trident_check_channel_interrupt(struct trident_card * trident, int channel)
-{
-	unsigned int ChanDwordCount = NUM_BANKS;
-	unsigned int bank = channel >> 5;
-	unsigned int mask = 1 << (channel & 0x1f);
+	data[1] = channel->lba;
+	data[4] = channel->control;
 
-	ReadAint(&trident->ChRegs);
-
-#ifdef DEBUG
-	if (trident->ChRegs.lpChAint[bank] & mask)
-		printk("trident: channel %d has interrupt\n", channel);
-#endif	
-	return (trident->ChRegs.lpChAint[bank] & mask) ? TRUE : FALSE;
-}
-
-/*---------------------------------------------------------------------------
-   void AckChannelInterrupt( )
-  
-   Description:	 Acknowledge the interrupt bit for channel intrs.
-  
-   Parameters :	 trident - pointer to target device class for 4DWave.
-  
-   Return Value: None
-  
-  ---------------------------------------------------------------------------*/
-static void trident_ack_channel_interrupt(struct trident_card * trident, int channel)
-{
-	unsigned int ChanDwordCount = NUM_BANKS;
-	unsigned int bank = channel >> 5;
-	unsigned int mask = 1 << (channel & 0x1f);
-
-	ReadAint(&trident->ChRegs);
-	trident->ChRegs.lpChAint[bank] &= mask;
-	IWriteAint(&trident->ChRegs);
-}
-
-/*---------------------------------------------------------------------------
-   int trident_load_hw_delta( unsigned int HwChannel, unsigned int Delta )
-  
-   Description: This routine writes Delta to the hardware.
-  
-   Parameters:	Delta - data to write (2 Bytes only)
-		HwChannel - Hardware channel to write to.
-		trident - pointer to target device class for 4DWave.
-  
-   Returns:	TRUE if all goes well, else FALSE. 
-  
-  ---------------------------------------------------------------------------*/
-static int trident_load_hw_delta (struct trident_card * trident, unsigned int channel,
-				  unsigned short delta)
-{
-	/* select a channel for output */
-	outb(channel, TRID_REG(trident, T4D_LFO_GC_CIR));
-
-	switch (trident->pci_id)
+	switch (state->card->pci_id)
 	{
 	case PCI_DEVICE_ID_SI_7018:
+		data[0] = 0; /* Current Sample Offset */
+		data[2] = (channel->eso << 16) | (channel->delta & 0xffff);
+		data[3] = (channel->attribute << 16) | (channel->fm_vol & 0xffff);
+		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		outw((u16) delta, TRID_REG(trident, CH_DX_ESO_DELTA));
+		data[0] = 0; /* Current Sample Offset */
+		data[2] = (channel->eso << 16) | (channel->delta & 0xffff);
+		data[3] = channel->fm_vol & 0xffff;
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		outb(delta	 & 0xff, TRID_REG(trident, CH_NX_DELTA_CSO + 3));
-		outb((delta >> 8)& 0xff, TRID_REG(trident, CH_NX_DELTA_ESO + 3));
+		data[0] = (channel->delta << 24);
+		data[2] = ((channel->delta << 24) & 0xff000000) | (channel->eso & 0x00ffffff);
+		data[3] = channel->fm_vol & 0xffff;
 		break;
 	default:
 		return FALSE;
 	}
-	return TRUE;
-}
 
-/*---------------------------------------------------------------------------
-   int LoadVirtualChannel( ULONG *Data, ULONG HwChannel)
-  
-   Description: This routine writes all required channel registers to hardware.
-  
-   Parameters:	*Data - a pointer to the data to write (5 ULONGS always).
-		HwChannel - Hardware channel to write to.
-		trident - pointer to target device class for 4DWave.
-  
-   Returns:	TRUE if all goes well, else FALSE. 
-  
-  ---------------------------------------------------------------------------*/
-static int LoadVirtualChannel(struct trident_card * trident, unsigned int *Data, unsigned int HwChannel)
-{
-	unsigned int ChanData[CHANNEL_REGS];
-	unsigned int ULONGSToDo = CHANNEL_REGS;
-	unsigned int i;
-	unsigned int Address = CHANNEL_START;
-
-	/* Copy the data first... Hack... Before mucking with Volume! */
-	memcpy((unsigned char *) ChanData, (unsigned char *) Data, ULONGSToDo * 4);
-
-	outb((unsigned char) HwChannel, TRID_REG(trident, T4D_LFO_GC_CIR));
-
-	for (i = 0; i < ULONGSToDo; i++, Address += 4)
-		outl(ChanData[i], TRID_REG(trident, Address));
-#ifdef DEBUG
-	printk("(trident) load virtual channel %d\n", HwChannel);
-#endif
-	return TRUE;
-}
-
-/*---------------------------------------------------------------------------
-   trident_write_voice_regs
-  
-   Description: This routine will write the 5 hardware channel registers
-		to hardware.
-  
-   Paramters:	trident - pointer to target device class for 4DWave.
-		Channel - Real or Virtual channel number.
-		Each register field.
-  
-   Returns:	TRUE if all goes well, else FALSE. 
-  
-  ---------------------------------------------------------------------------*/
-int trident_write_voice_regs(struct trident_card * trident,
-			 unsigned int Channel,
-			 unsigned int LBA,
-			 unsigned int CSO,
-			 unsigned int ESO,
-			 unsigned int DELTA,
-			 unsigned int ALPHA_FMS,
-			 unsigned int FMC_RVOL_CVOL,
-			 unsigned int GVSEL,
-			 unsigned int PAN,
-			 unsigned int VOL,
-			 unsigned int CTRL,
-			 unsigned int EC)
-{
-	unsigned int ChanData[CHANNEL_REGS + 1], FmcRvolCvol;
-
-	ChanData[1] = LBA;
-	ChanData[4] = (GVSEL << 31) |
-	    ((PAN & 0x0000007f) << 24) |
-	    ((VOL & 0x000000ff) << 16) |
-	    ((CTRL & 0x0000000f) << 12) |
-	    (EC & 0x00000fff);
-
-	FmcRvolCvol = FMC_RVOL_CVOL & 0x0000ffff;
-
-	switch (trident->pci_id)
-	{
-	case PCI_DEVICE_ID_SI_7018:
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		ChanData[0] = (CSO << 16) | (ALPHA_FMS & 0x0000ffff);
-		ChanData[2] = (ESO << 16) | (DELTA & 0x0000ffff);
-		ChanData[3] = FmcRvolCvol;
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		ChanData[0] = (DELTA << 24) | (CSO & 0x00ffffff);
-		ChanData[2] = ((DELTA << 16) & 0xff000000) | (ESO & 0x00ffffff);
-		ChanData[3] = (ALPHA_FMS << 16) | FmcRvolCvol;
-		break;
-	}
-
-	LoadVirtualChannel(trident, ChanData, Channel);
-
-	return TRUE;
+	return trident_load_channel_registers(state->card, data, channel->num);
 }
 
 static int compute_rate(u32 rate)
 {
 	int delta;
-	// We special case 44100 and 8000 since rounding with the equation
-	// does not give us an accurate enough value. For 11025 and 22050
-	// the equation gives us the best answer. All other frequencies will
-	// also use the equation. JDW
+	/* We special case 44100 and 8000 since rounding with the equation
+	   does not give us an accurate enough value. For 11025 and 22050
+	   the equation gives us the best answer. All other frequencies will
+	   also use the equation. JDW */
 	if (rate == 44100)
 		delta = 0xeb3;
 	else if (rate == 8000)
@@ -784,838 +555,267 @@ static int compute_rate(u32 rate)
 	return delta;
 }
 
-/*---------------------------------------------------------------------------
-   trident_set_dac_rate
-  
-   Description: This routine will set the sample rate for playback.
-  
-   Paramters:	trident - pointer to target device class for 4DWave.
-		rate	- desired sample rate
-		set	- actually write hardware if set is true.
-  
-   Returns:	The rate allowed by device.
-  
-  ---------------------------------------------------------------------------*/
-
-static unsigned int trident_set_dac_rate(struct trident_state * trident,
-					 unsigned int rate, int set)
-{
-	u16 delta;
+/* set playback sample rate */
+static unsigned int trident_set_dac_rate(struct trident_state * state, unsigned int rate)
+{	
+	struct dmabuf *dmabuf = &state->dma_dac;
 
 	if (rate > 48000)
 		rate = 48000;
 	if (rate < 4000)
 		rate = 4000;
 
-	delta = compute_rate(rate);
-	trident->ratedac = rate;
+	dmabuf->rate = rate;
+	dmabuf->channel->delta = compute_rate(rate);
 
-	if (set)
-		trident_load_hw_delta(trident->card, trident->dma_dac.chan,
-				      delta);
-#ifdef DEBUG	 
-	printk("trident: called trident_set_dac_rate : rate = %d, "
-	       "set = %d, delta = 0x%04x\n", rate, set, delta);
+	trident_write_voice_regs(state, 0);
+
+#ifdef DEBUG
+	printk("trident: called trident_set_dac_rate : rate = %d\n", rate);
 #endif
 
 	return rate;
 }
 
-/*---------------------------------------------------------------------------
-   trident_set_adc_rate
-  
-   Description: This routine will set the sample rate for capture.
-  
-   Paramters:	trident - pointer to target device class for 4DWave.
-		rate	- desired sample rate
-		set	- actually write hardware if set is true.
-  
-   Returns:	The rate allowed by device.
-  
-  ---------------------------------------------------------------------------*/
-
-static unsigned int trident_set_adc_rate(struct trident_state * trident,
-					 unsigned int rate, int set)
+/* set recording sample rate */
+static unsigned int trident_set_adc_rate(struct trident_state * state, unsigned int rate)
 {
-	u16 delta;
-
+	struct dmabuf *dmabuf = &state->dma_adc;
 	if (rate > 48000)
 		rate = 48000;
 	if (rate < 4000)
 		rate = 4000;
 
-	delta = compute_rate(rate);
-	trident->ratedac = rate;
+	dmabuf->rate = rate;
+	dmabuf->channel->delta = compute_rate(rate);
 
-#if 0 /* It seems that 4D-Wave can not use wave tables channels for recording */
-	if (set)
-		trident_load_hw_delta(trident->card, trident->dma_adc.chan,
-				      delta);
-#endif
-#ifdef DEBUG	 
-	printk("trident: called trident_set_adc_rate : rate = %d, "
-	       "set = %d, delta = 0x%04x\n", rate, set, delta);
+	trident_write_voice_regs(state, 1);
+
+#ifdef DEBUG
+	printk("trident: called trident_set_adc_rate : rate = %d\n", rate);
 #endif
 	return rate;
 }
- 
-extern __inline__ unsigned ld2(unsigned int x)
+
+/* prepare channel attributes for playback */ 
+static void trident_play_setup(struct trident_state *state)
 {
-	unsigned r = 0;
+	struct dmabuf *dmabuf = &state->dma_dac;
+	struct trident_channel *channel = dmabuf->channel;
+
+	channel->lba = virt_to_bus(dmabuf->rawbuf);
+	channel->delta = compute_rate(dmabuf->rate);
+
+	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
+	channel->eso -= 1;
+
+	if (state->card->pci_id == PCI_DEVICE_ID_SI_7018) {
+		/* FIXME: channel attributes are configured by ioctls, but it is not implemented
+		   so just set to ZERO for the moment */
+		channel->attribute = 0;
+	} else {
+		channel->attribute = 0;
+	}
+
+	channel->fm_vol = 0x0;
 	
-	if (x >= 0x10000) {
-		x >>= 16;
-		r += 16;
-	}
-	if (x >= 0x100) {
-		x >>= 8;
-		r += 8;
-	}
-	if (x >= 0x10) {
-		x >>= 4;
-		r += 4;
-	}
-	if (x >= 4) {
-		x >>= 2;
-		r += 2;
-	}
-	if (x >= 2)
-		r++;
-	return r;
-}
-
-/* Write AC97 mixer registers */
-static void trident_ac97_set(struct trident_card *trident, u8 cmd, u16 val)
-{
-	unsigned int	address, mask, busy;
-	unsigned short	count  = 0xffff;
-	u32 data;
-
-	data = ((u32) val) << 16;
-
-	switch (trident->pci_id)
-	{
-	default:
-	case PCI_DEVICE_ID_SI_7018:
-		address = SI_AC97_WRITE;
-		mask = SI_AC97_BUSY_WRITE | SI_AC97_AUDIO_BUSY;
-		busy = SI_AC97_BUSY_WRITE;
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		address = DX_ACR0_AC97_W;
-		mask = busy = DX_AC97_BUSY_WRITE;
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		address = NX_ACR1_AC97_W;
-		mask = busy = NX_AC97_BUSY_WRITE;
-		break;
-	}
-
-	do {
-		if ((inw(TRID_REG(trident, address)) & busy) == 0)
-			break;
-	} while (count--);
-	
-	data |= (mask | (cmd & AC97_REG_ADDR));
-
-	if (count == 0) {
-		printk(KERN_ERR "trident: AC97 CODEC write timed out.\n");
-		return;
-	}
-	outl(data, TRID_REG(trident, address));
-}
-
-/* Read AC97 codec registers */
-static u16 trident_ac97_get(struct trident_card *trident, u8 cmd)
-{
-	unsigned int address, mask, busy;
-	unsigned short count = 0xffff;
-	u32 data;
-
-	switch (trident->pci_id)
-	{
-	default:
-	case PCI_DEVICE_ID_SI_7018:
-		address = SI_AC97_READ;
-		mask = SI_AC97_BUSY_READ | SI_AC97_AUDIO_BUSY;
-		busy = SI_AC97_BUSY_READ;
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		address = DX_ACR1_AC97_R;
-		mask = busy = DX_AC97_BUSY_READ;
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		address = NX_ACR2_AC97_R_PRIMARY;
-		mask = NX_AC97_BUSY_READ;
-		busy = 0x0c00;
-		break;
-	}
-
-	data = (mask | (cmd & AC97_REG_ADDR));
-	outl(data, TRID_REG(trident, address));
-
-	do {
-		data = inl(TRID_REG(trident, address));
-		if ((data & busy) == 0)
-			break;
-	} while (count--);
-
-	if (count == 0) {
-		printk(KERN_ERR "trident: AC97 CODEC read timed out.\n");
-		data = 0;
-	}
-	return ((u16) (data >> 16));
-}
-
-/* OSS interface to the ac97s.. */
-
-#define AC97_STEREO_MASK (SOUND_MASK_VOLUME|\
-	SOUND_MASK_PCM|SOUND_MASK_LINE|SOUND_MASK_CD|\
-	SOUND_MASK_VIDEO|SOUND_MASK_LINE1|SOUND_MASK_IGAIN)
-
-#define AC97_SUPPORTED_MASK (AC97_STEREO_MASK | \
-	SOUND_MASK_BASS|SOUND_MASK_TREBLE|SOUND_MASK_MIC|\
-	SOUND_MASK_SPEAKER)
-
-#define AC97_RECORD_MASK (SOUND_MASK_MIC|\
-	SOUND_MASK_CD| SOUND_MASK_VIDEO| SOUND_MASK_LINE1| SOUND_MASK_LINE|\
-	SOUND_MASK_PHONEIN)
-
-#define supported_mixer(CARD,FOO) ( CARD->mix.supported_mixers & (1<<FOO) )
-
-/* this table has default mixer values for all OSS mixers.
-	be sure to fill it in if you add oss mixers
-	to anyone's supported mixer defines */
-
-/* possible __init */
-static struct mixer_defaults {
-	int mixer;
-	unsigned int value;
-} mixer_defaults[SOUND_MIXER_NRDEVICES] = {
-	/* all values 0 -> 100 in bytes */
-	{SOUND_MIXER_VOLUME,	0x3232},
-	{SOUND_MIXER_BASS,	0x3232},
-	{SOUND_MIXER_TREBLE,	0x3232},
-	{SOUND_MIXER_SPEAKER,	0x3232},
-	{SOUND_MIXER_MIC,	0x3232},
-	{SOUND_MIXER_LINE,	0x3232},
-	{SOUND_MIXER_CD,	0x3232},
-	{SOUND_MIXER_VIDEO,	0x3232},
-	{SOUND_MIXER_LINE1,	0x3232},
-	{SOUND_MIXER_PCM,	0x3232},
-	{SOUND_MIXER_IGAIN,	0x3232},
-	{-1,0}
-};
-	
-static struct ac97_mixer_hw {
-	unsigned char offset;
-	int scale;
-} ac97_hw[SOUND_MIXER_NRDEVICES]= {
-	[SOUND_MIXER_VOLUME]	=	{AC97_MASTER_VOL_STEREO,63},
-	[SOUND_MIXER_BASS]	=	{AC97_MASTER_TONE,	15},
-	[SOUND_MIXER_TREBLE]	=	{AC97_MASTER_TONE, 	15},
-	[SOUND_MIXER_SPEAKER]	=	{AC97_PCBEEP_VOL,  	15},
-	[SOUND_MIXER_MIC]	=	{AC97_MIC_VOL,		31},
-	[SOUND_MIXER_LINE]	=	{AC97_LINEIN_VOL,	31},
-	[SOUND_MIXER_CD]	=	{AC97_CD_VOL,		31},
-	[SOUND_MIXER_VIDEO]	=	{AC97_VIDEO_VOL,	31},
-	[SOUND_MIXER_LINE1]	=	{AC97_AUX_VOL,		31},
-	[SOUND_MIXER_PCM]	=	{AC97_PCMOUT_VOL,	31},
-	[SOUND_MIXER_IGAIN]	=	{AC97_RECORD_GAIN,	31}
-};
-
-#if 0 /* *shrug* removed simply because we never used it.
-	 feel free to implement again if needed */
-
-/* reads the given OSS mixer from the ac97
-   the caller must have insured that the ac97 knows
-   about that given mixer, and should be holding a
-   spinlock for the card */
-static int ac97_read_mixer(struct trident_card *card, int mixer) 
-{
-	u16 val;
-	int ret = 0;
-	struct ac97_mixer_hw *mh = &ac97_hw[mixer];
-
-	val = trident_ac97_get(card , mh->offset);
-
-	if (AC97_STEREO_MASK & (1<<mixer)) {
-		/* nice stereo mixers .. */
-		int left,right;
-
-		left = (val >> 8)  & 0x7f;
-		right = val  & 0x7f;
-
-		if (mixer == SOUND_MIXER_IGAIN) {
-			right = (right * 100) / mh->scale;
-			left = (left * 100) / mh->scale;
-		else {
-			right = 100 - ((right * 100) / mh->scale);
-			left = 100 - ((left * 100) / mh->scale);
-		}
-
-		ret = left | (right << 8);
-	} else if (mixer == SOUND_MIXER_SPEAKER) {
-		ret = 100 - ((((val & 0x1e)>>1) * 100) / mh->scale);
-	} else if (mixer == SOUND_MIXER_MIC) {
-		ret = 100 - (((val & 0x1f) * 100) / mh->scale);
-	/*  the low bit is optional in the tone sliders and masking
-	    it lets us avoid the 0xf 'bypass'.. */
-	} else if (mixer == SOUND_MIXER_BASS) {
-		ret = 100 - ((((val >> 8) & 0xe) * 100) / mh->scale);
-	} else if (mixer == SOUND_MIXER_TREBLE) {
-		ret = 100 - (((val & 0xe) * 100) / mh->scale);
-	}
-
-#ifdef DEBUG
-	printk("trident: read OSS mixer %2d (ac97 register 0x%02x), "
-	       "0x%04x -> 0x%04x\n", mixer, mh->offset, val, ret);
-#endif
-
-	return ret;
-}
-#endif
-
-/* write the OSS encoded volume to the given OSS encoded mixer,
-   again caller's job to make sure all is well in arg land,
-   call with spinlock held */
-static void ac97_write_mixer(struct trident_card *card, int mixer, 
-			     unsigned int left, unsigned int right)
-{
-	u16 val = 0;
-	struct ac97_mixer_hw *mh = &ac97_hw[mixer];
-
-#ifdef DEBUG
-	printk("trident: wrote OSS mixer %2d (ac97 register 0x%02x), "
-	       "left vol:%2d, right vol:%2d:",
-	       mixer, mh->offset, left, right);
-#endif
-
-	if (AC97_STEREO_MASK & (1 << mixer)) {
-		/* stereo mixers */
-		if (mixer == SOUND_MIXER_IGAIN) {
-			right = (right * mh->scale) / 100;
-			left = (left * mh->scale) / 100;
-		} else {
-			right = ((100 - right) * mh->scale) / 100;
-			left = ((100 - left) * mh->scale) / 100;
-		}
-
-		val = (left << 8) | right;
-	} else if (mixer == SOUND_MIXER_SPEAKER) {
-		val = (((100 - left) * mh->scale) / 100) << 1;
-	} else if (mixer == SOUND_MIXER_MIC) {
-		val = trident_ac97_get(card , mh->offset) & ~0x801f;
-		val |= (((100 - left) * mh->scale) / 100);
-		/*  the low bit is optional in the tone sliders and masking
-		    it lets us avoid the 0xf 'bypass'.. */
-	} else if (mixer == SOUND_MIXER_BASS) {
-		val = trident_ac97_get(card , mh->offset) & ~0x0f00;
-		val |= ((((100 - left) * mh->scale) / 100) << 8) & 0x0e00;
-	} else if (mixer == SOUND_MIXER_TREBLE)	 {
-		val = trident_ac97_get(card , mh->offset) & ~0x000f;
-		val |= (((100 - left) * mh->scale) / 100) & 0x000e;
-	}
-
-#ifdef DEBUG
-	printk(" 0x%04x", val);
-#endif
-	trident_ac97_set(card, mh->offset, val);
-
-#ifdef DEBUG
-	val = trident_ac97_get(card, mh->offset);
-	printk(" -> 0x%04x\n", val);
-#endif
-}
-
-/* the following tables allow us to go from 
-	OSS <-> ac97 quickly. */
-
-enum ac97_recsettings {
-	AC97_REC_MIC=0,
-	AC97_REC_CD,
-	AC97_REC_VIDEO,
-	AC97_REC_AUX,
-	AC97_REC_LINE,
-	AC97_REC_STEREO, /* combination of all enabled outputs..  */
-	AC97_REC_MONO,	      /*.. or the mono equivalent */
-	AC97_REC_PHONE	      
-};
-
-static unsigned int ac97_rm2oss[] = {
-	[AC97_REC_MIC] = SOUND_MIXER_MIC, 
-	[AC97_REC_CD] = SOUND_MIXER_CD, 
-	[AC97_REC_VIDEO] = SOUND_MIXER_VIDEO, 
-	[AC97_REC_AUX] = SOUND_MIXER_LINE1, 
-	[AC97_REC_LINE] = SOUND_MIXER_LINE, 
-	[AC97_REC_PHONE] = SOUND_MIXER_PHONEIN
-};
-
-/* indexed by bit position */
-static unsigned int ac97_oss_rm[] = {
-	[SOUND_MIXER_MIC] = AC97_REC_MIC,
-	[SOUND_MIXER_CD] = AC97_REC_CD,
-	[SOUND_MIXER_VIDEO] = AC97_REC_VIDEO,
-	[SOUND_MIXER_LINE1] = AC97_REC_AUX,
-	[SOUND_MIXER_LINE] = AC97_REC_LINE,
-	[SOUND_MIXER_PHONEIN] = AC97_REC_PHONE
-};
-	
-/* read or write the recmask 
-   the ac97 can really have left and right recording
-   inputs independantly set, but OSS doesn't seem to 
-   want us to express that to the user. 
-   the caller guarantees that we have a supported bit set,
-   and they must be holding the card's spinlock */
-static int ac97_recmask_io(struct trident_card *card, int rw, int mask) 
-{
-	unsigned int val;
-
-	if (rw) {
-		/* read it from the card */
-		val = trident_ac97_get(card, 0x1a) & 0x7;
-		return ac97_rm2oss[val];
-	}
-
-	/* else, write the first set in the mask as the
-	   output */	
-
-	val = ffs(mask); 
-	val = ac97_oss_rm[val-1];
-	val |= val << 8;  /* set both channels */
-#ifdef DEBUG
-	printk("trident: setting ac97 recmask to 0x%x\n", val);
-#endif
-	trident_ac97_set(card, 0x1a, val);
-
-	return 0;
-};
-
-/* AC97 codec initialisation. */
-static u16 trident_ac97_init(struct trident_card *trident)
-{
-	u16 id1, id2;
-	char *ac97_name = NULL;
-	int i;
-
-	/* initialize controller side of AC link */
-	switch (trident->pci_id)
-	{
-	case PCI_DEVICE_ID_SI_7018:
-		/* disable AC97 GPIO interrupt */
-		outl(0x00, TRID_REG(trident, SI_AC97_GPIO));
-		/* stop AC97 cold reset process */
-		outl(0x00014000, TRID_REG(trident, SI_SERIAL_INTF_CTRL));
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		/* playback on */
-		outl(0x02, TRID_REG(trident, DX_ACR2_AC97_COM_STAT));
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		/* enable AC97 Output Slot 3,4 (PCM Left/Right Playback) */
-		outl(0x02, TRID_REG(trident, NX_ACR0_AC97_COM_STAT));
-		break;
-	}
-
-	/* get some information about our AC97 codec */
-	id1 = trident_ac97_get(trident, AC97_VENDOR_ID1);
-	id2 = trident_ac97_get(trident, AC97_VENDOR_ID2);
-	for (i = 0; i < sizeof (snd_ac97_codec_ids); i++) {
-		if (snd_ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
-			ac97_name = snd_ac97_codec_ids[i].name;
-			break;
-		}
-	}
-	if (ac97_name == NULL)
-		ac97_name = "Unknown";
-	printk(KERN_INFO "trident: ac97 vendor id1: 0x%04x, id2: 0x%04x (%s)\n",
-	       id1, id2, ac97_name);
-
-	/* initialize volume level */
-	trident_ac97_set(trident, AC97_RESET, 0L);
-	trident_ac97_set(trident, AC97_MASTER_VOL_STEREO, 0L);
-	trident_ac97_set(trident, AC97_PCMOUT_VOL, 0L);
-
-	/* set appropriate masks and function pointers */
-	trident->mix.supported_mixers = AC97_SUPPORTED_MASK;
-	trident->mix.stereo_mixers = AC97_STEREO_MASK;
-	trident->mix.record_sources = AC97_RECORD_MASK;
-	/* FIXME: trident->mix.read_mixer = ac97_read_mixer; */
-	trident->mix.write_mixer = ac97_write_mixer;
-	trident->mix.recmask_io = ac97_recmask_io;
-
-	return 0;
-}
-
-/* this function only update fmt field in trident_state, the hardware channel attribute
-   will be update in trident_play(rec)_setup() which will be called every time a new
-   sample is played(recorded) */
-static void set_fmt(struct trident_state *s, unsigned char mask, unsigned char data)
-{
-	s->fmt = (s->fmt & mask) | data;
-}
-
-/* the mode passed should be already shifted and masked */
-/* trident_play_setup: initialize channel for play back, mode specify the format of samples to
-   be played. 
-   default values: 
-*/
-
-static void trident_play_setup(struct trident_state *trident, int mode, u32 rate,
-			       void *buffer, int size)
-{
-	unsigned int LBA;
-	unsigned int Delta;
-	unsigned int ESO;
-	unsigned int CTRL;
-	unsigned int FMC_RVOL_CVOL;
-	unsigned int GVSEL;
-	unsigned int PAN;
-	unsigned int VOL;
-	unsigned int EC;
-
-	/* set Loop Begin Address */
-	LBA = virt_to_bus(buffer);
-	Delta = compute_rate(rate);
-
-	/* set ESO */
-	ESO = size;
-	if (mode & TRIDENT_FMT_16BIT)
-		ESO /= 2;
-	if (mode & TRIDENT_FMT_STEREO)
-		ESO /= 2;
-	ESO = ESO - 1;
-
-	/* loop mode enable */
-	CTRL = 0x00000001;
-	if (mode & TRIDENT_FMT_16BIT) {
+	channel->control = CHANNEL_LOOP;
+	if (dmabuf->fmt & TRIDENT_FMT_16BIT) {
 		/* 16-bits */
-		CTRL |= 0x00000008;
+		channel->control |= CHANNEL_16BITS;
 		/* signed */
-		CTRL |= 0x00000002;
+		channel->control |= CHANNEL_SIGNED;
 	}
-	if (mode & TRIDENT_FMT_STEREO)
+	if (dmabuf->fmt & TRIDENT_FMT_STEREO)
 		/* stereo */
-		CTRL |= 0x00000004;
-	
-	/* FIXME: some difference between 4D and 7018 in FMC_RVOL_CVOL */
-	/* right vol: mute, ledt vol: mute */
-	FMC_RVOL_CVOL = 0x0000ffff;
-	GVSEL = 1;
-	PAN = 0;
-	VOL = 0;
-	EC = 0;
-
-	trident_write_voice_regs(trident->card,
-				 trident->dma_dac.chan,
-				 LBA,
-				 0,	/* cso */
-				 ESO,
-				 Delta,
-				 0,	/* alpha */
-				 FMC_RVOL_CVOL,
-				 GVSEL,
-				 PAN,
-				 VOL,
-				 CTRL,
-				 EC);
-
+		channel->control |= CHANNEL_STEREO;
+#ifdef DEBUG
+	printk("trident: trident_play_setup, LBA = 0x%08x, "
+	       "Delat = 0x%08x, ESO = 0x%08x, Control = 0x%08x\n",
+	       channel->lba, channel->delta, channel->eso, channel->control);
+#endif
+	trident_write_voice_regs(state, 0);
 }
 
-/*
- *	Native record driver 
- */
-/* FIXME: Not exammed yet */
-/* again, passed mode is alrady shifted/masked */
-
-static void trident_rec_setup(struct trident_state *trident, int mode, u32 rate,
-			      void *buffer, int size)
+/* prepare channel attributes for recording */
+static void trident_rec_setup(struct trident_state *state)
 {
-	unsigned int LBA;
-	unsigned int Delta;
-	unsigned int ESO;
-	unsigned int CTRL;
-	unsigned int FMC_RVOL_CVOL;
-	unsigned int GVSEL;
-	unsigned int PAN;
-	unsigned int VOL;
-	unsigned int EC;
-	unsigned char bValue;
-	unsigned short wValue;
-	unsigned int dwValue;
-	unsigned short wRecCODECSamples;
-	unsigned int dwChanFlags;
-	struct trident_card *card = trident->card;
+	u16 w;
+	struct trident_card *card = state->card;
+	struct dmabuf *dmabuf = &state->dma_adc;
+	struct trident_channel *channel = dmabuf->channel;
 
-#ifdef DEBUG
-	printk("trident: trident_rec_setup called\n");
-#endif
-
-	// Enable AC-97 ADC (capture), disable capture interrupt
+	/* Enable AC-97 ADC (capture) */
 	switch (card->pci_id) 
 	{
 	case PCI_DEVICE_ID_SI_7018:
 		/* for 7018, the ac97 is always in playback/record (duplex) mode */
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		bValue = inb(TRID_REG(card, DX_ACR2_AC97_COM_STAT));
-		outb(bValue | 0x48, TRID_REG(card, DX_ACR2_AC97_COM_STAT));
+		w = inb(TRID_REG(card, DX_ACR2_AC97_COM_STAT));
+		outb(w | 0x48, TRID_REG(card, DX_ACR2_AC97_COM_STAT));
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		wValue = inw(TRID_REG(card, T4D_MISCINT));
-		outw(wValue | 0x1000, TRID_REG(card, T4D_MISCINT));
+		w = inw(TRID_REG(card, T4D_MISCINT));
+		outw(w | 0x1000, TRID_REG(card, T4D_MISCINT));
 		break;
+	default:
+		return;
 	}
 
-	// Initilize the channel and set channel Mode
-	outb(0, TRID_REG(card, LEGACY_DMAR15));
+	channel->lba = virt_to_bus(dmabuf->rawbuf);
+	channel->delta = compute_rate(dmabuf->rate);
 
-	// Set DMA channel operation mode register
-	bValue = inb(TRID_REG(card, LEGACY_DMAR11)) & 0x03;
-	outb(bValue | 0x54, TRID_REG(card, LEGACY_DMAR11));
+	channel->eso = dmabuf->dmasize >> sample_shift[dmabuf->fmt];
+	channel->eso -= 1;
 
-	// Set channel buffer Address
-	LBA = virt_to_bus(buffer);
-	outl(LBA, TRID_REG(card, LEGACY_DMAR0));
-
-	/* set ESO */
-	ESO = size;
-
-	dwValue = inl(TRID_REG(card, LEGACY_DMAR4)) & 0xff000000;
-	dwValue |= (ESO - 1) & 0x0000ffff;
-	outl(dwValue, TRID_REG(card, LEGACY_DMAR4));
-
-	// Set channel sample rate , 4.12 format
-	dwValue = (((unsigned int) 48000L << 12) / (unsigned long) (rate));
-	outw((unsigned short) dwValue, TRID_REG(card, T4D_SBDELTA_DELTA_R));
-
-	// Set channel interrupt blk length
-	if (mode & TRIDENT_FMT_16BIT) {
-		wRecCODECSamples = (unsigned short) ((ESO >> 1) - 1);
-		dwChanFlags = 0xffffb000;
+	if (state->card->pci_id == PCI_DEVICE_ID_SI_7018) {
+		/* FIXME: channel attributes are configured by ioctls, but it is not implemented
+		   so just set to ZERO for the moment */
+		channel->attribute = 0;
 	} else {
-		wRecCODECSamples = (unsigned short) (ESO - 1);
-		dwChanFlags = 0xffff1000;
+		channel->attribute = 0;
 	}
 
-	dwValue = ((unsigned int) wRecCODECSamples) << 16;
-	dwValue |= (unsigned int) (wRecCODECSamples) & 0x0000ffff;
-	outl(dwValue, TRID_REG(card, T4D_SBBL_SBCL));
-
-	// Right now, set format and start to run capturing, 
-	// continuous run loop enable.
-	trident->bDMAStart = 0x19;	// 0001 1001b
-
-	if (mode & TRIDENT_FMT_16BIT)
-		trident->bDMAStart |= 0xa0;
-	if (mode & TRIDENT_FMT_STEREO)
-		trident->bDMAStart |= 0x40;
-
-	// Prepare capture intr channel
-
-	Delta = ((((unsigned int) rate) << 12) / ((unsigned long) (48000L)));
-
-	/* set Loop Back Address */
-	LBA = virt_to_bus(buffer);
-
-	/* set ESO */
-	ESO = size;
-	if (mode & TRIDENT_FMT_16BIT)
-		ESO /= 2;
-	if (mode & TRIDENT_FMT_STEREO)
-		ESO /= 2;
-
-	ESO = ESO - 1;
-	//snd_printk("trid: ESO = %d\n", ESO);
-
-	/* set ctrl mode
-	   CTRL default: 8-bit (unsigned) mono, loop mode enabled
-	 */
-	CTRL = 0x00000001;
-	if (mode & TRIDENT_FMT_16BIT)
-		CTRL |= 0x00000008;	// 16-bit data
-	/* XXX DO UNSIGNED XXX */
-	//if (!(mode & SND_PCM1_MODE_U))
-	//	CTRL |= 0x00000002;	// signed data
-	if (mode& TRIDENT_FMT_STEREO)
-		CTRL |= 0x00000004;	// stereo data
-
-	FMC_RVOL_CVOL = 0x0000ffff;
-	GVSEL = 1;
-	PAN = 0xff;
-	VOL = 0xff;
-	EC = 0;
-
-	trident_write_voice_regs(card,
-			     trident->dma_adc.chan,
-			     LBA,
-			     0,	/* cso */
-			     ESO,
-			     Delta,
-			     0,	/* alpha */
-			     FMC_RVOL_CVOL,
-			     GVSEL,
-			     PAN,
-			     VOL,
-			     CTRL,
-			     EC);
-
+	channel->fm_vol = 0x0;
+	
+	channel->control = CHANNEL_LOOP;
+	if (dmabuf->fmt & TRIDENT_FMT_16BIT) {
+		/* 16-bits */
+		channel->control |= CHANNEL_16BITS;
+		/* signed */
+		channel->control |= CHANNEL_SIGNED;
+	}
+	if (dmabuf->fmt & TRIDENT_FMT_STEREO)
+		/* stereo */
+		channel->control |= CHANNEL_STEREO;
+#ifdef DEBUG
+	printk("trident: trident_rec_setup, LBA = 0x%08x, "
+	       "Delat = 0x%08x, ESO = 0x%08x, Control = 0x%08x\n",
+	       channel->lba, channel->delta, channel->eso, channel->control);
+#endif
+	trident_write_voice_regs(state, 1);
 }
 
-/* get current playback pointer */
-__inline__ unsigned int get_dmaa(struct trident_state *trident)
+/* get current playback/recording dma buffer pointer (byte offset from LBA),
+   called with spinlock held! */
+extern __inline__ unsigned trident_get_dma_addr(struct trident_state *state, unsigned rec)
 {
+	struct dmabuf *dmabuf;
 	u32 cso;
-	u32 eso;
-#if 0
-	/* FIXME: does this mean that FULL duplex is not supported ? */
-	if (!(trident->enable & ADC_RUNNING))
-		return 0;
-#endif
-	outb(trident->dma_dac.chan, TRID_REG(trident->card, T4D_LFO_GC_CIR));
 
-	switch (trident->card->pci_id) 
+	if (rec)
+		dmabuf = &state->dma_adc;
+	else
+		dmabuf = &state->dma_dac;
+
+	if (!dmabuf->enable)
+		return 0;
+
+	outb(dmabuf->channel->num, TRID_REG(state->card, T4D_LFO_GC_CIR));
+
+	switch (state->card->pci_id) 
 	{
 	case PCI_DEVICE_ID_SI_7018:
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
 		/* 16 bits ESO, CSO for 7018 and DX */
-		cso = inw(TRID_REG(trident->card, CH_DX_CSO_ALPHA_FMS + 2));
-		eso = inw(TRID_REG(trident->card, CH_DX_ESO_DELTA + 2));
+		cso = inw(TRID_REG(state->card, CH_DX_CSO_ALPHA_FMS + 2));
 		break;
 	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
 		/* 24 bits ESO, CSO for NX */
-		cso =  inl(TRID_REG(trident->card, CH_NX_DELTA_CSO)) & 0x00ffffff;
-		eso =  inl(TRID_REG(trident->card, CH_NX_DELTA_ESO)) & 0x00ffffff;
+		cso = inl(TRID_REG(state->card, CH_NX_DELTA_CSO)) & 0x00ffffff;
 		break;
 	default:
 		return 0;
 	}
 
 #ifdef DEBUG
-	printk("trident: get_dmaa: chip reported channel: %d, cso = %d, eso = %d\n",
-	       trident->dma_dac.chan, cso, eso);
+	printk("trident: trident_get_dma_addr: chip reported channel: %d, cso = %d\n",
+	       dmabuf->channel->num, cso);
 #endif
 	/* ESO and CSO are in units of Samples, convert to byte offset */
-	if (cso > eso)
-		cso = eso;
-	if (trident->fmt & TRIDENT_FMT_16BIT)
-		cso *= 2;
-	if (trident->fmt & TRIDENT_FMT_STEREO)
-		cso *= 2;
-	return cso;
-}
+	cso <<= sample_shift[dmabuf->fmt];
 
-/* get current recording pointer */
-extern __inline__ unsigned get_dmac(struct trident_state *trident)
-{
-	u32 cso;
-#if 0
-	/* FIXME: does this mean that FULL duplex is not supported ? */
-	if (!(trident->enable & DAC_RUNNING))
-		return 0;
-#endif
-	outb(trident->dma_adc.chan, TRID_REG(trident->card, T4D_LFO_GC_CIR));
-
-	switch (trident->card->pci_id) 
-	{
-	default:
-	case PCI_DEVICE_ID_SI_7018:
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
-		/* 16 bits ESO, CSO for 7018 and DX */
-		cso = inw(TRID_REG(trident->card, CH_DX_CSO_ALPHA_FMS + 2));
-		break;
-	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
-		/* 24 bits ESO, CSO for NX */
-		cso = inl(TRID_REG(trident->card, CH_NX_DELTA_CSO)) & 0x00ffffff;
-		break;
-	}
-
-#ifdef DEBUG
-	printk("(trident) get_dmac: chip reported cso = %d\n", cso);
-#endif
-	/* ESO and CSO are in units of Samples, convert to byte offset */
-	if (trident->fmt & TRIDENT_FMT_16BIT)
-		cso *= 2;
-	if (trident->fmt & TRIDENT_FMT_STEREO)
-		cso *= 2;
-	return cso;
+	return (cso % dmabuf->dmasize);
 }
 
 /* Stop recording (lock held) */
-extern inline void __stop_adc(struct trident_state *s)
+extern __inline__ void __stop_adc(struct trident_state *state)
 {
-	struct trident_card *trident = s->card;
-#ifdef DEBUG
-	printk("(trident) stopping ADC\n");
-#endif
-	s->enable &= ~ADC_RUNNING;
-	trident_disable_voice_irq(trident, s->dma_adc.chan);
-	outb(0x00, TRID_REG(trident, T4D_SBCTRL_SBE2R_SBDD));
-	trident_disable_voice_irq(trident, s->dma_adc.chan);
-	trident_stop_voice(trident, s->dma_adc.chan);
-	ResetAinten(trident, s->dma_adc.chan);
-}	
+	struct dmabuf *dmabuf = &state->dma_adc;
+	unsigned int chan_num = dmabuf->channel->num;
+	struct trident_card *card = state->card;
 
-extern inline void stop_adc(struct trident_state *s)
+	dmabuf->enable &= ~DMA_RUNNING;
+	trident_stop_voice(card, chan_num);
+	trident_disable_voice_irq(card, chan_num);
+}
+
+static void stop_adc(struct trident_state *state)
 {
+	struct trident_card *card = state->card;
 	unsigned long flags;
-	struct trident_card *trident = s->card;
 
-	spin_lock_irqsave(&trident->lock, flags);
-	__stop_adc(s);
-	spin_unlock_irqrestore(&trident->lock, flags);
-}	
+	spin_lock_irqsave(&card->lock, flags);
+	__stop_adc(state);
+	spin_unlock_irqrestore(&card->lock, flags);
+}
+
+static void start_adc(struct trident_state *state)
+{
+	struct dmabuf *dmabuf = &state->dma_adc;
+	unsigned int chan_num = dmabuf->channel->num;
+	struct trident_card *card = state->card;
+	unsigned long flags;
+
+	spin_lock_irqsave(&card->lock, flags);
+	if ((dmabuf->mapped || 
+	     dmabuf->count < (signed)(dmabuf->dmasize - 2*dmabuf->fragsize))
+	    && dmabuf->ready) {
+		dmabuf->enable |= DMA_RUNNING;
+		trident_enable_voice_irq(card, chan_num);
+		trident_start_voice(card, chan_num);
+	}
+	spin_unlock_irqrestore(&card->lock, flags);
+}
 
 /* stop playback (lock held) */
-extern inline void __stop_dac(struct trident_state *state)
+extern __inline__ void __stop_dac(struct trident_state *state)
 {
-	struct trident_card *trident = state->card;
-	trident_stop_voice(trident, state->dma_dac.chan);
-	trident_disable_voice_irq(trident, state->dma_dac.chan);
-	state->enable &= ~DAC_RUNNING;
-}	
+	struct dmabuf *dmabuf = &state->dma_dac;
+	unsigned int chan_num = dmabuf->channel->num;
+	struct trident_card *card = state->card;
 
-extern inline void stop_dac(struct trident_state *state)
+	dmabuf->enable &= ~DMA_RUNNING;
+	trident_stop_voice(card, chan_num);
+	trident_disable_voice_irq(card, chan_num);
+}
+
+static void stop_dac(struct trident_state *state)
 {
-	struct trident_card *trident = state->card;
+	struct trident_card *card = state->card;
 	unsigned long flags;
 
-	spin_lock_irqsave(&trident->lock, flags);
+	spin_lock_irqsave(&card->lock, flags);
 	__stop_dac(state);
-	spin_unlock_irqrestore(&trident->lock, flags);
+	spin_unlock_irqrestore(&card->lock, flags);
 }	
 
 static void start_dac(struct trident_state *state)
 {
-	unsigned long flags;
-	struct trident_card *trident = state->card;
-
-	spin_lock_irqsave(&state->card->lock, flags);
-	if ((state->dma_dac.mapped || state->dma_dac.count > 0) && state->dma_dac.ready) {
-		state->enable |= DAC_RUNNING;
-		trident_enable_voice_irq(trident, state->dma_dac.chan);
-		trident_start_voice(trident, state->dma_dac.chan);
-	}
-	spin_unlock_irqrestore(&state->card->lock, flags);
-}	
-
-static void start_adc(struct trident_state *s)
-{
+	struct dmabuf *dmabuf = &state->dma_dac;
+	unsigned int chan_num = dmabuf->channel->num;
+	struct trident_card *card = state->card;
 	unsigned long flags;
 
-	spin_lock_irqsave(&s->card->lock, flags);
-	if ((s->dma_adc.mapped || s->dma_adc.count < (signed)(s->dma_adc.dmasize - 2*s->dma_adc.fragsize)) 
-	    && s->dma_adc.ready) {
-		s->enable |= ADC_RUNNING;
-		trident_enable_voice_irq(s->card, s->dma_adc.chan);
-		outb(s->bDMAStart, TRID_REG(s->card, T4D_SBCTRL_SBE2R_SBDD));
-		trident_start_voice(s->card, s->dma_adc.chan);
-#ifdef DEBUG
-		printk("(trident) starting ADC\n");
-#endif	
+	spin_lock_irqsave(&card->lock, flags);
+	if ((dmabuf->mapped || dmabuf->count > 0) && dmabuf->ready) {
+		dmabuf->enable |= DMA_RUNNING;
+		trident_enable_voice_irq(card, chan_num);
+		trident_start_voice(card, chan_num);
 	}
-	spin_unlock_irqrestore(&s->card->lock, flags);
-}	
+	spin_unlock_irqrestore(&card->lock, flags);
+}
 
 #define DMABUF_DEFAULTORDER (15-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
@@ -1623,9 +823,15 @@ static void start_adc(struct trident_state *s)
 /* allocate DMA buffer, playback and recording buffer should be allocated seperately */
 static int alloc_dmabuf(struct trident_state *state, unsigned rec)
 {
+	struct dmabuf *dmabuf;
 	void *rawbuf;
 	int order;
 	unsigned long map, mapend;
+
+	if (rec)
+		dmabuf  = &state->dma_adc;
+	else
+		dmabuf  = &state->dma_dac;
 
 	/* alloc as big a chunk as we can, FIXME: is this necessary ?? */
 	for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
@@ -1634,7 +840,7 @@ static int alloc_dmabuf(struct trident_state *state, unsigned rec)
 	if (!rawbuf)
 		return -ENOMEM;
 #ifdef DEBUG
-	printk("trident: allocated %ld (%d) bytes at %p\n",
+	printk("trident: allocated %ld (order = %d) bytes at %p\n",
 	       PAGE_SIZE << order, order, rawbuf);
 #endif
 
@@ -1648,17 +854,10 @@ static int alloc_dmabuf(struct trident_state *state, unsigned rec)
 		return -ENOMEM;
 	}
 
-	if (rec) {
-		state->dma_adc.ready = state->dma_adc.mapped = 0;
-		state->dma_adc.rawbuf = rawbuf;
-		state->dma_adc.buforder = order;
-	}
-	else {
-		state->dma_dac.ready = state->dma_dac.mapped = 0;
-		state->dma_dac.rawbuf = rawbuf;
-		state->dma_dac.buforder = order;
-	}
-
+	dmabuf->ready  = dmabuf->mapped = 0;
+	dmabuf->rawbuf = rawbuf;
+	dmabuf->buforder = order;
+	
 	/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
 	mapend = MAP_NR(rawbuf + (PAGE_SIZE << order) - 1);
 	for (map = MAP_NR(rawbuf); map <= mapend; map++)
@@ -1668,180 +867,237 @@ static int alloc_dmabuf(struct trident_state *state, unsigned rec)
 }
 
 /* free DMA buffer */
-static void dealloc_dmabuf(struct dmabuf *db)
+static void dealloc_dmabuf(struct dmabuf *dmabuf)
 {
 	unsigned long map, mapend;
 
-	if (db->rawbuf) {
+	if (dmabuf->rawbuf) {
 		/* undo marking the pages as reserved */
-		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
-		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
+		mapend = MAP_NR(dmabuf->rawbuf + (PAGE_SIZE << dmabuf->buforder) - 1);
+		for (map = MAP_NR(dmabuf->rawbuf); map <= mapend; map++)
 			clear_bit(PG_reserved, &mem_map[map].flags);	
-		free_pages((unsigned long)db->rawbuf, db->buforder);
+		free_pages((unsigned long)dmabuf->rawbuf, dmabuf->buforder);
 	}
-	db->rawbuf = NULL;
-	db->mapped = db->ready = 0;
+	dmabuf->rawbuf = NULL;
+	dmabuf->mapped = dmabuf->ready = 0;
 }
 
 static int prog_dmabuf(struct trident_state *state, unsigned rec)
 {
-	struct dmabuf *db = rec ? &state->dma_adc : &state->dma_dac;
-	unsigned rate = rec ? state->rateadc : state->ratedac;
+	struct dmabuf *dmabuf;
 	unsigned bytepersec;
-	unsigned bufs;
-	unsigned char fmt;
+	unsigned bufsize;
 	unsigned long flags;
 	int ret;
 
+	if (rec)
+		dmabuf = &state->dma_adc;
+	else
+		dmabuf = &state->dma_dac;
+
 	spin_lock_irqsave(&state->card->lock, flags);
-	fmt = state->fmt;
-	if (rec) {
-		state->enable &= ~TRIDENT_ENABLE_RE;
-		fmt >>= TRIDENT_ADC_SHIFT;
-	} else {
-		state->enable &= ~TRIDENT_ENABLE_PE;
-		fmt >>= TRIDENT_DAC_SHIFT;
-	}
+	dmabuf->hwptr  = dmabuf->swptr = dmabuf->total_bytes = 0;
+	dmabuf->count  = dmabuf->error = dmabuf->endcleared  = 0;
 	spin_unlock_irqrestore(&state->card->lock, flags);
 
-	fmt &= TRIDENT_FMT_MASK;
-
-	db->hwptr = db->swptr = db->total_bytes = 0;
-	db->count = db->error = db->endcleared  = 0;
-
 	/* allocate DMA buffer if not allocated yet */
-	if (!db->rawbuf)
+	if (!dmabuf->rawbuf)
 		if ((ret = alloc_dmabuf(state, rec)))
 			return ret;
 
-	bytepersec = rate << sample_shift[fmt];
-	bufs = PAGE_SIZE << db->buforder;
-	if (db->ossfragshift) {
-		if ((1000 << db->ossfragshift) < bytepersec)
-			db->fragshift = ld2(bytepersec/1000);
+	/* FIXME: figure out all this OSS fragment stuff */
+	bytepersec = dmabuf->rate << sample_shift[dmabuf->fmt];
+	bufsize = PAGE_SIZE << dmabuf->buforder;
+	if (dmabuf->ossfragshift) {
+		if ((1000 << dmabuf->ossfragshift) < bytepersec)
+			dmabuf->fragshift = ld2(bytepersec/1000);
 		else
-			db->fragshift = db->ossfragshift;
+			dmabuf->fragshift = dmabuf->ossfragshift;
 	} else {
 		/* lets hand out reasonable big ass buffers by default */
-		db->fragshift = (db->buforder + PAGE_SHIFT -2);
+		dmabuf->fragshift = (dmabuf->buforder + PAGE_SHIFT -2);
 	}
-	db->numfrag = bufs >> db->fragshift;
-	while (db->numfrag < 4 && db->fragshift > 3) {
-		db->fragshift--;
-		db->numfrag = bufs >> db->fragshift;
+	dmabuf->numfrag = bufsize >> dmabuf->fragshift;
+	while (dmabuf->numfrag < 4 && dmabuf->fragshift > 3) {
+		dmabuf->fragshift--;
+		dmabuf->numfrag = bufsize >> dmabuf->fragshift;
 	}
-	db->fragsize = 1 << db->fragshift;
-	if (db->ossmaxfrags >= 4 && db->ossmaxfrags < db->numfrag)
-		db->numfrag = db->ossmaxfrags;
-	db->fragsamples = db->fragsize >> sample_shift[fmt];
-	db->dmasize = db->numfrag << db->fragshift;
+	dmabuf->fragsize = 1 << dmabuf->fragshift;
+	if (dmabuf->ossmaxfrags >= 4 && dmabuf->ossmaxfrags < dmabuf->numfrag)
+		dmabuf->numfrag = dmabuf->ossmaxfrags;
+	dmabuf->fragsamples = dmabuf->fragsize >> sample_shift[dmabuf->fmt];
+	dmabuf->dmasize = dmabuf->numfrag << dmabuf->fragshift;
 
-	memset(db->rawbuf, (fmt & TRIDENT_FMT_16BIT) ? 0 : 0x80, db->dmasize);
+	memset(dmabuf->rawbuf, (dmabuf->fmt & TRIDENT_FMT_16BIT) ? 0 : 0x80,
+	       dmabuf->dmasize);
 
 	spin_lock_irqsave(&state->card->lock, flags);
 	if (rec) {
-		trident_rec_setup(state, fmt, state->rateadc, 
-				  db->rawbuf, db->numfrag << db->fragshift);
+		trident_rec_setup(state);
 	} else {
-		trident_play_setup(state, fmt, state->ratedac, 
-				   db->rawbuf, db->numfrag << db->fragshift);
+		trident_play_setup(state);
 	}
 	spin_unlock_irqrestore(&state->card->lock, flags);
 
 	/* set the ready flag for the dma buffer */
-	db->ready = 1;
+	dmabuf->ready = 1;
 
 #ifdef DEBUG
 	printk("trident: prog_dmabuf, sample rate = %d, format = %d, numfrag = %d, "
 	       "fragsize = %d dmasize = %d\n",
-	       rate, fmt, db->numfrag, db->fragsize, db->dmasize);
+	       dmabuf->rate, dmabuf->fmt, dmabuf->numfrag,
+	       dmabuf->fragsize, dmabuf->dmasize);
 #endif
 
 	return 0;
 }
 
-extern __inline__ void clear_advance(struct trident_state *s)
+/* we are doing quantum mechanics here, the buffer can only be empty, half or full filled i.e.
+   |------------|------------|   or   |xxxxxxxxxxxx|------------|   or   |xxxxxxxxxxxx|xxxxxxxxxxxx|
+   but we almost always get this
+   |xxxxxx------|------------|   or   |xxxxxxxxxxxx|xxxxx-------|
+   so we have to clear the tail space to "silence"
+   |xxxxxx000000|------------|   or   |xxxxxxxxxxxx|xxxxxx000000|
+*/
+static void trident_clear_tail(struct trident_state *state)
 {
-	unsigned char c = ((s->fmt >> TRIDENT_DAC_SHIFT) & TRIDENT_FMT_16BIT) ? 0 : 0x80;
-	unsigned char *buf = s->dma_dac.rawbuf;
-	unsigned bsize = s->dma_dac.dmasize;
-	unsigned bptr = s->dma_dac.swptr;
-	unsigned len = s->dma_dac.fragsize;
+	struct dmabuf *dmabuf = &state->dma_dac;
+	unsigned swptr;
+	unsigned char silence = (dmabuf->fmt & TRIDENT_FMT_16BIT) ? 0 : 0x80;
+	unsigned int len;
+	unsigned long flags;
 
-	if (bptr + len > bsize) {
-		unsigned x = bsize - bptr;
-		memset(buf + bptr, c, x);
-		/* account for wrapping? */
-		bptr = 0;
-		len -= x;
+	spin_lock_irqsave(&state->card->lock, flags);
+	swptr = dmabuf->swptr;
+	spin_unlock_irqrestore(&state->card->lock, flags);
+
+	if (swptr == 0 || swptr == dmabuf->dmasize / 2 || swptr == dmabuf->dmasize)
+		return;
+
+
+	if (swptr < dmabuf->dmasize/2)
+		len = dmabuf->dmasize/2 - swptr;
+	else
+		len = dmabuf->dmasize - swptr;
+
+	memset(dmabuf->rawbuf + swptr, silence, len);
+
+	spin_lock_irqsave(&state->card->lock, flags);	
+	dmabuf->swptr += len;
+	dmabuf->count += len;
+	spin_unlock_irqrestore(&state->card->lock, flags);
+
+	/* restart the dma machine in case it is halted */
+	start_dac(state);
+}
+
+static int drain_dac(struct trident_state *state, int nonblock)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	struct dmabuf *dmabuf = &state->dma_dac;
+	unsigned long flags;
+	unsigned long tmo;
+	int count;
+
+	if (dmabuf->mapped || !dmabuf->ready)
+		return 0;
+
+	add_wait_queue(&dmabuf->wait, &wait);
+	for (;;) {
+		/* It seems that we have to set the current state to TASK_INTERRUPTIBLE
+		   every time to make the process really go to sleep */
+		current->state = TASK_INTERRUPTIBLE;
+
+		spin_lock_irqsave(&state->card->lock, flags);
+		count = dmabuf->count;
+		spin_unlock_irqrestore(&state->card->lock, flags);
+
+		if (count <= 0)
+			break;
+
+		if (signal_pending(current))
+			break;
+
+		if (nonblock) {
+			remove_wait_queue(&dmabuf->wait, &wait);
+			current->state = TASK_RUNNING;
+			return -EBUSY;
+		}
+
+		/* No matter how much data left in the buffer, we have to wait untill
+		   CSO == ESO/2 or CSO == ESO when address engine interrupts */
+		tmo = (dmabuf->dmasize * HZ) / dmabuf->rate;
+		tmo >>= sample_shift[dmabuf->fmt];
+		if (!schedule_timeout(tmo ? tmo : 1) && tmo){
+			printk(KERN_ERR "trident: drain_dac, dma timeout?\n");
+			break;
+		}
 	}
-	memset(buf + bptr, c, len);
+	remove_wait_queue(&dmabuf->wait, &wait);
+	current->state = TASK_RUNNING;
+	if (signal_pending(current))
+		return -ERESTARTSYS;
+
+	return 0;
 }
 
 /* call with spinlock held! */
-static void trident_update_ptr(struct trident_state *s)
+static void trident_update_ptr(struct trident_state *state)
 {
+	struct dmabuf *dmabuf;
 	unsigned hwptr;
 	int diff;
 
 	/* update ADC pointer */
-	if (s->dma_adc.ready) {
-		hwptr = get_dmac(s) % s->dma_adc.dmasize;
-		diff = (s->dma_adc.dmasize + hwptr - s->dma_adc.hwptr) % 
-			s->dma_adc.dmasize;
-		s->dma_adc.hwptr = hwptr;
-		s->dma_adc.total_bytes += diff;
-		s->dma_adc.count += diff;
-		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
-			wake_up(&s->dma_adc.wait);
-		if (!s->dma_adc.mapped) {
-			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
-				s->enable &= ~TRIDENT_ENABLE_RE;
-				__stop_adc(s); 
-				s->dma_adc.error++;
+	if (state->dma_adc.ready) {
+		dmabuf = &state->dma_adc;
+		hwptr = trident_get_dma_addr(state, 1);
+		diff = (dmabuf->dmasize + hwptr - dmabuf->hwptr) % dmabuf->dmasize;
+
+		dmabuf->hwptr = hwptr;
+		dmabuf->total_bytes += diff;
+		dmabuf->count += diff;
+
+		if (dmabuf->count >= (signed)dmabuf->fragsize)
+			wake_up(&dmabuf->wait);
+		if (!dmabuf->mapped) {
+			if (dmabuf->count > (signed)(dmabuf->dmasize - ((3 * dmabuf->fragsize) >> 1))) {
+				__stop_adc(state); 
+				dmabuf->error++;
 			}
 		}
 	}
 
 	/* update DAC pointer */
-	if (s->dma_dac.ready) {
-		hwptr = get_dmaa(s) % s->dma_dac.dmasize; 
-		diff = (s->dma_dac.dmasize + hwptr - s->dma_dac.hwptr) % 
-			s->dma_dac.dmasize;
-		s->dma_dac.hwptr = hwptr;
-		s->dma_dac.total_bytes += diff;
-		if (s->dma_dac.mapped) {
-			s->dma_dac.count += diff;
-			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize) 
-				wake_up(&s->dma_dac.wait);
-		} 
-		else {
-			s->dma_dac.count -= diff;
-			if (s->dma_dac.count <= 0) {
-				s->enable &= ~TRIDENT_ENABLE_PE;
-				/* Lock already held */
-				__stop_dac(s);
-				/* brute force everyone back in sync, sigh */
-				s->dma_dac.count = 0; 
-				s->dma_dac.swptr = 0; 
-				s->dma_dac.hwptr = 0; 
-				s->dma_dac.error++;
-			} 
-			else if (s->dma_dac.count <= (signed)s->dma_dac.fragsize && 
-				 !s->dma_dac.endcleared) {
-				clear_advance(s);
-				s->dma_dac.endcleared = 1;
-			}
+	if (state->dma_dac.ready) {
+		dmabuf = &state->dma_dac;
+		hwptr = trident_get_dma_addr(state, 0);
+		diff = (dmabuf->dmasize + hwptr - dmabuf->hwptr) % dmabuf->dmasize;
 
-			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize) 
-				wake_up(&s->dma_dac.wait);
+		dmabuf->hwptr = hwptr;
+		dmabuf->total_bytes += diff;
+
+		if (dmabuf->mapped) {
+			dmabuf->count += diff;
+			if (dmabuf->count >= (signed)dmabuf->fragsize) 
+				wake_up(&dmabuf->wait);
+		}
+		else {
+			dmabuf->count -= diff;
+			if (dmabuf->count < 0 || dmabuf->count > dmabuf->dmasize) {
+				/* buffer underrun or buffer overrun, we have no way to recover
+				   it here, just stop the machine and let the process force hwptr
+				   and swptr to sync */
+				__stop_dac(state);
+				dmabuf->error++;
+			}
+			/* since dma machine only interrupts at ESO and ESO/2, we sure have at 
+			   least half of dma buffer free, so wake up the process unconditionally */
+			wake_up(&dmabuf->wait);
 		}
 	}
 }
 
-/*
- *	Trident interrupt handlers.
- */
 static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct trident_state *state;
@@ -1858,19 +1114,17 @@ static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (event & ADDRESS_IRQ) {
 		/* Update the pointers for all channels we are running. */
-		/* FIXME: improve interrupt latency !!! */
-		for (i = 0; i < NR_DSPS; i++) {
-			state = card->channels[i];
+		/* FIXME: should read interrupt status only once */
+		for (i = 0; i < NR_HW_CH; i++) {
 			if (trident_check_channel_interrupt(card, 63 - i)) {
 				trident_ack_channel_interrupt(card, 63 - i);
-				if (state != NULL)
+				if ((state = card->states[i]) != NULL) {
 					trident_update_ptr(state);
-				else {
-					/* Spurious ? */
-					printk("trident: spurious channel irq %d.\n", 
+				} else {
+					printk("trident: spurious channel irq %d.\n",
 					       63 - i);
 					trident_stop_voice(card, i);
-					trident_disable_voice_irq(card, i);
+					trident_disable_voice_irq(card, i);	
 				}
 			}
 		}
@@ -1886,235 +1140,9 @@ static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock(&card->lock);
 }
 
-static void set_mixer(struct trident_card *card,unsigned int mixer, unsigned int val ) 
-{
-	unsigned int left,right;
-
-	/* cleanse input a little */
-	right = ((val >> 8)  & 0xff) ;
-	left = (val  & 0xff) ;
-
-	if (right > 100) right = 100;
-	if (left > 100) left = 100;
-
-	card->mix.mixer_state[mixer] = (right << 8) | left;
-	card->mix.write_mixer(card, mixer, left, right);
-}
-
-static int mixer_ioctl(struct trident_card *card, unsigned int cmd, unsigned long arg)
-{
-	unsigned long flags;
-	int i, val = 0;
-
-	VALIDATE_CARD(card);
-	if (cmd == SOUND_MIXER_INFO) {
-		mixer_info info;
-		strncpy(info.id, card->pci_info->name, sizeof(info.id));
-		strncpy(info.name, card->pci_info->name, sizeof(info.name));
-		info.modify_counter = card->mix.modcnt;
-		if (copy_to_user((void *)arg, &info, sizeof(info)))
-			return -EFAULT;
-		return 0;
-	}
-	if (cmd == SOUND_OLD_MIXER_INFO) {
-		_old_mixer_info info;
-		strncpy(info.id, card->pci_info->name, sizeof(info.id));
-		strncpy(info.name, card->pci_info->name, sizeof(info.name));
-		if (copy_to_user((void *)arg, &info, sizeof(info)))
-			return -EFAULT;
-		return 0;
-	}
-
-	if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
-		return -EINVAL;
-
-	if (cmd == OSS_GETVERSION)
-		return put_user(SOUND_VERSION, (int *)arg);
-
-	if (_IOC_DIR(cmd) == _IOC_READ) {
-		switch (_IOC_NR(cmd)) {
-		case SOUND_MIXER_RECSRC: /* give them the current record source */
-			if (!card->mix.recmask_io) {
-				val = 0;
-			} else {
-				spin_lock_irqsave(&card->lock, flags);
-				val = card->mix.recmask_io(card,1,0);
-				spin_unlock_irqrestore(&card->lock, flags);
-			}
-			break;
-
-		case SOUND_MIXER_DEVMASK: /* give them the supported mixers */
-			val = card->mix.supported_mixers;
-			break;
-
-		case SOUND_MIXER_RECMASK: /* Arg contains a bit for each supported recording source */
-			val = card->mix.record_sources;
-			break;
-
-		case SOUND_MIXER_STEREODEVS: /* Mixer channels supporting stereo */
-			val = card->mix.stereo_mixers;
-			break;
-
-		case SOUND_MIXER_CAPS:
-			val = SOUND_CAP_EXCL_INPUT;
-			break;
-
-		default: /* read a specific mixer */
-			i = _IOC_NR(cmd);
-
-			if (!supported_mixer(card,i)) 
-				return -EINVAL;
-
-			/* do we ever want to touch the hardware? */
-			/* spin_lock_irqsave(&s->lock, flags);
-			val = card->mix.read_mixer(card,i);
-			spin_unlock_irqrestore(&s->lock, flags);*/
-
-			val = card->mix.mixer_state[i];
-			/* printk("returned 0x%x for mixer %d\n",val,i);*/
-			break;
-		}
-		return put_user(val,(int *)arg);
-	}
-
-	if (_IOC_DIR(cmd) == (_IOC_WRITE|_IOC_READ)) {
-		card->mix.modcnt++;
-		get_user_ret(val, (int *)arg, -EFAULT);
-
-		switch (_IOC_NR(cmd)) {
-		case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
-			if (!card->mix.recmask_io) return -EINVAL;
-			if (!(val &= card->mix.record_sources)) return -EINVAL;
-
-			spin_lock_irqsave(&card->lock, flags);
-			card->mix.recmask_io(card, 0, val);
-			spin_unlock_irqrestore(&card->lock, flags);
-
-			return 0;
-		default: /* write a specific mixer */
-			i = _IOC_NR(cmd);
-
-			if (!supported_mixer(card, i)) 
-				return -EINVAL;
-
-			spin_lock_irqsave(&card->lock, flags);
-			set_mixer(card, i, val);
-			spin_unlock_irqrestore(&card->lock, flags);
-
-			return 0;
-		}
-	}
-	return -EINVAL;
-}
-
-static int trident_open_mixdev(struct inode *inode, struct file *file)
-{
-	int minor = MINOR(inode->i_rdev);
-	struct trident_card *card = devs;
-
-	while (card && card->dev_mixer != minor)
-		card = card->next;
-	if (!card)
-		return -ENODEV;
-
-	file->private_data = card;
-
-	//FIXME put back in
-	//MOD_INC_USE_COUNT;
-	return 0;
-}
-
-static int trident_release_mixdev(struct inode *inode, struct file *file)
-{
-	struct trident_card *card = (struct trident_card *)file->private_data;
-
-	VALIDATE_CARD(card);
-	
-	//FIXME put back in
-	//MOD_DEC_USE_COUNT;
-	return 0;
-}
-
-static int trident_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int cmd, 
-				unsigned long arg)
-{
-	struct trident_card *card = (struct trident_card *)file->private_data;
-
-	VALIDATE_CARD(card);
-	return mixer_ioctl(card, cmd, arg);
-}
-
 static loff_t trident_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
-}
-
-static /*const*/ struct file_operations trident_mixer_fops = {
-	&trident_llseek,
-	NULL,  /* read */
-	NULL,  /* write */
-	NULL,  /* readdir */
-	NULL,  /* poll */
-	&trident_ioctl_mixdev,
-	NULL,  /* mmap */
-	&trident_open_mixdev,
-	NULL,	/* flush */
-	&trident_release_mixdev,
-	NULL,  /* fsync */
-	NULL,  /* fasync */
-	NULL,  /* lock */
-};
-
-/* drain the DAC buffer
-   FIXME: This function will block (forever ??) when using
-   XMMS Qsound plugin and direct cat sample.wav > /dev/dsp
-   This behavior is when drain_dac is called by trident_release. */
-static int drain_dac(struct trident_state *s, int nonblock)
-{
-	DECLARE_WAITQUEUE(wait, current);
-	unsigned long flags;
-	int count;
-	signed long tmo;
-
-	if (s->dma_dac.mapped || !s->dma_dac.ready)
-		return 0;
-
-	current->state = TASK_INTERRUPTIBLE;
-	add_wait_queue(&s->dma_dac.wait, &wait);
-	for (;;) {
-		spin_lock_irqsave(&s->card->lock, flags);
-		count = s->dma_dac.count;
-		spin_unlock_irqrestore(&s->card->lock, flags);
-
-		if (count <= 0)
-			break;
-
-		if (signal_pending(current))
-			break;
-
-		if (nonblock) {
-			remove_wait_queue(&s->dma_dac.wait, &wait);
-			current->state = TASK_RUNNING;
-			return -EBUSY;
-		}
-		
-		tmo = (count * HZ) / s->ratedac;
-		tmo >>= sample_shift[(s->fmt >> TRIDENT_DAC_SHIFT) & TRIDENT_FMT_MASK];
-
-		/* XXX this is just broken.  someone is waking us up alot, 
-		   or schedule_timeout is broken.
-		   or something.  who cares. - zach */
-		if (!schedule_timeout(tmo ? tmo : 1) && tmo)
-			printk(KERN_ERR "trident: drain_dac, "
-			       "dma timed out? jiffies = %ld\n",
-			       jiffies);
-	}
-	remove_wait_queue(&s->dma_dac.wait, &wait);
-	current->state = TASK_RUNNING;
-	if (signal_pending(current))
-		return -ERESTARTSYS;
-
-	return 0;
 }
 
 /* in this loop, dma_adc.count signifies the amount of data thats waiting
@@ -2123,17 +1151,18 @@ static int drain_dac(struct trident_state *s, int nonblock)
 static ssize_t trident_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
+	struct dmabuf *dmabuf = &state->dma_dac;
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
 	int cnt;
-	
+
 	VALIDATE_STATE(state);
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
-	if (state->dma_adc.mapped)
+	if (dmabuf->mapped)
 		return -ENXIO;
-	if (!state->dma_adc.ready && (ret = prog_dmabuf(state, 1)))
+	if (!dmabuf->ready && (ret = prog_dmabuf(state, 1)))
 		return ret;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
@@ -2141,12 +1170,10 @@ static ssize_t trident_read(struct file *file, char *buffer, size_t count, loff_
 
 	while (count > 0) {
 		spin_lock_irqsave(&state->card->lock, flags);
-		/* remember, all these things are expressed in bytes to be
-		   sent to the user.. hence the evil / 2 down below */
-		swptr = state->dma_adc.swptr;
-		cnt = state->dma_adc.dmasize - swptr;
-		if (state->dma_adc.count < cnt)
-			cnt = state->dma_adc.count;
+		swptr = dmabuf->swptr;
+		cnt = dmabuf->dmasize - swptr;
+		if (dmabuf->count < cnt)
+			cnt = dmabuf->count;
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		if (cnt > count)
@@ -2158,20 +1185,17 @@ static ssize_t trident_read(struct file *file, char *buffer, size_t count, loff_
 				ret = ret ? ret : -EAGAIN;
 				return ret;
 			}
-			if (!interruptible_sleep_on_timeout(&state->dma_adc.wait, HZ)) {
-				printk(KERN_DEBUG "(trident) read: chip lockup? "
+			if (!interruptible_sleep_on_timeout(&dmabuf->wait, HZ)) {
+				printk(KERN_ERR
+				       "(trident) read: chip lockup? "
 				       "dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
-				       state->dma_adc.dmasize,
-				       state->dma_adc.fragsize,
-				       state->dma_adc.count,
-				       state->dma_adc.hwptr,
-				       state->dma_adc.swptr);
+				       dmabuf->dmasize, dmabuf->fragsize, dmabuf->count,
+				       dmabuf->hwptr, dmabuf->swptr);
 				stop_adc(state);
-
 				spin_lock_irqsave(&state->card->lock, flags);
-				state->dma_adc.count = 0;
-				state->dma_adc.hwptr = 0;
-				state->dma_adc.swptr = 0;
+				dmabuf->count = 0;
+				dmabuf->hwptr = 0;
+				dmabuf->swptr = 0;
 				spin_unlock_irqrestore(&state->card->lock, flags);
 			}
 			if (signal_pending(current)) {
@@ -2180,17 +1204,19 @@ static ssize_t trident_read(struct file *file, char *buffer, size_t count, loff_
 			}
 			continue;
 		}
-	
-		if (copy_to_user(buffer, state->dma_adc.rawbuf + swptr, cnt)) {
+
+		if (copy_to_user(buffer, dmabuf->rawbuf + swptr, cnt)) {
 			ret = ret ? ret : -EFAULT;
 			return ret;
 		}
 
-		swptr = (swptr + cnt) % state->dma_adc.dmasize;
+		swptr = (swptr + cnt) % dmabuf->dmasize;
+
 		spin_lock_irqsave(&state->card->lock, flags);
-		state->dma_adc.swptr = swptr;
-		state->dma_adc.count -= cnt;
+		dmabuf->swptr = swptr;
+		dmabuf->count -= cnt;
 		spin_unlock_irqrestore(&state->card->lock, flags);
+
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
@@ -2203,11 +1229,11 @@ static ssize_t trident_read(struct file *file, char *buffer, size_t count, loff_
 static ssize_t trident_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct trident_state *state = (struct trident_state *)file->private_data;
+	struct dmabuf *dmabuf = &state->dma_dac;
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
 	int cnt;
-	int mode = (state->fmt >> TRIDENT_DAC_SHIFT) & TRIDENT_FMT_MASK;
 
 #ifdef DEBUG
 	printk("trident: trident_write called, count = %d\n", count);
@@ -2216,9 +1242,9 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 	VALIDATE_STATE(state);
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
-	if (state->dma_dac.mapped)
+	if (dmabuf->mapped)
 		return -ENXIO;
-	if (!state->dma_dac.ready && (ret = prog_dmabuf(state, 0)))
+	if (!dmabuf->ready && (ret = prog_dmabuf(state, 0)))
 		return ret;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
@@ -2226,41 +1252,47 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 
 	while (count > 0) {
 		spin_lock_irqsave(&state->card->lock, flags);
-		if (state->dma_dac.count < 0) {
-			state->dma_dac.count = 0;
-			state->dma_dac.swptr = state->dma_dac.hwptr;
+		if (dmabuf->count < 0) {
+			/* buffer underrun, we are recovering from sleep_on_timeout,
+			   resync hwptr and swptr */
+			dmabuf->count = 0;
+			dmabuf->swptr = dmabuf->hwptr;
 		}
-		swptr = state->dma_dac.swptr;
-		cnt = state->dma_dac.dmasize - swptr;
-		if (state->dma_dac.count + cnt > state->dma_dac.dmasize)
-			cnt = state->dma_dac.dmasize - state->dma_dac.count;
+		swptr = dmabuf->swptr;
+		cnt = dmabuf->dmasize - swptr;
+		if (dmabuf->count + cnt > dmabuf->dmasize)
+			cnt = dmabuf->dmasize - dmabuf->count;
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			/* buffer is full, wait for it to be played */
+			unsigned long tmo;
+			/* buffer is full, start the dma machine and wait for data to be played */
 			start_dac(state);
 			if (file->f_flags & O_NONBLOCK) {
 				if (!ret) ret = -EAGAIN;
 				return ret;
 			}
-			if (!interruptible_sleep_on_timeout(&state->dma_dac.wait, HZ)) {
-				printk(KERN_ERR 
-				       "trident: write: chip lockup? "
-				       "dmasz %u fragsz %u count %i "
-				       "hwptr %u swptr %u\n", 
-				       state->dma_dac.dmasize, 
-				       state->dma_dac.fragsize, 
-				       state->dma_dac.count, 
-				       state->dma_dac.hwptr, 
-				       state->dma_dac.swptr);
-				stop_dac(state);
-				spin_lock_irqsave(&state->card->lock, flags);
-				state->dma_dac.count = 0;
-				state->dma_dac.hwptr = 0;
-				state->dma_dac.swptr = 0;
-				spin_unlock_irqrestore(&state->card->lock, flags);
+			/* No matter how much data left in the buffer, we have to wait untill
+			   CSO == ESO/2 or CSO == ESO when address engine interrupts */
+			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
+			tmo >>= sample_shift[dmabuf->fmt];
+			/* There are two situations when sleep_on_timeout returns, one is when the
+			   interrupt is serviced correctly and the process is waked up by ISR ON TIME.
+			   Another is when timeout is expired, which means that either interrupt is NOT
+			   serviced correctly (pending interrupt) or it is TOO LATE for the process to 
+			   be scheduled to run (scheduler latency) which results in a (potential) buffer
+			   underrun. And worse, there is NOTHING we can do to prevent it. */
+			if (!interruptible_sleep_on_timeout(&dmabuf->wait, tmo)) {
+#ifdef DEBUG
+				printk(KERN_ERR "trident: schedule timeout, "
+				       "dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				       dmabuf->dmasize, dmabuf->fragsize, dmabuf->count,
+				       dmabuf->hwptr, dmabuf->swptr);
+#endif
+				/* a buffer underrun, we delay the recovery untill next time the
+				   while loop begin and we REALLY have data to play */
 			}
 			if (signal_pending(current)) {
 				if (!ret) ret = -ERESTARTSYS;
@@ -2268,18 +1300,17 @@ static ssize_t trident_write(struct file *file, const char *buffer, size_t count
 			}
 			continue;
 		}
-		if (copy_from_user(state->dma_dac.rawbuf + swptr, buffer, cnt)) {
-			if (!ret)
-				ret = -EFAULT;
+		if (copy_from_user(dmabuf->rawbuf + swptr, buffer, cnt)) {
+			if (!ret) ret = -EFAULT;
 			return ret;
 		}
 
-		swptr = (swptr + cnt) % state->dma_dac.dmasize;
+		swptr = (swptr + cnt) % dmabuf->dmasize;
 
 		spin_lock_irqsave(&state->card->lock, flags);
-		state->dma_dac.swptr = swptr;
-		state->dma_dac.count += cnt;
-		state->dma_dac.endcleared = 0;
+		dmabuf->swptr = swptr;
+		dmabuf->count += cnt;
+		dmabuf->endcleared = 0;
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		count -= cnt;
@@ -2304,7 +1335,6 @@ static unsigned int trident_poll(struct file *file, struct poll_table_struct *wa
 
 	spin_lock_irqsave(&s->card->lock, flags);
 	trident_update_ptr(s);
-
 	if (file->f_mode & FMODE_READ) {
 		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize)
 			mask |= POLLIN | POLLRDNORM;
@@ -2319,56 +1349,56 @@ static unsigned int trident_poll(struct file *file, struct poll_table_struct *wa
 		}
 	}
 	spin_unlock_irqrestore(&s->card->lock, flags);
+
 	return mask;
 }
 
-/* this needs to be fixed to deal with the dual apus/buffers */
-#if 0
 static int trident_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct trident_state *s = (struct trident_state *)file->private_data;
-	struct dmabuf *db;
+	struct trident_state *state = (struct trident_state *)file->private_data;
+	struct dmabuf *dmabuf;
 	int ret;
 	unsigned long size;
 
-	VALIDATE_STATE(s);
+	VALIDATE_STATE(state);
 	if (vma->vm_flags & VM_WRITE) {
-		if ((ret = prog_dmabuf(s, 0)) != 0)
+		if ((ret = prog_dmabuf(state, 0)) != 0)
 			return ret;
-		db = &s->dma_dac;
+		dmabuf = &state->dma_dac;
 	} else if (vma->vm_flags & VM_READ) {
-		if ((ret = prog_dmabuf(s, 1)) != 0)
+		if ((ret = prog_dmabuf(state, 1)) != 0)
 			return ret;
-		db = &s->dma_adc;
+		dmabuf = &state->dma_adc;
 	} else 
 		return -EINVAL;
-	if (vma->vm_offset != 0)
+
+	if (vma->vm_pgoff != 0)
 		return -EINVAL;
 	size = vma->vm_end - vma->vm_start;
-	if (size > (PAGE_SIZE << db->buforder))
+	if (size > (PAGE_SIZE << dmabuf->buforder))
 		return -EINVAL;
-	if (remap_page_range(vma->vm_start, virt_to_phys(db->rawbuf), size, vma->vm_page_prot))
+	if (remap_page_range(vma->vm_start, virt_to_phys(dmabuf->rawbuf),
+			     size, vma->vm_page_prot))
 		return -EAGAIN;
-	db->mapped = 1;
+	dmabuf->mapped = 1;
+
 	return 0;
 }
-#endif
 
 static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct trident_state *s = (struct trident_state *)file->private_data;
+	struct trident_state *state = (struct trident_state *)file->private_data;
 	unsigned long flags;
 	audio_buf_info abinfo;
 	count_info cinfo;
 	int val, mapped, ret;
-	unsigned char fmtm, fmtd;
 
-	VALIDATE_STATE(s);
-	mapped = ((file->f_mode & FMODE_WRITE) && s->dma_dac.mapped) ||
-		((file->f_mode & FMODE_READ) && s->dma_adc.mapped);
+	VALIDATE_STATE(state);
+	mapped = ((file->f_mode & FMODE_WRITE) && state->dma_dac.mapped) ||
+		((file->f_mode & FMODE_READ) && state->dma_adc.mapped);
 #ifdef DEBUG
-	printk("trident: trident_ioctl, command = %2d, arg = 0x%08x\n",_IOC_NR(cmd), 
-	       arg ? *(int *)arg : 0);
+	printk("trident: trident_ioctl, command = %2d, arg = 0x%08x\n",
+	       _IOC_NR(cmd), arg ? *(int *)arg : 0);
 #endif
 
 	switch (cmd) 
@@ -2378,189 +1408,218 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 
 	case SNDCTL_DSP_RESET:
 		if (file->f_mode & FMODE_WRITE) {
-			stop_dac(s);
+			stop_dac(state);
 			synchronize_irq();
-			s->dma_dac.swptr = s->dma_dac.hwptr = 0;
-			s->dma_dac.count = s->dma_dac.total_bytes = 0;
+			state->dma_dac.ready = 0;
+			state->dma_dac.swptr = state->dma_dac.hwptr = 0;
+			state->dma_dac.count = state->dma_dac.total_bytes = 0;
 		}
 		if (file->f_mode & FMODE_READ) {
-			stop_adc(s);
+			stop_adc(state);
 			synchronize_irq();
-			s->dma_adc.swptr = s->dma_adc.hwptr = 0;
-			s->dma_adc.count = s->dma_adc.total_bytes = 0;
+			state->dma_adc.ready = 0;
+			state->dma_adc.swptr = state->dma_adc.hwptr = 0;
+			state->dma_adc.count = state->dma_adc.total_bytes = 0;
 		}
 		return 0;
 
 	case SNDCTL_DSP_SYNC:
 		if (file->f_mode & FMODE_WRITE)
-			return drain_dac(s, file->f_flags & O_NONBLOCK);
+			return drain_dac(state, file->f_flags & O_NONBLOCK);
 		return 0;
 
-	case SNDCTL_DSP_SPEED:
+	case SNDCTL_DSP_SPEED: /* set smaple rate */
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val >= 0) {
-			if (file->f_mode & FMODE_READ) {
-				stop_adc(s);
-				s->dma_adc.ready = 0;
-				trident_set_adc_rate(s, val, 1);
-			}
 			if (file->f_mode & FMODE_WRITE) {
-				stop_dac(s);
-				s->dma_dac.ready = 0;
-				trident_set_dac_rate(s, val, 1);
+				stop_dac(state);
+				state->dma_dac.ready = 0;
+				spin_lock_irqsave(&state->card->lock, flags);
+				trident_set_dac_rate(state, val);
+				spin_unlock_irqrestore(&state->card->lock, flags);
+			}
+			if (file->f_mode & FMODE_READ) {
+				stop_adc(state);
+				state->dma_adc.ready = 0;
+				spin_lock_irqsave(&state->card->lock, flags);
+				trident_set_adc_rate(state, val);
+				spin_unlock_irqrestore(&state->card->lock, flags);
 			}
 		}
-		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac,
+		return put_user((file->f_mode & FMODE_READ) ? state->dma_adc.rate :
+				state->dma_dac.rate,
 				(int *)arg);
 
-	case SNDCTL_DSP_STEREO:
+	case SNDCTL_DSP_STEREO: /* set stereo or mono channel */
 		get_user_ret(val, (int *)arg, -EFAULT);
-		fmtd = 0;
-		fmtm = ~0;
-		if (file->f_mode & FMODE_READ) {
-			stop_adc(s);
-			s->dma_adc.ready = 0;
-			if (val)
-				fmtd |= TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT;
-			else
-				fmtm &= ~(TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT);
-		}
 		if (file->f_mode & FMODE_WRITE) {
-			stop_dac(s);
-			s->dma_dac.ready = 0;
+			stop_dac(state);
+			state->dma_dac.ready = 0;
 			if (val)
-				fmtd |= TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT;
+				state->dma_dac.fmt |= TRIDENT_FMT_STEREO;
 			else
-				fmtm &= ~(TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT);
+				state->dma_dac.fmt &= ~TRIDENT_FMT_STEREO;
 		}
-		set_fmt(s, fmtm, fmtd);
+		if (file->f_mode & FMODE_READ) {
+			stop_adc(state);
+			state->dma_adc.ready = 0;
+			if (val)
+				state->dma_adc.fmt |= TRIDENT_FMT_STEREO;
+			else
+				state->dma_adc.fmt &= ~TRIDENT_FMT_STEREO;
+		}
 		return 0;
 
 	case SNDCTL_DSP_GETBLKSIZE:
 		if (file->f_mode & FMODE_WRITE) {
-			if ((val = prog_dmabuf(s, 0)))
+			if ((val = prog_dmabuf(state, 0)))
 				return val;
-			return put_user(s->dma_dac.fragsize, (int *)arg);
+			return put_user(state->dma_dac.fragsize, (int *)arg);
 		}
-		if ((val = prog_dmabuf(s, 1)))
-			return val;
-		return put_user(s->dma_adc.fragsize, (int *)arg);
+		if (file->f_mode & FMODE_READ) {
+			if ((val = prog_dmabuf(state, 1)))
+				return val;
+			return put_user(state->dma_adc.fragsize, (int *)arg);
+		}
 
-	case SNDCTL_DSP_GETFMTS: /* Returns a mask */
-		return put_user(AFMT_S8|AFMT_S16_LE, (int *)arg);
-	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
+	case SNDCTL_DSP_GETFMTS: /* Returns a mask of supported sample format*/
+		return put_user(AFMT_S16_LE|AFMT_U16_LE|AFMT_S8|AFMT_U8, (int *)arg);
+
+	case SNDCTL_DSP_SETFMT: /* Select sample format */
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val != AFMT_QUERY) {
-			fmtd = 0;
-			fmtm = ~0;
-			if (file->f_mode & FMODE_READ) {
-				stop_adc(s);
-				s->dma_adc.ready = 0;
-				/* fixed at 16bit for now */
-				fmtd |= TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT;
-#if 0
-				if (val == AFMT_S16_LE)
-					fmtd |= TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT;
-				else
-					fmtm &= ~(TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT);
-#endif
-			}
 			if (file->f_mode & FMODE_WRITE) {
-				stop_dac(s);
-				s->dma_dac.ready = 0;
+				stop_dac(state);
+				state->dma_dac.ready = 0;
 				if (val == AFMT_S16_LE)
-					fmtd |= TRIDENT_FMT_16BIT << TRIDENT_DAC_SHIFT;
+					state->dma_dac.fmt |= TRIDENT_FMT_16BIT;
 				else
-					fmtm &= ~(TRIDENT_FMT_16BIT << TRIDENT_DAC_SHIFT);
+					state->dma_dac.fmt &= ~TRIDENT_FMT_16BIT;
 			}
-			set_fmt(s, fmtm, fmtd);
+			if (file->f_mode & FMODE_READ) {
+				stop_adc(state);
+				state->dma_adc.ready = 0;
+				if (val == AFMT_S16_LE)
+					state->dma_adc.fmt |= TRIDENT_FMT_16BIT;
+				else
+					state->dma_adc.fmt &= ~TRIDENT_FMT_16BIT;
+			}
 		}
-		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? 
-					   (TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT) : 
-					   (TRIDENT_FMT_16BIT << TRIDENT_DAC_SHIFT))) ? 
-				AFMT_S16_LE : AFMT_S8, (int *)arg);
+		if (file->f_mode & FMODE_WRITE)
+			return put_user((state->dma_dac.fmt & TRIDENT_FMT_16BIT) ?
+					AFMT_S16_LE : AFMT_U8, (int *)arg);
+		else
+			return put_user((state->dma_adc.fmt & TRIDENT_FMT_16BIT) ?
+					AFMT_S16_LE : AFMT_U8, (int *)arg);
 
 	case SNDCTL_DSP_CHANNELS:
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val != 0) {
-			fmtd = 0;
-			fmtm = ~0;
-
-			if (file->f_mode & FMODE_READ) {
-				stop_adc(s);
-				s->dma_adc.ready = 0;
-				if (val >= 2)
-					fmtd |= TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT;
-				else
-					fmtm &= ~(TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT);
-			}
-
 			if (file->f_mode & FMODE_WRITE) {
-				stop_dac(s);
-				s->dma_dac.ready = 0;
+				stop_dac(state);
+				state->dma_dac.ready = 0;
 				if (val >= 2)
-					fmtd |= TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT;
+					state->dma_dac.fmt |= TRIDENT_FMT_STEREO;
 				else
-					fmtm &= ~(TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT);
+					state->dma_dac.fmt &= ~TRIDENT_FMT_STEREO;
 			}
-			set_fmt(s, fmtm, fmtd);
+			if (file->f_mode & FMODE_READ) {
+				stop_adc(state);
+				state->dma_adc.ready = 0;
+				if (val >= 2)
+					state->dma_adc.fmt |= TRIDENT_FMT_STEREO;
+				else
+					state->dma_adc.fmt &= ~TRIDENT_FMT_STEREO;
+			}
 		}
-		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? 
-					   (TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT) : 
-					   (TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT))) ? 2 : 1, (int *)arg);
+		if (file->f_mode & FMODE_WRITE)
+			return put_user((state->dma_dac.fmt & TRIDENT_FMT_STEREO) ? 2 : 1,
+					(int *)arg);
+		else
+			return put_user((state->dma_adc.fmt & TRIDENT_FMT_STEREO) ? 2 : 1,
+					(int *)arg);
 	case SNDCTL_DSP_POST:
+		/* FIXME: the same as RESET ?? */
 		return 0;
 
 	case SNDCTL_DSP_SUBDIVIDE:
-		if ((file->f_mode & FMODE_READ && s->dma_adc.subdivision) || 
-		    (file->f_mode & FMODE_WRITE && s->dma_dac.subdivision))
+		if ((file->f_mode & FMODE_READ && state->dma_adc.subdivision) ||
+		    (file->f_mode & FMODE_WRITE && state->dma_dac.subdivision))
 			return -EINVAL;
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)
-			s->dma_adc.subdivision = val;
+			state->dma_adc.subdivision = val;
 		if (file->f_mode & FMODE_WRITE)
-			s->dma_dac.subdivision = val;
+			state->dma_dac.subdivision = val;
 		return 0;
 
 	case SNDCTL_DSP_SETFRAGMENT:
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (file->f_mode & FMODE_READ) {
-			s->dma_adc.ossfragshift = val & 0xffff;
-			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
-			if (s->dma_adc.ossfragshift < 4)
-				s->dma_adc.ossfragshift = 4;
-			if (s->dma_adc.ossfragshift > 15)
-				s->dma_adc.ossfragshift = 15;
-			if (s->dma_adc.ossmaxfrags < 4)
-				s->dma_adc.ossmaxfrags = 4;
+			state->dma_adc.ossfragshift = val & 0xffff;
+			state->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
+			if (state->dma_adc.ossfragshift < 4)
+				state->dma_adc.ossfragshift = 4;
+			if (state->dma_adc.ossfragshift > 15)
+				state->dma_adc.ossfragshift = 15;
+			if (state->dma_adc.ossmaxfrags < 4)
+				state->dma_adc.ossmaxfrags = 4;
 		}
 		if (file->f_mode & FMODE_WRITE) {
-			s->dma_dac.ossfragshift = val & 0xffff;
-			s->dma_dac.ossmaxfrags = (val >> 16) & 0xffff;
-			if (s->dma_dac.ossfragshift < 4)
-				s->dma_dac.ossfragshift = 4;
-			if (s->dma_dac.ossfragshift > 15)
-				s->dma_dac.ossfragshift = 15;
-			if (s->dma_dac.ossmaxfrags < 4)
-				s->dma_dac.ossmaxfrags = 4;
+			state->dma_dac.ossfragshift = val & 0xffff;
+			state->dma_dac.ossmaxfrags = (val >> 16) & 0xffff;
+			if (state->dma_dac.ossfragshift < 4)
+				state->dma_dac.ossfragshift = 4;
+			if (state->dma_dac.ossfragshift > 15)
+				state->dma_dac.ossfragshift = 15;
+			if (state->dma_dac.ossmaxfrags < 4)
+				state->dma_dac.ossmaxfrags = 4;
 		}
+		return 0;
+
+	case SNDCTL_DSP_GETOSPACE:
+		if (!(file->f_mode & FMODE_WRITE))
+			return -EINVAL;
+		if (!state->dma_dac.enable && (val = prog_dmabuf(state, 0)) != 0)
+			return val;
+		spin_lock_irqsave(&state->card->lock, flags);
+		trident_update_ptr(state);
+		abinfo.fragsize = state->dma_dac.fragsize;
+		abinfo.bytes = state->dma_dac.dmasize - state->dma_dac.count;
+		abinfo.fragstotal = state->dma_dac.numfrag;
+		abinfo.fragments = abinfo.bytes >> state->dma_dac.fragshift;      
+		spin_unlock_irqrestore(&state->card->lock, flags);
+		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
+
+	case SNDCTL_DSP_GETISPACE:
+		if (!(file->f_mode & FMODE_READ))
+			return -EINVAL;
+		if (!state->dma_adc.enable && (val = prog_dmabuf(state, 1)) != 0)
+			return val;
+		spin_lock_irqsave(&state->card->lock, flags);
+		trident_update_ptr(state);
+		abinfo.fragsize = state->dma_adc.fragsize;
+		abinfo.bytes = state->dma_adc.count;
+		abinfo.fragstotal = state->dma_adc.numfrag;
+		abinfo.fragments = abinfo.bytes >> state->dma_adc.fragshift;      
+		spin_unlock_irqrestore(&state->card->lock, flags);
+		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
+
+	case SNDCTL_DSP_NONBLOCK:
+		file->f_flags |= O_NONBLOCK;
 		return 0;
 
 	case SNDCTL_DSP_GETCAPS:
-		return put_user(0/* DSP_CAP_DUPLEX | DSP_CAP_REALTIME | DSP_CAP_TRIGGER | DSP_CAP_MMAP */,
-				(int *)arg);
-		
-	case SNDCTL_DSP_SETDUPLEX:
-		/* XXX fix */
-		return 0;
+	    return put_user(/* DSP_CAP_DUPLEX|*/DSP_CAP_REALTIME|DSP_CAP_TRIGGER|DSP_CAP_MMAP,
+			    (int *)arg);
 
 	case SNDCTL_DSP_GETTRIGGER:
 		val = 0;
-		if (file->f_mode & FMODE_READ && s->enable & TRIDENT_ENABLE_RE) 
+		if (file->f_mode & FMODE_READ && state->dma_adc.enable) 
 			val |= PCM_ENABLE_INPUT;
-		if (file->f_mode & FMODE_WRITE && s->enable & TRIDENT_ENABLE_PE) 
+		if (file->f_mode & FMODE_WRITE && state->dma_dac.enable) 
 			val |= PCM_ENABLE_OUTPUT;
 		return put_user(val, (int *)arg);
 
@@ -2568,106 +1627,86 @@ static int trident_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
-				if (!s->dma_adc.ready && (ret =	 prog_dmabuf(s, 1)))
+				if (!state->dma_adc.ready && (ret = prog_dmabuf(state, 1)))
 					return ret;
-				start_adc(s);
+				start_adc(state);
 			} 
 			else
-				stop_adc(s);
+				stop_adc(state);
 		}
 		if (file->f_mode & FMODE_WRITE) {
 			if (val & PCM_ENABLE_OUTPUT) {
-				if (!s->dma_dac.ready && (ret = prog_dmabuf(s, 0)))
+				if (!state->dma_dac.ready && (ret = prog_dmabuf(state, 0)))
 					return ret;
-				start_dac(s);
+				start_dac(state);
 			} 
 			else
-				stop_dac(s);
+				stop_dac(state);
 		}
 		return 0;
-
-	case SNDCTL_DSP_GETOSPACE:
-		if (!(file->f_mode & FMODE_WRITE))
-			return -EINVAL;
-		if (!(s->enable & TRIDENT_ENABLE_PE) && (val = prog_dmabuf(s, 0)) != 0)
-			return val;
-		spin_lock_irqsave(&s->card->lock, flags);
-		trident_update_ptr(s);
-		abinfo.fragsize = s->dma_dac.fragsize;
-		abinfo.bytes = s->dma_dac.dmasize - s->dma_dac.count;
-		abinfo.fragstotal = s->dma_dac.numfrag;
-		abinfo.fragments = abinfo.bytes >> s->dma_dac.fragshift;      
-		spin_unlock_irqrestore(&s->card->lock, flags);
-		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
-
-	case SNDCTL_DSP_GETISPACE:
-		if (!(file->f_mode & FMODE_READ))
-			return -EINVAL;
-		if (!(s->enable & TRIDENT_ENABLE_RE) && (val = prog_dmabuf(s, 1)) != 0)
-			return val;
-		spin_lock_irqsave(&s->card->lock, flags);
-		trident_update_ptr(s);
-		abinfo.fragsize = s->dma_adc.fragsize;
-		abinfo.bytes = s->dma_adc.count;
-		abinfo.fragstotal = s->dma_adc.numfrag;
-		abinfo.fragments = abinfo.bytes >> s->dma_adc.fragshift;      
-		spin_unlock_irqrestore(&s->card->lock, flags);
-		return copy_to_user((void *)arg, &abinfo, sizeof(abinfo)) ? -EFAULT : 0;
-
-	case SNDCTL_DSP_NONBLOCK:
-		file->f_flags |= O_NONBLOCK;
-		return 0;
-
-	case SNDCTL_DSP_GETODELAY:
-		if (!(file->f_mode & FMODE_WRITE))
-			return -EINVAL;
-		spin_lock_irqsave(&s->card->lock, flags);
-		trident_update_ptr(s);
-		val = s->dma_dac.count;
-		spin_unlock_irqrestore(&s->card->lock, flags);
-		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		spin_lock_irqsave(&s->card->lock, flags);
-		trident_update_ptr(s);
-		cinfo.bytes = s->dma_adc.total_bytes;
-		cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
-		cinfo.ptr = s->dma_adc.hwptr;
-		if (s->dma_adc.mapped)
-			s->dma_adc.count &= s->dma_adc.fragsize-1;
-		spin_unlock_irqrestore(&s->card->lock, flags);
+		spin_lock_irqsave(&state->card->lock, flags);
+		trident_update_ptr(state);
+		cinfo.bytes = state->dma_adc.total_bytes;
+		cinfo.blocks = state->dma_adc.count >> state->dma_adc.fragshift;
+		cinfo.ptr = state->dma_adc.hwptr;
+		if (state->dma_adc.mapped)
+			state->dma_adc.count &= state->dma_adc.fragsize-1;
+		spin_unlock_irqrestore(&state->card->lock, flags);
 		return copy_to_user((void *)arg, &cinfo, sizeof(cinfo));
 		
 	case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		spin_lock_irqsave(&s->card->lock, flags);
-		trident_update_ptr(s);
-		cinfo.bytes = s->dma_dac.total_bytes;
-		cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
-		cinfo.ptr = s->dma_dac.hwptr;
-		if (s->dma_dac.mapped)
-			s->dma_dac.count &= s->dma_dac.fragsize-1;
-		spin_unlock_irqrestore(&s->card->lock, flags);
+		spin_lock_irqsave(&state->card->lock, flags);
+		trident_update_ptr(state);
+		cinfo.bytes = state->dma_dac.total_bytes;
+		cinfo.blocks = state->dma_dac.count >> state->dma_dac.fragshift;
+		cinfo.ptr = state->dma_dac.hwptr;
+		if (state->dma_dac.mapped)
+			state->dma_dac.count &= state->dma_dac.fragsize-1;
+		spin_unlock_irqrestore(&state->card->lock, flags);
 		return copy_to_user((void *)arg, &cinfo, sizeof(cinfo));
 
+	case SNDCTL_DSP_SETDUPLEX:
+		/* XXX fix */
+		return 0;
+
+	case SNDCTL_DSP_GETODELAY:
+		if (!(file->f_mode & FMODE_WRITE))
+			return -EINVAL;
+		spin_lock_irqsave(&state->card->lock, flags);
+		trident_update_ptr(state);
+		val = state->dma_dac.count;
+		spin_unlock_irqrestore(&state->card->lock, flags);
+		return put_user(val, (int *)arg);
+
 	case SOUND_PCM_READ_RATE:
-		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac, (int *)arg);
+		return put_user((file->f_mode & FMODE_READ) ? state->dma_adc.rate :
+				state->dma_dac.rate, (int *)arg);
 
 	case SOUND_PCM_READ_CHANNELS:
-		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? 
-					   (TRIDENT_FMT_STEREO << TRIDENT_ADC_SHIFT) : 
-					   (TRIDENT_FMT_STEREO << TRIDENT_DAC_SHIFT))) ? 2 : 1, (int *)arg);
+		if (file->f_mode & FMODE_WRITE)
+			return put_user((state->dma_dac.fmt & TRIDENT_FMT_STEREO) ? 2 : 1,
+					(int *)arg);
+		else
+			return put_user((state->dma_adc.fmt & TRIDENT_FMT_STEREO) ? 2 : 1,
+					(int *)arg);
 		
 	case SOUND_PCM_READ_BITS:
-		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? 
-					   (TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT) : 
-					   (TRIDENT_FMT_16BIT << TRIDENT_DAC_SHIFT))) ? 16 : 8, (int *)arg);
-		
-	case SOUND_PCM_WRITE_FILTER:
+		if (file->f_mode & FMODE_WRITE)
+			return put_user((state->dma_dac.fmt & TRIDENT_FMT_16BIT) ?
+					AFMT_S16_LE : AFMT_U8, (int *)arg);
+		else
+			return put_user((state->dma_adc.fmt & TRIDENT_FMT_16BIT) ?
+					AFMT_S16_LE : AFMT_U8, (int *)arg);
+	case SNDCTL_DSP_MAPINBUF:
+	case SNDCTL_DSP_MAPOUTBUF:
 	case SNDCTL_DSP_SETSYNCRO:
+	case SOUND_PCM_WRITE_FILTER:
 	case SOUND_PCM_READ_FILTER:
 		return -EINVAL;
 		
@@ -2681,13 +1720,12 @@ static int trident_open(struct inode *inode, struct file *file)
 	int minor = MINOR(inode->i_rdev);
 	struct trident_card *card = devs;
 	struct trident_state *state = NULL;
-	unsigned char fmtm = ~0, fmts = 0;
 
 	/* find an avaiable virtual channel (instance of /dev/dsp) */
 	while (card != NULL) {
-		for (i = 0; i < NR_DSPS; i++) {
-			if (card->channels[i] == NULL) {
-				state = card->channels[i] = (struct trident_state *)
+		for (i = 0; i < NR_HW_CH; i++) {
+			if (card->states[i] == NULL) {
+				state = card->states[i] = (struct trident_state *)
 					kmalloc(sizeof(struct trident_state), GFP_KERNEL);
 				if (state == NULL)
 					return -ENOMEM;
@@ -2704,18 +1742,18 @@ static int trident_open(struct inode *inode, struct file *file)
  found_virt:
 	/* found a free virtual channel, allocate hardware channels */
 	if (file->f_mode & FMODE_READ)
-		if ((state->dma_adc.chan = trident_alloc_pcm_channel(card)) == -1) {
-			kfree (card->channels[i]);
-			card->channels[i] = NULL;;
+		if ((state->dma_adc.channel = trident_alloc_pcm_channel(card)) == NULL) {
+			kfree (card->states[i]);
+			card->states[i] = NULL;;
 			return -ENODEV;
 		}
 	if (file->f_mode & FMODE_WRITE)
-		if ((state->dma_dac.chan = trident_alloc_pcm_channel(card)) == -1) {
-			kfree (card->channels[i]);
-			card->channels[i] = NULL;
+		if ((state->dma_dac.channel = trident_alloc_pcm_channel(card)) == NULL) {
+			kfree (card->states[i]);
+			card->states[i] = NULL;
 			if (file->f_mode & FMODE_READ)
 				/* free previously allocated hardware channel */
-				trident_free_pcm_channel(card, state->dma_adc.chan);
+				trident_free_pcm_channel(card, state->dma_adc.channel->num);
 			return -ENODEV;
 		}
 
@@ -2732,30 +1770,27 @@ static int trident_open(struct inode *inode, struct file *file)
 
 	/* set default sample format, Refer to  OSS Programmer's Guide */
 	if (file->f_mode & FMODE_READ) {
-		/* fmtm &= ~((TRIDENT_FMT_STEREO | TRIDENT_FMT_16BIT) << TRIDENT_ADC_SHIFT);
-		if ((minor & 0xf) == SND_DEV_DSP16)
-			fmts |= TRIDENT_FMT_16BIT << TRIDENT_ADC_SHIFT; */
-		fmtm = (TRIDENT_FMT_STEREO|TRIDENT_FMT_16BIT) << TRIDENT_ADC_SHIFT;
+		/* FIXME: Trident 4d can only record in singed 16-bits stereo, 48kHz sample */
+		state->dma_adc.fmt = TRIDENT_FMT_STEREO|TRIDENT_FMT_16BIT;
 		state->dma_adc.ossfragshift = 0;
 		state->dma_adc.ossmaxfrags  = 0;
 		state->dma_adc.subdivision  = 0;
-		trident_set_adc_rate(state, 8000, 0);
+		trident_set_adc_rate(state, 48000);
 	}
 
 	/* according to OSS document, /dev/dsp should be default to unsigned 8-bits, 
 	   mono, with sample rate 8kHz and /dev/dspW will accept 16-bits sample */
 	if (file->f_mode & FMODE_WRITE) {
-		fmtm &= ~((TRIDENT_FMT_STEREO | TRIDENT_FMT_16BIT) << TRIDENT_DAC_SHIFT);
+		state->dma_dac.fmt &= ~TRIDENT_FMT_MASK;
 		if ((minor & 0xf) == SND_DEV_DSP16)
-			fmts |= TRIDENT_FMT_16BIT << TRIDENT_DAC_SHIFT;
+			 state->dma_dac.fmt |= TRIDENT_FMT_16BIT;
 		state->dma_dac.ossfragshift = 0;
 		state->dma_dac.ossmaxfrags  = 0;
 		state->dma_dac.subdivision  = 0;
-		trident_set_dac_rate(state, 8000, 1);
+		trident_set_dac_rate(state, 8000);
 	}
-	set_fmt(state, fmtm, fmts);
-	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 
+	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&state->open_sem);
 
 	//FIXME put back in
@@ -2768,8 +1803,12 @@ static int trident_release(struct inode *inode, struct file *file)
 	struct trident_state *state = (struct trident_state *)file->private_data;
 
 	VALIDATE_STATE(state);
-	if (file->f_mode & FMODE_WRITE)
+
+
+	if (file->f_mode & FMODE_WRITE) {
+		trident_clear_tail(state);
 		drain_dac(state, file->f_flags & O_NONBLOCK);
+	}
 
 	/* stop DMA state machine and free DMA buffers/channels */
 	down(&state->open_sem);
@@ -2777,16 +1816,16 @@ static int trident_release(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(state);
 		dealloc_dmabuf(&state->dma_dac);
-		trident_free_pcm_channel(state->card, state->dma_dac.chan);
+		trident_free_pcm_channel(state->card, state->dma_dac.channel->num);
 	}
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(state);
 		dealloc_dmabuf(&state->dma_adc);
-		trident_free_pcm_channel(state->card, state->dma_adc.chan);
+		trident_free_pcm_channel(state->card, state->dma_adc.channel->num);
 	}
 
-	kfree(state->card->channels[state->virt]);
-	state->card->channels[state->virt] = NULL;
+	kfree(state->card->states[state->virt]);
+	state->card->states[state->virt] = NULL;
 	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 
 	/* we're covered by the open_sem */
@@ -2796,6 +1835,7 @@ static int trident_release(struct inode *inode, struct file *file)
 	//MOD_DEC_USE_COUNT;
 	return 0;
 }
+
 static /*const*/ struct file_operations trident_audio_fops = {
 	&trident_llseek,
 	&trident_read,
@@ -2803,7 +1843,7 @@ static /*const*/ struct file_operations trident_audio_fops = {
 	NULL,	/* readdir */
 	&trident_poll,
 	&trident_ioctl,
-	NULL,	/* XXX &trident_mmap, */
+	&trident_mmap,
 	&trident_open,
 	NULL,	/* flush */
 	&trident_release,
@@ -2812,15 +1852,238 @@ static /*const*/ struct file_operations trident_audio_fops = {
 	NULL,	/* lock */
 };
 
-/* install the driver, we do not allocate hardware channel nor DMA buffer now, they are defered 
-   untill open time */
-static int trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_info)
+/* trident specific AC97 functions */
+/* Write AC97 mixer registers */
+static void trident_ac97_set(struct ac97_codec *codec, u8 reg, u16 val)
+{
+	struct trident_card *card = (struct trident_card *)codec->private_data;
+	unsigned int address, mask, busy;
+	unsigned short count  = 0xffff;
+	unsigned long flags;
+	u32 data;
+
+	data = ((u32) val) << 16;
+
+	switch (card->pci_id)
+	{
+	default:
+	case PCI_DEVICE_ID_SI_7018:
+		address = SI_AC97_WRITE;
+		mask = SI_AC97_BUSY_WRITE | SI_AC97_AUDIO_BUSY;
+		if (codec->id)
+		    mask |= SI_AC97_SECONDARY;
+		busy = SI_AC97_BUSY_WRITE;
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
+		address = DX_ACR0_AC97_W;
+		mask = busy = DX_AC97_BUSY_WRITE;
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
+		address = NX_ACR1_AC97_W;
+		mask = NX_AC97_BUSY_WRITE;
+		if (codec->id)
+		    mask |= NX_AC97_WRITE_SECONDARY;
+		busy = NX_AC97_BUSY_WRITE;
+		break;
+	}
+
+	spin_lock_irqsave(&card->lock, flags);
+	do {
+		if ((inw(TRID_REG(card, address)) & busy) == 0)
+			break;
+	} while (count--);
+
+
+	data |= (mask | (reg & AC97_REG_ADDR));
+
+	if (count == 0) {
+		printk(KERN_ERR "trident: AC97 CODEC write timed out.\n");
+		spin_unlock_irqrestore(&card->lock, flags);
+		return;
+	}
+
+	outl(data, TRID_REG(card, address));
+	spin_unlock_irqrestore(&card->lock, flags);
+}
+
+/* Read AC97 codec registers */
+static u16 trident_ac97_get(struct ac97_codec *codec, u8 reg)
+{
+	struct trident_card *card = (struct trident_card *)codec->private_data;
+	unsigned int address, mask, busy;
+	unsigned short count = 0xffff;
+	unsigned long flags;
+	u32 data;
+
+	switch (card->pci_id)
+	{
+	default:
+	case PCI_DEVICE_ID_SI_7018:
+		address = SI_AC97_READ;
+		mask = SI_AC97_BUSY_READ | SI_AC97_AUDIO_BUSY;
+		if (codec->id)
+		    mask |= SI_AC97_SECONDARY;
+		busy = SI_AC97_BUSY_READ;
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
+		address = DX_ACR1_AC97_R;
+		mask = busy = DX_AC97_BUSY_READ;
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
+		if (codec->id)
+			address = NX_ACR3_AC97_R_SECONDARY;
+		else
+			address = NX_ACR2_AC97_R_PRIMARY;
+		mask = NX_AC97_BUSY_READ;
+		busy = 0x0c00;
+		break;
+	}
+
+	data = (mask | (reg & AC97_REG_ADDR));
+
+	spin_lock_irqsave(&card->lock, flags);
+	outl(data, TRID_REG(card, address));
+	do {
+		data = inl(TRID_REG(card, address));
+		if ((data & busy) == 0)
+			break;
+	} while (count--);
+	spin_unlock_irqrestore(&card->lock, flags);
+
+	if (count == 0) {
+		printk(KERN_ERR "trident: AC97 CODEC read timed out.\n");
+		data = 0;
+	}
+	return ((u16) (data >> 16));
+}
+
+/* OSS /dev/mixer file operation methods */
+static int trident_open_mixdev(struct inode *inode, struct file *file)
 {
 	int i;
+	int minor = MINOR(inode->i_rdev);
+	struct trident_card *card = devs;
+
+	for (card = devs; card != NULL; card = card->next)
+		for (i = 0; i < NR_AC97; i++)
+			if (card->ac97_codec[i] != NULL &&
+			    card->ac97_codec[i]->dev_mixer == minor)
+				goto match;
+
+	if (!card)
+		return -ENODEV;
+
+ match:
+	file->private_data = card->ac97_codec[i];
+
+	//FIXME put back in
+	//MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static int trident_release_mixdev(struct inode *inode, struct file *file)
+{
+	//struct ac97_codec *codec = (struct ac97_codec *)file->private_data;
+
+	//FIXME put back in
+	//MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+static int trident_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int cmd,
+				unsigned long arg)
+{
+	struct ac97_codec *codec = (struct ac97_codec *)file->private_data;
+
+	return codec->mixer_ioctl(codec, cmd, arg);
+}
+
+static /*const*/ struct file_operations trident_mixer_fops = {
+	&trident_llseek,
+	NULL,  /* read */
+	NULL,  /* write */
+	NULL,  /* readdir */
+	NULL,  /* poll */
+	&trident_ioctl_mixdev,
+	NULL,  /* mmap */
+	&trident_open_mixdev,
+	NULL,	/* flush */
+	&trident_release_mixdev,
+	NULL,  /* fsync */
+	NULL,  /* fasync */
+	NULL,  /* lock */
+};
+
+/* AC97 codec initialisation. */
+static int __init trident_ac97_init(struct trident_card *card)
+{
+	int num_ac97 = 0;
+	int ready_2nd = 0;
+	struct ac97_codec *codec;
+
+	/* initialize controller side of AC link, and find out if secondary codes
+	   really exist */
+	switch (card->pci_id)
+	{
+	case PCI_DEVICE_ID_SI_7018:
+		/* disable AC97 GPIO interrupt */
+		outl(0x00, TRID_REG(card, SI_AC97_GPIO));
+		/* stop AC97 cold reset process */
+		outl(PCMOUT|SECONDARY_ID, TRID_REG(card, SI_SERIAL_INTF_CTRL));
+		ready_2nd = inl(TRID_REG(card, SI_SERIAL_INTF_CTRL)); 
+		ready_2nd &= SI_AC97_SECONDARY_READY;
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_DX:
+		/* playback on */
+		outl(DX_AC97_PLAYBACK, TRID_REG(card, DX_ACR2_AC97_COM_STAT));
+		break;
+	case PCI_DEVICE_ID_TRIDENT_4DWAVE_NX:
+		/* enable AC97 Output Slot 3,4 (PCM Left/Right Playback) */
+		outl(NX_AC97_PCM_OUTPUT, TRID_REG(card, NX_ACR0_AC97_COM_STAT));
+		ready_2nd = inl(TRID_REG(card, NX_ACR0_AC97_COM_STAT));
+		ready_2nd &= NX_AC97_SECONDARY_READY;
+		break;
+	}
+
+	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
+		if ((codec = kmalloc(sizeof(struct ac97_codec), GFP_KERNEL)) == NULL)
+			return -1;
+		memset(codec, 0, sizeof(struct ac97_codec));
+
+		/* initialize some basic codec information, other fields will be filled
+		   in ac97_probe_codec */
+		codec->private_data = card;
+		codec->id = num_ac97;
+		/* controller specific low level AC97 access function */
+		codec->codec_read = trident_ac97_get;
+		codec->codec_write = trident_ac97_set;
+
+		if (ac97_probe_codec(codec) == 0)
+			break;
+
+		if ((codec->dev_mixer = register_sound_mixer(&trident_mixer_fops, -1)) < 0) {
+			printk(KERN_ERR "trident: couldn't register mixer!\n");
+			kfree(codec);
+			break;
+		}
+
+		card->ac97_codec[num_ac97] = codec;
+
+		/* if there is no secondary codec at all, don't probe any more */
+		if (!ready_2nd)
+			return num_ac97+1;
+	}
+
+	return num_ac97;
+}
+
+/* install the driver, we do not allocate hardware channel nor DMA buffer now, they are defered 
+   untill "ACCESS" time (in prog_dmabuf calles by open/read/write/ioctl/mmap) */
+static int __init trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_info)
+{
 	u16 w;
 	unsigned long iobase;
 	struct trident_card *card;
-    	u32 ChanDwordCount;
 
 	iobase = pcidev->resource[0].start;
 	if (check_region(iobase, 256)) {
@@ -2847,30 +2110,12 @@ static int trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_in
 	card->irq = pcidev->irq;
 	card->next = devs;
 	card->magic = TRIDENT_CARD_MAGIC;
+	card->banks[BANK_A].addresses = &bank_a_addrs;
+	card->banks[BANK_A].bitmap = 0UL;
+	card->banks[BANK_B].addresses = &bank_b_addrs;
+	card->banks[BANK_B].bitmap = 0UL;
 	spin_lock_init(&card->lock);
-	devs = card;
-
-	/* ungly stupid thing, remove ASAP */
-	ChanDwordCount = card->ChanDwordCount = 2;
-	card->ChRegs.lpChStart = card->ChRegs.data;
-	card->ChRegs.lpChStop = card->ChRegs.lpChStart + ChanDwordCount;
-	card->ChRegs.lpChAint = card->ChRegs.lpChStop + ChanDwordCount;
-	card->ChRegs.lpChAinten = card->ChRegs.lpChAint + ChanDwordCount;
-	card->ChRegs.lpAChStart = card->ChRegs.lpChAinten + ChanDwordCount;
-	card->ChRegs.lpAChStop = card->ChRegs.lpAChStart + ChanDwordCount;
-	card->ChRegs.lpAChAint = card->ChRegs.lpAChStop + ChanDwordCount;
-	card->ChRegs.lpAChAinten = card->ChRegs.lpAChAint + ChanDwordCount;
-	// Assign Bank A addresses.
-	card->ChRegs.lpAChStart[0] = T4D_START_A;
-	card->ChRegs.lpAChStop[0] = T4D_STOP_A;
-	card->ChRegs.lpAChAint[0] = T4D_AINT_A;
-	card->ChRegs.lpAChAinten[0] = T4D_AINTEN_A;
-	/* Assign Bank B addresses */
-	card->ChRegs.lpAChStart[1] = T4D_START_B;
-	card->ChRegs.lpAChStop[1] = T4D_STOP_B;
-	card->ChRegs.lpAChAint[1] = T4D_AINT_B;
-	card->ChRegs.lpAChAinten[1] = T4D_AINTEN_B;
-
+	devs = card;	
 
 	printk(KERN_INFO "trident: %s found at IO 0x%04lx, IRQ %d\n",
 	       card->pci_info->name, card->iobase, card->irq);
@@ -2883,11 +2128,6 @@ static int trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_in
 		kfree(card);
 		return 0;
 	}
-
-	/* initilize AC97 codec */
-	trident_ac97_init(card);
-	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
-
 	/* register /dev/dsp */
 	if ((card->dev_audio = register_sound_dsp(&trident_audio_fops, -1)) < 0) {
 		printk(KERN_ERR "trident: coundn't register DSP device!\n");
@@ -2896,29 +2136,18 @@ static int trident_install(struct pci_dev *pcidev, struct pci_audio_info *pci_in
 		kfree(card);
 		return 0;
 	}
-	/* register /dev/mixer */
-	if ((card->dev_mixer = register_sound_mixer(&trident_mixer_fops, -1)) < 0) {
-		printk(KERN_ERR "trident: couldn't register mixer!\n");
+	/* initilize AC97 codec and register /dev/mixer */
+	if (trident_ac97_init(card) <= 0) {
 		unregister_sound_dsp(card->dev_audio);
 		release_region(iobase, 256);
 		free_irq(card->irq, card);
 		kfree(card);
 		return 0;
-	} else {
-		/* initilize mixer channels */
-		for (i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
-			struct mixer_defaults *md = &mixer_defaults[i];
-			if (md->mixer == -1) 
-				break;
-			if (!supported_mixer(card, md->mixer)) 
-				continue;
-			set_mixer(card, md->mixer, md->value);
-		}
 	}
+	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
 
 	/* Enable Address Engine Interrupts */
-	trident_enable_end_interrupts(card);
-	trident_enable_middle_interrupts(card);
+	trident_enable_loop_interrupts(card);
 
 	return 1; 
 }
@@ -2952,23 +2181,23 @@ static int __init init_trident(void)
 MODULE_AUTHOR("Alan Cox, Aaron Holtzman, Ollie Lho");
 MODULE_DESCRIPTION("Trident 4DWave/SiS 7018 PCI Audio Driver");
 
-#ifdef DEBUG
-MODULE_PARM(debug,"i");
-#endif
-
 static void __exit cleanup_trident(void)
 {
 	while (devs != NULL) {
+		int i;
 		/* Kill interrupts, and SP/DIF */
-		trident_disable_end_interrupts(devs);
-		trident_enable_middle_interrupts(devs);
+		trident_disable_loop_interrupts(devs);
 
 		/* free hardware resources */
 		free_irq(devs->irq, devs);
 		release_region(devs->iobase, 256);
 
 		/* unregister audio devices */
-		unregister_sound_mixer(devs->dev_mixer);
+		for (i = 0; i < NR_AC97; i++)
+			if (devs->ac97_codec[i] != NULL) {
+				unregister_sound_mixer(devs->ac97_codec[i]->dev_mixer);
+				kfree (devs->ac97_codec[i]);
+			}
 		unregister_sound_dsp(devs->dev_audio);
 
 		kfree(devs);
@@ -2978,5 +2207,3 @@ static void __exit cleanup_trident(void)
 
 module_init(init_trident);
 module_exit(cleanup_trident);
-
-

@@ -37,9 +37,6 @@
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
 #include <asm/siginfo.h>
-#ifdef CONFIG_KGDB
-#include <asm/kgdb.h>
-#endif
 
 /* assembler routines */
 asmlinkage void system_call(void);
@@ -766,11 +763,6 @@ int kstack_depth_to_print = 48;
 
 static void dump_stack(struct frame *fp)
 {
-#ifdef CONFIG_KGDB
-	/* This will never return to here, if kgdb has been initialized. And if
-	 * it returns from there, then to where the error happened... */
-	enter_kgdb( &fp->ptregs );
-#else
 	unsigned long *stack, *endstack, addr, module_start, module_end;
 	extern char _start, _etext;
 	int i;
@@ -868,15 +860,10 @@ static void dump_stack(struct frame *fp)
 	for (i = 0; i < 10; i++)
 		printk("%04x ", 0xffff & ((short *) fp->ptregs.pc)[i]);
 	printk ("\n");
-#endif
 }
 
 void bad_super_trap (struct frame *fp)
 {
-#ifdef CONFIG_KGDB
-	/* Save the register dump if we'll enter kgdb anyways */
-	if (!kgdb_initialized) {
-#endif
 	console_verbose();
 	if (fp->ptregs.vector < 4*sizeof(vec_names)/sizeof(vec_names[0]))
 		printk ("*** %s ***   FORMAT=%X\n",
@@ -906,9 +893,6 @@ void bad_super_trap (struct frame *fp)
 				fp->ptregs.pc);
 	}
 	printk ("Current process id is %d\n", current->pid);
-#ifdef CONFIG_KGDB
-	}
-#endif
 	die_if_kernel("BAD KERNEL TRAP", &fp->ptregs, 0);
 }
 
@@ -1037,10 +1021,6 @@ void die_if_kernel (char *str, struct pt_regs *fp, int nr)
 	if (!(fp->sr & PS_S))
 		return;
 
-#ifdef CONFIG_KGDB
-	/* Save the register dump if we'll enter kgdb anyways */
-	if (!kgdb_initialized) {
-#endif
 	console_verbose();
 	printk("%s: %08x\n",str,nr);
 	printk("PC: [<%08lx>]\nSR: %04x  SP: %p  a2: %08lx\n",
@@ -1052,9 +1032,6 @@ void die_if_kernel (char *str, struct pt_regs *fp, int nr)
 
 	printk("Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, PAGE_SIZE+(unsigned long)current);
-#ifdef CONFIG_KGDB
-	}
-#endif
 	dump_stack((struct frame *)fp);
 	do_exit(SIGSEGV);
 }

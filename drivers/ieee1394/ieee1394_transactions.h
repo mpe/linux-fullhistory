@@ -39,6 +39,9 @@ struct hpsb_packet *hpsb_make_writeqpacket(struct hpsb_host *host,
 struct hpsb_packet *hpsb_make_writebpacket(struct hpsb_host *host,
                                            nodeid_t node, u64 addr,
                                            size_t length);
+struct hpsb_packet *hpsb_make_lockpacket(struct hpsb_host *host, nodeid_t node,
+                                         u64 addr, int extcode);
+
 
 /*
  * hpsb_packet_success - Make sense of the ack and reply codes and

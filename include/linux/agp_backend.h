@@ -94,6 +94,7 @@ typedef struct _agp_memory {
 	unsigned long *memory;
 	off_t pg_start;
 	u32 type;
+	u32 physical;
 	u8 is_bound;
 	u8 is_flushed;
 } agp_memory;

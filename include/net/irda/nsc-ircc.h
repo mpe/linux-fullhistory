@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
- * Filename:      nsc_fir.h
+ * Filename:      nsc-ircc.h
  * Version:       
  * Description:   
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Nov 13 14:37:40 1998
- * Modified at:   Wed Jan  5 12:00:16 2000
+ * Modified at:   Sun Jan 23 17:47:00 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -25,20 +25,30 @@
  *     
  ********************************************************************/
 
-#ifndef NSC_FIR_H
-#define NSC_FIR_H
+#ifndef NSC_IRCC_H
+#define NSC_IRCC_H
 
 #include <linux/time.h>
 
 #include <linux/spinlock.h>
 #include <asm/io.h>
 
-#define PC87108         0x10
-#define PC97338         0xb0
-
 /* DMA modes needed */
 #define DMA_TX_MODE     0x08    /* Mem to I/O, ++, demand. */
 #define DMA_RX_MODE     0x04    /* I/O to mem, ++, demand. */
+
+/* Config registers for the '108 */
+#define CFG_BAIC 0x00
+#define CFG_CSRT 0x01
+#define CFG_MCTL 0x02
+
+/* Config registers for the '338 */
+#define CFG_FER  0x00
+#define CFG_FAR  0x01
+#define CFG_PTR  0x02
+#define CFG_PNP0 0x1b
+#define CFG_PNP1 0x1c
+#define CFG_PNP3 0x4f
 
 /* Flags for configuration register CRF0 */
 #define APEDCRC		0x02
@@ -174,14 +184,32 @@
 #define IRM_CR_IRX_MSL	0x40
 #define IRM_CR_AF_MNT   0x80 /* Automatic format */
 
+/* NSC chip information */
+struct nsc_chip {
+	char *name;          /* Name of chipset */
+	int cfg[3];          /* Config registers */
+	u_int8_t cid_index;  /* Chip identification index reg */
+	u_int8_t cid_value;  /* Chip identification expected value */
+	u_int8_t cid_mask;   /* Chip identification revision mask */
+
+	/* Functions for probing and initializing the specific chip */
+	int (*probe)(struct nsc_chip *chip, chipio_t *info);
+	int (*init)(struct nsc_chip *chip, chipio_t *info);
+};
+typedef struct nsc_chip nsc_chip_t;
+
 /* For storing entries in the status FIFO */
 struct st_fifo_entry {
 	int status;
 	int len;
 };
 
+#define MAX_TX_WINDOW 7
+#define MAX_RX_WINDOW 7
+
 struct st_fifo {
-	struct st_fifo_entry entries[10];
+	struct st_fifo_entry entries[MAX_RX_WINDOW];
+	int pending_bytes;
 	int head;
 	int tail;
 	int len;
@@ -192,42 +220,39 @@ struct frame_cb {
 	int len;     /* Lenght of frame in DMA mem */
 };
 
-#define MAX_WINDOW 7
-
 struct tx_fifo {
-	struct frame_cb queue[MAX_WINDOW]; /* Info about frames in queue */
-	int             ptr;               /* Currently being sent */
-	int             len;               /* Lenght of queue */
-	int             free;              /* Next free slot */
-	void           *tail;              /* Next free start in DMA mem */
+	struct frame_cb queue[MAX_TX_WINDOW]; /* Info about frames in queue */
+	int             ptr;                  /* Currently being sent */
+	int             len;                  /* Lenght of queue */
+	int             free;                 /* Next free slot */
+	void           *tail;                 /* Next free start in DMA mem */
 };
 
 /* Private data for each instance */
-struct nsc_fir_cb {
+struct nsc_ircc_cb {
 	struct st_fifo st_fifo;    /* Info about received frames */
 	struct tx_fifo tx_fifo;    /* Info about frames to be transmitted */
-
-	int tx_buff_offsets[10];   /* Offsets between frames in tx_buff */
-	int tx_len;                /* Number of frames in tx_buff */
 
 	struct net_device *netdev;     /* Yes! we are some kind of netdevice */
 	struct net_device_stats stats;
 	
 	struct irlap_cb *irlap;    /* The link layer we are binded to */
-	
-	struct chipio_t io;        /* IrDA controller information */
-	struct iobuff_t tx_buff;   /* Transmit buffer */
-	struct iobuff_t rx_buff;   /* Receive buffer */
 	struct qos_info qos;       /* QoS capabilities for this device */
+	
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
 
-	struct timeval  stamp;
-	struct timeval  now;
+	__u8 ier;                  /* Interrupt enable register */
+
+	struct timeval stamp;
+	struct timeval now;
 
 	spinlock_t lock;           /* For serializing operations */
 	
 	__u32 flags;               /* Interface flags */
 	__u32 new_speed;
-	int suspend;
+	int index;                 /* Instance index */
 };
 
 static inline void switch_bank(int iobase, int bank)
@@ -235,4 +260,4 @@ static inline void switch_bank(int iobase, int bank)
 		outb(bank, iobase+BSR);
 }
 
-#endif /* NSC_FIR_H */
+#endif /* NSC_IRCC_H */

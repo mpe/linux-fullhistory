@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Sun Nov 21 21:19:35 1999
+ * Modified at:   Tue Jan 25 09:10:18 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
- *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1999-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -55,15 +55,14 @@ struct irtty_cb {
 	struct tty_struct  *tty;
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
 
-	struct chipio_t io;        /* IrDA controller information */
-	struct iobuff_t tx_buff;   /* Transmit buffer */
-	struct iobuff_t rx_buff;   /* Receive buffer */
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
 
 	struct qos_info qos;       /* QoS capabilities for this device */
 	dongle_t *dongle;          /* Dongle driver */
 
 	__u32 new_speed;
-
  	__u32 flags;               /* Interface flags */
 
 	INFRARED_MODE mode;

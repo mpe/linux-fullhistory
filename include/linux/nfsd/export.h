@@ -37,7 +37,8 @@
 #define NFSEXP_SUNSECURE	0x0100
 #define NFSEXP_CROSSMNT		0x0200
 #define NFSEXP_NOSUBTREECHECK	0x0400
-#define NFSEXP_ALLFLAGS		0x07FF
+#define	NFSEXP_NOAUTHNLM	0x0800		/* Don't authenticate NLM requests - just trust */
+#define NFSEXP_ALLFLAGS		0x0FFF
 
 
 #ifdef __KERNEL__

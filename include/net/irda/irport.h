@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Mon Jan  3 10:23:34 2000
+ * Modified at:   Fri Jan 14 10:21:10 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -56,9 +56,9 @@ struct irport_cb {
 
 	struct irlap_cb *irlap;    /* The link layer we are attached to */
 
-	struct chipio_t io;        /* IrDA controller information */
-	struct iobuff_t tx_buff;   /* Transmit buffer */
-	struct iobuff_t rx_buff;   /* Receive buffer */
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
 
 	struct qos_info qos;       /* QoS capabilities for this device */
 	dongle_t *dongle;          /* Dongle driver */

@@ -1,5 +1,5 @@
 /*
- * ti_ohci1394.c - Texas Instruments Ohci1394 driver
+ * ohci1394.c - driver for OHCI 1394 boards
  * Copyright (C)1999,2000 Sebastien Rougeaux <sebastien.rougeaux@anu.edu.au>
  *                        Gord Peters <GordPeters@smarttech.com>
  *
@@ -40,8 +40,6 @@
 #include "ieee1394_core.h"
 #include "ohci1394.h"
 
-#undef CONFIG_PROC_FS
-
 /* print general (card independent) information */
 #define PRINT_G(level, fmt, args...) \
 printk(level "ohci1394: " fmt "\n" , ## args)
@@ -67,7 +65,6 @@ static int init_driver(void);
 /***********************************
  * IEEE-1394 functionality section *
  ***********************************/
-
 
 #if 0 /* not needed at this time */
 static int get_phy_reg(struct ti_ohci *ohci, int addr) 
@@ -324,31 +321,53 @@ static int ohci_initialize(struct hpsb_host *host)
 	}
 
 	/* Initialize AR dma */
-	ohci->AR_resp_prg->control=0x283C << 16 | AR_RESP_BUF_SIZE;
-	ohci->AR_resp_prg->address=virt_to_bus(ohci->AR_resp_buf);
-	ohci->AR_resp_prg->status=AR_RESP_BUF_SIZE;
-	PRINT(KERN_INFO, ohci->id, "AR control: %x",
-	      ohci->AR_resp_prg->control);
-	PRINT(KERN_INFO, ohci->id, "AR status: %x %d",
-	      ohci->AR_resp_prg->status & 0xffff,
-	      ohci->AR_resp_prg->status & 0xffff);
+	/* make sure the context isn't running, dead, or active */
+	if (!(reg_read(ohci, OHCI1394_AsRspRcvContextControlSet) & 0x00008F00)) {
 
-	/* Tell the controller where the AR program is */
-	reg_write(ohci, OHCI1394_AsRspRcvCommandPtr,
-		  virt_to_bus(ohci->AR_resp_prg)|0x00000001);
+                /* initialize AR program */
+                for (i= 0; i < AR_RESP_NUM_DESC; i++) {
 
-#if 1
-        /* Accept phy packets into AR request context */
-        reg_write(ohci, OHCI1394_LinkControlSet, 0x00000400);
-#endif
+			/* end of descriptor list? */
+                        if ((i + 1) < AR_RESP_NUM_DESC) {
+                                ohci->AR_resp_prg[i]->control=
+				  (0x283C << 16) | AR_RESP_BUF_SIZE;
+                                ohci->AR_resp_prg[i]->branchAddress=
+				  (virt_to_bus(ohci->AR_resp_prg[i + 1])
+                                         & 0xfffffff0) | 0x1;
+                        } else {
+                                ohci->AR_resp_prg[i]->control=
+                                        (0x283C << 16) | AR_RESP_BUF_SIZE;
+                                ohci->AR_resp_prg[i]->branchAddress=
+                                        (virt_to_bus(ohci->AR_resp_prg[0])
+                                         & 0xfffffff0) | 0x1;
+                        }
 
-	/* Run AR context */
-	reg_write(ohci, OHCI1394_AsRspRcvContextControlSet, 0x00008000);
+                        ohci->AR_resp_prg[i]->address=
+                                virt_to_bus(ohci->AR_resp_buf[i]);
+                        ohci->AR_resp_prg[i]->status= AR_RESP_BUF_SIZE;
+		}
+
+		/* Tell the controller where the first AR program is */
+		reg_write(ohci, OHCI1394_AsRspRcvCommandPtr,
+			  virt_to_bus(ohci->AR_resp_prg[0]) | 0x1 );
+
+		/* Accept phy packets into AR request context */
+		reg_write(ohci, OHCI1394_LinkControlSet, 0x00000400);
+
+		/* Run AR context */
+		reg_write(ohci, OHCI1394_AsRspRcvContextControlSet, 0x00008000);
+	}
+
+	/* Specify AT retries */
+	reg_write(ohci, OHCI1394_ATRetries, 
+		  OHCI1394_MAX_AT_REQ_RETRIES |
+		  (OHCI1394_MAX_AT_RESP_RETRIES<<4) |
+		  (OHCI1394_MAX_PHYS_RESP_RETRIES<<8));
 
 #ifndef __BIG_ENDIAN
-	reg_write(ohci, OHCI1394_HCControlSet, 0x40000000);
-#else
 	reg_write(ohci, OHCI1394_HCControlClear, 0x40000000);
+#else
+	reg_write(ohci, OHCI1394_HCControlSet, 0x40000000);
 #endif
 
 	/* Enable interrupts */
@@ -386,8 +405,9 @@ static void send_next_async(struct ti_ohci *ohci)
 	int i=0;
 	struct hpsb_packet *packet = ohci->async_queue;
 	struct dma_cmd prg;
+#if 0
 	quadlet_t *ptr = (quadlet_t *)ohci->AT_req_prg;
-
+#endif
 	//HPSB_TRACE();
 
         /* stop the channel program if it's still running */
@@ -435,14 +455,14 @@ static void send_next_async(struct ti_ohci *ohci)
                         prg.status = 0;
                         memcpy(ohci->AT_req_prg, &prg, 16);
                         memcpy(ohci->AT_req_prg + 1, packet->header, 16);
-
+#if 0
                         PRINT(KERN_INFO, ohci->id,
                               "dma_cmd: %08x %08x %08x %08x",
                               *ptr, *(ptr+1), *(ptr+2), *(ptr+3));
                         PRINT(KERN_INFO, ohci->id,
                               "header: %08x %08x %08x %08x",
                               *(ptr+4), *(ptr+5), *(ptr+6), *(ptr+7));
-
+#endif
                         reg_write(ohci, OHCI1394_AsReqTrCommandPtr, 
                                   virt_to_bus(ohci->AT_req_prg)|0x2);
                 }
@@ -455,11 +475,11 @@ static void send_next_async(struct ti_ohci *ohci)
                 prg.branchAddress = 0;
                 prg.status = 0;
                 memcpy(ohci->AT_req_prg, &prg, 16);
-
+#if 0
                 PRINT(KERN_INFO, ohci->id,
                       "dma_cmd: %08x %08x %08x %08x",
                       *ptr, *(ptr+1), *(ptr+2), *(ptr+3));
-
+#endif
                 reg_write(ohci, OHCI1394_AsReqTrCommandPtr, 
                           virt_to_bus(ohci->AT_req_prg)|0x2);
         }
@@ -638,6 +658,26 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
  * Global stuff (interrupt handler, init/shutdown code) *
  ********************************************************/
 
+static void stop_ar_resp_context(struct ti_ohci *ohci, char *msg)
+{
+	int i=0;
+
+	/* stop the channel program if it's still running */
+	reg_write(ohci, OHCI1394_AsRspRcvContextControlClear, 0x8000);
+   
+	/* Wait until it effectively stops */
+	while (reg_read(ohci, OHCI1394_AsRspRcvContextControlSet) 
+	       & 0x400) {
+		i++;
+		if (i>5000) {
+			PRINT(KERN_ERR, ohci->id, 
+			      "runaway loop in Dma Ar Resp. bailing out...");
+			break;
+		}
+	}
+	PRINT(KERN_ERR, ohci->id, "%s\n async response receive dma stopped\n", msg);
+}
+
 static void ohci_irq_handler(int irq, void *dev_id,
                              struct pt_regs *regs_are_unused)
 {
@@ -656,14 +696,13 @@ static void ohci_irq_handler(int irq, void *dev_id,
 	   event,reg_read(ohci, OHCI1394_IntMaskSet)); */
 
 	if (event & OHCI1394_busReset) {
+#if 0
 		PRINT(KERN_INFO, ohci->id, "bus reset interrupt");
+#endif
 		if (!host->in_bus_reset) {
 			hpsb_bus_reset(host);
 		}
 		ohci->NumBusResets++;
-	}
-	if (event & OHCI1394_reqTxComplete) {
-		PRINT(KERN_INFO, ohci->id, "reqTxComplete int received");
 	}
 	if (event & OHCI1394_RQPkt) {
 		PRINT(KERN_INFO, ohci->id, "RQPkt int received");
@@ -673,58 +712,55 @@ static void ohci_irq_handler(int irq, void *dev_id,
 		      reg_read(ohci, OHCI1394_AsReqRcvContextControlSet));
 	}
 	if (event & OHCI1394_RSPkt) {
-		int rcv_bytes;
-		int i=0;
+		unsigned int idx,offset,rescount;
 
-		/* we calculate the number of received bytes from the
-		   residual count field */
-		rcv_bytes = AR_RESP_BUF_SIZE - 
-		  (ohci->AR_resp_prg->status & 0xFFFF);
+                spin_lock(&ohci->AR_resp_lock);
 
-		PRINT(KERN_INFO, ohci->id, "AR_status 0x%x %d, %d bytes read", 
-		      ohci->AR_resp_prg->status, 
-		      ohci->AR_resp_prg->status & 0xffff, 
-		      rcv_bytes);
+		idx = ohci->AR_resp_buf_th_ind;
+		offset = ohci->AR_resp_buf_th_offset;
 
-		ohci->AR_resp_active = 0;
+		rescount = ohci->AR_resp_prg[idx]->status&0xffff;
+		ohci->AR_resp_bytes_left +=  AR_RESP_BUF_SIZE - rescount - offset;
+		offset = AR_RESP_BUF_SIZE - rescount;
 
-		if ((ohci->AR_resp_prg->status & 0x84000000) 
-		    && (ohci->AR_resp_prg->status & 0xFFFF) >= 8 ) {
-			hpsb_packet_received(host, ohci->AR_resp_buf, 
-					     rcv_bytes);
-		} else {
-			//HPSB_TRACE();
-			PRINT(KERN_ERR, ohci->id, 
-			      "AR resp DMA program status value 0x%x is incorrect!",
-			      ohci->AR_resp_prg->status);
-		}
+		if (!rescount) { /* We cross a buffer boundary */
+			idx = (idx+1) % AR_RESP_NUM_DESC;
 
-
-		/* --------------- FIXME ---------------------------------
-		   this is a complete hack... we stop the dma prg
-		   and start it again so as to reset the dma buffer address
-		   Very slow, very bad design... to change ASAP */
-		  
-		/* stop the channel program if it's still running */
-		reg_write(ohci, OHCI1394_AsRspRcvContextControlClear, 0x8000);
-   
-		/* Wait until it effectively stops */
-		while (reg_read(ohci, OHCI1394_AsRspRcvContextControlSet) 
-		       & 0x400) {
-			i++;
-			if (i>5000) {
-				PRINT(KERN_ERR, ohci->id, 
-				      "runaway loop in DmaAT. bailing out...");
-				break;
+#if 0 
+			/* This bit of code does not work */
+			/* Let's see how many bytes were written in the async response 
+			   receive buf since last interrupt. This is done by finding 
+			   the next active context (See OHCI Spec p91) */
+			while (ohci->AR_resp_bytes_left <= AR_RESP_TOTAL_BUF_SIZE) {
+				if (ohci->AR_resp_prg[idx]->status&0x04000000) break;
+				idx = (idx+1) % AR_RESP_NUM_DESC;
+				PRINT(KERN_INFO,ohci->id,"crossing more than one buffer boundary !!!");
+				ohci->AR_resp_bytes_left += AR_RESP_BUF_SIZE;
 			}
+#endif 
+			/* ASSUMPTION: only one buffer boundary is crossed */
+			rescount = ohci->AR_resp_prg[idx]->status&0xffff;
+			offset = AR_RESP_BUF_SIZE - rescount;
+			ohci->AR_resp_bytes_left += offset;
 		}
+		if (offset==AR_RESP_BUF_SIZE) {
+			offset=0;
+			idx = (idx+1) % AR_RESP_NUM_DESC;
+		}
+		ohci->AR_resp_buf_th_ind = idx;
+		ohci->AR_resp_buf_th_offset = offset;
 
-		reg_write(ohci, OHCI1394_AsRspRcvCommandPtr,
-			  virt_to_bus(ohci->AR_resp_prg)|0x00000001);
-		ohci->AR_resp_prg->status=AR_RESP_BUF_SIZE;
-		reg_write(ohci, OHCI1394_AsRspRcvContextControlSet, 0x8000);
+                /* is buffer processing too slow? (all buffers used) */
+		if (ohci->AR_resp_bytes_left > AR_RESP_TOTAL_BUF_SIZE) {
+			stop_ar_resp_context(ohci,"async response receive processing too slow");
+                        spin_unlock(&ohci->AR_resp_lock);
+			return;
+		}
+                spin_unlock(&ohci->AR_resp_lock);
 
-		/* ---------------- end of FIXME --------------------------*/
+		/* queue bottom half in immediate queue */
+		queue_task(&ohci->AR_resp_pdl_task, &tq_immediate);
+		mark_bh(IMMEDIATE_BH);
 	}
 	if (event & OHCI1394_isochRx) {
 		quadlet_t isoRecvIntEvent;
@@ -826,8 +862,10 @@ static void ohci_irq_handler(int irq, void *dev_id,
 				send_next_async(ohci);
 			}
 			spin_unlock(&ohci->async_queue_lock);
+#if 0
 			PRINT(KERN_INFO,ohci->id,
 			      "packet sent with ack code %d",ack);
+#endif
 			hpsb_packet_sent(host, packet, ack);	    
 		} else 
 		  PRINT(KERN_INFO,ohci->id,
@@ -837,6 +875,129 @@ static void ohci_irq_handler(int irq, void *dev_id,
 	}
 
 	ohci->NumInterrupts++;
+}
+
+
+/* This is the bottom half that processes async response receive descriptor buffers. */
+static void ohci_ar_resp_proc_desc(void *data)
+{
+	quadlet_t *buf_ptr;
+	char *split_ptr;
+	unsigned int split_left;
+	struct ti_ohci *ohci= (struct ti_ohci*)data;
+        unsigned int packet_length;
+        unsigned int idx,offset,tcode;
+        unsigned long flags;
+	char msg[256];
+
+        spin_lock_irqsave(&ohci->AR_resp_lock, flags);
+
+	idx = ohci->AR_resp_buf_bh_ind;
+	offset = ohci->AR_resp_buf_bh_offset;
+
+	buf_ptr = ohci->AR_resp_buf[idx];
+	buf_ptr += offset/4;
+
+        while(ohci->AR_resp_bytes_left > 0) {
+
+                /* check to see if a fatal error occurred */
+                if ((ohci->AR_resp_prg[idx]->status >> 16) & 0x800) {
+			sprintf(msg,"fatal async response receive error -- status is %d",
+				ohci->AR_resp_prg[idx]->status & 0x1F);
+			stop_ar_resp_context(ohci, msg);
+                        spin_unlock_irqrestore(&ohci->AR_resp_lock, flags);
+                        return;
+                }
+
+                spin_unlock_irqrestore(&ohci->AR_resp_lock, flags);
+
+		/* Let's see what kind of packet is in there */
+		tcode = (buf_ptr[0]>>4)&0xf;
+		if (tcode==2) /* no-data receive */
+		  packet_length=16;
+		else if (tcode==6) /* quadlet receive */
+		  packet_length=20;
+		else if (tcode==7) { /* block receive */
+			/* Where is the data length ? */
+			if (offset+12>=AR_RESP_BUF_SIZE) 
+			  packet_length=(ohci->AR_resp_buf[(idx+1)%AR_RESP_NUM_DESC]
+					 [3-(AR_RESP_BUF_SIZE-offset)/4]>>16)+20;
+			else 
+			  packet_length=(buf_ptr[3]>>16)+20;
+                        if (packet_length % 4)
+			  packet_length += 4 - (packet_length % 4);
+		}
+		else /* something is wrong */ {
+			sprintf(msg,"unexpected packet tcode %d in async response receive buffer",tcode);
+			stop_ar_resp_context(ohci,msg);
+			return;
+		}
+		if ((offset+packet_length)>AR_RESP_BUF_SIZE) {
+			/* we have a split packet */
+			if (packet_length>AR_RESP_SPLIT_PACKET_BUF_SIZE) {
+				sprintf(msg,"packet size %d bytes exceed split packet buffer size %d bytes",
+					packet_length,AR_RESP_SPLIT_PACKET_BUF_SIZE);
+				stop_ar_resp_context(ohci, msg);
+				return;
+			}
+			split_left = packet_length;
+			split_ptr = (char *)ohci->AR_resp_spb;
+			while (split_left>0) {
+				memcpy(split_ptr,buf_ptr,AR_RESP_BUF_SIZE-offset);
+				split_left -= AR_RESP_BUF_SIZE-offset;
+				split_ptr += AR_RESP_BUF_SIZE-offset;
+				ohci->AR_resp_prg[idx]->status = AR_RESP_BUF_SIZE;
+				idx = (idx+1) % AR_RESP_NUM_DESC;
+				buf_ptr = ohci->AR_resp_buf[idx];
+				offset=0;
+				while (split_left >= AR_RESP_BUF_SIZE) {
+					memcpy(split_ptr,buf_ptr,AR_RESP_BUF_SIZE);
+					split_ptr += AR_RESP_BUF_SIZE;
+					split_left -= AR_RESP_BUF_SIZE;
+					ohci->AR_resp_prg[idx]->status = AR_RESP_BUF_SIZE;
+					idx = (idx+1) % AR_RESP_NUM_DESC;
+					buf_ptr = ohci->AR_resp_buf[idx];
+				}
+				if (split_left>0) {
+					memcpy(split_ptr,buf_ptr,split_left);
+					offset = split_left;
+					split_left=0;
+					buf_ptr += split_left/4;
+				}
+			}
+#if 0
+			PRINT(KERN_INFO,ohci->id,"AR resp: received split packet tcode=%d length=%d",
+			      tcode,packet_length);
+#endif
+			hpsb_packet_received(ohci->host, ohci->AR_resp_spb, packet_length);
+			ohci->AR_resp_bytes_left -= packet_length;
+		}
+		else {
+#if 0
+			PRINT(KERN_INFO,ohci->id,"AR resp: received packet tcode=%d length=%d",
+			      tcode,packet_length);
+#endif
+			hpsb_packet_received(ohci->host, buf_ptr, packet_length);
+			offset += packet_length;
+			buf_ptr += packet_length/4;
+			ohci->AR_resp_bytes_left -= packet_length;
+			if (offset==AR_RESP_BUF_SIZE) {
+				ohci->AR_resp_prg[idx]->status = AR_RESP_BUF_SIZE;
+				idx = (idx+1) % AR_RESP_NUM_DESC;
+				buf_ptr = ohci->AR_resp_buf[idx];
+				offset=0;
+			}
+		}
+		
+	}
+	
+	if (ohci->AR_resp_bytes_left<0) 
+	  stop_ar_resp_context(ohci, "Sync problem in AR resp dma buffer");
+
+	ohci->AR_resp_buf_bh_ind = idx;
+	ohci->AR_resp_buf_bh_offset = offset;
+
+        spin_unlock_irqrestore(&ohci->AR_resp_lock, flags);
 }
 
 /* This is the bottom half that processes iso receive descriptor buffers. */
@@ -1023,22 +1184,60 @@ static int add_card(struct pci_dev *dev)
 		FAIL("failed to allocate DMA buffer for self-id packets");
 	}
 
-	/* AR dma buffer allocation */
-	ohci->AR_resp_buf = kmalloc(AR_RESP_BUF_SIZE, GFP_KERNEL);
-	if (ohci->AR_resp_buf != NULL) {
-		memset(ohci->AR_resp_buf, 0, AR_RESP_BUF_SIZE);
-	} else {
-		FAIL("failed to allocate AR response DMA buffer");
+	/* AR dma buffer and program allocation */
+	ohci->AR_resp_buf=
+	        kmalloc(AR_RESP_NUM_DESC * sizeof(quadlet_t*),
+			GFP_KERNEL);
+
+	if (ohci->AR_resp_buf == NULL) {
+		FAIL("failed to allocate AR response receive DMA buffer");
 	}
 
-	/* AR dma program allocation */
-	ohci->AR_resp_prg = (struct dma_cmd *) kmalloc(AR_RESP_PRG_SIZE, 
-						       GFP_KERNEL);
-	if (ohci->AR_resp_prg != NULL) {
-		memset(ohci->AR_resp_prg, 0, AR_RESP_PRG_SIZE);
-	} else {
-		FAIL("failed to allocate AR response DMA program");
+	ohci->AR_resp_prg=
+		kmalloc(AR_RESP_NUM_DESC * sizeof(struct dma_cmd*),
+			GFP_KERNEL);
+
+	if (ohci->AR_resp_prg == NULL) {
+		FAIL("failed to allocate AR response receive DMA program");
 	}
+
+	ohci->AR_resp_spb= kmalloc(AR_RESP_SPLIT_PACKET_BUF_SIZE, GFP_KERNEL);
+
+	if (ohci->AR_resp_spb == NULL) {
+		FAIL("failed to allocate AR response split packet buffer");
+	}
+
+	for (i= 0; i < AR_RESP_NUM_DESC; i++) {
+                ohci->AR_resp_buf[i]= kmalloc(AR_RESP_BUF_SIZE, GFP_KERNEL);
+
+                if (ohci->AR_resp_buf[i] != NULL) {
+                        memset(ohci->AR_resp_buf[i], 0, AR_RESP_BUF_SIZE);
+                } else {
+                        FAIL("failed to allocate AR response DMA buffer");
+                }
+
+                ohci->AR_resp_prg[i]= kmalloc(sizeof(struct dma_cmd),
+                                                   GFP_KERNEL);
+
+                if (ohci->AR_resp_prg[i] != NULL) {
+                        memset(ohci->AR_resp_prg[i], 0,
+                               sizeof(struct dma_cmd));
+                } else {
+                        FAIL("failed to allocate AR response DMA buffer");
+                }
+
+	}
+
+        ohci->AR_resp_buf_th_ind = 0;
+        ohci->AR_resp_buf_th_offset = 0;
+        ohci->AR_resp_buf_bh_ind = 0;
+        ohci->AR_resp_buf_bh_offset = 0;
+        ohci->AR_resp_bytes_left = 0;
+        spin_lock_init(&ohci->AR_resp_lock);
+
+        /* initialize AR response receive task */
+        ohci->AR_resp_pdl_task.routine= ohci_ar_resp_proc_desc;
+        ohci->AR_resp_pdl_task.data= (void*)ohci;
 
 	/* AT dma program allocation */
 	ohci->AT_req_prg = (struct dma_cmd *) kmalloc(AT_REQ_PRG_SIZE, 
@@ -1129,8 +1328,12 @@ static int add_card(struct pci_dev *dev)
 p += sprintf(p,fmt,reg_read(ohci, reg0),\
 	       reg_read(ohci, reg1),reg_read(ohci, reg2));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+static int ohci_get_status(char *buf)
+#else
 int ohci_get_info(char *buf, char **start, off_t fpos, 
 		  int length, int dummy)
+#endif
 {
 	struct ti_ohci *ohci=&cards[0];
 	struct hpsb_host *host=ohci->host;
@@ -1165,15 +1368,23 @@ int ohci_get_info(char *buf, char **start, off_t fpos,
 		     host->is_irm ? "iso_res_mgr" : "",
 		     host->is_busmgr ? "bus_mgr" : "");
   
-	p += sprintf(p,"\n### ohci data ###\n");
-	p += sprintf(p,"AR_resp_buf : %p  AR_resp_prg: %p\n",
-		     ohci->AR_resp_buf, ohci->AR_resp_prg);
-
+	p += sprintf(p,"\n---Iso Receive DMA---\n");
         for (i= 0; i < IR_NUM_DESC; i++) {
                 p += sprintf(p, "IR_recv_buf[%d] : %p  IR_recv_prg[%d]: %p\n",
                              i, ohci->IR_recv_buf[i], i, ohci->IR_recv_prg[i]);
 	}
 
+	
+	p += sprintf(p,"\n---Async Reponse Receive DMA---\n");
+        for (i= 0; i < AR_RESP_NUM_DESC; i++) {
+                p += sprintf(p, "AR_resp_buf[%d] : %p  AR_resp_prg[%d]: %p\n",
+                             i, ohci->AR_resp_buf[i], i, ohci->AR_resp_prg[i]);
+	}
+	p += sprintf(p, "Current AR resp buf in irq handler: %d offset: %d\n",
+		     ohci->AR_resp_buf_th_ind,ohci->AR_resp_buf_th_offset);
+	p += sprintf(p, "Current AR resp buf in bottom half: %d offset: %d\n",
+		     ohci->AR_resp_buf_bh_ind,ohci->AR_resp_buf_bh_offset);
+	
 	/* ----- Register Dump ----- */
 	p += sprintf(p,"\n### HC Register dump ###\n");
 	SR("Version     : %08x  GUID_ROM    : %08x  ATRetries   : %08x\n",
@@ -1242,12 +1453,27 @@ int ohci_get_info(char *buf, char **start, off_t fpos,
 		     phyreg&0x3f);
 #endif
 
+#if 0
 	p += sprintf(p,"AR_resp_prg ctrl: %08x\n",ohci->AR_resp_prg->control);
 	p += sprintf(p,"AR_resp_prg status: %08x\n",ohci->AR_resp_prg->status);
+#endif
 
 	return  p - buf;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+static int ohci1394_read_proc(char *page, char **start, off_t off,
+			      int count, int *eof, void *data)
+{
+        int len = ohci_get_status(page);
+        if (len <= off+count) *eof = 1;
+        *start = page + off;
+        len -= off;
+        if (len>count) len = count;
+        if (len<0) len = 0;
+        return len;
+}
+#else
 struct proc_dir_entry ohci_proc_entry = 
 {
 	0,			/* Inode number - dynamic */
@@ -1261,18 +1487,36 @@ struct proc_dir_entry ohci_proc_entry =
 	ohci_get_info,		/* The read function for this file */
 	NULL
 }; 
-#endif
+#endif /* LINUX_VERSION_CODE */
+#endif /* CONFIG_PROC_FS */
 
 static void remove_card(struct ti_ohci *ohci)
 {
 	if (ohci->registers) 
 	  iounmap(ohci->registers);
-	if (ohci->AR_resp_buf) 
-	  kfree(ohci->AR_resp_buf);
-	if (ohci->AR_resp_prg) 
-	  kfree(ohci->AR_resp_prg);
+
+	/* Free AR response buffers and programs */
+	if (ohci->AR_resp_buf) {
+		int i;
+                for (i= 0; i < AR_RESP_NUM_DESC; i++) {
+			kfree(ohci->AR_resp_buf[i]);
+		}
+		kfree(ohci->AR_resp_buf);
+	}
+	if (ohci->AR_resp_prg) {
+		int i;
+		for (i= 0; i < AR_RESP_NUM_DESC; i++) {
+			kfree(ohci->AR_resp_prg[i]);
+		}
+		kfree(ohci->AR_resp_prg);
+	}
+	kfree(ohci->AR_resp_spb);
+
+	/* Free AT request buffer and program */
 	if (ohci->AT_req_prg) 
 	  kfree(ohci->AT_req_prg);
+
+	/* Free Iso receive buffers and programs */
 	if (ohci->IR_recv_buf) {
 		int i;
                 for (i= 0; i < IR_NUM_DESC; i++) {
@@ -1288,11 +1532,16 @@ static void remove_card(struct ti_ohci *ohci)
 		kfree(ohci->IR_recv_prg);
 	}
 	kfree(ohci->IR_spb);
+
+	/* Free self-id buffer */
 	if (ohci->self_id_buffer)
 	  kfree(ohci->self_id_buffer);
+	
+	/* Free config rom */
 	if (ohci->csr_config_rom)
 	  kfree(ohci->csr_config_rom);
 
+	/* Free the IRQ */
 	free_irq(ohci->dev->irq, ohci);
 
 	ohci->state = 0;
@@ -1327,10 +1576,14 @@ static int init_driver()
 	}
 
 #ifdef CONFIG_PROC_FS
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+	create_proc_read_entry ("ohci1394", 0, NULL, ohci1394_read_proc, NULL);
+#else
 	if (proc_register(&proc_root, &ohci_proc_entry)) {
 		PRINT_G(KERN_ERR, "unable to register proc file\n");
 		return -EIO;
 	}
+#endif
 #endif
 	return 0;
 }
@@ -1384,7 +1637,11 @@ void cleanup_module(void)
 {
 	hpsb_unregister_lowlevel(get_ohci_template());
 #ifdef CONFIG_PROC_FS
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+	remove_proc_entry ("ohci1394", NULL);
+#else
 	proc_unregister(&proc_root, ohci_proc_entry.low_ino);
+#endif
 #endif
 	PRINT_G(KERN_INFO, "removed " OHCI1394_DRIVER_NAME " module\n");
 }

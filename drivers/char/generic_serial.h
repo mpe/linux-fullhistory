@@ -12,6 +12,8 @@
 #ifndef GENERIC_SERIAL_H
 #define GENERIC_SERIAL_H
 
+#define RS_EVENT_WRITE_WAKEUP 0
+
 struct real_driver {
   void                    (*disable_tx_interrupts) (void *);
   void                    (*enable_tx_interrupts) (void *);
@@ -75,6 +77,7 @@ struct gs_port {
 #define GS_DEBUG_TERMIOS 0x00000004
 #define GS_DEBUG_STUFF   0x00000008
 #define GS_DEBUG_CLOSE   0x00000010
+#define GS_DEBUG_FLOW    0x00000020
 
 
 void gs_put_char(struct tty_struct *tty, unsigned char ch);

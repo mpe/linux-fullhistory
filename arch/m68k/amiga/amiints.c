@@ -364,7 +364,7 @@ void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 	intena = ami_intena_vals[irq];
 	custom.intreq = intena;
 
-	/* serve first fast handlers - there can only be one of these */
+	/* serve fast handler if present - there can only be one of these */
 	node = ami_irq_list[irq];
 
 	/*
@@ -392,7 +392,11 @@ void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 	 */
 	custom.intena = intena;
 	save_flags(flags);
+#if 0 /* def CPU_M68060_ONLY */
 	sti();
+#else
+	restore_flags((flags & ~0x0700) | (fp->sr & 0x0700));
+#endif
 
 	slow_nodes = node;
 	for (;;) {

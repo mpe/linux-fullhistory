@@ -232,7 +232,6 @@ void agp_free_memory(agp_memory * curr)
 	}
 	if (curr->type != 0) {
 		agp_bridge.free_by_type(curr);
-		MOD_DEC_USE_COUNT;
 		return;
 	}
 	if (curr->page_count != 0) {
@@ -260,15 +259,23 @@ agp_memory *agp_allocate_memory(size_t page_count, u32 type)
 	    agp_bridge.max_memory_agp) {
 		return NULL;
 	}
+
 	if (type != 0) {
 		new = agp_bridge.alloc_by_type(page_count, type);
 		return new;
 	}
+      	/* We always increase the module count, since free auto-decrements
+	 * it
+	 */
+
+      	MOD_INC_USE_COUNT;
+
 	scratch_pages = (page_count + ENTRIES_PER_PAGE - 1) / ENTRIES_PER_PAGE;
 
 	new = agp_create_memory(scratch_pages);
 
 	if (new == NULL) {
+	      	MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	for (i = 0; i < page_count; i++) {
@@ -286,7 +293,6 @@ agp_memory *agp_allocate_memory(size_t page_count, u32 type)
 		new->page_count++;
 	}
 
-	MOD_INC_USE_COUNT;
 	return new;
 }
 
@@ -781,11 +787,13 @@ static aper_size_info_fixed intel_i810_sizes[] =
 };
 
 #define AGP_DCACHE_MEMORY 1
+#define AGP_PHYS_MEMORY   2
 
 static gatt_mask intel_i810_masks[] =
 {
 	{I810_PTE_VALID, 0},
-	{(I810_PTE_VALID | I810_PTE_LOCAL), AGP_DCACHE_MEMORY}
+	{(I810_PTE_VALID | I810_PTE_LOCAL), AGP_DCACHE_MEMORY},
+	{I810_PTE_VALID, 0}
 };
 
 static struct _intel_i810_private {
@@ -896,7 +904,7 @@ static int intel_i810_insert_entries(agp_memory * mem, off_t pg_start,
 		if ((type == AGP_DCACHE_MEMORY) &&
 		    (mem->type == AGP_DCACHE_MEMORY)) {
 			/* special insert */
-
+			CACHE_FLUSH();
 			for (i = pg_start;
 			     i < (pg_start + mem->page_count); i++) {
 				OUTREG32(intel_i810_private.registers,
@@ -904,20 +912,24 @@ static int intel_i810_insert_entries(agp_memory * mem, off_t pg_start,
 					 (i * 4096) | I810_PTE_LOCAL |
 					 I810_PTE_VALID);
 			}
-
+			CACHE_FLUSH();
 			agp_bridge.tlb_flush(mem);
 			return 0;
 		}
+	        if((type == AGP_PHYS_MEMORY) &&
+		   (mem->type == AGP_PHYS_MEMORY)) {
+		   goto insert;
+		}
 		return -EINVAL;
 	}
-	if (mem->is_flushed == FALSE) {
-		CACHE_FLUSH();
-		mem->is_flushed = TRUE;
-	}
+
+insert:
+   	CACHE_FLUSH();
 	for (i = 0, j = pg_start; i < mem->page_count; i++, j++) {
 		OUTREG32(intel_i810_private.registers,
 			 I810_PTE_BASE + (j * 4), mem->memory[i]);
 	}
+	CACHE_FLUSH();
 
 	agp_bridge.tlb_flush(mem);
 	return 0;
@@ -955,15 +967,55 @@ static agp_memory *intel_i810_alloc_by_type(size_t pg_count, int type)
 		new->page_count = pg_count;
 		new->num_scratch_pages = 0;
 		vfree(new->memory);
+	   	MOD_INC_USE_COUNT;
 		return new;
 	}
+	if(type == AGP_PHYS_MEMORY) {
+		/* The I810 requires a physical address to program
+		 * it's mouse pointer into hardware.  However the
+		 * Xserver still writes to it through the agp
+		 * aperture
+		 */
+	   	if (pg_count != 1) {
+		   	return NULL;
+		}
+	   	new = agp_create_memory(1);
+
+		if (new == NULL) {
+			return NULL;
+		}
+	   	MOD_INC_USE_COUNT;
+		new->memory[0] = agp_alloc_page();
+
+		if (new->memory[0] == 0) {
+			/* Free this structure */
+			agp_free_memory(new);
+			return NULL;
+		}
+		new->memory[0] =
+		    agp_bridge.mask_memory(
+				   virt_to_phys((void *) new->memory[0]),
+						  type);
+		new->page_count = 1;
+	   	new->num_scratch_pages = 1;
+	   	new->type = AGP_PHYS_MEMORY;
+	        new->physical = virt_to_phys((void *) new->memory[0]);
+	   	return new;
+	}
+   
 	return NULL;
 }
 
 static void intel_i810_free_by_type(agp_memory * curr)
 {
 	agp_free_key(curr->key);
+   	if(curr->type == AGP_PHYS_MEMORY) {
+	   	agp_destroy_page((unsigned long)
+				 phys_to_virt(curr->memory[0]));
+		vfree(curr->memory);
+	}
 	kfree(curr);
+   	MOD_DEC_USE_COUNT;
 }
 
 static unsigned long intel_i810_mask_memory(unsigned long addr, int type)
@@ -1916,7 +1968,7 @@ static struct agp_max_table maxes_table[9] =
 
 static int agp_find_max(void)
 {
-	long memory, t, index, result;
+	long memory, index, result;
 
 	memory = virt_to_phys(high_memory) >> 20;
 	index = 1;
@@ -1926,16 +1978,15 @@ static int agp_find_max(void)
 		index++;
 	}
 
-	t = (memory - maxes_table[index - 1].mem) /
-	    (maxes_table[index].mem - maxes_table[index - 1].mem);
-
 	result = maxes_table[index - 1].agp +
-	    (t * (maxes_table[index].agp - maxes_table[index - 1].agp));
+	   ( (memory - maxes_table[index - 1].mem)  *
+	     (maxes_table[index].agp - maxes_table[index - 1].agp)) /
+	   (maxes_table[index].mem - maxes_table[index - 1].mem);
 
 	printk(KERN_INFO "agpgart: Maximum main memory to use "
 	       "for agp memory: %ldM\n", result);
 	result = result << (20 - PAGE_SHIFT);
-	return result;
+        return result;
 }
 
 #define AGPGART_VERSION_MAJOR 0

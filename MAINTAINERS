@@ -456,6 +456,41 @@ M:	Gadi Oxman <gadio@netvision.net.il>
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+IEEE 1394 SUBSYSTEM
+P:	Andreas Bombe
+M:	andreas.bombe@munich.netsurf.de
+L:	linux1394-devel@eclipt.uni-klu.ac.at
+W:	http://eclipt.uni-klu.ac.at/ieee1394
+S:	Maintained
+
+IEEE 1394 AIC5800 DRIVER
+P:	Emanuel Pirker
+M:	epirker@edu.uni-klu.ac.at
+L:	linux1394-devel@eclipt.uni-klu.ac.at
+W:	http://eclipt.uni-klu.ac.at/ieee1394
+S:	Maintained
+
+IEEE 1394 OHCI DRIVER
+P:	Sebastien Rougeaux
+M:	sebastien.rougeaux@anu.edu.au
+L:	linux1394-devel@eclipt.uni-klu.ac.at
+W:	http://eclipt.uni-klu.ac.at/ieee1394
+S:	Maintained
+
+IEEE 1394 PCILYNX DRIVER
+P:	Andreas Bombe
+M:	andreas.bombe@munich.netsurf.de
+L:	linux1394-devel@eclipt.uni-klu.ac.at
+W:	http://eclipt.uni-klu.ac.at/ieee1394
+S:	Maintained
+
+IEEE 1394 RAW I/O DRIVER
+P:	Andreas Bombe
+M:	andreas.bombe@munich.netsurf.de
+L:	linux1394-devel@eclipt.uni-klu.ac.at
+W:	http://eclipt.uni-klu.ac.at/ieee1394
+S:	Maintained
+
 INTEL APIC/IOAPIC, LOWLEVEL X86 SMP SUPPORT
 P:	Ingo Molnar
 M:	mingo@redhat.com
@@ -935,6 +970,12 @@ M:	pnorton@ieee.org
 L:	linux-net@vger.rutgers.edu
 L:	linux-tr@linuxtr.net
 S:	Maintained
+
+TRIDENT 4DWAVE/SIS 7018 PCI AUDIO CORE
+P:      Ollie Lho  
+M:      ollie@sis.com.tw
+L:	linux-kernel@vger.rutgers.edu
+S:      Supported
 
 TMS380 TOKEN-RING NETWORK DRIVER
 P:	Adam Fritzler

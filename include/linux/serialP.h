@@ -19,18 +19,10 @@
  * For definitions of the flags field, see tty.h
  */
 
+#include <linux/config.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>
-
-/*
- * Counters of the input lines (CTS, DSR, RI, CD) interrupts
- */
-struct async_icount {
-	__u32	cts, dsr, rng, dcd, tx, rx;
-	__u32	frame, parity, overrun, brk;
-	__u32	buf_overrun;
-};
 
 struct serial_state {
 	int	magic;

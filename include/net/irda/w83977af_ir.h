@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Thu Nov 19 13:55:34 1998
- * Modified at:   Mon Nov  8 10:00:40 1999
+ * Modified at:   Tue Jan 11 13:08:19 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -174,11 +174,11 @@ struct w83977af_ir {
 	struct net_device_stats stats;
 	
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
+	struct qos_info     qos;   /* QoS capabilities for this device */
 	
-	struct chipio_t io;        /* IrDA controller information */
-	struct iobuff_t tx_buff;   /* Transmit buffer */
-	struct iobuff_t rx_buff;   /* Receive buffer */
-	struct qos_info qos;       /* QoS capabilities for this device */
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
 	
 	__u32 flags;               /* Interface flags */
 	__u32 new_speed;

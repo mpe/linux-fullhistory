@@ -29,10 +29,10 @@ else
 endif
 
 ifeq ($(CONFIG_NSC_FIR),y)
-L_OBJS += nsc_fir.o
+L_OBJS += nsc-ircc.o
 else
   ifeq ($(CONFIG_NSC_FIR),m)
-  M_OBJS += nsc_fir.o
+  M_OBJS += nsc-ircc.o
   endif
 endif
 
@@ -115,14 +115,6 @@ L_OBJS += litelink.o
 else
   ifeq ($(CONFIG_LITELINK_DONGLE),m)
   M_OBJS += litelink.o
-  endif
-endif
-
-ifeq ($(CONFIG_AIRPORT_DONGLE),y)
-L_OBJS += airport.o
-else
-  ifeq ($(CONFIG_AIRPORT_DONGLE),m)
-  M_OBJS += airport.o
   endif
 endif
 

@@ -509,6 +509,7 @@ struct usb_device {
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
 
+	int have_langid;		/* whether string_langid is valid yet */
 	int string_langid;		/* language ID for strings */
   
 	void *hcpriv;			/* Host Controller private data */

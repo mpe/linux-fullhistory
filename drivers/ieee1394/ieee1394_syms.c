@@ -39,6 +39,7 @@ EXPORT_SYMBOL(hpsb_make_readqpacket);
 EXPORT_SYMBOL(hpsb_make_readbpacket);
 EXPORT_SYMBOL(hpsb_make_writeqpacket);
 EXPORT_SYMBOL(hpsb_make_writebpacket);
+EXPORT_SYMBOL(hpsb_make_lockpacket);
 EXPORT_SYMBOL(hpsb_read);
 EXPORT_SYMBOL(hpsb_write);
 EXPORT_SYMBOL(hpsb_lock);

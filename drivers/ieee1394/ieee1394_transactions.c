@@ -329,6 +329,30 @@ struct hpsb_packet *hpsb_make_writebpacket(struct hpsb_host *host,
         return p;
 }
 
+struct hpsb_packet *hpsb_make_lockpacket(struct hpsb_host *host, nodeid_t node,
+                                         u64 addr, int extcode)
+{
+        struct hpsb_packet *p;
+
+        p = alloc_hpsb_packet(8);
+        if (!p) return NULL;
+
+        p->host = host;
+        p->tlabel = get_tlabel(host, node, 1);
+        p->node_id = node;
+
+        switch (extcode) {
+        case EXTCODE_FETCH_ADD:
+        case EXTCODE_LITTLE_ADD:
+                fill_async_lock(p, addr, extcode, 4);
+                break;
+        default:
+                fill_async_lock(p, addr, extcode, 8);
+                break;
+        }
+
+        return p;
+}
 
 /*
  * FIXME - these functions should probably read from / write to user space to

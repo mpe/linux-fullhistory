@@ -45,6 +45,7 @@ obj-	:=
 
 obj-$(CONFIG_USB)		+= usbcore.o
 obj-$(CONFIG_USB_UHCI)		+= usb-uhci.o
+obj-$(CONFIG_USB_UHCI_ALT)	+= uhci.o
 obj-$(CONFIG_USB_OHCI)		+= usb-ohci.o
 
 obj-$(CONFIG_USB_MOUSE)		+= usbmouse.o input.o
@@ -107,3 +108,4 @@ usbcore.o: $(usbcore-objs)
 
 usb-storage.o: $(usb-storage-objs)
 	$(LD) -r -o $@ $(usb-storage-objs)
+

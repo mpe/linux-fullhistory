@@ -35,135 +35,142 @@
 #include <net/irda/irport.h>
 
 /* DMA modes needed */
-#define DMA_TX_MODE              0x08    /* Mem to I/O, ++, demand. */
-#define DMA_RX_MODE              0x04    /* I/O to mem, ++, demand. */
+#define DMA_TX_MODE                0x08    /* Mem to I/O, ++, demand. */
+#define DMA_RX_MODE                0x04    /* I/O to mem, ++, demand. */
 
-#define IRCC_MASTER              0x07
-#define IRCC_MASTER_POWERDOWN	 1<<7
-#define IRCC_MASTER_RESET        1<<6
-#define IRCC_MASTER_INT_EN       1<<5
-#define IRCC_MASTER_ERROR_RESET	 1<<4
+/* Master Control Register */
+#define IRCC_MASTER                0x07
+#define   IRCC_MASTER_POWERDOWN	   0x80
+#define   IRCC_MASTER_RESET        0x40
+#define   IRCC_MASTER_INT_EN       0x20
+#define   IRCC_MASTER_ERROR_RESET  0x10
 
 /* Register block 0 */
-#define IRCC_IIR                 0x01
-#define IRCC_IER                 0x02
-#define IRCC_LSR                 0x03
-#define IRCC_LCR_A               0x04
-#define IRCC_LCR_B               0x05
-#define IRCC_BSR                 0x06
 
-#define IRCC_IIR_ACTIVE_FRAME    1<<7
-#define IRCC_IIR_EOM             1<<6
-#define IRCC_IIR_RAW_MODE        1<<5
-#define IRCC_IIR_FIFO		 1<<4
+/* Interrupt Identification */
+#define IRCC_IIR                   0x01
+#define   IRCC_IIR_ACTIVE_FRAME    0x80
+#define   IRCC_IIR_EOM             0x40
+#define   IRCC_IIR_RAW_MODE        0x20
+#define   IRCC_IIR_FIFO		   0x10
 
-#define IRCC_IER_ACTIVE_FRAME	 1<<7
-#define IRCC_IER_EOM 		 1<<6
-#define IRCC_IER_RAW_MODE        1<<5
-#define IRCC_IER_FIFO		 1<<4
+/* Interrupt Enable */
+#define IRCC_IER                   0x02
+#define   IRCC_IER_ACTIVE_FRAME	   0x80
+#define   IRCC_IER_EOM 		   0x40
+#define   IRCC_IER_RAW_MODE        0x20
+#define   IRCC_IER_FIFO		   0x10
 
-#define IRCC_LSR_UNDERRUN        1<<7
-#define IRCC_LSR_OVERRUN         1<<6
-#define IRCC_LSR_FRAME_ERROR     1<<5
-#define IRCC_LSR_SIZE_ERROR      1<<4
-#define IRCC_LSR_CRC_ERROR       1<<3
-#define IRCC_LSR_FRAME_ABORT 	 1<<2
+/* Line Status Register */
+#define IRCC_LSR                   0x03
+#define   IRCC_LSR_UNDERRUN        0x80
+#define   IRCC_LSR_OVERRUN         0x40
+#define   IRCC_LSR_FRAME_ERROR     0x20
+#define   IRCC_LSR_SIZE_ERROR      0x10
+#define   IRCC_LSR_CRC_ERROR       0x80
+#define   IRCC_LSR_FRAME_ABORT 	   0x40
 
-#define IRCC_LCR_A_FIFO_RESET    1<<7
-#define IRCC_LCR_A_FAST          1<<6
-#define IRCC_LCR_A_GP_DATA       1<<5
-#define IRCC_LCR_A_RAW_TX        1<<4
-#define IRCC_LCR_A_RAW_RX        1<<3
-#define IRCC_LCR_A_ABORT         1<<2
-#define IRCC_LCR_A_DATA_DONE     1<<1
+/* Line Control Register A */
+#define IRCC_LCR_A                 0x04
+#define   IRCC_LCR_A_FIFO_RESET    0x80
+#define   IRCC_LCR_A_FAST          0x40
+#define   IRCC_LCR_A_GP_DATA       0x20
+#define   IRCC_LCR_A_RAW_TX        0x10
+#define   IRCC_LCR_A_RAW_RX        0x08
+#define   IRCC_LCR_A_ABORT         0x04
+#define   IRCC_LCR_A_DATA_DONE     0x02
 
-#define IRCC_LCR_B_SCE_DISABLED  0x00<<6
-#define IRCC_LCR_B_SCE_TRANSMIT  0x01<<6
-#define IRCC_LCR_B_SCE_RECEIVE	 0x02<<6
-#define IRCC_LCR_B_SCE_UNDEFINED 0x03<<6
-#define IRCC_LCR_B_SIP_ENABLE	 1<<5
-#define IRCC_LCR_B_BRICK_WALL    1<<4
+/* Line Control Register B */
+#define IRCC_LCR_B                 0x05
+#define   IRCC_LCR_B_SCE_DISABLED  0x00
+#define   IRCC_LCR_B_SCE_TRANSMIT  0x40
+#define   IRCC_LCR_B_SCE_RECEIVE   0x80
+#define   IRCC_LCR_B_SCE_UNDEFINED 0xc0
+#define   IRCC_LCR_B_SIP_ENABLE	   0x20
+#define   IRCC_LCR_B_BRICK_WALL    0x10
 
-#define IRCC_BSR_NOT_EMPTY	 1<<7
-#define IRCC_BSR_FIFO_FULL	 1<<6
-#define IRCC_BSR_TIMEOUT	 1<<5
+/* Bus Status Register */
+#define IRCC_BSR                   0x06
+#define   IRCC_BSR_NOT_EMPTY	   0x80
+#define   IRCC_BSR_FIFO_FULL	   0x40
+#define   IRCC_BSR_TIMEOUT	   0x20
 
 /* Register block 1 */
-#define IRCC_SCE_CFGA	         0x00
-#define IRCC_SCE_CFGB	         0x01
-#define IRCC_FIFO_THRESHOLD	 0x02
 
-#define IRCC_CFGA_AUX_IR	 0x01<<7
-#define IRCC_CFGA_HALF_DUPLEX	 0x01<<2
-#define IRCC_CFGA_TX_POLARITY	 0x01<<1
-#define IRCC_CFGA_RX_POLARITY	 0x01
+#define IRCC_FIFO_THRESHOLD	   0x02
 
-#define IRCC_CFGA_COM		 0x00<<3
-#define IRCC_CFGA_IRDA_SIR_A	 0x01<<3
-#define IRCC_CFGA_ASK_SIR	 0x02<<3
-#define IRCC_CFGA_IRDA_SIR_B	 0x03<<3
-#define IRCC_CFGA_IRDA_HDLC 	 0x04<<3
-#define IRCC_CFGA_IRDA_4PPM 	 0x05<<3
-#define IRCC_CFGA_CONSUMER	 0x06<<3
-#define IRCC_CFGA_RAW_IR	 0x07<<3
-#define IRCC_CFGA_OTHER		 0x08<<3
+#define IRCC_SCE_CFGA	           0x00
+#define   IRCC_CFGA_AUX_IR	   0x80
+#define   IRCC_CFGA_HALF_DUPLEX	   0x04
+#define   IRCC_CFGA_TX_POLARITY	   0x02
+#define   IRCC_CFGA_RX_POLARITY	   0x01
 
-#define IRCC_IR_HDLC             0x04
-#define IRCC_IR_4PPM             0x01
-#define IRCC_IR_CONSUMER         0x02
+#define   IRCC_CFGA_COM		   0x00
+#define   IRCC_CFGA_IRDA_SIR_A	   0x08
+#define   IRCC_CFGA_ASK_SIR	   0x10
+#define   IRCC_CFGA_IRDA_SIR_B	   0x18
+#define   IRCC_CFGA_IRDA_HDLC 	   0x20
+#define   IRCC_CFGA_IRDA_4PPM 	   0x28
+#define   IRCC_CFGA_CONSUMER	   0x30
+#define   IRCC_CFGA_RAW_IR	   0x38
+#define   IRCC_CFGA_OTHER          0x40
 
-#define IRCC_CFGB_LOOPBACK       0x01<<5
-#define IRCC_CFGB_LPBCK_TX_CRC	 0x01<<4
-#define IRCC_CFGB_NOWAIT	 0x01<<3
-#define IRCC_CFGB_STRING_MOVE	 0x01<<2
-#define IRCC_CFGB_DMA_BURST 	 0x01<<1
-#define IRCC_CFGB_DMA_ENABLE	 0x01
+#define IRCC_IR_HDLC               0x04
+#define IRCC_IR_4PPM               0x01
+#define IRCC_IR_CONSUMER           0x02
 
-#define IRCC_CFGB_COM		 0x00<<6
-#define IRCC_CFGB_IR		 0x01<<6
-#define IRCC_CFGB_AUX		 0x02<<6
-#define IRCC_CFGB_INACTIVE	 0x03<<6
+#define IRCC_SCE_CFGB	           0x01
+#define IRCC_CFGB_LOOPBACK         0x20
+#define IRCC_CFGB_LPBCK_TX_CRC	   0x10
+#define IRCC_CFGB_NOWAIT	   0x08
+#define IRCC_CFGB_STRING_MOVE	   0x04
+#define IRCC_CFGB_DMA_BURST 	   0x02
+#define IRCC_CFGB_DMA_ENABLE	   0x01
+
+#define IRCC_CFGB_MUX_COM          0x00
+#define IRCC_CFGB_MUX_IR           0x40
+#define IRCC_CFGB_MUX_AUX          0x80
+#define IRCC_CFGB_MUX_INACTIVE	   0xc0
 
 /* Register block 3 - Identification Registers! */
-#define IRCC_ID_HIGH	         0x00   /* 0x10 */
-#define IRCC_ID_LOW	         0x01   /* 0xB8 */
-#define IRCC_CHIP_ID 	         0x02   /* 0xF1 */
-#define IRCC_VERSION	         0x03   /* 0x01 */
-#define IRCC_INTERFACE	         0x04   /* low 4 = DMA, high 4 = IRQ */
+#define IRCC_ID_HIGH	           0x00   /* 0x10 */
+#define IRCC_ID_LOW	           0x01   /* 0xB8 */
+#define IRCC_CHIP_ID 	           0x02   /* 0xF1 */
+#define IRCC_VERSION	           0x03   /* 0x01 */
+#define IRCC_INTERFACE	           0x04   /* low 4 = DMA, high 4 = IRQ */
 
 /* Register block 4 - IrDA */
-#define IRCC_CONTROL             0x00
-#define IRCC_BOF_COUNT_LO        0x01
-#define IRCC_BRICKWALL_CNT_LO    0x02
-#define IRCC_BRICKWALL_TX_CNT_HI 0x03
-#define IRCC_TX_SIZE_LO          0x04
-#define IRCC_RX_SIZE_HI          0x05
-#define IRCC_RX_SIZE_LO          0x06
+#define IRCC_CONTROL               0x00
+#define IRCC_BOF_COUNT_LO          0x01 /* Low byte */
+#define IRCC_BOF_COUNT_HI          0x00 /* High nibble (bit 0-3) */
+#define IRCC_BRICKWALL_CNT_LO      0x02 /* Low byte */
+#define IRCC_BRICKWALL_CNT_HI      0x03 /* High nibble (bit 4-7) */
+#define IRCC_TX_SIZE_LO            0x04 /* Low byte */
+#define IRCC_TX_SIZE_HI            0x03 /* High nibble (bit 0-3) */
+#define IRCC_RX_SIZE_HI            0x05 /* High nibble (bit 0-3) */
+#define IRCC_RX_SIZE_LO            0x06 /* Low byte */
 
-#define IRCC_1152                0x01<<7
-#define IRCC_CRC                 0x01<<6
+#define IRCC_1152                  0x80
+#define IRCC_CRC                   0x40
 
-/* For storing entries in the status FIFO */
-struct st_fifo_entry {
-	int status;
-	int len;
+struct smc_chip {
+	char *name;
+	unsigned char entr1;
+	unsigned char entr2;
+	unsigned char cid_index;
+	unsigned char cid_value;
+	int (*probe)(struct smc_chip *chip, chipio_t *info);
 };
-
-struct st_fifo {
-	struct st_fifo_entry entries[10];
-	int head;
-	int tail;
-	int len;
-};
+typedef struct smc_chip smc_chip_t;
 
 /* Private data for each instance */
 struct ircc_cb {
-	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device *netdev;     /* Yes! we are some kind of netdevice */
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
 	
-	struct chipio_t io;        /* IrDA controller information */
-	struct iobuff_t tx_buff;   /* Transmit buffer */
-	struct iobuff_t rx_buff;   /* Receive buffer */
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
 
 	struct irport_cb *irport;
 
@@ -171,8 +178,6 @@ struct ircc_cb {
 	
 	__u32 new_speed;
 	__u32 flags;               /* Interface flags */
-
-	struct st_fifo st_fifo;
 
 	int tx_buff_offsets[10];   /* Offsets between frames in tx_buff */
 	int tx_len;                /* Number of frames in tx_buff */

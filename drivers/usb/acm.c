@@ -1,5 +1,5 @@
 /*
- * acm.c  Version 0.14
+ * acm.c  Version 0.15
  *
  * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
@@ -17,6 +17,7 @@
  *	v0.12 - added TIOCM ioctls, added break handling, made struct acm kmalloced
  *	v0.13 - added termios, added hangup
  *	v0.14 - sized down struct acm
+ *	v0.15 - fixed flow control again - characters could be lost
  */
 
 /*
@@ -137,6 +138,7 @@ struct acm {
 	unsigned int writesize;				/* max packet size for the output bulk endpoint */
 	unsigned int used;				/* someone has this acm's device open */
 	unsigned int minor;				/* acm minor number */
+	unsigned char throttle;				/* throttled by tty layer */
 	unsigned char clocal;				/* termios CLOCAL */
 };
 
@@ -210,8 +212,6 @@ static void acm_ctrl_irq(struct urb *urb)
 				dr->request, dr->index, dr->length, data[0], data[1]);
 			return;
 	}
-
-	return;
 }
 
 static void acm_read_bulk(struct urb *urb)
@@ -219,24 +219,25 @@ static void acm_read_bulk(struct urb *urb)
 	struct acm *acm = urb->context;
 	struct tty_struct *tty = acm->tty;
 	unsigned char *data = urb->transfer_buffer;
-	int i;
+	int i = 0;
 
 	if (!ACM_READY(acm)) return;
 
-	if (!urb->status)  {
-
-		for (i = 0; i < urb->actual_length; i++)
+	if (!urb->status & !acm->throttle)  {
+		for (i = 0; i < urb->actual_length && !acm->throttle; i++)
 			tty_insert_flip_char(tty, data[i], 0);
-
 		tty_flip_buffer_push(tty);
-
 	} else
 		dbg("nonzero read bulk status received: %d", urb->status);
 
-	if (usb_submit_urb(urb))
-		dbg("failed resubmitting read urb");
-
-	return;
+	if (!acm->throttle) {
+		urb->actual_length = 0;
+		if (usb_submit_urb(urb))
+			dbg("failed resubmitting read urb");
+	} else {
+		memmove(data, data + i, urb->actual_length - i);
+		urb->actual_length -= i;
+	}
 }
 
 static void acm_write_bulk(struct urb *urb)
@@ -253,8 +254,6 @@ static void acm_write_bulk(struct urb *urb)
 		(tty->ldisc.write_wakeup)(tty);
 
 	wake_up_interruptible(&tty->write_wait);
-
-	return;
 }
 
 /*
@@ -347,15 +346,16 @@ static void acm_tty_throttle(struct tty_struct *tty)
 {
 	struct acm *acm = tty->driver_data;
 	if (!ACM_READY(acm)) return;
-	usb_unlink_urb(&acm->readurb);	
+	acm->throttle = 1;
 }
 
 static void acm_tty_unthrottle(struct tty_struct *tty)
 {
 	struct acm *acm = tty->driver_data;
 	if (!ACM_READY(acm)) return;
-	if (usb_submit_urb(&acm->readurb))
-		dbg("usb_submit_urb(read bulk) in unthrottle() failed");
+	acm->throttle = 0;
+	if (acm->readurb.status != -EINPROGRESS)
+		acm_read_bulk(&acm->readurb);
 }
 
 static void acm_tty_break_ctl(struct tty_struct *tty, int state)

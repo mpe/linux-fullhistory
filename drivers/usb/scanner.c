@@ -331,7 +331,6 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	
 	int ep_cnt;
 
-	char *ident;
 	char valid_device = 0;
 	char have_bulk_in, have_bulk_out, have_intr;
 

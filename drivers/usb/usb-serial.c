@@ -996,7 +996,7 @@ static int whiteheat_writememory (struct usb_serial *serial, int address, unsign
 //	dbg("whiteheat_writememory %x, %d", address, length);
 
 	if (!transfer_buffer) {
-		err("whiteheat_writememory: kmalloc(%d) failed.\n", length);
+		err("whiteheat_writememory: kmalloc(%d) failed.", length);
 		return -ENOMEM;
 	}
 	memcpy (transfer_buffer, data, length);
@@ -1078,7 +1078,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 		response = whiteheat_writememory (serial, record->address, 
 				(unsigned char *)record->data, record->data_size, 0xa0);
 		if (response < 0) {
-			err("whiteheat_writememory failed for second firmware step (%d %04X %p %d)\n", 
+			err("whiteheat_writememory failed for second firmware step (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);
 			break;
 		}
@@ -1127,7 +1127,7 @@ static void visor_serial_close(struct tty_struct *tty, struct file * filp)
 	dbg("visor_serial_close port %d", port);
 			 
 	if (!transfer_buffer) {
-		err("visor_serial_close: kmalloc(%d) failed.\n", 0x12);
+		err("visor_serial_close: kmalloc(%d) failed.", 0x12);
 	} else {
 		/* send a shutdown message to the device */
 		usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
@@ -1175,7 +1175,7 @@ static int  visor_startup (struct usb_serial *serial)
 	unsigned char *transfer_buffer =  kmalloc (256, GFP_KERNEL);
 
 	if (!transfer_buffer) {
-		err("visor_startup: kmalloc(%d) failed.\n", 256);
+		err("visor_startup: kmalloc(%d) failed.", 256);
 		return -ENOMEM;
 	}
 

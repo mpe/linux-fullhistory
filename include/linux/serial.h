@@ -10,6 +10,21 @@
 #ifndef _LINUX_SERIAL_H
 #define _LINUX_SERIAL_H
 
+/*
+ * Counters of the input lines (CTS, DSR, RI, CD) interrupts
+ */
+
+struct async_icount {
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
+};
+
+/*
+ * The size of the serial xmit buffer is 1 page, or 4096 bytes
+ */
+#define SERIAL_XMIT_SIZE 4096
+
 struct serial_struct {
 	int	type;
 	int	line;
