@@ -93,6 +93,9 @@ deny_mask(u32 allow_mask, unsigned int flags)
 	return ret;
 }
 
+/* XXX: modify functions to return NFS errors; they're only ever
+ * used by nfs code, after all.... */
+
 static int
 mode_from_nfs4(u32 perm, unsigned short *mode, unsigned int flags)
 {
