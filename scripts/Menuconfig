@@ -57,6 +57,14 @@
 # 13 Dec 1998, Riley H Williams (rhw@bigfoot.com)
 # When an error occurs, actually display the error message as well as
 # our comments thereon.
+#
+# 31 Dec 1998, Michael Elizabeth Chastain (mec@shout.net)
+# Fix mod_bool to honor $CONFIG_MODULES.
+# Fix dep_tristate to call define_bool when dependency is "n".
+#
+# 02 January 1999, Michael Elizabeth Chastain (mec@shout.net)
+# Blow away lxdialog.scrltmp on entry to activate_menu.  This protects
+# against people who use commands like ' ' to select menus.
 
 
 #
@@ -177,17 +185,13 @@ function tristate () {
 #       else in the kernel.
 #
 function dep_tristate () {
-	if [ "$CONFIG_MODULES" != "y" ]
-	then
-		bool "$1" "$2"
-	else
-		if  eval [ "_$3" != "_m" ]
-		then
-			tristate "$1" "$2" $3
-		else
-			mod_bool "$1" "$2"
-		fi
-	fi
+	if [ "$3" = "y" ]; then
+	    tristate "$1" "$2"
+	else if [ "$3" = "m" ]; then
+	    mod_bool "$1" "$2"
+	else 
+	    define_bool "$2" "$n"
+	fi; fi
 }
 
 #
@@ -372,16 +376,20 @@ function l_bool () {
 # Same as bool() except options are (Module/No)
 #
 function mod_bool () {
-	set_x_info "$2" "n"
-
-	case $x in
-	y|m) flag='M' ;;
-	*)   flag=' ' ;;
-	esac
-
-	echo -ne "'$2' '<$flag> $1$info' " >>MCmenu
-
-	echo -e "function $2 () { l_mod_bool '$2' \"\$1\" ;}" >>MCradiolists
+	if [ "$CONFIG_MODULES" != "y" ]; then
+	    define_bool "$2" "n"
+	else
+	    set_x_info "$2" "n"
+ 
+	    case $x in
+	    y|m) flag='M' ;;
+	    *)   flag=' ' ;;
+	    esac
+ 
+	    echo -ne "'$2' '<$flag> $1$info' " >>MCmenu
+ 
+	    echo -e "function $2 () { l_mod_bool '$2' \"\$1\" ;}" >>MCradiolists
+	fi
 }
 
 #
@@ -720,6 +728,7 @@ function parse_config_files () {
 # dialog commands or recursively call other menus.
 #
 function activate_menu () {
+	rm -f lxdialog.scrltmp
 	while true
 	do
 		comment_ctr=0		#So comment lines get unique tags

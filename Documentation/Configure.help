@@ -131,6 +131,13 @@ CONFIG_MATH_EMULATION
   If you are not sure, say Y; apart from resulting in a 45 KB bigger
   kernel, it won't hurt.
 
+Kernel FP software completion
+CONFIG_MATHEMU
+  This option is required for IEEE compliant floating point arithmetic
+  on the Alpha.  The only time you would ever not say Y is to say M
+  in order to debug the code.  Do not say anything but Y unless you
+  know what you are doing.
+
 Normal PC floppy disk support
 CONFIG_BLK_DEV_FD
   If you want to use the floppy disk drive(s) of your PC under Linux,
@@ -1169,38 +1176,50 @@ CONFIG_BLK_DEV_SUNFD
   if you have a floppy drive, otherwise N. Easy.
 
 Alpha system type
-CONFIG_ALPHA_AVANTI
-  Find out what type of Alpha motherboard you have. You will probably
-  want to read the Linux/Alpha home page on the WWW at
-  http://www.azstarnet.com/~axplinux/ (to browse the WWW, you need to
+CONFIG_ALPHA_GENERIC
+  This is the system type of your hardware.  A "generic" kernel will
+  run on any supported Alpha system.  Configuring a kernel for one
+  specific system can save about 200K and operate more efficiently.
+
+  To find out what type of Alpha system you have, you may want to
+  check out the Linux/Alpha FAQ, accessible on the WWW from
+  http://www.azstarnet.com/~axplinux/ (To browse the WWW, you need to
   have access to a machine on the Internet that has a program like
-  lynx or netscape) and also the Alpha-HOWTO, available via FTP (user:
-  anonymous) from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. For this
-  question, it suffices to give a unique prefix of the option you want
-  to choose. The choices:
-  ** Avanti: This is for Mustang (AS200), M3 (AS250), Avanti (AS400)
-     AlphaStations. These usually come with a TGA graphics adapter,
-     so you'll want to say Y to "TGA Console support", below, if you
-     have one of these.
-  ** Alpha-XL: A.k.a. "Windows NT Dream Machine" :-) These usually 
-     come with a TGA graphics adapter, so you'll want to say Y to "TGA
-     Console support", below, if you have one of these.
-  ** Jensen: a.k.a. DEC 2000 a.k.a. DECpc AXP 150, the oldest Alpha
-     PC; it sports an EISA bus. The boot process on Jensen machines is
-     difficult (no booting from floppies, MILO doesn't work). You need
-     to have access to a second Linux workstation. The Linux/Alpha
-     FAQ, accessible from the above mentioned WWW page, has details.
-  ** Noname: a.k.a. AXPpci33, a PCI-bus based board using the 21066
-     Alpha CPU, running at either 166 or 233 MHz. You also want to
-     choose this option if you have a UDB (Universal Desktop Box
-     a.k.a. Multia) machine.
-  ** Cabriolet: also called AlphaPC64, a PCI-bus based board using the
-     21064 Alpha CPU typically running at 275 or 300 MHz.
-  ** EB66: "Evaluation Board"
-  ** EB66+: "Evaluation Board"
-###
-### Add info about Platform2000, EB164, etc.
-###
+  lynx or netscape).  In summary:
+
+  Alcor/Alpha-XLT     AS 600
+  Alpha-XL            XL-233, XL-266
+  AlphaBook1          Alpha laptop
+  Avanti              AS 200, AS 205, AS 250, AS 255, AS 300, AS 400
+  Cabriolet           AlphaPC64, AlphaPCI64
+  DP264               DP264
+  EB164               EB164 21164 evaluation board
+  EB64+               EB64+ 21064 evaluation board
+  EB66                EB66 21066 evaluation board
+  EB66+               EB66+ 21066 evaluation board
+  Jensen              DECpc 150, DEC 2000 model 300, DEC 2000 model 500
+  LX164               AlphaPC164-LX
+  Miata               Personal Workstation 433a, 433au, 500a,
+                      500au, 600a, or 600au
+  Mikasa              AS 1000
+  Noname              AXPpci33, UDB (Multia)
+  Noritake            AS 1000A, AS 600A, AS 800
+  PC164               AlphaPC164
+  Rawhide             AS 1200, AS 4000, AS 4100
+  Ruffian             RPX164-2, AlphaPC164-UX, AlphaPC164-BX
+  SX164               AlphaPC164-SX
+  Sable               AS 2000, AS 2100
+  Takara              Takara
+
+  If you don't know what to do, choose "generic".
+
+EV5 CPU daughtercard
+CONFIG_ALPHA_PRIMO
+  Say Y if you have an AS 1000 5/xxx or an AS 1000A 5/xxx.
+
+EV5 CPU(s)
+CONFIG_ALPHA_GAMMA
+  Say Y if you have an AS 2000 5/xxx or an AS 2100 5/xxx.
 
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
@@ -1224,6 +1243,12 @@ CONFIG_ALPHA_SRM
   won't be able to boot from an IDE disk using SRM. 
 
   If unsure, say N.
+
+Use SRM PCI setup
+CONFIG_ALPHA_SRM_SETUP
+  This option controls whether or not the PCI configuration set up by
+  SRM is modified.  If you say Y, the existing PCI configuration will
+  be left intact.
 
 Non-standard serial port support
 CONFIG_SERIAL_NONSTANDARD
@@ -4107,6 +4132,17 @@ CONFIG_SCSI_IN2000
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called in2000.o.
+
+Initio 91XXU(W) SCSI support
+CONFIG_SCSI_INITIO
+  This is support for the Initio 91XXU(W) SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called initio.o
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
@@ -8461,13 +8497,40 @@ CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 
 Ignore multiple suspend/resume cycles
 CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-  This option is necessary on the Dell Inspiron 3200, but should be
-  safe for all other laptops. When enabled, a system suspend event
-  that occurs within one second of a resume is ignored. Without this
-  the Inspiron will shut itself off a few seconds after you open the
-  lid, requiring you to press the power button to resume it a second
-  time.
+  This option is necessary on the Dell Inspiron 3200 and others, but
+  should be safe for all other laptops. When enabled, a system suspend
+  event that occurs within one second of a resume is ignored. Without
+  this the Inspiron will shut itself off a few seconds after you open
+  the lid, requiring you to press the power button to resume it a
+  second time.
   Say Y.
+
+RTC stores time in GMT
+CONFIG_APM_RTC_IS_GMT
+  This option can be used when your RTC (Real Time Clock aka. Hardware
+  Clock) stores the time in GMT (Greenwich Mean Time) rather than
+  localtime. When suspending/resuming, the kernel needs to know what
+  is stored in the RTC so it can update the system clock (which is
+  always GMT). Without this option the kernel attempts to measure
+  the offset between the RTC and the system clock. This means you
+  can loose one second on each suspend/resume cycle.
+  Also, on the Dell Inspiron 3200, the hardware slows down the system
+  even before the kernel can measure the RTC/system clock offset. It
+  can then take 15 seconds to do this measurement and it can be
+  incorrect by several seconds.
+  Say Y if GMT is stored in your RTC.
+  GMT is usually the best anyway, because you don't have to worry about
+  daylight savings time changes. The only reason to not use GMT in
+  your RTC is if you also run a broken OS that doesn't understand GMT.
+
+Allow interrupts during APM BIOS calls
+CONFIG_APM_ALLOW_INTS
+  Normally we disable external interrupts while we are making calls to
+  the APM BIOS as a measure to lessen the effects of a badly behaving
+  BIOS implementation.  The BIOS should reeanble interrupts if it
+  needs to.  Unfortunately, some BIOS's do not - especially those in
+  many of the newer IBM Thinkpads.  If you experience hangs when you
+  suspend, try setting this to Y.  Otherwise, say N.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG

@@ -76,6 +76,22 @@ extern int mcpcia_hose_write_config_dword (u8, u8, u8, u32 value,
 extern void mcpcia_init_arch(unsigned long *, unsigned long *);
 extern void mcpcia_machine_check(u64, u64, struct pt_regs *);
 
+/* core_polaris.c */
+extern int polaris_hose_read_config_byte (u8, u8, u8, u8 *value,
+					struct linux_hose_info *hose);
+extern int polaris_hose_read_config_word (u8, u8, u8, u16 *value,
+					struct linux_hose_info *hose);
+extern int polaris_hose_read_config_dword (u8, u8, u8, u32 *value,
+					 struct linux_hose_info *hose);
+extern int polaris_hose_write_config_byte (u8, u8, u8, u8 value,
+					 struct linux_hose_info *hose);
+extern int polaris_hose_write_config_word (u8, u8, u8, u16 value,
+					 struct linux_hose_info *hose);
+extern int polaris_hose_write_config_dword (u8, u8, u8, u32 value,
+					  struct linux_hose_info *hose);
+extern void polaris_init_arch(unsigned long *, unsigned long *);
+extern void polaris_machine_check(u64, u64, struct pt_regs *);
+
 /* core_pyxis.c */
 extern int pyxis_hose_read_config_byte (u8, u8, u8, u8 *value,
 					struct linux_hose_info *hose);
@@ -129,8 +145,6 @@ extern void tsunami_init_arch(unsigned long *, unsigned long *);
 extern void tsunami_machine_check(u64, u64, struct pt_regs *);
 
 /* setup.c */
-extern void init_pit_rest(void);
-extern void generic_init_pit (void);
 extern unsigned long srm_hae;
 
 /* smp.c */
@@ -143,6 +157,8 @@ extern void reset_for_srm(void);
 
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
+extern void rtc_init_pit(void);
+extern void generic_init_pit(void);
 extern unsigned long est_cycle_freq;
 
 /* smc37c93x.c */

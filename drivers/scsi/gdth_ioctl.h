@@ -2,7 +2,7 @@
 #define _GDTH_IOCTL_H
 
 /* gdth_ioctl.h
- * $Id: gdth_ioctl.h,v 1.1 1997/02/21 08:07:27 achim Exp $
+ * $Id: gdth_ioctl.h,v 1.2 1998/12/17 15:42:49 achim Exp $
  */
 
 /* IOCTLs */
@@ -16,12 +16,12 @@
 #define GDTIOCTL_LOCKCHN    (GDTIOCTL_MASK | 7) /* lock channel */
 #define GDTIOCTL_EVENT      (GDTIOCTL_MASK | 8) /* read controller events */
 
-#define GDTIOCTL_MAGIC      0x06030f07UL
+#define GDTIOCTL_MAGIC      0xaffe0001UL
 
 
 /* IOCTL structure (write) */
 typedef struct {
-    ulong                   magic;              /* IOCTL magic */
+    ulong32                 magic;              /* IOCTL magic */
     ushort                  ioctl;              /* IOCTL */
     ushort                  ionode;             /* controller number */
     ushort                  service;            /* controller service */
@@ -43,14 +43,15 @@ typedef struct {
         struct {
             int             erase;              /* erase event ? */
             int             handle;
+            unchar          evt[34];            /* event structure */
         } event;
     } iu;
 } gdth_iowr_str;
 
 /* IOCTL structure (read) */
 typedef struct {
-    ulong                   size;               /* buffer size */
-    ulong                   status;             /* IOCTL error code */
+    ulong32                 size;               /* buffer size */
+    ulong32                 status;             /* IOCTL error code */
     union {
         struct {
             unchar          data[1];            /* data */
@@ -76,7 +77,7 @@ typedef struct {
         } ctrcnt;
         struct {
             int             handle;
-            unchar          evt[32];            /* event structure */
+            unchar          evt[34];            /* event structure */
         } event;
     } iu;
 } gdth_iord_str;

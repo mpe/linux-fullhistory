@@ -756,7 +756,7 @@ __initfunc(static int AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *p
 		 (search->irq != instance->irq) || (search == instance));
 	     search = search->next);
 	if (!search) {
-		if (request_irq(instance->irq, do_AM53C974_intr, SA_INTERRUPT, "AM53C974", NULL)) {
+		if (request_irq(instance->irq, do_AM53C974_intr, SA_SHIRQ, "AM53C974", instance)) {
 			printk("scsi%d: IRQ%d not free, detaching\n", instance->host_no, instance->irq);
 			scsi_unregister(instance);
 			return 0;
@@ -2458,7 +2458,7 @@ int AM53C974_reset(Scsi_Cmnd * cmd, unsigned int reset_flags)
  */
 int AM53C974_release(struct Scsi_Host *shp)
 {
-	free_irq(shp->irq, NULL);
+	free_irq(shp->irq, shp);
 	scsi_unregister(shp);
 	return 0;
 }

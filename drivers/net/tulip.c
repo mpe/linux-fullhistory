@@ -104,9 +104,6 @@ static int rx_copybreak = 100;
 #define NEW_MULTICAST
 #include <linux/delay.h>
 #endif
-#if (LINUX_VERSION_CODE >= 0x20100)
-char kernel_version[] = UTS_RELEASE;
-#endif
 #ifdef SA_SHIRQ
 #define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
 #else
@@ -465,7 +462,7 @@ int tulip_probe(struct device *dev)
 #endif
 	for (;pci_index < 0xff; pci_index++) {
 		u16 vendor, device, pci_command, new_command;
-		u32 pci_ioaddr;
+		unsigned long pci_ioaddr = 0;
 		int chip_idx = 0;
 
 		if (pcibios_find_class
@@ -503,7 +500,7 @@ int tulip_probe(struct device *dev)
 		pci_ioaddr &= ~3;
 
 		if (tulip_debug > 2)
-			printk(KERN_DEBUG "Found %s at I/O %#x.\n",
+			printk(KERN_DEBUG "Found %s at I/O %#lx.\n",
 				   tulip_tbl[chip_idx].chip_name, pci_ioaddr);
 
 		if (check_region(pci_ioaddr, tulip_tbl[chip_idx].io_size))

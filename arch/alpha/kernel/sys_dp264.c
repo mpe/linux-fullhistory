@@ -125,6 +125,7 @@ dp264_init_irq(void)
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
+	outb(0, DMA2_MASK_REG);
 
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
@@ -287,6 +288,29 @@ monet_swizzle(struct pci_dev *dev, int *pinp)
         return slot;
 }
 
+static int __init
+webbrick_map_irq(struct pci_dev *dev, int slot, int pin)
+{
+	static char irq_tab[13][5] __initlocaldata = {
+		/*INT    INTA   INTB   INTC   INTD */
+		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 7 ISA Bridge */
+		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 8 unused */
+		{    29,    29,    29,    29,    29}, /* IdSel 9 21143 #1 */
+		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 10 unused */
+		{    30,    30,    30,    30,    30}, /* IdSel 11 21143 #2 */
+		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 12 unused */
+		{    -1,    -1,    -1,    -1,    -1}, /* IdSel 13 unused */
+		{    47,    47,    46,    45,    44}, /* IdSel 14 slot 0 */
+		{    39,    39,    38,    37,    36}, /* IdSel 15 slot 1 */
+		{    43,    43,    42,    41,    40}, /* IdSel 16 slot 2 */
+		{    35,    35,    34,    33,    32}, /* IdSel 17 slot 3 */
+};
+	const long min_idsel = 7, max_idsel = 17, irqs_per_slot = 5;
+	int irq = COMMON_TABLE_LOOKUP;
+
+	return irq;
+}
+
 static void __init
 dp264_pci_fixup(void)
 {
@@ -301,6 +325,14 @@ monet_pci_fixup(void)
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(monet_map_irq, monet_swizzle);
 	/* es1888_init(); */ /* later? */
+	SMC669_Init();
+}
+
+static void __init
+webbrick_pci_fixup(void)
+{
+	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	common_pci_fixup(webbrick_map_irq, common_swizzle);
 	SMC669_Init();
 }
 
@@ -353,5 +385,27 @@ struct alpha_machine_vector monet_mv __initmv = {
 	pci_fixup:		monet_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
-/* No alpha_mv alias for monet, since we compile it in unconditionally
+
+struct alpha_machine_vector webbrick_mv __initmv = {
+	vector_name:		"Webbrick",
+	DO_EV6_MMU,
+	DO_DEFAULT_RTC,
+	DO_TSUNAMI_IO,
+	DO_TSUNAMI_BUS,
+	machine_check:		tsunami_machine_check,
+	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+
+	nr_irqs:		64,
+	irq_probe_mask:		_PROBE_MASK(64),
+	update_irq_hw:		dp264_update_irq_hw,
+	ack_irq:		generic_ack_irq,
+	device_interrupt:	dp264_device_interrupt,
+
+	init_arch:		tsunami_init_arch,
+	init_irq:		dp264_init_irq,
+	init_pit:		generic_init_pit,
+	pci_fixup:		webbrick_pci_fixup,
+	kill_arch:		generic_kill_arch,
+};
+/* No alpha_mv alias for webbrick, since we compile it in unconditionally
    with DP264; setup_arch knows how to cope.  */

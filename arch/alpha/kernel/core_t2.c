@@ -143,7 +143,7 @@ static unsigned int
 conf_read(unsigned long addr, unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0, value, cpu;
+	unsigned int value, cpu;
 	unsigned long t2_cfg = 0;
 
 	cpu = smp_processor_id();
@@ -153,11 +153,14 @@ conf_read(unsigned long addr, unsigned char type1)
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
 #if 0
-	/* Reset status register to avoid losing errors.  */
-	stat0 = *(vulp)T2_IOCSR;
-	*(vulp)T2_IOCSR = stat0;
-	mb();
-	DBG(("conf_read: T2 IOCSR was 0x%x\n", stat0));
+	{
+	  unsigned long stat0;
+	  /* Reset status register to avoid losing errors.  */
+	  stat0 = *(vulp)T2_IOCSR;
+	  *(vulp)T2_IOCSR = stat0;
+	  mb();
+	  DBG(("conf_read: T2 IOCSR was 0x%x\n", stat0));
+	}
 #endif
 
 	/* If Type1 access, must set T2 CFG.  */
@@ -202,7 +205,7 @@ static void
 conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 {
 	unsigned long flags;
-	unsigned int stat0, cpu;
+	unsigned int cpu;
 	unsigned long t2_cfg = 0;
 
 	cpu = smp_processor_id();
@@ -210,11 +213,14 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	__save_and_cli(flags);	/* avoid getting hit by machine check */
 
 #if 0
-	/* Reset status register to avoid losing errors.  */
-	stat0 = *(vulp)T2_IOCSR;
-	*(vulp)T2_IOCSR = stat0;
-	mb();
-	DBG(("conf_write: T2 ERR was 0x%x\n", stat0));
+	{
+	  unsigned long stat0;
+	  /* Reset status register to avoid losing errors.  */
+	  stat0 = *(vulp)T2_IOCSR;
+	  *(vulp)T2_IOCSR = stat0;
+	  mb();
+	  DBG(("conf_write: T2 ERR was 0x%x\n", stat0));
+	}
 #endif
 
 	/* If Type1 access, must set T2 CFG.  */
@@ -346,7 +352,6 @@ t2_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
 void __init
 t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-	unsigned long t2_err;
 	unsigned int i;
 
 	for (i = 0; i < NR_CPUS; i++) {
@@ -355,13 +360,15 @@ t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	}
 
 #if 0
-	/* 
-	 * Set up error reporting.
-	 */
-	t2_err = *(vulp)T2_IOCSR ;
-	t2_err |= (0x1 << 7) ;   /* master abort */
-	*(vulp)T2_IOCSR = t2_err ;
-	mb() ;
+	{
+	  /* Set up error reporting.  */
+	  unsigned long t2_err;
+
+	  t2_err = *(vulp)T2_IOCSR;
+	  t2_err |= (0x1 << 7);   /* master abort */
+	  *(vulp)T2_IOCSR = t2_err;
+	  mb();
+	}
 #endif
 
 	printk("t2_init: HBASE was 0x%lx\n", *(vulp)T2_HBASE);

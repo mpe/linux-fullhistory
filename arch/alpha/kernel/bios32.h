@@ -32,6 +32,13 @@
 #define DEFAULT_IO_BASE 0x8000		/* start at 8th slot */
 
 /*
+ * We try to make the DEFAULT_MEM_BASE addresses *always* have more than
+ * a single bit set. This is so that devices like the broken Myrinet card
+ * will always have a PCI memory address that will never match a IDSEL
+ * address in PCI Config space, which can cause problems with early rev cards.
+ */
+
+/*
  * An XL is AVANTI (APECS) family, *but* it has only 27 bits of ISA address
  * that get passed through the PCI<->ISA bridge chip. Although this causes
  * us to set the PCI->Mem window bases lower than normal, we still allocate
@@ -45,22 +52,20 @@
 #define XL_DEFAULT_MEM_BASE (16*MB + 2*MB) /* 16M to 64M-1 is avail */
 
 /*
- * We try to make this address *always* have more than 1 bit set.
- * this is so that devices like the broken Myrinet card will always have
- * a PCI memory address that will never match a IDSEL address in
- * PCI Config space, which can cause problems with early rev cards.
- *
- * However, APECS and LCA have only 34 bits for physical addresses, thus
- * limiting PCI bus memory addresses for SPARSE access to be less than 128Mb.
+ * APECS and LCA have only 34 bits for physical addresses, thus limiting PCI
+ * bus memory addresses for SPARSE access to be less than 128Mb.
  */
 #define APECS_AND_LCA_DEFAULT_MEM_BASE (64*MB + 2*MB)
 
 /*
- * We try to make this address *always* have more than 1 bit set.
- * this is so that devices like the broken Myrinet card will always have
- * a PCI memory address that will never match a IDSEL address in
- * PCI Config space, which can cause problems with early rev cards.
- *
+ * Because the MCPCIA core logic supports more bits for physical addresses,
+ * it should allow an expanded range of SPARSE memory addresses.
+ * However, we do not use them all, in order to avoid the HAE manipulation
+ * that would be needed.
+ */
+#define RAWHIDE_DEFAULT_MEM_BASE (64*MB + 2*MB)
+
+/*
  * Because CIA and PYXIS and T2 have more bits for physical addresses,
  * they support an expanded range of SPARSE memory addresses.
  */

@@ -61,15 +61,6 @@ extern struct inode swapper_inode;
 extern unsigned long page_cache_size;
 extern int buffermem;
 
-struct swap_stats 
-{
-	long	proc_freepage_attempts;
-	long	proc_freepage_successes;
-	long	kswap_freepage_attempts;
-	long	kswap_freepage_successes;
-};
-extern struct swap_stats swap_stats;
-
 /* Incomplete types for prototype declarations: */
 struct task_struct;
 struct vm_area_struct;
@@ -82,7 +73,7 @@ extern int shm_swap (int, int);
 extern void swap_setup (void);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_pages(unsigned int gfp_mask, int count);
+extern int try_to_free_pages(unsigned int gfp_mask);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);
@@ -139,9 +130,7 @@ asmlinkage int sys_swapon(const char *, int);
 
 #ifdef SWAP_CACHE_INFO
 extern unsigned long swap_cache_add_total;
-extern unsigned long swap_cache_add_success;
 extern unsigned long swap_cache_del_total;
-extern unsigned long swap_cache_del_success;
 extern unsigned long swap_cache_find_total;
 extern unsigned long swap_cache_find_success;
 #endif

@@ -4154,6 +4154,7 @@ __initfunc(int floppy_init(void))
 	fdc_state[1].address = FDC2;
 #endif
 
+	fdc = 0; /* reset fdc in case of unexpected interrupt */
 	if (floppy_grab_irq_and_dma()){
 		del_timer(&fd_timeout);
 		blk_dev[MAJOR_NR].request_fn = NULL;

@@ -23,6 +23,9 @@
  *  Major improvements to the timeout, abort, and reset processing,
  *  as well as performance modifications for large queue depths by
  *  Leonard N. Zubkoff <lnz@dandelion.com>
+ *
+ *  Improved compatibility with 2.0 behaviour by Manfred Spraul
+ *  <masp0008@stud.uni-sb.de>
  */
 
 /*
@@ -354,6 +357,18 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
     printk("In scsi_done(host = %d, result = %06x)\n", host->host_no, result);
 #endif
 
+    if(SCpnt->flags & SYNC_RESET)
+    {
+        /*
+        * The behaviou of scsi_reset(SYNC) was changed in 2.1.? .
+        * The scsi mid-layer does a REDO after every sync reset, the driver
+        * must not do that any more. In order to prevent old drivers from
+        * crashing, all scsi_done() calls during sync resets are ignored.
+        */
+        printk("scsi%d: device driver called scsi_done() "
+	       "for a syncronous reset.\n", SCpnt->host->host_no);
+        return;
+    }
     if(SCpnt->flags & WAS_SENSE)
     {
 	SCpnt->use_sg = SCpnt->old_use_sg;
@@ -494,7 +509,7 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 	    case RESERVATION_CONFLICT:
 		printk("scsi%d, channel %d : RESERVATION CONFLICT performing"
 		       " reset.\n", SCpnt->host->host_no, SCpnt->channel);
-		scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
+                scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
 		status = REDO;
 		break;
 	    default:
@@ -613,7 +628,7 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 		printk("scsi%d channel %d : resetting for second half of retries.\n",
 		       SCpnt->host->host_no, SCpnt->channel);
 		scsi_reset(SCpnt, SCSI_RESET_SYNCHRONOUS);
-		break;
+		/* fall through to REDO */
 	    }
 	}
 	else
@@ -913,6 +928,8 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	    SCpnt->internal_timeout |= IN_RESET;
 	    update_timeout(SCpnt, RESET_TIMEOUT);
 
+	    if (reset_flags & SCSI_RESET_SYNCHRONOUS)
+	      SCpnt->flags |= SYNC_RESET;
 	    if (host->host_busy)
 	    {
                 for(SDpnt = host->host_queue; SDpnt; SDpnt = SDpnt->next)
@@ -969,6 +986,8 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		  host->last_reset = jiffies;
 		if (!host->block) host->host_busy--;
 	    }
+	    if (reset_flags & SCSI_RESET_SYNCHRONOUS)
+	      SCpnt->flags &= ~SYNC_RESET;
 
 #ifdef DEBUG
 	    printk("scsi reset function returned %d\n", temp);

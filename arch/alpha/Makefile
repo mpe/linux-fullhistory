@@ -31,17 +31,19 @@ ifeq ($(have_mcpu),y)
   ifeq ($(CONFIG_ALPHA_EV4),y)
     CFLAGS := $(CFLAGS) -mcpu=ev4
   endif
-  # Leave out EV5, since it is too hard to figure out whether we
-  # should use EV56 insns or not.
+  ifeq ($(CONFIG_ALPHA_PYXIS),y)
+    CFLAGS := $(CFLAGS) -mcpu=ev56
+  endif
   ifeq ($(CONFIG_ALPHA_EV6),y)
     CFLAGS := $(CFLAGS) -mcpu=ev6
   endif
 endif
 
 # For TSUNAMI, we must have the assembler not emulate our instructions.
+# The same is true for POLARIS.
 # BWX is most important, but we don't really want any emulation ever.
 ifeq ($(old_gas),y)
- ifneq ($(CONFIG_ALPHA_GENERIC)$(CONFIG_ALPHA_TSUNAMI),)
+ ifneq ($(CONFIG_ALPHA_GENERIC)$(CONFIG_ALPHA_TSUNAMI)$(CONFIG_ALPHA_POLARIS),)
    # How do we do #error in make?
    CFLAGS := --error-please-upgrade-your-assembler
  endif
@@ -51,6 +53,9 @@ else
  endif
  ifeq ($(CONFIG_ALPHA_PYXIS),y)
    CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWIO_ENABLED
+ endif
+ ifeq ($(CONFIG_ALPHA_POLARIS),y)
+   CFLAGS := $(CFLAGS) -Wa,-m21164a
  endif
 endif
 

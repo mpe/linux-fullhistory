@@ -439,7 +439,7 @@ static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 #ifdef CONFIG_BSD_DISKLABEL
 	/* no bsd disklabel as a default */
 	kdev_t bsd_kdev = 0;
-	int bsd_maxpart;
+	int bsd_maxpart = BSD_MAXPARTITIONS;
 #endif
 #ifdef CONFIG_BLK_DEV_IDE
 	int tested_for_xlate = 0;
@@ -558,23 +558,15 @@ check_table:
 		}
 #ifdef CONFIG_BSD_DISKLABEL
 			/* tag first disklabel for late recognition */
-		if (SYS_IND(p) == BSD_PARTITION) {
+		if (SYS_IND(p) == BSD_PARTITION || SYS_IND(p) == NETBSD_PARTITION) {
 			printk("!");
-			if (!bsd_kdev) {
+			if (!bsd_kdev)
 				bsd_kdev = MKDEV(hd->major, minor);
-				bsd_maxpart = BSD_MAXPARTITIONS;
-			}
 		} else if (SYS_IND(p) == OPENBSD_PARTITION) {
 			printk("!");
 			if (!bsd_kdev) {
 				bsd_kdev = MKDEV(hd->major, minor);
 				bsd_maxpart = OPENBSD_MAXPARTITIONS;
-			}
-		} else if (SYS_IND(p) == NETBSD_PARTITION) {
-			printk("!");
-			if (!bsd_kdev) {
-				bsd_kdev = MKDEV(hd->major, minor);
-				bsd_maxpart = BSD_MAXPARTITIONS;
 			}
 		}
 #endif

@@ -22,7 +22,6 @@
 #include <linux/malloc.h>
 #include <linux/major.h>
 #include <linux/fs.h>
-#include <linux/config.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>

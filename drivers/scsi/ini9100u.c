@@ -93,6 +93,8 @@
  *		- Remove cli() locking for kernels >= 2.1.95. This uses
  *		  spinlocks to serialize access to the pSRB_head and
  *		  pSRB_tail members of the HCS structure.
+ * 09/01/99 bv	- v1.03d
+ *		- Fixed a deadlock problem in SMP.
  **************************************************************************/
 
 #define CVT_LINUX_VERSION(V,P,S)        (V * 65536 + P * 256 + S)
@@ -173,7 +175,7 @@ Scsi_Host_Template driver_template = INI9100U;
 char *i91uCopyright = "Copyright (C) 1996-98";
 char *i91uInitioName = "by Initio Corporation";
 char *i91uProductName = "INI-9X00U/UW";
-char *i91uVersion = "v1.03b";
+char *i91uVersion = "v1.03d";
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 struct proc_dir_entry proc_scsi_ini9100u =

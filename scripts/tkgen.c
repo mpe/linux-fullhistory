@@ -69,6 +69,11 @@
  *              0: they may have been set to 1 elsewhere. CONFIG_NETLINK is
  *              an example.
  *
+ * 1999 01 04
+ * Michael Elizabeth Chastain <mec@shout.net>
+ * - Call clear_globalflags when writing out update_mainmenu.
+ *   This fixes the missing global/vfix lines for ARCH=alpha on 2.2.0-pre4.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -358,7 +363,7 @@ void generate_if(struct kconfig * item,
 	}
       
       printf(".menu%d.config.f.x%d.n configure -state normal;",menu_num, line_num);
-      printf(".menu%d.config.f.x%d.m configure -state normal;",menu_num, line_num);
+      printf("global CONFIG_MODULES; if {($CONFIG_MODULES == 1)} then { .menu%d.config.f.x%d.m configure -state normal };",menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal;",menu_num, line_num);
       /*
        * Or in a bit to the variable - this causes all of the radiobuttons
@@ -913,6 +918,7 @@ void dump_tk_script(struct kconfig *scfg)
    * the top level menu, and this procedure will ensure that things are
    * correct.
    */
+  clear_globalflags(scfg);
   printf("proc update_mainmenu {w}  {\n");
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)
     {

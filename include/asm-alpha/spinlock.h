@@ -207,7 +207,7 @@ static inline void read_lock(rwlock_t * lock)
 	"	br	1b\n"
 	".previous"
 	: "=m" (__dummy_lock(lock)), "=&r" (regx)
-	: "0" (__dummy_lock(lock))
+	: "m" (__dummy_lock(lock))
 	);
 }
 #endif /* DEBUG_RWLOCK */
@@ -230,7 +230,7 @@ static inline void read_unlock(rwlock_t * lock)
 	"6:	br	1b\n"
 	".previous"
 	: "=m" (__dummy_lock(lock)), "=&r" (regx)
-	: "0" (__dummy_lock(lock)));
+	: "m" (__dummy_lock(lock)));
 }
 
 #define read_lock_irq(lock)	(__cli(), read_lock(lock))

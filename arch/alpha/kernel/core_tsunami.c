@@ -9,7 +9,6 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
@@ -302,14 +301,22 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
 		 * For now, windows 1,2 and 3 are disabled.  In the future,
 		 * we may want to use them to do scatter/gather DMA. 
 		 *
-		 * Window 0 goes at 1 GB and is 1 GB large.
+		 * Window 0 goes at 1 GB and is 1 GB large, mapping to 0.
 		 */
 
 		pchip->wsba[0].csr = 1L | (TSUNAMI_DMA_WIN_BASE_DEFAULT & 0xfff00000U);
 		pchip->wsm[0].csr = (TSUNAMI_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000UL;
 		pchip->tba[0].csr = 0;
 
+#if 0
 		pchip->wsba[1].csr = 0;
+#else
+		/* make the second window at 2Gb for 1Gb mapping to 1Gb */
+		pchip->wsba[1].csr = 1L | ((0x80000000U) & 0xfff00000U);
+		pchip->wsm[1].csr = (0x40000000UL - 1) & 0xfff00000UL;
+		pchip->tba[1].csr = 0x40000000;
+#endif
+
 		pchip->wsba[2].csr = 0;
 		pchip->wsba[3].csr = 0;
 		mb();
@@ -359,7 +366,9 @@ tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 
 	/* Find how many hoses we have, and initialize them.  */
 	tsunami_init_one_pchip(TSUNAMI_pchip0, 0, mem_start);
-	tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
+	/* must change this for TYPHOON which may have 4 */
+	if (TSUNAMI_cchip->csc.csr & 1L<<14)
+	    tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
 }
 
 static inline void
@@ -378,7 +387,9 @@ tsunami_pci_clr_err(void)
 {
 	int cpu = smp_processor_id();
 	tsunami_pci_clr_err_1(TSUNAMI_pchip0, cpu);
-	tsunami_pci_clr_err_1(TSUNAMI_pchip1, cpu);
+	/* must change this for TYPHOON which may have 4 */
+	if (TSUNAMI_cchip->csc.csr & 1L<<14)
+	    tsunami_pci_clr_err_1(TSUNAMI_pchip1, cpu);
 	return 0;
 }
 

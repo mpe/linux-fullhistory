@@ -71,9 +71,7 @@
  *
  */
 
-#define MCPCIA_MEM_R1_MASK 0x1fffffff /* SPARSE Mem region 1 mask is 29 bits */
-#define MCPCIA_MEM_R2_MASK 0x07ffffff /* SPARSE Mem region 2 mask is 27 bits */
-#define MCPCIA_MEM_R3_MASK 0x03ffffff /* SPARSE Mem region 3 mask is 26 bits */
+#define MCPCIA_MEM_MASK 0x07ffffff /* SPARSE Mem region mask is 27 bits */
 
 #define MCPCIA_DMA_WIN_BASE_DEFAULT    (2*1024*1024*1024U)
 #define MCPCIA_DMA_WIN_SIZE_DEFAULT    (2*1024*1024*1024U)
@@ -386,23 +384,10 @@ __EXTERN_INLINE unsigned long mcpcia_srm_base(unsigned long addr)
 	unsigned long hose = (addr >> 32) & 3;
 
 	if (addr >= alpha_mv.sm_base_r1
-	    && addr <= alpha_mv.sm_base_r1 + MCPCIA_MEM_R1_MASK) {
-		mask = MCPCIA_MEM_R1_MASK;
+	    && addr <= alpha_mv.sm_base_r1 + MCPCIA_MEM_MASK) {
+		mask = MCPCIA_MEM_MASK;
 		base = MCPCIA_SPARSE(hose);
 	}
-#if 0
-	/* FIXME FIXME FIXME: SPARSE_MEM_R2 and R3 are not defined?  */
-	else if (addr >= alpha_mv.sm_base_r2
-		 && addr <= alpha_mv.sm_base_r2 + MCPCIA_MEM_R2_MASK) {
-		mask = MCPCIA_MEM_R2_MASK;
-		base = MCPCIA_SPARSE_MEM_R2;
-	}
-	else if (addr >= alpha_mv.sm_base_r3
-		 && addr <= alpha_mv.sm_base_r3 + MCPCIA_MEM_R3_MASK) {
-		mask = MCPCIA_MEM_R3_MASK;
-		base = MCPCIA_SPARSE_MEM_R3;
-	}
-#endif
 	else
 	{
 #if 0
@@ -462,8 +447,8 @@ __EXTERN_INLINE unsigned long mcpcia_readb(unsigned long in_addr)
 	unsigned long hose = (in_addr >> 32) & 3;
 	unsigned long result, msb, work, temp;
 
-	msb = addr & 0xE0000000UL;
-	temp = addr & MCPCIA_MEM_R1_MASK;
+	msb = addr & ~MCPCIA_MEM_MASK;
+	temp = addr & MCPCIA_MEM_MASK;
 	set_hae(msb);
 
 	work = ((temp << 5) + MCPCIA_SPARSE(hose) + 0x00);
@@ -477,8 +462,8 @@ __EXTERN_INLINE unsigned long mcpcia_readw(unsigned long in_addr)
 	unsigned long hose = (in_addr >> 32) & 3;
 	unsigned long result, msb, work, temp;
 
-	msb = addr & 0xE0000000UL;
-	temp = addr & MCPCIA_MEM_R1_MASK ;
+	msb = addr & ~MCPCIA_MEM_MASK;
+	temp = addr & MCPCIA_MEM_MASK ;
 	set_hae(msb);
 
 	work = ((temp << 5) + MCPCIA_SPARSE(hose) + 0x08);
@@ -492,8 +477,8 @@ __EXTERN_INLINE void mcpcia_writeb(unsigned char b, unsigned long in_addr)
 	unsigned long hose = (in_addr >> 32) & 3;
         unsigned long msb; 
 
-	msb = addr & 0xE0000000;
-	addr &= MCPCIA_MEM_R1_MASK;
+	msb = addr & ~MCPCIA_MEM_MASK;
+	addr &= MCPCIA_MEM_MASK;
 	set_hae(msb);
 
 	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x00) = b * 0x01010101;
@@ -505,8 +490,8 @@ __EXTERN_INLINE void mcpcia_writew(unsigned short b, unsigned long in_addr)
 	unsigned long hose = (in_addr >> 32) & 3;
         unsigned long msb ; 
 
-	msb = addr & 0xE0000000 ;
-	addr &= MCPCIA_MEM_R1_MASK ;
+	msb = addr & ~MCPCIA_MEM_MASK ;
+	addr &= MCPCIA_MEM_MASK ;
 	set_hae(msb);
 
 	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x08) = b * 0x00010001;

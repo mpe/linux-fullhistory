@@ -328,7 +328,7 @@ static unsigned char imm_wait(int host_no)
     if (k)
 	return (r & 0xb8);
 
-    /* Counter expired - Time out occured */
+    /* Counter expired - Time out occurred */
     imm_fail(host_no, DID_TIME_OUT);
     printk("imm timeout in imm_wait\n");
     return 0;			/* command timed out */
@@ -943,7 +943,7 @@ static int imm_engine(imm_struct * tmp, Scsi_Cmnd * cmd)
     unsigned char l = 0, h = 0;
     int retv, x;
 
-    /* First check for any errors that may of occured
+    /* First check for any errors that may of occurred
      * Here we check for internal errors
      */
     if (tmp->failed)

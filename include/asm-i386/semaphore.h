@@ -49,11 +49,6 @@ extern spinlock_t semaphore_wake_lock;
  *
  * This is trivially done with load_locked/store_cond,
  * but on the x86 we need an external synchronizer.
- * Currently this is just the global interrupt lock,
- * bah. Go for a smaller spinlock some day.
- *
- * (On the other hand this shouldn't be in any critical
- * path, so..)
  */
 static inline void wake_one_more(struct semaphore * sem)
 {

@@ -82,7 +82,7 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	 * then all the PCI slots/INTXs (12-31) 
 	 * flash(5) :DWH:
 	 */
-        pld &= 0x00000000ffffff9fUL; /* was ffff7f */
+	pld &= 0x00000000ffffff9fUL; /* was ffff7f */
 
 	/*
 	 * Now for every possible bit set, work through them and call
@@ -118,12 +118,12 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			} else {
 				handle_irq(j, j, regs);
 			}
-                } else { /* if not an ISA int */
+		} else { /* if not an ISA int */
 			handle_irq(16 + i, 16 + i, regs);
 		}
 
-                *(vulp)PYXIS_INT_REQ = 1UL << i; mb();
-                *(vulp)PYXIS_INT_REQ; /* read to force the write */
+		*(vulp)PYXIS_INT_REQ = 1UL << i; mb();
+		*(vulp)PYXIS_INT_REQ; /* read to force the write */
 	}
 }
 
@@ -222,7 +222,7 @@ ruffian_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 
 	pyxis_enable_errors();
 	if (!pyxis_srm_window_setup()) {
-	        printk("ruffian_init_arch: Skipping window register rewrites."
+		printk("ruffian_init_arch: Skipping window register rewrites."
 		       "\n... Trust DeskStation firmware!\n");
 	}
 	pyxis_finish_init_arch();
@@ -233,7 +233,10 @@ ruffian_init_pit (void)
 {
 	/* Ruffian depends on the system timer established in MILO! */
 	request_region(0x70, 0x10, "timer");
-	init_pit_rest();
+
+	outb(0xb6, 0x43);       /* pit counter 2: speaker */
+	outb(0x31, 0x42);
+	outb(0x13, 0x42);
 }
 
 static void

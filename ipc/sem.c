@@ -696,7 +696,7 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
                 /*
                  * If queue.status == 1 we where woken up and
                  * have to retry else we simply return.
-                 * If an interrupt occured we have to clean up the
+                 * If an interrupt occurred we have to clean up the
                  * queue
                  *
                  */

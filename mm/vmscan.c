@@ -439,7 +439,7 @@ int kswapd(void *unused)
 		 * forever in a really bad memory squeeze.
 		 */
 		if (nr_free_pages < freepages.high)
-			try_to_free_pages(0, 16);
+			try_to_free_pages(GFP_KSWAPD);
 	}
 
 	return 0;
@@ -454,9 +454,10 @@ int kswapd(void *unused)
  * cluster them so that we get good swap-out behaviour. See
  * the "free_memory()" macro for details.
  */
-int try_to_free_pages(unsigned int gfp_mask, int count)
+int try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
+	int count = SWAP_CLUSTER_MAX;
 
 	lock_kernel();
 

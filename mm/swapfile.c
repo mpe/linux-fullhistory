@@ -23,6 +23,7 @@ struct swap_list_t swap_list = {-1, -1};
 
 struct swap_info_struct swap_info[MAX_SWAPFILES];
 
+#define SWAPFILE_CLUSTER 256
 
 static inline int scan_swap_map(struct swap_info_struct *si)
 {
@@ -30,7 +31,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	/* 
 	 * We try to cluster swap pages by allocating them
 	 * sequentially in swap.  Once we've allocated
-	 * SWAP_CLUSTER_MAX pages this way, however, we resort to
+	 * SWAPFILE_CLUSTER pages this way, however, we resort to
 	 * first-free allocation, starting a new cluster.  This
 	 * prevents us from scattering swap pages all over the entire
 	 * swap partition, so that we reduce overall disk seek times
@@ -46,7 +47,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 			goto got_page;
 		}
 	}
-	si->cluster_nr = SWAP_CLUSTER_MAX;
+	si->cluster_nr = SWAPFILE_CLUSTER;
 	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
 		if (si->swap_map[offset])
 			continue;

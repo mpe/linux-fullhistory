@@ -39,5 +39,5 @@ to
 and rebuild a kernel without PCI quirk support.
 
 
-Other than this paticular glitch the VIA [M]VP* chipsets appear to work
+Other than this particular glitch the VIA [M]VP* chipsets appear to work
 perfectly with Linux.

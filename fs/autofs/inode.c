@@ -34,8 +34,7 @@ static void autofs_delete_inode(struct inode *inode)
 
 static void autofs_put_super(struct super_block *sb)
 {
-	struct autofs_sb_info *sbi =
-		(struct autofs_sb_info *) sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(sb);
 	unsigned int n;
 
 	if ( !sbi->catatonic )
@@ -297,8 +296,7 @@ static void autofs_read_inode(struct inode *inode)
 {
 	ino_t ino = inode->i_ino;
 	unsigned int n;
-	struct autofs_sb_info *sbi =
-		(struct autofs_sb_info *) inode->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(inode->i_sb);
 
 	/* Initialize to the default case (stub directory) */
 

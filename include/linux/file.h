@@ -62,7 +62,7 @@ extern inline void fd_install(unsigned int fd, struct file *file)
  * precious bytes from my kernel, even without counting all the code compiled
  * as module!
  *
- * I suspect there are many other similiar "optimizations" across the
+ * I suspect there are many other similar "optimizations" across the
  * kernel...
  */
 extern void fput(struct file *file); 

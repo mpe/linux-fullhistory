@@ -58,7 +58,7 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 
 	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
 		return -EINVAL;
-	if (!capable(CAP_SYS_RAWIO))
+	if (turn_on && !capable(CAP_SYS_RAWIO))
 		return -EPERM;
 	/*
 	 * If it's the first ioperm() call in this thread's lifetime, set the
@@ -91,11 +91,15 @@ asmlinkage int sys_iopl(unsigned long unused)
 {
 	struct pt_regs * regs = (struct pt_regs *) &unused;
 	unsigned int level = regs->ebx;
+	unsigned int old = (regs->eflags >> 12) & 3;
 
 	if (level > 3)
 		return -EINVAL;
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
+	/* Trying to gain more privileges? */
+	if (level > old) {
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+	}
 	regs->eflags = (regs->eflags & 0xffffcfff) | (level << 12);
 	return 0;
 }

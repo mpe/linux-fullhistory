@@ -47,7 +47,7 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 
 	ent = dh->expiry_head.exp_next;
 
-	if ( ent == &(dh->expiry_head) )
+	if ( ent == &(dh->expiry_head) || sbi->catatonic )
 		return NULL;	/* No entries */
 
 	while ( jiffies - ent->last_usage >= timeout ) {
@@ -62,8 +62,10 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 		dentry = ent->dentry;
 
 		if ( !dentry ) {
+			/* Should only happen in catatonic mode */
 			printk("autofs: dentry == NULL but inode range is directory, entry %s\n", ent->name);
 			autofs_delete_usage(ent);
+			continue;
 		}
 
 		if ( !dentry->d_inode ) {
@@ -200,6 +202,23 @@ struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *dh,
 
 	*ptr = ((bucket+1) << 16) + ecount;
 	return ent;
+}
+
+/* Iterate over all the ents, and remove all dentry pointers.  Used on
+   entering catatonic mode, in order to make the filesystem unmountable. */
+void autofs_hash_dputall(struct autofs_dirhash *dh)
+{
+	int i;
+	struct autofs_dir_ent *ent, *nent;
+
+	for ( i = 0 ; i < AUTOFS_HASH_SIZE ; i++ ) {
+		for ( ent = dh->h[i] ; ent ; ent = ent->next ) {
+			if ( ent->dentry ) {
+				dput(ent->dentry);
+				ent->dentry = NULL;
+			}
+		}
+	}
 }
 
 /* Delete everything.  This is used on filesystem destruction, so we

@@ -90,33 +90,6 @@ static inline void remove_mem_queue(struct page * entry)
  */
 spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
 
-/*
- * This routine is used by the kernel swap daemon to determine
- * whether we have "enough" free pages. It is fairly arbitrary,
- * having a low-water and high-water mark.
- *
- * This returns:
- *  0 - urgent need for memory
- *  1 - need some memory, but do it slowly in the background
- *  2 - no need to even think about it.
- */
-int free_memory_available(void)
-{
-	static int available = 1;
-
-	if (nr_free_pages < freepages.low) {
-		available = 0;
-		return 0;
-	}
-
-	if (nr_free_pages > freepages.high) {
-		available = 1;
-		return 2;
-	}
-
-	return available;
-}
-
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {
 	struct free_area_struct *area = free_area + order;
@@ -155,11 +128,6 @@ void __free_page(struct page *page)
 		free_pages_ok(page->map_nr, 0);
 		return;
 	}
-#if 0
-	if (PageSwapCache(page) && atomic_read(&page->count) == 1)
-		printk(KERN_WARNING "VM: Releasing swap cache page at %p",
-			__builtin_return_address(0));
-#endif
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -177,12 +145,6 @@ void free_pages(unsigned long addr, unsigned long order)
 			free_pages_ok(map_nr, order);
 			return;
 		}
-#if 0
-		if (PageSwapCache(map) && atomic_read(&map->count) == 1)
-			printk(KERN_WARNING 
-				"VM: Releasing swap cache pages at %p",
-				__builtin_return_address(0));
-#endif
 	}
 }
 
@@ -249,38 +211,24 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		 * do our best to just allocate things without
 		 * further thought.
 		 */
-		if (current->flags & PF_MEMALLOC)
-			goto ok_to_allocate;
-
-		/*
-		 * Avoid going back-and-forth between allocating
-		 * memory and trying to free it. If we get into
-		 * a bad memory situation, we're better off trying
-		 * to free things up until things are better.
-		 *
-		 * Most notably, this puts most of the onus of
-		 * freeing up memory on the processes that _use_
-		 * the most memory, rather than on everybody.
-		 */
-		if (nr_free_pages > freepages.min) {
-			if (!current->trashing_memory)
-				goto ok_to_allocate;
-			if (nr_free_pages > freepages.low) {
-				current->trashing_memory = 0;
-				goto ok_to_allocate;
-			}
-		}
-		/*
-		 * Low priority (user) allocations must not
-		 * succeed if we are having trouble allocating
-		 * memory.
-		 */
-		current->trashing_memory = 1;
-		{
+		if (!(current->flags & PF_MEMALLOC)) {
+			static int trashing = 0;
 			int freed;
+
+			if (nr_free_pages > freepages.min) {
+				if (!trashing)
+					goto ok_to_allocate;
+				if (nr_free_pages > freepages.low) {
+					trashing = 0;
+					goto ok_to_allocate;
+				}
+			}
+
+			trashing = 1;
 			current->flags |= PF_MEMALLOC;
-			freed = try_to_free_pages(gfp_mask, freepages.high - nr_free_pages);
+			freed = try_to_free_pages(gfp_mask);
 			current->flags &= ~PF_MEMALLOC;
+
 			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
 				goto nopage;
 		}
@@ -406,21 +354,29 @@ void swapin_readahead(unsigned long entry)
 	struct swap_info_struct *swapdev = SWP_TYPE(entry) + swap_info;
 	
 	offset = (offset >> page_cluster) << page_cluster;
-	
-	for (i = 1 << page_cluster; i > 0; i--) {
-	      if (offset >= swapdev->max
-			      || nr_free_pages - atomic_read(&nr_async_pages) <
-			      (freepages.high + freepages.low)/2)
-		      return;
-	      if (!swapdev->swap_map[offset] ||
-		  swapdev->swap_map[offset] == SWAP_MAP_BAD ||
-		  test_bit(offset, swapdev->swap_lockmap))
-		      continue;
-	      new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);
-	      if (new_page != NULL)
-		      __free_page(new_page);
-	      offset++;
-	}
+
+	i = 1 << page_cluster;
+	do {
+		/* Don't read-ahead past the end of the swap area */
+		if (offset >= swapdev->max)
+			break;
+		/* Don't block on I/O for read-ahead */
+		if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster)
+			break;
+		/* Don't read in bad or busy pages */
+		if (!swapdev->swap_map[offset])
+			break;
+		if (swapdev->swap_map[offset] == SWAP_MAP_BAD)
+			break;
+		if (test_bit(offset, swapdev->swap_lockmap))
+			break;
+
+		/* Ok, do the async read-ahead now */
+		new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);
+		if (new_page != NULL)
+			__free_page(new_page);
+		offset++;
+	} while (--i);
 	return;
 }
 

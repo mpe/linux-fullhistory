@@ -429,7 +429,7 @@ scsi_bus_error:
 	if (eff_addr == &hades_psdm_reg)
 	{
 		/*
-		 * Bus error occured while reading the pseudo
+		 * Bus error occurred while reading the pseudo
 		 * DMA register. Time out.
 		 */
 

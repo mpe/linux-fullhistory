@@ -22,9 +22,7 @@
 #include <linux/console.h>
 #include <linux/console_struct.h>
 #include <linux/init.h>
-#ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
-#endif
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -205,7 +203,6 @@ static inline int PROC_CONSOLE(void)
 	return MINOR(current->tty->device) - 1;
 }
 
-#ifdef CONFIG_PROC_FS
 static int fbmem_read_proc(char *buf, char **start, off_t offset,
 			   int len, int *eof, void *private)
 {
@@ -220,7 +217,6 @@ static int fbmem_read_proc(char *buf, char **start, off_t offset,
 	*start = buf + offset;
 	return len > offset ? len - offset : 0;
 }
-#endif
 
 static ssize_t
 fb_read(struct file *file, char *buf, size_t count, loff_t *ppos)
@@ -583,20 +579,16 @@ unregister_framebuffer(const struct fb_info *fb_info)
 	return 0;
 }
 
-#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry *proc_fbmem;
-#endif
 
 __initfunc(void
 fbmem_init(void))
 {
 	int i;
 
-#ifdef CONFIG_PROC_FS
 	proc_fbmem = create_proc_entry("fb", 0, 0);
 	if (proc_fbmem)
 		proc_fbmem->read_proc = fbmem_read_proc;
-#endif
 
 	if (register_chrdev(FB_MAJOR,"fb",&fb_fops))
 		printk("unable to get major %d for fb devs\n", FB_MAJOR);

@@ -29,18 +29,16 @@ struct inode swapper_inode;
 
 #ifdef SWAP_CACHE_INFO
 unsigned long swap_cache_add_total = 0;
-unsigned long swap_cache_add_success = 0;
 unsigned long swap_cache_del_total = 0;
-unsigned long swap_cache_del_success = 0;
 unsigned long swap_cache_find_total = 0;
 unsigned long swap_cache_find_success = 0;
 
 void show_swap_cache_info(void)
 {
-	printk("Swap cache: add %ld/%ld, delete %ld/%ld, find %ld/%ld\n",
-		swap_cache_add_total, swap_cache_add_success, 
-		swap_cache_del_total, swap_cache_del_success,
-		swap_cache_find_total, swap_cache_find_success);
+	printk("Swap cache: add %ld, delete %ld, find %ld/%ld\n",
+		swap_cache_add_total, 
+		swap_cache_del_total,
+		swap_cache_find_success, swap_cache_find_total);
 }
 #endif
 
@@ -69,9 +67,6 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 	page->offset = entry;
 	add_page_to_hash_queue(page, &swapper_inode, entry);
 	add_page_to_inode_queue(&swapper_inode, page);
-#ifdef SWAP_CACHE_INFO
-	swap_cache_add_success++;
-#endif
 	return 1;
 }
 
@@ -192,16 +187,6 @@ static inline void remove_from_swap_cache(struct page *page)
 		printk ("VM: Removing swap cache page with wrong inode hash "
 			"on page %08lx\n", page_address(page));
 	}
-#if 0
-	/*
-	 * This is a legal case, but warn about it.
-	 */
-	if (atomic_read(&page->count) == 1) {
-		printk (KERN_WARNING 
-			"VM: Removing page cache on unshared page %08lx\n", 
-			page_address(page));
-	}
-#endif
 
 #ifdef DEBUG_SWAP
 	printk("DebugVM: remove_from_swap_cache(%08lx count %d)\n",
@@ -222,7 +207,6 @@ void delete_from_swap_cache(struct page *page)
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
-	swap_cache_del_success++;
 #endif
 #ifdef DEBUG_SWAP
 	printk("DebugVM: delete_from_swap_cache(%08lx count %d, "
@@ -262,15 +246,22 @@ void free_page_and_swap_cache(unsigned long addr)
 struct page * lookup_swap_cache(unsigned long entry)
 {
 	struct page *found;
-	
+
+#ifdef SWAP_CACHE_INFO
+	swap_cache_find_total++;
+#endif
 	while (1) {
 		found = find_page(&swapper_inode, entry);
 		if (!found)
 			return 0;
 		if (found->inode != &swapper_inode || !PageSwapCache(found))
 			goto out_bad;
-		if (!PageLocked(found))
+		if (!PageLocked(found)) {
+#ifdef SWAP_CACHE_INFO
+			swap_cache_find_success++;
+#endif
 			return found;
+		}
 		__free_page(found);
 		__wait_on_page(found);
 	}
@@ -292,7 +283,7 @@ out_bad:
 
 struct page * read_swap_cache_async(unsigned long entry, int wait)
 {
-	struct page *found_page, *new_page;
+	struct page *found_page = 0, *new_page;
 	unsigned long new_page_addr;
 	
 #ifdef DEBUG_SWAP
@@ -300,15 +291,20 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	       entry, wait ? ", wait" : "");
 #endif
 	/*
+	 * Make sure the swap entry is still in use.
+	 */
+	if (!swap_duplicate(entry))	/* Account for the swap cache */
+		goto out;
+	/*
 	 * Look for the page in the swap cache.
 	 */
 	found_page = lookup_swap_cache(entry);
 	if (found_page)
-		goto out;
+		goto out_free_swap;
 
 	new_page_addr = __get_free_page(GFP_USER);
 	if (!new_page_addr)
-		goto out;	/* Out of memory */
+		goto out_free_swap;	/* Out of memory */
 	new_page = mem_map + MAP_NR(new_page_addr);
 
 	/*
@@ -316,11 +312,6 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	 */
 	found_page = lookup_swap_cache(entry);
 	if (found_page)
-		goto out_free_page;
-	/*
-	 * Make sure the swap entry is still in use.
-	 */
-	if (!swap_duplicate(entry))	/* Account for the swap cache */
 		goto out_free_page;
 	/* 
 	 * Add it to the swap cache and read its contents.
@@ -339,6 +330,8 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 
 out_free_page:
 	__free_page(new_page);
+out_free_swap:
+	swap_free(entry);
 out:
 	return found_page;
 }

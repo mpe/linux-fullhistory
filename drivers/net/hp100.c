@@ -2798,7 +2798,7 @@ static int hp100_down_vg_link( struct device *dev )
     if ( hp100_inb( VG_LAN_CFG_1 ) & HP100_LINK_CABLE_ST ) break;
   } while (time_after(time, jiffies));
 
-  if ( time_before_eq(jiffies, time) )       /* no signal->no logout */
+  if ( time_after_eq(jiffies, time) )       /* no signal->no logout */
     return 0;
 
   /* Drop the VG Link by clearing the link up cmd and load addr.*/
@@ -2813,7 +2813,7 @@ static int hp100_down_vg_link( struct device *dev )
   } while(time_after(time, jiffies));
 
 #ifdef HP100_DEBUG
-  if (time_before_eq(jiffies, time))
+  if (time_after_eq(jiffies, time))
     printk("hp100: %s: down_vg_link: Link does not go down?\n", dev->name);
 #endif
 

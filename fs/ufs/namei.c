@@ -56,10 +56,10 @@
 #define NAMEI_RA_INDEX(c,b)  (((c) * NAMEI_RA_BLOCKS) + (b))
 
 /*
- * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
+ * NOTE! unlike strncmp, ufs_match returns 1 for success, 0 for failure.
  *
- * Len <= UFS_MAXNAMLEN' is guaranteed by caller.
- * De != NULL' is guaranteed by caller.
+ * len <= UFS_MAXNAMLEN' is guaranteed by caller.
+ * de != NULL' is guaranteed by caller.
  */
 static inline int ufs_match (int len, const char * const name,
 	struct ufs_dir_entry * de, unsigned flags, unsigned swab)

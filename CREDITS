@@ -765,9 +765,9 @@ S: 34131 Kassel
 S: Germany
 
 N: Richard Henderson
+E: rth@twiddle.net
 E: rth@cygnus.com
-E: richard@gnu.org
-D: Alpha/ELF, gcc, binutils, and glibc
+D: Alpha hacker, kernel and userland
 S: 50 E. Middlefield #10
 S: Mountain View, California 94043
 S: USA
@@ -910,7 +910,9 @@ S: Czech Republic
 N: Niels Kristian Bech Jensen
 E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
-D: 4.4BSD and NeXTstep support in read-only ufs
+D: 4.4BSD and NeXTstep filesystem support in the old ufs.
+D: Openstep filesystem support in the new ufs.
+D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
 S: Denmark
@@ -1507,7 +1509,12 @@ D: modularized BSD Unix domain sockets
 
 N: Reed H. Petty
 E: rhp@draper.net
+W: http://www.draper.net
 D: Loop device driver extensions
+D: Encryption transfer modules (no export)
+S: Post Office Box 1815
+S: Harrison, Arkansas  72602-1815
+S: USA
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de

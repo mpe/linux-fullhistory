@@ -284,7 +284,10 @@ struct mm_struct * mm_alloc(void)
 void mmput(struct mm_struct *mm)
 {
 	/* notify parent sleeping on vfork() */
-	wake_up(&current->p_opptr->vfork_sleep);
+	if (current->flags & PF_VFORK) {
+		current->flags &= ~PF_VFORK;
+		up(current->p_opptr->vfork_sem);
+	}
 
 	if (atomic_dec_and_test(&mm->count)) {
 		release_segments(mm);
@@ -456,10 +459,12 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long new_flags = p->flags;
 
-	new_flags &= ~(PF_SUPERPRIV | PF_USEDFPU);
+	new_flags &= ~(PF_SUPERPRIV | PF_USEDFPU | PF_VFORK);
 	new_flags |= PF_FORKNOEXEC;
 	if (!(clone_flags & CLONE_PTRACE))
 		new_flags &= ~(PF_PTRACED|PF_TRACESYS);
+	if (clone_flags & CLONE_VFORK)
+		new_flags |= PF_VFORK;
 	p->flags = new_flags;
 }
 
@@ -524,7 +529,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
-	init_waitqueue(&p->vfork_sleep);
+	p->vfork_sem = NULL;
 
 	p->sigpending = 0;
 	sigemptyset(&p->signal);
@@ -571,7 +576,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	/* ok, now we should be set up.. */
 	p->swappable = 1;
-	p->trashing_memory = 0;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->pdeath_signal = 0;
 

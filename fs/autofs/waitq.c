@@ -41,6 +41,7 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 		wq = nwq;
 	}
 	fput(sbi->pipe);	/* Close the pipe */
+	autofs_hash_dputall(&sbi->dirhash); /* Remove all dentry pointers */
 }
 
 static int autofs_write(struct file *file, const void *addr, int bytes)

@@ -68,13 +68,15 @@ static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 {
 	struct autofs_dir_ent *ent = NULL;
 	struct autofs_dirhash *dirhash;
+	struct autofs_sb_info *sbi;
 	struct inode * inode = filp->f_dentry->d_inode;
 	off_t onr, nr;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -ENOTDIR;
 
-	dirhash = &((struct autofs_sb_info *)inode->i_sb->u.generic_sbp)->dirhash;
+	sbi = autofs_sbi(inode->i_sb);
+	dirhash = &sbi->dirhash;
 	nr = filp->f_pos;
 
 	switch(nr)
@@ -168,11 +170,9 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
  */
 static int autofs_revalidate(struct dentry * dentry)
 {
-	struct autofs_sb_info *sbi;
 	struct inode * dir = dentry->d_parent->d_inode;
+	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
 	struct autofs_dir_ent *ent;
-
-	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
 	/* Pending dentry */
 	if ( dentry->d_flags & DCACHE_AUTOFS_PENDING ) {
@@ -220,7 +220,7 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	if (!S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
 
-	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+	sbi = autofs_sbi(dir->i_sb);
 
 	oz_mode = autofs_oz_mode(sbi);
 	DPRINTK(("autofs_lookup: pid = %u, pgrp = %u, catatonic = %d, oz_mode = %d\n",
@@ -267,7 +267,7 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 
 static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
-	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
 	unsigned int n;
@@ -338,7 +338,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
  */
 static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 {
-	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
 	unsigned int n;
@@ -365,7 +365,7 @@ static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 
 static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 {
-	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
 
@@ -393,7 +393,7 @@ static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 
 static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
-	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
 	ino_t ino;
@@ -492,8 +492,7 @@ static inline int autofs_expire_run(struct super_block *sb,
 static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 			     unsigned int cmd, unsigned long arg)
 {
-	struct autofs_sb_info *sbi =
-		(struct autofs_sb_info *)inode->i_sb->u.generic_sbp;
+	struct autofs_sb_info *sbi = autofs_sbi(inode->i_sb);
 
 	DPRINTK(("autofs_ioctl: cmd = 0x%08x, arg = 0x%08lx, sbi = %p, pgrp = %u\n",cmd,arg,sbi,current->pgrp));
 

@@ -52,8 +52,7 @@ enum root_directory_inos {
 	PROC_STRAM,
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
-	PROC_FS,
-	PROC_SWAPSTATS
+	PROC_FS
 };
 
 enum pid_directory_inos {

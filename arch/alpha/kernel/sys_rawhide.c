@@ -159,7 +159,7 @@ rawhide_map_irq(struct pci_dev *dev, int slot, int pin)
 static void __init
 rawhide_pci_fixup(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	layout_all_busses(DEFAULT_IO_BASE, RAWHIDE_DEFAULT_MEM_BASE);
 	common_pci_fixup(rawhide_map_irq, common_swizzle);
 }
 

@@ -354,7 +354,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.9"
+#define AIC7XXX_C_VERSION  "5.1.10"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -9116,19 +9116,22 @@ aic7xxx_detect(Scsi_Host_Template *template)
           {
             case AHC_AIC7870: /* 3840 / 3985 */
             case AHC_AIC7880: /* 3840 UW / 3985 UW */
-              switch(PCI_SLOT(temp_p->pci_device_fn))
+              if(temp_p->flags & AHC_MULTI_CHANNEL)
               {
-                case 5:
-                  temp_p->flags |= AHC_CHNLB;
-                  break;
-                case 8:
-                  temp_p->flags |= AHC_CHNLB;
-                  break;
-                case 12:
-                  temp_p->flags |= AHC_CHNLC;
-                  break;
-                default:
-                  break;
+                switch(PCI_SLOT(temp_p->pci_device_fn))
+                {
+                  case 5:
+                    temp_p->flags |= AHC_CHNLB;
+                    break;
+                  case 8:
+                    temp_p->flags |= AHC_CHNLB;
+                    break;
+                  case 12:
+                    temp_p->flags |= AHC_CHNLC;
+                    break;
+                  default:
+                    break;
+                }
               }
               break;
 
@@ -10999,11 +11002,13 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
        * entirely and avoids getting a bogus dead command back through the
        * mid-level code due to too many retries.
        */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,132)
       if ( flags & SCSI_RESET_SYNCHRONOUS )
       {
         cmd->result = DID_BUS_BUSY << 16;
         cmd->done(cmd);
       }
+#endif
       p->flags &= ~AHC_IN_RESET;
       /*
        * We can't rely on run_waiting_queues to unpause the sequencer for

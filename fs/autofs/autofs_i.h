@@ -92,10 +92,6 @@ struct autofs_symlink {
 
 #define AUTOFS_SYMLINK_BITMAP_LEN ((AUTOFS_MAX_SYMLINKS+31)/32)
 
-#ifndef END_OF_TIME
-#define END_OF_TIME ((time_t)((unsigned long)((time_t)(~0UL)) >> 1))
-#endif
-
 #define AUTOFS_SBI_MAGIC 0x6d4a556d
 
 struct autofs_sb_info {
@@ -110,6 +106,11 @@ struct autofs_sb_info {
 	struct autofs_symlink symlink[AUTOFS_MAX_SYMLINKS];
 	u32 symlink_bitmap[AUTOFS_SYMLINK_BITMAP_LEN];
 };
+
+extern inline struct autofs_sb_info *autofs_sbi(struct super_block *sb)
+{
+	return (struct autofs_sb_info *)(sb->u.generic_sbp);
+}
 
 /* autofs_oz_mode(): do we see the man behind the curtain?  (The
    processes which do manipulations for us in user space sees the raw
@@ -126,6 +127,7 @@ struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *,struct q
 void autofs_hash_insert(struct autofs_dirhash *,struct autofs_dir_ent *);
 void autofs_hash_delete(struct autofs_dir_ent *);
 struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *,off_t *,struct autofs_dir_ent *);
+void autofs_hash_dputall(struct autofs_dirhash *);
 void autofs_hash_nuke(struct autofs_dirhash *);
 
 /* Expiration-handling functions */

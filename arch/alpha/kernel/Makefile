@@ -23,11 +23,11 @@ OX_OBJS  := alpha_ksyms.o
 ifdef CONFIG_ALPHA_GENERIC
 
 O_OBJS	 += core_apecs.o core_cia.o core_lca.o core_mcpcia.o core_pyxis.o \
-	    core_t2.o core_tsunami.o \
+	    core_t2.o core_tsunami.o core_polaris.o \
 	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_noritake.o \
 	    sys_rawhide.o sys_ruffian.o sys_sable.o sys_sio.o \
-	    sys_sx164.o sys_takara.o \
+	    sys_sx164.o sys_takara.o sys_rx164.o \
 	    es1888.o smc37c669.o smc37c93x.o
 else
 
@@ -52,6 +52,9 @@ O_OBJS   += core_t2.o
 endif
 ifdef CONFIG_ALPHA_TSUNAMI
 O_OBJS   += core_tsunami.o
+endif
+ifdef CONFIG_ALPHA_POLARIS
+O_OBJS   += core_polaris.o
 endif
 
 # Board support
@@ -84,6 +87,9 @@ O_OBJS   += sys_rawhide.o
 endif
 ifdef CONFIG_ALPHA_RUFFIAN
 O_OBJS   += sys_ruffian.o
+endif
+ifdef CONFIG_ALPHA_RX164
+O_OBJS   += sys_rx164.o
 endif
 ifdef CONFIG_ALPHA_SABLE
 O_OBJS   += sys_sable.o

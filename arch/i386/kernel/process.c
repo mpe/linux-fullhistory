@@ -778,17 +778,19 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	newsp = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
-	return do_fork(clone_flags, newsp, &regs);
+	return do_fork(clone_flags & ~CLONE_VFORK, newsp, &regs);
 }
 
 asmlinkage int sys_vfork(struct pt_regs regs)
 {
-	int     child;
+	int child;
+	struct semaphore sem = MUTEX_LOCKED;
 
-	child = do_fork(CLONE_VM | SIGCHLD, regs.esp, &regs);
+	current->vfork_sem = &sem;
+	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.esp, &regs);
 
 	if (child > 0)
-		sleep_on(&current->vfork_sleep);
+		down(&sem);
 
 	return child;
 }

@@ -531,7 +531,7 @@ void cleanup_module(void)
  * (un-)register for hardware drivers
  * tab is an inititalised lp_struct, dev the desired minor
  * if dev < 0, let the driver choose the first free minor
- * if sucessful return the minor, else -1
+ * if successful return the minor, else -1
  */
 int register_parallel(struct lp_struct *tab, int dev)
 {

@@ -67,33 +67,6 @@ static inline int put_stack_long(struct task_struct *task, int offset,
 	return 0;
 }
 
-extern int _stext, _etext;
-static void print_child_state(struct task_struct *task)
-{
-	unsigned int * stack = (unsigned int *) task->tss.esp;
-	int count = 40;
-
-	printk("Process: %s (stack=%p, task=%p)\n", task->comm, stack, task);
-	for (;;) {
-		unsigned int data;
-		if ((unsigned int) stack < (unsigned int) task)
-			break;
-		if ((unsigned int) stack >= 2*PAGE_SIZE + (unsigned int) task)
-			break;
-		data = *stack;
-		stack++;
-		if (data < (unsigned long) &_stext)
-			continue;
-		if (data >= (unsigned long) &_etext)
-			continue;
-		printk("[<%08x>] ", data);
-		if (--count)
-			continue;
-		break;
-	}	
-	printk("\n");
-}
-
 /*
  * This routine gets a long from any process space by following the page
  * tables. NOTE! You should check that the long isn't on a page boundary,
@@ -400,7 +373,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!child)
 		goto out;
-print_child_state(child);
 	ret = -EPERM;
 	if (pid == 1)		/* you may not mess with init */
 		goto out;

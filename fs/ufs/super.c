@@ -641,11 +641,14 @@ magic_found:
 		case UFS_FSSTABLE:
 			UFSD(("fs is stable\n"))
 			break;
+		case UFS_FSOSF1:
+			UFSD(("fs is DEC OSF/1\n"))
+			break;
 		case UFS_FSACTIVE:
 			printk("ufs_read_super: fs is active\n");
 			sb->s_flags |= MS_RDONLY;
 			break;
-		    case UFS_FSBAD:
+		case UFS_FSBAD:
 			printk("ufs_read_super: fs is bad\n");
 			sb->s_flags |= MS_RDONLY;
 			break;

@@ -2,7 +2,7 @@ Additional low level sound drivers for Linux
 ============================================
 
 This directory contains additional low level sound drivers which
-are not part of USS/Lite (Open Sound System). These drivers are
+are not part of OSS/Lite (Open Sound System). These drivers are
 maintained by their authors (not by Hannu Savolainen).
 
 If you like to write a new low level sound driver, please contact

@@ -221,6 +221,10 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		    || (ret = __get_user(usec, &tvp->tv_usec)))
 			goto out_nofds;
 
+		ret = -EINVAL;
+		if (sec < 0 || usec < 0)
+			goto out_nofds;
+
 		if ((unsigned long) sec < MAX_SELECT_SECONDS) {
 			timeout = ROUND_UP(usec, 1000000/HZ);
 			timeout += sec * (unsigned long) HZ;
@@ -331,10 +335,13 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	if (nfds > NR_OPEN)
 		goto out;
 
-	if (timeout < 0)
-		timeout = MAX_SCHEDULE_TIMEOUT;
-	else if (timeout)
-		timeout = (timeout*HZ+999)/1000+1;
+	if (timeout) {
+		/* Carefula about overflow in the intermediate values */
+		if ((unsigned long) timeout < MAX_SCHEDULE_TIMEOUT / HZ)
+			timeout = (timeout*HZ+999)/1000+1;
+		else /* Negative or overflow */
+			timeout = MAX_SCHEDULE_TIMEOUT;
+	}
 
 	err = -ENOMEM;
 	if (timeout) {

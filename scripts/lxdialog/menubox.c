@@ -48,6 +48,12 @@
  *    *)  If for some reason the last scrolling position is not saved by
  *        lxdialog, it sets the scrolling so that the selected item is in the
  *        middle of the menu box, not at the bottom.
+ *
+ * 02 January 1999, Michael Elizabeth Chastain (mec@shout.net)
+ * Reset 'scroll' to 0 if the value from lxdialog.scrltmp is bogus.
+ * This fixes a bug in Menuconfig where using ' ' to descend into menus
+ * would leave mis-synchronized lxdialog.scrltmp files lying around,
+ * fscanf would read in 'scroll', and eventually that value would get used.
  */
 
 #include "dialog.h"
@@ -227,6 +233,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 	    choice = choice - scroll;
 	    fclose(f);
 	} else {
+	    scroll=0;
 	    remove("lxdialog.scrltmp");
 	    fclose(f);
 	    f=NULL;

@@ -74,11 +74,29 @@
 #include <linux/config.h>
 #include <linux/init.h>
 
+#include <linux/delay.h>
+
 #include "sound_config.h"
 #include "soundmodule.h"
 
 #include <linux/wavefront.h>
 
+/*
+ *	This sucks, hopefully it'll get standardised
+ */
+ 
+#if defined(__alpha__)
+#ifdef __SMP__
+#define LOOPS_PER_SEC cpu_data[smp_processor_id()].loops_per_sec
+#else
+#define LOOPS_PER_SEC	loops_per_sec
+#endif
+#endif
+
+#if defined(__i386__)
+#define LOOPS_PER_SEC current_cpu_data.loops_per_sec
+#endif
+ 
 #define MIDI_SYNTH_NAME	"WaveFront MIDI"
 #define MIDI_SYNTH_CAPS	SYNTH_CAP_INPUT
 #include "midi_synth.h"
@@ -440,7 +458,7 @@ wavefront_wait (int mask)
 
 	if (short_loop_cnt == 0) {
 		short_loop_cnt = wait_usecs *
-			(current_cpu_data.loops_per_sec / 1000000);
+			(LOOPS_PER_SEC / 1000000);
 	}
 
 	/* Spin for a short period of time, because >99% of all

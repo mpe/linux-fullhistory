@@ -62,7 +62,7 @@ extern __inline__ int prim_spin_unlock(struct spinlock *sp)
 	   not be safe this way */
 	if(!--sp->users)
 	{
-		lock_clear_bit(0,&sp->lock);sp->cpu= NO_PROC_ID;
+		sp->cpu= NO_PROC_ID;lock_clear_bit(0,&sp->lock);
 		return 1;
 	}
 	return 0;
@@ -102,15 +102,17 @@ extern __inline__ void spinlock(struct spinlock *sp)
 
 extern __inline__ void spinunlock(struct spinlock *sp)
 {
+	int pri;
 	if(current->lock_order!=sp->priority)
 		panic("lock release order violation %s (%d)\n", sp->name, current->lock_order);
+	pri=sp->oldpri;
 	if(prim_spin_unlock(sp))
 	{
 		/*
 		 *	Update the debugging lock priority chain. We dumped
 		 *	our last right to the lock.
 		 */
-		current->lock_order=sp->oldpri;
+		current->lock_order=sp->pri;
 	}	
 }
 

@@ -316,7 +316,7 @@ static unsigned char ppa_wait(int host_no)
     if (k)
 	return (r & 0xf0);
 
-    /* Counter expired - Time out occured */
+    /* Counter expired - Time out occurred */
     ppa_fail(host_no, DID_TIME_OUT);
     printk("ppa timeout in ppa_wait\n");
     return 0;			/* command timed out */
@@ -804,7 +804,7 @@ static int ppa_engine(ppa_struct * tmp, Scsi_Cmnd * cmd)
     unsigned char l = 0, h = 0;
     int retv;
 
-    /* First check for any errors that may of occured
+    /* First check for any errors that may of occurred
      * Here we check for internal errors
      */
     if (tmp->failed)

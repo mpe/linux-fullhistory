@@ -105,6 +105,8 @@ void (*perf_irq)(unsigned long, struct pt_regs *) = dummy_perf;
 # define IACK_SC	PYXIS_IACK_SC
 #elif defined(CONFIG_ALPHA_TSUNAMI)
 # define IACK_SC	TSUNAMI_IACK_SC
+#elif defined(CONFIG_ALPHA_POLARIS)
+# define IACK_SC	POLARIS_IACK_SC
 #else
   /* This is bogus but necessary to get it to compile on all platforms. */
 # define IACK_SC	1L
@@ -314,14 +316,14 @@ free_irq(unsigned int irq, void *dev_id)
 
 int get_irq_list(char *buf)
 {
-	int i, j;
+	int i;
 	struct irqaction * action;
 	char *p = buf;
 
 #ifdef __SMP__
 	p += sprintf(p, "           ");
-	for (j = 0; j < smp_num_cpus; j++)
-		p += sprintf(p, "CPU%d       ", j);
+	for (i = 0; i < smp_num_cpus; i++)
+		p += sprintf(p, "CPU%d       ", i);
 	*p++ = '\n';
 #endif
 

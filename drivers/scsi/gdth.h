@@ -4,13 +4,13 @@
 /*
  * Header file for the GDT ISA/EISA/PCI Disk Array Controller driver for Linux
  * 
- * gdth.h Copyright (C) 1995-97 ICP vortex Computersysteme GmbH, Achim Leubner
+ * gdth.h Copyright (C) 1995-98 ICP vortex Computersysteme GmbH, Achim Leubner
  * See gdth.c for further informations and 
  * below for supported controller types
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.9 1997/11/04 09:55:42 achim Exp $
+ * $Id: gdth.h,v 1.16 1998/12/17 15:54:53 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,9 +29,9 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.02"
+#define GDTH_VERSION_STR        "1.10"
 #define GDTH_VERSION            1
-#define GDTH_SUBVERSION         2
+#define GDTH_SUBVERSION         10
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
@@ -48,11 +48,13 @@
 #define GDT3B_ID        0x0330941c              /* GDT3000B/3010A */
 /* GDT_ISA */
 #define GDT2_ID         0x0120941c              /* GDT2000/2020 */
+
 /* vendor ID, device IDs (PCI) */
 /* these defines should already exist in <linux/pci.h> */
 #ifndef PCI_VENDOR_ID_VORTEX
 #define PCI_VENDOR_ID_VORTEX            0x1119  /* PCI controller vendor ID */
 #endif
+
 #ifndef PCI_DEVICE_ID_VORTEX_GDT60x0
 /* GDT_PCI */
 #define PCI_DEVICE_ID_VORTEX_GDT60x0    0       /* GDT6000/6020/6050 */
@@ -83,22 +85,44 @@
 /* GDT_MPR, RP series, narrow/ultra SCSI */
 #define PCI_DEVICE_ID_VORTEX_GDT6x11RP  0x104   /* GDT6111RP/GDT6511RP */
 #define PCI_DEVICE_ID_VORTEX_GDT6x21RP  0x105   /* GDT6121RP/GDT6521RP */
-/* GDT_MPR, RP1 series, wide/ultra SCSI */
-#define PCI_DEVICE_ID_VORTEX_GDT6x17RP1 0x110   /* GDT6117RP1/GDT6517RP1 */
-#define PCI_DEVICE_ID_VORTEX_GDT6x27RP1 0x111   /* GDT6127RP1/GDT6527RP1 */
-#define PCI_DEVICE_ID_VORTEX_GDT6537RP1 0x112   /* GDT6537RP1 */
-#define PCI_DEVICE_ID_VORTEX_GDT6557RP1 0x113   /* GDT6557RP1 */
-/* GDT_MPR, RP1 series, narrow/ultra SCSI */
-#define PCI_DEVICE_ID_VORTEX_GDT6x11RP1 0x114   /* GDT6111RP1/GDT6511RP1 */
-#define PCI_DEVICE_ID_VORTEX_GDT6x21RP1 0x115   /* GDT6121RP1/GDT6521RP1 */
-/* GDT_MPR, RP2 series, wide/ultra SCSI */
-#define PCI_DEVICE_ID_VORTEX_GDT6x17RP2 0x120   /* GDT6117RP2/GDT6517RP2 */
-#define PCI_DEVICE_ID_VORTEX_GDT6x27RP2 0x121   /* GDT6127RP2/GDT6527RP2 */
-#define PCI_DEVICE_ID_VORTEX_GDT6537RP2 0x122   /* GDT6537RP2 */
-#define PCI_DEVICE_ID_VORTEX_GDT6557RP2 0x123   /* GDT6557RP2 */
-/* GDT_MPR, RP2 series, narrow/ultra SCSI */
-#define PCI_DEVICE_ID_VORTEX_GDT6x11RP2 0x124   /* GDT6111RP2/GDT6511RP2 */
-#define PCI_DEVICE_ID_VORTEX_GDT6x21RP2 0x125   /* GDT6121RP2/GDT6521RP2 */
+#endif
+#ifndef PCI_DEVICE_ID_VORTEX_GDT6x17RD
+/* GDT_MPR, RD series, wide/ultra SCSI */
+#define PCI_DEVICE_ID_VORTEX_GDT6x17RD  0x110   /* GDT6117RD/GDT6517RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x27RD  0x111   /* GDT6127RD/GDT6527RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6537RD  0x112   /* GDT6537RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6557RD  0x113   /* GDT6557RD */
+/* GDT_MPR, RD series, narrow/ultra SCSI */
+#define PCI_DEVICE_ID_VORTEX_GDT6x11RD  0x114   /* GDT6111RD/GDT6511RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x21RD  0x115   /* GDT6121RD/GDT6521RD */
+/* GDT_MPR, RD series, wide/ultra2 SCSI */
+#define PCI_DEVICE_ID_VORTEX_GDT6x18RD  0x118   /* GDT6118RD/GDT6518RD/
+                                                   GDT6618RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x28RD  0x119   /* GDT6128RD/GDT6528RD/
+                                                   GDT6628RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x38RD  0x11A   /* GDT6538RD/GDT6638RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x58RD  0x11B   /* GDT6558RD/GDT6658RD */
+/* GDT_MPR, RN series (64-bit PCI), wide/ultra2 SCSI */
+#define PCI_DEVICE_ID_VORTEX_GDT7x18RN  0x168   /* GDT7118RN/GDT7518RN/
+                                                   GDT7618RN */
+#define PCI_DEVICE_ID_VORTEX_GDT7x28RN  0x169   /* GDT7128RN/GDT7528RN/
+                                                   GDT7628RN */
+#define PCI_DEVICE_ID_VORTEX_GDT7x38RN  0x16A   /* GDT7538RN/GDT7638RN */
+#define PCI_DEVICE_ID_VORTEX_GDT7x58RN  0x16B   /* GDT7558RN/GDT7658RN */
+#endif
+
+#ifndef PCI_DEVICE_ID_VORTEX_GDT6x19RD
+/* GDT_MPR, RD series, Fibre Channel */
+#define PCI_DEVICE_ID_VORTEX_GDT6x19RD  0x210   /* GDT6519RD/GDT6619RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6x29RD  0x211   /* GDT6529RD/GDT6629RD */
+/* GDT_MPR, RN series (64-bit PCI), Fibre Channel */
+#define PCI_DEVICE_ID_VORTEX_GDT7x19RN  0x260   /* GDT7519RN/GDT7619RN */
+#define PCI_DEVICE_ID_VORTEX_GDT7x29RN  0x261   /* GDT7529RN/GDT7629RN */
+#endif
+
+#ifndef PCI_DEVICE_ID_VORTEX_GDTMAXRP
+/* GDT_MPR, last device ID */
+#define PCI_DEVICE_ID_VORTEX_GDTMAXRP   0x2ff   
 #endif
 
 /* limits */
@@ -106,12 +130,14 @@
 #define GDTH_MAXCMDS    124
 #define GDTH_MAXC_P_L   16                      /* max. cmds per lun */
 #define MAXOFFSETS      128
-#define MAXHA           8
-#define MAXID           8
+#define MAXHA           16
+#define MAXID           127
 #define MAXLUN          8
-#define MAXBUS          5
+#define MAXBUS          6
 #define MAX_HDRIVES     35                      /* max. host drive count */
 #define MAX_EVENTS      100                     /* event buffer count */
+#define MAX_RES_ARGS    40                      /* device reservation, 
+                                                   must be a multiple of 4 */
 #define MAXCYLS         1024
 #define HEADS           64
 #define SECS            32                      /* mapping 64*32 */
@@ -126,12 +152,6 @@
 #define SCREEN_CMND     ((Scsi_Cmnd *)-3)
 #define SPECIAL_SCP(p)  (p==UNUSED_CMND || p==INTERNAL_CMND || p==SCREEN_CMND)
 
-/* device types */
-#define EMPTY_DTYP      0
-#define CACHE_DTYP      1
-#define RAW_DTYP        2
-#define SIOP_DTYP       3                       /* the SCSI processor */
-
 /* controller services */
 #define SCSIRAWSERVICE  3
 #define CACHESERVICE    9
@@ -144,14 +164,15 @@
 #define MSG_REQUEST     0                       /* async. event: message */
 
 /* cacheservice defines */
-#define SECTOR_SIZE     0x200                   /* always 512 bytes per sector */
+#define SECTOR_SIZE     0x200                   /* always 512 bytes per sec. */
 
 /* DPMEM constants */
+#define DPMEM_MAGIC     0xC0FFEE11
 #define IC_HEADER_BYTES 48
 #define IC_QUEUE_BYTES  4
 #define DPMEM_COMMAND_OFFSET    IC_HEADER_BYTES+IC_QUEUE_BYTES*MAXOFFSETS
 
-/* service commands */
+/* cache/raw service commands */
 #define GDT_INIT        0                       /* service initialization */
 #define GDT_READ        1                       /* read command */
 #define GDT_WRITE       2                       /* write command */
@@ -163,16 +184,27 @@
 #define GDT_UNMOUNT     11                      /* unmount cache device */
 #define GDT_SET_FEAT    12                      /* set feat. (scatter/gather) */
 #define GDT_GET_FEAT    13                      /* get features */
-#define GDT_RESERVE     14                      /* reserve dev. to raw service */
 #define GDT_WRITE_THR   16                      /* write through */
+#define GDT_READ_THR    17                      /* read through */
 #define GDT_EXT_INFO    18                      /* extended info */
 #define GDT_RESET       19                      /* controller reset */
 
+/* additional raw service commands */
+#define GDT_RESERVE     14                      /* reserve dev. to raw serv. */
+#define GDT_RELEASE     15                      /* release device */
+#define GDT_RESERVE_ALL 16                      /* reserve all devices */
+#define GDT_RELEASE_ALL 17                      /* release all devices */
+#define GDT_RESET_BUS   18                      /* reset bus */
+#define GDT_SCAN_START  19                      /* start device scan */
+#define GDT_SCAN_END    20                      /* stop device scan */  
+
 /* IOCTL command defines */
 #define SCSI_CHAN_CNT   5                       /* subfunctions */
+#define GET_IOCHAN_DESC 0x5e
 #define L_CTRL_PATTERN  0x20000000L
 #define CACHE_INFO      4
 #define CACHE_CONFIG    5
+#define BOARD_INFO      0x28
 #define IO_CHANNEL      0x00020000L             /* channels */
 #define INVALID_CHANNEL 0x0000ffffL     
 
@@ -200,6 +232,7 @@
 /* priorities */
 #define DEFAULT_PRI     0x20
 #define IOCTL_PRI       0x10
+#define HIGH_PRI        0x08
 
 /* data directions */
 #define DATA_IN         0x01000000L             /* data from target */
@@ -211,7 +244,7 @@
 #define SEMA0REG        0x0c8a                  /* command semaphore */
 #define SEMA1REG        0x0c8b                  /* status semaphore */
 #define LDOORREG        0x0c8d                  /* local doorbell */
-#define EDENABREG       0x0c8e                  /* EISA system doorbell enable */
+#define EDENABREG       0x0c8e                  /* EISA system doorbell enab. */
 #define EDOORREG        0x0c8f                  /* EISA system doorbell */
 #define MAILBOXREG      0x0c90                  /* mailbox reg. (16 bytes) */
 #define EISAREG         0x0cc0                  /* EISA configuration */
@@ -221,119 +254,160 @@
 #define SCATTER_GATHER  1                       /* s/g feature */
 #define GDTH_MAXSG      32                      /* max. s/g elements */
 #define SECS32          0x1f                    /* round capacity */
-#define BIOS_ID_OFFS    0x10                    /* offset contr. ID in ISABIOS */
+#define BIOS_ID_OFFS    0x10                    /* offset contr-ID in ISABIOS */
 #define LOCALBOARD      0                       /* board node always 0 */
 #define ASYNCINDEX      0                       /* cmd index async. event */
 #define SPEZINDEX       1                       /* cmd index unknown service */
 #define GDT_WR_THROUGH  0x100                   /* WRITE_THROUGH supported */
 
+
 /* typedefs */
-
-#pragma pack(1)
-
-typedef struct {
-    char        buffer[GDTH_SCRATCH];           /* scratch buffer */
-} gdth_scratch_str;
+typedef u32     ulong32;
+#define PACKED  __attribute__((packed))
 
 /* screenservice message */
 typedef struct {                               
-    ulong       msg_handle;                     /* message handle */
-    ulong       msg_len;                        /* size of message */
-    ulong       msg_alen;                       /* answer length */
+    ulong32     msg_handle;                     /* message handle */
+    ulong32     msg_len;                        /* size of message */
+    ulong32     msg_alen;                       /* answer length */
     unchar      msg_answer;                     /* answer flag */
     unchar      msg_ext;                        /* more messages */
     unchar      msg_reserved[2];
     char        msg_text[MSGLEN+2];             /* the message text */
-} gdth_msg_str;
+} PACKED gdth_msg_str;
 
 /* get channel count IOCTL */
 typedef struct {
-    ulong       channel_no;                     /* number of channel */
-    ulong       drive_cnt;                      /* number of drives */
+    ulong32     channel_no;                     /* number of channel */
+    ulong32     drive_cnt;                      /* number of drives */
     unchar      siop_id;                        /* SCSI processor ID */
     unchar      siop_state;                     /* SCSI processor state */ 
-} gdth_getch_str;
+} PACKED gdth_getch_str;
+
+/* get raw channel count IOCTL (NEW!) */
+typedef struct {
+    ulong32     version;            /* version of information (-1UL: newest) */
+    unchar      list_entries;       /* list entry count */
+    unchar      first_chan;         /* first channel number */
+    unchar      last_chan;          /* last channel number */
+    unchar      chan_count;         /* (R) channel count */
+    ulong32     list_offset;        /* offset of list[0] */
+    struct {
+        unchar      proc_id;            /* processor id */
+        unchar      proc_defect;        /* defect ? */
+        unchar      reserved[2];
+    } PACKED list[MAXBUS];
+} PACKED gdth_iochan_str;
 
 /* cache info/config IOCTL */
 typedef struct {
-    ulong       version;                        /* firmware version */
+    ulong32     version;                        /* firmware version */
     ushort      state;                          /* cache state (on/off) */
     ushort      strategy;                       /* cache strategy */
     ushort      write_back;                     /* write back state (on/off) */
     ushort      block_size;                     /* cache block size */
-} gdth_cpar_str;
+} PACKED gdth_cpar_str;
 
 typedef struct {
-    ulong       csize;                          /* cache size */
-    ulong       read_cnt;                       /* read/write counter */
-    ulong       write_cnt;
-    ulong       tr_hits;                        /* hits */
-    ulong       sec_hits;
-    ulong       sec_miss;                       /* misses */
-} gdth_cstat_str;
+    ulong32     csize;                          /* cache size */
+    ulong32     read_cnt;                       /* read/write counter */
+    ulong32     write_cnt;
+    ulong32     tr_hits;                        /* hits */
+    ulong32     sec_hits;
+    ulong32     sec_miss;                       /* misses */
+} PACKED gdth_cstat_str;
 
 typedef struct {
     gdth_cpar_str   cpar;
     gdth_cstat_str  cstat;
-} gdth_cinfo_str;
+} PACKED gdth_cinfo_str;
+
+/* board info IOCTL */
+typedef struct {
+    ulong32     ser_no;                         /* serial no. */
+    unchar      oem_id[2];                      /* OEM ID */
+    ushort      ep_flags;                       /* eprom flags */
+    ulong32     proc_id;                        /* processor ID */
+    ulong32     memsize;                        /* memory size (bytes) */
+    unchar      mem_banks;                      /* memory banks */
+    unchar      chan_type;                      /* channel type */
+    unchar      chan_count;                     /* channel count */
+    unchar      rdongle_pres;                   /* dongle present? */
+    ulong32     epr_fw_ver;                     /* (eprom) firmware version */
+    ulong32     upd_fw_ver;                     /* (update) firmware version */
+    ulong32     upd_revision;                   /* update revision */
+    char        type_string[16];                /* controller name */
+    char        raid_string[16];                /* RAID firmware name */
+    unchar      update_pres;                    /* update present? */
+    unchar      xor_pres;                       /* XOR engine present? */
+    unchar      prom_type;                      /* ROM type (eprom/flash) */
+    unchar      prom_count;                     /* number of ROM devices */
+    ulong32     dup_pres;                       /* duplexing module present? */
+    ulong32     chan_pres;                      /* number of expansion chn. */
+    ulong32     mem_pres;                       /* memory expansion inst. ? */
+    unchar      ft_bus_system;                  /* fault bus supported? */
+    unchar      subtype_valid;                  /* board_subtype valid? */
+    unchar      board_subtype;                  /* subtype/hardware level */
+    unchar      ramparity_pres;                 /* RAM parity check hardware? */
+} PACKED gdth_binfo_str; 
 
 /* scatter/gather element */
 typedef struct {
-    ulong       sg_ptr;                         /* address */
-    ulong       sg_len;                         /* length */
-} gdth_sg_str;
+    ulong32     sg_ptr;                         /* address */
+    ulong32     sg_len;                         /* length */
+} PACKED gdth_sg_str;
 
 /* command structure */
 typedef struct {
-    ulong       BoardNode;                      /* board node (always 0) */
-    ulong       CommandIndex;                   /* command number */
+    ulong32     BoardNode;                      /* board node (always 0) */
+    ulong32     CommandIndex;                   /* command number */
     ushort      OpCode;                         /* the command (READ,..) */
     union {
         struct {
             ushort      DeviceNo;               /* number of cache drive */
-            ulong       BlockNo;                /* block number */
-            ulong       BlockCnt;               /* block count */
-            ulong       DestAddr;               /* dest. addr. (if s/g: -1) */
-            ulong       sg_canz;                /* s/g element count */
+            ulong32     BlockNo;                /* block number */
+            ulong32     BlockCnt;               /* block count */
+            ulong32     DestAddr;               /* dest. addr. (if s/g: -1) */
+            ulong32     sg_canz;                /* s/g element count */
             gdth_sg_str sg_lst[GDTH_MAXSG];     /* s/g list */
-        } cache;                                /* cache service cmd. str. */
+        } PACKED cache;                         /* cache service cmd. str. */
         struct {
             ushort      param_size;             /* size of p_param buffer */
-            ulong       subfunc;                /* IOCTL function */
-            ulong       channel;                /* device */
-            ulong       p_param;                /* buffer */
-        } ioctl;                                /* IOCTL command structure */
+            ulong32     subfunc;                /* IOCTL function */
+            ulong32     channel;                /* device */
+            ulong32     p_param;                /* buffer */
+        } PACKED ioctl;                         /* IOCTL command structure */
         struct {
             ushort      reserved;
-            ulong       msg_handle;             /* message handle */
-            ulong       msg_addr;               /* message buffer address */
-        } screen;                               /* screen service cmd. str. */
+            ulong32     msg_handle;             /* message handle */
+            ulong32     msg_addr;               /* message buffer address */
+        } PACKED screen;                        /* screen service cmd. str. */
         struct {
             ushort      reserved;
-            ulong       direction;              /* data direction */
-            ulong       mdisc_time;             /* disc. time (0: no timeout)*/
-            ulong       mcon_time;              /* connect time(0: no to.) */
-            ulong       sdata;                  /* dest. addr. (if s/g: -1) */
-            ulong       sdlen;                  /* data length (bytes) */
-            ulong       clen;                   /* SCSI cmd. length(6,10,12) */
+            ulong32     direction;              /* data direction */
+            ulong32     mdisc_time;             /* disc. time (0: no timeout)*/
+            ulong32     mcon_time;              /* connect time(0: no to.) */
+            ulong32     sdata;                  /* dest. addr. (if s/g: -1) */
+            ulong32     sdlen;                  /* data length (bytes) */
+            ulong32     clen;                   /* SCSI cmd. length(6,10,12) */
             unchar      cmd[12];                /* SCSI command */
             unchar      target;                 /* target ID */
             unchar      lun;                    /* LUN */
             unchar      bus;                    /* SCSI bus number */
             unchar      priority;               /* only 0 used */
-            ulong       sense_len;              /* sense data length */
-            ulong       sense_data;             /* sense data addr. */
+            ulong32     sense_len;              /* sense data length */
+            ulong32     sense_data;             /* sense data addr. */
             struct raw  *link_p;                /* linked cmds (not supp.) */
-            ulong       sg_ranz;                /* s/g element count */
+            ulong32     sg_ranz;                /* s/g element count */
             gdth_sg_str sg_lst[GDTH_MAXSG];     /* s/g list */
-        } raw;                                  /* raw service cmd. struct. */
+        } PACKED raw;                           /* raw service cmd. struct. */
     } u;
     /* additional variables */
     unchar      Service;                        /* controller service */
     ushort      Status;                         /* command result */
-    ulong       Info;                           /* additional information */
+    ulong32     Info;                           /* additional information */
     Scsi_Cmnd   *RequestBuffer;                 /* request buffer */
-} gdth_cmd_str;
+} PACKED gdth_cmd_str;
 
 /* controller event structure */
 #define ES_ASYNC    1
@@ -347,40 +421,40 @@ typedef struct {
         struct {
             ushort          ionode;
             ushort          service;
-            ulong           index;
-        } driver;
+            ulong32         index;
+        } PACKED driver;
         struct {
             ushort          ionode;
             ushort          service;
             ushort          status;
-            ulong           info;
+            ulong32         info;
             unchar          scsi_coord[3];
-        } async;
+        } PACKED async;
         struct {
             ushort          ionode;
             ushort          service;
             ushort          status;
-            ulong           info;
+            ulong32         info;
             ushort          hostdrive;
             unchar          scsi_coord[3];
             unchar          sense_key;
-        } sync;
+        } PACKED sync;
         struct {
-            ulong           l1, l2, l3, l4;
-        } test;
+            ulong32         l1, l2, l3, l4;
+        } PACKED test;
     } eu;
-} gdth_evt_data;
+} PACKED gdth_evt_data;
 
 typedef struct {
-    ulong           first_stamp;
-    ulong           last_stamp;
+    ulong32         first_stamp;
+    ulong32         last_stamp;
     ushort          same_count;
     ushort          event_source;
     ushort          event_idx;
     unchar          application;
     unchar          reserved;
     gdth_evt_data   event_data;
-} gdth_evt_str;
+} PACKED gdth_evt_str;
 
 
 /* DPRAM structures */
@@ -390,32 +464,32 @@ typedef struct {
     unchar              S_Cmd_Indx;             /* special command */
     unchar volatile     S_Status;               /* status special command */
     ushort              reserved1;
-    ulong               S_Info[4];              /* add. info special command */
+    ulong32             S_Info[4];              /* add. info special command */
     unchar volatile     Sema0;                  /* command semaphore */
     unchar              reserved2[3];
     unchar              Cmd_Index;              /* command number */
     unchar              reserved3[3];
     ushort volatile     Status;                 /* command status */
     ushort              Service;                /* service(for async.events) */
-    ulong               Info[2];                /* additional info */
+    ulong32             Info[2];                /* additional info */
     struct {
         ushort          offset;                 /* command offs. in the DPRAM*/
         ushort          serv_id;                /* service */
-    } comm_queue[MAXOFFSETS];                   /* command queue */
-    ulong               bios_reserved[2];
+    } PACKED comm_queue[MAXOFFSETS];            /* command queue */
+    ulong32             bios_reserved[2];
     unchar              gdt_dpr_cmd[1];         /* commands */
-} gdt_dpr_if;
+} PACKED gdt_dpr_if;
 
 /* SRAM structure PCI controllers */
 typedef struct {
-    ulong       magic;                          /* controller ID from BIOS */
+    ulong32     magic;                          /* controller ID from BIOS */
     ushort      need_deinit;                    /* switch betw. BIOS/driver */
     unchar      switch_support;                 /* see need_deinit */
     unchar      padding[9];
     unchar      os_used[16];                    /* OS code per service */
     unchar      unused[28];
     unchar      fw_magic;                       /* contr. ID from firmware */
-} gdt_pci_sram;
+} PACKED gdt_pci_sram;
 
 /* SRAM structure EISA controllers (but NOT GDT3000/3020) */
 typedef struct {
@@ -423,7 +497,7 @@ typedef struct {
     ushort      need_deinit;                    /* switch betw. BIOS/driver */
     unchar      switch_support;                 /* see need_deinit */
     unchar      padding;
-} gdt_eisa_sram;
+} PACKED gdt_eisa_sram;
 
 
 /* DPRAM ISA controllers */
@@ -431,12 +505,12 @@ typedef struct {
     union {
         struct {
             unchar      bios_used[0x3c00-32];   /* 15KB - 32Bytes BIOS */
-            ulong       magic;                  /* controller (EISA) ID */
+            ulong32     magic;                  /* controller (EISA) ID */
             ushort      need_deinit;            /* switch betw. BIOS/driver */
             unchar      switch_support;         /* see need_deinit */
             unchar      padding[9];
             unchar      os_used[16];            /* OS code per service */
-        } dp_sram;
+        } PACKED dp_sram;
         unchar          bios_area[0x4000];      /* 16KB reserved for BIOS */
     } bu;
     union {
@@ -450,8 +524,8 @@ typedef struct {
         unchar          irqdel;                 /* acknowledge board int. */
         unchar volatile Sema1;                  /* status semaphore */
         unchar          rq;                     /* IRQ/DRQ configuration */
-    } io;
-} gdt2_dpram_str;
+    } PACKED io;
+} PACKED gdt2_dpram_str;
 
 /* DPRAM PCI controllers */
 typedef struct {
@@ -470,8 +544,8 @@ typedef struct {
         unchar          unused3[3];
         unchar          irqdel;                 /* acknowledge board int. */
         unchar          unused4[3];
-    } io;
-} gdt6_dpram_str;
+    } PACKED io;
+} PACKED gdt6_dpram_str;
 
 /* PLX register structure (new PCI controllers) */
 typedef struct {
@@ -482,7 +556,7 @@ typedef struct {
     unchar              unused2[2];
     ushort volatile     status;                 /* command status */
     ushort              service;                /* service */
-    ulong               info[2];                /* additional info */
+    ulong32             info[2];                /* additional info */
     unchar              unused3[0x10];
     unchar              ldoor_reg;              /* PCI to local doorbell */
     unchar              unused4[3];
@@ -491,7 +565,7 @@ typedef struct {
     unchar              control0;               /* control0 register(unused) */
     unchar              control1;               /* board interrupts enable */
     unchar              unused6[0x16];
-} gdt6c_plx_regs;
+} PACKED gdt6c_plx_regs;
 
 /* DPRAM new PCI controllers */
 typedef struct {
@@ -500,7 +574,7 @@ typedef struct {
         unchar          if_area[0x4000-sizeof(gdt_pci_sram)];
     } u;
     gdt_pci_sram        gdt6sr;                 /* SRAM structure */
-} gdt6c_dpram_str;
+} PACKED gdt6c_dpram_str;
 
 /* i960 register structure (PCI MPR controllers) */
 typedef struct {
@@ -511,15 +585,15 @@ typedef struct {
     unchar              unused3;
     ushort volatile     status;                 /* command status */
     ushort              service;                /* service */
-    ulong               info[2];                /* additional info */
+    ulong32             info[2];                /* additional info */
     unchar              ldoor_reg;              /* PCI to local doorbell */
     unchar              unused4[11];
     unchar volatile     edoor_reg;              /* local to PCI doorbell */
     unchar              unused5[7];
     unchar              edoor_en_reg;           /* board interrupts enable */
     unchar              unused6[27];
-    ulong               unused7[1004];          /* size: 4 KB */
-} gdt6m_i960_regs;
+    ulong32             unused7[1004];          /* size: 4 KB */
+} PACKED gdt6m_i960_regs;
 
 /* DPRAM PCI MPR controllers */
 typedef struct {
@@ -529,58 +603,71 @@ typedef struct {
         unchar          if_area[0x3000-sizeof(gdt_pci_sram)];
     } u;
     gdt_pci_sram        gdt6sr;                 /* SRAM structure */
-} gdt6m_dpram_str;
+} PACKED gdt6m_dpram_str;
 
 
 /* PCI resources */
 typedef struct {
-    ushort      device_id;                      /* device ID (0,..,9) */
-    unchar      bus;                            /* PCI bus */
-    unchar      device_fn;                      /* PCI device/function no. */
-    ulong       dpmem;                          /* DPRAM address */
-    ulong       io;                             /* IO address */
-    ulong       io_mm;                          /* IO address mem. mapped */
-    ulong       bios;                           /* BIOS address */
-    unchar      irq;                            /* IRQ */
+#if LINUX_VERSION_CODE >= 0x02015C
+    struct pci_dev      *pdev;
+#endif
+    ushort              device_id;              /* device ID (0,..,9) */
+    unchar              bus;                    /* PCI bus */
+    unchar              device_fn;              /* PCI device/function no. */
+    ulong               dpmem;                  /* DPRAM address */
+    ulong               io;                     /* IO address */
+    ulong               io_mm;                  /* IO address mem. mapped */
+    unchar              irq;                    /* IRQ */
 } gdth_pci_str;
 
 
 /* controller information structure */
 typedef struct {
-    unchar              bus_cnt;                /* SCSI bus count */
-    unchar              type;                   /* controller class */
+    ushort              type;                   /* controller class */
     ushort              raw_feat;               /* feat. raw service (s/g,..) */
-    ulong               stype;                  /* controller subtype */
+    ulong32             stype;                  /* controller subtype */
     ushort              cache_feat;             /* feat. cache serv. (s/g,..) */
-    ushort		bmic;			/* BMIC address (EISA) */
-    void               	*brd;	                /* DPRAM address */
-    ulong               brd_phys;               /* slot number/BIOS address */
+    ushort              bmic;                   /* BMIC address (EISA) */
+    void                *brd;                   /* DPRAM address */
+    ulong32             brd_phys;               /* slot number/BIOS address */
     gdt6c_plx_regs      *plx;                   /* PLX regs (new PCI contr.) */
     gdth_cmd_str        *pccb;                  /* address command structure */
-    gdth_scratch_str    *pscratch;
+    char                *pscratch;              /* scratch (DMA) buffer */
+    unchar              scratch_busy;           /* in use? */
+    unchar              scan_mode;              /* current scan mode */
     unchar              irq;                    /* IRQ */
     unchar              drq;                    /* DRQ (ISA controllers) */
     ushort              status;                 /* command status */
-    ulong               info;
-    ulong               info2;                  /* additional info */
+    ulong32             info;
+    ulong32             info2;                  /* additional info */
     Scsi_Cmnd           *req_first;             /* top of request queue */
     struct {
-        unchar          type;                   /* device type */
+        unchar          present;                /* host drive present? */
+        unchar          lock;                   /* drive locked? (hot plug) */
         unchar          heads;                  /* mapping */
         unchar          secs;
-        unchar          lock;                   /* drive locked ? (hot plug) */
-        ushort          hostdrive;              /* host drive number */
         ushort          devtype;                /* further information */
-        ulong           size;                   /* capacity */
-    } id[MAXBUS][MAXID];         
+        ulong32         size;                   /* capacity */
+    } hdr[MAXID];                               /* host drives */
+    struct {
+        unchar          lock;                   /* channel locked? (hot plug) */
+    } raw[MAXBUS];                              /* raw devices */
+    struct {
+        Scsi_Cmnd       *cmnd;                  /* pending request */
+        ushort          service;                /* service */
+    } cmd_tab[GDTH_MAXCMDS];                    /* table of pend. requests */
+    unchar              bus_cnt;                /* SCSI bus count */
+    unchar              tid_cnt;                /* Target ID count */
+    unchar              bus_id[MAXBUS];         /* IOP IDs */
     ushort              cmd_cnt;                /* command count in DPRAM */
     ushort              cmd_len;                /* length of actual command */
     ushort              cmd_offs_dpmem;         /* actual offset in DPRAM */
     ushort              ic_all_size;            /* sizeof DPRAM interf. area */
-    unchar              reserved;
-    unchar              mode;                   /* information from /proc */
-    ushort              param_size;
     gdth_cpar_str       cpar;                   /* controller cache par. */
+    char                ctr_name[16];           /* controller name */
+#if LINUX_VERSION_CODE >= 0x02015F
+    spinlock_t          smp_lock;
+#endif
 } gdth_ha_str;
 
 /* structure for scsi_register(), SCSI bus != 0 */
@@ -594,7 +681,6 @@ typedef struct {
     gdth_num_str        numext;                 /* must be the first element */
     gdth_ha_str         haext;
     gdth_cmd_str        cmdext;
-    gdth_scratch_str    dmaext;
 } gdth_ext_str;
 
 
@@ -611,27 +697,27 @@ typedef struct {
     unchar      vendor[8];
     unchar      product[16];
     unchar      revision[4];
-} gdth_inq_data;
+} PACKED gdth_inq_data;
 
 /* READ_CAPACITY data format */
 typedef struct {
-    ulong       last_block_no;
-    ulong       block_length;
-} gdth_rdcap_data;
+    ulong32     last_block_no;
+    ulong32     block_length;
+} PACKED gdth_rdcap_data;
 
 /* REQUEST_SENSE data format */
 typedef struct {
     unchar      errorcode;
     unchar      segno;
     unchar      key;
-    ulong       info;
+    ulong32     info;
     unchar      add_length;
-    ulong       cmd_info;
+    ulong32     cmd_info;
     unchar      adsc;
     unchar      adsq;
     unchar      fruc;
     unchar      key_spec[3];
-} gdth_sense_data;
+} PACKED gdth_sense_data;
 
 /* MODE_SENSE data format */
 typedef struct {
@@ -640,20 +726,20 @@ typedef struct {
         unchar  med_type;
         unchar  dev_par;
         unchar  bd_length;
-    } hd;
+    } PACKED hd;
     struct {
         unchar  dens_code;
         unchar  block_count[3];
         unchar  reserved;
         unchar  block_length[3];
-    } bd;
-} gdth_modep_data;
+    } PACKED bd;
+} PACKED gdth_modep_data;
 
+/* stack frame */
 typedef struct {
-    ulong       b[10];                          /* 32 bit compiler ! */
-} gdth_stackframe;
+    ulong       b[10];                          /* 32/64 bit compiler ! */
+} PACKED gdth_stackframe;
 
-#pragma pack()
 
 /* function prototyping */
 
@@ -669,27 +755,82 @@ int gdth_reset(Scsi_Cmnd *);
 #endif
 const char *gdth_info(struct Scsi_Host *);
 
-
+#if LINUX_VERSION_CODE >= 0x02015F
 int gdth_bios_param(Disk *,kdev_t,int *);
 extern struct proc_dir_entry proc_scsi_gdth;
 int gdth_proc_info(char *,char **,off_t,int,int,int);
-#define GDTH { proc_dir:          &proc_scsi_gdth,                     \
-               proc_info:         gdth_proc_info,                      \
-               name:              "GDT SCSI Disk Array Controller",    \
-               detect:            gdth_detect,                         \
-               release:           gdth_release,                        \
-               info:              gdth_info,                           \
-               command:           gdth_command,                        \
-               queuecommand:      gdth_queuecommand,                   \
-               abort:             gdth_abort,                          \
-               reset:             gdth_reset,                          \
-               bios_param:        gdth_bios_param,                     \
-               can_queue:         GDTH_MAXCMDS,                        \
-               this_id:           -1,                                  \
-               sg_tablesize:      GDTH_MAXSG,                          \
-               cmd_per_lun:       GDTH_MAXC_P_L,                       \
-               unchecked_isa_dma: 1,                                   \
-               use_clustering:    ENABLE_CLUSTERING}
+int gdth_eh_abort(Scsi_Cmnd *scp);
+int gdth_eh_device_reset(Scsi_Cmnd *scp);
+int gdth_eh_bus_reset(Scsi_Cmnd *scp);
+int gdth_eh_host_reset(Scsi_Cmnd *scp);
+#define GDTH { proc_dir:        &proc_scsi_gdth,                 \
+               proc_info:       gdth_proc_info,                  \
+               name:            "GDT SCSI Disk Array Controller",\
+               detect:          gdth_detect,                     \
+               release:         gdth_release,                    \
+               info:            gdth_info,                       \
+               command:         gdth_command,                    \
+               queuecommand:    gdth_queuecommand,               \
+               eh_abort_handler: gdth_eh_abort,                  \
+               eh_device_reset_handler: gdth_eh_device_reset,    \
+               eh_bus_reset_handler: gdth_eh_bus_reset,          \
+               eh_host_reset_handler: gdth_eh_host_reset,        \
+               abort:           gdth_abort,                      \
+               reset:           gdth_reset,                      \
+               bios_param:      gdth_bios_param,                 \
+               can_queue:       GDTH_MAXCMDS,                    \
+               this_id:         -1,                              \
+               sg_tablesize:    GDTH_MAXSG,                      \
+               cmd_per_lun:     GDTH_MAXC_P_L,                   \
+               present:         0,                               \
+               unchecked_isa_dma: 1,                             \
+               use_clustering:  ENABLE_CLUSTERING,               \
+               use_new_eh_code: 1       /* use new error code */ }    
+#elif LINUX_VERSION_CODE >= 0x010300
+int gdth_bios_param(Disk *,kdev_t,int *);
+extern struct proc_dir_entry proc_scsi_gdth;
+int gdth_proc_info(char *,char **,off_t,int,int,int);
+#define GDTH { NULL, NULL,                              \
+                   &proc_scsi_gdth,                     \
+                   gdth_proc_info,                      \
+                   "GDT SCSI Disk Array Controller",    \
+                   gdth_detect,                         \
+                   gdth_release,                        \
+                   gdth_info,                           \
+                   gdth_command,                        \
+                   gdth_queuecommand,                   \
+                   gdth_abort,                          \
+                   gdth_reset,                          \
+                   NULL,                                \
+                   gdth_bios_param,                     \
+                   GDTH_MAXCMDS,                        \
+                   -1,                                  \
+                   GDTH_MAXSG,                          \
+                   GDTH_MAXC_P_L,                       \
+                   0,                                   \
+                   1,                                   \
+                   ENABLE_CLUSTERING}
+#else
+int gdth_bios_param(Disk *,int,int *);
+#define GDTH { NULL, NULL,                              \
+                   "GDT SCSI Disk Array Controller",    \
+                   gdth_detect,                         \
+                   gdth_release,                        \
+                   gdth_info,                           \
+                   gdth_command,                        \
+                   gdth_queuecommand,                   \
+                   gdth_abort,                          \
+                   gdth_reset,                          \
+                   NULL,                                \
+                   gdth_bios_param,                     \
+                   GDTH_MAXCMDS,                        \
+                   -1,                                  \
+                   GDTH_MAXSG,                          \
+                   GDTH_MAXC_P_L,                       \
+                   0,                                   \
+                   1,                                   \
+                   ENABLE_CLUSTERING}
+#endif
 
 #endif
 

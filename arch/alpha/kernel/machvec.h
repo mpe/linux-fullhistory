@@ -13,6 +13,11 @@
    we can read and write it as we like.  ;-)  */
 #define TSUNAMI_HAE_ADDRESS	(&alpha_mv.hae_cache)
 
+/* Whee.  POLARIS doesn't have an HAE.  Fix things up for the GENERIC
+   kernel by defining the HAE address to be that of the cache.  Now
+   we can read and write it as we like.  ;-)  */
+#define POLARIS_HAE_ADDRESS	(&alpha_mv.hae_cache)
+
 /* Only a few systems don't define IACK_SC, handling all interrupts through
    the SRM console.  But splitting out that one case from IO() below
    seems like such a pain.  Define this to get things to compile.  */
@@ -91,6 +96,7 @@
 #define DO_LCA_IO	IO(LCA,lca,lca)
 #define DO_MCPCIA_IO	IO(MCPCIA,mcpcia,mcpcia)
 #define DO_PYXIS_IO	IO(PYXIS,pyxis_bw,pyxis)
+#define DO_POLARIS_IO	IO(POLARIS,polaris,polaris)
 #define DO_T2_IO	IO(T2,t2,t2)
 #define DO_TSUNAMI_IO	IO(TSUNAMI,tsunami,tsunami)
 
@@ -103,6 +109,7 @@
 #define DO_LCA_BUS	BUS(lca)
 #define DO_MCPCIA_BUS	BUS(mcpcia)
 #define DO_PYXIS_BUS	BUS(pyxis)
+#define DO_POLARIS_BUS	BUS(polaris)
 #define DO_T2_BUS	BUS(t2)
 #define DO_TSUNAMI_BUS	BUS(tsunami)
 

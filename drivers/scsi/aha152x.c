@@ -247,7 +247,7 @@
  C/H/S addressing.
 
  The number of cylinders/heads/sectors is called geometry and is required
- as base for requests in C/H/S adressing.  SCSI only knows about the
+ as base for requests in C/H/S addressing.  SCSI only knows about the
  total capacity of disks in blocks (sectors).
 
  Therefore the SCSI BIOS/DOS driver has to calculate a logical/virtual
@@ -276,7 +276,7 @@
  extended translation.  This means that the BIOS uses 255 for heads,
  63 for sectors and then divides the capacity of the disk by 255*63
  (about 8 MB), as soon it sees a disk greater than 1 GB.  That results
- in a maximum of about 8 GB adressable diskspace in the partition table
+ in a maximum of about 8 GB addressable diskspace in the partition table
  (but there are already bigger disks out there today).
 
  To make it even more complicated the translation mode might/might

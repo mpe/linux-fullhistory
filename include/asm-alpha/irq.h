@@ -34,6 +34,7 @@
       defined(CONFIG_ALPHA_XLT)       || \
       defined(CONFIG_ALPHA_MIATA)     || \
       defined(CONFIG_ALPHA_RUFFIAN)   || \
+      defined(CONFIG_ALPHA_RX164)     || \
       defined(CONFIG_ALPHA_NORITAKE)
 # define NR_IRQS	48
 

@@ -858,7 +858,7 @@ static int build_sglist(mega_host_config *megaCfg, mega_scb *scb,
 }
     
 /*--------------------------------------------------------------------
- * Initializes the adress of the controller's mailbox register
+ * Initializes the address of the controller's mailbox register
  *  The mailbox register is used to issue commands to the card.
  *  Format of the mailbox area:
  *   00 01 command

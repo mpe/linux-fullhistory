@@ -2363,10 +2363,10 @@ static void doevent(int crd)
 			eventbuf = (volatile unchar *)bus_to_virt((ulong)(bd->re_map_membase + tail + ISTART));
 		}
 
-		/* Get the channel the event occured on */
+		/* Get the channel the event occurred on */
 		channel = eventbuf[0];
 
-		/* Get the actual event code that occured */
+		/* Get the actual event code that occurred */
 		event = eventbuf[1];
 
 		/*  ----------------------------------------------------------------

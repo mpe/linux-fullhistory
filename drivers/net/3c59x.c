@@ -86,9 +86,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 #include <linux/delay.h>
 
-#if (LINUX_VERSION_CODE >= 0x20100)
-char kernel_version[] = UTS_RELEASE;
-#else
+#if (LINUX_VERSION_CODE <= 0x20100)
 #ifndef __alpha__
 #define ioremap(a,b) \
 	(((a)<0x100000) ? (void *)((u_long)(a)) : vremap(a,b))

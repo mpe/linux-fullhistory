@@ -216,8 +216,6 @@ static ctl_table kern_table[] = {
 };
 
 static ctl_table vm_table[] = {
-	{VM_SWAPCTL, "swapctl", 
-	 &swap_control, sizeof(swap_control_t), 0644, NULL, &proc_dointvec},
 	{VM_FREEPG, "freepages", 
 	 &freepages, sizeof(freepages_t), 0644, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,

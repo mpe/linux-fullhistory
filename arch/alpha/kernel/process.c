@@ -55,6 +55,7 @@
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
+static struct file * init_fd_array[NR_OPEN] = { NULL, };
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM;
@@ -256,11 +257,26 @@ void release_thread(struct task_struct *dead_task)
  * with parameters (SIGCHLD, 0).
  */
 int alpha_clone(unsigned long clone_flags, unsigned long usp,
-	struct switch_stack * swstack)
+		struct switch_stack * swstack)
 {
 	if (!usp)
 		usp = rdusp();
-	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1));
+	return do_fork(clone_flags & ~CLONE_VFORK, usp, (struct pt_regs *) (swstack+1));
+}
+
+int alpha_vfork(struct switch_stack * swstack)
+{
+	int child;
+	struct semaphore sem = MUTEX_LOCKED;
+
+	current->vfork_sem = &sem;
+	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
+			(struct pt_regs *) (swstack+1));
+
+	if (child > 0)
+		down(&sem);
+
+	return child;
 }
 
 extern void ret_from_sys_call(void);

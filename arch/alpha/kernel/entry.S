@@ -8,10 +8,9 @@
 
 #define halt	.long PAL_halt
 #define rti	.long PAL_rti
-#define SIGCHLD	20
+#define SIGCHLD 20
 
 #define NR_SYSCALLS 370
-#define osf_vfork sys_fork
 
 /*
  * These offsets must match with alpha_mv in <asm/machvec.h>.
@@ -502,6 +501,17 @@ sys_clone:
 .end	sys_clone
 
 .align 3
+.globl	sys_vfork
+.ent	sys_vfork
+sys_vfork:
+	bsr $1,do_switch_stack
+	bis $30,$30,$16
+	jsr $26,alpha_vfork
+	bsr $1,undo_switch_stack
+	ret $31,($26),1
+.end	sys_vfork
+
+.align 3
 .globl  alpha_switch_to
 .ent    alpha_switch_to
 alpha_switch_to:
@@ -822,7 +832,7 @@ sys_call_table:
 	.quad sys_getpgrp
 	.quad sys_getpagesize
 	.quad alpha_ni_syscall			/* 65 */
-	.quad osf_vfork
+	.quad sys_vfork
 	.quad sys_newstat
 	.quad sys_newlstat
 	.quad alpha_ni_syscall

@@ -58,10 +58,8 @@ static int max_interrupt_work = 10;
 #endif
 
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>
-#include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/malloc.h>
@@ -77,7 +75,6 @@ static int max_interrupt_work = 10;
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/dma.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -125,10 +122,9 @@ static int epic_debug = 1;
 
 I. Board Compatibility
 
-This device driver is designed for the SMC "EPCI/100", the SMC
+This device driver is designed for the SMC "EPIC/100", the SMC
 single-chip Ethernet controllers for PCI.  This chip is used on
 the SMC EtherPower II boards.
-
 
 II. Board-specific settings
 
@@ -144,9 +140,10 @@ IIIa. Ring buffers
 
 IVb. References
 
-http://www.smc.com/components/catalog/smc83c170.html
+http://www.smsc.com/main/datasheets/83c171.pdf
+http://www.smsc.com/main/datasheets/83c175.pdf
 http://cesdis.gsfc.nasa.gov/linux/misc/NWay.html
-http://www.national.com/pf/DP/DP83840.html
+http://www.national.com/pf/DP/DP83840A.html
 
 IVc. Errata
 
@@ -162,6 +159,7 @@ enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
 	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
 };
+
 struct chip_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
@@ -221,7 +219,7 @@ struct epic_private {
 	const char *product_name;
 	struct device *next_module;
 
-	/* Rx and Rx rings here so that they remain paragraph aligned. */
+	/* Tx and Rx rings here so that they remain paragraph aligned. */
 	struct epic_rx_desc rx_ring[RX_RING_SIZE];
 	struct epic_tx_desc tx_ring[TX_RING_SIZE];
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
@@ -930,7 +928,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #if defined(__i386__)
 	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
 	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
+		printk(KERN_ERR "%s: SMP simultaneous entry of an interrupt handler.\n",
 			   dev->name);
 		dev->interrupt = 0;	/* Avoid halting machine. */
 		return;

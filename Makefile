@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 0
-EXTRAVERSION =-pre6
+EXTRAVERSION =-pre7
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -412,8 +412,9 @@ endif
 
 depend dep: dep-files $(MODVERFILE)
 
+# make checkconfig: Prune 'scripts' directory to avoid "false positives".
 checkconfig:
-	perl -w scripts/checkconfig.pl `find * -name '*.[hcS]' -print | sort`
+	perl -w scripts/checkconfig.pl `find * -path 'scripts' -prune -o -name '*.[hcS]' -print | sort`
 
 checkhelp:
 	perl -w scripts/checkhelp.pl `find * -name [cC]onfig.in -print`

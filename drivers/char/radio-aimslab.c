@@ -101,6 +101,7 @@ static int rt_setvol(struct rt_device *dev, int vol)
 		outb(0x48, io);		/* volume down but still "on"	*/
 		sleep_delay(2000000);	/* make sure it's totally down	*/
 		outb(0xd0, io);		/* volume steady, off		*/
+		dev->curvol = 0;	/* track the volume state!	*/
 		return 0;
 	}
 

@@ -141,6 +141,8 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/core_tsunami.h>
 #elif defined(CONFIG_ALPHA_JENSEN)
 # include <asm/jensen.h>
+#elif defined(CONFIG_ALPHA_RX164)
+# include <asm/core_polaris.h>
 #else
 #error "What system is this?"
 #endif

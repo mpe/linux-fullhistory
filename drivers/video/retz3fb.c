@@ -757,7 +757,7 @@ static int retz3_set_video(struct fb_info *info,
 	reg_w(regs, VDAC_MASK, 0xff);
 
 	/*
-	 * Extended palette adressing ???
+	 * Extended palette addressing ???
 	 */
 	switch (bpp){
 	case 8:

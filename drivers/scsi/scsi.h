@@ -317,7 +317,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define IS_RESETTING    0x08
 #define IS_ABORTING     0x10
 #define ASKED_FOR_SENSE 0x20
-
+#define SYNC_RESET      0x40
 
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/pgtable.h>
