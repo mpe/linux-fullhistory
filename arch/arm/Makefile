@@ -121,6 +121,11 @@ MACHINE		 = ebsa110
 ARCHDIR		 = ebsa110
 endif
 
+ifeq ($(CONFIG_ARCH_CLPS7500),y)
+MACHINE		 = clps7500
+ARCHDIR		 = cl7500
+endif
+
 ifeq ($(CONFIG_FOOTBRIDGE),y)
 MACHINE		 = footbridge
 ARCHDIR		 = ebsa285
@@ -133,6 +138,11 @@ endif
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 MACHINE		 = nexuspci
 ARCHDIR		 = nexuspci
+endif
+
+ifeq ($(CONFIG_ARCH_SHARK),y)
+MACHINE		 = shark
+ARCHDIR		 = shark
 endif
 
 ifeq ($(CONFIG_ARCH_SA1100),y)
@@ -158,6 +168,11 @@ DRIVERS		+= drivers/acorn/block/acorn-block.a
 DRIVERS		+= drivers/acorn/char/acorn-char.o
 DRIVERS		+= drivers/acorn/net/acorn-net.a
 DRIVERS		+= drivers/acorn/scsi/acorn-scsi.a
+endif
+
+ifeq ($(CONFIG_ARCH_CLPS7500),y)
+SUBDIRS		+= drivers/acorn/char
+DRIVERS		+= drivers/acorn/char/acorn-char.o
 endif
 
 MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot

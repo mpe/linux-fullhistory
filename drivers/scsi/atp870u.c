@@ -105,6 +105,11 @@ irq_numok:
 	{
 		tmport += 0x1f;
 		j = inb(tmport);
+		if((j&0x80)==0)
+		{
+			dev->in_int=0;
+			return;
+		}
 
 		tmpcip = dev->pciport;
 		if ((inb(tmpcip) & 0x08) != 0) 

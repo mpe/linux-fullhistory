@@ -852,6 +852,8 @@ static int dgrs_ioctl(struct net_device *devN, struct ifreq *ifr, int cmd)
 				return -EFAULT;
 			return (0);
 		case DGRS_SETFILTER:
+			if (!capable(CAP_NET_ADMIN))
+				return -EPERM;
 			if (ioc.port > privN->bcomm->bc_nports)
 				return -EINVAL;
 			if (ioc.filter >= NFILTERS)
@@ -1188,8 +1190,11 @@ dgrs_probe1(struct net_device *dev)
 
 	priv->intrcnt = 0;
 	for (i = jiffies + 2*HZ + HZ/2; time_after(i, jiffies); )
+	{
+		barrier();		/* gcc 2.95 needs this */
 		if (priv->intrcnt >= 2)
 			break;
+	}
 	if (priv->intrcnt < 2)
 	{
 		printk("%s: Not interrupting on IRQ %d (%d)\n",

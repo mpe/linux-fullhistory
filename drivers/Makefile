@@ -9,9 +9,9 @@
 
 SUB_DIRS     := block char net parport sound misc
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp i2o ieee1394 \
-				macintosh video dio zorro fc4 usb \
-				nubus tc atm pcmcia i2c telephony
+ALL_SUB_DIRS := $(SUB_DIRS) pci sgi ide scsi sbus cdrom isdn pnp i2o \
+				ieee1394 macintosh video dio zorro fc4 \
+				usb nubus tc atm pcmcia i2c telephony
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -93,6 +93,17 @@ else
   MOD_SUB_DIRS += i2o
   endif
 endif 
+
+# If CONFIG_IDE is set, the core of ATA support will be added to the kernel,
+# but some of the low-level things may also be modules.
+ifeq ($(CONFIG_IDE),y)
+SUB_DIRS += ide
+MOD_SUB_DIRS += ide
+else
+  ifeq ($(CONFIG_IDE),m)
+  MOD_SUB_DIRS += ide
+  endif
+endif
 
 # If CONFIG_SCSI is set, the core of SCSI support will be added to the kernel,
 # but some of the low-level things may also be modules.

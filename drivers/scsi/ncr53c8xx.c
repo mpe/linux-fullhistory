@@ -73,7 +73,7 @@
 */
 
 /*
-**	January 8 2000, version 3.2e
+**	March 6 2000, version 3.2g
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -104,7 +104,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2e"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2g"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -184,98 +184,14 @@
 */
 typedef u32 u_int32;
 typedef u64 u_int64;
-
+typedef	u_long		vm_offset_t;
 #include "ncr53c8xx.h"
 
-/*==========================================================
-**
-**	A la VMS/CAM-3 queue management.
-**	Implemented from linux list management.
-**
-**==========================================================
-*/
+#define NAME53C			"ncr53c"
+#define NAME53C8XX		"ncr53c8xx"
+#define DRIVER_SMP_LOCK		ncr53c8xx_lock
 
-typedef struct xpt_quehead {
-	struct xpt_quehead *flink;	/* Forward  pointer */
-	struct xpt_quehead *blink;	/* Backward pointer */
-} XPT_QUEHEAD;
-
-#define xpt_que_init(ptr) do { \
-	(ptr)->flink = (ptr); (ptr)->blink = (ptr); \
-} while (0)
-
-static inline void __xpt_que_add(struct xpt_quehead * new,
-	struct xpt_quehead * blink,
-	struct xpt_quehead * flink)
-{
-	flink->blink	= new;
-	new->flink	= flink;
-	new->blink	= blink;
-	blink->flink	= new;
-}
-
-static inline void __xpt_que_del(struct xpt_quehead * blink,
-	struct xpt_quehead * flink)
-{
-	flink->blink = blink;
-	blink->flink = flink;
-}
-
-static inline int xpt_que_empty(struct xpt_quehead *head)
-{
-	return head->flink == head;
-}
-
-static inline void xpt_que_splice(struct xpt_quehead *list,
-	struct xpt_quehead *head)
-{
-	struct xpt_quehead *first = list->flink;
-
-	if (first != list) {
-		struct xpt_quehead *last = list->blink;
-		struct xpt_quehead *at   = head->flink;
-
-		first->blink = head;
-		head->flink  = first;
-
-		last->flink = at;
-		at->blink   = last;
-	}
-}
-
-#define xpt_que_entry(ptr, type, member) \
-	((type *)((char *)(ptr)-(unsigned long)(&((type *)0)->member)))
-
-
-#define xpt_insque(new, pos)		__xpt_que_add(new, pos, (pos)->flink)
-
-#define xpt_remque(el)			__xpt_que_del((el)->blink, (el)->flink)
-
-#define xpt_insque_head(new, head)	__xpt_que_add(new, head, (head)->flink)
-
-static inline struct xpt_quehead *xpt_remque_head(struct xpt_quehead *head)
-{
-	struct xpt_quehead *elem = head->flink;
-
-	if (elem != head)
-		__xpt_que_del(head, elem->flink);
-	else
-		elem = 0;
-	return elem;
-}
-
-#define xpt_insque_tail(new, head)	__xpt_que_add(new, (head)->blink, head)
-
-static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
-{
-	struct xpt_quehead *elem = head->blink;
-
-	if (elem != head)
-		__xpt_que_del(elem->blink, head);
-	else
-		elem = 0;
-	return elem;
-}
+#include "sym53c8xx_comm.h"
 
 /*==========================================================
 **
@@ -312,33 +228,6 @@ static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
 #endif
 
 #endif /* SCSI_NCR_CCB_DONE_SUPPORT */
-
-/*==========================================================
-**
-**	On x86 architecture, write buffers management does 
-**	not reorder writes to memory. So, using compiler 
-**	optimization barriers is enough to guarantee some 
-**	ordering when the CPU is writing data accessed by 
-**	the NCR.
-**	On Alpha architecture, explicit memory barriers have 
-**	to be used.
-**	Other architectures are defaulted to mb() macro if  
-**	defined, otherwise use compiler barrier.
-**
-**==========================================================
-*/
-
-#if defined(__i386__)
-#define MEMORY_BARRIER()	barrier()
-#elif defined(__alpha__)
-#define MEMORY_BARRIER()	mb()
-#else
-#  ifdef mb
-#  define MEMORY_BARRIER()	mb()
-#  else
-#  define MEMORY_BARRIER()	barrier()
-#  endif
-#endif
 
 /*==========================================================
 **
@@ -464,378 +353,10 @@ typedef u_int32 tagmap_t;
 #endif
 
 /*
-**    Io mapped or memory mapped.
-*/
-
-#if defined(SCSI_NCR_IOMAPPED)
-#define NCR_IOMAPPED
-#endif
-
-/*
 **	other
 */
 
 #define NCR_SNOOP_TIMEOUT (1000000)
-
-/*==========================================================
-**
-**	Defines for Linux.
-**
-**	Linux and Bsd kernel functions are quite different.
-**	These defines allow a minimum change of the original
-**	code.
-**
-**==========================================================
-*/
-
- /*
- **	Obvious definitions
- */
-
-#define u_char		unsigned char
-#define u_short		unsigned short
-#define u_int		unsigned int
-#define u_long		unsigned long
-
-typedef	u_long		vm_offset_t;
-typedef	int		vm_size_t;
-
-#ifndef bcopy
-#define bcopy(s, d, n)	memcpy((d), (s), (n))
-#endif
-#ifndef bzero
-#define bzero(d, n)	memset((d), 0, (n))
-#endif
- 
-#ifndef offsetof
-#define offsetof(t, m)	((size_t) (&((t *)0)->m))
-#endif
-
-/*
-**	 Simple Wrapper to kernel PCI bus interface.
-**
-**	 This wrapper allows to get rid of old kernel PCI interface
-**	 and still allows to preserve linux-2.0 compatibilty.
-**	 In fact, it is mostly an incomplete emulation of the new
-**	 PCI code for pre-2.2 kernels. When kernel-2.0 support
-**	 will be dropped, we will just have to remove most of this
-**	 code.
-*/
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,2,0)
-
-typedef struct pci_dev *pcidev_t;
-#define PCIDEV_NULL		(0)
-#define PciBusNumber(d)		(d)->bus->number
-#define PciDeviceFn(d)		(d)->devfn
-#define PciVendorId(d)		(d)->vendor
-#define PciDeviceId(d)		(d)->device
-#define PciIrqLine(d)		(d)->irq
-
-#if LINUX_VERSION_CODE > LinuxVersionCode(2,3,12)
-
-static int __init
-pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
-{
-	*base = pdev->resource[index].start;
-	if ((pdev->resource[index].flags & 0x7) == 0x4)
-		++index;
-	return ++index;
-}
-#else
-static int __init
-pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
-{
-	*base = pdev->base_address[index++];
-	if ((*base & 0x7) == 0x4) {
-#if BITS_PER_LONG > 32
-		*base |= (((u_long)pdev->base_address[index]) << 32);
-#endif
-		++index;
-	}
-	return index;
-}
-#endif
-
-#else  /* Incomplete emulation of current PCI code for pre-2.2 kernels */
-
-typedef unsigned int pcidev_t;
-#define PCIDEV_NULL            (~0u)
-#define PciBusNumber(d)                ((d)>>8)
-#define PciDeviceFn(n)         ((d)&0xff)
-#define __PciDev(busn, devfn)  (((busn)<<8)+(devfn))
-
-#define pci_present pcibios_present
-
-#define pci_read_config_byte(d, w, v) \
-	pcibios_read_config_byte(PciBusNumber(d), PciDeviceFn(d), w, v)
-#define pci_read_config_word(d, w, v) \
-	pcibios_read_config_word(PciBusNumber(d), PciDeviceFn(d), w, v)
-#define pci_read_config_dword(d, w, v) \
-	pcibios_read_config_dword(PciBusNumber(d), PciDeviceFn(d), w, v)
-
-
-#define pci_write_config_byte(d, w, v) \
-	pcibios_write_config_byte(PciBusNumber(d), PciDeviceFn(d), w, v)
-#define pci_write_config_word(d, w, v) \
-	pcibios_write_config_word(PciBusNumber(d), PciDeviceFn(d), w, v)
-#define pci_write_config_dword(d, w, v) \
-	pcibios_write_config_dword(PciBusNumber(d), PciDeviceFn(d), w, v)
-
-static pcidev_t __init
-pci_find_device(unsigned int vendor, unsigned int device, pcidev_t prev)
-{
-	static unsigned short pci_index;
-	int retv;
-	unsigned char bus_number, device_fn;
-
-	if (prev == PCIDEV_NULL)
-		pci_index = 0;
-	else
-		++pci_index;
-	retv = pcibios_find_device (vendor, device, pci_index,
-					&bus_number, &device_fn);
-	return retv ? PCIDEV_NULL : __PciDev(bus_number, device_fn);
-}
-
-static u_short __init PciVendorId(pcidev_t dev)
-{
-	u_short vendor_id;
-	pcibios_read_config_word(dev, PCI_VENDOR_ID, &vendor_id);
-	return vendor_id;
-}
-
-static u_short __init PciDeviceId(pcidev_t dev)
-{
-	u_short device_id;
-	pci_read_config_word(dev, PCI_DEVICE_ID, &device_id);
-	return device_id;
-}
-
-static u_int __init PciIrqLine(pcidev_t dev)
-{
-	u_short irq;
-	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
-	return irq;
-}
-
-static int __init
-pci_get_base_address(pcidev_t dev, int offset, u_long *base)
-{
-	u_int32 tmp;
-
-	pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + offset, &tmp);
-	*base = tmp;
-	offset += sizeof(u_int32);
-	if ((tmp & 0x7) == 0x4) {
-#if BITS_PER_LONG > 32
-		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + offset, &tmp);
-		*base |= (((u_long)tmp) << 32);
-#endif
-		offset += sizeof(u_int32);
-	}
-	return offset;
-}
-
-#endif /* LINUX_VERSION_CODE >= LinuxVersionCode(2,2,0) */
-
-/*
-**	SMP threading.
-**
-**	Assuming that SMP systems are generally high end systems and may 
-**	use several SCSI adapters, we are using one lock per controller 
-**	instead of some global one. For the moment (linux-2.1.95), driver's 
-**	entry points are called with the 'io_request_lock' lock held, so:
-**	- We are uselessly loosing a couple of micro-seconds to lock the 
-**	  controller data structure.
-**	- But the driver is not broken by design for SMP and so can be 
-**	  more resistant to bugs or bad changes in the IO sub-system code.
-**	- A small advantage could be that the interrupt code is grained as 
-**	  wished (e.g.: threaded by controller).
-*/
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
-
-#if 0	/* not yet needed */
-static spinlock_t driver_lock = SPIN_LOCK_UNLOCKED;
-#define	NCR_LOCK_DRIVER(flags)     spin_lock_irqsave(&driver_lock, flags)
-#define	NCR_UNLOCK_DRIVER(flags)   spin_unlock_irqrestore(&driver_lock, flags)
-#endif
-
-#define NCR_INIT_LOCK_NCB(np)      spin_lock_init(&np->smp_lock);
-#define	NCR_LOCK_NCB(np, flags)    spin_lock_irqsave(&np->smp_lock, flags)
-#define	NCR_UNLOCK_NCB(np, flags)  spin_unlock_irqrestore(&np->smp_lock, flags)
-
-#define	NCR_LOCK_SCSI_DONE(np, flags) \
-		spin_lock_irqsave(&io_request_lock, flags)
-#define	NCR_UNLOCK_SCSI_DONE(np, flags) \
-		spin_unlock_irqrestore(&io_request_lock, flags)
-
-#else
-
-#if 0	/* not yet needed */
-#define	NCR_LOCK_DRIVER(flags)     do {;} while (0)
-#define	NCR_UNLOCK_DRIVER(flags)   do {;} while (0)
-#endif
-
-#define	NCR_INIT_LOCK_NCB(np)      do { } while (0)
-#define	NCR_LOCK_NCB(np, flags)    do { save_flags(flags); cli(); } while (0)
-#define	NCR_UNLOCK_NCB(np, flags)  do { restore_flags(flags); } while (0)
-
-#define	NCR_LOCK_SCSI_DONE(np, flags)    do {;} while (0)
-#define	NCR_UNLOCK_SCSI_DONE(np, flags)  do {;} while (0)
-
-#endif
-
-/*
-**	Address translation
-**
-**	The driver has to provide physical memory addresses to 
-**	the script processor. Because some architectures use 
-**	different physical addresses from the PCI BUS, we must 
-**	use virt_to_bus instead of virt_to_phys.
-*/
-
-#define vtophys(p)	virt_to_bus(p)
-
-/*
-**	Memory mapped IO
-**
-**	Since linux-2.1, we must use ioremap() to map the io memory space.
-**	iounmap() to unmap it. That allows portability.
-**	Linux 1.3.X and 2.0.X allow to remap physical pages addresses greater 
-**	than the highest physical memory address to kernel virtual pages with 
-**	vremap() / vfree(). That was not portable but worked with i386 
-**	architecture.
-*/
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,0)
-#define ioremap vremap
-#define iounmap vfree
-#endif
-
-#if defined (__sparc__)
-#include <asm/irq.h>
-#elif defined (__alpha__)
-#define bus_dvma_to_mem(p)		((p) & 0xfffffffful)
-#else
-#define bus_dvma_to_mem(p)		(p)
-#endif
-
-#if defined(__i386__) || !defined(NCR_IOMAPPED)
-static vm_offset_t __init remap_pci_mem(u_long base, u_long size)
-{
-	u_long page_base	= ((u_long) base) & PAGE_MASK;
-	u_long page_offs	= ((u_long) base) - page_base;
-	u_long page_remapped	= (u_long) ioremap(page_base, page_offs+size);
-
-	return (vm_offset_t) (page_remapped? (page_remapped + page_offs) : 0UL);
-}
-
-static void __init unmap_pci_mem(vm_offset_t vaddr, u_long size)
-{
-	if (vaddr)
-		iounmap((void *) (vaddr & PAGE_MASK));
-}
-#endif	/* __i386__ || !NCR_IOMAPPED */
-
-/*
-**	Insert a delay in micro-seconds and milli-seconds.
-**	-------------------------------------------------
-**	Under Linux, udelay() is restricted to delay < 1 milli-second.
-**	In fact, it generally works for up to 1 second delay.
-**	Since 2.1.105, the mdelay() function is provided for delays 
-**	in milli-seconds.
-**	Under 2.0 kernels, udelay() is an inline function that is very 
-**	inaccurate on Pentium processors.
-*/
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,105)
-#define UDELAY udelay
-#define MDELAY mdelay
-#else
-static void UDELAY(long us) { udelay(us); }
-static void MDELAY(long ms) { while (ms--) UDELAY(1000); }
-#endif
-
-/*
-**	Internal data structure allocation.
-**
-**	Linux scsi memory poor pool is adjusted for the need of
-**	middle-level scsi driver.
-**	We allocate our control blocks in the kernel memory pool
-**	to avoid scsi pool shortage.
-**
-**	kmalloc() only ensures 8 bytes boundary alignment.
-**	The NCR need better alignment for cache line bursting.
-**	The global header is moved between the NCB and CCBs and needs 
-**	origin and destination addresses to have same lower four bits.
-**
-**	We use 32 boundary alignment for NCB and CCBs and offset multiple 
-**	of 32 for global header fields. That's too much but at least enough.
-*/
-
-#define ALIGN_SIZE(shift)	(1UL << shift)
-#define ALIGN_MASK(shift)	(~(ALIGN_SIZE(shift)-1))
-
-#define CACHE_LINE_SHIFT	5
-#define CACHE_LINE_SIZE		ALIGN_SIZE(CACHE_LINE_SHIFT)
-#define CACHE_LINE_MASK		ALIGN_MASK(CACHE_LINE_SHIFT)
-
-static void *m_alloc(int size, int a_shift)
-{
-	u_long addr;
-	void *ptr;
-	u_long a_size, a_mask;
-
-	if (a_shift < 3)
-		a_shift = 3;
-
-	a_size	= ALIGN_SIZE(a_shift);
-	a_mask	= ALIGN_MASK(a_shift);
-
-	ptr = (void *) kmalloc(size + a_size, GFP_ATOMIC);
-	if (ptr) {
-		addr	= (((u_long) ptr) + a_size) & a_mask;
-		*((void **) (addr - sizeof(void *))) = ptr;
-		ptr	= (void *) addr;
-	}
-
-	return ptr;
-}
-
-#ifdef MODULE
-static void m_free(void *ptr, int size)
-{
-	u_long addr;
-
-	if (ptr) {
-		addr	= (u_long) ptr;
-		ptr	= *((void **) (addr - sizeof(void *)));
-
-		kfree(ptr);
-	}
-}
-#endif
-
-/*
-**	Transfer direction
-**
-**	Low-level scsi drivers under Linux do not receive the expected 
-**	data transfer direction from upper scsi drivers.
-**	The driver will only check actual data direction for common 
-**	scsi opcodes. Other ones may cause problem, since they may 
-**	depend on device type or be vendor specific.
-**	I would prefer to never trust the device for data direction, 
-**	but that is not possible.
-**
-**	The original driver requires the expected direction to be known.
-**	The Linux version of the driver has been enhanced in order to 
-**	be able to transfer data in the direction choosen by the target. 
-*/
-
-#define XFER_IN		(1)
-#define XFER_OUT	(2)
 
 /*
 **	Head of list of NCR boards
@@ -848,44 +369,8 @@ static void m_free(void *ptr, int size)
 static struct Scsi_Host		*first_host	= NULL;
 static Scsi_Host_Template	*the_template	= NULL;	
 
-
 /*
-**	/proc directory entry and proc_info function
-*/
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
-static struct proc_dir_entry proc_scsi_ncr53c8xx = {
-    PROC_SCSI_NCR53C8XX, 9, "ncr53c8xx",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-#endif
-#ifdef SCSI_NCR_PROC_INFO_SUPPORT
-static int ncr53c8xx_proc_info(char *buffer, char **start, off_t offset,
-			int length, int hostno, int func);
-#endif
-
-/*
-**	Driver setup.
-**
-**	This structure is initialized from linux config options.
-**	It can be overridden at boot-up by the boot command line.
-*/
-static struct ncr_driver_setup
-	driver_setup			= SCSI_NCR_DRIVER_SETUP;
-
-#ifdef	SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
-static struct ncr_driver_setup
-	driver_safe_setup __initdata	= SCSI_NCR_DRIVER_SAFE_SETUP;
-# ifdef	MODULE
-char *ncr53c8xx = 0;	/* command line passed by insmod */
-#  if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,30)
-MODULE_PARM(ncr53c8xx, "s");
-#  endif
-# endif
-#endif
-
-/*
-**	Other Linux definitions
+**	Other definitions
 */
 
 #define ScsiResult(host_code, scsi_code) (((host_code) << 16) + ((scsi_code) & 0x7f))
@@ -902,266 +387,6 @@ static void ncr53c8xx_timeout(unsigned long np);
 static u_char Tekram_sync[16] __initdata =
 	{25,31,37,43, 50,62,75,125, 12,15,18,21, 6,7,9,10};
 #endif /* SCSI_NCR_NVRAM_SUPPORT */
-
-/*
-**	Structures used by ncr53c8xx_detect/ncr53c8xx_pci_init to 
-**	transmit device configuration to the ncr_attach() function.
-*/
-typedef struct {
-	int	bus;
-	u_char	device_fn;
-	u_long	base;
-	u_long	base_2;
-	u_long	io_port;
-	int	irq;
-/* port and reg fields to use INB, OUTB macros */
-	u_long	port;
-	volatile struct ncr_reg	*reg;
-} ncr_slot;
-
-typedef struct {
-	int type;
-#define	SCSI_NCR_SYMBIOS_NVRAM	(1)
-#define	SCSI_NCR_TEKRAM_NVRAM	(2)
-#ifdef	SCSI_NCR_NVRAM_SUPPORT
-	union {
-		Symbios_nvram Symbios;
-		Tekram_nvram Tekram;
-	} data;
-#endif
-} ncr_nvram;
-
-/*
-**	Structure used by ncr53c8xx_detect/ncr53c8xx_pci_init
-**	to save data on each detected board for ncr_attach().
-*/
-typedef struct {
-	ncr_slot  slot;
-	ncr_chip  chip;
-	ncr_nvram *nvram;
-	u_char	  host_id;
-	int attach_done;
-} ncr_device;
-
-/*==========================================================
-**
-**	Debugging tags
-**
-**==========================================================
-*/
-
-#define DEBUG_ALLOC    (0x0001)
-#define DEBUG_PHASE    (0x0002)
-#define DEBUG_QUEUE    (0x0008)
-#define DEBUG_RESULT   (0x0010)
-#define DEBUG_SCATTER  (0x0020)
-#define DEBUG_SCRIPT   (0x0040)
-#define DEBUG_TINY     (0x0080)
-#define DEBUG_TIMING   (0x0100)
-#define DEBUG_NEGO     (0x0200)
-#define DEBUG_TAGS     (0x0400)
-
-/*
-**    Enable/Disable debug messages.
-**    Can be changed at runtime too.
-*/
-
-#ifdef SCSI_NCR_DEBUG_INFO_SUPPORT
-	#define DEBUG_FLAGS ncr_debug
-#else
-	#define DEBUG_FLAGS	SCSI_NCR_DEBUG_FLAGS
-#endif
-
-
-
-/*==========================================================
-**
-**	assert ()
-**
-**==========================================================
-**
-**	modified copy from 386bsd:/usr/include/sys/assert.h
-**
-**----------------------------------------------------------
-*/
-
-#define	assert(expression) { \
-	if (!(expression)) { \
-		(void)printk(KERN_ERR \
-			"assertion \"%s\" failed: file \"%s\", line %d\n", \
-			#expression, \
-			__FILE__, __LINE__); \
-	} \
-}
-
-/*==========================================================
-**
-**	Big/Little endian support.
-**
-**==========================================================
-*/
-
-/*
-**	If the NCR uses big endian addressing mode over the 
-**	PCI, actual io register addresses for byte and word 
-**	accesses must be changed according to lane routing.
-**	Btw, ncr_offb() and ncr_offw() macros only apply to 
-**	constants and so donnot generate bloated code.
-*/
-
-#if	defined(SCSI_NCR_BIG_ENDIAN)
-
-#define ncr_offb(o)	(((o)&~3)+((~((o)&3))&3))
-#define ncr_offw(o)	(((o)&~3)+((~((o)&3))&2))
-
-#else
-
-#define ncr_offb(o)	(o)
-#define ncr_offw(o)	(o)
-
-#endif
-
-/*
-**	If the CPU and the NCR use same endian-ness addressing,
-**	no byte reordering is needed for script patching.
-**	Macro cpu_to_scr() is to be used for script patching.
-**	Macro scr_to_cpu() is to be used for getting a DWORD 
-**	from the script.
-*/
-
-#if	defined(__BIG_ENDIAN) && !defined(SCSI_NCR_BIG_ENDIAN)
-
-#define cpu_to_scr(dw)	cpu_to_le32(dw)
-#define scr_to_cpu(dw)	le32_to_cpu(dw)
-
-#elif	defined(__LITTLE_ENDIAN) && defined(SCSI_NCR_BIG_ENDIAN)
-
-#define cpu_to_scr(dw)	cpu_to_be32(dw)
-#define scr_to_cpu(dw)	be32_to_cpu(dw)
-
-#else
-
-#define cpu_to_scr(dw)	(dw)
-#define scr_to_cpu(dw)	(dw)
-
-#endif
-
-/*==========================================================
-**
-**	Access to the controller chip.
-**
-**	If NCR_IOMAPPED is defined, the driver will use 
-**	normal IOs instead of the MEMORY MAPPED IO method  
-**	recommended by PCI specifications.
-**	If all PCI bridges, host brigdes and architectures 
-**	would have been correctly designed for PCI, this 
-**	option would be useless.
-**
-**==========================================================
-*/
-
-/*
-**	If the CPU and the NCR use same endian-ness addressing,
-**	no byte reordering is needed for accessing chip io 
-**	registers. Functions suffixed by '_raw' are assumed 
-**	to access the chip over the PCI without doing byte 
-**	reordering. Functions suffixed by '_l2b' are 
-**	assumed to perform little-endian to big-endian byte 
-**	reordering, those suffixed by '_b2l' blah, blah,
-**	blah, ...
-*/
-
-#if defined(NCR_IOMAPPED)
-
-/*
-**	IO mapped only input / ouput
-*/
-
-#define	INB_OFF(o)		inb (np->port + ncr_offb(o))
-#define	OUTB_OFF(o, val)	outb ((val), np->port + ncr_offb(o))
-
-#if	defined(__BIG_ENDIAN) && !defined(SCSI_NCR_BIG_ENDIAN)
-
-#define	INW_OFF(o)		inw_l2b (np->port + ncr_offw(o))
-#define	INL_OFF(o)		inl_l2b (np->port + (o))
-
-#define	OUTW_OFF(o, val)	outw_b2l ((val), np->port + ncr_offw(o))
-#define	OUTL_OFF(o, val)	outl_b2l ((val), np->port + (o))
-
-#elif	defined(__LITTLE_ENDIAN) && defined(SCSI_NCR_BIG_ENDIAN)
-
-#define	INW_OFF(o)		inw_b2l (np->port + ncr_offw(o))
-#define	INL_OFF(o)		inl_b2l (np->port + (o))
-
-#define	OUTW_OFF(o, val)	outw_l2b ((val), np->port + ncr_offw(o))
-#define	OUTL_OFF(o, val)	outl_l2b ((val), np->port + (o))
-
-#else
-
-#define	INW_OFF(o)		inw_raw (np->port + ncr_offw(o))
-#define	INL_OFF(o)		inl_raw (np->port + (o))
-
-#define	OUTW_OFF(o, val)	outw_raw ((val), np->port + ncr_offw(o))
-#define	OUTL_OFF(o, val)	outl_raw ((val), np->port + (o))
-
-#endif	/* ENDIANs */
-
-#else	/* defined NCR_IOMAPPED */
-
-/*
-**	MEMORY mapped IO input / output
-*/
-
-#define INB_OFF(o)		readb((char *)np->reg + ncr_offb(o))
-#define OUTB_OFF(o, val)	writeb((val), (char *)np->reg + ncr_offb(o))
-
-#if	defined(__BIG_ENDIAN) && !defined(SCSI_NCR_BIG_ENDIAN)
-
-#define INW_OFF(o)		readw_l2b((char *)np->reg + ncr_offw(o))
-#define INL_OFF(o)		readl_l2b((char *)np->reg + (o))
-
-#define OUTW_OFF(o, val)	writew_b2l((val), (char *)np->reg + ncr_offw(o))
-#define OUTL_OFF(o, val)	writel_b2l((val), (char *)np->reg + (o))
-
-#elif	defined(__LITTLE_ENDIAN) && defined(SCSI_NCR_BIG_ENDIAN)
-
-#define INW_OFF(o)		readw_b2l((char *)np->reg + ncr_offw(o))
-#define INL_OFF(o)		readl_b2l((char *)np->reg + (o))
-
-#define OUTW_OFF(o, val)	writew_l2b((val), (char *)np->reg + ncr_offw(o))
-#define OUTL_OFF(o, val)	writel_l2b((val), (char *)np->reg + (o))
-
-#else
-
-#define INW_OFF(o)		readw_raw((char *)np->reg + ncr_offw(o))
-#define INL_OFF(o)		readl_raw((char *)np->reg + (o))
-
-#define OUTW_OFF(o, val)	writew_raw((val), (char *)np->reg + ncr_offw(o))
-#define OUTL_OFF(o, val)	writel_raw((val), (char *)np->reg + (o))
-
-#endif
-
-#endif	/* defined NCR_IOMAPPED */
-
-#define INB(r)		INB_OFF (offsetof(struct ncr_reg,r))
-#define INW(r)		INW_OFF (offsetof(struct ncr_reg,r))
-#define INL(r)		INL_OFF (offsetof(struct ncr_reg,r))
-
-#define OUTB(r, val)	OUTB_OFF (offsetof(struct ncr_reg,r), (val))
-#define OUTW(r, val)	OUTW_OFF (offsetof(struct ncr_reg,r), (val))
-#define OUTL(r, val)	OUTL_OFF (offsetof(struct ncr_reg,r), (val))
-
-/*
-**	Set bit field ON, OFF 
-*/
-
-#define OUTONB(r, m)	OUTB(r, INB(r) | (m))
-#define OUTOFFB(r, m)	OUTB(r, INB(r) & ~(m))
-#define OUTONW(r, m)	OUTW(r, INW(r) | (m))
-#define OUTOFFW(r, m)	OUTW(r, INW(r) & ~(m))
-#define OUTONL(r, m)	OUTL(r, INL(r) | (m))
-#define OUTOFFL(r, m)	OUTL(r, INL(r) & ~(m))
-
 
 /*==========================================================
 **
@@ -1758,6 +983,8 @@ struct ccb {
 	**----------------------------------------------------------------
 	*/
 	Scsi_Cmnd	*cmd;		/* SCSI command 		*/
+	u_char		cdb_buf[16];	/* Copy of CDB			*/
+	u_char		sense_buf[64];
 	int		data_len;	/* Total data length		*/
 
 	/*----------------------------------------------------------------
@@ -1888,6 +1115,7 @@ struct ncb {
 	**	General controller parameters and configuration.
 	**----------------------------------------------------------------
 	*/
+	pcidev_t	pdev;
 	u_short		device_id;	/* PCI device id		*/
 	u_char		revision_id;	/* PCI device revision id	*/
 	u_char		bus;		/* PCI BUS number		*/
@@ -1956,6 +1184,7 @@ struct ncb {
 	u_char		order;		/* Tag order to use		*/
 	u_char		verbose;	/* Verbosity for this controller*/
 	int		ncr_cache;	/* Used for cache test at init.	*/
+	u_long		p_ncb;		/* BUS address of this NCB	*/
 
 	/*----------------------------------------------------------------
 	**	Command completion handling.
@@ -1969,6 +1198,9 @@ struct ncb {
 	**	Fields that should be removed or changed.
 	**----------------------------------------------------------------
 	*/
+#ifdef SCSI_NCR_PROFILE_SUPPORT
+	u_long		ktime;		/* Copy of kernel time		*/
+#endif
 	struct ccb	*ccb;		/* Global CCB			*/
 	struct usrcmd	user;		/* Command from user		*/
 	u_char		release_stage;	/* Synchronisation stage on release  */
@@ -2158,7 +1390,7 @@ static	void	ncb_profile	(ncb_p np, ccb_p cp);
 static	void	ncr_script_copy_and_bind
 				(ncb_p np, ncrcmd *src, ncrcmd *dst, int len);
 static  void    ncr_script_fill (struct script * scr, struct scripth * scripth);
-static	int	ncr_scatter	(ccb_p cp, Scsi_Cmnd *cmd);
+static	int	ncr_scatter	(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd);
 static	void	ncr_getsync	(ncb_p np, u_char sfac, u_char *fakp, u_char *scntl3p);
 static	void	ncr_setsync	(ncb_p np, ccb_p cp, u_char scntl3, u_char sxfer);
 static	void	ncr_setup_tags	(ncb_p np, u_char tn, u_char ln);
@@ -2188,25 +1420,6 @@ static void process_waiting_list(ncb_p np, int sts);
 #define requeue_waiting_list(np) process_waiting_list((np), DID_OK)
 #define reset_waiting_list(np) process_waiting_list((np), DID_RESET)
 
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-static  void	ncr_get_nvram		(ncr_device *devp, ncr_nvram *nvp);
-static	int	ncr_get_Symbios_nvram	(ncr_slot *np, Symbios_nvram *nvram);
-static	int	ncr_get_Tekram_nvram	(ncr_slot *np, Tekram_nvram *nvram);
-#endif
-
-/*==========================================================
-**
-**
-**      Global static data.
-**
-**
-**==========================================================
-*/
-
-#ifdef SCSI_NCR_DEBUG_INFO_SUPPORT
-static int ncr_debug = SCSI_NCR_DEBUG_FLAGS;
-#endif
-
 static inline char *ncr_name (ncb_p np)
 {
 	return np->inst_name;
@@ -2235,7 +1448,9 @@ static inline char *ncr_name (ncb_p np)
 #define	RELOC_SOFTC	0x40000000
 #define	RELOC_LABEL	0x50000000
 #define	RELOC_REGISTER	0x60000000
+#if 0
 #define	RELOC_KVAR	0x70000000
+#endif
 #define	RELOC_LABELH	0x80000000
 #define	RELOC_MASK	0xf0000000
 
@@ -2244,19 +1459,21 @@ static inline char *ncr_name (ncb_p np)
 #define PADDRH(label)   (RELOC_LABELH | offsetof(struct scripth, label))
 #define	RADDR(label)	(RELOC_REGISTER | REG(label))
 #define	FADDR(label,ofs)(RELOC_REGISTER | ((REG(label))+(ofs)))
+#if 0
 #define	KVAR(which)	(RELOC_KVAR | (which))
+#endif
 
+#if 0
 #define	SCRIPT_KVAR_JIFFIES	(0)
-
 #define	SCRIPT_KVAR_FIRST		SCRIPT_KVAR_JIFFIES
 #define	SCRIPT_KVAR_LAST		SCRIPT_KVAR_JIFFIES
-
 /*
  * Kernel variables referenced in the scripts.
  * THESE MUST ALL BE ALIGNED TO A 4-BYTE BOUNDARY.
  */
 static void *script_kvars[] __initdata =
 	{ (void *)&jiffies };
+#endif
 
 static	struct script script0 __initdata = {
 /*--------------------------< START >-----------------------*/ {
@@ -2427,7 +1644,7 @@ static	struct script script0 __initdata = {
 	**	... set a timestamp ...
 	*/
 	SCR_COPY (sizeof (u_long)),
-		KVAR(SCRIPT_KVAR_JIFFIES),
+		NADDR (ktime),
 		NADDR (header.stamp.command),
 #endif
 	/*
@@ -2540,7 +1757,7 @@ static	struct script script0 __initdata = {
 	**	set the timestamp.
 	*/
 	SCR_COPY (sizeof (u_long)),
-		KVAR(SCRIPT_KVAR_JIFFIES),
+		NADDR (ktime),
 		NADDR (header.stamp.status),
 #endif
 	/*
@@ -2776,7 +1993,7 @@ static	struct script script0 __initdata = {
 	**	and count the disconnects.
 	*/
 	SCR_COPY (sizeof (u_long)),
-		KVAR(SCRIPT_KVAR_JIFFIES),
+		NADDR (ktime),
 		NADDR (header.stamp.disconnect),
 	SCR_COPY (4),
 		NADDR (disc_phys),
@@ -2932,7 +2149,7 @@ static	struct script script0 __initdata = {
 	**      Set a time stamp for this reselection
 	*/
 	SCR_COPY (sizeof (u_long)),
-		KVAR(SCRIPT_KVAR_JIFFIES),
+		NADDR (ktime),
 		NADDR (header.stamp.reselect),
 #endif
 	/*
@@ -3825,11 +3042,15 @@ ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int len)
 			*/
 			relocs = 2;
 			tmp1 = src[0];
+#ifdef	RELOC_KVAR
 			if ((tmp1 & RELOC_MASK) == RELOC_KVAR)
 				tmp1 = 0;
+#endif
 			tmp2 = src[1];
+#ifdef	RELOC_KVAR
 			if ((tmp2 & RELOC_MASK) == RELOC_KVAR)
 				tmp2 = 0;
+#endif
 			if ((tmp1 ^ tmp2) & 3) {
 				printk (KERN_ERR"%s: ERROR1 IN SCRIPT at %d.\n",
 					ncr_name(np), (int) (src-start-1));
@@ -3882,7 +3103,7 @@ ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int len)
 				switch (old & RELOC_MASK) {
 				case RELOC_REGISTER:
 					new = (old & ~RELOC_MASK)
-						+ bus_dvma_to_mem(np->paddr);
+						+ pcivtobus(np->paddr);
 					break;
 				case RELOC_LABEL:
 					new = (old & ~RELOC_MASK) + np->p_script;
@@ -3891,8 +3112,9 @@ ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int len)
 					new = (old & ~RELOC_MASK) + np->p_scripth;
 					break;
 				case RELOC_SOFTC:
-					new = (old & ~RELOC_MASK) + vtophys(np);
+					new = (old & ~RELOC_MASK) + np->p_ncb;
 					break;
+#ifdef	RELOC_KVAR
 				case RELOC_KVAR:
 					if (((old & ~RELOC_MASK) <
 					     SCRIPT_KVAR_FIRST) ||
@@ -3902,6 +3124,7 @@ ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int len)
 					new = vtophys(script_kvars[old &
 					    ~RELOC_MASK]);
 					break;
+#endif
 				case 0:
 					/* Don't relocate a 0 address. */
 					if (old == 0) {
@@ -3941,17 +3164,6 @@ ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int len)
 
 struct host_data {
      struct ncb *ncb;
-
-     char ncb_align[CACHE_LINE_SIZE-1]; /* Filler for alignment */
-     struct ncb _ncb_data;
-
-     char ccb_align[CACHE_LINE_SIZE-1]; /* Filler for alignment */
-     struct ccb _ccb_data;
-
-     char scr_align[CACHE_LINE_SIZE-1]; /* Filler for alignment */
-     struct script script_data;
-
-     struct scripth scripth_data;
 };
 
 /*
@@ -4390,88 +3602,6 @@ static int __init ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 	return 0;
 }
 
-
-#ifdef SCSI_NCR_DEBUG_NVRAM
-
-void __init ncr_display_Symbios_nvram(ncb_p np, Symbios_nvram *nvram)
-{
-	int i;
-
-	/* display Symbios nvram host data */
-	printk(KERN_DEBUG "%s: HOST ID=%d%s%s%s%s%s\n",
-		ncr_name(np), nvram->host_id & 0x0f,
-		(nvram->flags  & SYMBIOS_SCAM_ENABLE)	? " SCAM"	:"",
-		(nvram->flags  & SYMBIOS_PARITY_ENABLE)	? " PARITY"	:"",
-		(nvram->flags  & SYMBIOS_VERBOSE_MSGS)	? " VERBOSE"	:"", 
-		(nvram->flags  & SYMBIOS_CHS_MAPPING)	? " CHS_ALT"	:"", 
-		(nvram->flags1 & SYMBIOS_SCAN_HI_LO)	? " HI_LO"	:"");
-
-	/* display Symbios nvram drive data */
-	for (i = 0 ; i < 15 ; i++) {
-		struct Symbios_target *tn = &nvram->target[i];
-		printk(KERN_DEBUG "%s-%d:%s%s%s%s WIDTH=%d SYNC=%d TMO=%d\n",
-		ncr_name(np), i,
-		(tn->flags & SYMBIOS_DISCONNECT_ENABLE)	? " DISC"	: "",
-		(tn->flags & SYMBIOS_SCAN_AT_BOOT_TIME)	? " SCAN_BOOT"	: "",
-		(tn->flags & SYMBIOS_SCAN_LUNS)		? " SCAN_LUNS"	: "",
-		(tn->flags & SYMBIOS_QUEUE_TAGS_ENABLED)? " TCQ"	: "",
-		tn->bus_width,
-		tn->sync_period / 4,
-		tn->timeout);
-	}
-}
-
-static u_char Tekram_boot_delay[7] __initdata = {3, 5, 10, 20, 30, 60, 120};
-
-void __init ncr_display_Tekram_nvram(ncb_p np, Tekram_nvram *nvram)
-{
-	int i, tags, boot_delay;
-	char *rem;
-
-	/* display Tekram nvram host data */
-	tags = 2 << nvram->max_tags_index;
-	boot_delay = 0;
-	if (nvram->boot_delay_index < 6)
-		boot_delay = Tekram_boot_delay[nvram->boot_delay_index];
-	switch((nvram->flags & TEKRAM_REMOVABLE_FLAGS) >> 6) {
-	default:
-	case 0:	rem = "";			break;
-	case 1: rem = " REMOVABLE=boot device";	break;
-	case 2: rem = " REMOVABLE=all";		break;
-	}
-
-	printk(KERN_DEBUG
-		"%s: HOST ID=%d%s%s%s%s%s%s%s%s%s BOOT DELAY=%d tags=%d\n",
-		ncr_name(np), nvram->host_id & 0x0f,
-		(nvram->flags1 & SYMBIOS_SCAM_ENABLE)	? " SCAM"	:"",
-		(nvram->flags & TEKRAM_MORE_THAN_2_DRIVES) ? " >2DRIVES"	:"",
-		(nvram->flags & TEKRAM_DRIVES_SUP_1GB)	? " >1GB"	:"",
-		(nvram->flags & TEKRAM_RESET_ON_POWER_ON) ? " RESET"	:"",
-		(nvram->flags & TEKRAM_ACTIVE_NEGATION)	? " ACT_NEG"	:"",
-		(nvram->flags & TEKRAM_IMMEDIATE_SEEK)	? " IMM_SEEK"	:"",
-		(nvram->flags & TEKRAM_SCAN_LUNS)	? " SCAN_LUNS"	:"",
-		(nvram->flags1 & TEKRAM_F2_F6_ENABLED)	? " F2_F6"	:"",
-		rem, boot_delay, tags);
-
-	/* display Tekram nvram drive data */
-	for (i = 0; i <= 15; i++) {
-		int sync, j;
-		struct Tekram_target *tn = &nvram->target[i];
-		j = tn->sync_index & 0xf;
-		sync = Tekram_sync[j];
-		printk(KERN_DEBUG "%s-%d:%s%s%s%s%s%s PERIOD=%d\n",
-		ncr_name(np), i,
-		(tn->flags & TEKRAM_PARITY_CHECK)	? " PARITY"	: "",
-		(tn->flags & TEKRAM_SYNC_NEGO)		? " SYNC"	: "",
-		(tn->flags & TEKRAM_DISCONNECT_ENABLE)	? " DISC"	: "",
-		(tn->flags & TEKRAM_START_CMD)		? " START"	: "",
-		(tn->flags & TEKRAM_TAGGED_COMMANDS)	? " TCQ"	: "",
-		(tn->flags & TEKRAM_WIDE_NEGO)		? " WIDE"	: "",
-		sync);
-	}
-}
-#endif /* SCSI_NCR_DEBUG_NVRAM */
-
 /*
 **	Host attach and initialisations.
 **
@@ -4486,7 +3616,7 @@ static int __init
 ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 {
         struct host_data *host_data;
-	ncb_p np;
+	ncb_p np = 0;
         struct Scsi_Host *instance = 0;
 	u_long flags = 0;
 	ncr_nvram *nvram = device->nvram;
@@ -4512,21 +3642,25 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	*/
         if (!(instance = scsi_register(tpnt, sizeof(*host_data))))
 	        goto attach_error;
-
-	/*
-	**	Initialize structure.
-	*/
 	host_data = (struct host_data *) instance->hostdata;
-	bzero (host_data, sizeof(*host_data));
 
 	/*
-	**	Align np and first ccb to 32 boundary for cache line 
-	**	bursting when copying the global header.
+	**	Allocate the host control block.
 	*/
-	np = (ncb_p) (((u_long) &host_data->_ncb_data) & CACHE_LINE_MASK);
+	np = __m_calloc_dma(device->pdev, sizeof(struct ncb), "NCB");
+	if (!np)
+		goto attach_error;
 	NCR_INIT_LOCK_NCB(np);
+	np->pdev  = device->pdev;
+	np->p_ncb = vtobus(np);
 	host_data->ncb = np;
-	np->ccb = (ccb_p) (((u_long) &host_data->_ccb_data) & CACHE_LINE_MASK);
+
+	/*
+	**	Allocate the default CCB.
+	*/
+	np->ccb = (ccb_p) m_calloc_dma(sizeof(struct ccb), "CCB");
+	if (!np->ccb)
+		goto attach_error;
 
 	/*
 	**	Store input informations in the host data structure.
@@ -4545,9 +3679,17 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	np->maxburst	= device->chip.burst_max;
 	np->myaddr	= device->host_id;
 
+	/*
+	**	Allocate SCRIPTS areas.
+	*/
 	np->script0  = (struct script *)
-		(((u_long) &host_data->script_data) & CACHE_LINE_MASK);
-	np->scripth0 = &host_data->scripth_data;
+			m_calloc_dma(sizeof(struct script), "SCRIPT");
+	if (!np->script0)
+		goto attach_error;
+	np->scripth0  = (struct scripth *)
+			m_calloc_dma(sizeof(struct scripth), "SCRIPTH");
+	if (!np->scripth0)
+		goto attach_error;
 
 	/*
 	**    Initialize timer structure
@@ -4599,12 +3741,12 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 		switch(nvram->type) {
 		case SCSI_NCR_SYMBIOS_NVRAM:
 #ifdef SCSI_NCR_DEBUG_NVRAM
-			ncr_display_Symbios_nvram(np, &nvram->data.Symbios);
+			ncr_display_Symbios_nvram(&nvram->data.Symbios);
 #endif
 			break;
 		case SCSI_NCR_TEKRAM_NVRAM:
 #ifdef SCSI_NCR_DEBUG_NVRAM
-			ncr_display_Tekram_nvram(np, &nvram->data.Tekram);
+			ncr_display_Tekram_nvram(&nvram->data.Tekram);
 #endif
 			break;
 		default:
@@ -4656,13 +3798,14 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	ncr_script_fill (&script0, &scripth0);
 
 	np->scripth	= np->scripth0;
-	np->p_scripth	= vtophys(np->scripth);
+	np->p_scripth	= vtobus(np->scripth);
 
-	np->p_script	= (np->paddr2) ? bus_dvma_to_mem(np->paddr2) : vtophys(np->script0);
+	np->p_script	= (np->paddr2) ?
+			  pcivtobus(np->paddr2) : vtobus(np->script0);
 
 	ncr_script_copy_and_bind (np, (ncrcmd *) &script0, (ncrcmd *) np->script0, sizeof(struct script));
 	ncr_script_copy_and_bind (np, (ncrcmd *) &scripth0, (ncrcmd *) np->scripth0, sizeof(struct scripth));
-	np->ccb->p_ccb		= vtophys (np->ccb);
+	np->ccb->p_ccb		= vtobus (np->ccb);
 
 	/*
 	**    Patch the script for LED support.
@@ -4798,6 +3941,8 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 attach_error:
 	if (!instance) return -1;
 	printk(KERN_INFO "%s: detaching...\n", ncr_name(np));
+	if (!np)
+		goto unregister;
 #ifndef NCR_IOMAPPED
 	if (np->vaddr) {
 #ifdef DEBUG_NCR53C8XX
@@ -4823,6 +3968,15 @@ attach_error:
 #endif
 		free_irq(np->irq, np);
 	}
+	if (np->scripth0)
+		m_free_dma(np->scripth0, sizeof(struct scripth), "SCRIPTH");
+	if (np->script0)
+		m_free_dma(np->script0, sizeof(struct script), "SCRIPT");
+	if (np->ccb)
+		m_free_dma(np->ccb, sizeof(struct ccb), "CCB");
+	m_free_dma(np, sizeof(struct ncb), "NCB");
+
+unregister:
 	scsi_unregister(instance);
 
         return -1;
@@ -4850,6 +4004,7 @@ attach_error:
 */
 static inline void ncr_queue_done_cmd(ncb_p np, Scsi_Cmnd *cmd)
 {
+	unmap_scsi_data(np, cmd);
 	cmd->host_scribble = (char *) np->done_list;
 	np->done_list = cmd;
 }
@@ -5105,7 +4260,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	**----------------------------------------------------
 	*/
 
-	segments = ncr_scatter (cp, cp->cmd);
+	segments = ncr_scatter (np, cp, cp->cmd);
 
 	if (segments < 0) {
 		ncr_free_ccb(np, cp);
@@ -5114,47 +4269,24 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 
 	/*----------------------------------------------------
 	**
-	**	Guess xfer direction.
-	**	Spare some CPU by testing here frequently opcode.
+	**	Determine xfer direction.
 	**
 	**----------------------------------------------------
 	*/
 	if (!cp->data_len)
-		direction = 0;
-	else {
-		switch((int) cmd->cmnd[0]) {
-		case 0x08:  /*	READ(6)				08 */
-		case 0x28:  /*	READ(10)			28 */
-		case 0xA8:  /*	READ(12)			A8 */
-			direction = XFER_IN;
-			break;
-		case 0x0A:  /*	WRITE(6)			0A */
-		case 0x2A:  /*	WRITE(10)			2A */
-		case 0xAA:  /*	WRITE(12)			AA */
-			direction = XFER_OUT;
-			break;
-		default:
-			direction = (XFER_IN|XFER_OUT);
-			break;
-		}
-	}
-
-	/*----------------------------------------------------
-	**
-	**	Set the SAVED_POINTER.
-	**
-	**----------------------------------------------------
-	*/
+		direction = SCSI_DATA_NONE;
+	else
+		direction = scsi_data_direction(cmd);
 
 	/*
-	**	Default to no data transfer.
+	**	If data direction is UNKNOWN, speculate DATA_READ 
+	**	but prepare alternate pointers for WRITE in case 
+	**	of our speculation will be just wrong.
+	**	SCRIPTS will swap values if needed.
 	*/
-	lastp = goalp = NCB_SCRIPT_PHYS (np, no_data);
-
-	/*
-	**	Compute data out pointers, if needed.
-	*/
-	if (direction & XFER_OUT) {
+	switch(direction) {
+	case SCSI_DATA_UNKNOWN:
+	case SCSI_DATA_WRITE:
 		goalp = NCB_SCRIPT_PHYS (np, data_out2) + 8;
 		if (segments <= MAX_SCATTERL)
 			lastp = goalp - 8 - (segments * 16);
@@ -5162,21 +4294,12 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 			lastp = NCB_SCRIPTH_PHYS (np, hdata_out2);
 			lastp -= (segments - MAX_SCATTERL) * 16;
 		}
-		/*
-		**	If actual data direction is unknown, save pointers 
-		**	in header. The SCRIPTS will swap them to current 
-		**	if target decision will be data out.
-		*/
-		if (direction & XFER_IN) {
-			cp->phys.header.wgoalp	= cpu_to_scr(goalp);
-			cp->phys.header.wlastp	= cpu_to_scr(lastp);
-		}
-	}
-
-	/*
-	**	Compute data in pointers, if needed.
-	*/
-	if (direction & XFER_IN) {
+		if (direction != SCSI_DATA_UNKNOWN)
+			break;
+		cp->phys.header.wgoalp	= cpu_to_scr(goalp);
+		cp->phys.header.wlastp	= cpu_to_scr(lastp);
+		/* fall through */
+	case SCSI_DATA_READ:
 		goalp = NCB_SCRIPT_PHYS (np, data_in2) + 8;
 		if (segments <= MAX_SCATTERL)
 			lastp = goalp - 8 - (segments * 16);
@@ -5184,6 +4307,11 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 			lastp = NCB_SCRIPTH_PHYS (np, hdata_in2);
 			lastp -= (segments - MAX_SCATTERL) * 16;
 		}
+		break;
+	default:
+	case SCSI_DATA_NONE:
+		lastp = goalp = NCB_SCRIPT_PHYS (np, no_data);
+		break;
 	}
 
 	/*
@@ -5193,7 +4321,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	cp->phys.header.lastp = cpu_to_scr(lastp);
 	cp->phys.header.goalp = cpu_to_scr(goalp);
 
-	if ((direction & (XFER_IN|XFER_OUT)) == (XFER_IN|XFER_OUT))
+	if (direction == SCSI_DATA_UNKNOWN)
 		cp->phys.header.savep = 
 			cpu_to_scr(NCB_SCRIPTH_PHYS (np, data_io));
 	else
@@ -5236,7 +4364,8 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	/*
 	**	command
 	*/
-	cp->phys.cmd.addr		= cpu_to_scr(vtophys (&cmd->cmnd[0]));
+	memcpy(cp->cdb_buf, cmd->cmnd, MIN(cmd->cmd_len, sizeof(cp->cdb_buf)));
+	cp->phys.cmd.addr		= cpu_to_scr(CCB_PHYS (cp, cdb_buf[0]));
 	cp->phys.cmd.size		= cpu_to_scr(cmd->cmd_len);
 
 	/*
@@ -5684,7 +4813,7 @@ static int ncr_detach(ncb_p np)
 #ifdef DEBUG_NCR53C8XX
 	printk("%s: freeing ccb (%lx)\n", ncr_name(np), (u_long) cp);
 #endif
-		m_free(cp, sizeof(*cp));
+		m_free_dma(cp, sizeof(*cp), "CCB");
 	}
 
 	/*
@@ -5700,11 +4829,19 @@ static int ncr_detach(ncb_p np)
 	printk("%s: freeing lp (%lx)\n", ncr_name(np), (u_long) lp);
 #endif
 				if (lp->jump_ccb != &lp->jump_ccb_0)
-					m_free(lp->jump_ccb, 256);
-				m_free(lp, sizeof(*lp));
+					m_free_dma(lp->jump_ccb,256,"JUMP_CCB");
+				m_free_dma(lp, sizeof(*lp), "LCB");
 			}
 		}
 	}
+
+	if (np->scripth0)
+		m_free_dma(np->scripth0, sizeof(struct scripth), "SCRIPTH");
+	if (np->script0)
+		m_free_dma(np->script0, sizeof(struct script), "SCRIPT");
+	if (np->ccb)
+		m_free_dma(np->ccb, sizeof(struct ccb), "CCB");
+	m_free_dma(np, sizeof(struct ncb), "NCB");
 
 	printk("%s: host resources successfully released\n", ncr_name(np));
 
@@ -5859,6 +4996,7 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		*/
 		if (cmd->cmnd[0] == 0x12 && !(cmd->cmnd[1] & 0x3) &&
 		    cmd->cmnd[4] >= 7 && !cmd->use_sg) {
+			sync_scsi_data(np, cmd);	/* SYNC the data */
 			ncr_setup_lcb (np, cmd->target, cmd->lun,
 				       (char *) cmd->request_buffer);
 		}
@@ -5884,6 +5022,12 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		**   Check condition code
 		*/
 		cmd->result = ScsiResult(DID_OK, S_CHECK_COND);
+
+		/*
+		**	Copy back sense data to caller's buffer.
+		*/
+		memcpy(cmd->sense_buffer, cp->sense_buf,
+		       MIN(sizeof(cmd->sense_buffer), sizeof(cp->sense_buf)));
 
 		if (DEBUG_FLAGS & (DEBUG_RESULT|DEBUG_TINY)) {
 			u_char * p = (u_char*) & cmd->sense_buffer;
@@ -6260,7 +5404,7 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 		if (bootverbose)
 			printk ("%s: Downloading SCSI SCRIPTS.\n",
 				ncr_name(np));
-		OUTL (nc_scratcha, vtophys(np->script0));
+		OUTL (nc_scratcha, vtobus(np->script0));
 		OUTL (nc_dsp, NCB_SCRIPTH_PHYS (np, start_ram));
 	}
 	else
@@ -6774,7 +5918,12 @@ static void ncr_timeout (ncb_p np)
 		return;
 	}
 
+#ifdef SCSI_NCR_PROFILE_SUPPORT
+	np->ktime = thistime;
+	np->timer.expires = ktime_get(1);
+#else
 	np->timer.expires = ktime_get(SCSI_NCR_TIMER_INTERVAL);
+#endif
 	add_timer(&np->timer);
 
 	/*
@@ -7289,6 +6438,7 @@ static void ncr_int_ma (ncb_p np)
 	u_int32	dsp;
 	u_int32	dsa;
 	u_int32	nxtdsp;
+	u_int32	newtmp;
 	u_int32	*vdsp;
 	u_int32	oadr, olen;
 	u_int32	*tblp;
@@ -7383,11 +6533,11 @@ static void ncr_int_ma (ncb_p np)
 		nxtdsp = dsp;
 	}
 	else if (cp) {
-		if	(dsp == vtophys (&cp->patch[2])) {
+		if	(dsp == CCB_PHYS (cp, patch[2])) {
 			vdsp = &cp->patch[0];
 			nxtdsp = scr_to_cpu(vdsp[3]);
 		}
-		else if (dsp == vtophys (&cp->patch[6])) {
+		else if (dsp == CCB_PHYS (cp, patch[6])) {
 			vdsp = &cp->patch[4];
 			nxtdsp = scr_to_cpu(vdsp[3]);
 		}
@@ -7482,7 +6632,11 @@ static void ncr_int_ma (ncb_p np)
 	*/
 
 	newcmd = cp->patch;
-	if (cp->phys.header.savep == cpu_to_scr(vtophys (newcmd))) newcmd+=4;
+	newtmp = CCB_PHYS (cp, patch);
+	if (newtmp == scr_to_cpu(cp->phys.header.savep)) {
+		newcmd = &cp->patch[4];
+		newtmp = CCB_PHYS (cp, patch[4]);
+	}
 
 	/*
 	**	fillin the commands
@@ -7509,7 +6663,7 @@ static void ncr_int_ma (ncb_p np)
 #ifdef SCSI_NCR_PROFILE_SUPPORT
 	np->profile.num_break++;
 #endif
-	OUTL (nc_temp, vtophys (newcmd));
+	OUTL (nc_temp, newtmp);
 	OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, dispatch));
 	return;
 
@@ -7678,15 +6832,14 @@ static void ncr_sir_to_redo(ncb_p np, int num, ccb_p cp)
 		*/
 		cp->sensecmd[0]		= 0x03;
 		cp->sensecmd[1]		= cmd->lun << 5;
-		cp->sensecmd[4]		= sizeof(cmd->sense_buffer);
+		cp->sensecmd[4]		= sizeof(cp->sense_buf);
 
 		/*
 		**	sense data
 		*/
-		cp->phys.sense.addr	=
-				cpu_to_scr(vtophys (&cmd->sense_buffer[0]));
-		cp->phys.sense.size	=
-				cpu_to_scr(sizeof(cmd->sense_buffer));
+		bzero(cp->sense_buf, sizeof(cp->sense_buf));
+		cp->phys.sense.addr	= cpu_to_scr(CCB_PHYS(cp,sense_buf[0]));
+		cp->phys.sense.size	= cpu_to_scr(sizeof(cp->sense_buf));
 
 		/*
 		**	requeue the command.
@@ -8395,7 +7548,7 @@ static void ncr_free_ccb (ncb_p np, ccb_p cp)
 
 
 #define ncr_reg_bus_addr(r) \
-	(bus_dvma_to_mem(np->paddr) + offsetof (struct ncr_reg, r))
+	(pcivtobus(np->paddr) + offsetof (struct ncr_reg, r))
 
 /*------------------------------------------------------------------------
 **	Initialize the fixed part of a CCB structure.
@@ -8409,7 +7562,7 @@ static void ncr_init_ccb(ncb_p np, ccb_p cp)
 	/*
 	**	Remember virtual and bus address of this ccb.
 	*/
-	cp->p_ccb 	   = vtophys(cp);
+	cp->p_ccb 	   = vtobus(cp);
 	cp->phys.header.cp = cp;
 
 	/*
@@ -8424,10 +7577,10 @@ static void ncr_init_ccb(ncb_p np, ccb_p cp)
 	**	JUMP @(sched_point)
 	*/
 	cp->start.setup_dsa[0]	 = cpu_to_scr(copy_4);
-	cp->start.setup_dsa[1]	 = cpu_to_scr(vtophys(&cp->start.p_phys));
+	cp->start.setup_dsa[1]	 = cpu_to_scr(CCB_PHYS(cp, start.p_phys));
 	cp->start.setup_dsa[2]	 = cpu_to_scr(ncr_reg_bus_addr(nc_dsa));
 	cp->start.schedule.l_cmd = cpu_to_scr(SCR_JUMP);
-	cp->start.p_phys	 = cpu_to_scr(vtophys(&cp->phys));
+	cp->start.p_phys	 = cpu_to_scr(CCB_PHYS(cp, phys));
 
 	bcopy(&cp->start, &cp->restart, sizeof(cp->restart));
 
@@ -8450,14 +7603,9 @@ static void ncr_alloc_ccb(ncb_p np, u_char tn, u_char ln)
 	/*
 	**	Allocate memory for this CCB.
 	*/
-	cp = m_alloc(sizeof(struct ccb), 5);
+	cp = m_calloc_dma(sizeof(struct ccb), "CCB");
 	if (!cp)
 		return;
-
-	if (DEBUG_FLAGS & DEBUG_ALLOC) {
-		PRINT_LUN(np, tn, ln);
-		printk ("new ccb @%p.\n", cp);
-	}
 
 	/*
 	**	Count it and initialyze it.
@@ -8516,7 +7664,7 @@ static void ncr_init_tcb (ncb_p np, u_char tn)
 	**	COPY @(tp->sval), @(sxfer)
 	*/
 	tp->getscr[0] =	cpu_to_scr(copy_1);
-	tp->getscr[1] = cpu_to_scr(vtophys (&tp->sval));
+	tp->getscr[1] = cpu_to_scr(vtobus (&tp->sval));
 	tp->getscr[2] = cpu_to_scr(ncr_reg_bus_addr(nc_sxfer));
   
 	/*
@@ -8524,7 +7672,7 @@ static void ncr_init_tcb (ncb_p np, u_char tn)
 	**	COPY @(tp->wval), @(scntl3)
 	*/
 	tp->getscr[3] =	cpu_to_scr(copy_1);
-	tp->getscr[4] = cpu_to_scr(vtophys (&tp->wval));
+	tp->getscr[4] = cpu_to_scr(vtobus (&tp->wval));
 	tp->getscr[5] = cpu_to_scr(ncr_reg_bus_addr(nc_scntl3));
 
 	/*
@@ -8549,7 +7697,7 @@ static void ncr_init_tcb (ncb_p np, u_char tn)
 	/*
 	**	Link this target control block to the JUMP chain.
 	*/
-	np->jump_tcb[th].l_paddr = cpu_to_scr(vtophys (&tp->jump_tcb));
+	np->jump_tcb[th].l_paddr = cpu_to_scr(vtobus (&tp->jump_tcb));
 
 	/*
 	**	These assert's should be moved at driver initialisations.
@@ -8584,16 +7732,11 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	/*
 	**	Allocate the lcb.
 	*/
-	lp = m_alloc(sizeof(struct lcb), 3);
+	lp = m_calloc_dma(sizeof(struct lcb), "LCB");
 	if (!lp)
 		goto fail;
 	bzero(lp, sizeof(*lp));
 	tp->lp[ln] = lp;
-
-	if (DEBUG_FLAGS & DEBUG_ALLOC) {
-		PRINT_LUN(np, tn, ln);
-		printk ("new lcb @%p.\n", lp);
-	}
 
 	/*
 	**	Initialize the target control block if not yet.
@@ -8615,7 +7758,7 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	*/
 	lp->maxnxs	= 1;
 	lp->jump_ccb	= &lp->jump_ccb_0;
-	lp->p_jump_ccb	= cpu_to_scr(vtophys(lp->jump_ccb));
+	lp->p_jump_ccb	= cpu_to_scr(vtobus(lp->jump_ccb));
 
 	/*
 	**	Initilialyze the reselect script:
@@ -8633,7 +7776,7 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	lp->jump_lcb.l_paddr = tp->jump_lcb[lh].l_paddr;
 
 	lp->load_jump_ccb[0] = cpu_to_scr(copy_4);
-	lp->load_jump_ccb[1] = cpu_to_scr(vtophys (&lp->p_jump_ccb));
+	lp->load_jump_ccb[1] = cpu_to_scr(vtobus (&lp->p_jump_ccb));
 	lp->load_jump_ccb[2] = cpu_to_scr(ncr_reg_bus_addr(nc_temp));
 
 	lp->jump_tag.l_cmd   = cpu_to_scr(SCR_JUMP);
@@ -8642,7 +7785,7 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	/*
 	**	Link this lun control block to the JUMP chain.
 	*/
-	tp->jump_lcb[lh].l_paddr = cpu_to_scr(vtophys (&lp->jump_lcb));
+	tp->jump_lcb[lh].l_paddr = cpu_to_scr(vtobus (&lp->jump_lcb));
 
 	/*
 	**	Initialize command queuing control.
@@ -8726,12 +7869,12 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 	*/
 	if ((inq_byte7 & INQ7_QUEUE) && lp->jump_ccb == &lp->jump_ccb_0) {
 		int i;
-		lp->jump_ccb = m_alloc(256, 8);
+		lp->jump_ccb = m_calloc_dma(256, "JUMP_CCB");
 		if (!lp->jump_ccb) {
 			lp->jump_ccb = &lp->jump_ccb_0;
 			goto fail;
 		}
-		lp->p_jump_ccb = cpu_to_scr(vtophys(lp->jump_ccb));
+		lp->p_jump_ccb = cpu_to_scr(vtobus(lp->jump_ccb));
 		for (i = 0 ; i < 64 ; i++)
 			lp->jump_ccb[i] =
 				cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l_q));
@@ -8783,7 +7926,7 @@ fail:
 **	sizes to the data segment array.
 */
 
-static	int	ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
+static	int	ncr_scatter(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd)
 {
 	struct scr_tblmove *data;
 	int segment	= 0;
@@ -8794,8 +7937,10 @@ static	int	ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
 
 	if (!use_sg) {
 		if (cmd->request_bufflen) {
+			u_long baddr = map_scsi_single_data(np, cmd);
+
 			data = &data[MAX_SCATTER - 1];
-			data[0].addr = cpu_to_scr(vtophys(cmd->request_buffer));
+			data[0].addr = cpu_to_scr(baddr);
 			data[0].size = cpu_to_scr(cmd->request_bufflen);
 			cp->data_len = cmd->request_bufflen;
 			segment = 1;
@@ -8804,13 +7949,16 @@ static	int	ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
 	else if (use_sg <= MAX_SCATTER) {
 		struct scatterlist *scatter = (struct scatterlist *)cmd->buffer;
 
+		use_sg = map_scsi_sg_data(np, cmd);
 		data = &data[MAX_SCATTER - use_sg];
+
 		while (segment < use_sg) {
-			data[segment].addr =
-				cpu_to_scr(vtophys(scatter[segment].address));
-			data[segment].size =
-				cpu_to_scr(scatter[segment].length);
-			cp->data_len	   += scatter[segment].length;
+			u_long baddr = scsi_sg_dma_address(&scatter[segment]);
+			unsigned int len = scsi_sg_dma_len(&scatter[segment]);
+
+			data[segment].addr = cpu_to_scr(baddr);
+			data[segment].size = cpu_to_scr(len);
+			cp->data_len	  += len;
 			++segment;
 		}
 	}
@@ -9231,832 +8379,9 @@ static void __init ncr_getclock (ncb_p np, int mult)
 
 /*===================== LINUX ENTRY POINTS SECTION ==========================*/
 
-#ifndef uchar
-#define uchar unsigned char
-#endif
-
-#ifndef ushort
-#define ushort unsigned short
-#endif
-
-#ifndef ulong
-#define ulong unsigned long
-#endif
-
-/* ---------------------------------------------------------------------
-**
-**	Driver setup from the boot command line
-**
-** ---------------------------------------------------------------------
-*/
-
-#ifdef MODULE
-#define	ARG_SEP	' '
-#else
-#define	ARG_SEP	','
-#endif
-
-int __init ncr53c8xx_setup(char *str)
-{
-#ifdef SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
-	char *cur = str;
-	char *pc, *pv;
-	int val;
-	int base;
-	int c;
-	int xi = 0;
-
-	while (cur != NULL && (pc = strchr(cur, ':')) != NULL) {
-		char *pe;
-
-		val = 0;
-		pv = pc;
-		c = *++pv;
-
-		if	(c == 'n')
-			val = 0;
-		else if	(c == 'y')
-			val = 1;
-		else {
-			base = 0;
-			val = (int) simple_strtoul(pv, &pe, base);
-		}
-		if	(!strncmp(cur, "tags:", 5)) {
-			int i;
-			driver_setup.default_tags = val;
-			if (pe && *pe == '/') {
-				i = 0;
-				while (*pe && *pe != ARG_SEP && 
-					i < sizeof(driver_setup.tag_ctrl)-1) {
-					driver_setup.tag_ctrl[i++] = *pe++;
-				}
-				driver_setup.tag_ctrl[i] = '\0';
-			}
-		}
-		else if	(!strncmp(cur, "mpar:", 5))
-			driver_setup.master_parity	= val;
-		else if	(!strncmp(cur, "spar:", 5))
-			driver_setup.scsi_parity	= val;
-		else if	(!strncmp(cur, "disc:", 5))
-			driver_setup.disconnection	= val;
-		else if	(!strncmp(cur, "specf:", 6))
-			driver_setup.special_features = val;
-		else if	(!strncmp(cur, "ultra:", 6))
-			driver_setup.ultra_scsi	= val;
-		else if	(!strncmp(cur, "fsn:", 4))
-			driver_setup.force_sync_nego	= val;
-		else if	(!strncmp(cur, "revprob:", 8))
-			driver_setup.reverse_probe	= val;
-		else if	(!strncmp(cur, "sync:", 5))
-			driver_setup.default_sync	= val;
-		else if	(!strncmp(cur, "verb:", 5))
-			driver_setup.verbose	= val;
-		else if	(!strncmp(cur, "debug:", 6))
-			driver_setup.debug	= val;
-		else if	(!strncmp(cur, "burst:", 6))
-			driver_setup.burst_max	= val;
-		else if	(!strncmp(cur, "led:", 4))
-			driver_setup.led_pin	= val;
-		else if	(!strncmp(cur, "wide:", 5))
-			driver_setup.max_wide	= val? 1:0;
-		else if	(!strncmp(cur, "settle:", 7))
-			driver_setup.settle_delay= val;
-		else if	(!strncmp(cur, "diff:", 5))
-			driver_setup.diff_support= val;
-		else if	(!strncmp(cur, "irqm:", 5))
-			driver_setup.irqm	= val;
-		else if	(!strncmp(cur, "pcifix:", 7))
-			driver_setup.pci_fix_up	= val;
-		else if	(!strncmp(cur, "buschk:", 7))
-			driver_setup.bus_check	= val;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-		else if	(!strncmp(cur, "nvram:", 6))
-			driver_setup.use_nvram	= val;
-#endif
-
-		else if	(!strncmp(cur, "safe:", 5) && val)
-			memcpy(&driver_setup, &driver_safe_setup, sizeof(driver_setup));
-		else if	(!strncmp(cur, "excl:", 5)) {
-			if (xi < SCSI_NCR_MAX_EXCLUDES)
-				driver_setup.excludes[xi++] = val;
-		}
-		else if	(!strncmp(cur, "hostid:", 7))
-			driver_setup.host_id	= val;
-		else
-			printk("ncr53c8xx_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
-
-		if ((cur = strchr(cur, ARG_SEP)) != NULL)
-			++cur;
-	}
-#endif /* SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT */
-	return 0;
-}
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,13)
-#ifndef MODULE
-__setup("ncr53c8xx=", ncr53c8xx_setup);
-#endif
-#endif
-
-static int 
-ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device);
-
-/*
-**   Linux entry point for NCR53C8XX devices detection routine.
-**
-**   Called by the middle-level scsi drivers at initialization time,
-**   or at module installation.
-**
-**   Read the PCI configuration and try to attach each
-**   detected NCR board.
-**
-**   If NVRAM is present, try to attach boards according to 
-**   the used defined boot order.
-**
-**   Returns the number of boards successfully attached.
-*/
-
-static void __init ncr_print_driver_setup(void)
-{
-#define YesNo(y)	y ? 'y' : 'n'
-	printk ("ncr53c8xx: setup=disc:%c,specf:%d,ultra:%d,tags:%d,sync:%d,"
-		"burst:%d,wide:%c,diff:%d,revprob:%c,buschk:0x%x\n",
-		YesNo(driver_setup.disconnection),
-		driver_setup.special_features,
-		driver_setup.ultra_scsi,
-		driver_setup.default_tags,
-		driver_setup.default_sync,
-		driver_setup.burst_max,
-		YesNo(driver_setup.max_wide),
-		driver_setup.diff_support,
-		YesNo(driver_setup.reverse_probe),
-		driver_setup.bus_check);
-
-	printk ("ncr53c8xx: setup=mpar:%c,spar:%c,fsn=%c,verb:%d,debug:0x%x,"
-		"led:%c,settle:%d,irqm:%d,nvram:0x%x,pcifix:0x%x\n",
-		YesNo(driver_setup.master_parity),
-		YesNo(driver_setup.scsi_parity),
-		YesNo(driver_setup.force_sync_nego),
-		driver_setup.verbose,
-		driver_setup.debug,
-		YesNo(driver_setup.led_pin),
-		driver_setup.settle_delay,
-		driver_setup.irqm,
-		driver_setup.use_nvram,
-		driver_setup.pci_fix_up);
-#undef YesNo
-}
-
-/*
-**   NCR53C8XX devices description table and chip ids list.
-*/
-
-static ncr_chip	ncr_chip_table[] __initdata	= SCSI_NCR_CHIP_TABLE;
-static ushort	ncr_chip_ids[]   __initdata	= SCSI_NCR_CHIP_IDS;
-
-
-/*===================================================================
-**    Detect all 53c8xx hosts and then attach them.
-**
-**    If we are using NVRAM, once all hosts are detected, we need to 
-**    check any NVRAM for boot order in case detect and boot order 
-**    differ and attach them using the order in the NVRAM.
-**
-**    If no NVRAM is found or data appears invalid attach boards in 
-**    the the order they are detected.
-**===================================================================
-*/
-int __init ncr53c8xx_detect(Scsi_Host_Template *tpnt)
-{
-	pcidev_t pcidev;
-	int i, j, chips, hosts, count;
-	int attach_count = 0;
-	ncr_device *devtbl, *devp;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	ncr_nvram  nvram0, nvram, *nvp;
-#endif
-
-	/*
-	**    PCI is required.
-	*/
-	if (!pci_present())
-		return 0;
-
-	/*
-	**    Initialize driver general stuff.
-	*/
-#ifdef SCSI_NCR_PROC_INFO_SUPPORT
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
-     tpnt->proc_dir  = &proc_scsi_ncr53c8xx;
-#else
-     tpnt->proc_name = "ncr53c8xx";
-#endif
-     tpnt->proc_info = ncr53c8xx_proc_info;
-#endif
-
-#if	defined(SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT) && defined(MODULE)
-if (ncr53c8xx)
-	ncr53c8xx_setup(ncr53c8xx);
-#endif
-#ifdef SCSI_NCR_DEBUG_INFO_SUPPORT
-	ncr_debug = driver_setup.debug;
-#endif
-
-	if (initverbose >= 2)
-		ncr_print_driver_setup();
-
-	/*
-	**	Allocate the device table since we donnot want to 
-	**	overflow the kernel stack.
-	**	1 x 4K PAGE is enough for more than 40 devices for i386.
-	*/
-	devtbl = kmalloc(4000, GFP_ATOMIC);
-	if (!devtbl)
-		return 0;
-
-	/* 
-	**    Detect all 53c8xx hosts.
-	**    Save the first Symbios NVRAM content if any 
-	**    for the boot order.
-	*/
-	chips	= sizeof(ncr_chip_ids)	/ sizeof(ncr_chip_ids[0]);
-	hosts	= 4000			/ sizeof(*devtbl);
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	nvp = (driver_setup.use_nvram & 0x1) ? &nvram0 : 0;
-#endif
-	j = 0;
-	count = 0;
-	pcidev = PCIDEV_NULL; 
-	while (1) {
-		char *msg = "";
-		if (count >= hosts)
-			break;
-		if (j >= chips)
-			break;
-		i = driver_setup.reverse_probe ? chips - 1 - j : j;
-		pcidev = pci_find_device(PCI_VENDOR_ID_NCR, ncr_chip_ids[i],
-					pcidev);
-		if (pcidev == PCIDEV_NULL) {
-			++j;
-			continue;
-		}
-		/* Some HW as the HP LH4 may report twice PCI devices */
-		for (i = 0; i < count ; i++) {
-			if (devtbl[i].slot.bus	     == PciBusNumber(pcidev) && 
-			    devtbl[i].slot.device_fn == PciDeviceFn(pcidev))
-				break;
-		}
-		if (i != count)	/* Ignore this device if we already have it */
-			continue;
-		devp = &devtbl[count];
-		devp->host_id = driver_setup.host_id;
-		devp->attach_done = 0;
-		if (ncr53c8xx_pci_init(tpnt, pcidev, devp)) {
-			continue;
-		}
-		++count;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-		if (nvp) {
-			ncr_get_nvram(devp, nvp);
-			switch(nvp->type) {
-			case SCSI_NCR_SYMBIOS_NVRAM:
-				/*
-				 *   Switch to the other nvram buffer, so that 
-				 *   nvram0 will contain the first Symbios 
-				 *   format NVRAM content with boot order.
-				 */
-				nvp = &nvram;
-				msg = "with Symbios NVRAM";
-				break;
-			case SCSI_NCR_TEKRAM_NVRAM:
-				msg = "with Tekram NVRAM";
-				break;
-			}
-		}
-#endif
-		printk(KERN_INFO "ncr53c8xx: 53c%s detected %s\n",
-		       devp->chip.name, msg);
-	}
-
-	/*
-	**    If we have found a SYMBIOS NVRAM, use first the NVRAM boot 
-	**    sequence as device boot order.
-	**    check devices in the boot record against devices detected. 
-	**    attach devices if we find a match. boot table records that 
-	**    do not match any detected devices will be ignored. 
-	**    devices that do not match any boot table will not be attached
-	**    here but will attempt to be attached during the device table 
-	**    rescan.
-	*/
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	if (!nvp || nvram0.type != SCSI_NCR_SYMBIOS_NVRAM)
-		goto next;
-	for (i = 0; i < 4; i++) {
-		Symbios_host *h = &nvram0.data.Symbios.host[i];
-		for (j = 0 ; j < count ; j++) {
-			devp = &devtbl[j];
-			if (h->device_fn != devp->slot.device_fn ||
-			    h->bus_nr	 != devp->slot.bus	 ||
-			    h->device_id != devp->chip.device_id)
-				continue;
-			if (devp->attach_done)
-				continue;
-			ncr_get_nvram(devp, nvp);
-			if (!ncr_attach (tpnt, attach_count, devp))
-				attach_count++;
-			devp->attach_done = 1;
-			break;
-		}
-	}
-next:
-#endif
-
-	/* 
-	**    Rescan device list to make sure all boards attached.
-	**    Devices without boot records will not be attached yet
-	**    so try to attach them here.
-	*/
-	for (i= 0; i < count; i++) {
-		devp = &devtbl[i];
-		if (!devp->attach_done) {
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-			ncr_get_nvram(devp, nvp);
-#endif
-			if (!ncr_attach (tpnt, attach_count, devp))
-				attach_count++;
-		}
-	}
-
-	kfree(devtbl);
-
-	return attach_count;
-}
-
-/*===================================================================
-**    Detect and try to read SYMBIOS and TEKRAM NVRAM.
-**
-**    Data can be used to order booting of boards.
-**
-**    Data is saved in ncr_device structure if NVRAM found. This
-**    is then used to find drive boot order for ncr_attach().
-**
-**    NVRAM data is passed to Scsi_Host_Template later during 
-**    ncr_attach() for any device set up.
-*===================================================================
-*/
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-static void __init ncr_get_nvram(ncr_device *devp, ncr_nvram *nvp)
-{
-	devp->nvram = nvp;
-	if (!nvp)
-		return;
-	/*
-	**    Get access to chip IO registers
-	*/
-#ifdef NCR_IOMAPPED
-	request_region(devp->slot.io_port, 128, "ncr53c8xx");
-	devp->slot.port = devp->slot.io_port;
-#else
-	devp->slot.reg = (struct ncr_reg *) remap_pci_mem(devp->slot.base, 128);
-	if (!devp->slot.reg)
-		return;
-#endif
-
-	/*
-	**    Try to read SYMBIOS nvram.
-	**    Try to read TEKRAM nvram if Symbios nvram not found.
-	*/
-	if	(!ncr_get_Symbios_nvram(&devp->slot, &nvp->data.Symbios))
-		nvp->type = SCSI_NCR_SYMBIOS_NVRAM;
-	else if	(!ncr_get_Tekram_nvram(&devp->slot, &nvp->data.Tekram))
-		nvp->type = SCSI_NCR_TEKRAM_NVRAM;
-	else {
-		nvp->type = 0;
-		devp->nvram = 0;
-	}
-
-	/*
-	** Release access to chip IO registers
-	*/
-#ifdef NCR_IOMAPPED
-	release_region(devp->slot.port, 128);
-#else
-	unmap_pci_mem((u_long) devp->slot.reg, 128ul);
-#endif
-
-}
-#endif	/* SCSI_NCR_NVRAM_SUPPORT */
-
-/*
-**   Read and check the PCI configuration for any detected NCR 
-**   boards and save data for attaching after all boards have 
-**   been detected.
-*/
-
-static int __init 
-ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
-{
-	ushort vendor_id, device_id, command;
-	uchar cache_line_size, latency_timer;
-	uchar revision;
-	uint irq;
-	ulong base, base_2, io_port; 
-	int i;
-	ncr_chip *chip;
-
-	/*
-	**    Read info from the PCI config space.
-	**    pci_read_config_xxx() functions are assumed to be used for 
-	**    successfully detected PCI devices.
-	*/
-	vendor_id = PciVendorId(pdev);
-	device_id = PciDeviceId(pdev);
-	irq = PciIrqLine(pdev);
-	i =	0;
-	i =	pci_get_base_address(pdev, i, &io_port);
-	i =	pci_get_base_address(pdev, i, &base);
-	(void)	pci_get_base_address(pdev, i, &base_2);
-	pci_read_config_word(pdev, PCI_COMMAND, &command);
-	pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
-	pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
-	pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
-
-	/*
-	**	If user excludes this chip, donnot initialize it.
-	*/
-	for (i = 0 ; i < SCSI_NCR_MAX_EXCLUDES ; i++) {
-		if (driver_setup.excludes[i] ==
-				(io_port & PCI_BASE_ADDRESS_IO_MASK))
-			return -1;
-	}
-	/*
-	 *	Check if the chip is supported
-	 */
-	chip = 0;
-	for (i = 0; i < sizeof(ncr_chip_table)/sizeof(ncr_chip_table[0]); i++) {
-		if (device_id != ncr_chip_table[i].device_id)
-			continue;
-		if (revision > ncr_chip_table[i].revision_id)
-			continue;
-		chip = &device->chip;
-		memcpy(chip, &ncr_chip_table[i], sizeof(*chip));
-		chip->revision_id = revision;
-		break;
-	}
-
-#if defined(__i386__)
-	/*
-	 *	Ignore Symbios chips controlled by SISL RAID controller.
-	 */
-	if (chip && (base_2 & PCI_BASE_ADDRESS_MEM_MASK)) {
-		unsigned int ScriptsSize, MagicValue;
-		vm_offset_t ScriptsRAM;
-
-		if (chip->features & FE_RAM8K)
-			ScriptsSize = 8192;
-		else
-			ScriptsSize = 4096;
-
-		ScriptsRAM = remap_pci_mem(base_2 & PCI_BASE_ADDRESS_MEM_MASK,
-					   ScriptsSize);
-		if (ScriptsRAM) {
-			MagicValue = readl(ScriptsRAM + ScriptsSize - 16);
-			unmap_pci_mem(ScriptsRAM, ScriptsSize);
-			if (MagicValue == 0x52414944)
-				return -1;
-		}
-	}
-#endif
-
-	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
-		PciBusNumber(pdev),
-		(int) (PciDeviceFn(pdev) & 0xf8) >> 3,
-		(int) (PciDeviceFn(pdev) & 0x7));
-
-	if (!chip) {
-		printk("ncr53c8xx: not initializing, device not supported\n");
-		return -1;
-	}
-
-#ifdef __powerpc__
-	/*
-	 *	Several fix-up for power/pc.
-	 *	Should not be performed by the driver.
-	 */
-	if (!(command & PCI_COMMAND_MASTER)) {
-		printk("ncr53c8xx: attempting to force PCI_COMMAND_MASTER...");
-		command |= PCI_COMMAND_MASTER;
-		pci_write_config_word(pdev, PCI_COMMAND, command);
-		pci_read_config_word(pdev, PCI_COMMAND, &command);
-		if (!(command & PCI_COMMAND_MASTER)) {
-			printk("failed!\n");
-		} else {
-			printk("succeeded.\n");
-		}
-	}
-
-	if (!(command & PCI_COMMAND_IO)) {
-		printk("ncr53c8xx: attempting to force PCI_COMMAND_IO...");
-		command |= PCI_COMMAND_IO;
-		pci_write_config_word(pdev, PCI_COMMAND, command);
-		pci_read_config_word(pdev, PCI_COMMAND, &command);
-		if (!(command & PCI_COMMAND_IO)) {
-			printk("failed!\n");
-		} else {
-			printk("succeeded.\n");
-		}
-	}
-
-	if (!(command & PCI_COMMAND_MEMORY)) {
-		printk("ncr53c8xx: attempting to force PCI_COMMAND_MEMORY...");
-		command |= PCI_COMMAND_MEMORY;
-		pci_write_config_word(pdev, PCI_COMMAND, command);
-		pci_read_config_word(pdev, PCI_COMMAND, &command);
-		if (!(command & PCI_COMMAND_MEMORY)) {
-			printk("failed!\n");
-		} else {
-			printk("succeeded.\n");
-		}
-	}
-
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,140)
-	if ( is_prep ) {
-		if (io_port >= 0x10000000) {
-			printk("ncr53c8xx: reallocating io_port (Wacky IBM)");
-			io_port = (io_port & 0x00FFFFFF) | 0x01000000;
-			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, io_port);
-		}
-		if (base >= 0x10000000) {
-			printk("ncr53c8xx: reallocating base (Wacky IBM)");
-			base = (base & 0x00FFFFFF) | 0x01000000;
-			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_1, base);
-		}
-		if (base_2 >= 0x10000000) {
-			printk("ncr53c8xx: reallocating base2 (Wacky IBM)");
-			base_2 = (base_2 & 0x00FFFFFF) | 0x01000000;
-			pci_write_config_dword(pdev, PCI_BASE_ADDRESS_2, base_2);
-		}
-	}
-#endif
-#endif	/* __powerpc__ */
-
-#ifdef __sparc__
-	/*
-	 *	Severall fix-ups for sparc.
-	 *
-	 *	Should not be performed by the driver, but how can OBP know
-	 *	each and every PCI card, if they don't use Fcode?
-	 */
-
-	base = __pa(base);
-	base_2 = __pa(base_2);
-
-	if (!(command & PCI_COMMAND_MASTER)) {
-		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_COMMAND_MASTER bit (fixup)\n");
-		command |= PCI_COMMAND_MASTER;
-		pci_write_config_word(pdev, PCI_COMMAND, command);
-		pci_read_config_word(pdev, PCI_COMMAND, &command);
-	}
-
-	if ((chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
-		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fixup)\n");
-		command |= PCI_COMMAND_INVALIDATE;
-		pci_write_config_word(pdev, PCI_COMMAND, command);
-		pci_read_config_word(pdev, PCI_COMMAND, &command);
-	}
-
-	if ((chip->features & FE_CLSE) && !cache_line_size) {
-		/* PCI_CACHE_LINE_SIZE value is in 32-bit words. */
-		cache_line_size = 64 / sizeof(u_int32);
-		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
-		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, cache_line_size);
-		pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
-	}
-
-	if (!latency_timer) {
-		latency_timer = 128;
-		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
-		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
-		pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
-	}
-#endif	/* __sparc__ */
-
-	/*
-	 * Check availability of IO space, memory space and master capability.
-	 */
-	if (command & PCI_COMMAND_IO)
-		io_port &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		io_port = 0;
-
-	if (command & PCI_COMMAND_MEMORY)
-		base &= PCI_BASE_ADDRESS_MEM_MASK;
-	else
-		base = 0;
-	
-	if (!io_port && !base) {
-		printk("ncr53c8xx: not initializing, both I/O and memory mappings disabled\n");
-		return -1;
-	}
-
-	base_2 &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if (io_port && check_region (io_port, 128)) {
-#ifdef __sparc__
-		printk("ncr53c8xx: IO region 0x%lx to 0x%lx is in use\n",
-			io_port, (io_port + 127));
-#else
-		printk("ncr53c8xx: IO region 0x%x to 0x%x is in use\n",
-			(int) io_port, (int) (io_port + 127));
-#endif
-		return -1;
-	}
-	
-	if (!(command & PCI_COMMAND_MASTER)) {
-		printk("ncr53c8xx: not initializing, BUS MASTERING was disabled\n");
-		return -1;
-	}
-
-	/*
-	 * Fix some features according to driver setup.
-	 */
-	if (!(driver_setup.special_features & 1))
-		chip->features &= ~FE_SPECIAL_SET;
-	else {
-		if (driver_setup.special_features & 2)
-			chip->features &= ~FE_WRIE;
-	}
-	if (driver_setup.ultra_scsi < 2 && (chip->features & FE_ULTRA2)) {
-		chip->features |=  FE_ULTRA;
-		chip->features &= ~FE_ULTRA2;
-	}
-	if (driver_setup.ultra_scsi < 1)
-		chip->features &= ~FE_ULTRA;
-	if (!driver_setup.max_wide)
-		chip->features &= ~FE_WIDE;
-
-
-#ifdef	SCSI_NCR_PCI_FIX_UP_SUPPORT
-
-	/*
-	 * Try to fix up PCI config according to wished features.
-	 */
-#if defined(__i386__) && !defined(MODULE)
-	if ((driver_setup.pci_fix_up & 1) &&
-	    (chip->features & FE_CLSE) && cache_line_size == 0) {
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)
-		extern char x86;
-		switch(x86) {
-#else
-		switch(boot_cpu_data.x86) {
-#endif
-		case 4:	cache_line_size = 4; break;
-		case 6:
-		case 5:	cache_line_size = 8; break;
-		}
-		if (cache_line_size)
-			(void) pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, cache_line_size);
-		if (initverbose)
-			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fix-up).\n", cache_line_size);
-	}
-
-	if ((driver_setup.pci_fix_up & 2) && cache_line_size &&
-	    (chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
-		command |= PCI_COMMAND_INVALIDATE;
-		(void) pci_write_config_word(pdev, PCI_COMMAND, command);
-		if (initverbose)
-			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fix-up).\n");
-	}
-#endif
-	/*
-	 * Fix up for old chips that support READ LINE but not CACHE LINE SIZE.
-	 * - If CACHE LINE SIZE is unknown, set burst max to 32 bytes = 8 dwords
-	 *   and donnot enable READ LINE.
-	 * - Otherwise set it to the CACHE LINE SIZE (power of 2 assumed). 
-	 */
-
-	if (!(chip->features & FE_CLSE)) {
-		int burst_max = chip->burst_max;
-		if (cache_line_size == 0) {
-			chip->features	&= ~FE_ERL;
-			if (burst_max > 3)
-				burst_max = 3;
-		}
-		else {
-			while (cache_line_size < (1 << burst_max))
-				--burst_max;
-		}
-		chip->burst_max = burst_max;
-	}
-
-	/*
-	 * Tune PCI LATENCY TIMER according to burst max length transfer.
-	 * (latency timer >= burst length + 6, we add 10 to be quite sure)
-	 * If current value is zero, the device has probably been configured 
-	 * for no bursting due to some broken hardware.
-	 */
-
-	if (latency_timer == 0 && chip->burst_max)
-		printk("ncr53c8xx: PCI_LATENCY_TIMER=0, bursting should'nt be allowed.\n");
-
-	if ((driver_setup.pci_fix_up & 4) && chip->burst_max) {
-		uchar lt = (1 << chip->burst_max) + 6 + 10;
-		if (latency_timer < lt) {
-			latency_timer = lt;
-			if (initverbose)
-				printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fix-up).\n", latency_timer);
-			 (void) pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
-		}
-	}
-
-	/*
-	 * Fix up for recent chips that support CACHE LINE SIZE.
-	 * If PCI config space is not OK, remove features that shall not be 
-	 * used by the chip. No need to trigger possible chip bugs.
-	 */
-
-	if ((chip->features & FE_CLSE) && cache_line_size == 0) {
-		chip->features &= ~FE_CACHE_SET;
-		printk("ncr53c8xx: PCI_CACHE_LINE_SIZE not set, features based on CACHE LINE SIZE not used.\n");
-	}
-
-	if ((chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
-		chip->features &= ~FE_WRIE;
-		printk("ncr53c8xx: PCI_COMMAND_INVALIDATE not set, WRITE AND INVALIDATE not used\n");
-	}
-
-#endif	/* SCSI_NCR_PCI_FIX_UP_SUPPORT */
-
- 	/* initialise ncr_device structure with items required by ncr_attach */
-	device->slot.bus	= PciBusNumber(pdev);
-	device->slot.device_fn	= PciDeviceFn(pdev);
-	device->slot.base	= base;
-	device->slot.base_2	= base_2;
-	device->slot.io_port	= io_port;
-	device->slot.irq	= irq;
-	device->attach_done	= 0;
-
-	return 0;     
-}
-
 /*
 **   Linux select queue depths function
 */
-
-#define DEF_DEPTH	(driver_setup.default_tags)
-#define ALL_TARGETS	-2
-#define NO_TARGET	-1
-#define ALL_LUNS	-2
-#define NO_LUN		-1
-
-static int device_queue_depth(ncb_p np, int target, int lun)
-{
-	int c, h, t, u, v;
-	char *p = driver_setup.tag_ctrl;
-	char *ep;
-
-	h = -1;
-	t = NO_TARGET;
-	u = NO_LUN;
-	while ((c = *p++) != 0) {
-		v = simple_strtoul(p, &ep, 0);
-		switch(c) {
-		case '/':
-			++h;
-			t = ALL_TARGETS;
-			u = ALL_LUNS;
-			break;
-		case 't':
-			if (t != target)
-				t = (target == v) ? v : NO_TARGET;
-			u = ALL_LUNS;
-			break;
-		case 'u':
-			if (u != lun)
-				u = (lun == v) ? v : NO_LUN;
-			break;
-		case 'q':
-			if (h == np->unit &&
-				(t == ALL_TARGETS || t == target) &&
-				(u == ALL_LUNS    || u == lun))
-				return v;
-			break;
-		case '-':
-			t = ALL_TARGETS;
-			u = ALL_LUNS;
-			break;
-		default:
-			break;
-		}
-		p = ep;
-	}
-	return DEF_DEPTH;
-}
 
 static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_device *devlist)
 {
@@ -10081,7 +8406,7 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 		**	Use at least 2.
 		**	Donnot use more than our maximum.
 		*/
-		numtags = device_queue_depth(np, device->id, device->lun);
+		numtags = device_queue_depth(np->unit, device->id, device->lun);
 		if (numtags > tp->usrtags)
 			numtags = tp->usrtags;
 		if (!device->tagged_supported)
@@ -10111,14 +8436,6 @@ printk("ncr53c8xx_select_queue_depth: host=%d, id=%d, lun=%d, depth=%d\n",
 }
 
 /*
-**   Linux entry point for info() function
-*/
-const char *ncr53c8xx_info (struct Scsi_Host *host)
-{
-	return SCSI_NCR_DRIVER_NAME;
-}
-
-/*
 **   Linux entry point of queuecommand() function
 */
 
@@ -10134,6 +8451,10 @@ printk("ncr53c8xx_queue_command\n");
 
      cmd->scsi_done     = done;
      cmd->host_scribble = NULL;
+#ifdef SCSI_NCR_DYNAMIC_DMA_MAPPING
+     cmd->__data_mapped = 0;
+     cmd->__data_mapping = 0;
+#endif
 
      NCR_LOCK_NCB(np, flags);
 
@@ -10150,8 +8471,10 @@ printk("ncr53c8xx : command successfully queued\n");
 
      NCR_UNLOCK_NCB(np, flags);
 
-     if (sts != DID_OK)
+     if (sts != DID_OK) {
+          unmap_scsi_data(np, cmd);
           done(cmd);
+     }
 
      return sts;
 }
@@ -10627,50 +8950,8 @@ printk("ncr_user_command: data=%ld\n", uc->data);
 
 #endif	/* SCSI_NCR_USER_COMMAND_SUPPORT */
 
+
 #ifdef SCSI_NCR_USER_INFO_SUPPORT
-
-struct info_str
-{
-	char *buffer;
-	int length;
-	int offset;
-	int pos;
-};
-
-static void copy_mem_info(struct info_str *info, char *data, int len)
-{
-	if (info->pos + len > info->length)
-		len = info->length - info->pos;
-
-	if (info->pos + len < info->offset) {
-		info->pos += len;
-		return;
-	}
-	if (info->pos < info->offset) {
-		data += (info->offset - info->pos);
-		len  -= (info->offset - info->pos);
-	}
-
-	if (len > 0) {
-		memcpy(info->buffer + info->pos, data, len);
-		info->pos += len;
-	}
-}
-
-static int copy_info(struct info_str *info, char *fmt, ...)
-{
-	va_list args;
-	char buf[81];
-	int len;
-
-	va_start(args, fmt);
-	len = vsprintf(buf, fmt, args);
-	va_end(args);
-
-	copy_mem_info(info, buf, len);
-	return len;
-}
-
 /*
 **	Copy formatted profile information into the input buffer.
 */
@@ -10778,7 +9059,6 @@ printk("ncr53c8xx_proc_info: hostno=%d, func=%d\n", hostno, func);
 	return retv;
 }
 
-
 /*=========================================================================
 **	End of proc file system stuff
 **=========================================================================
@@ -10786,431 +9066,104 @@ printk("ncr53c8xx_proc_info: hostno=%d, func=%d\n", hostno, func);
 #endif
 
 
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-
-/* ---------------------------------------------------------------------
+/*==========================================================
 **
-**	Try reading Symbios format nvram
+**	/proc directory entry.
 **
-** ---------------------------------------------------------------------
-**
-** GPOI0 - data in/data out
-** GPIO1 - clock
-**
-**	return 0 if NVRAM data OK, 1 if NVRAM data not OK
-** ---------------------------------------------------------------------
+**==========================================================
 */
-
-#define SET_BIT 0
-#define CLR_BIT 1
-#define SET_CLK 2
-#define CLR_CLK 3
-
-static u_short nvram_read_data(ncr_slot *np, u_char *data, int len, u_char *gpreg, u_char *gpcntl);
-static void nvram_start(ncr_slot *np, u_char *gpreg);
-static void nvram_write_byte(ncr_slot *np, u_char *ack_data, u_char write_data, u_char *gpreg, u_char *gpcntl);
-static void nvram_read_byte(ncr_slot *np, u_char *read_data, u_char ack_data, u_char *gpreg, u_char *gpcntl);
-static void nvram_readAck(ncr_slot *np, u_char *read_bit, u_char *gpreg, u_char *gpcntl);
-static void nvram_writeAck(ncr_slot *np, u_char write_bit, u_char *gpreg, u_char *gpcntl);
-static void nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char *gpreg);
-static void nvram_stop(ncr_slot *np, u_char *gpreg);
-static void nvram_setBit(ncr_slot *np, u_char write_bit, u_char *gpreg, int bit_mode);
-
-static int __init ncr_get_Symbios_nvram (ncr_slot *np, Symbios_nvram *nvram)
-{
-	static u_char Symbios_trailer[6] = {0xfe, 0xfe, 0, 0, 0, 0};
-	u_char	gpcntl, gpreg;
-	u_char	old_gpcntl, old_gpreg;
-	u_short	csum;
-	u_char	ack_data;
-	int	retv = 1;
-
-	/* save current state of GPCNTL and GPREG */
-	old_gpreg	= INB (nc_gpreg);
-	old_gpcntl	= INB (nc_gpcntl);
-	gpcntl		= old_gpcntl & 0xfc;
-
-	/* set up GPREG & GPCNTL to set GPIO0 and GPIO1 in to known state */
-	OUTB (nc_gpreg,  old_gpreg);
-	OUTB (nc_gpcntl, gpcntl);
-
-	/* this is to set NVRAM into a known state with GPIO0/1 both low */
-	gpreg = old_gpreg;
-	nvram_setBit(np, 0, &gpreg, CLR_CLK);
-	nvram_setBit(np, 0, &gpreg, CLR_BIT);
-		
-	/* now set NVRAM inactive with GPIO0/1 both high */
-	nvram_stop(np, &gpreg);
-	
-	/* activate NVRAM */
-	nvram_start(np, &gpreg);
-
-	/* write device code and random address MSB */
-	nvram_write_byte(np, &ack_data,
-		0xa0 | ((SYMBIOS_NVRAM_ADDRESS >> 7) & 0x0e), &gpreg, &gpcntl);
-	if (ack_data & 0x01)
-		goto out;
-
-	/* write random address LSB */
-	nvram_write_byte(np, &ack_data,
-		(SYMBIOS_NVRAM_ADDRESS & 0x7f) << 1, &gpreg, &gpcntl);
-	if (ack_data & 0x01)
-		goto out;
-
-	/* regenerate START state to set up for reading */
-	nvram_start(np, &gpreg);
-	
-	/* rewrite device code and address MSB with read bit set (lsb = 0x01) */
-	nvram_write_byte(np, &ack_data,
-		0xa1 | ((SYMBIOS_NVRAM_ADDRESS >> 7) & 0x0e), &gpreg, &gpcntl);
-	if (ack_data & 0x01)
-		goto out;
-
-	/* now set up GPIO0 for inputting data */
-	gpcntl |= 0x01;
-	OUTB (nc_gpcntl, gpcntl);
-		
-	/* input all active data - only part of total NVRAM */
-	csum = nvram_read_data(np,
-			(u_char *) nvram, sizeof(*nvram), &gpreg, &gpcntl);
-
-	/* finally put NVRAM back in inactive mode */
-	gpcntl &= 0xfe;
-	OUTB (nc_gpcntl, gpcntl);
-	nvram_stop(np, &gpreg);
-	
-#ifdef SCSI_NCR_DEBUG_NVRAM
-printk("ncr53c8xx: NvRAM type=%x trailer=%x %x %x %x %x %x byte_count=%d/%d checksum=%x/%x\n",
-	nvram->type,
-	nvram->trailer[0], nvram->trailer[1], nvram->trailer[2],
-	nvram->trailer[3], nvram->trailer[4], nvram->trailer[5],
-	nvram->byte_count, sizeof(*nvram) - 12,
-	nvram->checksum, csum);
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
+static struct proc_dir_entry proc_scsi_ncr53c8xx = {
+    PROC_SCSI_NCR53C8XX, 9, NAME53C8XX,
+    S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
 #endif
 
-	/* check valid NVRAM signature, verify byte count and checksum */
-	if (nvram->type == 0 &&
-	    !memcmp(nvram->trailer, Symbios_trailer, 6) &&
-	    nvram->byte_count == sizeof(*nvram) - 12 &&
-	    csum == nvram->checksum)
-		retv = 0;
-out:
-	/* return GPIO0/1 to original states after having accessed NVRAM */
-	OUTB (nc_gpcntl, old_gpcntl);
-	OUTB (nc_gpreg,  old_gpreg);
-
-	return retv;
-}
-
-/*
- * Read Symbios NvRAM data and compute checksum.
- */
-static u_short __init 
-nvram_read_data(ncr_slot *np, u_char *data, int len, u_char *gpreg, u_char *gpcntl)
-{
-	int	x;
-	u_short	csum;
-
-	for (x = 0; x < len; x++) 
-		nvram_read_byte(np, &data[x], (x == (len - 1)), gpreg, gpcntl);
-
-	for (x = 6, csum = 0; x < len - 6; x++)
-		csum += data[x];
-
-	return csum;
-}
-
-/*
- * Send START condition to NVRAM to wake it up.
- */
-static void __init nvram_start(ncr_slot *np, u_char *gpreg)
-{
-	nvram_setBit(np, 1, gpreg, SET_BIT);
-	nvram_setBit(np, 0, gpreg, SET_CLK);
-	nvram_setBit(np, 0, gpreg, CLR_BIT);
-	nvram_setBit(np, 0, gpreg, CLR_CLK);
-}
-
-/*
- * WRITE a byte to the NVRAM and then get an ACK to see it was accepted OK,
- * GPIO0 must already be set as an output
- */
-static void __init 
-nvram_write_byte(ncr_slot *np, u_char *ack_data, u_char write_data, u_char *gpreg, u_char *gpcntl)
-{
-	int x;
-	
-	for (x = 0; x < 8; x++)
-		nvram_doBit(np, 0, (write_data >> (7 - x)) & 0x01, gpreg);
-		
-	nvram_readAck(np, ack_data, gpreg, gpcntl);
-}
-
-/*
- * READ a byte from the NVRAM and then send an ACK to say we have got it,
- * GPIO0 must already be set as an input
- */
-static void __init 
-nvram_read_byte(ncr_slot *np, u_char *read_data, u_char ack_data, u_char *gpreg, u_char *gpcntl)
-{
-	int x;
-	u_char read_bit;
-
-	*read_data = 0;
-	for (x = 0; x < 8; x++) {
-		nvram_doBit(np, &read_bit, 1, gpreg);
-		*read_data |= ((read_bit & 0x01) << (7 - x));
-	}
-
-	nvram_writeAck(np, ack_data, gpreg, gpcntl);
-}
-
-/*
- * Output an ACK to the NVRAM after reading,
- * change GPIO0 to output and when done back to an input
- */
-static void __init 
-nvram_writeAck(ncr_slot *np, u_char write_bit, u_char *gpreg, u_char *gpcntl)
-{
-	OUTB (nc_gpcntl, *gpcntl & 0xfe);
-	nvram_doBit(np, 0, write_bit, gpreg);
-	OUTB (nc_gpcntl, *gpcntl);
-}
-
-/*
- * Input an ACK from NVRAM after writing,
- * change GPIO0 to input and when done back to an output
- */
-static void __init 
-nvram_readAck(ncr_slot *np, u_char *read_bit, u_char *gpreg, u_char *gpcntl)
-{
-	OUTB (nc_gpcntl, *gpcntl | 0x01);
-	nvram_doBit(np, read_bit, 1, gpreg);
-	OUTB (nc_gpcntl, *gpcntl);
-}
-
-/*
- * Read or write a bit to the NVRAM,
- * read if GPIO0 input else write if GPIO0 output
- */
-static void __init nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char *gpreg)
-{
-	nvram_setBit(np, write_bit, gpreg, SET_BIT);
-	nvram_setBit(np, 0, gpreg, SET_CLK);
-	if (read_bit)
-		*read_bit = INB (nc_gpreg);
-	nvram_setBit(np, 0, gpreg, CLR_CLK);
-	nvram_setBit(np, 0, gpreg, CLR_BIT);
-}
-
-/*
- * Send STOP condition to NVRAM - puts NVRAM to sleep... ZZzzzz!!
- */
-static void __init nvram_stop(ncr_slot *np, u_char *gpreg)
-{
-	nvram_setBit(np, 0, gpreg, SET_CLK);
-	nvram_setBit(np, 1, gpreg, SET_BIT);
-}
-
-/*
- * Set/clear data/clock bit in GPIO0
- */
-static void __init 
-nvram_setBit(ncr_slot *np, u_char write_bit, u_char *gpreg, int bit_mode)
-{
-	UDELAY (5);
-	switch (bit_mode){
-	case SET_BIT:
-		*gpreg |= write_bit;
-		break;
-	case CLR_BIT:
-		*gpreg &= 0xfe;
-		break;
-	case SET_CLK:
-		*gpreg |= 0x02;
-		break;
-	case CLR_CLK:
-		*gpreg &= 0xfd;
-		break;
-
-	}
-	OUTB (nc_gpreg, *gpreg);
-	UDELAY (5);
-}
-
-#undef SET_BIT 0
-#undef CLR_BIT 1
-#undef SET_CLK 2
-#undef CLR_CLK 3
-
-
-/* ---------------------------------------------------------------------
+/*==========================================================
 **
-**	Try reading Tekram format nvram
+**	Boot command line.
 **
-** ---------------------------------------------------------------------
+**==========================================================
+*/
+#ifdef	MODULE
+char *ncr53c8xx = 0;	/* command line passed by insmod */
+# if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,30)
+MODULE_PARM(ncr53c8xx, "s");
+# endif
+#endif
+
+int __init ncr53c8xx_setup(char *str)
+{
+	return sym53c8xx__setup(str);
+}
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,13)
+#ifndef MODULE
+__setup("ncr53c8xx=", ncr53c8xx_setup);
+#endif
+#endif
+
+/*===================================================================
 **
-** GPOI0 - data in
-** GPIO1 - data out
-** GPIO2 - clock
-** GPIO4 - chip select
+**   SYM53C8XX supported device list
 **
-**	return 0 if NVRAM data OK, 1 if NVRAM data not OK
-** ---------------------------------------------------------------------
+**===================================================================
 */
 
-static u_short Tnvram_read_data(ncr_slot *np, u_short *data, int len, u_char *gpreg);
-static void Tnvram_Send_Command(ncr_slot *np, u_short write_data, u_char *read_bit, u_char *gpreg);
-static void Tnvram_Read_Word(ncr_slot *np, u_short *nvram_data, u_char *gpreg);
-static void Tnvram_Read_Bit(ncr_slot *np, u_char *read_bit, u_char *gpreg);
-static void Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg);
-static void Tnvram_Stop(ncr_slot *np, u_char *gpreg);
-static void Tnvram_Clk(ncr_slot *np, u_char *gpreg);
+static u_short	ncr_chip_ids[]   __initdata = {
+	PCI_DEVICE_ID_NCR_53C810,
+	PCI_DEVICE_ID_NCR_53C815,
+	PCI_DEVICE_ID_NCR_53C820,
+	PCI_DEVICE_ID_NCR_53C825,
+	PCI_DEVICE_ID_NCR_53C860,
+	PCI_DEVICE_ID_NCR_53C875,
+	PCI_DEVICE_ID_NCR_53C875J,
+	PCI_DEVICE_ID_NCR_53C885,
+	PCI_DEVICE_ID_NCR_53C895,
+	PCI_DEVICE_ID_NCR_53C896,
+	PCI_DEVICE_ID_NCR_53C895A,
+	PCI_DEVICE_ID_NCR_53C1510D
+};
 
-static int __init ncr_get_Tekram_nvram (ncr_slot *np, Tekram_nvram *nvram)
+/*==========================================================
+**
+**	Chip detection entry point.
+**
+**==========================================================
+*/
+int __init ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 {
-	u_char gpcntl, gpreg;
-	u_char old_gpcntl, old_gpreg;
-	u_short csum;
+	/*
+	**    Initialize driver general stuff.
+	*/
+#ifdef SCSI_NCR_PROC_INFO_SUPPORT
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,27)
+     tpnt->proc_dir  = &proc_scsi_ncr53c8xx;
+#else
+     tpnt->proc_name = NAME53C8XX;
+#endif
+     tpnt->proc_info = ncr53c8xx_proc_info;
+#endif
 
-	/* save current state of GPCNTL and GPREG */
-	old_gpreg	= INB (nc_gpreg);
-	old_gpcntl	= INB (nc_gpcntl);
+#if	defined(SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT) && defined(MODULE)
+if (ncr53c8xx)
+	ncr53c8xx_setup(ncr53c8xx);
+#endif
 
-	/* set up GPREG & GPCNTL to set GPIO0/1/2/4 in to known state, 0 in,
-	   1/2/4 out */
-	gpreg = old_gpreg & 0xe9;
-	OUTB (nc_gpreg, gpreg);
-	gpcntl = (old_gpcntl & 0xe9) | 0x09;
-	OUTB (nc_gpcntl, gpcntl);
-
-	/* input all of NVRAM, 64 words */
-	csum = Tnvram_read_data(np, (u_short *) nvram,
-			sizeof(*nvram) / sizeof(short), &gpreg);
-	
-	/* return GPIO0/1/2/4 to original states after having accessed NVRAM */
-	OUTB (nc_gpcntl, old_gpcntl);
-	OUTB (nc_gpreg,  old_gpreg);
-
-	/* check data valid */
-	if (csum != 0x1234)
-		return 1;
-
-	return 0;
+	return sym53c8xx__detect(tpnt, ncr_chip_ids,
+				 sizeof(ncr_chip_ids)/sizeof(ncr_chip_ids[0]));
 }
 
-/*
- * Read Tekram NvRAM data and compute checksum.
- */
-static u_short __init 
-Tnvram_read_data(ncr_slot *np, u_short *data, int len, u_char *gpreg)
+/*==========================================================
+**
+**   Entry point for info() function
+**
+**==========================================================
+*/
+const char *ncr53c8xx_info (struct Scsi_Host *host)
 {
-	u_char	read_bit;
-	u_short	csum;
-	int	x;
-
-	for (x = 0, csum = 0; x < len; x++)  {
-
-		/* output read command and address */
-		Tnvram_Send_Command(np, 0x180 | x, &read_bit, gpreg);
-		if (read_bit & 0x01)
-			return 0; /* Force bad checksum */
-
-		Tnvram_Read_Word(np, &data[x], gpreg);
-		csum += data[x];
-
-		Tnvram_Stop(np, gpreg);
-	}
-
-	return csum;
+	return SCSI_NCR_DRIVER_NAME;
 }
-
-/*
- * Send read command and address to NVRAM
- */
-static void __init Tnvram_Send_Command(ncr_slot *np, u_short write_data, u_char *read_bit, u_char *gpreg)
-{
-	int x;
-
-	/* send 9 bits, start bit (1), command (2), address (6)  */
-	for (x = 0; x < 9; x++)
-		Tnvram_Write_Bit(np, (u_char) (write_data >> (8 - x)), gpreg);
-
-	*read_bit = INB (nc_gpreg);
-}
-
-/*
- * READ a byte from the NVRAM
- */
-static void __init Tnvram_Read_Word(ncr_slot *np, u_short *nvram_data, u_char *gpreg)
-{
-	int x;
-	u_char read_bit;
-
-	*nvram_data = 0;
-	for (x = 0; x < 16; x++) {
-		Tnvram_Read_Bit(np, &read_bit, gpreg);
-
-		if (read_bit & 0x01)
-			*nvram_data |=  (0x01 << (15 - x));
-		else
-			*nvram_data &= ~(0x01 << (15 - x));
-	}
-}
-
-/* 
- * Read bit from NVRAM
- */
-static void __init 
-Tnvram_Read_Bit(ncr_slot *np, u_char *read_bit, u_char *gpreg)
-{
-	UDELAY (2);
-	Tnvram_Clk(np, gpreg);
-	*read_bit = INB (nc_gpreg);
-}
-
-/*
- * Write bit to GPIO0
- */
-static void __init 
-Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg)
-{
-	if (write_bit & 0x01)
-		*gpreg |= 0x02;
-	else
-		*gpreg &= 0xfd;
-		
-	*gpreg |= 0x10;
-		
-	OUTB (nc_gpreg, *gpreg);
-	UDELAY (2);
-
-	Tnvram_Clk(np, gpreg);
-}
-
-/*
- * Send STOP condition to NVRAM - puts NVRAM to sleep... ZZZzzz!!
- */
-static void __init Tnvram_Stop(ncr_slot *np, u_char *gpreg)
-{
-	*gpreg &= 0xef;
-	OUTB (nc_gpreg, *gpreg);
-	UDELAY (2);
-
-	Tnvram_Clk(np, gpreg);
-}
-
-/*
- * Pulse clock bit in GPIO0
- */
-static void __init Tnvram_Clk(ncr_slot *np, u_char *gpreg)
-{
-	OUTB (nc_gpreg, *gpreg | 0x04);
-	UDELAY (2);
-	OUTB (nc_gpreg, *gpreg);
-}
-
-#endif	/* SCSI_NCR_NVRAM_SUPPORT */
 
 /*
 **	Module stuff

@@ -1038,4 +1038,9 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	return -ENOSYS;
 }
 
+int try_inc_mod_count(struct module *mod)
+{
+	return 1;
+}
+
 #endif	/* CONFIG_MODULES */

@@ -1,4 +1,4 @@
-/* $Id: vaddrs.h,v 1.22 1999/04/20 13:22:55 anton Exp $ */
+/* $Id: vaddrs.h,v 1.23 2000/03/12 04:10:46 davem Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 
@@ -20,8 +20,8 @@
 #define  IOBASE_LEN     0x00300000  /* Length of the IO area */
 #define  IOBASE_END     0xfe300000
 #define  DVMA_VADDR     0xfff00000  /* Base area of the DVMA on suns */
-#define  DVMA_LEN       0x00040000  /* Size of the DVMA address space */
-#define  DVMA_END       0xfff40000
+#define  DVMA_LEN       0x000c0000  /* Size of the DVMA address space */
+#define  DVMA_END       0xfffc0000
 
 /* IOMMU Mapping area, must be on a 16MB boundary!  Note this
  * doesn't count the DVMA areas, the prom lives between the

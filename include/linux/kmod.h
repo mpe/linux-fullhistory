@@ -10,7 +10,7 @@ extern int request_module(const char * name);
 extern int exec_usermodehelper(char *program_path, char *argv[], char *envp[]);
 #else
 static inline int request_module(const char * name) { return -ENOSYS; }
-extern inline int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
+static inline int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 {
 	return -EACCES;
 }

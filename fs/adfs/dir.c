@@ -1,7 +1,7 @@
 /*
  * linux/fs/adfs/dir.c
  *
- * Copyright (C) 1999 Russell King
+ * Copyright (C) 1999-2000 Russell King
  *
  * Common directory handling for ADFS
  */
@@ -33,13 +33,16 @@ adfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
 	struct object_info obj;
 	struct adfs_dir dir;
-	int ret;
+	int ret = 0;
+
+	if (filp->f_pos >> 32)
+		goto out;
 
 	ret = ops->read(sb, inode->i_ino, inode->i_size, &dir);
 	if (ret)
 		goto out;
 
-	switch (filp->f_pos) {
+	switch ((unsigned long)filp->f_pos) {
 	case 0:
 		if (filldir(dirent, ".", 1, 0, inode->i_ino) < 0)
 			goto free_out;
@@ -79,13 +82,14 @@ out:
 int
 adfs_dir_update(struct super_block *sb, struct object_info *obj)
 {
+	int ret = -EINVAL;
+#ifdef CONFIG_ADFS_FS_RW
 	struct adfs_dir_ops *ops = sb->u.adfs_sb.s_dir;
 	struct adfs_dir dir;
-	int ret = -EINVAL;
 
 	printk(KERN_INFO "adfs_dir_update: object %06X in dir %06X\n",
 		 obj->file_id, obj->parent_id);
-#if 0
+
 	if (!ops->update) {
 		ret = -EINVAL;
 		goto out;

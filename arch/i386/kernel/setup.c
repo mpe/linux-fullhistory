@@ -790,14 +790,14 @@ void __init setup_arch(char **cmdline_p)
 
 static int __init get_model_name(struct cpuinfo_x86 *c)
 {
-	unsigned int n, dummy, *v;
+	unsigned int n, dummy, *v, ecx, edx;
 
 	/* Actually we must have cpuid or we could never have
 	 * figured out that this was AMD from the vendor info :-).
 	 */
 
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
-	if (n < 4)
+	if (n < 0x80000004)
 		return 0;
 	cpuid(0x80000001, &dummy, &dummy, &dummy, &(c->x86_capability));
 	v = (unsigned int *) c->x86_model_id;
@@ -806,13 +806,24 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
 	/*  Set MTRR capability flag if appropriate  */
-	if(boot_cpu_data.x86 !=5)
-		return 1;
-	if((boot_cpu_data.x86_model == 9) ||
-	   ((boot_cpu_data.x86_model == 8) && 
-	    (boot_cpu_data.x86_mask >= 8)))
-		c->x86_capability |= X86_FEATURE_MTRR;
+	if(boot_cpu_data.x86 == 5) {
+		if((boot_cpu_data.x86_model == 9) ||
+		   ((boot_cpu_data.x86_model == 8) && 
+		    (boot_cpu_data.x86_mask >= 8)))
+			c->x86_capability |= X86_FEATURE_MTRR;
+	}
 
+	if (n >= 0x80000005){
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+			ecx>>24, edx>>24);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);
+	}
+	if (n >= 0x80000006){
+		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L2 Cache: %dK\n", ecx>>16);
+		c->x86_cache_size=(ecx>>16);
+	}
 	return 1;
 }
 
@@ -882,18 +893,7 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 			}
 			break;
 		case 6:	/* An Athlon. We can trust the BIOS probably */
-		{
-			
-			u32 ecx, edx, dummy;
-			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-			printk("L1 I Cache: %dK  L1 D Cache: %dK\n",
-				ecx>>24, edx>>24);
-			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-			printk("L2 Cache: %dK\n", ecx>>16);
-			c->x86_cache_size = ecx>>16;
-			break;
-		}
-		
+			break;		
 	}
 	return r;
 }
@@ -1021,10 +1021,18 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		/* It isnt really a PCI quirk directly, but the cure is the
 		   same. The MediaGX has deep magic SMM stuff that handles the
 		   SB emulation. It thows away the fifo on disable_dma() which
-		   is wrong and ruins the audio. */
+                   is wrong and ruins the audio. 
+                   
+                   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
+                   causes bad things. According to NatSemi VSA2 has another
+                   bug to do with 'hlt'. I've not seen any boards using VSA2
+                   and X doesn't seem to support it either so who cares 8).
+                   VSA1 we work around however.
+                   
+		*/
 		
-		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
-		isa_dma_bridge_buggy = 1;
+		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bugs.\n");
+		isa_dma_bridge_buggy = 2;
 #endif		
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {

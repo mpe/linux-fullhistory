@@ -13,6 +13,9 @@ SECTIONS
 		__proc_info_begin = .;
 			*(.proc.info)
 		__proc_info_end = .;
+		__arch_info_begin = .;
+			*(.arch.info)
+		__arch_info_end = .;
 			*(.data.init)
 		. = ALIGN(16);
 		__setup_start = .;
@@ -23,6 +26,11 @@ SECTIONS
 		__initcall_end = .;
 		. = ALIGN(4096);
 		__init_end = .;
+	}
+
+	/DISCARD/ : {			/* Exit code and data		*/
+			*(.text.exit)
+			*(.data.exit)
 	}
 
 	.text : {			/* Real text segment		*/

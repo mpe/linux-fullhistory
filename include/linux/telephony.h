@@ -158,6 +158,16 @@ typedef enum {
 	WSS = 12
 } phone_codec;
 
+struct phone_codec_data
+{
+	phone_codec type;
+	unsigned short buf_min, buf_opt, buf_max;
+};
+
+#define PHONE_QUERY_CODEC		_IOWR ('q', 0xA7, struct phone_codec_data *)
+#define PHONE_PSTN_LINETEST		_IO ('q', 0xA8)
+
+
 /******************************************************************************
 *
 * The exception structure allows us to multiplex multiple events onto the

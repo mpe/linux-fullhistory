@@ -174,7 +174,9 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		}
 		up(&tty->flip.pty_sem);
 	} else {
-		c = MIN(count, to->ldisc.receive_room(to));
+		c = to->ldisc.receive_room(to);
+		if (c > count)
+			c = count;
 		to->ldisc.receive_buf(to, buf, 0, c);
 	}
 	

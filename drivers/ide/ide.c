@@ -2587,6 +2587,8 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case BLKFLSBUF:
 		case BLKSSZGET:
 		case BLKPG:
+		case BLKELVGET:
+		case BLKELVSET:
 			return blk_ioctl(inode->i_rdev, cmd, arg);
 
 		default:

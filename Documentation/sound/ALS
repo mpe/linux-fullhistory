@@ -1,18 +1,19 @@
-ALS-007 based sound cards
-=========================
+ALS-007/ALS-100/ALS-200 based sound cards
+=========================================
 
-Support for sound cards based around the Avance Logic ALS-007 chip is
-included.  The ALS-007 is a single chip PnP sound solution which is mostly
-hardware compatible with the Sound Blaster 16 card, with most differences
-occurring in the use of the mixer registers.  For this reason the ALS-007 
-code is integrated as part of the Sound Blaster 16 driver (adding only 800
-bytes to the SB16 driver).
+Support for sound cards based around the Avance Logic
+ALS-007/ALS-100/ALS-200 chip is included.  These chips are a single
+chip PnP sound solution which is mostly hardware compatible with the
+Sound Blaster 16 card, with most differences occurring in the use of
+the mixer registers.  For this reason the ALS code is integrated
+as part of the Sound Blaster 16 driver (adding only 800 bytes to the
+SB16 driver).
 
-To use an ALS-007 sound card under Linux, enable the following options in the
+To use an ALS sound card under Linux, enable the following options in the
 sound configuration section of the kernel config:
   - 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
   - FM synthesizer (YM3812/OPL-3) support 
-Since the ALS-007 is a PnP card, the sound driver probably should be
+Since the ALS-007/100/200 is a PnP card, the sound driver probably should be
 compiled as a module, with the isapnptools used to wake up the sound card.
 Set the "I/O base for SB", "Sound Blaster IRQ" and "Sound Blaster DMA" (8 bit -
 either 0, 1 or 3) to the values used in your particular installation (they
@@ -38,3 +39,5 @@ The resulting sound driver will provide the following capabilities:
 Jonathan Woithe
 jwoithe@physics.adelaide.edu.au
 30 March 1998
+
+Modified 2000-02-26 by Dave Forrest, drf5n@virginia.edu to add ALS100/ALS200

@@ -1029,7 +1029,7 @@ release:
  *	Receive an Econet frame from a device.
  */
 
-static int econet_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int econet_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct ec_framehdr *hdr = (struct ec_framehdr *)skb->data;
 	struct sock *sk;

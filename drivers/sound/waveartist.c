@@ -1771,6 +1771,18 @@ MODULE_PARM(dma2, "i");		/* DMA2 */
 
 static int __init init_waveartist(void)
 {
+	if (!io && machine_is_netwinder()) {
+		/*
+		 * The NetWinder WaveArtist is at a fixed address.
+		 * If the user does not supply an address, use the
+		 * well-known parameters.
+		 */
+		io   = 0x250;
+		irq  = 12;
+		dma  = 3;
+		dma2 = 7;
+	}
+
 	cfg.io_base = io;
 	cfg.irq = irq;
 	cfg.dma = dma;

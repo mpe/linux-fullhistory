@@ -1034,6 +1034,9 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
     printk("RCioctl: cmd = 0x%x\n", cmd);
 #endif
  
+    if(!capable(CAP_NET_ADMIN))
+    	return -EPERM;
+    	
     switch (cmd)  {
  
     case RCU_PROTOCOL_REV:
@@ -1157,14 +1160,14 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
             RCUD_DEFAULT -> rc = 0x11223344;
             break;
         }
-        copy_to_user(rq->ifr_data, &RCuser, sizeof(RCuser));
+        if(copy_to_user(rq->ifr_data, &RCuser, sizeof(RCuser)))
+        	return -EFAULT;
         break;
-    }   /* RCU_COMMAND */ 
+	}   /* RCU_COMMAND */ 
 
-    default:
-        printk("RC default\n");
-        rq->ifr_ifru.ifru_data = (caddr_t) 0x12345678;
-        break;
+	default:
+        	rq->ifr_ifru.ifru_data = (caddr_t) 0x12345678;
+        	return -EINVAL;
     }
     return 0;
 }

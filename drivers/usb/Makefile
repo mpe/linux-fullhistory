@@ -4,9 +4,10 @@
 
 # Subdirs.
 
-SUB_DIRS	:= serial
+SUB_DIRS	:=
 MOD_SUB_DIRS	:= $(SUB_DIRS)
-ALL_SUB_DIRS	:= $(SUB_DIRS)
+MOD_IN_SUB_DIRS	:= $(SUB_DIRS)
+ALL_SUB_DIRS	:= $(SUB_DIRS) serial
 
 # The target object and module list name.
 
@@ -36,6 +37,18 @@ obj-y	:=
 obj-m	:=
 obj-n	:=
 obj-	:=
+
+# Object files in subdirectories
+
+ifeq ($(CONFIG_USB_SERIAL),y)
+	SUB_DIRS += serial
+	obj-y += serial/serial.o
+else
+	ifeq ($(CONFIG_USB_SERIAL),m)
+		MOD_SUB_DIRS += serial
+	endif
+endif
+
 
 # Each configuration option enables a list of files.
 
@@ -68,6 +81,7 @@ obj-$(CONFIG_USB_PLUSB)		+= plusb.o
 obj-$(CONFIG_USB_OV511)		+= ov511.o
 obj-$(CONFIG_USB_PEGASUS)	+= pegasus.o
 obj-$(CONFIG_USB_RIO500)	+= rio500.o
+obj-$(CONFIG_USB_DSBR)		+= dsbr100.o
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

@@ -58,4 +58,4 @@ endif
 include $(TOPDIR)/Rules.make
 
 mpoa.o: mpc.o mpoa_caches.o mpoa_proc.o
-	ld -r -o mpoa.o mpc.o mpoa_caches.o mpoa_proc.o
+	$(LD) -r -o mpoa.o mpc.o mpoa_caches.o mpoa_proc.o

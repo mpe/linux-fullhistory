@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.134 2000/03/07 22:27:30 davem Exp $
+/* $Id: sys_sparc32.c,v 1.135 2000/03/12 03:52:09 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3645,7 +3645,7 @@ struct nfsctl_arg32 {
 };
 
 union nfsctl_res32 {
-	struct knfs_fh		cr32_getfh;
+	__u8			cr32_getfh[NFS_FHSIZE];
 	u32			cr32_debug;
 };
 

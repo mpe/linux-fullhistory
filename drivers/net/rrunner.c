@@ -76,8 +76,8 @@ static inline void netif_start_queue(struct net_device *dev)
 #else
 #define NET_BH              0
 #define rr_mark_net_bh(foo) {do{} while(0);}
-#define rr_if_busy(dev)     test_bit(LINK_STATE_XOFF, &dev->state)
-#define rr_if_running(dev)  test_bit(LINK_STATE_START, &dev->state)
+#define rr_if_busy(dev)     netif_queue_stopped(dev)
+#define rr_if_running(dev)  netif_running(dev)
 #define rr_if_down(dev)     {do{} while(0);}
 #endif
 

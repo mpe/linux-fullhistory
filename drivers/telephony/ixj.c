@@ -508,7 +508,7 @@ static void ixj_timeout(unsigned long ptr)
 					j->flags.cringing = 0;
 					ixj_ring_off(board);
 				} else {
-					if (jiffies - j->ring_cadence_jif >= (.5 * hertz)) {
+					if (jiffies - j->ring_cadence_jif >= (hertz/2)) {
 						j->ring_cadence_t--;
 						if (j->ring_cadence_t == -1)
 							j->ring_cadence_t = 15;
@@ -3799,6 +3799,32 @@ int ixj_ioctl(struct inode *inode, struct file *file_p,
 	case PHONE_CPT_STOP:
 		ixj_cpt_stop(board);
 		break;
+	case PHONE_QUERY_CODEC:
+	{
+		struct phone_codec_data pd;
+		int val;
+		int proto_size[] = {
+			-1, 
+			12, 10, 16, 9, 8, 48, 5,
+			40, 40, 80, 40, 40
+		};
+		if(copy_from_user(&pd, (void *)arg, sizeof(pd)))
+			return -EFAULT;
+		if(pd.type<1 || pd.type>12)
+			return -EPROTONOSUPPORT;
+		if(pd.type<G729)
+			val=proto_size[pd.type];
+		else switch(j->baseframe.low)
+		{
+			case 0xA0:val=2*proto_size[pd.type];break;
+			case 0x50:val=proto_size[pd.type];break;
+			default:val=proto_size[pd.type]*3;break;
+		}
+		pd.buf_min=pd.buf_max=pd.buf_opt=val;
+		if(copy_to_user((void *)arg, &pd, sizeof(pd)))
+			return -EFAULT;
+		return 0;
+	}
 	case IXJCTL_DSP_IDLE:
 		idle(board);
 		break;
@@ -3839,6 +3865,7 @@ int ixj_ioctl(struct inode *inode, struct file *file_p,
 		ixj_daa_cr4(board, arg | 0x02);
 		break;
 	case IXJCTL_PSTN_LINETEST:
+	case PHONE_PSTN_LINETEST:
 		retval = ixj_linetest(board);
 		break;
 	case IXJCTL_CID:

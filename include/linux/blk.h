@@ -18,17 +18,7 @@ extern spinlock_t io_request_lock;
  * NOTE that writes may use only the low 2/3 of these: reads
  * take precedence.
  */
-#define NR_REQUEST	128
-
-/*
- * This is used in the elevator algorithm.  We don't prioritise reads
- * over writes any more --- although reads are more time-critical than
- * writes, by treating them equally we increase filesystem throughput.
- * This turns out to give better overall performance.  -- sct
- */
-#define IN_ORDER(s1,s2) \
-((s1)->rq_dev < (s2)->rq_dev || (((s1)->rq_dev == (s2)->rq_dev && \
-(s1)->sector < (s2)->sector)))
+#define NR_REQUEST	256
 
 /*
  * Initialization functions.
@@ -102,7 +92,7 @@ extern inline void blkdev_dequeue_request(struct request * req)
 	{
 		if (req->cmd == READ)
 			req->q->elevator.read_pendings--;
-		req->q->nr_segments -= req->nr_segments;
+		req->q->elevator.nr_segments -= req->nr_segments;
 		req->q = NULL;
 	}
 	list_del(&req->queue);

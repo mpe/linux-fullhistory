@@ -16,22 +16,23 @@ extern unsigned int system_serial_high;
 extern unsigned int __machine_arch_type;
 
 /* see arch/arm/kernel/setup.c for a description of these */
-#define MACH_TYPE_EBSA110	0
-#define MACH_TYPE_RISCPC	1
-#define MACH_TYPE_NEXUSPCI	3
-#define MACH_TYPE_EBSA285	4
-#define MACH_TYPE_NETWINDER	5
-#define MACH_TYPE_CATS		6
-#define MACH_TYPE_TBOX		7
-#define MACH_TYPE_CO285		8
-#define MACH_TYPE_CLPS7110	9
-#define MACH_TYPE_ARCHIMEDES	10
-#define MACH_TYPE_A5K		11
-#define MACH_TYPE_ETOILE	12
-#define MACH_TYPE_LACIE_NAS	13
-#define MACH_TYPE_CLPS7500	14
-#define MACH_TYPE_SHARK		15
-#define MACH_TYPE_SA1100	16
+#define MACH_TYPE_EBSA110		0
+#define MACH_TYPE_RISCPC		1
+#define MACH_TYPE_NEXUSPCI		3
+#define MACH_TYPE_EBSA285		4
+#define MACH_TYPE_NETWINDER		5
+#define MACH_TYPE_CATS			6
+#define MACH_TYPE_TBOX			7
+#define MACH_TYPE_CO285			8
+#define MACH_TYPE_CLPS7110		9
+#define MACH_TYPE_ARCHIMEDES		10
+#define MACH_TYPE_A5K			11
+#define MACH_TYPE_ETOILE		12
+#define MACH_TYPE_LACIE_NAS		13
+#define MACH_TYPE_CLPS7500		14
+#define MACH_TYPE_SHARK			15
+#define MACH_TYPE_SA1100		16
+#define MACH_TYPE_PERSONAL_SERVER	17
 
 /*
  * Sort out a definition for machine_arch_type
@@ -41,6 +42,11 @@ extern unsigned int __machine_arch_type;
  * 2. If two or more architectures are selected, then the selected
  *    machine_is_xxx() are variable, and the unselected machine_is_xxx()
  *    are constant zero.
+ *
+ * In general, you should use machine_is_xxxx() in your code, not:
+ *  -  switch (machine_arch_type) { }
+ *  -  if (machine_arch_type = xxxx)
+ *  -  __machine_arch_type
  */
 #ifdef CONFIG_ARCH_EBSA110
 # ifdef machine_arch_type
@@ -114,6 +120,54 @@ extern unsigned int __machine_arch_type;
 # define machine_is_co285()	(0)
 #endif
 
+#ifdef CONFIG_ARCH_ARC
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_ARCHIMEDES
+# endif
+# define machine_is_arc()	(machine_arch_type == MACH_TYPE_ARCHIMEDES)
+#else
+# define machine_is_arc()	(0)
+#endif
+
+#ifdef CONFIG_ARCH_A5K
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_A5K
+# endif
+# define machine_is_a5k()	(machine_arch_type == MACH_TYPE_A5K)
+#else
+# define machine_is_a5k()	(0)
+#endif
+
+#ifdef CONFIG_ARCH_CLPS7500
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_CLPS7500
+# endif
+# define machine_is_clps7500()	(machine_arch_type == MACH_TYPE_CLPS7500)
+#else
+# define machine_is_clps7500()	(0)
+#endif
+
+#ifdef CONFIG_ARCH_SHARK
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_SHARK
+# endif
+# define machine_is_shark()	(machine_arch_type == MACH_TYPE_SHARK)
+#else
+# define machine_is_shark()	(0)
+#endif
+
 #ifdef CONFIG_ARCH_SA1100
 # ifdef machine_arch_type
 #  undef machine_arch_type
@@ -121,9 +175,21 @@ extern unsigned int __machine_arch_type;
 # else
 #  define machine_arch_type	MACH_TYPE_SA1100
 # endif
-# define machine_is_sa1100()	(machine_arch_type == MACH_TYPE_SA1100
+# define machine_is_sa1100()	(machine_arch_type == MACH_TYPE_SA1100)
 #else
 # define machine_is_sa1100()	(0)
+#endif
+
+#ifdef CONFIG_PERSONAL_SERVER
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_PERSONAL_SERVER
+# endif
+# define machine_is_personal_server()	(machine_arch_type == MACH_TYPE_PERSONAL_SERVER)
+#else
+# define machine_is_personal_server()	(0)
 #endif
 
 #ifndef machine_arch_type

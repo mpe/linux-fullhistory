@@ -121,21 +121,7 @@ EXPORT_SYMBOL(smp_call_function);
 #endif
 
 #ifdef CONFIG_MCA
-/* Adapter probing and info methods. */
 EXPORT_SYMBOL(machine_id);
-EXPORT_SYMBOL(mca_find_adapter);
-EXPORT_SYMBOL(mca_write_pos);
-EXPORT_SYMBOL(mca_read_pos);
-EXPORT_SYMBOL(mca_read_stored_pos);
-EXPORT_SYMBOL(mca_set_adapter_name);
-EXPORT_SYMBOL(mca_get_adapter_name);
-EXPORT_SYMBOL(mca_set_adapter_procfn);
-EXPORT_SYMBOL(mca_isenabled);
-EXPORT_SYMBOL(mca_isadapter);
-EXPORT_SYMBOL(mca_mark_as_used);
-EXPORT_SYMBOL(mca_mark_as_unused);
-EXPORT_SYMBOL(mca_find_unused_adapter);
-EXPORT_SYMBOL(mca_is_adapter_used);
 #endif
 
 #ifdef CONFIG_VT

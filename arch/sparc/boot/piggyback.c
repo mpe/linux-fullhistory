@@ -1,4 +1,4 @@
-/* $Id: piggyback.c,v 1.2 1998/12/15 12:24:43 jj Exp $
+/* $Id: piggyback.c,v 1.3 2000/03/11 00:22:26 zaitcev Exp $
    Simple utility to make a single-image install kernel with initial ramdisk
    for Sparc tftpbooting without need to set up nfs.
    
@@ -29,8 +29,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-/* Note: run this on an a.out kernel (use elftoaout for it), as PROM looks for a.out image onlly
-   usage: piggyback vmlinux System.map tail, where tail is gzipped fs of the initial ramdisk */
+/*
+ * Note: run this on an a.out kernel (use elftoaout for it),
+ * as PROM looks for a.out image only.
+ */
+
+void usage(void)
+{
+	/* fs_img.gz is an image of initial ramdisk. */
+	fprintf(stderr, "Usage: piggyback vmlinux.aout System.map fs_img.gz\n");
+	fprintf(stderr, "\tKernel image will be modified in place.\n");
+	exit(1);
+}
 
 void die(char *str)
 {
@@ -45,7 +55,8 @@ int main(int argc,char **argv)
 	FILE *map;
 	struct stat s;
 	int image, tail;
-	
+
+	if (argc != 4) usage();
 	start = end = 0;
 	if (stat (argv[3], &s) < 0) die (argv[3]);
 	map = fopen (argv[2], "r");

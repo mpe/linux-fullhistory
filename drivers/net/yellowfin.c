@@ -77,7 +77,6 @@ static int gx_fix = 0;
 
 #include <linux/version.h>
 #include <linux/module.h>
-#include <linux/modversions.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/timer.h>

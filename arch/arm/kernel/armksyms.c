@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/in6.h>
+#include <linux/vt_kern.h>
 
 #include <asm/byteorder.h>
 #include <asm/elf.h>
@@ -82,6 +83,8 @@ EXPORT_SYMBOL_ALIAS(fp_send_sig,send_sig);
 EXPORT_SYMBOL(fpundefinstr);
 EXPORT_SYMBOL(ret_from_exception);
 #endif
+
+EXPORT_SYMBOL(kd_mksound);
 
 	/* platform dependent support */
 EXPORT_SYMBOL(dump_thread);

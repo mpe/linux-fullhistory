@@ -28,8 +28,6 @@
 
 #include <linux/module.h>
 
-#define DEBUG_ELEVATOR
-
 /*
  * MAC Floppy IWM hooks
  */
@@ -150,18 +148,6 @@ request_queue_t * blk_get_queue (kdev_t dev)
 	return ret;
 }
 
-static inline int get_request_latency(elevator_t * elevator, int rw)
-{
-	int latency;
-
-	if (rw != READ)
-		latency = elevator->write_latency;
-	else
-		latency = elevator->read_latency;
-
-	return latency;
-}
-
 void blk_cleanup_queue(request_queue_t * q)
 {
 	memset(q, 0, sizeof(*q));
@@ -186,7 +172,7 @@ static inline int ll_new_segment(request_queue_t *q, struct request *req, int ma
 {
 	if (req->nr_segments < max_segments) {
 		req->nr_segments++;
-		q->nr_segments++;
+		q->elevator.nr_segments++;
 		return 1;
 	}
 	return 0;
@@ -212,18 +198,18 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
 				struct request *next, int max_segments)
 {
 	int total_segments = req->nr_segments + next->nr_segments;
-       int same_segment;
+	int same_segment;
 
-       same_segment = 0;
+	same_segment = 0;
 	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data) {
 		total_segments--;
-               same_segment = 1;
+		same_segment = 1;
 	}
     
 	if (total_segments > max_segments)
 		return 0;
 
-       q->nr_segments -= same_segment;
+	q->elevator.nr_segments -= same_segment;
 	req->nr_segments = total_segments;
 	return 1;
 }
@@ -254,7 +240,7 @@ static void generic_plug_device (request_queue_t *q, kdev_t dev)
 void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
 {
 	INIT_LIST_HEAD(&q->queue_head);
-	q->elevator = ELEVATOR_DEFAULTS;
+	elevator_init(&q->elevator);
 	q->request_fn     	= rfn;
 	q->back_merge_fn       	= ll_back_merge_fn;
 	q->front_merge_fn      	= ll_front_merge_fn;
@@ -425,113 +411,6 @@ static inline void drive_stat_acct(struct request *req,
 		printk(KERN_ERR "drive_stat_acct: cmd not R/W?\n");
 }
 
-/* elevator */
-
-#define elevator_sequence_after(a,b) ((int)((b)-(a)) < 0)
-#define elevator_sequence_before(a,b) elevator_sequence_after(b,a)
-#define elevator_sequence_after_eq(a,b) ((int)((b)-(a)) <= 0)
-#define elevator_sequence_before_eq(a,b) elevator_sequence_after_eq(b,a)
-
-static inline struct list_head * seek_to_not_starving_chunk(request_queue_t * q,
-							    int * lat, int * starving)
-{
-	int sequence = q->elevator.sequence;
-	struct list_head * entry = q->queue_head.prev;
-	int pos = 0;
-
-	do {
-		struct request * req = blkdev_entry_to_request(entry);
-		if (elevator_sequence_before(req->elevator_sequence, sequence)) {
-			*lat -= q->nr_segments - pos;
-			*starving = 1;
-			return entry;
-		}
-		pos += req->nr_segments;
-	} while ((entry = entry->prev) != &q->queue_head);
-
-	*starving = 0;
-
-	return entry->next;
-}
-
-static inline void elevator_merge_requests(elevator_t * e, struct request * req, struct request * next)
-{
-	if (elevator_sequence_before(next->elevator_sequence, req->elevator_sequence))
-		req->elevator_sequence = next->elevator_sequence;
-	if (req->cmd == READ)
-		e->read_pendings--;
-
-}
-
-static inline int elevator_sequence(elevator_t * e, int latency)
-{
-	return latency + e->sequence;
-}
-
-#define elevator_merge_before(q, req, lat)	__elevator_merge((q), (req), (lat), 0)
-#define elevator_merge_after(q, req, lat)	__elevator_merge((q), (req), (lat), 1)
-static inline void __elevator_merge(request_queue_t * q, struct request * req, int latency, int after)
-{
-	int sequence = elevator_sequence(&q->elevator, latency);
-	if (after)
-		sequence -= req->nr_segments;
-	if (elevator_sequence_before(sequence, req->elevator_sequence))
-		req->elevator_sequence = sequence;
-}
-
-static inline void elevator_queue(request_queue_t * q,
-				  struct request * req,
-				  struct list_head * entry,
-				  int latency, int starving)
-{
-	struct request * tmp, * __tmp;
-	int __latency = latency;
-
-	__tmp = tmp = blkdev_entry_to_request(entry);
-
-	for (;; tmp = blkdev_next_request(tmp))
-	{
-		if ((latency -= tmp->nr_segments) <= 0)
-		{
-			tmp = __tmp;
-			latency = __latency;
-
-			if (starving)
-				break;
-
-			if (q->head_active && !q->plugged)
-			{
-				latency -= tmp->nr_segments;
-				break;
-			}
-
-			list_add(&req->queue, &q->queue_head);
-			goto after_link;
-		}
-
-		if (tmp->queue.next == &q->queue_head)
-			break;
-
-		{
-			const int after_current = IN_ORDER(tmp,req);
-			const int before_next = IN_ORDER(req,blkdev_next_request(tmp));
-
-			if (!IN_ORDER(tmp,blkdev_next_request(tmp))) {
-				if (after_current || before_next)
-					break;
-			} else {
-				if (after_current && before_next)
-					break;
-			}
-		}
-	}
-
-	list_add(&req->queue, &tmp->queue);
-
- after_link:
-	req->elevator_sequence = elevator_sequence(&q->elevator, latency);
-}
-
 /*
  * add-request adds a request to the linked list.
  * It disables interrupts (aquires the request spinlock) so that it can muck
@@ -542,20 +421,19 @@ static inline void elevator_queue(request_queue_t * q,
  * which is important for drive_stat_acct() above.
  */
 
-static inline void __add_request(request_queue_t * q, struct request * req,
-				 int empty, struct list_head * entry,
-				 int latency, int starving)
+static inline void add_request(request_queue_t * q, struct request * req,
+			       struct list_head * head, int latency)
 {
 	int major;
 
 	drive_stat_acct(req, req->nr_sectors, 1);
 
-	if (empty) {
+	if (list_empty(head)) {
 		req->elevator_sequence = elevator_sequence(&q->elevator, latency);
 		list_add(&req->queue, &q->queue_head);
 		return;
 	}
-	elevator_queue(q, req, entry, latency, starving);
+	q->elevator.elevator_fn(req, &q->elevator, &q->queue_head, head, latency);
 
 	/*
 	 * FIXME(eric) I don't understand why there is a need for this
@@ -579,19 +457,17 @@ static inline void __add_request(request_queue_t * q, struct request * req,
 /*
  * Has to be called with the request spinlock aquired
  */
-static inline void attempt_merge (request_queue_t * q,
-				  struct request *req,
-				  int max_sectors,
-				  int max_segments)
+static void attempt_merge(request_queue_t * q,
+			  struct request *req,
+			  int max_sectors,
+			  int max_segments)
 {
 	struct request *next;
   
-	if (req->queue.next == &q->queue_head)
-		return;
 	next = blkdev_next_request(req);
 	if (req->sector + req->nr_sectors != next->sector)
 		return;
-	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors)
+	if (req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors || next->sem)
 		return;
 	/*
 	 * If we are not allowed to merge these requests, then
@@ -611,54 +487,28 @@ static inline void attempt_merge (request_queue_t * q,
 	wake_up (&wait_for_request);
 }
 
-static inline void elevator_debug(request_queue_t * q, kdev_t dev)
+static inline void attempt_back_merge(request_queue_t * q,
+				      struct request *req,
+				      int max_sectors,
+				      int max_segments)
 {
-#ifdef DEBUG_ELEVATOR
-	int read_pendings = 0, nr_segments = 0;
-	elevator_t * elevator = &q->elevator;
-	struct list_head * entry = &q->queue_head;
-	static int counter;
-
-	if (counter++ % 100)
+	if (&req->queue == q->queue_head.prev)
 		return;
-
-	while ((entry = entry->next) != &q->queue_head)
-	{
-		struct request * req;
-
-		req = blkdev_entry_to_request(entry);
-		if (!req->q)
-			continue;
-		if (req->cmd == READ)
-			read_pendings++;
-		nr_segments += req->nr_segments;
-	}
-
-	if (read_pendings != elevator->read_pendings)
-	{
-		printk(KERN_WARNING
-		       "%s: elevator read_pendings %d should be %d\n",
-		       kdevname(dev), elevator->read_pendings,
-		       read_pendings);
-		elevator->read_pendings = read_pendings;
-	}
-	if (nr_segments != q->nr_segments)
-	{
-		printk(KERN_WARNING
-		       "%s: elevator nr_segments %d should be %d\n",
-		       kdevname(dev), q->nr_segments,
-		       nr_segments);
-		q->nr_segments = nr_segments;
-	}
-#endif
+	attempt_merge(q, req, max_sectors, max_segments);
 }
 
-static inline void elevator_account_request(request_queue_t * q, struct request * req)
+static inline void attempt_front_merge(request_queue_t * q,
+				       struct list_head * head,
+				       struct request *req,
+				       int max_sectors,
+				       int max_segments)
 {
-	q->elevator.sequence++;
-	if (req->cmd == READ)
-		q->elevator.read_pendings++;
-	q->nr_segments++;
+	struct list_head * prev;
+
+	prev = req->queue.prev;
+	if (head == prev)
+		return;
+	attempt_merge(q, blkdev_entry_to_request(prev), max_sectors, max_segments);
 }
 
 static inline void __make_request(request_queue_t * q, int rw,
@@ -667,11 +517,13 @@ static inline void __make_request(request_queue_t * q, int rw,
 	int major = MAJOR(bh->b_rdev);
 	unsigned int sector, count;
 	int max_segments = MAX_SEGMENTS;
-	struct request * req, * prev;
+	struct request * req;
 	int rw_ahead, max_req, max_sectors;
 	unsigned long flags;
-	int orig_latency, latency, __latency, starving, __starving, empty;
-	struct list_head * entry, * __entry = NULL;
+
+	int orig_latency, latency, starving, sequence;
+	struct list_head * entry, * head = &q->queue_head;
+	elevator_t * elevator;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
@@ -758,7 +610,8 @@ static inline void __make_request(request_queue_t * q, int rw,
 	 */
 	max_sectors = get_max_sectors(bh->b_rdev);
 
-	__latency = orig_latency = get_request_latency(&q->elevator, rw);
+	elevator = &q->elevator;
+	orig_latency = elevator_request_latency(elevator, rw);
 
 	/*
 	 * Now we acquire the request spinlock, we have to be mega careful
@@ -767,46 +620,42 @@ static inline void __make_request(request_queue_t * q, int rw,
 	spin_lock_irqsave(&io_request_lock,flags);
 	elevator_debug(q, bh->b_rdev);
 
-	empty = 0;
-	if (list_empty(&q->queue_head)) {
-		empty = 1;
+	if (list_empty(head)) {
 		q->plug_device_fn(q, bh->b_rdev); /* is atomic */
 		goto get_rq;
 	}
 
 	/* avoid write-bombs to not hurt iteractiveness of reads */
-	if (rw != READ && q->elevator.read_pendings)
-		max_segments = q->elevator.max_bomb_segments;
+	if (rw != READ && elevator->read_pendings)
+		max_segments = elevator->max_bomb_segments;
 
-	entry = seek_to_not_starving_chunk(q, &__latency, &starving);
+	sequence = elevator->sequence;
+	latency = orig_latency - elevator->nr_segments;
+	starving = 0;
+	entry = head;
 
-	__entry = entry;
-	__starving = starving;
+	/*
+	 * The scsi disk and cdrom drivers completely remove the request
+	 * from the queue when they start processing an entry.  For this
+	 * reason it is safe to continue to add links to the top entry
+	 * for those devices.
+	 *
+	 * All other drivers need to jump over the first entry, as that
+	 * entry may be busy being processed and we thus can't change
+	 * it.
+	 */
+	if (q->head_active && !q->plugged)
+		head = head->next;
 
-	latency = __latency;
-
-	if (q->head_active && !q->plugged) {
-		/*
-		 * The scsi disk and cdrom drivers completely remove the request
-		 * from the queue when they start processing an entry.  For this
-		 * reason it is safe to continue to add links to the top entry
-		 * for those devices.
-		 *
-		 * All other drivers need to jump over the first entry, as that
-		 * entry may be busy being processed and we thus can't change
-		 * it.
-		 */
-		if (entry == q->queue_head.next) {
-			latency -= blkdev_entry_to_request(entry)->nr_segments;
-			if ((entry = entry->next) == &q->queue_head)
-				goto get_rq;
-			starving = 0;
-		}
-	}
-
-	prev = NULL;
-	do {
+	while ((entry = entry->prev) != head && !starving) {
 		req = blkdev_entry_to_request(entry);
+		if (!req->q)
+			break;
+		latency += req->nr_segments;
+		if (elevator_sequence_before(req->elevator_sequence, sequence))
+			starving = 1;
+		if (latency < 0)
+			continue;
 
 		if (req->sem)
 			continue;
@@ -833,20 +682,20 @@ static inline void __make_request(request_queue_t * q, int rw,
 			 * this 
 			 */
 			if(!(q->back_merge_fn)(q, req, bh, max_segments))
-				continue;
+				break;
 			req->bhtail->b_reqnext = bh;
 			req->bhtail = bh;
 		    	req->nr_sectors += count;
 			drive_stat_acct(req, count, 0);
 
-			elevator_merge_after(q, req, latency);
+			elevator_merge_after(elevator, req, latency);
 
 			/* Can we now merge this req with the next? */
-			attempt_merge(q, req, max_sectors, max_segments);
+			attempt_back_merge(q, req, max_sectors, max_segments);
 		/* or to the beginning? */
 		} else if (req->sector - count == sector) {
-			if (!prev && starving)
-				continue;
+			if (starving)
+				break;
 			/*
 			 * The merge_fn is a more advanced way
 			 * of accomplishing the same task.  Instead
@@ -860,7 +709,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 			 * this 
 			 */
 			if(!(q->front_merge_fn)(q, req, bh, max_segments))
-				continue;
+				break;
 		    	bh->b_reqnext = req->bh;
 		    	req->bh = bh;
 		    	req->buffer = bh->b_data;
@@ -869,10 +718,9 @@ static inline void __make_request(request_queue_t * q, int rw,
 		    	req->nr_sectors += count;
 			drive_stat_acct(req, count, 0);
 
-			elevator_merge_before(q, req, latency);
+			elevator_merge_before(elevator, req, latency);
 
-			if (prev)
-				attempt_merge(q, prev, max_sectors, max_segments);
+			attempt_front_merge(q, head, req, max_sectors, max_segments);
 		} else
 			continue;
 
@@ -880,9 +728,7 @@ static inline void __make_request(request_queue_t * q, int rw,
 		spin_unlock_irqrestore(&io_request_lock,flags);
 	    	return;
 
-	} while (prev = req,
-		 (latency -= req->nr_segments) >= 0 &&
-		 (entry = entry->next) != &q->queue_head);
+	}
 
 /* find an unused request. */
 get_rq:
@@ -899,31 +745,10 @@ get_rq:
 		req = __get_request_wait(max_req, bh->b_rdev);
 		spin_lock_irqsave(&io_request_lock,flags);
 
-		/* lock got dropped so revalidate elevator */
-		empty = 1;
-		if (!list_empty(&q->queue_head)) {
-			empty = 0;
-			__latency = orig_latency;
-			__entry = seek_to_not_starving_chunk(q, &__latency, &__starving);
-		}
-	}
-	/*
-	 * Dont start the IO if the buffer has been
-	 * invalidated meanwhile. (we have to do this
-	 * within the io request lock and atomically
-	 * before adding the request, see buffer.c's
-	 * insert_into_queues_exclusive() function.
-	 */
-	if (!test_bit(BH_Req, &bh->b_state)) {
-		req->rq_status = RQ_INACTIVE;
-		spin_unlock_irqrestore(&io_request_lock,flags);
-		/*
-		 * A fake 'everything went ok' completion event.
-		 * The bh doesnt matter anymore, but we should not
-		 * signal errors to RAID levels.
-	 	 */
-		bh->b_end_io(bh, 1);
-		return;
+		/* revalidate elevator */
+		head = &q->queue_head;
+		if (q->head_active && !q->plugged)
+			head = head->next;
 	}
 
 /* fill up the request-info, and add it to the queue */
@@ -939,8 +764,8 @@ get_rq:
 	req->bh = bh;
 	req->bhtail = bh;
 	req->q = q;
-	__add_request(q, req, empty, __entry, __latency, __starving);
-	elevator_account_request(q, req);
+	add_request(q, req, head, orig_latency);
+	elevator_account_request(elevator, req);
 
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	return;
@@ -1166,10 +991,10 @@ int __init blk_dev_init(void)
 #ifdef CONFIG_ISP16_CDI
 	isp16_init();
 #endif CONFIG_ISP16_CDI
-#ifdef CONFIG_BLK_DEV_IDE
+#if defined(CONFIG_IDE) && defined(CONFIG_BLK_DEV_IDE)
 	ide_init();		/* this MUST precede hd_init */
 #endif
-#ifdef CONFIG_BLK_DEV_HD
+#if defined(CONFIG_IDE) && defined(CONFIG_BLK_DEV_HD)
 	hd_init();
 #endif
 #ifdef CONFIG_BLK_DEV_PS2

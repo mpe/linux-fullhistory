@@ -33,6 +33,12 @@ tkgen.o: tkgen.c tkparse.h
 tkparse.o tkcond.o tkgen.o:
 	$(HOSTCC) $(HOSTCFLAGS) -c -o $@ $(@:.o=.c)
 
+docproc.o: docproc.c
+	$(HOSTCC) $(HOSTCFLAGS) -c -o $@ $(@:.o=.c)
+
+docproc: docproc.o
+	${HOSTCC} -o docproc docproc.o
+
 clean:
 	rm -f *~ kconfig.tk *.o tkparse mkdep split-include
 

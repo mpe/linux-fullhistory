@@ -517,7 +517,7 @@ static pte_t **shm_alloc(unsigned long pages)
 {
 	unsigned short dir  = pages / PTRS_PER_PTE;
 	unsigned short last = pages % PTRS_PER_PTE;
-	pte_t **ret, **ptr;
+	pte_t **ret, **ptr, *pte;
 
 	if (pages == 0)
 		return NULL;
@@ -531,7 +531,8 @@ static pte_t **shm_alloc(unsigned long pages)
 		*ptr = (pte_t *)__get_free_page (GFP_KERNEL);
 		if (!*ptr)
 			goto free;
-		memset (*ptr, 0, PAGE_SIZE); 
+		for (pte = *ptr; pte < *ptr + PTRS_PER_PTE; pte++)
+			pte_clear (pte);
 	}
 
 	/* The last one is probably not of PAGE_SIZE: we use kmalloc */
@@ -539,7 +540,8 @@ static pte_t **shm_alloc(unsigned long pages)
 		*ptr = kmalloc (last*sizeof(pte_t), GFP_KERNEL);
 		if (!*ptr)
 			goto free;
-		memset (*ptr, 0, last*sizeof(pte_t));
+		for (pte = *ptr; pte < *ptr + last; pte++)
+			pte_clear (pte);
 	}
 	return ret;
 
@@ -696,9 +698,11 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 {
 	struct shmid_kernel *shp;
 	int err, id = 0;
+	static int count=0;
 
 	if (!shm_sb) {
-		printk ("shmget: shm filesystem not mounted\n");
+		if(count++<5)
+			printk(KERN_WARNING "shmget: shm filesystem not mounted\n");
 		return -EINVAL;
 	}
 
@@ -886,9 +890,11 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	struct shm_setbuf setbuf;
 	struct shmid_kernel *shp;
 	int err, version;
+	static int count;
 
 	if (!shm_sb) {
-		printk ("shmctl: shm filesystem not mounted\n");
+		if(count++<5)
+			printk (KERN_WARNING "shmctl: shm filesystem not mounted\n");
 		return -EINVAL;
 	}
 

@@ -73,12 +73,6 @@ CONFIG_KMOD=y
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_IDE is not set
-
-#
-# Please see Documentation/ide.txt for help/info on IDE drives
-#
-# CONFIG_BLK_DEV_HD_ONLY is not set
 
 #
 # Additional Block Devices
@@ -89,8 +83,6 @@ CONFIG_KMOD=y
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_PARIDE is not set
-# CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
 
 #
 # Networking options
@@ -146,6 +138,11 @@ CONFIG_IP_PNP_BOOTP=y
 #
 # CONFIG_PHONE is not set
 # CONFIG_PHONE_IXJ is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
 
 #
 # SCSI support

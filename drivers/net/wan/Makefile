@@ -180,8 +180,8 @@ clean:
 	rm -f core *.o *.a *.s
 
 wanpipe.o: $(WANPIPE_OBJS)
-	ld -r -o $@ $(WANPIPE_OBJS)
+	$(LD) -r -o $@ $(WANPIPE_OBJS)
 
 cyclomx.o: $(CYCLOMX_OBJS)
-	ld -r -o $@ $(CYCLOMX_OBJS)
+	$(LD) -r -o $@ $(CYCLOMX_OBJS)
 

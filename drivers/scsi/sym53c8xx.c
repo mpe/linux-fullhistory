@@ -55,7 +55,7 @@
 */
 
 /*
-**	February 20 2000, sym53c8xx 1.5j
+**	March 6 2000, sym53c8xx 1.5k
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -84,7 +84,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5j"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5k"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -173,6 +173,9 @@ typedef u32 u_int32;
 typedef u64 u_int64;
 
 #include "sym53c8xx.h"
+
+#define MIN(a,b)        (((a) < (b)) ? (a) : (b))
+#define MAX(a,b)        (((a) > (b)) ? (a) : (b))
 
 /*
 **	Hmmm... What complex some PCI-HOST bridges actually are, 
@@ -1000,8 +1003,9 @@ static m_addr_t ___dma_getp(m_pool_s *mp)
 			++mp->nump;
 			return vp;
 		}
+		else
+			__m_free(&mp0, vbp, sizeof(*vbp), "VTOB");
 	}
-	__m_free(&mp0, vbp, sizeof(*vbp), "VTOB");
 	return 0;
 }
 
@@ -1253,7 +1257,7 @@ static void ncr_printl_hex(char *label, u_char *p, int n)
 #define	SCSI_DATA_READ		2
 #define	SCSI_DATA_NONE		3
 
-static __inline__ scsi_data_direction(Scsi_Cmnd *cmd)
+static __inline__ int scsi_data_direction(Scsi_Cmnd *cmd)
 {
 	int direction;
 
@@ -2043,12 +2047,17 @@ struct head {
 #define HF_ACT_PM	(1u<<2)
 #define HF_DP_SAVED	(1u<<3)
 #define HF_AUTO_SENSE	(1u<<4)
-#define HF_DATA_ST	(1u<<5)
+#define HF_DATA_IN	(1u<<5)
 #define HF_PM_TO_C	(1u<<6)
 
 #ifdef SCSI_NCR_IARB_SUPPORT
 #define HF_HINT_IARB	(1u<<7)
 #endif
+
+/*
+**	This one is stolen from QU_REG.:)
+*/
+#define HF_DATA_ST	(1u<<7)
 
 /*
 **	First four bytes (script)
@@ -2568,8 +2577,12 @@ struct script {
 	ncrcmd  data_in2	[  4];
 	ncrcmd  data_out	[MAX_SCATTER * SCR_SG_SIZE];
 	ncrcmd  data_out2	[  4];
-	ncrcmd  pm0_data	[ 16];
-	ncrcmd  pm1_data	[ 16];
+	ncrcmd  pm0_data	[ 12];
+	ncrcmd  pm0_data_out	[  6];
+	ncrcmd  pm0_data_end	[  6];
+	ncrcmd  pm1_data	[ 12];
+	ncrcmd  pm1_data_out	[  6];
+	ncrcmd  pm1_data_end	[  6];
 };
 
 /*
@@ -2607,7 +2620,7 @@ struct scripth {
 	ncrcmd	sdata_in	[  6];
 	ncrcmd  data_io		[  2];
 	ncrcmd  data_io_com	[  8];
-	ncrcmd  data_io_out	[ 10];
+	ncrcmd  data_io_out	[ 12];
 	ncrcmd	bad_identify	[ 12];
 	ncrcmd	bad_i_t_l	[  4];
 	ncrcmd	bad_i_t_l_q	[  4];
@@ -3146,12 +3159,11 @@ static	struct script script0 __initdata = {
 
 }/*-------------------------< DATAPHASE >------------------*/,{
 #ifdef SCSI_NCR_PROFILE_SUPPORT
-	SCR_REG_REG (HF_REG, SCR_OR, HF_DATA_ST),
+	SCR_REG_REG (QU_REG, SCR_OR, HF_DATA_ST),
 		0,
 #endif
 	SCR_RETURN,
- 		0,
-
+		0,
 }/*-------------------------< MSG_IN >--------------------*/,{
 	/*
 	**	Get the first byte of the message.
@@ -3390,7 +3402,7 @@ static	struct script script0 __initdata = {
 	*/
 	SCR_LOAD_REL (scratcha, 4),
 		offsetof (struct ccb, phys.num_disc),
-	SCR_FROM_REG (HF_REG),
+	SCR_FROM_REG (QU_REG),
 		0,
 	SCR_JUMPR ^ IFTRUE (MASK (HF_DATA_ST, HF_DATA_ST)),
 		8,
@@ -3692,26 +3704,57 @@ static	struct script script0 __initdata = {
 
 }/*-------------------------< PM0_DATA >--------------------*/,{
 	/*
-	**	Keep track we are executing the PM0 DATA 
-	**	mini-script.
+	**	Read our host flags to SFBR, so we will be able 
+	**	to check against the data direction we expect.
+	*/
+	SCR_FROM_REG (HF_REG),
+		0,
+	/*
+	**	Check against actual DATA PHASE.
+	*/
+	SCR_JUMP ^ IFFALSE (WHEN (SCR_DATA_IN)),
+		PADDR (pm0_data_out),
+	/*
+	**	Actual phase is DATA IN.
+	**	Check against expected direction.
+	*/
+	SCR_JUMP ^ IFFALSE (MASK (HF_DATA_IN, HF_DATA_IN)),
+		PADDRH (no_data),
+	/*
+	**	Keep track we are moving data from the 
+	**	PM0 DATA mini-script.
 	*/
 	SCR_REG_REG (HF_REG, SCR_OR, HF_IN_PM0),
 		0,
 	/*
-	**	MOVE the data according to the actual 
-	**	DATA direction.
+	**	Move the data to memory.
 	*/
-	SCR_JUMPR ^ IFFALSE (WHEN (SCR_DATA_IN)),
-		16,
 	SCR_CHMOV_TBL ^ SCR_DATA_IN,
 		offsetof (struct ccb, phys.pm0.sg),
-	SCR_JUMPR,
-		8,
+	SCR_JUMP,
+		PADDR (pm0_data_end),
+}/*-------------------------< PM0_DATA_OUT >----------------*/,{
+	/*
+	**	Actual phase is DATA OUT.
+	**	Check against expected direction.
+	*/
+	SCR_JUMP ^ IFTRUE (MASK (HF_DATA_IN, HF_DATA_IN)),
+		PADDRH (no_data),
+	/*
+	**	Keep track we are moving data from the 
+	**	PM0 DATA mini-script.
+	*/
+	SCR_REG_REG (HF_REG, SCR_OR, HF_IN_PM0),
+		0,
+	/*
+	**	Move the data from memory.
+	*/
 	SCR_CHMOV_TBL ^ SCR_DATA_OUT,
 		offsetof (struct ccb, phys.pm0.sg),
+}/*-------------------------< PM0_DATA_END >----------------*/,{
 	/*
-	**	Clear the flag that told we were in 
-	**	the PM0 DATA mini-script.
+	**	Clear the flag that told we were moving  
+	**	data from the PM0 DATA mini-script.
 	*/
 	SCR_REG_REG (HF_REG, SCR_AND, (~HF_IN_PM0)),
 		0,
@@ -3726,26 +3769,57 @@ static	struct script script0 __initdata = {
 		0,
 }/*-------------------------< PM1_DATA >--------------------*/,{
 	/*
-	**	Keep track we are executing the PM1 DATA 
-	**	mini-script.
+	**	Read our host flags to SFBR, so we will be able 
+	**	to check against the data direction we expect.
+	*/
+	SCR_FROM_REG (HF_REG),
+		0,
+	/*
+	**	Check against actual DATA PHASE.
+	*/
+	SCR_JUMP ^ IFFALSE (WHEN (SCR_DATA_IN)),
+		PADDR (pm1_data_out),
+	/*
+	**	Actual phase is DATA IN.
+	**	Check against expected direction.
+	*/
+	SCR_JUMP ^ IFFALSE (MASK (HF_DATA_IN, HF_DATA_IN)),
+		PADDRH (no_data),
+	/*
+	**	Keep track we are moving data from the 
+	**	PM1 DATA mini-script.
 	*/
 	SCR_REG_REG (HF_REG, SCR_OR, HF_IN_PM1),
 		0,
 	/*
-	**	MOVE the data according to the actual 
-	**	DATA direction.
+	**	Move the data to memory.
 	*/
-	SCR_JUMPR ^ IFFALSE (WHEN (SCR_DATA_IN)),
-		16,
 	SCR_CHMOV_TBL ^ SCR_DATA_IN,
 		offsetof (struct ccb, phys.pm1.sg),
-	SCR_JUMPR,
-		8,
+	SCR_JUMP,
+		PADDR (pm1_data_end),
+}/*-------------------------< PM1_DATA_OUT >----------------*/,{
+	/*
+	**	Actual phase is DATA OUT.
+	**	Check against expected direction.
+	*/
+	SCR_JUMP ^ IFTRUE (MASK (HF_DATA_IN, HF_DATA_IN)),
+		PADDRH (no_data),
+	/*
+	**	Keep track we are moving data from the 
+	**	PM1 DATA mini-script.
+	*/
+	SCR_REG_REG (HF_REG, SCR_OR, HF_IN_PM1),
+		0,
+	/*
+	**	Move the data from memory.
+	*/
 	SCR_CHMOV_TBL ^ SCR_DATA_OUT,
 		offsetof (struct ccb, phys.pm1.sg),
+}/*-------------------------< PM1_DATA_END >----------------*/,{
 	/*
-	**	Clear the flag that told we were in 
-	**	the PM1 DATA mini-script.
+	**	Clear the flag that told we were moving  
+	**	data from the PM1 DATA mini-script.
 	*/
 	SCR_REG_REG (HF_REG, SCR_AND, (~HF_IN_PM1)),
 		0,
@@ -4193,6 +4267,8 @@ static	struct scripth scripth0 __initdata = {
 	/*
 	**	Direction is DATA OUT.
 	*/
+	SCR_REG_REG (HF_REG, SCR_AND, (~HF_DATA_IN)),
+		0,
 	SCR_LOAD_REL  (scratcha, 4),
 		offsetof (struct ccb, phys.header.wlastp),
 	SCR_STORE_REL (scratcha, 4),
@@ -5550,7 +5626,7 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 		goto attach_error;
 	NCR_INIT_LOCK_NCB(np);
 	np->pdev  = device->pdev;
-	np->p_ncb = __vtobus(device->pdev, np);
+	np->p_ncb = vtobus(np);
 	host_data->ncb = np;
 
 	/*
@@ -6119,18 +6195,18 @@ static void ncr_free_resources(ncb_p np)
 */
 static inline void ncr_queue_done_cmd(ncb_p np, Scsi_Cmnd *cmd)
 {
+	unmap_scsi_data(np, cmd);
 	cmd->host_scribble = (char *) np->done_list;
 	np->done_list = cmd;
 }
 
-static inline void ncr_flush_done_cmds(pcidev_t pdev, Scsi_Cmnd *lcmd)
+static inline void ncr_flush_done_cmds(Scsi_Cmnd *lcmd)
 {
 	Scsi_Cmnd *cmd;
 
 	while (lcmd) {
 		cmd = lcmd;
 		lcmd = (Scsi_Cmnd *) cmd->host_scribble;
-		__unmap_scsi_data(pdev, cmd);
 		cmd->scsi_done(cmd);
 	}
 }
@@ -6411,6 +6487,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 		cp->phys.header.wlastp	= cpu_to_scr(lastp);
 		/* fall through */
 	case SCSI_DATA_READ:
+		cp->host_flags |= HF_DATA_IN;
 		goalp = NCB_SCRIPT_PHYS (np, data_in2) + 8;
 		lastp = goalp - 8 - (segments * (SCR_SG_SIZE*4));
 		break;
@@ -6488,7 +6565,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	/*
 	**	command
 	*/
-	memcpy(cp->cdb_buf, cmd->cmnd, cmd->cmd_len);
+	memcpy(cp->cdb_buf, cmd->cmnd, MIN(cmd->cmd_len, sizeof(cp->cdb_buf)));
 	cp->phys.cmd.addr	= cpu_to_scr(CCB_PHYS (cp, cdb_buf[0]));
 	cp->phys.cmd.size	= cpu_to_scr(cmd->cmd_len);
 
@@ -9154,7 +9231,7 @@ next:
 		cp->scsi_status 	= S_ILLEGAL;
 		cp->xerr_status		= 0;
 		cp->phys.extra_bytes	= 0;
-		cp->host_flags		&= HF_PM_TO_C;
+		cp->host_flags		&= (HF_PM_TO_C|HF_DATA_IN);
 
 		break;
 
@@ -9221,7 +9298,7 @@ next:
 		*/
 		cp->sensecmd[0]		= 0x03;
 		cp->sensecmd[1]		= cp->lun << 5;
-		cp->sensecmd[4]		= sizeof(cmd->sense_buffer);
+		cp->sensecmd[4]		= sizeof(cp->sense_buf);
 
 		/*
 		**	sense data
@@ -9243,7 +9320,7 @@ next:
 
 		cp->host_status	= cp->nego_status ? HS_NEGOTIATE : HS_BUSY;
 		cp->scsi_status = S_ILLEGAL;
-		cp->host_flags	= HF_AUTO_SENSE;
+		cp->host_flags	= (HF_AUTO_SENSE|HF_DATA_IN);
 
 		cp->phys.header.go.start =
 			cpu_to_scr(NCB_SCRIPT_PHYS (np, select));
@@ -12616,8 +12693,10 @@ printk("sym53c8xx : command successfully queued\n");
 
      NCR_UNLOCK_NCB(np, flags);
 
-     if (sts != DID_OK)
+     if (sts != DID_OK) {
+          unmap_scsi_data(np, cmd);
           done(cmd);
+     }
 
      return sts;
 }
@@ -12635,7 +12714,6 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
      unsigned long flags;
      ncb_p np = (ncb_p) dev_id;
      Scsi_Cmnd *done_list;
-     pcidev_t pdev;
 
 #ifdef DEBUG_SYM53C8XX
      printk("sym53c8xx : interrupt received\n");
@@ -12645,7 +12723,6 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
 
      NCR_LOCK_NCB(np, flags);
      ncr_exception(np);
-     pdev = np->pdev;
      done_list     = np->done_list;
      np->done_list = 0;
      NCR_UNLOCK_NCB(np, flags);
@@ -12654,7 +12731,7 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
 
      if (done_list) {
           NCR_LOCK_SCSI_DONE(np, flags);
-          ncr_flush_done_cmds(pdev, done_list);
+          ncr_flush_done_cmds(done_list);
           NCR_UNLOCK_SCSI_DONE(np, flags);
      }
 }
@@ -12667,19 +12744,17 @@ static void sym53c8xx_timeout(unsigned long npref)
 {
      ncb_p np = (ncb_p) npref;
      unsigned long flags;
-     pcidev_t pdev;
      Scsi_Cmnd *done_list;
 
      NCR_LOCK_NCB(np, flags);
      ncr_timeout((ncb_p) np);
-     pdev = np->pdev;
      done_list     = np->done_list;
      np->done_list = 0;
      NCR_UNLOCK_NCB(np, flags);
 
      if (done_list) {
           NCR_LOCK_SCSI_DONE(np, flags);
-          ncr_flush_done_cmds(pdev, done_list);
+          ncr_flush_done_cmds(done_list);
           NCR_UNLOCK_SCSI_DONE(np, flags);
      }
 }
@@ -12697,7 +12772,6 @@ int sym53c8xx_reset(Scsi_Cmnd *cmd)
 	ncb_p np = ((struct host_data *) cmd->host->hostdata)->ncb;
 	int sts;
 	unsigned long flags;
-	pcidev_t pdev;
 	Scsi_Cmnd *done_list;
 
 #if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
@@ -12742,12 +12816,11 @@ int sym53c8xx_reset(Scsi_Cmnd *cmd)
 #endif
 
 out:
-	pdev = np->pdev;
 	done_list     = np->done_list;
 	np->done_list = 0;
 	NCR_UNLOCK_NCB(np, flags);
 
-	ncr_flush_done_cmds(pdev, done_list);
+	ncr_flush_done_cmds(done_list);
 
 	return sts;
 }
@@ -12761,7 +12834,6 @@ int sym53c8xx_abort(Scsi_Cmnd *cmd)
 	ncb_p np = ((struct host_data *) cmd->host->hostdata)->ncb;
 	int sts;
 	unsigned long flags;
-	pcidev_t pdev;
 	Scsi_Cmnd *done_list;
 
 #if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
@@ -12785,12 +12857,11 @@ int sym53c8xx_abort(Scsi_Cmnd *cmd)
 
 	sts = ncr_abort_command(np, cmd);
 out:
-	pdev = np->pdev;
 	done_list     = np->done_list;
 	np->done_list = 0;
 	NCR_UNLOCK_NCB(np, flags);
 
-	ncr_flush_done_cmds(pdev, done_list);
+	ncr_flush_done_cmds(done_list);
 
 	return sts;
 }

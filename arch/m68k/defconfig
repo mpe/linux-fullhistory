@@ -56,13 +56,6 @@ CONFIG_PROC_HARDWARE=y
 CONFIG_AMIGA_FLOPPY=y
 CONFIG_ATARI_FLOPPY=y
 # CONFIG_BLK_DEV_LOOP is not set
-# CONFIG_BLK_DEV_IDE is not set
-# CONFIG_BLK_DEV_IDEDISK is not set
-# CONFIG_BLK_DEV_IDECD is not set
-# CONFIG_BLK_DEV_IDETAPE is not set
-# CONFIG_BLK_DEV_IDEFLOPPY is not set
-# CONFIG_BLK_DEV_IDESCSI is not set
-# CONFIG_BLK_DEV_IDEDOUBLER is not set
 # CONFIG_AMIGA_Z2RAM is not set
 # CONFIG_ATARI_ACSI is not set
 # CONFIG_ACSI_MULTI_LUN is not set
@@ -119,6 +112,11 @@ CONFIG_IP_NOSR=y
 # QoS and/or fair queueing
 #
 # CONFIG_NET_SCHED is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
 
 #
 # SCSI support

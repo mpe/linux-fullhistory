@@ -25,6 +25,10 @@ ifeq ($(CONFIG_ARCH_RPC),y)
 ZTEXTADDR	 = 0x10008000
 endif
 
+ifeq ($(CONFIG_ARCH_CLPS7500),y)
+ZTEXTADDR	 = 0x10008000
+endif
+
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 ZTEXTADDR	 = 0x00008000
 endif
@@ -39,7 +43,6 @@ endif
 
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 HEAD		 = head-nexuspci.o
-OBJS		+= $(TOPDIR)/arch/arm/lib/ll_char_wr_scc.o
 ZTEXTADDR	 = 0x40200000
 ZRELADDR	 = 0x40008000
 endif

@@ -160,6 +160,8 @@ extern int max_super_blocks, nr_super_blocks;
 #define BLKSSZGET  _IO(0x12,104)/* get block device sector size */
 #if 0
 #define BLKPG      _IO(0x12,105)/* See blkpg.h */
+#define BLKELVGET   _IO(0x12,106)/* elevator get */
+#define BLKELVSET   _IO(0x12,107)/* elevator set */
 /* This was here just to show that the number is taken -
    probably all these _IO(0x12,*) ioctls should be moved to blkpg.h. */
 #endif

@@ -6,42 +6,6 @@
 #include <linux/adfs_fs.h>
 
 /*
- * Offset in bytes of the boot block on the disk.
- */
-#define BOOT_SECTOR_ADDRESS 0xc00
-
-/*
- * Disc record size
- */
-#define RECSIZE 60
-
-/*
- * Disc record
- */
-struct disc_record {
-	unsigned char  log2secsize;
-	unsigned char  secspertrack;
-	unsigned char  heads;
-	unsigned char  density;
-	unsigned char  idlen;
-	unsigned char  log2bpmb;
-	unsigned char  skew;
-	unsigned char  bootoption;
-	unsigned char  lowsector;
-	unsigned char  nzones;
-	unsigned short zone_spare;
-	unsigned long  root;
-	unsigned long  disc_size;
-	unsigned short disc_id;
-	unsigned char  disc_name[10];
-	unsigned long  disc_type;
-	unsigned long  disc_size_high;
-	unsigned char  log2sharesize:4;
-	unsigned char  unused:4;
-	unsigned char  big_flag:1;
-};
-
-/*
  * Partition types. (Oh for reusability)
  */
 #define PARTITION_RISCIX_MFM	1

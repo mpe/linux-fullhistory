@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,21) 
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,22) 
 
 #include <linux/types.h>
 #include <linux/wait.h>

@@ -101,7 +101,7 @@ static void sbni_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int  sbni_close(struct net_device *dev);
 static void sbni_drop_tx_queue(struct net_device *dev);
 static struct enet_statistics *sbni_get_stats(struct net_device *dev);
-void card_start(struct net_device *dev);
+static void card_start(struct net_device *dev);
 static inline unsigned short sbni_recv(struct net_device *dev);
 void change_level(struct net_device *dev);
 static inline void sbni_xmit(struct net_device *dev);
@@ -647,7 +647,7 @@ static int sbni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
-void card_start(struct net_device *dev)
+static void card_start(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local*)dev->priv;
    
@@ -1200,6 +1200,8 @@ static int sbni_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		}
 		case SIOCDEVRESINSTATS:
 		{
+			if(!capable(CAP_NET_ADMIN))
+				return -EPERM;
 			DP( printk("%s: SIOCDEVRESINSTATS\n",dev->name); )
 			lp->in_stats.all_rx_number = 0;
 			lp->in_stats.bad_rx_number = 0;

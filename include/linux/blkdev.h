@@ -43,6 +43,8 @@ struct request {
 	request_queue_t * q;
 };
 
+#include <linux/elevator.h>
+
 typedef int (merge_request_fn) (request_queue_t *q, 
 				struct request  *req,
 				struct buffer_head *bh,
@@ -57,21 +59,11 @@ typedef int (make_request_fn) (request_queue_t *q, int rw, struct buffer_head *b
 typedef void (plug_device_fn) (request_queue_t *q, kdev_t device);
 typedef void (unplug_device_fn) (void *q);
 
-typedef struct elevator_s
-{
-	int sequence;
-	int read_latency;
-	int write_latency;
-	int max_bomb_segments;
-	int read_pendings;
-} elevator_t;
-
 struct request_queue
 {
 	struct list_head queue_head;
 	/* together with queue_head for cacheline sharing */
 	elevator_t elevator;
-	unsigned int nr_segments;
 
 	request_fn_proc		* request_fn;
 	merge_request_fn	* back_merge_fn;
@@ -163,8 +155,6 @@ extern int * max_segments[MAX_BLKDEV];
 /* read-ahead in pages.. */
 #define MAX_READAHEAD	31
 #define MIN_READAHEAD	3
-
-#define ELEVATOR_DEFAULTS ((elevator_t) { 0, NR_REQUEST>>1, NR_REQUEST<<5, 4, 0, })
 
 #define blkdev_entry_to_request(entry) list_entry((entry), struct request, queue)
 #define blkdev_entry_next_request(entry) blkdev_entry_to_request((entry)->next)

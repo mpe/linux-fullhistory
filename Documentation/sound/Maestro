@@ -24,7 +24,7 @@ The Maestro 2 claims 0x1968 while the Maestro 2e has 0x1978.
 
 The various families of Maestro are mostly identical as far as this 
 driver is concerned.  It doesn't touch the DSP parts that differ (though
-it could for FM synthesis)
+it could for FM synthesis).
 
 Driver OSS Behavior
 --------------------
@@ -90,8 +90,33 @@ to be allocated, as a power of two.  Up to 4 devices can be registered
 ( dsps_order=2 ).  These devices act as fully distinct units and use
 separate channels in the maestro.
 
+Power Management
+----------------
+
+As of version 0.14, this driver has a minimal understanding of PCI
+Power Management.  If it finds a valid power management capability
+on the PCI device it will attempt to use the power management
+functions of the maestro.  It will only do this on Maestro 2Es and
+only on machines that are known to function well.  You can
+force the use of power management by setting the 'use_pm' module
+option to 1, or can disable it entirely by setting it to 0.
+
+When using power management, the driver does a few things
+differently.  It will keep the chip in a lower power mode
+when the module is inserted but /dev/dsp is not open.  This
+allows the mixer to function but turns off the clocks
+on other parts of the chip.  When /dev/dsp is opened the chip
+is brought into full power mode, and brought back down
+when it is closed.  It also powers down the chip entirely
+when the module is removed or the machine is shutdown.  This
+can have nonobvious consequences.  CD audio may not work
+after a power managing driver is removed.  Also, software that
+doesn't understand power management may not be able to talk
+to the powered down chip until the machine goes through a hard
+reboot to bring it back.
+
 .. more details ..
------------------
+------------------
 
 drivers/sound/maestro.c contains comments that hopefully explain
 the maestro implementation.

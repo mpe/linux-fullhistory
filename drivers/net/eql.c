@@ -1030,6 +1030,8 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	kfree(((equalizer_t *)dev_eql.priv)->stats );
+	kfree(dev_eql.priv);
 	unregister_netdev(&dev_eql);
 }
 #endif /* MODULE */

@@ -240,8 +240,8 @@ int register_sound_special(struct file_operations *fops, int unit)
 	    case 5:
 		name = "unknown5";
 		break;
-	    case 6:
-		name = "sndstat";
+	    case 6:		/* Was once sndstat */
+		name = "unknown6";
 		break;
 	    case 7:
 		name = "unknown7";
@@ -272,7 +272,7 @@ int register_sound_special(struct file_operations *fops, int unit)
 		break;
 	}
 	return sound_insert_unit(&chains[unit&15], fops, -1, unit, unit+1,
-				 name, S_IRUGO | S_IWUGO);
+				 name, S_IRUSR | S_IWUSR);
 }
  
 EXPORT_SYMBOL(register_sound_special);
@@ -280,7 +280,7 @@ EXPORT_SYMBOL(register_sound_special);
 int register_sound_mixer(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[0], fops, dev, 0, 128,
-				 "mixer", S_IRUGO | S_IWUGO);
+				 "mixer", S_IRUSR | S_IWUSR);
 }
 
 EXPORT_SYMBOL(register_sound_mixer);
@@ -288,7 +288,7 @@ EXPORT_SYMBOL(register_sound_mixer);
 int register_sound_midi(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[2], fops, dev, 2, 130,
-				 "midi", S_IRUGO | S_IWUGO);
+				 "midi", S_IRUSR | S_IWUSR);
 }
 
 EXPORT_SYMBOL(register_sound_midi);
@@ -301,7 +301,7 @@ EXPORT_SYMBOL(register_sound_midi);
 int register_sound_dsp(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[3], fops, dev, 3, 131,
-				 "dsp", S_IWUGO | S_IRUSR | S_IRGRP);
+				 "dsp", S_IWUSR | S_IRUSR);
 }
 
 EXPORT_SYMBOL(register_sound_dsp);
@@ -309,7 +309,7 @@ EXPORT_SYMBOL(register_sound_dsp);
 int register_sound_synth(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[9], fops, dev, 9, 137,
-				 "synth", S_IRUGO | S_IWUGO);
+				 "synth", S_IRUSR | S_IWUSR);
 }
 
 EXPORT_SYMBOL(register_sound_synth);

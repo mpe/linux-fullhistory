@@ -521,6 +521,48 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			/* give it a chance to run. */
 			ret = 0;
 			goto out;
+			
+		case PTRACE_GETREGS:
+		{	/* Get all gp regs from the child. */
+			unsigned char *stack;
+
+			ret = 0;
+			stack = (unsigned char *)((unsigned long)child + 8192 - sizeof(struct pt_regs));
+			if (copy_to_user((void *)data, stack,
+					 sizeof(struct pt_regs)))
+				ret = -EFAULT;
+
+			goto out;
+		};
+
+		case PTRACE_SETREGS:
+		{
+			/* Set all gp regs in the child. */
+			unsigned char *stack;
+
+			ret = 0;
+			stack = (unsigned char *)((unsigned long)child + 8192 - sizeof(struct pt_regs));
+			if (copy_from_user(stack, (void *)data,
+					   sizeof(struct pt_regs)))
+				ret = -EFAULT;
+			goto out;
+		  };
+
+		case PTRACE_GETFPREGS: 
+			/* Get the child FPU state. */
+			ret = 0;
+			if (copy_to_user((void *)data, &child->thread.fpstate,
+					 sizeof(struct user_fp)))
+				ret = -EFAULT;
+			goto out;
+		
+		case PTRACE_SETFPREGS:
+			/* Set the child FPU state. */
+			ret = 0;
+			if (copy_from_user(&child->thread.fpstate, (void *)data,
+					   sizeof(struct user_fp)))
+				ret = -EFAULT;
+			goto out;
 
 		case PTRACE_DETACH:				/* detach a process that was attached. */
 			ret = -EIO;

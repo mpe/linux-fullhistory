@@ -14,22 +14,8 @@
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	Fixing alignment problem with 1.3.* kernel and some minor changes
-	by Andrey V. Savochkin, 1996.
-
-	Problems or questions may be send to Donald Becker (see above) or to
-	Andrey Savochkin -- saw@shade.msu.ru or
-		Laboratory of Computation Methods, 
-		Department of Mathematics and Mechanics,
-		Moscow State University,
-		Leninskye Gory, Moscow 119899
-
-	But I should to inform you that I'm not an expert in the LANCE card
-	and it may occurs that you will receive no answer on your mail
-	to Donald Becker. I didn't receive any answer on all my letters
-	to him. Who knows why... But may be you are more lucky?  ;->
-                                                          SAW
-
+	Andrey V. Savochkin:
+	- alignment problem with 1.3.* kernel and some minor changes.
 	Thomas Bogendoerfer (tsbogend@bigbug.franken.de):
 	- added support for Linux/Alpha, but removed most of it, because
         it worked only for the PCI chip. 
@@ -785,11 +771,19 @@ lance_open(struct net_device *dev)
 */
 
 static void 
-lance_purge_tx_ring(struct net_device *dev)
+lance_purge_ring(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int i;
 
+	/* Free all the skbuffs in the Rx and Tx queues. */
+	for (i = 0; i < RX_RING_SIZE; i++) {
+		struct sk_buff *skb = lp->rx_skbuff[i];
+		lp->rx_skbuff[i] = 0;
+		lp->rx_ring[i].base = 0;		/* Not owned by LANCE chip. */
+		if (skb)
+			dev_kfree_skb(skb);
+	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (lp->tx_skbuff[i]) {
 			dev_kfree_skb(lp->tx_skbuff[i]);
@@ -850,7 +844,7 @@ lance_restart(struct net_device *dev, unsigned int csr0_bits, int must_reinit)
 
 	if (must_reinit ||
 		(chip_table[lp->chip_version].flags & LANCE_MUST_REINIT_RING)) {
-		lance_purge_tx_ring(dev);
+		lance_purge_ring(dev);
 		lance_init_ring(dev, GFP_ATOMIC);
 	}
 	outw(0x0000,    dev->base_addr + LANCE_ADDR);
@@ -869,7 +863,7 @@ static void lance_tx_timeout (struct net_device *dev)
 	outw (0x0004, ioaddr + LANCE_DATA);
 	lp->stats.tx_errors++;
 #ifndef final_version
-	{
+	if (lance_debug > 3) {
 		int i;
 		printk (" Ring data dump: dirty_tx %d cur_tx %d%s cur_rx %d.",
 		  lp->dirty_tx, lp->cur_tx, lp->tx_full ? " (full)" : "",
@@ -1192,19 +1186,7 @@ lance_close(struct net_device *dev)
 	}
 	free_irq(dev->irq, dev);
 
-	/* Free all the skbuffs in the Rx and Tx queues. */
-	for (i = 0; i < RX_RING_SIZE; i++) {
-		struct sk_buff *skb = lp->rx_skbuff[i];
-		lp->rx_skbuff[i] = 0;
-		lp->rx_ring[i].base = 0;		/* Not owned by LANCE chip. */
-		if (skb)
-			dev_kfree_skb(skb);
-	}
-	for (i = 0; i < TX_RING_SIZE; i++) {
-		if (lp->tx_skbuff[i])
-			dev_kfree_skb(lp->tx_skbuff[i]);
-		lp->tx_skbuff[i] = 0;
-	}
+	lance_purge_ring(dev);
 
 	MOD_DEC_USE_COUNT;
 	return 0;

@@ -98,29 +98,22 @@ fi
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 
-if [ "$CONFIG_PCI" = "y" ]; then
-   tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
-   if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
-      dep_tristate '  Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
-      dep_tristate '  Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
-      dep_tristate '  Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
-      dep_tristate '  Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
-      dep_tristate '  SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
-      define_bool CONFIG_BLK_DEV_IDEPCI y
-      define_bool CONFIG_BLK_DEV_IDEDMA y
-      define_bool CONFIG_IDEDMA_AUTO y
-      define_bool CONFIG_IDEDMA_NEW_DRIVE_LISTINGS y
-      define_bool CONFIG_BLK_DEV_NS87415 y
-      define_bool CONFIG_BLK_DEV_CMD64X y
-      define_bool CONFIG_BLK_DEV_IDE_MODES y
-   fi
-fi
-
-endmenu
-
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
 fi
+
+mainmenu_option next_comment
+comment 'ATA/IDE/MFM/RLL support'
+
+tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
+
+if [ "$CONFIG_IDE" != "n" ]; then
+  source drivers/ide/Config.in
+else
+  define_bool CONFIG_BLK_DEV_IDE_MODES n
+  define_bool CONFIG_BLK_DEV_HD n
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'SCSI support'
@@ -172,12 +165,16 @@ if [ "$CONFIG_SCSI" != "n" ]; then
   	 bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
 	 int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
       fi
+      dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
       dep_tristate 'SYM53C8XX SCSI support' CONFIG_SCSI_SYM53C8XX $CONFIG_SCSI
-      if [ "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
+      if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -o "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
 	 int 'default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
 	 int 'maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
 	 int 'synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
 	 bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
+         if [ "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
+	    bool '  include support for the NCR PQS/PDS SCSI card' CONFIG_SCSI_NCR53C8XX_PQS_PDS
+         fi
 	 if [ "$CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS" = "0" ]; then
 	    bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
 	 fi

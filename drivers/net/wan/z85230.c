@@ -55,7 +55,7 @@
 static spinlock_t z8530_buffer_lock = SPIN_LOCK_UNLOCKED;
 
 /**
- *	z8530_read_port:
+ *	z8530_read_port - Architecture specific interface function
  *	@p: port to read
  *
  *	Provided port access methods. The Comtrol SV11 requires no delays
@@ -79,7 +79,7 @@ extern __inline__ int z8530_read_port(unsigned long p)
 }
 
 /**
- *	z8530_write_port:
+ *	z8530_write_port - Architecture specific interface function
  *	@p: port to write
  *	@d: value to write
  *
@@ -108,7 +108,7 @@ static void z8530_tx_done(struct z8530_channel *c);
 
 
 /**
- *	read_zsreg:
+ *	read_zsreg - Read a register from a Z85230 
  *	@c: Z8530 channel to read from (2 per chip)
  *	@reg: Register to read
  *	FIXME: Use a spinlock.
@@ -133,7 +133,7 @@ extern inline u8 read_zsreg(struct z8530_channel *c, u8 reg)
 }
 
 /**
- *	read_zsdata:
+ *	read_zsdata - Read the data port of a Z8530 channel
  *	@c: The Z8530 channel to read the data port from
  *
  *	The data port provides fast access to some things. We still
@@ -148,7 +148,7 @@ extern inline u8 read_zsdata(struct z8530_channel *c)
 }
 
 /**
- *	write_zsreg:
+ *	write_zsreg - Write to a Z8530 channel register
  *	@c: The Z8530 channel
  *	@reg: Register number
  *	@val: Value to write
@@ -169,10 +169,27 @@ extern inline void write_zsreg(struct z8530_channel *c, u8 reg, u8 val)
 	restore_flags(flags);
 }
 
+/**
+ *	write_zsctrl - Write to a Z8530 control register
+ *	@c: The Z8530 channel
+ *	@val: Value to write
+ *
+ *	Write directly to the control register on the Z8530
+ */
+
 extern inline void write_zsctrl(struct z8530_channel *c, u8 val)
 {
 	z8530_write_port(c->ctrlio, val);
 }
+
+/**
+ *	write_zsdata - Write to a Z8530 control register
+ *	@c: The Z8530 channel
+ *	@val: Value to write
+ *
+ *	Write directly to the data register on the Z8530
+ */
+
 
 extern inline void write_zsdata(struct z8530_channel *c, u8 val)
 {
@@ -249,7 +266,7 @@ u8 z8530_hdlc_kilostream_85230[]=
 EXPORT_SYMBOL(z8530_hdlc_kilostream_85230);
 
 /**
- *	z8530_flush_fifo:
+ *	z8530_flush_fifo - Flush on chip RX FIFO
  *	@c: Channel to flush
  *
  *	Flush the receive FIFO. There is no specific option for this, we 
@@ -276,8 +293,8 @@ static void z8530_flush_fifo(struct z8530_channel *c)
 }	
 
 /**
- *	z8530_rtsdtr:
- *	@c: The Z8530 channel to contro;
+ *	z8530_rtsdtr - Control the outgoing DTS/RTS line
+ *	@c: The Z8530 channel to control;
  *	@set: 1 to set, 0 to clear
  *
  *	Sets or clears DTR/RTS on the requested line. All locking is handled
@@ -296,7 +313,7 @@ static void z8530_rtsdtr(struct z8530_channel *c, int set)
 }
 
 /**
- *	z8530_rx:
+ *	z8530_rx - Handle a PIO receive event
  *	@c: Z8530 channel to process
  *
  *	Receive handler for receiving in PIO mode. This is much like the 
@@ -378,7 +395,7 @@ static void z8530_rx(struct z8530_channel *c)
 
 
 /**
- *	z8530_tx:
+ *	z8530_tx - Handle a PIO transmit event
  *	@c: Z8530 channel to process
  *
  *	Z8530 transmit interrupt handler for the PIO mode. The basic
@@ -421,7 +438,7 @@ static void z8530_tx(struct z8530_channel *c)
 }
 
 /**
- *	z8530_status:
+ *	z8530_status - Handle a PIO status exception
  *	@chan: Z8530 channel to process
  *
  *	A status event occured in PIO synchronous mode. There are several
@@ -479,7 +496,7 @@ struct z8530_irqhandler z8530_sync=
 EXPORT_SYMBOL(z8530_sync);
 
 /**
- *	z8530_dma_rx:
+ *	z8530_dma_rx - Handle a DMA RX event
  *	@chan: Channel to handle
  *
  *	Non bus mastering DMA interfaces for the Z8x30 devices. This
@@ -514,7 +531,7 @@ static void z8530_dma_rx(struct z8530_channel *chan)
 }
 
 /**
- *	z8530_dma_tx:
+ *	z8530_dma_tx - Handle a DMA TX event
  *	@chan:	The Z8530 channel to handle
  *
  *	We have received an interrupt while doing DMA transmissions. It
@@ -525,17 +542,17 @@ static void z8530_dma_tx(struct z8530_channel *chan)
 {
 	if(!chan->dma_tx)
 	{
-		printk("Hey who turned the DMA off?\n");
+		printk(KERN_WARNING "Hey who turned the DMA off?\n");
 		z8530_tx(chan);
 		return;
 	}
 	/* This shouldnt occur in DMA mode */
-	printk(KERN_ERR "DMA tx ??\n");
+	printk(KERN_ERR "DMA tx - bogus event!\n");
 	z8530_tx(chan);
 }
 
 /**
- *	z8530_dma_status:
+ *	z8530_dma_status - Handle a DMA status exception
  *	@chan: Z8530 channel to process
  *	
  *	A status event occured on the Z8530. We receive these for two reasons
@@ -606,7 +623,7 @@ struct z8530_irqhandler z8530_txdma_sync=
 EXPORT_SYMBOL(z8530_txdma_sync);
 
 /**
- *	z8530_rx_clear:
+ *	z8530_rx_clear - Handle RX events from a stopped chip
  *	@c: Z8530 channel to shut up
  *
  *	Receive interrupt vectors for a Z8530 that is in 'parked' mode.
@@ -635,7 +652,7 @@ static void z8530_rx_clear(struct z8530_channel *c)
 }
 
 /**
- *	z8530_tx_clear:
+ *	z8530_tx_clear - Handle TX events from a stopped chip
  *	@c: Z8530 channel to shut up
  *
  *	Transmit interrupt vectors for a Z8530 that is in 'parked' mode.
@@ -650,7 +667,7 @@ static void z8530_tx_clear(struct z8530_channel *c)
 }
 
 /**
- *	z8530_status_clear:
+ *	z8530_status_clear - Handle status events from a stopped chip
  *	@chan: Z8530 channel to shut up
  *
  *	Status interrupt vectors for a Z8530 that is in 'parked' mode.
@@ -678,7 +695,7 @@ struct z8530_irqhandler z8530_nop=
 EXPORT_SYMBOL(z8530_nop);
 
 /**
- *	z8530_interrupt:
+ *	z8530_interrupt - Handle an interrupt from a Z8530
  *	@irq: 	Interrupt number
  *	@dev_id: The Z8530 device that is interrupting.
  *	@regs: unused
@@ -758,7 +775,7 @@ static char reg_init[16]=
 
 
 /**
- *	z8530_sync_open:
+ *	z8530_sync_open - Open a Z8530 channel for PIO
  *	@dev:	The network interface we are using
  *	@c:	The Z8530 channel to open in synchronous PIO mode
  *
@@ -789,7 +806,7 @@ int z8530_sync_open(struct net_device *dev, struct z8530_channel *c)
 EXPORT_SYMBOL(z8530_sync_open);
 
 /**
- *	z8530_sync_close:
+ *	z8530_sync_close - Close a PIO Z8530 channel
  *	@dev: Network device to close
  *	@c: Z8530 channel to disassociate and move to idle
  *
@@ -814,7 +831,7 @@ int z8530_sync_close(struct net_device *dev, struct z8530_channel *c)
 EXPORT_SYMBOL(z8530_sync_close);
 
 /**
- *	z8530_sync_dma_open:
+ *	z8530_sync_dma_open - Open a Z8530 for DMA I/O
  *	@dev: The network device to attach
  *	@c: The Z8530 channel to configure in sync DMA mode.
  *
@@ -934,7 +951,7 @@ int z8530_sync_dma_open(struct net_device *dev, struct z8530_channel *c)
 EXPORT_SYMBOL(z8530_sync_dma_open);
 
 /**
- *	z8530_sync_dma_close:
+ *	z8530_sync_dma_close - Close down DMA I/O
  *	@dev: Network device to detach
  *	@c: Z8530 channel to move into discard mode
  *
@@ -999,7 +1016,7 @@ int z8530_sync_dma_close(struct net_device *dev, struct z8530_channel *c)
 EXPORT_SYMBOL(z8530_sync_dma_close);
 
 /**
- *	z8530_sync_txdma_open:
+ *	z8530_sync_txdma_open - Open a Z8530 for TX driven DMA
  *	@dev: The network device to attach
  *	@c: The Z8530 channel to configure in sync DMA mode.
  *
@@ -1099,7 +1116,7 @@ int z8530_sync_txdma_open(struct net_device *dev, struct z8530_channel *c)
 EXPORT_SYMBOL(z8530_sync_txdma_open);
 
 /**
- *	z8530_sync_txdma_close:
+ *	z8530_sync_txdma_close - Close down a TX driven DMA channel
  *	@dev: Network device to detach
  *	@c: Z8530 channel to move into discard mode
  *
@@ -1168,7 +1185,7 @@ static char *z8530_type_name[]={
 };
 
 /**
- *	z8530_describe:
+ *	z8530_describe - Uniformly describe a Z8530 port
  *	@dev: Z8530 device to describe
  *	@mapping: string holding mapping type (eg "I/O" or "Mem")
  *	@io: the port value in question
@@ -1191,7 +1208,7 @@ void z8530_describe(struct z8530_dev *dev, char *mapping, unsigned long io)
 EXPORT_SYMBOL(z8530_describe);
 
 /**
- *	z8530_init:
+ *	z8530_init - Initialise a Z8530 device
  *	@dev: Z8530 device to initialise.
  *
  *	Configure up a Z8530/Z85C30 or Z85230 chip. We check the device
@@ -1273,7 +1290,7 @@ int z8530_init(struct z8530_dev *dev)
 EXPORT_SYMBOL(z8530_init);
 
 /**
- *	z8530_shutdown:
+ *	z8530_shutdown - Shutdown a Z8530 device
  *	@dev: The Z8530 chip to shutdown
  *
  *	We set the interrupt handlers to silence any interrupts. We then 
@@ -1294,7 +1311,7 @@ int z8530_shutdown(struct z8530_dev *dev)
 EXPORT_SYMBOL(z8530_shutdown);
 
 /**
- *	z8530_channel_load:
+ *	z8530_channel_load - Load channel data
  *	@c: Z8530 channel to configure
  *	@rtable: Table of register, value pairs
  *	FIXME: ioctl to allow user uploaded tables
@@ -1333,7 +1350,7 @@ EXPORT_SYMBOL(z8530_channel_load);
 
 
 /**
- *	z8530_tx_begin:
+ *	z8530_tx_begin - Begin packet transmission
  *	@c: The Z8530 channel to kick
  *
  *	This is the speed sensitive side of transmission. If we are called
@@ -1430,7 +1447,7 @@ static void z8530_tx_begin(struct z8530_channel *c)
 }
 
 /**
- *	z8530_tx_done:
+ *	z8530_tx_done - TX complete callback
  *	@c: The channel that completed a transmit.
  *
  *	This is called when we complete a packet send. We wake the queue,
@@ -1461,7 +1478,7 @@ static void z8530_tx_done(struct z8530_channel *c)
 }
 
 /**
- *	z8530_null_rx:
+ *	z8530_null_rx - Discard a packet
  *	@c: The channel the packet arrived on
  *	@skb: The buffer
  *
@@ -1477,7 +1494,7 @@ void z8530_null_rx(struct z8530_channel *c, struct sk_buff *skb)
 EXPORT_SYMBOL(z8530_null_rx);
 
 /**
- *	z8530_rx_done:
+ *	z8530_rx_done - Receive completion callback
  *	@c: The channel that completed a receive
  *
  *	A new packet is complete. Our goal here is to get back into receive
@@ -1630,7 +1647,7 @@ static void z8530_rx_done(struct z8530_channel *c)
 }
 
 /**
- *	spans_boundary:
+ *	spans_boundary - Check a packet can be ISA DMA'd
  *	@skb: The buffer to check
  *
  *	Returns true if the buffer cross a DMA boundary on a PC. The poor
@@ -1642,15 +1659,12 @@ extern inline int spans_boundary(struct sk_buff *skb)
 	unsigned long a=(unsigned long)skb->data;
 	a^=(a+skb->len);
 	if(a&0x00010000)	/* If the 64K bit is different.. */
-	{
-		printk("spanner\n");
 		return 1;
-	}
 	return 0;
 }
 
 /**
- *	z8530_queue_xmit:
+ *	z8530_queue_xmit - Queue a packet
  *	@c: The channel to use
  *	@skb: The packet to kick down the channel
  *
@@ -1707,7 +1721,7 @@ int z8530_queue_xmit(struct z8530_channel *c, struct sk_buff *skb)
 EXPORT_SYMBOL(z8530_queue_xmit);
 
 /**
- *	z8530_get_stats:
+ *	z8530_get_stats - Get network statistics
  *	@c: The channel to use
  *
  *	Get the statistics block. We keep the statistics in software as

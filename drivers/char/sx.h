@@ -37,7 +37,9 @@ struct sx_port {
 struct sx_board {
   int magic;
   unsigned int base;
+  unsigned int base2;
   unsigned int hw_base;
+  int eisa_base;
   int port_base; /* Number of the first port */
   struct sx_port *ports;
   int nports;
@@ -65,19 +67,27 @@ struct vpd_prom {
 #define MOD_RS232DB25MALE 0x0a
 #endif
 
-
-#define SX_BOARD_PRESENT     0x00000001
+#define SI_ISA_BOARD         0x00000001
 #define SX_ISA_BOARD         0x00000002
 #define SX_PCI_BOARD         0x00000004
-#define SI_ISA_BOARD         0x00000008
-#define SX_BOARD_INITIALIZED 0x00000010
-#define SX_IRQ_ALLOCATED     0x00000020
+#define SX_CFPCI_BOARD       0x00000008
+#define SX_CFISA_BOARD       0x00000010
+#define SI_EISA_BOARD        0x00000020
 
-#define SX_BOARD_TYPE (SX_ISA_BOARD|SX_PCI_BOARD|SI_ISA_BOARD)
+#define SX_BOARD_PRESENT     0x00001000
+#define SX_BOARD_INITIALIZED 0x00002000
+#define SX_IRQ_ALLOCATED     0x00004000
 
-#define IS_SX_BOARD(board) (board->flags & (SX_PCI_BOARD | SX_ISA_BOARD))
+#define SX_BOARD_TYPE        0x000000ff
+
+#define IS_SX_BOARD(board) (board->flags & (SX_PCI_BOARD | SX_CFPCI_BOARD | \
+                                            SX_ISA_BOARD | SX_CFISA_BOARD))
+
 #define IS_SI_BOARD(board) (board->flags & SI_ISA_BOARD)
 
+#define IS_EISA_BOARD(board) (board->flags & SI_EISA_BOARD)
+
+#define IS_CF_BOARD(board) (board->flags & (SX_CFISA_BOARD | SX_CFPCI_BOARD))
 
 #define SERIAL_TYPE_NORMAL 1
 
@@ -168,6 +178,7 @@ struct vpd_prom {
 #define SXIO_DO_RAMTEST     SPXL(0x07)
 #define SXIO_SETGSDEBUG     SPXL(0x08)
 #define SXIO_GETGSDEBUG     SPXL(0x09)
+#define SXIO_GETNPORTS      SPXL(0x0a)
 
 
 #ifndef SXCTL_MISC_MINOR 
@@ -175,6 +186,19 @@ struct vpd_prom {
 #define SXCTL_MISC_MINOR    167
 #endif
 
+#ifndef SX_NORMAL_MAJOR
+/* This allows overriding on the compiler commandline, or in a "major.h" 
+   include or something like that */
+#define SX_NORMAL_MAJOR  32
+#define SX_CALLOUT_MAJOR 33
+#endif
+
+
 #define SX_TYPE_SX          0x01
 #define SX_TYPE_SI          0x02
+#define SX_TYPE_CF          0x03
+
+
+#define WINDOW_LEN(board) (IS_CF_BOARD(board)?0x20000:SX_WINDOW_LEN)
+/*                         Need a #define for ^^^^^^^ !!! */
 

@@ -1,3 +1,12 @@
+Mon Mar  6 23:30 2000 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5k
+	- Test against expected data transfer direction from SCRIPTS.
+	- Revert the change in 'ncr_flush_done_cmds()' but unmap the 
+	  scsi dma buffer prior to queueing the command to our done 
+	  list.
+	- Miscellaneous (minor) fixes in the code added in driver 
+	  version 1.5j.
+
 Sun Feb 20 11:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.5j
 	- Add support for the new dynamic dma mapping kernel interface.

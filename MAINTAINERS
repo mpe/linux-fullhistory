@@ -287,7 +287,7 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 DIGI INTL. EPCA DRIVER
-P:	 Chad Schwartz
+P:	Chad Schwartz
 M:      support@dgii.com
 M:      chads@dgii.com
 L:      digilnux@dgii.com
@@ -328,6 +328,11 @@ EATA-PIO SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net
 L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+EEPRO100 NETWORK DRIVER
+P:	Andrey V. Savochkin
+M:	saw@saw.sw.com.sg
 S:	Maintained
 
 ETHEREXPRESS-16 NETWORK DRIVER
@@ -750,7 +755,7 @@ S:	Maintained
 
 OPL3-SA2, SA3, and SAx DRIVER
 P:	Scott Murray
-M:	scottm@interlog.com
+M:	scott@spiteful.org
 L:	linux-sound@vger.rutgers.edu
 S:	Maintained
 
@@ -825,6 +830,13 @@ M:	promise@pnd-pc.demon.co.uk
 W:	http://www.pnd-pc.demon.co.uk/promise/
 S:	Maintained
 
+QNX4 FILESYSTEM
+P:	Anders Larsen
+M:	al@alarsen.net
+L:	linux-kernel@vger.rutgers.edu
+W:	http://www.alarsen.net/linux/qnx4fs/
+S:	Maintained
+
 RAGE128 FRAMEBUFFER DISPLAY DRIVER
 P:	Brad Douglas
 M:	brad@neruo.com
@@ -839,13 +851,6 @@ M:	corey@world.std.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-QNX4 FILESYSTEM
-P:	Anders Larsen
-M:	al@alarsen.net
-L:	linux-kernel@vger.rutgers.edu
-W:	http://www.alarsen.net/linux/qnx4fs/
-S:	Maintained
-
 REAL TIME CLOCK DRIVER
 P:	Paul Gortmaker
 M:	p_gortmaker@yahoo.com
@@ -853,8 +858,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 ROSE NETWORK LAYER
-P:	Frederic Rible
-M:	frible@teaser.fr
+P:	Jean-Paul Roubelat
+M:	jpr@f6fbb.org
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
@@ -862,6 +867,13 @@ RISCOM8 DRIVER
 P:	Dmitry Gorodchanin
 M:	pgmdsg@ibi.com
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+RTLINUX  REALTIME  LINUX
+P:	Victor Yodaiken
+M:	yodaiken@fsmlabs.com
+L:	rtl@rtlinux.org
+W:	www.rtlinux.org
 S:	Maintained
 
 SA1100 SUPPORT
@@ -1169,13 +1181,6 @@ X.25 NETWORK LAYER
 P:	Henner Eisen
 M:	eis@baty.hanse.de
 L:	linux-x25@vger.rutgers.edu
-S:	Maintained
-
-RTLINUX  REALTIME  LINUX
-P:	Victor Yodaiken
-M:	yodaiken@fsmlabs.com
-L:	rtl@rtlinux.org
-W:	www.rtlinux.org
 S:	Maintained
 
 Z85230 SYNCHRONOUS DRIVER

@@ -161,7 +161,7 @@ nfs_readpage_result(struct rpc_task *task)
 	}
 	kunmap(page);
 	UnlockPage(page);
-	free_page(address);
+	__free_page(page);
 
 	rpc_release_task(task);
 	kfree(req);

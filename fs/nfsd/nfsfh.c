@@ -8,6 +8,7 @@
  * Extensive rewrite by Neil Brown <neilb@cse.unsw.edu.au> Southern-Spring 1999
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/fs.h>

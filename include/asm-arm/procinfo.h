@@ -18,8 +18,10 @@ struct proc_info_item {
 /*
  * Note!  struct processor is always defined if we're
  * using MULTI_CPU, otherwise this entry is unused,
- * but still exists.  NOTE! This structure is used
- * by assembler code!  Check:
+ * but still exists.
+ *
+ * NOTE! The following structure is defined by assembly
+ * language, NOT C code.  For more information, check:
  *  arch/arm/mm/proc-*.S and arch/arm/kernel/head-armv.S
  */
 struct proc_info_list {

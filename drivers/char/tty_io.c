@@ -1979,6 +1979,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->tq_hangup.routine = do_tty_hangup;
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);
+	spin_lock_init(&tty->read_lock);
 	INIT_LIST_HEAD(&tty->tty_files);
 }
 
@@ -2318,6 +2319,9 @@ void __init tty_init(void)
 #endif
 #ifdef CONFIG_SX
 	sx_init();
+#endif
+#ifdef CONFIG_RIO
+	rio_init();
 #endif
 #ifdef CONFIG_8xx
         rs_8xx_init();

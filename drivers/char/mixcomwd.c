@@ -24,10 +24,13 @@
  * Version 0.3.1 (99/06/22):
  *		- allow module removal while internal timer is active,
  *		  print warning about probable reset
+ *
+ * Version 0.4 (99/11/15):
+ *		- support for one more type board
  *	
  */
 
-#define VERSION "0.3.1" 
+#define VERSION "0.4" 
   
 #include <linux/module.h>
 #include <linux/config.h>
@@ -46,11 +49,13 @@
 static int mixcomwd_ioports[] = { 0x180, 0x280, 0x380, 0x000 };
 
 #define MIXCOM_WATCHDOG_OFFSET 0xc10
-#define MIXCOM_ID1 0x11
-#define MIXCOM_ID2 0x13
+#define MIXCOM_ID 0x11
+#define FLASHCOM_WATCHDOG_OFFSET 0x4
+#define FLASHCOM_ID 0x18
 
 static int mixcomwd_opened;
-static int mixcomwd_port;
+
+static int watchdog_port;
 
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
 static int mixcomwd_timer_alive;
@@ -59,7 +64,7 @@ static struct timer_list mixcomwd_timer;
 
 static void mixcomwd_ping(void)
 {
-	outb_p(55,mixcomwd_port+MIXCOM_WATCHDOG_OFFSET);
+	outb_p(55,watchdog_port);
 	return;
 }
 
@@ -183,40 +188,61 @@ static int __init mixcomwd_checkcard(int port)
 {
 	int id;
 
-	if(check_region(port,1)) {
+	if(check_region(port+MIXCOM_WATCHDOG_OFFSET,1)) {
 		return 0;
 	}
 	
 	id=inb_p(port + MIXCOM_WATCHDOG_OFFSET) & 0x3f;
-	if(id!=MIXCOM_ID1 && id!=MIXCOM_ID2) {
+	if(id!=MIXCOM_ID) {
 		return 0;
 	}
 	return 1;
 }
 
-
+static int __init flashcom_checkcard(int port)
+{
+	int id;
+	
+	if(check_region(port + FLASHCOM_WATCHDOG_OFFSET,1)) {
+		return 0;
+	}
+	
+	id=inb_p(port + FLASHCOM_WATCHDOG_OFFSET);
+ 	if(id!=FLASHCOM_ID) {
+		return 0;
+	}
+ 	return 1;
+ }
+ 
 void __init mixcomwd_init(void)
 {
 	int i;
 	int found=0;
 
-	for (i = 0; mixcomwd_ioports[i] != 0; i++) {
+	for (i = 0; !found && mixcomwd_ioports[i] != 0; i++) {
 		if (mixcomwd_checkcard(mixcomwd_ioports[i])) {
 			found = 1;
-			mixcomwd_port = mixcomwd_ioports[i];
-			break;
+			watchdog_port = mixcomwd_ioports[i] + MIXCOM_WATCHDOG_OFFSET;
 		}
 	}
-
+	
+	/* The FlashCOM card can be set up at 0x300 -> 0x378, in 0x8 jumps */
+	for (i = 0x300; !found && i < 0x380; i+=0x8) {
+		if (flashcom_checkcard(i)) {
+			found = 1;
+			watchdog_port = i + FLASHCOM_WATCHDOG_OFFSET;
+		}
+	}
+	
 	if (!found) {
 		printk("mixcomwd: No card detected, or port not available.\n");
 		return;
 	}
 
-	request_region(mixcomwd_port+MIXCOM_WATCHDOG_OFFSET,1,"MixCOM watchdog");
-	
+	request_region(watchdog_port,1,"MixCOM watchdog");
+		
 	misc_register(&mixcomwd_miscdev);
-	printk("MixCOM watchdog driver v%s, MixCOM card at 0x%3x\n",VERSION,mixcomwd_port);
+	printk(KERN_INFO "MixCOM watchdog driver v%s, watchdog port at 0x%3x\n",VERSION,watchdog_port);
 }	
 
 #ifdef MODULE
@@ -236,7 +262,7 @@ void cleanup_module(void)
 		mixcomwd_timer_alive=0;
 	}
 #endif
-	release_region(mixcomwd_port+MIXCOM_WATCHDOG_OFFSET,1);
+	release_region(watchdog_port,1);
 	misc_deregister(&mixcomwd_miscdev);
 }
 #endif

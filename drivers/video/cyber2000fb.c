@@ -32,6 +32,7 @@
 #include <video/fbcon-cfb24.h>
 
 #define MMIO_SIZE	0x000c0000
+/*#define CFB16_IS_CFB15*/
 
 static char			*CyberRegs;
 
@@ -275,18 +276,8 @@ cyber2000_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 #endif
 
 #ifdef FBCON_HAS_CFB16
-	case 15:
-		if (regno < 32) {
-			cyber2000_outb(regno << 3, 0x3c8);
-			cyber2000_outb(red, 0x3c9);
-			cyber2000_outb(green, 0x3c9);
-			cyber2000_outb(blue, 0x3c9);
-		}
-		if (regno < 16)
-			current_par.c_table.cfb16[regno] = regno | regno << 5 | regno << 10;
-		break;
-
 	case 16:
+#ifndef CFB16_IS_CFB15
 		if (regno < 64) {
 			/* write green */
 			cyber2000_outb(regno << 2, 0x3c8);
@@ -306,6 +297,19 @@ cyber2000_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 		if (regno < 16)
 			current_par.c_table.cfb16[regno] = regno | regno << 5 | regno << 11;
 		break;
+#endif
+
+	case 15:
+		if (regno < 32) {
+			cyber2000_outb(regno << 3, 0x3c8);
+			cyber2000_outb(red, 0x3c9);
+			cyber2000_outb(green, 0x3c9);
+			cyber2000_outb(blue, 0x3c9);
+		}
+		if (regno < 16)
+			current_par.c_table.cfb16[regno] = regno | regno << 5 | regno << 10;
+		break;
+
 #endif
 
 #ifdef FBCON_HAS_CFB24
@@ -345,6 +349,7 @@ struct par_info {
 	 * Other
 	 */
 	unsigned int	visual;
+	unsigned char	palette_ctrl;
 };
 
 static const char crtc_idx[] = {
@@ -418,7 +423,7 @@ static void cyber2000fb_set_timing(struct par_info *hw)
 	cyber2000_outb(0x56, 0x3ce);
 	i = cyber2000_inb(0x3cf);
 	cyber2000_outb(i | 4, 0x3cf);
-	cyber2000_outb(0x04, 0x3c6);
+	cyber2000_outb(hw->palette_ctrl, 0x3c6);
 	cyber2000_outb(i,    0x3cf);
 
 	cyber2000_outb(0x20, 0x3c0);
@@ -776,37 +781,76 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, int con, struct par_info *
 	int err;
 
 	hw->width = var->xres_virtual;
+
+	var->red.msb_right	= 0;
+	var->green.msb_right	= 0;
+	var->blue.msb_right	= 0;
+
 	switch (var->bits_per_pixel) {
 #ifdef FBCON_HAS_CFB8
 	case 8:	/* PSEUDOCOLOUR, 256 */
-		hw->visual    = FB_VISUAL_PSEUDOCOLOR;
-		hw->pixformat = PIXFORMAT_8BPP;
-		hw->visualid  = VISUALID_256;
-		hw->pitch     = hw->width >> 3;
+		var->bits_per_pixel	= 8;
+		var->red.offset		= 0;
+		var->red.length		= 8;
+		var->green.offset	= 0;
+		var->green.length	= 8;
+		var->blue.offset	= 0;
+		var->blue.length	= 8;
+		hw->visual		= FB_VISUAL_PSEUDOCOLOR;
+		hw->pixformat		= PIXFORMAT_8BPP;
+		hw->visualid		= VISUALID_256;
+		hw->pitch		= hw->width >> 3;
+		hw->palette_ctrl	= 0x04;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
+	case 16:/* DIRECTCOLOUR, 64k */
+#ifndef CFB16_IS_CFB15
+		var->bits_per_pixel	= 16;
+		var->red.offset		= 11;
+		var->red.length		= 5;
+		var->green.offset	= 5;
+		var->green.length	= 6;
+		var->blue.offset	= 0;
+		var->blue.length	= 5;
+		hw->visual		= FB_VISUAL_DIRECTCOLOR;
+		hw->pixformat		= PIXFORMAT_16BPP;
+		hw->visualid		= VISUALID_64K;
+		hw->pitch		= hw->width >> 2;
+		hw->palette_ctrl	= 0x14;
+		break;
+#endif
 	case 15:/* DIRECTCOLOUR, 32k */
-		hw->visual    = FB_VISUAL_DIRECTCOLOR;
-		hw->pixformat = PIXFORMAT_16BPP;
-		hw->visualid  = VISUALID_32K;
-		hw->pitch     = hw->width >> 2;
+		var->bits_per_pixel	= 15;
+		var->red.offset		= 10;
+		var->red.length		= 5;
+		var->green.offset	= 5;
+		var->green.length	= 5;
+		var->blue.offset	= 0;
+		var->blue.length	= 5;
+		hw->visual		= FB_VISUAL_DIRECTCOLOR;
+		hw->pixformat		= PIXFORMAT_16BPP;
+		hw->visualid		= VISUALID_32K;
+		hw->pitch		= hw->width >> 2;
+		hw->palette_ctrl	= 0x14;
 		break;
 
-	case 16:/* DIRECTCOLOUR, 64k */
-		hw->visual    = FB_VISUAL_DIRECTCOLOR;
-		hw->pixformat = PIXFORMAT_16BPP;
-		hw->visualid  = VISUALID_64K;
-		hw->pitch     = hw->width >> 2;
-		break;
 #endif
 #ifdef FBCON_HAS_CFB24
 	case 24:/* TRUECOLOUR, 16m */
-		hw->visual    = FB_VISUAL_TRUECOLOR;
-		hw->pixformat = PIXFORMAT_24BPP;
-		hw->visualid  = VISUALID_16M;
-		hw->width    *= 3;
-		hw->pitch     = hw->width >> 3;
+		var->bits_per_pixel	= 24;
+		var->red.offset		= 16;
+		var->red.length		= 8;
+		var->green.offset	= 8;
+		var->green.length	= 8;
+		var->blue.offset	= 0;
+		var->blue.length	= 8;
+		hw->visual		= FB_VISUAL_TRUECOLOR;
+		hw->pixformat		= PIXFORMAT_24BPP;
+		hw->visualid		= VISUALID_16M;
+		hw->width		*= 3;
+		hw->pitch		= hw->width >> 3;
+		hw->palette_ctrl	= 0x14;
 		break;
 #endif
 	default:

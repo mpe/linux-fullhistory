@@ -34,9 +34,9 @@
      be32_to_cpu((pi)->st) + be32_to_cpu((pi)->siz) <= (hdsiz))
 
 int atari_partition (struct gendisk *hd, kdev_t dev,
-		     unsigned long first_sector, int first_part_minor)
+		     unsigned long first_sector, int minor)
 {
-  int minor = first_part_minor, m_lim = first_part_minor + hd->max_p;
+  int m_lim = minor + hd->max_p;
   struct buffer_head *bh;
   struct rootsector *rs;
   struct partition_info *pi;

@@ -17,9 +17,9 @@
 #include "check.h"
 #include "sgi.h"
 
-int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, int first_part_minor)
+int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, int current_minor)
 {
-	int i, csum, magic, current_minor = first_part_minor;
+	int i, csum, magic;
 	unsigned int *ui, start, blocks, cs;
 	struct buffer_head *bh;
 	struct sgi_disklabel {

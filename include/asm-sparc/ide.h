@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.3 2000/03/10 04:46:47 davem Exp $
+/* $Id: ide.h,v 1.4 2000/03/12 03:56:12 davem Exp $
  * ide.h: SPARC PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)

@@ -12,7 +12,8 @@
 #ifndef GENERIC_SERIAL_H
 #define GENERIC_SERIAL_H
 
-#define RS_EVENT_WRITE_WAKEUP 0
+
+
 
 struct real_driver {
   void                    (*disable_tx_interrupts) (void *);
@@ -21,7 +22,7 @@ struct real_driver {
   void                    (*enable_rx_interrupts) (void *);
   int                     (*get_CD) (void *);
   void                    (*shutdown_port) (void*);
-  void                    (*set_real_termios) (void*);
+  int                     (*set_real_termios) (void*);
   int                     (*chars_in_buffer) (void*);
   void                    (*close) (void*);
   void                    (*hungup) (void*);

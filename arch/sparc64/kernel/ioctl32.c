@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.80 2000/02/17 06:45:09 jj Exp $
+/* $Id: ioctl32.c,v 1.81 2000/03/12 04:02:07 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -34,6 +34,7 @@
 #include <linux/cdrom.h>
 #include <linux/loop.h>
 #include <linux/auto_fs.h>
+#include <linux/devfs_fs.h>
 #include <linux/tty.h>
 #include <linux/vt_kern.h>
 #include <linux/fb.h>
@@ -2517,6 +2518,11 @@ COMPATIBLE_IOCTL(AUTOFS_IOC_FAIL)
 COMPATIBLE_IOCTL(AUTOFS_IOC_CATATONIC)
 COMPATIBLE_IOCTL(AUTOFS_IOC_PROTOVER)
 COMPATIBLE_IOCTL(AUTOFS_IOC_EXPIRE)
+/* DEVFS */
+COMPATIBLE_IOCTL(DEVFSDIOC_GET_PROTO_REV)
+COMPATIBLE_IOCTL(DEVFSDIOC_SET_EVENT_MASK)
+COMPATIBLE_IOCTL(DEVFSDIOC_RELEASE_EVENT_QUEUE)
+COMPATIBLE_IOCTL(DEVFSDIOC_SET_DEBUG_MASK)
 /* Raw devices */
 COMPATIBLE_IOCTL(RAW_SETBIND)
 COMPATIBLE_IOCTL(RAW_GETBIND)

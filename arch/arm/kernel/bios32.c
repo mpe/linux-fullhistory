@@ -222,8 +222,9 @@ static u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
 	return 0;
 }
 
-#ifdef CONFIG_FOOTBRIDGE
 /* ebsa285 host-specific stuff */
+
+#ifdef CONFIG_ARCH_EBSA285
 static int irqmap_ebsa285[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
 
 static u8 __init ebsa285_swizzle(struct pci_dev *dev, u8 *pin)
@@ -251,7 +252,9 @@ static struct hw_pci ebsa285_pci __initdata = {
 	ebsa285_swizzle,
 	ebsa285_map_irq
 };
+#endif
 
+#ifdef CONFIG_CATS
 /* cats host-specific stuff */
 static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
 
@@ -277,7 +280,9 @@ static struct hw_pci cats_pci __initdata = {
 	no_swizzle,
 	cats_map_irq
 };
+#endif
 
+#ifdef CONFIG_ARCH_NETWINDER
 /* netwinder host-specific stuff */
 static int __init netwinder_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
@@ -318,6 +323,41 @@ static struct hw_pci netwinder_pci __initdata = {
 };
 #endif
 
+#ifdef CONFIG_PERSONAL_SERVER
+static int irqmap_personal_server[] __initdata = {
+	IRQ_IN0, IRQ_IN1, IRQ_IN2, IRQ_IN3, 0, 0, 0,
+	IRQ_DOORBELLHOST, IRQ_DMA1, IRQ_DMA2, IRQ_PCI
+};
+
+static int __init personal_server_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+{
+	unsigned char line;
+
+	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &line);
+
+	if (line > 0x40 && line <= 0x5f) {
+		/* line corresponds to the bit controlling this interrupt
+		 * in the footbridge.  Ignore the first 8 interrupt bits,
+		 * look up the rest in the map.  IN0 is bit number 8
+		 */
+		return irqmap_personal_server[(line & 0x1f) - 8];
+	} else if (line == 0) {
+		/* no interrupt */
+		return 0;
+	} else
+		return irqmap_personal_server[(line - 1) & 3];
+}
+
+static struct hw_pci personal_server_pci __initdata = {
+	dc21285_init,
+	0x9000,
+	0x00100000,
+	no_swizzle,
+	personal_server_map_irq
+};
+
+#endif
+
 #ifdef CONFIG_ARCH_NEXUSPCI
 /*
  * Owing to a PCB cockup, issue A backplanes are wired thus:
@@ -352,17 +392,38 @@ void __init pcibios_init(void)
 {
 	struct hw_pci *hw_pci = NULL;
 
-#ifdef CONFIG_FOOTBRIDGE
-	if (machine_is_ebsa285())
-		hw_pci = &ebsa285_pci;
-	else if (machine_is_cats())
-		hw_pci = &cats_pci;
-	else if (machine_is_netwinder())
-		hw_pci = &netwinder_pci;
+	do {
+#ifdef CONFIG_ARCH_EBSA285
+		if (machine_is_ebsa285()) {
+			hw_pci = &ebsa285_pci;
+			break;
+		}
+#endif
+#ifdef CONFIG_CATS
+		if (machine_is_cats()) {
+			hw_pci = &cats_pci;
+			break;
+		}
+#endif
+#ifdef CONFIG_ARCH_NETWINDER
+		if (machine_is_netwinder()) {
+			hw_pci = &netwinder_pci;
+			break;
+		}
+#endif
+#ifdef CONFIG_PERSONAL_SERVER
+		if (machine_is_personal_server()) {
+			hw_pci = &personal_server_pci;
+			break;
+		}
 #endif
 #ifdef CONFIG_ARCH_NEXUSPCI
-	hw_pci = &ftv_pci;
+		if (machine_is_nexuspci()) {
+			hw_pci = &ftv_pci;
+			break;
+		}
 #endif
+	} while (0);			
 
 	if (hw_pci == NULL)
 		return;

@@ -17,7 +17,7 @@ CONFIG_I2C=m
 CONFIG_I2C_ALGOBIT=m
 
 The latest bttv version is available here:
-	http://www.in-berlin.de/User/kraxel/v4l/
+	http://me.in-berlin.de/~kraxel/bttv.html
 
 You'll find Ralphs original (mostly outdated) documentation in the
 ralphs-doc subdirectory.

@@ -6,9 +6,10 @@
 #define OV511_DEBUG	/* Turn on debug messages */
 
 #ifdef OV511_DEBUG
-#  define PDEBUG(fmt, args...) printk("ov511: " fmt "\n" , ## args)
+#  define PDEBUG(level, fmt, args...) \
+if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #else
-#  define PDEBUG(fmt, args...) do {} while(0)
+#  define PDEBUG(level, fmt, args...) do {} while(0)
 #endif
 
 /* Camera interface register numbers */
@@ -227,6 +228,8 @@ struct ov511_frame {
 	long bytes_read;	/* amount of scanlength that has been read from *data */
 
 	wait_queue_head_t wq;	/* Processes waiting */
+
+	int snapshot;			/* True if frame was a snapshot */
 };
 
 #define OV511_NUMFRAMES	2
@@ -269,6 +272,8 @@ struct usb_ov511 {
 	int scratchlen;
 
 	wait_queue_head_t wq;	/* Processes waiting */
+
+	int snap_enabled;   /* Snapshot mode enabled */
 };
 
 #endif

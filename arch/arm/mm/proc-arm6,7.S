@@ -107,19 +107,45 @@ msg:		.ascii	"DA*%p=%p\n\0"
 ENTRY(cpu_arm6_data_abort)
 		ldr	r4, [r0]			@ read instruction causing problem
 		mov	r2, r4, lsr #19			@ r2 b1 = L
-Ldata_simple:
+		and	r1, r4, #14 << 24
 		and	r2, r2, #2			@ check read/write bit
-		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
+		teq	r1, #4 << 23
+		bne	Ldata_simple
+
+
+Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
+		beq	Ldata_simple
+		mov	r7, #0x11
+		orr	r7, r7, r7, lsl #8
+		and	r0, r4, r7
+		and	r1, r4, r7, lsl #1
+		add	r0, r0, r1, lsr #1
+		and	r1, r4, r7, lsl #2
+		add	r0, r0, r1, lsr #2
+		and	r1, r4, r7, lsl #3
+		add	r0, r0, r1, lsr #3
+		add	r0, r0, r0, lsr #8
+		add	r0, r0, r0, lsr #4
+		and	r7, r0, #15			@ r7 = no. of registers to transfer.
+		and	r5, r4, #15 << 16		@ Get Rn
+		ldr	r0, [sp, r5, lsr #14]		@ Get register
+		tst	r4, #1 << 23			@ U bit
+		subne	r7, r0, r7, lsl #2
+		addeq	r7, r0, r7, lsl #2		@ Do correction (signed)
+Ldata_saver7:	str	r7, [sp, r5, lsr #14]		@ Put register
+Ldata_simple:	mrc	p15, 0, r0, c6, c0, 0		@ get FAR
 		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
-		and	r1, r1, #15
+		and	r1, r1, #255
 		mov	pc, lr
 
 ENTRY(cpu_arm7_data_abort)
 		ldr	r4, [r0]			@ read instruction causing problem
 		mov	r2, r4, lsr #19			@ r2 b1 = L
 		and	r1, r4, #15 << 24
+		and	r2, r2, #2			@ check read/write bit
 		add	pc, pc, r1, lsr #22		@ Now branch to the relevent processing routine
 		movs	pc, lr
+
 		b	Ldata_unknown
 		b	Ldata_unknown
 		b	Ldata_unknown
@@ -141,52 +167,23 @@ Ldata_unknown:	@ Part of jumptable
 		mov	r2, r3
 		b	baddataabort
 
-Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
-		beq	Ldata_simple
-
-		mov	r7, #0x11
-		orr	r7, r7, r7, lsl #8
-		and	r0, r4, r7
-		and	r1, r4, r7, lsl #1
-		add	r0, r0, r1, lsr #1
-		and	r1, r4, r7, lsl #2
-		add	r0, r0, r1, lsr #2
-		and	r1, r4, r7, lsl #3
-		add	r0, r0, r1, lsr #3
-		add	r0, r0, r0, lsr #8
-		add	r0, r0, r0, lsr #4
-		and	r7, r0, #15			@ r7 = no. of registers to transfer.
-		and	r5, r4, #15 << 16		@ Get Rn
-		ldr	r0, [sp, r5, lsr #14]		@ Get register
-		eor	r6, r4, r4, lsl #2
-		tst	r6, #1 << 23			@ Check inc/dec ^ writeback
-		rsbeq	r7, r7, #0
-		add	r7, r0, r7, lsl #2		@ Do correction (signed)
-		str	r7, [sp, r5, lsr #14]		@ Put register
-
-Ldata_lateldrpostconst:
-		movs	r1, r4, lsl #20			@ Get offset
-		beq	Ldata_simple			@ if offset is zero, no effect
-		and	r5, r4, #15 << 16		@ Get Rn
-		ldr	r0, [sp, r5, lsr #14]
-		tst	r4, #1 << 23			@ U bit
-		subne	r0, r0, r1, lsr #20
-		addeq	r0, r0, r1, lsr #20
-		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_simple
 
 Ldata_lateldrpreconst:
 		tst	r4, #1 << 21			@ check writeback bit
-		movnes	r1, r4, lsl #20			@ Get offset
+		beq	Ldata_simple
+Ldata_lateldrpostconst:
+		movs	r1, r4, lsl #20			@ Get offset
 		beq	Ldata_simple
 		and	r5, r4, #15 << 16		@ Get Rn
 		ldr	r0, [sp, r5, lsr #14]
 		tst	r4, #1 << 23			@ U bit
-		subne	r0, r0, r1, lsr #20
-		addeq	r0, r0, r1, lsr #20
-		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_simple
+		subne	r7, r0, r1, lsr #20
+		addeq	r7, r0, r1, lsr #20
+		b	Ldata_saver7
 
+Ldata_lateldrprereg:
+		tst	r4, #1 << 21			@ check writeback bit
+		beq	Ldata_simple
 Ldata_lateldrpostreg:
 		and	r5, r4, #15
 		ldr	r1, [sp, r5, lsl #2]		@ Get Rm
@@ -233,63 +230,9 @@ Ldata_lateldrpostreg:
 1:		and	r5, r4, #15 << 16		@ Get Rn
 		ldr	r0, [sp, r5, lsr #14]
 		tst	r4, #1 << 23			@ U bit
-		subne	r0, r0, r1
-		addeq	r0, r0, r1
-		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_simple
-
-Ldata_lateldrprereg:
-		tst	r4, #1 << 21			@ check writeback bit
-		beq	Ldata_simple
-		and	r5, r4, #15
-		ldr	r1, [sp, r5, lsl #2]		@ Get Rm
-		mov	r3, r4, lsr #7
-		ands	r3, r3, #31
-		and	r6, r4, #0x70
-		orreq	r6, r6, #8
-		add	pc, pc, r6
-		mov	r0, r0
-
-		mov	r1, r1, lsl r3			@ 0: LSL #!0
-		b	1f
-		b	1f				@ 1: LSL #0
-		mov	r0, r0
-		b	1f				@ 2: MUL?
-		mov	r0, r0
-		b	1f				@ 3: MUL?
-		mov	r0, r0
-		mov	r1, r1, lsr r3			@ 4: LSR #!0
-		b	1f
-		mov	r1, r1, lsr #32			@ 5: LSR #32
-		b	1f
-		b	1f				@ 6: MUL?
-		mov	r0, r0
-		b	1f				@ 7: MUL?
-		mov	r0, r0
-		mov	r1, r1, asr r3			@ 8: ASR #!0
-		b	1f
-		mov	r1, r1, asr #32			@ 9: ASR #32
-		b	1f
-		b	1f				@ A: MUL?
-		mov	r0, r0
-		b	1f				@ B: MUL?
-		mov	r0, r0
-		mov	r1, r1, ror r3			@ C: ROR #!0
-		b	1f
-		mov	r1, r1, rrx			@ D: RRX
-		b	1f
-		mov	r0, r0				@ E: MUL?
-		mov	r0, r0
-		mov	r0, r0				@ F: MUL?
-
-
-1:		and	r5, r4, #15 << 16		@ Get Rn
-		ldr	r0, [sp, r5, lsr #14]
-		tst	r4, #1 << 23			@ U bit
-		subne	r0, r0, r1
-		addeq	r0, r0, r1
-		str	r0, [sp, r5, lsr #14]		@ Put register
-		b	Ldata_simple
+		subne	r7, r0, r1
+		addeq	r7, r0, r1
+		b	Ldata_saver7
 
 /*
  * Function: arm6_7_check_bugs (void)

@@ -24,10 +24,9 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/videodev.h>
+#include <linux/init.h>
 
-#if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
-#endif
 #include <asm/system.h>
 
 #include <linux/kmod.h>
@@ -174,20 +173,11 @@ static int video_release(struct inode *inode, struct file *file)
  *	image ?
  */
  
-#if LINUX_VERSION_CODE >= 0x020100
 static long long video_lseek(struct file * file,
 			  long long offset, int origin)
 {
 	return -ESPIPE;
 }
-#else
-static long long video_lseek(struct inode *inode, struct file * file,
-			     long long offset, int origin)
-{
-	return -ESPIPE;
-}
-#endif
-
 
 static int video_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
@@ -210,16 +200,9 @@ static int video_ioctl(struct inode *inode, struct file *file,
  */
  
  
-#if LINUX_VERSION_CODE >= 0x020100
 int video_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
-#else
-static int video_mmap(struct inode * ino, struct file * file,
-		      struct vm_area_struct * vma)
-{
-	struct video_device *vfl=video_device[MINOR(ino->i_rdev)];
-#endif
 	if(vfl->mmap)
 		return vfl->mmap(vfl, (char *)vma->vm_start, 
 				(unsigned long)(vma->vm_end-vma->vm_start));
@@ -228,8 +211,28 @@ static int video_mmap(struct inode * ino, struct file * file,
 
 extern struct file_operations video_fops;
 
-/*
- *	Video For Linux device drivers request registration here.
+/**
+ *	video_register_device - register video4linux devices
+ *	@vfd: Video device structure we want to register
+ *	@type: type of device to register
+ *	FIXME: needs a semaphore on 2.3.x
+ *	
+ *	The registration code assigns minor numbers based on the type
+ *	requested. -ENFILE is returned in all the device slots for this
+ *	catetory are full. If not then the minor field is set and the
+ *	driver initialize function is called (if non NULL).
+ *
+ *	Zero is returned on success.
+ *
+ *	Valid types are
+ *
+ *	VFL_TYPE_GRABBER - A frame grabber
+ *
+ *	VFL_TYPE_VTX - A teletext device
+ *
+ *	VFL_TYPE_VBI - Vertical blank data (undecoded)
+ *
+ *	VFL_TYPE_RADIO - A radio card	
  */
  
 int video_register_device(struct video_device *vfd, int type)
@@ -288,10 +291,14 @@ int video_register_device(struct video_device *vfd, int type)
 				}
 			}
 			sprintf (name, "v4l/%s%d", name_base, i - base);
+			/*
+			 *	Start the device root only. Anything else
+			 *	has serious privacy issues.
+			 */
 			vfd->devfs_handle =
 			    devfs_register (NULL, name, 0, DEVFS_FL_DEFAULT,
 					    VIDEO_MAJOR, vfd->minor,
-					    S_IFCHR | S_IRUGO | S_IWUGO, 0, 0,
+					    S_IFCHR | S_IRUSR | S_IWUSR, 0, 0,
 					    &video_fops, NULL);
 			return 0;
 		}
@@ -299,8 +306,12 @@ int video_register_device(struct video_device *vfd, int type)
 	return -ENFILE;
 }
 
-/*
- *	Unregister an unused video for linux device
+/**
+ *	video_unregister_device - Unregister a video4linux device
+ *	@vfd: the device to unregister
+ *
+ *	This unregisters the passed device and deassigns the minor
+ *	number. Future open calls will be met with errors.
  */
  
 void video_unregister_device(struct video_device *vfd)
@@ -322,16 +333,14 @@ static struct file_operations video_fops=
 	mmap:		video_mmap,
 	open:		video_open,
 	release:	video_release,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 	poll:		video_poll,
-#endif
 };
 
 /*
  *	Initialise video for linux
  */
  
-int videodev_init(void)
+int __init videodev_init(void)
 {
 	struct video_init *vfli = video_init_list;
 	
@@ -365,15 +374,10 @@ void cleanup_module(void)
 	devfs_unregister_chrdev(VIDEO_MAJOR, "video_capture");
 }
 
-
-
-
-
-
-
 #endif
 
-#if LINUX_VERSION_CODE >= 0x020100
 EXPORT_SYMBOL(video_register_device);
 EXPORT_SYMBOL(video_unregister_device);
-#endif
+
+MODULE_AUTHOR("Alan Cox");
+MODULE_DESCRIPTION("Device registrar for Video4Linux drivers");

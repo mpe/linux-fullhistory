@@ -26,7 +26,7 @@
  * product (OEM, like DEC RoamAbout, Digital Ocean, or Epson),
  * you might need to modify this part to accommodate your hardware.
  */
-const char	MAC_ADDRESSES[][3] =
+static const char	MAC_ADDRESSES[][3] =
 {
   { 0x08, 0x00, 0x0E },		/* AT&T WaveLAN (standard) & DEC RoamAbout */
   { 0x08, 0x00, 0x6A },		/* AT&T WaveLAN (alternate) */
@@ -49,14 +49,14 @@ const char	MAC_ADDRESSES[][3] =
  * (as read in the offset register of the dac area).
  * Used to map channel numbers used by `wfreqsel' to frequencies
  */
-const short	channel_bands[] = { 0x30, 0x58, 0x64, 0x7A, 0x80, 0xA8,
+static const short	channel_bands[] = { 0x30, 0x58, 0x64, 0x7A, 0x80, 0xA8,
 				    0xD0, 0xF0, 0xF8, 0x150 };
 
 /* Frequencies of the 1.0 modem (fixed frequencies).
  * Use to map the PSA `subband' to a frequency
  * Note : all frequencies apart from the first one need to be multiplied by 10
  */
-const int	fixed_bands[] = { 915e6, 2.425e8, 2.46e8, 2.484e8, 2.4305e8 };
+static const int	fixed_bands[] = { 915e6, 2.425e8, 2.46e8, 2.484e8, 2.4305e8 };
 
 
 

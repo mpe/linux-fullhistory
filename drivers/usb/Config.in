@@ -51,6 +51,7 @@ comment 'USB Devices'
    dep_tristate '  PLUSB Prolific USB-Network driver' CONFIG_USB_PLUSB $CONFIG_USB
    dep_tristate '  USB ADMtek Pegasus-based device support' CONFIG_USB_PEGASUS $CONFIG_USB
    dep_tristate '  USB Diamond Rio500 support' CONFIG_USB_RIO500 $CONFIG_USB
+   dep_tristate '  D-Link USB FM radio support' CONFIG_USB_DSBR $CONFIG_USB
    
 comment 'USB HID'
    dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB

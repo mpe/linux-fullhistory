@@ -34,6 +34,7 @@
  *	- switched to regular procfs methods.
  */
 
+#include <linux/module.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -362,6 +363,19 @@ void mca_handle_nmi(void)
 
 /*--------------------------------------------------------------------*/
 
+/**
+ *	mca_find_adapter - scan for adapters
+ *	@id:	MCA identification to search for
+ *	@start:	Starting slot
+ *
+ *	Search the MCA configuration for adapters matching the 16bit
+ *	ID given. The first time it should be called with start as zero
+ *	and then further calls made passing the return value of the
+ *	previous call until MCA_NOTFOUND is returned.
+ *
+ *	Disabled adapters are not reported.
+ */
+ 
 int mca_find_adapter(int id, int start)
 {
 	if(mca_info == NULL || id == 0xffff) {
@@ -390,7 +404,24 @@ int mca_find_adapter(int id, int start)
 	return MCA_NOTFOUND;
 } /* mca_find_adapter() */
 
+EXPORT_SYMBOL(mca_find_adapter);
+
 /*--------------------------------------------------------------------*/
+
+/**
+ *	mca_find_unused_adapter - scan for unused adapters
+ *	@id:	MCA identification to search for
+ *	@start:	Starting slot
+ *
+ *	Search the MCA configuration for adapters matching the 16bit
+ *	ID given. The first time it should be called with start as zero
+ *	and then further calls made passing the return value of the
+ *	previous call until MCA_NOTFOUND is returned.
+ *
+ *	Adapters that have been claimed by drivers and those that
+ *	are disabled are not reported. This function thus allows a driver
+ *	to scan for further cards when some may already be driven.
+ */
 
 int mca_find_unused_adapter(int id, int start) 
 {
@@ -421,8 +452,20 @@ int mca_find_unused_adapter(int id, int start)
 	return MCA_NOTFOUND;
 } /* mca_find_unused_adapter() */	
 
+EXPORT_SYMBOL(mca_find_unused_adapter);
+
 /*--------------------------------------------------------------------*/
 
+/**
+ *	mca_read_stored_pos - read POS register from boot data
+ *	@slot: slot number to read from
+ *	@reg:  register to read from
+ *
+ *	Fetch a POS value that was stored at boot time by the kernel
+ *	when it scanned the MCA space. The register value is returned.
+ *	Missing or invalid registers report 0.
+ */
+ 
 unsigned char mca_read_stored_pos(int slot, int reg) 
 {
 	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == NULL) return 0;
@@ -430,7 +473,21 @@ unsigned char mca_read_stored_pos(int slot, int reg)
 	return mca_info->slot[slot].pos[reg];
 } /* mca_read_stored_pos() */
 
+EXPORT_SYMBOL(mca_read_stored_pos);
+
 /*--------------------------------------------------------------------*/
+
+/**
+ *	mca_read_pos - read POS register from card
+ *	@slot: slot number to read from
+ *	@reg:  register to read from
+ *
+ *	Fetch a POS value directly from the hardware to obtain the
+ *	current value. This is much slower than mca_read_stored_pos and
+ *	may not be invoked from interrupt context. It handles the
+ *	deep magic required for onboard devices transparently.
+ */
+ 
 
 unsigned char mca_read_pos(int slot, int reg) 
 {
@@ -489,16 +546,32 @@ unsigned char mca_read_pos(int slot, int reg)
 	return byte;
 } /* mca_read_pos() */
 
+EXPORT_SYMBOL(mca_read_pos);
+
 /*--------------------------------------------------------------------*/
 
-/* Note that this a technically a Bad Thing, as IBM tech stuff says
- * you should only set POS values through their utilities.
- * However, some devices such as the 3c523 recommend that you write
- * back some data to make sure the configuration is consistent.
- * I'd say that IBM is right, but I like my drivers to work.
- * This function can't do checks to see if multiple devices end up
- * with the same resources, so you might see magic smoke if someone
- * screws up.
+/**
+ *	mca_write_pos - read POS register from card
+ *	@slot: slot number to read from
+ *	@reg:  register to read from
+ *	@byte: byte to write to the POS registers
+ *
+ *	Store a POS value directly from the hardware. You should not 
+ *	normally need to use this function and should have a very good
+ *	knowledge of MCA bus before you do so. Doing this wrongly can
+ *	damage the hardware.
+ *
+ *	This function may not be used from interrupt context.
+ *
+ *	Note that this a technically a Bad Thing, as IBM tech stuff says
+ *	you should only set POS values through their utilities.
+ *	However, some devices such as the 3c523 recommend that you write
+ *	back some data to make sure the configuration is consistent.
+ *	I'd say that IBM is right, but I like my drivers to work.
+ *
+ *	This function can't do checks to see if multiple devices end up
+ *	with the same resources, so you might see magic smoke if someone
+ *	screws up.
  */
 
 void mca_write_pos(int slot, int reg, unsigned char byte) 
@@ -532,8 +605,20 @@ void mca_write_pos(int slot, int reg, unsigned char byte)
 	mca_info->slot[slot].pos[reg] = byte;
 } /* mca_write_pos() */
 
+EXPORT_SYMBOL(mca_write_pos);
+
 /*--------------------------------------------------------------------*/
 
+/**
+ *	mca_set_adapter_name - Set the description of the card
+ *	@slot: slot to name
+ *	@name: text string for the namen
+ *
+ *	This function sets the name reported via /proc for this
+ *	adapter slot. This is for user information only. Setting a 
+ *	name deletes any previous name.
+ */
+ 
 void mca_set_adapter_name(int slot, char* name) 
 {
 	if(mca_info == NULL) return;
@@ -550,6 +635,26 @@ void mca_set_adapter_name(int slot, char* name)
 	}
 }
 
+EXPORT_SYMBOL(mca_set_adapter_name);
+
+/**
+ *	mca_set_adapter_procfn - Set the /proc callback
+ *	@slot: slot to configure
+ *	@procfn: callback function to call for /proc 
+ *	@dev: device information passed to the callback
+ *
+ *	This sets up an information callback for /proc/mca/slot?.  The
+ *	function is called with the buffer, slot, and device pointer (or
+ *	some equally informative context information, or nothing, if you
+ *	prefer), and is expected to put useful information into the
+ *	buffer.  The adapter name, id, and POS registers get printed
+ * 	before this is called though, so don't do it again.
+ *
+ *	This should be called with a NULL procfn when a module
+ *	unregisters, thus preventing kernel crashes and other such
+ *	nastiness.
+ */
+
 void mca_set_adapter_procfn(int slot, MCA_ProcFn procfn, void* dev)
 {
 	if(mca_info == NULL) return;
@@ -560,10 +665,32 @@ void mca_set_adapter_procfn(int slot, MCA_ProcFn procfn, void* dev)
 	}
 }
 
+EXPORT_SYMBOL(mca_set_adapter_procfn);
+
+/**
+ *	mca_is_adapter_used - check if claimed by driver
+ *	@slot:	slot to check
+ *
+ *	Returns 1 if the slot has been claimed by a driver
+ */
+
 int mca_is_adapter_used(int slot)
 {
 	return mca_info->slot[slot].driver_loaded;
 }
+
+EXPORT_SYMBOL(mca_is_adapter_used);
+
+/**
+ *	mca_mark_as_used - claim an MCA device
+ *	@slot:	slot to claim
+ *	FIXME:  should we make this threadsafe
+ *
+ *	Claim an MCA slot for a device driver. If the
+ *	slot is already taken the function returns 1,
+ *	if it is not taken it is claimed and 0 is
+ *	returned.
+ */
 
 int mca_mark_as_used(int slot)
 {
@@ -572,10 +699,29 @@ int mca_mark_as_used(int slot)
 	return 0;
 }
 
+EXPORT_SYMBOL(mca_mark_as_used);
+
+/**
+ *	mca_mark_as_unused - release an MCA device
+ *	@slot:	slot to claim
+ *
+ *	Release the slot for other drives to use.
+ */
+
 void mca_mark_as_unused(int slot)
 {
 	mca_info->slot[slot].driver_loaded = 0;
 }
+
+EXPORT_SYMBOL(mca_mark_as_unused);
+
+/**
+ *	mca_get_adapter_name - get the adapter description
+ *	@slot:	slot to query
+ *
+ *	Return the adapter description if set. If it has not been
+ *	set or the slot is out range then return NULL.
+ */
  
 char *mca_get_adapter_name(int slot) 
 {
@@ -587,6 +733,16 @@ char *mca_get_adapter_name(int slot)
 
 	return 0;
 }
+
+EXPORT_SYMBOL(mca_get_adapter_name);
+
+/**
+ *	mca_isadapter - check if the slot holds an adapter
+ *	@slot:	slot to query
+ *
+ *	Returns zero if the slot does not hold an adapter, non zero if
+ *	it does.
+ */
 
 int mca_isadapter(int slot)
 {
@@ -600,6 +756,17 @@ int mca_isadapter(int slot)
 	return 0;
 }
 
+EXPORT_SYMBOL(mca_isadapter);
+
+
+/**
+ *	mca_isadapter - check if the slot holds an adapter
+ *	@slot:	slot to query
+ *
+ *	Returns a non zero value if the slot holds an enabled adapter
+ *	and zero for any other case.
+ */
+
 int mca_isenabled(int slot)
 {
 	if(mca_info == NULL) return 0;
@@ -610,6 +777,8 @@ int mca_isenabled(int slot)
 
 	return 0;
 }
+
+EXPORT_SYMBOL(mca_isenabled);
 
 /*--------------------------------------------------------------------*/
 

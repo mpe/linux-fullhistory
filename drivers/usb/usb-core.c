@@ -31,7 +31,6 @@ void usb_major_cleanup(void);
 int usb_audio_init(void);
 int usb_cpia_init(void);
 int usb_ibmcam_init(void);
-int usb_ov511_init(void);
 int dabusb_init(void);
 int plusb_init(void);
 
@@ -78,11 +77,11 @@ int usb_init(void)
 #ifdef CONFIG_USB_IBMCAM
 	usb_ibmcam_init();
 #endif
-#ifdef CONFIG_USB_OV511
-	usb_ov511_init();
-#endif
 #ifdef CONFIG_USB_DABUSB
 	dabusb_init();
+#endif
+#ifdef CONFIG_USB_DSBR
+	dsbr100_init();
 #endif
 #ifdef CONFIG_USB_PLUSB
 	plusb_init();

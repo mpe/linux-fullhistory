@@ -10,7 +10,8 @@
  *
  * Author:      Alan Cox, <alan@redhat.com>
  *
- * Fixes:
+ * Fixes:       Mar 01 2000 Thomas Sparr, <thomas.l.sparr@telia.com>
+ *              phone_register_device now works with unit!=PHONE_UNIT_ANY
  */
 
 #include <linux/config.h>
@@ -84,7 +85,7 @@ int phone_register_device(struct phone_device *p, int unit)
 
 	if (unit != PHONE_UNIT_ANY) {
 		base = unit;
-		end = unit;
+		end = unit + 1;  /* enter the loop at least one time */
 	}
 	for (i = base; i < end; i++) {
 		if (phone_device[i] == NULL) {

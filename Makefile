@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 51
+SUBLEVEL = 52
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -136,7 +136,7 @@ ifdef CONFIG_NET_FC
 DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
 endif
 
-ifdef CONFIG_ATALK
+ifdef CONFIG_APPLETALK
 DRIVERS := $(DRIVERS) drivers/net/appletalk/appletalk.a
 endif
 
@@ -154,6 +154,10 @@ endif
 
 ifdef CONFIG_ATM
 DRIVERS := $(DRIVERS) drivers/atm/atm.a
+endif
+
+ifeq ($(CONFIG_IDE),y)
+DRIVERS := $(DRIVERS) drivers/ide/ide.a
 endif
 
 ifeq ($(CONFIG_SCSI),y)
@@ -399,6 +403,7 @@ modules_install:
 	if [ -f IPV4_MODULES  ]; then inst_mod IPV4_MODULES  ipv4;  fi; \
 	if [ -f IPV6_MODULES  ]; then inst_mod IPV6_MODULES  ipv6;  fi; \
 	if [ -f ATM_MODULES   ]; then inst_mod ATM_MODULES   atm;   fi; \
+	if [ -f IDE_MODULES   ]; then inst_mod IDE_MODULES   ide;   fi; \
 	if [ -f SCSI_MODULES  ]; then inst_mod SCSI_MODULES  scsi;  fi; \
 	if [ -f FS_MODULES    ]; then inst_mod FS_MODULES    fs;    fi; \
 	if [ -f NLS_MODULES   ]; then inst_mod NLS_MODULES   fs;    fi; \
@@ -483,6 +488,9 @@ distclean: mrproper
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz
 	sync
+
+sgmldocs: 
+	$(MAKE) -C $(TOPDIR)/Documentation/DocBook books
 
 sums:
 	find . -type f -print | sort | xargs sum > .SUMS

@@ -454,7 +454,7 @@ struct awc_fid_queue {
 };
 
 
-extern  void
+extern  __inline__ void
 awc_fid_queue_init(struct awc_fid_queue * queue){
 
 	unsigned long flags;

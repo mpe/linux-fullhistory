@@ -219,7 +219,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
    fi
    dep_tristate '  Zoran ZR36057/36060 Video For Linux' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV $CONFIG_PCI
    dep_tristate '    Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
-   dep_tristate '  Zoran ZR36120/36125 Video For Linux' CONFIG_VIDEO_ZR36120 $CONFIG_VIDEO_DEV $CONFIG_PCI
+   dep_tristate '  Zoran ZR36120/36125 Video For Linux' CONFIG_VIDEO_ZR36120 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C
 fi
 
 endmenu

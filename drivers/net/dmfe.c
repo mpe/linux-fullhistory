@@ -1,15 +1,26 @@
 /*
-   dmfe.c: Version 1.26
+   dmfe.c: Version 1.28 01/18/2000
 
-   A Davicom DM9102 fast ethernet driver for Linux. 
+   A Davicom DM9102(A)/DM9132/DM9801 fast ethernet driver for Linux. 
+   Copyright (C) 1997  Sten Wang
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, version 1.
+   This program is free software; you can redistribute it and/or
+   modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2
+   of the License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
 
    Compiler command:
    "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall 
-		-Wstrict-prototypes -O6 -c dmfe.c"
+   -Wstrict-prototypes -O6 -c dmfe.c"
+   OR
+   "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net -Wall 
+   -Wstrict-prototypes -O6 -c dmfe.c"
 
    The following steps teach you how to active DM9102 board:
    1. Used the upper compiler command to compile dmfe.c
@@ -25,7 +36,7 @@
    "route add -net 172.22.3.0 eth0"
    5. Well done. Your DM9102 adapter actived now.
 
-   Author: Sten Wang, E-mail: sten_wang@davicom.com.tw
+   Author: Sten Wang, 886-3-5798797-8517, E-mail: sten_wang@davicom.com.tw
 
    Date:   10/28,1998
 
@@ -44,6 +55,9 @@
    Check and fix on 64bit and big endian boxes.
    Sort out the PCI latency.
    
+   (C)Copyright 1997-1998 DAVICOM Semiconductor,Inc. All Rights Reserved.
+     
+   Cleaned up for kernel merge by Alan Cox (alan@redhat.com)
  */
 
 #include <linux/module.h>
@@ -60,38 +74,41 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/version.h>
-
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/skbuff.h>
 #include <linux/delay.h>
+
 #include <asm/processor.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
 
 
 /* Board/System/Debug information/definition ---------------- */
+#define PCI_DM9132_ID   0x91321282	/* Davicom DM9132 ID */
 #define PCI_DM9102_ID   0x91021282	/* Davicom DM9102 ID */
 #define PCI_DM9100_ID   0x91001282	/* Davicom DM9100 ID */
 
 #define DMFE_SUCC       0
 #define DM9102_IO_SIZE  0x80
-#define TX_FREE_DESC_CNT 0x1	/* Tx packet count */
+#define DM9102A_IO_SIZE 0x100
+#define TX_FREE_DESC_CNT 0xc	/* Tx packet count */
+#define TX_MAX_SEND_CNT 0x1	/* Maximum tx packet per time */
 #define TX_DESC_CNT     0x10	/* Allocated Tx descriptors */
 #define RX_DESC_CNT     0x10	/* Allocated Rx descriptors */
 #define DESC_ALL_CNT    TX_DESC_CNT+RX_DESC_CNT
 #define TX_BUF_ALLOC    0x600
 #define RX_ALLOC_SIZE   0x620
 #define DM910X_RESET    1
-#define CR6_DEFAULT     0x002c0000	/* SF, MII, HD */
+#define CR6_DEFAULT     0x00280000	/* SF, HD */
 #define CR7_DEFAULT     0x1a2cd
 #define CR15_DEFAULT    0x06	/* TxJabber RxWatchdog */
 #define TDES0_ERR_MASK  0x4302	/* TXJT, LC, EC, FUE */
 #define MAX_PACKET_SIZE 1514
 #define DMFE_MAX_MULTICAST 14
-#define RX_MAX_TRAFFIC 0x5000
+#define RX_MAX_TRAFFIC  0x14000
 #define MAX_CHECK_PACKET 0x8000
 
 #define DMFE_10MHF      0
@@ -100,8 +117,8 @@
 #define DMFE_100MFD     5
 #define DMFE_AUTO       8
 
-#define DMFE_TIMER_WUT  jiffies+HZ*1	/* timer wakeup time : 1 second */
-#define DMFE_TX_TIMEOUT HZ*2	/* tx packet time-out time */
+#define DMFE_TIMER_WUT  jiffies+(HZ*2)/2	/* timer wakeup time : 1 second */
+#define DMFE_TX_TIMEOUT HZ*1.5	/* tx packet time-out time 1.5 s" */
 
 #define DMFE_DBUG(dbug_now, msg, vaule) if (dmfe_debug || dbug_now) printk("DBUG: %s %x\n", msg, vaule)
 
@@ -109,7 +126,7 @@
 
 #define DELAY_1US udelay(1)	/* udelay scale 1 usec */
 
-#define SHOW_MEDIA_TYPE(mode) printk("\n<WARN> Change Speed to %sMhz %s duplex\n",mode & 1 ?"100":"10", mode & 4 ? "full":"half");
+#define SHOW_MEDIA_TYPE(mode) printk(KERN_WARNING "dmfe: Change Speed to %sMhz %s duplex\n",mode & 1 ?"100":"10", mode & 4 ? "full":"half");
 
 
 /* CR9 definition: SROM/MII */
@@ -124,6 +141,9 @@
 #define MDCLKH          0x10000
 
 #define SROM_CLK_WRITE(data, ioaddr) outl(data|CR9_SROM_READ|CR9_SRCS,ioaddr);DELAY_5US;outl(data|CR9_SROM_READ|CR9_SRCS|CR9_SRCLK,ioaddr);DELAY_5US;outl(data|CR9_SROM_READ|CR9_SRCS,ioaddr);DELAY_5US;
+
+#define CHK_IO_SIZE(pci_id, dev_rev) ( (pci_id==PCI_DM9132_ID) || (dev_rev >= 0x02000030) ) ? DM9102A_IO_SIZE: DM9102_IO_SIZE
+
 
 /* Structure/enum declaration ------------------------------- */
 struct tx_desc {
@@ -149,13 +169,14 @@ struct dmfe_board_info {
 
 	struct pci_dev *net_dev;	/* PCI device */
 
-	u32 ioaddr;		/* I/O base address */
+	unsigned long ioaddr;		/* I/O base address */
+	u32 cr0_data;
 	u32 cr5_data;
 	u32 cr6_data;
 	u32 cr7_data;
 	u32 cr15_data;
-
-/* descriptor pointer */
+	
+	/* descriptor pointer */
 	unsigned char *buf_pool_ptr;	/* Tx buffer pool memory */
 	unsigned char *buf_pool_start;	/* Tx buffer pool align dword */
 	unsigned char *desc_pool_ptr;	/* descriptor pool memory */
@@ -166,8 +187,11 @@ struct dmfe_board_info {
 	struct rx_desc *rx_insert_ptr;
 	struct rx_desc *rx_ready_ptr;	/* packet come pointer */
 	u32 tx_packet_cnt;	/* transmitted packet count */
+	u32 tx_queue_cnt;	/* wait to send packet count */
 	u32 rx_avail_cnt;	/* available rx descriptor count */
 	u32 interval_rx_cnt;	/* rx packet count a callback time */
+
+	u16 phy_id2;		/* Phyxcer ID2 */
 
 	u8 media_mode;		/* user specify media mode */
 	u8 op_mode;		/* real work media mode */
@@ -190,14 +214,14 @@ enum dmfe_offsets {
 
 enum dmfe_CR6_bits {
 	CR6_RXSC = 0x2, CR6_PBF = 0x8, CR6_PM = 0x40, CR6_PAM = 0x80, CR6_FDM = 0x200,
-	CR6_TXSC = 0x2000, CR6_STI = 0x100000, CR6_SFT = 0x200000, CR6_RXA = 0x40000000
+	CR6_TXSC = 0x2000, CR6_STI = 0x100000, CR6_SFT = 0x200000, CR6_RXA = 0x40000000,
+	CR6_NO_PURGE = 0x20000000
 };
 
 /* Global variable declaration ----------------------------- */
-
 static int dmfe_debug = 0;
 static unsigned char dmfe_media_mode = 8;
-static struct net_device *dmfe_root_dev = NULL;		/* First device */
+static struct net_device *dmfe_root_dev = NULL;	/* First device */
 static u32 dmfe_cr6_user_set = 0;
 
 /* For module input parameter */
@@ -206,7 +230,7 @@ static u32 cr6set = 0;
 static unsigned char mode = 8;
 static u8 chkmode = 1;
 
-unsigned long CrcTable[256] =
+static unsigned long CrcTable[256] =
 {
 	0x00000000L, 0x77073096L, 0xEE0E612CL, 0x990951BAL,
 	0x076DC419L, 0x706AF48FL, 0xE963A535L, 0x9E6495A3L,
@@ -275,7 +299,7 @@ unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-static int dmfe_reg_board(void);
+static int dmfe_probe(void);
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static int dmfe_stop(struct net_device *);
@@ -288,11 +312,11 @@ static void dmfe_descriptor_init(struct dmfe_board_info *, u32);
 static void allocated_rx_buffer(struct dmfe_board_info *);
 static void update_cr6(u32, u32);
 static void send_filter_frame(struct net_device *, int);
-static u16 phy_read(u32, u8, u8);
-static void phy_write(u32, u8, u8, u16);
+static void dm9132_id_table(struct net_device *, int);
+static u16 phy_read(u32, u8, u8, u32);
+static void phy_write(u32, u8, u8, u16, u32);
 static void phy_write_1bit(u32, u32);
 static u16 phy_read_1bit(u32);
-static void parser_ctrl_info(struct dmfe_board_info *);
 static void dmfe_sense_speed(struct dmfe_board_info *);
 static void dmfe_process_mode(struct dmfe_board_info *);
 static void dmfe_timer(unsigned long);
@@ -301,7 +325,7 @@ static void dmfe_reused_skb(struct dmfe_board_info *, struct sk_buff *);
 static void dmfe_dynamic_reset(struct net_device *);
 static void dmfe_free_rxbuffer(struct dmfe_board_info *);
 static void dmfe_init_dm910x(struct net_device *);
-static unsigned long cal_CRC(unsigned char *, unsigned int);
+static unsigned long cal_CRC(unsigned char *, unsigned int, u8);
 
 /* DM910X network board routine ---------------------------- */
 
@@ -309,9 +333,9 @@ static unsigned long cal_CRC(unsigned char *, unsigned int);
  *	Search DM910X board, allocate space and register it
  */
  
-static int __init dmfe_reg_board(void)
+static int __init dmfe_probe(void)
 {
-	u32 pci_iobase;
+	unsigned long pci_iobase;
 	u16 dm9102_count = 0;
 	u8 pci_irqline;
 	static int index = 0;	/* For multiple call */
@@ -320,7 +344,7 @@ static int __init dmfe_reg_board(void)
 	struct pci_dev *net_dev = NULL;
 	struct net_device *dev;
 
-	DMFE_DBUG(0, "dmfe_reg_board()", 0);
+	DMFE_DBUG(0, "dmfe_probe()", 0);
 
 	if (!pci_present())
 		return -ENODEV;
@@ -329,20 +353,18 @@ static int __init dmfe_reg_board(void)
 	while ((net_dev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, net_dev)))
 	{
 		u32 pci_id;
+		u32 dev_rev;
 
 		index++;
 		if (pci_read_config_dword(net_dev, PCI_VENDOR_ID, &pci_id) != DMFE_SUCC)
 			continue;
 
-		if (pci_id != PCI_DM9102_ID)
+		if ((pci_id != PCI_DM9102_ID) && (pci_id != PCI_DM9132_ID))
 			continue;
 
 		pci_iobase = net_dev->resource[0].start;
 		pci_irqline = net_dev->irq;
 				
-		if (check_region(pci_iobase, DM9102_IO_SIZE))	/* IO range check */
-			continue;
-
 		/* Enable Master/IO access, Disable memory access */
 		
 		pci_enable_device (net_dev);
@@ -355,7 +377,19 @@ static int __init dmfe_reg_board(void)
 		   
 		pci_write_config_byte(net_dev, PCI_LATENCY_TIMER, 0x80);
 
-		/* IO range and interrupt check */
+		/* Read Chip revesion */
+		pci_read_config_dword(net_dev, PCI_REVISION_ID, &dev_rev);
+		
+		/* IO range check */
+		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) {
+			printk(KERN_ERR "dmfe: I/O conflict : IO=%lx Range=%x\n", pci_iobase, CHK_IO_SIZE(pci_id, dev_rev));
+  			continue;
+		}
+		/* Interrupt check */
+		if (pci_irqline == 0) {
+			printk(KERN_ERR "dmfe: Interrupt wrong : IRQ=%d\n", pci_irqline);
+			continue;
+		}
 
 		/* Found DM9102 card and PCI resource allocated OK */
 		dm9102_count++;	/* Found a DM9102 card */
@@ -373,7 +407,7 @@ static int __init dmfe_reg_board(void)
 
 		db->chip_id = pci_id;	/* keep Chip vandor/Device ID */
 		db->ioaddr = pci_iobase;
-		pci_read_config_dword(net_dev, 8, &db->chip_revesion);
+		db->chip_revesion = dev_rev;
 
 		db->net_dev = net_dev;
 
@@ -386,7 +420,7 @@ static int __init dmfe_reg_board(void)
 		dev->set_multicast_list = &dmfe_set_filter_mode;
 		dev->do_ioctl = &dmfe_do_ioctl;
 
-		request_region(pci_iobase, DM9102_IO_SIZE, dev->name);
+		request_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev), dev->name);
 
 		/* read 64 word srom data */
 		for (i = 0; i < 64; i++)
@@ -422,20 +456,17 @@ static int dmfe_open(struct net_device *dev)
 	db->desc_pool_ptr = kmalloc(sizeof(struct tx_desc) * DESC_ALL_CNT + 0x20, GFP_KERNEL | GFP_DMA);
 	if (db->desc_pool_ptr == NULL)
 		return -ENOMEM;
-
 	if ((u32) db->desc_pool_ptr & 0x1f)
 		db->first_tx_desc = (struct tx_desc *) (((u32) db->desc_pool_ptr & ~0x1f) + 0x20);
 	else
 		db->first_tx_desc = (struct tx_desc *) db->desc_pool_ptr;
 
 	/* Allocated Tx buffer memory */
-	
 	db->buf_pool_ptr = kmalloc(TX_BUF_ALLOC * TX_DESC_CNT + 4, GFP_KERNEL | GFP_DMA);
 	if (db->buf_pool_ptr == NULL) {
 		kfree(db->desc_pool_ptr);
 		return -ENOMEM;
 	}
-	
 	if ((u32) db->buf_pool_ptr & 0x3)
 		db->buf_pool_start = (char *) (((u32) db->buf_pool_ptr & ~0x3) + 0x4);
 	else
@@ -444,16 +475,21 @@ static int dmfe_open(struct net_device *dev)
 	/* system variable init */
 	db->cr6_data = CR6_DEFAULT | dmfe_cr6_user_set;
 	db->tx_packet_cnt = 0;
+	db->tx_queue_cnt = 0;
 	db->rx_avail_cnt = 0;
 	db->link_failed = 0;
 	db->wait_reset = 0;
 	db->in_reset_state = 0;
 	db->rx_error_cnt = 0;
 
-	if (chkmode && (db->chip_revesion < 0x02000030)) {
-		db->dm910x_chk_mode = 1;	/* Enter the check mode */
-	} else {
+	if (!chkmode || (db->chip_id == PCI_DM9132_ID) || (db->chip_revesion >= 0x02000030)) {
+		//db->cr6_data &= ~CR6_SFT;         /* Used Tx threshold */
+		//db->cr6_data |= CR6_NO_PURGE;     /* No purge if rx unavailable */
+		db->cr0_data = 0xc00000;	/* TX/RX desc burst mode */
 		db->dm910x_chk_mode = 4;	/* Enter the normal mode */
+	} else {
+		db->cr0_data = 0;
+		db->dm910x_chk_mode = 1;	/* Enter the check mode */
 	}
 
 	/* Initilize DM910X board */
@@ -474,14 +510,12 @@ static int dmfe_open(struct net_device *dev)
 	return 0;
 }
 
-/*
- *	Initialize DM910X board
- *	Reset DM910X board
- *	Initialize TX/Rx descriptor chain structure
- *	Send the set-up frame
- *	Enable Tx/Rx machine
+/* Initilize DM910X board
+   Reset DM910X board
+   Initilize TX/Rx descriptor chain structure
+   Send the set-up frame
+   Enable Tx/Rx machine
  */
- 
 static void dmfe_init_dm910x(struct net_device *dev)
 {
 	struct dmfe_board_info *db = dev->priv;
@@ -490,16 +524,18 @@ static void dmfe_init_dm910x(struct net_device *dev)
 	DMFE_DBUG(0, "dmfe_init_dm910x()", 0);
 
 	/* Reset DM910x board : need 32 PCI clock to complete */
-	outl(DM910X_RESET, ioaddr + DCR0);
+	outl(DM910X_RESET, ioaddr + DCR0);	/* RESET MAC */
 	DELAY_5US;
-	outl(0, ioaddr + DCR0);
+	outl(db->cr0_data, ioaddr + DCR0);
 
 	outl(0x180, ioaddr + DCR12);	/* Let bit 7 output port */
-	outl(0x80, ioaddr + DCR12);	/* Reset DM9102 phyxcer */
+	outl(0x80, ioaddr + DCR12);	/* RESET DM9102 phyxcer */
 	outl(0x0, ioaddr + DCR12);	/* Clear RESET signal */
 
-	/* Parser control information: Phy addr */
-	parser_ctrl_info(db);
+	/* Phy addr : DM910(A)2/DM9132/9801, phy address = 1 */
+	db->phy_addr = 1;
+
+	/* Media Mode Check */
 	db->media_mode = dmfe_media_mode;
 	if (db->media_mode & DMFE_AUTO)
 		dmfe_sense_speed(db);
@@ -514,7 +550,10 @@ static void dmfe_init_dm910x(struct net_device *dev)
 	update_cr6(db->cr6_data, ioaddr);
 
 	/* Send setup frame */
-	send_filter_frame(dev, 0);
+	if (db->chip_id == PCI_DM9132_ID)
+		dm9132_id_table(dev, dev->mc_count);	/* DM9132 */
+	else
+		send_filter_frame(dev, dev->mc_count);	/* DM9102/DM9102A */
 
 	/* Init CR5/CR7, interrupt active bit */
 	outl(0xffffffff, ioaddr + DCR5);	/* clear all CR5 status */
@@ -533,10 +572,9 @@ static void dmfe_init_dm910x(struct net_device *dev)
 
 
 /*
- *	Hardware start transmission.
- *	Send a packet to media from the upper layer.
+   Hardware start transmission.
+   Send a packet to media from the upper layer.
  */
- 
 static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dmfe_board_info *db = dev->priv;
@@ -561,24 +599,23 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	txptr = db->tx_insert_ptr;
 	memcpy((char *) txptr->tx_buf_ptr, (char *) skb->data, skb->len);
 	txptr->tdes1 = 0xe1000000 | skb->len;
-	txptr->tdes0 = 0x80000000;	/* set owner bit to DM910X */
 
 	/* Point to next transmit free descriptor */
 	db->tx_insert_ptr = (struct tx_desc *) txptr->next_tx_desc;
 
-	/* transmit counter increase 1 */
-	db->tx_packet_cnt++;
-	db->stats.tx_packets++;
-
-	/* issue Tx polling command */
-	outl(0x1, dev->base_addr + DCR1);
+	/* Transmit Packet Process */
+	if (db->tx_packet_cnt < TX_MAX_SEND_CNT) {
+		txptr->tdes0 = 0x80000000;	/* set owner bit to DM910X */
+		db->tx_packet_cnt++;	/* Ready to send count */
+		outl(0x1, dev->base_addr + DCR1);	/* Issue Tx polling comand */
+	} else {
+		db->tx_queue_cnt++;	/* queue the tx packet */
+		outl(0x1, dev->base_addr + DCR1);	/* Issue Tx polling comand */
+	}
 
 	/* Tx resource check */
 	if (db->tx_packet_cnt < TX_FREE_DESC_CNT)
 		netif_wake_queue(dev);
-
-	/* Set transmit time stamp */
-	dev->trans_start = jiffies;	/* saved the time stamp */
 
 	/* free this SKB */
 	dev_kfree_skb(skb);
@@ -622,8 +659,8 @@ static int dmfe_stop(struct net_device *dev)
 }
 
 /*
- *	DM9102 insterrupt handler
- *	receive the packet to upper layer, free the transmitted packet
+   DM9102 insterrupt handler
+   receive the packet to upper layer, free the transmitted packet
  */
 
 static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -637,7 +674,6 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		DMFE_DBUG(1, "dmfe_interrupt() without device arg", 0);
 		return;
 	}
-
 	/* A real interrupt coming */
 	db = (struct dmfe_board_info *) dev->priv;
 	ioaddr = dev->base_addr;
@@ -667,15 +703,35 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* printk("tdes0=%x\n", txptr->tdes0); */
 		if (txptr->tdes0 & 0x80000000)
 			break;
+		db->stats.tx_packets++;
+		
 		if ((txptr->tdes0 & TDES0_ERR_MASK) && (txptr->tdes0 != 0x7fffffff)) {
 			/* printk("tdes0=%x\n", txptr->tdes0); */
 			db->stats.tx_errors++;
 		}
+		/* Transmit statistic counter */
+		if (txptr->tdes0 != 0x7fffffff) {
+ 			/* printk("tdes0=%x\n", txptr->tdes0); */
+ 			db->stats.collisions += (txptr->tdes0 >> 3) & 0xf;
+			db->stats.tx_bytes += txptr->tdes1 & 0x7ff;
+			if (txptr->tdes0 & TDES0_ERR_MASK)
+				db->stats.tx_errors++;
+		}
 		txptr = (struct tx_desc *) txptr->next_tx_desc;
 		db->tx_packet_cnt--;
 	}
+	/* Update TX remove pointer to next */
 	db->tx_remove_ptr = (struct tx_desc *) txptr;
 
+	/* Send the Tx packet in queue */
+	if ((db->tx_packet_cnt < TX_MAX_SEND_CNT) && db->tx_queue_cnt) {
+		txptr->tdes0 = 0x80000000;	/* set owner bit to DM910X */
+		db->tx_packet_cnt++;	/* Ready to send count */
+		outl(0x1, ioaddr + DCR1);	/* Issue Tx polling command */
+		dev->trans_start = jiffies;	/* saved the time stamp */
+		db->tx_queue_cnt--;
+ 	}
+	/* Resource available check */
 	if (db->tx_packet_cnt < TX_FREE_DESC_CNT)
 		netif_wake_queue(dev);
 
@@ -695,7 +751,6 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	/* Restore CR7 to enable interrupt mask */
-	
 	if (db->interval_rx_cnt > RX_MAX_TRAFFIC)
 		db->cr7_data = 0x1a28d;
 	else
@@ -704,9 +759,8 @@ static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 /*
- *	Receive the come packet and pass to upper layer
+   Receive the come packet and pass to upper layer
  */
- 
 static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 {
 	struct rx_desc *rxptr;
@@ -727,11 +781,11 @@ static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 			/* reused this SKB */
 			DMFE_DBUG(0, "Reused SK buffer, rdes0", rxptr->rdes0);
 			dmfe_reused_skb(db, (struct sk_buff *) rxptr->rx_skb_ptr);
-			db->rx_error_cnt++;
+			/* db->rx_error_cnt++; */
 		} else {
+			/* A packet with First/Last flag */
 			rxlen = ((rxptr->rdes0 >> 16) & 0x3fff) - 4;	/* skip CRC */
 
-			/* A packet with First/Last flag */
 			if (rxptr->rdes0 & 0x8000) {	/* error summary bit check */
 				/* This is a error packet */
 				/* printk("rdes0 error : %x \n", rxptr->rdes0); */
@@ -748,7 +802,7 @@ static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 				skb = (struct sk_buff *) rxptr->rx_skb_ptr;
 
 				/* Received Packet CRC check need or not */
-				if ((db->dm910x_chk_mode & 1) && (cal_CRC(skb->tail, rxlen) != (*(unsigned long *) (skb->tail + rxlen)))) {
+				if ((db->dm910x_chk_mode & 1) && (cal_CRC(skb->tail, rxlen, 1) != (*(unsigned long *) (skb->tail + rxlen)))) {
 					/* Found a error received packet */
 					dmfe_reused_skb(db, (struct sk_buff *) rxptr->rx_skb_ptr);
 					db->dm910x_chk_mode = 3;
@@ -758,11 +812,12 @@ static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 					skb_put(skb, rxlen);
 					skb->protocol = eth_type_trans(skb, dev);
 					netif_rx(skb);	/* Send to upper layer */
-					/* skb->ip_summed = CHECKSUM_UNNECESSARY; */
 					dev->last_rx = jiffies;
 					db->stats.rx_packets++;
+					db->stats.rx_bytes += rxlen;
 				}
 			} else {
+				/* Reuse SKB buffer when the packet is error */
 				DMFE_DBUG(0, "Reused SK buffer, rdes0", rxptr->rdes0);
 				dmfe_reused_skb(db, (struct sk_buff *) rxptr->rx_skb_ptr);
 			}
@@ -772,12 +827,12 @@ static void dmfe_rx_packet(struct net_device *dev, struct dmfe_board_info *db)
 	}
 
 	db->rx_ready_ptr = rxptr;
+
 }
 
 /*
- *	Get statistics from driver.
+   Get statistics from driver.
  */
- 
 static struct enet_statistics *dmfe_get_stats(struct net_device *dev)
 {
 	struct dmfe_board_info *db = (struct dmfe_board_info *) dev->priv;
@@ -787,9 +842,8 @@ static struct enet_statistics *dmfe_get_stats(struct net_device *dev)
 }
 
 /*
- *	Set DM910X multicast address
+   Set DM910X multicast address
  */
- 
 static void dmfe_set_filter_mode(struct net_device *dev)
 {
 	struct dmfe_board_info *db = dev->priv;
@@ -809,13 +863,15 @@ static void dmfe_set_filter_mode(struct net_device *dev)
 		return;
 	}
 	DMFE_DBUG(0, "Set multicast address", dev->mc_count);
-	send_filter_frame(dev, dev->mc_count);
+	if (db->chip_id == PCI_DM9132_ID)
+		dm9132_id_table(dev, dev->mc_count);	/* DM9132 */
+	else
+		send_filter_frame(dev, dev->mc_count);	/* DM9102/DM9102A */
 }
 
 /*
- *	Process the upper socket ioctl command
+   Process the upper socket ioctl command
  */
- 
 static int dmfe_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	DMFE_DBUG(0, "dmfe_do_ioctl()", 0);
@@ -823,10 +879,9 @@ static int dmfe_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 
 /*
- *	A periodic timer routine
- *	Dynamic media sense, allocated Rx buffer...
+   A periodic timer routine
+   Dynamic media sense, allocated Rx buffer...
  */
- 
 static void dmfe_timer(unsigned long data)
 {
 	u32 tmp_cr8;
@@ -861,18 +916,26 @@ static void dmfe_timer(unsigned long data)
 
 	if (db->wait_reset | (db->tx_packet_cnt &&
 			      ((jiffies - dev->trans_start) > DMFE_TX_TIMEOUT)) | (db->rx_error_cnt > 3)) {
-		/* printk("wait_reset %x, tx cnt %x, rx err %x, time %x\n", db->wait_reset, db->tx_packet_cnt, db->rx_error_cnt, jiffies-dev->trans_start); */
+		/*
+		   printk("wait_reset %x, tx cnt %x, rx err %x, time %x\n", db->wait_reset, db->tx_packet_cnt, db->rx_error_cnt, jiffies-dev->trans_start);
+		 */
 		DMFE_DBUG(0, "Warn!! Warn!! Tx/Rx moniotr step1", db->tx_packet_cnt);
 		dmfe_dynamic_reset(dev);
 		db->timer.expires = DMFE_TIMER_WUT;
 		add_timer(&db->timer);
 		return;
 	}
-	db->rx_error_cnt = 0;	/* Clear previous counter */
+	db->rx_error_cnt = 0;	/* Clear previos counter */
 
 	/* Link status check, Dynamic media type change */
-	tmp_cr12 = inb(db->ioaddr + DCR12);
-	if (db->chip_revesion == 0x02000030) {
+	if (db->chip_id == PCI_DM9132_ID)
+		tmp_cr12 = inb(db->ioaddr + DCR9 + 3);	/* DM9132 */
+	else
+		tmp_cr12 = inb(db->ioaddr + DCR12);	/* DM9102/DM9102A */
+
+	if (((db->chip_id == PCI_DM9102_ID) && (db->chip_revesion == 0x02000030)) ||
+	    ((db->chip_id == PCI_DM9132_ID) && (db->chip_revesion == 0x02000010))) {
+		/* DM9102A Chip */
 		if (tmp_cr12 & 2)
 			tmp_cr12 = 0x0;		/* Link failed */
 		else
@@ -882,10 +945,26 @@ static void dmfe_timer(unsigned long data)
 		/* Link Failed */
 		DMFE_DBUG(0, "Link Failed", tmp_cr12);
 		db->link_failed = 1;
-		phy_write(db->ioaddr, db->phy_addr, 0, 0x8000);		/* reset Phy controller */
+		phy_write(db->ioaddr, db->phy_addr, 0, 0x8000, db->chip_id);	/* reset Phy */
+
+		/* 10/100M link failed, used 1M Home-Net */
+		db->cr6_data |= 0x00040000;	/* CR6 bit18 = 1, select Home-Net */
+		db->cr6_data &= ~0x00000200;	/* CR6 bit9 =0, half duplex mode */
+		update_cr6(db->cr6_data, db->ioaddr);
+
+		/* For DM9801 : PHY ID1 0181h, PHY ID2 B900h */
+		db->phy_id2 = phy_read(db->ioaddr, db->phy_addr, 3, db->chip_id);
+		if (db->phy_id2 == 0xb900)
+			phy_write(db->ioaddr, db->phy_addr, 25, 0x7e08, db->chip_id);
 	} else if ((tmp_cr12 & 0x3) && db->link_failed) {
 		DMFE_DBUG(0, "Link link OK", tmp_cr12);
 		db->link_failed = 0;
+
+		/* CR6 bit18=0, select 10/100M */
+		db->cr6_data &= ~0x00040000;
+		update_cr6(db->cr6_data, db->ioaddr);
+
+		/* Auto Sense Speed */
 		if (db->media_mode & DMFE_AUTO)
 			dmfe_sense_speed(db);
 		dmfe_process_mode(db);
@@ -902,13 +981,12 @@ static void dmfe_timer(unsigned long data)
 }
 
 /*
- *	Dynamic reset the DM910X board
- *	Stop DM910X board
- *	Free Tx/Rx allocated memory
- *	Reset DM910X board
- *	Re-initilize DM910X board
+   Dynamic reset the DM910X board
+   Stop DM910X board
+   Free Tx/Rx allocated memory
+   Reset DM910X board
+   Re-initilize DM910X board
  */
- 
 static void dmfe_dynamic_reset(struct net_device *dev)
 {
 	struct dmfe_board_info *db = dev->priv;
@@ -929,6 +1007,7 @@ static void dmfe_dynamic_reset(struct net_device *dev)
 
 	/* system variable init */
 	db->tx_packet_cnt = 0;
+	db->tx_queue_cnt = 0;
 	db->rx_avail_cnt = 0;
 	db->link_failed = 0;
 	db->wait_reset = 0;
@@ -945,9 +1024,8 @@ static void dmfe_dynamic_reset(struct net_device *dev)
 }
 
 /*
- *	Free all allocated rx buffer 
+   free all allocated rx buffer 
  */
-
 static void dmfe_free_rxbuffer(struct dmfe_board_info *db)
 {
 	DMFE_DBUG(0, "dmfe_free_rxbuffer()", 0);
@@ -961,9 +1039,8 @@ static void dmfe_free_rxbuffer(struct dmfe_board_info *db)
 }
 
 /*
- *	Reused the SK buffer
+   Reused the SK buffer
  */
- 
 static void dmfe_reused_skb(struct dmfe_board_info *db, struct sk_buff *skb)
 {
 	struct rx_desc *rxptr = db->rx_insert_ptr;
@@ -979,10 +1056,9 @@ static void dmfe_reused_skb(struct dmfe_board_info *db, struct sk_buff *skb)
 }
 
 /*
- *	Initialize transmit/Receive descriptor 
- *	Using Chain structure, and allocated Tx/Rx buffer
+   Initialize transmit/Receive descriptor 
+   Using Chain structure, and allocated Tx/Rx buffer
  */
- 
 static void dmfe_descriptor_init(struct dmfe_board_info *db, u32 ioaddr)
 {
 	struct tx_desc *tmp_tx;
@@ -1033,10 +1109,9 @@ static void dmfe_descriptor_init(struct dmfe_board_info *db, u32 ioaddr)
 }
 
 /*
- *	Update CR6 vaule
- *	Firstly stop DM910X , then written value and start
+   Update CR6 vaule
+   Firstly stop DM910X , then written value and start
  */
- 
 static void update_cr6(u32 cr6_data, u32 ioaddr)
 {
 	u32 cr6_tmp;
@@ -1049,11 +1124,50 @@ static void update_cr6(u32 cr6_data, u32 ioaddr)
 	/* printk("CR6 update %x ", cr6_tmp); */
 }
 
-/*
- *	Send a setup frame
- *	This setup frame initilize DM910X addres filter mode
+/* Send a setup frame for DM9132
+   This setup frame initilize DM910X addres filter mode
  */
- 
+static void dm9132_id_table(struct net_device *dev, int mc_cnt)
+{
+	struct dev_mc_list *mcptr;
+	u16 *addrptr;
+	u32 ioaddr = dev->base_addr + 0xc0;	/* ID Table */
+	u32 hash_val;
+	u16 i, hash_table[4];
+
+	DMFE_DBUG(0, "dm9132_id_table()", 0);
+
+	/* Node address */
+	addrptr = (u16 *) dev->dev_addr;
+	outw(addrptr[0], ioaddr);
+	ioaddr += 4;
+	outw(addrptr[1], ioaddr);
+	ioaddr += 4;
+	outw(addrptr[2], ioaddr);
+	ioaddr += 4;
+
+	/* Clear Hash Table */
+	for (i = 0; i < 4; i++)
+		hash_table[i] = 0x0;
+
+	/* broadcast address */
+	hash_table[3] = 0x8000;
+
+	/* the multicast address in Hash Table : 64 bits */
+	for (mcptr = dev->mc_list, i = 0; i < mc_cnt; i++, mcptr = mcptr->next) {
+		hash_val = cal_CRC((char *) mcptr->dmi_addr, 6, 0) & 0x3f;
+		hash_table[hash_val / 16] |= (u16) 1 << (hash_val % 16);
+	}
+
+	/* Write the hash table to MAC MD table */
+	for (i = 0; i < 4; i++, ioaddr += 4) {
+		outw(hash_table[i], ioaddr);
+	}
+}
+
+/* Send a setup frame for DM9102/DM9102A
+   This setup frame initilize DM910X addres filter mode
+ */
 static void send_filter_frame(struct net_device *dev, int mc_cnt)
 {
 	struct dmfe_board_info *db = dev->priv;
@@ -1068,16 +1182,16 @@ static void send_filter_frame(struct net_device *dev, int mc_cnt)
 	txptr = db->tx_insert_ptr;
 	suptr = (u32 *) txptr->tx_buf_ptr;
 
-	/* broadcast address */
-	*suptr++ = 0xffff;
-	*suptr++ = 0xffff;
-	*suptr++ = 0xffff;
-
 	/* Node address */
 	addrptr = (u16 *) dev->dev_addr;
 	*suptr++ = addrptr[0];
 	*suptr++ = addrptr[1];
 	*suptr++ = addrptr[2];
+
+	/* broadcast address */
+	*suptr++ = 0xffff;
+	*suptr++ = 0xffff;
+	*suptr++ = 0xffff;
 
 	/* fit the multicast address */
 	for (mcptr = dev->mc_list, i = 0; i < mc_cnt; i++, mcptr = mcptr->next) {
@@ -1092,19 +1206,21 @@ static void send_filter_frame(struct net_device *dev, int mc_cnt)
 		*suptr++ = 0xffff;
 		*suptr++ = 0xffff;
 	}
-
 	/* prepare the setup frame */
-	db->tx_packet_cnt++;
-	netif_stop_queue(dev);
-	txptr->tdes1 = 0x890000c0;
-	txptr->tdes0 = 0x80000000;
 	db->tx_insert_ptr = (struct tx_desc *) txptr->next_tx_desc;
-
-	update_cr6(db->cr6_data | 0x2000, dev->base_addr);
-	outl(0x1, dev->base_addr + DCR1);
-	update_cr6(db->cr6_data, dev->base_addr);
-	dev->trans_start = jiffies;
-
+	txptr->tdes1 = 0x890000c0;
+	/* Resource Check and Send the setup packet */
+	if (!db->tx_packet_cnt) {
+		/* Resource Empty */
+		db->tx_packet_cnt++;
+		txptr->tdes0 = 0x80000000;
+		update_cr6(db->cr6_data | 0x2000, dev->base_addr);
+		outl(0x1, dev->base_addr + DCR1);	/* Issue Tx polling command */
+		update_cr6(db->cr6_data, dev->base_addr);
+	} else {
+		/* Put into TX queue */
+		db->tx_queue_cnt++;
+	}
 }
 
 /*
@@ -1132,9 +1248,8 @@ static void allocated_rx_buffer(struct dmfe_board_info *db)
 }
 
 /*
- *	Read one word data from the serial ROM
+   Read one word data from the serial ROM
  */
- 
 static u16 read_srom_word(long ioaddr, int offset)
 {
 	int i;
@@ -1170,35 +1285,6 @@ static u16 read_srom_word(long ioaddr, int offset)
 }
 
 /*
- *	Parser Control media block to get Phy address
- */
- 
-static void parser_ctrl_info(struct dmfe_board_info *db)
-{
-	int i;
-	char *sdata = db->srom;
-	unsigned char count;
-
-	/* point to info leaf0 */
-	count = *(sdata + 33);
-
-	/* Point to First media block */
-	sdata += 34;
-	for (i = 0; i < count; i++) {
-		if (*(sdata + 1) == 1) {
-			db->phy_addr = *(sdata + 2);
-			break;
-		}
-		sdata += ((unsigned char) *(sdata) & 0x7f) + 1;
-	}
-
-	if (i >= count) {
-		printk("Can't found Control Block\n");
-		db->phy_addr = 1;
-	}
-}
-
-/*
  *	Auto sense the media mode
  */
  
@@ -1209,13 +1295,16 @@ static void dmfe_sense_speed(struct dmfe_board_info *db)
 
 	for (i = 1000; i; i--) {
 		DELAY_5US;
-		phy_mode = phy_read(db->ioaddr, db->phy_addr, 1);
+		phy_mode = phy_read(db->ioaddr, db->phy_addr, 1, db->chip_id);
 		if ((phy_mode & 0x24) == 0x24)
 			break;
 	}
 
 	if (i) {
-		phy_mode = phy_read(db->ioaddr, db->phy_addr, 17) & 0xf000;
+		if (db->chip_id == PCI_DM9132_ID)	/* DM9132 */
+			phy_mode = phy_read(db->ioaddr, db->phy_addr, 7, db->chip_id) & 0xf000;
+		else		/* DM9102/DM9102A */
+			phy_mode = phy_read(db->ioaddr, db->phy_addr, 17, db->chip_id) & 0xf000;
 		/* printk("Phy_mode %x ",phy_mode); */
 		switch (phy_mode) {
 		case 0x1000:
@@ -1231,23 +1320,22 @@ static void dmfe_sense_speed(struct dmfe_board_info *db)
 			db->op_mode = DMFE_100MFD;
 			break;
 		default:
-			db->op_mode = DMFE_100MHF;
-			DMFE_DBUG(1, "Media Type error, phy reg17", phy_mode);
+			db->op_mode = DMFE_10MHF;
+			DMFE_DBUG(0, "Media Type error, phy reg17", phy_mode);
 			break;
 		}
 	} else {
-		db->op_mode = DMFE_100MHF;
+		db->op_mode = DMFE_10MHF;
 		DMFE_DBUG(0, "Link Failed :", phy_mode);
 	}
 }
 
 /*
- *	Process op-mode
- *	AUTO mode : PHY controller in Auto-negotiation Mode
- *	Force mode: PHY controller in force mode with HUB
- *	N-way force capability with SWITCH
+   Process op-mode
+   AUTO mode : PHY controller in Auto-negotiation Mode
+   Force mode: PHY controller in force mode with HUB
+   N-way force capability with SWITCH
  */
- 
 static void dmfe_process_mode(struct dmfe_board_info *db)
 {
 	u16 phy_reg;
@@ -1259,11 +1347,11 @@ static void dmfe_process_mode(struct dmfe_board_info *db)
 
 	if (!(db->media_mode & DMFE_AUTO)) {	/* Force Mode Check */
 		/* User force the media type */
-		phy_reg = phy_read(db->ioaddr, db->phy_addr, 5);
+		phy_reg = phy_read(db->ioaddr, db->phy_addr, 5, db->chip_id);
 		/* printk("Nway phy_reg5 %x ",phy_reg); */
 		if (phy_reg & 0x1) {
 			/* parter own the N-Way capability */
-			phy_reg = phy_read(db->ioaddr, db->phy_addr, 4) & ~0x1e0;
+			phy_reg = phy_read(db->ioaddr, db->phy_addr, 4, db->chip_id) & ~0x1e0;
 			switch (db->op_mode) {
 			case DMFE_10MHF:
 				phy_reg |= 0x20;
@@ -1278,7 +1366,7 @@ static void dmfe_process_mode(struct dmfe_board_info *db)
 				phy_reg |= 0x100;
 				break;
 			}
-			phy_write(db->ioaddr, db->phy_addr, 4, phy_reg);
+			phy_write(db->ioaddr, db->phy_addr, 4, phy_reg, db->chip_id);
 		} else {
 			/* parter without the N-Way capability */
 			switch (db->op_mode) {
@@ -1295,95 +1383,109 @@ static void dmfe_process_mode(struct dmfe_board_info *db)
 				phy_reg = 0x2100;
 				break;
 			}
-			phy_write(db->ioaddr, db->phy_addr, 0, phy_reg);
+			phy_write(db->ioaddr, db->phy_addr, 0, phy_reg, db->chip_id);
 		}
 	}
 }
 
 /*
- *	Write a word to Phy register
+   Write a word to Phy register
  */
- 
-static void phy_write(u32 iobase, u8 phy_addr, u8 offset, u16 phy_data)
+static void phy_write(u32 iobase, u8 phy_addr, u8 offset, u16 phy_data, u32 chip_id)
 {
 	u16 i;
-	u32 ioaddr = iobase + DCR9;
+	u32 ioaddr;
 
-	/* Send 33 synchronization clock to Phy controller */
-	for (i = 0; i < 35; i++)
+	if (chip_id == PCI_DM9132_ID) {
+		ioaddr = iobase + 0x80 + offset * 4;
+		outw(phy_data, ioaddr);
+	} else {
+		/* DM9102/DM9102A Chip */
+		ioaddr = iobase + DCR9;
+
+		/* Send 33 synchronization clock to Phy controller */
+		for (i = 0; i < 35; i++)
+			phy_write_1bit(ioaddr, PHY_DATA_1);
+
+		/* Send start command(01) to Phy */
+		phy_write_1bit(ioaddr, PHY_DATA_0);
 		phy_write_1bit(ioaddr, PHY_DATA_1);
 
-	/* Send start command(01) to Phy */
-	phy_write_1bit(ioaddr, PHY_DATA_0);
-	phy_write_1bit(ioaddr, PHY_DATA_1);
+		/* Send write command(01) to Phy */
+		phy_write_1bit(ioaddr, PHY_DATA_0);
+		phy_write_1bit(ioaddr, PHY_DATA_1);
 
-	/* Send write command(01) to Phy */
-	phy_write_1bit(ioaddr, PHY_DATA_0);
-	phy_write_1bit(ioaddr, PHY_DATA_1);
+		/* Send Phy addres */
+		for (i = 0x10; i > 0; i = i >> 1)
+			phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
 
-	/* Send Phy addres */
-	for (i = 0x10; i > 0; i = i >> 1)
-		phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
+		/* Send register addres */
+		for (i = 0x10; i > 0; i = i >> 1)
+			phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
 
-	/* Send register addres */
-	for (i = 0x10; i > 0; i = i >> 1)
-		phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
+		/* written trasnition */
+		phy_write_1bit(ioaddr, PHY_DATA_1);
+		phy_write_1bit(ioaddr, PHY_DATA_0);
 
-	/* written trasnition */
-	phy_write_1bit(ioaddr, PHY_DATA_1);
-	phy_write_1bit(ioaddr, PHY_DATA_0);
-
-	/* Write a word data to PHY controller */
-	for (i = 0x8000; i > 0; i >>= 1)
-		phy_write_1bit(ioaddr, phy_data & i ? PHY_DATA_1 : PHY_DATA_0);
+		/* Write a word data to PHY controller */
+		for (i = 0x8000; i > 0; i >>= 1)
+			phy_write_1bit(ioaddr, phy_data & i ? PHY_DATA_1 : PHY_DATA_0);
+	}
 }
 
 /*
- *	Read a word data from phy register
+   Read a word data from phy register
  */
- 
-static u16 phy_read(u32 iobase, u8 phy_addr, u8 offset)
+static u16 phy_read(u32 iobase, u8 phy_addr, u8 offset, u32 chip_id)
 {
 	int i;
 	u16 phy_data;
-	u32 ioaddr = iobase + DCR9;
+	u32 ioaddr;
 
-	/* Send 33 synchronization clock to Phy controller */
-	for (i = 0; i < 35; i++)
+	if (chip_id == PCI_DM9132_ID) {
+		/* DM9132 Chip */
+		ioaddr = iobase + 0x80 + offset * 4;
+		phy_data = inw(ioaddr);
+	} else {
+		/* DM9102/DM9102A Chip */
+
+		ioaddr = iobase + DCR9;
+		/* Send 33 synchronization clock to Phy controller */
+		for (i = 0; i < 35; i++)
+			phy_write_1bit(ioaddr, PHY_DATA_1);
+
+		/* Send start command(01) to Phy */
+		phy_write_1bit(ioaddr, PHY_DATA_0);
 		phy_write_1bit(ioaddr, PHY_DATA_1);
 
-	/* Send start command(01) to Phy */
-	phy_write_1bit(ioaddr, PHY_DATA_0);
-	phy_write_1bit(ioaddr, PHY_DATA_1);
+		/* Send read command(10) to Phy */
+		phy_write_1bit(ioaddr, PHY_DATA_1);
+		phy_write_1bit(ioaddr, PHY_DATA_0);
 
-	/* Send read command(10) to Phy */
-	phy_write_1bit(ioaddr, PHY_DATA_1);
-	phy_write_1bit(ioaddr, PHY_DATA_0);
+		/* Send Phy addres */
+		for (i = 0x10; i > 0; i = i >> 1)
+			phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
 
-	/* Send Phy addres */
-	for (i = 0x10; i > 0; i = i >> 1)
-		phy_write_1bit(ioaddr, phy_addr & i ? PHY_DATA_1 : PHY_DATA_0);
+		/* Send register addres */
+		for (i = 0x10; i > 0; i = i >> 1)
+			phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
 
-	/* Send register addres */
-	for (i = 0x10; i > 0; i = i >> 1)
-		phy_write_1bit(ioaddr, offset & i ? PHY_DATA_1 : PHY_DATA_0);
+		/* Skip transition state */
+		phy_read_1bit(ioaddr);
 
-	/* Skip transition state */
-	phy_read_1bit(ioaddr);
-
-	/* read 16bit data */
-	for (phy_data = 0, i = 0; i < 16; i++) {
-		phy_data <<= 1;
-		phy_data |= phy_read_1bit(ioaddr);
+		/* read 16bit data */
+		for (phy_data = 0, i = 0; i < 16; i++) {
+			phy_data <<= 1;
+			phy_data |= phy_read_1bit(ioaddr);
+		}
 	}
 
 	return phy_data;
 }
 
 /*
- *	Write one bit data to Phy Controller
+   Write one bit data to Phy Controller
  */
- 
 static void phy_write_1bit(u32 ioaddr, u32 phy_data)
 {
 	outl(phy_data, ioaddr);	/* MII Clock Low */
@@ -1395,9 +1497,8 @@ static void phy_write_1bit(u32 ioaddr, u32 phy_data)
 }
 
 /*
- *	Read one bit phy data from PHY controller
+   Read one bit phy data from PHY controller
  */
- 
 static u16 phy_read_1bit(u32 ioaddr)
 {
 	u16 phy_data;
@@ -1412,10 +1513,11 @@ static u16 phy_read_1bit(u32 ioaddr)
 }
 
 /*
- *	Calculate the CRC valude of the Rx packet
+   Calculate the CRC valude of the Rx packet
+   flag = 1 : return the reverse CRC (for the received packet CRC)
+   0 : return the normal CRC (for Hash Table index)
  */
- 
-static unsigned long cal_CRC(unsigned char *Data, unsigned int Len)
+unsigned long cal_CRC(unsigned char *Data, unsigned int Len, u8 flag)
 {
 	unsigned long Crc = 0xffffffff;
 
@@ -1423,8 +1525,10 @@ static unsigned long cal_CRC(unsigned char *Data, unsigned int Len)
 		Crc = CrcTable[(Crc ^ *Data++) & 0xFF] ^ (Crc >> 8);
 	}
 
-	return ~Crc;
-
+	if (flag)
+		return ~Crc;
+	else
+		return Crc;
 }
 
 
@@ -1461,7 +1565,7 @@ static int __init dmfe_init_module(void)
 		break;
 	}
 
-	return dmfe_reg_board();	/* search board and register */
+	return dmfe_probe();	/* search board and register */
 }
 
 /*
@@ -1473,14 +1577,16 @@ static int __init dmfe_init_module(void)
 static void __exit dmfe_cleanup_module(void)
 {
 	struct net_device *next_dev;
+	struct dmfe_board_info *db;
 
 	DMFE_DBUG(0, "clean_module()", 0);
 
 	while (dmfe_root_dev) {
-		next_dev = ((struct dmfe_board_info *) dmfe_root_dev->priv)->next_dev;
+		db = dmfe_root_dev->priv;
+		next_dev = db->next_dev;
 		unregister_netdev(dmfe_root_dev);
-		release_region(dmfe_root_dev->base_addr, DM9102_IO_SIZE);
-		kfree(dmfe_root_dev->priv);	/* free board information */
+		release_region(dmfe_root_dev->base_addr, CHK_IO_SIZE(db->chip_id, db->chip_revesion));
+		kfree(db);	/* free board information */
 		kfree(dmfe_root_dev);	/* free device structure */
 		dmfe_root_dev = next_dev;
 	}

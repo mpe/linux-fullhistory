@@ -23,6 +23,4 @@
 
 #define arch_power_off()	do { } while (0)
 
-#define arch_power_off()	do { } while (0)
-
 #endif

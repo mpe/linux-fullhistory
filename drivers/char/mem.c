@@ -26,9 +26,6 @@
 #include <asm/io.h>
 #include <asm/pgalloc.h>
 
-#ifdef CONFIG_VIDEO_BT848
-extern int i2c_init(void);
-#endif
 #ifdef CONFIG_I2C
 extern int i2c_init_all(void);
 #endif
@@ -661,9 +658,6 @@ int __init chr_dev_init(void)
 #endif
 #ifdef CONFIG_FTAPE
 	ftape_init();
-#endif
-#ifdef CONFIG_VIDEO_BT848
-	i2c_init();
 #endif
 #if defined(CONFIG_ADB)
 	adbdev_init();

@@ -45,6 +45,21 @@ CONFIG_BINFMT_ELF=y
 # Block devices
 #
 # CONFIG_BLK_DEV_FD is not set
+
+#
+# Additional Block Devices
+#
+# CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_MD is not set
+CONFIG_BLK_DEV_RAM=y
+CONFIG_BLK_DEV_INITRD=y
+# CONFIG_BLK_DEV_XD is not set
+# CONFIG_PARIDE is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+CONFIG_IDE=y
 CONFIG_BLK_DEV_IDE=y
 
 #
@@ -63,16 +78,6 @@ CONFIG_BLK_DEV_IDEDISK=y
 #
 # CONFIG_BLK_DEV_CMD640 is not set
 # CONFIG_IDE_CHIPSETS is not set
-
-#
-# Additional Block Devices
-#
-# CONFIG_BLK_DEV_LOOP is not set
-# CONFIG_BLK_DEV_MD is not set
-CONFIG_BLK_DEV_RAM=y
-CONFIG_BLK_DEV_INITRD=y
-# CONFIG_BLK_DEV_XD is not set
-# CONFIG_PARIDE is not set
 # CONFIG_BLK_DEV_IDE_MODES is not set
 # CONFIG_BLK_DEV_HD is not set
 

@@ -70,12 +70,6 @@ CONFIG_BINFMT_EM86=y
 # Block devices
 #
 CONFIG_BLK_DEV_FD=y
-# CONFIG_BLK_DEV_IDE is not set
-
-#
-# Please see Documentation/ide.txt for help/info on IDE drives
-#
-# CONFIG_BLK_DEV_HD_ONLY is not set
 # CONFIG_BLK_CPQ_DA is not set
 
 #
@@ -89,8 +83,6 @@ CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_DAC960 is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
-# CONFIG_BLK_DEV_IDE_MODES is not set
-# CONFIG_BLK_DEV_HD is not set
 
 #
 # Networking options
@@ -121,6 +113,11 @@ CONFIG_SKB_LARGE=y
 #
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
 
 #
 # SCSI support

@@ -129,7 +129,7 @@ extern int AIX_vpdReadByte() ;
 /*
  * FDDI card reset
  */
-void card_start(smc)
+static void card_start(smc)
 struct s_smc *smc ;
 {
 	int i ;

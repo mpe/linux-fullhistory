@@ -37,6 +37,7 @@ if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
    bool '  Include support for EBSA285' CONFIG_ARCH_EBSA285
    bool '  Include support for CATS' CONFIG_CATS
    bool '  Include support for NetWinder' CONFIG_ARCH_NETWINDER
+   bool '  Include support for Compaq Personal Server' CONFIG_PERSONAL_SERVER
 fi
 
 if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
@@ -170,6 +171,7 @@ source drivers/parport/Config.in
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_SA1100" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" -o \
+     "$CONFIG_PERSONAL_SERVER" = "y" -o \
      "$CONFIG_CATS" = "y" ]; then
    string 'Initial kernel command string' CONFIG_CMDLINE
 fi
@@ -252,6 +254,19 @@ fi
 #    source drivers/isdn/Config.in
 # fi
 # endmenu
+
+mainmenu_option next_comment
+comment 'ATA/IDE/MFM/RLL support'
+
+tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
+
+if [ "$CONFIG_IDE" != "n" ]; then
+  source drivers/ide/Config.in
+else
+  define_bool CONFIG_BLK_DEV_IDE_MODES n
+  define_bool CONFIG_BLK_DEV_HD n
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'SCSI support'

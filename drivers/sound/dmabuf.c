@@ -66,6 +66,14 @@ static int sound_alloc_dmap(struct dma_buffparms *dmap)
 	if (dma_buffsize < 4096)
 		dma_buffsize = 4096;
 	dma_pagesize = (dmap->dma < 4) ? (64 * 1024) : (128 * 1024);
+	
+	/*
+	 *	Now check for the Cyrix problem.
+	 */
+	 
+	if(isa_dma_bridge_buggy==2)
+		dma_pagesize=32768;
+	 
 	dmap->raw_buf = NULL;
 	dmap->buffsize = dma_buffsize;
 	if (dmap->buffsize > dma_pagesize)

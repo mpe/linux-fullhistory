@@ -203,7 +203,8 @@ extern __inline__ void setup_timer(void)
 {
 	int irq;
 
-	if (machine_is_co285())
+	if (machine_is_co285() ||
+	    machine_is_personal_server())
 		/*
 		 * Add-in 21285s shouldn't access the RTC
 		 */
@@ -247,7 +248,9 @@ extern __inline__ void setup_timer(void)
 			rtc_base = 0;
 	}
 
-	if (machine_is_ebsa285() || machine_is_co285()) {
+	if (machine_is_ebsa285() ||
+	    machine_is_co285() ||
+	    machine_is_personal_server()) {
 		gettimeoffset = timer1_gettimeoffset;
 
 		*CSR_TIMER1_CLR  = 0;

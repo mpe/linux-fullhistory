@@ -268,6 +268,13 @@ int blk_ioctl(kdev_t dev, unsigned int cmd, unsigned long arg)
 		case BLKPG:
 			return blkpg_ioctl(dev, (struct blkpg_ioctl_arg *) arg);
 			
+		case BLKELVGET:
+			return blkelvget_ioctl(&blk_get_queue(dev)->elevator,
+					       (blkelv_ioctl_arg_t *) arg);
+		case BLKELVSET:
+			return blkelvset_ioctl(&blk_get_queue(dev)->elevator,
+					       (blkelv_ioctl_arg_t *) arg);
+
 		default:
 			return -EINVAL;
 	}

@@ -1,13 +1,12 @@
 /*
  *  linux/arch/arm/kernel/setup.c
  *
- *  Copyright (C) 1995-1999 Russell King
+ *  Copyright (C) 1995-2000 Russell King
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/stddef.h>
-#include <linux/tty.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>
@@ -23,6 +22,8 @@
 #include <asm/setup.h>
 #include <asm/system.h>
 
+#include "arch.h"
+
 #ifndef MEM_SIZE
 #define MEM_SIZE	(16*1024*1024)
 #endif
@@ -31,6 +32,7 @@
 #define CONFIG_CMDLINE ""
 #endif
 
+extern void paging_init(struct meminfo *);
 extern void reboot_setup(char *str);
 extern void disable_hlt(void);
 extern int root_mountflags;
@@ -38,32 +40,10 @@ extern int _stext, _text, _etext, _edata, _end;
 
 unsigned int processor_id;
 unsigned int __machine_arch_type;
-unsigned int vram_size;
 unsigned int system_rev;
 unsigned int system_serial_low;
 unsigned int system_serial_high;
 unsigned int elf_hwcap;
-
-#ifdef CONFIG_ARCH_ACORN
-unsigned int memc_ctrl_reg;
-unsigned int number_mfm_drives;
-#endif
-
-struct meminfo meminfo;
-
-struct machine_desc {
-	const char	*name;		/* architecture name	*/
-	unsigned int	param_offset;	/* parameter page	*/
-	unsigned int	video_start;	/* start of video RAM	*/
-	unsigned int	video_end;	/* end of video RAM	*/
-	unsigned int	reserve_lp0 :1;	/* never has lp0	*/
-	unsigned int	reserve_lp1 :1;	/* never has lp1	*/
-	unsigned int	reserve_lp2 :1;	/* never has lp2	*/
-	unsigned int	broken_hlt  :1;	/* hlt is broken	*/
-	unsigned int	soft_reboot :1;	/* soft reboot		*/
-	void		(*fixup)(struct machine_desc *,
-				 struct param_struct *, char **);
-};
 
 #ifdef MULTI_CPU
 struct processor processor;
@@ -156,6 +136,33 @@ static void __init setup_processor(void)
 	cpu_proc_init();
 }
 
+static struct machine_desc * __init setup_architecture(unsigned int nr)
+{
+	extern struct machine_desc __arch_info_begin, __arch_info_end;
+	struct machine_desc *list;
+
+	/*
+	 * locate architecture in the list of supported architectures.
+	 */
+	for (list = &__arch_info_begin; list < &__arch_info_end; list++)
+		if (list->nr == nr)
+			break;
+
+	/*
+	 * If the architecture type is not recognised, then we
+	 * can co nothing...
+	 */
+	if (list >= &__arch_info_end) {
+		printk("Architecture configuration botched (nr %d), unable "
+		       "to continue.\n", nr);
+		while (1);
+	}
+
+	printk("Architecture: %s\n", list->name);
+
+	return list;
+}
+
 static unsigned long __init memparse(char *ptr, char **retptr)
 {
 	unsigned long ret = simple_strtoul(ptr, retptr, 0);
@@ -180,7 +187,7 @@ static unsigned long __init memparse(char *ptr, char **retptr)
  * are "size[KkMm]"
  */
 static void __init
-parse_cmdline(char **cmdline_p, char *from)
+parse_cmdline(struct meminfo *mi, char **cmdline_p, char *from)
 {
 	char c = ' ', *to = command_line;
 	int usermem = 0, len = 0;
@@ -198,7 +205,7 @@ parse_cmdline(char **cmdline_p, char *from)
 			 */
 			if (usermem == 0) {
 				usermem = 1;
-				meminfo.nr_banks = 0;
+				mi->nr_banks = 0;
 			}
 
 			start = PHYS_OFFSET;
@@ -206,9 +213,9 @@ parse_cmdline(char **cmdline_p, char *from)
 			if (*from == '@')
 				start = memparse(from + 1, &from);
 
-			meminfo.bank[meminfo.nr_banks].start = start;
-			meminfo.bank[meminfo.nr_banks].size  = size;
-			meminfo.nr_banks += 1;
+			mi->bank[mi->nr_banks].start = start;
+			mi->bank[mi->nr_banks].size  = size;
+			mi->nr_banks += 1;
 		}
 		c = *from++;
 		if (!c)
@@ -265,7 +272,8 @@ static void __init setup_initrd(unsigned int start, unsigned int size)
 #define free_bootmem(s,sz)	free_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
 #define reserve_bootmem(s,sz)	reserve_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
 
-static unsigned int __init find_bootmap_pfn(unsigned int bootmap_pages)
+static unsigned int __init
+find_bootmap_pfn(struct meminfo *mi, unsigned int bootmap_pages)
 {
 	unsigned int start_pfn, bank, bootmap_pfn;
 
@@ -278,25 +286,25 @@ static unsigned int __init find_bootmap_pfn(unsigned int bootmap_pages)
 	 */
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start) {
-		if (__pa(initrd_end) > meminfo.end) {
+		if (__pa(initrd_end) > mi->end) {
 			printk ("initrd extends beyond end of memory "
 				"(0x%08lx > 0x%08lx) - disabling initrd\n",
-				__pa(initrd_end), meminfo.end);
+				__pa(initrd_end), mi->end);
 			initrd_start = 0;
 			initrd_end   = 0;
 		}
 	}
 #endif
 
-	for (bank = 0; bank < meminfo.nr_banks; bank ++) {
+	for (bank = 0; bank < mi->nr_banks; bank ++) {
 		unsigned int start, end;
 
-		if (meminfo.bank[bank].size == 0)
+		if (mi->bank[bank].size == 0)
 			continue;
 
-		start = O_PFN_UP(meminfo.bank[bank].start);
-		end   = O_PFN_DOWN(meminfo.bank[bank].size +
-				   meminfo.bank[bank].start);
+		start = O_PFN_UP(mi->bank[bank].start);
+		end   = O_PFN_DOWN(mi->bank[bank].size +
+				   mi->bank[bank].start);
 
 		if (end < start_pfn)
 			continue;
@@ -322,7 +330,7 @@ static unsigned int __init find_bootmap_pfn(unsigned int bootmap_pages)
 /*
  * Initialise the bootmem allocator.
  */
-static void __init setup_bootmem(void)
+static void __init setup_bootmem(struct meminfo *mi)
 {
 	unsigned int end_pfn, start_pfn, bootmap_pages, bootmap_pfn;
 	unsigned int i;
@@ -330,21 +338,21 @@ static void __init setup_bootmem(void)
 	/*
 	 * Calculate the  physical address of the top of memory.
 	 */
-	meminfo.end = 0;
-	for (i = 0; i < meminfo.nr_banks; i++) {
+	mi->end = 0;
+	for (i = 0; i < mi->nr_banks; i++) {
 		unsigned long end;
 
-		if (meminfo.bank[i].size != 0) {
-			end = meminfo.bank[i].start + meminfo.bank[i].size;
-			if (meminfo.end < end)
-				meminfo.end = end;
+		if (mi->bank[i].size != 0) {
+			end = mi->bank[i].start + mi->bank[i].size;
+			if (mi->end < end)
+				mi->end = end;
 		}
 	}
 
 	start_pfn     = O_PFN_UP(PHYS_OFFSET);
-	end_pfn	      = O_PFN_DOWN(meminfo.end);
+	end_pfn	      = O_PFN_DOWN(mi->end);
 	bootmap_pages = bootmem_bootmap_pages(end_pfn - start_pfn);
-	bootmap_pfn   = find_bootmap_pfn(bootmap_pages);
+	bootmap_pfn   = find_bootmap_pfn(mi, bootmap_pages);
 
 	/*
 	 * Initialise the boot-time allocator
@@ -354,10 +362,10 @@ static void __init setup_bootmem(void)
 	/*
 	 * Register all available RAM with the bootmem allocator.
 	 */
-	for (i = 0; i < meminfo.nr_banks; i++)
-		if (meminfo.bank[i].size)
-			free_bootmem(O_PFN_UP(meminfo.bank[i].start),
-				     PFN_SIZE(meminfo.bank[i].size));
+	for (i = 0; i < mi->nr_banks; i++)
+		if (mi->bank[i].size)
+			free_bootmem(O_PFN_UP(mi->bank[i].start),
+				     PFN_SIZE(mi->bank[i].size));
 
 	/*
 	 * Register the reserved regions with bootmem
@@ -379,7 +387,8 @@ static void __init setup_bootmem(void)
 #endif
 }
 
-static void __init request_standard_resources(struct machine_desc *mdesc)
+static void __init
+request_standard_resources(struct meminfo *mi, struct machine_desc *mdesc)
 {
 	struct resource *res;
 	int i;
@@ -389,14 +398,14 @@ static void __init request_standard_resources(struct machine_desc *mdesc)
 	kernel_data.start  = __virt_to_bus(init_mm.end_code);
 	kernel_data.end    = __virt_to_bus(init_mm.brk - 1);
 
-	for (i = 0; i < meminfo.nr_banks; i++) {
+	for (i = 0; i < mi->nr_banks; i++) {
 		unsigned long virt_start, virt_end;
 
-		if (meminfo.bank[i].size == 0)
+		if (mi->bank[i].size == 0)
 			continue;
 
-		virt_start = __phys_to_virt(meminfo.bank[i].start);
-		virt_end   = virt_start + meminfo.bank[i].size - 1;
+		virt_start = __phys_to_virt(mi->bank[i].start);
+		virt_end   = virt_start + mi->bank[i].size - 1;
 
 		res = alloc_bootmem_low(sizeof(*res));
 		res->name  = "System RAM";
@@ -432,269 +441,14 @@ static void __init request_standard_resources(struct machine_desc *mdesc)
 		request_resource(&ioport_resource, &lp2);
 }
 
-/*
- * Architecture specific fixups.  This is where any
- * parameters in the params struct are fixed up, or
- * any additional architecture specific information
- * is pulled from the params struct.
- */
-static void __init
-fixup_acorn(struct machine_desc *desc, struct param_struct *params,
-	    char **cmdline)
-{
-#ifdef CONFIG_ARCH_ACORN
-	int i;
-
-	if (machine_is_riscpc()) {
-		/*
-		 * RiscPC can't handle half-word loads and stores
-		 */
-		elf_hwcap &= ~HWCAP_HALF;
-
-		switch (params->u1.s.pages_in_vram) {
-		case 512:
-			vram_size += PAGE_SIZE * 256;
-		case 256:
-			vram_size += PAGE_SIZE * 256;
-		default:
-			break;
-		}
-
-		if (vram_size) {
-			desc->video_start = 0x02000000;
-			desc->video_end   = 0x02000000 + vram_size;
-		}
-
-		for (i = 0; i < 4; i++) {
-			meminfo.bank[i].start = PHYS_OFFSET + (i << 26);
-			meminfo.bank[i].size  =
-				params->u1.s.pages_in_bank[i] *
-				params->u1.s.page_size;
-		}
-		meminfo.nr_banks = 4;
-	}
-	memc_ctrl_reg	  = params->u1.s.memc_control_reg;
-	number_mfm_drives = (params->u1.s.adfsdrives >> 3) & 3;
-#endif
-}
-
-static void __init
-fixup_ebsa285(struct machine_desc *desc, struct param_struct *params,
-	      char **cmdline)
-{
-	ORIG_X		 = params->u1.s.video_x;
-	ORIG_Y		 = params->u1.s.video_y;
-	ORIG_VIDEO_COLS  = params->u1.s.video_num_cols;
-	ORIG_VIDEO_LINES = params->u1.s.video_num_rows;
-}
-
-/*
- * Older NeTTroms either do not provide a parameters
- * page, or they don't supply correct information in
- * the parameter page.
- */
-static void __init
-fixup_netwinder(struct machine_desc *desc, struct param_struct *params,
-		char **cmdline)
-{
-	if (params->u1.s.nr_pages != 0x2000 &&
-	    params->u1.s.nr_pages != 0x4000) {
-		printk(KERN_WARNING "Warning: bad NeTTrom parameters "
-		       "detected, using defaults\n");
-
-		params->u1.s.nr_pages = 0x2000;	/* 32MB */
-		params->u1.s.ramdisk_size = 0;
-		params->u1.s.flags = FLAG_READONLY;
-		params->u1.s.initrd_start = 0;
-		params->u1.s.initrd_size = 0;
-		params->u1.s.rd_start = 0;
-	}
-}
-
-/*
- * CATS uses soft-reboot by default, since
- * hard reboots fail on early boards.
- */
-static void __init
-fixup_cats(struct machine_desc *desc, struct param_struct *params,
-	   char **cmdline)
-{
-	ORIG_VIDEO_LINES  = 25;
-	ORIG_VIDEO_POINTS = 16;
-	ORIG_Y = 24;
-}
-
-static void __init
-fixup_coebsa285(struct machine_desc *desc, struct param_struct *params,
-		char **cmdline)
-{
-#if 0
-	extern unsigned long boot_memory_end;
-	extern char boot_command_line[];
-
-	meminfo.nr_banks      = 1;
-	meminfo.bank[0].start = PHYS_OFFSET;
-	meminfo.bank[0].size  = boot_memory_end;
-
-	*cmdline = boot_command_line;
-#endif
-}
-
-static void __init
-fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
-		char **cmdline)
-{
-#ifdef CONFIG_ARCH_SA1100
-	int i;
-	extern struct mem_desc {
-		unsigned long phys_start;
-		unsigned long length;
-	} mem_desc[];
-	extern unsigned int mem_desc_size;
-
-	for( i = 0; i < mem_desc_size; i++ ) {
-		if( i >= NR_BANKS ) {
-			printk( __FUNCTION__ 
-				": mem_desc too large for meminfo structure\n");
-			break;
-		}
-		meminfo.bank[i].start = mem_desc[i].phys_start;
-		meminfo.bank[i].size = mem_desc[i].length;
-	}
-	meminfo.nr_banks = i;
-
-#if defined(CONFIG_SA1100_BRUTUS)
-	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
-	setup_ramdisk( 1, 0, 0, 8192 );
-	setup_initrd( __phys_to_virt(0xd8000000), 0x00400000 );
-#elif defined(CONFIG_SA1100_EMPEG)
-	ROOT_DEV = MKDEV( 3, 1 );  /* /dev/hda1 */
-	setup_ramdisk( 1, 0, 0, 4096 );
-	setup_initrd( 0xd0000000+((1024-320)*1024), (320*1024) );
-#elif defined(CONFIG_SA1100_TIFON)
-	ROOT_DEV = MKDEV(UNNAMED_MAJOR, 0);
-	setup_ramdisk(1, 0, 0, 4096);
-	setup_initrd( 0xd0000000 + 0x1100004, 0x140000 );
-#elif defined(CONFIG_SA1100_VICTOR)
-	ROOT_DEV = MKDEV( 60, 2 );
-
-	/* Get command line parameters passed from the loader (if any) */
-	if( *((char*)0xc0000000) )
-		strcpy( default_command_line, ((char *)0xc0000000) );
-
-	/* power off if any problem */
-	strcat( default_command_line, " panic=1" );
-#elif defined(CONFIG_SA1100_LART)
-	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
-	setup_ramdisk(1, 0, 0, 8192);
-	setup_initrd(0xc0400000, 0x00400000);
-#endif
-#endif
-}
-
-#define NO_PARAMS	0
-#define NO_VIDEO	0, 0
-
-/*
- * This is the list of all architectures supported by
- * this kernel.  This should be integrated with the list
- * in head-armv.S.
- */
-static struct machine_desc machine_desc[] __initdata = {
-	{ "EBSA110",		/* RMK			*/
-		0x00000400,
-		NO_VIDEO,
-		1, 0, 1, 1, 1,
-		NULL
-	}, { "Acorn-RiscPC",	/* RMK			*/
-		0x10000100,
-		NO_VIDEO,
-		1, 1, 0, 0, 0,
-		fixup_acorn
-	}, { "unknown",
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "FTV/PCI",		/* Philip Blundell	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "EBSA285",		/* RMK			*/
-		0x00000100,
-		0x000a0000, 0x000bffff,
-		0, 0, 0, 0, 0,
-		fixup_ebsa285
-	}, { "Rebel-NetWinder",	/* RMK			*/
-		0x00000100,
-		0x000a0000, 0x000bffff,
-		1, 0, 1, 0, 0,
-		fixup_netwinder
-	}, { "Chalice-CATS",	/* Philip Blundell	*/
-		NO_PARAMS,
-		0x000a0000, 0x000bffff,
-		0, 0, 0, 0, 1,
-		fixup_cats
-	}, { "unknown-TBOX",	/* Philip Blundell	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "co-EBSA285",	/* Mark van Doesburg	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		fixup_coebsa285
-	}, { "CL-PS7110",	/* Werner Almesberger	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "Acorn-Archimedes",/* RMK/DAG		*/
-		0x0207c000,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		fixup_acorn
-	}, { "Acorn-A5000",	/* RMK/PB		*/
-		0x0207c000,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		fixup_acorn
-	}, { "Etoile",		/* Alex de Vries	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "LaCie_NAS",	/* Benjamin Herrenschmidt */
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "CL-PS7500",	/* Philip Blundell	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "Shark",		/* Alexander Schulz	*/
-		NO_PARAMS,
-		/* do you really mean 0x200000? */
-		0x06000000, 0x06000000+0x00200000,
-		0, 0, 0, 0, 0,
-		NULL
-	}, { "SA1100-based",	/* Nicolas Pitre	*/
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		fixup_sa1100
-	}
-};
-
 void __init setup_arch(char **cmdline_p)
 {
 	struct param_struct *params = NULL;
 	struct machine_desc *mdesc;
+	struct meminfo meminfo;
 	char *from = default_command_line;
+
+	memset(&meminfo, 0, sizeof(meminfo));
 
 #if defined(CONFIG_ARCH_ARC)
 	__machine_arch_type = MACH_TYPE_ARCHIMEDES;
@@ -706,7 +460,7 @@ void __init setup_arch(char **cmdline_p)
 
 	ROOT_DEV = MKDEV(0, 255);
 
-	mdesc = machine_desc + machine_arch_type;
+	mdesc = setup_architecture(machine_arch_type);
 	machine_name = mdesc->name;
 
 	if (mdesc->broken_hlt)
@@ -719,7 +473,7 @@ void __init setup_arch(char **cmdline_p)
 		params = phys_to_virt(mdesc->param_offset);
 
 	if (mdesc->fixup)
-		mdesc->fixup(mdesc, params, &from);
+		mdesc->fixup(mdesc, params, &from, &meminfo);
 
 	if (params && params->u1.s.page_size != PAGE_SIZE) {
 		printk(KERN_WARNING "Warning: bad configuration page, "
@@ -763,11 +517,11 @@ void __init setup_arch(char **cmdline_p)
 
 	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
-	parse_cmdline(cmdline_p, from);
-	setup_bootmem();
-	request_standard_resources(mdesc);
+	parse_cmdline(&meminfo, cmdline_p, from);
+	setup_bootmem(&meminfo);
+	request_standard_resources(&meminfo, mdesc);
 
-	paging_init();
+	paging_init(&meminfo);
 
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)

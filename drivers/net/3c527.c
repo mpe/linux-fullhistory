@@ -2,6 +2,7 @@
  *
  *	(c) Copyright 1998 Red Hat Software Inc
  *	Written by Alan Cox.
+ *	Further debugging by Carl Drougge.
  *
  *	Based on skeleton.c written 1993-94 by Donald Becker and ne2.c
  *	(for the MCA stuff) written by Wim Dumon.
@@ -15,7 +16,7 @@
  */
 
 static const char *version =
-	"3c527.c:v0.07 2000/01/18 Alan Cox (alan@redhat.com)\n";
+	"3c527.c:v0.08 2000/02/22 Alan Cox (alan@redhat.com)\n";
 
 /**
  * DOC: Traps for the unwary
@@ -122,6 +123,7 @@ struct mc32_local
 	u32 base;
 	u16 rx_halted;
 	u16 tx_halted;
+	u16 rx_pending;
 	u16 exec_pending;
 	u16 mc_reload_wait;	/* a multicast load request is pending */
 	atomic_t tx_count;		/* buffers left */
@@ -451,6 +453,9 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 	
 	printk("%s: %d RX buffers, %d TX buffers. Base of 0x%08X.\n",
 		dev->name, lp->rx_len, lp->tx_len, lp->base);
+		
+	if(lp->tx_len > TX_RING_MAX)
+		lp->tx_len = TX_RING_MAX;
 	
 	dev->open		= mc32_open;
 	dev->stop		= mc32_close;
@@ -462,6 +467,7 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 	
 	lp->rx_halted		= 1;
 	lp->tx_halted		= 1;
+	lp->rx_pending		= 0;
 
 	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
@@ -652,6 +658,7 @@ static void mc32_rx_begin(struct net_device *dev)
 	mc32_ring_poll(dev);	
 	
 	lp->rx_halted=0;
+	lp->rx_pending=0;
 }
 
 /**
@@ -944,6 +951,7 @@ static void mc32_timeout(struct net_device *dev)
 static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	int ioaddr = dev->base_addr;
 	unsigned long flags;
 		
 	u16 tx_head;
@@ -967,7 +975,16 @@ static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 	lp->tx_skb[lp->tx_skb_end] = skb;
 	lp->tx_skb_end++;
 	lp->tx_skb_end&=(TX_RING_MAX-1);
+
+	/* TX suspend - shouldnt be needed but apparently is.
+	   This is a research item ... */
+		   
+	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+	lp->tx_box->mbox=0;
+	outb(3, ioaddr+HOST_CMD);
 	
+	/* Transmit now stopped */
+
 	/* P is the last sending/sent buffer as a pointer */
 	p=(struct skb_header *)bus_to_virt(lp->base+tx_head);
 	
@@ -990,7 +1007,9 @@ static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 	p->status	= 0;
 	p->control	&= ~(1<<6);
 	
+	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
 	lp->tx_box->mbox=0;
+	outb(5, ioaddr+HOST_CMD);		/* Restart TX */
 	restore_flags(flags);
 	
 	netif_wake_queue(dev);
@@ -1096,11 +1115,16 @@ static void mc32_rx_ring(struct net_device *dev)
 		base = p->next;
 	}
 	while(x++<48);
+
+	/*
+	 *	Restart ring processing
+	 */	
 	
 	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
 	lp->rx_box->mbox=0;
 	lp->rx_box->data[0] = top;
 	outb(1<<3, ioaddr+HOST_CMD);	
+	lp->rx_halted=0;
 }
 
 
@@ -1123,7 +1147,6 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	struct net_device *dev = dev_id;
 	struct mc32_local *lp;
 	int ioaddr, status, boguscount = 0;
-	int rx_event = 0;
 	
 	if (dev == NULL) {
 		printk(KERN_WARNING "%s: irq %d for unknown device.\n", cardname, irq);
@@ -1182,7 +1205,15 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			case 0:
 				break;
 			case 2:	/* RX */
-				rx_event=1;
+				lp->rx_pending=1;
+				if(!lp->rx_halted)
+				{
+					/*
+					 *	Halt ring receive
+					 */
+					while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+					outb(3<<3, ioaddr+HOST_CMD);
+				}
 				break;
 			case 3:
 			case 4:
@@ -1195,9 +1226,10 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				break;
 			case 6:
 				/* Out of RX buffers stat */
-				/* Must restart */
 				lp->net_stats.rx_dropped++;
-				rx_event = 1; 	/* To restart */
+				lp->rx_pending=1;
+				/* Must restart */
+				lp->rx_halted=1;
 				break;
 			default:
 				printk("%s: strange rx ack %d\n", 
@@ -1231,11 +1263,17 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	}
 	
 	/*
-	 *	Process and restart the receive ring.
+	 *	Process and restart the receive ring. This has some state
+	 *	as we must halt the ring to process it and halting the ring
+	 *	might not occur in the same IRQ handling loop as we issue
+	 *	the halt.
 	 */
 	 
-	if(rx_event)
+	if(lp->rx_pending && lp->rx_halted)
+	{
 		mc32_rx_ring(dev);
+		lp->rx_pending = 0;
+	}
 	return;
 }
 

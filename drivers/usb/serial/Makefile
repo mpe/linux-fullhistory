@@ -6,14 +6,15 @@
 
 SUB_DIRS	:=
 MOD_SUB_DIRS	:= $(SUB_DIRS)
+MOD_IN_SUB_DIRS	:= $(SUB_DIRS)
 ALL_SUB_DIRS	:= $(SUB_DIRS)
 
 # The target object and module list name.
 
-O_TARGET	:= usbdrv.o
-M_OBJS		:=
-O_OBJS		:=
-MOD_LIST_NAME	:= USB_MODULES
+O_TARGET	:= serial.o
+M_OBJS		:= usb-serial.o
+O_OBJS		:= usb-serial.o
+#MOD_LIST_NAME	:= USB_MODULES
 
 # Objects that export symbols.
 

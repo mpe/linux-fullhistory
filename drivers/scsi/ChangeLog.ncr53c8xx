@@ -1,3 +1,20 @@
+Mon March 6  23:15 2000 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2g
+	- Add the file sym53c8xx_comm.h that collects code that should 
+	  be shared by sym53c8xx and ncr53c8xx drivers. For now, it is  
+	  a header file that is only included by the ncr53c8xx driver, 
+	  but things will be cleaned up later. This code addresses 
+	  notably:
+	  * Chip detection and PCI related initialisations
+	  * NVRAM detection and reading
+	  * DMA mapping
+	  * Boot setup command
+	  * And some other ...
+	- Add support for the new dynamic dma mapping kernel interface.
+	  Requires Linux-2.3.47 (tested with pre-2.3.47-6).
+	- Get data transfer direction from the scsi command structure 
+	  (Scsi_Cmnd) when this information is available.
+
 Sat Jan 8  22:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2e
 	- Add year 2000 copyright.

@@ -182,8 +182,19 @@ static void sppp_clear_timeout(struct sppp *p)
 	}
 }
 
-/*
- * Process the received packet.
+/**
+ *	sppp_input -	receive and process a WAN PPP frame
+ *	@skb:	The buffer to process
+ *	@dev:	The device it arrived on
+ *
+ *	This can be called directly by cards that do not have
+ *	timing constraints but is normally called from the network layer
+ *	after interrupt servicing to process frames queued via netif_rx.
+ *
+ *	We process the options in the card. If the frame is destined for
+ *	the protocol stacks then it requeues the frame for the upper level
+ *	protocol. If it is a control from it is processed and discarded
+ *	here.
  */
  
 void sppp_input (struct net_device *dev, struct sk_buff *skb)
@@ -825,6 +836,14 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 	dev_queue_xmit(skb);
 }
 
+/**
+ *	sppp_close - close down a synchronous PPP or Cisco HDLC link
+ *	@dev: The network device to drop the link of
+ *
+ *	This drops the logical interface to the channel. It is not
+ *	done politely as we assume we will also be dropping DTR. Any
+ *	timeouts are killed.
+ */
 
 int sppp_close (struct net_device *dev)
 {
@@ -838,6 +857,15 @@ int sppp_close (struct net_device *dev)
 
 EXPORT_SYMBOL(sppp_close);
 
+/**
+ *	sppp_open - open a synchronous PPP or Cisco HDLC link
+ *	@dev:	Network device to activate
+ *	
+ *	Close down any existing synchronous session and commence
+ *	from scratch. In the PPP case this means negotiating LCP/IPCP
+ *	and friends, while for Cisco HDLC we simply need to staet sending
+ *	keepalives
+ */
 
 int sppp_open (struct net_device *dev)
 {
@@ -851,6 +879,22 @@ int sppp_open (struct net_device *dev)
 
 EXPORT_SYMBOL(sppp_open);
 
+/**
+ *	sppp_reopen - notify of physical link loss
+ *	@dev: Device that lost the link
+ *
+ *	This function informs the synchronous protocol code that
+ *	the underlying link died (for example a carrier drop on X.21)
+ *
+ *	We increment the magic numbers to ensure that if the other end
+ *	failed to notice we will correctly start a new session. It happens
+ *	do to the nature of telco circuits is that you can lose carrier on
+ *	one endonly.
+ *
+ *	Having done this we go back to negotiating. This function may
+ *	be called from an interrupt context.
+ */
+ 
 int sppp_reopen (struct net_device *dev)
 {
 	struct sppp *sp = (struct sppp *)sppp_of(dev);
@@ -870,6 +914,16 @@ int sppp_reopen (struct net_device *dev)
 
 EXPORT_SYMBOL(sppp_reopen);
 
+/**
+ *	sppp_change_mtu - Change the link MTU
+ *	@dev:	Device to change MTU on
+ *	@new_mtu: New MTU
+ *
+ *	Change the MTU on the link. This can only be called with
+ *	the link down. It returns an error if the link is up or
+ *	the mtu is out of range.
+ */
+ 
 int sppp_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if(new_mtu<128||new_mtu>PPP_MTU||(dev->flags&IFF_UP))
@@ -880,6 +934,18 @@ int sppp_change_mtu(struct net_device *dev, int new_mtu)
 
 EXPORT_SYMBOL(sppp_change_mtu);
 
+/**
+ *	sppp_do_ioctl - Ioctl handler for ppp/hdlc
+ *	@dev: Device subject to ioctl
+ *	@ifr: Interface request block from the user
+ *	@cmd: Command that is being issued
+ *	
+ *	This function handles the ioctls that may be issued by the user
+ *	to control the settings of a PPP/HDLC link. It does both busy
+ *	and security checks. This function is intended to be wrapped by
+ *	callers who wish to add additional ioctl calls of their own.
+ */
+ 
 int sppp_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct sppp *sp = (struct sppp *)sppp_of(dev);
@@ -913,6 +979,16 @@ int sppp_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 EXPORT_SYMBOL(sppp_do_ioctl);
 
+/**
+ *	sppp_attach - attach synchronous PPP/HDLC to a device
+ *	@pd:	PPP device to initialise
+ *
+ *	This initialises the PPP/HDLC support on an interface. At the
+ *	time of calling the dev element must point to the network device
+ *	that this interface is attached to. The interface should not yet
+ *	be registered. 
+ */
+ 
 void sppp_attach(struct ppp_device *pd)
 {
 	struct net_device *dev = pd->dev;
@@ -973,6 +1049,15 @@ void sppp_attach(struct ppp_device *pd)
 
 EXPORT_SYMBOL(sppp_attach);
 
+/**
+ *	sppp_detach - release PPP resources from a device
+ *	@dev:	Network device to release
+ *
+ *	Stop and free up any PPP/HDLC resources used by this
+ *	interface. This must be called before the device is
+ *	freed.
+ */
+ 
 void sppp_detach (struct net_device *dev)
 {
 	struct sppp **q, *p, *sp = (struct sppp *)sppp_of(dev);
@@ -1273,18 +1358,24 @@ static void sppp_print_bytes (u_char *p, u16 len)
 		printk ("-%x", *p++);
 }
 
-/*
+/**
+ *	sppp_rcv -	receive and process a WAN PPP frame
+ *	@skb:	The buffer to process
+ *	@dev:	The device it arrived on
+ *	@p: Unused
+ *
  *	Protocol glue. This drives the deferred processing mode the poorer
- *	cards use.
+ *	cards use. This can be called directly by cards that do not have
+ *	timing constraints but is normally called from the network layer
+ *	after interrupt servicing to process frames queued via netif_rx.
  */
 
-int sppp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *p)
+static int sppp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *p)
 {
 	sppp_input(dev,skb);
 	return 0;
 }
 
-EXPORT_SYMBOL(sppp_rcv);
 
 struct packet_type sppp_packet_type=
 {
@@ -1304,8 +1395,6 @@ void sync_ppp_init(void)
 	sppp_packet_type.type=htons(ETH_P_WAN_PPP);	
 	dev_add_pack(&sppp_packet_type);
 }
-
-EXPORT_SYMBOL(sync_ppp_init);
 
 #ifdef MODULE
 

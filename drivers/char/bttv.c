@@ -719,12 +719,14 @@ static void init_PXC200(struct bttv *btv)
 
 /* ----------------------------------------------------------------------- */
 
+/* for some vendors it is just the PCI ID */
 static struct VENDOR {
 	int id;
 	char *name;
 } vendors[] = {
 	{ 0x0001, "ATI Technologies Inc" },
 	{ 0x10b4, "STB Systems Inc" },
+	{ 0x1118, "Terratec" },
 	{ 0x13eb, "Hauppauge Computer Works Inc" },
 	{ 0x1461, "Avermedia" },
 	{ 0x1850, "Chronos" },
@@ -743,6 +745,7 @@ static struct CARD {
 } cards[] = {
 	{ 0x0001, 0x1002, BTTV_HAUPPAUGE878,  "TV Wonder" },
 	{ 0x10b4, 0x2636, BTTV_HAUPPAUGE878,  "???" },
+	{ 0x1118, 0x153b, BTTV_TERRATVALUE,   "TV Value" },
 	{ 0x13eb, 0x0070, BTTV_HAUPPAUGE878,  "WinTV" },
 	{ 0x1461, 0x0002, BTTV_AVERMEDIA98,   "TVCapture 98" },
 	{ 0x1850, 0x1851, BTTV_CHRONOS_VS2,   "Video Shuttle II" },
@@ -2018,6 +2021,7 @@ static int bttv_open(struct video_device *dev, int flags)
                 btv->gbuf[i].stat = GBUFFER_UNUSED;
 
         burst(0);
+	set_pll(btv);
         btv->user++;
 	up(&btv->lock);
         MOD_INC_USE_COUNT;
@@ -2235,6 +2239,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		if (btv->win.norm != v.mode) {
 			btv->win.norm = v.mode;
                         down(&btv->lock);
+			set_pll(btv);
 			make_vbitab(btv);
 			bt848_set_winsize(btv);
 			up(&btv->lock);
@@ -2866,6 +2871,7 @@ static struct video_device vbi_template=
 static int radio_open(struct video_device *dev, int flags)
 {
 	struct bttv *btv = (struct bttv *)(dev-1);
+	unsigned long v;
 
         down(&btv->lock);
 	if (btv->user)
@@ -2873,6 +2879,8 @@ static int radio_open(struct video_device *dev, int flags)
 	btv->user++;
 
 	btv->radio = 1;
+	v = 400*16;
+	call_i2c_clients(btv,VIDIOCSFREQ,&v);
 	call_i2c_clients(btv,AUDC_SET_RADIO,&btv->tuner_type);
 	bt848_muxsel(btv,0);
 	up(&btv->lock);

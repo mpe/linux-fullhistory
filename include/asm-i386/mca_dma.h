@@ -55,16 +55,40 @@
 #define MCA_DMA_MODE_16    0x40  /* 16 bit xfers */
 
 
+/**
+ *	mca_enable_dma	-	channel to enable DMA on
+ *	@dmanr: DMA channel
+ *
+ *	Enable the MCA bus DMA on a channel. This can be called from
+ *	IRQ context.
+ */
 
 static __inline__ void mca_enable_dma(unsigned int dmanr)
 {
 	outb(MCA_DMA_FN_RESET_MASK | dmanr, MCA_DMA_REG_FN);
 }
 
+/**
+ *	mca_disble_dma	-	channel to disable DMA on
+ *	@dmanr: DMA channel
+ *
+ *	Enable the MCA bus DMA on a channel. This can be called from
+ *	IRQ context.
+ */
+
 static __inline__ void mca_disable_dma(unsigned int dmanr)
 {
 	outb(MCA_DMA_FN_MASK | dmanr, MCA_DMA_REG_FN);
 }
+
+/**
+ *	mca_set_dma_addr -	load a 24bit DMA address
+ *	@dmanr: DMA channel
+ *	@a: 24bit bus address
+ *
+ *	Load the address register in the DMA controller. This has a 24bit
+ *	limitation (16Mb). 
+ */
 
 static __inline__ void mca_set_dma_addr(unsigned int dmanr, unsigned int a)
 {
@@ -73,6 +97,14 @@ static __inline__ void mca_set_dma_addr(unsigned int dmanr, unsigned int a)
 	outb((a >> 8) & 0xff, MCA_DMA_REG_EXE);
 	outb((a >> 16) & 0xff, MCA_DMA_REG_EXE);
 }
+
+/**
+ *	mca_get_dma_addr -	load a 24bit DMA address
+ *	@dmanr: DMA channel
+ *
+ *	Read the address register in the DMA controller. This has a 24bit
+ *	limitation (16Mb). The return is a bus address.
+ */
 
 static __inline__ unsigned int mca_get_dma_addr(unsigned int dmanr)
 {
@@ -86,6 +118,15 @@ static __inline__ unsigned int mca_get_dma_addr(unsigned int dmanr)
 	return addr;
 }
 
+/**
+ *	mca_set_dma_count -	load a 16bit transfer count
+ *	@dmanr: DMA channel
+ *	@count: count
+ *
+ *	Set the DMA count for this channel. This can be up to 64Kbytes.
+ *	Setting a count of zero will not do what you expect.
+ */
+
 static __inline__ void mca_set_dma_count(unsigned int dmanr, unsigned int count)
 {
 	count--;  /* transfers one more than count -- correct for this */
@@ -94,6 +135,14 @@ static __inline__ void mca_set_dma_count(unsigned int dmanr, unsigned int count)
 	outb(count & 0xff, MCA_DMA_REG_EXE);
 	outb((count >> 8) & 0xff, MCA_DMA_REG_EXE);
 }
+
+/**
+ *	mca_get_dma_residue -	get the remaining bytes to transfer
+ *	@dmanr: DMA channel
+ *
+ *	This function returns the number of bytes left to transfer
+ *	on this DMA channel.
+ */
 
 static __inline__ unsigned int mca_get_dma_residue(unsigned int dmanr)
 {
@@ -106,6 +155,15 @@ static __inline__ unsigned int mca_get_dma_residue(unsigned int dmanr)
 	return count;
 }
 
+/**
+ *	mca_set_dma_io -	set the port for an I/O transfer
+ *	@dmanr: DMA channel
+ *	@io_addr: an I/O port number
+ *
+ *	Unlike the ISA bus DMA controllers the DMA on MCA bus can transfer
+ *	with an I/O port target.
+ */
+
 static __inline__ void mca_set_dma_io(unsigned int dmanr, unsigned int io_addr)
 {
 	/*
@@ -116,6 +174,24 @@ static __inline__ void mca_set_dma_io(unsigned int dmanr, unsigned int io_addr)
 	outb(io_addr & 0xff, MCA_DMA_REG_EXE);
 	outb((io_addr >>  8) & 0xff, MCA_DMA_REG_EXE);
 }
+
+/**
+ *	mca_set_dma_mode -	set the DMA mode
+ *	@dmanr: DMA channel
+ *	@mode: The mode to set
+ *
+ *	The DMA controller supports several modes. The mode values you can
+ *	set are 
+ *
+ *	MCA_DMA_MODE_READ when reading from the DMA device.
+ *
+ *	MCA_DMA_MODE_WRITE to writing to the DMA device.
+ *
+ *	MCA_DMA_MODE_IO to do DMA to or from an I/O port.
+ *
+ *	MCA_DMA_MODE_16 to do 16bit transfers.
+ *
+ */
 
 static __inline__ void mca_set_dma_mode(unsigned int dmanr, unsigned int mode)
 {

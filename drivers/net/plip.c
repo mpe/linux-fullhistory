@@ -583,6 +583,61 @@ plip_receive(unsigned short nibble_timeout, struct net_device *dev,
 	return OK;
 }
 
+/*
+ *	Determine the packet's protocol ID. The rule here is that we 
+ *	assume 802.3 if the type field is short enough to be a length.
+ *	This is normal practice and works for any 'now in use' protocol.
+ *
+ *	PLIP is ethernet ish but the daddr might not be valid if unicast.
+ *	PLIP fortunately has no bus architecture (its Point-to-point).
+ *
+ *	We can't fix the daddr thing as that quirk (more bug) is embedded
+ *	in far too many old systems not all even running Linux.
+ */
+ 
+static unsigned short plip_type_trans(struct sk_buff *skb, struct net_device *dev)
+{
+	struct ethhdr *eth;
+	unsigned char *rawp;
+	
+	skb->mac.raw=skb->data;
+	skb_pull(skb,dev->hard_header_len);
+	eth= skb->mac.ethernet;
+	
+	if(*eth->h_dest&1)
+	{
+		if(memcmp(eth->h_dest,dev->broadcast, ETH_ALEN)==0)
+			skb->pkt_type=PACKET_BROADCAST;
+		else
+			skb->pkt_type=PACKET_MULTICAST;
+	}
+	
+	/*
+	 *	This ALLMULTI check should be redundant by 1.4
+	 *	so don't forget to remove it.
+	 */
+	 
+	if (ntohs(eth->h_proto) >= 1536)
+		return eth->h_proto;
+		
+	rawp = skb->data;
+	
+	/*
+	 *	This is a magic hack to spot IPX packets. Older Novell breaks
+	 *	the protocol design and runs IPX over 802.3 without an 802.2 LLC
+	 *	layer. We look for FFFF which isn't a used 802.2 SSAP/DSAP. This
+	 *	won't work for fault tolerant netware but does for the rest.
+	 */
+	if (*(unsigned short *)rawp == 0xFFFF)
+		return htons(ETH_P_802_3);
+		
+	/*
+	 *	Real 802.2 LLC
+	 */
+	return htons(ETH_P_802_2);
+}
+
+
 /* PLIP_RECEIVE_PACKET --- receive a packet */
 static int
 plip_receive_packet(struct net_device *dev, struct net_local *nl,
@@ -669,7 +724,7 @@ plip_receive_packet(struct net_device *dev, struct net_local *nl,
 
 	case PLIP_PK_DONE:
 		/* Inform the upper layer for the arrival of a packet. */
-		rcv->skb->protocol=eth_type_trans(rcv->skb, dev);
+		rcv->skb->protocol=plip_type_trans(rcv->skb, dev);
 		netif_rx(rcv->skb);
 		nl->enet_stats.rx_bytes += rcv->length.h;
 		nl->enet_stats.rx_packets++;
@@ -1227,6 +1282,8 @@ plip_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		pc->nibble  = nl->nibble;
 		break;
 	case PLIP_SET_TIMEOUT:
+		if(!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		nl->trigger = pc->trigger;
 		nl->nibble  = pc->nibble;
 		break;

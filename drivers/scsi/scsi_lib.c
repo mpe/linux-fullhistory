@@ -87,6 +87,7 @@ int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int at_head)
 	SCpnt->request.cmd = SPECIAL;
 	SCpnt->request.special = (void *) SCpnt;
 	SCpnt->request.q = NULL;
+	SCpnt->request.nr_segments = 0;
 
 	/*
 	 * We have the option of inserting the head or the tail of the queue.
@@ -155,6 +156,8 @@ int scsi_insert_special_req(Scsi_Request * SRpnt, int at_head)
 	q = &SRpnt->sr_device->request_queue;
 	SRpnt->sr_request.cmd = SPECIAL;
 	SRpnt->sr_request.special = (void *) SRpnt;
+	SRpnt->sr_request.q = NULL;
+	SRpnt->sr_request.nr_segments = 0;
 
 	/*
 	 * We have the option of inserting the head or the tail of the queue.

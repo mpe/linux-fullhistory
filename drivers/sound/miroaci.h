@@ -1,4 +1,3 @@
-#include <linux/config.h>
 extern int aci_implied_cmd(unsigned char opcode);
 extern int aci_write_cmd(unsigned char opcode, unsigned char parameter);
 extern int aci_write_cmd_d(unsigned char opcode, unsigned char parameter, unsigned char parameter2);

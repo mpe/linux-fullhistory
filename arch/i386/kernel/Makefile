@@ -29,7 +29,7 @@ endif
 endif
 
 ifdef CONFIG_MCA
-O_OBJS += mca.o
+OX_OBJS += mca.o
 endif
 
 ifeq ($(CONFIG_MTRR),y)

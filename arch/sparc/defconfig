@@ -101,7 +101,6 @@ CONFIG_KMOD=y
 # Floppy, IDE, and other block devices
 #
 CONFIG_BLK_DEV_FD=y
-# CONFIG_BLK_DEV_IDE is not set
 CONFIG_BLK_DEV_MD=y
 CONFIG_MD_LINEAR=m
 CONFIG_MD_STRIPED=m
@@ -168,6 +167,11 @@ CONFIG_DECNET_SIOCGIFCONF=y
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set
+
+#
+# ATA/IDE/MFM/RLL support
+#
+# CONFIG_IDE is not set
 
 #
 # SCSI support

@@ -22,6 +22,7 @@
 		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x8000 + SWAPPER_PGDIR_OFFSET
 
 		.section ".text.init",#alloc,#execinstr
+		.type	stext, #function
 ENTRY(stext)
 ENTRY(_stext)
 
@@ -311,6 +312,7 @@ __lookup_architecture_type:
  * required for debugging information to be shown to the user.
  * paging_init() does the real page table initialisation.
  */
+		.type	__arch_types_start, #object
 		@ 0x00 - DEC EBSA110
 __arch_types_start:
 		.long	0
@@ -398,15 +400,15 @@ __arch_types_start:
 
 		@ 0x0e - CL-PS7500
 		.long	0
-		.long	0
-		.long	0
-		.long	0
+		.long	0x10000000
+		.long	0x03000000
+		.long	0xe0000000
 
-		@ 0x0f - Shark
+		@ 0x0f - Digital Shark (DNARD)
 		.long	0
-		.long	0
-		.long	0
-		.long	0
+		.long	0x08000000
+		.long	0x40000000
+		.long	0xe0000000
 
 		@ 0x10 - SA1100
 		.long	0

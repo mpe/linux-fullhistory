@@ -17,8 +17,6 @@
 #include "check.h"
 #include "acorn.h"
 
-extern void add_gd_partition(struct gendisk *hd, int minor, int start, int size);
-
 static void
 adfspart_setgeometry(kdev_t dev, unsigned int secspertrack, unsigned int heads,
 		     unsigned long totalblocks)
@@ -41,21 +39,22 @@ struct linux_part {
 	unsigned long nr_sects;
 };
 
-static struct disc_record *adfs_partition(struct gendisk *hd, char *name, char *data,
+static struct adfs_discrecord *adfs_partition(struct gendisk *hd, char *name, char *data,
 					   unsigned long first_sector, unsigned int minor)
 {
-	struct disc_record *dr;
+	struct adfs_discrecord *dr;
 	unsigned int nr_sects;
 
 	if (adfs_checkbblk(data))
 		return NULL;
 
-	dr = (struct disc_record *)(data + 0x1c0);
+	dr = (struct adfs_discrecord *)(data + 0x1c0);
 
 	if (dr->disc_size == 0 && dr->disc_size_high == 0)
 		return NULL;
 
-	nr_sects = (dr->disc_size_high << 23) | (dr->disc_size >> 9);
+	nr_sects = (le32_to_cpu(dr->disc_size_high) << 23) |
+		   (le32_to_cpu(dr->disc_size) >> 9);
 
 	if (name)
 		printk(" [%s]", name);
@@ -93,8 +92,8 @@ static int riscix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 			if (rr->part[part].one &&
 			    memcmp(rr->part[part].name, "All\0", 4)) {
 				add_gd_partition(hd, minor++,
-						rr->part[part].start,
-						rr->part[part].length);
+						le32_to_cpu(rr->part[part].start),
+						le32_to_cpu(rr->part[part].length));
 				printk("(%s)", rr->part[part].name);
 			}
 		}
@@ -131,11 +130,13 @@ static int linux_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 
 	linuxp = (struct linux_part *)bh->b_data;
 	printk(" <");
-	while (linuxp->magic == LINUX_NATIVE_MAGIC || linuxp->magic == LINUX_SWAP_MAGIC) {
+	while (linuxp->magic == cpu_to_le32(LINUX_NATIVE_MAGIC) ||
+	       linuxp->magic == cpu_to_le32(LINUX_SWAP_MAGIC)) {
 		if (!(minor & mask))
 			break;
-		add_gd_partition(hd, minor++, first_sect + linuxp->start_sect,
-			linuxp->nr_sects);
+		add_gd_partition(hd, minor++, first_sect +
+				 le32_to_cpu(linuxp->start_sect),
+				 le32_to_cpu(linuxp->nr_sects));
 		linuxp ++;
 	}
 	printk(" >");
@@ -174,7 +175,7 @@ static int adfspart_check_CUMANA(struct gendisk *hd, kdev_t dev, unsigned long f
 	 * Hence it is totally untested.
 	 */
 	do {
-		struct disc_record *dr;
+		struct adfs_discrecord *dr;
 		unsigned int nr_sects;
 
 		if (!(minor & mask))
@@ -189,7 +190,8 @@ static int adfspart_check_CUMANA(struct gendisk *hd, kdev_t dev, unsigned long f
 		name = NULL;
 
 		nr_sects = (bh->b_data[0x1fd] + (bh->b_data[0x1fe] << 8)) *
-			 (dr->heads + (dr->lowsector & 0x40 ? 1 : 0)) * dr->secspertrack;
+			   (dr->heads + (dr->lowsector & 0x40 ? 1 : 0)) *
+			   dr->secspertrack;
 
 		if (!nr_sects)
 			break;
@@ -244,7 +246,7 @@ static int adfspart_check_ADFS(struct gendisk *hd, kdev_t dev, unsigned long fir
 {
 	unsigned long start_sect, nr_sects, sectscyl, heads;
 	struct buffer_head *bh;
-	struct disc_record *dr;
+	struct adfs_discrecord *dr;
 
 	if(get_ptable_blocksize(dev)!=1024)
 		return 0;
@@ -300,9 +302,6 @@ static int adfspart_check_ICSLinux(kdev_t dev, unsigned long block)
 	unsigned int offset = block & 1 ? 512 : 0;
 	int result = 0;
 
-	if(get_ptable_blocksize(dev)!=1024)
-		return 0;
-
 	bh = bread(dev, block >> 1, 1024);
 
 	if (bh != NULL) {
@@ -350,7 +349,8 @@ static int adfspart_check_ICS(struct gendisk *hd, kdev_t dev, unsigned long firs
 	for (i = 0, sum = 0x50617274; i < 508; i++)
 		sum += bh->b_data[i];
 
-	if (sum != *(unsigned long *)(&bh->b_data[508])) {
+	sum -= le32_to_cpu(*(unsigned long *)(&bh->b_data[508]));
+	if (sum) {
 	    	brelse(bh);
 		return 0; /* not ICS partition table */
 	}
@@ -358,19 +358,32 @@ static int adfspart_check_ICS(struct gendisk *hd, kdev_t dev, unsigned long firs
 	printk(" [ICS]");
 
 	for (p = (struct ics_part *)bh->b_data; p->size; p++) {
+		unsigned long start;
+		long size;
+
 		if ((minor & mask) == 0)
 			break;
 
-		if (p->size < 0 && adfspart_check_ICSLinux(dev, p->start)) {
+		start = le32_to_cpu(p->start);
+		size  = le32_to_cpu(p->size);
+
+		if (size < 0) {
+			size = -size;
+
 			/*
 			 * We use the first sector to identify what type
 			 * this partition is...
 			 */
-			if (-p->size > 1)
-				add_gd_partition(hd, minor, first_sector + p->start + 1, -p->size - 1);
-		} else
-			add_gd_partition(hd, minor, first_sector + p->start, p->size);
-		minor++;
+			if (size > 1 && adfspart_check_ICSLinux(dev, start)) {
+				start += 1;
+				size -= 1;
+			}
+		}
+
+		if (size) {
+			add_gd_partition(hd, minor, first_sector + start, size);
+			minor++;
+		}
 	}
 
 	brelse(bh);
@@ -422,8 +435,15 @@ static int adfspart_check_POWERTEC(struct gendisk *hd, kdev_t dev, unsigned long
 	printk(" [POWERTEC]");
 
 	for (i = 0, p = (struct ptec_partition *)bh->b_data; i < 12; i++, p++) {
-		if (p->size)
-			add_gd_partition(hd, minor, first_sector + p->start, p->size);
+		unsigned long start;
+		unsigned long size;
+
+		start = le32_to_cpu(p->start);
+		size  = le32_to_cpu(p->size);
+
+		if (size)
+			add_gd_partition(hd, minor, first_sector + start,
+					 size);
 		minor++;
 	}
 

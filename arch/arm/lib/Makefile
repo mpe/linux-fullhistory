@@ -14,37 +14,25 @@ L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
 O_TARGET := lib.o
 O_OBJS   := backtrace.o delay.o
 
+L_OBJS_arc		:= io-acorn.o
+L_OBJS_a5k		:= io-acorn.o floppydma.o
+L_OBJS_rpc		:= io-acorn.o floppydma.o
+L_OBJS_clps7500		:= io-acorn.o
+L_OBJS_ebsa110		:= io-ebsa110.o
+L_OBJS_footbridge	:= io-footbridge.o
+L_OBJS_nexuspci		:= io-footbridge.o
+L_OBJS_sa1100		:= io-footbridge.o
+L_OBJS_shark		:= io-shark.o
+
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
 endif
 
-ifdef CONFIG_ARCH_ACORN
-  L_OBJS += io-acorn.o
-  ifdef CONFIG_ARCH_A5K
-    L_OBJS += floppydma.o
-  endif
-  ifdef CONFIG_ARCH_RPC
-    L_OBJS += floppydma.o
-  endif
-endif
-
-ifeq ($(MACHINE),ebsa110)
-  L_OBJS += io-ebsa110.o
-else
+ifneq ($(MACHINE),ebsa110)
   OX_OBJS += io.o
 endif
 
-ifeq ($(MACHINE),footbridge)
-  L_OBJS += io-footbridge.o
-endif
-
-#
-# SA1100 IO routines happen to be the
-# same as the footbridge routines
-#
-ifeq ($(MACHINE),sa1100)
-  L_OBJS += io-footbridge.o
-endif
+L_OBJS	+= $(L_OBJS_$(MACHINE))
 
 include $(TOPDIR)/Rules.make
 

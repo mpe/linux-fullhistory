@@ -33,6 +33,7 @@
 #include "map.h"
 
 static unsigned long totalram_pages;
+struct meminfo meminfo;
 pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 /*
@@ -160,11 +161,13 @@ void show_mem(void)
 /*
  * paging_init() sets up the page tables...
  */
-void __init paging_init(void)
+void __init paging_init(struct meminfo *mi)
 {
 	void *zero_page, *bad_page, *bad_table;
 	unsigned long zone_size[MAX_NR_ZONES];
 	int i;
+
+	memcpy(&meminfo, mi, sizeof(meminfo));
 
 #ifdef CONFIG_CPU_32
 #define TABLE_OFFSET	(PTRS_PER_PTE)
@@ -197,12 +200,12 @@ void __init paging_init(void)
 	 * any problems with DMA or highmem, so all memory is
 	 * allocated to the DMA zone.
 	 */
-	for (i = 0; i < meminfo.nr_banks; i++) {
-		if (meminfo.bank[i].size) {
+	for (i = 0; i < mi->nr_banks; i++) {
+		if (mi->bank[i].size) {
 			unsigned int end;
 
-			end = (meminfo.bank[i].start - PHYS_OFFSET +
-			       meminfo.bank[i].size) >> PAGE_SHIFT;
+			end = (mi->bank[i].start - PHYS_OFFSET +
+			       mi->bank[i].size) >> PAGE_SHIFT;
 			if (zone_size[0] < end)
 				zone_size[0] = end;
 		}
@@ -327,24 +330,6 @@ void free_initmem(void)
 	free_area((unsigned long)(&__init_begin),
 		  (unsigned long)(&__init_end),
 		  "init");
-
-#ifdef CONFIG_FOOTBRIDGE
-	{
-	extern int __netwinder_begin, __netwinder_end,
-		   __ebsa285_begin, __ebsa285_end;
-
-	if (!machine_is_netwinder())
-		free_area((unsigned long)(&__netwinder_begin),
-			  (unsigned long)(&__netwinder_end),
-			  "netwinder");
-
-	if (!machine_is_ebsa285() && !machine_is_cats() &&
-	    !machine_is_co285())
-		free_area((unsigned long)(&__ebsa285_begin),
-			  (unsigned long)(&__ebsa285_end),
-			  "ebsa285/cats");
-	}
-#endif
 
 	printk("\n");
 }

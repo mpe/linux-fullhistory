@@ -1,7 +1,7 @@
 /*
  * parport.h: ARM-specific parport initialisation
  *
- * Copyright (C) 1999  Tim Waugh <tim@cyberelk.demon.co.uk>
+ * Copyright (C) 1999, 2000  Tim Waugh <tim@cyberelk.demon.co.uk>
  *
  * This file should only be included by drivers/parport/parport_pc.c.
  */
@@ -25,9 +25,6 @@
 #define __maybe_init __init
 #endif
 
-static int __maybe_init parport_pc_init_pci(int irq, int dma);
-static int __devinit parport_pc_init_superio(void);
-
 static int user_specified __maybe_initdata = 0;
 
 
@@ -35,6 +32,13 @@ int __init
 parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 {
 	int count = 0, i = 0;
+
+#ifndef MODULE
+	detect_and_report_winbond();
+	detect_and_report_smsc();
+
+	count += parport_pc_init_superio ();
+#endif
 
 	if (io && *io) {
 		/* Only probe the ports we were given. */
@@ -46,10 +50,6 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 				count++;
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
-#ifdef CONFIG_PCI
-		count += parport_pc_init_superio ();
-#endif
-
 		/* Probe all the likely ports. */
 		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0], NULL))
 			count++;
@@ -57,9 +57,6 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 			count++;
 		if (parport_pc_probe_port(0x278, 0x678, irq[0], dma[0], NULL))
 			count++;
-#ifdef CONFIG_PCI
-		count += parport_pc_init_pci (irq[0], dma[0]);
-#endif
 	}
 
         return count;

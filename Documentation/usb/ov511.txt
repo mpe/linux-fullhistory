@@ -3,7 +3,7 @@ Readme for Linux device driver for the OmniVision OV511 USB to camera bridge IC
 -------------------------------------------------------------------------------
 
 Author: Mark McClelland
-Homepage: http://people.delphi.com/mmcclelland/linux/
+Homepage: http://alpha.dyndns.org/ov511
 
 INTRODUCTION:
 
@@ -11,25 +11,41 @@ This is a preliminary version of my OV511 Linux device driver. Currently, it can
 grab a frame in color (YUV420) at 640x480 or 320x240 using either vidcat or
 xawtv. Other utilities may work but have not yet been tested.
 
+NEW IN THIS VERSION:
+ o Preliminary snapshot support
+ o Experimental red-blue misalignment fixes
+ o Better YUV420 color conversion
+ o Module options
+ o Finer-grained debug message control
+ o Support for new cameras (4, 36)
+ o Uses initcalls
+
 SUPPORTED CAMERAS:
-________________________________________________________
-Manufacturer     | Model          | Custom ID | Status
------------------+----------------+-----------+---------
-MediaForte       | MV300          | 0         | Working
-D-Link           | DSB-C300       | 3         | Working
-Puretek          | PT-6007        | 5         | Untested
-Creative Labs    | WebCam 3       | 21        | Working
-Lifeview         | RoboCam        | 100       | Untested
-AverMedia        | InterCam Elite | 102       | Working
-MediaForte       | MV300          | 112       | Working
---------------------------------------------------------
+_________________________________________________________
+Manufacturer     | Model           | Custom ID | Status
+-----------------+-----------------+-----------+---------
+MediaForte       | MV300           | 0         | Working
+Aiptek           | HyperVCam ?     | 0         | Working
+NetView          | NV300M          | 0         | Working
+D-Link           | DSB-C300        | 3         | Working
+Hawking Tech.    | ???             | 3         | Working
+???              | Generic         | 4         | Untested
+Puretek          | PT-6007         | 5         | Working
+Creative Labs    | WebCam 3        | 21        | Working
+???              | Koala-Cam       | 36        | Untested
+Lifeview         | RoboCam         | 100       | Untested
+AverMedia        | InterCam Elite  | 102       | Working
+MediaForte       | MV300           | 112       | Working
+Omnivision       | OV7110 EV board | 112       | Working*
+---------------------------------------------------------
+(*) uses OV7110 (monochrome)
 
 Any camera using the OV511 and the OV7610 CCD should work with this driver. The
 driver only detects known cameras though, based on their custom id number. If
 you have a currently unsupported camera, the ID number should be reported to you
-in the kernel logs. If you have an unsupported camera, please send me the model,
-manufacturer and ID number and I will add it to the detection code. In the
-meantime, you can add to the code yourself in the function ov511_probe()
+in the kernel logs. Please send me the model, manufacturer and ID number and I 
+will add it to the detection code. In the meantime, you can add to the code
+yourself in the function ov511_probe().
 
 WHAT YOU NEED:
 
@@ -44,7 +60,7 @@ HOW TO USE IT:
 
 You must have first compiled USB support, support for your specific USB host
 controller (UHCI or OHCI), and Video4Linux support for your kernel (I recommend
-making them modules.) 
+making them modules.)
 
 Next, (as root) from your appropriate modules directory (lib/modules/2.3.XX):
 
@@ -56,6 +72,14 @@ Next, (as root) from your appropriate modules directory (lib/modules/2.3.XX):
 If it is not already there (it usually is), create the video device:
 
 	mknod /dev/video c 81 0
+
+Sometimes /dev/video is a symlink to /dev/video0
+
+You will have to set permissions on this device to allow you to read/write
+from it:
+
+	chmod 666 /dev/video
+	chmod 666 /dev/video0 (if necessary)
 	
 Now you are ready to run a video app! Both vidcat and xawtv work well for me
 at 640x480.
@@ -83,20 +107,103 @@ Now you should be able to run xawtv. Right click for the options dialog. If
 you get a scrambled image it is likely that you made a mistake in Xawtv.ad.
 Try setting the size to 320x240 if all else fails.
 
+FAQ:
+Q: "Why does the picture have noise and look grainy"
+A: This is a problem at low light levels, and may be also due to subtle bugs in
+   the code. The cause is most likely the OV7610 settings we are currently
+   using. I am looking into this problem.
+
+Q: "The driver sometimes says `Failed to read OV7610 ID.' What is the deal?"
+A: The I2C code that allows the OV511 to communicate with the camera chip is a
+   bit flaky right now. This message means that the I2C bus never got
+   initialized properly, and the camera will most likely not work even if you
+   disable this warning. Try unloading/reloading the driver or unplugging/re-
+   plugging the camera if this happens.
+
+Q: "Why do you bother with this phony camera detection crap? It doesn't do
+    anything useful!"
+A: The main purpose of only supporting known camera models is to force people
+   with new camera models to tell me about them, so I can assemble the list
+   above, and so the code can know what CCD chip you have. Right now, nearly all
+   of the cameras use the OV7610 and consequently I have not put support for
+   other ones in, so the value of the detection code is questionable. Eventually
+   though, new CCDs might appear and we will be fortunate to have the detection.
+
+MODULE PARAMETERS:
+
+  You can set these with:  insmod ov511 NAME=VALUE
+  There is currently no way to set these on a per-camera basis.
+
+  NAME: autoadjust
+  TYPE: integer (boolean)
+  DEFAULT: 1
+  DESC: The camera normally adjusts exposure, gain, and hue automatically. This
+        can be set to 0 to disable this automatic adjustment. Note that there is
+        currently no way to set these parameters manually once autoadjust is
+        disabled. (This feature is not working yet)
+
+  NAME: debug
+  TYPE: integer (0-6)
+  DEFAULT: 3
+  DESC: Sets the threshold for printing debug messages. The higher the value,
+        the more is printed. The levels are cumulative, and are as follows:
+          0=no debug messages
+          1=init/detection/unload and other significant messages
+          2=some warning messages
+          3=config/control function calls
+          4=most function calls and data parsing messages
+          5=highly repetitive mesgs
+
+  NAME: fix_rgb_offset
+  TYPE: integer (boolean)
+  DEFAULT: 0
+  DESC: Some people have reported that the blue component of the image is one
+        or so lines higher than the red component. This is only apparent in 
+        images with white objects on black backgrounds at 640x480. Setting this
+        to 1 will realign the color planes correctly. NOTE: This is still
+        experimental and very buggy.
+
+  NAME: snapshot
+  TYPE: integer (boolean)
+  DEFAULT: 0
+  DESC: Set to 1 to enable snapshot mode. read() will block until the snapshot
+        button is pressed. Note that this does not yet work with most apps,
+        including xawtv and vidcat. NOTE: See the section "TODO" for more info.
+
 WORKING FEATURES:
  o Color streaming/capture at 640x480 and 320x240
  o YUV420 color
+ o Monochrome
  o Setting/getting of saturation, contrast and brightness (no color yet)
 
-WHAT NEEDS TO BE DONE:
+EXPERIMENTAL FEATURES:
+ o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
+   corrupted frames.
+ o Snapshot mode (only works with some read() based apps; see below for more)
 
-The rest of the work will involve implementing support for all the different
-resolutions, color depths, etc. Also, while support for the OV511's proprietary
-lossy compression is apparently not necessary (the code currently disables it,)
-it would be a nice addition as it improves performance quite a bit. OmniVision
-wouldn't tell me how the algorithm works, so we can't really work on that yet.
-Please kindly inform OmniVision that you would like them to release their
-specifications to the Linux community.
+TODO:
+ o Fix the noise / grainy image problem.
+ o Get compression working. It would be a nice addition as it improves
+   frame rate quite a bit. OmniVision wouldn't tell me how the algorithm works,
+   so we can't really work on that yet. Please kindly inform OmniVision that you
+   would like them to release their specifications to the Linux community.
+ o Get 160x120 working
+ o YUV422 (and other color modes)
+ o Fix read(). It only works right now if you run an mmap() based app like xawtv
+   or vidcat after loading the module and before using read(). Apparently there
+   are some initialization issues.
+ o Get snapshot mode working with mmap().
+ o Fix fixFrameRGBoffset(). It is not stable yet with streaming video.
+ o Get hue (red/blue channel balance) adjustment working (in ov511_get_picture()
+   and ov511_set_picture())
+ o Get autoadjust disable working
+ o Devise some clean way to support different types of CCDs (based on Custom ID)
+ o OV511A support
+ o V4L2 support (Probably not until it goes into the kernel)
+ o Fix I2C initialization. Some people are reporting problems with reading the
+   7610 registers. This could be due to timing differences, an excessive I2C
+   clock rate, or a problem with ov511_i2c_read().
+ o Get rid of the memory management functions (put them in videodev.c??)
 
 HOW TO CONTACT ME:
 
@@ -108,4 +215,5 @@ CREDITS:
 The code is based in no small part on the CPiA driver by Johannes Erdfelt,
 Randy Dunlap, and others. Big thanks to them for their pioneering work on that
 and the USB stack. Thanks to Bret Wallach for getting camera reg IO , ISOC, and
-image capture working.
+image capture working. Thanks to Orion Sky Lawlor and Kevin Moore for their
+work as well.
