@@ -28,8 +28,9 @@ patch to Linus Torvalds.  Or you can e-mail me at <mec@shout.net> and
 I'll register one for you.
 
 The second argument to _IO, _IOW, _IOR, or _IOWR is a sequence number
-to distinguish ioctls from each other.  The third argument is the size
-of the structure going into the kernel or coming out of the kernel.
+to distinguish ioctls from each other.  The third argument to _IOW,
+_IOR, or _IOWR is the type of the data going into the kernel or coming
+out of the kernel (e.g.  'int' or 'struct foo').
 
 Some devices use their major number as the identifier; this is OK, as
 long as it is unique.  Some devices are irregular and don't follow any

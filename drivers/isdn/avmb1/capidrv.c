@@ -1,11 +1,21 @@
 /*
- * $Id: capidrv.c,v 1.30 2000/03/03 15:50:42 calle Exp $
+ * $Id: capidrv.c,v 1.32 2000/04/07 15:19:58 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.32  2000/04/07 15:19:58  calle
+ * remove warnings
+ *
+ * Revision 1.31  2000/04/06 15:01:25  calle
+ * Bugfix: crash in capidrv.c when reseting a capi controller.
+ * - changed code order on remove of controller.
+ * - using tq_schedule for notifier in kcapi.c.
+ * - now using spin_lock_irqsave() and spin_unlock_irqrestore().
+ * strange: sometimes even MP hang on unload of isdn.o ...
+ *
  * Revision 1.30  2000/03/03 15:50:42  calle
  * - kernel CAPI:
  *   - Changed parameter "param" in capi_signal from __u32 to void *.
@@ -182,8 +192,8 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.30 $";
-int debugmode = 0;
+static char *revision = "$Revision: 1.32 $";
+static int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
 MODULE_PARM(debugmode, "i");
@@ -291,6 +301,7 @@ typedef struct capidrv_bchan capidrv_bchan;
 /* -------- data definitions ----------------------------------------- */
 
 static capidrv_data global;
+static spinlock_t global_lock = SPIN_LOCK_UNLOCKED;
 static struct capi_interface *capifuncs;
 
 static void handle_dtrace_data(capidrv_contr *card,
@@ -450,33 +461,27 @@ static inline __u8 cip2si2(__u16 cipval)
 
 static inline capidrv_contr *findcontrbydriverid(int driverid)
 {
-	capidrv_contr *p = global.contr_list;
-    	long flags;
+    	unsigned long flags;
+	capidrv_contr *p;
 
-        save_flags(flags);
-        cli();
-	while (p) {
+	spin_lock_irqsave(&global_lock, flags);
+	for (p = global.contr_list; p; p = p->next)
 		if (p->myid == driverid)
 			break;
-		p = p->next;
-	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&global_lock, flags);
 	return p;
 }
 
 static capidrv_contr *findcontrbynumber(__u32 contr)
 {
+	unsigned long flags;
 	capidrv_contr *p = global.contr_list;
-	long flags;
 
-	save_flags(flags);
-	cli();
-	while (p) {
+	spin_lock_irqsave(&global_lock, flags);
+	for (p = global.contr_list; p; p = p->next)
 		if (p->contrnr == contr)
 			break;
-		p = p->next;
-	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&global_lock, flags);
 	return p;
 }
 
@@ -1564,47 +1569,41 @@ static void capidrv_signal(__u16 applid, void *dummy)
 static void handle_dtrace_data(capidrv_contr *card,
 			     int send, int level2, __u8 *data, __u16 len)
 {
-    long flags;
-    __u8 *p, *end;
-    isdn_ctrl cmd;
+    	__u8 *p, *end;
+    	isdn_ctrl cmd;
 
-    if (!len) {
-       printk(KERN_DEBUG "capidrv-%d: avmb1_q931_data: len == %d\n",
+    	if (!len) {
+		printk(KERN_DEBUG "capidrv-%d: avmb1_q931_data: len == %d\n",
 				card->contrnr, len);
-       return;
-    }
+		return;
+	}
 
-    save_flags(flags);
-    cli();
+	if (level2) {
+		PUTBYTE_TO_STATUS(card, 'D');
+		PUTBYTE_TO_STATUS(card, '2');
+        	PUTBYTE_TO_STATUS(card, send ? '>' : '<');
+        	PUTBYTE_TO_STATUS(card, ':');
+	} else {
+        	PUTBYTE_TO_STATUS(card, 'D');
+        	PUTBYTE_TO_STATUS(card, '3');
+        	PUTBYTE_TO_STATUS(card, send ? '>' : '<');
+        	PUTBYTE_TO_STATUS(card, ':');
+    	}
 
-    if (level2) {
-        PUTBYTE_TO_STATUS(card, 'D');
-        PUTBYTE_TO_STATUS(card, '2');
-        PUTBYTE_TO_STATUS(card, send ? '>' : '<');
-        PUTBYTE_TO_STATUS(card, ':');
-    } else {
-        PUTBYTE_TO_STATUS(card, 'D');
-        PUTBYTE_TO_STATUS(card, '3');
-        PUTBYTE_TO_STATUS(card, send ? '>' : '<');
-        PUTBYTE_TO_STATUS(card, ':');
-    }
+	for (p = data, end = data+len; p < end; p++) {
+		__u8 w;
+		PUTBYTE_TO_STATUS(card, ' ');
+		w = (*p >> 4) & 0xf;
+		PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
+		w = *p & 0xf;
+		PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
+	}
+	PUTBYTE_TO_STATUS(card, '\n');
 
-    for (p = data, end = data+len; p < end; p++) {
-       __u8 w;
-       PUTBYTE_TO_STATUS(card, ' ');
-       w = (*p >> 4) & 0xf;
-       PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
-       w = *p & 0xf;
-       PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
-    }
-    PUTBYTE_TO_STATUS(card, '\n');
-
-    restore_flags(flags);
-    
-    cmd.command = ISDN_STAT_STAVAIL;
-    cmd.driver = card->myid;
-    cmd.arg = len*3+5;
-    card->interface.statcallb(&cmd);
+	cmd.command = ISDN_STAT_STAVAIL;
+	cmd.driver = card->myid;
+	cmd.arg = len*3+5;
+	card->interface.statcallb(&cmd);
 }
 
 /* ------------------------------------------------------------------- */
@@ -2009,8 +2008,8 @@ static int if_command(isdn_ctrl * c)
 		return capidrv_command(c, card);
 
 	printk(KERN_ERR
-	     "capidrv-%d: if_command %d called with invalid driverId %d!\n",
-	       card->contrnr, c->command, c->driver);
+	     "capidrv: if_command %d called with invalid driverId %d!\n",
+						c->command, c->driver);
 	return -ENODEV;
 }
 
@@ -2297,12 +2296,11 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	}
 	card->myid = card->interface.channels;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&global_lock, flags);
 	card->next = global.contr_list;
 	global.contr_list = card;
 	global.ncontr++;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&global_lock, flags);
 
 	memset(card->bchans, 0, sizeof(capidrv_bchan) * card->nbchan);
 	for (i = 0; i < card->nbchan; i++) {
@@ -2333,25 +2331,22 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 static int capidrv_delcontr(__u16 contr)
 {
 	capidrv_contr **pp, *card;
+	unsigned long flags;
 	isdn_ctrl cmd;
-	long flags;
-	int i;
 
-	save_flags(flags);
-	cli();
-	for (pp = &global.contr_list; *pp; pp = &(*pp)->next) {
-		if ((*pp)->contrnr == contr)
+	spin_lock_irqsave(&global_lock, flags);
+	for (card = global.contr_list; card; card = card->next) {
+		if (card->contrnr == contr)
 			break;
 	}
-	if (!*pp) {
-		restore_flags(flags);
+	if (!card) {
+		spin_unlock_irqrestore(&global_lock, flags);
 		printk(KERN_ERR "capidrv: delcontr: no contr %u\n", contr);
 		return -1;
 	}
-	card = *pp;
-	*pp = (*pp)->next;
-	global.ncontr--;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&global_lock, flags);
+
+	del_timer(&card->listentimer);
 
 	if (debugmode)
 		printk(KERN_DEBUG "capidrv-%d: id=%d unloading\n",
@@ -2361,27 +2356,50 @@ static int capidrv_delcontr(__u16 contr)
 	cmd.driver = card->myid;
 	card->interface.statcallb(&cmd);
 
-	for (i = 0; i < card->nbchan; i++) {
+	while (card->nbchan) {
 
 		cmd.command = ISDN_STAT_DISCH;
 		cmd.driver = card->myid;
-		cmd.arg = i;
+		cmd.arg = card->nbchan-1;
 	        cmd.parm.num[0] = 0;
+		if (debugmode)
+			printk(KERN_DEBUG "capidrv-%d: id=%d disable chan=%ld\n",
+					card->contrnr, card->myid, cmd.arg);
 		card->interface.statcallb(&cmd);
 
-		if (card->bchans[i].nccip)
-			free_ncci(card, card->bchans[i].nccip);
-		if (card->bchans[i].plcip)
-			free_plci(card, card->bchans[i].plcip);
+		if (card->bchans[card->nbchan-1].nccip)
+			free_ncci(card, card->bchans[card->nbchan-1].nccip);
+		if (card->bchans[card->nbchan-1].plcip)
+			free_plci(card, card->bchans[card->nbchan-1].plcip);
 		if (card->plci_list)
 			printk(KERN_ERR "capidrv: bug in free_plci()\n");
+		card->nbchan--;
 	}
 	kfree(card->bchans);
-	del_timer(&card->listentimer);
+	card->bchans = 0;
+
+	if (debugmode)
+		printk(KERN_DEBUG "capidrv-%d: id=%d isdn unload\n",
+					card->contrnr, card->myid);
 
 	cmd.command = ISDN_STAT_UNLOAD;
 	cmd.driver = card->myid;
 	card->interface.statcallb(&cmd);
+
+	if (debugmode)
+		printk(KERN_DEBUG "capidrv-%d: id=%d remove contr from list\n",
+					card->contrnr, card->myid);
+
+	spin_lock_irqsave(&global_lock, flags);
+	for (pp = &global.contr_list; *pp; pp = &(*pp)->next) {
+		if (*pp == card) {
+			*pp = (*pp)->next;
+			card->next = 0;
+			global.ncontr--;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&global_lock, flags);
 
 	kfree(card);
 
@@ -2539,12 +2557,10 @@ int capidrv_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	capidrv_contr *card, *next;
-	long flags;
 	char rev[10];
 	char *p;
 
-	if ((p = strchr(revision, ':'))) {
+	if ((p = strchr(revision, ':')) != 0) {
 		strcpy(rev, p + 1);
 		p = strchr(rev, '$');
 		*p = 0;
@@ -2552,21 +2568,10 @@ void cleanup_module(void)
 		strcpy(rev, " ??? ");
 	}
 
-	for (card = global.contr_list; card; card = next) {
-		next = card->next;
-		disable_dchannel_trace(card);
-	}
-
-    	save_flags(flags);
-    	cli();
-	for (card = global.contr_list; card; card = next) {
-		next = card->next;
-		capidrv_delcontr(card->contrnr);
-	}
-	restore_flags(flags);
-
 	(void) (*capifuncs->capi_release) (global.appid);
+
 	detach_capi_interface(&cuser);
+
 	proc_exit();
 
 	printk(KERN_NOTICE "capidrv: Rev%s: unloaded\n", rev);

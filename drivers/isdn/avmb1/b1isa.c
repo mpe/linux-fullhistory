@@ -1,11 +1,15 @@
 /*
- * $Id: b1isa.c,v 1.7 2000/02/02 18:36:03 calle Exp $
+ * $Id: b1isa.c,v 1.8 2000/04/03 13:29:24 calle Exp $
  * 
  * Module for AVM B1 ISA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1isa.c,v $
+ * Revision 1.8  2000/04/03 13:29:24  calle
+ * make Tim Waugh happy (module unload races in 2.3.99-pre3).
+ * no real problem there, but now it is much cleaner ...
+ *
  * Revision 1.7  2000/02/02 18:36:03  calle
  * - Modules are now locked while init_module is running
  * - fixed problem with memory mapping if address is not aligned
@@ -69,7 +73,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.7 $";
+static char *revision = "$Revision: 1.8 $";
 
 /* ------------------------------------------------------------- */
 
@@ -265,6 +269,9 @@ int b1isa_init(void)
 {
 	struct capi_driver *driver = &b1isa_driver;
 	char *p;
+	int retval = 0;
+
+	MOD_INC_USE_COUNT;
 
 	if ((p = strchr(revision, ':'))) {
 		strncpy(driver->revision, p + 1, sizeof(driver->revision));
@@ -279,9 +286,10 @@ int b1isa_init(void)
 	if (!di) {
 		printk(KERN_ERR "%s: failed to attach capi_driver\n",
 				driver->name);
-		return -EIO;
+		retval = -EIO;
 	}
-	return 0;
+	MOD_DEC_USE_COUNT;
+	return retval;
 }
 
 #ifdef MODULE

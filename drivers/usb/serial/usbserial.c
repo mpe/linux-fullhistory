@@ -997,235 +997,231 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_bulk_out = 0;
 	int num_ports;
 	
-	/* loop through our list of known serial converters, and see if this device matches */
-	device_num = 0;
-	while (usb_serial_devices[device_num] != NULL) {
+	/* loop through our list of known serial converters, and see if this
+           device matches. */
+	for (device_num = 0; usb_serial_devices[device_num]; device_num++) {
 		type = usb_serial_devices[device_num];
-		dbg ("Looking at %s Vendor id=%.4x Product id=%.4x", type->name, *(type->idVendor), *(type->idProduct));
+		dbg ("Looking at %s Vendor id=%.4x Product id=%.4x", 
+		     type->name, *(type->idVendor), *(type->idProduct));
 
 		/* look at the device descriptor */
 		if ((dev->descriptor.idVendor == *(type->idVendor)) &&
 		    (dev->descriptor.idProduct == *(type->idProduct))) {
+			dbg("descriptor matches");
+			break;
+		}
+	}
+	if (!usb_serial_devices[device_num]) {
+		/* no match */
+		dbg("none matched");
+		return(NULL);
+	}
 
-			dbg("descriptor matches...looking at the endpoints");
-
-			/* descriptor matches, let's try to find the endpoints needed */
-			interrupt_pipe = bulk_in_pipe = bulk_out_pipe = HAS_NOT;
+	/* descriptor matches, let's find the endpoints needed */
+	interrupt_pipe = bulk_in_pipe = bulk_out_pipe = HAS_NOT;
 			
-			/* check out the endpoints */
-			interface = &dev->actconfig->interface[ifnum].altsetting[0];
-			for (i = 0; i < interface->bNumEndpoints; ++i) {
-				endpoint = &interface->endpoint[i];
+	/* check out the endpoints */
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
+	for (i = 0; i < interface->bNumEndpoints; ++i) {
+		endpoint = &interface->endpoint[i];
 		
-				if ((endpoint->bEndpointAddress & 0x80) &&
-				    ((endpoint->bmAttributes & 3) == 0x02)) {
-					/* we found a bulk in endpoint */
-					dbg("found bulk in");
-					bulk_in_pipe = HAS;
-					bulk_in_endpoint[num_bulk_in] = endpoint;
-					++num_bulk_in;
-				}
+		if ((endpoint->bEndpointAddress & 0x80) &&
+		    ((endpoint->bmAttributes & 3) == 0x02)) {
+			/* we found a bulk in endpoint */
+			dbg("found bulk in");
+			bulk_in_pipe = HAS;
+			bulk_in_endpoint[num_bulk_in] = endpoint;
+			++num_bulk_in;
+		}
 
-				if (((endpoint->bEndpointAddress & 0x80) == 0x00) &&
-				    ((endpoint->bmAttributes & 3) == 0x02)) {
-					/* we found a bulk out endpoint */
-					dbg("found bulk out");
-					bulk_out_pipe = HAS;
-					bulk_out_endpoint[num_bulk_out] = endpoint;
-					++num_bulk_out;
-				}
+		if (((endpoint->bEndpointAddress & 0x80) == 0x00) &&
+		    ((endpoint->bmAttributes & 3) == 0x02)) {
+			/* we found a bulk out endpoint */
+			dbg("found bulk out");
+			bulk_out_pipe = HAS;
+			bulk_out_endpoint[num_bulk_out] = endpoint;
+			++num_bulk_out;
+		}
 		
-				if ((endpoint->bEndpointAddress & 0x80) &&
-				    ((endpoint->bmAttributes & 3) == 0x03)) {
-					/* we found a interrupt in endpoint */
-					dbg("found interrupt in");
-					interrupt_pipe = HAS;
-					interrupt_in_endpoint[num_interrupt_in] = endpoint;
-					++num_interrupt_in;
-				}
-
-			}
+		if ((endpoint->bEndpointAddress & 0x80) &&
+		    ((endpoint->bmAttributes & 3) == 0x03)) {
+			/* we found a interrupt in endpoint */
+			dbg("found interrupt in");
+			interrupt_pipe = HAS;
+			interrupt_in_endpoint[num_interrupt_in] = endpoint;
+			++num_interrupt_in;
+		}
+	}
 	
-			/* verify that we found all of the endpoints that we need */
-			if ((interrupt_pipe & type->needs_interrupt_in) &&
-			    (bulk_in_pipe & type->needs_bulk_in) &&
-			    (bulk_out_pipe & type->needs_bulk_out)) {
-				/* found all that we need */
-				MOD_INC_USE_COUNT;
-				info("%s converter detected", type->name);
+	/* verify that we found all of the endpoints that we need */
+	if (!((interrupt_pipe & type->needs_interrupt_in) &&
+	      (bulk_in_pipe & type->needs_bulk_in) &&
+	      (bulk_out_pipe & type->needs_bulk_out))) {
+		/* nope, they don't match what we expected */
+		info("descriptors matched, but endpoints did not");
+		return NULL;
+	}
+
+	/* found all that we need */
+	MOD_INC_USE_COUNT;
+	info("%s converter detected", type->name);
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
-				if (type == &generic_device)
-					num_ports = num_bulk_out;
-				else
+	if (type == &generic_device)
+		num_ports = num_bulk_out;
+	else
 #endif
-					num_ports = type->num_ports;
+		num_ports = type->num_ports;
 
-				serial = get_free_serial (num_ports, &minor);
-				if (serial == NULL) {
-					err("No more free serial devices");
-					MOD_DEC_USE_COUNT;
-					return NULL;
-				}
-	
-			       	serial->dev = dev;
-				serial->type = type;
-				serial->minor = minor;
-				serial->num_ports = num_ports;
-				serial->num_bulk_in = num_bulk_in;
-				serial->num_bulk_out = num_bulk_out;
-				serial->num_interrupt_in = num_interrupt_in;
-
-				/* initialize a tty_driver for this device */
-				serial->tty_driver = usb_serial_tty_driver_init (serial);
-				if (serial->tty_driver == NULL) {
-					err("Can't create a tty_serial_driver");
-					goto probe_error;
-				}
-
-				if (tty_register_driver (serial->tty_driver)) {
-					err("failed to register tty driver");
-					goto probe_error;
-				}
-
-				/* collect interrupt_in endpoints now, because
-				   the keyspan_pda startup function needs
-				   to know about them */
-				for (i = 0; i < num_interrupt_in; ++i) {
-					port = &serial->port[i];
-					buffer_size = interrupt_in_endpoint[i]->wMaxPacketSize;
-					port->interrupt_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
-					if (!port->interrupt_in_buffer) {
-						err("Couldn't allocate interrupt_in_buffer");
-						goto probe_error;
-					}
-					port->interrupt_in_endpoint = interrupt_in_endpoint[i];
-				}
-
-				/* if this device type has a startup function, call it */
-				if (type->startup) {
-					if (type->startup (serial)) {
-						goto probe_error;
-					}
-				}
-
-				/* set up the endpoint information */
-				for (i = 0; i < num_bulk_in; ++i) {
-					port = &serial->port[i];
-					port->read_urb = usb_alloc_urb (0);
-					if (!port->read_urb) {
-						err("No free urbs available");
-						goto probe_error;
-					}
-					buffer_size = bulk_in_endpoint[i]->wMaxPacketSize;
-					port->bulk_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
-					if (!port->bulk_in_buffer) {
-						err("Couldn't allocate bulk_in_buffer");
-						goto probe_error;
-					}
-					if (serial->type->read_bulk_callback) {
-						FILL_BULK_URB(port->read_urb, dev, usb_rcvbulkpipe (dev, bulk_in_endpoint[i]->bEndpointAddress),
-								port->bulk_in_buffer, buffer_size, serial->type->read_bulk_callback, port);
-					} else {
-						FILL_BULK_URB(port->read_urb, dev, usb_rcvbulkpipe (dev, bulk_in_endpoint[i]->bEndpointAddress),
-								port->bulk_in_buffer, buffer_size, generic_read_bulk_callback, port);
-					}
-				}
-
-				for (i = 0; i < num_bulk_out; ++i) {
-					port = &serial->port[i];
-					port->write_urb = usb_alloc_urb(0);
-					if (!port->write_urb) {
-						err("No free urbs available");
-						goto probe_error;
-					}
-					port->bulk_out_size = bulk_out_endpoint[i]->wMaxPacketSize;
-					port->bulk_out_buffer = kmalloc (port->bulk_out_size, GFP_KERNEL);
-					if (!port->bulk_out_buffer) {
-						err("Couldn't allocate bulk_out_buffer");
-						goto probe_error;
-					}
-					if (serial->type->write_bulk_callback) {
-						FILL_BULK_URB(port->write_urb, dev, usb_sndbulkpipe (dev, bulk_out_endpoint[i]->bEndpointAddress),
-								port->bulk_out_buffer, port->bulk_out_size, serial->type->write_bulk_callback, port);
-					} else {
-						FILL_BULK_URB(port->write_urb, dev, usb_sndbulkpipe (dev, bulk_out_endpoint[i]->bEndpointAddress),
-								port->bulk_out_buffer, port->bulk_out_size, generic_write_bulk_callback, port);
-					}
-				}
-
-#if 0 /* use this code when WhiteHEAT is up and running */
-				for (i = 0; i < num_interrupt_in; ++i) {
-					port = &serial->port[i];
-					port->control_urb = usb_alloc_urb(0);
-					if (!port->control_urb) {
-						err("No free urbs available");
-						goto probe_error;
-					}
-					buffer_size = interrupt_in_endpoint[i]->wMaxPacketSize;
-					port->interrupt_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
-					if (!port->interrupt_in_buffer) {
-						err("Couldn't allocate interrupt_in_buffer");
-						goto probe_error;
-					}
-					FILL_INT_URB(port->control_urb, dev, usb_rcvintpipe (dev, interrupt_in_endpoint[i]->bEndpointAddress),
-							port->interrupt_in_buffer, buffer_size, serial_control_irq,
-							port, interrupt_in_endpoint[i]->bInterval);
-				}
-#endif
-
-				for (i = 0; i < serial->num_ports; ++i) {
-					info("%s converter now attached to ttyUSB%d", type->name, serial->minor + i);
-				}
-
-				return serial;
-			} else {
-				info("descriptors matched, but endpoints did not");
-			}
-		}
-
-		/* look at the next type in our list */
-		++device_num;
+	serial = get_free_serial (num_ports, &minor);
+	if (serial == NULL) {
+		err("No more free serial devices");
+		MOD_DEC_USE_COUNT;
+		return NULL;
 	}
+	
+	serial->dev = dev;
+	serial->type = type;
+	serial->minor = minor;
+	serial->num_ports = num_ports;
+	serial->num_bulk_in = num_bulk_in;
+	serial->num_bulk_out = num_bulk_out;
+	serial->num_interrupt_in = num_interrupt_in;
+
+	/* initialize a tty_driver for this device */
+	serial->tty_driver = usb_serial_tty_driver_init (serial);
+	if (serial->tty_driver == NULL) {
+		err("Can't create a tty_serial_driver");
+		goto probe_error;
+	}
+
+	if (tty_register_driver (serial->tty_driver)) {
+		err("failed to register tty driver");
+		goto probe_error;
+	}
+	
+	/* if this device type has a startup function, call it */
+	if (type->startup) {
+		if (type->startup (serial)) {
+			goto probe_error;
+		}
+	}
+
+	/* set up the endpoint information */
+	for (i = 0; i < num_bulk_in; ++i) {
+		endpoint = bulk_in_endpoint[i];
+		port = &serial->port[i];
+		port->read_urb = usb_alloc_urb (0);
+		if (!port->read_urb) {
+			err("No free urbs available");
+			goto probe_error;
+		}
+		buffer_size = endpoint->wMaxPacketSize;
+		port->bulk_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
+		if (!port->bulk_in_buffer) {
+			err("Couldn't allocate bulk_in_buffer");
+			goto probe_error;
+		}
+		FILL_BULK_URB(port->read_urb, dev, 
+			      usb_rcvbulkpipe(dev, endpoint->bEndpointAddress),
+			      port->bulk_in_buffer, buffer_size, 
+			      ((serial->type->read_bulk_callback) ?
+			       serial->type->read_bulk_callback :
+			       generic_read_bulk_callback), 
+			      port);
+	}
+
+	for (i = 0; i < num_bulk_out; ++i) {
+		endpoint = bulk_out_endpoint[i];
+		port = &serial->port[i];
+		port->write_urb = usb_alloc_urb(0);
+		if (!port->write_urb) {
+			err("No free urbs available");
+			goto probe_error;
+		}
+		buffer_size = endpoint->wMaxPacketSize;
+		port->bulk_out_size = buffer_size;
+		port->bulk_out_buffer = kmalloc (buffer_size, GFP_KERNEL);
+		if (!port->bulk_out_buffer) {
+			err("Couldn't allocate bulk_out_buffer");
+			goto probe_error;
+		}
+		FILL_BULK_URB(port->write_urb, dev, 
+			      usb_sndbulkpipe(dev, endpoint->bEndpointAddress),
+			      port->bulk_out_buffer, buffer_size,
+			      ((serial->type->write_bulk_callback) ? 
+			       serial->type->write_bulk_callback : 
+			       generic_write_bulk_callback), 
+			      port);
+	}
+
+	for (i = 0; i < num_interrupt_in; ++i) {
+		endpoint = interrupt_in_endpoint[i];
+		port = &serial->port[i];
+		port->interrupt_in_urb = usb_alloc_urb(0);
+		if (!port->interrupt_in_urb) {
+			err("No free urbs available");
+			goto probe_error;
+		}
+		buffer_size = endpoint->wMaxPacketSize;
+		port->interrupt_in_buffer = kmalloc (buffer_size, GFP_KERNEL);
+		if (!port->interrupt_in_buffer) {
+			err("Couldn't allocate interrupt_in_buffer");
+			goto probe_error;
+		}
+		FILL_INT_URB(port->interrupt_in_urb, dev, 
+			     usb_rcvintpipe(dev, endpoint->bEndpointAddress),
+			     port->interrupt_in_buffer, buffer_size, 
+			     serial->type->read_int_callback,
+			     port, 
+			     endpoint->bInterval);
+	}
+
+
+	for (i = 0; i < serial->num_ports; ++i) {
+		info("%s converter now attached to ttyUSB%d", 
+		     type->name, serial->minor + i);
+	}
+	
+	return serial; /* success */
+
 
 probe_error:
-	if (serial) {
-		for (i = 0; i < num_bulk_in; ++i) {
-			port = &serial->port[i];
-			if (port->read_urb)
-				usb_free_urb (port->read_urb);
-			if (serial->port[i].bulk_in_buffer[i])
-				kfree (serial->port[i].bulk_in_buffer);
-		}
-		for (i = 0; i < num_bulk_out; ++i) {
-			port = &serial->port[i];
-			if (port->write_urb)
-				usb_free_urb (port->write_urb);
-			if (serial->port[i].bulk_out_buffer)
-				kfree (serial->port[i].bulk_out_buffer);
-		}
-		for (i = 0; i < num_interrupt_in; ++i) {
-			port = &serial->port[i];
-			if (port->control_urb)
-				usb_free_urb (port->control_urb);
-			if (serial->port[i].interrupt_in_buffer)
-				kfree (serial->port[i].interrupt_in_buffer);
-		}
-		
-		/* return the minor range that this device had */
-		return_serial (serial);
-
-		/* if this device has a tty_driver, then unregister it and free it */
-		if (serial->tty_driver) {
-			tty_unregister_driver (serial->tty_driver);
-			kfree (serial->tty_driver);
-			serial->tty_driver = NULL;
-		}
-
-		/* free up any memory that we allocated */
-		kfree (serial);
-		MOD_DEC_USE_COUNT;
+	for (i = 0; i < num_bulk_in; ++i) {
+		port = &serial->port[i];
+		if (port->read_urb)
+			usb_free_urb (port->read_urb);
+		if (port->bulk_in_buffer)
+			kfree (port->bulk_in_buffer);
 	}
+	for (i = 0; i < num_bulk_out; ++i) {
+		port = &serial->port[i];
+		if (port->write_urb)
+			usb_free_urb (port->write_urb);
+		if (port->bulk_out_buffer)
+			kfree (port->bulk_out_buffer);
+	}
+	for (i = 0; i < num_interrupt_in; ++i) {
+		port = &serial->port[i];
+		if (port->interrupt_in_urb)
+			usb_free_urb (port->interrupt_in_urb);
+		if (port->interrupt_in_buffer)
+			kfree (port->interrupt_in_buffer);
+	}
+		
+	/* return the minor range that this device had */
+	return_serial (serial);
+
+	/* if this device has a tty_driver, then unregister it and free it */
+	if (serial->tty_driver) {
+		tty_unregister_driver (serial->tty_driver);
+		kfree (serial->tty_driver);
+		serial->tty_driver = NULL;
+	}
+
+	/* free up any memory that we allocated */
+	kfree (serial);
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -1237,6 +1233,9 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 	int i;
 
 	if (serial) {
+		if (serial->type->shutdown)
+			serial->type->shutdown(serial);
+
 		for (i = 0; i < serial->num_ports; ++i)
 			serial->port[i].active = 0;
 
@@ -1260,9 +1259,9 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 		}
 		for (i = 0; i < serial->num_interrupt_in; ++i) {
 			port = &serial->port[i];
-			if (port->control_urb) {
-				usb_unlink_urb (port->control_urb);
-				usb_free_urb (port->control_urb);
+			if (port->interrupt_in_urb) {
+				usb_unlink_urb (port->interrupt_in_urb);
+				usb_free_urb (port->interrupt_in_urb);
 			}
 			if (port->interrupt_in_buffer)
 				kfree (port->interrupt_in_buffer);

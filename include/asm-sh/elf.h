@@ -69,8 +69,7 @@ typedef struct user_fpu_struct elf_fpregset_t;
        _r->regs[12]=0; _r->regs[13]=0; _r->regs[14]=0; } while (0)
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ex, ibcs2) \
-	current->personality = PER_LINUX_32BIT
+#define SET_PERSONALITY(ex, ibcs2) set_personality(PER_LINUX_32BIT)
 #endif
 
 #endif /* __ASM_SH_ELF_H */

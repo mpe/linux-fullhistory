@@ -668,19 +668,8 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (interpreter_type != INTERPRETER_AOUT)
 		sys_close(elf_exec_fileno);
 
-	put_exec_domain(current->exec_domain);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
-	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &elf_format;
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
+	set_binfmt(&elf_format);
 
-#ifndef VM_STACK_FLAGS
-	lock_kernel();
-	current->executable = dget(bprm->file->f_dentry);
-	unlock_kernel();
-#endif
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long)

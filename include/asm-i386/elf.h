@@ -94,8 +94,7 @@ typedef struct user_i387_struct elf_fpregset_t;
 #define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+((boot_cpu_data.x86-3)*5))
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ex, ibcs2) \
-	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)
 #endif
 
 #endif

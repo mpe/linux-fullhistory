@@ -410,7 +410,7 @@ extern __inline__ int parport_yield(struct pardevice *dev)
 }
 
 /**
- * parport_yield - relinquish a parallel port temporarily
+ * parport_yield_blocking - relinquish a parallel port temporarily
  * @dev: a device on the parallel port
  *
  * This function relinquishes the port if it would be helpful to other

@@ -54,7 +54,8 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 	unsigned long retval, ret_type;
 
 	lock_kernel();
-	current->personality = PER_SVR4;
+	/* Do we need it here? */
+	set_personality(PER_SVR4);
 	if (flags & MAP_NORESERVE) {
 		static int cnt = 0;
 		
@@ -719,11 +720,7 @@ asmlinkage int do_sol_unimplemented(struct pt_regs *regs)
 
 asmlinkage void solaris_register(void)
 {
-	lock_kernel();
-	current->personality = PER_SVR4;
-	put_exec_domain(current->exec_domain);
-	current->exec_domain = lookup_exec_domain(current->personality);
-	unlock_kernel();
+	set_personality(PER_SVR4);
 }
 
 extern long solaris_to_linux_signals[], linux_to_solaris_signals[];

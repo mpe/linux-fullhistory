@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.8 1999/08/11 21:01:33 keil Exp $
+/* $Id: niccy.c,v 1.10 2000/04/11 11:12:39 keil Exp $
 
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -8,6 +8,12 @@
  * Thanks to Dr. Neuhaus and SAGEM for informations
  *
  * $Log: niccy.c,v $
+ * Revision 1.10  2000/04/11 11:12:39  keil
+ * cleanup
+ *
+ * Revision 1.9  2000/04/09 19:09:19  keil
+ * Bugfix: reset IRQ enable only valid for PCI version
+ *
  * Revision 1.8  1999/08/11 21:01:33  keil
  * new PCI codefix
  *
@@ -42,7 +48,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.8 $";
+const char *niccy_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -228,12 +234,13 @@ release_io_niccy(struct IsdnCardState *cs)
 static void
 niccy_reset(struct IsdnCardState *cs)
 {
-	int val, nval;
-	
-	val = inl(cs->hw.niccy.cfg_reg + PCI_IRQ_CTRL_REG);
-	nval = val | PCI_IRQ_ENABLE;
-	outl(nval, cs->hw.niccy.cfg_reg + PCI_IRQ_CTRL_REG);
+	if (cs->subtyp == NICCY_PCI) {
+		int val;
 
+		val = inl(cs->hw.niccy.cfg_reg + PCI_IRQ_CTRL_REG);
+		val |= PCI_IRQ_ENABLE;
+		outl(val, cs->hw.niccy.cfg_reg + PCI_IRQ_CTRL_REG);
+	}
 	inithscxisac(cs, 3);
 }
 

@@ -1,11 +1,14 @@
 /*
- * $Id: b1dma.c,v 1.3 2000/02/26 01:00:53 keil Exp $
+ * $Id: b1dma.c,v 1.4 2000/04/03 16:38:05 calle Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.4  2000/04/03 16:38:05  calle
+ * made suppress_pollack static.
+ *
  * Revision 1.3  2000/02/26 01:00:53  keil
  * changes from 2.3.47
  *
@@ -34,7 +37,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.3 $";
+static char *revision = "$Revision: 1.4 $";
 
 /* ------------------------------------------------------------- */
 

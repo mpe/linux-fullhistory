@@ -153,7 +153,7 @@ struct usb_serial_device_type ftdi_sio_device = {
 /* do some startup allocations not currently performed by usb_serial_probe() */
 static int ftdi_sio_startup (struct usb_serial *serial)
 {
-	init_waitqueue_head(&serial->write_wait);
+	init_waitqueue_head(&serial->port[0].write_wait);
 	
 	return (0);
 }
@@ -291,7 +291,7 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 		/* Was seeing a race here, got a read callback, then write callback before
 		   hitting interuptible_sleep_on  - so wrapping in add_wait_queue stuff */
 
-		add_wait_queue(&serial->write_wait, &wait);
+		add_wait_queue(&port->write_wait, &wait);
 		set_current_state (TASK_INTERRUPTIBLE);
 		while (port->write_urb->status == -EINPROGRESS) {
 			dbg("ftdi_sio - write in progress - retrying");
@@ -301,13 +301,13 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 			}
 			if (signal_pending(current)) {
 				current->state = TASK_RUNNING;
-				remove_wait_queue(&serial->write_wait, &wait);				
+				remove_wait_queue(&port->write_wait, &wait);
 				rc = -ERESTARTSYS;
 				goto err;
 			}
 			schedule();
 		}		
-		remove_wait_queue(&serial->write_wait, &wait);
+		remove_wait_queue(&port->write_wait, &wait);
 		set_current_state(TASK_RUNNING);
 
 		count += data_offset;
@@ -388,7 +388,7 @@ static void ftdi_sio_write_bulk_callback (struct urb *urb)
 		return;
 	}
 
-	wake_up_interruptible(&serial->write_wait);
+	wake_up_interruptible(&port->write_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 

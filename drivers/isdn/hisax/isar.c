@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.10 2000/02/26 00:35:13 keil Exp $
+/* $Id: isar.c,v 1.11 2000/04/09 19:02:44 keil Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: isar.c,v $
+ * Revision 1.11  2000/04/09 19:02:44  keil
+ * retry pump modulation settings if it fails
+ *
  * Revision 1.10  2000/02/26 00:35:13  keil
  * Fix skb freeing in interrupt context
  *
@@ -1085,13 +1088,14 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 						break;
 					case PCTRL_CMD_FRH:
 					case PCTRL_CMD_FRM:
-						p1 = bcs->hw.isar.newmod;
+						p1 = bcs->hw.isar.mod = bcs->hw.isar.newmod;
 						bcs->hw.isar.newmod = 0;
 						bcs->hw.isar.cmd = bcs->hw.isar.newcmd;
 						bcs->hw.isar.newcmd = 0;
 						sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
 							bcs->hw.isar.cmd, 1, &p1);
 						bcs->hw.isar.state = STFAX_LINE;
+						bcs->hw.isar.try_mod = 3;
 						break;
 					default:
 						if (cs->debug & L1_DEB_HSCX)
@@ -1117,13 +1121,14 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 			if (cs->debug & L1_DEB_HSCX)
 				debugl1(cs, "pump stev RSP_SILDET");
 			if (bcs->hw.isar.state == STFAX_SILDET) {
-				p1 = bcs->hw.isar.newmod;
+				p1 = bcs->hw.isar.mod = bcs->hw.isar.newmod;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.cmd = bcs->hw.isar.newcmd;
 				bcs->hw.isar.newcmd = 0;
 				sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
 					bcs->hw.isar.cmd, 1, &p1);
 				bcs->hw.isar.state = STFAX_LINE;
+				bcs->hw.isar.try_mod = 3;
 			}
 			break;
 		case PSEV_RSP_SILOFF:
@@ -1131,6 +1136,17 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 				debugl1(cs, "pump stev RSP_SILOFF");
 			break;
 		case PSEV_RSP_FCERR:
+			if (bcs->hw.isar.state == STFAX_LINE) {
+				if (cs->debug & L1_DEB_HSCX)
+					debugl1(cs, "pump stev RSP_FCERR try %d",
+						bcs->hw.isar.try_mod);
+				if (bcs->hw.isar.try_mod--) {
+					sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
+						bcs->hw.isar.cmd, 1,
+						&bcs->hw.isar.mod);
+					break;
+				}
+			}
 			if (cs->debug & L1_DEB_HSCX)
 				debugl1(cs, "pump stev RSP_FCERR");
 			bcs->hw.isar.state = STFAX_ESCAPE;
@@ -1441,6 +1457,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FTM) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1463,6 +1480,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FTH) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1485,6 +1503,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FRM) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1507,6 +1526,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FRH) &&
 				(bcs->hw.isar.mod == para)) {

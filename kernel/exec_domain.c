@@ -32,9 +32,7 @@ static asmlinkage void no_lcall7(int segment, struct pt_regs * regs)
    * personality set incorrectly.  Check to see whether SVr4 is available,
    * and use it, otherwise give the user a SEGV.
    */
-	put_exec_domain(current->exec_domain);
-	current->personality = PER_SVR4;
-	current->exec_domain = lookup_exec_domain(current->personality);
+	set_personality(PER_SVR4);
 
 	if (current->exec_domain && current->exec_domain->handler
 	&& current->exec_domain->handler != no_lcall7) {
@@ -45,7 +43,7 @@ static asmlinkage void no_lcall7(int segment, struct pt_regs * regs)
 	send_sig(SIGSEGV, current, 1);
 }
 
-struct exec_domain *lookup_exec_domain(unsigned long personality)
+static struct exec_domain *lookup_exec_domain(unsigned long personality)
 {
 	unsigned long pers = personality & PER_MASK;
 	struct exec_domain *it;
@@ -104,28 +102,26 @@ int unregister_exec_domain(struct exec_domain *it)
 	return -EINVAL;
 }
 
-asmlinkage long sys_personality(unsigned long personality)
+void __set_personality(unsigned long personality)
 {
 	struct exec_domain *it;
-	unsigned long old_personality;
-	int ret;
 
-	if (personality == 0xffffffff)
-		return current->personality;
-
-	ret = -EINVAL;
-	lock_kernel();
 	it = lookup_exec_domain(personality);
-	if (!it)
-		goto out;
+	if (it) {
+		put_exec_domain(current->exec_domain);
+		current->personality = personality;
+		current->exec_domain = it;
+	}
+}
 
-	old_personality = current->personality;
-	put_exec_domain(current->exec_domain);
-	current->personality = personality;
-	current->exec_domain = it;
-	ret = old_personality;
-out:
-	unlock_kernel();
+asmlinkage long sys_personality(unsigned long personality)
+{
+	int ret = current->personality;
+	if (personality != 0xffffffff) {
+		set_personality(personality);
+		if (current->personality != personality)
+			ret = -EINVAL;
+	}
 	return ret;
 }
 

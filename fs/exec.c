@@ -858,6 +858,16 @@ out:
 	return retval;
 }
 
+void set_binfmt(struct linux_binfmt *new)
+{
+	struct linux_binfmt *old = current->binfmt;
+	if (new && new->module)
+		__MOD_INC_USE_COUNT(new->module);
+	current->binfmt = new;
+	if (old && old->module)
+		__MOD_DEC_USE_COUNT(old->module);
+}
+
 int do_coredump(long signr, struct pt_regs * regs)
 {
 	struct linux_binfmt * binfmt;

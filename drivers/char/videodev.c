@@ -227,7 +227,7 @@ extern struct file_operations video_fops;
  *	
  *	The registration code assigns minor numbers based on the type
  *	requested. -ENFILE is returned in all the device slots for this
- *	catetory are full. If not then the minor field is set and the
+ *	category are full. If not then the minor field is set and the
  *	driver initialize function is called (if non %NULL).
  *
  *	Zero is returned on success.

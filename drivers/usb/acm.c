@@ -52,10 +52,6 @@
 #define DEBUG
 #include <linux/usb.h>
 
-void tty_register_devfs (struct tty_driver *driver, unsigned int flags,
-			unsigned minor);
-void tty_unregister_devfs (struct tty_driver *driver, unsigned minor);
-
 /*
  * CMSPAR, some architectures can't have space and mark parity.
  */

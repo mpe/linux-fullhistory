@@ -618,7 +618,7 @@ int usb_get_current_frame_number (struct usb_device *usb_dev);
  *  - current Data0/1 state (1 bit)
  *  - direction (1 bit)
  *  - speed (1 bit)
- *  - max packet size (2 bits: 8, 16, 32 or 64)
+ *  - max packet size (2 bits: 8, 16, 32 or 64) [Historical; now gone.]
  *  - pipe type (2 bits: control, interrupt, bulk, isochronous)
  *
  * That's 18 bits. Really. Nothing more. And the USB people have
@@ -628,7 +628,7 @@ int usb_get_current_frame_number (struct usb_device *usb_dev);
  * Let's not fall in that trap. We'll just encode it as a simple
  * unsigned int. The encoding is:
  *
- *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
+ *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64) [Historical; now gone.]
  *  - direction:	bit 7		(0 = Host-to-Device [Out], 1 = Device-to-Host [In])
  *  - device:		bits 8-14
  *  - endpoint:		bits 15-18

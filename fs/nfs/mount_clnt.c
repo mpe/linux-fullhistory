@@ -120,10 +120,12 @@ xdr_encode_dirpath(struct rpc_rqst *req, u32 *p, const char *path)
 static int
 xdr_decode_fhstatus(struct rpc_rqst *req, u32 *p, struct mnt_fhstatus *res)
 {
-	memset((u8 *)res, 0, sizeof(*res));
+	struct nfs_fh *fh = res->fh;
+
+	memset((void *)fh, 0, sizeof(*fh));
 	if ((res->status = ntohl(*p++)) == 0) {
-		res->fh->size = NFS2_FHSIZE;
-		memcpy(res->fh->data, p, NFS2_FHSIZE);
+		fh->size = NFS2_FHSIZE;
+		memcpy(fh->data, p, NFS2_FHSIZE);
 	}
 	return 0;
 }
@@ -131,12 +133,14 @@ xdr_decode_fhstatus(struct rpc_rqst *req, u32 *p, struct mnt_fhstatus *res)
 static int
 xdr_decode_fhstatus3(struct rpc_rqst *req, u32 *p, struct mnt_fhstatus *res)
 {
-	memset((u8 *)res, 0, sizeof(*res));
+	struct nfs_fh *fh = res->fh;
+
+	memset((void *)fh, 0, sizeof(*fh));
 	if ((res->status = ntohl(*p++)) == 0) {
 		int size = ntohl(*p++);
 		if (size <= NFS3_FHSIZE) {
-			res->fh->size = size;
-			memcpy(res->fh->data, p, res->fh->size);
+			fh->size = size;
+			memcpy(fh->data, p, size);
 		} else
 			res->status = -EBADHANDLE;
 	}

@@ -533,8 +533,11 @@ CONFIG_BLK_DEV_IDEFLOPPY
   drives, similar to the SCSI protocol. 
 
   The LS-120 and the IDE/ATAPI Iomega ZIP drive are also supported by
-  this driver. (ATAPI PD-CD/CDR drives are not supported by this
-  driver; support for PD-CD/CDR drives is available if you answer Y to
+  this driver. For information about jumper settings and the question
+  of when a ZIP drive uses a partition table, see
+  http://www.win.tue.nl/~aeb/linux/zip/zip-1.html .
+  (ATAPI PD-CD/CDR drives are not supported by this driver; support
+  for PD-CD/CDR drives is available if you answer Y to 
   "SCSI emulation support", below).
 
   If you say Y here, the FLOPPY drive will be identified along with
@@ -9370,8 +9373,8 @@ CONFIG_USB
 
 USB verbose debug messages
 CONFIG_USB_DEBUG
-  Say Y here if you want the USB core drivers to produce a bunch of
-  debug messages to the system log. Select this if you are having a
+  Say Y here if you want the USB core & hub drivers to produce a bunch
+  of debug messages to the system log. Select this if you are having a
   problem with USB support and want to see more of what is going on.
 
 UHCI (intel PIIX4, VIA, ...) support?
@@ -13494,9 +13497,8 @@ CONFIG_HISAX_EURO
   Say Y or N according to the D-channel protocol which your local
   telephone service company provides.
 
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for German 1TR6", below. And vice
-  versa.
+  The call control protocol E-DSS1 is used in most European countries.
+  If unsure, say yes.
 
 Support for german charge info
 CONFIG_DE_AOC
@@ -13527,9 +13529,9 @@ CONFIG_HISAX_1TR6
   Say Y or N according to the D-channel protocol which your local
   telephone service company provides.
 
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for EURO/DSS1", above. And vice
-  versa.
+  1TR6 is an old call control protocol which was used in Germany
+  before E-DSS1 was established. Nowadays, all new lines in Germany
+  use E-DSS1.
 
 Teles 16.0/8.0
 CONFIG_HISAX_16_0

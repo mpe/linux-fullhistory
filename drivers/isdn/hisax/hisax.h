@@ -1,8 +1,11 @@
-/* $Id: hisax.h,v 2.41 2000/02/26 00:35:13 keil Exp $
+/* $Id: hisax.h,v 2.42 2000/04/09 19:02:44 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.42  2000/04/09 19:02:44  keil
+ * retry pump modulation settings if it fails
+ *
  * Revision 2.41  2000/02/26 00:35:13  keil
  * Fix skb freeing in interrupt context
  *
@@ -500,6 +503,7 @@ struct isar_hw {
 	u_char mod;
 	u_char newcmd;
 	u_char newmod;
+	char try_mod;
 	struct timer_list ftimer;
 	u_char *rcvbuf;         /* B-Channel receive Buffer */
 	u_char conmsg[16];

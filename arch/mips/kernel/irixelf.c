@@ -717,16 +717,8 @@ static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	set_fs(old_fs);
 
 	kfree(elf_phdata);
-	current->personality = PER_IRIX32;
-
-	put_exec_domain(current->exec_domain);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
-	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &irix_format;
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
-
+	set_personality(PER_IRIX32);
+	set_binfmt(&irix_format);
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long) 

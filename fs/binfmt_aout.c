@@ -252,7 +252,6 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
-	int fd;
 	unsigned long error;
 	unsigned long fd_offset;
 	unsigned long rlim;
@@ -284,10 +283,10 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return retval;
 
 	/* OK, This is the point of no return */
-	current->personality = PER_LINUX;
-
-#if defined(__sparc__)
-	current->personality = PER_SUNOS;
+#if !defined(__sparc__)
+	set_personality(PER_LINUX);
+#else
+	set_personality(PER_SUNOS);
 #if !defined(__sparc_v9__)
 	memcpy(&current->thread.core_exec, &ex, sizeof(struct exec));
 #endif
@@ -344,12 +343,6 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			error_time2 = jiffies;
 		}
 
-		fd = get_unused_fd();
-		if (fd < 0)
-			return fd;
-		get_file(bprm->file);
-		fd_install(fd, bprm->file);
-
 		if ((fd_offset & ~PAGE_MASK) != 0 &&
 		    (jiffies-error_time) > 5*HZ)
 		{
@@ -361,7 +354,6 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 		if (!bprm->file->f_op->mmap||((fd_offset & ~PAGE_MASK) != 0)) {
 			loff_t pos = fd_offset;
-			sys_close(fd);
 			do_brk(N_TXTADDR(ex), ex.a_text+ex.a_data);
 			bprm->file->f_op->read(bprm->file,(char *)N_TXTADDR(ex),
 					ex.a_text+ex.a_data, &pos);
@@ -377,7 +369,6 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			fd_offset);
 
 		if (error != N_TXTADDR(ex)) {
-			sys_close(fd);
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
@@ -386,20 +377,13 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
-		sys_close(fd);
 		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
 	}
 beyond_if:
-	put_exec_domain(current->exec_domain);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
-	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &aout_format;
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
+	set_binfmt(&aout_format);
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 

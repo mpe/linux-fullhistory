@@ -39,10 +39,8 @@ struct usb_serial_port {
 	unsigned char		number;
 	char			active;		/* someone has this device open */
 
-	struct usb_endpoint_descriptor * interrupt_in_endpoint;
-	__u8			interrupt_in_interval;
 	unsigned char *		interrupt_in_buffer;
-	struct urb *		control_urb;
+	struct urb *		interrupt_in_urb;
 
 	unsigned char *		bulk_in_buffer;
 	struct urb *		read_urb;
@@ -50,7 +48,10 @@ struct usb_serial_port {
 	unsigned char *		bulk_out_buffer;
 	int			bulk_out_size;
 	struct urb *		write_urb;
-	void *			private;	/* data private to the specific driver */
+
+	wait_queue_head_t	write_wait;
+
+	void *			private;	/* data private to the specific port */
 };
 
 struct usb_serial {
@@ -64,11 +65,6 @@ struct usb_serial {
 	char				num_bulk_in;		/* number of bulk in endpoints we have */
 	char				num_bulk_out;		/* number of bulk out endpoints we have */
 	struct usb_serial_port		port[MAX_NUM_PORTS];
-
-	/* FIXME! These should move to the private area of the keyspan driver */
-	int			tx_room;
-	int			tx_throttled;
-	wait_queue_head_t 	write_wait;
 
 	void *			private;		/* data private to the specific driver */
 };
@@ -99,7 +95,8 @@ struct usb_serial_device_type {
 
 	/* function call to make before accepting driver */
 	int (*startup) (struct usb_serial *serial);	/* return 0 to continue initialization, anything else to abort */
-	
+	void (*shutdown) (struct usb_serial *serial);
+
 	/* serial function calls */
 	int  (*open)		(struct usb_serial_port *port, struct file * filp);
 	void (*close)		(struct usb_serial_port *port, struct file * filp);
@@ -111,7 +108,8 @@ struct usb_serial_device_type {
 	int  (*chars_in_buffer)	(struct usb_serial_port *port);
 	void (*throttle)	(struct usb_serial_port *port);
 	void (*unthrottle)	(struct usb_serial_port *port);
-	
+
+	void (*read_int_callback)(struct urb *urb);
 	void (*read_bulk_callback)(struct urb *urb);
 	void (*write_bulk_callback)(struct urb *urb);
 };

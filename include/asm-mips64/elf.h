@@ -91,9 +91,9 @@ do {	if ((ex).e_ident[EI_CLASS] == ELFCLASS32)	\
 	else						\
 		current->thread.mflags &= ~MF_32BIT;	\
 	if (ibcs2)					\
-		current->personality = PER_SVR4;	\
+		set_personality(PER_SVR4);		\
 	else if (current->personality != PER_LINUX32)	\
-		current->personality = PER_LINUX;	\
+		set_personality(PER_LINUX);		\
 } while (0)
 #endif
 

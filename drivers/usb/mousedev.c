@@ -39,11 +39,11 @@
 #include <linux/input.h>
 #include <linux/config.h>
 
-#ifndef CONFIG_MOUSEDEV_SCREEN_X
-#define CONFIG_MOUSEDEV_SCREEN_X	1024
+#ifndef CONFIG_INPUT_MOUSEDEV_SCREEN_X
+#define CONFIG_INPUT_MOUSEDEV_SCREEN_X	1024
 #endif
-#ifndef CONFIG_MOUSEDEV_SCREEN_Y
-#define CONFIG_MOUSEDEV_SCREEN_Y	768
+#ifndef CONFIG_INPUT_MOUSEDEV_SCREEN_Y
+#define CONFIG_INPUT_MOUSEDEV_SCREEN_Y	768
 #endif
 
 struct mousedev {
@@ -93,12 +93,12 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 					switch (code) {
 						case ABS_X:	
 							size = handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X];
-							list->dx += (value * CONFIG_MOUSEDEV_SCREEN_X - list->oldx) / size;
+							list->dx += (value * CONFIG_INPUT_MOUSEDEV_SCREEN_X - list->oldx) / size;
 							list->oldx += list->dx * size;
 							break;
 						case ABS_Y:
 							size = handle->dev->absmax[ABS_Y] - handle->dev->absmin[ABS_Y];
-							list->dy -= (value * CONFIG_MOUSEDEV_SCREEN_Y - list->oldy) / size;
+							list->dy -= (value * CONFIG_INPUT_MOUSEDEV_SCREEN_Y - list->oldy) / size;
 							list->oldy -= list->dy * size;
 							break;
 					}

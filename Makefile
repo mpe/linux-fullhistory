@@ -410,14 +410,15 @@ backup: mrproper
 	sync
 
 sgmldocs: 
+	chmod 755 $(TOPDIR)/scripts/docgen
+	chmod 755 $(TOPDIR)/scripts/gen-all-syms
+	chmod 755 $(TOPDIR)/scripts/kernel-doc
 	$(MAKE) -C $(TOPDIR)/Documentation/DocBook books
 
 psdocs: sgmldocs
-	$(MAKE) -C scripts docproc
 	$(MAKE) -C Documentation/DocBook ps
 
 pdfdocs: sgmldocs
-	$(MAKE) -C scripts docproc
 	$(MAKE) -C Documentation/DocBook pdf
  
 sums:

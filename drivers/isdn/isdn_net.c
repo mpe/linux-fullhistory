@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.122 2000/03/20 22:37:46 detabc Exp $
+/* $Id: isdn_net.c,v 1.125 2000/04/05 21:25:55 detabc Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.125  2000/04/05 21:25:55  detabc
+ * add leased-line support to abc-stuff
+ *
+ * Revision 1.124  2000/04/03 21:07:22  detabc
+ * change write_super handling for abc-stuff
+ *
+ * Revision 1.123  2000/04/03 19:14:36  kai
+ * fix "isdn BUG at isdn_net.c:1440!"
+ *
  * Revision 1.122  2000/03/20 22:37:46  detabc
  * modify abc-extension to work together with the new LL.
  * remove abc frame-counter (is obsolete now).
@@ -647,7 +656,7 @@ static __inline__ void isdn_net_zero_frame_cnt(isdn_net_local *lp)
 int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct net_device *);
 
-char *isdn_net_revision = "$Revision: 1.122 $";
+char *isdn_net_revision = "$Revision: 1.125 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -1437,12 +1446,16 @@ isdn_net_log_skb(struct sk_buff * skb, isdn_net_local * lp)
 void isdn_net_write_super(isdn_net_local *lp, struct sk_buff *skb)
 {
 	if (in_interrupt()) {
-		printk("isdn BUG at %s:%d!\n", __FILE__, __LINE__);
+		// we can't grab the lock from irq context, 
+		// so we just queue the packet
+		skb_queue_tail(&lp->super_tx_queue, skb); 
+		queue_task(&lp->tqueue, &tq_immediate);
 		return;
 	}
 
 	spin_lock_bh(&lp->xmit_lock);
-	if (!isdn_net_lp_busy(lp)) {
+	if (!isdn_net_lp_busy(lp))
+	{
 		isdn_net_writebuf_skb(lp, skb);
 	} else {
 		skb_queue_tail(&lp->super_tx_queue, skb);

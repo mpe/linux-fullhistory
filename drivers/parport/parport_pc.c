@@ -427,6 +427,8 @@ static size_t parport_pc_ecpepp_read_data (struct parport *port, void *buf,
 	size_t got;
 
 	frob_econtrol (port, 0xe0, ECR_EPP << 5);
+	parport_pc_data_reverse (port);
+	parport_pc_write_control (port, 0x4);
 	got = parport_pc_epp_read_data (port, buf, length, flags);
 	frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 
@@ -440,6 +442,8 @@ static size_t parport_pc_ecpepp_write_data (struct parport *port,
 	size_t written;
 
 	frob_econtrol (port, 0xe0, ECR_EPP << 5);
+	parport_pc_write_control (port, 0x4);
+	parport_pc_data_forward (port);
 	written = parport_pc_epp_write_data (port, buf, length, flags);
 	frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 
@@ -452,6 +456,8 @@ static size_t parport_pc_ecpepp_read_addr (struct parport *port, void *buf,
 	size_t got;
 
 	frob_econtrol (port, 0xe0, ECR_EPP << 5);
+	parport_pc_data_reverse (port);
+	parport_pc_write_control (port, 0x4);
 	got = parport_pc_epp_read_addr (port, buf, length, flags);
 	frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 
@@ -465,6 +471,8 @@ static size_t parport_pc_ecpepp_write_addr (struct parport *port,
 	size_t written;
 
 	frob_econtrol (port, 0xe0, ECR_EPP << 5);
+	parport_pc_write_control (port, 0x4);
+	parport_pc_data_forward (port);
 	written = parport_pc_epp_write_addr (port, buf, length, flags);
 	frob_econtrol (port, 0xe0, ECR_PS2 << 5);
 
@@ -1733,7 +1741,7 @@ static int __devinit parport_ECPEPP_supported(struct parport *pb)
 	oecr = inb (ECONTROL (pb));
 	/* Search for SMC style EPP+ECP mode */
 	outb (0x80, ECONTROL (pb));
-	
+	outb (0x04, CONTROL (pb));
 	result = parport_EPP_supported(pb);
 
 	outb (oecr, ECONTROL (pb));

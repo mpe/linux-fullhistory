@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.20 1999/08/25 16:52:04 keil Exp $
+/* $Id: isdnl2.c,v 2.22 2000/04/12 20:28:37 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,13 @@
  *              Fritz Elfert
  *
  * $Log: isdnl2.c,v $
+ * Revision 2.22  2000/04/12 20:28:37  keil
+ * a I frame may be contain zero information bytes
+ *
+ * Revision 2.21  2000/04/12 16:41:01  kai
+ * fix max iframe size
+ * fix bug in multicasting DL_RELEASE_IND
+ *
  * Revision 2.20  1999/08/25 16:52:04  keil
  * Make gcc on AXP happy
  *
@@ -83,7 +90,7 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.20 $";
+const char *l2_revision = "$Revision: 2.22 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -361,7 +368,7 @@ IsRNR(u_char * data, struct PStack *st)
 int
 iframe_error(struct PStack *st, struct sk_buff *skb)
 {
-	int i = l2addrsize(&st->l2) + (test_bit(FLG_MOD128, &st->l2.flag) ? 1 : 0);
+	int i = l2addrsize(&st->l2) + (test_bit(FLG_MOD128, &st->l2.flag) ? 2 : 1);
 	int rsp = *skb->data & 0x2;
 
 	if (test_bit(FLG_ORIG, &st->l2.flag))
@@ -371,7 +378,7 @@ iframe_error(struct PStack *st, struct sk_buff *skb)
 		return 'L';
 
 
-	if (skb->len <= i)
+	if (skb->len < i)
 		return 'N';
 
 	if ((skb->len - i) > st->l2.maxlen)

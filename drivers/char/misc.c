@@ -195,7 +195,7 @@ int misc_register(struct miscdevice * misc)
  *	@misc: device to unregister
  *
  *	Unregister a miscellaneous device that was previously
- *	successfully registered with misc_register()F. Success
+ *	successfully registered with misc_register(). Success
  *	is indicated by a zero return, a negative errno code
  *	indicates an error.
  */

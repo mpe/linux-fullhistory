@@ -59,11 +59,7 @@ static struct exec_domain arthur_exec_domain = {
 	PER_RISCOS, PER_RISCOS,
 	arthur_to_linux_signals,
 	linux_to_arthur_signals,
-#ifdef MODULE
-	&__this_module,	/* No usage counter. */
-#else
-	NULL,
-#endif
+	THIS_MODULE,
 	NULL		/* Nothing after this in the list. */
 };
 

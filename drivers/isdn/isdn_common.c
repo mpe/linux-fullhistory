@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.100 2000/03/03 16:37:11 kai Exp $
+/* $Id: isdn_common.c,v 1.101 2000/04/07 14:50:34 calle Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.101  2000/04/07 14:50:34  calle
+ * Bugfix: on my system 2.3.99-pre3 Dual PII 350, unload of module isdn.o
+ *         hangs if vfree is called with interrupt disabled. After moving
+ * 	restore_flags in front of vfree it doesn't hang.
+ *
  * Revision 1.100  2000/03/03 16:37:11  kai
  * incorporated some cosmetic changes from the official kernel tree back
  * into CVS
@@ -453,7 +458,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.100 $";
+static char *isdn_revision = "$Revision: 1.101 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -2780,12 +2785,14 @@ cleanup_module(void)
 	}
 	if (devfs_unregister_chrdev(ISDN_MAJOR, "isdn") != 0) {
 		printk(KERN_WARNING "isdn: controldevice busy, remove cancelled\n");
+		restore_flags(flags);
 	} else {
 		isdn_cleanup_devfs();
 		del_timer(&dev->timer);
+		restore_flags(flags);
+		/* call vfree with interrupts enabled, else it will hang */
 		vfree(dev);
 		printk(KERN_NOTICE "ISDN-subsystem unloaded\n");
 	}
-	restore_flags(flags);
 }
 #endif

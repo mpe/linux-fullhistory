@@ -1190,7 +1190,7 @@ static int __init xd_manual_geo_init (char *str)
 {
 	int i, integers[1 + 3*XD_MAXDRIVES];
 
-	get_options (str, ARRAY_SIZE (ints), ints);
+	get_options (str, ARRAY_SIZE (integers), integers);
 	if (integers[0]%3 != 0) {
 		printk("xd: incorrect number of parameters for xd_geo\n");
 		return 1;

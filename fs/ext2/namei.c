@@ -284,13 +284,13 @@ int ext2_add_entry (struct inode * dir, const char * name, int namelen,
 				de->rec_len = cpu_to_le16(EXT2_DIR_REC_LEN(de->name_len));
 				de = de1;
 			}
+			de->file_type = EXT2_FT_UNKNOWN;
 			if (inode) {
 				de->inode = cpu_to_le32(inode->i_ino);
 				ext2_set_de_type(dir->i_sb, de, inode->i_mode);
 			} else
 				de->inode = 0;
 			de->name_len = namelen;
-			de->file_type = 0;
 			memcpy (de->name, name, namelen);
 			/*
 			 * XXX shouldn't update any times until successful

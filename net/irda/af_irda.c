@@ -1215,9 +1215,9 @@ static int irda_recvmsg_dgram(struct socket *sock, struct msghdr *msg,
 static void irda_data_wait(struct sock *sk)
 {
 	if (!skb_peek(&sk->receive_queue)) {
-		sk->socket->flags |= SO_WAITDATA;
+		set_bit(SOCK_ASYNC_WAITDATA, &sk->socket->flags);
 		interruptible_sleep_on(sk->sleep);
-		sk->socket->flags &= ~SO_WAITDATA;
+		clear_bit(SOCK_ASYNC_WAITDATA, &sk->socket->flags);
 	}
 }
 
@@ -1241,7 +1241,7 @@ static int irda_recvmsg_stream(struct socket *sock, struct msghdr *msg,
 	self = sk->protinfo.irda;
 	ASSERT(self != NULL, return -1;);
 
-	if (sock->flags & SO_ACCEPTCON) 
+	if (sock->flags & __SO_ACCEPTCON) 
 		return(-EINVAL);
 
 	if (flags & MSG_OOB)

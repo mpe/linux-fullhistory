@@ -221,8 +221,7 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 #define ELF_PLATFORM	0
 
 #ifdef __KERNEL__
-# define SET_PERSONALITY(EX,IBCS2)				\
-	(current->personality = (IBCS2) ? PER_SVR4 : PER_LINUX)
+#define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)
 #endif
 
 #define IA32_EFLAG	0x200

@@ -1,11 +1,15 @@
 /*
- * $Id: capi.c,v 1.30 2000/03/19 12:31:36 calle Exp $
+ * $Id: capi.c,v 1.31 2000/04/03 13:29:24 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.31  2000/04/03 13:29:24  calle
+ * make Tim Waugh happy (module unload races in 2.3.99-pre3).
+ * no real problem there, but now it is much cleaner ...
+ *
  * Revision 1.30  2000/03/19 12:31:36  calle
  * PPP over CAPI raw driver disabled for now, ppp_generic has been changed.
  *
@@ -154,7 +158,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -189,7 +192,7 @@
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.30 $";
+static char *revision = "$Revision: 1.31 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -362,12 +365,13 @@ struct capiminor *capiminor_alloc(__u16 applid, __u32 ncci)
 	struct capiminor *mp, **pp;
         unsigned int minor = 0;
 
+	MOD_INC_USE_COUNT;
 	mp = (struct capiminor *)kmem_cache_alloc(capiminor_cachep, GFP_ATOMIC);
 	if (!mp) {
+		MOD_DEC_USE_COUNT;
 		printk(KERN_ERR "capi: can't alloc capiminor\n");
 		return 0;
 	}
-	MOD_INC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capiminor_alloc %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif

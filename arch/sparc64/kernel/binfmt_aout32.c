@@ -198,7 +198,6 @@ static u32 *create_aout32_tables(char * p, struct linux_binprm * bprm)
 static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
-	int fd;
 	unsigned long error;
 	unsigned long fd_offset;
 	unsigned long rlim;
@@ -230,7 +229,7 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return retval;
 
 	/* OK, This is the point of no return */
-	current->personality = PER_SUNOS;
+	set_personality(PER_SUNOS);
 
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));
@@ -270,15 +269,8 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			error_time = jiffies;
 		}
 
-		fd = get_unused_fd();
-		if (fd < 0)
-			return fd;
-		get_file(bprm->file);
-		fd_install(fd, bprm->file);
-
 		if (!bprm->file->f_op->mmap) {
 			loff_t pos = fd_offset;
-			sys_close(fd);
 			do_brk(0, ex.a_text+ex.a_data);
 			bprm->file->f_op->read(bprm->file,(char *)N_TXTADDR(ex),
 				  ex.a_text+ex.a_data, &pos);
@@ -291,7 +283,6 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			fd_offset);
 
 		if (error != N_TXTADDR(ex)) {
-			sys_close(fd);
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
@@ -300,20 +291,13 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
-		sys_close(fd);
 		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
 	}
 beyond_if:
-	put_exec_domain(current->exec_domain);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
-	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &aout32_format;
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
+	set_binfmt(&aout32_format);
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 

@@ -3,13 +3,22 @@ BOOKS	:= wanbook.sgml z8530book.sgml mcabook.sgml videobook.sgml kernel-api.sgml
 PS	:=	$(patsubst %.sgml, %.ps, $(BOOKS))
 PDF	:=	$(patsubst %.sgml, %.pdf, $(BOOKS))
 
-books:	docproc $(BOOKS)
+$(BOOKS): $(TOPDIR)/scripts/docproc
+
+.PHONY:	books ps pdf clean mrproper db2ps db2pdf
+
+books:	$(BOOKS)
 
 ps:	$(PS)
 
 pdf:	$(PDF)
 
-docproc:
+db2ps db2pdf:
+	@(which $@ > /dev/null 2>&1) || \
+	 (echo "*** You need to install DocBook stylesheets ***"; \
+	  exit 1)
+
+$(TOPDIR)/scripts/docproc:
 	$(MAKE) -C $(TOPDIR)/scripts docproc
 
 wanbook.sgml: wanbook.tmpl
@@ -64,7 +73,7 @@ clean:
 mrproper: clean
 	$(RM) $(PS) $(PDF)
 
-%.ps : %.sgml
+%.ps : %.sgml db2ps
 	db2ps $<
 
 %.pdf : %.sgml

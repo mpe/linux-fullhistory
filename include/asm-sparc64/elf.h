@@ -96,9 +96,9 @@ do {	unsigned char flags = current->thread.flags;	\
 	}						\
 							\
 	if (ibcs2)					\
-		current->personality = PER_SVR4;	\
+		set_personality(PER_SVR4);		\
 	else if (current->personality != PER_LINUX32)	\
-		current->personality = PER_LINUX;	\
+		set_personality(PER_LINUX);		\
 } while (0)
 #endif
 

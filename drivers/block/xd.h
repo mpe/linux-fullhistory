@@ -103,9 +103,9 @@ typedef struct {
 	const char *name;
 } XD_SIGNATURE;
 
-void xd_setup (char *command,int *integers);
+int xd_setup (char *);
 #ifndef MODULE
-void xd_manual_geo_init (char *command,int *integers);
+int xd_manual_geo_init (char *command);
 #endif /* MODULE */
 static u_char xd_detect (u_char *controller, unsigned int *address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));

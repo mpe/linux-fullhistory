@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 2.10 1999/07/21 14:46:19 keil Exp $
+/* $Id: isdnl3.c,v 2.11 2000/04/12 16:41:01 kai Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,10 @@
  *              Fritz Elfert
  *
  * $Log: isdnl3.c,v $
+ * Revision 2.11  2000/04/12 16:41:01  kai
+ * fix max iframe size
+ * fix bug in multicasting DL_RELEASE_IND
+ *
  * Revision 2.10  1999/07/21 14:46:19  keil
  * changes from EICON certification
  *
@@ -68,7 +72,7 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.10 $";
+const char *l3_revision = "$Revision: 2.11 $";
 
 static
 struct Fsm l3fsm =
@@ -375,10 +379,13 @@ static void
 l3ml3p(struct PStack *st, int pr)
 {
 	struct l3_process *p = st->l3.proc;
+	struct l3_process *np;
 
 	while (p) {
+		/* p might be kfreed under us, so we need to save where we want to go on */
+		np = p->next;
 		st->l3.l3ml3(st, pr, p);
-		p = p->next;
+		p = np;
 	}
 }
 

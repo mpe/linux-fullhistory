@@ -17,7 +17,6 @@
    there is no other ELF system currently supported by iBCS.
    @@ Could print a warning message to encourage users to upgrade.  */
 #define SET_PERSONALITY(ex,ibcs2) \
-	current->personality = (ex.e_flags & EF_ARM_APCS26) ? \
-	PER_LINUX : PER_LINUX_32BIT
+	set_personality((ex).e_flags&EF_ARM_APCS26 ?PER_LINUX :PER_LINUX_32BIT)
 
 #endif

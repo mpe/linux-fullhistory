@@ -3,7 +3,7 @@
 
 #include <linux/linkage.h>
 #include <linux/ptrace.h>
-
+#include <asm/current.h>
 
 /* Flags for bug emulation. These occupy the top three bytes. */
 #define STICKY_TIMEOUTS		0x4000000
@@ -52,11 +52,15 @@ struct exec_domain {
 
 extern struct exec_domain default_exec_domain;
 
-extern struct exec_domain *lookup_exec_domain(unsigned long personality);
 extern int register_exec_domain(struct exec_domain *it);
 extern int unregister_exec_domain(struct exec_domain *it);
 #define put_exec_domain(it) \
 	if (it && it->module) __MOD_DEC_USE_COUNT(it->module);
+extern void __set_personality(unsigned long personality);
+#define set_personality(pers) do {	\
+	if (current->personality != pers) \
+		__set_personality(pers); \
+} while (0)
 asmlinkage long sys_personality(unsigned long personality);
 
 #endif /* _PERSONALITY_H */

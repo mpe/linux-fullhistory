@@ -10,7 +10,6 @@
 #define ELF_PROC_OK(x)		\
 	((x)->e_flags & EF_ARM_APCS26)
 
-#define SET_PERSONALITY(ex,ibcs2) \
-	current->personality = PER_LINUX
+#define SET_PERSONALITY(ex,ibcs2) set_personality(PER_LINUX)
 
 #endif
