@@ -2644,6 +2644,8 @@ static void hub_events(void)
 
 		/* deal with port status changes */
 		for (i = 1; i <= hub->descriptor->bNbrPorts; i++) {
+			if (test_bit(i, hub->busy_bits))
+				continue;
 			connect_change = test_bit(i, hub->change_bits);
 			if (!test_and_clear_bit(i, hub->event_bits) &&
 					!connect_change && !hub->activating)
@@ -2949,6 +2951,7 @@ int usb_reset_device(struct usb_device *udev)
 		hub_pre_reset(hub);
 	}
 
+	set_bit(port1, parent_hub->busy_bits);
 	for (i = 0; i < SET_CONFIG_TRIES; ++i) {
 
 		/* ep0 maxpacket size may change; let the HCD know about it.
@@ -2958,6 +2961,7 @@ int usb_reset_device(struct usb_device *udev)
 		if (ret >= 0)
 			break;
 	}
+	clear_bit(port1, parent_hub->busy_bits);
 	if (ret < 0)
 		goto re_enumerate;
  
