@@ -60,11 +60,7 @@ reset:
 	clr	SCSISIGO;		/* De-assert BSY */
 	and	SXFRCTL1, ~BITBUCKET;
 	/* Always allow reselection */
-	if ((p->flags & AHC_TARGETMODE) != 0) {
-		mvi	SCSISEQ, ENSELI|ENRSELI|ENAUTOATNP;
-	} else {
-		mvi	SCSISEQ, ENRSELI|ENAUTOATNP;
-	}
+	mvi	SCSISEQ, ENRSELI|ENAUTOATNP;
 
 	if ((p->features & AHC_CMD_CHAN) != 0) {
 		/* Ensure that no DMA operations are in progress */
@@ -182,6 +178,15 @@ initialize_scsiid:
 		and	SCSIID, OID;		/* Clear old target */
 		or	SCSIID, A;
 	}
+	mov	SCSIDATL, ALLZEROS;		/* clear out the latched */
+						/* data register, this */
+						/* fixes a bug on some */
+						/* controllers where the */
+						/* last byte written to */
+						/* this register can leak */
+						/* onto the data bus at */
+						/* bad times, such as during */
+						/* selection timeouts */
 	mvi	SCSISEQ, ENSELO|ENAUTOATNO|ENRSELI|ENAUTOATNP ret;
 
 /*
@@ -227,118 +232,6 @@ ndx_dtr_2:
 
 selection:
 	test	SSTAT0,SELDO	jnz select_out;
-select_in:
-	if ((p->flags & AHC_TARGETMODE) != 0) {
-		test	SSTAT0, TARGET	jz initiator_reselect;
-		/*
-		 * We've just been selected.  Assert BSY and
-		 * setup the phase for receiving the messages
-		 * from the target.
-		 */
-		mvi	SCSISIGO, P_MESGOUT|BSYO;
-		mvi	CLRSINT0, CLRSELDO;
-
-		/*
-		 * If ATN isn't asserted, go directly to bus free.
-		 */
-		test	SCSISIGI, ATNI	jz	target_busfree;
-
-		/*
-		 * Setup the DMA for sending the identify and
-		 * command information.
-		 */
-		mov	A, TMODE_CMDADDR_NEXT;
-		mvi	DINDEX, HADDR;
-		mvi	TMODE_CMDADDR call set_32byte_addr;
-		mvi	DFCNTRL, FIFORESET;
-
-		clr	SINDEX;
-		/* Watch ATN closely now */
-message_loop:
-		or	SXFRCTL0, SPIOEN;
-		test	SSTAT0, SPIORDY jz .;
-		and	SXFRCTL0, ~SPIOEN;
-		mov	DINDEX, SCSIDATL;
-		mov	DFDAT, DINDEX;
-		inc	SINDEX;
-
-		/* Message Testing... */
-		test	DINDEX, MSG_IDENTIFYFLAG jz . + 2;
-		mov	ARG_1, DINDEX;
-
-		test	SCSISIGI, ATNI	jnz	message_loop;
-		add	A, -4, SINDEX;
-		jc	target_cmdphase;
-		mvi	DFDAT, SCB_LIST_NULL;	/* Terminate the message list */
-
-target_cmdphase:
-		add	HCNT[0], 1, A;
-		clr	HCNT[1];
-		clr	HCNT[2];
-		mvi	SCSISIGO, P_COMMAND|BSYO;
-		or	SXFRCTL0, SPIOEN;
-		test	SSTAT0, SPIORDY jz .;
-		mov	A, SCSIDATL;
-		mov	DFDAT, A;	/* Store for host */
-
-		/*
-		 * Determine the number of bytes to read
-		 * based on the command group code.  Count is
-		 * one less than the total since we've already
-		 * fetched the first byte.
-		 */
-		clr	SINDEX;
-		shr	A, CMD_GROUP_CODE_SHIFT;
-		add	SEQADDR0, A;
-
-		add	SINDEX, CMD_GROUP0_BYTE_DELTA;
-		nop;	/* Group 1 and 2 are the same */
-		add	SINDEX, CMD_GROUP2_BYTE_DELTA;
-		nop;	/* Group 3 is reserved */
-		add	SINDEX, CMD_GROUP4_BYTE_DELTA;
-		add	SINDEX, CMD_GROUP5_BYTE_DELTA;
-		/* Group 6 and 7 are not handled yet */
-
-		mov	A, SINDEX;
-		add	HCNT[0], A;
-
-command_loop:
-		test	SSTAT0, SPIORDY jz .;
-		cmp	SINDEX, 1 jne . + 2;
-		and	SXFRCTL0, ~SPIOEN;	/* Last Byte */
-		mov	DFDAT, SCSIDATL;
-		dec	SINDEX;
-		test	SINDEX, 0xFF jnz command_loop;
-
-		or	DFCNTRL, HDMAEN|FIFOFLUSH;
-	
-		call	dma_finish;
-
-		test	ARG_1, MSG_IDENTIFY_DISCFLAG jz selectin_post;
-
-		mvi	SCSISIGO, P_MESGIN|BSYO;
-
-		or	SXFRCTL0, SPIOEN;
-
-		mvi	MSG_DISCONNECT call target_outb;
-	
-selectin_post:
-		inc	TMODE_CMDADDR_NEXT;
-		cmp	TMODE_CMDADDR_NEXT, TMODE_NUMCMDS jne . + 2;
-		clr	TMODE_CMDADDR_NEXT;
-		mvi	QOUTFIFO, SCB_LIST_NULL;
-		mvi	INTSTAT,CMDCMPLT;
-
-		test	ARG_1, MSG_IDENTIFY_DISCFLAG jnz target_busfree;
-
-		/* Busy loop on something then go to data or status phase */
-
-target_busfree:
-		clr	SCSISIGO;
-		jmp	poll_for_work;
-
-	}
-
 /*
  * Reselection has been initiated by a target. Make a note that we've been
  * reselected, but haven't seen an IDENTIFY message from the target yet.
@@ -444,13 +337,14 @@ clear_target_state:
  * STCNT may have been cleared, so restore it from the residual field.
  */
 data_phase_reinit:
-	if ((p->features & AHC_CMD_CHAN) != 0) {
-		if ((p->features & AHC_ULTRA2) != 0) {
-			bmov	HADDR, SHADDR, 4;
-			bmov    HCNT, SCB_RESID_DCNT, 3;
-		}
+	if ((p->features & AHC_ULTRA2) != 0) {
+		bmov	HADDR, SHADDR, 4;
+		bmov    HCNT, SCB_RESID_DCNT, 3;
+	}
+	if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895) {
 		bmov    STCNT, SCB_RESID_DCNT, 3;
-	} else {
+	}
+	if ((p->features & AHC_CMD_CHAN) == 0) {
 		mvi	DINDEX, STCNT;
 		mvi	SCB_RESID_DCNT	call bcopy_3;
 	}
@@ -677,10 +571,13 @@ ultra2_dmafifoflush:
 		test	DFSTATUS, FIFOEMP jz ultra2_dmafifoflush;
 		test	DFSTATUS, MREQPEND	jnz .;
 ultra2_dmahalt:
-		and     DFCNTRL, ~HDMAEN;
-		test	DFCNTRL, HDMAEN jnz .;
-		and     DFCNTRL, ~SCSIEN;
-		test	DFCNTRL, SCSIEN jnz .;
+		test	SCSIOFFSET, 0x7f	jnz ultra2_shutdown;
+ultra2_await_nreq:
+		test	SCSISIGI, REQI	jz ultra2_shutdown;
+		test	SSTAT1, (PHASEMIS|REQINIT)	jz ultra2_await_nreq;
+ultra2_shutdown:
+		and     DFCNTRL, ~(HDMAEN|SCSIEN);
+		test	DFCNTRL, (HDMAEN|SCSIEN) jnz .;
 		bmov	SCB_RESID_DCNT, STCNT, 3;
 		mov	SCB_RESID_SGCNT, SG_COUNT;
 		or	SXFRCTL0, CLRSTCNT|CLRCHN;
@@ -719,10 +616,11 @@ p_command_dma_loop:
 		test	SSTAT0, SDONE jnz p_command_ultra2_dma_done;
 		test	SSTAT1,PHASEMIS	jz p_command_dma_loop;	/* ie. underrun */
 p_command_ultra2_dma_done:
-		and     DFCNTRL, ~HDMAEN;
-		test	DFCNTRL, HDMAEN jnz .;
-		and	DFCNTRL, ~SCSIEN;
-		test	DFCNTRL, SCSIEN jnz .;
+		test	SCSISIGI, REQI	jz p_command_ultra2_shutdown;
+		test	SSTAT1, (PHASEMIS|REQINIT)	jz p_command_ultra2_dma_done;
+p_command_ultra2_shutdown:
+		and     DFCNTRL, ~(HDMAEN|SCSIEN);
+		test	DFCNTRL, (HDMAEN|SCSIEN) jnz .;
 		or	SXFRCTL0, CLRSTCNT|CLRCHN;
 	}
 	jmp	ITloop;
@@ -1069,25 +967,12 @@ mesgin_wide_residue:
 	mvi	ARG_1	call inb_next; /* ACK the wide_residue and get */
 				       /* the size byte */
 /*
- * See if we'll ignore this wide residue (because it's an overrun byte)
- */
- 	if ((p->features & AHC_ULTRA2) != 0) {
-		test	SSTAT2, WIDE_RES jnz mesgin_done;
-	} else {
-		test	SCB_RESID_SGCNT,0xff jnz wide_residue_int;
-		test	SCB_RESID_DCNT[0],0xff jnz wide_residue_int;
-		test	SCB_RESID_DCNT[1],0xff jnz wide_residue_int;
-		test	SCB_RESID_DCNT[2],0xff jnz wide_residue_int;
-		jmp	mesgin_done;
-	}
-wide_residue_int:
-/*
  * In order for this to be reliable, we have to do all sorts of horrible
  * magic in terms of resetting the datafifo and reloading the shadow layer
  * with the correct new values (so that a subsequent save data pointers
  * message will do the right thing).  We let the kernel do that work.
  */
- 	mvi	INTSTAT,WIDE_RESIDUE;
+ 	mvi	INTSTAT, WIDE_RESIDUE;
 	jmp	mesgin_done;
 	
 /*
@@ -1136,17 +1021,6 @@ inb_first:
 inb_last:
 	mov	NONE,SCSIDATL ret;		/*dummy read from latch to ACK*/
 
-if ((p->flags & AHC_TARGETMODE) != 0) {
-	/*
-	 * Send a byte to an initiator in Automatic PIO mode.
-	 * SPIOEN must be on prior to calling this routine.
-	 */
-target_outb:
-	mov	SCSIDATL, SINDEX;
-	test	SSTAT0, SPIORDY	jz .;
-	ret;
-}
-	
 mesgin_phasemis:
 /*
  * We expected to receive another byte, but the target changed phase
@@ -1191,6 +1065,12 @@ dma_fifoempty:
  * actually off first lest we get an ILLSADDR.
  */
 dma_dmadone:
+	cmp	LASTPHASE, P_COMMAND	je dma_await_nreq;
+	test	SCSIRATE, 0x0f	jnz dma_shutdown;
+dma_await_nreq:
+	test	SCSISIGI, REQI	jz dma_shutdown;
+	test	SSTAT1, (PHASEMIS|REQINIT)	jz dma_await_nreq;
+dma_shutdown:
 	and	DFCNTRL, ~(SCSIEN|SDMAEN|HDMAEN);
 dma_halt:
 	/*

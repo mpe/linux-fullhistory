@@ -172,7 +172,6 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
 #else
   size += sprintf(BLS, "  AIC7XXX_PROC_STATS     : Disabled\n");
 #endif
-  size += sprintf(BLS, "  AIC7XXX_RESET_DELAY    : %d\n", AIC7XXX_RESET_DELAY);
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
   size += sprintf(BLS, "           SCSI Adapter: %s\n",

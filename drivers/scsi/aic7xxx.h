@@ -23,21 +23,7 @@
 #ifndef _aic7xxx_h
 #define _aic7xxx_h
 
-#define AIC7XXX_H_VERSION  "3.2.4"
-
-#ifndef LINUX_VERSION_CODE
-#include <linux/version.h>
-#endif
-
-#ifndef KERNEL_VERSION
-#define KERNEL_VERSION(x,y,z) (((x)<<16)+((y)<<8)+(z))
-#endif
-
-#if defined(__i386__)
-#  define AIC7XXX_BIOSPARAM aic7xxx_biosparam
-#else
-#  define AIC7XXX_BIOSPARAM NULL
-#endif
+#define AIC7XXX_H_VERSION  "5.2.0"
 
 /*
  * Scsi_Host_Template (see hosts.h) for AIC-7xxx - some fields
@@ -61,7 +47,7 @@
 	abort: aic7xxx_abort,					\
 	reset: aic7xxx_reset,					\
 	slave_attach: NULL,					\
-	bios_param: AIC7XXX_BIOSPARAM,				\
+	bios_param: aic7xxx_biosparam,				\
 	can_queue: 255,		/* max simultaneous cmds      */\
 	this_id: -1,		/* scsi id of host adapter    */\
 	sg_tablesize: 0,	/* max scatter-gather cmds    */\
