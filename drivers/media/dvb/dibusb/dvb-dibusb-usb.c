@@ -25,12 +25,6 @@ int dibusb_readwrite_usb(struct usb_dibusb *dib, u8 *wbuf, u16 wlen, u8 *rbuf,
 	if ((ret = down_interruptible(&dib->usb_sem)))
 		return ret;
 
-	if (dib->feedcount &&
-		wbuf[0] == DIBUSB_REQ_I2C_WRITE &&
-		dib->dibdev->dev_cl->id == DIBUSB1_1)
-		deb_err("BUG: writing to i2c, while TS-streaming destroys the stream."
-				"(%x reg: %x %x)\n", wbuf[0],wbuf[2],wbuf[3]);
-
 	debug_dump(wbuf,wlen);
 
 	ret = usb_bulk_msg(dib->udev,usb_sndbulkpipe(dib->udev,

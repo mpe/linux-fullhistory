@@ -44,7 +44,7 @@ extern int dvb_dibusb_debug;
 
 /* Version information */
 #define DRIVER_VERSION "0.3"
-#define DRIVER_DESC "Driver for DiBcom based USB Budget DVB-T device"
+#define DRIVER_DESC "DiBcom based USB Budget DVB-T device"
 #define DRIVER_AUTHOR "Patrick Boettcher, patrick.boettcher@desy.de"
 
 #define deb_info(args...) dprintk(0x01,args)
@@ -55,9 +55,12 @@ extern int dvb_dibusb_debug;
 #define deb_rc(args...)   dprintk(0x20,args)
 
 /* generic log methods - taken from usb.h */
-#define err(format, arg...) printk(KERN_ERR "%s: " format "\n" , __FILE__ , ## arg)
-#define info(format, arg...) printk(KERN_INFO "%s: " format "\n" , __FILE__ , ## arg)
-#define warn(format, arg...) printk(KERN_WARNING "%s: " format "\n" , __FILE__ , ## arg)
+#undef err
+#define err(format, arg...)  printk(KERN_ERR     "dvb-dibusb: " format "\n" , ## arg)
+#undef info
+#define info(format, arg...) printk(KERN_INFO    "dvb-dibusb: " format "\n" , ## arg)
+#undef warn
+#define warn(format, arg...) printk(KERN_WARNING "dvb-dibusb: " format "\n" , ## arg)
 
 struct dibusb_usb_controller {
 	const char *name;       /* name of the usb controller */

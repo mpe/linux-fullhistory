@@ -28,7 +28,7 @@ void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 			urb->actual_length);
 
 	urb_compl_count++;
-	if (urb_compl_count % 500 == 0)
+	if (urb_compl_count % 1000 == 0)
 		deb_info("%d urbs completed so far.\n",urb_compl_count);
 
 	switch (urb->status) {
@@ -40,7 +40,8 @@ void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 		case -ESHUTDOWN:
 			return;
 		default:        /* error */
-			warn("urb completition error %d.", urb->status);
+			deb_ts("urb completition error %d.", urb->status);
+			break;
 	}
 
 	if (dib->feedcount > 0) {
@@ -77,7 +78,6 @@ static int dibusb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 	/* 
 	 * stop feed before setting a new pid if there will be no pid anymore 
 	 */
-//	if ((dib->dibdev->parm->firmware_bug && dib->feedcount) || 
 	if (newfeedcount == 0) {
 		deb_ts("stop feeding\n");
 		if (dib->xfer_ops.fifo_ctrl != NULL) {
@@ -97,12 +97,9 @@ static int dibusb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 		dibusb_ctrl_pid(dib,dvbdmxfeed,onoff);
 
 	/* 
-	 * start the feed, either if there is the firmware bug or 
-	 * if this was the first pid to set and there is still a pid for 
-	 * reception.
+	 * start the feed if this was the first pid to set and there is still a pid
+	 * for reception.
 	 */
-	
-//	if ((dib->dibdev->parm->firmware_bug)
 	if (dib->feedcount == onoff && dib->feedcount > 0) {
 
 		deb_ts("controlling pid parser\n");

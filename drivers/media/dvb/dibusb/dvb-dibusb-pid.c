@@ -67,13 +67,13 @@ int dibusb_ctrl_pid(struct usb_dibusb *dib, struct dvb_demux_feed *dvbdmxfeed , 
 		if (dib->xfer_ops.pid_ctrl != NULL) 
 			dib->xfer_ops.pid_ctrl(dib->fe,dpid->index,0,0);
 		
+		ret = dpid->index;
 		dpid->pid = 0;
 		dpid->active = 0;
-		ret = dpid->index;
 	}
 	
 	/* a free pid from the list */
-	deb_info("setting pid: %5d %04x at index %d '%s'\n",pid,pid,ret,onoff ? "on" : "off");
+	deb_xfer("setting pid: %5d %04x at index %d '%s'\n",pid,pid,ret,onoff ? "on" : "off");
 
 	return ret;
 }
