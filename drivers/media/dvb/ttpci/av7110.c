@@ -1853,6 +1853,45 @@ static struct stv0297_config nexusca_stv0297_config = {
 };
 
 
+
+static int grundig_29504_401_pll_set(struct dvb_frontend* fe, struct dvb_frontend_parameters* params)
+{
+	struct av7110* av7110 = (struct av7110*) fe->dvb->priv;
+	u32 div;
+	u8 cfg, cpump, band_select;
+	u8 data[4];
+	struct i2c_msg msg = { .addr = 0x61, .flags = 0, .buf = data, .len = sizeof(data) };
+
+	div = (36125000 + params->frequency) / 166666;
+
+	cfg = 0x88;
+
+	if (params->frequency < 175000000) cpump = 2;
+	else if (params->frequency < 390000000) cpump = 1;
+	else if (params->frequency < 470000000) cpump = 2;
+	else if (params->frequency < 750000000) cpump = 1;
+	else cpump = 3;
+
+	if (params->frequency < 175000000) band_select = 0x0e;
+	else if (params->frequency < 470000000) band_select = 0x05;
+	else band_select = 0x03;
+
+	data[0] = (div >> 8) & 0x7f;
+	data[1] = div & 0xff;
+	data[2] = ((div >> 10) & 0x60) | cfg;
+	data[3] = (cpump << 6) | band_select;
+
+	if (i2c_transfer (&av7110->i2c_adap, &msg, 1) != 1) return -EIO;
+	return 0;
+}
+
+static struct l64781_config grundig_29504_401_config = {
+	.demod_address = 0x55,
+	.pll_set = grundig_29504_401_pll_set,
+};
+
+
+
 static void av7110_fe_lock_fix(struct av7110* av7110, fe_status_t status)
 {
 	int synced = (status & FE_HAS_LOCK) ? 1 : 0;
@@ -2058,6 +2097,11 @@ static int frontend_init(struct av7110 *av7110)
 				av7110->fe->ops->diseqc_send_burst = av7110_diseqc_send_burst;
 				av7110->fe->ops->set_tone = av7110_set_tone;
 			}
+			break;
+
+		case 0x0008: // Hauppauge/TT DVB-T
+
+			av7110->fe = l64781_attach(&grundig_29504_401_config, &av7110->i2c_adap);
 			break;
 
 		case 0x000A: // Hauppauge/TT Nexus-CA rev1.X
@@ -2629,6 +2673,7 @@ MAKE_AV7110_INFO(ttc_1_X,    "Technotrend/Hauppauge WinTV Nexus-CA rev1.X");
 MAKE_AV7110_INFO(ttc_2_X,    "Technotrend/Hauppauge WinTV DVB-C rev2.X");
 MAKE_AV7110_INFO(tts_2_X,    "Technotrend/Hauppauge WinTV Nexus-S rev2.X");
 MAKE_AV7110_INFO(tts_1_3se,  "Technotrend/Hauppauge WinTV DVB-S rev1.3 SE");
+MAKE_AV7110_INFO(ttt,        "Technotrend/Hauppauge DVB-T");
 MAKE_AV7110_INFO(fsc,        "Fujitsu Siemens DVB-C");
 MAKE_AV7110_INFO(fss,        "Fujitsu Siemens DVB-S rev1.6");
 
@@ -2641,10 +2686,10 @@ static struct pci_device_id pci_tbl[] = {
 	MAKE_EXTENSION_PCI(fsc,       0x110a, 0x0000),
 	MAKE_EXTENSION_PCI(ttc_1_X,   0x13c2, 0x000a),
 	MAKE_EXTENSION_PCI(fss,       0x13c2, 0x0006),
+	MAKE_EXTENSION_PCI(ttt,       0x13c2, 0x0008),
 
 /*	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0004), UNDEFINED CARD */ // Galaxis DVB PC-Sat-Carte
 /*	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0005), UNDEFINED CARD */ // Technisat SkyStar1
-/*	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0008), UNDEFINED CARD */ // TT/Hauppauge WinTV DVB-T v????
 /*	MAKE_EXTENSION_PCI(???, 0x13c2, 0x0009), UNDEFINED CARD */ // TT/Hauppauge WinTV Nexus-CA v????
 
 	{
