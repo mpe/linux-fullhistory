@@ -181,10 +181,10 @@ void ext_free_inode(struct inode * inode)
 	if (!inode)
 		return;
 	if (!inode->i_dev) {
-		memset(inode,0,sizeof(*inode));
+		printk("free_inode: inode has no device\n");
 		return;
 	}
-	if (inode->i_count>1) {
+	if (inode->i_count != 1) {
 		printk("free_inode: inode has count=%d\n",inode->i_count);
 		return;
 	}
@@ -227,7 +227,7 @@ printk("ext_free_inode: inode full, skipping to %d\n", inode->i_ino);
 	inode->i_sb->s_dirt = 1;
 	inode->i_sb->u.ext_sb.s_firstfreeinodeblock->b_dirt = 1;
 	unlock_super (inode->i_sb);
-	memset(inode,0,sizeof(*inode));
+	clear_inode(inode);
 }
 
 struct inode * ext_new_inode(struct super_block * sb)

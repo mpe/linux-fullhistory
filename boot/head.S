@@ -69,7 +69,24 @@ startup_32:
 	orl $0x10022,%eax	# set NE and MP
 2:	movl %eax,%cr0
 	call check_x87
-	jmp after_page_tables
+	call setup_paging
+	lgdt gdt_descr
+	lidt idt_descr
+	ljmp $0x08,$1f
+1:	movl $0x10,%eax		# reload all the segment registers
+	mov %ax,%ds		# after changing gdt.
+	mov %ax,%es
+	mov %ax,%fs
+	mov %ax,%gs
+	lss _stack_start,%esp
+	pushl $0		# These are the parameters to main :-)
+	pushl $0
+	pushl $0
+	cld			# gcc2 wants the direction flag cleared at all times
+	call _start_kernel
+L6:
+	jmp L6			# main should never return here, but
+				# just in case, we know what happens.
 
 /*
  * We depend on ET to be correct. This checks for 287/387.
@@ -116,6 +133,42 @@ rp_sidt:
 	jne rp_sidt
 	ret
 
+
+/*
+ * Setup_paging
+ *
+ * This routine sets up paging by setting the page bit
+ * in cr0. The page tables are set up, identity-mapping
+ * the first 4MB.  The rest are initialized later.
+ *
+ * (ref: added support for up to 32mb, 17Apr92)  -- Rik Faith
+ * (ref: update, 25Sept92)  -- croutons@crunchy.uucp 
+ * (ref: 92.10.11 - Linus Torvalds. Corrected 16M limit - no upper memory limit)
+ */
+.align 2
+setup_paging:
+	movl $1024*2,%ecx		/* 2 pages - swapper_pg_dir+1 page table */
+	xorl %eax,%eax
+	movl $_swapper_pg_dir,%edi	/* swapper_pg_dir is at 0x1000 */
+	cld;rep;stosl
+/* Identity-map the kernel in low 4MB memory for ease of transition */
+	movl $_pg0+7,_swapper_pg_dir		/* set present bit/user r/w */
+/* But the real place is at 0xC0000000 */
+	movl $_pg0+7,_swapper_pg_dir+3072	/* set present bit/user r/w */
+	movl $_pg0+4092,%edi
+	movl $0x03ff007,%eax		/*  4Mb - 4096 + 7 (r/w user,p) */
+	std
+1:	stosl			/* fill the page backwards - more efficient :-) */
+	subl $0x1000,%eax
+	jge 1b
+	cld
+	movl $_swapper_pg_dir,%eax
+	movl %eax,%cr3			/* cr3 - page directory start */
+	movl %cr0,%eax
+	orl $0x80000000,%eax
+	movl %eax,%cr0		/* set paging (PG) bit */
+	ret			/* this also flushes the prefetch-queue */
+
 /*
  * page 0 is made non-existent, so that kernel NULL pointer references get
  * caught. Thus the swapper page directory has been moved to 0x1000
@@ -152,26 +205,6 @@ _tmp_floppy_area:
 _floppy_track_buffer:
 	.fill 512*2*18,1,0
 
-after_page_tables:
-	call setup_paging
-	lgdt gdt_descr
-	lidt idt_descr
-	ljmp $0x08,$1f
-1:	movl $0x10,%eax		# reload all the segment registers
-	mov %ax,%ds		# after changing gdt.
-	mov %ax,%es
-	mov %ax,%fs
-	mov %ax,%gs
-	lss _stack_start,%esp
-	pushl $0		# These are the parameters to main :-)
-	pushl $0
-	pushl $0
-	cld			# gcc2 wants the direction flag cleared at all times
-	call _start_kernel
-L6:
-	jmp L6			# main should never return here, but
-				# just in case, we know what happens.
-
 /* This is the default interrupt "handler" :-) */
 int_msg:
 	.asciz "Unknown interrupt\n\r"
@@ -198,58 +231,6 @@ ignore_int:
 	popl %ecx
 	popl %eax
 	iret
-
-
-/*
- * Setup_paging
- *
- * This routine sets up paging by setting the page bit
- * in cr0. The page tables are set up, identity-mapping
- * the first 4MB.  The rest are initialized later.
- *
- * NOTE! Although all physical memory should be identity
- * mapped by this routine, only the kernel page functions
- * use the >1Mb addresses directly. All "normal" functions
- * use just the lower 1Mb, or the local data space, which
- * will be mapped to some other place - mm keeps track of
- * that.
- *
- * For those with more memory than 16 Mb - tough luck. I've
- * not got it, why should you :-) The source is here. Change
- * it. (Seriously - it shouldn't be too difficult. Mostly
- * change some constants etc. I left it at 16Mb, as my machine
- * even cannot be extended past that (ok, but it was cheap :-)
- * I've tried to show which constants to change by having
- * some kind of marker at them (search for "16Mb"), but I
- * won't guarantee that's all :-( )
- *
- * (ref: added support for up to 32mb, 17Apr92)  -- Rik Faith
- * (ref: update, 25Sept92)  -- croutons@crunchy.uucp 
- * (ref: 92.10.11 - Linus Torvalds. Corrected 16M limit - no upper memory limit)
- */
-.align 2
-setup_paging:
-	movl $1024*2,%ecx		/* 2 pages - swapper_pg_dir+1 page table */
-	xorl %eax,%eax
-	movl $_swapper_pg_dir,%edi	/* swapper_pg_dir is at 0x1000 */
-	cld;rep;stosl
-/* Identity-map the kernel in low 4MB memory for ease of transition */
-	movl $_pg0+7,_swapper_pg_dir		/* set present bit/user r/w */
-/* But the real place is at 0xC0000000 */
-	movl $_pg0+7,_swapper_pg_dir+3072	/* set present bit/user r/w */
-	movl $_pg0+4092,%edi
-	movl $0x03ff007,%eax		/*  4Mb - 4096 + 7 (r/w user,p) */
-	std
-1:	stosl			/* fill the page backwards - more efficient :-) */
-	subl $0x1000,%eax
-	jge 1b
-	cld
-	movl $_swapper_pg_dir,%eax
-	movl %eax,%cr3			/* cr3 - page directory start */
-	movl %cr0,%eax
-	orl $0x80000000,%eax
-	movl %eax,%cr0		/* set paging (PG) bit */
-	ret			/* this also flushes the prefetch-queue */
 
 /*
  * The interrupt descriptor table has room for 256 idt's

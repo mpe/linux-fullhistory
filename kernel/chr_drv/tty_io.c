@@ -270,31 +270,19 @@ int is_ignored(int sig)
 	        (current->sigaction[sig-1].sa_handler == SIG_IGN));
 }
 
+static int available_canon_input(struct tty_struct *);
+static void __wait_for_canon_input(struct tty_struct *);
+
 static void wait_for_canon_input(struct tty_struct * tty)
 {
-	while (1) {
-		TTY_READ_FLUSH(tty);
-		if (tty->link)
-			if (tty->link->count)
-				TTY_WRITE_FLUSH(tty->link);
-			else
-				return;
-		if (current->signal & ~current->blocked)
-			return;
-		if (FULL(&tty->read_q))
-			return;
-		if (tty->secondary.data)
-			return;
-		cli();
-		if (!tty->secondary.data)
-			interruptible_sleep_on(&tty->secondary.proc_list);
-		sti();
-	}
+	if (!available_canon_input(tty))
+		__wait_for_canon_input(tty);
 }
 
 static int read_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
 	struct tty_struct * tty;
+	struct wait_queue wait = { current, NULL };
 	int c;
 	char * b=buf;
 	int minimum,time;
@@ -329,9 +317,13 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 			minimum = 1;
 		}
 	}
-	if (file->f_flags & O_NONBLOCK)
+	if (file->f_flags & O_NONBLOCK) {
 		time = current->timeout = 0;
-	else if (L_CANON(tty)) {
+		if (L_CANON(tty)) {
+			if (!available_canon_input(tty))
+				return -EAGAIN;
+		}
+	} else if (L_CANON(tty)) {
 		wait_for_canon_input(tty);
 		if (current->signal & ~current->blocked)
 			return -ERESTARTSYS;
@@ -355,7 +347,7 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 		if (nr == 0)
 			return 1;
 	}
-
+	add_wait_queue(&tty->secondary.proc_list, &wait);
 	while (nr>0) {
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
@@ -391,11 +383,14 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
 			TTY_WRITE_FLUSH(tty->link);
-		cli();
+		if (!EMPTY(&tty->secondary))
+			continue;
+		current->state = TASK_INTERRUPTIBLE;
 		if (EMPTY(&tty->secondary))
-			interruptible_sleep_on(&tty->secondary.proc_list);
-		sti();
+			schedule();
+		current->state = TASK_RUNNING;
 	}
+	remove_wait_queue(&tty->secondary.proc_list, &wait);
 	TTY_READ_FLUSH(tty);
 	if (tty->link && tty->link->write)
 		TTY_WRITE_FLUSH(tty->link);
@@ -418,9 +413,42 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 	return 0;
 }
 
+static void __wait_for_canon_input(struct tty_struct * tty)
+{
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&tty->secondary.proc_list, &wait);
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		if (available_canon_input(tty))
+			break;
+		schedule();
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&tty->secondary.proc_list, &wait);
+}
+
+static int available_canon_input(struct tty_struct * tty)
+{
+	TTY_READ_FLUSH(tty);
+	if (tty->link)
+		if (tty->link->count)
+			TTY_WRITE_FLUSH(tty->link);
+		else
+			return 1;
+	if (current->signal & ~current->blocked)
+		return 1;
+	if (FULL(&tty->read_q))
+		return 1;
+	if (tty->secondary.data)
+		return 1;
+	return 0;
+}
+
 static int write_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
 	struct tty_struct * tty;
+	struct wait_queue wait = { current, NULL };
 	char c, *b=buf;
 
 	if (channel > 255)
@@ -444,6 +472,7 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 		return -EINVAL;
 	if (!nr)
 		return 0;
+	add_wait_queue(&tty->write_q.proc_list, &wait);
 	while (nr>0) {
 		if (current->signal & ~current->blocked)
 			break;
@@ -451,14 +480,15 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 			send_sig(SIGPIPE,current,0);
 			break;
 		}
+		current->state = TASK_INTERRUPTIBLE;
 		if (FULL(&tty->write_q)) {
 			TTY_WRITE_FLUSH(tty);
-			cli();
 			if (FULL(&tty->write_q))
-				interruptible_sleep_on(&tty->write_q.proc_list);
-			sti();
+				schedule();
+			current->state = TASK_RUNNING;
 			continue;
 		}
+		current->state = TASK_RUNNING;
 		while (nr>0 && !FULL(&tty->write_q)) {
 			c=get_fs_byte(b);
 			if (O_POST(tty)) {
@@ -478,9 +508,10 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 			clear_bit(TTY_CR_PENDING,&tty->flags);
 			put_tty_queue(c,&tty->write_q);
 		}
-		if (nr>0)
+		if (need_resched)
 			schedule();
 	}
+	remove_wait_queue(&tty->write_q.proc_list, &wait);
 	TTY_WRITE_FLUSH(tty);
 	if (b-buf)
 		return b-buf;
@@ -794,7 +825,8 @@ int initialize_tty_struct(struct tty_struct *tty, int line)
 	tty->winsize.ws_row = 24;
 	tty->winsize.ws_col = 80;
 	if (!tty_termios[line]) {
-		tp = tty_termios[line] = malloc(sizeof(struct termios));
+		tp = tty_termios[line] = kmalloc(sizeof(struct termios),
+						GFP_KERNEL);
 		if (!tp)
 			return -ENOMEM;
 		memset(tp, 0, sizeof(struct termios));

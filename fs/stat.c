@@ -15,8 +15,7 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 {
 	struct old_stat tmp;
 
-	if (inode->i_ino & 0xffff0000)
-		printk("Warning: using old stat() call on bigfs\n");
+	printk("Warning: using old stat() call. Recompile your binary.\n");
 	verify_area(statbuf,sizeof (*statbuf));
 	tmp.st_dev = inode->i_dev;
 	tmp.st_ino = inode->i_ino;
@@ -69,9 +68,11 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 			blocks += indirect;
 		}
 		tmp.st_blocks = blocks;
-	} else
-		tmp.st_blocks = (inode->i_blocks * inode->i_blksize) / 512;
-	tmp.st_blksize = 512;
+		tmp.st_blksize = BLOCK_SIZE;
+	} else {
+		tmp.st_blocks = inode->i_blocks;
+		tmp.st_blksize = inode->i_blksize;
+	}
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 

@@ -37,11 +37,11 @@ static unsigned short	lterms[HIPOWER][4] =
 /*--- poly_2xm1() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-int	poly_2xm1(REG *arg, REG *result)
+int	poly_2xm1(FPU_REG *arg, FPU_REG *result)
 {
   short		exponent;
   long long     Xll;
-  REG           accum;
+  FPU_REG           accum;
 
 
   exponent = arg->exp - EXP_BIAS;

@@ -24,7 +24,7 @@ void msdos_put_inode(struct inode *inode)
 	inode->i_size = 0;
 	msdos_truncate(inode);
 	depend = MSDOS_I(inode)->i_depend;
-	memset(inode,0,sizeof(struct inode));
+	clear_inode(inode);
 	if (depend) {
 		if (MSDOS_I(depend)->i_old != inode) {
 			printk("Invalid link (0x%X): expected 0x%X, got "
@@ -50,6 +50,7 @@ void msdos_put_super(struct super_block *sb)
 
 static struct super_operations msdos_sops = { 
 	msdos_read_inode,
+	NULL,
 	msdos_write_inode,
 	msdos_put_inode,
 	msdos_put_super,

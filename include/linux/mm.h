@@ -47,41 +47,11 @@ struct vm_operations_struct {
 	int (*share)(struct vm_area_struct * old, struct vm_area_struct * new, unsigned long address);
 };
 
-/*
- * BAD_PAGE is the page that is used for page faults when linux
- * is out-of-memory. Older versions of linux just did a
- * do_exit(), but using this instead means there is less risk
- * for a process dying in kernel mode, possibly leaving a inode
- * unused etc..
- *
- * BAD_PAGETABLE is the accompanying page-table: it is initialized
- * to point to BAD_PAGE entries.
- */
-extern unsigned long inline __bad_page(void)
-{
-	extern char empty_bad_page[PAGE_SIZE];
+extern unsigned long __bad_page(void);
+extern unsigned long __bad_pagetable(void);
 
-	__asm__ __volatile__("cld ; rep ; stosl"
-		::"a" (0),
-		  "D" ((long) empty_bad_page),
-		  "c" (1024)
-		:"di","cx");
-	return (unsigned long) empty_bad_page;
-}
-#define BAD_PAGE __bad_page()
-
-extern unsigned long inline __bad_pagetable(void)
-{
-	extern char empty_bad_page_table[PAGE_SIZE];
-
-	__asm__ __volatile__("cld ; rep ; stosl"
-		::"a" (7+BAD_PAGE),
-		  "D" ((long) empty_bad_page_table),
-		  "c" (1024)
-		:"di","cx");
-	return (unsigned long) empty_bad_page_table;
-}
 #define BAD_PAGETABLE __bad_pagetable()
+#define BAD_PAGE __bad_page()
 
 extern volatile short free_page_ptr; /* used by malloc and tcp/ip. */
 

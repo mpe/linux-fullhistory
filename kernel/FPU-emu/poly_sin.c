@@ -38,10 +38,10 @@ static unsigned short	negterms[HIPOWER][4] =
 /*--- poly_sine() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_sine(REG *arg, REG *result)
+void	poly_sine(FPU_REG *arg, FPU_REG *result)
 {
   short	exponent;
-  REG	Xx, Xx2, Xx4, accum, negaccum;
+  FPU_REG	Xx, Xx2, Xx4, accum, negaccum;
   
   
   exponent = arg->exp - EXP_BIAS;
@@ -129,18 +129,22 @@ void	poly_sine(REG *arg, REG *result)
 	  )
 	{
 #ifdef DEBUGGING
+	  RE_ENTRANT_CHECK_OFF
 	  printk("\nEXP=%d, MS=%08x, LS=%08x\n", result->exp,
 		 result->sigh, result->sigl);
+	  RE_ENTRANT_CHECK_ON
 #endif DEBUGGING
 	  EXCEPTION(EX_INTERNAL|0x103);
 	}
       
 #ifdef DEBUGGING
+      RE_ENTRANT_CHECK_OFF
       printk("\n***CORRECTING ILLEGAL RESULT*** in poly_sin() computation\n");
       printk("EXP=%d, MS=%08x, LS=%08x\n", result->exp,
 	     result->sigh, result->sigl);
+      RE_ENTRANT_CHECK_ON
 #endif DEBUGGING
-      
+
       result->sigl = 0;	/* Truncate the result to 1.00 */
     }
 }

@@ -45,6 +45,7 @@ void ext_put_super(struct super_block *sb)
 
 static struct super_operations ext_sops = { 
 	ext_read_inode,
+	NULL,
 	ext_write_inode,
 	ext_put_inode,
 	ext_put_super,
@@ -62,7 +63,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);
-		printk("bread failed\n");
+		printk("EXT-fs: unable to read superblock\n");
 		return NULL;
 	}
 	es = (struct ext_super_block *) bh->b_data;
@@ -81,7 +82,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	if (s->s_magic != EXT_SUPER_MAGIC) {
 		s->s_dev = 0;
 		unlock_super(s);
-		printk("magic match failed\n");
+		printk("EXT-fs: magic match failed\n");
 		return NULL;
 	}
 	if (!s->u.ext_sb.s_firstfreeblocknumber)
@@ -89,7 +90,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	else
 		if (!(s->u.ext_sb.s_firstfreeblock = bread(dev,
 			s->u.ext_sb.s_firstfreeblocknumber, BLOCK_SIZE))) {
-			printk ("ext_read_super: unable to read first free block\n");
+			printk("ext_read_super: unable to read first free block\n");
 			s->s_dev = 0;
 			unlock_super(s);
 			return NULL;
@@ -99,7 +100,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	else {
 		block = 2 + (s->u.ext_sb.s_firstfreeinodenumber - 1) / EXT_INODES_PER_BLOCK;
 		if (!(s->u.ext_sb.s_firstfreeinodeblock = bread(dev, block, BLOCK_SIZE))) {
-			printk ("ext_read_super: unable to read first free inode block\n");
+			printk("ext_read_super: unable to read first free inode block\n");
 			brelse(s->u.ext_sb.s_firstfreeblock);
 			s->s_dev = 0;
 			unlock_super (s);
@@ -112,7 +113,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	s->s_op = &ext_sops;
 	if (!(s->s_mounted = iget(s,EXT_ROOT_INO))) {
 		s->s_dev=0;
-		printk("get root inode failed\n");
+		printk("EXT-fs: get root inode failed\n");
 		return NULL;
 	}
 	return s;
@@ -253,7 +254,7 @@ static struct buffer_head * block_getblk(struct inode * inode,
 	if (!bh)
 		return NULL;
 	if (!bh->b_uptodate) {
-		ll_rw_block(READ,bh);
+		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
 		if (!bh->b_uptodate) {
 			brelse(bh);
@@ -332,7 +333,7 @@ struct buffer_head * ext_bread(struct inode * inode, int block, int create)
 	bh = ext_getblk(inode,block,create);
 	if (!bh || bh->b_uptodate) 
 		return bh;
-	ll_rw_block(READ,bh);
+	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
 	if (bh->b_uptodate)
 		return bh;

@@ -28,3 +28,4 @@ extern FPU_REG CONST_MINF;
 extern FPU_REG CONST_QNaN;
 
 #endif _REG_CONSTANT_H_
+

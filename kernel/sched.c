@@ -36,35 +36,6 @@ unsigned long prof_len = 0;
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-static void show_task(int nr,struct task_struct * p)
-{
-	int i,j = 4096-sizeof(struct task_struct);
-
-	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
-		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
-	i=0;
-	while (i<j && !((char *)(p+1))[i])
-		i++;
-	printk("%d/%d chars free in kstack\n\r",i,j);
-	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
-	if (p->p_ysptr || p->p_osptr) 
-		printk("   Younger sib=%d, older sib=%d\n\r", 
-			p->p_ysptr ? p->p_ysptr->pid : -1,
-			p->p_osptr ? p->p_osptr->pid : -1);
-	else
-		printk("\n\r");
-}
-
-void show_state(void)
-{
-	int i;
-
-	printk("\rTask-info:\n\r");
-	for (i=0 ; i<NR_TASKS ; i++)
-		if (task[i])
-			show_task(i,task[i]);
-}
-
 #define LATCH (1193180/HZ)
 
 extern void mem_use(void);
@@ -72,12 +43,8 @@ extern void mem_use(void);
 extern int timer_interrupt(void);
 extern int system_call(void);
 
-union task_union {
-	struct task_struct task;
-	char stack[PAGE_SIZE];
-};
-
-static union task_union init_task = {INIT_TASK, };
+static unsigned long init_kernel_stack[1024];
+static struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;
 unsigned long startup_time=0;
@@ -87,10 +54,10 @@ int jiffies_offset = 0;		/* # clock ticks to add to get "true
 				   who like to syncronize their machines
 				   to WWV :-) */
 
-struct task_struct *current = &(init_task.task);
+struct task_struct *current = &init_task;
 struct task_struct *last_task_used_math = NULL;
 
-struct task_struct * task[NR_TASKS] = {&(init_task.task), };
+struct task_struct * task[NR_TASKS] = {&init_task, };
 
 long user_stack [ PAGE_SIZE>>2 ] ;
 
@@ -220,15 +187,13 @@ void wake_up(struct wait_queue **q)
 					need_resched = 1;
 			}
 		}
-#ifdef DEBUG
 		if (!tmp->next) {
-			printk("wait_queue is bad\n");
+			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
 			printk("        q = %08x\n",q);
 			printk("       *q = %08x\n",*q);
 			printk("      tmp = %08x\n",tmp);
 			break;
 		}
-#endif
 		tmp = tmp->next;
 	} while (tmp != *q);
 }
@@ -236,17 +201,18 @@ void wake_up(struct wait_queue **q)
 static inline void __sleep_on(struct wait_queue **p, int state)
 {
 	unsigned long flags;
+	struct wait_queue wait = { current, NULL };
 
 	if (!p)
 		return;
 	if (current == task[0])
 		panic("task[0] trying to sleep");
 	current->state = state;
-	add_wait_queue(p,&current->wait);
+	add_wait_queue(p, &wait);
 	save_flags(flags);
 	sti();
 	schedule();
-	remove_wait_queue(p,&current->wait);
+	remove_wait_queue(p, &wait);
 	restore_flags(flags);
 }
 
@@ -529,6 +495,41 @@ int sys_nice(long increment)
 	return 0;
 }
 
+static void show_task(int nr,struct task_struct * p)
+{
+	int i, j;
+	unsigned char * stack;
+
+	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
+		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
+	i = 0;
+	j = 4096;
+	if (!(stack = (char *) p->kernel_stack_page)) {
+		stack = (char *) init_kernel_stack;
+		j = sizeof(init_kernel_stack);
+	}
+	while (i<j && !*(stack++))
+		i++;
+	printk("%d/%d chars free in kstack\n\r",i,j);
+	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
+	if (p->p_ysptr || p->p_osptr) 
+		printk("   Younger sib=%d, older sib=%d\n\r", 
+			p->p_ysptr ? p->p_ysptr->pid : -1,
+			p->p_osptr ? p->p_osptr->pid : -1);
+	else
+		printk("\n\r");
+}
+
+void show_state(void)
+{
+	int i;
+
+	printk("\rTask-info:\n\r");
+	for (i=0 ; i<NR_TASKS ; i++)
+		if (task[i])
+			show_task(i,task[i]);
+}
+
 void sched_init(void)
 {
 	int i;
@@ -536,8 +537,8 @@ void sched_init(void)
 
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
-	set_tss_desc(gdt+FIRST_TSS_ENTRY,&(init_task.task.tss));
-	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&(init_task.task.ldt));
+	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);
+	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&init_task.ldt);
 	set_system_gate(0x80,&system_call);
 	p = gdt+2+FIRST_TSS_ENTRY;
 	for(i=1 ; i<NR_TASKS ; i++) {

@@ -227,7 +227,7 @@ static int read_aux(struct inode * inode, struct file * file, char * buffer, int
 
 	if (queue_empty()) {
 		if (file->f_flags & O_NONBLOCK)
-			return -EWOULDBLOCK;
+			return -EAGAIN;
 		cli();
 		interruptible_sleep_on(&queue->proc_list);
 		sti();
@@ -277,13 +277,6 @@ unsigned long psaux_init(unsigned long kmem_start)
 	if (aux_device_present != 0xaa) {
 		return kmem_start;
 	}
-	aux_write_ack(AUX_SET_RES);
-	aux_write_ack(0x03);		/* set resultion to 8 counts/mm */
-	aux_write_ack(AUX_SET_SCALE);
-	aux_write_ack(0x02);		/* set scaling to 2:1 */
-	aux_write_ack(AUX_SET_SAMPLE);
-	aux_write_ack(0x64);		/* set sampling rate to 100/sec */
-	aux_write_ack(AUX_SET_STREAM);	/* set stream mode */
 	printk("PS/2 type pointing device detected and installed.\n");
 	queue = (struct aux_queue *) kmem_start;
 	kmem_start += sizeof (struct aux_queue);

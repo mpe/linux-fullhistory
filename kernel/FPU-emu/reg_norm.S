@@ -4,10 +4,10 @@
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
- | Normalize the value in a REG.                                             |
+ | Normalize the value in a FPU_REG.                                         |
  |                                                                           |
  | Call from C as:                                                           |
- |   void normalize(REG *n)                                                  |
+ |   void normalize(FPU_REG *n)                                              |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 

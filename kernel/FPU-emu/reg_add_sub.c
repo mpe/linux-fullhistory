@@ -10,8 +10,8 @@
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- | For each function, the destination may be any REG, including one of the   |
- | source REGs.                                                              |
+ | For each function, the destination may be any FPU_REG, including one of   |
+ | the source FPU_REGs.                                                      |
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
@@ -20,7 +20,7 @@
 
 
 
-void reg_add(REG *a, REG *b, REG *dest)
+void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   int diff;
   
@@ -85,7 +85,7 @@ void reg_add(REG *a, REG *b, REG *dest)
 
 
 /* Subtract b from a.  (a-b) -> dest */
-void reg_sub(REG *a, REG *b, REG *dest)
+void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   int diff;
 

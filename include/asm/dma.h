@@ -1,20 +1,19 @@
 /* $Header: /sys/linux-0.97/include/asm/RCS/dma.h,v 1.4 1992/09/21 03:15:46 root Exp root $
  * linux/include/asm/dma.h: Defines for using and allocating dma channels.
  * Written by Hennus Bergman, 1992.
+ *
+ * High DMA channel support by Hannu Savolainen
  */
 
 #ifndef _ASM_DMA_H
 #define _ASM_DMA_H
 
 #include <asm/io.h>		/* need byte IO */
-#include <linux/kernel.h>	/* need panic() [FIXME] */
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
 #define outb	outb_p
 #endif
-
-/* FIXME: better fix this code for dma channels>3!!!!!!! */
 
 /*
  * The routines below should in most cases (with optimizing on) result
@@ -24,9 +23,16 @@
  * that cross a 64k boundary. When the address reaches 0xNffff, it will wrap
  * around to 0xN0000, rather than increment to 0x(N+1)0000 !
  * Make sure you align your buffers properly! Runtime check recommended.
+
+ ****** Correction!!!!!
+ * 	Channels 4-7 16 bit channels and capable to cross 64k boundaries
+ *	but not 128k boundaries. Transfer count must be given as words.
+ *	Maximum transfer size is 65k words = 128kb.
  *
  * NOTE2: DMA1..3 can only use the lower 1MB of physical memory. DMA4..7
  * can access the lower 16MB. There are people with >16MB, so beware!
+ 
+ * **** Not correct!!! All channels are able to access the first 16MB *******
  */
 
 
@@ -38,6 +44,7 @@
  * The first DMA controller uses bytes, the second words.
  *
  * Where are the page regs for the second DMA controller?????
+ * (ch 5=0x8b, 6=0x89, 7=0x8a)
  */
 
 
@@ -52,16 +59,18 @@
 #define DMA1_MODE_REG		0x0B	/* set modes for individual channels */
 #define DMA1_CLEAR_FF_REG	0x0C	/* Write 0 for LSB, 1 for MSB */
 #define DMA1_RESET_REG		0x0D	/* Write here to reset DMA controller */
-/* don't have much info on the second DMA controller... */
+
+#define DMA2_CMD_REG		0xD0	/* DMA command register */
+#define DMA2_STAT_REG		0xD0	/* DMA status register */
 #define DMA2_MASK_REG		0xD4
 #define DMA2_MODE_REG		0xD6
-/* #define DMA2_CLEAR_FF_REG 0xD8 -- pure guessing.... */
-
-/************* #error This needs more work!!!!!!!*************/
+#define DMA2_CLEAR_FF_REG 	0xD8
+#define DMA2_RESET_REG		0xDA	/* Write here to reset DMA controller */
 
 #define DMA_MODE_READ	0x44	/* I/O to memory, no autoinit, increment, single mode */
 #define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
-#define DMA_MODE_CASCADE	0xC0	/* cascade mode (for DMA2 controller only) */
+/* cascade mode (for DMA2 controller only) */
+#define DMA_MODE_CASCADE	0x40	/* 0xC0 */
 
 
 /* enable/disable a specific DMA channel */
@@ -93,11 +102,7 @@ static __inline__ void clear_dma_ff(unsigned int dmanr)
 	if (dmanr<=3)
 		outb(0,  DMA1_CLEAR_FF_REG);
 	else
-#ifdef DMA2_CLEAR_FF_REG
 		outb(0,  DMA2_CLEAR_FF_REG);
-#else
-		panic("dma.h: Don't have CLEAR_FF for high dma channels!\n");
-#endif
 }
 
 /* set mode (above) for a specific DMA channel */
@@ -130,10 +135,16 @@ static __inline__ void set_dma_page(unsigned int dmanr, char pagenr)
 			outb(pagenr, 0x82);
 			break;
 		case 4:
+			outb(pagenr, 0x8f);
+			break;
 		case 5:
+			outb(pagenr, 0x8b);
+			break;
 		case 6:
+			outb(pagenr, 0x89);
+			break;
 		case 7:
-			panic("dma.h: don't know how to set DMA page regs for channels>3");
+			outb(pagenr, 0x8a);
 			break;
 	}
 }
@@ -141,12 +152,20 @@ static __inline__ void set_dma_page(unsigned int dmanr, char pagenr)
 
 /* Set transfer address & page bits for specific DMA channel.
  * Assumes dma flipflop is clear.
+ *
+ * NOTE! A word address is assumed for the channels 4 to 7.
  */
 static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int a)
 {
 	unsigned int io_base = (dmanr<=3)? IO_DMA1_BASE : IO_DMA2_BASE;
+	unsigned int page = a>>16;
 
-	set_dma_page(dmanr, a>>16);
+	if (dmanr>3) page &= 0xfe;	/* The last bit is never used */
+
+	set_dma_page(dmanr, page);
+
+	if (dmanr>3) a >>= 1;
+
 	outb(a & 0xff, ((dmanr&3)<<1) + io_base);
 	outb((a>>8) & 0xff, ((dmanr&3)<<1) + io_base);
 }
@@ -160,8 +179,11 @@ static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int a)
  */
 static __inline__ void set_dma_count(unsigned int dmanr, unsigned int count)
 {
-	unsigned int dc = count - 1;
+	unsigned int dc;
 	unsigned int io_base = (dmanr<=3)? IO_DMA1_BASE : IO_DMA2_BASE;
+
+        if (dmanr>3) count >>=1;
+	dc = count - 1;
 
 	outb(dc & 0xff, ((dmanr&3)<<1) + 1 + io_base);
 	outb((dc>>8) & 0xff, ((dmanr&3)<<1) + 1 + io_base);

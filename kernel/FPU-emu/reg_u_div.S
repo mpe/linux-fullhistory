@@ -13,7 +13,8 @@
 /*---------------------------------------------------------------------------+
  |  Kernel for the division routines.                                        |
  |                                                                           |
- |  void reg_u_div(unsigned long long *a, unsigned long long *a, REG *dest)  |
+ |  void reg_u_div(unsigned long long *a, unsigned long long *a,             |
+ |                 FPU_REG *dest)                                            |
  |                                                                           |
  |  Does not compute the destination exponent, but does adjust it.           |
  +---------------------------------------------------------------------------*/

@@ -55,11 +55,11 @@ int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		return -EBADF;
 	switch (cmd) {
 		case FIOCLEX:
-			current->close_on_exec |= (1 << fd);
+			FD_SET(fd, &current->close_on_exec);
 			return 0;
 
 		case FIONCLEX:
-			current->close_on_exec &= ~(1 << fd);
+			FD_CLR(fd, &current->close_on_exec);
 			return 0;
 
 		case FIONBIO:

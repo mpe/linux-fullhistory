@@ -72,6 +72,8 @@ signal		= 12
 sigaction	= 16		# MUST be 16 (=len of sigaction)
 blocked		= (33*16)
 saved_kernel_stack = ((33*16)+4)
+kernel_stack_page = ((33*16)+8)
+flags		= ((33*16)+12)
 
 /*
  * offsets within sigaction
@@ -122,8 +124,29 @@ _system_call:
 	movl $-ENOSYS,EAX(%esp)
 	cmpl _NR_syscalls,%eax
 	jae ret_from_sys_call
-	call _sys_call_table(,%eax,4)
+	movl _current,%ebx
+	testl $0x20,flags(%ebx)		# PF_TRACESYS
+	je 1f
+	pushl $0
+	pushl %ebx
+	pushl $5			# SIGTRAP
+	call _send_sig
+	addl $12,%esp
+	call _schedule
+	movl ORIG_EAX(%esp),%eax
+1:	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
+	movl _current,%eax
+	testl $0x20,flags(%eax)		# PF_TRACESYS
+	je ret_from_sys_call
+	cmpl $0,signal(%eax)
+	jne ret_from_sys_call		# ptrace would clear signal
+	pushl $0
+	pushl %eax
+	pushl $5			# SIGTRAP
+	call _send_sig
+	addl $12,%esp
+	call _schedule
 	.align 4,0x90
 ret_from_sys_call:
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are

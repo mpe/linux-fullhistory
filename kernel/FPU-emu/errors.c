@@ -9,6 +9,13 @@
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------+
+ | Note:                                                                     |
+ |    The file contains code which accesses user memory.                     |
+ |    Emulator static data may change when user memory is accessed, due to   |
+ |    other processes using the emulator while swapping is in progress.      |
+ +---------------------------------------------------------------------------*/
+
 #include <linux/signal.h>
 
 #include <asm/segment.h>
@@ -21,17 +28,17 @@
 #include "reg_constant.h"
 #include "version.h"
 
-
-extern unsigned char  FPU_lookahead;
-
 /* */
 #undef PRINT_MESSAGES
 /* */
 
-
 void Un_impl(void)
 {
-  unsigned char byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
+  unsigned char byte1, FPU_modrm;
+
+  RE_ENTRANT_CHECK_OFF
+  byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
+  FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
   printk("Unimplemented FPU Opcode at eip=%p : %02x ",
 	 FPU_ORIG_EIP, byte1);
@@ -40,6 +47,7 @@ void Un_impl(void)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
     printk("/%d\n", (FPU_modrm >> 3) & 7);
+  RE_ENTRANT_CHECK_ON
 
   EXCEPTION(EX_Invalid);
 
@@ -53,7 +61,11 @@ void emu_printall()
   int i;
   static char *tag_desc[] = { "Valid", "Zero", "ERROR", "ERROR",
                               "DeNorm", "Inf", "NaN", "Empty" };
-  unsigned char byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
+  unsigned char byte1, FPU_modrm;
+
+  RE_ENTRANT_CHECK_OFF
+  byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
+  FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
 #ifdef DEBUGGING
 if ( status_word & SW_B ) printk("SW: backward compatibility (=ES)\n");
@@ -103,7 +115,7 @@ printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 
   for ( i = 0; i < 8; i++ )
     {
-      struct reg *r = &st(i);
+      FPU_REG *r = &st(i);
       switch (r->tag)
 	{
 	case TW_Empty:
@@ -140,6 +152,7 @@ printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 	 (long)(FPU_loaded_data.sigl & 0xFFFF),
 	 FPU_loaded_data.exp - EXP_BIAS + 1);
   printk("%s\n", tag_desc[(int) (unsigned) FPU_loaded_data.tag]);
+  RE_ENTRANT_CHECK_ON
 
 }
 
@@ -224,6 +237,7 @@ void exception(int n)
 	status_word &= ~SW_C1;
     }
 
+  RE_ENTRANT_CHECK_OFF
   if ( (~control_word & n & CW_EXM) || (n == EX_INTERNAL) )
     {
 #ifdef PRINT_MESSAGES
@@ -257,6 +271,7 @@ void exception(int n)
 
       send_sig(SIGFPE, current, 1);
     }
+  RE_ENTRANT_CHECK_ON
 
 #ifdef __DEBUG__
   math_abort(FPU_info,SIGFPE);
@@ -268,9 +283,9 @@ void exception(int n)
 
 
 /* Real operation attempted on two operands, one a NaN */
-void real_2op_NaN(REG *a, REG *b, REG *dest)
+void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
-  REG *x;
+  FPU_REG *x;
   
   x = a;
   if (a->tag == TW_NaN)
@@ -309,7 +324,7 @@ void real_2op_NaN(REG *a, REG *b, REG *dest)
 }
 
 /* Invalid arith operation on valid registers */
-void arith_invalid(REG *dest)
+void arith_invalid(FPU_REG *dest)
 {
   
   if ( control_word & EX_Invalid )
@@ -326,7 +341,7 @@ void arith_invalid(REG *dest)
 
 
 /* Divide a finite number by zero */
-void divide_by_zero(int sign, REG *dest)
+void divide_by_zero(int sign, FPU_REG *dest)
 {
 
   if ( control_word & EX_ZeroDiv )
@@ -343,7 +358,7 @@ void divide_by_zero(int sign, REG *dest)
 }
 
 
-void arith_overflow(REG *dest)
+void arith_overflow(FPU_REG *dest)
 {
 
   if ( control_word & EX_Overflow )
@@ -367,7 +382,7 @@ void arith_overflow(REG *dest)
 }
 
 
-void arith_underflow(REG *dest)
+void arith_underflow(FPU_REG *dest)
 {
 
   if ( control_word & EX_Underflow )
@@ -395,7 +410,7 @@ void stack_overflow(void)
     {
       /* The masked response */
       top--;
-      reg_move(&CONST_QNaN, st0_ptr = &st(0));
+      reg_move(&CONST_QNaN, FPU_st0_ptr = &st(0));
     }
 
   EXCEPTION(EX_StackOver);
@@ -411,7 +426,7 @@ void stack_underflow(void)
  if ( control_word & EX_Invalid )
     {
       /* The masked response */
-      reg_move(&CONST_QNaN, st0_ptr);
+      reg_move(&CONST_QNaN, FPU_st0_ptr);
     }
 
   EXCEPTION(EX_StackUnder);

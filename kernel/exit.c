@@ -70,6 +70,7 @@ void release(struct task_struct * p)
 		if (task[i] == p) {
 			task[i] = NULL;
 			REMOVE_LINKS(p);
+			free_page(p->kernel_stack_page);
 			free_page((long) p);
 			return;
 		}
@@ -98,7 +99,7 @@ int bad_task_ptr(struct task_struct *p)
  * holds.  Used for debugging only, since it's very slow....
  *
  * It looks a lot scarier than it really is.... we're doing ænothing more
- * than verifying the doubly-linked list foundæin p_ysptr and p_osptr, 
+ * than verifying the doubly-linked list found in p_ysptr and p_osptr, 
  * and checking it corresponds with the process tree defined by p_cptr and 
  * p_pptr;
  */
@@ -347,7 +348,7 @@ fake_volatile:
 	while (p = current->p_cptr) {
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
-		p->flags &= ~PF_PTRACED;
+		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 		if (task[1])
 			p->p_pptr = task[1];
 		else

@@ -330,11 +330,11 @@ int floppy_change(struct buffer_head * bh)
 	if (!bh)
 		return 0;
 	if (bh->b_dirt)
-		ll_rw_block(WRITE,bh);
+		ll_rw_block(WRITE, 1, &bh);
 	else {
 		buffer_track = -1;
 		bh->b_uptodate = 0;
-		ll_rw_block(READ,bh);
+		ll_rw_block(READ, 1, &bh);
 	}
 	cli();
 	while (bh->b_lock)

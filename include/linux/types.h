@@ -63,7 +63,41 @@ typedef unsigned char cc_t;
 typedef unsigned int speed_t;
 typedef unsigned long tcflag_t;
 
-typedef unsigned long fd_set;
+/*
+ * This allows for 256 file descriptors: if NR_OPEN is ever grown beyond that
+ * you'll have to change this too. But 256 fd's seem to be enough even for such
+ * "real" unices like SunOS, so hopefully this is one limit that doesn't have
+ * to be changed.
+ *
+ * Note that POSIX wants the FD_CLEAR(fd,fdsetp) defines to be in <sys/time.h>
+ * (and thus <linux/time.h>) - but this is a more logical place for them. Solved
+ * by having dummy defines in <sys/time.h>.
+ */
+#define __FDSET_LONGS 8
+typedef struct fd_set {
+	unsigned long fd_mask[__FDSET_LONGS];
+} fd_set;
+
+#define __FD_SETSIZE (__FDSET_LONGS*32)
+
+#define __FD_SET(fd,fdsetp) \
+__asm__ __volatile__("btsl %1,%0":"=m" (*(struct fd_set *)fdsetp):"r" ((int) fd))
+
+#define __FD_CLR(fd,fdsetp) \
+__asm__ __volatile__("btrl %1,%0":"=m" (*(struct fd_set *)fdsetp):"r" ((int) fd))
+
+#define __FD_ISSET(fd,fdsetp) \
+({ char __result; \
+__asm__ __volatile__("btl %1,%2 ; setb %0" \
+	:"=q" (__result) \
+	:"r" ((int) fd),"m" (*(struct fd_set *) fdsetp)); \
+__result; })
+
+#define __FD_ZERO(fdsetp) \
+__asm__ __volatile__("cld ; rep ; stosl" \
+	:"=m" (*(struct fd_set *) fdsetp) \
+	:"a" (0), "c" (__FDSET_LONGS), "D" ((struct fd_set *) fdsetp) \
+	:"cx","di")
 
 struct ustat {
 	daddr_t f_tfree;

@@ -9,17 +9,21 @@
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------+
+ | Note:                                                                     |
+ |    The file contains code which accesses user memory.                     |
+ |    Emulator static data may change when user memory is accessed, due to   |
+ |    other processes using the emulator while swapping is in progress.      |
+ +---------------------------------------------------------------------------*/
+
 
 #include <linux/stddef.h>
-#include <linux/math_emu.h>
 
 #include <asm/segment.h>
 
 #include "fpu_system.h"
 #include "exception.h"
 #include "fpu_emu.h"
-
-
 
 static int reg_offset[] = {
 	offsetof(struct info,___eax),
@@ -43,8 +47,10 @@ static void *sib(int mod)
 {
   unsigned char ss,index,base;
   long offset;
-  
+
+  RE_ENTRANT_CHECK_OFF
   base = get_fs_byte((char *) FPU_EIP);   /* The SIB byte */
+  RE_ENTRANT_CHECK_ON
   FPU_EIP++;
   ss = base >> 6;
   index = (base >> 3) & 7;
@@ -70,13 +76,17 @@ static void *sib(int mod)
   if (mod == 1)
     {
       /* 8 bit signed displacement */
+      RE_ENTRANT_CHECK_OFF
       offset += (signed char) get_fs_byte((char *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
       FPU_EIP++;
     }
   else if (mod == 2 || base == 5) /* The second condition also has mod==0 */
     {
       /* 32 bit displacment */
+      RE_ENTRANT_CHECK_OFF
       offset += (signed) get_fs_long((unsigned long *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
       FPU_EIP += 4;
     }
 
@@ -101,7 +111,7 @@ static void *sib(int mod)
 
 */
 
-void get_address(void)
+void get_address(unsigned char FPU_modrm)
 {
   unsigned char mod;
   long *cpu_reg_ptr;
@@ -122,7 +132,9 @@ void get_address(void)
       if (FPU_rm == 5)
 	{
 	  /* Special case: disp32 */
+	  RE_ENTRANT_CHECK_OFF
 	  offset = get_fs_long((unsigned long *) FPU_EIP);
+	  RE_ENTRANT_CHECK_ON
 	  FPU_EIP += 4;
 	  FPU_data_address = (void *) offset;
 	  return;
@@ -135,12 +147,16 @@ void get_address(void)
 	}
     case 1:
       /* 8 bit signed displacement */
+      RE_ENTRANT_CHECK_OFF
       offset = (signed char) get_fs_byte((char *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
       FPU_EIP++;
       break;
     case 2:
       /* 32 bit displacement */
+      RE_ENTRANT_CHECK_OFF
       offset = (signed) get_fs_long((unsigned long *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
       FPU_EIP += 4;
       break;
     case 3:

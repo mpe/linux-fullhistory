@@ -1,12 +1,19 @@
 /*---------------------------------------------------------------------------+
  |  reg_ld_str.c                                                             |
  |                                                                           |
- | All of the functions which transfer data between user memory and REGs.    |
+ | All of the functions which transfer data between user memory and FPU_REGs.|
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
+ +---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------+
+ | Note:                                                                     |
+ |    The file contains code which accesses user memory.                     |
+ |    Emulator static data may change when user memory is accessed, due to   |
+ |    other processes using the emulator while swapping is in progress.      |
  +---------------------------------------------------------------------------*/
 
 #include <asm/segment.h>
@@ -31,16 +38,27 @@
 #define SINGLE_Emin (-126)       /* smallest valid exponent */
 
 
-REG FPU_loaded_data;
+FPU_REG FPU_loaded_data;
 
 
 /* Get a long double from user memory */
 void reg_load_extended(void)
 {
   long double *s = (long double *)FPU_data_address;
-  FPU_loaded_data.sigl = get_fs_long((unsigned long *) s);
-  FPU_loaded_data.sigh = get_fs_long(1 + (unsigned long *) s);
-  FPU_loaded_data.exp = get_fs_word(4 + (unsigned short *) s);
+  unsigned long sigl, sigh, exp;
+
+  RE_ENTRANT_CHECK_OFF
+  /* Use temporary variables here because FPU_loaded data is
+     static and hence re-entrancy problems can arise */
+  sigl = get_fs_long((unsigned long *) s);
+  sigh = get_fs_long(1 + (unsigned long *) s);
+  exp = get_fs_word(4 + (unsigned short *) s);
+  RE_ENTRANT_CHECK_ON
+
+  FPU_loaded_data.sigl = sigl;
+  FPU_loaded_data.sigh = sigh;
+  FPU_loaded_data.exp = exp;
+
   if (FPU_loaded_data.exp & 0x8000)
     FPU_loaded_data.sign = SIGN_NEG;
   else
@@ -86,9 +104,13 @@ void reg_load_extended(void)
 void reg_load_double(void)
 {
   double *dfloat = (double *)FPU_data_address;
-  unsigned m64 = get_fs_long(1 + (unsigned long *) dfloat);
-  unsigned l64 = get_fs_long((unsigned long *) dfloat);
   int exp;
+  unsigned m64, l64;
+
+  RE_ENTRANT_CHECK_OFF
+  m64 = get_fs_long(1 + (unsigned long *) dfloat);
+  l64 = get_fs_long((unsigned long *) dfloat);
+  RE_ENTRANT_CHECK_ON
 
   if (m64 & 0x80000000)
     FPU_loaded_data.sign = SIGN_NEG;
@@ -157,8 +179,12 @@ void reg_load_double(void)
 void reg_load_single(void)
 {
   float *single = (float *)FPU_data_address;
-  unsigned m32 = get_fs_long((unsigned long *) single);
+  unsigned m32;
   int exp;
+
+  RE_ENTRANT_CHECK_OFF
+  m32 = get_fs_long((unsigned long *) single);
+  RE_ENTRANT_CHECK_ON
 
   if (m32 & 0x80000000)
     FPU_loaded_data.sign = SIGN_NEG;
@@ -220,8 +246,11 @@ void reg_load_int64(void)
   long long *_s = (long long *)FPU_data_address;
   int e;
   long long s;
+
+  RE_ENTRANT_CHECK_OFF
   ((unsigned long *)&s)[0] = get_fs_long((unsigned long *) _s);
   ((unsigned long *)&s)[1] = get_fs_long(1 + (unsigned long *) _s);
+  RE_ENTRANT_CHECK_ON
 
   if (s == 0)
     { reg_move(&CONST_Z, &FPU_loaded_data); return; }
@@ -246,9 +275,12 @@ void reg_load_int64(void)
 void reg_load_int32(void)
 {
   long *_s = (long *)FPU_data_address;
-  long s = (long)get_fs_long((unsigned long *) _s);
-
+  long s;
   int e;
+
+  RE_ENTRANT_CHECK_OFF
+  s = (long)get_fs_long((unsigned long *) _s);
+  RE_ENTRANT_CHECK_ON
 
   if (s == 0)
     { reg_move(&CONST_Z, &FPU_loaded_data); return; }
@@ -274,9 +306,11 @@ void reg_load_int32(void)
 void reg_load_int16(void)
 {
   short *_s = (short *)FPU_data_address;
-  int s = (int)get_fs_word((unsigned short *) _s);
+  int s, e;
 
-  int e;
+  RE_ENTRANT_CHECK_OFF
+  s = (int)get_fs_word((unsigned short *) _s);
+  RE_ENTRANT_CHECK_ON
 
   if (s == 0)
     { reg_move(&CONST_Z, &FPU_loaded_data); return; }
@@ -310,14 +344,28 @@ void reg_load_bcd(void)
   for ( pos = 8; pos >= 0; pos--)
     {
       l *= 10;
+      RE_ENTRANT_CHECK_OFF
       bcd = (unsigned char)get_fs_byte((unsigned char *) s+pos);
+      RE_ENTRANT_CHECK_ON
       l += bcd >> 4;
       l *= 10;
       l += bcd & 0x0f;
     }
+  
+  /* Finish all access to user memory before putting stuff into
+     the static FPU_loaded_data */
+  RE_ENTRANT_CHECK_OFF
+  FPU_loaded_data.sign =
+    ((unsigned char)get_fs_byte((unsigned char *) s+9)) & 0x80 ?
+      SIGN_NEG : SIGN_POS;
+  RE_ENTRANT_CHECK_ON
 
   if (l == 0)
-    { reg_move(&CONST_Z, &FPU_loaded_data); }
+    {
+      char sign = FPU_loaded_data.sign;
+      reg_move(&CONST_Z, &FPU_loaded_data);
+      FPU_loaded_data.sign = sign;
+    }
   else
     {
       *((long long *)&FPU_loaded_data.sigl) = l;
@@ -325,10 +373,6 @@ void reg_load_bcd(void)
       FPU_loaded_data.tag = TW_Valid;
       normalize(&FPU_loaded_data);
     }
-  
-  FPU_loaded_data.sign =
-    ((unsigned char)get_fs_byte((unsigned char *) s+9)) & 0x80 ?
-      SIGN_NEG : SIGN_POS;
 }
 
 /*===========================================================================*/
@@ -337,12 +381,12 @@ void reg_load_bcd(void)
 int reg_store_extended(void)
 {
   long double *d = (long double *)FPU_data_address;
-  short e;
+  long e = FPU_st0_ptr->exp - EXP_BIAS + EXTENDED_Ebias;
+  unsigned short sign = FPU_st0_ptr->sign*0x8000;
+  unsigned long ls, ms;
 
-  verify_area(d,10);
-  e = st0_ptr->exp - EXP_BIAS + EXTENDED_Ebias;
 
-  if ( st0_ptr->tag == TW_Valid )
+  if ( FPU_st0_tag == TW_Valid )
     {
       if ( e >= 0x7fff )
 	{
@@ -351,8 +395,8 @@ int reg_store_extended(void)
 	  if ( control_word & EX_Overflow )
 	    {
 	      /* Overflow to infinity */
-	      put_fs_long(0, (unsigned long *) d);
-	      put_fs_long(0x80000000, 1 + (unsigned long *) d);
+	      ls = 0;
+	      ms = 0x80000000;
 	      e = 0x7fff;
 	    }
 	  else
@@ -363,20 +407,20 @@ int reg_store_extended(void)
 	  if ( e == 0 )
 	    {
 	      EXCEPTION(EX_Denormal);  /* Pseudo de-normal */
-	      put_fs_long(st0_ptr->sigl, (unsigned long *) d);
-	      put_fs_long(st0_ptr->sigh, 1 + (unsigned long *) d);
+	      ls = FPU_st0_ptr->sigl;
+	      ms = FPU_st0_ptr->sigh;
 	    }
 	  else if ( e > -64 )
 	    {
 	      /* Make a de-normal */
-	      REG tmp;
+	      FPU_REG tmp;
 	      EXCEPTION(EX_Denormal);  /* De-normal */
-	      reg_move(st0_ptr, &tmp);
+	      reg_move(FPU_st0_ptr, &tmp);
 	      tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
 	      round_to_int(&tmp);
 	      e = 0;
-	      put_fs_long(tmp.sigl, (unsigned long *) d);
-	      put_fs_long(tmp.sigh, 1 + (unsigned long *) d);
+	      ls = tmp.sigl;
+	      ms = tmp.sigh;
 	    }
 	  else
 	    {
@@ -385,8 +429,8 @@ int reg_store_extended(void)
 	      if ( control_word & EX_Underflow )
 		{
 		  /* Underflow to zero */
-		  put_fs_long(0, (unsigned long *) d);
-		  put_fs_long(0, 1 + (unsigned long *) d);
+		  ls = 0;
+		  ms = 0;
 		  e = 0;
 		}
 	      else
@@ -395,29 +439,28 @@ int reg_store_extended(void)
 	}
       else
 	{
-	  put_fs_long(st0_ptr->sigl, (unsigned long *) d);
-	  put_fs_long(st0_ptr->sigh, 1 + (unsigned long *) d);
+	  ls = FPU_st0_ptr->sigl;
+	  ms = FPU_st0_ptr->sigh;
 	}
     }
-  else if ( st0_ptr->tag == TW_Zero )
+  else if ( FPU_st0_tag == TW_Zero )
     {
-      put_fs_long(0, (unsigned long *) d);
-      put_fs_long(0, 1 + (unsigned long *) d);
+      ls = ms = 0;
       e = 0;
     }
-  else if ( st0_ptr->tag == TW_Infinity )
+  else if ( FPU_st0_tag == TW_Infinity )
     {
-      put_fs_long(0, (unsigned long *) d);
-      put_fs_long(0x80000000, 1 + (unsigned long *) d);
+      ls = 0;
+      ms = 0x80000000;
       e = 0x7fff;
     }
-  else if ( st0_ptr->tag == TW_NaN )
+  else if ( FPU_st0_tag == TW_NaN )
     {
-      put_fs_long(st0_ptr->sigl, (unsigned long *) d);
-      put_fs_long(st0_ptr->sigh, 1 + (unsigned long *) d);
+      ls = FPU_st0_ptr->sigl;
+      ms = FPU_st0_ptr->sigh;
       e = 0x7fff;
     }
-  else if ( st0_ptr->tag == TW_Empty )
+  else if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -425,10 +468,9 @@ int reg_store_extended(void)
 	{
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
-	  put_fs_long(0, (unsigned long *) d);
-	  put_fs_long(0xc0000000, 1 + (unsigned long *) d);
-	  put_fs_word(0xffff, 4 + (short *) d);
-	  return 1;
+	  ls = 0;
+	  ms = 0xc0000000;
+	  e = 0xffff;
 	}
       else
 	return 0;
@@ -439,10 +481,15 @@ int reg_store_extended(void)
       EXCEPTION(EX_Invalid);
       /* Store a NaN */
       e = 0x7fff;
-      put_fs_long(1, (unsigned long *) d);
-      put_fs_long(0x80000000, 1 + (unsigned long *) d);
+      ls = 1;
+      ms = 0x80000000;
     }
-  put_fs_word(e + st0_ptr->sign*0x8000, 4 + (short *) d);
+  RE_ENTRANT_CHECK_OFF
+  verify_area(d,10);
+  put_fs_long(ls, (unsigned long *) d);
+  put_fs_long(ms, 1 + (unsigned long *) d);
+  put_fs_word((unsigned short)e | sign, 4 + (short *) d);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 
@@ -455,20 +502,19 @@ int reg_store_double(void)
   double *dfloat = (double *)FPU_data_address;
   unsigned long l[2];
 
-  verify_area((void *)dfloat,8);
 
-  if (st0_ptr->tag == TW_Valid)
+  if (FPU_st0_tag == TW_Valid)
     {
       /* Rounding can get a little messy.. */
-      int exp = st0_ptr->exp - EXP_BIAS;
-      int increment = ((st0_ptr->sigl & 0x7ff) > 0x400) |	/* nearest */
-	((st0_ptr->sigl & 0xc00) == 0xc00);           	/* odd -> even */
+      int exp = FPU_st0_ptr->exp - EXP_BIAS;
+      int increment = ((FPU_st0_ptr->sigl & 0x7ff) > 0x400) |	/* nearest */
+	((FPU_st0_ptr->sigl & 0xc00) == 0xc00);           	/* odd -> even */
       if ( increment )
 	{
-	  if ( st0_ptr->sigl >= 0xfffff800 )
+	  if ( FPU_st0_ptr->sigl >= 0xfffff800 )
 	    {
 	      /* the sigl part overflows */
-	      if ( st0_ptr->sigh == 0xffffffff )
+	      if ( FPU_st0_ptr->sigh == 0xffffffff )
 		{
 		  /* The sigh part overflows */
 		  l[0] = l[1] = 0;
@@ -477,22 +523,22 @@ int reg_store_double(void)
 	      else
 		{
 		  /* No overflow of sigh will happen, can safely increment */
-		  l[0] = (st0_ptr->sigh+1) << 21;
-		  l[1] = (((st0_ptr->sigh+1) >> 11) & 0xfffff);
+		  l[0] = (FPU_st0_ptr->sigh+1) << 21;
+		  l[1] = (((FPU_st0_ptr->sigh+1) >> 11) & 0xfffff);
 		}
 	    }
 	  else
 	    {
 	      /* We only need to increment sigl */
-	      l[0] = ((st0_ptr->sigl+0x800) >> 11) | (st0_ptr->sigh << 21);
-	      l[1] = ((st0_ptr->sigh >> 11) & 0xfffff);
+	      l[0] = ((FPU_st0_ptr->sigl+0x800) >> 11) | (FPU_st0_ptr->sigh << 21);
+	      l[1] = ((FPU_st0_ptr->sigh >> 11) & 0xfffff);
 	    }
 	}
       else
 	{
 	  /* No increment required */
-	  l[0] = (st0_ptr->sigl >> 11) | (st0_ptr->sigh << 21);
-	  l[1] = ((st0_ptr->sigh >> 11) & 0xfffff);
+	  l[0] = (FPU_st0_ptr->sigl >> 11) | (FPU_st0_ptr->sigh << 21);
+	  l[1] = ((FPU_st0_ptr->sigh >> 11) & 0xfffff);
 	}
 
       if ( exp > DOUBLE_Emax )
@@ -513,9 +559,9 @@ int reg_store_double(void)
 	  if ( exp > DOUBLE_Emin-53 )
 	    {
 	      /* Make a de-normal */
-	      REG tmp;
+	      FPU_REG tmp;
 	      EXCEPTION(EX_Denormal);
-	      reg_move(st0_ptr, &tmp);
+	      reg_move(FPU_st0_ptr, &tmp);
 	      tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
 	      round_to_int(&tmp);
 	      l[0] = tmp.sigl;
@@ -540,21 +586,21 @@ int reg_store_double(void)
 	  l[1] |= (((exp+DOUBLE_Ebias) & 0x7ff) << 20);
 	}
     }
-  else if (st0_ptr->tag == TW_Zero)
+  else if (FPU_st0_tag == TW_Zero)
     {
       /* Number is zero */
       l[0] = l[1] = 0;
     }
-  else if (st0_ptr->tag == TW_Infinity)
+  else if (FPU_st0_tag == TW_Infinity)
     {
       l[0] = 0;
       l[1] = 0x7ff00000;
     }
-  else if (st0_ptr->tag == TW_NaN)
+  else if (FPU_st0_tag == TW_NaN)
     {
-      /* See if we can get a valid NaN from the REG */
-      l[0] = (st0_ptr->sigl >> 11) | (st0_ptr->sigh << 21);
-      l[1] = ((st0_ptr->sigh >> 11) & 0xfffff);
+      /* See if we can get a valid NaN from the FPU_REG */
+      l[0] = (FPU_st0_ptr->sigl >> 11) | (FPU_st0_ptr->sigh << 21);
+      l[1] = ((FPU_st0_ptr->sigh >> 11) & 0xfffff);
       if ( !(l[0] | l[1]) )
 	{
 	  /* This case does not seem to be handled by the 80486 specs */
@@ -564,7 +610,7 @@ int reg_store_double(void)
 	}
       l[1] |= 0x7ff00000;
     }
-  else if ( st0_ptr->tag == TW_Empty )
+  else if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -573,24 +619,30 @@ int reg_store_double(void)
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
 put_indefinite:
+	  RE_ENTRANT_CHECK_OFF
+	  verify_area((void *)dfloat,8);
 	  put_fs_long(0, (unsigned long *) dfloat);
 	  put_fs_long(0xfff80000, 1 + (unsigned long *) dfloat);
+	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
       else
 	return 0;
     }
-  else if (st0_ptr->tag == TW_Denormal)
+  else if (FPU_st0_tag == TW_Denormal)
     {
       /* Extended real -> double real will always underflow */
       l[0] = l[1] = 0;
       EXCEPTION(EX_Underflow);
     }
-  if (st0_ptr->sign)
+  if (FPU_st0_ptr->sign)
     l[1] |= 0x80000000;
-  
+
+  RE_ENTRANT_CHECK_OFF
+  verify_area((void *)dfloat,8);
   put_fs_long(l[0], (unsigned long *)dfloat);
   put_fs_long(l[1], 1 + (unsigned long *)dfloat);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 
@@ -602,12 +654,11 @@ int reg_store_single(void)
 {
   float *single = (float *)FPU_data_address;
   long templ;
-  int exp = st0_ptr->exp - EXP_BIAS;
-  unsigned long sigh = st0_ptr->sigh;
+  int exp = FPU_st0_ptr->exp - EXP_BIAS;
+  unsigned long sigh = FPU_st0_ptr->sigh;
 
-  verify_area((void *)single,4);
 
-  if (st0_ptr->tag == TW_Valid)
+  if (FPU_st0_tag == TW_Valid)
     {
       if ( ((sigh & 0xff) > 0x80)           /* more than half */
 	  || ((sigh & 0x180) == 0x180) )    /* round to even */
@@ -642,9 +693,9 @@ int reg_store_single(void)
 	  if ( exp > SINGLE_Emin-24 )
 	    {
 	      /* Make a de-normal */
-	      REG tmp;
+	      FPU_REG tmp;
 	      EXCEPTION(EX_Denormal);
-	      reg_move(st0_ptr, &tmp);
+	      reg_move(FPU_st0_ptr, &tmp);
 	      tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
 	      round_to_int(&tmp);
 	      templ = tmp.sigl;
@@ -665,18 +716,18 @@ int reg_store_single(void)
       else
 	templ |= ((exp+SINGLE_Ebias) & 0xff) << 23;
     }
-  else if (st0_ptr->tag == TW_Zero)
+  else if (FPU_st0_tag == TW_Zero)
     {
       templ = 0;
     }
-  else if (st0_ptr->tag == TW_Infinity)
+  else if (FPU_st0_tag == TW_Infinity)
     {
       templ = 0x7f800000;
     }
-  else if (st0_ptr->tag == TW_NaN)
+  else if (FPU_st0_tag == TW_NaN)
     {
-      /* See if we can get a valid NaN from the REG */
-      templ = st0_ptr->sigh >> 8;
+      /* See if we can get a valid NaN from the FPU_REG */
+      templ = FPU_st0_ptr->sigh >> 8;
       if ( !(templ & 0x3fffff) )
 	{
 	  /* This case does not seem to be handled by the 80486 specs */
@@ -686,7 +737,7 @@ int reg_store_single(void)
 	}
       templ |= 0x7f800000;
     }
-  else if ( st0_ptr->tag == TW_Empty )
+  else if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -695,13 +746,16 @@ int reg_store_single(void)
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
 put_indefinite:
+	  RE_ENTRANT_CHECK_OFF
+	  verify_area((void *)single,4);
 	  put_fs_long(0xffc00000, (unsigned long *) single);
+	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
       else
 	return 0;
     }
-  else if (st0_ptr->tag == TW_Denormal)
+  else if (FPU_st0_tag == TW_Denormal)
     {
       /* Extended real -> real will always underflow */
       templ = 0;
@@ -714,10 +768,13 @@ put_indefinite:
       return 0;
     }
 #endif
-  if (st0_ptr->sign)
+  if (FPU_st0_ptr->sign)
     templ |= 0x80000000;
 
+  RE_ENTRANT_CHECK_OFF
+  verify_area((void *)single,4);
   put_fs_long(templ,(unsigned long *) single);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 }
@@ -727,11 +784,10 @@ put_indefinite:
 int reg_store_int64(void)
 {
   long long *d = (long long *)FPU_data_address;
-  REG t;
+  FPU_REG t;
   long long tll;
 
-  verify_area((void *)d,8);
-  if ( st0_ptr->tag == TW_Empty )
+  if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -745,7 +801,7 @@ int reg_store_int64(void)
 	return 0;
     }
 
-  reg_move(st0_ptr, &t);
+  reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
   ((long *)&tll)[0] = t.sigl;
   ((long *)&tll)[1] = t.sigh;
@@ -766,8 +822,11 @@ put_indefinite:
   else if (t.sign)
     tll = - tll;
 
+  RE_ENTRANT_CHECK_OFF
+  verify_area((void *)d,8);
   put_fs_long(((long *)&tll)[0],(unsigned long *) d);
   put_fs_long(((long *)&tll)[1],1 + (unsigned long *) d);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 }
@@ -777,11 +836,10 @@ put_indefinite:
 int reg_store_int32(void)
 {
   long *d = (long *)FPU_data_address;
-  REG t;
+  FPU_REG t;
   long tl;
 
-  verify_area(d,4);
-  if ( st0_ptr->tag == TW_Empty )
+  if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -789,14 +847,17 @@ int reg_store_int32(void)
 	{
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
+	  RE_ENTRANT_CHECK_OFF
+	  verify_area(d,4);
 	  put_fs_long(0x80000000, (unsigned long *) d);
+	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
       else
 	return 0;
     }
 
-  reg_move(st0_ptr, &t);
+  reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
   if (t.sigh || (t.sigl & 0x80000000))
     {
@@ -811,9 +872,12 @@ int reg_store_int32(void)
 	return 0;
     }
   else
-    tl = st0_ptr->sign ? -t.sigl : t.sigl;
+    tl = FPU_st0_ptr->sign ? -t.sigl : t.sigl;
 
+  RE_ENTRANT_CHECK_OFF
+  verify_area(d,4);
   put_fs_long(tl, (unsigned long *) d);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 }
@@ -823,11 +887,10 @@ int reg_store_int32(void)
 int reg_store_int16(void)
 {
   short *d = (short *)FPU_data_address;
-  REG t;
+  FPU_REG t;
   short ts;
 
-  verify_area(d,2);
-  if ( st0_ptr->tag == TW_Empty )
+  if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -835,14 +898,17 @@ int reg_store_int16(void)
 	{
 	  /* The masked response */
 	  /* Put out the QNaN indefinite */
+	  RE_ENTRANT_CHECK_OFF
+	  verify_area(d,2);
 	  put_fs_word(0x8000, (unsigned short *) d);
+	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
       else
 	return 0;
     }
 
-  reg_move(st0_ptr, &t);
+  reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
   if (t.sigh || (t.sigl & 0xFFFF8000))
     {
@@ -857,9 +923,12 @@ int reg_store_int16(void)
 	return 0;
     }
   else
-    ts = st0_ptr->sign ? -t.sigl : t.sigl;
+    ts = FPU_st0_ptr->sign ? -t.sigl : t.sigl;
 
+  RE_ENTRANT_CHECK_OFF
+  verify_area(d,2);
   put_fs_word(ts,(short *) d);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 }
@@ -869,13 +938,13 @@ int reg_store_int16(void)
 int reg_store_bcd(void)
 {
   char *d = (char *)FPU_data_address;
-  REG t;
+  FPU_REG t;
   long long ll;
   unsigned char b;
   int i;
+  unsigned char sign = (FPU_st0_ptr->sign == SIGN_NEG) ? 0x80 : 0;
 
-  verify_area(d,10);
-  if ( st0_ptr->tag == TW_Empty )
+  if ( FPU_st0_tag == TW_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -889,7 +958,7 @@ int reg_store_bcd(void)
 	return 0;
     }
 
-  reg_move(st0_ptr, &t);
+  reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
   ll = *(long long *)(&t.sigl);
 
@@ -903,25 +972,30 @@ int reg_store_bcd(void)
 	{
 put_indefinite:
 	  /* Produce "indefinite" */
+	  RE_ENTRANT_CHECK_OFF
+	  verify_area(d,10);
 	  put_fs_byte(0xff,(unsigned char *) d+7);
 	  put_fs_byte(0xff,(unsigned char *) d+8);
 	  put_fs_byte(0xff,(unsigned char *) d+9);
+	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
       else
 	return 0;
     }
 
+  verify_area(d,10);
   for ( i = 0; i < 9; i++)
     {
       b = div_small(&ll, 10);
       b |= (div_small(&ll, 10)) << 4;
+      RE_ENTRANT_CHECK_OFF
       put_fs_byte(b,(unsigned char *) d+i);
+      RE_ENTRANT_CHECK_ON
     }
-  if (st0_ptr->sign == SIGN_NEG)
-    put_fs_byte(0x80,(unsigned char *) d+9);
-  else
-    put_fs_byte(0,(unsigned char *) d+9);
+  RE_ENTRANT_CHECK_OFF
+  put_fs_byte(sign,(unsigned char *) d+9);
+  RE_ENTRANT_CHECK_ON
 
   return 1;
 }
@@ -934,7 +1008,7 @@ put_indefinite:
    In the case of overflow, the returned significand always has the
    the largest possible value */
 /* The value returned in eax is never actually needed :-) */
-int round_to_int(REG *r)
+int round_to_int(FPU_REG *r)
 {
   char     very_big;
   unsigned eax;
@@ -997,6 +1071,7 @@ char *fldenv(void)
   unsigned char tag;
   int i;
 
+  RE_ENTRANT_CHECK_OFF
   control_word = get_fs_word((unsigned short *) s);
   status_word = get_fs_word((unsigned short *) (s+4));
   tag_word = get_fs_word((unsigned short *) (s+8));
@@ -1004,6 +1079,7 @@ char *fldenv(void)
   cs_selector = get_fs_long((unsigned long *) (s+0x10));
   data_operand_offset = get_fs_long((unsigned long *) (s+0x14));
   operand_selector = get_fs_long((unsigned long *) (s+0x18));
+  RE_ENTRANT_CHECK_ON
 
 
   for ( i = 7; i >= 0; i-- )
@@ -1039,7 +1115,7 @@ void frstor(void)
 {
   int i;
   unsigned char tag;
-  REG *s = (REG *)fldenv();
+  FPU_REG *s = (FPU_REG *)fldenv();
 
   for ( i = 0; i < 8; i++ )
     {
@@ -1093,6 +1169,7 @@ char *fstenv(void)
   *(unsigned short *)&cs_selector = FPU_CS;
   *(unsigned short *)&operand_selector = FPU_DS;
 
+  RE_ENTRANT_CHECK_OFF
   put_fs_word(control_word, (unsigned short *) d);
   put_fs_word(status_word, (unsigned short *) (d+4));
   put_fs_word(tag_word, (unsigned short *) (d+8));
@@ -1100,6 +1177,7 @@ char *fstenv(void)
   put_fs_long(cs_selector, (unsigned long *) (d+0x10));
   put_fs_long(data_operand_offset, (unsigned long *) (d+0x14));
   put_fs_long(operand_selector, (unsigned long *) (d+0x18));
+  RE_ENTRANT_CHECK_ON
 
   return d + 0x1c;
 }
@@ -1108,7 +1186,7 @@ char *fstenv(void)
 void fsave(void)
 {
   char *d;
-  REG tmp, *rp;
+  FPU_REG tmp, *rp;
   int i;
   short e;
 
@@ -1121,13 +1199,15 @@ void fsave(void)
 
       e = rp->exp - EXP_BIAS + EXTENDED_Ebias;
 
-      if ( st0_ptr->tag == TW_Valid )
+      if ( rp->tag == TW_Valid )
 	{
 	  if ( e >= 0x7fff )
 	    {
 	      /* Overflow to infinity */
+	      RE_ENTRANT_CHECK_OFF
 	      put_fs_long(0, (unsigned long *) (d+i*10+2));
 	      put_fs_long(0x80000000, (unsigned long *) (d+i*10+6));
+	      RE_ENTRANT_CHECK_ON
 	      e = 0x7fff;
 	    }
 	  else if ( e <= 0 )
@@ -1135,8 +1215,10 @@ void fsave(void)
 	      if ( e == 0 )
 		{
 		  /* Pseudo de-normal */
+		  RE_ENTRANT_CHECK_OFF
 		  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
 		  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+		  RE_ENTRANT_CHECK_ON
 		}
 	      else if ( e > -64 )
 		{
@@ -1145,48 +1227,64 @@ void fsave(void)
 		  tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
 		  round_to_int(&tmp);
 		  e = 0;
+		  RE_ENTRANT_CHECK_OFF
 		  put_fs_long(tmp.sigl, (unsigned long *) (d+i*10+2));
 		  put_fs_long(tmp.sigh, (unsigned long *) (d+i*10+6));
+		  RE_ENTRANT_CHECK_ON
 		}
 	      else
 		{
 		  /* Underflow to zero */
+		  RE_ENTRANT_CHECK_OFF
 		  put_fs_long(0, (unsigned long *) (d+i*10+2));
 		  put_fs_long(0, (unsigned long *) (d+i*10+6));
+		  RE_ENTRANT_CHECK_ON
 		  e = 0;
 		}
 	    }
 	  else
 	    {
+	      RE_ENTRANT_CHECK_OFF
 	      put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
 	      put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	      RE_ENTRANT_CHECK_ON
 	    }
 	}
-      else if ( st0_ptr->tag == TW_Zero )
+      else if ( rp->tag == TW_Zero )
 	{
+	  RE_ENTRANT_CHECK_OFF
 	  put_fs_long(0, (unsigned long *) (d+i*10+2));
 	  put_fs_long(0, (unsigned long *) (d+i*10+6));
+	  RE_ENTRANT_CHECK_ON
 	  e = 0;
 	}
-      else if ( st0_ptr->tag == TW_Infinity )
+      else if ( rp->tag == TW_Infinity )
 	{
+	  RE_ENTRANT_CHECK_OFF
 	  put_fs_long(0, (unsigned long *) (d+i*10+2));
 	  put_fs_long(0x80000000, (unsigned long *) (d+i*10+6));
+	  RE_ENTRANT_CHECK_ON
 	  e = 0x7fff;
 	}
-      else if ( st0_ptr->tag == TW_NaN )
+      else if ( rp->tag == TW_NaN )
 	{
+	  RE_ENTRANT_CHECK_OFF
 	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
 	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	  RE_ENTRANT_CHECK_ON
 	  e = 0x7fff;
 	}
-      else if ( st0_ptr->tag == TW_Empty )
+      else if ( rp->tag == TW_Empty )
 	{
 	  /* just copy the reg */
+	  RE_ENTRANT_CHECK_OFF
 	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
 	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	  RE_ENTRANT_CHECK_ON
 	}
+      RE_ENTRANT_CHECK_OFF
       put_fs_word(e, (unsigned short *) (d+i*10));
+      RE_ENTRANT_CHECK_ON
     }
 
 }

@@ -2,11 +2,11 @@
 extern void Un_impl(void);
 extern void emu_printall(void);
 extern void exception(int n);
-extern void real_2op_NaN(struct reg *a, struct reg *b, struct reg *dest);
-extern void arith_invalid(struct reg *dest);
-extern void divide_by_zero(int sign, struct reg *dest);
-extern void arith_overflow(struct reg *dest);
-extern void arith_underflow(struct reg *dest);
+extern void real_2op_NaN(struct fpu_reg *a, struct fpu_reg *b, struct fpu_reg *dest);
+extern void arith_invalid(struct fpu_reg *dest);
+extern void divide_by_zero(int sign, struct fpu_reg *dest);
+extern void arith_overflow(struct fpu_reg *dest);
+extern void arith_underflow(struct fpu_reg *dest);
 extern void stack_overflow(void);
 extern void stack_underflow(void);
 /* fpu_arith.c */
@@ -43,30 +43,30 @@ extern void math_emulate(long arg);
 /* fpu_etc.c */
 extern void fp_etc(void);
 /* fpu_trig.c */
-extern void convert_l2reg(long *arg, struct reg *dest);
+extern void convert_l2reg(long *arg, struct fpu_reg *dest);
 extern void trig_a(void);
 extern void trig_b(void);
 /* get_address.c */
-extern void get_address(void);
+extern void get_address(unsigned char FPU_modrm);
 /* load_store.c */
 extern void load_store_instr(char type);
 /* poly_2xm1.c */
-extern int poly_2xm1(struct reg *arg, struct reg *result);
+extern int poly_2xm1(struct fpu_reg *arg, struct fpu_reg *result);
 /* poly_atan.c */
-extern void poly_atan(struct reg *arg);
-extern void poly_add_1(struct reg *src);
+extern void poly_atan(struct fpu_reg *arg);
+extern void poly_add_1(struct fpu_reg *src);
 /* poly_l2.c */
-extern void poly_l2(struct reg *arg, struct reg *result);
-extern int poly_l2p1(struct reg *arg, struct reg *result);
+extern void poly_l2(struct fpu_reg *arg, struct fpu_reg *result);
+extern int poly_l2p1(struct fpu_reg *arg, struct fpu_reg *result);
 /* poly_sin.c */
-extern void poly_sine(struct reg *arg, struct reg *result);
+extern void poly_sine(struct fpu_reg *arg, struct fpu_reg *result);
 /* poly_tan.c */
-extern void poly_tan(struct reg *arg, struct reg *y_reg);
+extern void poly_tan(struct fpu_reg *arg, struct fpu_reg *y_reg);
 /* reg_add_sub.c */
-extern void reg_add(struct reg *a, struct reg *b, struct reg *dest);
-extern void reg_sub(struct reg *a, struct reg *b, struct reg *dest);
+extern void reg_add(struct fpu_reg *a, struct fpu_reg *b, struct fpu_reg *dest);
+extern void reg_sub(struct fpu_reg *a, struct fpu_reg *b, struct fpu_reg *dest);
 /* reg_compare.c */
-extern int compare(struct reg *b);
+extern int compare(struct fpu_reg *b);
 extern void compare_st_data(void);
 extern void fcom_st(void);
 extern void fcompst(void);
@@ -91,10 +91,10 @@ extern int reg_store_int64(void);
 extern int reg_store_int32(void);
 extern int reg_store_int16(void);
 extern int reg_store_bcd(void);
-extern int round_to_int(struct reg *r);
+extern int round_to_int(struct fpu_reg *r);
 extern char *fldenv(void);
 extern void frstor(void);
 extern char *fstenv(void);
 extern void fsave(void);
 /* reg_mul.c */
-extern void reg_mul(struct reg *a, struct reg *b, struct reg *dest);
+extern void reg_mul(struct fpu_reg *a, struct fpu_reg *b, struct fpu_reg *dest);

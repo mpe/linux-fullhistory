@@ -158,10 +158,10 @@ void minix_free_inode(struct inode * inode)
 	if (!inode)
 		return;
 	if (!inode->i_dev) {
-		memset(inode,0,sizeof(*inode));
+		printk("free_inode: inode has no device\n");
 		return;
 	}
-	if (inode->i_count>1) {
+	if (inode->i_count != 1) {
 		printk("free_inode: inode has count=%d\n",inode->i_count);
 		return;
 	}
@@ -182,9 +182,9 @@ void minix_free_inode(struct inode * inode)
 		return;
 	}
 	if (clear_bit(inode->i_ino&8191,bh->b_data))
-		printk("free_inode: bit already cleared.\n\r");
+		printk("free_inode: bit %d already cleared.\n",inode->i_ino);
 	bh->b_dirt = 1;
-	memset(inode,0,sizeof(*inode));
+	clear_inode(inode);
 }
 
 struct inode * minix_new_inode(struct super_block * sb)

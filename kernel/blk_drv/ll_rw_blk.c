@@ -243,29 +243,30 @@ repeat:
 	schedule();
 }
 
-void ll_rw_block(int rw, struct buffer_head * bh)
+void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
 
-	if (!bh)
+	if (nr!=1) panic("ll_rw_block: only one block at a time implemented");
+	if (!bh[0])
 		return;
-	if (bh->b_size != 1024) {
-		printk("ll_rw_block: only 1024-char blocks implemented (%d)\n",bh->b_size);
-		bh->b_dirt = bh->b_uptodate = 0;
+	if (bh[0]->b_size != 1024) {
+		printk("ll_rw_block: only 1024-char blocks implemented (%d)\n",bh[0]->b_size);
+		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
 		return;
 	}
-	if ((major=MAJOR(bh->b_dev)) >= NR_BLK_DEV ||
+	if ((major=MAJOR(bh[0]->b_dev)) >= NR_BLK_DEV ||
 	!(blk_dev[major].request_fn)) {
-		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh->b_dev,bh->b_blocknr);
-		bh->b_dirt = bh->b_uptodate = 0;
+		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh[0]->b_dev,bh[0]->b_blocknr);
+		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
 		return;
 	}
-	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh->b_dev)) {
-		printk("Can't write to read-only device 0x%X\n\r",bh->b_dev);
-		bh->b_dirt = bh->b_uptodate = 0;
+	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
+		printk("Can't write to read-only device 0x%X\n\r",bh[0]->b_dev);
+		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
 		return;
 	}
-	make_request(major,rw,bh);
+	make_request(major,rw,bh[0]);
 }
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)

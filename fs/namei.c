@@ -144,6 +144,10 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 		if (error)
 			return error;
 	}
+	if (!base->i_op || !base->i_op->lookup) {
+		iput(base);
+		return -ENOTDIR;
+	}
 	*name = thisname;
 	*namelen = len;
 	*res_inode = base;

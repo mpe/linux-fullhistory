@@ -15,7 +15,7 @@
 /* devices are as follows: (same as minix, so we can use the minix
  * file system. These are major numbers.)
  *
- *  0 - unused (nodev)
+ *  0 - unnamed (minor 0 = true nodev)
  *  1 - /dev/mem
  *  2 - /dev/fd
  *  3 - /dev/hd
@@ -27,7 +27,13 @@
  *  9 - /dev/st
  * 10 - mice
  * 11 - scsi cdrom
+ * 12 -
+ * 13 -
+ * 14 - sound card (?)
+ * 15 -
  */
+
+#define UNNAMED_MAJOR 0
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -129,6 +135,9 @@ struct inode {
 	struct wait_queue * i_wait;
 	struct file_lock * i_flock;
 	struct vm_area_struct * i_mmap;
+	struct inode * i_next, * i_prev;
+	struct inode * i_hash_next, * i_hash_prev;
+	struct inode * i_bound_to, * i_bound_by;
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
@@ -194,7 +203,7 @@ struct file_operations {
 	int (*lseek) (struct inode *, struct file *, off_t, int);
 	int (*read) (struct inode *, struct file *, char *, int);
 	int (*write) (struct inode *, struct file *, char *, int);
-	int (*readdir) (struct inode *, struct file *, struct dirent *, int count);
+	int (*readdir) (struct inode *, struct file *, struct dirent *, int);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned int);
 	int (*mmap) (void);
@@ -214,23 +223,25 @@ struct inode_operations {
 	int (*mknod) (struct inode *,const char *,int,int,int);
 	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
-	int (*follow_link) (struct inode *, struct inode *, int flag, int mode, struct inode ** res_inode);
+	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
 };
 
 struct super_operations {
-	void (*read_inode)(struct inode *inode);
-	void (*write_inode) (struct inode *inode);
-	void (*put_inode) (struct inode *inode);
-	void (*put_super)(struct super_block *sb);
-	void (*write_super) (struct super_block *sb);
-	void (*statfs) (struct super_block *sb, struct statfs *buf);
+	void (*read_inode) (struct inode *);
+	int (*notify_change) (struct inode *);
+	void (*write_inode) (struct inode *);
+	void (*put_inode) (struct inode *);
+	void (*put_super) (struct super_block *);
+	void (*write_super) (struct super_block *);
+	void (*statfs) (struct super_block *, struct statfs *);
 };
 
 struct file_system_type {
-	struct super_block *(*read_super)(struct super_block *sb,void *mode);
+	struct super_block *(*read_super) (struct super_block *, void *);
 	char *name;
+	int requires_dev;
 };
 
 extern struct file_operations * chrdev_fops[MAX_CHRDEV];
@@ -261,6 +272,7 @@ extern void sync_inodes(dev_t dev);
 extern void sync_dev(dev_t dev);
 extern void sync_supers(dev_t dev);
 extern int bmap(struct inode * inode,int block);
+extern int notify_change(struct inode * inode);
 extern int namei(const char * pathname, struct inode ** res_inode);
 extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);
@@ -270,11 +282,12 @@ extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern void iput(struct inode * inode);
 extern struct inode * iget(struct super_block * sb,int nr);
 extern struct inode * get_empty_inode(void);
+extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
 extern struct file * get_empty_filp(void);
 extern struct buffer_head * get_hash_table(dev_t dev, int block, int size);
 extern struct buffer_head * getblk(dev_t dev, int block, int size);
-extern void ll_rw_block(int rw, struct buffer_head * bh);
+extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
 extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
 extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern void brelse(struct buffer_head * buf);

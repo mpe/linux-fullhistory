@@ -136,6 +136,9 @@ int minix_lookup(struct inode * dir,const char * name, int len,
  * NOTE!! The inode part of 'de' is left at 0 - which means you
  * may not sleep between calling this and putting something into
  * the entry, as someone else might have used it while you slept.
+ *
+ * Arggh. To avoid race-conditions, we copy the name into kernel
+ * space before actually writing it into the buffer...
  */
 static struct buffer_head * minix_add_entry(struct inode * dir,
 	const char * name, int namelen, struct minix_dir_entry ** res_dir)
@@ -143,22 +146,25 @@ static struct buffer_head * minix_add_entry(struct inode * dir,
 	int i;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
+	char name_buffer[MINIX_NAME_LEN];
 
 	*res_dir = NULL;
 	if (!dir)
 		return NULL;
+	if (namelen > MINIX_NAME_LEN) {
 #ifdef NO_TRUNCATE
-	if (namelen > MINIX_NAME_LEN)
 		return NULL;
 #else
-	if (namelen > MINIX_NAME_LEN)
 		namelen = MINIX_NAME_LEN;
 #endif
+	}
 	if (!namelen)
 		return NULL;
 	bh =  minix_bread(dir,0,0);
 	if (!bh)
 		return NULL;
+	for (i = 0; i < MINIX_NAME_LEN ; i++)
+		name_buffer[i] = (i<namelen) ? get_fs_byte(name+i) : 0;
 	i = 0;
 	de = (struct minix_dir_entry *) bh->b_data;
 	while (1) {
@@ -177,8 +183,7 @@ static struct buffer_head * minix_add_entry(struct inode * dir,
 		}
 		if (!de->inode) {
 			dir->i_mtime = CURRENT_TIME;
-			for (i=0; i < MINIX_NAME_LEN ; i++)
-				de->name[i]=(i<namelen)?get_fs_byte(name+i):0;
+			memcpy(de->name,name_buffer,MINIX_NAME_LEN);
 			bh->b_dirt = 1;
 			*res_dir = de;
 			return bh;
@@ -441,6 +446,7 @@ int minix_unlink(struct inode * dir, const char * name, int len)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
+repeat:
 	retval = -ENOENT;
 	inode = NULL;
 	bh = minix_find_entry(dir,name,len,&de);
@@ -448,6 +454,13 @@ int minix_unlink(struct inode * dir, const char * name, int len)
 		goto end_unlink;
 	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_unlink;
+	if (de->inode != inode->i_ino) {
+		iput(inode);
+		brelse(bh);
+		current->counter = 0;
+		schedule();
+		goto repeat;
+	}
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
@@ -462,9 +475,11 @@ int minix_unlink(struct inode * dir, const char * name, int len)
 	}
 	de->inode = 0;
 	bh->b_dirt = 1;
+	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_dirt = 1;
 	inode->i_nlink--;
-	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
+	inode->i_dirt = 1;
 	retval = 0;
 end_unlink:
 	brelse(bh);

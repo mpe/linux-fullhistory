@@ -77,7 +77,8 @@ int core_dump(long signr, struct pt_regs * regs)
 		return 0;
 	current->dumpable = 0;
 /* See if we have enough room to write the upage.  */
-	if(current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE/1024) return 0;
+	if (current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE)
+		return 0;
 	__asm__("mov %%fs,%0":"=r" (fs));
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode,NULL)) {
@@ -113,11 +114,11 @@ int core_dump(long signr, struct pt_regs * regs)
 		dump.u_ssize = ((unsigned long) (TASK_SIZE - dump.start_stack)) >> 12;
 /* If the size of the dump file exceeds the rlimit, then see what would happen
    if we wrote the stack, but not the data area.  */
-	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE/1024 >
+	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_dsize = 0;
 /* Make sure we have enough room to write the stack and data areas. */
-	if ((dump.u_ssize+1) * PAGE_SIZE / 1024 >
+	if ((dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_ssize = 0;
        	dump.u_comm = 0;
@@ -588,9 +589,9 @@ restart_interp:
 			current->sigaction[i].sa_handler = NULL;
 	}
 	for (i=0 ; i<NR_OPEN ; i++)
-		if ((current->close_on_exec>>i)&1)
+		if (FD_ISSET(i,&current->close_on_exec))
 			sys_close(i);
-	current->close_on_exec = 0;
+	FD_ZERO(&current->close_on_exec);
 	clear_page_tables(current);
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;

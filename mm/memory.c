@@ -62,9 +62,9 @@ unsigned short * mem_map = NULL;
 void oom(struct task_struct * task)
 {
 	printk("\nout of memory\n");
-	task->sigaction[SIGSEGV-1].sa_handler = NULL;
-	task->blocked &= ~(1<<(SIGSEGV-1));
-	send_sig(SIGSEGV,task,1);
+	task->sigaction[SIGKILL-1].sa_handler = NULL;
+	task->blocked &= ~(1<<(SIGKILL-1));
+	send_sig(SIGKILL,task,1);
 }
 
 static void free_one_table(unsigned long * page_dir)
@@ -446,31 +446,62 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	return page;
 }
 
-static void un_wp_page(unsigned long * table_entry, struct task_struct * task)
+/*
+ * This routine handles present pages, when users try to write
+ * to a shared page. It is done by copying the page to a new address
+ * and decrementing the shared-page counter for the old page.
+ *
+ * Fixed the routine to repeat a bit more: this is slightly slower,
+ * but there were race-conditions in the old code..
+ */
+void do_wp_page(unsigned long error_code, unsigned long address,
+	struct task_struct * tsk, unsigned long user_esp)
 {
-	unsigned long old_page;
+	unsigned long pde, pte, old_page, dirty;
 	unsigned long new_page = 0;
-	unsigned long dirty;
 
 repeat:
-	old_page = *table_entry;
-	if (!(old_page & 1)) {
+	pde = tsk->tss.cr3 + ((address>>20) & 0xffc);
+	pte = *(unsigned long *) pde;
+	if (!(pte & PAGE_PRESENT)) {
 		if (new_page)
 			free_page(new_page);
 		return;
 	}
+	if ((pte & 7) != 7 || pte >= high_memory) {
+		printk("do_wp_page: bogus page-table at address %08x (%08x)\n",address,pte);
+		*(unsigned long *) pde = BAD_PAGETABLE | 7;
+		send_sig(SIGKILL, tsk, 1);
+		if (new_page)
+			free_page(new_page);
+		return;
+	}
+	pte &= 0xfffff000;
+	pte += (address>>10) & 0xffc;
+	old_page = *(unsigned long *) pte;
+	if (!(old_page & PAGE_PRESENT)) {
+		if (new_page)
+			free_page(new_page);
+		return;
+	}
+	if (old_page >= high_memory) {
+		printk("do_wp_page: bogus page at address %08x (%08x)\n",address,old_page);
+		*(unsigned long *) pte = BAD_PAGE | 7;
+		send_sig(SIGKILL, tsk, 1);
+		if (new_page)
+			free_page(new_page);
+		return;
+	}
+	if (old_page & PAGE_RW) {
+		if (new_page)
+			free_page(new_page);
+		return;
+	}
+	tsk->min_flt++;
 	dirty = old_page & PAGE_DIRTY;
 	old_page &= 0xfffff000;
-	if (old_page >= high_memory) {
-		if (new_page)
-			free_page(new_page);
-		printk("bad page address\n\r");
-		send_sig(SIGSEGV, task, 1);
-		*table_entry = BAD_PAGE | 7;
-		return;
-	}
 	if (mem_map[MAP_NR(old_page)]==1) {
-		*table_entry |= 2;
+		*(unsigned long *) pte |= 2;
 		invalidate();
 		if (new_page)
 			free_page(new_page);
@@ -482,58 +513,17 @@ repeat:
 		copy_page(old_page,new_page);
 	else {
 		new_page = BAD_PAGE;
-		oom(task);
+		oom(tsk);
 	}
-	*table_entry = new_page | dirty | PAGE_ACCESSED | 7;
+	*(unsigned long *) pte = new_page | dirty | PAGE_ACCESSED | 7;
 	free_page(old_page);
 	invalidate();
-}	
-
-/*
- * This routine handles present pages, when users try to write
- * to a shared page. It is done by copying the page to a new address
- * and decrementing the shared-page counter for the old page.
- *
- * If it's in code space we exit with a segment error.
- */
-void do_wp_page(unsigned long error_code, unsigned long address,
-	struct task_struct * tsk, unsigned long user_esp)
-{
-	unsigned long pde, pte, page;
-
-	pde = tsk->tss.cr3 + ((address>>20) & 0xffc);
-	pte = *(unsigned long *) pde;
-	if ((pte & 3) != 3) {
-		printk("do_wp_page: bogus page-table at address %08x (%08x)\n",address,pte);
-		*(unsigned long *) pde = BAD_PAGETABLE | 7;
-		send_sig(SIGSEGV, tsk, 1);
-		return;
-	}
-	pte &= 0xfffff000;
-	pte += (address>>10) & 0xffc;
-	page = *(unsigned long *) pte;
-	if ((page & 3) != 1) {
-		printk("do_wp_page: bogus page at address %08x (%08x)\n",address,page);
-		*(unsigned long *) pte = BAD_PAGE | 7;
-		send_sig(SIGSEGV, tsk, 1);
-		return;
-	}
-	tsk->min_flt++;
-	un_wp_page((unsigned long *) pte, tsk);
 }
 
 void write_verify(unsigned long address)
 {
-	unsigned long page;
-
-	page = *(unsigned long *) (current->tss.cr3 + ((address>>20) & 0xffc));
-	if (!(page & PAGE_PRESENT))
-		return;
-	page &= 0xfffff000;
-	page += ((address>>10) & 0xffc);
-	if ((3 & *(unsigned long *) page) == 1)  /* non-writeable, present */
-		un_wp_page((unsigned long *) page, current);
-	return;
+	if (address < TASK_SIZE)
+		do_wp_page(1,address,current,0);
 }
 
 static void get_empty_page(struct task_struct * tsk, unsigned long address)
@@ -679,10 +669,8 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	page &= 0xfffff000;
 	page += (address >> 10) & 0xffc;
 	tmp = *(unsigned long *) page;
-	if (tmp & 1) {
-		printk("bogus do_no_page\n");
+	if (tmp & 1)
 		return;
-	}
 	++tsk->rss;
 	if (tmp) {
 		++tsk->maj_flt;
@@ -757,6 +745,74 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	oom(current);
 }
 
+/*
+ * This routine handles page faults.  It determines the address,
+ * and the problem, and then passes it off to one of the appropriate
+ * routines.
+ */
+void do_page_fault(unsigned long *esp, unsigned long error_code)
+{
+	unsigned long address;
+	unsigned long user_esp = 0;
+	unsigned int bit;
+	extern void die_if_kernel();
+
+	/* get the address */
+	__asm__("movl %%cr2,%0":"=r" (address));
+	if (address < TASK_SIZE) {
+		if (error_code & 4) {	/* user mode access? */
+			if (esp[2] & VM_MASK) {
+				bit = (address - 0xA0000) >> PAGE_SHIFT;
+				if (bit < 32)
+					current->screen_bitmap |= 1 << bit;
+			} else 
+				user_esp = esp[3];
+		}
+		if (error_code & 1)
+			do_wp_page(error_code, address, current, user_esp);
+		else
+			do_no_page(error_code, address, current, user_esp);
+		return;
+	}
+	printk("Unable to handle kernel paging request at address %08x\n",address);
+	die_if_kernel("Oops",esp,error_code);
+	do_exit(SIGKILL);
+}
+
+/*
+ * BAD_PAGE is the page that is used for page faults when linux
+ * is out-of-memory. Older versions of linux just did a
+ * do_exit(), but using this instead means there is less risk
+ * for a process dying in kernel mode, possibly leaving a inode
+ * unused etc..
+ *
+ * BAD_PAGETABLE is the accompanying page-table: it is initialized
+ * to point to BAD_PAGE entries.
+ */
+unsigned long __bad_pagetable(void)
+{
+	extern char empty_bad_page_table[PAGE_SIZE];
+
+	__asm__ __volatile__("cld ; rep ; stosl"
+		::"a" (7+BAD_PAGE),
+		  "D" ((long) empty_bad_page_table),
+		  "c" (1024)
+		:"di","cx");
+	return (unsigned long) empty_bad_page_table;
+}
+
+unsigned long __bad_page(void)
+{
+	extern char empty_bad_page[PAGE_SIZE];
+
+	__asm__ __volatile__("cld ; rep ; stosl"
+		::"a" (0),
+		  "D" ((long) empty_bad_page),
+		  "c" (1024)
+		:"di","cx");
+	return (unsigned long) empty_bad_page;
+}
+
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
@@ -783,40 +839,6 @@ void show_mem(void)
 	printk("%d pages shared\n",shared);
 }
 
-
-/*
- * This routine handles page faults.  It determines the address,
- * and the problem, and then passes it off to one of the appropriate
- * routines.
- */
-void do_page_fault(unsigned long *esp, unsigned long error_code)
-{
-	unsigned long address;
-	unsigned long user_esp = 0;
-	extern void die_if_kernel();
-
-	/* get the address */
-	__asm__("movl %%cr2,%0":"=r" (address));
-	if (address >= TASK_SIZE) {
-		printk("Unable to handle kernel paging request at address %08x\n",address);
-		die_if_kernel("Oops",esp,error_code);
-		do_exit(SIGSEGV);
-	}
-	if (esp[2] & VM_MASK) {
-		unsigned int bit;
-
-		bit = (address - 0xA0000) >> PAGE_SHIFT;
-		if (bit < 32)
-			current->screen_bitmap |= 1 << bit;
-	} else
-		if ((0xffff & esp[1]) == 0xf)
-			user_esp = esp[3];
-	if (!(error_code & 1))
-		do_no_page(error_code, address, current, user_esp);
-	else
-		do_wp_page(error_code, address, current, user_esp);
-}
-
 /*
  * paging_init() sets up the page tables - note that the first 4MB are
  * already mapped by head.S.
@@ -831,6 +853,12 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long tmp;
 	unsigned long address;
 
+/*
+ * Physical page 0 is special: it's a "zero-page", and is guaranteed to
+ * stay that way - it's write-protected and when there is a c-o-w, the
+ * mm handler treats it specially.
+ */
+	memset((void *) 0, 0, 4096);
 	start_mem += 4095;
 	start_mem &= 0xfffff000;
 	address = 0;

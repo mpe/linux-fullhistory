@@ -31,6 +31,7 @@ void proc_put_super(struct super_block *sb)
 
 static struct super_operations proc_sops = { 
 	proc_read_inode,
+	NULL,
 	proc_write_inode,
 	proc_put_inode,
 	proc_put_super,

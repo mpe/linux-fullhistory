@@ -1,8 +1,6 @@
 #ifndef _LINUX_WAIT_H
 #define _LINUX_WAIT_H
 
-#include <linux/limits.h>
-
 #define WNOHANG		1
 #define WUNTRACED	2
 
@@ -16,7 +14,9 @@ typedef struct select_table_struct {
 	struct select_table_entry {
 		struct wait_queue wait;
 		struct wait_queue ** wait_address;
-	} entry[NR_OPEN*3];
+	} * entry;
 } select_table;
+
+#define __MAX_SELECT_TABLE_ENTRIES (4096 / sizeof (struct select_table_entry))
 
 #endif

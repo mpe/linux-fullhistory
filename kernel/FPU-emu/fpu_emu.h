@@ -40,41 +40,39 @@
 
 #ifndef __ASSEMBLER__
 
+#include <linux/math_emu.h>
+
+#ifdef PARANOID
+extern char emulating;
+#  define RE_ENTRANT_CHECK_OFF emulating = 0;
+#  define RE_ENTRANT_CHECK_ON emulating = 1;
+#else
+#  define RE_ENTRANT_CHECK_OFF
+#  define RE_ENTRANT_CHECK_ON
+#endif PARANOID
+
 typedef void (*FUNC)();
-
-#define	REG	struct	reg
-
-struct reg {
-  char sign;
-  char tag;
-/*  short exp; *****/
-  long exp;
-  unsigned sigl;
-  unsigned sigh;
-};
+typedef struct fpu_reg FPU_REG;
 
 #define	st(x)	( regs[((top+x) &7 )] )
 
 #define	STACK_OVERFLOW	(st_new_ptr = &st(-1), st_new_ptr->tag != TW_Empty)
 #define	NOT_EMPTY(i)	(st(i).tag != TW_Empty)
-#define	NOT_EMPTY_0	(st0_tag ^ TW_Empty)
+#define	NOT_EMPTY_0	(FPU_st0_tag ^ TW_Empty)
 
-extern unsigned char FPU_modrm;
 extern unsigned char FPU_rm;
 
-extern	char	st0_tag;
-extern	REG	*st0_ptr;
+extern	char	FPU_st0_tag;
+extern	FPU_REG	*FPU_st0_ptr;
 
 extern void  *FPU_data_address;
-extern unsigned long FPU_entry_eip;
 
-extern  REG  FPU_loaded_data;
+extern  FPU_REG  FPU_loaded_data;
 
-#define pop()	{ st0_ptr->tag = TW_Empty; \
-				  top++; st0_ptr = &(regs[top&7]); }
+#define pop()	{ FPU_st0_ptr->tag = TW_Empty; top++; }
 
 /* push() does not affect the tags */
-#define push()	{ top--; st0_ptr = st_new_ptr; }
+#define push()	{ top--; FPU_st0_ptr = st_new_ptr; }
 
 
 #define reg_move(x, y) { \
@@ -84,7 +82,7 @@ extern  REG  FPU_loaded_data;
 
 
 /*----- Prototypes for functions written in assembler -----*/
-/* extern void reg_move(REG *a, REG *b); */
+/* extern void reg_move(FPU_REG *a, FPU_REG *b); */
 
 extern void mul64(long long *a, long long *b, long long *result);
 extern void poly_div2(long long *x);
@@ -92,13 +90,13 @@ extern void poly_div4(long long *x);
 extern void poly_div16(long long *x);
 extern void polynomial(unsigned accum[], unsigned x[],
 		       unsigned short terms[][4], int n);
-extern void normalize(REG *x);
-extern void reg_div(REG *arg1, REG *arg2, REG *answ);
-extern void reg_u_sub(REG *arg1, REG *arg2, REG *answ);
-extern void reg_u_mul(REG *arg1, REG *arg2, REG *answ);
-extern void reg_u_div(long long *arg1, long long *arg2, REG *answ);
-extern void reg_u_add(REG *arg1, REG *arg2, REG *answ);
-extern void wm_sqrt(REG *n);
+extern void normalize(FPU_REG *x);
+extern void reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
+extern void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
+extern void reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
+extern void reg_u_div(long long *arg1, long long *arg2, FPU_REG *answ);
+extern void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
+extern void wm_sqrt(FPU_REG *n);
 extern unsigned	shrx(void *l, unsigned x);
 extern unsigned	shrxs(void *v, unsigned x);
 extern unsigned long div_small(unsigned long long *x, unsigned long y);

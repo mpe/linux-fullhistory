@@ -36,6 +36,7 @@
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <linux/mm.h>
 /* #include <signal.h>*/
 #include <linux/termios.h> /* for ioctl's */
 #include "../kern_sock.h" /* for PRINTK */
@@ -376,7 +377,7 @@ tcp_send_check (struct tcp_header *th, unsigned long saddr,
    /* we need to grab some memory, and put together an ack, and then
       put it into the queue to be sent. */
 
-   buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1);
+   buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
    if (buff == NULL) 
      {
 	/* force it to send an ack. */
@@ -540,7 +541,8 @@ tcp_write(volatile struct sock *sk, unsigned char *from,
       if (copy < 200 || copy > sk->mtu) copy = sk->mtu;
       copy = min (copy, len);
 
-      skb=prot->wmalloc (sk, copy + prot->max_header+sizeof (*skb),0);
+      skb=prot->wmalloc (sk, copy + prot->max_header+sizeof (*skb),0,
+			 GFP_KERNEL);
 
       /* if we didn't get any memory, we need to sleep. */
       if (skb == NULL)
@@ -659,7 +661,7 @@ tcp_read_wakeup(volatile struct sock *sk)
   /* we need to grab some memory, and put together an ack, and then
      put it into the queue to be sent. */
 
-  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1);
+  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) 
     {
        /* try again real soon. */
@@ -1002,7 +1004,7 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcp_header *th,
   struct sk_buff *buff;
   struct tcp_header *t1;
   int tmp;
-  buff=prot->wmalloc(NULL, MAX_RESET_SIZE,1);
+  buff=prot->wmalloc(NULL, MAX_RESET_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) return;
 
   PRINTK("tcp_reset buff = %X\n", buff);
@@ -1084,7 +1086,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
      and if the listening socket is destroyed before this is taken
      off of the queue, this will take care of it. */
 
-  newsk = malloc(sizeof (struct sock));
+  newsk = kmalloc(sizeof (struct sock), GFP_ATOMIC);
   if (newsk == NULL) 
     {
        /* just ignore the syn.  It will get retransmitted. */
@@ -1165,7 +1167,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
     }
 
   print_sk (newsk);
-  buff=newsk->prot->wmalloc(newsk,MAX_SYN_SIZE,1);
+  buff=newsk->prot->wmalloc(newsk,MAX_SYN_SIZE,1, GFP_ATOMIC);
   if (buff == NULL)
     {
        sk->err = -ENOMEM;
@@ -1325,7 +1327,7 @@ tcp_close (volatile struct sock *sk, int timeout)
       prot = (struct proto *)sk->prot;
       th=(struct tcp_header *)&sk->dummy_th;
 
-       buff=prot->wmalloc(sk, MAX_FIN_SIZE,1);
+       buff=prot->wmalloc(sk, MAX_FIN_SIZE,1, GFP_ATOMIC);
        if (buff == NULL)
 	 {
 	    /* this will force it to try again later. */
@@ -1825,7 +1827,7 @@ tcp_fin (volatile struct sock *sk, struct tcp_header *th,
     }
 
   /* send an ack and our own fin. */
-  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1);
+  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL)
     {
        /* we will ignore the fin.  That way it will be sent again. */
@@ -1973,7 +1975,7 @@ tcp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
   sk->err = 0;
   sk->dummy_th.dest = sin.sin_port;
 
-  buff=sk->prot->wmalloc(sk,MAX_SYN_SIZE,0);
+  buff=sk->prot->wmalloc(sk,MAX_SYN_SIZE,0, GFP_KERNEL);
   if (buff == NULL) 
     {
       return (-ENOMEM);
@@ -2530,7 +2532,7 @@ tcp_write_wakeup(volatile struct sock *sk)
   int tmp;
   if (sk -> state != TCP_ESTABLISHED) return;
 
-  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1);
+  buff=sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   /* no big loss. */
   if (buff == NULL) return;
 

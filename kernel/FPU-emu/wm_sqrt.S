@@ -8,12 +8,12 @@
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
- |   void wm_sqrt(REG *n)                                                    |
+ |   void wm_sqrt(FPU_REG *n)                                                |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- |  wm_sqrt(REG *n)                                                          |
+ |  wm_sqrt(FPU_REG *n)                                                      |
  |    returns the square root of n in n.                                     |
  |                                                                           |
  |  Use Newton's method to compute the square root of a number, which must   |

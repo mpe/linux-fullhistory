@@ -127,7 +127,8 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
    else
      return (-EINVAL);
 
-   skb = sk->prot->wmalloc (sk, len+sizeof (*skb) + sk->prot->max_header, 0);
+   skb = sk->prot->wmalloc (sk, len+sizeof (*skb) + sk->prot->max_header, 0,
+			    GFP_KERNEL);
    /* this shouldn't happen, but it could. */
    if (skb == NULL)
      {
@@ -170,7 +171,7 @@ packet_close (volatile struct sock *sk, int timeout)
    sk->inuse = 1;
    sk->state = TCP_CLOSE;
    dev_remove_pack ((struct packet_type *)sk->pair);
-   free_s ((void *)sk->pair, sizeof (struct packet_type));
+   kfree_s ((void *)sk->pair, sizeof (struct packet_type));
    release_sock (sk);
 }
 
@@ -178,7 +179,7 @@ static int
 packet_init (volatile struct sock *sk)
 {
    struct packet_type *p;
-   p = malloc (sizeof (*p));
+   p = kmalloc (sizeof (*p), GFP_KERNEL);
    if (p == NULL) return (-ENOMEM);
 
    p->func = packet_rcv;

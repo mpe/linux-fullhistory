@@ -252,7 +252,7 @@ add_route (struct rtable *rt)
 		 rt->next = r->next;
 		 r1->next = rt;
 	      }
-	    free_s (r, sizeof (*r));
+	    kfree_s (r, sizeof (*r));
 	    return;
 	 }
 
@@ -300,7 +300,7 @@ ip_set_dev (struct ip_config *u_ipc)
   if (ipc.net != -1)
     {
        arp_add_broad (ipc.net, dev);
-       rt = malloc (sizeof (*rt));
+       rt = kmalloc (sizeof (*rt), GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
 
        rt->net = ipc.net;
@@ -312,7 +312,7 @@ ip_set_dev (struct ip_config *u_ipc)
 
   if (ipc.router != -1)
     {
-       rt = malloc (sizeof (*rt));
+       rt = kmalloc (sizeof (*rt),GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
        rt->net = 0;
        rt->dev = dev;
@@ -322,7 +322,7 @@ ip_set_dev (struct ip_config *u_ipc)
 
   if (dev->loopback)
     {
-       rt = malloc (sizeof (*rt));
+       rt = kmalloc (sizeof (*rt), GFP_KERNEL);
        if (rt == NULL) return (-ENOMEM);
        rt->net = ipc.paddr;
        rt->dev = dev;
@@ -729,7 +729,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
        if (ipprot->copy)
 	 {
-	    skb2 = malloc (skb->mem_len);
+	    skb2 = kmalloc (skb->mem_len, GFP_KERNEL);
 	    if (skb2 == NULL) continue;
 	    memcpy (skb2, skb, skb->mem_len);
 	    skb2->mem_addr = skb2;

@@ -15,6 +15,8 @@
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/tty.h>
+#include <linux/time.h>
+
 #include <asm/segment.h>
 
 extern void fcntl_remove_locks(struct task_struct *, struct file *);
@@ -87,8 +89,9 @@ int sys_truncate(const char * path, unsigned int length)
 		inode->i_op->truncate(inode);
 	inode->i_atime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
+	error = notify_change(inode);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 int sys_ftruncate(unsigned int fd, unsigned int length)
@@ -107,7 +110,7 @@ int sys_ftruncate(unsigned int fd, unsigned int length)
 		inode->i_op->truncate(inode);
 	inode->i_atime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	return 0;
+	return notify_change(inode);
 }
 
 /* If times==NULL, set access and modification to current time,
@@ -144,9 +147,11 @@ int sys_utime(char * filename, struct utimbuf * times)
 	}
 	inode->i_atime = actime;
 	inode->i_mtime = modtime;
+	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
+	error = notify_change(inode);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 /*
@@ -239,7 +244,7 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 		return -EROFS;
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	inode->i_dirt = 1;
-	return 0;
+	return notify_change(inode);
 }
 
 int sys_chmod(const char * filename, mode_t mode)
@@ -260,8 +265,9 @@ int sys_chmod(const char * filename, mode_t mode)
 	}
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
 	inode->i_dirt = 1;
+	error = notify_change(inode);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 int sys_fchown(unsigned int fd, uid_t user, gid_t group)
@@ -275,13 +281,17 @@ int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		return -ENOENT;
 	if (IS_RDONLY(inode))
 		return -EROFS;
+	if (user == (uid_t) -1)
+		user = inode->i_uid;
+	if (group == (gid_t) -1)
+		group = inode->i_gid;
 	if ((current->euid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
 	    suser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
-		inode->i_dirt=1;
-		return 0;
+		inode->i_dirt = 1;
+		return notify_change(inode);
 	}
 	return -EPERM;
 }
@@ -298,14 +308,19 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
 		iput(inode);
 		return -EROFS;
 	}
+	if (user == (uid_t) -1)
+		user = inode->i_uid;
+	if (group == (gid_t) -1)
+		group = inode->i_gid;
 	if ((current->euid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
 	    suser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
-		inode->i_dirt=1;
+		inode->i_dirt = 1;
+		error = notify_change(inode);
 		iput(inode);
-		return 0;
+		return error;
 	}
 	iput(inode);
 	return -EPERM;
@@ -336,7 +351,7 @@ int sys_open(const char * filename,int flag,int mode)
 			break;
 	if (fd>=NR_OPEN)
 		return -EMFILE;
-	current->close_on_exec &= ~(1<<fd);
+	FD_CLR(fd,&current->close_on_exec);
 	f = get_empty_filp();
 	if (!f)
 		return -ENFILE;
@@ -352,11 +367,17 @@ int sys_open(const char * filename,int flag,int mode)
 		f->f_count--;
 		return i;
 	}
-	if (flag & O_TRUNC)
-		if (inode->i_op && inode->i_op->truncate) {
-			inode->i_size = 0;
+	if (flag & O_TRUNC) {
+		inode->i_size = 0;
+		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
+		if ((i = notify_change(inode))) {
+			iput(inode);
+			current->filp[fd] = NULL;
+			f->f_count--;
+			return i;
 		}
+	}
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
@@ -374,6 +395,7 @@ int sys_open(const char * filename,int flag,int mode)
 			current->filp[fd]=NULL;
 			return i;
 		}
+	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
 	return (fd);
 }
 
@@ -382,7 +404,7 @@ int sys_creat(const char * pathname, int mode)
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
-static int close_fp(struct file *filp)
+int close_fp(struct file *filp)
 {
 	struct inode *inode;
 
@@ -411,7 +433,7 @@ int sys_close(unsigned int fd)
 
 	if (fd >= NR_OPEN)
 		return -EINVAL;
-	current->close_on_exec &= ~(1<<fd);
+	FD_CLR(fd, &current->close_on_exec);
 	if (!(filp = current->filp[fd]))
 		return -EINVAL;
 	current->filp[fd] = NULL;
@@ -494,7 +516,7 @@ int sys_vhangup(void)
 
 		  /* finally close the file. */
 
-				(*process)->close_on_exec &= ~(1<<j);
+				FD_CLR(j, &(*process)->close_on_exec);
 				close_fp (filep);
 			}
 		}

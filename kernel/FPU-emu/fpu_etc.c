@@ -20,7 +20,7 @@ static void fchs()
 {
   if ( NOT_EMPTY_0 )
     {
-      st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
+      FPU_st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
       status_word &= ~SW_C1;
     }
   else
@@ -29,9 +29,9 @@ static void fchs()
 
 static void fabs()
 {
-  if ( st0_tag ^ TW_Empty )
+  if ( FPU_st0_tag ^ TW_Empty )
     {
-      st0_ptr->sign = SIGN_POS;
+      FPU_st0_ptr->sign = SIGN_POS;
       status_word &= ~SW_C1;
     }
   else
@@ -41,13 +41,13 @@ static void fabs()
 
 static void ftst_()
 {
-  switch (st0_tag)
+  switch (FPU_st0_tag)
     {
     case TW_Zero:
       setcc(SW_C3);
       break;
     case TW_Valid:
-      if (st0_ptr->sign == SIGN_POS)
+      if (FPU_st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C0);
@@ -57,7 +57,7 @@ static void ftst_()
       EXCEPTION(EX_Invalid);
       break;
     case TW_Infinity:
-      if (st0_ptr->sign == SIGN_POS)
+      if (FPU_st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C3);
@@ -78,7 +78,7 @@ static void ftst_()
 static void fxam()
 {
   int c=0;
-  switch (st0_tag)
+  switch (FPU_st0_tag)
     {
     case TW_Empty:
       c = SW_C3|SW_C0;
@@ -87,7 +87,7 @@ static void fxam()
       c = SW_C3;
       break;
     case TW_Valid:
-      if (st0_ptr->sigh & 0x80000000)
+      if (FPU_st0_ptr->sigh & 0x80000000)
         c = SW_C2;
       else
         c = SW_C3|SW_C2;
@@ -99,7 +99,7 @@ static void fxam()
       c = SW_C2|SW_C0;
       break;
     }
-  if (st0_ptr->sign == SIGN_NEG)
+  if (FPU_st0_ptr->sign == SIGN_NEG)
     c |= SW_C1;
   setcc(c);
 }

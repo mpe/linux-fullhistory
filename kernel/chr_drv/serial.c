@@ -775,7 +775,7 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 		default:
 			return -EINVAL;
 	}
-	outb(UART_MCR + port,control);
+	outb(control, UART_MCR + port);
 	return 0;
 }
 

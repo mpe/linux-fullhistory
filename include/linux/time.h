@@ -11,11 +11,11 @@ struct timezone {
 	int	tz_dsttime;	/* type of dst correction */
 };
 
-#define FD_SETSIZE		(8*sizeof(fd_set))
-#define FD_SET(fd,fdsetp)	(*(fdsetp) |= (1 << (fd)))
-#define FD_CLR(fd,fdsetp)	(*(fdsetp) &= ~(1 << (fd)))
-#define FD_ISSET(fd,fdsetp)	((*(fdsetp) >> fd) & 1)
-#define FD_ZERO(fdsetp)		(*(fdsetp) = 0)
+#define FD_SETSIZE		__FD_SETSIZE
+#define FD_SET(fd,fdsetp)	__FD_SET(fd,fdsetp)
+#define FD_CLR(fd,fdsetp)	__FD_CLR(fd,fdsetp)
+#define FD_ISSET(fd,fdsetp)	__FD_ISSET(fd,fdsetp)
+#define FD_ZERO(fdsetp)		__FD_ZERO(fdsetp)
 
 /*
  * Names of the interval timers, and structure

@@ -34,6 +34,7 @@
 #include <linux/termios.h> /* for ioctl's */
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <linux/mm.h>
 #include "../kern_sock.h" /* for PRINTK */
 #include "udp.h"
 #include "icmp.h"
@@ -207,7 +208,7 @@ udp_loopback (volatile struct sock *sk, unsigned short port,
 
 	skb = pair->prot->rmalloc (pair,
 				   sizeof (*skb) + sizeof (*uh) + len + 4,
-				   0);
+				   0, GFP_KERNEL);
 
 	/* if we didn't get the memory, just drop the packet. */
 	if (skb == NULL) return (len);
@@ -315,7 +316,8 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	  {
 		  int tmp;
 		  skb = sk->prot->wmalloc (sk, len + sizeof (*skb)
-					       + sk->prot->max_header, 0);
+					       + sk->prot->max_header, 0,
+					   GFP_KERNEL);
 		  /* this should never happen, but it is possible. */
 
 		  if (skb == NULL)

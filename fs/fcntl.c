@@ -30,7 +30,7 @@ static int dupfd(unsigned int fd, unsigned int arg)
 			break;
 	if (arg >= NR_OPEN)
 		return -EMFILE;
-	current->close_on_exec &= ~(1<<arg);
+	FD_CLR(arg, &current->close_on_exec);
 	(current->filp[arg] = current->filp[fd])->f_count++;
 	return arg;
 }
@@ -61,12 +61,12 @@ int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case F_DUPFD:
 			return dupfd(fd,arg);
 		case F_GETFD:
-			return (current->close_on_exec>>fd)&1;
+			return FD_ISSET(fd, &current->close_on_exec);
 		case F_SETFD:
 			if (arg&1)
-				current->close_on_exec |= (1<<fd);
+				FD_SET(fd, &current->close_on_exec);
 			else
-				current->close_on_exec &= ~(1<<fd);
+				FD_CLR(fd, &current->close_on_exec);
 			return 0;
 		case F_GETFL:
 			return filp->f_flags;

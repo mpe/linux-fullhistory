@@ -75,7 +75,7 @@ struct hd_i_struct {
 	};
 #ifdef HD_TYPE
 struct hd_i_struct hd_info[] = { HD_TYPE };
-#define NR_HD ((sizeof (hd_info))/(sizeof (struct hd_i_struct)))
+static int NR_HD = ((sizeof (hd_info))/(sizeof (struct hd_i_struct)));
 #else
 struct hd_i_struct hd_info[] = { {0,0,0,0,0,0},{0,0,0,0,0,0} };
 static int NR_HD = 0;
@@ -106,18 +106,6 @@ unsigned long read_timer(void)
 }
 #endif
 
-static int controller_ready(void)
-{
-	int retries = 100000;
-
-	while (--retries && (inb_p(HD_STATUS)&0x80))
-		/* nothing */;
-	if (!retries)
-		printk("controller_ready: status = %02x\n\r",
-			(unsigned char) inb_p(HD_STATUS));
-	return (retries);
-}
-
 static int win_result(void)
 {
 	int i=inb_p(HD_STATUS);
@@ -133,6 +121,49 @@ static int win_result(void)
 	return 1;
 }
 
+static int controller_busy(void);
+static int status_ok(void);
+
+static int controller_ready(unsigned int drive, unsigned int head)
+{
+	int retry = 100;
+
+	do {
+		if (controller_busy() & BUSY_STAT)
+			return 0;
+		outb_p(0xA0 | (drive<<4) | head, HD_CURRENT);
+		if (status_ok())
+			return 1;
+	} while (--retry);
+	return 0;
+}
+
+static int status_ok(void)
+{
+	unsigned char status = controller_busy();
+
+	if (status & BUSY_STAT)
+		return 0;
+	if (status & WRERR_STAT)
+		return 0;
+	if (!(status & READY_STAT))
+		return 0;
+	if (!(status & SEEK_STAT))
+		return 0;
+	return 1;
+}
+
+static int controller_busy(void)
+{
+	int retries = 100000;
+	unsigned char status;
+
+	do {
+		status = inb_p(HD_STATUS);
+	} while ((status & BUSY_STAT) && --retries);
+	return status;
+}
+
 static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		unsigned int head,unsigned int cyl,unsigned int cmd,
 		void (*intr_addr)(void))
@@ -145,7 +176,9 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	while (read_timer() - last_req < HD_DELAY)
 		/* nothing */;
 #endif
-	if (reset || !controller_ready()) {
+	if (reset)
+		return;
+	if (!controller_ready(drive, head)) {
 		reset = 1;
 		return;
 	}
@@ -468,7 +501,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 	if (dev >= NR_HD)
 		return -EINVAL;
 	switch (cmd) {
-		case HDIO_REQ:
+		case HDIO_GETGEO:
 			if (!loc)  return -EINVAL;
 			verify_area(loc, sizeof(*loc));
 			put_fs_byte(hd_info[dev].head,
@@ -604,13 +637,13 @@ static void hd_geninit(void)
 			NR_HD = 1;
 	else
 		NR_HD = 0;
+#endif
 	if (NR_HD) {
 		if (irqaction(HD_IRQ,&hd_sigaction)) {
 			printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 			NR_HD = 0;
 		}
 	}
-#endif
 	for (i = 0 ; i < NR_HD ; i++)
 		hd[i<<6].nr_sects = hd_info[i].head*
 				hd_info[i].sect*hd_info[i].cyl;

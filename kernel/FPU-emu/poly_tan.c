@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  poly_tan.c                                                               |
  |                                                                           |
- | Compute the tan of a REG, using a polynomial approximation.               |
+ | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
@@ -47,12 +47,12 @@ static unsigned short	evennegterms[HIPOWERen][4] =
 /*--- poly_tan() ------------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_tan(REG *arg, REG *y_reg)
+void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
 {
   char		invert = 0;
   short		exponent;
-  REG           odd_poly, even_poly, pos_poly, neg_poly;
-  REG           argSq;
+  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
+  FPU_REG       argSq;
   long long     arg_signif, argSqSq;
   
 

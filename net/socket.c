@@ -81,29 +81,31 @@ static struct wait_queue *socket_wait_free = NULL;
 static int
 get_fd(struct inode *inode)
 {
-	int fd, i;
+	int fd;
 	struct file *file;
 
 	/*
 	 * find a file descriptor suitable for return to the user.
 	 */
+	file = get_empty_filp();
+	if (!file)
+		return -1;
 	for (fd = 0; fd < NR_OPEN; ++fd)
 		if (!current->filp[fd])
 			break;
-	if (fd == NR_OPEN)
+	if (fd == NR_OPEN) {
+		file->f_count = 0;
 		return -1;
-	current->close_on_exec &= ~(1 << fd);
-	for (file = file_table, i = 0; i < NR_FILE; ++i, ++file)
-		if (!file->f_count)
-			break;
-	if (i == NR_FILE)
-		return -1;
+	}
+	FD_CLR(fd, &current->close_on_exec);
 	current->filp[fd] = file;
 	file->f_op = &socket_file_ops;
 	file->f_mode = 3;
 	file->f_flags = 0;
 	file->f_count = 1;
 	file->f_inode = inode;
+	if (inode)
+		inode->i_count++;
 	file->f_pos = 0;
 	return fd;
 }
@@ -116,11 +118,11 @@ get_fd(struct inode *inode)
 static inline void
 toss_fd(int fd)
 {
-	current->filp[fd]->f_inode = NULL;	/* safe from iput */
+  /* the count protects us from iput. */
 	sys_close(fd);
 }
 
-static inline struct socket *
+struct socket *
 socki_lookup(struct inode *inode)
 {
 	struct socket *sock;
@@ -227,6 +229,8 @@ sock_release(struct socket *sock)
 		sock_release_peer(peersock);
 	sock->state = SS_FREE;		/* this really releases us */
 	wake_up(&socket_wait_free);
+	iput(SOCK_INODE(sock)); /* we need to do this.  If sock alloc was
+				   called we already have an inode. */
 }
 
 static int
@@ -576,17 +580,18 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 		return i;
 	}
 
-	if ((fd = get_fd(SOCK_INODE(newsock))) < 0) {
-		sock_release(newsock);
-		return -EINVAL;
-	}
 	i = newsock->ops->accept(sock, newsock, file->f_flags);
 
 	if ( i < 0)
 	  {
-	     sys_close (fd);
-	     return (i);
+	    sock_release(newsock);
+	    return (i);
 	  }
+
+	if ((fd = get_fd(SOCK_INODE(newsock))) < 0) {
+		sock_release(newsock);
+		return -EINVAL;
+	}
 
 	PRINTK("sys_accept: connected socket 0x%x via 0x%x\n",
 	       sock, newsock);

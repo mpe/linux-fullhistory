@@ -76,8 +76,10 @@ struct sock
 
 struct proto 
 {
-  void *(*wmalloc)(volatile struct sock *sk, unsigned long size, int force);
-  void *(*rmalloc)(volatile struct sock *sk, unsigned long size, int force);
+  void *(*wmalloc)(volatile struct sock *sk, unsigned long size, int force,
+		   int priority);
+  void *(*rmalloc)(volatile struct sock *sk, unsigned long size, int force,
+		   int priority);
   void (*wfree)(volatile struct sock *sk, void *mem, unsigned long size);
   void (*rfree)(volatile struct sock *sk, void *mem, unsigned long size);
   unsigned long (*rspace)(volatile struct sock *sk);
@@ -167,8 +169,10 @@ volatile struct sock *get_sock(struct proto *, unsigned short, unsigned long,
 			       unsigned short, unsigned long);
 void print_sk (volatile struct sock *);
 void print_skb (struct sk_buff *);
-void *sock_wmalloc(volatile struct sock *sk, unsigned long size, int force);
-void *sock_rmalloc(volatile struct sock *sk, unsigned long size, int force);
+void *sock_wmalloc(volatile struct sock *sk, unsigned long size, int force,
+		   int priority);
+void *sock_rmalloc(volatile struct sock *sk, unsigned long size, int force,
+		   int priority);
 void sock_wfree(volatile struct sock *sk, void *mem, unsigned long size);
 void sock_rfree(volatile struct sock *sk, void *mem, unsigned long size);
 unsigned long sock_rspace(volatile struct sock *sk);

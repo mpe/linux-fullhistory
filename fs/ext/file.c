@@ -100,7 +100,7 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 			--blocks;
 			*bhb = ext_getblk(inode,block++,0);
 			if (*bhb && !(*bhb)->b_uptodate)
-				ll_rw_block(READ,*bhb);
+				ll_rw_block(READ, 1, bhb);
 
 			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
@@ -183,7 +183,7 @@ static int ext_file_write(struct inode * inode, struct file * filp, char * buf, 
 		if (c > count-written)
 			c = count-written;
 		if (c != BLOCK_SIZE && !bh->b_uptodate) {
-			ll_rw_block(READ,bh);
+			ll_rw_block(READ, 1, &bh);
 			wait_on_buffer(bh);
 			if (!bh->b_uptodate) {
 				brelse(bh);

@@ -41,7 +41,7 @@ malloc.o : malloc.c /usr/include/linux/kernel.h /usr/include/linux/mm.h /usr/inc
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
   /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
   /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
-  /usr/include/asm/system.h 
+  /usr/include/linux/string.h /usr/include/asm/system.h 
 open.o : open.c /usr/include/linux/unistd.h /usr/lib/gcc-lib/i386-linux/2.2.2d/include/stdarg.h 
 setsid.o : setsid.c /usr/include/linux/types.h /usr/include/linux/unistd.h 
 string.o : string.c /usr/include/linux/types.h /usr/include/linux/string.h 

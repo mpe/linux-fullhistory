@@ -32,6 +32,7 @@
 #define FLOPPY_TIMER	17
 #define SCSI_TIMER 	18
 #define NET_TIMER	19
+#define SOUND_TIMER	20
 
 struct timer_struct {
 	unsigned long expires;

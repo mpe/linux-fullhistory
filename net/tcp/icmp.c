@@ -29,7 +29,7 @@
 
 #include <linux/types.h>
 #include <linux/sched.h>
-#include <linux/kernel.h>	/* free_s */
+#include <linux/kernel.h>	/* kfree_s */
 #include <linux/fcntl.h>
 #include <linux/socket.h>
 #include <netinet/in.h>
@@ -88,7 +88,7 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
 	 64 /* enough for an ip header. */ +
 	 dev->hard_header_len;
 	   
-   skb = malloc (len);
+   skb = kmalloc (len, GFP_ATOMIC);
    if (skb == NULL) return;
 
    skb->mem_addr = skb;
@@ -202,7 +202,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	   struct ip_header *iph;
 
 	   iph = (struct ip_header *)(icmph+1);
-	   rt = malloc (sizeof (*rt));
+	   rt = kmalloc (sizeof (*rt), GFP_ATOMIC);
 	   if (rt != NULL)
 	     {
 		rt->net = iph->daddr;
@@ -223,7 +223,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	/* Allocate an sk_buff response buffer (assume 64 byte IP header) */
 
 	size = sizeof( struct sk_buff ) + dev->hard_header_len + 64 + len;
-	skb = malloc( size );
+	skb = kmalloc( size, GFP_ATOMIC );
 	if (skb == NULL)
 	  {
 	     skb1->sk = NULL;
@@ -240,7 +240,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	  {
 	     /* Problems building header */
 	     PRINTK("\nCould not build IP Header for ICMP ECHO Response");
-	     free_s (skb->mem_addr, skb->mem_len);
+	     kfree_s (skb->mem_addr, skb->mem_len);
 	     skb1->sk = NULL;
 	     free_skb (skb1, FREE_READ);
 	     return( 0 ); /* just toss the received packet */

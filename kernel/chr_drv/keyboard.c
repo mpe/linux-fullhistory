@@ -1352,16 +1352,18 @@ long no_idt[2] = {0, 0};
  */
 void hard_reset_now(void)
 {
-	int i;
+	int i, j;
 	extern unsigned long pg0[1024];
 
 	sti();
 /* rebooting needs to touch the page at absolute addr 0 */
 	pg0[0] = 7;
+	*((unsigned short *)0x472) = 0x1234;
 	for (;;) {
 		for (i=0; i<100; i++) {
 			kb_wait();
-			*((unsigned short *)0x472) = 0x1234;
+			for(j = 0; j < 100000 ; j++)
+				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
 		}
 		__asm__("\tlidt _no_idt"::);

@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  p_atan.c                                                                 |
  |                                                                           |
- | Compute the tan of a REG, using a polynomial approximation.               |
+ | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
@@ -45,12 +45,12 @@ static unsigned denomterm[2] =
 /*--- poly_atan() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_atan(REG *arg)
+void	poly_atan(FPU_REG *arg)
 {
   char		recursions = 0;
   short		exponent;
-  REG           odd_poly, even_poly, pos_poly, neg_poly;
-  REG           argSq;
+  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
+  FPU_REG       argSq;
   long long     arg_signif, argSqSq;
   
 
@@ -90,7 +90,7 @@ void	poly_atan(REG *arg)
       /* convert the argument by an identity for atan */
       if ( (exponent >= -1) || (arg->sigh > 0xd413ccd0) )
 	{
-	  REG numerator, denom;
+	  FPU_REG numerator, denom;
 
 	  recursions++;
 
@@ -183,7 +183,7 @@ void	poly_atan(REG *arg)
    i.e. have an exponent (not checked) of EXP_BIAS-1 but need not
    be normalized.
    This function adds 1.0 to the (assumed positive) argument. */
-void poly_add_1(REG *src)
+void poly_add_1(FPU_REG *src)
 {
 /* Rounding in a consistent direction produces better results
    for the use of this function in poly_atan. Simple truncation

@@ -1,6 +1,15 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
+/*
+ * define DEBUG if you want the wait-queues to have some extra
+ * debugging code. It's not normally used, but might catch some
+ * wait-queue coding errors.
+ *
+ *  #define DEBUG
+ */
+
+
 #define HZ 100
 
 /*
@@ -55,10 +64,7 @@
 #include <linux/param.h>
 #include <linux/resource.h>
 #include <linux/vm86.h>
-
-#if (NR_OPEN > 32)
-#error "Currently the close-on-exec-flags and select masks are in one long, max 32 files/proc"
-#endif
+#include <linux/math_emu.h>
 
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
@@ -100,7 +106,10 @@ union i387_union {
 		long	foo;
 		long	fos;
 		long    top;
-		long	regs_space[32];	/* 8*16 bytes for each FP-reg = 112 bytes */
+		struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 112 bytes */
+		unsigned char	lookahead;
+		struct info	*info;
+		unsigned long	entry_eip;
 	} soft;
 };
 
@@ -141,6 +150,8 @@ struct task_struct {
 	struct sigaction sigaction[32];
 	long blocked;	/* bitmap of masked signals */
 	unsigned long saved_kernel_stack;
+	unsigned long kernel_stack_page;
+	unsigned int flags;	/* per process flags, defined below */
 /* various fields */
 	int exit_code;
 	int dumpable:1;
@@ -158,7 +169,6 @@ struct task_struct {
 	 * For ease of programming... Normal sleeps don't need to
 	 * keep track of a wait-queue: every task has an entry of it's own
 	 */
-	struct wait_queue wait;
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
 	unsigned long timeout;
@@ -168,7 +178,6 @@ struct task_struct {
 	unsigned long min_flt, maj_flt;
 	unsigned long cmin_flt, cmaj_flt;
 	struct rlimit rlim[RLIM_NLIMITS]; 
-	unsigned int flags;	/* per process flags, defined below */
 	unsigned short used_math;
 	unsigned short rss;	/* number of resident pages */
 	char comm[8];
@@ -190,9 +199,9 @@ struct task_struct {
 	} libraries[MAX_SHARED_LIBS];
 	int numlibraries;
 	struct file * filp[NR_OPEN];
-	unsigned long close_on_exec;
-/* ldt for this task 0 - zero 1 - cs 2 - ds&ss */
-	struct desc_struct ldt[3];
+	fd_set close_on_exec;
+/* ldt for this task 0 - zero 1 - cs 2 - ds&ss, rest unused */
+	struct desc_struct ldt[32];
 /* tss for this task */
 	struct tss_struct tss;
 };
@@ -203,6 +212,7 @@ struct task_struct {
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
+#define PF_TRACESYS	0x00000020	/* tracing system calls */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -210,32 +220,33 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
-/* signals */	0,{{},},0,0, \
+/* signals */	0,{{},},0,0,0, \
+/* flags */	0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
-/* proc links*/ &init_task.task,&init_task.task,NULL,NULL,NULL, \
-/* wait queue*/ {&init_task.task,NULL}, \
+/* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* min_flt */	0,0,0,0, \
 /* rlimits */   { {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff},  \
 		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}, \
 		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}}, \
-/* flags */	0, \
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
 /* libraries */	{ { NULL, 0, 0}, }, 0, \
-/* filp */	{NULL,}, 0, \
+/* filp */	{NULL,}, \
+/* cloe */	{0,}, \
 		{ \
 			{0,0}, \
 /* ldt */		{0x9f,0xc0c0fa00}, \
-			{0x9f,0xc0c0f200} \
+			{0x9f,0xc0c0f200}, \
 		}, \
-/*tss*/	{0,PAGE_SIZE+(long)&init_task,0x10,0,0,0,0,(long)&swapper_pg_dir,\
+/*tss*/	{0,sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
+	 0x10,0,0,0,0,(long) &swapper_pg_dir,\
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
 	 _LDT(0),0x80000000,{0xffffffff}, \
@@ -368,26 +379,49 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 {
 	unsigned long flags;
 	struct wait_queue * tmp;
+#ifdef DEBUG
+	unsigned long ok = 0;
+#endif
 
 	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if ((*p == wait) && ((*p = wait->next) == wait)) {
+	if ((*p == wait) &&
+#ifdef DEBUG
+	    (ok = 1) &&
+#endif
+	    ((*p = wait->next) == wait)) {
 		*p = NULL;
 	} else {
 		tmp = wait;
-		while (tmp->next != wait)
+		while (tmp->next != wait) {
 			tmp = tmp->next;
+#ifdef DEBUG
+			if (tmp == *p)
+				ok = 1;
+#endif
+		}
 		tmp->next = wait->next;
 	}
 	wait->next = NULL;
 	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+#ifdef DEBUG
+	if (!ok) {
+		printk("removed wait_queue not on list.\n");
+		printk("list = %08x, queue = %08x\n",p,wait);
+		__asm__("call 1f\n1:\tpopl %0":"=r" (ok));
+		printk("eip = %08x\n",ok);
+	}
+#endif
 }
 
 extern inline void select_wait(struct wait_queue ** wait_address, select_table * p)
 {
-	struct select_table_entry * entry = p->entry + p->nr;
+	struct select_table_entry * entry;
 
-	if (!wait_address)
+	if (!p || !wait_address)
 		return;
+	if (p->nr >= __MAX_SELECT_TABLE_ENTRIES)
+		return;
+ 	entry = p->entry + p->nr;
 	entry->wait_address = wait_address;
 	entry->wait.task = current;
 	entry->wait.next = NULL;

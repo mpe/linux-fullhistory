@@ -12,6 +12,13 @@
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
+ | Note:                                                                     |
+ |    The file contains code which accesses user memory.                     |
+ |    Emulator static data may change when user memory is accessed, due to   |
+ |    other processes using the emulator while swapping is in progress.      |
+ +---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------+
  | math_emulate() is the sole entry point for wm-FPU-emu                     |
  +---------------------------------------------------------------------------*/
 
@@ -58,32 +65,30 @@ static unsigned char type_table[64] = {
 };
 
 
-unsigned char  FPU_lookahead;
-unsigned char  FPU_modrm;
+/* Be careful when using any of these global variables...
+   they might change if swapping is triggered */
 unsigned char  FPU_rm;
-char	       st0_tag;
-struct reg     *st0_ptr;
+char	       FPU_st0_tag;
+FPU_REG       *FPU_st0_ptr;
 
-struct info    *FPU_info;
-
-unsigned long  FPU_entry_eip;
-
+#ifdef PARANOID
+char emulating=0;
+#endif PARANOID
 
 #define bswapw(x) __asm__("xchgb %%al,%%ah":"=a" (x):"0" ((short)x))
 
 
 void math_emulate(long arg)
 {
+  unsigned char  FPU_modrm;
   unsigned short code;
 
 #ifdef PARANOID
-  static int emulating=0;
-
   if ( emulating )
     {
       printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\r\n");
     }
-emulating = 1;
+  RE_ENTRANT_CHECK_ON
 #endif PARANOID
 
   if (!current->used_math)
@@ -114,50 +119,57 @@ do_another:
 
   FPU_entry_eip = FPU_ORIG_EIP = FPU_EIP;
 
+  RE_ENTRANT_CHECK_OFF
   code = get_fs_word((unsigned short *) FPU_EIP);
+  RE_ENTRANT_CHECK_ON
+
   if ( (code & 0xff) == 0x66 )
     {
       FPU_EIP++;
+      RE_ENTRANT_CHECK_OFF
       code = get_fs_word((unsigned short *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
     }
   FPU_EIP += 2;
 
   FPU_modrm = code >> 8;
   FPU_rm = FPU_modrm & 7;
 
-  st0_ptr = &st(0);
-  st0_tag = st0_ptr->tag;
-
   if ( FPU_modrm < 0300 )
     {
       /* All of these instructions use the mod/rm byte to get a data address */
-      get_address();
+      get_address(FPU_modrm);
       if ( !(code & 1) )
 	{
+	  switch ( (code >> 1) & 3 )
+	    {
+	    case 0:
+	      reg_load_single();
+	      break;
+	    case 1:
+	      reg_load_int32();
+	      break;
+	    case 2:
+	      reg_load_double();
+	      break;
+	    case 3:
+	      reg_load_int16();
+	      break;
+	    }
+
+	  /* No more access to user memory, it is safe
+	     to use static data now */
+	  FPU_st0_ptr = &st(0);
+	  FPU_st0_tag = FPU_st0_ptr->tag;
 	  if ( NOT_EMPTY_0 )
 	    {
-	      switch ( (code >> 1) & 3 )
-		{
-		case 0:
-		  reg_load_single();
-		  break;
-		case 1:
-		  reg_load_int32();
-		  break;
-		case 2:
-		  reg_load_double();
-		  break;
-		case 3:
-		  reg_load_int16();
-		  break;
-		}
 	      switch ( (FPU_modrm >> 3) & 7 )
 		{
 		case 0:         /* fadd */
-		  reg_add(st0_ptr, &FPU_loaded_data, st0_ptr);
+		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
 		  break;
 		case 1:         /* fmul */
-		  reg_mul(st0_ptr, &FPU_loaded_data, st0_ptr);
+		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
 		  break;
 		case 2:         /* fcom */
 		  compare_st_data();
@@ -167,16 +179,16 @@ do_another:
 		  pop();
 		  break;
 		case 4:         /* fsub */
-		  reg_sub(st0_ptr, &FPU_loaded_data, st0_ptr);
+		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
 		  break;
 		case 5:         /* fsubr */
-		  reg_sub(&FPU_loaded_data, st0_ptr, st0_ptr);
+		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr);
 		  break;
 		case 6:         /* fdiv */
-		  reg_div(st0_ptr, &FPU_loaded_data, st0_ptr);
+		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
 		  break;
 		case 7:         /* fdivr */
-		  reg_div(&FPU_loaded_data, st0_ptr, st0_ptr);
+		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr);
 		  break;
 		}
 	    }
@@ -184,13 +196,18 @@ do_another:
 	    stack_underflow();
 	}
       else
-	load_store_instr(((FPU_modrm & 0x38) | (code & 6)) >> 1);
+	{
+	  load_store_instr(((FPU_modrm & 0x38) | (code & 6)) >> 1);
+	}
 
-      data_operand_offset = FPU_data_address;
+      data_operand_offset = (unsigned long)FPU_data_address;
     }
   else
     {
+      /* None of these instructions access user memory */
       unsigned char instr_index = (FPU_modrm & 0x38) | (code & 7);
+      FPU_st0_ptr = &st(0);
+      FPU_st0_tag = FPU_st0_ptr->tag;
       switch ( type_table[(int) instr_index] )
 	{
 	case _NONE_:
@@ -231,7 +248,9 @@ instruction_done:
     {
       unsigned char next;
 skip_fwait:
+      RE_ENTRANT_CHECK_OFF
       next = get_fs_byte((unsigned char *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON
 test_for_fp:
       if ( (next & 0xf8) == 0xd8 )
 	{
@@ -241,16 +260,15 @@ test_for_fp:
 	{ FPU_EIP++; goto skip_fwait; }
       if ( next == 0x66 )  /* size prefix */
 	{
+	  RE_ENTRANT_CHECK_OFF
 	  next = get_fs_byte((unsigned char *) (FPU_EIP+1));
+	  RE_ENTRANT_CHECK_ON
 	  if ( (next & 0xf8) == 0xd8 )
 	    goto test_for_fp;
 	}
     }
 
-#ifdef PARANOID
-  emulating = 0;
-#endif PARANOID
-
+  RE_ENTRANT_CHECK_OFF
 }
 
 

@@ -152,13 +152,13 @@ arp_targetp(struct arp *arp)
 static  void
 arp_free (void *ptr, unsigned long len)
 {
-  free_s(ptr, len);
+  kfree_s(ptr, len);
 }
 
 static  void *
-arp_malloc (unsigned long amount)
+arp_malloc (unsigned long amount, int priority)
 {
-  return (malloc (amount));
+  return (kmalloc (amount, priority));
 }
 
 static  int
@@ -170,7 +170,8 @@ arp_response (struct arp *arp1, struct device *dev)
 
   /* get some mem and initialize it for the return trip. */
   skb = arp_malloc (sizeof (*skb) + sizeof (*arp2) +
-		    2*arp1->hlen + 2*arp1->plen + dev->hard_header_len);
+		    2*arp1->hlen + 2*arp1->plen + dev->hard_header_len,
+		    GFP_ATOMIC);
   if (skb == NULL) return (1);
 
   skb->mem_addr = skb;
@@ -278,7 +279,7 @@ create_arp (unsigned long paddr, unsigned char *addr, int hlen)
 {
   struct arp_table *apt;
   unsigned long hash;
-  apt = arp_malloc (sizeof (*apt));
+  apt = arp_malloc (sizeof (*apt), GFP_ATOMIC);
   if (apt == NULL) return (NULL);
 
   hash = net32(paddr) & (ARP_TABLE_SIZE - 1);
@@ -365,7 +366,7 @@ arp_snd (unsigned long paddr, struct device *dev, unsigned long saddr)
   if (apt == NULL) return;
 
   skb = arp_malloc (sizeof (*arp) + sizeof (*skb) + dev->hard_header_len +
-		    2*dev->addr_len+8);
+		    2*dev->addr_len+8, GFP_ATOMIC);
   if (skb == NULL) return;
   
   skb->sk = NULL;

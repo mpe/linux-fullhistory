@@ -99,6 +99,16 @@ defined(CONFIG_CHR_DEV_ST)
 #endif
 #endif
 
+/*
+ *  Choose filesystems here.
+ */
+
+#define MINIX_FS
+#define EXT_FS
+#define MSDOS_FS
+#define PROC_FS
+#undef  NFS_FS
+
 #ifdef CONFIG_DISTRIBUTION
 #include <linux/config.dist.h>
 #else

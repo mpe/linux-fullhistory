@@ -22,12 +22,18 @@
  * Ok, Peter made a complicated, but straightforward multiple_wait() function.
  * I have rewritten this, taking some shortcuts: This code may not be easy to
  * follow, but it should be free of race-conditions, and it's practical. If you
- * understand what I'm doing here, then you understand how the linux sleep/wakeup
- * mechanism works.
+ * understand what I'm doing here, then you understand how the linux
+ * sleep/wakeup mechanism works.
  *
  * Two very simple procedures, select_wait() and free_wait() make all the work.
- * select_wait() is a inline-function defined in <linux/fs.h>, as all select
+ * select_wait() is a inline-function defined in <linux/sched.h>, as all select
  * functions have to call it to add an entry to the select table.
+ */
+
+/*
+ * I rewrote this again to make the select_table size variable, take some
+ * more shortcuts, improve responsiveness, and remove another race that
+ * Linus noticed.  -- jrs
  */
 
 static void free_wait(select_table * p)
@@ -42,88 +48,125 @@ static void free_wait(select_table * p)
 }
 
 /*
- * The check_XX functions check out a file. We know it's either
- * a pipe, a character device or a fifo
+ * The check function checks the ready status of a file using the vfs layer.
+ *
+ * If the file was not ready we were added to its wait queue.  But in
+ * case it became ready just after the check and just before it called
+ * select_wait, we call it again, knowing we are already on its
+ * wait queue this time.  The second call is not necessary if the
+ * select_table is NULL indicating an earlier file check was ready
+ * and we aren't going to sleep on the select_table.  -- jrs
  */
-static int check_in(select_table * wait, struct inode * inode, struct file * file)
+
+static int check(int flag, select_table * wait, struct file * file)
 {
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_IN,wait);
-	if (inode && S_ISREG(inode->i_mode))
+	struct inode * inode;
+	struct file_operations *fops;
+	int (*select) (struct inode *, struct file *, int, select_table *);
+
+	inode = file->f_inode;
+	if ((fops = file->f_op) && (select = fops->select))
+		return select(inode, file, flag, wait)
+		    || (wait && select(inode, file, flag, NULL));
+	if (S_ISREG(inode->i_mode))
 		return 1;
 	return 0;
 }
 
-static int check_out(select_table * wait, struct inode * inode, struct file * file)
-{
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_OUT,wait);
-	if (inode && S_ISREG(inode->i_mode))
-		return 1;
-	return 0;
-}
-
-static int check_ex(select_table * wait, struct inode * inode, struct file * file)
-{
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_EX,wait);
-	if (inode && S_ISREG(inode->i_mode))
-		return 1;
-	return 0;
-}
-
-int do_select(fd_set in, fd_set out, fd_set ex,
-	fd_set *inp, fd_set *outp, fd_set *exp)
+int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
+	fd_set *res_in, fd_set *res_out, fd_set *res_ex)
 {
 	int count;
-	select_table wait_table;
-	struct file * file;
+	select_table wait_table, *wait;
+	struct select_table_entry *entry;
 	int i;
-	fd_set mask;
+	int max;
 
-	mask = in | out | ex;
-	for (i = 0 ; i < NR_OPEN ; i++,mask >>= 1) {
-		if (!(mask & 1))
+	max = -1;
+	for (i = 0 ; i < n ; i++) {
+		if (!FD_ISSET(i, in) &&
+		    !FD_ISSET(i, out) &&
+		    !FD_ISSET(i, ex))
 			continue;
 		if (!current->filp[i])
 			return -EBADF;
 		if (!current->filp[i]->f_inode)
 			return -EBADF;
+		max = i;
 	}
+	n = max + 1;
+	entry = (struct select_table_entry *) get_free_page(GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+	FD_ZERO(res_in);
+	FD_ZERO(res_out);
+	FD_ZERO(res_ex);
+	count = 0;
 repeat:
 	wait_table.nr = 0;
-	*inp = *outp = *exp = 0;
-	count = 0;
+	wait_table.entry = entry;
 	current->state = TASK_INTERRUPTIBLE;
-	mask = 1;
-	for (i = 0 ; i < NR_OPEN ; i++, mask += mask) {
-		file = current->filp[i];
-		if (mask & in)
-			if (check_in(&wait_table,file->f_inode,file)) {
-				*inp |= mask;
-				count++;
-			}
-		if (mask & out)
-			if (check_out(&wait_table,file->f_inode,file)) {
-				*outp |= mask;
-				count++;
-			}
-		if (mask & ex)
-			if (check_ex(&wait_table,file->f_inode,file)) {
-				*exp |= mask;
-				count++;
-			}
+	wait = &wait_table;
+	for (i = 0 ; i < n ; i++) {
+		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->filp[i])) {
+			FD_SET(i, res_in);
+			count++;
+			wait = NULL;
+		}
+		if (FD_ISSET(i,out) && check(SEL_OUT,wait,current->filp[i])) {
+			FD_SET(i, res_out);
+			count++;
+			wait = NULL;
+		}
+		if (FD_ISSET(i,ex) && check(SEL_EX,wait,current->filp[i])) {
+			FD_SET(i, res_ex);
+			count++;
+			wait = NULL;
+		}
 	}
-	if (!(current->signal & ~current->blocked) &&
-	    current->timeout && !count) {
+	if (!count && current->timeout
+	    && !(current->signal & ~current->blocked)) {
 		schedule();
 		free_wait(&wait_table);
 		goto repeat;
 	}
 	free_wait(&wait_table);
+	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
 	return count;
 }
+
+static void __get_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
+{
+	FD_ZERO(fdset);
+	if (!fs_pointer)
+		return;
+	while (nr > 0) {
+		*fdset = get_fs_long(fs_pointer);
+		fdset++;
+		fs_pointer++;
+		nr -= 32;
+	}
+}
+
+static void __set_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
+{
+	if (!fs_pointer)
+		return;
+	verify_area(fs_pointer, sizeof(fd_set));
+	while (nr > 0) {
+		put_fs_long(*fdset, fs_pointer);
+		fdset++;
+		fs_pointer++;
+		nr -= 32;
+	}
+}
+
+#define get_fd_set(nr,fsp,fdp) \
+__get_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
+
+#define set_fd_set(nr,fsp,fdp) \
+__set_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
 
 /*
  * We can actually return ERESTARTSYS insetad of EINTR, but I'd
@@ -134,29 +177,25 @@ int sys_select( unsigned long *buffer )
 {
 /* Perform the select(nd, in, out, ex, tv) system call. */
 	int i;
-	fd_set res_in, in = 0, *inp;
-	fd_set res_out, out = 0, *outp;
-	fd_set res_ex, ex = 0, *exp;
-	fd_set mask;
+	fd_set res_in, in, *inp;
+	fd_set res_out, out, *outp;
+	fd_set res_ex, ex, *exp;
+	int n;
 	struct timeval *tvp;
 	unsigned long timeout;
 
-	mask = get_fs_long(buffer++);
-	if (mask >= 32)
-		mask = ~0;
-	else
-		mask = ~((~0) << mask);
+	n = get_fs_long(buffer++);
+	if (n < 0)
+		return -EINVAL;
+	if (n > NR_OPEN)
+		n = NR_OPEN;
 	inp = (fd_set *) get_fs_long(buffer++);
 	outp = (fd_set *) get_fs_long(buffer++);
 	exp = (fd_set *) get_fs_long(buffer++);
 	tvp = (struct timeval *) get_fs_long(buffer);
-
-	if (inp)
-		in = mask & get_fs_long(inp);
-	if (outp)
-		out = mask & get_fs_long(outp);
-	if (exp)
-		ex = mask & get_fs_long(exp);
+	get_fd_set(n, inp, &in);
+	get_fd_set(n, outp, &out);
+	get_fd_set(n, exp, &ex);
 	timeout = 0xffffffff;
 	if (tvp) {
 		timeout = get_fs_long((unsigned long *)&tvp->tv_usec)/(1000000/HZ);
@@ -164,7 +203,7 @@ int sys_select( unsigned long *buffer )
 		timeout += jiffies;
 	}
 	current->timeout = timeout;
-	i = do_select(in, out, ex, &res_in, &res_out, &res_ex);
+	i = do_select(n, &in, &out, &ex, &res_in, &res_out, &res_ex);
 	if (current->timeout > jiffies)
 		timeout = current->timeout - jiffies;
 	else
@@ -181,17 +220,8 @@ int sys_select( unsigned long *buffer )
 		return i;
 	if (!i && (current->signal & ~current->blocked))
 		return -EINTR;
-	if (inp) {
-		verify_area(inp, 4);
-		put_fs_long(res_in,inp);
-	}
-	if (outp) {
-		verify_area(outp,4);
-		put_fs_long(res_out,outp);
-	}
-	if (exp) {
-		verify_area(exp,4);
-		put_fs_long(res_ex,exp);
-	}
+	set_fd_set(n, inp, &res_in);
+	set_fd_set(n, outp, &res_out);
+	set_fd_set(n, exp, &res_ex);
 	return i;
 }

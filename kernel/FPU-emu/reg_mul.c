@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  reg_mul.c                                                                |
  |                                                                           |
- | Multiply one REG by another and put the result in a destination REG.      |
+ | Multiply one FPU_REG by another, put the result in a destination FPU_REG. |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
@@ -10,7 +10,7 @@
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- | The destination may be any REG, including one of the source REGs.         |
+ | The destination may be any FPU_REG, including one of the source FPU_REGs. |
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
@@ -19,7 +19,7 @@
 
 
 /* This routine must be called with non-empty registers */
-void reg_mul(REG *a, REG *b, REG *dest)
+void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   if (!(a->tag | b->tag))
     {
@@ -29,9 +29,9 @@ void reg_mul(REG *a, REG *b, REG *dest)
       dest->sign = (a->sign ^ b->sign);
       dest->tag = TW_Valid;
       if ( dest->exp <= EXP_UNDER )
-	{ arith_underflow(st0_ptr); }
+	{ arith_underflow(FPU_st0_ptr); }
       else if ( dest->exp >= EXP_OVER )
-	{ arith_overflow(st0_ptr); }
+	{ arith_overflow(FPU_st0_ptr); }
       return;
     }
   else if ((a->tag <= TW_Zero) && (b->tag <= TW_Zero))

@@ -14,10 +14,6 @@
 #include "fpu_emu.h"
 #include "status_w.h"
 
-extern struct info *FPU_info;
-
-#define EAX_REG ((long)(FPU_info->___eax))
-
 
 
 static void fclex()
@@ -60,7 +56,7 @@ static void fstsw_ax()
   status_word &= ~SW_TOP;
   status_word |= (top&7) << SW_TOPS;
 
-  *(short *) &EAX_REG = status_word;
+  *(short *) &FPU_EAX = status_word;
 
 }
 
@@ -91,7 +87,7 @@ void fp_nop()
 
 void fld_i_()
 {
-  REG *st_new_ptr;
+  FPU_REG *st_new_ptr;
 
   if ( STACK_OVERFLOW )
     { stack_overflow(); return; }
@@ -117,10 +113,10 @@ void fld_i_()
 void fxch_i()
 {
   /* fxch st(i) */
-  REG t;
-  register REG *sti_ptr = &st(FPU_rm);
-  reg_move(st0_ptr, &t);
-  reg_move(sti_ptr, st0_ptr);
+  FPU_REG t;
+  register FPU_REG *sti_ptr = &st(FPU_rm);
+  reg_move(FPU_st0_ptr, &t);
+  reg_move(sti_ptr, FPU_st0_ptr);
   reg_move(&t, sti_ptr);
 }
 
@@ -135,14 +131,14 @@ void ffree_()
 void fst_i_()
 {
   /* fst st(i) */
-  reg_move(st0_ptr, &st(FPU_rm));
+  reg_move(FPU_st0_ptr, &st(FPU_rm));
 }
 
 
 void fstp_i()
 {
   /* fstp st(i) */
-  reg_move(st0_ptr, &st(FPU_rm));
+  reg_move(FPU_st0_ptr, &st(FPU_rm));
   pop();
 }
 

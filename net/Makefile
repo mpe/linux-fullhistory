@@ -10,8 +10,8 @@
 # only these two lines should need to be changed to remove inet sockets.
 # (and the tcp/tcpip.o in net.o)
 
-SUBDIRS		=# tcp
-SOCK_FLAGS	=# -DINET_SOCKETS
+SUBDIRS		= tcp
+SOCK_FLAGS	= -DINET_SOCKETS
 
 .c.o:
 	$(CC) $(CFLAGS) $(SOCK_FLAGS) -c $<
@@ -23,7 +23,7 @@ SOCK_FLAGS	=# -DINET_SOCKETS
 OBJS	=  socket.o unix.o 
 
 net.o: $(OBJS) subdirs
-	$(LD) -r -o net.o $(OBJS)# tcp/tcpip.o
+	$(LD) -r -o net.o $(OBJS) tcp/tcpip.o
 
 
 subdirs: dummy
@@ -50,9 +50,10 @@ socket.o : socket.c /usr/include/linux/signal.h /usr/include/linux/errno.h /usr/
   /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h \
   /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
   /usr/include/linux/kernel.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/stat.h \
-  /usr/include/linux/socket.h /usr/include/linux/fcntl.h /usr/include/linux/termios.h \
-  /usr/include/asm/system.h /usr/include/asm/segment.h kern_sock.h socketcall.h 
+  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
+  /usr/include/linux/stat.h /usr/include/linux/socket.h /usr/include/linux/fcntl.h \
+  /usr/include/linux/termios.h /usr/include/asm/system.h /usr/include/asm/segment.h \
+  kern_sock.h socketcall.h 
 unix.o : unix.c /usr/include/linux/signal.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
@@ -60,7 +61,7 @@ unix.o : unix.c /usr/include/linux/signal.h /usr/include/linux/sched.h /usr/incl
   /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
   /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
   /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
-  /usr/include/linux/vm86.h /usr/include/linux/errno.h /usr/include/linux/string.h \
-  /usr/include/linux/stat.h /usr/include/linux/socket.h /usr/include/linux/un.h \
-  /usr/include/linux/fcntl.h /usr/include/linux/termios.h /usr/include/asm/system.h \
-  /usr/include/asm/segment.h kern_sock.h 
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h /usr/include/linux/errno.h \
+  /usr/include/linux/string.h /usr/include/linux/stat.h /usr/include/linux/socket.h \
+  /usr/include/linux/un.h /usr/include/linux/fcntl.h /usr/include/linux/termios.h \
+  /usr/include/asm/system.h /usr/include/asm/segment.h kern_sock.h 

@@ -118,11 +118,10 @@ int sys_fork(long ebx,long ecx,long edx,
 		return nr;
 	}
 	task[nr] = p;
-	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
-	p->wait.task = p;
-	p->wait.next = NULL;
+	*p = *current;
+	p->kernel_stack_page = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
-	p->flags &= ~PF_PTRACED;
+	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 	p->pid = last_pid;
 	if (p->pid > 1)
 		p->swappable = 1;
@@ -140,7 +139,6 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->cmin_flt = p->cmaj_flt = 0;
 	p->start_time = jiffies;
 	p->tss.back_link = 0;
-	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
 	p->tss.eip = eip;
 	p->tss.eflags = eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
@@ -164,12 +162,15 @@ int sys_fork(long ebx,long ecx,long edx,
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
-	if (copy_mem(nr,p)) {
+	p->kernel_stack_page = get_free_page(GFP_KERNEL);
+	if (!p->kernel_stack_page || copy_mem(nr,p)) {
 		task[nr] = NULL;
 		REMOVE_LINKS(p);
+		free_page(p->kernel_stack_page);
 		free_page((long) p);
 		return -EAGAIN;
 	}
+	p->tss.esp0 = PAGE_SIZE + p->kernel_stack_page;
 	for (i=0; i<NR_OPEN;i++)
 		if (f=p->filp[i])
 			f->f_count++;

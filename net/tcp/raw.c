@@ -33,6 +33,8 @@
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <linux/mm.h>
+#include <linux/kernel.h>
 #include "../kern_sock.h" /* for PRINTK */
 
 extern struct proto raw_prot;
@@ -127,7 +129,7 @@ raw_loopback (volatile struct sock *sk, int prot, char *from, int len,
    /* just pretend it just came in. */
    struct sk_buff *skb;
    int err;
-   skb = malloc (len+sizeof (*skb));
+   skb = kmalloc (len+sizeof (*skb), GFP_KERNEL);
    if (skb == NULL) return (-ENOMEM);
 
    skb->mem_addr = skb;
@@ -184,7 +186,8 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
      }
 
    sk->inuse = 1;
-   skb = sk->prot->wmalloc (sk, len+sizeof (*skb) + sk->prot->max_header, 0);
+   skb = sk->prot->wmalloc (sk, len+sizeof (*skb) + sk->prot->max_header, 0,
+			    GFP_KERNEL);
    /* this shouldn't happen, but it could. */
    if (skb == NULL)
      {
@@ -227,7 +230,7 @@ raw_close (volatile struct sock *sk, int timeout)
    sk->inuse = 1;
    sk->state = TCP_CLOSE;
    delete_ip_protocol ((struct ip_protocol *)sk->pair);
-   free_s ((void *)sk->pair, sizeof (struct ip_protocol));
+   kfree_s ((void *)sk->pair, sizeof (struct ip_protocol));
    release_sock (sk);
 }
 
@@ -235,7 +238,7 @@ static int
 raw_init (volatile struct sock *sk)
 {
    struct ip_protocol *p;
-   p = malloc (sizeof (*p));
+   p = kmalloc (sizeof (*p), GFP_KERNEL);
    if (p == NULL) return (-ENOMEM);
 
    p->handler = raw_rcv;

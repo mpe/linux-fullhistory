@@ -51,7 +51,10 @@
 #define	BBD_ERR		0x80	/* ? */
 
 
+/* HDIO_GETGEO is the preferred choice - HDIO_REQ will be removed at some
+   later date */
 #define HDIO_REQ 0x301
+#define HDIO_GETGEO 0x301
 struct hd_geometry {
       unsigned char heads;
       unsigned char sectors;

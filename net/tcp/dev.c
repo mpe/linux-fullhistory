@@ -121,6 +121,13 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
   struct sk_buff *skb2;
   PRINTK ("eth_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri);
   skb->dev = dev;
+
+  if (skb->next != NULL)
+    {
+/*      printk ("retransmitted packet still on queue. \n");*/
+       return;
+    }
+
   if (pri < 0 || pri >= DEV_NUMBUFFS)
     {
        printk ("bad priority in dev_queue_xmit.\n");
@@ -129,12 +136,6 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 
   if (dev->hard_start_xmit(skb, dev) == 0)
     {
-       return;
-    }
-
-  if (skb->next != NULL)
-    {
-       printk ("retransmitted packet still on queue. \n");
        return;
     }
 
@@ -186,7 +187,7 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
    /* try to grab some memory. */
    if (len > 0 && buff != NULL)
      {
-	skb = malloc (sizeof (*skb) + len);
+	skb = kmalloc (sizeof (*skb) + len, GFP_ATOMIC);
 	if (skb != NULL)
 	  {
 	    skb->mem_len = sizeof (*skb) + len;
@@ -214,7 +215,7 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
 	  }
 	else
 	  {
-	     free_s (skb->mem_addr, skb->mem_len);
+	     kfree_s (skb->mem_addr, skb->mem_len);
 	     skb = (struct sk_buff *)buff;
 	  }
 
@@ -242,7 +243,7 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
      }
 
    if (skb != NULL) 
-     free_s (skb->mem_addr, skb->mem_len);
+     kfree_s (skb->mem_addr, skb->mem_len);
 
    /* anything left to process? */
 
@@ -295,7 +296,7 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
 	     /* copy the packet if we need to. */
 	     if (ptype->copy)
 	       {
-		  skb2 = malloc (skb->mem_len);
+		  skb2 = kmalloc (skb->mem_len, GFP_ATOMIC);
 		  if (skb2 == NULL) continue;
 		  memcpy (skb2, skb, skb->mem_len);
 		  skb2->mem_addr = skb2;

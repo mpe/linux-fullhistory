@@ -56,14 +56,16 @@ int nr_buffer_heads = 0;
  */
 void __wait_on_buffer(struct buffer_head * bh)
 {
-	add_wait_queue(&bh->b_wait,&current->wait);
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&bh->b_wait, &wait);
 repeat:
 	current->state = TASK_UNINTERRUPTIBLE;
 	if (bh->b_lock) {
 		schedule();
 		goto repeat;
 	}
-	remove_wait_queue(&bh->b_wait,&current->wait);
+	remove_wait_queue(&bh->b_wait, &wait);
 	current->state = TASK_RUNNING;
 }
 
@@ -78,7 +80,7 @@ static void sync_buffers(dev_t dev)
 			continue;
 		if (!bh->b_dirt)
 			continue;
-		ll_rw_block(WRITE,bh);
+		ll_rw_block(WRITE, 1, &bh);
 	}
 }
 
@@ -325,7 +327,7 @@ repeat:
 		}
 #if 0
 		if (tmp->b_dirt)
-			ll_rw_block(WRITEA,tmp);
+			ll_rw_block(WRITEA, 1, &tmp);
 #endif
 	}
 
@@ -386,7 +388,7 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 	}
 	if (bh->b_uptodate)
 		return bh;
-	ll_rw_block(READ,bh);
+	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
 	if (bh->b_uptodate)
 		return bh;
@@ -416,7 +418,7 @@ void bread_page(unsigned long address, dev_t dev, int b[4])
 		if (b[i]) {
 			if (bh[i] = getblk(dev, b[i], 1024))
 				if (!bh[i]->b_uptodate)
-					ll_rw_block(READ,bh[i]);
+					ll_rw_block(READ, 1, &bh[i]);
 		} else
 			bh[i] = NULL;
 	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE)
@@ -444,12 +446,12 @@ struct buffer_head * breada(dev_t dev,int first, ...)
 		return NULL;
 	}
 	if (!bh->b_uptodate)
-		ll_rw_block(READ,bh);
+		ll_rw_block(READ, 1, &bh);
 	while ((first=va_arg(args,int))>=0) {
 		tmp = getblk(dev, first, 1024);
 		if (tmp) {
 			if (!tmp->b_uptodate)
-				ll_rw_block(READA,tmp);
+				ll_rw_block(READA, 1, &tmp);
 			tmp->b_count--;
 		}
 	}
@@ -461,9 +463,16 @@ struct buffer_head * breada(dev_t dev,int first, ...)
 	return (NULL);
 }
 
+/*
+ * See fs/inode.c for the weird use of volatile..
+ */
 static void put_unused_buffer_head(struct buffer_head * bh)
 {
+	struct wait_queue * wait;
+
+	wait = ((volatile struct buffer_head *) bh)->b_wait;
 	memset((void *) bh,0,sizeof(*bh));
+	((volatile struct buffer_head *) bh)->b_wait = wait;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
 }
@@ -620,7 +629,7 @@ int shrink_buffers(unsigned int priority)
 			else
 				wait_on_buffer(bh);
 		if (bh->b_dirt) {
-			ll_rw_block(WRITEA,bh);
+			ll_rw_block(WRITEA, 1, &bh);
 			continue;
 		}
 		if (try_to_free(bh))

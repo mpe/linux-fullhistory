@@ -19,6 +19,8 @@
 #define PTRACE_ATTACH		0x10
 #define PTRACE_DETACH		0x11
 
+#define PTRACE_SYSCALL		  24
+
 /* use ptrace (3 or 6, pid, PT_EXCL, data); to read or write
    the processes registers. */
 

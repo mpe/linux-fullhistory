@@ -37,6 +37,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/fcntl.h>
+#include <linux/mm.h>
 
 #ifdef MEM_DEBUG
 #define MPRINTK printk
@@ -202,7 +203,7 @@ free_skb (struct sk_buff *skb, int rw)
      }
    else
      {
-	free_s (skb->mem_addr, skb->mem_len);
+	kfree_s (skb->mem_addr, skb->mem_len);
      }
 }
 
@@ -481,7 +482,7 @@ destroy_sock(volatile struct sock *sk)
      otherwise we need to keep it around until everything is gone. */
   if (sk->rmem_alloc == 0 && sk->wmem_alloc == 0)
     {
-       free_s ((void *)sk,sizeof (*sk));
+       kfree_s ((void *)sk,sizeof (*sk));
     }
   else
     {
@@ -728,7 +729,7 @@ ip_proto_create (struct socket *sock, int protocol)
   struct proto *prot;
   int err;
 
-  sk = malloc (sizeof (*sk));
+  sk = kmalloc (sizeof (*sk), GFP_KERNEL);
   if (sk == NULL)
     return (-ENOMEM);
   sk->num = 0;
@@ -740,7 +741,7 @@ ip_proto_create (struct socket *sock, int protocol)
     case SOCK_SEQPACKET:
        if (protocol && protocol != IPPROTO_TCP)
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
 	 }
        sk->no_check = TCP_NO_CHECK;
@@ -750,7 +751,7 @@ ip_proto_create (struct socket *sock, int protocol)
     case SOCK_DGRAM:
        if (protocol && protocol != IPPROTO_UDP)
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
 	 }
        sk->no_check = UDP_NO_CHECK;
@@ -760,13 +761,13 @@ ip_proto_create (struct socket *sock, int protocol)
      case SOCK_RAW:
        if (!suser())
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPERM);
 	 }
 
        if (!protocol)
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
 	 }
        prot = &raw_prot;
@@ -779,13 +780,13 @@ ip_proto_create (struct socket *sock, int protocol)
     case SOCK_PACKET:
        if (!suser())
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPERM);
 	 }
 
        if (!protocol)
 	 {
-	    free_s ((void *)sk, sizeof (*sk));
+	    kfree_s ((void *)sk, sizeof (*sk));
 	    return (-EPROTONOSUPPORT);
 	 }
        prot = &packet_prot;
@@ -797,7 +798,7 @@ ip_proto_create (struct socket *sock, int protocol)
 
       
     default:
-       free_s ((void *)sk, sizeof (*sk));
+       kfree_s ((void *)sk, sizeof (*sk));
        return (-ESOCKTNOSUPPORT);
 
     }
@@ -1427,208 +1428,44 @@ ip_proto_ioctl (struct socket *sock, unsigned int cmd,
     }
 }
 
-#ifdef MEM_DEBUG
-
-struct mem
-{
-   unsigned long check;
-   struct mem *other;
-   unsigned long len;
-   unsigned short buff[10];
-};
-
-static void
-print_mem (struct mem *m)
-{
-   int i;
-   MPRINTK("mem:\n");
-   MPRINTK("  check=%X, other = %X\n", m->check, m->other);
-   MPRINTK("  len=%d buff:\n " , m->len);
-   for (i = 0; i < 10; i++)
-     {
-	MPRINTK ("0x%02X ",m->buff[i]);
-     }
-   MPRINTK ("\n");
-}
-
-static void *
-smalloc (unsigned long size)
-{
-   struct mem *head, *tail;
-   static unsigned short count;
-   int i;
-   int sum;
-   unsigned char *ptr;
-
-   MPRINTK ("smalloc (size = %d)\n",size);
-   head = malloc (size + 2*sizeof (*head));
-   if (head == NULL) return (NULL);
-   tail = (struct mem *)((unsigned char *)(head+1) + size); 
-
-   head->other = tail;
-   tail->other = head;
-
-   tail->len = size;
-   head->len = size;
-   for (i = 0; i < 10; i++)
-     {
-	tail->buff[i]=count++;
-	head->buff[i]=count;
-     }
-
-   ptr = (unsigned char *)head;
-   head->check = 0;
-   sum = 0;
-
-   for (i = 0; i < sizeof (*head); i ++)
-     {
-	sum+= ptr[i]; 
-     }
-
-   head->check = ~sum;
-   ptr = (unsigned char *)tail;
-   tail->check = 0;
-   sum = 0;
-
-   for (i = 0; i < sizeof (*head); i ++)
-     {
-	sum+= ptr[i]; 
-     }
-
-   tail->check = ~sum;
-   MPRINTK ("head = %X:\n", head);
-   print_mem(head);
-   MPRINTK ("tail = %X:\n", tail);
-   print_mem(tail);
-   return (head+1);
-}
-
-void
-sfree (void *data, unsigned long len)
-{
-   int i;
-   int sum;
-   int csum;
-   unsigned char *ptr;
-   int bad = 0;
-   struct mem *head, *tail;
-   MPRINTK ("sfree(data=%X, len = %d)\n", data, len);
-   head = data;
-   head--;
-   tail = (struct mem *)((unsigned char *)(head+1) + len);
-   print_mem (head);
-   print_mem (tail);
-   if (head->other != tail)
-     {
-	MPRINTK ("sfree: head->other != tail:\n");
-	bad = 1;
-     }
-   if (tail->other != head)
-     {
-	MPRINTK ("sfree: tail->other != head:\n");
-	bad =1 ;
-     }
-   if (head ->len != len)
-     {
-	MPRINTK ("sfree: head->len != len");
-	bad = 1;
-     }
-   if (tail ->len != len)
-     {
-	MPRINTK ("sfree: tail->len != len");
-	bad = 1;
-     }
-   csum = head->check;
-   ptr = (unsigned char *)head;
-   head->check = 0;
-   sum = 0;
-   for (i = 0; i < sizeof (*head); i ++)
-     {
-	sum+= ptr[i]; 
-     }
-   if (csum != ~sum)
-     {
-	MPRINTK ("sfree: head failed checksum\n");
-	bad = 1;
-     }
-   csum = tail->check;
-   ptr = (unsigned char *)tail;
-   tail->check = 0;
-   sum = 0;
-   for (i = 0; i < sizeof (*head); i ++)
-     {
-	sum+= ptr[i]; 
-     }
-   if (csum != ~sum)
-     {
-	MPRINTK ("sfree: tail failed checksum\n");
-	bad = 1;
-     }
-   if (!bad)
-     free_s (head, len+2*sizeof (*head));
-   else
-     schedule();
-}
-#else
-static  void *
-smalloc (unsigned long size)
-{
-   return (malloc (size));
-}
-static  void
-sfree(void *data, unsigned long len)
-{
-   free_s(data,len);
-}
-#endif
-
 void *
-sock_wmalloc(volatile struct sock *sk, unsigned long size, int force)
+sock_wmalloc(volatile struct sock *sk, unsigned long size, int force,
+	     int priority)
 {
-  void *tmp;
   if (sk)
     {
-       if (sk->wmem_alloc + size >= SK_WMEM_MAX && !force)
+       if (sk->wmem_alloc + size < SK_WMEM_MAX || force)
 	 {
-	    MPRINTK ("sock_wmalloc(%X,%d,%d) returning NULL\n",
-		     sk, size, force);
-	    return (NULL);
+	   cli();
+	   sk->wmem_alloc+= size;
+	   sti();
+	   return (kmalloc (size, priority));
 	 }
-      cli();
-      sk->wmem_alloc+= size;
-      sti();
+       MPRINTK ("sock_wmalloc(%X,%d,%d,%d) returning NULL\n",
+		sk, size, force, priority);
+       return (NULL);
     }
-   if (sk)
-     tmp = smalloc (size);
-   else
-     tmp = malloc (size);
-
-  MPRINTK ("sock_wmalloc(%X,%d,%d) returning %X\n",sk, size, force, tmp);
-  return (tmp);
+  return (kmalloc(size, priority));
 }
 
 void *
-sock_rmalloc(volatile struct sock *sk, unsigned long size, int force)
+sock_rmalloc(volatile struct sock *sk, unsigned long size, int force,
+	     int priority)
 {
-   struct mem *tmp;
    if (sk )
      {
-	if (sk->rmem_alloc + size >= SK_RMEM_MAX && !force)
+	if (sk->rmem_alloc + size < SK_RMEM_MAX || force)
 	  {
-	     MPRINTK ("sock_rmalloc(%X,%d,%d) returning NULL\n",sk,size,force);
-	     return (NULL);
+	    cli();
+	    sk->rmem_alloc+= size;
+	    sti();
+	    return (kmalloc (size, priority));
 	  }
-	cli();
-	sk->rmem_alloc+= size;
-	sti();
-     }
-   if (sk)
-     tmp = smalloc (size);
-   else
-     tmp = malloc (size);
-
-   MPRINTK ("sock_rmalloc(%X,%d,%d) returning %X\n",sk, size, force, tmp);
-   return (tmp);
+	MPRINTK ("sock_rmalloc(%X,%d,%d,%d) returning NULL\n",
+		 sk,size,force, priority);
+	return (NULL);
+      }
+   return (kmalloc (size, priority));
 }
 
 
@@ -1663,22 +1500,19 @@ void
 sock_wfree (volatile struct sock *sk, void *mem, unsigned long size)
 {
    MPRINTK ("sock_wfree (sk=%X, mem=%X, size=%d)\n",sk, mem, size);
+   kfree_s (mem, size);
    if (sk)
      {
 	sk->wmem_alloc -= size;
-	sfree(mem,size);
 	/* in case it might be waiting for more memory. */
 	if (!sk->dead && sk->wmem_alloc > SK_WMEM_MAX/2) wake_up(sk->sleep);
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0)
 	  {
 	     MPRINTK ("recovered lost memory, destroying sock = %X\n",sk);
 	     delete_timer ((struct timer *)&sk->time_wait);
-	     free_s ((void *)sk, sizeof (*sk));
+	     kfree_s ((void *)sk, sizeof (*sk));
 	  }
-     }
-   else
-     {
-	free_s (mem, size);
+	return;
      }
 }
 
@@ -1686,19 +1520,15 @@ void
 sock_rfree (volatile struct sock *sk, void *mem, unsigned long size)
 {
    MPRINTK ("sock_rfree (sk=%X, mem=%X, size=%d)\n",sk, mem, size);
+   kfree_s (mem, size);
    if (sk)
      {
 	sk->rmem_alloc -= size;
-	sfree(mem,size);
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0)
 	  {
 	     delete_timer ((struct timer *)&sk->time_wait);
-	     free_s ((void *)sk, sizeof (*sk));
+	     kfree_s ((void *)sk, sizeof (*sk));
 	  }
-     }
-   else
-     {
-	free_s (mem, size);
      }
 }
 

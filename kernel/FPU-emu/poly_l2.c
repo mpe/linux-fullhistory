@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  poly_l2.c                                                                |
  |                                                                           |
- | Compute the base 2 logarithm of a REG, using a polynomial approximation.  |
+ | Compute the base 2 log of a FPU_REG, using a polynomial approximation.    |
  |                                                                           |
  | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
@@ -38,13 +38,13 @@ static unsigned short	lterms[HIPOWER][4] =
 /*--- poly_l2() -------------------------------------------------------------+
  |   Base 2 logarithm by a polynomial approximation.                         |
  +---------------------------------------------------------------------------*/
-void	poly_l2(REG *arg, REG *result)
+void	poly_l2(FPU_REG *arg, FPU_REG *result)
 {
   short		  exponent;
   char		  zero;		/* flag for an Xx == 0 */
   unsigned short  bits, shift;
   long long       Xsq;
-  REG		  accum, denom, num, Xx;
+  FPU_REG	  accum, denom, num, Xx;
 
 
   exponent = arg->exp - EXP_BIAS;
@@ -96,7 +96,7 @@ void	poly_l2(REG *arg, REG *result)
       /* If the exponent is zero, then we would lose precision by
 	 sticking to fixed point computation here */
       /* We need to re-compute Xx because of loss of precision. */
-      REG     lXx;
+      FPU_REG   lXx;
       char	sign;
       
       sign = accum.sign;
@@ -137,7 +137,6 @@ void	poly_l2(REG *arg, REG *result)
 
 	  reg_u_mul(&lXx, &accum, &accum);
 	  accum.exp += - EXP_BIAS + 1;
-/*	  normalize(&accum); ********/
 
 	  reg_u_add(&lXx, &accum, result);
 	  
@@ -222,11 +221,11 @@ void	poly_l2(REG *arg, REG *result)
  |   Base 2 logarithm by a polynomial approximation.                         |
  |   log2(x+1)                                                               |
  +---------------------------------------------------------------------------*/
-int	poly_l2p1(REG *arg, REG *result)
+int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
 {
   char		sign = 0;
   long long     Xsq;
-  REG        	arg_pl1, denom, accum, local_arg, poly_arg;
+  FPU_REG      	arg_pl1, denom, accum, local_arg, poly_arg;
 
 
   sign = arg->sign;

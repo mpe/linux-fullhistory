@@ -10,10 +10,11 @@ volatile void panic(const char * str);
 volatile void do_exit(long error_code);
 unsigned long simple_strtoul(const char *,char **,unsigned int);
 int printk(const char * fmt, ...);
-void * malloc(unsigned int size);
-void free_s(void * obj, int size);
 
-#define free(x) free_s((x), 0)
+void * kmalloc(unsigned int size, int priority);
+void kfree_s(void * obj, int size);
+
+#define kfree(x) kfree_s((x), 0)
 
 /*
  * This is defined as a macro, but at some point this might become a

@@ -13,57 +13,14 @@
 #include <asm/system.h>
 
 static struct inode inode_table[NR_INODE];
+static struct inode * last_inode = inode_table;
 
 void inode_init(void)
 {
 	memset(inode_table,0,sizeof(inode_table));	
 }
 
-int fs_may_mount(dev_t dev)
-{
-	struct inode * inode;
-
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
-		if (inode->i_dev != dev)
-			continue;
-		if (inode->i_count || inode->i_dirt || inode->i_lock)
-			return 0;
-		inode->i_dev = 0;
-	}
-	return 1;
-}
-
-int fs_may_umount(dev_t dev, struct inode * mount_root)
-{
-	struct inode * inode;
-
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++)
-		if (inode->i_dev==dev && inode->i_count)
-			if (inode == mount_root && inode->i_count == 1)
-				continue;
-			else
-				return 0;
-	return 1;
-}
-
-/*
- * The "new" scheduling primitives (new as of 0.97 or so) allow this to
- * be done without disabling interrupts (other than in the actual queue
- * updating things: only a couple of 386 instructions). This should be
- * much better for interrupt latency.
- */
-static void __wait_on_inode(struct inode * inode)
-{
-	add_wait_queue(&inode->i_wait,&current->wait);
-repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
-	if (inode->i_lock) {
-		schedule();
-		goto repeat;
-	}
-	remove_wait_queue(&inode->i_wait,&current->wait);
-	current->state = TASK_RUNNING;
-}
+static void __wait_on_inode(struct inode *);
 
 static inline void wait_on_inode(struct inode * inode)
 {
@@ -83,15 +40,69 @@ static inline void unlock_inode(struct inode * inode)
 	wake_up(&inode->i_wait);
 }
 
+/*
+ * Note that we don't want to disturb any wait-queues when we discard
+ * an inode.
+ *
+ * Argghh. Got bitten by a gcc problem with inlining: no way to tell
+ * the compiler that the inline asm function 'memset' changes 'inode'.
+ * I've been searching for the bug for days, and was getting desperate.
+ * Finally looked at the assembler output... Grrr.
+ *
+ * The solution is the weird use of 'volatile'. Ho humm. Have to report
+ * it to the gcc lists, and hope we can do this more cleanly some day..
+ */
+void clear_inode(struct inode * inode)
+{
+	struct wait_queue * wait;
+
+	wait_on_inode(inode);
+	wait = ((volatile struct inode *) inode)->i_wait;
+	memset(inode,0,sizeof(*inode));
+	((volatile struct inode *) inode)->i_wait = wait;
+}
+
+int fs_may_mount(dev_t dev)
+{
+	struct inode * inode;
+
+	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
+		if (inode->i_dev != dev)
+			continue;
+		if (inode->i_count || inode->i_dirt || inode->i_lock)
+			return 0;
+		clear_inode(inode);
+	}
+	return 1;
+}
+
+int fs_may_umount(dev_t dev, struct inode * mount_root)
+{
+	struct inode * inode;
+
+	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
+		if (inode->i_dev==dev && inode->i_count)
+			if (inode == mount_root && inode->i_count == 1)
+				continue;
+			else
+				return 0;
+	}
+	return 1;
+}
+
 static void write_inode(struct inode * inode)
 {
 	if (!inode->i_dirt)
 		return;
-	lock_inode(inode);
-	inode->i_dirt = 0;
-	if (inode->i_dev && inode->i_sb &&
-	    inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
-		inode->i_sb->s_op->write_inode(inode);
+	wait_on_inode(inode);
+	if (!inode->i_dirt)
+		return;
+	if (!inode->i_sb || !inode->i_sb->s_op || !inode->i_sb->s_op->write_inode) {
+		inode->i_dirt = 0;
+		return;
+	}
+	inode->i_lock = 1;	
+	inode->i_sb->s_op->write_inode(inode);
 	unlock_inode(inode);
 }
 
@@ -101,6 +112,22 @@ static void read_inode(struct inode * inode)
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->read_inode)
 		inode->i_sb->s_op->read_inode(inode);
 	unlock_inode(inode);
+}
+
+/*
+ * notify_change is called for inode-changing operations such as
+ * chown, chmod, utime, and truncate.  It is guaranteed (unlike
+ * write_inode) to be called from the context of the user requesting
+ * the change.  It is not called for ordinary access-time updates.
+ * NFS uses this to get the authentication correct.  -- jrs
+ */
+
+int notify_change(struct inode * inode)
+{
+	if (inode->i_sb && inode->i_sb->s_op  &&
+	    inode->i_sb->s_op->notify_change)
+		return inode->i_sb->s_op->notify_change(inode);
+	return 0;
 }
 
 /*
@@ -133,18 +160,16 @@ void invalidate_inodes(dev_t dev)
 				printk("inode in use on removed disk\n\r");
 				continue;
 			}
-			inode->i_dev = inode->i_dirt = 0;
+			clear_inode(inode);
 		}
 	}
 }
 
 void sync_inodes(dev_t dev)
 {
-	int i;
 	struct inode * inode;
 
-	inode = 0+inode_table;
-	for(i=0 ; i<NR_INODE ; i++,inode++) {
+	for(inode = 0+inode_table ; inode < NR_INODE+inode_table ; inode++) {
 		wait_on_inode(inode);
 		if (inode->i_dirt)
 			write_inode(inode);
@@ -176,10 +201,6 @@ repeat:
 		PIPE_BASE(*inode) = NULL;
 		free_page(page);
 	}
-	if (!inode->i_dev) {
-		inode->i_count--;
-		return;
-	}
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode) {
 		inode->i_sb->s_op->put_inode(inode);
 		if (!inode->i_nlink)
@@ -197,34 +218,38 @@ repeat:
 struct inode * get_empty_inode(void)
 {
 	struct inode * inode;
-	static struct inode * last_inode = inode_table;
 	int i;
 
-	do {
-		inode = NULL;
-		for (i = NR_INODE; i ; i--) {
-			if (++last_inode >= inode_table + NR_INODE)
-				last_inode = inode_table;
-			if (!last_inode->i_count) {
-				inode = last_inode;
-				if (!inode->i_dirt && !inode->i_lock)
-					break;
-			}
+repeat:
+	inode = NULL;
+	for (i = NR_INODE; i ; i--) {
+		if (++last_inode >= inode_table + NR_INODE)
+			last_inode = inode_table;
+		if (!last_inode->i_count) {
+			inode = last_inode;
+			if (!inode->i_dirt && !inode->i_lock)
+				break;
 		}
-		if (!inode) {
-			for (i=0 ; i<NR_INODE ; i++)
-				printk("(%04x: %d (%o)) ",inode_table[i].i_dev,
-					inode_table[i].i_ino,inode_table[i].i_mode);
-			panic("No free inodes in mem");
-		}
+	}
+	if (!inode) {
+		for (i=0 ; i<NR_INODE ; i++)
+			printk("(%04x: %d (%o)) ",inode_table[i].i_dev,
+				inode_table[i].i_ino,inode_table[i].i_mode);
+		panic("No free inodes in mem");
+	}
+	if (inode->i_lock) {
 		wait_on_inode(inode);
-		while (inode->i_dirt) {
-			write_inode(inode);
-			wait_on_inode(inode);
-		}
-	} while (inode->i_count);
-	memset(inode,0,sizeof(*inode));
+		goto repeat;
+	}
+	if (inode->i_dirt) {
+		write_inode(inode);
+		goto repeat;
+	}
+	if (inode->i_count)
+		goto repeat;
+	clear_inode(inode);
 	inode->i_count = 1;
+	inode->i_nlink = 1;
 	return inode;
 }
 
@@ -255,12 +280,12 @@ struct inode * iget(struct super_block * sb,int nr)
 	empty = get_empty_inode();
 	inode = inode_table;
 	while (inode < NR_INODE+inode_table) {
-		if (inode->i_sb != sb || inode->i_ino != nr) {
+		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
 			inode++;
 			continue;
 		}
 		wait_on_inode(inode);
-		if (inode->i_sb != sb || inode->i_ino != nr) {
+		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
 			inode = inode_table;
 			continue;
 		}
@@ -298,4 +323,25 @@ struct inode * iget(struct super_block * sb,int nr)
 	inode->i_flags = sb->s_flags;
 	read_inode(inode);
 	return inode;
+}
+
+/*
+ * The "new" scheduling primitives (new as of 0.97 or so) allow this to
+ * be done without disabling interrupts (other than in the actual queue
+ * updating things: only a couple of 386 instructions). This should be
+ * much better for interrupt latency.
+ */
+static void __wait_on_inode(struct inode * inode)
+{
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&inode->i_wait, &wait);
+repeat:
+	current->state = TASK_UNINTERRUPTIBLE;
+	if (inode->i_lock) {
+		schedule();
+		goto repeat;
+	}
+	remove_wait_queue(&inode->i_wait, &wait);
+	current->state = TASK_RUNNING;
 }

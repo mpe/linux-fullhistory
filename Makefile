@@ -78,7 +78,7 @@ SVGA_MODE=	-DSVGA_MODE=1
 # standard CFLAGS
 #
 
-CFLAGS =-Wall -O6 -fomit-frame-pointer $(LIMIT_MEMORY)
+CFLAGS = -Wall -O6 -fomit-frame-pointer $(LIMIT_MEMORY)
 
 #
 # if you want the ram-disk device, define this to be the
@@ -99,7 +99,7 @@ CPP	=$(CC) -E $(LIMIT_MEMORY)
 AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
-FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o fs/msdos/msdos.o fs/proc/proc.o
+FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
 		 kernel/blk_drv/scsi/scsi.a
 MATH		=kernel/FPU-emu/math.a
@@ -127,7 +127,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.98.pl3-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98.pl4-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -218,4 +218,5 @@ init/main.o : init/main.c /usr/lib/gcc-lib/i386-linux/2.2.2d/include/stdarg.h /u
   /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
   /usr/include/linux/kernel.h /usr/include/linux/signal.h /usr/include/linux/time.h \
   /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/tty.h /usr/include/linux/termios.h /usr/include/linux/unistd.h 
+  /usr/include/linux/math_emu.h /usr/include/linux/tty.h /usr/include/linux/termios.h \
+  /usr/include/linux/unistd.h /usr/include/linux/string.h 
