@@ -87,7 +87,7 @@ unsigned long avail_start;
 extern int num_memory;
 extern struct mem_info memory[];
 extern boot_infos_t *boot_infos;
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 struct pgtable_cache_struct quicklists;
 #endif
 
@@ -278,9 +278,9 @@ void show_mem(void)
 	show_buffers();
 	printk("%-8s %3s %8s %8s %8s %9s %8s", "Process", "Pid",
 	       "Ctx", "Ctx<<4", "Last Sys", "pc", "task");
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	printk(" %3s", "CPU");
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	printk("\n");
 	for_each_task(p)
 	{
@@ -294,7 +294,7 @@ void show_mem(void)
 		       (ulong)p);
 		{
 			int iscur = 0;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 			printk("%3d ", p->processor);
 			if ( (p->processor != NO_PROC_ID) &&
 			     (p == current_set[p->processor]) )
@@ -315,7 +315,7 @@ void show_mem(void)
 					printk(",");
 				printk("last math");
 			}			
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 			printk("\n");
 		}
 	}
@@ -495,7 +495,7 @@ local_flush_tlb_all(void)
 {
 	__clear_user(Hash, Hash_size);
 	_tlbia();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
 #endif	
 }
@@ -511,7 +511,7 @@ local_flush_tlb_mm(struct mm_struct *mm)
 	mm->context = NO_CONTEXT;
 	if (mm == current->mm)
 		activate_mm(mm, mm);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
 #endif	
 }
@@ -523,7 +523,7 @@ local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
 		flush_hash_page(vma->vm_mm->context, vmaddr);
 	else
 		flush_hash_page(0, vmaddr);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
 #endif	
 }
@@ -551,7 +551,7 @@ local_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long e
 	{
 		flush_hash_page(mm->context, start);
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
 #endif	
 }
@@ -575,7 +575,7 @@ mmu_context_overflow(void)
 	}
 	read_unlock(&tasklist_lock);
 	flush_hash_segments(0x10, 0xffffff);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_send_tlb_invalidate(0);
 #endif	
 	atomic_set(&next_mmu_context, 0);
@@ -663,7 +663,7 @@ void __init setbat(int index, unsigned long virt, unsigned long phys,
 }
 
 #define IO_PAGE	(_PAGE_NO_CACHE | _PAGE_GUARDED | _PAGE_RW)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define RAM_PAGE (_PAGE_RW|_PAGE_COHERENT)
 #else
 #define RAM_PAGE (_PAGE_RW)

@@ -1,12 +1,14 @@
 #ifndef __ARCH_I386_ATOMIC__
 #define __ARCH_I386_ATOMIC__
 
+#include <linux/config.h>
+
 /*
  * Atomic operations that C can't guarantee us.  Useful for
  * resource counting etc..
  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define LOCK "lock ; "
 #else
 #define LOCK ""
@@ -19,7 +21,7 @@
  */
 #define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 typedef struct { volatile int counter; } atomic_t;
 #else
 typedef struct { int counter; } atomic_t;

@@ -14,8 +14,12 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/23/2000) gkh
+ *	Fixed bug that Randy Dunlap found for Generic devices with no bulk out ports.
+ *	Moved when the startup code printed out the devices that are supported.
+ *
  * (04/19/2000) gkh
- *	Added driver for ZyXEL omni.net lcd plus modem.
+ *	Added driver for ZyXEL omni.net lcd plus ISDN TA
  *	Made startup info message specify which drivers were compiled in.
  *
  * (04/03/2000) gkh
@@ -1071,9 +1075,14 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	info("%s converter detected", type->name);
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
-	if (type == &generic_device)
+	if (type == &generic_device) {
 		num_ports = num_bulk_out;
-	else
+		if (num_ports == 0) {
+			err("Generic device with no bulk out, not allowed.");
+			MOD_DEC_USE_COUNT;
+			return NULL;
+		}
+	} else
 #endif
 		num_ports = type->num_ports;
 
@@ -1309,17 +1318,14 @@ int usb_serial_init(void)
 {
 	int i;
 	int something;
+	int result;
 
 	/* Initalize our global data */
 	for (i = 0; i < SERIAL_TTY_MINORS; ++i) {
 		serial_table[i] = NULL;
 	}
 
-	/* register the USB driver */
-	if (usb_register(&usb_serial_driver) < 0) {
-		return -1;
-	}
-
+	/* tell the world what devices this driver currently supports */
 	something = 0;
 	for (i = 0; usb_serial_devices[i]; ++i) {
 		if (!strstr (usb_serial_devices[i]->name, "prerenumeration")) {
@@ -1330,6 +1336,13 @@ int usb_serial_init(void)
 	if (!something)
 		info ("USB Serial driver is not configured for any devices!");
 
+	/* register the USB driver */
+	result = usb_register(&usb_serial_driver);
+	if (result < 0) {
+		err("usb_register failed for the usb-serial driver. Error number %d", result);
+		return -1;
+	}
+	
 	return 0;
 }
 

@@ -11,6 +11,16 @@
 #include <linux/init.h>
 #include <linux/wait.h>
 
+#ifndef __init
+#define __init
+#endif
+#ifndef __initfunc
+#define __initfunc(a) a
+#endif
+#ifndef __initdata
+#define __initdata
+#endif
+
 #include "./ip2/ip2types.h"		
 #include "./ip2/fip_firm.h"		// the meat
 
@@ -18,15 +28,26 @@ int
 ip2_loadmain(int *, int  *, unsigned char *, int ); // ref into ip2main.c
 
 #ifdef MODULE
+
+#include <linux/autoconf.h>
+#if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
+#	define MODVERSIONS
+#endif
+#ifdef MODVERSIONS
+#	include <linux/modversions.h>
+#endif
+
 static int io[IP2_MAX_BOARDS]= { 0,};
 static int irq[IP2_MAX_BOARDS] = { 0,}; 
 
-MODULE_AUTHOR("Doug McNash");
-MODULE_DESCRIPTION("Computone IntelliPort Plus Driver");
-MODULE_PARM(irq,"1-"__MODULE_STRING(IP2_MAX_BOARDS) "i");
-MODULE_PARM_DESC(irq,"Interrupts for IntelliPort Cards");
-MODULE_PARM(io,"1-"__MODULE_STRING(IP2_MAX_BOARDS) "i");
-MODULE_PARM_DESC(io,"I/O ports for IntelliPort Cards");
+#	if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
+		MODULE_AUTHOR("Doug McNash");
+		MODULE_DESCRIPTION("Computone IntelliPort Plus Driver");
+		MODULE_PARM(irq,"1-"__MODULE_STRING(IP2_MAX_BOARDS) "i");
+		MODULE_PARM_DESC(irq,"Interrupts for IntelliPort Cards");
+		MODULE_PARM(io,"1-"__MODULE_STRING(IP2_MAX_BOARDS) "i");
+		MODULE_PARM_DESC(io,"I/O ports for IntelliPort Cards");
+#	endif	/* LINUX_VERSION */
 
 
 //======================================================================

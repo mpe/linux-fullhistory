@@ -9,7 +9,6 @@ union ip2breadcrumb
 };
 
 #define ITRC_NO_PORT 	0xFF
-#define PORTN	(port->port_index)
 #define CHANN	(pCh->port_index)
 
 #define	ITRC_ERROR	'!'

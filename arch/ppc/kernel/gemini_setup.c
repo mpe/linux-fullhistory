@@ -303,7 +303,7 @@ printk("3\n");
 
 		/* standard stuff */
 		cache |= ((1<<reg)<<25);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		/* A couple errata for the 750's (both IBM and Motorola silicon)
 		   note that you can get missed cache lines on MP implementations.
 		   The workaround - if you call it that - is to make the L2
@@ -351,7 +351,7 @@ void __init gemini_init_IRQ(void)
 	for( i=0; i < NR_IRQS; i++ ) 
 		irq_desc[i].handler = &open_pic;
 	openpic_init(1);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
  	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action,
  		    0, "IPI0", 0);
  	request_irq(OPENPIC_VEC_IPI+1, openpic_ipi_action,
@@ -360,7 +360,7 @@ void __init gemini_init_IRQ(void)
  		    0, "IPI2 (stop CPU)", 0);
  	request_irq(OPENPIC_VEC_IPI+3, openpic_ipi_action,
  		    0, "IPI3 (reschedule)", 0);
-#endif	/* __SMP__ */
+#endif	/* CONFIG_SMP */
 }
 
 #define gemini_rtc_read(x)       (readb(GEMINI_RTC+(x)))

@@ -182,6 +182,13 @@
 #endif
 
 /*
+ * Should we enable DAC cycles on sparc64 platforms?
+ * Until further investigation we do not enable it
+ * anywhere at the moment.
+ */
+#undef SCSI_NCR_USE_64BIT_DAC
+
+/*
  * Sync transfer frequency at startup.
  * Allow from 5Mhz to 40Mhz default 20 Mhz.
  */

@@ -33,6 +33,23 @@
 #define TMU0_TCR_INIT	0x0020
 #define TMU_TSTR_INIT	1
 
+/* RCR1 Bits */
+#define RCR1_CF		0x80	/* Carry Flag             */
+#define RCR1_CIE	0x10	/* Carry Interrupt Enable */
+#define RCR1_AIE	0x08	/* Alarm Interrupt Enable */
+#define RCR1_AF		0x01	/* Alarm Flag             */
+
+/* RCR2 Bits */
+#define RCR2_PEF	0x80	/* PEriodic interrupt Flag */
+#define RCR2_PESMASK	0x70	/* Periodic interrupt Set  */
+#define RCR2_RTCEN	0x08	/* ENable RTC              */
+#define RCR2_ADJ	0x04	/* ADJustment (30-second)  */
+#define RCR2_RESET	0x02	/* Reset bit               */
+#define RCR2_START	0x01	/* Start bit               */
+
+#define RTC_IRQ		22
+#define RTC_IPR_OFFSET	0
+
 #if defined(__sh3__)
 #define TMU_TOCR	0xfffffe90	/* Byte access */
 #define TMU_TSTR	0xfffffe92	/* Byte access */
@@ -42,9 +59,6 @@
 #define TMU0_TCR	0xfffffe9c	/* Word access */
 
 #define FRQCR		0xffffff80
-
-#define RTC_IRQ         22
-#define RTC_IPR_OFFSET  0
 
 /* SH-3 RTC */
 #define R64CNT  	0xfffffec0
@@ -73,9 +87,6 @@
 #define TMU0_TCR	0xffd80010	/* Word access */
 
 #define FRQCR		0xffc00000
-
-#define RTC_IRQ		22
-#define RTC_IPR_OFFSET	0
 
 /* SH-4 RTC */
 #define R64CNT  	0xffc80000
@@ -149,7 +160,7 @@ static int set_rtc_time(unsigned long nowtime)
 	int retval = 0;
 	int real_seconds, real_minutes, cmos_minutes;
 
-	ctrl_outb(0x02, RCR2);  /* reset pre-scaler & stop RTC */
+	ctrl_outb(RCR2_RESET, RCR2);  /* Reset pre-scaler & stop RTC */
 
 	cmos_minutes = ctrl_inb(RMINCNT);
 	BCD_TO_BIN(cmos_minutes);
@@ -178,7 +189,7 @@ static int set_rtc_time(unsigned long nowtime)
 		retval = -1;
 	}
 
-	ctrl_outb(0x01, RCR2);  /* start RTC */
+	ctrl_outb(RCR2_RTCEN|RCR2_START, RCR2);  /* Start RTC */
 
 	return retval;
 }
@@ -283,8 +294,8 @@ static unsigned long get_rtc_time(void)
 	unsigned int sec, min, hr, wk, day, mon, yr, yr100;
 
  again:
-	ctrl_outb(0x01, RCR1);  /* clear CF bit */
 	do {
+		ctrl_outb(0, RCR1);  /* Clear CF-bit */
 		sec = ctrl_inb(RSECCNT);
 		min = ctrl_inb(RMINCNT);
 		hr  = ctrl_inb(RHRCNT);
@@ -299,7 +310,7 @@ static unsigned long get_rtc_time(void)
 		yr  = ctrl_inb(RYRCNT);
 		yr100 = (yr == 0x99) ? 0x19 : 0x20;
 #endif
-	} while ((ctrl_inb(RCR1) & 0x80) != 0);
+	} while ((ctrl_inb(RCR1) & RCR1_CF) != 0);
 
 	BCD_TO_BIN(yr100);
 	BCD_TO_BIN(yr);
@@ -313,7 +324,7 @@ static unsigned long get_rtc_time(void)
 	    hr > 23 || min > 59 || sec > 59) {
 		printk(KERN_ERR
 		       "SH RTC: invalid value, resetting to 1 Jan 2000\n");
-		ctrl_outb(0x02, RCR2);  /* reset, stop */
+		ctrl_outb(RCR2_RESET, RCR2);  /* Reset & Stop */
 		ctrl_outb(0, RSECCNT);
 		ctrl_outb(0, RMINCNT);
 		ctrl_outb(0, RHRCNT);
@@ -325,7 +336,7 @@ static unsigned long get_rtc_time(void)
 #else
 		ctrl_outb(0, RYRCNT);
 #endif
-		ctrl_outb(0x01, RCR2);  /* start */
+		ctrl_outb(RCR2_RTCEN|RCR2_START, RCR2);  /* Start */
 		goto again;
 	}
 
@@ -339,13 +350,13 @@ static __init unsigned int get_cpu_mhz(void)
 
 	sti();
 	do {} while (ctrl_inb(R64CNT) != 0);
-	ctrl_outb(0x11, RCR1);
+	ctrl_outb(RCR1_CIE, RCR1); /* Enable carry interrupt */
 	asm volatile(
 		"1:\t"
 		"tst	%1,%1\n\t"
 		"bt/s	1b\n\t"
 		" add	#1,%0"
-		: "=&r"(count), "=&z" (__dummy)
+		: "=r"(count), "=z" (__dummy)
 		: "0" (0), "1" (0));
 	cli();
 	/*
@@ -373,7 +384,7 @@ static __init unsigned int get_cpu_mhz(void)
 
 static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	ctrl_outb(0x01, RCR1);
+	ctrl_outb(0, RCR1);	/* Disable Carry Interrupts */
 	regs->regs[0] = 1;
 }
 

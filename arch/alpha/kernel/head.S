@@ -7,6 +7,7 @@
  * the kernel global pointer and jump to the kernel entry-point.
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 .globl swapper_pg_dir
@@ -30,7 +31,7 @@ __start:
 	call_pal PAL_halt
 	.end __start
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	.align 3
 	.globl	__smp_callin
 	.ent	__smp_callin
@@ -52,7 +53,7 @@ __smp_callin:
 	jsr	$26,smp_callin
 	call_pal PAL_halt
 	.end __smp_callin
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	#
 	# The following two functions are needed for supporting SRM PALcode

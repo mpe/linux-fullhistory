@@ -33,12 +33,12 @@ extern inline struct file * fcheck(unsigned int fd)
 	return file;
 }
 
-extern inline struct file * frip(unsigned int fd)
+extern inline struct file * frip(struct files_struct *files, unsigned int fd)
 {
 	struct file * file = NULL;
 
-	if (fd < current->files->max_fds)
-		file = xchg(&current->files->fd[fd], NULL);
+	if (fd < files->max_fds)
+		file = xchg(&files->fd[fd], NULL);
 	return file;
 }
 

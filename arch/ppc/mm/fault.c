@@ -135,7 +135,7 @@ good_area:
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	if (!handle_mm_fault(current, vma, address, is_write))
+	if (!handle_mm_fault(mm, vma, address, is_write))
 		goto bad_area;
 	up(&mm->mmap_sem);
 	/*

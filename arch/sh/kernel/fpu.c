@@ -23,6 +23,7 @@ save_fpu(struct task_struct *tsk)
 {
 	asm volatile("sts.l	$fpul, @-%0\n\t"
 		     "sts.l	$fpscr, @-%0\n\t"
+		     "lds	%1, $fpscr\n\t"
 		     "frchg\n\t"
 		     "fmov.s	$fr15, @-%0\n\t"
 		     "fmov.s	$fr14, @-%0\n\t"
@@ -58,7 +59,8 @@ save_fpu(struct task_struct *tsk)
 		     "fmov.s	$fr1, @-%0\n\t"
 		     "fmov.s	$fr0, @-%0"
 		     : /* no output */
-		     : "r" ((char *)(&tsk->thread.fpu.hard.status))
+		     : "r" ((char *)(&tsk->thread.fpu.hard.status)),
+		       "r" (FPSCR_INIT)
 		     : "memory");
 
 	tsk->flags &= ~PF_USEDFPU;
@@ -68,7 +70,8 @@ save_fpu(struct task_struct *tsk)
 static void
 restore_fpu(struct task_struct *tsk)
 {
-	asm volatile("fmov.s	@%0+, $fr0\n\t"
+	asm volatile("lds	%1, $fpscr\n\t"
+		     "fmov.s	@%0+, $fr0\n\t"
 		     "fmov.s	@%0+, $fr1\n\t"
 		     "fmov.s	@%0+, $fr2\n\t"
 		     "fmov.s	@%0+, $fr3\n\t"
@@ -105,7 +108,7 @@ restore_fpu(struct task_struct *tsk)
 		     "lds.l	@%0+, $fpscr\n\t"
 		     "lds.l	@%0+, $fpul\n\t"
 		     : /* no output */
-		     : "r" (&tsk->thread.fpu)
+		     : "r" (&tsk->thread.fpu), "r" (FPSCR_INIT)
 		     : "memory");
 }
 
@@ -163,7 +166,6 @@ do_fpu_error(unsigned long r4, unsigned long r5, unsigned long r6, unsigned long
 {
 	struct task_struct *tsk = current;
 
-	regs.syscall_nr = -1;
 	regs.pc += 2;
 
 	grab_fpu();
@@ -179,15 +181,34 @@ do_fpu_state_restore(unsigned long r4, unsigned long r5, unsigned long r6,
 {
 	struct task_struct *tsk = current;
 
-	regs.syscall_nr = -1;
-
 	if (!user_mode(&regs)) {
 		if (tsk != &init_task) {
 			unlazy_fpu(tsk);
 		}
 		tsk = &init_task;
-		if (tsk->flags & PF_USEDFPU)
-			BUG();
+		if (tsk->flags & PF_USEDFPU) {
+			/*
+			 * This weird situation can be occurred.
+			 *
+			 * There's race condition in __cli:
+			 *
+			 *   (1) $SR --> register
+			 *   (2) Set IMASK of register
+			 *   (3) $SR <-- register
+			 *
+			 * Between (1) and (2), or (2) and (3) getting
+			 * interrupt, and interrupt handler (or
+			 * softirq) may use FPU.
+			 *
+			 * Then, SR.FD is overwritten by (3).
+			 *
+			 * This results init_task.PF_USEDFPU is on,
+			 * with SR.FD == 1.
+			 *
+			 */
+			release_fpu();
+			return;
+		}
 	}
 
 	grab_fpu();
@@ -216,8 +237,8 @@ fpu_prepare_fd(unsigned long sr, unsigned long r5, unsigned long r6,
 			grab_fpu();
 		else {
 			if (!(sr & SR_FD)) {
-				release_fpu();
 				BUG();
+				release_fpu();
 			}
 		}
 		return;
@@ -228,16 +249,20 @@ fpu_prepare_fd(unsigned long sr, unsigned long r5, unsigned long r6,
 			grab_fpu();
 		else {
 			if (init_task.flags & PF_USEDFPU) {
-				init_task.flags &= ~PF_USEDFPU;
-				BUG();
+				/*
+				 * This weird situation can be occurred.
+				 * See the comment in do_fpu_state_restore.
+				 */
+				grab_fpu();
+				save_fpu(&init_task);
 			}
 		}
 	} else {
 		if (init_task.flags & PF_USEDFPU)
 			save_fpu(&init_task);
 		else {
-			release_fpu();
 			BUG();
+			release_fpu();
 		}
 	}
 }

@@ -54,6 +54,7 @@
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/usb.h>
+#include <linux/smp_lock.h>
 #include <linux/usbdevice_fs.h>
 #include <asm/uaccess.h>
 

@@ -15,7 +15,7 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #define in_irq() (local_irq_count[smp_processor_id()] != 0)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
@@ -25,7 +25,7 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #define synchronize_irq()	do { } while (0)
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 #include <asm/atomic.h>
 
@@ -80,6 +80,6 @@ static inline int hardirq_trylock(int cpu)
 
 extern void synchronize_irq(void);
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #endif /* __ASM_HARDIRQ_H */

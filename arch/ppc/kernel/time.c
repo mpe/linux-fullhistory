@@ -74,7 +74,7 @@ int timer_interrupt(struct pt_regs * regs)
 	unsigned long cpu = smp_processor_id();
 	
 	hardirq_enter(cpu);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	{
 		unsigned int loops = 100000000;
 		while (test_bit(0, &global_irq_lock)) {
@@ -93,7 +93,7 @@ int timer_interrupt(struct pt_regs * regs)
 			}
 		}
 	}
-#endif /* __SMP__ */			
+#endif /* CONFIG_SMP */			
 	
 	dval = get_dec();
 	/*
@@ -133,7 +133,7 @@ int timer_interrupt(struct pt_regs * regs)
 				last_rtc_update = xtime.tv_sec;
 		}
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_local_timer_interrupt(regs);
 #endif		
 	
@@ -155,7 +155,7 @@ void do_gettimeofday(struct timeval *tv)
 	cli();
 	*tv = xtime;
 	/* XXX we don't seem to have the decrementers synced properly yet */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	tv->tv_usec += (decrementer_count - get_dec())
 	    * count_period_num / count_period_den;
 	if (tv->tv_usec >= 1000000) {

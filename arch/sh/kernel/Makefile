@@ -29,7 +29,6 @@ all: kernel.o head.o init_task.o
 entry.o: entry.S
 
 head.o: head.S
-	$(CC) $(AFLAGS) -traditional -c $*.S -o $*.o
 
 clean:
 

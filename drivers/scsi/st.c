@@ -12,7 +12,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Sun Mar 19 22:06:54 2000 by makisara@kai.makisara.local
+   Last modified: Sun Apr 23 23:41:32 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -791,15 +791,6 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
                                     (STp->buffer)->b_data[6] * 256 + (STp->buffer)->b_data[7],
                                     STp->drv_buffer));
 		}
-
-		if (STp->block_size > (STp->buffer)->buffer_size &&
-		    !enlarge_buffer(STp->buffer, STp->block_size, STp->restr_dma)) {
-			printk(KERN_NOTICE "st%d: Blocksize %d too large for buffer.\n",
-                               dev, STp->block_size);
-			scsi_release_request(SRpnt);
-			retval = (-EIO);
-			goto err_out;
-		}
 		STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
 	}
 	scsi_release_request(SRpnt);
@@ -1032,7 +1023,8 @@ static ssize_t
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	ssize_t total;
-	ssize_t i, do_count, blks, retval, transfer;
+	ssize_t i, do_count, blks, transfer;
+	ssize_t retval = 0;
 	int write_threshold;
 	int doing_write = 0;
 	static unsigned char cmd[MAX_COMMAND_SIZE];
@@ -1047,6 +1039,9 @@ static ssize_t
 	STp = scsi_tapes[dev];
 	read_unlock(&st_dev_arr_lock);
 
+	if (down_interruptible(&STp->lock))
+		return -ERESTARTSYS;
+
 	/*
 	 * If we are in the middle of error recovery, don't let anyone
 	 * else try and use this device.  Also, if error recovery fails, it
@@ -1054,59 +1049,86 @@ static ssize_t
 	 * access to the device is prohibited.
 	 */
 	if (!scsi_block_when_processing_errors(STp->device)) {
-		return -ENXIO;
+		retval = (-ENXIO);
+		goto out;
 	}
 
 	if (ppos != &filp->f_pos) {
 		/* "A request was outside the capabilities of the device." */
-		return -ENXIO;
+		retval = (-ENXIO);
+		goto out;
 	}
 
 	if (STp->ready != ST_READY) {
 		if (STp->ready == ST_NO_TAPE)
-			return (-ENOMEDIUM);
+			retval = (-ENOMEDIUM);
 		else
-			return (-EIO);
+			retval = (-EIO);
+		goto out;
 	}
 
 	STm = &(STp->modes[STp->current_mode]);
-	if (!STm->defined)
-		return (-ENXIO);
+	if (!STm->defined) {
+		retval = (-ENXIO);
+		goto out;
+	}
 	if (count == 0)
-		return 0;
+		goto out;
 
 	/*
 	 * If there was a bus reset, block further access
 	 * to this device.
 	 */
-	if (STp->device->was_reset)
-		return (-EIO);
+	if (STp->device->was_reset) {
+		retval = (-EIO);
+		goto out;
+	}
 
         DEB(
 	if (!STp->in_use) {
 		printk(ST_DEB_MSG "st%d: Incorrect device.\n", dev);
-		return (-EIO);
+		retval = (-EIO);
+		goto out;
 	} ) /* end DEB */
 
 	/* Write must be integral number of blocks */
 	if (STp->block_size != 0 && (count % STp->block_size) != 0) {
 		printk(KERN_WARNING "st%d: Write not multiple of tape block size.\n",
 		       dev);
-		return (-EIO);
+		retval = (-EINVAL);
+		goto out;
 	}
 
 	if (STp->can_partitions &&
 	    (retval = update_partition(STp)) < 0)
-		return retval;
+		goto out;
 	STps = &(STp->ps[STp->partition]);
 
-	if (STp->write_prot)
-		return (-EACCES);
+	if (STp->write_prot) {
+		retval = (-EACCES);
+		goto out;
+	}
 
-	if (STp->block_size == 0 &&
-	    count > (STp->buffer)->buffer_size &&
-	    !enlarge_buffer(STp->buffer, count, STp->restr_dma))
-		return (-EOVERFLOW);
+	if (STp->block_size == 0) {
+		if (STp->max_block > 0 &&
+		    (count < STp->min_block || count > STp->max_block)) {
+			retval = (-EINVAL);
+			goto out;
+		}
+		if (count > (STp->buffer)->buffer_size &&
+		    !enlarge_buffer(STp->buffer, count, STp->restr_dma)) {
+			retval = (-EOVERFLOW);
+			goto out;
+		}
+	}
+	if ((STp->buffer)->buffer_blocks < 1) {
+		/* Fixed block mode with too small buffer */
+		if (!enlarge_buffer(STp->buffer, STp->block_size, STp->restr_dma)) {
+			retval = (-EOVERFLOW);
+			goto out;
+		}
+		(STp->buffer)->buffer_blocks = 1;
+	}
 
 	if (STp->do_auto_lock && STp->door_locked == ST_UNLOCKED &&
 	    !st_int_ioctl(STp, MTLOCK, 0))
@@ -1115,19 +1137,21 @@ static ssize_t
 	if (STps->rw == ST_READING) {
 		retval = flush_buffer(STp, 0);
 		if (retval)
-			return retval;
+			goto out;
 		STps->rw = ST_WRITING;
 	} else if (STps->rw != ST_WRITING &&
 		   STps->drv_file == 0 && STps->drv_block == 0) {
 		if ((retval = set_mode_densblk(STp, STm)) < 0)
-			return retval;
+			goto out;
 		if (STm->default_compression != ST_DONT_TOUCH &&
 		    !(STp->compression_changed)) {
 			if (st_compression(STp, (STm->default_compression == ST_YES))) {
 				printk(KERN_WARNING "st%d: Can't set default compression.\n",
 				       dev);
-				if (modes_defined)
-					return (-EINVAL);
+				if (modes_defined) {
+					retval = (-EINVAL);
+					goto out;
+				}
 			}
 		}
 	}
@@ -1144,22 +1168,30 @@ static ssize_t
 		}
 	}
 
-	if (STps->eof == ST_EOM_OK)
-		return (-ENOSPC);
-	else if (STps->eof == ST_EOM_ERROR)
-		return (-EIO);
+	if (STps->eof == ST_EOM_OK) {
+		retval = (-ENOSPC);
+		goto out;
+	}
+	else if (STps->eof == ST_EOM_ERROR) {
+		retval = (-EIO);
+		goto out;
+	}
 
 	/* Check the buffer readability in cases where copy_user might catch
 	   the problems after some tape movement. */
 	if (STp->block_size != 0 &&
 	    (copy_from_user(&i, buf, 1) != 0 ||
-	     copy_from_user(&i, buf + count - 1, 1) != 0))
-		return (-EFAULT);
+	     copy_from_user(&i, buf + count - 1, 1) != 0)) {
+		retval = (-EFAULT);
+		goto out;
+	}
 
 	if (!STm->do_buffer_writes) {
 #if 0
-		if (STp->block_size != 0 && (count % STp->block_size) != 0)
-			return (-EIO);	/* Write must be integral number of blocks */
+		if (STp->block_size != 0 && (count % STp->block_size) != 0) {
+			retval = (-EINVAL);	/* Write must be integral number of blocks */
+			goto out;
+		}
 #endif
 		write_threshold = 1;
 	} else
@@ -1191,11 +1223,8 @@ static ssize_t
 
 		i = append_to_buffer(b_point, STp->buffer, do_count);
 		if (i) {
-			if (SRpnt != NULL) {
-				scsi_release_request(SRpnt);
-				SRpnt = NULL;
-			}
-			return i;
+			retval = i;
+			goto out;
 		}
 
 		if (STp->block_size == 0)
@@ -1211,8 +1240,10 @@ static ssize_t
 
 		SRpnt = st_do_scsi(SRpnt, STp, cmd, transfer, SCSI_DATA_WRITE,
 				   STp->timeout, MAX_WRITE_RETRIES, TRUE);
-		if (!SRpnt)
-			return (STp->buffer)->syscall_result;
+		if (!SRpnt) {
+			retval = (STp->buffer)->syscall_result;
+			goto out;
+		}
 
 		if ((STp->buffer)->syscall_result != 0) {
                         DEBC(printk(ST_DEB_MSG "st%d: Error on write:\n", dev));
@@ -1267,9 +1298,8 @@ static ssize_t
 			(STp->buffer)->buffer_bytes = 0;
 			STp->dirty = 0;
 			if (count < total)
-				return total - count;
-			else
-				return retval;
+				retval = total - count;
+			goto out;
 		}
 		filp->f_pos += do_count;
 		b_point += do_count;
@@ -1287,20 +1317,16 @@ static ssize_t
 		STp->dirty = 1;
 		i = append_to_buffer(b_point, STp->buffer, count);
 		if (i) {
-			if (SRpnt != NULL) {
-				scsi_release_request(SRpnt);
-				SRpnt = NULL;
-			}
-			return i;
+			retval = i;
+			goto out;
 		}
 		filp->f_pos += count;
 		count = 0;
 	}
 
 	if (doing_write && (STp->buffer)->syscall_result != 0) {
-		scsi_release_request(SRpnt);
-		SRpnt = NULL;
-		return (STp->buffer)->syscall_result;
+		retval = (STp->buffer)->syscall_result;
+		goto out;
 	}
 
 	if (STm->do_async_writes &&
@@ -1328,18 +1354,24 @@ static ssize_t
 		SRpnt = st_do_scsi(SRpnt, STp, cmd, (STp->buffer)->writing,
 				   SCSI_DATA_WRITE, STp->timeout,
 				   MAX_WRITE_RETRIES, FALSE);
-		if (SRpnt == NULL)
-			return (STp->buffer)->syscall_result;
+		if (SRpnt == NULL) {
+			retval = (STp->buffer)->syscall_result;
+			goto out;
+		}
+		SRpnt = NULL;  /* Prevent releasing this request! */
 
-	} else if (SRpnt != NULL) {
-		scsi_release_request(SRpnt);
-		SRpnt = NULL;
 	}
 	STps->at_sm &= (total == 0);
 	if (total > 0)
 		STps->eof = ST_NOEOF;
+	retval = total;
 
-	return (total);
+ out:
+	if (SRpnt != NULL)
+		scsi_release_request(SRpnt);
+	up(&STp->lock);
+
+	return retval;
 }
 
 /* Read data from the tape. Returns zero in the normal case, one if the
@@ -1516,6 +1548,7 @@ static ssize_t
 {
 	struct inode *inode = filp->f_dentry->d_inode;
 	ssize_t total;
+	ssize_t retval = 0;
 	ssize_t i, transfer;
 	int special;
 	Scsi_Request *SRpnt = NULL;
@@ -1528,6 +1561,9 @@ static ssize_t
 	STp = scsi_tapes[dev];
 	read_unlock(&st_dev_arr_lock);
 
+	if (down_interruptible(&STp->lock))
+		return -ERESTARTSYS;
+
 	/*
 	 * If we are in the middle of error recovery, don't let anyone
 	 * else try and use this device.  Also, if error recovery fails, it
@@ -1535,41 +1571,65 @@ static ssize_t
 	 * access to the device is prohibited.
 	 */
 	if (!scsi_block_when_processing_errors(STp->device)) {
-		return -ENXIO;
+		retval = (-ENXIO);
+		goto out;
 	}
 
 	if (ppos != &filp->f_pos) {
 		/* "A request was outside the capabilities of the device." */
-		return -ENXIO;
+		retval = (-ENXIO);
+		goto out;
 	}
 
 	if (STp->ready != ST_READY) {
 		if (STp->ready == ST_NO_TAPE)
-			return (-ENOMEDIUM);
+			retval = (-ENOMEDIUM);
 		else
-			return (-EIO);
+			retval = (-EIO);
+		goto out;
 	}
 	STm = &(STp->modes[STp->current_mode]);
-	if (!STm->defined)
-		return (-ENXIO);
+	if (!STm->defined) {
+		retval = (-ENXIO);
+		goto out;
+	}
         DEB(
 	if (!STp->in_use) {
 		printk(ST_DEB_MSG "st%d: Incorrect device.\n", dev);
-		return (-EIO);
+		retval = (-EIO);
+		goto out;
 	} ) /* end DEB */
 
 	if (STp->can_partitions &&
-	    (total = update_partition(STp)) < 0)
-		return total;
+	    (retval = update_partition(STp)) < 0)
+		goto out;
 
-	if (STp->block_size == 0 &&
-	    count > (STp->buffer)->buffer_size &&
-	    !enlarge_buffer(STp->buffer, count, STp->restr_dma))
-		return (-EOVERFLOW);
+	if (STp->block_size == 0) {
+		if (STp->max_block > 0 &&
+		    (count < STp->min_block || count > STp->max_block)) {
+			retval = (-EINVAL);
+			goto out;
+		}
+		if (count > (STp->buffer)->buffer_size &&
+		    !enlarge_buffer(STp->buffer, count, STp->restr_dma)) {
+			retval = (-EOVERFLOW);
+			goto out;
+		}
+	}
+	if ((STp->buffer)->buffer_blocks < 1) {
+		/* Fixed block mode with too small buffer */
+		if (!enlarge_buffer(STp->buffer, STp->block_size, STp->restr_dma)) {
+			retval = (-EOVERFLOW);
+			goto out;
+		}
+		(STp->buffer)->buffer_blocks = 1;
+	}
 
 	if (!(STm->do_read_ahead) && STp->block_size != 0 &&
-	    (count % STp->block_size) != 0)
-		return (-EIO);	/* Read must be integral number of blocks */
+	    (count % STp->block_size) != 0) {
+		retval = (-EINVAL);	/* Read must be integral number of blocks */
+		goto out;
+	}
 
 	if (STp->do_auto_lock && STp->door_locked == ST_UNLOCKED &&
 	    !st_int_ioctl(STp, MTLOCK, 0))
@@ -1577,9 +1637,9 @@ static ssize_t
 
 	STps = &(STp->ps[STp->partition]);
 	if (STps->rw == ST_WRITING) {
-		transfer = flush_buffer(STp, 0);
-		if (transfer)
-			return transfer;
+		retval = flush_buffer(STp, 0);
+		if (retval)
+			goto out;
 		STps->rw = ST_READING;
 	}
         DEB(
@@ -1592,9 +1652,11 @@ static ssize_t
 	    STps->eof >= ST_EOD_1) {
 		if (STps->eof < ST_EOD) {
 			STps->eof += 1;
-			return 0;
+			retval = 0;
+			goto out;
 		}
-		return (-EIO);	/* EOM or Blank Check */
+		retval = (-EIO);	/* EOM or Blank Check */
+		goto out;
 	}
 
 	/* Check the buffer writability before any tape movement. Don't alter
@@ -1602,8 +1664,10 @@ static ssize_t
 	if (copy_from_user(&i, buf, 1) != 0 ||
 	    copy_to_user(buf, &i, 1) != 0 ||
 	    copy_from_user(&i, buf + count - 1, 1) != 0 ||
-	    copy_to_user(buf + count - 1, &i, 1) != 0)
-		return (-EFAULT);
+	    copy_to_user(buf + count - 1, &i, 1) != 0) {
+		retval = (-EFAULT);
+		goto out;
+	}
 
 	STps->rw = ST_READING;
 
@@ -1615,10 +1679,8 @@ static ssize_t
 		if ((STp->buffer)->buffer_bytes == 0) {
 			special = read_tape(STp, count - total, &SRpnt);
 			if (special < 0) {	/* No need to continue read */
-				if (SRpnt != NULL) {
-					scsi_release_request(SRpnt);
-				}
-				return special;
+				retval = special;
+				goto out;
 			}
 		}
 
@@ -1635,11 +1697,8 @@ static ssize_t
 			    (STp->buffer)->buffer_bytes : count - total;
 			i = from_buffer(STp->buffer, buf, transfer);
 			if (i) {
-				if (SRpnt != NULL) {
-					scsi_release_request(SRpnt);
-					SRpnt = NULL;
-				}
-				return i;
+				retval = i;
+				goto out;
 			}
 			filp->f_pos += transfer;
 			buf += transfer;
@@ -1651,11 +1710,6 @@ static ssize_t
 
 	}			/* for (total = 0, special = 0;
                                    total < count && !special; ) */
-
-	if (SRpnt != NULL) {
-		scsi_release_request(SRpnt);
-		SRpnt = NULL;
-	}
 
 	/* Change the eof state if no data from tape or buffer */
 	if (total == 0) {
@@ -1673,8 +1727,16 @@ static ssize_t
 			STps->eof = ST_EOD;
 	} else if (STps->eof == ST_FM)
 		STps->eof = ST_NOEOF;
+	retval = total;
 
-	return total;
+ out:
+	if (SRpnt != NULL) {
+		scsi_release_request(SRpnt);
+		SRpnt = NULL;
+	}
+	up(&STp->lock);
+
+	return retval;
 }
 
 
@@ -2236,9 +2298,9 @@ static int st_int_ioctl(Scsi_Tape *STp, unsigned int cmd_in, unsigned long arg)
 			return (-EIO);	/* Not allowed if data in buffer */
 		if ((cmd_in == MTSETBLK || cmd_in == SET_DENS_AND_BLK) &&
 		    (arg & MT_ST_BLKSIZE_MASK) != 0 &&
+		    STp->max_block > 0 &&
 		    ((arg & MT_ST_BLKSIZE_MASK) < STp->min_block ||
-		     (arg & MT_ST_BLKSIZE_MASK) > STp->max_block ||
-		     (arg & MT_ST_BLKSIZE_MASK) > st_buffer_size)) {
+		     (arg & MT_ST_BLKSIZE_MASK) > STp->max_block)) {
 			printk(KERN_WARNING "st%d: Illegal block size.\n", dev);
 			return (-EINVAL);
 		}
@@ -2745,6 +2807,7 @@ static int st_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd_in, unsigned long arg)
 {
 	int i, cmd_nr, cmd_type, bt;
+	int retval = 0;
 	unsigned int blk;
 	Scsi_Tape *STp;
 	ST_mode *STm;
@@ -2755,10 +2818,14 @@ static int st_ioctl(struct inode *inode, struct file *file,
 	STp = scsi_tapes[dev];
 	read_unlock(&st_dev_arr_lock);
 
+	if (down_interruptible(&STp->lock))
+		return -ERESTARTSYS;
+
         DEB(
 	if (debugging && !STp->in_use) {
 		printk(ST_DEB_MSG "st%d: Incorrect device.\n", dev);
-		return (-EIO);
+		retval = (-EIO);
+		goto out;
 	} ) /* end DEB */
 
 	STm = &(STp->modes[STp->current_mode]);
@@ -2771,7 +2838,8 @@ static int st_ioctl(struct inode *inode, struct file *file,
 	 * access to the device is prohibited.
 	 */
 	if (!scsi_block_when_processing_errors(STp->device)) {
-		return -ENXIO;
+		retval = (-ENXIO);
+		goto out;
 	}
 	cmd_type = _IOC_TYPE(cmd_in);
 	cmd_nr = _IOC_NR(cmd_in);
@@ -2779,21 +2847,29 @@ static int st_ioctl(struct inode *inode, struct file *file,
 	if (cmd_type == _IOC_TYPE(MTIOCTOP) && cmd_nr == _IOC_NR(MTIOCTOP)) {
 		struct mtop mtc;
 
-		if (_IOC_SIZE(cmd_in) != sizeof(mtc))
-			return (-EINVAL);
+		if (_IOC_SIZE(cmd_in) != sizeof(mtc)) {
+			retval = (-EINVAL);
+			goto out;
+		}
 
 		i = copy_from_user((char *) &mtc, (char *) arg, sizeof(struct mtop));
-		if (i)
-			return (-EFAULT);
+		if (i) {
+			retval = (-EFAULT);
+			goto out;
+		}
 
 		if (mtc.mt_op == MTSETDRVBUFFER && !capable(CAP_SYS_ADMIN)) {
 			printk(KERN_WARNING
                                "st%d: MTSETDRVBUFFER only allowed for root.\n", dev);
-			return (-EPERM);
+			retval = (-EPERM);
+			goto out;
 		}
 		if (!STm->defined &&
-		    (mtc.mt_op != MTSETDRVBUFFER && (mtc.mt_count & MT_ST_OPTIONS) == 0))
-			return (-ENXIO);
+		    (mtc.mt_op != MTSETDRVBUFFER &&
+		     (mtc.mt_count & MT_ST_OPTIONS) == 0)) {
+			retval = (-ENXIO);
+			goto out;
+		}
 
 		if (!(STp->device)->was_reset) {
 
@@ -2822,8 +2898,10 @@ static int st_ioctl(struct inode *inode, struct file *file,
 				    mtc.mt_op == MTCOMPRESSION;
 			}
 			i = flush_buffer(STp, i);
-			if (i < 0)
-				return i;
+			if (i < 0) {
+				retval = i;
+				goto out;
+			}
 		} else {
 			/*
 			 * If there was a bus reset, block further access
@@ -2835,8 +2913,10 @@ static int st_ioctl(struct inode *inode, struct file *file,
 			    mtc.mt_op != MTRETEN &&
 			    mtc.mt_op != MTERASE &&
 			    mtc.mt_op != MTSEEK &&
-			    mtc.mt_op != MTEOM)
-				return (-EIO);
+			    mtc.mt_op != MTEOM) {
+				retval = (-EIO);
+				goto out;
+			}
 			STp->device->was_reset = 0;
 			if (STp->door_locked != ST_UNLOCKED &&
 			    STp->door_locked != ST_LOCK_FAILS) {
@@ -2858,8 +2938,10 @@ static int st_ioctl(struct inode *inode, struct file *file,
 			st_int_ioctl(STp, MTUNLOCK, 0);	/* Ignore result! */
 
 		if (mtc.mt_op == MTSETDRVBUFFER &&
-		    (mtc.mt_count & MT_ST_OPTIONS) != 0)
-			return st_set_options(STp, mtc.mt_count);
+		    (mtc.mt_count & MT_ST_OPTIONS) != 0) {
+			retval = st_set_options(STp, mtc.mt_count);
+			goto out;
+		}
 
 		if (mtc.mt_op == MTSETPART) {
 			if (!STp->can_partitions ||
@@ -2871,7 +2953,8 @@ static int st_ioctl(struct inode *inode, struct file *file,
 			if (mtc.mt_count >= STp->nbr_partitions)
 				return (-EINVAL);
 			STp->new_partition = mtc.mt_count;
-			return 0;
+			retval = 0;
+			goto out;
 		}
 
 		if (mtc.mt_op == MTMKPART) {
@@ -2888,39 +2971,52 @@ static int st_ioctl(struct inode *inode, struct file *file,
 			STp->partition = STp->new_partition = 0;
 			STp->nbr_partitions = 1;	/* Bad guess ?-) */
 			STps->drv_block = STps->drv_file = 0;
-			return 0;
+			retval = 0;
+			goto out;
 		}
 
 		if (mtc.mt_op == MTSEEK) {
 			i = set_location(STp, mtc.mt_count, STp->new_partition, 0);
 			if (!STp->can_partitions)
 				STp->ps[0].rw = ST_IDLE;
-			return i;
+			retval = i;
+			goto out;
 		}
 
 		if (STp->can_partitions && STp->ready == ST_READY &&
-		    (i = update_partition(STp)) < 0)
-			return i;
+		    (i = update_partition(STp)) < 0) {
+			retval = i;
+			goto out;
+		}
 
 		if (mtc.mt_op == MTCOMPRESSION)
-			return st_compression(STp, (mtc.mt_count & 1));
+			retval = st_compression(STp, (mtc.mt_count & 1));
 		else
-			return st_int_ioctl(STp, mtc.mt_op, mtc.mt_count);
+			retval = st_int_ioctl(STp, mtc.mt_op, mtc.mt_count);
+		goto out;
 	}
-	if (!STm->defined)
-		return (-ENXIO);
+	if (!STm->defined) {
+		retval = (-ENXIO);
+		goto out;
+	}
 
-	if ((i = flush_buffer(STp, FALSE)) < 0)
-		return i;
+	if ((i = flush_buffer(STp, FALSE)) < 0) {
+		retval = i;
+		goto out;
+	}
 	if (STp->can_partitions &&
-	    (i = update_partition(STp)) < 0)
-		return i;
+	    (i = update_partition(STp)) < 0) {
+		retval = i;
+		goto out;
+	}
 
 	if (cmd_type == _IOC_TYPE(MTIOCGET) && cmd_nr == _IOC_NR(MTIOCGET)) {
 		struct mtget mt_status;
 
-		if (_IOC_SIZE(cmd_in) != sizeof(struct mtget))
-			 return (-EINVAL);
+		if (_IOC_SIZE(cmd_in) != sizeof(struct mtget)) {
+			 retval = (-EINVAL);
+			 goto out;
+		}
 
 		mt_status.mt_type = STp->tape_type;
 		mt_status.mt_dsreg =
@@ -2972,25 +3068,37 @@ static int st_ioctl(struct inode *inode, struct file *file,
 
 		i = copy_to_user((char *) arg, (char *) &(mt_status),
 				 sizeof(struct mtget));
-		if (i)
-			return (-EFAULT);
+		if (i) {
+			retval = (-EFAULT);
+			goto out;
+		}
 
 		STp->recover_reg = 0;		/* Clear after read */
-		return 0;
+		retval = 0;
+		goto out;
 	}			/* End of MTIOCGET */
 	if (cmd_type == _IOC_TYPE(MTIOCPOS) && cmd_nr == _IOC_NR(MTIOCPOS)) {
 		struct mtpos mt_pos;
-		if (_IOC_SIZE(cmd_in) != sizeof(struct mtpos))
-			 return (-EINVAL);
-		if ((i = get_location(STp, &blk, &bt, 0)) < 0)
-			return i;
+		if (_IOC_SIZE(cmd_in) != sizeof(struct mtpos)) {
+			 retval = (-EINVAL);
+			 goto out;
+		}
+		if ((i = get_location(STp, &blk, &bt, 0)) < 0) {
+			retval = i;
+			goto out;
+		}
 		mt_pos.mt_blkno = blk;
 		i = copy_to_user((char *) arg, (char *) (&mt_pos), sizeof(struct mtpos));
 		if (i)
-			return (-EFAULT);
-		return 0;
+			retval = (-EFAULT);
+		goto out;
 	}
+	up(&STp->lock);
 	return scsi_ioctl(STp->device, cmd_in, (void *) arg);
+
+ out:
+	up(&STp->lock);
+	return retval;
 }
 
 
@@ -3469,6 +3577,7 @@ static int st_attach(Scsi_Device * SDp)
 
 	tpnt->density_changed = tpnt->compression_changed =
 	    tpnt->blksize_changed = FALSE;
+	init_MUTEX(&tpnt->lock);
 
 	st_template.nr_dev++;
 	write_unlock_irqrestore(&st_dev_arr_lock, flags);

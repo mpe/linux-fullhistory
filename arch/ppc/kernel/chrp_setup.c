@@ -422,10 +422,10 @@ void __init chrp_init_IRQ(void)
 	request_irq(openpic_to_irq(HYDRA_INT_ADB_NMI),
 		    xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	request_irq(openpic_to_irq(OPENPIC_VEC_IPI),
 		    openpic_ipi_action, 0, "IPI0", 0);
-#endif	/* __SMP__ */
+#endif	/* CONFIG_SMP */
 }
 
 void __init

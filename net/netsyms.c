@@ -134,7 +134,6 @@ EXPORT_SYMBOL(sock_no_listen);
 EXPORT_SYMBOL(sock_no_shutdown);
 EXPORT_SYMBOL(sock_no_getsockopt);
 EXPORT_SYMBOL(sock_no_setsockopt);
-EXPORT_SYMBOL(sock_no_fcntl);
 EXPORT_SYMBOL(sock_no_sendmsg);
 EXPORT_SYMBOL(sock_no_recvmsg);
 EXPORT_SYMBOL(sock_no_mmap);

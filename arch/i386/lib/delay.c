@@ -10,11 +10,12 @@
  *	we have to worry about.
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <asm/delay.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #include <asm/smp.h>
 #endif
 

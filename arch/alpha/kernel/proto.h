@@ -1,3 +1,4 @@
+#include <linux/config.h>
 /* Prototypes of functions used across modules here in this directory.  */
 
 #define vucp	volatile unsigned char  *
@@ -132,7 +133,7 @@ void srm_paging_stop(void);
 
 /* irq.c */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define mcheck_expected(cpu)	(cpu_data[cpu].mcheck_expected)
 #define mcheck_taken(cpu)	(cpu_data[cpu].mcheck_taken)
 #define mcheck_extra(cpu)	(cpu_data[cpu].mcheck_extra)

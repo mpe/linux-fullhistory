@@ -16,17 +16,13 @@
 
   A. Compiler command:
 
-     A-1: For normal single processor kernel
+     A-1: For normal single or multiple processor kernel
           "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall 
             -Wstrict-prototypes -O6 -c dmfe.c"
 
-     A-2: For single processor and enable kernel module version function
+     A-2: For single or multiple processor with kernel module version function
           "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -I/usr/src/linux/net/inet 
             -Wall -Wstrict-prototypes -O6 -c dmfe.c"
-
-     A-3: For multiple processors(SMP) and enable the module version function
-          "gcc -D__SMP__ -DMODULE -DMODVERSIONS -D__KERNEL__ -I/usr/src/linux
-           /net/inet -Wall -Wstrict-prototypes -O6 -c dmfe.c"
 
 
   B. The following steps teach you how to active DM9102 board:

@@ -2032,24 +2032,23 @@ static struct net_proto_family	dn_family_ops = {
 };
 
 static struct proto_ops dn_proto_ops = {
-        AF_DECnet,
+	family:		AF_DECnet,
 
-	dn_release,
-	dn_bind,
-	dn_connect,
-	sock_no_socketpair,
-	dn_accept,
-	dn_getname,
-	dn_poll,
-	dn_ioctl,
-	dn_listen,
-	dn_shutdown,
-	dn_setsockopt,
-	dn_getsockopt,
-	sock_no_fcntl,
-        dn_sendmsg,
-	dn_recvmsg,
-	sock_no_mmap
+	release:	dn_release,
+	bind:		dn_bind,
+	connect:	dn_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		dn_accept,
+	getname:	dn_getname,
+	poll:		dn_poll,
+	ioctl:		dn_ioctl,
+	listen:		dn_listen,
+	shutdown:	dn_shutdown,
+	setsockopt:	dn_setsockopt,
+	getsockopt:	dn_getsockopt,
+	sendmsg:	dn_sendmsg,
+	recvmsg:	dn_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #ifdef CONFIG_SYSCTL

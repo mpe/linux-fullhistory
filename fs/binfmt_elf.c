@@ -963,7 +963,7 @@ static int writenote(struct memelfnote *men, struct file *file)
 #undef DUMP_SEEK
 
 #define DUMP_WRITE(addr, nr)	\
-	if (!dump_write(file, (addr), (nr))) \
+	if ((size += (nr)) > limit || !dump_write(file, (addr), (nr))) \
 		goto end_coredump;
 #define DUMP_SEEK(off)	\
 	if (!dump_seek(file, (off))) \
@@ -980,8 +980,8 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 	int has_dumped = 0;
 	mm_segment_t fs;
 	int segs;
+	size_t size = 0;
 	int i;
-	size_t size;
 	struct vm_area_struct *vma;
 	struct elfhdr elf;
 	off_t offset = 0, dataoff;
@@ -992,24 +992,10 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
 
-	/* Count what's needed to dump, up to the limit of coredump size */
-	segs = 0;
-	size = 0;
-	for(vma = current->mm->mmap; vma != NULL; vma = vma->vm_next) {
-		if (maydump(vma))
-		{
-			unsigned long sz = vma->vm_end-vma->vm_start;
+	segs = current->mm->map_count;
 
-			if (size+sz >= limit)
-				break;
-			else
-				size += sz;
-		}
-
-		segs++;
-	}
 #ifdef DEBUG
-	printk("elf_core_dump: %d segs taking %d bytes\n", segs, size);
+	printk("elf_core_dump: %d segs %lu limit\n", segs, limit);
 #endif
 
 	/* Set up header */
@@ -1166,12 +1152,9 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 	dataoff = offset = roundup(offset, ELF_EXEC_PAGESIZE);
 
 	/* Write program headers for segments dump */
-	for(vma = current->mm->mmap, i = 0;
-		i < segs && vma != NULL; vma = vma->vm_next) {
+	for(vma = current->mm->mmap; vma != NULL; vma = vma->vm_next) {
 		struct elf_phdr phdr;
 		size_t sz;
-
-		i++;
 
 		sz = vma->vm_end - vma->vm_start;
 
@@ -1198,19 +1181,36 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file)
 
 	DUMP_SEEK(dataoff);
 
-	for(i = 0, vma = current->mm->mmap;
-	    i < segs && vma != NULL;
-	    vma = vma->vm_next) {
-		unsigned long addr = vma->vm_start;
-		unsigned long len = vma->vm_end - vma->vm_start;
+	for(vma = current->mm->mmap; vma != NULL; vma = vma->vm_next) {
+		unsigned long addr;
 
-		i++;
 		if (!maydump(vma))
 			continue;
 #ifdef DEBUG
 		printk("elf_core_dump: writing %08lx %lx\n", addr, len);
 #endif
-		DUMP_WRITE((void *)addr, len);
+		for (addr = vma->vm_start;
+		     addr < vma->vm_end;
+		     addr += PAGE_SIZE) {
+			pgd_t *pgd;
+			pmd_t *pmd;
+			pte_t *pte;
+
+			pgd = pgd_offset(vma->vm_mm, addr);
+			pmd = pmd_alloc(pgd, addr);
+	
+			if (!pmd)
+				goto end_coredump;
+			pte = pte_alloc(pmd, addr);
+			if (!pte)
+				goto end_coredump;
+			if (!pte_present(*pte) &&
+			    pte_none(*pte)) {
+				DUMP_SEEK (file->f_pos + PAGE_SIZE);
+			} else {
+				DUMP_WRITE((void*)addr, PAGE_SIZE);
+			}
+		}
 	}
 
 	if ((off_t) file->f_pos != offset) {

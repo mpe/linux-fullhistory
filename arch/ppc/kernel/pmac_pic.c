@@ -183,7 +183,7 @@ pmac_get_irq(struct pt_regs *regs)
 	int irq;
 	unsigned long bits = 0;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	void pmac_smp_message_recv(void);
 	
         /* IPI's are a hack on the powersurge -- Cort */
@@ -197,7 +197,7 @@ pmac_get_irq(struct pt_regs *regs)
 		pmac_smp_message_recv();
 		return -2;	/* ignore, already handled */
         }
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	/* Yeah, I know, this could be a separate get_irq function */
 	if (has_openpic)

@@ -1,8 +1,46 @@
 This document describes the usage and errata of the 3Com "Vortex" device
 driver for Linux.
 
+The driver was written by Donald Becker <becker@cesdis.gsfc.nasa.gov>
+
+Don is no longer the prime maintener of this version of the driver. 
+Please report problems to one or more of:
+
+  Andrew Morton <andrewm@uow.edu.au>
+  Netdev mailing list <netdev@oss.sgi.com>
+
+
 This driver supports the following hardware:
-	3c590, 3c592, 3c595, 3c597
+
+   3c590 Vortex 10Mbps
+   3c592 EISA 10mbps Demon/Vortex
+   3c597 EISA Fast Demon/Vortex
+   3c595 Vortex 100baseTx
+   3c595 Vortex 100baseT4
+   3c595 Vortex 100base-MII
+   3Com Vortex
+   3c900 Boomerang 10baseT
+   3c900 Boomerang 10Mbps Combo
+   3c900 Cyclone 10Mbps TPO
+   3c900 Cyclone 10Mbps Combo
+   3c900 Cyclone 10Mbps TPC
+   3c900B-FL Cyclone 10base-FL
+   3c905 Boomerang 100baseTx
+   3c905 Boomerang 100baseT4
+   3c905B Cyclone 100baseTx
+   3c905B Cyclone 10/100/BNC
+   3c905B-FX Cyclone 100baseFx
+   3c905C Tornado
+   3c980 Cyclone
+   3cSOHO100-TX Hurricane
+   3c555 Laptop Hurricane
+   3c575 Boomerang CardBus
+   3CCFE575 Cyclone CardBus
+   3CCFE575CT Cyclone CardBus
+   3CCFE656 Cyclone CardBus
+   3CCFEM656 Cyclone CardBus
+   3c450 Cyclone/unknown
+   3Com Boomerang (unknown version)
 
 When loaded as a module the following variables may be set:
  name	 type	description
@@ -33,3 +71,46 @@ Possible media type settings
 	16	Bus-master enable bit (experimental use only!)
 
 Details of the device driver implementation are at the top of the source file.
+
+Additional documentation is available at Don Becker's Linux Drivers site:
+
+  http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html
+
+
+Additional resources
+--------------------
+
+Donald Becker's driver development site:
+
+     http://cesdis.gsfc.nasa.gov/linux/
+
+Don's vortex-diag program is useful for inspecting the NIC's state:
+
+     http://cesdis.gsfc.nasa.gov/linux/diag/vortex-diag.c
+
+Don's mii-diag program may be used for inspecting and manipulating the
+NIC's Media Independent Interface subsystem:
+
+     http://cesdis.gsfc.nasa.gov/linux/diag/#mii-diag
+
+3Com's documentation for many NICs, including the ones supported by
+this driver is available at 
+
+     http://support.3com.com/partners/developer/developer_form.html
+
+A detailed changelog for the modifications which were made for 2.3
+series kernel is available at
+
+     http://www.uow.edu.au/~andrewm/linux/#3c59x-2.3
+
+
+
+Cisco interoperability note from Walter Wong <wcw+@CMU.EDU>:
+
+  On a side note, adding HAS_NWAY seems to share a problem with the
+  Cisco 6509 switch.  Specifically, you need to change the spanning
+  tree parameter for the port the machine is plugged into to 'portfast'
+  mode.  Otherwise, the negotiation fails.  This has been an issue
+  we've noticed for a while but haven't had the time to track down.
+
+

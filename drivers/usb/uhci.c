@@ -284,42 +284,6 @@ static void uhci_insert_tds_in_qh(struct uhci_qh *qh, struct urb *urb, int bread
 	prevtd->link = UHCI_PTR_TERM;
 }
 
-/* This function will append one URB's QH to another URB's QH. This is for */
-/*  USB_QUEUE_BULK support */
-static void uhci_append_urb_qh(struct uhci *uhci, struct urb *eurb, struct urb *urb)
-{
-	struct urb *nurb;
-	struct urb_priv *eurbp, *urbp, *nurbp;
-	struct list_head *tmp;
-	struct uhci_td *td, *ntd;
-	unsigned long flags;
-
-	eurbp = eurb->hcpriv;
-	urbp = urb->hcpriv;
-
-	spin_lock_irqsave(&eurb->lock, flags);
-
-	/* Grab the last URB in the queue */
-	tmp = eurbp->urb_queue_list.prev;
-
-	/* Add this one to the end */
-	list_add_tail(&urbp->urb_queue_list, &eurbp->urb_queue_list);
-
-	spin_unlock_irqrestore(&eurb->lock, flags);
-
-	nurbp = list_entry(tmp, struct urb_priv, urb_queue_list);
-	nurb = nurbp->urb;
-
-	tmp = nurbp->list.prev;
-	td = list_entry(tmp, struct uhci_td, list);
-
-	tmp = urbp->list.next;
-	ntd = list_entry(tmp, struct uhci_td, list);
-
-	/* No breadth since this will only be called for bulk transfers */
-	td->link = virt_to_bus(ntd);
-}
-
 static void uhci_free_td(struct uhci_td *td)
 {
 	if (!list_empty(&td->list))
@@ -395,6 +359,7 @@ static void uhci_remove_qh(struct uhci *uhci, struct uhci_qh *qh)
 	if (qh->nextqh)
 		qh->nextqh->prevqh = qh->prevqh;
 	qh->prevqh = qh->nextqh = NULL;
+	qh->element = qh->link = UHCI_PTR_TERM;
 	spin_unlock_irqrestore(&uhci->framelist_lock, flags);
 
 	if (delayed) {
@@ -411,6 +376,101 @@ static void uhci_remove_qh(struct uhci *uhci, struct uhci_qh *qh)
 		spin_unlock_irqrestore(&uhci->qh_remove_lock, flags);
 	} else
 		uhci_free_qh(qh);
+}
+
+static spinlock_t uhci_append_urb_lock = SPIN_LOCK_UNLOCKED;
+
+/* This function will append one URB's QH to another URB's QH. This is for */
+/*  USB_QUEUE_BULK support */
+static void uhci_append_queued_urb(struct uhci *uhci, struct urb *eurb, struct urb *urb)
+{
+	struct urb_priv *eurbp, *urbp, *furbp, *lurbp;
+	struct list_head *tmp;
+	struct uhci_td *td, *ltd;
+	unsigned long flags;
+
+	eurbp = eurb->hcpriv;
+	urbp = urb->hcpriv;
+
+	spin_lock_irqsave(&uhci_append_urb_lock, flags);
+
+	/* Find the beginning URB in the queue */
+	if (eurbp->queued) {
+		struct list_head *head = &eurbp->urb_queue_list;
+
+		tmp = head->next;
+		while (tmp != head) {
+			struct urb_priv *turbp =
+				list_entry(tmp, struct urb_priv, urb_queue_list);
+
+			tmp = tmp->next;
+
+			if (!turbp->queued)
+				break;
+		}
+	} else
+		tmp = &eurbp->urb_queue_list;
+
+	furbp = list_entry(tmp, struct urb_priv, urb_queue_list);
+
+	tmp = furbp->urb_queue_list.prev;
+	lurbp = list_entry(tmp, struct urb_priv, urb_queue_list);
+
+	/* Add this one to the end */
+	list_add_tail(&urbp->urb_queue_list, &furbp->urb_queue_list);
+
+	/* Grab the last TD from the last URB */
+	ltd = list_entry(lurbp->list.prev, struct uhci_td, list);
+
+	/* Grab the first TD from the first URB */
+	td = list_entry(urbp->list.next, struct uhci_td, list);
+
+	/* No breadth since this will only be called for bulk transfers */
+	ltd->link = virt_to_bus(td);
+
+	spin_unlock_irqrestore(&uhci_append_urb_lock, flags);
+}
+
+static void uhci_delete_queued_urb(struct uhci *uhci, struct urb *urb)
+{
+	struct urb_priv *urbp, *nurbp;
+	unsigned long flags;
+
+	urbp = urb->hcpriv;
+
+	spin_lock_irqsave(&uhci_append_urb_lock, flags);
+
+	nurbp = list_entry(urbp->urb_queue_list.next, struct urb_priv,
+			urb_queue_list);
+
+	if (!urbp->queued) {
+		/* We're the head, so just insert the QH for the next URB */
+		uhci_insert_qh(uhci, &uhci->skel_bulk_qh, nurbp->qh);
+		nurbp->queued = 0;
+	} else {
+		struct urb_priv *purbp;
+		struct uhci_td *ptd;
+
+		/* We're somewhere in the middle (or end). A bit trickier */
+		/*  than the head scenario */
+		purbp = list_entry(urbp->urb_queue_list.prev, struct urb_priv,
+				urb_queue_list);
+
+		ptd = list_entry(purbp->list.prev, struct uhci_td, list);
+		if (nurbp->queued)
+			/* Close the gap between the two */
+			ptd->link = virt_to_bus(list_entry(nurbp->list.next,
+					struct uhci_td, list));
+		else
+			/* The next URB happens to be the beggining, so */
+			/*  we're the last, end the chain */
+			ptd->link = UHCI_PTR_TERM;
+		
+	}
+
+	list_del(&urbp->urb_queue_list);
+
+	spin_unlock_irqrestore(&uhci_append_urb_lock, flags);
 }
 
 struct urb_priv *uhci_alloc_urb_priv(struct urb *urb)
@@ -489,11 +549,6 @@ static void uhci_destroy_urb_priv(struct urb *urb)
 		uhci_remove_td(uhci, td);
 
 		uhci_free_td(td);
-	}
-
-	if (!list_empty(&urbp->urb_queue_list)) {
-		list_del(&urbp->urb_queue_list);
-		INIT_LIST_HEAD(&urbp->urb_queue_list);
 	}
 
 	urb->hcpriv = NULL;
@@ -672,12 +727,10 @@ static int uhci_submit_control(struct urb *urb)
 	if (urb->pipe & TD_CTRL_LS) {
 		uhci_insert_tds_in_qh(qh, urb, 0);
 		uhci_insert_qh(uhci, &uhci->skel_ls_control_qh, qh);
-		urbp->queued = 0;
 	} else {
 		uhci_insert_tds_in_qh(qh, urb, 1);
 		uhci_insert_qh(uhci, &uhci->skel_hs_control_qh, qh);
 		uhci_inc_fsbr(uhci, urb);
-		urbp->queued = 0;
 	}
 
 	urbp->qh = qh;
@@ -697,18 +750,21 @@ static int uhci_result_control(struct urb *urb)
 	struct urb_priv *urbp = urb->hcpriv;
 	struct uhci_td *td;
 	unsigned int status;
+	int ret = 0;
 
 	if (!urbp)
 		return -EINVAL;
 
 	head = &urbp->list;
-	tmp = head->next;
-	if (head == tmp)
+	if (head->next == head)
 		return -EINVAL;
 
-	if (urbp->short_control_packet)
+	if (urbp->short_control_packet) {
+		tmp = head->prev;
 		goto status_phase;
+	}
 
+	tmp = head->next;
 	td = list_entry(tmp, struct uhci_td, list);
 
 	/* The first TD is the SETUP phase, check the status, but skip */
@@ -729,20 +785,34 @@ static int uhci_result_control(struct urb *urb)
 
 		tmp = tmp->next;
 
+		if (urbp->fsbr_timeout && (td->status & TD_CTRL_IOC) &&
+		    !(td->status & TD_CTRL_ACTIVE)) {
+			uhci_inc_fsbr(urb->dev->bus->hcpriv, urb);
+			urbp->fsbr_timeout = 0;
+			td->status &= ~TD_CTRL_IOC;
+		}
+
 		status = uhci_status_bits(td->status);
 		if (status & TD_CTRL_ACTIVE)
 			return -EINPROGRESS;
 
 		urb->actual_length += uhci_actual_length(td->status);
 
-		/* If SPD is set then we received a short packet */
-		/*  There will be no status phase at the end */
-		if ((td->status & TD_CTRL_SPD) &&
-		    (uhci_actual_length(td->status) < uhci_expected_length(td->info)))
-			return usb_control_retrigger_status(urb);
-
 		if (status)
 			goto td_error;
+
+		/* Check to see if we received a short packet */
+		if (uhci_actual_length(td->status) < uhci_expected_length(td->info)) {
+			if (urb->transfer_flags & USB_DISABLE_SPD) {
+				ret = -EREMOTEIO;
+				goto err;
+			}
+
+			if (uhci_packetid(td->info) == USB_PID_IN)
+				return usb_control_retrigger_status(urb);
+			else
+				return 0;
+		}
 	}
 
 status_phase:
@@ -768,19 +838,22 @@ status_phase:
 	return 0;
 
 td_error:
-	if (status & TD_CTRL_STALLED)
+	ret = uhci_map_status(status, uhci_packetout(td->info));
+	if (ret == -EPIPE)
 		/* endpoint has stalled - mark it halted */
 		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
 	    			uhci_packetout(td->info));
-	else if (debug) {
+
+err:
+	if (debug && ret != -EPIPE) {
 		/* Some debugging code */
 		dbg("uhci_result_control() failed with status %x", status);
 
 		/* Print the chain for debugging purposes */
-		uhci_show_queue(urbp->qh);
+		uhci_show_urb_queue(urb);
 	}
 
-	return uhci_map_status(status, uhci_packetout(td->info));
+	return ret;
 }
 
 static int usb_control_retrigger_status(struct urb *urb)
@@ -823,7 +896,6 @@ static int usb_control_retrigger_status(struct urb *urb)
 		uhci_insert_qh(uhci, &uhci->skel_ls_control_qh, urbp->qh);
 	else
 		uhci_insert_qh(uhci, &uhci->skel_hs_control_qh, urbp->qh);
-	urbp->queued = 0;
 
 	return -EINPROGRESS;
 }
@@ -869,8 +941,9 @@ static int uhci_result_interrupt(struct urb *urb)
 {
 	struct list_head *tmp, *head;
 	struct urb_priv *urbp = urb->hcpriv;
-	unsigned int status;
 	struct uhci_td *td;
+	unsigned int status;
+	int ret = 0;
 
 	if (!urbp)
 		return -EINVAL;
@@ -884,46 +957,58 @@ static int uhci_result_interrupt(struct urb *urb)
 
 		tmp = tmp->next;
 
+		if (urbp->fsbr_timeout && (td->status & TD_CTRL_IOC) &&
+		    !(td->status & TD_CTRL_ACTIVE)) {
+			uhci_inc_fsbr(urb->dev->bus->hcpriv, urb);
+			urbp->fsbr_timeout = 0;
+			td->status &= ~TD_CTRL_IOC;
+		}
+
 		status = uhci_status_bits(td->status);
 		if (status & TD_CTRL_ACTIVE)
 			return -EINPROGRESS;
 
 		urb->actual_length += uhci_actual_length(td->status);
 
-		/* If SPD is set then we received a short packet */
-		if ((td->status & TD_CTRL_SPD) &&
-		    (uhci_actual_length(td->status) < uhci_expected_length(td->info))) {
+		if (status)
+			goto td_error;
+
+		if (uhci_actual_length(td->status) < uhci_expected_length(td->info)) {
 			usb_settoggle(urb->dev, uhci_endpoint(td->info),
 				uhci_packetout(td->info),
 				uhci_toggle(td->info) ^ 1);
 
-			return 0;
+			if (urb->transfer_flags & USB_DISABLE_SPD) {
+				ret = -EREMOTEIO;
+				goto err;
+			} else
+				return 0;
 		}
-
-		if (status)
-			goto td_error;
 	}
 
 	return 0;
 
 td_error:
-	if (status & TD_CTRL_STALLED)
+	ret = uhci_map_status(status, uhci_packetout(td->info));
+	if (ret == -EPIPE)
 		/* endpoint has stalled - mark it halted */
 		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
 	    			uhci_packetout(td->info));
-	else if (debug) {
+
+err:
+	if (debug && ret != -EPIPE) {
 		/* Some debugging code */
 		dbg("uhci_result_interrupt/bulk() failed with status %x",
 			status);
 
 		/* Print the chain for debugging purposes */
 		if (urbp->qh)
-			uhci_show_queue(urbp->qh);
+			uhci_show_urb_queue(urb);
 		else
 			uhci_show_td(td);
 	}
 
-	return uhci_map_status(status, uhci_packetout(td->info));
+	return ret;
 }
 
 static void uhci_reset_interrupt(struct urb *urb)
@@ -974,6 +1059,7 @@ static int uhci_submit_bulk(struct urb *urb, struct urb *eurb)
 
 	/* 3 errors */
 	status = TD_CTRL_ACTIVE | (3 << TD_CTRL_C_ERR_SHIFT);
+
 	if (!(urb->transfer_flags & USB_DISABLE_SPD))
 		status |= TD_CTRL_SPD;
 
@@ -1016,12 +1102,10 @@ static int uhci_submit_bulk(struct urb *urb, struct urb *eurb)
 	uhci_insert_tds_in_qh(qh, urb, 1);
 
 	if (urb->transfer_flags & USB_QUEUE_BULK && eurb) {
-		uhci_append_urb_qh(uhci, eurb, urb);
 		urbp->queued = 1;
-	} else {
+		uhci_append_queued_urb(uhci, eurb, urb);
+	} else
 		uhci_insert_qh(uhci, &uhci->skel_bulk_qh, qh);
-		urbp->queued = 0;
-	}
 
 	uhci_add_urb_list(uhci, urb);
 
@@ -1049,6 +1133,8 @@ static int isochronous_find_limits(struct urb *urb, unsigned int *start, unsigne
 	while (tmp != head) {
 		struct urb *u = list_entry(tmp, struct urb, urb_list);
 
+		tmp = tmp->next;
+
 		/* look for pending URB's with identical pipe handle */
 		if ((urb->pipe == u->pipe) && (urb->dev == u->dev) &&
 		    (u->status == -EINPROGRESS) && (u != urb)) {
@@ -1056,7 +1142,6 @@ static int isochronous_find_limits(struct urb *urb, unsigned int *start, unsigne
 				*start = u->start_frame;
 			last_urb = u;
 		}
-		tmp = tmp->next;
 	}
 
 	if (last_urb) {
@@ -1363,14 +1448,8 @@ static int uhci_unlink_generic(struct urb *urb)
 		/* The interrupt loop will reclaim the QH's */
 		uhci_remove_qh(uhci, urbp->qh);
 
-	if (!list_empty(&urbp->urb_queue_list)) {
-		struct list_head *tmp = urbp->urb_queue_list.next;
-		struct urb_priv *nurbp = list_entry(tmp, struct urb_priv, urb_queue_list);
-		if (nurbp->queued) {
-			uhci_insert_qh(uhci, &uhci->skel_bulk_qh, nurbp->qh);
-			nurbp->queued = 0;
-		}
-	}
+	if (!list_empty(&urbp->urb_queue_list))
+		uhci_delete_queued_urb(uhci, urb);
 
 	uhci_destroy_urb_priv(urb);
 
@@ -1428,6 +1507,35 @@ static int uhci_unlink_urb(struct urb *urb)
 	}
 
 	return ret;
+}
+
+static int uhci_fsbr_timeout(struct uhci *uhci, struct urb *urb)
+{
+	struct urb_priv *urbp = (struct urb_priv *)urb->hcpriv;
+	struct list_head *head, *tmp;
+
+	uhci_dec_fsbr(uhci, urb);
+
+	/* There is a race with updating IOC in here, but it's not worth */
+	/*  trying to fix since this is merely an optimization. The only */
+	/*  time we'd lose is if the status of the packet got updated */
+	/*  and we'd be turning on FSBR next frame anyway, so it's a wash */
+	urbp->fsbr_timeout = 1;
+
+	head = &urbp->list;
+	tmp = head->next;
+	while (tmp != head) {
+		struct uhci_td *td = list_entry(tmp, struct uhci_td, list);
+
+		tmp = tmp->next;
+
+		if (td->status & TD_CTRL_ACTIVE) {
+			td->status |= TD_CTRL_IOC;
+			break;
+		}
+	}
+
+	return 0;
 }
 
 /*
@@ -1586,7 +1694,7 @@ static void rh_int_timer_do(unsigned long ptr)
 		if (urbp) {
 			/* Check if the FSBR timed out */
 			if (urbp->fsbr && time_after(urbp->inserttime + IDLE_TIMEOUT, jiffies))
-				uhci_dec_fsbr(uhci, u);
+				uhci_fsbr_timeout(uhci, u);
 
 			/* Check if the URB timed out */
 			if (u->timeout && time_after(u->timeout, jiffies)) {
@@ -1762,7 +1870,7 @@ static int rh_submit_urb(struct urb *urb)
 		case RH_PORT_POWER:
 			OK(0); /* port power ** */
 		case RH_PORT_ENABLE:
-			SET_RH_PORTSTAT (USBPORTSC_PE);
+			SET_RH_PORTSTAT(USBPORTSC_PE);
 			OK(0);
 		}
 		break;

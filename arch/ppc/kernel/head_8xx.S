@@ -698,7 +698,7 @@ __secondary_hold:
  * This is where the main kernel code starts.
  */
 start_here:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* if we're the second cpu stack and r2 are different
 	* and we want to not clear the bss -- Cort */
 	lis	r5,first_cpu_booted@h
@@ -715,7 +715,7 @@ start_here:
 	lwz	r2,0(r2)
 	b	10f
 99:	
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* ptr to current */
 	lis	r2,init_task_union@h
 	ori	r2,r2,init_task_union@l
@@ -734,9 +734,9 @@ start_here:
 3:	stwu	r0,4(r8)
 	bdnz	3b
 2:
-#ifdef __SMP__	
+#ifdef CONFIG_SMP	
 10:
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* stack */
 	addi	r1,r2,TASK_UNION_SIZE
 	li	r0,0
@@ -779,7 +779,7 @@ start_here:
 	SYNC			/* Force all PTE updates to finish */
 	tlbia			/* Clear all TLB entries */
 	sync			/* wait for tlbia/tlbie to finish */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync			/* ... on all CPUs */
 	sync
 #endif
@@ -794,7 +794,7 @@ start_here:
 	li	r4,MSR_KERNEL
 	lis	r3,start_kernel@h
 	ori	r3,r3,start_kernel@l
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* the second time through here we go to
 	 * start_secondary(). -- Cort
 	 */
@@ -807,7 +807,7 @@ start_here:
 	lis	r3,start_secondary@h
 	ori	r3,r3,start_secondary@l
 10:	
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */

@@ -2817,10 +2817,12 @@ sym53c8xx__detect(Scsi_Host_Template *tpnt, u_short ncr_chip_ids[], int chips)
 				if (!ncr_attach (tpnt, attach_count, devp))
 					attach_count++;
 			}
+#if 0	/* Restore previous behaviour of ncr53c8xx driver */
 			else if (!(driver_setup.use_nvram & 0x80))
 				printk(KERN_INFO NAME53C8XX
 				       ": 53c%s state OFF thus not attached\n",
 				       devp->chip.name);
+#endif
 			else
 				continue;
 

@@ -204,7 +204,7 @@ int get_cpuinfo(char *buffer)
 	unsigned int pvr;
 	unsigned short maj, min;
 	
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define CPU_PRESENT(x) (cpu_callin_map[(x)])
 #define GET_PVR ((long int)(cpu_data[i].pvr))
 #define CD(x) (cpu_data[i].x)
@@ -355,13 +355,13 @@ int get_cpuinfo(char *buffer)
 		bogosum += CD(loops_per_sec);
 	}
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if ( i )
 		len += sprintf(buffer+len, "\n");
 	len += sprintf(buffer+len,"total bogomips\t: %lu.%02lu\n",
 		       (bogosum+2500)/500000,
 		       (bogosum+2500)/5000 % 100);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	/*
 	 * Ooh's and aah's info about zero'd pages in idle task

@@ -35,9 +35,9 @@
 #include <asm/dma.h>
 #include <asm/machdep.h>
 #include <asm/hw_irq.h>
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #include <asm/smplock.h>
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 #include "time.h"
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
@@ -76,9 +76,9 @@ EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 EXPORT_SYMBOL(isa_io_base);
@@ -189,7 +189,7 @@ EXPORT_SYMBOL(giveup_fpu);
 EXPORT_SYMBOL(enable_kernel_fp);
 EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(xchg_u32);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);

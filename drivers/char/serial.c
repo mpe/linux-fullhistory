@@ -4164,7 +4164,7 @@ static struct pci_board pci_boards[] __initdata = {
 		PCI_ANY_ID, PCI_ANY_ID,
 		SPCI_FL_BASE0 | SPCI_FL_BASE_TABLE, 4, 921600,
 		0, 0, pci_siig20x_fn },
-	/* Computone devices submitted by Doug McNash dmcnash@computone.com */
+	/* Computone devices submitted by Doug McNash dougm@computone.com */
 	{	PCI_VENDOR_ID_COMPUTONE, PCI_DEVICE_ID_COMPUTONE_PG,
 		PCI_SUBVENDOR_ID_COMPUTONE, PCI_SUBDEVICE_ID_COMPUTONE_PG4,
 		SPCI_FL_BASE0, 4, 921600, /* IOMEM */
@@ -5023,6 +5023,6 @@ void __init serial_console_init(void)
 
 /*
   Local variables:
-  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -D__SMP__ -pipe -fno-strength-reduce  -march=i686 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
+  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -pipe -fno-strength-reduce  -march=i686 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
   End:
 */

@@ -61,7 +61,7 @@ int idled(void)
 		if ( !current->need_resched && htab_reclaim_on ) htab_reclaim();
 		if ( !current->need_resched ) power_save();
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		if (current->need_resched)
 #endif
 			schedule();
@@ -162,11 +162,11 @@ unsigned long get_zero_page_fast(void)
 			: "=&r" (tmp), "=&r" (page), "+m" (zero_cache)
 			: "r" (&zero_quicklist)
 			: "cc" );
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		/* if another cpu beat us above this can happen -- Cort */
 		if ( page == 0 ) 
 			return 0;
-#endif /* __SMP__ */		
+#endif /* CONFIG_SMP */		
 		/* we can update zerocount after the fact since it is not
 		 * used for anything but control of a loop which doesn't
 		 * matter since it won't affect anything if it zeros one
@@ -253,7 +253,7 @@ void zero_paged(void)
 		/* atomically add this page to the list */
 		asm (	"101:lwarx  %0,0,%2\n"  /* reserve zero_cache */
 			"    stw    %0,0(%3)\n" /* update *pageptr */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 			"    sync\n"            /* let store settle */
 #endif			
 			"    stwcx. %3,0,%2\n"  /* update zero_cache in mem */

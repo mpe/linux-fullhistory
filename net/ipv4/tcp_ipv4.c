@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.205 2000/03/26 09:16:08 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.206 2000/04/15 01:48:10 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -2172,24 +2172,23 @@ out_no_bh:
 }
 
 struct proto tcp_prot = {
-	tcp_close,			/* close */
-	tcp_v4_connect,			/* connect */
-	tcp_disconnect,			/* disconnect */
-	tcp_accept,			/* accept */
-	tcp_ioctl,			/* ioctl */
-	tcp_v4_init_sock,		/* init */
-	tcp_v4_destroy_sock,		/* destroy */
-	tcp_shutdown,			/* shutdown */
-	tcp_setsockopt,			/* setsockopt */
-	tcp_getsockopt,			/* getsockopt */
-	tcp_sendmsg,			/* sendmsg */
-	tcp_recvmsg,			/* recvmsg */
-	NULL,				/* bind */
-	tcp_v4_do_rcv,			/* backlog_rcv */
-	tcp_v4_hash,			/* hash */
-	tcp_unhash,			/* unhash */
-	tcp_v4_get_port,		/* get_port */
-	"TCP",				/* name */
+	name:		"TCP",
+	close:		tcp_close,
+	connect:	tcp_v4_connect,
+	disconnect:	tcp_disconnect,
+	accept:		tcp_accept,
+	ioctl:		tcp_ioctl,
+	init:		tcp_v4_init_sock,
+	destroy:	tcp_v4_destroy_sock,
+	shutdown:	tcp_shutdown,
+	setsockopt:	tcp_setsockopt,
+	getsockopt:	tcp_getsockopt,
+	sendmsg:	tcp_sendmsg,
+	recvmsg:	tcp_recvmsg,
+	backlog_rcv:	tcp_v4_do_rcv,
+	hash:		tcp_v4_hash,
+	unhash:		tcp_unhash,
+	get_port:	tcp_v4_get_port,
 };
 
 

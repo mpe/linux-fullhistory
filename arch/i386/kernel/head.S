@@ -51,7 +51,7 @@ startup_32:
 	movl %eax,%es
 	movl %eax,%fs
 	movl %eax,%gs
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	orw %bx,%bx
 	jz 1f
 /*
@@ -105,14 +105,14 @@ startup_32:
 	/* Set up the stack pointer */
 	lss stack_start,%esp
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	orw  %bx,%bx
 	jz  1f				/* Initial CPU cleans BSS */
 	pushl $0
 	popfl
 	jmp checkCPUtype
 1:
-#endif __SMP__
+#endif CONFIG_SMP
 /*
  * Clear BSS first so that there are no surprises...
  */
@@ -159,7 +159,7 @@ startup_32:
 	rep
 	movsl
 1:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 checkCPUtype:
 #endif
 
@@ -234,7 +234,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	incb ready
 #endif
 	lgdt gdt_descr
@@ -245,7 +245,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	movl %eax,%es
 	movl %eax,%fs
 	movl %eax,%gs
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	movl $(__KERNEL_DS), %eax
 	movl %eax,%ss		# Reload the stack pointer (segment only)
 #else
@@ -254,7 +254,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	xorl %eax,%eax
 	lldt %ax
 	cld			# gcc2 wants the direction flag cleared at all times
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	movb ready, %cl	
 	cmpb $1,%cl
 	je 1f			# the first CPU calls start_kernel
@@ -268,7 +268,7 @@ L6:
 	jmp L6			# main should never return here, but
 				# just in case, we know what happens.
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 ready:	.byte 0
 #endif
 

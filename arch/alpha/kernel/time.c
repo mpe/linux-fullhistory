@@ -22,6 +22,7 @@
  *	fixed algorithm in do_gettimeofday() for calculating the precise time
  *	from processor cycle counter (now taking lost_ticks into account)
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -90,7 +91,7 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 	__u32 now;
 	long nticks;
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	/* Not SMP, do kernel PC profiling here.  */
 	if (!user_mode(regs))
 		alpha_do_profile(regs->pc);
@@ -315,7 +316,7 @@ do_gettimeofday(struct timeval *tv)
 
 	read_unlock_irqrestore(&xtime_lock, flags);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Until and unless we figure out how to get cpu cycle counters
 	   in sync and keep them there, we can't use the rpcc tricks.  */
 	delta_usec = lost * (1000000 / HZ);
@@ -361,7 +362,7 @@ do_settimeofday(struct timeval *tv)
 	   must be subtracted out here to keep a coherent view of the
 	   time.  Without this, a full-tick error is possible.  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	delta_usec = lost_ticks * (1000000 / HZ);
 #else
 	delta_usec = rpcc() - state.last_time;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.168 2000/04/13 01:13:06 davem Exp $
+ * Version:	$Id: tcp.c,v 1.169 2000/04/20 14:41:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -622,7 +622,7 @@ int tcp_listen_start(struct sock *sk)
 
 	sk->max_ack_backlog = 0;
 	sk->ack_backlog = 0;
-	tp->accept_queue = NULL;
+	tp->accept_queue = tp->accept_queue_tail = NULL;
 	tp->syn_wait_lock = RW_LOCK_UNLOCKED;
 
 	lopt = kmalloc(sizeof(struct tcp_listen_opt), GFP_KERNEL);
@@ -681,7 +681,7 @@ static void tcp_listen_stop (struct sock *sk)
 	write_lock_bh(&tp->syn_wait_lock);
 	tp->listen_opt =NULL;
 	write_unlock_bh(&tp->syn_wait_lock);
-	tp->accept_queue = NULL;
+	tp->accept_queue = tp->accept_queue_tail = NULL;
 
 	if (lopt->qlen) {
 		for (i=0; i<TCP_SYNQ_HSIZE; i++) {
@@ -2038,7 +2038,8 @@ struct sock *tcp_accept(struct sock *sk, int flags, int *err)
 	}
 
 	req = tp->accept_queue;
-	tp->accept_queue = req->dl_next;
+	if ((tp->accept_queue = req->dl_next) == NULL)
+		tp->accept_queue_tail = NULL;
 
  	newsk = req->sk;
 	tcp_acceptq_removed(sk);

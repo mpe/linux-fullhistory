@@ -2055,24 +2055,23 @@ static struct net_proto_family atalk_family_ops=
 
 static struct proto_ops SOCKOPS_WRAPPED(atalk_dgram_ops)=
 {
-	PF_APPLETALK,
+	family:		PF_APPLETALK,
 
-	atalk_release,
-	atalk_bind,
-	atalk_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	atalk_getname,
-	datagram_poll,
-	atalk_ioctl,
-	sock_no_listen,
-	sock_no_shutdown,
-	sock_no_setsockopt,
-	sock_no_getsockopt,
-	sock_no_fcntl,
-	atalk_sendmsg,
-	atalk_recvmsg,
-	sock_no_mmap
+	release:	atalk_release,
+	bind:		atalk_bind,
+	connect:	atalk_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	atalk_getname,
+	poll:		datagram_poll,
+	ioctl:		atalk_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	sock_no_setsockopt,
+	getsockopt:	sock_no_getsockopt,
+	sendmsg:	atalk_sendmsg,
+	recvmsg:	atalk_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

@@ -6,12 +6,12 @@ struct sigcontext {
 
 	/* CPU registers */
 	unsigned long sc_regs[16];
+	unsigned long sc_pc;
+	unsigned long sc_pr;
+	unsigned long sc_sr;
 	unsigned long sc_gbr;
 	unsigned long sc_mach;
 	unsigned long sc_macl;
-	unsigned long sc_pr;
-	unsigned long sc_sr;
-	unsigned long sc_pc;
 
 #if defined(__SH4__)
 	/* FPU registers */

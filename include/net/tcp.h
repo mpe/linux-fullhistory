@@ -1383,8 +1383,13 @@ extern __inline__ void tcp_acceptq_queue(struct sock *sk, struct open_request *r
 	req->sk = child;
 	tcp_acceptq_added(sk);
 
-	req->dl_next = tp->accept_queue;
-	tp->accept_queue = req;
+	if (!tp->accept_queue_tail) {
+		tp->accept_queue = req;
+	} else {
+		tp->accept_queue_tail->dl_next = req;
+	}
+	tp->accept_queue_tail = req;
+	req->dl_next = NULL;
 }
 
 struct tcp_listen_opt

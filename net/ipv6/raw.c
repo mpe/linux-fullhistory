@@ -786,22 +786,18 @@ out:
 }
 
 struct proto rawv6_prot = {
-	rawv6_close,			/* close */
-	udpv6_connect,			/* connect */
-	udp_disconnect,			/* disconnect */
-	NULL,				/* accept */
-	NULL,				/* ioctl */
-	rawv6_init_sk,			/* init */
-	inet6_destroy_sock,		/* destroy */
-	NULL,				/* shutdown */
-	rawv6_setsockopt,		/* setsockopt */
-	rawv6_getsockopt,		/* getsockopt */
-	rawv6_sendmsg,			/* sendmsg */
-	rawv6_recvmsg,			/* recvmsg */
-	rawv6_bind,			/* bind */
-	rawv6_rcv_skb,			/* backlog_rcv */
-	raw_v6_hash,			/* hash */
-	raw_v6_unhash,			/* unhash */
-	NULL,				/* get_port */
-	"RAW",				/* name */
+	name:		"RAW",
+	close:		rawv6_close,
+	connect:	udpv6_connect,
+	disconnect:	udp_disconnect,
+	init:		rawv6_init_sk,
+	destroy:	inet6_destroy_sock,
+	setsockopt:	rawv6_setsockopt,
+	getsockopt:	rawv6_getsockopt,
+	sendmsg:	rawv6_sendmsg,
+	recvmsg:	rawv6_recvmsg,
+	bind:		rawv6_bind,
+	backlog_rcv:	rawv6_rcv_skb,
+	hash:		raw_v6_hash,
+	unhash:		raw_v6_unhash,
 };

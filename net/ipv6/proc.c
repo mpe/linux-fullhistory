@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.13 2000/01/09 02:19:55 davem Exp $
+ * Version:	$Id: proc.c,v 1.14 2000/04/16 01:11:37 davem Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -32,7 +32,7 @@ static int fold_prot_inuse(struct proto *proto)
 	int cpu;
 
 	for (cpu=0; cpu<smp_num_cpus; cpu++)
-		res += proto->stats[cpu].inuse;
+		res += proto->stats[cpu_logical_map(cpu)].inuse;
 
 	return res;
 }
@@ -138,8 +138,10 @@ static unsigned long fold_field(unsigned long *ptr, int size)
 	unsigned long res = 0;
 	int i;
 
-	for (i=0; i<smp_num_cpus; i++)
-		res += ptr[i*size];
+	for (i=0; i<smp_num_cpus; i++) {
+		res += ptr[2*cpu_logical_map(i)*size];
+		res += ptr[(2*cpu_logical_map(i)+1)*size];
+	}
 
 	return res;
 }

@@ -91,7 +91,7 @@ good_area:
 	 * the fault.
 	 */
 	{
-		int fault = handle_mm_fault(tsk, vma, address, write);
+		int fault = handle_mm_fault(mm, vma, address, write);
 		if (fault < 0)
 			goto out_of_memory;
 		if (!fault)

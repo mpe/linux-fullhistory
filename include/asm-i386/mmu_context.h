@@ -12,7 +12,7 @@
 #define destroy_context(mm)		do { } while(0)
 #define init_new_context(tsk,mm)	do { } while (0)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {
@@ -42,7 +42,7 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, str
 		asm volatile("movl %0,%%cr3": :"r" (__pa(next->pgd)));
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	else {
 		int old_state = cpu_tlbstate[cpu].state;
 		cpu_tlbstate[cpu].state = TLBSTATE_OK;

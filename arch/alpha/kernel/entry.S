@@ -4,6 +4,7 @@
  * kernel entry-points
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 #define SIGCHLD 20
@@ -706,7 +707,7 @@ signal_return:
 	br	restore_all
 .end entSys
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
         .globl  ret_from_smp_fork
 .align 3
 .ent ret_from_smp_fork
@@ -715,7 +716,7 @@ ret_from_smp_fork:
 	mov	$17,$16
 	jsr	$31,schedule_tail
 .end ret_from_smp_fork
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 .align 3
 .ent reschedule

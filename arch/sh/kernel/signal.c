@@ -152,30 +152,36 @@ struct rt_sigframe
 #if defined(__SH4__)
 static inline int restore_sigcontext_fpu(struct sigcontext *sc)
 {
-	current->used_math = 1;
+	struct task_struct *tsk = current;
+
+	tsk->used_math = 1;
 	return __copy_from_user(&tsk->thread.fpu.hard, &sc->sc_fpregs[0],
-				sizeof(long)*(NUM_FPU_REGS*2+2));
+				sizeof(long)*(16*2+2));
 }
 
 static inline int save_sigcontext_fpu(struct sigcontext *sc)
 {
 	struct task_struct *tsk = current;
+	unsigned long flags;
 
 	if (!tsk->used_math) {
-		sc->owend_fp = 0;
+		sc->sc_ownedfp = 0;
 		return 0;
 	}
 
-	sc->owend_fp = 1;
+	sc->sc_ownedfp = 1;
 
 	/* This will cause a "finit" to be triggered by the next
 	   attempted FPU operation by the 'current' process.
 	   */
 	tsk->used_math = 0;
 
+	save_and_cli(flags);
 	unlazy_fpu(tsk);
+	restore_flags(flags);
+
 	return __copy_to_user(&sc->sc_fpregs[0], &tsk->thread.fpu.hard,
-			      sizeof(long)*(NUM_FPU_REGS*2+2));
+			      sizeof(long)*(16*2+2));
 }
 #endif
 
@@ -206,7 +212,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *r0_p)
 		regs->sr |= SR_FD; /* Release FPU */
 		clear_fpu(tsk);
 		current->used_math = 0;
-		__get_user (owned_fp, &context->sc_ownedfp);
+		__get_user (owned_fp, &sc->sc_ownedfp);
 		if (owned_fp)
 			err |= restore_sigcontext_fpu(sc);
 	}
@@ -363,11 +369,11 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	if (ka->sa.sa_flags & SA_RESTORER) {
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
-		/* This is : mov  #__NR_sigreturn,r0 ; trapa #0 */
+		/* This is : mov  #__NR_sigreturn,r3 ; trapa #0x10 */
 #ifdef __LITTLE_ENDIAN__
-		unsigned long code = 0xc300e000 | (__NR_sigreturn);
+		unsigned long code = 0xc310e300 | (__NR_sigreturn);
 #else
-		unsigned long code = 0xe000c300 | (__NR_sigreturn << 16);
+		unsigned long code = 0xe300c310 | (__NR_sigreturn << 16);
 #endif
 
 		regs->pr = (unsigned long) frame->retcode;
@@ -437,11 +443,11 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	if (ka->sa.sa_flags & SA_RESTORER) {
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
-		/* This is : mov  #__NR_rt_sigreturn,r0 ; trapa #0 */
+		/* This is : mov  #__NR_rt_sigreturn,r3 ; trapa #0x10 */
 #ifdef __LITTLE_ENDIAN__
-		unsigned long code = 0xc300e000 | (__NR_rt_sigreturn);
+		unsigned long code = 0xc310e300 | (__NR_rt_sigreturn);
 #else
-		unsigned long code = 0xe000c300 | (__NR_rt_sigreturn << 16);
+		unsigned long code = 0xe300c310 | (__NR_rt_sigreturn << 16);
 #endif
 
 		regs->pr = (unsigned long) frame->retcode;

@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/quotaops.h>
 #include <linux/slab.h>
+#include <linux/cache.h>
 
 /*
  * New inode.c implementation.
@@ -32,9 +33,11 @@
  * Inode lookup is no longer as critical as it used to be:
  * most of the lookups are going to be through the dcache.
  */
-#define HASH_BITS	14
-#define HASH_SIZE	(1UL << HASH_BITS)
-#define HASH_MASK	(HASH_SIZE-1)
+#define I_HASHBITS	i_hash_shift
+#define I_HASHMASK	i_hash_mask
+
+static unsigned int i_hash_mask;
+static unsigned int i_hash_shift;
 
 /*
  * Each inode can be on two separate lists. One is
@@ -50,7 +53,7 @@
 
 static LIST_HEAD(inode_in_use);
 static LIST_HEAD(inode_unused);
-static struct list_head inode_hashtable[HASH_SIZE];
+static struct list_head *inode_hashtable;
 static LIST_HEAD(anon_hash_chain); /* for inodes with NULL i_sb */
 
 /*
@@ -617,9 +620,9 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 
 static inline unsigned long hash(struct super_block *sb, unsigned long i_ino)
 {
-	unsigned long tmp = i_ino | (unsigned long) sb;
-	tmp = tmp + (tmp >> HASH_BITS) + (tmp >> HASH_BITS*2);
-	return tmp & HASH_MASK;
+	unsigned long tmp = i_ino | ((unsigned long) sb / L1_CACHE_BYTES);
+	tmp = tmp + (tmp >> I_HASHBITS) + (tmp >> I_HASHBITS*2);
+	return tmp & I_HASHMASK;
 }
 
 /* Yeah, I know about quadratic hash. Maybe, later. */
@@ -845,12 +848,41 @@ int bmap(struct inode * inode, int block)
 /*
  * Initialize the hash tables.
  */
-void __init inode_init(void)
+void __init inode_init(unsigned long mempages)
 {
+	struct list_head *head;
+	unsigned long order;
+	unsigned int nr_hash;
 	int i;
-	struct list_head *head = inode_hashtable;
 
-	i = HASH_SIZE;
+	mempages >>= (14 - PAGE_SHIFT);
+	mempages *= sizeof(struct list_head);
+	for (order = 0; ((1UL << order) << PAGE_SHIFT) < mempages; order++)
+		;
+
+	do {
+		unsigned long tmp;
+
+		nr_hash = (1UL << order) * PAGE_SIZE /
+			sizeof(struct list_head);
+		i_hash_mask = (nr_hash - 1);
+
+		tmp = nr_hash;
+		i_hash_shift = 0;
+		while ((tmp >>= 1UL) != 0UL)
+			i_hash_shift++;
+
+		inode_hashtable = (struct list_head *)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (inode_hashtable == NULL && --order >= 0);
+
+	if (!inode_hashtable)
+		panic("Failed to allocate inode hash table\n");
+
+	printk("VFS: INODE hash table configured to %d entries\n", nr_hash);
+
+	head = inode_hashtable;
+	i = nr_hash;
 	do {
 		INIT_LIST_HEAD(head);
 		head++;

@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
+#include <linux/smp_lock.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -18,7 +19,7 @@
 /*
  * Access another process' address space, one page at a time.
  */
-static int access_one_page(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long addr, void *buf, int len, int write)
+static int access_one_page(struct mm_struct * mm, struct vm_area_struct * vma, unsigned long addr, void *buf, int len, int write)
 {
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
@@ -65,7 +66,7 @@ repeat:
 
 fault_in_page:
 	/* -1: out of memory. 0 - unmapped page */
-	if (handle_mm_fault(tsk, vma, addr, write) > 0)
+	if (handle_mm_fault(mm, vma, addr, write) > 0)
 		goto repeat;
 	return 0;
 
@@ -78,18 +79,10 @@ bad_pmd:
 	return 0;
 }
 
-int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, int len, int write)
+static int access_mm(struct mm_struct *mm, struct vm_area_struct * vma, unsigned long addr, void *buf, int len, int write)
 {
-	int copied;
-	struct vm_area_struct * vma;
+	int copied = 0;
 
-	down(&tsk->mm->mmap_sem);
-	vma = find_extend_vma(tsk, addr);
-	if (!vma) {
-		up(&tsk->mm->mmap_sem);
-		return 0;
-	}
-	copied = 0;
 	for (;;) {
 		unsigned long offset = addr & ~PAGE_MASK;
 		int this_len = PAGE_SIZE - offset;
@@ -97,7 +90,7 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, in
 
 		if (this_len > len)
 			this_len = len;
-		retval = access_one_page(tsk, vma, addr, buf, this_len, write);
+		retval = access_one_page(mm, vma, addr, buf, this_len, write);
 		copied += retval;
 		if (retval != this_len)
 			break;
@@ -118,7 +111,29 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, in
 	
 		vma = vma->vm_next;
 	}
-	up(&tsk->mm->mmap_sem);
+	return copied;
+}
+
+int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, int len, int write)
+{
+	int copied;
+	struct mm_struct *mm;
+	struct vm_area_struct * vma;
+
+	/* Worry about races with exit() */
+	lock_kernel();
+	mm = tsk->mm;
+	atomic_inc(&mm->mm_users);
+	unlock_kernel();
+
+	down(&mm->mmap_sem);
+	vma = find_extend_vma(mm, addr);
+	copied = 0;
+	if (vma)
+		copied = access_mm(mm, vma, addr, buf, len, write);
+
+	up(&mm->mmap_sem);
+	mmput(mm);
 	return copied;
 }
 

@@ -67,8 +67,8 @@
 //
 #define MAX_CBUF_BLOCK  6	// Maximum total length of a bypass command block
 
-#define IBUF_SIZE       500	// character capacity of input buffer per channel
-#define OBUF_SIZE       2048// character capacity of output buffer per channel
+#define IBUF_SIZE       512	// character capacity of input buffer per channel
+#define OBUF_SIZE       1024// character capacity of output buffer per channel
 #define CBUF_SIZE       10	// character capacity of output bypass buffer
 
 typedef struct _i2ChanStr
@@ -97,6 +97,7 @@ typedef struct _i2ChanStr
 	PWAITQ   open_wait;     // Pointer for OS sleep function.
 	PWAITQ   close_wait;    // Pointer for OS sleep function.
 	PWAITQ   delta_msr_wait;// Pointer for OS sleep function.
+	PWAITQ   dss_now_wait;	// Pointer for OS sleep function.
 
 	struct timer_list  BookmarkTimer;   // Used by i2DrainOutput
 	wait_queue_head_t pBookmarkWait;   // Used by i2DrainOutput
@@ -215,7 +216,6 @@ typedef struct _i2ChanStr
 
 	void (*trace)(unsigned short,unsigned char,unsigned char,unsigned long,...);
 
-#ifdef __KERNEL__
 	/*
 	 * Kernel counters for the 4 input interrupts 
 	 */
@@ -227,7 +227,6 @@ typedef struct _i2ChanStr
 	struct tq_struct	tqueue_input;
 	struct tq_struct	tqueue_status;
 	struct tq_struct	tqueue_hangup;
-#endif 
 
 	spinlock_t Ibuf_spinlock;
 	spinlock_t Obuf_spinlock;

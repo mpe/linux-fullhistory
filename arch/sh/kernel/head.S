@@ -41,12 +41,21 @@ ENTRY(_stext)
 	ldc	$r0, $sr
 	!			Initialize global interrupt mask
 	mov	#0, $r0
-	ldc	$r0, $r5_bank
+	ldc	$r0, $r6_bank
 	!
 	mov.l	2f, $r0
 	mov	$r0, $r15	! Set initial r15 (stack pointer)
-	ldc	$r0, $r4_bank	!   and stack base
+	mov	#0x20, $r1	!
+	shll8	$r1		! $r1 = 8192
+	sub	$r1, $r0	!
+	ldc	$r0, $r7_bank	! ... and init_task
 	!
+#if defined(__SH4__)
+	!                       Initialize fpu
+	mov.l   7f, $r0
+	jsr     @$r0
+	 nop
+#endif
 	!			Enable cache
 	mov.l	6f, $r0
 	jsr	@$r0
@@ -71,3 +80,6 @@ ENTRY(_stext)
 4:	.long	SYMBOL_NAME(_end)
 5:	.long	SYMBOL_NAME(start_kernel)
 6:	.long	SYMBOL_NAME(cache_init)
+#if defined(__SH4__)
+7:	.long   SYMBOL_NAME(fpu_init)
+#endif

@@ -174,7 +174,7 @@ EXPORT_SYMBOL_NOVERS(__rwsem_wake);
  * SMP-specific symbols.
  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL(flush_tlb_all);
@@ -199,10 +199,10 @@ EXPORT_SYMBOL(debug_spin_trylock);
 EXPORT_SYMBOL(write_lock);
 EXPORT_SYMBOL(read_lock);
 #endif
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 EXPORT_SYMBOL(__local_bh_count);
 EXPORT_SYMBOL(__local_irq_count);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 EXPORT_SYMBOL(rtc_lock);
 

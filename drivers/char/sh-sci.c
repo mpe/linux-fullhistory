@@ -1,4 +1,4 @@
-/* $Id: sh-sci.c,v 1.36 2000/03/22 13:32:10 gniibe Exp $
+/* $Id: sh-sci.c,v 1.40 2000/04/15 06:57:29 gniibe Exp $
  *
  *  linux/drivers/char/sh-sci.c
  *
@@ -191,14 +191,13 @@ static void sci_set_termios_cflag(struct sci_port *port)
 #if defined(CONFIG_SH_SCIF_SERIAL)
 	if (C_CRTSCTS(port->gs.tty))
 		fcr_val |= 0x08;
+	else
+		ctrl_outw(0x0080, SCSPTR); /* Set RTS = 1 */
 	ctrl_out(fcr_val, SCFCR);
 #endif
 
 	sci_set_baud(port);
 	ctrl_out(SCSCR_INIT, SCSCR);	/* TIE=0,RIE=0,TE=1,RE=1 */
-#if 0 /* defined(CONFIG_SH_SCIF_SERIAL) */
-	ctrl_outw(0x0080, SCSPTR); /* Set RTS = 1 */
-#endif
 	sci_enable_rx_interrupts(port);
 }
 
@@ -661,7 +660,7 @@ static int sci_init_drivers(void)
 	sci_driver.subtype = SERIAL_TYPE_NORMAL;
 	sci_driver.init_termios = tty_std_termios;
 	sci_driver.init_termios.c_cflag =
-		B115200 | CS8 | CREAD | HUPCL | CLOCAL;
+		B115200 | CS8 | CREAD | HUPCL | CLOCAL | CRTSCTS;
 	sci_driver.flags = TTY_DRIVER_REAL_RAW;
 	sci_driver.refcount = &sci_refcount;
 	sci_driver.table = sci_table;
@@ -716,12 +715,6 @@ static int sci_init_drivers(void)
 	return 0;
 }
 
-#ifdef MODULE
-#define sci_init init_module
-#else
-#define sci_init rs_init
-#endif
-
 int __init sci_init(void)
 {
 	struct sci_port *port;
@@ -756,6 +749,8 @@ int __init sci_init(void)
 #endif
 	return 0;		/* Return -EIO when not detected */
 }
+
+module_init(sci_init);
 
 #ifdef MODULE
 #undef func_enter

@@ -100,7 +100,7 @@ static unsigned long get_long(struct task_struct * tsk,
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
+		handle_mm_fault(tsk->mm, vma, addr, 0);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -110,7 +110,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir,addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
+		handle_mm_fault(tsk->mm, vma, addr, 0);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -120,7 +120,7 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
+		handle_mm_fault(tsk->mm, vma, addr, 0);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
@@ -151,7 +151,7 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
+		handle_mm_fault(tsk->mm, vma, addr, 1);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -161,7 +161,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir,addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
+		handle_mm_fault(tsk->mm, vma, addr, 1);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -171,12 +171,12 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
+		handle_mm_fault(tsk->mm, vma, addr, 1);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
+		handle_mm_fault(tsk->mm, vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
@@ -198,7 +198,7 @@ repeat:
 static int read_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long * result)
 {
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
+	struct vm_area_struct * vma = find_extend_vma(tsk->mm, addr);
 
 	if (!vma)
 		return -EIO;
@@ -240,7 +240,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 static int write_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long data)
 {
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
+	struct vm_area_struct * vma = find_extend_vma(tsk->mm, addr);
 
 	if (!vma)
 		return -EIO;

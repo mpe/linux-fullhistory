@@ -6,6 +6,7 @@
 #ifndef __PPC_SYSTEM_H
 #define __PPC_SYSTEM_H
 
+#include <linux/config.h>
 #include <linux/kdev_t.h>
 
 #include <asm/processor.h>
@@ -86,7 +87,7 @@ extern unsigned int rtas_data;
 struct pt_regs;
 extern void dump_regs(struct pt_regs *);
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define cli()	__cli()
 #define sti()	__sti()
@@ -94,7 +95,7 @@ extern void dump_regs(struct pt_regs *);
 #define restore_flags(flags)	__restore_flags(flags)
 #define save_and_cli(flags)	__save_and_cli(flags)
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 extern void __global_cli(void);
 extern void __global_sti(void);
@@ -105,7 +106,7 @@ extern void __global_restore_flags(unsigned long);
 #define save_flags(x) ((x)=__global_save_flags())
 #define restore_flags(x) __global_restore_flags(x)
 
-#endif /* !__SMP__ */
+#endif /* !CONFIG_SMP */
 
 #define local_irq_disable()		__cli()
 #define local_irq_enable()		__sti()

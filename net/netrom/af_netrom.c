@@ -1240,24 +1240,23 @@ static struct net_proto_family nr_family_ops =
 };
 
 static struct proto_ops SOCKOPS_WRAPPED(nr_proto_ops) = {
-	PF_NETROM,
+	family:		PF_NETROM,
 
-	nr_release,
-	nr_bind,
-	nr_connect,
-	sock_no_socketpair,
-	nr_accept,
-	nr_getname,
-	datagram_poll,
-	nr_ioctl,
-	nr_listen,
-	sock_no_shutdown,
-	nr_setsockopt,
-	nr_getsockopt,
-	sock_no_fcntl,
-	nr_sendmsg,
-	nr_recvmsg,
-	sock_no_mmap
+	release:	nr_release,
+	bind:		nr_bind,
+	connect:	nr_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		nr_accept,
+	getname:	nr_getname,
+	poll:		datagram_poll,
+	ioctl:		nr_ioctl,
+	listen:		nr_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	nr_setsockopt,
+	getsockopt:	nr_getsockopt,
+	sendmsg:	nr_sendmsg,
+	recvmsg:	nr_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

@@ -3,7 +3,7 @@
 
    Copyright 1995-2000 Kai Makisara.
 
-   Last modified: Sat Mar 11 10:32:00 2000 by makisara@kai.makisara.local
+   Last modified: Sat Apr 22 14:47:02 2000 by makisara@kai.makisara.local
 */
 
 #ifndef _ST_OPTIONS_H
@@ -30,7 +30,7 @@
    SENSE. */
 #define ST_DEFAULT_BLOCK 0
 
-/* The tape driver buffer size in kilobytes. */
+/* The tape driver buffer size in kilobytes. Must be non-zero. */
 #define ST_BUFFER_BLOCKS 32
 
 /* The number of kilobytes of data in the buffer that triggers an

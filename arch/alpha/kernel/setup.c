@@ -484,7 +484,7 @@ setup_arch(char **cmdline_p)
 	 * Identify the flock of penguins.
 	 */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	setup_smp();
 #endif
 	paging_init();
@@ -930,7 +930,7 @@ int get_cpuinfo(char *buffer)
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
 		       platform_string(), nr_processors);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len += smp_info(buffer+len);
 #endif
 

@@ -40,6 +40,7 @@
  * "current" is in register %ebx during any slow entries.
  */
 
+#include <linux/config.h>
 #include <linux/sys.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
@@ -201,7 +202,7 @@ ENTRY(system_call)
 	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 ENTRY(ret_from_sys_call)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	movl processor(%ebx),%eax
 	shll $5,%eax
 	movl SYMBOL_NAME(softirq_state)(,%eax),%ecx
@@ -256,7 +257,7 @@ badsys:
 
 	ALIGN
 ret_from_exception:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	GET_CURRENT(%ebx)
 	movl processor(%ebx),%eax
 	shll $5,%eax

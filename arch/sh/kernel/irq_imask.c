@@ -43,7 +43,7 @@ static unsigned int startup_imask_irq(unsigned int irq)
 }
 
 static struct hw_interrupt_type imask_irq_type = {
-	"Interrupt using IMASK of SR register",
+	"SR.IMASK",
 	startup_imask_irq,
 	shutdown_imask_irq,
 	enable_imask_irq,
@@ -56,13 +56,13 @@ void static inline set_interrupt_registers(int ip)
 {
 	unsigned long __dummy;
 
-	asm volatile("ldc	%2, $r5_bank\n\t"
+	asm volatile("ldc	%2, $r6_bank\n\t"
 		     "stc	$sr, %0\n\t"
 		     "and	#0xf0, %0\n\t"
-		     "shlr8	%0\n\t"
-		     "cmp/eq	#0x0f, %0\n\t"
-		     "bt	1f	! CLI-ed\n\t"
-		     "stc	$sr, %0\n\t"
+		     "shlr2	%0\n\t"
+		     "cmp/eq	#0x3c, %0\n\t"
+		     "bt/s	1f	! CLI-ed\n\t"
+		     " stc	$sr, %0\n\t"
 		     "and	%1, %0\n\t"
 		     "or	%2, %0\n\t"
 		     "ldc	%0, $sr\n"

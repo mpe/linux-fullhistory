@@ -756,13 +756,20 @@ out:
 	return error;
 }
 
+inline void __put_unused_fd(struct files_struct *files, unsigned int fd)
+{
+	FD_CLR(fd, files->open_fds);
+	if (fd < files->next_fd)
+		files->next_fd = fd;
+}
+
 inline void put_unused_fd(unsigned int fd)
 {
-	write_lock(&current->files->file_lock);
-	FD_CLR(fd, current->files->open_fds);
-	if (fd < current->files->next_fd)
-		current->files->next_fd = fd;
-	write_unlock(&current->files->file_lock);
+	struct files_struct *files = current->files;
+
+	write_lock(&files->file_lock);
+	__put_unused_fd(files, fd);
+	write_unlock(&files->file_lock);
 }
 
 asmlinkage long sys_open(const char * filename, int flags, int mode)
@@ -848,13 +855,13 @@ int do_close(unsigned int fd, int release)
 
 	error = -EBADF;
 	write_lock(&files->file_lock);
-	filp = frip(fd);
+	filp = frip(files, fd);
 	if (!filp)
 		goto out_unlock;
 	FD_CLR(fd, files->close_on_exec);
-	write_unlock(&files->file_lock);
 	if (release)
-		put_unused_fd(fd);
+		__put_unused_fd(files, fd);
+	write_unlock(&files->file_lock);
 	lock_kernel();
 	error = filp_close(filp, files);
 	unlock_kernel();

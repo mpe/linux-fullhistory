@@ -1144,6 +1144,7 @@ W: http://www.image.dk/~nkbj
 D: 4.4BSD and NeXTstep filesystem support in the old ufs.
 D: Openstep filesystem and NeXTstep CDROM support in the new ufs.
 D: Replace CPU==[3-6]86 and __i386__ submodel flags by configuration options.
+D: Replace __SMP__ by CONFIG_SMP.
 D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj

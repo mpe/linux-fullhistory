@@ -1,3 +1,9 @@
+Mon Apr 24 12:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2i
+	- Return value 1 (instead of 0) from the driver setup routine.
+	- Let the driver also attach controllers that have been set to 
+	  OFF in the NVRAM as it did prior to revision 3.2g.
+
 Sat Apr 1  12:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2h
 	- Fix a compilation problem on Alpha introduced in version 3.2g.

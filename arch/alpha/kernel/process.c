@@ -116,7 +116,7 @@ common_shutdown_1(void *generic_ptr)
 	/* Clear reason to "default"; clear "bootstrap in progress". */
 	flags &= ~0x00ff0001UL;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Secondaries halt here. */
 	if (cpuid != boot_cpuid) {
 		flags |= 0x00040000UL; /* "remain halted" */
@@ -145,7 +145,7 @@ common_shutdown_1(void *generic_ptr)
 	}
 	*pflags = flags;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Wait for the secondaries to halt. */
 	clear_bit(boot_cpuid, &cpu_present_mask);
 	while (cpu_present_mask)
@@ -184,7 +184,7 @@ common_shutdown(int mode, char *restart_cmd)
 	struct halt_info args;
 	args.mode = mode;
 	args.restart_cmd = restart_cmd;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_call_function(common_shutdown_1, &args, 1, 0);
 #endif
 	common_shutdown_1(&args);
@@ -321,7 +321,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	stack = ((struct switch_stack *) regs) - 1;
 	childstack = ((struct switch_stack *) childregs) - 1;
 	*childstack = *stack;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	childstack->r26 = (unsigned long) ret_from_smp_fork;
 #else
 	childstack->r26 = (unsigned long) ret_from_sys_call;

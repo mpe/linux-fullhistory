@@ -87,7 +87,6 @@ void __init smp_store_cpu_info(int id)
 {
 	int i;
 
-	cpu_data[id].irq_count			= 0;
 	cpu_data[id].bh_count			= 0;
 	/* multiplier and counter set by
 	   smp_setup_percpu_timer()  */
@@ -656,40 +655,29 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 
 	clear_softint((1UL << 0));
 	do {
-		if(!user)
+		if (!user)
 			sparc64_do_profile(regs->tpc, regs->u_regs[UREG_RETPC]);
-		if(!--prof_counter(cpu))
-		{
+		if (!--prof_counter(cpu)) {
 			if (cpu == boot_cpu_id) {
-/* XXX Keep this in sync with irq.c --DaveM */
-#define irq_enter(cpu, irq)			\
-do {	hardirq_enter(cpu);			\
-	spin_unlock_wait(&global_irq_lock);	\
-} while(0)
-#define irq_exit(cpu, irq)	hardirq_exit(cpu)
-
 				irq_enter(cpu, 0);
-				kstat.irqs[cpu][0]++;
 
+				kstat.irqs[cpu][0]++;
 				timer_tick_interrupt(regs);
 
 				irq_exit(cpu, 0);
-
-#undef irq_enter
-#undef irq_exit
 			}
 
-			if(current->pid) {
+			if (current->pid) {
 				unsigned int *inc, *inc2;
 
 				update_one_process(current, 1, user, !user, cpu);
-				if(--current->counter <= 0) {
+				if (--current->counter <= 0) {
 					current->counter = 0;
 					current->need_resched = 1;
 				}
 
-				if(user) {
-					if(current->priority < DEF_PRIORITY) {
+				if (user) {
+					if (current->priority < DEF_PRIORITY) {
 						inc = &kstat.cpu_nice;
 						inc2 = &kstat.per_cpu_nice[cpu];
 					} else {

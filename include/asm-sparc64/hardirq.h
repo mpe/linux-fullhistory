@@ -7,11 +7,17 @@
 #define __SPARC64_HARDIRQ_H
 
 #include <linux/threads.h>
+#include <linux/brlock.h>
+#include <linux/spinlock.h>
 
 #ifndef __SMP__
 extern unsigned int local_irq_count;
+#define irq_enter(cpu, irq)	(local_irq_count++)
+#define irq_exit(cpu, irq)	(local_irq_count--)
 #else
-#define local_irq_count		(cpu_data[smp_processor_id()].irq_count)
+#define local_irq_count		(__brlock_array[smp_processor_id()][BR_GLOBALIRQ_LOCK])
+#define irq_enter(cpu, irq)	br_read_lock(BR_GLOBALIRQ_LOCK)
+#define irq_exit(cpu, irq)	br_read_unlock(BR_GLOBALIRQ_LOCK)
 #endif
 
 /*
@@ -35,42 +41,35 @@ extern unsigned int local_irq_count;
 
 #else /* (__SMP__) */
 
-#include <asm/atomic.h>
 #include <linux/spinlock.h>
-#include <asm/system.h>
-#include <asm/smp.h>
+
+static __inline__ int irqs_running(void)
+{
+	enum brlock_indices idx = BR_GLOBALIRQ_LOCK;
+	int i, count = 0;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		count += (__brlock_array[cpu_logical_map(i)][idx] != 0);
+
+	return count;
+}
 
 extern unsigned char global_irq_holder;
-extern spinlock_t global_irq_lock;
-extern atomic_t global_irq_count;
 
 static inline void release_irqlock(int cpu)
 {
 	/* if we didn't own the irq lock, just ignore... */
 	if(global_irq_holder == (unsigned char) cpu) {
 		global_irq_holder = NO_PROC_ID;
-		spin_unlock(&global_irq_lock);
+		br_write_unlock(BR_GLOBALIRQ_LOCK);
 	}
-}
-
-static inline void hardirq_enter(int cpu)
-{
-	++(cpu_data[cpu].irq_count);
-	atomic_inc(&global_irq_count);
-	membar("#StoreLoad | #StoreStore");
-}
-
-static inline void hardirq_exit(int cpu)
-{
-	membar("#StoreStore | #LoadStore");
-	atomic_dec(&global_irq_count);
-	--(cpu_data[cpu].irq_count);
 }
 
 static inline int hardirq_trylock(int cpu)
 {
-	return (! atomic_read(&global_irq_count) &&
-		! spin_is_locked (&global_irq_lock));
+	spinlock_t *lock = &__br_write_locks[BR_GLOBALIRQ_LOCK].lock;
+
+	return (!irqs_running() && !spin_is_locked(lock));
 }
 
 #define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)

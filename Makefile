@@ -341,6 +341,10 @@ modules_install:
 	if [ -f PCMCIA_SCSI_MODULES ]; then inst_mod PCMCIA_SCSI_MODULES pcmcia; fi; \
 	\
 	ls -1 -U *.o | sort > $$MODLIB/.allmods; \
+	if [ -f $$MODLIB/net/3c59x.o ]; then \
+		mkdir -p $$MODLIB/pcmcia; \
+		ln -nfs ../net/3c59x.o $$MODLIB/pcmcia/3c575_cb.o; \
+		MODULES="$$MODULES 3c575_cb.o"; fi; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
 	if [ -s $$MODLIB/.misc ]; then inst_mod $$MODLIB/.misc misc; fi; \
 	rm -f $$MODLIB/.misc $$MODLIB/.allmods; \

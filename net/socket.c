@@ -1392,7 +1392,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	sock = socki_lookup (filp->f_dentry->d_inode);
 	if (sock && sock->ops)
-		return sock->ops->fcntl(sock, cmd, arg);
+		return sock_no_fcntl(sock, cmd, arg);
 	return(-EINVAL);
 }
 
@@ -1613,7 +1613,7 @@ int socket_get_info(char *buffer, char **start, off_t offset, int length)
 	int counter = 0;
 
 	for (cpu=0; cpu<smp_num_cpus; cpu++)
-		counter += sockets_in_use[cpu].counter;
+		counter += sockets_in_use[cpu_logical_map(cpu)].counter;
 
 	/* It can be negative, by the way. 8) */
 	if (counter < 0)

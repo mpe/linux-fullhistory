@@ -99,7 +99,7 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	fault = handle_mm_fault(current, vma, address, write);
+	fault = handle_mm_fault(mm, vma, address, write);
 	if (fault < 0)
 		goto out_of_memory;
 	if (!fault)

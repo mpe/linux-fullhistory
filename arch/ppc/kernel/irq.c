@@ -237,13 +237,13 @@ int get_irq_list(char *buf)
 		if ( !action || !action->handler )
 			continue;
 		len += sprintf(buf+len, "%3d: ", i);		
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		for (j = 0; j < smp_num_cpus; j++)
 			len += sprintf(buf+len, "%10u ",
 				kstat.irqs[cpu_logical_map(j)][i]);
 #else		
 		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 		if ( irq_desc[i].handler )		
 			len += sprintf(buf+len, " %s ", irq_desc[i].handler->typename );
 		else
@@ -254,7 +254,7 @@ int get_irq_list(char *buf)
 		}
 		len += sprintf(buf+len, "\n");
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* should this be per processor send/receive? */
 	len += sprintf(buf+len, "IPI: %10lu\n", ipi_count);
 #endif		
@@ -343,7 +343,7 @@ void __init init_IRQ(void)
 	ppc_md.init_IRQ();
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
 atomic_t global_irq_count;
@@ -611,7 +611,7 @@ void __global_restore_flags(unsigned long flags)
 	}
 	}
 }
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 static struct proc_dir_entry * root_irq_dir;
 static struct proc_dir_entry * irq_dir [NR_IRQS];

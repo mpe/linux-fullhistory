@@ -1,6 +1,7 @@
 #ifndef _PPC_PGALLOC_H
 #define _PPC_PGALLOC_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 #include <asm/processor.h>
 
@@ -18,7 +19,7 @@
  * I need to generalize this so we can use it for other arch's as well.
  * -- Cort
  */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define quicklists	cpu_data[smp_processor_id()]
 #else
 extern struct pgtable_cache_struct {
@@ -54,7 +55,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
 	pgd_t *pgd;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int i;
 #endif	
         
@@ -65,7 +66,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 		*pgd_offset(p->mm,address) = entry;
 	}
 	read_unlock(&tasklist_lock);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
 #else

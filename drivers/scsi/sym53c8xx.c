@@ -55,7 +55,7 @@
 */
 
 /*
-**	March 6 2000, sym53c8xx 1.5k
+**	April 24 2000, sym53c8xx 1.5m
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -84,7 +84,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5l"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5m"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -5241,7 +5241,7 @@ static int __init ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 	**	64 bit (53C895A or 53C896) ?
 	*/
 	if (np->features & FE_64BIT)
-#if BITS_PER_LONG > 32
+#ifdef SCSI_NCR_USE_64BIT_DAC
 		np->rv_ccntl1	|= (XTIMOD | EXTIBMV);
 #else
 		np->rv_ccntl1	|= (DDAC);
@@ -11152,7 +11152,7 @@ fail:
 **	code will get more complex later).
 */
 
-#if BITS_PER_LONG > 32
+#ifdef SCSI_NCR_USE_64BIT_DAC
 #define SCATTER_ONE(data, badd, len)					\
 	(data)->addr = cpu_to_scr(badd);				\
 	(data)->size = cpu_to_scr((((badd) >> 8) & 0xff000000) + len);
@@ -11845,7 +11845,7 @@ int __init sym53c8xx_setup(char *str)
 			++cur;
 	}
 #endif /* SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT */
-	return 0;
+	return 1;
 }
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,13)

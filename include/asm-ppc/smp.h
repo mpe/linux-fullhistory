@@ -6,9 +6,10 @@
 #ifndef _PPC_SMP_H
 #define _PPC_SMP_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #ifndef __ASSEMBLY__
 
@@ -50,8 +51,8 @@ extern struct klock_info_struct klock_info;
 
 #endif /* __ASSEMBLY__ */
 
-#else /* !(__SMP__) */
+#else /* !(CONFIG_SMP) */
 
-#endif /* !(__SMP__) */
+#endif /* !(CONFIG_SMP) */
 
 #endif /* !(_PPC_SMP_H) */

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.81 2000/04/13 04:45:58 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.83 2000/04/19 08:38:25 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -81,6 +81,8 @@ extern int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 extern int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
 extern int (*handle_mathemu)(struct pt_regs *, struct fpustate *);
 extern long sparc32_open(const char * filename, int flags, int mode);
+extern int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned int, unsigned int, unsigned long, struct file *));
+extern int unregister_ioctl32_conversion(unsigned int cmd);
                 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -129,8 +131,6 @@ EXPORT_SYMBOL(kernel_flag);
 
 /* Hard IRQ locking */
 EXPORT_SYMBOL(global_irq_holder);
-EXPORT_SYMBOL(global_irq_lock);
-EXPORT_SYMBOL(global_irq_count);
 EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL_PRIVATE(global_cli);
 EXPORT_SYMBOL_PRIVATE(global_sti);
@@ -218,6 +218,10 @@ EXPORT_SYMBOL(pci_dma_sync_single);
 EXPORT_SYMBOL(pci_dma_sync_sg);
 EXPORT_SYMBOL(pci_dma_supported);
 #endif
+
+/* IOCTL32 emulation hooks. */
+EXPORT_SYMBOL(register_ioctl32_conversion);
+EXPORT_SYMBOL(unregister_ioctl32_conversion);
 
 /* Solaris/SunOS binary compatibility */
 EXPORT_SYMBOL(_sigpause_common);

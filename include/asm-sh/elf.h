@@ -66,7 +66,8 @@ typedef struct user_fpu_struct elf_fpregset_t;
   do { _r->regs[0]=0; _r->regs[1]=0; _r->regs[2]=0; _r->regs[3]=0; \
        _r->regs[4]=0; _r->regs[5]=0; _r->regs[6]=0; _r->regs[7]=0; \
        _r->regs[8]=0; _r->regs[9]=0; _r->regs[10]=0; _r->regs[11]=0; \
-       _r->regs[12]=0; _r->regs[13]=0; _r->regs[14]=0; } while (0)
+       _r->regs[12]=0; _r->regs[13]=0; _r->regs[14]=0; \
+       _r->sr = SR_FD; } while (0)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) set_personality(PER_LINUX_32BIT)

@@ -4,6 +4,7 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -34,7 +35,7 @@ extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
  * Force a new ASN for a task.
  */
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 unsigned long last_asn = ASN_FIRST_VERSION;
 #endif
 
@@ -139,7 +140,7 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	fault = handle_mm_fault(current, vma, address, cause > 0);
+	fault = handle_mm_fault(mm, vma, address, cause > 0);
 	up(&mm->mmap_sem);
 
 	if (fault < 0)

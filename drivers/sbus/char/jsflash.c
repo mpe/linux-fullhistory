@@ -301,7 +301,7 @@ static int jsf_ioctl_program(unsigned long arg)
 	if (verify_area(VERIFY_READ, uptr, togo))
 		return -EFAULT;
 	while (togo != 0) {
-		--togo;
+		togo -= 4;
 		copy_from_user(&b.s[0], uptr, 4);
 		jsf_write4(p, b.n);
 		p += 4;

@@ -397,23 +397,23 @@ static int svc_getsockopt(struct socket *sock,int level,int optname,
 
 
 static struct proto_ops SOCKOPS_WRAPPED(svc_proto_ops) = {
-	PF_ATMSVC,
-	svc_release,
-	svc_bind,
-	svc_connect,
-	sock_no_socketpair,
-	svc_accept,
-	svc_getname,
-	atm_poll,
-	atm_ioctl,
-	svc_listen,
-	svc_shutdown,
-	svc_setsockopt,
-	svc_getsockopt,
-	sock_no_fcntl,
-	atm_sendmsg,
-	atm_recvmsg,
-	sock_no_mmap
+	family:		PF_ATMSVC,
+
+	release:	svc_release,
+	bind:		svc_bind,
+	connect:	svc_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		svc_accept,
+	getname:	svc_getname,
+	poll:		atm_poll,
+	ioctl:		atm_ioctl,
+	listen:		svc_listen,
+	shutdown:	svc_shutdown,
+	setsockopt:	svc_setsockopt,
+	getsockopt:	svc_getsockopt,
+	sendmsg:	atm_sendmsg,
+	recvmsg:	atm_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 

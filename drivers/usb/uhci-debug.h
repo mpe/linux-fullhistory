@@ -14,7 +14,7 @@
 
 #include "uhci.h"
 
-void uhci_show_td(struct uhci_td * td)
+void uhci_show_td(struct uhci_td *td)
 {
 	char *spid;
 
@@ -127,6 +127,62 @@ struct uhci_td *uhci_link_to_td(unsigned int link)
 		return NULL;
 
 	return bus_to_virt(link & ~UHCI_PTR_BITS);
+}
+
+void uhci_show_urb_queue(struct urb *urb)
+{
+	struct urb_priv *urbp = urb->hcpriv;
+	struct list_head *head, *tmp;
+	int i, checked = 0, prevactive = 0;
+
+	printk("  URB [%p] urbp [%p]\n", urb, urbp);
+
+	if (urbp->qh)
+		printk("    QH [%p]\n", urbp->qh);
+	else
+		printk("    QH [%p] element (%08x) link (%08x)\n", urbp->qh,
+			urbp->qh->element, urbp->qh->link);
+
+	i = 0;
+
+	head = &urbp->list;
+	tmp = head->next;
+	while (tmp != head) {
+		struct uhci_td *td = list_entry(tmp, struct uhci_td, list);
+
+		tmp = tmp->next;
+
+		printk("      td %d: [%p]\n", i++, td);
+		printk("      ");
+		uhci_show_td(td);
+
+		if (i > 10 && !checked && prevactive && tmp != head) {
+			struct list_head *ntmp = tmp;
+			struct uhci_td *ntd = td;
+			int active = 1, ni = i;
+
+			checked = 1;
+
+			while (ntmp != head && ntmp->next != head && active) {
+				ntd = list_entry(ntmp, struct uhci_td, list);
+
+				ntmp = ntmp->next;
+
+				active = ntd->status & TD_CTRL_ACTIVE;
+
+				ni++;
+			}
+
+			if (active && ni > i) {
+				printk("      [skipped %d active TD's]\n", ni - i);
+				tmp = ntmp;
+				td = ntd;
+				i = ni;
+			}
+		}
+
+		prevactive = td->status & TD_CTRL_ACTIVE;
+	}
 }
 
 void uhci_show_queue(struct uhci_qh *qh)

@@ -905,7 +905,7 @@ struct cdrom_mechstat_header {
 #endif
 	__u8     curlba[3];
 	__u8     nslots;
-	__u8 short slot_tablelen;
+	__u16 slot_tablelen;
 };
 
 struct cdrom_slot {

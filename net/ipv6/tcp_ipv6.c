@@ -2080,24 +2080,23 @@ out_no_bh:
 }
 
 struct proto tcpv6_prot = {
-	tcp_close,			/* close */
-	tcp_v6_connect,			/* connect */
-	tcp_disconnect,			/* disconnect */
-	tcp_accept,			/* accept */
-	tcp_ioctl,			/* ioctl */
-	tcp_v6_init_sock,		/* init */
-	tcp_v6_destroy_sock,		/* destroy */
-	tcp_shutdown,			/* shutdown */
-	tcp_setsockopt,			/* setsockopt */
-	tcp_getsockopt,			/* getsockopt */
-	tcp_sendmsg,			/* sendmsg */
-	tcp_recvmsg,			/* recvmsg */
-	NULL,				/* bind */
-	tcp_v6_do_rcv,			/* backlog_rcv */
-	tcp_v6_hash,			/* hash */
-	tcp_unhash,			/* unhash */
-	tcp_v6_get_port,		/* get_port */
-	"TCPv6",			/* name */
+	name:		"TCPv6",
+	close:		tcp_close,
+	connect:	tcp_v6_connect,
+	disconnect:	tcp_disconnect,
+	accept:		tcp_accept,
+	ioctl:		tcp_ioctl,
+	init:		tcp_v6_init_sock,
+	destroy:	tcp_v6_destroy_sock,
+	shutdown:	tcp_shutdown,
+	setsockopt:	tcp_setsockopt,
+	getsockopt:	tcp_getsockopt,
+	sendmsg:	tcp_sendmsg,
+	recvmsg:	tcp_recvmsg,
+	backlog_rcv:	tcp_v6_do_rcv,
+	hash:		tcp_v6_hash,
+	unhash:		tcp_unhash,
+	get_port:	tcp_v6_get_port,
 };
 
 static struct inet6_protocol tcpv6_protocol =

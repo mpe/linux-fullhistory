@@ -44,7 +44,7 @@
 /* stall/wait timeout for rio */
 #define NAK_TIMEOUT (HZ)
 
-#define IBUF_SIZE 128
+#define IBUF_SIZE 0x1000
 
 /* Size of the rio buffer */
 #define OBUF_SIZE 0x10000
@@ -317,7 +317,7 @@ read_rio(struct file *file, char *buffer, size_t count, loff_t * ppos)
 		result = usb_bulk_msg(rio->rio_dev,
 				      usb_rcvbulkpipe(rio->rio_dev, 1),
 				      ibuf, this_read, &partial,
-				      (int) (HZ * .1));
+				      (int) (HZ * 8));
 
 		dbg(KERN_DEBUG "read stats: result:%d this_read:%u partial:%u",
 		       result, this_read, partial);

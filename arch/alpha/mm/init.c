@@ -37,7 +37,7 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
 
 struct thread_struct original_pcb;
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 struct pgtable_cache_struct quicklists;
 #endif
 

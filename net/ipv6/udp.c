@@ -972,24 +972,20 @@ out:
 }
 
 struct proto udpv6_prot = {
-	udpv6_close,			/* close */
-	udpv6_connect,			/* connect */
-	udp_disconnect,			/* disconnect */
-	NULL,				/* accept */
-	udp_ioctl,			/* ioctl */
-	NULL,				/* init */
-	inet6_destroy_sock,		/* destroy */
-	NULL,				/* shutdown */
-	ipv6_setsockopt,		/* setsockopt */
-	ipv6_getsockopt,		/* getsockopt */
-	udpv6_sendmsg,			/* sendmsg */
-	udpv6_recvmsg,			/* recvmsg */
-	NULL,				/* bind */
-	udpv6_queue_rcv_skb,		/* backlog_rcv */
-	udp_v6_hash,			/* hash */
-	udp_v6_unhash,			/* unhash */
-	udp_v6_get_port,		/* get_port */
-	"UDP",				/* name */
+	name:		"UDP",
+	close:		udpv6_close,
+	connect:	udpv6_connect,
+	disconnect:	udp_disconnect,
+	ioctl:		udp_ioctl,
+	destroy:	inet6_destroy_sock,
+	setsockopt:	ipv6_setsockopt,
+	getsockopt:	ipv6_getsockopt,
+	sendmsg:	udpv6_sendmsg,
+	recvmsg:	udpv6_recvmsg,
+	backlog_rcv:	udpv6_queue_rcv_skb,
+	hash:		udp_v6_hash,
+	unhash:		udp_v6_unhash,
+	get_port:	udp_v6_get_port,
 };
 
 void __init udpv6_init(void)

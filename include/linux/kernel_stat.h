@@ -1,6 +1,7 @@
 #ifndef _LINUX_KERNEL_STAT_H
 #define _LINUX_KERNEL_STAT_H
 
+#include <linux/config.h>
 #include <asm/irq.h>
 #include <linux/smp.h>
 #include <linux/threads.h>
@@ -25,7 +26,9 @@ struct kernel_stat {
 	unsigned int dk_drive_wblk[DK_NDRIVE];
 	unsigned int pgpgin, pgpgout;
 	unsigned int pswpin, pswpout;
+#if !defined(CONFIG_ARCH_S390)
 	unsigned int irqs[NR_CPUS][NR_IRQS];
+#endif
 	unsigned int ipackets, opackets;
 	unsigned int ierrors, oerrors;
 	unsigned int collisions;
@@ -34,6 +37,7 @@ struct kernel_stat {
 
 extern struct kernel_stat kstat;
 
+#if !defined(CONFIG_ARCH_S390)
 /*
  * Number of interrupts per specific IRQ source, since bootup
  */
@@ -46,5 +50,6 @@ extern inline int kstat_irqs (int irq)
 
 	return sum;
 }
+#endif
 
 #endif /* _LINUX_KERNEL_STAT_H */

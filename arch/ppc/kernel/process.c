@@ -154,7 +154,7 @@ dump_altivec(struct pt_regs *regs, elf_vrregset_t *vrregs)
 void 
 enable_kernel_altivec(void)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (current->thread.regs && (current->thread.regs->msr & MSR_VEC))
 		giveup_altivec(current);
 	else
@@ -169,14 +169,14 @@ enable_kernel_altivec(void)
 void
 enable_kernel_fp(void)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (current->thread.regs && (current->thread.regs->msr & MSR_FP))
 		giveup_fpu(current);
 	else
 		giveup_fpu(NULL);	/* just enables FP for kernel */
 #else
 	giveup_fpu(last_task_used_math);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 }
 
 int
@@ -208,7 +208,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	       new->comm,new->pid,new->thread.regs->nip,new->processor,
 	       new->fs->root,prev->fs->root);
 #endif
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* avoid complexity of lazy save/restore of fpu
 	 * by just saving it every time we switch out if
 	 * this task used the fpu during the last quantum.
@@ -236,7 +236,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 #endif /* CONFIG_ALTIVEC */	
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* Avoid the trap.  On smp this this never happens since
 	 * we don't set last_task_used_altivec -- Cort
 	 */
@@ -265,9 +265,9 @@ void show_regs(struct pt_regs * regs)
 	printk("\nlast math %p last altivec %p", last_task_used_math,
 	       last_task_used_altivec);
 	
-#ifdef __SMP__	
+#ifdef CONFIG_SMP
 	printk(" CPU: %d last CPU: %d", current->processor,current->last_processor);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	
 	printk("\n");
 	for (i = 0;  i < 32;  i++)
@@ -319,7 +319,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 {
 	unsigned long msr;
 	struct pt_regs * childregs, *kregs;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	extern void ret_from_smpfork(void);
 #else
 	extern void ret_from_except(void);
@@ -336,7 +336,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->thread.ksp = (unsigned long) childregs - STACK_FRAME_OVERHEAD;
 	p->thread.ksp -= sizeof(struct pt_regs ) + STACK_FRAME_OVERHEAD;
 	kregs = (struct pt_regs *)(p->thread.ksp + STACK_FRAME_OVERHEAD);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	kregs->nip = (unsigned long)ret_from_smpfork;
 #else	
 	kregs->nip = (unsigned long)ret_from_except;
@@ -378,9 +378,9 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	childregs->msr &= ~MSR_VEC;
 #endif /* CONFIG_ALTIVEC */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	p->last_processor = NO_PROC_ID;
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	return 0;
 }
 
@@ -447,14 +447,14 @@ asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
 	int res;
 	lock_kernel();
 	res = do_fork(clone_flags, regs->gpr[1], regs);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* When we clone the idle task we keep the same pid but
 	 * the return value of 0 for both causes problems.
 	 * -- Cort
 	 */
 	if ((current->pid == 0) && (current == &init_task))
 		res = 1;
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	unlock_kernel();
 	return res;
 }
@@ -466,14 +466,14 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 	int res;
 	
 	res = do_fork(SIGCHLD, regs->gpr[1], regs);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* When we clone the idle task we keep the same pid but
 	 * the return value of 0 for both causes problems.
 	 * -- Cort
 	 */
 	if ((current->pid == 0) && (current == &init_task))
 		res = 1;
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	return res;
 }
 

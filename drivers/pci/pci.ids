@@ -1437,14 +1437,22 @@
 	3390  Token Link Velocity
 	3590  3c359 TokenLink Velocity XL
 		10b7 3590  TokenLink Velocity XL Adapter
+	4500  3c450 Cyclone/unknown
+	5055  3c555 Laptop Hurricane
 	5057  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus PC Card
 	5157  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5b57  3C575 Megahertz 10/100 LAN Cardbus PC Card
+	5257  3CCFE575CT Cyclone CardBus
 	5900  3c590 10BaseT [Vortex]
+	5920  3c592 EISA 10mbps Demon/Vortex
 	5950  3c595 100BaseTX [Vortex]
 	5951  3c595 100BaseT4 [Vortex]
 	5952  3c595 100Base-MII [Vortex]
+	5970  3c597 EISA Fast Demon/Vortex
+	6560  3CCFE656 Cyclone CardBus
+	6562  3CCFEM656 Cyclone CardBus
+	7646  3cSOHO100-TX Hurricane
 	8811  Token ring
 	9000  3c900 10BaseT [Boomerang]
 	9001  3c900 Combo [Boomerang]

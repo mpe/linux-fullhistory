@@ -1410,24 +1410,23 @@ static struct net_proto_family rose_family_ops = {
 };
 
 static struct proto_ops SOCKOPS_WRAPPED(rose_proto_ops) = {
-	PF_ROSE,
+	family:		PF_ROSE,
 
-	rose_release,
-	rose_bind,
-	rose_connect,
-	sock_no_socketpair,
-	rose_accept,
-	rose_getname,
-	datagram_poll,
-	rose_ioctl,
-	rose_listen,
-	sock_no_shutdown,
-	rose_setsockopt,
-	rose_getsockopt,
-	sock_no_fcntl,
-	rose_sendmsg,
-	rose_recvmsg,
-	sock_no_mmap
+	release:	rose_release,
+	bind:		rose_bind,
+	connect:	rose_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		rose_accept,
+	getname:	rose_getname,
+	poll:		datagram_poll,
+	ioctl:		rose_ioctl,
+	listen:		rose_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	rose_setsockopt,
+	getsockopt:	rose_getsockopt,
+	sendmsg:	rose_sendmsg,
+	recvmsg:	rose_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

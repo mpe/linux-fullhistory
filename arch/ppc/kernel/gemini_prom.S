@@ -10,6 +10,7 @@
 
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
+#include <linux/config.h>
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/gemini.h>
@@ -25,7 +26,7 @@
 
 _GLOBAL(prom_init)
 _GLOBAL(gemini_prom_init)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Since the MMU's on, get stuff in rom space that we'll need */
 	lis	r4,GEMINI_CPUSTAT@h
 	ori	r4,r4,GEMINI_CPUSTAT@l
@@ -74,14 +75,14 @@ prom_no_mmu:
 	addi	r3,r3,1
 	bdnz	3b
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* The 750 book (and Mot/IBM support) says that this will "assist" snooping
 	   when in SMP.  Not sure yet whether this should stay or leave... */
 	mfspr	r4,HID0
 	ori	r4,r4,HID0_ABE
 	mtspr	HID0,r4
 	sync
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	blr
 
 /*  apparently, SMon doesn't pay attention to HID0[SRST].  Disable the MMU and

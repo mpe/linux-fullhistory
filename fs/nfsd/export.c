@@ -103,23 +103,6 @@ out:
 	return exp;
 }
 
-
-/*
- * Look up the device of the parent fs.
- */
-static inline int
-nfsd_parentdev(kdev_t *devp)
-{
-	struct super_block	*sb;
-
-	if (!(sb = get_super(*devp)) || !sb->s_root->d_covers)
-		return 0;
-	if (*devp == sb->s_root->d_covers->d_inode->i_dev)
-		return 0;
-	*devp = sb->s_root->d_covers->d_inode->i_dev;
-	return 1;
-}
-
 /*
  * Find the export entry for a given dentry.  <gam3@acm.org>
  */
@@ -127,36 +110,13 @@ static svc_export *
 exp_parent(svc_client *clp, kdev_t dev, struct dentry *dentry)
 {
 	svc_export      *exp;
-	kdev_t		xdev = dev;
-	struct dentry	*xdentry = dentry;
-	struct dentry	*ndentry = NULL;
 
-	if (clp == NULL || dentry == NULL)
+	if (clp == NULL)
 		return NULL;
 
-	do {
-		xdev = dev;
-		do {
-			exp = clp->cl_export[EXPORT_HASH(xdev)];
-			if (exp)
-				do {
-					ndentry = exp->ex_dentry;
-				        if (ndentry == xdentry) {
-#ifdef NFSD_PARANOIA
-if (dev == xdev)
-	dprintk("nfsd: exp_parent submount over mount.\n");
-else
-	dprintk("nfsd: exp_parent found.\n");
-#endif
-						goto out;
-					}
-				} while (NULL != (exp = exp->ex_next));
-		} while (nfsd_parentdev(&xdev));
-		if (IS_ROOT(xdentry))
+	for (exp = clp->cl_export[EXPORT_HASH(dev)]; exp; exp = exp->ex_next)
+		if (is_subdir(dentry, exp->ex_dentry))
 			break;
-	} while ((xdentry = xdentry->d_parent));
-	exp = NULL;
-out:
 	return exp;
 }
 
@@ -169,30 +129,15 @@ static svc_export *
 exp_child(svc_client *clp, kdev_t dev, struct dentry *dentry)
 {
 	svc_export      *exp;
-	struct dentry	*xdentry = dentry;
-	struct dentry	*ndentry = NULL;
 
-	if (clp == NULL || dentry == NULL)
+	if (clp == NULL)
 		return NULL;
 
-	exp = clp->cl_export[EXPORT_HASH(dev)];
-	if (exp)
-		do {
-			ndentry = exp->ex_dentry;
-			if (ndentry)
-				while ((ndentry = ndentry->d_parent)) {
-					if (ndentry == xdentry) {
-#ifdef NFSD_PARANOIA
-dprintk("nfsd: exp_child mount under submount.\n");
-#endif
-						goto out;
-					}
-					if (IS_ROOT(ndentry))
-						break;
-				}
-		} while (NULL != (exp = exp->ex_next));
-	exp = NULL;
-out:
+	for (exp = clp->cl_export[EXPORT_HASH(dev)]; exp; exp = exp->ex_next) {
+		struct dentry	*ndentry = exp->ex_dentry;
+		if (ndentry && is_subdir(ndentry->d_parent, dentry))
+			break;
+	}
 	return exp;
 }
 
@@ -279,10 +224,8 @@ exp_export(struct nfsctl_export *nxp)
 	}
 	/* Is this is a sub-export, must be a proper subset of FS */
 	if ((parent = exp_parent(clp, dev, dentry)) != NULL) {
-		if (dev == parent->ex_dev) {
-			dprintk("exp_export: sub-export not valid (Rule 2).\n");
-			goto finish;
-		}
+		dprintk("exp_export: sub-export not valid (Rule 2).\n");
+		goto finish;
 	}
 
 	err = -ENOMEM;

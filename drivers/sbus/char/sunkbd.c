@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/sysrq.h>
+#include <linux/spinlock.h>
 #include <linux/devfs_fs_kernel.h>
 
 #include <asm/kbio.h>
@@ -89,6 +90,8 @@ int keyboard_wait_for_keypress(struct console *co)
 	sleep_on(&keypress_wait);
 	return 0;
 }
+
+static spinlock_t sunkbd_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * global state includes the following, and various static variables
@@ -255,6 +258,7 @@ static unsigned char sunkbd_clickp;
 static void nop_kbd_put_char(unsigned char c) { }
 static void (*kbd_put_char)(unsigned char) = nop_kbd_put_char;
 
+/* Must be invoked under sunkbd_lock. */
 static inline void send_cmd(unsigned char c)
 {
 	kbd_put_char(c);
@@ -429,6 +433,7 @@ int sun_getkeycode(unsigned int scancode)
 	    e0_keys[scancode - 128];
 }
 
+static void __sunkbd_inchar(unsigned char ch, struct pt_regs *regs);
 void sunkbd_inchar(unsigned char ch, struct pt_regs *regs);
 static void keyboard_timer (unsigned long ignored);
 
@@ -443,16 +448,17 @@ keyboard_timer (unsigned long ignored)
 {
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&sunkbd_lock, flags);
 
 	/* Auto repeat: send regs = 0 to indicate autorepeat */
-	sunkbd_inchar (last_keycode, 0);
+	__sunkbd_inchar (last_keycode, 0);
 	del_timer (&auto_repeat_timer);
 	if (kbd_rate_ticks) {
 		auto_repeat_timer.expires = jiffies + kbd_rate_ticks;
 		add_timer (&auto_repeat_timer);
 	}
-	restore_flags(flags);
+
+	spin_unlock_irqrestore(&sunkbd_lock, flags);
 }
 
 #ifndef CONFIG_PCI
@@ -460,8 +466,10 @@ DECLARE_TASKLET_DISABLED(keyboard_tasklet, sun_kbd_bh, 0);
 #endif
 
 /* #define SKBD_DEBUG */
-/* This is our keyboard 'interrupt' routine. */
-void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
+/* This is our keyboard 'interrupt' routine.
+ * Must run under sunkbd_lock.
+ */
+static void __sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 {
 	unsigned char keycode;
 	char up_flag;                          /* 0 or SUNKBD_UBIT */
@@ -610,6 +618,15 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	}
 out:
 	tasklet_schedule(&keyboard_tasklet);
+}
+
+void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&sunkbd_lock, flags);
+	__sunkbd_inchar(ch, regs);
+	spin_unlock_irqrestore(&sunkbd_lock, flags);
 }
 
 static void put_queue(int ch)
@@ -1164,15 +1181,21 @@ static inline unsigned char getleds(void){
 static unsigned char sunkbd_ledstate = 0xff; /* undefined */
 void sun_kbd_bh(unsigned long dummy)
 {
-	unsigned char leds = getleds();
-	unsigned char kbd_leds = vcleds_to_sunkbd(leds);
+	unsigned long flags;
+	unsigned char leds, kbd_leds;
 
+	spin_lock_irqsave(&sunkbd_lock, flags);
+
+	leds = getleds();
+	kbd_leds = vcleds_to_sunkbd(leds);
 	if (kbd_leds != sunkbd_ledstate) {
 		ledstate = leds;
 		sunkbd_ledstate = kbd_leds;
 		send_cmd(SKBDCMD_SETLED);
 		send_cmd(kbd_leds);
 	}
+
+	spin_unlock_irqrestore(&sunkbd_lock, flags);
 }
 
 /* Support for keyboard "beeps". */ 
@@ -1180,7 +1203,11 @@ void sun_kbd_bh(unsigned long dummy)
 /* Timer routine to turn off the beep after the interval expires. */
 static void sunkbd_kd_nosound(unsigned long __unused)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&sunkbd_lock, flags);
 	send_cmd(SKBDCMD_BELLOFF);
+	spin_unlock_irqrestore(&sunkbd_lock, flags);
 }
 
 /*
@@ -1195,8 +1222,7 @@ static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
 						 sunkbd_kd_nosound };
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&sunkbd_lock, flags);
 
 	del_timer(&sound_timer);
 
@@ -1209,7 +1235,7 @@ static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 	} else
 		send_cmd(SKBDCMD_BELLOFF);
 
-	restore_flags(flags);
+	spin_unlock_irqrestore(&sunkbd_lock, flags);
 }
 
 extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
@@ -1260,6 +1286,7 @@ int __init sun_kbd_init(void)
 #define KBD_QSIZE 32
 static Firm_event kbd_queue [KBD_QSIZE];
 static int kbd_head, kbd_tail;
+static spinlock_t kbd_queue_lock = SPIN_LOCK_UNLOCKED;
 char kbd_opened;
 static int kbd_active = 0;
 static DECLARE_WAIT_QUEUE_HEAD(kbd_wait);
@@ -1268,16 +1295,22 @@ static struct fasync_struct *kb_fasync;
 void
 push_kbd (int scan)
 {
-	int next = (kbd_head + 1) % KBD_QSIZE;
+	unsigned long flags;
+	int next;
 
 	if (scan == KBD_IDLE)
 		return;
+
+	spin_lock_irqsave(&kbd_queue_lock, flags);
+	next = (kbd_head + 1) % KBD_QSIZE;
 	if (next != kbd_tail){
 		kbd_queue [kbd_head].id = scan & KBD_KEYMASK;
 		kbd_queue [kbd_head].value=scan & KBD_UP ? VKEY_UP : VKEY_DOWN;
 		kbd_queue [kbd_head].time = xtime;
 		kbd_head = next;
 	}
+	spin_unlock_irqrestore(&kbd_queue_lock, flags);
+
 	if (kb_fasync)
 		kill_fasync (kb_fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&kbd_wait);
@@ -1287,6 +1320,7 @@ static ssize_t
 kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 {
 	DECLARE_WAITQUEUE(wait, current);
+	unsigned long flags;
 	char *end, *p;
 
 	/* Return EWOULDBLOCK, because this is what the X server expects */
@@ -1294,9 +1328,11 @@ kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 		if (f->f_flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 		add_wait_queue (&kbd_wait, &wait);
-		while (kbd_head == kbd_tail && !signal_pending(current)) {
-			current->state = TASK_INTERRUPTIBLE;
-			schedule ();
+repeat:
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (kbd_head == kbd_tail && !signal_pending(current)) {
+			schedule();
+			goto repeat;
 		}
 		current->state = TASK_RUNNING;
 		remove_wait_queue (&kbd_wait, &wait);
@@ -1304,29 +1340,40 @@ kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 	/* There is data in the keyboard, fill the user buffer */
 	end = buffer+count;
 	p = buffer;
+	spin_lock_irqsave(&kbd_queue_lock, flags);
 	for (; p < end && kbd_head != kbd_tail;){
+		Firm_event this_event = kbd_queue[kbd_tail];
+
+		kbd_tail = (kbd_tail + 1) % KBD_QSIZE;
+
+		spin_unlock_irqrestore(&kbd_queue_lock, flags);
+
 #ifdef CONFIG_SPARC32_COMPAT
 		if (current->thread.flags & SPARC_FLAG_32BIT) {
-			copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], 
-					 sizeof(Firm_event)-sizeof(struct timeval), -EFAULT);
+			copy_to_user_ret((Firm_event *)p, &this_event,
+					 sizeof(Firm_event)-sizeof(struct timeval),
+					 -EFAULT);
 			p += sizeof(Firm_event)-sizeof(struct timeval);
-			__put_user_ret(kbd_queue[kbd_tail].time.tv_sec, (u32 *)p, -EFAULT);
+			__put_user_ret(this_event.time.tv_sec, (u32 *)p, -EFAULT);
 			p += sizeof(u32);
-			__put_user_ret(kbd_queue[kbd_tail].time.tv_usec, (u32 *)p, -EFAULT);
+			__put_user_ret(this_event.time.tv_usec, (u32 *)p, -EFAULT);
 			p += sizeof(u32);
 		} else
 #endif
 		{
-			copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], 
+			copy_to_user_ret((Firm_event *)p, &this_event, 
 					 sizeof(Firm_event), -EFAULT);
 			p += sizeof (Firm_event);
 		}
 #ifdef KBD_DEBUG
-		printk ("[%s]", kbd_queue [kbd_tail].value == VKEY_UP ? "UP" : "DOWN");
+		printk ("[%s]", this_event.value == VKEY_UP ? "UP" : "DOWN");
 #endif
-		kbd_tail++;
-		kbd_tail %= KBD_QSIZE;
+
+		spin_lock_irqsave(&kbd_queue_lock, flags);
 	}
+
+	spin_unlock_irqrestore(&kbd_queue_lock, flags);
+
 	return p-buffer;
 }
 
@@ -1387,7 +1434,9 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 		switch (c) {
 			case SKBDCMD_CLICK:
 			case SKBDCMD_NOCLICK:
+				spin_lock_irq(&sunkbd_lock);
 				send_cmd(c);
+				spin_unlock_irq(&sunkbd_lock);
 				return 0;
 			case SKBDCMD_BELLON:
 				kd_mksound(1,0);
@@ -1469,7 +1518,11 @@ kbd_open (struct inode *i, struct file *f)
 		return 0;
 
 	kbd_opened = fg_console + 1;
+
+	spin_lock_irq(&kbd_queue_lock);
 	kbd_head = kbd_tail = 0;
+	spin_unlock_irq(&kbd_queue_lock);
+
 	return 0;
 }
 
@@ -1537,6 +1590,8 @@ void __init keyboard_zsinit(void (*put_char)(unsigned char))
 	if(sunkbd_type == SUNKBD_TYPE2)
 		sunkbd_clickp = 0;
 
+	spin_lock_irq(&sunkbd_lock);
+
 	if(sunkbd_clickp) {
 		send_cmd(SKBDCMD_CLICK);
 		printk("with keyclick\n");
@@ -1548,6 +1603,8 @@ void __init keyboard_zsinit(void (*put_char)(unsigned char))
 	/* Dork with led lights, then turn them all off */
 	send_cmd(SKBDCMD_SETLED); send_cmd(0xf); /* All on */
 	send_cmd(SKBDCMD_SETLED); send_cmd(0x0); /* All off */
+
+	spin_unlock_irq(&sunkbd_lock);
 
 	/* Register the /dev/kbd interface */
 	devfs_register (NULL, "kbd", 0, DEVFS_FL_NONE,

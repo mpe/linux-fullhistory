@@ -15,7 +15,7 @@
  You might find some interesting stuff about this module at
  http://unimut.fsk.uni-heidelberg.de/unimut/demi/dsbr
 
- Copyright (c) 2000 Markus Demleitner
+ Copyright (c) 2000 Markus Demleitner <msdemlei@tucana.harvard.edu>
 
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -33,9 +33,12 @@
 
  History:
 
+ Version 0.22:
+ 	Markus: Some (brown bag) cleanup in what VIDIOCSTUNER returns, 
+	thanks to Mike Cox for pointing the problem out.
+
  Version 0.21:
- 	Markus Demleitner <msdemlei@tucana.harvard.edu>:
-	Minor cleanup, warnings if something goes wrong, lame attempt
+ 	Markus: Minor cleanup, warnings if something goes wrong, lame attempt
 	to adhere to Documentation/CodingStyle
 
  Version 0.2: 
@@ -212,13 +215,14 @@ static int usb_dsbr100_ioctl(struct video_device *dev, unsigned int cmd,
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow=(87*16000);
-			v.rangehigh=(108*16000);
-			/*v.flags=VIDEO_TUNER_LOW;*/
-			v.mode=VIDEO_MODE_AUTO;
-			v.signal=radio->stereo;
-			v.flags|=VIDEO_TUNER_STEREO_ON;
-			strcpy(v.name, "FM");
+			v.rangelow = 87*16;
+			v.rangehigh = 108*16;
+			v.flags = VIDEO_TUNER_LOW;
+			v.mode = VIDEO_MODE_AUTO;
+			v.signal = radio->stereo*0x7000;
+				/* Don't know how to get signal strength */
+			v.flags |= VIDEO_TUNER_STEREO_ON*radio->stereo;
+			strcpy(v.name, "DSB R-100");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;
 			return 0;

@@ -235,8 +235,6 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	struct irqaction * action;
 	unsigned int status;
 
-	regs.syscall_nr = -1;	/* It's not system call */
-
 	/* Get IRQ number */
 	asm volatile("stc	$r2_bank, %0\n\t"
 		     "shlr2	%0\n\t"

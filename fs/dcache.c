@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
+#include <linux/cache.h>
 
 #include <asm/uaccess.h>
 
@@ -40,11 +41,12 @@ kmem_cache_t *dentry_cache;
  * This hash-function tries to avoid losing too many bits of hash
  * information, yet avoid using a prime hash-size or similar.
  */
-#define D_HASHBITS     14
-#define D_HASHSIZE     (1UL << D_HASHBITS)
-#define D_HASHMASK     (D_HASHSIZE-1)
+#define D_HASHBITS     d_hash_shift
+#define D_HASHMASK     d_hash_mask
 
-static struct list_head dentry_hashtable[D_HASHSIZE];
+static unsigned int d_hash_mask;
+static unsigned int d_hash_shift;
+static struct list_head *dentry_hashtable;
 static LIST_HEAD(dentry_unused);
 
 struct {
@@ -635,7 +637,7 @@ struct dentry * d_alloc_root(struct inode * root_inode)
 
 static inline struct list_head * d_hash(struct dentry * parent, unsigned long hash)
 {
-	hash += (unsigned long) parent;
+	hash += (unsigned long) parent / L1_CACHE_BYTES;
 	hash = hash ^ (hash >> D_HASHBITS) ^ (hash >> D_HASHBITS*2);
 	return dentry_hashtable + (hash & D_HASHMASK);
 }
@@ -1054,10 +1056,12 @@ out:
 	return ino;
 }
 
-void __init dcache_init(void)
+void __init dcache_init(unsigned long mempages)
 {
+	struct list_head *d;
+	unsigned long order;
+	unsigned int nr_hash;
 	int i;
-	struct list_head *d = dentry_hashtable;
 
 	/* 
 	 * A constructor could be added for stable state like the lists,
@@ -1075,7 +1079,34 @@ void __init dcache_init(void)
 	if (!dentry_cache)
 		panic("Cannot create dentry cache");
 
-	i = D_HASHSIZE;
+	mempages >>= (13 - PAGE_SHIFT);
+	mempages *= sizeof(struct list_head);
+	for (order = 0; ((1UL << order) << PAGE_SHIFT) < mempages; order++)
+		;
+
+	do {
+		unsigned long tmp;
+
+		nr_hash = (1UL << order) * PAGE_SIZE /
+			sizeof(struct list_head);
+		d_hash_mask = (nr_hash - 1);
+
+		tmp = nr_hash;
+		d_hash_shift = 0;
+		while ((tmp >>= 1UL) != 0UL)
+			d_hash_shift++;
+
+		dentry_hashtable = (struct list_head *)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (dentry_hashtable == NULL && --order >= 0);
+
+	if (!dentry_hashtable)
+		panic("Failed to allocate dcache hash table\n");
+
+	printk("VFS: DCACHE hash table configured to %d entries\n", nr_hash);
+
+	d = dentry_hashtable;
+	i = nr_hash;
 	do {
 		INIT_LIST_HEAD(d);
 		d++;

@@ -884,23 +884,23 @@ static int spx_getsockopt(struct socket *sock, int level, int optname,
 }
 
 static struct proto_ops SOCKOPS_WRAPPED(spx_ops) = {
-        PF_IPX,
-        spx_release,
-        spx_bind,
-        spx_connect,
-        sock_no_socketpair,
-        spx_accept,
-	spx_getname,
-        spx_datagram_poll,
-	spx_ioctl,
-        spx_listen,
-        sock_no_shutdown,
-	spx_setsockopt,
-	spx_getsockopt,
-        sock_no_fcntl,
-        spx_sendmsg,
-        spx_recvmsg,
-	sock_no_mmap
+	family:		PF_IPX,
+
+	release:	spx_release,
+	bind:		spx_bind,
+	connect:	spx_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		spx_accept,
+	getname:	spx_getname,
+	poll:		spx_datagram_poll,
+	ioctl:		spx_ioctl,
+	listen:		spx_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	spx_setsockopt,
+	getsockopt:	spx_getsockopt,
+	sendmsg:	spx_sendmsg,
+	recvmsg:	spx_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

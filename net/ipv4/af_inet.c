@@ -893,45 +893,43 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 struct proto_ops inet_stream_ops = {
-	PF_INET,
+	family:		PF_INET,
 
-	inet_release,
-	inet_bind,
-	inet_stream_connect,
-	sock_no_socketpair,
-	inet_accept,
-	inet_getname, 
-	tcp_poll,
-	inet_ioctl,
-	inet_listen,
-	inet_shutdown,
-	inet_setsockopt,
-	inet_getsockopt,
-	sock_no_fcntl,
-	inet_sendmsg,
-	inet_recvmsg,
-	sock_no_mmap
+	release:	inet_release,
+	bind:		inet_bind,
+	connect:	inet_stream_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		inet_accept,
+	getname:	inet_getname, 
+	poll:		tcp_poll,
+	ioctl:		inet_ioctl,
+	listen:		inet_listen,
+	shutdown:	inet_shutdown,
+	setsockopt:	inet_setsockopt,
+	getsockopt:	inet_getsockopt,
+	sendmsg:	inet_sendmsg,
+	recvmsg:	inet_recvmsg,
+	mmap:		sock_no_mmap
 };
 
 struct proto_ops inet_dgram_ops = {
-	PF_INET,
+	family:		PF_INET,
 
-	inet_release,
-	inet_bind,
-	inet_dgram_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	inet_getname, 
-	datagram_poll,
-	inet_ioctl,
-	sock_no_listen,
-	inet_shutdown,
-	inet_setsockopt,
-	inet_getsockopt,
-	sock_no_fcntl,
-	inet_sendmsg,
-	inet_recvmsg,
-	sock_no_mmap
+	release:	inet_release,
+	bind:		inet_bind,
+	connect:	inet_dgram_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	inet_getname, 
+	poll:		datagram_poll,
+	ioctl:		inet_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	inet_shutdown,
+	setsockopt:	inet_setsockopt,
+	getsockopt:	inet_getsockopt,
+	sendmsg:	inet_sendmsg,
+	recvmsg:	inet_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 struct net_proto_family inet_family_ops = {

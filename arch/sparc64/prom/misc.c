@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.16 1999/11/19 05:53:04 davem Exp $
+/* $Id: misc.c,v 1.17 2000/04/15 06:02:50 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -64,7 +64,7 @@ prom_cmdline(void)
 	 * on SMP, we need to drop the IRQ locks we hold.
 	 */
 #ifdef __SMP__
-	hardirq_exit(smp_processor_id());
+	irq_exit(smp_processor_id(), 0);
 	smp_capture();
 #else
 	local_irq_count--;
@@ -74,8 +74,8 @@ prom_cmdline(void)
 
 #ifdef __SMP__
 	smp_release();
-	hardirq_enter(smp_processor_id());
-	spin_unlock_wait(&global_irq_lock);
+	irq_enter(smp_processor_id(), 0);
+	spin_unlock_wait(&__br_write_locks[BR_GLOBALIRQ_LOCK].lock);
 #else
 	local_irq_count++;
 #endif

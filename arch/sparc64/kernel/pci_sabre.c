@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.17 2000/03/31 04:06:59 davem Exp $
+/* $Id: pci_sabre.c,v 1.19 2000/04/15 13:07:51 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1012,22 +1012,35 @@ static void __init sabre_base_address_update(struct pci_dev *pdev, int resource)
 	struct pcidev_cookie *pcp = pdev->sysdata;
 	struct pci_pbm_info *pbm = pcp->pbm;
 	struct pci_controller_info *p = pbm->parent;
-	struct resource *res = &pdev->resource[resource];
+	struct resource *res;
 	unsigned long base;
 	u32 reg;
-	int where, size;
+	int where, size, is_64bit;
 
+	res = &pdev->resource[resource];
+	where = PCI_BASE_ADDRESS_0 + (resource * 4);
+
+	is_64bit = 0;
 	if (res->flags & IORESOURCE_IO)
 		base = p->controller_regs + SABRE_IOSPACE;
-	else
+	else {
 		base = p->controller_regs + SABRE_MEMSPACE;
+		if ((res->flags & PCI_BASE_ADDRESS_MEM_TYPE_MASK)
+		    == PCI_BASE_ADDRESS_MEM_TYPE_64)
+			is_64bit = 1;
+	}
 
-	where = PCI_BASE_ADDRESS_0 + (resource * 4);
 	size = res->end - res->start;
 	pci_read_config_dword(pdev, where, &reg);
 	reg = ((reg & size) |
 	       (((u32)(res->start - base)) & ~size));
 	pci_write_config_dword(pdev, where, reg);
+
+	/* This knows that the upper 32-bits of the address
+	 * must be zero.  Our PCI common layer enforces this.
+	 */
+	if (is_64bit)
+		pci_write_config_dword(pdev, where + 4, 0);
 }
 
 static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre_bus)
@@ -1050,6 +1063,20 @@ static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre
 			/* Status register bits are "write 1 to clear". */
 			sabre_write_word(pdev, PCI_STATUS, 0xffff);
 			sabre_write_word(pdev, PCI_SEC_STATUS, 0xffff);
+
+			/* Use a primary/seconday latency timer value
+			 * of 64.
+			 */
+			sabre_write_byte(pdev, PCI_LATENCY_TIMER, 64);
+			sabre_write_byte(pdev, PCI_SEC_LATENCY_TIMER, 64);
+
+			/* Enable reporting/forwarding of master aborts,
+			 * parity, and SERR.
+			 */
+			sabre_write_byte(pdev, PCI_BRIDGE_CONTROL,
+					 (PCI_BRIDGE_CTL_PARITY |
+					  PCI_BRIDGE_CTL_SERR |
+					  PCI_BRIDGE_CTL_MASTER_ABORT));
 		}
 	}
 }
@@ -1086,17 +1113,6 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 	sabre_bus = pci_scan_bus(p->pci_first_busno,
 				 p->pci_ops,
 				 &p->pbm_A);
-#if 0
-	{
-		unsigned int devfn;
-		u8 *addr;
-
-		devfn = PCI_DEVFN(0, 0);
-		addr = sabre_pci_config_mkaddr(&p->pbm_A, 0,
-					       devfn, PCI_LATENCY_TIMER);
-		pci_config_write8(addr, 32);
-	}
-#endif
 	apb_init(p, sabre_bus);
 
 	walk = &sabre_bus->children;

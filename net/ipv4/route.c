@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.83 2000/03/23 05:34:13 davem Exp $
+ * Version:	$Id: route.c,v 1.86 2000/04/24 07:03:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2228,14 +2228,19 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 		memcpy(dst, src, length);
 
 #ifdef CONFIG_SMP
-		if (smp_num_cpus > 1) {
+		if (smp_num_cpus > 1 || cpu_logical_map(0) != 0) {
 			int i;
 			int cnt = length/4;
 
-			for (i=1; i<smp_num_cpus; i++) {
+			for (i=0; i<smp_num_cpus; i++) {
+				int cpu = cpu_logical_map(i);
 				int k;
 
-				src += (256/4)*sizeof(struct ip_rt_acct);
+				if (cpu == 0)
+					continue;
+
+				src = (u32*)(((u8*)ip_rt_acct) + offset +
+					     cpu*256*sizeof(struct ip_rt_acct));
 
 				for (k=0; k<cnt; k++)
 					dst[k] += src[k];
@@ -2254,7 +2259,7 @@ void __init ip_rt_init(void)
 
 #ifdef CONFIG_NET_CLS_ROUTE
 	for (order=0;
-	     (PAGE_SIZE<<order) < 256*sizeof(ip_rt_acct)*smp_num_cpus; order++)
+	     (PAGE_SIZE<<order) < 256*sizeof(ip_rt_acct)*NR_CPUS; order++)
 		/* NOTHING */;
 	ip_rt_acct = (struct ip_rt_acct *)__get_free_pages(GFP_KERNEL, order);
 	if (!ip_rt_acct)

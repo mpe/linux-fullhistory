@@ -95,7 +95,7 @@ die_if_kernel(char * str, struct pt_regs *regs, long err, unsigned long *r9_15)
 {
 	if (regs->ps & 8)
 		return;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	printk("CPU %d ", hard_smp_processor_id());
 #endif
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);

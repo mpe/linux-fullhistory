@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.105 2000/03/26 09:13:48 davem Exp $
+/*  $Id: process.c,v 1.106 2000/04/15 06:02:50 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -269,9 +269,8 @@ void __show_regs(struct pt_regs * regs)
 	unsigned long flags;
 
 	spin_lock_irqsave(&regdump_lock, flags);
-	printk("CPU[%d]: local_irq_count[%u] global_irq_count[%d]\n",
-	       smp_processor_id(), local_irq_count,
-	       atomic_read(&global_irq_count));
+	printk("CPU[%d]: local_irq_count[%u] irqs_running[%d]\n",
+	       smp_processor_id(), local_irq_count, irqs_running());
 #endif
 	printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
 	       regs->tpc, regs->tnpc, regs->y);

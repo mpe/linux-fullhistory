@@ -445,45 +445,43 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 struct proto_ops inet6_stream_ops = {
-	PF_INET6,
+	family:		PF_INET6,
 
-	inet6_release,
-	inet6_bind,
-	inet_stream_connect,		/* ok		*/
-	sock_no_socketpair,		/* a do nothing	*/
-	inet_accept,			/* ok		*/
-	inet6_getname, 
-	tcp_poll,			/* ok		*/
-	inet6_ioctl,			/* must change  */
-	inet_listen,			/* ok		*/
-	inet_shutdown,			/* ok		*/
-	inet_setsockopt,		/* ok		*/
-	inet_getsockopt,		/* ok		*/
-	sock_no_fcntl,			/* ok		*/
-	inet_sendmsg,			/* ok		*/
-	inet_recvmsg,			/* ok		*/
-	sock_no_mmap
+	release:	inet6_release,
+	bind:		inet6_bind,
+	connect:	inet_stream_connect,		/* ok		*/
+	socketpair:	sock_no_socketpair,		/* a do nothing	*/
+	accept:		inet_accept,			/* ok		*/
+	getname:	inet6_getname, 
+	poll:		tcp_poll,			/* ok		*/
+	ioctl:		inet6_ioctl,			/* must change  */
+	listen:		inet_listen,			/* ok		*/
+	shutdown:	inet_shutdown,			/* ok		*/
+	setsockopt:	inet_setsockopt,		/* ok		*/
+	getsockopt:	inet_getsockopt,		/* ok		*/
+	sendmsg:	inet_sendmsg,			/* ok		*/
+	recvmsg:	inet_recvmsg,			/* ok		*/
+	mmap:		sock_no_mmap,
 };
 
 struct proto_ops inet6_dgram_ops = {
-	PF_INET6,
+	family:		PF_INET6,
 
-	inet6_release,
-	inet6_bind,
-	inet_dgram_connect,		/* ok		*/
-	sock_no_socketpair,		/* a do nothing	*/
-	sock_no_accept,			/* a do nothing	*/
-	inet6_getname, 
-	datagram_poll,			/* ok		*/
-	inet6_ioctl,			/* must change  */
-	sock_no_listen,			/* ok		*/
-	inet_shutdown,			/* ok		*/
-	inet_setsockopt,		/* ok		*/
-	inet_getsockopt,		/* ok		*/
-	sock_no_fcntl,			/* ok		*/
-	inet_sendmsg,			/* ok		*/
-	inet_recvmsg,			/* ok		*/
-	sock_no_mmap,
+	release:	inet6_release,
+	bind:		inet6_bind,
+	connect:	inet_dgram_connect,		/* ok		*/
+	socketpair:	sock_no_socketpair,		/* a do nothing	*/
+	accept:		sock_no_accept,			/* a do nothing	*/
+	getname:	inet6_getname, 
+	poll:		datagram_poll,			/* ok		*/
+	ioctl:		inet6_ioctl,			/* must change  */
+	listen:		sock_no_listen,			/* ok		*/
+	shutdown:	inet_shutdown,			/* ok		*/
+	setsockopt:	inet_setsockopt,		/* ok		*/
+	getsockopt:	inet_getsockopt,		/* ok		*/
+	sendmsg:	inet_sendmsg,			/* ok		*/
+	recvmsg:	inet_recvmsg,			/* ok		*/
+	mmap:		sock_no_mmap,
 };
 
 struct net_proto_family inet6_family_ops = {

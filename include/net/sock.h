@@ -356,7 +356,10 @@ struct tcp_opt {
 	 */
 	rwlock_t		syn_wait_lock;
 	struct tcp_listen_opt	*listen_opt;
-	struct open_request	*accept_queue; /* Established children */
+
+	/* FIFO of established children */
+	struct open_request	*accept_queue;
+	struct open_request	*accept_queue_tail;
 
 	int write_pending;	/* A write to socket waits to start. */
 

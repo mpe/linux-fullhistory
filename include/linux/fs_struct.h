@@ -1,5 +1,5 @@
 #ifndef _LINUX_FS_STRUCT_H
-#define _LINUX_FS_STRUC_H
+#define _LINUX_FS_STRUCT_H
 #ifdef __KERNEL__
 
 struct fs_struct {

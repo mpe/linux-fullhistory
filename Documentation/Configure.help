@@ -7008,16 +7008,6 @@ CONFIG_PCMCIA_IBMTR
   The module will be called ibmtr_cs.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt.
 
-3Com 3c575 CardBus support
-CONFIG_PCMCIA_3C575
-  This driver supports the 3Com 3c575 series of CardBus Fast Ethernet
-  adapters.
-
-  This driver can only be compiled as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called 3c575_cb.o. If you want to do that, say M
-  here and read Documentation/modules.txt.  If unsure, say N.
-
 Xircom Tulip-like CardBus support
 CONFIG_PCMCIA_XIRTULIP
   This driver is for the Digital "Tulip" Ethernet CardBus adapters.
@@ -8294,12 +8284,19 @@ CONFIG_3C515
   Documentation/networking/net-modules.txt. The module will be called
   3c515.o.
 
-3c590 series (592/595/597) "Vortex" support
+3c59x/3c90x/3c575_Cardbus series "Vortex/Boomerang/Cyclone" support
 CONFIG_VORTEX
-  If you have a 3Com "Vortex" (Fast EtherLink 3c590/3c592/3c595/3c597)
-  or "Boomerang" series (EtherLink XL 3c900 or 3c905) network
-  (Ethernet) card, say Y and read the Ethernet-HOWTO, available from
-  http://www.linuxdoc.org/docs.html#howto . More specific
+  This option enables driver support for a large number of 10mbps and
+  10/100mbps EISA, PCI and PCMCIA 3Com network cards:
+
+  "Vortex"    (Fast EtherLink 3c590/3c592/3c595/3c597) EISA and PCI
+  "Boomerang" (EtherLink XL 3c900 or 3c905)            PCI
+  "Cyclone"   (3c540/3c900/3c905/3c980/3c575/3c656)    PCI and Cardbus
+  "Tornado"   (3c905)                                  PCI
+  "Hurricane" (3c555/3cSOHO)                           PCI
+
+  If you have such a card, say Y and read the Ethernet-HOWTO, available
+  from http://www.linuxdoc.org/docs.html#howto . More specific
   information is in Documentation/networking/vortex.txt and in the
   comments at the beginning of drivers/net/3c59x.c.
 
@@ -9761,6 +9758,10 @@ USB Keyspan PDA Single Port Serial Driver
 CONFIG_USB_SERIAL_KEYSPAN_PDA
   Say Y here if you want to use a Keyspan PDA single port USB to
   serial converter device.
+
+USB ZyXEL omni.net LCD Plus Driver
+CONFIG_USB_SERIAL_OMNINET
+  Say Y here if you want to use a ZyXEL omni.net LCD ISDN TA.
 
 USB Printer support
 CONFIG_USB_PRINTER

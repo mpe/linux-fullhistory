@@ -230,7 +230,7 @@ extern unsigned long ioremap_bot, ioremap_base;
 
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define _PAGE_BASE	_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_COHERENT
 #else
 #define _PAGE_BASE	_PAGE_PRESENT | _PAGE_ACCESSED

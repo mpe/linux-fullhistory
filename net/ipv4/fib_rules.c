@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.14 1999/08/31 07:03:29 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.15 2000/04/15 01:48:10 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *

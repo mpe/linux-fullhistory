@@ -78,23 +78,23 @@ static int pvc_getname(struct socket *sock,struct sockaddr *sockaddr,
 
 
 static struct proto_ops SOCKOPS_WRAPPED(pvc_proto_ops) = {
-	PF_ATMPVC,
-	atm_release,
-	pvc_bind,
-	pvc_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	pvc_getname,
-	atm_poll,
-	atm_ioctl,
-	sock_no_listen,
-	pvc_shutdown,
-	atm_setsockopt,
-	atm_getsockopt,
-	sock_no_fcntl,
-	atm_sendmsg,
-	atm_recvmsg,
-	sock_no_mmap
+	family:		PF_ATMPVC,
+
+	release:	atm_release,
+	bind:		pvc_bind,
+	connect:	pvc_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	pvc_getname,
+	poll:		atm_poll,
+	ioctl:		atm_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	pvc_shutdown,
+	setsockopt:	atm_setsockopt,
+	getsockopt:	atm_getsockopt,
+	sendmsg:	atm_sendmsg,
+	recvmsg:	atm_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 

@@ -941,24 +941,23 @@ done:
 #endif
 
 struct proto_ops netlink_ops = {
-	PF_NETLINK,
+	family:		PF_NETLINK,
 
-	netlink_release,
-	netlink_bind,
-	netlink_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	netlink_getname,
-	datagram_poll,
-	sock_no_ioctl,
-	sock_no_listen,
-	sock_no_shutdown,
-	sock_no_setsockopt,
-	sock_no_getsockopt,
-	sock_no_fcntl,
-	netlink_sendmsg,
-	netlink_recvmsg,
-	sock_no_mmap
+	release:	netlink_release,
+	bind:		netlink_bind,
+	connect:	netlink_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	netlink_getname,
+	poll:		datagram_poll,
+	ioctl:		sock_no_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	sock_no_setsockopt,
+	getsockopt:	sock_no_getsockopt,
+	sendmsg:	netlink_sendmsg,
+	recvmsg:	netlink_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 struct net_proto_family netlink_family_ops = {

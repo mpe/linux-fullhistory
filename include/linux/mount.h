@@ -17,7 +17,7 @@ struct vfsmount
   char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
   char *mnt_dirname;			/* Name of directory mounted on */
   struct super_block *mnt_sb;		/* pointer to superblock */
-  struct vfsmount *mnt_next;		/* pointer to next in linkedlist */
+	struct list_head mnt_list;
 };
 
 /* MOUNT_REWRITE: fill these */

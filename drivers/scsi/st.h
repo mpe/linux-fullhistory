@@ -66,7 +66,8 @@ typedef struct {
 typedef struct {
 	kdev_t devt;
 	Scsi_Device *device;
-	struct semaphore sem;
+	struct semaphore lock;	/* For serialization */
+	struct semaphore sem;	/* For SCSI commands */
 	ST_buffer *buffer;
 
 	/* Drive characteristics */

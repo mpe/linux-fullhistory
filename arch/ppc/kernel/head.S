@@ -189,11 +189,11 @@ __after_prom_start:
 #endif /* CONFIG_PPC64 */
 
 4:	tophys(r8,r11)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	ori	r8,r8,0x12		/* R/W access, M=1 */
 #else
 	ori	r8,r8,2			/* R/W access */
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 #ifdef CONFIG_APUS
 	ori	r11,r11,BL_8M<<2|0x2	/* set up 8MB BAT registers for 604 */
 #else
@@ -782,7 +782,7 @@ load_up_fpu:
  * horrendously complex, especially when a task switches from one CPU
  * to another.  Instead we call giveup_fpu in switch_to.
  */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	lis	r6,0                    /* get __pa constant */
 	tophys(r6,r6)
 	addis	r3,r6,last_task_used_math@ha
@@ -801,18 +801,18 @@ load_up_fpu:
 	andc	r4,r4,r20		/* disable FP for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 1:
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* enable use of FP after return */
 	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1
 	mfspr	r5,SPRG3		/* current task's THREAD (phys) */
 	lfd	fr0,THREAD_FPSCR-4(r5)
 	mtfsf	0xff,fr0
 	REST_32FPRS(0, r5)
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	subi	r4,r5,THREAD
 	sub	r4,r4,r6
 	stw	r4,last_task_used_math@l(r3)
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* restore registers and return */
 	lwz	r3,_CCR(r21)
 	lwz	r4,_LINK(r21)
@@ -868,7 +868,7 @@ load_up_altivec:
  * horrendously complex, especially when a task switches from one CPU
  * to another.  Instead we call giveup_altivec in switch_to.
  */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 #ifndef CONFIG_APUS
 	lis	r6,-KERNELBASE@h
 #else
@@ -892,7 +892,7 @@ load_up_altivec:
 	andc	r4,r4,r20	/* disable altivec for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 1:
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* enable use of AltiVec after return */
 	oris	r23,r23,MSR_VEC@h
 	mfspr	r5,SPRG3		/* current task's THREAD (phys) */
@@ -900,11 +900,11 @@ load_up_altivec:
 	LVX(vr0,r20,r5)
 	MTVSCR(vr0)
 	REST_32VR(0,r20,r5)
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	subi	r4,r5,THREAD
 	sub	r4,r4,r6
 	stw	r4,last_task_used_altivec@l(r3)
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	/* restore registers and return */
 	lwz	r3,_CCR(r21)
 	lwz	r4,_LINK(r21)
@@ -967,11 +967,11 @@ giveup_altivec:
 	andc	r4,r4,r3		/* disable AltiVec for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 1:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	li	r5,0
 	lis	r4,last_task_used_altivec@ha
 	stw	r5,last_task_used_altivec@l(r4)
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	blr
 #endif /* CONFIG_ALTIVEC */
 	
@@ -1002,11 +1002,11 @@ giveup_fpu:
 	andc	r4,r4,r3		/* disable FP for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 1:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	li	r5,0
 	lis	r4,last_task_used_math@ha
 	stw	r5,last_task_used_math@l(r4)
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	blr
 
 /*
@@ -1432,7 +1432,7 @@ start_here:
 	SYNC			/* Force all PTE updates to finish */
 	tlbia			/* Clear all TLB entries */
 	sync			/* wait for tlbia/tlbie to finish */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync			/* ... on all CPUs */
 	sync
 #endif

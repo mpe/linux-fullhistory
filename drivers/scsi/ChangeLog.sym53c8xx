@@ -1,5 +1,11 @@
+Mon Apr 24 12:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5m
+	- Return value 1 (instead of 0) from the driver setup routine.
+	- Donnot enable PCI DAC cycles. This just broke support for 
+	  SYM534C896 on sparc64. Problem fixed by David S. Miller.
+
 Sat Apr 1  12:00 2000 Gerard Roudier (groudier@club-internet.fr)
-	* revision 1.5l
+	* version sym53c8xx-1.5l
 	- Tiny change for __sparc__ appeared in 2.3.99-pre4.1 that 
 	  applies to cache line size (? Probably from David S Miller).
 	- Make sure no data transfer will happen for Scsi_Cmnd requests 

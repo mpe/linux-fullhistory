@@ -123,7 +123,7 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	if (!handle_mm_fault(tsk, vma, addr & PAGE_MASK, DO_COW(mode)))
+	if (!handle_mm_fault(mm, vma, addr & PAGE_MASK, DO_COW(mode)))
 		goto do_sigbus;
 
 	up(&mm->mmap_sem);

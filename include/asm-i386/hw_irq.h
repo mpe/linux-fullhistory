@@ -12,6 +12,7 @@
  *	<tomsoft@informatik.tu-chemnitz.de>
  */
 
+#include <linux/config.h>
 #include <asm/irq.h>
 
 /*
@@ -211,7 +212,7 @@ static inline void x86_do_profile (unsigned long eip)
 	atomic_inc((atomic_t *)&prof_buffer[eip]);
 }
 
-#ifdef __SMP__ /*more of this file should probably be ifdefed SMP */
+#ifdef CONFIG_SMP /*more of this file should probably be ifdefed SMP */
 static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {
 	if (IO_APIC_IRQ(i))
 		send_IPI_self(IO_APIC_VECTOR(i));

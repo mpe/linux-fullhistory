@@ -289,7 +289,7 @@
 #define MTRRfix4K_F0000_MSR 0x26e
 #define MTRRfix4K_F8000_MSR 0x26f
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #  define MTRR_CHANGE_MASK_FIXED     0x01
 #  define MTRR_CHANGE_MASK_VARIABLE  0x02
 #  define MTRR_CHANGE_MASK_DEFTYPE   0x04
@@ -302,7 +302,7 @@ typedef u8 mtrr_type;
 #define LINE_SIZE      80
 #define JIFFIE_TIMEOUT 100
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #  define set_mtrr(reg,base,size,type) set_mtrr_smp (reg, base, size, type)
 #else
 #  define set_mtrr(reg,base,size,type) (*set_mtrr_up) (reg, base, size, type, \
@@ -767,7 +767,7 @@ static void (*set_mtrr_up) (unsigned int reg, unsigned long base,
 			    unsigned long size, mtrr_type type,
 			    int do_safe) = NULL;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 struct mtrr_var_range
 {
@@ -1015,7 +1015,7 @@ static void __init mtrr_state_warn(unsigned long mask)
     printk ("mtrr: probably your BIOS does not setup all CPUs\n");
 }   /*  End Function mtrr_state_warn  */
 
-#endif  /*  __SMP__  */
+#endif  /*  CONFIG_SMP  */
 
 static char *attrib_to_str (int x)
 {
@@ -1608,7 +1608,7 @@ static void compute_ascii (void)
 EXPORT_SYMBOL(mtrr_add);
 EXPORT_SYMBOL(mtrr_del);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 typedef struct
 {
@@ -1663,7 +1663,7 @@ static void __init cyrix_arr_init(void)
     struct set_mtrr_context ctxt;
     unsigned char ccr[7];
     int ccrc[7] = { 0, 0, 0, 0, 0, 0, 0 };
-#ifdef __SMP__
+#ifdef CONFIG_SMP
     int i;
 #endif
 
@@ -1709,7 +1709,7 @@ static void __init cyrix_arr_init(void)
 	setCx86 (CX86_CCR5, ccr[5]);
     }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
     for(i=0; i<7; i++) ccr_state[i] = ccr[i];
     for(i=0; i<8; i++)
       cyrix_get_arr(i,
@@ -1782,7 +1782,7 @@ static void __init mtrr_setup(void)
     }
 }   /*  End Function mtrr_setup  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 static volatile unsigned long smp_changes_mask __initdata = 0;
 static struct mtrr_state smp_mtrr_state __initdata = {0, 0};
@@ -1851,12 +1851,12 @@ void __init mtrr_init_secondary_cpu(void)
 	break;
     }
 }   /*  End Function mtrr_init_secondary_cpu  */
-#endif  /*  __SMP__  */
+#endif  /*  CONFIG_SMP  */
 
 int __init mtrr_init(void)
 {
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
     switch (boot_cpu_data.x86_vendor)
     {
       case X86_VENDOR_AMD:
@@ -1866,7 +1866,7 @@ int __init mtrr_init(void)
 	mtrr_state_warn (smp_changes_mask);
 	break;
     }
-#else  /*  __SMP__  */
+#else  /*  CONFIG_SMP  */
     mtrr_setup ();
     switch (boot_cpu_data.x86_vendor)
     {
@@ -1877,7 +1877,7 @@ int __init mtrr_init(void)
         centaur_mcr_init ();
         break;
     }
-#endif  /*  !__SMP__  */
+#endif  /*  !CONFIG_SMP  */
 
 #ifdef CONFIG_PROC_FS
     proc_root_mtrr = create_proc_entry ("mtrr", S_IWUSR | S_IRUGO, &proc_root);

@@ -29,6 +29,9 @@
  *		- Added code for ATAPI devices.
  *		- Double buffer for scatter/gather support
  *
+ *	Revision 2.10		March-27-2000
+ *		- Added support for dynamic DMA
+ *
  ****************************************************************************/
 
 //#define DEBUG 1
@@ -57,7 +60,7 @@
 #include "psi_dale.h"
 
 
-#define	PCI2220I_VERSION		"2.00"
+#define	PCI2220I_VERSION		"2.10"
 #define	READ_CMD				IDE_CMD_READ_MULTIPLE
 #define	WRITE_CMD				IDE_CMD_WRITE_MULTIPLE
 #define	MAX_BUS_MASTER_BLOCKS	SECTORSXFER		// This is the maximum we can bus master
@@ -99,32 +102,33 @@ typedef struct
 	{
 	USHORT		 bigD;					// identity is a PCI-2240I if true, otherwise a PCI-2220I
 	USHORT		 atapi;					// this interface is for ATAPI devices only
-	USHORT		 regDmaDesc;			// address of the DMA discriptor register for direction of transfer
-	USHORT		 regDmaCmdStat;			// Byte #1 of DMA command status register
-	USHORT		 regDmaAddrPci;			// 32 bit register for PCI address of DMA
-	USHORT		 regDmaAddrLoc;			// 32 bit register for local bus address of DMA
-	USHORT		 regDmaCount;			// 32 bit register for DMA transfer count
-	USHORT		 regDmaMode;			// 32 bit register for DMA mode control
-	USHORT		 regRemap;				// 32 bit local space remap
-	USHORT		 regDesc;				// 32 bit local region descriptor
-	USHORT		 regRange;				// 32 bit local range
-	USHORT		 regIrqControl;			// 16 bit Interrupt enable/disable and status
-	USHORT		 regScratchPad;			// scratch pad I/O base address
-	USHORT		 regBase;				// Base I/O register for data space
-	USHORT		 regData;				// data register I/O address
-	USHORT		 regError;				// error register I/O address
-	USHORT		 regSectCount;			// sector count register I/O address
-	USHORT		 regLba0;				// least significant byte of LBA
-	USHORT		 regLba8;				// next least significant byte of LBA
-	USHORT		 regLba16;				// next most significan byte of LBA
-	USHORT		 regLba24;				// head and most 4 significant bits of LBA
-	USHORT		 regStatCmd;			// status on read and command on write register
-	USHORT		 regStatSel;			// board status on read and spigot select on write register
-	USHORT		 regFail;				// fail bits control register
-	USHORT		 regAltStat;			// alternate status and drive control register
-	USHORT		 basePort;				// PLX base I/O port
+	ULONG		 regDmaDesc;			// address of the DMA discriptor register for direction of transfer
+	ULONG		 regDmaCmdStat;			// Byte #1 of DMA command status register
+	ULONG		 regDmaAddrPci;			// 32 bit register for PCI address of DMA
+	ULONG		 regDmaAddrLoc;			// 32 bit register for local bus address of DMA
+	ULONG		 regDmaCount;			// 32 bit register for DMA transfer count
+	ULONG		 regDmaMode;			// 32 bit register for DMA mode control
+	ULONG		 regRemap;				// 32 bit local space remap
+	ULONG		 regDesc;				// 32 bit local region descriptor
+	ULONG		 regRange;				// 32 bit local range
+	ULONG		 regIrqControl;			// 16 bit Interrupt enable/disable and status
+	ULONG		 regScratchPad;			// scratch pad I/O base address
+	ULONG		 regBase;				// Base I/O register for data space
+	ULONG		 regData;				// data register I/O address
+	ULONG		 regError;				// error register I/O address
+	ULONG		 regSectCount;			// sector count register I/O address
+	ULONG		 regLba0;				// least significant byte of LBA
+	ULONG		 regLba8;				// next least significant byte of LBA
+	ULONG		 regLba16;				// next most significan byte of LBA
+	ULONG		 regLba24;				// head and most 4 significant bits of LBA
+	ULONG		 regStatCmd;			// status on read and command on write register
+	ULONG		 regStatSel;			// board status on read and spigot select on write register
+	ULONG		 regFail;				// fail bits control register
+	ULONG		 regAltStat;			// alternate status and drive control register
+	ULONG		 basePort;				// PLX base I/O port
 	USHORT		 timingMode;			// timing mode currently set for adapter
 	USHORT		 timingPIO;				// TRUE if PIO timing is active
+	struct pci_dev	*pcidev;
 	ULONG		 timingAddress;			// address to use on adapter for current timing mode
 	ULONG		 irqOwned;				// owned IRQ or zero if shared
 	UCHAR		 numberOfDrives;		// saved number of drives on this controller
@@ -151,6 +155,7 @@ typedef struct
 	struct timer_list	reconTimer;	
 	struct timer_list	timer;
 	UCHAR		*kBuffer;
+	dma_addr_t	 kBufferDma;
 	UCHAR		 reqSense;
 	UCHAR		 atapiCdb[16];
 	UCHAR		 atapiSpecial;
@@ -520,7 +525,7 @@ static void BusMaster (PADAPTER2220I padapter, UCHAR datain, UCHAR irq)
 		}
 	
 	outl (padapter->timingAddress, padapter->regDmaAddrLoc);
-	outl (virt_to_bus (padapter->kBuffer), padapter->regDmaAddrPci);
+	outl (padapter->kBufferDma, padapter->regDmaAddrPci);
 	outl (zl, padapter->regDmaCount);
 	outb_p (0x03, padapter->regDmaCmdStat);							// kick the DMA engine in gear
 	}
@@ -539,7 +544,7 @@ static void BusMaster (PADAPTER2220I padapter, UCHAR datain, UCHAR irq)
 static void AtapiBusMaster (PADAPTER2220I padapter, UCHAR datain, ULONG length)
 	{
 	outl (padapter->timingAddress, padapter->regDmaAddrLoc);
-	outl (virt_to_bus (padapter->kBuffer), padapter->regDmaAddrPci);
+	outl (padapter->kBufferDma, padapter->regDmaAddrPci);
 	outl (length, padapter->regDmaCount);
 	if ( datain )
 		{
@@ -1017,10 +1022,6 @@ static ULONG DecodeError (PADAPTER2220I	padapter, UCHAR status)
 	UCHAR			error;
 
 	padapter->expectingIRQ = 0;
-#ifdef DEBUG
-	printk (" @@@@@@  status: %X @@@@@@@ ", status);
-	STOP_HERE();	
-#endif
 	if ( status & IDE_STATUS_WRITE_FAULT )
 		{
 		return DID_PARITY << 16;
@@ -1154,23 +1155,13 @@ static void TimerExpiry (unsigned long data)
 	POUR_DEVICE		pdev = padapter->pdev;
 	UCHAR			status = IDE_STATUS_BUSY;
 	UCHAR			temp, temp1;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int					flags;
-#else /* version >= v2.1.95 */
     unsigned long		flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	DEB (printk ("\nPCI2220I: Timeout expired "));
 
 	if ( padapter->failinprog )
@@ -1299,20 +1290,12 @@ static void TimerExpiry (unsigned long data)
 	OpDone (padapter, DecodeError (padapter, status));
 
 timerExpiryDone:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:			SetReconstruct	:LOCAL
@@ -1353,23 +1336,13 @@ static void ReconTimerExpiry (unsigned long data)
 	ULONG			zl;
 	UCHAR			zc;
 	USHORT			z;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int				flags;
-#else /* version >= v2.1.95 */
     unsigned long	flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 
 	padapter = (PADAPTER2220I)data;
 	if ( padapter->SCpnt )
@@ -1589,20 +1562,12 @@ static void ReconTimerExpiry (unsigned long data)
 	padapter->reconPhase = RECON_PHASE_LAST;
 
 reconTimerExpiry:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:	Irq_Handler	:LOCAL
@@ -1629,23 +1594,13 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	ATAPI_ERROR			errora;
 	int					z;
 	ULONG				zl;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int					flags;
-#else /* version >= v2.1.95 */
     unsigned long		flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 
 //	DEB (printk ("\npci2220i recieved interrupt\n"));
 
@@ -1833,7 +1788,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 						}
 					else
 						outl (padapter->timingAddress, padapter->regDmaAddrLoc);
-					outl (virt_to_bus (padapter->kBuffer), padapter->regDmaAddrPci);
+					outl (padapter->kBufferDma, padapter->regDmaAddrPci);
 					outl (padapter->reconSize * BYTES_PER_SECTOR, padapter->regDmaCount);
 					outb_p (8, padapter->regDmaDesc);						// read operation
 					if ( padapter->bigD )
@@ -2069,20 +2024,12 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 
 	OpDone (padapter, zl);
 irq_return:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:	Pci2220i_QueueCommand
@@ -2421,30 +2368,26 @@ static VOID ReadFlash (PADAPTER2220I padapter, VOID *pdata, ULONG base, ULONG le
  *	Parameters:		pshost		  - Pointer to SCSI host data structure.
  *					bigd		  - PCI-2240I identifier
  *					pcidev		  - Pointer to device data structure.
- *					pci_bus		  - PCI bus number.
- *					pci_device_fn - PCI device and function number.
  *
  *	Returns:		TRUE if failure to install.
  *
  ****************************************************************/
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, struct pci_dev *pcidev)
-#else
-static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, UCHAR pci_bus, UCHAR pci_device_fn)
-#endif
 	{
 	PADAPTER2220I	padapter;
 	int				setirq;
 	int				z;
 	USHORT			zr, zl;
+	UCHAR		   *consistent;
+	dma_addr_t		consistentDma;
 
 	padapter = HOSTDATA(pshost);
 	memset (padapter, 0, sizeof (ADAPTER2220I));
 	memset (&DaleSetup, 0, sizeof (DaleSetup));
 	memset (DiskMirror, 0, sizeof (DiskMirror));
 
-	zr = pci_resource_start (pcidev, 1);
-	zl = pci_resource_start (pcidev, 2);
+	zr = pcidev->resource[1].start & PCI_BASE_ADDRESS_IO_MASK;
+	zl = pcidev->resource[2].start & PCI_BASE_ADDRESS_IO_MASK;
 
 	padapter->basePort = zr;
 	padapter->regRemap		= zr + RTR_LOCAL_REMAP;					// 32 bit local space remap
@@ -2465,6 +2408,7 @@ static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, UCHAR pci_bus, UCHAR
 	padapter->regStatSel	= zl + REG_STAT_SEL;					// board status on read and spigot select on write register
 	padapter->regFail		= zl + REG_FAIL;
 	padapter->regAltStat	= zl + REG_ALT_STAT;
+	padapter->pcidev		= pcidev;
 
 	if ( bigd )
 		{
@@ -2490,11 +2434,7 @@ static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, UCHAR pci_bus, UCHAR
 	if ( !bigd && !padapter->numberOfDrives )						// if no devices on this board
 		return TRUE;
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	pshost->irq = pcidev->irq;
-#else
-	pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
-#endif
 	setirq = 1;
 	for ( z = 0;  z < Installed;  z++ )								// scan for shared interrupts
 		{
@@ -2513,23 +2453,21 @@ static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, UCHAR pci_bus, UCHAR
 			}
 		padapter->irqOwned = pshost->irq;							// set IRQ as owned
 		}
+
 	if ( padapter->numberOfDrives )
-		padapter->kBuffer = kmalloc (SECTORSXFER * BYTES_PER_SECTOR, GFP_DMA | GFP_ATOMIC);
+		consistent = pci_alloc_consistent (pcidev, SECTORSXFER * BYTES_PER_SECTOR, &consistentDma);
 	else
-		padapter->kBuffer = kmalloc (ATAPI_TRANSFER, GFP_DMA | GFP_ATOMIC);
-	if ( !padapter->kBuffer )
+		consistent = pci_alloc_consistent (pcidev, ATAPI_TRANSFER, &consistentDma);
+	if ( !consistent )
 		{
 		printk ("Unable to allocate DMA buffer for PCI-2220I controller.\n");
-#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
-		free_irq (pshost->irq);
-#else /* version >= v1.3.70 */
 		free_irq (pshost->irq, padapter);
-#endif /* version >= v1.3.70 */
 		return TRUE;
 		}
+	padapter->kBuffer = consistent;
+	padapter->kBufferDma = consistentDma;
 
 	PsiHost[Installed]	= pshost;									// save SCSI_HOST pointer
-
 	pshost->io_port		= padapter->basePort;
 	pshost->n_io_port	= 0xFF;
 	pshost->unique_id	= padapter->regBase;
@@ -2571,7 +2509,7 @@ VOID SetupFinish (PADAPTER2220I padapter, char *str, int irq)
 	init_timer (&padapter->reconTimer);
 	padapter->reconTimer.function = ReconTimerExpiry;
 	padapter->reconTimer.data = (unsigned long)padapter;
-	printk("\nPCI-%sI EIDE CONTROLLER: at I/O = %X/%X  IRQ = %d\n", str, padapter->basePort, padapter->regBase, irq);
+	printk("\nPCI-%sI EIDE CONTROLLER: at I/O = %lX/%lX  IRQ = %ld\n", str, padapter->basePort, padapter->regBase, irq);
 	printk("Version %s, Compiled %s %s\n\n", PCI2220I_VERSION, __DATE__, __TIME__);
 	}	
 /****************************************************************
@@ -2594,38 +2532,20 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 	USHORT				raidon;
 	UCHAR				spigot1, spigot2;
 	UCHAR				device;
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	struct pci_dev	   *pcidev = NULL;
-#else
-	int					found;
-	UCHAR				pci_bus, pci_device_fn;
-#endif
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	if ( !pci_present () )
-#else
-	if ( !pcibios_present () )
-#endif
 		{
 		printk ("pci2220i: PCI BIOS not present\n");
 		return 0;
 		}
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	while ( (pcidev = pci_find_device (VENDOR_PSI, DEVICE_DALE_1, pcidev)) != NULL )
-#else
-	found = 0;
-	while ( !pcibios_find_device (VENDOR_PSI, DEVICE_DALE_1, found++, &pci_bus, &pci_device_fn) )
-#endif
 		{
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
 		padapter = HOSTDATA(pshost);
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 		if ( GetRegs (pshost, FALSE, pcidev) )
-#else
-		if ( GetRegs (pshost, FALSE, pci_bus, pci_device_fn) )
-#endif
 			goto unregister;
 
 		pshost->max_id = padapter->numberOfDrives;
@@ -2720,21 +2640,12 @@ unregister:;
 		scsi_unregister (pshost);
 		}
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	while ( (pcidev = pci_find_device (VENDOR_PSI, DEVICE_BIGD_1, pcidev)) != NULL )
-#else
-	found = 0;
-	while ( !pcibios_find_device (VENDOR_PSI, DEVICE_BIGD_1, found++, &pci_bus, &pci_device_fn) )
-#endif
 		{
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
 		padapter = HOSTDATA(pshost);
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 		if ( GetRegs (pshost, TRUE, pcidev) )
-#else
-		if ( GetRegs (pshost, TRUE, pci_bus, pci_device_fn) )
-#endif
 			goto unregister1;
 
 		for ( z = 0;  z < BIGD_MAXDRIVES;  z++ )
@@ -2966,13 +2877,12 @@ int Pci2220i_Release (struct Scsi_Host *pshost)
 		}
 
 	if ( padapter->irqOwned )
-#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
-		free_irq (pshost->irq);
-#else /* version >= v1.3.70 */
 		free_irq (pshost->irq, padapter);
-#endif /* version >= v1.3.70 */
     release_region (pshost->io_port, pshost->n_io_port);
-	kfree (padapter->kBuffer);
+	if ( padapter->numberOfDrives )
+		pci_free_consistent (padapter->pcidev, SECTORSXFER * BYTES_PER_SECTOR, padapter->kBuffer, padapter->kBufferDma);
+	else	
+		pci_free_consistent (padapter->pcidev, ATAPI_TRANSFER, padapter->kBuffer, padapter->kBufferDma);
     scsi_unregister(pshost);
     return 0;
 	}

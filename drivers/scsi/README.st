@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sat Mar 11 10:34:44 2000 by makisara@kai.makisara.local
+Last modified: Sat Apr 22 14:50:25 2000 by makisara@kai.makisara.local
 
 
 BASICS
@@ -115,8 +115,8 @@ started and the write call returns immediately. The status is checked
 at the next tape operation.
 
 Buffered writes and asynchronous writes may in some rare cases cause
-problems in multivolume operations if there is not enough space after
-the early-warning mark to flush the driver buffer.
+problems in multivolume operations if there is not enough space on the
+tape after the early-warning mark to flush the driver buffer.
 
 Read ahead for fixed block mode (ST_READ_AHEAD). Filling the buffer is
 attempted even if the user does not want to get all of the data at
@@ -124,11 +124,11 @@ this read command. Should be disabled for those drives that don't like
 a filemark to truncate a read request or that don't like backspacing.
 
 The buffer size is defined (in 1024 byte units) by ST_BUFFER_BLOCKS or
-at boot time. If this size is not enough, the driver tries to allocate
-a large enough temporary buffer that is released when the device is
-closed. Buffer allocation uses chunks of memory having sizes
-2^n * (page size). Because of this the actual buffer size may be
-larger than the buffer size specified with ST_BUFFER_BLOCKS.
+at boot time. If this size is not large enough, the driver tries to
+temporarily enlarge the buffer. Buffer allocation uses chunks of
+memory having sizes 2^n * (page size). Because of this the actual
+buffer size may be larger than the buffer size specified with
+ST_BUFFER_BLOCKS.
 
 A small number of buffers are allocated at driver initialisation. The
 maximum number of these buffers is defined by ST_MAX_BUFFERS. The

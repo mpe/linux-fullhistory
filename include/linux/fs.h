@@ -179,9 +179,9 @@ extern void update_atime (struct inode *);
 #define UPDATE_ATIME(inode) update_atime (inode)
 
 extern void buffer_init(unsigned long);
-extern void inode_init(void);
+extern void inode_init(unsigned long);
 extern void file_table_init(void);
-extern void dcache_init(void);
+extern void dcache_init(unsigned long);
 
 /* bh state bits */
 #define BH_Uptodate	0	/* 1 if the buffer contains valid data */
@@ -848,7 +848,8 @@ asmlinkage long sys_close(unsigned int);	/* yes, it's really unsigned */
 extern int do_close(unsigned int, int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, loff_t start);
 extern int get_unused_fd(void);
-extern void put_unused_fd(unsigned int);
+extern void __put_unused_fd(struct files_struct *, unsigned int); /* locked outside */
+extern void put_unused_fd(unsigned int);                          /* locked inside */
 
 extern struct file *filp_open(const char *, int, int);
 extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
@@ -886,7 +887,6 @@ extern void init_special_inode(struct inode *, umode_t, int);
 extern void make_bad_inode(struct inode *);
 extern int is_bad_inode(struct inode *);
 
-extern struct file_operations connecting_fifo_fops;
 extern struct file_operations read_fifo_fops;
 extern struct file_operations write_fifo_fops;
 extern struct file_operations rdwr_fifo_fops;
@@ -955,7 +955,6 @@ extern void invalidate_inode_pages(struct inode *);
 #define invalidate_buffers(dev)	__invalidate_buffers((dev), 0)
 #define destroy_buffers(dev)	__invalidate_buffers((dev), 1)
 extern void __invalidate_buffers(kdev_t dev, int);
-extern int floppy_is_wp(int);
 extern void sync_inodes(kdev_t);
 extern void write_inode_now(struct inode *);
 extern void sync_dev(kdev_t);

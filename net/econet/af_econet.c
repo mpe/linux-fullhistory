@@ -705,24 +705,23 @@ static struct net_proto_family econet_family_ops = {
 };
 
 static struct proto_ops SOCKOPS_WRAPPED(econet_ops) = {
-	PF_ECONET,
+	family:		PF_ECONET,
 
-	econet_release,
-	econet_bind,
-	sock_no_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	econet_getname, 
-	datagram_poll,
-	econet_ioctl,
-	sock_no_listen,
-	sock_no_shutdown,
-	sock_no_setsockopt,
-	sock_no_getsockopt,
-	sock_no_fcntl,
-	econet_sendmsg,
-	econet_recvmsg,
-	sock_no_mmap
+	release:	econet_release,
+	bind:		econet_bind,
+	connect:	sock_no_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	econet_getname, 
+	poll:		datagram_poll,
+	ioctl:		econet_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	sock_no_shutdown,
+	setsockopt:	sock_no_setsockopt,
+	getsockopt:	sock_no_getsockopt,
+	sendmsg:	econet_sendmsg,
+	recvmsg:	econet_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

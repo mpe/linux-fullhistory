@@ -1795,24 +1795,23 @@ static struct net_proto_family ax25_family_ops =
 };
 
 static struct proto_ops SOCKOPS_WRAPPED(ax25_proto_ops) = {
-	PF_AX25,
+	family:		PF_AX25,
 
-	ax25_release,
-	ax25_bind,
-	ax25_connect,
-	sock_no_socketpair,
-	ax25_accept,
-	ax25_getname,
-	datagram_poll,
-	ax25_ioctl,
-	ax25_listen,
-	ax25_shutdown,
-	ax25_setsockopt,
-	ax25_getsockopt,
-	sock_no_fcntl,
-	ax25_sendmsg,
-	ax25_recvmsg,
-	sock_no_mmap
+	release:	ax25_release,
+	bind:		ax25_bind,
+	connect:	ax25_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		ax25_accept,
+	getname:	ax25_getname,
+	poll:		datagram_poll,
+	ioctl:		ax25_ioctl,
+	listen:		ax25_listen,
+	shutdown:	ax25_shutdown,
+	setsockopt:	ax25_setsockopt,
+	getsockopt:	ax25_getsockopt,
+	sendmsg:	ax25_sendmsg,
+	recvmsg:	ax25_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

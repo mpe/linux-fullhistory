@@ -95,7 +95,7 @@ static __inline__ int mtrr_del (int reg, unsigned long base,
 
 /*  The following functions are for initialisation: don't use them!  */
 extern int mtrr_init (void);
-#  if defined(__SMP__) && defined(CONFIG_MTRR)
+#  if defined(CONFIG_SMP) && defined(CONFIG_MTRR)
 extern void mtrr_init_boot_cpu (void);
 extern void mtrr_init_secondary_cpu (void);
 #  endif

@@ -97,11 +97,11 @@ extern __inline__ void __sti(void)
 
 	__asm__ __volatile__("stc	$sr, %0\n\t"
 			     "and	%1, %0\n\t"
-			     "stc	$r5_bank, %1\n\t"
+			     "stc	$r6_bank, %1\n\t"
 			     "or	%1, %0\n\t"
 			     "ldc	%0, $sr"
 			     : "=&r" (__dummy0), "=r" (__dummy1)
-			     : "1" (~0xf0)
+			     : "1" (~0x000000f0)
 			     : "memory");
 }
 
@@ -137,17 +137,8 @@ x = (__extension__ ({	unsigned long __dummy,__sr;	\
 		: "memory"); (__sr & 0x000000f0); }))
 
 #define __restore_flags(x) do { 			\
-	unsigned long __dummy0, __dummy1;		\
-	if (x != 0xf0)	/* not CLI-ed? */		\
-		__asm__ __volatile__(		       	\
-		"stc	$sr, %0\n\t"			\
-		"and	%1, %0\n\t"			\
-		"stc	$r5_bank, %1\n\t"		\
-		"or	%1, %0\n\t"			\
-		"ldc	%0, $sr"			\
-		: "=&r" (__dummy0), "=r" (__dummy1)	\
-		: "1" (0xffffff0f)	 		\
-		: "memory"); 				\
+	if (x != 0x000000f0)	/* not CLI-ed? */		\
+		__sti();				\
 } while (0)
 
 /*

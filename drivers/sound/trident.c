@@ -2445,12 +2445,12 @@ static void __exit trident_remove(struct pci_dev *pci_dev)
 	trident_disable_loop_interrupts(card);
 
 	/* free hardware resources */
-	free_irq(card->irq, devs);
+	free_irq(card->irq, card);
 	release_region(card->iobase, 256);
 
 	/* unregister audio devices */
 	for (i = 0; i < NR_AC97; i++)
-		if (devs->ac97_codec[i] != NULL) {
+		if (card->ac97_codec[i] != NULL) {
 			unregister_sound_mixer(card->ac97_codec[i]->dev_mixer);
 			kfree (card->ac97_codec[i]);
 		}

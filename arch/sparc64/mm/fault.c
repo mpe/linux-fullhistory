@@ -296,7 +296,7 @@ good_area:
 	}
 
 	{
-		int fault = handle_mm_fault(current, vma,
+		int fault = handle_mm_fault(mm, vma,
 					    address, (fault_code & FAULT_CODE_WRITE));
 
 		if (fault < 0)

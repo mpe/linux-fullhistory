@@ -1715,12 +1715,13 @@ static struct file *file_setup(struct file *fzero, struct shmid_kernel *shp)
 	d_instantiate(filp->f_dentry, inp);
 
 	/*
-	 * Copy over /dev/zero dev/ino for benefit of procfs. Use
+	 * Copy over dev/ino for benefit of procfs. Use
 	 * ino to indicate seperate mappings.
 	 */
-	filp->f_dentry->d_inode->i_dev = fzero->f_dentry->d_inode->i_dev;
+	filp->f_dentry->d_inode->i_dev = shm_sb->s_dev;
 	filp->f_dentry->d_inode->i_ino = (unsigned long)shp;
-	fput(fzero);	/* release /dev/zero file */
+	if (fzero)
+		fput(fzero);	/* release /dev/zero file */
 	return(filp);
 }
 

@@ -142,7 +142,7 @@ _GLOBAL(_tlbia)
 	sync
 	tlbia
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 #endif
@@ -154,7 +154,7 @@ _GLOBAL(_tlbia)
 _GLOBAL(_tlbie)
 	tlbie	r3
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 #endif

@@ -94,7 +94,7 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 	 * sure we exit gracefully rather than endlessly redo the
 	 * fault.
 	 */
-	if (!handle_mm_fault(current, vma, address, (isr & IA64_ISR_W) != 0)) {
+	if (!handle_mm_fault(mm, vma, address, (isr & IA64_ISR_W) != 0)) {
 		/*
 		 * We ran out of memory, or some other thing happened
 		 * to us that made us unable to handle the page fault

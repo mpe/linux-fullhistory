@@ -43,7 +43,6 @@ asmlinkage void do_##name(unsigned long r4, unsigned long r5, \
  \
 	asm volatile("stc	$r2_bank, %0": "=r" (error_code)); \
 	sti(); \
-	regs.syscall_nr = -1; \
 	tsk->thread.error_code = error_code; \
 	tsk->thread.trap_no = trapnr; \
 	force_sig(signr, tsk); \
@@ -95,9 +94,9 @@ DO_ERROR( 8, SIGSEGV, "address error (store)", address_error_store, current)
 DO_ERROR(12, SIGILL,  "reserved instruction", reserved_inst, current)
 DO_ERROR(13, SIGILL,  "illegal slot instruction", illegal_slot_inst, current)
 
-asmlinkage void do_exception_error (unsigned long r4, unsigned long r5,
-				    unsigned long r6, unsigned long r7,
-				    struct pt_regs regs)
+asmlinkage void do_exception_error(unsigned long r4, unsigned long r5,
+				   unsigned long r6, unsigned long r7,
+				   struct pt_regs regs)
 {
 	long ex;
 	asm volatile("stc	$r2_bank, %0" : "=r" (ex));
@@ -131,7 +130,8 @@ void dump_stack(void)
 	unsigned long *p;
 
 	asm("mov	$r15, %0" : "=r" (start));
-	asm("stc	$r4_bank, %0" : "=r" (end));
+	asm("stc	$r7_bank, %0" : "=r" (end));
+	end += 8192;
 
 	printk("%08lx:%08lx\n", (unsigned long)start, (unsigned long)end);
 	for (p=start; p < end; p++)

@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.44 2000/02/11 04:49:13 davem Exp $
+/* $Id: pcikbd.c,v 1.45 2000/04/24 06:10:19 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -23,6 +23,7 @@
 #include <linux/kbd_ll.h>
 #include <linux/kbd_kern.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 #include <linux/init.h>
 
 #include <asm/ebus.h>
@@ -59,6 +60,8 @@ static volatile unsigned char reply_expected = 0;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
+static spinlock_t pcikbd_lock = SPIN_LOCK_UNLOCKED;
+
 unsigned char pckbd_read_mask = KBD_STAT_OBF;
 
 extern int pcikbd_init(void);
@@ -71,26 +74,18 @@ extern unsigned char pci_getledstate(void);
 #define pcikbd_inb(x)     inb(x)
 #define pcikbd_outb(v,x)  outb(v,x)
 
-#if 0 /* deadwood */
-static __inline__ unsigned char pcikbd_inb(unsigned long port)
+/* Wait for keyboard controller input buffer to drain.
+ * Must be invoked under the pcikbd_lock.
+ */
+static void kb_wait(void)
 {
-	return inb(port);
-}
-
-static __inline__ void pcikbd_outb(unsigned char val, unsigned long port)
-{
-	outb(val, port);
-}
-#endif
-
-static inline void kb_wait(void)
-{
-	unsigned long start = jiffies;
+	unsigned long timeout = 250;
 
 	do {
 		if(!(pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG) & KBD_STAT_IBF))
 			return;
-	} while (jiffies - start < KBC_TIMEOUT);
+		mdelay(1);
+	} while (--timeout);
 }
 
 /*
@@ -312,7 +307,10 @@ char pcikbd_unexpected_up(unsigned char keycode)
 static void
 pcikbd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
+	unsigned long flags;
 	unsigned char status;
+
+	spin_lock_irqsave(&pcikbd_lock, flags);
 
 	kbd_pt_regs = regs;
 	status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
@@ -327,27 +325,45 @@ pcikbd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	} while(status & KBD_STAT_OBF);
 	tasklet_schedule(&keyboard_tasklet);
+
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
 }
 
 static int send_data(unsigned char data)
 {
 	int retries = 3;
-	unsigned long start;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pcikbd_lock, flags);
 
 	do {
+		unsigned long timeout = 1000;
+
 		kb_wait();
-		acknowledge = resend = 0;
+
+		acknowledge = 0;
+		resend = 0;
 		reply_expected = 1;
+
 		pcikbd_outb(data, pcikbd_iobase + KBD_DATA_REG);
-		start = jiffies;
 		do {
-			if(acknowledge)
-				return 1;
-			if(jiffies - start >= KBD_TIMEOUT)
-				return 0;
-		} while(!resend);
-	} while(retries-- > 0);
+			if (acknowledge)
+				goto out_ack;
+			if (resend)
+				break;
+			mdelay(1);
+		} while (--timeout);
+		if (timeout == 0)
+			goto out_timeout;
+	} while (retries-- > 0);
+
+out_timeout:
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
 	return 0;
+
+out_ack:
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
+	return 1;
 }
 
 void pcikbd_leds(unsigned char leds)
@@ -360,17 +376,23 @@ void pcikbd_leds(unsigned char leds)
 static int __init pcikbd_wait_for_input(void)
 {
 	int status, data;
-	unsigned long start = jiffies;
+	unsigned long timeout = 1000;
 
 	do {
+		mdelay(1);
+
 		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
-		if(!(status & KBD_STAT_OBF))
+		if (!(status & KBD_STAT_OBF))
 			continue;
+
 		data = pcikbd_inb(pcikbd_iobase + KBD_DATA_REG);
-		if(status & (KBD_STAT_GTO | KBD_STAT_PERR))
+		if (status & (KBD_STAT_GTO | KBD_STAT_PERR))
 			continue;
+
 		return (data & 0xff);
-	} while(jiffies - start < KBD_INIT_TIMEOUT);
+
+	} while (--timeout > 0);
+
 	return -1;
 }
 
@@ -573,26 +595,11 @@ struct aux_queue {
 };
 
 static struct aux_queue *queue;
-static int aux_ready = 0;
 static int aux_count = 0;
 static int aux_present = 0;
 
 #define pcimouse_inb(x)     inb(x)
 #define pcimouse_outb(v,x)  outb(v,x)
-
-#if 0
-
-static __inline__ unsigned char pcimouse_inb(unsigned long port)
-{
-	return inb(port);
-}
-
-static __inline__ void pcimouse_outb(unsigned char val, unsigned long port)
-{
-	outb(val, port);
-}
-
-#endif
 
 /*
  *	Shared subroutines
@@ -603,11 +610,11 @@ static unsigned int get_from_queue(void)
 	unsigned int result;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&pcikbd_lock, flags);
 	result = queue->buf[queue->tail];
 	queue->tail = (queue->tail + 1) & (AUX_BUF_SIZE-1);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
+
 	return result;
 }
 
@@ -645,17 +652,17 @@ static int aux_fasync(int fd, struct file *filp, int on)
 
 static int poll_aux_status(void)
 {
-	int retries=0;
+	int retries = 0;
 
 	while ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) &
 		(KBD_STAT_IBF | KBD_STAT_OBF)) && retries < MAX_RETRIES) {
  		if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF)
 		    == AUX_STAT_OBF)
 			pcimouse_inb(pcimouse_iobase + KBD_DATA_REG);
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout((5*HZ + 99) / 100);
+		mdelay(5);
 		retries++;
 	}
+
 	return (retries < MAX_RETRIES);
 }
 
@@ -699,51 +706,38 @@ static void aux_write_cmd(int val)
 }
 
 /*
- * AUX handler critical section start and end.
- * 
- * Only one process can be in the critical section and all keyboard sends are
- * deferred as long as we're inside. This is necessary as we may sleep when
- * waiting for the keyboard controller and other processes / BH's can
- * preempt us. Please note that the input buffer must be flushed when
- * aux_end_atomic() is called and the interrupt is no longer enabled as not
- * doing so might cause the keyboard driver to ignore all incoming keystrokes.
- */
-
-static DECLARE_MUTEX(aux_sema4);
-
-static inline void aux_start_atomic(void)
-{
-	down(&aux_sema4);
-	tasklet_disable_nosync(&keyboard_tasklet);
-	tasklet_unlock_wait(&keyboard_tasklet);
-}
-
-static inline void aux_end_atomic(void)
-{
-	tasklet_enable(&keyboard_tasklet);
-	up(&aux_sema4);
-}
-
-/*
  * Interrupt from the auxiliary device: a character
  * is waiting in the keyboard/aux controller.
  */
 
 void pcimouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	int head = queue->head;
-	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
+	unsigned long flags;
+	int head, maxhead;
+	unsigned char val;
 
-	if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) != AUX_STAT_OBF)
+	spin_lock_irqsave(&pcikbd_lock, flags);
+
+	head = queue->head;
+	maxhead = (queue->tail - 1) & (AUX_BUF_SIZE - 1);
+
+	if ((pcimouse_inb(pcimouse_iobase + KBD_STATUS_REG) & AUX_STAT_OBF) !=
+	    AUX_STAT_OBF) {
+		spin_unlock_irqrestore(&pcikbd_lock, flags);
 		return;
+	}
 
-	add_mouse_randomness(queue->buf[head] = pcimouse_inb(pcimouse_iobase + KBD_DATA_REG));
+	val = pcimouse_inb(pcimouse_iobase + KBD_DATA_REG);
+	queue->buf[head] = val;
+	add_mouse_randomness(val);
 	if (head != maxhead) {
 		head++;
-		head &= AUX_BUF_SIZE-1;
+		head &= AUX_BUF_SIZE - 1;
 	}
 	queue->head = head;
-	aux_ready = 1;
+
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
+
 	if (queue->fasync)
 		kill_fasync(queue->fasync, SIGIO, POLL_IN);
 	wake_up_interruptible(&queue->proc_list);
@@ -751,10 +745,13 @@ void pcimouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static int aux_release(struct inode * inode, struct file * file)
 {
+	unsigned long flags;
+
 	aux_fasync(-1, file, 0);
 	if (--aux_count)
 		return 0;
-	aux_start_atomic();
+
+	spin_lock_irqsave(&pcikbd_lock, flags);
 
 	/* Disable controller ints */
 	aux_write_cmd(AUX_INTS_OFF);
@@ -763,7 +760,8 @@ static int aux_release(struct inode * inode, struct file * file)
 	/* Disable Aux device */
 	pcimouse_outb(KBD_CCMD_MOUSE_DISABLE, pcimouse_iobase + KBD_CNTL_REG);
 	poll_aux_status();
-	aux_end_atomic();
+
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -776,17 +774,19 @@ static int aux_release(struct inode * inode, struct file * file)
 
 static int aux_open(struct inode * inode, struct file * file)
 {
+	unsigned long flags;
+
 	if (!aux_present)
 		return -ENODEV;
 
-	aux_start_atomic();
-	if (aux_count++) {
-		aux_end_atomic();
+	if (aux_count++)
 		return 0;
-	}
-	if (!poll_aux_status()) {		/* FIXME: Race condition */
+
+	spin_lock_irqsave(&pcikbd_lock, flags);
+
+	if (!poll_aux_status()) {
 		aux_count--;
-		aux_end_atomic();
+		spin_unlock_irqrestore(&pcikbd_lock, flags);
 		return -EBUSY;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
@@ -798,9 +798,10 @@ static int aux_open(struct inode * inode, struct file * file)
 	aux_write_dev(AUX_ENABLE_DEV);			    /* Enable aux device */
 	aux_write_cmd(AUX_INTS_ON);			    /* Enable controller ints */
 	poll_aux_status();
-	aux_end_atomic();
 
-	aux_ready = 0;
+	spin_unlock_irqrestore(&pcikbd_lock, flags);
+
+
 	return 0;
 }
 
@@ -812,23 +813,35 @@ static ssize_t aux_write(struct file * file, const char * buffer,
 			 size_t count, loff_t *ppos)
 {
 	ssize_t retval = 0;
+	unsigned long flags;
 
 	if (count) {
 		ssize_t written = 0;
 
-		aux_start_atomic();
+		spin_lock_irqsave(&pcikbd_lock, flags);
+
 		do {
 			char c;
-			if (!poll_aux_status())
-				break;
-			pcimouse_outb(KBD_CCMD_WRITE_MOUSE, pcimouse_iobase + KBD_CNTL_REG);
-			if (!poll_aux_status())
-				break;
+
+			spin_unlock_irqrestore(&pcikbd_lock, flags);
+
 			get_user(c, buffer++);
+
+			spin_lock_irqsave(&pcikbd_lock, flags);
+
+			if (!poll_aux_status())
+				break;
+			pcimouse_outb(KBD_CCMD_WRITE_MOUSE,
+				      pcimouse_iobase + KBD_CNTL_REG);
+			if (!poll_aux_status())
+				break;
+
 			pcimouse_outb(c, pcimouse_iobase + KBD_DATA_REG);
 			written++;
 		} while (--count);
-		aux_end_atomic();
+
+		spin_unlock_irqrestore(&pcikbd_lock, flags);
+
 		retval = -EIO;
 		if (written) {
 			retval = written;
@@ -872,7 +885,6 @@ repeat:
 		put_user(c, buffer++);
 		i--;
 	}
-	aux_ready = !queue_empty();
 	if (count-i) {
 		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 		return count-i;
@@ -885,7 +897,7 @@ repeat:
 static unsigned int aux_poll(struct file *file, poll_table * wait)
 {
 	poll_wait(file, &queue->proc_list, wait);
-	if (aux_ready)
+	if (!queue_empty())
 		return POLLIN | POLLRDNORM;
 	return 0;
 }
@@ -972,7 +984,9 @@ found:
 	pckbd_read_mask = AUX_STAT_OBF;
 
 	misc_register(&psaux_mouse);
-	aux_start_atomic();
+
+	spin_lock_irq(&pcikbd_lock);
+
 	pcimouse_outb(KBD_CCMD_MOUSE_ENABLE, pcimouse_iobase + KBD_CNTL_REG);
 	aux_write_ack(AUX_RESET);
 	aux_write_ack(AUX_SET_SAMPLE);
@@ -987,7 +1001,8 @@ found:
 	poll_aux_status();
 	pcimouse_outb(AUX_INTS_OFF, pcimouse_iobase + KBD_DATA_REG);
 	poll_aux_status();
-	aux_end_atomic();
+
+	spin_unlock_irq(&pcikbd_lock);
 
 	return 0;
 

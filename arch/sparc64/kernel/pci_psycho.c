@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.15 2000/03/25 05:18:11 davem Exp $
+/* $Id: pci_psycho.c,v 1.16 2000/04/15 10:06:16 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1074,22 +1074,34 @@ static void __init psycho_base_address_update(struct pci_dev *pdev, int resource
 {
 	struct pcidev_cookie *pcp = pdev->sysdata;
 	struct pci_pbm_info *pbm = pcp->pbm;
-	struct resource *res = &pdev->resource[resource];
-	struct resource *root;
+	struct resource *res, *root;
 	u32 reg;
-	int where, size;
+	int where, size, is_64bit;
 
+	res = &pdev->resource[resource];
+	where = PCI_BASE_ADDRESS_0 + (resource * 4);
+
+	is_64bit = 0;
 	if (res->flags & IORESOURCE_IO)
 		root = &pbm->io_space;
-	else
+	else {
 		root = &pbm->mem_space;
+		if ((res->flags & PCI_BASE_ADDRESS_MEM_TYPE_MASK)
+		    == PCI_BASE_ADDRESS_MEM_TYPE_64)
+			is_64bit = 1;
+	}
 
-	where = PCI_BASE_ADDRESS_0 + (resource * 4);
 	size = res->end - res->start;
 	pci_read_config_dword(pdev, where, &reg);
 	reg = ((reg & size) |
 	       (((u32)(res->start - root->start)) & ~size));
 	pci_write_config_dword(pdev, where, reg);
+
+	/* This knows that the upper 32-bits of the address
+	 * must be zero.  Our PCI common layer enforces this.
+	 */
+	if (is_64bit)
+		pci_write_config_dword(pdev, where + 4, 0);
 }
 
 /* We have to do the config space accesses by hand, thus... */

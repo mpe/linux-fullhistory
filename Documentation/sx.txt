@@ -175,8 +175,13 @@ You can specify several parameters:
 		works). 
 
 	sx_irqmask: The mask of allowable IRQs to use. I suggest you set 
-                this to 0 (disable IRQs all together) and use polling if 
-		the assignment of IRQs becomes problematic.
+		this to 0 (disable IRQs all together) and use polling if 
+		the assignment of IRQs becomes problematic. This is defined
+		as the sum of (1 << irq) 's that you want to allow. So 
+		sx_irqmask of 8 (1 << 3) specifies that only irq 3 may
+		be used by the SX driver. If you want to specify to the 
+		driver: "Either irq 11 or 12 is ok for you to use", then
+		specify (1 << 11) | (1 << 12) = 0x1800 . 
 
 	sx_debug: You can enable different sorts of debug traces with this. 
 		At "-1" all debugging traces are active. You'll get several

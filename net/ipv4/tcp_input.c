@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.192 2000/04/08 07:21:20 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.193 2000/04/20 14:41:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2784,7 +2784,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->fin_seq = req->rcv_isn;
 		newtp->urg_data = 0;
 		newtp->listen_opt = NULL;
-		newtp->accept_queue = NULL;
+		newtp->accept_queue = newtp->accept_queue_tail = NULL;
 		/* Deinitialize syn_wait_lock to trap illegal accesses. */
 		memset(&newtp->syn_wait_lock, 0, sizeof(newtp->syn_wait_lock));
 

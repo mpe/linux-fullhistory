@@ -136,20 +136,20 @@ void free_task_struct(struct task_struct *p)
  */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {	/* Don't use this in BL=1(cli).  Or else, CPU resets! */
-	register unsigned long __sc0 __asm__ ("$r0") = __NR_clone;
+	register unsigned long __sc0 __asm__ ("$r3") = __NR_clone;
 	register unsigned long __sc4 __asm__ ("$r4") = (long) flags | CLONE_VM;
 	register unsigned long __sc5 __asm__ ("$r5") = 0;
 	register unsigned long __sc8 __asm__ ("$r8") = (long) arg;
 	register unsigned long __sc9 __asm__ ("$r9") = (long) fn;
 
-	__asm__("trapa	#0\n\t" 	/* Linux/SH system call */
+	__asm__("trapa	#0x12\n\t" 	/* Linux/SH system call */
 		"tst	#0xff, $r0\n\t"	/* child or parent? */
 		"bf	1f\n\t"		/* parent - jump */
 		"jsr	@$r9\n\t"	/* call fn */
 		" mov	$r8, $r4\n\t"	/* push argument */
 		"mov	$r0, $r4\n\t"	/* return value to arg of exit */
-		"mov	%2, $r0\n\t"	/* exit */
-		"trapa	#0\n"
+		"mov	%2, $r3\n\t"	/* exit */
+		"trapa	#0x11\n"
 		"1:"
 		: "=z" (__sc0)
 		: "0" (__sc0), "i" (__NR_exit),
@@ -194,7 +194,11 @@ int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpu)
 
 	fpvalid = tsk->used_math;
 	if (fpvalid) {
+		unsigned long flags;
+
+		save_and_cli(flags);
 		unlazy_fpu(tsk);
+		restore_flags(flags);
 		memcpy(fpu, &tsk->thread.fpu.hard, sizeof(*fpu));
 	}
 
@@ -214,7 +218,11 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct task_struct *tsk = current;
 
 	if (tsk != &init_task) {
+		unsigned long flags;
+
+		save_and_cli(flags);
 		unlazy_fpu(tsk);
+		restore_flags(flags);
 		p->thread.fpu = current->thread.fpu;
 		p->used_math = tsk->used_math;
 	}
@@ -263,16 +271,21 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
 #if defined(__SH4__)
-	if (prev != &init_task)
+	if (prev != &init_task) {
+		unsigned long flags;
+
+		save_and_cli(flags);
 		unlazy_fpu(prev);
+		restore_flags(flags);
+	}
 #endif
 	/*
-	 * Restore the kernel stack onto kernel mode register
-	 *   	k4 (r4_bank1)
+	 * Restore the kernel mode register
+	 *   	k7 (r7_bank1)
 	 */
-	asm volatile("ldc	%0, $r4_bank"
+	asm volatile("ldc	%0, $r7_bank"
 		     : /* no output */
-		     :"r" ((unsigned long)next+8192));
+		     :"r" (next));
 }
 
 asmlinkage int sys_fork(unsigned long r4, unsigned long r5,

@@ -244,7 +244,7 @@ void __init setup_arch(char **cmdline_p)
 
 	/*
 	 * Reserve the kernel text and
-	 * Reserve the bootmem bitmap.We do this in two steps (first step
+	 * Reserve the bootmem bitmap. We do this in two steps (first step
 	 * was init_bootmem()), because this catches the (definitely buggy)
 	 * case of us accidentally initializing the bootmem allocator with
 	 * an invalid RAM area.
@@ -262,17 +262,17 @@ void __init setup_arch(char **cmdline_p)
 	if (LOADER_TYPE && INITRD_START) {
 		if (INITRD_START + INITRD_SIZE <= (max_low_pfn << PAGE_SHIFT)) {
 			reserve_bootmem(INITRD_START+__MEMORY_START, INITRD_SIZE);
- 			initrd_start =
- 				INITRD_START ? INITRD_START + PAGE_OFFSET + __MEMORY_START : 0;
+			initrd_start =
+				INITRD_START ? INITRD_START + PAGE_OFFSET + __MEMORY_START : 0;
 			initrd_end = initrd_start + INITRD_SIZE;
 		} else {
- 			printk("initrd extends beyond end of memory "
- 			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			printk("initrd extends beyond end of memory "
+			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
 				    INITRD_START + INITRD_SIZE,
 				    max_low_pfn << PAGE_SHIFT);
- 			initrd_start = 0;
- 		}
- 	}
+			initrd_start = 0;
+		}
+	}
 #endif
 
 #if 0
@@ -301,10 +301,9 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #if defined(__SH4__)
+	/* We already grab/initialized FPU in head.S.  Make it consisitent. */
 	init_task.used_math = 1;
 	init_task.flags |= PF_USEDFPU;
-	grab_fpu();
-	fpu_init();
 #endif
 	paging_init();
 }

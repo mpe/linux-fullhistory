@@ -73,7 +73,7 @@
 */
 
 /*
-**	March 6 2000, version 3.2g
+**	April 24 2000, version 3.2i
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -104,7 +104,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2h"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2i"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 

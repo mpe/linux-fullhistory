@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.41 2000/01/21 23:45:57 davem Exp $
+ * Version:	$Id: proc.c,v 1.42 2000/04/16 01:11:37 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -56,7 +56,7 @@ static int fold_prot_inuse(struct proto *proto)
 	int cpu;
 
 	for (cpu=0; cpu<smp_num_cpus; cpu++)
-		res += proto->stats[cpu].inuse;
+		res += proto->stats[cpu_logical_map(cpu)].inuse;
 
 	return res;
 }
@@ -99,8 +99,10 @@ static unsigned long fold_field(unsigned long *begin, int sz, int nr)
 
 	sz /= sizeof(unsigned long);
 
-	for (i=0; i<2*smp_num_cpus; i++)
-		res += begin[i*sz + nr];
+	for (i=0; i<smp_num_cpus; i++) {
+		res += begin[2*cpu_logical_map(i)*sz + nr];
+		res += begin[(2*cpu_logical_map(i)+1)*sz + nr];
+	}
 	return res;
 }
 

@@ -432,7 +432,7 @@ static void __init check_bugs(void)
 	identify_cpu(&boot_cpu_data);
 	check_cx686_cpuid();
 	check_cx686_slop();
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);
 #endif

@@ -118,7 +118,7 @@ prep_get_cpuinfo(char *buffer)
 	extern char *Motherboard_map_name;
 	int len, i;
   
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define CD(X)		(cpu_data[n].X)  
 #else
 #define CD(X) (X)
@@ -624,10 +624,10 @@ prep_init_IRQ(void)
         for ( i = 0 ; i < 16  ; i++ )
                 irq_desc[i].handler = &i8259_pic;
         i8259_init();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	request_irq(openpic_to_irq(OPENPIC_VEC_SPURIOUS), openpic_ipi_action,
 		    0, "IPI0", 0);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)

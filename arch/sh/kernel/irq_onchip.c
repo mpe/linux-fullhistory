@@ -61,7 +61,7 @@ static unsigned int startup_onChip_irq(unsigned int irq)
 }
 
 static struct hw_interrupt_type onChip_irq_type = {
-	"On-Chip Supporting Module",
+	"On-Chip-IPR",
 	startup_onChip_irq,
 	shutdown_onChip_irq,
 	enable_onChip_irq,
@@ -193,7 +193,7 @@ static unsigned int startup_onChip2_irq(unsigned int irq)
 }
 
 static struct hw_interrupt_type onChip2_irq_type = {
-	"SH7709 Extended On-Chip Supporting Module",
+	"Extended-IPR",
 	startup_onChip2_irq,
 	shutdown_onChip2_irq,
 	enable_onChip2_irq,

@@ -220,8 +220,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 		default:
 			return -EINVAL;
 		}
-	} else if ((flags & MAP_TYPE) != MAP_PRIVATE)
-		return -EINVAL;
+	}
 
 	/* Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
@@ -269,8 +268,11 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 			if (!(file->f_mode & FMODE_WRITE))
 				vma->vm_flags &= ~(VM_MAYWRITE | VM_SHARED);
 		}
-	} else
+	} else {
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+		if (flags & MAP_SHARED)
+			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
+	}
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
 	vma->vm_pgoff = pgoff;
@@ -316,6 +318,8 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 			atomic_inc(&file->f_dentry->d_inode->i_writecount);
 		if (error)
 			goto unmap_and_free_vma;
+	} else if (flags & MAP_SHARED) {
+		error = map_zero_setup (vma);
 	}
 
 	/*
@@ -468,13 +472,13 @@ struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
 	return NULL;
 }
 
-struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
+struct vm_area_struct * find_extend_vma(struct mm_struct * mm, unsigned long addr)
 {
 	struct vm_area_struct * vma;
 	unsigned long start;
 
 	addr &= PAGE_MASK;
-	vma = find_vma(tsk->mm,addr);
+	vma = find_vma(mm,addr);
 	if (!vma)
 		return NULL;
 	if (vma->vm_start <= addr)

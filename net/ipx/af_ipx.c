@@ -2330,23 +2330,23 @@ static struct net_proto_family ipx_family_ops = {
 };
 
 static struct proto_ops SOCKOPS_WRAPPED(ipx_dgram_ops) = {
-	PF_IPX,
-	ipx_release,
-	ipx_bind,
-	ipx_connect,
-	sock_no_socketpair,
-	sock_no_accept,
-	ipx_getname,
-	datagram_poll,
-	ipx_ioctl,
-	sock_no_listen,
-	sock_no_shutdown, /* FIXME: We have to really support shutdown. */
-	ipx_setsockopt,
-	ipx_getsockopt,
-	sock_no_fcntl,
-	ipx_sendmsg,
-	ipx_recvmsg,
-	sock_no_mmap
+	family:		PF_IPX,
+
+	release:	ipx_release,
+	bind:		ipx_bind,
+	connect:	ipx_connect,
+	socketpair:	sock_no_socketpair,
+	accept:		sock_no_accept,
+	getname:	ipx_getname,
+	poll:		datagram_poll,
+	ioctl:		ipx_ioctl,
+	listen:		sock_no_listen,
+	shutdown:	sock_no_shutdown, /* FIXME: We have to really support shutdown. */
+	setsockopt:	ipx_setsockopt,
+	getsockopt:	ipx_getsockopt,
+	sendmsg:	ipx_sendmsg,
+	recvmsg:	ipx_recvmsg,
+	mmap:		sock_no_mmap,
 };
 
 #include <linux/smp_lock.h>

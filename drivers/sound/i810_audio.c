@@ -1,3 +1,53 @@
+/*
+ *	Intel i810 and friends ICH driver for Linux
+ *	Alan Cox <alan@redhat.com>
+ *
+ *  Built from:
+ *	Low level code:  Zach Brown (original nonworking i810 OSS driver)
+ *			 Jaroslav Kysela <perex@suse.cz> (working ALSA driver)
+ *
+ *	Framework: Thomas Sailer <sailer@ife.ee.ethz.ch>
+ *	Extended by: Zach Brown <zab@redhat.com>  
+ *			and others..
+ *
+ *  Hardware Provided By:
+ *	Analog Devices (A major AC97 codec maker)
+ *	Intel Corp  (you've probably heard of them already)
+ *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program; if not, write to the Free Software
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ *
+ *	Intel 810 theory of operation
+ *
+ *	The chipset provides three DMA channels that talk to an AC97
+ *	CODEC (AC97 is a digital/analog mixer standard). At its simplest
+ *	you get 48Khz audio with basic volume and mixer controls. At the
+ *	best you get rate adaption in the codec. We set the card up so
+ *	that we never take completion interrupts but instead keep the card
+ *	chasing its tail around a ring buffer. This is needed for mmap
+ *	mode audio and happens to work rather well for non-mmap modes too.
+ *
+ *	The board has one output channel for PCM audio (supported) and
+ *	a stereo line in and mono microphone input. Again these are normally
+ *	locked to 48Khz only. Right now recording is not finished.
+ *
+ *	There is no midi support, no synth support. Use timidity. To get
+ *	esd working you need to use esd -r 48000 as it won't probe 48KHz
+ *	by default. mpg123 can't handle 48Khz only audio so use xmms.
+ */
+ 
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/string.h>
@@ -211,10 +261,10 @@ struct i810_card {
 	struct i810_channel channel[3];
 	unsigned int magic;
 
-	/* We keep trident cards in a linked list */
+	/* We keep i810 cards in a linked list */
 	struct i810_card *next;
 
-	/* The trident has a certain amount of cross channel interaction
+	/* The i810 has a certain amount of cross channel interaction
 	   so we use a single per card lock */
 	spinlock_t lock;
 
@@ -348,17 +398,40 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int rate)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
-
+	u16 dacp, rp;
+	struct ac97_codec *codec=state->card->ac97_codec[0];
+	
+	if(!(state->card->ac97_features&0x0001))
+		return 48000;
+			
 	if (rate > 48000)
 		rate = 48000;
-	if (rate < 48000)
-		rate = 48000;
+	if (rate < 4000)
+		rate = 4000;
 
+	/* Power down the ADC */
+	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
+	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0100);
+	
+	/* Load the rate and read the effective rate */
+	i810_ac97_set(codec, AC97_PCM_LR_ADC_RATE, rate);
+	rp=i810_ac97_get(codec, AC97_PCM_LR_ADC_RATE);
+	
+	printk("ADC rate set to %d Returned %d\n", 
+		rate, (int)rp);
+		
+	rate=rp;
+		
+	/* Power it back up */
+	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
+	
 	dmabuf->rate = rate;
 #ifdef DEBUG
 	printk("i810_audio: called i810_set_adc_rate : rate = %d\n", rate);
 #endif
+
 	return rate;
+
 }
 
 /* prepare channel attributes for playback */ 
@@ -709,8 +782,6 @@ static int drain_dac(struct i810_state *state, int nonblock)
 			return -EBUSY;
 		}
 
-		/* No matter how much data left in the buffer, we have to wait untill
-		   CSO == ESO/2 or CSO == ESO when address engine interrupts */
 		tmo = (dmabuf->dmasize * HZ) / dmabuf->rate;
 		tmo >>= sample_shift[dmabuf->fmt];
 		if (!schedule_timeout(tmo ? tmo : 1) && tmo){
@@ -771,8 +842,6 @@ static void i810_update_ptr(struct i810_state *state)
 					dmabuf->endcleared = 1;
 				}
 			}			
-			/* since dma machine only interrupts at ESO and ESO/2, we sure have at
-			   least half of dma buffer free, so wake up the process unconditionally */
 			wake_up(&dmabuf->wait);
 		}
 	}
@@ -793,8 +862,6 @@ static void i810_update_ptr(struct i810_state *state)
 				printk("DMA overrun on send\n");
 				dmabuf->error++;
 			}
-			/* since dma machine only interrupts at ESO and ESO/2, we sure have at
-			   least half of dma buffer free, so wake up the process unconditionally */
 			wake_up(&dmabuf->wait);
 		}
 	}
@@ -837,7 +904,7 @@ static void i810_channel_interrupt(struct i810_card *card)
 		if(status & DMA_INT_COMPLETE)
 		{
 			int x;
-			/* Kepe the card chasing its tail */
+			/* Keep the card chasing its tail */
 			outb(x=((inb(port+OFF_CIV)-1)&31), port+OFF_LVI);
 			i810_update_ptr(state);
 //			printk("COMP%d ",x);
@@ -923,8 +990,7 @@ static ssize_t i810_read(struct file *file, char *buffer, size_t count, loff_t *
 				if (!ret) ret = -EAGAIN;
 				return ret;
 			}
-			/* No matter how much space left in the buffer, we have to wait untill
-			   CSO == ESO/2 or CSO == ESO when address engine interrupts */
+			/* This isnt strictly right for the 810  but it'll do */
 			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
 			tmo >>= sample_shift[dmabuf->fmt];
 			/* There are two situations when sleep_on_timeout returns, one is when
@@ -1021,8 +1087,7 @@ static ssize_t i810_write(struct file *file, const char *buffer, size_t count, l
 				if (!ret) ret = -EAGAIN;
 				return ret;
 			}
-			/* No matter how much data left in the buffer, we have to wait untill
-			   CSO == ESO/2 or CSO == ESO when address engine interrupts */
+			/* Not strictly correct but works */
 			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
 			tmo >>= sample_shift[dmabuf->fmt];
 			/* There are two situations when sleep_on_timeout returns, one is when

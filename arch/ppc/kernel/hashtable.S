@@ -52,7 +52,7 @@ Hash_msk = (((1 << Hash_bits) - 1) * 64)
 	
 	.globl	hash_page
 hash_page:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	SAVE_2GPRS(7,r21)
 	eieio
 	lis	r2,hash_table_lock@h
@@ -88,7 +88,7 @@ hash_page:
 	rlwimi	r5,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r5,0(r5)		/* get pmd entry */
 	rlwinm.	r5,r5,0,0,19		/* extract address of pte page */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	beq-	hash_page_out		/* return if no mapping */
 #else
 	/* XXX it seems like the 601 will give a machine fault on the
@@ -102,7 +102,7 @@ hash_page:
 	lwz	r6,0(r2)		/* get linux-style pte */
 	ori	r4,r4,1			/* set _PAGE_PRESENT bit in access */
 	andc.	r0,r4,r6		/* check access & ~permission */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	bne-	hash_page_out		/* return if access not permitted */
 #else
 	bnelr-
@@ -128,7 +128,7 @@ hash_page:
 	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
 #endif /* CONFIG_PPC64 */
 	
-#ifndef __SMP__				/* do this later for SMP */
+#ifndef CONFIG_SMP				/* do this later for SMP */
 #ifdef CONFIG_PPC64
 	ori	r5,r5,1			/* set V (valid) bit */
 #else /* CONFIG_PPC64 */
@@ -280,7 +280,7 @@ hash_page_patch_C:
 	addi	r4,r4,1
 	stw	r4,htab_evicts@l(r2)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	/* Store PTE in PTEG */
 found_empty:
 #ifdef CONFIG_PPC64
@@ -296,7 +296,7 @@ found_slot:
 #endif	
 	sync
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 /*
  * Between the tlbie above and updating the hash table entry below,
  * another CPU could read the hash table entry and put it in its TLB.
@@ -324,7 +324,7 @@ found_slot:
 	sync
 	oris	r5,r5,0x8000
 	stw	r5,0(r3)	/* finally set V bit in PTE */
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 /*
  * Update the hash table miss count.  We only want misses here
@@ -342,7 +342,7 @@ found_slot:
 	addi	r3,r3,1
 	stw	r3,htab_reloads@l(r2)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	lis	r2,hash_table_lock@ha
 	tophys(r2,r2)
 	li	r0,0
@@ -373,7 +373,7 @@ found_slot:
 	lwz	r21,GPR21(r21)
 	rfi
 	
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 hash_page_out:
 	lis	r2,hash_table_lock@ha
 	tophys(r2,r2)
@@ -386,7 +386,7 @@ hash_page_out:
 	.globl	hash_table_lock
 hash_table_lock:
 	.long	0
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	.data
 next_slot:
@@ -404,13 +404,13 @@ _GLOBAL(flush_hash_segments)
 	bne+	99f
 	tlbia
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 #endif
 	blr
 99:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Note - we had better not do anything which could generate
 	   a hash table miss while we have the hash table locked,
 	   or we'll get a deadlock.  -paulus */
@@ -451,7 +451,7 @@ _GLOBAL(flush_hash_segments)
 	sync
 	tlbia
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 	lis	r3,hash_table_lock@ha
@@ -473,13 +473,13 @@ _GLOBAL(flush_hash_page)
 	bne+	99f
 	tlbie	r4			/* in hw tlb too */
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 #endif
 	blr
 99:
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Note - we had better not do anything which could generate
 	   a hash table miss while we have the hash table locked,
 	   or we'll get a deadlock.  -paulus */
@@ -531,7 +531,7 @@ _GLOBAL(flush_hash_page)
 4:	sync
 	tlbie	r4			/* in hw tlb too */
 	sync
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	tlbsync
 	sync
 	li	r0,0

@@ -339,10 +339,10 @@ struct urb_priv {
 
 	struct uhci_qh *qh;		/* QH for this URB */
 
-	int fsbr : 1;			/* Did this URB turn on FSBR? */
-	int queued : 1;			/* 0 if QH was linked in */
-
-	char short_control_packet;	/* If we get a short packet during */
+	int fsbr : 1;			/* URB turned on FSBR */
+	int fsbr_timeout : 1;		/* URB timed out on FSBR */
+	int queued : 1;			/* QH was queued (not linked in) */
+	int short_control_packet : 1;	/* If we get a short packet during */
 					/*  a control transfer, retrigger */
 					/*  the status phase */
 
@@ -414,6 +414,7 @@ struct uhci_td *uhci_link_to_td(unsigned int element);
 /* Debugging code */
 void uhci_show_td(struct uhci_td *td);
 void uhci_show_status(struct uhci *uhci);
+void uhci_show_urb_queue(struct urb *urb);
 void uhci_show_queue(struct uhci_qh *qh);
 void uhci_show_queues(struct uhci *uhci);
 

@@ -101,12 +101,12 @@ void no_action(int ir1, void *dev, struct pt_regs *regs)
 {
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
 	smp_message_recv(cpl-OPENPIC_VEC_IPI);
 }
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #ifdef __i386__
 static inline u_int in_le32(volatile u_int *addr)

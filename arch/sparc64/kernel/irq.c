@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.85 2000/03/02 02:00:24 davem Exp $
+/* $Id: irq.c,v 1.86 2000/04/15 06:02:50 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -538,82 +538,43 @@ out:
 }
 
 /* Only uniprocessor needs this IRQ/BH locking depth, on SMP it
- * lives in the per-cpu structure for cache reasons.
+ * lives in the brlock table for cache reasons.
  */
 #ifndef __SMP__
 unsigned int local_irq_count;
 unsigned int local_bh_count;
-
-#define irq_enter(cpu, irq)	(local_irq_count++)
-#define irq_exit(cpu, irq)	(local_irq_count--)
 #else
 
 /* Who has global_irq_lock. */
 unsigned char global_irq_holder = NO_PROC_ID;
 
-/* This protects IRQ's. */
-spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
-
-/* Global IRQ locking depth. */
-atomic_t global_irq_count = ATOMIC_INIT(0);
-
-#define irq_enter(cpu, irq)			\
-do {	hardirq_enter(cpu);			\
-	spin_unlock_wait(&global_irq_lock);	\
-} while(0)
-#define irq_exit(cpu, irq)	hardirq_exit(cpu)
-
 static void show(char * str)
 {
 	int cpu = smp_processor_id();
+	int i;
 
 	printk("\n%s, CPU %d:\n", str, cpu);
-	printk("irq:  %d [%u %u]\n",
-	       atomic_read(&global_irq_count),
-	       cpu_data[0].irq_count, cpu_data[1].irq_count);
-	printk("bh:   %d [%u %u]\n",
-	       (spin_is_locked(&global_bh_lock) ? 1 : 0),
-	       cpu_data[0].bh_count, cpu_data[1].bh_count);
+	printk("irq:  %d [ ", irqs_running());
+	for (i = 0; i < smp_num_cpus; i++)
+		printk("%u ", __brlock_array[i][BR_GLOBALIRQ_LOCK]);
+	printk("]\nbh:   %d [ ",
+	       (spin_is_locked(&global_bh_lock) ? 1 : 0));
+	for (i = 0; i < smp_num_cpus; i++)
+		printk("%u ", cpu_data[i].bh_count);
+	printk("]\n");
 }
 
 #define MAXCOUNT 100000000
 
+#if 0
 #define SYNC_OTHER_ULTRAS(x)	udelay(x+1)
-
-static inline void wait_on_irq(int cpu)
-{
-	int count = MAXCOUNT;
-	for(;;) {
-		membar("#LoadLoad");
-		if (!atomic_read (&global_irq_count)) {
-			if (local_bh_count || ! spin_is_locked(&global_bh_lock))
-				break;
-		}
-		spin_unlock (&global_irq_lock);
-		membar("#StoreLoad | #StoreStore");
-		for(;;) {
-			if (!--count) {
-				show("wait_on_irq");
-				count = ~0;
-			}
-			__sti();
-			SYNC_OTHER_ULTRAS(cpu);
-			__cli();
-			if (atomic_read(&global_irq_count))
-				continue;
-			if (spin_is_locked (&global_irq_lock))
-				continue;
-			if (!local_bh_count && spin_is_locked (&global_bh_lock))
-				continue;
-			if (spin_trylock(&global_irq_lock))
-				break;
-		}
-	}
-}
+#else
+#define SYNC_OTHER_ULTRAS(x)	membar("#Sync");
+#endif
 
 void synchronize_irq(void)
 {
-	if (atomic_read(&global_irq_count)) {
+	if (irqs_running()) {
 		cli();
 		sti();
 	}
@@ -621,15 +582,37 @@ void synchronize_irq(void)
 
 static inline void get_irqlock(int cpu)
 {
-	if (! spin_trylock(&global_irq_lock)) {
-		if ((unsigned char) cpu == global_irq_holder)
-			return;
-		do {
-			while (spin_is_locked (&global_irq_lock))
-				membar("#LoadLoad");
-		} while(! spin_trylock(&global_irq_lock));
+	int count;
+
+	if ((unsigned char)cpu == global_irq_holder)
+		return;
+
+	count = MAXCOUNT;
+again:
+	br_write_lock(BR_GLOBALIRQ_LOCK);
+	for (;;) {
+		spinlock_t *lock;
+
+		if (!irqs_running() &&
+		    (local_bh_count || !spin_is_locked(&global_bh_lock)))
+			break;
+
+		br_write_unlock(BR_GLOBALIRQ_LOCK);
+		lock = &__br_write_locks[BR_GLOBALIRQ_LOCK].lock;
+		while (irqs_running() ||
+		       spin_is_locked(lock) ||
+		       (!local_bh_count && spin_is_locked(&global_bh_lock))) {
+			if (!--count) {
+				show("wait_on_irq");
+				count = (~0 >> 1);
+			}
+			__sti();
+			SYNC_OTHER_ULTRAS(cpu);
+			__cli();
+		}
+		goto again;
 	}
-	wait_on_irq(cpu);
+
 	global_irq_holder = cpu;
 }
 

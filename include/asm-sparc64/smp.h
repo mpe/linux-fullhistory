@@ -33,12 +33,11 @@ extern struct prom_cpuinfo linux_cpus[64];
 /* Keep this a multiple of 64-bytes for cache reasons. */
 struct cpuinfo_sparc {
 	/* Dcache line 1 */
-	unsigned int	irq_count;
 	unsigned int	bh_count;
 	unsigned int	multiplier;
 	unsigned int	counter;
 	unsigned int	idle_volume;
-	unsigned int	__pad;
+	unsigned int	__pad[2];
 	unsigned long	udelay_val;
 
 	/* Dcache line 2 */

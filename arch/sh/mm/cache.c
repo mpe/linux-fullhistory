@@ -175,13 +175,13 @@ void cache_wback_area(unsigned long start, unsigned long end)
  *
  * For SH-4, flush (write back) Operand Cache, as Instruction Cache
  * doesn't have "updated" data.
+ *
+ * Assumes that called in interrupt disabled.
  */
 static void cache_wback_all(void)
 {
-	unsigned long flags;
 	unsigned long addr, data, i, j;
 
-	save_and_cli(flags);
 	jump_to_P2();
 
 	for (i=0; i<CACHE_OC_NUM_ENTRIES; i++) {
@@ -197,7 +197,6 @@ static void cache_wback_all(void)
 	}
 
 	back_to_P1();
-	restore_flags(flags);
 }
 
 static void
@@ -314,11 +313,11 @@ void flush_cache_all(void)
 {
 	unsigned long flags;
 
+	save_and_cli(flags);
 	/* Write back Operand Cache */
-	cache_wback_all ();
+	cache_wback_all();
 
 	/* Then, invalidate Instruction Cache and Operand Cache */
-	save_and_cli(flags);
 	jump_to_P2();
 	ctrl_outl(CCR_CACHE_INIT, CCR);
 	back_to_P1();

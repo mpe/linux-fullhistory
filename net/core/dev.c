@@ -1427,10 +1427,11 @@ static int dev_get_info(char *buffer, char **start, off_t offset, int length)
 static int dev_proc_stats(char *buffer, char **start, off_t offset,
 			  int length, int *eof, void *data)
 {
-	int i;
+	int i, lcpu;
 	int len=0;
 
-	for (i=0; i<smp_num_cpus; i++) {
+	for (lcpu=0; lcpu<smp_num_cpus; lcpu++) {
+		i = cpu_logical_map(lcpu);
 		len += sprintf(buffer+len, "%08x %08x %08x %08x %08x %08x %08x %08x %08x\n",
 			       netdev_rx_stat[i].total,
 			       netdev_rx_stat[i].dropped,

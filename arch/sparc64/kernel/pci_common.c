@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.7 2000/03/25 05:18:11 davem Exp $
+/* $Id: pci_common.c,v 1.10 2000/04/15 13:19:13 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -219,10 +219,15 @@ __init get_root_resource(struct linux_prom_pci_registers *ap,
 		return &pbm->mem_space;
 
 	case 3:
+		/* 64-bit MEM space, these are allocated out of
+		 * the 32-bit mem_space range for the PBM, ie.
+		 * we just zero out the upper 32-bits.
+		 */
+		return &pbm->mem_space;
+
 	default:
-		/* 64-bit MEM space, unsupported. */
-		printk("PCI: 64-bit MEM assignment??? "
-		       "Tell davem@redhat.com about it!\n");
+		printk("PCI: What is resource space %x? "
+		       "Tell davem@redhat.com about it!\n", space);
 		return NULL;
 	};
 }
@@ -231,6 +236,7 @@ static struct resource *
 __init get_device_resource(struct linux_prom_pci_registers *ap,
 			   struct pci_dev *pdev)
 {
+	struct resource *res;
 	int breg = (ap->phys_hi & 0xff);
 	int space = (ap->phys_hi >> 24) & 3;
 
@@ -240,7 +246,8 @@ __init get_device_resource(struct linux_prom_pci_registers *ap,
 		if (space != 2)
 			bad_assignment(ap, NULL, 0);
 
-		return &pdev->resource[PCI_ROM_RESOURCE];
+		res = &pdev->resource[PCI_ROM_RESOURCE];
+		break;
 
 	case PCI_BASE_ADDRESS_0:
 	case PCI_BASE_ADDRESS_1:
@@ -248,12 +255,16 @@ __init get_device_resource(struct linux_prom_pci_registers *ap,
 	case PCI_BASE_ADDRESS_3:
 	case PCI_BASE_ADDRESS_4:
 	case PCI_BASE_ADDRESS_5:
-		return &pdev->resource[(breg - PCI_BASE_ADDRESS_0) / 4];
+		res = &pdev->resource[(breg - PCI_BASE_ADDRESS_0) / 4];
+		break;
 
 	default:
 		bad_assignment(ap, NULL, 0);
-		return NULL;
+		res = NULL;
+		break;
 	};
+
+	return res;
 }
 
 static void __init pdev_record_assignments(struct pci_pbm_info *pbm,
@@ -280,6 +291,31 @@ static void __init pdev_record_assignments(struct pci_pbm_info *pbm,
 		 */
 		if ((res->start & 0xffffffffUL) != ap->phys_lo)
 			bad_assignment(ap, res, 1);
+
+		/* If it is a 64-bit MEM space assignment, verify that
+		 * the resource is too and that the upper 32-bits match.
+		 */
+		if (((ap->phys_hi >> 24) & 3) == 3) {
+			if (((res->flags & IORESOURCE_MEM) == 0) ||
+			    ((res->flags & PCI_BASE_ADDRESS_MEM_TYPE_MASK)
+			     != PCI_BASE_ADDRESS_MEM_TYPE_64))
+				bad_assignment(ap, res, 1);
+			if ((res->start >> 32) != ap->phys_mid)
+				bad_assignment(ap, res, 1);
+
+			/* PBM cannot generate cpu initiated PIOs
+			 * to the full 64-bit space.  Therefore the
+			 * upper 32-bits better be zero.  If it is
+			 * not, just skip it and we will assign it
+			 * properly ourselves.
+			 */
+			if ((res->start >> 32) != 0UL) {
+				printk(KERN_ERR "PCI: OBP assigns out of range MEM address "
+				       "%016lx for region %ld on device %s\n",
+				       res->start, (res - &pdev->resource[0]), pdev->name);
+				continue;
+			}
+		}
 
 		/* Adjust the resource into the physical address space
 		 * of this PBM.
@@ -425,13 +461,21 @@ static int __init pci_intmap_match(struct pci_dev *pdev, unsigned int *interrupt
 		return 0;
 
 	/* If we are underneath a PCI bridge, use PROM register
-	 * property of parent bridge.
+	 * property of the parent bridge which is closest to
+	 * the PBM.
 	 */
 	if (pdev->bus->number != pbm->pci_first_busno) {
 		struct pcidev_cookie *bus_pcp;
+		struct pci_dev *pwalk;
 		int offset;
 
-		bus_pcp = pdev->bus->self->sysdata;
+		pwalk = pdev->bus->self;
+		while (pwalk->bus &&
+		       pwalk->bus->number != pbm->pci_first_busno)
+			pwalk = pwalk->bus->self;
+
+		bus_pcp = pwalk->bus->self->sysdata;
+
 		pregs = bus_pcp->prom_regs;
 		offset = prom_getint(bus_pcp->prom_node,
 				     "fcode-rom-offset");

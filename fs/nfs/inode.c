@@ -260,6 +260,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct nfs_fsinfo	fsinfo;
 	int			tcp, version, maxlen;
 
+	memset(&sb->u.nfs_sb, 0, sizeof(sb->u.nfs_sb));
 	if (!data)
 		goto out_miss_args;
 

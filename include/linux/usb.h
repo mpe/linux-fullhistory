@@ -160,7 +160,7 @@ typedef struct wait_queue *wait_queue_head_t;
 
 #define __set_current_state(state_value)                        \
 	do { current->state = state_value; } while (0)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define set_current_state(state_value)          \
 	set_mb(current->state, state_value)
 #else
