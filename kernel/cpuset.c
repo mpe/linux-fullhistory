@@ -345,7 +345,7 @@ struct cftype {
 	int (*open) (struct inode *inode, struct file *file);
 	ssize_t (*read) (struct file *file, char __user *buf, size_t nbytes,
 							loff_t *ppos);
-	int (*write) (struct file *file, const char *buf, size_t nbytes,
+	int (*write) (struct file *file, const char __user *buf, size_t nbytes,
 							loff_t *ppos);
 	int (*release) (struct inode *inode, struct file *file);
 };
@@ -740,7 +740,7 @@ typedef enum {
 	FILE_TASKLIST,
 } cpuset_filetype_t;
 
-static ssize_t cpuset_common_file_write(struct file *file, const char *userbuf,
+static ssize_t cpuset_common_file_write(struct file *file, const char __user *userbuf,
 					size_t nbytes, loff_t *unused_ppos)
 {
 	struct cpuset *cs = __d_cs(file->f_dentry->d_parent);
@@ -803,7 +803,7 @@ out1:
 	return retval;
 }
 
-static ssize_t cpuset_file_write(struct file *file, const char *buf,
+static ssize_t cpuset_file_write(struct file *file, const char __user *buf,
 						size_t nbytes, loff_t *ppos)
 {
 	ssize_t retval = 0;
@@ -903,7 +903,7 @@ out:
 	return retval;
 }
 
-static ssize_t cpuset_file_read(struct file *file, char *buf, size_t nbytes,
+static ssize_t cpuset_file_read(struct file *file, char __user *buf, size_t nbytes,
 								loff_t *ppos)
 {
 	ssize_t retval = 0;
