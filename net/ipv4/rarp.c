@@ -320,7 +320,7 @@ static int rarp_req_set(struct arpreq *req)
 	ip = si->sin_addr.s_addr;
 	if (ip == 0)
 	{
-		printk("RARP: SETRARP: requested PA is 0.0.0.0 !\n");
+		printk(KERN_DEBUG "RARP: SETRARP: requested PA is 0.0.0.0 !\n");
 		return -EINVAL;
 	}
   

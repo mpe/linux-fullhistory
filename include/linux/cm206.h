@@ -56,7 +56,7 @@
 		   dc_mask_transmit_ready)
 
 /* now some constants related to the cm206 */
-/* another drive status byte, echoed by the cm206 on most commmands */
+/* another drive status byte, echoed by the cm206 on most commands */
 
 #define dsb_error_condition 0x1
 #define dsb_play_in_progress 0x4

@@ -56,9 +56,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-/* Undef this, if you don't need 6bit encapsulation code in the driver */
-#define CONFIG_SLIP_MODE_SLIP6
-
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>

@@ -1,4 +1,4 @@
-			Video Mode Selection Support 2.7
+			Video Mode Selection Support 2.9
 	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
@@ -243,3 +243,4 @@ this must be done manually -- no autodetection mechanisms are available.
 		- Screen store/restore fixed.
 2.8 (14-Apr-96)	- Previous release was not compilable without CONFIG_VIDEO_SVGA.
 		- Better recognition of text modes during mode scan.
+2.9 (12-May-96)	- Ignored VESA modes 0x80 - 0xff (more VESA BIOS bugs!)

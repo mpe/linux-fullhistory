@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: May 9, 1996}
+\date{Last revised: May 12, 1996}
 \maketitle
 %
 \noindent
@@ -61,9 +61,10 @@ tsx-11.mit.edu in the directory {\file
 /pub/linux/docs/linux-standards/fsstnd}.
 
 To have a major number allocated, or a minor number in situations
-where that applies (e.g.\ busmice), please contact me.  Also, if you
-have additional information regarding any of the devices listed below,
-or if I have made a mistake, I would greatly appreciate a note.
+where that applies (e.g.\ busmice), please contact me with the
+appropriate device information.  Also, if you have additional
+information regarding any of the devices listed below, or if I have
+made a mistake, I would greatly appreciate a note.
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -389,13 +390,38 @@ disk.
 
 \begin{devicelist}
 \major{ 9}{}{char }{SCSI tape devices}
-	\minor{0}{/dev/st0}{First SCSI tape}
-	\minor{1}{/dev/st1}{Second SCSI tape}
+	\minor{0}{/dev/st0}{First SCSI tape, mode 0}
+	\minor{1}{/dev/st1}{Second SCSI tape, mode 0}
 	\minordots
-	\minor{128}{/dev/nst0}{First SCSI tape, no rewind-on-close}
-	\minor{129}{/dev/nst1}{Second SCSI tape, no rewind-on-close}
+	\minor{32}{/dev/st0l}{First SCSI tape, mode 1}
+	\minor{33}{/dev/st1l}{Second SCSI tape, mode 1}
 	\minordots
-\\
+	\minor{64}{/dev/st0m}{First SCSI tape, mode 2}
+	\minor{65}{/dev/st1m}{Second SCSI tape, mode 2}
+	\minordots
+	\minor{96}{/dev/st0a}{First SCSI tape, mode 3}
+	\minor{97}{/dev/st1a}{Second SCSI tape, mode 4}
+	\minordots
+	\minor{128}{/dev/nst0}{First SCSI tape, mode 0, no rewind}
+	\minor{129}{/dev/nst1}{Second SCSI tape, mode 0, no rewind}
+	\minordots
+	\minor{160}{/dev/nst0l}{First SCSI tape, mode 1, no rewind}
+	\minor{161}{/dev/nst1l}{Second SCSI tape, mode 1, no rewind}
+	\minordots
+	\minor{192}{/dev/nst0m}{First SCSI tape, mode 2, no rewind}
+	\minor{193}{/dev/nst1m}{Second SCSI tape, mode 2, no rewind}
+	\minordots
+	\minor{224}{/dev/nst0a}{First SCSI tape, mode 3, no rewind}
+	\minor{225}{/dev/nst1a}{Second SCSI tape, mode 3, no rewind}
+	\minordots
+\end{devicelist}
+
+\noindent
+``No rewind'' refers to the omission of the default automatic rewind
+on device close.  The {\file MTREW} or {\file MTOFFL} ioctl()s can be
+used to rewind the tape regardless of the device used to access it.
+
+\begin{devicelist}
 \major{  }{}{block}{Metadisk (RAID) devices}
 	\minor{0}{/dev/md0}{First metadisk group}
 	\minor{1}{/dev/md1}{Second metadisk group}

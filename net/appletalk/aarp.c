@@ -794,7 +794,7 @@ static char aarp_snap_id[]={0x00,0x00,0x00,0x80,0xF3};
 void aarp_proto_init(void)
 {
 	if((aarp_dl=register_snap_client(aarp_snap_id, aarp_rcv))==NULL)
-		printk("Unable to register AARP with SNAP.\n");
+		printk(KERN_CRIT "Unable to register AARP with SNAP.\n");
 	init_timer(&aarp_timer);
 	aarp_timer.function=aarp_expire_timeout;
 	aarp_timer.data=0;

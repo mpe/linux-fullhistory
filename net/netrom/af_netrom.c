@@ -347,7 +347,7 @@ static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
 	  		if (nr_ctl.arg < 16 || nr_ctl.arg > 65535) 
 	  			return -EINVAL;
 	  		if (nr_ctl.arg > 236) /* we probably want this */
-	  			printk("nr_ctl_ioctl: Warning --- huge paclen %d\n", (int)nr_ctl.arg);
+	  			printk(KERN_WARNING "nr_ctl_ioctl: Warning --- huge paclen %d\n", (int)nr_ctl.arg);
 	  		sk->nr->paclen = nr_ctl.arg;
 	  		break;
 
@@ -1406,7 +1406,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.4 ALPHA for AX25.032 Linux 1.3.77\n");
+	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.5 for AX25.032 Linux 2.0\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

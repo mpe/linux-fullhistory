@@ -38,7 +38,7 @@ void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 	if((long)when < 0)
 	{
 		when=3;
-		printk("Error: Negative timer in xmit_timer\n");
+		printk(KERN_ERR "Error: Negative timer in xmit_timer\n");
 	}
 	sk->retransmit_timer.expires=jiffies+when;
 	add_timer(&sk->retransmit_timer);
@@ -257,7 +257,7 @@ void tcp_retransmit_timer(unsigned long data)
 		break;
 
 	default:
-		printk ("rexmit_timer: timer expired - reason unknown\n");
+		printk (KERN_ERR "rexmit_timer: timer expired - reason unknown\n");
 		break;
 	}
 }

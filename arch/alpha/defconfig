@@ -69,7 +69,6 @@ CONFIG_INET=y
 # CONFIG_INET_PCTCP is not set
 # CONFIG_INET_RARP is not set
 # CONFIG_NO_PATH_MTU_DISCOVERY is not set
-# CONFIG_TCP_NAGLE_OFF is not set
 CONFIG_IP_NOSR=y
 CONFIG_SKB_LARGE=y
 
@@ -164,6 +163,7 @@ CONFIG_DE4X5=y
 # Filesystems
 #
 # CONFIG_QUOTA is not set
+# CONFIG_LOCK_MANDATORY is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y

@@ -304,7 +304,7 @@ int acct_process(long exitcode)
       ac.ac_uid   = current->uid;
       ac.ac_gid   = current->gid;
       ac.ac_tty   = (current)->tty == NULL ? -1 :
-	  MKDEV(4, current->tty->device);
+	  kdev_t_to_nr(current->tty->device);
       ac.ac_flag  = 0;
       if (current->flags & PF_FORKNOEXEC)
          ac.ac_flag |= AFORK;

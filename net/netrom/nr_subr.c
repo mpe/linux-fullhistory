@@ -168,7 +168,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 		case NR_INFOACK:
 			break;
 		default:
-			printk("nr_write_internal: invalid frame type %d\n", frametype);
+			printk(KERN_ERR "nr_write_internal: invalid frame type %d\n", frametype);
 			return;
 	}
 	

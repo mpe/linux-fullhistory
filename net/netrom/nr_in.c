@@ -316,7 +316,7 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->nr->state != NR_STATE_1 && sk->nr->state != NR_STATE_2 &&
 	    sk->nr->state != NR_STATE_3) {
-		printk("nr_process_rx_frame: frame received - state: %d\n", sk->nr->state);
+		printk(KERN_ERR "nr_process_rx_frame: frame received - state: %d\n", sk->nr->state);
 		return queued;
 	}
 

@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		      Last revised: May 9, 1996
+		      Last revised: May 12, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -18,9 +18,10 @@ Standard (FSSTND).  The FSSTND is available via FTP from
 tsx-11.mit.edu in the directory /pub/linux/docs/linux-standards/fsstnd.
 
 To have a major number allocated, or a minor number in situations
-where that applies (e.g. busmice), please contact me.  Also, if you
-have additional information regarding any of the devices listed below,
-or if I have made a mistake, I would greatly appreciate a note.
+where that applies (e.g. busmice), please contact me with the
+appropriate device information.  Also, if you have additional
+information regarding any of the devices listed below, or if I have
+made a mistake, I would greatly appreciate a note.
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
@@ -214,12 +215,36 @@ least not without contacting me first.
 		partitions is 15.
 
   9 char	SCSI tape devices
-    		  0 = /dev/st0		First SCSI tape
-		  1 = /dev/st1		Second SCSI tape
+    		  0 = /dev/st0		First SCSI tape, mode 0
+		  1 = /dev/st1		Second SCSI tape, mode 0
 		      ...
-		128 = /dev/nst0		First SCSI tape, no rewind-on-close
-		129 = /dev/nst1		Second SCSI tape, no rewind-on-close
+    		 32 = /dev/st0l		First SCSI tape, mode 1
+		 33 = /dev/st1l		Second SCSI tape, mode 1
 		      ...
+    		 64 = /dev/st0m		First SCSI tape, mode 2
+		 65 = /dev/st1m		Second SCSI tape, mode 2
+		      ...
+    		 96 = /dev/st0a		First SCSI tape, mode 3
+		 97 = /dev/st1a		Second SCSI tape, mode 3
+		      ...
+		128 = /dev/nst0		First SCSI tape, mode 0, no rewind
+		129 = /dev/nst1		Second SCSI tape, mode 0, no rewind
+		      ...
+		160 = /dev/nst0l	First SCSI tape, mode 1, no rewind
+		161 = /dev/nst1l	Second SCSI tape, mode 1, no rewind
+		      ...
+		192 = /dev/nst0m	First SCSI tape, mode 2, no rewind
+		193 = /dev/nst1m	Second SCSI tape, mode 2, no rewind
+		      ...
+		224 = /dev/nst0a	First SCSI tape, mode 3, no rewind
+		225 = /dev/nst1a	Second SCSI tape, mode 3, no rewind
+		      ...
+
+		"No rewind" refers to the omission of the default
+		automatic rewind on device close.  The MTREW or MTOFFL
+		ioctl()'s can be used to rewind the tape regardless of
+		the device used to access it.
+
     block	Metadisk (RAID) devices
 		  0 = /dev/md0		First metadisk group
 		  1 = /dev/md1		Second metadisk group

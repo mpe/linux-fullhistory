@@ -236,6 +236,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * If the time is zero, turn off sound ourselves.
 		 */
 		ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
+		if ((arg & 0xffff) == 0 ) arg |= 1; /* jp: huh? */
 		count = ticks ? (1193180 / (arg & 0xffff)) : 0;
 		kd_mksound(count, ticks);
 		return 0;
@@ -700,7 +701,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 		if (!perm)
 			return -EPERM;
-		i = verify_area(VERIFY_WRITE, (void *)vtmode, sizeof(struct vt_mode));
+		i = verify_area(VERIFY_READ, (void *)vtmode, sizeof(struct vt_mode));
 		if (i)
 			return i;
 		mode = get_user(&vtmode->mode);

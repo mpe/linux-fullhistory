@@ -1105,7 +1105,7 @@ static void arp_send_q(struct arp_table *entry)
 	
 	if(!(entry->flags&ATF_COM))
 	{
-		printk("arp_send_q: incomplete entry for %s\n",
+		printk(KERN_ERR "arp_send_q: incomplete entry for %s\n",
 				in_ntoa(entry->ip));
 		/* Can't flush the skb, because RFC1122 says to hang on to */
 		/* at least one from any unresolved entry.  --MS */
@@ -1670,7 +1670,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 				+ dev->hard_header_len, GFP_ATOMIC);
 	if (skb == NULL)
 	{
-		printk("ARP: no memory to send an arp packet\n");
+		printk(KERN_DEBUG "ARP: no memory to send an arp packet\n");
 		return;
 	}
 	skb_reserve(skb, dev->hard_header_len);
@@ -1798,7 +1798,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			break;
 
 		default:
-			printk("ARP: dev->type mangled!\n");
+			printk(KERN_ERR "ARP: dev->type mangled!\n");
 			kfree_skb(skb, FREE_READ);
 			return 0;
 	}

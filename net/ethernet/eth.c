@@ -231,7 +231,7 @@ void eth_header_cache_bind(struct hh_cache ** hhp, struct device *dev,
 
 	if (htype != ETH_P_IP)
 	{
-		printk("eth_header_cache_bind: %04x cache is not implemented\n", htype);
+		printk(KERN_DEBUG "eth_header_cache_bind: %04x cache is not implemented\n", htype);
 		return;
 	}
 	if (arp_bind_cache(hhp, dev, htype, daddr))
@@ -252,7 +252,7 @@ void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned c
 {
 	if (hh->hh_type != ETH_P_IP)
 	{
-		printk("eth_header_cache_update: %04x cache is not implemented\n", hh->hh_type);
+		printk(KERN_DEBUG "eth_header_cache_update: %04x cache is not implemented\n", hh->hh_type);
 		return;
 	}
 	memcpy(hh->hh_data, haddr, ETH_ALEN);

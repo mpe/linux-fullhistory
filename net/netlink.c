@@ -218,7 +218,7 @@ int init_netlink(void)
 	int ct;
 
 	if(register_chrdev(NETLINK_MAJOR,"netlink", &netlink_fops)) {
-		printk("netlink: unable to get major %d\n", NETLINK_MAJOR);
+		printk(KERN_ERR "netlink: unable to get major %d\n", NETLINK_MAJOR);
 		return -EIO;
 	}
 	for(ct=0;ct<MAX_LINKS;ct++)
@@ -233,7 +233,7 @@ int init_netlink(void)
 
 int init_module(void)
 {
-	printk("Network Kernel/User communications module 0.03\n");
+	printk(KERN_INFO "Network Kernel/User communications module 0.03\n");
 	return init_netlink();
 }
 

@@ -25,7 +25,7 @@
 /* serial module kerneld load support */
 struct tty_driver *get_tty_driver(kdev_t device);
 #define isa_tty_dev(ma)	(ma == TTY_MAJOR || ma == TTYAUX_MAJOR)
-#define need_serial(ma,mi) (get_tty_driver(to_kdev_t(MKDEV(ma,mi))) == NULL)
+#define need_serial(ma,mi) (get_tty_driver(MKDEV(ma,mi)) == NULL)
 #endif
 
 struct device_struct {

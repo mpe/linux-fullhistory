@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.8 (14-Apr-96)
+!	Display adapter & video mode setup, version 2.9 (12-May-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -879,8 +879,8 @@ vesa1:	seg	gs		! Get next mode in the list
 	jz	vesar
 	cmp	ax,#0x0080	! Check validity of mode ID
 	jc	vesa2
-	or	ah,ah		! Valid ID's are 0x0000-0x007f
-	jz	vesae		! and 0x0100-0x07ff.
+	or	ah,ah		! Valid ID's are 0x0000-0x007f and 0x0100-0x07ff
+	jz	vesan		! [Certain BIOSes errorneously report 0x80-0xff]
 	cmp	ax,#0x0800
 	jnc	vesae
 vesa2:	push	cx

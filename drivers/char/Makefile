@@ -127,10 +127,14 @@ ifeq ($(CONFIG_UMISC),y)
 M = y
 endif
 
-ifdef CONFIG_SOFT_WATCHDOG
-L_OBJS += softdog.o
+ifeq ($(CONFIG_SOFT_WATCHDOG),y)
 M = y
-# This is not modularized, so if configured then "misc.c" will be resident
+L_OBJS += softdog.o
+else
+  ifeq ($(CONFIG_SOFT_WATCHDOG),m)
+  M_OBJS += softdog.o
+  MM = m
+  endif   
 endif
 
 ifdef CONFIG_SUN_MOUSE

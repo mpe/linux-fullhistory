@@ -2,14 +2,14 @@
 
 		Alan Cox <alan@lxorguk.ukuu.org.uk>
 
-	    Custom Linux Driver And Program Development
+	     Custom Linux Driver And Program Development
 
 
 The following watchdog drivers are currently implemented:
 
-	IMS	WDT501-P
-	INS	WDT501-P (no fan tachometer)
-	IMS	WDT500-P
+	ICS	WDT501-P
+	ICS	WDT501-P (no fan tachometer)
+	ICS	WDT500-P
 	Software Only
 
 All four interfaces provide /dev/watchdog, which when open must be written
@@ -40,6 +40,7 @@ Power Over         X               o                o
 Overheat           X               o                o
 
 The external event interfaces on the WDT boards are not currently supported.
+Minor numbers are however allocated for it.
 
 
 Example Watchdog Driver
@@ -65,11 +66,17 @@ int main(int argc, const char *argv[])
 }
 
 
-> People keep asking about the WDT watchdog timer hardware: The phone contacts
-> for Industrial Computer Source are:
-> 
-> US: 619 677 0898 (sales)  0895 (general)
-> UK: 01243 533900
-> France (1) 69.18.74.30
-> 
-> and please mention Linux when enquiring.
+Contact Information
+
+People keep asking about the WDT watchdog timer hardware: The phone contacts
+for Industrial Computer Source are:
+ 
+US: 619 677 0877 (sales)  0895 (fax)
+UK: 01243 533900
+France (1) 69.18.74.30
+
+Industrial Computer Source 
+9950 Barnes Canyon Road 
+San Diego, CA     
+
+and please mention Linux when enquiring.

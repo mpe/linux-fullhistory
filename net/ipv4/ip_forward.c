@@ -399,7 +399,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 					optptr[2] = srrptr+4;
 				}
 				else
-				        printk("ip_forward(): Argh! Destination lost!\n");
+				        printk(KERN_CRIT "ip_forward(): Argh! Destination lost!\n");
 			}
 			if (opt->ts_needaddr) 
 			{

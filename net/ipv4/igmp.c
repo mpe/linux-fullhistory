@@ -203,7 +203,7 @@ static void igmp_stop_timer(struct ip_mc_list *im)
     im->tm_running=0;
   }
   else {
-    printk("igmp_stop_timer() called with timer not running by %p\n",__builtin_return_address(0));
+    printk(KERN_ERR "igmp_stop_timer() called with timer not running by %p\n",__builtin_return_address(0));
   }
 }
 
@@ -459,7 +459,7 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	if(saddr==0)
 	{
-		printk("Broken multicast host using 0.0.0.0 heard on %s\n",
+		printk(KERN_INFO "Broken multicast host using 0.0.0.0 heard on %s\n",
 			dev->name);
 		kfree_skb(skb, FREE_READ);
 		return 0;

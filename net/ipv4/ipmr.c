@@ -908,7 +908,7 @@ done:
  
 void ip_mr_init(void)
 {
-	printk("Linux IP multicast router 0.05-maybe-works 8)\n");
+	printk(KERN_INFO "Linux IP multicast router 0.05.\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",

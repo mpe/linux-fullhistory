@@ -124,7 +124,7 @@ struct file * get_empty_filp(void)
 
 #ifdef CONFIG_QUOTA
 
-void add_dquot_ref(dev_t dev, short type)
+void add_dquot_ref(kdev_t dev, short type)
 {
 	struct file *filp;
 	int cnt;
@@ -139,7 +139,7 @@ void add_dquot_ref(dev_t dev, short type)
 	}
 }
 
-void reset_dquot_ptrs(dev_t dev, short type)
+void reset_dquot_ptrs(kdev_t dev, short type)
 {
 	struct file *filp;
 	int cnt;

@@ -5,23 +5,24 @@
 #ifndef LINUX_UCDROM_H
 #define LINUX_UCDROM_H
 
+#ifdef __KERNEL__
 struct cdrom_device_ops {
 /* routines */
-	int (*open) (dev_t, int);
-	void (*release) (dev_t);
-	int (*open_files) (dev_t);      /* number of open files */
-	int (*drive_status) (dev_t);
-	int (*disc_status) (dev_t);
-	int (*media_changed) (dev_t);
-	int (*tray_move) (dev_t, int);
-	int (*lock_door) (dev_t, int);
-	int (*select_speed) (dev_t, int);
-	int (*select_disc) (dev_t, int);
-	int (*get_last_session) (dev_t, struct cdrom_multisession *);
-	int (*get_mcn) (dev_t, struct cdrom_mcn *);
-	int (*reset) (dev_t dev);       /* hard reset device */
-	int (*audio_ioctl) (dev_t, unsigned int, void *); /* play stuff */
-	int (*dev_ioctl) (dev_t, unsigned int, unsigned long); /* dev-specific */
+	int (*open) (kdev_t, int);
+	void (*release) (kdev_t);
+	int (*open_files) (kdev_t);      /* number of open files */
+	int (*drive_status) (kdev_t);
+	int (*disc_status) (kdev_t);
+	int (*media_changed) (kdev_t);
+	int (*tray_move) (kdev_t, int);
+	int (*lock_door) (kdev_t, int);
+	int (*select_speed) (kdev_t, int);
+	int (*select_disc) (kdev_t, int);
+	int (*get_last_session) (kdev_t, struct cdrom_multisession *);
+	int (*get_mcn) (kdev_t, struct cdrom_mcn *);
+	int (*reset) (kdev_t dev);       /* hard reset device */
+	int (*audio_ioctl) (kdev_t, unsigned int, void *); /* play stuff */
+	int (*dev_ioctl) (kdev_t, unsigned int, unsigned long); /* dev-specific */
 /* specifications */
 	const int capability;           /* capability flags */
 	int mask;                       /* mask of capability: disables them */
@@ -32,6 +33,7 @@ struct cdrom_device_ops {
 	int options;                    /* options flags */
 	long mc_flags;                  /* media change buffer flags (2*16) */
 };
+#endif
 
 /* capability flags */
 #define CDC_CLOSE_TRAY	0x1             /* caddy systems _can't_ close */
@@ -74,15 +76,17 @@ struct cdrom_device_ops {
 #define CDROM_DRIVE_STATUS	0x5326  /* tray position, etc. */
 #define CDROM_DISC_STATUS	0x5327  /* disc type etc. */
 
-/* Rename and old ioctl */
+/* Rename an old ioctl */
 #define CDROM_GET_MCN	CDROM_GET_UPC	/* medium catalog number */
 
+#ifdef __KERNEL__
 /* the general file operations structure: */
 extern struct file_operations cdrom_fops;
 
 extern int register_cdrom(int major, char *name,
                           struct cdrom_device_ops *cdo);
 extern int unregister_cdrom(int major, char *name);
+#endif
 
 #endif	/* LINUX_UCDROM_H */
 /*

@@ -20,6 +20,7 @@ tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
   bool ' Keepalive and linefill' CONFIG_SLIP_SMART
+  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 fi
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then

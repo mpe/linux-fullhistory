@@ -181,7 +181,7 @@ static int nr_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 
 	if (!dev->start) {
-		printk("netrom: xmit call when iface is down\n");
+		printk(KERN_ERR "netrom: xmit call when iface is down\n");
 		return 1;
 	}
 

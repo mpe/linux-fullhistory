@@ -1,5 +1,5 @@
 \documentclass{article}
-\def\version{$Id: cdrom-standard.tex,v 0.4 1996/04/17 20:46:34 david Exp $}
+\def\version{$Id: cdrom-standard.tex,v 0.5 1996/05/12 22:00:00 emoenke Exp $}
 
 \evensidemargin=0pt
 \oddsidemargin=0pt
@@ -29,26 +29,66 @@ variety of hardware devices. The reasons for this are presumably
 \item The large list of different hardware devices available for the popular
 IBM PC-architecture,
 \item The open design of the operating system, such that everybody can
-write a driver for Linux.
+write a driver for Linux (source code examples).
 \end{itemize}
 The vast choice and openness has lead not only to a wide support of
-hardware devices, but also to a certain divergence in
-behavior. Especially for \cdrom\ devices, the way a particular drive
-reacts to a `standard' $ioctl()$ call varies a lot from one brand
-to another. 
+hardware devices, but also to a certain divergence in behavior. Especially
+for \cdrom\ devices, the way a particular drive reacts to a `standard'
+$ioctl()$ call varies a lot from one brand to another; until today, the
+\linux \cdrom\ driver writers kept away from wilderness by a good practice:
+to evolve a new driver by copying, understanding and changing an existing
+one.
 
-Undoubtedly, this has a reason. Since the beginning of the \cdrom,
-many different interfaces developed. Most of them had proprietary
-interfaces, which means that a separate driver had to be written for
-each new type of interface. Nowadays, all new \cdrom\ types are either
-ATAPI/IDE or SCSI. But history has delivered us \cdrom\ support for
-some 10 or so different interfaces. Not all drives have the same
-capabilities, and all different interfaces use different i/o formats
-for the data. For the interfacing with the \linux\ operating system
-and software, this has lead to a rather wild set of commands and data
-formats. Presumably, every \cdrom\ device drive author has added his
-own set of ioctl commands and used a format reminiscent of the
-underlying hardware. Any structure is lost. 
+Since the beginning of the \cdrom, many different interfaces developed.
+Some of them had their own proprietary design (Sony, Mitsumi, Panasonic),
+other manufacturers adopted an existing electrical interface and changed
+the functionality (CreativeLabs/SoundBlaster, Teac, Funai) or simply adapted
+their drives to one or more of the already existing electrical interfaces
+(Aztech, Sanyo, Funai, Vertos, Longshine, Optics Storage and most of the
+`NoName' manufacturers).
+In cases where a new drive really brought his own interface or used his
+own command set and flow control scheme, either a separate driver had to
+be written, or an existing driver had to get enhanced.
+
+Nowadays, almost all new \cdrom\ types are either ATAPI/IDE or SCSI;
+it is very unlikely that any manufacturer still will create a new
+interface, and new drives for the existing proprietary interfaces are
+getting rare.
+But history has delivered us \cdrom\ support for many different interfaces.
+
+Some of the \linux\ \cdrom\ driver writers look at the existing standard
+which is expressed through <linux/cdrom.h> as to a rather wild set of
+commands and data formats and feel that any structure is lost, and from
+this point of view, this documentation shall help to achieve a common
+programming interface.
+ 
+Others - mainly those who used the already existing drivers not only as
+a coding example, but also as a `user interface' reference during their
+own development - have taken care that <linux/cdrom.h> reflects a
+software interface to `user programs' which is unique between all drivers
+as much as possible; these driver writers will continue to refine the
+existing <linux/cdrom.h> where it seems necessary, and they tend to look
+if any newly requested functionality isn't already there before they are
+ready to define new structures. The sbpcd driver gives an example that
+it is possible to let a robot arm play juke box - either with audio or
+with data CDs -, and that it is possible to let the juke box work on
+even if a disk has fallen upon the floor and the drive door has closed 
+without having a disk inside; without any new software layer or any
+structures which are not already present in <linux/cdrom.h>.
+This `other' group of \linux\ \cdrom\ driver writers explicitely does
+NOT support the idea to define an additional software layer between driver
+and user program.
+
+
+The following text reflects the opinion of the first mentioned \linux\ 
+\cdrom\ driver writer group only; the other group (not only the `silent
+majority') sees this text as a good base for a future documentation of the
+existing common \linux\ \cdrom\ programming interface, as it is stated 
+within <linux/cdrom.h>. Where <linux/cdrom.h> needs some external 
+explanation, this text can give it if the reader is aware that - at least
+at the moment - this text claims to be the proposal of something else than
+<linux/cdrom.h>.
+
 
 Apart from the somewhat unstructured interfacing with software, the
 actual execution of the commands is different for most of the
@@ -140,21 +180,21 @@ $$
 \halign{$#$\ \hfil&$#$\ \hfil&\hbox to 10em{$#$\hss}&
   $/*$ \rm# $*/$\hfil\cr
 struct& cdrom_device_ops\ \{ \hidewidth\cr
-  &int& (* open)(dev_t, int)\cr
-  &void& (* release)(dev_t);\cr 
-  &int& (* open_files)(dev_t);  \cr
-  &int& (* drive_status)(dev_t);\cr     
-  &int& (* disc_status)(dev_t);\cr      
-  &int& (* media_changed)(dev_t);\cr 
-  &int& (* tray_move)(dev_t, int);\cr
-  &int& (* lock_door)(dev_t, int);\cr
-  &int& (* select_speed)(dev_t, int);\cr
-  &int& (* select_disc)(dev_t, int);\cr
-  &int& (* get_last_session) (dev_t, struct\ cdrom_multisession *{});\cr
-  &int& (* get_mcn)(dev_t, struct\ cdrom_mcn *{});\cr
-  &int& (* reset)(dev_t);\cr
-  &int& (* audio_ioctl)(dev_t, unsigned\ int, void *{});\cr 
-  &int& (* dev_ioctl)(dev_t, unsigned\ int, unsigned\ long);\cr
+  &int& (* open)(kdev_t, int)\cr
+  &void& (* release)(kdev_t);\cr 
+  &int& (* open_files)(kdev_t);  \cr
+  &int& (* drive_status)(kdev_t);\cr     
+  &int& (* disc_status)(kdev_t);\cr      
+  &int& (* media_changed)(kdev_t);\cr 
+  &int& (* tray_move)(kdev_t, int);\cr
+  &int& (* lock_door)(kdev_t, int);\cr
+  &int& (* select_speed)(kdev_t, int);\cr
+  &int& (* select_disc)(kdev_t, int);\cr
+  &int& (* get_last_session) (kdev_t, struct\ cdrom_multisession *{});\cr
+  &int& (* get_mcn)(kdev_t, struct\ cdrom_mcn *{});\cr
+  &int& (* reset)(kdev_t);\cr
+  &int& (* audio_ioctl)(kdev_t, unsigned\ int, void *{});\cr 
+  &int& (* dev_ioctl)(kdev_t, unsigned\ int, unsigned\ long);\cr
 \noalign{\medskip}
   &\llap{const\ }int& capability;&  capability flags \cr
   &int& mask;& mask of capability: disables them \cr
@@ -213,7 +253,7 @@ negative on error. A function call should return only after the
 command has completed, but of course waiting for the device should not
 use processor time.
 
-\subsection{$Open(dev_t\ dev, int\ purpose)$}
+\subsection{$Open(kdev_t\ dev, int\ purpose)$}
 
 $Open()$ should try to open the device for a specific $purpose$, which
 can be either:
@@ -235,7 +275,7 @@ done by the calling routine in \cdromc, so the low-level routine
 should only be concerned with proper initialization and device-use
 count.
 
-\subsection{$Release(dev_t\ dev)$}
+\subsection{$Release(kdev_t\ dev)$}
 
 The use-count of the device $dev$ should be decreased by 1, and a
 single call $MOD_DEC_USE_COUNT$ should be coded here.  Possibly other
@@ -245,14 +285,14 @@ unlocking the door, should be left over to the general routine
 $cdrom_release()$. Also, the invalidation of the allocated buffers in
 the VFS is taken care of by the routine in \cdromc.
 
-\subsection{$Open_files(dev_t\ dev)$}
+\subsection{$Open_files(kdev_t\ dev)$}
 
 This function should return the internal variable use-count of the
 device $dev$. The use-count is not implemented in the routines in
 \cdromc\ itself, because there may be many minor devices connected to
 a single low-level driver.
 
-\subsection{$Drive_status(dev_t\ dev)$}
+\subsection{$Drive_status(kdev_t\ dev)$}
 \label{drive status}
 
 The function $drive_status$, if implemented, should provide
@@ -269,7 +309,7 @@ CDS_DISC_OK& a disc is loaded and everything is fine\cr
 }
 $$
 
-\subsection{$Disc_status(dev_t\ dev)$}
+\subsection{$Disc_status(kdev_t\ dev)$}
 \label{disc status}
 
 As a complement to $drive_status()$, this function can provide the
@@ -301,7 +341,7 @@ this function through $cdrom_media_changed()$, we can implement
 separate queues for the VFS and a new $ioctl()$ function that can
 report device changes to software (e.g., an auto-mounting daemon). 
 
-\subsection{$Tray_move(dev_t\ dev, int\ position)$}
+\subsection{$Tray_move(kdev_t\ dev, int\ position)$}
 
 This function, if implemented, should control the tray movement. (No
 other function should control this.) The parameter $position$ controls
@@ -314,7 +354,7 @@ This function returns 0 upon success, and a non-zero value upon
 error. Note that if the tray is already in the desired position, no
 action need be taken, and the return value should be 0. 
 
-\subsection{$Lock_door(dev_t\ dev, int\ lock)$}
+\subsection{$Lock_door(kdev_t\ dev, int\ lock)$}
 
 This function (and no other code) controls locking of the door, if the
 drive allows this. The value of $lock$ controls the desired locking
@@ -325,7 +365,7 @@ state:
 \end{itemize}
 Return values are as for $tray_move()$.
 
-\subsection{$Select_speed(dev_t\ dev, int\ speed)$}
+\subsection{$Select_speed(kdev_t\ dev, int\ speed)$}
 
 Although none of the drivers has implemented this function so far,
 some drives are capable of head-speed selection, and hence this is a
@@ -341,7 +381,7 @@ for it, more than real-time playback of audio might be used for
 high-speed copying of audio tracks). Badly pressed \cdrom s may
 benefit from less-than-maximum head rate.
 
-\subsection{$Select_disc(dev_t\ dev, int\ number)$}
+\subsection{$Select_disc(kdev_t\ dev, int\ number)$}
 
 If the drive can store multiple discs (a juke-box), it is likely that
 a disc selection can be made by software. This function should perform
@@ -350,7 +390,7 @@ success, a negative value on error. Currently, none of the \linux\
 \cdrom\ drivers appears to support such functionality, but it is defined
 here for future purposes.
 
-\subsection{$Get_last_session(dev_t\ dev, struct\ cdrom_multisession *
+\subsection{$Get_last_session(kdev_t\ dev, struct\ cdrom_multisession *
 ms_info)$}
 
 This function should implement the old corresponding $ioctl()$. For
@@ -364,7 +404,7 @@ format if it wishes so (setting the $ms_info\rightarrow addr_format$
 field appropriately, of course) and the routines in \cdromc\ will make
 the transform if necessary. The return value is 0 upon success.
 
-\subsection{$Get_mcn(dev_t\ dev, struct\ cdrom_mcn * mcn)$}
+\subsection{$Get_mcn(kdev_t\ dev, struct\ cdrom_mcn * mcn)$}
 
 Some discs carry a `Media Catalog Number' (MCN), also called
 `Universal Product Code' (UPC). This number should reflect the number that
@@ -374,14 +414,14 @@ format. The return argument to this function is a pointer to a
 pre-declared memory region of type $struct\ cdrom_mcn$. The MCN is
 expected as a 13-character string, terminated by a null-character.
 
-\subsection{$Reset(dev_t dev)$}
+\subsection{$Reset(kdev_t dev)$}
 
 This call should implement hard-resetting the drive (although in
 circumstances that a hard-reset is necessary, a drive may very well
 not listen to commands anymore). Preferably, control is returned to the
 caller only after the drive has finished resetting.
 
-\subsection{$Audio_ioctl(dev_t\ dev, unsigned\ int\ cmd, void *
+\subsection{$Audio_ioctl(kdev_t\ dev, unsigned\ int\ cmd, void *
 arg)$}
 
 Some of the \cdrom-$ioctl$s defined in {\tt cdrom.h} can be
@@ -405,7 +445,7 @@ errors should be according to the standards, whatever they are. (We
 may decide to sanitize the return value in $cdrom_ioctl()$, in order
 to guarantee a uniform interface to the audio-player software.)
 
-\subsection{$Dev_ioctl(dev_t\ dev, unsigned\ int\ cmd, unsigned\ long\
+\subsection{$Dev_ioctl(kdev_t\ dev, unsigned\ int\ cmd, unsigned\ long\
 arg)$}
 
 Some $ioctl$s seem to be specific to certain \cdrom\ drives. That is,
@@ -772,12 +812,6 @@ if implemented. No memory allocation or verification is carried out.
 
 \subsection{How to update your driver}
 
-We hope all \cdrom\ driver maintainers will understand the advantages
-of re-routing the interface to the kernel though the new routines in
-\cdromc. The following scheme should help you to update your
-driver. It should not be too much work. We hope you want to take these
-steps, in order to make the \linux\ \cdrom\ support more uniform and
-more flexible.
 \begin{enumerate}
 \item Make a backup of your current driver. 
 \item Get hold of the files \cdromc\ and \ucdrom, they should be in

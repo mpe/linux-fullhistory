@@ -173,7 +173,7 @@ static inline void kb_wait(void)
 	for (i=0; i<0x100000; i++)
 		if ((inb_p(0x64) & 0x02) == 0)
 			return;
-	printk("Keyboard timed out\n");
+	printk(KERN_WARNING "Keyboard timed out\n");
 }
 
 static inline void send_cmd(unsigned char c)
@@ -361,7 +361,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	  if (!(status & 0x21)) { /* neither ODS nor OBF */
 	    scancode = inb(0x60); /* read data anyway */
 #if 0
-	    printk("keyboard: status 0x%x  mask 0x%x  data 0x%x\n",
+	    printk(KERN_DEBUG "keyboard: status 0x%x  mask 0x%x  data 0x%x\n",
 		   status, kbd_read_mask, scancode);
 #endif
 	  }
@@ -383,12 +383,13 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* strange ... */
 		reply_expected = 1;
 #if 0
-		printk("keyboard reply expected - got %02x\n", scancode);
+		printk(KERN_DEBUG "keyboard reply expected - got %02x\n",
+		       scancode);
 #endif
 	}
 	if (scancode == 0) {
 #ifdef KBD_REPORT_ERR
-		printk("keyboard buffer overflow\n");
+		printk(KERN_INFO "keyboard buffer overflow\n");
 #endif
 		prev_scancode = 0;
 		goto end_kbd_intr;
@@ -412,7 +413,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #ifndef KBD_IS_FOCUS_9000
 #ifdef KBD_REPORT_ERR
 		if (!raw_mode)
-		  printk("keyboard error\n");
+		  printk(KERN_DEBUG "keyboard error\n");
 #endif
 #endif
 		prev_scancode = 0;
@@ -445,7 +446,7 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	      } else {
 #ifdef KBD_REPORT_UNKN
 		  if (!raw_mode)
-		    printk("keyboard: unknown e1 escape sequence\n");
+		    printk(KERN_INFO "keyboard: unknown e1 escape sequence\n");
 #endif
 		  prev_scancode = 0;
 		  goto end_kbd_intr;
@@ -473,7 +474,8 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	      else {
 #ifdef KBD_REPORT_UNKN
 		  if (!raw_mode)
-		    printk("keyboard: unknown scancode e0 %02x\n", scancode);
+		    printk(KERN_INFO "keyboard: unknown scancode e0 %02x\n",
+			   scancode);
 #endif
 		  goto end_kbd_intr;
 	      }
@@ -494,8 +496,8 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	  if (!keycode) {
 	      if (!raw_mode) {
 #ifdef KBD_REPORT_UNKN
-		  printk("keyboard: unrecognized scancode (%02x) - ignored\n"
-			 , scancode);
+		  printk(KERN_INFO "keyboard: unrecognized scancode (%02x)"
+			 " - ignored\n", scancode);
 #endif
 	      }
 	      goto end_kbd_intr;
@@ -796,7 +798,7 @@ static void do_spec(unsigned char value, char up_flag)
 
 static void do_lowercase(unsigned char value, char up_flag)
 {
-	printk("keyboard.c: do_lowercase was called - impossible\n");
+	printk(KERN_ERR "keyboard.c: do_lowercase was called - impossible\n");
 }
 
 static void do_self(unsigned char value, char up_flag)
@@ -878,7 +880,7 @@ static void do_fn(unsigned char value, char up_flag)
 		if (func_table[value])
 			puts_queue(func_table[value]);
 	} else
-		printk("do_fn called with value=%d\n", value);
+		printk(KERN_ERR "do_fn called with value=%d\n", value);
 }
 
 static void do_pad(unsigned char value, char up_flag)
@@ -1313,7 +1315,8 @@ static int initialize_kbd(void)
 	 */
 	kbd_write(KBD_CNTL_REG, KBD_SELF_TEST);
 	if (kbd_wait_for_input() != 0x55) {
-		printk("initialize_kbd: keyboard failed self test.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "keyboard failed self test.\n");
 		restore_flags(flags);
 		return(-1);
 	}
@@ -1325,7 +1328,8 @@ static int initialize_kbd(void)
 	 */
 	kbd_write(KBD_CNTL_REG, KBD_SELF_TEST2);
 	if (kbd_wait_for_input() != 0x00) {
-		printk("initialize_kbd: keyboard failed self test 2.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "keyboard failed self test 2.\n");
 		restore_flags(flags);
 		return(-1);
 	}
@@ -1341,13 +1345,15 @@ static int initialize_kbd(void)
 	 */
 	kbd_write(KBD_DATA_REG, KBD_RESET);
 	if (kbd_wait_for_input() != KBD_ACK) {
-		printk("initialize_kbd: reset kbd failed, no ACK.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "reset kbd failed, no ACK.\n");
 		restore_flags(flags);
 		return(-1);
 	}
 
 	if (kbd_wait_for_input() != KBD_POR) {
-		printk("initialize_kbd: reset kbd failed, not POR.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "reset kbd failed, not POR.\n");
 		restore_flags(flags);
 		return(-1);
 	}
@@ -1357,7 +1363,8 @@ static int initialize_kbd(void)
 	 */
 	kbd_write(KBD_DATA_REG, KBD_DISABLE);
 	if (kbd_wait_for_input() != KBD_ACK) {
-		printk("initialize_kbd: disable kbd failed, no ACK.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "disable kbd failed, no ACK.\n");
 		restore_flags(flags);
 		return(-1);
 	}
@@ -1375,7 +1382,8 @@ static int initialize_kbd(void)
 	 */
 	kbd_write(KBD_DATA_REG, KBD_ENABLE);
 	if (kbd_wait_for_input() != KBD_ACK) {
-		printk("initialize_kbd: keyboard enable failed.\n");
+		printk(KERN_WARNING "initialize_kbd: "
+		       "keyboard enable failed.\n");
 		restore_flags(flags);
 		return(-1);
 	}

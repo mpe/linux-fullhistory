@@ -219,7 +219,7 @@ void isdn_tty_modem_hup(modem_info * info)
         }
 }
 
-static inline int isdn_tty_paranoia_check(modem_info * info, dev_t device, const char *routine)
+static inline int isdn_tty_paranoia_check(modem_info * info, kdev_t device, const char *routine)
 {
 #ifdef MODEM_PARANOIA_CHECK
 	if (!info) {

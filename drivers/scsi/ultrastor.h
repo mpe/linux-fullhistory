@@ -18,7 +18,7 @@ int ultrastor_detect(Scsi_Host_Template *);
 const char *ultrastor_info(struct Scsi_Host * shpnt);
 int ultrastor_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int ultrastor_abort(Scsi_Cmnd *);
-int ultrastor_reset(Scsi_Cmnd *);
+int ultrastor_reset(Scsi_Cmnd *, unsigned int);
 int ultrastor_biosparam(Disk *, kdev_t, int *);
 
 

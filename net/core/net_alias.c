@@ -157,7 +157,7 @@ nat_attach_chg(struct net_alias_type *nat, int delta)
   if (n_at < 0)
   {
     restore_flags(flags);
-    printk("net_alias: tried to set n_attach < 0 for (family==%d) nat object.\n",
+    printk(KERN_WARNING "net_alias: tried to set n_attach < 0 for (family==%d) nat object.\n",
 	   nat->type);
     return -1;
   }
@@ -229,7 +229,7 @@ net_alias_devinit(struct device *dev)
 static int
 net_alias_hard_start_xmit(struct sk_buff *skb, struct device *dev)
 {
-  printk("net_alias: net_alias_hard_start_xmit() for %s called (ignored)!!\n", dev->name);
+  printk(KERN_WARNING "net_alias: net_alias_hard_start_xmit() for %s called (ignored)!!\n", dev->name);
   dev_kfree_skb(skb, FREE_WRITE);
   return 0;
 }
@@ -363,7 +363,7 @@ net_alias_dev_create(struct device *main_dev, int slot, int *err, struct sockadd
     nat = nat_getbytype(family);
     if (!nat) {
 #endif
-      printk("net_alias_dev_create(%s:%d): unregistered family==%d\n",
+      printk(KERN_WARNING "net_alias_dev_create(%s:%d): unregistered family==%d\n",
              main_dev->name, slot, family);
       /* *err = -EAFNOSUPPORT; */
       *err = -EINVAL;
@@ -509,7 +509,7 @@ net_alias_dev_delete(struct device *main_dev, int slot, int *err)
   {
     if (!(alias = prevdev->next->my_alias))
     {
-      printk("ERROR: net_alias_dev_delete(): incorrect non-alias device after maindev\n");
+      printk(KERN_ERR "ERROR: net_alias_dev_delete(): incorrect non-alias device after maindev\n");
       continue;			/* or should give up? */
     }
     if (alias->slot == slot) break;
@@ -534,10 +534,10 @@ net_alias_dev_delete(struct device *main_dev, int slot, int *err)
   
   if (*aliasp != alias)
     if ((aliasp = net_alias_slow_findp(alias_info, alias)))
-      printk("net_alias_dev_delete(%s): bad hashing recovered\n", alias->name);
+      printk(KERN_WARNING "net_alias_dev_delete(%s): bad hashing recovered\n", alias->name);
     else
     {
-      printk("ERROR: net_alias_dev_delete(%s): unhashed alias!\n",alias->name);
+      printk(KERN_ERR "ERROR: net_alias_dev_delete(%s): unhashed alias!\n",alias->name);
       return NULL;		/* ENODEV */
     }
   
@@ -654,11 +654,11 @@ net_alias_free(struct device *main_dev)
 	continue;
       }
       else
-	printk("net_alias_free(%s): '%s' is not my alias\n",
+	printk(KERN_ERR "net_alias_free(%s): '%s' is not my alias\n",
 	       main_dev->name, alias->name);
     }
     else
-      printk("net_alias_free(%s): found a non-alias after device!\n",
+      printk(KERN_ERR "net_alias_free(%s): found a non-alias after device!\n",
 	     main_dev->name);
     dev = dev->next;
   }
@@ -760,7 +760,7 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
   
   if (!sa)
   {
-    printk("ERROR: net_alias_rehash(): NULL sockaddr passed\n");
+    printk(KERN_ERR "ERROR: net_alias_rehash(): NULL sockaddr passed\n");
     return -1;
   }
 
@@ -770,7 +770,7 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
 
   if ( (main_dev = alias->main_dev) == NULL )
   {
-    printk("ERROR: net_alias_rehash for %s: NULL maindev\n", alias->name);
+    printk(KERN_ERR "ERROR: net_alias_rehash for %s: NULL maindev\n", alias->name);
     return -1;
   }
 
@@ -780,7 +780,7 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
 
   if (!(alias_info=main_dev->alias_info))
   {
-    printk("ERROR: net_alias_rehash for %s: NULL alias_info\n", alias->name);
+    printk(KERN_ERR "ERROR: net_alias_rehash for %s: NULL alias_info\n", alias->name);
     return -1;
   }
   
@@ -791,7 +791,7 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
   o_nat = alias->nat;
   if (!o_nat)
   {
-    printk("ERROR: net_alias_rehash(%s): unbound alias.\n", alias->name);
+    printk(KERN_ERR "ERROR: net_alias_rehash(%s): unbound alias.\n", alias->name);
     return -1;
   }
 
@@ -806,7 +806,7 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
     n_nat = nat_getbytype(sa->sa_family);
     if (!n_nat)
     {
-      printk("ERROR: net_alias_rehash(%s): unreg family==%d.\n", alias->name, sa->sa_family);
+      printk(KERN_ERR "ERROR: net_alias_rehash(%s): unreg family==%d.\n", alias->name, sa->sa_family);
       return -1;
     }
   }
@@ -832,10 +832,10 @@ net_alias_dev_rehash(struct device *dev, struct sockaddr *sa)
   
   if(!*aliasp)
     if ((aliasp = net_alias_slow_findp(alias_info, alias)))
-      printk("net_alias_rehash(%s): bad hashing recovered\n", alias->name);
+      printk(KERN_WARNING "net_alias_rehash(%s): bad hashing recovered\n", alias->name);
     else
     {
-      printk("ERROR: net_alias_rehash(%s): unhashed alias!\n", alias->name);
+      printk(KERN_ERR "ERROR: net_alias_rehash(%s): unhashed alias!\n", alias->name);
       return -1;
     }
   
@@ -1309,7 +1309,7 @@ int register_net_alias_type(struct net_alias_type *nat, int type)
   unsigned long flags;
   if (!nat)
   {
-    printk("register_net_alias_type(): NULL arg\n");
+    printk(KERN_ERR "register_net_alias_type(): NULL arg\n");
     return -EINVAL;
   }
   nat->type = type;
@@ -1334,7 +1334,7 @@ int unregister_net_alias_type(struct net_alias_type *nat)
   
   if (!nat)
   {
-    printk("unregister_net_alias_type(): NULL arg\n");
+    printk(KERN_ERR "unregister_net_alias_type(): NULL arg\n");
     return -EINVAL;
   }
 
@@ -1343,7 +1343,7 @@ int unregister_net_alias_type(struct net_alias_type *nat)
    */
   if (nat->n_attach)
   {
-    printk("unregister_net_alias_type(): has %d attachments. failed\n",
+    printk(KERN_ERR "unregister_net_alias_type(): has %d attachments. failed\n",
 	   nat->n_attach);
     return -EINVAL;
   }
@@ -1360,7 +1360,7 @@ int unregister_net_alias_type(struct net_alias_type *nat)
     }
   }
   restore_flags(flags);
-  printk("unregister_net_alias_type(type=%d): not found!\n", nat->type);
+  printk(KERN_ERR "unregister_net_alias_type(type=%d): not found!\n", nat->type);
   return -EINVAL;
 }
 

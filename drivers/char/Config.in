@@ -52,13 +52,13 @@ bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
   bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
   tristate '   WDT Watchdog timer' CONFIG_WDT
-  if [ "$CONFIG_WDT" = "y" ]; then
+  if [ "$CONFIG_WDT" != "n" ]; then
      bool '       WDT501 features' CONFIG_WDT_501
      if [ "$CONFIG_WDT_501" = "y" ]; then
          bool '       Fan Tachometer' CONFIG_WDT_501_FAN
      fi
   else
-     bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
+     tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC

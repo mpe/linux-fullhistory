@@ -1,5 +1,5 @@
 /*
- *	SoftDog	0.02:	A Software Watchdog Device
+ *	SoftDog	0.04:	A Software Watchdog Device
  *
  *	(c) Copyright 1995    Alan Cox <alan@lxorguk.ukuu.org.uk>
  *
@@ -16,8 +16,15 @@
  *
  *	Software only watchdog driver. Unlike its big brother the WDT501P
  *	driver this won't always recover a failed machine.
+ *
+ *  03/96: Angelo Haritsis <ah@doc.ic.ac.uk> :
+ *	Modularised.
+ *	Added soft_margin; use upon insmod to change the timer delay.
+ *	NB: uses same minor as wdt (WATCHDOG_MINOR); we could use separate
+ *	    minors.
  */
  
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -26,7 +33,9 @@
 #include <linux/miscdevice.h>
 
 #define WATCHDOG_MINOR	130
-#define TIMER_MARGIN	(60*HZ)		/* Allow 1 minute */
+#define TIMER_MARGIN	60		/* (secs) Default is 1 minute */
+
+static int soft_margin = TIMER_MARGIN;	/* in seconds */
 
 /*
  *	Our timer
@@ -43,8 +52,13 @@ static int timer_alive = 0;
 static void watchdog_fire(unsigned long data)
 {
 	extern void hard_reset_now(void);
+#ifdef ONLY_TESTING
+		printk(KERN_CRIT "SOFTDOG: Would Reboot.\n");
+#else
+	printk(KERN_CRIT "SOFTDOG: Initiating system reboot.\n");
 	hard_reset_now();
 	printk("WATCHDOG: Reboot didn't ?????\n");
+#endif
 }
 
 /*
@@ -55,10 +69,11 @@ static int softdog_open(struct inode *inode, struct file *file)
 {
 	if(timer_alive)
 		return -EBUSY;
+	MOD_INC_USE_COUNT;
 	/*
 	 *	Activate timer
 	 */
-	watchdog_ticktock.expires=jiffies+TIMER_MARGIN;
+	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
 	add_timer(&watchdog_ticktock);
 	timer_alive++;
 	return 0;
@@ -68,11 +83,13 @@ static void softdog_release(struct inode *inode, struct file *file)
 {
 	/*
 	 *	Shut off the timer.
+	 * 	Lock it in if it's a module and we defined ...NOWAYOUT
 	 */
 #ifndef CONFIG_WATCHDOG_NOWAYOUT	 
 	del_timer(&watchdog_ticktock);
-#endif	
+	MOD_DEC_USE_COUNT;
 	timer_alive=0;
+#endif	
 }
 
 static int softdog_write(struct inode *inode, struct file *file, const char *data, int len)
@@ -81,39 +98,50 @@ static int softdog_write(struct inode *inode, struct file *file, const char *dat
 	 *	Refresh the timer.
 	 */
 	del_timer(&watchdog_ticktock);
-	watchdog_ticktock.expires=jiffies+TIMER_MARGIN;
+	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
 	add_timer(&watchdog_ticktock);
 	return 1;
 }
 
-/*
- *	The mouse stuff ought to be renamed misc_register etc before 1.4...
- */
- 
+static struct file_operations softdog_fops=
+{
+	NULL,		/* Seek */
+	NULL,		/* Read */
+	softdog_write,	/* Write */
+	NULL,		/* Readdir */
+	NULL,		/* Select */
+	NULL,		/* Ioctl */
+	NULL,		/* MMap */
+	softdog_open,
+	softdog_release,
+	NULL,		
+	NULL		/* Fasync */
+};
+
+static struct miscdevice softdog_miscdev=
+{
+	WATCHDOG_MINOR,
+	"softdog",
+	&softdog_fops
+};
+
 void watchdog_init(void)
 {
-	static struct file_operations softdog_fops=
-	{
-		NULL,		/* Seek */
-		NULL,		/* Read */
-		softdog_write,	/* Write */
-		NULL,		/* Readdir */
-		NULL,		/* Select */
-		NULL,		/* Ioctl */
-		NULL,		/* MMap */
-		softdog_open,
-		softdog_release,
-		NULL,		
-		NULL		/* Fasync */
-	};
-	static struct miscdevice softdog_mouse={
-		WATCHDOG_MINOR,
-		"softdog",
-		&softdog_fops
-	};
-
-	misc_register(&softdog_mouse);
+	misc_register(&softdog_miscdev);
 	init_timer(&watchdog_ticktock);
 	watchdog_ticktock.function=watchdog_fire;
-	printk("Software Watchdog Timer: 0.03\n");
+	printk("Software Watchdog Timer: 0.04, timer margin: %d sec\n", soft_margin);
 }	
+
+#ifdef MODULE
+int init_module(void)
+{
+	watchdog_init();
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	misc_deregister(&softdog_miscdev);
+}
+#endif

@@ -213,7 +213,7 @@ done:
  * Create devices for BSD partitions listed in a disklabel, under a
  * dos-like partition. See extended_partition() for more information.
  */
-static void bsd_disklabel_partition(struct gendisk *hd, int dev)
+static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev)
 {
 	struct buffer_head *bh;
 	struct bsd_disklabel *l;
@@ -470,7 +470,7 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 
 #ifdef CONFIG_SUN_PARTITION
 
-static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
+static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 {
 	int i, csum;
 	unsigned short *ush;
@@ -512,13 +512,15 @@ static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 				 : (__u32)(x))
 
 	if(!(bh = bread(dev, 0, 1024))) {
-		printk("Dev %d: unable to read partition table\n", dev);
+		printk("Dev %s: unable to read partition table\n",
+		       kdevname(dev));
 		return -1;
 	}
 	label = (struct sun_disklabel *) bh->b_data;
 	p = label->partitions;
 	if (label->magic != SUN_LABEL_MAGIC && label->magic != SUN_LABEL_MAGIC_SWAPPED) {
-		printk("Dev %d Sun disklabel: bad magic %04x\n", dev, label->magic);
+		printk("Dev %s Sun disklabel: bad magic %04x\n",
+		       kdevname(dev), label->magic);
 		brelse(bh);
 		return 0;
 	}
@@ -528,7 +530,8 @@ static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 	for(csum = 0; ush >= ((unsigned short *) label);)
 		csum ^= *ush--;
 	if(csum) {
-		printk("Dev %d Sun disklabel: Csum bad, label corrupted\n", dev);
+		printk("Dev %s Sun disklabel: Csum bad, label corrupted\n",
+		       kdevname(dev));
 		brelse(bh);
 		return 0;
 	}

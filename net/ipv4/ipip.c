@@ -21,7 +21,6 @@
  
 #include <linux/module.h>
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -31,7 +30,6 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/firewall.h>
-#include <linux/config.h>	/* For CONFIG_FIREWALL */
 
 #include <net/datalink.h>
 #include <net/sock.h>
@@ -53,9 +51,6 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		__u32 daddr, unsigned short len, __u32 saddr,
                                    int redo, struct inet_protocol *protocol)
 {
-#ifdef CONFIG_FIREWALL
-	int err;
-#endif
 	/* Don't unlink in the middle of a turnaround */
 	MOD_INC_USE_COUNT;
 #ifdef TUNNEL_DEBUG
@@ -116,7 +111,7 @@ int init_module( void)
 void cleanup_module( void) 
 {
 	if ( inet_del_protocol(&ipip_protocol) < 0 )
-		printk("ipip close: can't remove protocol\n");
+		printk(KERN_INFO "ipip close: can't remove protocol\n");
 }
 
 #endif

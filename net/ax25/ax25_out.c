@@ -99,7 +99,7 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 			 */
 			if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL) {
 				restore_flags(flags);
-				printk("ax25_output: alloc_skb returned NULL\n");
+				printk(KERN_DEBUG "ax25_output: alloc_skb returned NULL\n");
 				if (skb_device_locked(skb))
 					skb_device_unlock(skb);
 				return;
@@ -268,7 +268,7 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	}
 
 	if (skb_headroom(skb) < size_ax25_addr(ax25->digipeat)) {
-		printk("ax25_transmit_buffer: not enough room for digi-peaters\n");
+		printk(KERN_CRIT "ax25_transmit_buffer: not enough room for digi-peaters\n");
 		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 		return;

@@ -59,6 +59,8 @@ struct __sysctl_args {
 #define KERN_REALROOTDEV 16	/* real root device to mount after initrd */
 #define KERN_NFSRNAME	17	/* NFS root name */
 #define KERN_NFSRADDRS	18	/* NFS root addresses */
+#define KERN_JAVA_INTERPRETER 19 /* path to Java(tm) interpreter */
+#define KERN_JAVA_APPLETVIEWER 20 /* path to Java(tm) appletviewer */
 
 /* CTL_VM names: */
 #define VM_SWAPCTL	1	/* struct: Set vm swapping control */

@@ -5,6 +5,7 @@ mainmenu_option next_comment
 comment 'Filesystems'
 
 bool	 'Quota support' CONFIG_QUOTA
+bool	 'Mandatory lock support' CONFIG_LOCK_MANDATORY
 tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS

@@ -184,7 +184,7 @@ void dev_remove_pack(struct packet_type *pt)
 			return;
 		}
 	}
-	printk("dev_remove_pack: %p not found.\n", pt);
+	printk(KERN_WARNING "dev_remove_pack: %p not found.\n", pt);
 }
 
 /*****************************************************************************************
@@ -360,7 +360,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 #ifdef CONFIG_NET_DEBUG
 	if (pri >= DEV_NUMBUFFS) 
 	{
-		printk("bad priority in dev_queue_xmit.\n");
+		printk(KERN_WARNING "bad priority in dev_queue_xmit.\n");
 		pri = 1;
 	}
 #endif

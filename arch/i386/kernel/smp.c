@@ -534,8 +534,10 @@ void smp_commence(void)
  
 void smp_callin(void)
 {
+	extern void calibrate_delay(void);
 	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
 	unsigned long l;
+	
 	/*
 	 *	Activate our APIC
 	 */

@@ -904,7 +904,8 @@ int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction)
 
 void dquot_init(void)
 {
-	printk("VFS: Diskquotas version %s initialized\r\n", __DQUOT_VERSION__);
+	printk(KERN_NOTICE "VFS: Diskquotas version %s initialized\r\n",
+	       __DQUOT_VERSION__);
 	memset(hash_table, 0, sizeof(hash_table));
 	memset((caddr_t)&dqstats, 0, sizeof(dqstats));
 	first_dquot = NODQUOT;

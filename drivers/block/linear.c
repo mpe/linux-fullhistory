@@ -128,7 +128,8 @@ static int linear_map (struct md_dev *mddev, kdev_t *rdev,
     tmp_dev=hash->dev0;
     
   if (block >= (tmp_dev->size + tmp_dev->offset) || block < tmp_dev->offset)
-    printk ("Block %ld out of bounds on dev %04x size %d offset %d\n", block, tmp_dev->dev, tmp_dev->size, tmp_dev->offset);
+    printk ("Block %ld out of bounds on dev %s size %d offset %d\n",
+	    block, kdevname(tmp_dev->dev), tmp_dev->size, tmp_dev->offset);
   
   *rdev=tmp_dev->dev;
   *rsector=(block-(tmp_dev->offset)) << 1;

@@ -9,11 +9,11 @@
  *            Also for the TEAC CD-55A drive.
  *            Also for the ECS-AT "Vertos 100" drive.
  *            Not for Sanyo drives (but for the H94A, sjcd is there...).
- *            Not for any other Funai drives than the CD200 types
- *            (sometimes labelled E2550UA or MK4015 or E2880UA).
+ *            Not for any other Funai drives than the CD200 types (sometimes
+ *             labelled E2550UA or MK4015 or 2800F).
  */
 
-#define VERSION "v4.2 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
  *
@@ -274,6 +274,11 @@
  *       is user-configurable (even at runtime), but to get aware of this, one
  *       needs a special mental quality: the ability to read.
  *       
+ *  4.3  CD200F does not like to receive a command while the drive is
+ *       reading the ToC; still trying to solve it.
+ *       Removed some redundant verify_area calls (yes, Heiko Eissfeldt
+ *       is visiting all the Linux CDROM drivers ;-).
+ *
  *
  *  TODO
  *
@@ -728,6 +733,12 @@ static struct timer_list audio_timer = { NULL, NULL, 0, 0, mark_timeout_audio};
  */
 static void msg(int level, const char *fmt, ...)
 {
+#if DISTRIBUTION
+#define MSG_LEVEL KERN_NOTICE
+#else
+#define MSG_LEVEL KERN_INFO
+#endif DISTRIBUTION
+
 	char buf[256];
 	va_list args;
 	
@@ -735,7 +746,7 @@ static void msg(int level, const char *fmt, ...)
 	
 	msgnum++;
 	if (msgnum>99) msgnum=0;
-	sprintf(buf, KERN_NOTICE "%s-%d [%02d]:  ", major_name, d, msgnum);
+	sprintf(buf, MSG_LEVEL "%s-%d [%02d]:  ", major_name, d, msgnum);
 	va_start(args, fmt);
 	vsprintf(&buf[18], fmt, args);
 	va_end(args);
@@ -1645,7 +1656,7 @@ static int cc_SetSpeed(u_char speed, u_char x1, u_char x2)
 			drvcmd[2]=0;
 			drvcmd[3]=150;
 		}
-		flags_cmd_out=f_putcmd|f_ResponseStatus;
+		flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
 	}
 	else if (famT_drive)
 	{
@@ -3975,7 +3986,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
 		msg(DBG_IOC,"ioctl: CDROMREADTOCENTRY entered.\n");
-		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_tocentry));
+		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_tocentry));
 		if (st) return (st);
 		memcpy_fromfs(&tocentry, (void *) arg, sizeof(struct cdrom_tocentry));
 		i=tocentry.cdte_track;
@@ -3993,8 +4004,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		else if (tocentry.cdte_format==CDROM_LBA) /* blk required */
 			tocentry.cdte_addr.lba=msf2blk(D_S[d].TocBuffer[i].address);
 		else return (-EINVAL);
-		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_tocentry));
-		if (st) return (st);
 		memcpy_tofs((void *) arg, &tocentry, sizeof(struct cdrom_tocentry));
 		return (0);
 		
@@ -4069,8 +4078,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					    }
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
 		if (st)	return (st);
-		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_subchnl));
-		if (st) return (st);
 		memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
 		switch (D_S[d].audio_state)
 		{
@@ -4355,7 +4362,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		
 	case CDROMMULTISESSION: /* tell start-of-last-session */
 		msg(DBG_IOC,"ioctl: CDROMMULTISESSION entered.\n");
-		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_multisession));
+		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_multisession));
 		if (st) return (st);
 		memcpy_fromfs(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
 		if (ms_info.addr_format==CDROM_MSF) /* MSF-bin requested */
@@ -4365,8 +4372,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		else return (-EINVAL);
 		if (D_S[d].f_multisession) ms_info.xa_flag=1; /* valid redirection address */
 		else ms_info.xa_flag=0; /* invalid redirection address */
-		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_multisession));
-		if (st) return (st);
 		memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
 		msg(DBG_MUL,"ioctl: CDROMMULTISESSION done (%d, %08X).\n",
 		    ms_info.xa_flag, ms_info.addr.lba);

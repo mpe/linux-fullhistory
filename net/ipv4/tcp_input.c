@@ -1666,7 +1666,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	if (!sk->prot) 
 	{
-		printk("IMPOSSIBLE 3\n");
+		printk(KERN_CRIT "IMPOSSIBLE 3\n");
 		return(0);
 	}
 

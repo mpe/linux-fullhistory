@@ -188,7 +188,7 @@ static void unix_destroy_socket(unix_socket *sk)
 		}
 		else
 		{
-			/* passed fds are erased where?? */
+			/* passed fds are erased in the kfree_skb hook */
 			kfree_skb(skb,FREE_WRITE);
 		}
 	}
@@ -354,7 +354,8 @@ static int unix_release(struct socket *sock, struct socket *peer)
 		skpair->protinfo.af_unix.locks--;	/* It may now die */
 	sk->protinfo.af_unix.other=NULL;		/* No pair */
 	unix_destroy_socket(sk);			/* Try to flush out this socket. Throw out buffers at least */
-	
+	unix_gc();					/* Garbage collect fds */	
+
 	/*
 	 *	FIXME: BSD difference: In BSD all sockets connected to use get ECONNRESET and we die on the spot. In
 	 *	Linux we behave like files and pipes do and wait for the last dereference.
@@ -1085,7 +1086,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		)
 		{
 			kfree(cm);
-			printk("recvmsg: Bad msg_accrights\n");
+/*			printk("recvmsg: Bad msg_accrights\n");*/
 		   	return -EINVAL;
 		}
 	}
@@ -1305,7 +1306,7 @@ struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk("NET3: Unix domain sockets 0.12 for Linux NET3.033.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.12 for Linux NET3.035.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {

@@ -1,5 +1,5 @@
-               JAVA Binary Kernel Support for Linux v1.01
-               ------------------------------------------
+               Java(tm) Binary Kernel Support for Linux v1.01
+               ----------------------------------------------
 
 Linux beats them ALL! While all other OS's are TALKING about direct
 support of Java Binaries in the OS, Linux is doing it!
@@ -14,9 +14,15 @@ small details:
 		ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/Java-HOWTO
 
 	   If you install the JDK in a location other than the suggested
-	   directory of /usr/local/java, then you will need to edit the
-	   kernel's fs/binfmt_java.c file and make the needed change to the
-	   _PATH_JAVA definition at the top of that file.
+	   directory of /usr/local/java, then you will need to tell the
+	   kernel where you put the Java interpreter.  
+           There are two ways to do this.
+           One, edit fs/binfmt_java.c file and make the needed change to 
+	   the _PATH_JAVA definition at the top of that file.  
+           Two, as root, issue the command:
+	 echo "/path/to/java/interpreter" > /proc/sys/kernel/java-interpreter
+	   (Currently, this does not work if you're using a module for
+	    Java support.)
 
 	2) You must chmod the '*.class' files you wish to execute with
 	   the execute bit. This is not normally (till now) done with
@@ -29,7 +35,6 @@ small details:
 	4) Either compile your kernel with Java support builtin, or
 	   as a loadable module. If a module, load it with insmod or
 	   kerneld.
-
 
 To test your new setup, enter in the following simple Java app, and name
 it "HelloWorld.java":
@@ -75,9 +80,15 @@ demo/Blink/example1.html file), and:
 	   with all known browsers.
 
 	2) If you install the JDK in a location other than the suggested
-	   directory of /usr/local/java, then you will need to edit the
-	   kernel's fs/binfmt_java.c file and make the needed change to the
-	   _PATH_APPLET definition at the top of that file.
+	   directory of /usr/local/java, then you will need to tell the
+	   kernel where you put the Java appletviewer.  
+           There are two ways to do this.
+           One, edit fs/binfmt_java.c file and make the needed change to 
+	   the _PATH_APPLET definition at the top of that file.  
+           Two, as root, issue the command:
+	echo "/path/to/java/appletviewer" > /proc/sys/kernel/java-appletviewer
+	   (Currently, this does not work if you're using a module for
+	    Java support.)
 
 	3) You must chmod the '*.html' files you wish to execute with
 	   the execute bit. This is not normally (till now) done with
@@ -86,6 +97,7 @@ demo/Blink/example1.html file), and:
 	4) And then execute it.
 
 
-
 Brian A. Lantz
 brian@lantz.com
+(/proc/sys/kernel/java-* support by Mike Shaver (shaver@ingenia.com))
+

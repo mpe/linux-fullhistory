@@ -756,7 +756,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		} 
 		else 
 		{
-			printk("IPX: Network number collision %lx\n\t%s %s and %s %s\n",
+			printk(KERN_WARNING "IPX: Network number collision %lx\n\t%s %s and %s %s\n",
 				htonl(ipx->ipx_source.net), 
 				ipx_device_name(i),
 				ipx_frame_name(i->if_dlink_type),
@@ -2353,13 +2353,13 @@ ipx_proto_init(struct net_proto *pro)
 	dev_add_pack(&ipx_8023_packet_type);
 	
 	if ((p8022_datalink = register_8022_client(ipx_8022_type, ipx_rcv)) == NULL)
-		printk("IPX: Unable to register with 802.2\n");
+		printk(KERN_CRIT "IPX: Unable to register with 802.2\n");
 
 	if ((p8022tr_datalink = register_8022tr_client(ipx_8022_type, ipx_rcv)) == NULL)
-		printk("IPX: Unable to register with 802.2TR\n");
+		printk(KERN_CRIT "IPX: Unable to register with 802.2TR\n");
  
 	if ((pSNAP_datalink = register_snap_client(ipx_snap_id, ipx_rcv)) == NULL)
-		printk("IPX: Unable to register with SNAP\n");
+		printk(KERN_CRIT "IPX: Unable to register with SNAP\n");
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
 
@@ -2367,7 +2367,7 @@ ipx_proto_init(struct net_proto *pro)
 	proc_net_register(&ipx_if_procinfo);
 	proc_net_register(&ipx_rt_procinfo);
 		
-	printk(KERN_INFO "Swansea University Computer Society IPX 0.34 for NET3.034\n");
+	printk(KERN_INFO "Swansea University Computer Society IPX 0.34 for NET3.035\n");
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 

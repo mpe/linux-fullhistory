@@ -185,7 +185,7 @@ void ufs_read_inode(struct inode * inode)
 
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
 	        /* XXX - should be ui_db[1] on little endian ufs filesystems */
-	        inode->i_rdev = ufsip->ui_db[0];
+	        inode->i_rdev = to_kdev_t(ufsip->ui_db[0]);
 	}
 
 	/* XXX - implement fast and slow symlinks */

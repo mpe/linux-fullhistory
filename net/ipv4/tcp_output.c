@@ -120,7 +120,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	 
 	if (size < sizeof(struct tcphdr) || size > skb->len) 
 	{
-		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
+		printk(KERN_ERR "tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %lu)\n",
 			skb, skb->data, th, skb->len);
 		kfree_skb(skb, FREE_WRITE);
 		return;
@@ -136,7 +136,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		/* If it's got a syn or fin it's notionally included in the size..*/
 		if(!th->syn && !th->fin) 
 		{
-			printk("tcp_send_skb: attempt to queue a bogon.\n");
+			printk(KERN_ERR "tcp_send_skb: attempt to queue a bogon.\n");
 			kfree_skb(skb,FREE_WRITE);
 			return;
 		}
@@ -167,7 +167,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		th->check = 0;
 		if (skb->next != NULL) 
 		{
-			printk("tcp_send_partial: next != NULL\n");
+			printk(KERN_ERR "tcp_send_partial: next != NULL\n");
 			skb_unlink(skb);
 		}
 		skb_queue_tail(&sk->write_queue, skb);
@@ -648,7 +648,7 @@ void tcp_send_fin(struct sock *sk)
 	if (buff == NULL)
 	{
 		/* This is a disaster if it occurs */
-		printk("tcp_send_fin: Impossible malloc failure");
+		printk(KERN_CRIT "tcp_send_fin: Impossible malloc failure");
 		return;
 	}
 
@@ -713,7 +713,7 @@ void tcp_send_fin(struct sock *sk)
   		buff->free = 0;
 		if (buff->next != NULL) 
 		{
-			printk("tcp_send_fin: next != NULL\n");
+			printk(KERN_ERR "tcp_send_fin: next != NULL\n");
 			skb_unlink(buff);
 		}
 		skb_queue_tail(&sk->write_queue, buff);

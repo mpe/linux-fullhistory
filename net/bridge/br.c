@@ -579,6 +579,7 @@ void br_init(void)
 {						  /* (4.8.1)	 */
 	int             port_no;
 
+	printk(KERN_INFO "Ethernet Bridge 002 for NET3.035 (Linux 2.0)\n");
 	bridge_info.designated_root = bridge_info.bridge_id;	/* (4.8.1.1)	 */
 	bridge_info.root_path_cost = Zero;
 	bridge_info.root_port = No_port;
@@ -876,7 +877,7 @@ int size;
 unsigned long flags;
 	
 	if (port_info[port_no].state == Disabled) {
-		printk("send_config_bpdu: port %i not valid\n",port_no);
+		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
 		return(-1);
 		}
 	if (br_stats.flags & BR_DEBUG)
@@ -887,7 +888,7 @@ unsigned long flags;
 	size = sizeof(Config_bpdu) + dev->hard_header_len;
 	skb = alloc_skb(size, GFP_ATOMIC);
 	if (skb == NULL) {
-		printk("send_config_bpdu: no skb available\n");
+		printk(KERN_DEBUG "send_config_bpdu: no skb available\n");
 		return(-1);
 		}
 	skb->dev = dev;
@@ -935,7 +936,7 @@ int size;
 unsigned long flags;
 	
 	if (port_info[port_no].state == Disabled) {
-		printk("send_tcn_bpdu: port %i not valid\n",port_no);
+		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
 		return(-1);
 		}
 	if (br_stats.flags & BR_DEBUG)
@@ -943,7 +944,7 @@ unsigned long flags;
 	size = sizeof(Tcn_bpdu) + dev->hard_header_len;
 	skb = alloc_skb(size, GFP_ATOMIC);
 	if (skb == NULL) {
-		printk("send_tcn_bpdu: no skb available\n");
+		printk(KERN_DEBUG "send_tcn_bpdu: no skb available\n");
 		return(-1);
 		}
 	skb->dev = dev;
@@ -1033,9 +1034,11 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 			}
 		}
 		break;
+#if 0
 	default:
 		printk("br_device_event: unknown event [%x]\n",
 			(unsigned int)event);
+#endif			
 	}
 	return NOTIFY_DONE;
 }
@@ -1054,7 +1057,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 		printk("br_receive_frame: ");
 	/* sanity */
 	if (!skb) {
-		printk("no skb!\n");
+		printk(KERN_CRIT "br_receive_frame: no skb!\n");
 		return(1);
 	}
 
@@ -1134,7 +1137,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 			skb_device_lock(skb);
 			return(br_forward(skb, port));
 		default:
-			printk("br_receive_frame: port [%i] unknown state [%i]\n",
+			printk(KERN_DEBUG "br_receive_frame: port [%i] unknown state [%i]\n",
 				port, port_info[port].state);
 			return(0);	/* pass frame up stack? */
 	}
@@ -1153,7 +1156,7 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 	/* sanity */
 	if (!skb) 
 	{
-		printk("br_tx_frame: no skb!\n");
+		printk(KERN_CRIT "br_tx_frame: no skb!\n");
 		return(0);
 	}
 	/* check for loopback */
@@ -1208,7 +1211,7 @@ int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
 				GFP_ATOMIC);
 
 			if (!f) {
-				printk("br_learn: unable to malloc fdb\n");
+				printk(KERN_DEBUG "br_learn: unable to malloc fdb\n");
 				return(-1);
 			}
 			f->port = port;	/* source port */
@@ -1260,7 +1263,6 @@ int br_dev_drop(struct sk_buff *skb)
 int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 {
 	struct fdb *f;
-	unsigned long flags;
 	
 	/*
    	 * flood all ports with frames destined for a group
@@ -1344,7 +1346,6 @@ int br_flood(struct sk_buff *skb, int port)
 {
 	int i;
 	struct sk_buff *nskb;
-	unsigned long flags;
 
 	for (i = One; i <= No_of_ports; i++) 
 	{
@@ -1411,7 +1412,7 @@ void br_bpdu(struct sk_buff *skb) /* consumes skb */
 			received_tcn_bpdu(port, bpdu);
 			break;
 		default:
-			printk("br_bpdu: received unknown bpdu, type = %i\n",
+			printk(KERN_DEBUG "br_bpdu: received unknown bpdu, type = %i\n",
 				bpdu->type);
 			/* break; */
 	}
@@ -1422,7 +1423,6 @@ int br_ioctl(unsigned int cmd, void *arg)
 {
 	int err;
 	struct br_cf bcf;
-	int i;
 
 	switch(cmd)
 	{
@@ -1447,14 +1447,14 @@ int br_ioctl(unsigned int cmd, void *arg)
 				case BRCMD_BRIDGE_ENABLE:
 					if (br_stats.flags & BR_UP)
 						return(-EALREADY);	
-					printk("br: enabling bridging function\n");
+					printk(KERN_DEBUG "br: enabling bridging function\n");
 					br_stats.flags |= BR_UP;	/* enable bridge */
 					start_hello_timer();
 					break;
 				case BRCMD_BRIDGE_DISABLE:
 					if (!(br_stats.flags & BR_UP))
 						return(-EALREADY);	
-					printk("br: disabling bridging function\n");
+					printk(KERN_DEBUG "br: disabling bridging function\n");
 					br_stats.flags &= ~BR_UP;	/* disable bridge */
 					stop_hello_timer();
 #if 0					
@@ -1468,7 +1468,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 						return(-EINVAL);
 					if (port_info[bcf.arg1].state != Disabled)
 						return(-EALREADY);
-					printk("br: enabling port %i\n",bcf.arg1);
+					printk(KERN_DEBUG "br: enabling port %i\n",bcf.arg1);
 					enable_port(bcf.arg1);
 					break;
 				case BRCMD_PORT_DISABLE:
@@ -1476,7 +1476,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 						return(-EINVAL);
 					if (port_info[bcf.arg1].state == Disabled)
 						return(-EALREADY);
-					printk("br: disabling port %i\n",bcf.arg1);
+					printk(KERN_DEBUG "br: disabling port %i\n",bcf.arg1);
 					disable_port(bcf.arg1);
 					break;
 				case BRCMD_SET_BRIDGE_PRIORITY:

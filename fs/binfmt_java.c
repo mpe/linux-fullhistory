@@ -14,7 +14,10 @@
 
 #define _PATH_JAVA	"/usr/bin/java"
 #define _PATH_APPLET	"/usr/bin/appletviewer"
-#define _PATH_SH	"/bin/sh"
+#define _PATH_SH	"/bin/bash"
+
+char binfmt_java_interpreter[65] = _PATH_JAVA;
+char binfmt_java_appletviewer[65] = _PATH_APPLET;
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
@@ -47,7 +50,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
 
-	strcpy (bprm->buf, _PATH_JAVA);
+	strcpy (bprm->buf, binfmt_java_interpreter);
 	cp = bprm->buf;
 	bprm->p = copy_strings(1, &cp, bprm->page, bprm->p, 2);
 	bprm->argc++;
@@ -102,12 +105,12 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
 
-	strcpy (bprm->buf, _PATH_APPLET);
+	strcpy (bprm->buf, binfmt_java_appletviewer);
 	cp = bprm->buf;
 	bprm->p = copy_strings(1, &cp, bprm->page, bprm->p, 2);
 	bprm->argc++;
 
-	strcpy (bprm->buf, _PATH_BSHELL);
+	strcpy (bprm->buf, _PATH_SH);
 	interp = bprm->buf;
 	if ((i_name = strrchr (bprm->buf, '/')) != NULL)
 		i_name++;

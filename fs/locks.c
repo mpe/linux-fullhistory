@@ -75,7 +75,13 @@
  *  Fixed deadlock condition for pathological code that mixes calls to
  *  flock() and fcntl().
  *  Andy Walker (andy@lysaker.kvaerner.no), April 29, 1996.
+ *
+ *	BUG: MUST DISALLOW MANDATORY LOCK ON NFS/SMB/NCP FILE SYSTEM 
+ *	TO MATCH SYS5.4 SEMANTICS.
+ *
  */
+
+#include <linux/config.h>
 
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -336,6 +342,7 @@ int locks_verify_locked(struct inode *inode)
 
 int locks_mandatory_locked(struct inode *inode)
 {
+#ifdef CONFIG_LOCK_MANDATORY
 	struct file_lock *fl;
 
 	/* Search the lock list for this inode for any POSIX locks.
@@ -344,6 +351,7 @@ int locks_mandatory_locked(struct inode *inode)
 		if ((fl->fl_flags & F_POSIX) && (fl->fl_owner != current))
 			return (-EAGAIN);
 	}
+#endif	
 	return (0);
 }
 
@@ -353,16 +361,19 @@ int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
+#ifdef CONFIG_LOCK_MANDATORY	 
 	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return (locks_mandatory_area(read_write, inode, filp, offset,
 					     count));
+#endif					     
 	return (0);
 }
-	
+
 int locks_mandatory_area(int read_write, struct inode *inode,
 			 struct file *filp, unsigned int offset,
 			 unsigned int count)
 {
+#ifdef CONFIG_LOCK_MANDATORY	
 	struct file_lock *fl;
 
 repeat:
@@ -401,6 +412,7 @@ repeat:
 			goto repeat;
 		}
 	}
+#endif
 	return (0);
 }
 
@@ -936,8 +948,8 @@ static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
 		p += sprintf(p, "FLOCK  ADVISORY  ");
 	}
 	p += sprintf(p, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
-	p += sprintf(p, "%d %04x:%ld %ld %ld ",
-		     fl->fl_owner->pid, fl->fl_file->f_inode->i_dev,
+	p += sprintf(p, "%d %s:%ld %ld %ld ",
+		     fl->fl_owner->pid, kdevname(fl->fl_file->f_inode->i_dev),
 		     fl->fl_file->f_inode->i_ino, fl->fl_start,
 		     fl->fl_end);
 	p += sprintf(p, "%08lx %08lx %08lx %08lx %08lx\n%d:%s",

@@ -985,7 +985,7 @@ static int do_tcp_sendmsg(struct sock *sk,
 					copy = min(sk->mss - tcp_size, seglen);
 					if (copy <= 0)
 					{
-						printk("TCP: **bug**: \"copy\" <= 0\n");
+						printk(KERN_CRIT "TCP: **bug**: \"copy\" <= 0\n");
 				  		return -EFAULT;
 					}
 					tcp_size += copy;
@@ -1023,7 +1023,7 @@ static int do_tcp_sendmsg(struct sock *sk,
 				copy = seglen;
 			if (copy <= 0)
 			{
-				printk("TCP: **bug**: copy=%d, sk->mss=%d\n", copy, sk->mss);
+				printk(KERN_CRIT "TCP: **bug**: copy=%d, sk->mss=%d\n", copy, sk->mss);
 		  		return -EFAULT;
 			}
 

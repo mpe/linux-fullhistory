@@ -28,7 +28,7 @@ int cdrom_open(struct inode *ip, struct file *fp);
 void cdrom_release(struct inode *ip, struct file *fp);
 int cdrom_ioctl(struct inode *ip, struct file *fp,
 				unsigned int cmd, unsigned long arg);
-int cdrom_media_changed(dev_t dev);
+int cdrom_media_changed(kdev_t dev);
 
 struct file_operations cdrom_fops =
 {
@@ -107,11 +107,11 @@ int unregister_cdrom(int major, char *name)
  * is in their own interest: device control becomes a lot easier
  * this way.
  */
-int open_for_data(struct cdrom_device_ops *, int);
+int open_for_data(struct cdrom_device_ops *, kdev_t);
 
 int cdrom_open(struct inode *ip, struct file *fp)
 {
-        dev_t dev = ip->i_rdev;
+	kdev_t dev = ip->i_rdev;
         struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
         int purpose = !!(fp->f_flags & O_NONBLOCK);
 
@@ -126,7 +126,7 @@ int cdrom_open(struct inode *ip, struct file *fp)
                 return open_for_data(cdo, dev);
 }
 
-int open_for_data(struct cdrom_device_ops * cdo, int dev)
+int open_for_data(struct cdrom_device_ops * cdo, kdev_t dev)
 {
         int ret;
         if (cdo->drive_status != NULL) {
@@ -163,7 +163,7 @@ int open_for_data(struct cdrom_device_ops * cdo, int dev)
 /* Admittedly, the logic below could be performed in a nicer way. */
 void cdrom_release(struct inode *ip, struct file *fp)
 {
-        dev_t dev = ip->i_rdev;
+        kdev_t dev = ip->i_rdev;
         struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
 	
         if (cdo == NULL || MINOR(dev) >= cdo->minors)
@@ -192,7 +192,7 @@ void cdrom_release(struct inode *ip, struct file *fp)
  * in the lower 16 bits, queue 1 in the higher 16 bits.
  */
 
-int media_changed(dev_t dev, int queue)
+int media_changed(kdev_t dev, int queue)
 {
         unsigned int major = MAJOR(dev);
         unsigned int minor = MINOR(dev);
@@ -212,7 +212,7 @@ int media_changed(dev_t dev, int queue)
         return ret;
 }
 
-int cdrom_media_changed(dev_t dev)
+int cdrom_media_changed(kdev_t dev)
 {
         struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
         if (cdo == NULL || MINOR(dev) >= cdo->minors)
@@ -290,7 +290,7 @@ void sanitize_format(union cdrom_addr *addr,
 int cdrom_ioctl(struct inode *ip, struct file *fp,
                 unsigned int cmd, unsigned long arg)
 {
-        dev_t dev = ip->i_rdev;
+        kdev_t dev = ip->i_rdev;
         struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
 
         if (cdo == NULL || MINOR(dev) >= cdo->minors)

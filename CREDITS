@@ -755,7 +755,8 @@ D: SLS distribution
 D: Initial implementation of VC's, pty's and select()
 
 N: James B. MacLean
-E: jmaclean@fox.nstn.ns.ca
+E: macleajb@ednet.ns.ca
+W: http://www.ednet.ns.ca/~macleajb/dosemu.html
 D: Coordinator of DOSEMU releases
 D: Program in DOSEMU
 S: PO BOX 220, HFX. CENTRAL
@@ -1007,7 +1008,7 @@ D: Author, Emacs VC and GUD modes
 N: Stefan Reinauer
 E: stepan@home.culture.mipt.ru
 W: http://home.culture.mipt.ru/~stepan
-D: Modulized affs and ufs. Minor fixes.
+D: Modularized affs and ufs. Minor fixes.
 S: Rebmannsweg 34h
 S: 79539 Loerrach
 S: Germany

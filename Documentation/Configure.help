@@ -39,12 +39,16 @@ CONFIG_EXPERIMENTAL
   testing is not yet high enough for general use. This is usually
   known as the "alpha-test" phase amongst developers. If a feature is
   currently in alpha-test, then the developers usually discourage 
-  widespread use of this feature by the general public to avoid 
-  "Why doesn't this work?" type mail messages. However, active testing
-  and and detailed bug reports from people familiar with the kernel's
-  internals are usually welcomed by the developers. Unless you intend
-  to help test and develop a feature or driver that falls into this 
-  category, you should probably say N here, which will cause this 
+  uninformed widespread use of this feature by the general public to
+  avoid "Why doesn't this work?" type mail messages. However, active
+  testing and use of these systems is welcomed. Just be aware that it
+  may not meet the normal level of reliability or it may fail to work
+  in some special cases. Detailed bug reports from people familiar with
+  the kernel internals are usually welcomed by the developers. 
+
+  Unless you intend to help test and develop a feature or driver that
+  falls into this category, or you have a situation that requires using 
+  these features you should probably say N here, which will cause this 
   configure script to present you with fewer choices. If you say Y here,
   you will be offered the choice of using features or drivers that are
   currently considered to be in the alpha-test phase.
@@ -403,7 +407,8 @@ CONFIG_FIREWALL
   net is inspected by the firewall first. If you want to configure
   your Linux box as a firewall for a local network, say Y here. If
   your local network is TCP/IP based, you will have to say Y to "IP:
-  firewalling", below. Chances are that you don't want this, so say N.
+  firewalling", below. Chances are that you should use this on any
+  machine being run as a router and not on a host.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -465,7 +470,7 @@ CONFIG_MAX_16M
   option to the kernel 3) passing the "mem=4M" option to the kernel
   (thereby disabling all but the first 4M of RAM) 4) disabling the
   cache from your BIOS settings 5) exchanging RAM chips 6) exchanging
-  the motherboard 7) committing suicide.
+  the motherboard.
 
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
@@ -772,9 +777,9 @@ CONFIG_IP_FORWARD
 IP: multicasting
 CONFIG_IP_MULTICAST
   This is code for addressing several networked computers at once,
-  enlarging your kernel by about 2 kB. Some versions of gated, the
-  program which constantly updates a networked computer's routing
-  tables, require that this option be compiled in. You also need
+  enlarging your kernel by about 2 kB. If you are using gated, the
+  to update your computer's routing tables and are using RIP2 or OSPF
+  you will need to have this option compiled in. You also need
   multicasting if you intend to participate in the MBONE, a high
   bandwidth network on top of the internet which carries audio and
   video broadcasts. More information about the MBONE is on the WWW at
@@ -789,28 +794,22 @@ CONFIG_IP_ROUTER
   Some Linux network drivers use a technique called copy and checksum
   to optimize host performance. For a machine which is forwarding most
   packets to another host this is however a loss. This parameter turns
-  off copy and checksum from devices. It may also do other changes in
+  off copy and checksum from devices. It may make other changes in the
   future.
 
 IP: firewalling
 CONFIG_IP_FIREWALL
-  A firewall is a computer which protects a local network from the
-  rest of the internet: all traffic to and from computers on the local
-  net is inspected by the firewall first. If you want to configure
-  your Linux box as a firewall for a local TCP/IP based network, say Y
-  here. This will enlarge your kernel by about 2kB. You will need to
-  read the FIREWALL-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will have to use
-  the ipfw tool from the net-tools package, available via ftp (user:
-  anonymous) from
-  ftp.linux.org.uk:/pub/linux/Networking/PROGRAMS/NetTools, or
-  preferably ipfwadm from ftp.xos.nl:/pub/linux/ipfwadm/. These
-  programs allow selective blocking of internet traffic based on type,
-  origin and destination.  You need to enable IP firewalling in order
-  to be able to use IP masquerading (i.e. local computers can chat
-  with an outside host, but that outside host is made to think that it
-  is talking to the firewall box. Makes the local network completely
-  invisible). Chances are that you don't want this, so say N.
+  If you want to configure your Linux box as a firewall for a local 
+  TCP/IP based network, say Y here. This will enlarge your kernel by
+  about 2kB. You may need to read the FIREWALL-HOWTO, available via
+  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also,
+  you will need the ipfwadm tool to allow selective blocking of internet
+  traffic based on type, origin and destination.  You need to enable IP
+  firewalling in order to be able to use IP masquerading (i.e. local 
+  computers can chat with an outside host, but that outside host is 
+  made to think that it is talking to the firewall box. Makes the local
+  network completely invisible) or to use the ip packet accounting to see
+  what is using all your network bandwidth.
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -821,13 +820,7 @@ CONFIG_IP_ACCT
   firewalling. The data is accessible with "cat /proc/net/ip_acct", so
   you want to say Y to the /proc filesystem below, if you say Y
   here. To specify what exactly should be recorded, you need the tool
-  ipfw from the net-tools package, available via ftp (user:
-  anonymous) from
-  ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/NetTools.  Also, you
-  might want to have a look at the net-acct package, available via ftp
-  (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/system/Network/management. Most people
-  say N, however.
+  ipfwadm (available from ftp.xos.nl if you don't have a copy already).
 
 IP: tunneling
 CONFIG_NET_IPIP
@@ -840,8 +833,7 @@ CONFIG_NET_IPIP
   mobile IP facilities (which effectively are doing that). Enabling this
   option will produce two modules ( = code which can be inserted in
   and removed from the running kernel whenever you want), one
-  encapsulator and one decapsulator.  This is still alpha code, which
-  means that it need not be completely stable. You can read details in
+  encapsulator and one decapsulator. You can read details in
   drivers/net/README.tunnel. Most people can say N.
   
 IP: firewall packet logging
@@ -905,8 +897,9 @@ PC/TCP compatibility mode
 CONFIG_INET_PCTCP
   If you have been having difficulties telneting to your Linux machine
   from a DOS system that uses (broken) PC/TCP networking software (all
-  versions up to OnNet 2.0), try enabling this option.  Everyone else
-  says N.
+  versions up to OnNet 2.0) over your local ethernet  try enabling this
+  option.  Everyone else says N. People having problems with NCSA telnet
+  should see the file linux/Documentation/networking/ncsa-telnet.
 
 Reverse ARP
 CONFIG_INET_RARP
@@ -939,7 +932,8 @@ CONFIG_NO_PATH_MTU_DISCOVERY
   we adjust to a smaller size. This is good, so most people say
   N. However, some versions of DOS NCSA telnet (and other software)
   are broken and can only connect to your Linux machine if you say Y
-  here.
+  here. See also Documentation/networking/ncsa-telnet for the location
+  of fixed NCSA telnet clients.
 
 Disable NAGLE algorithm (normally enabled)
 CONFIG_TCP_NAGLE_OFF
@@ -957,26 +951,24 @@ CONFIG_IP_NOSR
   decide how to forward the frame. However, there is a feature of the
   IP protocol that allows to specify the full route for a given frame
   already at its origin. A frame with such a fully specified route is
-  called "source routed". The question now is whether we should honor
+  called "source routed". The question now is whether we should honour
   these route requests when such frames arrive, or if we should
-  drop all those frames instead. Honoring can introduce security
-  problems (and is not required by the IP specification), and hence it
-  is recommended to say Y here unless you really know what you're
-  doing.
+  drop all those frames instead. Honouring them can introduce security
+  problems (and is rarely a useful feature), and hence it is recommended
+  that you say Y here unless you really know what you're doing.
 
 IP: Allow large windows (not recommend if <16Mb of memory)
 CONFIG_SKB_LARGE
-  This option can speed up network performance. It works by increasing
-  the size of socket buffers, thereby reducing overhead but increasing
-  memory usage. Say N if you have less than 16Mb of RAM, otherwise Y.
-  Note for machines with more that 64MB of RAM: in order for the kernel 
-  to be able to use the memory above 64MB, pass the command line option
-  "mem=XXXM" (where XXX is the memory size in megabytes) to your
-  kernel. See the documentation of your boot loader (lilo or loadlin)
-  about how to pass options to the kernel. The lilo procedure is also
-  explained in the SCSI-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You also need at least 512kB
-  of RAM cache if you have more than 64MB of RAM.
+  On high speed, long distance networks the performance limit on 
+  networking becomes the amount of data a machine can buffer until the
+  other end confirms its reception. (At 45Mbit/second there are a lot
+  of bits between New York and London ..). This option allows larger
+  amounts of data to be "in flight" at a given time. It also means a user
+  process can require a lot more memory for network buffers and thus this
+  option is best only used on machines with 16Mb of memory or higher. 
+  Unless you are using long links with end to end speeds of over 2Mbit
+  a second or   satellite links this option will make no difference to
+  performance.
 
 The IPX protocol
 CONFIG_IPX
@@ -1018,9 +1010,10 @@ CONFIG_IPX_INTERN
 
 Appletalk DDP
 CONFIG_ATALK
-  Appletalk is the way Apple computers speak to each other on an
-  Ethernet (Apple calls it EtherTalk) network. If your linux box is
-  connected to such a network and you want to join the conversation,
+  Appletalk is the way Apple computers speak to each other on a
+  network. EtherTalk is the name used for appletalk over ethernet and
+  Localtalk is appletalk over the apple serial links. If your linux box 
+  is connected to such a network and you want to join the conversation,
   say Y. You will need to use the netatalk package so that your Linux
   box can act as a print and file server for macs as well as access
   appletalk printers. Check out
@@ -1034,6 +1027,10 @@ CONFIG_ATALK
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt. I hear that the GNU boycott of Apple is
   over, so even politically correct people are allowed to say Y here.
+  At the time the kernel is released the localtalk drivers are not
+  yet ready to ship. The kernel however supports localtalk and when
+  such drivers become available all you will need to do is download
+  and install the localtalk driver.
 
 Amateur Radio AX.25 Level 2
 CONFIG_AX25
@@ -1044,24 +1041,22 @@ CONFIG_AX25
   use a low speed TNC (a Terminal Node Controller acts as a kind of
   modem connecting your computer's serial port to your radio's
   microphone input and speaker output) supporting the KISS protocol or
-  the much faster Ottawa PI card (to enable support for this card,
-  you'll have to answer Y to the question about ALPHA test drivers,
-  below) or the Z8530 SCC cards; the latter two require an additional
-  radio modem.  In order to use AX.25, you need to get a set of
-  supporting software tools via ftp (user: anonymous) from
-  sunacm.swan.ac.uk:/pub/misc/Linux/Radio/. A comprehensive listing of
-  all the software for Linux amateur radio users as well as
-  information about how to configure an AX.25 port is contained in the
-  HAM-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to check
-  out the file Documentation/networking/ax25.txt in the kernel
-  source. More information about digital amateur radio in general is
-  on the WWW at
+  the  various SCC cards that are supported by the Ottowa PI, the
+  Gracilis Packetwin and the generic Z8530 driver. 
+  At the moment there is no driver for the Baycom modem serial and parallel
+  port hacks although one is being written (see the HAM-HOWTO). The other
+  baycom cards (SCC) are supported by the Z8530 driver.
+  In order to use AX.25, you need to get a set of all the software for 
+  Linux amateur radio users as well as information about how to 
+  configure an AX.25 port is contained in the HAM-HOWTO, available via
+  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You
+  might also want to check out the file Documentation/networking/ax25.txt
+  in the kernel source. More information about digital amateur radio
+  in general is on the WWW at  
   http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
   (To browse the WWW, you need to have access to a machine on the
   Internet that has one of the programs lynx, netscape or
-  Mosaic). AX.25 support is actively being developed, so it's best to
-  get the very latest 1.3 kernel if you intend to use this.
+  Mosaic). 
 
 Amateur Radio NET/ROM
 CONFIG_NETROM
@@ -1076,9 +1071,7 @@ CONFIG_NETROM
   http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
   (To browse the WWW, you need to have access to a machine on the
   Internet that has one of the programs lynx, netscape or
-  Mosaic). Amateur radio support is actively being developed, so you
-  might want to get the very latest 1.3 kernel if you intend to use
-  this.
+  Mosaic). 
 
 AX.25 over Ethernet
 CONFIG_BPQETHER
@@ -1094,11 +1087,12 @@ CONFIG_BRIDGE
   ethernet bridge, which means that the different ethernet segments it
   is connected to will appear as one ethernet to the
   participants. Several such bridges can work together to create even
-  larger networks of ethernets using a cool spanning tree
-  algorithm. Note that if your box acts as a bridge, it probably
-  contains several ethernet devices, but the kernel is not able to
-  recognize more than one at boot time without help; for details read
-  the Multiple-Ethernet-mini-HOWTO, available via ftp (user:
+  larger networks of ethernets using the IEEE802.1 spanning tree
+  algorithm. As this is a standard Linux bridges will interwork properly
+  with other third party bridge products. Note that if your box acts as 
+  a bridge, it probably contains several ethernet devices, but the kernel
+  is not able to recognize more than one at boot time without help; for 
+  details read the Multiple-Ethernet-mini-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The
   Bridging code is still in test. If unsure, say N.
   The bridge configuration tools are available via ftp from shadow.cabi.net.
@@ -1531,8 +1525,8 @@ CONFIG_NETDEVICES
 
 Dummy net driver support
 CONFIG_DUMMY
-  This is essentially a loopback device (i.e. traffic you send to this
-  device is immediately returned back to you) with a configurable IP
+  This is essentially a bit-bucket device (i.e. traffic you send to 
+  this device is consigned into oblivion) with a configurable IP
   address different from the usual 127.0.0.1. It is most commonly used
   in order to make your currently inactive SLIP address seem like a
   real address for local programs. If you use SLIP or PPP, you might
@@ -1591,6 +1585,14 @@ CONFIG_SLIP_SMART
   Adds additional capabilities to the SLIP driver to support the
   RELCOM line fill and keepalive monitoring. Ideal on poor quality
   analogue lines.
+
+Six bit SLIP encapsulation
+CONFIG_SLIP_MODE_SLIP6
+  Just occasionally you may need to run IP over hostile serial networks that
+  don't pass all control characters or are only seven bit. This adds an
+  extra mode you can use with SLIP "slip6" which contains only the normal
+  ascii symbols. Its good enough, for example, to run IP over the async
+  ports of a Camtec JNT Pad.
 
 Radio network interfaces
 CONFIG_NET_RADIO
@@ -1651,13 +1653,10 @@ CONFIG_STRIP
 
 WIC (Radio IP bridge)
 CONFIG_WIC
-  Don't know what this is; has something to do with the parallel
-  port. Say N and that's that. But if you want to compile it as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt. :-)
+  Support for the WIC parallel port radio bridge. You'll probably want
+  to say N.
 
-Z8530 SCC kiss emulation driver for AX.2
+Z8530 SCC kiss emulation driver for AX.25
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   and communicate with other computers.  If you want to use this, read
@@ -1765,6 +1764,10 @@ CONFIG_SDLA
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
+Ethernet (10 or 100Mbit)
+CONFIG_NET_ETHERNET
+  Say yes if you want to select support for ethernet cards.
+
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
   This is support for lance ethernet cards on Sun workstations such as
@@ -1816,6 +1819,9 @@ CONFIG_ULTRA
   more than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Important: There have been many reports that, with some motherboards
+  mixing an SMC Ultra and an Adaptec AHA1542 SCSI card causes corruption
+  problems with many operating systems.
 
 SMC 9194 Support
 CONFIG_SMC9194
@@ -1858,15 +1864,14 @@ CONFIG_EL1
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Also, consider buying a new
-  card, since the 3c501 is buggy and obsolete and the driver is
-  unsupported. This driver is also available as a module ( = code
-  which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  card, since the 3c501 is slow and obsolete. This driver is also 
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt as well
+  as Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the 
+  Multiple-Ethernet-mini-HOWTO, available from 
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini - and don't use 3c501s.
 
 3c503 support
 CONFIG_EL2
@@ -2558,6 +2563,14 @@ CONFIG_QUOTA
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
+Mandatory lock support
+CONFIG_LOCK_MANDATORY
+  Mandatory locking is used by some System 5 style database applications.
+  To use this option safely you must have newer NFS daemons, new samba,
+  new netatalk, new mars-nwe and other file servers. At the time of 
+  writing none of these are available. Unless you need this feature say
+  N.
+  
 Standard (minix) fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about

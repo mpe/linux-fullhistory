@@ -951,7 +951,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
     return SCSI_ABORT_SUCCESS;
 }
 
-int ultrastor_reset(Scsi_Cmnd * SCpnt)
+int ultrastor_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 {
     int flags;
     register int i;
@@ -1044,7 +1044,7 @@ static void ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	printk("Ux4F interrupt: bad MSCP address %x\n", (unsigned int) mscp);
 	/* A command has been lost.  Reset and report an error
 	   for all commands.  */
-	ultrastor_reset(NULL);
+	ultrastor_reset(NULL, 0);
 	return;
     }
 #endif

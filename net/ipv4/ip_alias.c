@@ -159,7 +159,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (ip_alias_done() != 0)
-		printk("ip_alias: can't remove module");
+		printk(KERN_INFO "ip_alias: can't remove module");
 }
 
 #endif /* MODULE */

@@ -598,7 +598,7 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
 		
 	if (skb_headroom(skb) < len) {
-		printk("ax25_dg_build_path: not enough headroom for digis in skb\n");
+		printk(KERN_CRIT "ax25_dg_build_path: not enough headroom for digis in skb\n");
 		return;
 	}
 	
@@ -659,7 +659,7 @@ unsigned short ax25_dev_get_value(struct device *dev, int valueno)
 	struct ax25_dev *ax25_dev;
 
 	if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL) {
-		printk("ax25_dev_get_flag called with invalid device\n");
+		printk(KERN_WARNING "ax25_dev_get_flag called with invalid device\n");
 		return 1;
 	}
 

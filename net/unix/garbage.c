@@ -1,13 +1,9 @@
 /*
- * NET3:	Garbage Collector For AF_UNIX sockets (STUBS)
+ * NET3:	Garbage Collector For AF_UNIX sockets
  *
  * Garbage Collector:
  *	Copyright (C) Barak A. Pearlmutter.
  *	Released under the GPL version 2 or later.
- *
- * NOTE:
- *	We don't actually call this yet. I'm finishing some tests before I
- *	enable it. The bold can add it in themselves.
  *
  * Chopped about by Alan Cox 22/3/96 to make it fit the AF_UNIX socket problem.
  * If it doesn't work blame me, it worked when Barak sent it.
@@ -70,22 +66,22 @@ static int in_stack = 0;	/* first free entry in stack */
 
 extern inline unix_socket *unix_get_socket(struct file *filp)
 {
-	struct socket *s;
+	unix_socket * u_sock = NULL;
+	struct inode *inode = filp->f_inode;
+
 	/*
 	 *	Socket ?
 	 */
-	if(filp->f_inode->i_mode!=S_IFSOCK)
-		return NULL;
-	s=&(filp->f_inode->u.socket_i);
-	/*
-	 *	AF_UNIX ?
-	 */
-	if(s->ops!=&unix_proto_ops)
-		return NULL;
-	/*
-	 *	Got one.
-	 */
-	return s->data;	
+	if (inode && inode->i_sock) {
+		struct socket * s = &inode->u.socket_i;
+
+		/*
+		 *	AF_UNIX ?
+		 */
+		if (s->ops == &unix_proto_ops)
+			u_sock = s->data;
+	}
+	return u_sock;
 }
 
 /*
@@ -263,8 +259,15 @@ tail:
 			 *	We exist only in the passing tree of sockets
 			 *	that is no longer connected to active descriptors
 			 *	Time to die..
+			 *
+			 *	Subtle item: We will correctly sweep out the
+			 *	socket that has just been closed by the user.
+			 *	We must not close this as we are in the middle
+			 *	of its close at this moment. Skip that file
+			 *	using f_count==0 to spot it.
 			 */
-			if(s->socket && s->socket->file)
+			 
+			if(s->socket && s->socket->file && s->socket->file->f_count)
 				close_fp(s->socket->file);
 		}
 		else

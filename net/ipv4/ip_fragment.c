@@ -707,7 +707,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 
 		skb2->arp = skb->arp;
 		if(skb->free==0)
-			printk("IP fragmenter: BUG free!=1 in fragmenter\n");
+			printk(KERN_ERR "IP fragmenter: BUG free!=1 in fragmenter\n");
 		skb2->free = 1;
 		skb_put(skb2,len + hlen);
 		skb2->h.raw=(char *) skb2->data;

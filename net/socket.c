@@ -577,7 +577,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 
 	if (!(sock = sock_alloc())) 
 	{
-		printk("NET: sys_socket: no more sockets\n");
+		printk(KERN_WARNING "socket: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of
 				   system resources! */
 	}
@@ -754,7 +754,7 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 
 	if (!(newsock = sock_alloc())) 
 	{
-		printk("NET: sock_accept: no more sockets\n");
+		printk(KERN_WARNING "accept: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of system
 				   resources! */
 	}
@@ -1397,7 +1397,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.034 for Linux 1.3.77\n");
+	printk(KERN_INFO "Swansea University Computer Society NET3.035 for Linux 2.0\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

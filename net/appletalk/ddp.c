@@ -830,7 +830,7 @@ int atif_ioctl(int cmd, void *arg)
 				limit=ntohs(nr->nr_lastnet);
 				if(limit-ntohs(nr->nr_firstnet) > 256)
 				{
-					printk("Too many routes/iface.\n");
+					printk(KERN_WARING "Too many routes/iface.\n");
 					return -EINVAL;
 				}
 				for(ct=ntohs(nr->nr_firstnet);ct<=limit;ct++)
@@ -2013,7 +2013,7 @@ void atalk_proto_init(struct net_proto *pro)
 {
 	(void) sock_register(atalk_proto_ops.family, &atalk_proto_ops);
 	if ((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
-		printk("Unable to register DDP with SNAP.\n");
+		printk(KERN_CRIT "Unable to register DDP with SNAP.\n");
 	
 	ltalk_packet_type.type=htons(ETH_P_LOCALTALK);	
 	dev_add_pack(&ltalk_packet_type);
@@ -2043,7 +2043,7 @@ void atalk_proto_init(struct net_proto *pro)
 		atalk_if_get_info
 	});
 
-	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.034\n");
+	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.035\n");
 }
 
 #ifdef MODULE
