@@ -279,6 +279,12 @@ struct cdrom_multisession
 
 
 /*
+ * For controlling a changer.  (Used by ATAPI driver.)
+ */
+#define CDROMLOADFROMSLOT	0x531a	/* LOAD disk from slot*/
+
+
+/*
  * CD-ROM-specific SCSI command opcodes
  */
 

@@ -1,0 +1,91 @@
+               JAVA Binary Kernel Support for Linux v1.01
+               ------------------------------------------
+
+Linux beats them ALL! While all other OS's are TALKING about direct
+support of Java Binaries in the OS, Linux is doing it!
+
+You execute Java classes as you would any other executable, after a few
+small details:
+
+	1) You MUST FIRST install the Java Developers Kit for Linux.
+	   The Java on Linux HOWTO gives the details on getting and
+	   installing this. This HOWTO can be found at:
+
+		ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/Java-HOWTO
+
+	   If you install the JDK in a location other than the suggested
+	   directory of /usr/local/java, then you will need to edit the
+	   kernel's fs/binfmt_java.c file and make the needed change to the
+	   _PATH_JAVA definition at the top of that file.
+
+	2) You must chmod the '*.class' files you wish to execute with
+	   the execute bit. This is not normally (till now) done with
+	   '.class' files.
+
+	3) You must optionally export a CLASSPATH environment variable,
+	   if you plan to use Java applications installed outside of
+	   /usr/local/java/classes/*.
+
+	4) Either compile your kernel with Java support builtin, or
+	   as a loadable module. If a module, load it with insmod or
+	   kerneld.
+
+
+To test your new setup, enter in the following simple Java app, and name
+it "HelloWorld.java":
+
+	class HelloWorld {
+		public static void main(String args[]) {
+			System.out.println("Hello World!");
+		}
+	}
+
+
+Now compile the application with:
+
+	/usr/local/java/bin/javac HelloWorld.java
+
+Set the executable permissions of the binary file, with:
+
+	chmod 755 HelloWorld.class
+
+And then execute it:
+
+	./HellowWorld.class
+
+
+Yes, it's JUST THAT EASY! ;-)
+
+-----------------------------------------------------------------
+
+Nope, I didn't forget about Java Applets! ;-)
+
+While this may not be the best way to do this, it works!
+
+Take any html file used with the Java appletviewer (like the
+demo/Blink/example1.html file), and:
+
+	1) Insert a new first line of:
+
+		<!--applet-->
+
+	   Make sure the '<' is the first character in the file. This
+	   will be treated as a valid HTML comment outside of this
+	   Java Applet support, so the modified file can still be used
+	   with all known browsers.
+
+	2) If you install the JDK in a location other than the suggested
+	   directory of /usr/local/java, then you will need to edit the
+	   kernel's fs/binfmt_java.c file and make the needed change to the
+	   _PATH_APPLET definition at the top of that file.
+
+	3) You must chmod the '*.html' files you wish to execute with
+	   the execute bit. This is not normally (till now) done with
+	   '.html' files.
+
+	4) And then execute it.
+
+
+
+Brian A. Lantz
+brian@lantz.com

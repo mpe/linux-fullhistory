@@ -62,6 +62,7 @@ extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
+extern void msmouse_setup(char *str, int *ints);
 extern void lp_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
@@ -273,6 +274,9 @@ struct {
 #endif
 #ifdef CONFIG_BUSMOUSE
 	{ "bmouse=", bmouse_setup },
+#endif
+#ifdef CONFIG_MS_BUSMOUSE
+	{ "msmouse=", msmouse_setup },
 #endif
 #ifdef CONFIG_SCSI_SEAGATE
 	{ "st0x=", st0x_setup },

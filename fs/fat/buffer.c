@@ -15,16 +15,19 @@ struct buffer_head *fat_bread (
 	int block)
 {
 	struct buffer_head *ret = NULL;
-	if (sb->s_blocksize == 512){
-/*		ret = bread (sb->s_dev,block,512); */
-		ret = breada (sb->s_dev,block,512,0,18*1024); 
-	}else{
-/*		struct buffer_head *real = bread (sb->s_dev,block>>1,1024); */
-		struct buffer_head *real = breada (sb->s_dev,block>>1,1024,0,18*1024); 
+
+	/* Note that the blocksize is 512 or 1024, but the first read
+	   is always of size 1024. Doing readahead may be counterproductive
+	   or just plain wrong. */
+	if (sb->s_blocksize == 512) {
+		ret = bread (sb->s_dev,block,512);
+	} else {
+		struct buffer_head *real = bread (sb->s_dev,block>>1,1024);
+
 		if (real != NULL){
-			ret = (struct buffer_head *)kmalloc (sizeof(struct buffer_head)
-				,GFP_KERNEL);
-			if (ret != NULL){
+			ret = (struct buffer_head *)
+			  kmalloc (sizeof(struct buffer_head), GFP_KERNEL);
+			if (ret != NULL) {
 				/* #Specification: msdos / strategy / special device / dummy blocks
 					Many special device (Scsi optical disk for one) use
 					larger hardware sector size. This allows for higher

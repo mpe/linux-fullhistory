@@ -25,7 +25,7 @@
 #elif defined(__BIG_ENDIAN)
 #define BO_EXBITS	0x00UL
 #else
-#error Endianess must be known for affs to work.
+#error Endianness must be known for affs to work.
 #endif
 
 /* The following constants will be checked against the values read native */

@@ -425,6 +425,13 @@ S: 6/1 M.Koneva bl, apt #125
 S: Poltava 314023
 S: Ukraine
 
+N: John E. Gotts
+E: jgotts@engin.umich.edu
+D: kernel hacker
+S: 8124 Constitution Apt. 7
+S: Sterling Heights, MI  48313
+S: USA
+
 N: Grant Guenther
 E: grant@torque.net
 D: Iomega PPA / ZIP driver
@@ -983,6 +990,14 @@ D: is the predecessor of 'make menuconfig' and 'make xconfig'.
 S: Tallak 95
 S: 8103 Rein
 S: Austria
+
+N: Stefan Reinauer
+E: stepan@home.culture.mipt.ru
+W: http://home.culture.mipt.ru/~stepan
+D: Modulized affs and ufs. Minor fixes.
+S: Rebmannsweg 34h
+S: 79539 Loerrach
+S: Germany
 
 N: William E. Roadcap
 E: roadcapw@cfw.com

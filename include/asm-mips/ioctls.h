@@ -232,6 +232,7 @@
 #define  B57600  0010001
 #define  B115200 0010002
 #define  B230400 0010003
+#define  B460800 0010004
 #define CIBAUD	  002003600000	/* input baud rate (not used) */
 #define CRTSCTS	  020000000000		/* flow control */
 #endif

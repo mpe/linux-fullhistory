@@ -123,12 +123,12 @@ struct fat_pre {
 static void fat_prefetch (
 	struct inode *inode,
 	struct fat_pre *pre,
-	int nb)		/* How many must be prefetch at once */
+	int nb)		/* How many must we prefetch at once */
 {
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bhreq[MSDOS_PREFETCH];	/* Buffers not */
-												/* already read */
-	int nbreq=0;			/* Number of buffers in bhreq */
+							/* already read */
+	int nbreq = 0;			/* Number of buffers in bhreq */
 	int i;
 	for (i=0; i<nb; i++){
 		int sector = fat_smap(inode,pre->file_sector);
@@ -136,10 +136,11 @@ static void fat_prefetch (
 			struct buffer_head *bh;
 			PRINTK (("fsector2 %d -> %d\n",pre->file_sector-1,sector));
 			pre->file_sector++;
-			bh = getblk(inode->i_dev,sector,SECTOR_SIZE);
+			bh = fat_getblk(sb, sector);
 			if (bh == NULL)	break;
 			pre->bhlist[pre->nblist++] = bh;
-			if (!fat_is_uptodate(sb,bh)) bhreq[nbreq++] = bh;
+			if (!fat_is_uptodate(sb,bh))
+				bhreq[nbreq++] = bh;
 		}else{
 			break;
 		}
@@ -229,7 +230,7 @@ int fat_file_read(
 		wait_on_buffer(bh);
 		if (!fat_is_uptodate(sb,bh)){
 			/* read error  ? */
-			brelse (bh);
+			fat_brelse (sb, bh);
 			break;
 		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
@@ -252,12 +253,15 @@ int fat_file_read(
 				}
 			}
 		}
-		brelse(bh);
+		fat_brelse(sb, bh);
 	}
 	PRINTK (("--- %d -> %d\n",count,(int)(buf-start)));
-	for (i=0; i<pre.nblist; i++) brelse (pre.bhlist[i]);
-	if (start == buf) return -EIO;
-	if (!IS_RDONLY(inode)) inode->i_atime = CURRENT_TIME;
+	for (i=0; i<pre.nblist; i++)
+		fat_brelse (sb, pre.bhlist[i]);
+	if (start == buf)
+		return -EIO;
+	if (!IS_RDONLY(inode))
+		inode->i_atime = CURRENT_TIME;
 	filp->f_reada = 1;	/* Will be reset if a lseek is done */
 	return buf-start;
 }
@@ -288,14 +292,17 @@ int fat_file_write(
 		printk("fat_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-	/* system files are immutable */
-	if (IS_IMMUTABLE(inode)) return -EPERM;
+	/* system files may be immutable */
+	if (IS_IMMUTABLE(inode))
+		return -EPERM;
 /*
  * ok, append may not work when many processes are writing at the same time
  * but so what. That way leads to madness anyway.
  */
-	if (filp->f_flags & O_APPEND) filp->f_pos = inode->i_size;
-	if (count <= 0) return 0;
+	if (filp->f_flags & O_APPEND)
+		filp->f_pos = inode->i_size;
+	if (count <= 0)
+		return 0;
 	error = carry = 0;
 	for (start = buf; count || carry; count -= size) {
 		while (!(sector = fat_smap(inode,filp->f_pos >> SECTOR_BITS)))
@@ -313,19 +320,18 @@ int fat_file_write(
 			/* No need to read the block first since we will */
 			/* completely overwrite it */
 			/* or at least write past the end of file */
-			if (!(bh = getblk(inode->i_dev,sector,SECTOR_SIZE))){
+			if (!(bh = fat_getblk(sb,sector))){
 				error = -EIO;
 				break;
 			}
-		}else if (!(bh = bread(inode->i_dev,sector,SECTOR_SIZE))) {
+		} else if (!(bh = fat_bread(sb,sector))) {
 			error = -EIO;
 			break;
 		}
 		if (binary_mode) {
 			memcpy_fromfs(bh->b_data+offset,buf,written = size);
 			buf += size;
-		}
-		else {
+		} else {
 			written = left = SECTOR_SIZE-offset;
 			to = (char *) bh->b_data+(filp->f_pos & (SECTOR_SIZE-1));
 			if (carry) {
@@ -352,9 +358,9 @@ int fat_file_write(
 			inode->i_size = filp->f_pos;
 			inode->i_dirt = 1;
 		}
-		fat_set_uptodate(sb,bh,1);
-		mark_buffer_dirty(bh, 0);
-		brelse(bh);
+		fat_set_uptodate(sb, bh, 1);
+		fat_mark_buffer_dirty(sb, bh, 0);
+		fat_brelse(sb, bh);
 	}
 	if (start == buf)
 		return error;
@@ -369,7 +375,8 @@ void fat_truncate(struct inode *inode)
 	int cluster;
 
 	/* Why no return value?  Surely the disk could fail... */
-	if (IS_IMMUTABLE(inode)) return /* -EPERM */;
+	if (IS_IMMUTABLE(inode))
+		return /* -EPERM */;
 	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
 	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;

@@ -231,7 +231,7 @@ struct async_struct {
 						boards carrying several UART's,
 						like some Amiga boards. */
 	unsigned short		nr_uarts;    /* UART-counter, that indicates
-						how manu UART's there are on
+						how many UART's there are on
 						the board.  If the board has a
 						IRQ-register, this can be used
 						to check if any of the uarts,

@@ -1220,9 +1220,9 @@ int aha152x_biosparam(Scsi_Disk * disk, kdev_t dev, int *info_array)
     info_array[1]=32;
     info_array[2]=disk->capacity / (64 * 32);
   } else {
-    info_array[0] = 256;
+    info_array[0] = 255;
     info_array[1] = 63;
-    info_array[2] = disk->capacity / (256 * 63);
+    info_array[2] = disk->capacity / (255 * 63);
     if(info_array[2] > 1023)
       info_array[2]=1023;
   }

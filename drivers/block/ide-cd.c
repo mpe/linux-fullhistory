@@ -94,9 +94,16 @@
  * 3.10  Apr 10, 1996 -- Fix compilation error with STANDARD_ATAPI.
  * 3.11  Apr 29, 1996 -- Patch from Heiko Eissfeldt <heiko@colossus.escape.de>
  *                       to remove redundant verify_area calls.
+ * 3.12  May  7, 1996 -- Rudimentary changer support.  Based on patches
+ *                        from Gerhard Zuber <zuber@berlin.snafu.de>.
+ *                       Let open succeed even if there's no loaded disc.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
+ *
+ * NOTE: The changer functions were tested with the NEC CDR-251 drive.
+ * They may not work with the Sanyo 3-cd changer, which i understand
+ * uses a different protocol.
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
@@ -181,6 +188,8 @@
 #define MODE_SENSE_10           0x5a
 #define MODE_SELECT_10          0x55
 #define READ_CD                 0xbe
+
+#define LOAD_UNLOAD             0xa6
 
 
 /* ATAPI sense keys (mostly copied from scsi.h). */
@@ -1957,6 +1966,23 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba,
 }
 
 
+/* If SLOT<0, unload the current slot.  Otherwise, try to load SLOT. */
+static int
+cdrom_load_unload (ide_drive_t *drive, unsigned long slot,
+		   struct atapi_request_sense *reqbuf)
+{
+	struct packet_command pc;
+
+	memset (&pc, 0, sizeof (pc));
+	pc.sense_data = reqbuf;
+
+	pc.c[0] = LOAD_UNLOAD;
+	pc.c[4] = 2 + (slot >= 0);
+	pc.c[8] = slot;
+	return cdrom_queue_packet_command (drive, &pc);
+}
+
+
 int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		     struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -2370,6 +2396,33 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		return stat;
 	}
 
+	case CDROMLOADFROMSLOT: {
+		struct atapi_request_sense my_reqbuf;
+		int stat;
+
+		if (drive->usage > 1)
+			return -EBUSY;
+
+		stat = cdrom_load_unload (drive, -1, NULL);
+		if (stat) return stat;
+
+                cdrom_saw_media_change (drive);
+                if (arg == -1) {
+			(void) cdrom_lockdoor (drive, 0, NULL);
+			return 0;
+		}
+		stat = cdrom_load_unload (drive, arg, NULL);
+		if (stat) return stat;
+
+		stat = cdrom_check_status (drive, &my_reqbuf);
+		if (stat && my_reqbuf.sense_key == NOT_READY) {
+			return -ENOENT;
+		}
+
+		/* And try to read the TOC information now. */
+		return cdrom_read_toc (drive, &my_reqbuf);
+	}
+
 #if 0 /* Doesn't work reliably yet. */
 	case CDROMRESET: {
 		struct request req;
@@ -2471,17 +2524,12 @@ int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 			stat = cdrom_check_status (drive, &my_reqbuf);
 		}
 
-		/* Return an error if there are still problems. */
-		if (stat && my_reqbuf.sense_key != UNIT_ATTENTION) {
-			--drive->usage;
-			return -ENXIO;
+		/* If things worked ok, lock the door and read the
+		   TOC information. */
+		if (stat == 0 || my_reqbuf.sense_key == UNIT_ATTENTION) {
+			(void) cdrom_lockdoor (drive, 1, &my_reqbuf);
+			(void) cdrom_read_toc (drive, &my_reqbuf);
 		}
-
-		/* Now lock the door. */
-		(void) cdrom_lockdoor (drive, 1, &my_reqbuf);
-
-		/* And try to read the TOC information now. */
-		(void) cdrom_read_toc (drive, &my_reqbuf);
 	}
 
 	return 0;
@@ -2593,7 +2641,7 @@ void ide_cdrom_setup (ide_drive_t *drive)
  *   duplicated functionality between read and ioctl paths?
  *  Establish interfaces for an IDE port driver, and break out the cdrom
  *   code into a loadable module.
- *  Support changers.
+ *  Support changers better.
  *  Write some real documentation.
  */
 

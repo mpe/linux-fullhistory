@@ -173,6 +173,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BINFMT_JAVA),y)
+BINFMTS += binfmt_java.o
+else
+  ifeq ($(CONFIG_BINFMT_JAVA),m)
+  M_OBJS += binfmt_java.o
+  endif
+endif
+
 # binfmt_script is always there
 BINFMTS += binfmt_script.o
 

@@ -1,5 +1,5 @@
 
-UPDATE NEWS: version 1.28 - 27 Apr 96
+UPDATE NEWS: version 1.28 - 07 May 96
 
    Tightened up the "interrupts enabled/disabled" discipline
    in 'in2000_queuecommand()' and maybe 1 or 2 other places.
@@ -70,51 +70,8 @@ UPDATE NEWS: version 1.24 - 23 Feb 96
    advantage. In a single device system, or if only 1 device
    is being accessed, transfers usually go faster if disconnects
    are not allowed.
-   Hackers -> the positions of some of the 'setup_default' flags
-              have changed, so check your command-line args if
-              you've been using them with a previous version.
 
 
-Hi everyone:
-
-   A revamped IN2000 SCSI driver is available for download and
-   testing at my ftp site:
-
-            ftp.netcom.com/pub/js/jshiffle
-
-   in the 'in2000' directory. It has what I think are a few
-   improvements over the stock driver, including disconnect/
-   reselect, synchronous transfer, easier debugging, command-
-   line arguments for setting run-time parameters and debug
-   output, and better FIFO handling. Swap partitions work now,
-   as do tape drives and anything else that used to butt heads
-   with the old driver's 2k block size limit. See the top
-   of the 'in2000.c' file for more details.
-
-   This is a rewrite of the in2000.[ch] files for Linux. They
-   are drop-in replacements for the originals in linux/drivers/scsi
-   - just copy them over the old ones. The driver has been tested
-   in 1.2.13 with and without ELF, and in the 1.3 series somewhere
-   up into the 60's. I don't expect any problems with newer kernels.
-   It is "modular-ised" for those who prefer that route.
-
--------  Hackers take note:   ------------------
-Anyone who wants to use LILO to pass a command line to this driver
-will have to make 2 small changes to the file 'init/main.c'. Find
-the area between lines 60-80 where all the 'xxxxx_setup()' extern
-declarations are and insert a new one like the following:
-
-extern void in2000_setup(char *str, int *ints);
-
-Then do a search for "bootsetups" - add a new entry to this array
-(somewhere in the middle) that looks like this:
-
-#ifdef CONFIG_SCSI_IN2000
-   { "in2000=", in2000_setup },
-#endif
-
-[You can skip the above if you're only loading the driver as a module
- or if the driver defaults are OK.]
 
 The default arguments (you get these when you don't give an 'in2000'
 command-line argument, or you give a blank argument) will cause
@@ -142,30 +99,15 @@ line with the 'period' keyword.
 
 ------------------------------------------------
 
-   I have run a LOT of tests on this driver, and it seems very solid,
-   including with up to 3 simultaneous large copy or tar commands
-   running between 6 devices at once. Synchronous transfers are
-   working fine for the devices I have to test, although others have
-   reported some failures (CDROM drives, mostly). Tape drives work
-   well (finally!) and so do CD-ROM drives.
-
    I should mention that Drew Eckhardt's 'Generic NCR5380' sources
    were my main inspiration, with lots of reference to the IN2000
    driver currently distributed in the kernel source. I also owe
    much to a driver written by Hamish Macdonald for Linux-m68k(!).
    And to Eric Wright for being an ALPHA guinea pig. And to Bill
    Earnest for 2 tons of great input and information. And to David
-   Willmore for extensive 'bonnie' testing.
+   Willmore for extensive 'bonnie' testing. And to Joe Mack for
+   continual testing and feedback.
 
-   Be forewarned that while I've had good luck with it, this
-   is the first time it's been loose out in the wide world.
-   It wouldn't surprise me if people uncover problems that
-   I haven't caught....
-
-   Please try the driver out. Test it, beat on it. And PLEASE get back
-   to me - I really need to hear about bugs, stupid or bad code,
-   and any ideas for enhancements.
-   Thanks very much...
 
             John Shifflett    jshiffle@netcom.com
 

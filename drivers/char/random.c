@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.97, last modified 24-Apr-96
+ * Version 0.98, last modified 7-May-96
  * 
  * Copyright Theodore Ts'o, 1994, 1995, 1996.  All rights reserved.
  *
@@ -458,7 +458,6 @@ static inline void add_entropy_word(struct random_bucket *r,
  * On the i386, this is assumed to be at most 16 bits, and the high bits
  * are used for a high-resolution timer.
  *
- * TODO: Read the time stamp register on the Pentium.
  */
 static void add_timer_randomness(struct random_bucket *r,
 				 struct timer_rand_state *state, unsigned num)
@@ -475,21 +474,6 @@ static void add_timer_randomness(struct random_bucket *r,
 		time = (__u32) low;
 		num ^= (__u32) high;
 	} else {
-#if 0
-		/*
-		 * On a 386, read the high resolution timer.  We assume that
-		 * this gives us 2 bits of randomness.
-		 *
-		 * This is turned off for now because of the speed hit
-		 * it entails.
-		 */ 
-		outb_p(0x00, 0x43);	/* latch the count ASAP */
-		num |= inb_p(0x40) << 16;
-		num |= inb(0x40) << 24;
-		if (!state->dont_count_entropy)
-			r->entropy_count += 2;
-#endif
-		
 		time = jiffies;
 	}
 #else
@@ -520,6 +504,13 @@ static void add_timer_randomness(struct random_bucket *r,
 		delta = MIN(MIN(delta, delta2), delta3) >> 1;
 		for (nbits = 0; delta; nbits++)
 			delta >>= 1;
+
+		/*
+		 * In no case do we assume we've added more than 12
+		 * bits of randomness.
+		 */
+		if (nbits > 12)
+			nbits = 12;
 
 		r->entropy_count += nbits;
 
@@ -844,6 +835,7 @@ static inline int extract_entropy(struct random_bucket *r, char * buf,
 {
 	int ret, i;
 	__u32 tmp[HASH_BUFFER_SIZE];
+	char *cp,*dp;
 	
 	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
@@ -885,15 +877,27 @@ static inline int extract_entropy(struct random_bucket *r, char * buf,
 		 * add_entropy_word().
 		 */
 		HASH_TRANSFORM(tmp, r->pool);
+
+		/*
+		 * In case the hash function has some recognizeable
+		 * output pattern, we fold it half.
+		 */
+		cp = (char *) tmp;
+		dp = cp + (HASH_BUFFER_SIZE*sizeof(__u32)) - 1;
+		for (i=0; i <  HASH_BUFFER_SIZE*sizeof(__u32)/2; i++) {
+			*cp ^= *dp;
+			cp++;  dp--;
+		}
 		
 		/* Copy data to destination buffer */
-		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32));
+		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32)/2);
 		if (to_user)
 			memcpy_tofs(buf, (__u8 const *)tmp, i);
 		else
 			memcpy(buf, (__u8 const *)tmp, i);
 		nbytes -= i;
 		buf += i;
+		add_timer_randomness(r, &extract_timer_state, nbytes);
 	}
 
 	/* Wipe data from memory */
@@ -1029,6 +1033,20 @@ random_ioctl(struct inode * inode, struct file * file,
 	int *p, size, ent_count;
 	int retval;
 	
+	/*
+	 * Translate old 1.3.XX values.
+	 * Remove this code in 2.1.0.
+	 * <mec@duracef.shout.net>
+	 */
+	switch (cmd) {
+	case 0x01080000: cmd = RNDGETENTCNT;   break;
+	case 0x01080001: cmd = RNDADDTOENTCNT; break;
+	case 0x01080002: cmd = RNDGETPOOL;     break;
+	case 0x01080003: cmd = RNDADDENTROPY;  break;
+	case 0x01080004: cmd = RNDZAPENTCNT;   break;
+	case 0x01080006: cmd = RNDCLEARPOOL;   break;
+	}
+
 	switch (cmd) {
 	case RNDGETENTCNT:
 		retval = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));

@@ -617,6 +617,9 @@ int blk_dev_init(void)
 #ifdef CONFIG_BLK_DEV_LOOP
 	loop_init();
 #endif
+#ifdef CONFIG_CDI_INIT
+	cdi_init();		/* this MUST precede ide_init */
+#endif CONFIG_CDI_INIT
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_init();		/* this MUST precede hd_init */
 #endif
@@ -631,9 +634,6 @@ int blk_dev_init(void)
 #else
 	outb_p(0xc, 0x3f2);
 #endif
-#ifdef CONFIG_CDI_INIT
-	cdi_init();
-#endif CONFIG_CDI_INIT
 #ifdef CONFIG_CDU31A
 	cdu31a_init();
 #endif CONFIG_CDU31A

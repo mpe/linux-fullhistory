@@ -295,7 +295,8 @@ int fat_readdirx(
 		}
 		ino = fat_get_entry(inode,&filp->f_pos,&bh,&de);	
 	}
-	if (bh) brelse(bh);
+	if (bh)
+		fat_brelse(sb, bh);
 	if (unicode) {
 		free_page((unsigned long) unicode);
 	}

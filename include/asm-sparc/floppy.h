@@ -66,6 +66,8 @@ static struct sun_floppy_ops sun_fdops;
 #define fd_cacheflush(addr, size) /* nothing... */
 #define fd_request_irq()          sun_fd_request_irq()
 #define fd_free_irq()             /* nothing... */
+#define fd_dma_mem_alloc(size)    ((unsigned long) vmalloc(size))
+#define fd_dma_mem_free(addr,size) (vfree((void *)(addr)))
 
 #define FLOPPY_MOTOR_MASK         0x10
 

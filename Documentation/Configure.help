@@ -608,6 +608,21 @@ CONFIG_BINFMT_AOUT
   format. Saying M or N here is dangerous, because some crucial
   programs on your system might be in A.OUT format.
 
+Kernel support for JAVA binaries
+CONFIG_BINFMT_JAVA
+  JAVA binaries are becoming a universal executable format. This
+  option allows Java binaries and Java Applets to be handled invisibly
+  to the OS. As more and more Java programs become available, the use
+  for this will gradually increase. If you want to use this, read the
+  Java on Linux HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. In order to execute Java binaries,
+  you will also need to install the Java Developers Kit. If you disable
+  this option it will reduce your kernel by about one page. This is not
+  much and by itself does not warrant removing support. However its
+  removal is a good idea if you do not have the JDK installed. If you
+  don't know what to answer at this point then answer Y. You may answer
+  M for module support and later load the module when you install the
+  JDK or find a interesting Java program that you can't live without.
 Processor type
 CONFIG_M386
   This is the processor type of your CPU. It is used for optimizing
@@ -1369,18 +1384,15 @@ CONFIG_SCSI_NCR53C7xx_DISCONNECT
 ### Dunno
 ###
 
-Always IN2000 SCSI support (test release)
+Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
-  Believe it or not, there is a SCSI host adaptor of that name. It is
-  explained in section 3.6 of the SCSI-HOWTO, available via ftp (user:
-  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't
-  work out of the box, you may have to change some settings in
-  drivers/scsi/in2000.h.  You may also want to drop in a rewritten,
-  and probably more reliable, driver from John Shifflett, which you
-  can get from ftp://ftp.netcom.com/pub/js/jshiffle/in2000/ .  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  This is support for an ISA bus SCSI host adaptor. You'll find
+  more information in drivers/scsi/in2000.readme. If it doesn't
+  work out of the box, you may have to change the jumpers for IRQ
+  or address selection. If you want to compile this as a module 
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want), say M here and read 
+  Documentation/modules.txt.
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16

@@ -117,7 +117,7 @@
 #define ISR_PTX   0x02 /* Packet transmitted without errors */
 #define ISR_RXE   0x04 /* Receive error  */
 #define ISR_TXE   0x08 /* Transmit error */
-#define ISR_OVW   0x10 /* Ring buffer overrrun */
+#define ISR_OVW   0x10 /* Ring buffer overrun */
 #define ISR_CNT   0x20 /* Counter overflow    */
 #define ISR_RDC   0x40 /* Remote DMA compile */
 #define ISR_RST   0x80 /* Reset status      */

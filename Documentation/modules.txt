@@ -59,6 +59,7 @@ The set of modules is rapidly increasing, but so far these are known:
 	Some misc modules:
 		lp: line printer
 		binfmt_elf: elf loader
+		binfmt_java: java loader
 		isp16: cdrom interface
 
 When you have made the kernel, you create the modules by doing:

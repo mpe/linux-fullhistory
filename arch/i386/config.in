@@ -33,6 +33,7 @@ fi
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
 bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 
 choice 'Processor type' \

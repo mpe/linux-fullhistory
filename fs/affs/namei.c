@@ -603,7 +603,7 @@ start_up:
 		if (affs_parent_ino(old_inode) != old_dir->i_ino)
 			goto end_rename;
 	}
-	/* Unlink destination if existant */
+	/* Unlink destination if existent */
 	if (new_inode) {
 		if ((retval = affs_fix_hash_pred(new_dir,affs_hash_name(new_name,new_len,
 		                                 AFFS_I2FSTYPE(new_dir),AFFS_I2HSIZE(new_dir)) + 6,

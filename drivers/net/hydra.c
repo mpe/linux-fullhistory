@@ -382,7 +382,7 @@ static void hydra_interrupt(int irq, struct pt_regs *fp, void *data)
             #endif
 	    
 
-	    /* overwrite warning occured, stop NIC & check the BOUNDARY pointer */
+	    /* overwrite warning occurred, stop NIC & check the BOUNDARY pointer */
 	    /* FIXME - real overwrite handling needed !! */
 
 	    printk("hydra_interrupt(): overwrite warning, resetting NIC\n");

@@ -10,7 +10,23 @@
 #define KERNELD_BLANKER 7 /* from drivers/char/console.c */
 #define KERNELD_ARP 256 /* from net/ipv4/arp.c */
 
+/*
+ * Uncomment the following line for the new kerneld protocol
+ * This includes the pid of the kernel level requestor into the kerneld header
+ */
+/*
+#define NEW_KERNELD_PROTOCOL
+ */
+#ifdef NEW_KERNELD_PROTOCOL
+#define OLDIPC_KERNELD 00040000   /* use the kerneld message channel */
+#define IPC_KERNELD 00140000   /* use the kerneld message channel, new protocol */
+#define KDHDR (sizeof(long) + sizeof(short) + sizeof(short))
+#define NULL_KDHDR 0, 2, 0
+#else
 #define IPC_KERNELD 00040000   /* use the kerneld message channel */
+#define KDHDR (sizeof(long))
+#define NULL_KDHDR 0
+#endif
 #define KERNELD_MAXCMD 0x7ffeffff
 #define KERNELD_MINSEQ 0x7fff0000 /* "commands" legal up to 0x7ffeffff */
 #define KERNELD_WAIT 0x80000000
@@ -19,6 +35,10 @@
 struct kerneld_msg {
 	long mtype;
 	long id;
+#ifdef NEW_KERNELD_PROTOCOL
+	short version;
+	short pid;
+#endif
 #ifdef __KERNEL__
 	char *text;
 #else

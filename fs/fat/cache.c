@@ -22,26 +22,27 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 {
 	struct buffer_head *bh,*bh2,*c_bh,*c_bh2;
 	unsigned char *p_first,*p_last;
-	int first,last,next,copy;
+	int first,last,next,copy,b;
 
-	if ((unsigned) (nr-2) >= MSDOS_SB(sb)->clusters) return 0;
-	if (MSDOS_SB(sb)->fat_bits == 16) first = last = nr*2;
-	else {
+	if ((unsigned) (nr-2) >= MSDOS_SB(sb)->clusters)
+		return 0;
+	if (MSDOS_SB(sb)->fat_bits == 16) {
+		first = last = nr*2;
+	} else {
 		first = nr*3/2;
 		last = first+1;
 	}
-	if (!(bh = breada(sb->s_dev,MSDOS_SB(sb)->fat_start+(first >>
-	    SECTOR_BITS),SECTOR_SIZE,0,FAT_READAHEAD))) {
-		printk("breada in fat_access failed\n");
+	b = MSDOS_SB(sb)->fat_start + (first >> SECTOR_BITS);
+	if (!(bh = fat_bread(sb, b))) {
+		printk("bread in fat_access failed\n");
 		return 0;
 	}
-	if ((first >> SECTOR_BITS) == (last >> SECTOR_BITS))
+	if ((first >> SECTOR_BITS) == (last >> SECTOR_BITS)) {
 		bh2 = bh;
-	else {
-		if (!(bh2 = breada(sb->s_dev,MSDOS_SB(sb)->fat_start+(last
-		    >> SECTOR_BITS),SECTOR_SIZE,0,FAT_READAHEAD))) {
-			brelse(bh);
-			printk("breada in fat_access failed\n");
+	} else {
+		if (!(bh2 = fat_bread(sb, b+1))) {
+			fat_brelse(sb, bh);
+			printk("2nd bread in fat_access failed\n");
 			return 0;
 		}
 	}
@@ -72,31 +73,30 @@ int fat_access(struct super_block *sb,int nr,int new_value)
 				*p_first = new_value & 0xff;
 				*p_last = (*p_last & 0xf0) | (new_value >> 8);
 			}
-			mark_buffer_dirty(bh2, 1);
+			fat_mark_buffer_dirty(sb, bh2, 1);
 		}
-		mark_buffer_dirty(bh, 1);
+		fat_mark_buffer_dirty(sb, bh, 1);
 		for (copy = 1; copy < MSDOS_SB(sb)->fats; copy++) {
-			if (!(c_bh = breada(sb->s_dev,MSDOS_SB(sb)->
-			    fat_start+(first >> SECTOR_BITS)+MSDOS_SB(sb)->
-			    fat_length*copy,SECTOR_SIZE,0,FAT_READAHEAD))) break;
+			b = MSDOS_SB(sb)->fat_start + (first >> SECTOR_BITS) +
+				MSDOS_SB(sb)->fat_length * copy;
+			if (!(c_bh = fat_bread(sb, b)))
+				break;
 			memcpy(c_bh->b_data,bh->b_data,SECTOR_SIZE);
-			mark_buffer_dirty(c_bh, 1);
+			fat_mark_buffer_dirty(sb, c_bh, 1);
 			if (bh != bh2) {
-				if (!(c_bh2 = breada(sb->s_dev,
-				    MSDOS_SB(sb)->fat_start+(first >>
-				    SECTOR_BITS)+MSDOS_SB(sb)->fat_length*copy
-				    +1,SECTOR_SIZE,0,FAT_READAHEAD))) {
-					brelse(c_bh);
+				if (!(c_bh2 = fat_bread(sb, b+1))) {
+					fat_brelse(sb, c_bh);
 					break;
 				}
 				memcpy(c_bh2->b_data,bh2->b_data,SECTOR_SIZE);
-				brelse(c_bh2);
+				fat_brelse(sb, c_bh2);
 			}
-			brelse(c_bh);
+			fat_brelse(sb, c_bh);
 		}
 	}
-	brelse(bh);
-	if (bh != bh2) brelse(bh2);
+	fat_brelse(sb, bh);
+	if (bh != bh2)
+		fat_brelse(sb, bh2);
 	return next;
 }
 

@@ -287,7 +287,6 @@ M:	begemot@bgm.rosprint.net
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-
 MOUSE AND MISC DEVICES [GENERAL]
 P:	Alessandro Rubini
 M:	rubini@ipvvis.unipv.it
@@ -304,6 +303,12 @@ LANCE AND LANCE32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@bigbug.franken.de
 L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
+ADVANSYS SCSI DRIVER
+P:	Bob Frey
+M:	Bob Frey <bobf@advansys.com>
+W:	http://www.advansys.com/linux
 S:	Maintained
 
 REST:

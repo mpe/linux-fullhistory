@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.39  May 3, 1996
+ *  linux/drivers/block/ide.c	Version 5.41  May 9, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -231,6 +231,10 @@
  *			mask drive irq after use, if sharing with another hwif
  *			add code to help debug weird cmd640 problems
  * Version 5.39		fix horrible error in earlier irq sharing "fix"
+ * Version 5.40		fix serialization -- was broken in 5.39
+ *			help sharing by masking device irq after probing
+ * Version 5.41		more fixes to irq sharing/serialize detection
+ *			disable io_32bit by default on drive reset
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -705,8 +709,10 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	/* For an ATAPI device, first try an ATAPI SRST. */
 	if (drive->media != ide_disk) {
 		if (!do_not_try_atapi) {
-			if (!drive->keep_settings)
+			if (!drive->keep_settings) {
 				drive->unmask = 0;
+				drive->io_32bit = 0;
+			}
 			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
 			udelay (20);
 			OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
@@ -732,6 +738,7 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 		if (!rdrive->keep_settings) {
 			rdrive->mult_req = 0;
 			rdrive->unmask = 0;
+			rdrive->io_32bit = 0;
 			if (rdrive->using_dma) {
 				rdrive->using_dma = 0;
 				printk("%s: disabled DMA\n", rdrive->name);
@@ -2376,8 +2383,11 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 
 #if CONFIG_BLK_DEV_PROMISE
 	if (IS_PROMISE_DRIVE) {
-		if(promise_cmd(drive,PROMISE_IDENTIFY))
+		if (promise_cmd(drive,PROMISE_IDENTIFY)) {
+			if (irqs)
+				(void) probe_irq_off(irqs);
 			return 1;
+		}
 	} else
 #endif /* CONFIG_BLK_DEV_PROMISE */
 		OUT_BYTE(cmd,IDE_COMMAND_REG);		/* ask drive for ID */
@@ -2385,7 +2395,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	timeout += jiffies;
 	do {
 		if (jiffies > timeout) {
-			if (!HWIF(drive)->irq)
+			if (irqs)
 				(void) probe_irq_off(irqs);
 			return 1;	/* drive timed-out */
 		}
@@ -2409,10 +2419,13 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	} else
 		rc = 2;			/* drive refused ID */
 	if (!HWIF(drive)->irq) {
-		irqs = probe_irq_off(irqs);	/* get irq number */
-		if (irqs > 0)
-			HWIF(drive)->irq = irqs;
-		else {				/* Mmmm.. multiple IRQs */
+		irqs = probe_irq_off(irqs);	/* get our irq number */
+		if (irqs > 0) {
+			HWIF(drive)->irq = irqs; /* save it for later */
+			irqs = probe_irq_on();  /* grab irqs, to ignore next edge */
+			OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
+			(void) probe_irq_off(irqs); /* restore irqs again */
+		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
 			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
 #ifdef CONFIG_BLK_DEV_CMD640
 			if (HWIF(drive)->chipset == ide_cmd640) {
@@ -2998,10 +3011,39 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	return 1;
 }
 
+#if MAX_HWIFS > 1
+/*
+ * save_match() is used to simplify logic in init_irq() below.
+ *
+ * A loophole here is that we may not know about a particular
+ * hwif's irq until after that hwif is actually probed/initialized..
+ * This could be a problem for the case where an hwif is on a
+ * dual interface that requires serialization (eg. cmd640) and another
+ * hwif using one of the same irqs is initialized beforehand.
+ *
+ * This routine detects and reports such situations, but does not fix them.
+ */
+static void save_match (ide_hwif_t *hwif, ide_hwif_t *new, ide_hwif_t **match)
+{
+	ide_hwif_t *m = *match;
+
+	if (m && m->hwgroup && m->hwgroup != new->hwgroup) {
+		if (!new->hwgroup)
+			return;
+		printk("%s: potential irq problem with %s and %s\n", hwif->name, new->name, m->name);
+	}
+	if (m->irq != hwif->irq) /* don't undo a prior perfect match */
+		*match = new;
+}
+#endif /* MAX_HWIFS > 1 */
 
 /*
  * This routine sets up the irq for an ide interface, and creates a new
  * hwgroup for the irq/hwif if none was previously assigned.
+ *
+ * Much of the code is for correctly detecting/handling irq sharing
+ * and irq serialization situations.  This is somewhat complex because
+ * it handles static as well as dynamic (PCMCIA) IDE interfaces.
  *
  * The SA_INTERRUPT in sa_flags means ide_intr() is always entered with
  * interrupts completely disabled.  This can be bad for interrupt latency,
@@ -3011,48 +3053,52 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 static int init_irq (ide_hwif_t *hwif)
 {
 	unsigned long flags;
-	ide_hwgroup_t *hwgroup = hwif->hwgroup;
-	ide_hwif_t *mate_hwif;
-	unsigned int index, mate_irq = hwif->irq;
+	unsigned int index;
+	ide_hwgroup_t *hwgroup;
+	ide_hwif_t *match = NULL;
 
 	save_flags(flags);
 	cli();
 
+	hwif->hwgroup = NULL;
+#if MAX_HWIFS > 1
 	/*
-	 * Handle serialization, regardless of init sequence
-	 */
-	mate_hwif = &ide_hwifs[hwif->index ^ 1];
-	if (hwif->serialized && mate_hwif->present)
-		mate_irq = mate_hwif->irq;
-
-	/*
-	 * Group up with any other hwifs that share our irq(s)
+	 * Group up with any other hwifs that share our irq(s).
 	 */
 	for (index = 0; index < MAX_HWIFS; index++) {
-		if (index != hwif->index) {
-			ide_hwif_t *h = &ide_hwifs[index];
-			if (h->irq == hwif->irq || h->irq == mate_irq) {
+		ide_hwif_t *h = &ide_hwifs[index];
+		if (h->hwgroup) {  /* scan only initialized hwif's */
+			if (hwif->irq == h->irq) {
 				hwif->sharing_irq = h->sharing_irq = 1;
-				if (hwgroup && !h->hwgroup)
-					h->hwgroup = hwgroup;
-				else if (!hwgroup)
-					hwgroup = h->hwgroup;
+				save_match(hwif, h, &match);
+			}
+			if (hwif->serialized) {
+				ide_hwif_t *mate = &ide_hwifs[hwif->index^1];
+				if (index == mate->index || h->irq == mate->irq)
+					save_match(hwif, h, &match);
+			}
+			if (h->serialized) {
+				ide_hwif_t *mate = &ide_hwifs[h->index^1];
+				if (hwif->irq == mate->irq)
+					save_match(hwif, h, &match);
 			}
 		}
 	}
-
+#endif /* MAX_HWIFS > 1 */
 	/*
 	 * If we are still without a hwgroup, then form a new one
 	 */
-	if (hwgroup == NULL) {
-		hwgroup = kmalloc (sizeof(ide_hwgroup_t), GFP_KERNEL);
+	if (match) {
+		hwgroup = match->hwgroup;
+	} else {
+		hwgroup = kmalloc(sizeof(ide_hwgroup_t), GFP_KERNEL);
 		hwgroup->hwif 	 = hwgroup->next_hwif = hwif->next = hwif;
 		hwgroup->rq      = NULL;
 		hwgroup->handler = NULL;
 		if (hwif->drives[0].present)
-			hwgroup->drive   = &hwif->drives[0];
+			hwgroup->drive = &hwif->drives[0];
 		else
-			hwgroup->drive   = &hwif->drives[1];
+			hwgroup->drive = &hwif->drives[1];
 		hwgroup->poll_timeout = 0;
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &timer_expiry;
@@ -3062,15 +3108,12 @@ static int init_irq (ide_hwif_t *hwif)
 	/*
 	 * Allocate the irq, if not already obtained for another hwif
 	 */
-	if (!hwif->got_irq) {
+	if (!match || match->irq != hwif->irq) {
 		if (request_irq(hwif->irq, ide_intr, SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name, hwgroup)) {
+			if (!match)
+				kfree(hwgroup);
 			restore_flags(flags);
 			return 1;
-		}
-		for (index = 0; index < MAX_HWIFS; index++) {
-			ide_hwif_t *g = &ide_hwifs[index];
-			if (g->irq == hwif->irq)
-				g->got_irq = 1;
 		}
 	}
 
@@ -3085,8 +3128,8 @@ static int init_irq (ide_hwif_t *hwif)
 
 	printk("%s at 0x%03x-0x%03x,0x%03x on irq %d", hwif->name,
 		hwif->io_base, hwif->io_base+7, hwif->ctl_port, hwif->irq);
-	if (hwgroup->hwif != hwif)
-		printk(" (serialized with %s)", hwgroup->hwif->name);
+	if (match)
+		printk(" (%sed with %s)", hwif->sharing_irq ? "shar" : "serializ", match->name);
 	printk("\n");
 	return 0;
 }

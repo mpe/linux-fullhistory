@@ -213,10 +213,10 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	/* The first read is always 1024 bytes */
 	sb->s_blocksize = 1024;
 	set_blocksize(sb->s_dev, 1024);
-	bh = bread(sb->s_dev, 0, 1024);
+	bh = fat_bread(sb, 0);
 	unlock_super(sb);
 	if (bh == NULL || !fat_is_uptodate(sb,bh)) {
-		brelse (bh);
+		fat_brelse (sb, bh);
 		sb->s_dev = 0;
 		printk("FAT bread failed\n");
 		MOD_DEC_USE_COUNT;
@@ -271,15 +271,15 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 		    MSDOS_MAX_EXTRA || (logical_sector_size & (SECTOR_SIZE-1))
 		    || !b->secs_track || !b->heads;
 	}
-	brelse(bh);
+	fat_brelse(sb, bh);
 	/*
 		This must be done after the brelse because the bh is a dummy
 		allocated by fat_bread (see buffer.c)
 	*/
-	sb->s_blocksize = blksize;	/* Using this small block size solve the */
+	sb->s_blocksize = blksize;    /* Using this small block size solves */
 				/* the misfit with buffer cache and cluster */
-				/* because cluster (DOS) are often aligned */
-				/* on odd sector */
+				/* because clusters (DOS) are often aligned */
+				/* on odd sectors. */
 	sb->s_blocksize_bits = blksize == 512 ? 9 : 10;
 	if (error || debug) {
 		/* The MSDOS_CAN_BMAP is obsolete, but left just to remember */
@@ -383,33 +383,31 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	struct msdos_dir_entry *raw_entry;
 	int nr;
 
-/* printk("read inode %d\n",inode->i_ino); */
 	MSDOS_I(inode)->i_busy = 0;
 	MSDOS_I(inode)->i_depend = MSDOS_I(inode)->i_old = NULL;
 	MSDOS_I(inode)->i_linked = MSDOS_I(inode)->i_oldlink = NULL;
 	MSDOS_I(inode)->i_binary = 1;
-	inode->i_uid = MSDOS_SB(inode->i_sb)->options.fs_uid;
-	inode->i_gid = MSDOS_SB(inode->i_sb)->options.fs_gid;
+	inode->i_uid = MSDOS_SB(sb)->options.fs_uid;
+	inode->i_gid = MSDOS_SB(sb)->options.fs_gid;
 	inode->i_version = ++event;
 	if (inode->i_ino == MSDOS_ROOT_INO) {
-		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->options.fs_umask) |
+		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(sb)->options.fs_umask) |
 		    S_IFDIR;
 		inode->i_op = fs_dir_inode_ops;
 		inode->i_nlink = fat_subdirs(inode)+2;
 		    /* subdirs (neither . nor ..) plus . and "self" */
-		inode->i_size = MSDOS_SB(inode->i_sb)->dir_entries*
+		inode->i_size = MSDOS_SB(sb)->dir_entries*
 		    sizeof(struct msdos_dir_entry);
-		inode->i_blksize = MSDOS_SB(inode->i_sb)->cluster_size*
+		inode->i_blksize = MSDOS_SB(sb)->cluster_size*
 		    SECTOR_SIZE;
 		inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
-		    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
+		    inode->i_blksize*MSDOS_SB(sb)->cluster_size;
 		MSDOS_I(inode)->i_start = 0;
 		MSDOS_I(inode)->i_attrs = 0;
 		inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
 		return;
 	}
-	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
-	    SECTOR_SIZE))) {
+	if (!(bh = fat_bread(sb, inode->i_ino >> MSDOS_DPB_BITS))) {
 		printk("dev = %s, ino = %ld\n",
 		       kdevname(inode->i_dev), inode->i_ino);
 		panic("fat_read_inode: unable to read i-node block");
@@ -418,7 +416,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if ((raw_entry->attr & ATTR_DIR) && !IS_FREE(raw_entry->name)) {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,S_IRWXUGO &
-		    ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IFDIR;
+		    ~MSDOS_SB(sb)->options.fs_umask) | S_IFDIR;
 		inode->i_op = fs_dir_inode_ops;
 
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
@@ -435,7 +433,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 			while (nr != -1) {
 				inode->i_size += SECTOR_SIZE*MSDOS_SB(inode->
 				    i_sb)->cluster_size;
-				if (!(nr = fat_access(inode->i_sb,nr,-1))) {
+				if (!(nr = fat_access(sb,nr,-1))) {
 					printk("Directory %ld: bad FAT\n",
 					    inode->i_ino);
 					break;
@@ -444,10 +442,10 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	} else { /* not a directory */
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,
 		    ((IS_NOEXEC(inode) || 
-		      (MSDOS_SB(inode->i_sb)->options.showexec &&
+		      (MSDOS_SB(sb)->options.showexec &&
 		       !is_exec(raw_entry->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
-		    & ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IFREG;
+		    & ~MSDOS_SB(sb)->options.fs_umask) | S_IFREG;
 		inode->i_op = (sb->s_blocksize == 1024)
 			? &fat_file_inode_operations_1024
 			: &fat_file_inode_operations;
@@ -456,22 +454,22 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 		inode->i_size = CF_LE_L(raw_entry->size);
 	}
 	if(raw_entry->attr & ATTR_SYS)
-		if (MSDOS_SB(inode->i_sb)->options.sys_immutable)
+		if (MSDOS_SB(sb)->options.sys_immutable)
 			inode->i_flags |= S_IMMUTABLE;
-	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->options.conversion,
+	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(sb)->options.conversion,
 	    raw_entry->ext);
 	MSDOS_I(inode)->i_attrs = raw_entry->attr & ATTR_UNUSED;
 	/* this is as close to the truth as we can get ... */
-	inode->i_blksize = MSDOS_SB(inode->i_sb)->cluster_size*SECTOR_SIZE;
+	inode->i_blksize = MSDOS_SB(sb)->cluster_size*SECTOR_SIZE;
 	inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
-	    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
+	    inode->i_blksize*MSDOS_SB(sb)->cluster_size;
 	inode->i_mtime = inode->i_atime =
 	    date_dos2unix(CF_LE_W(raw_entry->time),CF_LE_W(raw_entry->date));
 	inode->i_ctime =
-		MSDOS_SB(inode->i_sb)->options.isvfat
+		MSDOS_SB(sb)->options.isvfat
 		? date_dos2unix(CF_LE_W(raw_entry->ctime),CF_LE_W(raw_entry->cdate))
 		: inode->i_mtime;
-	brelse(bh);
+	fat_brelse(sb, bh);
 }
 
 
@@ -506,8 +504,7 @@ void fat_write_inode(struct inode *inode)
 
 	inode->i_dirt = 0;
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
-	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
-	    SECTOR_SIZE))) {
+	if (!(bh = fat_bread(sb, inode->i_ino >> MSDOS_DPB_BITS))) {
 		printk("dev = %s, ino = %ld\n",
 		       kdevname(inode->i_dev), inode->i_ino);
 		panic("msdos_write_inode: unable to read i-node block");
@@ -533,29 +530,30 @@ void fat_write_inode(struct inode *inode)
 		raw_entry->ctime = CT_LE_W(raw_entry->ctime);
 		raw_entry->cdate = CT_LE_W(raw_entry->cdate);
 	}
-	mark_buffer_dirty(bh, 1);
-	brelse(bh);
+	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_brelse(sb, bh);
 }
 
 
 int fat_notify_change(struct inode * inode,struct iattr * attr)
 {
+	struct super_block *sb = inode->i_sb;
 	int error;
 
 	error = inode_change_ok(inode, attr);
 	if (error)
-		return MSDOS_SB(inode->i_sb)->options.quiet ? 0 : error;
+		return MSDOS_SB(sb)->options.quiet ? 0 : error;
 
 	if (((attr->ia_valid & ATTR_UID) && 
-	     (attr->ia_uid != MSDOS_SB(inode->i_sb)->options.fs_uid)) ||
+	     (attr->ia_uid != MSDOS_SB(sb)->options.fs_uid)) ||
 	    ((attr->ia_valid & ATTR_GID) && 
-	     (attr->ia_gid != MSDOS_SB(inode->i_sb)->options.fs_gid)) ||
+	     (attr->ia_gid != MSDOS_SB(sb)->options.fs_gid)) ||
 	    ((attr->ia_valid & ATTR_MODE) &&
 	     (attr->ia_mode & ~MSDOS_VALID_MODE)))
 		error = -EPERM;
 
 	if (error)
-		return MSDOS_SB(inode->i_sb)->options.quiet ? 0 : error;
+		return MSDOS_SB(sb)->options.quiet ? 0 : error;
 
 	inode_setattr(inode, attr);
 
@@ -565,8 +563,8 @@ int fat_notify_change(struct inode * inode,struct iattr * attr)
 		inode->i_mode |= S_IXUGO;
 
 	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
-	    & ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
-	    ~MSDOS_SB(inode->i_sb)->options.fs_umask;
+	    & ~MSDOS_SB(sb)->options.fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
+	    ~MSDOS_SB(sb)->options.fs_umask;
 	return 0;
 }
 

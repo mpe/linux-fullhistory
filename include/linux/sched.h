@@ -74,8 +74,6 @@ extern int last_pid;
 #include <linux/time.h>
 #include <linux/param.h>
 #include <linux/resource.h>
-#include <linux/vm86.h>
-#include <linux/math_emu.h>
 #include <linux/ptrace.h>
 #include <linux/timer.h>
 

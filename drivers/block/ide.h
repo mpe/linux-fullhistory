@@ -419,7 +419,6 @@ typedef struct hwif_s {
 	unsigned	present    : 1;	/* this interface exists */
 	unsigned	serialized : 1;	/* serialized operation with mate hwif */
 	unsigned	no_unmask  : 1;	/* disallow setting unmask bits */
-	unsigned	got_irq    : 1;	/* 1 = already alloc'd our irq */
 	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
 #ifdef CONFIG_BLK_DEV_PROMISE
 	unsigned	is_promise2: 1;	/* 2nd i/f on promise DC4030 */

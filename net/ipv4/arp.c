@@ -1431,7 +1431,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
  *	all possible race conditions should be resolved by
  *	cli()/sti() pairs.
  *
- *	Important note: hhs never disapear from lists, if ARP_LOCKED,
+ *	Important note: hhs never disappear from lists, if ARP_LOCKED,
  *	this fact allows to scan hh lists with enabled interrupts,
  *	but results in generating duplicate hh entries.
  *	It is harmless. (and I've never seen such event)
@@ -2036,7 +2036,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 		entry->mask = mask;
 		entry->flags = r->arp_flags;
 
-		entry->next = (*entryp)->next;
+		entry->next = *entryp;
 		*entryp = entry;
 	}
 

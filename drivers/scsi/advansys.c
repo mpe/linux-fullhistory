@@ -1,4 +1,4 @@
-/* $Id: advansys.c,v 1.12 1996/02/23 20:48:27 bobf Exp bobf $ */
+/* $Id: advansys.c,v 1.14 1996/05/10 00:26:31 bobf Exp bobf $ */
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
  * 
@@ -14,8 +14,8 @@
  * bobf@advansys.com (Bob Frey)
  */
 
-/* The driver has been tested with Linux v1.2.1 and v1.3.57 kernels. */
-#define ASC_VERSION "1.3"	/* AdvanSys Driver Version */
+/* The driver has been tested with Linux v1.2.13 and v1.3.57 kernels. */
+#define ASC_VERSION "1.4"	/* AdvanSys Driver Version */
 
 /*
 
@@ -359,6 +359,15 @@
          4. Eliminate 'make dep' warning.
          5. Try to fix problem with handling resets by increasing their
             timeout value.
+
+     5/8/96 1.4:
+         1. Change definitions to eliminate conflicts with other subsystems.
+         2. Add versioning code for the shared interrupt changes.
+         3. Eliminate problem in asc_rmqueue() with iterating after removing
+            a request.
+         4. Remove reset request loop problem from the "Known Problems or
+            Issues" section. This problem was isolated and fixed in the
+            mid-level SCSI driver.
         
   H. Known Problems or Issues
 
@@ -376,10 +385,6 @@
         its own initialization for the board and each device. The timeout
         value is only changed on the first scsi command for each device
         and never thereafter. The same change is made for reset commands.
-
-     3. The driver occasionally enters a loop handling reset requests. It
-        isn't clear yet whether this is a bug in the upper or mid-level
-        scsi modules or in this driver.
 
   I. Credits
 
@@ -482,11 +487,6 @@
 #define ASC_LIB_SERIAL_NUMBER  53
 
 typedef unsigned char uchar;
-typedef unsigned char BYTE;
-typedef unsigned short WORD;
-typedef unsigned long DWORD;
-
-typedef int         BOOL;
 
 #ifndef NULL
 #define NULL     (0)
@@ -502,33 +502,33 @@ typedef int         BOOL;
 
 #define  REG     register
 
-#define rchar    REG char
-#define rshort   REG short
-#define rint     REG int
-#define rlong    REG long
+#define rchar    REG __s8
+#define rshort   REG __s16
+#define rint     REG __s32
+#define rlong    REG __s32
 
-#define ruchar   REG uchar
-#define rushort  REG ushort
-#define ruint    REG uint
-#define rulong   REG ulong
+#define ruchar   REG __u8
+#define rushort  REG __u16
+#define ruint    REG __u32
+#define rulong   REG __u32
 
 #define NULLPTR   ( void *)0
 #define FNULLPTR  ( void dosfar *)0UL
 #define EOF      (-1)
 #define EOS      '\0'
 #define ERR      (-1)
-#define UB_ERR   (uchar)(0xFF)
-#define UW_ERR   (uint)(0xFFFF)
-#define UL_ERR   (ulong)(0xFFFFFFFFUL)
+#define UB_ERR   (__u8)(0xFF)
+#define UW_ERR   (__u16)(0xFFFF)
+#define UL_ERR   (__u32)(0xFFFFFFFFUL)
 
-#define iseven_word( val )  ( ( ( ( uint )val) & ( uint )0x0001 ) == 0 )
-#define isodd_word( val )   ( ( ( ( uint )val) & ( uint )0x0001 ) != 0 )
-#define toeven_word( val )  ( ( ( uint )val ) & ( uint )0xFFFE )
+#define iseven_word( val )  ( ( ( ( __u16 )val) & ( __u16 )0x0001 ) == 0 )
+#define isodd_word( val )   ( ( ( ( __u16 )val) & ( __u16 )0x0001 ) != 0 )
+#define toeven_word( val )  ( ( ( __u16 )val ) & ( __u16 )0xFFFE )
 
-#define biton( val, bits )   ((( uint )( val >> bits ) & (uint)0x0001 ) != 0 )
-#define bitoff( val, bits )  ((( uint )( val >> bits ) & (uint)0x0001 ) == 0 )
-#define lbiton( val, bits )  ((( ulong )( val >> bits ) & (ulong)0x00000001UL ) != 0 )
-#define lbitoff( val, bits ) ((( ulong )( val >> bits ) & (ulong)0x00000001UL ) == 0 )
+#define biton( val, bits )   ((( __u16 )( val >> bits ) & (__u16)0x0001 ) != 0 )
+#define bitoff( val, bits )  ((( __u16 )( val >> bits ) & (__u16)0x0001 ) == 0 )
+#define lbiton( val, bits )  ((( __u32 )( val >> bits ) & (__u32)0x00000001UL ) != 0 )
+#define lbitoff( val, bits ) ((( __u32 )( val >> bits ) & (__u32)0x00000001UL ) == 0 )
 
 #define  absh( val )    ( ( val ) < 0 ? -( val ) : ( val ) )
 
@@ -546,25 +546,25 @@ typedef int         BOOL;
 #define KBYTE       (0x400)
 #endif
 
-#define HI_BYTE(x) ( *( ( BYTE *)(&x)+1 ) )
-#define LO_BYTE(x) ( *( ( BYTE *)&x ) )
+#define HI_BYTE(x) ( *( ( __u8 *)(&x)+1 ) )
+#define LO_BYTE(x) ( *( ( __u8 *)&x ) )
 
-#define HI_WORD(x) ( *( ( WORD *)(&x)+1 ) )
-#define LO_WORD(x) ( *( ( WORD *)&x ) )
+#define HI_WORD(x) ( *( ( __u16 *)(&x)+1 ) )
+#define LO_WORD(x) ( *( ( __u16 *)&x ) )
 
 #ifndef MAKEWORD
-#define MAKEWORD(lo, hi)    ((WORD) (((WORD) lo) | ((WORD) hi << 8)))
+#define MAKEWORD(lo, hi)    ((__u16) (((__u16) lo) | ((__u16) hi << 8)))
 #endif
 
 #ifndef MAKELONG
-#define MAKELONG(lo, hi)    ((DWORD) (((DWORD) lo) | ((DWORD) hi << 16)))
+#define MAKELONG(lo, hi)    ((__u32) (((__u32) lo) | ((__u32) hi << 16)))
 #endif
 
-#define SwapWords(dWord)        ((DWORD) ((dWord >> 16) | (dWord << 16)))
-#define SwapBytes(word)         ((WORD) ((word >> 8) | (word << 8)))
+#define SwapWords(dWord)        ((__u32) ((dWord >> 16) | (dWord << 16)))
+#define SwapBytes(word)         ((__u16) ((word >> 8) | (word << 8)))
 
 #define BigToLittle(dWord) \
-    ((DWORD) (SwapWords(MAKELONG(SwapBytes(LO_WORD(dWord)), SwapBytes(HI_WORD(dWord))))))
+    ((__u32) (SwapWords(MAKELONG(SwapBytes(LO_WORD(dWord)), SwapBytes(HI_WORD(dWord))))))
 #define LittleToBig(dWord)      BigToLittle(dWord)
 
 #define Lptr
@@ -2551,7 +2551,11 @@ int		asc_dbglvl = 0;
 #ifdef LINUX_1_3
 STATIC int			asc_proc_copy(off_t, off_t, char *, int , char *, int);
 #endif /* LINUX_1_3 */
+#ifdef LINUX_1_2
+STATIC void 		advansys_interrupt(int, struct pt_regs *);
+#else /* LINUX_1_3 */
 STATIC void 		advansys_interrupt(int, void *, struct pt_regs *);
+#endif /* LINUX_1_3 */
 STATIC void 		advansys_command_done(Scsi_Cmnd *);
 STATIC int 			asc_execute_scsi_cmnd(Scsi_Cmnd *);
 STATIC void 		asc_isr_callback(ASC_DVC_VAR *, ASC_QDONE_INFO *);
@@ -3106,8 +3110,13 @@ advansys_detect(Scsi_Host_Template *tpnt)
 
 			/* Register IRQ Number. */
 			ASC_DBG1(2, "advansys_detect: request_irq() %d\n", shp->irq);
+#ifdef LINUX_1_2
+			if ((ret = request_irq(shp->irq, advansys_interrupt,
+								SA_INTERRUPT, "advansys")) != 0) {
+#else /* LINUX_1_3 */
 			if ((ret = request_irq(shp->irq, advansys_interrupt,
 								SA_INTERRUPT, "advansys", NULL)) != 0) {
+#endif /* LINUX_1_3 */
 				ASC_DBG1(0, "advansys_detect: request_irq() failed %d\n", ret);
 				release_region(shp->io_port, shp->n_io_port);
 				if (shp->dma_channel != NO_ISA_DMA) {
@@ -3130,7 +3139,11 @@ advansys_detect(Scsi_Host_Template *tpnt)
 				if (shp->dma_channel != NO_ISA_DMA) {
 					free_dma(shp->dma_channel);
 				}
+#ifdef LINUX_1_2
+				free_irq(shp->irq);
+#else /* LINUX_1_3 */
 				free_irq(shp->irq, NULL);
+#endif /* LINUX_1_3 */
 				scsi_unregister(shp);
 				asc_board_count--;
 				continue;
@@ -3152,7 +3165,11 @@ int
 advansys_release(struct Scsi_Host *shp)
 {
 	ASC_DBG(1, "advansys_release: begin\n");
+#ifdef LINUX_1_2
+	free_irq(shp->irq);
+#else /* LINUX_1_3 */
 	free_irq(shp->irq, NULL);
+#endif /* LINUX_1_3 */
 	if (shp->dma_channel != NO_ISA_DMA) {
 		ASC_DBG(1, "advansys_release: free_dma()\n");
 		free_dma(shp->dma_channel);
@@ -3577,7 +3594,11 @@ asc_proc_copy(off_t advoffset, off_t offset, char *curbuf, int leftlen,
  * First-level interrupt handler.
  */
 STATIC void
+#ifdef LINUX_1_2
+advansys_interrupt(int irq, struct pt_regs *regs)
+#else /* LINUX_1_3 */
 advansys_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+#endif /* LINUX_1_3 */
 {
 	int			i;
 	int			flags;
@@ -4455,6 +4476,7 @@ asc_rmqueue(struct Scsi_Host *shp, Scsi_Cmnd *scp, int tid)
 			scp->host_scribble = NULL;
 			ASC_STATS(rmqueue);
 			ret = ASC_TRUE;
+			break; /* Note: Don't iterate, *scpp may be NULL. */
 		}
 	}
 	if (ASC_BOARD(shp)->pending[tid] == NULL) {

@@ -82,7 +82,7 @@
  *
  *
  * TODO:
- *       proc interface. tagged queuing. multiple cards.
+ *       tagged queuing. multiple cards.
  *
  *
  * NOTE:
@@ -120,32 +120,28 @@
 #include "hosts.h"
 #include "in2000.h"
 
-#if LINUX_VERSION_CODE >= 0x010300
 #include <linux/blk.h>
-#else
-#include "../block/blk.h"
-#endif
+#include <linux/stat.h>
 
 #ifdef MODULE
 #include <linux/module.h>
 #endif
 
 
+#define IN2000_VERSION    "1.28"
+#define IN2000_DATE       "07/May/1996"
+
 #define PROC_INTERFACE     /* add code for /proc/scsi/in2000/xxx interface */
-
-#define FAST_READ_IO       /* No problems with these on my machine */
-#define FAST_WRITE_IO
-
 #define SYNC_DEBUG         /* extra info on sync negotiation printed */
 #define DEBUGGING_ON       /* enable command-line debugging bitmask */
 #define DEBUG_DEFAULTS 0   /* default bitmask - change from command-line */
 
-#define IN2000_VERSION    "1.28"
-#define IN2000_DATE       "27/Apr/1996"
+#define FAST_READ_IO       /* No problems with these on my machine */
+#define FAST_WRITE_IO
 
 #ifdef DEBUGGING_ON
 #define DB(f,a) if (hostdata->args & (f)) a;
-#define CHECK_NULL(p,s) if (!(p)) {printk("\n"); while (1) printk("NP:%s\r",(s));}
+#define CHECK_NULL(p,s) /* if (!(p)) {printk("\n"); while (1) printk("NP:%s\r",(s));} */
 #else
 #define DB(f,a)
 #define CHECK_NULL(p,s)
@@ -851,11 +847,7 @@ int i;
  * re-think the multiple card capability....
  */
 
-#if LINUX_VERSION_CODE >= 0x010346   /* 1.3.70 */
 void in2000_intr (int irqnum, void * dev_id, struct pt_regs *ptregs)
-#else
-void in2000_intr (int irqnum, struct pt_regs *ptregs)
-#endif
 {
 struct Scsi_Host *instance;
 struct IN2000_hostdata *hostdata;
@@ -1684,11 +1676,7 @@ unsigned long flags;
 
 
 
-#if LINUX_VERSION_CODE >= 0x010359        /* 1.3.89 */
 int in2000_reset(Scsi_Cmnd *cmd, unsigned int reset_flags)
-#else
-int in2000_reset(Scsi_Cmnd *cmd)
-#endif
 {
 unsigned long flags;
 struct Scsi_Host *instance;
@@ -1930,13 +1918,10 @@ char *cp;
 
 
 
-#if LINUX_VERSION_CODE >= 0x010300
-#include <linux/stat.h>
 struct proc_dir_entry proc_scsi_in2000 = {
    PROC_SCSI_IN2000, 6, "in2000",
    S_IFDIR | S_IRUGO | S_IXUGO, 2
    };
-#endif
 
 
 const unsigned int *bios_tab[] = {
@@ -1995,12 +1980,12 @@ char buf[32];
       if (check_setup_strings("ioport",&flags,&val,buf)) {
          base = val;
          switches = ~inb(base + IO_SWITCHES) & 0xff;
-         printk("Forcing detection at IOport 0x%x.\n",base);
+         printk("Forcing IN2000 detection at IOport 0x%x ",base);
          bios = 2;
          }
       else if (*(bios_tab[bios]+0x04) == 0x41564f4e ||
           *(bios_tab[bios]+0x0c) == 0x61776c41) {
-         printk("Found IN2000 BIOS at 0x%x.\n",(unsigned int)bios_tab[bios]);
+         printk("Found IN2000 BIOS at 0x%x ",(unsigned int)bios_tab[bios]);
 
 /* Read the switch image that's mapped into EPROM space */
 
@@ -2015,7 +2000,7 @@ char buf[32];
 
          x = ~inb(base + IO_SWITCHES) & 0xff;
          if (x != switches) {
-            printk("Bad IO signature: %02x vs %02x\n",x,switches);
+            printk("Bad IO signature: %02x vs %02x.\n",x,switches);
             continue;
             }
          }
@@ -2054,10 +2039,7 @@ char buf[32];
  * initialize it.
  */
 
-#if LINUX_VERSION_CODE >= 0x010300
       tpnt->proc_dir = &proc_scsi_in2000; /* done more than once? harmless. */
-#endif
-
       detect_count++;
       instance  = scsi_register(tpnt, sizeof(struct IN2000_hostdata));
       if (!instance_list)
@@ -2071,12 +2053,7 @@ char buf[32];
       write1_io(0,IO_FIFO_READ);             /* start fifo out in read mode */
       write1_io(0,IO_INTR_MASK);    /* allow all ints */
       x = int_tab[(switches & (SW_INT0 | SW_INT1)) >> SW_INT_SHIFT];
-
-#if LINUX_VERSION_CODE >= 0x010346   /* 1.3.70 */
       if (request_irq(x, in2000_intr, SA_INTERRUPT, "in2000", NULL)) {
-#else
-      if (request_irq(x, in2000_intr, SA_INTERRUPT, "in2000")) {
-#endif
          printk("in2000_detect: Unable to allocate IRQ.\n");
          detect_count--;
          continue;
@@ -2119,7 +2096,6 @@ char buf[32];
       disc_taken_total = 0;
 #endif
 
-
       if (check_setup_strings("nosync",&flags,&val,buf))
          hostdata->sync_off = val;
 
@@ -2139,7 +2115,7 @@ char buf[32];
       if (check_setup_strings("debug",&flags,&val,buf))
          hostdata->args = (val & DB_MASK);
 
-      while (check_setup_strings("proc",&flags,&val,buf))
+      if (check_setup_strings("proc",&flags,&val,buf))
          hostdata->proc = val;
 
       x = reset_hardware(instance,(hostdata->args & A_NO_SCSI_RESET)?RESET_CARD:RESET_CARD_AND_BUS);
@@ -2154,27 +2130,26 @@ char buf[32];
       else
          hostdata->chip = C_WD33C93;
 
-      printk("in2000-%d: dip_switch=%02x: irq=%d ioport=%02x floppy=%s sync/DOS5=%s\n",
-                  instance->host_no,(switches & 0x7f),
+      printk("dip_switch=%02x irq=%d ioport=%02x floppy=%s sync/DOS5=%s ",
+                  (switches & 0x7f),
                   instance->irq,hostdata->io_base,
                   (switches & SW_FLOPPY)?"Yes":"No",
                   (switches & SW_SYNC_DOS5)?"Yes":"No");
-      printk("in2000-%d: hardware_ver=%02x chip=%s microcode=%02x\n",
-                  instance->host_no,hrev,
+      printk("hardware_ver=%02x chip=%s microcode=%02x\n",
+                  hrev,
                   (hostdata->chip==C_WD33C93)?"WD33c93":
                   (hostdata->chip==C_WD33C93A)?"WD33c93A":
                   (hostdata->chip==C_WD33C93B)?"WD33c93B":"unknown",
                   hostdata->microcode);
 #ifdef DEBUGGING_ON
-      printk("in2000-%d: setup_strings = ",instance->host_no);
+      printk("setup_strings = ");
       for (x=0; x<8; x++)
          printk("%s,",setup_strings[x]);
       printk("\n");
 #endif
       if (hostdata->sync_off == 0xff)
-         printk("in2000-%d: Sync-transfer DISABLED on all devices: ENABLE from command-line\n",instance->host_no);
-      printk("in2000-%d: driver version %s - %s\n",instance->host_no,
-                        IN2000_VERSION,IN2000_DATE);
+         printk("Sync-transfer DISABLED on all devices: ENABLE from command-line\n");
+      printk("IN2000 driver version %s - %s\n",IN2000_VERSION,IN2000_DATE);
       }
 
    return detect_count;
@@ -2186,11 +2161,7 @@ char buf[32];
  *       supposed to do...
  */
 
-#if LINUX_VERSION_CODE >= 0x010300
 int in2000_biosparam(Disk *disk, kdev_t dev, int *iinfo)
-#else
-int in2000_biosparam(Disk *disk, int dev, int *iinfo)
-#endif
 {
 int size;
 
@@ -2222,6 +2193,26 @@ int size;
       }
     return 0;
 }
+
+
+#ifdef PROC_INTERFACE
+
+/* Certain older compilers (such as a.out 2.5.8) choke and give a
+ * "Too many reloads" error when there are a lot of calls to 'strcat()'
+ * in one function. Modern kernels define 'strcat()' as an inline
+ * function - I _guess_ this is related to the problem. Regardless,
+ * we can make everyone happy by doing some macro fudging to force
+ * gcc to do calls instead of inline expansion.
+ */
+
+char * in2000_strcat(char * dest, const char * src)
+{
+   return strcat(dest,src);
+}
+
+#define strcat(d,s) (in2000_strcat((d),(s)))
+
+#endif
 
 
 int in2000_proc_info(char *buf, char **start, off_t off, int len, int hn, int in)

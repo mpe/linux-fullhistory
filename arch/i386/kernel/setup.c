@@ -208,7 +208,7 @@ static const char * i486model(unsigned int nr)
 {
 	static const char *model[] = {
 		"0","DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB",
-		"10","11","12","13","Am5x85-WT","Am5x86-WB"
+		"10","11","12","13","Am5x86-WT","Am5x86-WB"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];

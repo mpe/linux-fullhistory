@@ -128,7 +128,7 @@ affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey)
 	while (1) {
 		if (nextkey == 0)
 			break;
-		pr_debug("AFFS: find_link_pred(): next key=%d\n", nextkey));
+		pr_debug("AFFS: find_link_pred(): next key=%d\n", nextkey);
 		if (!(bh = affs_bread(startino->i_dev,nextkey,AFFS_I2BSIZE(startino))))
 			break;
 		if (affs_checksum_block(AFFS_I2BSIZE(startino),bh->b_data,&ptype,&stype)

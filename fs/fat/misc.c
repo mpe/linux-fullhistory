@@ -118,35 +118,34 @@ int fat_add_cluster(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	int count,nr,limit,last,curr,sector,last_sector,file_cluster;
 	struct buffer_head *bh;
-	int cluster_size = MSDOS_SB(inode->i_sb)->cluster_size;
+	int cluster_size = MSDOS_SB(sb)->cluster_size;
 
 	if (inode->i_ino == MSDOS_ROOT_INO) return -ENOSPC;
-	if (!MSDOS_SB(inode->i_sb)->free_clusters) return -ENOSPC;
-	lock_fat(inode->i_sb);
-	limit = MSDOS_SB(inode->i_sb)->clusters;
+	if (!MSDOS_SB(sb)->free_clusters) return -ENOSPC;
+	lock_fat(sb);
+	limit = MSDOS_SB(sb)->clusters;
 	nr = limit; /* to keep GCC happy */
 	for (count = 0; count < limit; count++) {
-		nr = ((count+MSDOS_SB(inode->i_sb)->prev_free) % limit)+2;
-		if (fat_access(inode->i_sb,nr,-1) == 0) break;
+		nr = ((count+MSDOS_SB(sb)->prev_free) % limit)+2;
+		if (fat_access(sb,nr,-1) == 0) break;
 	}
 	PRINTK (("cnt = %d --",count));
 #ifdef DEBUG
 printk("free cluster: %d\n",nr);
 #endif
-	MSDOS_SB(inode->i_sb)->prev_free = (count+MSDOS_SB(inode->i_sb)->
-	    prev_free+1) % limit;
+	MSDOS_SB(sb)->prev_free = (count+MSDOS_SB(sb)->prev_free+1) % limit;
 	if (count >= limit) {
-		MSDOS_SB(inode->i_sb)->free_clusters = 0;
-		unlock_fat(inode->i_sb);
+		MSDOS_SB(sb)->free_clusters = 0;
+		unlock_fat(sb);
 		return -ENOSPC;
 	}
-	fat_access(inode->i_sb,nr,MSDOS_SB(inode->i_sb)->fat_bits == 12 ?
+	fat_access(sb,nr,MSDOS_SB(sb)->fat_bits == 12 ?
 	    0xff8 : 0xfff8);
-	if (MSDOS_SB(inode->i_sb)->free_clusters != -1)
-		MSDOS_SB(inode->i_sb)->free_clusters--;
-	unlock_fat(inode->i_sb);
+	if (MSDOS_SB(sb)->free_clusters != -1)
+		MSDOS_SB(sb)->free_clusters--;
+	unlock_fat(sb);
 #ifdef DEBUG
-printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
+printk("set to %x\n",fat_access(sb,nr,-1));
 #endif
 	last = 0;
 	/* We must locate the last cluster of the file to add this
@@ -166,9 +165,9 @@ printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 		while (curr && curr != -1){
 			PRINTK (("."));
 			file_cluster++;
-			if (!(curr = fat_access(inode->i_sb,
+			if (!(curr = fat_access(sb,
 			    last = curr,-1))) {
-				fat_fs_panic(inode->i_sb,"File without EOF");
+				fat_fs_panic(sb,"File without EOF");
 				return -ENOSPC;
 			}
 		}
@@ -177,27 +176,27 @@ printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 #ifdef DEBUG
 printk("last = %d\n",last);
 #endif
-	if (last) fat_access(inode->i_sb,last,nr);
+	if (last) fat_access(sb,last,nr);
 	else {
 		MSDOS_I(inode)->i_start = nr;
 		inode->i_dirt = 1;
 	}
 #ifdef DEBUG
-if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
+if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 #endif
-	sector = MSDOS_SB(inode->i_sb)->data_start+(nr-2)*cluster_size;
+	sector = MSDOS_SB(sb)->data_start+(nr-2)*cluster_size;
 	last_sector = sector + cluster_size;
 	for ( ; sector < last_sector; sector++) {
 		#ifdef DEBUG
 			printk("zeroing sector %d\n",sector);
 		#endif
-		if (!(bh = getblk(inode->i_dev,sector,SECTOR_SIZE)))
+		if (!(bh = fat_getblk(sb, sector)))
 			printk("getblk failed\n");
 		else {
 			memset(bh->b_data,0,SECTOR_SIZE);
-			fat_set_uptodate(sb,bh,1);
-			mark_buffer_dirty(bh, 1);
-			brelse(bh);
+			fat_set_uptodate(sb, bh, 1);
+			fat_mark_buffer_dirty(sb, bh, 1);
+			fat_brelse(sb, bh);
 		}
 	}
 	if (file_cluster != inode->i_blocks/cluster_size){
@@ -209,7 +208,7 @@ if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
 	inode->i_blocks += cluster_size;
 	if (S_ISDIR(inode->i_mode)) {
 		if (inode->i_size & (SECTOR_SIZE-1)) {
-			fat_fs_panic(inode->i_sb,"Odd directory size");
+			fat_fs_panic(sb,"Odd directory size");
 			inode->i_size = (inode->i_size+SECTOR_SIZE) &
 			    ~(SECTOR_SIZE-1);
 		}
@@ -284,7 +283,7 @@ int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de)
 {
 	struct super_block *sb = dir->i_sb;
-	int sector,offset;
+	int sector, offset;
 
 	while (1) {
 		offset = *pos;
@@ -296,9 +295,9 @@ int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 			return -1; /* beyond EOF */
 		*pos += sizeof(struct msdos_dir_entry);
 		if (*bh)
-			brelse(*bh);
+			fat_brelse(sb, *bh);
 		PRINTK (("get_entry sector apres brelse\n"));
-		if (!(*bh = breada(dir->i_dev,sector,SECTOR_SIZE,0,FAT_READAHEAD))) {
+		if (!(*bh = fat_bread(sb, sector))) {
 			printk("Directory sread (sector %d) failed\n",sector);
 			continue;
 		}
@@ -372,7 +371,8 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 	struct inode *inode;
 	int entry,start,done;
 
-	if (!(bh = breada(sb->s_dev,sector,SECTOR_SIZE,0,FAT_READAHEAD))) return -EIO;
+	if (!(bh = fat_bread(sb,sector)))
+		return -EIO;
 	data = (struct msdos_dir_entry *) bh->b_data;
 	for (entry = 0; entry < MSDOS_DPS; entry++) {
 /* RSS_COUNT:  if (data[entry].name == name) done=true else done=false. */
@@ -393,7 +393,8 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 		if (done) {
 			if (ino) *ino = sector*MSDOS_DPS+entry;
 			start = CF_LE_W(data[entry].start);
-			if (!res_bh) brelse(bh);
+			if (!res_bh)
+				fat_brelse(sb, bh);
 			else {
 				*res_bh = bh;
 				*res_de = &data[entry];
@@ -401,7 +402,7 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 			return start;
 		}
 	}
-	brelse(bh);
+	fat_brelse(sb, bh);
 	return -ENOENT;
 }
 

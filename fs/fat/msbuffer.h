@@ -13,24 +13,3 @@ void fat_set_uptodate (struct super_block *sb,
 int fat_is_uptodate (struct super_block *sb, struct buffer_head *bh);
 void fat_ll_rw_block (struct super_block *sb, int opr,
 	int nbreq, struct buffer_head *bh[32]);
-
-/* These macros exist to avoid modifying all the code */
-/* They should be removed one day I guess */
-
-/* The versioning mechanism of the modules system defines those macros */
-/* This removes some warnings */
-#ifdef brelse
-	#undef brelse
-#endif
-#ifdef bread
-	#undef bread
-#endif
-#ifdef getblk
-	#undef getblk
-#endif
-
-#define brelse(b)			fat_brelse(sb,b)
-#define bread(d,b,s)			fat_bread(sb,b)
-#define getblk(d,b,s)			fat_getblk(sb,b)
-#define mark_buffer_dirty(b,v)		fat_mark_buffer_dirty(sb,b,v)
-

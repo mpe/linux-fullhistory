@@ -1,3 +1,21 @@
+Tue May  7 22:51:11 1996    <tytso@rsts-11.mit.edu>
+
+	* random.c (add_timer_randomness): Limit the amount randomness
+		that we estimate to 12 bits.  (An arbitrary amount).
+
+		(extract_entropy): To make it harder to analyze the hash
+		function, fold the hash function in half using XOR, and
+		use the folded result as the value to emit to the user.
+		Also, add timer randomness each pass through the
+		exact_entropy call, to increase the amount of unknown
+		values during the extraction process.
+
+		(random_ioctl): Use IOR/IOW definitions to define the
+		ioctl values used by the /dev/random driver.  Allow the
+		old ioctl values to be used for backwards compatibility
+		(for a limited amount of time).
+
+
 Wed Apr 24 14:02:04 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* random.c (add_timer_randomness): Use 2nd derivative as well to

@@ -70,6 +70,10 @@ void binfmt_setup(void)
 #ifdef CONFIG_BINFMT_AOUT
 	init_aout_binfmt();
 #endif
+
+#ifdef CONFIG_BINFMT_JAVA
+	init_java_binfmt();
+#endif
 	/* This cannot be configured out of the kernel */
 	init_script_binfmt();
 }

@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: May 5, 1996}
+\date{Last revised: May 9, 1996}
 \maketitle
 %
 \noindent
@@ -167,7 +167,8 @@ least not without contacting me first.
 \major{48}{}{char }{SDL RISCom serial card}
 \major{49}{}{char }{SDL RISCom serial card -- alternate devices}
 \major{50}{}{char }{Reserved for GLINT}
-\major{51}{--59}{}{Unallocated}
+\major{51}{}{char }{Baycom radio modem}
+\major{52}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -1027,7 +1028,18 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \begin{devicelist}
-\major{50}{--59}{}{Unallocated}
+\major{50}{}{char}{Reserved for GLINT}
+\end{devicelist}
+
+\begin{devicelist}
+\major{51}{}{char }{Baycom radio modem}
+	\minor{0}{/dev/bc0}{First Baycom radio modem}
+	\minor{1}{/dev/bc1}{Second Baycom radio modem}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{52}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -19,7 +19,7 @@ DOS\3		The "international" Fast File System.  Supported.
 
 DOS\4		The original filesystem with directory cache. The directory
 		cache speeds up directory accesses on floppies considerably,
-		but slowes down file creation/deletion. Doesn't make much
+		but slows down file creation/deletion. Doesn't make much
 		sense on hard disks. Not supported.
 
 DOS\5		The Fast File System with directory cache. Not supported.
@@ -37,7 +37,7 @@ protect		If this option is set, the protection bits cannot be altered.
 
 uid[=uid]	This sets the uid of the root directory (i. e. the mount point
 		to uid or to the uid of the current user, if the =uid is
-		ommitted.
+		omitted.
 
 gid[=gid]	Same as above, but for gid.
 
@@ -49,7 +49,7 @@ setgid[=gid]	Same as above, but for gid.
 use_mp		The uid and gid are taken from the now covered mount point
 		instead of the current user or value defined.
 
-mode=mode	Sets the mode flags to the given (octal) value, regardles
+mode=mode	Sets the mode flags to the given (octal) value, regardless
 		of the original permissions. Directories will get an x
 		permission, if the corresponding r bit is set.
 		This is useful since most of the plain AmigaOS files
@@ -58,12 +58,12 @@ mode=mode	Sets the mode flags to the given (octal) value, regardles
 reserved=num	Sets the number of reserved blocks at the start of the
 		partition to num. Default is 2.
 
-root=block	Sets the block number of the root block. This schould never
-		be neccessary.
+root=block	Sets the block number of the root block. This should never
+		be necessary.
 
 bs=blksize	Sets the blocksize to blksize. Valid block sizes are 512,
 		1024, 2048 and 4096. Like the root option, this should
-		never be neccessary, as the affs can figure it out itself.
+		never be necessary, as the affs can figure it out itself.
 
 quiet		The file system will not return an error for disallowed
 		mode changes.

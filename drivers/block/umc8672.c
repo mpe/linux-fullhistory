@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/umc8672.c	Version 0.03  Feb 09, 1996
+ *  linux/drivers/block/umc8672.c	Version 0.04  May 09, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
@@ -35,7 +35,7 @@
  * the results from the DOS speed test program supplied from UMC. 11 is the 
  * highest speed (about PIO mode 3)
  */
-#undef REALLY_SLOW_IO		/* most systems can safely undef this */
+#define REALLY_SLOW_IO		/* some systems can safely undef this */
 
 #include <linux/types.h>
 #include <linux/kernel.h>

@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		      Last revised: May 5, 1996
+		      Last revised: May 9, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -708,7 +708,14 @@ least not without contacting me first.
 		  1 = /dev/cul1		Callout device corresponding to ttyL1
 		      ...
 
- 50-59		UNALLOCATED
+ 50 char	Reserved for GLINT
+
+ 51 char	Baycom radio modem
+		  0 = /dev/bc0		First Baycom radio modem
+		  1 = /dev/bc1		Second Baycom radio modem
+		      ...
+
+ 52-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

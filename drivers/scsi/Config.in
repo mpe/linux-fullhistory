@@ -40,7 +40,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
     bool '   allow DISCONNECT' CONFIG_SCSI_NCR53C7xx_DISCONNECT
   fi
 fi
-dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 $CONFIG_SCSI
+dep_tristate 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 $CONFIG_SCSI
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
 dep_tristate 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC $CONFIG_SCSI
 dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI

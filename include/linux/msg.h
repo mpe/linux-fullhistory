@@ -60,6 +60,7 @@ struct msg {
     struct msg *msg_next;   /* next message on queue */
     long  msg_type;          
     char *msg_spot;         /* message text address */
+    time_t msg_stime;       /* msgsnd time */
     short msg_ts;           /* message text size */
 };
 

@@ -2,7 +2,7 @@
  *    in2000.h -  Linux device driver definitions for the
  *                Always IN2000 ISA SCSI card.
  *
- *    IMPORTANT: This file is for version 1.28 - 27/Apr/1996
+ *    IMPORTANT: This file is for version 1.28 - 07/May/1996
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com
@@ -24,16 +24,6 @@
 #define IN2000_H
 
 #include <asm/io.h>
-
-/* We include version.h to get 'LINUX_VERSION_CODE' - a define used here
- * and there in the source to get around various compatibility problems:
- * -  pre-1.3.xx kernels didn't have 'kdev_t' or proc, and their
- *    <blk.h> was in a different place.
- * -  1.3.70 introduced an additional argument for interrupt functions
- * -  1.3.89 added an argument to in2000_reset(), which we don't really
- *    use at the moment. But for completeness...
- */
-#include <linux/version.h>
 
 
 #define uchar unsigned char
@@ -325,17 +315,8 @@ int in2000_abort(Scsi_Cmnd *);
 void in2000_setup(char *, int *);
 int in2000_proc_info(char *, char **, off_t, int, int, int);
 struct proc_dir_entry proc_scsi_in2000;
-
-#if LINUX_VERSION_CODE >= 0x010300
 int in2000_biosparam(struct scsi_disk *, kdev_t, int *);
-#else
-int in2000_biosparam(Disk *, int, int *);
-#endif
-#if LINUX_VERSION_CODE >= 0x010359           /* 1.3.89 */
 int in2000_reset(Scsi_Cmnd *, unsigned int);
-#else
-int in2000_reset(Scsi_Cmnd *);
-#endif
 
 
 #define IN2000_CAN_Q    16
@@ -343,7 +324,6 @@ int in2000_reset(Scsi_Cmnd *);
 #define IN2000_CPL      2
 #define IN2000_HOST_ID  7
 
-#if LINUX_VERSION_CODE >= 0x010300
 #define IN2000 {  NULL,                /* link pointer for modules */ \
                   NULL,                /* usage_count for modules */ \
                   &proc_scsi_in2000,   /* pointer to /proc/scsi directory entry */ \
@@ -366,31 +346,6 @@ int in2000_reset(Scsi_Cmnd *);
                   0,                   /* unchecked dma */ \
                   DISABLE_CLUSTERING \
                }
-
-#else
-#define IN2000 {  NULL,                /* link pointer for modules */ \
-                  NULL,                /* usage_count for modules */ \
-/*                  NULL,*/                /* pointer to /proc/scsi directory entry */ \
-/*                  NULL,*/                /* pointer to proc info function */ \
-                  "Always IN2000",     /* device name */ \
-                  in2000_detect,       /* returns number of in2000's found */ \
-                  NULL,                /* optional unload function for modules */ \
-                  NULL,                /* optional misc info function */ \
-                  NULL,                /* send scsi command, wait for completion */ \
-                  in2000_queuecommand, /* queue scsi command, don't wait */ \
-                  in2000_abort,        /* abort current command */ \
-                  in2000_reset,        /* reset scsi bus */ \
-                  NULL,                /* slave_attach - unused */ \
-                  in2000_biosparam,    /* figures out BIOS parameters for lilo, etc */ \
-                  IN2000_CAN_Q,        /* max commands we can queue up */ \
-                  IN2000_HOST_ID,      /* host-adapter scsi id */ \
-                  IN2000_SG,           /* scatter-gather table size */ \
-                  IN2000_CPL,          /* commands per lun */ \
-                  0,                   /* board counter */ \
-                  0,                   /* unchecked dma */ \
-                  DISABLE_CLUSTERING \
-               }
-#endif
 
 
 #endif /* IN2000_H */

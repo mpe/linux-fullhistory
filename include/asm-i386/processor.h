@@ -7,6 +7,9 @@
 #ifndef __ASM_I386_PROCESSOR_H
 #define __ASM_I386_PROCESSOR_H
 
+#include <asm/vm86.h>
+#include <asm/math_emu.h>
+
 /*
  * System setup and hardware bug flags..
  * [Note we don't test the 386 multiply bug or popad bug]

@@ -49,6 +49,7 @@ extern int open_inode(struct inode * inode, int mode);
 extern int init_elf_binfmt(void);
 extern int init_aout_binfmt(void);
 extern int init_script_binfmt(void);
+extern int init_java_binfmt(void);
 
 extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);
