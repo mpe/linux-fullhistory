@@ -18,6 +18,8 @@
  *        David S. Miller (davem@caip.rutgers.edu), 1995
  *  64-bit file support on 64-bit platforms by Jakub Jelinek
  * 	(jj@sunsite.ms.mff.cuni.cz)
+ *
+ *  Assorted race fixes, rewrite of ext2_get_block() by Al Viro, 2000
  */
 
 #include <linux/fs.h>
@@ -25,8 +27,6 @@
 #include <linux/smp_lock.h>
 #include <linux/sched.h>
 #include <linux/highuid.h>
-
-
 
 static int ext2_update_inode(struct inode * inode, int do_sync);
 
@@ -64,23 +64,18 @@ no_delete:
 	clear_inode(inode);	/* We must guarantee clearing of inode... */
 }
 
-/* 
- * ext2_discard_prealloc and ext2_alloc_block are atomic wrt. the
- * superblock in the same manner as are ext2_free_blocks and
- * ext2_new_block.  We just wait on the super rather than locking it
- * here, since ext2_new_block will do the necessary locking and we
- * can't block until then.
- */
 void ext2_discard_prealloc (struct inode * inode)
 {
 #ifdef EXT2_PREALLOCATE
-	unsigned short total;
-
 	lock_kernel();
+	/* Writer: ->i_prealloc* */
 	if (inode->u.ext2_i.i_prealloc_count) {
-		total = inode->u.ext2_i.i_prealloc_count;
+		unsigned short total = inode->u.ext2_i.i_prealloc_count;
+		unsigned long block = inode->u.ext2_i.i_prealloc_block;
 		inode->u.ext2_i.i_prealloc_count = 0;
-		ext2_free_blocks (inode, inode->u.ext2_i.i_prealloc_block, total);
+		inode->u.ext2_i.i_prealloc_block = 0;
+		/* Writer: end */
+		ext2_free_blocks (inode, block, total);
 	}
 	unlock_kernel();
 #endif
@@ -93,22 +88,26 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 #endif
 	unsigned long result;
 
-	wait_on_super (inode->i_sb);
 
 #ifdef EXT2_PREALLOCATE
+	/* Writer: ->i_prealloc* */
 	if (inode->u.ext2_i.i_prealloc_count &&
 	    (goal == inode->u.ext2_i.i_prealloc_block ||
 	     goal + 1 == inode->u.ext2_i.i_prealloc_block))
 	{		
 		result = inode->u.ext2_i.i_prealloc_block++;
 		inode->u.ext2_i.i_prealloc_count--;
+		/* Writer: end */
+#ifdef EXT2FS_DEBUG
 		ext2_debug ("preallocation hit (%lu/%lu).\n",
 			    ++alloc_hits, ++alloc_attempts);
-
+#endif
 	} else {
 		ext2_discard_prealloc (inode);
+#ifdef EXT2FS_DEBUG
 		ext2_debug ("preallocation miss (%lu/%lu).\n",
 			    alloc_hits, ++alloc_attempts);
+#endif
 		if (S_ISREG(inode->i_mode))
 			result = ext2_new_block (inode, goal, 
 				 &inode->u.ext2_i.i_prealloc_count,
@@ -299,307 +298,309 @@ no_block:
 	return p;
 }
 
-static struct buffer_head * inode_getblk (struct inode * inode, int nr,
-	int new_block, int * err, int metadata, long *phys, int *new)
+/**
+ *	ext2_find_near - find a place for allocation with sufficient locality
+ *	@inode: owner
+ *	@ind: descriptor of indirect block.
+ *
+ *	This function returns the prefered place for block allocation.
+ *	It is used when heuristic for sequential allocation fails.
+ *	Rules are:
+ *	  + if there is a block to the left of our position - allocate near it.
+ *	  + if pointer will live in indirect block - allocate near that block.
+ *	  + if pointer will live in inode - allocate in the same cylinder group.
+ *	Caller must make sure that @ind is valid and will stay that way.
+ */
+
+static inline unsigned long ext2_find_near(struct inode *inode, Indirect *ind)
 {
-	u32 * p;
-	int tmp, goal = 0;
-	struct buffer_head * result;
+	u32 *start = ind->bh ? (u32*) ind->bh->b_data : inode->u.ext2_i.i_data;
+	u32 *p;
+
+	/* Try to find previous block */
+	for (p = ind->p - 1; p >= start; p--)
+		if (*p)
+			return le32_to_cpu(*p);
+
+	/* No such thing, so let's try location of indirect block */
+	if (ind->bh)
+		return ind->bh->b_blocknr;
+
+	/*
+	 * It is going to be refered from inode itself? OK, just put it into
+	 * the same cylinder group then.
+	 */
+	return (inode->u.ext2_i.i_block_group * 
+		EXT2_BLOCKS_PER_GROUP(inode->i_sb)) +
+	       le32_to_cpu(inode->i_sb->u.ext2_sb.s_es->s_first_data_block);
+}
+
+/**
+ *	ext2_find_goal - find a prefered place for allocation.
+ *	@inode: owner
+ *	@block:  block we want
+ *	@chain:  chain of indirect blocks
+ *	@partial: pointer to the last triple within a chain
+ *	@goal:	place to store the result.
+ *
+ *	Normally this function find the prefered place for block allocation,
+ *	stores it in *@goal and returns zero. If the branch had been changed
+ *	under us we return -EAGAIN.
+ */
+
+static inline int ext2_find_goal(struct inode *inode,
+				 long block,
+				 Indirect chain[4],
+				 Indirect *partial,
+				 unsigned long *goal)
+{
+	/* Writer: ->i_next_alloc* */
+	if (block == inode->u.ext2_i.i_next_alloc_block + 1) {
+		inode->u.ext2_i.i_next_alloc_block++;
+		inode->u.ext2_i.i_next_alloc_goal++;
+	} 
+	/* Writer: end */
+	/* Reader: pointers, ->i_next_alloc* */
+	if (verify_chain(chain, partial)) {
+		/*
+		 * try the heuristic for sequential allocation,
+		 * failing that at least try to get decent locality.
+		 */
+		if (block == inode->u.ext2_i.i_next_alloc_block)
+			*goal = inode->u.ext2_i.i_next_alloc_goal;
+		if (!*goal)
+			*goal = ext2_find_near(inode, partial);
+		return 0;
+	}
+	/* Reader: end */
+	return -EAGAIN;
+}
+
+/**
+ *	ext2_alloc_branch - allocate and set up a chain of blocks.
+ *	@inode: owner
+ *	@num: depth of the chain (number of blocks to allocate)
+ *	@offsets: offsets (in the blocks) to store the pointers to next.
+ *	@branch: place to store the chain in.
+ *
+ *	This function allocates @num blocks, zeroes out all but the last one,
+ *	links them into chain and (if we are synchronous) writes them to disk.
+ *	In other words, it prepares a branch that can be spliced onto the
+ *	inode. It stores the information about that chain in the branch[], in
+ *	the same format as ext2_get_branch() would do. We are calling it after
+ *	we had read the existing part of chain and partial points to the last
+ *	triple of that (one with zero ->key). Upon the exit we have the same
+ *	picture as after the successful ext2_get_block(), excpet that in one
+ *	place chain is disconnected - *branch->p is still zero (we did not
+ *	set the last link), but branch->key contains the number that should
+ *	be placed into *branch->p to fill that gap.
+ *
+ *	If allocation fails we free all blocks we've allocated (and forget
+ *	ther buffer_heads) and return the error value the from failed
+ *	ext2_alloc_block() (normally -ENOSPC). Otherwise we set the chain
+ *	as described above and return 0.
+ */
+
+static int ext2_alloc_branch(struct inode *inode,
+			     int num,
+			     unsigned long goal,
+			     int *offsets,
+			     Indirect *branch)
+{
 	int blocksize = inode->i_sb->s_blocksize;
+	int n = 0;
+	int err;
+	int i;
+	int parent = ext2_alloc_block(inode, goal, &err);
 
-	p = inode->u.ext2_i.i_data + nr;
-repeat:
-	tmp = le32_to_cpu(*p);
-	if (tmp) {
-		if (metadata) {
-			result = getblk (inode->i_dev, tmp, blocksize);
-			if (tmp == le32_to_cpu(*p))
-				return result;
-			brelse (result);
-			goto repeat;
-		} else {
-			*phys = tmp;
-			return NULL;
+	branch[0].key = cpu_to_le32(parent);
+	if (parent) for (n = 1; n < num; n++) {
+		struct buffer_head *bh;
+		/* Allocate the next block */
+		int nr = ext2_alloc_block(inode, parent, &err);
+		if (!nr)
+			break;
+		branch[n].key = cpu_to_le32(nr);
+		/*
+		 * Get buffer_head for parent block, zero it out and set 
+		 * the pointer to new one, then send parent to disk.
+		 */
+		bh = getblk(inode->i_dev, parent, blocksize);
+		if (!buffer_uptodate(bh))
+			wait_on_buffer(bh);
+		memset(bh->b_data, 0, blocksize);
+		branch[n].bh = bh;
+		branch[n].p = (u32*) bh->b_data + offsets[n];
+		*branch[n].p = branch[n].key;
+		mark_buffer_uptodate(bh, 1);
+		mark_buffer_dirty(bh, 1);
+		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
+			ll_rw_block (WRITE, 1, &bh);
+			wait_on_buffer (bh);
 		}
+		parent = nr;
 	}
+	if (n == num)
+		return 0;
 
-	if (inode->u.ext2_i.i_next_alloc_block == new_block)
-		goal = inode->u.ext2_i.i_next_alloc_goal;
+	/* Allocation failed, free what we already allocated */
+	for (i = 1; i < n; i++)
+		bforget(branch[i].bh);
+	for (i = 0; i < n; i++)
+		ext2_free_blocks(inode, le32_to_cpu(branch[i].key), 1);
+	return err;
+}
 
-	ext2_debug ("hint = %d,", goal);
+/**
+ *	ext2_splice_branch - splice the allocated branch onto inode.
+ *	@inode: owner
+ *	@block: (logical) number of block we are adding
+ *	@chain: chain of indirect blocks (with a missing link - see
+ *		ext2_alloc_branch)
+ *	@where: location of missing link
+ *	@num:   number of blocks we are adding
+ *
+ *	This function verifies that chain (up to the missing link) had not
+ *	changed, fills the missing link and does all housekeeping needed in
+ *	inode (->i_blocks, etc.). In case of success we end up with the full
+ *	chain to new block and return 0. Otherwise (== chain had been changed)
+ *	we free the new blocks (forgetting their buffer_heads, indeed) and
+ *	return -EAGAIN.
+ */
 
-	if (!goal) {
-		for (tmp = nr - 1; tmp >= 0; tmp--) {
-			if (inode->u.ext2_i.i_data[tmp]) {
-				goal = le32_to_cpu(inode->u.ext2_i.i_data[tmp]);
-				break;
-			}
-		}
-		if (!goal)
-			goal = (inode->u.ext2_i.i_block_group * 
-				EXT2_BLOCKS_PER_GROUP(inode->i_sb)) +
-			       le32_to_cpu(inode->i_sb->u.ext2_sb.s_es->s_first_data_block);
-	}
+static inline int ext2_splice_branch(struct inode *inode,
+				     long block,
+				     Indirect chain[4],
+				     Indirect *where,
+				     int num)
+{
+	int i;
 
-	ext2_debug ("goal = %d.\n", goal);
+	/* Verify that place we are splicing to is still there and vacant */
 
-	tmp = ext2_alloc_block (inode, goal, err);
-	if (!tmp)
-		return NULL;
+	/* Writer: pointers, ->i_next_alloc*, ->i_blocks */
+	if (!verify_chain(chain, where-1) || *where->p)
+		/* Writer: end */
+		goto changed;
 
-	if (metadata) {
-		result = getblk (inode->i_dev, tmp, blocksize);
-		if (!buffer_uptodate(result))
-			wait_on_buffer(result);
-		memset(result->b_data, 0, blocksize);
-		mark_buffer_uptodate(result, 1);
-		mark_buffer_dirty(result, 1);
-		if (*p) {
-			ext2_free_blocks (inode, tmp, 1);
-			bforget (result);
-			goto repeat;
-		}
-	} else {
-		if (*p) {
-			/*
-			 * Nobody is allowed to change block allocation
-			 * state from under us:
-			 */
-			ext2_error (inode->i_sb, "block_getblk",
-				    "data block filled under us");
-			BUG();
-			ext2_free_blocks (inode, tmp, 1);
-			goto repeat;
-		}
-		*phys = tmp;
-		result = NULL;
-		*err = 0;
-		*new = 1;
-	}
-	*p = cpu_to_le32(tmp);
+	/* That's it */
 
-	inode->u.ext2_i.i_next_alloc_block = new_block;
-	inode->u.ext2_i.i_next_alloc_goal = tmp;
+	*where->p = where->key;
+	inode->u.ext2_i.i_next_alloc_block = block;
+	inode->u.ext2_i.i_next_alloc_goal = le32_to_cpu(where[num-1].key);
+	inode->i_blocks += num * inode->i_sb->s_blocksize/512;
+
+	/* Writer: end */
+
+	/* We are done with atomic stuff, now do the rest of housekeeping */
+
 	inode->i_ctime = CURRENT_TIME;
-	inode->i_blocks += blocksize/512;
+
+	/* had we spliced it onto indirect block? */
+	if (where->bh) {
+		mark_buffer_dirty(where->bh, 1);
+		if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
+			ll_rw_block (WRITE, 1, &where->bh);
+			wait_on_buffer(where->bh);
+		}
+	}
+
 	if (IS_SYNC(inode) || inode->u.ext2_i.i_osync)
 		ext2_sync_inode (inode);
 	else
 		mark_inode_dirty(inode);
-	return result;
+	return 0;
+
+changed:
+	for (i = 1; i < num; i++)
+		bforget(where[i].bh);
+	for (i = 0; i < num; i++)
+		ext2_free_blocks(inode, le32_to_cpu(where[i].key), 1);
+	return -EAGAIN;
 }
 
 /*
- *   metadata / data
- *   possibly create / access
- *   can fail due to: - not present
- *                    - out of space
- *
- *   NULL return in the data case is mandatory.
+ * Allocation strategy is simple: if we have to allocate something, we will
+ * have to go the whole way to leaf. So let's do it before attaching anything
+ * to tree, set linkage between the newborn blocks, write them if sync is
+ * required, recheck the path, free and repeat if check fails, otherwise
+ * set the last missing link (that will protect us from any truncate-generated
+ * removals - all blocks on the path are immune now) and possibly force the
+ * write on the parent block.
+ * That has a nice additional property: no special recovery from the failed
+ * allocations is needed - we simply release blocks and do not touch anything
+ * reachable from inode.
  */
-static struct buffer_head * block_getblk (struct inode * inode,
-	  struct buffer_head * bh, int nr,
-	  int new_block, int * err, int metadata, long *phys, int *new)
-{
-	int tmp, goal = 0;
-	u32 * p;
-	struct buffer_head * result;
-	int blocksize = inode->i_sb->s_blocksize;
-
-	result = NULL;	
-	if (!bh)
-		goto out;
-	if (!buffer_uptodate(bh)) {
-		ll_rw_block (READ, 1, &bh);
-		wait_on_buffer (bh);
-		if (!buffer_uptodate(bh))
-			goto out;
-	}
-	p = (u32 *) bh->b_data + nr;
-repeat:
-	tmp = le32_to_cpu(*p);
-	if (tmp) {
-		if (metadata) {
-			result = getblk (bh->b_dev, tmp, blocksize);
-			if (tmp == le32_to_cpu(*p))
-				goto out;
-			brelse (result);
-			goto repeat;
-		} else {
-			*phys = tmp;
-			/* result == NULL */
-			goto out;
-		}
-	}
-
-	if (inode->u.ext2_i.i_next_alloc_block == new_block)
-		goal = inode->u.ext2_i.i_next_alloc_goal;
-	if (!goal) {
-		for (tmp = nr - 1; tmp >= 0; tmp--) {
-			if (le32_to_cpu(((u32 *) bh->b_data)[tmp])) {
-				goal = le32_to_cpu(((u32 *)bh->b_data)[tmp]);
-				break;
-			}
-		}
-		if (!goal)
-			goal = bh->b_blocknr;
-	}
-	tmp = ext2_alloc_block (inode, goal, err);
-	if (!tmp)
-		goto out;
-	if (metadata) {
-		result = getblk (bh->b_dev, tmp, blocksize);
-		if (!buffer_uptodate(result))
-			wait_on_buffer(result);
-		memset(result->b_data, 0, inode->i_sb->s_blocksize);
-		mark_buffer_uptodate(result, 1);
-		mark_buffer_dirty(result, 1);
-		if (*p) {
-			ext2_free_blocks (inode, tmp, 1);
-			bforget (result);
-			goto repeat;
-		}
-	} else {
-		if (*p) {
-			/*
-			 * Nobody is allowed to change block allocation
-			 * state from under us:
-			 */
-			ext2_error (inode->i_sb, "block_getblk",
-				    "data block filled under us");
-			BUG();
-			ext2_free_blocks (inode, tmp, 1);
-			goto repeat;
-		}
-		*phys = tmp;
-		*new = 1;
-	}
-	*p = le32_to_cpu(tmp);
-	mark_buffer_dirty(bh, 1);
-	if (IS_SYNC(inode) || inode->u.ext2_i.i_osync) {
-		ll_rw_block (WRITE, 1, &bh);
-		wait_on_buffer (bh);
-	}
-	inode->i_ctime = CURRENT_TIME;
-	inode->i_blocks += blocksize/512;
-	mark_inode_dirty(inode);
-	inode->u.ext2_i.i_next_alloc_block = new_block;
-	inode->u.ext2_i.i_next_alloc_goal = tmp;
-	*err = 0;
-out:
-	brelse (bh);
-	return result;
-}
 
 static int ext2_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
 {
-	int ret, err, new;
-	struct buffer_head *bh;
-	unsigned long phys;
+	int err = -EIO;
 	int offsets[4];
-	int *p;
 	Indirect chain[4];
 	Indirect *partial;
-	int depth;
+	unsigned long goal;
+	int left;
+	int depth = ext2_block_to_path(inode, iblock, offsets);
 
-	depth = ext2_block_to_path(inode, iblock, offsets);
 	if (depth == 0)
-		goto abort;
+		goto out;
 
 	lock_kernel();
+reread:
 	partial = ext2_get_branch(inode, depth, offsets, chain, &err);
 
+	/* Simplest case - block found, no allocation needed */
 	if (!partial) {
-		unlock_kernel();
-		for (partial = chain + depth - 1; partial > chain; partial--)
-			brelse(partial->bh);
+got_it:
 		bh_result->b_dev = inode->i_dev;
 		bh_result->b_blocknr = le32_to_cpu(chain[depth-1].key);
 		bh_result->b_state |= (1UL << BH_Mapped);
-		return 0;
+		/* Clean up and exit */
+		partial = chain+depth-1; /* the whole chain */
+		goto cleanup;
 	}
 
+	/* Next simple case - plain lookup or failed read of indirect block */
+	if (!create || err == -EIO) {
+cleanup:
+		while (partial > chain) {
+			brelse(partial->bh);
+			partial--;
+		}
+		unlock_kernel();
+out:
+		return err;
+	}
+
+	/*
+	 * Indirect block might be removed by truncate while we were
+	 * reading it. Handling of that case (forget what we've got and
+	 * reread) is taken out of the main path.
+	 */
+	if (err == -EAGAIN)
+		goto changed;
+
+	if (ext2_find_goal(inode, iblock, chain, partial, &goal) < 0)
+		goto changed;
+
+	left = (chain + depth) - partial;
+	err = ext2_alloc_branch(inode, left, goal,
+					offsets+(partial-chain), partial);
+	if (err)
+		goto cleanup;
+
+	if (ext2_splice_branch(inode, iblock, chain, partial, left) < 0)
+		goto changed;
+
+	bh_result->b_state |= (1UL << BH_New);
+	goto got_it;
+
+changed:
 	while (partial > chain) {
-		brelse(partial->bh);
+		bforget(partial->bh);
 		partial--;
 	}
-
-	if (!create) {
-		unlock_kernel();
-		return 0;
-	}
-
-	err = -EIO;
-	new = 0;
-	ret = 0;
-	bh = NULL;
-
-	/*
-	 * If this is a sequential block allocation, set the next_alloc_block
-	 * to this block now so that all the indblock and data block
-	 * allocations use the same goal zone
-	 */
-
-	ext2_debug ("block %lu, next %lu, goal %lu.\n", iblock, 
-		    inode->u.ext2_i.i_next_alloc_block,
-		    inode->u.ext2_i.i_next_alloc_goal);
-
-	if (iblock == inode->u.ext2_i.i_next_alloc_block + 1) {
-		inode->u.ext2_i.i_next_alloc_block++;
-		inode->u.ext2_i.i_next_alloc_goal++;
-	}
-
-	err = 0;
-
-	/*
-	 * ok, these macros clean the logic up a bit and make
-	 * it much more readable:
-	 */
-#define GET_INODE_DATABLOCK(x) \
-		inode_getblk(inode, x, iblock, &err, 0, &phys, &new)
-#define GET_INODE_PTR(x) \
-		inode_getblk(inode, x, iblock, &err, 1, NULL, NULL)
-#define GET_INDIRECT_DATABLOCK(x) \
-		block_getblk (inode, bh, x, iblock, &err, 0, &phys, &new);
-#define GET_INDIRECT_PTR(x) \
-		block_getblk (inode, bh, x, iblock, &err, 1, NULL, NULL);
-
-	p = offsets;
-	if (depth == 1) {
-		bh = GET_INODE_DATABLOCK(*p);
-		goto out;
-	}
-	bh = GET_INODE_PTR(*p);
-	switch (depth) {
-		default: /* case 4: */
-			bh = GET_INDIRECT_PTR(*++p);
-		case 3:
-			bh = GET_INDIRECT_PTR(*++p);
-		case 2:
-			bh = GET_INDIRECT_DATABLOCK(*++p);
-	}
-
-#undef GET_INODE_DATABLOCK
-#undef GET_INODE_PTR
-#undef GET_INDIRECT_DATABLOCK
-#undef GET_INDIRECT_PTR
-
-out:
-	if (bh)
-		BUG();	// temporary debugging check
-	if (err)
-		goto abort;
-	if (!phys)
-		BUG();	// must not happen either
-
-	bh_result->b_dev = inode->i_dev;
-	bh_result->b_blocknr = phys;
-	bh_result->b_state |= (1UL << BH_Mapped); /* safe */
-	if (new)
-		bh_result->b_state |= (1UL << BH_New);
-	unlock_kernel();
-abort:
-	return err;
+	goto reread;
 }
 
 struct buffer_head * ext2_getblk(struct inode * inode, long block, int create, int * err)
