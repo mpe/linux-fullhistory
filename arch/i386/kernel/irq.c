@@ -44,8 +44,8 @@ extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
 
 #define CR0_NE 32
 
-static unsigned char cache_21 = 0xff;
-static unsigned char cache_A1 = 0xff;
+/* This contains the irq mask for both irq controllers */
+static unsigned long cached_irq_mask = 0xffff;
 
 unsigned int local_irq_count[NR_CPUS];
 #ifdef __SMP__
@@ -58,32 +58,33 @@ int __intel_bh_counter;
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
 #endif
 
+static inline void ack_irq(int irq_nr)
+{
+	if (irq_nr & 8) {
+		outb(0x20,0xA0);
+	}
+	outb(0x20,0x20);
+}
+
+static inline void set_irq_mask(int irq_nr)
+{
+	if (irq_nr & 8) {
+		outb(cached_irq_mask>>8,0xA1);
+	} else {
+		outb(cached_irq_mask,0x21);
+	}
+}		
+
 static inline void mask_irq(unsigned int irq_nr)
 {
-	unsigned char mask;
-
-	mask = 1 << (irq_nr & 7);
-	if (irq_nr < 8) {
-		cache_21 |= mask;
-		outb(cache_21,0x21);
-	} else {
-		cache_A1 |= mask;
-		outb(cache_A1,0xA1);
-	}
+	set_bit(irq_nr, &cached_irq_mask);
+	set_irq_mask(irq_nr);
 }
 
 static inline void unmask_irq(unsigned int irq_nr)
 {
-	unsigned char mask;
-
-	mask = ~(1 << (irq_nr & 7));
-	if (irq_nr < 8) {
-		cache_21 &= mask;
-		outb(cache_21,0x21);
-	} else {
-		cache_A1 &= mask;
-		outb(cache_A1,0xA1);
-	}
+	clear_bit(irq_nr, &cached_irq_mask);
+	set_irq_mask(irq_nr);
 }
 
 void disable_irq(unsigned int irq_nr)
@@ -134,7 +135,8 @@ void enable_irq(unsigned int irq_nr)
 #error make irq stub building NR_IRQS dependent and remove me.
 #endif
 
-BUILD_TIMER_IRQ(FIRST,0,0x01)
+BUILD_COMMON_IRQ()
+BUILD_IRQ(FIRST,0,0x01)
 BUILD_IRQ(FIRST,1,0x02)
 BUILD_IRQ(FIRST,2,0x04)
 BUILD_IRQ(FIRST,3,0x08)
@@ -158,26 +160,11 @@ BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
 BUILD_SMP_TIMER_INTERRUPT(apic_timer_interrupt)
 #endif
 
-/*
- * Pointers to the low-level handlers: first the general ones, then the
- * fast ones, then the bad ones.
- */
 static void (*interrupt[17])(void) = {
 	IRQ0_interrupt, IRQ1_interrupt, IRQ2_interrupt, IRQ3_interrupt,
 	IRQ4_interrupt, IRQ5_interrupt, IRQ6_interrupt, IRQ7_interrupt,
 	IRQ8_interrupt, IRQ9_interrupt, IRQ10_interrupt, IRQ11_interrupt,
 	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt	
-};
-
-static void (*bad_interrupt[16])(void) = {
-	bad_IRQ0_interrupt, bad_IRQ1_interrupt,
-	bad_IRQ2_interrupt, bad_IRQ3_interrupt,
-	bad_IRQ4_interrupt, bad_IRQ5_interrupt,
-	bad_IRQ6_interrupt, bad_IRQ7_interrupt,
-	bad_IRQ8_interrupt, bad_IRQ9_interrupt,
-	bad_IRQ10_interrupt, bad_IRQ11_interrupt,
-	bad_IRQ12_interrupt, bad_IRQ13_interrupt,
-	bad_IRQ14_interrupt, bad_IRQ15_interrupt
 };
 
 /*
@@ -520,25 +507,34 @@ void __global_restore_flags(unsigned long flags)
  * SMP cross-CPU interrupts have their own specific
  * handlers).
  */
-asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
+asmlinkage void do_IRQ(struct pt_regs regs)
 {
+	int irq = regs.orig_eax & 0xff;
 	struct irqaction * action;
-	int do_random, cpu = smp_processor_id();
+	int status, cpu = smp_processor_id();
 
 	irq_enter(cpu, irq);
+	mask_irq(irq);
+	ack_irq(irq);
 	kstat.interrupts[irq]++;
 
+	/* Return with this interrupt masked if no action */
+	status = 0;
 	action = *(irq + irq_action);
-	do_random = 0;
-	while (action) {
-		do_random |= action->flags;
-		action->handler(irq, action->dev_id, regs);
-		action = action->next;
-	}
-	if (do_random & SA_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
-	irq_exit(cpu, irq);
+	if (action) {
+		do {
+			status |= action->flags;
+			action->handler(irq, action->dev_id, &regs);
+			action = action->next;
+		} while (action);
+		if (status & SA_SAMPLE_RANDOM)
+			add_interrupt_randomness(irq);
 
+		__cli();
+		unmask_irq(irq);
+	}
+
+	irq_exit(cpu, irq);
 	/*
 	 * This should be conditional: we should really get
 	 * a return code from the irq handler to tell us
@@ -635,10 +631,6 @@ void free_irq(unsigned int irq, void *dev_id)
 		save_flags(flags);
 		cli();
 		*p = action->next;
-		if (!irq[irq_action]) {
-			mask_irq(irq);
-			set_intr_gate(0x20+irq,bad_interrupt[irq]);
-		}
 		restore_flags(flags);
 		kfree(action);
 		return;
@@ -648,7 +640,7 @@ void free_irq(unsigned int irq, void *dev_id)
 
 unsigned long probe_irq_on (void)
 {
-	unsigned int i, irqs = 0, irqmask;
+	unsigned int i, irqs = 0;
 	unsigned long delay;
 
 	/* first, enable any unassigned irqs */
@@ -664,19 +656,17 @@ unsigned long probe_irq_on (void)
 		/* about 100ms delay */;
 
 	/* now filter out any obviously spurious interrupts */
-	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-	return irqs & ~irqmask;
+	return irqs & ~cached_irq_mask;
 }
 
 int probe_irq_off (unsigned long irqs)
 {
-	unsigned int i, irqmask;
+	unsigned int i;
 
-	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
 #ifdef DEBUG
-	printk("probe_irq_off: irqs=0x%04lx irqmask=0x%04x\n", irqs, irqmask);
+	printk("probe_irq_off: irqs=0x%04lx irqmask=0x%04x\n", irqs, cached_irq_mask);
 #endif
-	irqs &= irqmask;
+	irqs &= cached_irq_mask;
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);
@@ -699,7 +689,7 @@ __initfunc(void init_IRQ(void))
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 
 	for (i = 0; i < NR_IRQS ; i++)
-		set_intr_gate(0x20+i,bad_interrupt[i]);
+		set_intr_gate(0x20+i,interrupt[i]);
 
 #ifdef __SMP__	
 	/*

@@ -62,7 +62,7 @@ static inline void run_bottom_halves(void)
 
 asmlinkage void do_bottom_half(void)
 {
-	int cpu = hard_smp_processor_id();
+	int cpu = smp_processor_id();
 
 	if (hardirq_trylock(cpu)) {
 		if (softirq_trylock()) {

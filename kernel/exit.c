@@ -520,7 +520,7 @@ static void exit_notify(void)
 NORET_TYPE void do_exit(long code)
 {
 	if (in_interrupt()) {
-		local_irq_count[hard_smp_processor_id()] = 0;	/* Not really correct */
+		local_irq_count[smp_processor_id()] = 0;	/* Not really correct */
 		printk("Aiee, killing interrupt handler\n");
 	}
 fake_volatile:

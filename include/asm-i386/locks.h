@@ -12,7 +12,7 @@
 
 extern __inline__ void prim_spin_lock(struct spinlock *sp)
 {
-	int processor=hard_smp_processor_id();
+	int processor=smp_processor_id();
 	
 	/*
 	 *	Grab the lock bit

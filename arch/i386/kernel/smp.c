@@ -678,8 +678,6 @@ __initfunc(void initialize_secondary(void))
 {
 	struct thread_struct * p = &current->tss;
 
-printk("current = %p, real_esp = %p, real_eip = %p\n", current, p->esp, p->eip);
-printk("start_secondary = %p, cpu=%d\n", start_secondary, smp_processor_id());
 	/*
 	 * We don't actually need to load the full TSS,
 	 * just the stack pointer and the eip.

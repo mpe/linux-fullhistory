@@ -110,45 +110,24 @@ ENOSYS = 38
 	addl $4,%esp; \
 	iret
 
-#ifdef	__SMP__
-/* Get the processor ID multiplied by 4 */
-#if 0
-#define GET_PROCESSOR_OFFSET(reg) \
-	movl SYMBOL_NAME(apic_reg), reg; \
-	movl 32(reg), reg; \
-	shrl $22, reg; \
-	andl $0x3C, reg;
-
-#define GET_CURRENT(reg) \
-	GET_PROCESSOR_OFFSET(reg) \
-	movl SYMBOL_NAME(current_set)(reg),reg
-#endif
-
 #define GET_CURRENT(reg) \
 	movl %esp, reg; \
 	andl $-8192, reg;
-#else
-
-#define GET_CURRENT(reg) \
-	movl SYMBOL_NAME(current_set),reg
-
-#endif
 
 ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..
 	SAVE_ALL
-	GET_CURRENT(%ebx)
 	movl EIP(%esp),%eax	# due to call gates, this is eflags, not eip..
 	movl CS(%esp),%edx	# this is eip..
 	movl EFLAGS(%esp),%ecx	# and this is cs..
 	movl %eax,EFLAGS(%esp)	#
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
-	movl %esp,%eax
-	GET_CURRENT(%edx)
-	pushl %eax
-	movl exec_domain(%edx),%edx	# Get the execution domain
+	movl %esp,%ebx
+	pushl %ebx
+	andl $-8192,%ebx	# GET_CURRENT
+	movl exec_domain(%ebx),%edx	# Get the execution domain
 	movl 4(%edx),%edx	# Get the lcall7 handler for the domain
 	call *%edx
 	popl %eax
@@ -159,6 +138,7 @@ ENTRY(lcall7)
 	ALIGN
 	.globl	ret_from_smpfork
 ret_from_smpfork:
+	GET_CURRENT(%ebx)
 	btrl	$0, SYMBOL_NAME(scheduler_lock)
 	jmp	ret_from_sys_call
 #endif /* __SMP__ */
@@ -190,7 +170,6 @@ ret_from_sys_call:
 ret_with_reschedule:
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-	GET_CURRENT(%ebx)
 	movl blocked(%ebx),%eax
 	movl %eax,%esi			# save blocked in %esi for signal handling
 	notl %eax
@@ -235,6 +214,7 @@ ret_from_exception:
 	jne handle_bottom_half
 	ALIGN
 ret_from_intr:
+	GET_CURRENT(%ebx)
 	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
 	movb CS(%esp),%al
 	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?

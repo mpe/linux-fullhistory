@@ -23,10 +23,7 @@ static inline void irq_enter(int cpu, int irq)
 	hardirq_enter(cpu);
 	while (test_bit(0,&global_irq_lock)) {
 		if ((unsigned char) cpu == global_irq_holder) {
-			static int printed = 0;
-			if (!printed)
-				printk("BAD! Local interrupts enabled, global disabled\n");
-			printed++;
+			printk("BAD! Local interrupts enabled, global disabled\n");
 			break;
 		}
 		STUCK;
@@ -36,7 +33,6 @@ static inline void irq_enter(int cpu, int irq)
 
 static inline void irq_exit(int cpu, int irq)
 {
-	__cli();
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }
@@ -89,54 +85,6 @@ static inline void irq_exit(int cpu, int irq)
 	"pop %es\n\t" \
 	"iret"
 
-/*
- * The "inb" instructions are not needed, but seem to change the timings
- * a bit - without them it seems that the harddisk driver won't work on
- * all hardware. Arghh.
- */
-#define ACK_FIRST(mask,nr) \
-	"inb $0x21,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\torb $" #mask ","SYMBOL_NAME_STR(cache_21)"\n\t" \
-	"movb "SYMBOL_NAME_STR(cache_21)",%al\n\t" \
-	"outb %al,$0x21\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tmovb $0x20,%al\n\t" \
-	"outb %al,$0x20\n\t"
-
-#define ACK_SECOND(mask,nr) \
-	"inb $0xA1,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\torb $" #mask ","SYMBOL_NAME_STR(cache_A1)"\n\t" \
-	"movb "SYMBOL_NAME_STR(cache_A1)",%al\n\t" \
-	"outb %al,$0xA1\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tmovb $0x20,%al\n\t" \
-	"outb %al,$0xA0\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\toutb %al,$0x20\n\t"
-
-#define UNBLK_FIRST(mask) \
-	"inb $0x21,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tandb $~(" #mask "),"SYMBOL_NAME_STR(cache_21)"\n\t" \
-	"movb "SYMBOL_NAME_STR(cache_21)",%al\n\t" \
-	"outb %al,$0x21\n\t"
-
-#define UNBLK_SECOND(mask) \
-	"inb $0xA1,%al\n\t" \
-	"jmp 1f\n" \
-	"1:\tjmp 1f\n" \
-	"1:\tandb $~(" #mask "),"SYMBOL_NAME_STR(cache_A1)"\n\t" \
-	"movb "SYMBOL_NAME_STR(cache_A1)",%al\n\t" \
-	"outb %al,$0xA1\n\t"
-
 #define IRQ_NAME2(nr) nr##_interrupt(void)
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
@@ -176,45 +124,21 @@ SYMBOL_NAME_STR(x) ":\n\t" \
 
 #endif /* __SMP__ */
 
+#define BUILD_COMMON_IRQ() \
+__asm__( \
+	"\n" __ALIGN_STR"\n" \
+	"common_interrupt:\n\t" \
+	SAVE_ALL \
+	"pushl $ret_from_intr\n\t" \
+	"jmp "SYMBOL_NAME_STR(do_IRQ));
+
 #define BUILD_IRQ(chip,nr,mask) \
 asmlinkage void IRQ_NAME(nr); \
-asmlinkage void BAD_IRQ_NAME(nr); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
-	"pushl $-"#nr"-2\n\t" \
-	SAVE_ALL \
-	ACK_##chip(mask,(nr&7)) \
-	"movl %esp,%eax\n\t" \
-	"pushl %eax\n\t" \
-	"pushl $" #nr "\n\t" \
-	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
-	"addl $8,%esp\n\t" \
-	UNBLK_##chip(mask) \
-	"jmp ret_from_intr\n" \
-"\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
-	SAVE_MOST \
-	ACK_##chip(mask,(nr&7)) \
-	RESTORE_MOST);
-
-#define BUILD_TIMER_IRQ(chip,nr,mask) \
-asmlinkage void IRQ_NAME(nr); \
-asmlinkage void BAD_IRQ_NAME(nr); \
-__asm__( \
-"\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
-SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
-	"pushl $-"#nr"-2\n\t" \
-	SAVE_ALL \
-	ACK_##chip(mask,(nr&7)) \
-	"movl %esp,%eax\n\t" \
-	"pushl %eax\n\t" \
-	"pushl $" #nr "\n\t" \
-	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
-	"addl $8,%esp\n\t" \
-	UNBLK_##chip(mask) \
-	"jmp ret_from_intr\n");
+	"pushl $"#nr"-256\n\t" \
+	"jmp common_interrupt");
 
 /*
  * x86 profiling function, SMP safe. We might want to do this in

@@ -61,6 +61,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DIGIEPCA),y)
+L_OBJS += epca.o
+else
+  ifeq ($(CONFIG_DIGIEPCA),m)
+  M_OBJS += epca.o
+  endif
+endif
+
 ifeq ($(CONFIG_CYCLADES),y)
 L_OBJS += cyclades.o
 else

@@ -26,6 +26,8 @@ devices.txt
 	- plain ASCII listing of all the nodes in /dev/ with major minor #'s
 digiboard.txt
 	- info on the Digiboard PC/X{i,e,eve} multiport boards.
+digiepca.txt
+	- info on Digi Intl. {PC,PCI,EISA}Xx and Xem series cards.
 exception.txt
 	- how linux v2.1 handles exceptions without verify_area etc.
 ez.txt

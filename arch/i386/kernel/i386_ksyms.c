@@ -36,8 +36,6 @@ EXPORT_SYMBOL(__intel_bh_counter);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
 
-EXPORT_SYMBOL(synchronize_irq);
-
 #ifdef __SMP__
 EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */
 EXPORT_SYMBOL(cpu_data);
@@ -47,6 +45,7 @@ EXPORT_SYMBOL(smp_invalidate_needed);
 EXPORT_SYMBOL_NOVERS(__lock_kernel);
 
 /* Global SMP irq stuff */
+EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);

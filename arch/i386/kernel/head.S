@@ -40,19 +40,20 @@ startup_32:
 /*
  *	New page tables may be in 4Mbyte page mode and may
  *	be using the global pages. 
+ *
+ *	NOTE! We have to correct for the fact that we're
+ *	not yet offset 0xC0000000..
  */
-#define mmu_cr4_features $128+16
+#define cr4_bits mmu_cr4_features-0xC0000000
 #ifdef GAS_KNOWS_CR4
 	movl %cr4,%eax		# Turn on 4Mb pages
-	orl mmu_cr4_features,%eax
+	orl cr4_bits,%eax
 	movl %eax,%cr4
 #else
 	.byte 0x0f,0x20,0xe0
-	orl mmu_cr4_features,%eax
+	orl cr4_bits,%eax
 	.byte 0x0f,0x22,0xe0
 #endif
-	movl %eax,%cr3		/* flush TLB as per app note */
-	movl %cr0,%eax
 #endif
 /*
  * Setup paging (the tables are already set up, just switch them on)

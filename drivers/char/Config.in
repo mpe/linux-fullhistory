@@ -19,7 +19,10 @@ if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
-   tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
+   tristate 'Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
+   if [ "$CONFIG_DIGIEPCA" = "n" ]; then
+      tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
+   fi
    tristate 'Cyclades async mux support' CONFIG_CYCLADES
    bool 'Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then

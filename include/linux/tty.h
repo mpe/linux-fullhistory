@@ -288,6 +288,7 @@ extern int lp_init(void);
 extern int pty_init(void);
 extern int tty_init(void);
 extern int pcxe_init(void);
+extern int pc_init(void);
 extern int vcs_init(void);
 extern int cy_init(void);
 extern int stl_init(void);
@@ -330,10 +331,14 @@ extern int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 /* serial.c */
 
 extern long serial_console_init(long kmem_start, long kmem_end);
-
+ 
 /* pcxx.c */
 
 extern int pcxe_open(struct tty_struct *tty, struct file *filp);
+
+/* epca.c */
+
+extern int pc_open(struct tty_struct *tty, struct file *filp);
 
 /* console.c */
 

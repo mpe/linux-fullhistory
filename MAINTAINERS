@@ -342,6 +342,13 @@ M:	clameter@fuller.edu
 L:	digiboard@list.fuller.edu
 S:	Maintained
 
+DIGI INTL. EPCA DRIVER:
+P:      Daniel Taylor
+M:      support@dgii.com
+M:      digilnux@dgii.com
+L:      digiboard@list.fuller.edu
+S:      Maintained
+
 RISCOM8 DRIVER:
 P:	Dmitry Gorodchanin
 M:	begemot@bgm.rosprint.net

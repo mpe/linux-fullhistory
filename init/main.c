@@ -175,6 +175,9 @@ extern void teles_setup(char *str, int *ints);
 #ifdef CONFIG_ISDN_DRV_HISAX
 extern void HiSax_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_DIGIEPCA
+extern void epca_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_ISDN_DRV_PCBIT
 extern void pcbit_setup(char *str, int *ints);
 #endif
@@ -480,6 +483,9 @@ struct {
 #endif
 #ifdef CONFIG_DIGI
 	{ "digi=", pcxx_setup },
+#endif
+#ifdef CONFIG_DIGIEPCA
+	{ "digiepca=", epca_setup },
 #endif
 #ifdef CONFIG_RISCOM8
 	{ "riscom8=", riscom8_setup },

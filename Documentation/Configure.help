@@ -4036,6 +4036,16 @@ CONFIG_SERIAL_CONSOLE
   N here so that they can use the serial port for modem, mouse or some
   other device.
 
+Digi Intl. epca support
+CONFIG_DIGIEPCA
+  This is a driver for Digi Internationals Xx, Xeve, and Xem 
+  series of cards.  This driver supports the original PC (ISA) boards as
+  well as PCI, and EISA.  If you have a card like this, say Y here and read
+  the file Documentation/digiepca.txt.  NOTE: This driver is seperate from
+  the driver written and copyrighted by Troy De Jongh.  Because they both
+  attempt (In some cases) to access the same hardware only one of these
+  drivers (CONFIG_DIGIEPCA or CONFIG_DIGI) should be selected.
+
 Digiboard PC/Xx Support
 CONFIG_DIGI
   This is a driver for the Digiboard PC/Xe, PC/Xi, and PC/Xeve cards
@@ -5317,7 +5327,7 @@ CONFIG_MSDOS_PARTITION
 # LocalWords:  mgetty sendfax gert greenie muc lowlevel Lasermate LanManager io
 # LocalWords:  OOPSes trackball binghamton mobileip ncr IOMAPPED settags ns ser
 # LocalWords:  setsync NEGO MPARITY autotuning prefetch PIIX cdwrite utils rc
-# LocalWords:  PCWATCHDOG berkprod bitgate boldt ucsb jf kyoto jp euc Tetsuyasu
+# LocalWords:  PCWATCHDOG berkprod bitgate boldt ucsb jf kyoto jp euc Tetsuyasu 
 # LocalWords:  YAMADA tetsu cauchy nslab ntt nevod perm su doc kaf kheops wsc
 # LocalWords:  traduc Bourgin dbourgin helptext menuconfig kfill READMEs HOWTOs
 # LocalWords:  IDEDISK IDEFLOPPY EIDE firewalls QMAGIC ZMAGIC LocalWords opti
