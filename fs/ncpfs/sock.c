@@ -93,13 +93,8 @@ ncp_wdog_data_ready(struct sock *sk, int len)
 		    /* How to check connection number here? */
 		    )
 		{
-			/* Error, throw away the complete packet */
-			_recvfrom(sock, (void *)packet_buf, 2, 1, 0,
-				  &sender, &addr_len);
-
 			printk("ncpfs: got strange packet on watchdog "
 			       "socket\n");
-			
 		}
 		else
 		{
@@ -123,7 +118,6 @@ ncp_wdog_data_ready(struct sock *sk, int len)
 	}
 }
 
-
 int
 ncp_catch_watchdog(struct ncp_server *server)
 {
@@ -146,7 +140,7 @@ ncp_catch_watchdog(struct ncp_server *server)
 
         if (sock->type != SOCK_DGRAM)
 	{
-                printk("ncp_catch_watchdog: did not get SOCK_STREAM\n");
+                printk("ncp_catch_watchdog: did not get SOCK_DGRAM\n");
                 server->data_ready = NULL;
                 return -EINVAL;
         }
@@ -160,7 +154,7 @@ ncp_catch_watchdog(struct ncp_server *server)
                 return -EINVAL;
         }
 
-        DDPRINTK("ncp_catch_watchdog.: sk->d_r = %x, server->d_r = %x\n",
+        DDPRINTK("ncp_catch_watchdog: sk->d_r = %x, server->d_r = %x\n",
                  (unsigned int)(sk->data_ready),
                  (unsigned int)(server->data_ready));
 
@@ -198,11 +192,11 @@ ncp_dont_catch_watchdog(struct ncp_server *server)
 
         if (sock->type != SOCK_DGRAM)
 	{
-                printk("ncp_dont_catch_watchdog: did not get SOCK_STREAM\n");
+                printk("ncp_dont_catch_watchdog: did not get SOCK_DGRAM\n");
                 return -EINVAL;
         }
 
-        sk   = (struct sock *)(sock->data);
+        sk = (struct sock *)(sock->data);
 
         if (sk == NULL)
 	{
@@ -234,8 +228,88 @@ ncp_dont_catch_watchdog(struct ncp_server *server)
         return 0;
 }
 
+static void
+ncp_msg_data_ready(struct sock *sk, int len)
+{
+	struct socket *sock = sk->socket;
 
+	if (!sk->dead)
+	{
+		unsigned char packet_buf[2];
+		struct sockaddr_ipx sender;
+		int addr_len = sizeof(struct sockaddr_ipx);
+		int result;
+		unsigned short fs;
 
+		fs = get_fs();
+		set_fs(get_ds());
+
+		result = _recvfrom(sock, (void *)packet_buf, 2, 1, 0,
+				   &sender, &addr_len);
+
+		DPRINTK("ncpfs: got message of size %d from:\n", result);
+		DPRINTK("ncpfs: %08lX:%02X%02X%02X%02X%02X%02X:%04X,"
+			" conn:%02X,type:%c\n",
+			htonl(sender.sipx_network),
+			sender.sipx_node[0], sender.sipx_node[1],
+			sender.sipx_node[2], sender.sipx_node[3],
+			sender.sipx_node[4], sender.sipx_node[5],
+			ntohs(sender.sipx_port),
+			packet_buf[0], packet_buf[1]);
+
+		ncp_trigger_message(sk->ipx_ncp_server);
+
+		set_fs(fs);
+	}
+}
+
+int
+ncp_catch_message(struct ncp_server *server)
+{
+        struct file   *file;
+        struct inode  *inode;
+        struct socket *sock;
+        struct sock   *sk;
+
+        if (   (server == NULL)
+            || ((file  = server->msg_filp) == NULL)
+            || ((inode = file->f_inode) == NULL)
+            || (!S_ISSOCK(inode->i_mode)))
+	{
+                printk("ncp_catch_message: did not get valid server!\n");
+                return -EINVAL;
+        }
+
+        sock = &(inode->u.socket_i);
+
+        if (sock->type != SOCK_DGRAM)
+	{
+                printk("ncp_catch_message: did not get SOCK_DGRAM\n");
+                return -EINVAL;
+        }
+
+        sk = (struct sock *)(sock->data);
+
+        if (sk == NULL)
+	{
+                printk("ncp_catch_message: sk == NULL");
+                return -EINVAL;
+        }
+
+        DDPRINTK("ncp_catch_message: sk->d_r = %x\n",
+                 (unsigned int)(sk->data_ready));
+
+        if (sk->data_ready == ncp_msg_data_ready)
+	{
+                printk("ncp_catch_message: already done\n");
+                return -EINVAL;
+        }
+
+        sk->data_ready = ncp_msg_data_ready;
+	sk->ipx_ncp_server = server;
+        return 0;
+}
+                
 #define NCP_SLACK_SPACE 1024
 
 #define _S(nr) (1<<((nr)-1))
@@ -474,13 +548,30 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 static int
 ncp_do_request(struct ncp_server *server, int size)
 {
+	int result;
+
 	if (server->lock == 0)
 	{
 		printk("ncpfs: Server not locked!\n");
 		return -EIO;
 	}
 
-	return do_ncp_rpc_call(server, size);
+	if (!ncp_conn_valid(server))
+	{
+		return -EIO;
+	}
+
+	result = do_ncp_rpc_call(server, size);
+
+	DDPRINTK("do_ncp_rpc_call returned %d\n", result);
+
+	if (result < 0)
+	{
+		/* There was a problem with I/O, so the connections is
+                 * no longer usable. */
+		ncp_invalidate_conn(server);
+	}
+	return result;
 }
 
 /* ncp_do_request assures that at least a complete reply header is

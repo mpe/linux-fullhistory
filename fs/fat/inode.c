@@ -68,13 +68,14 @@ void fat_put_super(struct super_block *sb)
 
 static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
     gid_t *gid,int *umask,int *debug,int *fat,int *quiet,
-	int *blksize, char *dotsOK, char *sys_immutable)
+	int *blksize, char *dotsOK, char *sys_immutable, char *showexec)
 {
 	char *this_char,*value;
 
 	*check = 'n';
 	*conversion = 'b';
 	*dotsOK = 0;
+	*showexec = 0;
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->fs->umask;
@@ -104,6 +105,9 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 		}
 		else if (!strcmp(this_char,"nodots")) {
 		  *dotsOK = 0;
+		}
+		else if (!strcmp(this_char,"showexec")) {
+		  *showexec = 1;
 		}
 		else if (!strcmp(this_char,"dotsOK") && value) {
 			if (!strcmp(value,"yes")) *dotsOK = 1;
@@ -173,7 +177,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	struct msdos_boot_sector *b;
 	int data_sectors,logical_sector_size,sector_mult,fat_clusters=0;
 	int debug,error,fat,quiet;
-	char check,conversion,dotsOK,sys_immutable;
+	char check,conversion,dotsOK,sys_immutable,showexec;
 	uid_t uid;
 	gid_t gid;
 	int umask;
@@ -187,7 +191,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 		}
 	}
 	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask,
-	    &debug,&fat,&quiet,&blksize,&dotsOK,&sys_immutable)
+	    &debug,&fat,&quiet,&blksize,&dotsOK,&sys_immutable,&showexec)
 		|| (blksize != 512 && blksize != 1024)) {
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
@@ -299,6 +303,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	MSDOS_SB(sb)->fs_umask = umask;
 	MSDOS_SB(sb)->quiet = quiet;
 	MSDOS_SB(sb)->dotsOK = dotsOK;
+	MSDOS_SB(sb)->showexec = showexec;
 	MSDOS_SB(sb)->sys_immutable = sys_immutable;
 	MSDOS_SB(sb)->vfat = 0;   /* vfat_read_super sets this */
 	MSDOS_SB(sb)->umsdos = 0; /* umsdos_read_super will set this */
@@ -433,7 +438,8 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 			}
 	} else { /* not a directory */
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,
-		    ((IS_NOEXEC(inode) || !is_exec(raw_entry->ext))
+		    ((IS_NOEXEC(inode) || (MSDOS_SB(inode->i_sb)->showexec &&
+						!is_exec(raw_entry->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFREG;
 		inode->i_op = (sb->s_blocksize == 1024)

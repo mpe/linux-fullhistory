@@ -62,6 +62,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/if_arp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/route.h>
@@ -557,9 +558,10 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 	{
 		/*
 		 *	Don't try to add a gateway we can't reach.. 
+		 *	Tunnel devices are exempt from this rule.
 		 */
 		 
-		if (dev != get_gw_dev(gw))
+		if ((dev != get_gw_dev(gw)) && dev->type!=ARPHRD_TUNNEL)
 			return;
 			
 		flags |= RTF_GATEWAY;

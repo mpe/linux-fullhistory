@@ -192,12 +192,12 @@ void nr_write_internal(struct sock *sk, int frametype)
 			*dptr++  = 0;
 			*dptr++  = frametype;
 			*dptr++  = sk->window;
-			memcpy(dptr, &sk->nr->user_addr, sizeof(ax25_address));
+			memcpy(dptr, &sk->nr->user_addr, AX25_ADDR_LEN);
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSSID_SPARE;
 			dptr    += AX25_ADDR_LEN;
-			memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
+			memcpy(dptr, &sk->nr->source_addr, AX25_ADDR_LEN);
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSSID_SPARE;

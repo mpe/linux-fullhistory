@@ -93,6 +93,10 @@ ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
 		DPRINTK("ncp_file_read: inode = NULL\n");
 		return -EINVAL;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+	{
+		return -EIO;
+	}
 
 	if (!S_ISREG(inode->i_mode))
 	{
@@ -171,6 +175,10 @@ ncp_file_write(struct inode *inode, struct file *file, const char *buf,
 	{
 		DPRINTK("ncp_file_write: inode = NULL\n");
 		return -EINVAL;
+	}
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+	{
+		return -EIO;
 	}
 
 	if (!S_ISREG(inode->i_mode))

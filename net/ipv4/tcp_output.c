@@ -670,9 +670,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	if (buff == NULL) 
 	{
 		sk->err = ENOMEM;
-		newsk->dead = 1;
-		newsk->state = TCP_CLOSE;
-		/* And this will destroy it */
+		destroy_sock(newsk);
 		kfree_skb(skb, FREE_READ);
 		tcp_statistics.TcpAttemptFails++;
 		return;
@@ -697,8 +695,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 		sk->err = tmp;
 		buff->free = 1;
 		kfree_skb(buff,FREE_WRITE);
-		newsk->dead = 1;
-		newsk->state = TCP_CLOSE;
+		destroy_sock(newsk);
 		skb->sk = sk;
 		kfree_skb(skb, FREE_READ);
 		tcp_statistics.TcpAttemptFails++;

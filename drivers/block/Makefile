@@ -36,6 +36,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_DEV_LOOP),y)
+L_OBJS += loop.o
+else
+  ifeq ($(CONFIG_BLK_DEV_LOOP),m)
+  M_OBJS += loop.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_HD),y)
 L_OBJS += hd.o
 endif

@@ -151,7 +151,7 @@ void clear_inode(struct inode * inode)
 {
 	struct wait_queue * wait;
 
-	invalidate_inode_pages(inode, 0);
+	truncate_inode_pages(inode, 0);
 	wait_on_inode(inode);
 	if (IS_WRITABLE(inode)) {
 		if (inode->i_sb && inode->i_sb->dq_op)

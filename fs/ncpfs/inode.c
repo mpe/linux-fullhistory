@@ -6,6 +6,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -20,6 +21,9 @@
 #include <linux/locks.h>
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 #include "ncplib_kernel.h"
 
 extern int close_fp(struct file *filp);
@@ -182,6 +186,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
         struct ncp_server *server;
 	struct file *ncp_filp;
 	struct file *wdog_filp;
+	struct file *msg_filp;
 	kdev_t dev = sb->s_dev;
 	int error;
 
@@ -197,6 +202,8 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		printk("ncp warning: mount version %s than kernel\n",
 		       (data->version < NCP_MOUNT_VERSION) ?
                        "older" : "newer");
+		sb->s_dev = 0;
+		return NULL;
 	}
 
 	if (   (data->ncp_fd >= NR_OPEN)
@@ -217,6 +224,15 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		return NULL;
 	}
 
+	if (   (data->message_fd >= NR_OPEN)
+	    || ((msg_filp = current->files->fd[data->message_fd]) == NULL)
+	    || (!S_ISSOCK(msg_filp->f_inode->i_mode)))
+	{
+		printk("ncp_read_super: invalid wdog socket\n");
+		sb->s_dev = 0;
+		return NULL;
+	}
+
         /* We must malloc our own super-block info */
         server = (struct ncp_server *)ncp_kmalloc(sizeof(struct ncp_server),
                                                    GFP_KERNEL);
@@ -229,6 +245,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	ncp_filp->f_count += 1;
 	wdog_filp->f_count += 1;
+	msg_filp->f_count += 1;
 
 	lock_super(sb);
 
@@ -242,16 +259,21 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	server->ncp_filp    = ncp_filp;
 	server->wdog_filp   = wdog_filp;
+	server->msg_filp    = msg_filp;
 	server->lock        = 0;
 	server->wait        = NULL;
         server->packet      = NULL;
 	server->buffer_size = 0;
+	server->conn_status = 0;
 
         server->m = *data;
 	server->m.file_mode = (server->m.file_mode &
 			       (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFREG;
 	server->m.dir_mode  = (server->m.dir_mode &
 			       (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFDIR;
+
+	/* protect against invalid mount points */
+	server->m.mount_point[sizeof(server->m.mount_point)-1] = '\0';
 
 	server->packet_size = NCP_PACKET_SIZE;
 	server->packet      = ncp_kmalloc(NCP_PACKET_SIZE, GFP_KERNEL);
@@ -273,6 +295,15 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (ncp_catch_watchdog(server) != 0)
 	{
 		printk("ncp_read_super: Could not catch watchdog\n");
+		error = -EINVAL;
+		unlock_super(sb);
+		goto fail;
+	}
+
+	if (ncp_catch_message(server) != 0)
+	{
+		printk("ncp_read_super: Could not catch messages\n");
+		ncp_dont_catch_watchdog(server);
 		error = -EINVAL;
 		unlock_super(sb);
 		goto fail;
@@ -324,6 +355,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
  fail:
 	ncp_filp->f_count -= 1;
 	wdog_filp->f_count -= 1;
+	msg_filp->f_count -= 1;
         ncp_kfree_s(NCP_SBP(sb), sizeof(struct ncp_server));
         return NULL;
 }
@@ -343,6 +375,7 @@ ncp_put_super(struct super_block *sb)
 
 	ncp_dont_catch_watchdog(server);
 	close_fp(server->wdog_filp);
+	close_fp(server->msg_filp);
 
         ncp_free_all_inodes(server);
 
@@ -355,6 +388,32 @@ ncp_put_super(struct super_block *sb)
 	unlock_super(sb);
 
         MOD_DEC_USE_COUNT;
+}
+
+/* This routine is called from an interrupt in ncp_msg_data_ready. So
+ * we have to be careful NOT to sleep here! */
+void
+ncp_trigger_message(struct ncp_server *server)
+{
+	char command[ sizeof(server->m.mount_point)
+		     + sizeof(NCP_MSG_COMMAND) + 2];
+
+	if (server == NULL)
+	{
+		printk("ncp_trigger_message: invalid server!\n");
+		return;
+	}
+
+	DPRINTK("ncp_trigger_message: on %s\n",
+		server->m.mount_point);
+
+#ifdef CONFIG_KERNELD
+	strcpy(command, NCP_MSG_COMMAND);
+	strcat(command, " ");
+	strcat(command, server->m.mount_point);
+	DPRINTK("ksystem: %s\n", command);
+	ksystem(command, KERNELD_NOWAIT);
+#endif
 }
 
 static void 
@@ -385,6 +444,11 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 	int result = 0;
 	int info_mask;
 	struct nw_modify_dos_info info;
+
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+	{
+		return -EIO;
+	}
 
 	if ((result = inode_change_ok(inode, attr)) < 0)
 		return result;
@@ -493,6 +557,7 @@ int init_ncp_fs(void)
 }
 
 #ifdef MODULE
+int
 init_module( void)
 {
 	int status;

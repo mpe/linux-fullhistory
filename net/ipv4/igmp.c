@@ -53,6 +53,9 @@
  *					message (960131).
  *		Christian Daudt :	removed del_timer from 
  *					igmp_timer_expire function (960205).
+ *             Christian Daudt :       igmp_heard_report now only calls
+ *                                     igmp_timer_expire if tm->running is
+ *                                     true (960216).
  */
 
 
@@ -288,7 +291,7 @@ static void igmp_heard_report(struct device *dev, unsigned long address)
 	if ((address & IGMP_LOCAL_GROUP_MASK) != IGMP_LOCAL_GROUP) {
 	  /* Timers are only set for non-local groups */
 	  for(im=dev->ip_mc_list;im!=NULL;im=im->next) {
-	    if(im->multiaddr==address) {
+	    if(im->multiaddr==address && im->tm_running) {
 	      igmp_stop_timer(im);
 	    }
 	  }

@@ -571,8 +571,8 @@ static ax25_cb *ax25_create_cb(void)
 
 	ax25->state    = AX25_STATE_0;
 
-	memset(&ax25->dest_addr,   '\0', sizeof(ax25_address));
-	memset(&ax25->source_addr, '\0', sizeof(ax25_address));
+	memset(&ax25->dest_addr,   '\0', AX25_ADDR_LEN);
+	memset(&ax25->source_addr, '\0', AX25_ADDR_LEN);
 
 	return ax25;
 }
@@ -583,18 +583,17 @@ static ax25_cb *ax25_create_cb(void)
  *
  *	dl1bke 951121
  */
- 
 int ax25_dev_is_dama_slave(struct device *dev)
 {
-	ax25_cb * ax25;
+	ax25_cb *ax25;
 	int count = 0;
 	
-	for (ax25=ax25_list; ax25 ; ax25 = ax25->next)
-		if ( (ax25->device == dev) && ax25->dama_slave )
-		{
+	for (ax25 = ax25_list; ax25 != NULL; ax25 = ax25->next) {
+		if (ax25->device == dev && ax25->dama_slave) {
 			count++;
 			break;
 		}
+	}
 		
 	return count;
 }
@@ -652,15 +651,15 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 
 	ax25_fillin_cb(ax25, dev);
 
-	memcpy(&ax25->source_addr, src,  sizeof(ax25_address));
-	memcpy(&ax25->dest_addr,   dest, sizeof(ax25_address));
+	ax25->source_addr = *src;
+	ax25->dest_addr   = *dest;
 
 	if (digi != NULL) {
 		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
 			kfree_s(ax25, sizeof(ax25));
 			return 0;
 		}
-		memcpy(ax25->digipeat, digi, sizeof(ax25_digi));
+		*ax25->digipeat = *digi;
 	} else {
 		ax25_rt_build_path(ax25, dest);
 	}
@@ -668,7 +667,7 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 	if (ax25_dev_is_dama_slave(ax25->device))	/* dl1bke 960116 */
 		dama_establish_data_link(ax25);
 	else
-	ax25_establish_data_link(ax25);
+		ax25_establish_data_link(ax25);
 		
 	ax25_insert_socket(ax25);
 
@@ -995,8 +994,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	sk->type   = osk->type;
 	sk->socket = osk->socket;
 
-	switch(osk->type)
-	{
+	switch (osk->type) {
 		case SOCK_DGRAM:
 			break;
 		case SOCK_SEQPACKET:
@@ -1051,7 +1049,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 
 	ax25->window  = osk->ax25->window;
 
-	memcpy(&ax25->source_addr, &osk->ax25->source_addr, sizeof(ax25_address));
+	ax25->source_addr = osk->ax25->source_addr;
 	
 	if (osk->ax25->digipeat != NULL) {
 		if ((ax25->digipeat = (ax25_digi *)kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
@@ -1061,7 +1059,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 		}
 		
 		/* dl1bke 960119: we have to copy the old digipeater list! */
-		memcpy(ax25->digipeat, osk->ax25->digipeat, sizeof(ax25_digi));
+		*ax25->digipeat = *osk->ax25->digipeat;
 	}
 
 	sk->ax25 = ax25;
@@ -1105,7 +1103,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				if (sk->ax25->dama_slave)
 					ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
 				else
-				ax25_send_control(sk->ax25, DM, POLLON, C_RESPONSE);
+					ax25_send_control(sk->ax25, DM, POLLON, C_RESPONSE);
 				sk->ax25->state = AX25_STATE_0;
 				sk->state       = TCP_CLOSE;
 				sk->state_change(sk);
@@ -1118,7 +1116,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				ax25_clear_queues(sk->ax25);
 				sk->ax25->n2count = 0;
 				if (!sk->ax25->dama_slave)
-				ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
+					ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
 				sk->ax25->t3timer = 0;
 				sk->ax25->t1timer = sk->ax25->t1 = ax25_calculate_t1(sk->ax25);
 				sk->ax25->state   = AX25_STATE_2;
@@ -1170,9 +1168,9 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		return -EPERM;
 		
 	if (call == NULL)
-		memcpy(&sk->ax25->source_addr, &addr->fsa_ax25.sax25_call, sizeof(ax25_address));
+		sk->ax25->source_addr = addr->fsa_ax25.sax25_call;
 	else
-		memcpy(&sk->ax25->source_addr, call, sizeof(ax25_address));
+		sk->ax25->source_addr = *call;
 
 	if (sk->debug)
 		printk("AX25: source address set to %s\n", ax2asc(&sk->ax25->source_addr));
@@ -1258,14 +1256,12 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 
 		while (ct < addr->sax25_ndigis) {
 			sk->ax25->digipeat->repeated[ct] = 0;
-			memcpy(&sk->ax25->digipeat->calls[ct], &fsa->fsa_digipeater[ct], sizeof(ax25_address));
+			sk->ax25->digipeat->calls[ct] = fsa->fsa_digipeater[ct];
 			ct++;
 		}
 
 		sk->ax25->digipeat->lastrepeat = 0;
-	}
-	else
-	{ /* dl1bke 960117 */
+	} else { /* dl1bke 960117 */
 		if (sk->debug)
 			printk("building digipeater path\n");
 		ax25_rt_build_path(sk->ax25, &addr->sax25_call);
@@ -1289,7 +1285,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (sk->type == SOCK_SEQPACKET && ax25_find_cb(&sk->ax25->source_addr, &addr->sax25_call, sk->ax25->device) != NULL)
 		return -EBUSY;				/* Already such a connection */
 
-	memcpy(&sk->ax25->dest_addr, &addr->sax25_call, sizeof(ax25_address));
+	sk->ax25->dest_addr = addr->sax25_call;
 	
 	/* First the easy one */
 	if (sk->type != SOCK_SEQPACKET) {
@@ -1305,7 +1301,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (ax25_dev_is_dama_slave(sk->ax25->device))
 		dama_establish_data_link(sk->ax25);
 	else
-	ax25_establish_data_link(sk->ax25);
+		ax25_establish_data_link(sk->ax25);
 		
 	sk->ax25->state     = AX25_STATE_1;
 	ax25_set_timer(sk->ax25);		/* Start going SABM SABM until a UA or a give up and DM */
@@ -1415,7 +1411,7 @@ static int ax25_getname(struct socket *sock, struct sockaddr *uaddr,
 	}
 		
 	sax->fsa_ax25.sax25_family = AF_AX25;
-	memcpy(&sax->fsa_ax25.sax25_call, addr, sizeof(ax25_address));
+	sax->fsa_ax25.sax25_call   = *addr;
 	sax->fsa_ax25.sax25_ndigis = 0;
 	*uaddr_len = sizeof(struct sockaddr_ax25);
 
@@ -1423,9 +1419,9 @@ static int ax25_getname(struct socket *sock, struct sockaddr *uaddr,
 	if (sk->ax25->digipeat != NULL) {
 		ndigi = sk->ax25->digipeat->ndigi;
 		sax->fsa_ax25.sax25_ndigis = ndigi;
-		*uaddr_len += sizeof(ax25_address) * ndigi;
+		*uaddr_len += AX25_ADDR_LEN * ndigi;
 		for (i = 0; i < ndigi; i++)
-			memcpy(&sax->fsa_digipeater[i], &sk->ax25->digipeat->calls[i], sizeof(ax25_address));
+			sax->fsa_digipeater[i] = sk->ax25->digipeat->calls[i];
 	}
 
 	return 0;
@@ -1450,9 +1446,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	skb->h.raw = skb->data;
 	
 #ifdef CONFIG_FIREWALL
-	
-	if(call_in_firewall(PF_AX25, skb, skb->h.raw)!=FW_ACCEPT)
-	{
+	if (call_in_firewall(PF_AX25, skb, skb->h.raw) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1476,8 +1470,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 *	Ours perhaps ?
 	 */
 	if (dp.lastrepeat + 1 < dp.ndigi) {		/* Not yet digipeated completely */
-		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) 
-		{
+		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) {
 			struct device *dev_out = dev;
 
 			/* We are the digipeater. Mark ourselves as repeated
@@ -1485,10 +1478,8 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 			dp.lastrepeat++;
 			dp.repeated[(int)dp.lastrepeat] = 1;
 
-			if (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) 
-			{
-				while (dp.lastrepeat + 1 < dp.ndigi) 
-				{
+			if (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) {
+				while (dp.lastrepeat + 1 < dp.ndigi) {
 					struct device *dev_scan;
 					if ((dev_scan = ax25rtr_get_dev(&dp.calls[dp.lastrepeat + 1])) == NULL)
 						break;
@@ -1496,23 +1487,20 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 					dp.repeated[(int)dp.lastrepeat] = 1;
 					dev_out = dev_scan;
 				}
-				if (dev != dev_out && (ax25_dev_get_value(dev_out, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) == 0)
-				{
+				if (dev != dev_out && (ax25_dev_get_value(dev_out, AX25_VALUES_DIGI) & AX25_DIGI_XBAND) == 0) {
 					kfree_skb(skb, FREE_READ);
 					return 0;
 				}
 			}
 
-			if (dev == dev_out && (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_INBAND) == 0)
-			{
+			if (dev == dev_out && (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_INBAND) == 0) {
 				kfree_skb(skb, FREE_READ);
 				return 0;	/* Hey, Alan: look what you're doing below! You forgot this return! */
 			}
 
 			build_ax25_addr(skb->data, &src, &dest, &dp, type, MODULUS);
 #ifdef CONFIG_FIREWALL
-			if(call_fw_firewall(PF_AX25, skb,skb->data)!=FW_ACCEPT)
-			{
+			if (call_fw_firewall(PF_AX25, skb, skb->data) != FW_ACCEPT) {
 				kfree_skb(skb, FREE_READ);
 				return 0;
 			}
@@ -1680,8 +1668,8 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 #endif
 	}
 
-	memcpy(&ax25->source_addr, &dest, sizeof(ax25_address));
-	memcpy(&ax25->dest_addr,   &src,  sizeof(ax25_address));
+	ax25->source_addr = dest;
+	ax25->dest_addr   = src;
 
 	/*
 	 *	Sort out any digipeated paths.
@@ -1820,27 +1808,25 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 
 			while (ct < usax->sax25_ndigis) {
 				dtmp.repeated[ct] = 0;
-				memcpy(&dtmp.calls[ct], &fsa->fsa_digipeater[ct], sizeof(ax25_address));
+				dtmp.calls[ct]    = fsa->fsa_digipeater[ct];
 				ct++;
 			}
 
 			dtmp.lastrepeat = 0;
 		}
 
-		memcpy(&sax, usax, sizeof(sax));
-		if (sk->type == SOCK_SEQPACKET && memcmp(&sk->ax25->dest_addr, &sax.sax25_call, sizeof(ax25_address)) != 0)
+		sax = *usax;
+		if (sk->type == SOCK_SEQPACKET && ax25cmp(&sk->ax25->dest_addr, &sax.sax25_call) != 0)
 			return -EISCONN;
 		if (usax->sax25_ndigis == 0)
-		{
 			dp = NULL;
-		}
 		else
 			dp = &dtmp;
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
 		sax.sax25_family = AF_AX25;
-		memcpy(&sax.sax25_call, &sk->ax25->dest_addr, sizeof(ax25_address));
+		sax.sax25_call   = sk->ax25->dest_addr;
 		dp = sk->ax25->digipeat;
 	}
 	
@@ -1971,7 +1957,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		   application know the digi calls further down (because it
 		   did NOT ask to know them).  This could get political... **/
 		sax->sax25_ndigis = digi.ndigi;
-		memcpy(&sax->sax25_call, &dest, sizeof(ax25_address));
+		sax->sax25_call   = dest;
 
 		*addr_len = sizeof(struct sockaddr_ax25);
 
@@ -1980,7 +1966,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			struct full_sockaddr_ax25 *fsa = (struct full_sockaddr_ax25 *)sax;
 
 			while (ct < digi.ndigi) {
-				memcpy(&fsa->fsa_digipeater[ct], &digi.calls[ct], sizeof(ax25_address));
+				fsa->fsa_digipeater[ct] = digi.calls[ct];
 				ct++;
 			}
 
@@ -2274,8 +2260,7 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	int was_locked;
 	
 #ifdef CONFIG_FIREWALL
-	if(call_out_firewall(PF_AX25, skb, skb->data)!=FW_ACCEPT)
-	{
+	if (call_out_firewall(PF_AX25, skb, skb->data) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
@@ -2284,12 +2269,11 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	skb->protocol = htons (ETH_P_AX25);
 
 #ifdef CONFIG_BPQETHER
-	if(dev->type == ARPHRD_ETHER)
-	{
+	if(dev->type == ARPHRD_ETHER) {
 		static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 		int size;
-		if(skb_headroom(skb) < AX25_BPQ_HEADER_LEN)
-		{
+
+		if(skb_headroom(skb) < AX25_BPQ_HEADER_LEN) {
 			printk("ax25_queue_xmit: not enough space to add BPQ Ether header\n");
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
@@ -2398,11 +2382,9 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
   	if (arp_find(bp + 1, dest, dev, dev->pa_addr, skb))
   		return 1;
 
-	if (bp[16] == AX25_P_IP) 
-	{
+	if (bp[16] == AX25_P_IP) {
 		mode = ax25_ip_mode_get((ax25_address *)(bp + 1), dev);
-		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) 
-		{
+		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) {
 /*			skb_device_unlock(skb); *//* Don't unlock - it might vanish.. TCP will respond correctly to this lock holding */
 			skb_pull(skb, AX25_HEADER_LEN - 1);	/* Keep PID */
 #ifdef HUNTING_FOR_ENCAP_BUG
@@ -2410,14 +2392,14 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 		/* 		  twice... We'll try a work-around here and hope for   */
 		/* 		  the best.                                            */
 
-			if ( !(ax25cmp((ax25_address *) (bp + 8), (ax25_address *) (skb->data + 8)) ||
-			       ax25cmp((ax25_address *) (bp + 1), (ax25_address *) (skb->data + 1)) ) )
-			{
+			if (!(ax25cmp((ax25_address *)(bp + 8), (ax25_address *)(skb->data + 8)) ||
+			      ax25cmp((ax25_address *)(bp + 1), (ax25_address *)(skb->data + 1)))) {
 				printk("ax25_rebuild_header(): encap bug...\n");
 				skb_pull(skb, AX25_HEADER_LEN);
-			} else
+			} else {
 				if (!*skb->data)
 					printk("ax25_rebuild_header(): probably encap bug...\n");
+			}
 #endif
 			ax25_send_frame(skb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
 			return 1;
@@ -2431,6 +2413,8 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
   	bp[14] &= ~LAPB_C;
   	bp[14] |= LAPB_E;
   	bp[14] |= SSSID_SPARE;
+
+	ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev);
 
   	return 0;
 }	

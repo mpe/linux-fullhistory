@@ -4,24 +4,32 @@
 # corresponds to the kernel versions 1.3.x. Be aware that these
 # are development kernels.
 #
-# The latest version of these help texts is always available from
-#    http://math-www.uni-paderborn.de/~axel/config_help.html
-#
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
 # via ftp (user: anonymous) from sunsite.unc.edu in the directory
 # /pub/Linux/docs/HOWTO. 
 #
-# Format: description<nl>variable<nl>helptext<nl><nl>. The help texts
+# Format of this file: description<nl>variable<nl>helptext<nl><nl>. 
+# If the question being documented is of type "choice", we list
+# only the first occuring config variable. The help texts
 # must not contain empty lines. No variable should occur twice; if it
 # does, only the first occurance will be used by Configure. The lines
 # in a help text should be indented two positions. Lines starting with
-# `#' are ignored. Use emacs' kfill.el to edit this file or you lose.
+# `#' are ignored. To be nice to menuconfig, limit your lines to 70
+# chars. Use emacs' kfill.el to edit this file or you lose.
+#
+# If you add a help text to this file, please try to be as gentle as
+# possible. Don't use unexplained acronyms and generally write for the
+# hypothetical user who has just bought a PC, removed Windows,
+# installed Linux and is now recompiling the kernel for the first
+# time. Tell them what to do if they're unsure. Technical information
+# should go in a README in the Documentation directory. Mention all 
+# the relevant READMEs in the help text.
 #
 # All this was shamelessly stolen from several different sources. Many
 # thanks to all the contributors.  Feel free to use these help texts
 # in your own kernel configuration tools. The texts are copyrighted
-# (c) 1995 by Axel Boldt and governed by the GNU Public License.
+# (c) 1995,1996 by Axel Boldt and governed by the GNU Public License.
 #
 # Send comments to Axel Boldt <boldt@math.ucsb.edu>.
 
@@ -30,21 +38,21 @@ CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
   operations) if you don't have one. 486DX and Pentium processors have
   a math coprocessor built in, 486SX and 386 do not, unless you added
-  a 487DX or 387, respectively.  (The messages during boot time can give
-  you some hints here ["man dmesg"]) Everyone needs either a coprocessor or
-  this emulation. If you enable this emulation even though you have a
-  coprocessor, the coprocessor will be used nevertheless. (This
-  behavior can be changed with the kernel command line option
-  "no387", which comes handy if your coprocessor is broken. See the
-  documentation of your boot loader (lilo or loadlin) about how to
-  pass options to the kernel. The lilo procedure is also explained in
-  the SCSI-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) This means that it is a good
-  idea to say Y here if you intend to use this kernel on different
-  machines. More information about the internals of Linux math
-  coprocessor emulation can be found in arch/i386/math-emu/README. If
-  you are not sure, say Y; apart from resulting in a 45kB bigger
-  kernel, it won't hurt.
+  a 487DX or 387, respectively.  (The messages during boot time can
+  give you some hints here ["man dmesg"]) Everyone needs either a
+  coprocessor or this emulation. If you enable this emulation even
+  though you have a coprocessor, the coprocessor will be used
+  nevertheless. (This behavior can be changed with the kernel command
+  line option "no387", which comes handy if your coprocessor is
+  broken. See the documentation of your boot loader (lilo or loadlin)
+  about how to pass options to the kernel at boot time. The lilo
+  procedure is also explained in the SCSI-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.) This
+  means that it is a good idea to say Y here if you intend to use this
+  kernel on different machines. More information about the internals
+  of Linux math coprocessor emulation can be found in
+  arch/i386/math-emu/README. If you are not sure, say Y; apart from
+  resulting in a 45kB bigger kernel, it won't hurt.
 
 Normal floppy disk support
 CONFIG_BLK_DEV_FD
@@ -69,6 +77,15 @@ CONFIG_BLK_DEV_RAM
   running kernel whenever you want), say M and read Documentation/modules.txt.
   Most normal users won't need the RAM disk functionality, and can thus say 
   N here.
+
+Loop device support
+CONFIG_BLK_DEV_LOOP
+  Enabling this option will allow you to mount a file as a file system.
+  This is useful if you want to check an ISO9660 file system before
+  burning the CD, or want to use floppy images without first writing
+  them to floppy.
+  This option also allows one to mount a filesystem with encryption.
+  Most users will answer N here.
 
 Enhanced IDE/MFM/RLL disk/cdrom/tape support
 CONFIG_BLK_DEV_IDE 
@@ -135,45 +152,48 @@ CONFIG_BLK_DEV_IDETAPE
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
-  The CMD-Technologies CMD640 chip is used on many common 486 and Pentium
-  motherboards, usually in combination with a "Neptune" or "SiS" chipset.
-  Unfortunately, it has a number of rather nasty design flaws that can cause
-  severe data corruption under many common conditions.  Say Y here to include
-  code which tries to automatically detect and correct the problems under Linux.
-  This also provides support for the enhanced features of the CMD640,
-  for improved support/operation under linux, including access to the secondary
-  IDE ports in some systems.  This driver will work automatically in PCI
-  based systems (most new systems have PCI slots).  But if your system uses
-  VESA local bus (VLB) instead of PCI, you must also supply a kernel boot
-  parameter to enable the CMD640 bugfix/support:  "ide0=cmd640_vlb"
-  The CMD640 chip is also used on add-in cards by Acculogic,
-  and on the "CSA-6400E PCI to IDE controller" that some people have.
+  The CMD-Technologies CMD640 chip is used on many common 486 and
+  Pentium motherboards, usually in combination with a "Neptune" or
+  "SiS" chipset.  Unfortunately, it has a number of rather nasty
+  design flaws that can cause severe data corruption under many common
+  conditions.  Say Y here to include code which tries to automatically
+  detect and correct the problems under Linux.  This also provides
+  support for the enhanced features of the CMD640, for improved
+  support/operation under linux, including access to the secondary IDE
+  ports in some systems.  This driver will work automatically in PCI
+  based systems (most new systems have PCI slots).  But if your system
+  uses VESA local bus (VLB) instead of PCI, you must also supply a
+  kernel boot parameter to enable the CMD640 bugfix/support:
+  "ide0=cmd640_vlb" The CMD640 chip is also used on add-in cards by
+  Acculogic, and on the "CSA-6400E PCI to IDE controller" that some
+  people have. If unsure, say Y.
 
 RZ1000 chipset bugfix/support
 CONFIG_BLK_DEV_RZ1000
-  The PC-Technologies RZ1000 chip is used on many common 486 and Pentium
-  motherboards, usually along with the "Neptune" chipset.  Unfortunately,
-  it has a rather nasty design flaw that can cause severe data corruption
-  under many conditions.  Say Y here to include code which automatically
-  detects and corrects the problem under Linux.  This may slow disk throughput
-  by a few percent, but at least things will operate 100% reliably.
+  The PC-Technologies RZ1000 chip is used on many common 486 and
+  Pentium motherboards, usually along with the "Neptune" chipset.
+  Unfortunately, it has a rather nasty design flaw that can cause
+  severe data corruption under many conditions.  Say Y here to include
+  code which automatically detects and corrects the problem under
+  Linux.  This may slow disk throughput by a few percent, but at least
+  things will operate 100% reliably. If unsure, say Y.
 
 Other IDE chipset support
 CONFIG_IDE_CHIPSETS
-  Say Y here if you want to include enhanced support for various
-  IDE interface chipsets used on motherboards and add-on cards.
-  This enhanced support may be necessary for linux to be able to access
-  the 3rd/4th drives in some systems.  It may also enable setting of
-  higher speed I/O rates to improve system performance with these chipsets.
-  Most of these also require special kernel boot parameters to actually
-  turn on the support at runtime.
+  Say Y here if you want to include enhanced support for various IDE
+  interface chipsets used on motherboards and add-on cards.  This
+  enhanced support may be necessary for linux to be able to access the
+  3rd/4th drives in some systems.  It may also enable setting of
+  higher speed I/O rates to improve system performance with these
+  chipsets.  Most of these also require special kernel boot parameters
+  to actually turn on the support at runtime.
 
 DTC-2278 chipset support
 CONFIG_BLK_DEV_DTC2278
   This driver is enabled at runtime using the "ide0=dtc2278" kernel
   boot parameter.  It enables support for the secondary IDE interface
-  of the DTC-2278 card, and permits faster I/O speeds to be set as well.
-  See the README.ide and dtc2278.c files for more info.
+  of the DTC-2278 card, and permits faster I/O speeds to be set as
+  well.  See the README.ide and dtc2278.c files for more info.
 
 Holtek HT6560B chipset support
 CONFIG_BLK_DEV_HT6560B
@@ -207,51 +227,95 @@ CONFIG_BLK_DEV_XD
   Very old 8 bit hard disk controllers used in the IBM XT
   computer. Pretty unlikely that you have this: say N.
 
+Support for Deskstation RPC44 
+CONFIG_DESKSTATION_RPC44
+  This is a machine with a R4400 100 MHz CPU. To compile a Linux
+  kernel that runs on these, say Y here. For details about Linux
+  on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
+  http://lena.fnet.fr/ (To browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).
+
+Support for Mips Magnum 3000 
+CONFIG_MIPS_MAGNUM_3000
+  To compile a Linux kernel that runs on these, say Y here. For
+  details about Linux on the MIPS architecture, check out the
+  Linux/MIPS FAQ on the WWW at http://lena.fnet.fr/ (To browse the
+  WWW, you need to have access to a machine on the Internet that has
+  one of the programs lynx, netscape or Mosaic).
+
+Support for Mips Magnum 4000
+CONFIG_MIPS_MAGNUM_4000
+  This is a machine with a R4000 100 MHz CPU. To compile a Linux
+  kernel that runs on these, say Y here. For details about Linux
+  on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
+  http://lena.fnet.fr/ (To browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).
+
+Support for Olivetty M700
+CONFIG_OLIVETTI_M700
+  This is a machine with a R4000 100 MHz CPU. To compile a Linux
+  kernel that runs on these, say Y here. For details about Linux
+  on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
+  http://lena.fnet.fr/ (To browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).
+
 Support for Deskstation Tyne
 CONFIG_DESKSTATION_TYNE
-#####
-##### Anyone have details? It's for the MIPS architecture.
-#####
+  This is a machine with a R4600 134 MHz CPU. The Linux port for this
+  system is idle right now because of hardware or documentation
+  problems. For details about Linux on the MIPS architecture, check
+  out the Linux/MIPS FAQ on the WWW at http://lena.fnet.fr/ (To browse
+  the WWW, you need to have access to a machine on the Internet that
+  has one of the programs lynx, netscape or Mosaic).
 
 Support for Acer PICA 1 chipset
 CONFIG_ACER_PICA_61
-#####
-##### Anyone have details? It's for the MIPS architecture.
-#####
+  This is a machine with a R4400 134/150 MHz CPU. To compile a Linux
+  kernel that runs on these, say Y here. For details about
+  Linux on the MIPS architecture, check out the Linux/MIPS FAQ on the
+  WWW at http://lena.fnet.fr/ (To browse the WWW, you need to have
+  access to a machine on the Internet that has one of the programs
+  lynx, netscape or Mosaic).
 
 Support for DECstation
 CONFIG_DECSTATION
-#####
-##### Anyone have details? It's for the MIPS architecture.
-#####
+  The DECStation 3100 (with a MIPS R2000 series CPU) and DECStation
+  5000/xxx (MIPS R3000 series CPU) are also sometimes labeled
+  PMAX. They often run the Ultrix operating system. To compile a Linux
+  kernel that runs on these, say Y here. For details about Linux
+  on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
+  http://lena.fnet.fr/ (To browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic).
 
-Generate code for R4x00
-CONFIG_R4X00
-  If your computer uses the 64 bit R4X00 processor (as opposed to the
-  32 bit R3000), you need to say Y here, otherwise N. Note that these
-  processors are not compatible and the kernel can only work on the
-  processor type it was compiled for.
+CPU type
+CONFIG_CPU_R3000
+  Give the type of your machine's MIPS CPU. For this question,
+  it suffices to give a unique prefix of the option you want to
+  choose. 
 
 Networking support
 CONFIG_NET
   Unless you really know what you are doing, you should say Y
   here. The reason is that some programs need it even if you configure
   a stand-alone machine that won't be connected to any other computer.
-  If you have recently upgraded from an older kernel, you should
-  consider updating your networking tools too; read net/README for
-  details. 
+  from an older kernel, you should consider updating your networking
+  tools too; read net/README for details.
 
 Network aliasing
 CONFIG_NET_ALIAS
-  This is for setting several network addresses on the same low-level network
-  device driver. Typically used for services that act differently based
-  on the address they listen on (e.g. Apache httpd) or for connecting to
-  different logical networks through the same physical interface.
-  This is the generic part, later when configuring network protocol
-  options you will be asked for protocol-specific aliasing support.
-  See Documentation/networking/alias.txt for more info.
-  If you need this features (for any protocol, like IP) say Y; if unsure, 
-  say N.  
+  This is for setting several network addresses on the same low-level
+  network device driver. Typically used for services that act
+  differently based on the address they listen on (e.g. Apache httpd)
+  or for connecting to different logical networks through the same
+  physical interface.  This is the generic part, later when
+  configuring network protocol options you will be asked for
+  protocol-specific aliasing support.  See
+  Documentation/networking/alias.txt for more info.  If you need this
+  features (for any protocol, like IP) say Y; if unsure, say N.
 
 Network firewalls
 CONFIG_FIREWALL
@@ -269,67 +333,73 @@ CONFIG_BLK_DEV_SUNFD
 
 Alpha system type
 CONFIG_ALPHA_AVANTI
-  Find out what type of Alpha motherboard you have. If you can't
-  find one of the given names, then try "Noname". For this question,
-  it suffices to give a unique prefix of the option you want to
-  choose. 
+  Find out what type of Alpha motherboard you have. You will probably
+  want to read the Linux/Alpha homepage on the WWW at
+  http://www.azstarnet.com/~axplinux/ (To browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic). For this question, it suffices
+  to give a unique prefix of the option you want to choose. The
+  choices:
+  ** Avanti: This is for Mustang (AS200), M3 (AS250), Avanti (AS400)
+     and XL (a.k.a. "Windows NT Dream Machine" :-) AlphaStations.
+     These usually come with a TGA graphics adaptor, so you'll want to
+     say Y to "TGA Console support", below, if you have one of these.
+  ** Jensen: a.k.a. DEC 2000 a.k.a. DECpc AXP 150, the oldest Alpha
+     PC; it sports an EISA bus. The boot process on Jensen machines is
+     difficult (no booting from floppies, MILO doesn't work). You need
+     to have access to a second Linux workstation. The Linux/Alpha
+     FAQ, accessible from the above mentioned WWW page, has details.
+  ** Noname: a.k.a. AXPpci33, a PCI-bus based board using the 21066
+     Alpha CPU, running at either 166 or 233 MHz. You also want to
+     choose this option if you have a UDB (Universal Desktop Box
+     a.k.a. Multia) machine.
+  ** Cabriolet: also called AlphaPC64, a PCI-bus based board using the
+     21064 Alpha CPU typically running at 275 or 300 MHz.
+  ** EB66: "Evaluation Board"
+  ** EB66+: "Evaluation Board"
+###
+### Add info about Platform2000
+###
 
 Limit memory to low 16MB
 CONFIG_MAX_16M
   This is for some buggy motherboards which cannot properly deal with
   the memory above 16MB. If you have more than 16MB of RAM and
   experience weird problems, you might want to try Y, everyone else
-  says N. Note for machines with more than 64MB of RAM: in order for the
-  kernel to be able to use the memory above 64MB, pass the command
-  line option "mem=XXXM" (where XXX is the memory size in
-  megabytes) to your kernel. See the documentation of your boot loader
-  (lilo or loadlin) about how to pass options to the kernel. The lilo
-  procedure is also explained in the SCSI-HOWTO, available via ftp
-  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
-  You also need at least 512kB of RAM cache if you have more than 64MB
-  of RAM.
-  Some other things to try when experiencing seemingly random, "weird"
-  problems: 1) passing the "no-hlt" option to the kernel 2) passing
-  the "no-387" option to the kernel 3) passing the "mem=4M" option to
-  the kernel (will disable all but the first 4M of RAM) 4) disabling
-  the cache from your BIOS settings 5) exchanging RAM chips 6)
-  exchanging the motherboard 7) committing suicide.
+  says N. Note for machines with more that 64MB of RAM: in order for
+  the kernel to be able to use the memory above 64MB, pass the command
+  line option "mem=XXXM" (where XXX is the memory size in megabytes)
+  to your kernel during boot time. See the documentation of your boot
+  loader (lilo or loadlin) about how to pass options to the
+  kernel. The lilo procedure is also explained in the SCSI-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You also need at least 512kB
+  of RAM cache if you have more than 64MB of RAM.  Some other things
+  to try when experiencing seemingly random, "weird" problems: 1)
+  passing the "no-hlt" option to the kernel 2) passing the "no-387"
+  option to the kernel 3) passing the "mem=4M" option to the kernel
+  (thereby disabling all but the first 4M of RAM) 4) disabling the
+  cache from your BIOS settings 5) exchanging RAM chips 6) exchanging
+  the motherboard 7) committing suicide.
 
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
-  This selects whether the Linux kernel on an Alpha machines is being
-  booted through SRM (the DEC Unix firmware).  If you use MILO, answer
-  "no" here.  Except for Cabriolet and some other evaluation-board based
-  machines, this option has no effect and can be set to either value
-  with no ill effects.
-
-Kernel KGDB support
-CONFIG_KGDB
-  Selects whether kernel debugging via serial line should be enabled.
-  Enable this option only if you really plan on debugging the Linux
-  kernel.  If you enable this option, take a look at
-  arch/alpha/kernel/kgdb.c and search for SERIAL_LINE to find out
-  what serial port the kernel will use (either /dev/ttyS0 or
-  /dev/ttyS1).  Then, hook up a serial line to another machine
-  (must be another 64-bit machine when debugging a 64-bit kernel)
-  and start "gdb vmlinux" on that machine.  Then boot the kernel on
-  the target system with boot option "kgdb".  The kernel will display:
-     kgdb: stealing /dev/ttyS0 and initializing it to 38400 baud
-     kgdb: waiting for gdb to connect...
-  At this point, enter the following commands on the system running
-  gdb:
-     gdb> set remotebaud 38400
-     gdb> set target remote /dev/<whatever>
-  After a few seconds, gdb should respond with the usual prompt, showing
-  the source at which the kernel is currently executing.  You can now
-  use the normal gdb features such as breakpoints to debug the kernel.
-  WARNING: when CONFIG_KGDB is enabled, send a Ctrl-C character over
-  the serial line will drop the kernel into the debugger!
-
-Kernel tracing support
-CONFIG_KGDB_TRACING
-  Enabling this option allows to collect kernel execution traces.  Don't
-  try this at home!
+  There are two different types of booting firmware on Alphas: SRM,
+  which is command line driven, and ARC, which uses menus and arrow
+  keys. The usual way to load Linux on an Alpha machine is to use MILO
+  (a bootloader that lets you pass command line parameters to the
+  kernel just like LILO does) which can be loaded either from ARC or
+  can be installed directly as a permanent firmware replacement from
+  floppy (which requires changing a certain jumper on the
+  motherboard). If you want to do either of these, say N here. If MILO
+  doesn't work on your system (true for Jensen motherboards), you can
+  bypass it altogether and boot Linux directly from an SRM console;
+  say Y here in order to do that. Note that you won't be able to boot
+  from an IDE disk using SRM. If unsure, say N. Details about the
+  Linux/Alpha booting process are contained in the Linux/Alpha FAQ,
+  accessible on the WWW from http://www.azstarnet.com/~axplinux/ (To
+  browse the WWW, you need to have access to a machine on the Internet
+  that has one of the programs lynx, netscape or Mosaic).
 
 Echo console messages on /dev/ttyS1
 CONFIG_SERIAL_ECHO
@@ -340,26 +410,29 @@ CONFIG_SERIAL_ECHO
 
 TGA Console Support
 CONFIG_TGA_CONSOLE
-  Many Alpha systems are shipped with a graphics card that implements the
-  TGA interface (much like the VGA standard, but older TGA adaptors are
-  *not* VGA compatible).  On such systems, this option needs to be enabled
-  such that the TGA driver rather than the standard VGA driver is used.
+  Many Alpha systems (e.g the Multia) are shipped with a graphics card
+  that implements the TGA interface (much like the VGA standard, but
+  older TGA adaptors are *not* VGA compatible).  On such systems, this
+  option needs to be enabled so that the TGA driver rather than the
+  standard VGA driver is used.  Note that, at this time, there is no X
+  server for these systems. If unsure, try N.
 
 PCI bios support
 CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
   bus system, i.e. the way the CPU talks to the other stuff inside
-  your box. Other bus systems are ISA, EISA, Microchannel or VESA. If
-  you have PCI, say Y, otherwise N. Note: some old PCI motherboards
-  have BIOS bugs and may crash if this is enabled (but they run fine
-  without this option). The PCI-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains
-  valuable information about which PCI hardware works under Linux and
-  which doesn't.  If some of your PCI devices don't work and you get a
-  warning during boot time ("man dmesg"), please follow the instructions 
-  at the top of include/linux/pci.h. The buggy PCTech RZ 1000 IDE
-  harddrive controller which is used in some PCI systems is detected
-  and correctly handled by this driver.
+  your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
+  VESA. If you have PCI, say Y, otherwise N. Note1: MCA systems are
+  not supported by the standard kernels, but patches exist at
+  http://www.undergrad.math.uwaterloo.ca/~cpbeaure/mca-linux.html on
+  the WWW. Note2: some old PCI motherboards have BIOS bugs and may
+  crash if "PCI bios support" is enabled (but they run fine without
+  this option). The PCI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains valuable information
+  about which PCI hardware does work under Linux and which doesn't.
+  If some of your PCI devices don't work and you get a warning during
+  boot time ("man dmesg"), please follow the instructions at the top
+  of include/linux/pci.h. 
 
 PCI bridge optimization (experimental)
 CONFIG_PCI_OPTIMIZE
@@ -369,14 +442,13 @@ CONFIG_PCI_OPTIMIZE
 
 Intel 430FX (Triton) chipset DMA support
 CONFIG_BLK_DEV_TRITON
-  This option is valid only if PCI BIOS support was also selected earlier.
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
-  and includes the Intel 430FX PCI Triton chipset, you will want
-  to enable this option to allow use of bus-mastering DMA data transfers.
-  Read the comments at the beginning of drivers/block/triton.c.
-  The hdparm utility can be obtained via ftp (user: anonymous)
-  from sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/.
-  It is safe to say Y.
+  and includes the Intel 430FX PCI Triton chipset, you will want to
+  enable this option to allow use of bus-mastering DMA data transfers.
+  Read the comments at the beginning of drivers/block/triton.c.  The
+  hdparm utility can be obtained via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/.  It is safe
+  to say Y.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -404,14 +476,15 @@ CONFIG_BINFMT_ELF
   (this does *not* mean that you will be able to run executables from
   different architectures or operating systems!) and makes building
   run-time libraries very easy. Many new executables are distributed
-  solely in ELF format. You definitely want to say Y here. Information about
-  ELF is on the WWW at http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html
-  (To browse the WWW, you need to have access to a machine on the
-  Internet that has one of the programs lynx, netscape or Mosaic).  If
-  you find that after upgrading to Linux kernel 1.3 and saying Y here,
-  you still can't run any ELF binaries (they just crash), then you'll
-  have to install the newest ELF runtime libraries, including ld.so
-  (available via ftp (user: anonymous) from
+  solely in ELF format. You definitely want to say Y here. Information
+  about ELF is on the WWW at
+  http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html (To browse the
+  WWW, you need to have access to a machine on the Internet that has
+  one of the programs lynx, netscape or Mosaic).  If you find that
+  after upgrading to Linux kernel 1.3 and saying Y here, you still
+  can't run any ELF binaries (they just crash), then you'll have to
+  install the newest ELF runtime libraries, including ld.so (available
+  via ftp (user: anonymous) from
   tsx-11.mit.edu:/pub/linux/packages/GCC). Also note that ELF binary
   support was broken in kernel versions 1.3.0 - 1.3.2. Either use a
   newer 1.3 kernel or one of the stable 1.2 versions. If you want to
@@ -450,13 +523,34 @@ CONFIG_BINFMT_AOUT
 Processor type
 CONFIG_M386
   This is the processor type of your CPU. It is used for optimizing
-  purposes. In order to compile a kernel that can run on all three CPU
-  types (albeit not optimally fast), you can specify "386" here.  If
-  you specify "486" or "Pentium", then the kernel will run on
-  both 486 and Pentium CPUs. In rare cases, it can make sense to
-  specify "Pentium" here even if running a 486: the kernel will be
-  smaller but slower.
-  
+  purposes. In order to compile a kernel that can run on all CPU types
+  (albeit not optimally fast), you can specify "386" here.  If you
+  specify "486" or "Pentium" or "PPro", then the kernel will run on
+  486 and Pentium (=586) and Pentium Pro (=686) CPUs. In rare cases,
+  it can make sense to specify "Pentium" even if running a 486: the
+  kernel will be smaller but slower.
+
+Compile the kernel into the ELF object format 
+CONFIG_ELF_KERNEL
+  ELF (Executable and Linkable Format) is a format for libraries and
+  executables used across different architectures and operating
+  systems. This option will cause the resulting kernel to be in ELF
+  format, which is generally desirable, so say Y. However, it only
+  works if your compiler and linker can produce ELF code.
+
+Is your ELF compiler an extra compiler
+CONFIG_EXTRA_ELF_COMPILER
+  If you have a linuxelf-gcc as opposed to linux-gcc, say Y, otherwise
+  N.
+
+Generate little endian code
+CONFIG_CPU_LITTLE_ENDIAN
+  If your compiler is mipsel-linux-gcc or mipsel-linuxelf-gcc (as
+  opposed to mips-linux-gcc or mips-linuxelf-gcc), say Y here,
+  otherwise N. Most MIPS machines use little-endian code, but it might
+  be necessary to run older Mips sytems, such as the Sony News and
+  MIPS RC3xxx in big endian mode.
+
 Enable loadable module support
 CONFIG_MODULES
   Kernel modules are small pieces of compiled code which can be 
@@ -469,13 +563,13 @@ CONFIG_MODULES
 
 Set version information on all symbols for modules
 CONFIG_MODVERSIONS
-  Usually, modules have to be recompiled whenever you
-  switch to a new kernel. Enabling this option allows you
-  to keep using the same modules even after compiling a new kernel;
-  this requires the program modprobe. All the software needed for
-  module support is in the modules package in
-  sunsite.unc.edu:/pub/Linux/kernel, available via ftp (user:
-  anonymous). NOTE1: if you say Y here but don't have the program
+  Usually, modules have to be recompiled whenever you switch to a new
+  kernel. Enabling this option allows you to keep using the same
+  modules even after compiling a new kernel; this requires the program
+  modprobe. All the software needed for module support is in the
+  modules package in sunsite.unc.edu:/pub/Linux/kernel, available via
+  ftp (user: anonymous) and to be extracted with "tar xzvf
+  filename". NOTE1: if you say Y here but don't have the program
   genksyms (which is also contained in the above mentioned modules
   package), then the building of your kernel will fail. NOTE2: if you
   say Y here, then you cannot say Y to the PPP driver, below; the only
@@ -488,7 +582,7 @@ CONFIG_KERNELD
   to be created as loadable modules, you also have the responsibility
   to load the corresponding module (via insmod/modprobe) before you
   use it.  If you select Y here, the kernel will take care of this
-  all by itself, together with a user level daemon, "kerneld".
+  all by itself, together with a user level daemon; "kerneld".
   Note that "kerneld" will also automatically unload all unused
   modules, so you don't have to use "rmmod" either.
   There are some other "kernel callouts" that will be available
@@ -745,21 +839,21 @@ CONFIG_SKB_LARGE
 
 The IPX protocol
 CONFIG_IPX
-  This is support for the Novell networking protocol, IPX. You need it
-  if you want to access Novell Netware servers by using the Linux
-  Novell client ncpfs (available via ftp (user: anonymous) from 
-  sunsite.unc.edu:/pub/Linux/system/Filesystem/) or from within the 
+  This is support for the Novell networking protocol, IPX, commonly
+  used for local networks of Windows machines. You need it if you want
+  to access Novell Netware file or print servers using the Linux
+  Novell client ncpfs (available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/system/Filesystems/) or from within the
   Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO). To turn your Linux box into
-  a fully featured Netware file server and IPX router, say Y here and
-  fetch lwared from
-  sunsite.unc.edu:/pub/Linux/system/Networking/daemons/. General
-  information about how to connect Linux, Windows machines and Macs is
-  on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
-  you need to have access to a machine on the Internet that has one of
-  the programs lynx, netscape or Mosaic). This driver would enlarge
-  your kernel by about 5 kB. Unless you have Novell computers on your
-  local network, say N.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO). In order to do the former,
+  you'll also have to say Y to "NCP filesystem support", below. To
+  turn your Linux box into a fully featured Netware file server and
+  IPX router, say Y here and fetch lwared from
+  sunsite.unc.edu:/pub/Linux/system/Network/daemons/. For more
+  information, read the IPX-HOWTO in
+  sunsite.unc.edu:/pub/Linux/docs/howto. The IPX driver would enlarge
+  your kernel by about 5 kB. Unless you want to integrate your Linux
+  box with a local Novell network, say N.
 
 Full internal IPX network
 CONFIG_IPX_INTERN
@@ -775,6 +869,7 @@ CONFIG_IPX_INTERN
   primary network is disabled. This might break existing applications,
   especially RIP/SAP daemons. A RIP/SAP daemon that works well with the
   full internal net can be found on linux01.gwdg.de:/pub/ncpfs.
+  If you don't know what you are doing, say N.
 
 Appletalk DDP
 CONFIG_ATALK
@@ -934,6 +1029,15 @@ CONFIG_SCSI_CONSTANTS
   understand if you enable this; it will enlarge your kernel by about
   12KB. If in doubt, say Y.
 
+AdvanSys SCSI support
+CONFIG_SCSI_ADVANSYS
+  This is a driver for all SCSI host adaptors manufactured by
+  AdvanSys. It is documented in the kernel source in
+  drivers/scsi/advansys.c. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
 Adaptec AHA152X support
 CONFIG_SCSI_AHA152X
   This is support for an SCSI host adaptor. It is explained in section
@@ -980,14 +1084,14 @@ CONFIG_SCSI_AIC7XXX
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
-  This is support for BusLogic MultiMaster SCSI Host Adaptors.  Consult
-  the documentation in drivers/scsi/README.BusLogic for more information.
-  BusLogic FlashPoint SCSI Host Adapters are not supported by this driver.
-  If this driver does not work correctly without modification, please
-  consult the author.  This driver may also be built as a module, but
-  only a single instance may be loaded.  You might also want to read
-  the SCSI-HOWTO, available via anonymous ftp from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  This is support for BusLogic MultiMaster SCSI Host Adaptors.
+  Consult the documentation in drivers/scsi/README.BusLogic for more
+  information.  BusLogic FlashPoint SCSI Host Adapters are not
+  supported by this driver.  If this driver does not work correctly
+  without modification, please consult the author.  This driver may
+  also be built as a module, but only a single instance may be loaded.
+  You might also want to read the SCSI-HOWTO, available via anonymous
+  ftp from sunsite.unc.edu:/pub/Linux/docs/HOWTO.
  
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA
@@ -1028,17 +1132,18 @@ CONFIG_SCSI_U14_34F
 Future Domain 16xx SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN
   This is support for Future Domain's 16-bit SCSI host adaptors
-  (TMC-1660/1680, TMC-1650/1670, TMC-3260) and other adaptors based on the
-  Future Domain chipsets (Quantum ISA-200S, ISA-250MG; and at least one IBM
-  board).  It is explained in section 3.7 of the SCSI-HOWTO, available via
-  ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it
-  doesn't work out of the box, you may have to change some settings in
-  drivers/scsi/fdomain.h. This driver is also available as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M here and
-  read Documentation/modules.txt.
+  (TMC-1660/1680, TMC-1650/1670, TMC-3260) and other adaptors based on
+  the Future Domain chipsets (Quantum ISA-200S, ISA-250MG; and at
+  least one IBM board).  It is explained in section 3.7 of the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/fdomain.h. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
 
-Generic NCR5380 SCSI support
+Generic NCR5380/53c400 SCSI support
 CONFIG_SCSI_GENERIC_NCR5380
   This is the generic NCR family of SCSI controllers, not to be
   confused with the NCR 53c7 or 8xx controllers. It is explained in
@@ -1050,6 +1155,22 @@ CONFIG_SCSI_GENERIC_NCR5380
   kernel whenever you want). If you want to compile it as a module,
   say M here and read Documentation/modules.txt.
  
+Enable NCR53c400 extensions
+CONFIG_SCSI_GENERIC_NCR53C400
+  This enables certain optimizations for the NCR53c400 scsi cards. You
+  might as well try it out. Note that this driver will only probe for
+  the Trantor T130B in its default configuration; you might have to
+  pass a command line option to the kernel at boot time if it doesn't
+  detect your card. See the file drivers/scsi/README.g_NCR5380 for
+  details. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+NCR5380/53c400 mapping method (use Port for T130B)
+CONFIG_SCSI_G_NCR5380_PORT
+  The NCR5380 and NCR53c400 SCSI controllers come in two varieties:
+  port or memory mapped. You should know what you have. The most
+  common card, Trantor T130B, uses port mapped mode.
+
 NCR53c7,8xx SCSI support
 CONFIG_SCSI_NCR53C7xx
   This is the 53c7 and 8xx NCR family of SCSI controllers, not to be
@@ -1146,6 +1267,23 @@ CONFIG_SCSI_EATA
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
+NCR53c406a SCSI support
+CONFIG_SCSI_NCR53C406A
+  This is support for the NCR53c406a SCSI host adapter. For user
+  configurable parameters, check out drivers/scsi/NCR53c406.c in the
+  kernel source. Also read the SCSI-HOWTO, available via ftp (user:
+  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to
+  compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+AM53/79C974 PCI SCSI support
+CONFIG_SCSI_AM53C974
+  This is support for the AM53/79C974 SCSI host adapters. Please read
+  drivers/scsi/README.AM53C974 for details. Also, the SCSI-HOWTO,
+  available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you.
+
 Network device support?
 CONFIG_NETDEVICES
   You can say N here in case you don't intend to connect to any other
@@ -1231,8 +1369,9 @@ CONFIG_SLIP_COMPRESSED
 
 Keepalive and linefill
 CONFIG_SLIP_SMART
-  Adds additional capabilities to the SLIP driver to support the RELCOM
-  line fill and keepalive monitoring. Ideal on poor quality analogue lines.
+  Adds additional capabilities to the SLIP driver to support the
+  RELCOM line fill and keepalive monitoring. Ideal on poor quality
+  analogue lines.
 
 PPP (point-to-point) support
 CONFIG_PPP
@@ -1275,6 +1414,9 @@ CONFIG_SCC
   and communicate with other computers.  If you want to use this, read
   Documentation/networking/z8530drv.txt and the HAM-HOWTO, available via
   ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.
 
 PLIP (parallel port) support
 CONFIG_PLIP
@@ -1472,6 +1614,21 @@ CONFIG_EL3
   you may need to use the DOS setup disk to disable Plug & Play mode, and
   to select the default media type.
 
+3c590 series (592/595/597) "Vortex" support
+CONFIG_VORTEX
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. More specific information is
+  in Documentation/networking/vortex.txt and in the comments at the
+  beginning of drivers/net/3c59x.c. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini
+
 Other ISA cards
 CONFIG_NET_ISA
   If your network (ethernet) card hasn't been mentioned yet and its
@@ -1629,13 +1786,12 @@ CONFIG_PI
 
 Gracilis PackeTwin support
 CONFIG_PT
-  This card is similar to the PI card (mentioned above).  It is used mainly
-  by amateur radio operators for packet radio.  You should have already 
-  said Y to "AX.25 support" as this card uses that protocol. 
-  More information about this driver can be found in the file 
-  drivers/net/README.pt. 
-  NOTE: The card is capable of DMA and full duplex but neither of these have
-  been coded in the driver as yet.
+  This card is similar to the PI card (mentioned above).  It is used
+  mainly by amateur radio operators for packet radio.  You should have
+  already said Y to "AX.25 support" as this card uses that protocol.
+  More information about this driver can be found in the file
+  drivers/net/README.pt.  NOTE: The card is capable of DMA and full
+  duplex but neither of these have been coded in the driver as yet.
 
 WaveLAN support
 CONFIG_WAVELAN
@@ -1790,12 +1946,10 @@ CONFIG_ZNET
 
 Pocket and portable adaptors
 CONFIG_NET_POCKET
-  Cute little network (ethernet) devices which attach to your parallel
-  port ("pocket adaptors"). If you have one of those, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you
+  Cute little network (ethernet) devices which attach to the parallel
+  port ("pocket adaptors"), commonly used with laptops. If you have
+  one of those, say Y and read the Ethernet-HOWTO, available via ftp
+  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you
   want to plug a network card into the PCMCIA slot of your laptop
   instead (PCMCIA is the standard for credit card size extension cards
   used by all modern laptops), look in
@@ -1893,12 +2047,12 @@ CONFIG_CD_NO_IDESCSI
 Sony CDU31A/CDU33A CDROM support
 CONFIG_CDU31A
   These CDROM drives have a spring-pop-out caddyless drawer, and a
-  rectangular green LED centered beneath it.
-  NOTE: these CDROM drives will not be auto detected by the kernel at
-  boot time; you have to provide the interface address as an option to
-  the kernel as described in Documentation/cdrom/cdu31a or fill in your
+  rectangular green LED centered beneath it.  NOTE: these CDROM drives
+  will not be auto detected by the kernel at boot time; you have to
+  provide the interface address as an option to the kernel at boot
+  time as described in Documentation/cdrom/cdu31a or fill in your
   parameters into linux/drivers/cdrom/cdu31a.c. See the documentation
-  of your boot loader (lilo or loadlin) about how to pass options to 
+  of your boot loader (lilo or loadlin) about how to pass options to
   the kernel. The lilo procedure is also explained in the SCSI-HOWTO.
 
 Standard Mitsumi [no XA/Multisession] CDROM support
@@ -1928,25 +2082,27 @@ Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support
 CONFIG_SBPCD
   This driver supports most of the drives which use the Panasonic or
   SoundBlaster interface.
-  The Matsushita CR-521, CR-522, CR-523, CR-562, CR-563 drives (sometimes
-  labeled "Creative"), the CreativeLabs CD200, the Longshine LCS-7260,
-  the "IBM External ISA CDROM" (in fact a CR-56x model), the TEAC CD-55A
-  fall under this category. Some other "electrically compatible" drives
-  (Vertos, Genoa, some Funai models) are currently not supported; for the
-  Sanyo H94A drive currently a separate driver (asked later) is responsible.
-  Most drives have a uniquely shaped faceplate, with a caddyless motorized
-  drawer, but without external brand markings. The older CR-52x drives have
-  a caddy and manual loading/eject, but still no external markings.
-  The driver is able to do an extended auto-probing for interface addresses
-  and drive types; this can help to find facts in cases you are not sure,
-  but can consume some time during the boot process if none of the supported
-  drives gets found.
+  The Matsushita CR-521, CR-522, CR-523, CR-562, CR-563 drives
+  (sometimes labeled "Creative"), the CreativeLabs CD200, the
+  Longshine LCS-7260, the "IBM External ISA CDROM" (in fact a CR-56x
+  model), the TEAC CD-55A fall under this category. Some other
+  "electrically compatible" drives (Vertos, Genoa, some Funai models)
+  are currently not supported; for the Sanyo H94A drive currently a
+  separate driver (asked later) is responsible.  Most drives have a
+  uniquely shaped faceplate, with a caddyless motorized drawer, but
+  without external brand markings. The older CR-52x drives have a
+  caddy and manual loading/eject, but still no external markings.  The
+  driver is able to do an extended auto-probing for interface
+  addresses and drive types; this can help to find facts in cases you
+  are not sure, but can consume some time during the boot process if
+  none of the supported drives gets found.
   Once your drive got found, you should enter the reported parameters into
   linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
-  This driver can support up to four CDROM interface cards, and each card
-  can support up to four CDROM drives; if you say Y here, you will be asked
-  how many controllers you have. If compiled as a module, only one interface
-  card (but with up to four drives) is usable.
+  This driver can support up to four CDROM interface cards, and each
+  card can support up to four CDROM drives; if you say Y here, you
+  will be asked how many controllers you have. If compiled as a
+  module, only one interface card (but with up to four drives) is
+  usable.
 
 Matsushita/Panasonic, ... second CDROM controller support
 CONFIG_SBPCD2
@@ -1992,7 +2148,7 @@ CONFIG_SJCD
 
 Soft configurable cdrom interface card support
 CONFIG_CDI_INIT
-  If you want to include boot-time intialisation of any cdrom
+  If you want to include boot-time initialization of any cdrom
   interface card that is software configurable, say Y here.
   Currently only the ISP16/MAD16/Mozart cards are supported.
 
@@ -2003,15 +2159,19 @@ CONFIG_ISP16_CDI
   at boot time, please say Y. Boot time command line options (or
   'append=' options in /etc/lilo.conf) are:
                 isp16=<port>,<irq>,<dma>,<drive_type>
-  Here 'port','irq' and 'dma' are the base i/o address, irq number
-  and dma line assumed to be used by the attached cdrom drive. 'drive_type'
-  is the type of cdrom drive or its emulation mode. Valid values for
-  drive_type include: Sanyo, Panasonic (same as Sanyo), Sony and Mitsumi.
-  Default values are: port=0x340, irq=0, dma=0, drive_type=Sanyo.
+
+  Here 'port','irq' and 'dma' are the base i/o address, irq number and
+  dma line assumed to be used by the attached cdrom
+  drive. 'drive_type' is the type of cdrom drive or its emulation
+  mode. Valid values for drive_type include: Sanyo, Panasonic (same as
+  Sanyo), Sony and Mitsumi.  Default values are: port=0x340, irq=0,
+  dma=0, drive_type=Sanyo.
   The command line
                 isp16=noisp16
   will skip detection and configuration after all.
-  N.B. options are case sensitive.
+  N.B. options are case sensitive. 
+  Read Documentation/cdrom/isp16 for details. 
+
 
 Quota support
 CONFIG_QUOTA
@@ -2019,7 +2179,7 @@ CONFIG_QUOTA
   usage (also called diskquotas). Currently, it works only for the
   ext2 filesystem; you need the software available via ftp (user:
   anonymous) from
-  sunsite.unc.edu:/pub/Linux/systm/Admin/quota_acct.tar.gz in order to
+  sunsite.unc.edu:/pub/Linux/system/Admin/quota_acct.tar.gz in order to
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
@@ -2196,19 +2356,19 @@ CONFIG_ROOT_NFS
   some other computer over the net via NFS (presumably because your
   box doesn't have a harddisk), say Y here. You will then have to
   specify the directory that should be remotely mounted with the
-  "root" kernel command line option. See the documentation of your
-  boot loader (lilo or loadlin) about how to pass options to the
-  kernel. The lilo procedure is also explained in the SCSI-HOWTO,
-  available via ftp (user: anonymous) in
+  "root" kernel command line option at boot time. See the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel. The lilo procedure is also explained in
+  the SCSI-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.) Most people say N here.
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS
-  This is the standard filesystem used on CDROMs. It was previously known 
-  as "High Sierra Filesystem" and is called "hsfs" on other Unix systems. 
-  If you have a CDROM drive and want to do more with it than just listen to
-  audio CDs and watch its LEDs, say Y (and read the CDROM-HOWTO,
-  available via ftp (user: anonymous) from
+  This is the standard filesystem used on CDROMs. It was previously
+  known as "High Sierra Filesystem" and is called "hsfs" on other Unix
+  systems.  If you have a CDROM drive and want to do more with it than
+  just listen to audio CDs and watch its LEDs, say Y (and read the
+  CDROM-HOWTO, available via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO), thereby enlarging your
   kernel by about 27 kB; otherwise say N.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
@@ -2277,14 +2437,15 @@ CONFIG_SMB_FS
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS
   NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
-  used by NetWare clients to talk to file servers. Enabling this
-  allows you to mount NetWare file server volumes and access them just
-  like any other directory. To actually mount the filesystem, you need
-  a special mount program, available on sunsite.unc.edu via anonymous
-  ftp in /pub/Linux/system/Filesystem/ncpfs-xx.tgz. If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt.
+  used by NetWare clients to talk to file servers. It is to IPX what
+  nfs is to tcp/ip, if that helps. Enabling this option allows you to
+  mount NetWare file server volumes and to access them just like any
+  other Unix directory. To actually mount the filesystem, you need a
+  special mount program, as described in the IPX-HOWTO on
+  sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 Cyclades async mux support
 CONFIG_CYCLADES
@@ -2301,21 +2462,24 @@ CONFIG_STALDRV
   Stallion cards give you many serial ports. You would need something
   like this to connect more than two modems to your linux box, for
   instance in order to become a BBS. If you say Y here, you will be
-  asked for your specific card model in the next questions. If you
-  haven't heard about it, it's safe to say N.
+  asked for your specific card model in the next questions. Make sure
+  to read drivers/char/README.stallion in this case. If you have never
+  heard about all this, it's safe to say N.
  
 Stallion EasyIO or EC8/32 support 
 CONFIG_STALLION n
   If you have an EasyIO or EasyConnection 8/32 multiport Stallion
-  card, then this is for you; say Y.  If you want to compile this as a
+  card, then this is for you; say Y. Make sure to read
+  drivers/char/README.stallion. If you want to compile this as a
   module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
 CONFIG_ISTALLION n
   If you have an EasyConnection 8/64, ONboard, Brumby or Stallion
-  serial multiport card, say Y here. To compile it as a module ( =
-  code which can be inserted in and removed from the running kernel
+  serial multiport card, say Y here. Make sure to read
+  drivers/char/README.stallion. To compile it as a module ( = code
+  which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
 
 Parallel printer support
@@ -2493,6 +2657,35 @@ CONFIG_WATCHDOG
   after a lock-up. For details, read Documentation/watchdog.txt in the
   kernel source. If unsure, say N.
 
+Disable watchdog shutdown on close
+CONFIG_WATCHDOG_NOWAYOUT
+  The default watchdog behaviour is to stop the timer if the process
+  managing it closes the file. Its always remotely possible that this
+  process might get killed. In NOWAYOUT mode you cannot stop the watchdog
+  once its begun.
+
+WDT Watchdog timer
+CONFIG_WDT
+  Drivers for the WDT watchdog timer cards. These are hardware timer boards
+  that physically pull the power on and off to recover crashed machines.
+  Brutal but _very_ effective.
+
+WDT501 features
+CONFIG_WDT_501
+  Enable the onboard thermometer and voltage monitors on the extended (501)
+  card.
+
+Fan Tachometer
+CONFIG_WDT_501_FAN
+  Enable the Fan Tachometer on the WDT501. Only do this if you have a fan
+  tachometer actually set up.
+
+Software Watchdog
+CONFIG_SOFT_WATDHDOG
+  A software monitoring watchdog. This will fail to reboot your system from
+  some situations that the hardware watchdog will recover from. Equally its
+  a lot cheaper to install.
+
 Do CPU IDLE calls
 CONFIG_APM_CPU_IDLE
   Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.  On
@@ -2599,6 +2792,14 @@ CONFIG_PROFILE_SHIFT
 # LocalWords:  ICL EtherTeam ETH IDESCSI TXC dmesg httpd hlt sjc barlow dlp mtu
 # LocalWords:  thesphere TwoServers BOOTP DHCP ncpfs BPQETHER BPQ chipsets MG
 # LocalWords:  bsd comp Sparcstation le SunOS ie Gracilis PackeTwin PT pt LU FX
-# LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS
+# LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS ramdisk IDETAPE cmd
 # LocalWords:  Vertos Genoa Funai hsfs NCP NetWare tgz APM apm ioctls UltraLite
-# LocalWords:  TravelMate CDT LCD backlight VC
+# LocalWords:  TravelMate CDT LCD backlight VC RPC Mips Olivetty DECStation AXP
+# LocalWords:  PMAX MILO Alphas Multia Tseng linuxelf endian mipsel mips drv HT
+# LocalWords:  KERNELD kerneld callouts AdvanSys advansys diskquotas Admin WDT
+# LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
+# LocalWords:  QD qd UMC umc ALI ali lena fnet fr homepage azstarnet axplinux
+# LocalWords:  Avanti XL AlphaStations Jensen DECpc AXPpci UDB Cabriolet MCA RC
+# LocalWords:  AlphaPC uwaterloo cpbeaure mca AOUT OUTput PPro sipx gwdg
+# LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT
+# LocalWords:  OPTi isp irq noisp VFAT vfat NTFS

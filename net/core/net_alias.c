@@ -15,9 +15,12 @@
  *	-	net_alias_type objs registration/unreg., module-ables.
  *	-	/proc/net/aliases & /proc/net/alias_types entries
  * Fixes:
- *	JJC	:	several net_alias_type func. renamed.
- *	JJC	:	net_alias_type object methods now pass *this.
- *	JJC	:	xxx_rcv device selection based on <src,dst> addrs
+ *			JJC	:	several net_alias_type func. renamed.
+ *			JJC	:	net_alias_type object methods now pass 
+ *					*this.
+ *			JJC	:	xxx_rcv device selection based on <src,dst> 
+ *					addrs
+ *		Andreas Schultz	:	Kerneld support.
  *
  * FIXME:
  *	- User calls sleep/wake_up locking.
@@ -30,6 +33,7 @@
  *	
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
@@ -46,6 +50,10 @@
 #endif
 
 #include <linux/net_alias.h>
+
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 /*
  * Only allow the following flags to pass from main device to aliases
@@ -346,13 +354,23 @@ net_alias_dev_create(struct device *main_dev, int slot, int *err, struct sockadd
    */
   
   nat = nat_getbytype(family);
-  if (!nat)
-  {
-    printk("net_alias_dev_create(%s:%d): unregistered family==%d\n",
-	   main_dev->name, slot, family);
-    /* *err = -EAFNOSUPPORT; */
-    *err = -EINVAL;
-    return NULL;
+  if (!nat) {
+#ifdef CONFIG_KERNELD
+    char modname[20];
+    sprintf (modname,"netalias-%d", family);
+    request_module(modname);
+
+    nat = nat_getbytype(family);
+    if (!nat) {
+#endif
+      printk("net_alias_dev_create(%s:%d): unregistered family==%d\n",
+             main_dev->name, slot, family);
+      /* *err = -EAFNOSUPPORT; */
+      *err = -EINVAL;
+      return NULL;
+#ifdef CONFIG_KERNELD
+    }
+#endif
   }
   
   /*

@@ -30,7 +30,6 @@ CONFIG_M586=y
 # Floppy, IDE, and other block devices
 #
 CONFIG_BLK_DEV_FD=y
-# CONFIG_BLK_DEV_RAM is not set
 CONFIG_BLK_DEV_IDE=y
 
 #
@@ -43,6 +42,8 @@ CONFIG_BLK_DEV_CMD640=y
 CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_BLK_DEV_TRITON is not set
 # CONFIG_IDE_CHIPSETS is not set
+# CONFIG_BLK_DEV_RAM is not set
+# CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_XD is not set
 
 #

@@ -96,7 +96,7 @@ static struct file_operations ncp_dir_operations = {
 	NULL,			/* write - bad */
 	ncp_readdir,		/* readdir */
 	NULL,			/* select - default */
-	ncp_ioctl,		/* ioctl - default */
+	ncp_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
@@ -157,6 +157,11 @@ ncp_readdir(struct inode *inode, struct file *filp,
 	{
 		printk("ncp_readdir: inode is NULL or not a directory\n");
 		return -EBADF;
+	}
+
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+	{
+		return -EIO;
 	}
 
 	if (c_entry == NULL) 
@@ -640,6 +645,11 @@ ncp_lookup(struct inode *dir, const char *__name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(dir)))
+	{
+		iput(dir);
+		return -EIO;
+	}
 
         DDPRINTK("ncp_lookup: %s, len %d\n", __name, len);
 
@@ -772,6 +782,11 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(dir)))
+	{
+		iput(dir);
+		return -EIO;
+	}
 
 	strncpy(_name, name, len);
 	_name[len] = '\0';
@@ -779,7 +794,8 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 
 	if (ncp_open_create_file_or_subdir(NCP_SERVER(dir),
 					   NCP_ISTRUCT(dir), _name,
-					   OC_MODE_CREATE|OC_MODE_OPEN,
+					   OC_MODE_CREATE|OC_MODE_OPEN|
+					   OC_MODE_REPLACE,
 					   0, AR_READ|AR_WRITE,
 					   &finfo) != 0)
 	{
@@ -828,6 +844,11 @@ ncp_mkdir(struct inode *dir, const char *name, int len, int mode)
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(dir)))
+	{
+		iput(dir);
+		return -EIO;
+	}
 
 	if (ncp_open_create_file_or_subdir(NCP_SERVER(dir),
 					   NCP_ISTRUCT(dir), _name,
@@ -858,8 +879,14 @@ ncp_rmdir(struct inode *dir, const char *name, int len)
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(dir)))
+	{
+		iput(dir);
+		return -EIO;
+	}
         if (ncp_find_inode(dir, name) != NULL)
 	{
+		iput(dir);
                 error = -EBUSY;
         }
 	else
@@ -877,7 +904,7 @@ ncp_rmdir(struct inode *dir, const char *name, int len)
 		}
 		else
 		{
-			error = -EINVAL;
+			error = -EACCES;
 		}
         }
 	iput(dir);
@@ -896,8 +923,14 @@ ncp_unlink(struct inode *dir, const char *name, int len)
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!ncp_conn_valid(NCP_SERVER(dir)))
+	{
+		iput(dir);
+		return -EIO;
+	}
         if (ncp_find_inode(dir, name) != NULL)
 	{
+		iput(dir);
                 error = -EBUSY;
         }
 	else
@@ -914,7 +947,7 @@ ncp_unlink(struct inode *dir, const char *name, int len)
 		}
 		else
 		{
-			error = -EINVAL;
+			error = -EACCES;
 		}
         }
 	iput(dir);
@@ -934,6 +967,12 @@ ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
 		printk("ncp_rename: old inode is NULL or not a directory\n");
                 res = -ENOENT;
                 goto finished;
+	}
+
+	if (!ncp_conn_valid(NCP_SERVER(old_dir)))
+	{
+		res = -EIO;
+		goto finished;
 	}
 
 	if (!new_dir || !S_ISDIR(new_dir->i_mode))

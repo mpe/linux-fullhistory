@@ -272,14 +272,34 @@ static int get_uptime(char * buffer)
 static int get_meminfo(char * buffer)
 {
 	struct sysinfo i;
+	int len;
 
 	si_meminfo(&i);
 	si_swapinfo(&i);
-	return sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
+	len = sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
 		"Mem:  %8lu %8lu %8lu %8lu %8lu %8lu\n"
 		"Swap: %8lu %8lu %8lu\n",
 		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, page_cache_size*PAGE_SIZE,
 		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
+	/*
+	 * Tagged format, for easy grepping and expansion. The above will go away
+	 * eventually, once the tools have been updated.
+	 */
+	return len + sprintf(buffer+len,
+		"MemTotal:  %8lu kB\n"
+		"MemFree:   %8lu kB\n"
+		"MemShared: %8lu kB\n"
+		"Buffers:   %8lu kB\n"
+		"Cached:    %8lu kB\n"
+		"SwapTotal: %8lu kB\n"
+		"SwapFree:  %8lu kB\n",
+		i.totalram >> 10,
+		i.freeram >> 10,
+		i.sharedram >> 10,
+		i.bufferram >> 10,
+		page_cache_size << (PAGE_SHIFT - 10),
+		i.totalswap >> 10,
+		i.freeswap >> 10);
 }
 
 static int get_version(char * buffer)
@@ -451,6 +471,164 @@ static unsigned long get_wchan(struct task_struct *p)
 # define KSTK_EIP(tsk)	(*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
 #endif
+
+/* Gcc optimizes away "strlen(x)" for constant x */
+#define ADDBUF(buffer, string) \
+do { memcpy(buffer, string, strlen(string)); \
+     buffer += strlen(string); } while (0)
+
+static inline char * task_name(struct task_struct *p, char * buf)
+{
+	int i;
+	char * name;
+
+	ADDBUF(buf, "Name:\t");
+	name = p->comm;
+	i = sizeof(p->comm);
+	do {
+		unsigned char c = *name;
+		name++;
+		i--;
+		*buf = c;
+		if (!c)
+			break;
+		if (c == '\\') {
+			buf[1] = c;
+			buf += 2;
+			continue;
+		}
+		if (c == '\n') {
+			buf[0] = '\\';
+			buf[1] = 'n';
+			buf += 2;
+			continue;
+		}
+		buf++;
+	} while (i);
+	*buf = '\n';
+	return buf+1;
+}
+
+static inline char * task_state(struct task_struct *p, char *buffer)
+{
+#define NR_STATES (sizeof(states)/sizeof(const char *))
+	unsigned int n = p->state;
+	static const char * states[] = {
+		"R (running)",
+		"S (sleeping)",
+		"D (disk sleep)",
+		"Z (zombie)",
+		"T (stopped)",
+		"W (paging)",
+		". Huh?"
+	};
+
+	if (n >= NR_STATES)
+		n = NR_STATES-1;
+
+	buffer += sprintf(buffer,
+		"State:\t%s\n"
+		"Pid:\t%d\n"
+		"PPid:\t%d\n"
+		"Uid:\t%d\t%d\t%d\t%d\n"
+		"Gid:\t%d\t%d\t%d\t%d\n",
+		states[n],
+		p->pid, p->p_pptr->pid,
+		p->uid, p->euid, p->suid, p->fsuid,
+		p->gid, p->egid, p->sgid, p->fsgid);
+	return buffer;
+}
+
+static inline char * task_mem(struct task_struct *p, char *buffer)
+{
+	struct mm_struct * mm = p->mm;
+
+	if (mm && mm != &init_mm) {
+		struct vm_area_struct * vma = mm->mmap;
+		unsigned long data = 0, stack = 0;
+		unsigned long exec = 0, lib = 0;
+
+		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+			unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
+			if (!vma->vm_inode) {
+				data += len;
+				if (vma->vm_flags & VM_GROWSDOWN)
+					stack += len;
+				continue;
+			}
+			if (vma->vm_flags & VM_WRITE)
+				continue;
+			if (vma->vm_flags & VM_EXEC) {
+				exec += len;
+				if (vma->vm_flags & VM_EXECUTABLE)
+					continue;
+				lib += len;
+			}
+		}	
+		buffer += sprintf(buffer,
+			"VmSize:\t%8lu kB\n"
+			"VmLck:\t%8lu kB\n"
+			"VmRSS:\t%8lu kB\n"
+			"VmData:\t%8lu kB\n"
+			"VmStk:\t%8lu kB\n"
+			"VmExe:\t%8lu kB\n"
+			"VmLib:\t%8lu kB\n",
+			mm->total_vm << (PAGE_SHIFT-10),
+			mm->locked_vm << (PAGE_SHIFT-10),
+			mm->rss << (PAGE_SHIFT-10),
+			data - stack, stack,
+			exec - lib, lib);
+	}
+	return buffer;
+}
+
+static inline char * task_sig(struct task_struct *p, char *buffer)
+{
+	buffer += sprintf(buffer,
+		"SigPnd:\t%08lx\n"
+		"SigBlk:\t%08lx\n",
+		p->signal, p->blocked);
+	if (p->sig) {
+		struct sigaction * action = p->sig->action;
+		unsigned long sig_ign = 0, sig_caught = 0;
+		unsigned long bit = 1;
+		int i;
+
+		for (i = 0; i < 32; i++) {
+			switch((unsigned long) action->sa_handler) {
+				case 0:
+					break;
+				case 1:
+					sig_ign |= bit;
+					break;
+				default:
+					sig_caught |= bit;
+			}
+			bit <<= 1;
+			action++;
+		}
+		
+		buffer += sprintf(buffer,
+			"SigIgn:\t%08lx\n"
+			"SigCgt:\t%08lx\n",
+			sig_ign, sig_caught);
+	}
+	return buffer;
+}
+
+static int get_status(int pid, char * buffer)
+{
+	char * orig = buffer;
+	struct task_struct ** p = get_task(pid), *tsk;
+
+	if (!p || (tsk = *p) == NULL)
+		return 0;
+	buffer = task_name(tsk, buffer);
+	buffer = task_state(tsk, buffer);
+	buffer = task_mem(tsk, buffer);
+	buffer = task_sig(tsk, buffer);
+	return buffer - orig;
+}
 
 static int get_stat(int pid, char * buffer)
 {
@@ -857,6 +1035,8 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 static int get_process_array(char * page, int pid, int type)
 {
 	switch (type) {
+		case PROC_PID_STATUS:
+			return get_status(pid, page);
 		case PROC_PID_ENVIRON:
 			return get_env(pid, page);
 		case PROC_PID_CMDLINE:

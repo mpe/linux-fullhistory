@@ -81,7 +81,7 @@ static inline void revalidate_inode(struct nfs_server * server, struct inode * i
 			return;
 		NFS_OLDMTIME(inode) = fattr.mtime.seconds;
 	}
-	invalidate_inode_pages(inode, 0);
+	invalidate_inode_pages(inode);
 }
 
 
@@ -118,18 +118,15 @@ static inline void do_read_nfs(struct inode * inode, char * buf, unsigned long p
 		result = nfs_proc_read(NFS_SERVER(inode), NFS_FH(inode), 
 			pos, rsize, buf, &fattr);
 		if (result < 0)
-			goto partial;
+			break;
 		refresh = 1;
-		count -= rsize;
-		pos += rsize;
-		buf += rsize;
+		count -= result;
+		pos += result;
+		buf += result;
 		if (result < rsize)
-			goto partial;
+			break;
 	} while (count);
-	nfs_refresh_inode(inode, &fattr);
-	return;
 
-partial:
 	memset(buf, 0, count);
 	if (refresh)
 		nfs_refresh_inode(inode, &fattr);

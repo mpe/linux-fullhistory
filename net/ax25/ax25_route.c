@@ -30,7 +30,7 @@
  *	AX.25 031	Jonathan(G4KLX)	Added concept of default route.
  *			Joerg(DL1BKE)	ax25_rt_build_path() find digipeater list and device by 
  *					destination call. Needed for IP routing via digipeater
- *
+ *			Jonathan(G4KLX)	Added routing for IP datagram packets.
  */
  
 #include <linux/config.h>
@@ -101,20 +101,13 @@ void ax25_rt_rx_frame(ax25_address *src, struct device *dev, ax25_digi *digi)
 	}
 
 	if (count > AX25_ROUTE_MAX) {
-		oldest->callsign = *src;
-		oldest->dev      = dev;
-		if (oldest->digipeat != NULL) {
+		if (oldest->digipeat != NULL)
 			kfree_s(oldest->digipeat, sizeof(ax25_digi));
-			oldest->digipeat = NULL;
-		}
-		oldest->stamp    = xtime;
-		oldest->n        = 1;
-		oldest->ip_mode  = ' ';
-		return;
+		ax25_rt = oldest;
+	} else {
+		if ((ax25_rt = (struct ax25_route *)kmalloc(sizeof(struct ax25_route), GFP_ATOMIC)) == NULL)
+			return;		/* No space */
 	}
-
-	if ((ax25_rt = (struct ax25_route *)kmalloc(sizeof(struct ax25_route), GFP_ATOMIC)) == NULL)
-		return;		/* No space */
 
 	ax25_rt->callsign = *src;
 	ax25_rt->dev      = dev;
@@ -128,16 +121,18 @@ void ax25_rt_rx_frame(ax25_address *src, struct device *dev, ax25_digi *digi)
 			kfree_s(ax25_rt, sizeof(struct ax25_route));
 			return;
 		}
-		memcpy(ax25_rt->digipeat, digi, sizeof(ax25_digi));
+		*ax25_rt->digipeat = *digi;
 	}
 
-	save_flags(flags);
-	cli();
+	if (ax25_rt != oldest) {
+		save_flags(flags);
+		cli();
 
-	ax25_rt->next = ax25_route;
-	ax25_route    = ax25_rt;
+		ax25_rt->next = ax25_route;
+		ax25_route    = ax25_rt;
 
-	restore_flags(flags);
+		restore_flags(flags);
+	}
 }
 
 void ax25_rt_device_down(struct device *dev)
@@ -402,12 +397,12 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 		call = (ax25_address *)ax25->device->dev_addr;
 	}
 
-	memcpy(&ax25->source_addr, call, sizeof(ax25_address));
+	ax25->source_addr = *call;
 
 	if (ax25_rt->digipeat != NULL) {
 		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
-		memcpy(ax25->digipeat, ax25_rt->digipeat, sizeof(ax25_digi));
+		*ax25->digipeat = *ax25_rt->digipeat;
 	}
 
 	if (ax25->sk != NULL)
@@ -424,8 +419,7 @@ void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr)
 	struct ax25_route *ax25_rt;
 
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
-		if ( ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->digipeat != NULL ) {
-		
+		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->digipeat != NULL) {
 			if (ax25_rt->dev == NULL)
 				continue;
 			
@@ -433,12 +427,48 @@ void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr)
 				return;
 
 			ax25->device = ax25_rt->dev;
-			memcpy(ax25->digipeat, ax25_rt->digipeat, sizeof(ax25_digi));
+			*ax25->digipeat = *ax25_rt->digipeat;
+
 			return;
 		}
 	}
+
 	ax25->digipeat = NULL;
 }
+
+void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *dev)
+{
+	struct ax25_route *ax25_rt;
+	ax25_address src, dest;
+	unsigned char *bp;
+	int len;
+
+	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
+		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->dev == dev) {
+			if (ax25_rt->digipeat == NULL)
+				return;
+
+			len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
+			
+			if (skb_headroom(skb) < len) {
+				printk("ax25_dg_build_path: not enough headroom for in skb\n");
+				return;
+			}
+
+			memcpy(&dest, skb->data + 1, AX25_ADDR_LEN);
+			memcpy(&src,  skb->data + 8, AX25_ADDR_LEN);
+
+			bp = skb_push(skb, len);
+
+			*bp++ = 0x00;		/* KISS Data */
+
+			build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, C_COMMAND, MODULUS);
+
+			return;
+		}
+	}
+}
+
 /*
  *	Register the mode of an incoming IP frame. It is assumed that an entry
  *	already exists in the routing table.
@@ -563,7 +593,6 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 	struct device *dev;
 	struct ax25_dev *ax25_dev;
 	int err;
-	int count;
 
 	switch (cmd) {
 		case SIOCAX25SETPARMS:

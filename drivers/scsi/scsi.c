@@ -234,12 +234,14 @@ static struct dev_info device_list[] =
 {"MAXTOR","MXT-1240S","I1.2", BLIST_NOLUN},     /* Locks up when LUN>0 polled */
 {"MAXTOR","XT-4170S","B5A", BLIST_NOLUN},       /* Locks-up sometimes when LUN>0 polled. */
 {"MAXTOR","XT-8760S","B7B", BLIST_NOLUN},       /* guess what? */
+{"MEDIAVIS","RENO CD-ROMX2A","2.03",BLIST_NOLUN},/*Responds to all lun */
 {"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
 {"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */
 {"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},   /* causes failed REQUEST SENSE on lun 1 
 						 * for aha152x controller, which causes 
 						 * SCSI code to reset bus.*/
 {"SEAGATE", "ST296","921", BLIST_NOLUN},        /* Responds to all lun */
+{"SEAGATE","ST1581","6538",BLIST_NOLUN},	/* Responds to all lun */
 {"SONY","CD-ROM CDU-541","4.3d", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-55S","1.0i", BLIST_NOLUN},
 {"SONY","CD-ROM CDU-561","1.7x", BLIST_NOLUN},

@@ -185,7 +185,7 @@ struct scc_stat {
 };
 
 
-struct scc_modem{
+struct scc_modem {
 	long speed;		/* Line speed, bps */
 	char clocksrc;		/* 0 = DPLL, 1 = external, 2 = divider */
 	char nrz;		/* NRZ instead of NRZI */	

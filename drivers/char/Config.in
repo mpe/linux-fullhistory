@@ -13,7 +13,7 @@ fi
 tristate 'Parallel printer support' CONFIG_PRINTER
 tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
 tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
-if [ "$CONFIG_PSMOUSE" = "y" ]; then
+if [ "$CONFIG_PSMOUSE" != "n" ]; then
   bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
 fi
 tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
@@ -39,6 +39,7 @@ if [ "$CONFIG_APM" = "y" ]; then
 fi
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
+  bool '    Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
   tristate '   WDT Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" = "y" ]; then
      bool '       WDT501 features' CONFIG_WDT_501

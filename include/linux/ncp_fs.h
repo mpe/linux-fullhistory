@@ -54,6 +54,8 @@ struct ncp_fs_info {
 #define NCP_MAXPATHLEN 255
 #define NCP_MAXNAMELEN 14
 
+#define NCP_MSG_COMMAND "/sbin/nwmsg"
+
 #ifdef __KERNEL__
 
 /* The readdir cache size controls how many directory entries are
@@ -145,6 +147,7 @@ struct super_block *ncp_read_super(struct super_block *sb,
 extern int init_ncp_fs(void);
 void ncp_invalidate_connection(struct ncp_server *server);
 int ncp_conn_is_valid(struct ncp_server *server);
+void ncp_trigger_message(struct ncp_server *server);
 
 /* linux/fs/ncpfs/sock.c */
 int ncp_request(struct ncp_server *server, int function);
@@ -152,6 +155,7 @@ int ncp_connect(struct ncp_server *server);
 int ncp_disconnect(struct ncp_server *server);
 int ncp_catch_watchdog(struct ncp_server *server);
 int ncp_dont_catch_watchdog(struct ncp_server *server);
+int ncp_catch_message(struct ncp_server *server);
 void ncp_lock_server(struct ncp_server *server);
 void ncp_unlock_server(struct ncp_server *server);
 

@@ -27,7 +27,7 @@
  *	AX.25 030	Jonathan(G4KLX)	Added AX.25 fragment reception.
  *					Upgraded state machine for SABME.
  *					Added arbitrary protocol id support.
- *			Joerg(DL1BKE)	Added DAMA support
+ *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  */
 
 #include <linux/config.h>
@@ -268,14 +268,12 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case DISC:
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
-			if (ax25->dama_slave)
-			{
+			if (ax25->dama_slave) {
 				ax25->state = AX25_STATE_0;
 				ax25->dama_slave = 0;
 				ax25_dama_off(ax25);
 
-				if (ax25->sk != NULL) 
-				{
+				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
 					ax25->sk->err   = 0;
 					if (!ax25->sk->dead)
@@ -321,12 +319,11 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 		case REJ:
 		case RNR:
 		case RR:
-			if (pf)
-			{
+			if (pf) {
 				if (ax25->dama_slave)
 					ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 				else
-				ax25_send_control(ax25, DM, POLLON, C_RESPONSE);
+					ax25_send_control(ax25, DM, POLLON, C_RESPONSE);
 			}
 			break;
 				
@@ -465,8 +462,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				ax25_check_iframes_acked(ax25, nr);
 			}
 			if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-				if (pf)
-				{
+				if (pf)	{
 					if (ax25->dama_slave)	/* dl1bke 960114 */
 						dama_enquiry_response(ax25);
 					else
@@ -477,8 +473,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ns == ax25->vr) {
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-					if (pf)
-					{
+					if (pf) {
 						if (ax25->dama_slave)	/* dl1bke 960114 */
 							dama_enquiry_response(ax25);
 						else
@@ -492,7 +487,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					if (ax25->dama_slave)	/* dl1bke 960114 */
 						dama_enquiry_response(ax25);
 					else
-					ax25_enquiry_response(ax25);
+						ax25_enquiry_response(ax25);
 				} else {
 					if (!(ax25->condition & ACK_PENDING_CONDITION)) {
 						ax25->t2timer = ax25->t2;
@@ -501,8 +496,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				}
 			} else {
 				if (ax25->condition & REJECT_CONDITION) {
-					if (pf) 
-					{
+					if (pf) {
 						if (ax25->dama_slave)	/* dl1bke 960114 */
 							dama_enquiry_response(ax25);
 						else
@@ -513,7 +507,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					if (ax25->dama_slave)		/* dl1bke 960114 */
 						dama_enquiry_response(ax25);
 					else
-					ax25_send_control(ax25, REJ, pf, C_RESPONSE);
+						ax25_send_control(ax25, REJ, pf, C_RESPONSE);
 					ax25->condition &= ~ACK_PENDING_CONDITION;
 				}
 			}
@@ -716,8 +710,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			}
 			ax25_frames_acked(ax25, nr);
 			if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-				if (pf)
-				{	/* dl1bke 960114 */
+				if (pf) {	/* dl1bke 960114 */
 					if (ax25->dama_slave)
 						ax25_enquiry_response(ax25);
 					else
@@ -728,8 +721,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ns == ax25->vr) {
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-					if (pf) 
-					{	/* dl1bke 960114 */
+					if (pf) {	/* dl1bke 960114 */
 						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
@@ -743,7 +735,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					if (ax25->dama_slave) 	/* dl1bke 960114 */
 						dama_enquiry_response(ax25);
 					else
-					ax25_enquiry_response(ax25);
+						ax25_enquiry_response(ax25);
 				} else {
 					if (!(ax25->condition & ACK_PENDING_CONDITION)) {
 						ax25->t2timer = ax25->t2;
@@ -752,8 +744,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				}
 			} else {
 				if (ax25->condition & REJECT_CONDITION) {
-					if (pf) 
-					{ 	/* dl1bke 960114 */
+					if (pf) { 	/* dl1bke 960114 */
 						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
@@ -764,7 +755,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					if (ax25->dama_slave)		/* dl1bke 960114 */
 						dama_enquiry_response(ax25);
 					else
-					ax25_send_control(ax25, REJ, pf, C_RESPONSE);
+						ax25_send_control(ax25, REJ, pf, C_RESPONSE);
 					ax25->condition &= ~ACK_PENDING_CONDITION;
 				}
 			}

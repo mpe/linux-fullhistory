@@ -11,6 +11,10 @@ O_TARGET := ncpfs.o
 O_OBJS   := dir.o file.o inode.o ioctl.o mmap.o ncplib_kernel.o sock.o
 M_OBJS   := $(O_TARGET)
 
+# If you want debugging output, please uncomment the following line
+
+# EXTRA_CFLAGS += -DDEBUG_NCP=1
+
 include $(TOPDIR)/Rules.make
 
 ncplib_kernel.o: ncplib_kernel.c ncplib_kernel.h

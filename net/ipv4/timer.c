@@ -94,7 +94,7 @@ void net_timer (unsigned long data)
 
 	if (sk->users)
 	{
-		sk->timer.expires = jiffies+10;
+		sk->timer.expires = jiffies+HZ;
 		add_timer(&sk->timer);
 		sti();
 		return;
@@ -134,15 +134,7 @@ void net_timer (unsigned long data)
 		 *	the socket to be freed.
 		 */
 
-			if(sk->wmem_alloc!=0 || sk->rmem_alloc!=0)
-			{
-				sk->wmem_alloc++;	/* So it DOESN'T go away */
-				destroy_sock (sk);
-				sk->wmem_alloc--;	/* Might now have hit 0 - fall through and do it again if so */
-				sk->users = 0;	/* This will be ok, the destroy won't totally work */
-			}
-			if(sk->wmem_alloc==0 && sk->rmem_alloc==0)
-				destroy_sock(sk);	/* Socket gone, DON'T update sk->users! */
+			destroy_sock(sk);
 			break;
 
 		case TIME_CLOSE:
@@ -152,7 +144,7 @@ void net_timer (unsigned long data)
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->shutdown = SHUTDOWN_MASK;
-			reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
+			reset_timer (sk, TIME_DONE, TCP_DONE_TIME);
 			break;
 
 		default:

@@ -197,6 +197,12 @@ struct sock
 	ipx_address		ipx_dest_addr;
 	ipx_interface		*ipx_intrfc;
 	unsigned short		ipx_port;
+
+/* To handle asynchronous messages from the NetWare server, we have to
+ * know the connection this socket belongs to. Sorry to blow up this
+ * structure even more. */
+	struct ncp_server       *ipx_ncp_server;
+
 #ifdef CONFIG_IPX_INTERN
 	unsigned char           ipx_node[IPX_NODE_LEN];
 #endif

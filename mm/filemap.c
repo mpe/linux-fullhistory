@@ -41,7 +41,40 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
  * Simple routines for both non-shared and shared mappings.
  */
 
-void invalidate_inode_pages(struct inode * inode, unsigned long start)
+/*
+ * Invalidate the pages of an inode, removing all pages that aren't
+ * locked down (those are sure to be up-to-date anyway, so we shouldn't
+ * invalidate them).
+ */
+void invalidate_inode_pages(struct inode * inode)
+{
+	struct page ** p;
+	struct page * page;
+
+	p = &inode->i_pages;
+	while ((page = *p) != NULL) {
+		if (page->locked) {
+			p = &page->next;
+			continue;
+		}
+		inode->i_nrpages--;
+		if ((*p = page->next) != NULL)
+			(*p)->prev = page->prev;
+		page->dirty = 0;
+		page->next = NULL;
+		page->prev = NULL;
+		remove_page_from_hash_queue(page);
+		page->inode = NULL;
+		free_page(page_address(page));
+		continue;
+	}
+}
+
+/*
+ * Truncate the page cache at a set offset, removing the pages
+ * that are beyond that offset (and zeroing out partial pages).
+ */
+void truncate_inode_pages(struct inode * inode, unsigned long start)
 {
 	struct page ** p;
 	struct page * page;
@@ -261,14 +294,12 @@ repeat:
  * inode->i_op->readpage() function for the actual low-level
  * stuff.
  */
-#define READAHEAD_PAGES 3
-#define MAX_IO_PAGES 4
+#define MAX_READAHEAD (PAGE_SIZE*4)
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int read = 0, newpage = 0;
+	int read = 0;
 	unsigned long pos;
 	unsigned long page_cache = 0;
-	int pre_read = 0;
 	
 	if (count <= 0)
 		return 0;
@@ -277,8 +308,6 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 	do {
 		struct page *page;
 		unsigned long offset, addr, nr;
-		int i;
-		off_t p;
 
 		if (pos >= inode->i_size)
 			break;
@@ -326,48 +355,29 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 		add_page_to_hash_queue(inode, page);
 
 		inode->i_op->readpage(inode, page);
-		/* We only set "newpage" when we encounter a
-                   completely uncached page.  This way, we do no
-                   readahead if we are still just reading data out of
-                   the cache (even if the cached page is not yet
-                   uptodate --- it may be currently being read as a
-                   result of previous readahead).  -- sct */
-		newpage = 1;
 
 found_page:
 		addr = page_address(page);
 		if (nr > count)
 			nr = count;
-		/* We have two readahead cases.  First, do data
-                   pre-read if the current read request is for more
-                   than one page, so we can merge the adjacent
-                   requests. */
-		if (newpage && nr < count) {
-			if (pre_read > 0)
-				pre_read -= PAGE_SIZE;
-			else {
-				pre_read = (MAX_IO_PAGES-1) * PAGE_SIZE;
-				if (pre_read > (count - nr))
-					pre_read = count - nr;
-				for (i=0, p=pos; i<pre_read; i+=PAGE_SIZE) {
-					p += PAGE_SIZE;
-					page_cache = try_to_read_ahead(inode, p, page_cache);
-				}
+
+		/*
+		 * We may want to do read-ahead.. Do this only
+		 * if we're waiting for the current page to be
+		 * filled in, and if
+		 *  - we're going to read more than this page
+		 *  - if "f_reada" is set
+		 */
+		if (page->locked) {
+			if (nr < count || filp->f_reada) {
+				unsigned long ahead = 0;
+				do {
+					ahead += PAGE_SIZE;
+					page_cache = try_to_read_ahead(inode, pos + ahead, page_cache);
+				} while (ahead < MAX_READAHEAD);
 			}
+			__wait_on_page(page);
 		}
-		else
-		/* Second, do readahead at the end of the read, if we
-                   are still waiting on the current IO to complete, if
-                   readahead is flagged for the file, and if we have
-                   finished with the current block. */
-		if (newpage && nr == count && filp->f_reada
-		    && !((pos + nr) & ~PAGE_MASK)) {
-			for (i=0, p=pos; i<READAHEAD_PAGES; i++) {
-				p += PAGE_SIZE;
-				page_cache = try_to_read_ahead(inode, p, page_cache);
-			}
-		}
-		wait_on_page(page);
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
 		memcpy_tofs(buf, (void *) (addr + offset), nr);

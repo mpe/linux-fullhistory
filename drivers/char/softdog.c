@@ -18,12 +18,13 @@
  *	driver this won't always recover a failed machine.
  */
  
- 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mouse.h>
+
 #define WATCHDOG_MINOR	130
 #define TIMER_MARGIN	(60*HZ)		/* Allow 1 minute */
 
@@ -68,7 +69,9 @@ static void softdog_release(struct inode *inode, struct file *file)
 	/*
 	 *	Shut off the timer.
 	 */
+#ifndef CONFIG_WATCHDOG_NOWAYOUT	 
 	del_timer(&watchdog_ticktock);
+#endif	
 	timer_alive=0;
 }
 

@@ -20,6 +20,7 @@
  *		Alan Cox	:	Limit size of allocated blocks.
  *		Alan Cox	:	Fixed the stupid socketpair bug.
  *		Alan Cox	:	BSD compatibility fine tuning.
+ *		Alan Cox	:	Fixed a bug in connect when interrupted.
  *
  *
  * Known differences from reference BSD that was tested:
@@ -69,8 +70,9 @@ static unix_socket *unix_socket_list=NULL;
 #define min(a,b)	(((a)<(b))?(a):(b))
 
 /*
- * Make sure the unix name is null-terminated.
+ *	Make sure the unix name is null-terminated.
  */
+ 
 static inline void unix_mkname(struct sockaddr_un * sunaddr, unsigned long len)
 {
 	if (len >= sizeof(*sunaddr))
@@ -468,9 +470,13 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 			sock->state=SS_UNCONNECTED;
 			return -ECONNREFUSED;
 		}
-		if(sock->state==SS_CONNECTING)
+		if(sock->state!=SS_CONNECTING)
+			return -EISCONN;
+		if(flags&O_NONBLOCK)
 			return -EALREADY;
-		return -EISCONN;
+		/*
+		 *	Drop through the connect up logic to the wait.
+		 */
 	}
 	
 	if(addr_len < sizeof(sunaddr->sun_family)+1 || sunaddr->sun_family!=AF_UNIX)
@@ -478,15 +484,14 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 		
 	unix_mkname(sunaddr, addr_len);
 		
-	if(sk->type==SOCK_DGRAM && sk->protinfo.af_unix.other)
+	if(sk->type==SOCK_DGRAM)
 	{
-		sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
-		sk->protinfo.af_unix.other=NULL;
-		sock->state=SS_UNCONNECTED;
-	}
-
-	if(sock->type==SOCK_DGRAM)
-	{
+		if(sk->protinfo.af_unix.other)
+		{
+			sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
+			sk->protinfo.af_unix.other=NULL;
+			sock->state=SS_UNCONNECTED;
+		}
 		other=unix_find_other(sunaddr->sun_path, &err);
 		if(other==NULL)
 			return err;

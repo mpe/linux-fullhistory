@@ -322,36 +322,24 @@ void destroy_sock(struct sock *sk)
 		kfree_skb(skb, FREE_WRITE);
   	}
   	
-  	/* 
-  	 *	In case it's sleeping somewhere. 
-  	 */
-  	 
-  	if (!sk->dead) 
-  		sk->write_space(sk);
-
   	/*
-  	 *	Don't discard received data until the user side kills its
-  	 *	half of the socket.
+  	 *	Clean up the read buffer.
   	 */
 
-	if (sk->dead) 
+	while((skb=skb_dequeue(&sk->receive_queue))!=NULL) 
 	{
-  		while((skb=skb_dequeue(&sk->receive_queue))!=NULL) 
-  		{
 		/*
 		 * This will take care of closing sockets that were
 		 * listening and didn't accept everything.
 		 */
-			if (skb->sk != NULL && skb->sk != sk) 
-			{
-				IS_SKB(skb);
-				skb->sk->dead = 1;
-				skb->sk->prot->close(skb->sk, 0);
-			}
+		if (skb->sk != NULL && skb->sk != sk) 
+		{
 			IS_SKB(skb);
-			kfree_skb(skb, FREE_READ);
+			skb->sk->prot->close(skb->sk, 0);
 		}
-	}	
+		IS_SKB(skb);
+		kfree_skb(skb, FREE_READ);
+	}
 
 	/*
 	 *	Now we need to clean up the send head. 
@@ -396,7 +384,6 @@ void destroy_sock(struct sock *sk)
 	 
 	if (sk->pair) 
 	{
-		sk->pair->dead = 1;
 		sk->pair->prot->close(sk->pair, 0);
 		sk->pair = NULL;
   	}
@@ -407,7 +394,7 @@ void destroy_sock(struct sock *sk)
 	 * everything is gone.
 	 */
 
-	if (sk->dead && sk->rmem_alloc == 0 && sk->wmem_alloc == 0) 
+	if (sk->rmem_alloc == 0 && sk->wmem_alloc == 0) 
 	{
 		if(sk->opt)
 			kfree(sk->opt);
@@ -423,6 +410,7 @@ void destroy_sock(struct sock *sk)
 	{
 		/* this should never happen. */
 		/* actually it can if an ack has just been sent. */
+		printk("Socket destroy delayed\n");
 		sk->destroy = 1;
 		sk->ack_backlog = 0;
 		release_sock(sk);
@@ -1028,7 +1016,6 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	{
 	  	struct sock *sk=(struct sock *)newsock->data;
 	  	newsock->data=NULL;
-	  	sk->dead = 1;
 	  	destroy_sock(sk);
 	}
   
@@ -1078,7 +1065,6 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk2->state != TCP_ESTABLISHED && sk2->err > 0) 
 	{
 		err = sock_error(sk2);
-		sk2->dead=1;
 		destroy_sock(sk2);
 		newsock->data = NULL;
 		return err;

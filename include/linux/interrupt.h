@@ -2,7 +2,7 @@
 #ifndef _LINUX_INTERRUPT_H
 #define _LINUX_INTERRUPT_H
 
-#include <linux/linkage.h>
+#include <linux/kernel.h>
 #include <asm/bitops.h>
 
 struct bh_struct {
@@ -49,10 +49,12 @@ extern inline void enable_bh(int nr)
 extern inline void start_bh_atomic(void)
 {
 	intr_count++;
+	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
+	barrier();
 	intr_count--;
 }
 

@@ -17,6 +17,7 @@
  *	AX.25 028b	Jonathan(G4KLX)	Extracted AX25 control block from the
  *					sock structure.
  *	AX.25 029	Alan(GW4PTS)	Switched to KA9Q constant names.
+ *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  */
 
 #include <linux/config.h>
@@ -112,7 +113,7 @@ static void ax25_timer(unsigned long param)
 				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & OWN_RX_BUSY_CONDITION)) {
 					ax25->condition &= ~OWN_RX_BUSY_CONDITION;
 					if (!ax25->dama_slave) /* dl1bke */
-					ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
+						ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
 					ax25->condition &= ~ACK_PENDING_CONDITION;
 					break;
 				}
@@ -133,19 +134,15 @@ static void ax25_timer(unsigned long param)
 			if (ax25->condition & ACK_PENDING_CONDITION) {
 				ax25->condition &= ~ACK_PENDING_CONDITION;
 				if (!ax25->dama_slave)			/* dl1bke 960114 */
-				ax25_timeout_response(ax25);
+					ax25_timeout_response(ax25);
 			}
 		}
 	}
 
-	if (ax25->t3timer > 0 && --ax25->t3timer == 0) 
-	{
-	
+	if (ax25->t3timer > 0 && --ax25->t3timer == 0) {
 		/* dl1bke 960114: T3 expires and we are in DAMA mode:  */
 		/*                send a DISC and abort the connection */
-		 
-		if (ax25->dama_slave)
-		{
+		if (ax25->dama_slave) {
 #ifdef CONFIG_NETROM
 			nr_link_failed(&ax25->dest_addr, ax25->device);
 #endif
@@ -153,8 +150,7 @@ static void ax25_timer(unsigned long param)
 			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 				
 			ax25->state = AX25_STATE_0;
-			if (ax25->sk != NULL)
-			{
+			if (ax25->sk != NULL) {
 				if (ax25->sk->debug)
 					printk("T3 Timeout\n");
 				ax25->sk->state = TCP_CLOSE;
@@ -179,14 +175,13 @@ static void ax25_timer(unsigned long param)
 	/* 		  nevertheless we have to re-enqueue the timer struct...   */
 	
 	if (ax25->t1timer == 0 || --ax25->t1timer > 0) {
-	
 		ax25_reset_timer(ax25);
 		return;
 	}
 
-	if (!ax25_dev_is_dama_slave(ax25->device))
-	{
-		if (ax25->dama_slave) ax25->dama_slave = 0;
+	if (!ax25_dev_is_dama_slave(ax25->device)) {
+		if (ax25->dama_slave)
+			ax25->dama_slave = 0;
 		ax25_t1_timeout(ax25);
 	}
 }
@@ -200,8 +195,6 @@ static void ax25_timer(unsigned long param)
  *                Thus we'll have to do parts of our T1 handling in
  *                ax25_enquiry_response().
  */
-
-
 void ax25_t1_timeout(ax25_cb * ax25)
 {	
 	switch (ax25->state) {
@@ -255,14 +248,14 @@ void ax25_t1_timeout(ax25_cb * ax25)
 			} else {
 				ax25->n2count++;
 				if (!ax25_dev_is_dama_slave(ax25->device))	/* dl1bke */
-				ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+					ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 			}
 			break;
 
 		case AX25_STATE_3: 
 			ax25->n2count = 1;
 			if (!ax25->dama_slave)			/* dl1bke 960114 */
-			ax25_transmit_enquiry(ax25);
+				ax25_transmit_enquiry(ax25);
 			ax25->state   = AX25_STATE_4;
 			break;
 
@@ -286,7 +279,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 			} else {
 				ax25->n2count++;
 				if (!ax25->dama_slave)		/* dl1bke 960114 */
-				ax25_transmit_enquiry(ax25);
+					ax25_transmit_enquiry(ax25);
 			}
 			break;
 	}

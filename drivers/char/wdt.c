@@ -187,8 +187,10 @@ static void wdt_release(struct inode *inode, struct file *file)
 {
 	if(MINOR(inode->i_rdev)==WATCHDOG_MINOR)
 	{
+#ifndef CONFIG_WATCHDOG_NOWAYOUT	
 		inb_p(WDT_DC);		/* Disable counters */
 		wdt_ctr_load(2,0);	/* 0 length reset pulses now */
+#endif		
 		wdt_is_open=0;
 	}
 	MOD_DEC_USE_COUNT;

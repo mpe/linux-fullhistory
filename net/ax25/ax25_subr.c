@@ -25,7 +25,7 @@
  *					Added fragmentation support.
  *			Darryl(G7LED)	Added function ax25_requeue_frames() to split
  *					it up from ax25_frames_acked().
- *			Joerg(DL1BKE)	DAMA needs KISS Fullduplex ON/OFF.
+ *	AX.25 031	Joerg(DL1BKE)	DAMA needs KISS Fullduplex ON/OFF.
  *					Thus we have ax25_kiss_cmd() now... ;-)
  *			Dave Brown(N2RJT)
  *					Killed a silly bug in the DAMA code.
@@ -360,8 +360,7 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	digi->lastrepeat = -1;
 	digi->ndigi      = 0;
 	
-	while (!(buf[-1] & LAPB_E))
-	{
+	while (!(buf[-1] & LAPB_E)) {
 		if (d >= AX25_MAX_DIGIS)  return NULL;	/* Max of 6 digis */
 		if (len < 7) return NULL;	/* Short packet */
 
@@ -473,7 +472,16 @@ void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 	out->lastrepeat = 0;
 }
 
-void ax25_kiss_cmd(ax25_cb * ax25, unsigned char cmd, unsigned char param)
+/*
+ *	:::FIXME:::
+ *	This is ****NOT**** the right approach. Not all drivers do kiss. We
+ *	need a driver level request to switch duplex mode, that does either
+ *	SCC changing, PI config or KISS as required.
+ *
+ *	Not to mention this request isnt currently reliable.
+ */
+ 
+void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 {
 	struct sk_buff *skb;
 	unsigned char *p;
@@ -487,8 +495,7 @@ void ax25_kiss_cmd(ax25_cb * ax25, unsigned char cmd, unsigned char param)
 	skb->free = 1;
 	skb->arp = 1;
 	
-	if (ax25->sk != NULL)
-	{
+	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
 		ax25->sk->wmem_alloc += skb->truesize;
 	}
@@ -507,10 +514,9 @@ void ax25_dama_on(ax25_cb *ax25)
 {
 	int count = ax25_dev_is_dama_slave(ax25->device);
 
-	if (count == 0)
-	{
-		if (ax25->sk && ax25->sk->debug)
-			printk("DAMA on\n");
+	if (count == 0) {
+		if (ax25->sk != NULL && ax25->sk->debug)
+			printk("ax25_dama_on: DAMA on\n");
 		ax25_kiss_cmd(ax25, 5, 1);
 	}
 }
@@ -519,11 +525,9 @@ void ax25_dama_off(ax25_cb *ax25)
 {
 	int count = ax25_dev_is_dama_slave(ax25->device);
 	
-	
-	if (count == 0)
-	{
-		if (ax25->sk && ax25->sk->debug)
-			printk("DAMA off\n");
+	if (count == 0) {
+		if (ax25->sk != NULL && ax25->sk->debug)
+			printk("ax25_dama_off: DAMA off\n");
 		ax25_kiss_cmd(ax25, 5, 0);
 	}
 }

@@ -24,7 +24,7 @@
  *			Jonathan(G4KLX)	Only poll when window is full.
  *	AX.25 030	Jonathan(G4KLX)	Added fragmentation to ax25_output.
  *					Added support for extended AX.25.
- *			Joerg(DL1BKE)	Added DAMA support
+ *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  */
 
 #include <linux/config.h>
@@ -109,8 +109,7 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 		skb_queue_tail(&ax25->write_queue, skb);	  /* Throw it on the queue */
 	}
 
-	if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4)
-	{
+	if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
 		if (!ax25->dama_slave)		/* bke 960114: we aren't allowed to transmit */
 			ax25_kick(ax25);	/* in DAMA mode unless we received a Poll */
 	}
@@ -318,34 +317,34 @@ void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 	}
 }
 
-/* dl1bke 960114: shouldn't ax25/dama_check_need_response reside as  */
-/*                static inline void ...() in ax25.h, should it? ;-) */
-
+/*
+ *	dl1bke 960114: shouldn't ax25/dama_check_need_response reside as
+ *                static inline void ...() in ax25.h, should it? ;-)
+ */
 void ax25_check_need_response(ax25_cb *ax25, int type, int pf)
 {
 	if (!ax25->dama_slave && type == C_COMMAND && pf)
 		ax25_enquiry_response(ax25);
 }
 
-/* dl1bke 960114: transmit I frames on DAMA poll */
-
-void dama_enquiry_response(ax25_cb * ax25)
+/*
+ *	dl1bke 960114: transmit I frames on DAMA poll
+ */
+void dama_enquiry_response(ax25_cb *ax25)
 {
-	ax25_cb * ax25o = NULL;
+	ax25_cb *ax25o;
 	
-	if (!(ax25->condition & PEER_RX_BUSY_CONDITION) )
-	{
+	if (!(ax25->condition & PEER_RX_BUSY_CONDITION)) {
 		ax25_requeue_frames(ax25);
 		ax25_kick(ax25);
 	}
-	if (ax25->state == AX25_STATE_1 ||
-	    ax25->state == AX25_STATE_2 ||
-	    skb_peek(&ax25->ack_queue) != NULL) 
-	{
-		ax25_t1_timeout(ax25);
 
-	} else
+	if (ax25->state == AX25_STATE_1 || ax25->state == AX25_STATE_2 ||
+	    skb_peek(&ax25->ack_queue) != NULL) {
+		ax25_t1_timeout(ax25);
+	} else {
 		ax25->n2count = 0;
+	}
 	
 	ax25->t3timer = ax25->t3;
 	
@@ -367,31 +366,29 @@ void dama_enquiry_response(ax25_cb * ax25)
 	/* transmissions of the other channels as well... This version    */	
 	/* gives better performance on FLEXNET nodes. (Why, Gunter?)	  */
 
-	for (ax25o=ax25_list; ax25o; ax25o=ax25o->next)
-	{
+	for (ax25o = ax25_list; ax25o != NULL; ax25o = ax25o->next) {
 		if (ax25o->device != ax25->device)
 			continue;
-			
-		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2)
-		{
+
+		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2) {
 			ax25_t1_timeout(ax25o);
 			continue;
 		}
-			
-		if ( !ax25o->dama_slave)
+
+		if (!ax25o->dama_slave)
 			continue;
 			
 		if ( !(ax25o->condition & PEER_RX_BUSY_CONDITION) && 
 		     (ax25o->state == AX25_STATE_3 || 
-		     (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0)) )
-		{
+		     (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0))) {
 			ax25_requeue_frames(ax25o);
 			ax25_kick(ax25o);
 		}
 		
-		if (ax25o->state == AX25_STATE_1 ||
-		    ax25o->state == AX25_STATE_2 ||
-		    skb_peek(&ax25o->ack_queue) != NULL) ax25_t1_timeout(ax25o);
+		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2 ||
+		    skb_peek(&ax25o->ack_queue) != NULL) {
+			ax25_t1_timeout(ax25o);
+		}
 
 		ax25o->t3timer = ax25o->t3;
 	}

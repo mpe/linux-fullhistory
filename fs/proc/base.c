@@ -83,6 +83,12 @@ struct proc_dir_entry proc_pid = {
 void proc_base_init(void)
 {
 	proc_register(&proc_pid, &(struct proc_dir_entry) {
+		PROC_PID_STATUS, 6, "status",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_array_inode_operations,
+		NULL, proc_pid_fill_inode,
+	});
+	proc_register(&proc_pid, &(struct proc_dir_entry) {
 		PROC_PID_MEM, 3, "mem",
 		S_IFREG | S_IRUSR | S_IWUSR, 1, 0, 0,
 		0, &proc_mem_inode_operations,

@@ -290,7 +290,7 @@ static int count(char ** argv)
 unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
-	char *tmp, *pag = NULL;
+	char *tmp, *tmp1, *pag = NULL;
 	int len, offset = 0;
 	unsigned long old_fs, new_fs;
 
@@ -303,14 +303,12 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	while (argc-- > 0) {
 		if (from_kmem == 1)
 			set_fs(new_fs);
-		if (!(tmp = get_user(argv+argc)))
+		if (!(tmp1 = tmp = get_user(argv+argc)))
 			panic("VFS: argc is wrong");
 		if (from_kmem == 1)
 			set_fs(old_fs);
-		len=0;		/* remember zero-padding */
-		do {
-			len++;
-		} while (get_user(tmp++));
+		while (get_user(tmp++));
+		len = tmp - tmp1;
 		if (p < len) {	/* this shouldn't happen - 128kB */
 			set_fs(old_fs);
 			return 0;
@@ -329,7 +327,16 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 					set_fs(new_fs);
 
 			}
-			*(pag + offset) = get_user(tmp);
+			if (len == 0 || offset == 0)
+			  *(pag + offset) = get_user(tmp);
+			else {
+			  int bytes_to_copy = (len > offset) ? offset : len;
+			  tmp -= bytes_to_copy;
+			  p -= bytes_to_copy;
+			  offset -= bytes_to_copy;
+			  len -= bytes_to_copy;
+			  memcpy_fromfs(pag + offset, tmp, bytes_to_copy + 1);
+			}
 		}
 	}
 	if (from_kmem==2)

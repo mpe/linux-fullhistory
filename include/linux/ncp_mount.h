@@ -13,7 +13,7 @@
 #include <linux/ncp.h>
 #include <linux/ncp_fs_i.h>
 
-#define NCP_MOUNT_VERSION 1
+#define NCP_MOUNT_VERSION 2
 
 #define NCP_USERNAME_LEN (NCP_BINDERY_NAME_LEN)
 #define NCP_PASSWORD_LEN 20
@@ -30,10 +30,10 @@ struct ncp_mount_data {
         uid_t mounted_uid;      /* Who may umount() this filesystem? */
 
 	struct sockaddr_ipx serv_addr;
-	unsigned char server_name[49];
+	unsigned char server_name[NCP_BINDERY_NAME_LEN];
 
-	unsigned char username[NCP_USERNAME_LEN+1];
-	unsigned char password[NCP_PASSWORD_LEN+1];
+	unsigned char mount_point[PATH_MAX+1];
+	unsigned char mounted_vol[NCP_VOLNAME_LEN+1];
 
 	unsigned int time_out;	/* How long should I wait after
 				   sending a NCP request? */

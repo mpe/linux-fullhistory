@@ -34,13 +34,17 @@
 #define MAX_ADDR_LEN	7
 #ifndef CONFIG_AX25
 #ifndef CONFIG_TR
+#ifndef CONFIG_NET_IPIP
 #define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
 #else
+#define MAX_HEADER	48		/* We need to allow for having tunnel headers */
+#endif  /* IPIP */
+#else
 #define MAX_HEADER	48		/* Token Ring header needs 40 bytes ... 48 is aligned */ 
-#endif
+#endif /* TR */
 #else
 #define MAX_HEADER	96		/* AX.25 + NetROM */
-#endif
+#endif /* AX25 */
 
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/

@@ -48,6 +48,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
+#include <asm/string.h>
 
 unsigned long high_memory = 0;
 
@@ -177,13 +178,12 @@ void free_page_tables(struct task_struct * tsk)
 int new_page_tables(struct task_struct * tsk)
 {
 	pgd_t * page_dir, * new_pg;
-	int i;
 
 	if (!(new_pg = pgd_alloc()))
 		return -ENOMEM;
 	page_dir = pgd_offset(&init_mm, 0);
-	for (i = USER_PTRS_PER_PGD ; i < PTRS_PER_PGD ; i++)
-		new_pg[i] = page_dir[i];
+	memcpy(new_pg + USER_PTRS_PER_PGD, page_dir + USER_PTRS_PER_PGD,
+	       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof (pgd_t));
 	invalidate_mm(tsk->mm);
 	SET_PAGE_DIR(tsk, new_pg);
 	tsk->mm->pgd = new_pg;
@@ -801,7 +801,7 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 {
 	struct vm_area_struct * mpnt;
 
-	invalidate_inode_pages(inode, offset);
+	truncate_inode_pages(inode, offset);
 	if (!inode->i_mmap)
 		return;
 	mpnt = inode->i_mmap;

@@ -150,7 +150,7 @@ void nr_kick(struct sock *sk)
 	end   = (sk->nr->va + sk->window) % NR_MODULUS;
 
 	if (!(sk->nr->condition & PEER_RX_BUSY_CONDITION) &&
-	    start != end                                   &&
+	    start != end                                  &&
 	    skb_peek(&sk->write_queue) != NULL) {
 
 		sk->nr->vs = start;
@@ -208,13 +208,13 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 	 */
 	dptr = skb_push(skb, NR_NETWORK_LEN);
 
-	memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
+	memcpy(dptr, &sk->nr->source_addr, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] &= ~LAPB_E;
 	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 
-	memcpy(dptr, &sk->nr->dest_addr,   sizeof(ax25_address));
+	memcpy(dptr, &sk->nr->dest_addr, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] |= LAPB_E;
 	dptr[6] |= SSSID_SPARE;

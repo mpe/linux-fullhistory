@@ -411,12 +411,18 @@ ncp_open_create_file_or_subdir(struct ncp_server *server,
 			       struct nw_file_info *target)
 {
 	int result;
+	__u16 search_attribs = 0x0006;
+
+	if ((create_attributes & aDIR) != 0)
+	{
+		search_attribs |= 0x8000;
+	}
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 1); /* subfunction */
 	ncp_add_byte(server, 0); /* dos name space */
 	ncp_add_byte(server, open_create_mode);
-	ncp_add_word(server, 0x8006);
+	ncp_add_word(server, search_attribs);
 	ncp_add_dword(server, RIM_ALL);
 	ncp_add_dword(server, create_attributes);
 	/* The desired acc rights seem to be the inherited rights mask

@@ -88,21 +88,20 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		if ((nr_neigh = (struct nr_neigh *)kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
-		memcpy(&nr_neigh->callsign, ax25, sizeof(ax25_address));
-
-		nr_neigh->digipeat= NULL;
-		nr_neigh->dev     = dev;
-		nr_neigh->quality = nr_default.quality;
-		nr_neigh->locked  = 0;
-		nr_neigh->count   = 0;
-		nr_neigh->number  = nr_neigh_no++;
+		nr_neigh->callsign = *ax25;
+		nr_neigh->digipeat = NULL;
+		nr_neigh->dev      = dev;
+		nr_neigh->quality  = nr_default.quality;
+		nr_neigh->locked   = 0;
+		nr_neigh->count    = 0;
+		nr_neigh->number   = nr_neigh_no++;
 
 		if (ax25_digi != NULL) {
 			if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
 				kfree_s(nr_neigh, sizeof(*nr_neigh));
 				return -ENOMEM;
 			}
-			memcpy(nr_neigh->digipeat, ax25_digi, sizeof(*ax25_digi));
+			*nr_neigh->digipeat = *ax25_digi;
 		}
 			
 		save_flags(flags);
@@ -118,7 +117,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		if ((nr_node = (struct nr_node *)kmalloc(sizeof(*nr_node), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
-		memcpy(&nr_node->callsign, nr, sizeof(ax25_address));
+		nr_node->callsign = *nr;
 		memcpy(&nr_node->mnemonic, mnemonic, sizeof(nr_node->mnemonic));
 
 		nr_node->which = 0;
@@ -355,14 +354,13 @@ static int nr_add_neigh(ax25_address *callsign, struct device *dev, unsigned int
 	if ((nr_neigh = (struct nr_neigh *)kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
-	memcpy(&nr_neigh->callsign, callsign, sizeof(ax25_address));
-
-	nr_neigh->digipeat= NULL;
-	nr_neigh->dev     = dev;
-	nr_neigh->quality = quality;
-	nr_neigh->locked  = 1;
-	nr_neigh->count   = 0;
-	nr_neigh->number  = nr_neigh_no++;
+	nr_neigh->callsign = *callsign;
+	nr_neigh->digipeat = NULL;
+	nr_neigh->dev      = dev;
+	nr_neigh->quality  = quality;
+	nr_neigh->locked   = 1;
+	nr_neigh->count    = 0;
+	nr_neigh->number   = nr_neigh_no++;
 
 	save_flags(flags);
 	cli();

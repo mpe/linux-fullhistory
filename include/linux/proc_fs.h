@@ -46,6 +46,7 @@ enum root_directory_inos {
 
 enum pid_directory_inos {
 	PROC_PID_INO = 2,
+	PROC_PID_STATUS,
 	PROC_PID_MEM,
 	PROC_PID_CWD,
 	PROC_PID_ROOT,

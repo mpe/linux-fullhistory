@@ -151,7 +151,7 @@ static void nr_insert_socket(struct sock *sk)
  *	Find a socket that wants to accept the Connect Request we just
  *	received.
  */
-static struct sock *nr_find_listener(ax25_address *addr, int type)
+static struct sock *nr_find_listener(ax25_address *addr)
 {
 	unsigned long flags;
 	struct sock *s;
@@ -160,7 +160,7 @@ static struct sock *nr_find_listener(ax25_address *addr, int type)
 	cli();
 
 	for (s = nr_list; s != NULL; s = s->next) {
-		if (ax25cmp(&s->nr->source_addr, addr) == 0 && s->type == type && s->state == TCP_LISTEN) {
+		if (ax25cmp(&s->nr->source_addr, addr) == 0 && s->state == TCP_LISTEN) {
 			restore_flags(flags);
 			return s;
 		}
@@ -173,7 +173,7 @@ static struct sock *nr_find_listener(ax25_address *addr, int type)
 /*
  *	Find a connected NET/ROM socket given my circuit IDs.
  */
-static struct sock *nr_find_socket(unsigned char index, unsigned char id, int type)
+static struct sock *nr_find_socket(unsigned char index, unsigned char id)
 {
 	struct sock *s;
 	unsigned long flags;
@@ -182,7 +182,7 @@ static struct sock *nr_find_socket(unsigned char index, unsigned char id, int ty
 	cli();
 
 	for (s = nr_list; s != NULL; s = s->next) {
-		if (s->nr->my_index == index && s->nr->my_id == id && s->type == type) {
+		if (s->nr->my_index == index && s->nr->my_id == id) {
 			restore_flags(flags);
 			return s;
 		}
@@ -196,7 +196,7 @@ static struct sock *nr_find_socket(unsigned char index, unsigned char id, int ty
 /*
  *	Find a connected NET/ROM socket given their circuit IDs.
  */
-static struct sock *nr_find_peer(unsigned char index, unsigned char id, int type)
+static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 {
 	struct sock *s;
 	unsigned long flags;
@@ -205,7 +205,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id, int type
 	cli();
 
 	for (s = nr_list; s != NULL; s = s->next) {
-		if (s->nr->your_index == index && s->nr->your_id == id && s->type == type) {
+		if (s->nr->your_index == index && s->nr->your_id == id) {
 			restore_flags(flags);
 			return s;
 		}
@@ -385,8 +385,8 @@ static int nr_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = (struct sock *)sock->data;
 
-	if (sk->type == SOCK_SEQPACKET && sk->state != TCP_LISTEN) {
-		memset(&sk->nr->user_addr, '\0', sizeof(ax25_address));
+	if (sk->state != TCP_LISTEN) {
+		memset(&sk->nr->user_addr, '\0', AX25_ADDR_LEN);
 		sk->max_ack_backlog = backlog;
 		sk->state           = TCP_LISTEN;
 		return 0;
@@ -498,9 +498,9 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->state      = NR_STATE_0;
 	nr->device     = NULL;
 
-	memset(&nr->source_addr, '\0', sizeof(ax25_address));
-	memset(&nr->user_addr,   '\0', sizeof(ax25_address));
-	memset(&nr->dest_addr,   '\0', sizeof(ax25_address));
+	memset(&nr->source_addr, '\0', AX25_ADDR_LEN);
+	memset(&nr->user_addr,   '\0', AX25_ADDR_LEN);
+	memset(&nr->dest_addr,   '\0', AX25_ADDR_LEN);
 
 	nr->sk = sk;
 	sk->nr = nr;
@@ -604,54 +604,48 @@ static int nr_release(struct socket *sock, struct socket *peer)
 
 	if (sk == NULL) return 0;
 
-	if (sk->type == SOCK_SEQPACKET) {
-		switch (sk->nr->state) {
-			case NR_STATE_0:
-				sk->state     = TCP_CLOSE;
-				sk->state_change(sk);
-				sk->dead      = 1;
-				nr_destroy_socket(sk);
-				break;
+	switch (sk->nr->state) {
 
-			case NR_STATE_1:
-				sk->nr->state = NR_STATE_0;
-				sk->state     = TCP_CLOSE;
-				sk->state_change(sk);
-				sk->dead      = 1;
-				nr_destroy_socket(sk);
-				break;
+		case NR_STATE_0:
+			sk->state     = TCP_CLOSE;
+			sk->state_change(sk);
+			sk->dead      = 1;
+			nr_destroy_socket(sk);
+			break;
 
-			case NR_STATE_2:
-				nr_write_internal(sk, NR_DISCACK);
-				sk->nr->state = NR_STATE_0;
-				sk->state     = TCP_CLOSE;
-				sk->state_change(sk);
-				sk->dead      = 1;
-				nr_destroy_socket(sk);
-				break;			
+		case NR_STATE_1:
+			sk->nr->state = NR_STATE_0;
+			sk->state     = TCP_CLOSE;
+			sk->state_change(sk);
+			sk->dead      = 1;
+			nr_destroy_socket(sk);
+			break;
 
-			case NR_STATE_3:
-				nr_clear_queues(sk);
-				sk->nr->n2count = 0;
-				nr_write_internal(sk, NR_DISCREQ);
-				sk->nr->t1timer = sk->nr->t1 = nr_calculate_t1(sk);
-				sk->nr->t2timer = 0;
-				sk->nr->t4timer = 0;
-				sk->nr->state   = NR_STATE_2;
-				sk->state       = TCP_CLOSE;
-				sk->state_change(sk);
-				sk->dead        = 1;
-				sk->destroy     = 1;
-				break;
+		case NR_STATE_2:
+			nr_write_internal(sk, NR_DISCACK);
+			sk->nr->state = NR_STATE_0;
+			sk->state     = TCP_CLOSE;
+			sk->state_change(sk);
+			sk->dead      = 1;
+			nr_destroy_socket(sk);
+			break;			
 
-			default:
-				break;
-		}
-	} else {
-		sk->state = TCP_CLOSE;
-		sk->state_change(sk);
-		sk->dead = 1;
-		nr_destroy_socket(sk);
+		case NR_STATE_3:
+			nr_clear_queues(sk);
+			sk->nr->n2count = 0;
+			nr_write_internal(sk, NR_DISCREQ);
+			sk->nr->t1timer = sk->nr->t1 = nr_calculate_t1(sk);
+			sk->nr->t2timer = 0;
+			sk->nr->t4timer = 0;
+			sk->nr->state   = NR_STATE_2;
+			sk->state       = TCP_CLOSE;
+			sk->state_change(sk);
+			sk->dead        = 1;
+			sk->destroy     = 1;
+			break;
+
+		default:
+			break;
 	}
 
 	sock->data = NULL;	
@@ -687,8 +681,8 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (addr->fsa_ax25.sax25_ndigis == 1) {
 		if (!suser())
 			return -EPERM;
-		memcpy(&sk->nr->user_addr,   &addr->fsa_digipeater[0],   sizeof(ax25_address));
-		memcpy(&sk->nr->source_addr, &addr->fsa_ax25.sax25_call, sizeof(ax25_address));
+		sk->nr->user_addr   = addr->fsa_digipeater[0];
+		sk->nr->source_addr = addr->fsa_ax25.sax25_call;
 	} else {
 		source = &addr->fsa_ax25.sax25_call;
 
@@ -698,8 +692,8 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			user = source;
 		}
 
-		memcpy(&sk->nr->user_addr,   user,   sizeof(ax25_address));
-		memcpy(&sk->nr->source_addr, source, sizeof(ax25_address));
+		sk->nr->user_addr   = *user;
+		sk->nr->source_addr = *source;
 	}
 
 	sk->nr->device = dev;
@@ -731,7 +725,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 		return -ECONNREFUSED;
 	}
 	
-	if (sk->state == TCP_ESTABLISHED && sk->type == SOCK_SEQPACKET)
+	if (sk->state == TCP_ESTABLISHED)
 		return -EISCONN;	/* No reconnect on a seqpacket socket */
 		
 	sk->state   = TCP_CLOSE;	
@@ -754,17 +748,16 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 			user = source;
 		}
 
-		memcpy(&sk->nr->user_addr,   user,   sizeof(ax25_address));
-		memcpy(&sk->nr->source_addr, source, sizeof(ax25_address));
-
-		sk->nr->device = dev;
+		sk->nr->user_addr   = *user;
+		sk->nr->source_addr = *source;
+		sk->nr->device      = dev;
 
 		nr_insert_socket(sk);		/* Finish the bind */
 	}
 
-	memcpy(&sk->nr->dest_addr, &addr->sax25_call, sizeof(ax25_address));
+	sk->nr->dest_addr = addr->sax25_call;
 
-	while (nr_find_socket((unsigned char)circuit / 256, (unsigned char)circuit % 256, SOCK_SEQPACKET) != NULL)
+	while (nr_find_socket((unsigned char)circuit / 256, (unsigned char)circuit % 256) != NULL)
 		circuit++;
 
 	sk->nr->my_index = circuit / 256;
@@ -878,13 +871,13 @@ static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
 			return -ENOTCONN;
 		sax->fsa_ax25.sax25_family = AF_NETROM;
 		sax->fsa_ax25.sax25_ndigis = 1;
-		memcpy(&sax->fsa_ax25.sax25_call, &sk->nr->user_addr, sizeof(ax25_address));
-		memcpy(&sax->fsa_digipeater[0],   &sk->nr->dest_addr, sizeof(ax25_address));
-		*uaddr_len = sizeof(struct sockaddr_ax25) + sizeof(ax25_address);
+		sax->fsa_ax25.sax25_call = sk->nr->user_addr;
+		sax->fsa_digipeater[0]   = sk->nr->dest_addr;
+		*uaddr_len = sizeof(struct sockaddr_ax25) + AX25_ADDR_LEN;
 	} else {
 		sax->fsa_ax25.sax25_family = AF_NETROM;
 		sax->fsa_ax25.sax25_ndigis = 0;
-		memcpy(&sax->fsa_ax25.sax25_call, &sk->nr->source_addr, sizeof(ax25_address));
+		sax->fsa_ax25.sax25_call   = sk->nr->source_addr;
 		*uaddr_len = sizeof(struct sockaddr_ax25);
 	}
 
@@ -929,8 +922,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 * Find an existing socket connection, based on circuit ID, if its
 	 * a Connect Request base it on their circuit ID.
 	 */
-	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL) ||
-	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) {
+	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id)) != NULL) ||
+	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id)) != NULL)) {
 		skb->h.raw = skb->data;
 
 		if ((frametype & 0x0F) == NR_CONNACK && skb->len == 22)
@@ -944,9 +937,9 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	if ((frametype & 0x0F) != NR_CONNREQ)
 		return 0;
 		
-	sk = nr_find_listener(dest, SOCK_SEQPACKET);
+	sk = nr_find_listener(dest);
 
-	user   = (ax25_address *)(skb->data + 21);
+	user = (ax25_address *)(skb->data + 21);
 
 	if (sk == NULL || sk->ack_backlog == sk->max_ack_backlog || (make = nr_make_new(sk)) == NULL) {
 		nr_transmit_dm(skb);
@@ -959,9 +952,9 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	make->state         = TCP_ESTABLISHED;
 
 	/* Fill in his circuit details */
-	memcpy(&make->nr->source_addr, dest, sizeof(ax25_address));
-	memcpy(&make->nr->dest_addr,   src,  sizeof(ax25_address));
-	memcpy(&make->nr->user_addr,   user, sizeof(ax25_address));
+	make->nr->source_addr = *dest;
+	make->nr->dest_addr   = *src;
+	make->nr->user_addr   = *user;
 
 	make->nr->your_index = circuit_index;
 	make->nr->your_id    = circuit_id;
@@ -1033,8 +1026,8 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	if (usax) {
 		if (msg->msg_namelen < sizeof(sax))
 			return -EINVAL;
-		memcpy(&sax, usax, sizeof(sax));
-		if (sk->type == SOCK_SEQPACKET && memcmp(&sk->nr->dest_addr, &sax.sax25_call, sizeof(ax25_address)) != 0)
+		sax = *usax;
+		if (ax25cmp(&sk->nr->dest_addr, &sax.sax25_call) != 0)
 			return -EISCONN;
 		if (sax.sax25_family != AF_NETROM)
 			return -EINVAL;
@@ -1042,7 +1035,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
 		sax.sax25_family = AF_NETROM;
-		memcpy(&sax.sax25_call, &sk->nr->dest_addr, sizeof(ax25_address));
+		sax.sax25_call   = sk->nr->dest_addr;
 	}
 	
 	if (sk->debug)
@@ -1130,7 +1123,7 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 	 * This works for seqpacket too. The receiver has ordered the queue for
 	 * us! We do one quick check first though
 	 */
-	if (sk->type == SOCK_SEQPACKET && sk->state != TCP_ESTABLISHED)
+	if (sk->state != TCP_ESTABLISHED)
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
@@ -1149,9 +1142,9 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 		struct sockaddr_ax25 addr;
 		
 		addr.sax25_family = AF_NETROM;
-		memcpy(&addr.sax25_call, skb->data + 7, sizeof(ax25_address));
+		memcpy(&addr.sax25_call, skb->data + 7, AX25_ADDR_LEN);
 
-		memcpy(sax, &addr, sizeof(*sax));
+		*sax = addr;
 
 		*addr_len = sizeof(*sax);
 	}
@@ -1189,8 +1182,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			put_fs_long(amount, (unsigned long *)arg);
 			return 0;
 
-		case TIOCINQ:
-		{
+		case TIOCINQ: {
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
@@ -1231,8 +1223,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if (!suser()) return -EPERM;
 			return nr_rt_ioctl(cmd, (void *)arg);
 
-		case SIOCNRGETPARMS:
-		{
+		case SIOCNRGETPARMS: {
 			struct nr_parms_struct nr_parms;
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct nr_parms_struct))) != 0)
 				return err;
@@ -1242,8 +1233,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return 0;
 		}
 
-		case SIOCNRSETPARMS:
-		{
+		case SIOCNRSETPARMS: {
 			struct nr_parms_struct nr_parms;
 			if (!suser()) return -EPERM;
 			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(struct nr_parms_struct))) != 0)

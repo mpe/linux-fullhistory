@@ -55,8 +55,7 @@ int nr_rx_ip(struct sk_buff *skb, struct device *dev)
 {
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
 
-	if (!dev->start) 
-	{
+	if (!dev->start) {
 		stats->rx_errors++;
 		return 0;
 	}

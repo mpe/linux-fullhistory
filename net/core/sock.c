@@ -558,17 +558,15 @@ void __release_sock(struct sock *sk)
 	 */
 
 	/* See if we have any packets built up. */
+	start_bh_atomic();
 	while ((skb = __skb_dequeue(&sk->back_log)) != NULL) 
 	{
-		barrier();
-		sk->users = 1;
 		if (sk->prot->rcv) 
 			sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
 				 skb->saddr, skb->len, skb->daddr, 1,
 				/* Only used for/by raw sockets. */
 				(struct inet_protocol *)sk->pair); 
-		sk->users = 0;
-		barrier();
 	}
+	end_bh_atomic();
 #endif  
 }

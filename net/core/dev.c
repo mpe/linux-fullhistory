@@ -43,6 +43,8 @@
  *					on a Sparc.
  *		Bjorn Ekwall	:	Added KERNELD hack.
  *		Alan Cox	:	Cleaned up the backlog initialise.
+ *		Craig Metz	:	SIOCGIFCONF fix if space for under
+ *					1 device.
  *
  */
 
@@ -214,8 +216,15 @@ struct device *dev_get(const char *name)
 
 extern __inline__ void dev_load(const char *name)
 {
-	if(!dev_get(name))
-		request_module(name);
+        char *sptr;
+ 
+        if(!dev_get(name)) {
+#ifdef CONFIG_NET_ALIAS
+                for (sptr=name ; *sptr ; sptr++) if(*sptr==':') break;
+                if (!(*sptr && *(sptr+1)))
+#endif
+                        request_module(name);
+        }
 }
 
 #endif
@@ -788,17 +797,18 @@ static int dev_ifconf(char *arg)
 	{
         	if(!(dev->flags & IFF_UP))	/* Downed devices don't count */
 	        	continue;
-		memset(&ifr, 0, sizeof(struct ifreq));
-		strcpy(ifr.ifr_name, dev->name);
-		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_family = dev->family;
-		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
-
 		/*
 		 *	Have we run out of space here ?
 		 */
 	
 		if (len < sizeof(struct ifreq)) 
 			break;
+
+		memset(&ifr, 0, sizeof(struct ifreq));
+		strcpy(ifr.ifr_name, dev->name);
+		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_family = dev->family;
+		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
+
 
 		/*
 		 *	Write this block to the caller's space. 

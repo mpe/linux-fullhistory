@@ -36,10 +36,10 @@ L_OBJS += sk_g16.o
 endif
 
 ifeq ($(CONFIG_NET_IPIP),y)
-L_OBJS += tunnel.o
+L_OBJS += new_tunnel.o
 else
   ifeq ($(CONFIG_NET_IPIP),m)
-  M_OBJS += tunnel.o
+  M_OBJS += new_tunnel.o
   endif
 endif
 

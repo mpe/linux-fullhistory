@@ -480,7 +480,6 @@ static void tcp_close_pending (struct sock *sk)
 
 	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) 
 	{
-		skb->sk->dead=1;
 		tcp_close(skb->sk, 0);
 		kfree_skb(skb, FREE_READ);
 	}
@@ -1728,7 +1727,7 @@ static int tcp_close_state(struct sock *sk, int dead)
 
 /*
  *	Shutdown the sending side of a connection. Much like close except
- *	that we don't receive shut down or set sk->dead=1.
+ *	that we don't receive shut down or set sk->dead.
  */
 
 void tcp_shutdown(struct sock *sk, int how)
@@ -1817,6 +1816,7 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 		tcp_set_state(sk, TCP_CLOSE);
 		tcp_close_pending(sk);
 		release_sock(sk);
+		sk->dead = 1;
 		return;
 	}
 	
@@ -1873,9 +1873,9 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 	 * This will destroy it. The timers will take care of actually
 	 * free'ing up the memory.
 	 */
-	sk->dead = 1;
 	tcp_cache_zap();	/* Kill the cache again. */
 	release_sock(sk);
+	sk->dead = 1;
 }
 
 

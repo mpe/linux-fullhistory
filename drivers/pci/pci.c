@@ -106,6 +106,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OPTI,		OPTI_82C558,	"82C558"),
 	DEVICE( OPTI,		OPTI_82C621,	"82C621"),
 	DEVICE( OPTI,		OPTI_82C822,	"82C822"),
+	DEVICE( SGS,		SGS_2000,	"STG 2000X"),
+	DEVICE( SGS,		SGS_1764,	"STG 1764X"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C_2,"BT-946C"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C,	"BT-946C"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_930,	"BT-930"),
@@ -151,6 +153,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
 	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
+	DEVICE( AMCC,		AMCC_MYRINET,	"Myrinet PCI (M2-PCI-32)"),
 	DEVICE( INTERG,		INTERG_1680,	"IGA-1680"),
 	DEVICE( REALTEK,	REALTEK_8029,	"8029"),
 	DEVICE( INIT,		INIT_320P,	"320 P"),
@@ -171,6 +174,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
 	DEVICE( SPECIALIX,	SPECIALIX_XIO,	"XIO/SIO host"),
 	DEVICE( SPECIALIX,	SPECIALIX_RIO,	"RIO host"),
+	DEVICE( RP,             RP8OCTA,        "RocketPort 8 Oct"),
+	DEVICE( RP,             RP8INTF,        "RocketPort 8 Intf"),
+	DEVICE( RP,             RP16INTF,       "RocketPort 16 Intf"),
+	DEVICE( RP,             RP32INTF,       "RocketPort 32 Intf"),
 	DEVICE( CYCLADES,	CYCLADES_Y,	"Cyclome-Y"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
@@ -464,6 +471,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_MUTECH:	return "Mutech";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
 	      case PCI_VENDOR_ID_SPECIALIX:	return "Specialix";
+	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";

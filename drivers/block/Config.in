@@ -5,7 +5,6 @@ mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
-tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 bool 'Enhanced IDE/MFM/RLL disk/cdrom/tape support' CONFIG_BLK_DEV_IDE
 comment 'Please see drivers/block/README.ide for help/info on IDE drives'
 if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
@@ -29,6 +28,10 @@ else
     bool '      ALI M1439/M1445 chipset support' CONFIG_BLK_DEV_ALI14XX
   fi
 fi
+
+tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
+tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
   define_bool CONFIG_BLK_DEV_HD y
 fi

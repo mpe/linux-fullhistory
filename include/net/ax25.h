@@ -203,6 +203,7 @@ extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_cs_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
 extern void ax25_rt_build_path(ax25_cb *, ax25_address *);
+extern void ax25_dg_build_path(struct sk_buff *, ax25_address *, struct device *);
 extern void ax25_rt_device_down(struct device *);
 extern int  ax25_rt_ioctl(unsigned int, void *);
 extern void ax25_ip_mode_set(ax25_address *, struct device *, char);

@@ -588,11 +588,12 @@ function activate_menu () {
 			default="${defaults%%*}" defaults="${defaults#*}"
 			;;
 		2)	
+			echo >>dialog.out
 			read selection <dialog.out
 			default="${selection##* }"
 			case "$selection" in
 			*"-->"*) : ;;
-			*)	 eval help $selection ;;
+			*)	 eval help "$selection" ;;
 			esac
 			;;
 		255|1)

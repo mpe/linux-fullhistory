@@ -79,7 +79,8 @@ function help () {
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
 			/^$var[ 	]*\$/b
-			/^#.*/b;/^[ 	]*\$/q
+			/^#.*/b
+			/^[ 	]*\$/q
 			p
 		    }" Documentation/Configure.help)
      if [ -z "$text" ]

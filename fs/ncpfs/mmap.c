@@ -133,6 +133,11 @@ ncp_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
         DPRINTK("ncp_mmap: called\n");
 
+	if (!ncp_conn_valid(NCP_SERVER(inode)))
+	{
+		return -EIO;
+	}
+
         /* only PAGE_COW or read-only supported now */
 	if (vma->vm_flags & VM_SHARED)	
 		return -EINVAL;

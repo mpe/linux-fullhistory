@@ -1614,6 +1614,7 @@ ipx_create(struct socket *sock, int protocol)
 	sk->socket=sock;
 	sk->type=sock->type;
 	sk->ipx_type=0;		/* General user level IPX */
+	sk->ipx_ncp_server = NULL;
 	sk->debug=0;
 	sk->ipx_intrfc = NULL;
 	memset(&sk->ipx_dest_addr,'\0',sizeof(sk->ipx_dest_addr));
