@@ -1098,15 +1098,16 @@ static inline void iput_final(struct inode *inode)
  *	@inode: inode to put
  *
  *	Puts an inode, dropping its usage count. If the inode use count hits
- *	zero the inode is also then freed and may be destroyed.
+ *	zero, the inode is then freed and may also be destroyed.
+ *
+ *	Consequently, iput() can sleep.
  */
 void iput(struct inode *inode)
 {
 	if (inode) {
 		struct super_operations *op = inode->i_sb->s_op;
 
-		if (inode->i_state == I_CLEAR)
-			BUG();
+		BUG_ON(inode->i_state == I_CLEAR);
 
 		if (op && op->put_inode)
 			op->put_inode(inode);
