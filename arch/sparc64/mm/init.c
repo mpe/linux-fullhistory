@@ -85,40 +85,14 @@ void check_pgt_cache(void)
 	preempt_disable();
 	if (pgtable_cache_size > PGT_CACHE_HIGH) {
 		do {
-#ifdef CONFIG_SMP
 			if (pgd_quicklist)
 				free_pgd_slow(get_pgd_fast());
-#endif
 			if (pte_quicklist[0])
 				free_pte_slow(pte_alloc_one_fast(NULL, 0));
 			if (pte_quicklist[1])
 				free_pte_slow(pte_alloc_one_fast(NULL, 1 << (PAGE_SHIFT + 10)));
 		} while (pgtable_cache_size > PGT_CACHE_LOW);
 	}
-#ifndef CONFIG_SMP
-        if (pgd_cache_size > PGT_CACHE_HIGH / 4) {
-		struct page *page, *page2;
-                for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
-                        if ((unsigned long)page->lru.prev == 3) {
-                                if (page2)
-                                        page2->lru.next = page->lru.next;
-                                else
-                                        pgd_quicklist = (void *) page->lru.next;
-                                pgd_cache_size -= 2;
-                                __free_page(page);
-                                if (page2)
-                                        page = (struct page *)page2->lru.next;
-                                else
-                                        page = (struct page *)pgd_quicklist;
-                                if (pgd_cache_size <= PGT_CACHE_LOW / 4)
-                                        break;
-                                continue;
-                        }
-                        page2 = page;
-                        page = (struct page *)page->lru.next;
-                }
-        }
-#endif
 	preempt_enable();
 }
 
@@ -219,6 +193,7 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t p
 
 		put_cpu();
 	}
+
 	if (get_thread_fault_code())
 		__update_mmu_cache(vma->vm_mm->context & TAG_CONTEXT_BITS,
 				   address, pte, get_thread_fault_code());
@@ -281,9 +256,6 @@ void show_mem(void)
 	printk("%ld pages of RAM\n", num_physpages);
 	printk("%d free pages\n", nr_free_pages());
 	printk("%d pages in page table cache\n",pgtable_cache_size);
-#ifndef CONFIG_SMP
-	printk("%d entries in page dir cache\n",pgd_cache_size);
-#endif	
 }
 
 void mmu_info(struct seq_file *m)
@@ -392,10 +364,10 @@ static void inherit_prom_mappings(void)
 	n = n / sizeof(*trans);
 
 	/*
-	 * The obp translations are saved based on 8k pagesize, since obp can use
-	 * a mixture of pagesizes. Misses to the 0xf0000000 - 0x100000000, ie obp 
-	 * range, are handled in entry.S and do not use the vpte scheme (see rant
-	 * in inherit_locked_prom_mappings()).
+	 * The obp translations are saved based on 8k pagesize, since obp can
+	 * use a mixture of pagesizes. Misses to the 0xf0000000 - 0x100000000,
+	 * ie obp range, are handled in entry.S and do not use the vpte scheme
+	 * (see rant in inherit_locked_prom_mappings()).
 	 */
 #define OBP_PMD_SIZE 2048
 	prompmd = __alloc_bootmem(OBP_PMD_SIZE, OBP_PMD_SIZE, bootmap_base);
@@ -1703,22 +1675,6 @@ void __init mem_init(void)
 	datapages = PAGE_ALIGN(datapages) >> PAGE_SHIFT;
 	initpages = (((unsigned long) __init_end) - ((unsigned long) __init_begin));
 	initpages = PAGE_ALIGN(initpages) >> PAGE_SHIFT;
-
-#ifndef CONFIG_SMP
-	{
-		/* Put empty_pg_dir on pgd_quicklist */
-		extern pgd_t empty_pg_dir[1024];
-		unsigned long addr = (unsigned long)empty_pg_dir;
-		unsigned long alias_base = kern_base + PAGE_OFFSET -
-			(long)(KERNBASE);
-		
-		memset(empty_pg_dir, 0, sizeof(empty_pg_dir));
-		addr += alias_base;
-		free_pgd_fast((pgd_t *)addr);
-		num_physpages++;
-		totalram_pages++;
-	}
-#endif
 
 	printk("Memory: %uk available (%ldk kernel code, %ldk data, %ldk init) [%016lx,%016lx]\n",
 	       nr_free_pages() << (PAGE_SHIFT-10),

@@ -22,74 +22,12 @@ extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache[2];
 	unsigned int pgcache_size;
-	unsigned int pgdcache_size;
 } pgt_quicklists;
 #endif
 #define pgd_quicklist		(pgt_quicklists.pgd_cache)
 #define pmd_quicklist		((unsigned long *)0)
 #define pte_quicklist		(pgt_quicklists.pte_cache)
 #define pgtable_cache_size	(pgt_quicklists.pgcache_size)
-#define pgd_cache_size		(pgt_quicklists.pgdcache_size)
-
-#ifndef CONFIG_SMP
-
-static __inline__ void free_pgd_fast(pgd_t *pgd)
-{
-	struct page *page = virt_to_page(pgd);
-
-	preempt_disable();
-	if (!page->lru.prev) {
-		page->lru.next = (void *) pgd_quicklist;
-		pgd_quicklist = (unsigned long *)page;
-	}
-	page->lru.prev = (void *)
-	  (((unsigned long)page->lru.prev) |
-	   (((unsigned long)pgd & (PAGE_SIZE / 2)) ? 2 : 1));
-	pgd_cache_size++;
-	preempt_enable();
-}
-
-static __inline__ pgd_t *get_pgd_fast(void)
-{
-        struct page *ret;
-
-	preempt_disable();
-        if ((ret = (struct page *)pgd_quicklist) != NULL) {
-                unsigned long mask = (unsigned long)ret->lru.prev;
-		unsigned long off = 0;
-
-		if (mask & 1)
-			mask &= ~1;
-		else {
-			off = PAGE_SIZE / 2;
-			mask &= ~2;
-		}
-		ret->lru.prev = (void *) mask;
-		if (!mask)
-			pgd_quicklist = (unsigned long *)ret->lru.next;
-                ret = (struct page *)(__page_address(ret) + off);
-                pgd_cache_size--;
-		preempt_enable();
-        } else {
-		struct page *page;
-
-		preempt_enable();
-		page = alloc_page(GFP_KERNEL|__GFP_REPEAT|__GFP_ZERO);
-		if (page) {
-			ret = (struct page *)page_address(page);
-			page->lru.prev = (void *) 2UL;
-
-			preempt_disable();
-			page->lru.next = (void *) pgd_quicklist;
-			pgd_quicklist = (unsigned long *)page;
-			pgd_cache_size++;
-			preempt_enable();
-		}
-        }
-        return (pgd_t *)ret;
-}
-
-#else /* CONFIG_SMP */
 
 static __inline__ void free_pgd_fast(pgd_t *pgd)
 {
@@ -123,8 +61,6 @@ static __inline__ void free_pgd_slow(pgd_t *pgd)
 {
 	free_page((unsigned long)pgd);
 }
-
-#endif /* CONFIG_SMP */
 
 #ifdef DCACHE_ALIASING_POSSIBLE
 #define VPTE_COLOR(address)		(((address) >> (PAGE_SHIFT + 10)) & 1UL)

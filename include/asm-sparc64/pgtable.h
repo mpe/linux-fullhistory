@@ -59,44 +59,24 @@
 #define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT-3))
 #define PMD_SIZE	(1UL << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE-1))
-#define PMD_BITS	11
+#define PMD_BITS	(PAGE_SHIFT - 2)
 
 /* PGDIR_SHIFT determines what a third-level page table entry can map */
 #define PGDIR_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT-3) + PMD_BITS)
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
+#define PGDIR_BITS	(PAGE_SHIFT - 2)
 
 #ifndef __ASSEMBLY__
 
 #include <linux/sched.h>
 
 /* Entries per page directory level. */
-#define PTRS_PER_PTE		(1UL << (PAGE_SHIFT-3))
-
-/* We the first one in this file, what we export to the kernel
- * is different so we can optimize correctly for 32-bit tasks.
- */
-#define REAL_PTRS_PER_PMD	(1UL << PMD_BITS)
-
-/* This is gross, but unless we do this gcc retests the
- * thread flag every interation in pmd traversal loops.
- */
-extern unsigned long __ptrs_per_pmd(void) __attribute_const__;
-#define PTRS_PER_PMD		__ptrs_per_pmd()
-
-/*
- * We cannot use the top address range because VPTE table lives there. This
- * formula finds the total legal virtual space in the processor, subtracts the
- * vpte size, then aligns it to the number of bytes mapped by one pgde, and
- * thus calculates the number of pgdes needed.
- */
-#define PTRS_PER_PGD (((1UL << VA_BITS) - VPTE_SIZE + (1UL << (PAGE_SHIFT + \
-		      (PAGE_SHIFT-3) + PMD_BITS)) - 1) / (1UL << (PAGE_SHIFT + \
-		      (PAGE_SHIFT-3) + PMD_BITS)))
+#define PTRS_PER_PTE	(1UL << (PAGE_SHIFT-3))
+#define PTRS_PER_PMD	(1UL << PMD_BITS)
+#define PTRS_PER_PGD	(1UL << PGDIR_BITS)
 
 /* Kernel has a separate 44bit address space. */
-#define USER_PTRS_PER_PGD	((const int)(test_thread_flag(TIF_32BIT)) ? \
-				 (1) : (PTRS_PER_PGD))
 #define FIRST_USER_PGD_NR	0
 
 #define pte_ERROR(e)	__builtin_trap()
@@ -235,8 +215,8 @@ extern struct page *mem_map_zero;
 
 /* PFNs are real physical page numbers.  However, mem_map only begins to record
  * per-page information starting at pfn_base.  This is to handle systems where
- * the first physical page in the machine is at some huge physical address, such
- * as 4GB.   This is common on a partitioned E10000, for example.
+ * the first physical page in the machine is at some huge physical address,
+ * such as 4GB.   This is common on a partitioned E10000, for example.
  */
 
 #define pfn_pte(pfn, prot)	\
@@ -307,7 +287,7 @@ static inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 #define pte_mkdirty(pte)	(__pte(pte_val(pte) | _PAGE_MODIFIED | _PAGE_W))
 
 /* to find an entry in a page-table-directory. */
-#define pgd_index(address)	(((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD))
+#define pgd_index(address)	(((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
 #define pgd_offset(mm, address)	((mm)->pgd + pgd_index(address))
 
 /* to find an entry in a kernel page-table-directory */
@@ -321,7 +301,7 @@ static inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 /* Find an entry in the second-level page table.. */
 #define pmd_offset(pudp, address)	\
 	((pmd_t *) pud_page(*(pudp)) + \
-	 (((address) >> PMD_SHIFT) & (REAL_PTRS_PER_PMD-1)))
+	 (((address) >> PMD_SHIFT) & (PTRS_PER_PMD-1)))
 
 /* Find an entry in the third-level page table.. */
 #define pte_index(dir, address)	\

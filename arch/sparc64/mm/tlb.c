@@ -73,6 +73,7 @@ void tlb_batch_add(struct mm_struct *mm, unsigned long vaddr, pte_t *ptep, pte_t
 	}
 
 no_cache_flush:
+
 	if (mp->tlb_frozen)
 		return;
 
@@ -149,11 +150,4 @@ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long
 	}
 	if (nr)
 		flush_tlb_pending();
-}
-
-unsigned long __ptrs_per_pmd(void)
-{
-	if (test_thread_flag(TIF_32BIT))
-		return (1UL << (32 - (PAGE_SHIFT-3) - PAGE_SHIFT));
-	return REAL_PTRS_PER_PMD;
 }

@@ -38,97 +38,150 @@
  * range (note that this is only possible for instruction miss, data misses to
  * obp range do not use vpte). If so, go back directly to the faulting address.
  * This is because we want to read the tpc, otherwise we have no way of knowing
- * the 8k aligned faulting address if we are using >8k kernel pagesize. This also
- * ensures no vpte range addresses are dropped into tlb while obp is executing
- * (see inherit_locked_prom_mappings() rant).
+ * the 8k aligned faulting address if we are using >8k kernel pagesize. This
+ * also ensures no vpte range addresses are dropped into tlb while obp is
+ * executing (see inherit_locked_prom_mappings() rant).
  */
 sparc64_vpte_nucleus:
+	/* Load 0xf0000000, which is LOW_OBP_ADDRESS.  */
 	mov		0xf, %g5
-	sllx		%g5, 28, %g5			! Load 0xf0000000
-	cmp		%g4, %g5			! Is addr >= LOW_OBP_ADDRESS?
+	sllx		%g5, 28, %g5
+
+	/* Is addr >= LOW_OBP_ADDRESS?  */
+	cmp		%g4, %g5
 	blu,pn		%xcc, sparc64_vpte_patchme1
 	 mov		0x1, %g5
-	sllx		%g5, 32, %g5			! Load 0x100000000
-	cmp		%g4, %g5			! Is addr < HI_OBP_ADDRESS?
+
+	/* Load 0x100000000, which is HI_OBP_ADDRESS.  */
+	sllx		%g5, 32, %g5
+
+	/* Is addr < HI_OBP_ADDRESS?  */
+	cmp		%g4, %g5
 	blu,pn		%xcc, obp_iaddr_patch
 	 nop
+
+	/* These two instructions are patched by paginig_init().  */
 sparc64_vpte_patchme1:
-	sethi		%hi(0), %g5			! This has to be patched
+	sethi		%hi(0), %g5
 sparc64_vpte_patchme2:
-	or		%g5, %lo(0), %g5		! This is patched too
-	ba,pt		%xcc, sparc64_kpte_continue	! Part of dtlb_backend
-	 add		%g1, %g1, %g1			! Finish PMD offset adjustment
+	or		%g5, %lo(0), %g5
+
+	/* With kernel PGD in %g5, branch back into dtlb_backend.  */
+	ba,pt		%xcc, sparc64_kpte_continue
+	 andn		%g1, 0x3, %g1	/* Finish PMD offset adjustment.  */
 
 vpte_noent:
-	mov		TLB_SFSR, %g1			! Restore %g1 value
-	stxa		%g4, [%g1 + %g1] ASI_DMMU	! Restore previous TAG_ACCESS
-	done						! Slick trick
+	/* Restore previous TAG_ACCESS, %g5 is zero, and we will
+	 * skip over the trap instruction so that the top level
+	 * TLB miss handler will thing this %g5 value is just an
+	 * invalid PTE, thus branching to full fault processing.
+	 */
+	mov		TLB_SFSR, %g1
+	stxa		%g4, [%g1 + %g1] ASI_DMMU
+	done
 
 	.globl		obp_iaddr_patch
-	.globl		obp_daddr_patch
-
 obp_iaddr_patch:
-	sethi		%hi(0), %g5			! This and following is patched
-	or		%g5, %lo(0), %g5		! g5 now holds obp pmd base physaddr
-	wrpr		%g0, 1, %tl			! Behave as if we are at TL0
-	rdpr		%tpc, %g4			! Find original faulting iaddr
-	srlx		%g4, 13, %g4			! Throw out context bits
-	sllx		%g4, 13, %g4			! g4 has vpn + ctx0 now
-	mov		TLB_SFSR, %g1			! Restore %g1 value
-	stxa		%g4, [%g1 + %g1] ASI_IMMU	! Restore previous TAG_ACCESS
-	srlx		%g4, 23, %g6			! Find pmd number
-	and		%g6, 0x7ff, %g6			! Find pmd number
-	sllx		%g6, 2, %g6			! Find pmd offset
-	lduwa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5! Load pmd, ie pagetable physaddr
-	brz,pn		%g5, longpath			! Kill the PROM ? :-)
-	 sllx		%g5, 11, %g5			! Shift into place
-	srlx		%g4, 13, %g6			! find pte number in pagetable
-	and		%g6, 0x3ff, %g6			! find pte number in pagetable
-	sllx		%g6, 3, %g6			! find pte offset in pagetable
-	ldxa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5! Load pte
-	brgez,pn	%g5, longpath			! Kill the PROM ? :-)
-	 nop
-	stxa		%g5, [%g0] ASI_ITLB_DATA_IN	! put into tlb
-	retry						! go back to original fault
+	/* These two instructions patched by inherit_prom_mappings().  */
+	sethi		%hi(0), %g5
+	or		%g5, %lo(0), %g5
 
-obp_daddr_patch:
-	sethi		%hi(0), %g5			! This and following is patched
-	or		%g5, %lo(0), %g5		! g5 now holds obp pmd base physaddr
-	srlx		%g4, 23, %g6			! Find pmd number
-	and		%g6, 0x7ff, %g6			! Find pmd number
-	sllx		%g6, 2, %g6			! Find pmd offset
-	lduwa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5! Load pmd, ie pagetable physaddr
+	/* Behave as if we are at TL0.  */
+	wrpr		%g0, 1, %tl
+	rdpr		%tpc, %g4	/* Find original faulting iaddr */
+	srlx		%g4, 13, %g4	/* Throw out context bits */
+	sllx		%g4, 13, %g4	/* g4 has vpn + ctx0 now */
+
+	/* Restore previous TAG_ACCESS.  */
+	mov		TLB_SFSR, %g1
+	stxa		%g4, [%g1 + %g1] ASI_IMMU
+
+	/* Get PMD offset.  */
+	srlx		%g4, 23, %g6
+	and		%g6, 0x7ff, %g6
+	sllx		%g6, 2, %g6
+
+	/* Load PMD, is it valid?  */
+	lduwa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5
 	brz,pn		%g5, longpath
-	 sllx		%g5, 11, %g5			! Shift into place
-	srlx		%g4, 13, %g6			! find pte number in pagetable
-	and		%g6, 0x3ff, %g6			! find pte number in pagetable
-	sllx		%g6, 3, %g6			! find pte offset in pagetable
-	ldxa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5! Load pte
+	 sllx		%g5, 11, %g5
+
+	/* Get PTE offset.  */
+	srlx		%g4, 13, %g6
+	and		%g6, 0x3ff, %g6
+	sllx		%g6, 3, %g6
+
+	/* Load PTE.  */
+	ldxa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5
 	brgez,pn	%g5, longpath
 	 nop
-	stxa		%g5, [%g0] ASI_DTLB_DATA_IN	! put into tlb
+
+	/* TLB load and return from trap.  */
+	stxa		%g5, [%g0] ASI_ITLB_DATA_IN
+	retry
+
+	.globl		obp_daddr_patch
+obp_daddr_patch:
+	/* These two instructions patched by inherit_prom_mappings().  */
+	sethi		%hi(0), %g5
+	or		%g5, %lo(0), %g5
+
+	/* Get PMD offset.  */
+	srlx		%g4, 23, %g6
+	and		%g6, 0x7ff, %g6
+	sllx		%g6, 2, %g6
+
+	/* Load PMD, is it valid?  */
+	lduwa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5
+	brz,pn		%g5, longpath
+	 sllx		%g5, 11, %g5
+
+	/* Get PTE offset.  */
+	srlx		%g4, 13, %g6
+	and		%g6, 0x3ff, %g6
+	sllx		%g6, 3, %g6
+
+	/* Load PTE.  */
+	ldxa		[%g5 + %g6] ASI_PHYS_USE_EC, %g5
+	brgez,pn	%g5, longpath
+	 nop
+
+	/* TLB load and return from trap.  */
+	stxa		%g5, [%g0] ASI_DTLB_DATA_IN
 	retry
 
 /*
- * On a first level data miss, check whether this is to the OBP range (note that
- * such accesses can be made by prom, as well as by kernel using prom_getproperty
- * on "address"), and if so, do not use vpte access ... rather, use information
- * saved during inherit_prom_mappings() using 8k pagesize.
+ * On a first level data miss, check whether this is to the OBP range (note
+ * that such accesses can be made by prom, as well as by kernel using
+ * prom_getproperty on "address"), and if so, do not use vpte access ...
+ * rather, use information saved during inherit_prom_mappings() using 8k
+ * pagesize.
  */
 kvmap:
+	/* Load 0xf0000000, which is LOW_OBP_ADDRESS.  */
 	mov		0xf, %g5
-	sllx		%g5, 28, %g5			! Load 0xf0000000
-	cmp		%g4, %g5			! Is addr >= LOW_OBP_ADDRESS?
+	sllx		%g5, 28, %g5
+
+	/* Is addr >= LOW_OBP_ADDRESS?  */
+	cmp		%g4, %g5
 	blu,pn		%xcc, vmalloc_addr
 	 mov		0x1, %g5
-	sllx		%g5, 32, %g5			! Load 0x100000000
-	cmp		%g4, %g5			! Is addr < HI_OBP_ADDRESS?
+
+	/* Load 0x100000000, which is HI_OBP_ADDRESS.  */
+	sllx		%g5, 32, %g5
+
+	/* Is addr < HI_OBP_ADDRESS?  */
+	cmp		%g4, %g5
 	blu,pn		%xcc, obp_daddr_patch
 	 nop
-vmalloc_addr:						! vmalloc addr accessed
-	ldxa		[%g3 + %g6] ASI_N, %g5		! Yep, load k-vpte
-	brgez,pn	%g5, longpath			! Valid, load into TLB
+
+vmalloc_addr:
+	/* If we get here, a vmalloc addr accessed, load kernel VPTE.  */
+	ldxa		[%g3 + %g6] ASI_N, %g5
+	brgez,pn	%g5, longpath
 	 nop
+
+	/* PTE is valid, load into TLB and return from trap.  */
 	stxa		%g5, [%g0] ASI_DTLB_DATA_IN	! Reload TLB
 	retry
 
