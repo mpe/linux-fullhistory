@@ -794,10 +794,8 @@ static int dib3000mc_pid_parse(struct dvb_frontend *fe, int onoff)
 	deb_xfer("%s pid parsing\n",onoff ? "enabling" : "disabling");
 
 	if (onoff) {
-		deb_xfer("%d %x\n",tmp | DIB3000MC_SMO_MODE_PID_PARSE,tmp | DIB3000MC_SMO_MODE_PID_PARSE);
 		wr(DIB3000MC_REG_SMO_MODE,tmp | DIB3000MC_SMO_MODE_PID_PARSE);
 	} else {
-		deb_xfer("%d %x\n",tmp & DIB3000MC_SMO_MODE_NO_PID_PARSE,tmp & DIB3000MC_SMO_MODE_NO_PID_PARSE);
 		wr(DIB3000MC_REG_SMO_MODE,tmp & DIB3000MC_SMO_MODE_NO_PID_PARSE);
 	}
 	return 0;

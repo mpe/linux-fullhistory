@@ -684,8 +684,9 @@ static int dib3000mb_fifo_control(struct dvb_frontend *fe, int onoff)
 
 static int dib3000mb_pid_parse(struct dvb_frontend *fe, int onoff)
 {
-	//struct dib3000_state *state = fe->demodulator_priv;
-	/* switch it off and on */
+	struct dib3000_state *state = fe->demodulator_priv;
+	deb_xfer("%s pid parsing\n",onoff ? "enabling" : "disabling");
+	wr(DIB3000MB_REG_PID_PARSE,onoff);
 	return 0;
 }
 

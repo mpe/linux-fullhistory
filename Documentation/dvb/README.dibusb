@@ -77,6 +77,8 @@ Supported devices USB2.0
 - Hauppauge WinTV NOVA-T USB2
 	http://www.hauppauge.com/
 
+- KWorld/ADSTech Instant DVB-T USB2.0 (DiB3000M-B)
+
 - DiBcom USB2.0 DVB-T reference device (non-public)
 
 1) It is working almost.
@@ -84,12 +86,13 @@ Supported devices USB2.0
 
 
 0. NEWS:
-  2004-02-02 - added support for the Hauppauge Win-TV Nova-T USB2
-  2004-01-31 - distorted streaming is finally gone for USB1.1 devices
-  2004-01-13 - moved the mirrored pid_filter_table back to dvb-dibusb
+  2005-02-11 - added support for the KWorld/ADSTech Instant DVB-T USB2.0. Thanks a lot to Joachim von Caron
+  2005-02-02 - added support for the Hauppauge Win-TV Nova-T USB2
+  2005-01-31 - distorted streaming is finally gone for USB1.1 devices
+  2005-01-13 - moved the mirrored pid_filter_table back to dvb-dibusb
              - first almost working version for HanfTek UMT-010
              - found out, that Yakumo/HAMA/Typhoon are predessors of the HanfTek UMT-010
-  2004-01-10 - refactoring completed, now everything is very delightful
+  2005-01-10 - refactoring completed, now everything is very delightful
              - tuner quirks for some weird devices (Artec T1 AN2235 device has sometimes a
                Panasonic Tuner assembled). Tunerprobing implemented. Thanks a lot to Gunnar Wittich.
   2004-12-29 - after several days of struggling around bug of no returning URBs fixed.
@@ -259,6 +262,9 @@ Patches, comments and suggestions are very very welcome.
     stuff, a big thank you.
 
    Bernd Wagner for helping with huge bug reports and discussions.
+
+   Gunnar Wittich and Joachim von Caron for their trust for giving me
+    root-shells on their machines to implement support for new devices.
 
    Some guys on the linux-dvb mailing list for encouraging me
 

@@ -72,6 +72,7 @@ typedef enum {
 	DIBUSB1_1_AN2235,
 	DIBUSB2_0,
 	UMT2_0,
+	DIBUSB2_0B,
 } dibusb_class_t;
 
 typedef enum {

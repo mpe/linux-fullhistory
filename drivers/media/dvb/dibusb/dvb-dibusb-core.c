@@ -47,6 +47,7 @@ module_param(rc_query_interval, int, 0644);
 MODULE_PARM_DESC(rc_query_interval, "interval in msecs for remote control query (default: 100; min: 40)");
 
 /* Vendor IDs */
+#define USB_VID_ADSTECH						0x06e1
 #define USB_VID_ANCHOR						0x0547
 #define USB_VID_AVERMEDIA					0x14aa
 #define USB_VID_COMPRO						0x185b
@@ -63,6 +64,8 @@ MODULE_PARM_DESC(rc_query_interval, "interval in msecs for remote control query 
 #define USB_VID_ULTIMA_ELECTRONIC			0x05d8
 
 /* Product IDs */
+#define USB_PID_ADSTECH_USB2_COLD			0xa333
+#define USB_PID_ADSTECH_USB2_WARM			0xa334
 #define USB_PID_AVERMEDIA_DVBT_USB_COLD		0x0001
 #define USB_PID_AVERMEDIA_DVBT_USB_WARM		0x0002
 #define USB_PID_COMPRO_DVBU2000_COLD		0xd000
@@ -148,16 +151,18 @@ static struct usb_device_id dib_table [] = {
 
 /* 30 */	{ USB_DEVICE(USB_VID_HAUPPAUGE,		USB_PID_WINTV_NOVA_T_USB2_COLD) },
 /* 31 */	{ USB_DEVICE(USB_VID_HAUPPAUGE,		USB_PID_WINTV_NOVA_T_USB2_WARM) },
+/* 32 */	{ USB_DEVICE(USB_VID_ADSTECH,		USB_PID_ADSTECH_USB2_COLD) },
+/* 33 */	{ USB_DEVICE(USB_VID_ADSTECH,		USB_PID_ADSTECH_USB2_WARM) },
 /* 
  * activate the following define when you have one of the devices and want to 
  * build it from build-2.6 in dvb-kernel
  */
 // #define CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES 
 #ifdef CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
-/* 32 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_ANCHOR_COLD) },
-/* 33 */	{ USB_DEVICE(USB_VID_CYPRESS,		USB_PID_ULTIMA_TVBOX_USB2_FX_COLD) },
-/* 34 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_USB2_FX_WARM) },
-/* 35 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_DIBCOM_ANCHOR_2135_COLD) },
+/* 34 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_ANCHOR_COLD) },
+/* 35 */	{ USB_DEVICE(USB_VID_CYPRESS,		USB_PID_ULTIMA_TVBOX_USB2_FX_COLD) },
+/* 36 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_USB2_FX_WARM) },
+/* 37 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_DIBCOM_ANCHOR_2135_COLD) },
 #endif
 			{ }		/* Terminating entry */
 };
@@ -204,7 +209,7 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	{ .id = DIBUSB1_1, .usb_ctrl = &dibusb_usb_ctrl[0],
 	  .firmware = "dvb-dibusb-5.0.0.11.fw",
 	  .pipe_cmd = 0x01, .pipe_data = 0x02, 
-	  .urb_count = 5, .urb_buffer_size = 4096,
+	  .urb_count = 7, .urb_buffer_size = 4096,
 	  DIBUSB_RC_NEC_PROTOCOL,
 	  &dibusb_demod[DIBUSB_DIB3000MB],
 	  &dibusb_tuner[DIBUSB_TUNER_CABLE_THOMSON],
@@ -212,7 +217,7 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	{ DIBUSB1_1_AN2235, &dibusb_usb_ctrl[1],
 	  "dvb-dibusb-an2235-1.fw",
 	  0x01, 0x02, 
-	  5, 4096,
+	  7, 4096,
 	  DIBUSB_RC_NEC_PROTOCOL,
 	  &dibusb_demod[DIBUSB_DIB3000MB],
 	  &dibusb_tuner[DIBUSB_TUNER_CABLE_THOMSON],
@@ -228,10 +233,18 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	{ UMT2_0, &dibusb_usb_ctrl[2],
 	  "dvb-dibusb-umt-1.fw",
 	  0x01, 0x02, 
-	  15, 188*21,
+	  7, 188*21,
 	  DIBUSB_RC_NO,
 	  &dibusb_demod[DIBUSB_MT352],
 	  &dibusb_tuner[DIBUSB_TUNER_CABLE_LG_TDTP_E102P],
+	},
+	{ DIBUSB2_0B,&dibusb_usb_ctrl[2],
+	  "dvb-dibusb-adstech-usb2-1.fw",
+	  0x01, 0x06,
+	  7, 4096,
+	  DIBUSB_RC_NEC_PROTOCOL,
+	  &dibusb_demod[DIBUSB_DIB3000MB],
+	  &dibusb_tuner[DIBUSB_TUNER_CABLE_THOMSON],
 	},
 };
 
@@ -306,20 +319,25 @@ static struct dibusb_usb_device dibusb_devices[] = {
 		{ &dib_table[28], NULL },
 		{ &dib_table[29], NULL },
 	},	
+	{	"KWorld/ADSTech Instant DVB-T USB 2.0",
+		&dibusb_device_classes[DIBUSB2_0B],
+		{ &dib_table[32], NULL },
+		{ &dib_table[33], NULL }, /* device ID with default DIBUSB2_0-firmware */
+	},
 #ifdef CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
 	{	"Artec T1 USB1.1 TVBOX with AN2235 (misdesigned)",
 		&dibusb_device_classes[DIBUSB1_1_AN2235],
-		{ &dib_table[32], NULL },
+		{ &dib_table[34], NULL },
 		{ NULL },
 	},
 	{	"Artec T1 USB2.0 TVBOX with FX2 IDs (misdesigned, please report the warm ID)",
 		&dibusb_device_classes[DIBUSB2_0],
-		{ &dib_table[33], NULL },
-		{ &dib_table[34], NULL }, /* undefined, it could be that the device will get another USB ID in warm state */
+		{ &dib_table[35], NULL },
+		{ &dib_table[36], NULL }, /* undefined, it could be that the device will get another USB ID in warm state */
 	},
 	{	"DiBcom USB1.1 DVB-T reference design (MOD3000) with AN2135 default IDs",
 		&dibusb_device_classes[DIBUSB1_1],
-		{ &dib_table[35], NULL },
+		{ &dib_table[37], NULL },
 		{ NULL },
 	},
 #endif
@@ -365,30 +383,62 @@ static int dibusb_init(struct usb_dibusb *dib)
 	return 0;
 }
 
+static struct dibusb_usb_device * dibusb_device_class_quirk(struct usb_device *udev, struct dibusb_usb_device *dev)
+{
+	int i;
+
+	/* Quirk for the Kworld/ADSTech Instant USB2.0 device. It has the same USB
+	 * IDs like the USB1.1 KWorld after loading the firmware. Which is a bad
+	 * idea and make this quirk necessary.
+	 */
+	if (dev->dev_cl->id == DIBUSB1_1 && udev->speed == USB_SPEED_HIGH) {
+		info("this seems to be the Kworld/ADSTech Instant USB2.0 device or equal.");
+		for (i = 0; i < sizeof(dibusb_devices)/sizeof(struct dibusb_usb_device); i++) {
+			if (dibusb_devices[i].dev_cl->id == DIBUSB2_0B) {
+				dev = &dibusb_devices[i];
+				break;
+			}
+		}
+	}
+
+	return dev;
+}
+
 static struct dibusb_usb_device * dibusb_find_device (struct usb_device *udev,int *cold)
 {
 	int i,j;
 	*cold = -1;
+	struct dibusb_usb_device *dev = NULL;
+
 	for (i = 0; i < sizeof(dibusb_devices)/sizeof(struct dibusb_usb_device); i++) {
 		for (j = 0; j < DIBUSB_ID_MAX_NUM && dibusb_devices[i].cold_ids[j] != NULL; j++) {
 			deb_info("check for cold %x %x\n",dibusb_devices[i].cold_ids[j]->idVendor, dibusb_devices[i].cold_ids[j]->idProduct);
 			if (dibusb_devices[i].cold_ids[j]->idVendor == le16_to_cpu(udev->descriptor.idVendor) &&
 				dibusb_devices[i].cold_ids[j]->idProduct == le16_to_cpu(udev->descriptor.idProduct)) {
 				*cold = 1;
-				return &dibusb_devices[i];
+				dev = &dibusb_devices[i];
+				break;
 			}
 		}
+
+		if (dev != NULL)
+			break;
 
 		for (j = 0; j < DIBUSB_ID_MAX_NUM && dibusb_devices[i].warm_ids[j] != NULL; j++) {
 			deb_info("check for warm %x %x\n",dibusb_devices[i].warm_ids[j]->idVendor, dibusb_devices[i].warm_ids[j]->idProduct);
 			if (dibusb_devices[i].warm_ids[j]->idVendor == le16_to_cpu(udev->descriptor.idVendor) &&
 				dibusb_devices[i].warm_ids[j]->idProduct == le16_to_cpu(udev->descriptor.idProduct)) {
 				*cold = 0;
-				return &dibusb_devices[i];
+				dev = &dibusb_devices[i];
+				break;
 			}
 		}
 	}
-	return NULL;
+
+	if (dev != NULL)
+		dev = dibusb_device_class_quirk(udev,dev);
+
+	return dev;
 }
 
 /*

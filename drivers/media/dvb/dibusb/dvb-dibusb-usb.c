@@ -136,6 +136,7 @@ int dibusb_streaming(struct usb_dibusb *dib,int onoff)
 {
 	switch (dib->dibdev->dev_cl->id) {
 		case DIBUSB2_0:
+		case DIBUSB2_0B:
 			if (onoff)
 				return dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_ENABLE_STREAM,NULL,0);
 			else
@@ -206,10 +207,11 @@ int dibusb_urb_init(struct usb_dibusb *dib)
 
 	/* dib->pid_parse here contains the value of the module parameter */
 	/* decide if pid parsing can be deactivated:
-	 * is possible (by speed) and wanted (by user)
+	 * is possible (by device type) and wanted (by user)
 	 */
 	switch (dib->dibdev->dev_cl->id) {
 		case DIBUSB2_0:
+		case DIBUSB2_0B:
 			if (dib->udev->speed == USB_SPEED_HIGH && !dib->pid_parse) {
 				def_pid_parse = 0;
 				info("running at HIGH speed, will deliver the complete TS.");
