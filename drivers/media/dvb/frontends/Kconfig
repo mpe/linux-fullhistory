@@ -154,6 +154,7 @@ comment "ATSC (North American/Korean Terresterial DTV) frontends"
 config DVB_NXT2002
 	tristate "Nxt2002 based"
 	depends on DVB_CORE
+	select FW_LOADER
 	help
 	  An ATSC 8VSB tuner module. Say Y when you want to support this frontend.
 

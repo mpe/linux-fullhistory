@@ -343,8 +343,21 @@ static int nxt2002_setup_frontend_parameters (struct dvb_frontend* fe,
 	/* reset the agc now that tuning has been completed */
 	nxt2002_agc_reset(state);
 
+
+
 	/* set target power level */
+	switch (p->u.vsb.modulation) {
+		case QAM_64:
+		case QAM_256:
+				buf[0] = 0x74;
+				break;
+		case VSB_8:
 				buf[0] = 0x70;
+				break;
+		default:
+				return -EINVAL;
+				break;
+	}
 	i2c_writebytes(state,0x42,buf,1);
 
 	/* configure sdm */
@@ -357,7 +370,20 @@ static int nxt2002_setup_frontend_parameters (struct dvb_frontend* fe,
 	nxt2002_writereg_multibyte(state,0x58,buf,2);
 
 	/* write sdmx input */
+	switch (p->u.vsb.modulation) {
+		case QAM_64:
+				buf[0] = 0x68;
+				break;
+		case QAM_256:
+				buf[0] = 0x64;
+				break;
+		case VSB_8:
 				buf[0] = 0x60;
+				break;
+		default:
+				return -EINVAL;
+				break;
+	}
 	buf[1] = 0x00;
 	nxt2002_writereg_multibyte(state,0x5C,buf,2);
 
@@ -387,7 +413,20 @@ static int nxt2002_setup_frontend_parameters (struct dvb_frontend* fe,
 	i2c_writebytes(state,0x41,buf,1);
 
 	/* write agc ucgp0 */
+	switch (p->u.vsb.modulation) {
+		case QAM_64:
+				buf[0] = 0x02;
+				break;
+		case QAM_256:
+				buf[0] = 0x03;
+				break;
+		case VSB_8:
 				buf[0] = 0x00;
+				break;
+		default:
+				return -EINVAL;
+				break;
+	}
 	i2c_writebytes(state,0x30,buf,1);
 
 	/* write agc control reg */
@@ -632,12 +671,12 @@ static struct dvb_frontend_ops nxt2002_ops = {
 		.name = "Nextwave nxt2002 VSB/QAM frontend",
 		.type = FE_ATSC,
 		.frequency_min =  54000000,
-		.frequency_max = 803000000,
+		.frequency_max = 806000000,
                 /* stepsize is just a guess */
 		.frequency_stepsize = 166666,
 		.caps = FE_CAN_FEC_1_2 | FE_CAN_FEC_2_3 | FE_CAN_FEC_3_4 |
 			FE_CAN_FEC_5_6 | FE_CAN_FEC_7_8 | FE_CAN_FEC_AUTO |
-			FE_CAN_8VSB
+			FE_CAN_8VSB | FE_CAN_QAM_64 | FE_CAN_QAM_256
 	},
 
 	.release = nxt2002_release,
