@@ -55,7 +55,6 @@ static const char *version =
 "ne2.c:v0.90 Oct 14 1998 David Weinehall <tao@acc.umu.se>\n";
 
 #include <linux/module.h>
-#include <linux/config.h>
 #include <linux/version.h>
 
 #include <linux/kernel.h>

@@ -626,7 +626,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	if (!inode)
 		goto exit;
 
-	error = -EACCES;
+	error = -ELOOP;
 	if (S_ISLNK(inode->i_mode))
 		goto exit;
 	

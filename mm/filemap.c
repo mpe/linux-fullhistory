@@ -293,7 +293,7 @@ static inline void add_to_page_cache(struct page * page,
 	struct page **hash)
 {
 	atomic_inc(&page->count);
-	page->flags &= ~((1 << PG_uptodate) | (1 << PG_error));
+	page->flags = (page->flags & ~((1 << PG_uptodate) | (1 << PG_error))) | (1 << PG_referenced);
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
 	__add_page_to_hash_queue(page, hash);
@@ -328,7 +328,6 @@ static unsigned long try_to_read_ahead(struct file * file,
 			 */
 			page = mem_map + MAP_NR(page_cache);
 			add_to_page_cache(page, inode, offset, hash);
-			set_bit(PG_referenced, &page->flags);
 			inode->i_op->readpage(file, page);
 			page_cache = 0;
 		}

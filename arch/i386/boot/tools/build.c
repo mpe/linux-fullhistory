@@ -151,7 +151,7 @@ int main(int argc, char ** argv)
 	if (setup_sectors < SETUP_SECTS)
 		setup_sectors = SETUP_SECTS;
 	fprintf(stderr, "Setup is %d bytes.\n", i);
-	memset(buf, sizeof(buf), 0);
+	memset(buf, 0, sizeof(buf));
 	while (i < setup_sectors * 512) {
 		c = setup_sectors * 512 - i;
 		if (c > sizeof(buf))

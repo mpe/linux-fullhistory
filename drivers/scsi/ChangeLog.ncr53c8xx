@@ -1,3 +1,26 @@
+Wed Oct 21 21:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1a
+	- Changes from Eddie Dost for Sparc and Alpha:
+	  ioremap/iounmap support for Sparc.
+	  pcivtophys changed to bus_dvma_to_phys.
+	- Add the 53c876 description to the chip table. This is only usefull 
+	  for printing the right name of the controller.
+	- DEL-441 Item 2 work-around for the 53c876 rev <= 5 (0x15).
+	- Add additionnal checking of INQUIRY data:
+	  Check INQUIRY data received length is at least 7. Byte 7 of 
+	  inquiry data contains device features bits and the driver might 
+	  be confused by garbage. Also check peripheral qualifier.
+	- Cleanup of the SCSI tasks management:
+	  Remove the special case for 32 tags. Now the driver only uses the 
+	  scheme that allows up to 64 tags per LUN.
+	  Merge some code from the 896 driver.
+	  Use a 1,3,5,...MAXTAGS*2+1 tag numbering. Previous driver could  
+	  use any tag number from 1 to 253 and some non conformant devices  
+	  might have problems with large tag numbers.
+	- 'no_sync' changed to 'no_disc' in the README file. This is an old 
+	  and trivial mistake that seems to demonstrate the README file is 
+	  not often read. :)
+
 Sun Oct  4 14:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.0i
 	- Cosmetic changes for sparc (but not for the driver) that needs  

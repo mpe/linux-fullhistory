@@ -34,6 +34,7 @@
 		v1.10 4/21/97 Fixed module code so that multiple cards may be detected,
 				other cleanups.  -djb
 		Andrea Arcangeli:	Upgraded to Donald Becker's version 1.12.
+		Rick Payne:	Fixed SMP race condition
 */
 
 static char *version = "3c509.c:1.12 6/4/97 becker@cesdis.gsfc.nasa.gov\n";
@@ -59,6 +60,7 @@ static char *version = "3c509.c:1.12 6/4/97 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/skbuff.h>
 #include <linux/delay.h>	/* for udelay() */
 
+#include <asm/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -122,6 +124,7 @@ enum RxFilter {
 struct el3_private {
 	struct enet_statistics stats;
 	struct device *next_dev;
+	spinlock_t lock;
 	/* skb send-queue */
 	int head, size;
 	struct sk_buff *queue[SKB_QUEUE_SIZE];
@@ -401,6 +404,9 @@ el3_open(struct device *dev)
 	outw(RxReset, ioaddr + EL3_CMD);
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
 
+	/* Set the spinlock before grabbing IRQ! */
+	((struct el3_private *)dev->priv)->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+
 	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509", dev)) {
 		return -EAGAIN;
 	}
@@ -520,6 +526,11 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
+		unsigned long flags;
+
+	    	/* Spin on the lock, until we're clear of an IRQ */
+	    	spin_lock_irqsave(&lp->lock, flags);
+	    
 		/* Put out the doubleword header... */
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
@@ -536,6 +547,8 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		} else
 			/* Interrupt us when the FIFO has room for max-sized packet. */
 			outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
+
+		spin_unlock_irqrestore(&lp->lock, flags);
 	}
 
 	dev_kfree_skb (skb);
@@ -560,6 +573,7 @@ static void
 el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
+	struct el3_private *lp;
 	int ioaddr, status;
 	int i = INTR_WORK;
 
@@ -567,6 +581,9 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk ("el3_interrupt(): irq %d for unknown device.\n", irq);
 		return;
 	}
+
+	lp = (struct el3_private *)dev->priv;
+	spin_lock(&lp->lock);
 
 	if (dev->interrupt)
 		printk("%s: Re-entering the interrupt handler.\n", dev->name);
@@ -629,7 +646,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk("%s: exiting interrupt, status %4.4x.\n", dev->name,
 			   inw(ioaddr + EL3_STATUS));
 	}
-
+	spin_unlock(&lp->lock);
 	dev->interrupt = 0;
 	return;
 }

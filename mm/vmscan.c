@@ -118,8 +118,13 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	}
 	
 	if (pte_young(pte)) {
+		/*
+		 * Transfer the "accessed" bit from the page
+		 * tables to the global page map.
+		 */
 		set_pte(page_table, pte_mkold(pte));
-		touch_page(page_map);
+		set_bit(PG_referenced, &page_map->flags);
+
 		/* 
 		 * We should test here to see if we want to recover any
 		 * swap cache page here.  We do this if the page seeing
@@ -131,10 +136,6 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		 */
 		return 0;
 	}
-
-	age_page(page_map);
-	if (page_map->age)
-		return 0;
 
 	if (pte_dirty(pte)) {
 		if (vma->vm_ops && vma->vm_ops->swapout) {
@@ -305,8 +306,9 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *pgdir, unsigned long start, int gfp_mask)
+	unsigned long address, int gfp_mask)
 {
+	pgd_t *pgdir;
 	unsigned long end;
 
 	/* Don't swap out areas like shared memory which have their
@@ -314,12 +316,14 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (vma->vm_flags & (VM_SHM | VM_LOCKED))
 		return 0;
 
+	pgdir = pgd_offset(tsk->mm, address);
+
 	end = vma->vm_end;
-	while (start < end) {
-		int result = swap_out_pgd(tsk, vma, pgdir, start, end, gfp_mask);
+	while (address < end) {
+		int result = swap_out_pgd(tsk, vma, pgdir, address, end, gfp_mask);
 		if (result)
 			return result;
-		start = (start + PGDIR_SIZE) & PGDIR_MASK;
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
 	}
 	return 0;
@@ -339,22 +343,23 @@ static int swap_out_process(struct task_struct * p, int gfp_mask)
 	 * Find the proper vm-area
 	 */
 	vma = find_vma(p->mm, address);
-	if (!vma) {
-		p->swap_address = 0;
-		return 0;
-	}
-	if (address < vma->vm_start)
-		address = vma->vm_start;
+	if (vma) {
+		if (address < vma->vm_start)
+			address = vma->vm_start;
 
-	for (;;) {
-		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, gfp_mask);
-		if (result)
-			return result;
-		vma = vma->vm_next;
-		if (!vma)
-			break;
-		address = vma->vm_start;
+		for (;;) {
+			int result = swap_out_vma(p, vma, address, gfp_mask);
+			if (result)
+				return result;
+			vma = vma->vm_next;
+			if (!vma)
+				break;
+			address = vma->vm_start;
+		}
 	}
+
+	/* We didn't find anything for the process */
+	p->swap_cnt = 0;
 	p->swap_address = 0;
 	return 0;
 }
@@ -415,20 +420,12 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		}
 		pbest->swap_cnt--;
 
-		switch (swap_out_process(pbest, gfp_mask)) {
-		case 0:
-			/*
-			 * Clear swap_cnt so we don't look at this task
-			 * again until we've tried all of the others.
-			 * (We didn't block, so the task is still here.)
-			 */
-			pbest->swap_cnt = 0;
-			break;
-		case 1:
+		/*
+		 * Nonzero means we cleared out something, but only "1" means
+		 * that we actually free'd up a page as a result.
+		 */
+		if (swap_out_process(pbest, gfp_mask) == 1)
 			return 1;
-		default:
-			break;
-		};
 	}
 out:
 	return 0;
@@ -540,7 +537,7 @@ int kswapd(void *unused)
 	init_swap_timer();
 	kswapd_task = current;
 	while (1) {
-		int tries;
+		unsigned long start_time;
 
 		current->state = TASK_INTERRUPTIBLE;
 		flush_signals(current);
@@ -548,36 +545,12 @@ int kswapd(void *unused)
 		schedule();
 		swapstats.wakeups++;
 
-		/*
-		 * Do the background pageout: be
-		 * more aggressive if we're really
-		 * low on free memory.
-		 *
-		 * We try page_daemon.tries_base times, divided by
-		 * an 'urgency factor'. In practice this will mean
-		 * a value of pager_daemon.tries_base / 8 or 4 = 64
-		 * or 128 pages at a time.
-		 * This gives us 64 (or 128) * 4k * 4 (times/sec) =
-		 * 1 (or 2) MB/s swapping bandwidth in low-priority
-		 * background paging. This number rises to 8 MB/s
-		 * when the priority is highest (but then we'll be
-		 * woken up more often and the rate will be even
-		 * higher).
-		 */
-		tries = pager_daemon.tries_base;
-		tries >>= 4*free_memory_available();
-
+		start_time = jiffies;
 		do {
 			do_try_to_free_page(0);
-			/*
-			 * Syncing large chunks is faster than swapping
-			 * synchronously (less head movement). -- Rik.
-			 */
-			if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster)
-				run_task_queue(&tq_disk);
 			if (free_memory_available() > 1)
 				break;
-		} while (--tries > 0);
+		} while (jiffies != start_time);
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	kswapd_task = NULL;

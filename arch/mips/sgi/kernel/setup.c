@@ -5,6 +5,7 @@
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  * Copyright (C) 1997, 1998 Ralf Baechle (ralf@gnu.org)
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kbd_ll.h>
 #include <linux/kernel.h>

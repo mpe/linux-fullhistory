@@ -7,6 +7,8 @@
  *          Andrea Arcangeli
  *
  * based on work by Grant Guenther <grant@torque.net> and Phil Blundell.
+ *
+ * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  */
 
 /* This driver should work with any hardware that is broadly compatible
@@ -557,12 +559,12 @@ static int programmable_irq_support(struct parport *pb)
 static int irq_probe_ECP(struct parport *pb)
 {
 	int irqs, i;
-		
+
 	sti();
 	irqs = probe_irq_on();
 		
-	parport_pc_write_econtrol(pb, 0x00);    /* Reset FIFO */
-	parport_pc_write_econtrol(pb, 0xd0);    /* TEST FIFO + nErrIntrEn */
+	parport_pc_write_econtrol(pb, 0x00);	/* Reset FIFO */
+	parport_pc_write_econtrol(pb, 0xd0);	/* TEST FIFO + nErrIntrEn */
 
 	/* If Full FIFO sure that WriteIntrThresold is generated */
 	for (i=0; i < 1024 && !(parport_pc_read_econtrol(pb) & 0x02) ; i++) 

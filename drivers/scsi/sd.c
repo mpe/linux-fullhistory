@@ -65,7 +65,8 @@
 #define SD_MINOR_NUMBER(i)	((i) & 255)
 #define MKDEV_SD_PARTITION(i)	MKDEV(SD_MAJOR_NUMBER(i), (i) & 255)
 #define MKDEV_SD(index)		MKDEV_SD_PARTITION((index) << 4)
-#define N_USED_SD_MAJORS	((sd_template.dev_max + SCSI_DISKS_PER_MAJOR - 1) / SCSI_DISKS_PER_MAJOR)
+#define N_USED_SCSI_DISKS  (sd_template.dev_max + SCSI_DISKS_PER_MAJOR - 1)
+#define N_USED_SD_MAJORS   (N_USED_SCSI_DISKS / SCSI_DISKS_PER_MAJOR)
 
 #define MAX_RETRIES 5
 
@@ -1765,7 +1766,7 @@ void cleanup_module( void)
     scsi_unregister_module(MODULE_SCSI_DEV, &sd_template);
 
     for (i=0; i <= sd_template.dev_max / SCSI_DISKS_PER_MAJOR; i++) 
-    unregister_blkdev(SD_MAJOR(i),"sd");
+	unregister_blkdev(SD_MAJOR(i),"sd");
     
     sd_registered--;
     if( rscsi_disks != NULL )
@@ -1783,13 +1784,13 @@ void cleanup_module( void)
 
 	for (sdgd = gendisk_head; sdgd; sdgd = sdgd->next)
 	{
-	    if (sdgd->next >= sd_gendisks && sdgd->next <= LAST_SD_GENDISK)
+	    if (sdgd->next >= sd_gendisks && sdgd->next <= LAST_SD_GENDISK.max_nr)
 	    	    removed++, sdgd->next = sdgd->next->next;
 	    else sdgd = sdgd->next;
 	}
-	if (removed != N_USED_SCSI_DISKS)
+	if (removed != N_USED_SD_MAJORS)
 	    printk("%s %d sd_gendisks in disk chain",
-	    	removed > N_USED_SCSI_DISKS ? "total" : "just", removed);
+		removed > N_USED_SD_MAJORS ? "total" : "just", removed);
 	
     }
 

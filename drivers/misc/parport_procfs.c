@@ -8,16 +8,11 @@
  *
  * based on work by Grant Guenther <grant@torque.net>
  *              and Philip Blundell
+ *
+ * Cleaned up include files - Russell King <linux@arm.uk.linux.org>
  */
 
-#include <linux/stddef.h>
-#include <linux/tasks.h>
-#include <linux/ctype.h>
-#include <asm/ptrace.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-#include <asm/irq.h>
-
+#include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -26,6 +21,11 @@
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
 #include <linux/parport.h>
+#include <linux/ctype.h>
+
+#include <asm/io.h>
+#include <asm/dma.h>
+#include <asm/irq.h>
 
 struct proc_dir_entry *base = NULL;
 

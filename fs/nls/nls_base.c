@@ -49,7 +49,6 @@ utf8_mbtowc(__u16 *p, const __u8 *s, int n)
 	int c0, c, nc;
 	struct utf8_table *t;
   
-	printk("utf8_mbtowc\n");
 	nc = 0;
 	c0 = *s;
 	l = c0;
@@ -80,11 +79,9 @@ utf8_mbstowcs(__u16 *pwcs, const __u8 *s, int n)
 	const __u8 *ip;
 	int size;
 
-	printk("\nutf8_mbstowcs: n=%d\n", n);
 	op = pwcs;
 	ip = s;
 	while (*ip && n > 0) {
-		printk(" %02x", *ip);
 		if (*ip & 0x80) {
 			size = utf8_mbtowc(op, ip, n);
 			if (size == -1) {

@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-27 June 1998
+18 October 1998
 ===============================================================================
 
 1.  Introduction
@@ -21,7 +21,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.4  Set order type for tagged command
       8.5  Set debug mode
       8.6  Clear profile counters
-      8.7  Set flag (no_sync)
+      8.7  Set flag (no_disc)
       8.8  Set verbose level
 9.  Configuration parameters
 10. Boot setup commands
@@ -424,7 +424,7 @@ Available commands:
     The "clearprof" command allows you to clear these counters at any time.
 
 
-8.7 Set flag (no_sync)
+8.7 Set flag (no_disc)
  
     setflag <target> <flag>
 
@@ -432,11 +432,11 @@ Available commands:
 
     For the moment, only one flag is available:
 
-        no_sync:   not allow target to disconnect.
+        no_disc:   not allow target to disconnect.
 
     Do not specify any flag in order to reset the flag. For example:
     - setflag 4
-      will reset no_sync flag for target 4, so will allow it disconnections.
+      will reset no_disc flag for target 4, so will allow it disconnections.
     - setflag all
       will allow disconnection for all devices on the SCSI bus.
 
@@ -1067,7 +1067,7 @@ Try to enable one feature at a time with control commands.  For example:
   Will enable fast synchronous data transfer negotiation for all targets.
 
 - echo "setflag 3" >/proc/scsi/ncr53c8xx/0
-  Will reset flags (no_sync) for target 3, and so will allow it to disconnect 
+  Will reset flags (no_disc) for target 3, and so will allow it to disconnect 
   the SCSI Bus.
 
 - echo "settags 3 8" >/proc/scsi/ncr53c8xx/0

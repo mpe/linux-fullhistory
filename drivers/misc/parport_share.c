@@ -105,7 +105,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->ops = ops;
 	tmp->number = portnum;
 	memset (&tmp->probe_info, 0, sizeof (struct parport_device_info));
-	spin_lock_init(&tmp->cad_lock);
+	tmp->cad_lock = RW_LOCK_UNLOCKED;
 	spin_lock_init(&tmp->waitlist_lock);
 	spin_lock_init(&tmp->pardevice_lock);
 

@@ -53,6 +53,9 @@
 #
 # 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
 # texts.
+#
+# 102598 Michael Chastain (mec@shout.net) - put temporary files in
+# current directory, not in /tmp.
 
 #
 # Make sure we're really running bash.
@@ -506,9 +509,9 @@ if [ -f $DEFAULTS ]; then
   echo "# Using defaults found in" $DEFAULTS
   echo "#"
   . $DEFAULTS
-  sed -e 's/# \(.*\) is not.*/\1=n/' < $DEFAULTS > /tmp/conf.$$
-  . /tmp/conf.$$
-  rm /tmp/conf.$$
+  sed -e 's/# \(.*\) is not.*/\1=n/' < $DEFAULTS > .config-is-not.$$
+  . .config-is-not.$$
+  rm .config-is-not.$$
 else
   echo "#"
   echo "# No defaults found"

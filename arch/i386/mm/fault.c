@@ -156,7 +156,14 @@ good_area:
 			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 				goto bad_area;
 	}
-	handle_mm_fault(tsk, vma, address, write);
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	if (!handle_mm_fault(tsk, vma, address, write))
+		goto bad_area;
 
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?

@@ -272,7 +272,7 @@ extern int remap_page_range(unsigned long from, unsigned long to, unsigned long 
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
 extern void vmtruncate(struct inode * inode, unsigned long offset);
-extern void handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
+extern int handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
 extern void make_pages_present(unsigned long addr, unsigned long end);
 
 extern int pgt_cache_water[2];
@@ -329,18 +329,11 @@ extern void put_cached_page(unsigned long);
  */
 extern int free_memory_available(void);
 extern struct task_struct * kswapd_task;
-
-extern inline void kswapd_notify(unsigned int gfp_mask)
-{
-	if (kswapd_task) {
-		wake_up_process(kswapd_task);
-		if (gfp_mask & __GFP_WAIT) {
-			current->policy |= SCHED_YIELD;
-			schedule();
-		}
-	}
-}
-
+#define wakeup_kswapd() do { \
+	if (kswapd_task->state & TASK_INTERRUPTIBLE) \
+		wake_up_process(kswapd_task); \
+} while (0)
+			
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */
 static inline int expand_stack(struct vm_area_struct * vma, unsigned long address)

@@ -130,21 +130,19 @@ int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
 	int retval;
 	int i;
 
-	lock_kernel();
-
 	wait = NULL;
 	current->timeout = timeout;
 	if (timeout) {
-		struct poll_table_entry *entry = (struct poll_table_entry *)
-			__get_free_page(GFP_KERNEL);
-		if (!entry) {
-			retval = -ENOMEM;
-			goto out_nowait;
-		}
+		struct poll_table_entry *entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
+		if (!entry)
+			return -ENOMEM;
+
 		wait_table.nr = 0;
 		wait_table.entry = entry;
 		wait = &wait_table;
 	}
+
+	lock_kernel();
 
 	retval = max_select_fd(n, fds);
 	if (retval < 0)

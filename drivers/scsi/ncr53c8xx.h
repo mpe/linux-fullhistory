@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.0i"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 3.1a"
 
 /*
 **	Check supported Linux versions
@@ -468,7 +468,10 @@ typedef struct {
  {PCI_DEVICE_ID_NCR_53C875, 0x01, "875",  6, 16, 5,			\
  FE_WIDE|FE_ULTRA|FE_CLK80|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
- {PCI_DEVICE_ID_NCR_53C875, 0xff, "875",  6, 16, 5,			\
+ {PCI_DEVICE_ID_NCR_53C875, 0x0f, "875",  6, 16, 5,			\
+ FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ ,									\
+ {PCI_DEVICE_ID_NCR_53C875, 0xff, "876",  6, 16, 5,			\
  FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
  {PCI_DEVICE_ID_NCR_53C875J,0xff, "875J", 6, 16, 5,			\

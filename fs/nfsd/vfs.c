@@ -14,6 +14,7 @@
  * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
  */
 
+#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/errno.h>

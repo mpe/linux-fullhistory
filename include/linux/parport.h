@@ -208,7 +208,7 @@ struct parport {
 	int number;		/* port index - the `n' in `parportn' */
 	spinlock_t pardevice_lock;
 	spinlock_t waitlist_lock;
-	spinlock_t cad_lock;
+	rwlock_t cad_lock;
 };
 
 /* parport_register_port registers a new parallel port at the given address (if

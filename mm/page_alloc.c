@@ -269,11 +269,16 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 
 	/*
 	 * If we failed to find anything, we'll return NULL, but we'll
-	 * wake up kswapd _now_ and even wait for it synchronously if
-	 * we can.. This way we'll at least make some forward progress
+	 * wake up kswapd _now_ and even yield to it if we can..
+	 * This way we'll at least make some forward progress
 	 * over time.
 	 */
-	kswapd_notify(gfp_mask);
+	wakeup_kswapd();
+	if (gfp_mask & __GFP_WAIT) {
+		current->policy |= SCHED_YIELD;
+		schedule();
+	}
+
 nopage:
 	return 0;
 }

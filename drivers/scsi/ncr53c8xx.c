@@ -73,7 +73,7 @@
 */
 
 /*
-**	October 4 1998, version 3.0i
+**	October 21 1998, version 3.1a
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -169,9 +169,11 @@
 #endif
 
 /*
-**	Define the BSD style u_int32 type
+**	Define the BSD style u_int32 and u_int64 type.
+**	Are in fact u_int32_t and u_int64_t :-)
 */
 typedef u32 u_int32;
+typedef u64 u_int64;
 
 #include "ncr53c8xx.h"
 
@@ -366,24 +368,13 @@ static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
 #define NO_TAG	(255)
 
 /*
-**    For more than 32 TAGS support, we do some address calculation 
-**    from the SCRIPTS using 2 additionnal SCR_COPY's and a fiew 
-**    bit handling on 64 bit integers. For these reasons, support for 
-**    32 up to 64 TAGS is compiled conditionnaly.
+**	Choose appropriate type for tag bitmap.
 */
-
-#if	SCSI_NCR_MAX_TAGS <= 32
-struct nlink {
-	ncrcmd	l_cmd;
-	ncrcmd	l_paddr;
-};
+#if	SCSI_NCR_MAX_TAGS > 32
+typedef u_int64 tagmap_t;
 #else
-struct nlink {
-	ncrcmd	l_paddr;
-};
-typedef u64 u_int64;
+typedef u_int32 tagmap_t;
 #endif
-
 
 /*
 **    Number of targets supported by the driver.
@@ -583,16 +574,12 @@ static spinlock_t driver_lock;
 #define iounmap vfree
 #endif
 
-#ifdef __sparc__
+#if defined (__sparc__)
 #include <asm/irq.h>
-#define remap_pci_mem(base, size)	((vm_offset_t) __va(base))
-#define unmap_pci_mem(vaddr, size)
-#define pcivtophys(p)			((p) & pci_dvma_mask)
+#elif defined (__alpha__)
+#define bus_dvma_to_mem(p)		((p) & 0xfffffffful)
 #else
-#if defined(__alpha__)
-#define pcivtophys(p)			((p) & 0xfffffffful)
-#else
-#define pcivtophys(p)			(p)
+#define bus_dvma_to_mem(p)		(p)
 #endif
 
 #ifndef NCR_IOMAPPED
@@ -615,7 +602,6 @@ static void unmap_pci_mem(vm_offset_t vaddr, u_long size)
 		iounmap((void *) (vaddr & PAGE_MASK));
 }
 #endif	/* !NCR_IOMAPPED */
-#endif	/* __sparc__ */
 
 /*
 **	Insert a delay in micro-seconds and milli-seconds.
@@ -1488,8 +1474,8 @@ struct lcb {
 	**	64 possible tags.
 	**----------------------------------------------------------------
 	*/
-	struct nlink	jump_ccb_0;	/* Default table if no tags	*/
-	struct nlink	*jump_ccb;	/* Virtual address		*/
+	u_int32		jump_ccb_0;	/* Default table if no tags	*/
+	u_int32		*jump_ccb;	/* Virtual address		*/
 
 	/*----------------------------------------------------------------
 	**	CCB queue management.
@@ -1514,11 +1500,7 @@ struct lcb {
 	*/
 	u_char		ia_tag;		/* Allocation index		*/
 	u_char		if_tag;		/* Freeing index		*/
-#if SCSI_NCR_MAX_TAGS <= 32
-	u_char		cb_tags[32];	/* Circular tags buffer		*/
-#else
-	u_char		cb_tags[64];	/* Circular tags buffer		*/
-#endif
+	u_char cb_tags[SCSI_NCR_MAX_TAGS];	/* Circular tags buffer	*/
 	u_char		usetags;	/* Command queuing is active	*/
 	u_char		maxtags;	/* Max nr of tags asked by user	*/
 	u_char		numtags;	/* Current number of tags	*/
@@ -1528,14 +1510,13 @@ struct lcb {
 	**	QUEUE FULL control and ORDERED tag control.
 	**----------------------------------------------------------------
 	*/
+	/*----------------------------------------------------------------
+	**	QUEUE FULL and ORDERED tag control.
+	**----------------------------------------------------------------
+	*/
 	u_short		num_good;	/* Nr of GOOD since QUEUE FULL	*/
-#if SCSI_NCR_MAX_TAGS <= 32
-	u_int		tags_umap;	/* Used tags bitmap		*/
-	u_int		tags_smap;	/* Tags in use at 'tag_stime'	*/
-#else
-	u_int64		tags_umap;	/* Used tags bitmap		*/
-	u_int64		tags_smap;	/* Tags in use at 'tag_stime'	*/
-#endif
+	tagmap_t	tags_umap;	/* Used tags bitmap		*/
+	tagmap_t	tags_smap;	/* Tags in use at 'tag_stime'	*/
 	u_long		tags_stime;	/* Last time we set smap=umap	*/
 	ccb_p		held_ccb;	/* CCB held for QUEUE FULL	*/
 };
@@ -2065,18 +2046,10 @@ struct script {
 	ncrcmd	loadpos1	[  4];
 #endif
 	ncrcmd  resel_lun	[  6];
-#if SCSI_NCR_MAX_TAGS <= 32
-	ncrcmd	resel_tag	[  8];
-#else
 	ncrcmd	resel_tag	[  6];
 	ncrcmd	jump_to_nexus	[  4];
 	ncrcmd	nexus_indirect	[  4];
-#endif
-#if SCSI_NCR_MAX_TAGS <= 32
 	ncrcmd	resel_notag	[  4];
-#else
-	ncrcmd	resel_notag	[  4];
-#endif
 	ncrcmd  data_in		[MAX_SCATTERL * 4];
 	ncrcmd  data_in2	[  4];
 	ncrcmd  data_out	[MAX_SCATTERL * 4];
@@ -2987,18 +2960,12 @@ static	struct script script0 __initdata = {
 	/*
 	**	Read the TAG from the SIDL.
 	**	Still an aggressive optimization. ;-)
+	**	Compute the CCB indirect jump address which 
+	**	is (#TAG*2 & 0xfc) due to tag numbering using 
+	**	1,3,5..MAXTAGS*2+1 actual values.
 	*/
-	SCR_FROM_REG (sidl),
+	SCR_REG_SFBR (sidl, SCR_SHL, 0),
 		0,
-	/*
-	**	JUMP indirectly to the restart point of the CCB.
-	*/
-#if SCSI_NCR_MAX_TAGS <= 32
-	SCR_SFBR_REG (temp, SCR_AND, 0xf8),
-		0,
-	SCR_RETURN,
-		0,
-#else
 	SCR_SFBR_REG (temp, SCR_AND, 0xfc),
 		0,
 }/*-------------------------< JUMP_TO_NEXUS >-------------------*/,{
@@ -3011,7 +2978,6 @@ static	struct script script0 __initdata = {
 		RADDR (temp),
 	SCR_RETURN,
 		0,
-#endif
 }/*-------------------------< RESEL_NOTAG >-------------------*/,{
 	/*
 	**	No tag expected.
@@ -3019,13 +2985,8 @@ static	struct script script0 __initdata = {
 	*/
 	SCR_MOVE_ABS (1) ^ SCR_MSG_IN,
 		NADDR (msgin),
-#if SCSI_NCR_MAX_TAGS <= 32
-	SCR_RETURN,
-		0,
-#else
 	SCR_JUMP,
 		PADDR (jump_to_nexus),
-#endif
 }/*-------------------------< DATA_IN >--------------------*/,{
 /*
 **	Because the size depends on the
@@ -3907,7 +3868,7 @@ static void ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int le
 				switch (old & RELOC_MASK) {
 				case RELOC_REGISTER:
 					new = (old & ~RELOC_MASK)
-							+ pcivtophys(np->paddr);
+						+ bus_dvma_to_mem(np->paddr);
 					break;
 				case RELOC_LABEL:
 					new = (old & ~RELOC_MASK) + np->p_script;
@@ -4654,7 +4615,7 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	np->scripth	= np->scripth0;
 	np->p_scripth	= vtophys(np->scripth);
 
-	np->p_script	= (np->paddr2) ? pcivtophys(np->paddr2) : vtophys(np->script0);
+	np->p_script	= (np->paddr2) ? bus_dvma_to_mem(np->paddr2) : vtophys(np->script0);
 
 	ncr_script_copy_and_bind (np, (ncrcmd *) &script0, (ncrcmd *) np->script0, sizeof(struct script));
 	ncr_script_copy_and_bind (np, (ncrcmd *) &scripth0, (ncrcmd *) np->scripth0, sizeof(struct scripth));
@@ -5063,12 +5024,12 @@ int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 			}
 		}
 		msgptr[msglen++] = order;
-#if SCSI_NCR_MAX_TAGS <= 32
-		msgptr[msglen++] = (cp->tag << 3) + 1;
-#else
-		msgptr[msglen++] = (cp->tag << 2) + 1;
-#endif
-
+		/*
+		**	Actual tags are numbered 1,3,5,..2*MAXTAGS+1,
+		**	since we may have to deal with devices that have 
+		**	problems with #TAG 0 or too great #TAG numbers.
+		*/
+		msgptr[msglen++] = (cp->tag << 1) + 1;
 	}
 
 	switch (nego) {
@@ -5316,7 +5277,7 @@ static void ncr_start_next_ccb(ncb_p np, lcb_p lp, int maxn)
 		++lp->queuedccbs;
 		cp = xpt_que_entry(qp, struct ccb, link_ccbq);
 		xpt_insque_tail(qp, &lp->busy_ccbq);
-		lp->jump_ccb[cp->tag == NO_TAG ? 0 : cp->tag].l_paddr =
+		lp->jump_ccb[cp->tag == NO_TAG ? 0 : cp->tag] =
 			cpu_to_scr(CCB_PHYS (cp, restart));
 		ncr_put_start_queue(np, cp);
 	}
@@ -5705,7 +5666,7 @@ static int ncr_detach(ncb_p np)
 #ifdef DEBUG_NCR53C8XX
 	printk("%s: freeing lp (%lx)\n", ncr_name(np), (u_long) lp);
 #endif
-				if (lp->maxnxs > 1)
+				if (lp->jump_ccb != &lp->jump_ccb_0)
 					m_free(lp->jump_ccb, 256);
 				m_free(lp, sizeof(*lp));
 			}
@@ -5861,9 +5822,10 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		/*
 		**	On standard INQUIRY response (EVPD and CmDt 
 		**	not set), setup logical unit according to 
-		**	announced capabilities.
+		**	announced capabilities (we need the 1rst 7 bytes).
 		*/
-		if (cmd->cmnd[0] == 0x12 && !(cmd->cmnd[1] & 0x3)) {
+		if (cmd->cmnd[0] == 0x12 && !(cmd->cmnd[1] & 0x3) &&
+		    cmd->cmnd[4] >= 7) {
 			ncr_setup_lcb (np, cmd->target, cmd->lun,
 				       (char *) cmd->request_buffer);
 		}
@@ -6217,6 +6179,14 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 		OUTONW (nc_sien, SBMC);
 		np->scsi_mode = INB (nc_stest4) & SMODE;
 	}
+
+	/*
+	**	DEL 441 - 53C876 Rev 5 - Part Number 609-0392787/2788 - ITEM 2.
+	**	Disable overlapped arbitration.
+	*/
+	if (np->device_id == PCI_DEVICE_ID_NCR_53C875 &&
+	    np->revision_id >= 0x10 && np->revision_id <= 0x15)
+		OUTB (nc_ctest0, (1<<5));
 
 	/*
 	**	Fill in target structure.
@@ -7778,7 +7748,7 @@ void ncr_int_sir (ncb_p np)
 		**	We just assume lun=0, 1 CCB, no tag.
 		*/
 		if (tp->lp[0]) { 
-			OUTL (nc_dsp, scr_to_cpu(tp->lp[0]->jump_ccb[0].l_paddr));
+			OUTL (nc_dsp, scr_to_cpu(tp->lp[0]->jump_ccb[0]));
 			return;
 		}
 	case SIR_RESEL_BAD_TARGET:	/* Will send a TARGET RESET message */
@@ -8307,17 +8277,9 @@ static	ccb_p ncr_get_ccb (ncb_p np, u_char tn, u_char ln)
 	if (lp) {
 		if (tag != NO_TAG) {
 			++lp->ia_tag;
-#if SCSI_NCR_MAX_TAGS <= 32
-			if (lp->ia_tag == 32)
-#else
-			if (lp->ia_tag == 64)
-#endif
+			if (lp->ia_tag == SCSI_NCR_MAX_TAGS)
 				lp->ia_tag = 0;
-#if SCSI_NCR_MAX_TAGS <= 32
-			lp->tags_umap |= (1u << tag);
-#else
-			lp->tags_umap |= (((u_int64) 1) << tag);
-#endif
+			lp->tags_umap |= (((tagmap_t) 1) << tag);
 		}
 	}
 
@@ -8363,22 +8325,14 @@ static void ncr_free_ccb (ncb_p np, ccb_p cp)
 	if (lp) {
 		if (cp->tag != NO_TAG) {
 			lp->cb_tags[lp->if_tag++] = cp->tag;
-#if SCSI_NCR_MAX_TAGS <= 32
-			if (lp->if_tag == 32)
-#else
-			if (lp->if_tag == 64)
-#endif
+			if (lp->if_tag == SCSI_NCR_MAX_TAGS)
 				lp->if_tag = 0;
-#if SCSI_NCR_MAX_TAGS <= 32
-			lp->tags_umap &= ~(1u << cp->tag);
-#else
-			lp->tags_umap &= ~(((u_int64) 1) << cp->tag);
-#endif
+			lp->tags_umap &= ~(((tagmap_t) 1) << cp->tag);
 			lp->tags_smap &= lp->tags_umap;
-			lp->jump_ccb[cp->tag].l_paddr =
+			lp->jump_ccb[cp->tag] =
 				cpu_to_scr(NCB_SCRIPTH_PHYS(np, bad_i_t_l_q));
 		} else {
-			lp->jump_ccb[0].l_paddr =
+			lp->jump_ccb[0] =
 				cpu_to_scr(NCB_SCRIPTH_PHYS(np, bad_i_t_l));
 		}
 	}
@@ -8412,7 +8366,7 @@ static void ncr_free_ccb (ncb_p np, ccb_p cp)
 
 
 #define ncr_reg_bus_addr(r) \
-	(pcivtophys(np->paddr) + offsetof (struct ncr_reg, r))
+	(bus_dvma_to_mem(np->paddr) + offsetof (struct ncr_reg, r))
 
 /*------------------------------------------------------------------------
 **	Initialize the fixed part of a CCB structure.
@@ -8579,28 +8533,6 @@ static void ncr_init_tcb (ncb_p np, u_char tn)
 
 
 /*------------------------------------------------------------------------
-**	Reselection JUMP table initialisation.
-**------------------------------------------------------------------------
-**	The SCRIPTS processor jumps on reselection to the entry 
-**	corresponding to the CCB using the tag as offset.
-**------------------------------------------------------------------------
-*/
-static void ncr_setup_jump_ccb(ncb_p np, lcb_p lp)
-{
-	int i;
-
-	lp->p_jump_ccb = cpu_to_scr(vtophys(lp->jump_ccb));
-	for (i = 0 ; i < lp->maxnxs ; i++) {
-#if SCSI_NCR_MAX_TAGS <= 32
-		lp->jump_ccb[i].l_cmd   = cpu_to_scr(SCR_JUMP);
-#endif
-		lp->jump_ccb[i].l_paddr =
-			cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l_q));
-		lp->cb_tags[i] = i;
-	}
-}
-
-/*------------------------------------------------------------------------
 **	Lun control block allocation and initialization.
 **------------------------------------------------------------------------
 **	This data structure is allocated and initialized after a SCSI 
@@ -8649,12 +8581,12 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	xpt_que_init(&lp->skip_ccbq);
 
 	/*
-	**	Set max CCBs to 1 and use the default jump table 
-	**	by default.
+	**	Set max CCBs to 1 and use the default 1 entry 
+	**	jump table by default.
 	*/
-	lp->maxnxs = 1;
-	lp->jump_ccb = &lp->jump_ccb_0;
-	ncr_setup_jump_ccb(np, lp);
+	lp->maxnxs	= 1;
+	lp->jump_ccb	= &lp->jump_ccb_0;
+	lp->p_jump_ccb	= cpu_to_scr(vtophys(lp->jump_ccb));
 
 	/*
 	**	Initilialyze the reselect script:
@@ -8733,6 +8665,13 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 		inq_byte7 = inq_data[7];
 
 	/*
+	**	Throw away announced LUN capabilities if we are told 
+	**	that there is no real device supported by the logical unit.
+	*/
+	if ((inq_data[0] & 0xe0) > 0x20 || (inq_data[0] & 0x1f) == 0x1f)
+		inq_byte7 &= (INQ7_SYNC | INQ7_WIDE16);
+
+	/*
 	**	If user is wanting SYNC, force this feature.
 	*/
 	if (driver_setup.force_sync_nego)
@@ -8751,19 +8690,21 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 	**	If unit supports tagged commands, allocate the 
 	**	CCB JUMP table if not yet.
 	*/
-	if ((inq_byte7 & INQ7_QUEUE) && lp->maxnxs < 2) {
-		struct nlink *jumps;
-		jumps = m_alloc(256, 8);
-		if (!jumps)
+	if ((inq_byte7 & INQ7_QUEUE) && lp->jump_ccb == &lp->jump_ccb_0) {
+		int i;
+		lp->jump_ccb = m_alloc(256, 8);
+		if (!lp->jump_ccb) {
+			lp->jump_ccb = &lp->jump_ccb_0;
 			goto fail;
-#if SCSI_NCR_MAX_TAGS <= 32
-		lp->maxnxs   = 32;
-#else
-		lp->maxnxs   = 64;
-#endif
-		lp->jump_ccb = jumps;
-		ncr_setup_jump_ccb(np, lp);
-		lp->tags_stime	= jiffies;
+		}
+		lp->p_jump_ccb = cpu_to_scr(vtophys(lp->jump_ccb));
+		for (i = 0 ; i < 64 ; i++)
+			lp->jump_ccb[i] =
+				cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l_q));
+		for (i = 0 ; i < SCSI_NCR_MAX_TAGS ; i++)
+			lp->cb_tags[i] = i;
+		lp->maxnxs = SCSI_NCR_MAX_TAGS;
+		lp->tags_stime = jiffies;
 	}
 
 	/*
