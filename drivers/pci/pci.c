@@ -171,7 +171,6 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany)
 		do {
 			size <<= 1;
 		} while (!(size & newval));
-		res->end = res->start + size - 1;
 
 		/* 64-bit memory? */
 		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
@@ -192,6 +191,7 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany)
 #endif
 			}
 		}
+		res->end = res->start + size - 1;
 		request_resource((l & PCI_BASE_ADDRESS_SPACE_IO) ? &ioport_resource : &iomem_resource, res);
 	}
 }

@@ -1763,11 +1763,10 @@ static int __init parport_pc_init_pci (int irq, int dma)
 			for (n = 0; n < cards[i].numports; n++) {
 				unsigned long lo = cards[i].addr[n].lo;
 				unsigned long hi = cards[i].addr[n].hi;
-				unsigned long io_lo = pcidev->base_address[lo];
-				unsigned long io_hi = ((hi < 0) ? 0 :
-						pcidev->base_address[hi]);
-				io_lo &= PCI_BASE_ADDRESS_IO_MASK;
-				io_hi &= PCI_BASE_ADDRESS_IO_MASK;
+				unsigned long io_lo, io_hi;
+				io_lo = pcidev->resource[lo].start;
+				io_hi = ((hi < 0) ? 0 :
+					 pcidev->resource[hi].start);
 				if (irq == PARPORT_IRQ_AUTO) {
 					if (parport_pc_probe_port (io_lo,
 								   io_hi,

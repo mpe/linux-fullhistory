@@ -19,6 +19,16 @@ struct resource {
 	struct resource *parent, *sibling, *child;
 };
 
+/*
+ * PCI-like IO resources have these defined flags.
+ * The low four bits come directly from the PCI specs,
+ * the rest are extended sw flags..
+ */
+#define IORESOURCE_IOPORT	0x01	/* 0 - memory mapped, 1 - IO ports */
+#define IORESOURCE_MEMTYPE_MASK	0x06	/* PCI-specific mapping info */
+#define IORESOURCE_PREFETCH	0x08	/* No side effects */
+#define IORESOURCE_BUSY		0x10	/* Driver uses this resource */
+
 /* PC/ISA/whatever - the normal PC address spaces: IO and memory */
 extern struct resource ioport_resource;
 extern struct resource iomem_resource;

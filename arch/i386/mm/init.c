@@ -28,6 +28,8 @@
 #include <asm/dma.h>
 #include <asm/fixmap.h>
 
+static unsigned long totalram = 0;
+
 extern void show_net_buffers(void);
 extern unsigned long init_smp_mappings(unsigned long);
 
@@ -419,6 +421,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 			continue;
 		}
 		set_page_count(mem_map+MAP_NR(tmp), 1);
+		totalram += PAGE_SIZE;
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start || (tmp < initrd_start || tmp >=
 		    initrd_end))
@@ -446,28 +449,16 @@ void free_initmem(void)
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
 		set_page_count(mem_map+MAP_NR(addr), 1);
 		free_page(addr);
+		totalram += PAGE_SIZE;
 	}
 	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)
 {
-	int i;
-
-	i = max_mapnr;
-	val->totalram = 0;
+	val->totalram = totalram;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = atomic_read(&buffermem);
-	while (i-- > 0)  {
-		if (PageReserved(mem_map+i))
-			continue;
-		val->totalram++;
-		if (!page_count(mem_map+i))
-			continue;
-		val->sharedram += page_count(mem_map+i) - 1;
-	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
 	return;
 }

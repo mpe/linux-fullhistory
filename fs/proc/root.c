@@ -652,7 +652,7 @@ static struct proc_dir_entry proc_root_ioports = {
 	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_iomem = {
-	PROC_MEMORY, 6, "iomem",
+	PROC_MEMORY, 5, "iomem",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };

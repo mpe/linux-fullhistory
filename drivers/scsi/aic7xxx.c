@@ -9536,10 +9536,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
           temp_p->pdev = pdev;
           temp_p->pci_bus = pdev->bus->number;
           temp_p->pci_device_fn = pdev->devfn;
-          temp_p->base = pdev->base_address[0];
-          temp_p->mbase = pdev->base_address[1];
-          temp_p->base &= PCI_BASE_ADDRESS_IO_MASK;
-          temp_p->mbase &= PCI_BASE_ADDRESS_MEM_MASK;
+          temp_p->base = pdev->resource[0].start;
+          temp_p->mbase = pdev->resource[1].start;
           current_p = list_p;
 	  while(current_p)
 	  {

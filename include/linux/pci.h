@@ -948,6 +948,7 @@
 #define PCI_DEVICE_ID_3DFX_VOODOO	0x0001
 #define PCI_DEVICE_ID_3DFX_VOODOO2	0x0002
 #define PCI_DEVICE_ID_3DFX_BANSHEE      0x0003
+#define PCI_DEVICE_ID_3DFX_VOODOO3	0x0005
 
 #define PCI_VENDOR_ID_SIGMADES		0x1236
 #define PCI_DEVICE_ID_SIGMADES_6425	0x6401
@@ -1210,7 +1211,8 @@ struct pci_dev {
 	unsigned int	hdr_type;	/* PCI header type */
 	unsigned int	master : 1;	/* set if device is master capable */
 
-	char		name[32];
+	char		name[48];
+
 	/*
 	 * In theory, the irq level can be read from configuration
 	 * space and all would be fine.  However, old PCI chips don't

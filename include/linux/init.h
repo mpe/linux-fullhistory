@@ -57,8 +57,7 @@ typedef int (*initcall_t)(void);
 extern initcall_t __initcall_start, __initcall_end;
 
 #define __initcall(fn)								\
-	static __attribute__ ((unused,__section__ (".initcall.init")))		\
-		initcall_t __initcall_##fn = fn
+	static initcall_t __initcall_##fn __init_call = fn
 
 /*
  * Used for kernel command line parameter setup
@@ -70,20 +69,20 @@ struct kernel_param {
 
 extern struct kernel_param __setup_start, __setup_end;
 
-#define __setup(str, fn)							\
-	static __attribute__ ((__section__ (".data.init")))			\
-		char __setup_str_##fn[] = str;					\
-	static __attribute__ ((unused,__section__ (".setup.init")))		\
-		struct kernel_param __setup_##fn = { __setup_str_##fn, fn }
+#define __setup(str, fn)								\
+	static char __setup_str_##fn[] __initdata = str;				\
+	static struct kernel_param __setup_##fn __initsetup = { __setup_str_##fn, fn }
 
 /*
  * Mark functions and data as being only used at initialization
  * or exit time.
  */
-#define __init __attribute__ ((__section__ (".text.init")))
-#define __exit __attribute__ ((unused, __section__(".text.init")))
-#define __initdata __attribute__ ((__section__ (".data.init")))
-#define __exitdata __attribute__ ((unused, __section__ (".data.init")))
+#define __init		__attribute__ ((__section__ (".text.init")))
+#define __exit		__attribute__ ((unused, __section__(".text.init")))
+#define __initdata	__attribute__ ((__section__ (".data.init")))
+#define __exitdata	__attribute__ ((unused, __section__ (".data.init")))
+#define __initsetup	__attribute__ ((unused,__section__ (".setup.init")))
+#define __init_call	__attribute__ ((unused,__section__ (".initcall.init")))
 
 #define __initfunc(__arginit) \
 	__arginit __init; \

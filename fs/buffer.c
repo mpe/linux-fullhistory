@@ -1036,13 +1036,6 @@ static __inline__ void __put_unused_buffer_head(struct buffer_head * bh)
 	}
 }
 
-static void put_unused_buffer_head(struct buffer_head *bh)
-{
-	spin_lock(&unused_list_lock);
-	__put_unused_buffer_head(bh);
-	spin_unlock(&unused_list_lock);
-}
-
 /*
  * Reserve NR_RESERVED buffer heads for async IO requests to avoid
  * no-buffer-head deadlock.  Return NULL on failure; waiting for

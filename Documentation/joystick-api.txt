@@ -1,7 +1,7 @@
 		      Joystick API Documentation                -*-Text-*-
 
 		       Ragnar Hojland Espinosa
-		     <ragnar@lightside.ddns.org>
+		     <ragnar@lightside.dhis.org>
 
 			      7 Aug 1998
 
@@ -74,9 +74,10 @@ is, you have both an axis 0 and a button 0). Generally,
 	2nd Axis Y	3
 	...and so on
 
-Hats vary from one joystick type to another. Some can be moved in 8
-directions, some only in 4, however, the driver always reports a hat as two
-independent axis, even if the hardware doesn't allow independent movement.
+Hats vary from one joystick type to another.  Some can be moved in 8
+directions, some only in 4.  The driver, however, always reports a hat
+as two independent axis, even if the hardware doesn't allow independent
+movement. 
 
 
 2.3 js_event.value
@@ -85,7 +86,7 @@ independent axis, even if the hardware doesn't allow independent movement.
 For an axis, ``value'' is a signed integer between -32767 and +32767
 representing the position of the joystick along that axis. If you
 don't read a 0 when the joystick is `dead', or if it doesn't span the
-full range, you should recalibrate (with, for example, jscal).
+full range, you should recalibrate it (with, for example, jscal).
 
 For a button, ``value'' for a press button event is 1 and for a release
 button event is 0.
@@ -93,16 +94,16 @@ button event is 0.
 Though this
 
 	if (js_event.type == JS_EVENT_BUTTON) {
-	   buttons_state ^= (1 << js_event.number);
+		buttons_state ^= (1 << js_event.number);
 	}
 
 may work well if you handle JS_EVENT_INIT events separately,
 
 	if ((js_event.type & ~JS_EVENT_INIT) == JS_EVENT_BUTTON) {
-	   if (js_event.value)
-	      buttons_state |= (1 << js_event.number);
-	   else
-	      buttons_state &= ~(1 << js_event.number);
+		if (js_event.value)
+	        	buttons_state |= (1 << js_event.number);
+	   	else
+	      		buttons_state &= ~(1 << js_event.number);
 	}
 
 is much safer since it can't lose sync with the driver. As you would
@@ -112,6 +113,7 @@ snippet, this ends up being shorter.
 
 2.4 js_event.time
 ~~~~~~~~~~~~~~~~~
+
 The time an event was generated is stored in ``js_event.time''. It's a time
 in miliseconds since ... well, since sometime in the past.  This eases the
 task of detecting double clicks, figuring out if movement of axis and button
@@ -144,14 +146,14 @@ all events on the queue (that is, until you get a -1).
 For example,
 
 	while (1) {
-	   while (read (fd, &e, sizeof(struct js_event)) > 0) {
-	      process_event (e);
-	   }
-	   /* EAGAIN is returned when the queue is empty */
-	   if (errno != EAGAIN) {
-	      /* error */
-	   }
-	   /* do something interesting with processed events */
+		while (read (fd, &e, sizeof(struct js_event)) > 0) {
+	        	process_event (e);
+	   	}
+	   	/* EAGAIN is returned when the queue is empty */
+	   	if (errno != EAGAIN) {
+	      		/* error */
+	   	}
+	   	/* do something interesting with processed events */
 	}
 
 One reason for emptying the queue is that if it gets full you'll start
@@ -219,6 +221,7 @@ JS_VERSION symbol
 	#ifdef JS_VERSION
 	#if JS_VERSION > 0xsomething
 
+
 4.2 JSIOCGNAME
 ~~~~~~~~~~~~~~
 
@@ -231,6 +234,7 @@ possible overrun should the name be too long.
 	if (ioctl(fd, JSIOCGNAME(sizeof(name)), name) < 0)
 		strncpy(name, "Unknown", sizeof(name));
 	printf("Name: %s\n", name);
+
 
 4.3 JSIOC[SG]CORR
 ~~~~~~~~~~~~~~~~~
@@ -266,10 +270,10 @@ The driver offers backward compatibility, though. Here's a quick summary:
 
 	struct JS_DATA_TYPE js;
 	while (1) {
-	   if (read (fd, &js, JS_RETURN) != JS_RETURN) {
-	      /* error */
-	   }
-	   usleep (1000);
+		if (read (fd, &js, JS_RETURN) != JS_RETURN) {
+	      		/* error */
+	   	}
+	   	usleep (1000);
 	}
 
 As you can figure out from the example, the read returns immediately,
@@ -298,6 +302,7 @@ center, and 255 maximum value.
 The v0.8.0.2 driver also had an interface for 'digital joysticks', (now
 called Multisystem joystick in this driver), under /dev/djsX. This driver
 doesn't try to be compatible with that interface.
+
 
 6. Final Notes
 ~~~~~~~~~~~~~~
