@@ -33,6 +33,12 @@ S: Klaproosstraat 72 c 10
 S: B-2610 Wilrijk-Antwerpen
 S: Belgium
 
+N: C. Scott Ananian
+E: cananian@alumni.princeton.edu
+W: http://www.pdos.lcs.mit.edu/~cananian
+P: 1024/85AD9EED AD C0 49 08 91 67 DF D7  FA 04 1A EE 09 E8 44 B0
+D: pty improvements.
+
 N: Erik Andersen
 E: andersee@debian.org
 W: http://www.inconnect.com/~andersen
@@ -124,10 +130,12 @@ S: Rainweg 15
 S: Germany
 
 N: Fred Baumgarten
-E: dc6iq@insu1.etec.uni-karlsruhe.de
+E: dc6iq@insl1.etec.uni-karlsruhe.de
+E: dc6iq@adacom.org
+E: dc6iq@db0ais.#hes.deu.eu (packet radio)
 D: NET-2 & netstat(8)
-S: Kandelstrasse 27
-S: 76297 Stutensee
+S: Soevener Strasse 11
+S: 53773 Hennef
 S: Germany
 
 N: Donald Becker
@@ -674,6 +682,11 @@ D: drivers for the racal ni5210 & ni6510 ethernet-boards
 S: Talstr. 1
 S: D - 72072 Tuebingen
 S: Germany
+
+N: Jauder Ho
+E: jauderho@transmeta.com
+D: bug toaster (A1 sauce makes all the difference)
+D: Transmeta BOFH in my free time
 
 N: Dirk Hohndel
 E: hohndel@aib.com

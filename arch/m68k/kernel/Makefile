@@ -10,19 +10,26 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
-all: kernel.o head.o
+all: head.o kernel.o
 O_TARGET := kernel.o
 O_OBJS := entry.o process.o traps.o ints.o signal.o ptrace.o \
 	  setup.o sys_m68k.o time.o
-ifdef CONFIG_VT
-O_OBJS += console.o
-endif
 OX_OBJS := m68k_ksyms.o
 
 ifdef CONFIG_KGDB
 O_OBJS += kgdb.o
 endif
 
-head.o: head.S
+ifdef CONFIG_PCI
+O_OBJS += bios32.o
+endif
+
+head.o: head.S m68k_defs.h
+
+m68k_defs.h: m68k_defs.c m68k_defs.head $(TOPDIR)/include/linux/sched.h
+	$(CC) ${CFLAGS} -S m68k_defs.c
+	cp m68k_defs.head m68k_defs.h
+	sed -n < m68k_defs.s >> m68k_defs.h '/^#define/s/ #/ /p'
+	rm m68k_defs.s
 
 include $(TOPDIR)/Rules.make

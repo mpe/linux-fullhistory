@@ -21,43 +21,57 @@
 
 #define PRINTK(x)
 #define Printk(x)	printk x
+
+
 /*
 	Read a file into user space memory
 */
-static long UMSDOS_file_read(
-	struct inode *inode,
+static ssize_t UMSDOS_file_read(
 	struct file *filp,
 	char *buf,
-	unsigned long count)
+	size_t  count,
+	loff_t *ppos
+	)
 {
+	struct dentry * dentry = filp->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	
 	/* We have to set the access time because msdos don't care */
-	int ret = fat_file_read(inode,filp,buf,count);
+	/* FIXME */
+	int ret = fat_file_read(filp,buf,count,ppos);
 	if (!IS_RDONLY(inode)){
 		inode->i_atime = CURRENT_TIME;
+		/* FIXME 
 		inode->i_dirt = 1;
+		*/
 	}
 	return ret;
 }
+
+
 /*
 	Write a file from user space memory
 */
-static long UMSDOS_file_write(
-	struct inode *inode,
+static ssize_t UMSDOS_file_write(
 	struct file *filp,
 	const char *buf,
-	unsigned long count)
+	size_t count,
+	loff_t *ppos)
 {
-	return fat_file_write(inode,filp,buf,count);
+	return fat_file_write(filp,buf,count,ppos);
 }
+
+
 /*
 	Truncate a file to 0 length.
 */
 static void UMSDOS_truncate(struct inode *inode)
 {
-	PRINTK (("UMSDOS_truncate\n"));
+	Printk (("UMSDOS_truncate\n"));
 	fat_truncate (inode);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	inode->i_dirt = 1;
+	
+	/*FIXME	inode->i_dirt = 1; */
 }
 
 /* Function for normal file system (512 bytes hardware sector size) */
@@ -86,18 +100,20 @@ struct inode_operations umsdos_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	fat_bmap,		/* bmap */
-	UMSDOS_truncate,/* truncate */
+	UMSDOS_truncate,	/* truncate */
 	NULL,			/* permission */
 	fat_smap		/* smap */
 };
+
 /* For other with larger and unaligned file system */
 struct file_operations umsdos_file_operations_no_bmap = {
 	NULL,				/* lseek - default */
-	UMSDOS_file_read,	/* read */
-	UMSDOS_file_write,	/* write */
+	UMSDOS_file_read,		/* read */
+	UMSDOS_file_write,		/* write */
 	NULL,				/* readdir - bad */
 	NULL,				/* poll - default */
 	NULL,				/* ioctl - default */
@@ -119,10 +135,11 @@ struct inode_operations umsdos_file_inode_operations_no_bmap = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,                   /* follow link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	UMSDOS_truncate,/* truncate */
+	UMSDOS_truncate,	/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
 };

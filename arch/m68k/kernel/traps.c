@@ -36,6 +36,7 @@
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
+#include <asm/siginfo.h>
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
@@ -64,23 +65,10 @@ asm(".text\n"
     __ALIGN_STR "\n"
     SYMBOL_NAME_STR(nmihandler) ": rte");
 
-__initfunc(void trap_init (void))
+__initfunc(void base_trap_init(void))
 {
-	int i;
-
 	/* setup the exception vector table */
-	__asm__ volatile ("movec %0,%/vbr" : : "r" ((void*)vectors));
-
-	for (i = 48; i < 64; i++)
-		vectors[i] = trap;
-
-	for (i = 64; i < 256; i++)
-		vectors[i] = inthandler;
-
-        /* if running on an amiga, make the NMI interrupt do nothing */
-        if (MACH_IS_AMIGA) {
-                vectors[VEC_INT7] = nmihandler;
-        }
+	__asm__ volatile ("movec %0,%%vbr" : : "r" ((void*)vectors));
 
 	if (CPU_IS_040) {
 		/* set up FPSP entry points */
@@ -131,6 +119,23 @@ __initfunc(void trap_init (void))
 		/* set up ISP entry points */
 
 		vectors[VEC_UNIMPII] = unimp_vec;
+	}
+}
+
+__initfunc(void trap_init (void))
+{
+	int i;
+
+	for (i = 48; i < 64; i++)
+		if (!vectors[i])
+			vectors[i] = trap;
+
+	for (i = 64; i < 256; i++)
+		vectors[i] = inthandler;
+
+        /* if running on an amiga, make the NMI interrupt do nothing */
+	if (MACH_IS_AMIGA) {
+		vectors[VEC_INT7] = nmihandler;
 	}
 }
 
@@ -202,7 +207,7 @@ static inline void access_error060 (struct frame *fp)
 			return;
 	}
 
-	if (fslw & (MMU060_DESC_ERR | MMU060_WP)) {
+	if (fslw & (MMU060_DESC_ERR | MMU060_WP | MMU060_SP)) {
 		unsigned long errorcode;
 		unsigned long addr = fp->un.fmt4.effaddr;
 		errorcode = ((fslw & MMU060_WP) ? 1 : 0) |
@@ -230,9 +235,9 @@ static inline void access_error060 (struct frame *fp)
 static inline unsigned long probe040 (int iswrite, int fc, unsigned long addr)
 {
 	unsigned long mmusr;
-	unsigned long fs = get_fs();
+	mm_segment_t fs = get_fs();
 
-	set_fs (fc);
+	set_fs (MAKE_MM_SEG(fc));
 
 	if (iswrite)
 		/* write */
@@ -261,7 +266,7 @@ static inline void do_040writeback (unsigned short ssw,
 			     unsigned long wbd,
 			     struct frame *fp)
 {
-	unsigned long fs = get_fs ();
+	mm_segment_t fs = get_fs ();
 	unsigned long mmusr;
 	unsigned long errorcode;
 
@@ -277,7 +282,7 @@ static inline void do_040writeback (unsigned short ssw,
 	  /* just return if we can't perform the writeback */
 	  return;
 
-	set_fs (wbs & WBTM_040);
+	set_fs (MAKE_MM_SEG(wbs & WBTM_040));
 	switch (wbs & WBSIZ_040) {
 	    case BA_SIZE_BYTE:
 		put_user (wbd & 0xff, (char *)wba);
@@ -833,34 +838,37 @@ void bad_super_trap (struct frame *fp)
 asmlinkage void trap_c(struct frame *fp)
 {
 	int sig;
+	siginfo_t info;
 
-	if ((fp->ptregs.sr & PS_S)
-	    && ((fp->ptregs.vector) >> 2) == VEC_TRACE
-	    && !(fp->ptregs.sr & PS_T)) {
-		/* traced a trapping instruction */
-		unsigned char *lp = ((unsigned char *)&fp->un.fmt2) + 4;
-		current->flags |= PF_DTRACE;
-		/* clear the trace bit */
-		(*(unsigned short *)lp) &= ~PS_T;
-		return;
-	} else if (fp->ptregs.sr & PS_S) {
-		bad_super_trap(fp);
+	if (fp->ptregs.sr & PS_S) {
+		if ((fp->ptregs.vector >> 2) == VEC_TRACE) {
+			/* traced a trapping instruction */
+			current->flags |= PF_DTRACE;
+		} else
+			bad_super_trap(fp);
 		return;
 	}
 
 	/* send the appropriate signal to the user program */
 	switch ((fp->ptregs.vector) >> 2) {
 	    case VEC_ADDRERR:
+		info.si_code = BUS_ADRALN;
 		sig = SIGBUS;
 		break;
-	    case VEC_BUSERR:
-		sig = SIGSEGV;
-		break;
 	    case VEC_ILLEGAL:
-	    case VEC_PRIV:
 	    case VEC_LINE10:
 	    case VEC_LINE11:
+		info.si_code = ILL_ILLOPC;
+		sig = SIGILL;
+		break;
+	    case VEC_PRIV:
+		info.si_code = ILL_PRVOPC;
+		sig = SIGILL;
+		break;
 	    case VEC_COPROC:
+		info.si_code = ILL_COPROC;
+		sig = SIGILL;
+		break;
 	    case VEC_TRAP1:
 	    case VEC_TRAP2:
 	    case VEC_TRAP3:
@@ -875,51 +883,76 @@ asmlinkage void trap_c(struct frame *fp)
 	    case VEC_TRAP12:
 	    case VEC_TRAP13:
 	    case VEC_TRAP14:
+		info.si_code = ILL_ILLTRP;
 		sig = SIGILL;
 		break;
 	    case VEC_FPBRUC:
-	    case VEC_FPIR:
-	    case VEC_FPDIVZ:
-	    case VEC_FPUNDER:
 	    case VEC_FPOE:
-	    case VEC_FPOVER:
 	    case VEC_FPNAN:
-		{
-		  unsigned char fstate[FPSTATESIZE];
-
-		  __asm__ __volatile__ (".chip 68k/68881\n\t"
-		  			"fsave %0@\n\t"
-		  			".chip 68k" : : "a" (fstate) : "memory");
-		  /* Set the exception pending bit in the 68882 idle frame */
-		  if (*(unsigned short *) fstate == 0x1f38)
-		    {
-		      fstate[fstate[1]] |= 1 << 3;
-		      __asm__ __volatile__ (".chip 68k/68881\n\t"
-		      			    "frestore %0@\n\t"
-					    ".chip 68k" : : "a" (fstate));
-		    }
-		}
-		/* fall through */
+		info.si_code = FPE_FLTINV;
+		sig = SIGFPE;
+		break;
+	    case VEC_FPIR:
+		info.si_code = FPE_FLTRES;
+		sig = SIGFPE;
+		break;
+	    case VEC_FPDIVZ:
+		info.si_code = FPE_FLTDIV;
+		sig = SIGFPE;
+		break;
+	    case VEC_FPUNDER:
+		info.si_code = FPE_FLTUND;
+		sig = SIGFPE;
+		break;
+	    case VEC_FPOVER:
+		info.si_code = FPE_FLTOVF;
+		sig = SIGFPE;
+		break;
 	    case VEC_ZERODIV:
+		info.si_code = FPE_INTDIV;
+		sig = SIGFPE;
+		break;
+	    case VEC_CHK:
 	    case VEC_TRAP:
+		info.si_code = FPE_INTOVF;
 		sig = SIGFPE;
 		break;
 	    case VEC_TRACE:		/* ptrace single step */
-		fp->ptregs.sr &= ~PS_T;
+		info.si_code = TRAP_TRACE;
+		sig = SIGTRAP;
+		break;
 	    case VEC_TRAP15:		/* breakpoint */
+		info.si_code = TRAP_BRKPT;
 		sig = SIGTRAP;
 		break;
 	    default:
+		info.si_code = ILL_ILLOPC;
 		sig = SIGILL;
 		break;
 	}
-
-	send_sig (sig, current, 1);
-}
-
-asmlinkage void set_esp0 (unsigned long ssp)
-{
-  current->tss.esp0 = ssp;
+	info.si_signo = sig;
+	info.si_errno = 0;
+	switch (fp->ptregs.format) {
+	    default:
+		info.si_addr = (void *) fp->ptregs.pc;
+		break;
+	    case 2:
+		info.si_addr = (void *) fp->un.fmt2.iaddr;
+		break;
+	    case 7:
+		info.si_addr = (void *) fp->un.fmt7.effaddr;
+		break;
+	    case 9:
+		info.si_addr = (void *) fp->un.fmt9.iaddr;
+		break;
+	    case 10:
+		info.si_addr = (void *) fp->un.fmta.daddr;
+		break;
+	    case 11:
+		info.si_addr = (void *) fp->un.fmtb.daddr;
+		break;
+	}
+	force_sig_info (sig, &info, current);
 }
 
 void die_if_kernel (char *str, struct pt_regs *fp, int nr)

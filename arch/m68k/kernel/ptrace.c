@@ -10,7 +10,6 @@
  * this archive for more details.
  */
 
-#include <stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -24,6 +23,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/processor.h>
 
 /*
  * does not yet catch signals sent when the child dies.
@@ -439,7 +439,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -477,7 +477,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_reg(child, PT_SR) | (TRACE_BITS << 16);
@@ -494,7 +494,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= NSIG)
+			if ((unsigned long) data >= _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
@@ -506,6 +506,59 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);
 			ret = 0;
+			goto out;
+		}
+
+		case PTRACE_GETREGS: { /* Get all gp regs from the child. */
+		  	int i;
+			unsigned long tmp;
+			for (i = 0; i < 19; i++) {
+			    tmp = get_reg(child, i);
+			    if (i == PT_SR)
+				tmp >>= 16;
+			    if (put_user(tmp, (unsigned long *) data)) {
+				ret = -EFAULT;
+				goto out;
+			    }
+			    data += sizeof(long);
+			}
+			ret = 0;
+			goto out;
+		}
+
+		case PTRACE_SETREGS: { /* Set all gp regs in the child. */
+			int i;
+			unsigned long tmp;
+			for (i = 0; i < 19; i++) {
+			    if (get_user(tmp, (unsigned long *) data)) {
+				ret = -EFAULT;
+				goto out;
+			    }
+			    if (i == PT_SR) {
+				tmp &= SR_MASK;
+				tmp <<= 16;
+				tmp |= get_reg(child, PT_SR) & ~(SR_MASK << 16);
+			    }
+			    put_reg(child, i, tmp);
+			    data += sizeof(long);
+			}
+			ret = 0;
+			goto out;
+		}
+
+		case PTRACE_GETFPREGS: { /* Get the child FPU state. */
+			ret = 0;
+			if (copy_to_user((void *)data, &child->tss.fp,
+					 sizeof(struct user_m68kfp_struct)))
+				ret = -EFAULT;
+			goto out;
+		}
+
+		case PTRACE_SETFPREGS: { /* Set the child FPU state. */
+			ret = 0;
+			if (copy_from_user(&child->tss.fp, (void *)data,
+					   sizeof(struct user_m68kfp_struct)))
+				ret = -EFAULT;
 			goto out;
 		}
 
@@ -533,9 +586,10 @@ asmlinkage void syscall_trace(void)
 	 * for normal use.  strace only continues with a signal if the
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
-	if (current->exit_code)
-		current->signal |= (1 << (current->exit_code - 1));
-	current->exit_code = 0;
+	if (current->exit_code) {
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
+	}
 out:
 	unlock_kernel();
 }

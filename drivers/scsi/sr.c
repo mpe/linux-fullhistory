@@ -761,7 +761,13 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 
 	if (scsi_CDs[dev].sector_size == 512) realcount = realcount << 2;
 
-	if (((realcount > 0xff) || (block > 0x1fffff)) && scsi_CDs[dev].ten)
+        /*
+         * Note: The scsi standard says that READ_6 is *optional*, while
+         * READ_10 is mandatory.   Thus there is no point in using
+         * READ_6.
+         */
+	if (scsi_CDs[dev].ten)
+          
     {
 		if (realcount > 0xffff)
 	{

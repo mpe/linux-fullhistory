@@ -49,8 +49,16 @@ static __inline__ void kbd_leds(unsigned char leds)
 	mach_kbd_leds(leds);
 }
 
+#ifdef CONFIG_MAGIC_SYSRQ
+#define kbd_is_sysrq(keycode)	((keycode) == mach_sysrq_key && \
+								 (up_flag || \
+								  (shift_state & mach_sysrq_shift_mask) == \
+								  mach_sysrq_shift_state))
+#define kbd_sysrq_xlate			mach_sysrq_xlate
+#endif
+
 #define kbd_init_hw	mach_keyb_init
 
 #endif /* __KERNEL__ */
 
-#endif /* __ASMm68k_KEYBOARD_H */
+#endif /* __M68K_KEYBOARD_H */

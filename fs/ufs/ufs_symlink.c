@@ -8,6 +8,9 @@
  *
  * Ported to 2.1.62 by Francois-Rene Rideau <rideau@ens.fr> 19971109
  *
+ * 4.4BSD (FreeBSD) support added on February 1st 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
+ * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
  */
 
 #include <linux/fs.h>
@@ -22,13 +25,14 @@ static int
 ufs_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	struct inode * inode = dentry->d_inode;
+	struct super_block * sb = inode->i_sb;
 	unsigned long int block;
 	struct buffer_head * bh = NULL;
 	char * link;
 	int i;
 	char c;
 
-	if (inode->i_sb->u.ufs_sb.s_flags & (UFS_DEBUG|UFS_DEBUG_LINKS)) {
+	if (sb->u.ufs_sb.s_flags & (UFS_DEBUG|UFS_DEBUG_LINKS)) {
 	        printk("ufs_readlink: called on ino %lu dev %u/%u\n",
 	               inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
 	}
@@ -37,16 +41,16 @@ ufs_readlink(struct dentry * dentry, char * buffer, int buflen)
 		return -EINVAL;
 	}
    
-	if (buflen > inode->i_sb->s_blocksize - 1)
-		buflen = inode->i_sb->s_blocksize - 1;
+	if (buflen > sb->s_blocksize - 1)
+		buflen = sb->s_blocksize - 1;
 	if (inode->i_blocks) {
 	        /* XXX - error checking */
 	        block = ufs_bmap(inode, 0);
-	        if (inode->i_sb->u.ufs_sb.s_flags &(UFS_DEBUG|UFS_DEBUG_LINKS)) {
+	        if (sb->u.ufs_sb.s_flags &(UFS_DEBUG|UFS_DEBUG_LINKS)) {
 	                printk("ufs_readlink: bmap got %lu for ino %lu\n",
 	                       block, inode->i_ino);
 		}
-	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
+	        bh = bread(inode->i_dev, block, sb->s_blocksize);
 		if (!bh) {
 	                printk("ufs_readlink: can't read block 0 for ino %lu on dev %u/%u\n",
 	                       inode->i_ino, MAJOR(inode->i_dev),
@@ -55,9 +59,8 @@ ufs_readlink(struct dentry * dentry, char * buffer, int buflen)
 		}
 		link = bh->b_data;
 		/* no need to bswap */
-	}
-	else {
-	        link = (char *)&(inode->u.ufs_i.i_data[0]);
+	} else /* fast symlink */ {
+	        link = (char *)&(inode->u.ufs_i.i_u1.i_symlink[0]);
 	}
 	i = 0;
 	while (i < buflen && (c = link[i])) {
@@ -88,7 +91,7 @@ ufs_follow_link(struct dentry * dentry, struct dentry * base)
 	        /* read the link from disk */
 	        /* XXX - error checking */
 	        block = ufs_bmap(inode, 0);
-	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
+	        bh = bread(inode->i_dev, block, inode->i_sb->s_blocksize);
 	        if (bh == NULL) {
 	                printk("ufs_follow_link: can't read block 0 for ino %lu on dev %u/%u\n",
 	                       inode->i_ino, MAJOR(inode->i_dev),
@@ -97,9 +100,8 @@ ufs_follow_link(struct dentry * dentry, struct dentry * base)
 	                return ERR_PTR(-EIO);
 	        }
 	        link = bh->b_data;
-	} else {
-	        /* fast symlink */
-	        link = (char *)&(inode->u.ufs_i.i_data[0]);
+	} else /* fast symlink */ {
+	        link = (char *)&(inode->u.ufs_i.i_u1.i_symlink[0]);
 	}
 	base = lookup_dentry(link, base, 1);
 	brelse (bh);

@@ -331,11 +331,7 @@ __initfunc(int init_adfs_fs (void))
 #ifdef MODULE
 int init_module (void)
 {
-	int status;
-
-	if ((status = init_adfs_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return (init_adfs_fs());
 }
 
 void cleanup_module (void)

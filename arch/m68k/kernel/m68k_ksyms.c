@@ -26,16 +26,15 @@ extern int dump_fpu(elf_fpregset_t *);
 
 /* platform dependent support */
 
-EXPORT_SYMBOL(memcmp);
 EXPORT_SYMBOL(m68k_machtype);
 EXPORT_SYMBOL(m68k_cputype);
 EXPORT_SYMBOL(m68k_is040or060);
 EXPORT_SYMBOL(cache_push);
-EXPORT_SYMBOL(cache_push_v);
 EXPORT_SYMBOL(cache_clear);
 EXPORT_SYMBOL(mm_vtop);
 EXPORT_SYMBOL(mm_ptov);
 EXPORT_SYMBOL(mm_end_of_chunk);
+EXPORT_SYMBOL(kernel_map);
 EXPORT_SYMBOL(m68k_debug_device);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(dump_thread);
@@ -43,7 +42,7 @@ EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(local_irq_count);
-EXPORT_SYMBOL(__m68k_bh_counter);
+EXPORT_SYMBOL(local_bh_count);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
@@ -55,6 +54,7 @@ EXPORT_SYMBOL(csum_partial_copy);
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
+EXPORT_SYMBOL_NOVERS(memcmp);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);

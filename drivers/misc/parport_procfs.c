@@ -32,7 +32,7 @@ extern void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
 static int irq_write_proc(struct file *file, const char *buffer,
 					  unsigned long count, void *data)
 {
-	unsigned int newirq, oldirq;
+	int newirq, oldirq;
 	struct parport *pp = (struct parport *)data;
 	
 	if (count > 5 )  /* more than 4 digits + \n for a irq 0x?? 0?? ??  */

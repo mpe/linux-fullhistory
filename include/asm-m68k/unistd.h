@@ -174,9 +174,19 @@
 #define __NR_query_module	167
 #define __NR_poll		168
 #define __NR_nfsservctl		169
-#define __NR_prctl		170
-#define __NR_pread		171
-#define __NR_pwrite		172
+#define __NR_setresgid		170
+#define __NR_getresgid		171
+#define __NR_prctl		172
+#define __NR_rt_sigreturn	173
+#define __NR_rt_sigaction	174
+#define __NR_rt_sigprocmask	175
+#define __NR_rt_sigpending	176
+#define __NR_rt_sigtimedwait	177
+#define __NR_rt_sigqueueinfo	178
+#define __NR_rt_sigsuspend	179
+#define __NR_pread		180
+#define __NR_pwrite		181
+#define __NR_lchown		182
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */
@@ -319,7 +329,7 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 {
 	register long retval __asm__ ("d0") = __NR_clone;
 	register long clone_arg __asm__ ("d1") = flags | CLONE_VM;
-	unsigned long fs;
+	mm_segment_t fs;
 
 	fs = get_fs();
 	set_fs (KERNEL_DS);

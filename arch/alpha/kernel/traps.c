@@ -105,14 +105,24 @@ void die_if_kernel(char * str, struct pt_regs *regs, long err,
 	do_exit(SIGSEGV);
 }
 
+#ifndef CONFIG_MATHEMU
+static long dummy_alpha_fp_emul_imprecise(struct pt_regs *r, unsigned long wm)
+{
+  return 0;
+}
+
+long (*alpha_fp_emul_imprecise)(struct pt_regs *regs, unsigned long writemask)
+  = dummy_alpha_fp_emul_imprecise;
+#else
+long alpha_fp_emul_imprecise(struct pt_regs *regs, unsigned long writemask);
+#endif
+
 asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 			    unsigned long a2, unsigned long a3,
 			    unsigned long a4, unsigned long a5,
 			    struct pt_regs regs)
 {
 	if ((summary & 1)) {
-		extern long alpha_fp_emul_imprecise (struct pt_regs * regs,
-						     unsigned long write_mask);
 		/*
 		 * Software-completion summary bit is set, so try to
 		 * emulate the instruction.

@@ -75,6 +75,9 @@
 #define TIOCGPGRP	_IOR('t', 131, int)
 #define TIOCSCTTY	_IO('t', 132)
 #define TIOCGSID	_IOR('t', 133, int)
+/* Get minor device of a pty master's FD -- Solaris equiv is ISPTM */
+#define TIOCGPTN	_IOR('t', 134, unsigned int) /* Get Pty Number */
+#define TIOCSPTLCK	_IOW('t', 135, int) /* Lock/unlock PTY */
 
 /* Little f */
 #define FIOCLEX		_IO('f', 1)

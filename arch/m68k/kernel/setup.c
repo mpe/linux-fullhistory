@@ -36,14 +36,12 @@
 #include <asm/pgtable.h>
 #endif
 
-u_long m68k_machtype;
-u_long m68k_cputype;
-u_long m68k_fputype;
-u_long m68k_mmutype;
+unsigned long m68k_machtype;
+unsigned long m68k_cputype;
+unsigned long m68k_fputype;
+unsigned long m68k_mmutype;
 
 int m68k_is040or060 = 0;
-
-char m68k_debug_device[6] = "";
 
 extern int end;
 extern unsigned long availmem;
@@ -55,6 +53,8 @@ static struct mem_info m68k_ramdisk = { 0, 0 };
 
 static char m68k_command_line[CL_SIZE];
 char saved_command_line[CL_SIZE];
+
+char m68k_debug_device[6] = "";
 
 void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *)) __initdata;
 /* machine dependent keyboard functions */
@@ -74,23 +74,34 @@ void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
 void (*mach_reset)( void );
-struct fb_info *(*mach_fb_init)(long *) __initdata;
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
-void (*mach_video_setup) (char *, int *) __initdata;
-#ifdef CONFIG_BLK_DEV_FD
-int (*mach_floppy_init) (void) __initdata = NULL;
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
 void (*mach_floppy_setup) (char *, int *) __initdata = NULL;
 void (*mach_floppy_eject) (void) = NULL;
+#endif
+#ifdef CONFIG_HEARTBEAT
+void (*mach_heartbeat) (int) = NULL;
+#endif
+
+extern void base_trap_init(void);
+
+#ifdef CONFIG_MAGIC_SYSRQ
+int mach_sysrq_key = -1;
+int mach_sysrq_shift_state = 0;
+int mach_sysrq_shift_mask = 0;
+char *mach_sysrq_xlate = NULL;
 #endif
 
 extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
+extern int mac_parse_bootinfo(const struct bi_record *);
 
 extern void config_amiga(void);
 extern void config_atari(void);
 extern void config_mac(void);
 extern void config_sun3(void);
 extern void config_apollo(void);
+extern void config_mvme16x(void);
 
 #define MASK_256K 0xfffc0000
 
@@ -132,6 +143,8 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 		    unknown = amiga_parse_bootinfo(record);
 		else if (MACH_IS_ATARI)
 		    unknown = atari_parse_bootinfo(record);
+		else if (MACH_IS_MAC)
+		    unknown = mac_parse_bootinfo(record);
 		else
 		    unknown = 1;
 	}
@@ -145,7 +158,6 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 			   unsigned long * memory_end_p))
 {
-	unsigned long memory_start, memory_end;
 	extern int _etext, _edata, _end;
 	int i;
 	char *p, *q;
@@ -158,19 +170,15 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	else if (CPU_IS_060)
 		m68k_is040or060 = 6;
 
+	base_trap_init();
+
 	/* clear the fpu if we have one */
 	if (m68k_fputype & (FPU_68881|FPU_68882|FPU_68040|FPU_68060)) {
 		volatile int zero = 0;
 		asm __volatile__ ("frestore %0" : : "m" (zero));
 	}
 
-	memory_start = availmem;
-	memory_end = 0;
-
-	for (i = 0; i < m68k_num_memory; i++)
-		memory_end += m68k_memory[i].size & MASK_256K;
-
-	init_task.mm->start_code = 0;
+	init_task.mm->start_code = PAGE_OFFSET;
 	init_task.mm->end_code = (unsigned long) &_etext;
 	init_task.mm->end_data = (unsigned long) &_edata;
 	init_task.mm->brk = (unsigned long) &_end;
@@ -190,6 +198,15 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		if ((q = strchr( m68k_debug_device, ' ' ))) *q = 0;
 		i = 1;
 	    }
+#ifdef CONFIG_ATARI
+	    /* This option must be parsed very early */
+	    if (!strncmp( p, "switches=", 9 )) {
+		extern void atari_switches_setup( const char *, int );
+		atari_switches_setup( p+9, (q = strchr( p+9, ' ' )) ?
+				           (q - (p+9)) : strlen(p+9) );
+		i = 1;
+	    }
+#endif
 
 	    if (i) {
 		/* option processed, delete it */
@@ -201,9 +218,6 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		if ((p = strchr( p, ' ' ))) ++p;
 	    }
 	}
-
-	*memory_start_p = memory_start;
-	*memory_end_p = memory_end;
 
 	switch (m68k_machtype) {
 #ifdef CONFIG_AMIGA
@@ -231,6 +245,11 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	    	config_apollo();
 	    	break;
 #endif
+#ifdef CONFIG_MVME16x
+	    case MACH_MVME16x:
+	    	config_mvme16x();
+	    	break;
+#endif
 	    default:
 		panic ("No configuration setup");
 	}
@@ -241,6 +260,11 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		initrd_end = initrd_start + m68k_ramdisk.size;
 	}
 #endif
+
+	*memory_start_p = availmem;
+	*memory_end_p = 0;
+	for (i = 0; i < m68k_num_memory; i++)
+		*memory_end_p += m68k_memory[i].size & MASK_256K;
 }
 
 int get_cpuinfo(char * buffer)
@@ -337,15 +361,7 @@ int get_hardware_list(char *buffer)
     return(len);
 }
 
-#ifdef CONFIG_BLK_DEV_FD
-__initfunc(int floppy_init(void))
-{
-	if (mach_floppy_init)
-		return mach_floppy_init();
-	else
-		return 0;
-}
-
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
 __initfunc(void floppy_setup(char *str, int *ints))
 {
 	if (mach_floppy_setup)
@@ -373,8 +389,16 @@ void arch_gettod(int *year, int *mon, int *day, int *hour,
 		*year = *mon = *day = *hour = *min = *sec = 0;
 }
 
-__initfunc(void video_setup (char *options, int *ints))
+void check_bugs(void)
 {
-	if (mach_video_setup)
-		mach_video_setup (options, ints);
+#ifndef CONFIG_FPU_EMU
+	if (m68k_fputype == 0) {
+		printk( KERN_EMERG "*** YOU DO NOT HAVE A FLOATING POINT UNIT, "
+				"WHICH IS REQUIRED BY LINUX/M68K ***\n" );
+		printk( KERN_EMERG "Upgrade your hardware or join the FPU "
+				"emulation project\n" );
+		printk( KERN_EMERG "(see http://no-fpu.linux-m68k.org)\n" );
+		panic( "no FPU" );
+	}
+#endif
 }

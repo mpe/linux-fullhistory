@@ -66,11 +66,35 @@ static void timer_interrupt(int irq, void *dummy, struct pt_regs * regs)
 	 */
 	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
+	    xtime.tv_usec < 500000 + (tick >> 1)) {
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	}
+#ifdef CONFIG_HEARTBEAT
+	/* use power LED as a heartbeat instead -- much more useful
+	   for debugging -- based on the version for PReP by Cort */
+	/* acts like an actual heart beat -- ie thump-thump-pause... */
+	if (mach_heartbeat) {
+	    static unsigned cnt = 0, period = 0, dist = 0;
+
+	    if (cnt == 0 || cnt == dist)
+		mach_heartbeat( 1 );
+	    else if (cnt == 7 || cnt == dist+7)
+		mach_heartbeat( 0 );
+
+	    if (++cnt > period) {
+		cnt = 0;
+		/* The hyperbolic function below modifies the heartbeat period
+		 * length in dependency of the current (5min) load. It goes
+		 * through the points f(0)=126, f(1)=86, f(5)=51,
+		 * f(inf)->30. */
+		period = ((672<<FSHIFT)/(5*avenrun[0]+(7<<FSHIFT))) + 30;
+		dist = period / 4;
+	    }
+	}
+#endif /* CONFIG_HEARTBEAT */
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.

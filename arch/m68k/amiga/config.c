@@ -31,13 +31,13 @@
 #include <asm/machdep.h>
 #include <linux/zorro.h>
 
-u_long amiga_model;
-u_long amiga_eclock;
-u_long amiga_masterclock;
-u_long amiga_colorclock;
-u_long amiga_chipset;
-u_char amiga_vblank;
-u_char amiga_psfreq;
+unsigned long amiga_model;
+unsigned long amiga_eclock;
+unsigned long amiga_masterclock;
+unsigned long amiga_colorclock;
+unsigned long amiga_chipset;
+unsigned char amiga_vblank;
+unsigned char amiga_psfreq;
 struct amiga_hw_present amiga_hw_present;
 
 static const char *amiga_models[] = {
@@ -54,8 +54,10 @@ extern int amiga_kbdrate (struct kbd_repeat *);
 /* amiga specific irq functions */
 extern void amiga_init_IRQ (void);
 extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
-extern int amiga_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
-                              unsigned long flags, const char *devname, void *dev_id);
+extern int amiga_request_irq (unsigned int irq,
+			      void (*handler)(int, void *, struct pt_regs *),
+                              unsigned long flags, const char *devname,
+			      void *dev_id);
 extern void amiga_free_irq (unsigned int irq, void *dev_id);
 extern void amiga_enable_irq (unsigned int);
 extern void amiga_disable_irq (unsigned int);
@@ -69,27 +71,49 @@ static void a2000_gettod (int *, int *, int *, int *, int *, int *);
 static int amiga_hwclk (int, struct hwclk_time *);
 static int amiga_set_clock_mmss (unsigned long);
 extern void amiga_mksound( unsigned int count, unsigned int ticks );
-#ifdef CONFIG_BLK_DEV_FD
-extern int amiga_floppy_init (void);
+#ifdef CONFIG_AMIGA_FLOPPY
 extern void amiga_floppy_setup(char *, int *);
 #endif
 static void amiga_reset (void);
-static void amiga_wait_key(void);
+static int amiga_wait_key (struct console *co);
 extern struct consw fb_con;
-extern struct fb_info *amiga_fb_init(long *);
 extern void zorro_init(void);
 extern void amiga_init_sound(void);
 static void amiga_savekmsg_init(void);
-static void amiga_mem_console_write(const char *b, unsigned int count);
-static void amiga_serial_console_write(const char *s, unsigned int count);
+static void amiga_mem_console_write(struct console *co, const char *b,
+				    unsigned int count);
+void amiga_serial_console_write(struct console *co, const char *s,
+				unsigned int count);
 static void amiga_debug_init(void);
-
-extern void amiga_video_setup(char *, int *);
-extern void amiga_init_sound(void);
+#ifdef CONFIG_HEARTBEAT
+static void amiga_heartbeat(int on);
+#endif
 
 static struct console amiga_console_driver = {
-    NULL, NULL, amiga_wait_key
+	"debug",
+	NULL,			/* write */
+	NULL,			/* read */
+	NULL,			/* device */
+	amiga_wait_key,		/* wait_key */
+	NULL,			/* unblank */
+	NULL,			/* setup */
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
 };
+
+#ifdef CONFIG_MAGIC_SYSRQ
+static char amiga_sysrq_xlate[128] =
+	"\0001234567890-=\\\000\000"					/* 0x00 - 0x0f */
+	"qwertyuiop[]\000123"							/* 0x10 - 0x1f */
+	"asdfghjkl;'\000\000456"						/* 0x20 - 0x2f */
+	"\000zxcvbnm,./\000+789"						/* 0x30 - 0x3f */
+	" \177\t\r\r\000\177\000\000\000-\000\000\000\000\000"	/* 0x40 - 0x4f */
+	"\000\201\202\203\204\205\206\207\210\211()/*+\000"	/* 0x50 - 0x5f */
+	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"	/* 0x60 - 0x6f */
+	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000";	/* 0x70 - 0x7f */
+#endif
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 
@@ -100,7 +124,7 @@ extern void (*kd_mksound)(unsigned int, unsigned int);
 int amiga_parse_bootinfo(const struct bi_record *record)
 {
     int unknown = 0;
-    const u_long *data = record->data;
+    const unsigned long *data = record->data;
 
     switch (record->tag) {
 	case BI_AMIGA_MODEL:
@@ -120,11 +144,11 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 	    break;
 
 	case BI_AMIGA_VBLANK:
-	    amiga_vblank = *(const u_char *)data;
+	    amiga_vblank = *(const unsigned char *)data;
 	    break;
 
 	case BI_AMIGA_PSFREQ:
-	    amiga_psfreq = *(const u_char *)data;
+	    amiga_psfreq = *(const unsigned char *)data;
 	    break;
 
 	case BI_AMIGA_AUTOCON:
@@ -147,18 +171,16 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 }
 
     /*
-     *  Setup the Amiga configuration info
+     *  Identify builtin hardware
      */
 
-__initfunc(void config_amiga(void))
+__initfunc(static void amiga_identify(void))
 {
   /* Fill in some default values, if necessary */
   if (amiga_eclock == 0)
     amiga_eclock = 709379;
 
   memset(&amiga_hw_present, 0, sizeof(amiga_hw_present));
-
-  amiga_debug_init();
 
   printk("Amiga hardware found: ");
   if (amiga_model >= AMI_500 && amiga_model <= AMI_DRACO)
@@ -171,6 +193,7 @@ __initfunc(void config_amiga(void))
   case AMI_600:
   case AMI_1200:
     AMIGAHW_SET(A1200_IDE);
+    AMIGAHW_SET(PCMCIA);
   case AMI_500:
   case AMI_500PLUS:
   case AMI_1000:
@@ -300,11 +323,22 @@ __initfunc(void config_amiga(void))
   AMIGAHW_ANNOUNCE(ALICE_PAL, "ALICE_PAL ");
   AMIGAHW_ANNOUNCE(ALICE_NTSC, "ALICE_NTSC ");
   AMIGAHW_ANNOUNCE(MAGIC_REKICK, "MAGIC_REKICK ");
-  if (AMIGAHW_SET(ZORRO))
-    printk("ZORRO%s ", AMIGAHW_SET(ZORRO3) ? "3" : "");
+  AMIGAHW_ANNOUNCE(PCMCIA, "PCMCIA ");
+  if (AMIGAHW_PRESENT(ZORRO))
+    printk("ZORRO%s ", AMIGAHW_PRESENT(ZORRO3) ? "3" : "");
   printk("\n");
 
 #undef AMIGAHW_ANNOUNCE
+}
+
+    /*
+     *  Setup the Amiga configuration info
+     */
+
+__initfunc(void config_amiga(void))
+{
+  amiga_debug_init();
+  amiga_identify();
 
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
@@ -338,15 +372,21 @@ __initfunc(void config_amiga(void))
 
   mach_hwclk           = amiga_hwclk;
   mach_set_clock_mmss  = amiga_set_clock_mmss;
-#ifdef CONFIG_BLK_DEV_FD
-  mach_floppy_init     = amiga_floppy_init;
+#ifdef CONFIG_AMIGA_FLOPPY
   mach_floppy_setup    = amiga_floppy_setup;
 #endif
   mach_reset           = amiga_reset;
   conswitchp           = &fb_con;
-  mach_fb_init         = amiga_fb_init;
-  mach_video_setup     = amiga_video_setup;
   kd_mksound           = amiga_mksound;
+#ifdef CONFIG_MAGIC_SYSRQ
+  mach_sysrq_key = 0x5f;	     /* HELP */
+  mach_sysrq_shift_state = 0x03; /* SHIFT+ALTGR */
+  mach_sysrq_shift_mask = 0xff;  /* all modifiers except CapsLock */
+  mach_sysrq_xlate = amiga_sysrq_xlate;
+#endif
+#ifdef CONFIG_HEARTBEAT
+  mach_heartbeat = amiga_heartbeat;
+#endif
 
   /* Fill in the clock values (based on the 700 kHz E-Clock) */
   amiga_masterclock = 40*amiga_eclock;	/* 28 MHz */
@@ -357,15 +397,51 @@ __initfunc(void config_amiga(void))
   /* ensure that the DMA master bit is set */
   custom.dmacon = DMAF_SETCLR | DMAF_MASTER;
 
+  /* don't use Z2 RAM as system memory on Z3 capable machines */
+  if (AMIGAHW_PRESENT(ZORRO3)) {
+    int i, j;
+    unsigned long z2mem = 0;
+    for (i = 0; i < m68k_num_memory; i++)
+      if (m68k_memory[i].addr < 16*1024*1024) {
+	if (i == 0) {
+	  /* don't cut off the branch we're sitting on */
+	  printk("Warning: kernel runs in Zorro II memory\n");
+	  continue;
+	}
+	z2mem += m68k_memory[i].size;
+	m68k_num_memory--;
+	for (j = i; j < m68k_num_memory; j++)
+	  m68k_memory[j] = m68k_memory[j+1];
+      }
+    if (z2mem)
+      printk("%ldK of Zorro II memory will not be used as system memory\n",
+	     z2mem>>10);
+  }
+
   /* initialize chipram allocator */
   amiga_chip_init ();
+
+  /* debugging using chipram */
+  if (!strcmp( m68k_debug_device, "mem" )){
+	  if (!AMIGAHW_PRESENT(CHIP_RAM))
+		  printk("Warning: no chipram present for debugging\n");
+	  else {
+		  amiga_savekmsg_init();
+		  amiga_console_driver.write = amiga_mem_console_write;
+		  register_console(&amiga_console_driver);
+	  }
+  }
+
+  /* our beloved beeper */
+  if (AMIGAHW_PRESENT(AMI_AUDIO))
+	  amiga_init_sound();
 
   /*
    * if it is an A3000, set the magic bit that forces
    * a hard rekick
    */
   if (AMIGAHW_PRESENT(MAGIC_REKICK))
-    *(u_char *)ZTWO_VADDR(0xde0002) |= 0x80;
+	  *(unsigned char *)ZTWO_VADDR(0xde0002) |= 0x80;
 
   zorro_init();
 #ifdef CONFIG_ZORRO
@@ -373,7 +449,7 @@ __initfunc(void config_amiga(void))
    * Identify all known AutoConfig Expansion Devices
    */
   zorro_identify();
-#endif /* CONFIG_ZORRO */
+#endif
 }
 
 static unsigned short jiffy_ticks;
@@ -383,7 +459,7 @@ __initfunc(static void amiga_sched_init(void (*timer_routine)(int, void *,
 {
 	jiffy_ticks = (amiga_eclock+HZ/2)/HZ;
 
-	ciab.cra &= 0xC0;	 /* turn off timer A, continuous mode, from Eclk */
+	ciab.cra &= 0xC0;   /* turn off timer A, continuous mode, from Eclk */
 	ciab.talo = jiffy_ticks % 256;
 	ciab.tahi = jiffy_ticks / 256;
 
@@ -392,7 +468,8 @@ __initfunc(static void amiga_sched_init(void (*timer_routine)(int, void *,
 	 * Please don't change this to use ciaa, as it interferes with the
 	 * SCSI code. We'll have to take a look at this later
 	 */
-	request_irq(IRQ_AMIGA_CIAB_TA, timer_routine, IRQ_FLG_LOCK, "timer", NULL);
+	request_irq(IRQ_AMIGA_CIAB_TA, timer_routine, IRQ_FLG_LOCK,
+		    "timer", NULL);
 	/* start timer */
 	ciab.cra |= 0x11;
 }
@@ -462,11 +539,12 @@ static void a2000_gettod (int *yearp, int *monp, int *dayp,
 	*monp  = tod->month1      * 10 + tod->month2;
 	*yearp = tod->year1       * 10 + tod->year2;
 
-	if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE))
+	if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE)){
 		if (!(tod->hour1 & TOD2000_HOUR1_PM) && *hourp == 12)
 			*hourp = 0;
 		else if ((tod->hour1 & TOD2000_HOUR1_PM) && *hourp != 12)
 			*hourp += 12;
+	}
 
 	tod->cntrl1 &= ~TOD2000_CNTRL1_HOLD;
 }
@@ -521,11 +599,12 @@ static int amiga_hwclk(int op, struct hwclk_time *t)
 			t->mon  = tod->month1      * 10 + tod->month2 - 1;
 			t->year = tod->year1       * 10 + tod->year2;
 
-			if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE))
+			if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE)){
 				if (!(tod->hour1 & TOD2000_HOUR1_PM) && t->hour == 12)
 					t->hour = 0;
 				else if ((tod->hour1 & TOD2000_HOUR1_PM) && t->hour != 12)
 					t->hour += 12;
+			}
 		} else {
 			tod->second1 = t->sec / 10;
 			tod->second2 = t->sec % 10;
@@ -589,7 +668,7 @@ static int amiga_set_clock_mmss (unsigned long nowtime)
 	return 0;
 }
 
-static void amiga_wait_key (void)
+static int amiga_wait_key (struct console *co)
 {
     int i;
 
@@ -613,6 +692,7 @@ static void amiga_wait_key (void)
 	if (ciaa.pra & 0x40)
 	    break;
     }
+    return 0;
 }
 
 void dbprintf(const char *fmt , ...)
@@ -707,16 +787,17 @@ static void amiga_reset (void)
 #define SAVEKMSG_MAGIC2		0x4B4D5347	/* 'KMSG' */
 
 struct savekmsg {
-    u_long magic1;		/* SAVEKMSG_MAGIC1 */
-    u_long magic2;		/* SAVEKMSG_MAGIC2 */
-    u_long magicptr;		/* address of magic1 */
-    u_long size;
+    unsigned long magic1;		/* SAVEKMSG_MAGIC1 */
+    unsigned long magic2;		/* SAVEKMSG_MAGIC2 */
+    unsigned long magicptr;		/* address of magic1 */
+    unsigned long size;
     char data[0];
 };
 
 static struct savekmsg *savekmsg = NULL;
 
-static void amiga_mem_console_write(const char *s, unsigned int count)
+static void amiga_mem_console_write(struct console *co, const char *s,
+				    unsigned int count)
 {
     if (savekmsg->size+count <= SAVEKMSG_MAXMEM-sizeof(struct savekmsg)) {
         memcpy(savekmsg->data+savekmsg->size, s, count);
@@ -740,7 +821,8 @@ static void amiga_serial_putc(char c)
 	;
 }
 
-static void amiga_serial_console_write(const char *s, unsigned int count)
+void amiga_serial_console_write(struct console *co, const char *s,
+				       unsigned int count)
 {
     while (count--) {
 	if (*s == '\n')
@@ -752,19 +834,27 @@ static void amiga_serial_console_write(const char *s, unsigned int count)
 #ifdef CONFIG_SERIAL_CONSOLE
 void amiga_serial_puts(const char *s)
 {
-    amiga_serial_console_write(s, strlen(s));
+    amiga_serial_console_write(NULL, s, strlen(s));
 }
 
-void amiga_serial_gets(char *s, int len)
+int amiga_serial_console_wait_key(struct console *co)
+{
+    int ch;
+
+    while (!(custom.intreqr & IF_RBF))
+	barrier();
+    ch = custom.serdatr & 0xff;
+    /* clear the interrupt, so that another character can be read */
+    custom.intreq = IF_RBF;
+    return ch;
+}
+
+void amiga_serial_gets(struct console *co, char *s, int len)
 {
     int ch, cnt = 0;
 
     while (1) {
-	while (!(custom.intreqr & IF_RBF))
-	    barrier();
-	ch = custom.serdatr & 0xff;
-	/* clear the interrupt, so that another character can be read */
-	custom.intreq = IF_RBF;
+	ch = amiga_serial_console_wait_key(co);
 
 	/* Check for backspace. */
 	if (ch == 8 || ch == 127) {
@@ -803,17 +893,19 @@ __initfunc(static void amiga_debug_init(void))
 	if (!strcmp( m68k_debug_device, "ser" )) {
 		/* no initialization required (?) */
 		amiga_console_driver.write = amiga_serial_console_write;
-	} else if (!strcmp( m68k_debug_device, "mem" )) {
-		amiga_savekmsg_init();
-		amiga_console_driver.write = amiga_mem_console_write;
+		register_console(&amiga_console_driver);
 	}
-	register_console(&amiga_console_driver);
-
-	/* our beloved beeper */
-	if (AMIGAHW_PRESENT(AMI_AUDIO))
-		amiga_init_sound();
 }
 
+#ifdef CONFIG_HEARTBEAT
+static void amiga_heartbeat(int on)
+{
+    if (on)
+	ciaa.pra &= ~2;
+    else
+	ciaa.pra |= 2;
+}
+#endif
 
     /*
      *  Amiga specific parts of /proc
@@ -888,6 +980,7 @@ static int amiga_get_hardware_list(char *buffer)
     AMIGAHW_ANNOUNCE(ALICE_PAL, "PAL Alice 8374");
     AMIGAHW_ANNOUNCE(ALICE_NTSC, "NTSC Alice 8374");
     AMIGAHW_ANNOUNCE(MAGIC_REKICK, "Magic Hard Rekick");
+    AMIGAHW_ANNOUNCE(PCMCIA, "PCMCIA Slot");
     if (AMIGAHW_PRESENT(ZORRO))
 	len += sprintf(buffer+len, "\tZorro%s AutoConfig: %d Expansion Device%s\n",
 		       AMIGAHW_PRESENT(ZORRO3) ? " III" : "",

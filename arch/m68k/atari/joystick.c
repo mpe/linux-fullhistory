@@ -82,15 +82,16 @@ static int open_joystick(struct inode *inode, struct file *file)
     return 0;
 }
 
-static long write_joystick(struct inode *inode, struct file *file,
-			   const char *buffer, unsigned long count)
+static ssize_t write_joystick(struct file *file, const char *buffer,
+			      size_t count, loff_t *ppos)
 {
     return -EINVAL;
 }
 
-static long read_joystick(struct inode *inode, struct file *file,
-			  char *buffer, unsigned long count)
+static ssize_t read_joystick(struct file *file, char *buffer, size_t count,
+			     loff_t *ppos)
 {
+    struct inode *inode = file->f_dentry->d_inode;
     int minor = DEVICE_NR(inode->i_rdev);
 
     if (count < 2)
@@ -109,7 +110,7 @@ static long read_joystick(struct inode *inode, struct file *file,
 
 static unsigned int joystick_poll(struct file *file, poll_table *wait)
 {
-    int minor = DEVICE_NR(file->f_inode->i_rdev);
+    int minor = DEVICE_NR(file->f_dentry->d_inode->i_rdev);
 
     poll_wait(&joystick[minor].wait, wait);
     if (joystick[minor].ready)

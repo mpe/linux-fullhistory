@@ -2,6 +2,9 @@
  *  linux/drivers/char/pty.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  Added support for a Unix98-style ptmx device.
+ *    -- C. Scott Ananian <cananian@alumni.princeton.edu>, 14-Jan-1998
  */
 
 #include <linux/errno.h>
@@ -191,6 +194,45 @@ static int pty_chars_in_buffer(struct tty_struct *tty)
 	return ((count < N_TTY_BUF_SIZE/2) ? 0 : count);
 }
 
+/*
+ * Return the minor device number of a given pty.  This lets us
+ * open a master pty with the multi-headed ptmx device, then
+ * find out which one we got after it is open, with an ioctl.
+ */
+static int pty_get_device_minor(struct tty_struct *tty, unsigned int *value)
+{
+	unsigned int result = MINOR(tty->device);
+	return put_user(result, value);
+}
+/* Set the lock flag on a pty */
+static int pty_set_lock(struct tty_struct *tty, int * arg)
+{
+	int val;
+	if (get_user(val,arg))
+		return -EFAULT;
+	if (val)
+		set_bit(TTY_PTY_LOCK, &tty->flags);
+	else
+		clear_bit(TTY_PTY_LOCK, &tty->flags);
+	return 0;
+}
+
+static int pty_ioctl(struct tty_struct *tty, struct file *file,
+		     unsigned int cmd, unsigned long arg)
+{
+	if (!tty) {
+		printk("pty_ioctl called with NULL tty!\n");
+		return -EIO;
+	}
+	switch(cmd) {
+	case TIOCGPTN: /* Get PT Number */
+		return pty_get_device_minor(tty, (unsigned int *)arg);
+	case TIOCSPTLCK: /* Set PT Lock (disallow slave open) */
+		return pty_set_lock(tty, (int *) arg);
+	}
+	return -ENOIOCTLCMD;
+}
+
 static void pty_flush_buffer(struct tty_struct *tty)
 {
 	struct tty_struct *to = tty->link;
@@ -224,6 +266,8 @@ static int pty_open(struct tty_struct *tty, struct file * filp)
 
 	retval = -EIO;
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
+		goto out;
+	if (test_bit(TTY_PTY_LOCK, &tty->link->flags))
 		goto out;
 	if (tty->link->count != 1)
 		goto out;
@@ -304,6 +348,12 @@ __initfunc(int pty_init(void))
 	old_pty_slave_driver.minor_start = 192;
 	old_pty_slave_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;
 	old_pty_slave_driver.other = &old_pty_driver;
+
+	/* only the master pty gets this ioctl (which is why we
+	 * assign it here, instead of up with the rest of the
+	 * pty_driver initialization. <cananian@alumni.princeton.edu>
+	 */
+	pty_driver.ioctl = pty_ioctl;
 
 	if (tty_register_driver(&pty_driver))
 		panic("Couldn't register pty driver");

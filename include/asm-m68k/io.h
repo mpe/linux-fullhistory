@@ -3,15 +3,29 @@
 
 #ifdef __KERNEL__
 
+#include <asm/byteorder.h>
+
+#ifdef CONFIG_ATARI
+#include <asm/atarihw.h>
+
+#define SLOW_DOWN_IO	do { if (MACH_IS_ATARI) MFPDELAY(); } while (0)
+#endif
+
 /*
  * readX/writeX() are used to access memory mapped devices. On some
  * architectures the memory mapped IO stuff needs to be accessed
  * differently. On the m68k architecture, we just read/write the
  * memory location directly.
  */
-#define readb(addr) (*(volatile unsigned char *) (addr))
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
+/* ++roman: The assignments to temp. vars avoid that gcc sometimes generates
+ * two accesses to memory, which may be undesireable for some devices.
+ */
+#define readb(addr) \
+    ({ unsigned char __v = (*(volatile unsigned char *) (addr)); __v; })
+#define readw(addr) \
+    ({ unsigned short __v = (*(volatile unsigned short *) (addr)); __v; })
+#define readl(addr) \
+    ({ unsigned int __v = (*(volatile unsigned int *) (addr)); __v; })
 
 #define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
 #define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
@@ -44,10 +58,16 @@ extern inline void * phys_to_virt(unsigned long address)
 }
 
 /*
- * IO bus memory addresses are 1:1 with the physical address
+ * IO bus memory addresses are 1:1 with the physical address,
+ * except on the PCI bus of the Hades.
  */
+#ifdef CONFIG_HADES
+#define virt_to_bus(a) (virt_to_phys(a) + (MACH_IS_HADES ? 0x80000000 : 0))
+#define bus_to_virt(a) (phys_to_virt((a) - (MACH_IS_HADES ? 0x80000000 : 0)))
+#else
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt
+#endif
 
 #endif /* __KERNEL__ */
 

@@ -345,7 +345,6 @@ morein:
 copyinae:	
 	movs.b		(%a0)+,%d1		| fetch user byte
 	move.b		%d1,(%a1)+		| write supervisor byte
-	subq.l		#0x1,%d0		| are we through yet?
 	dbra		%d0,morein		| are we through yet?
 	moveq		#0,%d0			| return success
 	rts

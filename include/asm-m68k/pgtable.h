@@ -26,7 +26,7 @@ do {							\
 		asm __volatile__ ("nop\n\t"		\
 				  ".chip 68040\n\t"	\
 				  "cinva %%ic\n\t"	\
-				  ".chip 68k");		\
+				  ".chip 68k" : );	\
 	else {						\
 		unsigned long _tmp;			\
 		asm __volatile__ ("movec %%cacr,%0\n\t"	\
@@ -136,9 +136,12 @@ extern inline void flush_page_to_ram (unsigned long address)
 }
 
 /* Push n pages at kernel virtual address and clear the icache */
-extern inline void flush_pages_to_ram (unsigned long address, int n)
+extern inline void flush_icache_range (unsigned long address,
+				       unsigned long endaddr)
 {
     if (CPU_IS_040_OR_060) {
+	short n = (endaddr - address + PAGE_SIZE - 1) / PAGE_SIZE;
+
 	while (n--) {
 	    __asm__ __volatile__ ("nop\n\t"
 				  ".chip 68040\n\t"
@@ -159,7 +162,6 @@ extern inline void flush_pages_to_ram (unsigned long address, int n)
     }
 }
 
-#define flush_icache_range(start, end)		do { } while (0)
 
 /*
  * flush all user-space atc entries.
@@ -223,7 +225,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 extern inline void flush_tlb_kernel_page(unsigned long addr)
 {
 	if (CPU_IS_040_OR_060) {
-		unsigned long old_fs = get_fs();
+		mm_segment_t old_fs = get_fs();
 		set_fs(KERNEL_DS);
 		__asm__ __volatile__(".chip 68040\n\t"
 				     "pflush (%0)\n\t"
@@ -298,6 +300,8 @@ typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
 #define _PAGE_RONLY	0x004
 #define _PAGE_ACCESSED	0x008
 #define _PAGE_DIRTY	0x010
+#define _PAGE_SUPER	0x080	/* 68040 supervisor only */
+#define _PAGE_FAKE_SUPER 0x200	/* fake supervisor only on 680[23]0 */
 #define _PAGE_GLOBAL040	0x400	/* 68040 global bit, used for kva descs */
 #define _PAGE_COW	0x800	/* implemented in software */
 #define _PAGE_NOCACHE030 0x040	/* 68030 no-cache mode */
@@ -440,7 +444,7 @@ extern inline unsigned long pgd_page(pgd_t pgd)
 { return PTOV(pgd_val(pgd) & _TABLE_MASK); }
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
-extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
+extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & (_PAGE_PRESENT | _PAGE_FAKE_SUPER); }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 
 extern inline int pmd_none2(pmd_t *pmd)		{ return !pmd_val(*pmd); }
@@ -728,11 +732,14 @@ extern inline pgd_t * pgd_alloc(void)
 int mm_end_of_chunk (unsigned long addr, int len);
 
 /*
- * Map some physical address range into the kernel address space. The
- * code is copied and adapted from map_chunk().
+ * Map some physical address range into the kernel address space.
  */
 extern unsigned long kernel_map(unsigned long paddr, unsigned long size,
 				int nocacheflag, unsigned long *memavailp );
+/*
+ * Unmap a region alloced by kernel_map().
+ */
+extern void kernel_unmap( unsigned long addr );
 /*
  * Change the cache mode of some kernel address range.
  */
@@ -758,6 +765,8 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
  * I don't know what is going on here, but since these were changed,
  * swapping hasn't been working on the 68040.
  */
+/* With the new handling of PAGE_NONE the old definitions definitely
+   don't work any more.  */
 
 #define SWP_TYPE(entry)  (((entry) >> 2) & 0x7f)
 #if 0

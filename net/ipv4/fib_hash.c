@@ -715,7 +715,7 @@ static void rtmsg_fib(int event, struct fib_node* f, int z, int tb_id,
 	if (fib_dump_info(skb, pid, n->nlmsg_seq, event, tb_id,
 			  f->fn_type, f->fn_scope, &f->fn_key, z, f->fn_tos,
 			  FIB_INFO(f)) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		return;
 	}
 	NETLINK_CB(skb).dst_groups = RTMGRP_IPV4_ROUTE;

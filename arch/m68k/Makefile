@@ -26,6 +26,7 @@ endif
 
 LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds
 
+# without -fno-strength-reduce the 53c7xx.c driver fails ;-(
 CFLAGS += -pipe -fno-strength-reduce -ffixed-a2
 
 ifdef CONFIG_OPTIMIZE_040
@@ -33,7 +34,7 @@ CFLAGS := $(CFLAGS) -m68040
 endif
 
 ifdef CONFIG_OPTIMIZE_060
-CFLAGS := $(CFLAGS) -m68020-40
+CFLAGS := $(CFLAGS) -m68060
 endif
 
 ifdef CONFIG_KGDB
@@ -63,10 +64,14 @@ CORE_FILES := $(CORE_FILES) arch/m68k/mac/mac.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mac
 endif
 
-ifdef CONFIG_VT
-# add in console.a after {amiga,atari}.o that need it
-CORE_FILES := $(CORE_FILES) arch/m68k/console/console.a
-SUBDIRS := $(SUBDIRS) arch/m68k/console
+ifdef CONFIG_APOLLO
+CORE_FILES := $(CORE_FILES) arch/m68k/apollo/apollo.o
+SUBDIRS := $(SUBDIRS) arch/m68k/apollo
+endif
+
+ifdef CONFIG_MVME16x
+CORE_FILES := $(CORE_FILES) arch/m68k/mvme16x/mvme16x.o
+SUBDIRS := $(SUBDIRS) arch/m68k/mvme16x
 endif
 
 ifdef CONFIG_M68040
@@ -98,9 +103,6 @@ ifdef CONFIG_KGDB
 else
 	gzip -9c vmlinux >vmlinux.gz
 endif
-
-bootstrap: dummy
-	@$(MAKEBOOT) bootstrap
 
 archclean:
 	rm -f vmlinux.gz

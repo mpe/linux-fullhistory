@@ -18,8 +18,6 @@
 #include <asm/traps.h>
 #include <asm/amigahw.h>
 
-extern pte_t *kernel_page_table (unsigned long *memavailp);
-
 /* Strings for `extern inline' functions in <asm/pgtable.h>.  If put
    directly into these functions, they are output for every file that
    includes pgtable.h */
@@ -349,10 +347,10 @@ static unsigned long mm_vtop_fallback (unsigned long vaddr)
 	/* no match, too, so get the actual physical address from the MMU. */
 
 	if (CPU_IS_060) {
-	  unsigned long fs = get_fs();
+	  mm_segment_t fs = get_fs();
 	  unsigned long  paddr;
 
-	  set_fs (SUPER_DATA);
+	  set_fs (MAKE_MM_SEG(SUPER_DATA));
 
 	  /* The PLPAR instruction causes an access error if the translation
 	   * is not possible. We don't catch that here, so a bad kernel trap
@@ -368,9 +366,9 @@ static unsigned long mm_vtop_fallback (unsigned long vaddr)
 
 	} else if (CPU_IS_040) {
 	  unsigned long mmusr;
-	  unsigned long fs = get_fs();
+	  mm_segment_t fs = get_fs();
 
-	  set_fs (SUPER_DATA);
+	  set_fs (MAKE_MM_SEG(SUPER_DATA));
 
 	  asm volatile (".chip 68040\n\t"
 			"ptestr (%1)\n\t"
@@ -380,6 +378,9 @@ static unsigned long mm_vtop_fallback (unsigned long vaddr)
 			: "a" (vaddr));
 	  set_fs (fs);
 
+	  if (mmusr & MMU_T_040) {
+	    return (vaddr);	/* Transparent translation */
+	  }
 	  if (mmusr & MMU_R_040)
 	    return (mmusr & PAGE_MASK) | (vaddr & (PAGE_SIZE-1));
 
@@ -452,7 +453,7 @@ unsigned long mm_ptov (unsigned long paddr)
 
 	/*
 	 * if on an amiga and address is in first 16M, move it 
-	 * to the ZTWO_ADDR range
+	 * to the ZTWO_VADDR range
 	 */
 	if (MACH_IS_AMIGA && paddr < 16*1024*1024)
 		return ZTWO_VADDR(paddr);
@@ -494,33 +495,6 @@ unsigned long mm_ptov (unsigned long paddr)
 	do { push040(paddr);			\
 	     if (CPU_IS_060) cleari040(paddr);	\
 	} while(0)
-
-/* push page defined by virtual address in both caches */
-#define	pushv040(vaddr)						\
-	do { unsigned long _tmp1, _tmp2;			\
-	__asm__ __volatile__ ("nop\n\t"				\
-			      ".chip 68040\n\t"			\
-			      "ptestr (%2)\n\t"			\
-			      "movec %%mmusr,%0\n\t"		\
-			      "andw #0xf000,%0\n\t"		\
-			      "movel %0,%1\n\t"			\
-			      "nop\n\t"				\
-			      "cpushp %%bc,(%1)\n\t"		\
-			      ".chip 68k"			\
-			      : "=d" (_tmp1), "=a" (_tmp2)	\
-			      : "a" (vaddr));			\
-	} while (0)
-
-/* push page defined by virtual address in both caches */
-#define	pushv060(vaddr)					\
-	do { unsigned long _tmp;			\
-	__asm__ __volatile__ (".chip 68060\n\t"		\
-			      "plpar (%0)\n\t"		\
-			      "cpushp %%bc,(%0)\n\t"	\
-			      ".chip 68k"		\
-			      : "=a" (_tmp)		\
-			      : "0" (vaddr));		\
-	} while (0)
 
 
 /*
@@ -632,64 +606,11 @@ void cache_push (unsigned long paddr, int len)
 }
 
 
-/*
- * cache_push_v() semantics: Write back any dirty cache data in the given
- * area, and invalidate those entries at least in the instruction cache. This
- * is intended to be used after data has been written that can be executed as
- * code later. The range is defined by a _user_mode_ _virtual_ address  (or,
- * more exactly, the space is defined by the %sfc/%dfc register.)
- */
-
-void cache_push_v (unsigned long vaddr, int len)
-{
-    if (CPU_IS_040) {
-	int tmp = PAGE_SIZE;
-
-	/* on 68040, push cache lines for pages in the range */
-	len += vaddr & (PAGE_SIZE - 1);
-
-	/*
-	 * Work around bug I17 in the 68060 affecting some instruction
-	 * lines not being invalidated properly.
-	 */
-	vaddr &= PAGE_MASK;
-
-	do {
-	    pushv040(vaddr);
-	    vaddr += tmp;
-	} while ((len -= tmp) > 0);
-    }
-    else if (CPU_IS_060) {
-	int tmp = PAGE_SIZE;
-
-	/* on 68040, push cache lines for pages in the range */
-	len += vaddr & (PAGE_SIZE - 1);
-	do {
-	    pushv060(vaddr);
-	    vaddr += tmp;
-	} while ((len -= tmp) > 0);
-    }
-    /* 68030/68020 have no writeback cache; still need to clear icache. */
-    else /* 68030 or 68020 */
-	asm volatile ("movec %/cacr,%/d0\n\t"
-		      "oriw %0,%/d0\n\t"
-		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I)
-		      : "d0");
-}
-
 #undef clear040
 #undef cleari040
 #undef push040
 #undef pushcl040
 #undef pushcli040
-#undef pushv040
-#undef pushv060
-
-unsigned long mm_phys_to_virt (unsigned long addr)
-{
-    return PTOV (addr);
-}
 
 int mm_end_of_chunk (unsigned long addr, int len)
 {
@@ -700,227 +621,4 @@ int mm_end_of_chunk (unsigned long addr, int len)
 			return 1;
 	return 0;
 }
-
-/* Map some physical address range into the kernel address space. The
- * code is copied and adapted from map_chunk().
- */
-
-unsigned long kernel_map(unsigned long paddr, unsigned long size,
-			 int nocacheflag, unsigned long *memavailp )
-{
-#define STEP_SIZE	(256*1024)
-
-	static unsigned long vaddr = 0xe0000000; /* safe place */
-	unsigned long physaddr, retaddr;
-	pte_t *ktablep = NULL;
-	pmd_t *kpointerp;
-	pgd_t *page_dir;
-	int pindex;   /* index into pointer table */
-	int prot;
-	
-	/* Round down 'paddr' to 256 KB and adjust size */
-	physaddr = paddr & ~(STEP_SIZE-1);
-	size += paddr - physaddr;
-	retaddr = vaddr + (paddr - physaddr);
-	paddr = physaddr;
-	/* Round up the size to 256 KB. It doesn't hurt if too much is
-	 * mapped... */
-	size = (size + STEP_SIZE - 1) & ~(STEP_SIZE-1);
-
-	if (CPU_IS_040_OR_060) {
-		prot = _PAGE_PRESENT | _PAGE_GLOBAL040;
-		switch( nocacheflag ) {
-		  case KERNELMAP_FULL_CACHING:
-			prot |= _PAGE_CACHE040;
-			break;
-		  case KERNELMAP_NOCACHE_SER:
-		  default:
-			prot |= _PAGE_NOCACHE_S;
-			break;
-		  case KERNELMAP_NOCACHE_NONSER:
-			prot |= _PAGE_NOCACHE;
-			break;
-		  case KERNELMAP_NO_COPYBACK:
-			prot |= _PAGE_CACHE040W;
-			/* prot |= 0; */
-			break;
-		}
-	} else
-		prot = _PAGE_PRESENT |
-			   ((nocacheflag == KERNELMAP_FULL_CACHING ||
-				 nocacheflag == KERNELMAP_NO_COPYBACK) ? 0 : _PAGE_NOCACHE030);
-	
-	page_dir = pgd_offset_k(vaddr);
-	if (pgd_present(*page_dir)) {
-		kpointerp = (pmd_t *)pgd_page(*page_dir);
-		pindex = (vaddr >> 18) & 0x7f;
-		if (pindex != 0 && CPU_IS_040_OR_060) {
-			if (pmd_present(*kpointerp))
-				ktablep = (pte_t *)pmd_page(*kpointerp);
-			else {
-				ktablep = kernel_page_table (memavailp);
-				/* Make entries invalid */
-				memset( ktablep, 0, sizeof(long)*PTRS_PER_PTE);
-				pmd_set(kpointerp,ktablep);
-			}
-			ktablep += (pindex & 15)*64;
-		}
-	}
-	else {
-		/* we need a new pointer table */
-		kpointerp = get_kpointer_table ();
-		pgd_set(page_dir, (pmd_t *)kpointerp);
-		memset( kpointerp, 0, PTRS_PER_PMD*sizeof(pmd_t));
-		pindex = 0;
-	}
-
-	for (physaddr = paddr; physaddr < paddr + size; vaddr += STEP_SIZE) {
-
-		if (pindex > 127) {
-			/* we need a new pointer table */
-			kpointerp = get_kpointer_table ();
-			pgd_set(pgd_offset_k(vaddr), (pmd_t *)kpointerp);
-			memset( kpointerp, 0, PTRS_PER_PMD*sizeof(pmd_t));
-			pindex = 0;
-		}
-
-		if (CPU_IS_040_OR_060) {
-			int i;
-			unsigned long ktable;
-
-			/*
-			 * 68040, use page tables pointed to by the
-			 * kernel pointer table.
-			 */
-
-			if ((pindex & 15) == 0) {
-				/* Need new page table every 4M on the '040 */
-				ktablep = kernel_page_table (memavailp);
-				/* Make entries invalid */
-				memset( ktablep, 0, sizeof(long)*PTRS_PER_PTE);
-			}
-
-			ktable = VTOP(ktablep);
-
-			/*
-			 * initialize section of the page table mapping
-			 * this 1M portion.
-			 */
-			for (i = 0; i < 64; i++) {
-				pte_val(*ktablep++) = physaddr | prot;
-				physaddr += PAGE_SIZE;
-			}
-
-			/*
-			 * make the kernel pointer table point to the
-			 * kernel page table.
-			 */
-
-			((unsigned long *)kpointerp)[pindex++] = ktable | _PAGE_TABLE;
-
-		} else {
-			/*
-			 * 68030, use early termination page descriptors.
-			 * Each one points to 64 pages (256K).
-			 */
-			((unsigned long *)kpointerp)[pindex++] = physaddr | prot;
-			physaddr += 64 * PAGE_SIZE;
-		}
-	}
-
-	return( retaddr );
-}
-
-
-static inline void set_cmode_pte( pmd_t *pmd, unsigned long address,
-				  unsigned long size, unsigned cmode )
-{	pte_t *pte;
-	unsigned long end;
-
-	if (pmd_none(*pmd))
-		return;
-
-	pte = pte_offset( pmd, address );
-	address &= ~PMD_MASK;
-	end = address + size;
-	if (end >= PMD_SIZE)
-		end = PMD_SIZE;
-
-	for( ; address < end; pte++ ) {
-		pte_val(*pte) = (pte_val(*pte) & ~_PAGE_NOCACHE) | cmode;
-		address += PAGE_SIZE;
-	}
-}
-
-
-static inline void set_cmode_pmd( pgd_t *dir, unsigned long address,
-				  unsigned long size, unsigned cmode )
-{
-	pmd_t *pmd;
-	unsigned long end;
-
-	if (pgd_none(*dir))
-		return;
-
-	pmd = pmd_offset( dir, address );
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
-
-	if ((pmd_val(*pmd) & _DESCTYPE_MASK) == _PAGE_PRESENT) {
-		/* 68030 early termination descriptor */
-		pmd_val(*pmd) = (pmd_val(*pmd) & ~_PAGE_NOCACHE) | cmode;
-		return;
-	}
-	else {
-		/* "normal" tables */
-		for( ; address < end; pmd++ ) {
-			set_cmode_pte( pmd, address, end - address, cmode );
-			address = (address + PMD_SIZE) & PMD_MASK;
-		}
-	}
-}
-
-
-/*
- * Set new cache mode for some kernel address space.
- * The caller must push data for that range itself, if such data may already
- * be in the cache.
- */
-
-void kernel_set_cachemode( unsigned long address, unsigned long size,
-						   unsigned cmode )
-{
-	pgd_t *dir = pgd_offset_k( address );
-	unsigned long end = address + size;
-	
-	if (CPU_IS_040_OR_060) {
-		switch( cmode ) {
-		  case KERNELMAP_FULL_CACHING:
-			cmode = _PAGE_CACHE040;
-			break;
-		  case KERNELMAP_NOCACHE_SER:
-		  default:
-			cmode = _PAGE_NOCACHE_S;
-			break;
-		  case KERNELMAP_NOCACHE_NONSER:
-			cmode = _PAGE_NOCACHE;
-			break;
-		  case KERNELMAP_NO_COPYBACK:
-			cmode = _PAGE_CACHE040W;
-			break;
-		}
-	} else
-		cmode = ((cmode == KERNELMAP_FULL_CACHING ||
-				  cmode == KERNELMAP_NO_COPYBACK)    ?
-			 0 : _PAGE_NOCACHE030);
-
-	for( ; address < end; dir++ ) {
-		set_cmode_pmd( dir, address, end - address, cmode );
-		address = (address + PGDIR_SIZE) & PGDIR_MASK;
-	}
-	flush_tlb_all();
-}
-
 

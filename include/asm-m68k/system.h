@@ -8,15 +8,12 @@
 extern inline unsigned long rdusp(void) {
   	unsigned long usp;
 
-	__asm__ __volatile__("movec %/usp,%0"
-			     : "=d" (usp));
+	__asm__ __volatile__("move %/usp,%0" : "=a" (usp));
 	return usp;
 }
 
 extern inline void wrusp(unsigned long usp) {
-	__asm__ __volatile__("movec %0,%/usp"
-			     :
-			     : "d" (usp));
+	__asm__ __volatile__("move %0,%/usp" : : "a" (usp));
 }
 
 /*
@@ -63,7 +60,7 @@ asmlinkage void resume(void);
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((volatile struct __xchg_dummy *)(x))
 
-#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
+#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC) && !defined(CONFIG_HADES)
 /* block out HSYNC on the atari */
 #define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
 #else /* portable version */

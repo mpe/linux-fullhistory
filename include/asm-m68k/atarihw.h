@@ -21,15 +21,38 @@
 #define _LINUX_ATARIHW_H_
 
 #include <linux/types.h>
+#include <asm/bootinfo.h>
 
 extern u_long atari_mch_cookie;
+extern u_long atari_mch_type;
+extern u_long atari_switches;
+extern int atari_rtc_year_offset;
+extern int atari_dont_touch_floppy_select;
 
-/* mch_cookie values (upper word) */
-#define ATARI_MCH_ST		0
-#define ATARI_MCH_STE		1
-#define ATARI_MCH_TT		2
-#define ATARI_MCH_FALCON	3
+/* convenience macros for testing machine type */
+#define MACH_IS_ST	((atari_mch_cookie >> 16) == ATARI_MCH_ST)
+#define MACH_IS_STE	((atari_mch_cookie >> 16) == ATARI_MCH_STE && \
+			 (atari_mch_cookie & 0xffff) == 0)
+#define MACH_IS_MSTE	((atari_mch_cookie >> 16) == ATARI_MCH_STE && \
+			 (atari_mch_cookie & 0xffff) == 0x10)
+#define MACH_IS_TT	((atari_mch_cookie >> 16) == ATARI_MCH_TT)
+#define MACH_IS_FALCON	((atari_mch_cookie >> 16) == ATARI_MCH_FALCON)
+#define MACH_IS_MEDUSA	(atari_mch_type == ATARI_MACH_MEDUSA)
+#define MACH_IS_HADES	(atari_mch_type == ATARI_MACH_HADES)
+#define MACH_IS_AB40	(atari_mch_type == ATARI_MACH_AB40)
 
+/* values for atari_switches */
+#define ATARI_SWITCH_IKBD	0x01
+#define ATARI_SWITCH_MIDI	0x02
+#define ATARI_SWITCH_SND6	0x04
+#define ATARI_SWITCH_SND7	0x08
+#define ATARI_SWITCH_OVSC_SHIFT	16
+#define ATARI_SWITCH_OVSC_IKBD	(ATARI_SWITCH_IKBD << ATARI_SWITCH_OVSC_SHIFT)
+#define ATARI_SWITCH_OVSC_MIDI	(ATARI_SWITCH_MIDI << ATARI_SWITCH_OVSC_SHIFT)
+#define ATARI_SWITCH_OVSC_SND6	(ATARI_SWITCH_SND6 << ATARI_SWITCH_OVSC_SHIFT)
+#define ATARI_SWITCH_OVSC_SND7	(ATARI_SWITCH_SND7 << ATARI_SWITCH_OVSC_SHIFT)
+#define ATARI_SWITCH_OVSC_MASK	0xffff0000
+	
 /*
  * Define several Hardware-Chips for indication so that for the ATARI we do
  * no longer decide whether it is a Falcon or other machine . It's just
@@ -92,14 +115,6 @@ extern struct atari_hw_present atari_hw_present;
 #define	MFPDELAY() \
 	__asm__ __volatile__ ( "tstb %0" : : "m" (mfp.par_dt_reg) : "cc" );
 
-/* Memory used for screen ram and stdma buffers */
-void atari_stram_init (void);
-void *atari_stram_alloc (long size, unsigned long *start_mem );
-void atari_stram_free (void *);
-
-extern int is_medusa;
-extern int is_hades;
-
 /* Do cache push/invalidate for DMA read/write. This function obeys the
  * snooping on some machines (Medusa) and processors: The Medusa itself can
  * snoop, but only the '040 can source data from its cache to DMA writes i.e.,
@@ -116,11 +131,11 @@ static inline void dma_cache_maintenance( unsigned long paddr,
 
 {
 	if (writeflag) {
-		if (!is_medusa || CPU_IS_060)
+		if (!MACH_IS_MEDUSA || CPU_IS_060)
 			cache_push( paddr, len );
 	}
 	else {
-		if (!is_medusa)
+		if (!MACH_IS_MEDUSA)
 			cache_clear( paddr, len );
 	}
 }

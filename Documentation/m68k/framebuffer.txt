@@ -3,7 +3,7 @@
 		----------------------------------
 
 Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
-Last revised: March 23, 1997
+Last revised: January 24, 1998
 
 
 0. Introduction
@@ -23,85 +23,47 @@ The device is accessed through special device nodes, usually located in the
 --------------------------
 
 From the user's point of view, the frame buffer device looks just like any
-other device in /dev. It's a character device using major 29, the minor is
-divided into a frame buffer number in the upper 3 bits (allowing max. 8 frame
-buffers simultaneously) and a resolution code in the lower 5 bits of the minor.
+other device in /dev. It's a character device using major 29; the minor
+specifies the frame buffer number.
 
 By convention, the following device nodes are used (numbers indicate the device
 minor numbers):
 
-    First frame buffer
-	 0 = /dev/fb0current		Current resolution
-	 1 = /dev/fb0autodetect		Default resolution
-	 2 = /dev/fb0predefined0	Predefined resolutions (22)
-	     ...
-	23 = /dev/fb0predefined21
-	24 = /dev/fb0user0		User defined resolutions (8)
-	     ...
-	31 = /dev/fb0user7                              
+      0 = /dev/fb0	First frame buffer
+     32 = /dev/fb1	Second frame buffer
+	  ...
+    224 = /dev/fb7	8th frame buffer
 
-    Second frame buffer
-	32 = /dev/fb1current		Current resolution
-	33 = /dev/fb1autodetect		Default resolution
-	34 = /dev/fb1predefined0	Predefined resolutions (22)
-	     ...
-	55 = /dev/fb1predefined21
-	56 = /dev/fb1user0		User defined resolutions (8)
-	     ...                                          
-	63 = /dev/fb1user7                                 
+For backwards compatibility, you may want to create the following symbolic
+links:
+
+    /dev/fb0current -> fb0
+    /dev/fb1current -> fb1
 
 and so on...
-
-The device with (minor & 31) == 0 (/dev/fb?current) stands for the frame buffer
-together with the currently set video parameters; (minor & 31) == 1
-(/dev/fb?autodetect) is the video mode detected at boot time. Any other minor
-stands for some predefined or user defined video mode.
-
-The predefined entries (/dev/fb?predefined*) usually have a device dependent
-name, e.g. for major 29, minor 5, we have /dev/fb0multiscan on Amiga and
-/dev/fb0ttmid on Atari. These are meant to contain hardware dependent
-resolutions.
-
-The user defined resolutions (/dev/fb?user?) are meant to be filled in by the
-user. This way the user can store his favorite 8 resolutions during boot up.
-
-Note: if you need more than 8 user defined resolutions, you can always override
-the predefined resolutions by storing them in one of the predefined entries.
-But this is not recommended. Similarly, if there are more than 22 predefined
-resolutions, the device writer can decide to store them in the user defined
-entries.
-
-If the device is opened (for writing), the frame buffer driver switches to the
-selected video mode. Thus, you can switch video modes by writing to a frame
-buffer device, e.g.
-
-    > /dev/fb0ttlow
-
-will switch your video to TT low mode. Note: if you specify a resolution which
-contains a value that's not possible on your hardware, the frame buffer device
-will round it up (if possible) or return an error condition.
 
 The frame buffer devices are also `normal' memory devices, this means, you can
 read and write their contents. You can, for example, make a screen snapshot by
 
-  cp /dev/fb0current myfile
+  cp /dev/fb0 myfile
 
 There also can be more than one frame buffer at a time, e.g. if you have a
 graphics card in addition to the built-in hardware. The corresponding frame
-buffer devices (/dev/fb0* and /dev/fb1* etc.) work independently.
+buffer devices (/dev/fb0 and /dev/fb1 etc.) work independently.
 
 Application software that uses the frame buffer device (e.g. the X server) will
-use /dev/fb0current by default. You can specify an alternative resolution by
-setting the environment variable $FRAMEBUFFER to the path name of a frame
-buffer device, e.g. (for sh/bash users):
+use /dev/fb0 by default (older software uses /dev/fb0current). You can specify
+an alternative frame buffer device by setting the environment variable
+$FRAMEBUFFER to the path name of a frame buffer device, e.g. (for sh/bash
+users):
 
-    export FRAMEBUFFER=/dev/fb0multiscan
+    export FRAMEBUFFER=/dev/fb1
 
 or (for csh users):
 
-    setenv FRAMEBUFFER /dev/fb0multiscan
+    setenv FRAMEBUFFER /dev/fb1
 
-After this the X server will use the multiscan video mode.
+After this the X server will use the second frame buffer.
 
 
 2. Programmer's View of /dev/fb*
@@ -152,23 +114,20 @@ much trouble...
 --------------------------------------
 
 Frame buffer resolutions are maintained using the utility `fbset'. It allows to
-change the video mode properties of the current or a user defined resolution.
-It's main usage is to tune video modes and to store custom resolutions into one
-of the /dev/fb?user?  entries, e.g. during boot up in one of your /etc/rc.* or
-/etc/init.d/* files, after which those resolutions can be used by applications.
+change the video mode properties of the current resolution. It's main usage is
+to change the current video mode, e.g. during boot up in one of your /etc/rc.*
+or /etc/init.d/* files.
 
 Fbset uses a video mode database stored in a configuration file, so you can
-easily add your own modes and refer to them with a simple identifier. The fbset
-install script also creates the special device nodes for the device dependent
-predefined resolutions.
+easily add your own modes and refer to them with a simple identifier.
 
 
 4. The X Server
 ---------------
 
 The X server (XF68_FBDev) is the most notable application program for the frame
-buffer device. The current X server is part of the XFree86/XFree68 release 3.2
-package and has 2 modes:
+buffer device. The current X server is part of the XFree86/XFree68 release
+3.3.1 package and has 2 modes:
 
   - If the `Display' subsection for the `fbdev' driver in the /etc/XF86Config
     file contains a
@@ -347,7 +306,7 @@ applications, please refer to the following documentation:
   - The mighty kernel sources:
       o linux/include/linux/fb.h
       o linux/drivers/char/fbmem.c
-      o linux/arch/m68k/*/*fb.c
+      o linux/drivers/video/*fb.c
 
 
 8. Downloading

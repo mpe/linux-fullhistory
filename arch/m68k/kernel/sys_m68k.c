@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/file.h>
+#include <linux/utsname.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -308,6 +309,10 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 	    }
 	  if (!--i && len)
 	    {
+	      /*
+	       * No need to page align here since it is done by
+	       * virt_to_phys_040().
+	       */
 	      addr += PAGE_SIZE;
 	      i = PAGE_SIZE / 16;
 	      /* Recompute physical address when crossing a page
@@ -462,7 +467,14 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 	    }
 	  if (!--i && len)
 	    {
+
+	      /*
+	       * We just want to jump to the first cache line
+	       * in the next page.
+	       */
 	      addr += PAGE_SIZE;
+	      addr &= PAGE_MASK;
+
 	      i = PAGE_SIZE / 16;
 	      /* Recompute physical address when crossing a page
 	         boundary. */
@@ -559,13 +571,13 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 				cacr |= 4;
 			if (cache & FLUSH_CACHE_DATA)
 				cacr |= 0x400;
-			len >>= 4;
+			len >>= 2;
 			while (len--) {
 				__asm__ __volatile__ ("movec %1, %%caar\n\t"
 						      "movec %0, %%cacr"
 						      : /* no outputs */
 						      : "r" (cacr), "r" (addr));
-				addr += 16;
+				addr += 4;
 			}
 		} else {
 			/* Flush the whole cache, even if page granularity requested. */
@@ -587,4 +599,14 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 out:
 	unlock_kernel();
 	return ret;
+}
+
+/*
+ * Old cruft
+ */
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }

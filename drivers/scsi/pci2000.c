@@ -653,7 +653,7 @@ int Pci2000_BiosParam (Scsi_Disk *disk, kdev_t dev, int geom[])
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = PCI2220I;
+Scsi_Host_Template driver_template = PCI2000;
 
 #include "scsi_module.c"
 #endif

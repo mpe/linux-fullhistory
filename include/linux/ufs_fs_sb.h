@@ -8,6 +8,8 @@
  *
  * $Id: ufs_fs_sb.h,v 1.6 1996/06/01 15:31:08 ecd Exp $
  *
+ * NeXTstep support added on February 5th 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk>.
  */
 
 #ifndef __LINUX_UFS_FS_SB_H
@@ -35,6 +37,7 @@ struct ufs_sb_info {
 	__u32	s_lshift;
 	__u32	s_lmask;
 	__u32	s_fsfrag;
+	__u32	s_blockbase;	/* offset of NeXTstep superblock */
 };
 
 #endif /* __LINUX_UFS_FS_SB_H */

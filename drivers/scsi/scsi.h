@@ -685,7 +685,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 #define INIT_SCSI_REQUEST       \
     if (!CURRENT) {             \
 	CLEAR_INTR;             \
-	restore_flags(flags);	\
+	spin_unlock_irqrestore(&current_lock,flags);	\
 	return;                 \
     }                           \
     if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)           \

@@ -35,6 +35,11 @@ static struct request all_requests[NR_REQUEST];
 DECLARE_TASK_QUEUE(tq_disk);
 
 /*
+ * Protect the request list against multiple users..
+ */
+spinlock_t current_lock = SPIN_LOCK_UNLOCKED;
+
+/*
  * used to wait on when there are no free requests
  */
 struct wait_queue * wait_for_request = NULL;

@@ -30,13 +30,15 @@ extern void (*mach_gettod)(int *year, int *mon, int *day, int *hour,
 extern int (*mach_hwclk)(int, struct hwclk_time*);
 extern int (*mach_set_clock_mmss)(unsigned long);
 extern void (*mach_reset)( void );
-extern int (*mach_floppy_init) (void);
 extern unsigned long (*mach_hd_init) (unsigned long, unsigned long);
 extern void (*mach_hd_setup)(char *, int *);
-extern struct fb_info *(*mach_fb_init)(long *);
 extern long mach_max_dma_address;
-extern void (*mach_video_setup)(char *, int *);
 extern void (*mach_floppy_setup)(char *, int *);
 extern void (*mach_floppy_eject)(void);
+extern void (*mach_heartbeat) (int);
+extern int mach_sysrq_key;
+extern int mach_sysrq_shift_state;
+extern int mach_sysrq_shift_mask;
+extern char *mach_sysrq_xlate;
 
 #endif /* _M68K_MACHDEP_H */

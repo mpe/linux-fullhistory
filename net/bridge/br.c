@@ -1386,7 +1386,7 @@ static int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
 
 static int br_drop(struct sk_buff *skb)
 {
-	kfree_skb(skb, 0);
+	kfree_skb(skb);
 	return(1);
 }
 
@@ -1396,7 +1396,7 @@ static int br_drop(struct sk_buff *skb)
 
 static int br_dev_drop(struct sk_buff *skb)
 {
-	dev_kfree_skb(skb, 0);
+	dev_kfree_skb(skb);
 	return(1);
 }
 

@@ -282,6 +282,7 @@ struct tty_struct {
 #define TTY_CLOSING 7
 #define TTY_HW_COOK_OUT 14
 #define TTY_HW_COOK_IN 15
+#define TTY_PTY_LOCK 16
 
 #define TTY_WRITE_FLUSH(tty) tty_write_flush((tty))
 

@@ -1,6 +1,5 @@
-
 /*
- *  linux/atari/stmda.c
+ *  linux/arch/m68k/atari/stmda.c
  *
  *  Copyright (C) 1994 Roman Hodek
  *
@@ -37,7 +36,6 @@
 #include <asm/atari_stdma.h>
 #include <asm/atariints.h>
 #include <asm/atarihw.h>
-#include <asm/atarihdreg.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 

@@ -1046,7 +1046,7 @@ sys_call_table:
 	.quad sys_bdflush			/* 300 */
 	.quad sys_sethae
 	.quad sys_mount
-	.quad sys_adjtimex
+	.quad sys_old_adjtimex
 	.quad sys_swapoff
 	.quad sys_getdents			/* 305 */
 	.quad alpha_create_module

@@ -16,7 +16,7 @@ all: kernel.o head.o
 
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
-	    bios32.o ptrace.o time.o
+	    bios32.o ptrace.o time.o fpreg.o
 OX_OBJS  := alpha_ksyms.o
 
 

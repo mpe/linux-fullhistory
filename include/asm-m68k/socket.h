@@ -33,4 +33,10 @@
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	23
 #define SO_SECURITY_ENCRYPTION_NETWORK		24
 
+#define SO_BINDTODEVICE	25
+
+/* Socket filtering */
+#define SO_ATTACH_FILTER        26
+#define SO_DETACH_FILTER        27
+
 #endif /* _ASM_SOCKET_H */

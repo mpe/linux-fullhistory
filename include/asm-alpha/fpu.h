@@ -81,7 +81,38 @@ ieee_swcr_to_fpcr(unsigned long sw)
 	return fp;
 }
 
-extern unsigned long rdfpcr(void);
-extern void wrfpcr(unsigned long);
+#ifdef __KERNEL__
+
+/* The following two functions don't need trapb/excb instructions
+   around the mf_fpcr/mt_fpcr instructions because (a) the kernel
+   never generates arithmetic faults and (b) call_pal instructions
+   are implied trap barriers.  */
+
+static inline unsigned long rdfpcr(void)
+{
+	unsigned long tmp, ret;
+	__asm__ ("stt $f0,%0\n\t"
+		 "mf_fpcr $f0\n\t"
+		 "stt $f0,%1\n\t"
+		 "ldt $f0,%0"
+		: "=m"(tmp), "=m"(ret));
+	return ret;
+}
+
+static inline void wrfpcr(unsigned long val)
+{
+	unsigned long tmp;
+	__asm__ __volatile__ (
+		"stt $f0,%0\n\t"
+		"ldt $f0,%1\n\t"
+		"mt_fpcr $f0\n\t"
+		"ldt $f0,%0"
+		: "=m"(tmp) : "m"(val));
+}
+
+extern unsigned long alpha_read_fp_reg (unsigned long reg);
+extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
+
+#endif /* __KERNEL__ */
 
 #endif /* __ASM_ALPHA_FPU_H */

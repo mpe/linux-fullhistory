@@ -21,6 +21,7 @@
 #include <asm/checksum.h>
 #include <linux/interrupt.h>
 #include <asm/softirq.h>
+#include <asm/fpu.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -88,6 +89,8 @@ EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(hwrpb);
 EXPORT_SYMBOL(wrusp);
 EXPORT_SYMBOL(start_thread);
+EXPORT_SYMBOL(alpha_read_fp_reg);
+EXPORT_SYMBOL(alpha_write_fp_reg);
 
 /* In-kernel system calls.  */
 EXPORT_SYMBOL(__kernel_thread);
@@ -109,6 +112,11 @@ EXPORT_SYMBOL(ip_fast_csum);
 EXPORT_SYMBOL(csum_partial_copy);
 EXPORT_SYMBOL(csum_partial_copy_from_user);
 EXPORT_SYMBOL(csum_ipv6_magic);
+
+#ifdef CONFIG_MATHEMU_MODULE
+extern long (*alpha_fp_emul_imprecise)(struct pt_regs *, unsigned long);
+EXPORT_SYMBOL(alpha_fp_emul_imprecise);
+#endif
 
 /*
  * The following are specially called from the uaccess assembly stubs.

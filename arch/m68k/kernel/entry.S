@@ -37,6 +37,8 @@
 #include <asm/setup.h>
 #include <asm/segment.h>
 
+#include "m68k_defs.h"
+
 .globl SYMBOL_NAME(system_call), SYMBOL_NAME(buserr), SYMBOL_NAME(trap)
 .globl SYMBOL_NAME(resume), SYMBOL_NAME(ret_from_exception)
 .globl SYMBOL_NAME(ret_from_signal)
@@ -63,9 +65,7 @@ ENTRY(trap)
 
 ENTRY(reschedule)
 	| save top of frame
-	pea	%sp@
-	jbsr	SYMBOL_NAME(set_esp0)
-	addql	#4,%sp
+	movel	%sp,%curptr@(TS_ESP0)
 
 	pea	SYMBOL_NAME(ret_from_exception)
 	jmp	SYMBOL_NAME(schedule)
@@ -98,9 +98,7 @@ ENTRY(system_call)
 
 	GET_CURRENT(%d0)
 	| save top of frame
-	pea	%sp@
-	jbsr	SYMBOL_NAME(set_esp0)
-	addql	#4,%sp
+	movel	%sp,%curptr@(TS_ESP0)
 
 	cmpl	#NR_syscalls,%d2
 	jcc	badsys
@@ -112,6 +110,10 @@ ENTRY(system_call)
 SYMBOL_NAME_LABEL(ret_from_exception)
 	btst	#5,%sp@(LPT_OFF_SR)	| check if returning to kernel
 	bnes	2f			| if so, skip resched, signals
+	| only allow interrupts when we are really the last one on the
+	| kernel stack, otherwise stack overflow can occur during
+	| heavy interupt load
+	andw	#ALLOWINT,%sr
 	tstl	SYMBOL_NAME(need_resched)
 	jne	SYMBOL_NAME(reschedule)
 	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
@@ -122,16 +124,8 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 5:
 	tstl	%curptr@(LTASK_STATE)	| state
 	jne	SYMBOL_NAME(reschedule)
-	tstl	%curptr@(LTASK_COUNTER)	| counter
-	jeq	SYMBOL_NAME(reschedule)
 
-	movel	%curptr@(LTASK_BLOCKED),%d0
-	movel	%d0,%d1			| save blocked in d1 for sig handling
-	notl	%d0
-	btst	#LPF_PTRACED_BIT,%curptr@(LTASK_FLAGS+LPF_PTRACED_OFF)
-	jeq	1f
-	moveq	#-1,%d0			| let the debugger see all signals
-1:	andl	%curptr@(LTASK_SIGNAL),%d0
+	tstl	%curptr@(LTASK_SIGPENDING)
 	jne	Lsignal_return
 2:	RESTORE_ALL
 
@@ -139,7 +133,7 @@ Lsignal_return:
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	pea	%sp@(SWITCH_STACK_SIZE)
-	movel	%d1,%sp@-
+	clrl	%sp@-
 	bsrl	SYMBOL_NAME(do_signal)
 	addql	#8,%sp
 	RESTORE_SWITCH_STACK
@@ -184,11 +178,6 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 #endif
 	jhi	2b
 #endif
-	/* Let the rest run with interrupts allowed.  This is safe since
-	   the kernel never uses a non-standard ipl and this is the outer
-	   level interrupt. */
-	andw	#ALLOWINT,%sr
-
 	/* check if we need to do software interrupts */
 
 	movel	SYMBOL_NAME(bh_active),%d0
@@ -229,9 +218,23 @@ ENTRY(sys_sigsuspend)
 	RESTORE_SWITCH_STACK
 	rts
 
+ENTRY(sys_rt_sigsuspend)
+	SAVE_SWITCH_STACK
+	pea	%sp@(SWITCH_STACK_SIZE)
+	jbsr	SYMBOL_NAME(do_rt_sigsuspend)
+	addql	#4,%sp
+	RESTORE_SWITCH_STACK
+	rts
+
 ENTRY(sys_sigreturn)
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(do_sigreturn)
+	RESTORE_SWITCH_STACK
+	rts
+
+ENTRY(sys_rt_sigreturn)
+	SAVE_SWITCH_STACK
+	jbsr	SYMBOL_NAME(do_rt_sigreturn)
 	RESTORE_SWITCH_STACK
 	rts
 
@@ -250,11 +253,6 @@ SYMBOL_NAME_LABEL(resume)
 
 	/* save sr */
 	movew	%sr,%a0@(LTSS_SR)
-
-#if 0
-	/* disable interrupts */
-	oriw	#0x0700,%sr
-#endif
 
 	/* save fs (sfc,%dfc) (may be pointing to kernel memory) */
 	movec	%sfc,%d0
@@ -415,7 +413,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
 	.long SYMBOL_NAME(sys_chown)
-	.long SYMBOL_NAME(sys_break)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
 	.long SYMBOL_NAME(sys_getpid)		/* 20 */
@@ -429,11 +427,11 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_fstat)
 	.long SYMBOL_NAME(sys_pause)
 	.long SYMBOL_NAME(sys_utime)		/* 30 */
-	.long SYMBOL_NAME(sys_stty)
-	.long SYMBOL_NAME(sys_gtty)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old stty syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old gtty syscall holder */
 	.long SYMBOL_NAME(sys_access)
 	.long SYMBOL_NAME(sys_nice)
-	.long SYMBOL_NAME(sys_ftime)		/* 35 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* 35 */		/* old ftime syscall holder */
 	.long SYMBOL_NAME(sys_sync)
 	.long SYMBOL_NAME(sys_kill)
 	.long SYMBOL_NAME(sys_rename)
@@ -442,7 +440,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_dup)
 	.long SYMBOL_NAME(sys_pipe)
 	.long SYMBOL_NAME(sys_times)
-	.long SYMBOL_NAME(sys_prof)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old prof syscall holder */
 	.long SYMBOL_NAME(sys_brk)		/* 45 */
 	.long SYMBOL_NAME(sys_setgid)
 	.long SYMBOL_NAME(sys_getgid)
@@ -450,14 +448,14 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_geteuid)
 	.long SYMBOL_NAME(sys_getegid)		/* 50 */
 	.long SYMBOL_NAME(sys_acct)
-	.long SYMBOL_NAME(sys_phys)
-	.long SYMBOL_NAME(sys_lock)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old phys syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old lock syscall holder */
 	.long SYMBOL_NAME(sys_ioctl)
 	.long SYMBOL_NAME(sys_fcntl)		/* 55 */
-	.long SYMBOL_NAME(sys_mpx)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old mpx syscall holder */
 	.long SYMBOL_NAME(sys_setpgid)
-	.long SYMBOL_NAME(sys_ulimit)
-	.long SYMBOL_NAME(sys_olduname)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old ulimit syscall holder */
+	.long SYMBOL_NAME(sys_ni_syscall)
 	.long SYMBOL_NAME(sys_umask)		/* 60 */
 	.long SYMBOL_NAME(sys_chroot)
 	.long SYMBOL_NAME(sys_ustat)
@@ -496,7 +494,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_fchown)		/* 95 */
 	.long SYMBOL_NAME(sys_getpriority)
 	.long SYMBOL_NAME(sys_setpriority)
-	.long SYMBOL_NAME(sys_profil)
+	.long SYMBOL_NAME(sys_ni_syscall)				/* old profil syscall holder */
 	.long SYMBOL_NAME(sys_statfs)
 	.long SYMBOL_NAME(sys_fstatfs)		/* 100 */
 	.long SYMBOL_NAME(sys_ioperm)
@@ -507,7 +505,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_newstat)
 	.long SYMBOL_NAME(sys_newlstat)
 	.long SYMBOL_NAME(sys_newfstat)
-	.long SYMBOL_NAME(sys_uname)
+	.long SYMBOL_NAME(sys_ni_syscall)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* iopl for i386 */ /* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
 	.long SYMBOL_NAME(sys_idle)
@@ -568,9 +566,19 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_query_module)
 	.long SYMBOL_NAME(sys_poll)
 	.long SYMBOL_NAME(sys_nfsservctl)
+	.long SYMBOL_NAME(sys_setresgid)	/* 170 */
+	.long SYMBOL_NAME(sys_getresgid)
 	.long SYMBOL_NAME(sys_prctl)
-	.long SYMBOL_NAME(sys_pread)
+	.long SYMBOL_NAME(sys_rt_sigreturn)
+	.long SYMBOL_NAME(sys_rt_sigaction)
+	.long SYMBOL_NAME(sys_rt_sigprocmask)	/* 175 */
+	.long SYMBOL_NAME(sys_rt_sigpending)
+	.long SYMBOL_NAME(sys_rt_sigtimedwait)
+	.long SYMBOL_NAME(sys_rt_sigqueueinfo)
+	.long SYMBOL_NAME(sys_rt_sigsuspend)
+	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
+	.long SYMBOL_NAME(sys_lchown);
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

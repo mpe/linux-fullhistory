@@ -36,6 +36,10 @@
  *   2) instead of byteswapping, use [bl]e_to_cpu:
  *     it might be that we run on a VAX!
  *
+ * 4.4BSD (FreeBSD) support added on February 1st 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
+ * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
+ *
  * HOWTO continue adding swab support:
  *	basically, anywhere metadata is bread() (i.e. mapped to block device),
  *      data should either be SWAB()ed on the fly,
@@ -106,33 +110,69 @@ static __inline__ void n_le32_to_cpus(__u32*p,unsigned n) {
 
 /*
  * Here are the whole-structure swabping routines...
+ * They were fun to design, but I don't understand why we
+ * need a copy of the superblock, anyway. -- Fare'
  */
 
 extern void ufs_superblock_be_to_cpus(struct ufs_superblock * usb) {
 #ifndef __BIG_ENDIAN
+	__u16 sb_type = 1;	/* SUN type superblock */
+
+	if (usb->fs_u.fs_44.fs_maxsymlinklen >= 0)
+		sb_type = 0;	/* 4.4BSD (FreeBSD) type superblock */
+ 
 	be32_to_cpus__between(*usb,fs_link,fs_fmod);
         /* XXX - I dunno what to do w/ fs_csp,
          * but it is unused by the current code, so that's ok for now.
          */
 	be32_to_cpus(&usb->fs_cpc);
-        be16_to_cpus__between(*usb,fs_opostbl,fs_sparecon);
-        be32_to_cpus__between(*usb,fs_sparecon,fs_qbmask);
-        be64_to_cpus((__u64 *) &usb->fs_qbmask);
-        be64_to_cpus((__u64 *) &usb->fs_qfmask);
+	if (sb_type) {
+        	be16_to_cpus__between(*usb,fs_opostbl,fs_u.fs_sun.fs_sparecon);
+        	be32_to_cpus__between(*usb,fs_u.fs_sun.fs_sparecon,fs_u.fs_sun.fs_qbmask);
+                /* Might fail on strictly aligning 64-bit big-endian
+                 * architectures. Ouch!
+                 */
+        	be64_to_cpus((__u64 *) &usb->fs_u.fs_sun.fs_qbmask);
+        	be64_to_cpus((__u64 *) &usb->fs_u.fs_sun.fs_qfmask);
+	} else {
+        	be16_to_cpus__between(*usb,fs_opostbl,fs_u.fs_44.fs_sparecon);
+        	be32_to_cpus__between(*usb,fs_u.fs_sun.fs_sparecon,fs_u.fs_44.fs_maxfilesize);
+        	be64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_maxfilesize);
+        	be64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_qbmask);
+        	be64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_qfmask);
+        	be32_to_cpus((__s32 *) &usb->fs_u.fs_44.fs_state);
+	}
 	be32_to_cpus__between(*usb,fs_postblformat,fs_magic);
 #endif
 }
 extern void ufs_superblock_le_to_cpus(struct ufs_superblock * usb) {
 #ifndef __LITTLE_ENDIAN
+	__u16 sb_type = 1;	/* SUN type superblock */
+
+	if (usb->fs_u.fs_44.fs_maxsymlinklen >= 0)
+		sb_type = 0;	/* 4.4BSD (FreeBSD) type superblock */
+ 
 	le32_to_cpus__between(*usb,fs_link,fs_fmod);
         /* XXX - I dunno what to do w/ fs_csp,
          * but it is unused by the current code, so that's ok for now.
          */
 	le32_to_cpus(&usb->fs_cpc);
-        le16_to_cpus__between(*usb,fs_opostbl,fs_sparecon);
-        le32_to_cpus__between(*usb,fs_sparecon,fs_qbmask);
-        le64_to_cpus(&usb->fs_qbmask);
-        le64_to_cpus(&usb->fs_qfmask);
+	if (sb_type) {
+        	le16_to_cpus__between(*usb,fs_opostbl,fs_u.fs_sun.fs_sparecon);
+        	le32_to_cpus__between(*usb,fs_u.fs_sun.fs_sparecon,fs_u.fs_sun.fs_qbmask);
+                /* Might fail on strictly aligning 64-bit big-endian
+                 * architectures. Ouch!
+                 */
+        	le64_to_cpus((__u64 *) &usb->fs_u.fs_sun.fs_qbmask);
+        	le64_to_cpus((__u64 *) &usb->fs_u.fs_sun.fs_qfmask);
+	} else {
+        	le16_to_cpus__between(*usb,fs_opostbl,fs_u.fs_44.fs_sparecon);
+        	le32_to_cpus__between(*usb,fs_u.fs_sun.fs_sparecon,fs_u.fs_44.fs_maxfilesize);
+        	le64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_maxfilesize);
+        	le64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_qbmask);
+        	le64_to_cpus((__u64 *) &usb->fs_u.fs_44.fs_qfmask);
+        	le32_to_cpus((__s32 *) &usb->fs_u.fs_44.fs_state);
+	}
 	le32_to_cpus__between(*usb,fs_postblformat,fs_magic);
 #endif
 }

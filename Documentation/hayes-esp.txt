@@ -1,14 +1,37 @@
-HAYES ESP DRIVER VERSION 1.6
+HAYES ESP DRIVER VERSION 2.0
+
+A big thanks to the people at Hayes, especially Alan Adamson.  Their support
+has enabled me to provide enhancements to the driver.
+
+Please report your experiences with this driver to me (arobinso@nyx.net).  I
+am looking for both positive and negative feedback.
+
+*** IMPORTANT CHANGES FOR 2.0 ***
+Support for PIO mode.  Five situations will cause PIO mode to be used:
+1) A multiport card is detected.  PIO mode will always be used.  (8 port cards
+do not support DMA).
+2) The DMA channel is set to an invalid value (anything other than 1 or 3).
+3) The DMA buffer/channel could not be allocated.  The port will revert to PIO
+mode until it is reopened.
+4) Less than 33 bytes need to be transferred to/from the FIFOs.  PIO mode will
+be used for that transfer only.
+5) A port needs to do a DMA transfer and another port is already using the
+DMA channel.  PIO mode will be used for that transfer only.
+
+A patch for setserial (2.12) is included to allow the ESP enhanced mode
+configuration to be viewed and changed.
+***
+
+This package contains the files needed to compile a module to support the Hayes
+ESP card.  The drivers are basically a modified version of the serial drivers.
 
 Features:
 
 - Uses the enhanced mode of the ESP card, allowing a wider range of
   interrupts and features than compatibilty mode
-- Uses DMA to transfer data to and from the ESP's FIFOs, reducing CPU load
+- Uses DMA and 16 bit PIO mode to transfer data to and from the ESP's FIFOs,
+  reducing CPU load
 - Supports primary and secondary ports
-- Special version of setserial can be used to view/change the enhanced mode
-  configuration.  The setserial patch is distributed with the standalone
-  driver distribution.  See http://www.nyx.net/~arobinso for more information.
 
 To compile/install:
 
@@ -47,7 +70,8 @@ be:
 insmod esp divisor=0,0,0,0,0,0,0x84,0
 
 The dma= option can be used to set the DMA channel.  The channel can be either
-1 or 3.  For example, to set the dma channel to 3, the insmod command would be:
+1 or 3.  Specifying any other value will force the driver to use PIO mode.
+For example, to set the dma channel to 3, the insmod command would be:
 
 insmod esp dma=3
 

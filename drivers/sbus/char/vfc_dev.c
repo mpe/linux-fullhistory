@@ -666,9 +666,6 @@ int init_module(void)
 int vfc_init(void)
 #endif
 {
-#ifdef MODULE
-	register_symtab(0);
-#endif
 	return vfc_probe();
 }
 

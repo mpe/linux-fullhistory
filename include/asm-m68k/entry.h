@@ -40,12 +40,11 @@
 /*
  * these are offsets into the task-struct
  */
-LTASK_STATE	=  0
-LTASK_COUNTER	=  4
-LTASK_PRIORITY	=  8
-LTASK_SIGNAL	= 12
-LTASK_BLOCKED	= 16
-LTASK_FLAGS	= 20
+LTASK_STATE	 =  0
+LTASK_FLAGS	 =  4
+LTASK_SIGPENDING =  8
+LTASK_ADDRLIMIT	 = 12
+LTASK_EXECDOMAIN = 16
 
 LTSS_KSP	= 0
 LTSS_USP	= 4
@@ -55,7 +54,7 @@ LTSS_CRP	= 12
 LTSS_FPCTXT	= 24
 
 /* the following macro is used when enabling interrupts */
-#if defined(MACH_ATARI_ONLY)
+#if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
 	/* block out HSYNC on the atari */
 #define ALLOWINT 0xfbff
 #define	MAX_NOINT_IPL	3

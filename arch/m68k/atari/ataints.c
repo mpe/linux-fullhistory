@@ -166,7 +166,7 @@ static int free_vme_vec_bitmap = 0;
 asmlinkage void IRQ_NAME(n);						   \
 /* Dummy function to allow asm with operands.  */			   \
 void atari_slow_irq_##n##_dummy (void) {				   \
-__asm__ (ALIGN_STR "\n"							   \
+__asm__ (__ALIGN_STR "\n"						   \
 SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
 "	addql	#1,"SYMBOL_NAME_STR(local_irq_count)"\n"		   \
 	SAVE_ALL_INT "\n"						   \
@@ -190,7 +190,7 @@ SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
 "	andw	#0xfeff,%%sr\n"		/* set IPL = 6 again */		   \
 "	orb 	#(1<<(%c3&7)),%a4:w\n"	/* now unmask the int again */	   \
 "	jbra	"SYMBOL_NAME_STR(ret_from_interrupt)"\n"		   \
-	 : : "i" (&kstat.interrupts[n+8]), "i" (&irq_handler[n+8]),	   \
+	 : : "i" (&kstat.irqs[0][n+8]), "i" (&irq_handler[n+8]),	   \
 	     "n" (PT_OFF_SR), "n" (n),					   \
 	     "i" (n & 8 ? (n & 16 ? &tt_mfp.int_mk_a : &mfp.int_mk_a)	   \
 		        : (n & 16 ? &tt_mfp.int_mk_b : &mfp.int_mk_b))	   \
@@ -270,7 +270,7 @@ asmlinkage void atari_prio_irq_handler( void );
 
 /* Dummy function to allow asm with operands.  */
 void atari_fast_prio_irq_dummy (void) {
-__asm__ (ALIGN_STR "\n"
+__asm__ (__ALIGN_STR "\n"
 SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	orw 	#0x700,%%sr		/* disable all interrupts */
 "SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t
@@ -294,7 +294,7 @@ SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	addql	#8,%%sp
 	addql	#4,%%sp
 	jbra	"SYMBOL_NAME_STR(ret_from_interrupt)
-	 : : "i" (&kstat.interrupts), "n" (PT_OFF_FORMATVEC)
+	 : : "i" (&kstat.irqs), "n" (PT_OFF_FORMATVEC)
 );
 }
 
@@ -304,7 +304,7 @@ SYMBOL_NAME_STR(atari_fast_irq_handler) ":
  */
 asmlinkage void falcon_hblhandler(void);
 asm(".text\n"
-ALIGN_STR "\n"
+__ALIGN_STR "\n"
 SYMBOL_NAME_STR(falcon_hblhandler) ":
 	orw	#0x200,%sp@	/* set saved ipl to 2 */
 	rte");
@@ -313,6 +313,8 @@ SYMBOL_NAME_STR(falcon_hblhandler) ":
 asmlinkage void bad_interrupt(void);
 
 extern void atari_microwire_cmd( int cmd );
+
+extern int atari_SCC_reset_done;
 
 /*
  * void atari_init_IRQ (void)
@@ -358,7 +360,7 @@ __initfunc(void atari_init_IRQ(void))
 		tt_mfp.int_mk_b = 0xff;
 	}
 
-	if (ATARIHW_PRESENT(SCC)) {
+	if (ATARIHW_PRESENT(SCC) && !atari_SCC_reset_done) {
 		scc.cha_a_ctrl = 9;
 		MFPDELAY();
 		scc.cha_a_ctrl = (char) 0xc0; /* hardware reset */
@@ -374,10 +376,13 @@ __initfunc(void atari_init_IRQ(void))
 		tt_scu.vme_mask = 0x60;		/* enable MFP and SCC ints */
 	}
 	else {
-		/* If no SCU, the HSYNC interrupt needs to be disabled this
-		 * way. (Else _inthandler in kernel/sys_call.S gets overruns)
+		/* If no SCU and no Hades, the HSYNC interrupt needs to be
+		 * disabled this way. (Else _inthandler in kernel/sys_call.S
+		 * gets overruns)
 		 */
-		vectors[VEC_INT2] = falcon_hblhandler;
+
+		if (!MACH_IS_HADES)
+			vectors[VEC_INT2] = falcon_hblhandler;
 	}
 
 	if (ATARIHW_PRESENT(PCM_8BIT) && ATARIHW_PRESENT(MICROWIRE)) {
@@ -414,7 +419,14 @@ int atari_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
                       unsigned long flags, const char *devname, void *dev_id)
 {
 	int vector;
-	
+
+	/*
+	 * The following is a hack to make some PCI card drivers work,
+	 * which set the SA_SHIRQ flag.
+	 */
+
+	flags &= ~SA_SHIRQ;
+
 	if (flags < IRQ_TYPE_SLOW || flags > IRQ_TYPE_PRIO) {
 		printk ("%s: Bad irq type %ld requested from %s\n",
 		        __FUNCTION__, flags, devname);
@@ -600,11 +612,11 @@ int atari_get_irq_list(char *buf)
 			continue;
 		if (i < STMFP_SOURCE_BASE)
 			len += sprintf(buf+len, "auto %2d: %10u ",
-				       i, kstat.interrupts[i]);
+				       i, kstat.irqs[0][i]);
 		else
 			len += sprintf(buf+len, "vec $%02x: %10u ",
 				       IRQ_SOURCE_TO_VECTOR(i),
-				       kstat.interrupts[i]);
+				       kstat.irqs[0][i]);
 
 		if (irq_handler[i].handler != atari_call_irq_list) {
 			len += sprintf(buf+len, "%s\n", irq_param[i].devname);

@@ -6,8 +6,7 @@
 
   This program is free software; you may redistribute and/or modify it under
   the terms of the GNU General Public License Version 2 as published by the
-  Free Software Foundation, provided that none of the source code or runtime
-  copyright notices are removed or modified.
+  Free Software Foundation.
 
   This program is distributed in the hope that it will be useful, but
   WITHOUT ANY WARRANTY, without even the implied warranty of MERCHANTABILITY
@@ -27,6 +26,9 @@
 */
 
 
+#include <linux/config.h>
+
+
 /*
   Define types for some of the structures that interface with the rest
   of the Linux Kernel and SCSI Subsystem.
@@ -35,6 +37,7 @@
 typedef kdev_t KernelDevice_T;
 typedef struct proc_dir_entry PROC_DirectoryEntry_T;
 typedef struct pt_regs Registers_T;
+typedef struct partition PartitionTable_T;
 typedef Scsi_Host_Template SCSI_Host_Template_T;
 typedef struct Scsi_Host SCSI_Host_T;
 typedef struct scsi_device SCSI_Device_T;
@@ -63,19 +66,19 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
   Define the BusLogic SCSI Host Template structure.
 */
 
-#define BUSLOGIC							 \
-  { proc_dir:          &BusLogic_ProcDirectoryEntry,	/* /proc Directory Entry     */	 \
-    proc_info:         BusLogic_ProcDirectoryInfo,	/* /proc Info Function	     */	 \
-    name:              "BusLogic",			/* Driver Name		     */	 \
-    detect:            BusLogic_DetectHostAdapter,	/* Detect Host Adapter	     */	 \
-    release:           BusLogic_ReleaseHostAdapter,	/* Release Host Adapter	     */	 \
-    info:              BusLogic_DriverInfo,		/* Driver Info Function	     */	 \
-    queuecommand:      BusLogic_QueueCommand,		/* Queue Command Function    */	 \
-    abort:             BusLogic_AbortCommand,		/* Abort Command Function    */	 \
-    reset:             BusLogic_ResetCommand,		/* Reset Command Function    */	 \
-    bios_param:        BusLogic_BIOSDiskParameters,	/* BIOS Disk Parameters	     */	 \
-    unchecked_isa_dma: 1,				/* Default Unchecked ISA DMA */	 \
-    use_clustering:    ENABLE_CLUSTERING }		/* Enable Clustering	     */
+#define BUSLOGIC							       \
+  { proc_dir:       &BusLogic_ProcDirectoryEntry, /* ProcFS Directory Entry */ \
+    proc_info:      BusLogic_ProcDirectoryInfo,	  /* ProcFS Info Function   */ \
+    name:           "BusLogic",			  /* Driver Name            */ \
+    detect:         BusLogic_DetectHostAdapter,	  /* Detect Host Adapter    */ \
+    release:        BusLogic_ReleaseHostAdapter,  /* Release Host Adapter   */ \
+    info:           BusLogic_DriverInfo,	  /* Driver Info Function   */ \
+    queuecommand:   BusLogic_QueueCommand,	  /* Queue Command Function */ \
+    abort:          BusLogic_AbortCommand,	  /* Abort Command Function */ \
+    reset:          BusLogic_ResetCommand,	  /* Reset Command Function */ \
+    bios_param:     BusLogic_BIOSDiskParameters,  /* BIOS Disk Parameters   */ \
+    unchecked_isa_dma: 1,			  /* Default Initial Value  */ \
+    use_clustering: ENABLE_CLUSTERING }		  /* Enable Clustering	    */
 
 
 /*
@@ -83,6 +86,24 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 */
 
 #ifdef BusLogic_DriverVersion
+
+
+/*
+  FlashPoint support is only available for the Intel x86 Architecture with
+  CONFIG_PCI set.
+*/
+
+#ifndef __i386__
+#undef CONFIG_SCSI_OMIT_FLASHPOINT
+#define CONFIG_SCSI_OMIT_FLASHPOINT
+#endif
+
+#ifndef CONFIG_PCI
+#undef CONFIG_SCSI_OMIT_FLASHPOINT
+#define CONFIG_SCSI_OMIT_FLASHPOINT
+#define BusLogic_InitializeProbeInfoListISA \
+  BusLogic_InitializeProbeInfoList
+#endif
 
 
 /*
@@ -109,16 +130,17 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 
 
 /*
-  Define the maximum, preferred, and default Queue Depth to allow for Target
-  Devices depending on whether or not they support Tagged Queuing and whether
-  or not ISA Bounce Buffers are required.
+  Define the maximum, maximum automatic, minimum automatic, and default Queue
+  Depth to allow for Target Devices depending on whether or not they support
+  Tagged Queuing and whether or not ISA Bounce Buffers are required.
 */
 
-#define BusLogic_MaxTaggedQueueDepth		63
-#define BusLogic_PreferredTaggedQueueDepth	28
-#define BusLogic_TaggedQueueDepthBounceBuffers	2
-#define BusLogic_TaggedQueueDepthAutomatic	0
+#define BusLogic_MaxTaggedQueueDepth		64
+#define BusLogic_MaxAutomaticTaggedQueueDepth	28
+#define BusLogic_MinAutomaticTaggedQueueDepth	7
+#define BusLogic_TaggedQueueDepthBB		3
 #define BusLogic_UntaggedQueueDepth		3
+#define BusLogic_UntaggedQueueDepthBB		2
 
 
 /*
@@ -132,11 +154,29 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 
 
 /*
+  Define the maximum number of Mailboxes that should be used for MultiMaster
+  Host Adapters.  This number is chosen to be larger than the maximum Host
+  Adapter Queue Depth and small enough so that the Host Adapter structure
+  does not cross an allocation block size boundary.
+*/
+
+#define BusLogic_MaxMailboxes			211
+
+
+/*
+  Define the number of CCBs that should be allocated as a group to optimize
+  Kernel memory allocation.
+*/
+
+#define BusLogic_CCB_AllocationGroupSize	7
+
+
+/*
   Define the Host Adapter Line and Message Buffer Sizes.
 */
 
 #define BusLogic_LineBufferSize			100
-#define BusLogic_MessageBufferSize		9900
+#define BusLogic_MessageBufferSize		9700
 
 
 /*
@@ -155,7 +195,27 @@ BusLogic_MessageLevel_T;
 
 static char
   *BusLogic_MessageLevelMap[] =
-    { KERN_INFO, KERN_INFO, KERN_NOTICE, KERN_WARNING, KERN_ERR };
+    { KERN_NOTICE, KERN_NOTICE, KERN_NOTICE, KERN_WARNING, KERN_ERR };
+
+
+/*
+  Define Driver Message macros.
+*/
+
+#define BusLogic_Announce(Format, Arguments...) \
+  BusLogic_Message(BusLogic_AnnounceLevel, Format, ##Arguments)
+
+#define BusLogic_Info(Format, Arguments...) \
+  BusLogic_Message(BusLogic_InfoLevel, Format, ##Arguments)
+
+#define BusLogic_Notice(Format, Arguments...) \
+  BusLogic_Message(BusLogic_NoticeLevel, Format, ##Arguments)
+
+#define BusLogic_Warning(Format, Arguments...) \
+  BusLogic_Message(BusLogic_WarningLevel, Format, ##Arguments)
+
+#define BusLogic_Error(Format, Arguments...) \
+  BusLogic_Message(BusLogic_ErrorLevel, Format, ##Arguments)
 
 
 /*
@@ -175,8 +235,31 @@ BusLogic_HostAdapterType_T;
 #define BusLogic_FlashPointAddressCount		256
 
 static int
-  BusLogic_HostAdapter_AddressCount[3] =
+  BusLogic_HostAdapterAddressCount[3] =
     { 0, BusLogic_MultiMasterAddressCount, BusLogic_FlashPointAddressCount };
+
+
+/*
+  Define macros for testing the Host Adapter Type.
+*/
+
+#ifndef CONFIG_SCSI_OMIT_FLASHPOINT
+
+#define BusLogic_MultiMasterHostAdapterP(HostAdapter) \
+  (HostAdapter->HostAdapterType == BusLogic_MultiMaster)
+
+#define BusLogic_FlashPointHostAdapterP(HostAdapter) \
+  (HostAdapter->HostAdapterType == BusLogic_FlashPoint)
+
+#else
+
+#define BusLogic_MultiMasterHostAdapterP(HostAdapter) \
+  (true)
+
+#define BusLogic_FlashPointHostAdapterP(HostAdapter) \
+  (false)
+
+#endif
 
 
 /*
@@ -192,6 +275,7 @@ typedef enum
   BusLogic_VESA_Bus =				4,
   BusLogic_MCA_Bus =				5
 }
+__attribute__ ((packed))
 BusLogic_HostAdapterBusType_T;
 
 static char
@@ -245,6 +329,13 @@ typedef unsigned int BusLogic_PCI_Address_T;
 
 
 /*
+  Define a 32 bit Base Address data type.
+*/
+
+typedef unsigned int BusLogic_Base_Address_T;
+
+
+/*
   Define a 32 bit Bus Address data type.
 */
 
@@ -276,11 +367,10 @@ BusLogic_ByteCounter_T;
 
 typedef struct BusLogic_ProbeInfo
 {
+  BusLogic_HostAdapterType_T HostAdapterType;
+  BusLogic_HostAdapterBusType_T HostAdapterBusType;
   BusLogic_IO_Address_T IO_Address;
   BusLogic_PCI_Address_T PCI_Address;
-  BusLogic_HostAdapterType_T HostAdapterType:2;
-  BusLogic_HostAdapterBusType_T HostAdapterBusType:3;
-  unsigned char :3;
   unsigned char Bus;
   unsigned char Device;
   unsigned char IRQ_Channel;
@@ -289,35 +379,24 @@ BusLogic_ProbeInfo_T;
 
 
 /*
-  BusLogic_ISA_StandardAddresses is the list of standard ISA I/O Addresses at
-  which BusLogic MultiMaster Host Adapters may potentially be found.  The first
-  I/O Address 0x330 is known as the "Primary" I/O Address.  A Host Adapter
-  configured to use the Primary I/O Address will always be the preferred boot
-  device.
-*/
-
-#define BusLogic_ISA_StandardAddressesCount	6
-
-static BusLogic_IO_Address_T
-  BusLogic_ISA_StandardAddresses[BusLogic_ISA_StandardAddressesCount] =
-    { 0x330, 0x334, 0x230, 0x234, 0x130, 0x134 };
-
-
-/*
   Define the Probe Options.
 */
 
-typedef union BusLogic_ProbeOptions
+typedef struct BusLogic_ProbeOptions
 {
-  unsigned short All;
-  struct {
-    boolean NoProbe:1;					/* Bit 0 */
-    boolean NoProbeISA:1;				/* Bit 1 */
-    boolean NoProbePCI:1;				/* Bit 2 */
-    boolean NoSortPCI:1;				/* Bit 3 */
-    boolean ProbeMultiMasterFirst:1;			/* Bit 4 */
-    boolean ProbeFlashPointFirst:1;			/* Bit 5 */
-  } Bits;
+  boolean NoProbe:1;					/* Bit 0 */
+  boolean NoProbeISA:1;					/* Bit 1 */
+  boolean NoProbePCI:1;					/* Bit 2 */
+  boolean NoSortPCI:1;					/* Bit 3 */
+  boolean MultiMasterFirst:1;				/* Bit 4 */
+  boolean FlashPointFirst:1;				/* Bit 5 */
+  boolean LimitedProbeISA:1;				/* Bit 6 */
+  boolean Probe330:1;					/* Bit 7 */
+  boolean Probe334:1;					/* Bit 8 */
+  boolean Probe230:1;					/* Bit 9 */
+  boolean Probe234:1;					/* Bit 10 */
+  boolean Probe130:1;					/* Bit 11 */
+  boolean Probe134:1;					/* Bit 12 */
 }
 BusLogic_ProbeOptions_T;
 
@@ -326,15 +405,12 @@ BusLogic_ProbeOptions_T;
   Define the Global Options.
 */
 
-typedef union BusLogic_GlobalOptions
+typedef struct BusLogic_GlobalOptions
 {
-  unsigned short All;
-  struct {
-    boolean TraceProbe:1;				/* Bit 0 */
-    boolean TraceHardReset:1;				/* Bit 1 */
-    boolean TraceConfiguration:1;			/* Bit 2 */
-    boolean TraceErrors:1;				/* Bit 3 */
-  } Bits;
+  boolean TraceProbe:1;					/* Bit 0 */
+  boolean TraceHardwareReset:1;				/* Bit 1 */
+  boolean TraceConfiguration:1;				/* Bit 2 */
+  boolean TraceErrors:1;				/* Bit 3 */
 }
 BusLogic_GlobalOptions_T;
 
@@ -343,13 +419,9 @@ BusLogic_GlobalOptions_T;
   Define the Local Options.
 */
 
-typedef union BusLogic_LocalOptions
+typedef struct BusLogic_LocalOptions
 {
-  unsigned short All;
-  struct {
-    boolean InhibitTargetInquiry:1;			/* Bit 0 */
-    boolean InhibitInterruptTest:1;			/* Bit 1 */
-  } Bits;
+  boolean InhibitTargetInquiry:1;			/* Bit 0 */
 }
 BusLogic_LocalOptions_T;
 
@@ -607,10 +679,13 @@ typedef struct BusLogic_SetupInformation
   unsigned char Signature;				/* Byte 17 */
   unsigned char CharacterD;				/* Byte 18 */
   unsigned char HostBusType;				/* Byte 19 */
-  unsigned char :8;					/* Byte 20 */
-  unsigned char :8;					/* Byte 21 */
+  unsigned char WideTransfersPermittedID0to7;		/* Byte 20 */
+  unsigned char WideTransfersActiveID0to7;		/* Byte 21 */
   BusLogic_SynchronousValues8_T SynchronousValuesID8to15; /* Bytes 22-29 */
   unsigned char DisconnectPermittedID8to15;		/* Byte 30 */
+  unsigned char :8;					/* Byte 31 */
+  unsigned char WideTransfersPermittedID8to15;		/* Byte 32 */
+  unsigned char WideTransfersActiveID8to15;		/* Byte 33 */
 }
 BusLogic_SetupInformation_T;
 
@@ -1052,6 +1127,21 @@ BusLogic_ScatterGatherSegment_T;
 
 
 /*
+  Define the Driver CCB Status Codes.
+*/
+
+typedef enum
+{
+  BusLogic_CCB_Free =				0,
+  BusLogic_CCB_Active =				1,
+  BusLogic_CCB_Completed =			2,
+  BusLogic_CCB_Reset =				3
+}
+__attribute__ ((packed))
+BusLogic_CCB_Status_T;
+
+
+/*
   Define the 32 Bit Mode Command Control Block (CCB) structure.  The first 40
   bytes are defined by and common to both the MultiMaster Firmware and the
   FlashPoint SCCB Manager.  The next 60 bytes are defined by the FlashPoint
@@ -1101,27 +1191,26 @@ typedef struct BusLogic_CCB
     FlashPoint SCCB Manager Defined Portion.
   */
   void (*CallbackFunction)(struct BusLogic_CCB *);	/* Bytes 40-43 */
-  BusLogic_IO_Address_T BaseAddress;			/* Bytes 44-47 */
+  BusLogic_Base_Address_T BaseAddress;			/* Bytes 44-47 */
   BusLogic_CompletionCode_T CompletionCode;		/* Byte 48 */
+#ifndef CONFIG_SCSI_OMIT_FLASHPOINT
   unsigned char :8;					/* Byte 49 */
   unsigned short OS_Flags;				/* Bytes 50-51 */
   unsigned char Private[48];				/* Bytes 52-99 */
+#endif
   /*
     BusLogic Linux Driver Defined Portion.
   */
-  struct BusLogic_HostAdapter *HostAdapter;
-  SCSI_Command_T *Command;
-  enum { BusLogic_CCB_Free =	    0,
-	 BusLogic_CCB_Active =	    1,
-	 BusLogic_CCB_Completed =   2,
-	 BusLogic_CCB_Reset =	    3 } Status;
+  boolean AllocationGroupHead;
+  BusLogic_CCB_Status_T Status;
   unsigned long SerialNumber;
+  SCSI_Command_T *Command;
+  struct BusLogic_HostAdapter *HostAdapter;
   struct BusLogic_CCB *Next;
   struct BusLogic_CCB *NextAll;
   BusLogic_ScatterGatherSegment_T
     ScatterGatherList[BusLogic_ScatterGatherLimit];
 }
-__attribute__ ((packed))
 BusLogic_CCB_T;
 
 
@@ -1154,32 +1243,48 @@ BusLogic_IncomingMailbox_T;
 
 
 /*
-  Define the Linux BusLogic Driver Command Line Entry structure.
+  Define the BusLogic Driver Options structure.
 */
 
-typedef struct BusLogic_CommandLineEntry
+typedef struct BusLogic_DriverOptions
 {
-  BusLogic_IO_Address_T IO_Address;
-  unsigned short TaggedQueueDepth;
-  unsigned short BusSettleTime;
   unsigned short TaggedQueuingPermitted;
   unsigned short TaggedQueuingPermittedMask;
+  unsigned short BusSettleTime;
   BusLogic_LocalOptions_T LocalOptions;
+  unsigned char QueueDepth[BusLogic_MaxTargetDevices];
   BusLogic_ErrorRecoveryStrategy_T
     ErrorRecoveryStrategy[BusLogic_MaxTargetDevices];
 }
-BusLogic_CommandLineEntry_T;
+BusLogic_DriverOptions_T;
 
 
 /*
-  Define the Host Adapter Target Device Statistics structure.
+  Define the Host Adapter Target Flags structure.
+*/
+
+typedef struct BusLogic_TargetFlags
+{
+  boolean TargetExists:1;
+  boolean TaggedQueuingSupported:1;
+  boolean WideTransfersSupported:1;
+  boolean TaggedQueuingActive:1;
+  boolean WideTransfersActive:1;
+  boolean CommandSuccessfulFlag:1;
+  boolean TargetInfoReported:1;
+}
+BusLogic_TargetFlags_T;
+
+
+/*
+  Define the Host Adapter Target Statistics structure.
 */
 
 #define BusLogic_SizeBuckets			10
 
 typedef unsigned int BusLogic_CommandSizeBuckets_T[BusLogic_SizeBuckets];
 
-typedef struct BusLogic_TargetDeviceStatistics
+typedef struct BusLogic_TargetStatistics
 {
   unsigned int CommandsAttempted;
   unsigned int CommandsCompleted;
@@ -1199,7 +1304,7 @@ typedef struct BusLogic_TargetDeviceStatistics
   unsigned short HostAdapterResetsAttempted;
   unsigned short HostAdapterResetsCompleted;
 }
-BusLogic_TargetDeviceStatistics_T;
+BusLogic_TargetStatistics_T;
 
 
 /*
@@ -1218,7 +1323,7 @@ typedef unsigned int FlashPoint_CardHandle_T;
 
 typedef struct FlashPoint_Info
 {
-  BusLogic_IO_Address_T BaseAddress;			/* Bytes 0-3 */
+  BusLogic_Base_Address_T BaseAddress;			/* Bytes 0-3 */
   boolean Present;					/* Byte 4 */
   unsigned char IRQ_Channel;				/* Byte 5 */
   unsigned char SCSI_ID;				/* Byte 6 */
@@ -1253,12 +1358,14 @@ FlashPoint_Info_T;
 
 
 /*
-  Define the Linux BusLogic Driver Host Adapter structure.
+  Define the BusLogic Driver Host Adapter structure.
 */
 
 typedef struct BusLogic_HostAdapter
 {
   SCSI_Host_T *SCSI_Host;
+  BusLogic_HostAdapterType_T HostAdapterType;
+  BusLogic_HostAdapterBusType_T HostAdapterBusType;
   BusLogic_IO_Address_T IO_Address;
   BusLogic_PCI_Address_T PCI_Address;
   unsigned short AddressCount;
@@ -1267,18 +1374,16 @@ typedef struct BusLogic_HostAdapter
   unsigned char FirmwareVersion[6];
   unsigned char FullModelName[18];
   unsigned char InterruptLabel[68];
+  unsigned char Bus;
+  unsigned char Device;
   unsigned char IRQ_Channel;
   unsigned char DMA_Channel;
   unsigned char SCSI_ID;
-  unsigned char Bus;
-  unsigned char Device;
-  BusLogic_HostAdapterType_T HostAdapterType;
-  BusLogic_HostAdapterBusType_T HostAdapterBusType:3;
   boolean IRQ_ChannelAcquired:1;
   boolean DMA_ChannelAcquired:1;
   boolean ExtendedTranslationEnabled:1;
   boolean ParityCheckingEnabled:1;
-  boolean BusResetEnabled;
+  boolean BusResetEnabled:1;
   boolean LevelSensitiveInterrupt:1;
   boolean HostWideSCSI:1;
   boolean HostDifferentialSCSI:1;
@@ -1292,8 +1397,9 @@ typedef struct BusLogic_HostAdapter
   boolean StrictRoundRobinModeSupport:1;
   boolean SCAM_Enabled:1;
   boolean SCAM_Level2:1;
-  boolean HostAdapterInitialized;
-  boolean HostAdapterResetRequested:1;
+  boolean HostAdapterInitialized:1;
+  boolean HostAdapterExternalReset:1;
+  boolean HostAdapterInternalError:1;
   volatile boolean HostAdapterCommandCompleted:1;
   unsigned short HostAdapterScatterGatherLimit;
   unsigned short DriverScatterGatherLimit;
@@ -1305,7 +1411,6 @@ typedef struct BusLogic_HostAdapter
   unsigned short AllocatedCCBs;
   unsigned short DriverQueueDepth;
   unsigned short HostAdapterQueueDepth;
-  unsigned short TaggedQueueDepth;
   unsigned short UntaggedQueueDepth;
   unsigned short BusSettleTime;
   unsigned short SynchronousPermitted;
@@ -1315,26 +1420,24 @@ typedef struct BusLogic_HostAdapter
   unsigned short DisconnectPermitted;
   unsigned short TaggedQueuingPermitted;
   unsigned short ExternalHostAdapterResets;
-  BusLogic_LocalOptions_T LocalOptions;
+  unsigned short HostAdapterInternalErrors;
+  unsigned short TargetDeviceCount;
+  unsigned short MessageBufferLength;
   BusLogic_BusAddress_T BIOS_Address;
-  BusLogic_InstalledDevices_T InstalledDevices;
-  BusLogic_SynchronousValues_T SynchronousValues;
-  BusLogic_SynchronousPeriod_T SynchronousPeriod;
-  BusLogic_CommandLineEntry_T *CommandLineEntry;
-  FlashPoint_Info_T *FlashPointInfo;
+  BusLogic_DriverOptions_T *DriverOptions;
+  FlashPoint_Info_T FlashPointInfo;
   FlashPoint_CardHandle_T CardHandle;
   struct BusLogic_HostAdapter *Next;
-  char *MessageBuffer;
-  int MessageBufferLength;
+  struct BusLogic_HostAdapter *NextAll;
   BusLogic_CCB_T *All_CCBs;
   BusLogic_CCB_T *Free_CCBs;
   BusLogic_CCB_T *BusDeviceResetPendingCCB[BusLogic_MaxTargetDevices];
   BusLogic_ErrorRecoveryStrategy_T
     ErrorRecoveryStrategy[BusLogic_MaxTargetDevices];
-  boolean TaggedQueuingSupported[BusLogic_MaxTargetDevices];
-  boolean TaggedQueuingActive[BusLogic_MaxTargetDevices];
-  boolean CommandSuccessfulFlag[BusLogic_MaxTargetDevices];
+  BusLogic_TargetFlags_T TargetFlags[BusLogic_MaxTargetDevices];
   unsigned char QueueDepth[BusLogic_MaxTargetDevices];
+  unsigned char SynchronousPeriod[BusLogic_MaxTargetDevices];
+  unsigned char SynchronousOffset[BusLogic_MaxTargetDevices];
   unsigned char ActiveCommands[BusLogic_MaxTargetDevices];
   unsigned int CommandsSinceReset[BusLogic_MaxTargetDevices];
   unsigned long LastSequencePoint[BusLogic_MaxTargetDevices];
@@ -1346,7 +1449,11 @@ typedef struct BusLogic_HostAdapter
   BusLogic_IncomingMailbox_T *FirstIncomingMailbox;
   BusLogic_IncomingMailbox_T *LastIncomingMailbox;
   BusLogic_IncomingMailbox_T *NextIncomingMailbox;
-  BusLogic_TargetDeviceStatistics_T *TargetDeviceStatistics;
+  BusLogic_TargetStatistics_T TargetStatistics[BusLogic_MaxTargetDevices];
+  unsigned char MailboxSpace[BusLogic_MaxMailboxes
+			     * (sizeof(BusLogic_OutgoingMailbox_T)
+				+ sizeof(BusLogic_IncomingMailbox_T))];
+  char MessageBuffer[BusLogic_MessageBufferSize];
 }
 BusLogic_HostAdapter_T;
 
@@ -1362,6 +1469,41 @@ typedef struct BIOS_DiskParameters
   int Cylinders;
 }
 BIOS_DiskParameters_T;
+
+
+/*
+  Define a structure for the SCSI Inquiry command results.
+*/
+
+typedef struct SCSI_Inquiry
+{
+  unsigned char PeripheralDeviceType:5;			/* Byte 0 Bits 0-4 */
+  unsigned char PeripheralQualifier:3;			/* Byte 0 Bits 5-7 */
+  unsigned char DeviceTypeModifier:7;			/* Byte 1 Bits 0-6 */
+  boolean RMB:1;					/* Byte 1 Bit 7 */
+  unsigned char ANSI_ApprovedVersion:3;			/* Byte 2 Bits 0-2 */
+  unsigned char ECMA_Version:3;				/* Byte 2 Bits 3-5 */
+  unsigned char ISO_Version:2;				/* Byte 2 Bits 6-7 */
+  unsigned char ResponseDataFormat:4;			/* Byte 3 Bits 0-3 */
+  unsigned char :2;					/* Byte 3 Bits 4-5 */
+  boolean TrmIOP:1;					/* Byte 3 Bit 6 */
+  boolean AENC:1;					/* Byte 3 Bit 7 */
+  unsigned char AdditionalLength;			/* Byte 4 */
+  unsigned char :8;					/* Byte 5 */
+  unsigned char :8;					/* Byte 6 */
+  boolean SftRe:1;					/* Byte 7 Bit 0 */
+  boolean CmdQue:1;					/* Byte 7 Bit 1 */
+  boolean :1;						/* Byte 7 Bit 2 */
+  boolean Linked:1;					/* Byte 7 Bit 3 */
+  boolean Sync:1;					/* Byte 7 Bit 4 */
+  boolean WBus16:1;					/* Byte 7 Bit 5 */
+  boolean WBus32:1;					/* Byte 7 Bit 6 */
+  boolean RelAdr:1;					/* Byte 7 Bit 7 */
+  unsigned char VendorIdentification[8];		/* Bytes 8-15 */
+  unsigned char ProductIdentification[16];		/* Bytes 16-31 */
+  unsigned char ProductRevisionLevel[4];		/* Bytes 32-35 */
+}
+SCSI_Inquiry_T;
 
 
 /*
@@ -1540,6 +1682,19 @@ static inline void *Bus_to_Virtual(BusLogic_BusAddress_T BusAddress)
 
 
 /*
+  Virtual_to_32Bit_Virtual maps between Kernel Virtual Addresses and
+  32 Bit Kernel Virtual Addresses.  This avoids compilation warnings
+  on 64 Bit architectures.
+*/
+
+static inline
+BusLogic_BusAddress_T Virtual_to_32Bit_Virtual(void *VirtualAddress)
+{
+  return (BusLogic_BusAddress_T) (unsigned long) VirtualAddress;
+}
+
+
+/*
   BusLogic_IncrementErrorCounter increments Error Counter by 1, stopping at
   65535 rather than wrapping around to 0.
 */
@@ -1577,93 +1732,38 @@ static inline void BusLogic_IncrementSizeBucket(BusLogic_CommandSizeBuckets_T
 {
   int Index = 0;
   if (Amount < 8*1024)
-    if (Amount < 2*1024)
-      Index = (Amount < 1*1024 ? 0 : 1);
-    else Index = (Amount < 4*1024 ? 2 : 3);
+    {
+      if (Amount < 2*1024)
+	Index = (Amount < 1*1024 ? 0 : 1);
+      else Index = (Amount < 4*1024 ? 2 : 3);
+    }
   else if (Amount < 128*1024)
-    if (Amount < 32*1024)
-      Index = (Amount < 16*1024 ? 4 : 5);
-    else Index = (Amount < 64*1024 ? 6 : 7);
+    {
+      if (Amount < 32*1024)
+	Index = (Amount < 16*1024 ? 4 : 5);
+      else Index = (Amount < 64*1024 ? 6 : 7);
+    }
   else Index = (Amount < 256*1024 ? 8 : 9);
   CommandSizeBuckets[Index]++;
 }
 
 
 /*
-  If CONFIG_PCI is not set, force CONFIG_SCSI_OMIT_FLASHPOINT, and use the
-  ISA only probe function as the general one.
+  Define compatibility macros between Linux 2.0 and Linux 2.1.
 */
 
-#ifndef CONFIG_PCI
+#if LINUX_VERSION_CODE < 0x20100
 
-#undef CONFIG_SCSI_OMIT_FLASHPOINT
-#define CONFIG_SCSI_OMIT_FLASHPOINT
-
-#define BusLogic_InitializeProbeInfoListISA BusLogic_InitializeProbeInfoList
+#define MODULE_PARM(Variable, Type)
 
 #endif
-
-
-/*
-  FlashPoint support is only available for the Intel x86 Architecture.
-*/
-
-#ifndef __i386__
-
-#undef CONFIG_SCSI_OMIT_FLASHPOINT
-#define CONFIG_SCSI_OMIT_FLASHPOINT
-
-#endif
-
-
-/*
-  Define macros for testing the Host Adapter Type.
-*/
-
-#ifndef CONFIG_SCSI_OMIT_FLASHPOINT
-
-#define BusLogic_MultiMasterHostAdapterP(HostAdapter) \
-  (HostAdapter->HostAdapterType == BusLogic_MultiMaster)
-
-#define BusLogic_FlashPointHostAdapterP(HostAdapter) \
-  (HostAdapter->HostAdapterType == BusLogic_FlashPoint)
-
-#else
-
-#define BusLogic_MultiMasterHostAdapterP(HostAdapter) \
-  (true)
-
-#define BusLogic_FlashPointHostAdapterP(HostAdapter) \
-  (false)
-
-#endif
-
-
-/*
-  Define Driver Message Macros.
-*/
-
-#define BusLogic_Announce(Format, Arguments...) \
-  BusLogic_Message(BusLogic_AnnounceLevel, Format, ##Arguments)
-
-#define BusLogic_Info(Format, Arguments...) \
-  BusLogic_Message(BusLogic_InfoLevel, Format, ##Arguments)
-
-#define BusLogic_Notice(Format, Arguments...) \
-  BusLogic_Message(BusLogic_NoticeLevel, Format, ##Arguments)
-
-#define BusLogic_Warning(Format, Arguments...) \
-  BusLogic_Message(BusLogic_WarningLevel, Format, ##Arguments)
-
-#define BusLogic_Error(Format, Arguments...) \
-  BusLogic_Message(BusLogic_ErrorLevel, Format, ##Arguments)
 
 
 /*
   Define the version number of the FlashPoint Firmware (SCCB Manager).
 */
 
-#define FlashPoint_FirmwareVersion		"5.01"
+#define FlashPoint_FirmwareVersion		"5.02"
 
 
 /*
@@ -1671,21 +1771,8 @@ static inline void BusLogic_IncrementSizeBucket(BusLogic_CommandSizeBuckets_T
 */
 
 #define FlashPoint_NormalInterrupt		0x00
+#define FlashPoint_InternalError		0xFE
 #define FlashPoint_ExternalBusReset		0xFF
-
-
-/*
-  Define prototypes for the FlashPoint SCCB Manager Functions.
-*/
-
-extern unsigned char FlashPoint_ProbeHostAdapter(FlashPoint_Info_T *);
-extern FlashPoint_CardHandle_T
-       FlashPoint_HardResetHostAdapter(FlashPoint_Info_T *);
-extern void FlashPoint_StartCCB(FlashPoint_CardHandle_T, BusLogic_CCB_T *);
-extern int FlashPoint_AbortCCB(FlashPoint_CardHandle_T, BusLogic_CCB_T *);
-extern boolean FlashPoint_InterruptPending(FlashPoint_CardHandle_T);
-extern int FlashPoint_HandleInterrupt(FlashPoint_CardHandle_T);
-extern void FlashPoint_ReleaseHostAdapter(FlashPoint_CardHandle_T);
 
 
 /*
@@ -1693,13 +1780,13 @@ extern void FlashPoint_ReleaseHostAdapter(FlashPoint_CardHandle_T);
   Internal Functions.
 */
 
-static void BusLogic_QueueCompletedCCB(BusLogic_CCB_T *CCB);
+static void BusLogic_QueueCompletedCCB(BusLogic_CCB_T *);
 static void BusLogic_InterruptHandler(int, void *, Registers_T *);
 static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *,
-				     SCSI_Command_T *,
-				     unsigned int);
-static void BusLogic_Message(BusLogic_MessageLevel_T, char *Format,
+				     SCSI_Command_T *, unsigned int);
+static void BusLogic_Message(BusLogic_MessageLevel_T, char *,
 			     BusLogic_HostAdapter_T *, ...);
+static void BusLogic_ParseDriverOptions(char *);
 
 
 #endif /* BusLogic_DriverVersion */

@@ -101,11 +101,15 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
-	/* Are we prepared to handle this fault?  */
+	/* User mode accesses just cause a SIGSEGV */
+	if (user_mode(regs)) {
+		force_sig (SIGSEGV, tsk);
+		return 1;
+	}
+
+	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		struct pt_regs *tregs;
-		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
-		       current->comm, regs->pc, fixup);
 		/* Create a new four word stack frame, discarding the old
 		   one.  */
 		regs->stkadj = frame_extra_sizes[regs->format];
@@ -115,12 +119,6 @@ bad_area:
 		tregs->pc = fixup;
 		tregs->sr = regs->sr;
 		return -1;
-	}
-
-	if (user_mode(regs)) {
-		/* User memory access */
-		force_sig (SIGSEGV, tsk);
-		return 1;
 	}
 
 /*

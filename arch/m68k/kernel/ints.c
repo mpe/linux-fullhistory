@@ -53,7 +53,7 @@ static irq_node_t nodes[NUM_IRQ_NODES];
 
 unsigned int local_irq_count[NR_CPUS];
 
-int __m68k_bh_counter;
+unsigned int local_bh_count[NR_CPUS];
 
 static void dummy_enable_irq(unsigned int irq);
 static void dummy_disable_irq(unsigned int irq);
@@ -214,7 +214,7 @@ asmlinkage void process_int(unsigned long vec, struct pt_regs *fp)
 {
 	if (vec >= VEC_INT1 && vec <= VEC_INT7) {
 		vec -= VEC_SPUR;
-		kstat.interrupts[vec]++;
+		kstat.irqs[0][vec]++;
 		irq_list[vec].handler(vec, irq_list[vec].dev_id, fp);
 	} else {
 		if (mach_process_int)
@@ -233,7 +233,7 @@ int get_irq_list(char *buf)
 	if (mach_default_handler) {
 		for (i = 0; i < SYS_IRQS; i++) {
 			len += sprintf(buf+len, "auto %2d: %10u ", i,
-			               i ? kstat.interrupts[i] : num_spurious);
+			               i ? kstat.irqs[0][i] : num_spurious);
 			if (irq_list[i].flags & IRQ_FLG_LOCK)
 				len += sprintf(buf+len, "L ");
 			else

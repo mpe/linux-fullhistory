@@ -31,8 +31,7 @@ SECTIONS
 	CONSTRUCTORS
 	}
 
-  . = ALIGN(8192);
-  init_task : { *(init_task) }	/* The initial task and kernel stack */
+  .bss : { *(.bss) }		/* BSS */
 
   _edata = .;			/* End of data section */
 
@@ -40,13 +39,11 @@ SECTIONS
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
-  . = ALIGN(4096);
+  . = ALIGN(8192);
   __init_end = .;
 
-  __bss_start = .;		/* BSS */
-  .bss : {
-	*(.bss)
-	}
+  init_task : { *(init_task) }	/* The initial task and kernel stack */
+
   _end = . ;
 
   /* Stabs debugging sections.  */

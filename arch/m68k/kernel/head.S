@@ -14,6 +14,7 @@
 ** 94/11/14 Andreas Schwab: put kernel at PAGESIZE
 ** 94/11/18 Andreas Schwab: remove identity mapping of STRAM for Atari
 ** ++ Bjoern & Roman: ATARI-68040 support for the Medusa
+** 95/11/18 Richard Hirst: Added MVME166 support
 ** 96/04/26 Guenther Kelleter: fixed identity mapping for Falcon with
 ** 			      Magnum- and FX-alternate ram
 **
@@ -72,8 +73,7 @@
 #include <asm/pgtable.h>
 
 .globl SYMBOL_NAME(kernel_pg_dir), SYMBOL_NAME(kpt)
-.globl SYMBOL_NAME(availmem), SYMBOL_NAME(is_medusa)
-.globl SYMBOL_NAME(is_hades)
+.globl SYMBOL_NAME(availmem), SYMBOL_NAME(mvme_bdid_ptr)
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(kernel_pmd_table), SYMBOL_NAME(swapper_pg_dir)
 
@@ -145,6 +145,7 @@ TABLENR_16MB	= 64	/* same for 16 MB */
 
 #define is_not_amiga(lab) moveq &MACH_AMIGA,%d7; cmpl %d4,%d7; jne lab
 #define is_not_atari(lab) moveq &MACH_ATARI,%d7; cmpl %d4,%d7; jne lab
+#define is_not_mvme16x(lab) moveq &MACH_MVME16x,%d7; cmpl %d4,%d7; jne lab
 
 #define is_040_or_060(lab) btst &D6B_0460,%d6; jne lab
 #define is_not_040_or_060(lab) btst &D6B_0460,%d6; jeq lab
@@ -162,6 +163,7 @@ ENTRY(_stext)
 	.long	BOOTINFOV_MAGIC
 	.long	MACH_AMIGA, AMIGA_BOOTI_VERSION
 	.long	MACH_ATARI, ATARI_BOOTI_VERSION
+	.long	MACH_MVME16x, MVME16x_BOOTI_VERSION
 	.long	0
 1:	jra	SYMBOL_NAME(_start)
 
@@ -249,33 +251,25 @@ ENTRY(_start)
 #ifdef CONFIG_ATARI
 	is_not_atari(Lnotypetest)
 
-	moveq	#0,%d3			/* base addr for others: 0x00000000 */
-	moveq	#0,%d2			/* no Hades */
-	movec	%d3,%vbr
-	lea	%pc@(Ltest_berr),%a0
-	movel	%a0,0x8
-	movel	%sp,%a0
-	moveb	0x0,%d1
-	clrb	0x0
-	nop
-	moveb	%d1,0x0
-	nop
-	tstb	0x00ff82fe
-	nop
-	movel	#0xff000000,%d3		/* Medusa base addr: 0xff000000 */
-	tstb	0xb0000000
-	nop
-	movel	#0xff000000,%d2		/* Computer is a Hades */
-	moveq	#0,%d3
-Ltest_berr:
-	movel	%a0,%sp
-	lea	%pc@(SYMBOL_NAME(is_hades)),%a0
-	movel	%d2,%a0@
-	lea	%pc@(SYMBOL_NAME(is_medusa)),%a0
-	movel	%d3,%a0@
-	lea     %pc@(Liobase),%a0
-	movel   %d2,%a0@		/* On a Hades the iobase must be set
-					   before opening the serial port. */
+	/* get special machine type (Medusa/Hades/AB40) */
+	moveq	#0,%d3 /* default if tag doesn't exist */
+	movew	#BI_ATARI_MCH_TYPE,%d0
+	jbsr	Lget_bi_record
+	tstl	%d0
+	jbmi	1f
+	movel	%a0@,%d3
+1:	
+	/* %d3 is not clobbered until Atari page tables are set up,
+	 * where it is used again. */
+
+	/* On the Hades, the iobase must be set up before opening the
+	 * serial port. There are no I/O regs at 0x00ffxxxx at all. */
+	moveq	#0,%d0
+	cmpl	#ATARI_MACH_HADES,%d3
+	jbne	1f
+	movel	#0xff000000,%d0		/* Hades I/O base addr: 0xff000000 */
+1:	lea     %pc@(Liobase),%a0
+	movel   %d0,%a0@
 Lnotypetest:
 #endif
 
@@ -543,10 +537,15 @@ Lnotami:
    area.
 */
 
-	movel   %pc@(is_medusa),%d3
-	bne     1f
-	movel   %pc@(is_hades),%d3
-1:
+	/* I/O base addr for non-Medusa, non-Hades: 0x00000000 */
+	moveq	#0,%d0
+	cmpl	#ATARI_MACH_MEDUSA,%d3
+	jbeq	2f
+	cmpl	#ATARI_MACH_HADES,%d3
+	jbne	1f
+2:	movel	#0xff000000,%d0 /* Medusa/Hades base addr: 0xff000000 */
+1:	movel	%d0,%d3
+	
 	/* Let the root table point to the new pointer table */
 	lea	%a4@(PTR_TABLE_SIZE<<2),%a4
 	movel	%a4,%a0
@@ -614,6 +613,30 @@ Lspata68040:
 	dbra	%d0,1b
 
 Lnotatari:
+#endif
+
+#if defined(CONFIG_MVME16x)
+	is_not_mvme16x(Lnot16x)
+
+	/* Get pointer to board ID data */
+	movel	%d2,%sp@-
+	.long	0x4e4f0070		/* trap 0x70 - .BRD_ID */
+	movel	%sp@+,%d2
+	lea	%pc@(SYMBOL_NAME(mvme_bdid_ptr)),%a0
+	movel	%d2,%a0@
+
+	/*
+	 * On MVME16x we have already created kernel page tables for
+	 * 4MB of RAM at address 0, so now need to do a transparent
+	 * mapping of the top of memory space.  Make it 0.5GByte for now.
+	 */
+
+	movel	#0xe01f0000,%d2		/* logical address base */
+	orw	#0xa040,%d2		/* add in magic bits */
+	.long	0x4e7b2005		/* movec d2,ittr1 */
+	.long	0x4e7b2007		/* movec d2,dttr1 */
+
+Lnot16x:
 #endif
 
 /*
@@ -810,6 +833,26 @@ Latarimmu68040:
 Lmapphysnotatari:
 #endif
 
+#if defined(CONFIG_MVME16x)
+	is_not_mvme16x(Lmapphysnot16x)
+	/*
+	 * save physaddr of phys mem in register a3
+	 */
+	moveq	#'L',%d7
+	jbsr	Lserial_putc
+
+	.word	0xf4d8		/* CINVA I/D    */
+	.word	0xf518		/* pflusha      */
+	.long	0x4e7bd807	/* movec a5,srp */
+	.long	0x4e7bd806	/* movec a5,urp */
+	movel	#(TC_ENABLE+TC_PAGE4K),%d0
+	.long	0x4e7b0003	/* movec d0,tc  (enable the MMU) */
+	jra	LdoneMMUenable	/* branch to continuation of startup */
+
+Lmapphysnot16x:
+
+#endif
+
 LdoneMMUenable:
 
 /*
@@ -833,30 +876,6 @@ LdoneMMUenable:
 
 	putc('N')
 
-#if 0
-	putr()
-	lea	SYMBOL_NAME(kernel_pmd_table),%a0
-	moveq	#63,%d0
-1:	moveq	#7,%d1
-	putn(%a0)
-	putc(':')
-	putc(' ')
-2:	putn(%a0@+)
-	dbra	%d1,2b
-	putr()
-	dbra	%d0,1b
-	putr()
-	movel	SYMBOL_NAME(kpt),%a0
-	moveq	#639,%d0
-1:	moveq	#7,%d1
-	putn(%a0)
-	putc(':')
-	putc(' ')
-2:	putn(%a0@+)
-	dbra	%d1,2b
-	putr()
-	dbra	%d0,1b
-#endif
 /*
  * Enable caches
  */
@@ -899,6 +918,7 @@ Lcache68060:
 /* jump to the kernel start */
 	putr()
 
+	subl	%a6,%a6 /* clear a6 for gdb */
 	jbsr	SYMBOL_NAME(start_kernel)
 
 /*
@@ -1048,6 +1068,13 @@ Lserial_init:
  */
 Lserial_putc:
 	moveml	%a0/%a1,%sp@-
+#if defined(CONFIG_MVME16x)
+	cmpil	#MACH_MVME16x,%d4
+	jne	2f
+	moveb	%d7,%sp@-
+	.long	0x4e4f0020
+2:
+#endif
 #ifdef CONFIG_AMIGA
 	cmpil	#MACH_AMIGA,%d4
 	jne	2f
@@ -1130,6 +1157,7 @@ L1:	roll	%d0,%d1
 	moveml	%sp@+,%d0-%d2/%d7
 	rts
 
+#if 0
 Lshowtest:
 	moveml	%a0/%d7,%sp@-
 	putc('A')
@@ -1158,7 +1186,7 @@ Lshowtest:
 	putr()
 	moveml	%sp@+,%a0/%d7
 	rts
-
+#endif
 	.data
 	.even
 Lcustom:
@@ -1169,9 +1197,7 @@ SYMBOL_NAME_LABEL(kpt)
 	.long 0
 SYMBOL_NAME_LABEL(availmem)
 	.long 0
-SYMBOL_NAME_LABEL(is_medusa)
-	.long 0
-SYMBOL_NAME_LABEL(is_hades)
-	.long 0
 SYMBOL_NAME_LABEL(m68k_pgtable_cachemode)
+	.long 0
+SYMBOL_NAME_LABEL(mvme_bdid_ptr)
 	.long 0

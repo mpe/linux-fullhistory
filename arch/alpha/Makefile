@@ -18,8 +18,12 @@ HEAD := arch/alpha/kernel/head.o
 SUBDIRS := $(SUBDIRS) arch/alpha/kernel arch/alpha/mm arch/alpha/lib \
 	arch/alpha/math-emu
 CORE_FILES := arch/alpha/kernel/kernel.o arch/alpha/mm/mm.o $(CORE_FILES)
-LIBS := $(TOPDIR)/arch/alpha/math-emu/math-emu.a \
-	$(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
+
+ifeq ($(CONFIG_MATHEMU),y)
+  CORE_FILES := $(CORE_FILES) arch/alpha/math-emu/math-emu.o
+endif
+
+LIBS := arch/alpha/lib/lib.a $(LIBS) arch/alpha/lib/lib.a
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 

@@ -1,17 +1,16 @@
 /*
-linux/arch/m68k/atari/atasound.c
-
-++Geert: Moved almost all stuff to linux/drivers/sound/
-
-The author of atari_nosound, atari_mksound and atari_microwire_cmd is
-unknown.
-(++roman: That's me... :-)
-
-This file is subject to the terms and conditions of the GNU General Public
-License.  See the file COPYING in the main directory of this archive
-for more details.
-
-*/
+ * linux/arch/m68k/atari/atasound.c
+ *
+ * ++Geert: Moved almost all stuff to linux/drivers/sound/
+ *
+ * The author of atari_nosound, atari_mksound and atari_microwire_cmd is
+ * unknown. (++roman: That's me... :-)
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file COPYING in the main directory of this archive
+ * for more details.
+ *
+ */
 
 
 #include <linux/sched.h>

@@ -245,6 +245,12 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel FP software completion' CONFIG_MATHEMU
+else
+  define_bool CONFIG_MATHEMU y
+fi
+
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
 

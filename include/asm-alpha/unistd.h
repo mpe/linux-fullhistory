@@ -240,7 +240,7 @@
 #define __NR_bdflush		300
 #define __NR_sethae		301
 #define __NR_mount		302
-#define __NR_adjtimex		303
+#define __NR_old_adjtimex	303
 #define __NR_swapoff		304
 #define __NR_getdents		305
 #define __NR_create_module	306

@@ -261,10 +261,10 @@ isdn_dumppkt(char *s, u_char * p, int len, int dumplen)
 #endif
 
 static __inline void
-isdn_trash_skb(struct sk_buff *skb, int rw)
+isdn_trash_skb(struct sk_buff *skb)
 {
 	SET_SKB_FREE(skb);
-	kfree_skb(skb, rw);
+	kfree_skb(skb);
 }
 
 static void

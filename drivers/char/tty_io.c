@@ -51,6 +51,9 @@
  *
  * Rewrote init_dev and release_dev to eliminate races.
  *	-- Bill Hawes <whawes@star.net>, June 97
+ *
+ * Added support for a Unix98-style ptmx device.
+ *      -- C. Scott Ananian <cananian@alumni.princeton.edu>, 14-Jan-1998
  */
 
 #include <linux/config.h>
@@ -91,6 +94,7 @@
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)
 #define SYSCONS_DEV MKDEV(TTYAUX_MAJOR,1)
+#define PTMX_DEV MKDEV(TTYAUX_MAJOR,2)
 
 #undef TTY_DEBUG_HANGUP
 
@@ -1171,7 +1175,6 @@ static void release_dev(struct file * filp)
 static int tty_open(struct inode * inode, struct file * filp)
 {
 	struct tty_struct *tty;
-	int minor;
 	int noctty, retval;
 	kdev_t device;
 	unsigned short saved_flags;
@@ -1203,12 +1206,39 @@ retry_open:
                 device = c->device(c);
 		noctty = 1;
 	}
-	minor = MINOR(device);
+	if (device == PTMX_DEV) {
+		/* find a free pty. */
+		struct tty_driver *driver = tty_drivers;
+		int minor;
 
+		/* find the pty driver */
+		for (driver=tty_drivers; driver; driver=driver->next)
+			if (driver->major == PTY_MASTER_MAJOR)
+				break;
+		if (!driver) return -ENODEV;
+
+		/* find a minor device that is not in use. */
+		for (minor=driver->minor_start;
+		     minor<driver->minor_start+driver->num;
+		     minor++) {
+			device = MKDEV(driver->major, minor);
+			retval = init_dev(device, &tty);
+			if (retval==0) break; /* success! */
+		}
+		if (minor==driver->minor_start+driver->num) /* no success */
+			return -EIO; /* no free ptys */
+		
+		set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
+		noctty = 1;
+		goto init_dev_done;
+	}
+	
 	retval = init_dev(device, &tty);
 	if (retval)
 		return retval;
+
 	/* N.B. this error exit may leave filp->f_flags with O_NONBLOCK set */
+init_dev_done:
 	filp->private_data = tty;
 	check_tty_count(tty, "tty_open");
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
@@ -1932,7 +1962,7 @@ long console_init(long kmem_start, long kmem_end)
 }
 
 static struct tty_driver dev_tty_driver, dev_console_driver,
-	dev_syscons_driver;
+	dev_syscons_driver, dev_ptmx_driver;
 
 /*
  * Ok, now we can initialize the rest of the tty devices and can count
@@ -1973,6 +2003,17 @@ __initfunc(int tty_init(void))
 
 	if (tty_register_driver(&dev_syscons_driver))
 		panic("Couldn't register /dev/console driver\n");
+
+	dev_ptmx_driver = dev_tty_driver;
+	dev_ptmx_driver.driver_name = "/dev/ptmx";
+	dev_ptmx_driver.name = dev_ptmx_driver.driver_name + 5;
+	dev_ptmx_driver.major= MAJOR(PTMX_DEV);
+	dev_ptmx_driver.minor_start = MINOR(PTMX_DEV);
+	dev_ptmx_driver.type = TTY_DRIVER_TYPE_SYSTEM;
+	dev_ptmx_driver.subtype = SYSTEM_TYPE_SYSPTMX;
+
+	if (tty_register_driver(&dev_ptmx_driver))
+		panic("Couldn't register /dev/ptmx driver\n");
 
 #ifdef CONFIG_VT
 	dev_console_driver = dev_tty_driver;

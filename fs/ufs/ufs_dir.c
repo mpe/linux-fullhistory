@@ -8,6 +8,9 @@
  *
  * swab support by Francois-Rene Rideau <rideau@ens.fr> 19970406
  *
+ * 4.4BSD (FreeBSD) support added on February 1st 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
+ * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
  */
 
 #include <linux/fs.h>
@@ -28,17 +31,18 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 	struct ufs_direct * de;
 	struct super_block * sb;
 	int de_reclen;
-	__u32 s_flags, bytesex;
+	__u32 flags;
 
-	/* Isn't that already done but the upper layer??? */
+	/* Isn't that already done in the upper layer???
+         * the VFS layer really needs some explicit documentation!
+         */
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 
 	sb = inode->i_sb;
-        s_flags = sb->u.ufs_sb.s_flags;
-        bytesex = s_flags & UFS_BYTESEX;
+        flags = sb->u.ufs_sb.s_flags;
 
-	if (s_flags & UFS_DEBUG) {
+	if (flags & UFS_DEBUG) {
 	        printk("ufs_readdir: ino %lu  f_pos %lu\n",
 	               inode->i_ino, (unsigned long) filp->f_pos);
 	        ufs_print_inode(inode);
@@ -92,20 +96,23 @@ revalidate:
 		       && offset < sb->s_blocksize) {
 			de = (struct ufs_direct *) (bh->b_data + offset);
 	                /* XXX - put in a real ufs_check_dir_entry() */
-	                if ((de->d_reclen == 0) || (de->d_namlen == 0)) {
+	                if ((de->d_reclen == 0) || (NAMLEN(de) == 0)) {
 			/* SWAB16() was unneeded -- compare to 0 */
-	                        filp->f_pos = (filp->f_pos & (sb->s_blocksize - 1)) + sb->s_blocksize;
+	                        filp->f_pos = (filp->f_pos &
+				              (sb->s_blocksize - 1)) +
+				               sb->s_blocksize;
 	                        brelse(bh);
 	                        return stored;
 	                }
-#if 0
+#if 0 /* XXX */
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
 			/* XXX - beware about de having to be swabped somehow */
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
 	                           next block. */
-				filp->f_pos = (filp->f_pos & (sb->s_blocksize - 1))
-					      + sb->s_blocksize;
+				filp->f_pos = (filp->f_pos &
+				              (sb->s_blocksize - 1)) +
+					       sb->s_blocksize;
 				brelse (bh);
 				return stored;
 			}
@@ -121,11 +128,12 @@ revalidate:
 				 * during the copy operation. */
 				unsigned long version = inode->i_version;
 
-	                        if (s_flags & UFS_DEBUG) {
+	                        if (flags & UFS_DEBUG) {
 	                                printk("ufs_readdir: filldir(%s,%u)\n",
 	                                       de->d_name, SWAB32(de->d_ino));
 	                        }
-				error = filldir(dirent, de->d_name, SWAB16(de->d_namlen), filp->f_pos, SWAB32(de->d_ino));
+				error = filldir(dirent, de->d_name, NAMLEN(de),
+				                filp->f_pos, SWAB32(de->d_ino));
 				if (error)
 					break;
 				if (version != inode->i_version)

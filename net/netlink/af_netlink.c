@@ -370,7 +370,7 @@ retry:
 			if (nonblock) {
 				sti();
 				netlink_unlock(sk);
-				kfree_skb(skb, 0);
+				kfree_skb(skb);
 				return -EAGAIN;
 			}
 			interruptible_sleep_on(sk->sleep);
@@ -378,7 +378,7 @@ retry:
 			sti();
 
 			if (signal_pending(current)) {
-				kfree_skb(skb, 0);
+				kfree_skb(skb);
 				return -ERESTARTSYS;
 			}
 			goto retry;
@@ -392,7 +392,7 @@ Nprintk("unicast_deliver %d\n", skb->len);
 		netlink_unlock(sk);
 		return len;
 	}
-	kfree_skb(skb, 0);
+	kfree_skb(skb);
 	return -ECONNREFUSED;
 }
 
@@ -466,8 +466,8 @@ void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, pid_t pid,
 	netlink_unlock_table(protocol, allocation == GFP_KERNEL);
 
 	if (skb2)
-		kfree_skb(skb2, 0);
-	kfree_skb(skb, 0);
+		kfree_skb(skb2);
+	kfree_skb(skb);
 }
 
 void netlink_set_err(struct sock *ssk, pid_t pid, unsigned group, int code)
@@ -630,7 +630,7 @@ netlink_kernel_create(int unit, void (*input)(struct sock *sk, int len))
 static void netlink_destroy_callback(struct netlink_callback *cb)
 {
 	if (cb->skb)
-		kfree_skb(cb->skb, 0);
+		kfree_skb(cb->skb);
 	kfree(cb);
 }
 

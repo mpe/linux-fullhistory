@@ -9,7 +9,17 @@
  * Clean swab support on 19970406
  * by Francois-Rene Rideau <rideau@ens.fr>
  *
+ * 4.4BSD (FreeBSD) support added on February 1st 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk> partially based
+ * on code by Martin von Loewis <martin@mira.isdn.cs.tu-berlin.de>.
+ *
+ * NeXTstep support added on February 5th 1998 by
+ * Niels Kristian Bech Jensen <nkbj@image.dk>.
  */
+
+#undef DEBUG_UFS_INODE
+/*#define DEBUG_UFS_INODE 1*/
+/* Uncomment the line above when hacking ufs inode code */
 
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
@@ -25,29 +35,30 @@ void ufs_print_inode(struct inode * inode)
 	       inode->i_gid, inode->i_size, inode->i_blocks, inode->i_count);
 	printk("  db <0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x"
 	       " 0x%x 0x%x 0x%x 0x%x>\n",
-		inode->u.ufs_i.i_data[0], inode->u.ufs_i.i_data[1],
-		inode->u.ufs_i.i_data[2], inode->u.ufs_i.i_data[3],
-		inode->u.ufs_i.i_data[4], inode->u.ufs_i.i_data[5],
-		inode->u.ufs_i.i_data[6], inode->u.ufs_i.i_data[7],
-		inode->u.ufs_i.i_data[8], inode->u.ufs_i.i_data[9],
-		inode->u.ufs_i.i_data[10], inode->u.ufs_i.i_data[11]);
+		inode->u.ufs_i.i_u1.i_data[0], inode->u.ufs_i.i_u1.i_data[1],
+		inode->u.ufs_i.i_u1.i_data[2], inode->u.ufs_i.i_u1.i_data[3],
+		inode->u.ufs_i.i_u1.i_data[4], inode->u.ufs_i.i_u1.i_data[5],
+		inode->u.ufs_i.i_u1.i_data[6], inode->u.ufs_i.i_u1.i_data[7],
+		inode->u.ufs_i.i_u1.i_data[8], inode->u.ufs_i.i_u1.i_data[9],
+		inode->u.ufs_i.i_u1.i_data[10], inode->u.ufs_i.i_u1.i_data[11]);
 	printk("  gen 0x%8.8x ib <0x%x 0x%x 0x%x>\n",
 		inode->u.ufs_i.i_gen,
-		inode->u.ufs_i.i_data[UFS_IND_BLOCK],
-		inode->u.ufs_i.i_data[UFS_DIND_BLOCK],
-		inode->u.ufs_i.i_data[UFS_TIND_BLOCK]);
+		inode->u.ufs_i.i_u1.i_data[UFS_IND_BLOCK],
+		inode->u.ufs_i.i_u1.i_data[UFS_DIND_BLOCK],
+		inode->u.ufs_i.i_u1.i_data[UFS_TIND_BLOCK]);
 }
 
-#define inode_bmap(inode, nr) ((inode)->u.ufs_i.i_data[(nr)])
+#define inode_bmap(inode, nr) ((inode)->u.ufs_i.i_u1.i_data[(nr)])
 
 static inline int block_bmap (struct inode *inode, int block, int nr)
 {
 	struct buffer_head *bh;
 	int tmp;
-	__u32 bytesex = inode->i_sb->u.ufs_sb.s_flags & UFS_BYTESEX;
+	__u32 flags = inode->i_sb->u.ufs_sb.s_flags;
 	/* XXX Split in fsize big blocks (Can't bread 8Kb). */ 
 	tmp = nr >> (inode->i_sb->u.ufs_sb.s_fshift - 2);
-	bh = bread (inode->i_dev, block + tmp, inode->i_sb->u.ufs_sb.s_fsize);
+	bh = bread (inode->i_dev, inode->i_sb->u.ufs_sb.s_blockbase + block +
+	            tmp, inode->i_sb->s_blocksize);
 	if (!bh)
 		return 0;
 	nr &= ~(inode->i_sb->u.ufs_sb.s_fmask) >> 2;
@@ -75,13 +86,16 @@ int ufs_bmap (struct inode * inode, int block)
 		return 0;
 	}
 	if (lbn < UFS_NDADDR)
-		return ufs_dbn (inode->i_sb, inode_bmap (inode, lbn), boff);
+		return (inode->i_sb->u.ufs_sb.s_blockbase +
+			ufs_dbn (inode->i_sb, inode_bmap (inode, lbn), boff));
 	lbn -= UFS_NDADDR;
 	if (lbn < addr_per_block) {
 		i = inode_bmap (inode, UFS_IND_BLOCK);
 		if (!i)
 			return 0;
-		return ufs_dbn (inode->i_sb, block_bmap (inode, i, lbn), boff);
+		return (inode->i_sb->u.ufs_sb.s_blockbase +
+			ufs_dbn (inode->i_sb,
+				block_bmap (inode, i, lbn), boff));
 	}
 	lbn -= addr_per_block;
 	if (lbn < (1 << (addr_per_block_bits * 2))) {
@@ -91,9 +105,10 @@ int ufs_bmap (struct inode * inode, int block)
 		i = block_bmap (inode, i, lbn >> addr_per_block_bits);
 		if (!i)
 			return 0;
-		return ufs_dbn (inode->i_sb,
+		return (inode->i_sb->u.ufs_sb.s_blockbase +
+			ufs_dbn (inode->i_sb,
 				block_bmap (inode, i, lbn & (addr_per_block-1)),
-				boff);
+				boff));
 	}
 	lbn -= (1 << (addr_per_block_bits * 2));
 	i = inode_bmap (inode, UFS_TIND_BLOCK);
@@ -106,8 +121,9 @@ int ufs_bmap (struct inode * inode, int block)
 			(lbn >> addr_per_block_bits) & (addr_per_block - 1));
 	if (!i)
 		return 0;
-	return ufs_dbn (inode->i_sb,
-			block_bmap (inode, i, lbn & (addr_per_block-1)), boff);
+	return (inode->i_sb->u.ufs_sb.s_blockbase +
+		ufs_dbn (inode->i_sb,
+			block_bmap (inode, i, lbn & (addr_per_block-1)), boff));
 }
 
 /* XXX - ufs_read_inode is a mess */
@@ -116,28 +132,30 @@ void ufs_read_inode(struct inode * inode)
 	struct super_block * sb;
 	struct ufs_inode * ufsip;
 	struct buffer_head * bh;
-	__u32 bytesex = inode->i_sb->u.ufs_sb.s_flags & UFS_BYTESEX;
+	__u32 flags = inode->i_sb->u.ufs_sb.s_flags;
 
 	sb = inode->i_sb;
 
 	if (ufs_ino_ok(inode)) {
-	        printk("ufs_read_inode: bad inum %lu", inode->i_ino);
+	        printk("ufs_read_inode: bad inum %lu\n", inode->i_ino);
 
 	        return;
 	}
 
-#if 0
+#ifdef DEBUG_UFS_INODE
 	printk("ufs_read_inode: ino %lu  cg %u  cgino %u  ipg %u  inopb %u\n",
 	       inode->i_ino, ufs_ino2cg(inode),
 	       (inode->i_ino%sb->u.ufs_sb.s_inopb),
 	       sb->u.ufs_sb.s_ipg, sb->u.ufs_sb.s_inopb);
 #endif
 	bh = bread(inode->i_dev,
+	           inode->i_sb->u.ufs_sb.s_blockbase +
 	           ufs_cgimin(inode->i_sb, ufs_ino2cg(inode)) +
-	           (inode->i_ino%sb->u.ufs_sb.s_ipg)/(sb->u.ufs_sb.s_inopb/sb->u.ufs_sb.s_fsfrag),
-	           BLOCK_SIZE);
+	           (inode->i_ino%sb->u.ufs_sb.s_ipg)/
+	           (sb->u.ufs_sb.s_inopb/sb->u.ufs_sb.s_fsfrag),
+	           sb->s_blocksize);
 	if (!bh) {
-	        printk("ufs_read_inode: can't read inode %lu from dev %d/%d",
+	        printk("ufs_read_inode: can't read inode %lu from dev %d/%d\n",
 	               inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
 	        return;
 	}
@@ -176,23 +194,21 @@ void ufs_read_inode(struct inode * inode)
 	 * random users can't get at these files, since they get dynamically
 	 * "chown()ed" to root.
 	 */
-	if (SWAB16(ufsip->ui_suid) == UFS_USEEFT) {
-	        /* EFT */
+	if (UFS_UID(ufsip) >= UFS_USEEFT) {
 	        inode->i_uid = 0;
 	        printk("ufs_read_inode: EFT uid %u ino %lu dev %u/%u, using %u\n",
-	               SWAB32(ufsip->ui_uid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
-	               inode->i_uid);
+	               UFS_UID(ufsip), inode->i_ino, MAJOR(inode->i_dev),
+	               MINOR(inode->i_dev), inode->i_uid);
 	} else {
-	        inode->i_uid = SWAB16(ufsip->ui_suid);
+	        inode->i_uid = UFS_UID(ufsip);
 	}
-	if (SWAB16(ufsip->ui_sgid) == UFS_USEEFT) {
-	        /* EFT */
+	if (UFS_GID(ufsip) >= UFS_USEEFT) {
 	        inode->i_gid = 0;
 	        printk("ufs_read_inode: EFT gid %u ino %lu dev %u/%u, using %u\n",
-	               SWAB32(ufsip->ui_gid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
-	               inode->i_gid);
+	               UFS_GID(ufsip), inode->i_ino, MAJOR(inode->i_dev),
+	               MINOR(inode->i_dev), inode->i_gid);
 	} else {
-	        inode->i_gid = SWAB16(ufsip->ui_sgid);
+	        inode->i_gid = UFS_GID(ufsip);
 	}
 
 	/*
@@ -249,13 +265,19 @@ void ufs_read_inode(struct inode * inode)
 	    S_ISLNK(inode->i_mode)) {
 	        int i;
 
-	        for (i = 0; i < UFS_NDADDR; i++) {
-	                inode->u.ufs_i.i_data[i] = SWAB32(ufsip->ui_db[i]);
-	        }
-	        for (i = 0; i < UFS_NINDIR; i++) {
-	                inode->u.ufs_i.i_data[UFS_IND_BLOCK + i] =
-							SWAB32(ufsip->ui_ib[i]);
-	        }
+		if (inode->i_blocks) {
+		        for (i = 0; i < UFS_NDADDR; i++) {
+		                inode->u.ufs_i.i_u1.i_data[i] =
+				       SWAB32(ufsip->ui_u2.ui_addr.ui_db[i]);
+		        }
+		        for (i = 0; i < UFS_NINDIR; i++) {
+		                inode->u.ufs_i.i_u1.i_data[UFS_IND_BLOCK + i] =
+				       SWAB32(ufsip->ui_u2.ui_addr.ui_ib[i]);
+	        	}
+		} else /* fast symlink */ {
+			memcpy(inode->u.ufs_i.i_u1.i_symlink,
+			       ufsip->ui_u2.ui_symlink, 60);
+		}
 	}
 
 	/* KRR - I need to check the SunOS header files, but for the time
@@ -265,17 +287,15 @@ void ufs_read_inode(struct inode * inode)
 	 * the code.
 	 */
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
-	  inode->i_rdev = (kdev_t)SWAB64(*(__u64*)&ufsip->ui_db);
+	  inode->i_rdev = (kdev_t)SWAB64(*(__u64*)&ufsip->ui_u2.ui_addr.ui_db);
 	}
-
-	/* XXX - implement fast and slow symlinks */
 
 	inode->u.ufs_i.i_flags = SWAB32(ufsip->ui_flags);
 	inode->u.ufs_i.i_gen = SWAB32(ufsip->ui_gen); /* XXX - is this i_version? */
-	inode->u.ufs_i.i_shadow = SWAB32(ufsip->ui_shadow); /* XXX */
-	inode->u.ufs_i.i_uid = SWAB32(ufsip->ui_uid);
-	inode->u.ufs_i.i_gid = SWAB32(ufsip->ui_gid);
-	inode->u.ufs_i.i_oeftflag = SWAB32(ufsip->ui_oeftflag);
+	inode->u.ufs_i.i_shadow = SWAB32(ufsip->ui_u3.ui_sun.ui_shadow); /* XXX */
+	inode->u.ufs_i.i_uid = SWAB32(ufsip->ui_u3.ui_sun.ui_uid);
+	inode->u.ufs_i.i_gid = SWAB32(ufsip->ui_u3.ui_sun.ui_gid);
+	inode->u.ufs_i.i_oeftflag = SWAB32(ufsip->ui_u3.ui_sun.ui_oeftflag);
 
 	brelse(bh);
 

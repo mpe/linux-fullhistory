@@ -46,10 +46,13 @@
 #define ESI_NO_COMMAND		0xff
 
 #define ESP_STAT_RX_TIMEOUT	0x01
-#define ESP_STAT_NEED_DMA_RX	0x02
-#define ESP_STAT_NEED_DMA_TX    0x04
-#define ESP_STAT_DMA_RX		0x08
-#define ESP_STAT_DMA_TX		0x10
+#define ESP_STAT_DMA_RX		0x02
+#define ESP_STAT_DMA_TX		0x04
+#define ESP_STAT_NEVER_DMA      0x08
+#define ESP_STAT_USE_PIO        0x10
+
+/* Always use PIO for this number (or less) of bytes */
+#define ESP_PIO_THRESHOLD       32
 
 #define ESP_EVENT_WRITE_WAKEUP	0
 #define ESP_MAGIC		0x53ee
@@ -82,7 +85,6 @@ struct esp_struct {
 	int			xmit_head;
 	int			xmit_tail;
 	int			xmit_cnt;
-	struct tty_flip_buffer	*tty_buf;
 	struct tq_struct	tqueue;
 	struct tq_struct	tqueue_hangup;
 	struct termios		normal_termios;
@@ -93,9 +95,13 @@ struct esp_struct {
 	struct wait_queue	*break_wait;
 	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
 	struct esp_struct	*next_port; /* For the linked list */
-	struct esp_struct	*prev_port;
 };
 
+struct esp_pio_buffer
+{
+	unsigned char data[1024];
+	struct esp_pio_buffer *next;
+};
 
 #endif /* ESP_H */
 

@@ -44,22 +44,22 @@ extern inline void remove_bh(int nr)
 	bh_mask &= ~(1 << nr);
 }
 
-extern int __m68k_bh_counter;
+extern unsigned int local_bh_count[NR_CPUS];
 
 extern inline void start_bh_atomic(void)
 {
-	__m68k_bh_counter++;
+	local_bh_count[smp_processor_id()]++;
 	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
 	barrier();
-	__m68k_bh_counter--;
+	local_bh_count[smp_processor_id()]--;
 }
 
 /* These are for the irq's testing the lock */
-#define softirq_trylock()  (__m68k_bh_counter ? 0 : (__m68k_bh_counter=1))
-#define softirq_endlock()  (__m68k_bh_counter = 0)
+#define softirq_trylock(cpu)  (local_bh_count[cpu] ? 0 : (local_bh_count[cpu]=1))
+#define softirq_endlock(cpu)  (local_bh_count[cpu] = 0)
 
 #endif

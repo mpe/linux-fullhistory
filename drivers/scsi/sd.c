@@ -91,7 +91,7 @@ static void sd_devname(unsigned int disknum, char * buffer)
 {
     if( disknum <= 26 )
     {
-        sprintf(buffer, "sd%c", 'a' + (disknum >> 4));
+        sprintf(buffer, "sd%c", 'a' + disknum);
     }
     else
     {
@@ -101,8 +101,8 @@ static void sd_devname(unsigned int disknum, char * buffer)
          * For larger numbers of disks, we need to go to a new
          * naming scheme.
          */
-        min1 = (disknum >> 4) / 26;
-        min2 = (disknum >> 4) % 26;
+        min1 = disknum / 26;
+        min2 = disknum % 26;
         sprintf(buffer, "sd%c%c", 'a' + min1, 'a' + min2);
     }
 }
@@ -516,11 +516,11 @@ static void do_sd_request (void)
     unsigned long flags;
     int flag = 0;
 
-    save_flags(flags);
     while (1==1){
-	cli();
+	spin_lock_irqsave(&current_lock, flags);
+
 	if (CURRENT != NULL && CURRENT->rq_status == RQ_INACTIVE) {
-	    restore_flags(flags);
+            spin_unlock_irqrestore(&current_lock, flags);
 	    return;
 	}
 
@@ -535,6 +535,7 @@ static void do_sd_request (void)
          */
         if( SDev->host->in_recovery )
           {
+            spin_unlock_irqrestore(&current_lock, flags);
             return;
           }
 
@@ -554,6 +555,7 @@ static void do_sd_request (void)
 	     */
 	    if( SDev->removable && !in_interrupt() )
 	    {
+                spin_unlock(&current_lock);
                 scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
 		/* scsi_ioctl may allow CURRENT to change, so start over. */
 		SDev->was_reset = 0;
@@ -585,7 +587,7 @@ static void do_sd_request (void)
 	 * Using a "sti()" gets rid of the latency problems but causes
 	 * race conditions and crashes.
 	 */
-	restore_flags(flags);
+        spin_unlock_irqrestore(&current_lock, flags);
 
 	/* This is a performance enhancement. We dig down into the request
 	 * list and try to find a queueable request (i.e. device not busy,
@@ -603,7 +605,7 @@ static void do_sd_request (void)
 	if (!SCpnt && sd_template.nr_dev > 1){
 	    struct request *req1;
 	    req1 = NULL;
-	    cli();
+	    spin_lock_irqsave(&current_lock, flags);
 	    req = CURRENT;
 	    while(req){
 		SCpnt = scsi_request_queueable(req,
@@ -618,7 +620,7 @@ static void do_sd_request (void)
 		else
 		    req1->next = req->next;
 	    }
-	    restore_flags(flags);
+            spin_unlock_irqrestore(&current_lock, flags);
 	}
 
 	if (!SCpnt) return; /* Could not find anything to do */

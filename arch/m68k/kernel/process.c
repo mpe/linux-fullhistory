@@ -65,7 +65,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;){
-		if (!resched_needed())
+		if (!need_resched)
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 			/* block out HSYNC on the atari (falcon) */
 			__asm__("stop #0x2200" : : : "cc");
@@ -113,17 +113,14 @@ void show_regs(struct pt_regs * regs)
 		printk("USP: %08lx\n", rdusp());
 }
 
-/*
- * Free current thread data structures etc..
- */
-void exit_thread(void)
-{
-}
-
 void flush_thread(void)
 {
+	unsigned long zero = 0;
 	set_fs(USER_DS);
-	current->tss.fs = USER_DS;
+	current->tss.fs = __USER_DS;
+	asm volatile (".chip 68k/68881\n\t"
+		      "frestore %0@\n\t"
+		      ".chip 68k" : : "a" (&zero));
 }
 
 /*
@@ -160,10 +157,6 @@ asmlinkage int m68k_clone(struct pt_regs *regs)
 	return ret;
 }
 
-void release_thread(struct task_struct *dead_task)
-{
-}
-
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		 struct task_struct * p, struct pt_regs * regs)
 {
@@ -190,13 +183,12 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 * Must save the current SFC/DFC value, NOT the value when
 	 * the parent was last descheduled - RGH  10-08-96
 	 */
-	p->tss.fs = get_fs();
+	p->tss.fs = get_fs().seg;
 
 	/* Copy the current fpu state */
 	asm volatile ("fsave %0" : : "m" (p->tss.fpstate[0]) : "memory");
 
-	if((!CPU_IS_060 && p->tss.fpstate[0]) ||
-	   (CPU_IS_060 && p->tss.fpstate[2]))
+	if (!CPU_IS_060 ? p->tss.fpstate[0] : p->tss.fpstate[2])
 	  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
 			"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
 			: : "m" (p->tss.fp[0]), "m" (p->tss.fpcntl[0])
@@ -215,7 +207,7 @@ int dump_fpu (struct pt_regs *regs, struct user_m68kfp_struct *fpu)
 
   /* First dump the fpu context to avoid protocol violation.  */
   asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
-  if((!CPU_IS_060 && !fpustate[0]) || (CPU_IS_060 && !fpustate[2]))
+  if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
      return 0;
 
   asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"

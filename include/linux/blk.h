@@ -5,6 +5,15 @@
 #include <linux/locks.h>
 #include <linux/config.h>
 
+#include <asm/spinlock.h>
+
+/*
+ * Spinlock for protecting the request queue which
+ * is mucked around with in interrupts on potentially
+ * multiple CPU's..
+ */
+extern spinlock_t current_lock;
+
 /*
  * NR_REQUEST is the number of entries in the request-queue.
  * NOTE that writes may use only the low 2/3 of these: reads

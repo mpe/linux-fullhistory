@@ -103,6 +103,7 @@ struct amiga_hw_present {
     AMIGAHW_DECLARE(ALICE_PAL);		/* PAL Alice (8374) */
     AMIGAHW_DECLARE(ALICE_NTSC);	/* NTSC Alice (8374) */
     AMIGAHW_DECLARE(MAGIC_REKICK);	/* A3000 Magic Hard Rekick */
+    AMIGAHW_DECLARE(PCMCIA);		/* PCMCIA Slot */
     AMIGAHW_DECLARE(ZORRO);		/* Zorro AutoConfig */
     AMIGAHW_DECLARE(ZORRO3);		/* Zorro III */
 };

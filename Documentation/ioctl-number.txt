@@ -1,5 +1,5 @@
 Ioctl Numbers
-1 Sep 1997
+28 Jan 1998
 Michael Chastain
 <mec@shout.net>
 
@@ -86,7 +86,7 @@ Code	Seq#	Include File		Comments
 'W'	28-2F	linux/iso16-relay.h	in development
 'Y'	all	linux/cyclades.h
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
-'b'	00-3F	bit3 vme host bridge	in development:
+'b'	00-FF	bit3 vme host bridge	in development:
 					<mailto:natalia@nikhefk.nikhef.nl>
 'c'	all	linux/comstats.h
 'f'	all	linux/ext2_fs.h
@@ -108,6 +108,8 @@ Code	Seq#	Include File		Comments
 'w'	all	CERN SCI driver		in development
 'z'	00-3F	CAN bus card		in development:
 					<mailto:hdstich@connectu.ulm.circular.de>
+'z'	40-7F	CAN bas card		in development:
+					<mailto:oe@port.de>
 0x89	00-0F	asm-i386/sockios.h
 0x89	10-DF	linux/sockios.h
 0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range

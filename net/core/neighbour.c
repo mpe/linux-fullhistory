@@ -1127,7 +1127,7 @@ void neigh_app_ns(struct neighbour *n)
 		return;
 
 	if (neigh_fill_info(skb, n, 0, 0, RTM_GETNEIGH) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		return;
 	}
 	nlh = (struct nlmsghdr*)skb->data;
@@ -1147,7 +1147,7 @@ static void neigh_app_notify(struct neighbour *n)
 		return;
 
 	if (neigh_fill_info(skb, n, 0, 0, RTM_NEWNEIGH) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		return;
 	}
 	nlh = (struct nlmsghdr*)skb->data;

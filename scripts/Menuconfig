@@ -19,7 +19,8 @@
 # Portions of this script were borrowed from the original Configure
 # script.
 #
-# Please send comments / questions / bug fixes to roadcapw@cfw.com
+# William Roadcap was the original author of Menuconfig.
+# Michael Elizabeth Chastain (mec@shout.net) is the current maintainer.
 #
 # 070497 Bernhard Kaindl (bkaindl@netway.at) - get default values for
 # new bool, tristate and dep_tristate parameters from the defconfig file.
@@ -726,9 +727,8 @@ function activate_menu () {
 Menuconfig has encountered a possible error in one of the kernel's
 configuration files and is unable to continue.
 
-Please report this to the author <roadcapw@cfw.com>.  You may also
-send a problem report to linux-kernel@vger.rutgers.edu or post a
-message to the linux.dev.kernel news group.
+Please report this to the maintainer <mec@shout.net>.  You may also
+send a problem report to <linux-kernel@vger.rutgers.edu>.
 
 Please indicate the kernel version you are trying to configure and
 which menu you were trying to enter when this error occurred.
@@ -788,8 +788,8 @@ the /usr/src/linux/scripts/lxdialog directory and issuing the
 "make clean all" command.
 
 If you have verified that your ncurses install is correct, you may email
-the author <roadcapw@cfw.com> or post a message on the linux.dev.kernel
-news group for additional assistance. 
+the maintainer <mec@shout.net> or post a message to
+<linux-kernel@vger.rutgers.edu> for additional assistance. 
 
 EOM
 			cleanup

@@ -14,7 +14,23 @@
  * They use the standard big-endian m680x0 bit ordering.
  */
 
-extern __inline__ int test_and_set_bit(int nr,void * vaddr)
+#define test_and_set_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_test_and_set_bit(nr, vaddr) : \
+   __generic_test_and_set_bit(nr, vaddr))
+
+extern __inline__ int __constant_test_and_set_bit(int nr,void * vaddr)
+{
+	char retval;
+
+	__asm__ __volatile__ ("bset %1,%2; sne %0"
+	     : "=d" (retval)
+	     : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+
+	return retval;
+}
+
+extern __inline__ int __generic_test_and_set_bit(int nr,void * vaddr)
 {
 	char retval;
 
@@ -24,13 +40,40 @@ extern __inline__ int test_and_set_bit(int nr,void * vaddr)
 	return retval;
 }
 
-extern __inline__ void set_bit(int nr, void * vaddr)
+#define set_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_set_bit(nr, vaddr) : \
+   __generic_set_bit(nr, vaddr))
+
+extern __inline__ void __constant_set_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bset %0,%1"
+	     : : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+}
+
+extern __inline__ void __generic_set_bit(int nr, void * vaddr)
 {
 	__asm__ __volatile__ ("bfset %1@{%0:#1}"
 	     : : "d" (nr^31), "a" (vaddr));
 }
 
-extern __inline__ int test_and_clear_bit(int nr, void * vaddr)
+#define test_and_clear_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_test_and_clear_bit(nr, vaddr) : \
+   __generic_test_and_clear_bit(nr, vaddr))
+
+extern __inline__ int __constant_test_and_clear_bit(int nr, void * vaddr)
+{
+	char retval;
+
+	__asm__ __volatile__ ("bclr %1,%2; sne %0"
+	     : "=d" (retval)
+	     : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+
+	return retval;
+}
+
+extern __inline__ int __generic_test_and_clear_bit(int nr, void * vaddr)
 {
 	char retval;
 
@@ -40,13 +83,40 @@ extern __inline__ int test_and_clear_bit(int nr, void * vaddr)
 	return retval;
 }
 
-extern __inline__ void clear_bit(int nr, void * vaddr)
+#define clear_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_clear_bit(nr, vaddr) : \
+   __generic_clear_bit(nr, vaddr))
+
+extern __inline__ void __constant_clear_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bclr %0,%1"
+	     : : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+}
+
+extern __inline__ void __generic_clear_bit(int nr, void * vaddr)
 {
 	__asm__ __volatile__ ("bfclr %1@{%0:#1}"
 	     : : "d" (nr^31), "a" (vaddr));
 }
 
-extern __inline__ int test_and_change_bit(int nr, void * vaddr)
+#define test_and_change_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_test_and_change_bit(nr, vaddr) : \
+   __generic_test_and_change_bit(nr, vaddr))
+
+extern __inline__ int __constant_test_and_change_bit(int nr, void * vaddr)
+{
+	char retval;
+
+	__asm__ __volatile__ ("bchg %1,%2; sne %0"
+	     : "=d" (retval)
+	     : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+
+	return retval;
+}
+
+extern __inline__ int __generic_test_and_change_bit(int nr, void * vaddr)
 {
 	char retval;
 
@@ -56,7 +126,18 @@ extern __inline__ int test_and_change_bit(int nr, void * vaddr)
 	return retval;
 }
 
-extern __inline__ void change_bit(int nr, void * vaddr)
+#define change_bit(nr,vaddr) \
+  (__builtin_constant_p(nr) ? \
+   __constant_change_bit(nr, vaddr) : \
+   __generic_change_bit(nr, vaddr))
+
+extern __inline__ void __constant_change_bit(int nr, void * vaddr)
+{
+	__asm__ __volatile__ ("bchg %0,%1"
+	     : : "di" (nr & 7), "m" (((char *)vaddr)[(nr^31) >> 3]));
+}
+
+extern __inline__ void __generic_change_bit(int nr, void * vaddr)
 {
 	__asm__ __volatile__ ("bfchg %1@{%0:#1}"
 	     : : "d" (nr^31), "a" (vaddr));
@@ -256,8 +337,5 @@ ext2_find_next_zero_bit (const void *vaddr, unsigned size, unsigned offset)
 	res = ext2_find_first_zero_bit (p, size - 32 * (p - addr));
 	return (p - addr) * 32 + res;
 }
-
-
-/* Byte swapping (swab16 and swab32) is now in asm/byteorder.h . */
 
 #endif /* _M68K_BITOPS_H */

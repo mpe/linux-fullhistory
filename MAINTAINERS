@@ -348,8 +348,8 @@ L:	linux-mac68k@wave.lm.com
 S:	Maintained
 
 MENUCONFIG:
-P:	William Roadcap
-M:	roadcapw@cfw.com
+P:	Michael Elizabeth Chastain
+M:	mec@shout.net
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

@@ -32,6 +32,8 @@
 #define SER_IOEXT	106	/* Amiga GVP IO-Extender (16c552) */
 #define SER_MFC_III	107	/* Amiga BSC Multiface Card III (MC68681) */
 #define SER_WHIPPET	108	/* Amiga Hisoft Whippet PCMCIA (16c550B) */
+#define SER_SCC_MVME	109	/* MVME162/MVME172 ports */
+#define SER_SCC_MAC	110	/* Macintosh SCC channel */
 
 struct serial_struct {
 	int	type;
@@ -99,33 +101,33 @@ struct serial_struct {
  *
  */
 
-struct async_struct;
+struct m68k_async_struct;
 
 typedef struct {
-	void (*init)( struct async_struct *info );
-	void (*deinit)( struct async_struct *info, int leave_dtr );
-	void (*enab_tx_int)( struct async_struct *info, int enab_flag );
-	int  (*check_custom_divisor)( struct async_struct *info, int baud_base,
+	void (*init)( struct m68k_async_struct *info );
+	void (*deinit)( struct m68k_async_struct *info, int leave_dtr );
+	void (*enab_tx_int)( struct m68k_async_struct *info, int enab_flag );
+	int  (*check_custom_divisor)( struct m68k_async_struct *info, int baud_base,
 				     int divisor );
-	void (*change_speed)( struct async_struct *info );
-	void (*throttle)( struct async_struct *info, int status );
-	void (*set_break)( struct async_struct *info, int break_flag );
-	void (*get_serial_info)( struct async_struct *info,
+	void (*change_speed)( struct m68k_async_struct *info );
+	void (*throttle)( struct m68k_async_struct *info, int status );
+	void (*set_break)( struct m68k_async_struct *info, int break_flag );
+	void (*get_serial_info)( struct m68k_async_struct *info,
 				struct serial_struct *retinfo );
-	unsigned int (*get_modem_info)( struct async_struct *info );
-	int  (*set_modem_info)( struct async_struct *info, int new_dtr,
+	unsigned int (*get_modem_info)( struct m68k_async_struct *info );
+	int  (*set_modem_info)( struct m68k_async_struct *info, int new_dtr,
 			       int new_rts );
 	int  (*ioctl)( struct tty_struct *tty, struct file *file,
-		      struct async_struct *info, unsigned int cmd,
+		      struct m68k_async_struct *info, unsigned int cmd,
 		      unsigned long arg );
-	void (*stop_receive)( struct async_struct *info );
-	int  (*trans_empty)( struct async_struct *info );
-	int  (*check_open)( struct async_struct *info, struct tty_struct *tty,
+	void (*stop_receive)( struct m68k_async_struct *info );
+	int  (*trans_empty)( struct m68k_async_struct *info );
+	int  (*check_open)( struct m68k_async_struct *info, struct tty_struct *tty,
 			   struct file *file );
 } SERIALSWITCH;
 
 /*
- * Definitions for async_struct (and serial_struct) flags field
+ * Definitions for m68k_async_struct (and serial_struct) flags field
  */
 #define ASYNC_HUP_NOTIFY 0x0001 /* Notify getty on hangups and closes 
 				   on the callout port */
@@ -191,16 +193,18 @@ struct serial_icounter_struct {
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 
-/*
- * Counters of the input lines (CTS, DSR, RI, CD) interrupts
- */
-struct async_icount {
-	__u32	cts, dsr, rng, dcd, tx, rx;
-	__u32	frame, parity, overrun, brk;
-	__u32	buf_overrun;
-};
+#include <linux/config.h>	/* for Mac SCC extensions */
 
-struct async_struct {
+#ifdef CONFIG_MAC
+#define NUM_ZSREGS    16
+struct mac_zschannel {
+	volatile unsigned char *control;
+	volatile unsigned char *data;
+};
+struct m68k_async_private;
+#endif
+
+struct m68k_async_struct {
 	int			magic;
 	int			baud_base;
 	int			port;
@@ -233,15 +237,14 @@ struct async_struct {
 	int			xmit_tail;
 	int			xmit_cnt;
 	struct tq_struct	tqueue;
-	struct tq_struct	tqueue_hangup;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
 	struct wait_queue	*delta_msr_wait;
 	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
-	struct async_struct	*next_port; /* For the linked list */
-	struct async_struct	*prev_port;
+	struct m68k_async_struct	*next_port; /* For the linked list */
+	struct m68k_async_struct	*prev_port;
 	void			*board_base; /* board-base address for use with
 						boards carrying several UART's,
 						like some Amiga boards. */
@@ -254,8 +257,41 @@ struct async_struct {
 						interrupt, instead of checking
 						IRQ-registers on all UART's */
 	SERIALSWITCH		*sw;		/* functions to manage this port */
+#ifdef CONFIG_MAC
+	struct m68k_async_private	*private;
+#endif
 };
 
+#ifdef CONFIG_MAC
+struct m68k_async_private {
+	struct m68k_async_info	*zs_next;	/* For IRQ servicing chain */
+	struct mac_zschannel	*zs_channel;	/* Channel registers */
+	struct mac_zschannel	*zs_chan_a;	/* A side registers */
+	unsigned char		read_reg_zero;
+
+	char			soft_carrier;	/* Use soft carrier on this */
+	char			break_abort;	/* console, process brk/abrt */
+	char			kgdb_channel;	/* Kgdb running on this channel */
+	char			is_cons;	/* Is this our console. */
+	unsigned char		tx_active;	/* character being xmitted */
+	unsigned char		tx_stopped;	/* output is suspended */
+
+	/* We need to know the current clock divisor
+	 * to read the bps rate the chip has currently
+	 * loaded.
+	 */
+	unsigned char		clk_divisor;	/* May be 1, 16, 32, or 64 */
+	int			zs_baud;
+
+	/* Current write register values */
+	unsigned char		curregs[NUM_ZSREGS];
+
+	/* Values we need to set next opportunity */
+	unsigned char		pendregs[NUM_ZSREGS];
+
+	char			change_needed;
+};
+#endif
 #define SERIAL_MAGIC 0x5301
 
 /*
@@ -275,7 +311,7 @@ struct async_struct {
 /* Export to allow PCMCIA to use this - Dave Hinds */
 extern int register_serial(struct serial_struct *req);
 extern void unregister_serial(int line);
-extern struct async_struct rs_table[];
+extern struct m68k_async_struct rs_table[];
 extern task_queue tq_serial;
 
 
@@ -283,14 +319,14 @@ extern task_queue tq_serial;
  * This routine is used by the interrupt handler to schedule
  * processing in the software interrupt portion of the driver.
  */
-static __inline__ void rs_sched_event(struct async_struct *info, int event)
+static __inline__ void rs_sched_event(struct m68k_async_struct *info, int event)
 {
 	info->event |= 1 << event;
 	queue_task(&info->tqueue, &tq_serial);
 	mark_bh(SERIAL_BH);
 }
 
-static __inline__ void rs_receive_char( struct async_struct *info,
+static __inline__ void rs_receive_char( struct m68k_async_struct *info,
 					    int ch, int err )
 {
 	struct tty_struct *tty = info->tty;
@@ -305,10 +341,10 @@ static __inline__ void rs_receive_char( struct async_struct *info,
 	*tty->flip.flag_buf_ptr++ = err;
 	*tty->flip.char_buf_ptr++ = ch;
 	info->icount.rx++;
-	queue_task(&tty->flip.tqueue, &tq_timer);
+	tty_flip_buffer_push(tty);
 }
 
-static __inline__ int rs_get_tx_char( struct async_struct *info )
+static __inline__ int rs_get_tx_char( struct m68k_async_struct *info )
 {
 	unsigned char ch;
 	
@@ -330,14 +366,14 @@ static __inline__ int rs_get_tx_char( struct async_struct *info )
 	return( ch );
 }
 
-static __inline__ int rs_no_more_tx( struct async_struct *info )
+static __inline__ int rs_no_more_tx( struct m68k_async_struct *info )
 {
 	return( info->xmit_cnt <= 0 ||
 			info->tty->stopped ||
 			info->tty->hw_stopped );
 }
 
-static __inline__ void rs_dcd_changed( struct async_struct *info, int dcd )
+static __inline__ void rs_dcd_changed( struct m68k_async_struct *info, int dcd )
 
 {
 	/* update input line counter */
@@ -356,7 +392,8 @@ static __inline__ void rs_dcd_changed( struct async_struct *info, int dcd )
 #ifdef SERIAL_DEBUG_OPEN
 			printk("scheduling hangup...");
 #endif
-			queue_task(&info->tqueue_hangup, &tq_scheduler);
+			if (info->tty)
+				tty_hangup(info->tty);
 		}
 	}
 }
@@ -365,13 +402,13 @@ static __inline__ void rs_dcd_changed( struct async_struct *info, int dcd )
 void rs_stop( struct tty_struct *tty );
 void rs_start( struct tty_struct *tty );
 
-static __inline__ void rs_check_cts( struct async_struct *info, int cts )
+static __inline__ void rs_check_cts( struct m68k_async_struct *info, int cts )
 {
 	/* update input line counter */
 	info->icount.cts++;
 	wake_up_interruptible(&info->delta_msr_wait);
 	
-	if ((info->flags & ASYNC_CTS_FLOW) && info->tty)
+	if ((info->flags & ASYNC_CTS_FLOW) && info->tty) {
 		if (info->tty->hw_stopped) {
 			if (cts) {
 #if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
@@ -388,7 +425,7 @@ static __inline__ void rs_check_cts( struct async_struct *info, int cts )
 				rs_stop( info->tty );
 			}
 		}
-		
+	}
 }
 
 

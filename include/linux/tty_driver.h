@@ -213,6 +213,7 @@ struct tty_driver {
 #define SYSTEM_TYPE_TTY			0x0001
 #define SYSTEM_TYPE_CONSOLE		0x0002
 #define SYSTEM_TYPE_SYSCONS		0x0003
+#define SYSTEM_TYPE_SYSPTMX		0x0004
 
 /* pty subtypes (magic, used by tty_io.c) */
 #define PTY_TYPE_MASTER			0x0001

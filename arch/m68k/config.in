@@ -23,7 +23,19 @@ comment 'Platform dependant setup'
 
 bool 'Amiga support' CONFIG_AMIGA
 bool 'Atari support' CONFIG_ATARI
+if [ "$CONFIG_ATARI" = "y" ]; then
+  bool '  Hades support' CONFIG_HADES
+  if [ "$CONFIG_HADES" = "y" ]; then
+    define_bool CONFIG_PCI y
+  fi  
+fi
 bool 'Macintosh support' CONFIG_MAC
+bool 'Apollo support' CONFIG_APOLLO
+bool 'VME (Motorola and BVM) support' CONFIG_VME
+if [ "$CONFIG_VME" = "y" ]; then
+  bool 'MVME162, 166 and 167 support' CONFIG_MVME16x
+# bool 'BVME4000 and BVME6000 support' CONFIG_BVME6000
+fi
 
 comment 'Processor type'
 bool '68020 support' CONFIG_M68020
@@ -56,18 +68,18 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga AutoConfig Identification' CONFIG_ZORRO
-  bool 'Amiga OCS chipset support' CONFIG_AMIFB_OCS
-  bool 'Amiga ECS chipset support' CONFIG_AMIFB_ECS
-  bool 'Amiga AGA chipset support' CONFIG_AMIFB_AGA
-  bool 'Amiga Cybervision support' CONFIG_FB_CYBER
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
-  fi
 #  bool 'Amiga GSP (TMS340x0) support' CONFIG_AMIGA_GSP
 #  if [ "$CONFIG_AMIGA_GSP" = "y" ]; then
 #    bool 'DMI Resolver support' CONFIG_GSP_RESOLVER
 #    bool 'A2410 support' CONFIG_GSP_A2410
 #  fi
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  bool 'Support for ST-RAM as swap space' CONFIG_STRAM_SWAP
+  bool 'ST-RAM statistics in /proc' CONFIG_STRAM_PROC
+fi
+if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" ]; then
+  bool 'Use power LED as a heartbeat' CONFIG_HEARTBEAT
 fi
 endmenu
 
@@ -77,7 +89,17 @@ endmenu
 mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
-tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
+if [ "$CONFIG_AMIGA" = "y" ]; then
+  tristate 'Amiga floppy support' CONFIG_AMIGA_FLOPPY
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  tristate 'Atari floppy support' CONFIG_ATARI_FLOPPY
+fi
+if [ "$CONFIG_MAC" = "y" ]; then
+  tristate 'Macintosh IWM floppy support' CONFIG_MAC_FLOPPY
+fi
+#Normal floppy disk support' CONFIG_BLK_DEV_FD
+
 tristate 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
 if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
   dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
@@ -85,6 +107,16 @@ if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
   dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
   dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
   dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
+  if [ "$CONFIG_AMIGA" = "y" ]; then
+    bool '   Amiga Gayle IDE interface support' CONFIG_BLK_DEV_GAYLE
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '   Buddha/Catweasel IDE interface support' CONFIG_BLK_DEV_BUDDHA
+      bool '   Amiga IDE Doubler support' CONFIG_BLK_DEV_IDEDOUBLER $CONFIG_BLK_DEV_GAYLE
+    fi
+  fi
+  if [ "$CONFIG_ATARI" = "y" ]; then
+    bool '   Falcon IDE interface support' CONFIG_BLK_DEV_FALCON_IDE
+  fi
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
@@ -138,6 +170,7 @@ comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
 
 bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+bool 'SCSI logging facility' CONFIG_SCSI_LOGGING
 
 mainmenu_option next_comment
 comment 'SCSI low-level drivers'
@@ -155,14 +188,26 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
-    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
+    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
+#    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   dep_tristate 'Atari native SCSI support' CONFIG_ATARI_SCSI $CONFIG_SCSI
   bool 'Long delays for Toshiba CD-ROMs' CONFIG_ATARI_SCSI_TOSHIBA_DELAY
+  if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_HADES" = "y" ]; then
+    bool 'Hades SCSI DMA emulator (EXPERIMENTAL)' CONFIG_TT_DMA_EMUL
+  fi
+fi
+if [ "$CONFIG_MAC" = "y" ]; then
+  bool 'MAC NCR5380 SCSI' CONFIG_MAC_SCSI
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
+
+if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
+  bool 'NCR53C710 SCSI driver for MVME16x' CONFIG_MVME16x_SCSI
+fi
+
 endmenu
 
 fi
@@ -195,12 +240,21 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'A2065 support' CONFIG_A2065
   tristate 'Hydra support' CONFIG_HYDRA
 fi
-if [ "$CONFIG_ATARI" = "y" ]; then
-  bool 'Atari Lance support' CONFIG_ATARILANCE
-if [ "$CONFIG_ATARI_ACSI" = "y" ]; then
-  bool 'BioNet-100 support' CONFIG_ATARI_BIONET
-  bool 'PAMsNet support' CONFIG_ATARI_PAMSNET
+if [ "$CONFIG_APOLLO" = "y" ] ; then
+  tristate 'Apollo 3c505 support' CONFIG_APOLLO_ELPLUS
 fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  tristate 'Atari Lance support' CONFIG_ATARILANCE
+  if [ "$CONFIG_ATARI_ACSI" != "n" ]; then
+    tristate 'BioNet-100 support' CONFIG_ATARI_BIONET
+    tristate 'PAMsNet support' CONFIG_ATARI_PAMSNET
+  fi
+fi
+if [ "$CONFIG_MAC" = "y" ]; then
+  bool 'Mac NS 8390 based ethernet cards' CONFIG_DAYNAPORT
+fi
+if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
+  bool 'MVME16x Ethernet support' CONFIG_APRICOT
 fi
 fi
 endmenu
@@ -220,14 +274,23 @@ fi
 
 source fs/Config.in
 
+if [ "$CONFIG_VME" = "n" ]; then
+  define_bool CONFIG_FB y
+  source drivers/video/Config.in
+fi
+
 source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Character devices'
-
-define_bool CONFIG_VT y
-define_bool CONFIG_VT_CONSOLE y
-define_bool CONFIG_FB_CONSOLE y
+ 
+if [ "$CONFIG_VME" = "n" ]; then
+  define_bool CONFIG_VT y
+  if [ "$CONFIG_VT" = "y" ]; then
+    bool 'Support for console on virtual terminal' CONFIG_VT_CONSOLE
+  fi
+  define_bool CONFIG_FB_CONSOLE y
+fi
 
 if [ "$CONFIG_ATARI" = "y" ]; then
   define_bool CONFIG_NVRAM y
@@ -240,6 +303,9 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
+fi
+if [ "$CONFIG_MAC" = "y" ]; then
+   bool 'Mac ADB mouse support' CONFIG_MACMOUSE
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
@@ -260,11 +326,25 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
   bool 'Hisoft Whippet PCMCIA serial support' CONFIG_WHIPPET
 fi
-if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
-     "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \
-     "$CONFIG_GVPIOEXT" = "y" -o "$CONFIG_MULTIFACE_III_TTY" = "y" ]; then
-  bool 'Serial console support' CONFIG_SERIAL_CONSOLE
+if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" ]; then
+  if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
+       "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \
+       "$CONFIG_GVPIOEXT" = "y" -o "$CONFIG_MULTIFACE_III_TTY" = "y" ]; then
+    bool 'Support for serial port console' CONFIG_SERIAL_CONSOLE
+  fi
 fi
+if [ "$CONFIG_MAC" = "y" ]; then
+  bool 'Mac SCC serial support' CONFIG_MAC_SCC
+fi
+if [ "$CONFIG_VME" = "y" ]; then
+  define_bool CONFIG_SERIAL_CONSOLE y
+  bool 'CD2401 support for MVME166/7 serial ports' CONFIG_SERIAL167
+  bool 'SCC support for MVME162 serial ports' CONFIG_MVME162_SCC
+fi
+if [ "$CONFIG_APOLLO" = "y" ]; then
+  bool 'Support for DN serial port (dummy)' CONFIG_SERIAL
+  bool 'Support for serial port console' CONFIG_SERIAL_CONSOLE
+fi 
 bool 'Support for user serial device modules' CONFIG_USERIAL
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
@@ -274,6 +354,9 @@ fi
 bool 'Support for user misc device modules' CONFIG_UMISC
 if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" ]; then
   define_bool CONFIG_ABSTRACT_CONSOLE y
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 fi
 endmenu
 

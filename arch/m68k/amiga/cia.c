@@ -145,7 +145,7 @@ static void cia_handler(int irq, void *dev_id, struct pt_regs *fp)
 	custom.intreq = base->int_mask;
 	for (i = 0; i < CIA_IRQS; i++, irq++, mach_irq++) {
 		if (ints & 1) {
-			kstat.interrupts[irq]++;
+			kstat.irqs[0][irq]++;
 			base->irq_list[i].handler(mach_irq, base->irq_list[i].dev_id, fp);
 		}
 		ints >>= 1;
@@ -181,7 +181,7 @@ int cia_get_irq_list(struct ciabase *base, char *buf)
 	for (i = 0; i < CIA_IRQS; i++) {
 		if (!(base->irq_list[i].flags & IRQ_FLG_STD)) {
 			len += sprintf(buf+len, "cia  %2d: %10d ", j + i,
-			               kstat.interrupts[SYS_IRQS + j + i]);
+			               kstat.irqs[0][SYS_IRQS + j + i]);
 			if (base->irq_list[i].flags & IRQ_FLG_LOCK)
 				len += sprintf(buf+len, "L ");
 			else

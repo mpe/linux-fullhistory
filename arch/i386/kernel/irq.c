@@ -570,22 +570,31 @@ void __global_sti(void)
 
 unsigned long __global_save_flags(void)
 {
-	return global_irq_holder == (unsigned char) smp_processor_id();
+	if (!local_irq_count[smp_processor_id()])
+		return global_irq_holder == (unsigned char) smp_processor_id();
+	else {
+		unsigned long x;
+		__save_flags(x);
+		return x;
+	}
 }
 
 void __global_restore_flags(unsigned long flags)
 {
-	switch (flags) {
-	case 0:
-		__global_sti();
-		break;
-	case 1:
-		__global_cli();
-		break;
-	default:
-		printk("global_restore_flags: %08lx (%08lx)\n",
-			flags, (&flags)[-1]);
-	}
+	if (!local_irq_count[smp_processor_id()]) {
+		switch (flags) {
+		case 0:
+			__global_sti();
+			break;
+		case 1:
+			__global_cli();
+			break;
+		default:
+			printk("global_restore_flags: %08lx (%08lx)\n",
+				flags, (&flags)[-1]);
+		}
+	} else
+		__restore_flags(flags);
 }
 
 #endif

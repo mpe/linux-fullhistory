@@ -331,7 +331,7 @@ void amiga_disable_irq(unsigned int irq)
 
 inline void amiga_do_irq(int irq, struct pt_regs *fp)
 {
-	kstat.interrupts[SYS_IRQS + irq]++;
+	kstat.irqs[0][SYS_IRQS + irq]++;
 	ami_irq_list[irq]->handler(irq, ami_irq_list[irq]->dev_id, fp);
 }
 
@@ -340,7 +340,7 @@ void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 	irq_node_t *node, *slow_nodes;
 	unsigned short flags;
 
-	kstat.interrupts[SYS_IRQS + irq]++;
+	kstat.irqs[0][SYS_IRQS + irq]++;
 	if (server->count++)
 		server->reentrance = 1;
 	/* serve first fast and normal handlers */
@@ -489,7 +489,7 @@ int amiga_get_irq_list(char *buf)
 		if (node->flags & IRQ_FLG_STD)
 			continue;
 		len += sprintf(buf+len, "ami  %2d: %10u ", i,
-		               kstat.interrupts[SYS_IRQS + i]);
+		               kstat.irqs[0][SYS_IRQS + i]);
 		do {
 			if (ami_servers[i]) {
 				if (node->flags & IRQ_FLG_FAST)

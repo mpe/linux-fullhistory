@@ -32,7 +32,6 @@
 #include <asm/atari_joystick.h>
 #include <asm/irq.h>
 
-extern int ovsc_switchmode;
 extern unsigned char mach_keyboard_type;
 static void atakeyb_rep( unsigned long ignore );
 extern unsigned int keymap_count;
@@ -504,23 +503,6 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	}
     }
 
-#ifdef KEYB_WRITE_INTERRUPT
-    if (acia_stat & ACIA_TDRE)	/* transmit of character is finished */
-    {
-	if (kb_state.buf)
-	{
-	    acia.key_data = *kb_state.buf++;
-	    kb_state.len--;
-	    if (kb_state.len == 0)
-	    {
-		kb_state.buf = NULL;
-		if (!kb_state.kernel_mode)
-			/* unblock something */;
-	    }
-	}
-    }
-#endif
-
 #if 0
     if (acia_stat & ACIA_CTS)
 	/* cannot happen */;
@@ -537,26 +519,6 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
     goto repeat;
 }
 
-#ifdef KEYB_WRITE_INTERRUPT
-void ikbd_write(const char *str, int len)
-{
-    u_char acia_stat;
-
-    if (kb_stat.buf)
-	/* wait */;
-    acia_stat = acia.key_ctrl;
-    if (acia_stat & ACIA_TDRE)
-    {
-	if (len != 1)
-	{
-	    kb_stat.buf = str + 1;
-	    kb_stat.len = len - 1;
-	}
-	acia.key_data = *str;
-	/* poll */
-    }
-}
-#else
 /*
  * I write to the keyboard without using interrupts, I poll instead.
  * This takes for the maximum length string allowed (7) at 7812.5 baud
@@ -581,7 +543,6 @@ void ikbd_write(const char *str, int len)
 	}
     }
 }
-#endif
 
 /* Reset (without touching the clock) */
 void ikbd_reset(void)
@@ -828,33 +789,28 @@ __initfunc(int atari_keyb_init(void))
 
     atari_turnoff_irq(IRQ_MFP_ACIA);
     do {
-	acia.key_ctrl = ACIA_RESET;		/* reset ACIA */
+	/* reset IKBD ACIA */
+	acia.key_ctrl = ACIA_RESET |
+			(atari_switches & ATARI_SWITCH_IKBD) ? ACIA_RHTID : 0;
 	(void)acia.key_ctrl;
 	(void)acia.key_data;
 
-	acia.mid_ctrl = ACIA_RESET;		/* reset other ACIA */
+	/* reset MIDI ACIA */
+	acia.mid_ctrl = ACIA_RESET |
+			(atari_switches & ATARI_SWITCH_MIDI) ? ACIA_RHTID : 0;
 	(void)acia.mid_ctrl;
 	(void)acia.mid_data;
 
 	/* divide 500kHz by 64 gives 7812.5 baud */
 	/* 8 data no parity 1 start 1 stop bit */
 	/* receive interrupt enabled */
-#ifdef KEYB_WRITE_INTERRUPT
-	/* RTS low, transmit interrupt enabled */
-	if (ovsc_switchmode == 1)
-	    acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RHTIE|ACIA_RIE);
-	    /* switch on OverScan via keyboard ACIA */
-	else
-	    acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RLTIE|ACIA_RIE);
-#else
-	/* RTS low, transmit interrupt disabled */
-	if (ovsc_switchmode == 1)
-	    acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RHTID|ACIA_RIE);
-	else
-	    acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RLTID|ACIA_RIE);
-#endif
+	/* RTS low (except if switch selected), transmit interrupt disabled */
+	acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RIE) |
+			((atari_switches & ATARI_SWITCH_IKBD) ?
+			 ACIA_RHTID : ACIA_RLTID);
 	   
-	acia.mid_ctrl = ACIA_DIV16 | ACIA_D8N1S;
+	acia.mid_ctrl = ACIA_DIV16 | ACIA_D8N1S |
+			(atari_switches & ATARI_SWITCH_MIDI) ? ACIA_RHTID : 0;
     }
     /* make sure the interrupt line is up */
     while ((mfp.par_dt_reg & 0x10) == 0);

@@ -1530,7 +1530,7 @@ static void inet6_ifa_notify(int event, struct inet6_ifaddr *ifa)
 		return;
 	}
 	if (inet6_fill_ifaddr(skb, ifa, 0, 0, event) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_IFADDR, EINVAL);
 		return;
 	}

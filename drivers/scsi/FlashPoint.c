@@ -19,39 +19,14 @@
 #include <linux/config.h>
 
 
-/*
-  If CONFIG_PCI is not set, force CONFIG_SCSI_OMIT_FLASHPOINT.
-*/
-
-#ifndef CONFIG_PCI
-
-#undef CONFIG_SCSI_OMIT_FLASHPOINT
-#define CONFIG_SCSI_OMIT_FLASHPOINT
-
-#endif
-
-
-/*
-  FlashPoint support is only available for the Intel x86 Architecture.
-*/
-
-#ifndef __i386__
-
-#undef CONFIG_SCSI_OMIT_FLASHPOINT
-#define CONFIG_SCSI_OMIT_FLASHPOINT
-
-#endif
-
-
 #ifndef CONFIG_SCSI_OMIT_FLASHPOINT
 
 
 #define UNIX
 #define FW_TYPE		_SCCB_MGR_
 #define MAX_CARDS	8
+#undef BUSTYPE_PCI
 
-
-#include <asm/io.h>
 
 #define OS_InPortByte(port)		inb(port)
 #define OS_InPortWord(port)		inw(port)
@@ -68,7 +43,7 @@
 */
 
 #define SccbMgr_sense_adapter		FlashPoint_ProbeHostAdapter
-#define SccbMgr_config_adapter		FlashPoint_HardResetHostAdapter
+#define SccbMgr_config_adapter		FlashPoint_HardwareResetHostAdapter
 #define SccbMgr_unload_card		FlashPoint_ReleaseHostAdapter
 #define SccbMgr_start_sccb		FlashPoint_StartCCB
 #define SccbMgr_abort_sccb		FlashPoint_AbortCCB
@@ -169,6 +144,7 @@
 #define stwidn				FPT_stwidn
 #define sxfrp				FPT_sxfrp
 #define utilEERead			FPT_utilEERead
+#define utilEEReadOrg			FPT_utilEEReadOrg
 #define utilEESendCmdAddr		FPT_utilEESendCmdAddr
 #define utilEEWrite			FPT_utilEEWrite
 #define utilEEWriteOnOff		FPT_utilEEWriteOnOff
@@ -1317,9 +1293,9 @@ typedef struct SCCBscam_info {
  *
  *   Description:  Register definitions for HARPOON ASIC.
  *
- *   $Date: 1997/01/31 02:14:28 $
+ *   $Date: 1997/07/09 21:44:36 $
  *
- *   $Revision: 1.6 $
+ *   $Revision: 1.9 $
  *
  *----------------------------------------------------------------------*/
 
@@ -2070,9 +2046,14 @@ void  schkdd(USHORT port, UCHAR p_card);
 UCHAR RdStack(USHORT port, UCHAR index);
 void  WrStack(USHORT portBase, UCHAR index, UCHAR data);
 UCHAR ChkIfChipInitialized(USHORT ioPort);
+
+#if defined(V302)
 UCHAR GetTarLun(USHORT port, UCHAR p_card, UCHAR our_target, PSCCBcard pCurrCard, PUCHAR tag, PUCHAR lun);
+#endif
+
 void SendMsg(USHORT port, UCHAR message);
 void  queueFlushTargSccb(UCHAR p_card, UCHAR thisTarg, UCHAR error_code);
+UCHAR scsellDOS(USHORT p_port, UCHAR targ_id);
 #else
 UCHAR sfm(ULONG port, PSCCB pcurrSCCB);
 void  scsiStartAuto(ULONG port);
@@ -2090,7 +2071,11 @@ void  schkdd(ULONG port, UCHAR p_card);
 UCHAR RdStack(ULONG port, UCHAR index);
 void  WrStack(ULONG portBase, UCHAR index, UCHAR data);
 UCHAR ChkIfChipInitialized(ULONG ioPort);
+
+#if defined(V302)
 UCHAR GetTarLun(ULONG port, UCHAR p_card, UCHAR our_target, PSCCBcard pCurrCard, PUCHAR tar, PUCHAR lun);
+#endif
+
 void SendMsg(ULONG port, UCHAR message);
 void  queueFlushTargSccb(UCHAR p_card, UCHAR thisTarg, UCHAR error_code);
 #endif
@@ -2130,6 +2115,7 @@ void  Wait(USHORT p_port, UCHAR p_delay);
 void  utilEEWriteOnOff(USHORT p_port,UCHAR p_mode);
 void  utilEEWrite(USHORT p_port, USHORT ee_data, USHORT ee_addr);
 USHORT utilEERead(USHORT p_port, USHORT ee_addr);
+USHORT utilEEReadOrg(USHORT p_port, USHORT ee_addr);
 void  utilEESendCmdAddr(USHORT p_port, UCHAR ee_cmd, USHORT ee_addr);
 #else
 void  Wait1Second(ULONG p_port);
@@ -2137,6 +2123,7 @@ void  Wait(ULONG p_port, UCHAR p_delay);
 void  utilEEWriteOnOff(ULONG p_port,UCHAR p_mode);
 void  utilEEWrite(ULONG p_port, USHORT ee_data, USHORT ee_addr);
 USHORT utilEERead(ULONG p_port, USHORT ee_addr);
+USHORT utilEEReadOrg(ULONG p_port, USHORT ee_addr);
 void  utilEESendCmdAddr(ULONG p_port, UCHAR ee_cmd, USHORT ee_addr);
 #endif
 
@@ -2339,7 +2326,7 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data);
 extern unsigned int SccbGlobalFlags;
 
 
-#ident "$Id: sccb.c 1.17 1997/02/11 21:06:41 mohan Exp $"
+#ident "$Id: sccb.c 1.18 1997/06/10 16:47:04 mohan Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -2353,9 +2340,9 @@ extern unsigned int SccbGlobalFlags;
  *   Description:  Functions relating to handling of the SCCB interface
  *                 between the device driver and the HARPOON.
  *
- *   $Date: 1997/02/11 21:06:41 $
+ *   $Date: 1997/06/10 16:47:04 $
  *
- *   $Revision: 1.17 $
+ *   $Revision: 1.18 $
  *
  *----------------------------------------------------------------------*/
 
@@ -2477,6 +2464,7 @@ int SccbMgr_sense_adapter(PSCCBMGR_INFO pCardInfo)
 		if(ChkIfChipInitialized(ioport) == FALSE)
 		{
 			pCurrNvRam = NULL;
+		   WR_HARPOON(ioport+hp_semaphore, 0x00);
 			XbowInit(ioport, 0);             /*Must Init the SCSI before attempting */
 			DiagEEPROM(ioport);
 		}
@@ -3036,6 +3024,7 @@ STATIC s32bits probe_adapter(PADAPTER_INFO pAdapterInfo)
 		if(ChkIfChipInitialized(ioport) == FALSE)
 		{
 			pCurrNvRam = NULL;
+		   WR_HARPOON(ioport+hp_semaphore, 0x00);
 			XbowInit(ioport, 0);                /*Must Init the SCSI before attempting */
 			DiagEEPROM(ioport);
 		}
@@ -4802,7 +4791,23 @@ int SccbMgr_isr(ULONG pCurrCard)
                may not show up if another device reselects us in 1.5us or
                less.  SRR Wednesday, 3/8/1995.
              */
-	   while (!(RDW_HARPOON((ioport+hp_intstat)) & (BUS_FREE | RSEL))) ;
+	   while (!(RDW_HARPOON((ioport+hp_intstat)) & (BUS_FREE | RSEL)) &&
+		  !((RDW_HARPOON((ioport+hp_intstat)) & PHASE) &&
+		    RD_HARPOON((ioport+hp_scsisig)) ==
+		    (SCSI_BSY | SCSI_REQ | SCSI_CD | SCSI_MSG | SCSI_IOBIT))) ;
+
+	   /*
+	     The additional loop exit condition above detects a timing problem
+	     with the revision D/E harpoon chips.  The caller should reset the
+	     host adapter to recover when 0xFE is returned.
+	   */
+	   if (!(RDW_HARPOON((ioport+hp_intstat)) & (BUS_FREE | RSEL)))
+	     {
+	       mOS_Lock((PSCCBcard)pCurrCard);
+	       MENABLE_INT(ioport);
+	       mOS_UnLock((PSCCBcard)pCurrCard);
+	       return 0xFE;
+	     }
 
          WRW_HARPOON((ioport+hp_intstat), (BUS_FREE | ITAR_DISC));
 
@@ -5347,7 +5352,7 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data)
 }
 
 #endif
-#ident "$Id: sccb_dat.c 1.9 1997/01/31 02:12:58 mohan Exp $"
+#ident "$Id: sccb_dat.c 1.10 1997/02/22 03:16:02 awin Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -5361,9 +5366,9 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data)
  *   Description:  Functions relating to handling of the SCCB interface 
  *                 between the device driver and the HARPOON.
  *
- *   $Date: 1997/01/31 02:12:58 $
+ *   $Date: 1997/02/22 03:16:02 $
  *
- *   $Revision: 1.9 $
+ *   $Revision: 1.10 $
  *
  *----------------------------------------------------------------------*/
 
@@ -5378,18 +5383,19 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data)
 /*#include <target.h>*/
 /*#include <harpoon.h>*/
 
+/*
+**  IMPORTANT NOTE!!!
+**
+**  You MUST preassign all data to a valid value or zero.  This is
+**  required due to the MS compiler bug under OS/2 and Solaris Real-Mode
+**  driver environment.
+*/
 
-#if defined(OS2) || defined (SOLARIS_REAL_MODE)
-SCCBMGR_TAR_INFO sccbMgrTbl[MAX_CARDS][MAX_SCSI_TAR] = { 0 };
-SCCBCARD BL_Card[MAX_CARDS] = { 0 };
-SCCBSCAM_INFO scamInfo[MAX_SCSI_TAR] = { 0 };
-NVRAMINFO nvRamInfo[MAX_MB_CARDS] = { 0 };
-#else
-SCCBMGR_TAR_INFO sccbMgrTbl[MAX_CARDS][MAX_SCSI_TAR];
-SCCBCARD BL_Card[MAX_CARDS];
-SCCBSCAM_INFO scamInfo[MAX_SCSI_TAR];
-NVRAMINFO nvRamInfo[MAX_MB_CARDS];
-#endif
+
+SCCBMGR_TAR_INFO sccbMgrTbl[MAX_CARDS][MAX_SCSI_TAR] = { { { 0 } } };
+SCCBCARD BL_Card[MAX_CARDS] = { { 0 } };
+SCCBSCAM_INFO scamInfo[MAX_SCSI_TAR] = { { { 0 } } };
+NVRAMINFO nvRamInfo[MAX_MB_CARDS] = { { 0 } };
 
 
 #if defined(OS2)
@@ -5402,23 +5408,23 @@ void (*s_PhaseTbl[8]) ();
 #endif
 
 #if defined(DOS)
-UCHAR first_time;
+UCHAR first_time = 0;
 #endif
 
-UCHAR mbCards;
+UCHAR mbCards = 0;
 UCHAR scamHAString[] = {0x63, 0x07, 'B', 'U', 'S', 'L', 'O', 'G', 'I', 'C', \
 								' ', 'B', 'T', '-', '9', '3', '0', \
 								0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, \
 								0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20};
 
-USHORT default_intena;
+USHORT default_intena = 0;
 
 #if defined(BUGBUG)
-UCHAR    debug_int[MAX_CARDS][debug_size];
-UCHAR    debug_index[MAX_CARDS];
-UCHAR    reserved_1[3];
+UCHAR    debug_int[MAX_CARDS][debug_size] = { 0 };
+UCHAR    debug_index[MAX_CARDS] = { 0 };
+UCHAR    reserved_1[3] = { 0 };
 #endif
-#ident "$Id: scsi.c 1.19 1997/01/31 02:08:14 mohan Exp $"
+#ident "$Id: scsi.c 1.23 1997/07/09 21:42:54 mohan Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -5433,9 +5439,9 @@ UCHAR    reserved_1[3];
  *                 selection/reselection, sync negotiation, message-in
  *                 decoding.
  *
- *   $Date: 1997/01/31 02:08:14 $
+ *   $Date: 1997/07/09 21:42:54 $
  *
- *   $Revision: 1.19 $
+ *   $Revision: 1.23 $
  *
  *----------------------------------------------------------------------*/
 
@@ -5483,11 +5489,13 @@ UCHAR sfm(ULONG port, PSCCB pCurrSCCB)
 	while( (!(RD_HARPOON(port+hp_scsisig) & SCSI_REQ)) &&
 			(TimeOutLoop++ < 20000) ){}
 
+
 	WR_HARPOON(port+hp_portctrl_0, SCSI_PORT);
 
 	message = RD_HARPOON(port+hp_scsidata_0);
 
-	WR_HARPOON(port+hp_scsisig, (SCSI_ACK + S_ILL_PH));
+	WR_HARPOON(port+hp_scsisig, SCSI_ACK + S_MSGI_PH);
+
 
 	if (TimeOutLoop > 20000)
 		message = 0x00;   /* force message byte = 0 if Time Out on Req */
@@ -5495,6 +5503,10 @@ UCHAR sfm(ULONG port, PSCCB pCurrSCCB)
 	if ((RDW_HARPOON((port+hp_intstat)) & PARITY) &&
 		(RD_HARPOON(port+hp_addstat) & SCSI_PAR_ERR))
 	{
+		WR_HARPOON(port+hp_scsisig, (SCSI_ACK + S_ILL_PH));
+		WR_HARPOON(port+hp_xferstat, 0);
+		WR_HARPOON(port+hp_fiforead, 0);
+		WR_HARPOON(port+hp_fifowrite, 0);
 		if (pCurrSCCB != NULL)
 		{
 			pCurrSCCB->Sccb_scsimsg = SMPARITY;
@@ -5503,6 +5515,7 @@ UCHAR sfm(ULONG port, PSCCB pCurrSCCB)
 		do
 		{
 			ACCEPT_MSG_ATN(port);
+			TimeOutLoop = 0;
 			while( (!(RD_HARPOON(port+hp_scsisig) & SCSI_REQ)) &&
 				(TimeOutLoop++ < 20000) ){}
 			if (TimeOutLoop > 20000)
@@ -5524,6 +5537,10 @@ UCHAR sfm(ULONG port, PSCCB pCurrSCCB)
 		}while(1);
 
 	}
+	WR_HARPOON(port+hp_scsisig, (SCSI_ACK + S_ILL_PH));
+	WR_HARPOON(port+hp_xferstat, 0);
+	WR_HARPOON(port+hp_fiforead, 0);
+	WR_HARPOON(port+hp_fifowrite, 0);
 	return(message);
 }
 
@@ -5894,12 +5911,20 @@ void sres(USHORT port, UCHAR p_card, PSCCBcard pCurrCard)
 void sres(ULONG port, UCHAR p_card, PSCCBcard pCurrCard)
 #endif
 {
+
+#if defined(V302)
 #ifdef DOS
    UCHAR our_target,message, msgRetryCount;
    extern UCHAR lun, tag;
 #else
    UCHAR our_target,message,lun,tag, msgRetryCount;
 #endif
+
+#else  /* V302 */
+   UCHAR our_target, message, lun = 0, tag, msgRetryCount;
+#endif /* V302 */
+
+
    PSCCBMgr_tar_info currTar_Info;
 	PSCCB currSCCB;
 
@@ -5972,7 +5997,103 @@ void sres(ULONG port, UCHAR p_card, PSCCBcard pCurrCard)
 	msgRetryCount = 0;
 	do
 	{
+
+#if defined(V302)
+
 		message = GetTarLun(port, p_card, our_target, pCurrCard, &tag, &lun);
+
+#else /* V302 */
+
+		currTar_Info = &sccbMgrTbl[p_card][our_target];
+		tag = 0;
+
+
+		while(!(RD_HARPOON(port+hp_scsisig) & SCSI_REQ))
+		{
+			if (! (RD_HARPOON(port+hp_scsisig) & SCSI_BSY))
+			{
+
+				WRW_HARPOON((port+hp_intstat), PHASE);
+				return;
+			}
+		}
+
+		WRW_HARPOON((port+hp_intstat), PHASE);
+		if ((RD_HARPOON(port+hp_scsisig) & S_SCSI_PHZ) == S_MSGI_PH)
+		{
+
+			message = sfm(port,pCurrCard->currentSCCB);
+			if (message)
+			{
+
+				if (message <= (0x80 | LUN_MASK))
+				{
+					lun = message & (UCHAR)LUN_MASK;
+
+#if !defined(DOS)
+					if ((currTar_Info->TarStatus & TAR_TAG_Q_MASK) == TAG_Q_TRYING)
+					{
+						if (currTar_Info->TarTagQ_Cnt != 0)
+						{
+
+							if (!(currTar_Info->TarLUN_CA))
+							{
+								ACCEPT_MSG(port);    /*Release the ACK for ID msg. */
+
+
+								message = sfm(port,pCurrCard->currentSCCB);
+								if (message)
+								{
+									ACCEPT_MSG(port);
+								}
+
+								else
+   								message = FALSE;
+
+								if(message != FALSE)
+								{
+									tag = sfm(port,pCurrCard->currentSCCB);
+
+									if (!(tag)) 
+										message = FALSE;
+								}
+
+							} /*C.A. exists! */
+
+						} /*End Q cnt != 0 */
+
+					} /*End Tag cmds supported! */
+#endif /* !DOS */
+
+				} /*End valid ID message.  */
+
+				else
+				{
+
+					ACCEPT_MSG_ATN(port);
+				}
+
+			} /* End good id message. */
+
+			else
+			{
+
+				message = FALSE;
+			}
+		}
+		else
+		{
+			ACCEPT_MSG_ATN(port);
+
+		   while (!(RDW_HARPOON((port+hp_intstat)) & (PHASE | RESET)) &&
+			  !(RD_HARPOON(port+hp_scsisig) & SCSI_REQ) &&
+			  (RD_HARPOON(port+hp_scsisig) & SCSI_BSY)) ;
+
+			return;
+		}
+	
+#endif /* V302 */
+
 		if(message == FALSE)
 		{
 			msgRetryCount++;
@@ -6071,6 +6192,8 @@ void sres(ULONG port, UCHAR p_card, PSCCBcard pCurrCard)
 	  (RD_HARPOON(port+hp_scsisig) & SCSI_BSY)) ;
 }
 
+#if defined(V302)
+
 #if defined(DOS)
 UCHAR GetTarLun(USHORT port, UCHAR p_card, UCHAR our_target, PSCCBcard pCurrCard, PUCHAR tag, PUCHAR lun)
 #else
@@ -6162,6 +6285,7 @@ UCHAR GetTarLun(ULONG port, UCHAR p_card, UCHAR our_target, PSCCBcard pCurrCard,
 	return(TRUE);
 }
 
+#endif /* V302 */
 
 #if defined(DOS)
 void SendMsg(USHORT port, UCHAR message)
@@ -6469,6 +6593,10 @@ void shandem(ULONG port, UCHAR p_card, PSCCB pCurrSCCB)
 				ACCEPT_MSG(port);
 			WR_HARPOON(port+hp_autostart_1, (AUTO_IMMED+DISCONNECT_START));
 		}
+	}else
+	{
+			if(pCurrSCCB->Sccb_scsimsg == SMPARITY)
+				WR_HARPOON(port+hp_autostart_1, (AUTO_IMMED+DISCONNECT_START));
 	}
 }
 
@@ -7386,6 +7514,7 @@ void sinits(PSCCB p_sccb, UCHAR p_card)
    p_sccb->Sccb_scsistat      = BUS_FREE_ST;
    p_sccb->SccbStatus         = SCCB_IN_PROCESS;
    p_sccb->Sccb_scsimsg       = SMNO_OP;
+
 }
 
 
@@ -9222,7 +9351,7 @@ void hostDataXferRestart(PSCCB currSCCB)
       currSCCB->Sccb_XferCnt = currSCCB->DataLength - currSCCB->Sccb_ATC;
       }
 }
-#ident "$Id: scam.c 1.16 1997/01/31 02:11:12 mohan Exp $"
+#ident "$Id: scam.c 1.17 1997/03/20 23:49:37 mohan Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -9237,9 +9366,9 @@ void hostDataXferRestart(PSCCB currSCCB)
  *                 and the determination of the SCSI IDs to be assigned
  *                 to all perspective SCSI targets.
  *
- *   $Date: 1997/01/31 02:11:12 $
+ *   $Date: 1997/03/20 23:49:37 $
  *
- *   $Revision: 1.16 $
+ *   $Revision: 1.17 $
  *
  *----------------------------------------------------------------------*/
 
@@ -9468,7 +9597,7 @@ void scini(UCHAR p_card, UCHAR p_our_id, UCHAR p_power_up)
      	if (((ScamFlg & SCAM_ENABLED) && (scamInfo[i].state == LEGACY))
 			|| (i != p_our_id))
         	{
-         scsell(p_port,i);
+         scsellDOS(p_port,i);
   	      }
   	}
 #endif
@@ -9885,6 +10014,7 @@ UCHAR sciso(ULONG p_port, UCHAR p_id_string[])
             }
 
          if ((ret_data & 0x1F) == 0)
+	   {
 /*
 				if(bit_cnt != 0 || bit_cnt != 8)
 				{
@@ -9899,6 +10029,7 @@ UCHAR sciso(ULONG p_port, UCHAR p_id_string[])
                return(0x00);
             else
                return(0xFF);
+	   }
 
          } /*bit loop */
 
@@ -10090,6 +10221,90 @@ UCHAR scsell(ULONG p_port, UCHAR targ_id)
       }
 }
 
+#if defined(DOS)
+/*---------------------------------------------------------------------
+ *
+ * Function: scsell for DOS
+ *
+ * Description: Select the specified device ID using a selection timeout
+ *              less than 2ms.  This was specially required to solve
+ *              the problem with Plextor 12X CD-ROM drive. This drive
+ *					 was responding the Selection at the end of 4ms and 
+ *					 hanging the system.
+ *
+ *---------------------------------------------------------------------*/
+
+UCHAR scsellDOS(USHORT p_port, UCHAR targ_id)
+{
+   USHORT i;
+
+   WR_HARPOON(p_port+hp_page_ctrl,
+      (RD_HARPOON(p_port+hp_page_ctrl) | G_INT_DISABLE));
+
+   ARAM_ACCESS(p_port);
+
+   WR_HARPOON(p_port+hp_addstat,(RD_HARPOON(p_port+hp_addstat) | SCAM_TIMER));
+   WR_HARPOON(p_port+hp_seltimeout,TO_2ms);
+
+
+   for (i = p_port+CMD_STRT; i < p_port+CMD_STRT+12; i+=2) {
+      WRW_HARPOON(i, (MPM_OP+ACOMMAND));
+      }
+   WRW_HARPOON(i, (BRH_OP+ALWAYS+    NP));
+
+   WRW_HARPOON((p_port+hp_intstat),
+	       (RESET | TIMEOUT | SEL | BUS_FREE | AUTO_INT));
+
+   WR_HARPOON(p_port+hp_select_id, targ_id);
+
+   WR_HARPOON(p_port+hp_portctrl_0, SCSI_PORT);
+   WR_HARPOON(p_port+hp_autostart_3, (SELECT | CMD_ONLY_STRT));
+   WR_HARPOON(p_port+hp_scsictrl_0, (SEL_TAR | ENA_RESEL));
+
+
+   while (!(RDW_HARPOON((p_port+hp_intstat)) &
+	    (RESET | PROG_HLT | TIMEOUT | AUTO_INT))) {}
+
+   if (RDW_HARPOON((p_port+hp_intstat)) & RESET)
+         Wait(p_port, TO_250ms);
+
+   DISABLE_AUTO(p_port);
+
+   WR_HARPOON(p_port+hp_addstat,(RD_HARPOON(p_port+hp_addstat) & ~SCAM_TIMER));
+   WR_HARPOON(p_port+hp_seltimeout,TO_290ms);
+
+   SGRAM_ACCESS(p_port);
+
+   if (RDW_HARPOON((p_port+hp_intstat)) & (RESET | TIMEOUT) ) {
+
+      WRW_HARPOON((p_port+hp_intstat),
+		  (RESET | TIMEOUT | SEL | BUS_FREE | PHASE));
+
+      WR_HARPOON(p_port+hp_page_ctrl,
+         (RD_HARPOON(p_port+hp_page_ctrl) & ~G_INT_DISABLE));
+
+      return(FALSE);  /*No legacy device */
+      }
+
+   else {
+
+      while(!(RDW_HARPOON((p_port+hp_intstat)) & BUS_FREE)) {
+				if (RD_HARPOON(p_port+hp_scsisig) & SCSI_REQ)
+					{
+					WR_HARPOON(p_port+hp_scsisig, (SCSI_ACK + S_ILL_PH));
+      			ACCEPT_MSG(p_port);
+					}
+		}
+
+      WRW_HARPOON((p_port+hp_intstat), CLR_ALL_INT_1);
+
+      WR_HARPOON(p_port+hp_page_ctrl,
+         (RD_HARPOON(p_port+hp_page_ctrl) & ~G_INT_DISABLE));
+
+      return(TRUE);  /*Found one of them oldies! */
+      }
+}
+#endif  /* DOS */
 
 /*---------------------------------------------------------------------
  *
@@ -10252,10 +10467,12 @@ UCHAR scmachid(UCHAR p_card, UCHAR p_id_string[])
       match--;
 
       if (match == 0xFF)
+	{
          if (p_id_string[0] & BIT(5))
             match = 7;
          else
             match = MAX_SCSI_TAR-1;
+	}
       }
 
 
@@ -10300,10 +10517,12 @@ UCHAR scmachid(UCHAR p_card, UCHAR p_id_string[])
       match--;
 
       if (match == 0xFF)
+	{
          if (p_id_string[0] & BIT(5))
             match = 7;
          else
             match = MAX_SCSI_TAR-1;
+	}
       }
 
    return(NO_ID_AVAIL);
@@ -10362,7 +10581,7 @@ void scsavdi(UCHAR p_card, ULONG p_port)
    utilEEWrite(p_port, sum_data, EEPROM_CHECK_SUM/2);
    utilEEWriteOnOff(p_port,0);   /* Turn off write access */
 }
-#ident "$Id: diagnose.c 1.9 1997/01/31 02:09:48 mohan Exp $"
+#ident "$Id: diagnose.c 1.10 1997/06/10 16:51:47 mohan Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -10376,9 +10595,9 @@ void scsavdi(UCHAR p_card, ULONG p_port)
  *   Description:  Diagnostic funtions for testing the integrity of
  *                 the HARPOON.
  *
- *   $Date: 1997/01/31 02:09:48 $
+ *   $Date: 1997/06/10 16:51:47 $
  *
- *   $Revision: 1.9 $
+ *   $Revision: 1.10 $
  *
  *----------------------------------------------------------------------*/
 
@@ -10419,7 +10638,7 @@ UCHAR i;
    WR_HARPOON(port+hp_scsireset,(DMA_RESET | HPSCSI_RESET | PROG_RESET | \
 				 FIFO_CLR));
 
-   WR_HARPOON(port+hp_scsireset,0x00);
+   WR_HARPOON(port+hp_scsireset,SCSI_INI);
 
    WR_HARPOON(port+hp_clkctrl_0,CLKCTRL_DEFAULT);
 
@@ -10703,8 +10922,8 @@ void DiagEEPROM(ULONG p_port)
    temp += 0x70D3;
    utilEEWrite(p_port, 0x0010, BIOS_CONFIG/2);
    temp += 0x0010;
-   utilEEWrite(p_port, 0x0007, SCAM_CONFIG/2);
-   temp += 0x0007;
+   utilEEWrite(p_port, 0x0003, SCAM_CONFIG/2);
+   temp += 0x0003;
    utilEEWrite(p_port, 0x0007, ADAPTER_SCSI_ID/2);
    temp += 0x0007;
 
@@ -10807,7 +11026,7 @@ void DiagEEPROM(ULONG p_port)
 
 }
 
-#ident "$Id: utility.c 1.22 1997/01/31 02:12:23 mohan Exp $"
+#ident "$Id: utility.c 1.23 1997/06/10 16:55:06 mohan Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -10821,9 +11040,9 @@ void DiagEEPROM(ULONG p_port)
  *   Description:  Utility functions relating to queueing and EEPROM
  *                 manipulation and any other garbage functions.
  *
- *   $Date: 1997/01/31 02:12:23 $
+ *   $Date: 1997/06/10 16:55:06 $
  *
- *   $Revision: 1.22 $
+ *   $Revision: 1.23 $
  *
  *----------------------------------------------------------------------*/
 /*#include <globals.h>*/
@@ -11617,9 +11836,12 @@ void utilEEWrite(ULONG p_port, USHORT ee_data, USHORT ee_addr)
 	 ee_value &= ~SEE_DO;
 
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value |= SEE_CLK;          /* Clock  data! */
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value &= ~SEE_CLK;
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  }
    ee_value &= (EXT_ARB_ACK | SCSI_TERM_ENA_H);
@@ -11631,7 +11853,6 @@ void utilEEWrite(ULONG p_port, USHORT ee_data, USHORT ee_addr)
    WR_HARPOON(p_port+hp_ee_ctrl, (ee_value | SEE_MS));       /* Turn off CS */
    WR_HARPOON(p_port+hp_ee_ctrl, ee_value);       /* Turn off Master Select */
 }
-
 
 /*---------------------------------------------------------------------
  *
@@ -11646,6 +11867,40 @@ void utilEEWrite(ULONG p_port, USHORT ee_data, USHORT ee_addr)
 USHORT utilEERead(USHORT p_port, USHORT ee_addr)
 #else
 USHORT utilEERead(ULONG p_port, USHORT ee_addr)
+#endif
+{
+   USHORT i, ee_data1, ee_data2;
+
+	i = 0;
+	ee_data1 = utilEEReadOrg(p_port, ee_addr);
+	do
+	{
+		ee_data2 = utilEEReadOrg(p_port, ee_addr);
+
+		if(ee_data1 == ee_data2)
+			return(ee_data1);
+
+		ee_data1 = ee_data2;
+		i++;
+
+	}while(i < 4);
+
+	return(ee_data1);
+}
+
+/*---------------------------------------------------------------------
+ *
+ * Function: Read EEPROM Original 
+ *
+ * Description: Read a word from the EEPROM at the desired
+ *              address.
+ *
+ *---------------------------------------------------------------------*/
+
+#if defined(DOS)
+USHORT utilEEReadOrg(USHORT p_port, USHORT ee_addr)
+#else
+USHORT utilEEReadOrg(ULONG p_port, USHORT ee_addr)
 #endif
 {
 
@@ -11666,7 +11921,9 @@ USHORT utilEERead(ULONG p_port, USHORT ee_addr)
 
 	  ee_value |= SEE_CLK;          /* Clock  data! */
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value &= ~SEE_CLK;
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 
 	  ee_data <<= 1;
@@ -11722,9 +11979,12 @@ void utilEESendCmdAddr(ULONG p_port, UCHAR ee_cmd, USHORT ee_addr)
 		 ee_value &= ~SEE_DO;
 
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value |= SEE_CLK;                         /* Clock  data! */
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value &= ~SEE_CLK;
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  }
 
@@ -11744,9 +12004,12 @@ void utilEESendCmdAddr(ULONG p_port, UCHAR ee_cmd, USHORT ee_addr)
 		 ee_value &= ~SEE_DO;
 
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value |= SEE_CLK;                         /* Clock  data! */
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  ee_value &= ~SEE_CLK;
+	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 	  WR_HARPOON(p_port+hp_ee_ctrl, ee_value);
 
 	  i >>= 1;
@@ -11783,6 +12046,114 @@ UCHAR CalcLrc(UCHAR buffer[])
 	return(lrc);
 }
 
+
+
+/*
+  The following inline definitions avoid type conflicts.
+*/
+
+static inline unsigned char
+FlashPoint__ProbeHostAdapter(FlashPoint_Info_T *FlashPointInfo)
+{
+  return FlashPoint_ProbeHostAdapter((PSCCBMGR_INFO) FlashPointInfo);
+}
+
+
+static inline FlashPoint_CardHandle_T
+FlashPoint__HardwareResetHostAdapter(FlashPoint_Info_T *FlashPointInfo)
+{
+  return FlashPoint_HardwareResetHostAdapter((PSCCBMGR_INFO) FlashPointInfo);
+}
+
+static inline void
+FlashPoint__ReleaseHostAdapter(FlashPoint_CardHandle_T CardHandle)
+{
+  FlashPoint_ReleaseHostAdapter(CardHandle);
+}
+
+
+static inline void
+FlashPoint__StartCCB(FlashPoint_CardHandle_T CardHandle, BusLogic_CCB_T *CCB)
+{
+  FlashPoint_StartCCB(CardHandle, (PSCCB) CCB);
+}
+
+
+static inline void
+FlashPoint__AbortCCB(FlashPoint_CardHandle_T CardHandle, BusLogic_CCB_T *CCB)
+{
+  FlashPoint_AbortCCB(CardHandle, (PSCCB) CCB);
+}
+
+
+static inline boolean
+FlashPoint__InterruptPending(FlashPoint_CardHandle_T CardHandle)
+{
+  return FlashPoint_InterruptPending(CardHandle);
+}
+
+
+static inline int
+FlashPoint__HandleInterrupt(FlashPoint_CardHandle_T CardHandle)
+{
+  return FlashPoint_HandleInterrupt(CardHandle);
+}
+
+
+#define FlashPoint_ProbeHostAdapter	    FlashPoint__ProbeHostAdapter
+#define FlashPoint_HardwareResetHostAdapter FlashPoint__HardwareResetHostAdapter
+#define FlashPoint_ReleaseHostAdapter	    FlashPoint__ReleaseHostAdapter
+#define FlashPoint_StartCCB		    FlashPoint__StartCCB
+#define FlashPoint_AbortCCB		    FlashPoint__AbortCCB
+#define FlashPoint_InterruptPending	    FlashPoint__InterruptPending
+#define FlashPoint_HandleInterrupt	    FlashPoint__HandleInterrupt
+
+
+/*
+  FlashPoint_InquireTargetInfo returns the Synchronous Period, Synchronous
+  Offset, and Wide Transfers Active information for TargetID on CardHandle.
+*/
+
+void FlashPoint_InquireTargetInfo(FlashPoint_CardHandle_T CardHandle,
+				  int TargetID,
+				  unsigned char *SynchronousPeriod,
+				  unsigned char *SynchronousOffset,
+				  unsigned char *WideTransfersActive)
+{
+  SCCBMGR_TAR_INFO *TargetInfo =
+    &sccbMgrTbl[((SCCBCARD *)CardHandle)->cardIndex][TargetID];
+  if ((TargetInfo->TarSyncCtrl & SYNC_OFFSET) > 0)
+    {
+      *SynchronousPeriod = 5 * ((TargetInfo->TarSyncCtrl >> 5) + 1);
+      *SynchronousOffset = TargetInfo->TarSyncCtrl & SYNC_OFFSET;
+    }
+  else
+    {
+      *SynchronousPeriod = 0;
+      *SynchronousOffset = 0;
+    }
+  *WideTransfersActive = (TargetInfo->TarSyncCtrl & NARROW_SCSI ? 0 : 1);
+}
+
+
+#else  /* CONFIG_SCSI_OMIT_FLASHPOINT */
+
+
+/*
+  Define prototypes for the FlashPoint SCCB Manager Functions.
+*/
+
+extern unsigned char FlashPoint_ProbeHostAdapter(FlashPoint_Info_T *);
+extern FlashPoint_CardHandle_T
+       FlashPoint_HardwareResetHostAdapter(FlashPoint_Info_T *);
+extern void FlashPoint_StartCCB(FlashPoint_CardHandle_T, BusLogic_CCB_T *);
+extern int FlashPoint_AbortCCB(FlashPoint_CardHandle_T, BusLogic_CCB_T *);
+extern boolean FlashPoint_InterruptPending(FlashPoint_CardHandle_T);
+extern int FlashPoint_HandleInterrupt(FlashPoint_CardHandle_T);
+extern void FlashPoint_ReleaseHostAdapter(FlashPoint_CardHandle_T);
+extern void FlashPoint_InquireTargetInfo(FlashPoint_CardHandle_T,
+					 int, unsigned char *,
+					 unsigned char *, unsigned char *);
 
 
 #endif /* CONFIG_SCSI_OMIT_FLASHPOINT */

@@ -93,7 +93,73 @@ BIR_data	= BIR_size+2
      */
 
 #define BI_ATARI_MCH_COOKIE	0x8000	/* _MCH cookie from TOS (u_long) */
+#define BI_ATARI_MCH_TYPE	0x8001	/* special machine type (u_long) */
+					/* (values are ATARI_MACH_* defines */
 
+/* mch_cookie values (upper word) */
+#define ATARI_MCH_ST		0
+#define ATARI_MCH_STE		1
+#define ATARI_MCH_TT		2
+#define ATARI_MCH_FALCON	3
+
+/* mch_type values */
+#define ATARI_MACH_NORMAL	0	/* no special machine type */
+#define ATARI_MACH_MEDUSA	1	/* Medusa 040 */
+#define ATARI_MACH_HADES	2	/* Hades 040 or 060 */
+#define ATARI_MACH_AB40		3	/* Afterburner040 on Falcon */
+
+    /*
+     *  Macintosh-specific tags
+     */
+
+#define BI_MAC_MODEL		0x8000	/* Mac Gestalt ID (model type) */
+#define BI_MAC_VADDR		0x8001	/* Mac video base address */
+#define BI_MAC_VDEPTH		0x8002	/* Mac video depth */
+#define BI_MAC_VROW		0x8003	/* Mac video rowbytes */
+#define BI_MAC_VDIM		0x8004	/* Mac video dimensions */
+#define BI_MAC_VLOGICAL		0x8005	/* Mac video logical base */
+#define BI_MAC_SCCBASE		0x8006	/* Mac SCC base address */
+#define BI_MAC_BTIME		0x8007	/* Mac boot time */
+#define BI_MAC_GMTBIAS		0x8008	/* Mac GMT timezone offset */
+#define BI_MAC_MEMSIZE		0x8009	/* Mac RAM size (sanity check) */
+#define BI_MAC_CPUID		0x800a	/* Mac CPU type (sanity check) */
+
+    /*
+     * Mac: compatibility with old booter data format (temporarily)
+     */
+
+#ifndef __ASSEMBLY__
+
+struct mac_booter_data 
+{
+	unsigned long videoaddr;
+	unsigned long videorow;
+	unsigned long videodepth;
+	unsigned long dimensions;
+	unsigned long args;
+	unsigned long boottime;
+	unsigned long gmtbias;
+	unsigned long bootver;
+	unsigned long videological;
+	unsigned long sccbase;
+	unsigned long id;
+	unsigned long memsize;
+	unsigned long serialmf;
+	unsigned long serialhsk;
+	unsigned long serialgpi;
+	unsigned long printmf;
+	unsigned long printhsk;
+	unsigned long printgpi;
+	unsigned long cpuid;
+	unsigned long rombase;
+	unsigned long adbdelay;
+	unsigned long timedbra;
+};
+
+extern struct mac_booter_data 
+	mac_bi_data;
+
+#endif
 
     /*
      * Stuff for bootinfo interface versioning
@@ -129,7 +195,9 @@ struct bootversion {
 #endif /* __ASSEMBLY__ */
 
 #define AMIGA_BOOTI_VERSION    MK_BI_VERSION( 2, 0 )
-#define ATARI_BOOTI_VERSION    MK_BI_VERSION( 2, 0 )
+#define ATARI_BOOTI_VERSION    MK_BI_VERSION( 2, 1 )
+#define MAC_BOOTI_VERSION      MK_BI_VERSION( 2, 0 )
+#define MVME16x_BOOTI_VERSION  MK_BI_VERSION( 2, 0 )
 
 
 #ifdef BOOTINFO_COMPAT_1_0
@@ -140,6 +208,7 @@ struct bootversion {
 
 #define COMPAT_AMIGA_BOOTI_VERSION    MK_BI_VERSION( 1, 0 )
 #define COMPAT_ATARI_BOOTI_VERSION    MK_BI_VERSION( 1, 0 )
+#define COMPAT_MAC_BOOTI_VERSION      MK_BI_VERSION( 1, 0 )
 
 #include <linux/zorro.h>
 
@@ -161,6 +230,67 @@ struct compat_bi_Atari {
     unsigned long hw_present;
     unsigned long mch_cookie;
 };
+
+#ifndef __ASSEMBLY__
+
+#define MACHW_DECLARE(name)    unsigned name : 1
+#define MACHW_SET(name)                (boot_info.bi_mac.hw_present.name = 1)
+#define MACHW_PRESENT(name)    (boot_info.bi_mac.hw_present.name)
+
+struct compat_bi_Macintosh
+{
+	unsigned long videoaddr;
+	unsigned long videorow;
+	unsigned long videodepth;
+	unsigned long dimensions;
+	unsigned long args;
+	unsigned long boottime;
+	unsigned long gmtbias;
+	unsigned long bootver;
+	unsigned long videological;
+	unsigned long sccbase;
+	unsigned long id;
+	unsigned long memsize;
+	unsigned long serialmf;
+	unsigned long serialhsk;
+	unsigned long serialgpi;
+	unsigned long printmf;
+	unsigned long printhsk;
+	unsigned long printgpi;
+	unsigned long cpuid;
+	unsigned long rombase;
+	unsigned long adbdelay;
+	unsigned long timedbra;
+	struct {
+		/* video hardware */
+		/* sound hardware */
+		/* disk storage interfaces */
+		MACHW_DECLARE(MAC_SCSI);        /* Directly mapped NCR5380 */
+		MACHW_DECLARE(IDE);             /* IDE Interface */
+		/* other I/O hardware */
+		MACHW_DECLARE(SCC);             /* Serial Communications Contr. */
+		/* DMA */
+		MACHW_DECLARE(SCSI_DMA);        /* DMA for the NCR5380 */
+		/* real time clocks */
+		MACHW_DECLARE(RTC_CLK);         /* clock chip */
+		/* supporting hardware */
+		MACHW_DECLARE(VIA1);            /* Versatile Interface Ad. 1 */
+		MACHW_DECLARE(VIA2);            /* Versatile Interface Ad. 2 */
+		MACHW_DECLARE(RBV);             /* Versatile Interface Ad. 2+ */
+		/* NUBUS */
+		MACHW_DECLARE(NUBUS);           /* NUBUS */
+	} hw_present;
+};
+#else
+
+#define BI_videoaddr	BI_un
+#define BI_videorow	BI_videoaddr+4
+#define BI_videodepth	BI_videorow+4
+#define BI_dimensions	BI_videodepth+4
+#define BI_args		BI_dimensions+4
+#define BI_cpuid	BI_args+56
+
+#endif
 
 struct compat_mem_info {
     unsigned long addr;
@@ -200,13 +330,15 @@ struct compat_bootinfo {
     unsigned long ramdisk_addr;
     char command_line[COMPAT_CL_SIZE];
     union {
-	struct compat_bi_Amiga bi_ami;
-	struct compat_bi_Atari bi_ata;
+	struct compat_bi_Amiga     bi_ami;
+	struct compat_bi_Atari     bi_ata;
+	struct compat_bi_Macintosh bi_mac;
     } bi_un;
 };
 
 #define bi_amiga	bi_un.bi_ami
 #define bi_atari	bi_un.bi_ata
+#define bi_mac		bi_un.bi_mac
 
 #endif /* BOOTINFO_COMPAT_1_0 */
 

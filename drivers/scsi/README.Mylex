@@ -1,0 +1,6 @@
+Please see the file README.BusLogic for information about Linux support for
+Mylex (formerly BusLogic) MultiMaster and FlashPoint SCSI Host Adapters.
+
+The Mylex DAC960 PCI RAID Controllers are not supported at the present time,
+but work on a Linux driver for the DAC960 is in progress.  Please consult
+http://www.dandelion.com/Linux/ for further information on the DAC960 driver.

@@ -70,6 +70,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VLSI,		VLSI_82C597,	"82C597-AFC2"),
 	DEVICE( VLSI,		VLSI_82C541,	"82C541 Lynx"),
 	DEVICE( VLSI,		VLSI_82C543,	"82C543 Lynx ISA"),
+	DEVICE( VLSI,		VLSI_82C532,	"82C532"),
+	DEVICE( VLSI,		VLSI_82C534,	"82C534"),
+	DEVICE( VLSI,		VLSI_82C535,	"82C535"),
+	DEVICE( VLSI,		VLSI_82C147,	"82C147"),
 	DEVICE( VLSI,		VLSI_VAS96011,	"VAS96011 (Golden Gate II)"),
 	DEVICE( ADL,		ADL_2301,	"2301"),
 	DEVICE( NS,		NS_87415,	"87415"),
@@ -90,6 +94,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DEC,		DEC_TULIP_PLUS,	"DC21041"),
 	DEVICE( DEC,		DEC_21142,	"DC21142"),
 	DEVICE( DEC,		DEC_21052,	"DC21052"),
+	DEVICE( DEC,		DEC_21150,	"DC21150"),
 	DEVICE( DEC,		DEC_21152,	"DC21152"),
 	DEVICE( CIRRUS,		CIRRUS_7548,	"GD 7548"),
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
@@ -108,10 +113,12 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( IBM,		IBM_FIRE_CORAL,	"Fire Coral"),
 	DEVICE( IBM,		IBM_TR,		"Token Ring"),
 	DEVICE( IBM,		IBM_82G2675,	"82G2675"),
+	DEVICE( IBM,		IBM_MCA,	"MicroChannel"),
 	DEVICE( IBM,		IBM_82351,	"82351"),
 	DEVICE( WD,		WD_7197,	"WD 7197"),
 	DEVICE( AMD,		AMD_LANCE,	"79C970"),
 	DEVICE( AMD,		AMD_SCSI,	"53C974"),
+	DEVICE( TRIDENT,	TRIDENT_9397,	"Cyber9397"),
 	DEVICE( TRIDENT,	TRIDENT_9420,	"TG 9420"),
 	DEVICE( TRIDENT,	TRIDENT_9440,	"TG 9440"),
 	DEVICE( TRIDENT,	TRIDENT_9660,	"TG 9660 / Cyber9385"),
@@ -121,6 +128,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( MATROX,		MATROX_MIL,	"Millennium"),
 	DEVICE( MATROX,		MATROX_MYS,	"Mystique"),
 	DEVICE( MATROX,		MATROX_MIL_2,	"Millennium II"),
+	DEVICE( MATROX,		MATROX_MIL_2_AGP,"Millennium II AGP"),
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
 	DEVICE( CT,		CT_65545,	"65545"),
 	DEVICE( CT,		CT_65548,	"65548"),
@@ -146,6 +154,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( HP,		HP_J2585B,	"J2585B (Lassen)"),
 	DEVICE( PCTECH,		PCTECH_RZ1000,  "RZ1000 (buggy)"),
 	DEVICE( PCTECH,		PCTECH_RZ1001,  "RZ1001 (buggy?)"),
+	DEVICE( PCTECH,		PCTECH_SAMURAI_0,"Samurai 0"),
+	DEVICE( PCTECH,		PCTECH_SAMURAI_1,"Samurai 1"),
+	DEVICE( PCTECH,		PCTECH_SAMURAI_IDE,"Samurai IDE"),
 	DEVICE( DPT,		DPT,		"SmartCache/Raid"),
 	DEVICE( OPTI,		OPTI_92C178,	"92C178"),
 	DEVICE( OPTI,		OPTI_82C557,	"82C557 Viper-M"),
@@ -155,6 +166,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OPTI,		OPTI_82C701,	"82C701 FireStar Plus"),
 	DEVICE( OPTI,		OPTI_82C814,	"82C814 Firebridge 1"),
 	DEVICE( OPTI,		OPTI_82C822,	"82C822"),
+	DEVICE( OPTI,		OPTI_82C825,	"82C825 Firebridge 2"),
 	DEVICE( SGS,		SGS_2000,	"STG 2000X"),
 	DEVICE( SGS,		SGS_1764,	"STG 1764X"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_MULTIMASTER_NC, "MultiMaster NC"),
@@ -164,6 +176,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TI,		TI_TVP4020,	"TVP4020 Permedia 2"),
 	DEVICE( TI,		TI_PCI1130,	"PCI1130"),
 	DEVICE( TI,		TI_PCI1131,	"PCI1131"),
+	DEVICE( TI,		TI_PCI1250,	"PCI1250"),
 	DEVICE( OAK,		OAK_OTI107,	"OTI107"),
 	DEVICE( WINBOND2,	WINBOND2_89C940,"NE2000-PCI"),
 	DEVICE( MOTOROLA,	MOTOROLA_MPC105,"MPC105 Eagle"),
@@ -216,12 +229,15 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VISION,		VISION_QD8500,	"QD-8500"),
 	DEVICE( VISION,		VISION_QD8580,	"QD-8580"),
 	DEVICE( BROOKTREE,	BROOKTREE_848,	"Bt848"),
+	DEVICE( BROOKTREE,	BROOKTREE_849A,	"Bt849"),
+	DEVICE( BROOKTREE,	BROOKTREE_8474,	"Bt8474"),
 	DEVICE( SIERRA,		SIERRA_STB,	"STB Horizon 64"),
 	DEVICE( ACC,		ACC_2056,	"2056"),
 	DEVICE( WINBOND,	WINBOND_83769,	"W83769F"),
 	DEVICE( WINBOND,	WINBOND_82C105,	"SL82C105"),
 	DEVICE( WINBOND,	WINBOND_83C553,	"W83C553"),
 	DEVICE( DATABOOK,      	DATABOOK_87144,	"DB87144"),
+	DEVICE( PLX,		PLX_9080,	"PCI9080 I2O"),
 	DEVICE( 3COM,		3COM_3C590,	"3C590 10bT"),
 	DEVICE( 3COM,		3COM_3C595TX,	"3C595 100bTX"),
 	DEVICE( 3COM,		3COM_3C595T4,	"3C595 100bT4"),
@@ -241,9 +257,11 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1523,	"M1523"),
 	DEVICE( AL,		AL_M1531,	"M1531 Aladdin IV"),
 	DEVICE( AL,		AL_M1533,	"M1533 Aladdin IV"),
+	DEVICE( AL,		AL_M3307,	"M3307 MPEG-1 decoder"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
 	DEVICE( AL,		AL_M5219,	"M5219"),
 	DEVICE( AL,		AL_M5229,	"M5229 TXpro"),
+	DEVICE( AL,		AL_M5237,	"M5237 USB"),
 	DEVICE( SURECOM,	SURECOM_NE34,	"NE-34PCI LAN"),
 	DEVICE( NEOMAGIC,       NEOMAGIC_MAGICGRAPH_NM2070,     "Magicgraph NM2070"),
 	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_128V, "MagicGraph 128V"),
@@ -251,6 +269,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_NM2160, "MagicGraph NM2160"),
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( ASP,		ASP_ABP940U,	"ABP940U"),
+	DEVICE( ASP,		ASP_ABP940UW,	"ABP940UW"),
 	DEVICE( CERN,		CERN_SPSB_PMC,	"STAR/RD24 SCI-PCI (PMC)"),
 	DEVICE( CERN,		CERN_SPSB_PCI,	"STAR/RD24 SCI-PCI (PMC)"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
@@ -265,6 +284,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( REALTEK,	REALTEK_8129,	"8129"),
 	DEVICE( TRUEVISION,	TRUEVISION_T1000,"TARGA 1000"),
 	DEVICE( INIT,		INIT_320P,	"320 P"),
+	DEVICE( INIT,		INIT_360P,	"360 P"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
 	DEVICE( VIA,		VIA_82C561,	"VT 82C561"),
 	DEVICE( VIA,		VIA_82C586_1,	"VT 82C586 Apollo IDE"),
@@ -272,11 +292,13 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VIA,		VIA_82C585,	"VT 82C585 Apollo VP1/VPX"),
 	DEVICE( VIA,		VIA_82C586_0,	"VT 82C586 Apollo ISA"),
 	DEVICE( VIA,		VIA_82C595,	"VT 82C595 Apollo VP2"),
+	DEVICE( VIA,		VIA_82C597_0,	"VT 82C597 Apollo VP3"),
 	DEVICE( VIA,		VIA_82C926,	"VT 82C926 Amazon"),
 	DEVICE( VIA,		VIA_82C416,	"VT 82C416MV"),
 	DEVICE( VIA,		VIA_82C595_97,	"VT 82C595 Apollo VP2/97"),
 	DEVICE( VIA,		VIA_82C586_2,	"VT 82C586 Apollo USB"),
 	DEVICE( VIA,		VIA_82C586_3,	"VT 82C586B Apollo ACPI"),
+	DEVICE( VIA,		VIA_82C597_1,	"VT 82C597 Apollo VP3 AGP"),
 	DEVICE( VORTEX,		VORTEX_GDT60x0,	"GDT 60x0"),
 	DEVICE( VORTEX,		VORTEX_GDT6000B,"GDT 6000b"),
 	DEVICE( VORTEX,		VORTEX_GDT6x10,	"GDT 6110/6510"),
@@ -315,23 +337,33 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( FORE,		FORE_PCA200E,	 "PCA-200E"),
 	DEVICE( IMAGINGTECH,	IMAGINGTECH_ICPCI, "MVC IC-PCI"),
 	DEVICE( PHILIPS,	PHILIPS_SAA7146,"SAA7146"),
-	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge"),
+	DEVICE( CYCLONE,	CYCLONE_SDK,	"SDK"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROMOTIO, "Promotion-6410"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( ALLIANCE,	ALLIANCE_AT24,	"AT24"),
 	DEVICE( ALLIANCE,	ALLIANCE_AT3D,	"AT3D"),
 	DEVICE( VMIC,		VMIC_VME,	"VMIVME-7587"),
+	DEVICE( DIGI,		DIGI_EPC,	"AccelPort EPC"),
  	DEVICE( DIGI,		DIGI_RIGHTSWITCH, "RightSwitch SE-6"),
+	DEVICE( DIGI,		DIGI_XEM,	"AccelPort Xem"),
+	DEVICE( DIGI,		DIGI_XR,	"AccelPort Xr"),
+	DEVICE( DIGI,		DIGI_CX,	"AccelPort C/X"),
+	DEVICE( DIGI,		DIGI_XRJ,	"AccelPort Xr/J"),
+	DEVICE( DIGI,		DIGI_EPCJ,	"AccelPort EPC/J"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( RENDITION,	RENDITION_VERITE,"Verite 1000"),
 	DEVICE( RENDITION,	RENDITION_VERITE2100,"Verite 2100"),
 	DEVICE( TOSHIBA,	TOSHIBA_601,	"Laptop"),
+	DEVICE( TOSHIBA,	TOSHIBA_TOPIC95,"ToPIC95"),
+	DEVICE( TOSHIBA,	TOSHIBA_TOPIC97,"ToPIC97"),
 	DEVICE( RICOH,		RICOH_RL5C466,	"RL5C466"),
+	DEVICE( ARTOP,		ARTOP_ATP850UF,	"ATP850UF"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
 	DEVICE( OMEGA,		OMEGA_82C092G,	"82C092G"),
 	DEVICE( LITEON,		LITEON_LNE100TX,"LNE100TX"),
 	DEVICE( NP,		NP_PCI_FDDI,	"NP-PCI"),       
+	DEVICE( ATT,		ATT_L56XMF,	"L56xMF"),
 	DEVICE( SPECIALIX,	SPECIALIX_XIO,	"XIO/SIO host"),
 	DEVICE( SPECIALIX,	SPECIALIX_RIO,	"RIO host"),
 	DEVICE( AURAVISION,	AURAVISION_VXP524,"VXP524"),
@@ -349,11 +381,12 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CYCLADES,	CYCLOM_Y_Hi,	"Cyclom-Y above 1Mbyte"),
 	DEVICE( CYCLADES,	CYCLOM_Z_Lo,	"Cyclom-Z below 1Mbyte"),
 	DEVICE( CYCLADES,	CYCLOM_Z_Hi,	"Cyclom-Z above 1Mbyte"),
+	DEVICE( O2,		O2_6832,	"6832"),
 	DEVICE( 3DFX,		3DFX_VOODOO,	"Voodoo"),
+	DEVICE( SIGMADES,	SIGMADES_6425,	"REALmagic64/GX"),
 	DEVICE( STALLION,	STALLION_ECHPCI832,"EasyConnection 8/32"),
 	DEVICE( STALLION,	STALLION_ECHPCI864,"EasyConnection 8/64"),
 	DEVICE( STALLION,	STALLION_EIOPCI,"EasyIO"),
-	DEVICE( SIGMADES,	SIGMADES_6425,	"REALmagic64/GX"),
 	DEVICE( OPTIBASE,	OPTIBASE_FORGE,	"MPEG Forge"),
 	DEVICE( OPTIBASE,	OPTIBASE_FUSION,"MPEG Fusion"),
 	DEVICE( OPTIBASE,	OPTIBASE_VPLEX,	"VideoPlex"),
@@ -391,6 +424,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( S3,		S3_ViRGE_MX,	"ViRGE/MX"),
 	DEVICE( S3,		S3_ViRGE_MXP,	"ViRGE/MX+"),
 	DEVICE( S3,		S3_ViRGE_MXPMV,	"ViRGE/MX+MV"),
+	DEVICE( S3,		S3_SONICVIBES,	"SonicVibes"),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
 	DEVICE( INTEL,		INTEL_82424,	"82424ZX Saturn"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
@@ -615,6 +649,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
 	      case PCI_VENDOR_ID_WINBOND:	return "Winbond";
 	      case PCI_VENDOR_ID_DATABOOK:	return "Databook";
+	      case PCI_VENDOR_ID_PLX:		return "PLX";
 	      case PCI_VENDOR_ID_3COM:		return "3Com";
 	      case PCI_VENDOR_ID_SMC:		return "SMC";
 	      case PCI_VENDOR_ID_AL:		return "Acer Labs";
@@ -638,7 +673,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_FORE:		return "Fore Systems";
 	      case PCI_VENDOR_ID_IMAGINGTECH:	return "Imaging Technology";
 	      case PCI_VENDOR_ID_PHILIPS:	return "Philips";
-	      case PCI_VENDOR_ID_PLX:		return "PLX";
+	      case PCI_VENDOR_ID_CYCLONE:	return "Cyclone";
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";
 	      case PCI_VENDOR_ID_VMIC:		return "VMIC";
 	      case PCI_VENDOR_ID_DIGI:		return "Digi Intl.";
@@ -646,10 +681,12 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_RENDITION:	return "Rendition";
 	      case PCI_VENDOR_ID_TOSHIBA:	return "Toshiba";
 	      case PCI_VENDOR_ID_RICOH:		return "Ricoh";
+	      case PCI_VENDOR_ID_ARTOP:		return "Artop Electronics";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
 	      case PCI_VENDOR_ID_OMEGA:		return "Omega Micro";
 	      case PCI_VENDOR_ID_LITEON:	return "LiteOn";
 	      case PCI_VENDOR_ID_NP:		return "Network Peripherals";
+	      case PCI_VENDOR_ID_ATT:		return "Lucent (ex-AT&T) Microelectronics";
 	      case PCI_VENDOR_ID_SPECIALIX:	return "Specialix";
 	      case PCI_VENDOR_ID_AURAVISION:	return "Auravision";
 	      case PCI_VENDOR_ID_IKON:		return "Ikon";
@@ -657,6 +694,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_COMPEX:	return "Compex";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_O2:		return "O2 Micro";
 	      case PCI_VENDOR_ID_3DFX:		return "3Dfx";
 	      case PCI_VENDOR_ID_STALLION:	return "Stallion Technologies";
 	      case PCI_VENDOR_ID_SIGMADES:	return "Sigma Designs";
@@ -868,4 +906,4 @@ int get_pci_list(char *buf)
 	return len;
 }
 
-#endif
+#endif /* CONFIG_PROC_FS */

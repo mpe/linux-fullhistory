@@ -371,7 +371,13 @@ struct Scsi_Host
 
     void (*select_queue_depths)(struct Scsi_Host *, Scsi_Device *);
 
-    unsigned long hostdata[0];  /* Used for storage of host specific stuff */
+    /*
+     * We should ensure that this is aligned, both for better performance
+     * and also because some compilers (m68k) don't automatically force
+     * alignment to a 4-byte boundary.
+     */
+    unsigned long hostdata[0]  /* Used for storage of host specific stuff */
+        __attribute__ ((aligned (4)));
 };
 
 extern struct Scsi_Host * scsi_hostlist;

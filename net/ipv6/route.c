@@ -1749,7 +1749,7 @@ void inet6_rt_notify(int event, struct rt6_info *rt)
 		return;
 	}
 	if (rt6_fill_node(skb, rt, event, 0, 0) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_ROUTE, EINVAL);
 		return;
 	}

@@ -12,10 +12,10 @@
 #
 #              ***** IMPORTANT COMPATIBILITY NOTE ****
 # If configuration changes are made which might adversely effect 
-# Menuconfig or xconfig, please notify the respective authors so that 
+# Menuconfig or xconfig, please notify the respective maintainers so that 
 # those utilities can be updated in parallel.
 #
-# Menuconfig:  <roadcapw@cfw.com>
+# Menuconfig:  <mec@shout.net>
 # xconfig:     <apenwarr@foxnet.net>  <eric@aib.com>
 #              ****************************************
 #

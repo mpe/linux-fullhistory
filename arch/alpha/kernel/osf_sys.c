@@ -24,6 +24,7 @@
 #include <linux/a.out.h>
 #include <linux/utsname.h>
 #include <linux/time.h>
+#include <linux/timex.h>
 #include <linux/major.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
@@ -925,6 +926,7 @@ extern int do_getitimer(int which, struct itimerval *value);
 extern int do_setitimer(int which, struct itimerval *, struct itimerval *);
 asmlinkage int sys_utimes(char *, struct timeval *);
 extern int sys_wait4(pid_t, int *, int, struct rusage *);
+extern int do_adjtimex(struct timex *);
 
 struct timeval32
 {
@@ -1269,4 +1271,58 @@ asmlinkage int osf_usleep_thread(struct timeval32 *sleep, struct timeval32 *rema
 	return 0;
 fault:
 	return -EFAULT;
+}
+
+
+struct timex32 {
+	unsigned int modes;	/* mode selector */
+	long offset;		/* time offset (usec) */
+	long freq;		/* frequency offset (scaled ppm) */
+	long maxerror;		/* maximum error (usec) */
+	long esterror;		/* estimated error (usec) */
+	int status;		/* clock command/status */
+	long constant;		/* pll time constant */
+	long precision;		/* clock precision (usec) (read only) */
+	long tolerance;		/* clock frequency tolerance (ppm)
+				 * (read only)
+				 */
+	struct timeval32 time;	/* (read only) */
+	long tick;		/* (modified) usecs between clock ticks */
+
+	long ppsfreq;           /* pps frequency (scaled ppm) (ro) */
+	long jitter;            /* pps jitter (us) (ro) */
+	int shift;              /* interval duration (s) (shift) (ro) */
+	long stabil;            /* pps stability (scaled ppm) (ro) */
+	long jitcnt;            /* jitter limit exceeded (ro) */
+	long calcnt;            /* calibration intervals (ro) */
+	long errcnt;            /* calibration errors (ro) */
+	long stbcnt;            /* stability limit exceeded (ro) */
+
+	int  :32; int  :32; int  :32; int  :32;
+	int  :32; int  :32; int  :32; int  :32;
+	int  :32; int  :32; int  :32; int  :32;
+};
+
+asmlinkage int sys_old_adjtimex(struct timex32 *txc_p)
+{
+        struct timex txc;
+	int ret;
+
+	/* copy relevant bits of struct timex. */
+	if (copy_from_user(&txc, txc_p, offsetof(struct timex32, time)) ||
+	    copy_from_user(&txc.tick, &txc_p->tick, sizeof(struct timex32) - 
+			   offsetof(struct timex32, time)))
+	  return -EFAULT;
+	
+	if ((ret = do_adjtimex(&txc)))
+	  return ret;
+	
+	/* copy back to timex32 */
+	if (copy_to_user(txc_p, &txc, offsetof(struct timex32, time)) ||
+	    (copy_to_user(&txc_p->tick, &txc.tick, sizeof(struct timex32) - 
+			  offsetof(struct timex32, tick))) ||
+	    (put_tv32(&txc_p->time, &txc.time)))
+	  return -EFAULT;
+
+	return 0;
 }

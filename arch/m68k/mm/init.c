@@ -23,6 +23,9 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/machdep.h>
+#ifdef CONFIG_ATARI
+#include <asm/atari_stram.h>
+#endif
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void init_kpointer_table(void);
@@ -63,6 +66,7 @@ void show_mem(void)
 {
     unsigned long i;
     int free = 0, total = 0, reserved = 0, nonshared = 0, shared = 0;
+    int cached = 0;
 
     printk("\nMem-info:\n");
     show_free_areas();
@@ -72,6 +76,8 @@ void show_mem(void)
 	total++;
 	if (PageReserved(mem_map+i))
 	    reserved++;
+	if (PageSwapCache(mem_map+i))
+	    cached++;
 	else if (!atomic_read(&mem_map[i].count))
 	    free++;
 	else if (atomic_read(&mem_map[i].count) == 1)
@@ -84,6 +90,7 @@ void show_mem(void)
     printk("%d reserved pages\n",reserved);
     printk("%d pages nonshared\n",nonshared);
     printk("%d pages shared\n",shared);
+    printk("%d pages swap cached\n",cached);
     show_buffers();
 #ifdef CONFIG_NET
     show_net_buffers();
@@ -293,8 +300,6 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 /*
  * paging_init() continues the virtual memory environment setup which
  * was begun by the code in arch/head.S.
- * The parameters are pointers to where to stick the starting and ending
- * addresses  of available kernel virtual memory.
  */
 __initfunc(unsigned long paging_init(unsigned long start_mem,
 				     unsigned long end_mem))
@@ -320,6 +325,18 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 #endif
 		for (i = 0; i < 16; i++)
 			pgprot_val(protection_map[i]) |= _PAGE_CACHE040;
+	}
+	/* Fix the PAGE_NONE value. */
+	if (CPU_IS_040_OR_060) {
+		/* On the 680[46]0 we can use the _PAGE_SUPER bit.  */
+		pgprot_val(protection_map[0]) |= _PAGE_SUPER;
+		pgprot_val(protection_map[VM_SHARED]) |= _PAGE_SUPER;
+	} else {
+		/* Otherwise we must fake it. */
+		pgprot_val(protection_map[0]) &= ~_PAGE_PRESENT;
+		pgprot_val(protection_map[0]) |= _PAGE_FAKE_SUPER;
+		pgprot_val(protection_map[VM_SHARED]) &= ~_PAGE_PRESENT;
+		pgprot_val(protection_map[VM_SHARED]) |= _PAGE_FAKE_SUPER;
 	}
 
 	/*
@@ -412,42 +429,15 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	high_memory = (void *) end_mem;
 	max_mapnr = num_physpages = MAP_NR(end_mem);
 
-	start_mem = PAGE_ALIGN(start_mem);
-	while (start_mem < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
+	tmp = start_mem = PAGE_ALIGN(start_mem);
+	while (tmp < end_mem) {
+		clear_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
+		tmp += PAGE_SIZE;
 	}
 
 #ifdef CONFIG_ATARI
-
-	if (MACH_IS_ATARI) {
-
-		/* If the page with physical address 0 isn't the first kernel
-		 * code page, it has to be reserved because the first 2 KB of
-		 * ST-Ram can only be accessed from supervisor mode by
-		 * hardware.
-		 */
-
-		unsigned long virt0 = PTOV( 0 ), adr;
-		extern unsigned long rsvd_stram_beg, rsvd_stram_end;
-		
-		if (virt0 != 0) {
-
-			set_bit(PG_reserved, &mem_map[MAP_NR(virt0)].flags);
-
-			/* Also, reserve all pages that have been marked by
-			 * stram_alloc() (e.g. for the screen memory). (This may
-			 * treat the first ST-Ram page a second time, but that
-			 * doesn't hurt...) */
-			
-			rsvd_stram_end += PAGE_SIZE - 1;
-			rsvd_stram_end &= PAGE_MASK;
-			rsvd_stram_beg &= PAGE_MASK;
-			for( adr = rsvd_stram_beg; adr < rsvd_stram_end; adr += PAGE_SIZE )
-				set_bit(PG_reserved, &mem_map[MAP_NR(adr)].flags);
-		}
-	}
-	
+	if (MACH_IS_ATARI)
+		atari_stram_reserve_pages( start_mem );
 #endif
 
 	for (tmp = 0 ; tmp < end_mem ; tmp += PAGE_SIZE) {

@@ -28,6 +28,10 @@
 #define SCC_BAUD_BASE_NONE	0		/* for not connected or unused
 						 * clock sources */
 
+#define SCC_BAUD_BASE_MVME_PCLK	781250	/* 12.5 MHz */
+#define SCC_BAUD_BASE_BVM	460800	/* 7.3728 MHz */
+#define SCC_BAUD_BASE_MVME	625000	/* 10.000 MHz */
+
 /* The SCC configuration structure */
 
 struct atari_SCCserial {

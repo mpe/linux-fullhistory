@@ -578,7 +578,7 @@ static void tnet_send(long cid,long type,char *src_addr,long byteSize,
 
 static void free_skb(struct sk_buff *skb, int op)
 {
-	dev_kfree_skb(skb,op);
+	dev_kfree_skb(skb);
 }
 
 void tnet_send_ip(int cid,struct sk_buff *skb)

@@ -137,9 +137,8 @@ sub128 (const unsigned long a[2], const unsigned long b[2], unsigned long c[2])
 static inline void
 mul64 (const unsigned long a, const unsigned long b, unsigned long c[2])
 {
-	asm ("mulq  %2,%3,%0\n\t"
-	     "umulh %2,%3,%1"
-	     : "r="(c[0]), "r="(c[1]) : "r"(a), "r"(b));
+	c[0] = a * b;
+	asm ("umulh %1,%2,%0" : "=r"(c[1]) : "r"(a), "r"(b));
 }
 
 
@@ -276,7 +275,7 @@ make_s_ieee (long f, EXTENDED *a, unsigned long *b)
 {
 	unsigned long res, sticky;
 
-	if (!a->f[0] && !a->f[1]) {
+	if (!a->e && !a->f[0] && !a->f[1]) {
 		*b = (unsigned long) a->s << 63;	/* return +/-0 */
 		return 0;
 	}
@@ -356,7 +355,7 @@ make_t_ieee (long f, EXTENDED *a, unsigned long *b)
 {
 	unsigned long res, sticky;
 
-	if (!a->f[0] && !a->f[1]) {
+	if (!a->e && !a->f[0] && !a->f[1]) {
 		*b = (unsigned long) a->s << 63;	/* return +/-0 */
 		return 0;
 	}
@@ -384,7 +383,7 @@ make_t_ieee (long f, EXTENDED *a, unsigned long *b)
 			a->e = -0x3ff;
 		}
 	}
-	if (a->e > 0x3ff) {
+	if (a->e >= 0x3ff) {
 		res = FPCR_OVF | FPCR_INE;
 		if (f & IEEE_TRAP_ENABLE_OVF) {
 			a->e -= 0x600;	/* scale down result by 2^alpha */
@@ -1143,11 +1142,8 @@ ieee_MULS (int f, unsigned long a, unsigned long b, unsigned long *c)
 		return 0;
 	}
 	op_c.s = op_a.s ^ op_b.s;
-	op_c.e = op_a.e + op_b.e;
+	op_c.e = op_a.e + op_b.e - 55;
 	mul64(op_a.f[0], op_b.f[0], op_c.f);
-
-	normalize(&op_c);
-	op_c.e -= 55;		/* drop the 55 original bits. */
 
 	return round_s_ieee(f, &op_c, c);
 }
@@ -1200,11 +1196,8 @@ ieee_MULT (int f, unsigned long a, unsigned long b, unsigned long *c)
 		return 0;
 	}
 	op_c.s = op_a.s ^ op_b.s;
-	op_c.e = op_a.e + op_b.e;
+	op_c.e = op_a.e + op_b.e - 55;
 	mul64(op_a.f[0], op_b.f[0], op_c.f);
-
-	normalize(&op_c);
-	op_c.e -= 55;	/* drop the 55 original bits. */
 
 	return round_t_ieee(f, &op_c, c);
 }

@@ -464,14 +464,6 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-# This gives correct output but uses old-style "excessive compilation".
-# This will be fixed soon (about December 1997 or January 1998).
-BusLogic.o: BusLogic.c FlashPoint.c ../../include/linux/autoconf.h
-	$(CC) $(CFLAGS) -c BusLogic.c -o BusLogic.O
-	$(CC) $(CFLAGS) -c FlashPoint.c -o FlashPoint.O
-	$(LD) -r -o BusLogic.o BusLogic.O FlashPoint.O
-	rm -f BusLogic.O FlashPoint.O
-
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
 	ln -sf 53c7,8xx.scr fake.c
 	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 

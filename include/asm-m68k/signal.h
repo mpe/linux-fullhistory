@@ -1,10 +1,32 @@
 #ifndef _M68K_SIGNAL_H
 #define _M68K_SIGNAL_H
 
-typedef unsigned long sigset_t;		/* at least 32 bits */
+#include <linux/types.h>
 
-#define _NSIG             32
-#define NSIG		_NSIG
+/* Avoid too many header ordering problems.  */
+struct siginfo;
+
+#ifdef __KERNEL__
+/* Most things should be clean enough to redefine this at will, if care
+   is taken to make libc match.  */
+
+#define _NSIG		64
+#define _NSIG_BPW	32
+#define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
+
+typedef unsigned long old_sigset_t;		/* at least 32 bits */
+
+typedef struct {
+	unsigned long sig[_NSIG_WORDS];
+} sigset_t;
+
+#else
+/* Here we must cater to libcs that poke about in kernel headers.  */
+
+#define NSIG		32
+typedef unsigned long sigset_t;
+
+#endif /* __KERNEL__ */
 
 #define SIGHUP		 1
 #define SIGINT		 2
@@ -43,22 +65,36 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
 #define SIGPWR		30
 #define	SIGUNUSED	31
 
+/* These should not be considered constants from userland.  */
+#define SIGRTMIN	32
+#define SIGRTMAX	(_NSIG-1)
+
 /*
- * sa_flags values: SA_STACK is not currently supported, but will allow the
- * usage of signal stacks by using the (now obsolete) sa_restorer field in
- * the sigaction structure as a stack pointer. This is now possible due to
- * the changes in signal handling. LBT 010493.
+ * SA_FLAGS values:
+ *
+ * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
+ *   (++roman: SA_ONSTACK is supported on m68k)
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
- * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
+ * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
+ * SA_RESETHAND clears the handler when the signal is delivered.
+ * SA_NOCLDWAIT flag on SIGCHLD to inhibit zombies.
+ * SA_NODEFER prevents the current signal from being masked in the handler.
+ *
+ * SA_ONESHOT and SA_NOMASK are the historical Linux names for the Single
+ * Unix names RESETHAND and NODEFER respectively.
  */
-#define SA_NOCLDSTOP	1
-#define SA_SHIRQ	0x04000000
-#define SA_STACK	0x08000000
+#define SA_NOCLDSTOP	0x00000001
+#define SA_NOCLDWAIT	0x00000002 /* not supported yet */
+#define SA_SIGINFO	0x00000004
+#define SA_ONSTACK	0x08000000
 #define SA_RESTART	0x10000000
-#define SA_INTERRUPT	0x20000000
-#define SA_NOMASK	0x40000000
-#define SA_ONESHOT	0x80000000
+#define SA_NODEFER	0x40000000
+#define SA_RESETHAND	0x80000000
+
+#define SA_NOMASK	SA_NODEFER
+#define SA_ONESHOT	SA_RESETHAND
+#define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
 
 #ifdef __KERNEL__
 /*
@@ -66,9 +102,11 @@ typedef unsigned long sigset_t;		/* at least 32 bits */
  * irq handling routines.
  *
  * SA_INTERRUPT is also used by the irq handling routines.
+ * SA_SHIRQ is for shared interrupt support on PCI and EISA.
  */
-#define SA_PROBE SA_ONESHOT
-#define SA_SAMPLE_RANDOM SA_RESTART
+#define SA_PROBE		SA_ONESHOT
+#define SA_SAMPLE_RANDOM	SA_RESTART
+#define SA_SHIRQ		0x04000000
 #endif
 
 #define SIG_BLOCK          0	/* for blocking signals */
@@ -82,15 +120,85 @@ typedef void (*__sighandler_t)(int);
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
 #define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
 
+#ifdef __KERNEL__
+struct old_sigaction {
+	__sighandler_t sa_handler;
+	old_sigset_t sa_mask;
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
+};
+
+struct sigaction {
+	__sighandler_t sa_handler;
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
+	sigset_t sa_mask;		/* mask last for extensibility */
+};
+
+struct k_sigaction {
+	struct sigaction sa;
+};
+#else
+/* Here we must cater to libcs that poke about in kernel headers.  */
+
 struct sigaction {
 	__sighandler_t sa_handler;
 	sigset_t sa_mask;
 	unsigned long sa_flags;
 	void (*sa_restorer)(void);
 };
+#endif /* __KERNEL__ */
+
+typedef struct sigaltstack {
+	void *ss_sp;
+	int ss_flags;
+	size_t ss_size;
+} stack_t;
 
 #ifdef __KERNEL__
 #include <asm/sigcontext.h>
-#endif
+
+#define __HAVE_ARCH_SIG_BITOPS
+
+extern __inline__ void sigaddset(sigset_t *set, int _sig)
+{
+	__asm__("bfset %0{%1,#1}" : "=m" (*set) : "id" ((_sig - 1) ^ 31)
+		: "cc");
+}
+
+extern __inline__ void sigdelset(sigset_t *set, int _sig)
+{
+	__asm__("bfclr %0{%1,#1}" : "=m"(*set) : "id"((_sig - 1) ^ 31)
+		: "cc");
+}
+
+extern __inline__ int __const_sigismember(sigset_t *set, int _sig)
+{
+	unsigned long sig = _sig - 1;
+	return 1 & (set->sig[sig / _NSIG_BPW] >> (sig % _NSIG_BPW));
+}
+
+extern __inline__ int __gen_sigismember(sigset_t *set, int _sig)
+{
+	char ret;
+	__asm__("bftst %1{%2,#1}\n\t sne %0"
+		: "=rm"(ret) : "m"(*set), "id"((_sig-1) ^ 31) : "cc");
+	return ret;
+}
+
+#define sigismember(set,sig)			\
+	(__builtin_constant_p(sig) ?		\
+	 __const_sigismember(set,sig) :		\
+	 __gen_sigismember(set,sig))
+
+#define sigmask(sig)	(1UL << ((sig) - 1))
+
+extern __inline__ int sigfindinword(unsigned long word)
+{
+	__asm__("bfffo %1{#0,#0},%0" : "=d"(word) : "d"(word & -word) : "cc");
+	return word ^ 31;
+}
+
+#endif /* __KERNEL__ */
 
 #endif /* _M68K_SIGNAL_H */
