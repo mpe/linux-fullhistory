@@ -24,7 +24,8 @@
 
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
-	unsigned long addr, pid, cr3;
+	struct task_struct * tsk;
+	unsigned long addr, pid;
 	char *tmp;
 	unsigned long pte, page;
 	int i;
@@ -33,20 +34,20 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 		return -EINVAL;
 	pid = inode->i_ino;
 	pid >>= 16;
-	cr3 = 0;
+	tsk = NULL;
 	for (i = 1 ; i < NR_TASKS ; i++)
 		if (task[i] && task[i]->pid == pid) {
-			cr3 = task[i]->tss.cr3;
+			tsk = task[i];
 			break;
 		}
-	if (!cr3)
+	if (!tsk)
 		return -EACCES;
 	addr = file->f_pos;
 	tmp = buf;
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pte = *PAGE_DIR_OFFSET(cr3,addr);
+		pte = *PAGE_DIR_OFFSET(tsk,addr);
 		if (!(pte & PAGE_PRESENT))
 			break;
 		pte &= PAGE_MASK;
@@ -72,7 +73,8 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 
 static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
 {
-	unsigned long addr, pid, cr3;
+	struct task_struct * tsk;
+	unsigned long addr, pid;
 	char *tmp;
 	unsigned long pte, page;
 	int i;
@@ -82,19 +84,19 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	addr = file->f_pos;
 	pid = inode->i_ino;
 	pid >>= 16;
-	cr3 = 0;
+	tsk = NULL;
 	for (i = 1 ; i < NR_TASKS ; i++)
 		if (task[i] && task[i]->pid == pid) {
-			cr3 = task[i]->tss.cr3;
+			tsk = task[i];
 			break;
 		}
-	if (!cr3)
+	if (!tsk)
 		return -EACCES;
 	tmp = buf;
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pte = *PAGE_DIR_OFFSET(cr3,addr);
+		pte = *PAGE_DIR_OFFSET(tsk,addr);
 		if (!(pte & PAGE_PRESENT))
 			break;
 		pte &= PAGE_MASK;
@@ -144,21 +146,22 @@ int
 mem_mmap(struct inode * inode, struct file * file,
 	     struct vm_area_struct * vma)
 {
-  unsigned long *src_table, *dest_table, stmp, dtmp, cr3;
+  struct task_struct *tsk;
+  unsigned long *src_table, *dest_table, stmp, dtmp;
   struct vm_area_struct *src_vma = 0;
   int i;
 
   /* Get the source's task information */
 
-  cr3 = 0;
+  tsk = NULL;
   for (i = 1 ; i < NR_TASKS ; i++)
     if (task[i] && task[i]->pid == (inode->i_ino >> 16)) {
-      cr3     = task[i]->tss.cr3;
+      tsk     = task[i];
       src_vma = task[i]->mm->mmap;
       break;
     }
 
-  if (!cr3)
+  if (!tsk)
     return -EACCES;
 
 /* Ensure that we have a valid source area.  (Has to be mmap'ed and
@@ -173,7 +176,7 @@ mem_mmap(struct inode * inode, struct file * file,
     if (!src_vma || (src_vma->vm_flags & VM_SHM))
       return -EINVAL;
 
-    src_table = PAGE_DIR_OFFSET(cr3, stmp);
+    src_table = PAGE_DIR_OFFSET(tsk, stmp);
     if (!*src_table)
       return -EINVAL;
     src_table = (unsigned long *)((*src_table & PAGE_MASK) + PAGE_PTR(stmp));
@@ -197,10 +200,10 @@ mem_mmap(struct inode * inode, struct file * file,
     while (src_vma && stmp > src_vma->vm_end)
       src_vma = src_vma->vm_next;
 
-    src_table = PAGE_DIR_OFFSET(cr3, stmp);
+    src_table = PAGE_DIR_OFFSET(tsk, stmp);
     src_table = (unsigned long *)((*src_table & PAGE_MASK) + PAGE_PTR(stmp));
 
-    dest_table = PAGE_DIR_OFFSET(current->tss.cr3, dtmp);
+    dest_table = PAGE_DIR_OFFSET(current, dtmp);
 
     if (!*dest_table) {
       *dest_table = get_free_page(GFP_KERNEL);

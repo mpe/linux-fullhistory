@@ -65,27 +65,6 @@ long time_adjust_step = 0;
 int need_resched = 0;
 unsigned long event = 0;
 
-/*
- * Tell us the machine setup..
- */
-char hard_math = 0;		/* set by boot/head.S */
-char x86 = 0;			/* set by boot/head.S to 3 or 4 */
-char x86_model = 0;		/* set by boot/head.S */
-char x86_mask = 0;		/* set by boot/head.S */
-int x86_capability = 0;		/* set by boot/head.S */
-int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
-
-char x86_vendor_id[13] = "Unknown";
-
-char ignore_irq13 = 0;		/* set if exception 16 works */
-char wp_works_ok = 0;		/* set if paging hardware honours WP */ 
-char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
-
-/*
- * Bus types ..
- */
-int EISA_bus = 0;
-
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
@@ -494,7 +473,7 @@ static void second_overflow(void)
 		time_status = TIME_OK;
 		break;
 	}
-	if (xtime.tv_sec > last_rtc_update + 660)
+	if (time_status != TIME_BAD && xtime.tv_sec > last_rtc_update + 660)
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else

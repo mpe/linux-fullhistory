@@ -23,6 +23,27 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+/*
+ * Tell us the machine setup..
+ */
+char hard_math = 0;		/* set by boot/head.S */
+char x86 = 0;			/* set by boot/head.S to 3 or 4 */
+char x86_model = 0;		/* set by boot/head.S */
+char x86_mask = 0;		/* set by boot/head.S */
+int x86_capability = 0;		/* set by boot/head.S */
+int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
+
+char x86_vendor_id[13] = "Unknown";
+
+char ignore_irq13 = 0;		/* set if exception 16 works */
+char wp_works_ok = 0;		/* set if paging hardware honours WP */ 
+char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
+
+/*
+ * Bus types ..
+ */
+int EISA_bus = 0;
+
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
 /*

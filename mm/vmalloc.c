@@ -39,7 +39,7 @@ static inline void set_pgdir(unsigned long dindex, unsigned long value)
 
 	p = &init_task;
 	do {
-		((unsigned long *) p->tss.cr3)[dindex] = value;
+		PAGE_DIR_OFFSET(p,0)[dindex] = value;
 		p = p->next_task;
 	} while (p != &init_task);
 }

@@ -15,7 +15,7 @@
  *                      <middelin@polyware.iaf.nl>
  *
  * Danny ter Haar    :	Some minor additions for cpuinfo
- * <danny@ow.nl>
+ *			<danny@ow.nl>
  *
  * Alessandro Rubini :  profile extension.
  *                      <rubini@ipvvis.unipv.it>
@@ -332,7 +332,7 @@ static unsigned long get_phys_addr(struct task_struct ** p, unsigned long ptr)
 
 	if (!p || !*p || ptr >= TASK_SIZE)
 		return 0;
-	page = *PAGE_DIR_OFFSET((*p)->tss.cr3,ptr);
+	page = *PAGE_DIR_OFFSET(*p,ptr);
 	if (!(page & PAGE_PRESENT))
 		return 0;
 	page &= PAGE_MASK;
@@ -513,7 +513,7 @@ static int get_statm(int pid, char * buffer)
 		return 0;
 	tpag = (*p)->mm->end_code / PAGE_SIZE;
 	if ((*p)->state != TASK_ZOMBIE) {
-	  pagedir = (unsigned long *) (*p)->tss.cr3;
+	  pagedir = PAGE_DIR_OFFSET(*p, 0);
 	  for (i = 0; i < 0x300; ++i) {
 	    if ((ptbl = pagedir[i]) == 0) {
 	      tpag -= PTRS_PER_PAGE;

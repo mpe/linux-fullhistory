@@ -311,6 +311,8 @@ void trap_init(void)
 	int i;
 	struct desc_struct * p;
 
+	if (strncmp((char*)0x0FFFD9, "EISA", 4) == 0)
+		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);
 	set_trap_gate(0,&divide_error);
 	set_trap_gate(1,&debug);

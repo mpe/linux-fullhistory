@@ -91,7 +91,7 @@ struct sock {
   unsigned long		        lingertime;
   int				proc;
   struct sock			*next;
-  struct sock			*prev; /* Doubdly linked chain.. */
+  struct sock			*prev; /* Doubly linked chain.. */
   struct sock			*pair;
   struct sk_buff		* volatile send_head;
   struct sk_buff		* volatile send_tail;

@@ -18,8 +18,13 @@
 /*
  * Bus types
  */
-extern int EISA_bus;
+#define EISA_bus 1
 #define MCA_bus 0
+
+/*
+ * The alpha has no problems with write protection
+ */
+#define wp_works_ok 1
 
 struct thread_struct {
 	unsigned long ksp;

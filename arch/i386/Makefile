@@ -39,8 +39,8 @@ endif
 
 HEAD := arch/i386/kernel/head.o
 
-SUBDIRS := $(SUBDIRS) arch/i386/kernel
-ARCHIVES := arch/i386/kernel/kernel.o $(ARCHIVES)
+SUBDIRS := $(SUBDIRS) arch/i386/kernel arch/i386/mm
+ARCHIVES := arch/i386/kernel/kernel.o arch/i386/mm/mm.o $(ARCHIVES)
 
 ifdef CONFIG_IBCS
 SUBDIRS := $(SUBDIRS) arch/i386/ibcs

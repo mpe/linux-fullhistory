@@ -24,7 +24,7 @@ static void change_protection(unsigned long start, unsigned long end, int prot)
 	unsigned long page, offset;
 	int nr;
 
-	dir = PAGE_DIR_OFFSET(current->tss.cr3, start);
+	dir = PAGE_DIR_OFFSET(current, start);
 	offset = (start >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	nr = (end - start) >> PAGE_SHIFT;
 	while (nr > 0) {

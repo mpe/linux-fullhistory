@@ -43,10 +43,10 @@ struct unix_proto_data {
 	int		lock_flag;
 };
 
-extern struct unix_proto_data unix_datas[NSOCKETS];
+extern struct unix_proto_data unix_datas[NSOCKETS_UNIX];
 
 
-#define last_unix_data		(unix_datas + NSOCKETS - 1)
+#define last_unix_data		(unix_datas + NSOCKETS_UNIX - 1)
 
 
 #define UN_DATA(SOCK) 		((struct unix_proto_data *)(SOCK)->data)

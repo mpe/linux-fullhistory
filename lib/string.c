@@ -201,7 +201,7 @@ int memcmp(const void * cs,const void * ct,size_t count)
 /*
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
-extern inline void * memscan(void * addr, unsigned char c, size_t size)
+void * memscan(void * addr, unsigned char c, size_t size)
 {
 	unsigned char * p = (unsigned char *) addr;
 

@@ -580,7 +580,9 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			break;
 #endif
 		case ARPHRD_ETHER:
+#ifdef CONFIG_ARCNET
 		case ARPHRD_ARCNET:
+#endif
 			if(arp->ar_pro != htons(ETH_P_IP))
 			{
 				kfree_skb(skb, FREE_READ);
@@ -1054,10 +1056,12 @@ static int arp_req_set(struct arpreq *req)
 			htype = ARPHRD_ETHER;
 			hlen = ETH_ALEN;
 			break;
+#ifdef CONFIG_ARCNET
 		case ARPHRD_ARCNET:
 			htype = ARPHRD_ARCNET;
 			hlen = 1;	/* length of arcnet addresses */
 			break;
+#endif
 #ifdef CONFIG_AX25
 		case ARPHRD_AX25:
 			htype = ARPHRD_AX25;

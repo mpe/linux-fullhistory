@@ -90,7 +90,7 @@ static void file_mmap_sync(struct vm_area_struct * vma, unsigned long start,
 	unsigned long poff, pcnt, pc;
 
 	size = size >> PAGE_SHIFT;
-	dir = PAGE_DIR_OFFSET(current->tss.cr3,start);
+	dir = PAGE_DIR_OFFSET(current,start);
 	poff = (start >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	start -= vma->vm_start;
 	if ((pcnt = PTRS_PER_PAGE - poff) > size)

@@ -87,7 +87,7 @@ static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 	unsigned long page;
 
 repeat:
-	page = *PAGE_DIR_OFFSET(vma->vm_task->tss.cr3, addr);
+	page = *PAGE_DIR_OFFSET(vma->vm_task, addr);
 	if (page & PAGE_PRESENT) {
 		page &= PAGE_MASK;
 		page += PAGE_PTR(addr);
@@ -121,7 +121,7 @@ static void put_long(struct vm_area_struct * vma, unsigned long addr,
 	int readonly = 0;
 
 repeat:
-	page = *PAGE_DIR_OFFSET(vma->vm_task->tss.cr3, addr);
+	page = *PAGE_DIR_OFFSET(vma->vm_task, addr);
 	if (page & PAGE_PRESENT) {
 		page &= PAGE_MASK;
 		page += PAGE_PTR(addr);

@@ -50,7 +50,6 @@ struct	shminfo {
    bits 14..8 (SHM_ID) the id of the shared memory segment
    bits 29..15 (SHM_IDX) the index of the page within the shared memory segment
                     (actually only bits 24..15 get used since SHMMAX is so low)
-   bit 31 (SHM_READ_ONLY) flag whether the page belongs to a read-only attach
 */
 
 #define SHM_ID_SHIFT	8
@@ -63,9 +62,7 @@ struct	shminfo {
 #define _SHM_IDX_BITS	15
 #define SHM_IDX_MASK	((1<<_SHM_IDX_BITS)-1)
 
-#define SHM_READ_ONLY	(1<<31)
-
-/* We must have SHM_ID_SHIFT + _SHM_ID_BITS + _SHM_IDX_BITS + 1 <= 32
+/* We must have SHM_ID_SHIFT + _SHM_ID_BITS + _SHM_IDX_BITS <= 32
    and SHMMAX <= (PAGE_SIZE << _SHM_IDX_BITS). */
 
 #define SHMMAX 0x3fa000				/* max shared seg size (bytes) */

@@ -45,6 +45,8 @@
  *	$28 - compare status
  */
 
+#define halt .long 0
+
 /*
  * Select function type and registers
  */
@@ -66,17 +68,21 @@
  * For 32-bit operations, we need to extend to 64-bit
  */
 #ifdef INTSIZE
-#define function func(lu)
+#define ufunction func(lu)
+#define sfunction func(l)
 #define LONGIFY(x) zapnot x,15,x
+#define SLONGIFY(x) addl x,0,x
 #else
-#define function func(qu)
+#define ufunction func(qu)
+#define sfunction func(q)
 #define LONGIFY(x)
+#define SLONGIFY(x)
 #endif
 
 .set noat
-.globl	function
-.ent	function
-function:
+.globl	ufunction
+.ent	ufunction
+ufunction:
 	subq	$30,32,$30
 	stq	$0, 0($30)
 	stq	$1, 8($30)
@@ -113,4 +119,18 @@ function:
 	ldq	$2, 16($30)
 	addq	$30,32,$30
 	ret	$31,($23),1
-	.end	function
+	.end	ufunction
+
+/*
+ * The "signed" version just does a halt if either of the value is
+ * signed: the kernel shouldn't mess with signed divides anyway (who
+ * knows what way they'll round..)
+ */
+.globl	sfunction
+.ent	sfunction
+sfunction:
+	bis	$24,$25,$28
+	SLONGIFY($28)
+	bge	$28,ufunction
+	halt
+	.end	sfunction

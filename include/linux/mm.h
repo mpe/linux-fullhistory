@@ -87,7 +87,7 @@ struct vm_operations_struct {
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
 	void (*swapout)(struct vm_area_struct *,  unsigned long, unsigned long *);
-	unsigned long (*swapin)(struct vm_area_struct *,  unsigned long);
+	unsigned long (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
 extern unsigned long __bad_page(void);
@@ -282,11 +282,7 @@ extern inline long find_in_swap_cache (unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_find_total++;
 #endif
-	__asm__ __volatile__("xchgl %0,%1"
-		:"=m" (swap_cache[addr >> PAGE_SHIFT]),
-		 "=r" (entry)
-		:"0" (swap_cache[addr >> PAGE_SHIFT]),
-		 "1" (0));
+	entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), NULL);
 #ifdef SWAP_CACHE_INFO
 	if (entry)
 		swap_cache_find_success++;
@@ -301,11 +297,7 @@ extern inline int delete_from_swap_cache(unsigned long addr)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif	
-	__asm__ __volatile__("xchgl %0,%1"
-		:"=m" (swap_cache[addr >> PAGE_SHIFT]),
-		 "=r" (entry)
-		:"0" (swap_cache[addr >> PAGE_SHIFT]),
-		 "1" (0));
+	entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), NULL);
 	if (entry)  {
 #ifdef SWAP_CACHE_INFO
 		swap_cache_del_success++;

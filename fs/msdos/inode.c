@@ -46,9 +46,8 @@ void msdos_put_inode(struct inode *inode)
 	clear_inode(inode);
 	if (depend) {
 		if (MSDOS_I(depend)->i_old != inode) {
-			printk("Invalid link (0x%X): expected 0x%X, got 0x%X\n",
-			    (int) depend,(int) inode,(int) MSDOS_I(depend)->
-			    i_old);
+			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
+			    depend, inode, MSDOS_I(depend)->i_old);
 			fs_panic(sb,"...");
 			return;
 		}

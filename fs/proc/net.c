@@ -42,7 +42,6 @@ static int proc_lookupnet(struct inode *,const char *,int,struct inode **);
 /* the get_*_info() functions are in the net code, and are configured
    in via the standard mechanism... */
 extern int unix_get_info(char *, char **, off_t, int);
-extern int afinet_get_info(char *, char **, off_t, int);
 #ifdef CONFIG_INET
 extern int tcp_get_info(char *, char **, off_t, int);
 extern int udp_get_info(char *, char **, off_t, int);
@@ -52,6 +51,7 @@ extern int rarp_get_info(char *, char **, off_t, int);
 extern int dev_get_info(char *, char **, off_t, int);
 extern int rt_get_info(char *, char **, off_t, int);
 extern int snmp_get_info(char *, char **, off_t, int);
+extern int afinet_get_info(char *, char **, off_t, int);
 extern int ip_acct_procinfo(char *, char **, off_t, int);
 extern int ip_fw_blk_procinfo(char *, char **, off_t, int);
 extern int ip_fw_fwd_procinfo(char *, char **, off_t, int);
@@ -118,6 +118,7 @@ static struct proc_dir_entry net_dir[] = {
 	{ PROC_NET_TCP,		3, "tcp" },
 	{ PROC_NET_UDP,		3, "udp" },
 	{ PROC_NET_SNMP,	4, "snmp" },
+	{ PROC_NET_SOCKSTAT,	8, "sockstat" },
 #ifdef CONFIG_INET_RARP
 	{ PROC_NET_RARP,	4, "rarp"},
 #endif
@@ -145,7 +146,6 @@ static struct proc_dir_entry net_dir[] = {
 	{ PROC_NET_NR,		2, "nr" },
 #endif /* CONFIG_NETROM */
 #endif /* CONFIG_AX25 */
-	{ PROC_NET_SOCKSTAT,	8, "sockstat" },
 	{ 0, 0, NULL }
 };
 
@@ -233,10 +233,10 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			case PROC_NET_UNIX:
 				length = unix_get_info(page,&start,file->f_pos,thistime);
 				break;
+#ifdef CONFIG_INET
 			case PROC_NET_SOCKSTAT:
 				length = afinet_get_info(page,&start,file->f_pos,thistime);
 				break;
-#ifdef CONFIG_INET
 			case PROC_NET_ARP:
 				length = arp_get_info(page,&start,file->f_pos,thistime);
 				break;

@@ -287,7 +287,6 @@ static struct socket *sock_alloc(int wait)
 				++nsockets;
 			}
 			sti();
-printk("sock_alloc: Alloced some more, now %d sockets\n", nsockets);
 		}
 
 
@@ -367,7 +366,7 @@ printk("sock_alloc: Alloced some more, now %d sockets\n", nsockets);
 		sti();
 
 		/*
-		 * The rest of these are in fact vestigal from the previous
+		 * The rest of these are in fact vestigial from the previous
 		 * version, which didn't have growing list of sockets.
 		 * These may become necessary if there are 2000 (or whatever
 		 * the hard limit is set to) sockets already in system,
@@ -979,7 +978,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 	if (!(newsock = sock_alloc(0))) 
 	{
 		printk("NET: sock_accept: no more sockets\n");
-		return(-ENOSR);	/* Was: EGAIN, but we are out of system
+		return(-ENOSR);	/* Was: EAGAIN, but we are out of system
 				   resources! */
 	}
 	newsock->type = sock->type;

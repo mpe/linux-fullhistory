@@ -24,6 +24,7 @@
 
 
 #define NSOCKETS	2000		/* Dynamic, this is MAX LIMIT	*/
+#define NSOCKETS_UNIX	128		/* unix domain static limit	*/
 #define NPROTO		16		/* should be enough for now..	*/
 
 

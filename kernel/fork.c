@@ -169,13 +169,18 @@ asmlinkage int sys_fork(struct pt_regs regs)
 {
 	int nr;
 	struct task_struct *p;
+	unsigned long new_stack;
 	unsigned long clone_flags = COPYVM | SIGCHLD;
 
 	if(!(p = (struct task_struct*)__get_free_page(GFP_KERNEL)))
 		goto bad_fork;
+	new_stack = get_free_page(GFP_KERNEL);
+	if (!new_stack)
+		goto bad_fork_free;
 	nr = find_empty_process();
 	if (nr < 0)
 		goto bad_fork_free;
+
 	*p = *current;
 
 	if (p->exec_domain && p->exec_domain->use_count)
@@ -184,7 +189,8 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		(*p->binfmt->use_count)++;
 
 	p->did_exec = 0;
-	p->kernel_stack_page = 0;
+	p->kernel_stack_page = new_stack;
+	*(unsigned long *) p->kernel_stack_page = STACK_MAGIC;
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 	p->pid = last_pid;
@@ -200,11 +206,6 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	p->cutime = p->cstime = 0;
 	p->start_time = jiffies;
 	task[nr] = p;
-
-	/* build new kernel stack */
-	if (!(p->kernel_stack_page = get_free_page(GFP_KERNEL)))
-		goto bad_fork_cleanup;
-	*(unsigned long *)p->kernel_stack_page = STACK_MAGIC;
 
 	/* copy all the process information */
 	clone_flags = copy_thread(nr, COPYVM | SIGCHLD, p, &regs);
@@ -222,8 +223,8 @@ asmlinkage int sys_fork(struct pt_regs regs)
 bad_fork_cleanup:
 	task[nr] = NULL;
 	REMOVE_LINKS(p);
-	free_page(p->kernel_stack_page);
 bad_fork_free:
+	free_page(new_stack);
 	free_page((long) p);
 bad_fork:
 	return -EAGAIN;

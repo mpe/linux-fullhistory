@@ -735,8 +735,8 @@ static void scrdown(int currcons, unsigned int t, unsigned int b)
 
 	if (b > video_num_lines || t >= b)
 		return;
-	d = (unsigned short *) origin+video_size_row*b;
-	s = (unsigned short *) origin+video_size_row*(b-1);
+	d = (unsigned short *) (origin+video_size_row*b);
+	s = (unsigned short *) (origin+video_size_row*(b-1));
 	count = (b-t-1)*video_num_columns;
 	while (count) {
 		count--;

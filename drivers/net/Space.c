@@ -283,6 +283,14 @@ static struct device ppp0_dev = {
 #define NEXT_DEV (&ppp0_dev)
 #endif   /* PPP */
 
+#ifdef CONFIG_ARCNET
+    extern int arcnet_probe(struct device *dev);
+    static struct device arcnet_dev = {
+	"arc0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, arcnet_probe, };
+#   undef	NEXT_DEV
+#   define	NEXT_DEV	(&arcnet_dev)
+#endif
+
 #ifdef CONFIG_DUMMY
     extern int dummy_init(struct device *dev);
     static struct device dummy_dev = {

@@ -77,14 +77,8 @@ extern inline int add_to_swap_cache(unsigned long addr, unsigned long entry)
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
 #endif
-	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) { 
-		__asm__ __volatile__ (
-				      "xchgl %0,%1\n"
-				      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
-				       "=r" (entry)
-				      : "0" (swap_cache[addr >> PAGE_SHIFT]),
-				       "1" (entry)
-				      );
+	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
+		entry = (unsigned long) xchg_ptr(swap_cache + (addr >> PAGE_SHIFT), (void *) entry);
 		if (entry)  {
 			printk("swap_cache: replacing non-NULL entry\n");
 		}
@@ -398,7 +392,7 @@ static int swap_out_process(struct task_struct * p)
 	if (address < vma->vm_start)
 		address = vma->vm_start;
 
-	pgdir = (address >> PGDIR_SHIFT) + (unsigned long *) p->tss.cr3;
+	pgdir = PAGE_DIR_OFFSET(p, address);
 	offset = address & ~PGDIR_MASK;
 	address &= PGDIR_MASK;
 	for ( ; address < TASK_SIZE ;
@@ -754,7 +748,7 @@ repeat:
 		if (!p)
 			continue;
 		for (pgt = 0 ; pgt < PTRS_PER_PAGE ; pgt++) {
-			ppage = pgt + ((unsigned long *) p->tss.cr3);
+			ppage = pgt + PAGE_DIR_OFFSET(p, 0);
 			page = *ppage;
 			if (!page)
 				continue;

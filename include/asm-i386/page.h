@@ -27,14 +27,24 @@ __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 					/* 64-bit machines, beware!  SRB. */
 #define SIZEOF_PTR_LOG2			2
 
-			/* to find an entry in a page-table-directory */
-#define PAGE_DIR_OFFSET(base,address)	((unsigned long*)((base)+\
-  ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)*2&PTR_MASK&~PAGE_MASK)))
-			/* to find an entry in a page-table */
+/* to find an entry in a page-table-directory */
+#define PAGE_DIR_OFFSET(tsk,address) \
+((((unsigned long)(address)) >> 22) + (unsigned long *) (tsk)->tss.cr3)
+
+/* to find an entry in a page-table */
 #define PAGE_PTR(address)		\
-  ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
-			/* the no. of pointers that fit on a page */
+((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
+
+/* the no. of pointers that fit on a page */
 #define PTRS_PER_PAGE			(PAGE_SIZE/sizeof(void*))
+
+/* to set the page-dir */
+#define SET_PAGE_DIR(tsk,pgdir) \
+do { \
+	(tsk)->tss.cr3 = (unsigned long) (pgdir); \
+	if ((tsk) == current) \
+		__asm__ __volatile__("movl %0,%%cr3": :"a" ((tsk)->tss.cr3)); \
+} while (0)
 
 #endif /* __KERNEL__ */
 

@@ -55,7 +55,7 @@
  *	space that need not be wasted.
  */
  
-struct unix_proto_data unix_datas[NSOCKETS];
+struct unix_proto_data unix_datas[NSOCKETS_UNIX];
 
 static int unix_proto_create(struct socket *sock, int protocol);
 static int unix_proto_dup(struct socket *newsock, struct socket *oldsock);

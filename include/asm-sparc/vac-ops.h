@@ -8,12 +8,10 @@
    success, 1 on failure.
 */
 
-extern __inline__ int enable_vac()
+extern __inline__ int enable_vac(void)
 {
-  int success;
+  int success=0;
 
-  &success;
-  
   __asm__ __volatile__("lduba [%1] 2, %0\n\t"
 		       "or    %0, 0x10, %0\n\t"
 		       "stba  %0, [%1] 2\n\t"
@@ -28,9 +26,9 @@ extern __inline__ int enable_vac()
    success, 1 on failure.
 */
 
-extern __inline__ int disable_vac()
+extern __inline__ int disable_vac(void)
 {
-  int success;
+  int success=0;
 
   __asm__ __volatile__("lduba [%1] 0x2, %0\n\t"
 			"xor   %0, 0x10, %0\n\t"

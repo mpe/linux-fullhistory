@@ -32,6 +32,14 @@ N: Krishna Balasubramanian
 E: balasub@cis.ohio-state.edu
 D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
 
+N: Dario Ballabio
+E: dario@milano.europe.dg.com
+D: Author and maintainer of the Ultrastor 14F/34F SCSI driver
+D: Author and maintainer of the EATA ISA/EISA SCSI driver
+S: Data General Corporation
+S: Milano
+S: Italy
+
 N: Arindam Banerji
 E: axb@cse.nd.edu
 D: Contributed ESDI driver routines needed to port LINUX to the PS/2 MCA.
@@ -303,6 +311,16 @@ S: Great Baddow
 S: CM2 8HN
 S: United Kingdom
 
+N: Jochen Hein
+E: Hein@Informatik.TU-Clausthal.de
+D: National Language Support
+D: German Support-Disks for SLS/Slackware called SLT
+D: Linux Internationalization Project
+D: DOSemu
+S: Mohlenweg 19
+S: 34266 Niestetal
+S: Germany
+
 N: Michael Hipp
 E: mhipp@student.uni-tuebingen.de
 D: drivers for the racal ni5210 & ni6510 ethernet-boards
@@ -499,15 +517,10 @@ S: Victoria Park 6100
 S: Australia
 
 N: John A. Martin
-E: jmartin@csc.com
 E: jam@acm.org
 E: j.a.martin@ieee.org
 D: FSSTND contributor
 D: Credit file compilator
-S: Computer Sciences Corporation
-S: 1100 West Street
-S: Laurel, Maryland 20707-3587
-S: USA
 
 N: Kevin E. Martin
 E: martin@cs.unc.edu
@@ -708,6 +721,14 @@ N: Chris Smith
 E: csmith@convex.com
 D: HPFS filesystem
 S: Richardson, Texas
+S: USA
+
+N: Scott Snyder
+E: snyder@fnald0.fnal.gov
+D: ATAPI cdrom driver
+S: MS 352, Fermilab
+S: Post Office Box 500
+S: Batavia, Illinois 60510
 S: USA
 
 N: Drew Sullivan

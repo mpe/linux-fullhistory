@@ -22,7 +22,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap);
 static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
-static unsigned long shm_swap_in (struct vm_area_struct *, unsigned long);
+static unsigned long shm_swap_in (struct vm_area_struct *, unsigned long, unsigned long);
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -378,12 +378,11 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 {
 	unsigned long *page_table;
 	unsigned long tmp, shm_sgn;
-	unsigned long page_dir = shmd->vm_task->tss.cr3;
 
 	/* check that the range is unmapped */
 	if (!remap)
 		for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE) {
-			page_table = PAGE_DIR_OFFSET(page_dir,tmp);
+			page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
 			if (*page_table & PAGE_PRESENT) {
 				page_table = (ulong *) (PAGE_MASK & *page_table);
 				page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
@@ -403,7 +402,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 
 	/* check that the range has page_tables */
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE) {
-		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
+		page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
 		if (*page_table & PAGE_PRESENT) {
 			page_table = (ulong *) (PAGE_MASK & *page_table);
 			page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
@@ -429,7 +428,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 	shm_sgn = shmd->vm_pte + ((shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE,
 	     shm_sgn += (1 << SHM_IDX_SHIFT)) {
-		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
+		page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
 		page_table = (ulong *) (PAGE_MASK & *page_table);
 		page_table += (tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 		*page_table = shm_sgn;
@@ -496,8 +495,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EIDRM;
 	}
 
-	shmd->vm_pte = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT) |
-		(shmflg & SHM_RDONLY ? SHM_READ_ONLY : 0);
+	shmd->vm_pte = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT);
 	shmd->vm_start = addr;
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_task = current;
@@ -604,30 +602,40 @@ int sys_shmdt (char *shmaddr)
 /*
  * page not present ... go through shm_pages
  */
-static unsigned long shm_swap_in(struct vm_area_struct * vma, unsigned long code)
+static unsigned long shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, unsigned long code)
 {
 	unsigned long page;
 	struct shmid_ds *shp;
 	unsigned int id, idx;
 
 	id = (code >> SHM_ID_SHIFT) & SHM_ID_MASK;
+	if (id != ((shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK)) {
+		printk ("shm_swap_in: code id = %d and shmd id = %ld differ\n",
+			id, (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK);
+		return BAD_PAGE | PAGE_SHARED;
+	}
 	if (id > max_shmid) {
-		printk ("shm_no_page: id=%d too big. proc mem corrupted\n", id);
+		printk ("shm_swap_in: id=%d too big. proc mem corrupted\n", id);
 		return BAD_PAGE | PAGE_SHARED;
 	}
 	shp = shm_segs[id];
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {
-		printk ("shm_no_page: id=%d invalid. Race.\n", id);
+		printk ("shm_swap_in: id=%d invalid. Race.\n", id);
 		return BAD_PAGE | PAGE_SHARED;
 	}
 	idx = (code >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
+	if (idx != (offset >> PAGE_SHIFT)) {
+		printk ("shm_swap_in: code idx = %u and shmd idx = %lu differ\n",
+			idx, offset >> PAGE_SHIFT);
+		return BAD_PAGE | PAGE_SHARED;
+	}
 	if (idx >= shp->shm_npages) {
-		printk ("shm_no_page : too large page index. id=%d\n", id);
+		printk ("shm_swap_in : too large page index. id=%d\n", id);
 		return BAD_PAGE | PAGE_SHARED;
 	}
 
 	if (!(shp->shm_pages[idx] & PAGE_PRESENT)) {
-		if(!(page = get_free_page(GFP_KERNEL))) {
+		if (!(page = get_free_page(GFP_KERNEL))) {
 			oom(current);
 			return BAD_PAGE | PAGE_SHARED;
 		}
@@ -652,8 +660,7 @@ static unsigned long shm_swap_in(struct vm_area_struct * vma, unsigned long code
 done:
 	current->mm->min_flt++;
 	page = shp->shm_pages[idx];
-	if (code & SHM_READ_ONLY)           /* write-protect */
-		page &= ~PAGE_RW;
+	page &= ~(PAGE_RW & ~shmd->vm_page_prot);  /* write-protect */
 	mem_map[MAP_NR(page)]++;
 	return page;
 }
@@ -716,7 +723,7 @@ int shm_swap (int prio)
 		tmp = shmd->vm_start + (idx << PAGE_SHIFT) - shmd->vm_offset;
 		if (!(tmp >= shmd->vm_start && tmp < shmd->vm_end))
 			continue;
-		pte = PAGE_DIR_OFFSET(shmd->vm_task->tss.cr3,tmp);
+		pte = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
 		if (!(*pte & PAGE_PRESENT)) {
 			printk("shm_swap: bad pgtbl! id=%ld start=%lx idx=%ld\n",
 					id, shmd->vm_start, idx);
@@ -732,8 +739,7 @@ int shm_swap (int prio)
 			*pte &= ~PAGE_ACCESSED;
 			continue;
 		}
-		tmp = shmd->vm_pte | idx << SHM_IDX_SHIFT;
-		*pte = tmp;
+		*pte = shmd->vm_pte | idx << SHM_IDX_SHIFT;
 		mem_map[MAP_NR(page)]--;
 		shmd->vm_task->mm->rss--;
 		invalid++;

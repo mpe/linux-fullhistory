@@ -69,8 +69,14 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(rename_module_symbol),
 
 	/* system info variables */
+	/* These check that they aren't defines (0/1) */
+#ifndef EISA_bus
 	X(EISA_bus),
-#ifdef __i386__
+#endif
+#ifndef MCA_bus
+	X(MCA_bus),
+#endif
+#ifndef wp_works_ok
 	X(wp_works_ok),
 #endif
 
@@ -282,11 +288,13 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(__down),
 #if defined(CONFIG_MSDOS_FS) && !defined(CONFIG_UMSDOS_FS)
 	/* support for umsdos fs */
+	X(msdos_bmap),
 	X(msdos_create),
 	X(msdos_file_read),
 	X(msdos_file_write),
 	X(msdos_lookup),
 	X(msdos_mkdir),
+	X(msdos_mmap),
 	X(msdos_put_inode),
 	X(msdos_put_super),
 	X(msdos_read_inode),

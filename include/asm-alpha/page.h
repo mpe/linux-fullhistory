@@ -36,14 +36,32 @@ __asm__ __volatile__( \
 					/* 64-bit machines, beware!  SRB. */
 #define SIZEOF_PTR_LOG2			4
 
-			/* to find an entry in a page-table-directory */
-#define PAGE_DIR_OFFSET(base,address)	((unsigned long*)((base)+\
-  ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)*2&PTR_MASK&~PAGE_MASK)))
-			/* to find an entry in a page-table */
+/* to find an entry in a page-table-directory */
+/*
+ * XXXXX This isn't right: we shouldn't use the ptbr, but the L2 pointer.
+ * This is just for getting it through the compiler right now
+ */
+#define PAGE_DIR_OFFSET(tsk,address) \
+((unsigned long *) ((tsk)->tss.ptbr + ((((unsigned long)(address)) >> 21) & PTR_MASK & ~PAGE_MASK)))
+
+/* to find an entry in a page-table */
 #define PAGE_PTR(address)		\
   ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
-			/* the no. of pointers that fit on a page */
+
+/* the no. of pointers that fit on a page */
 #define PTRS_PER_PAGE			(PAGE_SIZE/sizeof(void*))
+
+/* to set the page-dir */
+/*
+ * XXXXX This isn't right: we shouldn't use the ptbr, but the L2 pointer.
+ * This is just for getting it through the compiler right now
+ */
+#define SET_PAGE_DIR(tsk,pgdir) \
+do { \
+	(tsk)->tss.ptbr = (unsigned long) (pgdir); \
+	if ((tsk) == current) \
+		invalidate(); \
+} while (0)
 
 #endif /* __KERNEL__ */
 
