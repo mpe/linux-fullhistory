@@ -258,7 +258,7 @@ void dev_remove_pack(struct packet_type *pt)
 *******************************************************************************/
 
 /* Boot time configuration table */
-struct netdev_boot_setup dev_boot_setup[NETDEV_BOOT_SETUP_MAX];
+static struct netdev_boot_setup dev_boot_setup[NETDEV_BOOT_SETUP_MAX];
 
 /**
  *	netdev_boot_setup_add	- add new setup entry

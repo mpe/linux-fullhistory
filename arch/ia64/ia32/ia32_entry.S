@@ -73,7 +73,7 @@ GLOBAL_ENTRY(ia32_trace_syscall)
 END(ia32_trace_syscall)
 
 GLOBAL_ENTRY(sys32_vfork)
-	alloc r16=ar.pfs,2,2,3,0;;
+	alloc r16=ar.pfs,2,2,4,0;;
 	mov out0=IA64_CLONE_VFORK|IA64_CLONE_VM|SIGCHLD	// out0 = clone_flags
 	br.cond.sptk.few .fork1			// do the work
 END(sys32_vfork)
@@ -105,7 +105,7 @@ END(sys32_fork)
 	.align 8
 	.globl ia32_syscall_table
 ia32_syscall_table:	
-	data8 sys_ni_syscall	  /* 0	-  old "setup(" system call*/
+	data8 sys32_ni_syscall	  /* 0	-  old "setup(" system call*/
 	data8 sys_exit
 	data8 sys32_fork
 	data8 sys_read
@@ -122,25 +122,25 @@ ia32_syscall_table:
 	data8 sys_mknod
 	data8 sys_chmod		  /* 15 */
 	data8 sys_lchown
-	data8 sys_ni_syscall	  /* old break syscall holder */
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall	  /* old break syscall holder */
+	data8 sys32_ni_syscall
 	data8 sys_lseek
 	data8 sys_getpid	  /* 20 */
 	data8 sys_mount
 	data8 sys_oldumount
 	data8 sys_setuid
 	data8 sys_getuid
-	data8 sys_ni_syscall /* sys_stime is not supported on IA64 */  /* 25 */
+	data8 sys32_ni_syscall /* sys_stime is not supported on IA64 */  /* 25 */
 	data8 sys32_ptrace
 	data8 sys32_alarm
-	data8 sys_ni_syscall
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall
+	data8 sys32_ni_syscall
 	data8 ia32_utime	  /* 30 */
-	data8 sys_ni_syscall	  /* old stty syscall holder */
-	data8 sys_ni_syscall	  /* old gtty syscall holder */
+	data8 sys32_ni_syscall	  /* old stty syscall holder */
+	data8 sys32_ni_syscall	  /* old gtty syscall holder */
 	data8 sys_access
 	data8 sys_nice
-	data8 sys_ni_syscall	  /* 35 */	  /* old ftime syscall holder */
+	data8 sys32_ni_syscall	  /* 35 */	  /* old ftime syscall holder */
 	data8 sys_sync
 	data8 sys_kill
 	data8 sys_rename
@@ -149,22 +149,22 @@ ia32_syscall_table:
 	data8 sys_dup
 	data8 sys32_pipe
 	data8 sys32_times
-	data8 sys_ni_syscall	  /* old prof syscall holder */
+	data8 sys32_ni_syscall	  /* old prof syscall holder */
 	data8 sys_brk		  /* 45 */
 	data8 sys_setgid
 	data8 sys_getgid
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall
 	data8 sys_geteuid
 	data8 sys_getegid	  /* 50 */
 	data8 sys_acct
 	data8 sys_umount	  /* recycled never used phys( */
-	data8 sys_ni_syscall	  /* old lock syscall holder */
+	data8 sys32_ni_syscall	  /* old lock syscall holder */
 	data8 ia32_ioctl
-	data8 sys_fcntl		  /* 55 */
-	data8 sys_ni_syscall	  /* old mpx syscall holder */
+	data8 sys32_fcntl	  /* 55 */
+	data8 sys32_ni_syscall	  /* old mpx syscall holder */
 	data8 sys_setpgid
-	data8 sys_ni_syscall	  /* old ulimit syscall holder */
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall	  /* old ulimit syscall holder */
+	data8 sys32_ni_syscall
 	data8 sys_umask		  /* 60 */
 	data8 sys_chroot
 	data8 sys_ustat
@@ -172,12 +172,12 @@ ia32_syscall_table:
 	data8 sys_getppid
 	data8 sys_getpgrp	  /* 65 */
 	data8 sys_setsid
-	data8 sys_ni_syscall
-	data8 sys_ni_syscall
-	data8 sys_ni_syscall
+	data8 sys32_sigaction
+	data8 sys32_ni_syscall
+	data8 sys32_ni_syscall
 	data8 sys_setreuid	  /* 70 */
 	data8 sys_setregid
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall
 	data8 sys_sigpending
 	data8 sys_sethostname
 	data8 sys32_setrlimit	  /* 75 */
@@ -189,7 +189,7 @@ ia32_syscall_table:
 	data8 sys_setgroups
 	data8 old_select
 	data8 sys_symlink
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall
 	data8 sys_readlink	  /* 85 */
 	data8 sys_uselib
 	data8 sys_swapon
@@ -203,7 +203,7 @@ ia32_syscall_table:
 	data8 sys_fchown	  /* 95 */
 	data8 sys_getpriority
 	data8 sys_setpriority
-	data8 sys_ni_syscall	  /* old profil syscall holder */
+	data8 sys32_ni_syscall	  /* old profil syscall holder */
 	data8 sys32_statfs
 	data8 sys32_fstatfs	  /* 100 */
 	data8 sys_ioperm
@@ -214,11 +214,11 @@ ia32_syscall_table:
 	data8 sys32_newstat
 	data8 sys32_newlstat
 	data8 sys32_newfstat
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall
 	data8 sys_iopl		  /* 110 */
 	data8 sys_vhangup
-	data8 sys_ni_syscall		// used to be sys_idle
-	data8 sys_ni_syscall
+	data8 sys32_ni_syscall		// used to be sys_idle
+	data8 sys32_ni_syscall
 	data8 sys32_wait4
 	data8 sys_swapoff	  /* 115 */
 	data8 sys_sysinfo
@@ -242,7 +242,7 @@ ia32_syscall_table:
 	data8 sys_bdflush
 	data8 sys_sysfs		  /* 135 */
 	data8 sys_personality
-	data8 sys_ni_syscall	  /* for afs_syscall */
+	data8 sys32_ni_syscall	  /* for afs_syscall */
 	data8 sys_setfsuid
 	data8 sys_setfsgid
 	data8 sys_llseek	  /* 140 */
@@ -293,8 +293,8 @@ ia32_syscall_table:
 	data8 sys_capset	  /* 185 */
 	data8 sys_sigaltstack
 	data8 sys_sendfile
-	data8 sys_ni_syscall		  /* streams1 */
-	data8 sys_ni_syscall		  /* streams2 */
+	data8 sys32_ni_syscall		  /* streams1 */
+	data8 sys32_ni_syscall		  /* streams2 */
 	data8 sys32_vfork	  /* 190 */
 	/*
 	 *  CAUTION: If any system calls are added beyond this point

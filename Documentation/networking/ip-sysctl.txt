@@ -207,7 +207,7 @@ tcp_ecn - BOOLEN
 	Enable Explicit Congestion Notification in TCP.
 
 tcp_reordering - INTEGER
-	Maxmimal reordering of packets in a TCP stream.
+	Maximal reordering of packets in a TCP stream.
 	Default: 3	
 
 tcp_retrans_collapse - BOOLEAN

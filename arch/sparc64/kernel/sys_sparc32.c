@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.159 2000/08/08 02:47:50 davem Exp $
+/* $Id: sys_sparc32.c,v 1.160 2000/08/12 13:25:41 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1180,7 +1180,7 @@ struct readdir_callback32 {
 };
 
 static int fillonedir(void * __buf, const char * name, int namlen,
-		      off_t offset, ino_t ino)
+		      off_t offset, ino_t ino, unsigned int d_type)
 {
 	struct readdir_callback32 * buf = (struct readdir_callback32 *) __buf;
 	struct old_linux_dirent32 * dirent;

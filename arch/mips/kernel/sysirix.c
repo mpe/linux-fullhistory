@@ -1622,7 +1622,7 @@ asmlinkage int irix_mmap64(struct pt_regs *regs)
 	pgoff = (off1 << (32 - PAGE_SHIFT)) | (off2 >> PAGE_SHIFT);
 
 	if (!(flags & MAP_ANONYMOUS)) {
-		if (!(file = fcheck(fd))) {
+		if (!(file = fget(fd))) {
 			error = -EBADF;
 			goto out;
 		}

@@ -1,4 +1,2 @@
+#define MACHVEC_PLATFORM_NAME	sn1
 #include <asm/machvec_init.h>
-#include <asm/machvec_sn1.h>
-
-MACHVEC_DEFINE(sn1)

@@ -232,13 +232,10 @@ static long do_fcntl(unsigned int fd, unsigned int cmd,
 			}
 			break;
 		case F_GETFD:
-			err = FD_ISSET(fd, current->files->close_on_exec);
+			err = get_close_on_exec(fd);
 			break;
 		case F_SETFD:
-			if (arg&1)
-				FD_SET(fd, current->files->close_on_exec);
-			else
-				FD_CLR(fd, current->files->close_on_exec);
+			set_close_on_exec(fd, arg&1);
 			break;
 		case F_GETFL:
 			err = filp->f_flags;

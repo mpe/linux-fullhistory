@@ -19,6 +19,7 @@
 #include <asm/types.h>
 
 #define IA64_NUM_DBG_REGS	8
+#define IA64_NUM_PM_REGS	4
 
 /*
  * TASK_SIZE really is a mis-named.  It really is the maximum user
@@ -152,12 +153,13 @@
 
 #define IA64_THREAD_FPH_VALID	(__IA64_UL(1) << 0)	/* floating-point high state valid? */
 #define IA64_THREAD_DBG_VALID	(__IA64_UL(1) << 1)	/* debug registers valid? */
-#define IA64_THREAD_UAC_NOPRINT	(__IA64_UL(1) << 2)	/* don't log unaligned accesses */
-#define IA64_THREAD_UAC_SIGBUS	(__IA64_UL(1) << 3)	/* generate SIGBUS on unaligned acc. */
-#define IA64_THREAD_KRBS_SYNCED	(__IA64_UL(1) << 4)	/* krbs synced with process vm? */
+#define IA64_THREAD_PM_VALID	(__IA64_UL(1) << 2)	/* performance registers valid? */
+#define IA64_THREAD_UAC_NOPRINT	(__IA64_UL(1) << 3)	/* don't log unaligned accesses */
+#define IA64_THREAD_UAC_SIGBUS	(__IA64_UL(1) << 4)	/* generate SIGBUS on unaligned acc. */
+#define IA64_THREAD_KRBS_SYNCED	(__IA64_UL(1) << 5)	/* krbs synced with process vm? */
 #define IA64_KERNEL_DEATH	(__IA64_UL(1) << 63)	/* see die_if_kernel()... */
 
-#define IA64_THREAD_UAC_SHIFT	2	
+#define IA64_THREAD_UAC_SHIFT	3
 #define IA64_THREAD_UAC_MASK	(IA64_THREAD_UAC_NOPRINT | IA64_THREAD_UAC_SIGBUS)
 
 #ifndef __ASSEMBLY__
@@ -285,6 +287,14 @@ struct thread_struct {
 	struct ia64_fpreg fph[96];	/* saved/loaded on demand */
 	__u64 dbr[IA64_NUM_DBG_REGS];
 	__u64 ibr[IA64_NUM_DBG_REGS];
+#ifdef CONFIG_PERFMON
+	__u64 pmc[IA64_NUM_PM_REGS];
+	__u64 pmd[IA64_NUM_PM_REGS];
+	__u64 pmod[IA64_NUM_PM_REGS];
+# define INIT_THREAD_PM		{0, }, {0, }, {0, },
+#else
+# define INIT_THREAD_PM
+#endif
 	__u64 map_base;			/* base address for mmap() */
 #ifdef CONFIG_IA32_SUPPORT
 	__u64 eflag;			/* IA32 EFLAGS reg */
@@ -316,6 +326,7 @@ struct thread_struct {
 	{{{{0}}}, },			/* fph */	\
 	{0, },				/* dbr */	\
 	{0, },				/* ibr */	\
+	INIT_THREAD_PM					\
 	0x2000000000000000		/* map_base */	\
 	INIT_THREAD_IA32,				\
 	0				/* siginfo */	\
@@ -338,8 +349,12 @@ struct thread_struct {
 struct mm_struct;
 struct task_struct;
 
-/* Free all resources held by a thread. */
-extern void release_thread (struct task_struct *);
+/*
+ * Free all resources held by a thread. This is called after the
+ * parent of DEAD_TASK has collected the exist status of the task via
+ * wait().  This is a no-op on IA-64.
+ */
+#define release_thread(dead_task)
 
 /*
  * This is the mechanism for creating a new kernel thread.
@@ -392,6 +407,18 @@ ia64_set_fpu_owner (struct task_struct *t)
 extern void __ia64_init_fpu (void);
 extern void __ia64_save_fpu (struct ia64_fpreg *fph);
 extern void __ia64_load_fpu (struct ia64_fpreg *fph);
+extern void ia64_save_debug_regs (unsigned long *save_area);
+extern void ia64_load_debug_regs (unsigned long *save_area);
+
+#ifdef CONFIG_IA32_SUPPORT
+extern void ia32_save_state (struct thread_struct *thread);
+extern void ia32_load_state (struct thread_struct *thread);
+#endif
+
+#ifdef CONFIG_PERFMON
+extern void ia64_save_pm_regs (struct thread_struct *thread);
+extern void ia64_load_pm_regs (struct thread_struct *thread);
+#endif
 
 #define ia64_fph_enable()	__asm__ __volatile__ (";; rsm psr.dfh;; srlz.d;;" ::: "memory");
 #define ia64_fph_disable()	__asm__ __volatile__ (";; ssm psr.dfh;; srlz.d;;" ::: "memory");

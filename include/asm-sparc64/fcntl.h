@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.8 2000/07/06 01:41:45 davem Exp $ */
+/* $Id: fcntl.h,v 1.9 2000/08/12 13:25:53 davem Exp $ */
 #ifndef _SPARC64_FCNTL_H
 #define _SPARC64_FCNTL_H
 
@@ -71,6 +71,10 @@ struct flock32 {
 	__kernel_pid_t32 l_pid;
 	short __unused;
 };
+#endif
+
+#ifdef __KERNEL__
+#define flock64	flock
 #endif
 
 #endif /* !(_SPARC64_FCNTL_H) */

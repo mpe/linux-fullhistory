@@ -130,12 +130,6 @@
    have 2 SDATA_IN lines (currently) */
 #define NR_AC97		2
 
-/* minor number of /dev/dspW */
-#define SND_DEV_DSP8	3
-
-/* minor number of /dev/dspW */
-#define SND_DEV_DSP16	5 
-
 /* minor number of /dev/swmodem (temporary, experimental) */
 #define SND_DEV_SWMODEM	7
 

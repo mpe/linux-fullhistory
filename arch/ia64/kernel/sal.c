@@ -156,6 +156,14 @@ ia64_sal_init (struct ia64_sal_systab *systab)
 			      struct ia64_sal_desc_platform_feature *pf = (void *) p;
 			      printk("SAL: Platform features ");
 
+#ifdef CONFIG_IA64_HAVE_IRQREDIR
+			      /*
+			       * Early versions of SAL say we don't have
+			       * IRQ redirection, even though we do...
+			       */
+			      pf->feature_mask |= (1 << 1);
+#endif
+
 			      if (pf->feature_mask & (1 << 0))
 				      printk("BusLock ");
 

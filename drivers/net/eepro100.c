@@ -23,6 +23,8 @@
 		Convert to new PCI driver interface
 	2000 Mar 24  Dragan Stancevic <visitor@valinux.com>
 		Disabled FC and ER, to avoid lockups when when we get FCP interrupts.
+	2000 Jul 17 Goutham Rao <goutham.rao@intel.com>
+		PCI DMA API fixes, adding pci_dma_sync_single calls where neccesary
 */
 
 static const char *version =
@@ -515,6 +517,7 @@ struct speedo_private {
 	spinlock_t lock;					/* Group with Tx control cache line. */
 	u32 tx_threshold;					/* The value for txdesc.count. */
 	struct RxFD *last_rxf;				/* Last filled RX buffer. */
+	dma_addr_t last_rxf_dma;
 	unsigned int cur_rx, dirty_rx;		/* The next free ring entry */
 	long last_rx_time;			/* Last Rx, in jiffies, to handle Rx hang. */
 	const char *product_name;
@@ -1213,19 +1216,24 @@ speedo_init_rx_ring(struct net_device *dev)
 		sp->rx_ring_dma[i] =
 			pci_map_single(sp->pdev, rxf, PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
 		skb_reserve(skb, sizeof(struct RxFD));
-		if (last_rxf)
+		if (last_rxf) {
 			last_rxf->link = cpu_to_le32(sp->rx_ring_dma[i]);
+			pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[i-1], sizeof(struct RxFD), PCI_DMA_TODEVICE);
+		}
 		last_rxf = rxf;
 		rxf->status = cpu_to_le32(0x00000001);	/* '1' is flag value only. */
 		rxf->link = 0;						/* None yet. */
 		/* This field unused by i82557. */
 		rxf->rx_buf_addr = 0xffffffff;
 		rxf->count = cpu_to_le32(PKT_BUF_SZ << 16);
+		pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[i], sizeof(struct RxFD), PCI_DMA_TODEVICE);
 	}
 	sp->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 	/* Mark the last entry as end-of-list. */
 	last_rxf->status = cpu_to_le32(0xC0000002);	/* '2' is flag value only. */
+	pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[RX_RING_SIZE-1], sizeof(struct RxFD), PCI_DMA_TODEVICE);
 	sp->last_rxf = last_rxf;
+	sp->last_rxf_dma = sp->rx_ring_dma[RX_RING_SIZE-1];
 }
 
 static void speedo_purge_tx(struct net_device *dev)
@@ -1660,6 +1668,7 @@ static inline struct RxFD *speedo_rx_alloc(struct net_device *dev, int entry)
 	skb->dev = dev;
 	skb_reserve(skb, sizeof(struct RxFD));
 	rxf->rx_buf_addr = 0xffffffff;
+	pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[entry], sizeof(struct RxFD), PCI_DMA_TODEVICE);
 	return rxf;
 }
 
@@ -1672,7 +1681,9 @@ static inline void speedo_rx_link(struct net_device *dev, int entry,
 	rxf->count = cpu_to_le32(PKT_BUF_SZ << 16);
 	sp->last_rxf->link = cpu_to_le32(rxf_dma);
 	sp->last_rxf->status &= cpu_to_le32(~0xC0000000);
+	pci_dma_sync_single(sp->pdev, sp->last_rxf_dma, sizeof(struct RxFD), PCI_DMA_TODEVICE);
 	sp->last_rxf = rxf;
+	sp->last_rxf_dma = rxf_dma;
 }
 
 static int speedo_refill_rx_buf(struct net_device *dev, int force)
@@ -1738,9 +1749,17 @@ speedo_rx(struct net_device *dev)
 	if (speedo_debug > 4)
 		printk(KERN_DEBUG " In speedo_rx().\n");
 	/* If we own the next entry, it's a new packet. Send it up. */
-	while (sp->rx_ringp[entry] != NULL &&
-		   (status = le32_to_cpu(sp->rx_ringp[entry]->status)) & RxComplete) {
-		int pkt_len = le32_to_cpu(sp->rx_ringp[entry]->count) & 0x3fff;
+	while (sp->rx_ringp[entry] != NULL) {
+		int pkt_len;
+
+		pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[entry],
+			sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
+
+		if(!((status = le32_to_cpu(sp->rx_ringp[entry]->status)) & RxComplete)) {
+			break;
+		}
+
+		pkt_len = le32_to_cpu(sp->rx_ringp[entry]->count) & 0x3fff;
 
 		if (--rx_work_limit < 0)
 			break;
@@ -1782,7 +1801,8 @@ speedo_rx(struct net_device *dev)
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
 				pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[entry],
-						PKT_BUF_SZ + sizeof(struct RxFD), PCI_DMA_FROMDEVICE);
+					sizeof(struct RxFD) + pkt_len, PCI_DMA_FROMDEVICE);
+
 #if 1 || USE_IP_CSUM
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_copy_and_sum(skb, sp->rx_skbuff[entry]->tail, pkt_len, 0);
@@ -2165,6 +2185,8 @@ static void set_rx_mode(struct net_device *dev)
 		/* Set the link in the setup frame. */
 		mc_setup_frm->link =
 			cpu_to_le32(TX_RING_ELEM_DMA(sp, (entry + 1) % TX_RING_SIZE));
+
+		pci_dma_sync_single(sp->pdev, mc_blk->frame_dma, mc_blk->len, PCI_DMA_TODEVICE);
 
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		clear_suspend(last_cmd);

@@ -395,11 +395,10 @@ efi_rtc_init(void)
 	return 0;
 }
 
-static int __exit
+static void __exit
 efi_rtc_exit(void)
 {
 	/* not yet used */
-	return 0;
 }
 
 module_init(efi_rtc_init);

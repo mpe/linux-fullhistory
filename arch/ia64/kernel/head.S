@@ -181,7 +181,9 @@ END(ia64_save_debug_regs)
 
 GLOBAL_ENTRY(ia64_load_debug_regs)
 	alloc r16=ar.pfs,1,0,0,0
+#if !(defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
 	lfetch.nta [in0]
+#endif
 	mov r20=ar.lc			// preserve ar.lc
 	add r19=IA64_NUM_DBG_REGS*8,in0
 	mov ar.lc=IA64_NUM_DBG_REGS-1
@@ -702,3 +704,74 @@ SET_REG(b4);
 SET_REG(b5);
 
 #endif /* CONFIG_IA64_BRL_EMU */
+
+#ifdef CONFIG_SMP
+
+	/*
+	 * This routine handles spinlock contention.  It uses a simple exponential backoff
+	 * algorithm to reduce unnecessary bus traffic.  The initial delay is selected from
+	 * the low-order bits of the cycle counter (a cheap "randomizer").  I'm sure this
+	 * could use additional tuning, especially on systems with a large number of CPUs.
+	 * Also, I think the maximum delay should be made a function of the number of CPUs in
+	 * the system. --davidm 00/08/05
+	 *
+	 * WARNING: This is not a normal procedure.  It gets called from C code without
+	 * the compiler knowing about it.  Thus, we must not use any scratch registers
+	 * beyond those that were declared "clobbered" at the call-site (see spin_lock()
+	 * macro).  We may not even use the stacked registers, because that could overwrite
+	 * output registers.  Similarly, we can't use the scratch stack area as it may be
+	 * in use, too.
+	 *
+	 * Inputs:
+	 *	ar.ccv = 0 (and available for use)
+	 *	r28 = available for use
+	 *	r29 = available for use
+	 *	r30 = non-zero (and available for use)
+	 *	r31 = address of lock we're trying to acquire
+	 *	p15 = available for use
+	 */
+
+#	define delay	r28
+#	define timeout	r29
+#	define tmp	r30
+
+GLOBAL_ENTRY(ia64_spinlock_contention)
+	mov tmp=ar.itc
+	;;
+	and delay=0x3f,tmp
+	;;
+
+.retry:	add timeout=tmp,delay
+	shl delay=delay,1
+	;;
+	dep delay=delay,r0,0,13	// limit delay to 8192 cycles
+	;;
+	// delay a little...
+.wait:	sub tmp=tmp,timeout
+	or delay=0xf,delay	// make sure delay is non-zero (otherwise we get stuck with 0)
+	;;
+	cmp.lt p15,p0=tmp,r0
+	mov tmp=ar.itc
+(p15)	br.cond.sptk .wait
+	;;
+	ld1 tmp=[r31]
+	;;
+	cmp.ne p15,p0=tmp,r0
+	mov tmp=ar.itc
+(p15)	br.cond.sptk.few .retry	// lock is still busy
+	;;
+	// try acquiring lock (we know ar.ccv is still zero!):
+	mov tmp=1
+	;;
+	IA64_SEMFIX_INSN
+	cmpxchg1.acq tmp=[r31],tmp,ar.ccv
+	;;
+	cmp.eq p15,p0=tmp,r0
+
+	mov tmp=ar.itc
+(p15)	br.ret.sptk.many b7	// got lock -> return
+	br .retry		// still no luck, retry
+
+END(ia64_spinlock_contention)
+
+#endif

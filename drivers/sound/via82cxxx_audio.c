@@ -36,10 +36,6 @@
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
-/* much better to duplicate this value than include
- * drivers/sound/sound_config.h just for this definition */
-#define SND_DEV_DSP16 5 
-
 
 #undef VIA_DEBUG	/* define to enable debugging output and checks */
 #ifdef VIA_DEBUG

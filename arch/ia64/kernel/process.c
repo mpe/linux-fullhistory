@@ -27,6 +27,8 @@
 #include <asm/unwind.h>
 #include <asm/user.h>
 
+#ifdef CONFIG_IA64_NEW_UNWIND
+
 static void
 do_show_stack (struct unw_frame_info *info, void *arg)
 {
@@ -43,6 +45,8 @@ do_show_stack (struct unw_frame_info *info, void *arg)
 		printk("[<%016lx>] sp=0x%016lx bsp=0x%016lx\n", ip, sp, bsp);
 	} while (unw_unwind(info) >= 0);
 }
+
+#endif
 
 void
 show_stack (struct task_struct *task)
@@ -118,15 +122,14 @@ cpu_idle (void *unused)
 	current->nice = 20;
 	current->counter = -100;
 
-#ifdef CONFIG_SMP
-	if (!current->need_resched)
-		min_xtp();
-#endif
 
 	while (1) {
-		while (!current->need_resched) {
+#ifdef CONFIG_SMP
+		if (!current->need_resched)
+			min_xtp();
+#endif
+		while (!current->need_resched)
 			continue;
-		}
 #ifdef CONFIG_SMP
 		normal_xtp();
 #endif
@@ -157,11 +160,12 @@ cpu_idle (void *unused)
 void
 ia64_save_extra (struct task_struct *task)
 {
-	extern void ia64_save_debug_regs (unsigned long *save_area);
-	extern void ia32_save_state (struct thread_struct *thread);
-
 	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
 		ia64_save_debug_regs(&task->thread.dbr[0]);
+#ifdef CONFIG_PERFMON
+	if ((task->thread.flags & IA64_THREAD_PM_VALID) != 0)
+		ia64_save_pm_regs(&task->thread);
+#endif
 	if (IS_IA32_PROCESS(ia64_task_regs(task)))
 		ia32_save_state(&task->thread);
 }
@@ -169,11 +173,12 @@ ia64_save_extra (struct task_struct *task)
 void
 ia64_load_extra (struct task_struct *task)
 {
-	extern void ia64_load_debug_regs (unsigned long *save_area);
-	extern void ia32_load_state (struct thread_struct *thread);
-
 	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
 		ia64_load_debug_regs(&task->thread.dbr[0]);
+#ifdef CONFIG_PERFMON
+	if ((task->thread.flags & IA64_THREAD_PM_VALID) != 0)
+		ia64_load_pm_regs(&task->thread);
+#endif
 	if (IS_IA32_PROCESS(ia64_task_regs(task)))
 		ia32_load_state(&task->thread);
 }
@@ -530,17 +535,6 @@ exit_thread (void)
 	if (ia64_get_fpu_owner() == current) {
 		ia64_set_fpu_owner(0);
 	}
-}
-
-/*
- * Free remaining state associated with DEAD_TASK.  This is called
- * after the parent of DEAD_TASK has collected the exist status of the
- * task via wait().
- */
-void
-release_thread (struct task_struct *dead_task)
-{
-	/* nothing to do */
 }
 
 unsigned long

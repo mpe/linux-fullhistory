@@ -549,6 +549,7 @@ void
 ia64_sync_fph (struct task_struct *child)
 {
 	if (ia64_psr(ia64_task_regs(child))->mfh && ia64_get_fpu_owner() == child) {
+		ia64_psr(ia64_task_regs(child))->mfh = 0;
 		ia64_set_fpu_owner(0);
 		ia64_save_fpu(&child->thread.fph[0]);
 		child->thread.flags |= IA64_THREAD_FPH_VALID;

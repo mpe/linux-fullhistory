@@ -448,6 +448,7 @@ static int __init sbni_probe1(struct net_device *dev, int ioaddr)
 	if(dev->priv == NULL)
 	{
 		DP( printk("%s: cannot allocate memory\n", dev->name); )
+		free_irq(dev->irq, dev);
 		return -ENOMEM;
 	}
    

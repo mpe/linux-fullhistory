@@ -9,8 +9,8 @@
 
 all: kernel.o head.o init_task.o
 
-obj-y := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o	\
-	 pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o semaphore.o setup.o		\
+obj-y := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o		\
+	 machvec.o pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o semaphore.o setup.o	\
 	 signal.o sys_ia64.o traps.o time.o unaligned.o unwind.o
 
 obj-$(CONFIG_IA64_GENERIC) += machvec.o

@@ -67,7 +67,7 @@ struct gred_sched_data
 	u32		limit;		/* HARD maximal queue length	*/
 	u32		qth_min;	/* Min average length threshold: A scaled */
 	u32		qth_max;	/* Max average length threshold: A scaled */
-        u32      	DP;		/* the drop pramaters */
+	u32      	DP;		/* the drop pramaters */
 	char		Wlog;		/* log(W)		*/
 	char		Plog;		/* random number bits	*/
 	u32		Scell_max;
@@ -146,8 +146,8 @@ gred_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 			
 	}
 
-        q->packetsin++;
-        q->bytesin+=skb->len;
+	q->packetsin++;
+	q->bytesin+=skb->len;
 
 	if (t->eqp && t->grio) {
 		qave=0;
@@ -218,7 +218,7 @@ gred_requeue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct gred_sched_data *q;
 	struct gred_sched *t= (struct gred_sched *)sch->data;
-        q= t->tab[(skb->tc_index&0xf)];
+	q= t->tab[(skb->tc_index&0xf)];
 /* error checking here -- probably unnecessary */
 	PSCHED_SET_PASTPERFECT(q->qidlestart);
 
@@ -308,6 +308,7 @@ static void gred_reset(struct Qdisc* sch)
 
 	while((skb=__skb_dequeue(&sch->q))!=NULL)
 		kfree_skb(skb);
+
 	sch->stats.backlog = 0;
 
         for (i=0;i<t->DPs;i++) {
@@ -329,27 +330,27 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct gred_sched *table = (struct gred_sched *)sch->data;
 	struct gred_sched_data *q;
-        struct tc_gred_qopt *ctl;
-        struct tc_gred_sopt *sopt;
-        struct rtattr *tb[TCA_GRED_STAB];
-        struct rtattr *tb2[TCA_GRED_STAB];
+	struct tc_gred_qopt *ctl;
+	struct tc_gred_sopt *sopt;
+	struct rtattr *tb[TCA_GRED_STAB];
+	struct rtattr *tb2[TCA_GRED_STAB];
 	int i;
 
-        if (opt == NULL ||
-            rtattr_parse(tb, TCA_GRED_STAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) )
-                return -EINVAL;
+	if (opt == NULL ||
+		rtattr_parse(tb, TCA_GRED_STAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) )
+			return -EINVAL;
 
 	if (tb[TCA_GRED_PARMS-1] == 0 && tb[TCA_GRED_STAB-1] == 0 &&
 	    tb[TCA_GRED_DPS-1] != 0) {
 		rtattr_parse(tb2, TCA_GRED_DPS, RTA_DATA(opt),
 		    RTA_PAYLOAD(opt));
 
-	    	sopt = RTA_DATA(tb2[TCA_GRED_DPS-1]);
-	    	table->DPs=sopt->DPs;   
-	    	table->def=sopt->def_DP; 
-	    	table->grio=sopt->grio; 
+		sopt = RTA_DATA(tb2[TCA_GRED_DPS-1]);
+		table->DPs=sopt->DPs;   
+		table->def=sopt->def_DP; 
+		table->grio=sopt->grio; 
 		table->initd=0;
-                /* probably need to clear all the table DP entries as well */
+		/* probably need to clear all the table DP entries as well */
 		MOD_INC_USE_COUNT;
 		return 0;
 	    }
@@ -361,7 +362,7 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 			return -EINVAL;
 
 	ctl = RTA_DATA(tb[TCA_GRED_PARMS-1]);
-	if (ctl->DP > MAX_DPs-1 || ctl->DP <0) {
+	if (ctl->DP > MAX_DPs-1 ) {
 		/* misbehaving is punished! Put in the default drop probability */
 		DPRINTK("\nGRED: DP %u not in  the proper range fixed. New DP "
 			"set to default at %d\n",ctl->DP,table->def);
@@ -371,6 +372,8 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 	if (table->tab[ctl->DP] == NULL) {
 		table->tab[ctl->DP]=kmalloc(sizeof(struct gred_sched_data),
 					    GFP_KERNEL);
+		if (NULL == table->tab[ctl->DP])
+			return -ENOMEM;
 		memset(table->tab[ctl->DP], 0, (sizeof(struct gred_sched_data)));
 	}
 	q= table->tab[ctl->DP]; 
@@ -378,13 +381,13 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 	if (table->grio) {
 		if (ctl->prio <=0) {
 			if (table->def && table->tab[table->def]) {
-				DPRINTK("\nGRED: DP %u does not have a prio setting "
-					"default to %d\n",ctl->DP,
+				DPRINTK("\nGRED: DP %u does not have a prio"
+					"setting default to %d\n",ctl->DP,
 					table->tab[table->def]->prio);
 				q->prio=table->tab[table->def]->prio;
 			} else { 
-				DPRINTK("\nGRED: DP %u does not have a prio setting "
-					"default to 8\n",ctl->DP);
+				DPRINTK("\nGRED: DP %u does not have a prio"
+					" setting default to 8\n",ctl->DP);
 				q->prio=8;
 			}
 		} else {
@@ -392,7 +395,7 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 		}
 	} else {
 		q->prio=8;
-        }
+	}
 
 
 	q->DP=ctl->DP;
@@ -437,10 +440,13 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 
 		if (table->tab[table->def] == NULL) {
 			table->tab[table->def]=
-			    kmalloc(sizeof(struct gred_sched_data), GFP_KERNEL);
+				kmalloc(sizeof(struct gred_sched_data), GFP_KERNEL);
+			if (NULL == table->tab[ctl->DP])
+				return -ENOMEM;
+
 			memset(table->tab[table->def], 0,
 			       (sizeof(struct gred_sched_data)));
-                }
+		}
 		q= table->tab[table->def]; 
 		q->DP=table->def;
 		q->Wlog = ctl->Wlog;
@@ -452,45 +458,44 @@ static int gred_change(struct Qdisc *sch, struct rtattr *opt)
 		q->qth_min = ctl->qth_min<<ctl->Wlog;
 		q->qth_max = ctl->qth_max<<ctl->Wlog;
 
-                if (table->grio)
+		if (table->grio)
 			q->prio=table->tab[ctl->DP]->prio;
-                else
+		else
 			q->prio=8;
 
 		q->qcount = -1;
 		PSCHED_SET_PASTPERFECT(q->qidlestart);
 		memcpy(q->Stab, RTA_DATA(tb[TCA_GRED_STAB-1]), 256);
 	}
-        return 0;
+	return 0;
 
 }
 
 static int gred_init(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct gred_sched *table = (struct gred_sched *)sch->data;
-        struct tc_gred_sopt *sopt;
-        struct rtattr *tb[TCA_GRED_STAB];
-        struct rtattr *tb2[TCA_GRED_STAB];
+	struct tc_gred_sopt *sopt;
+	struct rtattr *tb[TCA_GRED_STAB];
+	struct rtattr *tb2[TCA_GRED_STAB];
 
-        if (opt == NULL ||
-            rtattr_parse(tb, TCA_GRED_STAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) )
-                return -EINVAL;
+	if (opt == NULL ||
+		rtattr_parse(tb, TCA_GRED_STAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) )
+			return -EINVAL;
 
 	if (tb[TCA_GRED_PARMS-1] == 0 && tb[TCA_GRED_STAB-1] == 0 &&
 	    tb[TCA_GRED_DPS-1] != 0) {
-		rtattr_parse(tb2, TCA_GRED_DPS, RTA_DATA(opt),
-		    RTA_PAYLOAD(opt));
+		rtattr_parse(tb2, TCA_GRED_DPS, RTA_DATA(opt),RTA_PAYLOAD(opt));
 
-	    	sopt = RTA_DATA(tb2[TCA_GRED_DPS-1]);
-	    	table->DPs=sopt->DPs;   
-	    	table->def=sopt->def_DP; 
-	    	table->grio=sopt->grio; 
+		sopt = RTA_DATA(tb2[TCA_GRED_DPS-1]);
+		table->DPs=sopt->DPs;   
+		table->def=sopt->def_DP; 
+		table->grio=sopt->grio; 
 		table->initd=0;
 		MOD_INC_USE_COUNT;
 		return 0;
 	}
 
-        DPRINTK("\n GRED_INIT error!\n");
+	DPRINTK("\n GRED_INIT error!\n");
 	return -EINVAL;
 }
 

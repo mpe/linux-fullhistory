@@ -111,6 +111,7 @@
 
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
+#include <asm/processor.h>
 #include <asm/system.h>
 
 /*
@@ -286,7 +287,17 @@ extern pmd_t *ia64_bad_pagetable (void);
  * contains the memory attribute bits, dirty bits, and various other
  * bits as well.
  */
-#define pgprot_noncached(prot)	__pgprot((pgprot_val(prot) & ~_PAGE_MA_MASK) | _PAGE_MA_UC)
+#define pgprot_noncached(prot)		__pgprot((pgprot_val(prot) & ~_PAGE_MA_MASK) | _PAGE_MA_UC)
+
+/*
+ * Macro to make mark a page protection value as "write-combining".
+ * Note that "protection" is really a misnomer here as the protection
+ * value contains the memory attribute bits, dirty bits, and various
+ * other bits as well.  Accesses through a write-combining translation
+ * works bypasses the caches, but does allow for consecutive writes to
+ * be combined into single (but larger) write transactions.
+ */
+#define pgprot_writecombine(prot)	__pgprot((pgprot_val(prot) & ~_PAGE_MA_MASK) | _PAGE_MA_WC)
 
 /*
  * Return the region index for virtual address ADDRESS.

@@ -4,8 +4,8 @@
  * Copyright (C) 1999 Silicon Graphics, Inc.
  * Copyright (C) Srinivasa Thirumalachar <sprasad@engr.sgi.com>
  * Copyright (C) Vijay Chander <vijay@engr.sgi.com>
- * Copyright (C) 1999 Hewlett-Packard Co.
- * Copyright (C) David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1999-2000 Hewlett-Packard Co.
+ * Copyright (C) 1999-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #ifndef _ASM_IA64_MACHVEC_H
 #define _ASM_IA64_MACHVEC_H
@@ -21,6 +21,7 @@ struct pt_regs;
 struct task_struct;
 struct timeval;
 struct vm_area_struct;
+struct acpi_entry_iosapic;
 
 typedef void ia64_mv_setup_t (char **);
 typedef void ia64_mv_irq_init_t (void);
@@ -30,14 +31,32 @@ typedef void ia64_mv_mca_init_t (void);
 typedef void ia64_mv_mca_handler_t (void);
 typedef void ia64_mv_cmci_handler_t (int, void *, struct pt_regs *);
 typedef void ia64_mv_log_print_t (void);
+typedef void ia64_mv_register_iosapic_t (struct acpi_entry_iosapic *);
+
+extern void machvec_noop (void);
 
 # if defined (CONFIG_IA64_HP_SIM)
 #  include <asm/machvec_hpsim.h>
 # elif defined (CONFIG_IA64_DIG)
 #  include <asm/machvec_dig.h>
 # elif defined (CONFIG_IA64_SGI_SN1_SIM)
-#  include <asm/machvec_sgi_sn1_SIM.h>
+#  include <asm/machvec_sn1.h>
 # elif defined (CONFIG_IA64_GENERIC)
+
+# ifdef MACHVEC_PLATFORM_HEADER
+#  include MACHVEC_PLATFORM_HEADER
+# else
+#  define platform_name		ia64_mv.name
+#  define platform_setup	ia64_mv.setup
+#  define platform_irq_init	ia64_mv.irq_init
+#  define platform_map_nr	ia64_mv.map_nr
+#  define platform_mca_init	ia64_mv.mca_init
+#  define platform_mca_handler	ia64_mv.mca_handler
+#  define platform_cmci_handler	ia64_mv.cmci_handler
+#  define platform_log_print	ia64_mv.log_print
+#  define platform_pci_fixup	ia64_mv.pci_fixup
+#  define platform_register_iosapic	ia64_mv.register_iosapic
+# endif
 
 struct ia64_machine_vector {
 	const char *name;
@@ -49,6 +68,7 @@ struct ia64_machine_vector {
 	ia64_mv_mca_handler_t *mca_handler;
 	ia64_mv_cmci_handler_t *cmci_handler;
 	ia64_mv_log_print_t *log_print;
+	ia64_mv_register_iosapic_t *register_iosapic;
 };
 
 #define MACHVEC_INIT(name)			\
@@ -61,22 +81,12 @@ struct ia64_machine_vector {
 	platform_mca_init,			\
 	platform_mca_handler,			\
 	platform_cmci_handler,			\
-	platform_log_print			\
+	platform_log_print,			\
+	platform_register_iosapic			\
 }
 
-# ifndef MACHVEC_INHIBIT_RENAMING
-#  define platform_name		ia64_mv.name
-#  define platform_setup	ia64_mv.setup
-#  define platform_irq_init	ia64_mv.irq_init
-#  define platform_map_nr	ia64_mv.map_nr
-#  define platform_mca_init	ia64_mv.mca_init
-#  define platform_mca_handler	ia64_mv.mca_handler
-#  define platform_cmci_handler	ia64_mv.cmci_handler
-#  define platform_log_print	ia64_mv.log_print
-# endif
-
 extern struct ia64_machine_vector ia64_mv;
-extern void machvec_noop (void);
+extern void machvec_init (const char *name);
 
 # else
 #  error Unknown configuration.  Update asm-ia64/machvec.h.
@@ -103,6 +113,12 @@ extern void machvec_noop (void);
 #endif
 #ifndef platform_log_print
 # define platform_log_print	((ia64_mv_log_print_t *) machvec_noop)
+#endif
+#ifndef platform_pci_fixup
+# define platform_pci_fixup	((ia64_mv_pci_fixup_t *) machvec_noop)
+#endif
+#ifndef platform_register_iosapic
+# define platform_register_iosapic	((ia64_mv_register_iosapic_t *) machvec_noop)
 #endif
 
 #endif /* _ASM_IA64_MACHVEC_H */

@@ -18,15 +18,16 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_IA64 y
+define_bool CONFIG_SWIOTLB y	# for now...
 
 define_bool CONFIG_ISA n
 define_bool CONFIG_SBUS n
 
 choice 'IA-64 system type'					\
-	"Generic		CONFIG_IA64_GENERIC		\
+	"generic		CONFIG_IA64_GENERIC		\
+	 DIG-compliant		CONFIG_IA64_DIG			\
 	 HP-simulator		CONFIG_IA64_HP_SIM		\
-	 SN1-simulator		CONFIG_IA64_SGI_SN1_SIM		\
-	 DIG-compliant		CONFIG_IA64_DIG" Generic
+	 SN1-simulator		CONFIG_IA64_SGI_SN1_SIM" generic
 
 choice 'Kernel page size'						\
 	"4KB			CONFIG_IA64_PAGE_SIZE_4KB		\
@@ -38,16 +39,18 @@ if [ "$CONFIG_IA64_DIG" = "y" ]; then
 	define_bool CONFIG_ITANIUM y
 	define_bool CONFIG_IA64_BRL_EMU y
 	bool '  Enable Itanium A-step specific code' CONFIG_ITANIUM_ASTEP_SPECIFIC
-	bool '  Enable Itanium A1-step specific code' CONFIG_ITANIUM_A1_SPECIFIC
+	if [ "$CONFIG_ITANIUM_ASTEP_SPECIFIC" = "y" ]; then
+	  bool '   Enable Itanium A1-step specific code' CONFIG_ITANIUM_A1_SPECIFIC
+	fi
+	bool '  Enable Itanium B-step specific code' CONFIG_ITANIUM_BSTEP_SPECIFIC
+	if [ "$CONFIG_ITANIUM_BSTEP_SPECIFIC" = "y" ]; then
+	  bool '   Enable Itanium B0-step specific code' CONFIG_ITANIUM_B0_SPECIFIC
+	fi
+	bool '  Force interrupt redirection' CONFIG_IA64_HAVE_IRQREDIR
 	bool '  Enable use of global TLB purge instruction (ptc.g)' CONFIG_ITANIUM_PTCG
 	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS
 	bool '  Enable AzusA hacks' CONFIG_IA64_AZUSA_HACKS
-	bool '  Emulate PAL/SAL/EFI firmware' CONFIG_IA64_FW_EMU
-	bool '  Enable IA64 Machine Check Abort' CONFIG_IA64_MCA
-fi
-
-if [ "$CONFIG_IA64_GENERIC" = "y" ]; then
-	define_bool CONFIG_IA64_SOFTSDV_HACKS y
+	bool '  Enable IA-64 Machine Check Abort' CONFIG_IA64_MCA
 fi
 
 if [ "$CONFIG_IA64_SGI_SN1_SIM" = "y" ]; then
@@ -59,7 +62,7 @@ define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.
 
 bool 'SMP support' CONFIG_SMP
 bool 'Performance monitor support' CONFIG_PERFMON
-bool '/proc/palinfo support' CONFIG_IA64_PALINFO
+bool '/proc/pal support' CONFIG_IA64_PALINFO
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -162,8 +165,6 @@ source drivers/char/Config.in
 #source drivers/misc/Config.in
 
 source fs/Config.in
-
-source fs/nls/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment

@@ -19,10 +19,11 @@
 #include <linux/irq.h>
 
 #include <asm/acpi-ext.h>
-#include <asm/page.h>
 #include <asm/efi.h>
 #include <asm/io.h>
 #include <asm/iosapic.h>
+#include <asm/machvec.h>
+#include <asm/page.h>
 
 #undef ACPI_DEBUG		/* Guess what this does? */
 
@@ -73,47 +74,6 @@ acpi_lsapic(char *p)
 	
 	total_cpus++;
 }
-
-/*
- * Find all IOSAPICs and tag the iosapic_vector structure with the appropriate 
- * base addresses.
- */
-static void __init
-acpi_iosapic(char *p) 
-{
-	/*
-	 * This is not good.  ACPI is not necessarily limited to CONFIG_IA64_SV, yet
-	 * ACPI does not necessarily imply IOSAPIC either.  Perhaps there should be
-	 * a means for platform_setup() to register ACPI handlers?
-	 */
-#ifdef CONFIG_IA64_DIG
-	acpi_entry_iosapic_t *iosapic = (acpi_entry_iosapic_t *) p;
-	unsigned int ver, v;
-	int l, max_pin;
-
-	ver = iosapic_version(iosapic->address);
-	max_pin = (ver >> 16) & 0xff;
-	
-	printk("IOSAPIC Version %x.%x: address 0x%lx IRQs 0x%x - 0x%x\n", 
-	       (ver & 0xf0) >> 4, (ver & 0x0f), iosapic->address, 
-	       iosapic->irq_base, iosapic->irq_base + max_pin);
-	
-	for (l = 0; l <= max_pin; l++) {
-		v = iosapic->irq_base + l;
-		if (v < 16)
-			v = isa_irq_to_vector(v);
-		if (v > IA64_MAX_VECTORED_IRQ) {
-			printk("    !!! bad IOSAPIC interrupt vector: %u\n", v);
-			continue;
-		}
-		/* XXX Check for IOSAPIC collisions */
-		iosapic_addr(v) = (unsigned long) ioremap(iosapic->address, 0);
-		iosapic_baseirq(v) = iosapic->irq_base;
-	}
-	iosapic_init(iosapic->address, iosapic->irq_base);
-#endif
-}
-
 
 /*
  * Configure legacy IRQ information in iosapic_vector
@@ -227,7 +187,7 @@ acpi_parse_msapic(acpi_sapic_t *msapic)
 			break;
 	
 		case ACPI_ENTRY_IO_SAPIC:
-			acpi_iosapic(p);
+			platform_register_iosapic((acpi_entry_iosapic_t *) p);
 			break;
 
 		case ACPI_ENTRY_INT_SRC_OVERRIDE:

@@ -1,27 +1,15 @@
-
+#
 # Makefile for linux/drivers/net/fc
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
+# 9 Aug 2000, Christoph Hellwig <hch@caldera.de>
+# Rewritten to use lists instead of if-statements.
 #
 
-L_TARGET := fc.a
-L_OBJS   := 
-M_OBJS   := 
-MX_OBJS  := 
-FC_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
+O_TARGET := fc.o
 
-ifeq ($(CONFIG_IPHASE5526),y)
-L_OBJS += iph5526.o
-else
-  ifeq ($(CONFIG_IPHASE5526),m)
-    M_OBJS += iph5526.o 
-  endif
-endif
+obj-$(CONFIG_IPHASE5526)	+= iph5526.o
+
+O_OBJS	:= $(obj-y)
+M_OBJS	:= $(obj-m)
 
 include $(TOPDIR)/Rules.make
-
-clean:
-	rm *.o 
-

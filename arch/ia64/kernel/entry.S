@@ -106,29 +106,19 @@ GLOBAL_ENTRY(ia64_switch_to)
 	alloc r16=ar.pfs,1,0,0,0
 	DO_SAVE_SWITCH_STACK
 	UNW(.body)
-	// disable interrupts to ensure atomicity for next few instructions:
-	mov r17=psr		// M-unit
-	;;
-	rsm psr.i		// M-unit
-	dep r18=-1,r0,0,61	// build mask 0x1fffffffffffffff
-	;;
-	srlz.d
-	;;
+
 	adds r22=IA64_TASK_THREAD_KSP_OFFSET,r13
+	dep r18=-1,r0,0,61	// build mask 0x1fffffffffffffff
 	adds r21=IA64_TASK_THREAD_KSP_OFFSET,in0
 	;;
 	st8 [r22]=sp		// save kernel stack pointer of old task
 	ld8 sp=[r21]		// load kernel stack pointer of new task
 	and r20=in0,r18		// physical address of "current"
 	;;
+	mov ar.k6=r20		// copy "current" into ar.k6
 	mov r8=r13		// return pointer to previously running task
 	mov r13=in0		// set "current" pointer
-	mov ar.k6=r20		// copy "current" into ar.k6
 	;;
-	// restore interrupts
-	mov psr.l=r17
-	;;
-	srlz.d
 	DO_LOAD_SWITCH_STACK( )
 	br.ret.sptk.few rp
 END(ia64_switch_to)

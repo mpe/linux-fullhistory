@@ -22,12 +22,14 @@
 #include <linux/string.h>
 #include <linux/irq.h>
 
+#include <asm/acpi-ext.h>
+#include <asm/delay.h>
 #include <asm/io.h>
 #include <asm/iosapic.h>
+#include <asm/machvec.h>
+#include <asm/processor.h>
 #include <asm/ptrace.h>
 #include <asm/system.h>
-#include <asm/delay.h>
-#include <asm/processor.h>
 
 #undef DEBUG_IRQ_ROUTING
 
@@ -315,10 +317,6 @@ dig_irq_init (void)
 	 */
 	outb(0xff, 0xA1);
 	outb(0xff, 0x21);
-
-#ifndef CONFIG_IA64_DIG
-	iosapic_init(IO_SAPIC_DEFAULT_ADDR);
-#endif
 }
 
 void
@@ -337,15 +335,23 @@ dig_pci_fixup (void)
 			if (irq < 0 && dev->bus->parent) { /* go back to the bridge */
 				struct pci_dev * bridge = dev->bus->self;
 
-				/* do the bridge swizzle... */
-				pin = (pin + PCI_SLOT(dev->devfn)) % 4;
-				irq = iosapic_get_PCI_irq_vector(bridge->bus->number,
-								 PCI_SLOT(bridge->devfn), pin);
+				/* allow for multiple bridges on an adapter */
+				do {
+					/* do the bridge swizzle... */
+					pin = (pin + PCI_SLOT(dev->devfn)) % 4;
+					irq = iosapic_get_PCI_irq_vector(bridge->bus->number,
+									 PCI_SLOT(bridge->devfn), pin);
+				} while (irq < 0 && (bridge = bridge->bus->self));
 				if (irq >= 0)
 					printk(KERN_WARNING
 					       "PCI: using PPB(B%d,I%d,P%d) to get irq %02x\n",
 					       bridge->bus->number, PCI_SLOT(bridge->devfn),
 					       pin, irq);
+				else
+					printk(KERN_WARNING
+					       "PCI: Couldn't map irq for B%d,I%d,P%d\n",
+					       bridge->bus->number, PCI_SLOT(bridge->devfn),
+					       pin);
 			}
 			if (irq >= 0) {
 				printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %02x\n",
@@ -360,4 +366,35 @@ dig_pci_fixup (void)
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 15;	/* Spurious interrupts */
 	}
+}
+
+/*
+ * Register an IOSAPIC discovered via ACPI.
+ */
+void __init
+dig_register_iosapic (acpi_entry_iosapic_t *iosapic)
+{
+	unsigned int ver, v;
+	int l, max_pin;
+
+	ver = iosapic_version(iosapic->address);
+	max_pin = (ver >> 16) & 0xff;
+	
+	printk("IOSAPIC Version %x.%x: address 0x%lx IRQs 0x%x - 0x%x\n", 
+	       (ver & 0xf0) >> 4, (ver & 0x0f), iosapic->address, 
+	       iosapic->irq_base, iosapic->irq_base + max_pin);
+	
+	for (l = 0; l <= max_pin; l++) {
+		v = iosapic->irq_base + l;
+		if (v < 16)
+			v = isa_irq_to_vector(v);
+		if (v > IA64_MAX_VECTORED_IRQ) {
+			printk("    !!! bad IOSAPIC interrupt vector: %u\n", v);
+			continue;
+		}
+		/* XXX Check for IOSAPIC collisions */
+		iosapic_addr(v) = (unsigned long) ioremap(iosapic->address, 0);
+		iosapic_baseirq(v) = iosapic->irq_base;
+	}
+	iosapic_init(iosapic->address, iosapic->irq_base);
 }

@@ -226,6 +226,7 @@ efi_guidcmp (efi_guid_t left, efi_guid_t right)
 }
 
 extern void efi_init (void);
+extern void efi_map_pal_code (void);
 extern void efi_memmap_walk (efi_freemem_callback_t callback, void *arg);
 extern void efi_gettimeofday (struct timeval *tv);
 extern void efi_enter_virtual_mode (void);	/* switch EFI to virtual mode, if possible */

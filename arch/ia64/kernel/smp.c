@@ -320,6 +320,58 @@ smp_send_flush_tlb(void)
 #endif	/* !CONFIG_ITANIUM_PTCG */
 
 /*
+ * Run a function on another CPU
+ *  <func>	The function to run. This must be fast and non-blocking.
+ *  <info>	An arbitrary pointer to pass to the function.
+ *  <retry>	If true, keep retrying until ready.
+ *  <wait>	If true, wait until function has completed on other CPUs.
+ *  [RETURNS]   0 on success, else a negative status code.
+ *
+ * Does not return until the remote CPU is nearly ready to execute <func>
+ * or is or has executed.
+ */
+
+int
+smp_call_function_single (int cpuid, void (*func) (void *info), void *info, int retry, int wait)
+{
+	struct smp_call_struct data;
+	long timeout;
+	int cpus = 1;
+
+	if (cpuid == smp_processor_id()) {
+		printk(__FUNCTION__" trying to call self\n");
+		return -EBUSY;
+	}
+	
+	data.func = func;
+	data.info = info;
+	data.wait = wait;
+	atomic_set(&data.unstarted_count, cpus);
+	atomic_set(&data.unfinished_count, cpus);
+
+	if (pointer_lock(&smp_call_function_data, &data, retry))
+		return -EBUSY;
+
+	/*  Send a message to all other CPUs and wait for them to respond  */
+	send_IPI_single(cpuid, IPI_CALL_FUNC);
+
+	/*  Wait for response  */
+	timeout = jiffies + HZ;
+	while ((atomic_read(&data.unstarted_count) > 0) && time_before(jiffies, timeout))
+		barrier();
+	if (atomic_read(&data.unstarted_count) > 0) {
+		smp_call_function_data = NULL;
+		return -ETIMEDOUT;
+	}
+	if (wait)
+		while (atomic_read(&data.unfinished_count) > 0)
+			barrier();
+	/* unlock pointer */
+	smp_call_function_data = NULL;
+	return 0;
+}
+
+/*
  * Run a function on all other CPUs.
  *  <func>	The function to run. This must be fast and non-blocking.
  *  <info>	An arbitrary pointer to pass to the function.
@@ -396,13 +448,19 @@ void
 smp_do_timer(struct pt_regs *regs)
 {
         int cpu = smp_processor_id();
+        int user = user_mode(regs);
 	struct cpuinfo_ia64 *data = &cpu_data[cpu];
 
-        if (!--data->prof_counter) {
-		irq_enter(cpu, TIMER_IRQ);
-		update_process_times(user_mode(regs));
+        if (--data->prof_counter <= 0) {
 		data->prof_counter = data->prof_multiplier;
-		irq_exit(cpu, TIMER_IRQ);
+		/*
+		 * update_process_times() expects us to have done irq_enter().
+		 * Besides, if we don't timer interrupts ignore the global
+		 * interrupt lock, which is the WrongThing (tm) to do.
+		 */
+		irq_enter(cpu, 0);
+		update_process_times(user);
+		irq_exit(cpu, 0);
 	}
 }
 
@@ -473,6 +531,11 @@ smp_callin(void)
 	extern void ia64_rid_init(void);
 	extern void ia64_init_itm(void);
 	extern void ia64_cpu_local_tick(void);
+#ifdef CONFIG_PERFMON
+	extern void perfmon_init_percpu(void);
+#endif
+
+	efi_map_pal_code();
 
 	cpu_init();
 
@@ -480,6 +543,10 @@ smp_callin(void)
 
 	/* setup the CPU local timer tick */
 	ia64_init_itm();
+
+#ifdef CONFIG_PERFMON
+	perfmon_init_percpu();
+#endif
 
 	/* Disable all local interrupts */
 	ia64_set_lrr0(0, 1);	

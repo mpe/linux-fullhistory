@@ -7,6 +7,27 @@
 
 extern void FASTCALL(fput(struct file *));
 extern struct file * FASTCALL(fget(unsigned int fd));
+ 
+static inline int get_close_on_exec(unsigned int fd)
+{
+	struct files_struct *files = current->files;
+	int res;
+	write_lock(&files->file_lock);
+	res = FD_ISSET(fd, files->close_on_exec);
+	write_unlock(&files->file_lock);
+	return res;
+}
+
+static inline void set_close_on_exec(unsigned int fd, int flag)
+{
+	struct files_struct *files = current->files;
+	write_lock(&files->file_lock);
+	if (flag)
+		FD_SET(fd, files->close_on_exec);
+	else
+		FD_CLR(fd, files->close_on_exec);
+	write_unlock(&files->file_lock);
+}
 
 static inline struct file * fcheck_files(struct files_struct *files, unsigned int fd)
 {

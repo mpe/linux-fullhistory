@@ -272,8 +272,6 @@ struct tcp_opt {
 		__u32	lrcvtime;	/* timestamp of last received data packet*/
 		__u16	last_seg_size;	/* Size of last incoming segment	*/
 		__u16	rcv_mss;	/* MSS used for delayed ACK decisions	*/ 
-		__u16	rcv_small;	/* Number of not ACKed small segments	*/
-		__u16	rcv_thresh;	/* Peer doing TCP_NODELAY		*/
 	} ack;
 
 	/* Data for direct copy to user */

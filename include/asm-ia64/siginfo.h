@@ -14,12 +14,13 @@ typedef union sigval {
 } sigval_t;
 
 #define SI_MAX_SIZE	128
-#define SI_PAD_SIZE	((SI_MAX_SIZE/sizeof(int)) - 3)
+#define SI_PAD_SIZE	((SI_MAX_SIZE/sizeof(int)) - 4)
 
 typedef struct siginfo {
 	int si_signo;
 	int si_errno;
 	int si_code;
+	int __pad0;
 
 	union {
 		int _pad[SI_PAD_SIZE];
@@ -212,7 +213,7 @@ typedef struct siginfo {
 #define SIGEV_THREAD	2	/* deliver via thread creation */
 
 #define SIGEV_MAX_SIZE	64
-#define SIGEV_PAD_SIZE	((SIGEV_MAX_SIZE/sizeof(int)) - 3)
+#define SIGEV_PAD_SIZE	((SIGEV_MAX_SIZE/sizeof(int)) - 4)
 
 typedef struct sigevent {
 	sigval_t sigev_value;

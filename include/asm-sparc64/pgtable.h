@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.130 2000/08/09 00:00:17 davem Exp $
+/* $Id: pgtable.h,v 1.131 2000/08/11 03:00:14 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -174,7 +174,6 @@ extern inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 	(pmd_val(*(pmdp)) = (__pa((unsigned long) (ptep)) >> 11UL))
 #define pgd_set(pgdp, pmdp)	\
 	(pgd_val(*(pgdp)) = (__pa((unsigned long) (pmdp)) >> 11UL))
-#define sparc64_pte_pagenr(pte)   (((unsigned long) ((pte_val(pte)&~PAGE_OFFSET)-phys_base)>>PAGE_SHIFT))
 #define pmd_page(pmd)			((unsigned long) __va((pmd_val(pmd)<<11UL)))
 #define pgd_page(pgd)			((unsigned long) __va((pgd_val(pgd)<<11UL)))
 #define pte_none(pte) 			(!pte_val(pte))
@@ -206,7 +205,7 @@ extern inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
 #define __page_address(page)	((page)->virtual)
 #define page_address(page)	({ __page_address(page); })
 
-#define pte_page(x) (mem_map+sparc64_pte_pagenr(x))
+#define pte_page(x) (mem_map+(((pte_val(x)&_PAGE_PADDR)-phys_base)>>PAGE_SHIFT))
 
 /* Be very careful when you change these three, they are delicate. */
 #define pte_mkyoung(pte)	(__pte(pte_val(pte) | _PAGE_ACCESSED | _PAGE_R))

@@ -1189,7 +1189,9 @@ static void __init dcache_init(unsigned long mempages)
 	if (!dentry_cache)
 		panic("Cannot create dentry cache");
 
+#if PAGE_SHIFT < 13
 	mempages >>= (13 - PAGE_SHIFT);
+#endif
 	mempages *= sizeof(struct list_head);
 	for (order = 0; ((1UL << order) << PAGE_SHIFT) < mempages; order++)
 		;

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.78 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.79 2000/08/11 00:13:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -224,7 +224,7 @@ static void tcp_delack_timer(unsigned long data)
 
 	tcp_mem_reclaim(sk);
 
-	if (sk->state == TCP_CLOSE || !(tp->ack.pending&2))
+	if (sk->state == TCP_CLOSE || !(tp->ack.pending&TCP_ACK_TIMER))
 		goto out;
 
 	if ((long)(tp->ack.timeout - jiffies) > 0) {
@@ -232,7 +232,7 @@ static void tcp_delack_timer(unsigned long data)
 			sock_hold(sk);
 		goto out;
 	}
-	tp->ack.pending &= ~2;
+	tp->ack.pending &= ~TCP_ACK_TIMER;
 
 	if (skb_queue_len(&tp->ucopy.prequeue)) {
 		struct sk_buff *skb;

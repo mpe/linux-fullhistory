@@ -15,18 +15,29 @@ static int
 match_pid(const struct sk_buff *skb, pid_t pid)
 {
 	struct task_struct *p;
+	struct files_struct *files;
 	int i;
 
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
-	if(p && p->files) {
-		for (i=0; i < p->files->max_fds; i++) {
-			if (fcheck_files(p->files, i) == skb->sk->socket->file) {
+	if (!p)
+		goto out;
+	task_lock(p);
+	files = p->files;
+	if(files) {
+		read_lock(&files->file_lock);
+		for (i=0; i < files->max_fds; i++) {
+			if (fcheck_files(files, i) == skb->sk->socket->file) {
+				read_unlock(&files->file_lock);
+				task_unlock(p);
 				read_unlock(&tasklist_lock);
 				return 1;
 			}
-        	}
+		}
+		read_unlock(&files->file_lock);
 	}
+	task_unlock(p);
+out:
 	read_unlock(&tasklist_lock);
 	return 0;
 }
@@ -35,19 +46,28 @@ static int
 match_sid(const struct sk_buff *skb, pid_t sid)
 {
 	struct task_struct *p;
+	struct file *file = skb->sk->socket->file;
 	int i, found=0;
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		if ((p->session != sid) || !p->files)
+		struct file *files;
+		if (p->session != sid)
 			continue;
 
-		for (i=0; i < p->files->max_fds; i++) {
-			if (fcheck_files(p->files, i) == skb->sk->socket->file) {
-				found = 1;
-				break;
+		task_lock(p);
+		files = p->files;
+		if (files) {
+			read_lock(&files->file_lock);
+			for (i=0; i < files->max_fds; i++) {
+				if (fcheck_files(files, i) == file) {
+					found = 1;
+					break;
+				}
 			}
+			read_unlock(&files->file_lock);
 		}
+		task_unlock(p);
 		if(found)
 			break;
 	}

@@ -13,6 +13,7 @@
 #include <linux/console.h>
 #include <linux/timex.h>
 #include <linux/sched.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/machvec.h>

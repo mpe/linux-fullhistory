@@ -1291,7 +1291,7 @@ nfs_writeback_done(struct rpc_task *task)
 static void
 nfs_commit_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 {
-	struct nfs_page		*req;
+	struct nfs_page		*first, *last;
 	struct dentry		*dentry;
 	struct inode		*inode;
 	loff_t			start, end, len;
@@ -1299,32 +1299,28 @@ nfs_commit_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 	/* Set up the RPC argument and reply structs
 	 * NB: take care not to mess about with data->commit et al. */
 
-	end = 0;
-	start = ~0;
-	req = nfs_list_entry(head->next);
-	dentry = req->wb_dentry;
-	data->dentry = dentry;
-	data->cred = req->wb_cred;
+	list_splice(head, &data->pages);
+	INIT_LIST_HEAD(head);
+	first = nfs_list_entry(data->pages.next);
+	last = nfs_list_entry(data->pages.prev);
+	dentry = first->wb_dentry;
 	inode = dentry->d_inode;
-	while (!list_empty(head)) {
-		struct nfs_page	*req;
-		loff_t	rqstart, rqend;
-		req = nfs_list_entry(head->next);
-		nfs_list_remove_request(req);
-		nfs_list_add_request(req, &data->pages);
-		rqstart = page_offset(req->wb_page) + req->wb_offset;
-		rqend = rqstart + req->wb_bytes;
-		if (rqstart < start)
-			start = rqstart;
-		if (rqend > end)
-			end = rqend;
-	}
-	data->args.fh     = NFS_FH(dentry);
-	data->args.offset = start;
+
+	/*
+	 * Determine the offset range of requests in the COMMIT call.
+	 * We rely on the fact that data->pages is an ordered list...
+	 */
+	start = page_offset(first->wb_page) + first->wb_offset;
+	end = page_offset(last->wb_page) + (last->wb_offset + last->wb_bytes);
 	len = end - start;
 	/* If 'len' is not a 32-bit quantity, pass '0' in the COMMIT call */
-	if (end >= inode->i_size || len > (~((u32)0) >> 1))
+	if (end >= inode->i_size || len < 0 || len > (~((u32)0) >> 1))
 		len = 0;
+
+	data->dentry	  = dentry;
+	data->cred	  = first->wb_cred;
+	data->args.fh     = NFS_FH(dentry);
+	data->args.offset = start;
 	data->res.count   = data->args.count = (u32)len;
 	data->res.fattr   = &data->fattr;
 	data->res.verf    = &data->verf;

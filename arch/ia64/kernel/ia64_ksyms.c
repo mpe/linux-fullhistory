@@ -18,6 +18,7 @@ EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strncmp);
 EXPORT_SYMBOL(strncpy);
+EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strtok);
 
 #include <linux/pci.h>
@@ -37,6 +38,7 @@ EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL(kernel_thread);
 
 #ifdef CONFIG_SMP
+#include <asm/hardirq.h>
 EXPORT_SYMBOL(synchronize_irq);
 
 #include <asm/smplock.h>

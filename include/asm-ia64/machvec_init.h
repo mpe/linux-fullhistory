@@ -1,4 +1,6 @@
-#define MACHVEC_INHIBIT_RENAMING
+#define __MACHVEC_HDR(n)		<asm/machvec_##n##.h>
+#define __MACHVEC_EXPAND(n)		__MACHVEC_HDR(n)
+#define MACHVEC_PLATFORM_HEADER		__MACHVEC_EXPAND(MACHVEC_PLATFORM_NAME)
 
 #include <asm/machvec.h>
 
@@ -7,3 +9,5 @@
 	= MACHVEC_INIT(name);
 
 #define MACHVEC_DEFINE(name)	MACHVEC_HELPER(name)
+
+MACHVEC_DEFINE(MACHVEC_PLATFORM_NAME)

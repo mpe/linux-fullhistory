@@ -153,6 +153,7 @@ int drm_freelist_put(drm_device_t *dev, drm_freelist_t *bl, drm_buf_t *buf)
 #endif
 	buf->list	= DRM_LIST_FREE;
 	do {
+		/* XXX this is wrong due to the ABA problem! --davidm 00/08/07 */
 		old       = bl->next;
 		buf->next = old;
 		prev      = cmpxchg(&bl->next, old, buf);
@@ -185,6 +186,7 @@ static drm_buf_t *drm_freelist_try(drm_freelist_t *bl)
 	
 				/* Get buffer */
 	do {
+		/* XXX this is wrong due to the ABA problem! --davidm 00/08/07 */
 		old = bl->next;
 		if (!old) return NULL;
 		new  = bl->next->next;

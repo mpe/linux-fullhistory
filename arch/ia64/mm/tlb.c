@@ -1,8 +1,11 @@
 /*
  * TLB support routines.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
+ *
+ * 08/02/00 A. Mallick <asit.k.mallick@intel.com>	
+ *		Modified RID allocation for SMP 
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -27,9 +30,11 @@
 		1 << _PAGE_SIZE_8K   |		\
 		1 << _PAGE_SIZE_4K )
 
-static void wrap_context (struct mm_struct *mm);
-
-unsigned long ia64_next_context = (1UL << IA64_HW_CONTEXT_BITS) + 1;
+struct ia64_ctx ia64_ctx = {
+	lock:	SPIN_LOCK_UNLOCKED,
+	next:	1,
+	limit:	(1UL << IA64_HW_CONTEXT_BITS)
+};
 
  /*
   * Put everything in a struct so we avoid the global offset table whenever
@@ -106,49 +111,43 @@ flush_tlb_no_ptcg (unsigned long start, unsigned long end, unsigned long nbits)
 
 #endif /* CONFIG_SMP && !CONFIG_ITANIUM_PTCG */
 
-void
-get_new_mmu_context (struct mm_struct *mm)
-{
-	if ((ia64_next_context & IA64_HW_CONTEXT_MASK) == 0) {
-		wrap_context(mm);
-	}
-	mm->context = ia64_next_context++;
-}
-
 /*
- * This is where we handle the case where (ia64_next_context &
- * IA64_HW_CONTEXT_MASK) == 0.  Whenever this happens, we need to
- * flush the entire TLB and skip over region id number 0, which is
- * used by the kernel.
+ * Acquire the ia64_ctx.lock before calling this function!
  */
-static void
-wrap_context (struct mm_struct *mm)
+void
+wrap_mmu_context (struct mm_struct *mm)
 {
-	struct task_struct *task;
+	struct task_struct *tsk;
+	unsigned long tsk_context;
+
+	if (ia64_ctx.next >= (1UL << IA64_HW_CONTEXT_BITS)) 
+		ia64_ctx.next = 300;	/* skip daemons */
+	ia64_ctx.limit = (1UL << IA64_HW_CONTEXT_BITS);
 
 	/*
-	 * We wrapped back to the first region id so we nuke the TLB
-	 * so we can switch to the next generation of region ids.
+	 * Scan all the task's mm->context and set proper safe range
 	 */
-	__flush_tlb_all();
-	if (ia64_next_context++ == 0) {
-		/*
-		 * Oops, we've used up all 64 bits of the context
-		 * space---walk through task table to ensure we don't
-		 * get tricked into using an old context.  If this
-		 * happens, the machine has been running for a long,
-		 * long time!
-		 */
-		ia64_next_context = (1UL << IA64_HW_CONTEXT_BITS) + 1;
 
-		read_lock(&tasklist_lock);
-		for_each_task (task) {
-			if (task->mm == mm)
-				continue;
-			flush_tlb_mm(mm);
+	read_lock(&tasklist_lock);
+  repeat:
+	for_each_task(tsk) {
+		if (!tsk->mm)
+			continue;
+		tsk_context = tsk->mm->context;
+		if (tsk_context == ia64_ctx.next) {
+			if (++ia64_ctx.next >= ia64_ctx.limit) {
+				/* empty range: reset the range limit and start over */
+				if (ia64_ctx.next >= (1UL << IA64_HW_CONTEXT_BITS)) 
+					ia64_ctx.next = 300;
+				ia64_ctx.limit = (1UL << IA64_HW_CONTEXT_BITS);
+				goto repeat;
+			}
 		}
-		read_unlock(&tasklist_lock);
+		if ((tsk_context > ia64_ctx.next) && (tsk_context < ia64_ctx.limit))
+			ia64_ctx.limit = tsk_context;
 	}
+	read_unlock(&tasklist_lock);
+	flush_tlb_all();
 }
 
 void

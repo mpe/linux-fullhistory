@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.43 2000/08/09 08:04:45 davem Exp $ */
+/* $Id: mmu_context.h,v 1.45 2000/08/12 13:25:52 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -100,29 +100,35 @@ do { \
 /* Switch the current MM context. */
 static inline void switch_mm(struct mm_struct *old_mm, struct mm_struct *mm, struct task_struct *tsk, int cpu)
 {
-	long dirty;
+	unsigned long ctx_valid;
 
 	spin_lock(&mm->page_table_lock);
 	if (CTX_VALID(mm->context))
-		dirty = 0;
-	else
-		dirty = 1;
-	if (dirty || (old_mm != mm)) {
-		unsigned long vm_mask;
+		ctx_valid = 1;
+        else
+		ctx_valid = 0;
 
-		if (dirty)
+	if (!ctx_valid || (old_mm != mm)) {
+		if (!ctx_valid)
 			get_new_mmu_context(mm);
 
-		vm_mask = (1UL << cpu);
-		if (!(mm->cpu_vm_mask & vm_mask)) {
-			mm->cpu_vm_mask |= vm_mask;
-			dirty = 1;
-		}
-
 		load_secondary_context(mm);
-		if (dirty != 0)
-			clean_secondary_context();
 		reload_tlbmiss_state(tsk, mm);
+	}
+
+	{
+		unsigned long vm_mask = (1UL << cpu);
+
+		/* Even if (mm == old_mm) we _must_ check
+		 * the cpu_vm_mask.  If we do not we could
+		 * corrupt the TLB state because of how
+		 * smp_flush_tlb_{page,range,mm} on sparc64
+		 * and lazy tlb switches work. -DaveM
+		 */
+		if (!ctx_valid || !(mm->cpu_vm_mask & vm_mask)) {
+			mm->cpu_vm_mask |= vm_mask;
+			clean_secondary_context();
+		}
 	}
 	spin_unlock(&mm->page_table_lock);
 }

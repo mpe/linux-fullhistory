@@ -23,7 +23,7 @@
 #endif
 
 #define ENTRY(name)				\
-	.align 16;				\
+	.align 32;				\
 	.proc name;				\
 name:
 

@@ -47,6 +47,10 @@ phys_to_virt(unsigned long address)
 	return (void *) (address + PAGE_OFFSET);
 }
 
+/*
+ * The following two macros are deprecated and scheduled for removal.
+ * Please use the PCI-DMA interface defined in <asm/pci.h> instead.
+ */
 #define bus_to_virt	phys_to_virt
 #define virt_to_bus	virt_to_phys
 
@@ -315,6 +319,7 @@ __writeq (unsigned long val, void *addr)
 #define writeq(v,a)	__writeq((v), (void *) (a))
 #define __raw_writeb	writeb
 #define __raw_writew	writew
+#define __raw_writel	writel
 #define __raw_writeq	writeq
 
 #ifndef inb_p

@@ -19,13 +19,13 @@
 #define _TCP_H
 
 #define TCP_DEBUG 1
-#define FASTRETRANS_DEBUG 2
+#define FASTRETRANS_DEBUG 1
 
 /* Be paranoid about data immediately beyond right edge of window. */
 #undef  TCP_FORMAL_WINDOW
 
 /* Cancel timers, when they are not required. */
-#undef TCP_CLEAR_TIMER
+#undef TCP_CLEAR_TIMERS
 
 #include <linux/config.h>
 #include <linux/tcp.h>
@@ -624,14 +624,21 @@ extern int			tcp_rcv_established(struct sock *sk,
 						    struct tcphdr *th, 
 						    unsigned len);
 
+enum tcp_ack_state_t
+{
+	TCP_ACK_SCHED = 1,
+	TCP_ACK_TIMER = 2,
+	TCP_ACK_PUSHED= 4
+};
+
 static inline void tcp_schedule_ack(struct tcp_opt *tp)
 {
-	tp->ack.pending |= 1;
+	tp->ack.pending |= TCP_ACK_SCHED;
 }
 
 static inline int tcp_ack_scheduled(struct tcp_opt *tp)
 {
-	return tp->ack.pending&1;
+	return tp->ack.pending&TCP_ACK_SCHED;
 }
 
 static __inline__ void tcp_dec_quickack_mode(struct tcp_opt *tp)
@@ -851,7 +858,7 @@ here:
 		break;
 
 	case TCP_TIME_DACK:
-		tp->ack.pending |= 2;
+		tp->ack.pending |= TCP_ACK_TIMER;
 		tp->ack.timeout = jiffies+when;
 		if (!mod_timer(&tp->delack_timer, tp->ack.timeout))
 			sock_hold(sk);

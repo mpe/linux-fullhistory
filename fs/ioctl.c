@@ -58,11 +58,11 @@ asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	lock_kernel();
 	switch (cmd) {
 		case FIOCLEX:
-			FD_SET(fd, current->files->close_on_exec);
+			set_close_on_exec(fd, 1);
 			break;
 
 		case FIONCLEX:
-			FD_CLR(fd, current->files->close_on_exec);
+			set_close_on_exec(fd, 0);
 			break;
 
 		case FIONBIO:

@@ -150,11 +150,13 @@ do_gettimeofday (struct timeval *tv)
 static void
 timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	static unsigned long last_time;
-	static unsigned char count;
 	int cpu = smp_processor_id();
 	unsigned long new_itm;
+#if 0
+	static unsigned long last_time;
+	static unsigned char count;
 	int printed = 0;
+#endif
 
 	/*
 	 * Here we are in the timer irq handler. We have irqs locally
@@ -192,7 +194,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (time_after(new_itm, ia64_get_itc()))
 			break;
 
-#if !(defined(CONFIG_IA64_SOFTSDV_HACKS) && defined(CONFIG_SMP))
+#if 0
 		/*
 		 * SoftSDV in SMP mode is _slow_, so we do "lose" ticks, 
 		 * but it's really OK...

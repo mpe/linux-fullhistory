@@ -311,16 +311,16 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->mm = mm;
 	tsk->active_mm = mm;
 
-	/*
-	 * child gets a private LDT (if there was an LDT in the parent)
-	 */
-	copy_segments(tsk, mm);
-
 	down(&current->mm->mmap_sem);
 	retval = dup_mmap(mm);
 	up(&current->mm->mmap_sem);
 	if (retval)
 		goto free_pt;
+
+	/*
+	 * child gets a private LDT (if there was an LDT in the parent)
+	 */
+	copy_segments(tsk, mm);
 
 	if (init_new_context(tsk,mm))
 		goto free_pt;

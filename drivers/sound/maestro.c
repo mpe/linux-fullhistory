@@ -301,8 +301,6 @@ static int use_pm=2; /* set to 1 for force */
 #define NR_DSPS		(1<<dsps_order)
 #define NR_IDRS		32
 
-#define SND_DEV_DSP16   5 
-
 #define NR_APUS		64
 #define NR_APU_REGS	16
 

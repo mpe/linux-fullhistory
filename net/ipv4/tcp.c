@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.171 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: tcp.c,v 1.172 2000/08/11 00:13:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1222,7 +1222,7 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		     * in queue.
 		     */
 		    || (copied > 0 &&
-			tp->ack.rcv_small > tp->ack.rcv_thresh &&
+			(tp->ack.pending&TCP_ACK_PUSHED) &&
 			!tp->ack.pingpong &&
 			atomic_read(&sk->rmem_alloc) == 0)) {
 			time_to_ack = 1;

@@ -1839,9 +1839,12 @@ void do_SAK( struct tty_struct *tty)
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if ((p->tty == tty) ||
-		    ((session > 0) && (p->session == session)))
+		    ((session > 0) && (p->session == session))) {
 			send_sig(SIGKILL, p, 1);
-		else if (p->files) {
+			continue;
+		}
+		task_lock(p);
+		if (p->files) {
 			read_lock(&p->files->file_lock);
 			/* FIXME: p->files could change */
 			for (i=0; i < p->files->max_fds; i++) {
@@ -1854,6 +1857,7 @@ void do_SAK( struct tty_struct *tty)
 			}
 			read_unlock(&p->files->file_lock);
 		}
+		task_unlock(p);
 	}
 	read_unlock(&tasklist_lock);
 #endif

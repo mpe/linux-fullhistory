@@ -21,19 +21,35 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/mm.h>
+#include <linux/module.h>
+#if defined(MODVERSIONS)
+#include <linux/modversions.h>
+#endif
 
 #include <asm/pal.h>
 #include <asm/sal.h>
 #include <asm/efi.h>
 #include <asm/page.h>
 #include <asm/processor.h>
+#ifdef CONFIG_SMP
+#include <linux/smp.h>
+#endif
+
+MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");
+MODULE_DESCRIPTION("/proc interface to IA-64 PAL");
 
 /*
- * Hope to get rid of these in a near future
+ * Hope to get rid of this one in a near future
 */
 #define IA64_PAL_VERSION_BUG		1
 
-#define PALINFO_VERSION "0.1"
+#define PALINFO_VERSION "0.3"
+
+#ifdef CONFIG_SMP
+#define cpu_is_online(i) (cpu_online_map & (1UL << i))
+#else
+#define cpu_is_online(i)	1
+#endif
 
 typedef int (*palinfo_func_t)(char*);
 
@@ -43,7 +59,6 @@ typedef struct {
 	struct proc_dir_entry	*entry;		/* registered entry (removal) */
 } palinfo_entry_t;
 
-static struct proc_dir_entry *palinfo_dir;
 
 /*
  *  A bunch of string array to get pretty printing
@@ -95,7 +110,7 @@ static const char *rse_hints[]={
 #define RSE_HINTS_COUNT (sizeof(rse_hints)/sizeof(const char *))
 
 /*
- * The current resvision of the Volume 2 of 
+ * The current revision of the Volume 2 of 
  * IA-64 Architecture Software Developer's Manual is wrong.
  * Table 4-10 has invalid information concerning the ma field:
  * Correct table is:
@@ -121,64 +136,31 @@ static const char *mem_attrib[]={
 /*
  * Allocate a buffer suitable for calling PAL code in Virtual mode
  *
- * The documentation (PAL2.6) requires thius buffer to have a pinned
- * translation to avoid any DTLB faults. For this reason we allocate
- * a page (large enough to hold any possible reply) and use a DTC
- * to hold the translation during the call. A call the free_palbuffer()
- * is required to release ALL resources (page + translation).
+ * The documentation (PAL2.6) allows DTLB misses on the buffer. So 
+ * using the TC is enough, no need to pin the entry.
  *
- * The size of the page allocated is based on the PAGE_SIZE defined
- * at compile time for the kernel, i.e.  >= 4Kb.
- *
- * Return: a pointer to the newly allocated page (virtual address)
+ * We allocate a kernel-sized page (at least 4KB). This is enough to
+ * hold any possible reply.
  */
-static void *
+static inline void *
 get_palcall_buffer(void)
 {
 	void *tmp;
 
 	tmp = (void *)__get_free_page(GFP_KERNEL);
 	if (tmp == 0) {
-		printk(KERN_ERR "%s: can't get a buffer page\n", __FUNCTION__);
-	} else if ( ((u64)tmp - PAGE_OFFSET) > (1<<_PAGE_SIZE_256M) )  { /* XXX: temporary hack */
-		unsigned long flags;
-
-		/* PSR.ic must be zero to insert new DTR */
-		ia64_clear_ic(flags);
-
-		/*
-		 * we  only insert of DTR
-		 *
-		 * XXX: we need to figure out a way to "allocate" TR(s) to avoid
-		 * conflicts. Maybe something in an include file like pgtable.h
-		 * page.h or processor.h
-		 *
-		 * ITR0/DTR0: used for kernel code/data
-		 * ITR1/DTR1: used by HP simulator
-		 * ITR2/DTR2: used to map PAL code
-		 */
-		ia64_itr(0x2, 3, (u64)tmp,
-			 pte_val(mk_pte_phys(__pa(tmp), __pgprot(__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RW))), PAGE_SHIFT);
-
-		ia64_srlz_d ();
-
-		__restore_flags(flags);	
-	}
-
+		printk(KERN_ERR __FUNCTION__" : can't get a buffer page\n"); 
+	} 
 	return tmp;
 }
 
 /*
  * Free a palcall buffer allocated with the previous call
- *
- * The translation is also purged.
  */
-static void
+static inline void
 free_palcall_buffer(void *addr)
 {
 	__free_page(addr);
-	ia64_ptr(0x2, (u64)addr, PAGE_SHIFT);
-	ia64_srlz_d ();
 }
 
 /*
@@ -564,7 +546,6 @@ processor_info(char *page)
 	int i;
 	s64 ret;
 
-	/* must be in physical mode */
 	if ((ret=ia64_pal_proc_get_features(&avail, &status, &control)) != 0) return 0;
 
 	for(i=0; i < 64; i++, v++,avail >>=1, status >>=1, control >>=1) {
@@ -576,6 +557,57 @@ processor_info(char *page)
 	}
 	return p - page;
 }
+
+static const char *bus_features[]={
+	NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+	NULL,NULL,NULL,NULL,NULL,NULL,NULL, NULL,NULL,
+	NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+	NULL,NULL,
+	"Request  Bus Parking",
+	"Bus Lock Mask",
+	"Enable Half Transfer",
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL,
+	"Disable Transaction Queuing",
+	"Disable Reponse Error Checking",
+	"Disable Bus Error Checking",
+	"Disable Bus Requester Internal Error Signalling",
+	"Disable Bus Requester Error Signalling",
+	"Disable Bus Initialization Event Checking",
+	"Disable Bus Initialization Event Signalling",
+	"Disable Bus Address Error Checking",
+	"Disable Bus Address Error Signalling",
+	"Disable Bus Data Error Checking"
+};
+
+	
+static int
+bus_info(char *page)
+{
+	char *p = page;
+	const char **v = bus_features;
+	pal_bus_features_u_t av, st, ct;
+	u64 avail, status, control;
+	int i;
+	s64 ret;
+
+	if ((ret=ia64_pal_bus_get_features(&av, &st, &ct)) != 0) return 0;
+
+	avail   = av.pal_bus_features_val;
+	status  = st.pal_bus_features_val;
+	control = ct.pal_bus_features_val;
+
+	for(i=0; i < 64; i++, v++, avail >>=1, status >>=1, control >>=1) {
+		if ( ! *v ) continue;
+		p += sprintf(p, "%-48s : %s%s %s\n", *v, 
+				avail & 0x1 ? "" : "NotImpl",
+				avail & 0x1 ? (status  & 0x1 ? "On" : "Off"): "",
+				avail & 0x1 ? (control & 0x1 ? "Ctrl" : "NoCtrl"): "");
+	}
+	return p - page;
+}
+
 
 /*
  * physical mode call for PAL_VERSION is working fine.
@@ -613,21 +645,25 @@ version_info(char *page)
 #endif
 	if (status != 0) return 0;
 
-	p += sprintf(p, "PAL_vendor     : 0x%x (min=0x%x)\n" \
-			"PAL_A revision : 0x%x (min=0x%x)\n" \
-			"PAL_A model    : 0x%x (min=0x%x)\n" \
-			"PAL_B mode     : 0x%x (min=0x%x)\n" \
-			"PAL_B revision : 0x%x (min=0x%x)\n",
+	p += sprintf(p, "PAL_vendor : 0x%02x (min=0x%02x)\n" \
+			"PAL_A      : %x.%x.%x (min=%x.%x.%x)\n" \
+			"PAL_B      : %x.%x.%x (min=%x.%x.%x)\n",
 	     		cur_ver.pal_version_s.pv_pal_vendor,
 	     		min_ver.pal_version_s.pv_pal_vendor,
+
+	     		cur_ver.pal_version_s.pv_pal_a_model>>4,
+	     		cur_ver.pal_version_s.pv_pal_a_model&0xf,
 	     		cur_ver.pal_version_s.pv_pal_a_rev,
-	     		cur_ver.pal_version_s.pv_pal_a_rev,
-	     		cur_ver.pal_version_s.pv_pal_a_model,
-	     		min_ver.pal_version_s.pv_pal_a_model,
+	     		min_ver.pal_version_s.pv_pal_a_model>>4,
+	     		min_ver.pal_version_s.pv_pal_a_model&0xf,
+	     		min_ver.pal_version_s.pv_pal_a_rev,
+
+	     		cur_ver.pal_version_s.pv_pal_b_model>>4,
+	     		cur_ver.pal_version_s.pv_pal_b_model&0xf,
 	     		cur_ver.pal_version_s.pv_pal_b_rev,
-	     		min_ver.pal_version_s.pv_pal_b_rev,
-	     		cur_ver.pal_version_s.pv_pal_b_model,
-	     		min_ver.pal_version_s.pv_pal_b_model);
+	     		min_ver.pal_version_s.pv_pal_b_model>>4,
+	     		min_ver.pal_version_s.pv_pal_b_model&0xf,
+	     		min_ver.pal_version_s.pv_pal_b_rev);
 
 	return p - page;
 }
@@ -648,6 +684,9 @@ perfmon_info(char *page)
 	}
 
 #ifdef IA64_PAL_PERF_MON_INFO_BUG
+	/*
+	 * This bug has been fixed in PAL 2.2.9 and higher
+	 */
 	pm_buffer[5]=0x3;
 	pm_info.pal_perf_mon_info_s.cycles  = 0x12;
 	pm_info.pal_perf_mon_info_s.retired = 0x08;
@@ -708,30 +747,111 @@ frequency_info(char *page)
 	return p - page;
 }
 
-
-/*
- * Entry point routine: all calls go trhough this function
- */
 static int
-palinfo_read_entry(char *page, char **start, off_t off, int count, int *eof, void *data)
+tr_info(char *page)
 {
-	palinfo_func_t info = (palinfo_func_t)data;
-        int len = info(page);
+	char *p = page;
+	s64 status;
+	pal_tr_valid_u_t tr_valid;
+	u64 tr_buffer[4];
+	pal_vm_info_1_u_t vm_info_1;
+	pal_vm_info_2_u_t vm_info_2;
+	int i, j;
+	u64 max[3], pgm;
+	struct ifa_reg {
+		u64 valid:1;
+		u64 ig:11;
+		u64 vpn:52;
+	} *ifa_reg;
+	struct itir_reg {
+		u64 rv1:2;
+		u64 ps:6;
+		u64 key:24;
+		u64 rv2:32;
+	} *itir_reg;
+	struct gr_reg {
+		u64 p:1;
+		u64 rv1:1;
+		u64 ma:3;
+		u64 a:1;
+		u64 d:1;
+		u64 pl:2;
+		u64 ar:3;
+		u64 ppn:38;
+		u64 rv2:2;
+		u64 ed:1;
+		u64 ig:11;
+	} *gr_reg;
+	struct rid_reg {
+		u64 ig1:1;
+		u64 rv1:1;
+		u64 ig2:6;
+		u64 rid:24;
+		u64 rv2:32;
+	} *rid_reg;
 
-        if (len <= off+count) *eof = 1;
+	if ((status=ia64_pal_vm_summary(&vm_info_1, &vm_info_2)) !=0) {
+		printk("ia64_pal_vm_summary=%ld\n", status);
+		return 0;
+	}
+	max[0] = vm_info_1.pal_vm_info_1_s.max_itr_entry+1;
+	max[1] = vm_info_1.pal_vm_info_1_s.max_dtr_entry+1;
 
-        *start = page + off;
-        len   -= off;
+	for (i=0; i < 2; i++ ) {
+		for (j=0; j < max[i]; j++) {
 
-        if (len>count) len = count;
-        if (len<0) len = 0;
+		status = ia64_pal_tr_read(j, i, tr_buffer, &tr_valid);
+		if (status != 0) {
+			printk(__FUNCTION__ " pal call failed on tr[%d:%d]=%ld\n", i, j, status);
+			continue;
+		}
 
-        return len;
+		ifa_reg  = (struct ifa_reg *)&tr_buffer[2];
+
+		if (ifa_reg->valid == 0) continue;
+
+		gr_reg   = (struct gr_reg *)tr_buffer;	
+		itir_reg = (struct itir_reg *)&tr_buffer[1];
+		rid_reg  = (struct rid_reg *)&tr_buffer[3];
+
+		pgm	 = -1 << (itir_reg->ps - 12);
+		p += sprintf(p, "%cTR%d: av=%d pv=%d dv=%d mv=%d\n" \
+				"\tppn  : 0x%lx\n" \
+				"\tvpn  : 0x%lx\n" \
+				"\tps   : ",
+
+				"ID"[i],
+				j,
+				tr_valid.pal_tr_valid_s.access_rights_valid,
+				tr_valid.pal_tr_valid_s.priv_level_valid,
+				tr_valid.pal_tr_valid_s.dirty_bit_valid,
+				tr_valid.pal_tr_valid_s.mem_attr_valid,
+				(gr_reg->ppn & pgm)<< 12,
+				(ifa_reg->vpn & pgm)<< 12);
+
+		p = bitvector_process(p, 1<< itir_reg->ps);
+
+		p += sprintf(p, "\n\tpl   : %d\n" \
+				"\tar   : %d\n" \
+				"\trid  : %x\n" \
+				"\tp    : %d\n" \
+				"\tma   : %d\n" \
+				"\td    : %d\n", 
+				gr_reg->pl,
+				gr_reg->ar,
+				rid_reg->rid,
+				gr_reg->p,
+				gr_reg->ma,
+				gr_reg->d);
+		}
+	}
+	return p - page;
 }
 
+
+
 /*
- * List names,function pairs for every entry in /proc/palinfo
- * Must be terminated with the NULL,NULL entry.
+ * List {name,function} pairs for every entry in /proc/palinfo/cpu*
  */
 static palinfo_entry_t palinfo_entries[]={
 	{ "version_info",	version_info, },
@@ -742,38 +862,190 @@ static palinfo_entry_t palinfo_entries[]={
 	{ "processor_info",	processor_info, },
 	{ "perfmon_info",	perfmon_info, },
 	{ "frequency_info",	frequency_info, },
-	{ NULL,			NULL,}
+	{ "bus_info",		bus_info },
+	{ "tr_info",		tr_info, }
 };
 
+#define NR_PALINFO_ENTRIES	(sizeof(palinfo_entries)/sizeof(palinfo_entry_t))
+
+/*
+ * this array is used to keep track of the proc entries we create. This is 
+ * required in the module mode when we need to remove all entries. The procfs code
+ * does not do recursion of deletion
+ *
+ * Notes:
+ *	- first +1 accounts for the cpuN entry
+ *	- second +1 account for toplevel palinfo
+ * 
+ */
+#define NR_PALINFO_PROC_ENTRIES	(NR_CPUS*(NR_PALINFO_ENTRIES+1)+1)
+
+static struct proc_dir_entry *palinfo_proc_entries[NR_PALINFO_PROC_ENTRIES];
+
+/*
+ * This data structure is used to pass which cpu,function is being requested
+ * It must fit in a 64bit quantity to be passed to the proc callback routine
+ *
+ * In SMP mode, when we get a request for another CPU, we must call that
+ * other CPU using IPI and wait for the result before returning.
+ */
+typedef union {
+	u64 value;
+	struct {
+		unsigned	req_cpu: 32;	/* for which CPU this info is */
+		unsigned	func_id: 32;	/* which function is requested */
+	} pal_func_cpu;
+} pal_func_cpu_u_t;
+
+#define req_cpu	pal_func_cpu.req_cpu
+#define func_id pal_func_cpu.func_id
+
+#ifdef CONFIG_SMP
+
+/*
+ * used to hold information about final function to call 
+ */
+typedef struct {
+	palinfo_func_t	func;	/* pointer to function to call */
+	char		*page;	/* buffer to store results */
+	int		ret;	/* return value from call */
+} palinfo_smp_data_t;
+
+
+/*
+ * this function does the actual final call and he called
+ * from the smp code, i.e., this is the palinfo callback routine
+ */
+static void
+palinfo_smp_call(void *info)
+{
+	palinfo_smp_data_t *data = (palinfo_smp_data_t *)info;
+	/* printk(__FUNCTION__" called on CPU %d\n", smp_processor_id());*/
+	if (data == NULL) {
+		printk(KERN_ERR __FUNCTION__" data pointer is NULL\n");
+		data->ret = 0; /* no output */
+		return;
+	}
+	/* does this actual call */
+	data->ret = (*data->func)(data->page);
+}
+
+/*
+ * function called to trigger the IPI, we need to access a remote CPU
+ * Return:
+ *	0 : error or nothing to output
+ *	otherwise how many bytes in the "page" buffer were written
+ */
+static 
+int palinfo_handle_smp(pal_func_cpu_u_t *f, char *page)
+{
+	palinfo_smp_data_t ptr;
+	int ret;
+
+	ptr.func = palinfo_entries[f->func_id].proc_read;
+	ptr.page = page;
+	ptr.ret  = 0; /* just in case */
+
+	/*printk(__FUNCTION__" calling CPU %d from CPU %d for function %d\n", f->req_cpu,smp_processor_id(), f->func_id);*/
+
+	/* will send IPI to other CPU and wait for completion of remote call */
+	if ((ret=smp_call_function_single(f->req_cpu, palinfo_smp_call, &ptr, 0, 1))) {
+		printk(__FUNCTION__" remote CPU call from %d to %d on function %d: error %d\n", smp_processor_id(), f->req_cpu, f->func_id, ret);
+		return 0;
+	}
+	return ptr.ret;
+}
+#else /* ! CONFIG_SMP */
+static 
+int palinfo_handle_smp(pal_func_cpu_u_t *f, char *page)
+{
+	printk(__FUNCTION__" should not be called with non SMP kernel\n");
+	return 0;
+}
+#endif /* CONFIG_SMP */
+
+/*
+ * Entry point routine: all calls go through this function
+ */
+static int
+palinfo_read_entry(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	int len=0;
+	pal_func_cpu_u_t *f = (pal_func_cpu_u_t *)&data;
+
+	MOD_INC_USE_COUNT;
+	/*
+	 * in SMP mode, we may need to call another CPU to get correct
+	 * information. PAL, by definition, is processor specific
+	 */
+	if (f->req_cpu == smp_processor_id()) 
+		len = (*palinfo_entries[f->func_id].proc_read)(page);
+	else
+		len = palinfo_handle_smp(f, page);
+
+        if (len <= off+count) *eof = 1;
+
+        *start = page + off;
+        len   -= off;
+
+        if (len>count) len = count;
+        if (len<0) len = 0;
+
+	MOD_DEC_USE_COUNT;
+
+        return len;
+}
 
 static int __init 
 palinfo_init(void)
 {
-	palinfo_entry_t *p;
+#	define CPUSTR	"cpu%d"
+
+	pal_func_cpu_u_t f;
+	struct proc_dir_entry **pdir = palinfo_proc_entries;
+	struct proc_dir_entry *palinfo_dir, *cpu_dir;
+	int i, j;
+	char cpustr[sizeof(CPUSTR)];
 
 	printk(KERN_INFO "PAL Information Facility v%s\n", PALINFO_VERSION);
 
-	palinfo_dir = create_proc_entry("palinfo",  S_IFDIR | S_IRUGO | S_IXUGO, NULL);
+	palinfo_dir = proc_mkdir("pal", NULL);
 
-	for (p = palinfo_entries; p->name ; p++){
-		p->entry = create_proc_read_entry (p->name, 0, palinfo_dir, 
-						   palinfo_read_entry, p->proc_read);
+	/*
+	 * we keep track of created entries in a depth-first order for
+	 * cleanup purposes. Each entry is stored into palinfo_proc_entries
+	 */
+	for (i=0; i < NR_CPUS; i++) {
+
+		if (!cpu_is_online(i)) continue;
+
+		sprintf(cpustr,CPUSTR, i);
+
+		cpu_dir = proc_mkdir(cpustr, palinfo_dir);
+
+		f.req_cpu = i;
+
+		for (j=0; j < NR_PALINFO_ENTRIES; j++) {
+			f.func_id = j;
+			*pdir++ = create_proc_read_entry (palinfo_entries[j].name, 0, cpu_dir, 
+						palinfo_read_entry, (void *)f.value);
+		}
+		*pdir++ = cpu_dir;
 	}
+	*pdir = palinfo_dir;
 
 	return 0;
 }
 
-static int __exit
+static void __exit
 palinfo_exit(void)
 {
-	palinfo_entry_t *p;
+	int i = 0;
 
-	for (p = palinfo_entries; p->name ; p++){
-		remove_proc_entry (p->name, palinfo_dir);
+	/* remove all nodes: depth first pass */
+	for (i=0; i< NR_PALINFO_PROC_ENTRIES ; i++) {
+		remove_proc_entry (palinfo_proc_entries[i]->name, NULL);
 	}
-	remove_proc_entry ("palinfo", 0);
-
-	return 0;
 }
 
 module_init(palinfo_init);

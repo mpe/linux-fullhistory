@@ -4635,7 +4635,12 @@
 	84c4  450KX/GX [Orion] - 82454KX/GX PCI bridge
 	84c5  450KX/GX [Orion] - 82453KX/GX Memory controller
 	84ca  450NX - 82451NX Memory & I/O Controller
-	84cb  450NX - 82454NX PCI Expander Bridge
+	84cb  450NX - 82454NX/84460GX PCI Expander Bridge
+	84e0  460GX - 84460GX System Address Controller (SAC)
+	84e1  460GX - 84460GX System Data Controller (SDC)
+	84e2  460GX - 84460GX AGP Bridge (GXB)
+	84e3  460GX - 84460GX Memory Address Controller (MAC)
+	84e4  460GX - 84460GX Memory Data Controller (MDC)
 	ffff  450NX/GX [Orion] - 82453KX/GX Memory controller [BUG]
 8800  Trigem Computer Inc.
 	2008  Video assistent component

@@ -1175,7 +1175,7 @@ xor_block_VIS:
 	 wr	%%g0, 0, %%fprs
 	" : :
 	"i" (&((struct buffer_head *)0)->b_data),
-	"i" (&((struct buffer_head *)0)->b_data),
+	"i" (&((struct buffer_head *)0)->b_size),
 	"i" (FPRS_FEF|FPRS_DU), "i" (ASI_BLK_P),
 	"i" (FPRS_FEF), "i" (VISenter));
 }

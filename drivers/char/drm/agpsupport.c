@@ -322,7 +322,7 @@ drm_agp_head_t *drm_agp_init(void)
 		case ALI_M1541: 	head->chipset = "ALi M1541";     break;
 		default:		head->chipset = "Unknown";       break;
 		}
-		DRM_INFO("AGP %d.%d on %s @ 0x%08lx %dMB\n",
+		DRM_INFO("AGP %d.%d on %s @ 0x%08lx %ZuMB\n",
 			 head->agp_info.version.major,
 			 head->agp_info.version.minor,
 			 head->chipset,

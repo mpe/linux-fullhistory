@@ -10,23 +10,13 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_IA64_HP_SIM
+#if defined(CONFIG_IA64_HP_SIM) || defined(CONFIG_IA64_SOFTSDV_HACKS)
 /*
  * Yeah, simulating stuff is slow, so let us catch some breath between
  * timer interrupts...
  */
 # define HZ 20
-#endif
-
-#ifdef CONFIG_IA64_DIG
-# ifdef CONFIG_IA64_SOFTSDV_HACKS
-#  define HZ 20
-# else
-#  define HZ 100
-# endif
-#endif
-
-#ifndef HZ
+#else
 # define HZ	1024
 #endif
 

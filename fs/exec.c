@@ -473,19 +473,28 @@ static inline void flush_old_files(struct files_struct * files)
 	unsigned long j;
 
 	j = 0;
+	write_lock(&files->file_lock);
 	for (;;) {
 		unsigned long set, i;
 
 		i = j * __NFDBITS;
 		if (i >= files->max_fds || i >= files->max_fdset)
 			break;
-		set = xchg(&files->close_on_exec->fds_bits[j], 0);
+		set = files->close_on_exec->fds_bits[j];
+		if (!set)
+			continue;
+		files->close_on_exec->fds_bits[j] = 0;
 		j++;
+		write_unlock(&files->file_lock);
 		for ( ; set ; i++,set >>= 1) {
-			if (set & 1)
+			if (set & 1) {
 				sys_close(i);
+			}
 		}
+		write_lock(&files->file_lock);
+
 	}
+	write_unlock(&files->file_lock);
 }
 
 int flush_old_exec(struct linux_binprm * bprm)

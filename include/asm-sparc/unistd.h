@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.66 2000/01/29 17:57:25 jj Exp $ */
+/* $Id: unistd.h,v 1.67 2000/08/12 13:25:51 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 

@@ -2,12 +2,13 @@
 #define _ASM_IA64_MMU_CONTEXT_H
 
 /*
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #include <linux/config.h>
 #include <linux/sched.h>
+#include <linux/spinlock.h>
 
 #include <asm/processor.h>
 
@@ -26,21 +27,6 @@
  * architecture manual guarantees this number to be in the range
  * 18-24.
  *
- * A context number has the following format:
- *
- *  +--------------------+---------------------+
- *  |  generation number |    region id        |
- *  +--------------------+---------------------+
- *
- * A context number of 0 is considered "invalid".
- *
- * The generation number is incremented whenever we end up having used
- * up all available region ids.  At that point with flush the entire
- * TLB and reuse the first region id.  The new generation number
- * ensures that when we context switch back to an old process, we do
- * not inadvertently end up using its possibly reused region id.
- * Instead, we simply allocate a new region id for that process.
- *
  * Copyright (C) 1998 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
@@ -56,9 +42,15 @@
 
 #define IA64_HW_CONTEXT_MASK	((1UL << IA64_HW_CONTEXT_BITS) - 1)
 
-extern unsigned long ia64_next_context;
+struct ia64_ctx {
+	spinlock_t lock;
+	unsigned int next;	/* next context number to use */
+	unsigned int limit;	/* next >= limit => must call wrap_mmu_context() */
+};
 
-extern void get_new_mmu_context (struct mm_struct *mm);
+extern struct ia64_ctx ia64_ctx;
+
+extern void wrap_mmu_context (struct mm_struct *mm);
 
 static inline void
 enter_lazy_tlb (struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
@@ -76,12 +68,24 @@ ia64_rid (unsigned long context, unsigned long region_addr)
 }
 
 extern inline void
+get_new_mmu_context (struct mm_struct *mm)
+{
+	spin_lock(&ia64_ctx.lock);
+	{
+		if (ia64_ctx.next >= ia64_ctx.limit)
+			wrap_mmu_context(mm);
+		mm->context = ia64_ctx.next++;
+	}
+	spin_unlock(&ia64_ctx.lock);
+
+}
+
+extern inline void
 get_mmu_context (struct mm_struct *mm)
 {
 	/* check if our ASN is of an older generation and thus invalid: */
-	if (((mm->context ^ ia64_next_context) & ~IA64_HW_CONTEXT_MASK) != 0) {
+	if (mm->context == 0)
 		get_new_mmu_context(mm);
-	}
 }
 
 extern inline int
@@ -104,7 +108,7 @@ reload_context (struct mm_struct *mm)
 	unsigned long rid_incr = 0;
 	unsigned long rr0, rr1, rr2, rr3, rr4;
 
-	rid = (mm->context & IA64_HW_CONTEXT_MASK);
+	rid = mm->context;
 
 #ifndef CONFIG_IA64_TLB_CHECKS_REGION_NUMBER
 	rid <<= 3;	/* make space for encoding the region number */

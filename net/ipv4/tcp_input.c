@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.195 2000/08/10 01:21:14 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.197 2000/08/12 13:37:58 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -100,7 +100,7 @@ int sysctl_tcp_max_orphans = NR_FILE;
 #define IsReno(tp) ((tp)->sack_ok == 0)
 #define IsFack(tp) ((tp)->sack_ok & 2)
 
-
+#define TCP_REMNANT (TCP_FLAG_FIN|TCP_FLAG_URG|TCP_FLAG_SYN|TCP_FLAG_PSH)
 
 /* Adapt the MSS value used to make delayed ack decision to the 
  * real world.
@@ -118,9 +118,10 @@ static __inline__ void tcp_measure_rcv_mss(struct tcp_opt *tp, struct sk_buff *s
 	len = skb->len;
 	if (len >= tp->ack.rcv_mss) {
 		tp->ack.rcv_mss = len;
+		/* Dubious? Rather, it is final cut. 8) */
+		if (tcp_flag_word(skb->h.th)&TCP_REMNANT)
+			tp->ack.pending |= TCP_ACK_PUSHED;
 	} else {
-		tp->ack.rcv_small++;
-
 		/* Otherwise, we make more careful check taking into account,
 		 * that SACKs block is variable.
 		 *
@@ -133,7 +134,6 @@ static __inline__ void tcp_measure_rcv_mss(struct tcp_opt *tp, struct sk_buff *s
 		     * This observation (if it is correct 8)) allows
 		     * to handle super-low mtu links fairly.
 		     */
-#define TCP_REMNANT (TCP_FLAG_FIN|TCP_FLAG_URG|TCP_FLAG_SYN|TCP_FLAG_PSH)
 		    (len >= TCP_MIN_MSS + sizeof(struct tcphdr) &&
 		     !(tcp_flag_word(skb->h.th)&TCP_REMNANT))) {
 			/* Subtract also invariant (if peer is RFC compliant),
@@ -141,13 +141,13 @@ static __inline__ void tcp_measure_rcv_mss(struct tcp_opt *tp, struct sk_buff *s
 			 * Resulting "len" is MSS free of SACK jitter.
 			 */
 			len -= tp->tcp_header_len;
+			tp->ack.last_seg_size = len;
 			if (len == lss) {
 				tp->ack.rcv_mss = len;
-				tp->ack.rcv_small = 0;
-				tp->ack.rcv_thresh = 0;
+				return;
 			}
-			tp->ack.last_seg_size = len;
 		}
+		tp->ack.pending |= TCP_ACK_PUSHED;
 	}
 }
 
@@ -1395,9 +1395,10 @@ static void tcp_try_to_open(struct sock *sk, struct tcp_opt *tp, int flag)
 	if (tp->retrans_out == 0)
 		tp->retrans_stamp = 0;
 
-	if (flag&FLAG_ECE) {
+	if (flag&FLAG_ECE)
 		tcp_enter_cwr(tp);
-	} else if (tp->ca_state != TCP_CA_CWR) {
+
+	if (tp->ca_state != TCP_CA_CWR) {
 		int state = TCP_CA_Open;
 
 		if (tp->left_out ||
@@ -1409,8 +1410,10 @@ static void tcp_try_to_open(struct sock *sk, struct tcp_opt *tp, int flag)
 			tp->ca_state = state;
 			tp->high_seq = tp->snd_nxt;
 		}
+		tcp_moderate_cwnd(tp);
+	} else {
+		tcp_cwnd_down(tp);
 	}
-	tcp_moderate_cwnd(tp);
 }
 
 /* Process an event, which can update packets-in-flight not trivially.

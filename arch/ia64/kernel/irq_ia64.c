@@ -117,6 +117,13 @@ ia64_handle_irq (unsigned long vector, struct pt_regs *regs)
 	{
 		unsigned long bsp, sp;
 
+		/*
+		 * Note: if the interrupt happened while executing in
+		 * the context switch routine (ia64_switch_to), we may
+		 * get a spurious stack overflow here.  This is
+		 * because the register and the memory stack are not
+		 * switched atomically.
+		 */
 		asm ("mov %0=ar.bsp" : "=r"(bsp));
 		asm ("mov %0=sp" : "=r"(sp));
 

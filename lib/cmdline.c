@@ -85,12 +85,12 @@ char *get_options (char *str, int nints, int *ints)
  *	@ptr: Where parse begins
  *	@retptr: (output) Pointer to next char after parse completes
  *
- *	Parses a string into a number.  The number stored
- *	at @ptr is potentially suffixed with %K (for
- *	kilobytes, or 1024 bytes) or suffixed with %M (for
- *	megabytes, or 1048576 bytes).  If the number is suffixed
- *	with K or M, then the return value is the number
- *	multiplied by one kilobyte, or one megabyte, respectively.
+ *	Parses a string into a number.  The number stored at @ptr is
+ *	potentially suffixed with %K (for kilobytes, or 1024 bytes),
+ *	%M (for megabytes, or 1048576 bytes), or %G (for gigabytes, or
+ *	1073741824).  If the number is suffixed with K, M, or G, then
+ *	the return value is the number multiplied by one kilobyte, one
+ *	megabyte, or one gigabyte, respectively.
  */
 
 unsigned long memparse (char *ptr, char **retptr)
@@ -98,6 +98,9 @@ unsigned long memparse (char *ptr, char **retptr)
 	unsigned long ret = simple_strtoul (ptr, retptr, 0);
 
 	switch (**retptr) {
+	case 'G':
+	case 'g':
+		ret <<= 10;
 	case 'M':
 	case 'm':
 		ret <<= 10;

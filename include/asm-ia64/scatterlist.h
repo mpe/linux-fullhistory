@@ -13,6 +13,7 @@ struct scatterlist {
 	 * indirection buffer, NULL otherwise:
 	 */
 	char *alt_address;
+	char *orig_address;	/* Save away the original buffer address (used by pci-dma.c) */
 	unsigned int length;	/* buffer length */
 };
 

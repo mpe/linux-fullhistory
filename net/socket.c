@@ -440,6 +440,7 @@ struct socket *sock_alloc(void)
 	struct socket * sock;
 
 	inode = get_empty_inode();
+	inode->i_sb = sock_mnt->mnt_sb;
 	if (!inode)
 		return NULL;
 

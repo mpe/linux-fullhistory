@@ -24,10 +24,6 @@
 #include <asm/machvec.h>
 #include <asm/system.h>
 
-#ifdef CONFIG_IA64_FW_EMU
-# include "../../kernel/fw-emu.c"
-#endif
-
 /*
  * This is here so we can use the CMOS detection in ide-probe.c to
  * determine what drives are present.  In theory, we don't need this

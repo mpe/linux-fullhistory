@@ -301,12 +301,11 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 {
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
-	int tty_pgrp;
+	int tty_pgrp = -1, tty_nr = 0;
 	sigset_t sigign, sigcatch;
 	char state;
 	int res;
 	pid_t ppid;
-	int tty_nr;
 	struct mm_struct *mm;
 
 	state = *get_task_state(task);
@@ -315,6 +314,10 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 	mm = task->mm;
 	if(mm)
 		atomic_inc(&mm->mm_users);
+	if (task->tty) {
+		tty_pgrp = task->tty->pgrp;
+		tty_nr = kdev_t_to_nr(task->tty->device);
+	}
 	task_unlock(task);
 	if (mm) {
 		struct vm_area_struct *vma;
@@ -332,14 +335,6 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 	wchan = get_wchan(task);
 
 	collect_sigign_sigcatch(task, &sigign, &sigcatch);
-
-	task_lock(task);
-	if (task->tty)
-		tty_pgrp = task->tty->pgrp;
-	else
-		tty_pgrp = -1;
-	tty_nr = task->tty ? kdev_t_to_nr(task->tty->device) : 0;
-	task_unlock(task);
 
 	/* scale priority and nice values from timeslices to -20..20 */
 	/* to make it look like a "normal" Unix priority/nice value  */

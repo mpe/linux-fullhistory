@@ -170,33 +170,27 @@ ia64_ivt:
 	 * The ITLB basically does the same as the VHPT handler except
 	 * that we always insert exactly one instruction TLB entry.
 	 */
-#if 1
 	/*
 	 * Attempt to lookup PTE through virtual linear page table.
 	 * The speculative access will fail if there is no TLB entry
 	 * for the L3 page table page we're trying to access.
 	 */
+	mov r16=cr.iha				// get virtual address of L3 PTE
+	;;
+	ld8.s r16=[r16]				// try to read L3 PTE
 	mov r31=pr				// save predicates
 	;;
-	thash r17=r16				// compute virtual address of L3 PTE
-	;;
-	ld8.s r18=[r17]				// try to read L3 PTE
-	;;
-	tnat.nz p6,p0=r18			// did read succeed?
+	tnat.nz p6,p0=r16			// did read succeed?
 (p6)	br.cond.spnt.many 1f
 	;;
-	itc.i r18
+	itc.i r16
 	;;
 	mov pr=r31,-1
 	rfi
 
-1:	rsm psr.dt				// use physical addressing for data
-#else
-	mov r16=cr.ifa				// get address that caused the TLB miss
+1:	mov r16=cr.ifa				// get address that caused the TLB miss
 	;;
 	rsm psr.dt				// use physical addressing for data
-#endif
-	mov r31=pr				// save the predicate registers
 	mov r19=ar.k7				// get page table base address
 	shl r21=r16,3				// shift bit 60 into sign bit
 	shr.u r17=r16,61			// get the region number into r17
@@ -244,33 +238,27 @@ ia64_ivt:
 	 * The DTLB basically does the same as the VHPT handler except
 	 * that we always insert exactly one data TLB entry.
 	 */
-	mov r16=cr.ifa				// get address that caused the TLB miss
-#if 1
 	/*
 	 * Attempt to lookup PTE through virtual linear page table.
 	 * The speculative access will fail if there is no TLB entry
 	 * for the L3 page table page we're trying to access.
 	 */
+	mov r16=cr.iha				// get virtual address of L3 PTE
+	;;
+	ld8.s r16=[r16]				// try to read L3 PTE
 	mov r31=pr				// save predicates
 	;;
-	thash r17=r16				// compute virtual address of L3 PTE
-	;;
-	ld8.s r18=[r17]				// try to read L3 PTE
-	;;
-	tnat.nz p6,p0=r18			// did read succeed?
+	tnat.nz p6,p0=r16			// did read succeed?
 (p6)	br.cond.spnt.many 1f
 	;;
-	itc.d r18
+	itc.d r16
 	;;
 	mov pr=r31,-1
 	rfi
 
-1:	rsm psr.dt				// use physical addressing for data
-#else
-	rsm psr.dt				// use physical addressing for data
-	mov r31=pr				// save the predicate registers
+1:	mov r16=cr.ifa				// get address that caused the TLB miss
 	;;
-#endif
+	rsm psr.dt				// use physical addressing for data
 	mov r19=ar.k7				// get page table base address
 	shl r21=r16,3				// shift bit 60 into sign bit
 	shr.u r17=r16,61			// get the region number into r17
@@ -504,7 +492,24 @@ page_fault:
 	mov r29=b0				// save b0 in case of nested fault)
 	;;
 1:	ld8 r18=[r17]
-	;;					// avoid raw on r18
+#if defined(CONFIG_IA32_SUPPORT) && \
+    (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_B0_SPECIFIC))
+	//
+	// Erratum 85 (Access bit fault could be reported before page not present fault)
+	//   If the PTE is indicates the page is not present, then just turn this into a
+	//   page fault.
+	//
+	mov r31=pr				// save predicates
+	;;
+	tbit.nz p6,p0=r18,0			// page present bit set?
+(p6)	br.cond.sptk 1f
+	;;					// avoid WAW on p6
+	mov pr=r31,-1
+	br.cond.sptk page_fault			// page wasn't present
+1:	mov pr=r31,-1
+#else
+	;;					// avoid RAW on r18
+#endif
 	or r18=_PAGE_A,r18			// set the accessed bit
 	mov b0=r29				// restore b0
 	;;
@@ -541,14 +546,6 @@ page_fault:
 	;;
 	srlz.d			// ensure everyone knows psr.dt is off...
 	cmp.eq p0,p7=r16,r17	// is this a system call? (p7 <- false, if so)
-#if 1
-	// Allow syscalls via the old system call number for the time being.  This is
-	// so we can transition to the new syscall number in a relatively smooth
-	// fashion.
-	mov r17=0x80000
-	;;
-(p7)	cmp.eq.or.andcm p0,p7=r16,r17		// is this the old syscall number?
-#endif
 (p7)	br.cond.spnt.many non_syscall
 
 	SAVE_MIN				// uses r31; defines r2:

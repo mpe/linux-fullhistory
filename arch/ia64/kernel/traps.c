@@ -204,11 +204,13 @@ disabled_fph_fault (struct pt_regs *regs)
 {
 	struct task_struct *fpu_owner = ia64_get_fpu_owner();
 
+	/* first, clear psr.dfh and psr.mfh: */
 	regs->cr_ipsr &= ~(IA64_PSR_DFH | IA64_PSR_MFH);
 	if (fpu_owner != current) {
 		ia64_set_fpu_owner(current);
 
 		if (fpu_owner && ia64_psr(ia64_task_regs(fpu_owner))->mfh) {
+			ia64_psr(ia64_task_regs(fpu_owner))->mfh = 0;
 			fpu_owner->thread.flags |= IA64_THREAD_FPH_VALID;
 			__ia64_save_fpu(fpu_owner->thread.fph);
 		}
@@ -216,6 +218,11 @@ disabled_fph_fault (struct pt_regs *regs)
 			__ia64_load_fpu(current->thread.fph);
 		} else {
 			__ia64_init_fpu();
+			/*
+			 * Set mfh because the state in thread.fph does not match
+			 * the state in the fph partition.
+			 */
+			ia64_psr(regs)->mfh = 1;
 		}
 	}
 }

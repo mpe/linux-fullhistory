@@ -46,6 +46,15 @@ SECTIONS
 	{ *(__ex_table) }
   __stop___ex_table = .;
 
+#if defined(CONFIG_IA64_GENERIC)
+  /* Machine Vector */
+  . = ALIGN(16);
+  machvec_start = .;
+  .machvec : AT(ADDR(.machvec) - PAGE_OFFSET)
+	{ *(.machvec) }
+  machvec_end = .;
+#endif
+
   __start___ksymtab = .;	/* Kernel symbol table */
   __ksymtab : AT(ADDR(__ksymtab) - PAGE_OFFSET)
 	{ *(__ksymtab) }

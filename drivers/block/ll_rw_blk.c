@@ -256,8 +256,7 @@ void blk_queue_pluggable (request_queue_t * q, plug_device_fn *plug)
 
 
 /**
- * blk_queue_make_request - define an alternate make_request function for a
- * device
+ * blk_queue_make_request - define an alternate make_request function for a device
  * @q:  the request queue for the device to be affected
  * @mfn: the alternate make_request function
  *

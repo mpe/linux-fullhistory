@@ -282,8 +282,6 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
 #define FMODE_DMFM 0x10
 
-#define SND_DEV_DSP16   5 
-
 /* --------------------------------------------------------------------- */
 
 struct sv_state {

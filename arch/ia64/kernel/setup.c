@@ -122,6 +122,10 @@ setup_arch (char **cmdline_p)
 	 */
 	memcpy(&ia64_boot_param, (void *) ZERO_PAGE_ADDR, sizeof(ia64_boot_param));
 
+	*cmdline_p = __va(ia64_boot_param.command_line);
+	strncpy(saved_command_line, *cmdline_p, sizeof(saved_command_line));
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';		/* for safety */
+
 	efi_init();
 
 	max_pfn = 0;
@@ -133,19 +137,65 @@ setup_arch (char **cmdline_p)
 	 */
 	bootmap_start = PAGE_ALIGN(__pa(&_end));
 	if (ia64_boot_param.initrd_size)
-		bootmap_start = PAGE_ALIGN(bootmap_start + ia64_boot_param.initrd_size);
+		bootmap_start = PAGE_ALIGN(bootmap_start
+					   + ia64_boot_param.initrd_size);
 	bootmap_size = init_bootmem(bootmap_start >> PAGE_SHIFT, max_pfn);
 
 	efi_memmap_walk(free_available_memory, 0);
 
 	reserve_bootmem(bootmap_start, bootmap_size);
+
 #ifdef CONFIG_BLK_DEV_INITRD
 	initrd_start = ia64_boot_param.initrd_start;
+
 	if (initrd_start) {
+		u64 start, size;
+#		define is_same_page(a,b) (((a)&PAGE_MASK) == ((b)&PAGE_MASK))
+
+#if 1
+		/* XXX for now some backwards compatibility... */
+		if (initrd_start >= PAGE_OFFSET)
+			printk("Warning: boot loader passed virtual address "
+			       "for initrd, please upgrade the loader\n");
+		} else
+#endif
+			/* 
+			 * The loader ONLY passes physical addresses
+			 */
+			initrd_start = (unsigned long)__va(initrd_start);
 		initrd_end = initrd_start+ia64_boot_param.initrd_size;
+		start      = initrd_start;
+		size       = ia64_boot_param.initrd_size;
+
 		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
 		       (void *) initrd_start, ia64_boot_param.initrd_size);
-		reserve_bootmem(virt_to_phys(initrd_start), ia64_boot_param.initrd_size);
+
+		/*
+		 * The kernel end and the beginning of initrd can be
+		 * on the same page. This would cause the page to be
+		 * reserved twice.  While not harmful, it does lead to
+		 * a warning message which can cause confusion.  Thus,
+		 * we make sure that in this case we only reserve new
+		 * pages, i.e., initrd only pages. We need to:
+		 *
+		 *	- align up start
+		 *	- adjust size of reserved section accordingly
+		 *
+		 * It should be noted that this operation is only
+		 * valid for the reserve_bootmem() call and does not
+		 * affect the integrety of the initrd itself.
+		 *
+		 * reserve_bootmem() considers partial pages as reserved.
+		 */
+		if (is_same_page(initrd_start, (unsigned long)&_end)) {
+			start  = PAGE_ALIGN(start);
+			size  -= start-initrd_start;
+
+			printk("Initial ramdisk & kernel on the same page: "
+			       "reserving start=%lx size=%ld bytes\n",
+			       start, size);
+		}
+		reserve_bootmem(__pa(start), size);
 	}
 #endif
 #if 0
@@ -164,26 +214,20 @@ setup_arch (char **cmdline_p)
 	/* process SAL system table: */
 	ia64_sal_init(efi.sal_systab);
 
-	*cmdline_p = __va(ia64_boot_param.command_line);
-	strncpy(saved_command_line, *cmdline_p, sizeof(saved_command_line));
-	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';		/* for safety */
-
-	printk("args to kernel: %s\n", *cmdline_p);
-
 #ifdef CONFIG_SMP
 	bootstrap_processor = hard_smp_processor_id();
 	current->processor = bootstrap_processor;
 #endif
 	cpu_init();	/* initialize the bootstrap CPU */
 
+#ifdef CONFIG_IA64_GENERIC
+	machvec_init(acpi_get_sysname());
+#endif
+
 	if (efi.acpi) {
 		/* Parse the ACPI tables */
 		acpi_parse(efi.acpi);
 	}
-
-#ifdef CONFIG_IA64_GENERIC
-	machvec_init(acpi_get_sysname());
-#endif
 
 #ifdef CONFIG_VT
 # if defined(CONFIG_VGA_CONSOLE)
@@ -197,8 +241,16 @@ setup_arch (char **cmdline_p)
 	/* enable IA-64 Machine Check Abort Handling */
 	ia64_mca_init();
 #endif
+
 	paging_init();
 	platform_setup(cmdline_p);
+
+#ifdef CONFIG_SWIOTLB
+	{
+		extern void setup_swiotlb (void);
+		setup_swiotlb();
+	}
+#endif
 }
 
 /*

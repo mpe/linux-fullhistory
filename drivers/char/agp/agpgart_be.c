@@ -67,14 +67,16 @@ static inline void flush_cache(void)
 {
 #if defined(__i386__)
 	asm volatile ("wbinvd":::"memory");
-#elif defined(__alpha__)
+#elif defined(__alpha__) || defined(__ia64__)
 	/* ??? I wonder if we'll really need to flush caches, or if the
 	   core logic can manage to keep the system coherent.  The ARM
 	   speaks only of using `cflush' to get things in memory in
 	   preparation for power failure.
 
 	   If we do need to call `cflush', we'll need a target page,
-	   as we can only flush one page at a time.  */
+	   as we can only flush one page at a time.
+
+	   Ditto for IA-64. --davidm 00/08/07 */
 	mb();
 #else
 #error "Please define flush_cache."

@@ -74,10 +74,14 @@ nargs(unsigned int arg, char **ap)
 
 	n = 0;
 	do {
-		if ((err = get_user(addr, (int *)A(arg))) != 0)
-			return(err);
-		if (ap)
-			*ap++ = (char *)A(addr);
+		err = get_user(addr, (int *)A(arg));
+		if (IS_ERR(err))
+			return err;
+		if (ap) {		/* no access_ok needed, we allocated */
+			err = __put_user((char *)A(addr), ap++);
+			if (IS_ERR(err))
+				return err;
+		}
 		arg += sizeof(unsigned int);
 		n++;
 	} while (addr);
@@ -101,7 +105,11 @@ int stack)
 	int na, ne, r, len;
 
 	na = nargs(argv, NULL);
+	if (IS_ERR(na))
+		return(na);
 	ne = nargs(envp, NULL);
+	if (IS_ERR(ne))
+		return(ne);
 	len = (na + ne + 2) * sizeof(*av);
 	/*
 	 *  kmalloc won't work because the `sys_exec' code will attempt
@@ -121,12 +129,21 @@ int stack)
 	if (IS_ERR(av))
 		return (long)av;
 	ae = av + na + 1;
-	av[na] = (char *)0;
-	ae[ne] = (char *)0;
-	(void)nargs(argv, av);
-	(void)nargs(envp, ae);
+	r = __put_user(0, (av + na));
+	if (IS_ERR(r))
+		goto out;
+	r = __put_user(0, (ae + ne));
+	if (IS_ERR(r))
+		goto out;
+	r = nargs(argv, av);
+	if (IS_ERR(r))
+		goto out;
+	r = nargs(envp, ae);
+	if (IS_ERR(r))
+		goto out;
 	r = sys_execve(filename, av, ae, regs);
 	if (IS_ERR(r))
+out:
 		sys_munmap((unsigned long) av, len);
 	return(r);
 }
@@ -960,150 +977,85 @@ sys32_nanosleep(struct timespec32 *rqtp, struct timespec32 *rmtp)
 }
 
 struct iovec32 { unsigned int iov_base; int iov_len; };
+asmlinkage ssize_t sys_readv(unsigned long,const struct iovec *,unsigned long);
+asmlinkage ssize_t sys_writev(unsigned long,const struct iovec *,unsigned long);
 
-typedef ssize_t (*IO_fn_t)(struct file *, char *, size_t, loff_t *);
-
-static long
-do_readv_writev32(int type, struct file *file, const struct iovec32 *vector,
-		  u32 count)
+static struct iovec *
+get_iovec32(struct iovec32 *iov32, struct iovec *iov_buf, u32 count, int type)
 {
-	unsigned long tot_len;
-	struct iovec iovstack[UIO_FASTIOV];
-	struct iovec *iov=iovstack, *ivp;
-	struct inode *inode;
-	long retval, i;
-	IO_fn_t fn;
+	int i;
+	u32 buf, len;
+	struct iovec *ivp, *iov;
 
-	/* First get the "struct iovec" from user memory and
-	 * verify all the pointers
-	 */
+	/* Get the "struct iovec" from user memory */
+
 	if (!count)
 		return 0;
-	if(verify_area(VERIFY_READ, vector, sizeof(struct iovec32)*count))
-		return -EFAULT;
+	if(verify_area(VERIFY_READ, iov32, sizeof(struct iovec32)*count))
+		return(struct iovec *)0;
 	if (count > UIO_MAXIOV)
-		return -EINVAL;
+		return(struct iovec *)0;
 	if (count > UIO_FASTIOV) {
 		iov = kmalloc(count*sizeof(struct iovec), GFP_KERNEL);
 		if (!iov)
-			return -ENOMEM;
-	}
+			return((struct iovec *)0);
+	} else
+		iov = iov_buf;
 
-	tot_len = 0;
-	i = count;
 	ivp = iov;
-	while(i > 0) {
-		u32 len;
-		u32 buf;
-
-		__get_user(len, &vector->iov_len);
-		__get_user(buf, &vector->iov_base);
-		tot_len += len;
-		ivp->iov_base = (void *)A(buf);
-		ivp->iov_len = (__kernel_size_t) len;
-		vector++;
-		ivp++;
-		i--;
-	}
-
-	inode = file->f_dentry->d_inode;
-	/* VERIFY_WRITE actually means a read, as we write to user space */
-	retval = locks_verify_area((type == VERIFY_WRITE
-				    ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE),
-				   inode, file, file->f_pos, tot_len);
-	if (retval) {
-		if (iov != iovstack)
-			kfree(iov);
-		return retval;
-	}
-
-	/* Then do the actual IO.  Note that sockets need to be handled
-	 * specially as they have atomicity guarantees and can handle
-	 * iovec's natively
-	 */
-	if (inode->i_sock) {
-		int err;
-		err = sock_readv_writev(type, inode, file, iov, count, tot_len);
-		if (iov != iovstack)
-			kfree(iov);
-		return err;
-	}
-
-	if (!file->f_op) {
-		if (iov != iovstack)
-			kfree(iov);
-		return -EINVAL;
-	}
-	/* VERIFY_WRITE actually means a read, as we write to user space */
-	fn = file->f_op->read;
-	if (type == VERIFY_READ)
-		fn = (IO_fn_t) file->f_op->write;		
-	ivp = iov;
-	while (count > 0) {
-		void * base;
-		int len, nr;
-
-		base = ivp->iov_base;
-		len = ivp->iov_len;
-		ivp++;
-		count--;
-		nr = fn(file, base, len, &file->f_pos);
-		if (nr < 0) {
-			if (retval)
-				break;
-			retval = nr;
-			break;
+	for (i = 0; i < count; i++) {
+		if (__get_user(len, &iov32->iov_len) ||
+		    __get_user(buf, &iov32->iov_base)) {
+			if (iov != iov_buf)
+				kfree(iov);
+			return((struct iovec *)0);
 		}
-		retval += nr;
-		if (nr != len)
-			break;
+		if (verify_area(type, (void *)A(buf), len)) {
+			if (iov != iov_buf)
+				kfree(iov);
+			return((struct iovec *)0);
+		}
+		ivp->iov_base = (void *)A(buf);
+		ivp->iov_len = (__kernel_size_t)len;
+		iov32++;
+		ivp++;
 	}
-	if (iov != iovstack)
-		kfree(iov);
-	return retval;
+	return(iov);
 }
 
 asmlinkage long
 sys32_readv(int fd, struct iovec32 *vector, u32 count)
 {
-	struct file *file;
-	long ret = -EBADF;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov;
+	int ret;
+	mm_segment_t old_fs = get_fs();
 
-	file = fget(fd);
-	if(!file)
-		goto bad_file;
-
-	if(!(file->f_mode & 1))
-		goto out;
-
-	ret = do_readv_writev32(VERIFY_WRITE, file,
-				vector, count);
-out:
-	fput(file);
-bad_file:
+	if ((iov = get_iovec32(vector, iovstack, count, VERIFY_WRITE)) == (struct iovec *)0)
+		return -EFAULT;
+	set_fs(KERNEL_DS);
+	ret = sys_readv(fd, iov, count);
+	set_fs(old_fs);
+	if (iov != iovstack)
+		kfree(iov);
 	return ret;
 }
 
 asmlinkage long
 sys32_writev(int fd, struct iovec32 *vector, u32 count)
 {
-	struct file *file;
-	int ret = -EBADF;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov;
+	int ret;
+	mm_segment_t old_fs = get_fs();
 
-	file = fget(fd);
-	if(!file)
-		goto bad_file;
-
-	if(!(file->f_mode & 2))
-		goto out;
-
-	down(&file->f_dentry->d_inode->i_sem);
-	ret = do_readv_writev32(VERIFY_READ, file,
-				vector, count);
-	up(&file->f_dentry->d_inode->i_sem);
-out:
-	fput(file);
-bad_file:
+	if ((iov = get_iovec32(vector, iovstack, count, VERIFY_READ)) == (struct iovec *)0)
+		return -EFAULT;
+	set_fs(KERNEL_DS);
+	ret = sys_writev(fd, iov, count);
+	set_fs(old_fs);
+	if (iov != iovstack)
+		kfree(iov);
 	return ret;
 }
 
@@ -1174,21 +1126,22 @@ struct msghdr32 {
 static inline int
 shape_msg(struct msghdr *mp, struct msghdr32 *mp32)
 {
+	int ret;
 	unsigned int i;
 
 	if (!access_ok(VERIFY_READ, mp32, sizeof(*mp32)))
 		return(-EFAULT);
-	__get_user(i, &mp32->msg_name);
+	ret = __get_user(i, &mp32->msg_name);
 	mp->msg_name = (void *)A(i);
-	__get_user(mp->msg_namelen, &mp32->msg_namelen);
-	__get_user(i, &mp32->msg_iov);
+	ret |= __get_user(mp->msg_namelen, &mp32->msg_namelen);
+	ret |= __get_user(i, &mp32->msg_iov);
 	mp->msg_iov = (struct iovec *)A(i);
-	__get_user(mp->msg_iovlen, &mp32->msg_iovlen);
-	__get_user(i, &mp32->msg_control);
+	ret |= __get_user(mp->msg_iovlen, &mp32->msg_iovlen);
+	ret |= __get_user(i, &mp32->msg_control);
 	mp->msg_control = (void *)A(i);
-	__get_user(mp->msg_controllen, &mp32->msg_controllen);
-	__get_user(mp->msg_flags, &mp32->msg_flags);
-	return(0);
+	ret |= __get_user(mp->msg_controllen, &mp32->msg_controllen);
+	ret |= __get_user(mp->msg_flags, &mp32->msg_flags);
+	return(ret ? -EFAULT : 0);
 }
 
 /*
@@ -2342,17 +2295,17 @@ restore_ia32_fpstate(struct task_struct *tsk, struct _fpstate_ia32 *save)
 {
 	struct switch_stack *swp;
 	struct pt_regs *ptp;
-	int i, tos;
+	int i, tos, ret;
 	int fsrlo, fsrhi;
 
 	if (!access_ok(VERIFY_READ, save, sizeof(*save)))
 		return(-EIO);
-	__get_user(tsk->thread.fcr, (unsigned int *)&save->cw);
-	__get_user(fsrlo, (unsigned int *)&save->sw);
-	__get_user(fsrhi, (unsigned int *)&save->tag);
+	ret = __get_user(tsk->thread.fcr, (unsigned int *)&save->cw);
+	ret |= __get_user(fsrlo, (unsigned int *)&save->sw);
+	ret |= __get_user(fsrhi, (unsigned int *)&save->tag);
 	tsk->thread.fsr = ((long)fsrhi << 32) | (long)fsrlo;
-	__get_user(tsk->thread.fir, (unsigned int *)&save->ipoff);
-	__get_user(tsk->thread.fdr, (unsigned int *)&save->dataoff);
+	ret |= __get_user(tsk->thread.fir, (unsigned int *)&save->ipoff);
+	ret |= __get_user(tsk->thread.fdr, (unsigned int *)&save->dataoff);
 	/*
 	 *  Stack frames start with 16-bytes of temp space
 	 */
@@ -2361,7 +2314,7 @@ restore_ia32_fpstate(struct task_struct *tsk, struct _fpstate_ia32 *save)
 	tos = (tsk->thread.fsr >> 11) & 3;
 	for (i = 0; i < 8; i++)
 		get_fpreg(i, &save->_st[i], ptp, swp, tos);
-	return(0);
+	return(ret ? -EFAULT : 0);
 }
 
 asmlinkage long sys_ptrace(long, pid_t, unsigned long, unsigned long, long, long, long, long, long);
@@ -2493,6 +2446,105 @@ sys32_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 	return ret;
 }
 
+static inline int
+get_flock32(struct flock *kfl, struct flock32 *ufl)
+{
+	int err;
+	
+	err = get_user(kfl->l_type, &ufl->l_type);
+	err |= __get_user(kfl->l_whence, &ufl->l_whence);
+	err |= __get_user(kfl->l_start, &ufl->l_start);
+	err |= __get_user(kfl->l_len, &ufl->l_len);
+	err |= __get_user(kfl->l_pid, &ufl->l_pid);
+	return err;
+}
+
+static inline int
+put_flock32(struct flock *kfl, struct flock32 *ufl)
+{
+	int err;
+	
+	err = __put_user(kfl->l_type, &ufl->l_type);
+	err |= __put_user(kfl->l_whence, &ufl->l_whence);
+	err |= __put_user(kfl->l_start, &ufl->l_start);
+	err |= __put_user(kfl->l_len, &ufl->l_len);
+	err |= __put_user(kfl->l_pid, &ufl->l_pid);
+	return err;
+}
+
+extern asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd,
+				 unsigned long arg);
+
+asmlinkage long
+sys32_fcntl(unsigned int fd, unsigned int cmd, int arg)
+{
+	struct flock f;
+	mm_segment_t old_fs;
+	long ret;
+
+	switch (cmd) {
+	case F_GETLK:
+	case F_SETLK:
+	case F_SETLKW:
+		if(cmd != F_GETLK && get_flock32(&f, (struct flock32 *)((long)arg)))
+			return -EFAULT;
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		ret = sys_fcntl(fd, cmd, (unsigned long)&f);
+		set_fs(old_fs);
+		if(cmd == F_GETLK && put_flock32(&f, (struct flock32 *)((long)arg)))
+			return -EFAULT;
+		return ret;
+	default:
+		/*
+		 *  `sys_fcntl' lies about arg, for the F_SETOWN
+		 *  sub-function arg can have a negative value.
+		 */
+		return sys_fcntl(fd, cmd, (unsigned long)((long)arg));
+	}
+}
+
+asmlinkage long
+sys32_sigaction (int sig, struct old_sigaction32 *act, struct old_sigaction32 *oact)
+{
+        struct k_sigaction new_ka, old_ka;
+        int ret;
+
+        if (act) {
+		old_sigset32_t mask;
+		
+		ret = get_user((long)new_ka.sa.sa_handler, &act->sa_handler);
+		ret |= __get_user(new_ka.sa.sa_flags, &act->sa_flags);
+		ret |= __get_user(mask, &act->sa_mask);
+		if (ret)
+			return ret;
+		siginitset(&new_ka.sa.sa_mask, mask);
+        }
+
+        ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
+		ret = put_user((long)old_ka.sa.sa_handler, &oact->sa_handler);
+		ret |= __put_user(old_ka.sa.sa_flags, &oact->sa_flags);
+		ret |= __put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
+        }
+
+	return ret;
+}
+
+asmlinkage long sys_ni_syscall(void);
+
+asmlinkage long
+sys32_ni_syscall(int dummy0, int dummy1, int dummy2, int dummy3,
+	int dummy4, int dummy5, int dummy6, int dummy7, int stack)
+{
+	struct pt_regs *regs = (struct pt_regs *)&stack;
+
+	printk("IA32 syscall #%d issued, maybe we should implement it\n",
+		(int)regs->r1);
+	return(sys_ni_syscall());
+}
+
 #ifdef	NOTYET  /* UNTESTED FOR IA64 FROM HERE DOWN */
 
 /* In order to reduce some races, while at the same time doing additional
@@ -2544,61 +2596,6 @@ asmlinkage long
 sys32_ioperm(u32 from, u32 num, int on)
 {
 	return sys_ioperm((unsigned long)from, (unsigned long)num, on);
-}
-
-static inline int
-get_flock(struct flock *kfl, struct flock32 *ufl)
-{
-	int err;
-	
-	err = get_user(kfl->l_type, &ufl->l_type);
-	err |= __get_user(kfl->l_whence, &ufl->l_whence);
-	err |= __get_user(kfl->l_start, &ufl->l_start);
-	err |= __get_user(kfl->l_len, &ufl->l_len);
-	err |= __get_user(kfl->l_pid, &ufl->l_pid);
-	return err;
-}
-
-static inline int
-put_flock(struct flock *kfl, struct flock32 *ufl)
-{
-	int err;
-	
-	err = __put_user(kfl->l_type, &ufl->l_type);
-	err |= __put_user(kfl->l_whence, &ufl->l_whence);
-	err |= __put_user(kfl->l_start, &ufl->l_start);
-	err |= __put_user(kfl->l_len, &ufl->l_len);
-	err |= __put_user(kfl->l_pid, &ufl->l_pid);
-	return err;
-}
-
-extern asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd,
-				 unsigned long arg);
-
-asmlinkage long
-sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
-{
-	switch (cmd) {
-	case F_GETLK:
-	case F_SETLK:
-	case F_SETLKW:
-		{
-			struct flock f;
-			mm_segment_t old_fs;
-			long ret;
-			
-			if(get_flock(&f, (struct flock32 *)arg))
-				return -EFAULT;
-			old_fs = get_fs(); set_fs (KERNEL_DS);
-			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
-			set_fs (old_fs);
-			if(put_flock(&f, (struct flock32 *)arg))
-				return -EFAULT;
-			return ret;
-		}
-	default:
-		return sys_fcntl(fd, cmd, (unsigned long)arg);
-	}
 }
 
 struct dqblk32 {
@@ -3862,40 +3859,6 @@ out:
 }
 
 extern void check_pending(int signum);
-
-asmlinkage long
-sys32_sigaction (int sig, struct old_sigaction32 *act,
-		 struct old_sigaction32 *oact)
-{
-        struct k_sigaction new_ka, old_ka;
-        int ret;
-
-	if(sig < 0) {
-		current->tss.new_signal = 1;
-		sig = -sig;
-	}
-
-        if (act) {
-		old_sigset_t32 mask;
-		
-		ret = get_user((long)new_ka.sa.sa_handler, &act->sa_handler);
-		ret |= __get_user(new_ka.sa.sa_flags, &act->sa_flags);
-		ret |= __get_user(mask, &act->sa_mask);
-		if (ret)
-			return ret;
-		siginitset(&new_ka.sa.sa_mask, mask);
-        }
-
-        ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
-
-	if (!ret && oact) {
-		ret = put_user((long)old_ka.sa.sa_handler, &oact->sa_handler);
-		ret |= __put_user(old_ka.sa.sa_flags, &oact->sa_flags);
-		ret |= __put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
-        }
-
-	return ret;
-}
 
 #ifdef CONFIG_MODULES
 

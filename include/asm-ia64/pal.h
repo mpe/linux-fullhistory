@@ -18,7 +18,8 @@
  * 00/03/07	davidm	Updated pal_cache_flush() to be in sync with PAL v2.6.
  * 00/03/23     cfleck  Modified processor min-state save area to match updated PAL & SAL info
  * 00/05/24     eranian Updated to latest PAL spec, fix structures bugs, added 
- * 00/05/25	eranian Support for stack calls, and statis physical calls
+ * 00/05/25	eranian Support for stack calls, and static physical calls
+ * 00/06/18	eranian Support for stacked physical calls
  */
 
 /*
@@ -646,10 +647,12 @@ struct ia64_pal_retval {
 extern struct ia64_pal_retval ia64_pal_call_static (u64, u64, u64, u64); 
 extern struct ia64_pal_retval ia64_pal_call_stacked (u64, u64, u64, u64); 
 extern struct ia64_pal_retval ia64_pal_call_phys_static (u64, u64, u64, u64); 
+extern struct ia64_pal_retval ia64_pal_call_phys_stacked (u64, u64, u64, u64); 
 
 #define PAL_CALL(iprv,a0,a1,a2,a3)	iprv = ia64_pal_call_static(a0, a1, a2, a3)
 #define PAL_CALL_STK(iprv,a0,a1,a2,a3)	iprv = ia64_pal_call_stacked(a0, a1, a2, a3)
 #define PAL_CALL_PHYS(iprv,a0,a1,a2,a3) iprv = ia64_pal_call_phys_static(a0, a1, a2, a3)
+#define PAL_CALL_PHYS_STK(iprv,a0,a1,a2,a3) iprv = ia64_pal_call_phys_stacked(a0, a1, a2, a3)
 
 typedef int (*ia64_pal_handler) (u64, ...);
 extern ia64_pal_handler ia64_pal;
@@ -951,7 +954,7 @@ typedef union pal_power_mgmt_info_u {
 /* Return information about processor's optional power management capabilities. */
 extern inline s64 
 ia64_pal_halt_info (pal_power_mgmt_info_u_t *power_buf) 
-{
+{	
 	struct ia64_pal_retval iprv;
 	PAL_CALL_STK(iprv, PAL_HALT_INFO, (unsigned long) power_buf, 0, 0);
 	return iprv.status; 
@@ -1370,17 +1373,17 @@ typedef union pal_itr_valid_u {
 				dirty_bit_valid		: 1,
 				mem_attr_valid		: 1,
 				reserved		: 60;
-	} pal_itr_valid_s;
-} pal_itr_valid_u_t;
+	} pal_tr_valid_s;
+} pal_tr_valid_u_t;
 
 /* Read a translation register */
 extern inline s64 
-ia64_pal_vm_tr_read (u64 reg_num, u64 tr_type, u64 tr_buffer, pal_itr_valid_u_t *itr_valid) 
-{	
+ia64_pal_tr_read (u64 reg_num, u64 tr_type, u64 *tr_buffer, pal_tr_valid_u_t *tr_valid)
+{
 	struct ia64_pal_retval iprv;
-	PAL_CALL(iprv, PAL_VM_TR_READ, reg_num, tr_type, tr_buffer);
-	if (itr_valid)
-		itr_valid->piv_val = iprv.v0;
+	PAL_CALL_PHYS_STK(iprv, PAL_VM_TR_READ, reg_num, tr_type,(u64)__pa(tr_buffer));
+	if (tr_valid)
+		tr_valid->piv_val = iprv.v0;
 	return iprv.status; 
 }
 

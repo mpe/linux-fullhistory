@@ -33,8 +33,9 @@
 extern efi_status_t efi_call_phys (void *, ...);
 
 struct efi efi;
-		    
 static efi_runtime_services_t *runtime;
+
+static unsigned long mem_limit = ~0UL;
 
 static efi_status_t
 phys_get_time (efi_time_t *tm, efi_time_cap_t *tc)
@@ -169,15 +170,13 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
 		      case EFI_BOOT_SERVICES_CODE:
 		      case EFI_BOOT_SERVICES_DATA:
 		      case EFI_CONVENTIONAL_MEMORY:
-			if (md->phys_addr > 1024*1024*1024UL) {
-				printk("Warning: ignoring %luMB of memory above 1GB!\n",
-				       md->num_pages >> 8);
-				md->type = EFI_UNUSABLE_MEMORY;
-				continue;
-			}
-
 			if (!(md->attribute & EFI_MEMORY_WB))
 				continue;
+			if (md->phys_addr + (md->num_pages << 12) > mem_limit) {
+				if (md->phys_addr > mem_limit)
+					continue;
+				md->num_pages = (mem_limit - md->phys_addr) >> 12;
+			}
 			if (md->num_pages == 0) {
 				printk("efi_memmap_walk: ignoring empty region at 0x%lx",
 				       md->phys_addr);
@@ -224,8 +223,8 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
  * ITR to enable safe PAL calls in virtual mode.  See IA-64 Processor
  * Abstraction Layer chapter 11 in ADAG
  */
-static void
-map_pal_code (void)
+void
+efi_map_pal_code (void)
 {
 	void *efi_map_start, *efi_map_end, *p;
 	efi_memory_desc_t *md;
@@ -240,13 +239,14 @@ map_pal_code (void)
 
 	for (p = efi_map_start; p < efi_map_end; p += efi_desc_size) {
 		md = p;
-		if (md->type != EFI_PAL_CODE) continue;
+		if (md->type != EFI_PAL_CODE)
+			continue;
 
 		if (++pal_code_count > 1) {
 			printk(KERN_ERR "Too many EFI Pal Code memory ranges, dropped @ %lx\n",
 			       md->phys_addr);
 			continue;
-		} 
+		}
 		mask  = ~((1 << _PAGE_SIZE_4M)-1);	/* XXX should be dynamic? */
 		vaddr = PAGE_OFFSET + md->phys_addr;
 
@@ -281,8 +281,27 @@ efi_init (void)
 	efi_config_table_t *config_tables;
 	efi_char16_t *c16;
 	u64 efi_desc_size;
-	char vendor[100] = "unknown";
+	char *cp, *end, vendor[100] = "unknown";
+	extern char saved_command_line[];
 	int i;
+
+	/* it's too early to be able to use the standard kernel command line support... */
+	for (cp = saved_command_line; *cp; ) {
+		if (memcmp(cp, "mem=", 4) == 0) {
+			cp += 4;
+			mem_limit = memparse(cp, &end) - 1;
+			if (end != cp)
+				break;
+			cp = end;
+		} else {
+			while (*cp != ' ' && *cp)
+				++cp;
+			while (*cp == ' ')
+				++cp;
+		}
+	}
+	if (mem_limit != ~0UL)
+		printk("Ignoring memory above %luMB\n", mem_limit >> 20);
 
 	efi.systab = __va(ia64_boot_param.efi_systab);
 
@@ -359,7 +378,7 @@ efi_init (void)
 	}
 #endif
 
-	map_pal_code();
+	efi_map_pal_code();
 }
 
 void

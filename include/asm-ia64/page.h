@@ -100,13 +100,14 @@ typedef unsigned long pgprot_t;
 #define MAP_NR_SN1(addr)	(((unsigned long) (addr) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #ifdef CONFIG_IA64_GENERIC
-# define virt_to_page(kaddr)	(mem_map + platform_map_nr(kaddr))
+# include <asm/machvec.h>
+# define virt_to_page(kaddr)   (mem_map + platform_map_nr(kaddr))
 #elif defined (CONFIG_IA64_SN_SN1_SIM)
-# define virt_to_page(kaddr)	(mem_map + MAP_NR_SN1(kaddr))
+# define virt_to_page(kaddr)   (mem_map + MAP_NR_SN1(kaddr))
 #else
-# define virt_to_page(kaddr)	(mem_map + MAP_NR_DENSE(kaddr))
+# define virt_to_page(kaddr)   (mem_map + MAP_NR_DENSE(kaddr))
 #endif
-#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
+#define VALID_PAGE(page)       ((page - mem_map) < max_mapnr)
 
 # endif /* __KERNEL__ */
 

@@ -364,8 +364,6 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 #define FMODE_MIDI_READ  (FMODE_READ << FMODE_MIDI_SHIFT)
 #define FMODE_MIDI_WRITE (FMODE_WRITE << FMODE_MIDI_SHIFT)
 
-#define SND_DEV_DSP16   5 
-
 #define ES1371_MODULE_NAME "es1371"
 #define PFX ES1371_MODULE_NAME ": "
 

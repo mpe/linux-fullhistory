@@ -81,6 +81,11 @@ kernel-api.sgml: kernel-api.tmpl $(APISOURCES)
 	$(TOPDIR)/scripts/docgen $(APISOURCES) \
 		<kernel-api.tmpl >kernel-api.sgml
 
+kernel-api-man: $(APISOURCES)
+	@rm -rf $(TOPDIR)/Documentation/man
+	$(TOPDIR)/scripts/kernel-doc -man $^ | \
+		$(PERL) $(TOPDIR)/scripts/split-man $(TOPDIR)/Documentation/man
+
 parportbook: $(JPG-parportbook)
 parportbook.ps: $(EPS-parportbook)
 parportbook.sgml: parportbook.tmpl $(TOPDIR)/drivers/parport/init.c

@@ -185,8 +185,42 @@ free_initmem (void)
 void
 free_initrd_mem(unsigned long start, unsigned long end)
 {
+	/*
+	 * EFI uses 4KB pages while the kernel can use 4KB  or bigger.
+	 * Thus EFI and the kernel may have different page sizes. It is 
+	 * therefore possible to have the initrd share the same page as 
+	 * the end of the kernel (given current setup). 
+	 *
+	 * To avoid freeing/using the wrong page (kernel sized) we:
+	 * 	- align up the beginning of initrd
+	 *	- keep the end untouched
+	 *
+	 *  |             |
+	 *  |=============| a000
+	 *  |             |
+	 *  |             |
+	 *  |             | 9000
+	 *  |/////////////| 
+	 *  |/////////////| 
+	 *  |=============| 8000
+	 *  |///INITRD////|
+	 *  |/////////////|
+	 *  |/////////////| 7000
+	 *  |             |
+	 *  |KKKKKKKKKKKKK|
+	 *  |=============| 6000
+	 *  |KKKKKKKKKKKKK|
+	 *  |KKKKKKKKKKKKK| 
+	 *  K=kernel using 8KB pages
+	 * 
+	 * In this example, we must free page 8000 ONLY. So we must align up
+	 * initrd_start and keep initrd_end as is.
+	 */
+	start = PAGE_ALIGN(start);
+
 	if (start < end)
 		printk ("Freeing initrd memory: %ldkB freed\n", (end - start) >> 10);
+
 	for (; start < end; start += PAGE_SIZE) {
 		clear_bit(PG_reserved, &virt_to_page(start)->flags);
 		set_page_count(virt_to_page(start), 1);
@@ -423,5 +457,4 @@ mem_init (void)
 #ifdef CONFIG_IA32_SUPPORT
 	ia32_gdt_init();
 #endif
-	return;
 }

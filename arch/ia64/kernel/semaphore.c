@@ -222,9 +222,6 @@ down_read_failed (struct rw_semaphore *sem)
 void
 __down_read_failed (struct rw_semaphore *sem, long count)
 {
-	struct task_struct *tsk = current;
-	DECLARE_WAITQUEUE(wait, tsk);
-
 	while (1) {
 		if (count == -1) {
 			down_read_failed_biased(sem);

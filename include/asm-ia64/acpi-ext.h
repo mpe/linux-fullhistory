@@ -69,7 +69,7 @@ typedef struct {
 	u8 eid;
 } acpi_entry_lsapic_t;
 
-typedef struct {
+typedef struct acpi_entry_iosapic {
 	u8 type;
 	u8 length;
 	u16 reserved;

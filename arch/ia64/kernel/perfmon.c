@@ -11,6 +11,7 @@
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/interrupt.h>
 #include <linux/smp_lock.h>
 
 #include <asm/errno.h>
@@ -55,24 +56,23 @@
 #define WRITE_PMCS		0xa1
 #define READ_PMDS		0xa2
 #define STOP_PMCS		0xa3
-#define IA64_COUNTER_MASK	0xffffffffffffff6f
-#define PERF_OVFL_VAL		0xffffffff
+#define IA64_COUNTER_MASK	0xffffffffffffff6fL
+#define PERF_OVFL_VAL		0xffffffffL
+
+volatile int used_by_system;
 
 struct perfmon_counter {
         unsigned long data;
         unsigned long counter_num;
 };
 
-unsigned long pmds[MAX_PERF_COUNTER];
-struct task_struct *perf_owner=NULL;
+unsigned long pmds[NR_CPUS][MAX_PERF_COUNTER];
 
 asmlinkage unsigned long
 sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 {
         struct perfmon_counter tmp, *cptr = ptr;
-        unsigned long pmd, cnum, dcr, flags;
-        struct task_struct *p;
-        struct pt_regs *regs;
+        unsigned long cnum, dcr, flags;
         struct perf_counter;
         int i;
 
@@ -80,22 +80,24 @@ sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 	      case WRITE_PMCS:           /* Writes to PMC's and clears PMDs */
 	      case WRITE_PMCS_AND_START: /* Also starts counting */
 
+		if (cmd2 <= 0 || cmd2 > MAX_PERF_COUNTER - used_by_system)
+			return -EINVAL;
+
 		if (!access_ok(VERIFY_READ, cptr, sizeof(struct perf_counter)*cmd2))
 			return -EFAULT;
 
-		if (cmd2 > MAX_PERF_COUNTER)
-			return -EFAULT;
-
-		if (perf_owner && perf_owner != current)
-			return -EBUSY;
-		perf_owner = current;
+		current->thread.flags |= IA64_THREAD_PM_VALID;
 
 		for (i = 0; i < cmd2; i++, cptr++) {
 			copy_from_user(&tmp, cptr, sizeof(tmp));
 			/* XXX need to check validity of counter_num and perhaps data!! */
+			if (tmp.counter_num < 4
+			    || tmp.counter_num >= 4 + MAX_PERF_COUNTER - used_by_system)
+				return -EFAULT;
+
 			ia64_set_pmc(tmp.counter_num, tmp.data);
 			ia64_set_pmd(tmp.counter_num, 0);
-			pmds[tmp.counter_num - 4] = 0;
+			pmds[smp_processor_id()][tmp.counter_num - 4] = 0;
 		}
 
 		if (cmd1 == WRITE_PMCS_AND_START) {
@@ -104,26 +106,13 @@ sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 			dcr |= IA64_DCR_PP;
 			ia64_set_dcr(dcr);
 			local_irq_restore(flags);
-
-			/*
-			 * This is a no can do.  It obviously wouldn't
-			 * work on SMP where another process may not
-			 * be blocked at all. We need to put in a  perfmon 
-			 * IPI to take care of MP systems. See blurb above.
-			 */
-			lock_kernel();
-			for_each_task(p) {
-				regs = (struct pt_regs *) (((char *)p) + IA64_STK_OFFSET) -1 ;	
-				ia64_psr(regs)->pp = 1;
-			}
-			unlock_kernel();
 			ia64_set_pmc(0, 0);
 		}
                 break;
 
 	      case READ_PMDS:
-		if (cmd2 > MAX_PERF_COUNTER)
-			return -EFAULT;
+		if (cmd2 <= 0 || cmd2 > MAX_PERF_COUNTER - used_by_system)
+			return -EINVAL;
 		if (!access_ok(VERIFY_WRITE, cptr, sizeof(struct perf_counter)*cmd2))
 			return -EFAULT;
 
@@ -153,9 +142,13 @@ sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 		 * when we re-enabled interrupts. When I muck with dcr, 
 		 * is the irq_save/restore needed?
 		 */
-		for (i = 0, cnum = 4;i < MAX_PERF_COUNTER; i++, cnum++, cptr++){
-			pmd = pmds[i] + (ia64_get_pmd(cnum) & PERF_OVFL_VAL);
-			put_user(pmd, &cptr->data);
+		for (i = 0, cnum = 4;i < cmd2; i++, cnum++, cptr++) {
+			tmp.data = (pmds[smp_processor_id()][i]
+				    + (ia64_get_pmd(cnum) & PERF_OVFL_VAL));
+			tmp.counter_num = cnum;
+			if (copy_to_user(cptr, &tmp, sizeof(tmp)))
+				return -EFAULT;
+			//put_user(pmd, &cptr->data);
 		}
 		local_irq_save(flags);
 		__asm__ __volatile__("ssm psr.pp");
@@ -167,30 +160,22 @@ sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 
 	      case STOP_PMCS:
 		ia64_set_pmc(0, 1);
-		for (i = 0; i < MAX_PERF_COUNTER; ++i)
-			ia64_set_pmc(i, 0);
+		ia64_srlz_d();
+		for (i = 0; i < MAX_PERF_COUNTER - used_by_system; ++i)
+			ia64_set_pmc(4+i, 0);
 
-		local_irq_save(flags);
-		dcr = ia64_get_dcr();
-		dcr &= ~IA64_DCR_PP;
-		ia64_set_dcr(dcr);
-		local_irq_restore(flags);
-		/*
-		 * This is a no can do.  It obviously wouldn't
-		 * work on SMP where another process may not
-		 * be blocked at all. We need to put in a  perfmon 
-		 * IPI to take care of MP systems. See blurb above.
-		 */
-		lock_kernel();
-		for_each_task(p) {
-			regs = (struct pt_regs *) (((char *)p) + IA64_STK_OFFSET) - 1;
-			ia64_psr(regs)->pp = 0;
+		if (!used_by_system) {
+			local_irq_save(flags);
+			dcr = ia64_get_dcr();
+			dcr &= ~IA64_DCR_PP;
+			ia64_set_dcr(dcr);
+			local_irq_restore(flags);
 		}
-		unlock_kernel();
-		perf_owner = NULL;
+		current->thread.flags &= ~(IA64_THREAD_PM_VALID);
 		break;
 
 	      default:
+		return -EINVAL;
 		break;
         }
         return 0;
@@ -202,13 +187,13 @@ update_counters (void)
 	unsigned long mask, i, cnum, val;
 
 	mask = ia64_get_pmc(0) >> 4;
-	for (i = 0, cnum = 4; i < MAX_PERF_COUNTER; cnum++, i++, mask >>= 1) {
+	for (i = 0, cnum = 4; i < MAX_PERF_COUNTER - used_by_system; cnum++, i++, mask >>= 1) {
+		val = 0;
 		if (mask & 0x1) 
-			val = PERF_OVFL_VAL;
-		else
+			val += PERF_OVFL_VAL + 1;
 		/* since we got an interrupt, might as well clear every pmd. */
-			val = ia64_get_pmd(cnum) & PERF_OVFL_VAL;
-		pmds[i] += val;
+		val += ia64_get_pmd(cnum) & PERF_OVFL_VAL;
+		pmds[smp_processor_id()][i] += val;
 		ia64_set_pmd(cnum, 0);
 	}
 }
@@ -221,20 +206,61 @@ perfmon_interrupt (int irq, void *arg, struct pt_regs *regs)
 	ia64_srlz_d();
 }
 
+static struct irqaction perfmon_irqaction = {
+	handler:	perfmon_interrupt,
+	flags:		SA_INTERRUPT,
+	name:		"perfmon"
+};
+
 void
 perfmon_init (void)
 {
-        if (request_irq(PERFMON_IRQ, perfmon_interrupt, 0, "perfmon", NULL)) {
-		printk("perfmon_init: could not allocate performance monitor vector %u\n",
-		       PERFMON_IRQ);
-		return;
-	}
+	irq_desc[PERFMON_IRQ].status |= IRQ_PER_CPU;
+	irq_desc[PERFMON_IRQ].handler = &irq_type_ia64_sapic;
+	setup_irq(PERFMON_IRQ, &perfmon_irqaction);
+
 	ia64_set_pmv(PERFMON_IRQ);
 	ia64_srlz_d();
 	printk("Initialized perfmon vector to %u\n",PERFMON_IRQ);
 }
 
+void
+perfmon_init_percpu (void)
+{
+	ia64_set_pmv(PERFMON_IRQ);
+	ia64_srlz_d();
+}
+
+void
+ia64_save_pm_regs (struct thread_struct *t)
+{
+	int i;
+
+	ia64_set_pmc(0, 1);
+	ia64_srlz_d();
+	for (i=0; i< IA64_NUM_PM_REGS - used_by_system ; i++) {
+		t->pmd[i] = ia64_get_pmd(4+i);
+		t->pmod[i] = pmds[smp_processor_id()][i];
+		t->pmc[i] = ia64_get_pmc(4+i);
+	}
+}
+
+void
+ia64_load_pm_regs (struct thread_struct *t)
+{
+	int i;
+
+	for (i=0; i< IA64_NUM_PM_REGS - used_by_system ; i++) {
+		ia64_set_pmd(4+i, t->pmd[i]);
+		pmds[smp_processor_id()][i] = t->pmod[i];
+		ia64_set_pmc(4+i, t->pmc[i]);
+	}
+	ia64_set_pmc(0, 0);
+	ia64_srlz_d();
+}
+
 #else /* !CONFIG_PERFMON */
+
 asmlinkage unsigned long
 sys_perfmonctl (int cmd1, int cmd2, void *ptr)
 {

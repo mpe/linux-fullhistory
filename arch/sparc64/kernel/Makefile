@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.61 2000/08/09 08:25:19 jj Exp $
+# $Id: Makefile,v 1.62 2000/08/12 08:35:53 ecd Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -6,6 +6,8 @@
 # unless it's something special (ie not a .c file).
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
+
+SH = $(CONFIG_SHELL)
 
 .S.s:
 	$(CPP) $(AFLAGS) -ansi $< -o $*.s

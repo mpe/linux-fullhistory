@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.125 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.126 2000/08/11 00:13:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -136,14 +136,6 @@ static __inline__ void tcp_event_ack_sent(struct sock *sk)
 
 	tcp_dec_quickack_mode(tp);
 	tcp_clear_xmit_timer(sk, TCP_TIME_DACK);
-
-	/* If we ever saw N>1 small segments from peer, it has
-	 * enough of send buffer to send N packets and does not nagle.
-	 * Hence, we may delay acks more aggresively.
-	 */
-	if (tp->ack.rcv_small > tp->ack.rcv_thresh+1)
-		tp->ack.rcv_thresh = tp->ack.rcv_small-1;
-	tp->ack.rcv_small = 0;
 }
 
 /* Chose a new window to advertise, update state in tcp_opt for the
@@ -1204,8 +1196,10 @@ void tcp_send_delayed_ack(struct sock *sk)
 	unsigned long timeout;
 
 	if (ato > TCP_DELACK_MIN) {
-		int max_ato = (tp->ack.pingpong || tp->ack.rcv_small) ?
-			TCP_DELACK_MAX : (HZ/2);
+		int max_ato = HZ/2;
+
+		if (tp->ack.pingpong || (tp->ack.pending&TCP_ACK_PUSHED))
+			max_ato = TCP_DELACK_MAX;
 
 		/* Slow path, intersegment interval is "high". */
 
@@ -1227,7 +1221,7 @@ void tcp_send_delayed_ack(struct sock *sk)
 	timeout = jiffies + ato;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
-	if (tp->ack.pending&2) {
+	if (tp->ack.pending&TCP_ACK_TIMER) {
 		/* If delack timer was blocked or is about to expire,
 		 * send ACK now.
 		 */
@@ -1239,7 +1233,7 @@ void tcp_send_delayed_ack(struct sock *sk)
 		if (!time_before(timeout, tp->ack.timeout))
 			timeout = tp->ack.timeout;
 	}
-	tp->ack.pending = 3;
+	tp->ack.pending |= TCP_ACK_SCHED|TCP_ACK_TIMER;
 	tp->ack.timeout = timeout;
 	if (!mod_timer(&tp->delack_timer, timeout))
 		sock_hold(sk);

@@ -27,6 +27,15 @@
 
 #define GATE_ADDR		(0xa000000000000000 + PAGE_SIZE)
 
+#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC)
+  /* Workaround for Errata 97.  */
+# define IA64_SEMFIX_INSN	mf;
+# define IA64_SEMFIX	"mf;"
+#else
+# define IA64_SEMFIX_INSN
+# define IA64_SEMFIX	""
+#endif
+
 #ifndef __ASSEMBLY__
 
 #include <linux/types.h>
@@ -231,13 +240,13 @@ extern unsigned long __bad_increment_for_ia64_fetch_and_add (void);
 ({										\
 	switch (sz) {								\
 	      case 4:								\
-		__asm__ __volatile__ ("fetchadd4.rel %0=%1,%3"			\
+		__asm__ __volatile__ (IA64_SEMFIX"fetchadd4.rel %0=%1,%3"	\
 				      : "=r"(tmp), "=m"(__atomic_fool_gcc(v))	\
 				      : "m" (__atomic_fool_gcc(v)), "i"(n));	\
 		break;								\
 										\
 	      case 8:								\
-		__asm__ __volatile__ ("fetchadd8.rel %0=%1,%3"			\
+		__asm__ __volatile__ (IA64_SEMFIX"fetchadd8.rel %0=%1,%3"	\
 				      : "=r"(tmp), "=m"(__atomic_fool_gcc(v))	\
 				      : "m" (__atomic_fool_gcc(v)), "i"(n));	\
 		break;								\
@@ -280,22 +289,22 @@ __xchg (unsigned long x, volatile void *ptr, int size)
 
 	switch (size) {
 	      case 1:
-		__asm__ __volatile ("xchg1 %0=%1,%2" : "=r" (result)
+		__asm__ __volatile (IA64_SEMFIX"xchg1 %0=%1,%2" : "=r" (result)
 				    : "m" (*(char *) ptr), "r" (x) : "memory");
 		return result;
 
 	      case 2:
-		__asm__ __volatile ("xchg2 %0=%1,%2" : "=r" (result)
+		__asm__ __volatile (IA64_SEMFIX"xchg2 %0=%1,%2" : "=r" (result)
 				    : "m" (*(short *) ptr), "r" (x) : "memory");
 		return result;
 
 	      case 4:
-		__asm__ __volatile ("xchg4 %0=%1,%2" : "=r" (result)
+		__asm__ __volatile (IA64_SEMFIX"xchg4 %0=%1,%2" : "=r" (result)
 				    : "m" (*(int *) ptr), "r" (x) : "memory");
 		return result;
 
 	      case 8:
-		__asm__ __volatile ("xchg8 %0=%1,%2" : "=r" (result)
+		__asm__ __volatile (IA64_SEMFIX"xchg8 %0=%1,%2" : "=r" (result)
 				    : "m" (*(long *) ptr), "r" (x) : "memory");
 		return result;
 	}
@@ -305,7 +314,6 @@ __xchg (unsigned long x, volatile void *ptr, int size)
 
 #define xchg(ptr,x)							     \
   ((__typeof__(*(ptr))) __xchg ((unsigned long) (x), (ptr), sizeof(*(ptr))))
-#define tas(ptr)	(xchg ((ptr), 1))
 
 /* 
  * Atomic compare and exchange.  Compare OLD with MEM, if identical,
@@ -324,50 +332,50 @@ extern long __cmpxchg_called_with_bad_pointer(void);
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) (*(struct __xchg_dummy *)(x))
 
-#define ia64_cmpxchg(sem,ptr,old,new,size)				\
-({									\
-	__typeof__(ptr) _p_ = (ptr);					\
-	__typeof__(new) _n_ = (new);					\
-	__u64 _o_, _r_;							\
-									\
-	switch (size) {							\
-	      case 1: _o_ = (__u8 ) (old); break;			\
-	      case 2: _o_ = (__u16) (old); break;			\
-	      case 4: _o_ = (__u32) (old); break;			\
-	      case 8: _o_ = (__u64) (old); break;			\
-	      default:							\
-	}								\
-	 __asm__ __volatile__ ("mov ar.ccv=%0;;" :: "rO"(_o_));		\
-	switch (size) {							\
-	      case 1:							\
-		__asm__ __volatile__ ("cmpxchg1."sem" %0=%2,%3,ar.ccv"	\
-				      : "=r"(_r_), "=m"(__xg(_p_))	\
-				      : "m"(__xg(_p_)), "r"(_n_));	\
-		break;							\
-									\
-	      case 2:							\
-		__asm__ __volatile__ ("cmpxchg2."sem" %0=%2,%3,ar.ccv"	\
-				      : "=r"(_r_), "=m"(__xg(_p_))	\
-				      : "m"(__xg(_p_)), "r"(_n_));	\
-		break;							\
-									\
-	      case 4:							\
-		__asm__ __volatile__ ("cmpxchg4."sem" %0=%2,%3,ar.ccv"	\
-				      : "=r"(_r_), "=m"(__xg(_p_))	\
-				      : "m"(__xg(_p_)), "r"(_n_));	\
-		break;							\
-									\
-	      case 8:							\
-		__asm__ __volatile__ ("cmpxchg8."sem" %0=%2,%3,ar.ccv"	\
-				      : "=r"(_r_), "=m"(__xg(_p_))	\
-				      : "m"(__xg(_p_)), "r"(_n_));	\
-		break;							\
-									\
-	      default:							\
-		_r_ = __cmpxchg_called_with_bad_pointer();		\
-		break;							\
-	}								\
-	(__typeof__(old)) _r_;						\
+#define ia64_cmpxchg(sem,ptr,old,new,size)						\
+({											\
+	__typeof__(ptr) _p_ = (ptr);							\
+	__typeof__(new) _n_ = (new);							\
+	__u64 _o_, _r_;									\
+											\
+	switch (size) {									\
+	      case 1: _o_ = (__u8 ) (long) (old); break;				\
+	      case 2: _o_ = (__u16) (long) (old); break;				\
+	      case 4: _o_ = (__u32) (long) (old); break;				\
+	      case 8: _o_ = (__u64) (long) (old); break;				\
+	      default:									\
+	}										\
+	 __asm__ __volatile__ ("mov ar.ccv=%0;;" :: "rO"(_o_));				\
+	switch (size) {									\
+	      case 1:									\
+		__asm__ __volatile__ (IA64_SEMFIX"cmpxchg1."sem" %0=%2,%3,ar.ccv"	\
+				      : "=r"(_r_), "=m"(__xg(_p_))			\
+				      : "m"(__xg(_p_)), "r"(_n_));			\
+		break;									\
+											\
+	      case 2:									\
+		__asm__ __volatile__ (IA64_SEMFIX"cmpxchg2."sem" %0=%2,%3,ar.ccv"	\
+				      : "=r"(_r_), "=m"(__xg(_p_))			\
+				      : "m"(__xg(_p_)), "r"(_n_));			\
+		break;									\
+											\
+	      case 4:									\
+		__asm__ __volatile__ (IA64_SEMFIX"cmpxchg4."sem" %0=%2,%3,ar.ccv"	\
+				      : "=r"(_r_), "=m"(__xg(_p_))			\
+				      : "m"(__xg(_p_)), "r"(_n_));			\
+		break;									\
+											\
+	      case 8:									\
+		__asm__ __volatile__ (IA64_SEMFIX"cmpxchg8."sem" %0=%2,%3,ar.ccv"	\
+				      : "=r"(_r_), "=m"(__xg(_p_))			\
+				      : "m"(__xg(_p_)), "r"(_n_));			\
+		break;									\
+											\
+	      default:									\
+		_r_ = __cmpxchg_called_with_bad_pointer();				\
+		break;									\
+	}										\
+	(__typeof__(old)) _r_;								\
 })
 
 #define cmpxchg_acq(ptr,o,n)	ia64_cmpxchg("acq", (ptr), (o), (n), sizeof(*(ptr)))
@@ -418,15 +426,15 @@ extern struct task_struct *ia64_switch_to (void *next_task);
 extern void ia64_save_extra (struct task_struct *task);
 extern void ia64_load_extra (struct task_struct *task);
 
-#define __switch_to(prev,next,last) do {					\
-	if (((prev)->thread.flags & IA64_THREAD_DBG_VALID)			\
-	    || IS_IA32_PROCESS(ia64_task_regs(prev)))				\
-		ia64_save_extra(prev);						\
-	if (((next)->thread.flags & IA64_THREAD_DBG_VALID)			\
-	    || IS_IA32_PROCESS(ia64_task_regs(next)))				\
-		ia64_load_extra(next);						\
-	ia64_psr(ia64_task_regs(next))->dfh = (ia64_get_fpu_owner() != (next));	\
-	(last) = ia64_switch_to((next));					\
+#define __switch_to(prev,next,last) do {						\
+	if (((prev)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID))	\
+	    || IS_IA32_PROCESS(ia64_task_regs(prev)))					\
+		ia64_save_extra(prev);							\
+	if (((next)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID))	\
+	    || IS_IA32_PROCESS(ia64_task_regs(next)))					\
+		ia64_load_extra(next);							\
+	ia64_psr(ia64_task_regs(next))->dfh = (ia64_get_fpu_owner() != (next));		\
+	(last) = ia64_switch_to((next));						\
 } while (0)
 
 #ifdef CONFIG_SMP 
@@ -444,6 +452,7 @@ extern void ia64_load_extra (struct task_struct *task);
    */
 # define switch_to(prev,next,last) do {							\
 	if (ia64_get_fpu_owner() == (prev) && ia64_psr(ia64_task_regs(prev))->mfh) {	\
+		ia64_psr(ia64_task_regs(prev))->mfh = 0;				\
 		(prev)->thread.flags |= IA64_THREAD_FPH_VALID;				\
 		__ia64_save_fpu((prev)->thread.fph);					\
 	}										\

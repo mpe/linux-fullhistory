@@ -1,6 +1,15 @@
 #ifndef _ASM_IA64_PCI_H
 #define _ASM_IA64_PCI_H
 
+#include <linux/config.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/types.h>
+#include <linux/spinlock.h>
+
+#include <asm/io.h>
+#include <asm/scatterlist.h>
+
 /*
  * Can be used to override the logic in pci_scan_bus for skipping
  * already-configured bus numbers - to be used for buggy BIOSes or
@@ -10,6 +19,8 @@
 
 #define PCIBIOS_MIN_IO		0x1000
 #define PCIBIOS_MIN_MEM		0x10000000
+
+struct pci_dev;
 
 extern inline void pcibios_set_master(struct pci_dev *dev)
 {
@@ -23,17 +34,7 @@ extern inline void pcibios_penalize_isa_irq(int irq)
 
 /*
  * Dynamic DMA mapping API.
- * IA-64 has everything mapped statically.
  */
-
-#include <linux/slab.h>
-#include <linux/string.h>
-#include <linux/types.h>
-
-#include <asm/io.h>
-#include <asm/scatterlist.h>
-
-struct pci_dev;
 
 /*
  * Allocate and map kernel buffer using consistent mode DMA for a device.
@@ -64,13 +65,7 @@ extern void pci_free_consistent (struct pci_dev *hwdev, size_t size,
  * Once the device is given the dma address, the device owns this memory
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
-extern inline dma_addr_t
-pci_map_single (struct pci_dev *hwdev, void *ptr, size_t size, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	return virt_to_bus(ptr);
-}
+extern dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int direction);
 
 /*
  * Unmap a single streaming mode DMA translation.  The dma_addr and size
@@ -80,13 +75,7 @@ pci_map_single (struct pci_dev *hwdev, void *ptr, size_t size, int direction)
  * After this call, reads by the cpu to the buffer are guarenteed to see
  * whatever the device wrote there.
  */
-extern inline void
-pci_unmap_single (struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	/* Nothing to do */
-}
+extern void pci_unmap_single (struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction);
 
 /*
  * Map a set of buffers described by scatterlist in streaming
@@ -104,26 +93,14 @@ pci_unmap_single (struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int d
  * Device ownership issues as mentioned above for pci_map_single are
  * the same here.
  */
-extern inline int
-pci_map_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	return nents;
-}
+extern int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction);
 
 /*
  * Unmap a set of streaming mode DMA translations.
  * Again, cpu read rules concerning calls here are the same as for
  * pci_unmap_single() above.
  */
-extern inline void
-pci_unmap_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	/* Nothing to do */
-}
+extern void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction);
 
 /*
  * Make physical memory consistent for a single
@@ -135,13 +112,7 @@ pci_unmap_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nents, int dire
  * next point you give the PCI dma address back to the card, the
  * device again owns the buffer.
  */
-extern inline void
-pci_dma_sync_single (struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	/* Nothing to do */
-}
+extern void pci_dma_sync_single (struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, int direction);
 
 /*
  * Make physical memory consistent for a set of streaming mode DMA
@@ -150,20 +121,15 @@ pci_dma_sync_single (struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, 
  * The same as pci_dma_sync_single but for a scatter-gather list,
  * same rules and usage.
  */
-extern inline void
-pci_dma_sync_sg (struct pci_dev *hwdev, struct scatterlist *sg, int nelems, int direction)
-{
-	if (direction == PCI_DMA_NONE)
-		BUG();
-	/* Nothing to do */
-}
+extern void pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nelems, int direction);
 
 /* Return whether the given PCI device DMA address mask can
  * be supported properly.  For example, if your device can
  * only drive the low 24-bits during PCI bus mastering, then
  * you would pass 0x00ffffff as the mask to this function.
  */
-extern inline int pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
+extern inline int
+pci_dma_supported(struct pci_dev *hwdev, dma_addr_t mask)
 {
 	return 1;
 }

@@ -191,3 +191,57 @@ GLOBAL_ENTRY(ia64_pal_call_phys_static)
 	srlz.d				// seralize restoration of psr.l
 	br.ret.sptk.few	b0
 END(ia64_pal_call_phys_static)
+
+/*
+ * Make a PAL call using the stacked registers in physical mode.
+ *
+ * Inputs:
+ * 	in0         Index of PAL service
+ * 	in2 - in3   Remaning PAL arguments
+ */
+GLOBAL_ENTRY(ia64_pal_call_phys_stacked)
+	UNW(.prologue ASM_UNW_PRLG_RP|ASM_UNW_PRLG_PFS, ASM_UNW_PRLG_GRSAVE(5))
+	alloc	loc1 = ar.pfs,5,5,86,0
+	movl	loc2 = pal_entry_point
+1:	{
+	  mov r28  = in0		// copy procedure index
+	  mov loc0 = rp		// save rp
+	}
+	.body
+	;;
+	ld8 loc2 = [loc2]		// loc2 <- entry point
+	mov out0 = in0		// first argument
+	mov out1 = in1		// copy arg2
+	mov out2 = in2		// copy arg3
+	mov out3 = in3		// copy arg3
+	;;
+	mov loc3 = psr		// save psr
+	;; 
+	mov loc4=ar.rsc			// save RSE configuration
+	dep.z loc2=loc2,0,61		// convert pal entry point to physical
+	;;
+	mov ar.rsc=r0			// put RSE in enforced lazy, LE mode
+	movl r16=PAL_PSR_BITS_TO_CLEAR
+	movl r17=PAL_PSR_BITS_TO_SET
+	;;
+	or loc3=loc3,r17		// add in psr the bits to set
+	mov b7 = loc2			// install target to branch reg
+	;;
+	andcm r16=loc3,r16		// removes bits to clear from psr
+	br.call.sptk.few rp=ia64_switch_mode
+.ret6:
+	br.call.sptk.many rp=b7		// now make the call
+.ret7:
+	mov ar.rsc=r0			// put RSE in enforced lazy, LE mode
+	mov r16=loc3			// r16= original psr
+	br.call.sptk.few rp=ia64_switch_mode	// return to virtual mode
+
+.ret8:	mov psr.l  = loc3		// restore init PSR
+	mov ar.pfs = loc1
+	mov rp = loc0
+	;;
+	mov ar.rsc=loc4			// restore RSE configuration
+	srlz.d				// seralize restoration of psr.l
+	br.ret.sptk.few	b0
+END(ia64_pal_call_phys_stacked)
+

@@ -99,5 +99,9 @@ hard_smp_processor_id(void)
 extern void __init init_smp_config (void);
 extern void smp_do_timer (struct pt_regs *regs);
 
+extern int smp_call_function_single (int cpuid, void (*func) (void *info), void *info,
+			      int retry, int wait);
+
+
 #endif /* CONFIG_SMP */
 #endif /* _ASM_IA64_SMP_H */
