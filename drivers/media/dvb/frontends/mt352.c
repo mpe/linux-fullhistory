@@ -294,6 +294,8 @@ static int mt352_set_parameters(struct dvb_frontend* fe,
 	state->config->pll_set(fe, param, buf+8);
 
 #if 0 /* FIXME: should be catched elsewhere ... */
+	/* this dubious code which helped on some cards does not work for
+	 * the pinnacle 300i */
 	/* Only send the tuning request if the tuner doesn't have the requested
 	 * parameters already set.  Enhances tuning time and prevents stream
 	 * breakup when retuning the same transponder. */
@@ -435,6 +437,8 @@ static int mt352_read_status(struct dvb_frontend* fe, fe_status_t* status)
 {
 	struct mt352_state* state = (struct mt352_state*) fe->demodulator_priv;
 #if 1
+	/* the pinnacle 300i loses lock if the STATUS_x registers
+	 * are polled too often... */
 	int val;
 
 	if (0 != mt352_read_register(state, INTERRUPT_0)) {
