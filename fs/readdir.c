@@ -266,8 +266,8 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 				if(inode) {
 					nr++;
 					if(nr > (file->f_pos & ~BASKET_BIT)) {
-						int err = filldir(&buf, ptr->d_name,
-								  ptr->d_len,
+						int err = filldir(&buf, ptr->d_name.name,
+								  ptr->d_name.len,
 								  file->f_pos,
 								  inode->i_ino);
 						if(err)

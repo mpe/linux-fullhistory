@@ -2603,6 +2603,7 @@ __initfunc(static void probe_for_hwifs (void))
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_1, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB, &ide_init_triton, 0);
 #endif /* CONFIG_BLK_DEV_TRITON */
+	ide_probe_pci (PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_1, &ide_init_triton, 0);
 #ifdef CONFIG_BLK_DEV_OPTI621
 		ide_probe_pci (PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C621, &ide_init_opti621, 0);
 #endif /* CONFIG_BLK_DEV_OPTI621 */

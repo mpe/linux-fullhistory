@@ -287,17 +287,19 @@ CONFIG_BLK_DEV_RZ1000
   Linux.  This may slow disk throughput by a few percent, but at least
   things will operate 100% reliably. If unsure, say Y.
 
-Intel 82371 PIIX (Triton I/II) DMA support
+Intel 82371 PIIX (Triton I/II), VIA VP-1 DMA support
 CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
   and includes the Intel Triton I/II IDE interface chipset (i82371FB,
-  i82371SB or i82371AB), you will want to enable this option to allow
-  use of bus-mastering DMA data transfers. Read the comments at the
+  i82371SB or i82371AB), or the VIA VP-1 IDE interface chipset 
+  (VT82C586), you will want to enable this option to allow use of 
+  bus-mastering DMA data transfers. Read the comments at the
   beginning of drivers/block/triton.c and Documentation/ide.txt.
   You can get the latest version of the hdparm utility via 
   ftp (user: anonymous) from
   sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
-  used to tune your harddisk. It is safe to say Y to this question.
+  used to tune your harddisk. 
+  It is safe to say Y to this question.
 
 Other IDE chipset support
 CONFIG_IDE_CHIPSETS

@@ -143,12 +143,8 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
       bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
       bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
-      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
-        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
-      fi
-      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
-        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
-      fi
+      #bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
+      #bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
     fi
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP

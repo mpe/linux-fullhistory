@@ -765,9 +765,9 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		struct dentry * old = dir_i->i_dentry;
 		struct dentry * new;
 		vfs_lock();
-		new = d_alloc(old->d_parent, old->d_len, 1);
+		new = d_alloc(old->d_parent, old->d_name.len, 1);
 		if(new) {
-			struct qstr copy = { old->d_name, old->d_len };
+			struct qstr copy = { old->d_name.name, old->d_name.len };
 			d_add(new, sb->s_mounted, &copy, D_DUPLICATE);
 			vfs_unlock();
 		} else {

@@ -71,6 +71,7 @@
 #include <linux/fs.h>
 #include <linux/dalloc.h>
 #include <linux/dlists.h>
+#include <linux/malloc.h>
 
 /* this should be removed after the beta phase */
 /* #define DEBUG */
@@ -90,33 +91,6 @@
 #define D_RECURSIVE 4
 #define D_NO_FREE   8
 
-/* adjust these constants if you know a probability distribution ... */
-#define D_SMALL 16
-#define D_MEDIUM 64
-#define D_LARGE 256
-#define D_HUGE D_MAXLEN
-
-#define BASE_DHEADER(x) (struct dheader*)((unsigned long)(x) & ~(PAGE_SIZE-1))
-#define BYTE_ADD(x,n) (void*)((char*)(x) + (n))
-#define BYTE_SUB(x,n) (void*)((char*)(x) - (n))
-
-/* This is for global allocation of dentries.  Remove this when
- * converting to SLAB.
- */
-struct dheader {
-	struct dentry * emptylist;
-	short free, maxfree;
-	struct dheader * next;
-	struct dheader * prev;
-};
-
-struct anchors {
-	struct dheader * free; /* each contains at least 1 empty dentry */
-	struct dheader * full; /* all the used up ones */
-	struct dheader * dir_free; 
-	struct dheader * dir_full; 
-};
-
 /* This is only used for directory dentries. Think of it as an extension
  * of the dentry.
  * It is defined as separate struct, so it uses up space only
@@ -133,9 +107,6 @@ struct ddir {
 	unsigned short dd_negs; /* # of negative entries */
 };
 
-DEF_INSERT(header,struct dheader,next,prev)
-DEF_REMOVE(header,struct dheader,next,prev)
-
 DEF_INSERT(alias,struct dentry,d_next,d_prev)
 DEF_REMOVE(alias,struct dentry,d_next,d_prev)
 
@@ -145,13 +116,10 @@ DEF_REMOVE(hash,struct dentry,d_hash_next,d_hash_prev)
 DEF_INSERT(basket,struct dentry,d_basket_next,d_basket_prev)
 DEF_REMOVE(basket,struct dentry,d_basket_next,d_basket_prev)
 
-static struct anchors anchors[4];
-
 struct dentry * the_root = NULL;
 
 unsigned long name_cache_init(unsigned long mem_start, unsigned long mem_end)
 {
-	memset(anchors, 0, sizeof(anchors));
 	return mem_start;
 }
 
@@ -260,7 +228,7 @@ void printpath(struct dentry * entry)
 {
 	if(!IS_ROOT(entry))
 		printpath(entry->d_parent);
-	printk("/%s", entry->d_name);
+	printk("/%s", entry->d_name.name);
 }
 
 static inline long has_sons(struct ddir * ddir)
@@ -310,82 +278,42 @@ static void d_panic(void)
 	panic("VFS: dcache directory corruption");
 }
 
+/*
+ * IF this is a directory, the ddir has been allocated right
+ * after the dentry.
+ */
 static inline struct ddir * d_dir(struct dentry * entry)
 {
-	struct ddir * res = BYTE_SUB(entry, sizeof(struct ddir));
-
 	if(!(entry->d_flag & D_DIR))
 		d_panic();
-#ifdef DEBUG
-	if(!entry)
-		panic("entry NULL!");
-	if(BASE_DHEADER(res) != BASE_DHEADER(entry))
-		printk("Scheisse!!!\n");
-#endif
-	return res;
+	return (struct ddir *) (entry+1);
 }
 
-static /*inline*/ struct dheader * dinit(int isdir, int size)
-{
-	struct dheader * res = (struct dheader*)__get_free_page(GFP_KERNEL);
-	int restlen = PAGE_SIZE - sizeof(struct dheader);
-	struct dentry * ptr = BYTE_ADD(res, sizeof(struct dheader));
+#define NAME_ALLOC_LEN(len)	((len+16) & ~15)
 
-	if(!res)
-		return NULL;
-        memset(res, 0, sizeof(struct dheader));
-	if(isdir) {
-		ptr = BYTE_ADD(ptr, sizeof(struct ddir));
+struct dentry * d_alloc(struct dentry * parent, int len, int isdir)
+{
+	struct dentry *res;
+	int size = sizeof(struct dentry);
+	int flag = 0;
+
+	if (isdir) {
 		size += sizeof(struct ddir);
+		flag = D_DIR;
 	}
-	if(BASE_DHEADER(ptr) != res) 
-		panic("Bad kernel page alignment");
-	size += sizeof(struct dentry) - D_MAXLEN;
-	res->emptylist = NULL;
-	res->free = 0;
-	while(restlen >= size) {
-#ifdef DEBUG
-		ins(ptr);
-		if(BASE_DHEADER(ptr) != res)
-			panic("Wrong dinit!");
-#endif
-		ptr->d_next = res->emptylist;
-		res->emptylist = ptr;
-		ptr = BYTE_ADD(ptr, size);
-		res->free++;
-		restlen -= size;
-	}
-	res->maxfree = res->free;
-	return res;
-}
+	res = kmalloc(size, GFP_KERNEL);
+	if (!res)
+		return NULL;
+	memset(res, 0, size);
+	res->d_flag = flag;
 
-static /*inline*/ struct dentry * __dalloc(struct anchors * anchor,
-					   struct dentry * parent, int isdir,
-					   int len, int size)
-{
-	struct dheader ** free = isdir ? &anchor->dir_free : &anchor->free;
-	struct dheader ** full = isdir ? &anchor->dir_full : &anchor->full;
-	struct dheader * base = *free;
-	struct dentry * res;
-
-	if(!base) {
-		base = dinit(isdir, size);
-		if(!base)
-			return NULL;
-		insert_header(free, base);
+	res->d_name.name = kmalloc(NAME_ALLOC_LEN(len), GFP_KERNEL);
+	if (!res->d_name.name) {
+		kfree(res);
+		return NULL;
 	}
-	base->free--;
-	res = base->emptylist;
-	if(!(base->emptylist = res->d_next)) {
-		remove_header(free, base);
-		insert_header(full, base);
-	}
-	memset(res, 0, sizeof(struct dentry) - D_MAXLEN);
-	if(isdir) {
-		res->d_flag = D_DIR;
-		memset(d_dir(res), 0, sizeof(struct ddir));
-	}
-	res->d_len = len;
+	
+	res->d_name.len = len;
 	res->d_parent = parent;
 	if(parent) {
 		struct ddir * pdir = d_dir(parent);
@@ -403,33 +331,6 @@ static /*inline*/ struct dentry * __dalloc(struct anchors * anchor,
 	return res;
 }
 
-struct dentry * d_alloc(struct dentry * parent, int len, int isdir)
-{
-	int i, size;
-
-#ifdef DEBUG
-        if(the_root)
-	        recursive_test(the_root);
-	LOG("d_alloc", parent);
-#endif
-	if(len >= D_MEDIUM) {
-		if(len >= D_LARGE) {
-			i = 3;
-			size = D_HUGE;
-		} else {
-			i = 2;
-			size = D_LARGE;
-		} 
-	} else if(len >= D_SMALL) {
-		i = 1;
-		size = D_MEDIUM;
-	} else {
-		i = 0;
-		size = D_SMALL;
-	}
-	return __dalloc(&anchors[i], parent, isdir, len, size);
-}
-
 extern blocking struct dentry * d_alloc_root(struct inode * root_inode)
 {
 	struct dentry * res = the_root;
@@ -442,7 +343,7 @@ extern blocking struct dentry * d_alloc_root(struct inode * root_inode)
 		the_root = res = d_alloc(NULL, 0, 1);
 		LOG("d_alloc_root", res);
 		res->d_parent = res;
-		res->d_name[0]='\0';
+		res->d_name.name[0]='\0';
 		ddir = d_dir(res);
 		ddir->dd_alloced = 999; /* protect from deletion */
 	}
@@ -460,8 +361,8 @@ static inline unsigned long d_hash(char first, char last)
 
 static inline struct dentry ** d_base_entry(struct ddir * pdir, struct dentry * entry)
 {
-	return &pdir->dd_hashtable[d_hash(entry->d_name[0],
-					  entry->d_name[entry->d_len-1])];
+	return &pdir->dd_hashtable[d_hash(entry->d_name.name[0],
+					  entry->d_name.name[entry->d_name.len-1])];
 }
 
 static inline struct dentry ** d_base_qstr(struct ddir * pdir,
@@ -569,12 +470,8 @@ static /*inline*/ void _d_handle_zombie(struct dentry * entry,
 }
 
 static /*inline*/ blocking void _d_del(struct dentry * entry,
-				       struct anchors * anchor,
 				       int flags)
 {
-	struct dheader ** free;
-	struct dheader ** full;
-	struct dheader * base = BASE_DHEADER(entry);
 	struct ddir * ddir = NULL;
 	struct ddir * pdir;
 	struct inode * inode = entry->d_flag & D_PRELIMINARY ? NULL : entry->u.d_inode;
@@ -586,13 +483,6 @@ static /*inline*/ blocking void _d_del(struct dentry * entry,
 	if(!entry->d_parent) {
 		printk("VFS: dcache parent is NULL\n");
 		return;
-	}
-	if(entry->d_flag & D_DIR) {
-		free = &anchor->dir_free;
-		full = &anchor->dir_full;
-	} else {
-		free = &anchor->free;
-		full = &anchor->full;
 	}
 	pdir = d_dir(entry->d_parent);
 	if(!IS_ROOT(entry))
@@ -636,50 +526,23 @@ static /*inline*/ blocking void _d_del(struct dentry * entry,
 		}
 	}
 	if(!(flags & D_NO_FREE) && !(entry->d_flag & D_ZOMBIE)) {
-		base->free++;
-		if(base->free == base->maxfree) {
-#ifndef DEBUG
-			remove_header(free, base);
-			free_page((unsigned long)base);
-			goto done;
-#endif
-		}
-		entry->d_next = base->emptylist;
-		base->emptylist = entry;
-		if(!entry->d_next) {
-			remove_header(full, base);
-			insert_header(free, base);
-		}
+		kfree(entry->d_name.name);
+		kfree(entry);
 #ifdef DEBUG
 		x_freed++;
 #endif
 	}
-#ifndef DEBUG
-done:
-#else
+#ifdef DEBUG
 	x_free++;
 #endif
 }
 
 blocking void d_del(struct dentry * entry, int flags)
 {
-	int i;
-
 	if(!entry)
 		return;
 	LOG("d_clear", entry);
-	if(entry->d_len >= D_MEDIUM) {
-		if(entry->d_len >= D_LARGE) {
-			i = 3;
-		} else {
-			i = 2;
-		} 
-	} else if(entry->d_len >= D_SMALL) {
-		i = 1;
-	} else {
-		i = 0;
-	}
-	_d_del(entry, &anchors[i], flags);
+	_d_del(entry, flags);
 }
 
 static inline struct dentry * __dlookup(struct dentry ** base,
@@ -694,10 +557,10 @@ static inline struct dentry * __dlookup(struct dentry ** base,
 		if(appendix)
 			totallen += appendix->len;
 		do {
-			if(tmp->d_len == totallen			&&
+			if(tmp->d_name.len == totallen			&&
 			   !(tmp->d_flag & D_DUPLICATE)			&&
-			   !strncmp(tmp->d_name, name->name, name->len)	&&
-			   (!appendix || !strncmp(tmp->d_name+name->len,
+			   !strncmp(tmp->d_name.name, name->name, name->len)	&&
+			   (!appendix || !strncmp(tmp->d_name.name+name->len,
 						  appendix->name, appendix->len)))
 				return tmp;
 			tmp = tmp->d_hash_next;
@@ -755,7 +618,7 @@ static /*inline*/ blocking void _d_insert_to_parent(struct dentry * entry,
 	if(inode && inode->i_dentry && (entry->d_flag & D_DIR)) {
 		struct dentry * tmp = inode->i_dentry;
 		printk("Auweia inode=%p entry=%p (%p %p %s)\n",
-		       inode, entry, parent->u.d_inode, parent, parent->d_name);
+		       inode, entry, parent->u.d_inode, parent, parent->d_name.name);
 		printk("entry path="); printpath(entry); printk("\n");
 		do {
 			TST("auweia",tmp);
@@ -801,15 +664,15 @@ blocking void d_add(struct dentry * entry, struct inode * inode,
 	LOG("d_add", entry);
 #endif
 	if(ininame) {
-		if(ininame->len != entry->d_len) {
+		if(ininame->len != entry->d_name.len) {
 			printk("VFS: d_add with wrong string length");
-			entry->d_len = ininame->len; /* kludge */
+			entry->d_name.len = ininame->len; /* kludge */
 		}
-		memcpy(entry->d_name, ininame->name, ininame->len);
-		entry->d_name[ininame->len] = '\0';
+		memcpy(entry->d_name.name, ininame->name, ininame->len);
+		entry->d_name.name[ininame->len] = '\0';
 	} else {
-		dummy.name = entry->d_name;
-		dummy.len = entry->d_len;
+		dummy.name = entry->d_name.name;
+		dummy.len = entry->d_name.len;
 		ininame = &dummy;
 	}
         if(entry->d_flag & D_HASHED)
@@ -871,11 +734,45 @@ blocking void d_entry_preliminary(struct dentry * parent,
 	}
 }
 
+static inline void alloc_new_name(struct dentry * entry, int len)
+{
+	int alloc_len = NAME_ALLOC_LEN(len);
+	char *name;
+
+	if (alloc_len == NAME_ALLOC_LEN(entry->d_name.len))
+		return;
+	name = kmalloc(alloc_len, GFP_KERNEL);
+	if (!name)
+		printk("out of memory for dcache\n");
+	kfree(entry->d_name.name);
+	entry->d_name.name = name;
+}
+
+static inline void d_remove_old_parent(struct dentry * entry)
+{
+	struct ddir * pdir;
+	struct inode * inode;
+
+	pdir = d_dir(entry->d_parent);
+	inode = entry->u.d_inode;
+	_d_remove_from_parent(entry, pdir, inode, D_NO_CLEAR_INODE);
+}
+
+static inline void d_add_new_parent(struct dentry * entry, struct inode * new_parent)
+{
+	struct ddir * pdir;
+	struct inode * inode;
+
+	pdir = d_dir(entry->d_parent = new_parent->i_dentry);
+	inode = entry->u.d_inode;
+
+	_d_insert_to_parent(entry, pdir, inode, &entry->d_name, entry->d_flag);
+}
+
+
 blocking void d_move(struct dentry * entry, struct inode * newdir, 
 		     struct qstr * newname, struct qstr * newapp)
 {
-	struct ddir tmp;
-	struct dentry * new;
 	struct inode * inode;
 	int len;
 	int flags;
@@ -891,38 +788,29 @@ blocking void d_move(struct dentry * entry, struct inode * newdir,
 		return;
 	}
 #if 0
-printk("d_move %p '%s' -> '%s%s' dent_count=%d\n", inode, entry->d_name,
+printk("d_move %p '%s' -> '%s%s' dent_count=%d\n", inode, entry->d_name.name,
        newname->name, newapp ? newapp->name : "", inode->i_dent_count);
 #endif
 	if(flags & D_ZOMBIE) {
 		printk("VFS: moving zombie entry\n");
 	}
-	if(flags & D_DIR) {
-		struct ddir * ddir = d_dir(entry);
 
-		memcpy(&tmp, ddir, sizeof(struct ddir));
+	d_remove_old_parent(entry);
 
-                /* Simulate empty dir for d_del(). */
-		memset(ddir, 0, sizeof(struct ddir));
-	}
 	len = newname->len;
 	if(newapp) {
 		len += newapp->len;
 		flags |= D_BASKET;
 	} else
 		flags &= ~D_BASKET;
-	new = d_alloc(newdir->i_dentry, len, flags & D_DIR);
-	memcpy(new->d_name, newname->name, newname->len);
+	alloc_new_name(entry, len);
+	memcpy(entry->d_name.name, newname->name, newname->len);
 	if(newapp)
-		memcpy(new->d_name+newname->len, newapp->name, newapp->len);
-	new->d_name[len] = '\0';
-	d_del(entry, D_NO_CLEAR_INODE);
-	d_add(new, inode, NULL, flags & (D_DIR|D_BASKET));
-	if(flags & D_DIR) {
-		struct ddir * ddir = d_dir(new);
+		memcpy(entry->d_name.name+newname->len, newapp->name, newapp->len);
+	entry->d_name.name[len] = '\0';
+	entry->d_name.len = len;
 
-		memcpy(ddir, &tmp, sizeof(struct ddir));
-       	}
+	d_add_new_parent(entry, newdir);
 }
 
 int d_path(struct dentry * entry, struct inode * chroot, char * buf)
@@ -939,8 +827,8 @@ int d_path(struct dentry * entry, struct inode * chroot, char * buf)
 			*buf++ = '/';
 			len++;
 		}
-		memcpy(buf, entry->d_name, entry->d_len);
-		return len + entry->d_len;
+		memcpy(buf, entry->d_name.name, entry->d_name.len);
+		return len + entry->d_name.len;
 	}
 }
 
@@ -966,7 +854,7 @@ blocking struct inode * d_inode(struct dentry ** changing_entry)
 
 #ifdef CONFIG_DCACHE_PRELOAD
 	if(entry->d_flag & D_PRELIMINARY) {
-		struct qstr name = { entry->d_name, entry->d_len };
+		struct qstr name = { entry->d_name.name, entry->d_name.len };
 		struct ddir * pdir = d_dir(entry->d_parent);
 		struct dentry ** base = d_base_qstr(pdir, &name, NULL);
 		struct dentry * found;
@@ -1014,7 +902,7 @@ blocking struct inode * d_inode(struct dentry ** changing_entry)
 			d_del(entry, D_NO_CLEAR_INODE);
 			*changing_entry = found;
 		} else if(S_ISDIR(inode->i_mode)) {
-			struct dentry * new = d_alloc(entry->d_parent, entry->d_len, 1);
+			struct dentry * new = d_alloc(entry->d_parent, entry->d_name.len, 1);
 			if(new)
 				d_add(new, inode, &name, D_DIR);
 			*changing_entry = new;

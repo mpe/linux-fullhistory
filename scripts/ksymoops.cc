@@ -31,6 +31,7 @@
 // * Only resolves operands of jump and call instructions.
 
 #include <fstream.h>
+#include <strstream.h>
 #include <iomanip.h>
 #include <stdio.h>
 #include <string.h>
@@ -184,9 +185,23 @@ NameList::decode(unsigned char* code, long eip_addr)
     
     char buf[1024];
     int lines = 0;
+    int eip_seen = 0;
+    long offset;
     while (fgets(buf, sizeof(buf), objdump_FILE)) {
+	if (eip_seen && buf[4] == ':') {
+	    // assume objdump from binutils 2.8..., reformat to old style
+	    offset = strtol(buf, 0, 16);
+	    char newbuf[sizeof(buf)];
+	    memset(newbuf, '\0', sizeof(newbuf));
+	    ostrstream ost(newbuf, sizeof(newbuf));
+	    ost.width(8);
+	    ost << offset;
+	    ost << " <_EIP+" << offset << ">: " << &buf[6] << ends;
+	    strcpy(buf, newbuf);
+	}
 	if (!strnequ(&buf[9], "<_EIP", 5))
 	    continue;
+	eip_seen = 1;
 	if (strstr(buf, " is out of bounds"))
 	    break;
 	lines++;
@@ -195,19 +210,28 @@ NameList::decode(unsigned char* code, long eip_addr)
 	    cout << buf;
 	    continue;
 	}
-	long offset = strtol(buf, 0, 16);
-	char* bp_0 = strchr(buf, '>') + 2;
+	offset = strtol(buf, 0, 16);
+	char* bp_0 = strchr(buf, '>');
 	KSym* ksym = find(eip_addr + offset);
+	if (bp_0)
+	    bp_0 += 2;
+	else
+	    bp_0 = strchr(buf, ':');
 	if (ksym)
 	    cout << *ksym << ' ';
-	char* bp = bp_0;
+	char *bp_1 = strstr(bp_0, "\t");        // objdump from binutils 2.8...
+	if (bp_1)
+	    ++bp_1;
+	else
+	    bp_1 = bp_0;
+	char *bp = bp_1;
 	while (!isspace(*bp))
 	    bp++;
 	while (isspace(*bp))
 	    bp++;
-	if (*bp != '0') {
+	if (!isxdigit(*bp)) {
 	    cout << bp_0;
-	} else if (*bp_0 == 'j' || strnequ(bp_0, "call", 4)) { // a jump or call insn
+	} else if (*bp_1 == 'j' || strnequ(bp_1, "call", 4)) { // a jump or call insn
 	    long rel_addr = strtol(bp, 0, 16);
 	    ksym = find(eip_addr + rel_addr);
 	    if (ksym) {

@@ -9,7 +9,7 @@
  * <schoebel@informatik.uni-stuttgart.de>.
  */
 
-#define D_MAXLEN   1024
+#define D_MAXLEN 1024
 
 /* public flags for d_add() */
 #define D_NORMAL     0
@@ -26,6 +26,16 @@
 
 #define IS_ROOT(x) ((x) == (x)->d_parent)
 
+/* "quick string" -- I introduced this to shorten the parameter list
+ * of many routines. Think of it as a (str,stlen) pair.
+ * Storing the len instead of doing strlen() very often is performance
+ * critical.
+ */
+struct qstr {
+	char * name;
+	int len;
+};
+
 struct dentry {
 	union {
 		struct inode  * d_inode;  /* Where the name belongs to */
@@ -38,19 +48,8 @@ struct dentry {
 	struct dentry * d_hash_prev;
 	struct dentry * d_basket_next;
 	struct dentry * d_basket_prev;
-	short d_len;              /* set by dalloc() */
-	short d_flag;
-	char d_name[D_MAXLEN];
-};
-
-/* "quick string" -- I introduced this to shorten the parameter list
- * of many routines. Think of it as a (str,stlen) pair.
- * Storing the len instead of doing strlen() very often is performance
- * critical.
- */
-struct qstr {
-	const char * name;
-	int len;
+	struct qstr d_name;
+	unsigned int d_flag;
 };
 
 extern struct dentry * the_root;

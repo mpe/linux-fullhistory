@@ -122,15 +122,25 @@ static unsigned int piix_key;
 #define PIIX_FLAGS_PREFETCH	4
 #define PIIX_FLAGS_FAST_DMA	8
 
-typedef struct {
-	unsigned d0_flags	:4;
-	unsigned d1_flags	:4;
-	unsigned recovery	:2;
-	unsigned reserved	:2;
-	unsigned sample		:2;
-	unsigned sidetim_enabled:1;
-	unsigned ports_enabled	:1;
-} piix_timing_t;
+
+union chip_en_reg_u {
+	struct {
+		unsigned d0_flags	:4;
+		unsigned d1_flags	:4;
+		unsigned recovery	:2;
+		unsigned reserved	:2;
+		unsigned sample		:2;
+		unsigned sidetim_enabled:1;
+		unsigned ports_enabled	:1;
+	} piix_s;
+	struct {
+		unsigned sec_en		:1;
+		unsigned pri_en		:1;
+		unsigned reserved	:14;
+	} via_s;
+};
+
+typedef union chip_en_reg_u piix_timing_t;
 
 typedef struct {
 	unsigned pri_recovery	:2;
@@ -269,16 +279,16 @@ static int piix_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 				printk("%s: pcibios read failed\n", HWIF(drive)->name);
 				return 1;
 			}
-			dflags = drive->select.b.unit ? timing.d1_flags : timing.d0_flags;
+			dflags = drive->select.b.unit ? timing.piix_s.d1_flags : timing.piix_s.d0_flags;
 			if (dflags & PIIX_FLAGS_FAST_PIO) {
 				if (func == ide_dma_on && drive->media == ide_disk)
 					dflags |= PIIX_FLAGS_FAST_DMA;
 				else
 					dflags &= ~PIIX_FLAGS_FAST_DMA;
 				if (drive->select.b.unit == 0)
-					timing.d0_flags = dflags;
+					timing.piix_s.d0_flags = dflags;
 				else
-					timing.d1_flags = dflags;
+					timing.piix_s.d1_flags = dflags;
 				if (pcibios_write_config_word(piix_pci_bus, piix_pci_fn, reg, *(short *)&timing)) {
 					printk("%s: pcibios write failed\n", HWIF(drive)->name);
 					return 1;
@@ -456,8 +466,14 @@ void ide_init_triton (byte bus, byte fn)
 		chipset = "PIIX4";
 	else if (devid == PCI_DEVICE_ID_INTEL_82371SB_1)
 		chipset = "PIIX3";
-	else
+	else if (devid == PCI_DEVICE_ID_INTEL_82371_1)
 		chipset = "PIIX";
+	else if (devid == PCI_DEVICE_ID_VIA_82C586_1)
+		chipset = "VP1";
+	else {
+		printk("Unknown PCI IDE interface 0x%x\n", devid);
+		goto quit;
+	}
 
 	printk("%s: bus-master IDE device on PCI bus %d function %d\n", chipset, bus, fn);
 
@@ -470,13 +486,24 @@ void ide_init_triton (byte bus, byte fn)
 		printk("%s: IDE ports are not enabled (BIOS)\n", chipset);
 		goto quit;
 	}
-	if ((rc = pcibios_read_config_word(bus, fn, 0x40, (short *)&timings[0])))
-		goto quit;
-	if ((rc = pcibios_read_config_word(bus, fn, 0x42, (short *)&timings[1])))
-		goto quit;
-	if ((!timings[0].ports_enabled) && (!timings[1].ports_enabled)) {
-		printk("%s: neither IDE port is enabled\n", chipset);
-		goto quit;
+	if (devid == PCI_DEVICE_ID_VIA_82C586_1) {
+		/* pri and sec channel enables are in port 0x40 */
+		if ((rc = pcibios_read_config_word(bus, fn, 0x40, (short *)&timings[0])))
+			goto quit;
+		if ((!timings[0].via_s.pri_en && (!timings[0].via_s.sec_en))) {
+			printk("%s: neither IDE port is enabled\n", chipset);
+			goto quit;
+		}
+	}
+	else {		/* INTEL piix */
+		if ((rc = pcibios_read_config_word(bus, fn, 0x40, (short *)&timings[0])))
+			goto quit;
+		if ((rc = pcibios_read_config_word(bus, fn, 0x42, (short *)&timings[1])))
+			goto quit;
+		if ((!timings[0].piix_s.ports_enabled) && (!timings[1].piix_s.ports_enabled)) {
+			printk("%s: neither IDE port is enabled\n", chipset);
+			goto quit;
+		}
 	}
 
 	/*
@@ -526,10 +553,30 @@ void ide_init_triton (byte bus, byte fn)
 			case 0x170:	pri_sec = 1; break;
 			default:	continue;
 		}
+
+		if (devid == PCI_DEVICE_ID_VIA_82C586_1) {
+			timing = timings[0];
+			switch (h) {
+				case 0:
+					if (!timing.piix_s.ports_enabled) {
+			printk("port 0 DMA not enabled\n");
+						continue;
+					}
+				case 1:
+					if (!timing.piix_s.sidetim_enabled) {
+			printk("port 1 DMA not enabled\n");
+						continue;
+					}
+			}
+			hwif->chipset = ide_via;
+		}
+		else {		/* PIIX */
+
 		timing = timings[pri_sec];
-		if (!timing.ports_enabled)	/* interface disabled? */
+		if (!timing.piix_s.ports_enabled)	/* interface disabled? */
 			continue;
 		hwif->chipset = ide_triton;
+		}
 		if (dma_enabled)
 			init_piix_dma(hwif, bmiba + (pri_sec ? 8 : 0));
 #ifdef DISPLAY_PIIX_TIMINGS
@@ -539,17 +586,32 @@ void ide_init_triton (byte bus, byte fn)
 		{
 			const char *slave;
 			piix_sidetim_t sidetim;
-			byte sample   = 5 - timing.sample;
-			byte recovery = 4 - timing.recovery;
+			byte sample   = 5 - timing.piix_s.sample;
+			byte recovery = 4 - timing.piix_s.recovery;
+			unsigned int drvtim;
+
+			if (devid == PCI_DEVICE_ID_VIA_82C586_1) {
+				pcibios_read_config_dword(bus, fn, 0x48, &drvtim);
+				if (pri_sec == 0) { 
+					printk("    %s master: active_pulse_CLKs=%d, recovery_CLKs=%d\n", hwif->name, 1+(drvtim>>28), 1+((drvtim & 0x0f000000)>>24));
+					printk("    %s slave: active_pulse_CLKs=%d, recovery_CLKs=%d\n", hwif->name, 1+((drvtim & 0xf00000)>>20), 1+((drvtim & 0x0f0000)>>16));
+					continue;
+				} else {
+					printk("    %s master: active_pulse_CLKs=%d, recovery_CLKs=%d\n", hwif->name, 1+((drvtim & 0xf000)>>12), 1+((drvtim & 0x0f00)>>8));
+					printk("    %s slave: active_pulse_CLKs=%d, recovery_CLKs=%d\n", hwif->name, 1+((drvtim & 0xf0)>>4), 1+(drvtim & 0x0f));
+					continue;
+				}
+			}
+	
 			if ((devid == PCI_DEVICE_ID_INTEL_82371SB_1
 			     || devid == PCI_DEVICE_ID_INTEL_82371AB)
-			 && timing.sidetim_enabled
+			 && timing.piix_s.sidetim_enabled
 			 && !pcibios_read_config_byte(bus, fn, 0x44, (byte *) &sidetim))
 				slave = "";		/* PIIX3 and later */
 			else
 				slave = "/slave";	/* PIIX, or PIIX3 in compatibility mode */
 			printk("    %s master%s: sample_CLKs=%d, recovery_CLKs=%d\n", hwif->name, slave, sample, recovery);
-			print_piix_drive_flags ("master:", timing.d0_flags);
+			print_piix_drive_flags ("master:", timing.piix_s.d0_flags);
 			if (!*slave) {
 				if (pri_sec == 0) {
 					sample   = 5 - sidetim.pri_sample;
@@ -560,7 +622,7 @@ void ide_init_triton (byte bus, byte fn)
 				}
 				printk("         slave : sample_CLKs=%d, recovery_CLKs=%d\n", sample, recovery);
 			}
-			print_piix_drive_flags ("slave :", timing.d1_flags);
+			print_piix_drive_flags ("slave :", timing.piix_s.d1_flags);
 		}
 #endif /* DISPLAY_PIIX_TIMINGS */
 	}

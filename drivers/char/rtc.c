@@ -180,7 +180,7 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 		data = rtc_irq_data;
 		rtc_irq_data = 0;
 		restore_flags(flags);
-		retval = put_user(data, (unsigned long *)buf)) ?: sizeof(unsigned long);
+		retval = put_user(data, (unsigned long *)buf) ?: sizeof(unsigned long);
 	}
 
 	current->state = TASK_RUNNING;

@@ -951,7 +951,7 @@ static void basket_name(struct inode * dir, struct dentry * entry)
 {
 	char prefix[32];
 	struct qstr prename = { prefix, 14 };
-	struct qstr entname = { entry->d_name, entry->d_len };
+	struct qstr entname = { entry->d_name.name, entry->d_name.len };
 	struct inode * inode;
 	struct dentry * old = entry; /* dummy */
 	int i;

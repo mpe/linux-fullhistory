@@ -15,7 +15,9 @@
 #include <linux/net.h>
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
+
 #include <asm/atomic.h>
+#include <asm/bitops.h>
 
 /* Prefixes for routines (having no effect), but indicate what
  * the routine may do. This can greatly ease reasoning about routines...
