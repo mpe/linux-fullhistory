@@ -44,7 +44,7 @@
 
 /* Hack until we have a macro check for mandatory locks. */
 #ifndef IS_ISMNDLK
-#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_ISVTX)) == S_ISGID)
+#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP)) == S_ISGID)
 #endif
 
 /* Check for dir entries '.' and '..' */
@@ -95,6 +95,7 @@ nfsd_iscovered(struct dentry *dentry, struct svc_export *exp)
 
 /*
  * Look up one component of a pathname.
+ * N.B. After this call _both_ fhp and resfh need an fh_put
  */
 int
 nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
@@ -139,6 +140,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 
 /*
  * Set various file attributes.
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
@@ -216,6 +218,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 /*
  * Open an existing file or directory.
  * The wflag argument indicates write access.
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
@@ -328,6 +331,7 @@ found:
 /*
  * Read data from a file. count must contain the requested read count
  * on entry. On return, *count contains the number of bytes actually read.
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
@@ -387,6 +391,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
 /*
  * Write data to a file.
  * The stable flag requests synchronous writes.
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
@@ -490,6 +495,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 /*
  * Create a file (regular, directory, device, fifo).
  * UNIX sockets not yet implemented.
+ * N.B. Every call to nfsd_create needs an fh_put for _both_ fhp and resfhp
  */
 int
 nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
@@ -578,6 +584,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * field and call notify_change.
  *
  * XXX Nobody calls this thing? -DaveM
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
@@ -615,6 +622,7 @@ out:
 /*
  * Read a symlink. On entry, *lenp must contain the maximum path length that
  * fits into the buffer. On return, it contains the true length.
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
@@ -647,6 +655,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 
 /*
  * Create a symlink and look up its inode
+ * N.B. After this call _both_ fhp and resfhp need an fh_put
  */
 int
 nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
@@ -697,6 +706,7 @@ out:
 
 /*
  * Create a hardlink
+ * N.B. After this call _both_ ffhp and tfhp need an fh_put
  */
 int
 nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
@@ -753,6 +763,7 @@ dput_and_out:
 }
 
 /* More "hidden treasure" from the generic VFS. -DaveM */
+/* N.B. VFS double_down was modified to fix a bug ... should use VFS one */
 static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
 {
 	if((unsigned long) s1 < (unsigned long) s2) {
@@ -769,6 +780,7 @@ static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
 
 /*
  * Rename a file
+ * N.B. After this call _both_ ffhp and tfhp need an fh_put
  */
 int
 nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
@@ -829,6 +841,7 @@ out_no_unlock:
 
 /*
  * Unlink a file or directory
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
@@ -951,6 +964,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 /*
  * Get file system stats
+ * N.B. After this call fhp needs an fh_put
  */
 int
 nfsd_statfs(struct svc_rqst *rqstp, struct svc_fh *fhp, struct statfs *stat)

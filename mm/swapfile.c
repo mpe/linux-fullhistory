@@ -21,6 +21,7 @@
 #include <linux/malloc.h>
 #include <linux/blkdev.h> /* for blk_size */
 #include <linux/vmalloc.h>
+#include <linux/dcache.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -169,7 +170,7 @@ void swap_free(unsigned long entry)
  * from the beginning for this process..
  */
 static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
-	pte_t *dir, unsigned int type, unsigned long page)
+	pte_t *dir, unsigned long entry, unsigned long page)
 {
 	pte_t pte = *dir;
 
@@ -178,24 +179,24 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 	if (pte_present(pte)) {
 		struct page *pg;
 		unsigned long page_nr = MAP_NR(pte_page(pte));
+		unsigned long pg_swap_entry;
+
 		if (page_nr >= max_mapnr)
 			return 0;
 		pg = mem_map + page_nr;
-		if (!in_swap_cache(pg))
+		if (!(pg_swap_entry = in_swap_cache(pg)))
 			return 0;
-		if (SWP_TYPE(in_swap_cache(pg)) != type)
+		if (SWP_TYPE(pg_swap_entry) != SWP_TYPE(entry))
 			return 0;
 		delete_from_swap_cache(pg);
 		set_pte(dir, pte_mkdirty(pte));
-		return 0;
-	}
-	if (SWP_TYPE(pte_val(pte)) != type)
-		return 0;
-	read_swap_page(pte_val(pte), (char *) page);
-	if (pte_val(*dir) != pte_val(pte)) {
+		if (pg_swap_entry != entry)
+			return 0;
 		free_page(page);
 		return 1;
 	}
+	if (pte_val(pte) != entry)
+		return 0;
 	set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
 	flush_tlb_page(vma, address);
 	++vma->vm_mm->rss;
@@ -205,7 +206,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 
 static inline int unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	unsigned long address, unsigned long size, unsigned long offset,
-	unsigned int type, unsigned long page)
+	unsigned long entry, unsigned long page)
 {
 	pte_t * pte;
 	unsigned long end;
@@ -224,7 +225,8 @@ static inline int unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		if (unuse_pte(vma, offset+address-vma->vm_start, pte, type, page))
+		if (unuse_pte(vma, offset+address-vma->vm_start, pte, entry, 
+				page))
 			return 1;
 		address += PAGE_SIZE;
 		pte++;
@@ -234,7 +236,7 @@ static inline int unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 
 static inline int unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	unsigned long address, unsigned long size,
-	unsigned int type, unsigned long page)
+	unsigned long entry, unsigned long page)
 {
 	pmd_t * pmd;
 	unsigned long offset, end;
@@ -253,7 +255,8 @@ static inline int unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
 	do {
-		if (unuse_pmd(vma, pmd, address, end - address, offset, type, page))
+		if (unuse_pmd(vma, pmd, address, end - address, offset, entry,
+				 page))
 			return 1;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
@@ -262,11 +265,12 @@ static inline int unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 }
 
 static int unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-	unsigned long start, unsigned long end,
-	unsigned int type, unsigned long page)
+			unsigned long entry, unsigned long page)
 {
+	unsigned long start = vma->vm_start, end = vma->vm_end;
+
 	while (start < end) {
-		if (unuse_pgd(vma, pgdir, start, end - start, type, page))
+		if (unuse_pgd(vma, pgdir, start, end - start, entry, page))
 			return 1;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
@@ -274,7 +278,8 @@ static int unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 	return 0;
 }
 
-static int unuse_process(struct mm_struct * mm, unsigned int type, unsigned long page)
+static int unuse_process(struct mm_struct * mm, unsigned long entry, 
+			unsigned long page)
 {
 	struct vm_area_struct* vma;
 
@@ -283,43 +288,70 @@ static int unuse_process(struct mm_struct * mm, unsigned int type, unsigned long
 	 */
 	if (!mm || mm == &init_mm)
 		return 0;
-	vma = mm->mmap;
-	while (vma) {
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
 		pgd_t * pgd = pgd_offset(mm, vma->vm_start);
-		if (unuse_vma(vma, pgd, vma->vm_start, vma->vm_end, type, page))
+		if (unuse_vma(vma, pgd, entry, page))
 			return 1;
-		vma = vma->vm_next;
+	}
+	return 0;
+}
+
+static unsigned long find_swap_entry(int type)
+{
+	struct swap_info_struct * p = &swap_info[type];
+	int i;
+
+	for (i = 1 ; i < p->max ; i++) {
+		if (p->swap_map[i] > 0 && p->swap_map[i] != 0x80)
+			return SWP_ENTRY(type, i);
 	}
 	return 0;
 }
 
 /*
- * To avoid races, we repeat for each process after having
- * swapped something in. That gets rid of a few pesky races,
- * and "swapoff" isn't exactly timing critical.
+ * We completely avoid races by reading each swap page in advance,
+ * and then search for the process using it.  All the necessary
+ * page table adjustments can then be made atomically.
  */
 static int try_to_unuse(unsigned int type)
 {
-	unsigned long page = get_free_page(GFP_KERNEL);
+	unsigned long page = 0;
 	struct task_struct *p;
+	unsigned long entry;
 
-	if (!page)
-		return -ENOMEM;
-again:
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		read_unlock(&tasklist_lock);
-		if(unuse_process(p->mm, type, page)) {
-			page = get_free_page(GFP_KERNEL);
-			if(!page)
+	/*
+	 * Find all swap entries in use ...
+	 */
+	while ((entry = find_swap_entry(type)) != 0) {
+		if (!page) {
+			page = __get_free_page(GFP_KERNEL);
+			if (!page)
 				return -ENOMEM;
-			goto again;
 		}
-		read_lock(&tasklist_lock);
-	}
-	read_unlock(&tasklist_lock);
 
-	free_page(page);
+		/*
+		 * Read in the page, and then free the swap page.
+		 */
+		read_swap_page(entry, (char *) page);
+
+		read_lock(&tasklist_lock);
+		for_each_task(p) {
+			if (unuse_process(p->mm, entry, page)) {
+				page = 0;
+				goto unlock;
+			}
+		}
+	unlock:
+		read_unlock(&tasklist_lock);
+		if (page) {
+			printk("try_to_unuse: didn't find entry %8lx\n",
+				entry);
+			swap_free(entry);
+		}
+	}
+
+	if (page)
+		free_page(page);
 	return 0;
 }
 
@@ -415,18 +447,25 @@ out:
 
 int get_swaparea_info(char *buf)
 {
+	char * page = (char *) __get_free_page(GFP_KERNEL);
 	struct swap_info_struct *ptr = swap_info;
 	int i, j, len = 0, usedswap;
 
-	len += sprintf(buf, "Filename\t\t\tType\t\tSize\tUsed\tPriority\n");
-	for (i = 0 ; i < nr_swapfiles ; i++, ptr++)
-		if (ptr->flags & SWP_USED) {
-			len += sprintf(buf + len, "%-31s ", ptr->swap_file->d_name.name);
+	if (!page)
+		return -ENOMEM;
 
-			if (ptr->swap_file)
+	len += sprintf(buf, "Filename\t\t\tType\t\tSize\tUsed\tPriority\n");
+	for (i = 0 ; i < nr_swapfiles ; i++, ptr++) {
+		if (ptr->flags & SWP_USED) {
+			char * path = d_path(ptr->swap_file, page, PAGE_SIZE);
+
+			len += sprintf(buf + len, "%-31s ", path);
+
+			if (!ptr->swap_device)
 				len += sprintf(buf + len, "file\t\t");
 			else
 				len += sprintf(buf + len, "partition\t");
+
 			usedswap = 0;
 			for (j = 0; j < ptr->max; ++j)
 				switch (ptr->swap_map[j]) {
@@ -439,6 +478,8 @@ int get_swaparea_info(char *buf)
 			len += sprintf(buf + len, "%d\t%d\t%d\n", ptr->pages << (PAGE_SHIFT - 10), 
 				usedswap << (PAGE_SHIFT - 10), ptr->prio);
 		}
+	}
+	free_page((unsigned long) page);
 	return len;
 }
 

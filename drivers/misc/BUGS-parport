@@ -1,12 +1,5 @@
 Currently known (or at least suspected) bugs in parport:
 
-o /proc/parport is untested under 2.0.XX
-
-o SCSI aborts for PPA under 2.0.29 [reported by jmr].  Under investigation.
-
-o make config (etc) allow you to select CONFIG_PNP_PARPORT=m, CONFIG_PPA=y -
-  the resulting kernel won't link.
-
 o IEEE1284 code does not do the terminating handshake after transfers, which
   seems to upset some devices.
 

@@ -123,6 +123,7 @@ struct lp_struct {
 	unsigned int lastcall;
 	unsigned int runchars;
 	unsigned int waittime;
+	unsigned int should_relinquish;
 	struct lp_stats stats;
 };
 

@@ -423,7 +423,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 	wait_table.nr = 0;
 	wait_table.entry = entry;
 
-	fdcount = do_poll(nfds, fds, &wait_table);
+	fdcount = do_poll(nfds, fds, timeout ? &wait_table : NULL);
 	current->timeout = 0;
 
 	free_wait(&wait_table);

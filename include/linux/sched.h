@@ -471,6 +471,16 @@ extern inline int suser(void)
 	return 0;
 }
 
+/*
+ * Routines for handling mm_structs
+ */
+extern struct mm_struct * mm_alloc(void);
+static inline void mmget(struct mm_struct * mm)
+{
+	mm->count++;
+}
+extern void mmput(struct mm_struct *);
+
 extern int  copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);
 extern void exit_thread(void);

@@ -1,8 +1,7 @@
-/* $Id: parport_share.c,v 1.1.2.2 1997/04/18 15:00:52 phil Exp $
- * Parallel-port resource manager code.
+/* Parallel-port resource manager code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
- *          Tim Waugh <tmw20@cam.ac.uk>
+ *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *	    Jose Renau <renau@acm.org>
  *
  * based on work by Grant Guenther <grant@torque.net>
@@ -19,6 +18,10 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
+
 #undef PARPORT_PARANOID
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
@@ -27,6 +30,10 @@ static int portcount = 0;
 /* Return a list of all the ports we know about. */
 struct parport *parport_enumerate(void)
 {
+#ifdef CONFIG_KERNELD
+	if (portlist == NULL)
+		request_module("parport_lowlevel");
+#endif
 	return portlist;
 }
 
@@ -93,7 +100,8 @@ void parport_unregister_port(struct parport *port)
 	struct parport *p;
 	kfree(port->name);
 	if (portlist == port) {
-		portlist = port->next;
+		if ((portlist = port->next) == NULL)
+			portlist_tail = NULL;
 	} else {
 		for (p = portlist; (p != NULL) && (p->next != port); 
 		     p=p->next);
@@ -184,6 +192,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		port->lurker = tmp;
 
 	inc_parport_count();
+	port->ops->inc_use_count();
 
 	return tmp;
 }
@@ -218,6 +227,7 @@ void parport_unregister_device(struct pardevice *dev)
 	kfree(dev);
 
 	dec_parport_count();
+	port->ops->dec_use_count();
 
 	/* If there are no more devices, put the port to sleep. */
 	if (!port->devices)

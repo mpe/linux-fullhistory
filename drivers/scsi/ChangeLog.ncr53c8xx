@@ -1,3 +1,28 @@
+Thu Aug 23 23:43 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5a
+	- Update Configure.help for inclusion in linux-2.1.51/2/3
+	- Use BASE_2 address from PCI config space instead of some 
+	  IO register for getting the on-board SRAM bus address.
+	- Remove error testing of pcibios_read/write functions.
+	  These functions are intended to be used for successfully 
+	  detected PCI devices. Expecting error condition from them 
+	  is nothing but paranoia.
+
+Thu Aug 21 23:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 2.5
+	- 53C860 chip support fix.
+	- Move the 'host_status' to the last DWORD of the CCB header.
+	  This header is copied back by the script processor. This 
+	  guarantees that the header is entirely copied back over 
+	  the PCI when the CPU completes a CCB.
+	- (re)read ISTAT prior to scanning CCBs for completion. This
+	  ensure that any posted buffer are flushed prior CCBs scan.
+	- Support for BIG ENDIAN cpu. Added by Cort <cort@cs.nmt.edu>.
+	  Initial patch did'nt support disconnections and tagged commands.
+	  I've completed the patch and it seems that all is ok now.
+	  Only some powerpc under 2.1.X is supported for the moment.
+	- Misc. trivial fixes and cleanups.
+
 Sat July 26 18:00 1997 Gerard Roudier (groudier@club-internet.fr)
 	* revision 2.4
 	Several clean-ups:

@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.4"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.5a"
 
 /*
 **	Check supported Linux versions
@@ -155,9 +155,11 @@
 #endif
 
 /*
- * Use normal IO if configured. Forced for alpha.
+ * Use normal IO if configured. Forced for alpha and ppc.
  */
-#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED) || defined(__alpha__)
+#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED)
+#define	SCSI_NCR_IOMAPPED
+#elif defined(__alpha__) || defined(__powerpc__)
 #define	SCSI_NCR_IOMAPPED
 #endif
 
@@ -316,6 +318,45 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #ifndef HOSTS_C
 
 /*
+**	IO functions definition for big/little endian support.
+**	For now, the NCR is only supported in little endian addressing mode, 
+**	and big endian byte ordering is only supported for the PPC.
+**	MMIO is not used on PPC.
+*/
+
+#ifdef	__BIG_ENDIAN
+
+#if	LINUX_VERSION_CODE < LinuxVersionCode(2,1,0)
+#error	"BIG ENDIAN byte ordering needs kernel version >= 2.1.0"
+#endif
+
+#ifdef	__powerpc__
+#define	inw_l2b		inw
+#define	inl_l2b		inl
+#define	outw_b2l	outw
+#define	outl_b2l	outl
+#else
+#error	"Support for BIG ENDIAN is only available for the PowerPC"
+#endif
+
+#else	/* Assumed x86 or alpha */
+
+#define	inw_raw		inw
+#define	inl_raw		inl
+#define	outw_raw	outw
+#define	outl_raw	outl
+#define	readw_raw	readw
+#define	readl_raw	readl
+#define	writew_raw	writew
+#define	writel_raw	writel
+
+#endif
+
+#ifdef	SCSI_NCR_BIG_ENDIAN
+#error	"The NCR in BIG ENDIAN adressing mode is not (yet) supported"
+#endif
+
+/*
 **	NCR53C8XX Device Ids
 */
 
@@ -416,7 +457,7 @@ typedef struct {
  FE_WIDE|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}		\
  ,									\
  {PCI_DEVICE_ID_NCR_53C860, 0xff, "860",  4,  8, 5,			\
- FE_WIDE|FE_ULTRA|FE_CLK80|FE_CACHE_SET|FE_BOF|FE_LDSTR|FE_PFEN|FE_RAM}	\
+ FE_ULTRA|FE_CLK80|FE_CACHE_SET|FE_BOF|FE_LDSTR|FE_PFEN}		\
  ,									\
  {PCI_DEVICE_ID_NCR_53C875, 0x01, "875",  7, 16, 5,			\
  FE_WIDE|FE_ULTRA|FE_CLK80|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\

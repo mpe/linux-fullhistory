@@ -109,7 +109,6 @@ static inline void init_once(struct inode * inode)
 {
 	memset(inode, 0, sizeof(*inode));
 	init_waitqueue(&inode->i_wait);
-	INIT_LIST_HEAD(&inode->i_dentry);
 	INIT_LIST_HEAD(&inode->i_hash);
 	sema_init(&inode->i_sem, 1);
 }

@@ -553,7 +553,7 @@ void put_unnamed_dev(kdev_t dev)
 static int d_umount(struct super_block * sb)
 {
 	struct dentry * root = sb->s_root;
-	struct dentry * covers = root->d_covers;
+	struct dentry * covered = root->d_covers;
 
 	if (root->d_count != 1)
 		return -EBUSY;
@@ -563,22 +563,23 @@ static int d_umount(struct super_block * sb)
 
 	sb->s_root = NULL;
 
-	covers->d_mounts = covers;
-	root->d_covers = root;
-
-	dput(covers);
+	if (covered != root) {
+		root->d_covers = root;
+		covered->d_mounts = covered;
+		dput(covered);
+	}
 	dput(root);
 	return 0;
 }
 
-static void d_mount(struct dentry *covers, struct dentry *dentry)
+static void d_mount(struct dentry *covered, struct dentry *dentry)
 {
-	if (covers->d_mounts != covers) {
+	if (covered->d_mounts != covered) {
 		printk("VFS: mount - already mounted\n");
 		return;
 	}
-	covers->d_mounts = dentry;
-	dentry->d_covers = covers;
+	covered->d_mounts = dentry;
+	dentry->d_covers = covered;
 }
 
 static int do_umount(kdev_t dev,int unmount_root)
@@ -1124,6 +1125,15 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 	}
 	ROOT_DEV = new_root_dev;
 	do_mount_root();
+	dput(old_root);
+	dput(old_pwd);
+#if 1
+	shrink_dcache();
+	printk("do_change_root: old root has d_count=%d\n", old_root->d_count);
+#endif
+	/*
+	 * Get the new mount directory
+	 */
 	dir_d = lookup_dentry(put_old, NULL, 1);
 	if (IS_ERR(dir_d)) {
 		error = PTR_ERR(dir_d);
@@ -1141,20 +1151,18 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		dput(dir_d);
 		error = -ENOTDIR;
 	}
-	printk("do_change_root: old root d_count=%d\n", old_root->d_count);
-	dput(old_root);
-	dput(old_pwd);
 	if (error) {
 		int umount_error;
 
 		printk(KERN_NOTICE "Trying to unmount old root ... ");
 		umount_error = do_umount(old_root_dev,1);
-		if (umount_error) printk(KERN_ERR "error %d\n",umount_error);
-		else {
+		if (!umount_error) {
 			printk("okay\n");
 			invalidate_buffers(old_root_dev);
+			return 0;
 		}
-		return umount_error ? error : 0;
+		printk(KERN_ERR "error %d\n",umount_error);
+		return error;
 	}
 	remove_vfsmnt(old_root_dev);
 	vfsmnt = add_vfsmnt(old_root_dev,"/dev/root.old",put_old);
@@ -1165,7 +1173,6 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		return 0;
 	}
 	printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
-	dput(old_root);
 	return -ENOMEM;
 }
 

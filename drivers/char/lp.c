@@ -36,11 +36,11 @@
 /* if you have more than 3 printers, remember to increase LP_NO */
 struct lp_struct lp_table[] =
 {
- {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, 0,
   {0}},
- {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, 0,
   {0}},
- {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, 0,
   {0}}
 };
 #define LP_NO 3
@@ -60,6 +60,41 @@ static char *dev_name = "lp";
 #undef LP_DEBUG
 #undef LP_READ_DEBUG
 
+static inline void lp_parport_release (int minor)
+{
+	parport_release (lp_table[minor].dev);
+	lp_table[minor].should_relinquish = 0;
+}
+
+static inline void lp_parport_claim (int minor)
+{
+	if (parport_claim (lp_table[minor].dev))
+		sleep_on (&lp_table[minor].lp_wait_q);
+}
+
+static inline void lp_schedule (int minor)
+{
+	if (lp_table[minor].should_relinquish) {
+		lp_parport_release (minor);
+		schedule ();
+		lp_parport_claim (minor);
+	}
+	else
+		schedule ();
+}
+
+
+static int lp_preempt (void *handle)
+{
+	struct lp_struct *lps = (struct lp_struct *)handle;
+
+	/* Just remember that someone wants the port */
+	lps->should_relinquish = 1;
+
+	/* Don't actually release the port now */
+	return 1;
+}
+
 static int lp_reset(int minor)
 {
 	w_ctr(minor, LP_PSELECP);
@@ -70,7 +105,8 @@ static int lp_reset(int minor)
 
 static inline int lp_char_polled(char lpchar, int minor)
 {
-	int status, wait = 0;
+	int status;
+	unsigned int wait = 0;
 	unsigned long count = 0;
 	struct lp_stats *stats;
 
@@ -78,7 +114,7 @@ static inline int lp_char_polled(char lpchar, int minor)
 		status = r_str(minor);
 		count++;
 		if (need_resched)
-			schedule();
+			lp_schedule (minor);
 	} while (!LP_READY(minor, status) && count < LP_CHAR(minor));
 
 	if (count == LP_CHAR(minor)) {
@@ -90,11 +126,11 @@ static inline int lp_char_polled(char lpchar, int minor)
 	stats->chars++;
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
-	while (wait != LP_WAIT(minor))
+	while (wait != LP_WAIT(minor)) /* FIXME: should be a udelay() */
 		wait++;
 	/* control port takes strobe high */
 	w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
-	while (wait)
+	while (wait)			/* FIXME: should be a udelay() */
 		wait--;
 	/* take strobe low */
 	w_ctr(minor, LP_PSELECP | LP_PINITP);
@@ -116,14 +152,14 @@ static inline int lp_char_polled(char lpchar, int minor)
 
 static inline int lp_char_interrupt(char lpchar, int minor)
 {
-	int wait;
+	unsigned int wait;
 	unsigned long count = 0;
 	unsigned char status;
 	struct lp_stats *stats;
 
 	do {
 		if(need_resched)
-			schedule();
+			lp_schedule (minor);
 		if ((status = r_str(minor)) & LP_PBUSY) {
 			if (!LP_CAREFUL_READY(minor, status))
 				return 0;
@@ -133,12 +169,12 @@ static inline int lp_char_interrupt(char lpchar, int minor)
 			/* must wait before taking strobe high, and after taking strobe
 			   low, according spec.  Some printers need it, others don't. */
 			wait = 0;
-			while (wait != LP_WAIT(minor))
-				wait++;
+			while (wait != LP_WAIT(minor)) /* FIXME: should be */
+				wait++;		       /* a udelay ()      */
 			/* control port takes strobe high */
 			w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
 			while (wait)
-				wait--;
+				wait--;	/* FIXME: should be a udelay() */
 			/* take strobe low */
 			w_ctr(minor, LP_PSELECP | LP_PINITP);
 			/* update waittime statistics */
@@ -164,7 +200,7 @@ static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct pardevice *pd = pb->cad;
 	struct lp_struct *lp_dev = (struct lp_struct *) pd->private;
 
-	if (lp_dev->lp_wait_q)
+	if (waitqueue_active (&lp_dev->lp_wait_q))
 		wake_up(&lp_dev->lp_wait_q);
 }
 
@@ -211,7 +247,8 @@ static inline int lp_write_interrupt(unsigned int minor, const char *buf, int co
 				}
 				LP_STAT(minor).sleeps++;
 				cli();
-				w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
+				enable_irq(lp->dev->port->irq);
+				w_ctr(minor, LP_PSELECP|LP_PINITP|LP_PINTEN);
 				status = r_str(minor);
 				if ((!(status & LP_PACK) || (status & LP_PBUSY))
 				    && LP_CAREFUL_READY(minor, status)) {
@@ -222,6 +259,7 @@ static inline int lp_write_interrupt(unsigned int minor, const char *buf, int co
 				lp_table[minor].runchars = 0;
 				current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
 				interruptible_sleep_on(&lp->lp_wait_q);
+
 				w_ctr(minor, LP_PSELECP | LP_PINITP);
 				sti();
 				if (current->signal & ~current->blocked) {
@@ -267,7 +305,7 @@ static inline int lp_write_polled(unsigned int minor, const char *buf, int count
 					return temp-buf?temp-buf:-ENOSPC;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+				lp_schedule (minor);
 			} else
 			if (!(status & LP_PSELECD)) {
 				printk(KERN_INFO "lp%d off-line\n", minor);
@@ -275,7 +313,7 @@ static inline int lp_write_polled(unsigned int minor, const char *buf, int count
 					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+				lp_schedule (minor);
 			} else
 			/* not offline or out of paper. on fire? */
 			if (!(status & LP_PERRORP)) {
@@ -284,7 +322,7 @@ static inline int lp_write_polled(unsigned int minor, const char *buf, int count
 					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
-				schedule();
+				lp_schedule (minor);
 			}
 
 			/* check for signals before going to sleep */
@@ -302,7 +340,7 @@ static inline int lp_write_polled(unsigned int minor, const char *buf, int count
 			lp_table[minor].runchars=0;
 			current->state = TASK_INTERRUPTIBLE;
 			current->timeout = jiffies + LP_TIME(minor);
-			schedule();
+			lp_schedule (minor);
 		}
 	}
 	return temp-buf;
@@ -322,16 +360,14 @@ static long lp_write(struct inode * inode, struct file * file,
  	/* Claim Parport or sleep until it becomes available
  	 * (see lp_wakeup() for details)
  	 */
- 	if (parport_claim(lp_table[minor].dev)) {
- 		sleep_on(&lp_table[minor].lp_wait_q);
- 		lp_table[minor].lp_wait_q = NULL;
- 	}
+ 	lp_parport_claim (minor);
+
  	if (LP_IRQ(minor) > 0)
  		retv = lp_write_interrupt(minor, buf, count);
   	else
  		retv = lp_write_polled(minor, buf, count);
  
- 	parport_release(lp_table[minor].dev);
+ 	lp_parport_release (minor);
  	return retv;
 }
 
@@ -370,10 +406,7 @@ static long lp_read(struct inode * inode, struct file * file,
  	/* Claim Parport or sleep until it becomes available
  	 * (see lp_wakeup() for details)
  	 */
- 	if (parport_claim(lp_table[minor].dev)) {
- 		sleep_on(&lp_table[minor].lp_wait_q);
- 		lp_table[minor].lp_wait_q = NULL;
- 	}
+ 	lp_parport_claim (minor);
 
 	temp=buf;	
 #ifdef LP_READ_DEBUG 
@@ -399,7 +432,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			udelay(50);
 			counter++;
 			if (need_resched)
-				schedule();
+				lp_schedule (minor);
 		} while ( (status == 0x40) && (counter < 20) );
 		if ( counter == 20 ) { /* Timeout */
 #ifdef LP_READ_DEBUG
@@ -418,7 +451,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			udelay(20);
 			counter++;
 			if (need_resched)
-				schedule();
+				lp_schedule (minor);
 		} while ( (status == 0) && (counter < 20) );
 		if (counter == 20) { /* Timeout */
 #ifdef LP_READ_DEBUG
@@ -434,7 +467,7 @@ static long lp_read(struct inode * inode, struct file * file,
 			}
 			current->state=TASK_INTERRUPTIBLE;
 			current->timeout=jiffies + LP_TIME(minor);
-			schedule();
+			lp_schedule (minor);
 		}
 		counter=0;
 		if (( i & 1) != 0) {
@@ -656,7 +689,7 @@ void lp_wakeup(void *ref)
 {
 	struct lp_struct *lp_dev = (struct lp_struct *) ref;
 
-	if (!lp_dev->lp_wait_q)
+	if (!waitqueue_active (&lp_dev->lp_wait_q))
 		return;	/* Wake up whom? */
 
 	/* Claim the Parport */
@@ -691,8 +724,8 @@ int lp_init(void)
 			    (parport[0] == -3 &&
 			     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
 				lp_table[count].dev =
-				  parport_register_device(pb, dev_name, NULL, 
-						lp_wakeup,
+				  parport_register_device(pb, dev_name, 
+						lp_preempt, lp_wakeup,
 						lp_interrupt, PARPORT_DEV_TRAN,
 						(void *) &lp_table[count]);
 				lp_table[count].flags |= LP_EXIST;

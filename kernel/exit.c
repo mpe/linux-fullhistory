@@ -446,13 +446,7 @@ static inline void __exit_mm(struct task_struct * tsk)
 		tsk->mm = &init_mm;
 		tsk->swappable = 0;
 		SET_PAGE_DIR(tsk, swapper_pg_dir);
-
-		/* free the old state - not used any more */
-		if (!--mm->count) {
-			exit_mmap(mm);
-			free_page_tables(mm);
-			kmem_cache_free(mm_cachep, mm);
-		}
+		mmput(mm);
 	}
 }
 
@@ -504,7 +498,8 @@ static void exit_notify(void)
 
 		p->p_pptr = p->p_opptr;
 		p->p_osptr = p->p_pptr->p_cptr;
-		p->p_osptr->p_ysptr = p;
+		if (p->p_osptr)
+			p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
 			notify_parent(p, p->exit_signal);

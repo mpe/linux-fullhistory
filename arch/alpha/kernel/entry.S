@@ -437,8 +437,8 @@ entUnaUser:
 	stq $13,32($30)
 	stq $14,40($30)
 	stq $15,48($30)
-	bis $31,$30,$19
 	lda $8,0x3fff
+	addq $30,56,$19
 	bic $30,$8,$8
 	jsr $26,do_entUnaUser
 	ldq $9,0($30)

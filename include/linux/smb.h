@@ -1,119 +1,76 @@
 /*
  *  smb.h
  *
- *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1997 by Volker Lendecke
  *
  */
 
 #ifndef _LINUX_SMB_H
 #define _LINUX_SMB_H
 
-#define SMB_PORT 139
-#define SMB_MAXNAMELEN 255
-#define SMB_MAXPATHLEN 1024
-
-#define SMB_DEF_MAX_XMIT 32768
-
-/* Allocate max. 1 page */
-#define TRANS2_MAX_TRANSFER (4096-17)
-
-#include <asm/types.h>
-#ifdef __KERNEL__
-typedef u8  byte;
-typedef u16 word;
-typedef u32 dword;
-#else
-typedef unsigned char byte;
-typedef unsigned short word;
-typedef unsigned long dword;
-#endif
-
-/* The following macros have been taken directly from Samba. Thanks,
-   Andrew! */
-
-#undef CAREFUL_ALIGNMENT
-
-/* we know that the 386 can handle misalignment and has the "right" 
-   byteorder */
-#if defined(__i386__)
-#define CAREFUL_ALIGNMENT 0
-#endif
-
-#ifndef CAREFUL_ALIGNMENT
-#define CAREFUL_ALIGNMENT 1
-#endif
-
-#define BVAL(buf,pos) (((u8 *)(buf))[pos])
-#define PVAL(buf,pos) ((unsigned)BVAL(buf,pos))
-#define BSET(buf,pos,val) (BVAL(buf,pos) = (val))
-
-
-#if CAREFUL_ALIGNMENT
-#define WVAL(buf,pos) (PVAL(buf,pos)|PVAL(buf,(pos)+1)<<8)
-#define DVAL(buf,pos) (WVAL(buf,pos)|WVAL(buf,(pos)+2)<<16)
-
-#define SSVALX(buf,pos,val) (BVAL(buf,pos)=(val)&0xFF,BVAL(buf,pos+1)=(val)>>8)
-#define SIVALX(buf,pos,val) (SSVALX(buf,pos,val&0xFFFF),SSVALX(buf,pos+2,val>>16))
-#define WSET(buf,pos,val) { word __val = (val); \
-	SSVALX((buf),(pos),((word)(__val))); }
-#define DSET(buf,pos,val) { dword __val = (val); \
-	SIVALX((buf),(pos),((dword)(__val))); }
-#else
-/* this handles things for architectures like the 386 that can handle
-   alignment errors */
-/*
-   WARNING: This section is dependent on the length of word and dword
-   being correct 
-*/
-#define WVAL(buf,pos) (*(word *)((char *)(buf) + (pos)))
-#define DVAL(buf,pos) (*(dword *)((char *)(buf) + (pos)))
-#define WSET(buf,pos,val) WVAL(buf,pos)=((word)(val))
-#define DSET(buf,pos,val) DVAL(buf,pos)=((dword)(val))
-#endif
-
-
-/* where to find the base of the SMB packet proper */
-#define smb_base(buf) ((byte *)(((byte *)(buf))+4))
-
-#define LANMAN1
-#define LANMAN2
-#define NT1
+#include <linux/types.h>
 
 enum smb_protocol { 
-	PROTOCOL_NONE, 
-	PROTOCOL_CORE, 
-	PROTOCOL_COREPLUS, 
-	PROTOCOL_LANMAN1, 
-	PROTOCOL_LANMAN2, 
-	PROTOCOL_NT1 
+	SMB_PROTOCOL_NONE, 
+	SMB_PROTOCOL_CORE, 
+	SMB_PROTOCOL_COREPLUS, 
+	SMB_PROTOCOL_LANMAN1, 
+	SMB_PROTOCOL_LANMAN2, 
+	SMB_PROTOCOL_NT1 
 };
 
 enum smb_case_hndl {
-	CASE_DEFAULT,
-	CASE_LOWER,
-	CASE_UPPER
+	SMB_CASE_DEFAULT,
+	SMB_CASE_LOWER,
+	SMB_CASE_UPPER
+};
+
+struct smb_dskattr {
+        __u16 total;
+        __u16 allocblocks;
+        __u16 blocksize;
+        __u16 free;
+};
+
+struct smb_conn_opt {
+
+        /* The socket */
+	unsigned int fd;
+
+	enum smb_protocol protocol;
+	enum smb_case_hndl case_handling;
+
+	/* Connection-Options */
+
+	__u32              max_xmit;
+	__u16              server_uid;
+	__u16              tid;
+
+        /* The following are LANMAN 1.0 options */
+        __u16              secmode;
+        __u16              maxmux;
+        __u16              maxvcs;
+        __u16              rawmode;
+        __u32              sesskey;
+
+	/* The following are NT LM 0.12 options */
+	__u32              maxraw;
+	__u32              capabilities;
+	__u16              serverzone;
 };
 
 #ifdef __KERNEL__
 
-enum smb_conn_state {
-        CONN_VALID,             /* everything's fine */
-        CONN_INVALID,           /* Something went wrong, but did not
-                                   try to reconnect yet. */
-        CONN_RETRIED            /* Tried a reconnection, but was refused */
-};
-
-struct smb_dskattr {
-        word total;
-        word allocblocks;
-        word blocksize;
-        word free;
-};
+#define SMB_MAXNAMELEN 255
+#define SMB_MAXPATHLEN 1024
 
 /*
  * Contains all relevant data on a SMB networked file.
  */
-struct smb_dirent {
+struct smb_fattr {
+
+	__u16 attr;
 
 	unsigned long	f_ino;
 	umode_t		f_mode;
@@ -127,16 +84,40 @@ struct smb_dirent {
 	time_t		f_ctime;
 	unsigned long	f_blksize;
 	unsigned long	f_blocks;
-	
-        int             opened; /* is it open on the fileserver? */
-	word            fileid;	/* What id to handle a file with? */
-	word            attr;	/* Attribute fields, DOS value */
-
-	unsigned short  access;	/* Access bits. */
-        unsigned long   f_pos;	/* File position. (For readdir.) */
-	unsigned char   name[SMB_MAXNAMELEN+1];
-	int             len;	/* namelength */
 };
 
-#endif  /* __KERNEL__ */
-#endif  /* _LINUX_SMB_H */
+struct smb_dirent {
+	struct smb_fattr attr;
+
+	int f_pos;
+	int len;
+	__u8 name[SMB_MAXNAMELEN];
+};
+
+enum smb_conn_state {
+        CONN_VALID,             /* everything's fine */
+        CONN_INVALID,           /* Something went wrong, but did not
+                                   try to reconnect yet. */
+        CONN_RETRIED            /* Tried a reconnection, but was refused */
+};
+
+/*
+ * The readdir cache size controls how many directory entries are cached.
+ */
+#define SMB_READDIR_CACHE_SIZE        64
+
+#define SMB_SUPER_MAGIC               0x517B
+
+#define SMB_SERVER(inode)    (&(inode->i_sb->u.smbfs_sb))
+#define SMB_INOP(inode)      (&(inode->u.smbfs_i))
+
+#define SMB_HEADER_LEN   37     /* includes everything up to, but not
+                                 * including smb_bcc */
+#define SMB_DEF_MAX_XMIT 32768
+#define SMB_INITIAL_PACKET_SIZE 4000
+
+/* Allocate max. 1 page */
+#define TRANS2_MAX_TRANSFER (4096-17)
+
+#endif
+#endif

@@ -7,6 +7,13 @@
  *
  * 10 Apr 1996	Added silly rename for unlink	--okir
  * 28 Sep 1996	Improved directory cache --okir
+ * 23 Aug 1997  Claus Heine claus@momo.math.rwth-aachen.de 
+ *              Re-implemented silly rename for unlink, newly implemented
+ *              silly rename for nfs_rename() following the suggestions
+ *              of Olaf Kirch (okir) found in this file.
+ *              Following Linus comments on my original hack, this version
+ *              depends only on the dcache stuff and doesn't touch the inode
+ *              layer (iput() and friends).
  */
 
 #include <linux/sched.h>
@@ -349,10 +356,13 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 	return time < max;
 }
 
+static void nfs_silly_delete(struct dentry *);
+
 static struct dentry_operations nfs_dentry_operations = {
 	nfs_lookup_revalidate,
 	0,			/* d_hash */
 	0,			/* d_compare */
+	nfs_silly_delete,
 };
 
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
@@ -378,7 +388,6 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 
 	inode = NULL;
 	if (!error) {
-		error = -ENOENT;
 		inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
 		if (!inode)
 			return -EACCES;
@@ -530,9 +539,150 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return 0;
 }
 
-/*
- * We should do silly-rename here, but I'm too lazy to fix
- * up the directory entry implications of it..
+
+/*  Note: we copy the code from lookup_dentry() here, only: we have to
+ *  omit the directory lock. We are already the owner of the lock when
+ *  we reach here. And "down(&dir->i_sem)" would make us sleep forever
+ *  ('cause WE have the lock)
+ * 
+ *  VERY IMPORTANT: calculate the hash for this dentry!!!!!!!!
+ *  Otherwise the cached lookup DEFINITELY WILL fail. And a new dentry
+ *  is created. Without the DCACHE_NFSFS_RENAMED flag. And with d_count
+ *  == 1. And trouble.
+ *
+ *  Concerning my choice of the temp name: it is just nice to have
+ *  i_ino part of the temp name, as this offers another check whether
+ *  somebody attempts to remove the "silly renamed" dentry
+ *  itself. Which is something that I consider evil. Your opinion may
+ *  vary.
+ *  BUT:
+ *  Now that I compute the hash value right, it should be possible to simply
+ *  check for the DCACHE_NFSFS_RENAMED flag in dentry->d_flag instead of
+ *  doing the string compare.
+ *  WHICH MEANS:
+ *  This offers the opportunity to shorten the temp name. Currently, I use
+ *  the hex representation of i_ino + the hex value of jiffies. This
+ *  sums up to as much as 36 characters for a 64 bit machine, and needs
+ *  20 chars on a 32 bit machine. Have a look at jiffiesize etc.
+ *  QUINTESSENCE
+ *  The use of i_ino is simply cosmetic. All we need is a unique temp
+ *  file name for the .nfs files. The hex representation of "jiffies"
+ *  seemed to be adequate. And as we retry in case such a file already
+ *  exists we are guaranteed to succed (after some jiffies have passed
+ *  by :)
+ */
+
+static
+struct dentry *nfs_silly_lookup(struct dentry *parent, char *silly, int slen)
+{
+	struct qstr    sqstr;
+	struct dentry *sdentry;
+	int i, error;
+
+	sqstr.name = silly;
+	sqstr.len  = slen;
+	sqstr.hash = init_name_hash();
+	for (i= 0; i < slen; i++)
+		sqstr.hash = partial_name_hash(silly[i], sqstr.hash);
+	sqstr.hash = end_name_hash(sqstr.hash);
+	sdentry = d_lookup(parent, &sqstr);
+	if (!sdentry) {
+		sdentry = d_alloc(parent, &sqstr);
+		if (sdentry == NULL)
+			return ERR_PTR(-ENOMEM);
+		error = nfs_lookup(parent->d_inode, sdentry);
+		if (error) {
+			dput(sdentry);
+			return ERR_PTR(error);
+		}
+	}
+	return sdentry;
+}
+
+static int nfs_sillyrename(struct inode *dir, struct dentry *dentry)
+{
+	static unsigned int sillycounter = 0;
+	const int      i_inosize  = sizeof(dir->i_ino)*2;
+	const int      countersize = sizeof(sillycounter)*2;
+	const int      slen       = strlen(".nfs") + i_inosize + countersize;
+	char           silly[slen+1];
+	int            error;
+	struct dentry *sdentry;
+
+	if (dentry->d_count == 1) {
+		return -EIO;  /* No need to silly rename. */
+	}
+
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		return -EBUSY; /* don't allow to unlink silly inode -- nope,
+				* think a bit: silly DENTRY, NOT inode --
+				* itself
+				*/
+	}
+
+	sprintf(silly, ".nfs%*.*lx",
+		i_inosize, i_inosize, dentry->d_inode->i_ino);
+
+	sdentry = NULL;
+	do {
+		char *suffix = silly + slen - countersize;
+
+		dput(sdentry);
+		sillycounter++;
+		sprintf(suffix, "%*.*x", countersize, countersize, sillycounter);
+
+		dfprintk(VFS, "trying to rename %s to %s\n",
+			 dentry->d_name.name, silly);
+		
+		sdentry = nfs_silly_lookup(dentry->d_parent, silly, slen);
+		if (IS_ERR(sdentry)) {
+			return -EIO; /* FIXME ? */
+		}		
+	} while(sdentry->d_inode != NULL); /* need negative lookup */
+
+	error = nfs_proc_rename(NFS_SERVER(dir),
+				NFS_FH(dir), dentry->d_name.name,
+				NFS_FH(dir), silly);
+	if (error) {
+		dput(sdentry);
+		return error;
+	}
+	nfs_invalidate_dircache(dir);
+	d_move(dentry, sdentry);
+	dput(sdentry);
+	dentry->d_flags |= DCACHE_NFSFS_RENAMED;
+
+	return 0; /* don't unlink */
+}
+
+static void nfs_silly_delete(struct dentry *dentry)
+{
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		struct inode *dir = dentry->d_parent->d_inode;
+		int error;
+		
+		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
+
+		/* Unhash it first */
+		d_drop(dentry);
+		dfprintk(VFS, "trying to unlink %s\n", dentry->d_name.name);
+		error = nfs_proc_remove(NFS_SERVER(dir),
+					NFS_FH(dir), dentry->d_name.name);
+		if (error < 0)
+			printk("NFS " __FUNCTION__ " failed (err = %d)\n",
+			       -error);
+		dentry->d_inode->i_nlink --;
+		nfs_invalidate_dircache(dir);
+	}
+}
+
+/*  We do silly rename. In case sillyrename() returns -EBUSY, the inode
+ *  belongs to an active ".nfs..." file and we return -EBUSY.
+ *
+ *  If sillyrename() returns 0, we do nothing, otherwise we unlink.
+ * 
+ *  inode->i_nlink is updated here rather than waiting for the next
+ *  nfs_refresh_inode() for cosmetic reasons only.
  */
 static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 {
@@ -549,12 +699,21 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), dentry->d_name.name);
-	if (error)
-		return error;
+	error = nfs_sillyrename(dir, dentry);
 
-	nfs_invalidate_dircache(dir);
-	d_delete(dentry);
+	if (error == -EBUSY) {
+		return -EBUSY;
+	} else if (error < 0) {
+		error = nfs_proc_remove(NFS_SERVER(dir),
+					NFS_FH(dir), dentry->d_name.name);
+		if (error < 0)
+			return error;
+		
+		dentry->d_inode->i_nlink --;
+		nfs_invalidate_dircache(dir);
+		d_delete(dentry);
+	}
+
 	return 0;
 }
 
@@ -588,7 +747,7 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 		return error;
 
 	nfs_invalidate_dircache(dir);
-	/*  this looks _funny_ doesn't it? But: nfs_proc_symlynk()
+	/*  this looks _funny_ doesn't it? But: nfs_proc_symlink()
 	 *  only fills in sattr, not fattr. Thus nfs_fhget() cannot be
 	 *  called, it would be pointless, without a valid fattr
 	 *  argument. Other possibility: call nfs_proc_lookup()
@@ -623,7 +782,8 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
 		return error;
 
 	nfs_invalidate_dircache(dir);
-	inode->i_count++;
+	inode->i_count ++;
+	inode->i_nlink ++; /* no need to wait for nfs_refresh_inode() */
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -634,8 +794,17 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
  * different file handle for the same inode after a rename (e.g. when
  * moving to a different directory). A fail-safe method to do so would
  * be to look up old_dir/old_name, create a link to new_dir/new_name and
- * rename the old file using the silly_rename stuff. This way, the original
+ * rename the old file using the sillyrename stuff. This way, the original
  * file in old_dir will go away when the last process iput()s the inode.
+ *
+ * FIXED.
+ * 
+ * It actually works quite well. One needs to have the possibility for
+ * at least one ".nfs..." file in each directory the file ever gets
+ * moved or linked to which happens automagically with the new
+ * implementation that only depends on the dcache stuff instead of
+ * using the inode layer
+ *
  */
 static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		      struct inode *new_dir, struct dentry *new_dentry)
@@ -659,10 +828,22 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (old_dentry->d_name.len > NFS_MAXNAMLEN || new_dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	error = nfs_proc_rename(NFS_SERVER(old_dir),
-		NFS_FH(old_dir), old_dentry->d_name.name,
-		NFS_FH(new_dir), new_dentry->d_name.name);
+	if (new_dir != old_dir) {
+		error = nfs_sillyrename(old_dir, old_dentry);
 
+		if (error == -EBUSY) {
+			return -EBUSY;
+		} else if (error == 0) { /* did silly rename stuff */
+			error = nfs_link(old_dentry->d_inode,
+					 new_dir, new_dentry);
+			
+			return error;
+		}
+		/* no need for silly rename, proceed as usual */
+	}
+	error = nfs_proc_rename(NFS_SERVER(old_dir),
+				NFS_FH(old_dir), old_dentry->d_name.name,
+				NFS_FH(new_dir), new_dentry->d_name.name);
 	if (error)
 		return error;
 
@@ -737,3 +918,10 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	} else
 		inode->i_op = NULL;
 }
+
+/*
+ * Local variables:
+ *  version-control: t
+ *  kept-new-versions: 5
+ * End:
+ */

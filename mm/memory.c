@@ -143,8 +143,7 @@ void clear_page_tables(struct task_struct * tsk)
 
 /*
  * This function frees up all page tables of a process when it exits. It
- * is the same as "clear_page_tables()", except it also changes the process'
- * page table directory to the kernel page tables and then frees the old
+ * is the same as "clear_page_tables()", except it also frees the old
  * page table directory.
  */
 void free_page_tables(struct mm_struct * mm)
@@ -153,13 +152,15 @@ void free_page_tables(struct mm_struct * mm)
 	pgd_t * page_dir;
 
 	page_dir = mm->pgd;
-	if (!page_dir || page_dir == swapper_pg_dir) {
-		printk("Trying to free kernel page-directory: not good\n");
-		return;
+	if (page_dir) {
+		if (page_dir == swapper_pg_dir) {
+			printk("free_page_tables: Trying to free kernel pgd\n");
+			return;
+		}
+		for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
+			free_one_pgd(page_dir + i);
+		pgd_free(page_dir);
 	}
-	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
-		free_one_pgd(page_dir + i);
-	pgd_free(page_dir);
 }
 
 int new_page_tables(struct task_struct * tsk)

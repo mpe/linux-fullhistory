@@ -269,74 +269,78 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 	return 0;
 }
 
+/*
+ * Select the task with maximal swap_cnt and try to swap out a page.
+ * N.B. This function returns only 0 or 1.  Return values != 1 from
+ * the lower level routines result in continued processing.
+ */
 static int swap_out(unsigned int priority, int dma, int wait)
 {
-	static int skip_factor = 0;
-	int limit = nr_tasks - 1;
-	int loop, counter, i;
-	struct task_struct *p;
+	struct task_struct * p, * pbest;
+	int counter, assign, max_cnt;
 
+	/* 
+	 * We make one or two passes through the task list, indexed by 
+	 * assign = {0, 1}:
+	 *   Pass 1: select the swappable task with maximal swap_cnt.
+	 *   Pass 2: assign new swap_cnt values, then select as above.
+	 * With this approach, there's no need to remember the last task
+	 * swapped out.  If the swap-out fails, we clear swap_cnt so the 
+	 * task won't be selected again until all others have been tried.
+	 */
 	counter = ((PAGEOUT_WEIGHT * nr_tasks) >> 10) >> priority;
-	if(skip_factor > nr_tasks)
-		skip_factor = 0;
-
-	read_lock(&tasklist_lock);
-	p = init_task.next_task;
-	i = skip_factor;
-	while(i--)
-		p = p->next_task;
-	for(; counter >= 0; counter--) {
-		/* Check if task is suitable for swapping. */
-		loop = 0;
-		while(1) {
-			if(!--limit) {
-				limit = nr_tasks - 1;
-				/* See if all processes are unswappable or
-				 * already swapped out.
+	for (; counter >= 0; counter--) {
+		assign = 0;
+		max_cnt = 0;
+		pbest = NULL;
+	select:
+		read_lock(&tasklist_lock);
+		p = init_task.next_task;
+		for (; p != &init_task; p = p->next_task) {
+			if (!p->swappable)
+				continue;
+	 		if (p->mm->rss <= 0)
+				continue;
+			if (assign) {
+				/* 
+				 * If we didn't select a task on pass 1, 
+				 * assign each task a new swap_cnt.
+				 * Normalise the number of pages swapped
+				 * by multiplying by (RSS / 1MB)
 				 */
-				if (loop)
-					goto out;
-				loop = 1;
+				p->swap_cnt = AGE_CLUSTER_SIZE(p->mm->rss);
 			}
-			if (p->swappable && p->mm->rss)
-				break;
-			if((p = p->next_task) == &init_task)
-				p = p->next_task;
+			if (p->swap_cnt > max_cnt) {
+				max_cnt = p->swap_cnt;
+				pbest = p;
+			}
 		}
-		skip_factor++;
-
-		/* Determine the number of pages to swap from this process. */
-		if (!p->swap_cnt) {
-			/* Normalise the number of pages swapped by
-			   multiplying by (RSS / 1MB) */
-			p->swap_cnt = AGE_CLUSTER_SIZE(p->mm->rss);
-		}
-		if (!--p->swap_cnt)
-			skip_factor++;
 		read_unlock(&tasklist_lock);
+		if (!pbest) {
+			if (!assign) {
+				assign = 1;
+				goto select;
+			}
+			goto out;
+		}
+		pbest->swap_cnt--;
 
-		switch (swap_out_process(p, dma, wait)) {
+		switch (swap_out_process(pbest, dma, wait)) {
 		case 0:
-			if (p->swap_cnt)
-				skip_factor++;
+			/*
+			 * Clear swap_cnt so we don't look at this task
+			 * again until we've tried all of the others.
+			 * (We didn't block, so the task is still here.)
+			 */
+			pbest->swap_cnt = 0;
 			break;
 		case 1:
 			return 1;
 		default:
 			break;
 		};
-
-		/* Whoever we swapped may not even exist now, in fact we cannot
-		 * assume anything about the list we were searching previously.
-		 */
-		read_lock(&tasklist_lock);
-		p = init_task.next_task;
-		i = skip_factor;
-		while(i--)
-			p = p->next_task;
 	}
 out:
-	read_unlock(&tasklist_lock);
 	return 0;
 }
 
@@ -362,9 +366,6 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 				return 1;
 			state = 1;
 		case 1:
-			shrink_dcache();
-			state = 2;
-		case 2:
 			/*
 			 * We shouldn't have a priority here:
 			 * If we're low on memory we should
@@ -373,11 +374,11 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 			 */
 			if (kmem_cache_reap(0, dma, wait))
 				return 1;
-			state = 3;
-		case 3:
+			state = 2;
+		case 2:
 			if (shm_swap(i, dma))
 				return 1;
-			state = 4;
+			state = 3;
 		default:
 			if (swap_out(i, dma, wait))
 				return 1;
@@ -477,31 +478,23 @@ int kswapd(void *unused)
 
 void swap_tick(void)
 {
-	int	want_wakeup = 0;
-	static int	last_wakeup_low = 0;
+	int want_wakeup = 0, memory_low = 0;
+	int pages = nr_free_pages + atomic_read(&nr_async_pages);
 
-	if ((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_low) {
-		if (last_wakeup_low)
-			want_wakeup = jiffies >= next_swap_jiffies;
-		else
-			last_wakeup_low = want_wakeup = 1;
-	}
-	else if (((nr_free_pages + atomic_read(&nr_async_pages)) < free_pages_high) && 
-	         jiffies >= next_swap_jiffies) {
-		last_wakeup_low = 0;
+	if (pages < free_pages_low)
+		memory_low = want_wakeup = 1;
+	else if (pages < free_pages_high && jiffies >= next_swap_jiffies)
 		want_wakeup = 1;
-	}
 
 	if (want_wakeup) { 
 		if (!kswapd_awake) {
 			wake_up(&kswapd_wait);
 			need_resched = 1;
 		}
-		/* low on memory, we need to start swapping soon */
-		if(last_wakeup_low) 
-			next_swap_jiffies = jiffies;
-		else  
-			next_swap_jiffies = jiffies + swapout_interval;
+		/* Set the next wake-up time */
+		next_swap_jiffies = jiffies;
+		if (!memory_low) 
+			next_swap_jiffies += swapout_interval;
 	}
 	timer_active |= (1<<SWAP_TIMER);
 }

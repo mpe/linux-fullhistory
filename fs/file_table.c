@@ -43,26 +43,6 @@ static inline void put_inuse(struct file *file)
 	file->f_pprev = &inuse_filps;
 }
 
-/* Get more free filp's. */
-static int grow_files(void)
-{
-	int i = 16;
-
-	while(i--) {
-		struct file * file = kmem_cache_alloc(filp_cache, SLAB_KERNEL);
-		if(!file) {
-			if(i == 15)
-				return 0;
-			goto got_some;
-		}
-
-		insert_file_free(file);
-		nr_files++;
-	}
-got_some:
-	return 1;
-}
-
 void file_table_init(void)
 {
 	filp_cache = kmem_cache_create("filp", sizeof(struct file),
@@ -78,28 +58,36 @@ void file_table_init(void)
  */
 struct file * get_empty_filp(void)
 {
+	static int old_max = 0;
 	struct file * f;
 
-again:
-	if((f = free_filps) != NULL) {
-		remove_filp(f);
-		memset(f, 0, sizeof(*f));
-		f->f_count = 1;
-		f->f_version = ++event;
-		put_inuse(f);
-	} else {
-		int max = max_files;
-
-		/* Reserve a few files for the super-user.. */
-		if (current->euid)
-			max -= 10;
-
-		if (nr_files < max && grow_files())
-			goto again;
-
-		/* Big problems... */
-	}
+	f = free_filps;
+	if (!f) 
+		goto get_more;
+	remove_filp(f);
+got_one:
+	memset(f, 0, sizeof(*f));
+	f->f_count = 1;
+	f->f_version = ++event;
+	put_inuse(f);
 	return f;
+
+get_more:
+	/* Reserve a few files for the super-user.. */
+	if (nr_files < (current->euid ? max_files - 10 : max_files)) {
+		f = kmem_cache_alloc(filp_cache, SLAB_KERNEL);
+		if (f) {
+			nr_files++;
+			goto got_one;
+		}
+		/* Big problems... */
+		printk("VFS: filp allocation failed\n");
+
+	} else if (max_files > old_max) {
+		printk("VFS: file-max limit %d reached\n", max_files);
+		old_max = max_files;
+	}
+	return NULL;
 }
 
 /*

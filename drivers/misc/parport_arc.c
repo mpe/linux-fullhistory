@@ -1,7 +1,6 @@
-/* $Id$
- * Parallel-port routines for ARC onboard hardware.
+/* Parallel-port routines for ARC onboard hardware.
  *
- * Author: Phil Blundell <pjb27@cam.ac.uk>
+ * Author: Phil Blundell <Philip.Blundell@pobox.com>
  */
 
 #include <linux/tasks.h>
@@ -35,6 +34,20 @@ static void arc_write_data(struct parport *p, unsigned int data)
 static unsigned int arc_read_data(struct parport *p)
 {
 	return data_copy;
+}
+
+static void arc_inc_use_count(void)
+{
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+}
+
+static void arc_dec_use_count(void)
+{
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 }
 
 static struct parport_operations arc_ops = 
@@ -72,5 +85,8 @@ static struct parport_operations arc_ops =
 
 	arc_enable_irq,
 	arc_disable_irq,
-	arc_examine_irq 
+	arc_examine_irq,
+
+	arc_inc_use_count,
+	arc_dec_use_count
 };

@@ -455,15 +455,6 @@ static struct dentry *romfs_follow_link(struct inode *inode, struct dentry *base
 	int len, cnt;
 	struct dentry *dentry;
 
-	/* Note: 2.1.46+ calls this for our strange directories...
-	 * What I do is not really right, but I like it better for now,
-	 * than a separate i_op table.  Anyway, our directories won't
-	 * have multiple "real" links to them, so it maybe loses nothing.  */
-	if (!S_ISLNK(inode->i_mode)) {
-		dentry = dget(i_dentry(inode));
-		goto outnobuf;
-	}
-
 	len = inode->i_size;
 
 	dentry = ERR_PTR(-EAGAIN);			/* correct? */
@@ -548,10 +539,31 @@ static struct file_operations romfs_dir_operations = {
  * will protect from type mismatch.
  */
 
-static struct inode_operations romfs_dirlink_inode_operations = {
+static struct inode_operations romfs_dir_inode_operations = {
 	&romfs_dir_operations,
 	NULL,			/* create */
 	romfs_lookup,		/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+};
+
+static struct inode_operations romfs_link_inode_operations = {
+	NULL,			/* no file operations on symlinks */
+	NULL,			/* create */
+	NULL,			/* lookup */
 	NULL,			/* link */
 	NULL,			/* unlink */
 	NULL,			/* symlink */
@@ -578,9 +590,9 @@ static mode_t romfs_modemap[] =
 static struct inode_operations *romfs_inoops[] =
 {
 	NULL,				/* hardlink, handled elsewhere */
-	&romfs_dirlink_inode_operations,
+	&romfs_dir_inode_operations,
 	&romfs_file_inode_operations,
-	&romfs_dirlink_inode_operations,
+	&romfs_link_inode_operations,
 	&blkdev_inode_operations,	/* standard handlers */
 	&chrdev_inode_operations,
 	NULL,				/* socket */

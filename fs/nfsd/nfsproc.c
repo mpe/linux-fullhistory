@@ -50,6 +50,7 @@ nfsd_proc_null(struct svc_rqst *rqstp, void *argp, void *resp)
 
 /*
  * Get a file's attributes
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
@@ -63,6 +64,7 @@ nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 
 /*
  * Set a file's attributes
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
@@ -76,6 +78,7 @@ nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 
 /*
  * Look up a path name component
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
@@ -119,6 +122,7 @@ nfsd_proc_readlink(struct svc_rqst *rqstp, struct nfsd_fhandle     *argp,
 
 /*
  * Read a portion of a file.
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
@@ -156,6 +160,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 
 /*
  * Write data to a file
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
@@ -181,6 +186,7 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
  * and the actual create() call, but one could even consider this a
  * feature because this only happens if someone else creates the file
  * at the same time.
+ * N.B. After this call _both_ argp->fh and resp->fh need an fh_put
  */
 static int
 nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
@@ -188,7 +194,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 {
 	struct inode	*dirp, *inode = NULL;
 	struct iattr	*attr;
-	svc_fh		*dirfhp, *newfhp = NULL;
+	svc_fh		*dirfhp, *newfhp;
 	int		nfserr, type, mode;
 	int		rdonly = 0, exists;
 	dev_t		rdev = NODEV;
@@ -202,7 +208,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	/* Get the directory inode */
 	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
-		RETURN(nfserr);
+		goto done; /* must fh_put dirfhp even on error */
 	dirp = dirfhp->fh_handle.fh_dentry->d_inode;
 
 	/* Check for MAY_WRITE separately. */
@@ -211,10 +217,8 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 				 MAY_WRITE);
 	if (nfserr == nfserr_rofs) {
 		rdonly = 1;	/* Non-fatal error for echo > /dev/null */
-	} else if (nfserr) {
-		fh_put(dirfhp);
-		RETURN(nfserr);
-	}
+	} else if (nfserr)
+		goto done;
 
 	/* First, check if the file already exists.  */
 	exists = !nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
@@ -378,6 +382,7 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 
 /*
  * Make directory. This operation is not idempotent.
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
@@ -389,6 +394,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		SVCFH_DENTRY(&argp->fh),
 		argp->name);
 
+	/* N.B. what about the dentry count?? */
 	resp->fh.fh_dverified = 0; /* paranoia */
 	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				    &argp->attrs, S_IFDIR, 0, &resp->fh);

@@ -952,11 +952,14 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	file.f_reada = 0;
 
 	/*
-	 * WSH: could vm_area struct (and inode) be released while writing?
+	 * If a task terminates while we're swapping the page, the vma and
+	 * and dentry could be released ... increment the count to be safe.
 	 */
+	dget(dentry);
 	down(&inode->i_sem);
 	result = do_write_page(inode, &file, (const char *) page, offset);
 	up(&inode->i_sem);
+	dput(dentry);
 	return result;
 }
 

@@ -1,5 +1,5 @@
 Ioctl Numbers
-7 Aug 1997
+1 Sep 1997
 Michael Chastain
 <mec@shout.net>
 
@@ -106,6 +106,8 @@ Code	Seq#	Include File		Comments
 'u'	all	linux/smb_fs.h
 'v'	all	linux/ext2_fs.h
 'w'	all	CERN SCI driver		in development
+'z'	00-3F	CAN bus card		in development:
+					<mailto:hdstich@connectu.ulm.circular.de>
 0x89	00-0F	asm-i386/sockios.h
 0x89	10-DF	linux/sockios.h
 0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range

@@ -19,6 +19,9 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 
+/* For managing the dcache */
+extern int nr_free_pages, free_pages_low;
+
 /*
  * This is the single most critical data structure when it comes
  * to the dcache: the hashtable for lookups. Somebody should try
@@ -72,13 +75,13 @@ repeat:
 		dentry->d_count = count;
 		if (!count) {
 			list_del(&dentry->d_lru);
+			if (dentry->d_op && dentry->d_op->d_delete)
+				dentry->d_op->d_delete(dentry);
 			if (list_empty(&dentry->d_hash)) {
 				struct inode *inode = dentry->d_inode;
 				struct dentry * parent;
-				if (inode) {
-					list_del(&dentry->d_alias);
+				if (inode)
 					iput(inode);
-				}
 				parent = dentry->d_parent;
 				d_free(dentry);
 				if (dentry == parent)
@@ -134,7 +137,6 @@ void shrink_dcache(void)
 			if (dentry->d_inode) {
 				struct inode * inode = dentry->d_inode;
 
-				list_del(&dentry->d_alias);
 				dentry->d_inode = NULL;
 				iput(inode);
 			}
@@ -151,6 +153,13 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 {
 	char * str;
 	struct dentry *dentry;
+
+	/*
+	 * Check whether to shrink the dcache ... this greatly reduces
+	 * the likelyhood that kmalloc() will need additional memory.
+	 */
+	if (nr_free_pages < free_pages_low)
+		shrink_dcache();
 
 	dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
 	if (!dentry)
@@ -172,7 +181,6 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	dentry->d_mounts = dentry;
 	dentry->d_covers = dentry;
 	INIT_LIST_HEAD(&dentry->d_hash);
-	INIT_LIST_HEAD(&dentry->d_alias);
 	INIT_LIST_HEAD(&dentry->d_lru);
 
 	dentry->d_name.name = str;
@@ -194,9 +202,6 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
  */
 void d_instantiate(struct dentry *entry, struct inode * inode)
 {
-	if (inode)
-		list_add(&entry->d_alias, &inode->i_dentry);
-
 	entry->d_inode = inode;
 }
 
@@ -312,10 +317,10 @@ void d_delete(struct dentry * dentry)
 	 */
 	if (dentry->d_count == 1) {
 		struct inode * inode = dentry->d_inode;
-
-		dentry->d_inode = NULL;
-		list_del(&dentry->d_alias);
-		iput(inode);
+		if (inode) {
+			dentry->d_inode = NULL;
+			iput(inode);
+		}
 		return;
 	}
 

@@ -840,26 +840,19 @@ static int openpromfs_create (struct inode *dir, struct dentry *dentry, int mode
 	
 	if (!dir)
 		return -ENOENT;
-	if (dentry->d_name.len > 256) {
-		iput (dir);
+	if (dentry->d_name.len > 256)
 		return -EINVAL;
-	}
-	if (aliases_nodes == ALIASES_NNODES) {
-		iput (dir);
+	if (aliases_nodes == ALIASES_NNODES)
 		return -EIO;
-	}
 	p = kmalloc (dentry->d_name.len + 1, GFP_KERNEL);
-	if (!p) {
-		iput (dir);
+	if (!p)
 		return -ENOMEM;
-	}
 	strncpy (p, dentry->d_name.name, dentry->d_name.len);
 	p [dentry->d_name.len] = 0;
 	alias_names [aliases_nodes++] = p;
 	inode = proc_get_inode (dir->i_sb,
 				NODEP2INO(NODE(dir->i_ino).first_prop)
 				+ aliases_nodes, 0);
-	iput (dir);
 	if (!inode)
 		return -EINVAL;
 	inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;

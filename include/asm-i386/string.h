@@ -23,7 +23,8 @@
  * set, making the functions fast and clean. String instructions have been
  * used through-out, making for "slightly" unclear code :-)
  *
- *		Copyright (C) 1991, 1992 Linus Torvalds
+ *		NO Copyright (C) 1991, 1992 Linus Torvalds,
+ *		consider these trivial functions to be PD.
  */
 
 #define __HAVE_ARCH_STRCPY

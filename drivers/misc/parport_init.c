@@ -1,8 +1,7 @@
-/* $Id: parport_init.c,v 1.1.2.2 1997/04/18 15:00:52 phil Exp $
- * Parallel-port initialisation code.
+/* Parallel-port initialisation code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
- *          Tim Waugh <tmw20@cam.ac.uk>
+ *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *	    Jose Renau <renau@acm.org>
  *
  * based on work by Grant Guenther <grant@torque.net>
@@ -62,17 +61,6 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct parport *port, *next;
-   
-	for (port = parport_enumerate(); port; port = next) {
-		next = port->next;
-		if (!(port->flags & PARPORT_FLAG_COMA))
-			parport_quiesce(port);
-		parport_proc_unregister(port);
-		kfree(port->name);
-		kfree(port);
-	}
-	
 	parport_proc_cleanup();
 }
 #else

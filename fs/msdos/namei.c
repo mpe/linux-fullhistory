@@ -232,8 +232,11 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data, int sile
 
 	sb->s_op = &msdos_sops;
 	res =  fat_read_super(sb, data, silent);
-	if (res == NULL)
+	if (res == NULL) {
+		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
 	sb->s_root->d_op = &msdos_dentry_operations;
 	return res;
 }

@@ -46,6 +46,7 @@ nfsd3_proc_null(struct svc_rqst *rqstp, void *argp, void *resp)
 
 /*
  * Get a file's attributes
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
@@ -64,6 +65,7 @@ nfsd3_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 
 /*
  * Set a file's attributes
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_setattr(struct svc_rqst *rqstp, struct nfsd3_sattrargs *argp,
@@ -82,6 +84,7 @@ nfsd3_proc_setattr(struct svc_rqst *rqstp, struct nfsd3_sattrargs *argp,
 
 /*
  * Look up a path name component
+ * N.B. After this call _both_ resp->dirfh and resp->fh need an fh_put
  */
 static int
 nfsd3_proc_lookup(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
@@ -134,11 +137,13 @@ nfsd3_proc_readlink(struct svc_rqst *rqstp, struct nfsd_fhandle     *argp,
 	/* Read the symlink. */
 	resp->len = NFS3_MAXPATHLEN;
 	nfserr = nfsd_readlink(rqstp, &argp->fh, (char *) path, &resp->len);
+	fh_put(&argp->fh);
 	RETURN(nfserr);
 }
 
 /*
  * Read a portion of a file.
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_read(struct svc_rqst *rqstp, struct nfsd3_readargs *argp,
@@ -180,6 +185,7 @@ nfsd3_proc_read(struct svc_rqst *rqstp, struct nfsd3_readargs *argp,
 
 /*
  * Write data to a file
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_write(struct svc_rqst *rqstp, struct nfsd3_writeargs *argp,
@@ -207,6 +213,7 @@ nfsd3_proc_write(struct svc_rqst *rqstp, struct nfsd3_writeargs *argp,
  * With NFSv3, CREATE processing is a lot easier than with NFSv2.
  * At least in theory; we'll see how it fares in practice when the
  * first reports about SunOS compatibility problems start to pour in...
+ * N.B. After this call _both_ resp->dirfh and resp->fh need an fh_put
  */
 static int
 nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
@@ -246,6 +253,7 @@ nfsd3_proc_create(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
 	RETURN(nfserr);
 }
 
+/* N.B. Is nfsd3_attrstat * correct for resp?? table says "void" */
 static int
 nfsd3_proc_remove(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
 					  struct nfsd3_attrstat  *resp)
@@ -257,11 +265,16 @@ nfsd3_proc_remove(struct svc_rqst *rqstp, struct nfsd3_diropargs *argp,
 				SVCFH_INO(&argp->fh),
 				argp->name);
 
+	/* Is this correct?? */
 	fh_copy(&resp->fh, &argp->fh);
 
 	/* Unlink. -S_IFDIR means file must not be a directory */
-	nfserr = nfsd_unlink(rqstp, &resp->fh, -S_IFDIR,
-					argp->name, argp->len);
+	nfserr = nfsd_unlink(rqstp, &resp->fh, -S_IFDIR, argp->name, argp->len);
+	/* 
+	 * N.B. Should be an fh_put here ... nfsd3_proc_rmdir has one,
+	 * or else as an xdr release function
+	 */
+	fh_put(&resp->fh);
 	RETURN(nfserr);
 }
 
@@ -336,6 +349,7 @@ nfsd3_proc_symlink(struct svc_rqst *rqstp, struct nfsd3_symlinkargs *argp,
 
 /*
  * Make directory. This operation is not idempotent.
+ * N.B. After this call resp->fh needs an fh_put
  */
 static int
 nfsd3_proc_mkdir(struct svc_rqst *rqstp, struct nfsd3_createargs *argp,
@@ -449,13 +463,13 @@ struct svc_procedure		nfsd3_procedures2[18] = {
   PROC(getattr,	 fhandle,	attrstat,	fhandle, RC_NOCACHE),
   PROC(setattr,  sattrargs,	attrstat,	fhandle, RC_REPLBUFF),
   PROC(none,	 void,		void,		void,	 RC_NOCACHE),
-  PROC(lookup,	 diropargs,	diropres,	fhandle, RC_NOCACHE),
+  PROC(lookup,	 diropargs,	diropres,	fhandle2,RC_NOCACHE),
   PROC(readlink, fhandle,	readlinkres,	void,	 RC_NOCACHE),
   PROC(read,	 readargs,	readres,	fhandle, RC_NOCACHE),
   PROC(none,	 void,		void,		void,	 RC_NOCACHE),
   PROC(write,	 writeargs,	attrstat,	fhandle, RC_REPLBUFF),
-  PROC(create,	 createargs,	diropres,	fhandle, RC_REPLBUFF),
-  PROC(remove,	 diropargs,	void,		void,	 RC_REPLSTAT),
+  PROC(create,	 createargs,	diropres,	fhandle2,RC_REPLBUFF),
+  PROC(remove,	 diropargs,	void,/* ??*/	void,	 RC_REPLSTAT),
   PROC(rename,	 renameargs,	void,		void,	 RC_REPLSTAT),
   PROC(link,	 linkargs,	void,		void,	 RC_REPLSTAT),
   PROC(symlink,	 symlinkargs,	void,		void,	 RC_REPLSTAT),

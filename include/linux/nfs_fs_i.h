@@ -47,13 +47,6 @@ struct nfs_inode_info {
 	unsigned long		attrtimeo;
 
 	/*
-	 * This is to support the clandestine rename on unlink.
-	 * Instead of the directory inode, we might as well keep
-	 * its NFS FH, but that requires a kmalloc.
-	 */
-	struct inode *		silly_inode;
-
-	/*
 	 * This is the list of dirty unwritten pages.
 	 * NFSv3 will want to add a list for written but uncommitted
 	 * pages.

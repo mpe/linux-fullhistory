@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-19 June 1997
+23 August 1997
 ===============================================================================
 
 1.  Introduction
@@ -46,6 +46,9 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       17.1 Features
       17.2 Symbios NVRAM layout
       17.3 Tekram  NVRAM layout
+18. Support for Big Endian
+      18.1 Big Endian CPU
+      18.2 NCR chip in Big Endian mode of operations
 
 ===============================================================================
 
@@ -83,7 +86,7 @@ This short documentation only describes the features of the NCR53C8XX
 driver, configuration parameters and control commands available
 through the proc SCSI file system read / write operations.
 
-This driver has been tested OK with linux/i386 and Linux/Alpha.
+This driver has been tested OK with linux/i386, Linux/Alpha and Linux/PPC.
 
 Latest driver version and patches are available at:
 
@@ -429,7 +432,10 @@ this feature after boot-up only for devices that support it safely.
 
 CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
     Answer "y" if you suspect your mother board to not allow memory mapped I/O.
-    May slow down performance a little.
+    May slow down performance a little.  This option is required by
+    Linux/PPC and is used no matter what you select here.  Linux/PPC
+    suffers no performance loss with this option since all IO is memory
+    mapped anyway.
 
 CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE    (default answer: n)
     Answer "y" if you are sure that all your SCSI devices that are able to 
@@ -1430,8 +1436,29 @@ default nvram data:
 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000
 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0x0000 0xfbbc
 
+
+18. Support for Big Endian
+
+The PCI local bus has been primarily designed for x86 architecture.
+As a consequence, PCI devices generally expect DWORDS using little endian 
+byte ordering.
+
+18.1 Big Endian CPU
+
+In order to support NCR chips on a Big Endian architecture the driver has to 
+perform byte reordering each time it is needed. This feature has been 
+added to the driver by Cort <cort@cs.nmt.edu> and is available in driver 
+version 2.5 and later ones. For the moment Big Endian support has only 
+been tested on Linux/PPC (PowerPC).
+
+18.2 NCR chip in Big Endian mode of operations
+
+It can be read in SYMBIOS documentation that some chips support a special 
+Big Endian mode, on paper: 53C815, 53C825A, 53C875, 53C875N, 53C895.
+This mode of operations is not software-selectable, but needs pin named 
+BigLit to be pulled-up. Using this mode, most of byte reorderings should 
+be avoided when the driver is running on a Big Endian CPU.
+Driver version 2.5 is also, in theory, ready for this feature.
+
 ===============================================================================
 End of NCR53C8XX driver README file
-
-
-

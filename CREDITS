@@ -529,6 +529,7 @@ S: Canada
 
 N: Richard Günther
 E: richard.guenther@student.uni-tuebingen.de
+P: 2048/2E829319 2F 83 FC 93 E9 E4 19 E2  93 7A 32 42 45 37 23 57
 D: binfmt_misc
 S: Fichtenweg 3/511
 S: 72076 Tübingen
@@ -1467,10 +1468,12 @@ S: MacGregor A.C.T
 S: 2615 Australia
 
 N: Winfried Trümper
-E: truemper@MI.Uni-Koeln.DE
-D: German HOWTO, Enhanced German HOWTO, Crash-Kurs Linux (German)
-D: 1- or 5-days tutorials on Linux twice a year (free of charge)
-D: Linux-Workshop Köln (aka LUUG cologne, germany)
+E: winni@xpilot.org
+W: http://www.shop.de/~winni/
+D: German HOWTO, Crash-Kurs Linux (German, 100 comprehensive pages)
+D: CD-Writing HOWTO, various mini-HOWTOs
+D: one-week tutorials on Linux twice a year (free of charge)
+D: Linux-Workshop Köln (aka LUG Cologne, Germany), Installfests
 S: Tacitusstr. 6
 S: D-50968 Köln
 

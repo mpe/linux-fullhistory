@@ -491,8 +491,22 @@ static inline unsigned long s_reg_to_mem (unsigned long s_reg)
 			| 1L << 0x2c | 1L << 0x2d   /* stl stq */	\
 			| 1L << 0xd )		    /* stw */
 
+#define R(x)	((size_t) &((struct pt_regs *)0)->x)
+
+static int unauser_reg_offsets[32] = {
+	R(r0), R(r1), R(r2), R(r3), R(r4), R(r5), R(r6), R(r7), R(r8),
+	/* r9 ... r15 are stored in front of regs.  */
+	-56, -48, -40, -32, -24, -16, -8,
+	R(r16), R(r17), R(r18),
+	R(r19), R(r20), R(r21), R(r22), R(r23), R(r24), R(r25), R(r26),
+	R(r27), R(r28), R(gp),
+	0, 0
+};
+
+#undef R
+
 asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
-			      unsigned long reg, unsigned long * frame)
+			      unsigned long reg, struct pt_regs *regs)
 {
 	extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
 	extern unsigned long alpha_read_fp_reg (unsigned long reg);
@@ -501,11 +515,9 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 	static long last_time = 0;
 
 	unsigned long tmp1, tmp2, tmp3, tmp4;
-	unsigned long *reg_addr, *pc_addr, fake_reg;
+	unsigned long fake_reg, *reg_addr = &fake_reg;
 	unsigned long uac_bits;
 	long error;
-
-	pc_addr = frame + 7 + 20 + 1;			/* pc in PAL frame */
 
 	/* Check the UAC bits to decide what the user wants us to do
 	   with the unaliged access.  */
@@ -519,7 +531,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 			lock_kernel();
 			printk("%s(%d): unaligned trap at %016lx: %p %lx %ld\n",
 			       current->comm, current->pid,
-			       *pc_addr - 4, va, opcode, reg);
+			       regs->pc - 4, va, opcode, reg);
 			unlock_kernel();
 		}
 		last_time = jiffies;
@@ -540,51 +552,19 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 
 	++unaligned[1].count;
 	unaligned[1].va = (unsigned long)va;
-	unaligned[1].pc = *pc_addr - 4;
+	unaligned[1].pc = regs->pc - 4;
 
-	reg_addr = frame;
 	if ((1L << opcode) & OP_INT_MASK) {
 		/* it's an integer load/store */
-		switch (reg) {
-		      case 0: case 1: case 2: case 3: case 4:
-		      case 5: case 6: case 7: case 8:
-			/* v0-t7 in SAVE_ALL frame */
-			reg_addr += 7 + reg;
-			break;
-
-		      case 9: case 10: case 11: case 12:
-		      case 13: case 14: case 15:
-			/* s0-s6 in entUna frame */
-			reg_addr += (reg - 9);
-			break;
-
-		      case 16: case 17: case 18:
-			/* a0-a2 in PAL frame */
-			reg_addr += 7 + 20 + 3 + (reg - 16);
-			break;
-
-		      case 19: case 20: case 21: case 22: case 23:
-		      case 24: case 25: case 26: case 27: case 28:
-			/* a3-at in SAVE_ALL frame */
-			reg_addr += 7 + 9 + (reg - 19);
-			break;
-
-		      case 29:
-			/* gp in PAL frame */
-			reg_addr += 7 + 20 + 2;
-			break;
-
-		      case 30:
+		if (reg < 30) {
+			reg_addr = (unsigned long *)
+			  ((char *)regs + unauser_reg_offsets[reg]);
+		} else if (reg == 30) {
 			/* usp in PAL regs */
 			fake_reg = rdusp();
-			reg_addr = &fake_reg;
-			break;
-
-		      case 31:
+		} else {
 			/* zero "register" */
 			fake_reg = 0;
-			reg_addr = &fake_reg;
-			break;
 		}
 	}
 
@@ -728,7 +708,6 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 
 	case 0x26: /* sts */
 		fake_reg = s_reg_to_mem(alpha_read_fp_reg(reg));
-		reg_addr = &fake_reg;
 		/* FALLTHRU */
 
 	case 0x2c: /* stl */
@@ -763,7 +742,6 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 
 	case 0x27: /* stt */
 		fake_reg = alpha_read_fp_reg(reg);
-		reg_addr = &fake_reg;
 		/* FALLTHRU */
 
 	case 0x2d: /* stq */
@@ -807,14 +785,14 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
 	return;
 
 give_sigsegv:
-	*pc_addr -= 4;  /* make pc point to faulting insn */
+	regs->pc -= 4;  /* make pc point to faulting insn */
 	lock_kernel();
 	force_sig(SIGSEGV, current);
 	unlock_kernel();
 	return;
 
 give_sigbus:
-	*pc_addr -= 4;
+	regs->pc -= 4;
 	lock_kernel();
 	force_sig(SIGBUS, current);
 	unlock_kernel();

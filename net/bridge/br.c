@@ -1567,7 +1567,7 @@ static void br_bpdu(struct sk_buff *skb) /* consumes skb */
 		return;
 	}
 		
-	bpdu = (Tcn_bpdu *)skb->data + ETH_HLEN;
+	bpdu = (Tcn_bpdu *) (skb->data + ETH_HLEN);
 	switch (bpdu->type) {
 		case BPDU_TYPE_CONFIG:
 			received_config_bpdu(port, (Config_bpdu *)bpdu);

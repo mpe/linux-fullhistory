@@ -77,10 +77,6 @@ nfs_put_inode(struct inode * inode)
 	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 }
 
-/*
- * This should do any silly-rename cleanups once we
- * get silly-renaming working again..
- */
 static void
 nfs_delete_inode(struct inode * inode)
 {
@@ -454,6 +450,8 @@ int
 init_nfs_fs(void)
 {
 #ifdef CONFIG_PROC_FS
+	rpc_register_sysctl();
+	rpc_proc_init();
 	rpc_proc_register(&nfs_rpcstat);
 #endif
         return register_filesystem(&nfs_fs_type);

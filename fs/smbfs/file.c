@@ -1,7 +1,8 @@
 /*
  *  file.c
  *
- *  Copyright (C) 1995, 1996 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995, 1996, 1997 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1997 by Volker Lendecke
  *
  */
 
@@ -13,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/smb_fs.h>
 #include <linux/malloc.h>
+#include <linux/pagemap.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -29,184 +31,204 @@ smb_fsync(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/*
+ * Read a page synchronously.
+ */
+static int
+smb_readpage_sync(struct inode *inode, struct page *page)
+{
+	unsigned long offset = page->offset;
+	char *buffer = (char *) page_address(page);
+	int rsize = SMB_SERVER(inode)->opt.max_xmit - (SMB_HEADER_LEN+15);
+	int result, refresh = 0;
+	int count = PAGE_SIZE;
+
+	pr_debug("SMB: smb_readpage_sync(%p)\n", page);
+	clear_bit(PG_error, &page->flags);
+
+	result = smb_open(inode, O_RDONLY);
+	if (result < 0)
+		goto io_error;
+
+	do {
+		if (count < rsize)
+			rsize = count;
+
+		result = smb_proc_read(inode, offset, rsize, buffer);
+		if (result < 0)
+			goto io_error;
+
+		refresh = 1;
+		count -= result;
+		offset += result;
+		buffer += result;
+		if (result < rsize)
+			break;
+	} while (count);
+
+	memset(buffer, 0, count);
+	set_bit(PG_uptodate, &page->flags);
+	result = 0;
+
+io_error:
+	if (refresh)
+		smb_refresh_inode(inode);
+	clear_bit(PG_locked, &page->flags);
+	wake_up(&page->wait);
+	return result;
+}
+
 int
-smb_make_open(struct inode *i, int right)
+smb_readpage(struct inode *inode, struct page *page)
 {
-	struct smb_dirent *dirent;
+	unsigned long	address;
+	int		error = -1;
 
-	if (i == NULL)
-	{
-		printk("smb_make_open: got NULL inode\n");
-		return -EINVAL;
-	}
-	dirent = &(SMB_INOP(i)->finfo);
+	pr_debug("SMB: smb_readpage %08lx\n", page_address(page));
+	set_bit(PG_locked, &page->flags);
+	address = page_address(page);
+	atomic_inc(&page->count);
+	error = smb_readpage_sync(inode, page);
+	free_page(address);
+	return error;
+}
 
-	DDPRINTK("smb_make_open: dirent->opened = %d\n", dirent->opened);
+/*
+ * Write a page synchronously.
+ * Offset is the data offset within the page.
+ */
+static int
+smb_writepage_sync(struct inode *inode, struct page *page,
+		   unsigned long offset, unsigned int count)
+{
+	int wsize = SMB_SERVER(inode)->opt.max_xmit - (SMB_HEADER_LEN+15);
+	int result, refresh = 0, written = 0;
+	u8 *buffer;
 
-	if ((dirent->opened) == 0)
-	{
-		/* tries max. rights */
-		int open_result = smb_proc_open(SMB_SERVER(i),
-						SMB_INOP(i)->dir,
-						dirent->name, dirent->len,
-						dirent);
-		if (open_result)
-		{
-			return open_result;
+	pr_debug("SMB:      smb_writepage_sync(%x/%ld %d@%ld)\n",
+		 inode->i_dev, inode->i_ino,
+		 count, page->offset + offset);
+
+	buffer = (u8 *) page_address(page) + offset;
+	offset += page->offset;
+
+	do {
+		if (count < wsize)
+			wsize = count;
+
+		result = smb_proc_write(inode, offset, wsize, buffer);
+
+		if (result < 0) {
+			/* Must mark the page invalid after I/O error */
+			clear_bit(PG_uptodate, &page->flags);
+			goto io_error;
 		}
-	}
-	if (((right == O_RDONLY) && ((dirent->access == O_RDONLY)
-				     || (dirent->access == O_RDWR)))
-	    || ((right == O_WRONLY) && ((dirent->access == O_WRONLY)
-					|| (dirent->access == O_RDWR)))
-	    || ((right == O_RDWR) && (dirent->access == O_RDWR)))
-		return 0;
+		refresh = 1;
+		buffer += wsize;
+		offset += wsize;
+		written += wsize;
+		count -= wsize;
+	} while (count);
 
-	return -EACCES;
+io_error:
+	if (refresh)
+		smb_refresh_inode(inode);
+
+	clear_bit(PG_locked, &page->flags);
+	return written ? written : result;
+}
+
+/*
+ * Write a page to the server. This will be used for NFS swapping only
+ * (for now), and we currently do this synchronously only.
+ */
+static int
+smb_writepage(struct inode *inode, struct page *page)
+{
+	return smb_writepage_sync(inode, page, 0, PAGE_SIZE);
+}
+
+static int
+smb_updatepage(struct inode *inode, struct page *page, const char *buffer,
+	       unsigned long offset, unsigned int count, int sync)
+{
+	u8		*page_addr;
+
+	pr_debug("SMB:      smb_updatepage(%x/%ld %d@%ld, sync=%d)\n",
+		 inode->i_dev, inode->i_ino,
+		 count, page->offset+offset, sync);
+
+	page_addr = (u8 *) page_address(page);
+
+	copy_from_user(page_addr + offset, buffer, count);
+	return smb_writepage_sync(inode, page, offset, count);
 }
 
 static long
-smb_file_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
+smb_file_read(struct inode * inode, struct file * file,
+	      char * buf, unsigned long count)
 {
-	int result, bufsize, to_read, already_read;
-	off_t pos;
-	int errno;
+	int	status;
 
-	DPRINTK("smb_file_read: enter %s\n", SMB_FINFO(inode)->name);
+	pr_debug("SMB: read(%x/%ld (%d), %lu@%lu)\n",
+		 inode->i_dev, inode->i_ino, inode->i_count,
+		 count, (unsigned long) file->f_pos);
 
-	if (!inode)
-	{
-		DPRINTK("smb_file_read: inode = NULL\n");
-		return -EINVAL;
-	}
-	if (!S_ISREG(inode->i_mode))
-	{
-		DPRINTK("smb_file_read: read from non-file, mode %07o\n",
-			inode->i_mode);
-		return -EINVAL;
-	}
-	if ((errno = smb_make_open(inode, O_RDONLY)) != 0)
-		return errno;
+	status = smb_revalidate_inode(inode);
+	if (status < 0)
+		return status;
 
-	pos = file->f_pos;
-
-	if (pos + count > inode->i_size)
-	{
-		count = inode->i_size - pos;
-	}
-	if (count <= 0)
-	{
-		return 0;
-	}
-	bufsize = SMB_SERVER(inode)->max_xmit - SMB_HEADER_LEN - 5 * 2 - 5;
-
-	already_read = 0;
-
-	/* First read in as much as possible for each bufsize. */
-	while (already_read < count)
-	{
-		to_read = min(bufsize, count - already_read);
-		result = smb_proc_read(SMB_SERVER(inode), SMB_FINFO(inode),
-				       pos, to_read, buf, 1);
-		if (result < 0)
-		{
-			return result;
-		}
-		pos += result;
-		buf += result;
-		already_read += result;
-
-		if (result < to_read)
-		{
-			break;
-		}
-	}
-
-	file->f_pos = pos;
-
-	if (!IS_RDONLY(inode))
-		inode->i_atime = CURRENT_TIME;
-	mark_inode_dirty(inode);
-	
-	DPRINTK("smb_file_read: exit %s\n", SMB_FINFO(inode)->name);
-
-	return already_read;
+	return generic_file_read(inode, file, buf, count);
 }
 
-static long
-smb_file_write(struct inode *inode, struct file *file, const char *buf,
-	       unsigned long count)
+static int
+smb_file_mmap(struct inode * inode, struct file * file,
+				struct vm_area_struct * vma)
 {
-	int result, bufsize, to_write, already_written;
-	off_t pos;
-	int errno;
+	int	status;
 
-	if (!inode)
-	{
-		DPRINTK("smb_file_write: inode = NULL\n");
+	status = smb_revalidate_inode(inode);
+	if (status < 0)
+		return status;
+
+	return generic_file_mmap(inode, file, vma);
+}
+
+/* 
+ * Write to a file (through the page cache).
+ */
+static long
+smb_file_write(struct inode *inode, struct file *file,
+	       const char *buf, unsigned long count)
+{
+	int	result;
+
+	pr_debug("SMB: write(%x/%ld (%d), %lu@%lu)\n",
+		 inode->i_dev, inode->i_ino, inode->i_count,
+		 count, (unsigned long) file->f_pos);
+
+	if (!inode) {
+		printk("smb_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
-	if (!S_ISREG(inode->i_mode))
-	{
-		DPRINTK("smb_file_write: write to non-file, mode %07o\n",
+
+	result = smb_revalidate_inode(inode);
+	if (result < 0)
+		return result;
+
+	result = smb_open(inode, O_WRONLY);
+	if (result < 0)
+		return result;
+
+	if (!S_ISREG(inode->i_mode)) {
+		printk("smb_file_write: write to non-file, mode %07o\n",
 			inode->i_mode);
 		return -EINVAL;
 	}
-	DPRINTK("smb_file_write: enter %s\n", SMB_FINFO(inode)->name);
-
 	if (count <= 0)
-	{
 		return 0;
-	}
-	if ((errno = smb_make_open(inode, O_RDWR)) != 0)
-	{
-		return errno;
-	}
-	pos = file->f_pos;
 
-	if (file->f_flags & O_APPEND)
-		pos = inode->i_size;
-
-	bufsize = SMB_SERVER(inode)->max_xmit - SMB_HEADER_LEN - 5 * 2 - 5;
-
-	already_written = 0;
-
-	DPRINTK("smb_write_file: blkmode = %d, blkmode & 2 = %d\n",
-		SMB_SERVER(inode)->blkmode,
-		SMB_SERVER(inode)->blkmode & 2);
-
-	while (already_written < count)
-	{
-		to_write = min(bufsize, count - already_written);
-		result = smb_proc_write(SMB_SERVER(inode), SMB_FINFO(inode),
-					pos, to_write, buf);
-
-		if (result < 0)
-		{
-			return result;
-		}
-		pos += result;
-		buf += result;
-		already_written += result;
-
-		if (result < to_write)
-		{
-			break;
-		}
-	}
-
-	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	mark_inode_dirty(inode);
-	
-	file->f_pos = pos;
-
-	if (pos > inode->i_size)
-	{
-		inode->i_size = pos;
-	}
-	DPRINTK("smb_file_write: exit %s\n", SMB_FINFO(inode)->name);
-
-	return already_written;
+	return generic_file_write(inode, file, buf, count);
 }
 
 static struct file_operations smb_file_operations =
@@ -217,7 +239,7 @@ static struct file_operations smb_file_operations =
 	NULL,			/* readdir - bad */
 	NULL,			/* poll - default */
 	smb_ioctl,		/* ioctl */
-	smb_mmap,		/* mmap */
+	smb_file_mmap,		/* mmap */
 	NULL,			/* open */
 	NULL,			/* release */
 	smb_fsync,		/* fsync */
@@ -236,8 +258,13 @@ struct inode_operations smb_file_inode_operations =
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
+	NULL,			/* follow_link */
+	smb_readpage,		/* readpage */
+	smb_writepage,		/* writepage */
 	NULL,			/* bmap */
-	NULL			/* truncate */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	smb_updatepage,		/* updatepage */
+	smb_revalidate_inode,	/* revalidate */
 };

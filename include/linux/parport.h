@@ -81,6 +81,9 @@ struct parport_operations {
 	void (*enable_irq)(struct parport *);
 	void (*disable_irq)(struct parport *);
 	int (*examine_irq)(struct parport *);
+
+	void (*inc_use_count)(void);
+	void (*dec_use_count)(void);
 };
 
 #define PARPORT_CONTROL_STROBE    0x1

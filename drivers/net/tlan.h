@@ -1,3 +1,6 @@
+#ifndef TLAN_H
+#define TLAN_H
+
 /********************************************************************
  *
  *  Linux ThunderLAN Driver
@@ -18,6 +21,11 @@
 #include <asm/types.h>
 #include <linux/netdevice.h>
 
+#if LINUX_VERSION_CODE <= 0x20100
+#define net_device_stats	enet_statistics
+#endif
+
+
 
 
 	/*****************************************************************
@@ -37,7 +45,11 @@
 		#define TLAN_IGNORE	0
 		#define TLAN_RECORD	1
 
-		#define TLAN_DBG(lvl, format, args...)	if ( debug >= lvl ) printk( format, ##args );
+		#define TLAN_DBG(lvl, format, args...)	if ( debug & lvl ) printk( format, ##args );
+		#define TLAN_DEBUG_GNRL	0x0001
+		#define TLAN_DEBUG_TX	0x0002
+		#define TLAN_DEBUG_RX	0x0004 
+		#define TLAN_DEBUG_LIST	0x0008
 
 
 
@@ -50,7 +62,12 @@
 		/* NOTE: These should be moved to pci.h someday */
 		#define PCI_DEVICE_ID_NETELLIGENT_10 0xAE34
 		#define PCI_DEVICE_ID_NETELLIGENT_10_100 0xAE32
-		#define PCI_DEVICE_ID_NETFLEX_3_INTEGRATED 0xAE35
+		#define PCI_DEVICE_ID_NETFLEX_3P_INTEGRATED 0xAE35
+		#define PCI_DEVICE_ID_NETFLEX_3P 0xF130
+		#define PCI_DEVICE_ID_NETFLEX_3P_BNC 0xF150
+		#define PCI_DEVICE_ID_NETELLIGENT_10_100_PROLIANT 0xAE43
+		#define PCI_DEVICE_ID_NETELLIGENT_10_100_DUAL 0xAE40
+		#define PCI_DEVICE_ID_DESKPRO_4000_5233MMX 0xB011
 
 
 		typedef struct tlan_pci_id {
@@ -152,11 +169,12 @@
 			u32						timerSetAt;
 			u32						timerType;
 			struct timer_list		timer;
-			struct enet_statistics  stats;
+			struct net_device_stats	stats;
 			u32                     pciEntry;
 			u8                      pciRevision;
 			u8                      pciBus;
 			u8                      pciDeviceFn;
+			u8						tlanRev;
 			char                    devName[8];
 		} TLanPrivateInfo;
 
@@ -479,3 +497,7 @@ inline u32 TLan_HashFunc( u8 *a )
 
 } 
 
+
+
+
+#endif

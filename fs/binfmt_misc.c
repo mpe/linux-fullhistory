@@ -12,6 +12,7 @@
  *  1997-05-19 cleanup
  *  1997-06-26 hpa: pass the real filename rather than argv[0]
  *  1997-06-30 minor cleanup
+ *  1997-08-09 removed extension stripping, locking cleanup
  */
 
 #include <linux/module.h>
@@ -31,10 +32,6 @@
 
 #define VERBOSE_STATUS /* undef this to save 400 bytes kernel memory */
 
-#ifndef MIN
-#define MIN(x,y) (((x)<(y))?(x):(y))
-#endif
-
 struct binfmt_entry {
 	struct binfmt_entry *next;
 	int id;
@@ -50,7 +47,6 @@ struct binfmt_entry {
 
 #define ENTRY_ENABLED 1		/* the old binfmt_entry.enabled */
 #define	ENTRY_MAGIC 8		/* not filename detection */
-#define ENTRY_STRIP_EXT 32	/* strip off last filename extension */
 
 static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs);
 static void entry_proc_cleanup(struct binfmt_entry *e);
@@ -70,7 +66,9 @@ static struct binfmt_entry *entries = NULL;
 static int free_id = 1;
 static int enabled = 1;
 
+#ifdef __SMP__
 static rwlock_t entries_lock = RW_LOCK_UNLOCKED;
+#endif
 
 
 /*
@@ -84,12 +82,14 @@ static void clear_entry(int id)
 	ep = &entries;
 	while (*ep && ((*ep)->id != id))
 		ep = &((*ep)->next);
-	if ((e = *ep)) {
+	if ((e = *ep))
 		*ep = e->next;
+	write_unlock(&entries_lock);
+
+	if (e) {
 		entry_proc_cleanup(e);
 		kfree(e);
 	}
-	write_unlock(&entries_lock);
 }
 
 /*
@@ -97,27 +97,43 @@ static void clear_entry(int id)
  */
 static void clear_entries(void)
 {
-	struct binfmt_entry *e;
+	struct binfmt_entry *e, *n;
 
 	write_lock(&entries_lock);
-	while ((e = entries)) {
-		entries = entries->next;
+	n = entries;
+	entries = NULL;
+	write_unlock(&entries_lock);
+
+	while ((e = n)) {
+		n = e->next;
 		entry_proc_cleanup(e);
 		kfree(e);
 	}
-	write_unlock(&entries_lock);
 }
 
 /*
- * Find entry through id - caller has to do locking
+ * Find entry through id and lock it
  */
 static struct binfmt_entry *get_entry(int id)
 {
-	struct binfmt_entry *e = entries;
+	struct binfmt_entry *e;
 
+	read_lock(&entries_lock);
+	e = entries;
 	while (e && (e->id != id))
 		e = e->next;
+	if (!e)
+		read_unlock(&entries_lock);
 	return e;
+}
+
+/*
+ * unlock entry
+ */
+static inline void put_entry(struct binfmt_entry *e)
+{
+	if (e)
+		read_unlock(&entries_lock);
 }
 
 
@@ -128,10 +144,11 @@ static struct binfmt_entry *get_entry(int id)
  */
 static struct binfmt_entry *check_file(struct linux_binprm *bprm)
 {
-	struct binfmt_entry *e = entries;
+	struct binfmt_entry *e;
 	char *p = strrchr(bprm->filename, '.');
 	int j;
 
+	e = entries;
 	while (e) {
 		if (e->flags & ENTRY_ENABLED) {
 			if (!(e->flags & ENTRY_MAGIC)) {
@@ -160,7 +177,7 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	struct binfmt_entry *fmt;
 	struct dentry * dentry;
 	char iname[128];
-	char *iname_addr = iname, *p;
+	char *iname_addr = iname;
 	int retval, fmt_flags = 0;
 
 	MOD_INC_USE_COUNT;
@@ -186,9 +203,6 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	bprm->dentry = NULL;
 
 	/* Build args for interpreter */
-	if ((fmt_flags & ENTRY_STRIP_EXT) &&
-	    (p = strrchr(bprm->filename, '.')))
-		*p = '\0';
 	remove_arg_zero(bprm);
 	bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
 	bprm->argc++;
@@ -288,13 +302,12 @@ static int proc_write_register(struct file *file, const char *buffer,
 
 	e->proc_name = copyarg(&dp, &sp, &cnt, del, 0, &err);
 
-	/* we can use bit 3 and 5 of type for ext/magic and ext-strip
-	   flag due to the nice encoding of E, M, e and m */
-	if ((*sp & 0x92) || (sp[1] != del))
+	/* we can use bit 3 of type for ext/magic
+	   flag due to the nice encoding of E and M */
+	if ((*sp & ~('E' | 'M')) || (sp[1] != del))
 		err = -EINVAL;
 	else
-		e->flags = (*sp++ & (ENTRY_MAGIC | ENTRY_STRIP_EXT))
-			    | ENTRY_ENABLED;
+		e->flags = (*sp++ & (ENTRY_MAGIC | ENTRY_ENABLED));
 	cnt -= 2; sp++;
 
 	e->offset = 0;
@@ -342,17 +355,17 @@ static int proc_read_status(char *page, char **start, off_t off,
 {
 	struct binfmt_entry *e;
 	char *dp;
-	int elen, i;
+	int elen, i, err;
 
 	MOD_INC_USE_COUNT;
 #ifndef VERBOSE_STATUS
 	if (data) {
-		read_lock(&entries_lock);
-		if (!(e = get_entry((int) data)))
-			i = 0;
-		else
-			i = e->flags & ENTRY_ENABLED;
-		read_unlock(&entries_lock);
+		if (!(e = get_entry((int) data))) {
+			err = -ENOENT;
+			goto _err;
+		}
+		i = e->flags & ENTRY_ENABLED;
+		put_entry(e);
 	} else {
 		i = enabled;
 	} 
@@ -361,10 +374,9 @@ static int proc_read_status(char *page, char **start, off_t off,
 	if (!data)
 		sprintf(page, "%s\n", (enabled ? "enabled" : "disabled"));
 	else {
-		read_lock(&entries_lock);
 		if (!(e = get_entry((int) data))) {
-			*page = '\0';
-			goto _out;
+			err = -ENOENT;
+			goto _err;
 		}
 		sprintf(page, "%s\ninterpreter %s\n",
 		        (e->flags & ENTRY_ENABLED ? "enabled" : "disabled"),
@@ -391,10 +403,7 @@ static int proc_read_status(char *page, char **start, off_t off,
 			*dp++ = '\n';
 			*dp = '\0';
 		}
-		if (e->flags & ENTRY_STRIP_EXT)
-			sprintf(dp, "extension stripped\n");
-_out:
-		read_unlock(&entries_lock);
+		put_entry(e);
 	}
 #endif
 
@@ -403,9 +412,11 @@ _out:
 		elen = 0;
 	*eof = (elen <= count) ? 1 : 0;
 	*start = page + off;
+	err = elen;
 
+_err:
 	MOD_DEC_USE_COUNT;
-	return elen;
+	return err;
 }
 
 /*
@@ -419,18 +430,18 @@ static int proc_write_status(struct file *file, const char *buffer,
 	int res = count;
 
 	MOD_INC_USE_COUNT;
-	if (((buffer[0] == '1') || (buffer[0] == '0')) &&
-	    ((count == 1) || ((count == 2) && (buffer[1] == '\n')))) {
+	if (buffer[count-1] == '\n')
+		count--;
+	if ((count == 1) && !(buffer[0] & ~('0' | '1'))) {
 		if (data) {
-			read_lock(&entries_lock);
 			if ((e = get_entry((int) data)))
-				e->flags = (e->flags & -2) | (int) (buffer[0] - '0');
-			read_unlock(&entries_lock);
+				e->flags = (e->flags & ~ENTRY_ENABLED)
+					    | (int)(buffer[0] - '0');
+			put_entry(e);
 		} else {
 			enabled = buffer[0] - '0';
 		}
-	} else if ((buffer[0] == '-') && (buffer[1] == '1') &&
-	       ((count == 2) || ((count == 3) && (buffer[2] == '\n')))) {
+	} else if ((count == 2) && (buffer[0] == '-') && (buffer[1] == '1')) {
 		if (data)
 			clear_entry((int) data);
 		else

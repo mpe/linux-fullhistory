@@ -2,6 +2,7 @@
  *  smb_fs_i.h
  *
  *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1997 by Volker Lendecke
  *
  */
 
@@ -9,25 +10,22 @@
 #define _LINUX_SMB_FS_I
 
 #ifdef __KERNEL__
-#include <linux/smb.h>
-
-enum smb_inode_state {
-        SMB_INODE_VALID = 19,	/* Inode currently in use */
-        SMB_INODE_LOOKED_UP,	/* directly before iget */
-        SMB_INODE_CACHED,	/* in a path to an inode which is in use */
-        SMB_INODE_INVALID
-};
+#include <linux/types.h>
 
 /*
  * smb fs inode data (in memory only)
  */
 struct smb_inode_info {
-        enum smb_inode_state state;
-        int nused;              /* for directories:
-                                   number of references in memory */
-        struct smb_inode_info *dir;
-        struct smb_inode_info *next, *prev;
-        struct smb_dirent finfo;
+
+	/*
+	 * file handles are local to a connection. A file is open if
+	 * (open == generation).
+	 */
+        unsigned int open;
+	__u16 fileid;		/* What id to handle a file with? */
+	__u16 attr;		/* Attribute fields, DOS value */
+
+	__u16 access;		/* Access bits. */
 };
 
 #endif

@@ -9,6 +9,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/page.h>
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -23,7 +24,7 @@
 
 #define MAX_RETRIES 5   
 #define MAX_TIMEOUT (9 * HZ)
-#define MAX_BUF 4096
+#define MAX_BUF PAGE_SIZE
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -73,12 +74,9 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
  * 
  * *(char *) ((int *) arg)[2] the actual command byte.   
  * 
- * Note that no more than MAX_BUF data bytes will be transfered.  Since
- * SCSI block device size is 512 bytes, I figured 1K was good.
- * but (WDE) changed it to 8192 to handle large bad track buffers.
- * ERY: I changed this to a dynamic allocation using scsi_malloc - we were
- * getting a kernel stack overflow which was crashing the system when we
- * were using 8192 bytes.
+ * Note that if more than MAX_BUF bytes are requested to be transfered,
+ * the ioctl will fail with error EINVAL.  MAX_BUF can be increased in
+ * the future by increasing the size that scsi_malloc will accept.
  * 
  * This size *does not* include the initial lengths that were passed.
  * 
@@ -201,8 +199,8 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
      * If the user needs to transfer more data than this, they
      * should use scsi_generics instead.
      */
-    if( inlen > MAX_BUF ) inlen = MAX_BUF;
-    if( outlen > MAX_BUF ) outlen = MAX_BUF;
+    if( inlen > MAX_BUF ) return -EINVAL;
+    if( outlen > MAX_BUF ) return -EINVAL;
 
     cmd_in = sic->data;
     get_user(opcode, cmd_in); 

@@ -46,7 +46,7 @@ bool 'System V IPC' CONFIG_SYSVIPC
 define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
-tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 
 if [ "$CONFIG_PMAC" = "y" ]; then
   define_bool CONFIG_PMAC_CONSOLE y

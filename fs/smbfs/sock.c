@@ -2,6 +2,7 @@
  *  sock.c
  *
  *  Copyright (C) 1995, 1996 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1997 by Volker Lendecke
  *
  */
 
@@ -99,8 +100,7 @@ smb_data_callback(struct sock *sk, int len)
 			result = _recvfrom(sock, (void *) peek_buf, 4,
 					   MSG_DONTWAIT);
 
-			DDPRINTK("smb_data_callback:"
-				 " got SESSION KEEP ALIVE\n");
+			pr_debug("smb_data_callback: got SESSION KEEPALIVE\n");
 
 			if (result == -EAGAIN)
 			{
@@ -119,7 +119,7 @@ smb_data_callback(struct sock *sk, int len)
 }
 
 int
-smb_catch_keepalive(struct smb_server *server)
+smb_catch_keepalive(struct smb_sb_info *server)
 {
 	struct file *file;
 	struct inode *inode;
@@ -131,7 +131,7 @@ smb_catch_keepalive(struct smb_server *server)
 	    || ((inode = file->f_dentry->d_inode) == NULL)
 	    || (!S_ISSOCK(inode->i_mode)))
 	{
-		printk("smb_catch_keepalive: did not get valid server!\n");
+		pr_debug("smb_catch_keepalive: did not get valid server!\n");
 		server->data_ready = NULL;
 		return -EINVAL;
 	}
@@ -139,7 +139,7 @@ smb_catch_keepalive(struct smb_server *server)
 
 	if (sock->type != SOCK_STREAM)
 	{
-		printk("smb_catch_keepalive: did not get SOCK_STREAM\n");
+		pr_debug("smb_catch_keepalive: did not get SOCK_STREAM\n");
 		server->data_ready = NULL;
 		return -EINVAL;
 	}
@@ -147,17 +147,17 @@ smb_catch_keepalive(struct smb_server *server)
 
 	if (sk == NULL)
 	{
-		printk("smb_catch_keepalive: sk == NULL");
+		pr_debug("smb_catch_keepalive: sk == NULL");
 		server->data_ready = NULL;
 		return -EINVAL;
 	}
-	DDPRINTK("smb_catch_keepalive.: sk->d_r = %x, server->d_r = %x\n",
+	pr_debug("smb_catch_keepalive.: sk->d_r = %x, server->d_r = %x\n",
 		 (unsigned int) (sk->data_ready),
 		 (unsigned int) (server->data_ready));
 
 	if (sk->data_ready == smb_data_callback)
 	{
-		printk("smb_catch_keepalive: already done\n");
+		printk(KERN_ERR "smb_catch_keepalive: already done\n");
 		return -EINVAL;
 	}
 	server->data_ready = sk->data_ready;
@@ -166,7 +166,7 @@ smb_catch_keepalive(struct smb_server *server)
 }
 
 int
-smb_dont_catch_keepalive(struct smb_server *server)
+smb_dont_catch_keepalive(struct smb_sb_info *server)
 {
 	struct file *file;
 	struct inode *inode;
@@ -208,7 +208,7 @@ smb_dont_catch_keepalive(struct smb_server *server)
 		       "sk->data_callback != smb_data_callback\n");
 		return -EINVAL;
 	}
-	DDPRINTK("smb_dont_catch_keepalive: sk->d_r = %x, server->d_r = %x\n",
+	pr_debug("smb_dont_catch_keepalive: sk->d_r = %x, server->d_r = %x\n",
 		 (unsigned int) (sk->data_ready),
 		 (unsigned int) (server->data_ready));
 
@@ -235,8 +235,8 @@ smb_send_raw(struct socket *sock, unsigned char *source, int length)
 		}
 		if (result < 0)
 		{
-			DPRINTK("smb_send_raw: sendto error = %d\n",
-				-result);
+			pr_debug("smb_send_raw: sendto error = %d\n",
+				 -result);
 			return result;
 		}
 		already_sent += result;
@@ -262,8 +262,8 @@ smb_receive_raw(struct socket *sock, unsigned char *target, int length)
 		}
 		if (result < 0)
 		{
-			DPRINTK("smb_receive_raw: recvfrom error = %d\n",
-				-result);
+			pr_debug("smb_receive_raw: recvfrom error = %d\n",
+				 -result);
 			return result;
 		}
 		already_read += result;
@@ -286,7 +286,7 @@ smb_get_length(struct socket *sock, unsigned char *header)
 
 	if (result < 0)
 	{
-		DPRINTK("smb_get_length: recv error = %d\n", -result);
+		pr_debug("smb_get_length: recv error = %d\n", -result);
 		return result;
 	}
 	switch (peek_buf[0])
@@ -296,11 +296,11 @@ smb_get_length(struct socket *sock, unsigned char *header)
 		break;
 
 	case 0x85:
-		DPRINTK("smb_get_length: Got SESSION KEEP ALIVE\n");
+		pr_debug("smb_get_length: Got SESSION KEEP ALIVE\n");
 		goto re_recv;
 
 	default:
-		printk("smb_get_length: Invalid NBT packet\n");
+		pr_debug("smb_get_length: Invalid NBT packet\n");
 		return -EIO;
 	}
 
@@ -313,7 +313,7 @@ smb_get_length(struct socket *sock, unsigned char *header)
 }
 
 static struct socket *
-server_sock(struct smb_server *server)
+server_sock(struct smb_sb_info *server)
 {
 	struct file *file;
 	struct inode *inode;
@@ -332,7 +332,7 @@ server_sock(struct smb_server *server)
  * fs points to the correct segment
  */
 static int
-smb_receive(struct smb_server *server)
+smb_receive(struct smb_sb_info *server)
 {
 	struct socket *sock = server_sock(server);
 	int len;
@@ -349,7 +349,7 @@ smb_receive(struct smb_server *server)
 	{
 		/* Some servers do not care about our max_xmit. They
 		   send larger packets */
-		DPRINTK("smb_receive: Increase packet size from %d to %d\n",
+		pr_debug("smb_receive: Increase packet size from %d to %d\n",
 			server->packet_size, len + 4);
 		smb_vfree(server->packet);
 		server->packet_size = 0;
@@ -365,22 +365,22 @@ smb_receive(struct smb_server *server)
 
 	if (result < 0)
 	{
-		printk("smb_receive: receive error: %d\n", result);
+		pr_debug("smb_receive: receive error: %d\n", result);
 		return result;
 	}
-	server->rcls = BVAL(server->packet, 9);
+	server->rcls = *(server->packet+9);
 	server->err = WVAL(server->packet, 11);
 
 	if (server->rcls != 0)
 	{
-		DPRINTK("smb_receive: rcls=%d, err=%d\n",
-			server->rcls, server->err);
+		pr_debug("smb_receive: rcls=%d, err=%d\n",
+			 server->rcls, server->err);
 	}
 	return result;
 }
 
 static int
-smb_receive_trans2(struct smb_server *server,
+smb_receive_trans2(struct smb_sb_info *server,
 		   int *ldata, unsigned char **data,
 		   int *lparam, unsigned char **param)
 {
@@ -405,12 +405,12 @@ smb_receive_trans2(struct smb_server *server,
 	total_data = WVAL(server->packet, smb_tdrcnt);
 	total_param = WVAL(server->packet, smb_tprcnt);
 
-	DDPRINTK("smb_receive_trans2: td=%d,tp=%d\n", total_data, total_param);
+	pr_debug("smb_receive_trans2: td=%d,tp=%d\n", total_data, total_param);
 
 	if ((total_data > TRANS2_MAX_TRANSFER)
 	    || (total_param > TRANS2_MAX_TRANSFER))
 	{
-		DPRINTK("smb_receive_trans2: data/param too long\n");
+		pr_debug("smb_receive_trans2: data/param too long\n");
 		return -EIO;
 	}
 	buf_len = total_data + total_param;
@@ -420,7 +420,7 @@ smb_receive_trans2(struct smb_server *server,
 	}
 	if ((rcv_buf = smb_vmalloc(buf_len)) == NULL)
 	{
-		DPRINTK("smb_receive_trans2: could not alloc data area\n");
+		pr_debug("smb_receive_trans2: could not alloc data area\n");
 		return -ENOMEM;
 	}
 	*param = rcv_buf;
@@ -433,7 +433,7 @@ smb_receive_trans2(struct smb_server *server,
 		if (WVAL(inbuf, smb_prdisp) + WVAL(inbuf, smb_prcnt)
 		    > total_param)
 		{
-			DPRINTK("smb_receive_trans2: invalid parameters\n");
+			pr_debug("smb_receive_trans2: invalid parameters\n");
 			result = -EIO;
 			goto fail;
 		}
@@ -445,14 +445,11 @@ smb_receive_trans2(struct smb_server *server,
 		if (WVAL(inbuf, smb_drdisp) + WVAL(inbuf, smb_drcnt)
 		    > total_data)
 		{
-			DPRINTK("smb_receive_trans2: invalid data block\n");
+			pr_debug("smb_receive_trans2: invalid data block\n");
 			result = -EIO;
 			goto fail;
 		}
-		DDPRINTK("target: %X\n", *data + WVAL(inbuf, smb_drdisp));
-		DDPRINTK("source: %X\n",
-			 smb_base(inbuf) + WVAL(inbuf, smb_droff));
-		DDPRINTK("disp: %d, off: %d, cnt: %d\n",
+		pr_debug("disp: %d, off: %d, cnt: %d\n",
 			 WVAL(inbuf, smb_drdisp), WVAL(inbuf, smb_droff),
 			 WVAL(inbuf, smb_drcnt));
 
@@ -464,7 +461,7 @@ smb_receive_trans2(struct smb_server *server,
 		if ((WVAL(inbuf, smb_tdrcnt) > total_data)
 		    || (WVAL(inbuf, smb_tprcnt) > total_param))
 		{
-			printk("smb_receive_trans2: data/params grew!\n");
+			pr_debug("smb_receive_trans2: data/params grew!\n");
 			result = -EIO;
 			goto fail;
 		}
@@ -499,50 +496,8 @@ smb_receive_trans2(struct smb_server *server,
 	return result;
 }
 
-extern struct net_proto_family inet_family_ops;
-
 int
-smb_release(struct smb_server *server)
-{
-	struct socket *sock = server_sock(server);
-	int result;
-
-	if (sock == NULL)
-	{
-		return -EINVAL;
-	}
-	result = sock->ops->release(sock, NULL);
-	DPRINTK("smb_release: sock->ops->release = %d\n", result);
-
-	/* inet_release does not set sock->state.  Maybe someone is
-	   confused about sock->state being SS_CONNECTED while there
-	   is nothing behind it, so I set it to SS_UNCONNECTED. */
-	sock->state = SS_UNCONNECTED;
-
-	result = inet_family_ops.create(sock, 0);
-	DPRINTK("smb_release: inet_create = %d\n", result);
-	return result;
-}
-
-int
-smb_connect(struct smb_server *server)
-{
-	struct socket *sock = server_sock(server);
-	if (sock == NULL)
-	{
-		return -EINVAL;
-	}
-	if (sock->state != SS_UNCONNECTED)
-	{
-		DPRINTK("smb_connect: socket is not unconnected: %d\n",
-			sock->state);
-	}
-	return sock->ops->connect(sock, (struct sockaddr *) &(server->m.addr),
-				  sizeof(struct sockaddr_in), 0);
-}
-
-int
-smb_request(struct smb_server *server)
+smb_request(struct smb_sb_info *server)
 {
 	unsigned long old_mask;
 	unsigned short fs;
@@ -552,7 +507,7 @@ smb_request(struct smb_server *server)
 
 	if (buffer == NULL)
 	{
-		printk("smb_request: Bad server!\n");
+		pr_debug("smb_request: Bad server!\n");
 		return -EBADF;
 	}
 	if (server->state != CONN_VALID)
@@ -562,12 +517,12 @@ smb_request(struct smb_server *server)
 	if ((result = smb_dont_catch_keepalive(server)) != 0)
 	{
 		server->state = CONN_INVALID;
-		smb_invalidate_all_inodes(server);
+		smb_invalidate_inodes(server);
 		return result;
 	}
 	len = smb_len(buffer) + 4;
 
-	DDPRINTK("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
+	pr_debug("smb_request: len = %d cmd = 0x%X\n", len, buffer[8]);
 
 	old_mask = current->blocked;
 	current->blocked |= ~(_S(SIGKILL) | _S(SIGSTOP));
@@ -595,16 +550,16 @@ smb_request(struct smb_server *server)
 	if (result < 0)
 	{
 		server->state = CONN_INVALID;
-		smb_invalidate_all_inodes(server);
+		smb_invalidate_inodes(server);
 	}
-	DDPRINTK("smb_request: result = %d\n", result);
+	pr_debug("smb_request: result = %d\n", result);
 
 	return result;
 }
 
 #define ROUND_UP(x) (((x)+3) & ~3)
 static int
-smb_send_trans2(struct smb_server *server, __u16 trans2_command,
+smb_send_trans2(struct smb_sb_info *server, __u16 trans2_command,
 		int ldata, unsigned char *data,
 		int lparam, unsigned char *param)
 {
@@ -632,7 +587,7 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
 	struct iovec iov[4];
 	struct msghdr msg;
 
-	if ((bcc + oparam) > server->max_xmit)
+	if ((bcc + oparam) > server->opt.max_xmit)
 	{
 		return -ENOMEM;
 	}
@@ -687,7 +642,7 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
  * one packet to send.
  */
 int
-smb_trans2_request(struct smb_server *server, __u16 trans2_command,
+smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		   int ldata, unsigned char *data,
 		   int lparam, unsigned char *param,
 		   int *lrdata, unsigned char **rdata,
@@ -697,7 +652,7 @@ smb_trans2_request(struct smb_server *server, __u16 trans2_command,
 	unsigned short fs;
 	int result;
 
-	DDPRINTK("smb_trans2_request: com=%d, ld=%d, lp=%d\n",
+	pr_debug("smb_trans2_request: com=%d, ld=%d, lp=%d\n",
 		 trans2_command, ldata, lparam);
 
 	if (server->state != CONN_VALID)
@@ -707,7 +662,7 @@ smb_trans2_request(struct smb_server *server, __u16 trans2_command,
 	if ((result = smb_dont_catch_keepalive(server)) != 0)
 	{
 		server->state = CONN_INVALID;
-		smb_invalidate_all_inodes(server);
+		smb_invalidate_inodes(server);
 		return result;
 	}
 	old_mask = current->blocked;
@@ -738,9 +693,9 @@ smb_trans2_request(struct smb_server *server, __u16 trans2_command,
 	if (result < 0)
 	{
 		server->state = CONN_INVALID;
-		smb_invalidate_all_inodes(server);
+		smb_invalidate_inodes(server);
 	}
-	DDPRINTK("smb_trans2_request: result = %d\n", result);
+	pr_debug("smb_trans2_request: result = %d\n", result);
 
 	return result;
 }

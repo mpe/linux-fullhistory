@@ -134,21 +134,23 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 }
 #endif	/* CONFIG_MODULES */
 
+/* N.B. Error returns must be < 0 */
 int open_dentry(struct dentry * dentry, int mode)
 {
 	int fd;
 	struct inode * inode = dentry->d_inode;
+	struct file * f;
+	int error;
 
+	error = -EINVAL;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
-		return -EINVAL;
+		goto out;
 	fd = get_unused_fd();
 	if (fd >= 0) {
-		struct file * f = get_empty_filp();
-
-		if (!f) {
-			put_unused_fd(fd);
-			return -ENFILE;
-		}
+		error = -ENFILE;
+		f = get_empty_filp();
+		if (!f)
+			goto out_fd;
 		f->f_flags = mode;
 		f->f_mode = (mode+1) & O_ACCMODE;
 		f->f_dentry = dentry;
@@ -156,17 +158,23 @@ int open_dentry(struct dentry * dentry, int mode)
 		f->f_reada = 0;
 		f->f_op = inode->i_op->default_file_ops;
 		if (f->f_op->open) {
-			int error = f->f_op->open(inode,f);
-			if (error) {
-				put_filp(f);
-				put_unused_fd(fd);
-				return error;
-			}
+			error = f->f_op->open(inode,f);
+			if (error)
+				goto out_filp;
 		}
 		current->files->fd[fd] = f;
 		dget(dentry);
 	}
 	return fd;
+
+out_filp:
+	if (error > 0)
+		error = -EIO;
+	put_filp(f);
+out_fd:
+	put_unused_fd(fd);
+out:
+	return error;
 }
 
 /*
@@ -379,37 +387,53 @@ end_readexec:
 	return result;
 }
 
-static void exec_mmap(void)
+static int exec_mmap(void)
 {
+	struct mm_struct * mm, * old_mm;
+	int retval;
+
+	if (current->mm->count == 1) {
+		flush_cache_mm(current->mm);
+		exit_mmap(current->mm);
+		clear_page_tables(current);
+		flush_tlb_mm(current->mm);
+		return 0;
+	}
+
 	/*
 	 * The clear_page_tables done later on exec does the right thing
 	 * to the page directory when shared, except for graceful abort
 	 * (the oom is wrong there, too, IMHO)
 	 */
-	if (current->mm->count > 1) {
-		struct mm_struct *mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
-		if (!mm) {
-			/* this is wrong, I think. */
-			oom(current);
-			return;
-		}
-		*mm = *current->mm;
-		init_new_context(mm);
-		mm->def_flags = 0;	/* should future lockings be kept? */
-		mm->cpu_vm_mask = (1UL << smp_processor_id());
-		mm->count = 1;
-		mm->mmap = mm->mmap_cache = NULL;
-		mm->total_vm = 0;
-		mm->rss = 0;
-		current->mm->count--;
-		current->mm = mm;
-		new_page_tables(current);
-		return;
-	}
-	flush_cache_mm(current->mm);
-	exit_mmap(current->mm);
-	clear_page_tables(current);
-	flush_tlb_mm(current->mm);
+	retval = -ENOMEM;
+	mm = mm_alloc();
+	if (!mm)
+		goto fail_nomem;
+	mm->cpu_vm_mask = (1UL << smp_processor_id());
+	mm->total_vm = 0;
+	mm->rss = 0;
+	old_mm = current->mm;
+	current->mm = mm;
+	retval = new_page_tables(current);
+	if (retval)
+		goto fail_restore;
+	mmput(old_mm);
+	return 0;
+
+	/*
+	 * Failure ... restore the prior mm_struct.
+	 */
+fail_restore:
+	current->mm = old_mm;
+	mmput(mm);
+
+	/*
+	 * N.B. binfmt_xxx needs to handle the error instead of oom()
+	 */
+fail_nomem:
+	/* this is wrong, I think. */
+	oom(current);
+	return retval;
 }
 
 /*
@@ -454,9 +478,16 @@ static inline void flush_old_files(struct files_struct * files)
 
 void flush_old_exec(struct linux_binprm * bprm)
 {
-	int i;
-	int ch;
 	char * name;
+	int i, ch, retval;
+
+	/* 
+	 * Release all of the old mmap stuff ... do this first
+	 * so we can bail out on failure.
+	 */
+	retval = exec_mmap();
+	if (retval)
+		goto out;
 
 	if (current->euid == current->uid && current->egid == current->gid)
 		current->dumpable = 1;
@@ -470,9 +501,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 	}
 	current->comm[i] = '\0';
 
-	/* Release all of the old mmap stuff. */
-	exec_mmap();
-
 	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
@@ -481,6 +509,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 
 	flush_old_signals(current->sig);
 	flush_old_files(current->files);
+out:
+	return; /* retval; FIXME. */
 }
 
 /* 

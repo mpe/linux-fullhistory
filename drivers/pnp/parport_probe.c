@@ -52,7 +52,7 @@ static long read_polled(struct parport *port, char *buf,
 {
 	int i;
 	char *temp=buf;
-	int count = 0;
+	unsigned int count = 0;
 	unsigned char z=0;
 	unsigned char Byte=0;
 

@@ -1,7 +1,6 @@
-/* $Id$ 
- * IEEE-1284 implementation for parport.
+/* IEEE-1284 implementation for parport.
  *
- * Authors: Philip Blundell <pjb27@cam.ac.uk>
+ * Authors: Phil Blundell <Philip.Blundell@pobox.com>
  *          Carsten Gross <carsten@sol.wohnheim.uni-ulm.de>
  *	    Jose Renau <renau@acm.org>
  */

@@ -1982,12 +1982,10 @@ NCR53C8XX SCSI support
 CONFIG_SCSI_NCR53C8XX
   This is the BSD ncr driver adapted to linux for the NCR53C8XX family
   of PCI-SCSI controllers. This driver supports parity checking,
-  tagged command queuing, fast scsi II transfer up to 10 MB/s with
-  narrow scsi devices and 20 MB/s with wide scsi devices.
-  Support of Ultra SCSI data transfers with NCR53C860 and NCR53C875 
-  controllers has been recently added to the driver.
+  tagged command queuing, Fast-20 data transfer up to 20 MB/s with
+  narrow scsi devices and 40 MB/s with wide scsi devices.
   Please read drivers/scsi/README.ncr53c8xx for more information.
-  Linux/i386 and Linux/Alpha are supported by this driver.
+  Linux/i386, Linux/Alpha and Linux/PPC are supported by this driver.
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
@@ -2015,10 +2013,11 @@ use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
   This option allows you to force the driver to use normal IO.
   Memory mapped IO has less latency than normal IO and works for most 
-  Intel-based hardware.
-  Under Linux/Alpha only normal IO is currently supported by the driver 
-  and so, this option has no effect.
-  The normal answer therefore is N. Try Y only if you have problems.
+  Intel-based hardware.  Under Linux/Alpha and Linux/PPC only normal 
+  IO is currently supported by the driver and so, this option has no
+  effect. On Linux/PPC MMIO and normal IO are done the same (all IO
+  is memory mapped) so you loose nothing by using normal IO. The normal
+  answer therefore is N. Try Y only if you have problems.
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT

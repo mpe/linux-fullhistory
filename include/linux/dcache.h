@@ -46,7 +46,6 @@ struct dentry {
 	struct dentry * d_mounts;	/* mount information */
 	struct dentry * d_covers;
 	struct list_head d_hash;	/* lookup hash list */
-	struct list_head d_alias;	/* inode alias list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct qstr d_name;
 	unsigned long d_time;		/* used by d_revalidate */
@@ -57,6 +56,7 @@ struct dentry_operations {
 	int (*d_revalidate)(struct dentry *);
 	int (*d_hash) (struct dentry *,struct qstr *);
 	int (*d_compare) (struct dentry *,struct qstr *, struct qstr *);
+	void (*d_delete)(struct dentry *);
 };
 
 /* the dentry parameter passed to d_hash and d_compare is the parent
@@ -70,6 +70,10 @@ struct dentry_operations {
 
 /* d_flags entries */
 #define DCACHE_AUTOFS_PENDING 0x0001    /* autofs: "under construction" */
+#define DCACHE_NFSFS_RENAMED  0x0002    /* this dentry has been "silly
+					 * renamed" and has to be
+					 * deleted on the last dput()
+					 */
 
 /*
  * d_drop() unhashes the entry from the parent
@@ -132,13 +136,5 @@ static inline struct dentry * dget(struct dentry *dentry)
 }
 
 extern void dput(struct dentry *);
-
-/*
- * This is ugly. The inode:dentry relationship is a 1:n
- * relationship, so we have to return one (random) dentry
- * from the alias list. We select the first one..
- */
-#define i_dentry(inode) \
-	list_entry((inode)->i_dentry.next, struct dentry, d_alias)
 
 #endif	/* __LINUX_DCACHE_H */

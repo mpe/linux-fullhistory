@@ -54,6 +54,7 @@ running, the suggested command should tell you.
 - Autofs                 0.3.7                   ; automount --version
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
+- Smbfs                  2.1.0
 
 Upgrade notes
 *************
@@ -159,6 +160,10 @@ much-improved performance.  As a result, you'll need to upgrade mount
 to a 2.6 release.  Also, amd is being phased out in favor of the much
 better autofs.  You'll also have to get the appropriate utils to use
 autofs as well as the new NFS utils.
+
+The smbfs code is also being revised. This results in an incompatible
+mount interface. See the README of smbfs-2.1.0 or later for a
+description of the new mount command.
 
 RPM
 ===

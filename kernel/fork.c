@@ -258,9 +258,45 @@ static inline int dup_mmap(struct mm_struct * mm)
 	return 0;
 
 fail_nomem:
-	exit_mmap(mm);
 	flush_tlb_mm(current->mm);
 	return retval;
+}
+
+/*
+ * Allocate and initialize an mm_struct.
+ */
+struct mm_struct * mm_alloc(void)
+{
+	struct mm_struct * mm;
+
+	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
+	if (mm) {
+		*mm = *current->mm;
+		init_new_context(mm);
+		mm->count = 1;
+		mm->def_flags = 0;
+		mm->mmap_sem = MUTEX;
+		mm->pgd = NULL;
+		mm->mmap = mm->mmap_cache = NULL;
+
+		/* It has not run yet, so cannot be present in anyone's
+		 * cache or tlb.
+		 */
+		mm->cpu_vm_mask = 0;
+	}
+	return mm;
+}
+
+/*
+ * Decrement the use count and release all resources for an mm.
+ */
+void mmput(struct mm_struct *mm)
+{
+	if (!--mm->count) {
+		exit_mmap(mm);
+		free_page_tables(mm);
+		kmem_cache_free(mm_cachep, mm);
+	}
 }
 
 static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
@@ -269,25 +305,15 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	int retval;
 
 	if (clone_flags & CLONE_VM) {
-		current->mm->count++;
+		mmget(current->mm);
 		SET_PAGE_DIR(tsk, current->mm->pgd);
 		return 0;
 	}
 
 	retval = -ENOMEM;
-	mm = kmem_cache_alloc(mm_cachep, SLAB_KERNEL);
+	mm = mm_alloc();
 	if (!mm)
 		goto fail_nomem;
-	*mm = *current->mm;
-	init_new_context(mm);
-	mm->count = 1;
-	mm->def_flags = 0;
-	mm->mmap_sem = MUTEX;
-
-	/* It has not run yet, so cannot be present in anyone's
-	 * cache or tlb.
-	 */
-	mm->cpu_vm_mask = 0;
 
 	tsk->mm = mm;
 	tsk->min_flt = tsk->maj_flt = 0;
@@ -298,14 +324,12 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		goto free_mm;
 	retval = dup_mmap(mm);
 	if (retval)
-		goto free_pt;
+		goto free_mm;
 	return 0;
 
-free_pt:
-	free_page_tables(mm);
 free_mm:
 	tsk->mm = NULL;
-	kmem_cache_free(mm_cachep, mm);
+	mmput(mm);
 fail_nomem:
 	return retval;
 }
