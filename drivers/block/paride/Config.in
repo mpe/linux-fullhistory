@@ -1,6 +1,17 @@
 #
 # PARIDE configuration
 #
+
+# PARIDE doesn't need PARPORT, but if PARPORT is configured as a module,
+# PARIDE must also be a module.  The bogus CONFIG_PARIDE_PARPORT option
+# controls the choices given to the user ...
+ 
+if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "n" ]; then
+   define_tristate CONFIG_PARIDE_PARPORT y
+else
+   define_tristate CONFIG_PARIDE_PARPORT m
+fi
+
 comment 'Parallel IDE high-level drivers'
 dep_tristate '  Parallel port IDE disks' CONFIG_PARIDE_PD $CONFIG_PARIDE
 dep_tristate '  Parallel port ATAPI CD-ROMs' CONFIG_PARIDE_PCD $CONFIG_PARIDE

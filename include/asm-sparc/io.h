@@ -1,5 +1,5 @@
 /*
- * $Id: io.h,v 1.24 1999/12/20 04:58:40 davem Exp $
+ * $Id: io.h,v 1.25 2000/01/22 07:35:46 zaitcev Exp $
  */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
@@ -12,7 +12,7 @@
 #include <asm/system.h>
 
 #define virt_to_bus virt_to_phys
-
+#define bus_to_virt phys_to_virt
 
 extern __inline__ unsigned  flip_dword (unsigned d) {
 	return ((d&0xff)<<24) | (((d>>8)&0xff)<<16) | (((d>>16)&0xff)<<8)| ((d>>24)&0xff);
@@ -77,6 +77,13 @@ extern __inline__ void writel(unsigned int b, unsigned long addr) {
 #define outw(b, addr)		writew(b, addr)
 #define outl(b, addr)		writel(b, addr)
 #define outb_p(b, addr)		writeb(b, addr)
+
+extern void outsb(unsigned long addr, const void *src, unsigned long cnt);
+extern void outsw(unsigned long addr, const void *src, unsigned long cnt);
+extern void outsl(unsigned long addr, const void *src, unsigned long cnt);
+extern void insb(unsigned long addr, void *dst, unsigned long count);
+extern void insw(unsigned long addr, void *dst, unsigned long count);
+extern void insl(unsigned long addr, void *dst, unsigned long count);
 
 #define IO_SPACE_LIMIT 0xffffffff
 

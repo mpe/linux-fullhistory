@@ -115,7 +115,7 @@ int vfc_i2c_reset_bus(struct vfc_dev *dev)
 {
 	VFC_I2C_DEBUG_PRINTK((KERN_DEBUG "vfc%d: Resetting the i2c bus\n",
 			      dev->instance));
-	if(dev == NULl)
+	if(dev == NULL)
 		return -EINVAL;
 	if(dev->regs == NULL)
 		return -EINVAL;

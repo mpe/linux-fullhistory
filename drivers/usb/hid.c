@@ -1005,7 +1005,7 @@ static void hid_irq(struct urb *urb)
 static void hid_read_report(struct hid_device *hid, struct hid_report *report)
 {
 #if 0
-	int rlen = ((report->size - 1) >> 3) + 1 +  hid->report_enum[HID_INPUT_REPORT].numbered;
+	int rlen = ((report->size - 1) >> 3) + 1;
 	char rdata[rlen];
 	struct urb urb;
 	int read, j;
@@ -1019,7 +1019,7 @@ static void hid_read_report(struct hid_device *hid, struct hid_report *report)
 
 	dbg("getting report type %d id %d len %d", report->type + 1, report->id, rlen);
 
-	if ((read = usb_get_report(hid->dev, report->type + 1, report->id, hid->ifnum, rdata, rlen)) != rlen) {
+	if ((read = usb_get_report(hid->dev, hid->ifnum, report->type + 1, report->id, rdata, rlen)) != rlen) {
 		dbg("reading report failed rlen %d read %d", rlen, read);
 #ifdef DEBUG
 		printk(KERN_DEBUG __FILE__ ": report = ");
@@ -1059,13 +1059,6 @@ static void hid_output_field(struct hid_field *field, __u8 *data)
 void hid_output_report(struct hid_report *report, __u8 *data)
 {
 	unsigned n;
-
-#if 0
-	/* skip the ID if we have a single report */
-	if (report->device->report_enum[report->type].numbered)
-		*data++ = report->id;
-#endif
-
 	for (n = 0; n < report->maxfield; n++)
 		hid_output_field(report->field[n], data);
 };
@@ -1188,7 +1181,7 @@ static void hid_init_input(struct hid_device *hid)
 					hid_configure_usage(hid, report->field[i], report->field[i]->usage + j);
 
 			if (k == HID_INPUT_REPORT)  {
-				usb_set_idle(hid->dev, 0, report->id);
+				usb_set_idle(hid->dev, hid->ifnum, report->id, 0);
 				hid_read_report(hid, report);
 			}
 		}
@@ -1197,7 +1190,7 @@ static void hid_init_input(struct hid_device *hid)
 
 static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 {
-	struct usb_interface_descriptor *interface = &dev->actconfig->interface[ifnum].altsetting[0];
+	struct usb_interface_descriptor *interface = dev->actconfig->interface[ifnum].altsetting + 0;
 	struct hid_descriptor *hdesc;
 	struct hid_device *hid;
 	unsigned rsize = 0;
@@ -1224,7 +1217,7 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 	{
 		__u8 rdesc[rsize];
 
-		if ((n = usb_get_class_descriptor(dev, USB_DT_REPORT, 0, ifnum, rdesc, rsize)) < 0) {
+		if ((n = usb_get_class_descriptor(dev, interface->bInterfaceNumber, USB_DT_REPORT, 0, rdesc, rsize)) < 0) {
 			dbg("reading report descriptor failed");
 			return NULL;
 		}
@@ -1272,19 +1265,22 @@ static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 		return NULL;
 	}
 
+	hid->version = hdesc->bcdHID;
+	hid->country = hdesc->bCountryCode;
+	hid->dev = dev;
+	hid->ifnum = interface->bInterfaceNumber;
+
 	hid->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
 	hid->dr.request = USB_REQ_SET_REPORT;
 	hid->dr.value = 0x200;
-	hid->dr.index = interface->bInterfaceNumber;
+	hid->dr.index = hid->ifnum;
 	hid->dr.length = 1;
 
 	FILL_CONTROL_URB(&hid->urbout, dev, usb_sndctrlpipe(dev, 0),
 		(void*) &hid->dr, hid->bufout, 1, hid_ctrl, hid);
 
-	hid->version = hdesc->bcdHID;
-	hid->country = hdesc->bCountryCode;
-	hid->dev = dev;
-	hid->ifnum = ifnum;
+	if (interface->bInterfaceSubClass == 1)
+        	usb_set_protocol(dev, hid->ifnum, 1);
 
 	return hid;
 }

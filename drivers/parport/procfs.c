@@ -224,7 +224,7 @@ static const struct parport_sysctl_table parport_sysctl_template = {
 #endif /* IEEE 1284 support */
 		{0}
 	},
-	{ {DEV_PARPORT_DEVICES_ACTIVE, "active", NULL, 0, 444, NULL,
+	{ {DEV_PARPORT_DEVICES_ACTIVE, "active", NULL, 0, 0444, NULL,
 	  &do_active_device }, {0}},
 	{ PARPORT_PORT_DIR(NULL), {0}},
 	{ PARPORT_PARPORT_DIR(NULL), {0}},

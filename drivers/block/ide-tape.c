@@ -384,7 +384,7 @@
  *		sharing a (fast) ATA-2 disk with any (slow) new ATAPI device.
  */
 
-#define IDETAPE_VERSION "1.16e"
+#define IDETAPE_VERSION "1.16f"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -408,6 +408,9 @@
 #include <asm/io.h>
 #include <asm/unaligned.h>
 #include <asm/bitops.h>
+
+
+#define NO_LONGER_REQUIRE	(1)
 
 /*
  *	OnStream support
@@ -1735,7 +1738,7 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 					aux = stage->aux;
 					p = stage->bh->b_data;
 					if (ntohl(aux->logical_blk_num) < 11300 && ntohl(aux->logical_blk_num) > 11100)
-						printk(KERN_INFO "ide-tape: finished writing logical blk %lu (data %x %x %x %x)\n", ntohl(aux->logical_blk_num), *p++, *p++, *p++, *p++);
+						printk(KERN_INFO "ide-tape: finished writing logical blk %u (data %x %x %x %x)\n", ntohl(aux->logical_blk_num), *p++, *p++, *p++, *p++);
 				}
 			}
 #endif
@@ -2851,7 +2854,7 @@ static void idetape_add_stage_tail (ide_drive_t *drive,idetape_stage_t *stage)
 /*
  * Initialize the OnStream AUX
  */
-static void idetape_init_stage(ide_drive_t *drive, idetape_stage_t *stage, int frame_type, int logical_blk_num)
+static void idetape_init_stage (ide_drive_t *drive, idetape_stage_t *stage, int frame_type, int logical_blk_num)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	os_aux_t *aux = stage->aux;
@@ -2965,7 +2968,7 @@ static ide_startstop_t idetape_read_position_callback (ide_drive_t *drive)
 		} else {
 #if IDETAPE_DEBUG_LOG
 			if (tape->debug_level >= 2)
-				printk (KERN_INFO "ide-tape: Block Location - %lu\n", ntohl (result->first_block));
+				printk (KERN_INFO "ide-tape: Block Location - %u\n", ntohl (result->first_block));
 #endif /* IDETAPE_DEBUG_LOG */
 			tape->partition = result->partition;
 			tape->first_frame_position = ntohl (result->first_block);
@@ -3358,7 +3361,7 @@ static void idetape_onstream_write_error_recovery (ide_drive_t *drive)
 	unsigned int block;
 
 	if (tape->onstream_write_error == 1) {
-		printk(KERN_ERR "ide-tape: %s: detected physical bad block at %lu\n", tape->name, ntohl(tape->sense.information));
+		printk(KERN_ERR "ide-tape: %s: detected physical bad block at %u\n", tape->name, ntohl(tape->sense.information));
 		block = ntohl(tape->sense.information) + 80;
 		idetape_update_stats(drive);
 		printk(KERN_ERR "ide-tape: %s: relocating %d buffered logical blocks to physical block %u\n", tape->name, tape->cur_frames, block);
@@ -3490,7 +3493,7 @@ static int idetape_verify_stage (ide_drive_t *drive, idetape_stage_t *stage, int
 		return 0;
 	}
 	if (ntohl(aux->format_id) != 0) {
-		printk(KERN_INFO "ide-tape: %s: skipping frame, format_id %lu\n", tape->name, ntohl(aux->format_id));
+		printk(KERN_INFO "ide-tape: %s: skipping frame, format_id %u\n", tape->name, ntohl(aux->format_id));
 		return 0;
 	}
 	if (memcmp(aux->application_sig, tape->application_sig, 4) != 0) {
@@ -3514,7 +3517,7 @@ static int idetape_verify_stage (ide_drive_t *drive, idetape_stage_t *stage, int
 		return 0;
 	}
 	if (ntohs(par->wrt_pass_cntr) != tape->wrt_pass_cntr) {
-		printk(KERN_INFO "ide-tape: %s: skipping frame, wrt_pass_cntr %d (expected %d)(logical_blk_num %lu)\n", tape->name, ntohs(par->wrt_pass_cntr), tape->wrt_pass_cntr, ntohl(aux->logical_blk_num));
+		printk(KERN_INFO "ide-tape: %s: skipping frame, wrt_pass_cntr %d (expected %d)(logical_blk_num %u)\n", tape->name, ntohs(par->wrt_pass_cntr), tape->wrt_pass_cntr, ntohl(aux->logical_blk_num));
 		return 0;
 	}
 	if (aux->frame_seq_num != aux->logical_blk_num) {
@@ -3523,7 +3526,7 @@ static int idetape_verify_stage (ide_drive_t *drive, idetape_stage_t *stage, int
 	}
 	if (logical_blk_num != -1 && ntohl(aux->logical_blk_num) != logical_blk_num) {
 		if (!quiet)
-			printk(KERN_INFO "ide-tape: %s: skipping frame, logical_blk_num %lu (expected %d)\n", tape->name, ntohl(aux->logical_blk_num), logical_blk_num);
+			printk(KERN_INFO "ide-tape: %s: skipping frame, logical_blk_num %u (expected %d)\n", tape->name, ntohl(aux->logical_blk_num), logical_blk_num);
 		return 0;
 	}
 	if (aux->frame_type == OS_FRAME_TYPE_MARKER) {
@@ -4492,7 +4495,8 @@ static void __idetape_write_header (ide_drive_t *drive, int block, int cnt)
 	idetape_position_tape(drive, block, 0, 0);
 	memset(&header, 0, sizeof(header));
 	strcpy(header.ident_str, "ADR_SEQ");
-	header.major_rev = header.minor_rev = 2;
+	header.major_rev = 1;
+	header.minor_rev = 2;
 	header.par_num = 1;
 	header.partition.partition_num = OS_DATA_PARTITION;
 	header.partition.par_desc_ver = OS_PARTITION_VERSION;
@@ -5113,7 +5117,11 @@ static int idetape_analyze_headers (ide_drive_t *drive)
 	for (block = 5; block < 10; block++)
 		if (__idetape_analyze_headers(drive, block))
 			goto ok;
+#if 0
+	for (block = 0xbae; block < 0xbb8; block++)
+#else
 	for (block = 0xbae; block < 0xbb3; block++)
+#endif
 		if (__idetape_analyze_headers(drive, block))
 			goto ok;
 	printk(KERN_ERR "ide-tape: %s: failed to find valid ADRL header\n", tape->name);
@@ -5866,8 +5874,7 @@ int idetape_init (void)
 		ide_register_module (&idetape_module);
 		MOD_DEC_USE_COUNT;
 #if ONSTREAM_DEBUG
-		if (tape->debug_level >= 6)
-			printk(KERN_INFO "ide-tape: MOD_DEC_USE_COUNT in idetape_init\n");
+		printk(KERN_INFO "ide-tape: MOD_DEC_USE_COUNT in idetape_init\n");
 #endif
 		return 0;
 	}

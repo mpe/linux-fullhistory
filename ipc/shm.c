@@ -584,15 +584,10 @@ out_unlock:
  */
 
 static struct vm_operations_struct shm_vm_ops = {
-	shm_open,		/* open - callback for a new vm-area open */
-	shm_close,		/* close - callback for when the vm-area is released */
-	NULL,			/* no need to sync pages at unmap */
-	NULL,			/* protect */
-	NULL,			/* sync */
-	NULL,			/* advise */
-	shm_nopage,		/* nopage */
-	NULL,			/* wppage */
-	shm_swapout		/* swapout */
+	open:		shm_open,	/* open - callback for a new vm-area open */
+	close:		shm_close,	/* close - callback for when the vm-area is released */
+	nopage:		shm_nopage,
+	swapout:	shm_swapout,
 };
 
 /* Insert shmd into the list shp->attaches */

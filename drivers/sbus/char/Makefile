@@ -103,6 +103,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUN_JSFLASH),y)
+O_OBJS += jsflash.o
+endif
+ifeq ($(CONFIG_SUN_JSFLASH),m)
+M_OBJS += jsflash.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 sunkbdmap.o: sunkeymap.c

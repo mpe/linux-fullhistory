@@ -92,17 +92,9 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	return page;
 }
 
-struct vm_operations_struct ncp_file_mmap =
+static struct vm_operations_struct ncp_file_mmap =
 {
-	NULL,			/* open */
-	NULL,			/* close */
-	NULL,			/* unmap */
-	NULL,			/* protect */
-	NULL,			/* sync */
-	NULL,			/* advise */
-	ncp_file_mmap_nopage,	/* nopage */
-	NULL,			/* wppage */
-	NULL			/* swapout */
+	nopage:	ncp_file_mmap_nopage,
 };
 
 

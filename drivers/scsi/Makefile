@@ -675,6 +675,14 @@ ifeq ($(CONFIG_SUN3X_ESP),y)
 L_OBJS += NCR53C9x.o sun3x_esp.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_3W_XXXX_RAID),y)
+L_OBJS += 3w-xxxx.o
+else
+  ifeq ($(CONFIG_BLK_DEV_3W_XXXX_RAID),m)
+  M_OBJS += 3w-xxxx.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 53c8xx_d.h: 53c7,8xx.scr script_asm.pl

@@ -168,14 +168,14 @@ static struct inode_operations chrdev_inode_operations = {
  * Print device name (in decimal, hexadecimal or symbolic)
  * Note: returns pointer to static data!
  */
-char * kdevname(kdev_t dev)
+const char * kdevname(kdev_t dev)
 {
 	static char buffer[32];
 	sprintf(buffer, "%02x:%02x", MAJOR(dev), MINOR(dev));
 	return buffer;
 }
 
-char * cdevname(kdev_t dev)
+const char * cdevname(kdev_t dev)
 {
 	static char buffer[32];
 	const char * name = chrdevs[MAJOR(dev)].name;

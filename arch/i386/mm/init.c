@@ -196,7 +196,7 @@ void __init kmap_init(void)
 
 	kmap_prot = PAGE_KERNEL;
 }
-#endif
+#endif /* CONFIG_HIGHMEM */
 
 void show_mem(void)
 {

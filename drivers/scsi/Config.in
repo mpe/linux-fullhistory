@@ -30,9 +30,9 @@ dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 $CONFIG_SCSI
 dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
 if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
    bool '  Enable Tagged Command Queueing (TCQ) by default' CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
-   int  'Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
+   int  '  Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
    bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS
-   int  'Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
+   int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
 fi
 dep_tristate 'IBM ServeRAID support' CONFIG_SCSI_IPS $CONFIG_SCSI
 dep_tristate 'AdvanSys SCSI support' CONFIG_SCSI_ADVANSYS $CONFIG_SCSI
@@ -49,7 +49,7 @@ dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) supp
 if [ "$CONFIG_SCSI_EATA" != "n" ]; then
    bool '  enable tagged command queueing' CONFIG_SCSI_EATA_TAGGED_QUEUE
    bool '  enable elevator sorting' CONFIG_SCSI_EATA_LINKED_COMMANDS
-   int  'maximum number of queued commands' CONFIG_SCSI_EATA_MAX_TAGS 16
+   int  '  maximum number of queued commands' CONFIG_SCSI_EATA_MAX_TAGS 16
 fi
 dep_tristate 'EATA-DMA [Obsolete] (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support' CONFIG_SCSI_EATA_DMA $CONFIG_SCSI
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
@@ -92,9 +92,9 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
    dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
    dep_tristate 'SYM53C8XX SCSI support' CONFIG_SCSI_SYM53C8XX $CONFIG_SCSI
    if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -o "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
-      int  'default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
-      int  'maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
-      int  'synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 20
+      int  '  default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
+      int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
+      int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 20
       bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
       bool '  use normal IO' CONFIG_SCSI_NCR53C8XX_IOMAPPED
       if [ "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
@@ -138,7 +138,7 @@ dep_tristate 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 $CONFIG_SCS
 dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
    if [ "$CONFIG_SCSI_U14_34F" != "n" ]; then
       bool '  enable elevator sorting' CONFIG_SCSI_U14_34F_LINKED_COMMANDS
-      int  'maximum number of queued commands' CONFIG_SCSI_U14_34F_MAX_TAGS 8
+      int  '  maximum number of queued commands' CONFIG_SCSI_U14_34F_MAX_TAGS 8
    fi
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
 #
@@ -155,7 +155,7 @@ fi
 if [ "$CONFIG_PPC" = "y" ]; then
    dep_tristate 'MESH (Power Mac internal SCSI) support' CONFIG_SCSI_MESH $CONFIG_SCSI
    if [ "$CONFIG_SCSI_MESH" != "n" ]; then
-      int 'maximum synchronous transfer rate (MB/s) (0 = async)' CONFIG_SCSI_MESH_SYNC_RATE 5
+      int '  maximum synchronous transfer rate (MB/s) (0 = async)' CONFIG_SCSI_MESH_SYNC_RATE 5
    fi
    dep_tristate '53C94 (Power Mac external SCSI) support' CONFIG_SCSI_MAC53C94 $CONFIG_SCSI
 fi
@@ -165,4 +165,8 @@ fi
 if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
    bool 'MIPS JAZZ FAS216 SCSI support' CONFIG_JAZZ_ESP
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   dep_tristate '3Ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
+fi
+
 endmenu

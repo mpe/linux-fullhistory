@@ -783,9 +783,9 @@ extern int register_chrdev(unsigned int, const char *, struct file_operations *)
 extern int unregister_chrdev(unsigned int, const char *);
 extern int chrdev_open(struct inode *, struct file *);
 extern struct file_operations def_chr_fops;
-extern char * bdevname(kdev_t);
-extern char * cdevname(kdev_t);
-extern char * kdevname(kdev_t);
+extern const char * bdevname(kdev_t);
+extern const char * cdevname(kdev_t);
+extern const char * kdevname(kdev_t);
 extern void init_special_inode(struct inode *, umode_t, int);
 
 extern struct inode_operations fifo_inode_operations;

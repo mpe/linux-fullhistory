@@ -11,10 +11,6 @@ This is a preliminary version of my OV511 Linux device driver. Currently, it can
 grab a frame in color (YUV420) at 640x480 or 320x240 using either vidcat or
 xawtv. Other utilities may work but have not yet been tested.
 
-NOTE: 320x240 does not work reliably for me, and causes complete system crashes.
-      I recommend not using it until a later version, and if you do, run "sync"
-      first.
-
 SUPPORTED CAMERAS:
 ________________________________________________________
 Manufacturer     | Model          | Custom ID | Status
@@ -24,6 +20,7 @@ D-Link           | DSB-C300       | 3         | Working
 Creative Labs    | WebCam 3       | 21        | Working
 Lifeview         | RoboCam        | 100       | Untested
 AverMedia        | InterCam Elite | 102       | Working
+MediaForte       | MV300          | 112       | Untested
 --------------------------------------------------------
 
 Any camera using the OV511 and the OV7610 CCD should work with this driver. The
@@ -39,7 +36,8 @@ WHAT YOU NEED:
   http://www.ovt.com/omniusbp.html
 
 - A Video4Linux compatible frame grabber program (I recommend vidcat and xawtv)
-  (see: http://www.exploits.org/v4l/ )
+    vidcat is part of the w3cam package:  http://www.hdk-berlin.de/~rasca/w3cam/
+    xawtv is available at:  http://www.in-berlin.de/User/kraxel/xawtv.html
 
 HOW TO USE IT:
 
@@ -83,7 +81,7 @@ directory:
 Now you should be able to run xawtv. Right click for the options dialog.
 
 WORKING FEATURES:
- o Color streaming/capture at 640x480 (reliably) and 320x240 (unreliably)
+ o Color streaming/capture at 640x480 and 320x240
  o YUV420 color
  o Setting/getting of saturation, contrast and brightness (no color yet)
 

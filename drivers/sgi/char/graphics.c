@@ -254,15 +254,7 @@ sgi_graphics_nopage (struct vm_area_struct *vma, unsigned long address, int
  */
 
 static struct vm_operations_struct graphics_mmap = {
-	NULL,			/* no special mmap-open */
-	NULL,			/* no special mmap-close */
-	NULL,			/* no special mmap-unmap */
-	NULL,			/* no special mmap-protect */
-	NULL,			/* no special mmap-sync */
-	NULL,			/* no special mmap-advise */
-	sgi_graphics_nopage,	/* our magic no-page fault handler */
-	NULL,			/* no special mmap-wppage */
-	NULL			/* no special mmap-swapout */
+	nopage:	sgi_graphics_nopage,	/* our magic no-page fault handler */
 };
 	
 int

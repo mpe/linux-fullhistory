@@ -1532,15 +1532,8 @@ static void packet_mm_close(struct vm_area_struct *vma)
 }
 
 static struct vm_operations_struct packet_mmap_ops = {
-	packet_mm_open,		/* open */
-	packet_mm_close,	/* close */
-	NULL,			/* unmap */
-	NULL,			/* no special protect */
-	NULL,			/* sync */
-	NULL,			/* advise */
-	NULL,			/* nopage */
-	NULL,			/* wppage */
-	NULL			/* swapout */
+	open:	packet_mm_open,
+	close:	packet_mm_close,
 };
 
 static void free_pg_vec(unsigned long *pg_vec, unsigned order, unsigned len)

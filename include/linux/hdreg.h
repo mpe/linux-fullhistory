@@ -49,6 +49,7 @@
 #define WIN_SEEK		0x70
 #define WIN_DIAGNOSE		0x90
 #define WIN_SPECIFY		0x91	/* set drive geometry translation */
+#define WIN_IDLEIMMEDIATE	0xE1	/* force drive to become "ready" */
 #define WIN_SETIDLE1		0xE3
 #define WIN_SETIDLE2		0x97
 

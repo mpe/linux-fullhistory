@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.28 1999/12/27 06:08:28 anton Exp $
+/* $Id: ioport.c,v 1.29 2000/01/22 07:35:25 zaitcev Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -203,6 +203,7 @@ static void *_sparc_alloc_io(unsigned int busno, unsigned long phys,
 		tlen = strlen(name);
 		tack = kmalloc(sizeof (struct resource) + tlen + 1, GFP_KERNEL);
 		if (tack == NULL) return NULL;
+		memset(tack, 0, sizeof(struct resource));
 		res = (struct resource *) tack;
 		tack += sizeof (struct resource);
 	}
@@ -285,6 +286,8 @@ void sbus_set_sbus64(struct sbus_dev *sdev, int x) {
  * Allocate a chunk of memory suitable for DMA.
  * Typically devices use them for control blocks.
  * CPU may access them without any explicit flushing.
+ *
+ * XXX Some clever people know that sdev is not used and supply NULL. Watch.
  */
 void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 {
@@ -319,17 +322,18 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 		printk("sbus_alloc_consistant: no core\n");
 		return NULL;
 	}
+	memset((char*)res, 0, sizeof(struct resource));
 
 	if (allocate_resource(&sparc_dvma, res, len_total,
 	    sparc_dvma.start, sparc_dvma.end, PAGE_SIZE, NULL, NULL) != 0) {
-		printk("sbus_alloc_consistant: cannot occupy 0x%lx", len);
+		printk("sbus_alloc_consistant: cannot occupy 0x%lx", len_total);
 		free_pages(va, order);
 		kfree(res);
 		return NULL;
 	}
 
 	*dma_addrp = res->start;
-	mmu_map_dma_area(va, res->start, len);
+	mmu_map_dma_area(va, res->start, len_total);
 
 	/*
 	 * "Official" or "natural" address of pages we got is va.
@@ -403,6 +407,7 @@ u32 sbus_map_single(struct sbus_dev *sdev, void *va, long len)
 		printk("sbus_map_single: no core\n");
 		return 0;
 	}
+	memset((char*)res, 0, sizeof(struct resource));
 	res->name = va;
 
 	if (allocate_resource(&sparc_dvma, res, len_total,

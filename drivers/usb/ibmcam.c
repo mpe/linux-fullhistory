@@ -112,7 +112,10 @@ MODULE_PARM(init_contrast, "i");
 MODULE_PARM(init_color, "i");
 MODULE_PARM(init_hue, "i");
 
-/* Still mysterious i2o commands */
+MODULE_AUTHOR ("module author");
+MODULE_DESCRIPTION ("IBM/Xirlink C-it USB Camera Driver for Linux (c) 2000");
+
+/* Still mysterious i2c commands */
 static const unsigned short unknown_88 = 0x0088;
 static const unsigned short unknown_89 = 0x0089;
 static const unsigned short bright_3x[3] = { 0x0031, 0x0032, 0x0033 };
@@ -1034,7 +1037,7 @@ static int usb_ibmcam_veio(
  * real_fps = 3 + (fps_code * 4.5)
  *
  * History:
- * 1/18/99  Created.
+ * 1/18/00  Created.
  */
 static int usb_ibmcam_calculate_fps(void)
 {
@@ -1142,7 +1145,7 @@ static void usb_ibmcam_PacketFormat2(struct usb_device *dev, unsigned char fkey,
  * TODO: we probably don't need to send the setup 5 times...
  *
  * History:
- * 1/2/99   Created.
+ * 1/2/00   Created.
  */
 static void usb_ibmcam_adjust_contrast(struct usb_ibmcam *ibmcam)
 {
@@ -1171,7 +1174,7 @@ static void usb_ibmcam_adjust_contrast(struct usb_ibmcam *ibmcam)
  * Low lighting forces slower FPS. Lighting is set as a module parameter.
  *
  * History:
- * 1/5/99   Created.
+ * 1/5/00   Created.
  */
 static void usb_ibmcam_change_lighting_conditions(struct usb_ibmcam *ibmcam)
 {
@@ -1234,31 +1237,20 @@ static void usb_ibmcam_adjust_picture(struct usb_ibmcam *ibmcam)
 	usb_ibmcam_set_brightness(ibmcam);
 }
 
-static void usb_ibmcam_setup_before_if1(struct usb_device *dev)
+static int usb_ibmcam_setup(struct usb_ibmcam *ibmcam)
 {
-	switch (videosize) {
-	case VIDEOSIZE_128x96:
-	case VIDEOSIZE_176x144:
-		usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0108);
-		break;
-	case VIDEOSIZE_352x288:
-		usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0100);
-		usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x81, 0x0100);
-		usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0100);
-		usb_ibmcam_veio(dev, 0, 0x01, 0x0108);
-		break;
-	}
-}
-
-static void usb_ibmcam_setup_before_if2(struct usb_device *dev)
-{
+	struct usb_device *dev = ibmcam->dev;
 	const int ntries = 5;
 	int i;
+
+	usb_ibmcam_veio(dev, 1, 0, 0x128);
+	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
+	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(dev, 0, 0x81, 0x0100);  /* LED Off */
+	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
+	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
+	usb_ibmcam_veio(dev, 0, 0x01, 0x0108);
 
 	usb_ibmcam_veio(dev, 0, 0x03, 0x0112);
 	usb_ibmcam_veio(dev, 1, 0x00, 0x0115);
@@ -1440,19 +1432,33 @@ static void usb_ibmcam_setup_before_if2(struct usb_device *dev)
 		usb_ibmcam_veio(dev, 0, 0xf6, 0x0107);
 		break;
 	}
+	return 0; /* TODO: return actual completion status! */
 }
 
+/*
+ * usb_ibmcam_setup_after_video_if()
+ *
+ * This code adds finishing touches to the video data interface.
+ * Here we configure the frame rate and turn on the LED.
+ */
 static void usb_ibmcam_setup_after_video_if(struct usb_device *dev)
 {
 	unsigned short internal_frame_rate;
 
 	RESTRICT_TO_RANGE(framerate, FRAMERATE_MIN, FRAMERATE_MAX);
 	internal_frame_rate = FRAMERATE_MAX - framerate; /* 0=Fast 6=Slow */
+	usb_ibmcam_veio(dev, 0, 0x01, 0x0100);	/* LED On  */
 	usb_ibmcam_veio(dev, 0, internal_frame_rate, 0x0111);
 	usb_ibmcam_veio(dev, 0, 0x01, 0x0114);
 	usb_ibmcam_veio(dev, 0, 0xc0, 0x010c);
 }
 
+/*
+ * usb_ibmcam_setup_video_stop()
+ *
+ * This code tells camera to stop streaming. The interface remains
+ * configured and bandwidth - claimed.
+ */
 static void usb_ibmcam_setup_video_stop(struct usb_device *dev)
 {
 	usb_ibmcam_veio(dev, 0, 0x00, 0x010c);
@@ -1462,7 +1468,7 @@ static void usb_ibmcam_setup_video_stop(struct usb_device *dev)
 	usb_ibmcam_veio(dev, 0, 0x00, 0x010c);
 	usb_ibmcam_send_FF_04_02(dev);
 	usb_ibmcam_veio(dev, 1, 0x00, 0x0100);
-	usb_ibmcam_veio(dev, 0, 0x81, 0x0100);
+	usb_ibmcam_veio(dev, 0, 0x81, 0x0100);	/* LED Off */
 }
 
 /*
@@ -1564,29 +1570,36 @@ static int ibmcam_init_isoc(struct usb_ibmcam *ibmcam)
 	return 0;
 }
 
+/*
+ * ibmcam_stop_isoc()
+ *
+ * This procedure stops streaming and deallocates URBs. Then it
+ * activates zero-bandwidth alt. setting of the video interface.
+ *
+ * History:
+ * 1/22/00  Corrected order of actions to work after surprise removal.
+ */
 static void ibmcam_stop_isoc(struct usb_ibmcam *ibmcam)
 {
 	if (!ibmcam->streaming)
 		return;
 
-	usb_ibmcam_setup_video_stop(ibmcam->dev);
-
-	/* Set packet size to 0 */
-	if (usb_set_interface(ibmcam->dev, 2, 0) < 0) {
-		printk(KERN_ERR "usb_set_interface error\n");
-		return /* -EINVAL */;
-	}
-
 	/* Unschedule all of the iso td's */
 	usb_unlink_urb(ibmcam->sbuf[1].urb);
 	usb_unlink_urb(ibmcam->sbuf[0].urb);
 
-	// printk(KERN_DEBUG "streaming=0\n");
+	/* printk(KERN_DEBUG "streaming=0\n"); */
 	ibmcam->streaming = 0;
 
 	/* Delete them all */
 	usb_free_urb(ibmcam->sbuf[1].urb);
 	usb_free_urb(ibmcam->sbuf[0].urb);
+
+	usb_ibmcam_setup_video_stop(ibmcam->dev);
+
+	/* Set packet size to 0 */
+	if (usb_set_interface(ibmcam->dev, 2, 0) < 0)
+		printk(KERN_ERR "usb_set_interface error\n");
 }
 
 static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
@@ -1645,89 +1658,126 @@ static int ibmcam_new_frame(struct usb_ibmcam *ibmcam, int framenum)
 	return 0;
 }
 
-/* Video 4 Linux API */
+/*
+ * ibmcam_open()
+ *
+ * This is part of Video 4 Linux API. The driver can be opened by one
+ * client only (checks internal counter 'ibmcam->user'). The procedure
+ * then allocates buffers needed for video processing.
+ *
+ * History:
+ * 1/22/00  Rewrote, moved scratch buffer allocation here. Now the
+ *          camera is also initialized here (once per connect), at
+ *          expense of V4L client (it waits on open() call).
+ */
 static int ibmcam_open(struct video_device *dev, int flags)
 {
-	int err = -EBUSY;
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
-
-	if (ibmcam->remove_pending)
-		return -EFAULT;
+	const int nbuffers = 2;
+	const int sb_size = FRAMES_PER_DESC * ibmcam->iso_packet_len;
+	int i, err = 0;
 
 	down(&ibmcam->lock);
+
 	if (ibmcam->user)
-		goto out_unlock;
+		err = -EBUSY;
+	else {
+		/* Clean pointers so we know if we allocated something */
+		for (i=0; i < nbuffers; i++)
+			ibmcam->sbuf[i].data = NULL;
 
-	ibmcam->frame[0].grabstate = FRAME_UNUSED;
-	ibmcam->frame[1].grabstate = FRAME_UNUSED;
+		/* Allocate memory for the frame buffers */
+		ibmcam->fbuf_size = nbuffers * MAX_FRAME_SIZE;
+		ibmcam->fbuf = rvmalloc(ibmcam->fbuf_size);
+		ibmcam->scratch = kmalloc(scratchbufsize, GFP_KERNEL);
+		ibmcam->scratchlen = 0;
+		if ((ibmcam->fbuf == NULL) || (ibmcam->scratch == NULL))
+			err = -ENOMEM;
+		else {
+			/* Allocate all buffers */
+			for (i=0; i < nbuffers; i++) {
+				ibmcam->frame[i].grabstate = FRAME_UNUSED;
+				ibmcam->frame[i].data = ibmcam->fbuf + i*MAX_FRAME_SIZE;
 
-	err = -ENOMEM;
+				ibmcam->sbuf[i].data = kmalloc(sb_size, GFP_KERNEL);
+				if (ibmcam->sbuf[i].data == NULL) {
+					err = -ENOMEM;
+					break;
+				}
+				/*
+				 * Set default sizes in case IOCTL (VIDIOCMCAPTURE)
+				 * is not used (using read() instead).
+				 */
+				ibmcam->frame[i].width = imgwidth;
+				ibmcam->frame[i].height = imgheight;
+				ibmcam->frame[i].bytes_read = 0;
+			}
+		}
+		if (err) {
+			/* Have to free all that memory */
+			if (ibmcam->fbuf != NULL) {
+				rvfree(ibmcam->fbuf, ibmcam->fbuf_size);
+				ibmcam->fbuf = NULL;
+			}
+			if (ibmcam->scratch != NULL) {
+				kfree(ibmcam->scratch);
+				ibmcam->scratch = NULL;
+			}
+			for (i=0; i < nbuffers; i++) {
+				if (ibmcam->sbuf[i].data != NULL) {
+					kfree (ibmcam->sbuf[i].data);
+					ibmcam->sbuf[i].data = NULL;
+				}
+			}
+		}
+	}
 
-	/* Allocate memory for the frame buffers */
-	ibmcam->fbuf = rvmalloc(2 * MAX_FRAME_SIZE);
-	if (!ibmcam->fbuf)
-		goto open_err_ret;
+	/* If so far no errors then we shall start the camera */
+	if (!err) {
+		err = ibmcam_init_isoc(ibmcam);
+		if (!err) {
+			/* Send init sequence only once, it's large! */
+			if (!ibmcam->initialized) {
+				err = usb_ibmcam_setup(ibmcam);
+				if (!err)
+					ibmcam->initialized = 1;
+			}
+			if (!err) {
+				ibmcam->user++;
+				MOD_INC_USE_COUNT;
+			}
+		}
+	}
 
-	ibmcam->frame[0].data = ibmcam->fbuf;
-	ibmcam->frame[1].data = ibmcam->fbuf + MAX_FRAME_SIZE;
-
-	ibmcam->sbuf[0].data = kmalloc (FRAMES_PER_DESC * ibmcam->iso_packet_len, GFP_KERNEL);
-	if (!ibmcam->sbuf[0].data)
-		goto open_err_on0;
-
-	ibmcam->sbuf[1].data = kmalloc (FRAMES_PER_DESC * ibmcam->iso_packet_len, GFP_KERNEL);
-	if (!ibmcam->sbuf[1].data)
-		goto open_err_on1;
-
-	/* Set default sizes in case IOCTL (VIDIOCMCAPTURE) is not used
-	 * (using read() instead). */
-	ibmcam->frame[0].width = imgwidth;
-	ibmcam->frame[0].height = imgheight;
-	ibmcam->frame[0].bytes_read = 0;
-	ibmcam->frame[1].width = imgwidth;
-	ibmcam->frame[1].height = imgheight;
-	ibmcam->frame[1].bytes_read = 0;
-
-	err = ibmcam_init_isoc(ibmcam);
-	if (err)
-		goto open_err_on2;
-
-	ibmcam->user++;
-	up(&ibmcam->lock);
-
-	MOD_INC_USE_COUNT;
-
-	return 0;
-
-open_err_on2:
-	kfree (ibmcam->sbuf[1].data);
-open_err_on1:
-	kfree (ibmcam->sbuf[0].data);
-open_err_on0:
-	rvfree(ibmcam->fbuf, 2 * MAX_FRAME_SIZE);
-open_err_ret:
-	return err;
-
-out_unlock:
 	up(&ibmcam->lock);
 	return err;
 }
 
+/*
+ * ibmcam_close()
+ *
+ * This is part of Video 4 Linux API. The procedure
+ * stops streaming and deallocates all buffers that were earlier
+ * allocated in ibmcam_open().
+ *
+ * History:
+ * 1/22/00  Moved scratch buffer deallocation here.
+ */
 static void ibmcam_close(struct video_device *dev)
 {
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
 
 	down(&ibmcam->lock);	
-	ibmcam->user--;
-
-	MOD_DEC_USE_COUNT;
 
 	ibmcam_stop_isoc(ibmcam);
 
-	rvfree(ibmcam->fbuf, 2 * MAX_FRAME_SIZE);
-
+	rvfree(ibmcam->fbuf, ibmcam->fbuf_size);
+	kfree(ibmcam->scratch);
 	kfree(ibmcam->sbuf[1].data);
 	kfree(ibmcam->sbuf[0].data);
+
+	ibmcam->user--;
+	MOD_DEC_USE_COUNT;
 
 	up(&ibmcam->lock);
 }
@@ -1742,6 +1792,14 @@ static long ibmcam_write(struct video_device *dev, const char *buf, unsigned lon
 	return -EINVAL;
 }
 
+/*
+ * ibmcam_ioctl()
+ *
+ * This is part of Video 4 Linux API. The procedure handles ioctl() calls.
+ *
+ * History:
+ * 1/22/00  Corrected VIDIOCSPICT to reject unsupported settings.
+ */
 static int ibmcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *)dev;
@@ -1784,8 +1842,18 @@ static int ibmcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		}
 		case VIDIOCSPICT:
 		{
-			if (copy_from_user(&ibmcam->vpic, arg, sizeof(ibmcam->vpic)))
+			struct video_picture tmp;
+			/*
+			 * Use temporary 'video_picture' structure to preserve our
+			 * own settings (such as color depth, palette) that we
+			 * aren't allowing everyone (V4L client) to change.
+			 */
+			if (copy_from_user(&tmp, arg, sizeof(tmp)))
 				return -EFAULT;
+			ibmcam->vpic.brightness = tmp.brightness;
+			ibmcam->vpic.hue = tmp.hue;
+			ibmcam->vpic.colour = tmp.colour;
+			ibmcam->vpic.contrast = tmp.contrast;
 			usb_ibmcam_adjust_picture(ibmcam);
 			return 0;
 		}
@@ -2131,6 +2199,15 @@ static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)
 	strcpy(ibmcam->vchan.name, "Camera");
 }
 
+/*
+ * usb_ibmcam_probe()
+ *
+ * This procedure queries device descriptor and accepts the interface
+ * if it looks like IBM C-it camera.
+ *
+ * History:
+ * 1/22/00  Moved camera init code to ibmcam_open()
+ */
 static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_ibmcam *ibmcam = NULL;
@@ -2167,19 +2244,8 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 	ibmcam->iface = interface->bInterfaceNumber;
 	ibmcam->video_endp = 0x82;
-	ibmcam->scratch = kmalloc(scratchbufsize, GFP_KERNEL);
-	if (ibmcam->scratch == NULL) {
-		printk(KERN_ERR "couldn't kmalloc ibmcam->scratch\n");
-		kfree(ibmcam);
-		return NULL;
-	}
 	init_waitqueue_head (&ibmcam->remove_ok);
 	ibmcam->iso_packet_len = 1014;
-
-	/* Camera setup */
-	usb_ibmcam_veio(dev, 1, 0, 0x128);
-	usb_ibmcam_setup_before_if1(dev);
-	usb_ibmcam_setup_before_if2(dev);
 
 	memcpy(&ibmcam->vdev, &ibmcam_template, sizeof(ibmcam_template));
 	usb_ibmcam_configure_video(ibmcam);
@@ -2201,31 +2267,53 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 	return ibmcam;
 }
 
+/*
+ * usb_ibmcam_disconnect()
+ *
+ * This procedure stops all driver activity, deallocates interface-private
+ * structure (pointed by 'ptr') and after that driver should be removable
+ * with no ill consequences.
+ *
+ * TODO: This code behaves badly on surprise removal!
+ *
+ * History:
+ * 1/22/00  Added polling of MOD_IN_USE to delay removal until all users gone.
+ */
 static void usb_ibmcam_disconnect(struct usb_device *dev, void *ptr)
 {
 	static const char proc[] = "usb_ibmcam_disconnect";
 	struct usb_ibmcam *ibmcam = (struct usb_ibmcam *) ptr;
+	wait_queue_head_t wq;	/* Wait here until removal is safe */
 
 	if (debug > 0)
 		printk(KERN_DEBUG "%s(%p,%p.)\n", proc, dev, ptr);
 
-	ibmcam->remove_pending = 1;
-	/* Now all ISO data will be ignored */
+	init_waitqueue_head(&wq);
+	ibmcam->remove_pending = 1; /* Now all ISO data will be ignored */
 
 	/* At this time we ask to cancel outstanding URBs */
 	ibmcam_stop_isoc(ibmcam);
 
-	/* sleep_on(&s->remove_ok); */
-	/* Now it should be safe to remove */
-
+	if (MOD_IN_USE) {
+		printk(KERN_INFO "%s: In use, disconnect pending.\n", proc);
+		while (MOD_IN_USE)
+			interruptible_sleep_on_timeout (&wq, HZ);
+		printk(KERN_INFO "%s: Released, wait.\n", proc);
+//		interruptible_sleep_on_timeout (&wq, HZ*10);
+	}
 	video_unregister_device(&ibmcam->vdev);
+	printk(KERN_INFO "%s: Video dereg'd, wait.\n", proc);
+//	interruptible_sleep_on_timeout (&wq, HZ*10);
 
 	/* Free the memory */
 	if (debug > 0)
 		printk(KERN_DEBUG "%s: freeing ibmcam=%p\n", proc, ibmcam);
-	if (ibmcam->scratch != NULL)
-		kfree(ibmcam->scratch);
 	kfree(ibmcam);
+
+	printk(KERN_INFO "%s: Memory freed, wait.\n", proc);
+//	interruptible_sleep_on_timeout (&wq, HZ*10);
+
+	printk(KERN_INFO "IBM USB camera disconnected.\n");
 }
 
 static struct usb_driver ibmcam_driver = {

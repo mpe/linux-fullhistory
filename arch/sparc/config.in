@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.80 2000/01/14 07:12:30 davem Exp $
+# $Id: config.in,v 1.81 2000/01/22 05:14:44 zaitcev Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -37,7 +37,6 @@ else
    mainmenu_option next_comment
    comment 'Console drivers'
    bool 'PROM console' CONFIG_PROM_CONSOLE
-   bool 'Support Frame buffer devices' CONFIG_FB
    source drivers/video/Config.in
    endmenu
 

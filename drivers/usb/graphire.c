@@ -62,6 +62,12 @@ MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
  * byte 7: pen presure high bits / mouse distance
  * 
  * There are also two single-byte feature reports (2 and 3).
+ *
+ * Resolution:
+ * X: 0 - 10206
+ * Y: 0 - 7422
+ * 
+ * (0,0) is upper left corner
  */
 
 #define USB_VENDOR_ID_WACOM		0x056a
@@ -84,8 +90,10 @@ static void graphire_irq(struct urb *urb)
 	if (data[0] != 2)
 		dbg("received unknown report #%d", data[0]);
 
-	input_report_abs(dev, ABS_X, data[2] | ((__u32)data[3] << 8));
-	input_report_abs(dev, ABS_Y, data[4] | ((__u32)data[5] << 8));
+        if ( data[1] & 0x80 ) {
+	        input_report_abs(dev, ABS_X, data[2] | ((__u32)data[3] << 8));
+	        input_report_abs(dev, ABS_Y, 7422 - (data[4] | ((__u32)data[5] << 8)));
+	}
 
 	switch ((data[1] >> 5) & 3) {
 
@@ -106,7 +114,7 @@ static void graphire_irq(struct urb *urb)
 			break;
 
 		case 2: /* Mouse */
-	                input_report_key(dev, BTN_TOOL_MOUSE, data[7] > 27);
+	                input_report_key(dev, BTN_TOOL_MOUSE, data[7] > 24);
 			input_report_key(dev, BTN_LEFT, !!(data[1] & 0x01));
 			input_report_key(dev, BTN_RIGHT, !!(data[1] & 0x02));
 			input_report_key(dev, BTN_MIDDLE, !!(data[1] & 0x04));
@@ -137,9 +145,9 @@ static void *graphire_probe(struct usb_device *dev, unsigned int ifnum)
 	graphire->dev.relbit[0] |= BIT(REL_WHEEL);
 	graphire->dev.absbit[0] |= BIT(ABS_X) | BIT(ABS_Y) | BIT(ABS_PRESSURE) | BIT(ABS_DISTANCE);
 
-	graphire->dev.absmax[ABS_X] = 10000;
-	graphire->dev.absmax[ABS_Y] = 7500;
-	graphire->dev.absmax[ABS_PRESSURE] = 500;
+	graphire->dev.absmax[ABS_X] = 10206;
+	graphire->dev.absmax[ABS_Y] = 7422;
+	graphire->dev.absmax[ABS_PRESSURE] = 511;
 	graphire->dev.absmax[ABS_DISTANCE] = 32;
 
 	FILL_INT_URB(&graphire->irq, dev, usb_rcvintpipe(dev, endpoint->bEndpointAddress),

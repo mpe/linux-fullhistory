@@ -276,7 +276,6 @@ static void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor
 void register_disk(struct gendisk *gdev, kdev_t dev, unsigned minors,
 	struct block_device_operations *ops, long size)
 {
-	unsigned first = (unsigned)dev;
 	if (!gdev)
 		return;
 	grok_partitions(gdev, MINOR(dev)>>gdev->minor_shift, minors, size);

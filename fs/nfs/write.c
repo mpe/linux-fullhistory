@@ -416,7 +416,9 @@ wait_on_write_request(struct nfs_wreq *req)
 int
 nfs_writepage(struct dentry * dentry, struct page *page)
 {
-	return nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE);
+	int result = nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE); 
+	if ( result == PAGE_SIZE) return 0; 
+	return result; 
 }
 
 /*

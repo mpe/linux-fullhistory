@@ -347,6 +347,10 @@
 #include "../net/fc/iph5526_scsi.h"
 #endif
 
+#ifdef CONFIG_BLK_DEV_3W_XXXX_RAID
+#include "3w-xxxx.h"
+#endif
+
 /*
  * Moved ppa driver to the end of the probe list
  * since it is a removable host adapter.
@@ -625,6 +629,10 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_IPHASE5526
 	IPH5526_SCSI_FC,
 #endif
+#ifdef CONFIG_BLK_DEV_3W_XXXX_RAID
+	TWXXXX,
+#endif
+
 /* "Removable host adapters" below this line (Parallel Port/USB/other) */
 #ifdef CONFIG_SCSI_PPA
     PPA,

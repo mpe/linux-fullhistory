@@ -1627,15 +1627,10 @@ static void filemap_unmap(struct vm_area_struct *vma, unsigned long start, size_
  * backing-store for swapping..
  */
 static struct vm_operations_struct file_shared_mmap = {
-	NULL,			/* no special open */
-	NULL,			/* no special close */
-	filemap_unmap,		/* unmap - we need to sync the pages */
-	NULL,			/* no special protect */
-	filemap_sync,		/* sync */
-	NULL,			/* advise */
-	filemap_nopage,		/* nopage */
-	NULL,			/* wppage */
-	filemap_swapout		/* swapout */
+	unmap:		filemap_unmap,		/* unmap - we need to sync the pages */
+	sync:		filemap_sync,
+	nopage:		filemap_nopage,
+	swapout:	filemap_swapout,
 };
 
 /*
@@ -1645,15 +1640,7 @@ static struct vm_operations_struct file_shared_mmap = {
  * know they can't ever get write permissions..)
  */
 static struct vm_operations_struct file_private_mmap = {
-	NULL,			/* open */
-	NULL,			/* close */
-	NULL,			/* unmap */
-	NULL,			/* protect */
-	NULL,			/* sync */
-	NULL,			/* advise */
-	filemap_nopage,		/* nopage */
-	NULL,			/* wppage */
-	NULL			/* swapout */
+	nopage:		filemap_nopage,
 };
 
 /* This is used for a general mmap of a disk file */

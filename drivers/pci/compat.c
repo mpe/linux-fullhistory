@@ -19,7 +19,7 @@ pcibios_present(void)
 int
 pcibios_find_class(unsigned int class, unsigned short index, unsigned char *bus, unsigned char *devfn)
 {
-	struct pci_dev *dev = NULL;
+	const struct pci_dev *dev = NULL;
 	int cnt = 0;
 
 	while ((dev = pci_find_class(class, dev)))
@@ -36,7 +36,7 @@ int
 pcibios_find_device(unsigned short vendor, unsigned short device, unsigned short index,
 		    unsigned char *bus, unsigned char *devfn)
 {
-	struct pci_dev *dev = NULL;
+	const struct pci_dev *dev = NULL;
 	int cnt = 0;
 
 	while ((dev = pci_find_device(vendor, device, dev)))

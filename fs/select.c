@@ -8,6 +8,10 @@
  *     COFF/ELF binary emulation. If the process has the STICKY_TIMEOUTS
  *     flag set in its personality we do *not* modify the given timeout
  *     parameter to reflect time remaining.
+ *
+ *  24 January 2000
+ *     Changed sys_poll()/do_poll() to use PAGE_SIZE chunk-based allocation 
+ *     of fds to overcome nfds < 16390 descriptors limit (Tigran Aivazian).
  */
 
 #include <linux/malloc.h>
@@ -328,39 +332,48 @@ out_nofds:
 	return ret;
 }
 
-static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait,
-		   long timeout)
+#define POLLFD_PER_PAGE  ((PAGE_SIZE) / sizeof(struct pollfd))
+
+static void do_pollfd(struct pollfd * fdp, poll_table * wait, int *count)
+{
+	int fd;
+	unsigned int mask;
+
+	mask = 0;
+	fd = fdp->fd;
+	if (fd >= 0) {
+		struct file * file = fget(fd);
+		mask = POLLNVAL;
+		if (file != NULL) {
+			mask = DEFAULT_POLLMASK;
+			if (file->f_op && file->f_op->poll)
+			mask = file->f_op->poll(file, wait);
+			mask &= fdp->events | POLLERR | POLLHUP;
+			fput(file);
+		}
+		if (mask) {
+			wait = NULL;
+			(*count)++;
+		}
+	}
+	fdp->revents = mask;
+}
+
+static int do_poll(unsigned int nfds, unsigned int nchunks, unsigned int nleft, 
+	struct pollfd *fds[], poll_table *wait, long timeout)
 {
 	int count = 0;
 
 	for (;;) {
-		unsigned int j;
-		struct pollfd * fdpnt;
+		unsigned int i, j;
 
 		set_current_state(TASK_INTERRUPTIBLE);
-		for (fdpnt = fds, j = 0; j < nfds; j++, fdpnt++) {
-			int fd;
-			unsigned int mask;
-
-			mask = 0;
-			fd = fdpnt->fd;
-			if (fd >= 0) {
-				struct file * file = fget(fd);
-				mask = POLLNVAL;
-				if (file != NULL) {
-					mask = DEFAULT_POLLMASK;
-					if (file->f_op && file->f_op->poll)
-						mask = file->f_op->poll(file, wait);
-					mask &= fdpnt->events | POLLERR | POLLHUP;
-					fput(file);
-				}
-				if (mask) {
-					wait = NULL;
-					count++;
-				}
-			}
-			fdpnt->revents = mask;
-		}
+		for (i=0; i < nchunks; i++)
+			for (j = 0; j < POLLFD_PER_PAGE; j++)
+				do_pollfd(fds[i] + j, wait, &count);
+		if (nleft)
+			for (j = 0; j < nleft; j++)
+				do_pollfd(fds[nchunks] + j, wait, &count);
 
 		wait = NULL;
 		if (count || !timeout || signal_pending(current))
@@ -373,18 +386,17 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait,
 
 asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
-	int i, fdcount, err, size;
-	struct pollfd * fds, *fds1;
+	int i, j, fdcount, err;
+	struct pollfd **fds;
 	poll_table *wait_table = NULL, *wait = NULL;
+	int nchunks, nleft;
 
-	lock_kernel();
 	/* Do a sanity check on nfds ... */
-	err = -EINVAL;
 	if (nfds > current->files->max_fds)
-		goto out;
+		return -EINVAL;
 
 	if (timeout) {
-		/* Carefula about overflow in the intermediate values */
+		/* Careful about overflow in the intermediate values */
 		if ((unsigned long) timeout < MAX_SCHEDULE_TIMEOUT / HZ)
 			timeout = (unsigned long)(timeout*HZ+999)/1000+1;
 		else /* Negative or overflow */
@@ -402,32 +414,62 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 		wait = wait_table;
 	}
 
-	size = nfds * sizeof(struct pollfd);
-	fds = (struct pollfd *) kmalloc(size, GFP_KERNEL);
-	if (!fds)
+	fds = (struct pollfd **)kmalloc(
+		(1 + (nfds - 1) / POLLFD_PER_PAGE) * sizeof(struct pollfd *),
+		GFP_KERNEL);
+	if (fds == NULL)
 		goto out;
 
-	err = -EFAULT;
-	if (copy_from_user(fds, ufds, size))
-		goto out_fds;
+	nchunks = 0;
+	nleft = nfds;
+	while (nleft > POLLFD_PER_PAGE) { /* allocate complete PAGE_SIZE chunks */
+		fds[nchunks] = (struct pollfd *)__get_free_page(GFP_KERNEL);
+		if (fds[nchunks] == NULL)
+			goto out_fds;
+		nchunks++;
+		nleft -= POLLFD_PER_PAGE;
+	}
+	if (nleft) { /* allocate last PAGE_SIZE chunk, only nleft elements used */
+		fds[nchunks] = (struct pollfd *)__get_free_page(GFP_KERNEL);
+		if (fds[nchunks] == NULL)
+			goto out_fds;
+	}
 
-	fdcount = do_poll(nfds, fds, wait, timeout);
+	err = -EFAULT;
+	for (i=0; i < nchunks; i++)
+		if (copy_from_user(fds[i], ufds + i*POLLFD_PER_PAGE, PAGE_SIZE))
+			goto out_fds1;
+	if (nleft) {
+		if (copy_from_user(fds[nchunks], ufds + nchunks*POLLFD_PER_PAGE, 
+				nleft * sizeof(struct pollfd)))
+			goto out_fds1;
+	}
+
+	lock_kernel();
+	fdcount = do_poll(nfds, nchunks, nleft, fds, wait, timeout);
+	unlock_kernel();
 
 	/* OK, now copy the revents fields back to user space. */
-	fds1 = fds;
-	for(i=0; i < (int)nfds; i++, ufds++, fds1++) {
-		__put_user(fds1->revents, &ufds->revents);
-	}
+	for(i=0; i < nchunks; i++)
+		for (j=0; j < POLLFD_PER_PAGE; j++, ufds++)
+			__put_user((fds[i] + j)->revents, &ufds->revents);
+	if (nleft)
+		for (j=0; j < nleft; j++, ufds++)
+			__put_user((fds[nchunks] + j)->revents, &ufds->revents);
 
 	err = fdcount;
 	if (!fdcount && signal_pending(current))
 		err = -EINTR;
 
+out_fds1:
+	if (nleft)
+		free_page((unsigned long)(fds[nchunks]));
 out_fds:
+	for (i=0; i < nchunks; i++)
+		free_page((unsigned long)(fds[i]));
 	kfree(fds);
 out:
 	if (wait)
 		free_wait(wait_table);
-	unlock_kernel();
 	return err;
 }

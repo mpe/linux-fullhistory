@@ -38,6 +38,13 @@
 #include <linux/input.h>
 #include <linux/config.h>
 
+#ifndef CONFIG_MOUSEDEV_SCREEN_X
+#define CONFIG_MOUSEDEV_SCREEN_X	1024
+#endif
+#ifndef CONFIG_MOUSEDEV_SCREEN_Y
+#define CONFIG_MOUSEDEV_SCREEN_Y	768
+#endif
+
 struct mousedev {
 	char name[32];
 	int used;
@@ -52,9 +59,9 @@ struct mousedev_list {
 	struct mousedev *mousedev;
 	struct mousedev_list *next;
 	int dx, dy, dz, oldx, oldy;
-	unsigned char ps2[6];
+	char ps2[6];
 	unsigned long buttons;
-	unsigned char ready, inrange, buffer, bufsiz;
+	unsigned char ready, buffer, bufsiz;
 	unsigned char mode, genseq, impseq;
 };
 
@@ -75,7 +82,7 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 {
 	struct mousedev *mousedev = handle->private;
 	struct mousedev_list *list = mousedev->list;
-	int index;
+	int index, size;
 
 	while (list) {
 		switch (type) {
@@ -84,18 +91,17 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 					return;
 				switch (code) {
 					case ABS_X:	
-						if (list->inrange) list->dx += (value - list->oldx) * 2000 /
-							(handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X]);
-						list->oldx = value;
+						size = handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X];
+						list->dx += (value * CONFIG_MOUSEDEV_SCREEN_X - list->oldx) / size;
+						list->oldx += list->dx * size;
 						break;
 					case ABS_Y:
-						if (list->inrange) list->dy += (value - list->oldy) * 2000 /
-							(handle->dev->absmax[ABS_X] - handle->dev->absmin[ABS_X]);
-						list->oldy = value;
+						size = handle->dev->absmax[ABS_Y] - handle->dev->absmin[ABS_Y];
+						list->dy += (value * CONFIG_MOUSEDEV_SCREEN_Y - list->oldy) / size;
+						list->oldy += list->dy * size;
 						break;
 				}
 				break;
-
 			case EV_REL:
 				switch (code) {
 					case REL_X:	list->dx += value; break;
@@ -106,20 +112,20 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 
 			case EV_KEY:
 				switch (code) {
+					case BTN_0:
 					case BTN_TOUCH:
 					case BTN_LEFT:   index = 0; break;
+					case BTN_4:
 					case BTN_EXTRA:  if (list->mode > 1) { index = 4; break; }
 					case BTN_STYLUS:
+					case BTN_1:
 					case BTN_RIGHT:  index = 1; break;
+					case BTN_3:
 					case BTN_SIDE:   if (list->mode > 1) { index = 3; break; }
+					case BTN_2:
 					case BTN_STYLUS2:
 					case BTN_MIDDLE: index = 2; break;	
-					default: 
-						if (code >= BTN_TOOL_PEN && code <= BTN_TOOL_MOUSE) {
-							list->inrange = value;	
-							return;
-						}
-						index = 0;
+					default: return;
 				}
 				switch (value) {
 					case 0: clear_bit(index, &list->buttons); break;
@@ -211,7 +217,8 @@ static void mousedev_packet(struct mousedev_list *list, unsigned char off)
 	list->ps2[off] = 0x08 | ((list->dx < 0) << 4) | ((list->dy < 0) << 5) | (list->buttons & 0x07);
 	list->ps2[off + 1] = (list->dx > 127 ? 127 : (list->dx < -127 ? -127 : list->dx));
 	list->ps2[off + 2] = (list->dy > 127 ? 127 : (list->dy < -127 ? -127 : list->dy));
-	list->dx = list->dy = 0;
+	list->dx -= list->ps2[off + 1];
+	list->dy -= list->ps2[off + 2];
 	list->bufsiz = off + 3;
 
 	if (list->mode > 1)
@@ -220,9 +227,9 @@ static void mousedev_packet(struct mousedev_list *list, unsigned char off)
 	if (list->mode) {
 		list->ps2[off + 3] = (list->dz > 127 ? 127 : (list->dz < -127 ? -127 : list->dz));
 		list->bufsiz++;
-		list->dz = 0;
+		list->dz -= list->ps2[off + 3];
 	}
-	list->ready = 0;
+	if (!list->dx && !list->dy && (!list->mode || !list->dz)) list->ready = 0;
 	list->buffer = list->bufsiz;
 }
 

@@ -287,7 +287,8 @@ static void xxx_set_disp(const void *par, struct display *disp,
 
 struct fbgen_hwswitch xxx_switch = {
     xxx_detect, xxx_encode_fix, xxx_decode_var, xxx_encode_var, xxx_get_par,
-    xxx_set_par, xxx_getcolreg, xxx_setcolreg, xxx_blank, xxx_dispsw
+    xxx_set_par, xxx_getcolreg, xxx_setcolreg, xxx_pan_display, xxx_blank,
+    xxx_set_disp
 };
 
 

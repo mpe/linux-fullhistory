@@ -59,14 +59,12 @@ Current status:
   possible. The driver cleans up properly when the device is removed, or
   the connection is canceled on the Visor.
   
-  I write _should_ because communication does not seem to work properly at
-  this time. I am in contact with the developers at HandSpring and am
-  working at getting this to work properly.
+  When the device is connected, try talking to it on the second port
+  (this is usually /dev/ttyUSB1 if you do not have any other usb-serial
+  devices in the system.)
 
-  There is a webpage for this portion of the driver at 
-  http://milosch.net/visor/ and a project set up with mailing lists for
-  it at :
-  http://sourceforge.net/project/?group_id=1404
+  There is a webpage and mailing lists for this portion of the driver at: 
+  http://usbvisor.sourceforge.net/
 
 
 Belkin single port serial converter

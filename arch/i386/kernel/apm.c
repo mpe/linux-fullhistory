@@ -1413,18 +1413,11 @@ static int __init apm_setup(char *str)
 __setup("apm=", apm_setup);
 
 static struct file_operations apm_bios_fops = {
-	NULL,		/* lseek */
-	do_read,
-	NULL,		/* write */
-	NULL,		/* readdir */
-	do_poll,
-	do_ioctl,
-	NULL,		/* mmap */
-	do_open,
-	NULL,		/* flush */
-	do_release,
-	NULL,		/* fsync */
-	NULL		/* fasync */
+	read:		do_read,
+	poll:		do_poll,
+	ioctl:		do_ioctl,
+	open:		do_open,
+	release:	do_release,
 };
 
 static struct miscdevice apm_device = {

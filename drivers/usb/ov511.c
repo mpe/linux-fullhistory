@@ -1,6 +1,6 @@
 /*
  * OmniVision OV511 Camera-to-USB Bridge Driver
- * Copyright 1999 Mark W. McClelland
+ * Copyright 1999/2000 Mark W. McClelland
  *
  * Based on the Linux CPiA driver.
  * 
@@ -11,7 +11,7 @@
  *    DEBUG - Debugging code.
  *    FIXME - Something that is broken or needs improvement.
  *
- * Version: 1.05
+ * Version: 1.06
  *
  * Please see the file: linux/Documentation/usb/ov511.txt 
  * and the website at:  http://people.delphi.com/mmcclelland/linux/ 
@@ -533,7 +533,7 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 	ov511_i2c_write(dev, 0x20, 0x1c);
 	ov511_i2c_write(dev, 0x24, 0x2e); /* 10 */
 	ov511_i2c_write(dev, 0x25, 0x7c); /* 8a */
-	ov511_i2c_write(dev, 0x26, 0x70);
+	ov511_i2c_write(dev, 0x26, 0x00); /* was 0x70 */
 	ov511_i2c_write(dev, 0x28, 0x24); /* 24 */
 	ov511_i2c_write(dev, 0x2b, 0xac);
 	ov511_i2c_write(dev, 0x2c, 0xfe);
@@ -737,20 +737,16 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 	int aPackNum[10];
 	struct ov511_frame *frame;
 
-	if (ov511->curframe == -1) {
-	  return 0;
-	}
-
 	for (i = 0; i < urb->number_of_packets; i++) {
 		int n = urb->iso_frame_desc[i].actual_length;
 		int st = urb->iso_frame_desc[i].status;
-		
+		urb->iso_frame_desc[i].actual_length = 0;
+		urb->iso_frame_desc[i].status = 0;		
 		cdata = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
-
-		if (!n) continue;
 
 		aPackNum[i] = n ? cdata[992] : -1;
 
+		if (!n || ov511->curframe == -1) continue;
 		if (st)
 			PDEBUG("data error: [%d] len=%d, status=%d", i, n, st);
 
@@ -767,13 +763,26 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 #endif
 
 		    if (frame->scanstate == STATE_LINES) {
+		        int iFrameNext;
 		        if (waitqueue_active(&frame->wq)) {
 #if 0
 			  PDEBUG("About to wake up waiting processes");
 #endif
 			  frame->grabstate = FRAME_DONE;
-			  ov511->curframe = -1;
 			  wake_up_interruptible(&frame->wq);
+			}
+			/* If next frame is ready or grabbing, point to it */
+			iFrameNext = (ov511->curframe + 1) % OV511_NUMFRAMES;
+			if (ov511->frame[iFrameNext].grabstate== FRAME_READY ||
+			    ov511->frame[iFrameNext].grabstate== FRAME_GRABBING) {
+			  ov511->curframe = iFrameNext;
+			  frame->scanstate = STATE_SCANNING;
+			} else {
+#if 0
+			  PDEBUG("Frame not ready? state = %d",
+				 ov511->frame[iFrameNext].grabstate);
+#endif
+			  ov511->curframe = -1;
 			}
 		    }
 		}
@@ -1623,6 +1632,9 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		break;
 	case 102:
 		printk("ov511: Camera is a AverMedia InterCam Elite\n");
+		break;
+	case 112:
+		printk("ov511: Camera is a MediaForte MV300\n");
 		break;
 	default:
 		err("Specific camera type (%d) not recognized", rc);

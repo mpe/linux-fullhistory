@@ -14,6 +14,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (01/23/2000) gkh
+ *	Fixed problem of crash when trying to open a port that didn't have a
+ *	device assigned to it. Made the minor node finding a little smarter,
+ *	now it looks to find a continous space for the new device.
+ *
  * (01/21/2000) gkh
  *	Fixed bug in visor_startup with patch from Miles Lott (milos@insync.net)
  *	Fixed get_serial_by_minor which was all messed up for multi port 
@@ -464,7 +469,8 @@ static struct usb_serial *get_serial_by_minor (int minor)
 static struct usb_serial *get_free_serial (int num_ports, int *minor)
 {
 	struct usb_serial *serial = NULL;
-	int i;
+	int i, j;
+	int good_spot;
 
 	dbg("get_free_serial %d", num_ports);
 
@@ -472,6 +478,14 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 	for (i = 0; i < SERIAL_TTY_MINORS; ++i) {
 		if (serial_table[i])
 			continue;
+
+		good_spot = 1;
+		for (j = 0; j < num_ports-1; ++j)
+			if (serial_table[i+j])
+				good_spot = 0;
+		if (good_spot == 0)
+			continue;
+			
 		if (!(serial = kmalloc(sizeof(struct usb_serial), GFP_KERNEL))) {
 			err("Out of memory");
 			return NULL;
@@ -480,7 +494,7 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 		serial_table[i] = serial;
 		*minor = i;
 		dbg("minor base = %d", *minor);
-		for (i = *minor+1; (i < num_ports) && (i < SERIAL_TTY_MINORS); ++i)
+		for (i = *minor+1; (i < (*minor + num_ports)) && (i < SERIAL_TTY_MINORS); ++i)
 			serial_table[i] = SERIAL_PTR_EMPTY;
 		return (serial);
 		}
@@ -583,15 +597,20 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 static void serial_close(struct tty_struct *tty, struct file * filp)
 {
 	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
-	int port = MINOR(tty->device) - serial->minor;
+	int port;	
 
-	dbg("serial_close port %d", port);
-	
-	/* do some sanity checking that we really have a device present */
+	dbg("serial_close");
+
 	if (!serial) {
 		dbg("serial == NULL!");
 		return;
 	}
+
+	port = MINOR(tty->device) - serial->minor;
+
+	dbg("serial_close port %d", port);
+	
+	/* do some sanity checking that we really have a device present */
 	if (!serial->type) {
 		dbg("serial->type == NULL!");
 		return;
@@ -1446,6 +1465,7 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 			usb_unlink_urb (&serial->write_urb[i]);
 			usb_unlink_urb (&serial->read_urb[i]);
 			serial->active[i] = 0;
+			serial_table[serial->minor + i] = NULL;
 		}
 
 		/* free up any memory that we allocated */
@@ -1463,7 +1483,6 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 			info("%s converter now disconnected from ttyUSB%d", serial->type->name, serial->minor + i);
 		}
 
-		serial_table[serial->minor] = NULL;
 		kfree (serial);
 
 	} else {

@@ -411,7 +411,11 @@ static byte ali15x3_can_ultra (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
 
+#if 0
+	if (m5229_revision < 0x20) {
+#else
 	if (m5229_revision <= 0x20) {
+#endif
 		return 0;
 	} else if ((m5229_revision < 0xC2) &&
 		   ((drive->media!=ide_disk) ||

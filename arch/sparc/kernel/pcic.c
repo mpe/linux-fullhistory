@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.11 1999/11/25 05:22:05 zaitcev Exp $
+/* $Id: pcic.c,v 1.12 2000/01/22 07:35:25 zaitcev Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -84,8 +84,6 @@ unsigned int pcic_pin_to_irq(unsigned int pin, char *name);
  * Once we know the map we take device configuration address and
  * find PCIC pin number where INT line goes. Then we may either program
  * preferred irq into the PCIC or supply the preexisting irq to the device.
- *
- * XXX Entries for JE-1 are completely bogus. Gleb, Vladimir, please fill them.
  */
 struct pcic_ca2irq {
 	unsigned char busno;		/* PCI bus number */
@@ -102,14 +100,28 @@ struct pcic_sn2list {
 };
 
 /*
- * XXX JE-1 is a little known beast.
- * One rumor has the map this way: pin 0 - parallel, audio;
- * pin 1 - Ethernet; pin 2 - su; pin 3 - PS/2 kbd and mouse.
- * All other comparable systems tie serial and keyboard together,
- * so we do not code this rumor just yet.
+ * JavaEngine-1 apparently has different versions.
+ *
+ * According to communications with Sun folks, for P2 build 501-4628-03:
+ * pin 0 - parallel, audio;
+ * pin 1 - Ethernet;
+ * pin 2 - su;
+ * pin 3 - PS/2 kbd and mouse.
+ *
+ * OEM manual (805-1486):
+ * pin 0: Ethernet
+ * pin 1: All EBus
+ * pin 2: IGA (unused)
+ * pin 3: Not connected
+ * OEM manual says that 501-4628 & 501-4811 are the same thing,
+ * only the latter has NAND flash in place.
+ *
+ * So far unofficial Sun wins over the OEM manual. Poor OEMs...
  */
-static struct pcic_ca2irq pcic_i_je1[] = {
+static struct pcic_ca2irq pcic_i_je1a[] = {	/* 501-4811-03 */
+	{ 0, 0x00, 2, 12, 0 },		/* EBus: hogs all */
 	{ 0, 0x01, 1,  6, 1 },		/* Happy Meal */
+	{ 0, 0x80, 0,  7, 0 },		/* IGA (unused) */
 };
 
 /* XXX JS-E entry is incomplete - PCI Slot 2 address (pin 7)? */
@@ -159,7 +171,7 @@ static struct pcic_ca2irq pcic_i_jk[] = {
   { name, map, sizeof(map)/sizeof(struct pcic_ca2irq) }
 
 static struct pcic_sn2list pcic_known_sysnames[] = {
-	SN2L_INIT("JE-1-name", pcic_i_je1),  /* XXX Gleb, put name here, pls */
+	SN2L_INIT("SUNW,JavaEngine1", pcic_i_je1a),	/* JE1, PROM 2.32 */
 	SN2L_INIT("SUNW,JS-E", pcic_i_jse),	/* PROLL JavaStation-E */
 	SN2L_INIT("SUNW,SPARCengine-6", pcic_i_se6), /* SPARCengine-6/CP-1200 */
 	SN2L_INIT("SUNW,JS-NC", pcic_i_jk),	/* PROLL JavaStation-NC */
@@ -602,11 +614,19 @@ pcic_fill_irq(struct linux_pcic *pcic, struct pci_dev *dev, int node)
 		    p->irq, dev->device, dev->vendor);
 		dev->irq = p->irq;
 
-		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_HI);
-		ivec &= ~(0xF << ((p->pin - 4) << 2));
-		ivec |= p->irq << ((p->pin - 4) << 2);
-		writew(ivec, pcic->pcic_regs+PCI_INT_SELECT_HI);
-	}
+		i = p->pin;
+		if (i >= 4) {
+			ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_HI);
+			ivec &= ~(0xF << ((i - 4) << 2));
+			ivec |= p->irq << ((i - 4) << 2);
+			writew(ivec, pcic->pcic_regs+PCI_INT_SELECT_HI);
+		} else {
+			ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_LO);
+			ivec &= ~(0xF << (i << 2));
+			ivec |= p->irq << (i << 2);
+			writew(ivec, pcic->pcic_regs+PCI_INT_SELECT_LO);
+		}
+ 	}
 
 	return;
 }
@@ -616,7 +636,7 @@ pcic_fill_irq(struct linux_pcic *pcic, struct pci_dev *dev, int node)
  */
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
-	struct pci_dev *dev;
+	struct list_head *walk;
 	int i, has_io, has_mem;
 	unsigned short cmd;
 	struct linux_pcic *pcic;
@@ -638,7 +658,10 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		return;
 	}
 
-	for (dev = bus->devices; dev; dev = dev->sibling) {
+	walk = &bus->devices;
+	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
+		struct pci_dev *dev = pci_dev_b(walk);
+
 		/*
 		 * Comment from i386 branch:
 		 *     There are buggy BIOSes that forget to enable I/O and memory
@@ -832,6 +855,46 @@ char * __init pcibios_setup(char *str)
 }
 
 /*
+ */
+void pcibios_update_resource(struct pci_dev *pdev, struct resource *res1,
+			     struct resource *res2, int index)
+{
+}
+
+#if 0
+void pcibios_update_irq(struct pci_dev *pdev, int irq)
+{
+}
+
+unsigned long resource_fixup(struct pci_dev *pdev, struct resource *res,
+			     unsigned long start, unsigned long size)
+{
+	return start;
+}
+
+void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
+			       struct pbus_set_ranges_data *pranges)
+{
+}
+#endif
+
+void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+{
+}
+
+#if 0
+int pci_assign_resource(struct pci_dev *dev, int i)
+{
+	return -ENOSYS; /* :-)... actually implement this soon */
+}
+#endif
+
+int pcibios_enable_device(struct pci_dev *pdev)
+{
+	return 0;
+}
+
+/*
  * NMI
  */
 void pcic_nmi(unsigned int pend, struct pt_regs *regs)
@@ -1015,6 +1078,72 @@ void __init sun4m_pci_init_IRQ(void)
 int pcibios_assign_resource(struct pci_dev *pdev, int resource)
 {
 	return -ENXIO;
+}
+
+/*
+ * This probably belongs here rather than ioport.c because
+ * we do not want this crud linked into SBus kernels.
+ * Also, think for a moment about likes of floppy.c that
+ * include architecture specific parts. They may want to redefine ins/outs.
+ *
+ * We do not use horroble macroses here because we want to
+ * advance pointer by sizeof(size).
+ */
+void outsb(unsigned long addr, const void *src, unsigned long count) {
+	while (count) {
+		count -= 1;
+		writeb(*(const char *)src, addr);
+		src += 1;
+		addr += 1;
+	}
+}
+
+void outsw(unsigned long addr, const void *src, unsigned long count) {
+	while (count) {
+		count -= 2;
+		writew(*(const short *)src, addr);
+		src += 2;
+		addr += 2;
+	}
+}
+
+void outsl(unsigned long addr, const void *src, unsigned long count) {
+	while (count) {
+		count -= 4;
+		writel(*(const long *)src, addr);
+		src += 4;
+		addr += 4;
+	}
+}
+
+void insb(unsigned long addr, void *dst, unsigned long count) {
+	while (count) {
+		count -= 1;
+		*(unsigned char *)dst = readb(addr);
+		dst += 1;
+		addr += 1;
+	}
+}
+
+void insw(unsigned long addr, void *dst, unsigned long count) {
+	while (count) {
+		count -= 2;
+		*(unsigned short *)dst = readw(addr);
+		dst += 2;
+		addr += 2;
+	}
+}
+
+void insl(unsigned long addr, void *dst, unsigned long count) {
+	while (count) {
+		count -= 4;
+		/*
+		 * XXX I am sure we are in for an unaligned trap here.
+		 */
+		*(unsigned long *)dst = readl(addr);
+		dst += 4;
+		addr += 4;
+	}
 }
 
 #endif

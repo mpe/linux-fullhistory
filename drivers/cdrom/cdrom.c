@@ -227,6 +227,8 @@
 #include <linux/sysctl.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
+#include <linux/blkdev.h>
+
 #include <asm/fcntl.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>

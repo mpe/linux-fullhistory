@@ -27,7 +27,7 @@ it is manufactured by Xirlink. See http://www.xirlink.com
 
 WHAT YOU NEED:
 
-- A camera
+- An IBM C-it camera
 
 - A Linux box with USB support (2.3/2.4 or 2.2 w/backport)
 
@@ -94,7 +94,7 @@ flags           This is a bit mask, and you can combine any number of
                                            Will work with xawtv, will not
                                            with xrealproducer. Default is
                                            not set.
-                FLAGS_MONOCHROME	2  Forces monochrome (b/w) mode.
+                FLAGS_MONOCHROME        2  Activates monochrome (b/w) mode.
                 FLAGS_DISPLAY_HINTS     4  Shows colored pixels which have
                                            magic meaning to developers.
                 FLAGS_OVERLAY_STATS     8  Shows tiny numbers on screen,
@@ -152,13 +152,12 @@ WHAT NEEDS TO BE DONE:
 - On occasion camera produces negative image (funny colors.)
   Workaround: reload the driver module. Reason: [1].
 - The button on the camera is not used. I don't know how to get to it.
-- The LED on the camera goes off after video init.
 
 [1]
-- I2O interface does not read what camera reports back. Actually, it
-  reads it, but I don't know what returned data means. If camera fails
-  at some initialization stage then something should be done, and I don't
-  do that because I don't even know that some command failed.
+- Camera reports its status back to the driver; however I don't know
+  what returned data means. If camera fails at some initialization
+  stage then something should be done, and I don't do that because
+  I don't even know that some command failed.
 
 CREDITS:
 

@@ -7,9 +7,9 @@ tristate '  Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support' CONFIG
 if [ "$CONFIG_SBPCD" = "y" ]; then
    bool '    Matsushita/Panasonic, ... second CDROM controller support' CONFIG_SBPCD2
    if [ "$CONFIG_SBPCD2" = "y" ]; then
-      bool '      Matsushita/Panasonic, ... third CDROM controller support' CONFIG_SBPCD3
+      bool '    Matsushita/Panasonic, ... third CDROM controller support' CONFIG_SBPCD3
       if [ "$CONFIG_SBPCD3" = "y" ]; then
-	 bool '        Matsushita/Panasonic, ... fourth CDROM controller support' CONFIG_SBPCD4
+	 bool '    Matsushita/Panasonic, ... fourth CDROM controller support' CONFIG_SBPCD4
       fi
    fi
 fi

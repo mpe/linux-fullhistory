@@ -477,7 +477,7 @@ handle_bh_back:
 		goto move_rr_last;
 move_rr_back:
 
-	switch (prev->state) {
+	switch (prev->state & ~TASK_EXCLUSIVE) {
 		case TASK_INTERRUPTIBLE:
 			if (signal_pending(prev)) {
 				prev->state = TASK_RUNNING;

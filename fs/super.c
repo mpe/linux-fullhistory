@@ -1272,7 +1272,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 			}
 			return 0;
 		}
-		printk(KERN_ERR "error %d\n",PTR_ERR(bdev));
+		printk(KERN_ERR "error %ld\n",PTR_ERR(bdev));
 		return error;
 	}
 	remove_vfsmnt(old_root_dev);

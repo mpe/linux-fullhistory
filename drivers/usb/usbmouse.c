@@ -83,8 +83,9 @@ static void *usb_mouse_probe(struct usb_device *dev, unsigned int ifnum)
 	if ((endpoint->bmAttributes & 3) != 3) return NULL;
 
 #ifndef USBMOUSE_EXTRA
-	usb_set_protocol(dev, 0);
+	usb_set_protocol(dev, interface->bInterfaceNumber, 0);
 #endif
+	usb_set_idle(dev, interface->bInterfaceNumber, 0, 0);
 
 	if (!(mouse = kmalloc(sizeof(struct usb_mouse), GFP_KERNEL))) return NULL;
 	memset(mouse, 0, sizeof(struct usb_mouse));

@@ -43,8 +43,8 @@ proc_bus_pci_lseek(struct file *file, loff_t off, int whence)
 static ssize_t
 proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 {
-	struct inode *ino = file->f_dentry->d_inode;
-	struct proc_dir_entry *dp = ino->u.generic_ip;
+	const struct inode *ino = file->f_dentry->d_inode;
+	const struct proc_dir_entry *dp = ino->u.generic_ip;
 	struct pci_dev *dev = dp->data;
 	int pos = *ppos;
 	int cnt, size;
@@ -125,8 +125,8 @@ proc_bus_pci_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
 static ssize_t
 proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *ppos)
 {
-	struct inode *ino = file->f_dentry->d_inode;
-	struct proc_dir_entry *dp = ino->u.generic_ip;
+	const struct inode *ino = file->f_dentry->d_inode;
+	const struct proc_dir_entry *dp = ino->u.generic_ip;
 	struct pci_dev *dev = dp->data;
 	int pos = *ppos;
 	int cnt;
@@ -192,17 +192,9 @@ proc_bus_pci_write(struct file *file, const char *buf, size_t nbytes, loff_t *pp
 }
 
 static struct file_operations proc_bus_pci_operations = {
-	proc_bus_pci_lseek,
-	proc_bus_pci_read,
-	proc_bus_pci_write,
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* can't fsync */
+	llseek:	proc_bus_pci_lseek,
+	read:	proc_bus_pci_read,
+	write:	proc_bus_pci_write,
 };
 
 static struct inode_operations proc_bus_pci_inode_operations = {
@@ -218,13 +210,13 @@ static struct inode_operations proc_bus_pci_inode_operations = {
 static int
 get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 {
-	struct pci_dev *dev;
+	const struct pci_dev *dev;
 	off_t at = 0;
 	int len, i, cnt;
 
 	cnt = 0;
 	pci_for_each_dev(dev) {
-		struct pci_driver *drv = pci_dev_driver(dev);
+		const struct pci_driver *drv = pci_dev_driver(dev);
 		len = sprintf(buf, "%02x%02x\t%04x%04x\t%x",
 			dev->bus->number,
 			dev->devfn,

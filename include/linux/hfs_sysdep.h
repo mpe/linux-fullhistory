@@ -121,7 +121,7 @@ extern inline void hfs_mdb_dirty(hfs_sysmdb sys_mdb) {
 	sys_mdb->s_dirt = 1;
 }
 
-extern inline char *hfs_mdb_name(hfs_sysmdb sys_mdb) {
+extern inline const char *hfs_mdb_name(hfs_sysmdb sys_mdb) {
 	return kdevname(sys_mdb->s_dev);
 }
 

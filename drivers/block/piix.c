@@ -33,11 +33,16 @@
  *
  * 4a 84|21        hdb|hda
  * 4b 84|21        hdd|hdc
- * 
- *    00|00 udma 0
- *    01|01 udma 1
- *    10|10 udma 2
- *    11|11 reserved
+ *
+ *    ata-33/82371AB
+ *    ata-33/82371EB
+ *    ata-33/82801AB            ata-66/82801AA
+ *    00|00 udma 0              00|00 reserved
+ *    01|01 udma 1              01|01 udma 3
+ *    10|10 udma 2              10|10 udma 4
+ *    11|11 reserved            11|11 reserved
+ *
+ * 54 8421|8421    ata66 drive|ata66 enable
  *
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x40, &reg40);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x42, &reg42);
@@ -195,69 +200,76 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 	struct pci_dev *dev	= hwif->pci_dev;
 
 	int			sitre;
-	short			reg4042, reg44, reg48, reg4a;
+	short			reg4042, reg44, reg48, reg4a, reg54;
 	byte			speed;
-	int			u_speed;
 
 	byte maslave		= hwif->channel ? 0x42 : 0x40;
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 	int ultra		= ((dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
-				   (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1)) ? 1 : 0;
-	int ultra66		= (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1) ? 1 :  0; 
+				   (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1)) ? 1 : 0;
+	int ultra66		= (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ? 1 : 0; 
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	int a_speed		= 2 << (drive_number * 4);
 	int u_flag		= 1 << drive_number;
+	int u_speed		= 0;
 
 	pci_read_config_word(dev, maslave, &reg4042);
-	sitre =  (reg4042 & 0x4000) ? 1 : 0;
+	sitre = (reg4042 & 0x4000) ? 1 : 0;
 	pci_read_config_word(dev, 0x44, &reg44);
 	pci_read_config_word(dev, 0x48, &reg48);
 	pci_read_config_word(dev, 0x4a, &reg4a);
+	pci_read_config_word(dev, 0x54, &reg54);
 
-	if (id->dma_ultra && (ultra)) {
-		if (!(reg48 & u_flag)) {
-			pci_write_config_word(dev, 0x48, reg48|u_flag);
-		}
-	} else {
-		if (reg48 & u_flag) {
-			pci_write_config_word(dev, 0x48, reg48 & ~u_flag);
-		}
-	}
-
-	if (((id->dma_ultra & 0x0010) || (id->dma_ultra & 0x0008) || (id->dma_ultra & 0x0004)) && (ultra)) {
+	if ((id->dma_ultra & 0x0010) && (ultra)) {
 		u_speed = 2 << (drive_number * 4);
-		if (!(reg4a & u_speed)) {
-			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
-		}
+		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_4 : XFER_UDMA_2;
+	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
+		u_speed = 1 << (drive_number * 4);
+		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_3 : XFER_UDMA_1;
+	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
+		u_speed = 2 << (drive_number * 4);
 		speed = XFER_UDMA_2;
 	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
 		u_speed = 1 << (drive_number * 4);
-		if (!(reg4a & u_speed)) {
-			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
-		}
 		speed = XFER_UDMA_1;
 	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
 		u_speed = 0 << (drive_number * 4);
+		speed = XFER_UDMA_0;
+	} else if (id->dma_mword & 0x0004) {
+		speed = XFER_MW_DMA_2;
+	} else if (id->dma_mword & 0x0002) {
+		speed = XFER_MW_DMA_1;
+	} else if (id->dma_1word & 0x0004) {
+		speed = XFER_SW_DMA_2;
+        } else {
+		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
+	}
+
+	/*
+	 * This is !@#$% ugly and stupid.............
+	 * But ugly harware generates ugly code.........
+	 */
+	if (speed >= XFER_UDMA_0) {
+		if (!(reg48 & u_flag))
+			pci_write_config_word(dev, 0x48, reg48|u_flag);
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
 		}
-		speed = XFER_UDMA_0;
-	} else if (id->dma_mword & 0x0004) {
+		if ((speed > XFER_UDMA_2) && (!(reg54 & u_flag))) {
+			pci_write_config_word(dev, 0x54, reg54|u_flag);
+		} else {
+			pci_write_config_word(dev, 0x54, reg54 & ~u_flag);
+		}
+	}
+
+	if (speed < XFER_UDMA_0) {
+		if (reg48 & u_flag)
+			pci_write_config_word(dev, 0x48, reg48 & ~u_flag);
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		speed = XFER_MW_DMA_2;
-	} else if (id->dma_mword & 0x0002) {
-		if (reg4a & a_speed)
-			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		speed = XFER_MW_DMA_1;
-	} else if (id->dma_1word & 0x0004) {
-		if (reg4a & a_speed)
-			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		speed = XFER_SW_DMA_2;
-        } else {
-		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
+		if (reg54 & u_flag)
+			pci_write_config_word(dev, 0x54, reg54 & ~u_flag);
 	}
 
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
@@ -301,11 +313,21 @@ unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
 	return 0;
 }
 
+/*
+ * Sheesh, someone at Intel needs to go read the ATA-4/5 T13 standards.
+ * It does not specify device detection, but channel!!!
+ * You determine later if bit 13 of word93 is set...
+ */
 unsigned int __init ata66_piix (ide_hwif_t *hwif)
 {
-	if (0)
-		return 1;
-	return 0;
+	byte reg54h = 0, reg55h = 0, ata66 = 0;
+	byte mask = hwif->channel ? 0x0c : 0x03;
+
+	pci_read_config_byte(hwif->pci_dev, 0x54, &reg54h);
+	pci_read_config_byte(hwif->pci_dev, 0x55, &reg55h);
+	ata66 = (reg54h & mask) ? 0 : 1;
+
+	return ata66;
 }
 
 void __init ide_init_piix (ide_hwif_t *hwif)

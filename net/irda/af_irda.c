@@ -1522,7 +1522,7 @@ static unsigned int irda_poll(struct file * file, struct socket *sock,
 	 * we set writable also when the other side has shut down the
 	 * connection. This prevents stuck sockets.
 	 */
-	if (sk->sndbuf - (int)atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
+	if (sk->sndbuf - (int)atomic_read(&sk->wmem_alloc) >= SOCK_MIN_WRITE_SPACE)
 			mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 
 	return mask;

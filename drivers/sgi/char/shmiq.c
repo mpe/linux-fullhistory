@@ -296,15 +296,7 @@ shmiq_nopage (struct vm_area_struct *vma, unsigned long address, int write_acces
 }
 
 static struct vm_operations_struct qcntl_mmap = {
-	NULL,			/* no special mmap-open */
-	NULL,			/* no special mmap-close */
-	NULL,			/* no special mmap-unmap */
-	NULL,			/* no special mmap-protect */
-	NULL,			/* no special mmap-sync */
-	NULL,			/* no special mmap-advise */
-	shmiq_nopage,		/* our magic no-page fault handler */
-	NULL,			/* no special mmap-wppage */
-	NULL			/* no special mmap-swapout */
+	nopage:	shmiq_nopage,		/* our magic no-page fault handler */
 };
 
 static int

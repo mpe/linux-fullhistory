@@ -7,4 +7,7 @@
  */
 #define pcibios_assign_all_busses()	0
 
+#define PCIBIOS_MIN_IO		0UL
+#define PCIBIOS_MIN_MEM		0UL
+
 #endif /* __SPARC_PCI_H */

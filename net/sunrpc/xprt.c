@@ -816,7 +816,7 @@ static void
 do_rpciod_tcp_dispatcher(void)
 {
 	struct rpc_xprt *xprt;
-	int result;
+	int result = 0;
 
 	dprintk("rpciod_tcp_dispatcher: Queue Running\n");
 

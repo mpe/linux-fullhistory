@@ -8001,6 +8001,21 @@ CONFIG_INPUT_MOUSEDEV_MIX
   into one misc device. If you say N, you'll have a separate
   device for each your USB mouse.
 
+Support for digitizers
+CONFIG_INPUT_MOUSEDEV_DIGITIZER
+  Use this if you have a digitizer that doesn't emulate a mouse
+  itself, and want to use it as a mouse.
+
+Horizontal screen resolution
+CONFIG_INPUT_MOUSEDEV_SCREEN_X
+  For the mouse emulation to be correct, the mousedev driver needs
+  to know the screen resolution you are using (in X). 
+
+Vertical screen resolution
+CONFIG_INPUT_MOUSEDEV_SCREEN_Y
+  For the mouse emulation to be correct, the mousedev driver needs
+  to know the screen resolution you are using (in X). 
+
 Joystick support
 CONFIG_INPUT_JOYDEV
   Say Y here if you want your USB HID joystick or gamepad to be
@@ -11826,6 +11841,11 @@ CONFIG_SUN_MOSTEK_RTC
   and to "Enhanced Real Time Clock Support".
 
   Say Y here unless you are building a special purpose kernel.
+
+JavaStation OS Flash SIMM (EXPERIMENTAL)
+CONFIG_SUN_JSFLASH
+  This option enables a driver for JavaStation OS Flash driver.
+  Say N unless you want to boot from your Flash SIMM.
 
 #Siemens SAB82532 serial support
 #CONFIG_SAB82532

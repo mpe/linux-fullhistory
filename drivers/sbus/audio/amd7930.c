@@ -1,4 +1,4 @@
-/* $Id: amd7930.c,v 1.23 1999/11/19 09:55:58 davem Exp $
+/* $Id: amd7930.c,v 1.24 2000/01/22 05:10:27 anton Exp $
  * drivers/sbus/audio/amd7930.c
  *
  * Copyright (C) 1996,1997 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -1375,7 +1375,7 @@ static int amd7930_bopen(int dev, unsigned int chan,
 	/* Enable B channel transmit */
 	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
 	tmp = sbus_readb(info->regs + DR);
-	tmp |= AM_LIU_LMR1_B1_ENBL + chan;
+	tmp |= AM_LIU_LMR1_B1_ENABL + chan;
 	sbus_writeb(tmp, info->regs + DR);
 
 	/* Enable B channel interrupts */
@@ -1701,7 +1701,7 @@ int __init amd7930_init(void)
 				continue;
 
 			if (amd7930_attach(&drivers[num_drivers],
-					   sdev->prom_node, sdev->my_bus, sdev) == 0)
+					   sdev->prom_node, sdev->bus, sdev) == 0)
 				num_drivers++;
 		}
 	}

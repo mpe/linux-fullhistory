@@ -59,18 +59,20 @@ else
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_AEC6210" = "y" ]; then
 	       bool '      AEC6210 Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_AEC6210_TUNING
 	    fi
+	    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
+	       bool '    ALI M15x3 chipset support' CONFIG_BLK_DEV_ALI15X3
+	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
+		  bool '    AMD Viper support (EXPERIMENTAL)' CONFIG_BLK_DEV_AMD7409
+	       fi
+	    fi
 	    bool '    CMD64X chipset support' CONFIG_BLK_DEV_CMD64X
-	    if [ "$CONFIG_BLK_DEV_CMD64X" = "y" -a "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y"  ]; then
+	    if [ "$CONFIG_BLK_DEV_CMD64X" = "y" -a "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '      CMD64X chipset RAID support (EXPERIMENTAL) (WIP)' CONFIG_BLK_DEV_CMD64X_RAID
 	    fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '    CY82C693 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CY82C693
 	    fi
 	    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
-	       bool '    ALI M15x3 chipset support' CONFIG_BLK_DEV_ALI15X3
-	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
-		  bool '    AMD Viper support (EXPERIMENTAL)' CONFIG_BLK_DEV_AMD7409
-	       fi
   	       bool '    HPT34X chipset support' CONFIG_BLK_DEV_HPT34X
 	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_HPT34X" = "y" ]; then
 		  bool '      HPT34X DMA support (EXPERIMENTAL)' CONFIG_BLK_DEV_HPT34X_DMA
@@ -218,15 +220,6 @@ if [ "$CONFIG_PCI" = "y" ]; then
   tristate 'Mylex DAC960/DAC1100 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
 fi
 
-# PARIDE doesn't need PARPORT, but if PARPORT is configured as a module,
-# PARIDE must also be a module.  The bogus CONFIG_PARIDE_PARPORT option
-# controls the choices given to the user ...
-
-if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "n" ]; then
-   define_tristate CONFIG_PARIDE_PARPORT y
-else
-   define_tristate CONFIG_PARIDE_PARPORT m
-fi
 dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARIDE_PARPORT
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
    source drivers/block/paride/Config.in

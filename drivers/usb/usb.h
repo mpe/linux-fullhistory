@@ -270,23 +270,6 @@ struct usb_endpoint_descriptor {
 	int extralen;
 } __attribute__ ((packed));
 
-/* HID descriptor */
-struct usb_hid_class_descriptor {
-        __u8  bDescriptorType;
-        __u16 wDescriptorLength;
-} __attribute__ ((packed));
-
-
-struct usb_hid_descriptor {
-        __u8  bLength;
-        __u8  bDescriptorType;
-        __u16 bcdHID;
-        __u8  bCountryCode;
-        __u8  bNumDescriptors;
-
-        struct usb_hid_class_descriptor desc[1];
-} __attribute__ ((packed));
-
 /* Interface descriptor */
 struct usb_interface_descriptor {
 	__u8  bLength;
@@ -685,20 +668,20 @@ int usb_new_device(struct usb_device *dev);
 int usb_set_address(struct usb_device *dev);
 int usb_get_descriptor(struct usb_device *dev, unsigned char desctype,
 	unsigned char descindex, void *buf, int size);
-int usb_get_class_descriptor(struct usb_device *dev, unsigned char desctype,
-	unsigned char descindex, unsigned char ifnum, void *buf, int size);
+int usb_get_class_descriptor(struct usb_device *dev, int ifnum, unsigned char desctype,
+	unsigned char descindex, void *buf, int size);
 int usb_get_device_descriptor(struct usb_device *dev);
 int __usb_get_extra_descriptor(char *buffer, unsigned size, unsigned char type, void **ptr);
-int usb_get_status (struct usb_device *dev, int type, int target, void *data);
-int usb_get_protocol(struct usb_device *dev);
-int usb_set_protocol(struct usb_device *dev, int protocol);
-int usb_set_interface(struct usb_device *dev, int interface, int alternate);
-int usb_set_idle(struct usb_device *dev, int duration, int report_id);
+int usb_get_status(struct usb_device *dev, int type, int target, void *data);
+int usb_get_protocol(struct usb_device *dev, int ifnum);
+int usb_set_protocol(struct usb_device *dev, int ifnum, int protocol);
+int usb_set_interface(struct usb_device *dev, int ifnum, int alternate);
+int usb_set_idle(struct usb_device *dev, int ifnum, int duration, int report_id);
 int usb_set_configuration(struct usb_device *dev, int configuration);
-int usb_get_report(struct usb_device *dev, unsigned char type,
-	unsigned char id, unsigned char index, void *buf, int size);
-int usb_set_report(struct usb_device *dev, unsigned char type,
-	unsigned char id, unsigned char index, void *buf, int size);
+int usb_get_report(struct usb_device *dev, int ifnum, unsigned char type,
+	unsigned char id, void *buf, int size);
+int usb_set_report(struct usb_device *dev, int ifnum, unsigned char type,
+	unsigned char id, void *buf, int size);
 int usb_string(struct usb_device *dev, int index, char *buf, size_t size);
 int usb_clear_halt(struct usb_device *dev, int pipe);
 

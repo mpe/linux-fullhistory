@@ -661,8 +661,6 @@ int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe,
 void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
 {
 	urb_t *urb;
-	DECLARE_WAITQUEUE(wait, current);
-	DECLARE_WAIT_QUEUE_HEAD(wqh);
 	api_wrapper_data *awd;
 
 	if (!(urb=usb_alloc_urb(0)))
@@ -1302,12 +1300,12 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	return result;
 }
 
-int usb_get_class_descriptor(struct usb_device *dev, unsigned char type,
-		unsigned char id, unsigned char index, void *buf, int size)
+int usb_get_class_descriptor(struct usb_device *dev, int ifnum,
+		unsigned char type, unsigned char id, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_DESCRIPTOR, USB_RECIP_INTERFACE | USB_DIR_IN,
-		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
+		(type << 8) + id, ifnum, buf, size, HZ * GET_TIMEOUT);
 }
 
 int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char index, void *buf, int size)
@@ -1336,31 +1334,31 @@ int usb_get_status(struct usb_device *dev, int type, int target, void *data)
 		USB_REQ_GET_STATUS, USB_DIR_IN | type, 0, target, data, 2, HZ * GET_TIMEOUT);
 }
 
-int usb_get_protocol(struct usb_device *dev)
+int usb_get_protocol(struct usb_device *dev, int ifnum)
 {
 	unsigned char type;
 	int ret;
 
 	if ((ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 	    USB_REQ_GET_PROTOCOL, USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-	    0, 1, &type, 1, HZ * GET_TIMEOUT)) < 0)
+	    0, ifnum, &type, 1, HZ * GET_TIMEOUT)) < 0)
 		return ret;
 
 	return type;
 }
 
-int usb_set_protocol(struct usb_device *dev, int protocol)
+int usb_set_protocol(struct usb_device *dev, int ifnum, int protocol)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
 		USB_REQ_SET_PROTOCOL, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-		protocol, 1, NULL, 0, HZ * SET_TIMEOUT);
+		protocol, ifnum, NULL, 0, HZ * SET_TIMEOUT);
 }
 
-int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
+int usb_set_idle(struct usb_device *dev, int ifnum, int duration, int report_id)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
 		USB_REQ_SET_IDLE, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-		(duration << 8) | report_id, 1, NULL, 0, HZ * SET_TIMEOUT);
+		(duration << 8) | report_id, ifnum, NULL, 0, HZ * SET_TIMEOUT);
 }
 
 static void usb_set_maxpacket(struct usb_device *dev)
@@ -1482,18 +1480,18 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	return 0;
 }
 
-int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
+int usb_get_report(struct usb_device *dev, int ifnum, unsigned char type, unsigned char id, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_REPORT, USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
+		(type << 8) + id, ifnum, buf, size, HZ * GET_TIMEOUT);
 }
 
-int usb_set_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
+int usb_set_report(struct usb_device *dev, int ifnum, unsigned char type, unsigned char id, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
 		USB_REQ_SET_REPORT, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
-		(type << 8) + id, index, buf, size, HZ);
+		(type << 8) + id, ifnum, buf, size, HZ);
 }
 
 int usb_get_configuration(struct usb_device *dev)

@@ -21,6 +21,8 @@ if [ "$CONFIG_PARTITION_ADVANCED" = "y" ]; then
       bool '    Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
       bool '    Unixware slices support' CONFIG_UNIXWARE_DISKLABEL
    fi
+   bool 'SGI partition support' CONFIG_SGI_PARTITION
+   bool 'Sun partition tables support' CONFIG_SUN_PARTITION
 else
    if [ "$ARCH" = "alpha" ]; then
       define_bool CONFIG_OSF_PARTITION y
@@ -46,14 +48,10 @@ else
    if [ "$CONFIG_ATARI" = "y" ]; then
       define_bool CONFIG_ATARI_PARTITION y
    fi
-fi
-if [ "$CONFIG_SGI" != "y" ]; then
-   bool 'SGI partition support' CONFIG_SGI_PARTITION
-else
-   define_bool CONFIG_SGI_PARTITION y
-fi
-if [ "$ARCH" != "sparc" -a "$ARCH" != "sparc64" ]; then
-   bool 'Sun partition tables support' CONFIG_SUN_PARTITION
-else
-   define_bool CONFIG_SUN_PARTITION y
+   if [ "$CONFIG_SGI" = "y" ]; then
+      define_bool CONFIG_SGI_PARTITION y
+   fi
+   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
+      define_bool CONFIG_SUN_PARTITION y
+   fi
 fi

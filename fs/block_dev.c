@@ -652,7 +652,7 @@ struct inode_operations blkdev_inode_operations = {
 	&def_blk_fops,		/* default file operations */
 };
 
-char * bdevname(kdev_t dev)
+const char * bdevname(kdev_t dev)
 {
 	static char buffer[32];
 	const char * name = blkdevs[MAJOR(dev)].name;

@@ -111,6 +111,14 @@
     mr = LIMIT_RGB(mm_r); \
 }
 
+/* Debugging aid */
+#define IBMCAM_SAY_AND_WAIT(what) { \
+	wait_queue_head_t wq; \
+	init_waitqueue_head(&wq); \
+	printk(KERN_INFO "Say: %s\n", what); \
+	interruptible_sleep_on_timeout (&wq, HZ*3); \
+}
+
 enum {
 	STATE_SCANNING,		/* Scanning for header */
 	STATE_LINES,		/* Parsing lines */
@@ -164,12 +172,14 @@ struct usb_ibmcam {
 	struct semaphore lock;
 	int user;		/* user count for exclusive use */
 
+	int initialized;	/* Had we already sent init sequence? */
 	int streaming;		/* Are we streaming Isochronous? */
 	int grabbing;		/* Are we grabbing? */
 
 	int compress;		/* Should the next frame be compressed? */
 
 	char *fbuf;		/* Videodev buffer area */
+	int fbuf_size;		/* Videodev buffer size */
 
 	int curframe;
 	struct ibmcam_frame frame[IBMCAM_NUMFRAMES];	/* Double buffering */

@@ -8,7 +8,7 @@
 #include <string.h>
 
 static void
-pq(FILE *f, char *c)
+pq(FILE *f, const char *c)
 {
 	while (*c) {
 		if (*c == '"')

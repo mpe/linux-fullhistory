@@ -142,7 +142,8 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	if (!(endpoint->bEndpointAddress & 0x80)) return NULL;
 	if ((endpoint->bmAttributes & 3) != 3) return NULL;
 
-	usb_set_protocol(dev, 0);
+	usb_set_protocol(dev, interface->bInterfaceNumber, 0);
+	usb_set_idle(dev, interface->bInterfaceNumber, 0, 0);
 
 	if (!(kbd = kmalloc(sizeof(struct usb_kbd), GFP_KERNEL))) return NULL;
 	memset(kbd, 0, sizeof(struct usb_kbd));

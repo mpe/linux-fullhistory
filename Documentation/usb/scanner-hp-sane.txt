@@ -1,8 +1,10 @@
-Oct. 19, 1999
+Copyright (C) 1999, 2000 David E. Nelson
+
+Jan. 22, 2000
 
 CHANGES
 
-- Ammended for Linux-2.3.22+
+- Amended for Linux-2.3.40
 
 
 INTRODUCTION
@@ -11,22 +13,25 @@ This document will hopefully provide enough info on how to get SANE
 working with a Hewlett Packard USB capable scanner using the USB
 interface.  The majority of HP Scanners support the Scanner Control
 Language (SCL) which is both published by HP and supported by SANE.
-The only HP Scanner that I'm aware of that does not support SCL is the
-4200C.  All other HP scanners with USB interfaces should work (4100C,
-5200C, 6200C, and 6300C).  Of course as HP releases new scanners this
-information may change.
+The only HP Scanners that I'm aware of that do not support SCL are the
+4200C and the 3300C.  All other HP scanners with USB interfaces should
+work (4100C, 5200C, 6200C, and 6300C).  Of course as HP releases new
+scanners this information may change.
 
 
 REQUIREMENTS
 
 In order to get this running you'll need USB support in your kernel in
-addition to USB Scanner support.  Please refer to README.scanner
-for issues pertaining to Linux USB and USB Scanner support.
+addition to USB Scanner support.  Please refer to scanner.txt for
+issues pertaining to Linux USB and USB Scanner support.
 
 An installed version of SANE which is available from
 http://www.mostang.com/sane/.  Testing has been performed using
 version SANE-1.0.1.  For instructions on building and installing SANE,
 refer to the various README files within the SANE distribution.
+
+The latest SANE HP backend available from http://www.kirchgessner.net.
+At the time of this writing, version 0.83 was available.
 
 
 OK, I'VE INSTALLED SANE. SO WHAT DO I DO NOW?

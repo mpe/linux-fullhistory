@@ -43,7 +43,7 @@ extern int sysctl_overcommit_memory;
 extern int max_threads;
 extern int nr_queued_signals, max_queued_signals;
 
-/* this is needed for the proc_dointvec_minmax for overflow UID and GID */
+/* this is needed for the proc_dointvec_minmax for [fs_]overflow UID and GID */
 static int maxolduid = 65535;
 static int minolduid = 0;
 

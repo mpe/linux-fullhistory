@@ -1050,11 +1050,10 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
 				}
  			} else {
  				if (tdBE != 0) {
- 					dlen = (bus_to_virt (tdBE) - urb->transfer_buffer + 1);
  					if (td_list->hwCBP == 0)
-  			    		urb->actual_length += dlen;
+						urb->actual_length = bus_to_virt (tdBE) - urb->transfer_buffer + 1;
   					else
-  			    		urb->actual_length += (bus_to_virt(tdCBP) - urb->transfer_buffer);
+						urb->actual_length = bus_to_virt (tdCBP) - urb->transfer_buffer;
   			    }
   			}
   		}

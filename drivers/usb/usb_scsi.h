@@ -1,25 +1,19 @@
 /* Driver for USB SCSI - include file
  *
- * (C) Michael Gee (michael@linuxspecific.com) 1999
- *
- * This driver is schizoid  - it makes a USB scanner appear as both a SCSI device
- * and a character device. The latter is only available if the device has an
- * interrupt endpoint, and is used specifically to receive interrupt events.
- *
- * In order to support various 'strange' scanners, this module supports plug-in
- * device-specific filter modules, which can do their own thing when required.
+ * (c) 1999 Michael Gee (michael@linuxspecific.com)
+ * (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  */
 
 #include <linux/config.h>
 
-#define USB_SCSI "usbscsi: "
+#define USB_STORAGE "usb-storage: "
 
 extern int usb_stor_debug;
 
 #ifdef CONFIG_USB_SCSI_DEBUG
 void us_show_command(Scsi_Cmnd *srb);
-#define US_DEBUGP(x...) { if(usb_stor_debug) printk( KERN_DEBUG USB_SCSI ## x ); }
+#define US_DEBUGP(x...) { if(usb_stor_debug) printk( KERN_DEBUG USB_STORAGE ## x ); }
 #define US_DEBUGPX(x...) { if(usb_stor_debug) printk( ## x ); }
 #define US_DEBUG(x)  { if(usb_stor_debug) x; }
 #else
@@ -53,14 +47,15 @@ extern unsigned char us_direction[256/8];
  * Bulk only data structures (Zip 100, for example)
  */
 
+/* command block wrapper */
 struct bulk_cb_wrap {
-    __u32	Signature;		/* contains 'USBC' */
-    __u32	Tag;			/* unique per command id */
-    __u32	DataTransferLength;	/* size of data */
-    __u8	Flags;			/* direction in bit 0 */
-    __u8	Lun;			/* LUN normally 0 */
-    __u8	Length;			/* of of the CDB */
-    __u8	CDB[16];		/* max command */
+	__u32	Signature;		/* contains 'USBC' */
+	__u32	Tag;			/* unique per command id */
+	__u32	DataTransferLength;	/* size of data */
+	__u8	Flags;			/* direction in bit 0 */
+	__u8	Lun;			/* LUN normally 0 */
+	__u8	Length;			/* of of the CDB */
+	__u8	CDB[16];		/* max command */
 };
 
 #define US_BULK_CB_WRAP_LEN 	31
@@ -68,12 +63,13 @@ struct bulk_cb_wrap {
 #define US_BULK_FLAG_IN		1
 #define US_BULK_FLAG_OUT	0
 
+/* command status wrapper */
 struct bulk_cs_wrap {
-    __u32	Signature;		/* should = 'USBS' */
-    __u32	Tag;			/* same as original command */
-    __u32	Residue;		/* amount not transferred */
-    __u8	Status;			/* see below */
-    __u8	Filler[18];
+	__u32	Signature;		/* should = 'USBS' */
+	__u32	Tag;			/* same as original command */
+	__u32	Residue;		/* amount not transferred */
+	__u8	Status;			/* see below */
+	__u8	Filler[18];
 };
 
 #define US_BULK_CS_WRAP_LEN	31
@@ -87,24 +83,22 @@ struct bulk_cs_wrap {
 #define US_BULK_RESET_HARD	0
 
 /*
+ * Transport return codes
+ */
+
+#define USB_STOR_TRANSPORT_GOOD    0    /* Transport good, command good    */
+#define USB_STOR_TRANSPORT_FAILED  1    /* Transport good, command failed  */
+#define USB_STOR_TRANSPORT_ERROR   2    /* Transport bad (i.e. device dead */
+
+/*
  * CBI style
  */
 
 #define US_CBI_ADSC		0
 
-/*
- * Filter device definitions
+/* 
+ * GUID definitions
  */
-struct usb_scsi_filter {
-
-	struct usb_scsi_filter * next;	/* usb_scsi driver only */
-	char *name;			/* not really required */
-
-	unsigned int flags;		/* Filter flags */
-	void * (* probe) (struct usb_device *, char *, char *, char *);	/* probe device */
-	void (* release)(void *);	/* device gone */
-	int (* command)(void *, Scsi_Cmnd *);  /* all commands */
-};
 
 #define GUID(x) __u32 x[3]
 #define GUID_EQUAL(x, y) (x[0] == y[0] && x[1] == y[1] && x[2] == y[2])
@@ -122,25 +116,15 @@ static inline void make_guid( __u32 *pg, __u16 vendor, __u16 product, char *seri
 		pg[1] |= pg[2] >> 28;
 		pg[2] <<= 4;
 		if (*serial >= 'a')
-		    *serial -= 'a' - 'A';
+			*serial -= 'a' - 'A';
 		pg[2] |= (*serial <= '9' && *serial >= '0') ? *serial - '0'
-						    	    : *serial - 'A' + 10;
+			: *serial - 'A' + 10;
 		serial++;
 	}
 }
 
 /* Flag definitions */
-#define US_FL_IP_STATUS		0x00000001		/* status uses interrupt */
-#define US_FL_FIXED_COMMAND	0x00000002		/* expand commands to fixed size */
-
-/*
- * Called by filters to register/unregister the mini driver
- *
- * WARNING - the supplied probe function may be called before exiting this fn
- */
-int usb_scsi_register(struct usb_scsi_filter *);
-void usb_scsi_deregister(struct usb_scsi_filter *);
-
-#ifdef CONFIG_USB_HP4100
-int hp4100_init(void);
-#endif
+#define US_FL_IP_STATUS	      0x00000001         /* status uses interrupt */
+#define US_FL_FIXED_COMMAND   0x00000002 /* expand commands to fixed size */
+#define US_FL_MODE_XLATE      0x00000004 /* translate _6 to _10 comands for
+					    Win/MacOS compatibility */

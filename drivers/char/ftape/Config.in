@@ -34,5 +34,9 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    int '  Default FIFO threshold (EXPERIMENTAL)' CONFIG_FT_FDC_THR 8
    int '  Maximal data rate to use (EXPERIMENTAL)' CONFIG_FT_FDC_MAX_RATE 2000
 fi
-comment 'ONLY for DEC Alpha architectures'
-int '  CPU clock frequency of your DEC Alpha' CONFIG_FT_ALPHA_CLOCK 0
+
+if [ "$ARCH" = "alpha" ]; then
+   int '  CPU clock frequency of your DEC Alpha' CONFIG_FT_ALPHA_CLOCK 0
+else
+   define_int CONFIG_FT_ALPHA_CLOCK 0
+fi

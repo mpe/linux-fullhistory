@@ -1,8 +1,10 @@
-Oct 19, 1999
+Copyright (C) 1999, 2000 David E. Nelson
+
+Jan. 22, 2000
 
 CHANGES
 
-- Ammended for linux-2.3.22+
+- Amended for linux-2.3.40
 - Appended hp_scan.c to end of this README
 - Removed most references to HP
 
@@ -12,49 +14,63 @@ OVERVIEW
 This README will address issues regarding how to configure the kernel
 to access a USB scanner.  Although the driver was originally conceived
 for USB HP scanners, it's general enough so that it can be used with
-other scanners.  Also, one can now pass the USB Vendor and
-Product ID's using module parameters for unknown scanners.  Refer to
-the document README.scanner_hp_sane for guidance on how to configure
-SANE to use a USB HP Scanner.
+other scanners.  Also, one can now pass the USB Vendor and Product
+ID's using module parameters for unknown scanners.  Refer to the
+document scanner_hp_sane.txt for guidance on how to configure SANE to
+use a USB HP Scanner.
 
 
 ADDITIONAL INFORMATION
 
 http://www.linux-usb.org/
-http://www.dynamine.net/linux-usb/HOWTO/
 
 
 REQUIREMENTS
 
 A host with a USB port.  Ideally, either a UHCI (Intel) or OHCI
 (Compaq and others) hardware port should work.  However, I've only
-been able to really use an OHCI controller.  I did have access to a
-system with a UHCI controller but some very limited testing did not
-produce satisfactory results.  Luke Ordelmans
-<postbus@ordelmans.demon.nl> has reported success using the UHCI host
-controller with kernel 2.3.18 and a ChainTech motherboard.  Here
-lately I've been having better success with the ohci-hcd driver.  But
-since Linux USB support is still in a state of constant development
-that may change at a later date.  I am confident that eventually all
-the host contollers will perform without incident.
+been able to really use an OHCI controller.  At the time of this
+writing, both uhci and ohci work with scanner.c *except* for the HP
+4100C which only works with ohci.  This problem is being investigated.
 
-A Linux kernel with USB support (preferably linux-2.3.18+)
+A Linux development kernel (2.3.x) with USB support enabled or a
+backported version to linux-2.2.x.  See http://www.linux-usb.org for
+more information on accomplishing this.
 
-A Linux kernel with USB Scanner support.
+A Linux kernel with USB Scanner support enabled.
 
+'lspci' which is only needed to determine the type of USB hardware
+available in your machine.
 
 CONFIGURATION
 
-Using `make menuconfig` or your prefered method for configuring the
-kernel, select 'Support for USB', 'OHCI/OHCI-HCD/UHCI' depending on
-your hardware, 'USB hub support', and 'USB Scanner support'.  Compile
-and install the modules (you may need to execute `depmod -a` to update
-the module dependencies).  Testing was performed only as modules,
-YMMV.
+Using `lspci -v`, determine the type of USB hardware available.
+
+  If you see something like:
+
+    USB Controller: ......
+    Flags: .....
+    I/O ports at ....
+
+  Then you have a UHCI based controller.
+
+  If you see something like:
+
+     USB Controller: .....
+     Flags: ....
+     Memory at .....
+
+  Then you have a OHCI based controller.
+
+Using `make menuconfig` or your preferred method for configuring the
+kernel, select 'Support for USB', 'OHCI/UHCI' depending on your
+hardware (determined from the steps above), 'USB Scanner support', and
+'Preliminary USB device filesystem'.  Compile and install the modules
+(you may need to execute `depmod -a` to update the module
+dependencies).  Testing was performed only as modules, YMMV.
 
 Add a device for the USB scanner:
-  linux-2.3.22 and above: `mknod /dev/usbscanner c 180 48`
-  linux-2.3.21 and below: `mknod /dev/usbscanner c 16 1`
+  `mknod /dev/usbscanner c 180 48`
 
 Set appropriate permissions for /dev/usbscanner (don't forget about
 group and world permissions).  Both read and write permissions are
@@ -66,36 +82,71 @@ Load the appropriate modules (if compiled as modules):
     modprobe usb-ohci
     modprobe scanner
 
-  OHCI-HCD:
-    modprobe usb-ohci-hcd
-    modprobe hub
-    modprobe scanner
-
   UHCI:
     modprobe usb-uhci
-    modprobe hub (don't know if this is required or not)
     modprobe scanner
 
 That's it.  SANE should now be able to access the device.  
 
 There is a small test program (hp_scan.c -- appended below) that can
 be used to test the scanner device if it's an HP scanner that supports
-SCL.  Its purpose is to test the driver without having to
-retrieve/configure SANE.  Hp_scan.c will scan the entire bed and put
-the output into a file called 'out.dat' in the current directory.  The
-data in the file is raw data so it's not very useful for imaging.
+SCL (Scanner Control Language).  Known HP scanner that support SCL are
+the 4100, 5200, 6200, the 6300 -- note that the 4200 is *not*
+supported since it does not understand SCL; it's also strongly
+suspected that the 3300 is not SCL compliant.  Hp_scan.c's purpose is
+to test the driver without having to retrieve/configure SANE.
+Hp_scan.c will scan the entire bed and put the output into a file
+called 'out.dat' in the current directory.  The data in the file is
+raw data so it's not very useful for imaging.
+
+
+SUPPORTED SCANNERS
+
+NOTE: Just because a product is listed here does not mean that
+applications exist that support the product.  It's in the hopes that
+this will allow developers a means to produce applications that will
+support the listed USB products.
+
+At the time of this writing, the following scanners were supported by
+scanner.c:
+
+  Hewlett Packard
+
+    3300, 4100, 4200, 5200, 6200, 6300, PhotoSmart S20
+
+  AGFA
+
+    SnapScan 1212U
+
+  Umax
+
+    Astra 2000U
+
+  Seiko/Epson
+
+    Perfection 636, Perfection 1200U
+
+  Mustek
+
+    1200 CU
+
+  User Specified.  See MODULE PARAMETERS for details.
 
 
 MODULE PARAMETERS
 
-If you have a device that wish to experiment with or try using this
-driver with, but the Vendor and Product ID's are not coded in, don't
-despair.  If the driver was compiled as a module, you can pass options
-to the driver.  Simply add 'options scanner vendor=0x####
+If you have a device that you wish to experiment with or try using
+this driver with, but the Vendor and Product ID's are not coded in,
+don't despair.  If the driver was compiled as a module, you can pass
+options to the driver.  Simply add 'options scanner vendor=0x####
 product=0x****' to the conf.modules/modules.conf file replacing the
 #'s and the *'s with the correct ID's.  The ID's can be retrieved from
 the messages file or using `cat /proc/bus/usb/devices` if USB /proc
-support was selected during kernel configuration.
+support was selected during kernel configuration.  In later kernels
+(2.3.38+), a new filesystem was introduced, usbdevfs.  To mount the
+filesystem, issue the command `mount -t usbdevfs /proc/bus/usb
+/proc/bus/usb`.  You can then issue ` cat /proc/bus/usb/devices` to
+extract USB device information.
 
 
 BUGS

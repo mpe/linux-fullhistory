@@ -1,7 +1,11 @@
 /* -*- linux-c -*- */
 
 /* 
- * Driver for USB Scanners (linux-2.3.33)
+ * Driver for USB Scanners (linux-2.3.41)
+ *
+ * Copyright (C) 1999, 2000 David E. Nelson
+ *
+ * Portions may be copyright Brad Keryan and Michael Gee.
  *
  * David E. Nelson (dnelson@jump.net)
  * 
@@ -19,9 +23,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * Based upon mouse.c (Brad Keryan) and printer.c (Michael Gee).
+ * Originally based upon mouse.c (Brad Keryan) and printer.c (Michael Gee).
  *
  * History
+ *
  *  0.1  8/31/1999
  *
  *    Developed/tested using linux-2.3.15 with minor ohci.c changes to
@@ -30,18 +35,18 @@
  *    testing was performed with uhci but I was unable to get it to
  *    work.  Initial relase to the linux-usb development effort.
  *
+ *
  *  0.2  10/16/1999
  *
- *    FIXED:
  *    - Device can't be opened unless a scanner is plugged into the USB.
  *    - Finally settled on a reasonable value for the I/O buffer's.
  *    - Cleaned up write_scanner()
  *    - Disabled read/write stats
  *    - A little more code cleanup
  *
+ *
  *  0.3  10/18/1999
  *
- *    FIXED:
  *    - Device registration changed to reflect new device
  *      allocation/registration for linux-2.3.22+.
  *    - Adopted David Brownell's <david-b@pacbell.net> technique for 
@@ -52,19 +57,21 @@
  *    - Added user specified verdor:product USB ID's which can be passed 
  *      as module parameters.
  *
+ *
  *  0.3.1
- *    FIXED:
+ *
  *    - Applied patches for linux-2.3.25.
  *    - Error number reporting changed to reflect negative return codes.
  *
+ *
  *  0.3.2
- *    FIXED:
+ *
  *    - Applied patches for linux-2.3.26 to scanner_init().
  *    - Debug read/write stats now report values as signed decimal.
  *
  *
  *  0.3.3
- *    FIXED:
+ *
  *    - Updated the bulk_msg() calls to usb usb_bulk_msg().
  *    - Added a small delay in the write_scanner() method to aid in
  *      avoiding NULL data reads on HP scanners.  We'll see how this works.
@@ -75,13 +82,42 @@
  *    - kfree()'d the pointer after using usb_string() as documented in
  *      linux-usb-api.txt.
  *    - Added usb_set_configuration().  It got lost in version 0.3 -- ack!
- *    - Added the HP 5200C USB Vendor/Product ID's
+ *    - Added the HP 5200C USB Vendor/Product ID's.
+ *
+ *
+ *  0.3.4
+ *
+ *    - Added Greg K-H's <greg@kroah.com> patch for better handling of 
+ *      Product/Vendor detection.
+ *    - The driver now autoconfigures its endpoints including interrupt
+ *      endpoints if one is detected.  The concept was originally based
+ *      upon David Brownell's method.
+ *    - Added some Seiko/Epson ID's. Thanks to Karl Heinz 
+ *      Kremer <khk@khk.net>.
+ *    - Added some preliminary ioctl() calls for the PV8630 which is used
+ *      by the HP4200. The ioctl()'s still have to be registered. Thanks 
+ *      to Adrian Perez Jorge <adrianpj@easynews.com>.
+ *    - Moved/migrated stuff to scanner.h
+ *    - Removed the usb_set_configuration() since this is handled by
+ *      the usb_new_device() routine in usb.c.
+ *    - Added the HP 3300C.  Thanks to Bruce Tenison.
+ *    - Changed user specified vendor/product id so that root hub doesn't
+ *      get falsely attached to. Thanks to Greg K-H.
+ *    - Added some Mustek ID's. Thanks to Gernot Hoyler 
+ *      <Dr.Hoyler@t-online.de>.
+ *    - Modified the usb_string() reporting.  See kfree() comment above.
+ *    - Added Umax Astra 2000U. Thanks to Doug Alcorn.
+ *    - Updated the printk()'s to use the info/warn/dbg macros.
+ *    - Updated usb_bulk_msg() argument types to correct gcc warnings.
+ *
  *
  *  TODO
+ *
  *    - Simultaneous multiple device attachment
- *    - ioctl()'s ?
+ *
  *
  *  Thanks to:
+ *
  *    - All the folks on the linux-usb list who put up with me. :)  This 
  *      has been a great learning experience for me.
  *    - To Linus Torvalds for this great OS.
@@ -90,58 +126,28 @@
  *    - And anybody else who chimed in with reports and suggestions.
  *
  *  Performance:
+ *
  *    System: Pentium 120, 80 MB RAM, OHCI, Linux 2.3.23, HP 4100C USB Scanner
  *            300 dpi scan of the entire bed
  *      24 Bit Color ~ 70 secs - 3.6 Mbit/sec
  *       8 Bit Gray  ~ 17 secs - 4.2 Mbit/sec
  * */
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/errno.h>
-#include <asm/uaccess.h>
-#include <linux/malloc.h>
-#include <linux/delay.h>
-
-#undef DEBUG		/* Enable to print results of read/write_scanner() calls */
-#undef RD_DATA_DUMP	/* Enable to dump data - limited to 24 bytes */
-#undef WR_DATA_DUMP
-
-#include "usb.h"
-
-#define IBUF_SIZE 32768
-#define OBUF_SIZE 4096
-
-struct hpscan_usb_data {
-	struct usb_device *hpscan_dev;
-        int isopen;		/* Not zero if the device is open */
-	int present;		/* Device is present on the bus */
-	char *obuf, *ibuf;	/* transfer buffers */
-	char iep, oep;          /* I/O Endpoints */
-};
-
-static struct hpscan_usb_data hpscan;
-
-MODULE_AUTHOR("David E. Nelson, dnelson@jump.net, http://www.jump.net/~dnelson");
-MODULE_DESCRIPTION("USB Scanner Driver");
-
-static __u16 vendor=0x05f9, product=0xffff;
-MODULE_PARM(vendor, "i");
-MODULE_PARM_DESC(vendor, "User specified USB idVendor");
-
-MODULE_PARM(product, "i");
-MODULE_PARM_DESC(product, "User specified USB idProduct");
+#include "scanner.h"
 
 static int
 open_scanner(struct inode * inode, struct file * file)
 {
 	struct hpscan_usb_data *hps = &hpscan;
+	struct usb_device *dev;
 
-	if (!hps->present) {
+	dev = hps->hpscan_dev;
+
+	if (!dev) {
 		return -ENODEV;
 	}
 
-	if (!hps->hpscan_dev) {
+	if (!hps->present) {
 		return -ENODEV;
 	}
 
@@ -173,18 +179,18 @@ write_scanner(struct file * file, const char * buffer,
               size_t count, loff_t *ppos)
 {
 	struct hpscan_usb_data *hps = &hpscan;
-
-	unsigned long copy_size;
-	unsigned long bytes_written = 0;
-	unsigned long partial;
-
+	struct usb_device *dev;
+	
+	ssize_t bytes_written = 0;
 	ssize_t ret = 0;
 
+	int copy_size;
+	int partial;
 	int result = 0;
 	
 	char *obuf = hps->obuf;
 
-	set_current_state(TASK_INTERRUPTIBLE);
+	dev = hps->hpscan_dev;
 
 	while (count > 0) {
 
@@ -200,8 +206,8 @@ write_scanner(struct file * file, const char * buffer,
 			break;
 		}
 
-		result = usb_bulk_msg(hps->hpscan_dev,usb_sndbulkpipe(hps->hpscan_dev, hps->oep), obuf, copy_size, &partial, 30*HZ);
-		dbg("write stats: result:%d copy_size:%lu partial:%lu", (int)result, copy_size, partial);
+		result = usb_bulk_msg(dev,usb_sndbulkpipe(dev, hps->bulk_out_ep), obuf, copy_size, &partial, 60*HZ);
+		dbg("write stats: result:%d copy_size:%d partial:%d", result, copy_size, partial);
 
 		if (result == USB_ST_TIMEOUT) {	/* NAK -- shouldn't happen */
 			warn("write_scanner: NAK recieved.");
@@ -217,7 +223,7 @@ write_scanner(struct file * file, const char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG __FILE__ ": dump: ");
+			printk(KERN_DEBUG "dump: ");
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", obuf[cnt]);
 			}
@@ -239,8 +245,7 @@ write_scanner(struct file * file, const char * buffer,
 			break;
 		}
 	}
-//	mdelay(5);
-	set_current_state(TASK_RUNNING);
+	mdelay(5);
 	return ret ? ret : bytes_written;
 }
 
@@ -249,18 +254,19 @@ read_scanner(struct file * file, char * buffer,
              size_t count, loff_t *ppos)
 {
 	struct hpscan_usb_data *hps = &hpscan;
+	struct usb_device *dev;
 
 	ssize_t read_count, ret = 0;
 
-	unsigned long partial;
-
+	int partial;
 	int this_read;
 	int result;
 
 	char *ibuf = hps->ibuf;
 
+	dev = hps->hpscan_dev;
+
 	read_count = 0;
-	set_current_state(TASK_INTERRUPTIBLE);
 
 	while (count) {
 		if (signal_pending(current)) {
@@ -270,8 +276,8 @@ read_scanner(struct file * file, char * buffer,
 
 		this_read = (count > IBUF_SIZE) ? IBUF_SIZE : count;
 		
-		result = usb_bulk_msg(hps->hpscan_dev, usb_rcvbulkpipe(hps->hpscan_dev, hps->iep), ibuf, this_read, &partial, 60*HZ);
-		dbg("read stats: result:%d this_read:%u partial:%lu", (int)result, this_read, partial);
+		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, hps->bulk_in_ep), ibuf, this_read, &partial, 60*HZ);
+		dbg("read stats: result:%d this_read:%d partial:%d", result, this_read, partial);
 
 		if (result == USB_ST_TIMEOUT) { /* NAK -- shouldn't happen */
 			warn("read_scanner: NAK received");
@@ -287,7 +293,7 @@ read_scanner(struct file * file, char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG __FILE__ ": dump: ");
+			printk(KERN_DEBUG "dump: ");
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", ibuf[cnt]);
 			}
@@ -313,7 +319,6 @@ read_scanner(struct file * file, char * buffer,
 			buffer += this_read;
 		}
 	}
-	set_current_state(TASK_RUNNING);
 	return ret ? ret : read_count;
 }
 
@@ -321,103 +326,181 @@ static void *
 probe_scanner(struct usb_device *dev, unsigned int ifnum)
 {
 	struct hpscan_usb_data *hps = &hpscan;
+	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
+	
+	int ep_cnt;
 
 	char *ident;
+	char valid_device = 0;
+	char have_bulk_in, have_bulk_out, have_intr;
 
 	hps->present = 0;
 
-	if (vendor != 0 || product != 0)
-		info("USB Scanner Vendor:Product - %x:%x\n", vendor, product);
+	if (vendor != -1 && product != -1) {
+		info("probe_scanner: User specified USB scanner -- Vendor:Product - %x:%x", vendor, product);
+	}
 
-/* There doesn't seem to be an imaging class defined in the USB
+/*
+ * 1. Check Vendor/Product
+ * 2. Determine/Assign Bulk Endpoints
+ * 3. Determine/Assign Intr Endpoint
+ */
+
+/* 
+ * There doesn't seem to be an imaging class defined in the USB
  * Spec. (yet).  If there is, HP isn't following it and it doesn't
  * look like anybody else is either.  Therefore, we have to test the
- * Vendor and Product ID's to see what we have.  This makes this
- * driver a high maintenance driver since it has to be updated with
- * each release of a product.  Also, other scanners may be able to use
- * this driver but again, their Vendor and Product ID's must be added.
+ * Vendor and Product ID's to see what we have.  Also, other scanners
+ * may be able to use this driver by specifying both vendor and
+ * product ID's as options to the scanner module in conf.modules.
  *
  * NOTE: Just because a product is supported here does not mean that
  * applications exist that support the product.  It's in the hopes
  * that this will allow developers a means to produce applications
  * that will support USB products.
  *
- * Until we detect a device which is pleasing, we silently punt.
- * */
+ * Until we detect a device which is pleasing, we silently punt.  */
 
-	if (dev->descriptor.idVendor != 0x03f0 && /* Hewlett Packard */
-	    dev->descriptor.idVendor != 0x06bd && /* AGFA */
-	    dev->descriptor.idVendor != 0x1606 && /* UMAX */
-	    dev->descriptor.idVendor != vendor ) { /* User specified */
+	do {
+		if (dev->descriptor.idVendor == 0x03f0) {          /* Hewlett Packard */
+			if (dev->descriptor.idProduct == 0x0205 || /* 3300C */
+			    dev->descriptor.idProduct == 0x0101 || /* 4100C */
+			    dev->descriptor.idProduct == 0x0105 || /* 4200C */
+			    dev->descriptor.idProduct == 0x0202 || /* PhotoSmart S20 */
+			    dev->descriptor.idProduct == 0x0401 || /* 5200C */
+			    dev->descriptor.idProduct == 0x0201 || /* 6200C */
+			    dev->descriptor.idProduct == 0x0601) { /* 6300C */
+				valid_device = 1;
+				break;
+			}
+		}
+		
+		if (dev->descriptor.idVendor == 0x06bd &&  /* AGFA */
+		    dev->descriptor.idProduct == 0x0001) { /* SnapScan 1212U */
+			valid_device = 1;
+			break;
+		}
+		
+		if (dev->descriptor.idVendor == 0x1606 &&  /* Umax */
+		    dev->descriptor.idProduct == 0x0030) { /* Astra 2000U */
+			valid_device = 1;
+			break;
+		}
+		
+		if (dev->descriptor.idVendor == 0x04b8)	{          /* Seiko/Epson Corp. */
+			if (dev->descriptor.idProduct == 0x0101 || /* Perfection 636 */
+			    dev->descriptor.idProduct == 0x0104) { /* Perfection 1200U */
+				valid_device = 1;
+				break;
+			}
+		}
+
+		if (dev->descriptor.idVendor == 0x055f)	{          /* Mustek */
+			if (dev->descriptor.idProduct == 0x0001) { /* 1200 CU */
+				valid_device = 1;
+				break;
+			}
+		}
+
+		if (dev->descriptor.idVendor == vendor &&   /* User specified */
+		    dev->descriptor.idProduct == product) { /* User specified */
+			valid_device = 1;
+			break;
+		}
+	} while (0);
+
+	if (!valid_device)
+		return NULL;
+
+
+/*
+ * After this point we can be a little noisy about what we are trying to
+ *  configure.
+ */
+
+	if (dev->descriptor.bNumConfigurations != 1) {
+		info("probe_scanner: Only one configuration is supported.");
 		return NULL;
 	}
 
-	if (dev->descriptor.idProduct != 0x0101 && /* HP 4100C */
-	    dev->descriptor.idProduct != 0x0102 && /* HP 4200C & PhotoSmart S20? */
-	    dev->descriptor.idProduct != 0x0202 && /* HP 5100C */
-	    dev->descriptor.idProduct != 0x0401 && /* HP 5200C */
-	    dev->descriptor.idProduct != 0x0201 && /* HP 6200C */
-	    dev->descriptor.idProduct != 0x0601 && /* HP 6300C */
-	    dev->descriptor.idProduct != 0x0001 && /* AGFA SnapScan 1212U */
-	    dev->descriptor.idProduct != 0x0030 && /* Umax 2000U */
-	    dev->descriptor.idProduct != product) { /* User specified */
+	if (dev->config[0].bNumInterfaces != 1) {
+		info("probe_scanner: Only one interface is supported.");
 		return NULL;
 	}
 
-/* After this point we can be a little noisy about what we are trying to
- *  configure. */
+	interface = dev->config[0].interface[0].altsetting;
+	endpoint = interface[0].endpoint;
 
-	if (dev->descriptor.bNumConfigurations != 1 || 
-	    dev->config[0].bNumInterfaces != 1) {
-		dbg("probe_scanner: only simple configurations supported");
+/* 
+ * Start checking for two bulk endpoints OR two bulk endpoints *and* one
+ * interrupt endpoint. If we have an interrupt endpoint go ahead and
+ * setup the handler. FIXME: This is a future enhancement...
+ */
+
+
+	dbg("probe_scanner: Number of Endpoints: %d", (int) interface->bNumEndpoints);
+
+	if ((interface->bNumEndpoints != 2) && (interface->bNumEndpoints != 3)) {
+		info("probe_scanner: Only two or three endpoints supported.");
 		return NULL;
 	}
 
-	endpoint = dev->config[0].interface[0].altsetting[0].endpoint;
+	ep_cnt = have_bulk_in = have_bulk_out = have_intr = 0;
 
-	if (endpoint[0].bmAttributes != USB_ENDPOINT_XFER_BULK
-	    || endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK) {
-		dbg("probe_scanner: invalid bulk endpoints");
+	while (ep_cnt < interface->bNumEndpoints) {
+
+		if (!have_bulk_in && IS_EP_BULK_IN(endpoint[ep_cnt])) {
+			have_bulk_in = 1;
+			hps->bulk_in_ep = ep_cnt + 1;
+			ep_cnt++;
+			dbg("probe_scanner: bulk_in_ep: %d", (int)hps->bulk_in_ep);
+			continue;
+		}
+		
+		if (!have_bulk_out && IS_EP_BULK_OUT(endpoint[ep_cnt])) {
+			have_bulk_out = 1;
+			hps->bulk_out_ep = ep_cnt + 1;
+			ep_cnt++;
+			dbg("probe_scanner: bulk_out_ep: %d", (int)hps->bulk_out_ep);
+			continue;
+		}
+
+		if (!have_intr && IS_EP_INTR(endpoint[ep_cnt])) {
+			have_intr = 1;
+			hps->intr_ep = ep_cnt + 1;
+			ep_cnt++;
+			dbg("probe_scanner: intr_ep: %d", (int)hps->intr_ep);
+			continue;
+		}
+		info("probe_scanner: Undetected endpoint. Notify the maintainer.");
+		return NULL;	/* Shouldn't ever get here unless we have something weird */
+	}
+
+	switch(interface->bNumEndpoints) {
+	case 2:
+		if (!have_bulk_in || !have_bulk_out) {
+			info("probe_scanner: Two bulk endpoints required.");
+			return NULL;
+		}
+		break;
+	case 3:
+		if (!have_bulk_in || !have_bulk_out || !have_intr) {
+			info("probe_scanner: Two bulk endpoints and one interrupt endpoint required.");
+			return NULL;
+		}
+		break;
+	default:
+		info("probe_scanner: Endpoint determination failed.  Notify the maintainer.");
 		return NULL;
-	}
-
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-                dbg("probe_scanner: failed usb_set_configuration");
-		hps->hpscan_dev = NULL;
-                return NULL;
-        }
-
-/* By the time we get here, we should be dealing with a fairly simple
- * device that supports at least two bulk endpoints on endpoints 1 and
- * 2.
- *
- * We determine the bulk endpoints so that the read_*() and write_*()
- * procedures can recv/send data to the correct endpoint.
- * */
-
-	hps->iep = hps->oep = 0;
-
-	if ((endpoint[0].bEndpointAddress & 0x80) == 0x80) {
-		hps->iep = endpoint[0].bEndpointAddress & 0x7f;
-	} else {
-		hps->oep = endpoint[0].bEndpointAddress;
-	}
-
-	if ((endpoint[1].bEndpointAddress & 0x80) == 0x80) {
-		hps->iep = endpoint[1].bEndpointAddress & 0x7f;
-	} else {
-		hps->oep = endpoint[1].bEndpointAddress;
 	}
 
 	ident = kmalloc(256, GFP_KERNEL);
-	if (ident) {
-		usb_string(dev, dev->descriptor.iProduct, ident, 256);
-		info("USB Scanner (%s) found at address %d", ident, dev->devnum);
-		kfree(ident);
-	}
-
-	dbg("probe_scanner: using bulk endpoints - In: %x  Out: %x", hps->iep, hps->oep);
+        if (ident) {
+                usb_string(dev, dev->descriptor.iProduct, ident, 256);
+                info("USB Scanner (%s) found at address %d", ident, dev->devnum);
+                kfree(ident);
+        }
 
 	hps->present = 1;
 	hps->hpscan_dev = dev;
@@ -449,6 +532,71 @@ disconnect_scanner(struct usb_device *dev, void *ptr)
 	hps->present = 0;
 }
 
+static int
+ioctl_scanner(struct inode *inode, struct file *file,
+	      unsigned int cmd, unsigned long arg)
+{
+	struct hpscan_usb_data *hps = &hpscan;
+	struct usb_device *dev;
+
+	int result;
+	
+	dev = hps->hpscan_dev;
+
+	switch (cmd)
+	{
+	case PV8630_RECEIVE :
+	{
+		struct {
+			unsigned char data;
+			__u16 value;
+			__u16 index;
+		} args;
+		
+		if (copy_from_user(&args, (void *)arg, sizeof(args)))
+			return -EFAULT;
+		
+		result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), 0x0,
+					 USB_TYPE_VENDOR|USB_RECIP_DEVICE|USB_DIR_IN,
+					 args.value, args.index, &args.data, 1, HZ);
+
+		dbg("ioctl_scanner recv: args.data:%x args.value:%x args.index:%x",
+				 args.data, args.value, args.index);
+
+		if (copy_to_user((void *)arg, &args, sizeof(args)))
+			return -EFAULT;
+		
+		dbg("ioctl_scanner recv: result:%d", result);
+
+		return result;
+	}
+	case PV8630_SEND :
+	{
+		struct {
+			__u16 value;
+			__u16 index;
+		} args;
+		
+		if (copy_from_user(&args, (void *)arg, sizeof(args)))
+			return -EFAULT;
+		
+		dbg("ioctl_scanner send: args.value:%x args.index:%x", args.value, args.index);
+
+		result = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), 0x1 /* Vendor Specific bRequest */,
+					 USB_TYPE_VENDOR|USB_RECIP_DEVICE|USB_DIR_OUT /* 0x40 */,
+					 args.value, args.index, NULL, 0, HZ);
+
+		dbg("ioctl_scanner send: result:%d", result);
+		
+
+		return result;
+	}
+	default:
+		return -ENOIOCTLCMD;
+	}
+	return 0;
+}
+
 static struct
 file_operations usb_scanner_fops = {
 	NULL,		/* seek */
@@ -456,7 +604,7 @@ file_operations usb_scanner_fops = {
 	write_scanner,
 	NULL,		/* readdir */
 	NULL,		/* poll */
-	NULL,    	/* ioctl */
+	ioctl_scanner, 	/* ioctl */
 	NULL,		/* mmap */
 	open_scanner,
 	NULL,		/* flush */

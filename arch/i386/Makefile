@@ -22,7 +22,10 @@ LDFLAGS=-e stext
 LINKFLAGS =-T $(TOPDIR)/arch/i386/vmlinux.lds $(LDFLAGS)
 
 CFLAGS_PIPE := -pipe
-CFLAGS_NSR  := -fno-strength-reduce
+
+# only work around strength reduction bug(s) on older gcc versions
+CFLAGS_NSR  := $(shell if $(CC) -march=i486 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo ""; else echo "-fno-strength-reduce"; fi)
+
 CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
 
 # prevent gcc from keeping the stack 16 byte aligned
@@ -55,6 +58,12 @@ ifdef CONFIG_M686
 CFLAGS := $(CFLAGS) -DCPU=686
 CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi)
 AFLAGS := $(AFLAGS) -DCPU=686
+endif
+
+ifdef CONFIG_MK6
+CFLAGS := $(CFLAGS) -DCPU=586
+CFLAGS += $(shell if $(CC) -march=k6 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=k6"; fi)
+AFLAGS := $(AFLAGS) -DCPU=586
 endif
 
 ifdef CONFIG_MK7

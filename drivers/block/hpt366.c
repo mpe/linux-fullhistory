@@ -30,7 +30,6 @@
 #include "ide_modes.h"
 
 const char *bad_ata66_4[] = {
-	"QUANTUM FIREBALLP KA9.1",
 	"WDC AC310200R",
 	NULL
 };
@@ -423,30 +422,17 @@ no_dma_set:
 
 int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
+	byte reg50h = 0;
+
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
+		case ide_dma_lostirq:
+			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
+			pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h|0x03);
+			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
+			/* ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL); */
 		case ide_dma_timeout:
-			/* ide_do_reset(drive); */
-
-			if (0) {
-				byte reg50h = 0, reg52h = 0;
-				(void) ide_dmaproc(ide_dma_off_quietly, drive);
-				pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
-				pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
-				printk("%s: (ide_dma_timeout) reg52h=0x%02x\n", drive->name, reg52h);
-				if (reg52h & 0x04) {
-					pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
-					pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h|0xff);
-					pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h);
-				}
-				pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
-				pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
-				printk("%s: (ide_dma_timeout) reg50h=0x%02x reg52h=0x%02x :: again\n", drive->name, reg50h, reg52h);
-				(void) ide_dmaproc(ide_dma_on, drive);
-				if (reg52h & 0x04)
-					(void) ide_dmaproc(ide_dma_off, drive);
-			}
 			break;
 		default:
 			break;

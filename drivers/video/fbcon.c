@@ -237,7 +237,7 @@ static void cursor_timer_handler(unsigned long dev_addr)
       fbcon_vbl_handler(0, NULL, NULL);
       cursor_timer.expires = jiffies+HZ/50;
       cursor_timer.data = 0;
-      cursor_timer.next = cursor_timer.next = NULL;
+      cursor_timer.next = cursor_timer.prev = NULL;
       add_timer(&cursor_timer);
 }
 

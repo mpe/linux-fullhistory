@@ -29,8 +29,8 @@
 #define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
-#define DEVID_PIIX4E	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
-#define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AB_1})
+#define DEVID_PIIX4E	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AB_1})
+#define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
 #define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
@@ -696,70 +696,45 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
  * ide_scan_pcibus() gets invoked at boot time from ide.c.
  * It finds all PCI IDE controllers and calls ide_setup_pci_device for them.
  */
-void __init ide_forward_scan_pcibus (void)
+void __init ide_scan_pcidev (struct pci_dev *dev)
 {
-	struct pci_dev		*dev;
 	ide_pci_devid_t		devid;
 	ide_pci_device_t	*d;
 
-	pci_for_each_dev(dev) {
-		devid.vid = dev->vendor;
-		devid.did = dev->device;
-		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
-		if (d->init_hwif == IDE_IGNORE)
-			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
-			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
-			continue;	/* CY82C693 is more than only a IDE controller */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) && !(PCI_FUNC(dev->devfn) & 1))
-			continue;	/* UM8886A/BF pair */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366))
-			hpt366_device_order_fixup(dev, d);
-		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
-			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
-				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",
-					d->name, dev->bus->number, dev->devfn, devid.vid, devid.did);
-			else
-				printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
-			ide_setup_pci_device(dev, d);
-		}
-	}
-}
-
-void __init ide_reverse_scan_pcibus (void)
-{
-	struct pci_dev		*dev;
-	ide_pci_devid_t		devid;
-	ide_pci_device_t	*d;
-
-	pci_for_each_dev_reverse(dev) {
-		devid.vid = dev->vendor;
-		devid.did = dev->device;
-		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
-		if (d->init_hwif == IDE_IGNORE)
-			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
-			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
-			continue;	/* CY82C693 is more than only a IDE controller */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) && !(PCI_FUNC(dev->devfn) & 1))
-			continue;	/* UM8886A/BF pair */
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366))
-			hpt366_device_order_fixup(dev, d);
-		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
-			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
-				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",
-					d->name, dev->bus->number, dev->devfn, devid.vid, devid.did);
-			else
-				printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
-			ide_setup_pci_device(dev, d);
-		}
+	devid.vid = dev->vendor;
+	devid.did = dev->device;
+	for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
+	if (d->init_hwif == IDE_IGNORE)
+		printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
+	else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
+		return;
+	else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
+		return;	/* CY82C693 is more than only a IDE controller */
+	else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) && !(PCI_FUNC(dev->devfn) & 1))
+		return;	/* UM8886A/BF pair */
+	else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366))
+		hpt366_device_order_fixup(dev, d);
+	else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
+		if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
+			printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",
+			       d->name, dev->bus->number, dev->devfn, devid.vid, devid.did);
+		else
+			printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
+		ide_setup_pci_device(dev, d);
 	}
 }
 
 void __init ide_scan_pcibus (int scan_direction)
 {
-	if (!scan_direction) ide_forward_scan_pcibus();
-		else ide_reverse_scan_pcibus();
+	struct pci_dev *dev;
+
+	if (!scan_direction) {
+		pci_for_each_dev(dev) {
+			ide_scan_pcidev(dev);
+		}
+	} else {
+		pci_for_each_dev_reverse(dev) {
+			ide_scan_pcidev(dev);
+		}
+	}
 }

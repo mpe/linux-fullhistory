@@ -33,8 +33,8 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
       tristate '  Digiboard PC/Xx Support' CONFIG_DIGI
    fi
    tristate '  Hayes ESP serial port support' CONFIG_ESPSERIAL
-   tristate 'Moxa Intellio support' CONFIG_MOXA_INTELLIO
-   tristate 'Moxa SmartIO support' CONFIG_MOXA_SMARTIO
+   tristate '  Moxa Intellio support' CONFIG_MOXA_INTELLIO
+   tristate '  Moxa SmartIO support' CONFIG_MOXA_SMARTIO
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       dep_tristate '  Multi-Tech multiport card support (EXPERIMENTAL)' CONFIG_ISI m
    fi

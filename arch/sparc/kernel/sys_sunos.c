@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.110 2000/01/21 11:38:40 jj Exp $
+/* $Id: sys_sunos.c,v 1.111 2000/01/22 05:17:55 anton Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -605,7 +605,7 @@ asmlinkage int sunos_nosys(void)
 	info.si_signo = SIGSYS;
 	info.si_errno = 0;
 	info.si_code = __SI_FAULT|0x100;
-	info.si_addr = (void *)regs->tpc;
+	info.si_addr = (void *)regs->pc;
 	info.si_trapno = regs->u_regs[UREG_G1];
 	send_sig_info(SIGSYS, &info, current);
 	if (cnt++ < 4) {

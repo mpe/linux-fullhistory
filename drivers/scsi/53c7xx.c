@@ -245,7 +245,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>

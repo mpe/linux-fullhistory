@@ -1,4 +1,4 @@
-/* $Id: uctrl.c,v 1.5 1999/12/15 15:48:24 davem Exp $
+/* $Id: uctrl.c,v 1.6 2000/01/22 05:22:07 anton Exp $
  * uctrl.c: TS102 Microcontroller interface on Tadpole Sparcbook 3
  *
  * Copyright 1999 Derrick J Brashear (shadow@dementia.org)
@@ -380,7 +380,7 @@ void uctrl_get_external_status()
 #ifdef MODULE
 int init_module(void)
 #else
-int __init uctrl_init(void)
+int __init ts102_uctrl_init(void)
 #endif
 {
 	struct uctrl_driver *driver = &drv;

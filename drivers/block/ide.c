@@ -655,14 +655,17 @@ static ide_startstop_t reset_pollfunc (ide_drive_t *drive)
 
 static void pre_reset (ide_drive_t *drive)
 {
-	if (!drive->keep_settings) {
-		drive->unmask = 0;
-		drive->io_32bit = 0;
-		if (drive->using_dma)
-			(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
-	}
 	if (drive->driver != NULL)
 		DRIVER(drive)->pre_reset(drive);
+
+	if (!drive->keep_settings) {
+		if (drive->using_dma) {
+			(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
+		} else {
+			drive->unmask = 0;
+			drive->io_32bit = 0;
+		}
+	}
 }
 
 /*
@@ -901,7 +904,7 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, byte stat)
 			try_to_flush_leftover_data(drive);
 	}
 	if (GET_STAT() & (BUSY_STAT|DRQ_STAT))
-		rq->errors |= ERROR_RESET;	/* Mmmm.. timing problem */
+		OUT_BYTE(WIN_IDLEIMMEDIATE,IDE_COMMAND_REG);	/* force an abort */
 
 	if (rq->errors >= ERROR_MAX) {
 		if (drive->driver != NULL)
@@ -1825,7 +1828,7 @@ static void ide_init_module (int type)
 	revalidate_drives();
 #ifdef CONFIG_KMOD
 	if (!found && type == IDE_PROBE_MODULE)
-		(void) request_module("ide-probe");
+		(void) request_module("ide-probe-mod");
 #endif /* CONFIG_KMOD */
 }
 

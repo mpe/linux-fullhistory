@@ -73,7 +73,7 @@ typedef unsigned short kdev_t;
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 #define B_FREE		0xffff		/* yuk */
 
-extern char * kdevname(kdev_t);	/* note: returns pointer to static data! */
+extern const char * kdevname(kdev_t);	/* note: returns pointer to static data! */
 
 /*
 As long as device numbers in the outside world have 16 bits only,
