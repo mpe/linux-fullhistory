@@ -151,7 +151,7 @@ static struct Nala_table_entry Nala_table[PSZ_MAX][8] =
 		USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE, \
 		value, \
 		pdev->vcinterface, \
-		&buf, buflen, HZ / 2)
+		&buf, buflen, 500)
 
 #define RecvControlMsg(request, value, buflen) \
 	usb_control_msg(pdev->udev, usb_rcvctrlpipe(pdev->udev, 0), \
@@ -159,7 +159,7 @@ static struct Nala_table_entry Nala_table[PSZ_MAX][8] =
 		USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE, \
 		value, \
 		pdev->vcinterface, \
-		&buf, buflen, HZ / 2)
+		&buf, buflen, 500)
 
 
 #if PWC_DEBUG
@@ -194,7 +194,7 @@ static inline int send_video_command(struct usb_device *udev, int index, void *b
 		USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
 		VIDEO_OUTPUT_CONTROL_FORMATTER,
 		index,
-		buf, buflen, HZ);
+		buf, buflen, 1000);
 }
 
 
