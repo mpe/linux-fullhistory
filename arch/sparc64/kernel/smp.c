@@ -107,6 +107,10 @@ void __init smp_callin(void)
 
 	__flush_tlb_all();
 
+	__asm__ __volatile__("mov %0, %%g5\n\t"
+			     : /* no outputs */
+			     : "r" (__per_cpu_offset[cpuid]));
+
 	smp_setup_percpu_timer();
 
 	local_irq_enable();
@@ -1115,6 +1119,11 @@ void __devinit smp_prepare_boot_cpu(void)
 	}
 
 	current_thread_info()->cpu = hard_smp_processor_id();
+
+	__asm__ __volatile__("mov %0, %%g5\n\t"
+			     : /* no outputs */
+			     : "r" (__per_cpu_offset[smp_processor_id()]));
+
 	cpu_set(smp_processor_id(), cpu_online_map);
 	cpu_set(smp_processor_id(), phys_cpu_present_map);
 }

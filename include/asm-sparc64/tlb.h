@@ -44,7 +44,7 @@ extern void flush_tlb_pending(void);
 
 static inline struct mmu_gather *tlb_gather_mmu(struct mm_struct *mm, unsigned int full_mm_flush)
 {
-	struct mmu_gather *mp = &per_cpu(mmu_gathers, smp_processor_id());
+	struct mmu_gather *mp = &__get_cpu_var(mmu_gathers);
 
 	BUG_ON(mp->tlb_nr);
 

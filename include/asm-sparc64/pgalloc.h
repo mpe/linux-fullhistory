@@ -14,7 +14,7 @@
 /* Page table allocation/freeing. */
 #ifdef CONFIG_SMP
 /* Sliiiicck */
-#define pgt_quicklists	cpu_data(smp_processor_id())
+#define pgt_quicklists	local_cpu_data()
 #else
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;

@@ -102,11 +102,15 @@ cplus_etrap_insn_2:
 		stx	%i7, [%sp + PTREGS_OFF + PT_V9_I7]
 		wrpr	%g0, ETRAP_PSTATE2, %pstate
 		mov	%l6, %g6
+#ifdef CONFIG_SMP
+		ldub	[%g6 + TI_CPU], %g3
+		sethi	%hi(__per_cpu_offset), %g2
+		or	%g2, %lo(__per_cpu_offset), %g2
+		sllx	%g3, 3, %g3
+		ldx	[%g2 + %g3], %g5
+#endif
 		jmpl	%l2 + 0x4, %g0
 		 ldx	[%g6 + TI_TASK], %g4
-		nop
-		nop
-		nop
 
 3:		ldub	[%l6 + TI_FPDEPTH], %l5
 		add	%l6, TI_FPSAVED + 1, %l4
@@ -254,10 +258,15 @@ cplus_etrap_insn_4:
 		stx	%i6, [%sp + PTREGS_OFF + PT_V9_I6]
 		mov	%l6, %g6
 		stx	%i7, [%sp + PTREGS_OFF + PT_V9_I7]
+#ifdef CONFIG_SMP
+		ldub	[%g6 + TI_CPU], %g3
+		sethi	%hi(__per_cpu_offset), %g2
+		or	%g2, %lo(__per_cpu_offset), %g2
+		sllx	%g3, 3, %g3
+		ldx	[%g2 + %g3], %g5
+#endif
 		ldx	[%g6 + TI_TASK], %g4
 		done
-		nop
-		nop
 
 #undef TASK_REGOFF
 #undef ETRAP_PSTATE1

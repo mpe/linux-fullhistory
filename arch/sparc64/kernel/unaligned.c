@@ -413,7 +413,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn, u
 		:
 		: "r" (regs), "r" (insn)
 		: "o0", "o1", "o2", "o3", "o4", "o5", "o7",
-		  "g1", "g2", "g3", "g4", "g5", "g7", "cc");
+		  "g1", "g2", "g3", "g4", "g7", "cc");
 	} else {
 		unsigned long addr = compute_effective_address(regs, insn, ((insn >> 25) & 0x1f));
 

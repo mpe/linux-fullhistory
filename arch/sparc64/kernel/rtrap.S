@@ -222,8 +222,9 @@ rt_continue:	ldx			[%sp + PTREGS_OFF + PT_V9_G1], %g1
 
 		ldx			[%sp + PTREGS_OFF + PT_V9_G3], %g3
 		ldx			[%sp + PTREGS_OFF + PT_V9_G4], %g4
-		ldx			[%sp + PTREGS_OFF + PT_V9_G5], %g5
-		ldx			[%sp + PTREGS_OFF + PT_V9_G6], %g6
+		brz,a,pn		%l3, 1f
+		 ldx			[%sp + PTREGS_OFF + PT_V9_G5], %g5
+1:		ldx			[%sp + PTREGS_OFF + PT_V9_G6], %g6
 		ldx			[%sp + PTREGS_OFF + PT_V9_G7], %g7
 		wrpr			%g0, RTRAP_PSTATE_AG_IRQOFF, %pstate
 		ldx			[%sp + PTREGS_OFF + PT_V9_I0], %i0
