@@ -5,9 +5,6 @@
 #include <linux/slab.h>
 #include <linux/cpumask.h>
 #include <linux/percpu.h>
-#include <asm/processor.h>
-#include <asm/tlb.h>
-#include <asm/page.h>
 
 extern kmem_cache_t *zero_cache;
 
