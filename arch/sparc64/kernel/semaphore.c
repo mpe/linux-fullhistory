@@ -83,7 +83,7 @@ void up(struct semaphore *sem)
 "	 restore\n"
 "	.previous\n"
 	: : "r" (sem), "i" (__up)
-	: "g1", "g2", "g3", "g7", "memory", "cc");
+	: "g1", "g2", "g3", "g5", "g7", "memory", "cc");
 }
 
 static void __sched __down(struct semaphore * sem)
@@ -140,7 +140,7 @@ void __sched down(struct semaphore *sem)
 "	 restore\n"
 "	.previous\n"
 	: : "r" (sem), "i" (__down)
-	: "g1", "g2", "g3", "g7", "memory", "cc");
+	: "g1", "g2", "g3", "g5", "g7", "memory", "cc");
 }
 
 int down_trylock(struct semaphore *sem)
@@ -246,6 +246,6 @@ int __sched down_interruptible(struct semaphore *sem)
 "	.previous\n"
 	: "=r" (ret)
 	: "0" (ret), "r" (sem), "i" (__down_interruptible)
-	: "g1", "g2", "g3", "g7", "memory", "cc");
+	: "g1", "g2", "g3", "g5", "g7", "memory", "cc");
 	return ret;
 }

@@ -1642,7 +1642,7 @@ ret_from_syscall:
 		andn		%o7, _TIF_NEWCHILD, %l0
 		stx		%l0, [%g6 + TI_FLAGS]
 		call		schedule_tail
-		 mov		%g5, %o0
+		 mov		%g7, %o0
 		andcc		%l0, _TIF_PERFCTR, %g0
 		be,pt		%icc, 1f
 		 nop

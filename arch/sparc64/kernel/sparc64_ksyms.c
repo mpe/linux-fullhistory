@@ -59,6 +59,7 @@
 #include <asm/ns87303.h>
 #include <asm/timer.h>
 #include <asm/cpudata.h>
+#include <asm/rwsem.h>
 
 struct poll {
 	int fd;
@@ -170,6 +171,15 @@ EXPORT_SYMBOL(down);
 EXPORT_SYMBOL(down_trylock);
 EXPORT_SYMBOL(down_interruptible);
 EXPORT_SYMBOL(up);
+
+/* RW semaphores */
+EXPORT_SYMBOL(__down_read);
+EXPORT_SYMBOL(__down_read_trylock);
+EXPORT_SYMBOL(__down_write);
+EXPORT_SYMBOL(__down_write_trylock);
+EXPORT_SYMBOL(__up_read);
+EXPORT_SYMBOL(__up_write);
+EXPORT_SYMBOL(__downgrade_write);
 
 /* Atomic counter implementation. */
 EXPORT_SYMBOL(atomic_add);
