@@ -63,6 +63,8 @@ struct super_block;
 
 extern struct inode_operations udf_dir_inode_operations;
 extern struct inode_operations udf_file_inode_operations;
+extern struct file_operations udf_dir_operations;
+extern struct file_operations udf_file_operations;
 extern struct address_space_operations udf_adinicb_aops;
 extern struct address_space_operations udf_symlink_aops;
 
@@ -118,15 +120,6 @@ extern void udf_warning(struct super_block *, const char *, const char *, ...);
 
 /* namei.c */
 extern int udf_write_fi(struct FileIdentDesc *, struct FileIdentDesc *, struct udf_fileident_bh *, Uint8 *, Uint8 *);
-extern struct dentry * udf_lookup(struct inode *, struct dentry *);
-extern int udf_create(struct inode *, struct dentry *, int);
-extern int udf_mknod(struct inode *, struct dentry *, int, int);
-extern int udf_mkdir(struct inode *, struct dentry *, int);
-extern int udf_rmdir(struct inode *, struct dentry *);
-extern int udf_unlink(struct inode *, struct dentry *);
-extern int udf_symlink(struct inode *, struct dentry *, const char *);
-extern int udf_link(struct dentry *, struct inode *, struct dentry *);
-extern int udf_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
 
 /* file.c */
 extern int udf_ioctl(struct inode *, struct file *, unsigned int, unsigned long);

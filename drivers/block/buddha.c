@@ -42,7 +42,7 @@
 #define BUDDHA_BASE2	0xa00
 #define BUDDHA_BASE3	0xc00
 
-static const u_int buddha_bases[CATWEASEL_NUM_HWIFS] = {
+static const u_int __init buddha_bases[CATWEASEL_NUM_HWIFS] = {
     BUDDHA_BASE1, BUDDHA_BASE2, BUDDHA_BASE3
 };
 
@@ -61,7 +61,7 @@ static const u_int buddha_bases[CATWEASEL_NUM_HWIFS] = {
 #define BUDDHA_STATUS	0x1e		/* see status-bits */
 #define BUDDHA_CONTROL	0x11a
 
-static int buddha_offsets[IDE_NR_PORTS] = {
+static int __init buddha_offsets[IDE_NR_PORTS] = {
     BUDDHA_DATA, BUDDHA_ERROR, BUDDHA_NSECTOR, BUDDHA_SECTOR, BUDDHA_LCYL,
     BUDDHA_HCYL, BUDDHA_SELECT, BUDDHA_STATUS, BUDDHA_CONTROL
 };
@@ -75,7 +75,7 @@ static int buddha_offsets[IDE_NR_PORTS] = {
 #define BUDDHA_IRQ2	0xf40		/* interrupt */
 #define BUDDHA_IRQ3	0xf80
 
-static const int buddha_irqports[CATWEASEL_NUM_HWIFS] = {
+static const int __init buddha_irqports[CATWEASEL_NUM_HWIFS] = {
     BUDDHA_IRQ1, BUDDHA_IRQ2, BUDDHA_IRQ3
 };
 
@@ -109,7 +109,7 @@ static int buddha_ack_intr(ide_hwif_t *hwif)
      *  Any Buddha or Catweasel boards present?
      */
 
-static int find_buddha(void)
+static int __init find_buddha(void)
 {
     struct zorro_dev *z = NULL;
 
@@ -143,7 +143,7 @@ static int find_buddha(void)
      *  We support only _one_ of them, no multiple boards!
      */
 
-void buddha_init(void)
+void __init buddha_init(void)
 {
     hw_regs_t hw;
     int i, index;

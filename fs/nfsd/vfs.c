@@ -432,14 +432,14 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	err = nfserr_perm;
 	if (IS_APPEND(inode) || IS_ISMNDLK(inode))
 		goto out;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!inode->i_fop)
 		goto out;
 
 	if ((access & MAY_WRITE) && (err = get_write_access(inode)) != 0)
 		goto out_nfserr;
 
 	memset(filp, 0, sizeof(*filp));
-	filp->f_op    = inode->i_op->default_file_ops;
+	filp->f_op    = inode->i_fop;
 	atomic_set(&filp->f_count, 1);
 	filp->f_dentry = dentry;
 	if (access & MAY_WRITE) {
@@ -512,8 +512,7 @@ nfsd_sync_dir(struct dentry *dp)
 	struct inode *inode = dp->d_inode;
 	int (*fsync) (struct file *, struct dentry *);
 	
-	if (inode->i_op->default_file_ops
-	    && (fsync = inode->i_op->default_file_ops->fsync)) {
+	if (inode->i_fop && (fsync = inode->i_fop->fsync)) {
 		fsync(NULL, dp);
 	}
 }

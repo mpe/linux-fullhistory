@@ -95,50 +95,17 @@ static struct file_operations router_fops =
 
 static struct inode_operations router_inode =
 {
-	&router_fops,
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	router_proc_perms,	/* permission */
-	NULL			/* revalidate */
+	permission:	router_proc_perms,
 };
 
 /*
- *	/proc/net/router/<device> file and inode operations
+ *	/proc/net/router/<device> file operations
  */
 
 static struct file_operations wandev_fops =
 {
 	read:		router_proc_read,
 	ioctl:		wanrouter_ioctl,
-};
-
-static struct inode_operations wandev_inode =
-{
-	&wandev_fops,
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	router_proc_perms,	/* permission */
-	NULL			/* revalidate */
 };
 
 /*
@@ -175,12 +142,14 @@ int __init wanrouter_proc_init (void)
 	p = create_proc_entry("config",0,proc_router);
 	if (!p)
 		goto fail_config;
-	p->ops = &router_inode;
+	p->proc_fops = &router_fops;
+	p->proc_iops = &router_inode;
 	p->get_info = config_get_info;
 	p = create_proc_entry("status",0,proc_router);
 	if (!p)
 		goto fail_stat;
-	p->ops = &router_inode;
+	p->proc_fops = &router_fops;
+	p->proc_iops = &router_inode;
 	p->get_info = status_get_info;
 	return 0;
 fail_stat:
@@ -214,7 +183,8 @@ int wanrouter_proc_add (wan_device_t* wandev)
 	wandev->dent = create_proc_entry(wandev->name, 0, proc_router);
 	if (!wandev->dent)
 		return -ENOMEM;
-	wandev->dent->ops	= &wandev_inode;
+	wandev->dent->proc_fops	= &wandev_fops;
+	wandev->dent->proc_iops	= &router_inode;
 	wandev->dent->get_info	= wandev_get_info;
 	wandev->dent->data	= wandev;
 	return 0;

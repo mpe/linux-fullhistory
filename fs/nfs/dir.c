@@ -38,7 +38,6 @@
 
 static int nfs_safe_remove(struct dentry *);
 
-static ssize_t nfs_dir_read(struct file *, char *, size_t, loff_t *);
 static int nfs_readdir(struct file *, void *, filldir_t);
 static struct dentry *nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
@@ -51,36 +50,26 @@ static int nfs_mknod(struct inode *, struct dentry *, int, int);
 static int nfs_rename(struct inode *, struct dentry *,
 		      struct inode *, struct dentry *);
 
-static struct file_operations nfs_dir_operations = {
-	read:		nfs_dir_read,
+struct file_operations nfs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	nfs_readdir,
 	open:		nfs_open,
 	release:	nfs_release,
 };
 
 struct inode_operations nfs_dir_inode_operations = {
-	&nfs_dir_operations,	/* default directory file-ops */
-	nfs_create,		/* create */
-	nfs_lookup,		/* lookup */
-	nfs_link,		/* link */
-	nfs_unlink,		/* unlink */
-	nfs_symlink,		/* symlink */
-	nfs_mkdir,		/* mkdir */
-	nfs_rmdir,		/* rmdir */
-	nfs_mknod,		/* mknod */
-	nfs_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	nfs_revalidate,		/* revalidate */
+	create:		nfs_create,
+	lookup:		nfs_lookup,
+	link:		nfs_link,
+	unlink:		nfs_unlink,
+	symlink:	nfs_symlink,
+	mkdir:		nfs_mkdir,
+	rmdir:		nfs_rmdir,
+	mknod:		nfs_mknod,
+	rename:		nfs_rename,
+	revalidate:	nfs_revalidate,
+	setattr:	nfs_notify_change,
 };
-
-static ssize_t
-nfs_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
 
 /* Each readdir response is composed of entries which look
  * like the following, as per the NFSv2 RFC:

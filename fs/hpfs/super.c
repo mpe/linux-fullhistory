@@ -152,19 +152,13 @@ int hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 
 /* Super operations */
 
-static const struct super_operations hpfs_sops =
+static struct super_operations hpfs_sops =
 {
-        hpfs_read_inode,		/* read_inode */
-        NULL,				/* write_inode */
-	NULL,				/* put_inode */
-	hpfs_delete_inode,		/* delete inode */
-        hpfs_notify_change,		/* notify_change */
-        hpfs_put_super,			/* put_super */
-        NULL,				/* write_super */
-        hpfs_statfs,			/* statfs */
-        hpfs_remount_fs,		/* remount_fs */
-	NULL,				/* clear inode */
-	NULL,				/* umount_begin */
+        read_inode:	hpfs_read_inode,
+	delete_inode:	hpfs_delete_inode,
+	put_super:	hpfs_put_super,
+	statfs:		hpfs_statfs,
+	remount_fs:	hpfs_remount_fs,
 };
 
 /*
@@ -437,7 +431,7 @@ struct super_block *hpfs_read_super(struct super_block *s, void *options,
 	s->s_magic = HPFS_SUPER_MAGIC;
 	s->s_blocksize = 512;
 	s->s_blocksize_bits = 9;
-	s->s_op = (struct super_operations *) &hpfs_sops;
+	s->s_op = &hpfs_sops;
 
 	s->s_hpfs_root = superblock->root;
 	s->s_hpfs_fs_size = superblock->n_sectors;

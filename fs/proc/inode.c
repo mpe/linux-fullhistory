@@ -95,10 +95,6 @@ static void proc_put_super(struct super_block *sb)
 	*p = (struct super_block *)(*p)->u.generic_sbp;
 }
 
-static void proc_write_inode(struct inode * inode)
-{
-}
-
 static void proc_read_inode(struct inode * inode)
 {
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -120,15 +116,11 @@ static int proc_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 }
 
 static struct super_operations proc_sops = { 
-	proc_read_inode,
-	proc_write_inode,
-	proc_put_inode,
-	proc_delete_inode,	/* delete_inode(struct inode *) */
-	NULL,
-	proc_put_super,
-	NULL,
-	proc_statfs,
-	NULL
+	read_inode:	proc_read_inode,
+	put_inode:	proc_put_inode,
+	delete_inode:	proc_delete_inode,
+	put_super:	proc_put_super,
+	statfs:		proc_statfs,
 };
 
 
@@ -195,8 +187,12 @@ printk("proc_iget: using deleted entry %s, count=%d\n", de->name, de->count);
 			__MOD_INC_USE_COUNT(de->owner);
 		if (S_ISBLK(de->mode)||S_ISCHR(de->mode)||S_ISFIFO(de->mode))
 			init_special_inode(inode,de->mode,kdev_t_to_nr(de->rdev));
-		else if (de->ops)
-			inode->i_op = de->ops;
+		else {
+			if (de->proc_iops)
+				inode->i_op = de->proc_iops;
+			if (de->proc_fops)
+				inode->i_fop = de->proc_fops;
+		}
 	}
 
 out:

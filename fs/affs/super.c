@@ -98,15 +98,14 @@ affs_write_super(struct super_block *sb)
 }
 
 static struct super_operations affs_sops = {
-	affs_read_inode,
-	affs_write_inode,
-	affs_put_inode,
-	affs_delete_inode,
-	affs_notify_change,
-	affs_put_super,
-	affs_write_super,
-	affs_statfs,
-	affs_remount
+	read_inode:	affs_read_inode,
+	write_inode:	affs_write_inode,
+	put_inode:	affs_put_inode,
+	delete_inode:	affs_delete_inode,
+	put_super:	affs_put_super,
+	write_super:	affs_write_super,
+	statfs:		affs_statfs,
+	remount_fs:	affs_remount,
 };
 
 static int

@@ -469,7 +469,6 @@ repeat:
 	inode->u.ext2_i.i_dir_acl = 0;
 	inode->u.ext2_i.i_dtime = 0;
 	inode->u.ext2_i.i_block_group = i;
-	inode->i_op = NULL;
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
 		inode->i_flags |= MS_SYNCHRONOUS;
 	insert_inode_hash(inode);

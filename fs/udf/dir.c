@@ -49,37 +49,11 @@ static int do_udf_readdir(struct inode *, struct file *, filldir_t, void *);
 
 /* readdir and lookup functions */
 
-static struct file_operations udf_dir_operations = {
+struct file_operations udf_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	udf_readdir,
 	ioctl:		udf_ioctl,
 	fsync:		udf_sync_file,
-};
-
-struct inode_operations udf_dir_inode_operations = {
-	&udf_dir_operations,
-#if CONFIG_UDF_RW == 1
-	udf_create, 	/* create */
-#else
-	NULL,			/* create */
-#endif
-	udf_lookup,		/* lookup */
-#if CONFIG_UDF_RW == 1
-	udf_link,		/* link */
-	udf_unlink,		/* unlink */
-	udf_symlink,	/* symlink */
-	udf_mkdir,		/* mkdir */
-	udf_rmdir,		/* rmdir */
-	udf_mknod,		/* mknod */
-	udf_rename,		/* rename */
-#else
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-#endif
 };
 
 /*

@@ -57,35 +57,31 @@ const struct hfs_name hfs_cap_reserved2[] = {
 #define DOT_FINDERINFO	(&hfs_cap_reserved1[3])
 #define DOT_ROOTINFO	(&hfs_cap_reserved2[0])
 
-static struct file_operations hfs_cap_dir_operations = {
-	read:		hfs_dir_read,
+struct file_operations hfs_cap_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	cap_readdir,
 	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_cap_ndir_inode_operations = {
-	&hfs_cap_dir_operations,/* default directory file-ops */
-	hfs_create,		/* create */
-	cap_lookup,		/* lookup */
-	NULL,			/* link */
-	hfs_unlink,		/* unlink */
-	NULL,			/* symlink */
-	hfs_mkdir,		/* mkdir */
-	hfs_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	hfs_rename,		/* rename */
+	create:		hfs_create,
+	lookup:		cap_lookup,
+	unlink:		hfs_unlink,
+	mkdir:		hfs_mkdir,
+	rmdir:		hfs_rmdir,
+	rename:		hfs_rename,
+	setattr:	hfs_notify_change,
 };
 
 struct inode_operations hfs_cap_fdir_inode_operations = {
-	&hfs_cap_dir_operations,/* default directory file-ops */
-	NULL,			/* create */
-	cap_lookup,		/* lookup */
+	lookup:		cap_lookup,
+	setattr:	hfs_notify_change,
 };
 
 struct inode_operations hfs_cap_rdir_inode_operations = {
-	&hfs_cap_dir_operations,/* default directory file-ops */
-	hfs_create,		/* create */
-	cap_lookup,		/* lookup */
+	create:		hfs_create,
+	lookup:		cap_lookup,
+	setattr:	hfs_notify_change,
 };
 
 /*================ File-local functions ================*/

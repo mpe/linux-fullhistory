@@ -85,7 +85,7 @@ static void tw_copy_mem_info(TW_Info *info, char *data, int len);
 static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 
 /* Globals */
-char *tw_driver_version="0.4.001";
+char *tw_driver_version="1.0.000";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -2051,12 +2051,16 @@ int tw_scsiop_read_write(TW_Device_Extension *tw_dev, int request_id)
 	command_packet->status = 0;
 	command_packet->flags = 0;
 
+	if ((srb->cmnd[0] == WRITE_6) || (srb->cmnd[0] == WRITE_10)) {
+		if ((srb->cmnd[1] & 0x8) || (srb->cmnd[1] & 0x10))
+			command_packet->flags = 1;
+	}
+
 	if (srb->cmnd[0] == READ_6 || srb->cmnd[0] == WRITE_6) {
 		lba = ((u32)srb->cmnd[1] << 16) | ((u32)srb->cmnd[2] << 8) | (u32)srb->cmnd[3];
 		num_sectors = (u32)srb->cmnd[4];
 	} else {
-		lba = ((u32)srb->cmnd[2] << 24) | ((u32)srb->cmnd[3] << 16) | 
-		       ((u32)srb->cmnd[4] << 8) | (u32)srb->cmnd[5];
+		lba = ((u32)srb->cmnd[2] << 24) | ((u32)srb->cmnd[3] << 16) | ((u32)srb->cmnd[4] << 8) | (u32)srb->cmnd[5];
 		num_sectors = (u32)srb->cmnd[8] | ((u32)srb->cmnd[7] << 8);
 	}
   

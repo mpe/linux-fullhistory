@@ -37,10 +37,6 @@ static struct file_operations proc_file_operations = {
 	write:		proc_file_write,
 };
 
-static struct inode_operations proc_file_inode_operations = {
-	&proc_file_operations,  /* default proc file-ops */
-};
-
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -343,10 +339,8 @@ static struct file_operations proc_dir_operations = {
 /*
  * proc directories can do almost nothing..
  */
-struct inode_operations proc_dir_inode_operations = {
-	&proc_dir_operations,	/* default net directory file-ops */
-	NULL,			/* create */
-	proc_lookup,		/* lookup */
+static struct inode_operations proc_dir_inode_operations = {
+	lookup:		proc_lookup,
 };
 
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
@@ -361,15 +355,17 @@ int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 	dp->parent = dir;
 	dir->subdir = dp;
 	if (S_ISDIR(dp->mode)) {
-		if (dp->ops == NULL)
-			dp->ops = &proc_dir_inode_operations;
+		if (dp->proc_iops == NULL) {
+			dp->proc_fops = &proc_dir_operations;
+			dp->proc_iops = &proc_dir_inode_operations;
+		}
 		dir->nlink++;
 	} else if (S_ISLNK(dp->mode)) {
-		if (dp->ops == NULL)
-			dp->ops = &proc_link_inode_operations;
+		if (dp->proc_iops == NULL)
+			dp->proc_iops = &proc_link_inode_operations;
 	} else if (S_ISREG(dp->mode)) {
-		if (dp->ops == NULL)
-			dp->ops = &proc_file_inode_operations;
+		if (dp->proc_fops == NULL)
+			dp->proc_fops = &proc_file_operations;
 	}
 	return 0;
 }
@@ -490,7 +486,8 @@ struct proc_dir_entry *proc_mkdir(const char *name, struct proc_dir_entry *paren
 	memcpy(((char *) ent) + sizeof(*ent), fn, len + 1);
 	ent->name = ((char *) ent) + sizeof(*ent);
 	ent->namelen = len;
-	ent->ops = &proc_dir_inode_operations;
+	ent->proc_fops = &proc_dir_operations;
+	ent->proc_iops = &proc_dir_inode_operations;
 	ent->nlink = 2;
 	ent->mode = S_IFDIR | S_IRUGO | S_IXUGO;
 
@@ -522,7 +519,8 @@ struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 	if (S_ISDIR(mode)) {
 		if ((mode & S_IALLUGO) == 0)
 		mode |= S_IRUGO | S_IXUGO;
-		ent->ops = &proc_dir_inode_operations;
+		ent->proc_fops = &proc_dir_operations;
+		ent->proc_iops = &proc_dir_inode_operations;
 		ent->nlink = 2;
 	} else {
 		if ((mode & S_IFMT) == 0)

@@ -181,12 +181,17 @@ typedef unsigned char	byte;	/* used everywhere */
 struct hwif_s;
 typedef int (ide_ack_intr_t)(struct hwif_s *);
 
+#ifndef NO_DMA
+#define NO_DMA  255
+#endif
+
 /*
  * Structure to hold all information about the location of this port
  */
 typedef struct hw_regs_s {
 	ide_ioreg_t	io_ports[IDE_NR_PORTS];	/* task file registers */
 	int		irq;			/* our irq number */
+	int		dma;			/* our dma entry */
 	ide_ack_intr_t	*ack_intr;		/* acknowledge interrupt */
 	void		*priv;			/* interface specific data */
 } hw_regs_t;
@@ -356,6 +361,7 @@ typedef enum {	ide_unknown,	ide_generic,	ide_pci,
 		ide_cmd646,	ide_cy82c693,	ide_4drives
 } hwif_chipset_t;
 
+#ifdef CONFIG_BLK_DEV_IDEPCI
 typedef struct ide_pci_devid_s {
 	unsigned short	vid;
 	unsigned short	did;
@@ -363,6 +369,7 @@ typedef struct ide_pci_devid_s {
 
 #define IDE_PCI_DEVID_NULL	((ide_pci_devid_t){0,0})
 #define IDE_PCI_DEVID_EQ(a,b)	(a.vid == b.vid && a.did == b.did)
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 
 typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
@@ -399,8 +406,10 @@ typedef struct hwif_s {
 	unsigned	autodma    : 1;	/* automatically try to enable DMA at boot */
 	unsigned	udma_four  : 1;	/* 1=ATA-66 capable, 0=default */
 	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
+#ifdef CONFIG_BLK_DEV_IDEPCI
 	struct pci_dev	*pci_dev;	/* for pci chipsets */
 	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -579,7 +588,8 @@ typedef struct ide_module_s {
  */
 #ifndef _IDE_C
 extern	ide_hwif_t	ide_hwifs[];		/* master data repository */
-extern  ide_module_t	*ide_modules;
+extern	ide_module_t	*ide_modules;
+extern	ide_module_t	*ide_probe;
 #endif
 
 /*
@@ -850,5 +860,7 @@ int ide_release_dma (ide_hwif_t *hwif);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;
 unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
+
+void hwif_unregister (ide_hwif_t *hwif);
 
 #endif /* _IDE_H */

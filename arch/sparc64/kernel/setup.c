@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.50 1999/12/01 10:44:45 davem Exp $
+/*  $Id: setup.c,v 1.51 2000/02/26 04:24:32 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -451,6 +451,8 @@ void register_prom_callbacks(void)
 		   "' linux-.soft2 to .soft2");
 }
 
+extern void paging_init(void);
+
 void __init setup_arch(char **cmdline_p)
 {
 	extern int serial_console;  /* in console.c, of course */
@@ -587,6 +589,8 @@ void __init setup_arch(char **cmdline_p)
 #endif
 	if (serial_console)
 		conswitchp = NULL;
+
+	paging_init();
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.09  April 23, 1999
+ *  linux/drivers/block/ide-disk.c	Version 1.09	April 23, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */

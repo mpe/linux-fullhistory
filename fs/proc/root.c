@@ -51,13 +51,6 @@ static struct proc_dir_entry proc_root_self = {
 	S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
 	64, &proc_self_inode_operations,
 };
-#ifdef __powerpc__
-static struct proc_dir_entry proc_root_ppc_htab = {
-	0, 8, "ppc_htab",
-	S_IFREG | S_IRUGO|S_IWUSR, 1, 0, 0,
-	0, &proc_ppc_htab_inode_operations,
-};
-#endif
 
 void __init proc_root_init(void)
 {
@@ -143,16 +136,14 @@ static int proc_root_readdir(struct file * filp,
  * directory handling functions for that..
  */
 static struct file_operations proc_root_operations = {
-	readdir: proc_root_readdir,
+	readdir:	 proc_root_readdir,
 };
 
 /*
  * proc root can do almost nothing..
  */
 static struct inode_operations proc_root_inode_operations = {
-	&proc_root_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	proc_root_lookup,	/* lookup */
+	lookup:		proc_root_lookup,
 };
 
 /*
@@ -161,7 +152,7 @@ static struct inode_operations proc_root_inode_operations = {
 struct proc_dir_entry proc_root = {
 	PROC_ROOT_INO, 5, "/proc",
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_root_inode_operations,
+	0, &proc_root_inode_operations, &proc_root_operations,
 	NULL, NULL,
 	NULL,
 	&proc_root, NULL

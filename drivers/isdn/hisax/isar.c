@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.9 2000/01/20 19:47:45 keil Exp $
+/* $Id: isar.c,v 1.10 2000/02/26 00:35:13 keil Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: isar.c,v $
+ * Revision 1.10  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.9  2000/01/20 19:47:45  keil
  * Add Fax Class 1 support
  *
@@ -774,7 +777,7 @@ send_frames(struct BCState *bcs)
 					}
 				}
 			}
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->hw.isar.txcnt = 0; 
 			bcs->tx_skb = NULL;
 		}
@@ -1631,7 +1634,7 @@ close_isarstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 			if (bcs->cs->debug & L1_DEB_HSCX)

@@ -18,7 +18,7 @@
 #define dprintf(x...)
 #endif
 
-static struct file_operations bfs_file_operations = {
+struct file_operations bfs_file_operations = {
 	read:	generic_file_read,
 	write:	generic_file_write,
 	mmap:	generic_file_mmap,
@@ -156,5 +156,4 @@ struct address_space_operations bfs_aops = {
 };
 
 struct inode_operations bfs_file_inops = {
-	default_file_ops:	&bfs_file_operations,
 };

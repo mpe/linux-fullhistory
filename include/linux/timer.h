@@ -20,7 +20,6 @@
 #define GSCD_TIMER	9	/* Goldstar CDROM */
 #define COMTROL_TIMER	10	/* Comtrol serial */
 #define DIGI_TIMER	11	/* Digi serial */
-#define GDTH_TIMER	12	/* Ugh - gdth scsi driver */
 
 #define COPRO_TIMER	31	/* 387 timeout for buggy hardware (boot only) */
 

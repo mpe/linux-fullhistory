@@ -695,42 +695,6 @@ _sparc_io_get_info(char *buf, char **start, off_t fpos, int length, int *eof,
 	return p-buf;
 }
 
-static struct proc_dir_entry _sparc_iomap_proc_entry = {
-	0,                      /* Inode number - dynamic */
-	6,                      /* Length of the file name */
-	"io_map",		/* The file name */
-	S_IFREG | S_IRUGO,      /* File mode */
-	1,                      /* Number of links */
-	0, 0,                   /* The uid and gid for the file */
-	0,                      /* The size of the file reported by ls. */
-	NULL,                   /* struct inode_operations * ops */
-	NULL,			/* get_info: backward compatibility */
-	NULL,			/* owner */
-	NULL, NULL, NULL,	/* linkage */
-	&sparc_iomap,
-	_sparc_io_get_info,	/* The read function for this file */
-	NULL,
-	/* and more stuff */
-};
-
-static struct proc_dir_entry _sparc_dvma_proc_entry = {
-	0,                      /* Inode number - dynamic */
-	8,			/* Length of the file name */
-	"dvma_map",		/* The file name */
-	S_IFREG | S_IRUGO,      /* File mode */
-	1,                      /* Number of links */
-	0, 0,                   /* The uid and gid for the file */
-	0,                      /* The size of the file reported by ls. */
-	NULL,                   /* struct inode_operations * ops */
-	NULL,			/* get_info: backward compatibility */
-	NULL,			/* owner */
-	NULL, NULL, NULL,	/* linkage */
-	&_sparc_dvma,
-	_sparc_io_get_info,
-	NULL,
-	/* some more stuff */
-};
-
 #endif CONFIG_PROC_FS
 
 /*
@@ -782,7 +746,7 @@ void ioport_init(void)
 	};
 
 #ifdef CONFIG_PROC_FS
-	proc_register(&proc_root, &_sparc_iomap_proc_entry);
-	proc_register(&proc_root, &_sparc_dvma_proc_entry);
+	create_proc_read_entry("io_map",0,0,_sparc_io_get_info,&sparc_iomap);
+	create_proc_read_entry("dvma_map",0,0,_sparc_io_get_info,&_sparc_dvma);
 #endif
 }

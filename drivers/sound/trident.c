@@ -79,11 +79,11 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/spinlock.h>
+#include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
 #include "trident.h"
-#include "ac97_codec.h"
 
 #undef DEBUG
 
@@ -1131,7 +1131,7 @@ static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* Midi - TODO */
 	}
 
-	/* manually clear interrupt status, bad hardware design, balme T^2 */
+	/* manually clear interrupt status, bad hardware design, blame T^2 */
 	outl((ST_TARGET_REACHED | MIXER_OVERFLOW | MIXER_UNDERFLOW),
 	     TRID_REG(card, T4D_MISCINT));
 	spin_unlock(&card->lock);

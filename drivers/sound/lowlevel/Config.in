@@ -2,6 +2,15 @@ dep_tristate '  ACI mixer (miroPCM12)' CONFIG_ACI_MIXER $CONFIG_SOUND_OSS
 
 dep_tristate '  AWE32 synth' CONFIG_AWE32_SYNTH $CONFIG_SOUND_OSS
 
+if [ "$CONFIG_AWE32_SYNTH" = "y" -o "$CONFIG_AWE32_SYNTH" = "m" ]; then
+   comment 'AWE32 PnP-ISA Cards are not always setup correctly'
+   bool 'Configure AWE32 synth Base Address and Default Memory Size' CONFIG_AWE32_SYNTH_DEFAULTS
+   if [ "$CONFIG_AWE32_SYNTH_DEFAULTS" = "y" ]; then
+      hex 'AWE32 synth Base Address 620' AWE_DEFAULT_BASE_ADDR 620
+      int 'AWE32 synth Default Memory Size 512 1024 or 4096' AWE_DEFAULT_MEM_SIZE 512
+   fi
+fi
+
 if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND" = "m" ]; then
    dep_tristate '  Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_AEDSP16 $CONFIG_SOUND_OSS
    if [ "$CONFIG_AEDSP16" = "y" -o "$CONFIG_AEDSP16" = "m" ]; then

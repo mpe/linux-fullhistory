@@ -1,10 +1,13 @@
-/* $Id: config.c,v 2.43 2000/01/20 19:49:36 keil Exp $
+/* $Id: config.c,v 2.44 2000/02/26 00:35:12 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.44  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 2.43  2000/01/20 19:49:36  keil
  * Support teles 13.3c vendor version 2.1
  *
@@ -549,9 +552,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3d (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.3e (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3d (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.3e (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));

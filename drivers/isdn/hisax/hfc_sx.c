@@ -1,4 +1,4 @@
-/* $Id: hfc_sx.c,v 1.3 2000/01/20 19:49:36 keil Exp $
+/* $Id: hfc_sx.c,v 1.4 2000/02/26 00:35:12 keil Exp $
 
  * hfc_sx.c     low level driver for CCD´s hfc-s+/sp based cards
  *
@@ -22,6 +22,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_sx.c,v $
+ * Revision 1.4  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.3  2000/01/20 19:49:36  keil
  * Support teles 13.3c vendor version 2.1
  *
@@ -38,6 +41,7 @@
  *
  */
 
+#include <linux/config.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "hfc_sx.h"
@@ -46,7 +50,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcsx_revision = "$Revision: 1.3 $";
+static const char *hfcsx_revision = "$Revision: 1.4 $";
 
 /***************************************/
 /* IRQ-table for CCDs demo board       */
@@ -327,7 +331,7 @@ read_fifo(struct IsdnCardState *cs, u_char fifo, int trans_max)
 	      Read_hfc(cs, HFCSX_FIF_DRD); /* CRC 1 */
 	      Read_hfc(cs, HFCSX_FIF_DRD); /* CRC 2 */
 	      if (Read_hfc(cs, HFCSX_FIF_DRD)) {
-		dev_kfree_skb(skb);
+		dev_kfree_skb_irq(skb);
 		if (cs->debug & L1_DEB_ISAC_FIFO)
 		  debugl1(cs, "hfcsx_read_fifo %d crc error", fifo);
 		skb = NULL;
@@ -600,7 +604,7 @@ hfcsx_fill_dfifo(struct IsdnCardState *cs)
 		return;
 
 	if (write_fifo(cs, cs->tx_skb, HFCSX_SEL_D_TX, 0)) {
-	  dev_kfree_skb(cs->tx_skb);
+	  dev_kfree_skb_any(cs->tx_skb);
 	  cs->tx_skb = NULL;
 	}
 	return;
@@ -633,7 +637,7 @@ hfcsx_fill_fifo(struct BCState *bcs)
 	  if (bcs->st->lli.l1writewakeup &&
 	      (PACKET_NOACK != bcs->tx_skb->pkt_type))
 	    bcs->st->lli.l1writewakeup(bcs->st, bcs->tx_skb->len);
-	  dev_kfree_skb(bcs->tx_skb);
+	  dev_kfree_skb_any(bcs->tx_skb);
 	  bcs->tx_skb = NULL;
 	  test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 	}
@@ -777,7 +781,7 @@ receive_emsg(struct IsdnCardState *cs)
 	      } else
 		HiSax_putstatus(cs, "LogEcho: ", "warning Frame too big (%d)", skb->len);
 	    }
-	    dev_kfree_skb(skb);
+	    dev_kfree_skb_any(skb);
 	  }
 	} while (--count && skb);
 
@@ -931,7 +935,7 @@ hfcsx_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					}
 					goto afterXPR;
 				} else {
-					dev_kfree_skb(cs->tx_skb);
+					dev_kfree_skb_irq(cs->tx_skb);
 					cs->tx_cnt = 0;
 					cs->tx_skb = NULL;
 				}
@@ -1305,7 +1309,7 @@ close_hfcsx(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

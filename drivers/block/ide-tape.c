@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.16f		Dec  15, 1999
+ * linux/drivers/block/ide-tape.c		Version 1.16f	Dec  15, 1999
  *
  * Copyright (C) 1995 - 1999 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -411,12 +411,12 @@
 #include <asm/bitops.h>
 
 
-#define NO_LONGER_REQUIRE	(1)
+#define NO_LONGER_REQUIRED	(1)
 
 /*
  *	OnStream support
  */
-#define ONSTREAM_DEBUG		(1)
+#define ONSTREAM_DEBUG		(0)
 #define OS_CONFIG_PARTITION	(0xff)
 #define OS_DATA_PARTITION	(0)
 #define OS_PARTITION_VERSION	(1)
@@ -543,6 +543,7 @@ typedef struct os_header_s {
 /*
  *	The following are used to debug the driver:
  *
+ *	Setting IDETAPE_DEBUG_INFO to 1 will report device capabilities.
  *	Setting IDETAPE_DEBUG_LOG to 1 will log driver flow control.
  *	Setting IDETAPE_DEBUG_BUGS to 1 will enable self-sanity checks in
  *	some places.
@@ -557,7 +558,9 @@ typedef struct os_header_s {
  *	is verified to be stable enough. This will make it much more
  *	esthetic.
  */
+#define IDETAPE_DEBUG_INFO		0
 #define IDETAPE_DEBUG_LOG		1
+#define IDETAPE_DEBUG_LOG_VERBOSE	0
 #define IDETAPE_DEBUG_BUGS		1
 
 /*
@@ -700,9 +703,10 @@ typedef struct idetape_packet_command_s {
  */
 typedef struct {
 	unsigned	page_code	:6;	/* Page code - Should be 0x2a */
-	unsigned	reserved1_67	:2;
-	u8		page_length;		/* Page Length - Should be 0x12 */
-	u8		reserved2, reserved3;
+	__u8		reserved0_6	:1;
+	__u8		ps		:1;	/* parameters saveable */
+	__u8		page_length;		/* Page Length - Should be 0x12 */
+	__u8		reserved2, reserved3;
 	unsigned	ro		:1;	/* Read Only Mode */
 	unsigned	reserved4_1234	:4;
 	unsigned	sprev		:1;	/* Supports SPACE in the reverse direction */
@@ -716,7 +720,8 @@ typedef struct {
 	unsigned	locked		:1;	/* The volume is locked */
 	unsigned	prevent		:1;	/* The device defaults in the prevent state after power up */	
 	unsigned	eject		:1;	/* The device can eject the volume */
-	unsigned	reserved6_45	:2;	/* Reserved */	
+	__u8		disconnect	:1;	/* The device can break request > ctl */	
+	__u8		reserved6_5	:1;
 	unsigned	ecc		:1;	/* Supports error correction */
 	unsigned	cmprs		:1;	/* Supports data compression */
 	unsigned	reserved7_0	:1;
@@ -726,12 +731,12 @@ typedef struct {
 	unsigned	blk32768	:1;	/* slowb - the device restricts the byte count for PIO */
 						/* transfers for slow buffer memory ??? */
 						/* Also 32768 block size in some cases */
-	u16		max_speed;		/* Maximum speed supported in KBps */
-	u8		reserved10, reserved11;
-	u16		ctl;			/* Continuous Transfer Limit in blocks */
-	u16		speed;			/* Current Speed, in KBps */
-	u16		buffer_size;		/* Buffer Size, in 512 bytes */
-	u8		reserved18, reserved19;
+	__u16		max_speed;		/* Maximum speed supported in KBps */
+	__u8		reserved10, reserved11;
+	__u16		ctl;			/* Continuous Transfer Limit in blocks */
+	__u16		speed;			/* Current Speed, in KBps */
+	__u16		buffer_size;		/* Buffer Size, in 512 bytes */
+	__u8		reserved18, reserved19;
 } idetape_capabilities_page_t;
 
 /*
@@ -741,8 +746,8 @@ typedef struct {
 	unsigned	page_code	:6;	/* Page code - Should be 0x30 */
 	unsigned	reserved1_6	:1;
 	unsigned	ps		:1;
-	u8		page_length;		/* Page Length - Should be 2 */
-	u8		reserved2;
+	__u8		page_length;		/* Page Length - Should be 2 */
+	__u8		reserved2;
 	unsigned	play32		:1;
 	unsigned	play32_5	:1;
 	unsigned	reserved2_23	:2;
@@ -768,23 +773,23 @@ typedef struct idetape_stage_s {
 typedef struct {
 	unsigned	error_code	:7;	/* Current of deferred errors */
 	unsigned	valid		:1;	/* The information field conforms to QIC-157C */
-	u8		reserved1	:8;	/* Segment Number - Reserved */
+	__u8		reserved1	:8;	/* Segment Number - Reserved */
 	unsigned	sense_key	:4;	/* Sense Key */
 	unsigned	reserved2_4	:1;	/* Reserved */
 	unsigned	ili		:1;	/* Incorrect Length Indicator */
 	unsigned	eom		:1;	/* End Of Medium */
 	unsigned	filemark 	:1;	/* Filemark */
-	u32		information __attribute__ ((packed));
-	u8		asl;			/* Additional sense length (n-7) */
-	u32		command_specific;	/* Additional command specific information */
-	u8		asc;			/* Additional Sense Code */
-	u8		ascq;			/* Additional Sense Code Qualifier */
-	u8		replaceable_unit_code;	/* Field Replaceable Unit Code */
+	__u32		information __attribute__ ((packed));
+	__u8		asl;			/* Additional sense length (n-7) */
+	__u32		command_specific;	/* Additional command specific information */
+	__u8		asc;			/* Additional Sense Code */
+	__u8		ascq;			/* Additional Sense Code Qualifier */
+	__u8		replaceable_unit_code;	/* Field Replaceable Unit Code */
 	unsigned	sk_specific1 	:7;	/* Sense Key Specific */
 	unsigned	sksv		:1;	/* Sense Key Specific information is valid */
-	u8		sk_specific2;		/* Sense Key Specific */
-	u8		sk_specific3;		/* Sense Key Specific */
-	u8		pad[2];			/* Padding to 20 bytes */
+	__u8		sk_specific2;		/* Sense Key Specific */
+	__u8		sk_specific3;		/* Sense Key Specific */
+	__u8		pad[2];			/* Padding to 20 bytes */
 } idetape_request_sense_result_t;
 
 
@@ -1247,13 +1252,13 @@ typedef struct {
 	unsigned	reserved3_45	:2;	/* Reserved */
 	unsigned	reserved3_6	:1;	/* TrmIOP - Reserved */
 	unsigned	reserved3_7	:1;	/* AENC - Reserved */
-	u8		additional_length;	/* Additional Length (total_length-4) */
-	u8		rsv5, rsv6, rsv7;	/* Reserved */
-	u8		vendor_id[8];		/* Vendor Identification */
-	u8		product_id[16];		/* Product Identification */
-	u8		revision_level[4];	/* Revision Level */
-	u8		vendor_specific[20];	/* Vendor Specific - Optional */
-	u8		reserved56t95[40];	/* Reserved - Optional */
+	__u8		additional_length;	/* Additional Length (total_length-4) */
+	__u8		rsv5, rsv6, rsv7;	/* Reserved */
+	__u8		vendor_id[8];		/* Vendor Identification */
+	__u8		product_id[16];		/* Product Identification */
+	__u8		revision_level[4];	/* Revision Level */
+	__u8		vendor_specific[20];	/* Vendor Specific - Optional */
+	__u8		reserved56t95[40];	/* Reserved - Optional */
 						/* Additional information may be returned */
 } idetape_inquiry_result_t;
 
@@ -1287,10 +1292,25 @@ typedef struct {
  *	Mode Parameter Header for the MODE SENSE packet command
  */
 typedef struct {
-	u8		mode_data_length;	/* Length of the following data transfer */
-	u8		medium_type;		/* Medium Type */
-	u8		dsp;			/* Device Specific Parameter */
-	u8		bdl;			/* Block Descriptor Length */
+	__u8	mode_data_length;	/* Length of the following data transfer */
+	__u8	medium_type;		/* Medium Type */
+	__u8	dsp;			/* Device Specific Parameter */
+	__u8	bdl;			/* Block Descriptor Length */
+#if 0
+	/* data transfer page */
+	__u8	page_code	:6;
+	__u8	reserved0_6	:1;
+	__u8	ps		:1;	/* parameters saveable */
+	__u8	page_length;		/* page Length == 0x02 */
+	__u8	reserved2;
+	__u8	read32k		:1;	/* 32k blk size (data only) */
+	__u8	read32k5	:1;	/* 32.5k blk size (data&AUX) */
+	__u8	reserved3_23	:2;
+	__u8	write32k	:1;	/* 32k blk size (data only) */
+	__u8	write32k5	:1;	/* 32.5k blk size (data&AUX) */
+	__u8	reserved3_6	:1;
+	__u8	streaming	:1;	/* streaming mode enable */
+#endif
 } idetape_mode_parameter_header_t;
 
 /*
@@ -1299,10 +1319,10 @@ typedef struct {
  *	Support for block descriptors is optional.
  */
 typedef struct {
-	u8		density_code;		/* Medium density code */
-	u8		blocks[3];		/* Number of blocks */
-	u8		reserved4;		/* Reserved */
-	u8		length[3];		/* Block Length */
+	__u8		density_code;		/* Medium density code */
+	__u8		blocks[3];		/* Number of blocks */
+	__u8		reserved4;		/* Reserved */
+	__u8		length[3];		/* Block Length */
 } idetape_parameter_block_descriptor_t;
 
 /*
@@ -1312,16 +1332,16 @@ typedef struct {
 	unsigned	page_code	:6;	/* Page Code - Should be 0xf */
 	unsigned	reserved0	:1;	/* Reserved */
 	unsigned	ps		:1;
-	u8		page_length;		/* Page Length - Should be 14 */
+	__u8		page_length;		/* Page Length - Should be 14 */
 	unsigned	reserved2	:6;	/* Reserved */
 	unsigned	dcc		:1;	/* Data Compression Capable */
 	unsigned	dce		:1;	/* Data Compression Enable */
 	unsigned	reserved3	:5;	/* Reserved */
 	unsigned	red		:2;	/* Report Exception on Decompression */
 	unsigned	dde		:1;	/* Data Decompression Enable */
-	u32		ca;			/* Compression Algorithm */
-	u32		da;			/* Decompression Algorithm */
-	u8		reserved[4];		/* Reserved */
+	__u32		ca;			/* Compression Algorithm */
+	__u32		da;			/* Decompression Algorithm */
+	__u8		reserved[4];		/* Reserved */
 } idetape_data_compression_page_t;
 
 /*
@@ -1331,16 +1351,16 @@ typedef struct {
 	unsigned	page_code	:6;	/* Page Code - Should be 0x11 */
 	unsigned	reserved1_6	:1;	/* Reserved */
 	unsigned	ps		:1;
-	u8		page_length;		/* Page Length - Should be 6 */
-	u8		map;			/* Maximum Additional Partitions - Should be 0 */
-	u8		apd;			/* Additional Partitions Defined - Should be 0 */
+	__u8		page_length;		/* Page Length - Should be 6 */
+	__u8		map;			/* Maximum Additional Partitions - Should be 0 */
+	__u8		apd;			/* Additional Partitions Defined - Should be 0 */
 	unsigned	reserved4_012	:3;	/* Reserved */
 	unsigned	psum		:2;	/* Should be 0 */
 	unsigned	idp		:1;	/* Should be 0 */
 	unsigned	sdp		:1;	/* Should be 0 */
 	unsigned	fdp		:1;	/* Fixed Data Partitions */
-	u8		mfr;			/* Medium Format Recognition */
-	u8		reserved[2];		/* Reserved */
+	__u8		mfr;			/* Medium Format Recognition */
+	__u8		reserved[2];		/* Reserved */
 } idetape_medium_partition_page_t;
 
 /*
@@ -1358,6 +1378,53 @@ typedef struct {
  */
 static idetape_chrdev_t idetape_chrdevs[MAX_HWIFS * MAX_DRIVES];
 static int idetape_chrdev_present = 0;
+
+#if IDETAPE_DEBUG_LOG_VERBOSE
+
+/*
+ * DO NOT REMOVE, BUILDING A VERBOSE DEBUG SCHEME FOR ATAPI
+ */
+
+char *idetape_sense_key_verbose (byte idetape_sense_key)
+{
+	switch (idetape_sense_key) {
+		default: {
+			char buf[22];
+			sprintf(buf, "IDETAPE_SENSE (0x%02x)", idetape_sense_key);
+			return(buf);
+		}
+
+	}
+}
+
+char *idetape_command_key_verbose (byte idetape_command_key)
+{
+	switch (idetape_command_key) {
+		case IDETAPE_TEST_UNIT_READY_CMD:	return("TEST_UNIT_READY_CMD");
+		case IDETAPE_REWIND_CMD:		return("REWIND_CMD");
+		case IDETAPE_REQUEST_SENSE_CMD:		return("REQUEST_SENSE_CMD");
+		case IDETAPE_READ_CMD:			return("READ_CMD");
+		case IDETAPE_WRITE_CMD:			return("WRITE_CMD");
+		case IDETAPE_WRITE_FILEMARK_CMD:	return("WRITE_FILEMARK_CMD");
+		case IDETAPE_SPACE_CMD:			return("SPACE_CMD");
+		case IDETAPE_INQUIRY_CMD:		return("INQUIRY_CMD");
+		case IDETAPE_ERASE_CMD:			return("ERASE_CMD")
+		case IDETAPE_MODE_SENSE_CMD:		return("MODE_SENSE_CMD");
+		case IDETAPE_MODE_SELECT_CMD:		return("MODE_SELECT_CMD");
+		case IDETAPE_LOAD_UNLOAD_CMD:		return("LOAD_UNLOAD_CMD");
+		case IDETAPE_PREVENT_CMD:		return("PREVENT_CMD");
+		case IDETAPE_LOCATE_CMD:		return("LOCATE_CMD");
+		case IDETAPE_READ_POSITION_CMD:		return("READ_POSITION_CMD");
+		case IDETAPE_READ_BUFFER_CMD:		return("READ_BUFFER_CMD");
+		case IDETAPE_SET_SPEED_CMD:		return("SET_SPEED_CMD");
+		default: {
+				char buf[20];
+				sprintf(buf, "CMD (0x%02x)", idetape_command_key);
+				return(buf);
+			}
+	}
+}
+#endif /* IDETAPE_DEBUG_LOG_VERBOSE */
 
 /*
  *	Too bad. The drive wants to send us data which we are not ready to accept.
@@ -1523,6 +1590,14 @@ static void idetape_analyze_error (ide_drive_t *drive,idetape_request_sense_resu
 	 */
 	if (tape->debug_level >= 1)
 		printk (KERN_INFO "ide-tape: pc = %x, sense key = %x, asc = %x, ascq = %x\n",pc->c[0],result->sense_key,result->asc,result->ascq);
+#if IDETAPE_DEBUG_LOG_VERBOSE
+	if (tape->debug_level >= 1)
+		printk (KERN_INFO "ide-tape: pc = %s, sense key = %x, asc = %x, ascq = %x\n",
+			idetape_command_key_verbose((byte) pc->c[0]),
+			result->sense_key,
+			result->asc,
+			result->ascq);
+#endif /* IDETAPE_DEBUG_LOG_VERBOSE */
 #endif /* IDETAPE_DEBUG_LOG */
 
 	if (tape->onstream && result->sense_key == 2 && result->asc == 0x53 && result->ascq == 2) {
@@ -3833,7 +3908,7 @@ static int idetape_get_logical_blk (ide_drive_t *drive, int logical_blk_num, int
 			if (tape->onstream) {
 #if ONSTREAM_DEBUG
 				if (tape->debug_level >= 1)
-					printk(KERN_INFO "ide-tape: %s: first_stage == NULL, pipeline error %d\n", tape->name, test_bit(IDETAPE_PIPELINE_ERROR, &tape->flags));
+					printk(KERN_INFO "ide-tape: %s: first_stage == NULL, pipeline error %ld\n", tape->name, (long)test_bit(IDETAPE_PIPELINE_ERROR, &tape->flags));
 #endif
 				clear_bit(IDETAPE_PIPELINE_ERROR, &tape->flags);
 				position = idetape_read_position(drive);
@@ -5280,16 +5355,16 @@ static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 {
 	struct idetape_id_gcw gcw;
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_DEBUG_INFO
 	unsigned short mask,i;
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_DEBUG_INFO */
 
 	if (!id)
 		return 0;
 
 	*((unsigned short *) &gcw) = id->config;
 
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_DEBUG_INFO
 	printk (KERN_INFO "ide-tape: Dumping ATAPI Identify Device tape parameters\n");
 	printk (KERN_INFO "ide-tape: Protocol Type: ");
 	switch (gcw.protocol) {
@@ -5377,7 +5452,7 @@ static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		
 	} else
 		printk (KERN_INFO "ide-tape: According to the device, fields 64-70 are not valid.\n");
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_DEBUG_INFO */
 
 	/* Check that we can support this device */
 
@@ -5462,12 +5537,12 @@ static void idetape_onstream_configure_block_size (ide_drive_t *drive)
 	header = (idetape_mode_parameter_header_t *) pc.buffer;
 	bs = (idetape_block_size_page_t *) (pc.buffer + sizeof(idetape_mode_parameter_header_t) + header->bdl);
 
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_DEBUG_INFO
 	printk(KERN_INFO "ide-tape: 32KB play back: %s\n", bs->play32 ? "Yes" : "No");
 	printk(KERN_INFO "ide-tape: 32.5KB play back: %s\n", bs->play32_5 ? "Yes" : "No");
 	printk(KERN_INFO "ide-tape: 32KB record: %s\n", bs->record32 ? "Yes" : "No");
 	printk(KERN_INFO "ide-tape: 32.5KB record: %s\n", bs->record32_5 ? "Yes" : "No");
-#endif
+#endif /* IDETAPE_DEBUG_INFO */
 
 	/*
 	 * Configure default auto columns mode, 32.5KB block size
@@ -5587,7 +5662,7 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 	else if (tape->onstream && capabilities->blk32768)
 		tape->tape_block_size = 32768;
 
-#if IDETAPE_DEBUG_LOG
+#if IDETAPE_DEBUG_INFO
 	printk (KERN_INFO "ide-tape: Dumping the results of the MODE SENSE packet command\n");
 	printk (KERN_INFO "ide-tape: Mode Parameter Header:\n");
 	printk (KERN_INFO "ide-tape: Mode Data Length - %d\n",header->mode_data_length);
@@ -5615,7 +5690,7 @@ static void idetape_get_mode_sense_results (ide_drive_t *drive)
 	printk (KERN_INFO "ide-tape: Continuous transfer limits in blocks - %d\n",capabilities->ctl);
 	printk (KERN_INFO "ide-tape: Current speed in KBps - %d\n",capabilities->speed);	
 	printk (KERN_INFO "ide-tape: Buffer size - %d\n",capabilities->buffer_size*512);
-#endif /* IDETAPE_DEBUG_LOG */
+#endif /* IDETAPE_DEBUG_INFO */
 }
 
 static void idetape_add_settings (ide_drive_t *drive)

@@ -1,4 +1,4 @@
-/* $Id: locks.S,v 1.15 1998/10/14 09:18:55 jj Exp $
+/* $Id: locks.S,v 1.16 2000/02/26 11:02:47 anton Exp $
  * locks.S: SMP low-level lock primitives on Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -14,25 +14,6 @@
 
 	.text
 	.align	4
-
-	/* This is called when the initial acquisition attempt of a spin
-	 * lock fails.  The calling convention is weird, return address
-	 * is in %o7 as usual but we agree with the caller to only touch
-	 * and use %g2 as a temporary.  We are passed a ptr to the lock
-	 * itself in %g1, %g4 must be restored into %o7 when we return,
-	 * and the caller wants us to return to him at three instructions
-	 * previous to the call instruction which got us here.  See how
-	 * this is used in asm/spinlock.h if what I just said confuses
-	 * you to no end.
-	 */
-	.globl	___spinlock_waitfor
-___spinlock_waitfor:
-1:	orcc	%g2, 0x0, %g0
-	bne,a	1b
-	 ldub	[%g1], %g2
-	ldstub	[%g1], %g2
-	jmpl	%o7 - 12, %g0
-	 mov	%g4, %o7
 
 	/* Read/writer locks, as usual this is overly clever to make it
 	 * as fast as possible.

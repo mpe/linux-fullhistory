@@ -40,4 +40,4 @@ extern inline struct devpts_sb_info *SBI(struct super_block *sb)
 }
 
 extern struct inode_operations devpts_root_inode_operations;
-extern struct inode_operations devpts_device_inode_operations;
+extern struct file_operations devpts_root_operations;

@@ -25,10 +25,9 @@
 #include <linux/amigaffs.h>
 
 static int affs_readdir(struct file *, void *, filldir_t);
-static ssize_t affs_dir_read(struct file *, char *, size_t, loff_t *);
 
-static struct file_operations affs_dir_operations = {
-	read:		affs_dir_read,
+struct file_operations affs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	affs_readdir,
 	fsync:		file_fsync,
 };
@@ -37,23 +36,16 @@ static struct file_operations affs_dir_operations = {
  * directories can handle most operations...
  */
 struct inode_operations affs_dir_inode_operations = {
-	&affs_dir_operations,	/* default directory file-ops */
-	affs_create,		/* create */
-	affs_lookup,		/* lookup */
-	affs_link,		/* link */
-	affs_unlink,		/* unlink */
-	affs_symlink,		/* symlink */
-	affs_mkdir,		/* mkdir */
-	affs_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	affs_rename,		/* rename */
+	create:		affs_create,
+	lookup:		affs_lookup,
+	link:		affs_link,
+	unlink:		affs_unlink,
+	symlink:	affs_symlink,
+	mkdir:		affs_mkdir,
+	rmdir:		affs_rmdir,
+	rename:		affs_rename,
+	setattr:	affs_notify_change,
 };
-
-static ssize_t
-affs_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
 
 static int
 affs_readdir(struct file *filp, void *dirent, filldir_t filldir)

@@ -60,15 +60,12 @@ static void autofs_read_inode(struct inode *inode);
 static void autofs_write_inode(struct inode *inode);
 
 static struct super_operations autofs_sops = {
-	autofs_read_inode,
-	autofs_write_inode,
-	autofs_put_inode,
-	autofs_delete_inode,
-	NULL,			/* notify_change */
-	autofs_put_super,
-	NULL,			/* write_super */
-	autofs_statfs,
-	NULL
+	read_inode:	autofs_read_inode,
+	write_inode:	autofs_write_inode,
+	put_inode:	autofs_put_inode,
+	delete_inode:	autofs_delete_inode,
+	put_super:	autofs_put_super,
+	statfs:		autofs_statfs,
 };
 
 static int parse_options(char *options, int *pipefd, uid_t *uid, gid_t *gid, pid_t *pgrp, int *minproto, int *maxproto)
@@ -300,8 +297,8 @@ static void autofs_read_inode(struct inode *inode)
 
 	/* Initialize to the default case (stub directory) */
 
-	inode->i_op = NULL;
 	inode->i_op = &autofs_dir_inode_operations;
+	inode->i_fop = &autofs_dir_operations;
 	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 	inode->i_nlink = 2;
 	inode->i_size = 0;
@@ -312,6 +309,7 @@ static void autofs_read_inode(struct inode *inode)
 	if ( ino == AUTOFS_ROOT_INO ) {
 		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 		inode->i_op = &autofs_root_inode_operations;
+		inode->i_fop = &autofs_root_operations;
 		inode->i_uid = inode->i_gid = 0; /* Changed in read_super */
 		return;
 	} 

@@ -38,7 +38,7 @@ NEW!	- support for IDE ATAPI *floppy* drives
 		- interface PIO timing & prefetch parameter support
 	- experimental support for UMC 8672 interfaces
 	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
-		- use kernel command line option:   ide0=ht6560
+		- use kernel command line option:   ide0=ht6560b
 	- experimental support for various IDE chipsets
 		- use appropriate kernel command line option from list below
 	- support for drives with a stuck WRERR_STAT bit

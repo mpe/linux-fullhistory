@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.17 1999/07/01 08:11:41 keil Exp $
+/* $Id: hscx.c,v 1.18 2000/02/26 00:35:13 keil Exp $
 
  * hscx.c   HSCX specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hscx.c,v $
+ * Revision 1.18  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.17  1999/07/01 08:11:41  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -219,7 +222,7 @@ close_hscxstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

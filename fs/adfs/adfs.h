@@ -96,6 +96,7 @@ extern struct dentry *adfs_lookup(struct inode *dir, struct dentry *dentry);
 
 /* dir_*.c */
 extern struct inode_operations adfs_dir_inode_operations;
+extern struct file_operations adfs_dir_operations;
 extern struct adfs_dir_ops adfs_f_dir_ops;
 extern struct adfs_dir_ops adfs_fplus_dir_ops;
 
@@ -103,6 +104,7 @@ extern int adfs_dir_update(struct super_block *sb, struct object_info *obj);
 
 /* file.c */
 extern struct inode_operations adfs_file_inode_operations;
+extern struct file_operations adfs_file_operations;
 
 extern inline __u32 signed_asl(__u32 val, signed int shift)
 {

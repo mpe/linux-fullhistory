@@ -558,31 +558,24 @@ static struct file_operations openpromfs_prop_ops = {
 	release:	property_release,
 };
 
-static struct inode_operations openpromfs_prop_inode_ops = {
-	&openpromfs_prop_ops,	/* default property file-ops */
-};
-
 static struct file_operations openpromfs_nodenum_ops = {
 	read:		nodenum_read,
 };
 
-static struct inode_operations openpromfs_nodenum_inode_ops = {
-	&openpromfs_nodenum_ops,/* default .node file-ops */
-};
-
-static struct file_operations openprom_alias_operations = {
+static struct file_operations openprom_operations = {
+	read:		generic_read_dir,
 	readdir:	openpromfs_readdir,
 };
 
 static struct inode_operations openprom_alias_inode_operations = {
-	&openprom_alias_operations,/* default aliases directory file-ops */
-	openpromfs_create,	/* create */
-	openpromfs_lookup,	/* lookup */
-	NULL,			/* link */
-	openpromfs_unlink,	/* unlink */
+	create:		openpromfs_create,
+	lookup:		openpromfs_lookup,
+	unlink:		openpromfs_unlink,
 };
 
-extern struct inode_operations openprom_inode_operations;
+static struct inode_operations openprom_inode_operations = {
+	lookup:		openpromfs_lookup,
+};
 
 static int lookup_children(u16 n, const char * name, int len)
 {
@@ -710,11 +703,12 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 			inode->i_op = &openprom_alias_inode_operations;
 		} else
 			inode->i_op = &openprom_inode_operations;
+		inode->i_fop = &openprom_operations;
 		inode->i_nlink = 2;
 		break;
 	case OPFSL_NODENUM:
 		inode->i_mode = S_IFREG | S_IRUGO;
-		inode->i_op = &openpromfs_nodenum_inode_ops;
+		inode->i_fop = &openpromfs_nodenum_ops;
 		inode->i_nlink = 1;
 		inode->u.generic_ip = (void *)(long)(n);
 		break;
@@ -729,7 +723,7 @@ static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentr
 					inode->i_mode |= S_IWUSR;
 			}
 		}
-		inode->i_op = &openpromfs_prop_inode_ops;
+		inode->i_fop = &openpromfs_prop_ops;
 		inode->i_nlink = 1;
 		if (inode->i_size < 0)
 			inode->i_size = 0;
@@ -845,7 +839,7 @@ static int openpromfs_create (struct inode *dir, struct dentry *dentry, int mode
 	if (!inode)
 		return -EINVAL;
 	inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
-	inode->i_op = &openpromfs_prop_inode_ops;
+	inode->i_fop = &openpromfs_prop_ops;
 	inode->i_nlink = 1;
 	if (inode->i_size < 0) inode->i_size = 0;
 	inode->u.generic_ip = (void *)(long)(((u16)aliases) | 
@@ -976,22 +970,12 @@ static u16 get_nodes (u16 parent, u32 node)
 	return n;
 }
 
-
-static struct file_operations openprom_operations = {
-	readdir:	openpromfs_readdir,
-};
-
-static struct inode_operations openprom_inode_operations = {
-	&openprom_operations,/* default net directory file-ops */
-	NULL,			/* create */
-	openpromfs_lookup,	/* lookup */
-};
-
 static void openprom_read_inode(struct inode * inode)
 {
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	if (inode->i_ino == OPENPROM_ROOT_INO) {
 		inode->i_op = &openprom_inode_operations;
+		inode->i_fop = &openprom_operations;
 		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 	}
 }
@@ -1017,15 +1001,9 @@ static int openprom_statfs(struct super_block *sb, struct statfs *buf, int bufsi
 }
 
 static struct super_operations openprom_sops = { 
-	openprom_read_inode,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	openprom_put_super,
-	NULL,
-	openprom_statfs,
-	NULL
+	read_inode:	openprom_read_inode,
+	put_super:	openprom_put_super,
+	statfs:		openprom_statfs,
 };
 
 struct super_block *openprom_read_super(struct super_block *s,void *data, 

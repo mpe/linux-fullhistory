@@ -162,7 +162,6 @@ obj-$(CONFIG_EFI_RTC) += efirtc.o
 ifeq ($(CONFIG_PPC),)
   obj-$(CONFIG_NVRAM) += nvram.o
 endif
-obj-$(CONFIG_I810_RNG) += i810_rng.o
 
 obj-$(CONFIG_VIDEO_DEV) += videodev.o
 

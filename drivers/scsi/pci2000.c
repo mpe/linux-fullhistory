@@ -60,9 +60,6 @@
 #include <linux/bios32.h>
 #endif
 
-struct proc_dir_entry Proc_Scsi_Pci2000 =
-	{ PROC_SCSI_PCI2000, 7, "pci2000", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
-
 //#define DEBUG 1
 
 #ifdef DEBUG

@@ -45,13 +45,6 @@ static struct file_operations mpc_file_operations = {
 	write:		proc_mpc_write,
 };
 
-/*
- *   Define allowed INODE OPERATIONS
- */
-static struct inode_operations mpc_inode_operations = {
-        &mpc_file_operations,
-};
-
 static int print_header(char *buff,struct mpoa_client *mpc){
         if(mpc != NULL){
 	        return sprintf(buff,"\nInterface %d:\n\n",mpc->dev_num);  
@@ -330,7 +323,7 @@ int mpc_proc_init(void)
                 printk(KERN_ERR "Unable to initialize /proc/atm/%s\n", STAT_FILE_NAME);
                 return -ENOMEM;
         }
-	p->ops = &mpc_inode_operations;
+	p->proc_fops = &mpc_file_operations;
 	return 0;
 }
 

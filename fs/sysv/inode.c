@@ -68,19 +68,15 @@ static void sysv_delete_inode(struct inode *inode)
 static void sysv_put_super(struct super_block *);
 static void sysv_write_super(struct super_block *);
 static void sysv_read_inode(struct inode *);
-static int sysv_notify_change(struct dentry *, struct iattr *);
 static int sysv_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations sysv_sops = {
-	sysv_read_inode,
-	sysv_write_inode,
-	NULL,			/* nothing special on put_inode() */
-	sysv_delete_inode,
-	sysv_notify_change,
-	sysv_put_super,
-	sysv_write_super,
-	sysv_statfs,
-	NULL			/* remount_fs */
+	read_inode:	sysv_read_inode,
+	write_inode:	sysv_write_inode,
+	delete_inode:	sysv_delete_inode,
+	put_super:	sysv_put_super,
+	write_super:	sysv_write_super,
+	statfs:		sysv_statfs,
 };
 
 /* The following functions try to recognize specific filesystems.
@@ -1027,6 +1023,12 @@ static inline void coh_write3byte (unsigned char * p, unsigned long val)
 	*(unsigned short *)(p+1) = (unsigned short) val;
 }
 
+struct inode_operations sysv_symlink_inode_operations = {
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	setattr:	sysv_notify_change,
+};
+
 static void sysv_read_inode(struct inode *inode)
 {
 	struct super_block * sb = inode->i_sb;
@@ -1036,7 +1038,6 @@ static void sysv_read_inode(struct inode *inode)
 	umode_t mode;
 
 	ino = inode->i_ino;
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	if (!ino || ino > sb->sv_ninodes) {
 		printk("Bad inode number on dev %s"
@@ -1085,11 +1086,13 @@ static void sysv_read_inode(struct inode *inode)
 				read3byte(&raw_inode->i_a.i_addb[3*block]);
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &sysv_file_inode_operations;
+		inode->i_fop = &sysv_file_operations;
 		inode->i_mapping->a_ops = &sysv_aops;
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &sysv_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &page_symlink_inode_operations;
+		inode->i_fop = &sysv_dir_operations;
+	} else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &sysv_symlink_inode_operations;
 		inode->i_mapping->a_ops = &sysv_aops;
 	} else
 		init_special_inode(inode, inode->i_mode,raw_inode->i_a.i_rdev);
@@ -1097,7 +1100,7 @@ static void sysv_read_inode(struct inode *inode)
 }
 
 /* To avoid inconsistencies between inodes in memory and inodes on disk. */
-static int sysv_notify_change(struct dentry *dentry, struct iattr *attr)
+int sysv_notify_change(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	int error;

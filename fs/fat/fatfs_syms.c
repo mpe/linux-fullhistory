@@ -15,8 +15,6 @@
 #include "msbuffer.h"
 #include "tables.h"
 
-extern struct file_operations fat_dir_operations;
-
 EXPORT_SYMBOL(fat_new_dir);
 EXPORT_SYMBOL(fat_bmap);
 EXPORT_SYMBOL(fat_get_block);
@@ -25,7 +23,6 @@ EXPORT_SYMBOL(fat_cache_inval_inode);
 EXPORT_SYMBOL(fat_clear_inode);
 EXPORT_SYMBOL(fat_date_unix2dos);
 EXPORT_SYMBOL(fat_delete_inode);
-EXPORT_SYMBOL(fat_dir_operations);
 EXPORT_SYMBOL(fat_esc2uni);
 EXPORT_SYMBOL(fat_file_read);
 EXPORT_SYMBOL(fat_file_write);

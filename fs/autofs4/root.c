@@ -25,33 +25,31 @@ static int autofs4_dir_mkdir(struct inode *,struct dentry *,int);
 static int autofs4_root_ioctl(struct inode *, struct file *,unsigned int,unsigned long);
 static struct dentry *autofs4_root_lookup(struct inode *,struct dentry *);
 
-static struct file_operations autofs4_root_operations = {
-	readdir:	autofs4_dir_readdir,	/* readdir */
-	ioctl:		autofs4_root_ioctl,	/* ioctl */
+struct file_operations autofs4_root_operations = {
+	read:		generic_read_dir,
+	readdir:	autofs4_dir_readdir,
+	ioctl:		autofs4_root_ioctl,
+};
+
+struct file_operations autofs4_dir_operations = {
+	read:		generic_read_dir,
+	readdir:	autofs4_dir_readdir,
 };
 
 struct inode_operations autofs4_root_inode_operations = {
-        &autofs4_root_operations,		/* file operations */
-
-	lookup:		autofs4_root_lookup,	/* lookup */
-	unlink:		autofs4_dir_unlink,      /* unlink */
-	symlink:	autofs4_dir_symlink,     /* symlink */
-	mkdir:		autofs4_dir_mkdir,       /* mkdir */
-	rmdir:		autofs4_dir_rmdir,       /* rmdir */
-};
-
-static struct file_operations autofs4_dir_operations = {
-        readdir:	autofs4_dir_readdir,     /* readdir */
+	lookup:		autofs4_root_lookup,
+	unlink:		autofs4_dir_unlink,
+	symlink:	autofs4_dir_symlink,
+	mkdir:		autofs4_dir_mkdir,
+	rmdir:		autofs4_dir_rmdir,
 };
 
 struct inode_operations autofs4_dir_inode_operations = {
-        &autofs4_dir_operations, /* file operations */
-
-	lookup:		autofs4_dir_lookup,	/* lookup */
-        unlink:		autofs4_dir_unlink,      /* unlink */
-        symlink:	autofs4_dir_symlink,     /* symlink */
-        mkdir:		autofs4_dir_mkdir,       /* mkdir */
-        rmdir:		autofs4_dir_rmdir,       /* rmdir */
+	lookup:		autofs4_dir_lookup,
+	unlink:		autofs4_dir_unlink,
+	symlink:	autofs4_dir_symlink,
+	mkdir:		autofs4_dir_mkdir,
+	rmdir:		autofs4_dir_rmdir,
 };
 
 static inline struct dentry *nth_child(struct dentry *dir, int nr)

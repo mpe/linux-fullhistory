@@ -317,4 +317,9 @@ void shm_unuse(swp_entry_t entry, struct page *page)
 {
 }
 
+int map_zero_setup(struct vm_area_struct *vma)
+{
+	return -EINVAL;
+}
+
 #endif /* CONFIG_SYSVIPC */

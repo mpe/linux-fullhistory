@@ -275,7 +275,7 @@ out:
 	return already_written ? already_written : errno;
 }
 
-static struct file_operations ncp_file_operations =
+struct file_operations ncp_file_operations =
 {
 	read:		ncp_file_read,
 	write:		ncp_file_write,
@@ -286,19 +286,5 @@ static struct file_operations ncp_file_operations =
 
 struct inode_operations ncp_file_inode_operations =
 {
-	&ncp_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	setattr:	ncp_notify_change,
 };

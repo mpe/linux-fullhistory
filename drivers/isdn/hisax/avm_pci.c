@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.14 1999/12/19 13:09:41 keil Exp $
+/* $Id: avm_pci.c,v 1.15 2000/02/26 00:35:12 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,9 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.15  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.14  1999/12/19 13:09:41  keil
  * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
  * signal proof delays
@@ -63,7 +66,7 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.14 $";
+static const char *avm_pci_rev = "$Revision: 1.15 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -499,7 +502,7 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hdlc.count);
-				dev_kfree_skb(bcs->tx_skb);
+				dev_kfree_skb_irq(bcs->tx_skb);
 				bcs->hw.hdlc.count = 0;
 				bcs->tx_skb = NULL;
 			}
@@ -626,7 +629,7 @@ close_hdlcstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

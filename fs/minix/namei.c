@@ -115,7 +115,7 @@ struct dentry_operations minix_dentry_operations = {
 	0		/* compare */
 };
 
-struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode * inode = NULL;
 	struct minix_dir_entry * de;
@@ -206,7 +206,7 @@ static int minix_add_entry(struct inode * dir,
 	return 0;
 }
 
-int minix_create(struct inode * dir, struct dentry *dentry, int mode)
+static int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 {
 	int error;
 	struct inode * inode;
@@ -219,6 +219,7 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &minix_file_inode_operations;
+	inode->i_fop = &minix_file_operations;
 	inode->i_mapping->a_ops = &minix_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
@@ -237,7 +238,7 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	return 0;
 }
 
-int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
+static int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 {
 	int error;
 	struct inode * inode;
@@ -266,7 +267,7 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	return 0;
 }
 
-int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
+static int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 {
 	int error;
 	struct inode * inode;
@@ -283,6 +284,7 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &minix_dir_inode_operations;
+	inode->i_fop = &minix_dir_operations;
 	inode->i_size = 2 * info->s_dirsize;
 	dir_block = minix_bread(inode,0,1);
 	if (!dir_block) {
@@ -377,7 +379,7 @@ bad_dir:
 	return 1;
 }
 
-int minix_rmdir(struct inode * dir, struct dentry *dentry)
+static int minix_rmdir(struct inode * dir, struct dentry *dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -422,7 +424,7 @@ end_rmdir:
 	return retval;
 }
 
-int minix_unlink(struct inode * dir, struct dentry *dentry)
+static int minix_unlink(struct inode * dir, struct dentry *dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -457,7 +459,7 @@ end_unlink:
 	return retval;
 }
 
-int minix_symlink(struct inode * dir, struct dentry *dentry,
+static int minix_symlink(struct inode * dir, struct dentry *dentry,
 		  const char * symname)
 {
 	struct minix_dir_entry * de;
@@ -502,7 +504,7 @@ fail:
 	goto out;
 }
 
-int minix_link(struct dentry * old_dentry, struct inode * dir,
+static int minix_link(struct dentry * old_dentry, struct inode * dir,
 	       struct dentry *dentry)
 {
 	int error;
@@ -540,7 +542,7 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
+static int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 			   struct inode * new_dir, struct dentry *new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -630,3 +632,18 @@ end_rename:
 	brelse(new_bh);
 	return retval;
 }
+
+/*
+ * directories can handle most operations...
+ */
+struct inode_operations minix_dir_inode_operations = {
+	create:		minix_create,
+	lookup:		minix_lookup,
+	link:		minix_link,
+	unlink:		minix_unlink,
+	symlink:	minix_symlink,
+	mkdir:		minix_mkdir,
+	rmdir:		minix_rmdir,
+	mknod:		minix_mknod,
+	rename:		minix_rename,
+};

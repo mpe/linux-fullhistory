@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.107 2000/02/13 09:52:05 kai Exp $
+/* $Id: isdn_net.c,v 1.110 2000/02/26 01:00:53 keil Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.110  2000/02/26 01:00:53  keil
+ * changes from 2.3.47
+ *
+ * Revision 1.109  2000/02/25 11:29:17  paul
+ * changed chargetime to ulong from int (after about 20 days the "chargetime of
+ * ipppX is now 1234" message displays a negative number on alpha).
+ *
+ * Revision 1.108  2000/02/15 12:54:01  kai
+ * set TX timeout back to 2 secs for 2.2.x, just to be safe
+ *
  * Revision 1.107  2000/02/13 09:52:05  kai
  * increased TX_TIMEOUT to 20sec
  *
@@ -521,6 +531,14 @@ static void __inline__ isdn_net_lp_xon(isdn_net_local * lp)
 		netif_wake_queue(&lp->netdev->dev);
 }
 
+/* For 2.2.x we leave the transmitter busy timeout at 2 secs, just 
+ * to be safe.
+ * For 2.3.x we push it up to 20 secs, because call establishment
+ * (in particular callback) may take such a long time, and we 
+ * don't want confusing messages in the log. However, there is a slight
+ * possibility that this large timeout will break other things like MPPP,
+ * which might rely on the tx timeout. If so, we'll find out this way...
+ */
 
 #define ISDN_NET_TX_TIMEOUT (20*HZ) 
 
@@ -530,7 +548,7 @@ int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct net_device *);
 static int isdn_net_xmit(struct net_device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.107 $";
+char *isdn_net_revision = "$Revision: 1.110 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -727,7 +745,7 @@ isdn_net_autohup()
 							isdn_net_hangup(&p->dev);
 						} else if (jiffies - l->chargetime > l->chargeint) {
 							printk(KERN_DEBUG
-							       "isdn_net: %s: chtime = %d, chint = %d\n",
+							       "isdn_net: %s: chtime = %lu, chint = %d\n",
 							       l->name, l->chargetime, l->chargeint);
 							isdn_net_hangup(&p->dev);
 						}
@@ -868,7 +886,7 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 						 * we correct the timestamp here.
 						 */
 						lp->chargetime = jiffies;
-						printk(KERN_DEBUG "isdn_net: chargetime of %s now %d\n",
+						printk(KERN_DEBUG "isdn_net: chargetime of %s now %lu\n",
 						lp->name, lp->chargetime);
 
 						/* reset dial-timeout */
@@ -915,7 +933,7 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 				if (lp->hupflags & ISDN_WAITCHARGE)
 					lp->hupflags |= ISDN_HAVECHARGE;
 				lp->chargetime = jiffies;
-				printk(KERN_DEBUG "isdn_net: Got CINF chargetime of %s now %d\n",
+				printk(KERN_DEBUG "isdn_net: Got CINF chargetime of %s now %lu\n",
 				       lp->name, lp->chargetime);
 				return 1;
 		}

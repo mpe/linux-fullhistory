@@ -536,6 +536,9 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 
 	static int did_version = 0;			/* Already printed version info. */
 
+	if (speedo_debug > 0  &&  did_version++ == 0)
+		printk(version);
+
 #ifdef USE_IO
 	ioaddr = pci_resource_start (pdev, 0);
 #else
@@ -569,9 +572,6 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	}
 #endif
 
-	if (speedo_debug > 0  &&  did_version++ == 0)
-		printk(version);
-
 	tx_ring = pci_alloc_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
 					     + sizeof(struct speedo_stats), &tx_ring_dma);
 	if (!tx_ring) {
@@ -604,7 +604,11 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 		acpi_idle_state = pwr_command & PCI_PM_CTRL_STATE_MASK;
 	}
 
-	pci_enable_device (pdev);
+	if (pci_enable_device (pdev)) {
+		printk(KERN_ERR PFX "Could not enable PCI device\n");
+		goto err_out_free_netdev;
+	}
+
 	pci_set_master (pdev);
 
 	/* Read the station address EEPROM before doing the reset.
@@ -732,11 +736,12 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 	/* Return the chip to its original power state. */
 	pci_set_power_state (pdev, acpi_idle_state);
 
+	pdev->driver_data = dev;
+
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 
 	sp = dev->priv;
-	memset(sp, 0, sizeof(*sp));
 
 	sp->pdev = pdev;
 	sp->acpi_pwr = acpi_idle_state;
@@ -872,6 +877,8 @@ speedo_open(struct net_device *dev)
 	if (speedo_debug > 1)
 		printk(KERN_DEBUG "%s: speedo_open() irq %d.\n", dev->name, dev->irq);
 
+	MOD_INC_USE_COUNT;
+
 	pci_set_power_state(sp->pdev, 0);
 
 	/* Set up the Tx queue early.. */
@@ -882,12 +889,13 @@ speedo_open(struct net_device *dev)
 	spin_lock_init(&sp->lock);
 
 	/* .. we can safely take handler calls during init. */
-	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ, dev->name, dev))
+	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ, dev->name, dev)) {
+		MOD_DEC_USE_COUNT;
 		return -EBUSY;
-
-	MOD_INC_USE_COUNT;
+	}
 
 	dev->if_port = sp->default_port;
+
 #if 0
 	/* With some transceivers we must retrigger negotiation to reset
 	   power-up errors. */
@@ -1174,8 +1182,6 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	long ioaddr = dev->base_addr;
 	int entry;
 
-	netif_stop_queue (dev);
-
 	/* Caution: the write order is important here, set the base address
 	   with the "ownership" bits last. */
 
@@ -1216,16 +1222,15 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		if (sp->cur_tx - sp->dirty_tx >= TX_QUEUE_LIMIT) {
 			sp->tx_full = 1;
+			netif_stop_queue (dev);
 		}
 		spin_unlock_irqrestore(&sp->lock, flags);
 	}
+
 	wait_for_cmd_done(ioaddr + SCBCmd);
 	outw(CUResume, ioaddr + SCBCmd);
 	dev->trans_start = jiffies;
 	
-	if (! sp->tx_full)
-		netif_start_queue (dev);
-
 	return 0;
 }
 
@@ -1328,22 +1333,18 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				&&  sp->cur_tx - dirty_tx < TX_QUEUE_LIMIT - 1) {
 				/* The ring is no longer full, clear tbusy. */
 				sp->tx_full = 0;
-			}
-			
-			if (sp->tx_full)
-				netif_stop_queue (dev);
-			else
 				netif_wake_queue (dev);
+			}
 		}
 
-		if (--boguscnt < 0) {
-			printk(KERN_ERR "%s: Too much work at interrupt, status=0x%4.4x.\n",
-				   dev->name, status);
-			/* Clear all interrupt sources. */
-			outl(0xfc00, ioaddr + SCBStatus);
-			break;
-		}
-	} while (1);
+	} while (--boguscnt > 0);
+
+	if (boguscnt <= 0) {
+		printk(KERN_ERR "%s: Too much work at interrupt, status=0x%4.4x.\n",
+			   dev->name, status);
+		/* Clear all interrupt sources. */
+		outl(0xfc00, ioaddr + SCBStatus);
+	}
 
 	if (speedo_debug > 3)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
@@ -1502,8 +1503,8 @@ speedo_close(struct net_device *dev)
 		/* Clear the Tx descriptors. */
 		if (skb) {
 			pci_unmap_single(sp->pdev,
-							 le32_to_cpu(sp->tx_ring[i].tx_buf_addr0),
-							 skb->len, PCI_DMA_TODEVICE);
+					 le32_to_cpu(sp->tx_ring[i].tx_buf_addr0),
+					 skb->len, PCI_DMA_TODEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
@@ -1810,8 +1811,6 @@ static void __devexit eepro100_remove_one (struct pci_dev *pdev)
 #ifndef USE_IO
 	iounmap ((char *) dev->base_addr);
 #endif
-
-	pci_set_power_state (pdev, sp->acpi_pwr);
 
 	pci_free_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
 				  + sizeof(struct speedo_stats),

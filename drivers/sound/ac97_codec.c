@@ -28,8 +28,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
-
-#include "ac97_codec.h"
+#include <linux/ac97_codec.h>
 
 static int ac97_read_mixer(struct ac97_codec *codec, int oss_channel);
 static void ac97_write_mixer(struct ac97_codec *codec, int oss_channel, 

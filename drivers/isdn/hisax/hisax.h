@@ -1,8 +1,11 @@
-/* $Id: hisax.h,v 2.40 2000/01/20 19:51:46 keil Exp $
+/* $Id: hisax.h,v 2.41 2000/02/26 00:35:13 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.41  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 2.40  2000/01/20 19:51:46  keil
  * Fix AddTimer message
  * Change CONFIG defines
@@ -157,8 +160,9 @@
 #include <linux/isdnif.h>
 #include <linux/tty.h>
 #include <linux/serial_reg.h>
+#include <linux/netdevice.h>
 
-#undef ERROR_STATISTIC
+#define ERROR_STATISTIC
 
 #define REQUEST		0
 #define CONFIRM		1

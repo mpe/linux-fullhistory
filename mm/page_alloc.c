@@ -27,6 +27,7 @@
 int nr_swap_pages = 0;
 int nr_lru_pages;
 LIST_HEAD(lru_cache);
+pg_data_t *pgdat_list = (pg_data_t *)0;
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
 static int zone_balance_ratio[MAX_NR_ZONES] = { 128, 128, 128, };
@@ -264,24 +265,23 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 			{
 				if (z->low_on_memory)
 					z->low_on_memory = 0;
+				z->zone_wake_kswapd = 0;
 			}
 			else
 			{
 				extern wait_queue_head_t kswapd_wait;
 
+				if (free <= z->pages_low) {
+					z->zone_wake_kswapd = 1;
+					wake_up_interruptible(&kswapd_wait);
+				} else
+					z->zone_wake_kswapd = 0;
+
+				if (free <= z->pages_min)
+					z->low_on_memory = 1;
+
 				if (z->low_on_memory)
 					goto balance;
-
-				if (free <= z->pages_low)
-				{
-					wake_up_interruptible(&kswapd_wait);
-
-					if (free <= z->pages_min)
-					{
-						z->low_on_memory = 1;
-						goto balance;
-					}
-				}
 			}
 		}
 		/*
@@ -482,6 +482,9 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	unsigned long totalpages, offset;
 	unsigned int cumulative = 0;
 
+	pgdat->node_next = pgdat_list;
+	pgdat_list = pgdat;
+
 	totalpages = 0;
 	for (i = 0; i < MAX_NR_ZONES; i++) {
 		unsigned long size = zones_size[i];
@@ -560,6 +563,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		zone->pages_low = mask*2;
 		zone->pages_high = mask*3;
 		zone->low_on_memory = 0;
+		zone->zone_wake_kswapd = 0;
 		zone->zone_mem_map = mem_map + offset;
 		zone->zone_start_mapnr = offset;
 		zone->zone_start_paddr = zone_start_paddr;

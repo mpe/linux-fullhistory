@@ -60,12 +60,3 @@ int efs_bmap(struct inode *inode, efs_block_t block) {
 
 	return efs_map_block(inode, block);
 }
-
-static struct file_operations efs_file_operations = {
-	read:		generic_file_read,
-	mmap:		generic_file_mmap,
-};
-
-struct inode_operations efs_file_inode_operations = {
-	&efs_file_operations,	/* default file operations */
-};

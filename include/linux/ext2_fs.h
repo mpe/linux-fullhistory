@@ -576,17 +576,7 @@ extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
 		       unsigned long);
 
 /* namei.c */
-extern void ext2_release (struct inode *, struct file *);
-extern struct dentry *ext2_lookup (struct inode *, struct dentry *);
-extern int ext2_create (struct inode *,struct dentry *,int);
-extern int ext2_mkdir (struct inode *,struct dentry *,int);
-extern int ext2_rmdir (struct inode *,struct dentry *);
-extern int ext2_unlink (struct inode *,struct dentry *);
-extern int ext2_symlink (struct inode *,struct dentry *,const char *);
-extern int ext2_link (struct dentry *, struct inode *, struct dentry *);
-extern int ext2_mknod (struct inode *, struct dentry *, int, int);
-extern int ext2_rename (struct inode *, struct dentry *,
-			struct inode *, struct dentry *);
+extern struct inode_operations ext2_dir_inode_operations;
 
 /* super.c */
 extern void ext2_error (struct super_block *, const char *, const char *, ...)
@@ -610,10 +600,11 @@ extern void ext2_truncate (struct inode *);
  */
 
 /* dir.c */
-extern struct inode_operations ext2_dir_inode_operations;
+extern struct file_operations ext2_dir_operations;
 
 /* file.c */
 extern struct inode_operations ext2_file_inode_operations;
+extern struct file_operations ext2_file_operations;
 
 /* symlink.c */
 extern struct inode_operations ext2_fast_symlink_inode_operations;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-proc.c	Version 1.03	January   2, 1998
+ *  linux/drivers/block/ide-proc.c	Version 1.03	January  2, 1998
  *
  *  Copyright (C) 1997-1998	Mark Lord
  */
@@ -73,21 +73,46 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
+#ifdef CONFIG_BLK_DEV_AEC6210
+extern byte aec6210_proc;
+int (*aec6210_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_AEC6210 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 extern byte ali_proc;
 int (*ali_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
-
+#ifdef CONFIG_BLK_DEV_AMD7409
+extern byte amd7409_proc;
+int (*amd7409_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_AMD7409 */
+#ifdef CONFIG_BLK_DEV_CMD64X
+extern byte cmd64x_proc;
+int (*cmd64x_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_CMD64X */
+#ifdef CONFIG_BLK_DEV_CS5530
+extern byte cs5530_proc;
+int (*cs5530_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_CS5530 */
+#ifdef CONFIG_BLK_DEV_HPT34X
+extern byte hpt34x_proc;
+int (*hpt34x_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_HPT34X */
+#ifdef CONFIG_BLK_DEV_HPT366
+extern byte hpt366_proc;
+int (*hpt366_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_HPT366 */
+#ifdef CONFIG_BLK_DEV_PDC202XX
+extern byte pdc202xx_proc;
+int (*pdc202xx_display_info)(char *, char **, off_t, int) = NULL;
+#endif /* CONFIG_BLK_DEV_PDC202XX */
 #ifdef CONFIG_BLK_DEV_PIIX
 extern byte piix_proc;
 int (*piix_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_PIIX */
-
 #ifdef CONFIG_BLK_DEV_SIS5513
 extern byte sis_proc;
 int (*sis_display_info)(char *, char **, off_t, int) = NULL;
 #endif /* CONFIG_BLK_DEV_SIS5513 */
-
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
 extern byte via_proc;
 int (*via_display_info)(char *, char **, off_t, int) = NULL;
@@ -229,7 +254,7 @@ static int proc_ide_write_config
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
 			if (for_real) {
 #if 0
-				printk("proc_ide_write_config: type=%c, reg=0x%x, val=0x%x, digits=%d\n", is_pci ? 'PCI' : 'non-PCI', reg, val, digits);
+				printk("proc_ide_write_config: type=%c, reg=0x%x, val=0x%x, digits=%d\n", is_pci ? "PCI" : "non-PCI", reg, val, digits);
 #endif
 				if (is_pci) {
 #ifdef CONFIG_BLK_DEV_IDEPCI
@@ -349,7 +374,7 @@ static int proc_ide_read_drivers
 
 	while (p) {
 		driver = (ide_driver_t *) p->info;
-		if (p->type == IDE_DRIVER_MODULE && driver)
+		if (driver)
 			out += sprintf(out, "%s version %s\n", driver->name, driver->version);
 		p = p->next;
 	}
@@ -775,10 +800,38 @@ void proc_ide_create(void)
 	create_proc_read_entry("drivers",0,proc_ide_root,
 				proc_ide_read_drivers, NULL);
 
+#ifdef CONFIG_BLK_DEV_AEC6210
+	if ((aec6210_display_info) && (aec6210_proc))
+		create_proc_info_entry("aec6210", 0, proc_ide_root, aec6210_display_info);
+#endif /* CONFIG_BLK_DEV_AEC6210 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 	if ((ali_display_info) && (ali_proc))
 		create_proc_info_entry("ali", 0, proc_ide_root, ali_display_info);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_AMD7409
+	if ((amd7409_display_info) && (amd7409_proc))
+		create_proc_info_entry("amd7409", 0, proc_ide_root, amd7409_display_info);
+#endif /* CONFIG_BLK_DEV_AMD7409 */
+#ifdef CONFIG_BLK_DEV_CMD64X
+	if ((cmd64x_display_info) && (cmd64x_proc))
+		create_proc_info_entry("cmd64x", 0, proc_ide_root, cmd64x_display_info);
+#endif /* CONFIG_BLK_DEV_CMD64X */
+#ifdef CONFIG_BLK_DEV_CS5530
+	if ((cs5530_display_info) && (cs5530_proc))
+		create_proc_info_entry("cs5530", 0, proc_ide_root, cs5530_display_info);
+#endif /* CONFIG_BLK_DEV_CS5530 */
+#ifdef CONFIG_BLK_DEV_HPT34X
+	if ((hpt34x_display_info) && (hpt34x_proc))
+		create_proc_info_entry("", 0, proc_ide_root, hpt34x_display_info);
+#endif /* CONFIG_BLK_DEV_HPT34X */
+#ifdef CONFIG_BLK_DEV_HPT366
+	if ((hpt366_display_info) && (hpt366_proc))
+		create_proc_info_entry("", 0, proc_ide_root, hpt366_display_info);
+#endif /* CONFIG_BLK_DEV_HPT366 */
+#ifdef CONFIG_BLK_DEV_PDC202XX
+	if ((pdc202xx_display_info) && (pdc202xx_proc))
+		create_proc_info_entry("pdc202xx", 0, proc_ide_root, pdc202xx_display_info);
+#endif /* CONFIG_BLK_DEV_PDC202XX */
 #ifdef CONFIG_BLK_DEV_PIIX
 	if ((piix_display_info) && (piix_proc))
 		create_proc_info_entry("piix", 0, proc_ide_root, piix_display_info);
@@ -799,10 +852,38 @@ void proc_ide_destroy(void)
 	 * Mmmm.. does this free up all resources,
 	 * or do we need to do a more proper cleanup here ??
 	 */
+#ifdef CONFIG_BLK_DEV_AEC6210
+	if ((aec6210_display_info) && (aec6210_proc))
+		remove_proc_entry("ide/aec6210",0);
+#endif /* CONFIG_BLK_DEV_AEC6210 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 	if ((ali_display_info) && (ali_proc))
 		remove_proc_entry("ide/ali",0);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_AMD7409
+	if ((amd7409_display_info) && (amd7409_proc))
+		remove_proc_entry("ide/amd7409",0);
+#endif /* CONFIG_BLK_DEV_AMD7409 */
+#ifdef CONFIG_BLK_DEV_CMD64X
+	if ((cmd64x_display_info) && (cmd64x_proc))
+		remove_proc_entry("ide/cmd64x",0);
+#endif /* CONFIG_BLK_DEV_CMD64X */
+#ifdef CONFIG_BLK_DEV_CS5530
+	if ((cs5530_display_info) && (cs5530_proc))
+		remove_proc_entry("ide/cs5530",0);
+#endif /* CONFIG_BLK_DEV_CS5530 */
+#ifdef CONFIG_BLK_DEV_HPT34X
+	if ((hpt34x_display_info) && (hpt34x_proc))
+		remove_proc_entry("ide/hpt34x",0);
+#endif /* CONFIG_BLK_DEV_HPT34X */
+#ifdef CONFIG_BLK_DEV_HPT366
+	if ((hpt366_display_info) && (hpt366_proc))
+		remove_proc_entry("ide/hpt366",0);
+#endif /* CONFIG_BLK_DEV_HPT366 */
+#ifdef CONFIG_BLK_DEV_PDC202XX
+	if ((pdc202xx_display_info) && (pdc202xx_proc))
+		remove_proc_entry("ide/pdc202xx",0);
+#endif /* CONFIG_BLK_DEV_PDC202XX */
 #ifdef CONFIG_BLK_DEV_PIIX
 	if ((piix_display_info) && (piix_proc))
 		remove_proc_entry("ide/piix",0);

@@ -1,11 +1,14 @@
 /*
- * $Id: capi.c,v 1.22 1999/11/13 21:27:16 keil Exp $
+ * $Id: capi.c,v 1.23 2000/02/26 01:00:53 keil Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.23  2000/02/26 01:00:53  keil
+ * changes from 2.3.47
+ *
  * Revision 1.22  1999/11/13 21:27:16  keil
  * remove KERNELVERSION
  *

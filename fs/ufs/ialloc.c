@@ -290,7 +290,6 @@ cg_found:
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->u.ufs_i.i_flags = dir->u.ufs_i.i_flags;
 	inode->u.ufs_i.i_lastfrag = 0;
-	inode->i_op = NULL;
 
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-pci.c	Version 1.04	July 27, 1999
+ *  linux/drivers/block/ide-pci.c		Version 1.04	July 27, 1999
  *
  *  Copyright (c) 1998-1999  Andre Hedrick
  *
@@ -31,6 +31,7 @@
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
 #define DEVID_PIIX4E	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AB_1})
 #define DEVID_PIIX4U	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82801AA_1})
+#define DEVID_PIIX4U2	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82372FB_1})
 #define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
@@ -95,13 +96,19 @@ extern void ide_dmacapable_ali15x3(ide_hwif_t *, unsigned long);
 #endif
 
 #ifdef CONFIG_BLK_DEV_AMD7409
+extern unsigned int pci_init_amd7409(struct pci_dev *, const char *);
 extern unsigned int ata66_amd7409(ide_hwif_t *);
 extern void ide_init_amd7409(ide_hwif_t *);
+extern void ide_dmacapable_amd7409(ide_hwif_t *, unsigned long);
+#define PCI_AMD7409	&pci_init_amd7409
 #define ATA66_AMD7409	&ata66_amd7409
 #define INIT_AMD7409	&ide_init_amd7409
+#define DMA_AMD7409	&ide_dmacapable_amd7409
 #else
+#define PCI_AMD7409	NULL
 #define ATA66_AMD7409	NULL
 #define INIT_AMD7409	NULL
+#define DMA_AMD7409	NULL
 #endif
 
 #ifdef CONFIG_BLK_DEV_CMD64X
@@ -135,11 +142,11 @@ extern void ide_init_cy82c693(ide_hwif_t *);
 #ifdef CONFIG_BLK_DEV_CS5530
 extern unsigned int pci_init_cs5530(struct pci_dev *, const char *);
 extern void ide_init_cs5530(ide_hwif_t *);
-#define INIT_CS5530	&ide_init_cs5530
 #define PCI_CS5530	&pci_init_cs5530
+#define INIT_CS5530	&ide_init_cs5530
 #else
-#define INIT_CS5530	NULL
 #define PCI_CS5530	NULL
+#define INIT_CS5530	NULL
 #endif
 
 #ifdef CONFIG_BLK_DEV_HPT34X
@@ -149,7 +156,7 @@ extern void ide_init_hpt34x(ide_hwif_t *);
 #define INIT_HPT34X	&ide_init_hpt34x
 #else
 #define PCI_HPT34X	NULL
-#define INIT_HPT34X	NULL
+#define INIT_HPT34X	IDE_IGNORE
 #endif
 
 #ifdef CONFIG_BLK_DEV_HPT366
@@ -289,6 +296,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIX4,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX4E,	"PIIX4",	PCI_PIIX,	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_PIIX4U,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
+	{DEVID_PIIX4U2,	"PIIX4",	PCI_PIIX,	ATA66_PIIX,	INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}},	ON_BOARD,	0 },
 	{DEVID_VIA_IDE,	"VIA_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_VP_IDE,	"VP_IDE",	PCI_VIA82CXXX,	ATA66_VIA82CXXX,INIT_VIA82CXXX,	DMA_VIA82CXXX,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
 	{DEVID_PDC20246,"PDC20246",	PCI_PDC202XX,	NULL,		INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
@@ -318,7 +326,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CY82C693,"CY82C693",	PCI_CY82C693,	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_CS5530,	"CS5530",	PCI_CS5530,	NULL,		INIT_CS5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
-	{DEVID_AMD7409,	"AMD7409",	NULL,		ATA66_AMD7409,	INIT_AMD7409,	NULL,		{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
+	{DEVID_AMD7409,	"AMD7409",	PCI_AMD7409,	ATA66_AMD7409,	INIT_AMD7409,	DMA_AMD7409,	{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
@@ -329,27 +337,6 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 static unsigned int __init ide_special_settings (struct pci_dev *dev, const char *name)
 {
 	switch(dev->device) {
-		case PCI_DEVICE_ID_TTI_HPT343:
-			{
-				int i;
-				unsigned long hpt34xIoBase = dev->resource[4].start;
-				unsigned short pcicmd = 0;
-
-				pci_write_config_byte(dev, 0x80, 0x00);
-				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
-				if (!(pcicmd & PCI_COMMAND_MEMORY)) {
-					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
-				} else {
-					pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
-				}
-
-				dev->resource[0].start = (hpt34xIoBase + 0x20);
-				dev->resource[1].start = (hpt34xIoBase + 0x34);
-				dev->resource[2].start = (hpt34xIoBase + 0x28);
-				dev->resource[3].start = (hpt34xIoBase + 0x3c);
-				for(i=0; i<4; i++)
-					dev->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
-			}
 		case PCI_DEVICE_ID_TTI_HPT366:
 		case PCI_DEVICE_ID_PROMISE_20246:
 		case PCI_DEVICE_ID_PROMISE_20262:
@@ -535,17 +522,8 @@ check_if_enabled:
 #endif
 	}
 	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X)) {
-		/*
-		 * Since there are two cards that report almost identically,
-		 * the only discernable difference is the values
-		 * reported in pcicmd.
-		 * Booting-BIOS card or HPT363 :: pcicmd == 0x07
-		 * Non-bootable card or HPT343 :: pcicmd == 0x05
-		 */
-		if (pcicmd & PCI_COMMAND_MEMORY) {
-			printk("%s: is IDE Express HPT363.\n", d->name);
-			d->bootable = OFF_BOARD;
-		}
+		/* see comments in hpt34x.c on why..... */
+		d->bootable = (pcicmd & PCI_COMMAND_MEMORY) ? OFF_BOARD : NEVER_BOARD;
 	}
 	/*
 	 * Set up the IDE ports
@@ -618,9 +596,7 @@ check_if_enabled:
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20262) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
-#ifdef CONFIG_BLK_DEV_HPT34X
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X) ||
-#endif /* CONFIG_BLK_DEV_HPT34X */
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CS5530) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||

@@ -121,10 +121,6 @@ static Scsi_Cmnd *sun3_dma_setup_done = NULL;
 /* minimum number of bytes to to dma on */
 #define SUN3_DMA_MINSIZE 128
 
-static struct proc_dir_entry proc_scsi_sun3_5380 = {
-	PROC_SCSI_MAC, 13, "Sun3 5380 SCSI", S_IFDIR | S_IRUGO, S_IXUGO, 2
-};
-
 static volatile unsigned char *sun3_scsi_regp;
 static volatile struct sun3_dma_regs *dregs;
 static unsigned char *dmabuf = NULL; /* dma memory buffer */
@@ -196,7 +192,7 @@ int sun3scsi_detect(Scsi_Host_Template * tpnt)
 	if(called)
 		return 0;
 
-	tpnt->proc_dir = &proc_scsi_sun3_5380;
+	tpnt->proc_name = "Sun3 5380 SCSI";
 
 	/* setup variables */
 	tpnt->can_queue =

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/macide.c -- Macintosh IDE Driver
+ *  linux/drivers/ide/macide.c -- Macintosh IDE Driver
  *
  *     Copyright (C) 1998 by Michael Schmitz
  *
@@ -43,7 +43,7 @@
 #define MAC_HD_STATUS	0x1c		/* see status-bits */
 #define MAC_HD_CONTROL	0x38		/* control/altstatus */
 
-static int macide_offsets[IDE_NR_PORTS] = {
+static int __init macide_offsets[IDE_NR_PORTS] = {
     MAC_HD_DATA, MAC_HD_ERROR, MAC_HD_NSECTOR, MAC_HD_SECTOR, MAC_HD_LCYL,
     MAC_HD_HCYL, MAC_HD_SELECT, MAC_HD_STATUS, MAC_HD_CONTROL
 };
@@ -84,7 +84,7 @@ static int mac_ack_intr(ide_hwif_t* hwif)
      *  Probe for a Macintosh IDE interface
      */
 
-void macide_init(void)
+void __init macide_init(void)
 {
 	hw_regs_t hw;
 	int index = -1;

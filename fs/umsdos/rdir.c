@@ -218,23 +218,20 @@ out:
  * have a "r" prefix (r for real) such as UMSDOS_rlookup, to differentiate
  * from the one with full UMSDOS semantics.
  */
-static struct file_operations umsdos_rdir_operations =
+struct file_operations umsdos_rdir_operations =
 {
-	read:		dummy_dir_read,
+	read:		generic_read_dir,
 	readdir:	UMSDOS_rreaddir,
 	ioctl:		UMSDOS_ioctl_dir,
 };
 
 struct inode_operations umsdos_rdir_inode_operations =
 {
-	&umsdos_rdir_operations,	/* default directory file-ops */
-	msdos_create,		/* create */
-	UMSDOS_rlookup,		/* lookup */
-	NULL,			/* link */
-	msdos_unlink,		/* unlink */
-	NULL,			/* symlink */
-	msdos_mkdir,		/* mkdir */
-	UMSDOS_rrmdir,		/* rmdir */
-	NULL,			/* mknod */
-	msdos_rename,		/* rename */
+	create:		msdos_create,
+	lookup:		UMSDOS_rlookup,
+	unlink:		msdos_unlink,
+	mkdir:		msdos_mkdir,
+	rmdir:		UMSDOS_rrmdir,
+	rename:		msdos_rename,
+	setattr:	UMSDOS_notify_change,
 };

@@ -34,7 +34,6 @@
 /* VFS super_block ops */
 static struct super_block *coda_read_super(struct super_block *, void *, int);
 static void coda_read_inode(struct inode *);
-static int  coda_notify_change(struct dentry *dentry, struct iattr *attr);
 static void coda_put_inode(struct inode *);
 static void coda_delete_inode(struct inode *);
 static void coda_put_super(struct super_block *);
@@ -44,17 +43,11 @@ static int coda_statfs(struct super_block *sb, struct statfs *buf,
 /* exported operations */
 struct super_operations coda_super_operations =
 {
-	coda_read_inode,        /* read_inode */
-	NULL,                   /* write_inode */
-	coda_put_inode,	        /* put_inode */
-	coda_delete_inode,      /* delete_inode */
-	coda_notify_change,	/* notify_change */
-	coda_put_super,	        /* put_super */
-	NULL,			/* write_super */
-	coda_statfs,   		/* statfs */
-	NULL,			/* remount_fs */
-	NULL,			/* no clear inode */
-	NULL			/* umount attempt begin */
+	read_inode:	coda_read_inode,
+	put_inode:	coda_put_inode,
+	delete_inode:	coda_delete_inode,
+	put_super:	coda_put_super,
+	statfs:		coda_statfs,
 };
 
 static struct super_block * coda_read_super(struct super_block *sb, 
@@ -213,7 +206,7 @@ static void coda_delete_inode(struct inode *inode)
 	EXIT;
 }
 
-static int coda_notify_change(struct dentry *de, struct iattr *iattr)
+int coda_notify_change(struct dentry *de, struct iattr *iattr)
 {
 	struct inode *inode = de->d_inode;
         struct coda_inode_info *cii;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.05  July 3, 1999
+ *  linux/drivers/block/ide-probe.c	Version 1.05	July 3, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -57,7 +57,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide__sti();	/* local CPU only */
 	ide_fix_driveid(id);
 	if (!drive->forced_lun)
-		drive->last_lun = id->word126 & 0x7;
+		drive->last_lun = id->last_lun & 0x7;
 #if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO) || defined (CONFIG_SCSI_EATA)
 	/*
 	 * EATA SCSI controllers do a hardware ATA emulation:
@@ -395,6 +395,56 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 }
 
 /*
+ * Calculate the region that this interface occupies,
+ * handling interfaces where the registers may not be
+ * ordered sanely.  We deal with the CONTROL register
+ * separately.
+ */
+static int hwif_check_regions (ide_hwif_t *hwif)
+{
+	int region_errors = 0;
+
+	region_errors  = ide_check_region(hwif->io_ports[IDE_DATA_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_ERROR_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_NSECTOR_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_SECTOR_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_LCYL_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_HCYL_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_SELECT_OFFSET], 1);
+	region_errors += ide_check_region(hwif->io_ports[IDE_STATUS_OFFSET], 1);
+	if (hwif->io_ports[IDE_CONTROL_OFFSET])
+		region_errors += ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
+	if (hwif->io_ports[IDE_IRQ_OFFSET])
+		region_errors += ide_check_region(hwif->io_ports[IDE_IRQ_OFFSET], 1);
+
+	return(region_errors);
+}
+
+static void hwif_register (ide_hwif_t *hwif)
+{
+	if (hwif->io_ports[IDE_DATA_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_DATA_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_ERROR_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_ERROR_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_NSECTOR_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_NSECTOR_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_SECTOR_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_SECTOR_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_LCYL_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_LCYL_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_HCYL_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_HCYL_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_SELECT_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_SELECT_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_STATUS_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_STATUS_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_CONTROL_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1, hwif->name);
+	if (hwif->io_ports[IDE_IRQ_OFFSET])
+		ide_request_region(hwif->io_ports[IDE_IRQ_OFFSET], 1, hwif->name);
+}
+
+/*
  * This routine only knows how to look for drive units 0 and 1
  * on an interface, so any setting of MAX_DRIVES > 2 won't work here.
  */
@@ -402,12 +452,6 @@ static void probe_hwif (ide_hwif_t *hwif)
 {
 	unsigned int unit;
 	unsigned long flags;
-
-	ide_ioreg_t ide_control_reg 	= hwif->io_ports[IDE_CONTROL_OFFSET];
-	ide_ioreg_t region_low 		= hwif->io_ports[IDE_DATA_OFFSET];
-	ide_ioreg_t region_high 	= region_low;
-	unsigned int region_request	= 8;
-	int i;
 
 	if (hwif->noprobe)
 		return;
@@ -417,30 +461,11 @@ static void probe_hwif (ide_hwif_t *hwif)
 		probe_cmos_for_drives (hwif);
 	}
 
-	/*
-	 * Calculate the region that this interface occupies,
-	 * handling interfaces where the registers may not be
-	 * ordered sanely.  We deal with the CONTROL register
-	 * separately.
-	 */
-	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
-		if (hwif->io_ports[i]) {
-			if (hwif->io_ports[i] < region_low)
-				region_low = hwif->io_ports[i];
-			if (hwif->io_ports[i] > region_high)
-				region_high = hwif->io_ports[i];
-		}
-	}
-	region_request = (region_high - region_low);
-	if (region_request == 0x0007)
-		region_request++;
 	if ((hwif->chipset != ide_4drives || !hwif->mate->present) &&
 #if CONFIG_BLK_DEV_PDC4030
 	    (hwif->chipset != ide_pdc4030 || hwif->channel == 0) &&
 #endif /* CONFIG_BLK_DEV_PDC4030 */
-	    (ide_check_region(region_low, region_request) ||
-	    (ide_control_reg && ide_check_region(ide_control_reg,1))))
-	{
+	    (hwif_check_regions(hwif))) {
 		int msgout = 0;
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
@@ -467,20 +492,18 @@ static void probe_hwif (ide_hwif_t *hwif)
 		if (drive->present && !hwif->present) {
 			hwif->present = 1;
 			if (hwif->chipset != ide_4drives || !hwif->mate->present) {
-				ide_request_region(region_low, region_request, hwif->name);
-				if (ide_control_reg)
-					ide_request_region(ide_control_reg, 1, hwif->name);
+				hwif_register(hwif);
 			}
 		}
 	}
-	if (ide_control_reg && hwif->reset) {
+	if (hwif->io_ports[IDE_CONTROL_OFFSET] && hwif->reset) {
 		unsigned long timeout = jiffies + WAIT_WORSTCASE;
 		byte stat;
 
 		printk("%s: reset\n", hwif->name);
-		OUT_BYTE(12, ide_control_reg);
+		OUT_BYTE(12, hwif->io_ports[IDE_CONTROL_OFFSET]);
 		udelay(10);
-		OUT_BYTE(8, ide_control_reg);
+		OUT_BYTE(8, hwif->io_ports[IDE_CONTROL_OFFSET]);
 		do {
 			ide_delay_50ms();
 			stat = IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
@@ -594,7 +617,11 @@ static int init_irq (ide_hwif_t *hwif)
 	 * Allocate the irq, if not already obtained for another hwif
 	 */
 	if (!match || match->irq != hwif->irq) {
+#ifdef CONFIG_IDEPCI_SHARE_IRQ
+		int sa = (hwif->chipset == ide_pci) ? SA_SHIRQ : SA_INTERRUPT;
+#else /* !CONFIG_IDEPCI_SHARE_IRQ */
 		int sa = (hwif->chipset == ide_pci) ? SA_INTERRUPT|SA_SHIRQ : SA_INTERRUPT;
+#endif /* CONFIG_IDEPCI_SHARE_IRQ */
 		if (ide_request_irq(hwif->irq, &ide_intr, sa, hwif->name, hwgroup)) {
 			if (!match)
 				kfree(hwgroup);
@@ -784,20 +811,18 @@ static int hwif_init (ide_hwif_t *hwif)
 		return (hwif->present = 0);
 	}
 	
-	if (init_irq (hwif)) {
+	if (init_irq(hwif)) {
 		int i = hwif->irq;
 		/*
 		 *	It failed to initialise. Find the default IRQ for 
 		 *	this port and try that.
 		 */
-		if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) 
-		{
+		if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) {
 			printk("%s: Disabled unable to get IRQ %d.\n", hwif->name, i);
 			(void) unregister_blkdev (hwif->major, hwif->name);
 			return (hwif->present = 0);
 		}
-		if(init_irq (hwif)) 
-		{
+		if (init_irq(hwif)) {
 			printk("%s: probed IRQ %d and default IRQ %d failed.\n",
 				hwif->name, i, hwif->irq);
 			(void) unregister_blkdev (hwif->major, hwif->name);
@@ -863,7 +888,8 @@ int ideprobe_init (void)
 	for (index = 0; index < MAX_HWIFS; ++index)
 		if (probe[index])
 			hwif_init(&ide_hwifs[index]);
-	ide_register_module(&ideprobe_module);
+	if (!ide_probe)
+		ide_probe = &ideprobe_module;
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -882,6 +908,6 @@ int init_module (void)
 
 void cleanup_module (void)
 {
-	ide_unregister_module(&ideprobe_module);
+	ide_probe = NULL;
 }
 #endif /* MODULE */

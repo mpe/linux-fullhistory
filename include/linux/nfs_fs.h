@@ -185,17 +185,20 @@ extern int nfs_revalidate(struct dentry *);
 extern int nfs_open(struct inode *, struct file *);
 extern int nfs_release(struct inode *, struct file *);
 extern int __nfs_revalidate_inode(struct nfs_server *, struct dentry *);
+extern int nfs_notify_change(struct dentry *, struct iattr *);
 
 /*
  * linux/fs/nfs/file.c
  */
 extern struct inode_operations nfs_file_inode_operations;
+extern struct file_operations nfs_file_operations;
 extern struct address_space_operations nfs_file_aops;
 
 /*
  * linux/fs/nfs/dir.c
  */
 extern struct inode_operations nfs_dir_inode_operations;
+extern struct file_operations nfs_dir_operations;
 extern struct dentry_operations nfs_dentry_operations;
 extern void nfs_flush_dircache(struct inode *);
 extern void nfs_free_dircache(struct inode *);

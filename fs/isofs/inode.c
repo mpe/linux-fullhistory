@@ -77,15 +77,9 @@ static void isofs_read_inode(struct inode *);
 static int isofs_statfs (struct super_block *, struct statfs *, int);
 
 static struct super_operations isofs_sops = {
-	isofs_read_inode,
-	NULL,			/* write_inode */
-	NULL,			/* put_inode */
-	NULL,			/* delete_inode */
-	NULL,			/* notify_change */
-	isofs_put_super,
-	NULL,			/* write_super */
-	isofs_statfs,
-	NULL
+	read_inode:	isofs_read_inode,
+	put_super:	isofs_put_super,
+	statfs:		isofs_statfs,
 };
 
 static struct dentry_operations isofs_dentry_ops[] = {
@@ -1259,7 +1253,6 @@ static void isofs_read_inode(struct inode * inode)
 	}
 
 	/* Install the inode operations vector */
-	inode->i_op = NULL;
 #ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' &&
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
@@ -1268,11 +1261,12 @@ static void isofs_read_inode(struct inode * inode)
 #endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	{
 	  if (S_ISREG(inode->i_mode)) {
-	    inode->i_op = &isofs_file_inode_operations;
+	    inode->i_fop = &generic_ro_fops;
 	    inode->i_data.a_ops = &isofs_aops;
-	  } else if (S_ISDIR(inode->i_mode))
+	  } else if (S_ISDIR(inode->i_mode)) {
 	    inode->i_op = &isofs_dir_inode_operations;
-	  else if (S_ISLNK(inode->i_mode)) {
+	    inode->i_fop = &isofs_dir_operations;
+	  } else if (S_ISLNK(inode->i_mode)) {
 	    inode->i_op = &page_symlink_inode_operations;
 	    inode->i_data.a_ops = &isofs_symlink_aops;
 	  } else
@@ -1283,14 +1277,7 @@ static void isofs_read_inode(struct inode * inode)
 
       fail:
 	/* With a data error we return this information */
-	inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
-	inode->u.isofs_i.i_first_extent = 0;
-	inode->i_size = 0;
-	inode->i_blocks = inode->i_blksize = 0;
-	inode->i_nlink = 1;
-	inode->i_uid = inode->i_gid = 0;
-	inode->i_mode = S_IFREG;  /*Regular file, no one gets to read*/
-	inode->i_op = NULL;
+	make_bad_inode(inode);
 	return;
 }
 

@@ -384,7 +384,7 @@ printk("smb_file_permission: mode=%x, mask=%x\n", mode, mask);
 	return error;
 }
 
-static struct file_operations smb_file_operations =
+struct file_operations smb_file_operations =
 {
 	read:		smb_file_read,
 	write:		smb_file_write,
@@ -397,19 +397,7 @@ static struct file_operations smb_file_operations =
 
 struct inode_operations smb_file_inode_operations =
 {
-	&smb_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	smb_file_permission,	/* permission */
-	smb_revalidate_inode,	/* revalidate */
+	permission:	smb_file_permission,
+	revalidate:	smb_revalidate_inode,
+	setattr:	smb_notify_change,
 };

@@ -44,17 +44,10 @@ extern unsigned long htab_evicts;
 extern unsigned long pte_misses;
 extern unsigned long pte_errors;
 
-static struct file_operations ppc_htab_operations = {
+struct file_operations ppc_htab_operations = {
 	llseek:		ppc_htab_lseek,
 	read:		ppc_htab_read,
 	write:		ppc_htab_write,
-};
-
-/*
- * proc files can do almost nothing..
- */
-struct inode_operations proc_ppc_htab_inode_operations = {
-    &ppc_htab_operations,  /* default proc file-ops */
 };
 
 /* these will go into processor.h when I'm done debugging -- Cort */

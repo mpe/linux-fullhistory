@@ -259,7 +259,7 @@ out:
 
 /* Table to convert sigio signal codes into poll band bitmaps */
 
-static int band_table[NSIGPOLL+1] = {
+static long band_table[NSIGPOLL+1] = {
 	~0,
 	POLLIN | POLLRDNORM,			/* POLL_IN */
 	POLLOUT | POLLWRNORM | POLLWRBAND,	/* POLL_OUT */
@@ -291,7 +291,7 @@ static void send_sigio_to_task(struct task_struct *p,
 			si.si_errno = 0;
 		        si.si_code  = reason;
 			if (reason < 0 || reason > NSIGPOLL)
-				si.si_band  = ~0;
+				si.si_band  = ~0L;
 			else
 				si.si_band = band_table[reason];
 			si.si_fd    = fa->fa_fd;

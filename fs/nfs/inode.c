@@ -44,23 +44,17 @@ static void nfs_invalidate_inode(struct inode *);
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
-static int  nfs_notify_change(struct dentry *, struct iattr *);
 static void nfs_put_super(struct super_block *);
 static void nfs_umount_begin(struct super_block *);
 static int  nfs_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations nfs_sops = { 
-	nfs_read_inode,		/* read inode */
-	NULL,			/* write inode */
-	nfs_put_inode,		/* put inode */
-	nfs_delete_inode,	/* delete inode */
-	nfs_notify_change,	/* notify change */
-	nfs_put_super,		/* put superblock */
-	NULL,			/* write superblock */
-	nfs_statfs,		/* stat filesystem */
-	NULL,			/* no remount */
-	NULL,			/* no clear inode */
-	nfs_umount_begin	/* umount attempt begin */
+	read_inode:	nfs_read_inode,
+	put_inode:	nfs_put_inode,
+	delete_inode:	nfs_delete_inode,
+	put_super:	nfs_put_super,
+	statfs:		nfs_statfs,
+	umount_begin:	nfs_umount_begin,
 };
 
 struct rpc_stat			nfs_rpcstat = { &nfs_program };
@@ -78,7 +72,6 @@ nfs_read_inode(struct inode * inode)
 	inode->i_blksize = inode->i_sb->s_blocksize;
 	inode->i_mode = 0;
 	inode->i_rdev = 0;
-	inode->i_op = NULL;
 	NFS_FILEID(inode) = 0;
 	NFS_FSID(inode) = 0;
 	NFS_CACHEINV(inode);
@@ -477,12 +470,17 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 		NFS_FILEID(inode) = fattr->fileid;
 		NFS_FSID(inode) = fattr->fsid;
 		inode->i_mode = fattr->mode;
+		/* Why so? Because we want revalidate for devices/FIFOs, and
+		 * that's precisely what we have in nfs_file_inode_operations.
+		 */
+		inode->i_op = &nfs_file_inode_operations;
 		if (S_ISREG(inode->i_mode)) {
-			inode->i_op = &nfs_file_inode_operations;
+			inode->i_fop = &nfs_file_operations;
 			inode->i_data.a_ops = &nfs_file_aops;
-		} else if (S_ISDIR(inode->i_mode))
+		} else if (S_ISDIR(inode->i_mode)) {
 			inode->i_op = &nfs_dir_inode_operations;
-		else if (S_ISLNK(inode->i_mode))
+			inode->i_fop = &nfs_dir_operations;
+		} else if (S_ISLNK(inode->i_mode))
 			inode->i_op = &nfs_symlink_inode_operations;
 		else
 			init_special_inode(inode, inode->i_mode, fattr->rdev);

@@ -22,7 +22,7 @@
  * We have mostly NULL's here: the current defaults are ok for
  * the qnx4 filesystem.
  */
-static struct file_operations qnx4_file_operations =
+struct file_operations qnx4_file_operations =
 {
 	read:			generic_file_read,
 #ifdef CONFIG_QNX4FS_RW
@@ -36,7 +36,6 @@ static struct file_operations qnx4_file_operations =
 
 struct inode_operations qnx4_file_inode_operations =
 {
-	default_file_ops:	&qnx4_file_operations,
 #ifdef CONFIG_QNX4FS_RW
 	truncate:		qnx4_truncate,
 #endif

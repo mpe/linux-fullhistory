@@ -8,11 +8,6 @@
 
 #include "hpfs_fn.h"
 
-ssize_t hpfs_dir_read(struct file *filp, char *name, size_t len, loff_t *loff)
-{
-	return -EISDIR;
-}
-
 int hpfs_dir_release(struct inode *inode, struct file *filp)
 {
 	hpfs_del_pos(inode, &filp->f_pos);

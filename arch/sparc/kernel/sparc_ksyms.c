@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.92 2000/02/21 15:49:59 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.93 2000/02/26 11:02:45 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -92,7 +92,6 @@ __attribute__((section("__ksymtab"))) =				\
 
 /* used by various drivers */
 EXPORT_SYMBOL(sparc_cpu_model);
-EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
 EXPORT_SYMBOL(kernel_thread);
 #ifdef SPIN_LOCK_DEBUG
 EXPORT_SYMBOL(_do_spin_lock);

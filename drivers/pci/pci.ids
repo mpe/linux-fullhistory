@@ -2682,6 +2682,7 @@
 13c0  Microgate Corporation
 	0010  SyncLink WAN Adapter
 13c1  3ware Inc
+	1000  3ware ATA-RAID
 13c2  Technotrend Systemtechnik GmbH
 13c3  Janz Computer AG
 13c4  Phase Metrics
@@ -3424,6 +3425,7 @@
 	71a0  440GX - 82443GX Host bridge
 	71a1  440GX - 82443GX AGP bridge
 	71a2  440GX - 82443GX Host bridge (AGP disabled)
+	7601  82372FB PIIX4 IDE
 	7602  82372FB [PCI-to-USB UHCI]
 	7800  i740
 		1092 0100  Stealth II G460

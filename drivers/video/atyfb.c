@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.139 2000/02/12 22:47:04 davem Exp $
+/*  $Id: atyfb.c,v 1.140 2000/02/25 05:46:27 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -122,10 +122,6 @@
 /*  - must be aligned to a PAGE boundary           */
 #define GUI_RESERVE	(1 * PAGE_SIZE)
 
-
-#ifndef __powerpc__
-#define eieio()		/* Enforce In-order Execution of I/O */
-#endif
 
 /* FIXME: remove the FAIL definition */
 #define FAIL(x) do { printk(x "\n"); return -EINVAL; } while (0)
@@ -3207,25 +3203,18 @@ static void atyfb_save_palette(struct fb_info *fb, int enter)
 			tmp |= 0x2;
 		aty_st_8(DAC_CNTL, tmp, info);
 		aty_st_8(DAC_MASK, 0xff, info);
-		eieio();
+
 		scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 			(info->current_par.crtc.bpp == 16)) ? 3 : 0;
-		info->aty_cmap_regs->rindex = i << scale;
-		eieio();
-		atyfb_save.r[enter][i] = info->aty_cmap_regs->lut;
-		eieio();
-		atyfb_save.g[enter][i] = info->aty_cmap_regs->lut;
-		eieio();
-		atyfb_save.b[enter][i] = info->aty_cmap_regs->lut;
-		eieio();
-		info->aty_cmap_regs->windex = i << scale;
-		eieio();
-		info->aty_cmap_regs->lut = atyfb_save.r[1-enter][i];
-		eieio();
-		info->aty_cmap_regs->lut = atyfb_save.g[1-enter][i];
-		eieio();
-		info->aty_cmap_regs->lut = atyfb_save.b[1-enter][i];
-		eieio();
+		writeb(i << scale, &info->aty_cmap_regs->rindex);
+
+		atyfb_save.r[enter][i] = readb(&info->aty_cmap_regs->lut);
+		atyfb_save.g[enter][i] = readb(&info->aty_cmap_regs->lut);
+		atyfb_save.b[enter][i] = readb(&info->aty_cmap_regs->lut);
+		writeb(i << scale, &info->aty_cmap_regs->windex);
+		writeb(atyfb_save.r[1-enter][i], &info->aty_cmap_regs->lut);
+		writeb(atyfb_save.g[1-enter][i], &info->aty_cmap_regs->lut);
+		writeb(atyfb_save.b[1-enter][i], &info->aty_cmap_regs->lut);
 	}
 }
 
@@ -3278,9 +3267,6 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     u8 pll_ref_div;
 
     info->aty_cmap_regs = (struct aty_cmap_regs *)(info->ati_regbase+0xc0);
-#ifdef __sparc_v9__
-    info->aty_cmap_regs = __va(info->aty_cmap_regs);
-#endif
     chip_id = aty_ld_le32(CONFIG_CHIP_ID, info);
     Gx = chip_id & CFG_CHIP_TYPE;
     Rev = (chip_id & CFG_CHIP_REV)>>24;
@@ -3697,7 +3683,7 @@ int __init atyfb_init(void)
 	    /*
 	     * Map in big-endian aperture.
 	     */
-	    info->frame_buffer = (unsigned long) __va(addr + 0x800000UL);
+	    info->frame_buffer = (unsigned long) addr + 0x800000UL;
 	    info->frame_buffer_phys = addr + 0x800000UL;
 
 	    /*
@@ -3942,7 +3928,7 @@ int __init atyfb_init(void)
 	     * Add /dev/fb mmap values.
 	     */
 	    info->mmap_map[0].voff = 0x8000000000000000UL;
-	    info->mmap_map[0].poff = __pa(info->frame_buffer & PAGE_MASK);
+	    info->mmap_map[0].poff = info->frame_buffer & PAGE_MASK;
 	    info->mmap_map[0].size = info->total_vram;
 	    info->mmap_map[0].prot_mask = _PAGE_CACHE;
 	    info->mmap_map[0].prot_flag = _PAGE_E;
@@ -4273,14 +4259,10 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     aty_st_8(DAC_MASK, 0xff, info);
     scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 	     (info->current_par.crtc.bpp == 16)) ? 3 : 0;
-    info->aty_cmap_regs->windex = regno << scale;
-    eieio();
-    info->aty_cmap_regs->lut = red;
-    eieio();
-    info->aty_cmap_regs->lut = green;
-    eieio();
-    info->aty_cmap_regs->lut = blue;
-    eieio();
+    writeb(regno << scale, &info->aty_cmap_regs->windex);
+    writeb(red, &info->aty_cmap_regs->lut);
+    writeb(green, &info->aty_cmap_regs->lut);
+    writeb(blue, &info->aty_cmap_regs->lut);
     if (regno < 16)
 	switch (info->current_par.crtc.bpp) {
 #ifdef FBCON_HAS_CFB16

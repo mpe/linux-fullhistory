@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.22 2000/01/20 19:44:20 keil Exp $
+/* $Id: l3dss1.c,v 2.23 2000/02/26 01:38:14 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,9 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.23  2000/02/26 01:38:14  keil
+ * Fixes for V.110 encoding LLC from Jens Jakobsen
+ *
  * Revision 2.22  2000/01/20 19:44:20  keil
  * Fixed uninitialiesed location
  * Fixed redirecting number IE in Setup
@@ -104,7 +107,7 @@
 #include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.22 $";
+const char *dss1_revision = "$Revision: 2.23 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -1045,7 +1048,8 @@ u_char *
 EncodeASyncParams(u_char * p, u_char si2)
 {				// 7c 06 88  90 21 42 00 bb
 
-	p[0] = p[1] = 0;
+	p[0] = 0;
+	p[1] = 0x40;		// Intermediate rate: 16 kbit/s jj 2000.02.19
 	p[2] = 0x80;
 	if (si2 & 32)		// 7 data bits
 
@@ -1059,7 +1063,7 @@ EncodeASyncParams(u_char * p, u_char si2)
 		p[2] += 96;
 	else			// 1 stop bit
 
-		p[2] = 32;
+		p[2] += 32;
 
 	if (si2 & 8)		// even parity
 

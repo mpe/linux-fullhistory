@@ -88,7 +88,7 @@ int open_dentry(struct dentry * dentry, int mode)
 		l = &inode->i_sb->s_files;
 
 	error = -EINVAL;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!inode->i_fop)
 		goto out;
 	fd = get_unused_fd();
 	if (fd >= 0) {
@@ -101,7 +101,7 @@ int open_dentry(struct dentry * dentry, int mode)
 		f->f_dentry = dentry;
 		f->f_pos = 0;
 		f->f_reada = 0;
-		f->f_op = inode->i_op->default_file_ops;
+		f->f_op = inode->i_fop;
 		if (f->f_op->open) {
 			error = f->f_op->open(inode,f);
 			if (error)
@@ -352,7 +352,7 @@ int read_exec(struct dentry *dentry, unsigned long offset,
 	struct inode * inode = dentry->d_inode;
 	int result = -ENOEXEC;
 
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!inode->i_fop)
 		goto end_readexec;
 	if (init_private_file(&file, dentry, 1))
 		goto end_readexec;
@@ -900,7 +900,7 @@ int do_coredump(long signr, struct pt_regs * regs)
 
 	if (!S_ISREG(inode->i_mode))
 		goto close_fail;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!inode->i_fop)
 		goto close_fail;
 	if (!file->f_op->write)
 		goto close_fail;

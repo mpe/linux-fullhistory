@@ -1,4 +1,4 @@
-/* $Id: hfc_2bs0.c,v 1.12 1999/12/19 14:17:12 keil Exp $
+/* $Id: hfc_2bs0.c,v 1.13 2000/02/26 00:35:12 keil Exp $
 
  *  specific routines for CCD's HFC 2BS0
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfc_2bs0.c,v $
+ * Revision 1.13  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.12  1999/12/19 14:17:12  keil
  * fix compiler warning
  *
@@ -249,7 +252,7 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 		if (idx != count) {
 			debugl1(cs, "RFIFO BUSY error");
 			printk(KERN_WARNING "HFC FIFO channel %d BUSY Error\n", bcs->channel);
-			dev_kfree_skb(skb);
+			dev_kfree_skb_any(skb);
 			if (bcs->mode != L1_MODE_TRANS) {
 			  WaitNoBusy(cs);
 			  stat = cs->BC_Read_Reg(cs, HFC_DATA, HFC_CIP | HFC_F2_INC | HFC_REC |
@@ -270,7 +273,7 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 			    bcs->channel, chksum, stat);
 		  if (stat) {
 		    debugl1(cs, "FIFO CRC error");
-		    dev_kfree_skb(skb);
+		    dev_kfree_skb_any(skb);
 		    skb = NULL;
 #ifdef ERROR_STATISTIC
 		    bcs->err_crc++;
@@ -359,7 +362,7 @@ hfc_fill_fifo(struct BCState *bcs)
 		bcs->tx_cnt -= count;
 		if (PACKET_NOACK == bcs->tx_skb->pkt_type)
 			count = -1;
-		dev_kfree_skb(bcs->tx_skb);
+		dev_kfree_skb_any(bcs->tx_skb);
 		bcs->tx_skb = NULL;
 		if (bcs->mode != L1_MODE_TRANS) {
 		  WaitForBusy(cs);
@@ -573,7 +576,7 @@ close_hfcstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

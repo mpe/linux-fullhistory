@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.9		Jul   4, 1999
+ * linux/drivers/block/ide-floppy.c	Version 0.9	Jul   4, 1999
  *
  * Copyright (C) 1996 - 1999 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -1264,8 +1264,11 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 		blocks = descriptor->blocks = ntohl (descriptor->blocks);
 		length = descriptor->length = ntohs (descriptor->length);
 		if (!i && descriptor->dc == CAPACITY_CURRENT) {
-			if (memcmp (descriptor, &floppy->capacity, sizeof (idefloppy_capacity_descriptor_t)))
-				printk (KERN_INFO "%s: %dkB, %d blocks, %d sector size\n", drive->name, blocks * length / 1024, blocks, length);
+			if (memcmp (descriptor, &floppy->capacity, sizeof (idefloppy_capacity_descriptor_t))) {
+				printk (KERN_INFO "%s: %dkB, %d blocks, %d sector size, %s \n",
+					drive->name, blocks * length / 1024, blocks, length,
+					drive->using_dma ? ", DMA":"");
+			}
 			floppy->capacity = *descriptor;
 			if (!length || length % 512)
 				printk (KERN_ERR "%s: %d bytes block size not supported\n", drive->name, length);

@@ -23,20 +23,18 @@ static int autofs_root_rmdir(struct inode *,struct dentry *);
 static int autofs_root_mkdir(struct inode *,struct dentry *,int);
 static int autofs_root_ioctl(struct inode *, struct file *,unsigned int,unsigned long);
 
-static struct file_operations autofs_root_operations = {
+struct file_operations autofs_root_operations = {
+	read:		generic_read_dir,
 	readdir:	autofs_root_readdir,
 	ioctl:		autofs_root_ioctl,
 };
 
 struct inode_operations autofs_root_inode_operations = {
-        &autofs_root_operations, /* file operations */
-        NULL,                   /* create */
-        autofs_root_lookup,     /* lookup */
-        NULL,                   /* link */
-        autofs_root_unlink,     /* unlink */
-        autofs_root_symlink,    /* symlink */
-        autofs_root_mkdir,      /* mkdir */
-        autofs_root_rmdir,      /* rmdir */
+        lookup:		autofs_root_lookup,
+        unlink:		autofs_root_unlink,
+        symlink:	autofs_root_symlink,
+        mkdir:		autofs_root_mkdir,
+        rmdir:		autofs_root_rmdir,
 };
 
 static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldir)

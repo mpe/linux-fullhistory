@@ -1002,15 +1002,11 @@ static unsigned int usbdev_poll(struct file *file, struct poll_table_struct *wai
 	return mask;
 }
 
-static struct file_operations usbdevfs_device_file_operations = {
+struct file_operations usbdevfs_device_file_operations = {
 	llseek:		usbdev_lseek,
 	read:		usbdev_read,
 	poll:		usbdev_poll,
 	ioctl:		usbdev_ioctl,
 	open:		usbdev_open,
 	release:	usbdev_release,
-};
-
-struct inode_operations usbdevfs_device_inode_operations = {
-        &usbdevfs_device_file_operations,  /* file-ops */
 };

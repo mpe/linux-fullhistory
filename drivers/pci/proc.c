@@ -197,10 +197,6 @@ static struct file_operations proc_bus_pci_operations = {
 	write:	proc_bus_pci_write,
 };
 
-static struct inode_operations proc_bus_pci_inode_operations = {
-	&proc_bus_pci_operations, /* default base directory file-ops */
-};
-
 #if BITS_PER_LONG == 32
 #define LONG_FORMAT "\t%08lx"
 #else
@@ -265,7 +261,7 @@ int pci_proc_attach_device(struct pci_dev *dev)
 	e = dev->procent = create_proc_entry(name, S_IFREG | S_IRUGO | S_IWUSR, de);
 	if (!e)
 		return -ENOMEM;
-	e->ops = &proc_bus_pci_inode_operations;
+	e->proc_fops = &proc_bus_pci_operations;
 	e->data = dev;
 	e->size = PCI_CFG_SPACE_SIZE;
 	return 0;

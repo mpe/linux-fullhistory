@@ -25,6 +25,12 @@ inline int coda_fideq(ViceFid *fid1, ViceFid *fid2)
 	return 1;
 }
 
+static struct inode_operations coda_symlink_inode_operations = {
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	setattr:	coda_notify_change,
+};
+
 /* cnode.c */
 static void coda_fill_inode(struct inode *inode, struct coda_vattr *attr)
 {
@@ -35,12 +41,14 @@ static void coda_fill_inode(struct inode *inode, struct coda_vattr *attr)
 
         coda_vattr_to_iattr(inode, attr);
 
-        if (S_ISREG(inode->i_mode))
+        if (S_ISREG(inode->i_mode)) {
                 inode->i_op = &coda_file_inode_operations;
-        else if (S_ISDIR(inode->i_mode))
+                inode->i_fop = &coda_file_operations;
+        } else if (S_ISDIR(inode->i_mode)) {
                 inode->i_op = &coda_dir_inode_operations;
-        else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &page_symlink_inode_operations;
+                inode->i_fop = &coda_dir_operations;
+        } else if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &coda_symlink_inode_operations;
 		inode->i_data.a_ops = &coda_symlink_aops;
 	} else
                 init_special_inode(inode, inode->i_mode, attr->va_rdev);
@@ -259,6 +267,7 @@ int coda_cnode_makectl(struct inode **inode, struct super_block *sb)
     *inode = iget(sb, CTL_INO);
     if ( *inode ) {
 	(*inode)->i_op = &coda_ioctl_inode_operations;
+	(*inode)->i_fop = &coda_ioctl_operations;
 	(*inode)->i_mode = 00444;
 	error = 0;
     } else { 

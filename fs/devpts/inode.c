@@ -62,16 +62,10 @@ static void devpts_read_inode(struct inode *inode);
 static void devpts_write_inode(struct inode *inode);
 
 static struct super_operations devpts_sops = {
-	devpts_read_inode,
-	devpts_write_inode,
-	NULL,			/* put_inode */
-	NULL,			/* delete_inode */
-	NULL,			/* notify_change */
-	devpts_put_super,
-	NULL,			/* write_super */
-	devpts_statfs,
-	NULL,			/* remount_fs */
-	NULL,			/* clear_inode */
+	read_inode:	devpts_read_inode,
+	write_inode:	devpts_write_inode,
+	put_super:	devpts_put_super,
+	statfs:		devpts_statfs,
 };
 
 static int devpts_parse_options(char *options, struct devpts_sb_info *sbi)
@@ -264,7 +258,6 @@ static void devpts_read_inode(struct inode *inode)
 	ino_t ino = inode->i_ino;
 	struct devpts_sb_info *sbi = SBI(inode->i_sb);
 
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_nlink = 0;
 	inode->i_size = 0;
@@ -276,6 +269,7 @@ static void devpts_read_inode(struct inode *inode)
 	if ( ino == 1 ) {
 		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 		inode->i_op = &devpts_root_inode_operations;
+		inode->i_fop = &devpts_root_operations;
 		inode->i_nlink = 2;
 		return;
 	} 

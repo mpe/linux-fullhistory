@@ -186,6 +186,7 @@ static int	ide_lock = 0;
  * ide_modules keeps track of the available IDE chipset/probe/driver modules.
  */
 ide_module_t *ide_modules = NULL;
+ide_module_t *ide_probe = NULL;
 
 /*
  * This is declared extern in ide.h, for access by other IDE modules:
@@ -281,7 +282,7 @@ static void init_hwif_data (unsigned int index)
  * for the max possible number (MAX_HWIFS * MAX_DRIVES) of them.
  */
 #define MAGIC_COOKIE 0x12345678
-static void init_ide_data (void)
+static void __init init_ide_data (void)
 {
 	unsigned int index;
 	static unsigned long magic_cookie = MAGIC_COOKIE;
@@ -1093,13 +1094,18 @@ static ide_startstop_t start_request (ide_drive_t *drive)
 #endif
 	block    = rq->sector;
 	blockend = block + rq->nr_sectors;
-	if ((blockend < block) || (blockend > drive->part[minor&PARTN_MASK].nr_sects)) {
-		printk("%s%c: bad access: block=%ld, count=%ld\n", drive->name,
-		 (minor&PARTN_MASK)?'0'+(minor&PARTN_MASK):' ', block, rq->nr_sectors);
-		goto kill_rq;
+#if 0
+	if ((rq->cmd == READ || rq->cmd == WRITE) &&
+	    (drive->media == ide_disk || drive->media == ide_floppy))
+#endif
+	{
+		if ((blockend < block) || (blockend > drive->part[minor&PARTN_MASK].nr_sects)) {
+			printk("%s%c: bad access: block=%ld, count=%ld\n", drive->name,
+			 (minor&PARTN_MASK)?'0'+(minor&PARTN_MASK):' ', block, rq->nr_sectors);
+			goto kill_rq;
+		}
+		block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
 	}
-	block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
-
 	/* Yecch - this will shift the entire interval,
 	   possibly killing some innocent following sector */
 	if (block == 0 && drive->remap_0_to_1 == 1)
@@ -1409,9 +1415,9 @@ void ide_timer_expiry (unsigned long data)
 		}
 	} else {
 		ide_drive_t *drive = hwgroup->drive;
-		hwgroup->handler = NULL;
 		if (!drive) {
 			printk("ide_timer_expiry: hwgroup->drive was NULL\n");
+			hwgroup->handler = NULL;
 		} else {
 			ide_hwif_t *hwif;
 			ide_startstop_t startstop;
@@ -1429,6 +1435,7 @@ void ide_timer_expiry (unsigned long data)
 					return;
 				}
 			}
+			hwgroup->handler = NULL;
 			/*
 			 * We need to simulate a real interrupt when invoking
 			 * the handler() function, which means we need to globally
@@ -1436,7 +1443,7 @@ void ide_timer_expiry (unsigned long data)
 			 */
 			spin_unlock(&io_request_lock);
 			hwif  = HWIF(drive);
-			disable_irq(hwif->irq);
+			disable_irq(hwif->irq);	/* disable_irq_nosync ?? */
 			__cli();	/* local CPU only, as if we were handling an interrupt */
 			if (hwgroup->poll_timeout != 0) {
 				startstop = handler(drive);
@@ -1802,23 +1809,33 @@ static void revalidate_drives (void)
 	}
 }
 
-static void ide_init_module (int type)
+static void ide_probe_module (void)
 {
-	int found = 0;
+	if (!ide_probe) {
+#ifdef CONFIG_KMOD
+		(void) request_module("ide-probe-mod");
+#endif /* CONFIG_KMOD */
+	} else {
+		(void) ide_probe->init();
+	}
+	revalidate_drives();
+}
+
+static void ide_driver_module (void)
+{
+	int index;
 	ide_module_t *module = ide_modules;
-	
+
+	for (index = 0; index < MAX_HWIFS; ++index)
+		if (ide_hwifs[index].present)
+			goto search;
+	ide_probe_module();
+search:
 	while (module) {
-		if (module->type == type) {
-			found = 1;
-			(void) module->init();
-		}
+		(void) module->init();
 		module = module->next;
 	}
 	revalidate_drives();
-#ifdef CONFIG_KMOD
-	if (!found && type == IDE_PROBE_MODULE)
-		(void) request_module("ide-probe-mod");
-#endif /* CONFIG_KMOD */
 }
 
 static int ide_open (struct inode * inode, struct file * filp)
@@ -1830,7 +1847,7 @@ static int ide_open (struct inode * inode, struct file * filp)
 		return -ENXIO;
 	MOD_INC_USE_COUNT;
 	if (drive->driver == NULL)
-		ide_init_module(IDE_DRIVER_MODULE);
+		ide_driver_module();
 #ifdef CONFIG_KMOD
 	if (drive->driver == NULL) {
 		if (drive->media == ide_disk)
@@ -1881,9 +1898,9 @@ int ide_replace_subdriver (ide_drive_t *drive, const char *driver)
 	if (drive->driver != NULL && DRIVER(drive)->cleanup(drive))
 		goto abort;
 	strncpy(drive->driver_req, driver, 9);
-	ide_init_module(IDE_DRIVER_MODULE);
+	ide_driver_module();
 	drive->driver_req[0] = 0;
-	ide_init_module(IDE_DRIVER_MODULE);
+	ide_driver_module();
 	if (DRIVER(drive) && !strcmp(DRIVER(drive)->name, driver))
 		return 0;
 abort:
@@ -1896,6 +1913,35 @@ ide_proc_entry_t generic_subdriver_entries[] = {
 	{ NULL, 0, NULL, NULL }
 };
 #endif
+
+/*
+ * Note that we only release the standard ports,
+ * and do not even try to handle any extra ports
+ * allocated for weird IDE interface chipsets.
+ */
+void hwif_unregister (ide_hwif_t *hwif)
+{
+	if (hwif->io_ports[IDE_DATA_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_DATA_OFFSET], 1);
+	if (hwif->io_ports[IDE_ERROR_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_ERROR_OFFSET], 1);
+	if (hwif->io_ports[IDE_NSECTOR_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_NSECTOR_OFFSET], 1);
+	if (hwif->io_ports[IDE_SECTOR_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_SECTOR_OFFSET], 1);
+	if (hwif->io_ports[IDE_LCYL_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_LCYL_OFFSET], 1);
+	if (hwif->io_ports[IDE_HCYL_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_HCYL_OFFSET], 1);
+	if (hwif->io_ports[IDE_SELECT_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_SELECT_OFFSET], 1);
+	if (hwif->io_ports[IDE_STATUS_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_STATUS_OFFSET], 1);
+	if (hwif->io_ports[IDE_CONTROL_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
+	if (hwif->io_ports[IDE_IRQ_OFFSET])
+		ide_release_region(hwif->io_ports[IDE_IRQ_OFFSET], 1);
+}
 
 void ide_unregister (unsigned int index)
 {
@@ -1967,9 +2013,7 @@ void ide_unregister (unsigned int index)
 	 * and do not even try to handle any extra ports
 	 * allocated for weird IDE interface chipsets.
 	 */
-	ide_release_region(hwif->io_ports[IDE_DATA_OFFSET], 8);
-	if (hwif->io_ports[IDE_CONTROL_OFFSET])
-		ide_release_region(hwif->io_ports[IDE_CONTROL_OFFSET], 1);
+	hwif_unregister(hwif);
 
 	/*
 	 * Remove us from the hwgroup, and free
@@ -2036,23 +2080,28 @@ void ide_unregister (unsigned int index)
 			kfree (gd->flags);
 		kfree(gd);
 	}
-	old_hwif = *hwif;
+	old_hwif		= *hwif;
 	init_hwif_data (index);	/* restore hwif data to pristine status */
-	hwif->hwgroup = old_hwif.hwgroup;
-	hwif->tuneproc = old_hwif.tuneproc;
-	hwif->resetproc = old_hwif.resetproc;
-	hwif->dmaproc = old_hwif.dmaproc;
-	hwif->dma_base = old_hwif.dma_base;
-	hwif->dma_extra = old_hwif.dma_extra;
-	hwif->config_data = old_hwif.config_data;
-	hwif->select_data = old_hwif.select_data;
-	hwif->irq = old_hwif.irq;
-	hwif->major = old_hwif.major;
-	hwif->proc = old_hwif.proc;
-	hwif->udma_four = old_hwif.udma_four;
-	hwif->chipset = old_hwif.chipset;
-	hwif->pci_dev = old_hwif.pci_dev;
-	hwif->pci_devid = old_hwif.pci_devid;
+	hwif->hwgroup		= old_hwif.hwgroup;
+	hwif->tuneproc		= old_hwif.tuneproc;
+	hwif->selectproc	= old_hwif.selectproc;
+	hwif->resetproc		= old_hwif.resetproc;
+	hwif->dmaproc		= old_hwif.dmaproc;
+	hwif->dma_base		= old_hwif.dma_base;
+	hwif->dma_extra		= old_hwif.dma_extra;
+	hwif->config_data	= old_hwif.config_data;
+	hwif->select_data	= old_hwif.select_data;
+	hwif->proc		= old_hwif.proc;
+	hwif->irq		= old_hwif.irq;
+	hwif->major		= old_hwif.major;
+	hwif->chipset		= old_hwif.chipset;
+	hwif->autodma		= old_hwif.autodma;
+	hwif->udma_four		= old_hwif.udma_four;
+#ifdef CONFIG_BLK_DEV_IDEPCI
+	hwif->pci_dev		= old_hwif.pci_dev;
+	hwif->pci_devid		= old_hwif.pci_devid;
+#endif /* CONFIG_BLK_DEV_IDEPCI */
+
 abort:
 	restore_flags(flags);	/* all CPUs */
 }
@@ -2087,6 +2136,7 @@ void ide_setup_ports (	hw_regs_t *hw,
 		}
 	}
 	hw->irq = irq;
+	hw->dma = NO_DMA;
 	hw->ack_intr = ack_intr;
 }
 
@@ -2126,11 +2176,11 @@ found:
 	hwif->noprobe = 0;
 
 	if (!initializing) {
-		ide_init_module(IDE_PROBE_MODULE);
+		ide_probe_module();
 #ifdef CONFIG_PROC_FS
 		create_proc_ide_interfaces();
 #endif
-		ide_init_module(IDE_DRIVER_MODULE);
+		ide_driver_module();
 	}
 
 	if (hwifp)
@@ -2750,7 +2800,7 @@ int __init ide_setup (char *s)
 	if (!strcmp(s, "ide=doubler")) {
 		extern int ide_doubler;
 
-		printk("ide: Enabled support for IDE doublers\n");
+		printk(" : Enabled support for IDE doublers\n");
 		ide_doubler = 1;
 		return 0;
 	}
@@ -2759,12 +2809,14 @@ int __init ide_setup (char *s)
 #ifdef CONFIG_BLK_DEV_IDEPCI
 	if (!strcmp(s, "ide=reverse")) {
 		ide_scan_direction = 1;
-		printk("ide: Enabled support for IDE inverse scan order.\n");
+		printk(" : Enabled support for IDE inverse scan order.\n");
 		return 0;
 	}
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 
+#ifndef CONFIG_BLK_DEV_IDEPCI
 	init_ide_data ();
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 
 	/*
 	 * Look for drive options:  "hdx="
@@ -3176,7 +3228,7 @@ void __init ide_init_builtin_drivers (void)
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 	if (ide_hwifs[0].io_ports[IDE_DATA_OFFSET]) {
 		ide_get_lock(&ide_lock, NULL, NULL);	/* for atari only */
-		disable_irq(ide_hwifs[0].irq);
+		disable_irq(ide_hwifs[0].irq);	/* disable_irq_nosync ?? */
 	}
 #endif /* __mc68000__ || CONFIG_APUS */
 
@@ -3293,10 +3345,6 @@ ide_drive_t *ide_scan_devices (byte media, const char *name, ide_driver_t *drive
 {
 	unsigned int unit, index, i;
 
-	for (index = 0; index < MAX_HWIFS; ++index)
-		if (ide_hwifs[index].present) goto search;
-	ide_init_module(IDE_PROBE_MODULE);
-search:
 	for (index = 0, i = 0; index < MAX_HWIFS; ++index) {
 		ide_hwif_t *hwif = &ide_hwifs[index];
 		if (!hwif->present)
@@ -3327,8 +3375,16 @@ int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int versio
 	setup_driver_defaults(drive);
 	restore_flags(flags);		/* all CPUs */
 	if (drive->autotune != 2) {
-		if (driver->supports_dma && HWIF(drive)->dmaproc != NULL)
+		if (driver->supports_dma && HWIF(drive)->dmaproc != NULL) {
+			/*
+			 * Force DMAing for the beginning of the check.
+			 * Some chipsets appear to do interesting things,
+			 * if not checked and cleared.
+			 *   PARANOIA!!!
+			 */
+			(void) (HWIF(drive)->dmaproc(ide_dma_off_quietly, drive));
 			(void) (HWIF(drive)->dmaproc(ide_dma_check, drive));
+		}
 		drive->dsc_overlap = (drive->next != drive && driver->supports_dsc_overlap);
 		drive->nice1 = 1;
 	}
@@ -3400,6 +3456,7 @@ EXPORT_SYMBOL(ide_spin_wait_hwgroup);
 /*
  * Probe module
  */
+EXPORT_SYMBOL(ide_probe);
 EXPORT_SYMBOL(drive_is_flashcard);
 EXPORT_SYMBOL(ide_timer_expiry);
 EXPORT_SYMBOL(ide_intr);
@@ -3474,7 +3531,7 @@ EXPORT_SYMBOL(ide_register_hw);
 EXPORT_SYMBOL(ide_register);
 EXPORT_SYMBOL(ide_unregister);
 EXPORT_SYMBOL(ide_setup_ports);
-
+EXPORT_SYMBOL(hwif_unregister);
 EXPORT_SYMBOL(get_info_ptr);
 EXPORT_SYMBOL(current_capacity);
 
@@ -3539,13 +3596,9 @@ void cleanup_module (void)
 {
 	int index;
 
-	for (index = 0; index < MAX_HWIFS; ++index) {
+	for (index = 0; index < MAX_HWIFS; ++index)
 		ide_unregister(index);
-#ifdef CONFIG_BLK_DEV_IDEDMA
-		if (ide_hwifs[index].dma_base)
-			(void) ide_release_dma(&ide_hwifs[index]);
-#endif /* CONFIG_BLK_DEV_IDEDMA */
-	}
+
 #ifdef CONFIG_PROC_FS
 	proc_ide_destroy();
 #endif

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/cs5530.c		Version 0.5	Feb 13, 2000
+ * linux/drivers/block/cs5530.c			Version 0.5	Feb 13, 2000
  *
  * Copyright (C) 2000			Mark Lord <mlord@pobox.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -24,130 +24,63 @@
 #include <asm/irq.h>
 #include "ide_modes.h"
 
-/*
- * Return the mode name for a drive transfer mode value:
- */
-static const char *strmode (byte mode)
+#define DISPLAY_CS5530_TIMINGS
+
+#if defined(DISPLAY_CS5530_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+
+static int cs5530_get_info(char *, char **, off_t, int);
+extern int (*cs5530_display_info)(char *, char **, off_t, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+
+static int cs5530_get_info (char *buffer, char **addr, off_t offset, int count)
 {
-	switch (mode) {
-		case XFER_UDMA_4:	return("UDMA4");
-		case XFER_UDMA_3:	return("UDMA3");
-		case XFER_UDMA_2:	return("UDMA2");
-		case XFER_UDMA_1:	return("UDMA1");
-		case XFER_UDMA_0:	return("UDMA0");
-		case XFER_MW_DMA_2:	return("MDMA2");
-		case XFER_MW_DMA_1:	return("MDMA1");
-		case XFER_MW_DMA_0:	return("MDMA0");
-		case XFER_SW_DMA_2:	return("SDMA2");
-		case XFER_SW_DMA_1:	return("SDMA1");
-		case XFER_SW_DMA_0:	return("SDMA0");
-		case XFER_PIO_4:	return("PIO4");
-		case XFER_PIO_3:	return("PIO3");
-		case XFER_PIO_2:	return("PIO2");
-		case XFER_PIO_1:	return("PIO1");
-		case XFER_PIO_0:	return("PIO0");
-		default:		return("???");
-	}
+	char *p = buffer;
+	u32 bibma = bmide_dev->resource[4].start;
+	u8  c0 = 0, c1 = 0;
+
+	/*
+	 * at that point bibma+0x2 et bibma+0xa are byte registers
+	 * to investigate:
+	 */
+
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	c1 = inb_p((unsigned short)bibma + 0x0a);
+
+	p += sprintf(p, "\n                                Cyrix 5530 Chipset.\n");
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
+
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
+
+	return p-buffer;
 }
+#endif /* DISPLAY_CS5530_TIMINGS && CONFIG_PROC_FS */
+
+byte cs5530_proc = 0;
+
+extern char *ide_xfer_verbose (byte xfer_rate);
 
 /*
  * Set a new transfer mode at the drive
  */
 int cs5530_set_xfer_mode (ide_drive_t *drive, byte mode)
 {
-	int		i, error = 1;
-	byte		stat;
-	ide_hwif_t	*hwif = HWIF(drive);
+	int error = 0;
 
-	printk("%s: cs5530_set_xfer_mode(%s)\n", drive->name, strmode(mode));
-	/*
-	 * If this is a DMA mode setting, then turn off all DMA bits.
-	 * We will set one of them back on afterwards, if all goes well.
-	 *
-	 * Not sure why this is needed (it looks very silly),
-	 * but other IDE chipset drivers also do this fiddling.  ???? -ml
- 	 */
-	switch (mode) {
-		case XFER_UDMA_4:
-		case XFER_UDMA_3:
-		case XFER_UDMA_2:
-		case XFER_UDMA_1:
-		case XFER_UDMA_0:
-		case XFER_MW_DMA_2:
-		case XFER_MW_DMA_1:
-		case XFER_MW_DMA_0:
-		case XFER_SW_DMA_2:
-		case XFER_SW_DMA_1:
-		case XFER_SW_DMA_0:
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-	}
+	printk("%s: cs5530_set_xfer_mode(%s)\n", drive->name, ide_xfer_verbose(mode));
+	error = ide_config_drive_speed(drive, mode);
 
-	/*
-	 * Select the drive, and issue the SETFEATURES command
-	 */
-	disable_irq(hwif->irq);
-	udelay(1);
-	SELECT_DRIVE(HWIF(drive), drive);
-	udelay(1);
-	if (IDE_CONTROL_REG)
-		OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
-	OUT_BYTE(mode, IDE_NSECTOR_REG);
-	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
-	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
-	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
-
-	/*
-	 * Wait for drive to become non-BUSY
-	 */
-	if ((stat = GET_STAT()) & BUSY_STAT) {
-		unsigned long flags, timeout;
-		__save_flags(flags);	/* local CPU only */
-		ide__sti();		/* local CPU only -- for jiffies */
-		timeout = jiffies + WAIT_CMD;
-		while ((stat = GET_STAT()) & BUSY_STAT) {
-			if (0 < (signed long)(jiffies - timeout))
-				break;
-		}
-		__restore_flags(flags); /* local CPU only */
-	}
-
-	/*
-	 * Allow status to settle, then read it again.
-	 * A few rare drives vastly violate the 400ns spec here,
-	 * so we'll wait up to 10usec for a "good" status
-	 * rather than expensively fail things immediately.
-	 */
-	for (i = 0; i < 10; i++) {
-		udelay(1);
-		if (OK_STAT((stat = GET_STAT()), DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT)) {
-			error = 0;
-			break;
-		}
-	}
-	enable_irq(hwif->irq);
-
-	/*
-	 * Turn dma bit on if all is okay
-	 */
-	if (error) {
-		(void) ide_dump_status(drive, "cs5530_set_xfer_mode", stat);
-	} else {
-		switch (mode) {
-			case XFER_UDMA_4:   drive->id->dma_ultra |= 0x1010; break;
-			case XFER_UDMA_3:   drive->id->dma_ultra |= 0x0808; break;
-			case XFER_UDMA_2:   drive->id->dma_ultra |= 0x0404; break;
-			case XFER_UDMA_1:   drive->id->dma_ultra |= 0x0202; break;
-			case XFER_UDMA_0:   drive->id->dma_ultra |= 0x0101; break;
-			case XFER_MW_DMA_2: drive->id->dma_mword |= 0x0404; break;
-			case XFER_MW_DMA_1: drive->id->dma_mword |= 0x0202; break;
-			case XFER_MW_DMA_0: drive->id->dma_mword |= 0x0101; break;
-			case XFER_SW_DMA_2: drive->id->dma_1word |= 0x0404; break;
-			case XFER_SW_DMA_1: drive->id->dma_1word |= 0x0202; break;
-			case XFER_SW_DMA_0: drive->id->dma_1word |= 0x0101; break;
-		}
-	}
 	return error;
 }
 
@@ -302,8 +235,10 @@ int cs5530_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_check:
 			return cs5530_config_dma(drive);
 		default:
-			return ide_dmaproc(func, drive);
+			break;
 	}
+	/* Other cases are done by generic IDE-DMA code. */
+	return ide_dmaproc(func, drive);
 }
 
 /*
@@ -384,6 +319,13 @@ unsigned int __init pci_init_cs5530 (struct pci_dev *dev, const char *name)
 	pci_write_config_byte(master_0, 0x43, 0xc1);
 
 	restore_flags(flags);
+
+#if defined(DISPLAY_CS5530_TIMINGS) && defined(CONFIG_PROC_FS)
+	cs5530_proc = 1;
+	bmide_dev = dev;
+	cs5530_display_info = &cs5530_get_info;
+#endif /* DISPLAY_CS5530_TIMINGS && CONFIG_PROC_FS */
+
 	return 0;
 }
 

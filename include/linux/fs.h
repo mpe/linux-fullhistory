@@ -385,6 +385,7 @@ struct inode {
 	unsigned long		i_version;
 	struct semaphore	i_sem;
 	struct inode_operations	*i_op;
+	struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 	struct super_block	*i_sb;
 	wait_queue_head_t	i_wait;
 	struct file_lock	*i_flock;
@@ -668,7 +669,6 @@ struct file_operations {
 };
 
 struct inode_operations {
-	struct file_operations * default_file_ops;
 	int (*create) (struct inode *,struct dentry *,int);
 	struct dentry * (*lookup) (struct inode *,struct dentry *);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
@@ -684,6 +684,8 @@ struct inode_operations {
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*revalidate) (struct dentry *);
+	int (*setattr) (struct dentry *, struct iattr *);
+	int (*getattr) (struct dentry *, struct iattr *);
 };
 
 /*
@@ -695,7 +697,6 @@ struct super_operations {
 	void (*write_inode) (struct inode *);
 	void (*put_inode) (struct inode *);
 	void (*delete_inode) (struct inode *);
-	int (*notify_change) (struct dentry *, struct iattr *);
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	int (*statfs) (struct super_block *, struct statfs *, int);
@@ -796,6 +797,7 @@ extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
 extern struct file_operations def_blk_fops;
+extern struct file_operations def_fifo_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
 extern int blkdev_get(struct block_device *, mode_t, unsigned, int);
 extern int blkdev_put(struct block_device *, int);
@@ -810,9 +812,6 @@ extern const char * bdevname(kdev_t);
 extern const char * cdevname(kdev_t);
 extern const char * kdevname(kdev_t);
 extern void init_special_inode(struct inode *, umode_t, int);
-
-extern struct inode_operations fifo_inode_operations;
-extern struct inode_operations blkdev_inode_operations;
 
 /* Invalid inode operations -- fs/bad_inode.c */
 extern void make_bad_inode(struct inode *);
@@ -1018,6 +1017,10 @@ extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *);
 extern void do_generic_file_read(struct file *, loff_t *, read_descriptor_t *, read_actor_t);
+
+extern ssize_t generic_read_dir(struct file *, char *, size_t, loff_t *);
+
+extern struct file_operations generic_ro_fops;
 
 extern int vfs_readlink(struct dentry *, char *, int, const char *);
 extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, const char *);

@@ -68,11 +68,23 @@ primarily needed in a situation where balancing can not be done,
 probably because all allocation requests are coming from intr context
 and all process contexts are sleeping. For 2.3, kswapd does not really
 need to balance the highmem zone, since intr context does not request
-highmem pages. A zone aware kswapd still needs to be implemented.
+highmem pages. kswapd looks at the zone_wake_kswapd field in the zone
+structure to decide whether a zone needs balancing.
 
 Page stealing from process memory and shm is done if stealing the page would
 alleviate memory pressure on any zone in the page's node that has fallen below
 its watermark.
+
+pages_min/pages_low/pages_high/low_on_memory/zone_wake_kswapd: These are 
+per-zone fields, used to determine when a zone needs to be balanced. When
+the number of pages falls below pages_min, the hysteric field low_on_memory
+gets set. This stays set till the number of free pages becomes pages_high.
+When low_on_memory is set, page allocation requests will try to free some
+pages in the zone (providing GFP_WAIT is set in the request). Orthogonal
+to this, is the decision to poke kswapd to free some zone pages. That
+decision is not hysteresis based, and is done when the number of free
+pages is below pages_low; in which case zone_wake_kswapd is also set.
+
 
 (Good) Ideas that I have heard:
 1. Dynamic experience should influence balancing: number of failed requests

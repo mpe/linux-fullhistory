@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/pdc4030.h
+ *  linux/drivers/ide/pdc4030.h
  *
  *  Copyright (C) 1995-1998  Linus Torvalds & authors
  */

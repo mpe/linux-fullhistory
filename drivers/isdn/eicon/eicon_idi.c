@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.29 2000/01/23 21:21:23 armin Exp $
+/* $Id: eicon_idi.c,v 1.31 2000/02/22 16:26:40 armin Exp $
  *
  * ISDN lowlevel-module for Eicon active cards.
  *        IDI interface 
@@ -26,6 +26,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.c,v $
+ * Revision 1.31  2000/02/22 16:26:40  armin
+ * Fixed membase error message.
+ * Fixed missing log buffer struct.
+ *
+ * Revision 1.30  2000/02/16 16:08:46  armin
+ * Fixed virtual channel handling of IDI.
+ *
  * Revision 1.29  2000/01/23 21:21:23  armin
  * Added new trace capability and some updates.
  * DIVA Server BRI now supports data for ISDNLOG.
@@ -149,7 +156,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.29 $";
+char *eicon_idi_revision = "$Revision: 1.31 $";
 
 eicon_manifbuf *manbuf;
 
@@ -255,10 +262,10 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 }
 
 int
-idi_put_req(eicon_REQ *reqbuf, int rq, int signet)
+idi_put_req(eicon_REQ *reqbuf, int rq, int signet, int Ch)
 {
 	reqbuf->Req = rq;
-	reqbuf->ReqCh = 0;
+	reqbuf->ReqCh = Ch;
 	reqbuf->ReqId = 1;
 	reqbuf->XBuffer.length = 1;
 	reqbuf->XBuffer.P[0] = 0;
@@ -368,34 +375,34 @@ idi_do_req(eicon_card *card, eicon_chan *chan, int cmd, int layer)
 			break;
 		case REMOVE:
 		case REMOVE|0x700:
-			idi_put_req(reqbuf, REMOVE, layer);
+			idi_put_req(reqbuf, REMOVE, layer, 0);
 			break;
 		case INDICATE_REQ:
-			idi_put_req(reqbuf, INDICATE_REQ, 0);
+			idi_put_req(reqbuf, INDICATE_REQ, 0, 0);
 			break;
 		case HANGUP:
-			idi_put_req(reqbuf, HANGUP, 0);
+			idi_put_req(reqbuf, HANGUP, 0, 0);
 			break;
 		case REJECT:
-			idi_put_req(reqbuf, REJECT, 0);
+			idi_put_req(reqbuf, REJECT, 0 ,0);
 			break;
 		case CALL_ALERT:
-			idi_put_req(reqbuf, CALL_ALERT, 0);
+			idi_put_req(reqbuf, CALL_ALERT, 0, 0);
 			break;
 		case CALL_RES:
 			idi_call_res_req(reqbuf, chan);
 			break;
 		case IDI_N_CONNECT|0x700:
-			idi_put_req(reqbuf, IDI_N_CONNECT, 1);
+			idi_put_req(reqbuf, IDI_N_CONNECT, 1, 0);
 			break;
 		case IDI_N_CONNECT_ACK|0x700:
-			idi_put_req(reqbuf, IDI_N_CONNECT_ACK, 1);
+			idi_put_req(reqbuf, IDI_N_CONNECT_ACK, 1, 0);
 			break;
 		case IDI_N_DISC|0x700:
-			idi_put_req(reqbuf, IDI_N_DISC, 1);
+			idi_put_req(reqbuf, IDI_N_DISC, 1, chan->e.IndCh);
 			break;
 		case IDI_N_DISC_ACK|0x700:
-			idi_put_req(reqbuf, IDI_N_DISC_ACK, 1);
+			idi_put_req(reqbuf, IDI_N_DISC_ACK, 1, chan->e.IndCh);
 			break;
 		default:
 			eicon_log(card, 1, "idi_req: Ch%d: Unknown request\n", chan->No);
@@ -813,6 +820,11 @@ idi_IndParse(eicon_card *ccard, eicon_chan *chan, idi_ind_message *message, unsi
 					message->osa[i] = buffer[pos++];
 				eicon_log(ccard, 2, "idi_inf: Ch%d: OSA=%s\n", chan->No, message->osa);
 				break;
+			case CAD:
+				pos += wlen;
+				eicon_log(ccard, 2, "idi_inf: Ch%d: Connected Address in ind, len:%x\n", 
+					chan->No, wlen);
+				break;
 			case BC:
 				if (wlen > sizeof(message->bc)) {
 					pos += wlen;
@@ -1206,7 +1218,7 @@ idi_send_edata(eicon_card *card, eicon_chan *chan)
 	reqbuf = (eicon_REQ *)skb_put(skb, sizeof(eicon_t30_s) + sizeof(eicon_REQ));
 
 	reqbuf->Req = IDI_N_EDATA;
-	reqbuf->ReqCh = 0;
+	reqbuf->ReqCh = chan->e.IndCh;
 	reqbuf->ReqId = 1;
 
 	reqbuf->XBuffer.length = idi_fill_in_T30(chan, reqbuf->XBuffer.P);
@@ -2205,7 +2217,7 @@ idi_send_udata(eicon_card *card, eicon_chan *chan, int UReq, u_char *buffer, int
 	reqbuf = (eicon_REQ *)skb_put(skb, 1 + len + sizeof(eicon_REQ));
 
 	reqbuf->Req = IDI_N_UDATA;
-	reqbuf->ReqCh = 0;
+	reqbuf->ReqCh = chan->e.IndCh;
 	reqbuf->ReqId = 1;
 
 	reqbuf->XBuffer.length = len + 1;
@@ -2322,7 +2334,7 @@ eicon_parse_trace(eicon_card *ccard, unsigned char *buffer, int len)
 		unsigned char data[1];
 	} *q;
 
-	if (!(p = kmalloc(buflen, GFP_KERNEL))) {
+	if (!(p = kmalloc(buflen, GFP_ATOMIC))) {
 		eicon_log(ccard, 1, "idi_err: Ch??: could not allocate trace buffer\n");
 		return;
 	}
@@ -2380,7 +2392,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 		return;
 	}
 	
-	if (ind->Ind != 8)
+	if ((ind->Ind != 8) && (ind->Ind != 0xc))
 		dlev = 144;
 	else
 		dlev = 128;
@@ -2634,6 +2646,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				break; 
 			case IDI_N_CONNECT:
 				eicon_log(ccard, 16,"idi_ind: Ch%d: N_Connect\n", chan->No);
+				chan->e.IndCh = ind->IndCh;
 				if (chan->e.B2Id) idi_do_req(ccard, chan, IDI_N_CONNECT_ACK, 1);
 				if (chan->l2prot == ISDN_PROTO_L2_FAX) {
 					break;
@@ -2664,6 +2677,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					idi_fax_hangup(ccard, chan);
 				}
 #endif
+				chan->e.IndCh = 0;
 				save_flags(flags);
 				cli();
 				chan->queued = 0;
@@ -2693,7 +2707,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 #endif
 				break; 
 			case IDI_N_DATA_ACK:
-				eicon_log(ccard, 16, "idi_ind: Ch%d: N_DATA_ACK\n", chan->No);
+				eicon_log(ccard, 128, "idi_ind: Ch%d: N_DATA_ACK\n", chan->No);
 				break;
 			case IDI_N_DATA:
 				skb_pull(skb, sizeof(eicon_IND) - 1);
@@ -2774,6 +2788,11 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	} else {
 	/* Network layer */
 		switch(chan->e.Req & 0x0f) {
+			case IDI_N_CONNECT:
+				chan->e.IndCh = ack->RcCh;
+				eicon_log(ccard, 16, "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
+					ack->RcId, ack->RcCh, ack->Reference);
+				break;
 			case IDI_N_MDATA:
 			case IDI_N_DATA:
 				if ((chan->e.Req & 0x0f) == IDI_N_DATA) {
@@ -2999,7 +3018,7 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
 		        reqbuf->Req = IDI_N_DATA;
 			if (ack) reqbuf->Req |= N_D_BIT;
 		}	
-        	reqbuf->ReqCh = 0;
+        	reqbuf->ReqCh = chan->e.IndCh;
 	        reqbuf->ReqId = 1;
 		memcpy(&reqbuf->XBuffer.P, skb->data + offset, plen);
 		reqbuf->XBuffer.length = plen;

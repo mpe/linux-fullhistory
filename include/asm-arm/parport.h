@@ -43,6 +43,8 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 				count++;
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
+		count += parport_pc_init_superio ();
+
 		/* Probe all the likely ports. */
 		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0], NULL))
 			count++;

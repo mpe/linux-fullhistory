@@ -121,15 +121,14 @@ void ext2_put_super (struct super_block * sb)
 }
 
 static struct super_operations ext2_sops = {
-	ext2_read_inode,
-	ext2_write_inode,
-	ext2_put_inode,
-	ext2_delete_inode,
-	NULL,
-	ext2_put_super,
-	ext2_write_super,
-	ext2_statfs,
-	ext2_remount
+	read_inode:	ext2_read_inode,
+	write_inode:	ext2_write_inode,
+	put_inode:	ext2_put_inode,
+	delete_inode:	ext2_delete_inode,
+	put_super:	ext2_put_super,
+	write_super:	ext2_write_super,
+	statfs:		ext2_statfs,
+	remount_fs:	ext2_remount,
 };
 
 /*

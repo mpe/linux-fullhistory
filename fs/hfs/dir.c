@@ -157,19 +157,6 @@ static inline void mark_inodes_deleted(struct hfs_cat_entry *entry,
 /*================ Global functions ================*/
 
 /*
- * hfs_dir_read()
- *
- * This is the read() entry in the file_operations structure for HFS
- * directories.	 It simply returns an error code, since reading is not
- * supported.
- */
-hfs_rwret_t hfs_dir_read(struct file * filp, char *buf,
-			 hfs_rwarg_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
-/*
  * hfs_create()
  *
  * This is the create() entry in the inode_operations structure for

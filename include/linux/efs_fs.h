@@ -46,7 +46,7 @@ static const char cprt[] = "EFS: "EFS_VERSION" - (c) 1999 Al Smith <Al.Smith@aes
 #endif
 
 extern struct inode_operations efs_dir_inode_operations;
-extern struct inode_operations efs_file_inode_operations;
+extern struct file_operations efs_dir_operations;
 extern struct address_space_operations efs_symlink_aops;
 
 extern int init_module(void);

@@ -1,11 +1,14 @@
 /*
- * $Id: b1dma.c,v 1.2 2000/01/25 14:44:47 calle Exp $
+ * $Id: b1dma.c,v 1.3 2000/02/26 01:00:53 keil Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.3  2000/02/26 01:00:53  keil
+ * changes from 2.3.47
+ *
  * Revision 1.2  2000/01/25 14:44:47  calle
  * typo in b1pciv4_detect().
  *
@@ -31,7 +34,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.2 $";
+static char *revision = "$Revision: 1.3 $";
 
 /* ------------------------------------------------------------- */
 

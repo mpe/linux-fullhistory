@@ -43,30 +43,16 @@
 static hfs_rwret_t hdr_read(struct file *, char *, hfs_rwarg_t, loff_t *);
 static hfs_rwret_t hdr_write(struct file *, const char *,
 			     hfs_rwarg_t, loff_t *);
-static void hdr_truncate(struct inode *);
-
 /*================ Global variables ================*/
 
-static struct file_operations hfs_hdr_operations = {
+struct file_operations hfs_hdr_operations = {
 	read:		hdr_read,
 	write:		hdr_write,
 	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_hdr_inode_operations = {
-	&hfs_hdr_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	hdr_truncate,		/* truncate */
+	setattr:	hfs_notify_change_hdr,
 };
 
 const struct hfs_hdr_layout hfs_dbl_fil_hdr_layout = {
@@ -962,13 +948,13 @@ done:
  * header files.  The purpose is to allocate or release blocks as needed
  * to satisfy a change in file length.
  */
-static void hdr_truncate(struct inode *inode)
+void hdr_truncate(struct inode *inode, size_t size)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 	struct hfs_hdr_layout *layout;
-	size_t size = inode->i_size;
 	int lcv, last;
 
+	inode->i_size = size;
 	if (!HFS_I(inode)->layout) {
 		HFS_I(inode)->layout = dup_layout(HFS_I(inode)->default_layout);
 	}

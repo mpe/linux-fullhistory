@@ -210,11 +210,6 @@ static struct file_operations isapnp_info_entry_operations =
 	release:	isapnp_info_entry_release,
 };
 
-static struct inode_operations isapnp_info_entry_inode_operations =
-{
-	&isapnp_info_entry_operations,	/* default sound info directory file-ops */
-};
-
 static loff_t isapnp_proc_bus_lseek(struct file *file, loff_t off, int whence)
 {
 	loff_t new;
@@ -274,11 +269,6 @@ static struct file_operations isapnp_proc_bus_file_operations =
 	read:		isapnp_proc_bus_read,
 };
 
-static struct inode_operations isapnp_proc_bus_inode_operations =
-{
-	&isapnp_proc_bus_file_operations,
-};
-
 static int isapnp_proc_attach_device(struct pci_dev *dev)
 {
 	struct pci_bus *bus = dev->bus;
@@ -295,7 +285,7 @@ static int isapnp_proc_attach_device(struct pci_dev *dev)
 	e = dev->procent = create_proc_entry(name, S_IFREG | S_IRUGO, de);
 	if (!e)
 		return -ENOMEM;
-	e->ops = &isapnp_proc_bus_inode_operations;
+	e->proc_fops = &isapnp_proc_bus_file_operations;
 	e->data = dev;
 	e->size = 256;
 	return 0;
@@ -378,7 +368,7 @@ int __init isapnp_proc_init(void)
 	isapnp_proc_entry = NULL;
 	p = create_proc_entry("isapnp", S_IFREG | S_IRUGO | S_IWUSR, &proc_root);
 	if (p)
-		p->ops = &isapnp_info_entry_inode_operations;
+		p->proc_fops = &isapnp_info_entry_operations;
 	isapnp_proc_entry = p;
 	isapnp_proc_bus_dir = proc_mkdir("isapnp", proc_bus);
 	isapnp_proc_devices_entry = create_proc_info_entry("devices", 0,

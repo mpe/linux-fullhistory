@@ -39,59 +39,23 @@ int Pci2220i_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry Proc_Scsi_Pci2220i;
-
-#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,75)
-#define PCI2220I {															\
-		next:						NULL,									\
-		module:						NULL,									\
-		proc_dir:					&Proc_Scsi_Pci2220i,					\
-		proc_info:					NULL,	/* let's not bloat the kernel */\
-		name:						"PCI-2220I/PCI-2240I",					\
-		detect:						Pci2220i_Detect,						\
-		release:					Pci2220i_Release,						\
-		info:						NULL,	/* let's not bloat the kernel */\
-		command:					Pci2220i_Command,						\
-		queuecommand:				Pci2220i_QueueCommand,					\
-		eh_strategy_handler:		NULL,									\
-		eh_abort_handler:			NULL,									\
-		eh_device_reset_handler:	NULL,									\
-		eh_bus_reset_handler:		NULL,									\
-		eh_host_reset_handler:		NULL,									\
-		abort:						Pci2220i_Abort,							\
-		reset:						Pci2220i_Reset,							\
-		slave_attach:				NULL,									\
-		bios_param:					Pci2220i_BiosParam,						\
-		can_queue:					1,										\
-		this_id:					-1,										\
-		sg_tablesize:				SG_ALL,								\
-		cmd_per_lun:				1,										\
-		present:					0,										\
-		unchecked_isa_dma:			0,										\
-		use_clustering:				DISABLE_CLUSTERING,						\
-		use_new_eh_code:			0										\
-		}
-#else
-#define PCI2220I { NULL, NULL,						\
-			&Proc_Scsi_Pci2220i,/* proc_dir_entry */\
-			NULL,		                			\
-			"PCI-2220I/PCI-2240I",					\
-			Pci2220i_Detect,						\
-			Pci2220i_Release,						\
-			NULL,	 								\
-			Pci2220i_Command,						\
-			Pci2220i_QueueCommand,					\
-			Pci2220i_Abort,							\
-			Pci2220i_Reset,							\
-			NULL,									\
-			Pci2220i_BiosParam,                 	\
-			1, 										\
-			-1, 									\
-			SG_ALL,		 						\
-			1, 										\
-			0, 										\
-			0, 										\
-			DISABLE_CLUSTERING }
-#endif
-
+#define PCI2220I {					\
+	proc_name:		"pci2220i",		\
+	name:			"PCI-2220I/PCI-2240I",	\
+	detect:			Pci2220i_Detect,	\
+	release:		Pci2220i_Release,	\
+	command:		Pci2220i_Command,	\
+	queuecommand:		Pci2220i_QueueCommand,	\
+	abort:			Pci2220i_Abort,		\
+	reset:			Pci2220i_Reset,		\
+	bios_param:		Pci2220i_BiosParam,	\
+	can_queue:		1,			\
+	this_id:		-1,			\
+	sg_tablesize:		SG_ALL,			\
+	cmd_per_lun:		1,			\
+	present:		0,			\
+	unchecked_isa_dma:	0,			\
+	use_clustering:		DISABLE_CLUSTERING,	\
+	use_new_eh_code:	0			\
+}
 #endif

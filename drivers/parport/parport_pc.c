@@ -998,7 +998,7 @@ struct parport_operations parport_pc_ops =
 /*
  * Checks for port existence, all ports support SPP MODE
  */
-static int __maybe_init parport_SPP_supported(struct parport *pb)
+static int __devinit parport_SPP_supported(struct parport *pb)
 {
 	unsigned char r, w;
 
@@ -1075,7 +1075,7 @@ static int __maybe_init parport_SPP_supported(struct parport *pb)
  * two bits of ECR aren't writable, so we check by writing ECR and
  * reading it back to see if it's what we expect.
  */
-static int __maybe_init parport_ECR_present(struct parport *pb)
+static int __devinit parport_ECR_present(struct parport *pb)
 {
 	struct parport_pc_private *priv = pb->private_data;
 	unsigned char r = 0xc;
@@ -1127,7 +1127,7 @@ static int __maybe_init parport_ECR_present(struct parport *pb)
  * be misdetected here is rather academic. 
  */
 
-static int __maybe_init parport_PS2_supported(struct parport *pb)
+static int __devinit parport_PS2_supported(struct parport *pb)
 {
 	int ok = 0;
   
@@ -1155,7 +1155,7 @@ static int __maybe_init parport_PS2_supported(struct parport *pb)
 	return ok;
 }
 
-static int __maybe_init parport_ECP_supported(struct parport *pb)
+static int __devinit parport_ECP_supported(struct parport *pb)
 {
 	int i;
 	int config;
@@ -1266,7 +1266,7 @@ static int __maybe_init parport_ECP_supported(struct parport *pb)
 	return 1;
 }
 
-static int __maybe_init parport_ECPPS2_supported(struct parport *pb)
+static int __devinit parport_ECPPS2_supported(struct parport *pb)
 {
 	const struct parport_pc_private *priv = pb->private_data;
 	int result;
@@ -1286,7 +1286,7 @@ static int __maybe_init parport_ECPPS2_supported(struct parport *pb)
 
 /* EPP mode detection  */
 
-static int __maybe_init parport_EPP_supported(struct parport *pb)
+static int __devinit parport_EPP_supported(struct parport *pb)
 {
 	const struct parport_pc_private *priv = pb->private_data;
 
@@ -1329,7 +1329,7 @@ static int __maybe_init parport_EPP_supported(struct parport *pb)
 	return 1;
 }
 
-static int __maybe_init parport_ECPEPP_supported(struct parport *pb)
+static int __devinit parport_ECPEPP_supported(struct parport *pb)
 {
 	struct parport_pc_private *priv = pb->private_data;
 	int result;
@@ -1360,18 +1360,18 @@ static int __maybe_init parport_ECPEPP_supported(struct parport *pb)
 #else /* No IEEE 1284 support */
 
 /* Don't bother probing for modes we know we won't use. */
-static int __maybe_init parport_PS2_supported(struct parport *pb) { return 0; }
-static int __maybe_init parport_ECP_supported(struct parport *pb) { return 0; }
-static int __maybe_init parport_EPP_supported(struct parport *pb) { return 0; }
-static int __maybe_init parport_ECPEPP_supported(struct parport *pb){return 0;}
-static int __maybe_init parport_ECPPS2_supported(struct parport *pb){return 0;}
+static int __devinit parport_PS2_supported(struct parport *pb) { return 0; }
+static int __devinit parport_ECP_supported(struct parport *pb) { return 0; }
+static int __devinit parport_EPP_supported(struct parport *pb) { return 0; }
+static int __devinit parport_ECPEPP_supported(struct parport *pb){return 0;}
+static int __devinit parport_ECPPS2_supported(struct parport *pb){return 0;}
 
 #endif /* No IEEE 1284 support */
 
 /* --- IRQ detection -------------------------------------- */
 
 /* Only if supports ECP mode */
-static int __maybe_init programmable_irq_support(struct parport *pb)
+static int __devinit programmable_irq_support(struct parport *pb)
 {
 	int irq, intrLine;
 	unsigned char oecr = inb (ECONTROL (pb));
@@ -1388,7 +1388,7 @@ static int __maybe_init programmable_irq_support(struct parport *pb)
 	return irq;
 }
 
-static int __maybe_init irq_probe_ECP(struct parport *pb)
+static int __devinit irq_probe_ECP(struct parport *pb)
 {
 	int i;
 	unsigned long irqs;
@@ -1417,7 +1417,7 @@ static int __maybe_init irq_probe_ECP(struct parport *pb)
  * This detection seems that only works in National Semiconductors
  * This doesn't work in SMC, LGS, and Winbond 
  */
-static int __maybe_init irq_probe_EPP(struct parport *pb)
+static int __devinit irq_probe_EPP(struct parport *pb)
 {
 #ifndef ADVANCED_DETECT
 	return PARPORT_IRQ_NONE;
@@ -1457,7 +1457,7 @@ static int __maybe_init irq_probe_EPP(struct parport *pb)
 #endif /* Advanced detection */
 }
 
-static int __maybe_init irq_probe_SPP(struct parport *pb)
+static int __devinit irq_probe_SPP(struct parport *pb)
 {
 	/* Don't even try to do this. */
 	return PARPORT_IRQ_NONE;
@@ -1470,7 +1470,7 @@ static int __maybe_init irq_probe_SPP(struct parport *pb)
  * When ECP is available we can autoprobe for IRQs.
  * NOTE: If we can autoprobe it, we can register the IRQ.
  */
-static int __maybe_init parport_irq_probe(struct parport *pb)
+static int __devinit parport_irq_probe(struct parport *pb)
 {
 	const struct parport_pc_private *priv = pb->private_data;
 
@@ -1504,7 +1504,7 @@ out:
 /* --- DMA detection -------------------------------------- */
 
 /* Only if supports ECP mode */
-static int __maybe_init programmable_dma_support (struct parport *p)
+static int __devinit programmable_dma_support (struct parport *p)
 {
 	unsigned char oecr = inb (ECONTROL (p));
 	int dma;
@@ -1519,7 +1519,7 @@ static int __maybe_init programmable_dma_support (struct parport *p)
 	return dma;
 }
 
-static int __maybe_init parport_dma_probe (struct parport *p)
+static int __devinit parport_dma_probe (struct parport *p)
 {
 	const struct parport_pc_private *priv = p->private_data;
 	if (priv->ecr)
@@ -1530,7 +1530,7 @@ static int __maybe_init parport_dma_probe (struct parport *p)
 
 /* --- Initialisation code -------------------------------- */
 
-struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
+struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 						    unsigned long int base_hi,
 						    int irq, int dma,
 						    struct pci_dev *dev)
@@ -1720,6 +1720,135 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 
 	return p;
 }
+
+
+static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
+{
+	u8 dma, irq, tmp;
+	unsigned port1, port2, have_eppecp;
+
+	/*
+	 * unlock super i/o configuration, set 0x85_1
+	 */
+	pci_read_config_byte (pdev, 0x85, &tmp);
+	tmp |= (1 << 1);
+	pci_write_config_byte (pdev, 0x85, tmp);
+	
+	/* 
+	 * Super I/O configuration, index port == 3f0h, data port == 3f1h
+	 */
+	
+	/* 0xE2_1-0: Parallel Port Mode / Enable */
+	outb (0xE2, 0x3F0);
+	tmp = inb (0x3F1);
+	
+	if ((tmp & 0x03) == 0x03) {
+		printk (KERN_INFO "parport_pc: Via 686A parallel port disabled in BIOS\n");
+		return 0;
+	}
+	
+	/* 0xE6: Parallel Port I/O Base Address, bits 9-2 */
+	outb (0xE6, 0x3F0);
+	port1 = inb (0x3F1) << 2;
+	
+	switch (port1) {
+	case 0x3bc: port2 = 0x7bc; break;
+	case 0x378: port2 = 0x778; break;
+	case 0x278: port2 = 0x678; break;
+	default:
+		printk (KERN_INFO "parport_pc: Via 686A weird parport base 0x%X, ignoring\n",
+			port1);
+		return 0;
+	}
+
+	/* 0xF0_5: EPP+ECP enable */
+	outb (0xF0, 0x3F0);
+	have_eppecp = (inb (0x3F1) & (1 << 5));
+	
+	/*
+	 * lock super i/o configuration, clear 0x85_1
+	 */
+	pci_read_config_byte (pdev, 0x85, &tmp);
+	tmp &= ~(1 << 1);
+	pci_write_config_byte (pdev, 0x85, tmp);
+
+	/*
+	 * Get DMA and IRQ from PCI->ISA bridge PCI config registers
+	 */
+
+	/* 0x50_3-2: PnP Routing for Parallel Port DRQ */
+	pci_read_config_byte (pdev, 0x50, &dma);
+	dma = ((dma >> 2) & 0x03);
+	
+	/* 0x51_7-4: PnP Routing for Parallel Port IRQ */
+	pci_read_config_byte (pdev, 0x51, &irq);
+	irq = ((irq >> 4) & 0x0F);
+
+	/* filter bogus IRQs */
+	switch (irq) {
+	case 0:
+	case 2:
+	case 8:
+	case 13:
+		irq = PARPORT_IRQ_NONE;
+		break;
+
+	default: /* do nothing */
+		break;
+	}
+
+	/* if ECP not enabled, DMA is not enabled, assumed bogus 'dma' value */
+	if (!have_eppecp)
+		dma = PARPORT_DMA_NONE;
+
+	/* finally, do the probe with values obtained */
+	if (parport_pc_probe_port (port1, port2, irq, dma, NULL)) {
+		printk (KERN_INFO "parport_pc: Via 686A parallel port: io=0x%X, irq=%d, dma=%d\n",
+			port1, irq, dma);
+		return 1;
+	}
+	
+	printk (KERN_WARNING "parport_pc: Strange, can't probe Via 686A parallel port: io=0x%X, irq=%d, dma=%d\n",
+		port1, irq, dma);
+	return 0;
+}
+
+
+enum parport_pc_sio_types {
+	sio_via_686a = 0,	/* Via VT82C686A motherboard Super I/O */
+};
+
+
+/* each element directly indexed from enum list, above */
+static struct parport_pc_superio {
+	int (*probe) (struct pci_dev *pdev);
+} parport_pc_superio_info[] __devinitdata = {
+	{ sio_via_686a_probe, },
+};
+
+
+static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
+	{ 0x1106, 0x0686, PCI_ANY_ID, PCI_ANY_ID, 0, 0, sio_via_686a },
+	{ 0, }, /* terminate list */
+};
+
+
+static int __devinit parport_pc_init_superio(void)
+{
+	const struct pci_device_id *id;
+	struct pci_dev *pdev;
+	
+	pci_for_each_dev(pdev) {
+		id = pci_match_device (parport_pc_pci_tbl, pdev);
+		if (id == NULL)
+			continue;
+		
+		return parport_pc_superio_info[id->driver_data].probe (pdev);
+	}
+	
+	return 0; /* zero devices found */
+}
+
 
 /* Look for PCI parallel port cards. */
 static int __init parport_pc_init_pci (int irq, int dma)

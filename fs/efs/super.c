@@ -21,15 +21,9 @@ static struct file_system_type efs_fs_type = {
 };
 
 static struct super_operations efs_superblock_operations = {
-	efs_read_inode,	/* read_inode */
-	NULL,		/* write_inode */
-	NULL,		/* put_inode */
-	NULL,		/* delete_inode */
-	NULL,		/* notify_change */
-	efs_put_super,	/* put_super */
-	NULL,		/* write_super */
-	efs_statfs,	/* statfs */
-	NULL		/* remount */
+	read_inode:	efs_read_inode,
+	put_super:	efs_put_super,
+	statfs:		efs_statfs,
 };
 
 int __init init_efs_fs(void) {

@@ -40,7 +40,7 @@
 #define ATA_HD_STATUS	0x1d		/* see status-bits */
 #define ATA_HD_CONTROL	0x39
 
-static int falconide_offsets[IDE_NR_PORTS] = {
+static int __init falconide_offsets[IDE_NR_PORTS] = {
     ATA_HD_DATA, ATA_HD_ERROR, ATA_HD_NSECTOR, ATA_HD_SECTOR, ATA_HD_LCYL,
     ATA_HD_HCYL, ATA_HD_SELECT, ATA_HD_STATUS, ATA_HD_CONTROL, -1
 };
@@ -50,7 +50,7 @@ static int falconide_offsets[IDE_NR_PORTS] = {
      *  Probe for a Falcon IDE interface
      */
 
-void falconide_init(void)
+void __init falconide_init(void)
 {
     if (MACH_IS_ATARI && ATARIHW_PRESENT(IDE)) {
 	hw_regs_t hw;

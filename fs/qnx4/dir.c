@@ -78,21 +78,19 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	return 0;
 }
 
-static struct file_operations qnx4_dir_operations =
+struct file_operations qnx4_dir_operations =
 {
-	readdir:		qnx4_readdir,
-	fsync:			file_fsync,
+	read:		generic_read_dir,
+	readdir:	qnx4_readdir,
+	fsync:		file_fsync,
 };
 
 struct inode_operations qnx4_dir_inode_operations =
 {
-	default_file_ops:	&qnx4_dir_operations,
+	lookup:		qnx4_lookup,
 #ifdef CONFIG_QNX4FS_RW
-	create:			qnx4_create,
-#endif
-	lookup:			qnx4_lookup,
-#ifdef CONFIG_QNX4FS_RW
-	unlink:			qnx4_unlink,
-	rmdir:			qnx4_rmdir,
+	create:		qnx4_create,
+	unlink:		qnx4_unlink,
+	rmdir:		qnx4_rmdir,
 #endif
 };

@@ -351,27 +351,6 @@ static struct file_operations log_fops =
 	NULL			/* fsync */
 };
 
-struct inode_operations log_inode_operations =
-{
-	&log_fops,		/* log proc file-ops */
-	NULL,			/* create      */
-	NULL,			/* lookup      */
-	NULL,			/* link        */
-	NULL,			/* unlink      */
-	NULL,			/* symlink     */
-	NULL,			/* mkdir       */
-	NULL,			/* rmdir       */
-	NULL,			/* mknod       */
-	NULL,			/* rename      */
-	NULL,			/* readlink    */
-	NULL,			/* follow_link */
-	NULL,			/* readpage    */
-	NULL,			/* writepage   */
-	NULL,			/* bmap        */
-	NULL,			/* truncate    */
-	NULL			/* permission  */
-};
-
 /*****************************************/
 /* Output info data to the cardinfo file */
 /*****************************************/
@@ -464,7 +443,7 @@ hysdn_procfs_init(void)
 
 			sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
 			if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL)
-				pd->log->ops = &log_inode_operations;	/* set new operations table */
+				pd->log->proc_fops = &log_fops;	/* set new operations table */
 
 			init_waitqueue_head(&(pd->rd_queue));
 

@@ -8,7 +8,7 @@
 
 #include "hpfs_fn.h"
 
-static const struct file_operations hpfs_file_ops =
+static struct file_operations hpfs_file_ops =
 {
 	read:		generic_file_read,
 	write:		hpfs_file_write,
@@ -18,45 +18,33 @@ static const struct file_operations hpfs_file_ops =
 	fsync:		hpfs_file_fsync,
 };
 
-static const struct inode_operations hpfs_file_iops =
+static struct inode_operations hpfs_file_iops =
 {
-	(nonconst *) & hpfs_file_ops,	/* default file operations */
-	NULL,				/* create */
-	NULL,				/* lookup */
-	NULL,				/* link */
-	NULL,				/* unlink */
-	NULL,				/* symlink */
-	NULL,				/* mkdir */
-	NULL,				/* rmdir */
-	NULL,				/* mknod */
-	NULL,				/* rename */
-	NULL,				/* readlink */
-	NULL,				/* follow_link */
-	hpfs_truncate,			/* truncate */
+	truncate:	hpfs_truncate,
+	setattr:	hpfs_notify_change,
 };
 
-static const struct file_operations hpfs_dir_ops =
+static struct file_operations hpfs_dir_ops =
 {
 	llseek:		hpfs_dir_lseek,
-	read:		hpfs_dir_read,
+	read:		generic_read_dir,
 	readdir:	hpfs_readdir,
 	open:		hpfs_open,
 	release:	hpfs_dir_release,
 	fsync:		hpfs_file_fsync,
 };
 
-static const struct inode_operations hpfs_dir_iops =
+static struct inode_operations hpfs_dir_iops =
 {
-	(nonconst *) & hpfs_dir_ops,	/* default directory file ops */
-	hpfs_create,			/* create */
-	hpfs_lookup,			/* lookup */
-	NULL,				/* link */
-	hpfs_unlink,			/* unlink */
-	hpfs_symlink,			/* symlink */
-	hpfs_mkdir,			/* mkdir */
-	hpfs_rmdir,			/* rmdir */
-	hpfs_mknod,			/* mknod */
-	hpfs_rename,			/* rename */
+	create:		hpfs_create,
+	lookup:		hpfs_lookup,
+	unlink:		hpfs_unlink,
+	symlink:	hpfs_symlink,
+	mkdir:		hpfs_mkdir,
+	rmdir:		hpfs_rmdir,
+	mknod:		hpfs_mknod,
+	rename:		hpfs_rename,
+	setattr:	hpfs_notify_change,
 };
 
 struct address_space_operations hpfs_symlink_aops = {
@@ -70,7 +58,6 @@ void hpfs_read_inode(struct inode *i)
 	struct super_block *sb = i->i_sb;
 	unsigned char *ea;
 	int ea_size;
-	i->i_op = 0;
 	init_MUTEX(&i->i_hpfs_sem);
 	i->i_uid = sb->s_hpfs_uid;
 	i->i_gid = sb->s_hpfs_gid;
@@ -104,14 +91,16 @@ void hpfs_read_inode(struct inode *i)
 	if (i->i_sb->s_hpfs_rd_inode == 2) {
 		i->i_mode |= S_IFREG;
 		i->i_mode &= ~0111;
-		i->i_op = (struct inode_operations *) &hpfs_file_iops;
+		i->i_op = &hpfs_file_iops;
+		i->i_fop = &hpfs_file_ops;
 		i->i_nlink = 1;
 		return;
 	}
 	if (!(fnode = hpfs_map_fnode(sb, i->i_ino, &bh))) {
 		/*i->i_mode |= S_IFREG;
 		i->i_mode &= ~0111;
-		i->i_op = (struct inode_operations *) &hpfs_file_iops;
+		i->i_op = &hpfs_file_iops;
+		i->i_fop = &hpfs_file_ops;
 		i->i_nlink = 0;*/
 		make_bad_inode(i);
 		return;
@@ -171,7 +160,8 @@ void hpfs_read_inode(struct inode *i)
 	if (fnode->dirflag) {
 		unsigned n_dnodes, n_subdirs;
 		i->i_mode |= S_IFDIR;
-		i->i_op = (struct inode_operations *) &hpfs_dir_iops;
+		i->i_op = &hpfs_dir_iops;
+		i->i_fop = &hpfs_dir_ops;
 		i->i_hpfs_parent_dir = fnode->up;
 		i->i_hpfs_dno = fnode->u.external[0].disk_secno;
 		if (sb->s_hpfs_chk >= 2) {
@@ -186,7 +176,8 @@ void hpfs_read_inode(struct inode *i)
 	} else {
 		i->i_mode |= S_IFREG;
 		if (!i->i_hpfs_ea_mode) i->i_mode &= ~0111;
-		i->i_op = (struct inode_operations *) &hpfs_file_iops;
+		i->i_op = &hpfs_file_iops;
+		i->i_fop = &hpfs_file_ops;
 		i->i_nlink = 1;
 		i->i_size = fnode->file_size;
 		i->i_blocks = ((i->i_size + 511) >> 9) + 1;

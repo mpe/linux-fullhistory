@@ -162,22 +162,24 @@ affs_read_inode(struct inode *inode)
 			 sys_tz.tz_minuteswest * 60;
 	affs_brelse(bh);
 
-	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode)) {
 		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
-			inode->i_op = &affs_file_inode_operations_ofs;
+			inode->i_op = &affs_file_inode_operations;
+			inode->i_fop = &affs_file_operations_ofs;
 			return;
 		}
 		inode->i_op = &affs_file_inode_operations;
+		inode->i_fop = &affs_file_operations;
 		inode->i_mapping->a_ops = &affs_aops;
 		inode->u.affs_i.mmu_private = inode->i_size;
 	} else if (S_ISDIR(inode->i_mode)) {
 		/* Maybe it should be controlled by mount parameter? */
 		inode->i_mode |= S_ISVTX;
 		inode->i_op = &affs_dir_inode_operations;
+		inode->i_fop = &affs_dir_operations;
 	}
 	else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &page_symlink_inode_operations;
+		inode->i_op = &affs_symlink_inode_operations;
 		inode->i_data.a_ops = &affs_symlink_aops;
 	}
 }
@@ -295,24 +297,16 @@ affs_new_inode(const struct inode *dir)
 
 	sb = dir->i_sb;
 	inode->i_sb    = sb;
-	inode->i_flags = 0;
 
 	if (!(block = affs_new_header((struct inode *)dir))) {
 		iput(inode);
 		return NULL;
 	}
 
-	inode->i_count   = 1;
-	inode->i_nlink   = 1;
 	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
 	inode->i_gid     = current->fsgid;
 	inode->i_ino     = block;
-	inode->i_op      = NULL;
-	inode->i_blocks  = 0;
-	inode->i_size    = 0;
-	inode->i_mode    = 0;
-	inode->i_blksize = 0;
 	inode->i_mtime   = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
 	inode->u.affs_i.i_original  = 0;

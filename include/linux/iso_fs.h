@@ -189,8 +189,8 @@ extern int isofs_bmap(struct inode *, int);
 extern int init_iso9660_fs(void);
 extern int isofs_lookup_grandparent(struct inode *, int);
 
-extern struct inode_operations isofs_file_inode_operations;
 extern struct inode_operations isofs_dir_inode_operations;
+extern struct file_operations isofs_dir_operations;
 extern struct address_space_operations isofs_symlink_aops;
 
 /* The following macros are used to check for memory leaks. */

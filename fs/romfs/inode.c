@@ -450,45 +450,19 @@ static struct address_space_operations romfs_aops = {
 	readpage: romfs_readpage
 };
 
-static struct file_operations romfs_file_operations = {
-	read:		generic_file_read,
-	mmap:		generic_file_mmap,
-};
-
-static struct inode_operations romfs_file_inode_operations = {
-	&romfs_file_operations,
-};
-
 static struct file_operations romfs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	romfs_readdir,
 };
 
-/* Merged dir/symlink op table.  readdir/lookup/readlink/follow_link
- * will protect from type mismatch.
- */
-
 static struct inode_operations romfs_dir_inode_operations = {
-	&romfs_dir_operations,
-	NULL,			/* create */
-	romfs_lookup,		/* lookup */
+	lookup:		romfs_lookup,
 };
 
 static mode_t romfs_modemap[] =
 {
 	0, S_IFDIR+0644, S_IFREG+0644, S_IFLNK+0777,
 	S_IFBLK+0600, S_IFCHR+0600, S_IFSOCK+0644, S_IFIFO+0644
-};
-
-static struct inode_operations *romfs_inoops[] =
-{
-	NULL,				/* hardlink, handled elsewhere */
-	&romfs_dir_inode_operations,
-	&romfs_file_inode_operations,
-	&page_symlink_inode_operations,
-	NULL,				/* device/fifo/socket nodes, */
-	NULL,				/*   set by init_special_inode */
-	NULL,
-	NULL,
 };
 
 static void
@@ -498,7 +472,6 @@ romfs_read_inode(struct inode *i)
 	struct romfs_inode ri;
 
 	ino = i->i_ino & ROMFH_MASK;
-	i->i_op = NULL;
 	i->i_mode = 0;
 
 	/* Loop for finding the real hard link */
@@ -534,32 +507,38 @@ romfs_read_inode(struct inode *i)
         /* Compute permissions */
         ino = romfs_modemap[nextfh & ROMFH_TYPE];
 	/* only "normal" files have ops */
-        if ((i->i_op = romfs_inoops[nextfh & ROMFH_TYPE])) {
-		if (nextfh & ROMFH_EXEC)
-			ino |= S_IXUGO;
-		i->i_mode = ino;
-		if (S_ISDIR(ino))
+	switch (nextfh & ROMFH_TYPE) {
+		case 1:
 			i->i_size = i->u.romfs_i.i_metasize;
-		else
+			i->i_op = &romfs_dir_inode_operations;
+			i->i_fop = &romfs_dir_operations;
+			if (nextfh & ROMFH_EXEC)
+				ino |= S_IXUGO;
+			i->i_mode = ino;
+			break;
+		case 2:
+			i->i_fop = &generic_ro_fops;
 			i->i_data.a_ops = &romfs_aops;
-	} else {
-		/* depending on MBZ for sock/fifos */
-		nextfh = ntohl(ri.spec);
-		nextfh = kdev_t_to_nr(MKDEV(nextfh>>16,nextfh&0xffff));
-		init_special_inode(i, ino, nextfh);
+			if (nextfh & ROMFH_EXEC)
+				ino |= S_IXUGO;
+			i->i_mode = ino;
+			break;
+		case 3:
+			i->i_op = &page_symlink_inode_operations;
+			i->i_mode = S_IRWXUGO;
+			break;
+		default:
+			/* depending on MBZ for sock/fifos */
+			nextfh = ntohl(ri.spec);
+			nextfh = kdev_t_to_nr(MKDEV(nextfh>>16,nextfh&0xffff));
+			init_special_inode(i, ino, nextfh);
 	}
 }
 
 static struct super_operations romfs_ops = {
-	romfs_read_inode,	/* read inode */
-	NULL,			/* write inode */
-	NULL,			/* put inode */
-	NULL,			/* delete inode */
-	NULL,			/* notify change */
-	romfs_put_super,	/* put super */
-	NULL,			/* write super */
-	romfs_statfs,		/* statfs */
-	NULL			/* remount */
+	read_inode:	romfs_read_inode,
+	put_super:	romfs_put_super,
+	statfs:		romfs_statfs,
 };
 
 static struct file_system_type romfs_fs_type = {

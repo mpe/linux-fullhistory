@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.90 2000/02/06 21:50:00 detabc Exp $
+/* $Id: isdn.h,v 1.94 2000/02/26 00:29:40 keil Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.94  2000/02/26 00:29:40  keil
+ * more softnet changes
+ *
+ * Revision 1.93  2000/02/25 11:29:17  paul
+ * changed chargetime to ulong from int (after about 20 days the "chargetime of
+ * ipppX is now 1234" message displays a negative number on alpha).
+ *
+ * Revision 1.92  2000/02/17 13:15:56  keil
+ * fix backward compatibility for 2.2
+ *
+ * Revision 1.91  2000/02/16 14:56:27  paul
+ * translated ISDN_MODEM_ANZREG to ISDN_MODEM_NUMREG for english speakers
+ *
  * Revision 1.90  2000/02/06 21:50:00  detabc
  * add rewriting of socket's and frame's saddr for udp-ipv4 dynip-connections.
  * Include checksum-recompute of ip- and udp-header's.
@@ -444,7 +457,7 @@
 #define ISDN_USAGE_EXCLUSIVE 64 /* This bit is set, if channel is exclusive */
 #define ISDN_USAGE_OUTGOING 128 /* This bit is set, if channel is outgoing  */
 
-#define ISDN_MODEM_ANZREG    24        /* Number of Modem-Registers        */
+#define ISDN_MODEM_NUMREG    24        /* Number of Modem-Registers        */
 #define ISDN_LMSNLEN         255 /* Length of tty's Listen-MSN string */
 #define ISDN_CMSGLEN	     50	 /* Length of CONNECT-Message to add for Modem */
 
@@ -672,7 +685,7 @@ typedef struct isdn_net_local_s {
                                        /*   0 = Transparent                */
   int                    huptimer;     /* Timeout-counter for auto-hangup  */
   int                    charge;       /* Counter for charging units       */
-  int                    chargetime;   /* Timer for Charging info          */
+  ulong                  chargetime;   /* Timer for Charging info          */
   int                    hupflags;     /* Flags for charge-unit-hangup:    */
 				       /* bit0: chargeint is invalid       */
 				       /* bit1: Getting charge-interval    */
@@ -777,8 +790,8 @@ typedef struct isdn_audio_skb {
 
 /* Private data of AT-command-interpreter */
 typedef struct atemu {
-	u_char       profile[ISDN_MODEM_ANZREG]; /* Modem-Regs. Profile 0              */
-	u_char       mdmreg[ISDN_MODEM_ANZREG];  /* Modem-Registers                    */
+	u_char       profile[ISDN_MODEM_NUMREG]; /* Modem-Regs. Profile 0              */
+	u_char       mdmreg[ISDN_MODEM_NUMREG];  /* Modem-Registers                    */
 	char         pmsn[ISDN_MSNLEN];          /* EAZ/MSNs Profile 0                 */
 	char         msn[ISDN_MSNLEN];           /* EAZ/MSN                            */
 	char         plmsn[ISDN_LMSNLEN];        /* Listening MSNs Profile 0           */
@@ -985,10 +998,10 @@ typedef struct isdn_devt {
 	devfs_handle_t devfs_handle_isdnctrl;
 	devfs_handle_t devfs_handle_isdnX[ISDN_MAX_CHANNELS];
 	devfs_handle_t devfs_handle_isdnctrlX[ISDN_MAX_CHANNELS];
-#  ifdef CONFIG_ISDN_PPP
+#ifdef CONFIG_ISDN_PPP
 	devfs_handle_t devfs_handle_ipppX[ISDN_MAX_CHANNELS];
-#  endif
 #endif
+#endif /* CONFIG_DEVFS_FS */
 } isdn_dev;
 
 extern isdn_dev *dev;

@@ -30,7 +30,7 @@
 #define PRINTK(x)
 #define Printk(x) printk x
 
-static struct file_operations fat_file_operations = {
+struct file_operations fat_file_operations = {
 	read:		fat_file_read,
 	write:		fat_file_write,
 	mmap:		generic_file_mmap,
@@ -38,19 +38,8 @@ static struct file_operations fat_file_operations = {
 };
 
 struct inode_operations fat_file_inode_operations = {
-	&fat_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	fat_truncate,		/* truncate */
+	truncate:	fat_truncate,
+	setattr:	fat_notify_change,
 };
 
 ssize_t fat_file_read(

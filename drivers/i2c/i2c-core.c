@@ -101,10 +101,6 @@ static struct file_operations i2cproc_operations = {
 	read:		i2cproc_bus_read,
 };
 
-static struct inode_operations i2cproc_inode_operations = {
-	&i2cproc_operations
-};
-
 static int i2cproc_initialized = 0;
 
 #else /* undef CONFIG_PROC_FS */
@@ -163,7 +159,7 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 			       name);
 			return -ENOENT;
 		}
-		proc_entry->ops = &i2cproc_inode_operations;
+		proc_entry->proc_fops = &i2cproc_operations;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,27))
 		proc_entry->owner = THIS_MODULE;
 #else

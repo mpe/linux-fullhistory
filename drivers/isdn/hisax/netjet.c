@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.17 1999/12/19 13:09:42 keil Exp $
+/* $Id: netjet.c,v 1.18 2000/02/26 00:35:13 keil Exp $
 
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -7,6 +7,9 @@
  * Thanks to Traverse Technologie Australia for documents and informations
  *
  * $Log: netjet.c,v $
+ * Revision 1.18  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.17  1999/12/19 13:09:42  keil
  * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
  * signal proof delays
@@ -85,7 +88,7 @@
 
 extern const char *CardType[];
 
-const char *NETjet_revision = "$Revision: 1.17 $";
+const char *NETjet_revision = "$Revision: 1.18 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -730,7 +733,7 @@ static void write_raw(struct BCState *bcs, u_int *buf, int cnt) {
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->tx_skb->len);
-				dev_kfree_skb(bcs->tx_skb);
+				dev_kfree_skb_any(bcs->tx_skb);
 				bcs->tx_skb = NULL;
 			}
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
@@ -873,7 +876,7 @@ close_tigerstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/aec6210.c	Version 0.04	Dec. 13, 1999
+ * linux/drivers/block/aec6210.c		Version 0.05	Feb. 10, 2000
  *
- * Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
+ * Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
  *
  *  pio 0 ::       40: 00 07 00 00 00 00 00 00 02 07 a6 04 00 02 00 02
@@ -56,7 +56,52 @@
 
 #define ACARD_DEBUG_DRIVE_INFO 1
 
-#ifdef CONFIG_BLK_DEV_AEC6210_TUNING
+#define DISPLAY_AEC6210_TIMINGS
+
+#if defined(DISPLAY_AEC6210_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+
+static int aec6210_get_info(char *, char **, off_t, int);
+extern int (*aec6210_display_info)(char *, char **, off_t, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+
+static int aec6210_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p = buffer;
+
+	u32 bibma = bmide_dev->resource[4].start;
+	u8 c0 = 0, c1 = 0;
+	
+	p += sprintf(p, "\n                                AEC6210 Chipset.\n");
+
+        /*
+         * at that point bibma+0x2 et bibma+0xa are byte registers
+         * to investigate:
+         */
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	c1 = inb_p((unsigned short)bibma + 0x0a);
+
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
+
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
+	return p-buffer;/* => must be less than 4k! */
+}
+#endif	/* defined(DISPLAY_AEC6210_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+byte aec6210_proc = 0;
+
+#ifdef CONFIG_AEC6210_TUNING
 
 struct chipset_bus_clock_list_entry {
 	byte		xfer_speed;
@@ -269,7 +314,7 @@ int aec6210_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
-#endif /* CONFIG_BLK_DEV_AEC6210_TUNING */
+#endif /* CONFIG_AEC6210_TUNING */
 
 unsigned int __init pci_init_aec6210 (struct pci_dev *dev, const char *name)
 {
@@ -277,12 +322,19 @@ unsigned int __init pci_init_aec6210 (struct pci_dev *dev, const char *name)
 		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
 		printk("%s: ROM enabled at 0x%08lx\n", name, dev->resource[PCI_ROM_RESOURCE].start);
 	}
+
+#if defined(DISPLAY_AEC6210_TIMINGS) && defined(CONFIG_PROC_FS)
+	aec6210_proc = 1;
+	bmide_dev = dev;
+	aec6210_display_info = &aec6210_get_info;
+#endif /* DISPLAY_AEC6210_TIMINGS && CONFIG_PROC_FS */
+
 	return dev->irq;
 }
 
 void __init ide_init_aec6210 (ide_hwif_t *hwif)
 {
-#ifdef CONFIG_BLK_DEV_AEC6210_TUNING
+#ifdef CONFIG_AEC6210_TUNING
 	hwif->tuneproc = &aec6210_tune_drive;
 
 	if (hwif->dma_base) {
@@ -291,7 +343,7 @@ void __init ide_init_aec6210 (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
-#endif /* CONFIG_BLK_DEV_AEC6210_TUNING */
+#endif /* CONFIG_AEC6210_TUNING */
 }
 
 void __init ide_dmacapable_aec6210 (ide_hwif_t *hwif, unsigned long dmabase)

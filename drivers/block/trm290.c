@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/trm290.c	Version 1.01  December 5, 1997
+ *  linux/drivers/block/trm290.c		Version 1.01	December 5, 1997
  *
  *  Copyright (c) 1997-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License

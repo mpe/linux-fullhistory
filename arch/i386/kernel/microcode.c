@@ -71,10 +71,6 @@ static struct file_operations microcode_fops = {
 	release:	microcode_release,
 };
 
-static struct inode_operations microcode_inops = {
-	default_file_ops:	&microcode_fops,
-};
-
 static struct proc_dir_entry *proc_microcode;
 
 static int __init microcode_init(void)
@@ -84,7 +80,7 @@ static int __init microcode_init(void)
 		printk(KERN_ERR "microcode: can't create /proc/driver/microcode\n");
 		return -ENOMEM;
 	}
-	proc_microcode->ops = &microcode_inops;
+	proc_microcode->proc_fops = &microcode_fops;
 	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
 	return 0;
 }

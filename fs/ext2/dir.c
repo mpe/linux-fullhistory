@@ -20,37 +20,13 @@
 
 #include <linux/fs.h>
 
-
-
-static ssize_t ext2_dir_read (struct file * filp, char * buf,
-			      size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
 static int ext2_readdir(struct file *, void *, filldir_t);
 
-static struct file_operations ext2_dir_operations = {
-	read:		ext2_dir_read,
+struct file_operations ext2_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	ext2_readdir,
 	ioctl:		ext2_ioctl,
 	fsync:		ext2_sync_file,
-};
-
-/*
- * directories can handle most operations...
- */
-struct inode_operations ext2_dir_inode_operations = {
-	&ext2_dir_operations,	/* default directory file-ops */
-	ext2_create,		/* create */
-	ext2_lookup,		/* lookup */
-	ext2_link,		/* link */
-	ext2_unlink,		/* unlink */
-	ext2_symlink,		/* symlink */
-	ext2_mkdir,		/* mkdir */
-	ext2_rmdir,		/* rmdir */
-	ext2_mknod,		/* mknod */
-	ext2_rename,		/* rename */
 };
 
 int ext2_check_dir_entry (const char * function, struct inode * dir,

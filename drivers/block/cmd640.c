@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 1.02  Sep 01, 1996
+ *  linux/drivers/block/cmd640.c		Version 1.02  Sep 01, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -290,7 +290,7 @@ static byte get_cmd640_reg_vlb (unsigned short reg)
 	return b;
 }
 
-static int match_pci_cmd640_device (void)
+static int __init match_pci_cmd640_device (void)
 {
 	const byte ven_dev[4] = {0x95, 0x10, 0x40, 0x06};
 	unsigned int i;
@@ -310,7 +310,7 @@ static int match_pci_cmd640_device (void)
 /*
  * Probe for CMD640x -- pci method 1
  */
-static int probe_for_cmd640_pci1 (void)
+static int __init probe_for_cmd640_pci1 (void)
 {
 	get_cmd640_reg = get_cmd640_reg_pci1;
 	put_cmd640_reg = put_cmd640_reg_pci1;
@@ -324,7 +324,7 @@ static int probe_for_cmd640_pci1 (void)
 /*
  * Probe for CMD640x -- pci method 2
  */
-static int probe_for_cmd640_pci2 (void)
+static int __init probe_for_cmd640_pci2 (void)
 {
 	get_cmd640_reg = get_cmd640_reg_pci2;
 	put_cmd640_reg = put_cmd640_reg_pci2;
@@ -338,7 +338,7 @@ static int probe_for_cmd640_pci2 (void)
 /*
  * Probe for CMD640x -- vlb
  */
-static int probe_for_cmd640_vlb (void)
+static int __init probe_for_cmd640_vlb (void)
 {
 	byte b;
 
@@ -359,7 +359,7 @@ static int probe_for_cmd640_vlb (void)
  *  Returns 1 if an IDE interface/drive exists at 0x170,
  *  Returns 0 otherwise.
  */
-static int secondary_port_responding (void)
+static int __init secondary_port_responding (void)
 {
 	unsigned long flags;
 
@@ -403,7 +403,7 @@ void cmd640_dump_regs (void)
  * Check whether prefetch is on for a drive,
  * and initialize the unmask flags for safe operation.
  */
-static void check_prefetch (unsigned int index)
+static void __init check_prefetch (unsigned int index)
 {
 	ide_drive_t *drive = cmd_drives[index];
 	byte b = get_cmd640_reg(prefetch_regs[index]);
@@ -424,7 +424,7 @@ static void check_prefetch (unsigned int index)
 /*
  * Figure out which devices we control
  */
-static void setup_device_ptrs (void)
+static void __init setup_device_ptrs (void)
 {
 	unsigned int i;
 
@@ -507,7 +507,7 @@ inline static byte pack_nibbles (byte upper, byte lower)
 /*
  * This routine retrieves the initial drive timings from the chipset.
  */
-static void retrieve_drive_counts (unsigned int index)
+static void __init retrieve_drive_counts (unsigned int index)
 {
 	byte b;
 
@@ -694,7 +694,7 @@ static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 /*
  * Probe for a cmd640 chipset, and initialize it if found.  Called from ide.c
  */
-int ide_probe_for_cmd640x (void)
+int __init ide_probe_for_cmd640x (void)
 {
 #ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
 	int second_port_toggled = 0;

@@ -298,7 +298,7 @@ modem_fill(struct BCState *bcs) {
 				(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st,
 						bcs->hw.hscx.count);
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 		}
 	}
@@ -442,13 +442,13 @@ close_elsastate(struct BCState *bcs)
 			bcs->hw.hscx.rcvbuf = NULL;
 		}
 		while ((skb = skb_dequeue(&bcs->rqueue))) {
-			dev_kfree_skb(skb);
+			dev_kfree_skb_any(skb);
 		}
 		while ((skb = skb_dequeue(&bcs->squeue))) {
-			dev_kfree_skb(skb);
+			dev_kfree_skb_any(skb);
 		}
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

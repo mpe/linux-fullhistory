@@ -33,21 +33,9 @@ static int coda_file_mmap(struct file * file, struct vm_area_struct * vma);
 int coda_fsync(struct file *, struct dentry *dentry);
 
 struct inode_operations coda_file_inode_operations = {
-	&coda_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,		        /* lookup */
-	NULL,			/* link */
-	NULL,		        /* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,		        /* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-        coda_permission,        /* permission */
-        coda_revalidate_inode   /* revalidate */
+        permission:	coda_permission,
+        revalidate:	coda_revalidate_inode,
+	setattr:	coda_notify_change,
 };
 
 struct file_operations coda_file_operations = {
@@ -133,7 +121,7 @@ void coda_prepare_openfile(struct inode *i, struct file *coda_file,
         cont_file->f_flags = coda_file->f_flags;
         atomic_set(&cont_file->f_count, atomic_read(&coda_file->f_count));
         cont_file->f_owner  = coda_file->f_owner;
-	cont_file->f_op = cont_inode->i_op->default_file_ops;
+	cont_file->f_op = cont_inode->i_fop;
 	cont_file->f_dentry = cont_dentry;
         cont_file->f_dentry->d_inode = cont_inode;
         return ;

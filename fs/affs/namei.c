@@ -274,9 +274,11 @@ affs_create(struct inode *dir, struct dentry *dentry, int mode)
 
 	pr_debug("AFFS: ino=%lu\n",inode->i_ino);
 	if (dir->i_sb->u.affs_sb.s_flags & SF_OFS)
-		inode->i_op = &affs_file_inode_operations_ofs;
+		inode->i_op = &affs_file_inode_operations;
+		inode->i_fop = &affs_file_operations_ofs;
 	else {
 		inode->i_op = &affs_file_inode_operations;
+		inode->i_fop = &affs_file_operations;
 		inode->i_mapping->a_ops = &affs_aops;
 		inode->u.affs_i.mmu_private = inode->i_size;
 	}
@@ -314,6 +316,7 @@ affs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		goto out;
 
 	inode->i_op = &affs_dir_inode_operations;
+	inode->i_fop = &affs_dir_operations;
 	error       = affs_add_entry(dir,NULL,inode,dentry,ST_USERDIR);
 	if (error)
 		goto out_iput;
@@ -403,7 +406,7 @@ affs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if (!inode)
 		goto out;
 
-	inode->i_op = &page_symlink_inode_operations;
+	inode->i_op = &affs_symlink_inode_operations;
 	inode->i_data.a_ops = &affs_symlink_aops;
 	inode->i_mode = S_IFLNK | 0777;
 	inode->u.affs_i.i_protect = mode_to_prot(inode->i_mode);
@@ -495,6 +498,7 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	inode->i_op                = oldinode->i_op;
+	inode->i_fop               = oldinode->i_fop;
 	inode->u.affs_i.i_protect  = mode_to_prot(oldinode->i_mode);
 	inode->u.affs_i.i_original = oldinode->i_ino;
 	inode->u.affs_i.i_hlink    = 1;

@@ -426,25 +426,6 @@ static char dummy_buffer[60] = "Please don't add commas in your insmod command!!
 
 #endif
 
-
-/*
- * Our directory Entry in /proc/scsi for the user to 
- * access the driver. 
- */
-
-#if 0
-
-/* Need to add in proc_fs.h     PROC_SCSI_QL1280 */
-#define PROC_SCSI_QL1280  PROC_SCSI_QLOGICISP
-
-struct proc_dir_entry proc_scsi_qla1280 = {
-    PROC_SCSI_QL1280, 7, "qla1280",                           
-    S_IFDIR | S_IRUGO | S_IXUGO, 2,
-    0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-};
-
-#endif
-
 /* We use the Scsi_Pointer structure that's included with each command
  * SCSI_Cmnd as a scratchpad for our SRB.
  *

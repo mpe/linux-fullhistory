@@ -1266,16 +1266,13 @@ rename_done:
 
 /* Public inode operations for the VFAT fs */
 struct inode_operations vfat_dir_inode_operations = {
-	&fat_dir_operations,	/* default directory file-ops */
-	vfat_create,		/* create */
-	vfat_lookup,		/* lookup */
-	NULL,			/* link */
-	vfat_unlink,		/* unlink */
-	NULL,			/* symlink */
-	vfat_mkdir,		/* mkdir */
-	vfat_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	vfat_rename,		/* rename */
+	create:		vfat_create,
+	lookup:		vfat_lookup,
+	unlink:		vfat_unlink,
+	mkdir:		vfat_mkdir,
+	rmdir:		vfat_rmdir,
+	rename:		vfat_rename,
+	setattr:	fat_notify_change,
 };
 
 struct super_block *vfat_read_super(struct super_block *sb,void *data,

@@ -67,9 +67,6 @@
 #define	WRITE_CMD				IDE_CMD_WRITE_MULTIPLE
 #define	MAX_BUS_MASTER_BLOCKS	SECTORSXFER		// This is the maximum we can bus master
 
-struct proc_dir_entry Proc_Scsi_Pci2220i =
-	{ PROC_SCSI_PCI2220I, 8, "pci2220i", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
-
 #ifdef DEBUG
 #define DEB(x) x
 #define STOP_HERE()	{int st;for(st=0;st<100;st++){st=1;}}

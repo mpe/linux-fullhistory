@@ -416,8 +416,6 @@ static struct file_operations conf_fops =
 	NULL			/* fsync */
 };
 
-static struct inode_operations conf_inode_operations;
-
 /*****************************/
 /* hysdn subdir in /proc/net */
 /*****************************/
@@ -446,10 +444,8 @@ hysdn_procconf_init(void)
 		if ((card->procconf = (void *) create_proc_entry(conf_name,
 					     S_IFREG | S_IRUGO | S_IWUSR,
 					    hysdn_proc_entry)) != NULL) {
-			memset(&conf_inode_operations, 0, sizeof(struct inode_operations));
-			conf_inode_operations.default_file_ops = &conf_fops;
 
-			((struct proc_dir_entry *) card->procconf)->ops = &conf_inode_operations;
+			((struct proc_dir_entry *) card->procconf)->proc_fops = &conf_fops;
 			hysdn_proclog_init(card);	/* init the log file entry */
 		}
 		card = card->next;	/* next entry */

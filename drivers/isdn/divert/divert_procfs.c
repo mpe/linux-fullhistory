@@ -315,8 +315,6 @@ static struct file_operations isdn_fops =
 	NULL			/* fsync */
 };
 
-struct inode_operations divert_file_inode_operations;
-
 /****************************/
 /* isdn subdir in /proc/net */
 /****************************/
@@ -342,9 +340,7 @@ divert_dev_init(void)
 		remove_proc_entry("isdn", proc_net);
 		return (-1);
 	}
-	memset(&divert_file_inode_operations, 0, sizeof(struct inode_operations));
-	divert_file_inode_operations.default_file_ops = &isdn_fops;
-	isdn_divert_entry->ops = &divert_file_inode_operations;
+	isdn_divert_entry->proc_fops = &isdn_fops;
 #endif	/* CONFIG_PROC_FS */
 
 	return (0);

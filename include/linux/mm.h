@@ -378,6 +378,8 @@ extern void show_free_areas_node(int nid);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 
+extern int map_zero_setup(struct vm_area_struct *);
+
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
 extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct vm_area_struct *vma);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, pgprot_t prot);

@@ -119,11 +119,11 @@
 #include <linux/bitops.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
+#include <linux/ac97_codec.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
-#include "ac97_codec.h"
 
 /* --------------------------------------------------------------------- */
 
@@ -376,6 +376,9 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
 #define SND_DEV_DSP16   5 
 
+#define ES1371_MODULE_NAME "es1371"
+#define PFX ES1371_MODULE_NAME ": "
+
 /* --------------------------------------------------------------------- */
 
 struct es1371_state {
@@ -496,7 +499,7 @@ static unsigned wait_src_ready(struct es1371_state *s)
 			return r;
 		udelay(1);
 	}
-	printk(KERN_DEBUG "es1371: sample rate converter timeout r = 0x%08x\n", r);
+	printk(KERN_DEBUG PFX "sample rate converter timeout r = 0x%08x\n", r);
 	return r;
 }
 
@@ -1113,7 +1116,7 @@ static void es1371_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static const char invalid_magic[] = KERN_CRIT "es1371: invalid magic value\n";
+static const char invalid_magic[] = KERN_CRIT PFX "invalid magic value\n";
 
 #define VALIDATE_STATE(s)                         \
 ({                                                \
@@ -1216,7 +1219,7 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 		tmo = 3 * HZ * (count + s->dma_dac1.fragsize) / 2 / s->dac1rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P1FMT) >> SCTRL_SH_P1FMT];
 		if (!schedule_timeout(tmo + 1))
-			DBG(printk(KERN_DEBUG "es1371: dac1 dma timed out??\n");)
+			DBG(printk(KERN_DEBUG PFX "dac1 dma timed out??\n");)
         }
         remove_wait_queue(&s->dma_dac1.wait, &wait);
         set_current_state(TASK_RUNNING);
@@ -1251,7 +1254,7 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 		tmo = 3 * HZ * (count + s->dma_dac2.fragsize) / 2 / s->dac2rate;
 		tmo >>= sample_shift[(s->sctrl & SCTRL_P2FMT) >> SCTRL_SH_P2FMT];
 		if (!schedule_timeout(tmo + 1))
-			DBG(printk(KERN_DEBUG "es1371: dac2 dma timed out??\n");)
+			DBG(printk(KERN_DEBUG PFX "dac2 dma timed out??\n");)
         }
         remove_wait_queue(&s->dma_dac2.wait, &wait);
         set_current_state(TASK_RUNNING);
@@ -2502,7 +2505,7 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 			}
 			tmo = (count * HZ) / 3100;
 			if (!schedule_timeout(tmo ? : 1) && tmo)
-				printk(KERN_DEBUG "es1371: midi timed out??\n");
+				printk(KERN_DEBUG PFX "midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
 		set_current_state(TASK_RUNNING);
@@ -2629,7 +2632,7 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 		return -1;
 	}
 	if (!(s = kmalloc(sizeof(struct es1371_state), GFP_KERNEL))) {
-		printk(KERN_WARNING "es1371: out of memory\n");
+		printk(KERN_WARNING PFX "out of memory\n");
 		return -1;
 	}
 	memset(s, 0, sizeof(struct es1371_state));
@@ -2652,19 +2655,19 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	s->codec.id = 0;
 	s->codec.codec_read = rdcodec;
 	s->codec.codec_write = wrcodec;
-	printk(KERN_INFO "es1371: found chip, vendor id 0x%04x device id 0x%04x revision 0x%02x\n",
+	printk(KERN_INFO PFX "found chip, vendor id 0x%04x device id 0x%04x revision 0x%02x\n",
 	       s->vendor, s->device, s->rev);
 	if (!request_region(s->io, ES1371_EXTENT, "es1371")) {
-		printk(KERN_ERR "es1371: io ports %#lx-%#lx in use\n", s->io, s->io+ES1371_EXTENT-1);
+		printk(KERN_ERR PFX "io ports %#lx-%#lx in use\n", s->io, s->io+ES1371_EXTENT-1);
 		goto err_region;
 	}
 	if (request_irq(s->irq, es1371_interrupt, SA_SHIRQ, "es1371", s)) {
-		printk(KERN_ERR "es1371: irq %u in use\n", s->irq);
+		printk(KERN_ERR PFX "irq %u in use\n", s->irq);
 		goto err_irq;
 	}
 	pci_enable_device(pcidev);
-	printk(KERN_INFO "es1371: found es1371 rev %d at io %#lx irq %u\n"
-	       KERN_INFO "es1371: features: joystick 0x%x\n", s->rev, s->io, s->irq, joystick[devindex]);
+	printk(KERN_INFO PFX "found es1371 rev %d at io %#lx irq %u\n"
+	       KERN_INFO PFX "features: joystick 0x%x\n", s->rev, s->io, s->irq, joystick[devindex]);
 	/* register devices */
 	if ((s->dev_audio = register_sound_dsp(&es1371_audio_fops, -1)) < 0)
 		goto err_dev1;
@@ -2683,7 +2686,7 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	s->ctrl = 0;
 	if ((joystick[devindex] & ~0x18) == 0x200) {
 		if (check_region(joystick[devindex], JOY_EXTENT))
-			printk(KERN_ERR "es1371: joystick address 0x%x already in use\n", joystick[devindex]);
+			printk(KERN_ERR PFX "joystick address 0x%x already in use\n", joystick[devindex]);
 		else {
 			s->ctrl |= CTRL_JYSTK_EN | (((joystick[devindex] >> 3) & CTRL_JOY_MASK) << CTRL_JOY_SHIFT);
 		}
@@ -2693,11 +2696,11 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	/* check to see if s/pdif mode is being requested */
 	if (spdif[devindex]) {
 		if (s->rev >= 4) {
-			printk(KERN_INFO "es1371: enabling S/PDIF output\n");
+			printk(KERN_INFO PFX "enabling S/PDIF output\n");
 			cssr |= STAT_EN_SPDIF;
 			s->ctrl |= CTRL_SPDIFEN_B;
 		} else {
-			printk(KERN_ERR "es1371: revision %d does not support S/PDIF\n", s->rev);
+			printk(KERN_ERR PFX "revision %d does not support S/PDIF\n", s->rev);
 		}
 	}
 	/* initialize the chips */
@@ -2731,6 +2734,7 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 	if (!ac97_probe_codec(&s->codec))
 		goto err_dev4;
 	/* set default values */
+
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	val = SOUND_MASK_LINE;
@@ -2759,7 +2763,7 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
  err_dev2:
 	unregister_sound_dsp(s->dev_audio);
  err_dev1:
-	printk(KERN_ERR "es1371: cannot register misc device\n");
+	printk(KERN_ERR PFX "cannot register misc device\n");
 	free_irq(s->irq, s);
  err_irq:
 	release_region(s->io, ES1371_EXTENT);
@@ -2822,7 +2826,7 @@ static int __init init_es1371(void)
 
 static void __exit cleanup_es1371(void)
 {
-	printk(KERN_INFO "es1371: unloading\n");
+	printk(KERN_INFO PFX "unloading\n");
 	pci_unregister_driver(&es1371_driver);
 }
 

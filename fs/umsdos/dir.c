@@ -52,17 +52,6 @@ struct dentry_operations umsdos_dentry_operations =
 	umsdos_dentry_dput	/* d_delete(struct dentry *) */
 };
 
-
-/*
- * So  grep *  doesn't complain in the presence of directories.
- */
- 
-int dummy_dir_read (struct file *filp, char *buff, size_t size, loff_t *count)
-{
-	return -EISDIR;
-}
-
-
 struct UMSDOS_DIR_ONCE {
 	void *dirbuf;
 	filldir_t filldir;
@@ -800,23 +789,23 @@ out_noread:
 }	
 
 
-static struct file_operations umsdos_dir_operations =
+struct file_operations umsdos_dir_operations =
 {
-	read:		dummy_dir_read,
+	read:		generic_read_dir,
 	readdir:	UMSDOS_readdir,
 	ioctl:		UMSDOS_ioctl_dir,
 };
 
 struct inode_operations umsdos_dir_inode_operations =
 {
-	&umsdos_dir_operations,	/* default directory file-ops */
-	UMSDOS_create,		/* create */
-	UMSDOS_lookup,		/* lookup */
-	UMSDOS_link,		/* link */
-	UMSDOS_unlink,		/* unlink */
-	UMSDOS_symlink,		/* symlink */
-	UMSDOS_mkdir,		/* mkdir */
-	UMSDOS_rmdir,		/* rmdir */
-	UMSDOS_mknod,		/* mknod */
-	UMSDOS_rename,		/* rename */
+	create:		UMSDOS_create,
+	lookup:		UMSDOS_lookup,
+	link:		UMSDOS_link,
+	unlink:		UMSDOS_unlink,
+	symlink:	UMSDOS_symlink,
+	mkdir:		UMSDOS_mkdir,
+	rmdir:		UMSDOS_rmdir,
+	mknod:		UMSDOS_mknod,
+	rename:		UMSDOS_rename,
+	setattr:	UMSDOS_notify_change,
 };

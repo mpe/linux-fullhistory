@@ -177,25 +177,8 @@ int ufs_check_dir_entry (const char * function,	struct inode * dir,
 	return (error_msg == NULL ? 1 : 0);
 }
 
-static struct file_operations ufs_dir_operations = {
+struct file_operations ufs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	ufs_readdir,
 	fsync:		file_fsync,
-};
-
-struct inode_operations ufs_dir_inode_operations = {
-	&ufs_dir_operations,	/* default directory file operations */
-	ufs_create,		/* create */
-	ufs_lookup,		/* lookup */
-	ufs_link,		/* link */
-	ufs_unlink,		/* unlink */
-	ufs_symlink,		/* symlink */
-	ufs_mkdir,		/* mkdir */
-	ufs_rmdir,		/* rmdir */
-	ufs_mknod,		/* mknod */
-	ufs_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	ufs_permission,		/* permission */
-	NULL			/* revalidate */
 };

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/dtc2278.c       Version 0.02  Feb 10, 1996
+ *  linux/drivers/block/dtc2278.c		Version 0.02	Feb 10, 1996
  *
  *  Copyright (C) 1996  Linus Torvalds & author (see below)
  */
@@ -95,7 +95,7 @@ static void tune_dtc2278 (ide_drive_t *drive, byte pio)
 	HWIF(drive)->drives[!drive->select.b.unit].io_32bit = 1;
 }
 
-void init_dtc2278 (void)
+void __init init_dtc2278 (void)
 {
 	unsigned long flags;
 

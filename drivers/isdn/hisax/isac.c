@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.24 1999/10/14 20:25:28 keil Exp $
+/* $Id: isac.c,v 1.25 2000/02/26 00:35:13 keil Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -9,6 +9,9 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: isac.c,v $
+ * Revision 1.25  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.24  1999/10/14 20:25:28  keil
  * add a statistic for error monitoring
  *
@@ -338,7 +341,7 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 				isac_fill_fifo(cs);
 				goto afterXPR;
 			} else {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_irq(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			}
@@ -627,7 +630,7 @@ ISAC_l1hw(struct PStack *st, int pr, void *arg)
 			discard_queue(&cs->rq);
 			discard_queue(&cs->sq);
 			if (cs->tx_skb) {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_any(cs->tx_skb);
 				cs->tx_skb = NULL;
 			}
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags))
@@ -683,7 +686,7 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 			/* discard frame; reset transceiver */
 			test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags);
 			if (cs->tx_skb) {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_any(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			} else {

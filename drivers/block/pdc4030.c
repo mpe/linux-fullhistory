@@ -1,5 +1,5 @@
 /*  -*- linux-c -*-
- *  linux/drivers/block/pdc4030.c	Version 0.90  May 27, 1999
+ *  linux/drivers/ide/pdc4030.c		Version 0.90  May 27, 1999
  *
  *  Copyright (C) 1995-1999  Linus Torvalds & authors (see below)
  */

@@ -23,8 +23,8 @@
 #include "cramfs.h"
 
 static struct super_operations cramfs_ops;
-static struct inode_operations cramfs_file_inode_operations;
 static struct inode_operations cramfs_dir_inode_operations;
+static struct file_operations cramfs_directory_operations;
 static struct address_space_operations cramfs_aops;
 
 /* These two macros may change in future, to provide better st_ino
@@ -52,11 +52,12 @@ static struct inode *get_cramfs_inode(struct super_block *sb, struct cramfs_inod
 				       without -noleaf option. */
 		insert_inode_hash(inode);
 		if (S_ISREG(inode->i_mode)) {
-			inode->i_op = &cramfs_file_inode_operations;
+			inode->i_fop = &generic_ro_fops;
 			inode->i_data.a_ops = &cramfs_aops;
-		} else if (S_ISDIR(inode->i_mode))
+		} else if (S_ISDIR(inode->i_mode)) {
 			inode->i_op = &cramfs_dir_inode_operations;
-		else if (S_ISLNK(inode->i_mode)) {
+			inode->i_fop = &cramfs_directory_operations;
+		} else if (S_ISLNK(inode->i_mode)) {
 			inode->i_op = &page_symlink_inode_operations;
 			inode->i_data.a_ops = &cramfs_aops;
 		} else {
@@ -352,41 +353,23 @@ static struct address_space_operations cramfs_aops = {
 
 /*
  * Our operations:
- *
- * A regular file can be read and mmap'ed.
  */
-static struct file_operations cramfs_file_operations = {
-	read:		generic_file_read,
-	mmap:		generic_file_mmap,
-};
 
 /*
  * A directory can only readdir
  */
 static struct file_operations cramfs_directory_operations = {
+	read:		generic_read_dir,
 	readdir:	cramfs_readdir,
 };
 
-static struct inode_operations cramfs_file_inode_operations = {
-	&cramfs_file_operations,
-};
-
 static struct inode_operations cramfs_dir_inode_operations = {
-	&cramfs_directory_operations,
-	NULL,			/* create */
-	cramfs_lookup,		/* lookup */
+	lookup:		cramfs_lookup,
 };
 
 static struct super_operations cramfs_ops = {
-	NULL,			/* read inode */
-	NULL,			/* write inode */
-	NULL,			/* put inode */
-	NULL,			/* delete inode */
-	NULL,			/* notify change */
-	cramfs_put_super,		/* put super */
-	NULL,			/* write super */
-	cramfs_statfs,		/* statfs */
-	NULL			/* remount */
+	put_super:	cramfs_put_super,
+	statfs:		cramfs_statfs,
 };
 
 static struct file_system_type cramfs_fs_type = {

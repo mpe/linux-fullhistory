@@ -85,15 +85,13 @@ static void minix_put_super(struct super_block *sb)
 }
 
 static struct super_operations minix_sops = {
-	minix_read_inode,
-	minix_write_inode,
-	NULL,			/* put_inode */
-	minix_delete_inode,
-	NULL,			/* notify_change */
-	minix_put_super,
-	minix_write_super,
-	minix_statfs,
-	minix_remount
+	read_inode:	minix_read_inode,
+	write_inode:	minix_write_inode,
+	delete_inode:	minix_delete_inode,
+	put_super:	minix_put_super,
+	write_super:	minix_write_super,
+	statfs:		minix_statfs,
+	remount_fs:	minix_remount,
 };
 
 static int minix_remount (struct super_block * sb, int * flags, char * data)
@@ -1054,7 +1052,6 @@ static void V1_minix_read_inode(struct inode * inode)
 	int block, ino;
 
 	ino = inode->i_ino;
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
@@ -1083,10 +1080,12 @@ static void V1_minix_read_inode(struct inode * inode)
 		inode->u.minix_i.u.i1_data[block] = raw_inode->i_zone[block];
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &minix_file_inode_operations;
+		inode->i_fop = &minix_file_operations;
 		inode->i_mapping->a_ops = &minix_aops;
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &minix_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_fop = &minix_dir_operations;
+	} else if (S_ISLNK(inode->i_mode)) {
 		inode->i_op = &page_symlink_inode_operations;
 		inode->i_mapping->a_ops = &minix_aops;
 	} else
@@ -1104,7 +1103,6 @@ static void V2_minix_read_inode(struct inode * inode)
 	int block, ino;
 
 	ino = inode->i_ino;
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
@@ -1135,10 +1133,12 @@ static void V2_minix_read_inode(struct inode * inode)
 		inode->u.minix_i.u.i2_data[block] = raw_inode->i_zone[block];
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &minix_file_inode_operations;
+		inode->i_fop = &minix_file_operations;
 		inode->i_mapping->a_ops = &minix_aops;
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &minix_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_fop = &minix_dir_operations;
+	} else if (S_ISLNK(inode->i_mode)) {
 		inode->i_op = &page_symlink_inode_operations;
 		inode->i_mapping->a_ops = &minix_aops;
 	} else

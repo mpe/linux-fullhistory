@@ -41,7 +41,7 @@
 #define GAYLE_STATUS	0x1e		/* see status-bits */
 #define GAYLE_CONTROL	0x101a
 
-static int gayle_offsets[IDE_NR_PORTS] = {
+static int __init gayle_offsets[IDE_NR_PORTS] = {
     GAYLE_DATA, GAYLE_ERROR, GAYLE_NSECTOR, GAYLE_SECTOR, GAYLE_LCYL,
     GAYLE_HCYL, GAYLE_SELECT, GAYLE_STATUS, -1, -1
 };
@@ -105,7 +105,7 @@ static int gayle_ack_intr_a1200(ide_hwif_t *hwif)
      *  Probe for a Gayle IDE interface (and optionally for an IDE doubler)
      */
 
-void gayle_init(void)
+void __init gayle_init(void)
 {
     int a4000, i;
 

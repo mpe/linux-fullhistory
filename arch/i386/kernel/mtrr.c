@@ -1507,11 +1507,6 @@ static struct file_operations mtrr_fops =
 
 #  ifdef CONFIG_PROC_FS
 
-static struct inode_operations proc_mtrr_inode_operations =
-{
-    &mtrr_fops,             /* default property file-ops */
-};
-
 static struct proc_dir_entry *proc_root_mtrr;
 
 #  endif  /*  CONFIG_PROC_FS  */
@@ -1836,7 +1831,7 @@ int __init mtrr_init(void)
 
 #ifdef CONFIG_PROC_FS
     proc_root_mtrr = create_proc_entry ("mtrr", S_IWUSR | S_IRUGO, &proc_root);
-    proc_root_mtrr->ops = &proc_mtrr_inode_operations;
+    proc_root_mtrr->proc_fops = &mtrr_fops;
 #endif
 #ifdef CONFIG_DEVFS_FS
     devfs_handle = devfs_register (NULL, "cpu/mtrr", 0, DEVFS_FL_DEFAULT, 0, 0,

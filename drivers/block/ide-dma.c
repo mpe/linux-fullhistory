@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-dma.c	Version 4.09	April 23, 1999
+ *  linux/drivers/block/ide-dma.c		Version 4.09	April 23, 1999
  *
  *  Copyright (c) 1999  Andre Hedrick
  *  May be copied or modified under the terms of the GNU General Public License
@@ -90,6 +90,8 @@
 
 #include <asm/io.h>
 #include <asm/irq.h>
+
+extern char *ide_dmafunc_verbose(ide_dma_action_t dmafunc);
 
 #ifdef CONFIG_IDEDMA_NEW_DRIVE_LISTINGS
 
@@ -401,6 +403,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long dma_base = hwif->dma_base;
+	byte unit = (drive->select.b.unit & 0x01);
 	unsigned int count, reading = 0;
 	byte dma_stat;
 
@@ -408,8 +411,11 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_off:
 			printk("%s: DMA disabled\n", drive->name);
 		case ide_dma_off_quietly:
+			outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
 		case ide_dma_on:
 			drive->using_dma = (func == ide_dma_on);
+			if (drive->using_dma)
+				outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
 			return 0;
 		case ide_dma_check:
 			return config_drive_for_dma (drive);
@@ -424,7 +430,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			drive->waiting_for_dma = 1;
 			if (drive->media != ide_disk)
 				return 0;
-			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL);/* issue cmd to drive */
+			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL);	/* issue cmd to drive */
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 		case ide_dma_begin:
 			/* Note that this is done *after* the cmd has
@@ -449,12 +455,10 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			return check_drive_lists(drive, (func == ide_dma_good_drive));
 		case ide_dma_lostirq:
 		case ide_dma_timeout:
-			/*
-			 * printk("ide_dmaproc: chipset supported func only: %d\n", func);
-			 */
+			printk("ide_dmaproc: chipset supported %s func only: %d\n", ide_dmafunc_verbose(func),  func);
 			return 1;
 		default:
-			printk("ide_dmaproc: unsupported func: %d\n", func);
+			printk("ide_dmaproc: unsupported %s func: %d\n", ide_dmafunc_verbose(func), func);
 			return 1;
 	}
 }
@@ -541,14 +545,15 @@ unsigned long __init ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const
 		}
 	}
 	if (dma_base) {
-		if (extra) /* PDC20246, PDC20262, & HPT343 */
+		if (extra) /* PDC20246, PDC20262, HPT343, & HPT366 */
 			request_region(dma_base+16, extra, name);
 		dma_base += hwif->channel ? 8 : 0;
 		hwif->dma_extra = extra;
 
 		switch(dev->device) {
-			case PCI_DEVICE_ID_CMD_643:
 			case PCI_DEVICE_ID_AL_M5219:
+			case PCI_DEVICE_ID_AMD_VIPER_7409:
+			case PCI_DEVICE_ID_CMD_643:
 				outb(inb(dma_base+2) & 0x60, dma_base+2);
 				if (inb(dma_base+2) & 0x80) {
 					printk("%s: simplex device: DMA forced\n", name);

@@ -56,23 +56,20 @@ const struct hfs_name hfs_dbl_reserved2[] = {
 #define ROOTINFO	(&hfs_dbl_reserved2[0])
 #define PCNT_ROOTINFO	(&hfs_dbl_reserved2[1])
 
-static struct file_operations hfs_dbl_dir_operations = {
-	read:		hfs_dir_read,
+struct file_operations hfs_dbl_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	dbl_readdir,
 	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_dbl_dir_inode_operations = {
-	&hfs_dbl_dir_operations,/* default directory file-ops */
-	dbl_create,		/* create */
-	dbl_lookup,		/* lookup */
-	NULL,			/* link */
-	dbl_unlink,		/* unlink */
-	NULL,			/* symlink */
-	dbl_mkdir,		/* mkdir */
-	dbl_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	dbl_rename,		/* rename */
+	create:		dbl_create,
+	lookup:		dbl_lookup,
+	unlink:		dbl_unlink,
+	mkdir:		dbl_mkdir,
+	rmdir:		dbl_rmdir,
+	rename:		dbl_rename,
+	setattr:	hfs_notify_change,
 };
 
 

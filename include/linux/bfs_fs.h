@@ -83,10 +83,12 @@ extern int init_bfs_fs(void);
 
 /* file.c */
 extern struct inode_operations bfs_file_inops;
+extern struct file_operations bfs_file_operations;
 extern struct address_space_operations bfs_aops;
 
 /* dir.c */
 extern struct inode_operations bfs_dir_inops;
+extern struct file_operations bfs_dir_operations;
 
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_BFS_FS_H */

@@ -1,5 +1,5 @@
 /*
- *  $Id: debug.h,v 1.1 1996/11/07 13:07:42 fritz Exp $
+ *  $Id: debug.h,v 1.2 2000/02/26 01:00:53 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify

@@ -38,15 +38,10 @@ static int  ncp_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations ncp_sops =
 {
-	NULL,			/* read inode */
-	NULL,			/* write inode */
-	ncp_put_inode,		/* put inode */
-	ncp_delete_inode,       /* delete inode */
-	ncp_notify_change,	/* notify change */
-	ncp_put_super,		/* put superblock */
-	NULL,			/* write superblock */
-	ncp_statfs,		/* stat filesystem */
-	NULL                    /* remount */
+	put_inode:	ncp_put_inode,
+	delete_inode:	ncp_delete_inode,
+	put_super:	ncp_put_super,
+	statfs:		ncp_statfs,
 };
 
 extern struct dentry_operations ncp_dentry_operations;
@@ -201,6 +196,12 @@ static void ncp_set_attr(struct inode *inode, struct ncp_entry_info *nwinfo)
 	ncp_update_inode(inode, nwinfo);
 }
 
+static struct inode_operations ncp_symlink_inode_operations = {
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	setattr:	ncp_notify_change,
+};
+
 /*
  * Get a new inode.
  */
@@ -222,11 +223,13 @@ ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
 		ncp_set_attr(inode, info);
 		if (S_ISREG(inode->i_mode)) {
 			inode->i_op = &ncp_file_inode_operations;
+			inode->i_fop = &ncp_file_operations;
 		} else if (S_ISDIR(inode->i_mode)) {
 			inode->i_op = &ncp_dir_inode_operations;
+			inode->i_fop = &ncp_dir_operations;
 #ifdef CONFIG_NCPFS_EXTRAS
 		} else if (S_ISLNK(inode->i_mode)) {
-			inode->i_op = &page_symlink_inode_operations;
+			inode->i_op = &ncp_symlink_inode_operations;
 			inode->i_data.a_ops = &ncp_symlink_aops;
 #endif
 		}

@@ -116,23 +116,9 @@ struct file_operations proc_sys_file_operations =
 	write:		proc_writesys,
 };
 
-struct inode_operations proc_sys_inode_operations =
+static struct inode_operations proc_sys_inode_operations =
 {
-	&proc_sys_file_operations,
-	NULL,		/* create */
-	NULL,		/* lookup */
-	NULL,		/* link */
-	NULL,		/* unlink */
-	NULL,		/* symlink */
-	NULL,		/* mkdir */
-	NULL,		/* rmdir */
-	NULL,		/* mknod */
-	NULL,		/* rename */
-	NULL,		/* readlink */
-	NULL,		/* follow_link */
-	NULL,		/* truncate */
-	proc_sys_permission, /* permission */
-	NULL		/* revalidate */
+	permission:	proc_sys_permission,
 };
 
 extern struct proc_dir_entry *proc_sys_root;
@@ -569,9 +555,10 @@ static void register_proc_table(ctl_table * table, struct proc_dir_entry *root)
 			if (!de)
 				continue;
 			de->data = (void *) table;
-			if (table->proc_handler)
-				de->ops = &proc_sys_inode_operations;
-
+			if (table->proc_handler) {
+				de->proc_fops = &proc_sys_file_operations;
+				de->proc_iops = &proc_sys_inode_operations;
+			}
 		}
 		table->de = de;
 		if (de->mode & S_IFDIR)

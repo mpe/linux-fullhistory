@@ -672,10 +672,6 @@ struct file_operations def_blk_fops = {
 	ioctl:		blkdev_ioctl,
 };
 
-struct inode_operations blkdev_inode_operations = {
-	&def_blk_fops,		/* default file operations */
-};
-
 const char * bdevname(kdev_t dev)
 {
 	static char buffer[32];

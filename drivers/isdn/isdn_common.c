@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.97 2000/01/23 18:45:37 keil Exp $
+/* $Id: isdn_common.c,v 1.99 2000/02/26 01:00:52 keil Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.99  2000/02/26 01:00:52  keil
+ * changes from 2.3.47
+ *
+ * Revision 1.98  2000/02/16 14:56:27  paul
+ * translated ISDN_MODEM_ANZREG to ISDN_MODEM_NUMREG for english speakers
+ *
  * Revision 1.97  2000/01/23 18:45:37  keil
  * Change EAZ mapping to forbit the use of cards (insert a "-" for the MSN)
  *
@@ -443,7 +449,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.97 $";
+static char *isdn_revision = "$Revision: 1.99 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -1795,15 +1801,15 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 					int i;
 
 					if ((ret = verify_area(VERIFY_WRITE, (void *) arg,
-					(ISDN_MODEM_ANZREG + ISDN_MSNLEN + ISDN_LMSNLEN)
+					(ISDN_MODEM_NUMREG + ISDN_MSNLEN + ISDN_LMSNLEN)
 						   * ISDN_MAX_CHANNELS)))
 						return ret;
 
 					for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 						if (copy_to_user(p, dev->mdm.info[i].emu.profile,
-						      ISDN_MODEM_ANZREG))
+						      ISDN_MODEM_NUMREG))
 							return -EFAULT;
-						p += ISDN_MODEM_ANZREG;
+						p += ISDN_MODEM_NUMREG;
 						if (copy_to_user(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN))
 							return -EFAULT;
 						p += ISDN_MSNLEN;
@@ -1811,7 +1817,7 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 							return -EFAULT;
 						p += ISDN_LMSNLEN;
 					}
-					return (ISDN_MODEM_ANZREG + ISDN_MSNLEN + ISDN_LMSNLEN) * ISDN_MAX_CHANNELS;
+					return (ISDN_MODEM_NUMREG + ISDN_MSNLEN + ISDN_LMSNLEN) * ISDN_MAX_CHANNELS;
 				} else
 					return -EINVAL;
 				break;
@@ -1822,15 +1828,15 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 					int i;
 
 					if ((ret = verify_area(VERIFY_READ, (void *) arg,
-					(ISDN_MODEM_ANZREG + ISDN_MSNLEN)
+					(ISDN_MODEM_NUMREG + ISDN_MSNLEN)
 						   * ISDN_MAX_CHANNELS)))
 						return ret;
 
 					for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 						if (copy_from_user(dev->mdm.info[i].emu.profile, p,
-						     ISDN_MODEM_ANZREG))
+						     ISDN_MODEM_NUMREG))
 							return -EFAULT;
-						p += ISDN_MODEM_ANZREG;
+						p += ISDN_MODEM_NUMREG;
 						if (copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN))
 							return -EFAULT;
 						p += ISDN_MSNLEN;
@@ -2632,7 +2638,7 @@ static void isdn_cleanup_devfs(void)
 	devfs_unregister (devfs_handle);
 }
 
-#else   /*  CONFIG_DEVFS_FS  */
+#else   /* CONFIG_DEVFS_FS */
 static void isdn_register_devfs(int dummy)
 {
 	return;
@@ -2653,7 +2659,7 @@ static void isdn_cleanup_devfs(void)
     return;
 }
 
-#endif  /*  CONFIG_DEVFS_FS  */
+#endif  /* CONFIG_DEVFS_FS */
 
 /*
  * Allocate and initialize all data, register modem-devices

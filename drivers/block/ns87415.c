@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ns87415.c	Version 1.00  December 7, 1997
+ * linux/drivers/block/ns87415.c		Version 1.00  December 7, 1997
  *
  * Copyright (C) 1997-1998  Mark Lord
  * Copyright (C) 1998       Eddie C. Dost  (ecd@skynet.be)

@@ -200,59 +200,25 @@ int Pci2000_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry Proc_Scsi_Pci2000;
-
-#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,75)
-#define PCI2000 {																\
-		next:						NULL,										\
-		module:						NULL,										\
-		proc_dir:					&Proc_Scsi_Pci2000,							\
-		proc_info:					NULL,	/* let's not bloat the kernel */	\
-		name:						"PCI-2000 SCSI Intelligent Disk Controller",\
-		detect:						Pci2000_Detect,								\
-		release:					Pci2000_Release,							\
-		info:						NULL,	/* let's not bloat the kernel */	\
-		command:					Pci2000_Command,							\
-		queuecommand:				Pci2000_QueueCommand,						\
-		eh_strategy_handler:		NULL,										\
-		eh_abort_handler:			NULL,										\
-		eh_device_reset_handler:	NULL,										\
-		eh_bus_reset_handler:		NULL,										\
-		eh_host_reset_handler:		NULL,										\
-		abort:						Pci2000_Abort,								\
-		reset:						Pci2000_Reset,								\
-		slave_attach:				NULL,										\
-		bios_param:					Pci2000_BiosParam,							\
-		can_queue:					16,											\
-		this_id:					-1,											\
-		sg_tablesize:				16,											\
-		cmd_per_lun:				1,											\
-		present:					0,											\
-		unchecked_isa_dma:			0,											\
-		use_clustering:				DISABLE_CLUSTERING,							\
-		use_new_eh_code:			0											\
-		}
-#else
-#define PCI2000 { NULL, NULL,							\
-			&Proc_Scsi_Pci2000,/* proc_dir_entry */		\
-			NULL,		                				\
-			"PCI-2000 SCSI Intelligent Disk Controller",\
-			Pci2000_Detect,								\
-			Pci2000_Release,							\
-			NULL,	 									\
-			Pci2000_Command,							\
-			Pci2000_QueueCommand,						\
-			Pci2000_Abort,								\
-			Pci2000_Reset,								\
-			NULL,										\
-			Pci2000_BiosParam,                 			\
-			16, 										\
-			-1, 										\
-			16,		 									\
-			1, 											\
-			0, 											\
-			0, 											\
-			DISABLE_CLUSTERING }
-#endif
+/* screen is 80 columns wide, damnit! */
+#define PCI2000 {				\
+	proc_name:	"pci2000",					\
+	name:		"PCI-2000 SCSI Intelligent Disk Controller",	\
+	detect:		Pci2000_Detect,					\
+	release:	Pci2000_Release,				\
+	command:	Pci2000_Command,				\
+	queuecommand:	Pci2000_QueueCommand,				\
+	abort:		Pci2000_Abort,					\
+	reset:		Pci2000_Reset,					\
+	bios_param:	Pci2000_BiosParam,				\
+	can_queue:	16,						\
+	this_id:	-1,						\
+	sg_tablesize:	16,						\
+	cmd_per_lun:	1,						\
+	present:	0,						\
+	unchecked_isa_dma:0,						\
+	use_clustering:	DISABLE_CLUSTERING,				\
+	use_new_eh_code:0						\
+}
 
 #endif

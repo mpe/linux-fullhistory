@@ -62,36 +62,28 @@ const struct hfs_name hfs_nat_reserved2[] = {
 #define DOT_PARENT	(&hfs_nat_reserved1[3])
 #define ROOTINFO        (&hfs_nat_reserved2[0])
 
-static struct file_operations hfs_nat_dir_operations = {
-	read:		hfs_dir_read,
+struct file_operations hfs_nat_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	nat_readdir,
 	fsync:		file_fsync,
 };
 
 struct inode_operations hfs_nat_ndir_inode_operations = {
-	&hfs_nat_dir_operations,/* default directory file-ops */
-	hfs_create,		/* create */
-	nat_lookup,		/* lookup */
-	NULL,			/* link */
-	hfs_unlink,		/* unlink */
-	NULL,			/* symlink */
-	hfs_mkdir,		/* mkdir */
-	nat_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	hfs_rename,		/* rename */
+	create:		hfs_create,
+	lookup:		nat_lookup,
+	unlink:		hfs_unlink,
+	mkdir:		hfs_mkdir,
+	rmdir:		nat_rmdir,
+	rename:		hfs_rename,
+	setattr:	hfs_notify_change,
 };
 
 struct inode_operations hfs_nat_hdir_inode_operations = {
-	&hfs_nat_dir_operations,/* default directory file-ops */
-	hfs_create,		/* create */
-	nat_lookup,		/* lookup */
-	NULL,			/* link */
-	nat_hdr_unlink,		/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	nat_hdr_rename,		/* rename */
+	create:		hfs_create,
+	lookup:		nat_lookup,
+	unlink:		nat_hdr_unlink,
+	rename:		nat_hdr_rename,
+	setattr:	hfs_notify_change,
 };
 
 /*================ File-local functions ================*/

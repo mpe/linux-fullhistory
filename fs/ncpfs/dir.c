@@ -31,7 +31,6 @@ static void ncp_read_volume_list(struct file *, void *, filldir_t,
 static void ncp_do_readdir(struct file *, void *, filldir_t,
 				struct ncp_cache_control *);
 
-static ssize_t ncp_dir_read(struct file *, char *, size_t, loff_t *);
 static int ncp_readdir(struct file *, void *, filldir_t);
 
 static int ncp_create(struct inode *, struct dentry *, int);
@@ -45,41 +44,26 @@ static int ncp_rename(struct inode *, struct dentry *,
 extern int ncp_symlink(struct inode *, struct dentry *, const char *);
 #endif
 		      
-static struct file_operations ncp_dir_operations =
+struct file_operations ncp_dir_operations =
 {
-	read:		ncp_dir_read,
+	read:		generic_read_dir,
 	readdir:	ncp_readdir,
 	ioctl:		ncp_ioctl,
 };
 
 struct inode_operations ncp_dir_inode_operations =
 {
-	&ncp_dir_operations,	/* default directory file ops */
-	ncp_create,		/* create */
-	ncp_lookup,		/* lookup */
-	NULL,			/* link */
-	ncp_unlink,		/* unlink */
+	create:		ncp_create,
+	lookup:		ncp_lookup,
+	unlink:		ncp_unlink,
 #ifdef CONFIG_NCPFS_EXTRAS
-	ncp_symlink,		/* symlink */
-#else
-	NULL,			/* symlink */
+	symlink:	ncp_symlink,
 #endif
-	ncp_mkdir,		/* mkdir */
-	ncp_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	ncp_rename,		/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow link */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* revalidate */
+	mkdir:		ncp_mkdir,
+	rmdir:		ncp_rmdir,
+	rename:		ncp_rename,
+	setattr:	ncp_notify_change,
 };
-
-static ssize_t 
-ncp_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
 
 /*
  * Dentry operations routines

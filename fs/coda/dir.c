@@ -65,24 +65,22 @@ struct dentry_operations coda_dentry_operations =
 
 struct inode_operations coda_dir_inode_operations =
 {
-	&coda_dir_operations,
-	coda_create,	        /* create */
-	coda_lookup,	        /* lookup */
-	coda_link,	        /* link */
-	coda_unlink,            /* unlink */
-	coda_symlink,	        /* symlink */
-	coda_mkdir,	        /* mkdir */
-	coda_rmdir,   	        /* rmdir */
-	coda_mknod,	        /* mknod */
-	coda_rename,	        /* rename */
-	NULL,	                /* readlink */
-	NULL,	                /* follow_link */
-	NULL,	                /* truncate */
-	coda_permission,        /* permission */
-        coda_revalidate_inode   /* revalidate */
+	create:		coda_create,
+	lookup:		coda_lookup,
+	link:		coda_link,
+	unlink:		coda_unlink,
+	symlink:	coda_symlink,
+	mkdir:		coda_mkdir,
+	rmdir:		coda_rmdir,
+	mknod:		coda_mknod,
+	rename:		coda_rename,
+	permission:	coda_permission,
+        revalidate:	coda_revalidate_inode,
+	setattr:	coda_notify_change,
 };
 
 struct file_operations coda_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	coda_readdir,
 	open:		coda_open,
 	release:	coda_release,

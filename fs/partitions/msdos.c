@@ -351,7 +351,7 @@ int msdos_partition(struct gendisk *hd, kdev_t dev,
 	int tested_for_xlate = 0;
 
 read_mbr:
-#endif
+#endif /* CONFIG_BLK_DEV_IDE */
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
 		if (warn_no_part) printk(" unable to read partition table\n");
 		return -1;
@@ -359,7 +359,7 @@ read_mbr:
 	data = bh->b_data;
 #ifdef CONFIG_BLK_DEV_IDE
 check_table:
-#endif
+#endif /* CONFIG_BLK_DEV_IDE */
 	/* Use bforget(), because we may have changed the disk geometry */
 	if (*(unsigned short *)  (0x1fe + data) != cpu_to_le16(MSDOS_LABEL_MAGIC)) {
 		bforget(bh);

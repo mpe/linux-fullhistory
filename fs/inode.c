@@ -471,9 +471,12 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 static void clean_inode(struct inode *inode)
 {
 	static struct address_space_operations empty_aops = {};
+	static struct inode_operations empty_iops = {};
+	static struct file_operations empty_fops = {};
 	memset(&inode->u, 0, sizeof(inode->u));
 	inode->i_sock = 0;
-	inode->i_op = NULL;
+	inode->i_op = &empty_iops;
+	inode->i_fop = &empty_fops;
 	inode->i_nlink = 1;
 	atomic_set(&inode->i_writecount, 0);
 	inode->i_size = 0;

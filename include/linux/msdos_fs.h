@@ -267,6 +267,7 @@ int fat_new_dir(struct inode *inode, struct inode *parent, int is_vfat);
 extern struct inode_operations fat_file_inode_operations;
 extern struct inode_operations fat_file_inode_operations_1024;
 extern struct inode_operations fat_file_inode_operations_readpage;
+extern struct file_operations fat_file_operations;
 extern ssize_t fat_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t fat_file_write(struct file *, const char *, size_t, loff_t *);
 extern void fat_truncate(struct inode *inode);

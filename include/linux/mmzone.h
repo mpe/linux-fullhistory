@@ -28,7 +28,8 @@ typedef struct zone_struct {
 	spinlock_t lock;
 	unsigned long offset;
 	unsigned long free_pages;
-	int low_on_memory;
+	char low_on_memory;
+	char zone_wake_kswapd;
 	unsigned long pages_min, pages_low, pages_high;
 
 	/*
@@ -84,9 +85,11 @@ typedef struct pglist_data {
 	unsigned long node_start_mapnr;
 	unsigned long node_size;
 	int node_id;
+	struct pglist_data *node_next;
 } pg_data_t;
 
 extern int numnodes;
+extern pg_data_t *pgdat_list;
 
 #define memclass(pgzone, tzone)	(((pgzone)->zone_pgdat == (tzone)->zone_pgdat) \
 			&& (((pgzone) - (pgzone)->zone_pgdat->node_zones) <= \

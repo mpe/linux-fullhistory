@@ -101,7 +101,7 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 	return NULL;
 }
 
-struct dentry *sysv_lookup(struct inode * dir, struct dentry * dentry)
+static struct dentry *sysv_lookup(struct inode * dir, struct dentry * dentry)
 {
 	struct inode * inode = NULL;
 	struct sysv_dir_entry * de;
@@ -193,7 +193,7 @@ static int sysv_add_entry(struct inode * dir,
 	return 0;
 }
 
-int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
+static int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 {
 	int error;
 	struct inode * inode;
@@ -204,6 +204,7 @@ int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 	if (!inode) 
 		return -ENOSPC;
 	inode->i_op = &sysv_file_inode_operations;
+	inode->i_fop = &sysv_file_operations;
 	inode->i_mapping->a_ops = &sysv_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
@@ -222,7 +223,7 @@ int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 	return 0;
 }
 
-int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
+static int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 {
 	int error;
 	struct inode * inode;
@@ -256,7 +257,7 @@ int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 	return 0;
 }
 
-int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
+static int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 {
 	int error;
 	struct inode * inode;
@@ -275,6 +276,7 @@ int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_op = &sysv_dir_inode_operations;
+	inode->i_fop = &sysv_dir_operations;
 	inode->i_size = 2 * SYSV_DIRSIZE;
 	dir_block = sysv_file_bread(inode,0,1);
 	if (!dir_block) {
@@ -370,7 +372,7 @@ bad_dir:
 	return 1;
 }
 
-int sysv_rmdir(struct inode * dir, struct dentry * dentry)
+static int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -407,7 +409,7 @@ end_rmdir:
 	return retval;
 }
 
-int sysv_unlink(struct inode * dir, struct dentry * dentry)
+static int sysv_unlink(struct inode * dir, struct dentry * dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -438,7 +440,7 @@ end_unlink:
 	return retval;
 }
 
-int sysv_symlink(struct inode * dir, struct dentry * dentry, 
+static int sysv_symlink(struct inode * dir, struct dentry * dentry, 
 		 const char * symname)
 {
 	struct inode * inode;
@@ -456,7 +458,7 @@ int sysv_symlink(struct inode * dir, struct dentry * dentry,
 		goto out;
 
 	inode->i_mode = S_IFLNK | 0777;
-	inode->i_op = &page_symlink_inode_operations;
+	inode->i_op = &sysv_symlink_inode_operations;
 	inode->i_mapping->a_ops = &sysv_aops;
 	err = block_symlink(inode, symname, l);
 	if (err)
@@ -479,7 +481,7 @@ out_no_entry:
 	goto out;
 }
 
-int sysv_link(struct dentry * old_dentry, struct inode * dir, 
+static int sysv_link(struct dentry * old_dentry, struct inode * dir, 
 	      struct dentry * dentry)
 {
 	struct inode *oldinode = old_dentry->d_inode;
@@ -523,7 +525,7 @@ int sysv_link(struct dentry * old_dentry, struct inode * dir,
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
+static int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
 		  struct inode * new_dir, struct dentry * new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -604,3 +606,19 @@ end_rename:
 	brelse(new_bh);
 	return retval;
 }
+
+/*
+ * directories can handle most operations...
+ */
+struct inode_operations sysv_dir_inode_operations = {
+	create:		sysv_create,
+	lookup:		sysv_lookup,
+	link:		sysv_link,
+	unlink:		sysv_unlink,
+	symlink:	sysv_symlink,
+	mkdir:		sysv_mkdir,
+	rmdir:		sysv_rmdir,
+	mknod:		sysv_mknod,
+	rename:		sysv_rename,
+	setattr:	sysv_notify_change,
+};

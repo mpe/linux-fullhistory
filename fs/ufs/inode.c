@@ -641,14 +641,14 @@ void ufs_read_inode (struct inode * inode)
 	}
 
 
-	inode->i_op = NULL;
-
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ufs_file_inode_operations;
+		inode->i_fop = &ufs_file_operations;
 		inode->i_mapping->a_ops = &ufs_aops;
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &ufs_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_fop = &ufs_dir_operations;
+	} else if (S_ISLNK(inode->i_mode)) {
 		if (!inode->i_blocks)
 			inode->i_op = &ufs_fast_symlink_inode_operations;
 		else {

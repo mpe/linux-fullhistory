@@ -59,7 +59,8 @@ struct proc_dir_entry {
 	uid_t uid;
 	gid_t gid;
 	unsigned long size;
-	struct inode_operations * ops;
+	struct inode_operations * proc_iops;
+	struct file_operations * proc_fops;
 	get_info_t *get_info;
 	struct module *owner;
 	struct proc_dir_entry *next, *parent, *subdir;
@@ -80,7 +81,7 @@ extern struct proc_dir_entry *proc_root_fs;
 extern struct proc_dir_entry *proc_net;
 extern struct proc_dir_entry *proc_bus;
 extern struct proc_dir_entry *proc_root_driver;
-extern struct proc_dir_entry proc_root_kcore;
+extern struct proc_dir_entry *proc_root_kcore;
 
 extern void proc_root_init(void);
 extern void proc_misc_init(void);
@@ -112,10 +113,9 @@ extern int proc_match(int, const char *,struct proc_dir_entry *);
 extern int proc_readdir(struct file *, void *, filldir_t);
 extern struct dentry *proc_lookup(struct inode *, struct dentry *);
 
-extern struct inode_operations proc_sys_inode_operations;
-extern struct inode_operations proc_kcore_inode_operations;
-extern struct inode_operations proc_kmsg_inode_operations;
-extern struct inode_operations proc_ppc_htab_inode_operations;
+extern struct file_operations proc_kcore_operations;
+extern struct file_operations proc_kmsg_operations;
+extern struct file_operations ppc_htab_operations;
 
 /*
  * proc_tty.c

@@ -99,7 +99,7 @@ struct file * get_empty_filp(void)
 /*
  * Clear and initialize a (private) struct file for the given dentry,
  * and call the open function (if any).  The caller must verify that
- * inode->i_op and inode->i_op->default_file_ops are not NULL.
+ * inode->i_fop is not NULL.
  */
 int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 {
@@ -109,7 +109,7 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 	filp->f_dentry = dentry;
 	filp->f_uid    = current->fsuid;
 	filp->f_gid    = current->fsgid;
-	filp->f_op     = dentry->d_inode->i_op->default_file_ops;
+	filp->f_op     = dentry->d_inode->i_fop;
 	if (filp->f_op->open)
 		return filp->f_op->open(dentry->d_inode, filp);
 	else

@@ -585,16 +585,13 @@ rename_done:
 
 /* The public inode operations for the msdos fs */
 struct inode_operations msdos_dir_inode_operations = {
-	&fat_dir_operations,	/* default directory file-ops */
-	msdos_create,		/* create */
-	msdos_lookup,		/* lookup */
-	NULL,			/* link */
-	msdos_unlink,		/* unlink */
-	NULL,			/* symlink */
-	msdos_mkdir,		/* mkdir */
-	msdos_rmdir,		/* rmdir */
-	NULL,			/* mknod */
-	msdos_rename,		/* rename */
+	create:		msdos_create,
+	lookup:		msdos_lookup,
+	unlink:		msdos_unlink,
+	mkdir:		msdos_mkdir,
+	rmdir:		msdos_rmdir,
+	rename:		msdos_rename,
+	setattr:	fat_notify_change,
 };
 
 static void msdos_put_super_callback(struct super_block *sb)

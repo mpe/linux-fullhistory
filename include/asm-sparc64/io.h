@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.32 2000/02/15 10:04:54 jj Exp $ */
+/* $Id: io.h,v 1.33 2000/02/25 05:47:38 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -225,10 +225,8 @@ extern __inline__ void _sbus_writel(unsigned int l, unsigned long addr)
 #define sbus_writew(__w, __addr)	(_sbus_writew((__w), (unsigned long)(__addr)))
 #define sbus_writel(__l, __addr)	(_sbus_writel((__l), (unsigned long)(__addr)))
 
-static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
+static inline void *_sbus_memset_io(unsigned long dst, int c, __kernel_size_t n)
 {
-	unsigned long dst = (unsigned long)__dst;
-
 	while(n--) {
 		sbus_writeb(c, dst);
 		dst++;
@@ -236,8 +234,11 @@ static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
 	return (void *) dst;
 }
 
+#define sbus_memset_io(d,c,sz)	\
+	_sbus_memset_io((unsigned long)d,(int)c,(__kernel_size_t)sz)
+
 static inline void *
-memset_io(void *dst, int c, __kernel_size_t n)
+_memset_io(void *dst, int c, __kernel_size_t n)
 {
 	char *d = dst;
 
@@ -249,8 +250,11 @@ memset_io(void *dst, int c, __kernel_size_t n)
 	return dst;
 }
 
+#define memset_io(d,c,sz)	\
+	_memset_io((void *)d,(int)c,(__kernel_size_t)sz)
+
 static inline void *
-memcpy_fromio(void *dst, unsigned long src, __kernel_size_t n)
+_memcpy_fromio(void *dst, unsigned long src, __kernel_size_t n)
 {
 	char *d = dst;
 
@@ -263,8 +267,11 @@ memcpy_fromio(void *dst, unsigned long src, __kernel_size_t n)
 	return dst;
 }
 
+#define memcpy_fromio(d,s,sz)	\
+	_memcpy_fromio((void *)d,(unsigned long)s,(__kernel_size_t)sz)
+
 static inline void *
-memcpy_toio(unsigned long dst, const void *src, __kernel_size_t n)
+_memcpy_toio(unsigned long dst, const void *src, __kernel_size_t n)
 {
 	const char *s = src;
 	unsigned long d = dst;
@@ -276,6 +283,9 @@ memcpy_toio(unsigned long dst, const void *src, __kernel_size_t n)
 	}
 	return (void *)dst;
 }
+
+#define memcpy_toio(d,s,sz)	\
+	_memcpy_toio((unsigned long)d,(const void *)s,(__kernel_size_t)sz)
 
 static inline int check_signature(unsigned long io_addr,
 				  const unsigned char *signature,

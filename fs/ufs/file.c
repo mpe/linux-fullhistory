@@ -71,7 +71,7 @@ static long long ufs_file_lseek(
  * We have mostly NULL's here: the current defaults are ok for
  * the ufs filesystem.
  */
-static struct file_operations ufs_file_operations = {
+struct file_operations ufs_file_operations = {
 	llseek:		ufs_file_lseek,
 	read:		generic_file_read,
 	write:		generic_file_write,
@@ -79,6 +79,5 @@ static struct file_operations ufs_file_operations = {
 };
 
 struct inode_operations ufs_file_inode_operations = {
-	&ufs_file_operations,
 	truncate:	ufs_truncate,
 };

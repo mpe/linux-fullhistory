@@ -1,16 +1,15 @@
 /*
- * linux/drivers/block/ide-features.c
+ * linux/drivers/block/ide-features.c	Version 0.03	Feb. 10, 2000
  *
- *  Copyright (C) 1999  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1999-2000	Linus Torvalds & authors (see below)
  *  
- *  Andre Hedrick <andre@suse.com>
+ *  Copyright (C) 1999-2000	Andre Hedrick <andre@suse.com>
  *
  *  Extracts if ide.c to address the evolving transfer rate code for
- *  the SETFEATURES_XFER callouts.  Below are original authors of some or
- *  various parts of any given function below.
+ *  the SETFEATURES_XFER callouts.  Various parts of any given function
+ *  are credited to previous ATA-IDE maintainers.
  *
- *  Mark Lord     <mlord@pobox.com>
- *  Gadi Oxman    <gadio@netvision.net.il>
+ *  May be copied or modified under the terms of the GNU General Public License
  */
 
 #define __NO_VERSION__
@@ -36,12 +35,15 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 
+#define SETFEATURES_CONTROL_REG		(0)	/* some arch's may need */
+
 /*
- *
+ * A Verbose noise maker for debugging on the attempted transfer rates.
  */
 char *ide_xfer_verbose (byte xfer_rate)
 {
 	switch(xfer_rate) {
+		case XFER_UDMA_7:	return("UDMA 7");
 		case XFER_UDMA_6:	return("UDMA 6");
 		case XFER_UDMA_5:	return("UDMA 5");
 		case XFER_UDMA_4:	return("UDMA 4");
@@ -71,14 +73,42 @@ char *ide_xfer_verbose (byte xfer_rate)
 char *ide_media_verbose (ide_drive_t *drive)
 {
 	switch (drive->media) {
-		case ide_disk:		return("disk  ");
-		case ide_cdrom:		return("cdrom ");
-		case ide_tape:		return("tape  ");
-		case ide_floppy:	return("floppy");
-		default:		return("??????");
+		case ide_scsi:		return("scsi   ");
+		case ide_disk:		return("disk   ");
+		case ide_optical:	return("optical");
+		case ide_cdrom:		return("cdrom  ");
+		case ide_tape:		return("tape   ");
+		case ide_floppy:	return("floppy ");
+		default:		return("???????");
 	}
 }
 
+/*
+ * A Verbose noise maker for debugging on the attempted dmaing calls.
+ */
+char *ide_dmafunc_verbose (ide_dma_action_t dmafunc)
+{
+	switch (dmafunc) {
+		case ide_dma_read:		return("ide_dma_read");
+		case ide_dma_write:		return("ide_dma_write");
+		case ide_dma_begin:		return("ide_dma_begin");
+		case ide_dma_end:		return("ide_dma_end:");
+		case ide_dma_check:		return("ide_dma_check");
+		case ide_dma_on:		return("ide_dma_on");
+		case ide_dma_off:		return("ide_dma_off");
+		case ide_dma_off_quietly:	return("ide_dma_off_quietly");
+		case ide_dma_test_irq:		return("ide_dma_test_irq");
+		case ide_dma_bad_drive:		return("ide_dma_bad_drive");
+		case ide_dma_good_drive:	return("ide_dma_good_drive");
+		case ide_dma_lostirq:		return("ide_dma_lostirq");
+		case ide_dma_timeout:		return("ide_dma_timeout");
+		default:			return("unknown");
+	}
+}
+
+/*
+ * Update the 
+ */
 int ide_driveid_update (ide_drive_t *drive)
 {
 	/*
@@ -129,50 +159,6 @@ int ide_driveid_update (ide_drive_t *drive)
 }
 
 /*
- * Similar to ide_wait_stat(), except it never calls ide_error internally.
- * This is a kludge to handle the new ide_config_drive_speed() function,
- * and should not otherwise be used anywhere.  Eventually, the tuneproc's
- * should be updated to return ide_startstop_t, in which case we can get
- * rid of this abomination again.  :)   -ml
- */
-int ide_wait_noerr (ide_drive_t *drive, byte good, byte bad, unsigned long timeout)
-{
-	byte stat;
-	int i;
-	unsigned long flags;
-
-	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
-	if ((stat = GET_STAT()) & BUSY_STAT) {
-		__save_flags(flags);	/* local CPU only */
-		ide__sti();	/* local CPU only */
-		timeout += jiffies;
-		while ((stat = GET_STAT()) & BUSY_STAT) {
-			if (0 < (signed long)(jiffies - timeout)) {
-				__restore_flags(flags);	/* local CPU only */
-				(void)ide_dump_status(drive, "ide_wait_noerr", stat);
-				return 1;
-			}
-		}
-		__restore_flags(flags); /* local CPU only */
-	}
-	/*
-	 * Allow status to settle, then read it again.
-	 * A few rare drives vastly violate the 400ns spec here,
-	 * so we'll wait up to 10usec for a "good" status
-	 * rather than expensively fail things immediately.
-	 * This fix courtesy of Matthew Faupel & Niccolo Rigacci.
-	 */
-	for (i = 0; i < 10; i++) {
-		udelay(1);
-		if (OK_STAT((stat = GET_STAT()), good, bad))
-			return 0;
-	}
-	(void)ide_dump_status(drive, "ide_wait_noerr", stat);
-	return 1;
-}
-
-
-/*
  * Verify that we are doing an approved SETFEATURES_XFER with respect
  * to the hardware being able to support request.  Since some hardware
  * can improperly report capabilties, we check to see if the host adapter
@@ -213,30 +199,23 @@ int set_transfer (ide_drive_t *drive, int cmd, int nsect, int feature)
 	return 0;
 }
 
-#if 0
-ide_startstop_t set_drive_speed_intr (ide_drive_t *drive)
-{
-	byte stat;
-
-	if (!OK_STAT(stat=GET_STAT(),READY_STAT,BAD_STAT))
 /*
- *	if (!OK_STAT(stat=GET_STAT(),DRIVE_READY,BAD_STAT))
- *	if (stat != DRIVE_READY)
+ * Similar to ide_wait_stat(), except it never calls ide_error internally.
+ * This is a kludge to handle the new ide_config_drive_speed() function,
+ * and should not otherwise be used anywhere.  Eventually, the tuneproc's
+ * should be updated to return ide_startstop_t, in which case we can get
+ * rid of this abomination again.  :)   -ml
+ *
+ * It is gone..........
+ *
+ * const char *msg == consider adding for verbose errors.
  */
-		(void) ide_dump_status(drive, "set_drive_speed_status", stat);
-
-	return ide_stopped;
-}
-#endif
-
 int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 {
-	unsigned long flags;
-	int err;
+	ide_hwif_t *hwif = HWIF(drive);
+	int	i, error = 1;
+	byte unit = (drive->select.b.unit & 0x01);
 	byte stat;
-
-	__save_flags(flags);	/* local CPU only */
-	__cli();		/* local CPU only */
 
 	/*
 	 * Don't use ide_wait_cmd here - it will
@@ -244,39 +223,72 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	 * but for some reason these don't work at
 	 * this point (lost interrupt).
 	 */
+        /*
+         * Select the drive, and issue the SETFEATURES command
+         */
+	disable_irq(hwif->irq);	/* disable_irq_nosync ?? */
+	udelay(1);
 	SELECT_DRIVE(HWIF(drive), drive);
+	udelay(1);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
 	OUT_BYTE(speed, IDE_NSECTOR_REG);
 	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
 	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
-
-	err = ide_wait_noerr(drive, DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD);
-
-#if 0
-	if (IDE_CONTROL_REG)
+	if ((IDE_CONTROL_REG) && (SETFEATURES_CONTROL_REG))
 		OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
-#endif
+	udelay(1);
+	/*
+	 * Wait for drive to become non-BUSY
+	 */
+	if ((stat = GET_STAT()) & BUSY_STAT) {
+		unsigned long flags, timeout;
+		__save_flags(flags);	/* local CPU only */
+		ide__sti();		/* local CPU only -- for jiffies */
+		timeout = jiffies + WAIT_CMD;
+		while ((stat = GET_STAT()) & BUSY_STAT) {
+			if (0 < (signed long)(jiffies - timeout))
+				break;
+		}
+		__restore_flags(flags); /* local CPU only */
+	}
 
-	__restore_flags(flags);	/* local CPU only */
+	/*
+	 * Allow status to settle, then read it again.
+	 * A few rare drives vastly violate the 400ns spec here,
+	 * so we'll wait up to 10usec for a "good" status
+	 * rather than expensively fail things immediately.
+	 * This fix courtesy of Matthew Faupel & Niccolo Rigacci.
+	 */
+	for (i = 0; i < 10; i++) {
+		udelay(1);
+		if (OK_STAT((stat = GET_STAT()), DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT)) {
+			error = 0;
+			break;
+		}
+	}
 
-#if 0
-	ide_set_handler(drive, &set_drive_speed_intr, WAIT_CMD, NULL);
-#endif
+	enable_irq(hwif->irq);
 
-	stat = GET_STAT();
-	if (stat != DRIVE_READY)
+	if (error) {
 		(void) ide_dump_status(drive, "set_drive_speed_status", stat);
+		return error;
+	}
 
 	drive->id->dma_ultra &= ~0xFF00;
 	drive->id->dma_mword &= ~0x0F00;
 	drive->id->dma_1word &= ~0x0F00;
 
+	if (speed > XFER_PIO_4) {
+		outb(inb(hwif->dma_base+2)|(1<<(5+unit)), hwif->dma_base+2);
+	} else {
+		outb(inb(hwif->dma_base+2) & ~(1<<(5+unit)), hwif->dma_base+2);
+	}
+
 	switch(speed) {
-#if 0
-		case XFER_UDMA_6:   drive->id->dma_ultra |= 0x1010; break;
-		case XFER_UDMA_5:   drive->id->dma_ultra |= 0x1010; break;
-#endif
+		case XFER_UDMA_7:   drive->id->dma_ultra |= 0x8080; break;
+		case XFER_UDMA_6:   drive->id->dma_ultra |= 0x4040; break;
+		case XFER_UDMA_5:   drive->id->dma_ultra |= 0x2020; break;
 		case XFER_UDMA_4:   drive->id->dma_ultra |= 0x1010; break;
 		case XFER_UDMA_3:   drive->id->dma_ultra |= 0x0808; break;
 		case XFER_UDMA_2:   drive->id->dma_ultra |= 0x0404; break;
@@ -290,11 +302,10 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 		case XFER_SW_DMA_0: drive->id->dma_1word |= 0x0101; break;
 		default: break;
 	}
-	return(err);
+	return error;
 }
 
 EXPORT_SYMBOL(ide_driveid_update);
-EXPORT_SYMBOL(ide_wait_noerr);
 EXPORT_SYMBOL(ide_ata66_check);
 EXPORT_SYMBOL(set_transfer);
 EXPORT_SYMBOL(ide_config_drive_speed);

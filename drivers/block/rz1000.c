@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/rz1000.c	Version 0.05  December 8, 1997
+ *  linux/drivers/block/rz1000.c		Version 0.05	December 8, 1997
  *
  *  Copyright (C) 1995-1998  Linus Torvalds & author (see below)
  */

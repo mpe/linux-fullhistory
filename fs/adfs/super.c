@@ -231,17 +231,10 @@ static int adfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 }
 
 static struct super_operations adfs_sops = {
-	adfs_read_inode,	/* read_inode		*/
-	adfs_write_inode,	/* write_inode		*/
-	NULL,			/* put_inode		*/
-	NULL,			/* delete_inode		*/
-	adfs_notify_change,	/* notify_change	*/
-	adfs_put_super,		/* put_super		*/
-	NULL,			/* write_super		*/
-	adfs_statfs,		/* statfs		*/
-	adfs_remount,		/* remount_fs		*/
-	NULL,			/* clear_inode		*/
-	NULL			/* umount_begin		*/
+	write_inode:	adfs_write_inode,
+	put_super:	adfs_put_super,
+	statfs:		adfs_statfs,
+	remount_fs:	adfs_remount,
 };
 
 static struct adfs_discmap *adfs_read_map(struct super_block *sb, struct adfs_discrecord *dr)

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.15	Dec. 22, 1999
+ * linux/drivers/block/hpt366.c		Version 0.16	Feb. 10, 2000
  *
- * Copyright (C) 1999			Andre Hedrick <andre@suse.com>
+ * Copyright (C) 1999-2000		Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
  *
  * Thanks to HighPoint Technologies for their assistance, and hardware.
@@ -29,6 +29,13 @@
 #include <asm/irq.h>
 
 #include "ide_modes.h"
+
+#define DISPLAY_HPT366_TIMINGS
+
+#if defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+#endif  /* defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS) */
 
 const char *bad_ata66_4[] = {
 	"WDC AC310200R",
@@ -119,6 +126,48 @@ struct chipset_bus_clock_list_entry twenty_five_base [] = {
 #define HPT366_DEBUG_DRIVE_INFO		0
 #define HPT366_ALLOW_ATA66_4		1
 #define HPT366_ALLOW_ATA66_3		1
+
+#if defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS)
+static int hpt366_get_info(char *, char **, off_t, int);
+extern int (*hpt366_display_info)(char *, char **, off_t, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+static struct pci_dev *bmide2_dev;
+
+static int hpt366_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p		= buffer;
+	u32 bibma	= bmide_dev->resource[4].start;
+	u32 bibma2 	= bmide2_dev->resource[4].start;
+	u8  c0 = 0, c1 = 0;
+
+        /*
+         * at that point bibma+0x2 et bibma+0xa are byte registers
+         * to investigate:
+         */
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	if (bmide2_dev)
+		c1 = inb_p((unsigned short)bibma2 + 0x02);
+
+	p += sprintf(p, "\n                                HPT366 Chipset.\n");
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
+
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
+
+	return p-buffer;/* => must be less than 4k! */
+}
+#endif  /* defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+byte hpt366_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 byte hpt363_shared_irq = 0;
@@ -263,20 +312,20 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 
 	pci_read_config_byte(HWIF(drive)->pci_dev, 0x51, &reg51h);
 
-#ifdef CONFIG_HPT366_FAST_IRQ_PREDICTION
+#ifdef CONFIG_HPT366_FIP
 	/*
 	 * Some drives prefer/allow for the method of handling interrupts.
 	 */
 	if (!(reg51h & 0x80))
 		pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h|0x80);
-#else /* ! CONFIG_HPT366_FAST_IRQ_PREDICTION */
+#else /* ! CONFIG_HPT366_FIP */
 	/*
 	 * Disable the "fast interrupt" prediction.
 	 * Instead, always wait for the real interrupt from the drive!
 	 */
 	if (reg51h & 0x80)
 		pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h & ~0x80);
-#endif /* CONFIG_HPT366_FAST_IRQ_PREDICTION */
+#endif /* CONFIG_HPT366_FIP */
 
 	/*
 	 * Preserve existing PIO settings:
@@ -420,7 +469,6 @@ no_dma_set:
  * This is specific to the HPT366 UDMA bios chipset
  * by HighPoint|Triones Technologies, Inc.
  */
-
 int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	byte reg50h = 0;
@@ -434,7 +482,6 @@ int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
 			/* ide_set_handler(drive, &ide_dma_intr, WAIT_CMD, NULL); */
 		case ide_dma_timeout:
-			break;
 		default:
 			break;
 	}
@@ -464,6 +511,17 @@ unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 	if (test != 0x08)
 		pci_write_config_byte(dev, PCI_MAX_LAT, 0x08);
 
+#if defined(DISPLAY_HPT366_TIMINGS) && defined(CONFIG_PROC_FS)
+	if (!hpt366_proc) {
+		hpt366_proc = 1;
+		bmide_dev = dev;
+		hpt366_display_info = &hpt366_get_info;
+	}
+	if ((hpt366_proc) && ((dev->devfn - bmide_dev->devfn) == 1)) {
+		bmide2_dev = dev;
+	}
+#endif /* DISPLAY_HPT366_TIMINGS && CONFIG_PROC_FS */
+
 	return dev->irq;
 }
 
@@ -482,18 +540,6 @@ unsigned int __init ata66_hpt366 (ide_hwif_t *hwif)
 
 void __init ide_init_hpt366 (ide_hwif_t *hwif)
 {
-#if 0
-	if ((PCI_FUNC(hwif->pci_dev->devfn) & 1) && (hpt363_shared_irq)) {
-		hwif->mate = &ide_hwifs[hwif->index-1];
-		hwif->mate->mate = hwif;
-		hwif->serialized = hwif->mate->serialized = 1;
-	}
-
-	if ((PCI_FUNC(hwif->pci_dev->devfn) & 1) && (hpt363_shared_pin)) {
-
-	}
-#endif
-
 	hwif->tuneproc = &hpt366_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &hpt366_dmaproc;

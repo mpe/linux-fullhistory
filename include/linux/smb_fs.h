@@ -101,10 +101,12 @@ int smb_mmap(struct file *, struct vm_area_struct *);
 
 /* linux/fs/smbfs/file.c */
 extern struct inode_operations smb_file_inode_operations;
+extern struct file_operations smb_file_operations;
 extern struct address_space_operations smb_file_aops;
 
 /* linux/fs/smbfs/dir.c */
 extern struct inode_operations smb_dir_inode_operations;
+extern struct file_operations smb_dir_operations;
 void smb_renew_times(struct dentry *);
 
 /* linux/fs/smbfs/ioctl.c */

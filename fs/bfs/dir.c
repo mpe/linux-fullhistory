@@ -23,11 +23,6 @@ static int bfs_add_entry(struct inode * dir, const char * name, int namelen, int
 static struct buffer_head * bfs_find_entry(struct inode * dir, 
 	const char * name, int namelen, struct bfs_dirent ** res_dir);
 
-static ssize_t bfs_dir_read(struct file * f, char * buf, size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
 static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 {
 	struct inode * dir = f->f_dentry->d_inode;
@@ -75,8 +70,8 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 	return 0;	
 }
 
-static struct file_operations bfs_dir_operations = {
-	read:		bfs_dir_read,
+struct file_operations bfs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	bfs_readdir,
 	fsync:		file_fsync,
 };
@@ -107,6 +102,7 @@ static int bfs_create(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks = inode->i_blksize = 0;
 	inode->i_op = &bfs_file_inops;
+	inode->i_fop = &bfs_file_operations;
 	inode->i_mapping->a_ops = &bfs_aops;
 	inode->i_mode = mode;
 	inode->i_ino = inode->iu_dsk_ino = ino;
@@ -256,7 +252,6 @@ end_rename:
 }
 
 struct inode_operations bfs_dir_inops = {
-	default_file_ops:	&bfs_dir_operations,
 	create:			bfs_create,
 	lookup:			bfs_lookup,
 	link:			bfs_link,

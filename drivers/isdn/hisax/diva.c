@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.18 1999/12/19 13:09:41 keil Exp $
+/* $Id: diva.c,v 1.19 2000/02/26 00:35:12 keil Exp $
 
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -12,6 +12,9 @@
  *
  *
  * $Log: diva.c,v $
+ * Revision 1.19  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.18  1999/12/19 13:09:41  keil
  * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
  * signal proof delays
@@ -84,7 +87,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.18 $";
+const char *Diva_revision = "$Revision: 1.19 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -585,7 +588,7 @@ Memhscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hscx.count);
-				dev_kfree_skb(bcs->tx_skb);
+				dev_kfree_skb_irq(bcs->tx_skb);
 				bcs->hw.hscx.count = 0; 
 				bcs->tx_skb = NULL;
 			}

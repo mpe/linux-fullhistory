@@ -34,14 +34,8 @@
 
 #define PRINTK(X)
 
-static ssize_t fat_dir_read(struct file * filp, char * buf,
-			    size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
 struct file_operations fat_dir_operations = {
-	read:		fat_dir_read,
+	read:		generic_read_dir,
 	readdir:	fat_readdir,
 	ioctl:		fat_dir_ioctl,
 	fsync:		file_fsync,

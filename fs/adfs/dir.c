@@ -188,14 +188,8 @@ out:
 	return ret;
 }
 
-static ssize_t
-adfs_dir_no_read(struct file *filp, char *buf, size_t siz, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
-static struct file_operations adfs_dir_operations = {
-	read:		adfs_dir_no_read,
+struct file_operations adfs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	adfs_readdir,
 	fsync:		file_fsync,
 };
@@ -296,7 +290,6 @@ struct dentry *adfs_lookup(struct inode *dir, struct dentry *dentry)
  * directories can handle most operations...
  */
 struct inode_operations adfs_dir_inode_operations = {
-	&adfs_dir_operations,	/* default directory file-ops */
-	NULL,			/* create		*/
-	adfs_lookup,		/* lookup		*/
+	lookup:		adfs_lookup,
+	setattr:	adfs_notify_change,
 };

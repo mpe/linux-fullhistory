@@ -597,28 +597,11 @@ static struct file_operations proc_profile_operations = {
 	write:		write_profile,
 };
 
-static struct inode_operations proc_profile_inode_operations = {
-	&proc_profile_operations,
-};
-
-static struct proc_dir_entry proc_root_kmsg = {
-	0, 4, "kmsg",
-	S_IFREG | S_IRUSR, 1, 0, 0,
-	0, &proc_kmsg_inode_operations
-};
-struct proc_dir_entry proc_root_kcore = {
-	0, 5, "kcore",
-	S_IFREG | S_IRUSR, 1, 0, 0,
-	0, &proc_kcore_inode_operations
-};
-static struct proc_dir_entry proc_root_profile = {
-	0, 7, "profile",
-	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-	0, &proc_profile_inode_operations
-};
+struct proc_dir_entry *proc_root_kcore;
 
 void __init proc_misc_init(void)
 {
+	struct proc_dir_entry *entry;
 	static struct {
 		char *name;
 		int (*read_proc)(char*,char**,off_t,int,int*,void*);
@@ -664,11 +647,25 @@ void __init proc_misc_init(void)
 		create_proc_read_entry(p->name, 0, NULL, p->read_proc, NULL);
 
 	/* And now for trickier ones */
-	proc_register(&proc_root, &proc_root_kmsg);
-	proc_register(&proc_root, &proc_root_kcore);
-	proc_root_kcore.size = (size_t)high_memory - PAGE_OFFSET + PAGE_SIZE;
-	if (prof_shift) {
-		proc_register(&proc_root, &proc_root_profile);
-		proc_root_profile.size = (1+prof_len) * sizeof(unsigned int);
+	entry = create_proc_entry("kmsg", S_IRUSR, &proc_root);
+	if (entry)
+		entry->proc_fops = &proc_kmsg_operations;
+	proc_root_kcore = create_proc_entry("kcore", S_IRUSR, NULL);
+	if (proc_root_kcore) {
+		proc_root_kcore->proc_fops = &proc_kcore_operations;
+		proc_root_kcore->size =
+				(size_t)high_memory - PAGE_OFFSET + PAGE_SIZE;
 	}
+	if (prof_shift) {
+		entry = create_proc_entry("profile", S_IWUSR | S_IRUGO, NULL);
+		if (entry) {
+			entry->proc_fops = &proc_profile_operations;
+			entry->size = (1+prof_len) * sizeof(unsigned int);
+		}
+	}
+#ifdef __powerpc__
+	entry = create_proc_entry("ppc_htab", S_IRUGO|S_IWUSR, NULL);
+	if (entry)
+		entry->proc_fops = &ppc_htab_operations;
+#endif
 }

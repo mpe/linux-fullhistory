@@ -455,7 +455,6 @@ static void qnx4_read_inode(struct inode *inode)
 	int block, ino;
 
 	ino = inode->i_ino;
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 
 	QNX4DEBUG(("Reading inode : [%d]\n", ino));
@@ -488,11 +487,13 @@ static void qnx4_read_inode(struct inode *inode)
 	memcpy(&inode->u.qnx4_i, (struct qnx4_inode_info *) raw_inode, QNX4_DIR_ENTRY_SIZE);
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &qnx4_file_inode_operations;
+		inode->i_fop = &qnx4_file_operations;
 		inode->i_mapping->a_ops = &qnx4_aops;
 		inode->u.qnx4_i.mmu_private = inode->i_size;
-	} else if (S_ISDIR(inode->i_mode))
+	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &qnx4_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode)) {
+		inode->i_fop = &qnx4_dir_operations;
+	} else if (S_ISLNK(inode->i_mode)) {
 		inode->i_op = &page_symlink_inode_operations;
 		inode->i_mapping->a_ops = &qnx4_aops;
 		inode->u.qnx4_i.mmu_private = inode->i_size;

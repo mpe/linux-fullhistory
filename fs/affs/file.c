@@ -43,7 +43,7 @@ static ssize_t affs_file_write(struct file *filp, const char *buf, size_t count,
 static ssize_t affs_file_write_ofs(struct file *filp, const char *buf, size_t cnt, loff_t *ppos);
 static int alloc_ext_cache(struct inode *inode);
 
-static struct file_operations affs_file_operations = {
+struct file_operations affs_file_operations = {
 	read:		generic_file_read,
 	write:		affs_file_write,
 	mmap:		generic_file_mmap,
@@ -51,45 +51,14 @@ static struct file_operations affs_file_operations = {
 };
 
 struct inode_operations affs_file_inode_operations = {
-	&affs_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	affs_truncate,		/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	truncate:	affs_truncate,
+	setattr:	affs_notify_change,
 };
 
-static struct file_operations affs_file_operations_ofs = {
+struct file_operations affs_file_operations_ofs = {
 	read:		affs_file_read_ofs,
 	write:		affs_file_write_ofs,
 	fsync:		file_fsync,
-};
-
-struct inode_operations affs_file_inode_operations_ofs = {
-	&affs_file_operations_ofs,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	affs_truncate,		/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
 };
 
 #define AFFS_ISINDEX(x)	((x < 129) ||				\

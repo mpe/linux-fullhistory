@@ -137,9 +137,10 @@ void efs_read_inode(struct inode *inode) {
 	switch (inode->i_mode & S_IFMT) {
 		case S_IFDIR: 
 			inode->i_op = &efs_dir_inode_operations; 
+			inode->i_fop = &efs_dir_operations; 
 			break;
 		case S_IFREG:
-			inode->i_op = &efs_file_inode_operations;
+			inode->i_fop = &generic_ro_fops;
 			inode->i_data.a_ops = &efs_aops;
 			break;
 		case S_IFLNK:
@@ -161,16 +162,7 @@ void efs_read_inode(struct inode *inode) {
         
 read_inode_error:
 	printk(KERN_WARNING "EFS: failed to read inode %lu\n", inode->i_ino);
-	inode->i_mode = S_IFREG;
-	inode->i_atime = 0;
-	inode->i_ctime = 0;
-	inode->i_mtime = 0;
-	inode->i_nlink = 1;
-	inode->i_size = 0;
-	inode->i_blocks = 0;
-	inode->i_uid = 0;
-	inode->i_gid = 0;
-	inode->i_op = NULL;
+	make_bad_inode(inode);
 
 	return;
 }

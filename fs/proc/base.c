@@ -208,10 +208,6 @@ static struct file_operations proc_maps_operations = {
 	read:		pid_maps_read,
 };
 
-struct inode_operations proc_maps_inode_operations = {
-	&proc_maps_operations,	/* default base directory file-ops */
-};
-
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 
 static ssize_t proc_info_read(struct file * file, char * buf,
@@ -257,10 +253,6 @@ static ssize_t proc_info_read(struct file * file, char * buf,
 
 static struct file_operations proc_info_file_operations = {
 	read:		proc_info_read,
-};
-
-static struct inode_operations proc_info_inode_operations = {
-	&proc_info_file_operations,  /* default proc file-ops */
 };
 
 #define MAY_PTRACE(p) \
@@ -350,21 +342,7 @@ static struct file_operations proc_mem_operations = {
 };
 
 static struct inode_operations proc_mem_inode_operations = {
-	&proc_mem_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	proc_permission,	/* permission */
-	NULL			/* revalidate */
+	permission:	proc_permission,
 };
 
 static struct dentry * proc_pid_follow_link(struct dentry *dentry,
@@ -452,14 +430,6 @@ static struct inode_operations proc_pid_link_inode_operations = {
 	readlink:	proc_pid_readlink,
 	follow_link:	proc_pid_follow_link
 };
-
-/* reading from directory - bad */
-
-static ssize_t proc_dir_read (struct file * filp, char * buf,
-			      size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
 
 struct pid_entry {
 	int type;
@@ -744,28 +714,16 @@ out:
 }
 
 static struct file_operations proc_fd_operations = {
-	read: proc_dir_read,		/* read - bad */
-	readdir: proc_readfd,		/* readdir */
+	read:		generic_read_dir,
+	readdir:	proc_readfd,
 };
 
 /*
  * proc directories can do almost nothing..
  */
 static struct inode_operations proc_fd_inode_operations = {
-	&proc_fd_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	proc_lookupfd,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	proc_permission,	/* permission */
+	lookup:		proc_lookupfd,
+	permission:	proc_permission,
 };
 
 static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
@@ -801,6 +759,7 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 		case PROC_PID_FD:
 			inode->i_nlink = 2;
 			inode->i_op = &proc_fd_inode_operations;
+			inode->i_fop = &proc_fd_operations;
 			break;
 		case PROC_PID_EXE:
 			inode->i_op = &proc_pid_link_inode_operations;
@@ -815,36 +774,37 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 			inode->u.proc_i.op.proc_get_link = proc_root_link;
 			break;
 		case PROC_PID_ENVIRON:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_environ;
 			break;
 		case PROC_PID_STATUS:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_status;
 			break;
 		case PROC_PID_STAT:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_stat;
 			break;
 		case PROC_PID_CMDLINE:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_cmdline;
 			break;
 		case PROC_PID_STATM:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_statm;
 			break;
 		case PROC_PID_MAPS:
-			inode->i_op = &proc_maps_inode_operations;
+			inode->i_fop = &proc_maps_operations;
 			break;
 #ifdef __SMP__
 		case PROC_PID_CPU:
-			inode->i_op = &proc_info_inode_operations;
+			inode->i_fop = &proc_info_file_operations;
 			inode->u.proc_i.op.proc_read = proc_pid_cpu;
 			break;
 #endif
 		case PROC_PID_MEM:
 			inode->i_op = &proc_mem_inode_operations;
+			inode->i_fop = &proc_mem_operations;
 			break;
 		default:
 			printk("procfs: impossible type (%d)",p->type);
@@ -860,14 +820,12 @@ out:
 }
 
 static struct file_operations proc_base_operations = {
-	read: proc_dir_read,		/* read - bad */
-	readdir: proc_base_readdir,	/* readdir */
+	read:		generic_read_dir,
+	readdir:	proc_base_readdir,
 };
 
 static struct inode_operations proc_base_inode_operations = {
-	&proc_base_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	proc_base_lookup,	/* lookup */
+	lookup:		proc_base_lookup,
 };
 
 struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
@@ -910,6 +868,7 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 		goto out;
 	inode->i_mode = S_IFDIR|S_IRUGO|S_IXUGO;
 	inode->i_op = &proc_base_inode_operations;
+	inode->i_fop = &proc_base_operations;
 	inode->i_nlink = 3;
 	inode->i_flags|=S_IMMUTABLE;
 

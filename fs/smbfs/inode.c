@@ -29,7 +29,6 @@
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 
-static void smb_read_inode(struct inode *);
 static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
@@ -38,15 +37,10 @@ static void smb_set_inode_attr(struct inode *, struct smb_fattr *);
 
 static struct super_operations smb_sops =
 {
-	smb_read_inode,		/* read inode */
-	NULL,			/* write inode */
-	smb_put_inode,		/* put inode */
-	smb_delete_inode,	/* delete inode */
-	smb_notify_change,	/* notify change */
-	smb_put_super,		/* put superblock */
-	NULL,			/* write superblock */
-	smb_statfs,		/* stat filesystem */
-	NULL			/* remount filesystem */
+	put_inode:	smb_put_inode,
+	delete_inode:	smb_delete_inode,
+	put_super:	smb_put_super,
+	statfs:		smb_statfs,
 };
 
 /* FIXME: Look at all inodes whether so that we do not get duplicate
@@ -84,11 +78,12 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 	smb_set_inode_attr(result, fattr);
 	if (S_ISREG(result->i_mode)) {
 		result->i_op = &smb_file_inode_operations;
+		result->i_fop = &smb_file_operations;
 		result->i_data.a_ops = &smb_file_aops;
-	} else if (S_ISDIR(result->i_mode))
+	} else if (S_ISDIR(result->i_mode)) {
 		result->i_op = &smb_dir_inode_operations;
-	else
-		result->i_op = NULL;
+		result->i_fop = &smb_dir_operations;
+	}
 	insert_inode_hash(result);
 	return result;
 }
@@ -150,14 +145,6 @@ smb_set_inode_attr(struct inode *inode, struct smb_fattr *fattr)
 	 * Update the "last time refreshed" field for revalidation.
 	 */
 	inode->u.smbfs_i.oldmtime = jiffies;
-}
-
-static void
-smb_read_inode(struct inode *inode)
-{
-	/* Now it can be called only by NFS */
-	printk("smb_read_inode called from invalid point\n");
-	return;
 }
 
 /*

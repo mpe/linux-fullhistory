@@ -12,36 +12,12 @@
 #include <linux/minix_fs.h>
 #include <linux/stat.h>
 
-#include <asm/uaccess.h>
-
-static ssize_t minix_dir_read(struct file * filp, char * buf,
-			      size_t count, loff_t *ppos)
-{
-	return -EISDIR;
-}
-
 static int minix_readdir(struct file *, void *, filldir_t);
 
-static struct file_operations minix_dir_operations = {
-	read:		minix_dir_read,
+struct file_operations minix_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	minix_readdir,
 	fsync:		file_fsync,
-};
-
-/*
- * directories can handle most operations...
- */
-struct inode_operations minix_dir_inode_operations = {
-	&minix_dir_operations,	/* default directory file-ops */
-	minix_create,		/* create */
-	minix_lookup,		/* lookup */
-	minix_link,		/* link */
-	minix_unlink,		/* unlink */
-	minix_symlink,		/* symlink */
-	minix_mkdir,		/* mkdir */
-	minix_rmdir,		/* rmdir */
-	minix_mknod,		/* mknod */
-	minix_rename,		/* rename */
 };
 
 static int minix_readdir(struct file * filp,

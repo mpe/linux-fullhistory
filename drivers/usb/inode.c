@@ -46,24 +46,17 @@
 static LIST_HEAD(superlist);
 
 extern struct inode_operations usbdevfs_bus_inode_operations;
-
-static struct inode_operations devices_inode_operations = {
-        &usbdevfs_devices_fops
-};
-
-static struct inode_operations drivers_inode_operations = {
-        &usbdevfs_drivers_fops
-};
+extern struct file_operations usbdevfs_bus_file_operations;
 
 struct special {
 	const char *name;
-	struct inode_operations *iops;
+	struct file_operations *fops;
 	struct list_head inodes;
 };
 
 static struct special special[] = { 
-	{ "devices", &devices_inode_operations,  },
-	{ "drivers", &drivers_inode_operations,  }
+	{ "devices", &usbdevfs_devices_fops,  },
+	{ "drivers", &usbdevfs_drivers_fops,  }
 };
 
 #define NRSPECIAL (sizeof(special)/sizeof(special[0]))
@@ -110,7 +103,7 @@ static void new_dev_inode(struct usb_device *dev, struct super_block *sb)
 	inode->i_uid = sb->u.usbdevfs_sb.devuid;
 	inode->i_gid = sb->u.usbdevfs_sb.devgid;
 	inode->i_mode = sb->u.usbdevfs_sb.devmode | S_IFREG;
-	inode->i_op = &usbdevfs_device_inode_operations;
+	inode->i_fop = &usbdevfs_device_file_operations;
 	inode->i_size = sizeof(struct usb_device_descriptor);
 	inode->u.usbdev_i.p.dev = dev;
 	list_add_tail(&inode->u.usbdev_i.slist, &sb->u.usbdevfs_sb.ilist);
@@ -148,6 +141,7 @@ static void new_bus_inode(struct usb_bus *bus, struct super_block *sb)
 	inode->i_gid = sb->u.usbdevfs_sb.busgid;
 	inode->i_mode = sb->u.usbdevfs_sb.busmode | S_IFDIR;
 	inode->i_op = &usbdevfs_bus_inode_operations;
+	inode->i_fop = &usbdevfs_bus_file_operations;
 	inode->u.usbdev_i.p.bus = bus;
 	list_add_tail(&inode->u.usbdev_i.slist, &sb->u.usbdevfs_sb.ilist);
 	list_add_tail(&inode->u.usbdev_i.dlist, &bus->inodes);
@@ -159,7 +153,6 @@ static void free_inode(struct inode *inode)
 	inode->u.usbdev_i.p.dev = NULL;
 	inode->i_mode &= ~S_IRWXUGO;
 	inode->i_uid = inode->i_gid = 0;
-	inode->i_op = NULL;
 	inode->i_size = 0;
 	list_del(&inode->u.usbdev_i.slist);
 	INIT_LIST_HEAD(&inode->u.usbdev_i.slist);
@@ -405,7 +398,6 @@ static struct file_operations usbdevfs_root_file_operations = {
 };
 
 static struct inode_operations usbdevfs_root_inode_operations = {
-	default_file_ops: &usbdevfs_root_file_operations,
 	lookup: usbdevfs_root_lookup,
 };
 
@@ -414,7 +406,6 @@ static struct file_operations usbdevfs_bus_file_operations = {
 };
 
 static struct inode_operations usbdevfs_bus_inode_operations = {
-	default_file_ops: &usbdevfs_bus_file_operations,
 	lookup: usbdevfs_bus_lookup,
 };
 
@@ -433,13 +424,14 @@ static void usbdevfs_read_inode(struct inode *inode)
 	case ISPECIAL:
 		if (inode->i_ino == IROOT) {
 			inode->i_op = &usbdevfs_root_inode_operations;
+			inode->i_fop = &usbdevfs_root_file_operations;
 			inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 			return;
 		}
 		if (inode->i_ino <= IROOT || inode->i_ino > IROOT+NRSPECIAL)
 			return;
 		spec = &special[inode->i_ino-(IROOT+1)];
-		inode->i_op = spec->iops;
+		inode->i_fop = spec->fops;
 		return;
 
 	case IDEVICE:
@@ -451,10 +443,6 @@ static void usbdevfs_read_inode(struct inode *inode)
 	default:
 		return;
         }
-}
-
-static void usbdevfs_put_inode(struct inode *inode)
-{
 }
 
 static void usbdevfs_put_super(struct super_block *sb)
@@ -482,15 +470,9 @@ static int usbdevfs_statfs(struct super_block *sb, struct statfs *buf, int bufsi
 }
 
 static struct super_operations usbdevfs_sops = { 
-        usbdevfs_read_inode,
-        NULL,
-        usbdevfs_put_inode,
-        NULL,
-        NULL,
-        usbdevfs_put_super,
-        NULL,
-        usbdevfs_statfs,
-        NULL
+	read_inode:	usbdevfs_read_inode,
+	put_super:	usbdevfs_put_super,
+	statfs:		usbdevfs_statfs,
 };
 
 struct super_block *usbdevfs_read_super(struct super_block *s, void *data, int silent)

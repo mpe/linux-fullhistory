@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.24 2000/01/23 21:21:23 armin Exp $
+/* $Id: eicon_mod.c,v 1.25 2000/02/22 16:26:40 armin Exp $
  *
  * ISDN lowlevel-module for Eicon active cards.
  * 
@@ -31,6 +31,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.25  2000/02/22 16:26:40  armin
+ * Fixed membase error message.
+ * Fixed missing log buffer struct.
+ *
  * Revision 1.24  2000/01/23 21:21:23  armin
  * Added new trace capability and some updates.
  * DIVA Server BRI now supports data for ISDNLOG.
@@ -140,7 +144,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.24 $";
+static char *eicon_revision = "$Revision: 1.25 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -886,8 +890,10 @@ eicon_putstatus(eicon_card * card, char * buf)
 	u_char *p;
 	struct sk_buff *skb;
 
-	if (!card)
-		return;
+	if (!card) {
+		if (!(card = cards))
+			return;
+	}
 
 	save_flags(flags);
 	cli();

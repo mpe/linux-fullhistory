@@ -278,7 +278,7 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 	if (!file)
 		return -EINVAL;
 	inode = file->f_dentry->d_inode;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!inode->i_fop)
 		return -EINVAL;
 	if (!file->f_op->read)
 		return -EINVAL;

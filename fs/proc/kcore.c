@@ -26,13 +26,9 @@ static int open_kcore(struct inode * inode, struct file * filp)
 
 static ssize_t read_kcore(struct file *, char *, size_t, loff_t *);
 
-static struct file_operations proc_kcore_operations = {
+struct file_operations proc_kcore_operations = {
 	read:		read_kcore,
 	open:		open_kcore,
-};
-
-struct inode_operations proc_kcore_inode_operations = {
-	&proc_kcore_operations,
 };
 
 #ifdef CONFIG_KCORE_AOUT
@@ -323,7 +319,7 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 	 * and after elf_kcore_store_hdr() returns.
 	 * For now assume that num_vma does not change (TA)
 	 */
-	proc_root_kcore.size = size = get_kcore_size(&num_vma, &elf_buflen);
+	proc_root_kcore->size = size = get_kcore_size(&num_vma, &elf_buflen);
 	if (buflen == 0 || *fpos >= size)
 		return 0;
 

@@ -77,10 +77,6 @@ static struct file_operations proc_bus_zorro_operations = {
 	read:		proc_bus_zorro_read,
 };
 
-static struct inode_operations proc_bus_zorro_inode_operations = {
-	&proc_bus_zorro_operations, /* default base directory file-ops */
-};
-
 static int
 get_zorro_dev_info(char *buf, char **start, off_t pos, int count)
 {
@@ -118,7 +114,7 @@ static int __init zorro_proc_attach_device(u_int slot)
 	entry = create_proc_entry(name, 0, proc_bus_zorro_dir);
 	if (!entry)
 		return -ENOMEM;
-	entry->ops = &proc_bus_zorro_inode_operations;
+	entry->proc_fops = &proc_bus_zorro_operations;
 	entry->data = &zorro_autocon[slot];
 	entry->size = sizeof(struct zorro_dev);
 	return 0;

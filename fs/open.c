@@ -680,7 +680,7 @@ struct file *filp_open(const char * filename, int flags, int mode)
 	f->f_reada = 0;
 	f->f_op = NULL;
 	if (inode->i_op)
-		f->f_op = inode->i_op->default_file_ops;
+		f->f_op = inode->i_fop;
 	if (inode->i_sb)
 		file_move(f, &inode->i_sb->s_files);
 	if (f->f_op && f->f_op->open) {

@@ -87,7 +87,7 @@ an MMIO register read.
 #include <asm/io.h>
 
 
-#define RTL8139_VERSION "0.9.3.3.2"
+#define RTL8139_VERSION "0.9.4"
 #define RTL8139_MODULE_NAME "8139too"
 #define RTL8139_DRIVER_NAME   RTL8139_MODULE_NAME " Fast Ethernet driver " RTL8139_VERSION
 #define PFX RTL8139_MODULE_NAME ": "
@@ -306,6 +306,7 @@ enum RxConfigBits {
 	RxCfgRcv64K = (1 << 11) | (1 << 12),
 };
 
+
 /* Twister tuning parameters from RealTek.
    Completely undocumented, but required to tune bad links. */
 enum CSCRBits {
@@ -315,6 +316,14 @@ enum CSCRBits {
 	CSCR_LinkDownOffCmd = 0x003c0,
 	CSCR_LinkDownCmd = 0x0f3c0,
 };
+
+
+enum Cfg9346Bits {
+	Cfg9346_Lock = 0x00,
+	Cfg9346_Unlock = 0xC0,
+};
+
+
 #define PARA78_default	0x78fa8388
 #define PARA7c_default	0xcb38de43	/* param[0][3] */
 #define PARA7c_xxx		0xcb38de43
@@ -630,7 +639,7 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 		dev->dev_addr[4], dev->dev_addr[5]);
 
 	/* Put the chip into low-power mode. */
-	RTL_W8 (Cfg9346, 0xC0);
+	RTL_W8 (Cfg9346, Cfg9346_Unlock);
 	RTL_W8 (Config1, 0x03);	/* Enable PM & PCI VPD */
 	RTL_W8 (HltClk, 'H');	/* 'R' would leave the clock running. */
 
@@ -946,6 +955,7 @@ static int rtl8139_open (struct net_device *dev)
 	return 0;
 }
 
+
 /* Start the hardware at open or resume. */
 static void rtl8139_hw_start (struct net_device *dev)
 {
@@ -970,8 +980,9 @@ static void rtl8139_hw_start (struct net_device *dev)
 	RTL_W32_F (MAC0 + 0, cpu_to_le32 (*(u32 *) (dev->dev_addr + 0)));
 	RTL_W32_F (MAC0 + 4, cpu_to_le32 (*(u32 *) (dev->dev_addr + 4)));
 
-	/* Hmmm, do these belong here? */
-	RTL_W8 (Cfg9346, 0x00);
+	/* unlock Config[01234] and BMCR register writes */
+	RTL_W8 (Cfg9346, Cfg9346_Unlock);
+
 	tp->cur_rx = 0;
 
 	/* Must enable Tx/Rx before setting transfer thresholds! */
@@ -993,15 +1004,21 @@ static void rtl8139_hw_start (struct net_device *dev)
 	RTL_W16 (BasicModeCtrl, (1<<13)|(1<<12)|(1<<9)|(1<<8));
 	
 	/* check_duplex() here. */
-	RTL_W8 (Cfg9346, 0xC0);
 	RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20);
-	RTL_W8 (Cfg9346, 0x00);
+
+	/* lock Config[01234] and BMCR register writes */
+	RTL_W8 (Cfg9346, Cfg9346_Lock);
 
 	RTL_W32 (RxBuf, tp->rx_ring_dma);
 
 	/* Start the chip's Tx and Rx process. */
 	RTL_W32 (RxMissed, 0);
+
+	/* release lock cuz set_rx_mode wants it */
+	spin_unlock_irqrestore (&tp->lock, flags);
 	rtl8139_set_rx_mode (dev);
+	spin_lock_irqsave (&tp->lock, flags);
+
 	RTL_W8 (ChipCmd, CmdRxEnb | CmdTxEnb);
 
 	/* Enable all known interrupts by setting the interrupt mask. */
@@ -1135,9 +1152,9 @@ static void rtl8139_timer (unsigned long data)
 				" partner ability of %4.4x.\n", dev->name,
 				tp->full_duplex ? "full" : "half",
 				tp->phys[0], mii_reg5);
-			RTL_W8 (Cfg9346, 0xC0);
+			RTL_W8 (Cfg9346, Cfg9346_Unlock);
 			RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20);
-			RTL_W8 (Cfg9346, 0x00);
+			RTL_W8 (Cfg9346, Cfg9346_Lock);
 		}
 	}
 
@@ -1364,8 +1381,6 @@ static inline void rtl8139_tx_interrupt (struct net_device *dev,
 #endif /* RTL8139_NDEBUG */
 
 	tp->dirty_tx = dirty_tx;
-	
-	spin_unlock (&dev->xmit_lock);
 }
 
 
@@ -1397,15 +1412,17 @@ static inline void rtl8139_rx_interrupt (struct net_device *dev,
 		    le32_to_cpu (*(u32 *) (rx_ring + ring_offset));
 		int rx_size = rx_status >> 16;
 
-#ifdef RTL8139_DEBUG
-		int i;
 		DPRINTK ("%s:  rtl8139_rx() status %4.4x, size %4.4x,"
 			" cur %4.4x.\n", dev->name, rx_status,
 			rx_size, cur_rx);
+#if RTL8139_DEBUG > 2
+		{
+		int i;
 		DPRINTK ("%s: Frame contents ", dev->name);
 		for (i = 0; i < 70; i++)
 			printk (" %2.2x", rx_ring[ring_offset + i]);
 		printk (".\n");
+		}
 #endif
 
 		/* E. Gill */
@@ -1533,9 +1550,9 @@ static inline int rtl8139_weird_interrupt (struct net_device *dev,
 				|| tp->duplex_lock;
 		if (tp->full_duplex != duplex) {
 			tp->full_duplex = duplex;
-			RTL_W8 (Cfg9346, 0xC0);
+			RTL_W8 (Cfg9346, Cfg9346_Unlock);
 			RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20);
-			RTL_W8 (Cfg9346, 0x00);
+			RTL_W8 (Cfg9346, Cfg9346_Lock);
 		}
 		status &= ~RxUnderrun;
 	}
@@ -1715,7 +1732,7 @@ static int rtl8139_close (struct net_device *dev)
 	tp->tx_bufs = NULL;
 
 	/* Green! Put the chip in low-power mode. */
-	RTL_W8 (Cfg9346, 0xC0);
+	RTL_W8 (Cfg9346, Cfg9346_Unlock);
 	RTL_W8 (Config1, 0x03);
 	RTL_W8 (HltClk, 'H');	/* 'R' would leave the clock running. */
 
@@ -1725,10 +1742,13 @@ static int rtl8139_close (struct net_device *dev)
 	return 0;
 }
 
+
 static int mii_ioctl (struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
 	u16 *data = (u16 *) & rq->ifr_data;
+	unsigned long flags;
+	int rc = 0;
 
 	DPRINTK ("ENTER\n");
 
@@ -1736,23 +1756,33 @@ static int mii_ioctl (struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCDEVPRIVATE:	/* Get the address of the PHY in use. */
 		data[0] = tp->phys[0] & 0x3f;
 		/* Fall Through */
+
 	case SIOCDEVPRIVATE + 1:	/* Read the specified MII register. */
+		spin_lock_irqsave (&tp->lock, flags);
 		data[3] = mdio_read (dev, data[0], data[1] & 0x1f);
-		DPRINTK ("EXIT\n");
-		return 0;
+		spin_unlock_irqrestore (&tp->lock, flags);
+		break;
+
 	case SIOCDEVPRIVATE + 2:	/* Write the specified MII register */
-		if (!capable (CAP_NET_ADMIN))
-			return -EPERM;
+		if (!capable (CAP_NET_ADMIN)) {
+			rc = -EPERM;
+			break;
+		}
+
+		spin_lock_irqsave (&tp->lock, flags);
 		mdio_write (dev, data[0], data[1] & 0x1f, data[2]);
-		DPRINTK ("EXIT\n");
-		return 0;
+		spin_unlock_irqrestore (&tp->lock, flags);
+		break;
+
 	default:
-		DPRINTK ("EXIT\n");
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		break;
 	}
 
-	DPRINTK ("EXIT\n");
+	DPRINTK ("EXIT, returning %d\n", rc);
+	return rc;
 }
+
 
 static struct net_device_stats *rtl8139_get_stats (struct net_device *dev)
 {
@@ -1808,6 +1838,7 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 	void *ioaddr = tp->mmio_addr;
 	u32 mc_filter[2];	/* Multicast hash filter */
 	int i, rx_mode;
+	unsigned long flags;
 
 	DPRINTK ("ENTER\n");
 
@@ -1840,10 +1871,18 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 						       dmi_addr) >> 26,
 					    mc_filter);
 	}
+	
+	/* if called from irq handler, lock already acquired */
+	if (!in_irq ())
+		spin_lock_irqsave (&tp->lock, flags);
+
 	/* We can safely update without stopping the chip. */
 	RTL_W32 (RxConfig, rtl8139_rx_config | rx_mode);
 	RTL_W32_F (MAR0 + 0, mc_filter[0]);
 	RTL_W32_F (MAR0 + 4, mc_filter[1]);
+
+	if (!in_irq ())
+		spin_unlock_irqrestore (&tp->lock, flags);
 
 	DPRINTK ("EXIT\n");
 }

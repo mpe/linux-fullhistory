@@ -104,4 +104,6 @@ nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 struct inode_operations nfs_symlink_inode_operations = {
 	readlink:	nfs_readlink,
 	follow_link:	nfs_follow_link,
+	revalidate:	nfs_revalidate,
+	setattr:	nfs_notify_change,
 };

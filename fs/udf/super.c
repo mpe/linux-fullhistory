@@ -105,25 +105,15 @@ static struct file_system_type udf_fstype = {
 /* Superblock operations */
 static struct super_operations udf_sb_ops =
 {
-	udf_read_inode,		/* read_inode */
+	read_inode:	udf_read_inode,
+	put_inode:	udf_put_inode,
+	put_super:	udf_put_super,
+	statfs:		udf_statfs,
+	remount_fs:	udf_remount_fs,
 #if CONFIG_UDF_RW == 1
-	udf_write_inode,	/* write_inode */
-#else
-	NULL,				/* write_inode */
+	write_inode:	udf_write_inode,
+	delete_inode:	udf_delete_inode,
 #endif
-	udf_put_inode,		/* put_inode */
-#if CONFIG_UDF_RW == 1
-	udf_delete_inode,	/* delete_inode */
-#else
-	NULL,				/* delete_inode */
-#endif
-	NULL,				/* notify_change */
-	udf_put_super,		/* put_super */
-	NULL,				/* write_super */
-	udf_statfs,			/* statfs */
-	udf_remount_fs,		/* remount_fs */
-	NULL,				/* clear_inode */
-	NULL,				/* umount_begin */
 };
 
 struct udf_options

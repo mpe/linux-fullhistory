@@ -349,7 +349,7 @@ static int udf_open_file(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-static struct file_operations udf_file_operations = {
+struct file_operations udf_file_operations = {
 	llseek:		udf_file_llseek,
 	read:		generic_file_read,
 	write:		udf_file_write,
@@ -361,7 +361,6 @@ static struct file_operations udf_file_operations = {
 };
 
 struct inode_operations udf_file_inode_operations = {
-	&udf_file_operations,
 #if CONFIG_UDF_RW == 1
 	truncate:	udf_truncate,
 #endif

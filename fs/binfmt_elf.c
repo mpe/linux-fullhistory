@@ -225,8 +225,8 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 		goto out;
 	if (!elf_check_arch(interp_elf_ex->e_machine))
 		goto out;
-	if (!interpreter_dentry->d_inode->i_op ||
-	    !interpreter_dentry->d_inode->i_op->default_file_ops->mmap)
+	if (!interpreter_dentry->d_inode->i_fop ||
+	    !interpreter_dentry->d_inode->i_fop->mmap)
 		goto out;
 
 	/*
@@ -424,9 +424,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out;
 	}
 #endif
-	if (!bprm->dentry->d_inode->i_op		   ||
-	    !bprm->dentry->d_inode->i_op->default_file_ops ||
-	    !bprm->dentry->d_inode->i_op->default_file_ops->mmap)
+	if (!bprm->dentry->d_inode->i_fop||!bprm->dentry->d_inode->i_fop->mmap)
 		goto out;
 
 	/* Now read in all of the header information */
@@ -830,7 +828,7 @@ do_load_elf_library(int fd)
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   !elf_check_arch(elf_ex.e_machine) ||
-	   (!inode->i_op || !inode->i_op->default_file_ops->mmap))
+	   (!inode->i_fop || !inode->i_fop->mmap))
 		goto out_putf;
 
 	/* Now read in all of the header information */

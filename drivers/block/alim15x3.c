@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/alim15x3.c	Version 0.08	Jan. 14, 2000
+ * linux/drivers/block/alim15x3.c		Version 0.08	Jan. 14, 2000
  *
  *  Copyright (C) 1998-2000 Michel Aubry, Maintainer
  *  Copyright (C) 1998-2000 Andrzej Krzysztofowicz, Maintainer
@@ -493,7 +493,6 @@ static int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		default:
 			break;
 	}
-
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
@@ -518,6 +517,13 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 		if (inb(fixdma_base+2) & 0x80)
 			printk("%s: simplex device: DMA will fail!!\n", name);
 	}
+
+#if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
+	ali_proc = 1;
+	bmide_dev = dev;
+	ali_display_info = &ali_get_info;
+#endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
+
 	return 0;
 }
 
@@ -666,22 +672,11 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 		 */
 		hwif->dmaproc = &ali15x3_dmaproc;
 		hwif->autodma = 1;
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
-	
-#if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
-	if (!ali_proc) {
-		ali_proc = 1;
-		bmide_dev = hwif->pci_dev;
-		ali_display_info = &ali_get_info;
-	}
-#endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
-
 	return;
 }
 

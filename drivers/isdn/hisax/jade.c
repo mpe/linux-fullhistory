@@ -1,10 +1,13 @@
-/* $Id: jade.c,v 1.2 1999/07/01 08:07:57 keil Exp $
+/* $Id: jade.c,v 1.3 2000/02/26 00:35:13 keil Exp $
  *
  * jade.c   JADE stuff (derived from original hscx.c)
  *
  * Author   Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: jade.c,v $
+ * Revision 1.3  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.2  1999/07/01 08:07:57  keil
  * Initial version
  *
@@ -214,7 +217,7 @@ close_jadestate(struct BCState *bcs)
 	discard_queue(&bcs->rqueue);
 	discard_queue(&bcs->squeue);
 	if (bcs->tx_skb) {
-		dev_kfree_skb(bcs->tx_skb);
+		dev_kfree_skb_any(bcs->tx_skb);
 		bcs->tx_skb = NULL;
 		test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 	}

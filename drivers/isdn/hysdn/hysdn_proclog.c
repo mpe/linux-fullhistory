@@ -433,8 +433,6 @@ static struct file_operations log_fops =
 	NULL			/* fsync */
 };
 
-struct inode_operations log_inode_operations;
-
 /***********************************************************************************/
 /* hysdn_proclog_init is called when the module is loaded after creating the cards */
 /* conf files.                                                                     */
@@ -448,12 +446,10 @@ hysdn_proclog_init(hysdn_card * card)
 
 	if ((pd = (struct procdata *) kmalloc(sizeof(struct procdata), GFP_KERNEL)) != NULL) {
 		memset(pd, 0, sizeof(struct procdata));
-		memset(&log_inode_operations, 0, sizeof(struct inode_operations));
-		log_inode_operations.default_file_ops = &log_fops;
 
 		sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
 		if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL)
-			pd->log->ops = &log_inode_operations;	/* set new operations table */
+			pd->log->proc_fops = &log_fops;	/* set new operations table */
 
 		init_waitqueue_head(&(pd->rd_queue));
 

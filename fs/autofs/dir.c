@@ -42,13 +42,12 @@ static struct dentry *autofs_dir_lookup(struct inode *dir,struct dentry *dentry)
 	return NULL;
 }
 
-static struct file_operations autofs_dir_operations = {
+struct file_operations autofs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	autofs_dir_readdir,
 };
 
 struct inode_operations autofs_dir_inode_operations = {
-	&autofs_dir_operations,	/* file operations */
-	NULL,			/* create */
-	autofs_dir_lookup,	/* lookup */
+	lookup:		autofs_dir_lookup,
 };
 

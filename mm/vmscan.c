@@ -8,6 +8,7 @@
  *  Removed kswapd_ctl limits, and swap out as many pages as needed
  *  to bring the system back to freepages.high: 2.4.97, Rik van Riel.
  *  Version: $Id: vmscan.c,v 1.5 1998/02/23 22:14:28 sct Exp $
+ *  Zone aware kswapd started 02/00, Kanoj Sarcar (kanoj@sgi.com).
  */
 
 #include <linux/slab.h>
@@ -468,7 +469,10 @@ DECLARE_WAIT_QUEUE_HEAD(kswapd_wait);
  */
 int kswapd(void *unused)
 {
+	int i;
 	struct task_struct *tsk = current;
+	pg_data_t *pgdat;
+	zone_t *zone;
 
 	tsk->session = 1;
 	tsk->pgrp = 1;
@@ -496,12 +500,17 @@ int kswapd(void *unused)
 		 * up on a more timely basis.
 		 */
 		do {
-			/* kswapd is critical to provide GFP_ATOMIC
-			   allocations (not GFP_HIGHMEM ones). */
-			if (nr_free_pages() - nr_free_highpages() >= freepages.high)
-				break;
-			if (!do_try_to_free_pages(GFP_KSWAPD, 0))
-				break;
+			pgdat = pgdat_list;
+			while (pgdat) {
+				for (i = 0; i < MAX_NR_ZONES; i++) {
+					zone = pgdat->node_zones + i;
+					if ((!zone->size) || 
+							(!zone->zone_wake_kswapd))
+						continue;
+					do_try_to_free_pages(GFP_KSWAPD, zone);
+				}
+				pgdat = pgdat->node_next;
+			}
 			run_task_queue(&tq_disk);
 		} while (!tsk->need_resched);
 		tsk->state = TASK_INTERRUPTIBLE;

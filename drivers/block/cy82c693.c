@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/cy82c693.c	Version 0.34	Dec. 13, 1999
+ * linux/drivers/block/cy82c693.c		Version 0.34	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Andreas S. Krebs (akrebs@altavista.net), Maintainer
  *  Copyright (C) 1998-99 Andre Hedrick, Integrater
@@ -54,7 +54,7 @@
 #include "ide_modes.h"
 
 /* the current version */
-#define CY82_VERSION	"CY82C693U driver v0.34 99-09-03 Andreas S. Krebs (akrebs@altavista.net)"
+#define CY82_VERSION	"CY82C693U driver v0.34 99-13-12 Andreas S. Krebs (akrebs@altavista.net)"
 
 /*
  *	The following are used to debug the driver.
@@ -439,4 +439,3 @@ void __init ide_init_cy82c693(ide_hwif_t *hwif)
 		hwif->drives[1].autotune = 1;
 	}
 }
-

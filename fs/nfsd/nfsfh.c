@@ -76,7 +76,7 @@ static int get_ino_name(struct dentry *dentry, struct qstr *name, unsigned long 
 	if (!dir || !S_ISDIR(dir->i_mode))
 		goto out;
 	error = -EINVAL;
-	if (!dir->i_op || !dir->i_op->default_file_ops)
+	if (!dir->i_fop)
 		goto out;
 	/*
 	 * Open the directory ...

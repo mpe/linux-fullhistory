@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.26 2000/02/09 20:22:55 werner Exp $
+/* $Id: hfc_pci.c,v 1.27 2000/02/26 00:35:12 keil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -23,6 +23,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.c,v $
+ * Revision 1.27  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.26  2000/02/09 20:22:55  werner
  *
  * Updated PCI-ID table
@@ -126,7 +129,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.26 $";
+static const char *hfcpci_revision = "$Revision: 1.27 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -636,7 +639,7 @@ hfcpci_fill_dfifo(struct IsdnCardState *cs)
 	df->f1 = new_f1;	/* next frame */
 	restore_flags(flags);
 
-	dev_kfree_skb(cs->tx_skb);
+	dev_kfree_skb_any(cs->tx_skb);
 	cs->tx_skb = NULL;
 	return;
 }
@@ -710,7 +713,7 @@ hfcpci_fill_fifo(struct BCState *bcs)
 				debugl1(cs, "hfcpci_fill_fifo_trans %d frame length %d discarded",
 					bcs->channel, bcs->tx_skb->len);
 
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			cli();
 			bcs->tx_skb = skb_dequeue(&bcs->squeue);	/* fetch next data */
 			sti();
@@ -778,7 +781,7 @@ hfcpci_fill_fifo(struct BCState *bcs)
 	bz->f1 = new_f1;	/* next frame */
 	restore_flags(flags);
 
-	dev_kfree_skb(bcs->tx_skb);
+	dev_kfree_skb_any(bcs->tx_skb);
 	bcs->tx_skb = NULL;
 	test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 	return;
@@ -1130,7 +1133,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					}
 					goto afterXPR;
 				} else {
-					dev_kfree_skb(cs->tx_skb);
+					dev_kfree_skb_irq(cs->tx_skb);
 					cs->tx_cnt = 0;
 					cs->tx_skb = NULL;
 				}
@@ -1522,7 +1525,7 @@ close_hfcpci(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

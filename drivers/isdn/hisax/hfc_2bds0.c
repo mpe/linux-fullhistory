@@ -1,4 +1,4 @@
-/* $Id: hfc_2bds0.c,v 1.11 1999/12/23 15:09:32 keil Exp $
+/* $Id: hfc_2bds0.c,v 1.12 2000/02/26 00:35:12 keil Exp $
  *
  *  specific routines for CCD's HFC 2BDS0
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfc_2bds0.c,v $
+ * Revision 1.12  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.11  1999/12/23 15:09:32  keil
  * change email
  *
@@ -293,7 +296,7 @@ static struct sk_buff
 			sti();
 			debugl1(cs, "RFIFO BUSY error");
 			printk(KERN_WARNING "HFC FIFO channel %d BUSY Error\n", bcs->channel);
-			dev_kfree_skb(skb);
+			dev_kfree_skb_irq(skb);
 			skb = NULL;
 		} else {
 			cli();
@@ -309,7 +312,7 @@ static struct sk_buff
 					bcs->channel, chksum, stat);
 			if (stat) {
 				debugl1(cs, "FIFO CRC error");
-				dev_kfree_skb(skb);
+				dev_kfree_skb_irq(skb);
 				skb = NULL;
 #ifdef ERROR_STATISTIC
 				bcs->err_crc++;
@@ -401,7 +404,7 @@ hfc_fill_fifo(struct BCState *bcs)
 		if (bcs->st->lli.l1writewakeup &&
 			(PACKET_NOACK != bcs->tx_skb->pkt_type))
 			bcs->st->lli.l1writewakeup(bcs->st, bcs->tx_skb->len);
-		dev_kfree_skb(bcs->tx_skb);
+		dev_kfree_skb_any(bcs->tx_skb);
 		bcs->tx_skb = NULL;
 	}
 	WaitForBusy(cs);
@@ -603,7 +606,7 @@ close_2bs0(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -751,7 +754,7 @@ int receive_dmsg(struct IsdnCardState *cs)
 				sti();
 				debugl1(cs, "RFIFO D BUSY error");
 				printk(KERN_WARNING "HFC DFIFO channel BUSY Error\n");
-				dev_kfree_skb(skb);
+				dev_kfree_skb_irq(skb);
 				skb = NULL;
 #ifdef ERROR_STATISTIC
 				cs->err_rx++;
@@ -770,7 +773,7 @@ int receive_dmsg(struct IsdnCardState *cs)
 						chksum, stat);
 				if (stat) {
 					debugl1(cs, "FIFO CRC error");
-					dev_kfree_skb(skb);
+					dev_kfree_skb_irq(skb);
 					skb = NULL;
 #ifdef ERROR_STATISTIC
 					cs->err_crc++;
@@ -870,7 +873,7 @@ hfc_fill_dfifo(struct IsdnCardState *cs)
 	cli();
 	WaitNoBusy(cs);
 	ReadReg(cs, HFCD_DATA, HFCD_FIFO | HFCD_F1_INC | HFCD_SEND);
-	dev_kfree_skb(cs->tx_skb);
+	dev_kfree_skb_any(cs->tx_skb);
 	cs->tx_skb = NULL;
 	sti();
 	WaitForBusy(cs);
@@ -1004,7 +1007,7 @@ hfc2bds0_interrupt(struct IsdnCardState *cs, u_char val)
 					}
 					goto afterXPR;
 				} else {
-					dev_kfree_skb(cs->tx_skb);
+					dev_kfree_skb_irq(cs->tx_skb);
 					cs->tx_cnt = 0;
 					cs->tx_skb = NULL;
 				}

@@ -1,10 +1,11 @@
-#ifndef _IDE_MODES_H
-#define _IDE_MODES_H
 /*
  *  linux/drivers/block/ide_modes.h
  *
  *  Copyright (C) 1996  Linus Torvalds, Igor Abramov, and Mark Lord
  */
+
+#ifndef _IDE_MODES_H
+#define _IDE_MODES_H
 
 #include <linux/config.h>
 

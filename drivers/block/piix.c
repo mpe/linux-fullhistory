@@ -1,8 +1,8 @@
 /*
- * linux/drivers/block/piix.c	Version 0.28	Dec. 13, 1999
+ * linux/drivers/block/piix.c		Version 0.30	Feb. 26, 2000
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
- *  Copyright (C) 1998-1999 Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000 Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  PIO mode setting function for Intel chipsets.  
@@ -49,13 +49,33 @@
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x44, &reg44);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x48, &reg48);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x4a, &reg4a);
+ * pci_read_config_word(HWIF(drive)->pci_dev, 0x54, &reg54);
  *
- * #if 0
- * int err;
- * err = ide_config_drive_speed(drive, speed);
- * (void) ide_config_drive_speed(drive, speed);
- * #else
- * #endif
+ * 00:1f.1 IDE interface: Intel Corporation:
+ *                          Unknown device 2411 (rev 01) (prog-if 80 [Master])
+ *         Control: I/O+ Mem- BusMaster+ SpecCycle- MemWINV- VGASnoop-
+ *                          ParErr- Stepping- SERR- FastB2B-
+ *         Status: Cap- 66Mhz- UDF- FastB2B+ ParErr- DEVSEL=medium >TAbort-
+ *                          <TAbort- <MAbort- >SERR- <PERR-
+ *         Latency: 0 set
+ *         Region 4: I/O ports at ffa0
+ * 00: 86 80 11 24 05 00 80 02 01 80 01 01 00 00 00 00
+ * 10: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 20: a1 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 30: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 40: 07 a3 03 a3 00 00 00 00 05 00 02 02 00 00 00 00
+ * 50: 00 00 00 00 11 04 00 00 00 00 00 00 00 00 00 00
+ * 60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * 90: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * b0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * d0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * f0: 00 00 00 00 00 00 00 00 3a 0f 00 00 00 00 00 00
+ *
  */
 
 #include <linux/config.h>
@@ -86,16 +106,88 @@ static struct pci_dev *bmide_dev;
 
 static int piix_get_info (char *buffer, char **addr, off_t offset, int count)
 {
-	/* int rc; */
-	int piix_who = ((bmide_dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
-			(bmide_dev->device == PCI_DEVICE_ID_INTEL_82801AB_1) ||
-			(bmide_dev->device == PCI_DEVICE_ID_INTEL_82371AB)) ? 4 : 3;
 	char *p = buffer;
-	p += sprintf(p, "\n                                Intel PIIX%d Chipset.\n", piix_who);
-	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n\n");
+	u32 bibma = bmide_dev->resource[4].start;
+        u16 reg40 = 0, psitre = 0, reg42 = 0, ssitre = 0;
+	u8  c0 = 0, c1 = 0;
+	u8  reg44 = 0, reg48 = 0, reg4a = 0, reg4b = 0, reg54 = 0;
+
+	pci_read_config_word(bmide_dev, 0x40, &reg40);
+	pci_read_config_word(bmide_dev, 0x42, &reg42);
+	pci_read_config_byte(bmide_dev, 0x44, &reg44);
+	pci_read_config_byte(bmide_dev, 0x48, &reg48);
+	pci_read_config_byte(bmide_dev, 0x4a, &reg4a);
+	pci_read_config_byte(bmide_dev, 0x4b, &reg4b);
+	pci_read_config_byte(bmide_dev, 0x54, &reg54);
+
+	psitre = (reg40 & 0x4000) ? 1 : 0;
+	ssitre = (reg42 & 0x4000) ? 1 : 0;
+
+        /*
+         * at that point bibma+0x2 et bibma+0xa are byte registers
+         * to investigate:
+         */
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	c1 = inb_p((unsigned short)bibma + 0x0a);
+
+	switch(bmide_dev->device) {
+		case PCI_DEVICE_ID_INTEL_82372FB_1:
+		case PCI_DEVICE_ID_INTEL_82801AA_1:
+			p += sprintf(p, "\n                                Intel PIIX4 Ultra 66 Chipset.\n");
+			break;
+		case PCI_DEVICE_ID_INTEL_82801AB_1:
+		case PCI_DEVICE_ID_INTEL_82371AB:
+			p += sprintf(p, "\n                                Intel PIIX4 Ultra 33 Chipset.\n");
+			break;
+		case PCI_DEVICE_ID_INTEL_82371SB_1:
+			p += sprintf(p, "\n                                Intel PIIX3 Chipset.\n");
+			break;
+		case PCI_DEVICE_ID_INTEL_82371FB_1:
+		case PCI_DEVICE_ID_INTEL_82371FB_0:
+		default:
+			p += sprintf(p, "\n                                Intel PIIX Chipset.\n");
+			break;
+	}
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
-	p += sprintf(p, "\n");
-	p += sprintf(p, "\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ",
+			(c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ",
+			(c1&0x40) ? "yes" : "no " );
+	p += sprintf(p, "UDMA enabled:   %s              %s             %s               %s\n",
+			(reg48&0x01) ? "yes" : "no ",
+			(reg48&0x02) ? "yes" : "no ",
+			(reg48&0x04) ? "yes" : "no ",
+			(reg48&0x08) ? "yes" : "no " );
+	p += sprintf(p, "UDMA enabled:   %s                %s               %s                 %s\n",
+			((reg54&0x11) && (reg4a&0x02)) ? "4" :
+			((reg54&0x11) && (reg4a&0x01)) ? "3" :
+			(reg4a&0x02) ? "2" :
+			(reg4a&0x01) ? "1" :
+			(reg4a&0x00) ? "0" : "X",
+			((reg54&0x22) && (reg4a&0x20)) ? "4" :
+			((reg54&0x22) && (reg4a&0x10)) ? "3" :
+			(reg4a&0x20) ? "2" :
+			(reg4a&0x10) ? "1" :
+			(reg4a&0x00) ? "0" : "X",
+			((reg54&0x44) && (reg4b&0x02)) ? "4" :
+			((reg54&0x44) && (reg4b&0x01)) ? "3" :
+			(reg4b&0x02) ? "2" :
+			(reg4b&0x01) ? "1" :
+			(reg4b&0x00) ? "0" : "X",
+			((reg54&0x88) && (reg4b&0x20)) ? "4" :
+			((reg54&0x88) && (reg4b&0x10)) ? "3" :
+			(reg4b&0x20) ? "2" :
+			(reg4b&0x10) ? "1" :
+			(reg4b&0x00) ? "0" : "X");
+
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
 
 /*
  *	FIXME.... Add configuration junk data....blah blah......
@@ -113,7 +205,6 @@ byte piix_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
-#ifdef CONFIG_BLK_DEV_PIIX_TUNING
 /*
  *
  */
@@ -143,7 +234,6 @@ static byte piix_dma_2_pio (byte xfer_rate) {
 			return 0;
 	}
 }
-#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
 /*
  *  Based on settings done by AMI BIOS
@@ -191,8 +281,6 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 	restore_flags(flags);
 }
 
-#ifdef CONFIG_BLK_DEV_PIIX_TUNING
-
 static int piix_config_drive_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
@@ -205,12 +293,15 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 
 	byte maslave		= hwif->channel ? 0x42 : 0x40;
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
-	int ultra		= ((dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
+	int ultra66		= ((dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82372FB_1)) ? 1 : 0;
+	int ultra		= ((ultra66) ||
+				   (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1)) ? 1 : 0;
-	int ultra66		= (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1) ? 1 : 0; 
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	int a_speed		= 2 << (drive_number * 4);
 	int u_flag		= 1 << drive_number;
+	int v_flag		= 0x10 << drive_number;
 	int u_speed		= 0;
 
 	pci_read_config_word(dev, maslave, &reg4042);
@@ -245,10 +336,6 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
 	}
 
-	/*
-	 * This is !@#$% ugly and stupid.............
-	 * But ugly harware generates ugly code.........
-	 */
 	if (speed >= XFER_UDMA_0) {
 		if (!(reg48 & u_flag))
 			pci_write_config_word(dev, 0x48, reg48|u_flag);
@@ -256,10 +343,12 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
 		}
-		if ((speed > XFER_UDMA_2) && (!(reg54 & u_flag))) {
-			pci_write_config_word(dev, 0x54, reg54|u_flag);
+		if (speed > XFER_UDMA_2) {
+			if (!(reg54 & v_flag)) {
+				pci_write_config_word(dev, 0x54, reg54|v_flag);
+			}
 		} else {
-			pci_write_config_word(dev, 0x54, reg54 & ~u_flag);
+			pci_write_config_word(dev, 0x54, reg54 & ~v_flag);
 		}
 	}
 
@@ -268,8 +357,8 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 			pci_write_config_word(dev, 0x48, reg48 & ~u_flag);
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		if (reg54 & u_flag)
-			pci_write_config_word(dev, 0x54, reg54 & ~u_flag);
+		if (reg54 & v_flag)
+			pci_write_config_word(dev, 0x54, reg54 & ~v_flag);
 	}
 
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
@@ -277,8 +366,7 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 	(void) ide_config_drive_speed(drive, speed);
 
 #if PIIX_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d ", drive->name, ide_xfer_verbose(speed), drive_number);
-	printk("\n");
+	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive_number);
 #endif /* PIIX_DEBUG_DRIVE_INFO */
 
 	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
@@ -299,16 +387,13 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	/* Other cases are done by generic IDE-DMA code. */
 	return ide_dmaproc(func, drive);
 }
-#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
 unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
 {
 #if defined(DISPLAY_PIIX_TIMINGS) && defined(CONFIG_PROC_FS)
-	if (!piix_proc) {
-		piix_proc = 1;
-		bmide_dev = dev;
-		piix_display_info = &piix_get_info;
-	}
+	piix_proc = 1;
+	bmide_dev = dev;
+	piix_display_info = &piix_get_info;
 #endif /* DISPLAY_PIIX_TIMINGS && CONFIG_PROC_FS */
 	return 0;
 }
@@ -325,7 +410,7 @@ unsigned int __init ata66_piix (ide_hwif_t *hwif)
 
 	pci_read_config_byte(hwif->pci_dev, 0x54, &reg54h);
 	pci_read_config_byte(hwif->pci_dev, 0x55, &reg55h);
-	ata66 = (reg54h & mask) ? 0 : 1;
+	ata66 = (reg54h & mask) ? 1 : 0;
 
 	return ata66;
 }
@@ -335,9 +420,9 @@ void __init ide_init_piix (ide_hwif_t *hwif)
 	hwif->tuneproc = &piix_tune_drive;
 
 	if (hwif->dma_base) {
-#ifdef CONFIG_BLK_DEV_PIIX_TUNING
+#ifdef CONFIG_PIIX_TUNING
 		hwif->dmaproc = &piix_dmaproc;
-#endif /* CONFIG_BLK_DEV_PIIX_TUNING */
+#endif /* CONFIG_PIIX_TUNING */
 		hwif->drives[0].autotune = 0;
 		hwif->drives[1].autotune = 0;
 	} else {

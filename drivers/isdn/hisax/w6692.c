@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.1 1999/09/04 06:28:58 keil Exp $
+/* $Id: w6692.c,v 1.2 2000/02/26 00:35:13 keil Exp $
 
  * w6692.c   Winbond W6692 specific routines
  *
@@ -8,6 +8,9 @@
  *              This file is (c) under GNU PUBLIC LICENSE
  *
  * $Log: w6692.c,v $
+ * Revision 1.2  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.1  1999/09/04 06:28:58  keil
  * first revision
  *
@@ -47,7 +50,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.1 $";
+const char *w6692_revision = "$Revision: 1.2 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -378,7 +381,7 @@ W6692B_interrupt(struct IsdnCardState *cs, u_char bchan)
 				if (bcs->st->lli.l1writewakeup &&
 				 (PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.w6692.count);
-				dev_kfree_skb(bcs->tx_skb);
+				dev_kfree_skb_irq(bcs->tx_skb);
 				bcs->hw.w6692.count = 0;
 				bcs->tx_skb = NULL;
 			}
@@ -478,7 +481,7 @@ W6692_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				W6692_fill_fifo(cs);
 				goto afterXFR;
 			} else {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_irq(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			}
@@ -655,7 +658,7 @@ W6692_l1hw(struct PStack *st, int pr, void *arg)
 			discard_queue(&cs->rq);
 			discard_queue(&cs->sq);
 			if (cs->tx_skb) {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_any(cs->tx_skb);
 				cs->tx_skb = NULL;
 			}
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags))
@@ -704,7 +707,7 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 			/* discard frame; reset transceiver */
 			test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags);
 			if (cs->tx_skb) {
-				dev_kfree_skb(cs->tx_skb);
+				dev_kfree_skb_any(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			} else {
@@ -819,7 +822,7 @@ close_w6692state(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			dev_kfree_skb(bcs->tx_skb);
+			dev_kfree_skb_any(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

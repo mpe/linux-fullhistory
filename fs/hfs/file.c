@@ -31,7 +31,7 @@ static void hfs_file_truncate(struct inode *);
 
 /*================ Global variables ================*/
 
-static struct file_operations hfs_file_operations = {
+struct file_operations hfs_file_operations = {
 	read:		hfs_file_read,
 	write:		hfs_file_write,
 	mmap:		generic_file_mmap,
@@ -39,19 +39,8 @@ static struct file_operations hfs_file_operations = {
 };
 
 struct inode_operations hfs_file_inode_operations = {
-	&hfs_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	hfs_file_truncate,	/* truncate */
+	truncate:	hfs_file_truncate,
+	setattr:	hfs_notify_change,
 };
 
 /*================ Variable-like macros ================*/

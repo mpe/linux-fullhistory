@@ -20,8 +20,6 @@
 #include <linux/list.h>
 
 extern struct dentry_operations umsdos_dentry_operations;
-extern struct inode_operations umsdos_rdir_inode_operations;
-
 
 struct dentry *saved_root = NULL;	/* Original root if changed */
 struct inode *pseudo_root = NULL;	/* Useful to simulate the pseudo DOS */
@@ -42,7 +40,7 @@ void fill_new_filp (struct file *filp, struct dentry *dentry)
 	filp->f_reada = 1;
 	filp->f_flags = O_RDWR;
 	filp->f_dentry = dentry;
-	filp->f_op = dentry->d_inode->i_op->default_file_ops;
+	filp->f_op = dentry->d_inode->i_fop;
 }
 
 
@@ -100,10 +98,12 @@ void umsdos_setup_dir(struct dentry *dir)
 	inode->u.umsdos_i.dir_info.pid = 0;
 
 	inode->i_op = &umsdos_rdir_inode_operations;
+	inode->i_fop = &umsdos_rdir_operations;
 	if (umsdos_have_emd(dir)) {
 Printk((KERN_DEBUG "umsdos_setup_dir: %s/%s using EMD\n",
 dir->d_parent->d_name.name, dir->d_name.name));
 		inode->i_op = &umsdos_dir_inode_operations;
+		inode->i_fop = &umsdos_dir_operations;
 	}
 }
 
@@ -126,7 +126,16 @@ void umsdos_set_dirinfo_new (struct dentry *dentry, off_t f_pos)
 	return;
 }
 
+static struct inode_operations umsdos_file_inode_operations = {
+	truncate:	fat_truncate,
+	setattr:	UMSDOS_notify_change,
+};
 
+static struct inode_operations umsdos_symlink_inode_operations = {
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	setattr:	UMSDOS_notify_change,
+};
 
 /*
  * Connect the proper tables in the inode and add some info.
@@ -150,13 +159,14 @@ PRINTK (("umsdos_patch_inode: call umsdos_set_dirinfo_new(%p,%lu)\n",
 dentry, f_pos));
 	umsdos_set_dirinfo_new(dentry, f_pos);
 
+	inode->i_op = &umsdos_file_inode_operations;
 	if (S_ISREG (inode->i_mode)) {
-		/* All set */
+		/* address_space operations already set */
 	} else if (S_ISDIR (inode->i_mode)) {
 		umsdos_setup_dir(dentry);
 	} else if (S_ISLNK (inode->i_mode)) {
 		/* address_space operations already set */
-		inode->i_op = &page_symlink_inode_operations;
+		inode->i_op = &umsdos_symlink_inode_operations;
 	} else
 		init_special_inode(inode, inode->i_mode,
 					kdev_t_to_nr(inode->i_rdev));
@@ -307,16 +317,12 @@ void UMSDOS_write_inode (struct inode *inode)
 
 static struct super_operations umsdos_sops =
 {
-	NULL,			/* read_inode */
-	UMSDOS_write_inode,	/* write_inode */
-	UMSDOS_put_inode,	/* put_inode */
-	fat_delete_inode,	/* delete_inode */
-	UMSDOS_notify_change,	/* notify_change */
-	UMSDOS_put_super,	/* put_super */
-	NULL,			/* write_super */
-	fat_statfs,		/* statfs */
-	NULL,			/* remount_fs */
-	fat_clear_inode		/* clear_inode */
+	write_inode:	UMSDOS_write_inode,
+	put_inode:	UMSDOS_put_inode,
+	delete_inode:	fat_delete_inode,
+	put_super:	UMSDOS_put_super,
+	statfs:		fat_statfs,
+	clear_inode:	fat_clear_inode,
 };
 
 /*

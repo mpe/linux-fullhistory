@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/drivers/block/ide-rapide.c
+ * linux/drivers/block/rapide.c
  *
  * Copyright (c) 1996-1998 Russell King.
  *
@@ -16,7 +16,7 @@
 
 #include <asm/ecard.h>
 
-static const card_ids rapide_cids[] = {
+static const card_ids __init rapide_cids[] = {
 	{ MANU_YELLOWSTONE, PROD_YELLOWSTONE_RAPIDE32 },
 	{ 0xffff, 0xffff }
 };
@@ -43,7 +43,7 @@ static inline int rapide_register(struct expansion_card *ec)
 	return ide_register_hw(&hw, NULL);
 }
 
-int rapide_init(void)
+int __init rapide_init(void)
 {
 	int i;
 

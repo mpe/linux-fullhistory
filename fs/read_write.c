@@ -13,6 +13,16 @@
 
 #include <asm/uaccess.h>
 
+struct file_operations generic_ro_fops = {
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
+};
+
+ssize_t generic_read_dir(struct file *filp, char *buf, size_t siz, loff_t *ppos)
+{
+	return -EISDIR;
+}
+
 loff_t default_llseek(struct file *file, loff_t offset, int origin)
 {
 	long long retval;

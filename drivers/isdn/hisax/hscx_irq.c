@@ -1,4 +1,4 @@
-/* $Id: hscx_irq.c,v 1.13 1999/10/14 20:25:28 keil Exp $
+/* $Id: hscx_irq.c,v 1.14 2000/02/26 00:35:13 keil Exp $
 
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *
@@ -7,6 +7,9 @@
  * This is an include file for fast inline IRQ stuff
  *
  * $Log: hscx_irq.c,v $
+ * Revision 1.14  2000/02/26 00:35:13  keil
+ * Fix skb freeing in interrupt context
+ *
  * Revision 1.13  1999/10/14 20:25:28  keil
  * add a statistic for error monitoring
  *
@@ -250,7 +253,7 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hscx.count);
-				dev_kfree_skb(bcs->tx_skb);
+				dev_kfree_skb_irq(bcs->tx_skb);
 				bcs->hw.hscx.count = 0; 
 				bcs->tx_skb = NULL;
 			}

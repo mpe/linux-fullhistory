@@ -95,7 +95,7 @@ static int ext2_open_file (struct inode * inode, struct file * filp)
  * We have mostly NULL's here: the current defaults are ok for
  * the ext2 filesystem.
  */
-static struct file_operations ext2_file_operations = {
+struct file_operations ext2_file_operations = {
 	llseek:		ext2_file_lseek,
 	read:		generic_file_read,
 	write:		generic_file_write,
@@ -107,6 +107,5 @@ static struct file_operations ext2_file_operations = {
 };
 
 struct inode_operations ext2_file_inode_operations = {
-	&ext2_file_operations,
 	truncate:	ext2_truncate,
 };

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.83 2000/02/11 06:57:17 jj Exp $
+/* $Id: irq.c,v 1.84 2000/02/25 05:44:41 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -1155,4 +1155,9 @@ void __init init_IRQ(void)
 			     : /* No outputs */
 			     : "i" (PSTATE_IE)
 			     : "g1");
+}
+
+void init_irq_proc(void)
+{
+	/* For now, nothing... */
 }

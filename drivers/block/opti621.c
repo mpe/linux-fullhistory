@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/opti621.c       Version 0.6  Jan 02, 1999
+ *  linux/drivers/block/opti621.c		Version 0.6	Jan 02, 1999
  *
  *  Copyright (C) 1996-1998  Linus Torvalds & authors (see below)
  */

@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.59 2000/01/21 11:38:52 jj Exp $
+/*  $Id: signal32.c,v 1.60 2000/02/25 06:02:37 jj Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -126,6 +126,8 @@ int copy_siginfo_to_user32(siginfo_t32 *to, siginfo_t *from)
 			err |= __put_user(from->si_pid, &to->si_pid);
 			err |= __put_user(from->si_uid, &to->si_uid);
 			break;
+		case SIGURG:
+		case SIGIO:
 		case SIGSEGV:
 		case SIGILL:
 		case SIGFPE:

@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.37 2000/02/09 11:16:40 davem Exp $
+ *	Version: $Id: igmp.c,v 1.38 2000/02/27 01:20:02 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -93,6 +93,7 @@
 #include <net/route.h>
 #include <net/sock.h>
 #include <net/checksum.h>
+#include <linux/netfilter_ipv4.h>
 #ifdef CONFIG_IP_MROUTE
 #include <linux/mroute.h>
 #endif
@@ -185,6 +186,11 @@ static void igmp_mod_timer(struct ip_mc_list *im, int max_delay)
 
 #define IGMP_SIZE (sizeof(struct igmphdr)+sizeof(struct iphdr)+4)
 
+static inline int igmp_send_report2(struct sk_buff *skb)
+{
+	return skb->dst->output(skb);
+}
+
 static int igmp_send_report(struct net_device *dev, u32 group, int type)
 {
 	struct sk_buff *skb;
@@ -242,7 +248,8 @@ static int igmp_send_report(struct net_device *dev, u32 group, int type)
 	ih->group=group;
 	ih->csum=ip_compute_csum((void *)ih, sizeof(struct igmphdr));
 
-	return skb->dst->output(skb);
+	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
+		       igmp_send_report2);
 }
 
 

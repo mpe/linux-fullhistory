@@ -289,7 +289,7 @@ udf_find_entry(struct inode *dir, struct dentry *dentry,
  *	Written, tested, and released.
  */
 
-struct dentry *
+static struct dentry *
 udf_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct inode *inode = NULL;
@@ -631,7 +631,7 @@ static int udf_delete_entry(struct FileIdentDesc *fi,
 	return udf_write_fi(cfi, fi, fibh, NULL, NULL);
 }
 
-int udf_create(struct inode *dir, struct dentry *dentry, int mode)
+static int udf_create(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct udf_fileident_bh fibh;
 	struct inode *inode;
@@ -644,6 +644,7 @@ int udf_create(struct inode *dir, struct dentry *dentry, int mode)
 
 	inode->i_data.a_ops = &udf_adinicb_aops;
 	inode->i_op = &udf_file_inode_operations;
+	inode->i_fop = &udf_file_operations;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
 
@@ -672,7 +673,7 @@ int udf_create(struct inode *dir, struct dentry *dentry, int mode)
 	return 0;
 }
 
-int udf_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
+static int udf_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 {
 	struct inode * inode;
 	struct udf_fileident_bh fibh;
@@ -686,8 +687,6 @@ int udf_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 
 	inode->i_uid = current->fsuid;
 	init_special_inode(inode, mode, rdev);
-	inode->i_mode = mode;
-	inode->i_op = NULL;
 	if (!(fi = udf_add_entry(dir, dentry, &fibh, &cfi, &err)))
 	{
 		udf_debug("udf_add_entry failure!\n");
@@ -717,7 +716,7 @@ out:
 	return err;
 }
 
-int udf_mkdir(struct inode * dir, struct dentry * dentry, int mode)
+static int udf_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 {
 	struct inode * inode;
 	struct udf_fileident_bh fibh;
@@ -736,6 +735,7 @@ int udf_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		goto out;
 
 	inode->i_op = &udf_dir_inode_operations;
+	inode->i_fop = &udf_dir_operations;
 	inode->i_size = (sizeof(struct FileIdentDesc) + 3) & ~3;
 	UDF_I_LENALLOC(inode) = inode->i_size;
 	loc = UDF_I_LOCATION(inode).logicalBlockNum;
@@ -860,7 +860,7 @@ static int empty_dir(struct inode *dir)
 	return 1;
 }
 
-int udf_rmdir(struct inode * dir, struct dentry * dentry)
+static int udf_rmdir(struct inode * dir, struct dentry * dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -906,7 +906,7 @@ out:
 	return retval;
 }
 
-int udf_unlink(struct inode * dir, struct dentry * dentry)
+static int udf_unlink(struct inode * dir, struct dentry * dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -955,7 +955,7 @@ out:
 	return retval;
 }
 
-int udf_symlink(struct inode * dir, struct dentry * dentry, const char * symname)
+static int udf_symlink(struct inode * dir, struct dentry * dentry, const char * symname)
 {
 	struct inode * inode;
 	struct PathComponent *pc;
@@ -1075,7 +1075,7 @@ out:
 	return err;
 }
 
-int udf_link(struct dentry * old_dentry, struct inode * dir,
+static int udf_link(struct dentry * old_dentry, struct inode * dir,
 	 struct dentry *dentry)
 {
 	struct inode *inode = old_dentry->d_inode;
@@ -1127,7 +1127,7 @@ int udf_link(struct dentry * old_dentry, struct inode * dir,
 /* Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-int udf_rename (struct inode * old_dir, struct dentry * old_dentry,
+static int udf_rename (struct inode * old_dir, struct dentry * old_dentry,
 	struct inode * new_dir, struct dentry * new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -1270,3 +1270,17 @@ end_rename:
 	}
 	return retval;
 }
+
+struct inode_operations udf_dir_inode_operations = {
+	lookup:		udf_lookup,
+#if CONFIG_UDF_RW == 1
+	create:		udf_create,
+	link:		udf_link,
+	unlink:		udf_unlink,
+	symlink:	udf_symlink,
+	mkdir:		udf_mkdir,
+	rmdir:		udf_rmdir,
+	mknod:		udf_mknod,
+	rename:		udf_rename,
+#endif
+};

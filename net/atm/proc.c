@@ -63,15 +63,6 @@ static struct file_operations proc_spec_atm_operations = {
 	read:		proc_spec_atm_read,
 };
 
-static struct inode_operations proc_dev_atm_inode_operations = {
-	&proc_dev_atm_operations,	/* default ATM directory file-ops */
-};
-
-static struct inode_operations proc_spec_atm_inode_operations = {
-	&proc_spec_atm_operations,	/* default ATM directory file-ops */
-};
-
-
 static void add_stats(char *buf,const char *aal,
   const struct atm_aal_stats *stats)
 {
@@ -563,7 +554,7 @@ int atm_proc_dev_register(struct atm_dev *dev)
 	if (!dev->proc_entry)
 		goto fail0;
 	dev->proc_entry->data = dev;
-	dev->proc_entry->ops = &proc_dev_atm_inode_operations;
+	dev->proc_entry->proc_fops = &proc_dev_atm_operations;
 	return 0;
 	kfree(dev->proc_entry);
 fail0:
@@ -584,7 +575,7 @@ void atm_proc_dev_deregister(struct atm_dev *dev)
     name = create_proc_entry(#name,0,atm_proc_root); \
     if (!name) goto cleanup; \
     name->data = atm_##name##_info; \
-    name->ops = &proc_spec_atm_inode_operations
+    name->proc_fops = &proc_spec_atm_operations
 
 
 int __init atm_proc_init(void)

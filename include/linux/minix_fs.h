@@ -89,17 +89,6 @@ struct minix_dir_entry {
 
 #ifdef __KERNEL__
 
-extern struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry);
-extern int minix_create(struct inode * dir, struct dentry *dentry, int mode);
-extern int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode);
-extern int minix_rmdir(struct inode * dir, struct dentry *dentry);
-extern int minix_unlink(struct inode * dir, struct dentry *dentry);
-extern int minix_symlink(struct inode * inode, struct dentry *dentry,
-	const char * symname);
-extern int minix_link(struct dentry * old_dentry, struct inode * dir, struct dentry *dentry);
-extern int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev);
-extern int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
-			struct inode * new_dir, struct dentry *new_dentry);
 extern struct inode * minix_new_inode(const struct inode * dir, int * error);
 extern void minix_free_inode(struct inode * inode);
 extern unsigned long minix_count_free_inodes(struct super_block *sb);
@@ -118,6 +107,8 @@ extern int minix_sync_file(struct file *, struct dentry *);
 extern struct address_space_operations minix_aops;
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;
+extern struct file_operations minix_file_operations;
+extern struct file_operations minix_dir_operations;
 extern struct dentry_operations minix_dentry_operations;
 
 #endif /* __KERNEL__ */

@@ -2184,6 +2184,7 @@ static int get_removable_partition (struct devfs_entry *dir, const char *name,
 /*  Superblock operations follow  */
 
 extern struct inode_operations devfs_iops;
+static struct file_operations devfs_fops;
 
 static void devfs_read_inode (struct inode *inode)
 {
@@ -2205,6 +2206,7 @@ static void devfs_read_inode (struct inode *inode)
     inode->i_blocks = 0;
     inode->i_blksize = 1024;
     inode->i_op = &devfs_iops;
+    inode->i_fop = &devfs_fops;
     inode->i_rdev = NODEV;
     if ( S_ISCHR (di->mode) )
 	inode->i_rdev = MKDEV (di->de->u.fcb.u.device.major,
@@ -2218,7 +2220,7 @@ static void devfs_read_inode (struct inode *inode)
 	else printk ("%s: read_inode(%d): no block device from bdget()\n",
 		     DEVFS_NAME, (int) inode->i_ino);
     }
-    else if ( S_ISFIFO (di->mode) ) inode->i_op = &fifo_inode_operations;
+    else if ( S_ISFIFO (di->mode) ) inode->i_fop = &def_fifo_fops;
     else if ( S_ISREG (di->mode) ) inode->i_size = di->de->u.fcb.u.file.size;
     inode->i_mode = di->mode;
     inode->i_uid = di->uid;
@@ -2321,7 +2323,6 @@ static struct super_operations devfs_sops =
 { 
     read_inode:    devfs_read_inode,
     write_inode:   devfs_write_inode,
-    notify_change: devfs_notify_change,
     put_super:     devfs_put_super,
     statfs:        devfs_statfs,
 };
@@ -3125,16 +3126,16 @@ static struct dentry *devfs_follow_link (struct dentry *dentry,
 
 static struct inode_operations devfs_iops =
 {
-    default_file_ops: &devfs_fops,
-    lookup:           devfs_lookup,
-    link:             devfs_link,
-    unlink:           devfs_unlink,
-    symlink:          devfs_symlink,
-    mkdir:            devfs_mkdir,
-    rmdir:            devfs_rmdir,
-    mknod:            devfs_mknod,
-    readlink:         devfs_readlink,
-    follow_link:      devfs_follow_link,
+	lookup:		devfs_lookup,
+	link:		devfs_link,
+	unlink:		devfs_unlink,
+	symlink:	devfs_symlink,
+	mkdir:		devfs_mkdir,
+	rmdir:		devfs_rmdir,
+	mknod:		devfs_mknod,
+	readlink:	devfs_readlink,
+	follow_link:	devfs_follow_link,
+	setattr:	devfs_notify_change,
 };
 
 static struct super_block *devfs_read_super (struct super_block *sb,

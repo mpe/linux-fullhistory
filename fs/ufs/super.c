@@ -173,6 +173,8 @@ void ufs_print_cylinder_stuff(struct ufs_cylinder_group *cg, unsigned swab)
 }
 #endif /* UFS_SUPER_DEBUG_MORE */
 
+static struct super_operations ufs_super_ops;
+
 static char error_buf[1024];
 
 void ufs_error (struct super_block * sb, const char * function,
@@ -947,15 +949,14 @@ int ufs_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 }
 
 static struct super_operations ufs_super_ops = {
-	ufs_read_inode,
-	ufs_write_inode,
-	ufs_put_inode,
-	ufs_delete_inode,
-	NULL,			/* notify_change() */
-	ufs_put_super,
-	ufs_write_super,
-	ufs_statfs,
-	ufs_remount
+	read_inode:	ufs_read_inode,
+	write_inode:	ufs_write_inode,
+	put_inode:	ufs_put_inode,
+	delete_inode:	ufs_delete_inode,
+	put_super:	ufs_put_super,
+	write_super:	ufs_write_super,
+	statfs:		ufs_statfs,
+	remount_fs:	ufs_remount,
 };
 
 static struct file_system_type ufs_fs_type = {

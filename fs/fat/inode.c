@@ -375,6 +375,7 @@ static void fat_read_root(struct inode *inode)
 	inode->i_version = ++event;
 	inode->i_mode = (S_IRWXUGO & ~sbi->options.fs_umask) | S_IFDIR;
 	inode->i_op = sbi->dir_ops;
+	inode->i_fop = &fat_dir_operations;
 	if (sbi->fat_bits == 32) {
 		MSDOS_I(inode)->i_start = sbi->root_cluster;
 		if ((nr = MSDOS_I(inode)->i_start) != 0) {
@@ -406,16 +407,11 @@ static void fat_read_root(struct inode *inode)
 }
 
 static struct super_operations fat_sops = { 
-	NULL,
-	fat_write_inode,
-	NULL,
-	fat_delete_inode,
-	fat_notify_change,
-	fat_put_super,
-	NULL,		/* write_super */
-	fat_statfs,
-	NULL,		/* remount */
-	fat_clear_inode
+	write_inode:	fat_write_inode,
+	delete_inode:	fat_delete_inode,
+	put_super:	fat_put_super,
+	statfs:		fat_statfs,
+	clear_inode:	fat_clear_inode,
 };
 
 /*
@@ -788,6 +784,7 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 		inode->i_mode = MSDOS_MKMODE(de->attr,S_IRWXUGO &
 		    ~sbi->options.fs_umask) | S_IFDIR;
 		inode->i_op = sbi->dir_ops;
+		inode->i_fop = &fat_dir_operations;
 
 		MSDOS_I(inode)->i_start = CF_LE_W(de->start);
 		if (sbi->fat_bits == 32) {
@@ -830,6 +827,7 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(de->size);
 	        inode->i_op = &fat_file_inode_operations;
+	        inode->i_fop = &fat_file_operations;
 		inode->i_mapping->a_ops = &fat_aops;
 		MSDOS_I(inode)->mmu_private = inode->i_size;
 	}

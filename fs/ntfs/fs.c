@@ -412,7 +412,6 @@ static struct file_operations ntfs_file_operations_nommap = {
 };
 
 static struct inode_operations ntfs_inode_operations_nobmap = {
-	&ntfs_file_operations_nommap,
 };
 
 #ifdef CONFIG_NTFS_RW
@@ -466,6 +465,7 @@ ntfs_create(struct inode* dir,struct dentry *d,int mode)
 	}
 	/* It's not a directory */
 	r->i_op=&ntfs_inode_operations_nobmap;
+	r->i_fop=&ntfs_file_operations_nommap,
 	r->i_mode=S_IFREG|S_IRUGO;
 #ifdef CONFIG_NTFS_RW
 	r->i_mode|=S_IWUGO;
@@ -529,6 +529,7 @@ _linux_ntfs_mkdir(struct inode *dir, struct dentry* d, int mode)
 	}
 	/* It's a directory */
 	r->i_op = &ntfs_dir_inode_operations;
+	r->i_fop = &ntfs_dir_operations;
 	r->i_mode = S_IFDIR|S_IRUGO|S_IXUGO;
 #ifdef CONFIG_NTFS_RW
 	r->i_mode|=S_IWUGO;
@@ -570,32 +571,19 @@ static struct file_operations ntfs_file_operations = {
 };
 
 static struct inode_operations ntfs_inode_operations = {
-	&ntfs_file_operations,
 };
 
 static struct file_operations ntfs_dir_operations = {
+	read:		generic_read_dir,
 	readdir:	ntfs_readdir,
 };
 
 static struct inode_operations ntfs_dir_inode_operations = {
-	&ntfs_dir_operations,
+	lookup:		ntfs_lookup,
 #ifdef CONFIG_NTFS_RW
-	ntfs_create, /* create */
-#else
-	NULL,
+	create:		ntfs_create,
+	mkdir:		_linux_ntfs_mkdir,
 #endif
-	ntfs_lookup, /* lookup */
-	NULL, /* link */
-	NULL, /* unlink */
-	NULL, /* symlink */
-#ifdef CONFIG_NTFS_RW
-	_linux_ntfs_mkdir, /* mkdir */
-#else
-	NULL,
-#endif
-	NULL, /* rmdir */
-	NULL, /* mknod */
-	NULL, /* rename */
 };
 
 static int ntfs_writepage(struct dentry *dentry, struct page *page)
@@ -636,7 +624,6 @@ static void ntfs_read_inode(struct inode* inode)
 	ntfs_attribute *si;
 
 	vol=NTFS_INO2VOL(inode);
-	inode->i_op=NULL;
 	inode->i_mode=0;
 	ntfs_debug(DEBUG_OTHER, "ntfs_read_inode %x\n",(unsigned)inode->i_ino);
 
@@ -693,16 +680,19 @@ static void ntfs_read_inode(struct inode* inode)
 		inode->i_size = at ? at->size : 0;
 	  
 		inode->i_op=&ntfs_dir_inode_operations;
+		inode->i_fop=&ntfs_dir_operations;
 		inode->i_mode=S_IFDIR|S_IRUGO|S_IXUGO;
 	}
 	else
 	{
 		if (can_mmap) {
 			inode->i_op = &ntfs_inode_operations;
+			inode->i_fop = &ntfs_file_operations;
 			inode->i_mapping->a_ops = &ntfs_aops;
 			inode->u.ntfs_i.mmu_private = inode->i_size;
 		} else {
 			inode->i_op=&ntfs_inode_operations_nobmap;
+			inode->i_fop=&ntfs_file_operations_nommap,
 		}
 		inode->i_mode=S_IFREG|S_IRUGO;
 	}
@@ -806,20 +796,14 @@ static int ntfs_remount_fs(struct super_block *sb, int *flags, char *options)
 
 /* Define the super block operation that are implemented */
 static struct super_operations ntfs_super_operations = {
-	ntfs_read_inode,
+	read_inode:	ntfs_read_inode,
 #ifdef CONFIG_NTFS_RW
-	ntfs_write_inode,
-#else
-	NULL,
+	write_inode:	ntfs_write_inode,
 #endif
-	NULL, /* put_inode */
-	NULL, /* delete_inode */
-	NULL, /* notify_change */
-	ntfs_put_super,
-	NULL, /* write_super */
-	ntfs_statfs,
-	ntfs_remount_fs, /* remount */
-	_ntfs_clear_inode, /* clear_inode */ 
+	put_super:	ntfs_put_super,
+	statfs:		ntfs_statfs,
+	remount_fs:	ntfs_remount_fs,
+	clear_inode:	_ntfs_clear_inode,
 };
 
 /* Called to mount a filesystem by read_super() in fs/super.c

@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/pdc202xx.c	Version 0.28	Dec. 13, 1999
+ *  linux/drivers/block/pdc202xx.c	Version 0.29	Feb. 10, 2000
  *
- *  Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  Promise Ultra33 cards with BIOS v1.20 through 1.28 will need this
@@ -14,7 +14,7 @@
  *  8 are UDMA supported and 4 are limited to DMA mode 2 multi-word.
  *  The 8/4 ratio is a BIOS code limit by promise.
  *
- *  UNLESS you enable "CONFIG_PDC202XX_FORCE_BURST_BIT"
+ *  UNLESS you enable "CONFIG_PDC202XX_BURST"
  *
  *  There is only one BIOS in the three contollers.
  *
@@ -99,6 +99,61 @@
 
 #define PDC202XX_DEBUG_DRIVE_INFO		0
 #define PDC202XX_DECODE_REGISTER_INFO		0
+
+#define DISPLAY_PDC202XX_TIMINGS
+#if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+
+static int pdc202xx_get_info(char *, char **, off_t, int);
+extern int (*pdc202xx_display_info)(char *, char **, off_t, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+
+static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p = buffer;
+
+	u32 bibma = bmide_dev->resource[4].start;
+	u8 c0 = 0, c1 = 0;
+
+        /*
+         * at that point bibma+0x2 et bibma+0xa are byte registers
+         * to investigate:
+         */
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	c1 = inb_p((unsigned short)bibma + 0x0a);
+
+	switch(bmide_dev->device) {	
+		case PCI_DEVICE_ID_PROMISE_20262:
+			p += sprintf(p, "\n                                PDC20262 Chipset.\n");
+			break;
+		case PCI_DEVICE_ID_PROMISE_20246:
+			p += sprintf(p, "\n                                PDC20246 Chipset.\n");
+			break;
+		default:
+			p += sprintf(p, "\n                                PDC202XX Chipset.\n");
+			break;
+	}
+
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
+
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
+
+	return p-buffer;	/* => must be less than 4k! */
+}
+#endif  /* defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+byte pdc202xx_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
@@ -620,15 +675,15 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		(primary_mode & 1) ? "MASTER" : "PCI",
 		(secondary_mode & 1) ? "MASTER" : "PCI" );
 
-#ifdef CONFIG_PDC202XX_FORCE_BURST_BIT
+#ifdef CONFIG_PDC202XX_BURST
 	if (!(udma_speed_flag & 1)) {
 		printk("%s: FORCING BURST BIT 0x%02x -> 0x%02x ", name, udma_speed_flag, (udma_speed_flag|1));
 		outb(udma_speed_flag|1, high_16 + 0x001f);
 		printk("%sCTIVE\n", (inb(high_16 + 0x001f) & 1) ? "A" : "INA");
 	}
-#endif /* CONFIG_PDC202XX_FORCE_BURST_BIT */
+#endif /* CONFIG_PDC202XX_BURST */
 
-#ifdef CONFIG_PDC202XX_FORCE_MASTER_MODE
+#ifdef CONFIG_PDC202XX_MASTER
 	if (!(primary_mode & 1)) {
 		printk("%s: FORCING PRIMARY MODE BIT 0x%02x -> 0x%02x ",
 			name, primary_mode, (primary_mode|1));
@@ -642,7 +697,14 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		outb(secondary_mode|1, high_16 + 0x001b);
 		printk("%s\n", (inb(high_16 + 0x001b) & 1) ? "MASTER" : "PCI");
 	}
-#endif /* CONFIG_PDC202XX_FORCE_MASTER_MODE */
+#endif /* CONFIG_PDC202XX_MASTER */
+
+#if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
+        pdc202xx_proc = 1;
+        bmide_dev = dev;
+        pdc202xx_display_info = &pdc202xx_get_info;
+#endif /* DISPLAY_PDC202XX_TIMINGS && CONFIG_PROC_FS */
+
 	return dev->irq;
 }
 

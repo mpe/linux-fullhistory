@@ -159,7 +159,7 @@ failure:
 	return NULL;
 }
 
-struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode * inode;
 	struct ext2_dir_entry_2 * de;
@@ -369,7 +369,7 @@ static inline void ext2_set_de_type(struct super_block *sb,
  * If the create succeeds, we fill in the inode information
  * with d_instantiate(). 
  */
-int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
+static int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 {
 	struct inode * inode;
 	struct buffer_head * bh;
@@ -384,6 +384,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 		return err;
 
 	inode->i_op = &ext2_file_inode_operations;
+	inode->i_fop = &ext2_file_operations;
 	inode->i_mapping->a_ops = &ext2_aops;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
@@ -407,7 +408,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 	return 0;
 }
 
-int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
+static int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 {
 	struct inode * inode;
 	struct buffer_head * bh;
@@ -445,7 +446,7 @@ out_no_entry:
 	goto out;
 }
 
-int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
+static int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 {
 	struct inode * inode;
 	struct buffer_head * bh, * dir_block;
@@ -462,6 +463,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		goto out;
 
 	inode->i_op = &ext2_dir_inode_operations;
+	inode->i_fop = &ext2_dir_operations;
 	inode->i_size = inode->i_sb->s_blocksize;
 	inode->i_blocks = 0;	
 	dir_block = ext2_bread (inode, 0, 1, &err);
@@ -579,7 +581,7 @@ static int empty_dir (struct inode * inode)
 	return 1;
 }
 
-int ext2_rmdir (struct inode * dir, struct dentry *dentry)
+static int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -630,7 +632,7 @@ end_rmdir:
 	return retval;
 }
 
-int ext2_unlink(struct inode * dir, struct dentry *dentry)
+static int ext2_unlink(struct inode * dir, struct dentry *dentry)
 {
 	int retval;
 	struct inode * inode;
@@ -678,7 +680,7 @@ end_unlink:
 	return retval;
 }
 
-int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symname)
+static int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symname)
 {
 	struct inode * inode;
 	struct ext2_dir_entry_2 * de;
@@ -733,7 +735,7 @@ out_no_entry:
 	goto out;
 }
 
-int ext2_link (struct dentry * old_dentry,
+static int ext2_link (struct dentry * old_dentry,
 		struct inode * dir, struct dentry *dentry)
 {
 	struct inode *inode = old_dentry->d_inode;
@@ -776,7 +778,7 @@ int ext2_link (struct dentry * old_dentry,
  * Anybody can rename anything with this: the permission checks are left to the
  * higher-level routines.
  */
-int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
+static int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 			   struct inode * new_dir,struct dentry *new_dentry)
 {
 	struct inode * old_inode, * new_inode;
@@ -894,3 +896,18 @@ end_rename:
 	brelse (new_bh);
 	return retval;
 }
+
+/*
+ * directories can handle most operations...
+ */
+struct inode_operations ext2_dir_inode_operations = {
+	create:		ext2_create,
+	lookup:		ext2_lookup,
+	link:		ext2_link,
+	unlink:		ext2_unlink,
+	symlink:	ext2_symlink,
+	mkdir:		ext2_mkdir,
+	rmdir:		ext2_rmdir,
+	mknod:		ext2_mknod,
+	rename:		ext2_rename,
+};

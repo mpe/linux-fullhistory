@@ -59,12 +59,13 @@ static void bfs_read_inode(struct inode * inode)
 	if (di->i_vtype == BFS_VDIR) {
 		inode->i_mode |= S_IFDIR;
 		inode->i_op = &bfs_dir_inops;
+		inode->i_fop = &bfs_dir_operations;
 	} else if (di->i_vtype == BFS_VREG) {
 		inode->i_mode |= S_IFREG;
 		inode->i_op = &bfs_file_inops;
+		inode->i_fop = &bfs_file_operations;
 		inode->i_mapping->a_ops = &bfs_aops;
-	} else 
-		inode->i_op = NULL;
+	}
 
 	inode->i_uid = di->i_uid;
 	inode->i_gid = di->i_gid;

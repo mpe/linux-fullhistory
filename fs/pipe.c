@@ -533,7 +533,6 @@ struct file_operations rdwr_pipe_fops = {
 
 static struct inode * get_pipe_inode(void)
 {
-	extern struct inode_operations pipe_inode_operations;
 	struct inode *inode = get_empty_inode();
 	unsigned long page;
 
@@ -548,7 +547,7 @@ static struct inode * get_pipe_inode(void)
 	if (!inode->i_pipe)
 		goto fail_page;
 
-	inode->i_op = &pipe_inode_operations;
+	inode->i_fop = &rdwr_pipe_fops;
 
 	init_waitqueue_head(PIPE_WAIT(*inode));
 	PIPE_BASE(*inode) = (char *) page;
@@ -577,10 +576,6 @@ fail_iput:
 fail_inode:
 	return NULL;
 }
-
-struct inode_operations pipe_inode_operations = {
-	&rdwr_pipe_fops,
-};
 
 int do_pipe(int *fd)
 {

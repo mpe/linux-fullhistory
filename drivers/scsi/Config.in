@@ -44,6 +44,9 @@ if [ "$CONFIG_DECSTATION" = "y" ]; then
    dep_tristate 'DEC SII Scsi Driver' CONFIG_SCSI_DECSII $CONFIG_SCSI
 fi
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   dep_tristate '3ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
+fi
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
 dep_tristate 'ACARD SCSI support' CONFIG_SCSI_ACARD $CONFIG_SCSI
 dep_tristate 'Adaptec AHA152X/2825 support' CONFIG_SCSI_AHA152X $CONFIG_SCSI
@@ -187,9 +190,6 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
 fi
 if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
    bool 'MIPS JAZZ FAS216 SCSI support' CONFIG_JAZZ_ESP
-fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   dep_tristate '3Ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
 fi
 
 endmenu

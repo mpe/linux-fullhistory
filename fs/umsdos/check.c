@@ -84,7 +84,6 @@ void check_sb (struct super_block *sb, const char c)
 /*
  * check an inode
  */
-extern struct inode_operations umsdos_rdir_inode_operations;
 
 void check_inode (struct inode *inode)
 {

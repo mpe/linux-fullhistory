@@ -1,9 +1,10 @@
 /*
- * linux/drivers/block/via82cxxx.c	Version 0.06	Dec. 13, 1999
+ * linux/drivers/block/via82cxxx.c	Version 0.07	Feb. 10, 2000
  *
- *  Copyright (C) 1998-99 Michel Aubry, Maintainer
- *  Copyright (C) 1999 Jeff Garzik, MVP4 Support (jgarzik@mandrakesoft.com)
- *  Copyright (C) 1998-99 Andre Hedrick (andre@suse.com)
+ *  Copyright (C) 1998-99	Michel Aubry, Maintainer
+ *  Copyright (C) 1999		Jeff Garzik, MVP4 Support
+ *					(jgarzik@mandrakesoft.com)
+ *  Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
  *
  *  The VIA MVP-4 is reported OK with UDMA.
@@ -473,12 +474,6 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 		!(newfifo & 0x03)		? "1" :
 		(!(newfifo & 0x02)		? "3/4" :
 		(newfifo & 0x01)		? "1/4" : "1/2"));
-
-#if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
-	via_proc = 1;
-	bmide_dev = hwif->pci_dev;
-	via_display_info = &via_get_info;
-#endif /* DISPLAY_VIA_TIMINGS &&  CONFIG_PROC_FS*/
 	return 0;
 }
 
@@ -530,6 +525,12 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 		printk("\n");
 	}
 
+#if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
+	via_proc = 1;
+	bmide_dev = dev;
+	via_display_info = &via_get_info;
+#endif /* DISPLAY_VIA_TIMINGS &&  CONFIG_PROC_FS*/
+
 	return 0;
 }
 
@@ -555,7 +556,7 @@ void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 }
 
 /*
- *  ide_dmacapable_via82c568(ide_hwif_t *, unsigned long)
+ *  ide_dmacapable_via82cxxx(ide_hwif_t *, unsigned long)
  *  checks if channel "channel" of if hwif is dma
  *  capable or not, according to kernel command line,
  *  and the new fifo settings.

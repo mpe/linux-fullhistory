@@ -410,10 +410,13 @@ static void autofs4_read_inode(struct inode *inode)
 
 	if (S_ISDIR(inf->mode)) {
 		inode->i_nlink = 2;
-		if (inode->i_ino == AUTOFS_ROOT_INO)
+		if (inode->i_ino == AUTOFS_ROOT_INO) {
 			inode->i_op = &autofs4_root_inode_operations;
-		else
+			inode->i_fop = &autofs4_root_operations;
+		} else {
 			inode->i_op = &autofs4_dir_inode_operations;
+			inode->i_fop = &autofs4_dir_operations;
+		}
 	} else if (S_ISLNK(inf->mode)) {
 		inode->i_op = &autofs4_symlink_inode_operations;
 	}

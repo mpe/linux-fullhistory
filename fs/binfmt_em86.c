@@ -36,9 +36,8 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	/* First of all, some simple consistency checks */
 	if ((elf_ex.e_type != ET_EXEC && elf_ex.e_type != ET_DYN) ||
 		(!((elf_ex.e_machine == EM_386) || (elf_ex.e_machine == EM_486))) ||
-		(!bprm->dentry->d_inode->i_op || 
-		!bprm->dentry->d_inode->i_op->default_file_ops ||
-		!bprm->dentry->d_inode->i_op->default_file_ops->mmap)) {
+		(!bprm->dentry->d_inode->i_fop || 
+		!bprm->dentry->d_inode->i_fop->mmap)) {
 			return -ENOEXEC;
 	}
 

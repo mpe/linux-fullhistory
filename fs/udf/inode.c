@@ -1077,6 +1077,7 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		case FILE_TYPE_DIRECTORY:
 		{
 			inode->i_op = &udf_dir_inode_operations;
+			inode->i_fop = &udf_dir_operations;
 			inode->i_mode |= S_IFDIR;
 			inode->i_nlink ++;
 			break;
@@ -1089,6 +1090,7 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 			else
 				inode->i_data.a_ops = &udf_aops;
 			inode->i_op = &udf_file_inode_operations;
+			inode->i_fop = &udf_file_operations;
 			inode->i_mode |= S_IFREG;
 			break;
 		}

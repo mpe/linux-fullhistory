@@ -283,10 +283,12 @@ adfs_iget(struct super_block *sb, struct object_info *obj)
 	inode->i_atime	 =
 	inode->i_ctime	 = adfs_adfs2unix_time(inode);
 
-	if (S_ISDIR(inode->i_mode))
+	if (S_ISDIR(inode->i_mode)) {
 		inode->i_op	= &adfs_dir_inode_operations;
-	else if (S_ISREG(inode->i_mode)) {
+		inode->i_fop	= &adfs_dir_operations;
+	} else if (S_ISREG(inode->i_mode)) {
 		inode->i_op	= &adfs_file_inode_operations;
+		inode->i_fop	= &adfs_file_operations;
 		inode->i_mapping->a_ops = &adfs_aops;
 		inode->u.adfs_i.mmu_private = inode->i_size;
 	}
@@ -295,17 +297,6 @@ adfs_iget(struct super_block *sb, struct object_info *obj)
 
 out:
 	return inode;
-}
-
-/*
- * This is no longer a valid way to obtain the metadata associated with the
- * inode number on this filesystem.  This means that this filesystem cannot
- * be shared via NFS.
- */
-void adfs_read_inode(struct inode *inode)
-{
-	adfs_error(inode->i_sb, "unsupported method of reading inode");
-	make_bad_inode(inode);
 }
 
 /*

@@ -160,10 +160,6 @@ static struct file_operations def_chr_fops = {
 	open:		chrdev_open,
 };
 
-static struct inode_operations chrdev_inode_operations = {
-	&def_chr_fops		/* default file operations */
-};
-
 /*
  * Print device name (in decimal, hexadecimal or symbolic)
  * Note: returns pointer to static data!
@@ -189,16 +185,15 @@ const char * cdevname(kdev_t dev)
 void init_special_inode(struct inode *inode, umode_t mode, int rdev)
 {
 	inode->i_mode = mode;
-	inode->i_op = NULL;
 	if (S_ISCHR(mode)) {
-		inode->i_op = &chrdev_inode_operations;
+		inode->i_fop = &def_chr_fops;
 		inode->i_rdev = to_kdev_t(rdev);
 	} else if (S_ISBLK(mode)) {
-		inode->i_op = &blkdev_inode_operations;
+		inode->i_fop = &def_blk_fops;
 		inode->i_rdev = to_kdev_t(rdev);
 		inode->i_bdev = bdget(rdev);
 	} else if (S_ISFIFO(mode))
-		inode->i_op = &fifo_inode_operations;
+		inode->i_fop = &def_fifo_fops;
 	else if (S_ISSOCK(mode))
 		;
 	else

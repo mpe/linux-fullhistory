@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/sis5513.c	Version 0.08	Dec. 13, 1999
+ * linux/drivers/block/sis5513.c		Version 0.09	Feb. 10, 2000
  *
- * Copyright (C) 1999	Andre Hedrick (andre@suse.com)
+ * Copyright (C) 1999-2000	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
  *
  * Thanks to SIS Taiwan for direct support and hardware.
@@ -50,6 +50,7 @@ static const struct {
 	{ "SiS540",	PCI_DEVICE_ID_SI_540,	SIS5513_FLAG_ATA_66, },
 	{ "SiS620",	PCI_DEVICE_ID_SI_620,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
 	{ "SiS630",	PCI_DEVICE_ID_SI_630,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
+	{ "SiS5591",	PCI_DEVICE_ID_SI_5591,	SIS5513_FLAG_ATA_33, },
 	{ "SiS5597",	PCI_DEVICE_ID_SI_5597,	SIS5513_FLAG_ATA_33, },
 	{ "SiS5600",	PCI_DEVICE_ID_SI_5600,	SIS5513_FLAG_ATA_33, },
 	{ "SiS5511",	PCI_DEVICE_ID_SI_5511,	SIS5513_FLAG_ATA_16, },
@@ -233,8 +234,10 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte			drive_pci, test1, test2, mask;
 	int			err;
 
+	unsigned long dma_base	= hwif->dma_base;
+	byte unit		= (drive->select.b.unit & 0x01);
 	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
+	int drive_number	= ((hwif->channel ? 2 : 0) + unit);
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 
 	if (host_dev) {
@@ -314,6 +317,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		return ((int) ide_dma_off_quietly);
 	}
 
+	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
 	err = ide_config_drive_speed(drive, speed);
 
 #if SIS5513_DEBUG_DRIVE_INFO
@@ -532,6 +536,7 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 			case PCI_DEVICE_ID_SI_630:
 			case PCI_DEVICE_ID_SI_5600:
 			case PCI_DEVICE_ID_SI_5597:
+			case PCI_DEVICE_ID_SI_5591:
 				hwif->autodma = 1;
 				hwif->dmaproc = &sis5513_dmaproc;
 				break;

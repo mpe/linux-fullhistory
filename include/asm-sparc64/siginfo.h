@@ -65,7 +65,7 @@ typedef struct siginfo {
 
 		/* SIGPOLL */
 		struct {
-			int _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
+			long _band;	/* POLL_IN, POLL_OUT, POLL_MSG */
 			int _fd;
 		} _sigpoll;
 	} _sifields;

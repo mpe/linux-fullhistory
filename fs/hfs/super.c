@@ -42,15 +42,11 @@ static void hfs_write_super(struct super_block *);
 /*================ Global variables ================*/
 
 static struct super_operations hfs_super_operations = { 
-	hfs_read_inode,		/* read_inode */
-	NULL,			/* write_inode */
-	hfs_put_inode,		/* put_inode     - in inode.c */
-	NULL,                   /* delete_inode  */
-	hfs_notify_change,	/* notify_change - in inode.c */
-	hfs_put_super,		/* put_super */
-	hfs_write_super,	/* write_super */
-	hfs_statfs,		/* statfs */
-	NULL			/* remount_fs */
+	read_inode:	hfs_read_inode,
+	put_inode:	hfs_put_inode,
+	put_super:	hfs_put_super,
+	write_super:	hfs_write_super,
+	statfs:		hfs_statfs,
 };
 
 /*================ File-local variables ================*/
@@ -72,7 +68,6 @@ static struct file_system_type hfs_fs = {
 static void hfs_read_inode(struct inode *inode)
 {
   inode->i_mode = 0;
-  inode->i_op = NULL;
 }
 
 /*

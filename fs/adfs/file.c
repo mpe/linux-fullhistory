@@ -33,7 +33,7 @@
  * We have mostly NULLs here: the current defaults are OK for
  * the adfs filesystem.
  */
-static struct file_operations adfs_file_operations = {
+struct file_operations adfs_file_operations = {
 	read:		generic_file_read,
 	mmap:		generic_file_mmap,
 	fsync:		file_fsync,
@@ -43,8 +43,9 @@ static struct file_operations adfs_file_operations = {
 };
 
 struct inode_operations adfs_file_inode_operations = {
-	&adfs_file_operations,	/* default file operations */
+	setattr:	adfs_notify_change,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+	&adfs_file_operations,	/* default file operations */
 	readpage:	generic_readpage,
 	bmap:		adfs_bmap,
 #endif

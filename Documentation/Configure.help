@@ -323,27 +323,31 @@ CONFIG_BLK_DEV_NBD
 Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
 CONFIG_BLK_DEV_IDE
   If you say Y here, you will use the full-featured IDE driver to
-  control up to eight IDE interfaces, each being able to serve a
-  "master" and a "slave" device, for a total of up to sixteen IDE
+  control up to ten ATA/IDE interfaces, each being able to serve a
+  "master" and a "slave" device, for a total of up to twenty ATA/IDE
   disk/cdrom/tape/floppy drives. People with SCSI-only systems
-  can say N here.
+  can say N or M here.
 
   Useful information about large (>540 MB) IDE disks, multiple
-  interfaces, what to do if IDE devices are not automatically
-  detected, sound card IDE ports, module support, and other topics, is
-  contained in Documentation/ide.txt. For detailed information about
+  interfaces, what to do if ATA/IDE devices are not automatically
+  detected, sound card ATA/IDE ports, module support, and other topics, is
+  contained in Documentation/ata-ide.txt. For detailed information about
   hard drives, consult the Disk-HOWTO and the Multi-Disk-HOWTO,
   available from http://www.linuxdoc.org/docs.html#howto .
 
-  To fine-tune IDE drive/interface parameters for improved
+  To fine-tune ATA/IDE drive/interface parameters for improved
+  performance, look for the hdparm package at
+  ftp://metalab.unc.edu/pub/Linux/kernel/patches/diskdrives/ .
+
+  To fine-tune ATA/IDE drive/interface parameters for improved
   performance, look for the hdparm package at
   ftp://metalab.unc.edu/pub/Linux/kernel/patches/diskdrives/ .
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt and
-  Documentation/ide.txt. The module will be called ide.o. Do not
-  compile this driver as a module if your root file system (the one
+  Documentation/ide.txt. The module will be called ide-mod.o. Do not
+  compile this driver as a module if your root filesystem (the one
   containing the directory /) is located on an IDE device.
 
   If you have one or more IDE drives, say Y or M here. If your system
@@ -557,13 +561,6 @@ CONFIG_BLK_DEV_RZ1000
 
   People with SCSI-only systems should say N here. If unsure, say Y.
 
-Cyrix CS5530 MediaGX chipset support
-CONFIG_BLK_DEV_CS5530
-  Include support for UDMA on the Cyrix MediaGX 5530 chipset. This
-  will automatically be detected and configured if found.
-
-  It is safe to say Y to this question.
-
 Generic PCI IDE chipset support
 CONFIG_BLK_DEV_IDEPCI
   Say Y here for PCI systems which use IDE drive(s).
@@ -571,6 +568,15 @@ CONFIG_BLK_DEV_IDEPCI
   configure all PCI-based IDE interfaces in your system.
   
   People with SCSI-only systems should say N here; if unsure say Y.
+
+Support for sharing PCI IDE interrupts
+CONFIG_IDEPCI_SHARE_IRQ
+  Some ATA/IDE chipsets have hardware support which allows for
+  sharing a single IRQ with other cards. To enable support for
+  this in the ATA/IDE driver, say Y here.
+
+  It is safe to say Y to this question, in most cases.
+  If unsure, say N.
 
 Generic PCI bus-master DMA support
 CONFIG_BLK_DEV_IDEDMA_PCI
@@ -584,7 +590,7 @@ CONFIG_BLK_DEV_IDEDMA_PCI
   the latest version of the hdparm utility from
   ftp://metalab.unc.edu/pub/Linux/system/hardware/ .
 
-  Read the comments at the beginning of drivers/block/idedma.c and the
+  Read the comments at the beginning of drivers/block/ide-dma.c and the
   file Documentation/ide.txt for more information. 
 
   It is safe to say Y to this question.
@@ -614,7 +620,7 @@ CONFIG_BLK_DEV_OFFBOARD
 
   If you say Y here, and you actually want to reverse the device scan
   order as explained above, you also need to issue the kernel command
-  line option "pci=reverse". (Try "man bootparam" or see the
+  line option "ide=reverse". (Try "man bootparam" or see the
   documentation of your boot loader (lilo or loadlin) about how to
   pass options to the kernel at boot time. The lilo procedure is also
   explained in the SCSI-HOWTO, available from
@@ -639,6 +645,23 @@ CONFIG_IDEDMA_PCI_AUTO
   It is normally safe to answer Y to this question unless your
   motherboard uses a VIA VP2 chipset, in which case you should say N.
 
+Various ATA, Work(s) In Progress (EXPERIMENTAL)
+CONFIG_IDEDMA_PCI_WIP
+  If you enable this you will be capable of using and testing
+  highly developmentail projects.
+
+  It is SAFEST to say N to this question.
+
+3ware Hardware ATA-RAID support (EXPERIMENTAL)
+CONFIG_BLK_DEV_3W_XXXX_RAID
+  3ware is the only hardware ATA-Raid product in Linux to date.
+  This card is 2,4, or 8 channel master mode support only.
+  SCSI support required!!!
+
+  http://www.3ware.com/
+
+  Please read the comments at the top of drivers/scsi/3w-xxxx.c  
+
 AEC6210 chipset support
 CONFIG_BLK_DEV_AEC6210
   This driver adds up to 4 more EIDE devices sharing a single
@@ -648,6 +671,12 @@ CONFIG_BLK_DEV_AEC6210
   available".
 
   Please read the comments at the top of drivers/block/aec6210.c
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
+
+AEC6210 Tuning support (WIP)
+CONFIG_AEC6210_TUNING
+  Please read the comments at the top of drivers/block/aec6210.c  
+  If unsure, say N.
 
 ALI M15x3 chipset support
 CONFIG_BLK_DEV_ALI15X3
@@ -655,9 +684,8 @@ CONFIG_BLK_DEV_ALI15X3
   1535, 1535D onboard chipsets.  It also tests for Simplex mode and
   enables normal dual channel support.
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
   Please read the comments at the top of drivers/block/alim15x3.c
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
 
   If unsure, say N.
 
@@ -665,10 +693,14 @@ AMD7409 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_AMD7409
   This driver ensures (U)DMA support for AMD756 Viper chipset.
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
   Please read the comments at the top of drivers/block/amd7409.c
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
+  If unsure, say N.
 
+AMD Viper ATA-66 Override support (WIP)
+CONFIG_AMD7409_OVERRIDE
+  This option auto-forces the ata66 flag.
+  This effect can be also invoked by calling "idex=ata66"
   If unsure, say N.
 
 CMD64X chipset support
@@ -676,8 +708,8 @@ CONFIG_BLK_DEV_CMD64X
   Say Y here if you have an IDE controller which uses any of these chipsets,
   CMD643, CMD646, or CMD648.
 
-CMD64X chipset RAID support (EXPERIMENTAL) (WIP)
-CONFIG_BLK_DEV_CMD64X
+CMD64X chipset RAID support (WIP)
+CONFIG_CMD64X_RAID
   Work in progress for hardware raid ata-33/66..........rev 7 minimum.
   Say N for now.
 
@@ -686,8 +718,14 @@ CONFIG_BLK_DEV_CY82C693
   This driver adds detection and support for the CY82C693 chipset
   used on Digital's PC-Alpha 164SX boards.
 
-  If you say Y here, you need to say Y to "Use DMA by default
-  when available" as well.
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
+
+Cyrix CS5530 MediaGX chipset support
+CONFIG_BLK_DEV_CS5530
+  Include support for UDMA on the Cyrix MediaGX 5530 chipset. This
+  will automatically be detected and configured if found.
+
+  It is safe to say Y to this question.
 
 HPT34X chipset support
 CONFIG_BLK_DEV_HPT34X
@@ -698,12 +736,13 @@ CONFIG_BLK_DEV_HPT34X
   chipset during the ide-probe at boot time. It is reported to support
   DVD II drives, by the manufacturer.
 
-HPT34X DMA support (EXPERIMENTAL)
-CONFIG_BLK_DEV_HPT34X_DMA
-  you need to say Y to "Use DMA by default when available" if you say
-  Y here.
-
+HPT34X AUTODMA support (WIP)
+CONFIG_HPT34X_AUTODMA
+  This is a dangerous thing to attempt currently!
   Please read the comments at the top of drivers/block/hpt34x.c
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
+
+  If unsure, say N.
 
 HPT366 chipset support
 CONFIG_BLK_DEV_HPT366
@@ -716,13 +755,14 @@ CONFIG_BLK_DEV_HPT366
   manufacturer.
 
   Please read the comments at the top of drivers/block/hpt366.c
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
 
-HPT366 Fast Interrupt support (EXPERIMENTAL) (WIP)
-CONFIG_HPT366_FAST_IRQ_PREDICTION
+HPT366 Fast Interrupts (WIP)
+CONFIG_HPT366_FIP
 
   If unsure, say N.
 
-HPT366 mode three unsupported (EXPERIMENTAL) (WIP)
+HPT366 mode three unsupported (WIP)
 CONFIG_HPT366_MODE3
   This is an undocumented mode that the HA366 can default to in many cases.
   If unsure, say N.
@@ -748,11 +788,11 @@ CONFIG_BLK_DEV_PIIX
 
   Please read the comments at the top of drivers/block/piix.c
 
-  Should also include "PIIXn Tuning support" CONFIG_BLK_DEV_PIIX_TUNING
+  Should also include "PIIXn Tuning support" CONFIG_PIIX_TUNING
   If unsure, say Y.
 
 PIIXn Tuning support
-CONFIG_BLK_DEV_PIIX_TUNING
+CONFIG_PIIX_TUNING
   This driver extension adds DMA mode setting and tuning for all PIIX
   IDE controllers by Intel. Since the BIOS can sometimes improperly
   set up the device/adapter combination and speed limits, it has
@@ -784,15 +824,13 @@ CONFIG_BLK_DEV_PDC202XX
   boot-time for max-speed. Note tested limits are UDMA-2. Ultra66 BIOS
   1.11 or newer required.
 
-  If you say Y here, you need to say Y to "Use DMA by default when
-  available" as well.
-
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
   Please read the comments at the top of drivers/block/pdc202xx.c
 
   If unsure, say N.
 
 Special UDMA Feature
-CONFIG_PDC202XX_FORCE_BURST_BIT
+CONFIG_PDC202XX_BURST
   For PDC20246 and PDC20262 Ultra DMA chipsets. Designed originally
   for PDC20246/Ultra33 that has BIOS setup failures when using 3 or
   more cards.
@@ -801,8 +839,8 @@ CONFIG_PDC202XX_FORCE_BURST_BIT
 
   If unsure, say N.
 
-Special Mode Feature (EXPERIMENTAL)
-CONFIG_PDC202XX_FORCE_MASTER_MODE
+Special Mode Feature (WIP)
+CONFIG_PDC202XX_MASTER
   For PDC20246 and PDC20262 Ultra DMA chipsets. This is reserved for
   possible Hardware RAID 0,1 for the FastTrak Series.
 
@@ -832,8 +870,7 @@ CONFIG_BLK_DEV_VIA82CXXX
   (while running a "cat") provided you enabled "proc" support.
   Please read the comments at the top of drivers/block/via82cxxx.c
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
+  If you say Y here, then say Y to "Use DMA by default when available" as well.
 
   If unsure, say N.
 
@@ -908,16 +945,6 @@ CONFIG_BLK_DEV_UMC8672
   See the files Documentation/ide.txt and drivers/block/umc8672.c for
   more info.
 
-PS/2 ESDI hard disk support
-CONFIG_BLK_DEV_PS2
-  Say Y here if you have a PS/2 machine with a MCA bus and an ESDI
-  hard disk.
-  
-  If you want to compile the driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called ps2esdi.o.
-
 Amiga builtin Gayle IDE interface support
 CONFIG_BLK_DEV_GAYLE
   This is the IDE driver for the builtin IDE interface on some Amiga
@@ -968,7 +995,14 @@ CONFIG_BLK_DEV_IDEDMA_PMAC
 
 Use DMA by default
 CONFIG_IDEDMA_PMAC_AUTO
-  No help for CONFIG_IDEDMA_PMAC_AUTO
+  Prior to kernel version 2.1.112, Linux used to automatically use
+  DMA for IDE drives and chipsets which support it. Due to concerns
+  about a couple of cases where buggy hardware may have caused damage,
+  the default is now to NOT use DMA automatically. To revert to the
+  previous behaviour, say Y to this question.
+
+  If you suspect your hardware is at all flakey, say N here.
+  Do NOT email the IDE kernel people regarding this issue!
 
 Macintosh Quadra/Powerbook IDE interface support
 CONFIG_BLK_DEV_MAC_IDE
@@ -981,9 +1015,16 @@ CONFIG_BLK_DEV_MAC_IDE
   devices (hard disks, CD-ROM drives, etc.) that are connected to the
   builtin IDE interface.
 
+IDE card support
+CONFIG_BLK_DEV_IDE_CARDS
+  On Acorn systems, say Y here if you wish to use an IDE interface
+  expansion card. If you do not or are unsure, say N to this.
+
 ICS IDE interface support
 CONFIG_BLK_DEV_IDE_ICSIDE
-  No help for CONFIG_BLK_DEV_IDE_ICSIDE
+  On Acorn systems, say Y here if you wish to use the ICS IDE
+  interface card.  This is not required for ICS partition support.
+  If you are unsure, say N to this.
 
 ICS DMA support
 CONFIG_BLK_DEV_IDEDMA_ICS
@@ -991,7 +1032,14 @@ CONFIG_BLK_DEV_IDEDMA_ICS
 
 Use ICS DMA by default
 CONFIG_IDEDMA_ICS_AUTO
-  No help for CONFIG_IDEDMA_ICS_AUTO
+  Prior to kernel version 2.1.112, Linux used to automatically use
+  DMA for IDE drives and chipsets which support it. Due to concerns
+  about a couple of cases where buggy hardware may have caused damage,
+  the default is now to NOT use DMA automatically. To revert to the
+  previous behaviour, say Y to this question.
+
+  If you suspect your hardware is at all flakey, say N here.
+  Do NOT email the IDE kernel people regarding this issue!
 
 RapIDE interface support
 CONFIG_BLK_DEV_IDE_RAPIDE
@@ -1008,6 +1056,16 @@ CONFIG_BLK_DEV_XD
   called xd.o. 
 
   It's pretty unlikely that you have one of these: say N.
+
+PS/2 ESDI hard disk support
+CONFIG_BLK_DEV_PS2
+  Say Y here if you have a PS/2 machine with a MCA bus and an ESDI
+  hard disk.
+
+  If you want to compile the driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ps2esdi.o.
 
 Mylex DAC960/DAC1100 PCI RAID Controller support
 CONFIG_BLK_DEV_DAC960

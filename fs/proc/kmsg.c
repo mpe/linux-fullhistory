@@ -45,13 +45,9 @@ static unsigned int kmsg_poll(struct file *file, poll_table * wait)
 }
 
 
-static struct file_operations proc_kmsg_operations = {
+struct file_operations proc_kmsg_operations = {
 	read:		kmsg_read,
 	poll:		kmsg_poll,
 	open:		kmsg_open,
 	release:	kmsg_release,
-};
-
-struct inode_operations proc_kmsg_inode_operations = {
-	&proc_kmsg_operations,	/* default base directory file-ops */
 };

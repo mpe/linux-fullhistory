@@ -40,7 +40,7 @@ static ssize_t nfs_file_write(struct file *, const char *, size_t, loff_t *);
 static int  nfs_file_flush(struct file *);
 static int  nfs_fsync(struct file *, struct dentry *dentry);
 
-static struct file_operations nfs_file_operations = {
+struct file_operations nfs_file_operations = {
 	read:		nfs_file_read,
 	write:		nfs_file_write,
 	mmap:		nfs_file_mmap,
@@ -52,21 +52,8 @@ static struct file_operations nfs_file_operations = {
 };
 
 struct inode_operations nfs_file_inode_operations = {
-	&nfs_file_operations,	/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	nfs_revalidate,		/* revalidate */
+	revalidate:	nfs_revalidate,
+	setattr:	nfs_notify_change,
 };
 
 /* Hack for future NFS swap support */

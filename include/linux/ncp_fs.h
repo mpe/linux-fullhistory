@@ -232,6 +232,7 @@ extern int init_ncp_fs(void);
 
 /* linux/fs/ncpfs/dir.c */
 extern struct inode_operations ncp_dir_inode_operations;
+extern struct file_operations ncp_dir_operations;
 int ncp_conn_logged_in(struct super_block *);
 int ncp_date_dos2unix(__u16 time, __u16 date);
 void ncp_date_unix2dos(int unix_date, __u16 * time, __u16 * date);
@@ -252,6 +253,7 @@ void ncp_unlock_server(struct ncp_server *server);
 
 /* linux/fs/ncpfs/file.c */
 extern struct inode_operations ncp_file_inode_operations;
+extern struct file_operations ncp_file_operations;
 int ncp_make_open(struct inode *, int);
 
 /* linux/fs/ncpfs/mmap.c */

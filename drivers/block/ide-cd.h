@@ -1,11 +1,11 @@
-#ifndef _IDE_CD_H
-#define _IDE_CD_H
 /*
  *  linux/drivers/block/ide_cd.h
  *
- *  Copyright (C) 1996, 1997, 1998  Erik Andersen
- *  Copyright (C) 1998, 1999 Jens Axboe
+ *  Copyright (C) 1996-98  Erik Andersen
+ *  Copyright (C) 1998-2000 Jens Axboe
  */
+#ifndef _IDE_CD_H
+#define _IDE_CD_H
 
 #include <linux/cdrom.h>
 #include <asm/byteorder.h>

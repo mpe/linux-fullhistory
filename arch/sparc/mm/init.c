@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.80 2000/02/09 21:11:06 davem Exp $
+/*  $Id: init.c,v 1.81 2000/02/26 11:59:31 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -40,7 +40,7 @@ unsigned long phys_base;
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 unsigned long sparc_unmapped_base;
 
-struct pgtable_cache_struct pgt_quicklists;
+struct pgtable_cache_struct pgt_quicklists = { 0, 0, 0, 0, SPIN_LOCK_UNLOCKED, SPIN_LOCK_UNLOCKED };
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, _start, end, etext , edata;

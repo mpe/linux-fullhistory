@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/amd7409.c	Version 0.01	Jan. 10, 2000
+ * linux/drivers/block/amd7409.c		Version 0.03	Feb. 10, 2000
  *
  * Copyright (C) 2000			Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -24,6 +24,51 @@
 
 #include "ide_modes.h"
 
+#define DISPLAY_VIPER_TIMINGS
+
+#if defined(DISPLAY_VIPER_TIMINGS) && defined(CONFIG_PROC_FS)
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+
+static int amd7409_get_info(char *, char **, off_t, int);
+extern int (*amd7409_display_info)(char *, char **, off_t, int); /* ide-proc.c */
+extern char *ide_media_verbose(ide_drive_t *);
+static struct pci_dev *bmide_dev;
+
+static int amd7409_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p = buffer;
+	u32 bibma = bmide_dev->resource[4].start;
+	u8 c0 = 0, c1 = 0;
+
+	/*
+	 * at that point bibma+0x2 et bibma+0xa are byte registers
+	 * to investigate:
+	 */
+	c0 = inb_p((unsigned short)bibma + 0x02);
+	c1 = inb_p((unsigned short)bibma + 0x0a);
+
+	p += sprintf(p, "\n                                AMD 7409 VIPER Chipset.\n");
+	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
+	p += sprintf(p, "                %sabled                         %sabled\n",
+			(c0&0x80) ? "dis" : " en",
+			(c1&0x80) ? "dis" : " en");
+	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
+	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
+			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
+			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
+	p += sprintf(p, "UDMA\n");
+	p += sprintf(p, "DMA\n");
+	p += sprintf(p, "PIO\n");
+
+	return p-buffer;	/* => must be less than 4k! */
+}
+#endif  /* defined(DISPLAY_VIPER_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+byte amd7409_proc = 0;
+
+extern char *ide_xfer_verbose (byte xfer_rate);
+
 /*
  * Here is where all the hard work goes to program the chipset.
  *
@@ -33,11 +78,13 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	int err			= 0;
-	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) +
-				   (drive->select.b.unit & 0x01));
+	byte unit		= (drive->select.b.unit & 0x01);
+	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + unit);
+	unsigned long dma_base	= hwif->dma_base;
 	byte drive_pci		= 0x00;
 	byte drive_pci2		= 0x00;
-	byte drive_timing	= 0x00;
+	byte ultra_timing	= 0x00;
+	byte dma_pio_timing	= 0x00;
 	byte pio_timing		= 0x00;
 
         switch (drive_number) {
@@ -49,54 +96,99 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
                         return ((int) ide_dma_off_quietly);
         }
 
-	pci_read_config_byte(dev, drive_pci, &drive_timing);
-	pci_read_config_byte(dev, drive_pci2, &pio_timing);
+	pci_read_config_byte(dev, drive_pci, &ultra_timing);
+	pci_read_config_byte(dev, drive_pci2, &dma_pio_timing);
+	pci_read_config_byte(dev, 0x4c, &pio_timing);
 
-	printk("%s: UDMA 0x%02x PIO 0x%02x ",
-		drive->name, drive_timing, pio_timing);
+#ifdef DEBUG
+	printk("%s: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x ",
+		drive->name, ultra_timing, dma_pio_timing, pio_timing);
+#endif
+
+	ultra_timing &= ~0xC7;
+	dma_pio_timing &= ~0xFF;
+	pio_timing &= ~(0x03 << drive_number);
+
+#ifdef DEBUG
+	printk(":: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x ",
+		ultra_timing, dma_pio_timing, pio_timing);
+#endif
 
 	switch(speed) {
 		case XFER_UDMA_4:
-			drive_timing &= ~0xC7;
-			drive_timing |= 0x45;
-			pci_write_config_byte(dev, drive_pci, drive_timing);
+			ultra_timing |= 0x45;
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
 			break;
 		case XFER_UDMA_3:
-			drive_timing &= ~0xC7;
-			drive_timing |= 0x44;
-			pci_write_config_byte(dev, drive_pci, drive_timing);
+			ultra_timing |= 0x44;
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
 			break;
 		case XFER_UDMA_2:
-			drive_timing &= ~0xC7;
-			drive_timing |= 0x40;
-			pci_write_config_byte(dev, drive_pci, drive_timing);
+			ultra_timing |= 0x40;
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
 			break;
 		case XFER_UDMA_1:
-			drive_timing &= ~0xC7;
-			drive_timing |= 0x41;
-			pci_write_config_byte(dev, drive_pci, drive_timing);
+			ultra_timing |= 0x41;
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
 			break;
 		case XFER_UDMA_0:
-			drive_timing &= ~0xC7;
-			drive_timing |= 0x42;
-			pci_write_config_byte(dev, drive_pci, drive_timing);
+			ultra_timing |= 0x42;
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
 			break;
-		case XFER_MW_DMA_2:break;
-		case XFER_MW_DMA_1:break;
-		case XFER_MW_DMA_0:break;
-		case XFER_SW_DMA_2:break;
-		case XFER_SW_DMA_1:break;
-		case XFER_SW_DMA_0:break;
-		case XFER_PIO_4:break;
-		case XFER_PIO_3:break;
-		case XFER_PIO_2:break;
-		case XFER_PIO_1:break;
-		case XFER_PIO_0:break;
-		default: break;
+		case XFER_MW_DMA_2:
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_MW_DMA_1:
+			dma_pio_timing |= 0x21;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_MW_DMA_0:
+			dma_pio_timing |= 0x77;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_PIO_4:
+			dma_pio_timing |= 0x20;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_PIO_3:
+			dma_pio_timing |= 0x22;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_PIO_2:
+			dma_pio_timing |= 0x42;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_PIO_1:
+			dma_pio_timing |= 0x65;
+			pio_timing |= (0x03 << drive_number);
+			break;
+		case XFER_PIO_0:
+		default:
+			dma_pio_timing |= 0xA8;
+			pio_timing |= (0x03 << drive_number);
+			break;
         }
 
-	printk(":: UDMA 0x%02x PIO 0x%02x\n", drive_timing, pio_timing);
+	pci_write_config_byte(dev, drive_pci, ultra_timing);
+	pci_write_config_byte(dev, drive_pci2, dma_pio_timing);
+	pci_write_config_byte(dev, 0x4c, pio_timing);
 
+#ifdef DEBUG
+	printk(":: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x\n",
+		ultra_timing, dma_pio_timing, pio_timing);
+#endif
+
+	if (speed > XFER_PIO_4) {
+		outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+	} else {
+		outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
+	}
 	err = ide_config_drive_speed(drive, speed);
 	return (err);
 }
@@ -109,12 +201,14 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
+	byte udma_66		= ((id->hw_config & 0x2000) &&
+				   (HWIF(drive)->udma_four)) ? 1 : 0;
 	byte speed		= 0x00;
 	int  rval;
 
-	if ((id->dma_ultra & 0x0010) && (HWIF(drive)->udma_four)) {
+	if ((id->dma_ultra & 0x0010) && (udma_66)) {
 		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (HWIF(drive)->udma_four)) {
+	} else if ((id->dma_ultra & 0x0008) && (udma_66)) {
 		speed = XFER_UDMA_3;
 	} else if (id->dma_ultra & 0x0004) {
 		speed = XFER_UDMA_2;
@@ -128,12 +222,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		speed = XFER_MW_DMA_1;
 	} else if (id->dma_mword & 0x0001) {
 		speed = XFER_MW_DMA_0;
-	} else if (id->dma_1word & 0x0004) {
-		speed = XFER_SW_DMA_2;
-	} else if (id->dma_1word & 0x0002) {
-		speed = XFER_SW_DMA_1;
-	} else if (id->dma_1word & 0x0001) {
-		speed = XFER_SW_DMA_0;
         } else {
 		return ((int) ide_dma_off_quietly);
 	}
@@ -143,7 +231,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
-			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
 
 	return rval;
@@ -222,8 +309,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 			}
 		} else if (id->field_valid & 2) {
 try_dma_modes:
-			if ((id->dma_mword & 0x0007) ||
-			    (id->dma_1word & 0x0007)) {
+			if (id->dma_mword & 0x0007) {
 				/* Force if Capable regular DMA modes */
 				dma_func = config_chipset_for_dma(drive);
 				if (dma_func != ide_dma_on)
@@ -265,16 +351,45 @@ int amd7409_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
+unsigned int __init pci_init_amd7409 (struct pci_dev *dev, const char *name)
+{
+	unsigned long fixdma_base = dev->resource[4].start;
+
+	if (!fixdma_base || fixdma_base == PCI_BASE_ADDRESS_IO_MASK) {
+		/*
+		 *
+		 */
+	} else {
+		/*
+		 * enable DMA capable bit, and "not" simplex only
+		 */
+		outb(inb(fixdma_base+2) & 0x60, fixdma_base+2);
+
+		if (inb(fixdma_base+2) & 0x80)
+			printk("%s: simplex device: DMA will fail!!\n", name);
+	}
+#if defined(DISPLAY_VIPER_TIMINGS) && defined(CONFIG_PROC_FS)
+	amd7409_proc = 1;
+	bmide_dev = dev;
+	amd7409_display_info = &amd7409_get_info;
+#endif /* DISPLAY_VIPER_TIMINGS && CONFIG_PROC_FS */
+
+	return 0;
+}
+
 unsigned int __init ata66_amd7409 (ide_hwif_t *hwif)
 {
-#if 0
+#ifdef CONFIG_AMD7409_OVERRIDE
+	byte ata66 = 1;
+#else
 	byte ata66 = 0;
+#endif /* CONFIG_AMD7409_OVERRIDE */
 
+#if 0
 	pci_read_config_byte(hwif->pci_dev, 0x48, &ata66);
 	return ((ata66 & 0x02) ? 0 : 1);
-#else
-	return 0;
 #endif
+	return ata66;
 }
 
 void __init ide_init_amd7409 (ide_hwif_t *hwif)
@@ -287,4 +402,9 @@ void __init ide_init_amd7409 (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+}
+
+void ide_dmacapable_amd7409 (ide_hwif_t *hwif, unsigned long dmabase)
+{
+	ide_setup_dma(hwif, dmabase, 8);
 }
