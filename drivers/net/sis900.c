@@ -17,7 +17,8 @@
    SiS 7014 Single Chip 100BASE-TX/10BASE-T Physical Layer Solution,
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
-   
+
+   Rev 1.06.04 Feb. 11 2000 Jeff Garzik <jgarzik@mandrakesoft.com> softnet and init for kernel 2.4
    Rev 1.06.03 Dec. 23 1999 Ollie Lho Third release
    Rev 1.06.02 Nov. 23 1999 Ollie Lho bug in mac probing fixed 
    Rev 1.06.01 Nov. 16 1999 Ollie Lho CRC calculation provide by Joseph Zbiciak (im14u2c@primenet.com)
@@ -51,7 +52,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.06.03  12/23/99\n";
+"sis900.c: v1.06.04  02/11/2000\n";
 
 static int max_interrupt_work = 20;
 #define sis900_debug debug
@@ -788,6 +789,7 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
 	long ioaddr = net_dev->base_addr;
+	unsigned long flags;
 	int i;
 
 	printk(KERN_INFO "%s: Transmit timeout, status %8.8x %8.8x \n",
@@ -798,6 +800,7 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 
 	/* discard unsent packets, should this code section be protected by
 	   cli(), sti() ?? */
+	spin_lock_irqsave(&sis_priv->lock, flags);
 	sis_priv->dirty_tx = sis_priv->cur_tx = 0;
 	for (i = 0; i < NUM_TX_DESC; i++) {
 		if (sis_priv->tx_skbuff[i] != NULL) {
@@ -808,6 +811,7 @@ static void sis900_tx_timeout(struct net_device *net_dev)
 			sis_priv->stats.tx_dropped++;
 		}
 	}
+	spin_unlock_irqrestore(&sis_priv->lock, flags);
 
 	net_dev->trans_start = jiffies;
 	sis_priv->tx_full = 0;
@@ -1048,7 +1052,7 @@ static void sis900_finish_xmit (struct net_device *net_dev)
 			sis_priv->stats.tx_packets++;
 		}
 		/* Free the original skb. */
-		dev_kfree_skb(sis_priv->tx_skbuff[entry]);
+		dev_kfree_skb_irq(sis_priv->tx_skbuff[entry]);
 		sis_priv->tx_skbuff[entry] = NULL;
 		sis_priv->tx_ring[entry].bufptr = 0;
 		sis_priv->tx_ring[entry].cmdsts = 0;

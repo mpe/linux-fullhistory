@@ -51,7 +51,7 @@ extern pgd_t swapper_pg_dir[1024];
 			"movl %%cr3, %0;  # flush TLB        \n"	\
 			"movl %0, %%cr3;                     \n"	\
 			"movl %2, %%cr4;  # turn PGE back on \n"	\
-			: "=r" (tmpreg)					\
+			: "=&r" (tmpreg)				\
 			: "r" (mmu_cr4_features & ~X86_CR4_PGE),	\
 			  "r" (mmu_cr4_features)			\
 			: "memory");					\

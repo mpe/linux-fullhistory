@@ -27,9 +27,6 @@ else
    if [ "$ARCH" = "alpha" ]; then
       define_bool CONFIG_OSF_PARTITION y
    fi
-   if [ "$ARCH" = "ppc" -o "$CONFIG_MAC" = "y" ]; then
-      define_bool CONFIG_MAC_PARTITION y
-   fi
    if [ "$CONFIG_AMIGA" != "y" -a "$CONFIG_ATARI" != "y" -a \
         "$CONFIG_MAC" != "y" ]; then
       define_bool CONFIG_MSDOS_PARTITION y
