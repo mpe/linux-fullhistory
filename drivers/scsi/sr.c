@@ -47,7 +47,9 @@
 #include <scsi/scsi_ioctl.h>	/* For the door lock/unlock commands */
 #include "constants.h"
 
+#ifdef MODULE
 MODULE_PARM(xa_test, "i");	/* see sr_ioctl.c */
+#endif
 
 #define MAX_RETRIES	3
 #define SR_TIMEOUT	(30 * HZ)
@@ -106,9 +108,10 @@ static struct cdrom_device_ops sr_dops =
 	sr_audio_ioctl,		/* audio ioctl */
 	sr_dev_ioctl,		/* device-specific ioctl */
 	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_SELECT_SPEED |
-	CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
-	CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS | CDC_CD_R | CDC_CD_RW |
-	CDC_DVD | CDC_DVD_R | CDC_DVD_RAM | CDC_GENERIC_PACKET,
+	CDC_SELECT_DISC | CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED |
+	CDC_PLAY_AUDIO | CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS |
+	CDC_CD_R | CDC_CD_RW | CDC_DVD | CDC_DVD_R | CDC_DVD_RAM |
+	CDC_GENERIC_PACKET,
 	0,
 	sr_packet
 };
@@ -874,17 +877,9 @@ void get_sectorsize(int i)
 		memset(buffer, 0, 8);
 
 		/* Do the command and wait.. */
-		{
-			DECLARE_MUTEX_LOCKED(sem);
-			SCpnt->request.sem = &sem;
-			spin_lock_irqsave(&io_request_lock, flags);
-			scsi_do_cmd(SCpnt,
-				    (void *) cmd, (void *) buffer,
-				    512, sr_init_done, SR_TIMEOUT,
-				    MAX_RETRIES);
-			spin_unlock_irqrestore(&io_request_lock, flags);
-			down(&sem);
-		}
+
+		scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
+			512, sr_init_done,  SR_TIMEOUT,	 MAX_RETRIES);
 
 		the_result = SCpnt->result;
 		retries--;
@@ -958,7 +953,7 @@ void get_capabilities(int i)
 		"pop-up",
 		"",
 		"changer",
-		"changer",
+		"cartridge changer",
 		"",
 		""
 	};
@@ -1010,6 +1005,20 @@ void get_capabilities(int i)
 	if ((buffer[n + 3] & 0x1) == 0)
 		/* can't write CD-R media */
 		scsi_CDs[i].cdi.mask |= CDC_CD_R;
+	if ((buffer[n+6] & 0x8) == 0)
+		/* can't eject */
+		scsi_CDs[i].cdi.mask |= CDC_OPEN_TRAY;
+
+	if ((buffer[n+6] >> 5) == mechtype_individual_changer ||
+	    (buffer[n+6] >> 5) == mechtype_cartridge_changer)
+		scsi_CDs[i].cdi.capacity = 
+			cdrom_number_of_slots(&(scsi_CDs[i].cdi));
+	if (scsi_CDs[i].cdi.capacity <= 1)
+                /* not a changer */
+		scsi_CDs[i].cdi.mask |= CDC_SELECT_DISC;
+	/*else    I don't think it can close its tray
+		scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY; */
+
 
 	scsi_free(buffer, 512);
 }
@@ -1022,7 +1031,6 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 {
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
-	DECLARE_MUTEX_LOCKED(sem);
 	unsigned long flags;
 	int stat;
 
@@ -1036,15 +1044,11 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 
 	/* do the locking and issue the command */
 	SCpnt->request.rq_dev = cdi->dev;
-	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	/* scsi_do_cmd sets the command length */
 	SCpnt->cmd_len = 0;
-	SCpnt->request.sem = &sem;
-	spin_lock_irqsave(&io_request_lock, flags);
-	scsi_do_cmd(SCpnt, (void *) cgc->cmd, (void *) cgc->buffer, cgc->buflen,
-		    sr_init_done, SR_TIMEOUT, MAX_RETRIES);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-	down(&sem);
+	
+	scsi_wait_cmd (SCpnt, (void *)cgc->cmd, (void *)cgc->buffer, cgc->buflen,
+		sr_init_done, SR_TIMEOUT, MAX_RETRIES);
 
 	stat = SCpnt->result;
 

@@ -293,16 +293,14 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 {
     u_char  sr_cmd[10];    
-    int result, target;
-    
-    target = MINOR(cdi->dev);
+    int result, target  = MINOR(cdi->dev);
+    unsigned char buffer[32];
     
     switch (cmd) 
     {
     case CDROMREADTOCHDR:
     {
 	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
-	char buffer[32];
 	
 	sr_cmd[0] = GPCMD_READ_TOC_PMA_ATIP;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
@@ -323,7 +321,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     case CDROMREADTOCENTRY:
     {
 	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
-	unsigned char buffer[32];
 	
 	sr_cmd[0] = GPCMD_READ_TOC_PMA_ATIP;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |

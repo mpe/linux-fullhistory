@@ -62,10 +62,9 @@ __asm__ __volatile__( \
  */
 typedef struct {
 	volatile unsigned int lock;
-	unsigned long previous;
 } rwlock_t;
 
-#define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0 }
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 
 /*
  * On x86, we implement read-write locks as a 32-bit counter

@@ -147,9 +147,9 @@
 /* Address in MSF format */
 struct cdrom_msf0		
 {
-	u_char	minute;
-	u_char	second;
-	u_char	frame;
+	__u8	minute;
+	__u8	second;
+	__u8	frame;
 };
 
 /* Address in either MSF or logical format */
@@ -162,48 +162,48 @@ union cdrom_addr
 /* This struct is used by the CDROMPLAYMSF ioctl */ 
 struct cdrom_msf 
 {
-	u_char	cdmsf_min0;	/* start minute */
-	u_char	cdmsf_sec0;	/* start second */
-	u_char	cdmsf_frame0;	/* start frame */
-	u_char	cdmsf_min1;	/* end minute */
-	u_char	cdmsf_sec1;	/* end second */
-	u_char	cdmsf_frame1;	/* end frame */
+	__u8	cdmsf_min0;	/* start minute */
+	__u8	cdmsf_sec0;	/* start second */
+	__u8	cdmsf_frame0;	/* start frame */
+	__u8	cdmsf_min1;	/* end minute */
+	__u8	cdmsf_sec1;	/* end second */
+	__u8	cdmsf_frame1;	/* end frame */
 };
 
 /* This struct is used by the CDROMPLAYTRKIND ioctl */
 struct cdrom_ti 
 {
-	u_char	cdti_trk0;	/* start track */
-	u_char	cdti_ind0;	/* start index */
-	u_char	cdti_trk1;	/* end track */
-	u_char	cdti_ind1;	/* end index */
+	__u8	cdti_trk0;	/* start track */
+	__u8	cdti_ind0;	/* start index */
+	__u8	cdti_trk1;	/* end track */
+	__u8	cdti_ind1;	/* end index */
 };
 
 /* This struct is used by the CDROMREADTOCHDR ioctl */
 struct cdrom_tochdr 	
 {
-	u_char	cdth_trk0;	/* start track */
-	u_char	cdth_trk1;	/* end track */
+	__u8	cdth_trk0;	/* start track */
+	__u8	cdth_trk1;	/* end track */
 };
 
 /* This struct is used by the CDROMVOLCTRL and CDROMVOLREAD ioctls */
 struct cdrom_volctrl
 {
-	u_char	channel0;
-	u_char	channel1;
-	u_char	channel2;
-	u_char	channel3;
+	__u8	channel0;
+	__u8	channel1;
+	__u8	channel2;
+	__u8	channel3;
 };
 
 /* This struct is used by the CDROMSUBCHNL ioctl */
 struct cdrom_subchnl 
 {
-	u_char	cdsc_format;
-	u_char	cdsc_audiostatus;
-	u_char	cdsc_adr:	4;
-	u_char	cdsc_ctrl:	4;
-	u_char	cdsc_trk;
-	u_char	cdsc_ind;
+	__u8	cdsc_format;
+	__u8	cdsc_audiostatus;
+	__u8	cdsc_adr:	4;
+	__u8	cdsc_ctrl:	4;
+	__u8	cdsc_trk;
+	__u8	cdsc_ind;
 	union cdrom_addr cdsc_absaddr;
 	union cdrom_addr cdsc_reladdr;
 };
@@ -212,12 +212,12 @@ struct cdrom_subchnl
 /* This struct is used by the CDROMREADTOCENTRY ioctl */
 struct cdrom_tocentry 
 {
-	u_char	cdte_track;
-	u_char	cdte_adr	:4;
-	u_char	cdte_ctrl	:4;
-	u_char	cdte_format;
+	__u8	cdte_track;
+	__u8	cdte_adr	:4;
+	__u8	cdte_ctrl	:4;
+	__u8	cdte_format;
 	union cdrom_addr cdte_addr;
-	u_char	cdte_datamode;
+	__u8	cdte_datamode;
 };
 
 /* This struct is used by the CDROMREADMODE1, and CDROMREADMODE2 ioctls */
@@ -232,9 +232,9 @@ struct cdrom_read
 struct cdrom_read_audio
 {
 	union cdrom_addr addr; /* frame address */
-	u_char addr_format;    /* CDROM_LBA or CDROM_MSF */
+	__u8 addr_format;    /* CDROM_LBA or CDROM_MSF */
 	int nframes;           /* number of 2352-byte-frames to read at once */
-	u_char *buf;           /* frame buffer (size: nframes*2352 bytes) */
+	__u8 *buf;           /* frame buffer (size: nframes*2352 bytes) */
 };
 
 /* This struct is used with the CDROMMULTISESSION ioctl */
@@ -243,8 +243,8 @@ struct cdrom_multisession
 	union cdrom_addr addr; /* frame address: start-of-last-session 
 	                           (not the new "frame 16"!).  Only valid
 	                           if the "xa_flag" is true. */
-	u_char xa_flag;        /* 1: "is XA disk" */
-	u_char addr_format;    /* CDROM_LBA or CDROM_MSF */
+	__u8 xa_flag;        /* 1: "is XA disk" */
+	__u8 addr_format;    /* CDROM_LBA or CDROM_MSF */
 };
 
 /* This struct is used with the CDROM_GET_MCN ioctl.  
@@ -254,7 +254,7 @@ struct cdrom_multisession
  */  
 struct cdrom_mcn 
 {
-  u_char medium_catalog_number[14]; /* 13 ASCII digits, null-terminated */
+  __u8 medium_catalog_number[14]; /* 13 ASCII digits, null-terminated */
 };
 
 /* This is used by the CDROMPLAYBLK ioctl */
@@ -400,6 +400,14 @@ struct cdrom_generic_command
 #define CDSL_NONE       	((int) (~0U>>1)-1)
 #define CDSL_CURRENT    	((int) (~0U>>1))
 
+/* For partition based multisession access. IDE can handle 64 partitions
+ * per drive - SCSI CD-ROM's use minors to differentiate between the
+ * various drives, so we can't do multisessions the same way there.
+ * Use the -o session=x option to mount on them.
+ */
+#define CD_PART_MAX		64
+#define CD_PART_MASK		(CD_PART_MAX - 1)
+
 /*********************************************************************
  * Generic Packet commands, MMC commands, and such
  *********************************************************************/
@@ -495,59 +503,59 @@ struct cdrom_generic_command
 #define DVD_STRUCT_MANUFACT	0x04
 
 struct dvd_layer {
-	u_char book_version	: 4;
-	u_char book_type	: 4;
-	u_char min_rate		: 4;
-	u_char disc_size	: 4;
-	u_char layer_type	: 4;
-	u_char track_path	: 1;
-	u_char nlayers		: 2;
-	u_char track_density	: 4;
-	u_char linear_density	: 4;
-	u_char bca		: 1;
-	u_char start_sector;
-	u_char end_sector;
-	u_char end_sector_l0;
+	__u8 book_version	: 4;
+	__u8 book_type	: 4;
+	__u8 min_rate		: 4;
+	__u8 disc_size	: 4;
+	__u8 layer_type	: 4;
+	__u8 track_path	: 1;
+	__u8 nlayers		: 2;
+	__u8 track_density	: 4;
+	__u8 linear_density	: 4;
+	__u8 bca		: 1;
+	__u8 start_sector;
+	__u8 end_sector;
+	__u8 end_sector_l0;
 };
 
 struct dvd_physical {
-	u_char type;
-	u_char layer_num;
+	__u8 type;
+	__u8 layer_num;
 	struct dvd_layer layer[4];
 };
 
 struct dvd_copyright {
-	u_char type;
+	__u8 type;
 
-	u_char layer_num;
-	u_char cpst;
-	u_char rmi;
+	__u8 layer_num;
+	__u8 cpst;
+	__u8 rmi;
 };
 
 struct dvd_disckey {
-	u_char type;
+	__u8 type;
 
 	unsigned agid			: 2;
-	u_char value[2048];
+	__u8 value[2048];
 };
 
 struct dvd_bca {
-	u_char type;
+	__u8 type;
 
 	int len;
-	u_char value[188];
+	__u8 value[188];
 };
 
 struct dvd_manufact {
-	u_char type;
+	__u8 type;
 
-	u_char layer_num;
+	__u8 layer_num;
 	int len;
-	u_char value[2048];
+	__u8 value[2048];
 };
 
 typedef union {
-	u_char type;
+	__u8 type;
 
 	struct dvd_physical	physical;
 	struct dvd_copyright	copyright;
@@ -577,30 +585,30 @@ typedef union {
 #define DVD_INVALIDATE_AGID	9
 
 /* State data */
-typedef u_char dvd_key[5];		/* 40-bit value, MSB is first elem. */
-typedef u_char dvd_challenge[10];	/* 80-bit value, MSB is first elem. */
+typedef __u8 dvd_key[5];		/* 40-bit value, MSB is first elem. */
+typedef __u8 dvd_challenge[10];	/* 80-bit value, MSB is first elem. */
 
 struct dvd_lu_send_agid {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 };
 
 struct dvd_host_send_challenge {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 
 	dvd_challenge chal;
 };
 
 struct dvd_send_key {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 
 	dvd_key key;
 };
 
 struct dvd_lu_send_challenge {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 
 	dvd_challenge chal;
@@ -617,7 +625,7 @@ struct dvd_lu_send_challenge {
 #define DVD_CGMS_RESTRICTED	3
 
 struct dvd_lu_send_title_key {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 
 	dvd_key title_key;
@@ -628,14 +636,14 @@ struct dvd_lu_send_title_key {
 };
 
 struct dvd_lu_send_asf {
-	u_char type;
+	__u8 type;
 	unsigned agid		: 2;
 
 	unsigned asf		: 1;
 };
 
 typedef union {
-	u_char type;
+	__u8 type;
 
 	struct dvd_lu_send_agid		lsa;
 	struct dvd_host_send_challenge	hsc;
@@ -658,11 +666,13 @@ struct cdrom_device_info {
 	int speed;			/* maximum speed for reading data */
 	int capacity;			/* number of discs in jukebox */
 /* device-related storage */
-	int options : 30;               /* options flags */
-	unsigned mc_flags : 2;          /* media change buffer flags */
+	int options		: 30;	/* options flags */
+	unsigned mc_flags	: 2;	/* media change buffer flags */
     	int use_count;                  /* number of times device opened */
     	char name[20];                  /* name of the device type */
-
+/* per-device flags */
+        __u8 sanyo_slot		: 2;	/* Sanyo 3 CD changer support */
+        __u8 reserved		: 6;	/* not used yet */
 };
 
 struct cdrom_device_ops {
@@ -699,6 +709,7 @@ extern struct file_operations cdrom_fops;
 
 extern int register_cdrom(struct cdrom_device_info *cdi);
 extern int unregister_cdrom(struct cdrom_device_info *cdi);
+
 typedef struct {
     int data;
     int audio;
@@ -706,9 +717,19 @@ typedef struct {
     int xa;
     long error;
 } tracktype;
+
 extern void cdrom_count_tracks(struct cdrom_device_info *cdi,tracktype* tracks);
 extern int cdrom_get_next_writable(kdev_t dev, long *next_writable);
 extern int cdrom_get_last_written(kdev_t dev, long *last_written);
+extern int cdrom_number_of_slots(struct cdrom_device_info *cdi);
+extern int cdrom_select_disc(struct cdrom_device_info *cdi, int slot);
+extern int cdrom_mode_select(struct cdrom_device_info *cdi,
+			     struct cdrom_generic_command *cgc);
+extern int cdrom_mode_sense(struct cdrom_device_info *cdi,
+			    struct cdrom_generic_command *cgc,
+			    int page_code, int page_control);
+extern void init_cdrom_command(struct cdrom_generic_command *cgc,
+			       void *buffer, int len);
 
 typedef struct {
 	__u16 disc_information_length;
@@ -795,6 +816,61 @@ typedef struct {
 	__u32 track_size;
 	__u32 last_rec_address;
 } track_information;
+
+/* The SCSI spec says there could be 256 slots. */
+#define CDROM_MAX_SLOTS	256
+
+struct cdrom_mechstat_header {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 fault         : 1;
+	__u8 changer_state : 2;
+	__u8 curslot       : 5;
+	__u8 mech_state    : 3;
+	__u8 door_open     : 1;
+	__u8 reserved1     : 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 curslot       : 5;
+	__u8 changer_state : 2;
+	__u8 fault         : 1;
+	__u8 reserved1     : 4;
+	__u8 door_open     : 1;
+	__u8 mech_state    : 3;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u8     curlba[3];
+	__u8     nslots;
+	__u8 short slot_tablelen;
+};
+
+
+struct cdrom_slot {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 disc_present : 1;
+	__u8 reserved1    : 6;
+	__u8 change       : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 change       : 1;
+	__u8 reserved1    : 6;
+	__u8 disc_present : 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u8 reserved2[3];
+};
+
+struct cdrom_changer_info {
+	struct cdrom_mechstat_header hdr;
+	struct cdrom_slot slots[CDROM_MAX_SLOTS];
+};
+
+typedef enum {
+	mechtype_caddy = 0,
+	mechtype_tray  = 1,
+	mechtype_popup = 2,
+	mechtype_individual_changer = 4,
+	mechtype_cartridge_changer  = 5
+} mechtype_t;
 
 #endif  /* End of kernel only stuff */ 
 
