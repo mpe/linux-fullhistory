@@ -289,7 +289,8 @@ static void serial_detach(dev_link_t * link)
 
 /*====================================================================*/
 
-static int setup_serial(struct serial_info * info, kio_addr_t iobase, int irq)
+static int setup_serial(client_handle_t handle, struct serial_info * info,
+			kio_addr_t iobase, int irq)
 {
 	struct uart_port port;
 	int line;
@@ -299,6 +300,7 @@ static int setup_serial(struct serial_info * info, kio_addr_t iobase, int irq)
 	port.irq = irq;
 	port.flags = UPF_BOOT_AUTOCONF | UPF_SKIP_TEST | UPF_SHARE_IRQ;
 	port.uartclk = 1843200;
+	port.dev = &handle_to_dev(handle);
 	if (buggy_uart)
 		port.flags |= UPF_BUGGY_UART;
 	line = serial8250_register_port(&port);
@@ -376,7 +378,7 @@ static int simple_config(dev_link_t *link)
 			info->slave = 1;
 		}
 		if (info->slave)
-			return setup_serial(info, port, config.AssignedIRQ);
+			return setup_serial(handle, info, port, config.AssignedIRQ);
 	}
 	link->conf.Vcc = config.Vcc;
 
@@ -451,7 +453,7 @@ next_entry:
 		return -1;
 	}
 
-	return setup_serial(info, link->io.BasePort1, link->irq.AssignedIRQ);
+	return setup_serial(handle, info, link->io.BasePort1, link->irq.AssignedIRQ);
 }
 
 static int multi_config(dev_link_t * link)
@@ -546,21 +548,21 @@ static int multi_config(dev_link_t * link)
 	   8 registers are for the UART, the others are extra registers */
 	if (info->manfid == MANFID_OXSEMI) {
 		if (cf->index == 1 || cf->index == 3) {
-			setup_serial(info, base2, link->irq.AssignedIRQ);
+			setup_serial(handle, info, base2, link->irq.AssignedIRQ);
 			outb(12, link->io.BasePort1 + 1);
 		} else {
-			setup_serial(info, link->io.BasePort1, link->irq.AssignedIRQ);
+			setup_serial(handle, info, link->io.BasePort1, link->irq.AssignedIRQ);
 			outb(12, base2 + 1);
 		}
 		return 0;
 	}
 
-	setup_serial(info, link->io.BasePort1, link->irq.AssignedIRQ);
+	setup_serial(handle, info, link->io.BasePort1, link->irq.AssignedIRQ);
 	/* The Nokia cards are not really multiport cards */
 	if (info->manfid == MANFID_NOKIA)
 		return 0;
 	for (i = 0; i < info->multi - 1; i++)
-		setup_serial(info, base2 + (8 * i), link->irq.AssignedIRQ);
+		setup_serial(handle, info, base2 + (8 * i), link->irq.AssignedIRQ);
 
 	return 0;
 }

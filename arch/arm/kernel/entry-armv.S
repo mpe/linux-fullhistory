@@ -280,13 +280,21 @@ __pabt_svc:
 	@
 	stmia	r5, {r2 - r4}
 	stmdb	r5, {sp, lr}^
+
+	@
+	@ Enable the alignment trap while in kernel mode
+	@
+	alignment_trap r7, r0, __temp_\sym
+
+	@
+	@ Clear FP to mark the first stack frame
+	@
+	zero_fp
 	.endm
 
 	.align	5
 __dabt_usr:
 	usr_entry abt
-	alignment_trap r7, r0, __temp_abt
-	zero_fp
 
 	@
 	@ Call the processor-specific abort handler:
@@ -316,8 +324,7 @@ __dabt_usr:
 	.align	5
 __irq_usr:
 	usr_entry irq
-	alignment_trap r7, r0, __temp_irq
-	zero_fp
+
 #ifdef CONFIG_PREEMPT
 	get_thread_info r8
 	ldr	r9, [r8, #TI_PREEMPT]		@ get preempt count
@@ -348,8 +355,7 @@ __irq_usr:
 	.align	5
 __und_usr:
 	usr_entry und
-	alignment_trap r7, r0, __temp_und
-	zero_fp
+
 	tst	r3, #PSR_T_BIT			@ Thumb mode?
 	bne	fpundefinstr			@ ignore FP
 	sub	r4, r2, #4
@@ -465,8 +471,7 @@ fpundefinstr:
 	.align	5
 __pabt_usr:
 	usr_entry abt
-	alignment_trap r7, r0, __temp_abt
-	zero_fp
+
 	enable_irq r0				@ Enable interrupts
 	mov	r0, r2				@ address (pc)
 	mov	r1, sp				@ regs

@@ -22,16 +22,21 @@
  * Static I/O regions.
  *
  * Most of the registers are clumped in 4K regions spread throughout
- * the 0xc000000 -> 0xc0100000 address range, but we just map in
+ * the 0xc0000000 -> 0xc0100000 address range, but we just map in
  * the whole range using a single 1 MB section instead of small
  * 4K pages.  This has two advantages for us:
  *
  * 1) We use only one TLB entry for large number of on-chip I/O devices.
  *
  * 2) We can easily set the Section attributes to XCB=101 on the IXP2400
- *    as required per erratum #66.
+ *    as required per erratum #66.  We accomplish this by using a
+ *    new MT_IXP2000_DEVICE memory type with the bits set as required.
  *
- * CAP stands for CSR Access Proxy
+ * CAP stands for CSR Access Proxy.
+ *
+ * If you change the virtual address of this mapping, please propagate
+ * the change to arch/arm/kernel/debug.S, which hardcodes the virtual
+ * address of the UART located in this region.
  */
 
 #define	IXP2000_CAP_PHYS_BASE		0xc0000000
@@ -49,7 +54,10 @@
 #define	IXP2000_GPIO_VIRT_BASE		0Xfef10000
 
 /*
- * Devices outside of the 0xc0000000 -> 0xc0100000 range
+ * Devices outside of the 0xc0000000 -> 0xc0100000 range.  The virtual
+ * addresses of the INTCTL and PCI_CSR mappings are hardcoded in
+ * entry-macro.S, so if you ever change these please propagate
+ * the change.
  */
 #define IXP2000_INTCTL_PHYS_BASE	0xd6000000
 #define	IXP2000_INTCTL_VIRT_BASE	0xfee00000
@@ -202,7 +210,7 @@
 
 #define IXP2000_PCICNTL_PNR		(1<<17)	/* PCI not Reset bit of PCI_CONTROL */
 #define IXP2000_PCICNTL_PCF		(1<<28)	/* PCI Centrolfunction bit */
-#define IXP2000_XSCALE_INT		(1<<1)	/* Interrupt from  XScale to PCI */
+#define IXP2000_XSCALE_INT		(1<<1)	/* Interrupt from XScale to PCI */
 
 /* These are from the IRQ register in the PCI ISR register */
 #define PCI_CONTROL_BE_DEO		(1 << 22)	/* Big Endian Data Enable Out */

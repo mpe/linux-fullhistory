@@ -31,6 +31,8 @@
 
 #include "8250.h"
 
+#undef SERIAL_DEBUG_PCI
+
 /*
  * Definitions for PCI support.
  */
@@ -1877,6 +1879,9 @@ static struct pci_device_id serial_pci_tbl[] = {
 	{	PCI_VENDOR_ID_SEALEVEL, PCI_DEVICE_ID_SEALEVEL_COMM8,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 
 		pbn_b2_8_115200 },
+	{	PCI_VENDOR_ID_SEALEVEL, PCI_DEVICE_ID_SEALEVEL_UCOMM8,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		pbn_b2_8_115200 },
 
 	{	PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_GTEK_SERIAL2,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
@@ -2184,6 +2189,9 @@ static struct pci_device_id serial_pci_tbl[] = {
 	/*
 	 * HP Diva card
 	 */
+	{	PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA,
+		PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA_RMP3, 0, 0,
+		pbn_b1_1_115200 },
 	{	PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_DIVA,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
 		pbn_b0_5_115200 },
