@@ -280,6 +280,46 @@
 #define AC97ADDRESS_READY	0x80		/* Read-only bit, reflects CODEC READY signal	*/
 #define AC97ADDRESS_ADDRESS	0x7f		/* Address of indexed AC97 register		*/
 
+/* Available on the Audigy 2 and Audigy 4 only. This is the P16V chip. */
+#define PTR2			0x20		/* Indexed register set pointer register	*/
+#define DATA2			0x24		/* Indexed register set data register		*/
+#define IPR2			0x28		/* P16V interrupt pending register		*/
+#define IPR2_PLAYBACK_CH_0_LOOP      0x00001000 /* Playback Channel 0 loop                               */
+#define IPR2_PLAYBACK_CH_0_HALF_LOOP 0x00000100 /* Playback Channel 0 half loop                          */
+#define IPR2_CAPTURE_CH_0_LOOP       0x00100000 /* Capture Channel 0 loop                               */
+#define IPR2_CAPTURE_CH_0_HALF_LOOP  0x00010000 /* Capture Channel 0 half loop                          */
+						/* 0x00000100 Playback. Only in once per period.
+						 * 0x00110000 Capture. Int on half buffer.
+						 */
+#define INTE2			0x2c		/* P16V Interrupt enable register. 	*/
+#define INTE2_PLAYBACK_CH_0_LOOP      0x00001000 /* Playback Channel 0 loop                               */
+#define INTE2_PLAYBACK_CH_0_HALF_LOOP 0x00000100 /* Playback Channel 0 half loop                          */
+#define INTE2_PLAYBACK_CH_1_LOOP      0x00002000 /* Playback Channel 1 loop                               */
+#define INTE2_PLAYBACK_CH_1_HALF_LOOP 0x00000200 /* Playback Channel 1 half loop                          */
+#define INTE2_PLAYBACK_CH_2_LOOP      0x00004000 /* Playback Channel 2 loop                               */
+#define INTE2_PLAYBACK_CH_2_HALF_LOOP 0x00000400 /* Playback Channel 2 half loop                          */
+#define INTE2_PLAYBACK_CH_3_LOOP      0x00008000 /* Playback Channel 3 loop                               */
+#define INTE2_PLAYBACK_CH_3_HALF_LOOP 0x00000800 /* Playback Channel 3 half loop                          */
+#define INTE2_CAPTURE_CH_0_LOOP       0x00100000 /* Capture Channel 0 loop                               */
+#define INTE2_CAPTURE_CH_0_HALF_LOOP  0x00010000 /* Caputre Channel 0 half loop                          */
+#define HCFG2			0x34		/* Defaults: 0, win2000 sets it to 00004201 */
+						/* 0x00000000 2-channel output. */
+						/* 0x00000200 8-channel output. */
+						/* 0x00000004 pauses stream/irq fail. */
+						/* Rest of bits no nothing to sound output */
+						/* bit 0: Enable P16V audio.
+						 * bit 1: Lock P16V record memory cache.
+						 * bit 2: Lock P16V playback memory cache.
+						 * bit 3: Dummy record insert zero samples.
+						 * bit 8: Record 8-channel in phase.
+						 * bit 9: Playback 8-channel in phase.
+						 * bit 11-12: Playback mixer attenuation: 0=0dB, 1=-6dB, 2=-12dB, 3=Mute.
+						 * bit 13: Playback mixer enable.
+						 * bit 14: Route SRC48 mixer output to fx engine.
+						 * bit 15: Enable IEEE 1394 chip.
+						 */
+#define IPR3			0x38		/* Cdif interrupt pending register		*/
+#define INTE3			0x3c		/* Cdif interrupt enable register. 	*/
 /************************************************************************************************/
 /* PCI function 1 registers, address = <val> + PCIBASE1						*/
 /************************************************************************************************/
@@ -1014,6 +1054,9 @@ struct _snd_emu10k1 {
 	int max_cache_pages;			/* max memory size / PAGE_SIZE */
 	struct snd_dma_buffer silent_page;	/* silent page */
 	struct snd_dma_buffer ptb_pages;	/* page table pages */
+	struct snd_dma_device p16v_dma_dev;
+	struct snd_dma_buffer p16v_buffer;
+
 	snd_util_memhdr_t *memhdr;		/* page allocation list */
 	emu10k1_memblk_t *reserved_page;	/* reserved page */
 
@@ -1035,6 +1078,7 @@ struct _snd_emu10k1 {
 	snd_pcm_t *pcm;
 	snd_pcm_t *pcm_mic;
 	snd_pcm_t *pcm_efx;
+	snd_pcm_t *pcm_p16v;
 
 	spinlock_t synth_lock;
 	void *synth;
@@ -1046,6 +1090,8 @@ struct _snd_emu10k1 {
 	struct semaphore ptb_lock;
 
 	emu10k1_voice_t voices[NUM_G];
+	emu10k1_voice_t p16v_voices[4];
+	int p16v_device_offset;
 	emu10k1_pcm_mixer_t pcm_mixer[32];
 	emu10k1_pcm_mixer_t efx_pcm_mixer[NUM_EFX_PLAYBACK];
 	snd_kcontrol_t *ctl_send_routing;
@@ -1087,6 +1133,9 @@ int snd_emu10k1_create(snd_card_t * card,
 int snd_emu10k1_pcm(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
 int snd_emu10k1_pcm_mic(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
 int snd_emu10k1_pcm_efx(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
+int snd_p16v_pcm(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
+int snd_p16v_free(emu10k1_t * emu);
+int snd_p16v_mixer(emu10k1_t * emu);
 int snd_emu10k1_pcm_multi(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
 int snd_emu10k1_fx8010_pcm(emu10k1_t * emu, int device, snd_pcm_t ** rpcm);
 int snd_emu10k1_mixer(emu10k1_t * emu);
@@ -1104,6 +1153,8 @@ int snd_emu10k1_fx8010_tram_setup(emu10k1_t *emu, u32 size);
 /* I/O functions */
 unsigned int snd_emu10k1_ptr_read(emu10k1_t * emu, unsigned int reg, unsigned int chn);
 void snd_emu10k1_ptr_write(emu10k1_t *emu, unsigned int reg, unsigned int chn, unsigned int data);
+unsigned int snd_emu10k1_ptr20_read(emu10k1_t * emu, unsigned int reg, unsigned int chn);
+void snd_emu10k1_ptr20_write(emu10k1_t *emu, unsigned int reg, unsigned int chn, unsigned int data);
 unsigned int snd_emu10k1_efx_read(emu10k1_t *emu, unsigned int pc);
 void snd_emu10k1_intr_enable(emu10k1_t *emu, unsigned int intrenb);
 void snd_emu10k1_intr_disable(emu10k1_t *emu, unsigned int intrenb);

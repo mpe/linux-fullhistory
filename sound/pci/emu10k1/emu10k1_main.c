@@ -39,6 +39,7 @@
 
 #include <sound/core.h>
 #include <sound/emu10k1.h>
+#include "p16v.h"
 
 #if 0
 MODULE_AUTHOR("Jaroslav Kysela <perex@suse.cz>, Creative Labs, Inc.");
@@ -178,14 +179,17 @@ static int __devinit snd_emu10k1_init(emu10k1_t * emu, int enable_ir)
 		tmp &= 0xfffff1ff;
 		tmp |= (0x2<<9);
 		snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, 0, tmp);
-
+		
 		/* Setup SRCSel (Enable Spdif,I2S SRCMulti) */
-		outl(0x600000, emu->port + 0x20);
-		outl(0x14, emu->port + 0x24);
-
+		snd_emu10k1_ptr20_write(emu, SRCSel, 0, 0x14);
 		/* Setup SRCMulti Input Audio Enable */
-		outl(0x6E0000, emu->port + 0x20);
-		outl(0xFF00FF00, emu->port + 0x24);
+		/* Use 0xFFFFFFFF to enable P16V sounds. */
+		snd_emu10k1_ptr20_write(emu, SRCMULTI_ENABLE, 0, 0xFFFFFFFF);
+
+		/* Enabled Phased (8-channel) P16V playback */
+		outl(0x0201, emu->port + HCFG2);
+		/* Set playback routing. */
+		snd_emu10k1_ptr_write(emu, CAPTURE_P16V_SOURCE, 0, 78e4);
 	}
 	if (emu->audigy && (emu->serial == 0x10011102) ) { /* audigy2 Value */
 		/* Hacks for Alice3 to work independent of haP16V driver */
@@ -596,6 +600,7 @@ static int snd_emu10k1_free(emu10k1_t *emu)
 	if (emu->port)
 		pci_release_regions(emu->pci);
 	pci_disable_device(emu->pci);
+	snd_p16v_free(emu);
 	kfree(emu);
 	return 0;
 }

@@ -940,6 +940,10 @@ int __devinit snd_emu10k1_mixer(emu10k1_t *emu)
 		if ((err = snd_ctl_add(card, kctl)))
 			return err;
 	}
-
+	if (emu->audigy && emu->revision == 4) { /* P16V */
+		if ((err = snd_p16v_mixer(emu)))
+			return err;
+	}
+		
 	return 0;
 }
