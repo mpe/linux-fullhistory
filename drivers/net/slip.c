@@ -385,7 +385,7 @@ sl_bump(struct slip *sl)
 	skb->dev = sl->dev;
 	memcpy(skb_put(skb,count), sl->rbuff, count);
 	skb->mac.raw=skb->data;
-	if(sl->mode&(SL_MODE_AX25|SL_MODE_AX25VC))
+	if(sl->mode & SL_MODE_AX25)
 		skb->protocol=htons(ETH_P_AX25);
 	else
 		skb->protocol=htons(ETH_P_IP);
@@ -537,7 +537,7 @@ sl_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 #ifdef CONFIG_INET
 	struct slip *sl = (struct slip*)(dev->priv);
 
-	if (((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) && type != htons(ETH_P_AX25))  {
+	if (sl->mode & SL_MODE_AX25 && type != htons(ETH_P_AX25))  {
 		return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
 	}
 #endif
@@ -555,7 +555,7 @@ sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
 #ifdef CONFIG_INET
 	struct slip *sl = (struct slip*)(dev->priv);
 
-	if ((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) {
+	if (sl->mode & SL_MODE_AX25) {
 		return ax25_rebuild_header(buff, dev, raddr, skb);
 	}
 #endif
@@ -752,7 +752,7 @@ slip_open(struct tty_struct *tty)
 	sl->mode      = SL_MODE_DEFAULT;
 	sl->dev->type = ARPHRD_SLIP + sl->mode;
 #ifdef CONFIG_AX25	
-	if (sl->dev->type == 260 || sl->dev->type == 272) {	/* KISS */
+	if (sl->dev->type == 260) {		/* KISS */
 		sl->dev->type = ARPHRD_AX25;
 	}
 #endif	
@@ -1008,14 +1008,6 @@ sl_set_dev_mac_address(struct device *dev, void *addr)
 	memcpy(dev->dev_addr, addr, AX25_ADDR_LEN);
 	return 0;
 }
-
-int sl_get_ax25_mode(struct device *dev)
-{
-	struct slip *sl = (struct slip*)(dev->priv);
-
-	return sl->mode & SL_MODE_AX25VC;
-}
-
 #endif /* CONFIG_AX25 */
 
 
@@ -1072,13 +1064,13 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		}
 #endif
 #ifndef CONFIG_AX25
-		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
+		if (tmp & SL_MODE_AX25) {
 			return -EINVAL;
 		}
 #else
-		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
+		if (tmp & SL_MODE_AX25) {
 			sl->dev->addr_len=AX25_ADDR_LEN;	  /* sizeof an AX.25 addr */
-			sl->dev->hard_header_len=73; /* We don't do digipeaters */
+			sl->dev->hard_header_len=AX25_KISS_HEADER_LEN + AX25_MAX_HEADER_LEN + 3;
 		} else	{
 			sl->dev->addr_len=0;	/* No mac addr in slip mode */
 			sl->dev->hard_header_len=0;
@@ -1087,7 +1079,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		sl->mode = tmp;
 		sl->dev->type = ARPHRD_SLIP+sl->mode;
 #ifdef CONFIG_AX25		
-		if (sl->dev->type == 260 || sl->dev->type == 272)  {
+		if (sl->dev->type == 260)  {
 			sl->dev->type = ARPHRD_AX25;
 		}
 #endif		
@@ -1221,7 +1213,7 @@ slip_init(struct device *dev)
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 #ifdef CONFIG_AX25
-	if (sl->dev->type == 260 || sl->dev->type == 272)  {
+	if (sl->dev->type == 260) {
 		sl->dev->type = ARPHRD_AX25;
 	}
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);	/* Only activated in AX.25 mode */

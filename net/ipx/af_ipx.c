@@ -60,6 +60,7 @@
 #include <linux/ipx.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/route.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <asm/segment.h>
@@ -71,6 +72,7 @@
 #include <net/p8022.h>
 #include <net/psnap.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 #ifdef CONFIG_IPX
 /* Configuration Variables */

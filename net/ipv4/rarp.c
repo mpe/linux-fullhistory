@@ -66,6 +66,7 @@
 #include <net/ax25.h>
 #endif
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 #if	defined(CONFIG_INET_RARP) || defined(MODULE)
 

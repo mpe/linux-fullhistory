@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 19
+SUBLEVEL = 20
 
 ARCH = i386
 
@@ -113,7 +113,7 @@ include arch/$(ARCH)/Makefile
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 Version: dummy
-	rm -f include/linux/version.h
+	@rm -f include/linux/compile.h
 
 boot: vmlinux
 	@$(MAKE) -C arch/$(ARCH)/boot
@@ -140,6 +140,7 @@ linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 $(TOPDIR)/include/linux/version.h: include/linux/version.h
+$(TOPDIR)/include/linux/compile.h: include/linux/compile.h
 
 newversion:
 	@if [ ! -f .version ]; then \
@@ -148,8 +149,7 @@ newversion:
 		expr `cat .version` + 1 > .version; \
 	fi
 
-include/linux/version.h: $(CONFIGURATION) Makefile newversion
-	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > .ver
+include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 	@if [ -f .name ]; then \
 	   echo \#define UTS_VERSION \"\#`cat .version`-`cat .name` `date`\"; \
 	 else \
@@ -166,10 +166,14 @@ include/linux/version.h: $(CONFIGURATION) Makefile newversion
 	   echo \#define LINUX_COMPILE_DOMAIN ; \
 	 fi >> .ver
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> .ver
-	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> .ver
-	if [ ! -f $@ ]; then mv .ver $@; fi
+	@mv -f .ver $@
 
-init/version.o: init/version.c include/linux/version.h
+include/linux/version.h: ./Makefile
+	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > .ver
+	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> .ver
+	@mv -f .ver $@
+
+init/version.o: init/version.c include/linux/compile.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
 init/main.o: init/main.c
@@ -225,7 +229,7 @@ modules_install:
 	)
 
 clean:	archclean
-	rm -f kernel/ksyms.lst
+	rm -f kernel/ksyms.lst include/linux/compile.h
 	rm -f core `find . -name '*.[oas]' -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
@@ -253,11 +257,9 @@ backup: mrproper
 	sync
 
 #depend dep: .hdepend
-depend dep: archdep .hdepend
-	touch include/linux/version.h
+depend dep: archdep .hdepend include/linux/version.h
 	awk -f scripts/depend.awk init/*.c > .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
-	rm -f include/linux/version.h
 	mv .tmpdepend .depend
 ifdef CONFIG_MODVERSIONS
 	@echo updating $(TOPDIR)/include/linux/modversions.h

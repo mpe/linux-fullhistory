@@ -38,6 +38,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
+#include <linux/if_arp.h>
 #include <linux/inet.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>

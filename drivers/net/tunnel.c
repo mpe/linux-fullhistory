@@ -36,6 +36,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <net/ip.h>
 

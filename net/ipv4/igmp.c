@@ -30,6 +30,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/if_arp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/route.h>

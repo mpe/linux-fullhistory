@@ -15,6 +15,8 @@
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
+ *		Niibe Yutaka	:	async I/O support
+ *		Carsten Paeth	:	PF_UNIX check, address fixes.
  */
 
 #include <linux/config.h>
@@ -237,14 +239,26 @@ static void def_callback1(struct sock *sk)
 static void def_callback2(struct sock *sk, int len)
 {
 	if(!sk->dead)
+	{
 		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 1);
+	}
+}
+
+static void def_callback3(struct sock *sk)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 2);
+	}
 }
 
 static int unix_create(struct socket *sock, int protocol)
 {
 	unix_socket *sk;
 /*	printk("Unix create\n");*/
-	if(protocol)
+	if(protocol && protocol != PF_UNIX)
 		return -EPROTONOSUPPORT;
 	sk=(unix_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
 	if(sk==NULL)
@@ -289,7 +303,7 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->shutdown=0;
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
-	sk->write_space=def_callback1;
+	sk->write_space=def_callback3;
 	sk->error_report=def_callback1;
 	sk->mtu=4096;
 	sk->socket=sock;
@@ -410,7 +424,6 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	struct sk_buff *skb;
 	int err;
 
-	unix_mkname(sun, addr_len);
 	if(sk->type==SOCK_STREAM && sk->protinfo.af_unix.other)
 	{
 		if(sock->state==SS_CONNECTING && sk->state==TCP_ESTABLISHED)
@@ -428,9 +441,11 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 		return -EISCONN;
 	}
 	
-	if(sun->sun_family!=AF_UNIX)
+	if(addr_len < sizeof(sun->sun_family)+1 || sun->sun_family!=AF_UNIX)
 		return -EINVAL;
-
+		
+	unix_mkname(sun, addr_len);
+		
 	if(sk->type==SOCK_DGRAM && sk->protinfo.af_unix.other)
 	{
 		sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
@@ -440,6 +455,11 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 	if(sock->type==SOCK_DGRAM)
 	{
+		other=unix_find_other(sun->sun_path, &err);
+		if(other==NULL)
+			return err;
+		other->protinfo.af_unix.locks++;
+		sk->protinfo.af_unix.other=other;
 		sock->state=SS_CONNECTED;
 		sk->state=TCP_ESTABLISHED;
 		return 0;			/* Done */
@@ -601,6 +621,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	tsk->protinfo.af_unix.locks++;	/* Back lock */
 	sti();
 	tsk->state_change(tsk);		/* Wake up any sleeping connect */
+	sock_wake_async(tsk->socket, 0);
 	return 0;
 }
 
@@ -619,10 +640,10 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 	if(sk->protinfo.af_unix.name==NULL)
 	{
 		*sun->sun_path=0;
-		*uaddr_len=3;
+		*uaddr_len=sizeof(sun->sun_family)+1;
 		return 0;		/* Not bound */
 	}
-	*uaddr_len=sizeof(short)+strlen(sk->protinfo.af_unix.name)+1;
+	*uaddr_len=sizeof(sun->sun_family)+strlen(sk->protinfo.af_unix.name)+1;
 	strcpy(sun->sun_path,sk->protinfo.af_unix.name);		/* 108 byte limited */
 	return 0;
 }
@@ -688,6 +709,13 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if(sun==NULL)
 	{
 		other=sk->protinfo.af_unix.other;
+		if(sock->type==SOCK_DGRAM && other->dead)
+		{
+			other->protinfo.af_unix.locks--;
+			sk->protinfo.af_unix.other=NULL;
+			sock->state=SS_UNCONNECTED;
+			return -ECONNRESET;
+		}
 	}
 	else
 	{
@@ -761,7 +789,9 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 				{
 					return -EAGAIN;
 				}
+				sk->socket->flags |= SO_WAITDATA;
 				interruptible_sleep_on(sk->sleep);
+				sk->socket->flags &= ~SO_WAITDATA;
 				if( current->signal & ~current->blocked)
 				{
 					sti();

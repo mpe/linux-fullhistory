@@ -286,6 +286,16 @@ void ax25_enquiry_response(ax25_cb *ax25)
 	ax25->condition &= ~ACK_PENDING_CONDITION;
 }
 
+void ax25_timeout_response(ax25_cb *ax25)
+{
+	if (ax25->condition & OWN_RX_BUSY_CONDITION)
+		ax25_send_control(ax25, RNR, POLLOFF, C_RESPONSE);
+	else
+		ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
+
+	ax25->condition &= ~ACK_PENDING_CONDITION;
+}
+
 void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 {
 	if (ax25->vs == nr) {

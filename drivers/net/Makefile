@@ -127,13 +127,13 @@ L_OBJS += de600.o
 else
 M_OBJS += de600.o
 endif
-	
+
 ifdef CONFIG_DE620
 L_OBJS += de620.o
 else
 M_OBJS += de620.o
 endif
-	
+
 ifdef CONFIG_AT1500
 L_OBJS += lance.o
 endif

@@ -1240,13 +1240,13 @@ static int arp_req_set(struct arpreq *req)
 #ifdef CONFIG_AX25
 		case ARPHRD_AX25:
 			htype = ARPHRD_AX25;
-			hlen = 7;
+			hlen = AX25_ADDR_LEN;
 			break;
 #endif
 #ifdef CONFIG_NETROM
 		case ARPHRD_NETROM:
 			htype = ARPHRD_NETROM;
-			hlen = 7;
+			hlen = AX25_ADDR_LEN;
 			break;
 #endif
 		case ARPHRD_IEEE802:

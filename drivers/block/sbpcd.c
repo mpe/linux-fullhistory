@@ -695,7 +695,6 @@ static void msg(int level, const char *fmt, ...)
 {
 	char buf[256];
 	va_list args;
-	extern int vsprintf(char *, const char *, va_list);
 	
 	if (!(sbpcd_debug&(1<<level))) return;
 	

@@ -34,7 +34,7 @@ include ../../versions.mk
 endif
 
 ifdef CONFIG_SCSI
-L_OBJS := hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 else
 ifdef CONFIG_MODVERSIONS
 # Create this before we build anything else.

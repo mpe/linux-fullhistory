@@ -9,6 +9,7 @@
 #include <linux/config.h>
 #include <linux/utsname.h>
 #include <linux/version.h>
+#include <linux/compile.h>
 
 struct new_utsname system_utsname = {
 	UTS_SYSNAME, UTS_NODENAME, UTS_RELEASE, UTS_VERSION,

@@ -23,6 +23,33 @@
  */
 #define mem_write NULL
 
+static int check_range(struct task_struct * tsk, unsigned long addr, int count)
+{
+	struct vm_area_struct *vma;
+	int retval;
+
+	vma = find_vma(tsk, addr);
+	if (!vma)
+		return -EACCES;
+	if (vma->vm_start > addr)
+		return -EACCES;
+	if (!(vma->vm_flags & VM_READ))
+		return -EACCES;
+	while ((retval = vma->vm_end - addr) < count) {
+		struct vm_area_struct *next = vma->vm_next;
+		if (!next)
+			break;
+		if (vma->vm_end != next->vm_start)
+			break;
+		if (!(next->vm_flags & VM_READ))
+			break;
+		vma = next;
+	}
+	if (retval > count)
+		retval = count;
+	return retval;
+}
+
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	pgd_t *page_dir;
@@ -47,6 +74,9 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	if (!tsk)
 		return -EACCES;
 	addr = file->f_pos;
+	count = check_range(tsk, addr, count);
+	if (count < 0)
+		return count;
 	tmp = buf;
 	while (count > 0) {
 		if (current->signal & ~current->blocked)

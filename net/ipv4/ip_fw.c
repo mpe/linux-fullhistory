@@ -84,6 +84,7 @@
 #include <linux/ip_fw.h>
 #include <net/checksum.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 /*
  *	Implement IP packet firewall

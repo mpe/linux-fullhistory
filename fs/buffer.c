@@ -228,7 +228,7 @@ int fsync_dev(dev_t dev)
 
 asmlinkage int sys_sync(void)
 {
-	sync_dev(0);
+	fsync_dev(0);
 	return 0;
 }
 
@@ -440,6 +440,7 @@ struct buffer_head * get_hash_table(dev_t dev, int block, int size)
 	for (;;) {
 		if (!(bh=find_buffer(dev,block,size)))
 			return NULL;
+		bh->b_reuse=0;
 		bh->b_count++;
 		wait_on_buffer(bh);
 		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size)
@@ -1075,6 +1076,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 		arr[block++] = bh;
 		bh->b_count = 1;
 		bh->b_dirt = 0;
+		bh->b_reuse = 0;
 		bh->b_flushtime = 0;
 		bh->b_uptodate = 0;
 		bh->b_req = 0;

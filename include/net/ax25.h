@@ -101,13 +101,21 @@
 #define AX25_STATE_4	4
 
 #define PR_SLOWHZ	10			/*  Run timing at 1/10 second - gives us better resolution for 56kbit links */
-#define DEFAULT_T1	(10  * PR_SLOWHZ)	/*  Outstanding frames - 10 seconds */
-#define DEFAULT_T2	(3   * PR_SLOWHZ)	/*  Response delay     - 3 seconds */
-#define DEFAULT_T3	(300 * PR_SLOWHZ)	/*  Idle supervision   - 300 seconds */
-#define DEFAULT_N2	10			/*  Number of retries */
-#define	DEFAULT_WINDOW	2			/*  Default window size	*/
 #define MODULUS 	8			/*  Standard AX.25 modulus */
 #define	EMODULUS	128			/*  Extended AX.25 modulus */
+
+#define	AX25_DEF_IPDEFMODE	'D'
+#define	AX25_DEF_AXDEFMODE	8
+#define	AX25_DEF_NETROM		1
+#define	AX25_DEF_TEXT		1
+#define	AX25_DEF_BACKOFF	'E'
+#define	AX25_DEF_CONMODE	1
+#define	AX25_DEF_WINDOW		2
+#define	AX25_DEF_EWINDOW	32
+#define	AX25_DEF_T1		10
+#define	AX25_DEF_T2		3
+#define	AX25_DEF_T3		300
+#define	AX25_DEF_N2		10
 
 typedef struct ax25_uid_assoc {
 	struct ax25_uid_assoc *next;
@@ -126,7 +134,7 @@ typedef struct ax25_cb {
 	struct ax25_cb		*next;
 	ax25_address		source_addr, dest_addr;
 	struct device		*device;
-	unsigned char		state, modulus;
+	unsigned char		state, modulus, hdrincl;
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
@@ -152,7 +160,6 @@ extern struct device *ax25rtr_get_dev(ax25_address *);
 extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
 	void *, void *, unsigned int);
 extern int  ax25_rebuild_header(unsigned char *, struct device *, unsigned long, struct sk_buff *);
-extern int  ax25_get_info(char *, char **, off_t, int, int);
 extern ax25_uid_assoc *ax25_uid_list;
 extern int  ax25_uid_policy;
 extern ax25_address *ax25_findbyuid(uid_t);
@@ -171,17 +178,23 @@ extern void ax25_nr_error_recovery(ax25_cb *);
 extern void ax25_establish_data_link(ax25_cb *);
 extern void ax25_transmit_enquiry(ax25_cb *);
 extern void ax25_enquiry_response(ax25_cb *);
+extern void ax25_timeout_response(ax25_cb *);
 extern void ax25_check_iframes_acked(ax25_cb *, unsigned short);
 extern void ax25_check_need_response(ax25_cb *, int, int);
 
 /* ax25_route.c */
-extern void ax25_rt_rx_frame(ax25_address *, struct device *);
+extern void ax25_rt_rx_frame(ax25_address *, struct device *, ax25_digi *);
 extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_cs_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
 extern void ax25_rt_device_down(struct device *);
+extern int  ax25_rt_ioctl(unsigned int, void *);
 extern void ax25_ip_mode_set(ax25_address *, struct device *, char);
 extern char ax25_ip_mode_get(ax25_address *, struct device *);
+extern unsigned short ax25_dev_get_value(struct device *, int);
+extern void ax25_dev_device_up(struct device *);
+extern void ax25_dev_device_down(struct device *);
+extern int  ax25_dev_ioctl(unsigned int, void *);
 
 /* ax25_subr.c */
 extern void ax25_clear_queues(ax25_cb *);
@@ -201,8 +214,5 @@ extern void ax25_return_dm(struct device *, ax25_address *, ax25_address *, ax25
 
 /* ax25_timer */
 extern void ax25_set_timer(ax25_cb *);
-
-/* slip.c */
-extern int  sl_get_ax25_mode(struct device *);
 
 #endif

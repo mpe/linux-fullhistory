@@ -50,7 +50,7 @@
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 #include <net/netrom.h>
-
+#include <linux/proc_fs.h>
 #include <net/ip.h>
 #include <net/arp.h>
 
@@ -115,8 +115,6 @@ static void nr_kill_by_device(struct device *dev)
 			s->dead  = 1;
 		}
 	}
-
-	nr_rt_device_down(dev);
 }
 
 /*
@@ -124,10 +122,13 @@ static void nr_kill_by_device(struct device *dev)
  */
 static int nr_device_event(unsigned long event, void *ptr)
 {
+	struct device *dev = (struct device *)ptr;
+
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
 		
-	nr_kill_by_device(ptr);
+	nr_kill_by_device(dev);
+	nr_rt_device_down(dev);
 	
 	return NOTIFY_DONE;
 }
@@ -329,6 +330,10 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 			sk->nr->n2 = opt;
 			return 0;
 			
+		case NETROM_HDRINCL:
+			sk->nr->hdrincl = opt ? 1 : 0;
+			return 0;
+			
 		default:
 			return -ENOPROTOOPT;
 	}
@@ -351,7 +356,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	
 	switch (optname) {
 		case NETROM_T1:
-			val = sk->nr->t1 / PR_SLOWHZ;
+			val = (sk->nr->t1 * 2) / PR_SLOWHZ;
 			break;
 			
 		case NETROM_T2:
@@ -362,6 +367,10 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 			val = sk->nr->n2;
 			break;
 						
+		case NETROM_HDRINCL:
+			val = sk->nr->hdrincl;
+			break;
+
 		default:
 			return -ENOPROTOOPT;
 	}
@@ -497,6 +506,7 @@ static int nr_create(struct socket *sock, int protocol)
 
 	nr->bpqext     = 1;
 	nr->fraglen    = 0;
+	nr->hdrincl    = 0;
 	nr->state      = NR_STATE_0;
 	nr->device     = NULL;
 
@@ -580,6 +590,7 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	nr->device   = osk->nr->device;
 	nr->bpqext   = osk->nr->bpqext;
+	nr->hdrincl  = osk->nr->hdrincl;
 	nr->fraglen  = 0;
 
 	nr->t1timer  = 0;
@@ -931,10 +942,9 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 */
 	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL) ||
 	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) {
-		skb_pull(skb, NR_NETWORK_LEN);
-		skb->h.raw = skb->data + NR_TRANSPORT_LEN;
+		skb->h.raw = skb->data;
 
-		if ((frametype & 0x0F) == NR_CONNACK && skb->len == 7)
+		if ((frametype & 0x0F) == NR_CONNACK && skb->len == 22)
 			sk->nr->bpqext = 1;
 		else
 			sk->nr->bpqext = 0;
@@ -1129,7 +1139,7 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 {
 	struct sock *sk = (struct sock *)sock->data;
 	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)sip;
-	int copied = 0;
+	int copied;
 	struct sk_buff *skb;
 	int er;
 
@@ -1142,7 +1152,10 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	if (addr_len != NULL)
 		*addr_len = sizeof(*sax);
 
-	/* This works for seqpacket too. The receiver has ordered the queue for us! We do one quick check first though */
+	/*
+	 * This works for seqpacket too. The receiver has ordered the queue for
+	 * us! We do one quick check first though
+	 */
 	if (sk->type == SOCK_SEQPACKET && sk->state != TCP_ESTABLISHED)
 		return -ENOTCONN;
 
@@ -1150,8 +1163,12 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
 		return er;
 
-	copied = (size < skb->len - NR_TRANSPORT_LEN) ? size : skb->len - NR_TRANSPORT_LEN;
+	if (!sk->nr->hdrincl) {
+		skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+		skb->h.raw = skb->data;
+	}
 
+	copied = (size < skb->len) ? size : skb->len;
 	skb_copy_datagram(skb, 0, ubuf, copied);
 	
 	if (sax != NULL) {
@@ -1286,8 +1303,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-static int nr_get_info(char *buffer, char **start, off_t offset,
-		       int length, int dummy)
+static int nr_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct sock *s;
 	struct device *dev;

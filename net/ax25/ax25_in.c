@@ -64,6 +64,7 @@ static int ax25_rx_iframe(ax25_cb *, struct sk_buff *);
 static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 {
 	struct sk_buff *skbn, *skbo;
+	int hdrlen;
 	
 	if (ax25->fragno != 0) {
 		if (!(*skb->data & SEG_FIRST)) {
@@ -86,6 +87,14 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 					}
 
 					skb_reserve(skbn, AX25_MAX_HEADER_LEN);
+					skbn->h.raw = skbn->data;
+
+					skbo = skb_dequeue(&ax25->frag_queue);
+					hdrlen = skbo->data - skbo->h.raw;
+					skb_push(skbo, hdrlen);
+					memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
+					skb_pull(skbn, hdrlen);
+					kfree_skb(skbo, FREE_READ);
 
 					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {
 						memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
@@ -122,13 +131,13 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 {
 	int queued = 0;
 
-	skb->h.raw = skb->data;
-
 	switch (*skb->data) {
 #ifdef CONFIG_NETROM
 		case AX25_P_NETROM:
-			skb_pull(skb, 1);	/* Remove PID */
-			queued = nr_route_frame(skb, ax25);
+			if (ax25_dev_get_value(ax25->device, AX25_VALUES_NETROM)) {
+				skb_pull(skb, 1);	/* Remove PID */
+				queued = nr_route_frame(skb, ax25);
+			}
 			break;
 #endif
 #ifdef CONFIG_INET
@@ -141,7 +150,7 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 			break;
 #endif
 		case AX25_P_TEXT:
-			if (ax25->sk != NULL) {
+			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT)) {
 				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
 					queued = 1;
 				} else {
@@ -172,11 +181,13 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 	switch (frametype) {
 		case SABM:
 			ax25->modulus = MODULUS;
+			ax25->window  = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			break;
 
 		case SABME:
 			ax25->modulus = EMODULUS;
+			ax25->window  = ax25_dev_get_value(ax25->device, AX25_VALUES_EWINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			break;
 
@@ -217,6 +228,7 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					}
 				} else {
 					ax25->modulus = MODULUS;
+					ax25->window  = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 				}
 			}
 			break;
@@ -298,6 +310,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 	switch (frametype) {
 		case SABM:
 			ax25->modulus   = MODULUS;
+			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
@@ -309,6 +322,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case SABME:
 			ax25->modulus   = EMODULUS;
+			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_EWINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
@@ -455,6 +469,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 	switch (frametype) {
 		case SABM:
 			ax25->modulus   = MODULUS;
+			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
@@ -468,6 +483,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case SABME:
 			ax25->modulus   = EMODULUS;
+			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_EWINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;

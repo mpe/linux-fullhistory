@@ -130,7 +130,7 @@ static void ax25_timer(unsigned long param)
 		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
 			if (ax25->condition & ACK_PENDING_CONDITION) {
 				ax25->condition &= ~ACK_PENDING_CONDITION;
-				ax25_enquiry_response(ax25);
+				ax25_timeout_response(ax25);
 			}
 		}
 	}
@@ -167,7 +167,9 @@ static void ax25_timer(unsigned long param)
 					}
 				} else {
 					ax25->modulus = MODULUS;
+					ax25->window  = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 					ax25->n2count = 0;
+					ax25_send_control(ax25, SABM, POLLON, C_COMMAND);
 				}
 			} else {
 				ax25->n2count++;

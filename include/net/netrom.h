@@ -46,11 +46,10 @@
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
 	struct device		*device;
-	unsigned char		my_index,    my_id;
-	unsigned char		your_index,  your_id;
-	unsigned char		state, bpqext;
+	unsigned char		my_index,   my_id;
+	unsigned char		your_index, your_id;
+	unsigned char		state, condition, bpqext, hdrincl;
 	unsigned short		vs, vr, va, vl;
-	unsigned char		condition;
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, rtt;
 	unsigned short		t1timer, t2timer, t4timer;

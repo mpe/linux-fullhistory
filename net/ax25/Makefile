@@ -12,7 +12,7 @@ O_TARGET := ax25.o
 O_OBJS	 := af_ax25.o
 
 ifdef CONFIG_AX25
-OBJS	+= ax25_in.o ax25_out.o ax25_route.o ax25_subr.o ax25_timer.o
+O_OBJS	+= ax25_in.o ax25_out.o ax25_route.o ax25_subr.o ax25_timer.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -38,6 +38,8 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
+#include <linux/if_arp.h>
+#include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
@@ -50,6 +52,7 @@
 #include <net/sock.h>
 #include <linux/atalk.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
 
 #ifdef CONFIG_ATALK
 
@@ -211,7 +214,7 @@ static void atalk_destroy_socket(atalk_socket *sk)
 
 
 /* Called from proc fs */
-int atalk_get_info(char *buffer, char **start, off_t offset, int length)
+int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	atalk_socket *s;
 	int len=0;
@@ -813,7 +816,7 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 
 /* Called from proc fs - just make it print the ifaces neatly */
 
-int atalk_if_get_info(char *buffer, char **start, off_t offset, int length)
+int atalk_if_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct atalk_iface *iface;
 	int len=0;
@@ -846,7 +849,7 @@ int atalk_if_get_info(char *buffer, char **start, off_t offset, int length)
 
 /* Called from proc fs - just make it print the routes neatly */
 
-int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length)
+int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct atalk_route *rt;
 	int len=0;
@@ -1873,6 +1876,7 @@ void atalk_proto_init(struct net_proto *pro)
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_AT_ROUTE, 11,"atalk_route",
 		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
 		atalk_rt_get_info
 	});
 	proc_net_register(&(struct proc_dir_entry) {

@@ -7,6 +7,8 @@
  *	Fixes:
  *		Alan Cox	:	Merged and made usable non modular (its so tiny its silly as
  *					a module taking up 2 pages).
+ *		Alan Cox	: 	Fixed bug with 1.3.18 and IPIP not working (now needs to set skb->h.iph)
+ *					to keep ip_forward happy.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -56,6 +58,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 #ifdef TUNNEL_DEBUG
 	printk("ipip_rcv: got a packet!\n");
 #endif
+	skb->h.iph=skb->data;	/* Correct IP header pointer on to new header */
 	if(ip_forward(skb, dev, 0, daddr, 0))
 		kfree_skb(skb, FREE_READ);
 	MOD_DEC_USE_COUNT;
