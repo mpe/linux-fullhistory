@@ -1,6 +1,6 @@
 /* drivers/atm/eni.h - Efficient Networks ENI155P device driver declarations */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
  
 #ifndef DRIVER_ATM_ENI_H
@@ -24,6 +24,9 @@
 #define RX_DMA_BUF	  8		/* burst and skip a few things */
 #define TX_DMA_BUF	100		/* should be enough for 64 kB */
 
+#define DEFAULT_RX_MULT	300		/* max_sdu*3 */
+#define DEFAULT_TX_MULT	300		/* max_sdu*3 */
+
 
 struct eni_free {
 	unsigned long start;		/* counting in bytes */
@@ -40,6 +43,7 @@ struct eni_tx {
 	int reserved;			/* reserved peak cell rate */
 	int shaping;			/* shaped peak cell rate */
 	struct sk_buff_head backlog;	/* queue of waiting TX buffers */
+	int backlog_len;		/* length of backlog in bytes */
 };
 
 struct eni_vcc {
@@ -51,7 +55,7 @@ struct eni_vcc {
 	struct eni_tx *tx;		/* TXer, NULL if none */
 	int rxing;			/* number of pending PDUs */
 	int servicing;			/* number of waiting VCs (0 or 1) */
-	int txing;			/* number of pending TX cells/PDUs */
+	int txing;			/* number of pending TX bytes */
 	struct timeval timestamp;	/* for RX timing */
 	struct atm_vcc *next;		/* next pending RX */
 	struct sk_buff *last;		/* last PDU being DMAed (used to carry
@@ -75,6 +79,7 @@ struct eni_dev {
 	wait_queue_head_t tx_wait;	/* for close */
 	int tx_bw;			/* remaining bandwidth */
 	u32 dma[TX_DMA_BUF*2];		/* DMA request scratch area */
+	int tx_mult;			/* buffer size multiplier (percent) */
 	/*-------------------------------- RX part */
 	u32 serv_read;			/* host service read index */
 	struct atm_vcc *fast,*last_fast;/* queues of VCCs with pending PDUs */
@@ -82,6 +87,7 @@ struct eni_dev {
 	struct atm_vcc **rx_map;	/* for fast lookups */
 	struct sk_buff_head rx_queue;	/* PDUs currently being RX-DMAed */
 	wait_queue_head_t rx_wait;	/* for close */
+	int rx_mult;			/* buffer size multiplier (percent) */
 	/*-------------------------------- statistics */
 	unsigned long lost;		/* number of lost cells (RX) */
 	/*-------------------------------- memory management */
@@ -94,7 +100,7 @@ struct eni_dev {
 	/*-------------------------------- general information */
 	int mem;			/* RAM on board (in bytes) */
 	int asic;			/* PCI interface type, 0 for FPGA */
-	unsigned char irq;		/* IRQ */
+	unsigned int irq;		/* IRQ */
 	struct pci_dev *pci_dev;	/* PCI stuff */
 };
 

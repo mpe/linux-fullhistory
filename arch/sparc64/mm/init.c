@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.144 2000/01/23 07:16:11 davem Exp $
+/*  $Id: init.c,v 1.145 2000/02/08 07:46:11 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -926,7 +926,7 @@ void __init paging_init(void)
 	flush_tlb_all();
 
 	{
-		unsigned int zones_size[MAX_NR_ZONES] = { 0, 0, 0};
+		unsigned long zones_size[MAX_NR_ZONES] = { 0, 0, 0};
 
 		zones_size[ZONE_DMA] = end_pfn;
 		free_area_init(zones_size);

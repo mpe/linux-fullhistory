@@ -61,3 +61,11 @@ Steve's quick list of things that need finishing off:
  o Hello messages should be generated for each primary address on each
    interface.
 
+ o Add more information into /proc/net/decnet and finalise the format to
+   allow DECnet support in netstat.
+
+ o Make sure that returned connect messages are generated when they should
+   be, and that the correct error messages are sent too. Ensure that the
+   conninit receiving routine does not accept conninits with parameters
+   that we cannot handle.
+

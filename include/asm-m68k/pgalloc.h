@@ -396,4 +396,9 @@ extern inline void flush_tlb_kernel_page(unsigned long addr)
 		__asm__ __volatile__("pflush #4,#4,(%0)" : : "a" (addr));
 }
 
+extern inline void flush_tlb_pgtables(struct mm_struct *mm,
+				      unsigned long start, unsigned long end)
+{
+}
+
 #endif /* _M68K_PGALLOC_H */

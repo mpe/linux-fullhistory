@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.29 2000/01/18 08:24:21 davem Exp $
+ *	$Id: mcast.c,v 1.30 2000/02/08 21:27:23 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -346,8 +346,8 @@ int ipv6_chk_mcast_addr(struct net_device *dev, struct in6_addr *addr)
 			}
 		}
 		read_unlock_bh(&idev->lock);
+		in6_dev_put(idev);
 	}
-	in6_dev_put(idev);
 	return 0;
 }
 

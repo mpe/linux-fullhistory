@@ -61,7 +61,6 @@
  *	"Channel Binding" ioctl extension
  */
       
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/string.h>

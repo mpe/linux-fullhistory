@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.161 2000/01/31 01:21:16 davem Exp $
+ * Version:	$Id: tcp.c,v 1.163 2000/02/08 21:27:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1106,8 +1106,8 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff *skb;
-	int time_to_ack;
-	
+	int time_to_ack = 0;
+
 	/* NOTE! The socket must be locked, so that we don't get
 	 * a messed-up receive queue.
 	 */
@@ -1117,13 +1117,39 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		tcp_eat_skb(sk, skb);
 	}
 
-	/* Delayed ACKs frequently hit locked sockets during bulk receive. */
-	time_to_ack = tp->ack.blocked && tp->ack.pending;
-#ifdef CONFIG_TCP_MORE_COARSE_ACKS
-	if (tp->ack.pending &&
-	    (tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss)
-		time_to_ack = 1;
+	if (tp->ack.pending) {
+		   /* Delayed ACKs frequently hit locked sockets during bulk receive. */
+		if (tp->ack.blocked
+#ifdef TCP_MORE_COARSE_ACKS
+		    /* Once-per-two-segments ACK was not sent by tcp_input.c */
+		    || tp->rcv_nxt - tp->rcv_wup > tp->ack.rcv_mss
 #endif
+		    /*
+		     * If this read emptied read buffer, we send ACK when:
+		     *
+		     * -- ATO estimator diverged. In this case it is useless
+		     * to delay ACK, it will miss in any case.
+		     *
+		     * -- The second condition is triggered when we did not
+		     * ACK 8 segments not depending of their size.
+		     * Linux senders allocate full-sized frame even for one byte
+		     * packets, so that default queue for MTU=8K can hold
+		     * only 8 packets. Note, that no other workarounds
+		     * but counting packets are possible. If sender selected
+		     * a small sndbuf or have larger mtu lockup will still
+		     * occur. Well, not lockup, but 10-20msec gap.
+		     * It is essentially dead lockup for 1Gib ethernet
+		     * and loopback :-). The value 8 covers all reasonable
+		     * cases and we may receive packet of any size
+		     * with maximal possible rate now.
+		     */
+		    || (copied > 0 &&
+			(tp->ack.ato >= TCP_DELACK_MAX || tp->ack.rcv_segs > 7) &&
+			!tp->ack.pingpong &&
+			atomic_read(&sk->rmem_alloc) == 0)) {
+			time_to_ack = 1;
+		}
+	}
 
   	/* We send an ACK if we can now advertise a non-zero window
 	 * which has been raised "significantly".
@@ -1135,14 +1161,12 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		__u32 rcv_window_now = tcp_receive_window(tp);
 		__u32 new_window = __tcp_select_window(sk);
 
-		/* We won't be raising the window any further than
-		 * the window-clamp allows.  Our window selection
-		 * also keeps things a nice multiple of MSS.  These
-		 * checks are necessary to prevent spurious ACKs
-		 * which don't advertize a larger window.
+		/* Send ACK now, if this read freed lots of space
+		 * in our buffer. Certainly, new_window is new window.
+		 * We can advertise it now, if it is not less than current one.
+		 * "Lots" means "at least twice" here.
 		 */
-		if((new_window && (new_window >= rcv_window_now * 2)) &&
-		   ((rcv_window_now + tp->ack.rcv_mss) <= tp->window_clamp))
+		if(new_window && new_window >= 2*rcv_window_now)
 			time_to_ack = 1;
 	}
 	if (time_to_ack)
@@ -1408,11 +1432,6 @@ do_prequeue:
 					copied += chunk;
 				}
 			}
-#ifdef CONFIG_TCP_MORE_COARSE_ACKS
-			if (tp->ack.pending &&
-			    (tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss)
-				tcp_send_ack(sk);
-#endif
 		}
 		continue;
 
@@ -1472,7 +1491,7 @@ do_prequeue:
 		skb->used = 1;
 		tcp_eat_skb(sk, skb);
 
-#ifdef CONFIG_TCP_LESS_COARSE_ACKS
+#ifdef TCP_LESS_COARSE_ACKS
 		/* Possible improvement. When sender is faster than receiver,
 		 * traffic looks like: fill window ... wait for window open ...
 		 * fill window. We lose at least one rtt, because call

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.76 2000/01/31 21:10:15 davem Exp $
+/* $Id: ioctl32.c,v 1.79 2000/02/08 20:24:25 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -17,7 +17,9 @@
 #include <linux/if.h>
 #include <linux/malloc.h>
 #include <linux/hdreg.h>
+#if 0 /* New RAID code is half-merged... -DaveM */
 #include <linux/md.h>
+#endif
 #include <linux/kd.h>
 #include <linux/route.h>
 #include <linux/skbuff.h>
@@ -60,6 +62,18 @@
 #include <asm/ethtool.h>
 
 #include <linux/soundcard.h>
+
+#include <linux/atm.h>
+#include <linux/atmarp.h>
+#include <linux/atmclip.h>
+#include <linux/atmdev.h>
+#include <linux/atmioc.h>
+#include <linux/atmlec.h>
+#include <linux/atmmpc.h>
+#include <linux/atmsvc.h>
+#include <linux/atm_tcp.h>
+#include <linux/sonet.h>
+#include <linux/atm_suni.h>
 
 /* Use this to get at 32-bit user passed pointers. 
    See sys_sparc32.c for description about these. */
@@ -1753,6 +1767,217 @@ static int do_smb_getmountuid(unsigned int fd, unsigned int cmd, unsigned long a
 	return err;
 }
 
+struct atmif_sioc32 {
+        int                number;
+        int                length;
+        __kernel_caddr_t32 arg;
+};
+
+struct atm_iobuf32 {
+	int                length;
+	__kernel_caddr_t32 buffer;
+};
+
+#define ATM_GETLINKRATE32 _IOW('a', ATMIOC_ITF+1, struct atmif_sioc32)
+#define ATM_GETNAMES32    _IOW('a', ATMIOC_ITF+3, struct atm_iobuf32)
+#define ATM_GETTYPE32     _IOW('a', ATMIOC_ITF+4, struct atmif_sioc32)
+#define ATM_GETESI32	  _IOW('a', ATMIOC_ITF+5, struct atmif_sioc32)
+#define ATM_GETADDR32	  _IOW('a', ATMIOC_ITF+6, struct atmif_sioc32)
+#define ATM_RSTADDR32	  _IOW('a', ATMIOC_ITF+7, struct atmif_sioc32)
+#define ATM_ADDADDR32	  _IOW('a', ATMIOC_ITF+8, struct atmif_sioc32)
+#define ATM_DELADDR32	  _IOW('a', ATMIOC_ITF+9, struct atmif_sioc32)
+#define ATM_GETCIRANGE32  _IOW('a', ATMIOC_ITF+10, struct atmif_sioc32)
+#define ATM_SETCIRANGE32  _IOW('a', ATMIOC_ITF+11, struct atmif_sioc32)
+#define ATM_SETESI32      _IOW('a', ATMIOC_ITF+12, struct atmif_sioc32)
+#define ATM_SETESIF32     _IOW('a', ATMIOC_ITF+13, struct atmif_sioc32)
+#define ATM_GETSTAT32     _IOW('a', ATMIOC_SARCOM+0, struct atmif_sioc32)
+#define ATM_GETSTATZ32    _IOW('a', ATMIOC_SARCOM+1, struct atmif_sioc32)
+
+static struct {
+        unsigned int cmd32;
+        unsigned int cmd;
+} atm_ioctl_map[] = {
+        { ATM_GETLINKRATE32, ATM_GETLINKRATE },
+	{ ATM_GETNAMES32,    ATM_GETNAMES },
+        { ATM_GETTYPE32,     ATM_GETTYPE },
+        { ATM_GETESI32,      ATM_GETESI },
+        { ATM_GETADDR32,     ATM_GETADDR },
+        { ATM_RSTADDR32,     ATM_RSTADDR },
+        { ATM_ADDADDR32,     ATM_ADDADDR },
+        { ATM_DELADDR32,     ATM_DELADDR },
+        { ATM_GETCIRANGE32,  ATM_GETCIRANGE },
+	{ ATM_SETCIRANGE32,  ATM_SETCIRANGE },
+	{ ATM_SETESI32,      ATM_SETESI },
+	{ ATM_SETESIF32,     ATM_SETESIF },
+	{ ATM_GETSTAT32,     ATM_GETSTAT },
+	{ ATM_GETSTATZ32,    ATM_GETSTATZ }
+};
+
+#define NR_ATM_IOCTL (sizeof(atm_ioctl_map)/sizeof(atm_ioctl_map[0]))
+
+
+static int do_atm_iobuf(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	struct atm_iobuf32 iobuf32;
+	struct atm_iobuf   iobuf = { 0, NULL };
+	mm_segment_t old_fs;
+	int err;
+
+	err = copy_from_user(&iobuf32, (struct atm_iobuf32*)arg,
+	    sizeof(struct atm_iobuf32));
+	if (err)
+		return -EFAULT;
+
+	iobuf.length = iobuf32.length;
+
+	if (iobuf32.buffer == (__kernel_caddr_t32) NULL || iobuf32.length == 0) {
+		iobuf.buffer = (void*)(unsigned long)iobuf32.buffer;
+	} else {
+		iobuf.buffer = kmalloc(iobuf.length, GFP_KERNEL);
+		if (iobuf.buffer == NULL) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		err = copy_from_user(iobuf.buffer, A(iobuf32.buffer), iobuf.length);
+		if (err) {
+			err = -EFAULT;
+			goto out;
+		}
+	}
+
+	old_fs = get_fs(); set_fs (KERNEL_DS);
+	err = sys_ioctl (fd, cmd, (unsigned long)&iobuf);      
+	set_fs (old_fs);
+        if(err)
+		goto out;
+
+        if(iobuf.buffer && iobuf.length > 0) {
+		err = copy_to_user(A(iobuf32.buffer), iobuf.buffer, iobuf.length);
+		if (err) {
+			err = -EFAULT;
+			goto out;
+		}
+	}
+	err = __put_user(iobuf.length, &(((struct atm_iobuf32*)arg)->length));
+
+ out:
+        if(iobuf32.buffer && iobuf32.length > 0)
+		kfree(iobuf.buffer);
+
+	return err;
+}
+
+
+static int do_atmif_sioc(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+        struct atmif_sioc32 sioc32;
+        struct atmif_sioc   sioc = { 0, 0, NULL };
+        mm_segment_t old_fs;
+        int err;
+        
+        err = copy_from_user(&sioc32, (struct atmif_sioc32*)arg,
+			     sizeof(struct atmif_sioc32));
+        if (err)
+                return -EFAULT;
+
+        sioc.number = sioc32.number;
+        sioc.length = sioc32.length;
+        
+	if (sioc32.arg == (__kernel_caddr_t32) NULL || sioc32.length == 0) {
+		sioc.arg = (void*)(unsigned long)sioc32.arg;
+        } else {
+                sioc.arg = kmalloc(sioc.length, GFP_KERNEL);
+                if (sioc.arg == NULL) {
+                        err = -ENOMEM;
+			goto out;
+		}
+                
+                err = copy_from_user(sioc.arg, A(sioc32.arg), sioc32.length);
+                if (err) {
+                        err = -EFAULT;
+                        goto out;
+                }
+        }
+        
+        old_fs = get_fs(); set_fs (KERNEL_DS);
+        err = sys_ioctl (fd, cmd, (unsigned long)&sioc);	
+        set_fs (old_fs);
+        if(err) {
+                goto out;
+	}
+        
+        if(sioc.arg && sioc.length > 0) {
+                err = copy_to_user(A(sioc32.arg), sioc.arg, sioc.length);
+                if (err) {
+                        err = -EFAULT;
+                        goto out;
+                }
+        }
+        err = __put_user(sioc.length, &(((struct atmif_sioc32*)arg)->length));
+        
+ out:
+        if(sioc32.arg && sioc32.length > 0)
+		kfree(sioc.arg);
+        
+	return err;
+}
+
+
+static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
+{
+        int i;
+        unsigned int cmd = 0;
+        
+	switch (cmd32) {
+	case SUNI_GETLOOP:
+	case SUNI_SETLOOP:
+	case SONET_GETSTAT:
+	case SONET_GETSTATZ:
+	case SONET_GETDIAG:
+	case SONET_SETDIAG:
+	case SONET_CLRDIAG:
+	case SONET_SETFRAMING:
+	case SONET_GETFRAMING:
+	case SONET_GETFRSENSE:
+		return do_atmif_sioc(fd, cmd32, arg);
+	}
+
+	if (cmd == 0) {
+		for (i = 0; i < NR_ATM_IOCTL; i++) {
+			if (cmd32 == atm_ioctl_map[i].cmd32) {
+				cmd = atm_ioctl_map[i].cmd;
+				break;
+			}
+		}
+	        if (i == NR_ATM_IOCTL) {
+	        return -EINVAL;
+	        }
+	}
+        
+        switch (cmd) {
+	case ATM_GETNAMES:
+		return do_atm_iobuf(fd, cmd, arg);
+	    
+	case ATM_GETLINKRATE:
+        case ATM_GETTYPE:
+        case ATM_GETESI:
+        case ATM_GETADDR:
+        case ATM_RSTADDR:
+        case ATM_ADDADDR:
+        case ATM_DELADDR:
+        case ATM_GETCIRANGE:
+	case ATM_SETCIRANGE:
+	case ATM_SETESI:
+	case ATM_SETESIF:
+	case ATM_GETSTAT:
+	case ATM_GETSTATZ:
+                return do_atmif_sioc(fd, cmd, arg);
+        }
+
+        return -EINVAL;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct file * filp;
@@ -1945,6 +2170,33 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		error = do_smb_getmountuid(fd, cmd, arg);
 		goto out;
 
+	case ATM_GETLINKRATE32:
+	case ATM_GETNAMES32:
+	case ATM_GETTYPE32:
+        case ATM_GETESI32:
+	case ATM_GETADDR32:
+        case ATM_RSTADDR32:
+        case ATM_ADDADDR32:
+        case ATM_DELADDR32:
+        case ATM_GETCIRANGE32:
+        case ATM_SETCIRANGE32:
+	case ATM_SETESI32:
+	case ATM_SETESIF32:
+	case ATM_GETSTAT32:
+	case ATM_GETSTATZ32:
+	case SUNI_GETLOOP:
+	case SUNI_SETLOOP:
+	case SONET_GETSTAT:
+	case SONET_GETSTATZ:
+	case SONET_GETDIAG:
+	case SONET_SETDIAG:
+	case SONET_CLRDIAG:
+	case SONET_SETFRAMING:
+	case SONET_GETFRAMING:
+	case SONET_GETFRSENSE:
+                error = do_atm_ioctl(fd, cmd, arg);
+                goto out;
+		
 	/* List here exlicitly which ioctl's are known to have
 	 * compatable types passed or none at all...
 	 */
@@ -2062,12 +2314,16 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case BLKRRPART:
 	case BLKFLSBUF:
 	case BLKRASET:
-	
+
+#if 0	/* New RAID code is being merged, fix up to handle
+	 * new RAID ioctls when fully merged in 2.3.x -DaveM
+	 */
 	/* 0x09 */
 	case REGISTER_DEV:
 	case REGISTER_DEV_NEW:
 	case START_MD:
 	case STOP_MD:
+#endif
 	
 	/* Big K */
 	case PIO_FONT:
@@ -2454,6 +2710,23 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	/* SMB ioctls which do not need any translations */
 	case SMB_IOC_NEWCONN:
 
+	/* Little a */
+	case ATMSIGD_CTRL:
+	case ATMARPD_CTRL:
+	case ATMLEC_CTRL:
+	case ATMLEC_MCAST:
+	case ATMLEC_DATA:
+	case ATM_SETSC:
+        case SIOCSIFATMTCP:
+	case SIOCMKCLIP:
+        case ATMARP_MKIP:
+        case ATMARP_SETENTRY:
+        case ATMARP_ENCAP:
+        case ATMTCP_CREATE:
+        case ATMTCP_REMOVE:
+        case ATMMPC_CTRL:
+        case ATMMPC_DATA:
+	    
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.120 2000/01/31 01:21:22 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.121 2000/02/08 21:27:19 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -94,9 +94,9 @@ static __inline__ void tcp_event_ack_sent(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	tp->last_ack_sent = tp->rcv_nxt;
 	tcp_dec_quickack_mode(tp);
 	tp->ack.pending = 0;
+	tp->ack.rcv_segs = 0;
 	tcp_clear_xmit_timer(sk, TCP_TIME_DACK);
 }
 
@@ -363,7 +363,7 @@ int tcp_sync_mss(struct sock *sk, u32 pmtu)
 
 	/* Bound mss with half of window */
 	if (tp->max_window && mss_now > (tp->max_window>>1))
-		mss_now = max((tp->max_window>>1), 1);
+		mss_now = max((tp->max_window>>1), 68 - tp->tcp_header_len);
 
 	/* And store cached results */
 	tp->pmtu_cookie = pmtu;
@@ -509,10 +509,7 @@ u32 __tcp_select_window(struct sock *sk)
 	if (tp->window_clamp < mss)
 		mss = tp->window_clamp; 
 
-	if ((free_space < (min((int)tp->window_clamp, tcp_full_space(sk)) / 2)) && 
-		(free_space < ((int) (mss/2)))) {
-		window = 0;
-
+	if (free_space < min((int)tp->window_clamp, tcp_full_space(sk)) / 2) {
 		/* THIS IS _VERY_ GOOD PLACE to play window clamp.
 		 * if free_space becomes suspiciously low
 		 * verify ratio rmem_alloc/(rcv_nxt - copied_seq),
@@ -520,21 +517,28 @@ u32 __tcp_select_window(struct sock *sk)
 		 * rmem_alloc will run out of rcvbuf*2, shrink window_clamp.
 		 * It will eliminate most of prune events! Very simple,
 		 * it is the next thing to do.			--ANK
+		 *
+		 * Provided we found a way to raise it back...  --ANK
 		 */
-	} else {
-		/* Get the largest window that is a nice multiple of mss.
-		 * Window clamp already applied above.
-		 * If our current window offering is within 1 mss of the
-		 * free space we just keep it. This prevents the divide
-		 * and multiply from happening most of the time.
-		 * We also don't do any window rounding when the free space
-		 * is too small.
-		 */
-		window = tp->rcv_wnd;
-		if ((((int) window) <= (free_space - ((int) mss))) ||
-				(((int) window) > free_space))
-			window = (((unsigned int) free_space)/mss)*mss;
+		tp->ack.quick = 0;
+
+		if (free_space < ((int) (mss/2)))
+			return 0;
 	}
+
+	/* Get the largest window that is a nice multiple of mss.
+	 * Window clamp already applied above.
+	 * If our current window offering is within 1 mss of the
+	 * free space we just keep it. This prevents the divide
+	 * and multiply from happening most of the time.
+	 * We also don't do any window rounding when the free space
+	 * is too small.
+	 */
+	window = tp->rcv_wnd;
+	if ((((int) window) <= (free_space - ((int) mss))) ||
+	    (((int) window) > free_space))
+		window = (((unsigned int) free_space)/mss)*mss;
+
 	return window;
 }
 
@@ -1092,8 +1096,7 @@ void tcp_send_delayed_ack(struct sock *sk)
 	unsigned long timeout;
 
 	/* Stay within the limit we were given */
-	timeout = tp->ack.ato;
-	timeout += jiffies + (timeout>>2);
+	timeout = jiffies + tp->ack.ato;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
 	spin_lock_bh(&sk->timer_lock);
@@ -1151,6 +1154,7 @@ void tcp_send_ack(struct sock *sk)
 		buff = alloc_skb(MAX_TCP_HEADER + 15, GFP_ATOMIC);
 		if (buff == NULL) {
 			tp->ack.pending = 1;
+			tp->ack.ato = TCP_ATO_MAX;
 			tcp_reset_xmit_timer(sk, TCP_TIME_DACK, TCP_DELACK_MAX);
 			return;
 		}

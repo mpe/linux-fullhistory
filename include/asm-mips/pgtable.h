@@ -47,6 +47,10 @@ extern void (*flush_tlb_range)(struct mm_struct *mm, unsigned long start,
 			       unsigned long end);
 extern void (*flush_tlb_page)(struct vm_area_struct *vma, unsigned long page);
 
+extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+}
+
 /*
  * - add_wired_entry() add a fixed TLB entry, and move wired register
  */

@@ -27,7 +27,6 @@
 
 #include "lec.h"
 #include "mpc.h"
-#include "tunable.h"
 #include "resources.h"  /* for bind_vcc() */
 
 /*
@@ -326,7 +325,7 @@ static void stop_mpc(struct mpoa_client *mpc)
         return;
 }
 
-static const char *mpoa_device_type_string (char type)
+static const char * __attribute__ ((unused)) mpoa_device_type_string(char type)
 {
         switch(type) {
         case NON_MPOA:
@@ -623,7 +622,8 @@ static void mpc_vcc_close(struct atm_vcc *vcc, struct net_device *dev)
         dprintk("mpoa: (%s) mpc_vcc_close:\n", dev->name);
         in_entry = mpc->in_ops->search_by_vcc(vcc, mpc);
         if (in_entry) {
-                unsigned char *ip = (unsigned char *)&in_entry->ctrl_info.in_dst_ip;
+                unsigned char *ip __attribute__ ((unused)) =
+		    (unsigned char *)&in_entry->ctrl_info.in_dst_ip;
 	        dprintk("mpoa: (%s) mpc_vcc_close: ingress SVC closed ip = %u.%u.%u.%u\n",
                        mpc->dev->name, ip[0], ip[1], ip[2], ip[3]);
                 in_entry->shortcut = NULL;
@@ -726,21 +726,8 @@ static void mpc_push(struct atm_vcc *vcc, struct sk_buff *skb)
 }
 
 static struct atmdev_ops mpc_ops = { /* only send is required */
-        NULL,           /* dev_close   */
-        NULL,           /* open        */
-        mpoad_close,    /* close       */
-        NULL,           /* ioctl       */
-        NULL,           /* getsockopt  */
-        NULL,           /* setsockopt  */
-        msg_from_mpoad, /* send        */
-        NULL,           /* sg_send     */
-        NULL,           /* send_oam    */
-        NULL,           /* phy_put     */
-        NULL,           /* phy_get     */
-        NULL,           /* feedback    */
-        NULL,           /* change_qos  */
-        NULL,           /* free_rx_skb */
-        NULL            /* proc_read   */
+        close:	mpoad_close,
+        send:	msg_from_mpoad
 };
 
 static struct atm_dev mpc_dev = {
@@ -1074,7 +1061,7 @@ static void MPOA_trigger_rcvd(struct k_message *msg, struct mpoa_client *client)
  */
 static void check_qos_and_open_shortcut(struct k_message *msg, struct mpoa_client *client, in_cache_entry *entry){
         uint32_t dst_ip = msg->content.in_info.in_dst_ip;
-        unsigned char *ip = (unsigned char *)&dst_ip;
+        unsigned char *ip __attribute__ ((unused)) = (unsigned char *)&dst_ip;
 	struct atm_mpoa_qos *qos = atm_mpoa_search_qos(dst_ip);
 	eg_cache_entry *eg_entry = client->eg_ops->search_by_src_ip(dst_ip, client);
 	if(eg_entry && eg_entry->shortcut){

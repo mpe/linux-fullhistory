@@ -1405,7 +1405,7 @@ static int amb_ioctl (struct atm_dev * dev, unsigned int cmd, void * arg) {
     dont_panic (dev);
   } else {
     // moan
-    return -EINVAL;
+    return -ENOIOCTLCMD;
   }
 }
 #endif
@@ -1654,21 +1654,11 @@ static int amb_proc_read (struct atm_dev * atm_dev, loff_t * pos, char * page) {
 /********** Operation Structure **********/
 
 static const struct atmdev_ops amb_ops = {
-  NULL,          // no amb_dev_close
-  amb_open,
-  amb_close,
-  NULL,          // no amb_ioctl,
-  NULL,          // no amb_getsockopt,
-  NULL,          // no amb_setsockopt,
-  amb_send,
-  amb_sg_send,
-  NULL,          // no send_oam    - not in fact used yet
-  NULL,          // no amb_phy_put - not needed in this driver 
-  NULL,          // no amb_phy_get - not needed in this driver 
-  NULL,          // no feedback    - feedback to the driver!
-  NULL,          // no amb_change_qos
-  NULL,          // amb_free_rx_skb not used until checked by someone else
-  amb_proc_read
+  open:		amb_open,
+  close:	amb_close,
+  send:		amb_send,
+  sg_send:	amb_sg_send,
+  proc_read:	amb_proc_read
 };
 
 /********** housekeeping **********/

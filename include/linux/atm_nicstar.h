@@ -18,6 +18,7 @@
  * sys/types.h for struct timeval
  */
 
+#include <linux/atmapi.h>
 #include <linux/atmioc.h>
 
 #define NS_GETPSTAT	_IOWR('a',ATMIOC_SARPRV+1,struct atmif_sioc)
@@ -32,7 +33,7 @@ typedef struct buf_nr
    unsigned min;
    unsigned init;
    unsigned max;
-} buf_nr;
+}buf_nr;
 
 
 typedef struct pool_levels

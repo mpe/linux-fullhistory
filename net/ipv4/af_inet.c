@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.104 2000/01/18 08:24:14 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.106 2000/02/04 21:04:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -675,7 +675,9 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
   
 	sin->sin_family = AF_INET;
 	if (peer) {
-		if (!sk->dport) 
+		if (!sk->dport)
+			return -ENOTCONN;
+		if (((1<<sk->state)&(TCPF_CLOSE|TCPF_SYN_SENT)) && peer == 1)
 			return -ENOTCONN;
 		sin->sin_port = sk->dport;
 		sin->sin_addr.s_addr = sk->daddr;

@@ -120,9 +120,6 @@ MODULE_PARM(multicast_filter_limit, "i");
 #endif
 
 #define RUN_AT(x) (jiffies + (x))
-/* Condensed bus+endian portability operations. */
-#define virt_to_le32bus(addr)  cpu_to_le32(virt_to_bus(addr))
-#define le32bus_to_virt(addr)  bus_to_virt(le32_to_cpu(addr))
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
@@ -361,7 +358,9 @@ enum commands {
 #elif defined(__powerpc__)
 #define clear_suspend(cmd)	clear_bit(6, &(cmd)->cmd_status)
 #else
+#if 0
 # error You are probably in trouble: clear_suspend() MUST be atomic.
+#endif
 # define clear_suspend(cmd)	(cmd)->cmd_status &= cpu_to_le32(~CmdSuspend)
 #endif
 
@@ -440,11 +439,13 @@ struct speedo_stats {
 /* Do not change the position (alignment) of the first few elements!
    The later elements are grouped for cache locality. */
 struct speedo_private {
-	struct TxFD	tx_ring[TX_RING_SIZE];	/* Commands (usually CmdTxPacket). */
+	struct TxFD	*tx_ring;		/* Commands (usually CmdTxPacket). */
 	struct RxFD *rx_ringp[RX_RING_SIZE];	/* Rx descriptor, used as ring. */
 	/* The addresses of a Tx/Rx-in-place packets/buffers. */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
+	dma_addr_t	rx_ring_dma[RX_RING_SIZE];
+	dma_addr_t	tx_ring_dma;
 	struct descriptor  *last_cmd;	/* Last command sent. */
 	unsigned int cur_tx, dirty_tx;	/* The ring entries to be free()ed. */
 	spinlock_t lock;				/* Group with Tx control cache line. */
@@ -456,14 +457,16 @@ struct speedo_private {
 	struct net_device *next_module;
 	void *priv_addr;					/* Unaligned address for kfree */
 	struct enet_statistics stats;
-	struct speedo_stats lstats;
+	struct speedo_stats *lstats;
 	int chip_id;
 	unsigned char pci_bus, pci_devfn, acpi_pwr;
+	struct pci_dev *pdev;
 	struct timer_list timer;	/* Media selection timer. */
 	int mc_setup_frm_len;			 	/* The length of an allocated.. */
 	struct descriptor *mc_setup_frm; 	/* ..multicast setup frame. */
 	int mc_setup_busy;					/* Avoid double-use of setup frame. */
-	int in_interrupt;					/* Word-aligned dev->interrupt */
+	dma_addr_t mc_setup_dma;
+	unsigned long in_interrupt;			/* Word-aligned dev->interrupt */
 	char rx_mode;						/* Current PROMISC/ALLMULTI setting. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
@@ -542,7 +545,6 @@ int eepro100_init(void)
 
 	for (; pci_index < 8; pci_index++) {
 		unsigned char pci_bus, pci_device_fn, pci_latency;
-		u32 pciaddr;
 		long ioaddr;
 		int irq;
 
@@ -557,14 +559,15 @@ int eepro100_init(void)
 		{
 			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
 #ifdef USE_IO
-			pciaddr = pdev->resource[1].start;
+			ioaddr = pdev->resource[1].start;
 #else
-			pciaddr = pdev->resource[0].start;
+			ioaddr = pdev->resource[0].start;
 #endif
 			irq = pdev->irq;
 		}
 #else
 		{
+			u32 pciaddr;
 			u8 pci_irq_line;
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
@@ -577,19 +580,23 @@ int eepro100_init(void)
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pciaddr);
 #endif
+			ioaddr = pciaddr;
 			irq = pci_irq_line;
 		}
 #endif
 		/* Remove I/O space marker in bit 0. */
 #ifdef USE_IO
-		ioaddr = pciaddr;
 		if (check_region(ioaddr, 32))
 			continue;
 #else
-		if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
-			printk(KERN_INFO "Failed to map PCI address %#x.\n",
-				   pciaddr);
-			continue;
+		{
+			unsigned long orig_ioaddr = ioaddr;
+
+			if ((ioaddr = (long)ioremap(ioaddr & ~0xfUL, 0x1000)) == 0) {
+				printk(KERN_INFO "Failed to map PCI address %#lx.\n",
+					   orig_ioaddr);
+				continue;
+			}
 		}
 #endif
 		if (speedo_debug > 2)
@@ -630,6 +637,9 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 {
 	struct net_device *dev;
 	struct speedo_private *sp;
+	struct pci_dev *pdev;
+	unsigned char *tx_ring;
+	dma_addr_t tx_ring_dma;
 	const char *product;
 	int i, option;
 	u16 eeprom[0x100];
@@ -640,7 +650,22 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 		printk(version);
 #endif
 
+	pdev = pci_find_slot(pci_bus, pci_devfn);
+
+	tx_ring = pci_alloc_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
+					     + sizeof(struct speedo_stats), &tx_ring_dma);
+	if (!tx_ring) {
+		printk(KERN_ERR "Could not allocate DMA memory.\n");
+		return NULL;
+	}
+
 	dev = init_etherdev(NULL, sizeof(struct speedo_private));
+	if (dev == NULL) {
+		pci_free_consistent(pdev, TX_RING_SIZE * sizeof(struct TxFD)
+					  + sizeof(struct speedo_stats),
+				    tx_ring, tx_ring_dma);
+		return NULL;
+	}
 
 	if (dev->mem_start > 0)
 		option = dev->mem_start;
@@ -712,7 +737,7 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 	{
 		const char *connectors[] = {" RJ45", " BNC", " AUI", " MII"};
 		/* The self-test results must be paragraph aligned. */
-		s32 str[6], *volatile self_test_results;
+		volatile s32 *self_test_results = (volatile s32 *)tx_ring;
 		int boguscnt = 16000;	/* Timeout for set-test. */
 		if (eeprom[3] & 0x03)
 			printk(KERN_INFO "  Receiver lock-up bug exists -- enabling"
@@ -746,11 +771,10 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 					   ((option & 0x10) ? 0x0100 : 0)); /* Full duplex? */
 		}
 
-		/* Perform a system self-test. */
-		self_test_results = (s32*) ((((long) str) + 15) & ~0xf);
+		/* Perform a system self-test. Use the tx_ring consistent DMA mapping for it. */
 		self_test_results[0] = 0;
 		self_test_results[1] = -1;
-		outl(virt_to_bus(self_test_results) | PortSelfTest, ioaddr + SCBPort);
+		outl(tx_ring_dma | PortSelfTest, ioaddr + SCBPort);
 		do {
 			udelay(10);
 		} while (self_test_results[1] == -1  &&  --boguscnt >= 0);
@@ -798,9 +822,13 @@ static struct net_device *speedo_found1(int pci_bus, int pci_devfn,
 
 	sp->pci_bus = pci_bus;
 	sp->pci_devfn = pci_devfn;
+	sp->pdev = pdev;
 	sp->chip_id = chip_idx;
 	sp->acpi_pwr = acpi_idle_state;
-
+	sp->tx_ring = (struct TxFD *)tx_ring;
+	sp->tx_ring_dma = tx_ring_dma;
+	sp->lstats = (struct speedo_stats *)(sp->tx_ring + TX_RING_SIZE);
+	
 	sp->full_duplex = option >= 0 && (option & 0x10) ? 1 : 0;
 	if (card_idx >= 0) {
 		if (full_duplex[card_idx] >= 0)
@@ -913,7 +941,7 @@ speedo_open(struct net_device *dev)
 	sp->dirty_tx = 0;
 	sp->last_cmd = 0;
 	sp->tx_full = 0;
-	sp->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&sp->lock);
 	sp->in_interrupt = 0;
 
 	/* .. we can safely take handler calls during init. */
@@ -1003,12 +1031,12 @@ static void speedo_resume(struct net_device *dev)
 	wait_for_cmd_done(ioaddr + SCBCmd);
 
 	/* Load the statistics block and rx ring addresses. */
-	outl(virt_to_bus(&sp->lstats), ioaddr + SCBPointer);
+	outl(sp->tx_ring_dma + sizeof(struct TxFD) * TX_RING_SIZE, ioaddr + SCBPointer);
 	outb(CUStatsAddr, ioaddr + SCBCmd);
-	sp->lstats.done_marker = 0;
+	sp->lstats->done_marker = 0;
 	wait_for_cmd_done(ioaddr + SCBCmd);
 
-	outl(virt_to_bus(sp->rx_ringp[sp->cur_rx % RX_RING_SIZE]),
+	outl(sp->rx_ring_dma[sp->cur_rx % RX_RING_SIZE],
 		 ioaddr + SCBPointer);
 	outb(RxStart, ioaddr + SCBCmd);
 	wait_for_cmd_done(ioaddr + SCBCmd);
@@ -1023,7 +1051,8 @@ static void speedo_resume(struct net_device *dev)
 		/* Avoid a bug(?!) here by marking the command already completed. */
 		cur_cmd->cmd_status = cpu_to_le32((CmdSuspend | CmdIASetup) | 0xa000);
 		cur_cmd->link =
-			virt_to_le32bus(&sp->tx_ring[sp->cur_tx % TX_RING_SIZE]);
+			cpu_to_le32(sp->tx_ring_dma + (sp->cur_tx % TX_RING_SIZE)
+						      * sizeof(struct TxFD));
 		memcpy(cur_cmd->params, dev->dev_addr, 6);
 		if (sp->last_cmd)
 			clear_suspend(sp->last_cmd);
@@ -1032,7 +1061,8 @@ static void speedo_resume(struct net_device *dev)
 
 	/* Start the chip's Tx process and unmask interrupts. */
 	wait_for_cmd_done(ioaddr + SCBCmd);
-	outl(virt_to_bus(&sp->tx_ring[sp->dirty_tx % TX_RING_SIZE]),
+	outl(sp->tx_ring_dma
+	     + (sp->dirty_tx % TX_RING_SIZE) * sizeof(struct TxFD),
 		 ioaddr + SCBPointer);
 	outw(CUStart, ioaddr + SCBCmd);
 }
@@ -1139,18 +1169,16 @@ speedo_init_rx_ring(struct net_device *dev)
 		skb->dev = dev;			/* Mark as being used by this device. */
 		rxf = (struct RxFD *)skb->tail;
 		sp->rx_ringp[i] = rxf;
+		sp->rx_ring_dma[i] =
+			pci_map_single(sp->pdev, rxf, PKT_BUF_SZ + sizeof(struct RxFD));
 		skb_reserve(skb, sizeof(struct RxFD));
 		if (last_rxf)
-			last_rxf->link = virt_to_le32bus(rxf);
+			last_rxf->link = cpu_to_le32(sp->rx_ring_dma[i]);
 		last_rxf = rxf;
 		rxf->status = cpu_to_le32(0x00000001);	/* '1' is flag value only. */
 		rxf->link = 0;						/* None yet. */
-		/* This field unused by i82557, we use it as a consistency check. */
-#ifdef final_version
+		/* This field unused by i82557. */
 		rxf->rx_buf_addr = 0xffffffff;
-#else
-		rxf->rx_buf_addr = virt_to_bus(skb->tail);
-#endif
 		rxf->count = cpu_to_le32(PKT_BUF_SZ << 16);
 	}
 	sp->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
@@ -1179,7 +1207,8 @@ static void speedo_tx_timeout(struct net_device *dev)
 		/* Only the command unit has stopped. */
 		printk(KERN_WARNING "%s: Trying to restart the transmitter...\n",
 			   dev->name);
-		outl(virt_to_bus(&sp->tx_ring[sp->dirty_tx % TX_RING_SIZE]),
+		outl(sp->tx_ring_dma
+		     + (sp->dirty_tx % TX_RING_SIZE) * sizeof(struct TxFD),
 			 ioaddr + SCBPointer);
 		outw(CUStart, ioaddr + SCBCmd);
 	} else {
@@ -1244,12 +1273,18 @@ speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		sp->tx_ring[entry].status =
 			cpu_to_le32(CmdSuspend | CmdTx | CmdTxFlex);
 		sp->tx_ring[entry].link =
-			virt_to_le32bus(&sp->tx_ring[sp->cur_tx % TX_RING_SIZE]);
+			cpu_to_le32(sp->tx_ring_dma
+				    + (sp->cur_tx % TX_RING_SIZE)
+				    * sizeof(struct TxFD));
 		sp->tx_ring[entry].tx_desc_addr =
-			virt_to_le32bus(&sp->tx_ring[entry].tx_buf_addr0);
+			cpu_to_le32(sp->tx_ring_dma
+				    + ((long)&sp->tx_ring[entry].tx_buf_addr0
+				       - (long)sp->tx_ring));
 		/* The data region is always in one buffer descriptor. */
 		sp->tx_ring[entry].count = cpu_to_le32(sp->tx_threshold);
-		sp->tx_ring[entry].tx_buf_addr0 = virt_to_le32bus(skb->data);
+		sp->tx_ring[entry].tx_buf_addr0 =
+			cpu_to_le32(pci_map_single(sp->pdev, skb->data,
+						   skb->len));
 		sp->tx_ring[entry].tx_buf_size0 = cpu_to_le32(skb->len);
 		/* Todo: perhaps leave the interrupt bit set if the Tx queue is more
 		   than half full.  Argument against: we should be receiving packets
@@ -1323,7 +1358,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				outw(RxResumeNoResources, ioaddr + SCBCmd);
 			else if ((status & 0x003c) == 0x0008) { /* No resources (why?!) */
 				/* No idea of what went wrong.  Restart the receiver. */
-				outl(virt_to_bus(sp->rx_ringp[sp->cur_rx % RX_RING_SIZE]),
+				outl(sp->rx_ring_dma[sp->cur_rx % RX_RING_SIZE],
 					 ioaddr + SCBPointer);
 				outw(RxStart, ioaddr + SCBCmd);
 			}
@@ -1354,10 +1389,18 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #if LINUX_VERSION_CODE > 0x20127
 					sp->stats.tx_bytes += sp->tx_skbuff[entry]->len;
 #endif
+					pci_unmap_single(sp->pdev,
+							 le32_to_cpu(sp->tx_ring[entry].tx_buf_addr0),
+							 sp->tx_skbuff[entry]->len);
 					dev_free_skb(sp->tx_skbuff[entry]);
 					sp->tx_skbuff[entry] = 0;
-				} else if ((status & 0x70000) == CmdNOp)
+				} else if ((status & 0x70000) == CmdNOp) {
+					if (sp->mc_setup_busy)
+						pci_unmap_single(sp->pdev,
+								 sp->mc_setup_dma,
+								 sp->mc_setup_frm_len);
 					sp->mc_setup_busy = 0;
+				}
 				dirty_tx++;
 			}
 
@@ -1440,6 +1483,8 @@ speedo_rx(struct net_device *dev)
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
+				pci_dma_sync_single(sp->pdev, sp->rx_ring_dma[entry],
+						    PKT_BUF_SZ + sizeof(struct RxFD));
 #if 1 || USE_IP_CSUM
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_copy_and_sum(skb, sp->rx_skbuff[entry]->tail, pkt_len, 0);
@@ -1459,15 +1504,9 @@ speedo_rx(struct net_device *dev)
 				}
 				sp->rx_skbuff[entry] = NULL;
 				temp = skb_put(skb, pkt_len);
-#if !defined(final_version) && !defined(__powerpc__)
-				if (bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr) != temp)
-					printk(KERN_ERR "%s: Rx consistency error -- the skbuff "
-						   "addresses do not match in speedo_rx: %p vs. %p "
-						   "/ %p.\n", dev->name,
-						   bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr),
-						   skb->head, temp);
-#endif
 				sp->rx_ringp[entry] = NULL;
+				pci_unmap_single(sp->pdev, sp->rx_ring_dma[entry],
+						 PKT_BUF_SZ + sizeof(struct RxFD));
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
@@ -1493,16 +1532,19 @@ speedo_rx(struct net_device *dev)
 				break;			/* Better luck next time!  */
 			}
 			rxf = sp->rx_ringp[entry] = (struct RxFD *)skb->tail;
+			sp->rx_ring_dma[entry] =
+				pci_map_single(sp->pdev, rxf, PKT_BUF_SZ
+					       + sizeof(struct RxFD));
 			skb->dev = dev;
 			skb_reserve(skb, sizeof(struct RxFD));
-			rxf->rx_buf_addr = virt_to_bus(skb->tail);
+			rxf->rx_buf_addr = 0xffffffff;
 		} else {
 			rxf = sp->rx_ringp[entry];
 		}
 		rxf->status = cpu_to_le32(0xC0000001); 	/* '1' for driver use only. */
 		rxf->link = 0;			/* None yet. */
 		rxf->count = cpu_to_le32(PKT_BUF_SZ << 16);
-		sp->last_rxf->link = virt_to_le32bus(rxf);
+		sp->last_rxf->link = cpu_to_le32(sp->rx_ring_dma[entry]);
 		sp->last_rxf->status &= cpu_to_le32(~0xC0000000);
 		sp->last_rxf = rxf;
 	}
@@ -1540,6 +1582,9 @@ speedo_close(struct net_device *dev)
 		sp->rx_skbuff[i] = 0;
 		/* Clear the Rx descriptors. */
 		if (skb) {
+			pci_unmap_single(sp->pdev,
+					 sp->rx_ring_dma[i],
+					 PKT_BUF_SZ + sizeof(struct RxFD));
 #if LINUX_VERSION_CODE < 0x20100
 			skb->free = 1;
 #endif
@@ -1550,9 +1595,14 @@ speedo_close(struct net_device *dev)
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		struct sk_buff *skb = sp->tx_skbuff[i];
 		sp->tx_skbuff[i] = 0;
+
 		/* Clear the Tx descriptors. */
-		if (skb)
+		if (skb) {
+			pci_unmap_single(sp->pdev,
+							 le32_to_cpu(sp->tx_ring[i].tx_buf_addr0),
+							 skb->len);
 			dev_free_skb(skb);
+		}
 	}
 	if (sp->mc_setup_frm) {
 		kfree(sp->mc_setup_frm);
@@ -1591,19 +1641,19 @@ speedo_get_stats(struct net_device *dev)
 	long ioaddr = dev->base_addr;
 
 	/* Update only if the previous dump finished. */
-	if (sp->lstats.done_marker == le32_to_cpu(0xA007)) {
-		sp->stats.tx_aborted_errors += le32_to_cpu(sp->lstats.tx_coll16_errs);
-		sp->stats.tx_window_errors += le32_to_cpu(sp->lstats.tx_late_colls);
-		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats.tx_underruns);
-		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats.tx_lost_carrier);
-		/*sp->stats.tx_deferred += le32_to_cpu(sp->lstats.tx_deferred);*/
-		sp->stats.collisions += le32_to_cpu(sp->lstats.tx_total_colls);
-		sp->stats.rx_crc_errors += le32_to_cpu(sp->lstats.rx_crc_errs);
-		sp->stats.rx_frame_errors += le32_to_cpu(sp->lstats.rx_align_errs);
-		sp->stats.rx_over_errors += le32_to_cpu(sp->lstats.rx_resource_errs);
-		sp->stats.rx_fifo_errors += le32_to_cpu(sp->lstats.rx_overrun_errs);
-		sp->stats.rx_length_errors += le32_to_cpu(sp->lstats.rx_runt_errs);
-		sp->lstats.done_marker = 0x0000;
+	if (sp->lstats->done_marker == le32_to_cpu(0xA007)) {
+		sp->stats.tx_aborted_errors += le32_to_cpu(sp->lstats->tx_coll16_errs);
+		sp->stats.tx_window_errors += le32_to_cpu(sp->lstats->tx_late_colls);
+		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats->tx_underruns);
+		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats->tx_lost_carrier);
+		/*sp->stats.tx_deferred += le32_to_cpu(sp->lstats->tx_deferred);*/
+		sp->stats.collisions += le32_to_cpu(sp->lstats->tx_total_colls);
+		sp->stats.rx_crc_errors += le32_to_cpu(sp->lstats->rx_crc_errs);
+		sp->stats.rx_frame_errors += le32_to_cpu(sp->lstats->rx_align_errs);
+		sp->stats.rx_over_errors += le32_to_cpu(sp->lstats->rx_resource_errs);
+		sp->stats.rx_fifo_errors += le32_to_cpu(sp->lstats->rx_overrun_errs);
+		sp->stats.rx_length_errors += le32_to_cpu(sp->lstats->rx_runt_errs);
+		sp->lstats->done_marker = 0x0000;
 		if (dev->start) {
 			wait_for_cmd_done(ioaddr + SCBCmd);
 			outw(CUDumpStats, ioaddr + SCBCmd);
@@ -1694,7 +1744,8 @@ static void set_rx_mode(struct net_device *dev)
 		sp->tx_skbuff[entry] = 0;			/* Redundant. */
 		sp->tx_ring[entry].status = cpu_to_le32(CmdSuspend | CmdConfigure);
 		sp->tx_ring[entry].link =
-			virt_to_le32bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]);
+			cpu_to_le32(sp->tx_ring_dma + ((entry + 1) % TX_RING_SIZE)
+				    * sizeof(struct TxFD));
 		config_cmd_data = (void *)&sp->tx_ring[entry].tx_desc_addr;
 		/* Construct a full CmdConfig frame. */
 		memcpy(config_cmd_data, i82558_config_cmd, sizeof(i82558_config_cmd));
@@ -1730,7 +1781,8 @@ static void set_rx_mode(struct net_device *dev)
 		sp->tx_skbuff[entry] = 0;
 		sp->tx_ring[entry].status = cpu_to_le32(CmdSuspend | CmdMulticastList);
 		sp->tx_ring[entry].link =
-			virt_to_le32bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]);
+			cpu_to_le32(sp->tx_ring_dma + ((entry + 1) % TX_RING_SIZE)
+				    * sizeof(struct TxFD));
 		sp->tx_ring[entry].tx_desc_addr = 0; /* Really MC list count. */
 		setup_params = (u16 *)&sp->tx_ring[entry].tx_desc_addr;
 		*setup_params++ = cpu_to_le16(dev->mc_count*6);
@@ -1754,12 +1806,17 @@ static void set_rx_mode(struct net_device *dev)
 		struct descriptor *mc_setup_frm = sp->mc_setup_frm;
 		int i;
 
+		/* If we are busy, someone might be quickly adding to the MC list.
+		   Try again later when the list updates stop. */
+		if (sp->mc_setup_busy) {
+			sp->rx_mode = -1;
+			return;
+		}
 		if (sp->mc_setup_frm_len < 10 + dev->mc_count*6
 			|| sp->mc_setup_frm == NULL) {
 			/* Allocate a full setup frame, 10bytes + <max addrs>. */
 			if (sp->mc_setup_frm)
 				kfree(sp->mc_setup_frm);
-			sp->mc_setup_busy = 0;
 			sp->mc_setup_frm_len = 10 + multicast_filter_limit*6;
 			sp->mc_setup_frm = kmalloc(sp->mc_setup_frm_len, GFP_ATOMIC);
 			if (sp->mc_setup_frm == NULL) {
@@ -1768,12 +1825,6 @@ static void set_rx_mode(struct net_device *dev)
 				sp->rx_mode = -1; /* We failed, try again. */
 				return;
 			}
-		}
-		/* If we are busy, someone might be quickly adding to the MC list.
-		   Try again later when the list updates stop. */
-		if (sp->mc_setup_busy) {
-			sp->rx_mode = -1;
-			return;
 		}
 		mc_setup_frm = sp->mc_setup_frm;
 		/* Fill the setup frame. */
@@ -1800,16 +1851,18 @@ static void set_rx_mode(struct net_device *dev)
 		entry = sp->cur_tx++ % TX_RING_SIZE;
 		last_cmd = sp->last_cmd;
 		sp->last_cmd = mc_setup_frm;
-		sp->mc_setup_busy++;
+		sp->mc_setup_busy = 1;
 
 		/* Change the command to a NoOp, pointing to the CmdMulti command. */
 		sp->tx_skbuff[entry] = 0;
 		sp->tx_ring[entry].status = cpu_to_le32(CmdNOp);
-		sp->tx_ring[entry].link = virt_to_le32bus(mc_setup_frm);
+		sp->mc_setup_dma = pci_map_single(sp->pdev, mc_setup_frm, sp->mc_setup_frm_len);
+		sp->tx_ring[entry].link = cpu_to_le32(sp->mc_setup_dma);
 
 		/* Set the link in the setup frame. */
 		mc_setup_frm->link =
-			virt_to_le32bus(&(sp->tx_ring[(entry+1) % TX_RING_SIZE]));
+			cpu_to_le32(sp->tx_ring_dma + ((entry + 1) % TX_RING_SIZE)
+				    * sizeof(struct TxFD));
 
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		clear_suspend(last_cmd);

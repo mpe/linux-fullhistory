@@ -1,6 +1,6 @@
 /* net/atm/atmarp.h - RFC1577 ATM ARP */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
  
  
 #ifndef _ATMCLIP_H
@@ -26,7 +26,9 @@ struct clip_vcc {
 	unsigned long	last_use;	/* last send or receive operation */
 	unsigned long	idle_timeout;	/* keep open idle for so many jiffies*/
 	void (*old_push)(struct atm_vcc *vcc,struct sk_buff *skb);
-					/* keep old push fn for detaching */
+					/* keep old push fn for chaining */
+	void (*old_pop)(struct atm_vcc *vcc,struct sk_buff *skb);
+					/* keep old pop fn for chaining */
 	struct clip_vcc	*next;		/* next VCC */
 };
 

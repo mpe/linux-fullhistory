@@ -48,6 +48,12 @@ extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 #define flush_tlb_page local_flush_tlb_page
 #define flush_tlb_range local_flush_tlb_range
 
+extern inline void flush_tlb_pgtables(struct mm_struct *mm,
+				unsigned long start, unsigned long end)
+{
+	/* PPC has hw page tables. */
+}
+
 /*
  * No cache flushing is required when address mappings are
  * changed, because the caches on PowerPCs are physically

@@ -429,6 +429,8 @@ struct s_AC  {
 
 	
 	caddr_t		pDescrMem;	/* Pointer to the descriptor area */
+	dma_addr_t	pDescrMemDMA;	/* PCI DMA address of area */
+
 	/* the port structures with descriptor rings */
 	TX_PORT		TxPort[SK_MAX_MACS][2];
 	RX_PORT		RxPort[SK_MAX_MACS];

@@ -609,8 +609,10 @@ static void free_pgtables(struct mm_struct * mm, struct vm_area_struct *prev,
 no_mmaps:
 	first = first >> PGDIR_SHIFT;
 	last = last >> PGDIR_SHIFT;
-	if (last > first)
+	if (last > first) {
 		clear_page_tables(mm, first, last-first);
+		flush_tlb_pgtables(mm, first << PGDIR_SHIFT, last << PGDIR_SHIFT);
+	}
 }
 
 /* Munmap is split into 2 main parts -- this part which finds

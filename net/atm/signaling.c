@@ -1,6 +1,6 @@
 /* net/atm/signaling.c - ATM signaling */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/errno.h>	/* error codes */
@@ -13,7 +13,6 @@
 #include <linux/atmsvc.h>
 #include <linux/atmdev.h>
 
-#include "tunable.h"
 #include "resources.h"
 #include "signaling.h"
 
@@ -92,8 +91,9 @@ static int sigd_send(struct atm_vcc *vcc,struct sk_buff *skb)
 
 	msg = (struct atmsvc_msg *) skb->data;
 	atomic_sub(skb->truesize+ATM_PDU_OVHD,&vcc->tx_inuse);
-	DPRINTK("sigd_send %d (0x%lx)\n",(int) msg->type,msg->vcc);
-	vcc = (struct atm_vcc *) msg->vcc;
+	DPRINTK("sigd_send %d (0x%lx)\n",(int) msg->type,
+	  (unsigned long) msg->vcc);
+	vcc = *(struct atm_vcc **) &msg->vcc;
 	switch (msg->type) {
 		case as_okay:
 			vcc->reply = msg->reply;
@@ -118,7 +118,7 @@ static int sigd_send(struct atm_vcc *vcc,struct sk_buff *skb)
 			vcc->reply = msg->reply;
 			break;
 		case as_indicate:
-			vcc = (struct atm_vcc *) msg->listen_vcc;
+			vcc = *(struct atm_vcc **) &msg->listen_vcc;
 			DPRINTK("as_indicate!!!\n");
 			if (!vcc->backlog_quota) {
 				sigd_enq(0,as_reject,vcc,NULL,NULL);
@@ -152,7 +152,7 @@ static int sigd_send(struct atm_vcc *vcc,struct sk_buff *skb)
 
 
 void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
-    const struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
+    struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
     const struct sockaddr_atmsvc *svc)
 {
 	struct sk_buff *skb;
@@ -162,9 +162,10 @@ void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
 	while (!(skb = alloc_skb(sizeof(struct atmsvc_msg),GFP_KERNEL)))
 		schedule();
 	msg = (struct atmsvc_msg *) skb_put(skb,sizeof(struct atmsvc_msg));
+	memset(msg,0,sizeof(*msg));
 	msg->type = type;
-	msg->vcc = (unsigned long) vcc;
-	msg->listen_vcc = (unsigned long) listen_vcc;
+	*(struct atm_vcc **) &msg->vcc = vcc;
+	*(struct atm_vcc **) &msg->listen_vcc = listen_vcc;
 	msg->reply = 0; /* other ISP applications may use this field */
 	if (vcc) {
 		msg->qos = vcc->qos;
@@ -210,20 +211,8 @@ static void sigd_close(struct atm_vcc *vcc)
 
 
 static struct atmdev_ops sigd_dev_ops = {
-	NULL,		/* no dev_close */
-	NULL,		/* no open */
-	sigd_close,	/* close */
-	NULL,		/* no ioctl */
-	NULL,		/* no getsockopt */
-	NULL,		/* no setsockopt */
-	sigd_send,	/* send */
-	NULL,		/* no sg_send */
-	NULL,		/* no send_oam */
-	NULL,		/* no phy_put */
-	NULL,		/* no phy_get */
-	NULL,		/* no feedback */
-	NULL,		/* no change_qos */
-	NULL		/* no free_rx_skb */
+	close:	sigd_close,
+	send:	sigd_send
 };
 
 

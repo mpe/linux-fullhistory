@@ -212,11 +212,12 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device *starfire_probe1(int pci_bus, int pci_devfn, long ioaddr,
-									  int irq, int chp_idx, int fnd_cnt);
+static struct net_device *starfire_probe1(struct pci_dev *pdev, int pci_bus,
+										  int pci_devfn, long ioaddr,
+										  int irq, int chp_idx, int fnd_cnt);
 
 #if 0
 #define ADDR_64BITS 1			/* This chip uses 64 bit addresses. */
@@ -322,25 +323,35 @@ struct tx_done_report {
 #endif
 };
 
+struct ring_info {
+	struct sk_buff *skb;
+	dma_addr_t mapping;
+};
+
 struct netdev_private {
 	/* Descriptor rings first for alignment. */
 	struct starfire_rx_desc *rx_ring;
 	struct starfire_tx_desc *tx_ring;
+	dma_addr_t rx_ring_dma;
+	dma_addr_t tx_ring_dma;
 	struct net_device *next_module;			/* Link for devices of this type. */
 	const char *product_name;
 	/* The addresses of rx/tx-in-place skbuffs. */
-	struct sk_buff* rx_skbuff[RX_RING_SIZE];
-	struct sk_buff* tx_skbuff[TX_RING_SIZE];
+	struct ring_info rx_info[RX_RING_SIZE];
+	struct ring_info tx_info[TX_RING_SIZE];
 	/* Pointers to completion queues (full pages).  I should cache line pad..*/
 	u8 pad0[100];
 	struct rx_done_desc *rx_done_q;
+	dma_addr_t rx_done_q_dma;
 	unsigned int rx_done;
 	struct tx_done_report *tx_done_q;
 	unsigned int tx_done;
+	dma_addr_t tx_done_q_dma;
 	struct net_device_stats stats;
 	struct timer_list timer;	/* Media monitoring timer. */
 	/* Frequently used values: keep some adjacent for cache effect. */
 	int chip_id;
+	struct pci_dev *pdev;
 	unsigned char pci_bus, pci_devfn;
 	unsigned int cur_rx, dirty_rx;		/* Producer/consumer ring indices */
 	unsigned int cur_tx, dirty_tx;
@@ -400,6 +411,7 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 		return -ENODEV;
 
 	for (;pci_index < 0xff; pci_index++) {
+		struct pci_dev *pdev;
 		u16 vendor, device, pci_command, new_command;
 		int chip_idx, irq;
 		long pciaddr;
@@ -422,9 +434,9 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 		if (pci_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
 			continue;
 
-		{
-			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
+		pdev = pci_find_slot(pci_bus, pci_device_fn);
 
+		{
 			pciaddr = pdev->resource[0].start;
 #if defined(ADDR_64BITS) && defined(__alpha__)
 			pciaddr |= ((long)pdev->base_address[1]) << 32;
@@ -457,7 +469,7 @@ static int pci_etherdev_probe(struct pci_id_info pci_tbl[])
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, ioaddr,
+		dev = pci_tbl[chip_idx].probe1(pdev, pci_bus, pci_device_fn, ioaddr,
 									   irq, chip_idx, cards_found);
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
@@ -488,7 +500,7 @@ int starfire_probe(void)
 
 
 static struct net_device *
-starfire_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, int card_idx)
+starfire_probe1(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, int card_idx)
 {
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
@@ -525,6 +537,7 @@ starfire_probe1(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_id, i
 	np->next_module = root_net_dev;
 	root_net_dev = dev;
 
+	np->pdev = pdev;
 	np->pci_bus = pci_bus;
 	np->pci_devfn = pci_devfn;
 	np->chip_id = chip_id;
@@ -617,16 +630,29 @@ static int netdev_open(struct net_device *dev)
 			   dev->name, dev->irq);
 	/* Allocate the various queues, failing gracefully. */
 	if (np->tx_done_q == 0)
-		np->tx_done_q = (struct tx_done_report *)get_free_page(GFP_KERNEL);
+		np->tx_done_q = pci_alloc_consistent(np->pdev, PAGE_SIZE, &np->tx_done_q_dma);
 	if (np->rx_done_q == 0)
-		np->rx_done_q = (struct rx_done_desc *)get_free_page(GFP_KERNEL);
+		np->rx_done_q = pci_alloc_consistent(np->pdev, PAGE_SIZE, &np->rx_done_q_dma);
 	if (np->tx_ring == 0)
-		np->tx_ring = (struct starfire_tx_desc *)get_free_page(GFP_KERNEL);
+		np->tx_ring = pci_alloc_consistent(np->pdev, PAGE_SIZE, &np->tx_ring_dma);
 	if (np->rx_ring == 0)
-		np->rx_ring = (struct starfire_rx_desc *)get_free_page(GFP_KERNEL);
+		np->rx_ring = pci_alloc_consistent(np->pdev, PAGE_SIZE, &np->rx_ring_dma);
 	if (np->tx_done_q == 0  ||  np->rx_done_q == 0
-		|| np->rx_ring == 0 ||  np->tx_ring == 0)
+		|| np->rx_ring == 0 ||  np->tx_ring == 0) {
+		if (np->tx_done_q)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->tx_done_q, np->tx_done_q_dma);
+		if (np->rx_done_q)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->rx_done_q, np->rx_done_q_dma);
+		if (np->tx_ring)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->tx_ring, np->tx_ring_dma);
+		if (np->rx_ring)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->rx_ring, np->rx_ring_dma);
 		return -ENOMEM;
+	}
 
 	MOD_INC_USE_COUNT;
 
@@ -638,18 +664,19 @@ static int netdev_open(struct net_device *dev)
 	writel(0x02000401, ioaddr + TxDescCtrl);
 
 #if defined(ADDR_64BITS) && defined(__alpha__)
-	writel(virt_to_bus(np->rx_ring) >> 32, ioaddr + RxDescQHiAddr);
-	writel(virt_to_bus(np->tx_ring) >> 32, ioaddr + TxRingHiAddr);
+	/* XXX We really need a 64-bit PCI dma interfaces too... -DaveM */
+	writel(np->rx_ring_dma >> 32, ioaddr + RxDescQHiAddr);
+	writel(np->tx_ring_dma >> 32, ioaddr + TxRingHiAddr);
 #else
 	writel(0, ioaddr + RxDescQHiAddr);
 	writel(0, ioaddr + TxRingHiAddr);
 	writel(0, ioaddr + CompletionHiAddr);
 #endif
-	writel(virt_to_bus(np->rx_ring), ioaddr + RxDescQAddr);
-	writel(virt_to_bus(np->tx_ring), ioaddr + TxRingPtr);
+	writel(np->rx_ring_dma, ioaddr + RxDescQAddr);
+	writel(np->tx_ring_dma, ioaddr + TxRingPtr);
 
-	writel(virt_to_bus(np->tx_done_q), ioaddr + TxCompletionAddr);
-	writel(virt_to_bus(np->rx_done_q), ioaddr + RxCompletionAddr);
+	writel(np->tx_done_q_dma, ioaddr + TxCompletionAddr);
+	writel(np->rx_done_q_dma, ioaddr + RxCompletionAddr);
 
 	if (debug > 1)
 		printk(KERN_DEBUG "%s:  Filling in the station address.\n", dev->name);
@@ -815,12 +842,13 @@ static void init_ring(struct net_device *dev)
 	/* Fill in the Rx buffers.  Handle allocation failure gracefully. */
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		struct sk_buff *skb = dev_alloc_skb(np->rx_buf_sz);
-		np->rx_skbuff[i] = skb;
+		np->rx_info[i].skb = skb;
 		if (skb == NULL)
 			break;
+		np->rx_info[i].mapping = pci_map_single(np->pdev, skb->tail, np->rx_buf_sz);
 		skb->dev = dev;			/* Mark as being used by this device. */
 		/* Grrr, we cannot offset to correctly align the IP header. */
-		np->rx_ring[i].rxaddr = cpu_to_le32(virt_to_bus(skb->tail) | RxDescValid);
+		np->rx_ring[i].rxaddr = cpu_to_le32(np->rx_info[i].mapping | RxDescValid);
 	}
 	writew(i-1, dev->base_addr + RxDescQIdx);
 	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
@@ -828,7 +856,8 @@ static void init_ring(struct net_device *dev)
 	/* Clear the remainder of the Rx buffer ring. */
 	for (  ; i < RX_RING_SIZE; i++) {
 		np->rx_ring[i].rxaddr = 0;
-		np->rx_skbuff[i] = 0;
+		np->rx_info[i].skb = NULL;
+		np->rx_info[i].mapping = 0;
 	}
 	/* Mark the last entry as wrapping the ring. */
 	np->rx_ring[i-1].rxaddr |= cpu_to_le32(RxDescEndRing);
@@ -840,7 +869,8 @@ static void init_ring(struct net_device *dev)
 	}
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
-		np->tx_skbuff[i] = 0;
+		np->tx_info[i].skb = NULL;
+		np->tx_info[i].mapping = 0;
 		np->tx_ring[i].status = 0;
 	}
 	return;
@@ -866,9 +896,11 @@ static int start_tx(struct sk_buff *skb, struct net_device *dev)
 	/* Calculate the next Tx descriptor entry. */
 	entry = np->cur_tx % TX_RING_SIZE;
 
-	np->tx_skbuff[entry] = skb;
+	np->tx_info[entry].skb = skb;
+	np->tx_info[entry].mapping =
+		pci_map_single(np->pdev, skb->data, skb->len);
 
-	np->tx_ring[entry].addr = cpu_to_le32(virt_to_bus(skb->data));
+	np->tx_ring[entry].addr = cpu_to_le32(np->tx_info[entry].mapping);
 	/* Add  |TxDescIntr to generate Tx-done interrupts. */
 	np->tx_ring[entry].status = cpu_to_le32(skb->len | TxDescID);
 	if (debug > 5) {
@@ -974,11 +1006,19 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 				if ((tx_status & 0xe0000000) == 0xa0000000) {
 					np->stats.tx_packets++;
 				} else if ((tx_status & 0xe0000000) == 0x80000000) {
+					struct sk_buff *skb;
 					u16 entry = tx_status; 		/* Implicit truncate */
 					entry >>= 3;
+
+					skb = np->tx_info[entry].skb;
+					pci_unmap_single(np->pdev,
+									 np->tx_info[entry].mapping,
+									 skb->len);
+
 					/* Scavenge the descriptor. */
-					dev_kfree_skb(np->tx_skbuff[entry]);
-					np->tx_skbuff[entry] = 0;
+					dev_kfree_skb(skb);
+					np->tx_info[entry].skb = NULL;
+					np->tx_info[entry].mapping = 0;
 					np->dirty_tx++;
 				}
 				np->tx_done_q[np->tx_done].status = 0;
@@ -1074,23 +1114,24 @@ static int netdev_rx(struct net_device *dev)
 				&& (skb = dev_alloc_skb(pkt_len + 2)) != NULL) {
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
+				pci_dma_sync_single(np->pdev,
+									np->rx_info[entry].mapping,
+									pkt_len);
 #if HAS_IP_COPYSUM			/* Call copy + cksum if available. */
-				eth_copy_and_sum(skb, np->rx_skbuff[entry]->tail, pkt_len, 0);
+				eth_copy_and_sum(skb, np->rx_info[entry].skb->tail, pkt_len, 0);
 				skb_put(skb, pkt_len);
 #else
-				memcpy(skb_put(skb, pkt_len), np->rx_skbuff[entry]->tail,
+				memcpy(skb_put(skb, pkt_len), np->rx_info[entry].skb->tail,
 					   pkt_len);
 #endif
 			} else {
-				char *temp = skb_put(skb = np->rx_skbuff[entry], pkt_len);
-				np->rx_skbuff[entry] = NULL;
-#ifndef final_version				/* Remove after testing. */
-				if (bus_to_virt(le32_to_cpu(np->rx_ring[entry].rxaddr) & ~3) != temp)
-					printk(KERN_ERR "%s: Internal fault: The skbuff addresses "
-						   "do not match in netdev_rx: %p vs. %p / %p.\n",
-						   dev->name, bus_to_virt(le32_to_cpu(np->rx_ring[entry].rxaddr)),
-						   skb->head, temp);
-#endif
+				char *temp;
+
+				pci_unmap_single(np->pdev, np->rx_info[entry].mapping, np->rx_buf_sz);
+				skb = np->rx_info[entry].skb;
+				temp = skb_put(skb, pkt_len);
+				np->rx_info[entry].skb = NULL;
+				np->rx_info[entry].mapping = 0;
 			}
 #ifndef final_version				/* Remove after testing. */
 			/* You will want this info for the initial debug. */
@@ -1124,13 +1165,16 @@ static int netdev_rx(struct net_device *dev)
 	for (; np->cur_rx - np->dirty_rx > 0; np->dirty_rx++) {
 		struct sk_buff *skb;
 		int entry = np->dirty_rx % RX_RING_SIZE;
-		if (np->rx_skbuff[entry] == NULL) {
+		if (np->rx_info[entry].skb == NULL) {
 			skb = dev_alloc_skb(np->rx_buf_sz);
-			np->rx_skbuff[entry] = skb;
+			np->rx_info[entry].skb = skb;
 			if (skb == NULL)
 				break;			/* Better luck next round. */
+			np->rx_info[entry].mapping =
+				pci_map_single(np->pdev, skb->tail, np->rx_buf_sz);
 			skb->dev = dev;			/* Mark as being used by this device. */
-			np->rx_ring[entry].rxaddr = cpu_to_le32(virt_to_bus(skb->tail) | RxDescValid);
+			np->rx_ring[entry].rxaddr =
+				cpu_to_le32(np->rx_info[entry].mapping | RxDescValid);
 		}
 		if (entry == RX_RING_SIZE - 1)
 			np->rx_ring[entry].rxaddr |= cpu_to_le32(RxDescEndRing);
@@ -1333,14 +1377,14 @@ static int netdev_close(struct net_device *dev)
 #ifdef __i386__
 	if (debug > 2) {
 		printk("\n"KERN_DEBUG"  Tx ring at %8.8x:\n",
-			   (int)virt_to_bus(np->tx_ring));
+			   np->tx_ring_dma);
 		for (i = 0; i < 8 /* TX_RING_SIZE */; i++)
 			printk(KERN_DEBUG " #%d desc. %8.8x %8.8x -> %8.8x.\n",
 				   i, le32_to_cpu(np->tx_ring[i].status),
 				   le32_to_cpu(np->tx_ring[i].addr),
 				   le32_to_cpu(np->tx_done_q[i].status));
 		printk(KERN_DEBUG "  Rx ring at %8.8x -> %p:\n",
-			   (int)virt_to_bus(np->rx_ring), np->rx_done_q);
+			   np->rx_ring_dma, np->rx_done_q);
 		if (np->rx_done_q)
 			for (i = 0; i < 8 /* RX_RING_SIZE */; i++) {
 				printk(KERN_DEBUG " #%d desc. %8.8x -> %8.8x\n",
@@ -1354,18 +1398,23 @@ static int netdev_close(struct net_device *dev)
 	/* Free all the skbuffs in the Rx queue. */
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		np->rx_ring[i].rxaddr = cpu_to_le32(0xBADF00D0); /* An invalid address. */
-		if (np->rx_skbuff[i]) {
-#if LINUX_VERSION_CODE < 0x20100
-			np->rx_skbuff[i]->free = 1;
-#endif
-			dev_kfree_skb(np->rx_skbuff[i]);
+		if (np->rx_info[i].skb != NULL) {
+			pci_unmap_single(np->pdev, np->rx_info[i].mapping, np->rx_buf_sz);
+			dev_kfree_skb(np->rx_info[i].skb);
 		}
-		np->rx_skbuff[i] = 0;
+		np->rx_info[i].skb = NULL;
+		np->rx_info[i].mapping = 0;
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
-		if (np->tx_skbuff[i])
-			dev_kfree_skb(np->tx_skbuff[i]);
-		np->tx_skbuff[i] = 0;
+		struct sk_buff *skb = np->tx_info[i].skb;
+		if (skb != NULL) {
+			pci_unmap_single(np->pdev,
+							 np->tx_info[i].mapping,
+							 skb->len);
+			dev_kfree_skb(skb);
+		}
+		np->tx_info[i].skb = NULL;
+		np->tx_info[i].mapping = 0;
 	}
 
 	MOD_DEC_USE_COUNT;
@@ -1406,8 +1455,18 @@ void cleanup_module(void)
 		next_dev = np->next_module;
 		unregister_netdev(root_net_dev);
 		iounmap((char *)root_net_dev->base_addr);
-		if (np->tx_done_q) free_page((long)np->tx_done_q);
-		if (np->rx_done_q) free_page((long)np->rx_done_q);
+		if (np->tx_done_q)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->tx_done_q, np->tx_done_q_dma);
+		if (np->rx_done_q)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->rx_done_q, np->rx_done_q_dma);
+		if (np->tx_ring)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->tx_ring, np->tx_ring_dma);
+		if (np->rx_ring)
+			pci_free_consistent(np->pdev, PAGE_SIZE,
+								np->rx_ring, np->rx_ring_dma);
 		kfree(root_net_dev);
 		root_net_dev = next_dev;
 	}

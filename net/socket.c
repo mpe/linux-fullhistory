@@ -272,12 +272,12 @@ static int sock_map_fd(struct socket *sock)
 			goto out;
 		}
 
+		sock->file = file;
 		file->f_op = &socket_file_ops;
 		file->f_mode = 3;
 		file->f_flags = O_RDWR;
 		file->f_pos = 0;
 		fd_install(fd, file);
-		sock->file = file;
 	}
 
 out:
@@ -929,7 +929,7 @@ asmlinkage long sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_a
 		goto out_release;
 
 	if (upeer_sockaddr) {
-		if(newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 1)<0) {
+		if(newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 2)<0) {
 			err = -ECONNABORTED;
 			goto out_release;
 		}
@@ -938,9 +938,8 @@ asmlinkage long sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_a
 			goto out_release;
 	}
 
-	/* File flags are inherited via accept(). It looks silly, but we
-	 * have to be compatible with another OSes.
-	 */
+	/* File flags are not inherited via accept() unlike another OSes. */
+
 	if ((err = sock_map_fd(newsock)) < 0)
 		goto out_release;
 

@@ -1,3 +1,5 @@
+#ifndef _PPP_CHANNEL_H_
+#define _PPP_CHANNEL_H_
 /*
  * Definitions for the interface between the generic PPP code
  * and a PPP channel.
@@ -17,7 +19,7 @@
  * ==FILEVERSION 990909==
  */
 
-/* $Id: ppp_channel.h,v 1.2 1999/09/15 11:21:53 paulus Exp $ */
+/* $Id: ppp_channel.h,v 1.3 2000/01/31 01:42:48 davem Exp $ */
 
 #include <linux/list.h>
 #include <linux/skbuff.h>
@@ -61,3 +63,4 @@ extern int ppp_register_channel(struct ppp_channel *, int unit);
 extern void ppp_unregister_channel(struct ppp_channel *);
 
 #endif /* __KERNEL__ */
+#endif

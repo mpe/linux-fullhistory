@@ -10,13 +10,11 @@
 #include <asm/atomic.h>
 #include <asm/errno.h>
 
-#include "tunable.h"
-
 
 int atm_charge(struct atm_vcc *vcc,int truesize)
 {
 	atm_force_charge(vcc,truesize);
-	if (atomic_read(&vcc->rx_inuse) <= vcc->rx_quota) return 1;
+	if (atomic_read(&vcc->rx_inuse) <= vcc->sk->rcvbuf) return 1;
 	atm_return(vcc,truesize);
 	vcc->stats->rx_drop++;
 	return 0;
@@ -29,7 +27,7 @@ struct sk_buff *atm_alloc_charge(struct atm_vcc *vcc,int pdu_size,
 	int guess = atm_guess_pdu2truesize(pdu_size);
 
 	atm_force_charge(vcc,guess);
-	if (atomic_read(&vcc->rx_inuse) <= vcc->rx_quota) {
+	if (atomic_read(&vcc->rx_inuse) <= vcc->sk->rcvbuf) {
 		struct sk_buff *skb = alloc_skb(pdu_size,gfp_flags);
 
 		if (skb) {

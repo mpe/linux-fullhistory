@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.185 2000/01/15 00:51:32 anton Exp $
+/* $Id: sun4c.c,v 1.187 2000/02/08 07:46:01 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -584,15 +584,24 @@ static void sun4c_map_dma_area(unsigned long va, u32 addr, int len)
 	}
 }
 
-static void sun4c_unmap_dma_area(unsigned long addr, int len)
+static unsigned long sun4c_translate_dvma(unsigned long busa)
+{
+	/* Fortunately for us, bus_addr == uncached_virt in sun4c. */
+	unsigned long pte = sun4c_get_pte(busa);
+	return (pte << PAGE_SHIFT) + PAGE_OFFSET;
+}
+
+static unsigned long sun4c_unmap_dma_area(unsigned long busa, int len)
+{
+	/* Fortunately for us, bus_addr == uncached_virt in sun4c. */
+	/* XXX Implement this */
+}
+
+static void sun4c_inval_dma_area(unsigned long virt, int len)
 {
 }
 
-static void sun4c_inval_dma_area(unsigned long addr, int len)
-{
-}
-
-static void sun4c_flush_dma_area(unsigned long addr, int len)
+static void sun4c_flush_dma_area(unsigned long virt, int len)
 {
 }
 
@@ -2574,7 +2583,7 @@ void __init sun4c_paging_init(void)
 	sparc_context_init(num_contexts);
 
 	{
-		unsigned int zones_size[MAX_NR_ZONES] = { 0, 0, 0};
+		unsigned long zones_size[MAX_NR_ZONES] = { 0, 0, 0};
 
 		zones_size[ZONE_DMA] = end_pfn;
 		free_area_init(zones_size);
@@ -2721,6 +2730,7 @@ void __init ld_mmu_sun4c(void)
 
 	BTFIXUPSET_CALL(mmu_map_dma_area, sun4c_map_dma_area, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_unmap_dma_area, sun4c_unmap_dma_area, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_translate_dvma, sun4c_translate_dvma, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_flush_dma_area, sun4c_flush_dma_area, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(mmu_inval_dma_area, sun4c_inval_dma_area, BTFIXUPCALL_NORM);
 

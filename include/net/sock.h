@@ -242,6 +242,7 @@ struct tcp_opt {
 		__u32	lrcvtime;	/* timestamp of last received data packet*/
 		__u16	last_seg_size;	/* Size of last incoming segment */
 		__u16	rcv_mss;	/* MSS used for delayed ACK decisions */ 
+		__u32	rcv_segs;	/* Number of received segments since last ack */
 	} ack;
 
 	/* Data for direct copy to user */
@@ -325,7 +326,6 @@ struct tcp_opt {
         __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
         __u32	ts_recent;	/* Time stamp to echo next		*/
         long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
-	__u32	last_ack_sent;	/* last ack we sent (RTTM/PAWS)		*/
 
 /*	SACKs data	*/
 	struct tcp_sack_block selective_acks[4]; /* The SACKS themselves*/

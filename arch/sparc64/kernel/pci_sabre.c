@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.11 2000/01/28 13:42:01 jj Exp $
+/* $Id: pci_sabre.c,v 1.12 2000/02/08 05:11:33 jj Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1107,11 +1107,6 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 static void __init sabre_iommu_init(struct pci_controller_info *p,
 				    int tsbsize, unsigned long dvma_offset)
 {
-#ifndef NEW_PCI_DMA_MAP
-	struct linux_mlist_p1275 *mlist;
-	unsigned long n;
-	iopte_t *iopte;
-#endif
 	unsigned long tsbbase, i, order;
 	u64 control;
 
@@ -1154,99 +1149,9 @@ static void __init sabre_iommu_init(struct pci_controller_info *p,
 	   of buggy drivers.  */
 	p->iommu.lowest_free[0] = 1;
 
-#ifndef NEW_PCI_DMA_MAP
-	iopte = (iopte_t *)tsbbase;
-
-	/* Initialize to "none" settings. */
-	for(i = 0; i < PCI_DVMA_HASHSZ; i++) {
-		pci_dvma_v2p_hash[i] = PCI_DVMA_HASH_NONE;
-		pci_dvma_p2v_hash[i] = PCI_DVMA_HASH_NONE;
-	}
-
-	n = 0;
-	mlist = *prom_meminfo()->p1275_totphys;
-	while (mlist) {
-		unsigned long paddr = mlist->start_adr;
-		unsigned long num_bytes = mlist->num_bytes;
-
-		if(paddr >= (((unsigned long) high_memory) - PAGE_OFFSET))
-			goto next;
-
-		if((paddr + num_bytes) >= (((unsigned long) high_memory) - PAGE_OFFSET))
-			num_bytes =
-				(((unsigned long) high_memory) -
-				 PAGE_OFFSET) - paddr;
-
-		/* Align base and length so we map whole hash table sized chunks
-		 * at a time (and therefore full 64K IOMMU pages).
-		 */
-		paddr &= ~((1UL << 24UL) - 1);
-		num_bytes = (num_bytes + ((1UL << 24UL) - 1)) & ~((1UL << 24) - 1);
-
-		/* Move up the base for mappings already created. */
-		while(pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr)] !=
-		      PCI_DVMA_HASH_NONE) {
-			paddr += (1UL << 24UL);
-			num_bytes -= (1UL << 24UL);
-			if(num_bytes == 0UL)
-				goto next;
-		}
-
-		/* Move down the size for tail mappings already created. */
-		while(pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr + num_bytes - (1UL << 24UL))] !=
-		      PCI_DVMA_HASH_NONE) {
-			num_bytes -= (1UL << 24UL);
-			if(num_bytes == 0UL)
-				goto next;
-		}
-
-		/* Now map the rest. */
-		for (i = 0; i < ((num_bytes + ((1 << 16) - 1)) >> 16); i++) {
-			iopte_val(*iopte) = ((IOPTE_VALID | IOPTE_64K |
-					      IOPTE_CACHE | IOPTE_WRITE) |
-					     (paddr & IOPTE_PAGE));
-
-			if (!(n & 0xff))
-				set_dvma_hash(dvma_offset, paddr, (n << 16));
-			if (++n > (tsbsize * 1024))
-				goto out;
-
-			paddr += (1 << 16);
-			iopte++;
-		}
-	next:
-		mlist = mlist->theres_more;
-	}
-out:
-	if (mlist) {
-		prom_printf("WARNING: not all physical memory mapped in IOMMU\n");
-		prom_printf("Try booting with mem=xxxM or similar\n");
-		prom_halt();
-	}
-#endif
-
 	sabre_write(p->controller_regs + SABRE_IOMMU_TSBBASE, __pa(tsbbase));
 
 	control = sabre_read(p->controller_regs + SABRE_IOMMU_CONTROL);
-#ifndef NEW_PCI_DMA_MAP
-	control &= ~(SABRE_IOMMUCTRL_TSBSZ);
-	control |= (SABRE_IOMMUCTRL_TBWSZ | SABRE_IOMMUCTRL_ENAB);
-	switch(tsbsize) {
-	case 8:
-		control |= SABRE_IOMMU_TSBSZ_8K;
-		break;
-	case 16:
-		control |= SABRE_IOMMU_TSBSZ_16K;
-		break;
-	case 32:
-		control |= SABRE_IOMMU_TSBSZ_32K;
-		break;
-	default:
-		prom_printf("iommu_init: Illegal TSB size %d\n", tsbsize);
-		prom_halt();
-		break;
-	}
-#else
 	control &= ~(SABRE_IOMMUCTRL_TSBSZ | SABRE_IOMMUCTRL_TBWSZ);
 	control |= SABRE_IOMMUCTRL_ENAB;
 	switch(tsbsize) {
@@ -1263,7 +1168,6 @@ out:
 		prom_halt();
 		break;
 	}
-#endif
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 }
 
@@ -1472,17 +1376,6 @@ void __init sabre_init(int pnode)
 	}
 
 	switch(vdma[1]) {
-#ifndef NEW_PCI_DMA_MAP
-		case 0x20000000:
-			tsbsize = 8;
-			break;
-		case 0x40000000:
-			tsbsize = 16;
-			break;
-		case 0x80000000:
-			tsbsize = 32;
-			break;
-#else
 		case 0x20000000:
 			tsbsize = 64;
 			break;
@@ -1490,7 +1383,6 @@ void __init sabre_init(int pnode)
 		case 0x80000000:
 			tsbsize = 128;
 			break;
-#endif
 		default:
 			prom_printf("SABRE: strange virtual-dma size.\n");
 			prom_halt();

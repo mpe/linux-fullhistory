@@ -19,6 +19,7 @@
 #define _MD_H
 
 #include <linux/mm.h>
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <asm/semaphore.h>

@@ -244,9 +244,11 @@ struct uhci_td {
 #define skel_int128_td		skeltd[7]
 #define skel_int256_td		skeltd[8]
 
-#define UHCI_NUM_SKELQH		2
-#define skel_control_qh		skelqh[0]
-#define skel_bulk_qh		skelqh[1]
+#define UHCI_NUM_SKELQH		4
+#define skel_ls_control_qh	skelqh[0]
+#define skel_hs_control_qh	skelqh[1]
+#define skel_bulk_qh		skelqh[2]
+#define skel_term_qh		skelqh[3]
 
 /*
  * Search tree for determining where <interval> fits in the
@@ -320,14 +322,12 @@ struct uhci {
 	struct s_nested_lock irqlist_lock;
 	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
 
-	spinlock_t urblist_lock;
+	struct s_nested_lock urblist_lock;
 	struct list_head urb_list;
 
 	spinlock_t framelist_lock;
 
-	spinlock_t freelist_lock;
-	struct list_head td_free_list;
-	struct list_head qh_free_list;
+	int fsbr;			/* Full speed bandwidth reclamation */
 
 	struct virt_root_hub rh;	/* private data of the virtual root hub */
 };

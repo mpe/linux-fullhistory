@@ -1,6 +1,6 @@
 /* net/sched/sch_atm.c - ATM VC selection "queueing discipline" */
 
-/* Written 1998,1999 by Werner Almesberger, EPFL ICA */
+/* Written 1998-2000 by Werner Almesberger, EPFL ICA */
 
 
 #include <linux/config.h>
@@ -56,12 +56,14 @@ extern struct socket *sockfd_lookup(int fd, int *err); /* @@@ fix this */
 
 
 #define PRIV(sch) ((struct atm_qdisc_data *) (sch)->data)
+#define VCC2FLOW(vcc) ((struct atm_flow_data *) ((vcc)->user_back))
 
 
 struct atm_flow_data {
 	struct Qdisc		*q;		/* FIFO, TBF, etc. */
 	struct tcf_proto	*filter_list;
 	struct atm_vcc		*vcc;		/* VCC; NULL if VCC is closed */
+	void (*old_pop)(struct atm_vcc *vcc,struct sk_buff *skb); /* chaining */
 	struct socket		*sock;		/* for closing */
 	u32			classid;	/* x:y type ID */
 	int			ref;		/* reference count */
@@ -133,7 +135,7 @@ static struct Qdisc *atm_tc_leaf(struct Qdisc *sch,unsigned long cl)
 
 static unsigned long atm_tc_get(struct Qdisc *sch,u32 classid)
 {
-	struct atm_qdisc_data *p = PRIV(sch);
+	struct atm_qdisc_data *p __attribute__((unused)) = PRIV(sch);
 	struct atm_flow_data *flow;
 
 	DPRINTK("atm_tc_get(sch %p,[qdisc %p],classid %x)\n",sch,p,classid);
@@ -184,6 +186,7 @@ static void atm_tc_put(struct Qdisc *sch, unsigned long cl)
 	}
 	if (flow->sock) {
 		DPRINTK("atm_tc_put: f_count %d\n",file_count(flow->sock->file));
+		flow->vcc->pop = flow->old_pop;
 		sockfd_put(flow->sock);
 	}
 	if (flow->excess) atm_tc_put(sch,(unsigned long) flow->excess);
@@ -192,6 +195,13 @@ static void atm_tc_put(struct Qdisc *sch, unsigned long cl)
 	 * If flow == &p->link, the qdisc no longer works at this point and
 	 * needs to be removed. (By the caller of atm_tc_put.)
 	 */
+}
+
+
+static void sch_atm_pop(struct atm_vcc *vcc,struct sk_buff *skb)
+{
+	VCC2FLOW(vcc)->old_pop(vcc,skb);
+	mark_bh(NET_BH); /* may allow to send more */
 }
 
 
@@ -289,7 +299,10 @@ static int atm_tc_change(struct Qdisc *sch, u32 classid, u32 parent,
 	DPRINTK("atm_tc_change: qdisc %p\n",flow->q);
 	flow->sock = sock;
         flow->vcc = ATM_SD(sock); /* speedup */
+	flow->vcc->user_back = flow;
         DPRINTK("atm_tc_change: vcc %p\n",flow->vcc);
+	flow->old_pop = flow->vcc->pop;
+	flow->vcc->pop = sch_atm_pop;
 	flow->classid = classid;
 	flow->ref = 1;
 	flow->excess = excess;
@@ -440,6 +453,10 @@ static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
 		 * little bursts. Otherwise, it may ... @@@
 		 */
 		while ((skb = flow->q->dequeue(flow->q))) {
+			if (!atm_may_send(flow->vcc,skb->truesize)) {
+				flow->q->ops->requeue(skb,flow->q);
+				break;
+			}
 			sch->q.qlen--;
 			D2PRINTK("atm_tc_deqeueue: sending on class %p\n",flow);
 			/* remove any LL header somebody else has attached */
@@ -465,6 +482,22 @@ static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
 	skb = p->link.q->dequeue(p->link.q);
 	if (skb) sch->q.qlen--;
 	return skb;
+}
+
+
+static int atm_tc_requeue(struct sk_buff *skb,struct Qdisc *sch)
+{
+	struct atm_qdisc_data *p = PRIV(sch);
+	int ret;
+
+	D2PRINTK("atm_tc_requeue(skb %p,sch %p,[qdisc %p])\n",skb,sch,p);
+	ret = p->link.q->ops->requeue(skb,p->link.q);
+	if (!ret) sch->q.qlen++;
+	else {
+		sch->stats.drops++;
+		p->link.stats.drops++;
+	}
+	return ret;
 }
 
 
@@ -616,7 +649,7 @@ struct Qdisc_ops atm_qdisc_ops =
 
 	atm_tc_enqueue,			/* enqueue */
 	atm_tc_dequeue,			/* dequeue */
-	atm_tc_enqueue,			/* requeue; we're cheating a little */
+	atm_tc_requeue,			/* requeue */
 	atm_tc_drop,			/* drop */
 
 	atm_tc_init,			/* init */

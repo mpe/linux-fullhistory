@@ -508,6 +508,11 @@ struct dev_param {
  */
 #define RES_QUEUE_LEN		((QLOGICISP_REQ_QUEUE_LEN + 1) / 8 - 1)
 #define QUEUE_ENTRY_LEN		64
+#define QSIZE(entries)  (((entries) + 1) * QUEUE_ENTRY_LEN)
+
+struct isp_queue_entry {
+	char __opaque[QUEUE_ENTRY_LEN];
+};
 
 struct isp1020_hostdata {
 	u_long	memaddr;
@@ -516,6 +521,9 @@ struct isp1020_hostdata {
 	struct	dev_param dev_param[MAX_TARGETS];
 	struct	pci_dev *pci_dev;
 	
+	struct isp_queue_entry *res_cpu; /* CPU-side address of response queue. */
+	struct isp_queue_entry *req_cpu; /* CPU-size address of request queue. */
+
 	/* result and request queues (shared with isp1020): */
 	u_int	req_in_ptr;		/* index of next request slot */
 	u_int	res_out_ptr;		/* index of next result slot */
@@ -523,8 +531,15 @@ struct isp1020_hostdata {
 	/* this is here so the queues are nicely aligned */
 	long	send_marker;		/* do we need to send a marker? */
 
-	char	res[RES_QUEUE_LEN+1][QUEUE_ENTRY_LEN];
-	char	req[QLOGICISP_REQ_QUEUE_LEN+1][QUEUE_ENTRY_LEN];
+	/* The cmd->handle has a fixed size, and is only 32-bits.  We
+	 * need to take care to handle 64-bit systems correctly thus what
+	 * we actually place in cmd->handle is an index to the following
+	 * table.  Kudos to Matt Jacob for the technique.  -DaveM
+	 */
+	Scsi_Cmnd *cmd_slots[QLOGICISP_REQ_QUEUE_LEN + 1];
+
+	dma_addr_t res_dma;	/* PCI side view of response queue */
+	dma_addr_t req_dma;	/* PCI side view of request queue */
 };
 
 /* queue length's _must_ be power of two: */
@@ -616,10 +631,8 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 
 		hostdata->pci_dev = pdev;
 
-		if (isp1020_init(host)) {
-			scsi_unregister(host);
-			continue;
-		}
+		if (isp1020_init(host))
+			goto fail_and_unregister;
 		
 		if (isp1020_reset_hardware(host)
 #if USE_NVRAM_DEFAULTS
@@ -630,8 +643,7 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 		    || isp1020_load_parameters(host)) {
 			iounmap((void *)hostdata->memaddr);
 			release_region(host->io_port, 0xff);
-			scsi_unregister(host);
-			continue;
+			goto fail_and_unregister;
 		}
 
 		host->this_id = hostdata->host_param.initiator_scsi_id;
@@ -643,8 +655,7 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 			       host->irq);
 			iounmap((void *)hostdata->memaddr);
 			release_region(host->io_port, 0xff);
-			scsi_unregister(host);
-			continue;
+			goto fail_and_unregister;
 		}
 
 		isp_outw(0x0, host, PCI_SEMAPHORE);
@@ -652,6 +663,20 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 		isp1020_enable_irqs(host);
 
 		hosts++;
+		continue;
+
+	fail_and_unregister:
+		if (hostdata->res_cpu)
+			pci_free_consistent(hostdata->pci_dev,
+					    QSIZE(RES_QUEUE_LEN),
+					    hostdata->res_cpu,
+					    hostdata->res_dma);
+		if (hostdata->req_cpu)
+			pci_free_consistent(hostdata->pci_dev,
+					    QSIZE(QLOGICISP_REQ_QUEUE_LEN),
+					    hostdata->req_cpu,
+					    hostdata->req_dma);
+		scsi_unregister(host);
 	}
 
 	LEAVE("isp1020_detect");
@@ -709,7 +734,7 @@ const char *isp1020_info(struct Scsi_Host *host)
  */
 int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 {
-	int i, sg_count, n, num_free;
+	int i, n, num_free;
 	u_int in_ptr, out_ptr;
 	struct dataseg * ds;
 	struct scatterlist *sg;
@@ -732,7 +757,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	DEBUG(printk("qlogicisp : request queue depth %d\n",
 		     REQ_QUEUE_DEPTH(in_ptr, out_ptr)));
 
-	cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
+	cmd = (struct Command_Entry *) &hostdata->req_cpu[in_ptr];
 	in_ptr = (in_ptr + 1) & QLOGICISP_REQ_QUEUE_LEN;
 	if (in_ptr == out_ptr) {
 		printk("qlogicisp : request queue overflow\n");
@@ -760,7 +785,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 			printk("qlogicisp : request queue overflow\n");
 			return 1;
 		}
-		cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
+		cmd = (struct Command_Entry *) &hostdata->req_cpu[in_ptr];
 		in_ptr = (in_ptr + 1) & QLOGICISP_REQ_QUEUE_LEN;
 	}
 
@@ -771,7 +796,6 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	cmd->hdr.entry_type = ENTRY_COMMAND;
 	cmd->hdr.entry_cnt = 1;
 
-	cmd->handle = cpu_to_le32((u_int) virt_to_bus(Cmnd));
 	cmd->target_lun = Cmnd->lun;
 	cmd->target_id = Cmnd->target;
 	cmd->cdb_length = cpu_to_le16(Cmnd->cmd_len);
@@ -781,17 +805,22 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	memcpy(cmd->cdb, Cmnd->cmnd, Cmnd->cmd_len);
 
 	if (Cmnd->use_sg) {
-		cmd->segment_cnt = cpu_to_le16(sg_count = Cmnd->use_sg);
+		int sg_count;
+
 		sg = (struct scatterlist *) Cmnd->request_buffer;
 		ds = cmd->dataseg;
+
+		sg_count = pci_map_sg(hostdata->pci_dev, sg, Cmnd->use_sg);
+
+		cmd->segment_cnt = cpu_to_le16(sg_count);
 
 		/* fill in first four sg entries: */
 		n = sg_count;
 		if (n > 4)
 			n = 4;
 		for (i = 0; i < n; i++) {
-			ds[i].d_base  = cpu_to_le32((u_int) virt_to_bus(sg->address));
-			ds[i].d_count = cpu_to_le32(sg->length);
+			ds[i].d_base  = cpu_to_le32(sg_dma_address(sg));
+			ds[i].d_count = cpu_to_le32(sg_dma_len(sg));
 			++sg;
 		}
 		sg_count -= 4;
@@ -799,7 +828,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 		while (sg_count > 0) {
 			++cmd->hdr.entry_cnt;
 			cont = (struct Continuation_Entry *)
-				&hostdata->req[in_ptr][0];
+				&hostdata->req_cpu[in_ptr];
 			in_ptr = (in_ptr + 1) & QLOGICISP_REQ_QUEUE_LEN;
 			if (in_ptr == out_ptr) {
 				printk("isp1020: unexpected request queue "
@@ -817,19 +846,28 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 			if (n > 7)
 				n = 7;
 			for (i = 0; i < n; ++i) {
-				ds[i].d_base = cpu_to_le32((u_int)virt_to_bus(sg->address));
-				ds[i].d_count = cpu_to_le32(sg->length);
+				ds[i].d_base = cpu_to_le32(sg_dma_address(sg));
+				ds[i].d_count = cpu_to_le32(sg_dma_len(sg));
 				++sg;
 			}
 			sg_count -= n;
 		}
 	} else {
+		Cmnd->SCp.ptr = (char *)(unsigned long)
+			pci_map_single(hostdata->pci_dev,
+				       Cmnd->request_buffer,
+				       Cmnd->request_bufflen);
+
 		cmd->dataseg[0].d_base =
-			cpu_to_le32((u_int) virt_to_bus(Cmnd->request_buffer));
+			cpu_to_le32((u32)(long)Cmnd->SCp.ptr);
 		cmd->dataseg[0].d_count =
-			cpu_to_le32((u_int) Cmnd->request_bufflen);
+			cpu_to_le32((u32)Cmnd->request_bufflen);
 		cmd->segment_cnt = cpu_to_le16(1);
 	}
+
+	/* Committed, record Scsi_Cmd so we can find it later. */
+	cmd->handle = in_ptr;
+	hostdata->cmd_slots[in_ptr] = Cmnd;
 
 	isp_outw(in_ptr, host, MBOX4);
 	hostdata->req_in_ptr = in_ptr;
@@ -905,10 +943,14 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			  QUEUE_DEPTH(in_ptr, out_ptr, RES_QUEUE_LEN)));
 
 	while (out_ptr != in_ptr) {
-		sts = (struct Status_Entry *) &hostdata->res[out_ptr][0];
+		u_int cmd_slot;
+
+		sts = (struct Status_Entry *) &hostdata->res_cpu[out_ptr];
 		out_ptr = (out_ptr + 1) & RES_QUEUE_LEN;
 
-		Cmnd = (Scsi_Cmnd *) bus_to_virt(le32_to_cpu(sts->handle));
+		cmd_slot = sts->handle;
+		Cmnd = hostdata->cmd_slots[cmd_slot];
+		hostdata->cmd_slots[cmd_slot] = NULL;
 
 		TRACE("done", out_ptr, Cmnd);
 
@@ -927,6 +969,15 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			Cmnd->result = isp1020_return_status(sts);
 		else
 			Cmnd->result = DID_ERROR << 16;
+
+		if (Cmnd->use_sg)
+			pci_unmap_sg(hostdata->pci_dev,
+				     (struct scatterlist *)Cmnd->buffer,
+				     Cmnd->use_sg);
+		else
+			pci_unmap_single(hostdata->pci_dev,
+					 (u32)((long)Cmnd->SCp.ptr),
+					 Cmnd->request_bufflen);
 
 		isp_outw(out_ptr, host, MBOX5);
 		(*Cmnd->scsi_done)(Cmnd);
@@ -1031,19 +1082,25 @@ int isp1020_abort(Scsi_Cmnd *Cmnd)
 	struct Scsi_Host *host;
 	struct isp1020_hostdata *hostdata;
 	int return_status = SCSI_ABORT_SUCCESS;
-	u_int cmdaddr = virt_to_bus(Cmnd);
+	u_int cmd_cookie;
+	int i;
 
 	ENTER("isp1020_abort");
 
 	host = Cmnd->host;
 	hostdata = (struct isp1020_hostdata *) host->hostdata;
 
+	for (i = 0; i < QLOGICISP_REQ_QUEUE_LEN + 1; i++)
+		if (hostdata->cmd_slots[i] == Cmnd)
+			break;
+	cmd_cookie = i;
+
 	isp1020_disable_irqs(host);
 
 	param[0] = MBOX_ABORT;
 	param[1] = (((u_short) Cmnd->target) << 8) | Cmnd->lun;
-	param[2] = cmdaddr >> 16;
-	param[3] = cmdaddr & 0xffff;
+	param[2] = cmd_cookie >> 16;
+	param[3] = cmd_cookie & 0xffff;
 
 	isp1020_mbox_command(host, param);
 
@@ -1312,6 +1369,26 @@ static int isp1020_init(struct Scsi_Host *sh)
 	sh->irq = irq;
 	sh->max_id = MAX_TARGETS;
 	sh->max_lun = MAX_LUNS;
+
+	hostdata->res_cpu = pci_alloc_consistent(hostdata->pci_dev,
+						 QSIZE(RES_QUEUE_LEN),
+						 &hostdata->res_dma);
+	if (hostdata->res_cpu == NULL) {
+		printk("qlogicisp : can't allocate response queue\n");
+		return 1;
+	}
+
+	hostdata->req_cpu = pci_alloc_consistent(hostdata->pci_dev,
+						 QSIZE(QLOGICISP_REQ_QUEUE_LEN),
+						 &hostdata->req_dma);
+	if (hostdata->req_cpu == NULL) {
+		pci_free_consistent(hostdata->pci_dev,
+				    QSIZE(RES_QUEUE_LEN),
+				    hostdata->res_cpu,
+				    hostdata->res_dma);
+		printk("qlogicisp : can't allocate request queue\n");
+		return 1;
+	}
 
 	LEAVE("isp1020_init");
 
@@ -1667,7 +1744,7 @@ static int isp1020_load_parameters(struct Scsi_Host *host)
 		}
 	}
 
-	queue_addr = (u_int) virt_to_bus(&hostdata->res[0][0]);
+	queue_addr = hostdata->res_dma;
 
 	param[0] = MBOX_INIT_RES_QUEUE;
 	param[1] = RES_QUEUE_LEN + 1;
@@ -1684,7 +1761,7 @@ static int isp1020_load_parameters(struct Scsi_Host *host)
 		return 1;
 	}
 
-	queue_addr = (u_int) virt_to_bus(&hostdata->req[0][0]);
+	queue_addr = hostdata->req_dma;
 
 	param[0] = MBOX_INIT_REQ_QUEUE;
 	param[1] = QLOGICISP_REQ_QUEUE_LEN + 1;

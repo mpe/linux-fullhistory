@@ -2623,12 +2623,10 @@ static int hrz_getsockopt (struct atm_vcc * atm_vcc, int level, int optname,
   switch (level) {
     case SOL_SOCKET:
       switch (optname) {
-	case SO_BCTXOPT:
-	  // return the right thing
-	  break;
-	case SO_BCRXOPT:
-	  // return the right thing
-	  break;
+//	case SO_BCTXOPT:
+//	  break;
+//	case SO_BCRXOPT:
+//	  break;
 	default:
 	  return -ENOPROTOOPT;
 	  break;
@@ -2645,12 +2643,10 @@ static int hrz_setsockopt (struct atm_vcc * atm_vcc, int level, int optname,
   switch (level) {
     case SOL_SOCKET:
       switch (optname) {
-	case SO_BCTXOPT:
-	  // not settable
-	  break;
-	case SO_BCRXOPT:
-	  // not settable
-	  break;
+//	case SO_BCTXOPT:
+//	  break;
+//	case SO_BCRXOPT:
+//	  break;
 	default:
 	  return -ENOPROTOOPT;
 	  break;
@@ -2743,21 +2739,11 @@ static int hrz_proc_read (struct atm_dev * atm_dev, loff_t * pos, char * page) {
 }
 
 static const struct atmdev_ops hrz_ops = {
-  NULL,          // no hrz_dev_close
-  hrz_open,
-  hrz_close,
-  NULL,          // no hrz_ioctl
-  NULL,          // hrz_getsockopt,
-  NULL,          // hrz_setsockopt,
-  hrz_send,
-  hrz_sg_send,
-  NULL,          // no send_oam    - not in fact used yet
-  NULL,          // no hrz_phy_put - not needed in this driver 
-  NULL,          // no hrz_phy_get - not needed in this driver 
-  NULL,          // no feedback    - feedback to the driver!
-  NULL,          // no hrz_change_qos
-  NULL,          // no free_rx_skb
-  hrz_proc_read
+  open:		hrz_open,
+  close:	hrz_close,
+  send:		hrz_send,
+  sg_send:	hrz_sg_send,
+  proc_read:	hrz_proc_read
 };
 
 static int __init hrz_probe (void) {

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.52 2000/01/18 08:24:21 davem Exp $
+ *	$Id: af_inet6.c,v 1.53 2000/02/04 21:04:08 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -340,6 +340,8 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 	sin->sin6_flowinfo = 0;
 	if (peer) {
 		if (!sk->dport)
+			return -ENOTCONN;
+		if (((1<<sk->state)&(TCPF_CLOSE|TCPF_SYN_SENT)) && peer == 1)
 			return -ENOTCONN;
 		sin->sin6_port = sk->dport;
 		memcpy(&sin->sin6_addr, &sk->net_pinfo.af_inet6.daddr,

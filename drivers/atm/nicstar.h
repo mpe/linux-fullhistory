@@ -51,7 +51,7 @@
 				   128K x 32bit SRAM will limit the maximum
 				   VCI. */
 
-#define NS_PCI_LATENCY 64	/* Must be a multiple of 32 */
+/*#define NS_PCI_LATENCY 64*/	/* Must be a multiple of 32 */
 
 	/* Number of buffers initially allocated */
 #define NUM_SB 32	/* Must be even */
@@ -240,13 +240,13 @@ typedef struct ns_scqe
 #define NS_TBD_VCI_SHIFT 4
 
 #define ns_tbd_mkword_1(flags, m, n, buflen) \
-        (cpu_to_le32(flags | m << 23 | n << 16 | buflen))
+      (cpu_to_le32((flags) | (m) << 23 | (n) << 16 | (buflen)))
 #define ns_tbd_mkword_1_novbr(flags, buflen) \
-        (cpu_to_le32(flags | buflen | 0x00810000))
+      (cpu_to_le32((flags) | (buflen) | 0x00810000))
 #define ns_tbd_mkword_3(control, pdulen) \
-        (cpu_to_le32(control << 16 | pdulen))
+      (cpu_to_le32((control) << 16 | (pdulen)))
 #define ns_tbd_mkword_4(gfc, vpi, vci, pt, clp) \
-        (cpu_to_le32(gfc << 28 | vpi << 20 | vci << 4 | pt << 1 | clp)))
+      (cpu_to_le32((gfc) << 28 | (vpi) << 20 | (vci) << 4 | (pt) << 1 | (clp)))
 
 
 #define NS_TSR_INTENABLE 0x20000000
@@ -455,41 +455,59 @@ typedef struct ns_scd
 /* NISCtAR operation registers ************************************************/
 
 
+/* See Section 3.4 of `IDT77211 NICStAR User Manual' from www.idt.com */
+
 enum ns_regs
 {
-   DR0 = 0x00,
-   DR1 = 0x04,
-   DR2 = 0x08,
-   DR3 = 0x0C,
-   CMD = 0x10,
-   CFG = 0x14,
-   STAT = 0x18,
-   RSQB = 0x1C,
-   RSQT = 0x20,
-   RSQH = 0x24,
-   CDC = 0x28,
-   VPEC = 0x2C,
-   ICC = 0x30,
-   RAWCT = 0x34,
-   TMR = 0x38,
-   TSTB = 0x3C,
-   TSQB = 0x40,
-   TSQT = 0x44,
-   TSQH = 0x48,
-   GP = 0x4C,
-   VPM = 0x50
+   DR0   = 0x00,      /* Data Register 0 R/W*/
+   DR1   = 0x04,      /* Data Register 1 W */
+   DR2   = 0x08,      /* Data Register 2 W */
+   DR3   = 0x0C,      /* Data Register 3 W */
+   CMD   = 0x10,      /* Command W */
+   CFG   = 0x14,      /* Configuration R/W */
+   STAT  = 0x18,      /* Status R/W */
+   RSQB  = 0x1C,      /* Receive Status Queue Base W */
+   RSQT  = 0x20,      /* Receive Status Queue Tail R */
+   RSQH  = 0x24,      /* Receive Status Queue Head W */
+   CDC   = 0x28,      /* Cell Drop Counter R/clear */
+   VPEC  = 0x2C,      /* VPI/VCI Lookup Error Count R/clear */
+   ICC   = 0x30,      /* Invalid Cell Count R/clear */
+   RAWCT = 0x34,      /* Raw Cell Tail R */
+   TMR   = 0x38,      /* Timer R */
+   TSTB  = 0x3C,      /* Transmit Schedule Table Base R/W */
+   TSQB  = 0x40,      /* Transmit Status Queue Base W */
+   TSQT  = 0x44,      /* Transmit Status Queue Tail R */
+   TSQH  = 0x48,      /* Transmit Status Queue Head W */
+   GP    = 0x4C,      /* General Purpose R/W */
+   VPM   = 0x50       /* VPI/VCI Mask W */
 };
 
 
 /* NICStAR commands issued to the CMD register ********************************/
 
+
+/* Top 4 bits are command opcode, lower 28 are parameters. */
+
 #define NS_CMD_NO_OPERATION         0x00000000
+        /* params always 0 */
+
 #define NS_CMD_OPENCLOSE_CONNECTION 0x20000000
+        /* b19{1=open,0=close} b18-2{SRAM addr} */
+
 #define NS_CMD_WRITE_SRAM           0x40000000
+        /* b18-2{SRAM addr} b1-0{burst size} */
+
 #define NS_CMD_READ_SRAM            0x50000000
+        /* b18-2{SRAM addr} */
+
 #define NS_CMD_WRITE_FREEBUFQ       0x60000000
+        /* b0{large buf indicator} */
+
 #define NS_CMD_READ_UTILITY         0x80000000
+        /* b8{1=select UTL_CS1} b9{1=select UTL_CS0} b7-0{bus addr} */
+
 #define NS_CMD_WRITE_UTILITY        0x90000000
+        /* b8{1=select UTL_CS1} b9{1=select UTL_CS0} b7-0{bus addr} */
 
 #define NS_CMD_OPEN_CONNECTION (NS_CMD_OPENCLOSE_CONNECTION | 0x00080000)
 #define NS_CMD_CLOSE_CONNECTION NS_CMD_OPENCLOSE_CONNECTION
@@ -497,28 +515,35 @@ enum ns_regs
 
 /* NICStAR configuration bits *************************************************/
 
-#define NS_CFG_SWRST          0x80000000
-#define NS_CFG_RXPATH         0x20000000
-#define NS_CFG_SMBUFSIZE_MASK 0x18000000
-#define NS_CFG_LGBUFSIZE_MASK 0x06000000
-#define NS_CFG_EFBIE          0x01000000
-#define NS_CFG_RSQSIZE_MASK   0x00C00000
-#define NS_CFG_ICACCEPT       0x00200000
-#define NS_CFG_IGNOREGFC      0x00100000
-#define NS_CFG_VPIBITS_MASK   0x000C0000
-#define NS_CFG_RCTSIZE_MASK   0x00030000
-#define NS_CFG_VCERRACCEPT    0x00008000
-#define NS_CFG_RXINT_MASK     0x00007000
-#define NS_CFG_RAWIE          0x00000800
-#define NS_CFG_RSQAFIE        0x00000400
-#define NS_CFG_RXRM           0x00000200
-#define NS_CFG_TMRROIE        0x00000080
-#define NS_CFG_TXEN           0x00000020
-#define NS_CFG_TXIE           0x00000010
-#define NS_CFG_TXURIE         0x00000008
-#define NS_CFG_UMODE          0x00000004
-#define NS_CFG_TSQFIE         0x00000002
-#define NS_CFG_PHYIE          0x00000001
+#define NS_CFG_SWRST          0x80000000    /* Software Reset */
+#define NS_CFG_RXPATH         0x20000000    /* Receive Path Enable */
+#define NS_CFG_SMBUFSIZE_MASK 0x18000000    /* Small Receive Buffer Size */
+#define NS_CFG_LGBUFSIZE_MASK 0x06000000    /* Large Receive Buffer Size */
+#define NS_CFG_EFBIE          0x01000000    /* Empty Free Buffer Queue
+                                               Interrupt Enable */
+#define NS_CFG_RSQSIZE_MASK   0x00C00000    /* Receive Status Queue Size */
+#define NS_CFG_ICACCEPT       0x00200000    /* Invalid Cell Accept */
+#define NS_CFG_IGNOREGFC      0x00100000    /* Ignore General Flow Control */
+#define NS_CFG_VPIBITS_MASK   0x000C0000    /* VPI/VCI Bits Size Select */
+#define NS_CFG_RCTSIZE_MASK   0x00030000    /* Receive Connection Table Size */
+#define NS_CFG_VCERRACCEPT    0x00008000    /* VPI/VCI Error Cell Accept */
+#define NS_CFG_RXINT_MASK     0x00007000    /* End of Receive PDU Interrupt
+                                               Handling */
+#define NS_CFG_RAWIE          0x00000800    /* Raw Cell Qu' Interrupt Enable */
+#define NS_CFG_RSQAFIE        0x00000400    /* Receive Queue Almost Full
+                                               Interrupt Enable */
+#define NS_CFG_RXRM           0x00000200    /* Receive RM Cells */
+#define NS_CFG_TMRROIE        0x00000080    /* Timer Roll Over Interrupt
+                                               Enable */
+#define NS_CFG_TXEN           0x00000020    /* Transmit Operation Enable */
+#define NS_CFG_TXIE           0x00000010    /* Transmit Status Interrupt
+                                               Enable */
+#define NS_CFG_TXURIE         0x00000008    /* Transmit Under-run Interrupt
+                                               Enable */
+#define NS_CFG_UMODE          0x00000004    /* Utopia Mode (cell/byte) Select */
+#define NS_CFG_TSQFIE         0x00000002    /* Transmit Status Queue Full
+                                               Interrupt Enable */
+#define NS_CFG_PHYIE          0x00000001    /* PHY Interrupt Enable */
 
 #define NS_CFG_SMBUFSIZE_48    0x00000000
 #define NS_CFG_SMBUFSIZE_96    0x08000000
@@ -552,22 +577,22 @@ enum ns_regs
 
 /* NICStAR STATus bits ********************************************************/
 
-#define NS_STAT_SFBQC_MASK 0xFF000000
-#define NS_STAT_LFBQC_MASK 0x00FF0000
-#define NS_STAT_TSIF       0x00008000
-#define NS_STAT_TXICP      0x00004000
-#define NS_STAT_TSQF       0x00001000
-#define NS_STAT_TMROF      0x00000800
-#define NS_STAT_PHYI       0x00000400
-#define NS_STAT_CMDBZ      0x00000200
-#define NS_STAT_SFBQF      0x00000100
-#define NS_STAT_LFBQF      0x00000080
-#define NS_STAT_RSQF       0x00000040
-#define NS_STAT_EOPDU      0x00000020
-#define NS_STAT_RAWCF      0x00000010
-#define NS_STAT_SFBQE      0x00000008
-#define NS_STAT_LFBQE      0x00000004
-#define NS_STAT_RSQAF      0x00000002
+#define NS_STAT_SFBQC_MASK 0xFF000000   /* hi 8 bits Small Buffer Queue Count */
+#define NS_STAT_LFBQC_MASK 0x00FF0000   /* hi 8 bits Large Buffer Queue Count */
+#define NS_STAT_TSIF       0x00008000   /* Transmit Status Queue Indicator */
+#define NS_STAT_TXICP      0x00004000   /* Transmit Incomplete PDU */
+#define NS_STAT_TSQF       0x00001000   /* Transmit Status Queue Full */
+#define NS_STAT_TMROF      0x00000800   /* Timer Overflow */
+#define NS_STAT_PHYI       0x00000400   /* PHY Device Interrupt */
+#define NS_STAT_CMDBZ      0x00000200   /* Command Busy */
+#define NS_STAT_SFBQF      0x00000100   /* Small Buffer Queue Full */
+#define NS_STAT_LFBQF      0x00000080   /* Large Buffer Queue Full */
+#define NS_STAT_RSQF       0x00000040   /* Receive Status Queue Full */
+#define NS_STAT_EOPDU      0x00000020   /* End of PDU */
+#define NS_STAT_RAWCF      0x00000010   /* Raw Cell Flag */
+#define NS_STAT_SFBQE      0x00000008   /* Small Buffer Queue Empty */
+#define NS_STAT_LFBQE      0x00000004   /* Large Buffer Queue Empty */
+#define NS_STAT_RSQAF      0x00000002   /* Receive Status Queue Almost Full */
 
 #define ns_stat_sfbqc_get(stat) (((stat) & NS_STAT_SFBQC_MASK) >> 23)
 #define ns_stat_lfbqc_get(stat) (((stat) & NS_STAT_LFBQC_MASK) >> 15)
@@ -723,7 +748,7 @@ typedef struct ns_dev
 {
    int index;				/* Card ID to the device driver */
    int sram_size;			/* In k x 32bit words. 32 or 128 */
-   u32 membase;				/* Card's memory base address */
+   unsigned long membase;			/* Card's memory base address */
    unsigned long max_pcr;
    int rct_size;			/* Number of entries */
    int vpibits;

@@ -1,10 +1,10 @@
 /* atmioc.h - ranges for ATM-related ioctl numbers */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 /*
- * See http://lrcwww.epfl.ch/linux-atm/magic.html for the complete list of
+ * See http://icawww1.epfl.ch/linux-atm/magic.html for the complete list of
  * "magic" ioctl numbers.
  */
 

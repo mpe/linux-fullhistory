@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.84 2000/01/31 21:10:04 davem Exp $
+# $Id: config.in,v 1.85 2000/02/08 08:57:45 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -21,7 +21,7 @@ bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_S
 
 bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
 if [ "$CONFIG_SUN4" != "y" ]; then
-   bool '  Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
+   bool 'Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
    source drivers/pci/Config.in
 fi
 

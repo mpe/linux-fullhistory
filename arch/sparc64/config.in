@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.89 2000/01/31 21:10:10 davem Exp $
+# $Id: config.in,v 1.94 2000/02/08 08:57:50 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -17,13 +17,6 @@ define_bool CONFIG_VT_CONSOLE y
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
 
-mainmenu_option next_comment
-comment 'Console drivers'
-bool 'PROM console' CONFIG_PROM_CONSOLE
-bool 'Support Frame buffer devices' CONFIG_FB
-source drivers/video/Config.in
-endmenu
-
 # Global things across all Sun machines.
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y
@@ -38,6 +31,14 @@ define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
 bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
+
+mainmenu_option next_comment
+comment 'Console drivers'
+bool 'PROM console' CONFIG_PROM_CONSOLE
+bool 'Support Frame buffer devices' CONFIG_FB
+source drivers/video/Config.in
+endmenu
+
 source drivers/sbus/char/Config.in
 source drivers/sbus/audio/Config.in
 
@@ -198,26 +199,48 @@ if [ "$CONFIG_NET" = "y" ]; then
 	 bool '    Keepalive and linefill' CONFIG_SLIP_SMART
 	 bool '    Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
       fi
-      bool '  Sun LANCE support' CONFIG_SUNLANCE
-      tristate '  Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
+
+      mainmenu_option next_comment
+      comment 'Ethernet (10 or 100Mbit)'
+
+      bool 'Sun LANCE support' CONFIG_SUNLANCE
+      tristate 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	 tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
+	 tristate 'Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
       fi
       tristate '  Sun QuadEthernet support' CONFIG_SUNQE
-      tristate '  MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
       if [ "$CONFIG_PCI" = "y" ]; then
-	 tristate '  Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
-	 tristate '  3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
-	 tristate '  RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
-	 tristate '  PCI NE2000 support' CONFIG_NE2K_PCI
-	 tristate '  EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
-	 tristate '  Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
+	 tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+	 tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+	 tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
+	 tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
+	 tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
+	 tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
       fi
+      endmenu
+
+      mainmenu_option next_comment
+      comment 'Ethernet (1000 Mbit)'
+
+      if [ "$CONFIG_PCI" = "y" ]; then
+	  tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+	  if [ "$CONFIG_ACENIC" != "n" ]; then
+	    bool '  Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
+	  fi
+	  tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
+      fi
+      tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
+      endmenu
+
 #      bool '  FDDI driver support' CONFIG_FDDI
 #      if [ "$CONFIG_FDDI" = "y" ]; then
 #      fi
+
+      if [ "$CONFIG_ATM" = "y" ]; then
+	source drivers/atm/Config.in
+      fi
    fi
-endmenu
+   endmenu
 fi
 
 # This one must be before the filesystem configs. -DaveM

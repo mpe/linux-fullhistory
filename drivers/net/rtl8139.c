@@ -165,11 +165,12 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
+	struct net_device *(*probe1)(struct pci_dev *pdev, int pci_bus, int pci_devfn, long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct net_device * rtl8129_probe1(int pci_bus, int pci_devfn, long ioaddr,
-									  int irq, int chp_idx, int fnd_cnt);
+static struct net_device * rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
+										  int pci_devfn, long ioaddr,
+										  int irq, int chp_idx, int fnd_cnt);
 
 static struct pci_id_info pci_tbl[] =
 {{ "RealTek RTL8129 Fast Ethernet",
@@ -249,10 +250,16 @@ unsigned long param[4][4]={
 	{0x0bb39de43,0x0bb39ce43,0x0bb39ce83,0x0bb39ce83}
 };
 
+struct ring_info {
+	struct sk_buff *skb;
+	dma_addr_t mapping;
+};
+
 struct rtl8129_private {
 	char devname[8];			/* Used only for kernel debugging. */
 	const char *product_name;
 	struct net_device *next_module;
+	struct pci_dev *pdev;
 	int chip_id;
 	int chip_revision;
 	unsigned char pci_bus, pci_devfn;
@@ -265,10 +272,12 @@ struct rtl8129_private {
 	unsigned int cur_rx;		/* Index into the Rx buffer of next Rx pkt. */
 	unsigned int cur_tx, dirty_tx, tx_flag;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
-	struct sk_buff* tx_skbuff[NUM_TX_DESC];
+	struct ring_info tx_info[NUM_TX_DESC];
 	unsigned char *tx_buf[NUM_TX_DESC];	/* Tx bounce buffers */
 	unsigned char *rx_ring;
 	unsigned char *tx_bufs;				/* Tx bounce buffer region. */
+	dma_addr_t rx_ring_dma;
+	dma_addr_t tx_bufs_dma;
 	char phys[4];						/* MII device addresses. */
 	char twistie, twist_cnt;			/* Twister tune state. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
@@ -328,6 +337,7 @@ int rtl8139_probe(void)
 		return -ENODEV;
 
 	for (; pci_index < 0xff; pci_index++) {
+		struct pci_dev *pdev;
 		u16 vendor, device, pci_command, new_command;
 		int chip_idx, irq;
 		long ioaddr;
@@ -349,22 +359,9 @@ int rtl8139_probe(void)
 		if (pci_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
 			continue;
 
-		{
-#if defined(PCI_SUPPORT_VER2)
-			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-			ioaddr = pdev->resource[0].start;
-			irq = pdev->irq;
-#else
-			u32 pci_ioaddr;
-			u8 pci_irq_line;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			ioaddr = pci_ioaddr & ~3;
-			irq = pci_irq_line;
-#endif
-		}
+		pdev = pci_find_slot(pci_bus, pci_device_fn);
+		ioaddr = pdev->resource[0].start;
+		irq = pdev->irq;
 
 		if ((pci_tbl[chip_idx].flags & PCI_USES_IO) &&
 			check_region(ioaddr, pci_tbl[chip_idx].io_size))
@@ -382,7 +379,7 @@ int rtl8139_probe(void)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, ioaddr, irq, chip_idx, cards_found);
+		dev = pci_tbl[chip_idx].probe1(pdev, pci_bus, pci_device_fn, ioaddr, irq, chip_idx, cards_found);
 
 		if (dev  && (pci_tbl[chip_idx].flags & PCI_COMMAND_MASTER)) {
 			u8 pci_latency;
@@ -403,8 +400,9 @@ int rtl8139_probe(void)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct net_device *rtl8129_probe1(int pci_bus, int pci_devfn, long ioaddr,
-									 int irq, int chip_idx, int found_cnt)
+static struct net_device *rtl8129_probe1(struct pci_dev *pdev, int pci_bus,
+										 int pci_devfn, long ioaddr,
+										 int irq, int chip_idx, int found_cnt)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct rtl8129_private *tp;
@@ -449,6 +447,7 @@ static struct net_device *rtl8129_probe1(int pci_bus, int pci_devfn, long ioaddr
 	tp->next_module = root_rtl8129_dev;
 	root_rtl8129_dev = dev;
 
+	tp->pdev = pdev;
 	tp->chip_id = chip_idx;
 	tp->pci_bus = pci_bus;
 	tp->pci_devfn = pci_devfn;
@@ -677,12 +676,22 @@ rtl8129_open(struct net_device *dev)
 
 	MOD_INC_USE_COUNT;
 
-	tp->tx_bufs = kmalloc(TX_BUF_SIZE * NUM_TX_DESC, GFP_KERNEL);
-	tp->rx_ring = kmalloc(RX_BUF_LEN + 16, GFP_KERNEL);
+	tp->tx_bufs = pci_alloc_consistent(tp->pdev,
+									   TX_BUF_SIZE * NUM_TX_DESC,
+									   &tp->tx_bufs_dma);
+	tp->rx_ring = pci_alloc_consistent(tp->pdev,
+									   RX_BUF_LEN + 16,
+									   &tp->rx_ring_dma);
 	if (tp->tx_bufs == NULL ||  tp->rx_ring == NULL) {
 		free_irq(dev->irq, dev);
 		if (tp->tx_bufs)
-			kfree(tp->tx_bufs);
+			pci_free_consistent(tp->pdev,
+								TX_BUF_SIZE * NUM_TX_DESC,
+								tp->tx_bufs, tp->tx_bufs_dma);
+		if (tp->rx_ring)
+			pci_free_consistent(tp->pdev,
+								RX_BUF_LEN + 16,
+								tp->rx_ring, tp->rx_ring_dma);
 		if (rtl8129_debug > 0)
 			printk(KERN_ERR "%s: Couldn't allocate a %d byte receive ring.\n",
 				   dev->name, RX_BUF_LEN);
@@ -725,7 +734,7 @@ rtl8129_open(struct net_device *dev)
 	outb(tp->full_duplex ? 0x60 : 0x20, ioaddr + Config1);
 	outb(0x00, ioaddr + Cfg9346);
 
-	outl(virt_to_bus(tp->rx_ring), ioaddr + RxBuf);
+	outl(tp->rx_ring_dma, ioaddr + RxBuf);
 
 	/* Start the chip's Tx and Rx process. */
 	outl(0, ioaddr + RxMissed);
@@ -902,24 +911,38 @@ static void rtl8129_tx_timeout(struct net_device *dev)
 	{							/* Save the unsent Tx packets. */
 		struct sk_buff *saved_skb[NUM_TX_DESC], *skb;
 		int j;
-		for (j = 0; tp->cur_tx - tp->dirty_tx > 0 ; j++, tp->dirty_tx++)
-			saved_skb[j] = tp->tx_skbuff[tp->dirty_tx % NUM_TX_DESC];
+		for (j = 0; tp->cur_tx - tp->dirty_tx > 0 ; j++, tp->dirty_tx++) {
+			struct ring_info *rp = &tp->tx_info[tp->dirty_tx % NUM_TX_DESC];
+
+			saved_skb[j] = rp->skb;
+			if (rp->mapping != 0) {
+				pci_unmap_single(tp->pdev, rp->mapping, rp->skb->len);
+				rp->mapping = 0;
+			}
+		}
 		tp->dirty_tx = tp->cur_tx = 0;
 
 		for (i = 0; i < j; i++) {
-			skb = tp->tx_skbuff[i] = saved_skb[i];
+			skb = tp->tx_info[i].skb = saved_skb[i];
 			if ((long)skb->data & 3) {		/* Must use alignment buffer. */
 				memcpy(tp->tx_buf[i], skb->data, skb->len);
-				outl(virt_to_bus(tp->tx_buf[i]), ioaddr + TxAddr0 + i*4);
-			} else
-				outl(virt_to_bus(skb->data), ioaddr + TxAddr0 + i*4);
+				outl(tp->tx_bufs_dma + (tp->tx_buf[i] - tp->tx_bufs),
+					 ioaddr + TxAddr0 + i*4);
+			} else {
+				tp->tx_info[i].mapping =
+					pci_map_single(tp->pdev, skb->data, skb->len);
+				outl(tp->tx_info[i].mapping, ioaddr + TxAddr0 + i*4);
+			}
 			/* Note: the chip doesn't have auto-pad! */
 			outl(tp->tx_flag | (skb->len >= ETH_ZLEN ? skb->len : ETH_ZLEN),
 				 ioaddr + TxStatus0 + i*4);
 		}
 		tp->cur_tx = i;
-		while (i < NUM_TX_DESC)
-			tp->tx_skbuff[i++] = 0;
+		while (i < NUM_TX_DESC) {
+			tp->tx_info[i].skb = NULL;
+			tp->tx_info[i].mapping = 0;
+			i++;
+		}
 		if (tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
 			dev->tbusy = 0;
 			tp->tx_full = 0;
@@ -949,8 +972,9 @@ rtl8129_init_ring(struct net_device *dev)
 	tp->dirty_tx = tp->cur_tx = 0;
 
 	for (i = 0; i < NUM_TX_DESC; i++) {
-		tp->tx_skbuff[i] = 0;
 		tp->tx_buf[i] = &tp->tx_bufs[i*TX_BUF_SIZE];
+		tp->tx_info[i].skb = NULL;
+		tp->tx_info[i].mapping = 0;
 	}
 }
 
@@ -972,12 +996,17 @@ rtl8129_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % NUM_TX_DESC;
 
-	tp->tx_skbuff[entry] = skb;
+	tp->tx_info[entry].skb = skb;
 	if ((long)skb->data & 3) {			/* Must use alignment buffer. */
+		tp->tx_info[entry].mapping = 0;
 		memcpy(tp->tx_buf[entry], skb->data, skb->len);
-		outl(virt_to_bus(tp->tx_buf[entry]), ioaddr + TxAddr0 + entry*4);
-	} else
-		outl(virt_to_bus(skb->data), ioaddr + TxAddr0 + entry*4);
+		outl(tp->tx_bufs_dma + (tp->tx_buf[entry] - tp->tx_bufs),
+			 ioaddr + TxAddr0 + entry*4);
+	} else {
+		tp->tx_info[entry].mapping =
+			pci_map_single(tp->pdev, skb->data, skb->len);
+		outl(tp->tx_info[entry].mapping, ioaddr + TxAddr0 + entry*4);
+	}
 	/* Note: the chip doesn't have auto-pad! */
 	outl(tp->tx_flag | (skb->len >= ETH_ZLEN ? skb->len : ETH_ZLEN),
 		 ioaddr + TxStatus0 + entry*4);
@@ -1082,9 +1111,16 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					tp->stats.tx_packets++;
 				}
 
+				if (tp->tx_info[entry].mapping != 0) {
+					pci_unmap_single(tp->pdev,
+									 tp->tx_info[entry].mapping,
+									 tp->tx_info[entry].skb->len);
+					tp->tx_info[entry].mapping = 0;
+				}
+
 				/* Free the original skb. */
-				dev_free_skb(tp->tx_skbuff[entry]);
-				tp->tx_skbuff[entry] = 0;
+				dev_free_skb(tp->tx_info[entry].skb);
+				tp->tx_info[entry].skb = NULL;
 				if (tp->tx_full) {
 					/* The ring is no longer full, clear tbusy. */
 					tp->tx_full = 0;
@@ -1311,12 +1347,23 @@ rtl8129_close(struct net_device *dev)
 	free_irq(dev->irq, dev);
 
 	for (i = 0; i < NUM_TX_DESC; i++) {
-		if (tp->tx_skbuff[i])
-			dev_free_skb(tp->tx_skbuff[i]);
-		tp->tx_skbuff[i] = 0;
+		struct sk_buff *skb = tp->tx_info[i].skb;
+		dma_addr_t mapping = tp->tx_info[i].mapping;
+
+		if (skb) {
+			if (mapping)
+				pci_unmap_single(tp->pdev, mapping, skb->len);
+			dev_free_skb(skb);
+		}
+		tp->tx_info[i].skb = NULL;
+		tp->tx_info[i].mapping = 0;
 	}
-	kfree(tp->rx_ring);
-	kfree(tp->tx_bufs);
+	pci_free_consistent(tp->pdev, RX_BUF_LEN + 16,
+						tp->rx_ring, tp->rx_ring_dma);
+	pci_free_consistent(tp->pdev, TX_BUF_SIZE * NUM_TX_DESC,
+						tp->tx_bufs, tp->tx_bufs_dma);
+	tp->rx_ring = NULL;
+	tp->tx_bufs = NULL;
 
 	/* Green! Put the chip in low-power mode. */
 	outb(0xC0, ioaddr + Cfg9346);

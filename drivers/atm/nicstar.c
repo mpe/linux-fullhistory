@@ -44,6 +44,9 @@
 #ifdef CONFIG_ATM_NICSTAR_USE_SUNI
 #include "suni.h"
 #endif /* CONFIG_ATM_NICSTAR_USE_SUNI */
+#ifdef CONFIG_ATM_NICSTAR_USE_IDT77105
+#include "idt77105.h"
+#endif /* CONFIG_ATM_NICSTAR_USE_IDT77105 */
 
 
 /* Additional code ************************************************************/
@@ -99,8 +102,10 @@
 
 #define NS_DELAY mdelay(1)
 
-#define ALIGN_ADDRESS(addr, alignment) \
+#define ALIGN_BUS_ADDR(addr, alignment) \
         ((((u32) (addr)) + (((u32) (alignment)) - 1)) & ~(((u32) (alignment)) - 1))
+#define ALIGN_ADDRESS(addr, alignment) \
+        bus_to_virt(ALIGN_BUS_ADDR(virt_to_bus(addr), alignment))
 
 #undef CEIL(d)
 
@@ -164,21 +169,13 @@ static struct ns_dev *cards[NS_MAX_CARDS];
 static unsigned num_cards = 0;
 static struct atmdev_ops atm_ops =
 {
-   NULL,		/* dev_close */
-   ns_open,		/* open */
-   ns_close,		/* close */
-   ns_ioctl,		/* ioctl */
-   NULL,		/* getsockopt */
-   NULL,		/* setsockopt */
-   ns_send,		/* send */
-   NULL,		/* sg_send */
-   NULL,		/* send_oam */
-   ns_phy_put,		/* phy_put */
-   ns_phy_get,		/* phy_get */
-   NULL,		/* feedback */
-   NULL,		/* change_qos */
-   NULL,		/* free_rx_skb */
-   ns_proc_read		/* proc_read */
+   open:	ns_open,
+   close:	ns_close,
+   ioctl:	ns_ioctl,
+   send:	ns_send,
+   phy_put:	ns_phy_put,
+   phy_get:	ns_phy_get,
+   proc_read:	ns_proc_read
 };
 static struct timer_list ns_timer;
 static char *mac[NS_MAX_CARDS] = { NULL
@@ -285,6 +282,12 @@ void cleanup_module(void)
          continue;
 
       card = cards[i];
+
+#ifdef CONFIG_ATM_NICSTAR_USE_IDT77105
+      if (card->max_pcr == IDT_25_PCR) {
+        idt77105_stop(card->atmdev);
+      }
+#endif /* CONFIG_ATM_NICSTAR_USE_IDT77105 */
 
       /* Stop everything */
       writel(0x00000000, card->membase + CFG);
@@ -457,15 +460,16 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
    cards[i] = card;
       
    card->index = i;
+   card->atmdev = NULL;
    card->pcidev = pcidev;
-   card->membase = (u32) pcidev->resource[1].start;
+   card->membase = pcidev->resource[1].start;
 #ifdef __powerpc__
    /* Compensate for different memory map between host CPU and PCI bus.
       Shouldn't we use a macro for this? */
    card->membase += KERNELBASE;
 #endif /* __powerpc__ */
-   card->membase = (u32) ioremap(card->membase, NS_IOREMAP_SIZE);
-   if (card->membase == (u32) (NULL))
+   card->membase = (unsigned long) ioremap(card->membase, NS_IOREMAP_SIZE);
+   if (card->membase == 0)
    {
       printk("nicstar%d: can't ioremap() membase.\n",i);
       error = 3;
@@ -497,6 +501,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       ns_init_card_error(card, error);
       return error;
    }
+#ifdef NS_PCI_LATENCY
    if (pci_latency < NS_PCI_LATENCY)
    {
       PRINTK("nicstar%d: setting PCI latency timer to %d.\n", i, NS_PCI_LATENCY);
@@ -513,6 +518,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
 	 return error;
       }
    }
+#endif /* NS_PCI_LATENCY */
       
    /* Clear timer overflow */
    data = readl(card->membase + STAT);
@@ -872,8 +878,8 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
    card->atmdev->ci_range.vpi_bits = card->vpibits;
    card->atmdev->ci_range.vci_bits = card->vcibits;
    card->atmdev->link_rate = card->max_pcr;
-
    card->atmdev->phy = NULL;
+
 #ifdef CONFIG_ATM_NICSTAR_USE_SUNI
    if (card->max_pcr == ATM_OC3_PCR) {
       suni_init(card->atmdev);
@@ -883,6 +889,17 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
 #endif /* MODULE */
    }
 #endif /* CONFIG_ATM_NICSTAR_USE_SUNI */
+
+#ifdef CONFIG_ATM_NICSTAR_USE_IDT77105
+   if (card->max_pcr == IDT_25_PCR) {
+      idt77105_init(card->atmdev);
+      /* Note that for the IDT77105 PHY we don't need the awful
+       * module count hack that the SUNI needs because we can
+       * stop the '105 when the nicstar module is cleaned up.
+       */
+   }
+#endif /* CONFIG_ATM_NICSTAR_USE_IDT77105 */
+
    if (card->atmdev->phy && card->atmdev->phy->start)
       card->atmdev->phy->start(card->atmdev);
 
@@ -1798,8 +1815,8 @@ static int ns_send(struct atm_vcc *vcc, struct sk_buff *skb)
       flags = NS_TBD_AAL5;
       scqe.word_2 = cpu_to_le32((u32) virt_to_bus(skb->data));
       scqe.word_3 = cpu_to_le32((u32) skb->len);
-      scqe.word_4 = cpu_to_le32(((u32) vcc->vpi) << NS_TBD_VPI_SHIFT |
-                                ((u32) vcc->vci) << NS_TBD_VCI_SHIFT);
+      scqe.word_4 = ns_tbd_mkword_4(0, (u32) vcc->vpi, (u32) vcc->vci, 0,
+                           ATM_SKB(skb)->atm_options & ATM_ATMOPT_CLP ? 1 : 0);
       flags |= NS_TBD_EOPDU;
    }
    else /* (vcc->qos.aal == ATM_AAL0) */
@@ -1950,7 +1967,7 @@ static void process_tsq(ns_dev *card)
 {
    u32 scdi;
    scq_info *scq;
-   ns_tsi *previous, *one_ahead, *two_ahead;
+   ns_tsi *previous = NULL, *one_ahead, *two_ahead;
    int serviced_entries;   /* flag indicating at least on entry was serviced */
    
    serviced_entries = 0;
@@ -2679,7 +2696,10 @@ static int ns_proc_read(struct atm_dev *dev, loff_t *pos, char *page)
       card->intcnt = 0;
       return retval;
    }
+#if 0
    /* Dump 25.6 Mbps PHY registers */
+   /* Now there's a 25.6 Mbps PHY driver this code isn't needed. I left it
+      here just in case it's needed for debugging. */
    if (card->max_pcr == IDT_25_PCR && !left--)
    {
       u32 phy_regs[4];
@@ -2696,6 +2716,7 @@ static int ns_proc_read(struct atm_dev *dev, loff_t *pos, char *page)
       return sprintf(page, "PHY regs: 0x%02X 0x%02X 0x%02X 0x%02X \n",
                      phy_regs[0], phy_regs[1], phy_regs[2], phy_regs[3]);
    }
+#endif /* 0 - Dump 25.6 Mbps PHY registers */
 #if 0
    /* Dump TST */
    if (left-- < NS_TST_NUM_ENTRIES)
@@ -2757,7 +2778,7 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
 	       break;
 
             default:
-	       return -EINVAL;
+	       return -ENOIOCTLCMD;
 
 	 }
          if (!copy_to_user((pool_levels *) arg, &pl, sizeof(pl)))
@@ -2921,7 +2942,7 @@ static int ns_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
          else {
             printk("nicstar%d: %s == NULL \n", card->index,
                    dev->phy ? "dev->phy->ioctl" : "dev->phy");
-            return -EINVAL;
+            return -ENOIOCTLCMD;
          }
    }
 }

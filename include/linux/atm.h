@@ -1,6 +1,6 @@
 /* atm.h - general ATM declarations */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 /*
@@ -20,6 +20,7 @@
 #include <linux/socket.h>
 #include <linux/types.h>
 #endif
+#include <linux/atmapi.h>
 #include <linux/atmsap.h>
 #include <linux/atmioc.h>
 
@@ -84,23 +85,6 @@
  * please speak up ...
  */
 
-/* socket layer */
-#define SO_BCTXOPT	__SO_ENCODE(SOL_SOCKET,16,struct atm_buffconst)
-			    /* not ATM specific - should go somewhere else */
-#define SO_BCRXOPT	__SO_ENCODE(SOL_SOCKET,17,struct atm_buffconst)
-
-
-/* for SO_BCTXOPT and SO_BCRXOPT */
-
-struct atm_buffconst {
-	unsigned long	buf_fac;	/* buffer alignment factor */
-	unsigned long	buf_off;	/* buffer alignment offset */
-	unsigned long	size_fac;	/* buffer size factor */
-	unsigned long	size_off;	/* buffer size offset */
-	unsigned long	min_size;	/* minimum size */
-	unsigned long	max_size;	/* maximum size, 0 = unlimited */
-};
-
 
 /* ATM cell header (for AAL0) */
 
@@ -154,12 +138,28 @@ struct atm_trafprm {
 	int		min_pcr;	/* minimum PCR in cells per second */
 	int		max_cdv;	/* maximum CDV in microseconds */
 	int		max_sdu;	/* maximum SDU in bytes */
+        /* extra params for ABR */
+        unsigned int 	icr;         	/* Initial Cell Rate (24-bit) */
+        unsigned int	tbe;		/* Transient Buffer Exposure (24-bit) */ 
+        unsigned int 	frtt : 24;	/* Fixed Round Trip Time (24-bit) */
+        unsigned int 	rif  : 4;       /* Rate Increment Factor (4-bit) */
+        unsigned int 	rdf  : 4;       /* Rate Decrease Factor (4-bit) */
+        unsigned int nrm_pres  :1;      /* nrm present bit */
+        unsigned int trm_pres  :1;     	/* rm present bit */
+        unsigned int adtf_pres :1;     	/* adtf present bit */
+        unsigned int cdf_pres  :1;    	/* cdf present bit*/
+        unsigned int nrm       :3;     	/* Max # of Cells for each forward RM cell (3-bit) */
+        unsigned int trm       :3;    	/* Time between forward RM cells (3-bit) */    
+	unsigned int adtf      :10;     /* ACR Decrease Time Factor (10-bit) */
+	unsigned int cdf       :3;      /* Cutoff Decrease Factor (3-bit) */
+        unsigned int spare     :9;      /* spare bits */ 
 };
 
 struct atm_qos {
 	struct atm_trafprm txtp;	/* parameters in TX direction */
-	struct atm_trafprm rxtp;	/* parameters in RX direction */
-	unsigned char aal;
+	struct atm_trafprm rxtp __ATM_API_ALIGN;
+					/* parameters in RX direction */
+	unsigned char aal __ATM_API_ALIGN;
 };
 
 /* PVC addressing */
@@ -177,7 +177,7 @@ struct sockaddr_atmpvc {
 		short	itf;		/* ATM interface */
 		short	vpi;		/* VPI (only 8 bits at UNI) */
 		int	vci;		/* VCI (only 16 bits at UNI) */
-	}		sap_addr;	/* PVC address */
+	} sap_addr __ATM_API_ALIGN;	/* PVC address */
 };
 
 /* SVC addressing */
@@ -209,7 +209,7 @@ struct sockaddr_atmsvc {
     					/* unused addresses must be bzero'ed */
 	char		lij_type;	/* role in LIJ call; one of ATM_LIJ* */
 	uint32_t	lij_id;		/* LIJ call identifier */
-    }			sas_addr;	/* SVC address */
+    } sas_addr __ATM_API_ALIGN;		/* SVC address */
 };
 
 
@@ -234,10 +234,6 @@ struct atmif_sioc {
     int length;
     void *arg;
 };
-
-
-#define ATM_CREATE_LEAF _IO('a',ATMIOC_SPECIAL+2)
-                                /* create a point-to-multipoint leaf socket */
 
 
 #ifdef __KERNEL__

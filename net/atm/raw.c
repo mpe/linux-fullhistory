@@ -3,7 +3,6 @@
 /* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/atmdev.h>
@@ -11,14 +10,8 @@
 #include <linux/skbuff.h>
 #include <linux/mm.h>
 
-#ifdef CONFIG_MMU_HACKS
-#include <linux/mmuio.h>
-#include <linux/uio.h>
-#endif
-
 #include "common.h"
 #include "protocols.h"
-#include "tunable.h"		/* tunable parameters */
 
 
 #if 0
@@ -43,10 +36,6 @@ void atm_push_raw(struct atm_vcc *vcc,struct sk_buff *skb)
 
 static void atm_pop_raw(struct atm_vcc *vcc,struct sk_buff *skb)
 {
-#ifdef CONFIG_MMU_HACKS
-	if (ATM_SKB(skb)->iovcnt)
-		unlock_user(ATM_SKB(skb)->iovcnt,(struct iovec *) skb->data);
-#endif
 	DPRINTK("APopR (%d) %d -= %d\n",vcc->vci,vcc->tx_inuse,skb->truesize);
 	atomic_sub(skb->truesize+ATM_PDU_OVHD,&vcc->tx_inuse);
 	dev_kfree_skb(skb);

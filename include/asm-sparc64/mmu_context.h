@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.41 1999/09/10 15:39:03 jj Exp $ */
+/* $Id: mmu_context.h,v 1.42 2000/02/08 07:47:03 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 

@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.28 2000/01/24 23:35:59 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.30 2000/02/01 12:38:30 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1000,6 +1000,10 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb;
 	int copied, err;
+
+	err = -EINVAL;
+	if (flags & ~(MSG_PEEK|MSG_DONTWAIT|MSG_TRUNC))
+		goto out;
 
 #if 0
 	/* What error should we return now? EUNATTACH? */

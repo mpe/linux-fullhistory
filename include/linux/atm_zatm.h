@@ -1,7 +1,7 @@
 /* atm_zatm.h - Driver-specific declarations of the ZATM driver (for use by
 		driver-specific utilities) */
 
-/* Written 1995-1997 by Werner Almesberger, EPFL LRC */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #ifndef LINUX_ATM_ZATM_H
@@ -12,6 +12,7 @@
  * sys/types.h for struct timeval
  */
 
+#include <linux/atmapi.h>
 #include <linux/atmioc.h>
 
 #define ZATM_GETPOOL	_IOW('a',ATMIOC_SARPRV+1,struct atmif_sioc)

@@ -1,6 +1,6 @@
 /* net/atm/common.c - ATM sockets (common part for PVC and SVC) */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -23,11 +23,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/poll.h>
-
-#ifdef CONFIG_MMU_HACKS
-#include <linux/mmuio.h>
-#include <linux/uio.h>
-#endif
 
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 #include <linux/atmlec.h>
@@ -62,7 +57,6 @@ EXPORT_SYMBOL(atm_tcp_ops);
 #include "resources.h"		/* atm_find_dev */
 #include "common.h"		/* prototypes */
 #include "protocols.h"		/* atm_init_<transport> */
-#include "tunable.h"		/* tunable parameters */
 #include "addr.h"		/* address registry */
 #ifdef CONFIG_ATM_CLIP
 #include <net/atmclip.h>	/* for clip_create */
@@ -81,10 +75,9 @@ static struct sk_buff *alloc_tx(struct atm_vcc *vcc,unsigned int size)
 {
 	struct sk_buff *skb;
 
-	if (atomic_read(&vcc->tx_inuse) && size+atomic_read(&vcc->tx_inuse)+
-	    ATM_PDU_OVHD > vcc->tx_quota) {
-		DPRINTK("Sorry: tx_inuse = %d, size = %d, tx_quota = %ld\n",
-		    atomic_read(&vcc->tx_inuse),size,vcc->tx_quota);
+	if (atomic_read(&vcc->tx_inuse) && !atm_may_send(vcc,size)) {
+		DPRINTK("Sorry: tx_inuse = %d, size = %d, sndbuf = %d\n",
+		    atomic_read(&vcc->tx_inuse),size,vcc->sk->sndbuf);
 		return NULL;
 	}
 	while (!(skb = alloc_skb(size,GFP_KERNEL))) schedule();
@@ -103,15 +96,13 @@ int atm_create(struct socket *sock,int protocol,int family)
 	if (sock->type == SOCK_STREAM) return -EINVAL;
 	if (!(sk = alloc_atm_vcc_sk(family))) return -ENOMEM;
 	vcc = sk->protinfo.af_atm;
-	vcc->flags = ATM_VF_SCRX | ATM_VF_SCTX;
+	vcc->flags = 0;
 	vcc->dev = NULL;
 	vcc->family = sock->ops->family;
 	vcc->alloc_tx = alloc_tx;
 	vcc->callback = NULL;
 	memset(&vcc->local,0,sizeof(struct sockaddr_atmsvc));
 	memset(&vcc->remote,0,sizeof(struct sockaddr_atmsvc));
-	vcc->tx_quota = ATM_TXBQ_DEF;
-	vcc->rx_quota = ATM_RXBQ_DEF;
 	atomic_set(&vcc->tx_inuse,0);
 	atomic_set(&vcc->rx_inuse,0);
 	vcc->push = NULL;
@@ -382,19 +373,9 @@ int atm_recvmsg(struct socket *sock,struct msghdr *m,int total_len,
 		else vcc->dev->ops->free_rx_skb(vcc, skb);
 		return error ? error : eff_len;
 	}
-#ifdef CONFIG_MMU_HACKS
-	if (vcc->flags & ATM_VF_SCRX) {
-		mmucp_tofs((unsigned long) buff,eff_len,skb,
-		    (unsigned long) skb->data);
-		return eff_len;
-	}
-	else
-#endif
-	{
-		error = copy_to_user(buff,skb->data,eff_len) ? -EFAULT : 0;
-		if (!vcc->dev->ops->free_rx_skb) kfree_skb(skb);
-		else vcc->dev->ops->free_rx_skb(vcc, skb);
-	}
+	error = copy_to_user(buff,skb->data,eff_len) ? -EFAULT : 0;
+	if (!vcc->dev->ops->free_rx_skb) kfree_skb(skb);
+	else vcc->dev->ops->free_rx_skb(vcc, skb);
 	return error ? error : eff_len;
 }
 
@@ -419,39 +400,6 @@ int atm_sendmsg(struct socket *sock,struct msghdr *m,int total_len,
 	if (!(vcc->flags & ATM_VF_READY)) return -EPIPE;
 	if (!size) return 0;
 	/* verify_area is done by net/socket.c */
-#ifdef CONFIG_MMU_HACKS
-	if ((vcc->flags & ATM_VF_SCTX) && vcc->dev->ops->sg_send &&
-	    vcc->dev->ops->sg_send(vcc,(unsigned long) buff,size)) {
-		int res,max_iov;
-
-		max_iov = 2+size/PAGE_SIZE;
-		/*
-		 * Doesn't use alloc_tx yet - this will change later. @@@
-		 */
-		while (!(skb = alloc_skb(sizeof(struct iovec)*max_iov,
-		    GFP_KERNEL))) {
-			if (m->msg_flags & MSG_DONTWAIT) return -EAGAIN;
-			interruptible_sleep_on(&vcc->wsleep);
-			if (signal_pending(current)) return -ERESTARTSYS;
-		}
-		skb_put(skb,size);
-		res = lock_user((unsigned long) buff,size,max_iov,
-		    (struct iovec *) skb->data);
-		if (res < 0) {
-			kfree_skb(skb);
-			if (res != -EAGAIN) return res;
-		}
-		else {
-			DPRINTK("res is %d\n",res);
-			DPRINTK("Asnd %d += %d\n",vcc->tx_inuse,skb->truesize);
-			atomic_add(skb->truesize+ATM_PDU_OVHD,&vcc->tx_inuse);
-			ATM_SKB(skb)->iovcnt = res;
-			error = vcc->dev->ops->send(vcc,skb);
-			/* FIXME: security: may send up to 3 "garbage" bytes */
-			return error ? error : size;
-		}
-	}
-#endif
 	eff = (size+3) & ~3; /* align to word boundary */
 	while (!(skb = vcc->alloc_tx(vcc,eff))) {
 		if (m->msg_flags & MSG_DONTWAIT) return -EAGAIN;
@@ -461,6 +409,7 @@ int atm_sendmsg(struct socket *sock,struct msghdr *m,int total_len,
 			return vcc->reply;
 		if (!(vcc->flags & ATM_VF_READY)) return -EPIPE;
 	}
+	skb->dev = NULL; /* for paths shared with net_device interfaces */
 	ATM_SKB(skb)->iovcnt = 0;
 	ATM_SKB(skb)->atm_options = vcc->atm_options;
 	if (copy_from_user(skb_put(skb,size),buff,size)) {
@@ -488,7 +437,7 @@ unsigned int atm_poll(struct file *file,struct socket *sock,poll_table *wait)
 	if (sock->state != SS_CONNECTING) {
 		if (vcc->qos.txtp.traffic_class != ATM_NONE &&
 		    vcc->qos.txtp.max_sdu+atomic_read(&vcc->tx_inuse)+
-		    ATM_PDU_OVHD <= vcc->tx_quota)
+		    ATM_PDU_OVHD <= vcc->sk->sndbuf)
 			mask |= POLLOUT | POLLWRNORM;
 	}
 	else if (vcc->reply != WAITING) {
@@ -527,13 +476,13 @@ int atm_ioctl(struct socket *sock,unsigned int cmd,unsigned long arg)
 
 	vcc = ATM_SD(sock);
 	switch (cmd) {
-		case TIOCOUTQ:
+		case SIOCOUTQ:
 			if (sock->state != SS_CONNECTED ||
 			    !(vcc->flags & ATM_VF_READY)) return -EINVAL;
-			return put_user(vcc->tx_quota-
+			return put_user(vcc->sk->sndbuf-
 			    atomic_read(&vcc->tx_inuse)-ATM_PDU_OVHD,
 			    (int *) arg) ? -EFAULT : 0;
-		case TIOCINQ:
+		case SIOCINQ:
 			{
 				struct sk_buff *skb;
 
@@ -569,30 +518,13 @@ int atm_ioctl(struct socket *sock,unsigned int cmd,unsigned long arg)
 			return copy_to_user((void *) arg,&vcc->timestamp,
 			    sizeof(struct timeval)) ? -EFAULT : 0;
 		case ATM_SETSC:
-			if (arg & ~(ATM_VF_SCRX | ATM_VF_SCTX)) return -EINVAL;
-			/* @@@ race condition - should split flags into
-			       "volatile" and non-volatile part */
-			vcc->flags = (vcc->flags & ~(ATM_VF_SCRX |
-			    ATM_VF_SCTX)) | arg;
+			printk(KERN_WARNING "ATM_SETSC is obsolete\n");
 			return 0;
 		case ATMSIGD_CTRL:
 			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			error = sigd_attach(vcc);
 			if (!error) sock->state = SS_CONNECTED;
 			return error;
-#ifdef WE_DONT_SUPPORT_P2MP_YET
-		case ATM_CREATE_LEAF:
-			{
-				struct socket *session;
-
-				if (!(session = sockfd_lookup(arg,&error)))
-					return error;
-				if (sock->ops->family != PF_ATMSVC ||
-				    session->ops->family != PF_ATMSVC)
-					return -EPROTOTYPE;
-				return create_leaf(sock,session);
-			}
-#endif
 #ifdef CONFIG_ATM_CLIP
 		case SIOCMKCLIP:
 			if (!capable(CAP_NET_ADMIN)) return -EPERM;
@@ -746,7 +678,8 @@ int atm_ioctl(struct socket *sock,unsigned int cmd,unsigned long arg)
 		default:
 			if (!dev->ops->ioctl) return -EINVAL;
 			size = dev->ops->ioctl(dev,cmd,buf);
-			if (size < 0) return size;
+			if (size < 0)
+				return size == -ENOIOCTLCMD ? -EINVAL : size;
 	}
 	if (!size) return 0;
 	return put_user(size,&((struct atmif_sioc *) arg)->length) ?
@@ -805,22 +738,6 @@ static int atm_do_setsockopt(struct socket *sock,int level,int optname,
 
 	vcc = ATM_SD(sock);
 	switch (optname) {
-		case SO_SNDBUF:
-			if (get_user(value,(unsigned long *) optval))
-				return -EFAULT;
-			if (!value) value = ATM_TXBQ_DEF;
-			if (value < ATM_TXBQ_MIN) value = ATM_TXBQ_MIN;
-			if (value > ATM_TXBQ_MAX) value = ATM_TXBQ_MAX;
-			vcc->tx_quota = value;
-			return 0;
-		case SO_RCVBUF:
-			if (get_user(value,(unsigned long *) optval))
-				return -EFAULT;
-			if (!value) value = ATM_RXBQ_DEF;
-			if (value < ATM_RXBQ_MIN) value = ATM_RXBQ_MIN;
-			if (value > ATM_RXBQ_MAX) value = ATM_RXBQ_MAX;
-			vcc->rx_quota = value;
-			return 0;
 		case SO_ATMQOS:
 			{
 				struct atm_qos qos;
@@ -859,18 +776,6 @@ static int atm_do_getsockopt(struct socket *sock,int level,int optname,
 
 	vcc = ATM_SD(sock);
 	switch (optname) {
-		case SO_SNDBUF:
-			return put_user(vcc->tx_quota,(unsigned long *) optval)
-			    ? -EFAULT : 0;
-		case SO_RCVBUF:
-			return put_user(vcc->rx_quota,(unsigned long *) optval)
-			    ? -EFAULT : 0;
-		case SO_BCTXOPT:
-			/* fall through */
-		case SO_BCRXOPT:
-			printk(KERN_WARNING "Warning: SO_BCTXOPT/SO_BCRXOPT "
-			   "are obsolete\n");
-			break;
 		case SO_ATMQOS:
 			if (!(vcc->flags & ATM_VF_HASQOS)) return -EINVAL;
 			return copy_to_user(optval,&vcc->qos,sizeof(vcc->qos)) ?

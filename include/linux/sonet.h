@@ -1,22 +1,22 @@
 /* sonet.h - SONET/SHD physical layer control */
  
-/* Written 1995 by Werner Almesberger, EPFL LRC */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef LINUX_SONET_H
 #define LINUX_SONET_H
 
 struct sonet_stats {
-	long section_bip;		/* section parity errors (B1) */
-	long line_bip;			/* line parity errors (B2) */
-	long path_bip;			/* path parity errors (B3) */
-	long line_febe;			/* line parity errors at remote */
-	long path_febe;			/* path parity errors at remote */
-	long corr_hcs;			/* correctable header errors */
-	long uncorr_hcs;		/* uncorrectable header errors */
-	long tx_cells;			/* cells sent */
-	long rx_cells;			/* cells received */
-};
+	int section_bip;		/* section parity errors (B1) */
+	int line_bip;			/* line parity errors (B2) */
+	int path_bip;			/* path parity errors (B3) */
+	int line_febe;			/* line parity errors at remote */
+	int path_febe;			/* path parity errors at remote */
+	int corr_hcs;			/* correctable header errors */
+	int uncorr_hcs;			/* uncorrectable header errors */
+	int tx_cells;			/* cells sent */
+	int rx_cells;			/* cells received */
+} __attribute__ ((packed));
 
 #define SONET_GETSTAT	_IOR('a',ATMIOC_PHYTYP,struct sonet_stats)
 					/* get statistics */

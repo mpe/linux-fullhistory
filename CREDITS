@@ -24,6 +24,12 @@ S: C. Negri 6, bl. D3
 S: Iasi 6600
 S: Romania
 
+N: Monalisa Agrawal
+E: magrawal@nortelnetworks.com
+D: Basic Interphase 5575 driver with UBR and ABR support.
+S: 75 Donald St, Apt 42
+S: Weymouth, MA 02188
+
 N: Dave Airlie
 E: airlied@linux.ie
 W: http://www.csn.ul.ie/~airlied
@@ -38,11 +44,11 @@ D: BFS filesystem
 S: United Kingdom
 
 N: Werner Almesberger
-E: werner.almesberger@lrc.di.epfl.ch
-D: dosfs, LILO, some fd features, various other hacks here and there
+E: werner.almesberger@epfl.ch
+D: dosfs, LILO, some fd features, ATM, various other hacks here and there
 S: Ecole Polytechnique Federale de Lausanne
-S: DI-LRC
-S: INR (Ecublens)
+S: DSC ICA
+S: INN (Ecublens)
 S: CH-1015 Lausanne
 S: Switzerland
 
@@ -154,6 +160,14 @@ S: Department of Computer Science & Eng.
 S: University of Notre Dame
 S: Notre Dame, Indiana
 S: USA
+
+N: Greg Banks
+E: gnb@linuxfan.com
+D: IDT77105 ATM network driver
+S: NEC Australia
+S: 649-655 Springvale Rd
+S: Mulgrave, Victoria 3170
+S: Australia
 
 N: James Banks
 E: james@sovereign.org
@@ -460,6 +474,13 @@ S: 81 Hood Street
 S: Northampton
 S: NN1 3QT
 S: United Kingdom
+
+N: Uwe Dannowski
+E: Uwe.Dannowski@ira.uka.de
+W: http://i30www.ira.uka.de/~dannowsk/
+D: FORE PCA-200E driver
+S: University of Karlsruhe
+S: Germany
 
 N: Ray Dassen
 E: jdassen@wi.LeidenUniv.nl
@@ -1151,6 +1172,13 @@ S: Surrey
 S: TW9 1AE
 S: United Kingdom
 
+N: Marko Kiiskila
+E: marko@iprg.nokia.com
+D: Author of ATM Lan Emulation
+S: 660 Harvard Ave. #7
+S: Santa Clara, CA 95051
+S: USA
+
 N: Russell King
 E: rmk@arm.uk.linux.org
 D: Linux/arm integrator, maintainer & hacker
@@ -1348,6 +1376,15 @@ W: http://www.crosswinds.net/~tuxer
 D: PCILynx patch to work with 1394a PHY and without local RAM
 S: (ask for current address)
 S: Germany
+
+N: Christophe Lizzi
+E: lizzi@cnam.fr
+W: http://cedric.cnam.fr/personne/lizzi
+D: FORE Systems 200E-series ATM network driver, sparc64 port of ATM
+S: CNAM, Laboratoire CEDRIC
+S: 292, rue St-Martin
+S: 75141 Paris Cedex 03
+S: France
 
 N: Siegfried "Frieder" Loeffler (dg1sek)
 E: floeff@tunix.mathematik.uni-stuttgart.de, fl@LF.net
@@ -1812,6 +1849,10 @@ D: CDROM driver "sonycd535" (Sony CDU-535/531)
 N: Frederic Potter 
 E: Frederic.Potter@masi.ibp.fr 
 D: Some PCI kernel support
+
+N: Rui Prior
+E: rprior@inescn.pt
+D: ATM device driver for NICStAR based cards
 
 N: Stefan Probst
 E: sp@caldera.de
@@ -2403,6 +2444,13 @@ S: Computer Science Division
 S: UC Berkeley
 S: Berkeley, CA 94720-1776
 S: USA
+
+N: Mike Westall
+D: IBM Turboways 25 ATM Device Driver
+E: westall@cs.clemson.edu
+S: Department of Computer Science
+S: Clemson University
+S: Clemson SC 29634 USA
 
 N: Greg Wettstein
 E: greg@wind.rmcc.com

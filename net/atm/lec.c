@@ -39,7 +39,6 @@
 
 #include "lec.h"
 #include "lec_arpc.h"
-#include "tunable.h"
 #include "resources.h"  /* for bind_vcc() */
 
 #if 0
@@ -60,7 +59,7 @@ static int lec_open(struct net_device *dev);
 static int lec_send_packet(struct sk_buff *skb, struct net_device *dev);
 static int lec_close(struct net_device *dev);
 static struct net_device_stats *lec_get_stats(struct net_device *dev);
-static int lec_init(struct net_device *dev);
+static void lec_init(struct net_device *dev);
 static __inline__ struct lec_arp_table* lec_arp_find(struct lec_priv *priv,
                                                      unsigned char *mac_addr);
 static __inline__ int lec_arp_remove(struct lec_arp_table **lec_arp_tables,
@@ -78,9 +77,6 @@ static struct lane2_ops lane2_ops = {
 	lane2_associate_req,   /* associate_req,       spec 3.1.4 */
 	NULL                  /* associate indicator, spec 3.1.5 */
 };
-
-/* will be lec0, lec1, lec2 etc. */
-static char myname[] = "lecxx";
 
 static unsigned char bus_mac[ETH_ALEN] = {0xff,0xff,0xff,0xff,0xff,0xff};
 
@@ -261,6 +257,17 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
                 /* Put le header to place, works for TokenRing too */
                 lec_h = (struct lecdatahdr_8023*)skb->data;
                 lec_h->le_header = htons(priv->lecid); 
+
+#ifdef CONFIG_TR
+                /* Ugly. Use this to realign Token Ring packets for
+                 * e.g. PCA-200E driver. */
+                if (priv->is_trdev) {
+                        skb2 = skb_realloc_headroom(skb, LEC_HEADER_LEN);
+                        kfree_skb(skb);
+                        if (skb2 == NULL) return 0;
+                        skb = skb2;
+                }
+#endif
 
 #if DUMP_PACKETS > 0
                 printk("%s: send datalen:%ld lecid:%4.4x\n", dev->name,
@@ -466,6 +473,7 @@ lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
 		if (dev->change_mtu(dev, mesg->content.config.mtu))
 			printk("%s: change_mtu to %d failed\n", dev->name,
 			    mesg->content.config.mtu);
+		priv->is_proxy = mesg->content.config.is_proxy;
                 break;
         case l_flush_tran_id:
                 lec_set_flush_tran_id(priv, mesg->content.normal.atm_addr,
@@ -540,24 +548,8 @@ lec_atm_close(struct atm_vcc *vcc)
 }
 
 static struct atmdev_ops lecdev_ops = {
-        NULL, /*dev_close*/
-        NULL, /*open*/
-        lec_atm_close, /*close*/
-        NULL, /*ioctl*/
-        NULL, /*getsockopt */
-        NULL, /*setsockopt */
-        lec_atm_send, /*send */
-        NULL, /*sg_send */
-#if 0   /* these are disabled in <linux/atmdev.h> too */
-        NULL, /*poll */
-        NULL, /*send_iovec*/
-#endif 
-        NULL, /*send_oam*/
-        NULL, /*phy_put*/
-        NULL, /*phy_get*/
-        NULL, /*feedback*/
-        NULL, /* change_qos*/
-        NULL  /* free_rx_skb*/
+        close:	lec_atm_close,
+        send:	lec_atm_send
 };
 
 static struct atm_dev lecatm_dev = {
@@ -626,17 +618,9 @@ static int lec_change_mtu(struct net_device *dev, int new_mtu)
         return 0;
 }
 
-static int 
+static void 
 lec_init(struct net_device *dev)
 {
-        struct lec_priv *priv;
-
-        priv = (struct lec_priv *)dev->priv;
-        if (priv->is_trdev) {
-#ifdef CONFIG_TR
-                init_trdev(dev, 0);
-#endif
-        } else ether_setup(dev);
         dev->change_mtu = lec_change_mtu;
         dev->open = lec_open;
         dev->stop = lec_close;
@@ -646,7 +630,7 @@ lec_init(struct net_device *dev)
         dev->set_multicast_list = NULL;
         dev->do_ioctl  = NULL;
         printk("%s: Initialized!\n",dev->name);
-        return 0;
+        return;
 }
 
 static unsigned char lec_ctrl_magic[] = {
@@ -660,7 +644,6 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
 {
         struct net_device *dev = (struct net_device *)vcc->proto_data;
         struct lec_priv *priv = (struct lec_priv *)dev->priv; 
-        struct lecdatahdr_8023 *hdr;
 
 #if DUMP_PACKETS >0
         int i=0;
@@ -696,9 +679,10 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
                 skb_queue_tail(&vcc->recvq, skb);
                 wake_up(&vcc->sleep);
         } else { /* Data frame, queue to protocol handlers */
+                unsigned char *dst;
+
                 atm_return(vcc,skb->truesize);
-                hdr = (struct lecdatahdr_8023 *)skb->data;
-                if (hdr->le_header == htons(priv->lecid) ||
+                if (*(uint16_t *)skb->data == htons(priv->lecid) ||
                     !priv->lecd) { 
                         /* Probably looping back, or if lecd is missing,
                            lecd has gone down */
@@ -706,7 +690,19 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
                         dev_kfree_skb(skb);
                         return;
                 }
-                if (priv->lec_arp_empty_ones) { /* FILTER DATA!!!! */
+#ifdef CONFIG_TR
+                if (priv->is_trdev) dst = ((struct lecdatahdr_8025 *)skb->data)->h_dest;
+                else
+#endif
+                dst = ((struct lecdatahdr_8023 *)skb->data)->h_dest;
+
+                if (!(dst[0]&0x01) &&   /* Never filter Multi/Broadcast */
+                    !priv->is_proxy &&  /* Proxy wants all the packets */
+                    memcmp(dst, dev->dev_addr, sizeof(dev->dev_addr))) {
+                        dev_kfree_skb(skb);
+                        return;
+                }
+                if (priv->lec_arp_empty_ones) {
                         lec_arp_check_empties(priv, vcc, skb);
                 }
                 skb->dev = dev;
@@ -757,7 +753,7 @@ lec_mcast_attach(struct atm_vcc *vcc, int arg)
 int 
 lecd_attach(struct atm_vcc *vcc, int arg)
 {  
-        int i, result;
+        int i;
         struct lec_priv *priv;
 
         if (arg<0)
@@ -772,30 +768,28 @@ lecd_attach(struct atm_vcc *vcc, int arg)
                 return -EINVAL;
 #endif
         if (!dev_lec[i]) {
-                dev_lec[i] = (struct net_device*)
-		    kmalloc(sizeof(struct net_device)+sizeof(myname)+1, 
-		    GFP_KERNEL);
+                int is_trdev, size;
+
+                is_trdev = 0;
+                if (i >= (MAX_LEC_ITF - NUM_TR_DEVS))
+                        is_trdev = 1;
+
+                size = sizeof(struct lec_priv);
+#ifdef CONFIG_TR
+                if (is_trdev)
+                        dev_lec[i] = init_trdev(NULL, size);
+                else
+#endif
+                dev_lec[i] = init_etherdev(NULL, size);
                 if (!dev_lec[i])
                         return -ENOMEM;
-                memset(dev_lec[i],0,sizeof(struct net_device)+sizeof(myname)+1);
 
-                dev_lec[i]->priv = kmalloc(sizeof(struct lec_priv), GFP_KERNEL);
-                if (!dev_lec[i]->priv)
-                        return -ENOMEM;
-                memset(dev_lec[i]->priv,0,sizeof(struct lec_priv));
-                priv = (struct lec_priv *)dev_lec[i]->priv;
-
-                if (i >= (MAX_LEC_ITF - NUM_TR_DEVS))
-                        priv->is_trdev = 1;
-
-                dev_lec[i]->name = (char*)(dev_lec[i]+1);
-                sprintf(dev_lec[i]->name, "lec%d",i);
-                dev_lec[i]->init = lec_init;
-                if ((result = register_netdev(dev_lec[i])) !=0)
-                        return result;
-                sprintf(dev_lec[i]->name, "lec%d", i); /* init_trdev globbers device name */
+                priv = dev_lec[i]->priv;
+                priv->is_trdev = is_trdev;
+                sprintf(dev_lec[i]->name, "lec%d", i);
+                lec_init(dev_lec[i]);
         } else {
-                priv = (struct lec_priv *)dev_lec[i]->priv;
+                priv = dev_lec[i]->priv;
                 if (priv->lecd)
                         return -EADDRINUSE;
         }
@@ -874,7 +868,6 @@ void cleanup_module(void)
 #endif
                         } else
                                 unregister_netdev(dev_lec[i]);
-                        kfree(dev_lec[i]->priv);
                         kfree(dev_lec[i]);
                         dev_lec[i] = NULL;
                 }
@@ -1535,7 +1528,7 @@ lec_arp_expire_vcc(unsigned long data)
                 if (entry)
                         entry->next = to_remove->next;
         }
-        if (!entry)
+        if (!entry) {
                 if (to_remove == priv->lec_no_forward) {
                         priv->lec_no_forward = to_remove->next;
                 } else {
@@ -1545,6 +1538,7 @@ lec_arp_expire_vcc(unsigned long data)
                         if (entry)
                                 entry->next = to_remove->next;
                 }
+	}
         lec_arp_clear_vccs(to_remove);
         kfree(to_remove);
 }

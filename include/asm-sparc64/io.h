@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.30 2000/01/28 13:43:14 jj Exp $ */
+/* $Id: io.h,v 1.31 2000/02/08 05:11:38 jj Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -13,43 +13,10 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
-#define NEW_PCI_DMA_MAP
-
-#ifndef NEW_PCI_DMA_MAP
-#define PCI_DVMA_HASHSZ	256
-
-extern unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
-extern unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
-
-#define pci_dvma_ahashfn(addr)	(((addr) >> 24) & 0xff)
-
-extern __inline__ unsigned long virt_to_bus(volatile void *addr)
-{
-	unsigned long vaddr = (unsigned long)addr;
-	unsigned long off;
-
-	/* Handle kernel variable pointers... */
-	if (vaddr < PAGE_OFFSET)
-		vaddr += PAGE_OFFSET - (unsigned long)&empty_zero_page;
-
-	off = pci_dvma_v2p_hash[pci_dvma_ahashfn(vaddr - PAGE_OFFSET)];
-	return vaddr + off;
-}
-
-extern __inline__ void *bus_to_virt(unsigned long addr)
-{
-	unsigned long paddr = addr & 0xffffffffUL;
-	unsigned long off;
-
-	off = pci_dvma_p2v_hash[pci_dvma_ahashfn(paddr)];
-	return (void *)(paddr + off);
-}
-#else
 extern unsigned long virt_to_bus_not_defined_use_pci_map(volatile void *addr);
 #define virt_to_bus virt_to_bus_not_defined_use_pci_map
 extern unsigned long bus_to_virt_not_defined_use_pci_map(volatile void *addr);
 #define bus_to_virt bus_to_virt_not_defined_use_pci_map
-#endif
 
 /* Different PCI controllers we support have their PCI MEM space
  * mapped to an either 2GB (Psycho) or 4GB (Sabre) aligned area,

@@ -1,6 +1,6 @@
 /* include/net/dsfield.h - Manipulation of the Differentiated Services field */
 
-/* Written 1998 by Werner Almesberger, EPFL ICA */
+/* Written 1998-2000 by Werner Almesberger, EPFL ICA */
 
 
 #ifndef __NET_DSFIELD_H
@@ -46,7 +46,7 @@ extern __inline__ void ipv6_change_dsfield(struct ipv6hdr *ipv6h,__u8 mask,
         __u16 tmp;
 
 	tmp = ntohs(*(__u16 *) ipv6h);
-	tmp = (tmp & (mask << 4)) | (value << 4);
+	tmp = (tmp & ((mask << 4) | 0xf00f)) | (value << 4);
 	*(__u16 *) ipv6h = htons(tmp);
 }
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.186 2000/01/31 20:26:13 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.188 2000/02/08 21:27:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -134,25 +134,6 @@ static __inline__ void tcp_measure_rcv_mss(struct tcp_opt *tp, struct sk_buff *s
 				tp->ack.rcv_mss = len;
 			tp->ack.last_seg_size = len;
 		}
-
-#if 0
-		/* Tiny-grams with PSH set artifically deflate our
-		 * ato measurement.
-		 *
-		 * Mmm... I copied this test from tcp_remember_ack(), but
-		 * I did not understand this. Is it to speedup nagling sender?
-		 * It does not because classic (non-Minshall) sender nagles
-		 * guided by not-acked frames not depending on size.
-		 * And it does not help NODELAY sender, because latency
-		 * is too high in any case. The only result is timer trashing
-		 * and redundant ACKs. Grr... Seems, I missed something.  --ANK
-		 *
-		 * Let me to comment out this yet... TCP should work
-		 * perfectly without this. 				  --ANK
-		 */
-		if (len < (tp->ack.rcv_mss >> 1) && skb->h.th->psh)
-			tp->ack.ato = TCP_ATO_MIN;
-#endif
 	}
 }
 
@@ -199,6 +180,7 @@ static void tcp_event_data_recv(struct tcp_opt *tp, struct sk_buff *skb)
 	tcp_measure_rcv_mss(tp, skb);
 
 	tp->ack.pending = 1;
+	tp->ack.rcv_segs++;
 
 	now = tcp_time_stamp;
 
@@ -232,7 +214,8 @@ static void tcp_event_data_recv(struct tcp_opt *tp, struct sk_buff *skb)
 		} else {
 			if (m <= 0)
 				m = TCP_ATO_MIN/2;
-			tp->ack.ato = (tp->ack.ato >> 1) + m;
+			if (m <= tp->ack.ato)
+				tp->ack.ato = (tp->ack.ato >> 1) + m;
 		}
 	}
 	tp->ack.lrcvtime = now;
@@ -458,7 +441,7 @@ reset:
 extern __inline__ void
 tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp, u32 seq)
 {
-	if (!after(seq, tp->last_ack_sent)) {
+	if (!after(seq, tp->rcv_wup)) {
 		/* PAWS bug workaround wrt. ACK frames, the PAWS discard
 		 * extra check below makes sure this can only happen
 		 * for pure ACK frames.  -DaveM
@@ -2303,6 +2286,8 @@ static int prune_queue(struct sock *sk)
 	if(atomic_read(&sk->rmem_alloc) < (sk->rcvbuf << 1))
 		return 0;
 
+	NET_INC_STATS_BH(RcvPruned);
+
 	/* Massive buffer overcommit. */
 	return -1;
 }
@@ -2470,10 +2455,10 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				goto slow_path;
 
 			/* Predicted packet is in window by definition.
-			 * seq == rcv_nxt and last_ack_sent <= rcv_nxt.
-			 * Hence, check seq<=last_ack_sent reduces to:
+			 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
+			 * Hence, check seq<=rcv_wup reduces to:
 			 */
-			if (tp->rcv_nxt == tp->last_ack_sent) {
+			if (tp->rcv_nxt == tp->rcv_wup) {
 				tp->ts_recent = tp->rcv_tsval;
 				tp->ts_recent_stamp = xtime.tv_sec;
 			}
@@ -2544,7 +2529,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 			tcp_event_data_recv(tp, skb);
 
-#if 1/*def CONFIG_TCP_MORE_COARSE_ACKS*/
+#ifdef TCP_MORE_COARSE_ACKS
 			if (eaten) {
 				if (tcp_in_quickack_mode(tp)) {
 					tcp_send_ack(sk);
@@ -2747,7 +2732,6 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->copied_seq = req->rcv_isn + 1;
 
 		newtp->saw_tstamp = 0;
-		newtp->last_ack_sent = req->rcv_isn + 1;
 
 		newtp->probes_out = 0;
 		newtp->syn_seq = req->rcv_isn;
@@ -3146,7 +3130,6 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->ack.pending = 1;
 			tp->ack.lrcvtime = tcp_time_stamp;
 			tcp_enter_quickack_mode(tp);
-			tp->ack.pingpong = 1;
 			tp->ack.ato = TCP_ATO_MIN;
 			tcp_reset_xmit_timer(sk, TCP_TIME_DACK, TCP_DELACK_MIN);
 			goto discard;

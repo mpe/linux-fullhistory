@@ -1,10 +1,12 @@
 /* atmsap.h - ATM Service Access Point addressing definitions */
 
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #ifndef _LINUX_ATMSAP_H
 #define _LINUX_ATMSAP_H
+
+#include <linux/atmapi.h>
 
 /*
  * BEGIN_xx and END_xx markers are used for automatic generation of
@@ -116,24 +118,22 @@ struct atm_blli {
 	    unsigned char def_size; /* default packet size (log2), 4-12 (0 to */
 				    /* omit) */
 	    unsigned char window;/* packet window size, 1-127 (0 to omit) */
-	} itu;			/* ITU-T ecoding */
+	} itu;			/* ITU-T encoding */
 	unsigned char user;	/* user specified l3 information */
-	struct {		/* if l3_proto = ATM_L3_H310 */
-	    unsigned char term_type; /* terminal type */
+	struct {		      /* if l3_proto = ATM_L3_H310 */
+	    unsigned char term_type;  /* terminal type */
 	    unsigned char fw_mpx_cap; /* forward multiplexing capability */
 				      /* only if term_type != ATM_TT_NONE */
 	    unsigned char bw_mpx_cap; /* backward multiplexing capability */
 				      /* only if term_type != ATM_TT_NONE */
 	} h310;
-	struct {		/* if l3_proto = ATM_L3_TR9577 */
-	    unsigned char ipi;	/* initial protocol id */
+	struct {		  /* if l3_proto = ATM_L3_TR9577 */
+	    unsigned char ipi;	  /* initial protocol id */
 	    unsigned char snap[5];/* IEEE 802.1 SNAP identifier */
 				  /* (only if ipi == NLPID_IEEE802_1_SNAP) */
 	} tr9577;
     } l3;
-    struct atm_blli *next;	/* next BLLI or NULL (undefined when used in */
-				/* atmsvc_msg) ONLY USED IN OLD-STYLE API */
-};
+} __ATM_API_ALIGN;
 
 
 struct atm_bhli {
@@ -149,7 +149,8 @@ struct atm_bhli {
 
 struct atm_sap {
 	struct atm_bhli bhli;		/* local SAP, high-layer information */
-	struct atm_blli blli[ATM_MAX_BLLI]; /* local SAP, low-layer info */
+	struct atm_blli blli[ATM_MAX_BLLI] __ATM_API_ALIGN;
+					/* local SAP, low-layer info */
 };
 
 

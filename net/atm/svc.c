@@ -1,6 +1,6 @@
 /* net/atm/svc.c - ATM SVC sockets */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/string.h>
@@ -253,6 +253,7 @@ static int svc_accept(struct socket *sock,struct socket *newsock,int flags)
 		new_vcc->qos = msg->qos;
 		new_vcc->flags |= ATM_VF_HASQOS;
 		new_vcc->remote = msg->svc;
+		new_vcc->local = msg->local;
 		new_vcc->sap = msg->sap;
 		error = atm_connect(newsock,msg->pvc.sap_addr.itf,
 		    msg->pvc.sap_addr.vpi,msg->pvc.sap_addr.vci);

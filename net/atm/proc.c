@@ -1,6 +1,6 @@
 /* net/atm/proc.c - ATM /proc interface */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 /*
  * The mechanism used here isn't designed for speed but rather for convenience
@@ -73,10 +73,11 @@ static struct inode_operations proc_spec_atm_inode_operations = {
 	&proc_spec_atm_operations,	/* default ATM directory file-ops */
 };
 
+
 static void add_stats(char *buf,const char *aal,
   const struct atm_aal_stats *stats)
 {
-	sprintf(strchr(buf,0),"%s ( %ld %ld %ld %ld %ld )",aal,stats->tx,
+	sprintf(strchr(buf,0),"%s ( %d %d %d %d %d )",aal,stats->tx,
 	    stats->tx_err,stats->rx,stats->rx_err,stats->rx_drop);
 }
 
@@ -112,7 +113,7 @@ static int svc_addr(char *buf,struct sockaddr_atmsvc *addr)
 		len = strlen(addr->sas_addr.pub);
 		buf += len;
 		if (*addr->sas_addr.pub) {
-			*buf += '+';
+			*buf++ = '+';
 			len++;
 		}
 	}
@@ -209,12 +210,39 @@ static const char *vcc_state(struct atm_vcc *vcc)
 }
 
 
+static void vc_info(struct atm_vcc *vcc,char *buf)
+{
+	char *here;
+
+	here = buf+sprintf(buf,"%p ",vcc);
+	if (!vcc->dev) here += sprintf(here,"Unassigned    ");
+	else here += sprintf(here,"%3d %3d %5d ",vcc->dev->number,vcc->vpi,
+		    vcc->vci);
+	switch (vcc->family) {
+		case AF_ATMPVC:
+			here += sprintf(here,"PVC");
+			break;
+		case AF_ATMSVC:
+			here += sprintf(here,"SVC");
+			break;
+		default:
+			here += sprintf(here,"%3d",vcc->family);
+	}
+	here += sprintf(here," %04x  %5d %7d/%7d %7d/%7d\n",vcc->flags,
+	    vcc->reply,
+	    atomic_read(&vcc->tx_inuse),vcc->sk->sndbuf,
+	    atomic_read(&vcc->rx_inuse),vcc->sk->rcvbuf);
+}
+
+
 static void svc_info(struct atm_vcc *vcc,char *buf)
 {
 	char *here;
 	int i;
 
-	if (!vcc->dev) sprintf(buf,"Unassigned    ");
+	if (!vcc->dev)
+		sprintf(buf,sizeof(void *) == 4 ? "N/A@%p%6s" : "N/A@%p%2s",
+		    vcc,"");
 	else sprintf(buf,"%3d %3d %5d ",vcc->dev->number,vcc->vpi,vcc->vci);
 	here = strchr(buf,0);
 	here += sprintf(here,"%-10s ",vcc_state(vcc));
@@ -253,7 +281,6 @@ static void
 lec_info(struct lec_arp_table *entry, char *buf)
 {
         int j, offset=0;
-        
 
         for(j=0;j<ETH_ALEN;j++) {
                 offset+=sprintf(buf+offset,"%2.2x",0xff&entry->mac_addr[j]);
@@ -322,6 +349,34 @@ static int atm_pvc_info(loff_t pos,char *buf)
 	return 0;
 }
 
+
+static int atm_vc_info(loff_t pos,char *buf)
+{
+	struct atm_dev *dev;
+	struct atm_vcc *vcc;
+	int left;
+
+	if (!pos)
+		return sprintf(buf,sizeof(void *) == 4 ? "%-8s%s" : "%-16s%s",
+		    "Address"," Itf VPI VCI   Fam Flags Reply Send buffer"
+		    "     Recv buffer\n");
+	left = pos-1;
+	for (dev = atm_devs; dev; dev = dev->next)
+		for (vcc = dev->vccs; vcc; vcc = vcc->next)
+			if (!left--) {
+				vc_info(vcc,buf);
+				return strlen(buf);
+			}
+	for (vcc = nodev_vccs; vcc; vcc = vcc->next)
+		if (!left--) {
+			vc_info(vcc,buf);
+			return strlen(buf);
+		}
+
+	return 0;
+}
+
+
 static int atm_svc_info(loff_t pos,char *buf)
 {
 	struct atm_dev *dev;
@@ -388,6 +443,7 @@ static int atm_lec_info(loff_t pos,char *buf)
 	struct lec_arp_table *entry;
 	int i, count, d, e;
 	struct net_device **dev_lec;
+
 	if (!pos) {
 		return sprintf(buf,"Itf  MAC          ATM destination"
 		    "                          Status            Flags "
@@ -449,7 +505,8 @@ static ssize_t proc_dev_atm_read(struct file *file,char *buf,size_t count,
 	if (count < 0) return -EINVAL;
 	page = get_free_page(GFP_KERNEL);
 	if (!page) return -ENOMEM;
-	dev = ((struct proc_dir_entry *)file->f_dentry->d_inode->u.generic_ip)->data;
+	dev = ((struct proc_dir_entry *) file->f_dentry->d_inode->u.generic_ip)
+	    ->data;
 	if (!dev->ops->proc_read)
 		length = -EINVAL;
 	else {
@@ -464,13 +521,15 @@ static ssize_t proc_dev_atm_read(struct file *file,char *buf,size_t count,
 	return length;
 }
 
+
 static ssize_t proc_spec_atm_read(struct file *file,char *buf,size_t count,
     loff_t *pos)
 {
 	unsigned long page;
 	int length;
 	int (*info)(loff_t,char *);
-	info = ((struct proc_dir_entry *)file->f_dentry->d_inode->u.generic_ip)->data;
+	info = ((struct proc_dir_entry *) file->f_dentry->d_inode->u.generic_ip)
+	    ->data;
 
 	if (count < 0) return -EINVAL;
 	page = get_free_page(GFP_KERNEL);
@@ -485,8 +544,10 @@ static ssize_t proc_spec_atm_read(struct file *file,char *buf,size_t count,
 	return length;
 }
 
+
 struct proc_dir_entry *atm_proc_root;
 EXPORT_SYMBOL(atm_proc_root);
+
 
 int atm_proc_dev_register(struct atm_dev *dev)
 {
@@ -520,48 +581,41 @@ void atm_proc_dev_deregister(struct atm_dev *dev)
 	kfree(dev->proc_name);
 }
 
+
+#define CREATE_ENTRY(name) \
+    name = create_proc_entry(#name,0,atm_proc_root); \
+    if (!name) goto cleanup; \
+    name->data = atm_##name##_info; \
+    name->ops = &proc_spec_atm_inode_operations
+
+
 int __init atm_proc_init(void)
 {
-	struct proc_dir_entry *dev=NULL,*pvc=NULL,*svc=NULL,*arp=NULL,*lec=NULL;
+	struct proc_dir_entry *devices = NULL,*pvc = NULL,*svc = NULL;
+	struct proc_dir_entry *arp = NULL,*lec = NULL,*vc = NULL;
+
 	atm_proc_root = proc_mkdir("atm", &proc_root);
 	if (!atm_proc_root)
 		return -ENOMEM;
-	dev = create_proc_entry("devices",0,atm_proc_root);
-	if (!dev)
-		goto cleanup;
-	dev->data = atm_devices_info;
-	dev->ops = &proc_spec_atm_inode_operations;
-	pvc = create_proc_entry("pvc",0,atm_proc_root);
-	if (!pvc)
-		goto cleanup;
-	pvc->data = atm_pvc_info;
-	pvc->ops = &proc_spec_atm_inode_operations;
-	svc = create_proc_entry("svc",0,atm_proc_root);
-	if (!svc)
-		goto cleanup;
-	svc->data = atm_svc_info;
-	svc->ops = &proc_spec_atm_inode_operations;
+	CREATE_ENTRY(devices);
+	CREATE_ENTRY(pvc);
+	CREATE_ENTRY(svc);
+	CREATE_ENTRY(vc);
 #ifdef CONFIG_ATM_CLIP
-	arp = create_proc_entry("arp",0,atm_proc_root);
-	if (!arp)
-		goto cleanup;
-	arp->data = atm_arp_info;
-	arp->ops = &proc_spec_atm_inode_operations;
+	CREATE_ENTRY(arp);
 #endif
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
-	lec = create_proc_entry("lec",0,atm_proc_root);
-	if (!lec)
-		goto cleanup;
-	lec->data = atm_lec_info;
-	lec->ops = &proc_spec_atm_inode_operations;
+	CREATE_ENTRY(lec);
 #endif
 	return 0;
+
 cleanup:
-	if (dev) remove_proc_entry("devices",atm_proc_root);
+	if (devices) remove_proc_entry("devices",atm_proc_root);
 	if (pvc) remove_proc_entry("pvc",atm_proc_root);
 	if (svc) remove_proc_entry("svc",atm_proc_root);
 	if (arp) remove_proc_entry("arp",atm_proc_root);
 	if (lec) remove_proc_entry("lec",atm_proc_root);
+	if (vc) remove_proc_entry("vc",atm_proc_root);
 	remove_proc_entry("atm",&proc_root);
 	return -ENOMEM;
 }

@@ -145,6 +145,18 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 	flush_tlb_mm(mm);
 }
 
+/*
+ * Flush a specified range of user mapping page tables
+ * from TLB.
+ * Although Alpha uses VPTE caches, this can be a nop, as Alpha does
+ * not have finegrained tlb flushing, so it will flush VPTE stuff
+ * during next flush_tlb_range.
+ */
+static inline void flush_tlb_pgtables(struct mm_struct *mm,
+	unsigned long start, unsigned long end)
+{
+}
+
 #else /* __SMP__ */
 
 extern void flush_tlb_all(void);

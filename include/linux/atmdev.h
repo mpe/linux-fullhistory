@@ -8,6 +8,8 @@
 
 
 #include <linux/config.h>
+#include <linux/atmapi.h>
+#include <linux/atm.h>
 #include <linux/atmioc.h>
 
 
@@ -26,9 +28,9 @@
 
 
 struct atm_aal_stats {
-	long		tx,tx_err;	/* TX okay and errors */
-	long		rx,rx_err;	/* RX okay and errors */
-	long		rx_drop;	/* RX out of memory */
+	int		tx,tx_err;	/* TX okay and errors */
+	int		rx,rx_err;	/* RX okay and errors */
+	int		rx_drop;	/* RX out of memory */
 };
 
 
@@ -36,7 +38,7 @@ struct atm_dev_stats {
 	struct atm_aal_stats aal0;
 	struct atm_aal_stats aal34;
 	struct atm_aal_stats aal5;
-};
+} __ATM_API_ALIGN;
 
 
 #define ATM_GETLINKRATE	_IOW('a',ATMIOC_ITF+1,struct atmif_sioc)
@@ -123,6 +125,12 @@ struct atm_cirange {
 #define ATM_VS2TXT_MAP \
     "IDLE", "CONNECTED", "CLOSING", "LISTEN", "INUSE", "BOUND"
 
+#define ATM_VF2TXT_MAP \
+    "ADDR",	"READY",	"PARTIAL",	"REGIS", \
+    "RELEASED", "HASQOS",	"LISTEN",	"META", \
+    "256",	"512",		"1024",		"2048", \
+    "SESSION",	"HASSAP",	"BOUND",	"CLOSE"
+
 
 #ifdef __KERNEL__
 
@@ -132,6 +140,7 @@ struct atm_cirange {
 #include <linux/skbuff.h> /* struct sk_buff */
 #include <linux/atm.h>
 #include <linux/uio.h>
+#include <net/sock.h>
 #include <asm/atomic.h>
 
 #ifdef CONFIG_PROC_FS
@@ -156,10 +165,10 @@ struct atm_cirange {
 #define ATM_VF_META	128	/* SVC socket isn't used for normal data
 				   traffic and doesn't depend on signaling
 				   to be available */
-#define ATM_VF_AQREL	256	/* Arequipa VC is being released */
-#define ATM_VF_AQDANG	512	/* VC is in Arequipa's dangling list */
-#define ATM_VF_SCRX	ATM_SC_RX /* 1024; allow single-copy in the RX dir. */
-#define ATM_VF_SCTX	ATM_SC_TX /* 2048; allow single-copy in the TX dir. */
+				/*  256; unused */
+				/*  512; unused */
+				/* 1024; unused */
+				/* 2048; unused */
 #define ATM_VF_SESSION	4096	/* VCC is p2mp session control descriptor */
 #define ATM_VF_HASSAP	8192	/* SAP has been set */
 #define ATM_VF_CLOSE	32768	/* asynchronous close - treat like VF_RELEASED*/
@@ -191,7 +200,6 @@ struct atm_vcc {
 	struct atm_dev	*dev;		/* device back pointer */
 	struct atm_qos	qos;		/* QOS */
 	struct atm_sap	sap;		/* SAP */
-	unsigned long	tx_quota,rx_quota; /* buffer quotas */
 	atomic_t	tx_inuse,rx_inuse; /* buffer space in use */
 	void (*push)(struct atm_vcc *vcc,struct sk_buff *skb);
 	void (*pop)(struct atm_vcc *vcc,struct sk_buff *skb); /* optional */
@@ -207,6 +215,7 @@ struct atm_vcc {
 	struct atm_aal_stats *stats;	/* pointer to AAL stats group */
 	wait_queue_head_t sleep;	/* if socket is busy */
 	wait_queue_head_t wsleep;	/* if waiting for write buffer space */
+	struct sock	*sk;		/* socket backpointer */
 	struct atm_vcc	*prev,*next;
 	/* SVC part --- may move later ------------------------------------- */
 	short		itf;		/* interface number */
@@ -220,7 +229,9 @@ struct atm_vcc {
 	/* Multipoint part ------------------------------------------------- */
 	struct atm_vcc	*session;	/* session VCC descriptor */
 	/* Other stuff ----------------------------------------------------- */
-	void		*user_back;	/* user backlink - not touched */
+	void		*user_back;	/* user backlink - not touched by */
+					/* native ATM stack. Currently used */
+					/* by CLIP and sch_atm. */
 };
 
 
@@ -335,6 +346,12 @@ static __inline__ void atm_force_charge(struct atm_vcc *vcc,int truesize)
 static __inline__ void atm_return(struct atm_vcc *vcc,int truesize)
 {
 	atomic_sub(truesize+ATM_PDU_OVHD,&vcc->rx_inuse);
+}
+
+
+static __inline__ int atm_may_send(struct atm_vcc *vcc,unsigned int size)
+{
+	return size+atomic_read(&vcc->tx_inuse)+ATM_PDU_OVHD < vcc->sk->sndbuf;
 }
 
 

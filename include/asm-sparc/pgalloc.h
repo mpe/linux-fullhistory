@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.2 2000/01/15 00:51:42 anton Exp $ */
+/* $Id: pgalloc.h,v 1.3 2000/02/03 10:13:31 jj Exp $ */
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
@@ -68,6 +68,10 @@ BTFIXUPDEF_CALL(void, flush_tlb_all, void)
 BTFIXUPDEF_CALL(void, flush_tlb_mm, struct mm_struct *)
 BTFIXUPDEF_CALL(void, flush_tlb_range, struct mm_struct *, unsigned long, unsigned long)
 BTFIXUPDEF_CALL(void, flush_tlb_page, struct vm_area_struct *, unsigned long)
+
+extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+}
 
 #define flush_tlb_all() BTFIXUP_CALL(flush_tlb_all)()
 #define flush_tlb_mm(mm) BTFIXUP_CALL(flush_tlb_mm)(mm)

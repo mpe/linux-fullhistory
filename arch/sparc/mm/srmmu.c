@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.205 2000/01/21 17:59:46 anton Exp $
+/* $Id: srmmu.c,v 1.206 2000/02/08 07:45:59 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1304,7 +1304,7 @@ void __init srmmu_paging_init(void)
 	sparc_context_init(num_contexts);
 
 	{
-		unsigned int zones_size[MAX_NR_ZONES] = { 0, 0, 0};
+		unsigned long zones_size[MAX_NR_ZONES] = { 0, 0, 0};
 
 		zones_size[ZONE_DMA] = end_pfn;
 		free_area_init(zones_size);

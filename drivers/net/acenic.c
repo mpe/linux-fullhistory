@@ -20,6 +20,9 @@
  * Additional work by Pete Wyckoff <wyckoff@ca.sandia.gov> for initial
  * Alpha and trace dump support. The trace dump support has not been
  * integrated yet however.
+ *
+ * Big-endian+Sparc fixes and conversion to new PCI dma mapping
+ * infrastructure by David S. Miller <davem@redhat.com>.
  */
 
 #include <linux/config.h>
@@ -294,6 +297,101 @@ static struct net_device *root_dev = NULL;
 
 static int probed __initdata = 0;
 
+void ace_free_descriptors(struct net_device *dev)
+{
+	struct ace_private *ap = dev->priv;
+	int size;
+
+	if (ap->rx_std_ring != NULL) {
+		size = (sizeof(struct rx_desc) *
+			(RX_STD_RING_ENTRIES +
+			 RX_JUMBO_RING_ENTRIES +
+			 RX_MINI_RING_ENTRIES +
+			 RX_RETURN_RING_ENTRIES));
+		pci_free_consistent(ap->pdev, size,
+				    ap->rx_std_ring,
+				    ap->rx_ring_base_dma);
+		ap->rx_std_ring = NULL;
+		ap->rx_jumbo_ring = NULL;
+		ap->rx_mini_ring = NULL;
+		ap->rx_return_ring = NULL;
+	}
+	if (ap->evt_ring != NULL) {
+		size = (sizeof(struct event) * EVT_RING_ENTRIES);
+		pci_free_consistent(ap->pdev, size,
+				    ap->evt_ring,
+				    ap->evt_ring_dma);
+		ap->evt_ring = NULL;
+	}
+	if (ap->evt_prd != NULL) {
+		pci_free_consistent(ap->pdev, sizeof(u32),
+				    (void *)ap->evt_prd, ap->evt_prd_dma);
+		ap->evt_prd = NULL;
+	}
+	if (ap->rx_ret_prd != NULL) {
+		pci_free_consistent(ap->pdev, sizeof(u32),
+				    (void *)ap->rx_ret_prd, ap->rx_ret_prd_dma);
+		ap->rx_ret_prd = NULL;
+	}
+	if (ap->tx_csm != NULL) {
+		pci_free_consistent(ap->pdev, sizeof(u32),
+				    (void *)ap->tx_csm, ap->tx_csm_dma);
+		ap->tx_csm = NULL;
+	}
+}
+
+int ace_allocate_descriptors(struct net_device *dev)
+{
+	struct ace_private *ap = dev->priv;
+	int size;
+
+	size = (sizeof(struct rx_desc) *
+		(RX_STD_RING_ENTRIES +
+		 RX_JUMBO_RING_ENTRIES +
+		 RX_MINI_RING_ENTRIES +
+		 RX_RETURN_RING_ENTRIES));
+
+	ap->rx_std_ring = pci_alloc_consistent(ap->pdev, size,
+					       &ap->rx_ring_base_dma);
+	if (ap->rx_std_ring == NULL)
+		goto fail;
+
+	ap->rx_jumbo_ring = ap->rx_std_ring + RX_STD_RING_ENTRIES;
+	ap->rx_mini_ring = ap->rx_jumbo_ring + RX_JUMBO_RING_ENTRIES;
+	ap->rx_return_ring = ap->rx_mini_ring + RX_MINI_RING_ENTRIES;
+
+	size = (sizeof(struct event) * EVT_RING_ENTRIES);
+
+	ap->evt_ring = pci_alloc_consistent(ap->pdev, size,
+					    &ap->evt_ring_dma);
+
+	if (ap->evt_ring == NULL)
+		goto fail;
+
+	ap->evt_prd = pci_alloc_consistent(ap->pdev, sizeof(u32),
+					   &ap->evt_prd_dma);
+	if (ap->evt_prd == NULL)
+		goto fail;
+
+	ap->rx_ret_prd = pci_alloc_consistent(ap->pdev, sizeof(u32),
+					      &ap->rx_ret_prd_dma);
+	if (ap->rx_ret_prd == NULL)
+		goto fail;
+
+	ap->tx_csm = pci_alloc_consistent(ap->pdev, sizeof(u32),
+					  &ap->tx_csm_dma);
+	if (ap->tx_csm == NULL)
+		goto fail;
+
+	return 0;
+
+fail:
+	/* Clean up. */
+	ace_free_descriptors(dev);
+	iounmap(ap->regs);
+	unregister_netdev(dev);
+	return 1;
+}
 
 int __init acenic_probe(void)
 {
@@ -380,6 +478,10 @@ int __init acenic_probe(void)
 
 		pci_set_master(pdev);
 
+#ifdef __sparc__
+		/* NOTE: Cache line size is in 32-bit word units. */
+		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 0x10);
+#endif
 		/*
 		 * Remap the regs into kernel space - this is abuse of
 		 * dev->base_addr since it was means for I/O port
@@ -441,6 +543,9 @@ int __init acenic_probe(void)
 			continue;
 		}
 #endif
+
+		if (ace_allocate_descriptors(dev))
+			continue;
 
 #ifdef MODULE
 		if (ace_init(dev, boards_found))
@@ -528,26 +633,46 @@ void cleanup_module(void)
 		synchronize_irq();
 
 		for (i = 0; i < RX_STD_RING_ENTRIES; i++) {
-			if (ap->skb->rx_std_skbuff[i]) {
+			struct sk_buff *skb = ap->skb->rx_std_skbuff[i].skb;
+
+			if (skb) {
+				dma_addr_t mapping;
+
+				mapping = ap->skb->rx_std_skbuff[i].mapping;
+
 				ap->rx_std_ring[i].size = 0;
-				set_aceaddr_bus(&ap->rx_std_ring[i].addr, 0);
-				dev_kfree_skb(ap->skb->rx_std_skbuff[i]);
+				set_aceaddr(&ap->rx_std_ring[i].addr, 0);
+				pci_unmap_single(ap->pdev, mapping,
+						 ACE_STD_BUFSIZE - (2 + 16));
+				dev_kfree_skb(skb);
+				ap->skb->rx_std_skbuff[i].skb = NULL;
 			}
 		}
 		if (ap->version >= 2) {
 			for (i = 0; i < RX_MINI_RING_ENTRIES; i++) {
-				if (ap->skb->rx_mini_skbuff[i]) {
+				struct sk_buff *skb = ap->skb->rx_mini_skbuff[i].skb;
+
+				if (skb) {
+					dma_addr_t mapping;
+
+					mapping = ap->skb->rx_mini_skbuff[i].mapping;
+
 					ap->rx_mini_ring[i].size = 0;
-					set_aceaddr_bus(&ap->rx_mini_ring[i].addr, 0);
-					dev_kfree_skb(ap->skb->rx_mini_skbuff[i]);
+					set_aceaddr(&ap->rx_mini_ring[i].addr, 0);
+					pci_unmap_single(ap->pdev, mapping,
+							 ACE_MINI_BUFSIZE - (2 + 16));
+					dev_kfree_skb(skb);
 				}
 			}
 		}
 
+		ace_free_descriptors(root_dev);
+
 		iounmap(regs);
 		if(ap->trace_buf)
 			kfree(ap->trace_buf);
-		kfree(ap->info);
+		pci_free_consistent(ap->pdev, sizeof(struct ace_info),
+				    ap->info, ap->info_dma);
 		kfree(ap->skb);
 		free_irq(root_dev->irq, root_dev);
 		unregister_netdev(root_dev);
@@ -590,14 +715,8 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	/*
 	 * Don't access any other registes before this point!
 	 */
-#ifdef __BIG_ENDIAN
-	writel(((BYTE_SWAP | WORD_SWAP | CLR_INT) |
-		((BYTE_SWAP | WORD_SWAP | CLR_INT) << 24)),
-	       &regs->HostCtrl);
-#else
 	writel((CLR_INT | WORD_SWAP | ((CLR_INT | WORD_SWAP) << 24)),
 	       &regs->HostCtrl);
-#endif
 	mb();
 
 	/*
@@ -640,12 +759,8 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 * value a second time works as well. This is what caused the
 	 * `Firmware not running' problem on the Tigon II.
 	 */
-#ifdef __LITTLE_ENDIAN
 	writel(ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL |
 	       ACE_WORD_SWAP | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
-#else
-#error "this driver doesn't run on big-endian machines yet!"
-#endif
 
 	mac1 = 0;
 	for(i = 0; i < 4; i++){
@@ -731,19 +846,23 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 * and the control blocks for the transmit and receive rings
 	 * as they need to be setup once and for all.
 	 */
-	if (!(info = kmalloc(sizeof(struct ace_info), GFP_KERNEL)))
-		return -EAGAIN;
+	info = pci_alloc_consistent(ap->pdev, sizeof(struct ace_info),
+				    &ap->info_dma);
+	if (info == NULL)
+		goto fail;
 
 	/*
 	 * Get the memory for the skb rings.
 	 */
 	if (!(ap->skb = kmalloc(sizeof(struct ace_skb), GFP_KERNEL)))
-		return -EAGAIN;
+		goto fail;
+
+	memset(ap->skb, 0, sizeof(struct ace_skb));
 
 	if (request_irq(dev->irq, ace_interrupt, SA_SHIRQ, ap->name, dev)) {
 		printk(KERN_WARNING "%s: Requested IRQ %d is busy\n",
 		       dev->name, dev->irq);
-		return -EAGAIN;
+		goto fail;
 	}
 
 	/*
@@ -754,13 +873,11 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	root_dev = dev;
 
 	ap->info = info;
-	memset(info, 0, sizeof(struct ace_info));
-	memset(ap->skb, 0, sizeof(struct ace_skb));
 
 	ace_load_firmware(dev);
 	ap->fw_running = 0;
 
-	tmp_ptr = virt_to_bus((void *)info);
+	tmp_ptr = (unsigned long) ap->info_dma;
 #if (BITS_PER_LONG == 64)
 	writel(tmp_ptr >> 32, &regs->InfoPtrHi);
 #else
@@ -770,15 +887,15 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 
 	memset(ap->evt_ring, 0, EVT_RING_ENTRIES * sizeof(struct event));
 
-	set_aceaddr(&info->evt_ctrl.rngptr, ap->evt_ring);
+	set_aceaddr(&info->evt_ctrl.rngptr, ap->evt_ring_dma);
 	info->evt_ctrl.flags = 0;
 
-	set_aceaddr(&info->evt_prd_ptr, &ap->evt_prd);
-	ap->evt_prd = 0;
+	set_aceaddr(&info->evt_prd_ptr, ap->evt_prd_dma);
+	*(ap->evt_prd) = 0;
 	wmb();
 	writel(0, &regs->EvtCsm);
 
-	set_aceaddr_bus(&info->cmd_ctrl.rngptr, (void *)0x100);
+	set_aceaddr(&info->cmd_ctrl.rngptr, 0x100);
 	info->cmd_ctrl.flags = 0;
 	info->cmd_ctrl.max_len = 0;
 
@@ -788,30 +905,35 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	writel(0, &regs->CmdPrd);
 	writel(0, &regs->CmdCsm);
 
-	set_aceaddr(&info->stats2_ptr, &info->s.stats);
+	tmp_ptr = ap->info_dma;
+	tmp_ptr += (unsigned long) &(((struct ace_info *)0)->s.stats);
+	set_aceaddr(&info->stats2_ptr, (dma_addr_t) tmp_ptr);
 
-	set_aceaddr(&info->rx_std_ctrl.rngptr, ap->rx_std_ring);
-	info->rx_std_ctrl.max_len = ACE_STD_MTU + ETH_HLEN + 4;
-	info->rx_std_ctrl.flags = RCB_FLG_TCP_UDP_SUM;
+	set_aceaddr(&info->rx_std_ctrl.rngptr, ap->rx_ring_base_dma);
+	info->rx_std_ctrl.max_len = cpu_to_le16(ACE_STD_MTU + ETH_HLEN + 4);
+	info->rx_std_ctrl.flags = cpu_to_le16(RCB_FLG_TCP_UDP_SUM);
 
 	memset(ap->rx_std_ring, 0,
 	       RX_STD_RING_ENTRIES * sizeof(struct rx_desc));
 
 	for (i = 0; i < RX_STD_RING_ENTRIES; i++)
-		ap->rx_std_ring[i].flags = BD_FLG_TCP_UDP_SUM;
+		ap->rx_std_ring[i].flags = cpu_to_le16(BD_FLG_TCP_UDP_SUM);
 
 	ap->rx_std_skbprd = 0;
 	atomic_set(&ap->cur_rx_bufs, 0);
 
-	set_aceaddr(&info->rx_jumbo_ctrl.rngptr, ap->rx_jumbo_ring);
+	set_aceaddr(&info->rx_jumbo_ctrl.rngptr,
+		    (ap->rx_ring_base_dma +
+		     (sizeof(struct rx_desc) * RX_STD_RING_ENTRIES)));
 	info->rx_jumbo_ctrl.max_len = 0;
-	info->rx_jumbo_ctrl.flags = RCB_FLG_TCP_UDP_SUM;
+	info->rx_jumbo_ctrl.flags = cpu_to_le16(RCB_FLG_TCP_UDP_SUM);
 
 	memset(ap->rx_jumbo_ring, 0,
 	       RX_JUMBO_RING_ENTRIES * sizeof(struct rx_desc));
 
 	for (i = 0; i < RX_JUMBO_RING_ENTRIES; i++)
-		ap->rx_jumbo_ring[i].flags = BD_FLG_TCP_UDP_SUM | BD_FLG_JUMBO;
+		ap->rx_jumbo_ring[i].flags =
+			cpu_to_le16(BD_FLG_TCP_UDP_SUM | BD_FLG_JUMBO);
 
 	ap->rx_jumbo_skbprd = 0;
 	atomic_set(&ap->cur_jumbo_bufs, 0);
@@ -820,30 +942,40 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	       RX_MINI_RING_ENTRIES * sizeof(struct rx_desc));
 
 	if (ap->version >= 2) {
-		set_aceaddr(&info->rx_mini_ctrl.rngptr, ap->rx_mini_ring);
-		info->rx_mini_ctrl.max_len = ACE_MINI_SIZE;
-		info->rx_mini_ctrl.flags = RCB_FLG_TCP_UDP_SUM;
+		set_aceaddr(&info->rx_mini_ctrl.rngptr,
+			    (ap->rx_ring_base_dma +
+			     (sizeof(struct rx_desc) *
+			      (RX_STD_RING_ENTRIES +
+			       RX_JUMBO_RING_ENTRIES))));
+		info->rx_mini_ctrl.max_len = cpu_to_le16(ACE_MINI_SIZE);
+		info->rx_mini_ctrl.flags = cpu_to_le16(RCB_FLG_TCP_UDP_SUM);
 
 		for (i = 0; i < RX_MINI_RING_ENTRIES; i++)
 			ap->rx_mini_ring[i].flags =
-				BD_FLG_TCP_UDP_SUM | BD_FLG_MINI;
+				cpu_to_le16(BD_FLG_TCP_UDP_SUM | BD_FLG_MINI);
 	} else {
 		set_aceaddr(&info->rx_mini_ctrl.rngptr, 0);
-		info->rx_mini_ctrl.flags = RCB_FLG_RNG_DISABLE;
+		info->rx_mini_ctrl.flags = cpu_to_le16(RCB_FLG_RNG_DISABLE);
 		info->rx_mini_ctrl.max_len = 0;
 	}
 
 	ap->rx_mini_skbprd = 0;
 	atomic_set(&ap->cur_mini_bufs, 0);
 
-	set_aceaddr(&info->rx_return_ctrl.rngptr, ap->rx_return_ring);
+	set_aceaddr(&info->rx_return_ctrl.rngptr,
+		    (ap->rx_ring_base_dma +
+		     (sizeof(struct rx_desc) *
+		      (RX_STD_RING_ENTRIES +
+		       RX_JUMBO_RING_ENTRIES +
+		       RX_MINI_RING_ENTRIES))));
 	info->rx_return_ctrl.flags = 0;
-	info->rx_return_ctrl.max_len = RX_RETURN_RING_ENTRIES;
+	info->rx_return_ctrl.max_len = cpu_to_le16(RX_RETURN_RING_ENTRIES);
 
 	memset(ap->rx_return_ring, 0,
 	       RX_RETURN_RING_ENTRIES * sizeof(struct rx_desc));
 
-	set_aceaddr(&info->rx_ret_prd_ptr, &ap->rx_ret_prd);
+	set_aceaddr(&info->rx_ret_prd_ptr, ap->rx_ret_prd_dma);
+	*(ap->rx_ret_prd) = 0;
 
 	writel(TX_RING_BASE, &regs->WinBase);
 	ap->tx_ring = (struct tx_desc *)regs->Window;
@@ -851,15 +983,15 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 		writel(0, (unsigned long)ap->tx_ring + i * 4);
 	}
 
-	set_aceaddr_bus(&info->tx_ctrl.rngptr, (void *)TX_RING_BASE);
-	info->tx_ctrl.max_len = TX_RING_ENTRIES;
+	set_aceaddr(&info->tx_ctrl.rngptr, TX_RING_BASE);
+	info->tx_ctrl.max_len = cpu_to_le16(TX_RING_ENTRIES);
 #if TX_COAL_INTS_ONLY
-	info->tx_ctrl.flags = RCB_FLG_COAL_INT_ONLY;
+	info->tx_ctrl.flags = cpu_to_le16(RCB_FLG_COAL_INT_ONLY);
 #else
 	info->tx_ctrl.flags = 0;
 #endif
 
-	set_aceaddr(&info->tx_csm_ptr, &ap->tx_csm);
+	set_aceaddr(&info->tx_csm_ptr, ap->tx_csm_dma);
 
 	/*
 	 * Potential item for tuning parameter
@@ -975,7 +1107,7 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 	 */
 	ap->tx_full = 0;
 	ap->cur_rx = 0;
-	ap->tx_prd = ap->tx_csm = ap->tx_ret_csm = 0;
+	ap->tx_prd = *(ap->tx_csm) = ap->tx_ret_csm = 0;
 
 	wmb();
 	writel(0, &regs->TxPrd);
@@ -1015,6 +1147,17 @@ static int __init ace_init(struct net_device *dev, int board_idx)
 			       "the RX mini ring\n", dev->name);
 	}
 	return 0;
+
+fail:
+	if (info != NULL)
+		pci_free_consistent(ap->pdev, sizeof(struct ace_info),
+				    info, ap->info_dma);
+	if (ap->skb != NULL) {
+		kfree(ap->skb);
+		ap->skb = NULL;
+	}
+
+	return -EAGAIN;
 }
 
 
@@ -1032,7 +1175,7 @@ static void ace_timer(unsigned long data)
 	 * seconds and there is data in the transmit queue, thus we
 	 * asume the card is stuck.
 	 */
-	if (ap->tx_csm != ap->tx_ret_csm){
+	if (le32_to_cpu(*(ap->tx_csm)) != ap->tx_ret_csm){
 		printk(KERN_WARNING "%s: Transmitter is stuck, %08x\n",
 		       dev->name, (unsigned int)readl(&regs->HostCtrl));
 	}
@@ -1112,18 +1255,22 @@ static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs)
 	for (i = 0; i < nr_bufs; i++) {
 		struct sk_buff *skb;
 		struct rx_desc *rd;
+		dma_addr_t mapping;
 
 		skb = alloc_skb(ACE_STD_BUFSIZE, GFP_ATOMIC);
 		/*
 		 * Make sure IP header starts on a fresh cache line.
 		 */
 		skb_reserve(skb, 2 + 16);
-		ap->skb->rx_std_skbuff[idx] = skb;
+		mapping = pci_map_single(ap->pdev, skb->data,
+					 ACE_STD_BUFSIZE - (2 + 16));
+		ap->skb->rx_std_skbuff[idx].skb = skb;
+		ap->skb->rx_std_skbuff[idx].mapping = mapping;
 
 		rd = &ap->rx_std_ring[idx];
-		set_aceaddr(&rd->addr, skb->data);
-		rd->size = ACE_STD_MTU + ETH_HLEN + 4;
-		rd->idx = idx;
+		set_aceaddr(&rd->addr, mapping);
+		rd->size = cpu_to_le16(ACE_STD_MTU + ETH_HLEN + 4);
+		rd->idx = cpu_to_le16(idx);
 		idx = (idx + 1) % RX_STD_RING_ENTRIES;
 	}
 
@@ -1157,18 +1304,22 @@ static void ace_load_mini_rx_ring(struct ace_private *ap, int nr_bufs)
 	for (i = 0; i < nr_bufs; i++) {
 		struct sk_buff *skb;
 		struct rx_desc *rd;
+		dma_addr_t mapping;
 
 		skb = alloc_skb(ACE_MINI_BUFSIZE, GFP_ATOMIC);
 		/*
 		 * Make sure the IP header ends up on a fresh cache line
 		 */
 		skb_reserve(skb, 2 + 16);
-		ap->skb->rx_mini_skbuff[idx] = skb;
+		mapping = pci_map_single(ap->pdev, skb->data,
+					 ACE_MINI_BUFSIZE - (2 + 16));
+		ap->skb->rx_mini_skbuff[idx].skb = skb;
+		ap->skb->rx_mini_skbuff[idx].mapping = mapping;
 
 		rd = &ap->rx_mini_ring[idx];
-		set_aceaddr(&rd->addr, skb->data);
-		rd->size = ACE_MINI_SIZE;
-		rd->idx = idx;
+		set_aceaddr(&rd->addr, mapping);
+		rd->size = cpu_to_le16(ACE_MINI_SIZE);
+		rd->idx = cpu_to_le16(idx);
 		idx = (idx + 1) % RX_MINI_RING_ENTRIES;
 	}
 
@@ -1200,18 +1351,22 @@ static void ace_load_jumbo_rx_ring(struct ace_private *ap, int nr_bufs)
 	for (i = 0; i < nr_bufs; i++) {
 		struct sk_buff *skb;
 		struct rx_desc *rd;
+		dma_addr_t mapping;
 
 		skb = alloc_skb(ACE_JUMBO_BUFSIZE, GFP_ATOMIC);
 		/*
 		 * Make sure the IP header ends up on a fresh cache line
 		 */
 		skb_reserve(skb, 2 + 16);
-		ap->skb->rx_jumbo_skbuff[idx] = skb;
+		mapping = pci_map_single(ap->pdev, skb->data,
+					 ACE_JUMBO_BUFSIZE - (2 + 16));
+		ap->skb->rx_jumbo_skbuff[idx].skb = skb;
+		ap->skb->rx_jumbo_skbuff[idx].mapping = mapping;
 
 		rd = &ap->rx_jumbo_ring[idx];
-		set_aceaddr(&rd->addr, skb->data);
-		rd->size = ACE_JUMBO_MTU + ETH_HLEN + 4;
-		rd->idx = idx;
+		set_aceaddr(&rd->addr, mapping);
+		rd->size = cpu_to_le16(ACE_JUMBO_MTU + ETH_HLEN + 4);
+		rd->idx = cpu_to_le16(idx);
 		idx = (idx + 1) % RX_JUMBO_RING_ENTRIES;
 	}
 
@@ -1254,10 +1409,20 @@ static int ace_flush_jumbo_rx_ring(struct net_device *dev)
 		ace_issue_cmd(regs, &cmd);
 
 		for (i = 0; i < RX_JUMBO_RING_ENTRIES; i++) {
-			if (ap->skb->rx_jumbo_skbuff[i]) {
+			struct sk_buff *skb;
+
+			skb = ap->skb->rx_jumbo_skbuff[i].skb;
+			if (skb) {
+				dma_addr_t mapping;
+
+				mapping = ap->skb->rx_jumbo_skbuff[i].mapping;
+
 				ap->rx_jumbo_ring[i].size = 0;
-				set_aceaddr_bus(&ap->rx_jumbo_ring[i].addr, 0);
-				dev_kfree_skb(ap->skb->rx_jumbo_skbuff[i]);
+				set_aceaddr(&ap->rx_jumbo_ring[i].addr, 0);
+				pci_unmap_single(ap->pdev, mapping,
+						 ACE_JUMBO_BUFSIZE - (2 + 16));
+				dev_kfree_skb(skb);
+				ap->skb->rx_jumbo_skbuff[i].skb = NULL;
 			}
 		}
 	}else
@@ -1280,7 +1445,11 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 	ap = (struct ace_private *)dev->priv;
 
 	while (evtcsm != evtprd){
-		switch (ap->evt_ring[evtcsm].evt){
+		struct event evt_local;
+
+		memcpy(&evt_local, &ap->evt_ring[evtcsm], sizeof(evt_local));
+		evt_local.u.word = le32_to_cpu(evt_local.u.word);
+		switch (evt_local.u.data.evt){
 		case E_FW_RUNNING:
 			printk(KERN_INFO "%s: Firmware up and running\n",
 			       dev->name);
@@ -1290,7 +1459,7 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 			break;
 		case E_LNK_STATE:
 		{
-			u16 code = ap->evt_ring[evtcsm].code;
+			u16 code = evt_local.u.data.code;
 			if (code == E_C_LINK_UP){
 				printk(KERN_WARNING "%s: Optical link UP\n",
 				       dev->name);
@@ -1304,7 +1473,7 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 			break;
 		}
 		case E_ERROR:
-			switch(ap->evt_ring[evtcsm].code){
+			switch(evt_local.u.data.code){
 			case E_C_ERR_INVAL_CMD:
 				printk(KERN_ERR "%s: invalid command error\n",
 				       dev->name);
@@ -1319,14 +1488,14 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 				break;
 			default:
 				printk(KERN_ERR "%s: unknown error %02x\n",
-				       dev->name, ap->evt_ring[evtcsm].code);
+				       dev->name, evt_local.u.data.code);
 			}
 			break;
 		case E_RESET_JUMBO_RNG:
 			break;
 		default:
 			printk(KERN_ERR "%s: Unhandled event 0x%02x\n",
-			       dev->name, ap->evt_ring[evtcsm].evt);
+			       dev->name, evt_local.u.data.evt);
 		}
 		evtcsm = (evtcsm + 1) % EVT_RING_ENTRIES;
 	}
@@ -1344,14 +1513,16 @@ static void ace_rx_int(struct net_device *dev, u32 rxretprd, u32 rxretcsm)
 	idx = rxretcsm;
 
 	while (idx != rxretprd){
-		struct sk_buff *skb, **oldskb_p;
+		struct ring_info *rip;
+		struct sk_buff *skb;
 		struct rx_desc *rxdesc;
+		dma_addr_t mapping;
 		u32 skbidx;
-		int desc_type;
+		int desc_type, mapsize;
 		u16 csum;
 
-		skbidx = ap->rx_return_ring[idx].idx;
-		desc_type = ap->rx_return_ring[idx].flags &
+		skbidx = le16_to_cpu(ap->rx_return_ring[idx].idx);
+		desc_type = le16_to_cpu(ap->rx_return_ring[idx].flags) &
 			(BD_FLG_JUMBO | BD_FLG_MINI);
 
 		switch(desc_type) {
@@ -1363,42 +1534,47 @@ static void ace_rx_int(struct net_device *dev, u32 rxretprd, u32 rxretcsm)
 			 * atomic operations for each packet arriving.
 			 */
 		case 0:
-			oldskb_p = &ap->skb->rx_std_skbuff[skbidx];
+			rip = &ap->skb->rx_std_skbuff[skbidx];
+			mapsize = ACE_STD_BUFSIZE - (2 + 16);
 			rxdesc = &ap->rx_std_ring[skbidx];
 			std_count++;
 			break;
 		case BD_FLG_JUMBO:
-			oldskb_p = &ap->skb->rx_jumbo_skbuff[skbidx];
+			rip = &ap->skb->rx_jumbo_skbuff[skbidx];
+			mapsize = ACE_JUMBO_BUFSIZE - (2 + 16);
 			rxdesc = &ap->rx_jumbo_ring[skbidx];
 			atomic_dec(&ap->cur_jumbo_bufs);
 			break;
 		case BD_FLG_MINI:
-			oldskb_p = &ap->skb->rx_mini_skbuff[skbidx];
+			rip = &ap->skb->rx_mini_skbuff[skbidx];
+			mapsize = ACE_MINI_BUFSIZE - (2 + 16);
 			rxdesc = &ap->rx_mini_ring[skbidx];
 			mini_count++; 
 			break;
 		default:
 			printk(KERN_INFO "%s: unknown frame type (0x%02x) "
 			       "returned by NIC\n", dev->name,
-			       ap->rx_return_ring[idx].flags);
+			       le16_to_cpu(ap->rx_return_ring[idx].flags));
 			goto error;
 		}
 
-		skb = *oldskb_p;
+		skb = rip->skb;
+		mapping = rip->mapping;
 #if DEBUG
 		if (skb == NULL) {
 			printk("Mayday! illegal skb received! (idx %i)\n", skbidx);
 			goto error;
 		}
 #endif
-		*oldskb_p = NULL;
-		skb_put(skb, rxdesc->size);
+		rip->skb = NULL;
+		pci_unmap_single(ap->pdev, mapping, mapsize);
+		skb_put(skb, le16_to_cpu(rxdesc->size));
 		rxdesc->size = 0;
 
 		/*
 		 * Fly baby, fly!
 		 */
-		csum = ap->rx_return_ring[idx].tcp_udp_csum;
+		csum = le16_to_cpu(ap->rx_return_ring[idx].tcp_udp_csum);
 
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
@@ -1476,22 +1652,30 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	 * working on the other stuff - hey we don't need a spin lock
 	 * anymore.
 	 */
-	rxretprd = ap->rx_ret_prd;
+	rxretprd = le32_to_cpu(*(ap->rx_ret_prd));
 	rxretcsm = ap->cur_rx;
 
 	if (rxretprd != rxretcsm)
 		ace_rx_int(dev, rxretprd, rxretcsm);
 
-	txcsm = ap->tx_csm;
+	txcsm = le32_to_cpu(*(ap->tx_csm));
 	idx = ap->tx_ret_csm;
 
 	if (txcsm != idx) {
 		do {
-			ap->stats.tx_packets++;
-			ap->stats.tx_bytes += ap->skb->tx_skbuff[idx]->len;
-			dev_kfree_skb(ap->skb->tx_skbuff[idx]);
+			struct sk_buff *skb;
+			dma_addr_t mapping;
 
-			ap->skb->tx_skbuff[idx] = NULL;
+			skb = ap->skb->tx_skbuff[idx].skb;
+			mapping = ap->skb->tx_skbuff[idx].mapping;
+
+			ap->stats.tx_packets++;
+			ap->stats.tx_bytes += skb->len;
+
+			pci_unmap_single(ap->pdev, mapping, skb->len);
+			dev_kfree_skb(skb);
+
+			ap->skb->tx_skbuff[idx].skb = NULL;
 
 			/*
 			 * Question here is whether one should not skip
@@ -1535,7 +1719,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	}
 
 	evtcsm = readl(&regs->EvtCsm);
-	evtprd = ap->evt_prd;
+	evtprd = le32_to_cpu(*(ap->evt_prd));
 
 	if (evtcsm != evtprd) {
 		evtcsm = ace_handle_event(dev, evtcsm, evtprd);
@@ -1713,11 +1897,17 @@ static int ace_close(struct net_device *dev)
 	cli();
 
 	for (i = 0; i < TX_RING_ENTRIES; i++) {
-		if (ap->skb->tx_skbuff[i]) {
+		struct sk_buff *skb;
+		dma_addr_t mapping;
+
+		skb = ap->skb->tx_skbuff[i].skb;
+		mapping = ap->skb->tx_skbuff[i].mapping;
+		if (skb) {
 			writel(0, &ap->tx_ring[i].addr.addrhi);
 			writel(0, &ap->tx_ring[i].addr.addrlo);
 			writel(0, &ap->tx_ring[i].flagsize);
-			dev_kfree_skb(ap->skb->tx_skbuff[i]);
+			pci_unmap_single(ap->pdev, mapping, skb->len);
+			dev_kfree_skb(skb);
 		}
 	}
 
@@ -1752,8 +1942,10 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return 1;
 	}
 
-	ap->skb->tx_skbuff[idx] = skb;
-	addr = virt_to_bus(skb->data);
+	ap->skb->tx_skbuff[idx].skb = skb;
+	ap->skb->tx_skbuff[idx].mapping =
+		pci_map_single(ap->pdev, skb->data, skb->len);
+	addr = (unsigned long) ap->skb->tx_skbuff[idx].mapping;
 #if (BITS_PER_LONG == 64)
 	writel(addr >> 32, &ap->tx_ring[idx].addr.addrhi);
 #endif
@@ -2038,11 +2230,11 @@ static struct net_device_stats *ace_get_stats(struct net_device *dev)
 }
 
 
-void __init ace_copy(struct ace_regs *regs, void *src, u32 dest, int size)
+void __init ace_copy(struct ace_regs *regs, void *src, unsigned long dest, int size)
 {
 	unsigned long tdest;
 	u32 *wsrc;
-	short tsize, i;
+	unsigned long tsize, i;
 
 	if (size <= 0)
 		return;
@@ -2053,14 +2245,10 @@ void __init ace_copy(struct ace_regs *regs, void *src, u32 dest, int size)
 		tdest = (unsigned long)&regs->Window +
 			(dest & (ACE_WINDOW_SIZE - 1));
 		writel(dest & ~(ACE_WINDOW_SIZE - 1), &regs->WinBase);
-#ifdef __BIG_ENDIAN
-#error "data must be swapped here"
-#else
 		wsrc = src;
 		for (i = 0; i < (tsize / 4); i++){
 			writel(wsrc[i], tdest + i*4);
 		}
-#endif
 		dest += tsize;
 		src += tsize;
 		size -= tsize;
@@ -2070,10 +2258,10 @@ void __init ace_copy(struct ace_regs *regs, void *src, u32 dest, int size)
 }
 
 
-void __init ace_clear(struct ace_regs *regs, u32 dest, int size)
+void __init ace_clear(struct ace_regs *regs, unsigned long dest, int size)
 {
 	unsigned long tdest;
-	short tsize = 0, i;
+	unsigned long tsize = 0, i;
 
 	if (size <= 0)
 		return;

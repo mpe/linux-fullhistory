@@ -1,6 +1,6 @@
 /* net/atm/clip.c - RFC1577 Classical IP over ATM */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -30,7 +30,6 @@
 #include <asm/atomic.h>
 
 #include "common.h"
-#include "tunable.h"
 #include "resources.h"
 #include "ipcommon.h"
 #include <net/atmclip.h>
@@ -219,6 +218,18 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 }
 
 
+static void clip_pop(struct atm_vcc *vcc,struct sk_buff *skb)
+{
+	DPRINTK("clip_pop(vcc %p)\n",vcc);
+	CLIP_VCC(vcc)->old_pop(vcc,skb);
+	/* skb->dev == NULL in outbound ARP packets */
+	if (atm_may_send(vcc,0) && skb->dev) {
+		skb->dev->tbusy = 0;
+		mark_bh(NET_BH);
+	}
+}
+
+
 static void clip_neigh_destroy(struct neighbour *neigh)
 {
 	DPRINTK("clip_neigh_destroy (neigh %p)\n",neigh);
@@ -346,6 +357,7 @@ int clip_encap(struct atm_vcc *vcc,int mode)
 static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 {
 	struct atmarp_entry *entry;
+	struct atm_vcc *vcc;
 
 	DPRINTK("clip_start_xmit (skb %p)\n",skb);
 	if (!skb->dst) {
@@ -381,9 +393,8 @@ return 0;
 		return 0;
 	}
 	DPRINTK("neigh %p, vccs %p\n",entry,entry->vccs);
-	ATM_SKB(skb)->vcc = entry->vccs->vcc;
-	DPRINTK("using neighbour %p, vcc %p\n",skb->dst->neighbour,
-	    ATM_SKB(skb)->vcc);
+	ATM_SKB(skb)->vcc = vcc = entry->vccs->vcc;
+	DPRINTK("using neighbour %p, vcc %p\n",skb->dst->neighbour,vcc);
 	if (entry->vccs->encap) {
 		void *here;
 
@@ -391,15 +402,15 @@ return 0;
 		memcpy(here,llc_oui,sizeof(llc_oui));
 		((u16 *) here)[3] = skb->protocol;
 	}
-	atomic_add(skb->truesize,&ATM_SKB(skb)->vcc->tx_inuse);
+	atomic_add(skb->truesize,&vcc->tx_inuse);
+	dev->tbusy = !atm_may_send(vcc,0);
 	ATM_SKB(skb)->iovcnt = 0;
-	ATM_SKB(skb)->atm_options = ATM_SKB(skb)->vcc->atm_options;
+	ATM_SKB(skb)->atm_options = vcc->atm_options;
 	entry->vccs->last_use = jiffies;
-	DPRINTK("atm_skb(%p)->vcc(%p)->dev(%p)\n",skb,ATM_SKB(skb)->vcc,
-	    ATM_SKB(skb)->vcc->dev);
+	DPRINTK("atm_skb(%p)->vcc(%p)->dev(%p)\n",skb,vcc,vcc->dev);
 	PRIV(dev)->stats.tx_packets++;
 	PRIV(dev)->stats.tx_bytes += skb->len;
-	(void) ATM_SKB(skb)->vcc->dev->ops->send(ATM_SKB(skb)->vcc,skb);
+	(void) vcc->dev->ops->send(vcc,skb);
 	return 0;
 }
 
@@ -428,9 +439,11 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 	clip_vcc->last_use = jiffies;
 	clip_vcc->idle_timeout = timeout*HZ;
 	clip_vcc->old_push = vcc->push;
+	clip_vcc->old_pop = vcc->pop;
 	save_flags(flags);
 	cli();
 	vcc->push = clip_push;
+	vcc->pop = clip_pop;
 	skb_migrate(&vcc->recvq,&copy);
 	restore_flags(flags);
 	/* re-process everything received between connection setup and MKIP */
@@ -511,7 +524,12 @@ static int clip_init(struct net_device *dev)
 	dev->hard_header_len = RFC1483LLC_LEN;
 	dev->mtu = RFC1626_MTU;
 	dev->addr_len = 0;
-	dev->tx_queue_len = 0;
+	dev->tx_queue_len = 100; /* "normal" queue */
+	    /* When using a "real" qdisc, the qdisc determines the queue */
+	    /* length. tx_queue_len is only used for the default case, */
+	    /* without any more elaborate queuing. 100 is a reasonable */
+	    /* compromise between decent burst-tolerance and protection */
+	    /* against memory hogs. */
 	dev->flags = 0;
 	dev_init_buffers(dev); /* is this ever supposed to be used ? */
 	return 0;
@@ -641,20 +659,7 @@ static void atmarpd_close(struct atm_vcc *vcc)
 
 
 static struct atmdev_ops atmarpd_dev_ops = {
-	NULL,		/* no dev_close */
-	NULL,		/* no open */
-	atmarpd_close,	/* close */
-	NULL,		/* no ioctl */
-	NULL,		/* no getsockopt */
-	NULL,		/* no setsockopt */
-	NULL,		/* send */
-	NULL,		/* no sg_send */
-	NULL,		/* no send_oam */
-	NULL,		/* no phy_put */
-	NULL,		/* no phy_get */
-	NULL,		/* no feedback */
-	NULL,		/* no change_qos */
-	NULL		/* no free_rx_skb */
+	close:	atmarpd_close,
 };
 
 

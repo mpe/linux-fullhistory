@@ -27,8 +27,8 @@ Be sure to turn on the following options:
     CONFIG_PROCFS (to see what's going on)
     CONFIG_SYSCTL (for easy configuration)
 
-if you want to try out router support (not properly debugged and not
-complete yet), you'll need the following options as well...
+if you want to try out router support (not properly debugged yet)
+you'll need the following options as well...
 
     CONFIG_DECNET_RAW (to receive routing packets)
     CONFIG_DECNET_ROUTER (to be able to add/delete routes)
@@ -39,26 +39,26 @@ complete yet), you'll need the following options as well...
 
 The kernel command line takes options looking like the following:
 
-    decnet=1,2,1
+    decnet=1,2
 
-the first two numbers are the node address 1,2 = 1.2 For 2.2.xx kernels
+the two numbers are the node address 1,2 = 1.2 For 2.2.xx kernels
 and early 2.3.xx kernels, you must use a comma when specifying the
 DECnet address like this. For more recent 2.3.xx kernels, you may
 use almost charecter except space, although a `.` would be the most
 obvious choice :-)
 
-The third number is the level number for routers and is optional. In fact
-this option may go away shortly in favour if settings for each interface
-seperately. It is probably a good idea to set the DECnet address and type
-on boot like this rather than trying to do it later.
+There used to be a third number specifying the node type. This option
+has gone away in favour of a per interface node type. This is now set
+using /proc/sys/net/decnet/conf/<dev>/forwarding. This file can be
+set with a single digit, 0=EndNode, 1=L1 Router and  2=L2 Router.
 
-There are also equivalent options for modules. The node address and type can
+There are also equivalent options for modules. The node address can
 also be set through the /proc/sys/net/decnet/ files, as can other system
 parameters.
 
-Currently the only supported device is ethernet. You'll have to set the
-ethernet address of your ethernet card according to the DECnet address
-of the node in order for it to be recognised (and thus appear in
+Currently the only supported devices are ethernet and ip_gre. The
+ethernet address of your ethernet card has to be set according to the DECnet
+address of the node in order for it to be recognised (and thus appear in
 /proc/net/decnet_dev). There is a utility available at the above
 FTP sites called dn2ethaddr which can compute the correct ethernet
 address to use. The address can be set by ifconfig either before at
@@ -101,7 +101,8 @@ Here is a quick guide of what to look for in order to know if your DECnet
 kernel subsystem is working.
 
    - Is the node address set (see /proc/sys/net/decnet/node_address)
-   - Is the node of the correct type (see /proc/sys/net/decnet/node_type)
+   - Is the node of the correct type 
+                             (see /proc/sys/net/decnet/conf/<dev>/forwarding)
    - Is the Ethernet MAC address of each Ethernet card set to match
      the DECnet address. If in doubt use the dn2ethaddr utility available
      at the ftp archive.

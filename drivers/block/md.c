@@ -22,8 +22,8 @@
    Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
 */
 
+#include <linux/config.h>
 #include <linux/raid/md.h>
-#include <linux/raid/xor.h>
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
@@ -3317,12 +3317,6 @@ int md__init md_init (void)
 
 	md_register_reboot_notifier(&md_notifier);
 
-#ifdef CONFIG_MD_HSM
-	hsm_init ();
-#endif
-#ifdef CONFIG_MD_TRANSLUCENT
-	translucent_init ();
-#endif
 #ifdef CONFIG_MD_LINEAR
 	linear_init ();
 #endif
@@ -3380,4 +3374,5 @@ MD_EXPORT_SYMBOL(md_print_devices);
 MD_EXPORT_SYMBOL(find_rdev_nr);
 MD_EXPORT_SYMBOL(md_interrupt_thread);
 MD_EXPORT_SYMBOL(mddev_map);
+MD_EXPORT_SYMBOL(md_check_ordering);
 

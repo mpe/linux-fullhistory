@@ -1,6 +1,6 @@
 /* drivers/atm/atmtcp.c - ATM over TCP "device" driver */
 
-/* Written 1997-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1997-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/module.h>
@@ -8,7 +8,9 @@
 #include <linux/atmdev.h>
 #include <linux/atm_tcp.h>
 #include <asm/uaccess.h>
-#include "../../net/atm/protocols.h" /* @@@ fix this */
+
+
+extern int atm_init_aal5(struct atm_vcc *vcc); /* "raw" AAL5 transport */
 
 
 #define PRIV(dev) ((struct atmtcp_dev_data *) ((dev)->dev_data))
@@ -56,7 +58,8 @@ static int atmtcp_send_control(struct atm_vcc *vcc,int type,
 	*new_msg = *msg;
 	new_msg->hdr.length = ATMTCP_HDR_MAGIC;
 	new_msg->type = type;
-	new_msg->vcc = (unsigned long) vcc;
+	memset(&new_msg->vcc,0,sizeof(atm_kptr_t));
+	*(struct atm_vcc **) &new_msg->vcc = vcc;
 	old_flags = vcc->flags;
 	out_vcc->push(out_vcc,skb);
 	while (!((vcc->flags ^ old_flags) & flag)) {
@@ -72,7 +75,7 @@ static int atmtcp_send_control(struct atm_vcc *vcc,int type,
 
 static int atmtcp_recv_control(const struct atmtcp_control *msg)
 {
-	struct atm_vcc *vcc = (struct atm_vcc *) msg->vcc;
+	struct atm_vcc *vcc = *(struct atm_vcc **) &msg->vcc;
 
 	vcc->vpi = msg->addr.sap_addr.vpi;
 	vcc->vci = msg->addr.sap_addr.vci;
@@ -143,7 +146,7 @@ static int atmtcp_v_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 	struct atm_cirange ci;
 	struct atm_vcc *vcc;
 
-	if (cmd != ATM_SETCIRANGE) return -EINVAL;
+	if (cmd != ATM_SETCIRANGE) return -ENOIOCTLCMD;
 	if (copy_from_user(&ci,(void *) arg,sizeof(ci))) return -EFAULT;
 	if (ci.vpi_bits == ATM_CI_MAX) ci.vpi_bits = MAX_VPI_BITS;
 	if (ci.vci_bits == ATM_CI_MAX) ci.vci_bits = MAX_VCI_BITS;
@@ -190,6 +193,8 @@ static int atmtcp_v_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	if (vcc->pop) vcc->pop(vcc,skb);
 	else dev_kfree_skb(skb);
 	out_vcc->push(out_vcc,new_skb);
+	vcc->stats->tx++;
+	out_vcc->stats->rx++;
 	return 0;
 }
 
@@ -258,6 +263,8 @@ static int atmtcp_c_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	new_skb->stamp = xtime;
 	memcpy(skb_put(new_skb,skb->len),skb->data,skb->len);
 	out_vcc->push(out_vcc,new_skb);
+	vcc->stats->tx++;
+	out_vcc->stats->rx++;
 done:
 	if (vcc->pop) vcc->pop(vcc,skb);
 	else dev_kfree_skb(skb);
@@ -271,21 +278,12 @@ done:
 
 
 static struct atmdev_ops atmtcp_v_dev_ops = {
-	atmtcp_v_dev_close,
-	atmtcp_v_open,
-	atmtcp_v_close,
-	atmtcp_v_ioctl,
-	NULL,		/* no getsockopt */
-	NULL,		/* no setsockopt */
-	atmtcp_v_send,
-	NULL,		/* no direct writes */
-	NULL,		/* no send_oam */
-	NULL,		/* no phy_put */
-	NULL,		/* no phy_get */
-	NULL,		/* no feedback */
-	NULL,		/* no change_qos */
-	NULL,		/* no free_rx_skb */
-	atmtcp_v_proc	/* proc_read */
+	dev_close:	atmtcp_v_dev_close,
+	open:		atmtcp_v_open,
+	close:		atmtcp_v_close,
+	ioctl:		atmtcp_v_ioctl,
+	send:		atmtcp_v_send,
+	proc_read:	atmtcp_v_proc
 };
 
 
@@ -295,21 +293,8 @@ static struct atmdev_ops atmtcp_v_dev_ops = {
 
 
 static struct atmdev_ops atmtcp_c_dev_ops = {
-	NULL,		/* no dev_close */
-	NULL,		/* no open */
-	atmtcp_c_close,
-	NULL,		/* no ioctl */
-	NULL,		/* no getsockopt */
-	NULL,		/* no setsockopt */
-	atmtcp_c_send,
-	NULL,		/* no sg_send */
-	NULL,		/* no send_oam */
-	NULL,		/* no phy_put */
-	NULL,		/* no phy_get */
-	NULL,		/* no feedback */
-	NULL,		/* no change_qos */
-	NULL,		/* no free_rx_skb */
-	NULL		/* no proc_read */
+	close:		atmtcp_c_close,
+	send:		atmtcp_c_send
 };
 
 

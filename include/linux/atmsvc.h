@@ -1,11 +1,12 @@
 /* atmsvc.h - ATM signaling kernel-demon interface definitions */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef _LINUX_ATMSVC_H
 #define _LINUX_ATMSVC_H
 
+#include <linux/atmapi.h>
 #include <linux/atm.h>
 #include <linux/atmioc.h>
 
@@ -19,8 +20,8 @@ enum atmsvc_msg_type { as_catch_null,as_bind,as_connect,as_accept,as_reject,
 
 struct atmsvc_msg {
 	enum atmsvc_msg_type type;
-	unsigned long vcc;
-	unsigned long listen_vcc;	/* indicate */
+	atm_kptr_t vcc;
+	atm_kptr_t listen_vcc;		/* indicate */
 	int reply;			/* for okay and close:		   */
 					/*   < 0: error before active	   */
 					/*        (sigd has discarded ctx) */
@@ -31,12 +32,12 @@ struct atmsvc_msg {
 	struct sockaddr_atmsvc local;	/* local SVC address */
 	struct atm_qos qos;		/* QOS parameters */
 	struct atm_sap sap;		/* SAP */
-	unsigned long session;		/* for p2pm */
+	unsigned int session;		/* for p2pm */
 	struct sockaddr_atmsvc svc;	/* SVC address */
-};
+} __ATM_API_ALIGN;
 
 /*
- * Message contents: see ftp://lrcftp.epfl.ch/pub/linux/atm/docs/isp-*.tar.gz
+ * Message contents: see ftp://icaftp.epfl.ch/pub/linux/atm/docs/isp-*.tar.gz
  */
 
 /*

@@ -87,7 +87,7 @@ static in_cache_entry *new_in_cache_entry(uint32_t dst_ip,
 					  struct mpoa_client *client)
 {
         unsigned long flags;
-        unsigned char *ip = (unsigned char *)&dst_ip;
+        unsigned char *ip __attribute__ ((unused)) = (unsigned char *)&dst_ip;
         in_cache_entry* entry = kmalloc(sizeof(in_cache_entry), GFP_KERNEL);
 
         if (entry == NULL) {
@@ -149,7 +149,8 @@ static int cache_hit( in_cache_entry * entry, struct mpoa_client *mpc)
 
         if( entry->count > mpc->parameters.mpc_p1 &&
             entry->entry_state == INGRESS_INVALID){
-                unsigned char *ip = (unsigned char *)&entry->ctrl_info.in_dst_ip;
+                unsigned char *ip __attribute__ ((unused)) =
+		    (unsigned char *)&entry->ctrl_info.in_dst_ip;
 
 		dprintk("mpoa: (%s) mpoa_caches.c: threshold exceeded for ip %u.%u.%u.%u, sending MPOA res req\n", mpc->dev->name, ip[0], ip[1], ip[2], ip[3]);
                 entry->entry_state = INGRESS_RESOLVING;

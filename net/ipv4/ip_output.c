@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.78 2000/01/16 05:11:22 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.79 2000/02/08 21:27:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -972,10 +972,15 @@ void ip_send_reply(struct sock *sk, struct sk_buff *skb, struct ip_reply_arg *ar
 		return;
 
 	daddr = ipc.addr = rt->rt_src;
-	ipc.opt = &replyopts.opt;
+	ipc.opt = NULL;
 
-	if (ipc.opt->srr)
-		daddr = replyopts.opt.faddr;
+	if (replyopts.opt.optlen) {
+		ipc.opt = &replyopts.opt;
+
+		if (ipc.opt->srr)
+			daddr = replyopts.opt.faddr;
+	}
+
 	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
 		return;
 

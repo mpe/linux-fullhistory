@@ -1,6 +1,6 @@
 /* drivers/atm/suni.c - PMC SUNI (PHY) driver */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/module.h>
@@ -181,19 +181,24 @@ static int suni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 		case SONET_GETFRSENSE:
 			return -EINVAL;
 		case SUNI_SETLOOP:
-			if (!capable(CAP_NET_ADMIN)) return -EPERM;
-			if ((int) arg < 0 || (int) arg > SUNI_LM_LOOP)
-				return -EINVAL;
-			PUT((GET(MCT) & ~(SUNI_MCT_DLE | SUNI_MCT_LLE)) |
-			    ((int) arg == SUNI_LM_DIAG ? SUNI_MCT_DLE : 0) |
-			    ((int) arg == SUNI_LM_LOOP ? SUNI_MCT_LLE : 0),MCT);
-			PRIV(dev)->loop_mode = (int) arg;
-			return 0;
+			{
+				int int_arg = (int) (long) arg;
+
+				if (!capable(CAP_NET_ADMIN)) return -EPERM;
+				if (int_arg < 0 || int_arg > SUNI_LM_LOOP)
+					return -EINVAL;
+				PUT((GET(MCT) & ~(SUNI_MCT_DLE | SUNI_MCT_LLE))
+				    | (int_arg == SUNI_LM_DIAG ? SUNI_MCT_DLE :
+				    0) | (int_arg == SUNI_LM_LOOP ?
+				    SUNI_MCT_LLE : 0),MCT);
+				PRIV(dev)->loop_mode = int_arg;
+				return 0;
+			}
 		case SUNI_GETLOOP:
 			return put_user(PRIV(dev)->loop_mode,(int *) arg) ?
 			    -EFAULT : 0;
 		default:
-			return -EINVAL;
+			return -ENOIOCTLCMD;
 	}
 }
 

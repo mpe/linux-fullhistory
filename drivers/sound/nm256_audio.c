@@ -13,7 +13,6 @@
  * off of it; go on, I dare you.  
  */
 
-#include <linux/config.h>
 #define __NO_VERSION__
 #include <linux/pci.h>
 #include <linux/module.h>

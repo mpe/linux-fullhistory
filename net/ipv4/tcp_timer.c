@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.71 2000/01/18 08:24:19 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.72 2000/02/08 21:27:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -200,9 +200,16 @@ static void tcp_delack_timer(unsigned long data)
 	}
 
 	if (tp->ack.pending) {
-		/* Delayed ACK missed: inflate ATO, leave pingpong mode */
-		tp->ack.ato = min(tp->ack.ato<<1, TCP_ATO_MAX);
-		tp->ack.pingpong = 0;
+		if (!tp->ack.pingpong) {
+			/* Delayed ACK missed: inflate ATO. */
+			tp->ack.ato = min(tp->ack.ato<<1, TCP_ATO_MAX);
+		} else {
+			/* Delayed ACK missed: leave pingpong mode and
+			 * deflate ATO.
+			 */
+			tp->ack.pingpong = 0;
+			tp->ack.ato = TCP_ATO_MIN;
+		}
 		tcp_send_ack(sk);
 		NET_INC_STATS_BH(DelayedACKs);
 	}

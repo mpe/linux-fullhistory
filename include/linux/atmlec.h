@@ -9,6 +9,7 @@
 #ifndef _ATMLEC_H_
 #define _ATMLEC_H_
 
+#include <linux/atmapi.h>
 #include <linux/atmioc.h>
 #include <linux/atm.h>
 #include <linux/if_ether.h>
@@ -43,15 +44,16 @@ typedef enum {
 
 struct atmlec_config_msg {
         unsigned int maximum_unknown_frame_count;
-        unsigned long max_unknown_frame_time;
+        unsigned int max_unknown_frame_time;
         unsigned short max_retry_count;
-        unsigned long aging_time;
-        unsigned long forward_delay_time;
-        unsigned long arp_response_time;
-        unsigned long flush_timeout;
-        unsigned long path_switching_delay;
+        unsigned int aging_time;
+        unsigned int forward_delay_time;
+        unsigned int arp_response_time;
+        unsigned int flush_timeout;
+        unsigned int path_switching_delay;
         unsigned int  lane_version; /* LANE2: 1 for LANEv1, 2 for LANEv2 */
         int mtu;
+        int is_proxy;
 };
  
 struct atmlec_msg {
@@ -61,7 +63,7 @@ struct atmlec_msg {
                 struct {
                         unsigned char mac_addr[ETH_ALEN];
                         unsigned char atm_addr[ATM_ESA_LEN];
-                        unsigned long flag;/* Topology_change flag, 
+                        unsigned int flag;/* Topology_change flag, 
                                               remoteflag, permanent flag,
                                               lecid, transaction id */
                         unsigned int targetless_le_arp; /* LANE2 */
@@ -73,9 +75,10 @@ struct atmlec_msg {
                         uint32_t tran_id;                    /* transaction id    */
                         unsigned char mac_addr[ETH_ALEN];    /* dst mac addr      */
                         unsigned char atm_addr[ATM_ESA_LEN]; /* reqestor ATM addr */
-                } proxy; /* For mapping LE_ARP requests to responses. Filled by   */
+                } proxy;
+		     /* For mapping LE_ARP requests to responses. Filled by */
         } content;       /* zeppelin, returned by kernel. Used only when proxying */ 
-};
+} __ATM_API_ALIGN;
 
 struct atmlec_ioc {
         int dev_num;

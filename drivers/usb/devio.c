@@ -19,7 +19,7 @@
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *  $Id: devio.c,v 1.6 2000/01/11 23:26:33 tom Exp $
+ *  $Id: devio.c,v 1.7 2000/02/01 17:28:48 fliegl Exp $
  *
  *  This file implements the usbdevfs/x/y files, where
  *  x is the bus number and y the device number.
@@ -132,8 +132,8 @@ static int my_usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 re
         urb->transfer_buffer = data;
         urb->transfer_buffer_length = size;
 	ret = do_sync(urb, timeout);
-	if (ret >= 0)
-		ret = urb->status;
+	//if (ret >= 0)
+	//	ret = urb->status;
 	if (ret >= 0)
 		ret = urb->actual_length;
 	kfree(urb->setup_packet);
@@ -154,8 +154,8 @@ static int my_usb_bulk_msg(struct usb_device *dev, unsigned int pipe,
         urb->transfer_buffer = data;
         urb->transfer_buffer_length = len;
 	ret = do_sync(urb, timeout);
-	if (ret >= 0)
-		ret = urb->status;
+	//if (ret >= 0)
+	//	ret = urb->status;
 	if (ret >= 0 && actual_length != NULL)
 		*actual_length = urb->actual_length;
 	usb_free_urb(urb);
@@ -321,7 +321,7 @@ static void async_completed(purb_t urb)
         struct dev_state *ps = as->ps;
 	struct siginfo sinfo;
 
-#if 0
+#if 1
 	printk(KERN_DEBUG "usbdevfs: async_completed: status %d errcount %d actlen %d pipe 0x%x\n", 
 	       urb->status, urb->error_count, urb->actual_length, urb->pipe);
 #endif
@@ -345,7 +345,7 @@ static void destroy_all_async(struct dev_state *ps)
         unsigned long flags;
 
         spin_lock_irqsave(&ps->lock, flags);
-        if (!list_empty(&ps->async_pending)) {
+        while (!list_empty(&ps->async_pending)) {
                 as = list_entry(ps->async_pending.next, struct async, asynclist);
                 list_del(&as->asynclist);
                 INIT_LIST_HEAD(&as->asynclist);

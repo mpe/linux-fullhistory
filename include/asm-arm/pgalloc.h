@@ -14,6 +14,12 @@
  */
 #include <asm/proc/cache.h>
 
+extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm,
+					  unsigned long start,
+					  unsigned long end)
+{
+}
+
 /*
  * Page table cache stuff
  */

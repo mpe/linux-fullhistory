@@ -16,9 +16,6 @@ extern int zatm_detect(void);
 #ifdef CONFIG_ATM_TNETA1570
 extern int tneta1570_detect(void);
 #endif
-#ifdef CONFIG_ATM_FORE200
-extern int fore200_detect(void);
-#endif
 #ifdef CONFIG_ATM_NICSTAR
 extern int nicstar_detect(void);
 #endif
@@ -27,6 +24,9 @@ extern int amb_detect(void);
 #endif
 #ifdef CONFIG_ATM_HORIZON
 extern int hrz_detect(void);
+#endif
+#ifdef CONFIG_ATM_IA
+extern int ia_detect(void);
 #endif
 
 
@@ -44,9 +44,6 @@ int __init atmdev_init(void)
 #ifdef CONFIG_ATM_TNETA1570
 	devs += tneta1570_detect();
 #endif
-#ifdef CONFIG_ATM_FORE200
-	devs += fore200_detect();
-#endif
 #ifdef CONFIG_ATM_NICSTAR
 	devs += nicstar_detect();
 #endif
@@ -55,6 +52,9 @@ int __init atmdev_init(void)
 #endif
 #ifdef CONFIG_ATM_HORIZON
 	devs += hrz_detect();
+#endif
+#ifdef CONFIG_ATM_IA
+	devs += ia_detect();
 #endif
 	return devs;
 }

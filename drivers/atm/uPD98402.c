@@ -1,6 +1,6 @@
 /* drivers/atm/uPD98402.c - NEC uPD98402 (PHY) declarations */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #include <linux/module.h>
@@ -118,7 +118,7 @@ static int uPD98402_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 		case SONET_GETFRSENSE:
 			return get_sense(dev,arg);
 		default:
-		    return -EINVAL;
+		    return -ENOIOCTLCMD;
 	}
 }
 

@@ -337,6 +337,8 @@ asmlinkage void smp_invalidate_interrupt (void)
 {
 	unsigned long cpu = smp_processor_id();
 
+	if (!test_bit(cpu, &flush_cpumask))
+		BUG();
 	if (flush_mm == cpu_tlbstate[cpu].active_mm) {
 		if (cpu_tlbstate[cpu].state == TLBSTATE_OK) {
 			if (flush_va == FLUSH_ALL)
@@ -345,7 +347,12 @@ asmlinkage void smp_invalidate_interrupt (void)
 				__flush_tlb_one(flush_va);
 		} else
 			leave_mm(cpu);
+	} else {
+		extern void show_stack (void *);
+		printk("hm #1: %p, %p.\n", flush_mm, cpu_tlbstate[cpu].active_mm);
+		show_stack(NULL);
 	}
+	__flush_tlb();
 	ack_APIC_irq();
 	clear_bit(cpu, &flush_cpumask);
 }
@@ -366,12 +373,16 @@ static void flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
 		BUG();
 	if (cpumask & (1 << smp_processor_id()))
 		BUG();
+	if (!mm)
+		BUG();
 
 	/*
 	 * i'm not happy about this global shared spinlock in the
 	 * MM hot path, but we'll see how contended it is.
+	 * Temporarily this turns IRQs off, so that lockups are
+	 * detected by the NMI watchdog.
 	 */
-	spin_lock(&tlbstate_lock);
+	spin_lock_irq(&tlbstate_lock);
 	
 	flush_mm = mm;
 	flush_va = va;
@@ -387,7 +398,7 @@ static void flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
 
 	flush_mm = NULL;
 	flush_va = 0;
-	spin_unlock(&tlbstate_lock);
+	spin_unlock_irq(&tlbstate_lock);
 }
 	
 void flush_tlb_current_task(void)

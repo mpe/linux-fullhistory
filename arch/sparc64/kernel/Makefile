@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.50 1999/12/21 04:02:24 davem Exp $
+# $Id: Makefile,v 1.51 2000/02/08 05:11:31 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -19,13 +19,13 @@ O_TARGET := kernel.o
 O_OBJS   := process.o setup.o cpu.o idprom.o \
 	    traps.o devices.o auxio.o \
 	    irq.o ptrace.o time.o sys_sparc.o signal.o \
-	    unaligned.o central.o pci.o pci_common.o pci_iommu.o \
-	    pci_psycho.o pci_sabre.o starfire.o semaphore.o \
+	    unaligned.o central.o pci.o starfire.o semaphore.o \
 	    power.o sbus.o iommu_common.o
 OX_OBJS  := sparc64_ksyms.o
 
 ifdef CONFIG_PCI
-  O_OBJS += ebus.o
+  O_OBJS += ebus.o pci_common.o pci_iommu.o \
+	    pci_psycho.o pci_sabre.o 
 endif
 
 ifdef CONFIG_SUNOS_EMUL

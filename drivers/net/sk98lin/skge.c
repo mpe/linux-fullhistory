@@ -851,41 +851,35 @@ unsigned long	BusAddr;
 	AllocLength = (RX_RING_SIZE + TX_RING_SIZE) * pAC->GIni.GIMacsFound
 		+ RX_RING_SIZE + 8;
 #endif
-	pDescrMem = kmalloc(AllocLength, GFP_KERNEL);
+	pDescrMem = pci_alloc_consistent(&pAC->PciDev, AllocLength,
+					 &pAC->pDescrMemDMA);
 	if (pDescrMem == NULL) {
 		return (SK_FALSE);
 	}
 	pAC->pDescrMem = pDescrMem;
-	memset(pDescrMem, 0, AllocLength);
-	/* Descriptors need 8 byte alignment */
-	BusAddr = virt_to_bus(pDescrMem);
-	if (BusAddr & (DESCR_ALIGN-1)) {
-		pDescrMem += DESCR_ALIGN - (BusAddr & (DESCR_ALIGN-1));
-	}
+
+	/* Descriptors need 8 byte alignment, and this is ensured
+	 * by pci_alloc_consistent.
+	 */
+	BusAddr = (unsigned long) pAC->pDescrMemDMA;
 	for (i=0; i<pAC->GIni.GIMacsFound; i++) {
-		if ((virt_to_bus(pDescrMem) & ~0xFFFFFFFFULL) != 
-		    (virt_to_bus(pDescrMem+TX_RING_SIZE) & ~0xFFFFFFFFULL)) {
-			pDescrMem += TX_RING_SIZE;
-		}
 		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_TX_PROGRESS,
 			("TX%d/A: pDescrMem: %lX,   PhysDescrMem: %lX\n",
 			i, (unsigned long) pDescrMem,
-			(unsigned long)virt_to_bus(pDescrMem)));
+			BusAddr));
 		pAC->TxPort[i][0].pTxDescrRing = pDescrMem;
-		pAC->TxPort[i][0].VTxDescrRing = virt_to_bus(pDescrMem);
+		pAC->TxPort[i][0].VTxDescrRing = BusAddr;
 		pDescrMem += TX_RING_SIZE;
+		BusAddr += TX_RING_SIZE;
 	
-		if ((virt_to_bus(pDescrMem) & ~0xFFFFFFFFULL) != 
-		    (virt_to_bus(pDescrMem+RX_RING_SIZE) & ~0xFFFFFFFFULL)) {
-			pDescrMem += RX_RING_SIZE;
-		}
 		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_TX_PROGRESS,
 			("RX%d: pDescrMem: %lX,   PhysDescrMem: %lX\n",
 			i, (unsigned long) pDescrMem,
-			(unsigned long)(virt_to_bus(pDescrMem))));
+			(unsigned long)BusAddr));
 		pAC->RxPort[i].pRxDescrRing = pDescrMem;
-		pAC->RxPort[i].VRxDescrRing = virt_to_bus(pDescrMem);
+		pAC->RxPort[i].VRxDescrRing = BusAddr;
 		pDescrMem += RX_RING_SIZE;
+		BusAddr += RX_RING_SIZE;
 	} /* for */
 	
 	return (SK_TRUE);
@@ -905,9 +899,19 @@ unsigned long	BusAddr;
 static void BoardFreeMem(
 SK_AC		*pAC)
 {
+size_t		AllocLength;	/* length of complete descriptor area */
+
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ENTRY,
 		("BoardFreeMem\n"));
-	kfree(pAC->pDescrMem);
+#if (BITS_PER_LONG == 32)
+	AllocLength = (RX_RING_SIZE + TX_RING_SIZE) * pAC->GIni.GIMacsFound + 8;
+#else
+	AllocLength = (RX_RING_SIZE + TX_RING_SIZE) * pAC->GIni.GIMacsFound
+		+ RX_RING_SIZE + 8;
+#endif
+	pci_free_consistent(&pAC->PciDev, AllocLength,
+			    pAC->pDescrMem, pAC->pDescrMemDMA);
+	pAC->pDescrMem = NULL;
 } /* BoardFreeMem */
 
 
@@ -1530,7 +1534,9 @@ int		Rc;	/* return code of XmitFrame */
 	if (Rc == 0) {
 		/* transmitter out of resources */
 		set_bit(0, (void*) &dev->tbusy);
-		return (0);
+
+		/* give buffer ownership back to the queueing layer */
+		return (1);
 	} 
 	dev->trans_start = jiffies;
 	return (0);
@@ -1584,7 +1590,6 @@ int		BytesSend;
 				SK_DBGCAT_DRV_TX_PROGRESS,
 				("XmitFrame failed\n"));
 			/* this message can not be sent now */
-			DEV_KFREE_SKB(pMessage);
 			return (0);
 		}
 	}
@@ -1603,7 +1608,9 @@ int		BytesSend;
 #endif
 
 	/* set up descriptor and CONTROL dword */
-	PhysAddr = virt_to_bus(pMessage->data);
+	PhysAddr = (SK_U64) pci_map_single(&pAC->PciDev,
+					   pMessage->data,
+					   pMessage->len);
 	pTxd->VDataLow = (SK_U32)  (PhysAddr & 0xffffffff);
 	pTxd->VDataHigh = (SK_U32) (PhysAddr >> 32);
 	pTxd->pMBuf = pMessage;
@@ -1662,6 +1669,7 @@ TX_PORT	*pTxPort)	/* pointer to destination port structure */
 TXD	*pTxd;		/* pointer to the checked descriptor */
 TXD	*pNewTail;	/* pointer to 'end' of the ring */
 SK_U32	Control;	/* TBControl field of descriptor */
+SK_U64	PhysAddr;	/* address of DMA mapping */
 
 	pNewTail = pTxPort->pTxdRingTail;
 	pTxd = pNewTail;
@@ -1691,6 +1699,12 @@ SK_U32	Control;	/* TBControl field of descriptor */
 			return;
 		}
 		
+		/* release the DMA mapping */
+		PhysAddr = ((SK_U64) pTxd->VDataHigh) << (SK_U64) 32;
+		PhysAddr |= (SK_U64) pTxd->VDataLow;
+		pci_unmap_single(&pAC->PciDev, PhysAddr,
+				 pTxd->pMBuf->len);
+
 		DEV_KFREE_SKB(pTxd->pMBuf); /* free message */
 		pTxPort->TxdRingFree++;
 		pTxd->TBControl &= ~TX_CTRL_SOFTWARE;
@@ -1767,7 +1781,9 @@ SK_U64		PhysAddr;	/* physical address of a rx buffer */
 	pRxPort->pRxdRingTail = pRxd->pNextRxd;
 	pRxPort->RxdRingFree--;
 	Length = pAC->RxBufSize;
-	PhysAddr = virt_to_bus(pMsgBlock->data);
+	PhysAddr = (SK_U64) pci_map_single(&pAC->PciDev,
+					   pMsgBlock->data,
+					   pAC->RxBufSize - 2);
 	pRxd->VDataLow = (SK_U32) (PhysAddr & 0xffffffff);
 	pRxd->VDataHigh = (SK_U32) (PhysAddr >> 32);
 	pRxd->pMBuf = pMsgBlock;
@@ -1845,6 +1861,8 @@ unsigned short	Csum1;
 unsigned short	Csum2;
 unsigned short	Type;
 int		Result;
+SK_U64		PhysAddr;
+
 
 rx_start:	
 	/* do forever; exit if RX_CTRL_OWN_BMU found */
@@ -1876,17 +1894,19 @@ rx_start:
 		/*
 		 * if short frame then copy data to reduce memory waste
 		 */
+		pNewMsg = NULL;
 		if (FrameLength < SK_COPY_THRESHOLD) {
 			pNewMsg = alloc_skb(FrameLength+2, GFP_ATOMIC);
-			if (pNewMsg == NULL) {
-				/* use original skb */
-				/* set length in message */
-				skb_put(pMsg, FrameLength);
-			}
-			else {
-				/* alloc new skb and copy data */
+			if (pNewMsg != NULL) {
+				PhysAddr = ((SK_U64) pRxd->VDataHigh) << (SK_U64)32;
+				PhysAddr |= (SK_U64) pRxd->VDataLow;
+
+				/* use new skb and copy data */
 				skb_reserve(pNewMsg, 2);
 				skb_put(pNewMsg, FrameLength);
+				pci_dma_sync_single(&pAC->PciDev,
+						    (dma_addr_t) PhysAddr,
+						    FrameLength);
 				eth_copy_and_sum(pNewMsg, pMsg->data,
 					FrameLength, 0);
 				ReQueueRxBuffer(pAC, pRxPort, pMsg,
@@ -1894,7 +1914,20 @@ rx_start:
 				pMsg = pNewMsg;
 			}
 		}
-		else {
+
+		/*
+		 * if large frame, or SKB allocation failed, pass
+		 * the SKB directly to the networking
+		 */
+		if (pNewMsg == NULL) {
+			PhysAddr = ((SK_U64) pRxd->VDataHigh) << (SK_U64)32;
+			PhysAddr |= (SK_U64) pRxd->VDataLow;
+
+			/* release the DMA mapping */
+			pci_unmap_single(&pAC->PciDev,
+					 PhysAddr,
+					 pAC->RxBufSize - 2);
+
 			/* set length in message */
 			skb_put(pMsg, FrameLength);
 			/* hardware checksum */
@@ -2045,6 +2078,13 @@ rx_failed:
 	/* remove error frame */
 	SK_DBG_MSG(NULL, SK_DBGMOD_DRV, SK_DBGCAT_DRV_ERROR,
 		("Schrottdescriptor, length: 0x%x\n", FrameLength));
+
+	/* release the DMA mapping */
+	PhysAddr = ((SK_U64) pRxd->VDataHigh) << (SK_U64)32;
+	PhysAddr |= (SK_U64) pRxd->VDataLow;
+	pci_unmap_single(&pAC->PciDev,
+			 PhysAddr,
+			 pAC->RxBufSize - 2);
 	DEV_KFREE_SKB(pRxd->pMBuf);
 	pRxd->pMBuf = NULL;
 	pRxPort->RxdRingFree++;
@@ -2110,6 +2150,7 @@ RX_PORT	*pRxPort)	/* pointer to rx port struct */
 {
 RXD		*pRxd;	/* pointer to the current descriptor */
 unsigned int	Flags;
+ SK_U64		PhysAddr;
 
 	if (pRxPort->RxdRingFree == pAC->RxDescrPerRing) {
 		return;
@@ -2118,6 +2159,11 @@ unsigned int	Flags;
 	pRxd = pRxPort->pRxdRingHead;
 	do {
 		if (pRxd->pMBuf != NULL) {
+			PhysAddr = ((SK_U64) pRxd->VDataHigh) << (SK_U64)32;
+			PhysAddr |= (SK_U64) pRxd->VDataLow;
+			pci_unmap_single(&pAC->PciDev,
+					 PhysAddr,
+					 pAC->RxBufSize - 2);
 			DEV_KFREE_SKB(pRxd->pMBuf);
 			pRxd->pMBuf = NULL;
 		}

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.198 2000/01/31 01:21:20 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.199 2000/02/08 21:27:17 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1339,6 +1339,16 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	tp.user_mss = sk->tp_pinfo.af_tcp.user_mss;
 
 	tcp_parse_options(NULL, th, &tp, want_cookie);
+
+	if (tp.saw_tstamp && tp.rcv_tsval == 0) {
+		/* Some OSes (unknown ones, but I see them on web server, which
+		 * contains information interesting only for windows'
+		 * users) do not send their stamp in SYN. It is easy case.
+		 * We simply do not advertise TS support.
+		 */
+		tp.saw_tstamp = 0;
+		tp.tstamp_ok = 0;
+	}
 
 	tcp_openreq_init(req, &tp, skb);
 

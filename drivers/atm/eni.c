@@ -1,6 +1,6 @@
 /* drivers/atm/eni.c - Efficient Networks ENI155P device driver */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #include <linux/module.h>
@@ -774,7 +774,7 @@ static int open_rx_first(struct atm_vcc *vcc)
 	eni_vcc = ENI_VCC(vcc);
 	eni_vcc->rx = NULL;
 	if (vcc->qos.rxtp.traffic_class == ATM_NONE) return 0;
-	size = vcc->qos.rxtp.max_sdu*3; /* @@@ improve this */
+	size = vcc->qos.rxtp.max_sdu*eni_dev->rx_mult/100;
 	if (size > MID_MAX_BUF_SIZE && vcc->qos.rxtp.max_sdu <=
 	    MID_MAX_BUF_SIZE)
 		size = MID_MAX_BUF_SIZE;
@@ -885,6 +885,7 @@ static int start_rx(struct atm_dev *dev)
 		return -ENOMEM;
 	}
 	memset(eni_dev->rx_map,0,PAGE_SIZE);
+	eni_dev->rx_mult = DEFAULT_RX_MULT;
 	eni_dev->fast = eni_dev->last_fast = NULL;
 	eni_dev->slow = eni_dev->last_slow = NULL;
 	init_waitqueue_head(&eni_dev->rx_wait);
@@ -1151,7 +1152,8 @@ static void poll_tx(struct atm_dev *dev)
 		if (tx->send)
 			while ((skb = skb_dequeue(&tx->backlog))) {
 				res = do_tx(skb);
-				if (res != enq_ok) {
+				if (res == enq_ok) tx->backlog_len--;
+				else {
 					DPRINTK("re-queuing TX PDU\n");
 					skb_queue_head(&tx->backlog,skb);
 requeued++;
@@ -1258,7 +1260,7 @@ static int reserve_or_set_tx(struct atm_vcc *vcc,struct atm_trafprm *txtp,
 	unlimited = ubr && (!rate || rate <= -ATM_OC3_PCR ||
 	    rate >= ATM_OC3_PCR);
 	if (!unlimited) {
-		size = txtp->max_sdu*3; /* @@@ improve */
+		size = txtp->max_sdu*eni_dev->tx_mult/100;
 		if (size > MID_MAX_BUF_SIZE && txtp->max_sdu <=
 		    MID_MAX_BUF_SIZE)
 			size = MID_MAX_BUF_SIZE;
@@ -1287,6 +1289,7 @@ static int reserve_or_set_tx(struct atm_vcc *vcc,struct atm_trafprm *txtp,
 		tx->send = mem;
 		tx->words = size >> 2;
 		skb_queue_head_init(&tx->backlog);
+		tx->backlog_len = 0;
 		for (order = 0; size > (1 << (order+10)); order++);
 		eni_out((order << MID_SIZE_SHIFT) |
 		    ((tx->send-eni_dev->ram) >> (MID_LOC_SKIP+2)),
@@ -1390,6 +1393,7 @@ static int start_tx(struct atm_dev *dev)
 	eni_dev = ENI_DEV(dev);
 	eni_dev->lost = 0;
 	eni_dev->tx_bw = ATM_OC3_PCR;
+	eni_dev->tx_mult = DEFAULT_TX_MULT;
 	init_waitqueue_head(&eni_dev->tx_wait);
 	eni_dev->ubr = NULL;
 	skb_queue_head_init(&eni_dev->tx_queue);
@@ -1643,7 +1647,7 @@ static int __init eni_init(struct atm_dev *dev)
 	struct midway_eprom *eprom;
 	struct eni_dev *eni_dev;
 	struct pci_dev *pci_dev;
-	unsigned int real_base,base;
+	unsigned long real_base,base;
 	unsigned char revision;
 	int error,i,last;
 
@@ -1668,7 +1672,7 @@ static int __init eni_init(struct atm_dev *dev)
 		    "(0x%02x)\n",dev->number,error);
 		return error;
 	}
-	printk(KERN_NOTICE DEV_LABEL "(itf %d): rev.%d,base=0x%x,irq=%d,",
+	printk(KERN_NOTICE DEV_LABEL "(itf %d): rev.%d,base=0x%lx,irq=%d,",
 	    dev->number,revision,real_base,eni_dev->irq);
 	if (!(base = (unsigned long) ioremap_nocache(real_base,MAP_MAX_SIZE))) {
 		printk("\n");
@@ -1748,6 +1752,10 @@ static int __init eni_start(struct atm_dev *dev)
 		    "master (0x%02x)\n",dev->number,error);
 		return error;
 	}
+#ifdef __sparc_v9__ /* copied from drivers/net/sunhme.c */
+	/* NOTE: Cache line size is in 32-bit word units. */
+	pci_write_config_byte(eni_dev->pci_dev, PCI_CACHE_LINE_SIZE, 0x10);
+#endif
 	if ((error = pci_write_config_byte(eni_dev->pci_dev,PCI_TONGA_CTRL,
 	    END_SWAP_DMA))) {
 		printk(KERN_ERR DEV_LABEL "(itf %d): can't set endian swap "
@@ -1947,10 +1955,27 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 
 static int eni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 {
+	struct eni_dev *eni_dev = ENI_DEV(dev);
+
 	if (cmd == ENI_MEMDUMP) {
+		if (!capable(CAP_NET_ADMIN)) return -EPERM;
 		printk(KERN_WARNING "Please use /proc/atm/" DEV_LABEL ":%d "
 		    "instead of obsolete ioctl ENI_MEMDUMP\n",dev->number);
 		dump(dev);
+		return 0;
+	}
+	if (cmd == ENI_SETMULT) {
+		struct eni_multipliers mult;
+
+		if (!capable(CAP_NET_ADMIN)) return -EPERM;
+		if (copy_from_user(&mult,(void *) arg,
+		    sizeof(struct eni_multipliers)))
+			return -EFAULT;
+		if ((mult.tx && mult.tx <= 100) || (mult.rx &&mult.rx <= 100) ||
+		    mult.tx > 65536 || mult.rx > 65536)
+			return -EINVAL;
+		if (mult.tx) eni_dev->tx_mult = mult.tx;
+		if (mult.rx) eni_dev->rx_mult = mult.rx;
 		return 0;
 	}
 	if (cmd == ATM_SETCIRANGE) {
@@ -1963,7 +1988,7 @@ static int eni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 		    return 0;
 		return -EINVAL;
 	}
-	if (!dev->phy->ioctl) return -EINVAL;
+	if (!dev->phy->ioctl) return -ENOIOCTLCMD;
 	return dev->phy->ioctl(dev,cmd,arg);
 }
 
@@ -1971,21 +1996,6 @@ static int eni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 static int eni_getsockopt(struct atm_vcc *vcc,int level,int optname,
     void *optval,int optlen)
 {
-#ifdef CONFIG_MMU_HACKS
-
-static const struct atm_buffconst bctx = { PAGE_SIZE,0,PAGE_SIZE,0,0,0 };
-static const struct atm_buffconst bcrx = { PAGE_SIZE,0,PAGE_SIZE,0,0,0 };
-
-#else
-
-static const struct atm_buffconst bctx = { sizeof(int),0,sizeof(int),0,0,0 };
-static const struct atm_buffconst bcrx = { sizeof(int),0,sizeof(int),0,0,0 };
-
-#endif
-	if (level == SOL_AAL && (optname == SO_BCTXOPT ||
-	    optname == SO_BCRXOPT))
-		return copy_to_user(optval,optname == SO_BCTXOPT ? &bctx :
-		      &bcrx,sizeof(struct atm_buffconst)) ? -EFAULT : 0;
 	return -EINVAL;
 }
 
@@ -2027,7 +2037,8 @@ submitted++;
 	cli(); /* brute force */
 	if (skb_peek(&ENI_VCC(vcc)->tx->backlog) || do_tx(skb)) {
 		skb_queue_tail(&ENI_VCC(vcc)->tx->backlog,skb);
-		backlogged++;
+		ENI_VCC(vcc)->tx->backlog_len++;
+backlogged++;
 	}
 	restore_flags(flags);
 	return 0;
@@ -2068,9 +2079,8 @@ static int eni_proc_read(struct atm_dev *dev,loff_t *pos,char *page)
 		return sprintf(page,DEV_LABEL "(itf %d) signal %s, %dkB, "
 		    "%d cps remaining\n",dev->number,signal[(int) dev->signal],
 		    eni_dev->mem >> 10,eni_dev->tx_bw);
-	left--;
-	if (!left)
-		return sprintf(page,"Bursts: TX"
+	if (!--left)
+		return sprintf(page,"%4sBursts: TX"
 #if !defined(CONFIG_ATM_ENI_BURST_TX_16W) && \
     !defined(CONFIG_ATM_ENI_BURST_TX_8W) && \
     !defined(CONFIG_ATM_ENI_BURST_TX_4W) && \
@@ -2111,18 +2121,25 @@ static int eni_proc_read(struct atm_dev *dev,loff_t *pos,char *page)
 #ifndef CONFIG_ATM_ENI_TUNE_BURST
 		    " (default)"
 #endif
-		    "\n");
+		    "\n","");
+	if (!--left) 
+		return sprintf(page,"%4sBuffer multipliers: tx %d%%, rx %d%%\n",
+		    "",eni_dev->tx_mult,eni_dev->rx_mult);
 	for (i = 0; i < NR_CHAN; i++) {
 		struct eni_tx *tx = eni_dev->tx+i;
 
 		if (!tx->send) continue;
+		if (!--left) {
+			return sprintf(page,"tx[%d]:    0x%06lx-0x%06lx "
+			    "(%6ld bytes), rsv %d cps, shp %d cps%s\n",i,
+			    tx->send-eni_dev->ram,
+			    tx->send-eni_dev->ram+tx->words*4-1,tx->words*4,
+			    tx->reserved,tx->shaping,
+			    tx == eni_dev->ubr ? " (UBR)" : "");
+		}
 		if (--left) continue;
-		return sprintf(page,"tx[%d]:    0x%06lx-0x%06lx (%6ld bytes), "
-		    "rsv %d cps, shp %d cps%s\n",i,
-		    tx->send-eni_dev->ram,
-		    tx->send-eni_dev->ram+tx->words*4-1,tx->words*4,
-		    tx->reserved,tx->shaping,
-		    tx == eni_dev->ubr ? " (UBR)" : "");
+		return sprintf(page,"%10sbacklog %d bytes\n","",
+		    tx->backlog_len);
 	}
 	for (vcc = dev->vccs; vcc; vcc = vcc->next) {
 		struct eni_vcc *eni_vcc = ENI_VCC(vcc);
@@ -2139,8 +2156,8 @@ static int eni_proc_read(struct atm_dev *dev,loff_t *pos,char *page)
 			if (eni_vcc->tx) length += sprintf(page+length,", ");
 		}
 		if (eni_vcc->tx)
-			length += sprintf(page+length,"tx[%d]",
-			    eni_vcc->tx->index);
+			length += sprintf(page+length,"tx[%d], txing %d bytes",
+			    eni_vcc->tx->index,eni_vcc->txing);
 		page[length] = '\n';
 		return length+1;
 	}
@@ -2159,21 +2176,17 @@ static int eni_proc_read(struct atm_dev *dev,loff_t *pos,char *page)
 
 
 static const struct atmdev_ops ops = {
-	NULL,			/* no dev_close */
-	eni_open,
-	eni_close,
-	eni_ioctl,
-	eni_getsockopt,
-	eni_setsockopt,
-	eni_send,
-	eni_sg_send,
-	NULL,			/* no send_oam */
-	eni_phy_put,
-	eni_phy_get,
-	NULL,			/* no feedback */
-	eni_change_qos,		/* no change_qos */
-	NULL,			/* no free_rx_skb */
-	eni_proc_read
+	open:		eni_open,
+	close:		eni_close,
+	ioctl:		eni_ioctl,
+	getsockopt:	eni_getsockopt,
+	setsockopt:	eni_setsockopt,
+	send:		eni_send,
+	sg_send:	eni_sg_send,
+	phy_put:	eni_phy_put,
+	phy_get:	eni_phy_get,
+	change_qos:	eni_change_qos,
+	proc_read:	eni_proc_read
 };
 
 

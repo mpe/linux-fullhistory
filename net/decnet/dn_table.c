@@ -437,7 +437,7 @@ static int dn_fib_table_dump(struct dn_fib_table *tb, struct sk_buff *skb,
 
 #else /* no CONFIG_RTNETLINK */
 
-#define dn_rt_msg_fib(event,f,z,tb_id,nlh,req)
+#define dn_rtmsg_fib(event,f,z,tb_id,nlh,req)
 
 #endif /* CONFIG_RTNETLINK */
 

@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.10 2000/01/28 13:42:00 jj Exp $
+/* $Id: pci_psycho.c,v 1.11 2000/02/08 05:11:32 jj Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1219,12 +1219,6 @@ static void __init psycho_scan_bus(struct pci_controller_info *p)
 
 static void __init psycho_iommu_init(struct pci_controller_info *p)
 {
-#ifndef NEW_PCI_DMA_MAP
-	struct linux_mlist_p1275 *mlist;
-	unsigned long n;
-	iopte_t *iopte;
-	int tsbsize = 32;
-#endif
 	extern int this_is_starfire;
 	extern void *starfire_hookup(int);
 	unsigned long tsbbase, i;
@@ -1258,19 +1252,11 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	control &= ~(PSYCHO_IOMMU_CTRL_DENAB);
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
 
-#ifndef NEW_PCI_DMA_MAP
-	/* Using assumed page size 64K with 32K entries we need 256KB iommu page
-	 * table (32K ioptes * 8 bytes per iopte).  This is
-	 * page order 5 on UltraSparc.
-	 */
-	tsbbase = __get_free_pages(GFP_KERNEL, 5);
-#else
 	/* Using assumed page size 8K with 128K entries we need 1MB iommu page
 	 * table (128K ioptes * 8 bytes per iopte).  This is
 	 * page order 7 on UltraSparc.
 	 */
 	tsbbase = __get_free_pages(GFP_KERNEL, 7);
-#endif	
 	if (!tsbbase) {
 		prom_printf("PSYCHO_IOMMU: Error, gfp(tsb) failed.\n");
 		prom_halt();
@@ -1278,112 +1264,17 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	p->iommu.page_table = (iopte_t *)tsbbase;
 	p->iommu.page_table_sz_bits = 17;
 	p->iommu.page_table_map_base = 0xc0000000;
-#ifndef NEW_PCI_DMA_MAP
-	memset((char *)tsbbase, 0, PAGE_SIZE << 5);
-#else
 	memset((char *)tsbbase, 0, PAGE_SIZE << 7);
-#endif
 
 	/* Make sure DMA address 0 is never returned just to allow catching
 	   of buggy drivers.  */
 	p->iommu.lowest_free[0] = 1;
 
-#ifndef NEW_PCI_DMA_MAP
-	iopte = (iopte_t *)tsbbase;
-	/* Initialize to "none" settings. */
-	for(i = 0; i < PCI_DVMA_HASHSZ; i++) {
-		pci_dvma_v2p_hash[i] = PCI_DVMA_HASH_NONE;
-		pci_dvma_p2v_hash[i] = PCI_DVMA_HASH_NONE;
-	}
-
-	n = 0;
-	mlist = *prom_meminfo()->p1275_totphys;
-	while (mlist) {
-		unsigned long paddr = mlist->start_adr;
-		unsigned long num_bytes = mlist->num_bytes;
-
-		if(paddr >= (((unsigned long) high_memory) - PAGE_OFFSET))
-			goto next;
-
-		if((paddr + num_bytes) >= (((unsigned long) high_memory) - PAGE_OFFSET))
-			num_bytes = (((unsigned long) high_memory) - PAGE_OFFSET) - paddr;
-
-		/* Align base and length so we map whole hash table sized chunks
-		 * at a time (and therefore full 64K IOMMU pages).
-		 */
-		paddr &= ~((1UL << 24UL) - 1);
-		num_bytes = (num_bytes + ((1UL << 24UL) - 1)) & ~((1UL << 24) - 1);
-
-		/* Move up the base for mappings already created. */
-		while(pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr)] !=
-		      PCI_DVMA_HASH_NONE) {
-			paddr += (1UL << 24UL);
-			num_bytes -= (1UL << 24UL);
-			if(num_bytes == 0UL)
-				goto next;
-		}
-
-		/* Move down the size for tail mappings already created. */
-		while(pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr + num_bytes - (1UL << 24UL))] !=
-		      PCI_DVMA_HASH_NONE) {
-			num_bytes -= (1UL << 24UL);
-			if(num_bytes == 0UL)
-				goto next;
-		}
-
-		/* Now map the rest. */
-		for (i = 0; i < ((num_bytes + ((1 << 16) - 1)) >> 16); i++) {
-			iopte_val(*iopte) = ((IOPTE_VALID | IOPTE_64K |
-					      IOPTE_CACHE | IOPTE_WRITE) |
-					     (paddr & IOPTE_PAGE));
-
-			if (!(n & 0xff))
-				set_dvma_hash(0x80000000, paddr, (n << 16));
-
-			if (++n > (tsbsize * 1024))
-				goto out;
-
-			paddr += (1 << 16);
-			iopte++;
-		}
-	next:
-		mlist = mlist->theres_more;
-	}
-out:
-	if (mlist) {
-		prom_printf("WARNING: not all physical memory mapped in IOMMU\n");
-		prom_printf("Try booting with mem=xxxM or similar\n");
-		prom_halt();
-	}
-#endif
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_TSBBASE, __pa(tsbbase));
 
 	control = psycho_read(p->controller_regs + PSYCHO_IOMMU_CONTROL);
-#ifndef NEW_PCI_DMA_MAP
-	control &= ~(PSYCHO_IOMMU_CTRL_TSBSZ);
-	control |= (PSYCHO_IOMMU_CTRL_TBWSZ | PSYCHO_IOMMU_CTRL_ENAB);
-	switch(tsbsize) {
-	case 8:
-		p->iommu.page_table_map_base = 0xe0000000;
-		control |= PSYCHO_IOMMU_TSBSZ_8K;
-		break;
-	case 16:
-		p->iommu.page_table_map_base = 0xc0000000;
-		control |= PSYCHO_IOMMU_TSBSZ_16K;
-		break;
-	case 32:
-		p->iommu.page_table_map_base = 0x80000000;
-		control |= PSYCHO_IOMMU_TSBSZ_32K;
-		break;
-	default:
-		prom_printf("iommu_init: Illegal TSB size %d\n", tsbsize);
-		prom_halt();
-		break;
-	}
-#else
 	control &= ~(PSYCHO_IOMMU_CTRL_TSBSZ | PSYCHO_IOMMU_CTRL_TBWSZ);
 	control |= (PSYCHO_IOMMU_TSBSZ_128K | PSYCHO_IOMMU_CTRL_ENAB);
-#endif
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
 
 	/* If necessary, hook us up for starfire IRQ translations. */

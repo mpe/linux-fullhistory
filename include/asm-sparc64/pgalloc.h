@@ -94,6 +94,28 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 
 #endif /* ! __SMP__ */
 
+/* This will change for Cheetah and later chips. */
+#define VPTE_BASE	0xfffffffe00000000
+
+extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start,
+					  unsigned long end)
+{
+	/* Note the signed type.  */
+	long s = start, e = end;
+	if (s > e)
+		/* Nobody should call us with start below VM hole and end above.
+		   See if it is really true.  */
+		BUG();
+#if 0
+	/* Currently free_pgtables guarantees this.  */
+	s &= PMD_MASK;
+	e = (e + PMD_SIZE - 1) & PMD_MASK;
+#endif
+	flush_tlb_range(mm,
+			VPTE_BASE + (s >> (PAGE_SHIFT - 3)),
+			VPTE_BASE + (e >> (PAGE_SHIFT - 3)));
+}
+
 /* Page table allocation/freeing. */
 #ifdef __SMP__
 /* Sliiiicck */

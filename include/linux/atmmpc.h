@@ -1,6 +1,7 @@
 #ifndef _ATMMPC_H_
 #define _ATMMPC_H_
 
+#include <linux/atmapi.h>
 #include <linux/atmioc.h>
 #include <linux/atm.h>
 
@@ -37,16 +38,16 @@ typedef struct eg_ctrl_info {
         uint16_t  holding_time;
 } eg_ctrl_info;
 
-struct mpc_parameters{
+struct mpc_parameters {
         uint16_t mpc_p1;   /* Shortcut-Setup Frame Count    */
         uint16_t mpc_p2;   /* Shortcut-Setup Frame Time     */
         uint8_t mpc_p3[8]; /* Flow-detection Protocols      */
         uint16_t mpc_p4;   /* MPC Initial Retry Time        */
         uint16_t mpc_p5;   /* MPC Retry Time Maximum        */
         uint16_t mpc_p6;   /* Hold Down Time                */      
-};
+} ;
 
-struct k_message{
+struct k_message {
         uint16_t type;
         uint32_t ip_mask;
         uint8_t  MPS_ctrl[ATM_ESA_LEN];
@@ -56,9 +57,10 @@ struct k_message{
                 struct mpc_parameters params;
         } content;
         struct atm_qos qos;       
-};
+} __ATM_API_ALIGN;
 
-struct llc_snap_hdr { /* RFC 1483 LLC/SNAP encapsulation for routed IP PDUs */
+struct llc_snap_hdr {
+	/* RFC 1483 LLC/SNAP encapsulation for routed IP PDUs */
         uint8_t  dsap;    /* Destination Service Access Point (0xAA)     */
         uint8_t  ssap;    /* Source Service Access Point      (0xAA)     */
         uint8_t  ui;      /* Unnumbered Information           (0x03)     */
@@ -121,4 +123,3 @@ struct llc_snap_hdr { /* RFC 1483 LLC/SNAP encapsulation for routed IP PDUs */
 #define RELOAD                301 /* kill -HUP the daemon for reload */
 
 #endif /* _ATMMPC_H_ */
-

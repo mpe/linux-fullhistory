@@ -145,8 +145,10 @@ struct sock *alloc_atm_vcc_sk(int family)
 		sk_free(sk);
 		return NULL;
 	}
+	sock_init_data(NULL,sk);
 	sk->destruct = atm_free_sock;
 	memset(vcc,0,sizeof(*vcc));
+	vcc->sk = sk;
 	if (nodev_vccs) nodev_vccs->prev = vcc;
 	vcc->prev = NULL;
 	vcc->next = nodev_vccs;

@@ -1149,9 +1149,9 @@ void __init dn_route_init(void)
                 panic("Failed to allocate DECnet route cache hash table\n");
 
 	printk(KERN_INFO 
-		"DECnet: Routing cache hash table of %u buckets, %dKbytes\n", 
+		"DECnet: Routing cache hash table of %u buckets, %ldKbytes\n", 
 		dn_rt_hash_mask, 
-		(dn_rt_hash_mask*sizeof(struct dn_rt_hash_bucket))/1024);
+		(long)(dn_rt_hash_mask*sizeof(struct dn_rt_hash_bucket))/1024);
 
 	dn_rt_hash_mask--;
         for(i = 0; i <= dn_rt_hash_mask; i++) {

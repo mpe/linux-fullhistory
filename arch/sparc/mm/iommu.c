@@ -1,4 +1,4 @@
-/* $Id: iommu.c,v 1.18 2000/01/15 00:51:27 anton Exp $
+/* $Id: iommu.c,v 1.19 2000/02/06 22:55:45 zaitcev Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -289,8 +289,32 @@ static void iommu_map_dma_area(unsigned long va, __u32 addr, int len)
 	iommu_invalidate(iommu->regs);
 }
 
-static void iommu_unmap_dma_area(unsigned long addr, int len)
+static void iommu_unmap_dma_area(unsigned long busa, int len)
 {
+	struct iommu_struct *iommu = sbus_root->iommu;
+	iopte_t *iopte = iommu->page_table;
+	unsigned long end;
+
+	iopte += ((busa - iommu->start) >> PAGE_SHIFT);
+	end = PAGE_ALIGN((busa + len));
+	while (busa < end) {
+		iopte_val(*iopte++) = 0;
+		busa += PAGE_SIZE;
+	}
+	flush_tlb_all();	/* P3: Hmm... it would not hurt. */
+	iommu_invalidate(iommu->regs);
+}
+
+static unsigned long iommu_translate_dvma(unsigned long busa)
+{
+	struct iommu_struct *iommu = sbus_root->iommu;
+	iopte_t *iopte = iommu->page_table;
+	unsigned long pa;
+
+	iopte += ((busa - iommu->start) >> PAGE_SHIFT);
+	pa = pte_val(*iopte);
+	pa = (pa & 0xFFFFFFF0) << 4;		/* Loose higher bits of 36 */
+	return pa + PAGE_OFFSET;
 }
 #endif
 
@@ -327,5 +351,6 @@ void __init ld_mmu_iommu(void)
 #ifdef CONFIG_SBUS
 	BTFIXUPSET_CALL(mmu_map_dma_area, iommu_map_dma_area, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_unmap_dma_area, iommu_unmap_dma_area, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_translate_dvma, iommu_translate_dvma, BTFIXUPCALL_NORM);
 #endif
 }

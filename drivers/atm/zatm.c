@@ -1,6 +1,6 @@
 /* drivers/atm/zatm.c - ZeitNet ZN122x device driver */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -729,9 +729,6 @@ static int open_rx_second(struct atm_vcc *vcc)
 	zpokel(zatm_dev,(zpeekl(zatm_dev,pos) & ~(0xffff << shift)) |
 	    ((zatm_vcc->rx_chan | uPD98401_RXLT_ENBL) << shift),pos);
 	restore_flags(flags);
-/* Ugly hack to ensure that ttcp_atm will work with the current allocation
-   scheme. @@@ */
-if (vcc->rx_quota < 200000) vcc->rx_quota = 200000;
 	return 0;
 }
 
@@ -1701,7 +1698,7 @@ static int zatm_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 			}
 #endif
 		default:
-        		if (!dev->phy->ioctl) return -EINVAL;
+        		if (!dev->phy->ioctl) return -ENOIOCTLCMD;
 		        return dev->phy->ioctl(dev,cmd,arg);
 	}
 }
@@ -1710,21 +1707,6 @@ static int zatm_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 static int zatm_getsockopt(struct atm_vcc *vcc,int level,int optname,
     void *optval,int optlen)
 {
-#ifdef CONFIG_MMU_HACKS
-
-static const struct atm_buffconst bctx = { PAGE_SIZE,0,PAGE_SIZE,0,0,0 };
-static const struct atm_buffconst bcrx = { PAGE_SIZE,0,PAGE_SIZE,0,0,0 };
-
-#else
-
-static const struct atm_buffconst bctx = { 4,0,4,0,0,0 };
-static const struct atm_buffconst bcrx = { 4,0,4,0,0,0 };
-
-#endif
-	if (level == SOL_AAL && (optname == SO_BCTXOPT ||
-	    optname == SO_BCRXOPT))
-		return copy_to_user(optval,optname == SO_BCTXOPT ? &bctx :
-		    &bcrx,sizeof(struct atm_buffconst)) ? -EFAULT : 0;
 	return -EINVAL;
 }
 
@@ -1797,21 +1779,17 @@ static unsigned char zatm_phy_get(struct atm_dev *dev,unsigned long addr)
 
 
 static const struct atmdev_ops ops = {
-	NULL,			/* no dev_close */
-	zatm_open,
-	zatm_close,
-	zatm_ioctl,
-	zatm_getsockopt,
-	zatm_setsockopt,
-	zatm_send,
-	NULL /*zatm_sg_send*/,
-	NULL,			/* no send_oam */
-	zatm_phy_put,
-	zatm_phy_get,
-	zatm_feedback,
-	zatm_change_qos,
-	NULL,			/* no free_rx_skb */
-	NULL			/* no proc_read */
+	open:		zatm_open,
+	close:		zatm_close,
+	ioctl:		zatm_ioctl,
+	getsockopt:	zatm_getsockopt,
+	setsockopt:	zatm_setsockopt,
+	send:		zatm_send,
+	/*zatm_sg_send*/
+	phy_put:	zatm_phy_put,
+	phy_get:	zatm_phy_get,
+	feedback:	zatm_feedback,
+	change_qos:	zatm_change_qos,
 };
 
 

@@ -30,6 +30,7 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/string.h>
 #if 0	/* P3 from mem.c */
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
@@ -47,6 +48,8 @@
 #include <asm/sbus.h>
 #include <asm/ebus.h>
 #endif
+#include <asm/pcic.h>
+#include <asm/oplib.h>
 
 #include <asm/jsflash.h>		/* ioctl arguments. <linux/> ?? */
 #define JSFIDSZ		(sizeof(struct jsflash_ident_arg))
@@ -377,10 +380,16 @@ EXPORT_NO_SYMBOLS;
 #ifdef MODULE
 int init_module(void)
 #else
-int /* __init */ jsflash_init(void)
+int __init jsflash_init(void)
 #endif
 {
 	int rc;
+	char banner[128];
+
+	/* FIXME: Really autodetect things */
+	prom_getproperty(prom_root_node, "banner-name", banner, 128);
+	if (strcmp (banner, "JavaStation-NC") && strcmp (banner, "JavaStation-E"))
+		return -ENXIO;
 
 	/* extern enum sparc_cpu sparc_cpu_model; */ /* in <asm/system.h> */
 	if (sparc_cpu_model == sun4m && jsf0.base == 0) {

@@ -8,7 +8,7 @@ if [ "$CONFIG_INET" = "y" ]; then
 fi
 if [ "$CONFIG_PCI" = "y" ]; then
    tristate 'Efficient Networks ENI155P' CONFIG_ATM_ENI
-   if [ ! "$CONFIG_ATM_ENI" = "n" ]; then
+   if [ "$CONFIG_ATM_ENI" != "n" ]; then
       bool '  Enable extended debugging' CONFIG_ATM_ENI_DEBUG
       bool '  Fine-tune burst settings' CONFIG_ATM_ENI_TUNE_BURST
       if [ "$CONFIG_ATM_ENI_TUNE_BURST" = "y" ]; then
@@ -23,17 +23,20 @@ if [ "$CONFIG_PCI" = "y" ]; then
       fi
    fi
    tristate 'ZeitNet ZN1221/ZN1225' CONFIG_ATM_ZATM
-   if [ ! "$CONFIG_ATM_ZATM" = "n" ]; then
+   if [ "$CONFIG_ATM_ZATM" != "n" ]; then
       bool '  Enable extended debugging' CONFIG_ATM_ZATM_DEBUG
-      bool '  Enable usec resolution timestamps' CONFIG_ATM_ZATM_EXACT_TS
+      if [ "$CONFIG_X86" = "y" ]; then
+	bool '  Enable usec resolution timestamps' CONFIG_ATM_ZATM_EXACT_TS
+      fi
    fi
 #   bool 'Rolfs TI TNETA1570' CONFIG_ATM_TNETA1570 y
 #   if [ "$CONFIG_ATM_TNETA1570" = "y" ]; then
 #      bool '  Enable extended debugging' CONFIG_ATM_TNETA1570_DEBUG n
 #   fi
-   tristate 'IDT 77201 (NICStAR)' CONFIG_ATM_NICSTAR
+   tristate 'IDT 77201 (NICStAR) (ForeRunnerLE)' CONFIG_ATM_NICSTAR
    if [ "$CONFIG_ATM_NICSTAR" != "n" ]; then
-      bool '  Use suni PHY driver' CONFIG_ATM_NICSTAR_USE_SUNI
+      bool '  Use suni PHY driver (155Mbps)' CONFIG_ATM_NICSTAR_USE_SUNI
+      bool '  Use IDT77015 PHY driver (25Mbps)' CONFIG_ATM_NICSTAR_USE_IDT77105
    fi
    tristate 'Madge Ambassador (Collage PCI 155 Server)' CONFIG_ATM_AMBASSADOR
    if [ "$CONFIG_ATM_AMBASSADOR" != "n" ]; then
@@ -43,5 +46,9 @@ if [ "$CONFIG_PCI" = "y" ]; then
    if [ "$CONFIG_ATM_HORIZON" != "n" ]; then
       bool '  Enable debugging messages' CONFIG_ATM_HORIZON_DEBUG
    fi
+    tristate 'Interphase ATM PCI x575/x525/x531' CONFIG_ATM_IA
+    if [ "$CONFIG_ATM_IA" != "n" ]; then
+      bool '  Enable debugging messages' CONFIG_ATM_IA_DEBUG
+    fi
 fi
 endmenu

@@ -24,59 +24,18 @@ typedef struct {
 } aceaddr;
 
 
-static inline void set_aceaddr(aceaddr *aa, volatile void *addr)
+static inline void set_aceaddr(aceaddr *aa, dma_addr_t addr)
 {
-	unsigned long baddr = virt_to_bus((void *)addr);
+	unsigned long baddr = (unsigned long) addr;
 #if (BITS_PER_LONG == 64)
-	aa->addrlo = baddr & 0xffffffff;
-	aa->addrhi = baddr >> 32;
+	aa->addrlo = cpu_to_le32(baddr & 0xffffffff);
+	aa->addrhi = cpu_to_le32(baddr >> 32);
 #else
     /* Don't bother setting zero every time */
-	aa->addrlo = baddr;
+	aa->addrlo = cpu_to_le32(baddr);
 #endif
 	mb();
 }
-
-
-static inline void set_aceaddr_bus(aceaddr *aa, volatile void *addr)
-{
-	unsigned long baddr = (unsigned long)addr;
-#if (BITS_PER_LONG == 64)
-	aa->addrlo = baddr & 0xffffffff;
-	aa->addrhi = baddr >> 32;
-#else
-    /* Don't bother setting zero every time */
-	aa->addrlo = baddr;
-#endif
-	mb();
-}
-
-
-static inline void *get_aceaddr(aceaddr *aa)
-{
-	unsigned long addr;
-	mb();
-#if (BITS_PER_LONG == 64)
-	addr = (u64)aa->addrhi << 32 | aa->addrlo;
-#else
-	addr = aa->addrlo;
-#endif
-	return bus_to_virt(addr);
-}
-
-
-static inline void *get_aceaddr_bus(aceaddr *aa)
-{
-	unsigned long addr;
-	mb();
-#if (BITS_PER_LONG == 64)
-	addr = (u64)aa->addrhi << 32 | aa->addrlo;
-#else
-	addr = aa->addrlo;
-#endif
-	return (void *)addr;
-}
-
 
 struct ace_regs {
 	u32	pad0[16];	/* PCI control registers */
@@ -341,15 +300,20 @@ struct ace_regs {
 #define EVT_RING_SIZE	(EVT_RING_ENTRIES * sizeof(struct event))
 
 struct event {
-#ifdef __LITTLE_ENDIAN
-	u32	idx:12;
-	u32	code:12;
-	u32	evt:8;
+	union {
+		u32 word;
+		struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+			u32	idx:12;
+			u32	code:12;
+			u32	evt:8;
 #else
-	u32	evt:8;
-	u32	code:12;
-	u32	idx:12;
+			u32	evt:8;
+			u32	code:12;
+			u32	idx:12;
 #endif
+		} data;
+	} u;
 	u32     pad;
 };
 
@@ -387,7 +351,7 @@ struct event {
 #define CMD_RING_ENTRIES	64
 
 struct cmd {
-#ifdef __LITTLE_ENDIAN
+#if defined(__LITTLE_ENDIAN_BITFIELD)
 	u32	idx:12;
 	u32	code:12;
 	u32	evt:8;
@@ -471,17 +435,10 @@ struct tx_desc{
  * This is in PCI shared mem and must be accessed with readl/writel
  * real layout is:
  */
-#if __LITTLE_ENDIAN
 	u16	flags;
 	u16	size;
 	u16	vlan;
 	u16	reserved;
-#else
-	u16	size;
-	u16	flags;
-	u16	reserved;
-	u16	vlan;
-#endif
 #endif
 	u32	vlanres;
 };
@@ -502,34 +459,14 @@ struct tx_desc{
 
 struct rx_desc{
 	aceaddr	addr;
-#ifdef __LITTLE_ENDIAN
 	u16	size;
 	u16	idx;
-#else
-	u16	idx;
-	u16	size;
-#endif
-#ifdef __LITTLE_ENDIAN
 	u16	flags;
 	u16	type;
-#else
-	u16	type;
-	u16	flags;
-#endif
-#ifdef __LITTLE_ENDIAN
 	u16	tcp_udp_csum;
 	u16	ip_csum;
-#else
-	u16	ip_csum;
-	u16	tcp_udp_csum;
-#endif
-#ifdef __LITTLE_ENDIAN
 	u16	vlan;
 	u16	err_flags;
-#else
-	u16	err_flags;
-	u16	vlan;
-#endif
 	u32	reserved;
 	u32	opague;
 };
@@ -540,13 +477,8 @@ struct rx_desc{
  */
 struct ring_ctrl {
 	aceaddr	rngptr;
-#ifdef __LITTLE_ENDIAN
 	u16	flags;
 	u16	max_len;
-#else
-	u16	max_len;
-	u16	flags;
-#endif
 	u32	pad;
 };
 
@@ -608,12 +540,17 @@ struct ace_info {
  * pointers, but I don't see any other smart mode to do this in an
  * efficient manner ;-(
  */
+struct ring_info {
+	struct sk_buff		*skb;
+	dma_addr_t		mapping;
+};
+
 struct ace_skb
 {
-	struct sk_buff		*tx_skbuff[TX_RING_ENTRIES];
-	struct sk_buff		*rx_std_skbuff[RX_STD_RING_ENTRIES];
-	struct sk_buff		*rx_mini_skbuff[RX_MINI_RING_ENTRIES];
-	struct sk_buff		*rx_jumbo_skbuff[RX_JUMBO_RING_ENTRIES];
+	struct ring_info	tx_skbuff[TX_RING_ENTRIES];
+	struct ring_info	rx_std_skbuff[RX_STD_RING_ENTRIES];
+	struct ring_info	rx_mini_skbuff[RX_MINI_RING_ENTRIES];
+	struct ring_info	rx_jumbo_skbuff[RX_JUMBO_RING_ENTRIES];
 };
 
 
@@ -631,12 +568,14 @@ struct ace_private
 {
 	struct ace_skb		*skb;
 	struct ace_regs		*regs;		/* register base */
-	int			version, fw_running, fw_up, link;
+	volatile int		fw_running;
+	int			version, fw_up, link;
 	int			promisc, mcast_all;
 	/*
 	 * The send ring is located in the shared memory window
 	 */
 	struct ace_info		*info;
+	dma_addr_t		info_dma;
 	struct tx_desc		*tx_ring;
 	u32			tx_prd, tx_full, tx_ret_csm;
 	struct timer_list	timer;
@@ -651,18 +590,22 @@ struct ace_private
 	u32			cur_rx;
 	struct tq_struct	immediate;
 	int			bh_pending, jumbo;
-	struct rx_desc		rx_std_ring[RX_STD_RING_ENTRIES]
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
-	struct rx_desc		rx_jumbo_ring[RX_JUMBO_RING_ENTRIES];
-	struct rx_desc		rx_mini_ring[RX_MINI_RING_ENTRIES];
-	struct rx_desc		rx_return_ring[RX_RETURN_RING_ENTRIES];
-	struct event		evt_ring[EVT_RING_ENTRIES];
-	volatile u32		evt_prd
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
-	volatile u32		rx_ret_prd
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
-	volatile u32		tx_csm
-				__attribute__ ((aligned (L1_CACHE_BYTES)));
+
+	/* These elements are allocated using consistent PCI
+	 * dma memory.
+	 */
+	struct rx_desc		*rx_std_ring;
+	struct rx_desc		*rx_jumbo_ring;
+	struct rx_desc		*rx_mini_ring;
+	struct rx_desc		*rx_return_ring;
+	dma_addr_t		rx_ring_base_dma;
+
+	struct event		*evt_ring;
+	dma_addr_t		evt_ring_dma;
+
+	volatile u32		*evt_prd, *rx_ret_prd, *tx_csm;
+	dma_addr_t		evt_prd_dma, rx_ret_prd_dma, tx_csm_dma;
+
 	unsigned char		*trace_buf;
 	struct pci_dev		*pdev;
 	struct net_device	*next;

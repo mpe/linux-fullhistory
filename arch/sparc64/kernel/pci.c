@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.14 2000/01/13 00:05:43 davem Exp $
+/* $Id: pci.c,v 1.15 2000/02/08 05:11:29 jj Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -19,11 +19,6 @@
 #include <asm/pbm.h>
 #include <asm/irq.h>
 #include <asm/ebus.h>
-
-#ifndef NEW_PCI_DMA_MAP
-unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
-unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
-#endif
 
 unsigned long pci_memspace_mask = 0xffffffffUL;
 

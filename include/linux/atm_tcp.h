@@ -1,11 +1,13 @@
 /* atm_tcp.h - Driver-specific declarations of the ATMTCP driver (for use by
 	       driver-specific utilities) */
 
-/* Written 1997-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1997-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #ifndef LINUX_ATM_TCP_H
 #define LINUX_ATM_TCP_H
+
+#include <linux/atmapi.h>
 
 #ifdef __KERNEL__
 #include <linux/types.h>
@@ -33,12 +35,12 @@ struct atmtcp_hdr {
 
 struct atmtcp_control {
 	struct atmtcp_hdr hdr;	/* must be first */
-	int		type;	/* message type; both directions */
-	unsigned long	vcc;	/* both directions */
+	int type;		/* message type; both directions */
+	atm_kptr_t vcc;		/* both directions */
 	struct sockaddr_atmpvc addr; /* suggested value from kernel */
 	struct atm_qos	qos;	/* both directions */
 	int result;		/* to kernel only */
-};
+} __ATM_API_ALIGN;
 
 /*
  * Field usage:

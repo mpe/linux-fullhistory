@@ -258,7 +258,6 @@ struct my_sync_urb {
 struct usb_audiodev {
 	struct list_head list;
 	struct usb_audio_state *state;
-	int remove_pending;
 	
 	/* soundcore stuff */
 	int dev_audio;
@@ -838,8 +837,6 @@ static void usbin_completed(struct urb *urb)
 #if 0
 	printk(KERN_DEBUG "usbin_completed: status %d errcnt %d flags 0x%x\n", urb->status, urb->error_count, u->flags);
 #endif
-	if (as->remove_pending)
-		return;
 	if (urb == &u->durb[0].urb)
 		mask = FLG_URB0RUNNING;
 	else if (urb == &u->durb[1].urb)
@@ -904,9 +901,6 @@ static void usbin_sync_completed(struct urb *urb)
 #if 0
 	printk(KERN_DEBUG "usbin_sync_completed: status %d errcnt %d flags 0x%x\n", urb->status, urb->error_count, u->flags);
 #endif
-	if (as->remove_pending)
-		return;
-
 	if (urb == &u->surb[0].urb)
 		mask = FLG_SYNC0RUNNING;
 	else if (urb == &u->surb[1].urb)
@@ -1266,8 +1260,6 @@ static void usbout_sync_completed(struct urb *urb)
 #if 0
 	printk(KERN_DEBUG "usbout_sync_completed: status %d errcnt %d flags 0x%x\n", urb->status, urb->error_count, u->flags);
 #endif
-	if (as->remove_pending)
-		return;
 	if (urb == &u->surb[0].urb)
 		mask = FLG_SYNC0RUNNING;
 	else if (urb == &u->surb[1].urb)
@@ -1462,6 +1454,7 @@ static int set_format_in(struct usb_audiodev *as)
 		d->srate = fmt->sratelo;
 	if (d->srate > fmt->sratehi)
 		d->srate = fmt->sratehi;
+printk(KERN_DEBUG "usb_audio: set_format_in: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
 	if (usb_set_interface(dev, alts->bInterfaceNumber, fmt->altsetting) < 0) {
 		printk(KERN_WARNING "usbaudio: usb_set_interface failed, device %d interface %d altsetting %d\n",
 		       dev->devnum, u->interface, fmt->altsetting);
@@ -1527,13 +1520,13 @@ static int set_format_out(struct usb_audiodev *as)
 	u->datapipe = usb_sndisocpipe(dev, alts->endpoint[0].bEndpointAddress & 0xf);
 	u->syncpipe = u->syncinterval = 0;
 	if ((alts->endpoint[0].bmAttributes & 0x0c) == 0x04) {
-
+#if 0
 		printk(KERN_DEBUG "bNumEndpoints 0x%02x endpoint[1].bmAttributes 0x%02x\n"
 		       KERN_DEBUG "endpoint[1].bSynchAddress 0x%02x endpoint[1].bEndpointAddress 0x%02x\n"
 		       KERN_DEBUG "endpoint[0].bSynchAddress 0x%02x\n", alts->bNumEndpoints,
 		       alts->endpoint[1].bmAttributes, alts->endpoint[1].bSynchAddress,
 		       alts->endpoint[1].bEndpointAddress, alts->endpoint[0].bSynchAddress);
-
+#endif
 		if (alts->bNumEndpoints < 2 ||
 		    alts->endpoint[1].bmAttributes != 0x01 ||
 		    alts->endpoint[1].bSynchAddress != 0 ||
@@ -1545,14 +1538,11 @@ static int set_format_out(struct usb_audiodev *as)
 		u->syncpipe = usb_rcvisocpipe(dev, alts->endpoint[1].bEndpointAddress & 0xf);
 		u->syncinterval = alts->endpoint[1].bRefresh;
 	}
-
-	printk(KERN_DEBUG "datapipe 0x%x syncpipe 0x%x\n", u->datapipe, u->syncpipe);
-
-
 	if (d->srate < fmt->sratelo)
 		d->srate = fmt->sratelo;
 	if (d->srate > fmt->sratehi)
 		d->srate = fmt->sratehi;
+printk(KERN_DEBUG "usb_audio: set_format_out: usb_set_interface %u %u\n", alts->bInterfaceNumber, fmt->altsetting);
 	if (usb_set_interface(dev, u->interface, fmt->altsetting) < 0) {
 		printk(KERN_WARNING "usbaudio: usb_set_interface failed, device %d interface %d altsetting %d\n",
 		       dev->devnum, u->interface, fmt->altsetting);
@@ -2473,7 +2463,6 @@ static int usb_audio_open(struct inode *inode, struct file *file)
 	file->private_data = as;
 	as->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	s->count++;
-	as->remove_pending=0;
 	MOD_INC_USE_COUNT;
 	up(&open_sem);
 	return 0;
@@ -3143,14 +3132,20 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 	}
 	if (state->nrchannels > 2)
 		printk(KERN_WARNING "usbaudio: feature unit %u: OSS mixer interface does not support more than 2 channels\n", ftr[3]);
-	if (ftr[0] < 7+ftr[5]*(1+state->nrchannels)) {
-		printk(KERN_ERR "usbaudio: unit %u: invalid FEATURE_UNIT descriptor\n", ftr[3]);
-		return;
+	if (state->nrchannels == 1 && ftr[0] == 7+ftr[5]) {
+		printk(KERN_WARNING "usbaudio: workaround for broken Philips Camera Microphone descriptor enabled\n");
+		mchftr = ftr[6];
+		chftr = 0;
+	} else {
+		if (ftr[0] < 7+ftr[5]*(1+state->nrchannels)) {
+			printk(KERN_ERR "usbaudio: unit %u: invalid FEATURE_UNIT descriptor\n", ftr[3]);
+			return;
+		}
+		mchftr = ftr[6];
+		chftr = ftr[6+ftr[5]];
+		if (state->nrchannels > 1)
+			chftr &= ftr[6+2*ftr[5]];
 	}
-	mchftr = ftr[6];
-	chftr = ftr[6+ftr[5]];
-	if (state->nrchannels > 1)
-		chftr &= ftr[6+2*ftr[5]];
 	/* volume control */
 	if (chftr & 2) {
 		ch = getmixchannel(state, getvolchannel(state));

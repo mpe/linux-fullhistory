@@ -15,7 +15,6 @@
  * $Id: usb-uhci.c,v 1.185 2000/02/05 21:29:19 acher Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
@@ -2312,13 +2311,14 @@ _static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 	uhci_t *s = (uhci_t*) dev->data;
 	dbg("handle_apm_event(%d)", rqst);
 	if (s) {
-	switch (rqst) {
-	case PM_SUSPEND:
-		reset_hc (s);
-		break;
-	case PM_RESUME:
-		start_hc (s);
-		break;
+		switch (rqst) {
+		case PM_SUSPEND:
+			reset_hc (s);
+			break;
+		case PM_RESUME:
+			start_hc (s);
+			break;
+		}
 	}
 	return 0;
 }

@@ -1,6 +1,6 @@
 /* net/atm/signaling.h - ATM signaling */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef NET_ATM_SIGNALING_H
@@ -18,7 +18,7 @@ extern struct atm_vcc *sigd; /* needed in svc_release */
 
 
 void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
-    const struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
+    struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
     const struct sockaddr_atmsvc *svc);
 int sigd_attach(struct atm_vcc *vcc);
 void signaling_init(void);
