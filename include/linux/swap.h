@@ -39,7 +39,6 @@ extern atomic_t nr_async_pages;
 extern struct inode swapper_inode;
 extern unsigned long page_cache_size;
 extern int buffermem;
-#define BUFFER_MEM ((buffermem >> PAGE_SHIFT) + page_cache_size)
 
 /* Incomplete types for prototype declarations: */
 struct task_struct;

@@ -67,8 +67,8 @@ swap_control_t swap_control = {
 swapstat_t swapstats = {0};
 
 buffer_mem_t buffer_mem = {
-	6,	/* minimum percent buffer + cache memory */
-	20,	/* borrow percent buffer + cache memory */
-	90	/* maximum percent buffer + cache memory */
+	3,	/* minimum percent buffer */
+	10,	/* borrow percent buffer */
+	30	/* maximum percent buffer */
 };
 

@@ -150,6 +150,10 @@ int shrink_mmap(int priority, int gfp_mask)
 				}
 				tmp = tmp->b_this_page;
 			} while (tmp != bh);
+
+			/* Refuse to swap out all buffer pages */
+			if ((buffermem >> PAGE_SHIFT) * 100 > (buffer_mem.min_percent * num_physpages))
+				goto next;
 		}
 
 		/* We can't throw away shared pages, but we do mark

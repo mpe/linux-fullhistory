@@ -30,7 +30,6 @@
 
 /*
  *	Verify iovec
- *	verify area does a simple check for completly bogus addresses
  *
  *	Save time not doing verify_area. copy_*_user will make this work
  *	in any case.
@@ -79,22 +78,21 @@ out_free:
 }
 
 /*
- *	Copy kernel to iovec.
+ *	Copy kernel to iovec. Returns -EFAULT on error.
  *
  *	Note: this modifies the original iovec.
  */
  
 int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 {
-	int err;
+	int err = -EFAULT; 
 
 	while(len>0)
 	{
 		if(iov->iov_len)
 		{
 			int copy = min(iov->iov_len, len);
-			err = copy_to_user(iov->iov_base, kdata, copy);
-			if (err)
+			if (copy_to_user(iov->iov_base, kdata, copy))
 				goto out;
 			kdata+=copy;
 			len-=copy;
@@ -109,7 +107,7 @@ out:
 }
 
 /*
- *	Copy iovec to kernel.
+ *	Copy iovec to kernel. Returns -EFAULT on error.
  *
  *	Note: this modifies the original iovec.
  */
@@ -147,35 +145,23 @@ int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
 {
 	int err = -EFAULT;
 
-	while(offset>0)
+	/* Skip over the finished iovecs */
+	while(offset >= iov->iov_len)
 	{
-		if (offset > iov->iov_len)
-		{
-			offset -= iov->iov_len;
-		}
-		else
-		{
-			u8 *base = iov->iov_base + offset;
-			int copy = min(len, iov->iov_len - offset);
-
-			offset = 0;
-
-			if (copy_from_user(kdata, base, copy))
-				goto out;
-			len-=copy;
-			kdata+=copy;
-		}
+		offset -= iov->iov_len;
 		iov++;
 	}
 
-	while (len>0)
+	while (len > 0)
 	{
-		int copy = min(len, iov->iov_len);
+		u8 *base = iov->iov_base + offset;
+		int copy = min(len, iov->iov_len - offset);
 
-		if (copy_from_user(kdata, iov->iov_base, copy))
+		offset = 0;
+		if (copy_from_user(kdata, base, copy))
 			goto out;
-		len-=copy;
-		kdata+=copy;
+		len   -= copy;
+		kdata += copy;
 		iov++;
 	}
 	err = 0;
@@ -195,51 +181,22 @@ out:
 int csum_partial_copy_fromiovecend(unsigned char *kdata, struct iovec *iov,
 				 int offset, unsigned int len, int *csump)
 {
-	int partial_cnt = 0;
-	int err = 0;
-	int csum;
+	int csum = *csump;
+	int partial_cnt = 0, err = 0;
 
-	do {
-		int copy = iov->iov_len - offset;
-
-		if (copy > 0) {
-			u8 *base = iov->iov_base + offset;
-
-			/* Normal case (single iov component) is fastly detected */
-			if (len <= copy) {
-				*csump = csum_and_copy_from_user(base, kdata, 
-								 len, *csump, &err);
-				goto out;
-			}
-
-			partial_cnt = copy % 4;
-			if (partial_cnt) {
-				copy -= partial_cnt;
-				if (copy_from_user(kdata + copy, base + copy,
-						partial_cnt))
-					goto out_fault;
-			}
-
-			*csump = csum_and_copy_from_user(base, kdata, copy,
-							 *csump, &err);
-			if (err)
-				goto out;
-			len   -= copy + partial_cnt;
-			kdata += copy + partial_cnt;
-			iov++;
-			break;
-		}
+	/* Skip over the finished iovecs */
+	while (offset >= iov->iov_len)
+	{
+		offset -= iov->iov_len;
 		iov++;
-		offset = -copy;
-	} while (offset > 0);
-
-	csum = *csump;
+	}
 
 	while (len > 0)
 	{
-		u8 *base = iov->iov_base;
-		unsigned int copy = min(len, iov->iov_len);
+		u8 *base = iov->iov_base + offset;
+		unsigned int copy = min(len, iov->iov_len - offset);
 
+		offset = 0;
 		/* There is a remnant from previous iov. */
 		if (partial_cnt)
 		{

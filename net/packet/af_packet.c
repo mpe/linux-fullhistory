@@ -262,9 +262,9 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 			       struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
+	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	struct sk_buff *skb;
 	struct device *dev;
-	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	unsigned short proto=0;
 	int err;
 	
@@ -309,6 +309,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
   		return -EMSGSIZE;
 
 	dev_lock_list();
+	err = -ENOBUFS;
 	skb = sock_wmalloc(sk, len+dev->hard_header_len+15, 0, GFP_KERNEL);
 
 	/*
@@ -318,10 +319,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 	 */
 	 
 	if (skb == NULL) 
-	{
-		dev_unlock_list();
-		return(-ENOBUFS);
-	}
+		goto out_unlock;
 	
 	/*
 	 *	Fill it in 
@@ -339,36 +337,32 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 		skb->data -= dev->hard_header_len;
 		skb->tail -= dev->hard_header_len;
 	}
+
+	/* Returns -EFAULT on error */
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sk->priority;
-	dev_unlock_list();
+	if (err)
+		goto out_free;
+
+	err = -ENETDOWN;
+	if (!(dev->flags & IFF_UP))
+		goto out_free;
 
 	/*
 	 *	Now send it
 	 */
 
-	if (err)
-	{
-		err = -EFAULT;
-	}
-	else
-	{
-		if (!(dev->flags & IFF_UP))
-		{
-			err = -ENETDOWN;
-		}
-	}
-
-	if (err) 
-	{
-		kfree_skb(skb);
-		return err;
-	}
-
+	dev_unlock_list();
 	dev_queue_xmit(skb);
 	return(len);
+
+out_free:
+	kfree_skb(skb);
+out_unlock:
+	dev_unlock_list();
+	return err;
 }
 #endif
 
@@ -434,13 +428,12 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			  struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
+	struct sockaddr_ll *saddr=(struct sockaddr_ll *)msg->msg_name;
 	struct sk_buff *skb;
 	struct device *dev;
-	struct sockaddr_ll *saddr=(struct sockaddr_ll *)msg->msg_name;
 	unsigned short proto;
-	int ifindex;
-	int err;
-	int reserve = 0;
+	unsigned char *addr;
+	int ifindex, err, reserve = 0;
 	
 	/*
 	 *	Check the flags. 
@@ -454,13 +447,15 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	 */
 	 
 	if (saddr == NULL) {
-		ifindex = sk->protinfo.af_packet->ifindex;
-		proto = sk->num;
+		ifindex	= sk->protinfo.af_packet->ifindex;
+		proto	= sk->num;
+		addr	= NULL;
 	} else {
 		if (msg->msg_namelen < sizeof(struct sockaddr_ll)) 
 			return -EINVAL;
-		ifindex = saddr->sll_ifindex;
-		proto = saddr->sll_protocol;
+		ifindex	= saddr->sll_ifindex;
+		proto	= saddr->sll_protocol;
+		addr	= saddr->sll_addr;
 	}
 
 	dev = dev_get_by_index(ifindex);
@@ -474,55 +469,50 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	dev_lock_list();
 
-	skb = sock_alloc_send_skb(sk, len+dev->hard_header_len+15, 0, msg->msg_flags&MSG_DONTWAIT, &err);
-
-	if (skb==NULL) {
-		dev_unlock_list();
-		return err;
-	}
+	skb = sock_alloc_send_skb(sk, len+dev->hard_header_len+15, 0, 
+				msg->msg_flags & MSG_DONTWAIT, &err);
+	if (skb==NULL)
+		goto out_unlock;
 
 	skb_reserve(skb, (dev->hard_header_len+15)&~15);
 	skb->nh.raw = skb->data;
 
 	if (dev->hard_header) {
-		if (dev->hard_header(skb, dev, ntohs(proto),
-				     saddr ? saddr->sll_addr : NULL,
-				     NULL, len) < 0
-		    && sock->type == SOCK_DGRAM) {
-			kfree_skb(skb);
-			dev_unlock_list();
-			return -EINVAL;
-		}
+		int res;
+		err = -EINVAL;
+		res = dev->hard_header(skb, dev, ntohs(proto), addr, NULL, len);
 		if (sock->type != SOCK_DGRAM) {
 			skb->tail = skb->data;
 			skb->len = 0;
-		}
+		} else if (res < 0)
+			goto out_free;
 	}
 
+	/* Returns -EFAULT on error */
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sk->priority;
-	dev_unlock_list();
+	if (err)
+		goto out_free;
+
+	err = -ENETDOWN;
+	if (!(dev->flags & IFF_UP))
+		goto out_free;
 
 	/*
 	 *	Now send it
 	 */
 
-	if (err) {
-		err = -EFAULT;
-	} else {
-		if (!(dev->flags & IFF_UP))
-			err = -ENETDOWN;
-	}
-
-	if (err) {
-		kfree_skb(skb);
-		return err;
-	}
-
+	dev_unlock_list();
 	dev_queue_xmit(skb);
 	return(len);
+
+out_free:
+	kfree_skb(skb);
+out_unlock:
+	dev_unlock_list();
+	return err;
 }
 
 static void packet_destroy_timer(unsigned long data)
@@ -699,6 +689,7 @@ static int packet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len
 static int packet_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
+	int err;
 
 	if (!suser())
 		return -EPERM;
@@ -711,27 +702,23 @@ static int packet_create(struct socket *sock, int protocol)
 
 	sock->state = SS_UNCONNECTED;
 	MOD_INC_USE_COUNT;
+
+	err = -ENOBUFS;
 	sk = sk_alloc(AF_PACKET, GFP_KERNEL, 1);
-	if (sk == NULL) {
-		MOD_DEC_USE_COUNT;
-		return -ENOBUFS;
-	}
+	if (sk == NULL)
+		goto out;
 
 	sk->reuse = 1;
+	sock->ops = &packet_ops;
 #ifdef CONFIG_SOCK_PACKET
 	if (sock->type == SOCK_PACKET)
 		sock->ops = &packet_ops_spkt;
-	else
 #endif
-	sock->ops = &packet_ops;
 	sock_init_data(sock,sk);
 
 	sk->protinfo.af_packet = kmalloc(sizeof(struct packet_opt), GFP_KERNEL);
-	if (sk->protinfo.af_packet == NULL) {
-		sk_free(sk);
-		MOD_DEC_USE_COUNT;
-		return -ENOBUFS;
-	}
+	if (sk->protinfo.af_packet == NULL)
+		goto out_free;
 	memset(sk->protinfo.af_packet, 0, sizeof(struct packet_opt));
 	sk->zapped=0;
 	sk->family = AF_PACKET;
@@ -741,13 +728,11 @@ static int packet_create(struct socket *sock, int protocol)
 	 *	Attach a protocol block
 	 */
 
+	sk->protinfo.af_packet->prot_hook.func = packet_rcv;
 #ifdef CONFIG_SOCK_PACKET
 	if (sock->type == SOCK_PACKET)
 		sk->protinfo.af_packet->prot_hook.func = packet_rcv_spkt;
-	else
 #endif
-	sk->protinfo.af_packet->prot_hook.func = packet_rcv;
-
 	sk->protinfo.af_packet->prot_hook.data = (void *)sk;
 
 	if (protocol) {
@@ -758,6 +743,12 @@ static int packet_create(struct socket *sock, int protocol)
 
 	sklist_insert_socket(&packet_sklist, sk);
 	return(0);
+
+out_free:
+	sk_free(sk);
+out:
+	MOD_DEC_USE_COUNT;
+	return err;
 }
 
 /*
@@ -832,10 +823,8 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	/* We can't use skb_copy_datagram here */
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
-	if (err) {
-		err = -EFAULT;
+	if (err)
 		goto out_free;
-	}
 	sk->stamp=skb->stamp;
 
 	if (msg->msg_name)
@@ -932,37 +921,39 @@ static void packet_dev_mclist(struct device *dev, struct packet_mclist *i, int w
 
 static int packet_mc_add(struct sock *sk, struct packet_mreq *mreq)
 {
-	int err;
 	struct packet_mclist *ml, *i;
 	struct device *dev;
+	int err;
 
 	rtnl_shlock();
 
-	dev = dev_get_by_index(mreq->mr_ifindex);
-
-	i = NULL;
 	err = -ENODEV;
+	dev = dev_get_by_index(mreq->mr_ifindex);
 	if (!dev)
 		goto done;
+
 	err = -EINVAL;
 	if (mreq->mr_alen > dev->addr_len)
 		goto done;
 
+	err = -ENOBUFS;
 	i = (struct packet_mclist *)kmalloc(sizeof(*i), GFP_KERNEL);
+	if (i == NULL)
+		goto done;
 
+	err = 0;
 	for (ml=sk->protinfo.af_packet->mclist; ml; ml=ml->next) {
 		if (ml->ifindex == mreq->mr_ifindex &&
 		    ml->type == mreq->mr_type &&
 		    ml->alen == mreq->mr_alen &&
 		    memcmp(ml->addr, mreq->mr_address, ml->alen) == 0) {
 			ml->count++;
-			err = 0;
+			/* Free the new element ... */
+			kfree(i);
 			goto done;
 		}
 	}
-	err = -ENOBUFS;
-	if (i == NULL)
-		goto done;
+
 	i->type = mreq->mr_type;
 	i->ifindex = mreq->mr_ifindex;
 	i->alen = mreq->mr_alen;
@@ -971,13 +962,9 @@ static int packet_mc_add(struct sock *sk, struct packet_mreq *mreq)
 	i->next = sk->protinfo.af_packet->mclist;
 	sk->protinfo.af_packet->mclist = i;
 	packet_dev_mc(dev, i, +1);
-	i = NULL;
-	err = 0;
 
 done:
 	rtnl_shunlock();
-	if (i)
-		kfree(i);
 	return err;
 }
 
@@ -1109,13 +1096,12 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 		case FIOGETOWN:
 		case SIOCGPGRP:
 			return put_user(sk->proc, (int *)arg);
-			return(0);			
 		case SIOCGSTAMP:
 			if(sk->stamp.tv_sec==0)
 				return -ENOENT;
-			err = copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
-			if (err)
-				err = -EFAULT;
+			err = -EFAULT;
+			if (!copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
+				err = 0;
 			return err;
 		case SIOCGIFFLAGS:
 #ifndef CONFIG_INET

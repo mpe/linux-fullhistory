@@ -31,7 +31,7 @@
 /* 
  * When are we next due for a page scan? 
  */
-static int next_swap_jiffies = 0;
+static unsigned long next_swap_jiffies = 0;
 
 /* 
  * How often do we do a pageout scan during normal conditions?
@@ -451,14 +451,13 @@ static inline int do_try_to_free_page(int gfp_mask)
 	stop = 3;
 	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
-	if (BUFFER_MEM > buffer_mem.borrow_percent * num_physpages / 100)
+	if ((buffermem >> PAGE_SHIFT) * 100 > buffer_mem.borrow_percent * num_physpages)
 		state = 0;
 
 	switch (state) {
 		do {
 		case 0:
-			if (BUFFER_MEM > (buffer_mem.min_percent * num_physpages /100) &&
-					shrink_mmap(i, gfp_mask))
+			if (shrink_mmap(i, gfp_mask))
 				return 1;
 			state = 1;
 		case 1:
@@ -547,18 +546,30 @@ int kswapd(void *unused)
 		run_task_queue(&tq_disk);
 		schedule();
 		swapstats.wakeups++;
-		/* Do the background pageout: 
-		 * When we've got loads of memory, we try
-		 * (freepages.high - nr_free_pages) times to
-		 * free memory. As memory gets tighter, kswapd
-		 * gets more and more agressive. -- Rik.
+	
+		/*
+		 * Do the background pageout: be
+		 * more aggressive if we're really
+		 * low on free memory.
+		 *
+		 * Normally this is called 4 times
+		 * a second if we need more memory,
+		 * so this has a normal rate of
+		 * X*4 pages of memory free'd per
+		 * second. That rate goes up when
+		 *
+		 * - we're really low on memory (we get woken
+		 *   up a lot more)
+		 * - other processes fail to allocate memory,
+		 *   at which time they try to do their own
+		 *   freeing.
+		 *
+		 * A "tries" value of 50 means up to 200 pages
+		 * per second (1.6MB/s). This should be a /proc
+		 * thing.
 		 */
-		tries = freepages.high - nr_free_pages;
-		if (tries < freepages.min) {
-			tries = freepages.min;
-		}
-		if (nr_free_pages < freepages.low)
-			tries <<= 1;
+		tries = 50;
+	
 		while (tries--) {
 			int gfp_mask;
 
@@ -583,7 +594,6 @@ int kswapd(void *unused)
 /* 
  * The swap_tick function gets called on every clock tick.
  */
-
 void swap_tick(void)
 {
 	unsigned long now, want;
@@ -604,13 +614,13 @@ void swap_tick(void)
 	case 0:
 		want = now;
 		/* Fall through */
-	case 1 ... 2:
+	case 1 ... 3:
 		want_wakeup = 1;
 	default:
 	}
  
 	if ((long) (now - want) >= 0) {
-		if (want_wakeup || (num_physpages * buffer_mem.max_percent / 100) < BUFFER_MEM) {
+		if (want_wakeup || (num_physpages * buffer_mem.max_percent) < (buffermem >> PAGE_SHIFT) * 100) {
 			/* Set the next wake-up time */
 			next_swap_jiffies = now + swapout_interval;
 			wake_up(&kswapd_wait);

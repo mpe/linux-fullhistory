@@ -55,12 +55,9 @@ static char buffersize_index[17] =
 					     number of unused buffer heads */
 
 /*
- * How large a hash table do we need?
+ * Hash table mask..
  */
-#define HASH_PAGES_ORDER	4
-#define HASH_PAGES		(1UL << HASH_PAGES_ORDER)
-#define NR_HASH			(HASH_PAGES*PAGE_SIZE/sizeof(struct buffer_head *))
-#define HASH_MASK		(NR_HASH-1)
+static unsigned long bh_hash_mask = 0;
 
 static int grow_buffers(int pri, int size);
 
@@ -421,7 +418,7 @@ void invalidate_buffers(kdev_t dev)
 	}
 }
 
-#define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block))&HASH_MASK)
+#define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block)) & bh_hash_mask)
 #define hash(dev,block) hash_table[_hashfn(dev,block)]
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
@@ -732,7 +729,7 @@ static void refill_freelist(int size)
 	needed = bdf_prm.b_un.nrefill * size;  
 
 	while ((nr_free_pages > freepages.min*2) &&
-	        BUFFER_MEM < (buffer_mem.max_percent * num_physpages / 100) &&
+	        (buffermem >> PAGE_SHIFT) * 100 < (buffer_mem.max_percent * num_physpages) &&
 		grow_buffers(GFP_BUFFER, size)) {
 		obtained += PAGE_SIZE;
 		if (obtained >= needed)
@@ -817,7 +814,6 @@ repeat:
 	 */
 	while (obtained < (needed >> 1) &&
 	       nr_free_pages > freepages.min + 5 &&
-	       BUFFER_MEM < (buffer_mem.max_percent * num_physpages / 100) &&
 	       grow_buffers(GFP_BUFFER, size))
 		obtained += PAGE_SIZE;
 
@@ -1707,11 +1703,16 @@ void show_buffers(void)
  */
 void buffer_init(void)
 {
-	hash_table = (struct buffer_head **)
-		__get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER);
+	int order = 5;		/* Currently maximum order.. */
+	unsigned int nr_hash;
+
+	nr_hash = (1UL << order) * PAGE_SIZE / sizeof(struct buffer_head *);
+	hash_table = (struct buffer_head **) __get_free_pages(GFP_ATOMIC, order);
+	
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");
-	memset(hash_table,0,NR_HASH*sizeof(struct buffer_head *));
+	memset(hash_table, 0, nr_hash * sizeof(struct buffer_head *));
+	bh_hash_mask = nr_hash-1;
 
 	bh_cachep = kmem_cache_create("buffer_head",
 				      sizeof(struct buffer_head),

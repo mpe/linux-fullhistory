@@ -132,15 +132,13 @@ restart:
 		unsigned long flags;
 		save_flags(flags);
 		cli();
-		skb=skb_peek(&sk->receive_queue);
+		skb = skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
 			atomic_inc(&skb->users);
 		restore_flags(flags);
-		if(skb==NULL)		/* shouldn't happen but .. */
-			goto restart;
-		return skb;
-	}
-	skb = skb_dequeue(&sk->receive_queue);
+	} else
+		skb = skb_dequeue(&sk->receive_queue);
+
 	if (!skb)	/* Avoid race if someone beats us to the data */
 		goto restart;
 	return skb;
@@ -163,30 +161,23 @@ void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 
 int skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
-	int err;
-	err = copy_to_user(to, skb->h.raw+offset, size);
-	if (err)
-	{
-		err = -EFAULT;
-	}
+	int err = -EFAULT;
+
+	if (!copy_to_user(to, skb->h.raw + offset, size))
+		err = 0;
 	return err;
 }
 
 
 /*
  *	Copy a datagram to an iovec.
+ *	Note: the iovec is modified during the copy.
  */
  
 int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
 			    int size)
 {
-	int err;
-	err = memcpy_toiovec(to, skb->h.raw+offset, size);
-	if (err)
-	{
-		err = -EFAULT;
-	}
-	return err;
+	return memcpy_toiovec(to, skb->h.raw + offset, size);
 }
 
 /*

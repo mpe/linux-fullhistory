@@ -124,6 +124,7 @@ static spinlock_t page_alloc_lock;
  */
 int free_memory_available(int nr)
 {
+	int retval = 0;
 	unsigned long flags;
 	struct free_area_struct * list = NULL;
 
@@ -141,10 +142,11 @@ int free_memory_available(int nr)
 		if (list->next->next == memory_head(list))
 			continue;
 		/* More than one item? We're ok */
+		retval = nr + 1;
 		break;
 	} while (--nr >= 0);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	return nr + 1;
+	return retval;
 }
 
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)

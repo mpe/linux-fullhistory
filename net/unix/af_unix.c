@@ -687,17 +687,19 @@ static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
 	 
 		skb=sock_alloc_send_skb(sk, len, 0, nonblock, &err); /* Marker object */
 		if(skb==NULL)
-			return err;
+			goto out;
 		memcpy(&UNIXCB(skb), cmsg, sizeof(*cmsg));
-		if (len)
-			memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+		if (len) {
+			err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov,
+						len);
+			if (err)
+				goto out_free;
+		}
+
 		sk->state=TCP_CLOSE;
 		other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
 		if(other==NULL)
-		{
-			kfree_skb(skb);
-			return err;
-		}
+			goto out_free;
 		other->ack_backlog++;
 		unix_peer(sk)=other;
 		skb_queue_tail(&other->receive_queue,skb);
@@ -738,6 +740,11 @@ static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
 	if (!sk->protinfo.af_unix.addr)
 		unix_autobind(sock);
 	return 0;
+
+out_free:
+	kfree_skb(skb);
+out:
+	return err;
 }
 
 
@@ -908,8 +915,8 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			      struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
-	unix_socket *other;
 	struct sockaddr_un *sunaddr=msg->msg_name;
+	unix_socket *other;
 	int namelen = 0; /* fake GCC */
 	int err;
 	unsigned hash;
@@ -935,9 +942,8 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_autobind(sock);
 
 	skb = sock_alloc_send_skb(sk, len, 0, msg->msg_flags&MSG_DONTWAIT, &err);
-
 	if (skb==NULL)
-		return err;
+		goto out;
 
 	memcpy(UNIXCREDS(skb), &scm->creds, sizeof(struct ucred));
 	UNIXCB(skb).attr = msg->msg_flags;
@@ -945,7 +951,9 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_attach_fds(scm, skb);
 
 	skb->h.raw = skb->data;
-	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+	if (err)
+		goto out_free;
 
 	other = unix_peer(sk);
 	if (other && other->dead)
@@ -957,26 +965,18 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_unlock(other);
 		unix_peer(sk)=NULL;
 		other = NULL;
-		if (sunaddr == NULL) {
-			kfree_skb(skb);
-			return -ECONNRESET;
-		}
+		err = -ECONNRESET;
+		if (sunaddr == NULL)
+			goto out_free;
 	}
 	if (!other)
 	{
 		other = unix_find_other(sunaddr, namelen, sk->type, hash, &err);
-		
 		if (other==NULL)
-		{
-			kfree_skb(skb);
-			return err;
-		}
+			goto out_free;
+		err = -EINVAL;
 		if (!unix_may_send(sk, other))
-		{
-			unix_unlock(other);
-			kfree_skb(skb);
-			return -EINVAL;
-		}
+			goto out_unlock;
 	}
 
 	skb_queue_tail(&other->receive_queue, skb);
@@ -985,6 +985,13 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (!unix_peer(sk))
 		unix_unlock(other);
 	return len;
+
+out_unlock:
+	unix_unlock(other);
+out_free:
+	kfree_skb(skb);
+out:
+	return err;
 }
 
 		
@@ -1267,9 +1274,7 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		}
 
 		chunk = min(skb->len, size);
-		/* N.B. This could fail with a non-zero value (which means -EFAULT
-		 *      and the non-zero value is the number of bytes not copied).
-		 */
+		/* N.B. This could fail with -EFAULT */
 		memcpy_toiovec(msg->msg_iov, skb->data, chunk);
 		copied += chunk;
 		size -= chunk;

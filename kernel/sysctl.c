@@ -191,7 +191,7 @@ static ctl_table vm_table[] = {
 	{VM_SWAPCTL, "swapctl", 
 	 &swap_control, sizeof(swap_control_t), 0600, NULL, &proc_dointvec},
 	{VM_SWAPOUT, "swapout_interval",
-	 &swapout_interval, sizeof(int), 0600, NULL, &proc_dointvec_jiffies},
+	 &swapout_interval, sizeof(int), 0600, NULL, &proc_dointvec},
 	{VM_FREEPG, "freepages", 
 	 &freepages, sizeof(freepages_t), 0600, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,

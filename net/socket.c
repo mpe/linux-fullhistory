@@ -1142,19 +1142,21 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	char address[MAX_SOCK_ADDR];
 	struct iovec iov[UIO_FASTIOV];
 	unsigned char ctl[sizeof(struct cmsghdr) + 20];	/* 20 is size of ipv6_pktinfo */
-	struct msghdr msg_sys;
-	int err= -EINVAL;
-	int total_len;
 	unsigned char *ctl_buf = ctl;
+	struct msghdr msg_sys;
+	int err, total_len;
 	
 	lock_kernel();
 
-	err=-EFAULT;
+	err = -EFAULT;
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		goto out; 
+
 	/* do not move before msg_sys is valid */
-	if (msg_sys.msg_iovlen>UIO_MAXIOV)
+	err = -EINVAL;
+	if (msg_sys.msg_iovlen > UIO_MAXIOV)
 		goto out;
+
 	/* This will also move the address data into kernel space */
 	err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
 	if (err < 0) 
@@ -1164,7 +1166,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 
 	sock = sockfd_lookup(fd, &err);
 	if (!sock) 
-		goto out; 
+		goto out_freeiov;
 
 	if (msg_sys.msg_controllen) 
 	{
@@ -1198,9 +1200,10 @@ failed:
 	if (ctl_buf != ctl)    
 		sock_kfree_s(sock->sk, ctl_buf, msg_sys.msg_controllen);
 failed2:
+	sockfd_put(sock);
+out_freeiov:
 	if (msg_sys.msg_iov != iov)
 		kfree(msg_sys.msg_iov);
-	sockfd_put(sock);
 out:       
 	unlock_kernel();
 	return err;
@@ -1229,16 +1232,13 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	int *uaddr_len;
 	
 	lock_kernel();
+	err=-EFAULT;
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
-	{
-		err=-EFAULT;
 		goto out;
-	}
-	if (msg_sys.msg_iovlen>UIO_MAXIOV)
-	{
-		err=-EINVAL;
+
+	err=-EINVAL;
+	if (msg_sys.msg_iovlen > UIO_MAXIOV)
 		goto out;
-	}
 	
 	/*
 	 *	Save the user-mode address (verify_iovec will change the

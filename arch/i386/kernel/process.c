@@ -171,6 +171,8 @@ int cpu_idle(void *unused)
 
 asmlinkage int sys_idle(void)
 {
+	if (current->pid != 0)
+		return -EPERM;
 	cpu_idle(NULL);
 	return 0;
 }
