@@ -50,6 +50,10 @@ struct ax_disp {
 #define AXF_OUTWAIT	4		/* is outpacket was flag	*/
 
 	int                 mode;
+        int                 crcmode;    /* MW: for FlexNet, SMACK etc.  */ 
+#define CRC_MODE_NONE   0
+#define CRC_MODE_FLEX   1
+#define CRC_MODE_SMACK  2
 };
 
 #define AX25_MAGIC		0x5316

@@ -2,6 +2,8 @@
      *  Mac variable bpp packed pixels (mac)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_MAC) || defined(CONFIG_FBCON_MAC_MODULE)
 #define FBCON_HAS_MAC

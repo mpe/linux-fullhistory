@@ -190,6 +190,7 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 
 #define VMALLOC_START		0xFFFFFE0000000000
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
+#define VMALLOC_END		(~0UL)
 
 /*
  * OSF/1 PAL-code-imposed page table bits

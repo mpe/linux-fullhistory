@@ -106,28 +106,31 @@ void scheduling_functions_start_here(void) { }
 static inline void reschedule_idle(struct task_struct * p)
 {
 	/*
-	 * For SMP, we try to find another CPU to put the
-	 * new task on, and fall back on the local CPU only
-	 * if no other CPU is idle.
-	 *
-	 * FIXME: try to select the idle CPU to be the old
-	 * CPU of the task 'p' if possible.
+	 * For SMP, we try to see if the CPU the task used
+	 * to run on is idle..
 	 */
 #ifdef __SMP__
-	struct task_struct **idle = task;
-	int current_cpu = smp_processor_id();
-	int i = smp_num_cpus;
+	int want_cpu = p->processor;
 
-	do {
-		struct task_struct *tsk = *idle;
-		idle++;
-		/* Something like this.. */
-		if (tsk->has_cpu && !tsk->need_resched && tsk->processor != current_cpu) {
-			tsk->need_resched = 1;
-			smp_send_reschedule(tsk->processor);
-			return;
-		}
-	} while (--i > 0);
+	/*
+	 * Don't even try to find another CPU for us if the task
+	 * ran on this one before..
+	 */
+	if (want_cpu != smp_processor_id()) {
+		struct task_struct **idle = task;
+		int i = smp_num_cpus;
+
+		do {
+			struct task_struct *tsk = *idle;
+			idle++;
+			/* Something like this.. */
+			if (tsk->has_cpu && tsk->processor == want_cpu) {
+				tsk->need_resched = 1;
+				smp_send_reschedule(want_cpu);
+				return;
+			}
+		} while (--i > 0);
+	}
 #endif
 	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
 		current->need_resched = 1;	

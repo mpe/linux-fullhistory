@@ -421,16 +421,6 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 		insert_vm_struct(current->mm, mpnt);
 	}
 
-	/* Close the current area ... */
-	if (area->vm_ops && area->vm_ops->close) {
-		end = area->vm_end; /* save new end */
-		area->vm_end = area->vm_start;
-		area->vm_ops->close(area);
-		area->vm_end = end;
-	}
-	/* ... then reopen and reinsert. */
-	if (area->vm_ops && area->vm_ops->open)
-		area->vm_ops->open(area);
 	insert_vm_struct(current->mm, area);
 	return 1;
 }

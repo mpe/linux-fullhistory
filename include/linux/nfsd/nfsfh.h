@@ -27,12 +27,12 @@
  * ino/dev of the exported inode.
  */
 struct nfs_fhbase {
-	struct dentry *		fb_dentry;	/* dentry cookie */
-	ino_t			fb_ino;		/* our inode number */
-	ino_t			fb_dirino;	/* dir inode number */
-	kdev_t			fb_dev;		/* our device */
-	kdev_t			fb_xdev;
-	ino_t			fb_xino;
+	struct dentry *	fb_dentry;	/* dentry cookie */
+	__u32		fb_ino;		/* our inode number */
+	__u32		fb_dirino;	/* dir inode number */
+	__u32		fb_dev;		/* our device */
+	__u32		fb_xdev;
+	__u32		fb_xino;
 };
 
 #define NFS_FH_PADDING		(NFS_FHSIZE - sizeof(struct nfs_fhbase))
@@ -49,6 +49,29 @@ struct knfs_fh {
 #define fh_xino			fh_base.fb_xino
 
 #ifdef __KERNEL__
+
+/*
+ * Conversion macros for the filehandle fields.
+ */
+extern inline __u32 kdev_t_to_u32(kdev_t dev)
+{
+	return (__u32) dev;
+}
+
+extern inline kdev_t u32_to_kdev_t(__u32 udev)
+{
+	return (kdev_t) udev;
+}
+
+extern inline __u32 ino_t_to_u32(ino_t ino)
+{
+	return (__u32) ino;
+}
+
+extern inline ino_t u32_to_ino_t(__u32 uino)
+{
+	return (ino_t) uino;
+}
 
 /*
  * This is the internal representation of an NFS handle used in knfsd.

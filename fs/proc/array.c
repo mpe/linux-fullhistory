@@ -762,7 +762,7 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 	buffer += sprintf(buffer, "SigIgn:\t");
 	buffer = render_sigset_t(&ign, buffer);
 	*buffer++ = '\n';
-	buffer += sprintf(buffer, "SigCat:\t");
+	buffer += sprintf(buffer, "SigCgt:\t"); /* Linux 2.0 uses "SigCgt" */
 	buffer = render_sigset_t(&catch, buffer);
 	*buffer++ = '\n';
 
@@ -805,10 +805,6 @@ static int get_stat(int pid, char * buffer)
 	long priority, nice;
 	int tty_pgrp;
 	sigset_t sigign, sigcatch;
-	char signal_str[sizeof(sigset_t)*2+1];
-	char blocked_str[sizeof(sigset_t)*2+1];
-	char sigign_str[sizeof(sigset_t)*2+1];
-	char sigcatch_str[sizeof(sigset_t)*2+1];
 	char state;
 
 	read_lock(&tasklist_lock);
@@ -831,10 +827,6 @@ static int get_stat(int pid, char * buffer)
 	wchan = get_wchan(tsk);
 
 	collect_sigign_sigcatch(tsk, &sigign, &sigcatch);
-	render_sigset_t(&tsk->signal, signal_str);
-	render_sigset_t(&tsk->blocked, blocked_str);
-	render_sigset_t(&sigign, sigign_str);
-	render_sigset_t(&sigcatch, sigcatch_str);
 
 	if (tsk->tty)
 		tty_pgrp = tsk->tty->pgrp;
@@ -850,7 +842,7 @@ static int get_stat(int pid, char * buffer)
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
-%lu %s %s %s %s %lu %lu %lu\n",
+%lu %lu %lu %lu %lu %lu %lu %lu\n",
 		pid,
 		tsk->comm,
 		state,
@@ -881,10 +873,14 @@ static int get_stat(int pid, char * buffer)
 		tsk->mm ? tsk->mm->start_stack : 0,
 		esp,
 		eip,
-		signal_str,
-		blocked_str,
-		sigign_str,
-		sigcatch_str,
+		/* The signal information here is obsolete.
+		 * It must be decimal for Linux 2.0 compatibility.
+		 * Use /proc/#/status for real-time signals.
+		 */
+		tsk->signal .sig[0] & 0x7fffffffUL,
+		tsk->blocked.sig[0] & 0x7fffffffUL,
+		sigign      .sig[0] & 0x7fffffffUL,
+		sigcatch    .sig[0] & 0x7fffffffUL,
 		wchan,
 		tsk->nswap,
 		tsk->cnswap);

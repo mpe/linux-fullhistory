@@ -2,6 +2,8 @@
      *  24 bpp packed pixel (cfb24)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB24) || defined(CONFIG_FBCON_CFB24_MODULE)
 #define FBCON_HAS_CFB24

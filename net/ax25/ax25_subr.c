@@ -197,6 +197,8 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + ax25_addr_size(ax25->digipeat));
 
+	skb->nh.raw = skb->data;
+
 	/* Assume a response - address structure for DTE */
 	if (ax25->modulus == AX25_MODULUS) {
 		dptr = skb_put(skb, 1);

@@ -510,7 +510,7 @@ static void cleanup(struct ip_chain *chain,
 
 static inline void
 ip_fw_domatch(struct ip_fwkernel *f,
-	      const struct iphdr *ip, 
+	      struct iphdr *ip, 
 	      const char *rif,
 	      const ip_chainlabel label,
 	      struct sk_buff *skb,
@@ -522,6 +522,8 @@ ip_fw_domatch(struct ip_fwkernel *f,
 	if (f->ipfw.fw_flg & IP_FW_F_PRN) {
 		dump_packet(ip,rif,f,label,src_port,dst_port);
 	}
+	ip->tos = (ip->tos & f->ipfw.fw_tosand) ^ f->ipfw.fw_tosxor;
+
 /* This functionality is useless in stock 2.0.x series, but we don't
  * discard the mark thing altogether, to avoid breaking ipchains (and,
  * more importantly, the ipfwadm wrapper) --PR */

@@ -7,7 +7,7 @@
 #include <linux/errno.h>
 #include <linux/malloc.h>
 
-#include "i2c.h"
+#include <linux/i2c.h>
 #include <linux/videodev.h>
 
 #include "tuner.h"

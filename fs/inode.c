@@ -65,7 +65,7 @@ struct {
 	int dummy[4];
 } inodes_stat = {0, 0, 0,};
 
-int max_inodes = NR_INODE;
+int max_inodes;
 
 /*
  * Put the inode on the super block's dirty list.
@@ -537,6 +537,7 @@ add_new_inode:
 		inode->i_sb = NULL;
 		inode->i_dev = 0;
 		inode->i_ino = ++last_ino;
+		inode->i_flags = 0;
 		inode->i_count = 1;
 		inode->i_state = 0;
 		spin_unlock(&inode_lock);
@@ -733,11 +734,14 @@ int bmap(struct inode * inode, int block)
 }
 
 /*
- * Initialize the hash tables
+ * Initialize the hash tables and default
+ * value for max inodes..
  */
+#define MAX_INODE (8192)
+
 void inode_init(void)
 {
-	int i;
+	int i, max;
 	struct list_head *head = inode_hashtable;
 
 	i = HASH_SIZE;
@@ -746,6 +750,12 @@ void inode_init(void)
 		head++;
 		i--;
 	} while (i);
+
+	/* Initial guess at reasonable inode number */
+	max = num_physpages >> 1;
+	if (max > MAX_INODE)
+		max = MAX_INODE;
+	max_inodes = max;
 }
 
 /* This belongs in file_table.c, not here... */

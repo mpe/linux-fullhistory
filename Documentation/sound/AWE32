@@ -65,7 +65,7 @@ because the AWE32 driver is included in them.  ATTENTION!  In kernels 2.1.102,
 is not working. You should use the patch available at 
 http://members.xoom.com/yar/history.html. If you are using stable kernel
 releases 2.0.x, then get the latest version (3.8s9) of 
-OSS/Free at http://members.xoom.com/yar/ossfree38s9-linux20x.tar.gz
+OSS/Free at ftp://ftp.4front-tech.com/ossfree/ossfree38s9-linux20x.tar.gz
 and gunzip/untar it in /usr/src/ (assuming you keep your kernel source in
 /usr/src/linux).  Then go to /usr/src/linux/ and view the README file. That
 file contains info about kernel compilation and installation.
@@ -89,8 +89,8 @@ available as [y], select it as <M> (module))
 Now recompile the kernel (make dep; make (b)zImage; make modules; 
 make modules_install), update your boot loader and boot new kernel.
 
-6) Now download awesfx program 
-http://members.xoom.com/yar/awesfx-0.4.2.tgz here. Compile it.
+6) Now download awesfx program from
+http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/index.html#Latest. Compile it.
 Copy sfxload program to /bin (or /sbin if you wish). To enable AWE midi 
 synthesis you should also get the sound bank file for general midi from
 http://members.xoom.com/yar/synthgm.sbk.gz. Copy it to
@@ -110,7 +110,7 @@ That will enable the Sound Blaster and AWE wave synthesis.
 To play midi files you should get one of these programs:
 
 Playmidi 2.4 or higher: http://playmidi.openprojects.net
-Drvmidi 4.2.b: http://members.xoom.com/yar/awemidi-0.4.2b.tgz
+Drvmidi 4.2.b: http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/index.html#Latest
 
 (These are available at all major Linux FTP sites and may already be
  in your distribution)

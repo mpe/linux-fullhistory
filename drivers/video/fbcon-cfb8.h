@@ -2,6 +2,8 @@
      *  8 bpp packed pixel (cfb8)
      */
 
+#include <linux/config.h>
+
 #ifdef MODULE
 #if defined(CONFIG_FBCON_CFB8) || defined(CONFIG_FBCON_CFB8_MODULE)
 #define FBCON_HAS_CFB8

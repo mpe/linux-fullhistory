@@ -381,12 +381,13 @@ else
   endif
 endif                                             
 
-ifeq ($(CONFIG_MISC_RADIO),y)
-L_OBJS += radio.o
-  ifeq ($(CONFIG_RADIO_RTRACK),y)
-  L_OBJS += rtrack.o
+ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
+L_OBJS += radio-zoltrix.o
+else
+  ifeq ($(CONFIG_RADIO_ZOLTRIX),m)
+  M_OBJS += radio-zoltrix.o
   endif
-endif
+endif                                             
 
 ifeq ($(CONFIG_QIC02_TAPE),y)
 L_OBJS += tpqic02.o

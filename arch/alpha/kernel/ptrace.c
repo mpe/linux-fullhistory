@@ -23,13 +23,13 @@
 
 #ifdef DEBUG
 
-  enum {
-      DBG_MEM		= (1<<0),
-      DBG_BPT		= (1<<1),
-      DBG_MEM_ALL	= (1<<2)
-  };
+enum {
+	DBG_MEM		= (1<<0),
+	DBG_BPT		= (1<<1),
+	DBG_MEM_ALL	= (1<<2)
+};
 
-  int debug_mask = DBG_BPT;
+int debug_mask = DBG_BPT;
 
 # define DBG(fac,args)	{if ((fac) & debug_mask) printk args;}
 
@@ -150,7 +150,7 @@ static inline int put_reg(struct task_struct *task, long regno, long data)
  * no checking.
  */
 static unsigned long get_long(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr)
+			      struct vm_area_struct * vma, unsigned long addr)
 {
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
@@ -158,7 +158,7 @@ static unsigned long get_long(struct task_struct * tsk,
 	unsigned long page;
 
 	DBG(DBG_MEM_ALL, ("getting long at 0x%lx\n", addr));
-repeat:
+ repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
 		handle_mm_fault(tsk, vma, addr, 0);
@@ -185,7 +185,7 @@ repeat:
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
+	/* this is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
@@ -202,14 +202,14 @@ repeat:
  * even if a debugger scribbles breakpoints into it.  -M.U-
  */
 static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
-	unsigned long addr, unsigned long data)
+		     unsigned long addr, unsigned long data)
 {
 	pgd_t *pgdir;
 	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
 
-repeat:
+ repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
 		handle_mm_fault(tsk, vma, addr, 1);
@@ -240,11 +240,14 @@ repeat:
 		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
-/* this is a hack for non-kernel-mapped video buffers and similar */
+
+	/* This is a hack for non-kernel-mapped video buffers and similar.  */
 	if (MAP_NR(page) < max_mapnr)
 		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-/* this should also re-instate whatever read-only mode there was before */
+
+	/* We're bypassing pagetables, so we have to set the dirty bit
+	   ourselves.  This should also re-instate whatever read-only
+	   mode there was before.  */
 	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	flush_tlb();
 }
@@ -296,11 +299,11 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 		addr -= align;
 		low = get_long(tsk, vma, addr);
 		if (align) {
-		    unsigned long high;
+			unsigned long high;
 
-		    high = get_long(tsk, vma_high, addr + sizeof(long));
-		    low >>= align * 8;
-		    low  |= high << (64 - align * 8);
+			high = get_long(tsk, vma_high, addr + sizeof(long));
+			low >>= align * 8;
+			low  |= high << (64 - align * 8);
 		}
 		*result = low;
 	} else {
@@ -317,7 +320,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
  * within the task area. It then calls put_long() to write a long.
  */
 static int write_long(struct task_struct * tsk, unsigned long addr,
-	unsigned long data)
+		      unsigned long data)
 {
 	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
 
@@ -361,7 +364,7 @@ static int read_int(struct task_struct * tsk, unsigned long addr,
 
 	res = read_long(tsk, addr, &l);
 	if (res < 0)
-	  return res;
+		return res;
 
 	if (align == 0) {
 		*data = l;
@@ -388,7 +391,7 @@ static int write_int(struct task_struct * tsk, unsigned long addr,
 
 	res = read_long(tsk, addr, &l);
 	if (res < 0)
-	  return res;
+		return res;
 
 	if (align == 0) {
 		l = (l & 0xffffffff00000000UL) | ((unsigned long) data <<  0);
@@ -410,7 +413,7 @@ int ptrace_set_bpt(struct task_struct * child)
 	pc  = get_reg(child, REG_PC);
 	res = read_int(child, pc, &insn);
 	if (res < 0)
-	  return res;
+		return res;
 
 	op_code = insn >> 26;
 	if (op_code >= 0x30) {
@@ -423,31 +426,31 @@ int ptrace_set_bpt(struct task_struct * child)
 		 * branch (emulation can be tricky for fp branches).
 		 */
 		displ = ((s32)(insn << 11)) >> 9;
-		child->debugreg[nsaved++] = pc + 4;
+		child->tss.debugreg[nsaved++] = pc + 4;
 		if (displ)		/* guard against unoptimized code */
-		  child->debugreg[nsaved++] = pc + 4 + displ;
+			child->tss.debugreg[nsaved++] = pc + 4 + displ;
 		DBG(DBG_BPT, ("execing branch\n"));
 	} else if (op_code == 0x1a) {
 		reg_b = (insn >> 16) & 0x1f;
-		child->debugreg[nsaved++] = get_reg(child, reg_b);
+		child->tss.debugreg[nsaved++] = get_reg(child, reg_b);
 		DBG(DBG_BPT, ("execing jump\n"));
 	} else {
-		child->debugreg[nsaved++] = pc + 4;
+		child->tss.debugreg[nsaved++] = pc + 4;
 		DBG(DBG_BPT, ("execing normal insn\n"));
 	}
 
 	/* install breakpoints: */
 	for (i = 0; i < nsaved; ++i) {
-		res = read_int(child, child->debugreg[i], &insn);
+		res = read_int(child, child->tss.debugreg[i], &insn);
 		if (res < 0)
-		  return res;
-		child->debugreg[i + 2] = insn;
-		DBG(DBG_BPT, ("    -> next_pc=%lx\n", child->debugreg[i]));
-		res = write_int(child, child->debugreg[i], BREAKINST);
+			return res;
+		child->tss.debugreg[i + 2] = insn;
+		DBG(DBG_BPT, ("    -> next_pc=%lx\n", child->tss.debugreg[i]));
+		res = write_int(child, child->tss.debugreg[i], BREAKINST);
 		if (res < 0)
-		  return res;
+			return res;
 	}
-	child->debugreg[4] = nsaved;
+	child->tss.debugreg[4] = nsaved;
 	return 0;
 }
 
@@ -457,17 +460,18 @@ int ptrace_set_bpt(struct task_struct * child)
  */
 int ptrace_cancel_bpt(struct task_struct * child)
 {
-	int i, nsaved = child->debugreg[4];
+	int i, nsaved = child->tss.debugreg[4];
 
-	child->debugreg[4] = 0;
+	child->tss.debugreg[4] = 0;
 
 	if (nsaved > 2) {
-	    printk("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
-	    nsaved = 2;
+		printk("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
+		nsaved = 2;
 	}
 
 	for (i = 0; i < nsaved; ++i) {
-		write_int(child, child->debugreg[i], child->debugreg[i + 2]);
+		write_int(child, child->tss.debugreg[i],
+			  child->tss.debugreg[i + 2]);
 	}
 	return (nsaved != 0);
 }
@@ -506,7 +510,8 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 		     (current->uid != child->uid) ||
 		     (current->gid != child->egid) ||
 		     (current->gid != child->sgid) ||
-		     (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
+		     (current->gid != child->gid))
+		    && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
@@ -537,107 +542,107 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 	}
 
 	switch (request) {
-	/* when I and D space are separate, these will need to be fixed. */
-		case PTRACE_PEEKTEXT: /* read word at location addr. */
-		case PTRACE_PEEKDATA: {
-			unsigned long tmp;
+	/* When I and D space are separate, these will need to be fixed.  */
+	case PTRACE_PEEKTEXT: /* read word at location addr. */
+	case PTRACE_PEEKDATA: {
+		unsigned long tmp;
 
-			ret = read_long(child, addr, &tmp);
-			DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
-			if (ret < 0)
-				goto out;
-			regs.r0 = 0;	/* special return: no errors */
-			ret = tmp;
+		ret = read_long(child, addr, &tmp);
+		DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
+		if (ret < 0)
 			goto out;
-		}
+		regs.r0 = 0;	/* special return: no errors */
+		ret = tmp;
+		goto out;
+	}
 
 	/* read register number ADDR. */
-		case PTRACE_PEEKUSR:
-			regs.r0 = 0;	/* special return: no errors */
-			DBG(DBG_MEM, ("peek $%ld=%#lx\n", addr, regs.r0));
-			ret = get_reg(child, addr);
-			goto out;
+	case PTRACE_PEEKUSR:
+		regs.r0 = 0;	/* special return: no errors */
+		DBG(DBG_MEM, ("peek $%ld=%#lx\n", addr, regs.r0));
+		ret = get_reg(child, addr);
+		goto out;
 
-	/* when I and D space are separate, this will have to be fixed. */
-		case PTRACE_POKETEXT: /* write the word at location addr. */
-		case PTRACE_POKEDATA:
-			DBG(DBG_MEM, ("poke %#lx<-%#lx\n", addr, data));
-			ret = write_long(child, addr, data);
-			goto out;
+	/* When I and D space are separate, this will have to be fixed.  */
+	case PTRACE_POKETEXT: /* write the word at location addr. */
+	case PTRACE_POKEDATA:
+		DBG(DBG_MEM, ("poke %#lx<-%#lx\n", addr, data));
+		ret = write_long(child, addr, data);
+		goto out;
 
-		case PTRACE_POKEUSR: /* write the specified register */
-			DBG(DBG_MEM, ("poke $%ld<-%#lx\n", addr, data));
-			ret = put_reg(child, addr, data);
-			goto out;
+	case PTRACE_POKEUSR: /* write the specified register */
+		DBG(DBG_MEM, ("poke $%ld<-%#lx\n", addr, data));
+		ret = put_reg(child, addr, data);
+		goto out;
 
-		case PTRACE_SYSCALL: /* continue and stop at next
-					(return from) syscall */
-		case PTRACE_CONT: { /* restart after signal. */
-			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			if (request == PTRACE_SYSCALL)
-				child->flags |= PF_TRACESYS;
-			else
-				child->flags &= ~PF_TRACESYS;
-			child->exit_code = data;
-			wake_up_process(child);
-        /* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt(child);
-			ret = data;
+	case PTRACE_SYSCALL: /* continue and stop at next
+				(return from) syscall */
+	case PTRACE_CONT: { /* restart after signal. */
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
 			goto out;
-		}
-
-/*
- * make the child exit.  Best I can do is send it a sigkill.
- * perhaps it should be put in the status that it wants to
- * exit.
- */
-		case PTRACE_KILL: {
-			if (child->state != TASK_ZOMBIE) {
-				wake_up_process(child);
-				child->exit_code = SIGKILL;
-			}
-        /* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt(child);
-			ret = 0;
-			goto out;
-		}
-
-		case PTRACE_SINGLESTEP: {  /* execute single instruction. */
-			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->debugreg[4] = -1;	/* mark single-stepping */
+		if (request == PTRACE_SYSCALL)
+			child->flags |= PF_TRACESYS;
+		else
 			child->flags &= ~PF_TRACESYS;
-			wake_up_process(child);
-			child->exit_code = data;
-	/* give it a chance to run. */
-			ret = 0;
-			goto out;
-		}
+		child->exit_code = data;
+		wake_up_process(child);
+		/* make sure single-step breakpoint is gone. */
+		ptrace_cancel_bpt(child);
+		ret = data;
+		goto out;
+	}
 
-		case PTRACE_DETACH: { /* detach a process that was attached. */
-			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+	/*
+	 * Make the child exit.  Best I can do is send it a sigkill.
+	 * perhaps it should be put in the status that it wants to
+	 * exit.
+	 */
+	case PTRACE_KILL: {
+		if (child->state != TASK_ZOMBIE) {
 			wake_up_process(child);
-			child->exit_code = data;
-			REMOVE_LINKS(child);
-			child->p_pptr = child->p_opptr;
-			SET_LINKS(child);
-			/* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt(child);
-			ret = 0;
-			goto out;
+			child->exit_code = SIGKILL;
 		}
+		/* make sure single-step breakpoint is gone. */
+		ptrace_cancel_bpt(child);
+		ret = 0;
+		goto out;
+	}
 
-		default:
-		  ret = -EIO;
-		  goto out;
-	  }
-out:
+	case PTRACE_SINGLESTEP: {  /* execute single instruction. */
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
+			goto out;
+		child->tss.debugreg[4] = -1;	/* mark single-stepping */
+		child->flags &= ~PF_TRACESYS;
+		wake_up_process(child);
+		child->exit_code = data;
+		/* give it a chance to run. */
+		ret = 0;
+		goto out;
+	}
+
+	case PTRACE_DETACH: { /* detach a process that was attached. */
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
+			goto out;
+		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		wake_up_process(child);
+		child->exit_code = data;
+		REMOVE_LINKS(child);
+		child->p_pptr = child->p_opptr;
+		SET_LINKS(child);
+		/* make sure single-step breakpoint is gone. */
+		ptrace_cancel_bpt(child);
+		ret = 0;
+		goto out;
+	}
+
+	default:
+		ret = -EIO;
+		goto out;
+	}
+ out:
 	unlock_kernel();
 	return ret;
 }
@@ -645,7 +650,7 @@ out:
 asmlinkage void syscall_trace(void)
 {
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-			!= (PF_PTRACED|PF_TRACESYS))
+	    != (PF_PTRACED|PF_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

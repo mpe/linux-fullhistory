@@ -15,8 +15,6 @@
  */
 #define CUR_DEFAULT CUR_UNDERLINE
 
-#include <linux/config.h>
-
 #define NPAR 16
 
 struct vc_data {

@@ -1,8 +1,17 @@
 /*********************************************************************
  *
- * msnd_pinnacle.c - Support for Turtle Beach Pinnacle and Fiji
- *
  * Turtle Beach MultiSound Sound Card Driver for Linux
+ * Linux 2.0/2.2 Version
+ *
+ * msnd_pinnacle.c / msnd_classic.c
+ *
+ * -- If MSND_CLASSIC is defined:
+ *
+ *     -> driver for Turtle Beach Classic/Monterey/Tahiti
+ *
+ * -- Else
+ *
+ *     -> driver for Turtle Beach Pinnacle/Fiji
  *
  * Copyright (C) 1998 Andrew Veliath
  *
@@ -20,22 +29,36 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.2 1998/06/09 20:37:39 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.5 1998/07/18 00:12:16 andrewtv Exp $
  *
  ********************************************************************/
 
 #include <linux/config.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < 0x020101
+#  define LINUX20
+#endif
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/types.h>
 #include <linux/delay.h>
-#include <linux/init.h>
+#ifndef LINUX20
+#  include <linux/init.h>
+#endif
 #include "sound_config.h"
 #include "sound_firmware.h"
+#ifdef MSND_CLASSIC
+#  define SLOWIO
+#endif
 #include "msnd.h"
-#include "msnd_pinnacle.h"
+#ifdef MSND_CLASSIC
+#  include "msnd_classic.h"
+#  define LOGNAME			"msnd_classic"
+#else
+#  include "msnd_pinnacle.h"
+#  define LOGNAME			"msnd_pinnacle"
+#endif
 
-#define LOGNAME				"msnd_pinnacle"
 #define DEVNAME				dev.name
 #define MIXERMINOR			dev.mixer_minor
 #define DSPMINOR			dev.dsp_minor
@@ -111,7 +134,7 @@ static void reset_queues(void)
 
 static int dsp_ioctl(unsigned int cmd, unsigned long arg)
 {
-	int val, i, data;
+	int val, i, data, tmp;
 	LPDAQD lpDAQ, lpDARQ;
 
 	lpDAQ = (LPDAQD)(dev.base + DAPQ_DATA_BUFF);
@@ -139,8 +162,9 @@ static int dsp_ioctl(unsigned int cmd, unsigned long arg)
 		
 	case SNDCTL_DSP_GETBLKSIZE:
 
-		if (put_user(dev.fifosize / 4, (int *)arg))
-			return -EFAULT;
+		tmp = dev.fifosize / 4;
+		if (put_user(tmp, (int *)arg))
+                        return -EFAULT;
 
 		return 0;
 
@@ -283,7 +307,9 @@ static int mixer_get(int d)
 	case SOUND_MIXER_SYNTH:
 	case SOUND_MIXER_PCM:
 	case SOUND_MIXER_LINE:
+#ifndef MSND_CLASSIC
 	case SOUND_MIXER_MIC:
+#endif
 	case SOUND_MIXER_IMIX:
 	case SOUND_MIXER_LINE1:
 		return (dev.left_levels[d] >> 8) * 100 / 0xff | 
@@ -332,12 +358,14 @@ static int mixer_set(int d, int value)
 			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
 
+#ifndef MSND_CLASSIC
 	case SOUND_MIXER_MIC:			/* mic pot control */
 		writeb(bLeft, &dev.SMA->bMicPotPosLeft);
 		writeb(bRight, &dev.SMA->bMicPotPosRight);
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_MIC_SET_POTS) == 0)
 			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 		break;
+#endif
 
 	case SOUND_MIXER_LINE1:			/* line pot control */
 		writeb(bLeft, &dev.SMA->bAuxPotPosLeft);
@@ -359,7 +387,9 @@ static int mixer_set(int d, int value)
 	/* update digital controls for master volume */
 	update_vol(SOUND_MIXER_PCM, wCurrPlayVol, 1);
 	update_vol(SOUND_MIXER_IMIX, wCurrInVol, 1);
+#ifndef MSND_CLASSIC
 	update_vol(SOUND_MIXER_SYNTH, wCurrMHdrVol, 1);
+#endif
 	
 	return mixer_get(d);
 }
@@ -373,6 +403,7 @@ static unsigned long set_recsrc(unsigned long recsrc)
 #endif
 		dev.recsrc ^= recsrc;
 
+#ifndef MSND_CLASSIC
 	if (dev.recsrc & SOUND_MASK_LINE) {
 
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) == 0)
@@ -395,6 +426,7 @@ static unsigned long set_recsrc(unsigned long recsrc)
 			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 #endif
 	}
+#endif /* MSND_CLASSIC */
 
 	return dev.recsrc;
 }
@@ -432,16 +464,22 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 			case SOUND_MIXER_DEVMASK:
 			case SOUND_MIXER_STEREODEVS:
 				val =   SOUND_MASK_VOLUME |
+#ifndef MSND_CLASSIC
 					SOUND_MASK_SYNTH |
+					SOUND_MASK_MIC |
+#endif
 					SOUND_MASK_PCM |
 					SOUND_MASK_LINE |
-					SOUND_MASK_IMIX |
-					SOUND_MASK_MIC;
+					SOUND_MASK_IMIX;
 				break;
 				  
 			case SOUND_MIXER_RECMASK:
+#ifdef MSND_CLASSIC
+				val =   0;
+#else
 				val =   SOUND_MASK_LINE |
 					SOUND_MASK_SYNTH;
+#endif
 				break;
 				  
 			case SOUND_MIXER_CAPS:
@@ -476,15 +514,23 @@ static int dev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 static void dsp_halt(void)
 {
 	mdelay(1);
+#ifdef LINUX20
+	if (test_bit(F_READING, &dev.flags)) {
+		clear_bit(F_READING, &dev.flags);
+#else
 	if (test_and_clear_bit(F_READING, &dev.flags)) {
-
+#endif
 		msnd_send_dsp_cmd(&dev, HDEX_RECORD_STOP);
 		msnd_disable_irq(&dev);
 
 	}
 	mdelay(1);
+#ifdef LINUX20
+	if (test_bit(F_WRITING, &dev.flags)) {
+		clear_bit(F_WRITING, &dev.flags);
+#else
 	if (test_and_clear_bit(F_WRITING, &dev.flags)) {
-
+#endif
 		set_bit(F_WRITEFLUSH, &dev.flags);
 		interruptible_sleep_on(&dev.writeflush);
 		current->state = TASK_INTERRUPTIBLE;
@@ -540,23 +586,37 @@ static int dev_open(struct inode *inode, struct file *file)
 	return err;
 }
 
+#ifdef LINUX20
+static void dev_close(struct inode *inode, struct file *file)
+#else
 static int dev_close(struct inode *inode, struct file *file)
+#endif
 {
 	int minor = MINOR(inode->i_rdev);
+#ifndef LINUX20
 	int err = 0;
+#endif
 
 	if (minor == DSPMINOR) {
-		err = dsp_close();
+#ifndef LINUX20
+		err = 
+#endif
+			dsp_close();
 	}
 	else if (minor == MIXERMINOR) {
 		/* nothing */
-	} else
+	}
+#ifndef LINUX20
+	else
 		err = -EINVAL;
 
 	if (err >= 0)
+#endif
 		MOD_DEC_USE_COUNT;
-	
+
+#ifndef LINUX20	
 	return err;
+#endif
 }
 
 static int DAPF_to_bank(int bank)
@@ -586,9 +646,13 @@ static int dsp_read(char *buf, size_t len)
 
 		buf += n;
 		count -= n;
-		
-		if (!test_and_set_bit(F_READING, &dev.flags) && (dev.mode & FMODE_READ)) {
 
+#ifdef LINUX20		
+		if (!test_bit(F_READING, &dev.flags) && (dev.mode & FMODE_READ)) {
+			set_bit(F_READING, &dev.flags);
+#else
+		if (!test_and_set_bit(F_READING, &dev.flags) && (dev.mode & FMODE_READ)) {
+#endif
 			reset_record_queue();
 			msnd_enable_irq(&dev);
 			msnd_send_dsp_cmd(&dev, HDEX_RECORD_START);
@@ -634,8 +698,12 @@ static int dsp_write(const char *buf, size_t len)
 		buf += n;
 		count -= n;
 
+#ifdef LINUX20
+		if (!test_bit(F_WRITING, &dev.flags) && (dev.mode & FMODE_WRITE)) {
+			set_bit(F_WRITING, &dev.flags);
+#else
 		if (!test_and_set_bit(F_WRITING, &dev.flags) && (dev.mode & FMODE_WRITE)) {
-			
+#endif
 			reset_play_queue();
 			msnd_enable_irq(&dev);
 			msnd_send_dsp_cmd(&dev, HDEX_PLAY_START);
@@ -663,9 +731,15 @@ static int dsp_write(const char *buf, size_t len)
 	return len - count;
 }
 
+#ifdef LINUX20
+static int dev_read(struct inode *inode, struct file *file, char *buf, int count)
+{
+       int minor = MINOR(inode->i_rdev);
+#else
 static ssize_t dev_read(struct file *file, char *buf, size_t count, loff_t *off)
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+#endif
 
 	if (minor == DSPMINOR) {
 
@@ -675,9 +749,15 @@ static ssize_t dev_read(struct file *file, char *buf, size_t count, loff_t *off)
 		return -EINVAL;
 }
 
+#ifdef LINUX20
+static int dev_write(struct inode *inode, struct file *file, const char *buf, int count)
+{
+	int minor = MINOR(inode->i_rdev);
+#else
 static ssize_t dev_write(struct file *file, const char *buf, size_t count, loff_t *off)
 {
 	int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+#endif
 
 	if (minor == DSPMINOR) {
 
@@ -716,8 +796,15 @@ static void eval_dsp_msg(WORD wMessage)
 			else if (!test_bit(F_WRITEBLOCK, &dev.flags)) {
 
 				clear_bit(F_WRITING, &dev.flags);
+#ifdef LINUX20
+				if (test_bit(F_WRITEFLUSH, &dev.flags)) {
+					clear_bit(F_WRITEFLUSH, &dev.flags);
+					wake_up_interruptible(&dev.writeflush);
+				}
+#else
 				if (test_and_clear_bit(F_WRITEFLUSH, &dev.flags))
 					wake_up_interruptible(&dev.writeflush);
+#endif
 				msnd_disable_irq(&dev);
 
 			}
@@ -759,7 +846,9 @@ static void eval_dsp_msg(WORD wMessage)
 
 	case HIMT_DSP:
 		switch (LOBYTE(wMessage)) {
+#ifndef MSND_CLASSIC
 		case HIDSP_PLAY_UNDER:
+#endif
 		case HIDSP_INT_PLAY_UNDER:
 			printk(KERN_INFO LOGNAME ": Write underflow\n");
 			reset_play_queue();
@@ -858,9 +947,11 @@ __initfunc(static int reset_dsp(void))
 
 __initfunc(static int probe_multisound(void))
 {
+#ifndef MSND_CLASSIC
 	char *xv, *rev = NULL;
 	char *pin = "Pinnacle", *fiji = "Fiji";
 	char *pinfiji = "Pinnacle/Fiji";
+#endif
 
 	if (check_region(dev.io, dev.numio)) {
 		
@@ -878,6 +969,10 @@ __initfunc(static int probe_multisound(void))
 
 	printk(KERN_INFO LOGNAME ": DSP reset successful\n");
 
+#ifdef MSND_CLASSIC
+	dev.name = "Classic/Tahiti/Monterey";
+	printk(KERN_INFO LOGNAME ": Turtle Beach %s, "
+#else
 	switch (dev.info >> 4) {
 	case 0xf: xv = "<= 1.15"; break;
 	case 0x1: xv = "1.18/1.2"; break;
@@ -899,11 +994,13 @@ __initfunc(static int probe_multisound(void))
 		dev.name = pinfiji;
 		break;
 	}
-
 	printk(KERN_INFO LOGNAME ": Turtle Beach %s revision %s, Xilinx version %s, "
+#endif /* MSND_CLASSIC */
 	       "I/O 0x%x-0x%x, IRQ %d, memory mapped to 0x%p-0x%p\n",
 	       dev.name,
+#ifndef MSND_CLASSIC
 	       rev, xv,
+#endif
 	       dev.io, dev.io + dev.numio - 1,
 	       dev.irq,
 	       dev.base, dev.base + 0x7fff);
@@ -918,6 +1015,9 @@ __initfunc(static int init_sma(void))
 	int n;
 	LPDAQD lpDAQ;
 
+#ifdef MSND_CLASSIC
+	outb(dev.memid, dev.io + HP_MEMM);
+#endif
 	outb(HPBLKSEL_0, dev.io + HP_BLKS);
 	memset_io(dev.base, 0, 0x8000);
 	
@@ -1007,8 +1107,10 @@ __initfunc(static int init_sma(void))
 	writew(0, &dev.SMA->wCurrMastVolLeft);
 	writew(0, &dev.SMA->wCurrMastVolRight);
 
+#ifndef MSND_CLASSIC
 	writel(0x00010000, &dev.SMA->dwCurrPlayPitch);
 	writel(0x00000001, &dev.SMA->dwCurrPlayRate);
+#endif
 
 	writew(0x0000, &dev.SMA->wCurrDSPStatusFlags);
 	writew(0x0000, &dev.SMA->wCurrHostStatusFlags);
@@ -1023,10 +1125,12 @@ __initfunc(static int init_sma(void))
 	writeb(0, &dev.SMA->bAuxPotPosRight);
 	writeb(0, &dev.SMA->bAuxPotPosLeft);
 
+#ifndef MSND_CLASSIC
 	writew(1, &dev.SMA->wCurrPlayFormat);
 	writew(dev.sample_size, &dev.SMA->wCurrPlaySampleSize);
 	writew(dev.channels, &dev.SMA->wCurrPlayChannels);
 	writew(dev.sample_rate, &dev.SMA->wCurrPlaySampleRate);
+#endif
 	writew(dev.sample_rate, &dev.SMA->wCalFreqAtoD);
 
 	return 0;
@@ -1102,9 +1206,26 @@ __initfunc(static int upload_dsp_code(void))
 	return 0;
 }
 
+#ifdef MSND_CLASSIC
+__initfunc(static void reset_proteus(void))
+{
+	outb(HPPRORESET_ON, dev.io + HP_PROR);
+	mdelay(TIME_PRO_RESET);
+	outb(HPPRORESET_OFF, dev.io + HP_PROR);
+	mdelay(TIME_PRO_RESET_DONE);
+}
+#endif
+
 __initfunc(static int initialize(void))
 {
 	int err, timeout;
+
+#ifdef MSND_CLASSIC
+	outb(HPWAITSTATE_0, dev.io + HP_WAIT);
+	outb(HPBITMODE_16, dev.io + HP_BITM);
+
+	reset_proteus();
+#endif
 
 	if ((err = init_sma()) < 0) {
 
@@ -1229,14 +1350,24 @@ static int fifosize __initdata =	DEFFIFOSIZE;
 static int calibrate_signal __initdata;
 
 int init_module(void)
+#else /* not a module */
+#ifdef MSND_CLASSIC
+static int io __initdata =		CONFIG_MSNDCLAS_IO;
+static int irq __initdata =		CONFIG_MSNDCLAS_IRQ;
+static int mem __initdata =		CONFIG_MSNDCLAS_MEM;
 #else
 static int io __initdata =		CONFIG_MSNDPIN_IO;
 static int irq __initdata =		CONFIG_MSNDPIN_IRQ;
 static int mem __initdata =		CONFIG_MSNDPIN_MEM;
+#endif
 static int fifosize __initdata =	DEFFIFOSIZE;
 static int calibrate_signal __initdata;
 
+#ifdef MSND_CLASSIC
+__initfunc(int msnd_classic_init(void))
+#else
 __initfunc(int msnd_pinnacle_init(void))
+#endif /* MSND_CLASSIC */
 #endif
 {
 	int err;
@@ -1288,13 +1419,37 @@ __initfunc(int msnd_pinnacle_init(void))
 		return -EINVAL;
 	}
 
+#ifdef MSND_CLASSIC
+	switch (irq) {
+	case 5: dev.irqid = HPIRQ_5; break;
+	case 7: dev.irqid = HPIRQ_7; break;
+	case 9: dev.irqid = HPIRQ_9; break;
+	case 10: dev.irqid = HPIRQ_10; break;
+	case 11: dev.irqid = HPIRQ_11; break;
+	case 12: dev.irqid = HPIRQ_12; break;
+	}
+
+	switch (mem) {
+	case 0xb0000: dev.memid = HPMEM_B000; break;
+	case 0xc8000: dev.memid = HPMEM_C800; break;
+	case 0xd0000: dev.memid = HPMEM_D000; break;
+	case 0xd8000: dev.memid = HPMEM_D800; break;
+	case 0xe0000: dev.memid = HPMEM_E000; break;
+	case 0xe8000: dev.memid = HPMEM_E800; break;
+	}
+#endif /* MSND_CLASSIC */
+
 	if (fifosize < 16)
 		fifosize = 16;
 
 	if (fifosize > 768)
 		fifosize = 768;
 
+#ifdef MSND_CLASSIC
+	dev.type = msndClassic;
+#else
 	dev.type = msndPinnacle;
+#endif
 	dev.io = io;
 	dev.numio = DSP_NUMIO;
 	dev.irq = irq;
@@ -1310,7 +1465,9 @@ __initfunc(int msnd_pinnacle_init(void))
 	init_waitqueue(&dev.writeflush);
 	msnd_fifo_init(&dev.DAPF);
 	msnd_fifo_init(&dev.DARF);
+#ifndef LINUX20
 	spin_lock_init(&dev.lock);
+#endif
 
 	printk(KERN_INFO LOGNAME ": Using %u byte digital audio FIFOs (x2)\n", dev.fifosize);
 
@@ -1349,7 +1506,6 @@ __initfunc(int msnd_pinnacle_init(void))
 }
 
 #ifdef MODULE
-
 void cleanup_module(void)
 {
 	printk(KERN_INFO LOGNAME ": Unloading\n");

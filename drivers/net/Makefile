@@ -279,13 +279,11 @@ ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
   ifeq ($(CONFIG_SLIP_COMPRESSED),y)
   CONFIG_SLHC_BUILTIN = y
-  CONFIG_PPPDEF_BUILTIN = y
   endif
 else
   ifeq ($(CONFIG_SLIP),m)
     ifeq ($(CONFIG_SLIP_COMPRESSED),y)
     CONFIG_SLHC_MODULE = y
-    CONFIG_PPPDEF_MODULE = y
   endif
   M_OBJS += slip.o
   endif

@@ -628,16 +628,16 @@ wavefront_cmd (wf_config *hw, int cmd,
 /***********************************************************************
 WaveFront: data munging   
 
-Things here are wierd. All data written to the board cannot 
-have its most significant bit set. Any data item with values 
+Things here are weird.  All data written to the board cannot 
+have its most significant bit set.  Any data item with values 
 potentially > 0x7F (127) must be split across multiple bytes.
 
 Sometimes, we need to munge numeric values that are represented on
-the x86 side as 8-32 bit values. Sometimes, we need to munge data
-that is represented on the x86 side as an array of bytes. The most
+the x86 side as 8- to 32-bit values.  Sometimes, we need to munge data
+that is represented on the x86 side as an array of bytes.  The most
 efficient approach to handling both cases seems to be to use 2
-different functions for munging and 2 for de-munging. This avoids
-wierd casting and worrying about bit-level offsets.
+different functions for munging and 2 for de-munging.  This avoids
+weird casting and worrying about bit-level offsets.
 
 **********************************************************************/
 
@@ -1151,14 +1151,14 @@ wavefront_send_sample (wf_config      *hw,
 	shptr = munge_int32 (*((UINT32 *) &header->hdr.s.sampleEndOffset),
 			     shptr, 4);
 	
-	/* This one is truly wierd. What kind of wierdo decided that in
-	   a system dominated by 16 and 32 bit integers, they would use
-	   a 12 bit transfer size ?
+	/* This one is truly weird.  What kind of weirdo decided that in
+	   a system dominated by 16- and 32-bit integers, they would use
+	   a 12-bit transfer size ?
 	*/
 	
 	shptr = munge_int32 (header->hdr.s.FrequencyBias, shptr, 3);
 	
-	/* Why is this nybblified, when the MSB is *always* zero ? 
+	/* Why is this nybblified, when the MSB is *always* zero? 
 	   Anyway, we can't take address of bitfield, so make a
 	   good-faith guess at where it starts.
 	*/
@@ -2897,14 +2897,14 @@ wffx_ioctl (struct wf_config *hw, wavefront_fx_info *r)
 
 /* YSS225 initialization.
 
-   This code was developed using DOSEMU. The Turtle Beach SETUPSND
-   utility was run with I/O tracing in DOSEMU enabled, and a reconstruction
+   This code was developed using DOSEmu.  The Turtle Beach SETUPSND
+   utility was run with I/O tracing in DOSEmu enabled, and a reconstruction
    of the port I/O done, using the Yamaha faxback document as a guide
-   to add more logic to the code. Its really pretty wierd.
+   to add more logic to the code.  It's really pretty weird.
 
    There was an alternative approach of just dumping the whole I/O
    sequence as a series of port/value pairs and a simple loop
-   that output it. However, I hope that eventually I'll get more
+   that output it.  However, I hope that eventually I'll get more
    control over what this code does, and so I tried to stick with
    a somewhat "algorithmic" approach.
 */
@@ -3380,7 +3380,7 @@ int init_module (void)
 
 {
 	printk ("Turtle Beach WaveFront Driver\n"
-		"Copyright (C) by Hannu Solvainen, "
+		"Copyright (C) by Hannu Savolainen, "
 		"Paul Barton-Davis 1993-1998.\n");
 
 	if (io == -1 || irq == -1) {

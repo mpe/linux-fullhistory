@@ -45,14 +45,21 @@ struct thread_struct {
 	unsigned long pal_flags;
 	unsigned long res1, res2;
 
-	/* the fields below are Linux-specific: */
-	/* bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h) */
-	/* bit 6..8: UAC bits (see sysinfo.h) */
-	/* bit 17..21: IEEE_STATUS_MASK bits (see fpu.h) */
-	/* bit 63: die_if_kernel recursion lock */
+	/*
+	 * The fields below are Linux-specific:
+	 *
+	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
+	 * bit 6..8: UAC bits (see sysinfo.h)
+	 * bit 17..21: IEEE_STATUS_MASK bits (see fpu.h)
+	 * bit 63: die_if_kernel recursion lock
+	 */
 	unsigned long flags;
-	/* perform syscall argument validation (get/set_fs) */
+
+	/* Perform syscall argument validation (get/set_fs). */
 	mm_segment_t fs;
+
+	/* Breakpoint handling for ptrace.  */
+	long debugreg[8];
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \

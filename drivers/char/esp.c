@@ -65,7 +65,7 @@
 #include <linux/malloc.h>
 #include <asm/uaccess.h>
 
-#include "esp.h"
+#include <linux/hayesesp.h>
 
 #define NR_PORTS 64	/* maximum number of ports */
 #define NR_PRIMARY 8	/* maximum number of primary ports */
@@ -74,12 +74,13 @@
 static int irq[NR_PRIMARY] = {0,0,0,0,0,0,0,0};	/* IRQ for each base port */
 static unsigned int divisor[NR_PRIMARY] = {0,0,0,0,0,0,0,0};
 	/* custom divisor for each port */
-static unsigned int dma = CONFIG_ESPSERIAL_DMA_CHANNEL; /* DMA channel */
-static unsigned int rx_trigger = CONFIG_ESPSERIAL_RX_TRIGGER;
-static unsigned int tx_trigger = CONFIG_ESPSERIAL_TX_TRIGGER;
-static unsigned int flow_off = CONFIG_ESPSERIAL_FLOW_OFF;
-static unsigned int flow_on = CONFIG_ESPSERIAL_FLOW_ON;
-static unsigned int rx_timeout = CONFIG_ESPSERIAL_RX_TMOUT;
+static unsigned int dma = ESP_DMA_CHANNEL; /* DMA channel */
+static unsigned int rx_trigger = ESP_RX_TRIGGER;
+static unsigned int tx_trigger = ESP_TX_TRIGGER;
+static unsigned int flow_off = ESP_FLOW_OFF;
+static unsigned int flow_on = ESP_FLOW_ON;
+static unsigned int rx_timeout = ESP_RX_TMOUT;
+static unsigned int pio_threshold = ESP_PIO_THRESHOLD;
 
 MODULE_PARM(irq, "1-8i");
 MODULE_PARM(divisor, "1-8i");
@@ -89,6 +90,8 @@ MODULE_PARM(tx_trigger, "i");
 MODULE_PARM(flow_off, "i");
 MODULE_PARM(flow_on, "i");
 MODULE_PARM(rx_timeout, "i");
+MODULE_PARM(pio_threshold, "i");
+
 /* END */
 
 static char *dma_buffer;
@@ -100,7 +103,7 @@ static struct esp_pio_buffer *free_pio_buf;
 #define WAKEUP_CHARS 1024
 
 static char *serial_name = "ESP serial driver";
-static char *serial_version = "2.0";
+static char *serial_version = "2.1";
 
 static DECLARE_TASK_QUEUE(tq_esp);
 
@@ -696,7 +699,7 @@ static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 		if (num_bytes) {
 			if (dma_bytes ||
 			    (info->stat_flags & ESP_STAT_USE_PIO) ||
-			    (num_bytes <= ESP_PIO_THRESHOLD))
+			    (num_bytes <= info->config.pio_threshold))
 				receive_chars_pio(info, num_bytes);
 			else
 				receive_chars_dma(info, num_bytes);
@@ -723,7 +726,7 @@ static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 			if (num_bytes) {
 				if (dma_bytes ||
 				    (info->stat_flags & ESP_STAT_USE_PIO) ||
-				    (num_bytes <= ESP_PIO_THRESHOLD))
+				    (num_bytes <= info->config.pio_threshold))
 					transmit_chars_pio(info, num_bytes);
 				else
 					transmit_chars_dma(info, num_bytes);
@@ -853,10 +856,10 @@ static _INLINE_ void esp_basic_init(struct esp_struct * info)
 
 	/* set FIFO trigger levels */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_TRIGGER);
-	serial_out(info, UART_ESI_CMD2, rx_trigger >> 8);
-	serial_out(info, UART_ESI_CMD2, rx_trigger);
-	serial_out(info, UART_ESI_CMD2, tx_trigger >> 8);
-	serial_out(info, UART_ESI_CMD2, tx_trigger);
+	serial_out(info, UART_ESI_CMD2, info->config.rx_trigger >> 8);
+	serial_out(info, UART_ESI_CMD2, info->config.rx_trigger);
+	serial_out(info, UART_ESI_CMD2, info->config.tx_trigger >> 8);
+	serial_out(info, UART_ESI_CMD2, info->config.tx_trigger);
 
 	/* Set clock scaling and wait states */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_PRESCALAR);
@@ -910,7 +913,7 @@ static int startup(struct esp_struct * info)
 
 	/* set receive character timeout */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_RX_TIMEOUT);
-	serial_out(info, UART_ESI_CMD2, rx_timeout);
+	serial_out(info, UART_ESI_CMD2, info->config.rx_timeout);
 
 	/* clear all flags except the "never DMA" flag */
 	info->stat_flags &= ESP_STAT_NEVER_DMA;
@@ -1229,10 +1232,10 @@ static void change_speed(struct esp_struct *info)
 
 	/* Set high/low water */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_FLOW_LVL);
-	serial_out(info, UART_ESI_CMD2, flow_off >> 8);
-	serial_out(info, UART_ESI_CMD2, flow_off);
-	serial_out(info, UART_ESI_CMD2, flow_on >> 8);
-	serial_out(info, UART_ESI_CMD2, flow_on);
+	serial_out(info, UART_ESI_CMD2, info->config.flow_off >> 8);
+	serial_out(info, UART_ESI_CMD2, info->config.flow_off);
+	serial_out(info, UART_ESI_CMD2, info->config.flow_on >> 8);
+	serial_out(info, UART_ESI_CMD2, info->config.flow_on);
 
 	restore_flags(flags);
 }
@@ -1283,10 +1286,10 @@ static void rs_flush_chars(struct tty_struct *tty)
 static int rs_write(struct tty_struct * tty, int from_user,
 		    const unsigned char *buf, int count)
 {
-	int	c, ret = 0;
+	int	c, t, ret = 0;
 	struct esp_struct *info = (struct esp_struct *)tty->driver_data;
 	unsigned long flags;
-				
+
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
 		return 0;
 
@@ -1295,40 +1298,56 @@ static int rs_write(struct tty_struct * tty, int from_user,
 	    
 	if (from_user)
 		down(&tmp_buf_sem);
-	save_flags(flags);
+
 	while (1) {
-		cli();		
-		c = MIN(count, MIN(ESP_XMIT_SIZE - info->xmit_cnt - 1,
-				   ESP_XMIT_SIZE - info->xmit_head));
+		/* Thanks to R. Wolff for suggesting how to do this with */
+		/* interrupts enabled */
+
+		c = count;
+		t = ESP_XMIT_SIZE - info->xmit_cnt - 1;
+		
+		if (t < c)
+			c = t;
+
+		t = ESP_XMIT_SIZE - info->xmit_head;
+		
+		if (t < c)
+			c = t;
+
 		if (c <= 0)
 			break;
 
 		if (from_user) {
 			c -= copy_from_user(tmp_buf, buf, c);
+
 			if (!c) {
 				if (!ret)
 					ret = -EFAULT;
 				break;
 			}
-			c = MIN(c, MIN(ESP_XMIT_SIZE - info->xmit_cnt - 1,
-				       ESP_XMIT_SIZE - info->xmit_head));
+
 			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
 		} else
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
+
 		info->xmit_head = (info->xmit_head + c) & (ESP_XMIT_SIZE-1);
 		info->xmit_cnt += c;
-		restore_flags(flags);
 		buf += c;
 		count -= c;
 		ret += c;
 	}
+
 	if (from_user)
 		up(&tmp_buf_sem);
+	
+	save_flags(flags); cli();
+
 	if (info->xmit_cnt && !tty->stopped && !(info->IER & UART_IER_THRI)) {
 		info->IER |= UART_IER_THRI;
 		serial_out(info, UART_ESI_CMD1, ESI_SET_SRV_MASK);
 		serial_out(info, UART_ESI_CMD2, info->IER);
 	}
+
 	restore_flags(flags);
 	return ret;
 }
@@ -1418,7 +1437,7 @@ static void rs_unthrottle(struct tty_struct * tty)
 	serial_out(info, UART_ESI_CMD1, ESI_SET_SRV_MASK);
 	serial_out(info, UART_ESI_CMD2, info->IER);
 	serial_out(info, UART_ESI_CMD1, ESI_SET_RX_TIMEOUT);
-	serial_out(info, UART_ESI_CMD2, rx_timeout);
+	serial_out(info, UART_ESI_CMD2, info->config.rx_timeout);
 	sti();
 }
 
@@ -1447,14 +1466,31 @@ static int get_serial_info(struct esp_struct * info,
 	tmp.closing_wait = info->closing_wait;
 	tmp.custom_divisor = info->custom_divisor;
 	tmp.hub6 = 0;
-	tmp.reserved_char[0] = 'E';
-	tmp.reserved_char[1] = rx_timeout;
-	tmp.reserved[0] = rx_trigger;
-	tmp.reserved[1] = tx_trigger;
-	tmp.reserved[2] = flow_off;
-	tmp.reserved[3] = flow_on;
 	if (copy_to_user(retinfo,&tmp,sizeof(*retinfo)))
 		return -EFAULT;
+	return 0;
+}
+
+static int get_esp_config(struct esp_struct * info,
+			  struct hayes_esp_config * retinfo)
+{
+	struct hayes_esp_config tmp;
+  
+	if (!retinfo)
+		return -EFAULT;
+
+	memset(&tmp, 0, sizeof(tmp));
+	tmp.rx_timeout = info->config.rx_timeout;
+	tmp.rx_trigger = info->config.rx_trigger;
+	tmp.tx_trigger = info->config.tx_trigger;
+	tmp.flow_off = info->config.flow_off;
+	tmp.flow_on = info->config.flow_on;
+	tmp.pio_threshold = info->config.pio_threshold;
+	tmp.dma_channel = (info->stat_flags & ESP_STAT_NEVER_DMA ? 0 : dma);
+
+	if (copy_to_user(retinfo,&tmp,sizeof(*retinfo)))
+		return -EFAULT;
+
 	return 0;
 }
 
@@ -1464,7 +1500,6 @@ static int set_serial_info(struct esp_struct * info,
 	struct serial_struct new_serial;
 	struct esp_struct old_info;
 	unsigned int change_irq;
-	unsigned int change_flow;
 	int retval = 0;
 	struct esp_struct *current_async;
 
@@ -1480,21 +1515,10 @@ static int set_serial_info(struct esp_struct * info,
 	    (new_serial.irq < 2) ||
 	    (new_serial.irq == 6) ||
 	    (new_serial.irq == 8) ||
-	    (new_serial.irq == 13) ||
-	    (new_serial.reserved[3] >= new_serial.reserved[2]) ||
-	    (new_serial.reserved[0] < 1) ||
-	    (new_serial.reserved[1] < 1) ||
-	    (new_serial.reserved[2] < 1) ||
-	    (new_serial.reserved[3] < 1) ||
-	    (new_serial.reserved[0] > 1023) ||
-	    (new_serial.reserved[1] > 1023) ||
-	    (new_serial.reserved[2] > 1023) ||
-	    (new_serial.reserved[3] > 1023))
+	    (new_serial.irq == 13))
 		return -EINVAL;
 
 	change_irq = new_serial.irq != info->irq;
-	change_flow = ((new_serial.reserved[2] != flow_off) ||
-		       (new_serial.reserved[3] != flow_on));
 
 	if (change_irq && (info->line % 8))
 		return -EINVAL;
@@ -1539,40 +1563,6 @@ static int set_serial_info(struct esp_struct * info,
 		info->custom_divisor = new_serial.custom_divisor;
 		info->close_delay = new_serial.close_delay * HZ/100;
 		info->closing_wait = new_serial.closing_wait * HZ/100;
-		flow_off = new_serial.reserved[2];
-		flow_on = new_serial.reserved[3];
-
-		if ((new_serial.reserved[0] != rx_trigger) ||
-		    (new_serial.reserved[1] != tx_trigger)) {
-			unsigned long flags;
-
-			rx_trigger = new_serial.reserved[0];
-			tx_trigger = new_serial.reserved[1];
-			save_flags(flags); cli();
-			serial_out(info, UART_ESI_CMD1, ESI_SET_TRIGGER);
-			serial_out(info, UART_ESI_CMD2, rx_trigger >> 8);
-			serial_out(info, UART_ESI_CMD2, rx_trigger);
-			serial_out(info, UART_ESI_CMD2, tx_trigger >> 8);
-			serial_out(info, UART_ESI_CMD2, tx_trigger);
-			restore_flags(flags);
-		}
-
-		if (((unsigned char)(new_serial.reserved_char[1]) !=
-		     rx_timeout)) {
-			unsigned long flags;
-
-			rx_timeout = (unsigned char)
-				(new_serial.reserved_char[1]);
-			save_flags(flags); cli();
-
-			if (info->IER & UART_IER_RDI) {
-				serial_out(info, UART_ESI_CMD1,
-					   ESI_SET_RX_TIMEOUT);
-				serial_out(info, UART_ESI_CMD2, rx_timeout);
-			}
-
-			restore_flags(flags);
-		}
 
 		if (change_irq) {
 			/*
@@ -1602,8 +1592,7 @@ static int set_serial_info(struct esp_struct * info,
 	if (info->flags & ASYNC_INITIALIZED) {
 		if (((old_info.flags & ASYNC_SPD_MASK) !=
 		     (info->flags & ASYNC_SPD_MASK)) ||
-		    (old_info.custom_divisor != info->custom_divisor) ||
-		    change_flow) {
+		    (old_info.custom_divisor != info->custom_divisor)) {
 			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
 				info->tty->alt_speed = 57600;
 			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
@@ -1620,6 +1609,141 @@ static int set_serial_info(struct esp_struct * info,
 	return retval;
 }
 
+static int set_esp_config(struct esp_struct * info,
+			  struct hayes_esp_config * new_info)
+{
+	struct hayes_esp_config new_config;
+	unsigned int change_dma;
+	int retval = 0;
+	struct esp_struct *current_async;
+
+	/* Perhaps a non-sysadmin user should be able to do some of these */
+	/* operations.  I haven't decided yet. */
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (copy_from_user(&new_config, new_info, sizeof(new_config)))
+		return -EFAULT;
+
+	if ((new_config.flow_on >= new_config.flow_off) ||
+	    (new_config.rx_trigger < 1) ||
+	    (new_config.tx_trigger < 1) ||
+	    (new_config.flow_off < 1) ||
+	    (new_config.flow_on < 1) ||
+	    (new_config.rx_trigger > 1023) ||
+	    (new_config.tx_trigger > 1023) ||
+	    (new_config.flow_off > 1023) ||
+	    (new_config.flow_on > 1023) ||
+	    (new_config.pio_threshold < 0) ||
+	    (new_config.pio_threshold > 1024))
+		return -EINVAL;
+
+	if ((new_config.dma_channel != 1) && (new_config.dma_channel != 3))
+		new_config.dma_channel = 0;
+
+	if (info->stat_flags & ESP_STAT_NEVER_DMA)
+		change_dma = new_config.dma_channel;
+	else
+		change_dma = (new_config.dma_channel != dma);
+
+	if (change_dma) {
+		if (new_config.dma_channel) {
+			/* PIO mode to DMA mode transition OR */
+			/* change current DMA channel */
+			
+			current_async = ports;
+
+			while (current_async) {
+				if (current_async == info) {
+					if (current_async->count > 1)
+						return -EBUSY;
+				} else if (current_async->count)
+					return -EBUSY;
+					
+				current_async =
+					current_async->next_port;
+			}
+
+			shutdown(info);
+			dma = new_config.dma_channel;
+			info->stat_flags &= ~ESP_STAT_NEVER_DMA;
+			
+                        /* all ports must use the same DMA channel */
+
+			current_async = ports;
+
+			while (current_async) {
+				esp_basic_init(current_async);
+				current_async = current_async->next_port;
+			}
+		} else {
+			/* DMA mode to PIO mode only */
+			
+			if (info->count > 1)
+				return -EBUSY;
+
+			shutdown(info);
+			info->stat_flags |= ESP_STAT_NEVER_DMA;
+			esp_basic_init(info);
+		}
+	}
+
+	info->config.pio_threshold = new_config.pio_threshold;
+
+	if ((new_config.flow_off != info->config.flow_off) ||
+	    (new_config.flow_on != info->config.flow_on)) {
+		unsigned long flags;
+
+		info->config.flow_off = new_config.flow_off;
+		info->config.flow_on = new_config.flow_on;
+		save_flags(flags); cli();
+		serial_out(info, UART_ESI_CMD1, ESI_SET_FLOW_LVL);
+		serial_out(info, UART_ESI_CMD2, new_config.flow_off >> 8);
+		serial_out(info, UART_ESI_CMD2, new_config.flow_off);
+		serial_out(info, UART_ESI_CMD2, new_config.flow_on >> 8);
+		serial_out(info, UART_ESI_CMD2, new_config.flow_on);
+		restore_flags(flags);
+	}
+
+	if ((new_config.rx_trigger != info->config.rx_trigger) ||
+	    (new_config.tx_trigger != info->config.tx_trigger)) {
+		unsigned long flags;
+
+		info->config.rx_trigger = new_config.rx_trigger;
+		info->config.tx_trigger = new_config.tx_trigger;
+		save_flags(flags); cli();
+		serial_out(info, UART_ESI_CMD1, ESI_SET_TRIGGER);
+		serial_out(info, UART_ESI_CMD2,
+			   new_config.rx_trigger >> 8);
+		serial_out(info, UART_ESI_CMD2, new_config.rx_trigger);
+		serial_out(info, UART_ESI_CMD2,
+			   new_config.tx_trigger >> 8);
+		serial_out(info, UART_ESI_CMD2, new_config.tx_trigger);
+		restore_flags(flags);
+	}
+
+	if (new_config.rx_timeout != info->config.rx_timeout) {
+		unsigned long flags;
+
+		info->config.rx_timeout = new_config.rx_timeout;
+		save_flags(flags); cli();
+
+		if (info->IER & UART_IER_RDI) {
+			serial_out(info, UART_ESI_CMD1,
+				   ESI_SET_RX_TIMEOUT);
+			serial_out(info, UART_ESI_CMD2,
+				   new_config.rx_timeout);
+		}
+
+		restore_flags(flags);
+	}
+
+	if (!(info->flags & ASYNC_INITIALIZED))
+		retval = startup(info);
+
+	return retval;
+}
 
 /*
  * get_lsr_info - get line status register info
@@ -1741,7 +1865,8 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
 	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGWILD)  &&
 	    (cmd != TIOCSERSWILD) && (cmd != TIOCSERGSTRUCT) &&
-	    (cmd != TIOCMIWAIT) && (cmd != TIOCGICOUNT)) {
+	    (cmd != TIOCMIWAIT) && (cmd != TIOCGICOUNT) &&
+	    (cmd != TIOCGHAYESESP) && (cmd != TIOCSHAYESESP)) {
 		if (tty->flags & (1 << TTY_IO_ERROR))
 		    return -EIO;
 	}
@@ -1826,6 +1951,12 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 				return error;
 
 			return 0;
+	case TIOCGHAYESESP:
+		return (get_esp_config(info,
+				       (struct hayes_esp_config *)arg));
+	case TIOCSHAYESESP:
+		return (set_esp_config(info,
+				       (struct hayes_esp_config *)arg));
 
 		default:
 			return -ENOIOCTLCMD;
@@ -2513,6 +2644,12 @@ __initfunc(int espserial_init(void))
 		info->tqueue_hangup.data = info;
 		info->callout_termios = esp_callout_driver.init_termios;
 		info->normal_termios = esp_driver.init_termios;
+		info->config.rx_timeout = rx_timeout;
+		info->config.rx_trigger = rx_trigger;
+		info->config.tx_trigger = tx_trigger;
+		info->config.flow_on = flow_on;
+		info->config.flow_off = flow_off;
+		info->config.pio_threshold = pio_threshold;
 		info->next_port = ports;
 		ports = info;
 		printk(KERN_INFO "ttyP%d at 0x%04x (irq = %d) is an ESP ",

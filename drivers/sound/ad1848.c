@@ -1721,7 +1721,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	 */
 
 
-	long my_dev;
+	int my_dev;
 	char dev_name[100];
 	int e;
 
@@ -1914,7 +1914,7 @@ int ad1848_control(int cmd, int arg)
 
 void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int share_dma)
 {
-	int i, dev = 0;
+	int i, mixer, dev = 0;
 	ad1848_info *devc = NULL;
 
 	for (i = 0; devc == NULL && i < nr_ad1848_devs; i++)
@@ -1942,6 +1942,9 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 			if (audio_devs[dev]->dmap_in->dma != audio_devs[dev]->dmap_out->dma)
 				sound_free_dma(audio_devs[dev]->dmap_in->dma);
 		}
+		mixer = audio_devs[devc->dev_no]->mixer_dev;
+		if(mixer>=0)
+			sound_unload_mixerdev(mixer);
 	}
 	else
 		printk(KERN_ERR "ad1848: Can't find device to be unloaded. Base=%x\n", io_base);
@@ -1951,12 +1954,12 @@ void adintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	unsigned char status;
 	ad1848_info *devc;
-	long dev;
+	int dev;
 	int alt_stat = 0xff;
 	unsigned char c930_stat = 0;
 	int cnt = 0;
 
-	dev = (long)dev_id;
+	dev = (int)dev_id;
 	devc = (ad1848_info *) audio_devs[dev]->devc;
 
 interrupt_again:		/* Jump back here if int status doesn't reset */
@@ -2403,8 +2406,6 @@ void unload_ms_sound(struct address_info *hw_config)
 		      hw_config->irq,
 		      hw_config->dma,
 		      hw_config->dma, 0);
-	if(mixer>=0)
-		sound_unload_mixerdev(mixer);
 	sound_unload_audiodev(hw_config->slots[0]);
 	release_region(hw_config->io_base, 4);
 }

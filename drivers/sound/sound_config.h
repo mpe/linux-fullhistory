@@ -1,6 +1,6 @@
 /* sound_config.h
  *
- * A driver for Soundcards, misc configuration parameters.
+ * A driver for sound cards, misc. configuration parameters.
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1997

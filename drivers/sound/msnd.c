@@ -20,20 +20,33 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.c,v 1.2 1998/06/09 20:37:39 andrewtv Exp $
+ * $Id: msnd.c,v 1.5 1998/07/18 00:12:15 andrewtv Exp $
  *
  ********************************************************************/
 
+#include <linux/config.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < 0x020101
+#  define LINUX20
+#endif
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/types.h>
 #include <linux/delay.h>
-#include <linux/init.h>
 #include <linux/mm.h>
-#include <asm/io.h>
-#include <asm/uaccess.h>
-#include <asm/spinlock.h>
+#ifdef LINUX20
+#  include <linux/major.h>
+#  include <linux/fs.h>
+#  include <linux/sound.h>
+#  include <asm/segment.h>
+#  include "sound_config.h"
+#else
+#  include <linux/init.h>
+#  include <asm/io.h>
+#  include <asm/uaccess.h>
+#  include <asm/spinlock.h>
+#endif
 #include "msnd.h"
 
 #define LOGNAME			"msnd"
@@ -156,8 +169,16 @@ int msnd_fifo_write(msnd_fifo *f, const char *buf, size_t len, int user)
 		}
 
 		if (user) {
+#ifdef LINUX20
+			if (verify_area(VERIFY_READ, buf , nwritten))
+				return nwritten;
+			
+			memcpy_fromfs(f->data + f->tail, buf, nwritten);
+#else
 			if (copy_from_user(f->data + f->tail, buf, nwritten))
 				return -EFAULT;
+#endif
+
 		} else
 			memcpy(f->data + f->tail, buf, nwritten);
 
@@ -194,8 +215,15 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 		}
 		
 		if (user) {
+#ifdef LINUX20
+			if (verify_area(VERIFY_WRITE, buf, nread))
+				return nread;
+			
+			memcpy_tofs(buf, f->data + f->head, nread);
+#else
 			if (copy_to_user(buf, f->data + f->head, nread))
 				return -EFAULT;
+#endif
 		} else
 			memcpy(buf, f->data + f->head, nread);
 		
@@ -347,6 +375,7 @@ int msnd_disable_irq(multisound_dev_t *dev)
 	return 0;
 }
 
+#ifndef LINUX20
 EXPORT_SYMBOL(msnd_register);
 EXPORT_SYMBOL(msnd_unregister);
 EXPORT_SYMBOL(msnd_get_num_devs);
@@ -367,6 +396,7 @@ EXPORT_SYMBOL(msnd_upload_host);
 
 EXPORT_SYMBOL(msnd_enable_irq);
 EXPORT_SYMBOL(msnd_disable_irq);
+#endif
 
 #ifdef MODULE
 MODULE_AUTHOR				("Andrew Veliath <andrewtv@usa.net>");

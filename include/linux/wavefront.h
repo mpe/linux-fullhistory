@@ -502,11 +502,11 @@ typedef union wf_any {
     wavefront_drum d;
 } wavefront_any;
 
-/* Hannu Solvainen hoped that his "patch_info" struct in soundcard.h
-   might work for other wave-table based patch loading situations.
-   Alas, his fears were correct. The WaveFront doesn't even come with
-   just "patches", but several different kind of structures that
-   control the sound generation process.
+/* Hannu Savolainen hoped that his "patch_info" struct in soundcard.h
+   might work for other wavetable-based patch-loading situations.
+   Alas, his fears were correct.  The WaveFront doesn't even come with
+   just "patches", but several different kinds of structures that
+   control the process of generating sound.
  */
 
 typedef struct wf_patch_info {
@@ -662,7 +662,7 @@ typedef struct wf_fx_info {
 
 /* Allow direct user-space control over FX memory/coefficient data.
    In theory this could be used to download the FX microprogram,
-   but it would be a little slower, and involve some wierd code.
+   but it would be a little slower, and involve some weird code.
  */
 
 #define WFFX_MEMSET              69

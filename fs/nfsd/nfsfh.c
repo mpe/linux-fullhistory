@@ -98,7 +98,9 @@ static void add_to_lookup_cache(struct dentry *dentry, struct knfs_fh *fh)
 {
 	struct nfsd_fixup *fp;
 
-	fp = find_cached_lookup(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	fp = find_cached_lookup(u32_to_kdev_t(fh->fh_dev), 
+				u32_to_ino_t(fh->fh_dirino),
+				u32_to_ino_t(fh->fh_ino));
 	if (fp) {
 		fp->dentry = dentry;
 		return;
@@ -111,9 +113,9 @@ static void add_to_lookup_cache(struct dentry *dentry, struct knfs_fh *fh)
 	 */
 	fp = kmalloc(sizeof(struct nfsd_fixup), GFP_KERNEL);
 	if (fp) {
-		fp->dir = fh->fh_dirino;
-		fp->ino = fh->fh_ino;
-		fp->dev = fh->fh_dev;
+		fp->dir = u32_to_kdev_t(fh->fh_dirino);
+		fp->ino = u32_to_ino_t(fh->fh_ino);
+		fp->dev = u32_to_ino_t(fh->fh_dev);
 		fp->dentry = dentry;
 		fp->reftime = jiffies;
 		list_add(&fp->lru, &fixup_head);
@@ -763,7 +765,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			goto out;
 		}
-		if (inode->i_ino != fh->fh_ino || inode->i_dev != fh->fh_dev)
+		if (inode->i_ino != u32_to_ino_t(fh->fh_ino))
+			goto out;
+ 		if (inode->i_dev != u32_to_kdev_t(fh->fh_dev))
 			goto out;
 
 		fhe->dentry = NULL;
@@ -839,7 +843,9 @@ static struct dentry *nfsd_cached_lookup(struct knfs_fh *fh)
 {
 	struct nfsd_fixup *fp;
 
-	fp = find_cached_lookup(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	fp = find_cached_lookup(u32_to_kdev_t(fh->fh_dev),
+				u32_to_ino_t(fh->fh_dirino),
+				u32_to_ino_t(fh->fh_ino));
 	if (fp)
 		return fp->dentry;
 	return NULL;
@@ -893,13 +899,14 @@ recheck:
 	if (nfsd_d_validate(dentry)) {
 		struct inode * dir = dentry->d_parent->d_inode;
 
-		if (dir->i_ino == fh->fh_dirino && dir->i_dev == fh->fh_dev) {
+		if (dir->i_ino == u32_to_ino_t(fh->fh_dirino) && 
+		    dir->i_dev == u32_to_kdev_t(fh->fh_dev)) {
 			struct inode * inode = dentry->d_inode;
 			/*
 			 * NFS file handles must always have an inode,
 			 * so we won't accept a negative dentry.
 			 */
-			if (inode && inode->i_ino == fh->fh_ino) {
+			if (inode && inode->i_ino == u32_to_ino_t(fh->fh_ino)) {
 				dget(dentry);
 #ifdef NFSD_DEBUG_VERBOSE
 printk("find_fh_dentry: validated %s/%s, ino=%ld\n",
@@ -932,14 +939,16 @@ printk("find_fh_dentry: retried validation successful\n");
 	 * numbers. This should work for all Unix-like filesystems.
 	 */
 	looked_up = 1;
-	dentry = lookup_inode(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	dentry = lookup_inode(u32_to_kdev_t(fh->fh_dev),
+			      u32_to_ino_t(fh->fh_dirino),
+			      u32_to_ino_t(fh->fh_ino));
 	if (!IS_ERR(dentry)) {
 		struct inode * inode = dentry->d_inode;
 #ifdef NFSD_DEBUG_VERBOSE
 printk("find_fh_dentry: looked up %s/%s\n",
 dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
-		if (inode && inode->i_ino == fh->fh_ino) {
+		if (inode && inode->i_ino == u32_to_ino_t(fh->fh_ino)) {
 			nfsdstats.fh_lookup++;
 			goto out;
 		}
@@ -953,12 +962,13 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	/*
 	 * Stage 4: Look for the parent dentry in the fhcache ...
 	 */
-	parent = find_dentry_by_ino(fh->fh_dev, fh->fh_dirino);
+	parent = find_dentry_by_ino(u32_to_kdev_t(fh->fh_dev),
+				    u32_to_ino_t(fh->fh_dirino));
 	if (parent) {
 		/*
 		 * ... then search for the inode in the parent directory.
 		 */
-		dentry = lookup_by_inode(parent, fh->fh_ino);
+		dentry = lookup_by_inode(parent, u32_to_ino_t(fh->fh_ino));
 		dput(parent);
 		if (dentry)
 			goto out;
@@ -968,8 +978,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	 * Stage 5: Search the whole volume.
 	 */
 #ifdef NFSD_PARANOIA
-printk("find_fh_dentry: %s, %ld/%ld not found -- need full search!\n",
-kdevname(fh->fh_dev), fh->fh_dirino, fh->fh_ino);
+printk("find_fh_dentry: %s, %u/%u not found -- need full search!\n",
+kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_dirino, fh->fh_ino);
 #endif
 	dentry = NULL;
 	nfsdstats.fh_stale++;
@@ -1006,7 +1016,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	struct inode	*inode;
 	u32		error = 0;
 
-	dprintk("nfsd: fh_verify(exp %x/%ld cookie %p)\n",
+	dprintk("nfsd: fh_verify(exp %x/%u cookie %p)\n",
 		fh->fh_xdev, fh->fh_xino, fh->fh_dcookie);
 
 	if(fhp->fh_dverified)
@@ -1015,7 +1025,9 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	 * Look up the export entry.
 	 */
 	error = nfserr_stale;
-	exp = exp_get(rqstp->rq_client, fh->fh_xdev, fh->fh_xino);
+	exp = exp_get(rqstp->rq_client,
+			u32_to_kdev_t(fh->fh_xdev),
+			u32_to_ino_t(fh->fh_xino));
 	if (!exp) /* export entry revoked */
 		goto out;
 
@@ -1091,6 +1103,7 @@ void
 fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 {
 	struct inode * inode = dentry->d_inode;
+	struct dentry *parent = dentry->d_parent;
 
 	dprintk("nfsd: fh_compose(exp %x/%ld %s/%s, ino=%ld)\n",
 		exp->ex_dev, exp->ex_ino,
@@ -1105,12 +1118,12 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 	fh_init(fhp);
 	fhp->fh_handle.fh_dcookie = dentry;
 	if (inode) {
-		fhp->fh_handle.fh_ino = inode->i_ino;
+		fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
 	}
-	fhp->fh_handle.fh_dirino = dentry->d_parent->d_inode->i_ino;
-	fhp->fh_handle.fh_dev = dentry->d_parent->d_inode->i_dev;
-	fhp->fh_handle.fh_xdev = exp->ex_dev;
-	fhp->fh_handle.fh_xino = exp->ex_ino;
+	fhp->fh_handle.fh_dirino = ino_t_to_u32(parent->d_inode->i_ino);
+	fhp->fh_handle.fh_dev	 = kdev_t_to_u32(parent->d_inode->i_dev);
+	fhp->fh_handle.fh_xdev	 = kdev_t_to_u32(exp->ex_dev);
+	fhp->fh_handle.fh_xino	 = ino_t_to_u32(exp->ex_ino);
 
 	fhp->fh_dentry = dentry; /* our internal copy */
 	fhp->fh_export = exp;
@@ -1129,21 +1142,24 @@ fh_update(struct svc_fh *fhp)
 	struct dentry *dentry;
 	struct inode *inode;
 
-	if (!fhp->fh_dverified) {
-		printk(KERN_DEBUG "fh_update: fh not verified!\n");
-		goto out;
-	}
+	if (!fhp->fh_dverified)
+		goto out_bad;
 
 	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
-	if (!inode) {
-		printk(KERN_DEBUG "fh_update: %s/%s still negative!\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
-		goto out;
-	}
-	fhp->fh_handle.fh_ino = inode->i_ino;
+	if (!inode)
+		goto out_negative;
+	fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
 out:
 	return;
+
+out_bad:
+	printk(KERN_ERR "fh_update: fh not verified!\n");
+	goto out;
+out_negative:
+	printk(KERN_ERR "fh_update: %s/%s still negative!\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
+	goto out;
 }
 
 /*
@@ -1153,20 +1169,23 @@ out:
 void
 fh_put(struct svc_fh *fhp)
 {
+	struct dentry * dentry = fhp->fh_dentry;
 	if (fhp->fh_dverified) {
-		struct dentry * dentry = fhp->fh_dentry;
 		fh_unlock(fhp);
 		fhp->fh_dverified = 0;
-		if (!dentry->d_count) {
-			printk(KERN_DEBUG "fh_put: %s/%s has d_count 0!\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
-			return;
-		}
+		if (!dentry->d_count)
+			goto out_bad;
 		if (!dentry->d_inode || !add_to_fhcache(dentry, 0)) {
 			dput(dentry);
 			nfsd_nr_put++;
 		}
 	}
+	return;
+
+out_bad:
+	printk(KERN_ERR "fh_put: %s/%s has d_count 0!\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
+	return;
 }
 
 /*
@@ -1288,5 +1307,13 @@ void nfsd_fh_init(void)
 	INIT_LIST_HEAD(&path_inuse);
 	INIT_LIST_HEAD(&fixup_head);
 
-	printk(KERN_DEBUG "nfsd_init: initialized fhcache, entries=%lu\n", NFSD_MAXFH);
+	printk(KERN_DEBUG 
+		"nfsd_init: initialized fhcache, entries=%lu\n", NFSD_MAXFH);
+	/*
+	 * Display a warning if the ino_t is larger than 32 bits.
+	 */
+	if (sizeof(ino_t) > sizeof(__u32))
+		printk(KERN_INFO 
+			"NFSD: ino_t is %d bytes, using lower 4 bytes\n",
+			sizeof(ino_t));
 }

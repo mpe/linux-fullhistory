@@ -116,10 +116,10 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
     fi
     tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
+    tristate 'TI ThunderLAN support' CONFIG_TLAN
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
       tristate 'SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
-      tristate 'TI ThunderLAN support (EXPERIMENTAL)' CONFIG_TLAN
       bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
     fi
   fi

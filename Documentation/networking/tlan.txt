@@ -7,6 +7,10 @@ driver 1.0.  I will, of course continue to work on improving
 the driver, and work towards a 2.0 release.
 
 
+James
+james@sovereign.org
+
+
 
 I.  Supported Devices.
 
@@ -132,4 +136,5 @@ IV.  Things to try if you have problems.
 
 There is also a tlan mailing list which you can join by sending "subscribe tlan"
 in the body of an email to majordomo@vuser.vu.union.edu.
+
 

@@ -138,6 +138,9 @@ extern void free_inode_memory(int);	/* defined in fs/inode.c */
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * old_root);
 
+/* test whether root is busy without destroying dcache */
+extern int is_root_busy(struct dentry *);
+
 /*
  * This adds the entry to the hash queues and initializes "d_inode".
  * The entry was actually filled in earlier during "d_alloc()"

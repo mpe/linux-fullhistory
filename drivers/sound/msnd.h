@@ -24,13 +24,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.4 1998/07/14 22:59:25 andrewtv Exp $
+ * $Id: msnd.h,v 1.6 1998/07/18 00:12:15 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.6.2"
+#define VERSION			"0.7.0"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		8
@@ -159,6 +159,13 @@
 #  define inb			inb_p
 #endif
 
+#ifdef LINUX20
+#  define __initfunc(f)				f
+#  define __initdata				/* nothing */
+#  define spin_lock_irqsave(junk,flags)		do { save_flags(flags); cli(); } while (0)
+#  define spin_unlock_irqrestore(junk,flags)	do { restore_flags(flags); } while (0)
+#endif
+
 typedef unsigned char		BYTE;
 typedef unsigned short		USHORT;
 typedef unsigned short		WORD;
@@ -203,7 +210,9 @@ typedef struct multisound_dev {
 	int irq, irq_ref;
 	unsigned char info;
 	char *base;
+#ifndef LINUX20
 	spinlock_t lock;
+#endif
 
 	/* MultiSound DDK variables */
 	enum { msndClassic, msndPinnacle } type;

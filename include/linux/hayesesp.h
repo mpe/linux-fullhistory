@@ -1,5 +1,25 @@
-#ifndef ESP_H
-#define ESP_H
+#ifndef HAYESESP_H
+#define HAYESESP_H
+
+struct hayes_esp_config {
+	short flow_on;
+	short flow_off;
+	short rx_trigger;
+	short tx_trigger;
+	short pio_threshold;
+	unsigned char rx_timeout;
+	char dma_channel;
+};
+
+#ifdef __KERNEL__
+
+#define ESP_DMA_CHANNEL   0
+#define ESP_RX_TRIGGER    768
+#define ESP_TX_TRIGGER    768
+#define ESP_FLOW_OFF      1016
+#define ESP_FLOW_ON       944
+#define ESP_RX_TMOUT      128
+#define ESP_PIO_THRESHOLD 32
 
 #define ESP_IN_MAJOR	57	/* major dev # for dial in */
 #define ESP_OUT_MAJOR	58	/* major dev # for dial out */
@@ -51,9 +71,6 @@
 #define ESP_STAT_NEVER_DMA      0x08
 #define ESP_STAT_USE_PIO        0x10
 
-/* Always use PIO for this number (or less) of bytes */
-#define ESP_PIO_THRESHOLD       32
-
 #define ESP_EVENT_WRITE_WAKEUP	0
 #define ESP_MAGIC		0x53ee
 #define ESP_XMIT_SIZE		4096
@@ -94,14 +111,17 @@ struct esp_struct {
 	struct wait_queue	*delta_msr_wait;
 	struct wait_queue	*break_wait;
 	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
+	struct hayes_esp_config config; /* port configuration */
 	struct esp_struct	*next_port; /* For the linked list */
 };
 
-struct esp_pio_buffer
-{
+struct esp_pio_buffer {
 	unsigned char data[1024];
 	struct esp_pio_buffer *next;
 };
+
+#endif /* __KERNEL__ */
+
 
 #endif /* ESP_H */
 

@@ -277,7 +277,6 @@ void unload_cs4232(struct address_info *hw_config)
 {
 	int base = hw_config->io_base, irq = hw_config->irq;
 	int dma1 = hw_config->dma, dma2 = hw_config->dma2;
-	int mixer = audio_devs[hw_config->slots[0]]->mixer_dev;
 
 	if (dma2 == -1)
 		dma2 = dma1;
@@ -288,9 +287,6 @@ void unload_cs4232(struct address_info *hw_config)
 		      dma2,	/* Capture DMA */
 		      0);
 
-	if (mixer >= 0) {
-	    sound_unload_mixerdev (mixer);
-	}
 	sound_unload_audiodev(hw_config->slots[0]);
 #if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)

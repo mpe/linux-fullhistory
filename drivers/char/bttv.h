@@ -26,7 +26,7 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
-#include "i2c.h"
+#include <linux/i2c.h>
 #include "msp3400.h"
 #include "bt848.h"
 #include <linux/videodev.h>

@@ -50,7 +50,7 @@ static int
 nfsd_proc_getattr(struct svc_rqst *rqstp, struct nfsd_fhandle  *argp,
 					  struct nfsd_attrstat *resp)
 {
-	dprintk("nfsd: GETATTR  %d/%ld\n",
+	dprintk("nfsd: GETATTR  %d/%d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
@@ -65,7 +65,7 @@ static int
 nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 					  struct nfsd_attrstat  *resp)
 {
-	dprintk("nfsd: SETATTR  %d/%ld, valid=%x, size=%ld\n",
+	dprintk("nfsd: SETATTR  %d/%d, valid=%x, size=%ld\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->attrs.ia_valid, (long) argp->attrs.ia_size);
 
@@ -85,7 +85,7 @@ nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: LOOKUP   %d/%ld %s\n",
+	dprintk("nfsd: LOOKUP   %d/%d %s\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh), argp->name);
 
 	nfserr = nfsd_lookup(rqstp, &argp->fh, argp->name, argp->len,
@@ -129,7 +129,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 	u32 *	buffer;
 	int	nfserr, avail;
 
-	dprintk("nfsd: READ    %d/%ld %d bytes at %d\n",
+	dprintk("nfsd: READ    %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->count, argp->offset);
 
@@ -166,7 +166,7 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: WRITE    %d/%ld %d bytes at %d\n",
+	dprintk("nfsd: WRITE    %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->len, argp->offset);
 
@@ -195,7 +195,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	int		nfserr, type, mode, rdonly = 0;
 	dev_t		rdev = NODEV;
 
-	dprintk("nfsd: CREATE   %d/%ld %s\n",
+	dprintk("nfsd: CREATE   %d/%d %s\n",
 		SVCFH_DEV(dirfhp), SVCFH_INO(dirfhp), argp->name);
 
 	/* First verify the parent file handle */
@@ -439,7 +439,7 @@ nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 	u32 *	buffer;
 	int	nfserr, count;
 
-	dprintk("nfsd: READDIR  %d/%ld %d bytes at %d\n",
+	dprintk("nfsd: READDIR  %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->count, argp->cookie);
 

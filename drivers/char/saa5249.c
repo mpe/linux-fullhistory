@@ -52,7 +52,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <stdarg.h>
-#include "i2c.h"
+#include <linux/i2c.h>
 #include <linux/videotext.h>
 #include <linux/videodev.h>
 

@@ -58,7 +58,7 @@
 #include <linux/version.h>
 #include <asm/uaccess.h>
 
-#include "i2c.h"
+#include <linux/i2c.h>
 #include "bttv.h"
 #include "tuner.h"
 

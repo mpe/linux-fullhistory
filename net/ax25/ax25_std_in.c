@@ -335,11 +335,11 @@ static int ax25_std_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frame
 				ax25->condition |= AX25_COND_PEER_RX_BUSY;
 			if (type == AX25_RESPONSE && pf) {
 				ax25_stop_t1timer(ax25);
+				ax25->n2count = 0;
 				if (ax25_validate_nr(ax25, nr)) {
 					ax25_frames_acked(ax25, nr);
 					if (ax25->vs == ax25->va) {
 						ax25_start_t3timer(ax25);
-						ax25->n2count = 0;
 						ax25->state   = AX25_STATE_3;
 					} else {
 						ax25_requeue_frames(ax25);
@@ -364,11 +364,11 @@ static int ax25_std_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frame
 			ax25->condition &= ~AX25_COND_PEER_RX_BUSY;
 			if (pf && type == AX25_RESPONSE) {
 				ax25_stop_t1timer(ax25);
+				ax25->n2count = 0;
 				if (ax25_validate_nr(ax25, nr)) {
 					ax25_frames_acked(ax25, nr);
 					if (ax25->vs == ax25->va) {
 						ax25_start_t3timer(ax25);
-						ax25->n2count = 0;
 						ax25->state   = AX25_STATE_3;
 					} else {
 						ax25_requeue_frames(ax25);

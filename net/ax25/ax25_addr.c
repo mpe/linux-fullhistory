@@ -165,19 +165,23 @@ unsigned char *ax25_addr_parse(unsigned char *buf, int len, ax25_address *src, a
 
 	if (len < 14) return NULL;
 
-	*flags = 0;
-
-	if (buf[6] & AX25_CBIT)
-		*flags = AX25_COMMAND;
-	if (buf[13] & AX25_CBIT)
-		*flags = AX25_RESPONSE;
+	if (flags != NULL) {
+		*flags = 0;
+		
+		if (buf[6] & AX25_CBIT)
+			*flags = AX25_COMMAND;
+		if (buf[13] & AX25_CBIT)
+			*flags = AX25_RESPONSE;
+	}
 
 	if (dama != NULL) 
 		*dama = ~buf[13] & AX25_DAMA_FLAG;
 
 	/* Copy to, from */
-	memcpy(dest, buf + 0, AX25_ADDR_LEN);
-	memcpy(src,  buf + 7, AX25_ADDR_LEN);
+	if (dest != NULL)
+		memcpy(dest, buf + 0, AX25_ADDR_LEN);
+	if (src != NULL)
+		memcpy(src,  buf + 7, AX25_ADDR_LEN);
 
 	buf += 2 * AX25_ADDR_LEN;
 	len -= 2 * AX25_ADDR_LEN;

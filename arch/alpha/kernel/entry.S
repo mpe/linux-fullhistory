@@ -30,10 +30,12 @@
 /*
  * task structure offsets
  */
-#define TASK_STATE	 0
-#define TASK_FLAGS	 8
-#define TASK_SIGPENDING	16
-#define TASK_SIZE	24	
+#define TASK_STATE		0
+#define TASK_FLAGS		8
+#define TASK_SIGPENDING		16
+#define TASK_ADDR_LIMIT		24	
+#define TASK_EXEC_DOMAIN	32
+#define TASK_NEED_RESCHED	40
 
 /*
  * task flags (must match include/linux/sched.h):
@@ -616,8 +618,7 @@ ret_from_handle_bh:
 	and	$0,8,$0
 	beq	$0,restore_all
 ret_from_reschedule:
-	lda	$0,need_resched
-	ldl	$2,0($0)
+	ldq	$2,TASK_NEED_RESCHED($8)
 	lda	$4,init_task_union
 	bne	$2,reschedule
 	xor	$4,$8,$4

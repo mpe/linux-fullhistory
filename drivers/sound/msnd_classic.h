@@ -24,13 +24,11 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- * $Id: msnd_classic.h,v 1.4 1998/07/14 22:59:25 andrewtv Exp $
+ * $Id: msnd_classic.h,v 1.5 1998/07/18 00:12:15 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_CLASSIC_H
 #define __MSND_CLASSIC_H
-
-#include <linux/config.h>
 
 #define DSP_NUMIO		0x10
 

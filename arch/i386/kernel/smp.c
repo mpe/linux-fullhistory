@@ -1199,18 +1199,6 @@ void send_IPI (int dest, int vector)
  * enabled in a civilised fashion. That will also boost performance.
  */
 
-unsigned int TIME64 (void)
-{
-        unsigned int dummy,low;
-
-        __asm__("rdtsc"
-                :"=a" (low),
-                 "=d" (dummy));
-        return low;
-}
-
-int ipi_timestamp;
-
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
 	unsigned long cfg;
@@ -1424,7 +1412,7 @@ void smp_send_reschedule(int cpu)
 
 	__save_flags(flags);
 	__cli();
-	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 2);
+	smp_message_pass(cpu, MSG_RESCHEDULE, 0L, 2);
 	__restore_flags(flags);
 }
 
@@ -1520,15 +1508,14 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
 	 * want to be able to accept NMI tlb invalidates
 	 * during this time.
 	 */
-	spin_lock(&irq_controller_lock);
-	ack_APIC_irq ();
-	spin_unlock(&irq_controller_lock);
-
+	ack_APIC_irq();
 	smp_local_timer_interrupt(regs);
 }
 
 /*
- * Reschedule call back
+ * Reschedule call back. Nothing to do,
+ * all the work is done automatically when
+ * we return from the interrupt.
  */
 asmlinkage void smp_reschedule_interrupt(void)
 {

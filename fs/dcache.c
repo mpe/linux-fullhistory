@@ -363,6 +363,45 @@ repeat:
 }
 
 /*
+ * Check whether a root dentry would be in use if all of its
+ * child dentries were freed. This allows a non-destructive
+ * test for unmounting a device.
+ */
+int is_root_busy(struct dentry *root)
+{
+	struct dentry *this_parent = root;
+	struct list_head *next;
+	int count = root->d_count;
+
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		/* Decrement count for unused children */
+		count += (dentry->d_count - 1);
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+		/* root is busy if any leaf is busy */
+		if (dentry->d_count)
+			return 1;
+	}
+	/*
+	 * All done at this level ... ascend and resume the search.
+	 */
+	if (this_parent != root) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
+	return (count == 1); /* one remaining use count? */
+}
+
+/*
  * Search the dentry child list for the specified parent,
  * and move any unused dentries to the end of the unused
  * list for prune_dcache(). We descend to the next level
@@ -438,13 +477,7 @@ void shrink_dcache_parent(struct dentry * parent)
  */
 void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
-#if 0
-	int count = select_dcache(32, 8);
-	if (count)
-		prune_dcache((count << 6) >> priority);
-#else
 	prune_dcache(0);
-#endif
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

@@ -313,7 +313,9 @@ static void kmem_self_test(void);
 /* If the num of objs per slab is <= SLAB_MIN_OBJS_PER_SLAB,
  * then the page order must be less than this before trying the next order.
  */
-#define	SLAB_BREAK_GFP_ORDER	2
+#define	SLAB_BREAK_GFP_ORDER_HI	2
+#define	SLAB_BREAK_GFP_ORDER_LO	1
+static int slab_break_gfp_order = SLAB_BREAK_GFP_ORDER_LO;
 
 /* Macros for storing/retrieving the cachep and or slab from the
  * global 'mem_map'.  With off-slab bufctls, these are used to find the
@@ -447,6 +449,12 @@ __initfunc(long kmem_cache_init(long start, long end))
 	cache_cache.c_colour = (i-(cache_cache.c_num*size))/L1_CACHE_BYTES;
 	cache_cache.c_colour_next = cache_cache.c_colour;
 
+	/*
+	 * Fragmentation resistance on low memory - only use bigger
+	 * page orders on machines with more than 32MB of memory.
+	 */
+	if (num_physpages > (32 << 20) >> PAGE_SHIFT)
+		slab_break_gfp_order = SLAB_BREAK_GFP_ORDER_HI;
 	return start;
 }
 
@@ -604,7 +612,7 @@ kmem_slab_destroy(kmem_cache_t *cachep, kmem_slab_t *slabp)
 {
 	if (cachep->c_dtor
 #if	SLAB_DEBUG_SUPPORT
-		|| cachep->c_flags & (SLAB_POISON || SLAB_RED_ZONE)
+		|| cachep->c_flags & (SLAB_POISON | SLAB_RED_ZONE)
 #endif	/*SLAB_DEBUG_SUPPORT*/
 	) {
 		/* Doesn't use the bufctl ptrs to find objs. */
@@ -869,7 +877,7 @@ cal_wastage:
 		 * bad for the gfp()s.
 		 */
 		if (cachep->c_num <= SLAB_MIN_OBJS_PER_SLAB) {
-			if (cachep->c_gfporder < SLAB_BREAK_GFP_ORDER)
+			if (cachep->c_gfporder < slab_break_gfp_order)
 				goto next;
 		}
 

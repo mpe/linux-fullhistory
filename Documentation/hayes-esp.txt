@@ -1,4 +1,4 @@
-HAYES ESP DRIVER VERSION 2.0
+HAYES ESP DRIVER VERSION 2.1
 
 A big thanks to the people at Hayes, especially Alan Adamson.  Their support
 has enabled me to provide enhancements to the driver.
@@ -6,20 +6,26 @@ has enabled me to provide enhancements to the driver.
 Please report your experiences with this driver to me (arobinso@nyx.net).  I
 am looking for both positive and negative feedback.
 
-*** IMPORTANT CHANGES FOR 2.0 ***
+*** IMPORTANT CHANGES FOR 2.1 ***
 Support for PIO mode.  Five situations will cause PIO mode to be used:
 1) A multiport card is detected.  PIO mode will always be used.  (8 port cards
 do not support DMA).
 2) The DMA channel is set to an invalid value (anything other than 1 or 3).
 3) The DMA buffer/channel could not be allocated.  The port will revert to PIO
 mode until it is reopened.
-4) Less than 33 bytes need to be transferred to/from the FIFOs.  PIO mode will
-be used for that transfer only.
+4) Less than a specified number of bytes need to be transferred to/from the
+FIFOs.  PIO mode will be used for that transfer only.
 5) A port needs to do a DMA transfer and another port is already using the
 DMA channel.  PIO mode will be used for that transfer only.
 
-A patch for setserial (2.12) is included to allow the ESP enhanced mode
-configuration to be viewed and changed.
+Since the Hayes ESP seems to conflict with other cards (notably sound cards)
+when using DMA, DMA is turned off by default.  To use DMA, it must be turned
+on explicitly, either with the "dma=" option described below or with
+setserial.  A multiport card can be forced into DMA mode by using setserial;
+however, most multiport cards don't support DMA.
+
+The latest version of setserial allows the enhanced configuration of the ESP
+card to be viewed and modified.
 ***
 
 This package contains the files needed to compile a module to support the Hayes
@@ -33,20 +39,9 @@ Features:
   reducing CPU load
 - Supports primary and secondary ports
 
-To compile/install:
 
-Examine the first section of esp.h to verify that the definitions are
-acceptable.  If they are not, change them.
-DMA_CHANNEL must be either 1 or 3.
-ESP_BH should be set to a value not in use by the system.  If the system
-is not configured with RISCOM8 support, the default should be fine.
-
-Examine the Makefile, and make any appropriate changes.
-
-Type 'make' to compile the module.  The module will be called 'esp.o'.  Typing
-'make install' will install the module in /lib/modules/misc.  The module can
-be inserted and removed as usual (insmod, rmmod, etc.).  The IRQs to use can
-be specified by using the irq= option.  The format is:
+If the driver is compiled as a module, the IRQs to use can be specified by
+using the irq= option.  The format is:
 
 irq=[0x100],[0x140],[0x180],[0x200],[0x240],[0x280],[0x300],[0x380]
 
@@ -101,6 +96,12 @@ value too low will cause unnecessary interrupts.  For example, to set the
 receive timeout to 255, the insmod command would be:
 
 insmod esp rx_timeout=255
+
+The pio_threshold= option sets the threshold (in number of characters) for
+using PIO mode instead of DMA mode.  For example, if this value is 32,
+transfers of 32 bytes or less will always use PIO mode.
+
+insmod esp pio_threshold=32
 
 Multiple options can be listed on the insmod command line by separating each
 option with a space.  For example:

@@ -115,8 +115,8 @@ asmlinkage int sys_idle(void)
 	if (current->pid != 0)
 		goto out;
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
-	current->counter = -100;
+	current->priority = 0;
+	current->counter = 0;
 	for (;;) {
 		/*
 		 *	We are locked at this point. So we can safely call
@@ -152,7 +152,7 @@ out:
 
 int cpu_idle(void *unused)
 {
-	current->priority = -100;
+	current->priority = 0;
 	while(1)
 	{
 		if(current_cpu_data.hlt_works_ok &&
@@ -169,7 +169,7 @@ int cpu_idle(void *unused)
 			unlock_kernel();
 		}
 		/* endless idle loop with no priority at all */
-		current->counter = -100;
+		current->counter = 0;
 		schedule();
 	}
 }

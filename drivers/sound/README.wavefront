@@ -1,4 +1,4 @@
-	     An OSS/Free Driver for WaveFront soundcards
+	     An OSS/Free Driver for WaveFront Sound Cards
 	       (Turtle Beach Maui, Tropez, Tropez Plus)
 
 		     Paul Barton-Davis, July 1998
@@ -129,7 +129,7 @@ PART THREE: configure your kernel
 	 - choose MODULE(M) for CS4232 support
 
 	 - choose "N" for everything else (unless you have other
-	      soundcards you want support for)
+	      sound cards you want support for)
 
 
    make dep
@@ -142,7 +142,7 @@ PART THREE: configure your kernel
    .
    .
    .
-   make modules_isntall
+   make modules_install
 
 Here's my autoconf.h SOUND section:
 
@@ -203,7 +203,7 @@ Things to note:
        and "synthirq" cs4232 options.
 
        you can do without the adlib_card module if you don't
-       want to use the OPL/[34] synth on the soundcard
+       want to use the OPL/[34] synth on the sound card
 
        the adlib_card io parameter is conventionally not adjustable.
        In theory, any not-in-use IO port address would work, but
@@ -321,7 +321,7 @@ To check basically functionality, use play(1) or splay(1) to send a
 to play a General MIDI file. Try the "-D 0" to hear the
 difference between sending MIDI to the WaveFront and using the OPL/3,
 which is the default (I think ...). If you have an external synth(s)
-hooked to the soundcard, you can use "-e" to route to the
+hooked to the sound card, you can use "-e" to route to the
 external synth(s) (in theory, -D 1 should work as well, but I think
 there is a bug in playmidi which prevents this from doing what it
 should). 

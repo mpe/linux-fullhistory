@@ -164,6 +164,7 @@ void attach_opl3sa_wss(struct address_info *hw_config)
 {
 	int nm = num_mixers;
 
+	/* FIXME */
 	attach_ms_sound(hw_config);
 	if (num_mixers > nm)	/* A mixer was installed */
 	{

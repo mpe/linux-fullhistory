@@ -811,7 +811,7 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 		    || (k->sa.sa_handler == SIG_DFL
 			&& (sig == SIGCONT ||
 			    sig == SIGCHLD ||
-			    sig != SIGWINCH))) {
+			    sig == SIGWINCH))) {
 			/* So dequeue any that might be pending.
 			   XXX: process-wide signals? */
 			if (sig >= SIGRTMIN &&

@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.h,v 1.76 1998/07/15 20:34:50 mj Exp $
+ *	$Id: pci.h,v 1.80 1998/07/21 10:06:40 mj Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
@@ -603,6 +603,7 @@
 
 #define PCI_VENDOR_ID_MADGE		0x10b6
 #define PCI_DEVICE_ID_MADGE_MK2		0x0002
+#define PCI_DEVICE_ID_MADGE_C155S	0x1001
 
 #define PCI_VENDOR_ID_3COM		0x10b7
 #define PCI_DEVICE_ID_3COM_3C339	0x3390
@@ -902,6 +903,9 @@
 #define PCI_VENDOR_ID_ENSONIQ		0x1274
 #define PCI_DEVICE_ID_ENSONIQ_AUDIOPCI	0x5000
 
+#define PCI_VENDOR_ID_ALTEON		0x12ae
+#define PCI_DEVICE_ID_ALTEON_ACENIC	0x0001
+
 #define PCI_VENDOR_ID_PICTUREL		0x12c5
 #define PCI_DEVICE_ID_PICTUREL_PCIVST	0x0081
 
@@ -1169,73 +1173,26 @@ void pci_set_master(struct pci_dev *dev);
 #ifndef CONFIG_PCI
 /* If the system does not have PCI, clearly these return errors.  Define
    these as simple inline functions to avoid hair in drivers.  */
-extern inline
-int pcibios_present(void) { return 0; }
+extern inline int pcibios_present(void) { return 0; }
 
-extern inline
-int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
-                              unsigned char where, unsigned char *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
+#define _PCI_NOP(o,s,t) \
+	extern inline int pcibios_##o##_config_##s## (u8 bus, u8 dfn, u8 where, t val) \
+		{ return PCIBIOS_FUNC_NOT_SUPPORTED; } \
+	extern inline int pci_##o##_config_##s## (struct pci_dev *dev, u8 where, t val) \
+		{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
+#define _PCI_NOP_ALL(o,x)	_PCI_NOP(o,byte,u8 x) \
+				_PCI_NOP(o,word,u16 x) \
+				_PCI_NOP(o,dword,u32 x)
+_PCI_NOP_ALL(read, *)
+_PCI_NOP_ALL(write,)
 
-extern inline
-int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
-                              unsigned char where, unsigned short *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
-                               unsigned char where, unsigned int *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
-                               unsigned char where, unsigned char val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
-                               unsigned char where, unsigned short val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
-                                unsigned char where, unsigned int val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_read_config_byte(struct pci_dev *dev, u8 where, u8 *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_read_config_word(struct pci_dev *dev, u8 where, u16 *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_read_config_dword(struct pci_dev *dev, u8 where, u32 *val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_write_config_byte(struct pci_dev *dev, u8 where, u8 val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_write_config_word(struct pci_dev *dev, u8 where, u16 val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline
-int pci_write_config_dword(struct pci_dev *dev, u8 where, u32 val)
-{ return PCIBIOS_FUNC_NOT_SUPPORTED; }
-
-extern inline struct pci_dev *
-pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from)
+extern inline struct pci_dev *pci_find_device(unsigned int vendor, unsigned int device, struct pci_dev *from)
 { return NULL; }
 
-extern inline
-struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from)
+extern inline struct pci_dev *pci_find_class(unsigned int class, struct pci_dev *from)
 { return NULL; }
 
-extern inline
-struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn)
+extern inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn)
 { return NULL; }
 
 #endif /* !CONFIG_PCI */

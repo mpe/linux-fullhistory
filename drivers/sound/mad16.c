@@ -249,7 +249,7 @@ static int detect_c930(void)
 	}
 
 	tmp = mad_read(MC0_PORT+18);
-	if (tmp == 0xff)
+	if (tmp == 0xff || tmp == 0x00)
 		return 1;
 	/* We probably have a C931 */
 	DDB(printk("Detected C931 config=0x%02x\n", tmp));
@@ -840,10 +840,7 @@ void unload_mad16(struct address_info *hw_config)
 			hw_config->dma,
 			hw_config->dma2, 0);
 	release_region(hw_config->io_base, 4);
-	if(mixer>=0)
-		sound_unload_mixerdev(mixer);
 	sound_unload_audiodev(hw_config->slots[0]);
-
 }
 
 void

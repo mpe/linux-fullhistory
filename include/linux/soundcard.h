@@ -193,12 +193,16 @@ typedef struct seq_event_rec {
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
  *	sample based patches but is probably too limited.
+ *
+ *      (PBD) As Hannu guessed, the GUS structure is too limited for 
+ *      the WaveFront, but this is the right place for a constant definition.
  */
 
 struct patch_info {
 		unsigned short key;		/* Use WAVE_PATCH here */
-#define WAVE_PATCH	_PATCHKEY(0x04)
-#define GUS_PATCH	WAVE_PATCH
+#define WAVE_PATCH	   _PATCHKEY(0x04)
+#define GUS_PATCH	   WAVE_PATCH
+#define WAVEFRONT_PATCH    _PATCHKEY(0x06)
 
 		short device_no;	/* Synthesizer number */
 		short instr_no;		/* Midi pgm# */
@@ -476,6 +480,7 @@ struct synth_info {	/* Read only */
 
 #define SAMPLE_TYPE_BASIC		0x10
 #define SAMPLE_TYPE_GUS			SAMPLE_TYPE_BASIC
+#define SAMPLE_TYPE_WAVEFRONT           0x11
 
 		int	perc_mode;	/* No longer supported */
 		int	nr_voices;

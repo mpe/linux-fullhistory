@@ -48,13 +48,15 @@ u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 					struct nfs_fh *f)
 {
-	struct nlm_file	*file;
 	struct knfs_fh	*fh = (struct knfs_fh *) f;
-	unsigned int	hash = file_hash(fh->fh_dev, fh->fh_ino);
+	struct nlm_file	*file;
+	unsigned int	hash;
 	u32		nfserr;
 
-	dprintk("lockd: nlm_file_lookup(%s/%ld)\n",
-		kdevname(fh->fh_dev), fh->fh_ino);
+	dprintk("lockd: nlm_file_lookup(%s/%u)\n",
+		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
+
+	hash = file_hash(u32_to_kdev_t(fh->fh_dev), u32_to_ino_t(fh->fh_ino));
 
 	/* Lock file table */
 	down(&nlm_file_sema);
@@ -65,8 +67,8 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 			goto found;
 	}
 
-	dprintk("lockd: creating file for %s/%ld\n",
-		kdevname(fh->fh_dev), fh->fh_ino);
+	dprintk("lockd: creating file for %s/%u\n",
+		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
 	nfserr = nlm_lck_denied_nolocks;
 	file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)

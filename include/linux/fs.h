@@ -46,7 +46,7 @@ struct poll_table_struct;
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;
 extern int max_files, nr_files, nr_free_files;
-#define NR_INODE 4096	/* This should no longer be bigger than NR_FILE */
+
 #define NR_FILE  4096	/* this can well be larger on a larger system */
 #define NR_RESERVED_FILES 10 /* reserved for root */
 

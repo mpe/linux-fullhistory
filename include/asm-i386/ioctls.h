@@ -65,6 +65,8 @@
 
 #define TIOCMIWAIT	0x545C	/* wait for a change on serial input line(s) */
 #define TIOCGICOUNT	0x545D	/* read serial port inline interrupt counts */
+#define TIOCGHAYESESP   0x545E  /* Get Hayes ESP configuration */
+#define TIOCSHAYESESP   0x545F  /* Set Hayes ESP configuration */
 
 /* Used for packet mode */
 #define TIOCPKT_DATA		 0

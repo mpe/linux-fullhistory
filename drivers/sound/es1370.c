@@ -2301,6 +2301,7 @@ __initfunc(int init_es1370(void))
 		wrcodec(s, 0x16, 3); /* no RST, PD */
 		wrcodec(s, 0x17, 0); /* CODEC ADC and CODEC DAC use {LR,B}CLK2 and run off the LRCLK2 PLL; program DAC_SYNC=0!!  */
 		wrcodec(s, 0x18, 0); /* recording source is mixer */
+		wrcodec(s, 0x19, s->mix.micpreamp = 1); /* turn on MIC preamp */
 		fs = get_fs();
 		set_fs(KERNEL_DS);
 		val = SOUND_MASK_LINE|SOUND_MASK_SYNTH|SOUND_MASK_CD;

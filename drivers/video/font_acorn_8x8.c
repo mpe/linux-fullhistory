@@ -1,5 +1,6 @@
 /* Acorn-like font definition, with PC graphics characters */
 
+#include <linux/config.h>
 #include "font.h"
 
 static unsigned char acorndata_8x8[] = {

@@ -43,7 +43,7 @@
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
 
-#include "i2c.h"
+#include <linux/i2c.h>
 #include <linux/videodev.h>
 
 #include "msp3400.h"

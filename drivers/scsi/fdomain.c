@@ -950,7 +950,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       /* Register the IRQ with the kernel */
 
       retcode = request_irq( interrupt_level,
-			     do_fdomain_16x0_intr, SA_INTERRUPT, "fdomain", NULL);
+			     do_fdomain_16x0_intr, 0, "fdomain", NULL);
 
       if (retcode < 0) {
 	 if (retcode == -EINVAL) {
@@ -1181,8 +1181,9 @@ void my_done( int error )
 #endif
 }
 
-void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
+void do_fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 {
+   unsigned long flags;
    int      status;
    int      done = 0;
    unsigned data_count;
@@ -1225,7 +1226,9 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 #if EVERY_ACCESS
 	 printk( " AFAIL " );
 #endif
+         spin_lock_irqsave(&io_request_lock, flags);
 	 my_done( DID_BUS_BUSY << 16 );
+         spin_unlock_irqrestore(&io_request_lock, flags);
 	 return;
       }
       current_SC->SCp.phase = in_selection;
@@ -1249,7 +1252,9 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 #if EVERY_ACCESS
 	    printk( " SFAIL " );
 #endif
+            spin_lock_irqsave(&io_request_lock, flags);
 	    my_done( DID_NO_CONNECT << 16 );
+            spin_unlock_irqrestore(&io_request_lock, flags);
 	    return;
 	 } else {
 #if EVERY_ACCESS
@@ -1593,8 +1598,10 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 #if EVERY_ACCESS
       printk( "BEFORE MY_DONE. . ." );
 #endif
+      spin_lock_irqsave(&io_request_lock, flags);
       my_done( (current_SC->SCp.Status & 0xff)
 	       | ((current_SC->SCp.Message & 0xff) << 8) | (DID_OK << 16) );
+      spin_unlock_irqrestore(&io_request_lock, flags);
 #if EVERY_ACCESS
       printk( "RETURNING.\n" );
 #endif
@@ -1611,15 +1618,6 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
    in_interrupt_flag = 0;
 #endif
    return;
-}
-
-void do_fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
-{
-   unsigned long flags;
-
-   spin_lock_irqsave(&io_request_lock, flags);
-   fdomain_16x0_intr(irq, dev_id, regs);
-   spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 int fdomain_16x0_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))

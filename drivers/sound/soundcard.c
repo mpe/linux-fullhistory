@@ -836,8 +836,8 @@ soundcard_init(void)
 		audio_init_devices();
 	}
 #endif
-
-
+	if (proc_register(&proc_root, &proc_root_sound))
+		printk(KERN_ERR "sound: registering /proc/sound failed\n");
 }
 
 static int      sound[20] = {
@@ -875,8 +875,6 @@ int init_module(void)
 	if (sound_nblocks >= 1024)
 		printk(KERN_ERR "Sound warning: Deallocation table was too small.\n");
 	
-	if (proc_register(&proc_root, &proc_root_sound))
-		printk(KERN_ERR "sound: registering /proc/sound failed\n");
 	return 0;
 }
 
