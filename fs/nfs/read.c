@@ -225,7 +225,7 @@ nfs_readpage(struct file *file, struct page *page)
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	int		error = -1;
+	int		error;
 
 	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
 		page, PAGE_SIZE, page->offset);
@@ -242,6 +242,7 @@ nfs_readpage(struct file *file, struct page *page)
 	if (error)
 		return error;
 
+	error = -1;
 	atomic_inc(&page->count);
 	if (!IS_SWAPFILE(inode) && !PageError(page) &&
 	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)
