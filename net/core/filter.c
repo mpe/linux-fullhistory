@@ -2,7 +2,7 @@
  * Linux Socket Filter - Kernel level socket filtering
  *
  * Author:
- *     Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+ *     Jay Schulist <jschlst@turbolinux.com>
  *
  * Based on the design of:
  *     - The Berkeley Packet Filter

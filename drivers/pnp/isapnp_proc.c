@@ -19,7 +19,8 @@
  *
  */
 
-static void *isapnp_alloc(long size);
+struct pci_bus *isapnp_cards;
+struct pci_dev *isapnp_devices;
 
 struct isapnp_info_buffer {
 	char *buffer;		/* pointer to begin of buffer */

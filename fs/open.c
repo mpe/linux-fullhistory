@@ -789,6 +789,9 @@ asmlinkage long sys_open(const char * filename, int flags, int mode)
 	char * tmp;
 	int fd, error;
 
+#if BITS_PER_LONG != 32
+	flags |= O_LARGEFILE;
+#endif
 	tmp = getname(filename);
 	fd = PTR_ERR(tmp);
 	if (!IS_ERR(tmp)) {

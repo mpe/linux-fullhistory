@@ -103,6 +103,13 @@ struct isapnp_mem32 {
 	struct isapnp_mem32 *next;	/* next 32-bit memory resource */
 };
 
+struct isapnp_fixup {
+	unsigned short vendor;		/* matching vendor */
+	unsigned short device;		/* matching device */
+	void (*quirk_function)(struct pci_dev *dev);	/* fixup function */
+};
+
+
 #define ISAPNP_RES_PRIORITY_PREFERRED	0
 #define ISAPNP_RES_PRIORITY_ACCEPTABLE	1
 #define ISAPNP_RES_PRIORITY_FUNCTIONAL	2
@@ -137,6 +144,8 @@ void isapnp_wake(unsigned char csn);
 void isapnp_device(unsigned char device);
 void isapnp_activate(unsigned char device);
 void isapnp_deactivate(unsigned char device);
+void isapnp_fixup_device(struct pci_dev *dev);
+void *isapnp_alloc(long size);
 /* manager */
 struct pci_bus *isapnp_find_card(unsigned short vendor,
 				 unsigned short device,

@@ -122,7 +122,7 @@ source drivers/parport/Config.in
 bool 'ACPI support' CONFIG_ACPI
 if [ "$CONFIG_ACPI" != "n" ]; then
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-     bool '  Enter S1 for sleep' CONFIG_ACPI_S1_SLEEP
+      bool '  Enter S1 for sleep (EXPERIMENTAL)' CONFIG_ACPI_S1_SLEEP
    fi
 fi
 

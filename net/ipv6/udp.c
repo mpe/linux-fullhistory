@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.46 1999/12/15 22:40:03 davem Exp $
+ *	$Id: udp.c,v 1.47 2000/01/05 21:27:54 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -340,10 +340,6 @@ static void udpv6_close(struct sock *sk, long timeout)
 {
 	inet_sock_release(sk);
 }
-
-#ifndef HAVE_CSUM_COPY_USER
-#undef CONFIG_UDP_DELAY_CSUM
-#endif
 
 /*
  * 	This should be easy, if there is something there we

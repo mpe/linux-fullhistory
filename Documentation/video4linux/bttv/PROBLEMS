@@ -4,7 +4,7 @@
 
 - The memory of some S3 cards is not recognized right:
   
-  First of all, if you are not using Xfree-3.2 or newer, upgrade AT LEAST to
+  First of all, if you are not using XFree-3.2 or newer, upgrade AT LEAST to
   XFree-3.2A! This solved the problem for most people.
 
   Start up X11 like this: "XF86_S3 -probeonly" and write down where the

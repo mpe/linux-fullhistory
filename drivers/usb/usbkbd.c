@@ -79,14 +79,14 @@ static void usb_kbd_irq(struct urb *urb)
 			if (usb_kbd_keycode[kbd->old[i]])
 				input_report_key(&kbd->dev, usb_kbd_keycode[kbd->old[i]], 0);
 			else
-				printk(KERN_DEBUG "usbkbd.c: Unknown key (scancode %#x) released.\n", kbd->old[i]);
+				info("Unknown key (scancode %#x) released.", kbd->old[i]);
 		}
 
 		if (kbd->new[i] > 3 && memscan(kbd->old + 2, kbd->new[i], 6) == kbd->old + 8) {
 			if (usb_kbd_keycode[kbd->new[i]])
 				input_report_key(&kbd->dev, usb_kbd_keycode[kbd->new[i]], 1);
 			else
-				printk(KERN_DEBUG "usbkbd.c: Unknown key (scancode %#x) pressed.\n", kbd->new[i]);
+				info("Unknown key (scancode %#x) pressed.", kbd->new[i]);
 		}
 	}
 

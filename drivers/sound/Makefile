@@ -25,7 +25,7 @@ endif
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_card.o sequencer_syms.o \
 		    sound_core.o sound_syms.o uart401.o ad1816.o \
-		    nm256_audio.o
+		    nm256_audio.o ac97.o
 
 
 
@@ -53,7 +53,7 @@ obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o
 obj-$(CONFIG_SOUND_CS4232)	+= uart401.o
 obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
 obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
-obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx.o sb.o uart401.o
+obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx.o sb.o uart401.o ac97.o
 obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
 obj-$(CONFIG_SOUND_MPU401)	+= mpu401.o
 obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o

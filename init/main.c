@@ -88,6 +88,7 @@ extern void ppc_init(void);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 extern void signals_init(void);
+extern void bdev_init(void);
 extern int init_pcmcia_ds(void);
 
 extern void free_initmem(void);

@@ -6,6 +6,9 @@
  */
 #include <linux/version.h>
 #include <linux/kernel.h>
+
+#define DEBUG
+
 #include "usb.h"
 
 static void usb_show_endpoint(struct usb_endpoint_descriptor *endpoint)

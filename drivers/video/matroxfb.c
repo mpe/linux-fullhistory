@@ -6020,8 +6020,8 @@ static int __init matrox_init(void){
 		u_int16_t sid;
 
 		pci_read_config_byte(pdev, PCI_REVISION_ID, &rev);
-		svid = dev->subsystem_vendor;
-		sid = dev->subsystem_device;
+		svid = pdev->subsystem_vendor;
+		sid = pdev->subsystem_device;
 		for (b = dev_list; b->vendor; b++) {
 			if ((b->vendor != pdev->vendor) || (b->device != pdev->device) || (b->rev < rev)) continue;
 			if (b->svid)

@@ -14,13 +14,7 @@ typedef struct
 
 #ifdef __KERNEL__
 
-#ifdef MODSTR
-#undef MODSTR
-#endif
-#define MODSTR "dabusb: "
-
 typedef enum { _stopped=0, _started } driver_state_t;
-
 
 typedef struct
 {

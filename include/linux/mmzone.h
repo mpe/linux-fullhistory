@@ -25,6 +25,8 @@ typedef struct free_area_struct {
 	unsigned int * map;
 } free_area_t;
 
+struct pglist_data;
+
 typedef struct zone_struct {
 	/*
 	 * Commonly accessed fields:
@@ -34,6 +36,7 @@ typedef struct zone_struct {
 	unsigned long free_pages;
 	int low_on_memory;
 	unsigned long pages_low, pages_high;
+	struct pglist_data *zone_pgdat;
 
 	/*
 	 * free areas of different sizes
@@ -80,6 +83,10 @@ typedef struct pglist_data {
 } pg_data_t;
 
 extern int numnodes;
+
+#define memclass(pgzone, tzone)	(((pgzone)->zone_pgdat == (tzone)->zone_pgdat) \
+			&& (((pgzone) - (pgzone)->zone_pgdat->node_zones) <= \
+			((tzone) - (pgzone)->zone_pgdat->node_zones)))
 
 #ifndef CONFIG_DISCONTIGMEM
 

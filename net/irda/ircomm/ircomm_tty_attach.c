@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Jun  5 17:42:00 1999
- * Modified at:   Wed Dec 15 23:32:08 1999
+ * Modified at:   Tue Jan  4 14:20:49 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -496,10 +496,11 @@ void ircomm_tty_link_established(struct ircomm_tty_cb *self)
 	
 	del_timer(&self->watchdog_timer);
 
-	/*  
+	/* 
 	 * IrCOMM link is now up, and if we are not using hardware
-	 * flow-control, then declare the hardware as running. Otherwise
-	 * the client will have to wait for the CTS to be set.
+	 * flow-control, then declare the hardware as running. Otherwise we
+	 * will have to wait for the peer device (DCE) to raise the CTS
+	 * line.  
 	 */
 	if (self->flags & ASYNC_CTS_FLOW) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), waiting for CTS ...\n");

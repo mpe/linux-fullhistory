@@ -446,7 +446,6 @@ static void shutdown_socket(u_long i)
     s->state &= SOCKET_PRESENT|SOCKET_SETUP_PENDING;
     init_socket(s);
     s->irq.AssignedIRQ = s->irq.Config = 0;
-    s->functions = 0;
     s->lock_count = 0;
     s->cis_used = 0;
     if (s->fake_cis) {
@@ -457,6 +456,7 @@ static void shutdown_socket(u_long i)
     cb_release_cis_mem(s);
     cb_free(s);
 #endif
+    s->functions = 0;
     if (s->config) {
 	kfree(s->config);
 	s->config = NULL;

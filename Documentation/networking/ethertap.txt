@@ -1,6 +1,6 @@
 Documentation on setup and use of EtherTap.
 
-Contact Jay Schulist <Jay.Schulist@spacs.k12.wi.us> if you
+Contact Jay Schulist <jschlst@turbolinux.com> if you
 have questions or need futher assistance.
 
 Introduction

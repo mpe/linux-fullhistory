@@ -48,24 +48,6 @@ unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
 	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, NULL);
 }
 
-#if 0
-
-/* Not used at the moment. It is difficult to imagine for what purpose
-   it can be used :-) Please, do not forget to verify_area before it --ANK
- */
-
-/*
- * This combination is currently not used, but possible:
- */
-
-extern __inline__
-unsigned int csum_partial_copy_to_user ( const char *src, char *dst,
-					int len, int sum, int *err_ptr)
-{
-	return csum_partial_copy_generic ( src, dst, len, sum, NULL, err_ptr);
-}
-#endif
-
 /*
  * These are the old (and unsafe) way of doing checksums, a warning message will be
  * printed if they are used and an exeption occurs.

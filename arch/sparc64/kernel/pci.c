@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.12 2000/01/01 03:32:50 davem Exp $
+/* $Id: pci.c,v 1.13 2000/01/06 23:51:49 davem Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -161,25 +161,19 @@ static void pci_scan_each_controller_bus(void)
  */
 static void __init pci_reorder_devs(void)
 {
-	struct pci_dev **pci_onboard = &pci_devices;
-	struct pci_dev **pci_tail = &pci_devices;
-	struct pci_dev *pdev = pci_devices, *pci_other = NULL;
+	struct list_head *pci_onboard = &pci_devices;
+	struct list_head *walk = pci_onboard->next;
 
-	while (pdev) {
+	while (walk != pci_onboard) {
+		struct pci_dev *pdev = pci_dev_g(walk);
+		struct list_head *walk_next = walk->next;
+
 		if (pdev->irq && (__irq_ino(pdev->irq) & 0x20)) {
-			if (pci_other) {
-				*pci_onboard = pdev;
-				pci_onboard = &pdev->next;
-				pdev = pdev->next;
-				*pci_onboard = pci_other;
-				*pci_tail = pdev;
-				continue;
-			} else
-				pci_onboard = &pdev->next;
-		} else if (!pci_other)
-			pci_other = pdev;
-		pci_tail = &pdev->next;
-		pdev = pdev->next;
+			list_del(walk);
+			list_add(walk, pci_onboard);
+		}
+
+		walk = walk_next;
 	}
 }
 

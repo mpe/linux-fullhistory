@@ -1,7 +1,7 @@
 Text file for ipddp.c:
 	AppleTalk-IP Decapsulation and AppleTalk-IP Encapsulation
 
-This text file writen by Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+This text file writen by Jay Schulist <jschlst@turbolinux.com>
 
 Introduction
 ------------
@@ -38,7 +38,7 @@ Basic instructions for user space tools
 
 To enable AppleTalk-IP decapsulation/encapsulation you will need the 
 proper tools. You can get the tools for decapsulation from
-http://spacs1.spacs.k12.wi.us/~jschlst/MacGate and for encapsulation
+http://spacs1.spacs.k12.wi.us/~jschlst/index.html and for encapsulation
 from http://www.maths.unm.edu/~bradford/ltpc.html
 
 I will briefly describe the operation of the tools, but you will
@@ -72,7 +72,7 @@ EtherTalk only network.
 
 Further Assistance
 -------------------
-You can contact me (Jay Schulist <Jay.Schulist@spacs.k12.wi.us>) with any
+You can contact me (Jay Schulist <jschlst@turbolinux.com>) with any
 questions regarding decapsulation or encapsulation. Bradford W. Johnson
 <johns393@maroon.tc.umn.edu> originally wrote the ipddp.c driver for IP
 encapsulation in AppleTalk.

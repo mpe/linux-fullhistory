@@ -6,7 +6,7 @@
  * Status:        Experimental...
  * Author:        Jean Tourrilhes <jt@hpl.hp.com>
  * Created at:    22/11/99
- * Modified at:   Fri Dec 17 09:17:30 1999
+ * Modified at:   Fri Dec 17 09:13:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Jean Tourrilhes, All Rights Reserved.

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.29 1999/03/21 05:22:07 davem Exp $ */
+/* $Id: checksum.h,v 1.30 2000/01/05 21:27:39 davem Exp $ */
 #ifndef __SPARC_CHECKSUM_H
 #define __SPARC_CHECKSUM_H
 
@@ -30,7 +30,7 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
+extern unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /* the same as csum_partial, but copies from fs:src while it
  * checksums

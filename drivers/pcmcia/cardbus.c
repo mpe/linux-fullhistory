@@ -99,6 +99,11 @@ static int pc_debug = PCMCIA_DEBUG;
 #define PCDATA_CODE_TYPE	0x0014
 #define PCDATA_INDICATOR	0x0015
 
+#ifndef CONFIG_PROC_FS
+#define pci_proc_attach_device(dev)	do { } while (0)
+#define pci_proc_detach_device(dev)	do { } while (0)
+#endif
+
 typedef struct cb_config_t {
 	struct pci_dev dev;
 } cb_config_t;
@@ -313,19 +318,11 @@ int cb_alloc(socket_info_t * s)
 				res->start = 0;
 				pci_assign_resource(dev, r);
 			}
-			printk("Resource %d at %08lx-%08lx (%04lx)\n",
-			       r,
-			       res->start,
-			       res->end,
-			       res->flags);
 		}
 
 		list_add_tail(&dev->bus_list, &bus->devices);
 		list_add_tail(&dev->global_list, &pci_devices);
-#ifdef CONFIG_PROC_FS
 		pci_proc_attach_device(dev);
-#endif
-
 		pci_enable_device(dev);
 	}
 
@@ -350,17 +347,18 @@ void cb_free(socket_info_t * s)
 	int i;
 
 	if (c) {
+		int i;
+
+		s->cb_config = NULL;
 		for(i=0; i<s->functions; i++) {
 			struct pci_dev *dev = &c[i].dev;
+
 			list_del(&dev->bus_list);
 			list_del(&dev->global_list);
 			free_resources(dev);
-#ifdef CONFIG_PROC_FS
 			pci_proc_detach_device(dev);
-#endif
 		}
-		kfree(s->cb_config);
-		s->cb_config = NULL;
+		kfree(c);
 		printk(KERN_INFO "cs: cb_free(bus %d)\n", s->cap.cb_dev->subordinate->number);
 	}
 }

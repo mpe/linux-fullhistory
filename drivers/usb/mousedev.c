@@ -212,10 +212,6 @@ static ssize_t mousedev_write(struct file * file, const char * buffer, size_t co
 
 		c = buffer[i];
 
-#ifdef MOUSEDEV_DEBUG
-		printk(KERN_DEBUG "mousedev: received char %#x\n", c);
-#endif
-
 		if (c == mousedev_genius_seq[list->genseq]) {
 			if (++list->genseq == MOUSEDEV_GENIUS_LEN) {
 				list->genseq = 0;

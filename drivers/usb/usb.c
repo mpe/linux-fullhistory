@@ -18,8 +18,6 @@
  * $Id: usb.c,v 1.39 1999/12/27 15:17:47 acher Exp $
  */
 
-#define USB_DEBUG	1
-
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -27,15 +25,9 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
 
+#define DEBUG
+
 #include "usb.h"
-
-#define MODSTR "usbcore: "
-
-#ifdef USB_DEBUG
-	#define dbg(format, arg...) printk(format, ## arg)
-#else
-	#define dbg(format, arg...)
-#endif
 
 /*
  * Prototypes for the device driver probing/loading functions
@@ -218,7 +210,7 @@ static int check_bandwidth_alloc (unsigned int old_alloc, long bustime)
 	new_alloc = old_alloc + bustime;
 		/* what new total allocated bus time would be */
 
-	PRINTD ("usb-bandwidth-alloc: was: %u, new: %u, "
+	dbg("usb-bandwidth-alloc: was: %u, new: %u, "
 		"bustime = %ld us, Pipe allowed: %s",
 		old_alloc, new_alloc, bustime,
 		(new_alloc <= FRAME_TIME_MAX_USECS_ALLOC) ?
@@ -335,7 +327,7 @@ void usb_driver_claim_interface(struct usb_driver *driver, struct usb_interface 
 	if (!iface || !driver)
 		return;
 
-	printk(KERN_DEBUG "usbcore: %s driver claimed interface %p\n", driver->name, iface);
+	dbg("%s driver claimed interface %p", driver->name, iface);
 
 	iface->driver = driver;
 	iface->private_data = priv;
@@ -428,7 +420,11 @@ static void usb_find_drivers(struct usb_device *dev)
 	}
  
 	if (rejected)
-		printk(KERN_DEBUG "usbcore: unhandled interfaces on device.\n");
+		dbg("unhandled interfaces on device");
+
+#ifdef DEBUG
+	usb_show_device(dev);
+#endif
 }
 
 /*
@@ -478,7 +474,7 @@ urb_t* usb_alloc_urb(int iso_packets)
 	      in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
 	if (!urb)
 	{
-		printk(KERN_ERR MODSTR"alloc_urb: kmalloc failed\n");
+		err("alloc_urb: kmalloc failed");
 		return 0;
 	}
 	memset(urb,0,sizeof(urb_t));
@@ -522,7 +518,7 @@ static void usb_api_blocking_completion(urb_t *urb)
 		wake_up(awd->wakeup);
 #if 0
 	else
-		dbg(KERN_DEBUG MODSTR "(blocking_completion): waitqueue empty!\n"); 
+		dbg("(blocking_completion): waitqueue empty!"); 
 		// even occurs if urb was unlinked by timeout...
 #endif
 }
@@ -573,7 +569,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, unsigned long* rval)
 
 	if (!status) {
 		// timeout
-		printk(KERN_DEBUG MODSTR"usb_control/bulk_msg: timeout\n");
+		dbg("usb_control/bulk_msg: timeout");
 		usb_unlink_urb(urb);  // remove urb safely
 		status=-ETIMEDOUT;
 	}
@@ -621,7 +617,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 	dr.value = cpu_to_le16p(&value);
 	dr.index = cpu_to_le16p(&index);
 	dr.length = cpu_to_le16p(&size);
-	//dbg(KERN_DEBUG MODSTR"usb_control_msg\n");	
+	//dbg("usb_control_msg");	
 	return usb_internal_control_msg(dev, pipe, &dr, data, size, timeout);
 }
 
@@ -683,7 +679,7 @@ void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq
 int usb_terminate_bulk(struct usb_device *dev, void *first)
 {
 	urb_t *urb=(urb_t*)first;
-	dbg(KERN_DEBUG MODSTR"usb_terminate_bulk: urb:%p\n",urb);
+	dbg("usb_terminate_bulk: urb:%p",urb);
 	if (!urb) // none found? there is nothing to remove!
 		return -ENODEV;
   
@@ -702,7 +698,7 @@ void usb_release_bandwidth(struct usb_device *dev, int bw_alloc)
 {
 	dev->bus->bandwidth_allocated -= bw_alloc;
 	dev->bus->bandwidth_int_reqs--;
-	PRINTD ("bw_alloc reduced to %d for %d requesters",
+	dbg("bw_alloc reduced to %d for %d requesters",
 		dev->bus->bandwidth_allocated,
 		dev->bus->bandwidth_int_reqs +
 		dev->bus->bandwidth_isoc_reqs);
@@ -776,7 +772,7 @@ int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq ha
 	if (!ret) {
 		dev->bus->bandwidth_allocated += bustime;
 		dev->bus->bandwidth_int_reqs++;
-		PRINTD ("bw_alloc bumped to %d for %d requesters",
+		dbg("bw_alloc bumped to %d for %d requesters",
 			dev->bus->bandwidth_allocated,
 			dev->bus->bandwidth_int_reqs +
 			dev->bus->bandwidth_isoc_reqs);
@@ -1065,7 +1061,6 @@ int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor
 	struct usb_descriptor_header *header;
 
 	memcpy(config, buffer, USB_DT_INTERFACE_SIZE);
-	usb_show_config_descriptor(config);
 	le16_to_cpus(&config->wTotalLength);
 	size = config->wTotalLength;
 

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Tue Dec 21 21:39:31 1999
+ * Modified at:   Wed Jan  5 15:12:41 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1999-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -332,8 +332,7 @@ void irda_execute_as_process( void *self, TODO_CALLBACK callback, __u32 param)
 	struct irmanager_event event;
 
 	/* Make sure irmanager is running */
-	if ( !irda.in_use) {
-		printk( KERN_ERR "irmanager is not running!\n");
+	if (!irda.in_use) {
 		return;
 	}
 
@@ -372,7 +371,6 @@ void irmanager_notify( struct irmanager_event *event)
 	
 	/* Make sure irmanager is running */
 	if (!irda.in_use) {
-		printk( KERN_ERR "irmanager is not running!\n");
 		return;
 	}
 

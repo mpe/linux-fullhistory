@@ -36,7 +36,7 @@ else ;-)
 Make bttv work with your card
 -----------------------------
 
-Of cource you have to load the modules as very first thing.  The
+Of course you have to load the modules as very first thing.  The
 separate bttv bundle comes with a script called "update".  I use this
 one to load a new version while doing driver hacking.  You can use it
 too, but check the module arguments first.  They work for my setup,
@@ -49,7 +49,7 @@ Insmod-options:	list of all insmod options available for bttv and
 MAKEDEV:	a script to create the special files for v4l
 CARDLIST:	List of all supported cards
 
-Loading just the bttv modules is'nt enouth for most cards.  The
+Loading just the bttv modules isn't enough for most cards.  The
 drivers for the i2c tuner/sound chips must also be loaded.  bttv tries
 to load them automagically by calling request_module() now, but this
 obviously works only with kmod enabled.
@@ -59,15 +59,15 @@ correct card type.  If you get video but no sound you've very likely
 specified the wrong (or no) card type.  A list of supported cards is
 in CARDLIST.
 
-If your card is'nt listed in CARDLIST, you should read the Sound-FAQ.
+If your card isn't listed in CARDLIST, you should read the Sound-FAQ.
 
 
-Still does'nt work?
+Still doesn't work?
 -------------------
 
 I do NOT have a lab with 30+ different grabber boards and a
 PAL/NTSC/SECAM test signal generator at home, so I often can't
-reproduce your problems.  This makes debugging very difficuilt for me.
+reproduce your problems.  This makes debugging very difficult for me.
 If you have some knowledge and spare time, please try to fix this
 yourself (patches very welcome of course...)  You know: The linux
 slogan is "Do it yourself".

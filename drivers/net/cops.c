@@ -1,7 +1,7 @@
 /*      cops.c: LocalTalk driver for Linux.
  *
  *	Authors:
- *      - Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+ *      - Jay Schulist <jschlst@turbolinux.com>
  *
  *	With more than a little help from;
  *	- Alan Cox <Alan.Cox@linux.org> 
@@ -33,7 +33,7 @@
  */
 
 static const char *version =
-"cops.c:v0.04 6/7/98 Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n";
+"cops.c:v0.04 6/7/98 Jay Schulist <jschlst@turbolinux.com>\n";
 /*
  *  Sources:
  *      COPS Localtalk SDK. This provides almost all of the information

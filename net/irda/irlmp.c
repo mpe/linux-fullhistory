@@ -6,10 +6,10 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Thu Dec 16 22:59:40 1999
+ * Modified at:   Wed Jan  5 11:26:03 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -69,20 +69,19 @@ int irlmp_proc_read(char *buf, char **start, off_t offst, int len);
 /*
  * Function irlmp_init (void)
  *
- *    Create (allocate) the main IrLMP structure and the pointer array
- *    which will contain pointers to each instance of a LSAP.
+ *    Create (allocate) the main IrLMP structure
+ *
  */
 int __init irlmp_init(void)
 {
 	/* Initialize the irlmp structure. */
-	if ( irlmp == NULL) {
-		irlmp = kmalloc( sizeof(struct irlmp_cb), GFP_KERNEL);
-		if ( irlmp == NULL)
-			return -ENOMEM;
-	}
-	memset( irlmp, 0, sizeof(struct irlmp_cb));
+	irlmp = kmalloc( sizeof(struct irlmp_cb), GFP_KERNEL);
+	if (irlmp == NULL)
+		return -ENOMEM;
+	memset(irlmp, 0, sizeof(struct irlmp_cb));
 	
 	irlmp->magic = LMP_MAGIC;
+	spin_lock_init(&irlmp->lock);
 
 	irlmp->clients = hashbin_new(HB_GLOBAL);
 	irlmp->services = hashbin_new(HB_GLOBAL);
@@ -377,9 +376,18 @@ int irlmp_connect_request(struct lsap_cb *self, __u8 dlsap_sel,
 	 * device with the given daddr 
 	 */
 	if (!saddr) {
-		discovery = hashbin_find(irlmp->cachelog, daddr, NULL);
-		if (discovery)
+		if (daddr != DEV_ADDR_ANY)
+			discovery = hashbin_find(irlmp->cachelog, daddr, NULL);
+		else {
+			IRDA_DEBUG(2, __FUNCTION__ "(), no daddr\n");
+			discovery = (discovery_t *) 
+				hashbin_get_first(irlmp->cachelog);
+		}
+
+		if (discovery) {
 			saddr = discovery->saddr;
+			daddr = discovery->daddr;
+		}
 	}
 	lap = hashbin_find(irlmp->links, saddr, NULL);	
 	if (lap == NULL) {

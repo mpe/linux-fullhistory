@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Fri Dec 17 15:59:13 1999
+ * Modified at:   Sat Dec 25 21:09:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -168,8 +168,6 @@ void iriap_do_r_connect_event(struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_disconnect(struct iriap_cb *self, IRIAP_EVENT event, 
 			       struct sk_buff *skb) 
 {
-	int ret;
-
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IAS_MAGIC, return;);
 
@@ -178,9 +176,7 @@ static void state_s_disconnect(struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_client_state(self, S_CONNECTING);
 		ASSERT(self->skb == NULL, return;);
 		self->skb = skb;
-		ret = irlmp_connect_request(self->lsap, LSAP_IAS, 
-					    self->saddr, self->daddr, 
-					    NULL, NULL);
+		iriap_connect_request(self);
 		break;
 	case IAP_LM_DISCONNECT_INDICATION:
 		break;
@@ -207,7 +203,7 @@ static void state_s_connecting(struct iriap_cb *self, IRIAP_EVENT event,
 		/*
 		 *  Jump to S-Call FSM
 		 */
-		iriap_do_call_event(self, IAP_CALL_REQUEST, NULL);
+		iriap_do_call_event(self, IAP_CALL_REQUEST, skb);
 		/* iriap_call_request(self, 0,0,0); */
 		iriap_next_client_state(self, S_CALL);
 		break;
@@ -261,12 +257,14 @@ static void state_s_make_call(struct iriap_cb *self, IRIAP_EVENT event,
 	case IAP_CALL_REQUEST:
 		skb = self->skb;
 		self->skb = NULL;
-
+		
 		irlmp_data_request(self->lsap, skb);
 		iriap_next_call_state(self, S_OUTSTANDING);
 		break;
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown event %d\n", event);
+		if (skb)
+			dev_kfree_skb(skb);
 		break;
 	}
 }

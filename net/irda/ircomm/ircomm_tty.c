@@ -6,11 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 21:00:56 1999
- * Modified at:   Thu Dec 16 22:07:37 1999
+ * Modified at:   Tue Jan  4 14:12:06 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       serial.c and previous IrCOMM work by Takahide Higuchi
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -280,13 +280,15 @@ static int ircomm_tty_block_til_ready(struct ircomm_tty_cb *self,
 	}
 
 	if (self->flags & ASYNC_CALLOUT_ACTIVE) {
-		if (self->normal_termios.c_cflag & CLOCAL)
+		if (self->normal_termios.c_cflag & CLOCAL) {
 			IRDA_DEBUG(1, __FUNCTION__ "(), doing CLOCAL!\n");
 			do_clocal = 1;
+		}
 	} else {
-		if (tty->termios->c_cflag & CLOCAL)
+		if (tty->termios->c_cflag & CLOCAL) {
 			IRDA_DEBUG(1, __FUNCTION__ "(), doing CLOCAL!\n");
 			do_clocal = 1;
+		}
 	}
 	
 	/* Wait for carrier detect and the line to become
@@ -459,10 +461,12 @@ static int ircomm_tty_open(struct tty_struct *tty, struct file *filp)
 	/* Check if this is a "normal" ircomm device, or an irlpt device */
 	if (line < 0x10) {
 		self->service_type = IRCOMM_3_WIRE | IRCOMM_9_WIRE;
+		self->settings.service_type = IRCOMM_9_WIRE; /* Default */
 		IRDA_DEBUG(2, __FUNCTION__ "(), IrCOMM device\n");
 	} else {
 		IRDA_DEBUG(2, __FUNCTION__ "(), IrLPT device\n");
 		self->service_type = IRCOMM_3_WIRE_RAW;
+		self->settings.service_type = IRCOMM_3_WIRE_RAW; /* Default */
 	}
 
 	ret = ircomm_tty_startup(self);

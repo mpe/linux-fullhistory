@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Fri Dec 17 22:37:53 1999
+ * Modified at:   Sat Dec 25 21:10:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -42,7 +42,6 @@
  *     
  ********************************************************************/
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
@@ -324,13 +323,13 @@ static void irda_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 }
 
 /*
- * Function irda_get_value_confirm (obj_id, value, priv)
+ * Function irda_getvalue_confirm (obj_id, value, priv)
  *
  *    Got answer from remote LM-IAS
  *
  */
-static void irda_get_value_confirm(int result, __u16 obj_id, 
-				   struct ias_value *value, void *priv)
+static void irda_getvalue_confirm(int result, __u16 obj_id, 
+				  struct ias_value *value, void *priv)
 {
 	struct irda_sock *self;
 	
@@ -348,11 +347,11 @@ static void irda_get_value_confirm(int result, __u16 obj_id,
 	iriap_close(self->iriap);
 	self->iriap = NULL;
 
+	self->errno = result;
+
 	/* Check if request succeeded */
 	if (result != IAS_SUCCESS) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), IAS query failed!\n");
-
-		self->errno = result;
 
 		/* Wake up any processes waiting for result */
 		wake_up_interruptible(&self->ias_wait);
@@ -483,7 +482,7 @@ static int irda_find_lsap_sel(struct irda_sock *self, char *name)
 	}
 
 	self->iriap = iriap_open(LSAP_ANY, IAS_CLIENT, self,
-				 irda_get_value_confirm);
+				 irda_getvalue_confirm);
 
 	/* Query remote LM-IAS */
 	iriap_getvaluebyclass_request(self->iriap, self->saddr, self->daddr,
@@ -1652,7 +1651,7 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
 			irias_add_octseq_attrib(
 			      ias_obj,
 			      ias_opt.irda_attrib_name, 
-			      ias_opt.attribute.irda_attrib_octet_seq.OctetSeq,
+			      ias_opt.attribute.irda_attrib_octet_seq.octet_seq,
 			      ias_opt.attribute.irda_attrib_octet_seq.len);
 			break;
 		case IAS_STRING:
@@ -1716,14 +1715,14 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
 }
 
  /*
- * Function irda_simple_get_value_confirm (obj_id, value, priv)
+ * Function irda_simple_getvalue_confirm (obj_id, value, priv)
  *
  *    Got answer from remote LM-IAS, just copy object to requester...
  *
  * Note : duplicate from above, but we need our own version that
  * doesn't touch the dtsap_sel and save the full value structure...
  */
-static void irda_simple_get_value_confirm(int result, __u16 obj_id, 
+static void irda_simple_getvalue_confirm(int result, __u16 obj_id, 
 					  struct ias_value *value, void *priv)
 {
 	struct irda_sock *self;
@@ -1746,7 +1745,7 @@ static void irda_simple_get_value_confirm(int result, __u16 obj_id,
 	if (result != IAS_SUCCESS) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), IAS query failed!\n");
 
-		self->errno = result;
+		self->errno = -EHOSTUNREACH;
 
 		/* Wake up any processes waiting for result */
 		wake_up_interruptible(&self->ias_wait);
@@ -1757,6 +1756,9 @@ static void irda_simple_get_value_confirm(int result, __u16 obj_id,
 	/* Clone the object (so the requester can free it) */
 	self->ias_result = kmalloc(sizeof(struct ias_value), GFP_ATOMIC);
 	memcpy(self->ias_result, value, sizeof(struct ias_value));
+	irias_delete_value(value);
+
+	self->errno = 0;
 
 	/* Wake up any processes waiting for result */
 	wake_up_interruptible(&self->ias_wait);
@@ -1778,7 +1780,7 @@ static int irda_extract_ias_value(struct irda_ias_set *ias_opt,
 				  struct ias_value *ias_value)
 {
 	/* Look at the type */
-	switch(ias_value->type) {
+	switch (ias_value->type) {
 	case IAS_INTEGER:
 		/* Copy the integer */
 		ias_opt->attribute.irda_attrib_int = ias_value->t.integer;
@@ -1787,7 +1789,7 @@ static int irda_extract_ias_value(struct irda_ias_set *ias_opt,
 		/* Set length */
 		ias_opt->attribute.irda_attrib_octet_seq.len = ias_value->len;
 		/* Copy over */
-		memcpy(ias_opt->attribute.irda_attrib_octet_seq.OctetSeq,
+		memcpy(ias_opt->attribute.irda_attrib_octet_seq.octet_seq,
 		       ias_value->t.oct_seq, ias_value->len);
 		break;
 	case IAS_STRING:
@@ -1803,10 +1805,10 @@ static int irda_extract_ias_value(struct irda_ias_set *ias_opt,
 	default :
 		return -EINVAL;
 	}
-
+	
 	/* Copy type over */
 	ias_opt->irda_attrib_type = ias_value->type;
-
+	
 	return 0;
 }
 
@@ -1827,7 +1829,6 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 	struct irda_ias_set	ias_opt;	/* IAS get/query params */
 	struct ias_object *	ias_obj;	/* Object in IAS */
 	struct ias_attrib *	ias_attr;	/* Attribute in IAS object */
-	int daddr = 0;		/* Destination address for IAS queries */
 	int val = 0;
 	int len = 0;
 	int err;
@@ -1962,21 +1963,6 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 		if (copy_from_user((char *) &ias_opt, (char *)optval, len))
 		  	return -EFAULT;
 
-		/* Check the destination address requested */
-		daddr = ias_opt.attribute.irda_attrib_int;
-		if(self->daddr != DEV_ADDR_ANY) {
-			/* If we are connected, we must use the correct
-			 * destination address (or leave it unspecified) */
-			if((daddr != DEV_ADDR_ANY) || (daddr != self->daddr))
-				return -EINVAL;
-			daddr = self->daddr;
-		} else {
-			/* If we are not connected, we must specify a valid
-			 * destination address */
-			if(daddr == DEV_ADDR_ANY)
-				return -EINVAL;
-		}
-
 		/* Check that we can proceed with IAP */
 		if (self->iriap) {
 			WARNING(__FUNCTION__
@@ -1985,24 +1971,27 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 		}
 
 		self->iriap = iriap_open(LSAP_ANY, IAS_CLIENT, self,
-					 irda_simple_get_value_confirm);
+					 irda_simple_getvalue_confirm);
+
+		/* Treat unexpected signals as disconnect */
+		self->errno = -EHOSTUNREACH;
 
 		/* Query remote LM-IAS */
-		self->errno = 0;
-		iriap_getvaluebyclass_request(self->iriap, self->saddr,
-					      daddr,
+		iriap_getvaluebyclass_request(self->iriap, 
+					      self->saddr, self->daddr,
 					      ias_opt.irda_class_name,
 					      ias_opt.irda_attrib_name);
 		/* Wait for answer */
 		interruptible_sleep_on(&self->ias_wait);
 		/* Check what happened */
-		if(self->errno)
-			return(self->errno);
+		if (self->errno)
+			return (self->errno);
 
 		/* Translate from internal to user structure */
 		err = irda_extract_ias_value(&ias_opt, self->ias_result);
-		kfree(self->ias_result); /* Cleanup (need to be *here*) */
-		if(err)
+		if (self->ias_result)
+			kfree(self->ias_result);
+		if (err)
 			return err;
 
 		/* Copy reply to the user */
@@ -2014,7 +2003,7 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 	default:
 		return -ENOPROTOOPT;
 	}
-
+	
 	return 0;
 }
 

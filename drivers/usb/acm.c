@@ -45,13 +45,9 @@
 #include <linux/module.h>
 #include <linux/config.h>
 
-#include "usb.h"
+#undef DEBUG
 
-#ifdef CONFIG_USB_ACM_DEBUG
-#define acm_debug(fmt,arg...)	printk(KERN_DEBUG "acm: " fmt "\n" , ##arg)
-#else
-#define acm_debug(fmt,arg...)	do {} while(0)
-#endif
+#include "usb.h"
 
 /*
  * Major and minor numbers.
@@ -120,9 +116,9 @@ static struct acm acm_table[ACM_TTY_MINORS];
 static void acm_set_control(unsigned int status, struct acm *acm)
 {
 	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x22, 0x22, status, 0, NULL, 0, HZ) < 0)
-		acm_debug("acm_set_control() failed");
+		dbg("acm_set_control() failed");
 
-	acm_debug("output control lines: dtr%c rts%c",
+	dbg("output control lines: dtr%c rts%c",
 		acm->ctrlout & ACM_CTRL_DTR ? '+' : '-', acm->ctrlout & ACM_CTRL_RTS ? '+' : '-');
 }
 
@@ -130,13 +126,13 @@ static void acm_set_control(unsigned int status, struct acm *acm)
 static void acm_set_coding(struct acm_coding *coding, struct acm *acm)
 {
 	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x30, 0x22, 0, 0, coding, sizeof(struct acm_coding), HZ) < 0)
-		acm_debug("acm_set_coding() failed");
+		dbg("acm_set_coding() failed");
 }
 
 static void acm_send_break(int ms, struct acm *acm)
 {
 	if (usb_control_msg(acm->dev, usb_sndctrlpipe(acm->dev, 0), 0x30, 0x33, ms, 0, NULL, 0, HZ) < 0)
-		acm_debug("acm_send_break() failed");
+		dbg("acm_send_break() failed");
 }
 #endif
 
@@ -151,7 +147,7 @@ static void acm_ctrl_irq(struct urb *urb)
 	unsigned char *data = (unsigned char *)(dr + 1);
 
 	if (urb->status < 0) {
-		acm_debug("nonzero ctrl irq status received: %d", urb->status);
+		dbg("nonzero ctrl irq status received: %d", urb->status);
 		return;
 	}
 
@@ -162,13 +158,13 @@ static void acm_ctrl_irq(struct urb *urb)
 		case 0x20: /* Set serial line state */
 
 			if ((dr->index != 1) || (dr->length != 2)) {
-				acm_debug("unknown set serial line request: index %d len %d", dr->index, dr->length);
+				dbg("unknown set serial line request: index %d len %d", dr->index, dr->length);
 				return;
 			}
 
 			acm->ctrlin = data[0] | (((unsigned int) data[1]) << 8);
 
-			acm_debug("input control lines: dcd%c dsr%c break%c ring%c framing%c parity%c overrun%c",
+			dbg("input control lines: dcd%c dsr%c break%c ring%c framing%c parity%c overrun%c",
 				acm->ctrlin & ACM_CTRL_DCD ? '+' : '-',	acm->ctrlin & ACM_CTRL_DSR ? '+' : '-',
 				acm->ctrlin & ACM_CTRL_BRK ? '+' : '-',	acm->ctrlin & ACM_CTRL_RI  ? '+' : '-',
 				acm->ctrlin & ACM_CTRL_FRAMING ? '+' : '-',	acm->ctrlin & ACM_CTRL_PARITY ? '+' : '-',
@@ -177,7 +173,7 @@ static void acm_ctrl_irq(struct urb *urb)
 			return;
 
 		default:
-			acm_debug("unknown control event received: request %d index %d len %d data0 %d data1 %d",
+			dbg("unknown control event received: request %d index %d len %d data0 %d data1 %d",
 				dr->request, dr->index, dr->length, data[0], data[1]);
 			return;
 	}
@@ -193,7 +189,7 @@ static void acm_read_bulk(struct urb *urb)
 	int i;
 
 	if (urb->status) {
-		acm_debug("nonzero read bulk status received: %d", urb->status);
+		dbg("nonzero read bulk status received: %d", urb->status);
 		return;
 	}
 
@@ -205,7 +201,7 @@ static void acm_read_bulk(struct urb *urb)
 	tty_flip_buffer_push(tty);
 
 	if (usb_submit_urb(urb))
-		acm_debug("failed resubmitting read urb");
+		dbg("failed resubmitting read urb");
 
 	return;
 }
@@ -216,7 +212,7 @@ static void acm_write_bulk(struct urb *urb)
 	struct tty_struct *tty = acm->tty;
 
 	if (urb->status) {
-		acm_debug("nonzero write bulk status received: %d", urb->status);
+		dbg("nonzero write bulk status received: %d", urb->status);
 		return;
 	}
 
@@ -248,10 +244,10 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 	if (acm->used++) return 0;
 
 	if (usb_submit_urb(&acm->ctrlurb))
-		acm_debug("usb_submit_urb(ctrl irq) failed");
+		dbg("usb_submit_urb(ctrl irq) failed");
 
 	if (usb_submit_urb(&acm->readurb))
-		acm_debug("usb_submit_urb(read bulk) failed");
+		dbg("usb_submit_urb(read bulk) failed");
 
 	acm_set_control(acm->ctrlout = ACM_CTRL_DTR | ACM_CTRL_RTS, acm);
 
@@ -293,7 +289,7 @@ static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned c
 	acm->writeurb.transfer_buffer_length = count;
 
 	if (usb_submit_urb(&acm->writeurb))
-		acm_debug("usb_submit_urb(write bulk) failed");
+		dbg("usb_submit_urb(write bulk) failed");
 
 	return count;
 }
@@ -330,7 +326,7 @@ static void acm_tty_unthrottle(struct tty_struct *tty)
 
 static void acm_tty_set_termios(struct tty_struct *tty, struct termios *old)
 {
-	acm_debug("set_termios called, but not there yet");
+	dbg("set_termios called, but not there yet");
 	return;
 }
 
@@ -349,7 +345,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 	for (minor = 0; minor < ACM_TTY_MINORS &&
 		(acm_table[minor].present || acm_table[minor].used); minor++);
 	if (acm_table[minor].present || acm_table[minor].used) {
-		acm_debug("no more free acm devices");
+		dbg("no more free acm devices");
 		return NULL;
 	}
 	acm = acm_table + minor;
@@ -364,7 +360,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 
-		acm_debug("probing config %d", i);
+		dbg("probing config %d", i);
 		acm->cfg = dev->config + i;
 
 		ifcom = acm->cfg->interface[0].altsetting + 0;
@@ -434,7 +430,7 @@ static void acm_disconnect(struct usb_device *dev, void *ptr)
 	struct acm *acm = ptr;
 
 	if (!acm->present) {
-		acm_debug("disconnect on nonexisting interface");
+		dbg("disconnect on nonexisting interface");
 		return;
 	}
 

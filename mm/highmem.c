@@ -131,13 +131,17 @@ static void flush_all_zero_pkmaps(void)
 static unsigned long map_new_virtual(struct page *page)
 {
 	unsigned long vaddr;
-	int count = LAST_PKMAP;
+	int count;
 
+start:
+	count = LAST_PKMAP;
 	/* Find an empty entry */
 	for (;;) {
 		last_pkmap_nr = (last_pkmap_nr + 1) & LAST_PKMAP_MASK;
-		if (!last_pkmap_nr)
+		if (!last_pkmap_nr) {
 			flush_all_zero_pkmaps();
+			count = LAST_PKMAP;
+		}
 		if (!pkmap_count[last_pkmap_nr])
 			break;	/* Found a usable entry */
 		if (--count)
@@ -161,7 +165,7 @@ static unsigned long map_new_virtual(struct page *page)
 				return page->virtual;
 
 			/* Re-start */
-			count = LAST_PKMAP;
+			goto start;
 		}
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);

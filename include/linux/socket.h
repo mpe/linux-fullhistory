@@ -106,7 +106,7 @@ __KINLINE struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size,
 
 	__ptr = (struct cmsghdr*)(((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len));
 	if ((unsigned long)((char*)(__ptr+1) - (char *) __ctl) > __size)
-		return NULL;
+		return (struct cmsghdr *)0;
 
 	return __ptr;
 }
@@ -247,15 +247,6 @@ struct ucred {
 
 /* IPX options */
 #define IPX_TYPE	1
-
-/* TCP options - this way around because someone left a set in the c library includes */
-#define TCP_NODELAY	1
-#define TCP_MAXSEG	2
-#define TCP_CORK	3	/* Linux specific (for use with sendfile) */
-#define TCP_KEEPIDLE	4
-#define TCP_KEEPINTVL	5
-#define TCP_KEEPCNT	6
-#define TCP_SYNCNT	7
 
 #ifdef __KERNEL__
 extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);

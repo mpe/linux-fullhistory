@@ -78,14 +78,15 @@ struct task_struct;
 struct vm_area_struct;
 struct sysinfo;
 
+struct zone_t;
 /* linux/ipc/shm.c */
-extern int shm_swap (int, int);
+extern int shm_swap (int, int, zone_t *);
 
 /* linux/mm/swap.c */
 extern void swap_setup (void);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_pages(unsigned int gfp_mask);
+extern int try_to_free_pages(unsigned int gfp_mask, zone_t *zone);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, struct page *, int);

@@ -503,6 +503,11 @@ kmem_getpages(kmem_cache_t *cachep, unsigned long flags, unsigned int *dma)
 {
 	void	*addr;
 
+	/*
+	 * If we requested dmaable memory, we will get it. Even if we 
+	 * did not request dmaable memory, we might get it, but that
+	 * would be relatively rare and ignorable.
+	 */
 	*dma = flags & SLAB_DMA;
 	addr = (void*) __get_free_pages(flags, cachep->c_gfporder);
 	/* Assume that now we have the pages no one else can legally
@@ -511,18 +516,6 @@ kmem_getpages(kmem_cache_t *cachep, unsigned long flags, unsigned int *dma)
 	 * it is a named-page or buffer-page.  The members it tests are
 	 * of no interest here.....
 	 */
-	if (!*dma && addr) {
-		/* Need to check if can dma. */
-		struct page *page = mem_map + MAP_NR(addr);
-		*dma = 1<<cachep->c_gfporder;
-		while ((*dma)--) {
-			if (!PageDMA(page)) {
-				*dma = 0;
-				break;
-			}
-			page++;
-		}
-	}
 	return addr;
 }
 

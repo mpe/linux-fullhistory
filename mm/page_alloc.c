@@ -224,7 +224,7 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 		return 1;
 
 	current->flags |= PF_MEMALLOC;
-	freed = try_to_free_pages(gfp_mask);
+	freed = try_to_free_pages(gfp_mask, zone);
 	current->flags &= ~PF_MEMALLOC;
 
 	if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
@@ -235,7 +235,7 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 /*
  * We are still balancing memory in a global way:
  */
-static inline int balance_memory (int gfp_mask)
+static inline int balance_memory (zone_t *zone, int gfp_mask)
 {
 	unsigned long free = nr_free_pages();
 	static int low_on_memory = 0;
@@ -264,7 +264,7 @@ static inline int balance_memory (int gfp_mask)
 		return 1;
 
 	current->flags |= PF_MEMALLOC;
-	freed = try_to_free_pages(gfp_mask);
+	freed = try_to_free_pages(gfp_mask, zone);
 	current->flags &= ~PF_MEMALLOC;
 
 	if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
@@ -340,7 +340,7 @@ nopage:
  * The main chunk of the balancing code is in this offline branch:
  */
 balance:
-	if (!balance_memory(gfp_mask))
+	if (!balance_memory(z, gfp_mask))
 		goto nopage;
 	goto ready;
 }
@@ -533,9 +533,9 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		i = 10;
 	if (i > 256)
 		i = 256;
-	freepages.min = i;
-	freepages.low = i * 2;
-	freepages.high = i * 3;
+	freepages.min += i;
+	freepages.low += i * 2;
+	freepages.high += i * 3;
 
 	/*
 	 * Some architectures (with lots of mem and discontinous memory
@@ -574,6 +574,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		zone->size = size;
 		zone->name = zone_names[j];
 		zone->lock = SPIN_LOCK_UNLOCKED;
+		zone->zone_pgdat = pgdat;
 		if (!size)
 			continue;
 

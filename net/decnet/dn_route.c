@@ -22,6 +22,9 @@
  *              Steve Whitehouse : More SMP locking changes & dn_cache_dump()
  *              Steve Whitehouse : Prerouting NF hook, now really is prerouting.
  *				   Fixed possible skb leak in rtnetlink funcs.
+ *              Steve Whitehouse : Dave Miller's dynamic hash table sizing and
+ *                                 Alexey Kuznetsov's finer grained locking
+ *                                 from ipv4/route.c.
  */
 
 /******************************************************************************
@@ -44,7 +47,6 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/kernel.h>
-#include <linux/timer.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -69,9 +71,14 @@
 #include <net/dn_fib.h>
 #include <net/dn_raw.h>
 
+struct dn_rt_hash_bucket
+{
+	struct dn_route *chain;
+	rwlock_t lock;
+} __attribute__((__aligned__(8)));
+
 extern struct neigh_table dn_neigh_table;
 
-#define DN_HASHBUCKETS 16
 
 static unsigned char dn_hiord_addr[6] = {0xAA,0x00,0x04,0x00,0x00,0x00};
 
@@ -82,8 +89,8 @@ static struct dst_entry *dn_dst_negative_advice(struct dst_entry *);
 static void dn_dst_link_failure(struct sk_buff *);
 static int dn_route_input(struct sk_buff *);
 
-static struct dn_route *dn_route_cache[DN_HASHBUCKETS];
-static rwlock_t dn_hash_lock = RW_LOCK_UNLOCKED;
+static struct dn_rt_hash_bucket *dn_rt_hash_table;
+static unsigned dn_rt_hash_mask;
 
 static struct timer_list dn_route_timer = { NULL, NULL, 0, 0L, NULL };
 int decnet_dst_gc_interval = 2;
@@ -104,8 +111,11 @@ static struct dst_ops dn_dst_ops = {
 
 static __inline__ unsigned dn_hash(unsigned short dest)
 {
-	unsigned short tmp = (dest&0xff) ^ (dest>>8);
-	return (tmp&0x0f) ^ (tmp>>4);
+	unsigned short tmp = dest;
+	tmp ^= (dest >> 3);
+	tmp ^= (dest >> 5);
+	tmp ^= (dest >> 10);
+	return dn_rt_hash_mask & (unsigned)tmp;
 }
 
 static void dn_dst_check_expire(unsigned long dummy)
@@ -115,10 +125,10 @@ static void dn_dst_check_expire(unsigned long dummy)
 	unsigned long now = jiffies;
 	unsigned long expire = 120 * HZ;
 
-	for(i = 0; i < DN_HASHBUCKETS; i++) {
-		rtp = &dn_route_cache[i];
+	for(i = 0; i <= dn_rt_hash_mask; i++) {
+		rtp = &dn_rt_hash_table[i].chain;
 
-		write_lock(&dn_hash_lock);
+		write_lock(&dn_rt_hash_table[i].lock);
 		for(;(rt=*rtp); rtp = &rt->u.rt_next) {
 			if (atomic_read(&rt->u.dst.__refcnt) ||
 					(now - rt->u.dst.lastuse) < expire)
@@ -127,7 +137,7 @@ static void dn_dst_check_expire(unsigned long dummy)
 			rt->u.rt_next = NULL;
 			dst_free(&rt->u.dst);
 		}
-		write_unlock(&dn_hash_lock);
+		write_unlock(&dn_rt_hash_table[i].lock);
 
 		if ((jiffies - now) > 0)
 			break;
@@ -144,9 +154,9 @@ static int dn_dst_gc(void)
 	unsigned long now = jiffies;
 	unsigned long expire = 10 * HZ;
 
-	write_lock_bh(&dn_hash_lock);
-	for(i = 0; i < DN_HASHBUCKETS; i++) {
-		rtp = &dn_route_cache[i];
+	for(i = 0; i <= dn_rt_hash_mask; i++) {
+		write_lock_bh(&dn_rt_hash_table[i].lock);
+		rtp = &dn_rt_hash_table[i].chain;
 		for(; (rt=*rtp); rtp = &rt->u.rt_next) {
 			if (atomic_read(&rt->u.dst.__refcnt) ||
 					(now - rt->u.dst.lastuse) < expire)
@@ -156,8 +166,8 @@ static int dn_dst_gc(void)
 			dst_free(&rt->u.dst);
 			break;
 		}
+		write_unlock_bh(&dn_rt_hash_table[i].lock);
 	}
-	write_unlock_bh(&dn_hash_lock);
 
 	return 0;
 }
@@ -194,15 +204,15 @@ static void dn_insert_route(struct dn_route *rt)
 	unsigned hash = dn_hash(rt->rt_daddr);
 	unsigned long now = jiffies;
 
-	write_lock_bh(&dn_hash_lock);
-	rt->u.rt_next = dn_route_cache[hash];
-	dn_route_cache[hash] = rt;
+	write_lock_bh(&dn_rt_hash_table[hash].lock);
+	rt->u.rt_next = dn_rt_hash_table[hash].chain;
+	dn_rt_hash_table[hash].chain = rt;
 	
 	dst_hold(&rt->u.dst);
 	rt->u.dst.__use++;
 	rt->u.dst.lastuse = now;
 
-	write_unlock_bh(&dn_hash_lock);
+	write_unlock_bh(&dn_rt_hash_table[hash].lock);
 }
 
 void dn_run_flush(unsigned long dummy)
@@ -210,18 +220,21 @@ void dn_run_flush(unsigned long dummy)
 	int i;
 	struct dn_route *rt, *next;
 
-	write_lock_bh(&dn_hash_lock);
-	for(i = 0; i < DN_HASHBUCKETS; i++) {
-		if ((rt = xchg(&dn_route_cache[i], NULL)) == NULL)
-			continue;
+	for(i = 0; i < dn_rt_hash_mask; i++) {
+		write_lock_bh(&dn_rt_hash_table[i].lock);
+
+		if ((rt = xchg(&dn_rt_hash_table[i].chain, NULL)) == NULL)
+			goto nothing_to_declare;
 
 		for(; rt; rt=next) {
 			next = rt->u.rt_next;
 			rt->u.rt_next = NULL;
 			dst_free((struct dst_entry *)rt);
 		}
+
+nothing_to_declare:
+		write_unlock_bh(&dn_rt_hash_table[i].lock);
 	}
-	write_unlock_bh(&dn_hash_lock);
 }
 
 static int dn_route_rx_packet(struct sk_buff *skb)
@@ -607,8 +620,8 @@ int dn_route_output(struct dst_entry **pprt, dn_address dst, dn_address src, int
 	struct dn_route *rt = NULL;
 
 	if (!(flags & MSG_TRYHARD)) {
-		read_lock_bh(&dn_hash_lock);
-		for(rt = dn_route_cache[hash]; rt; rt = rt->u.rt_next) {
+		read_lock_bh(&dn_rt_hash_table[hash].lock);
+		for(rt = dn_rt_hash_table[hash].chain; rt; rt = rt->u.rt_next) {
 			if ((dst == rt->rt_daddr) &&
 					(src == rt->rt_saddr) &&
 					(rt->rt_iif == 0) &&
@@ -616,12 +629,12 @@ int dn_route_output(struct dst_entry **pprt, dn_address dst, dn_address src, int
 				rt->u.dst.lastuse = jiffies;
 				dst_hold(&rt->u.dst);
 				rt->u.dst.__use++;
-				read_unlock_bh(&dn_hash_lock);
+				read_unlock_bh(&dn_rt_hash_table[hash].lock);
 				*pprt = &rt->u.dst;
 				return 0;
 			}
 		}
-		read_unlock_bh(&dn_hash_lock);
+		read_unlock_bh(&dn_rt_hash_table[hash].lock);
 	}
 
 	return dn_route_output_slow(pprt, dst, src, flags);
@@ -731,8 +744,8 @@ int dn_route_input(struct sk_buff *skb)
 	if (skb->dst)
 		return 0;
 
-	read_lock_bh(&dn_hash_lock);
-	for(rt = dn_route_cache[hash]; rt != NULL; rt = rt->u.rt_next) {
+	read_lock(&dn_rt_hash_table[hash].lock);
+	for(rt = dn_rt_hash_table[hash].chain; rt != NULL; rt = rt->u.rt_next) {
 		if ((rt->rt_saddr == cb->dst) &&
 				(rt->rt_daddr == cb->src) &&
 				(rt->rt_oif == 0) &&
@@ -740,12 +753,12 @@ int dn_route_input(struct sk_buff *skb)
 			rt->u.dst.lastuse = jiffies;
 			dst_hold(&rt->u.dst);
 			rt->u.dst.__use++;
-			read_unlock_bh(&dn_hash_lock);
+			read_unlock(&dn_rt_hash_table[hash].lock);
 			skb->dst = (struct dst_entry *)rt;
 			return 0;
 		}
 	}
-	read_unlock_bh(&dn_hash_lock);
+	read_unlock(&dn_rt_hash_table[hash].lock);
 
 	return dn_route_input_slow(skb);
 }
@@ -831,7 +844,9 @@ int dn_cache_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 		skb->rx_dev = dev;
 		cb->src = src;
 		cb->dst = dst;
+		local_bh_disable();
 		err = dn_route_input(skb);
+		local_bh_enable();
 		memset(cb, 0, sizeof(struct dn_skb_cb));
 		rt = (struct dn_route *)skb->dst;
 	} else {
@@ -885,25 +900,25 @@ int dn_cache_dump(struct sk_buff *skb, struct netlink_callback *cb)
 
 	s_h = cb->args[0];
 	s_idx = idx = cb->args[1];
-	for(h = 0; h < DN_HASHBUCKETS; h++) {
+	for(h = 0; h <= dn_rt_hash_mask; h++) {
 		if (h < s_h)
 			continue;
 		if (h > s_h)
 			s_idx = 0;
-		read_lock_bh(&dn_hash_lock);
-		for(rt = dn_route_cache[h], idx = 0; rt; rt = rt->u.rt_next, idx++) {
+		read_lock_bh(&dn_rt_hash_table[h].lock);
+		for(rt = dn_rt_hash_table[h].chain, idx = 0; rt; rt = rt->u.rt_next, idx++) {
 			if (idx < s_idx)
 				continue;
 			skb->dst = dst_clone(&rt->u.dst);
 			if (dn_rt_fill_info(skb, NETLINK_CB(cb->skb).pid,
 					cb->nlh->nlmsg_seq, RTM_NEWROUTE, 1) <= 0) {
 				dst_release(xchg(&skb->dst, NULL));
-				read_unlock_bh(&dn_hash_lock);
+				read_unlock_bh(&dn_rt_hash_table[h].lock);
 				goto done;
 			}
 			dst_release(xchg(&skb->dst, NULL));
 		}
-		read_unlock_bh(&dn_hash_lock);
+		read_unlock_bh(&dn_rt_hash_table[h].lock);
 	}
 
 done:
@@ -924,9 +939,9 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
 	int i;
 	char buf1[DN_ASCBUF_LEN], buf2[DN_ASCBUF_LEN];
 
-	read_lock_bh(&dn_hash_lock);
-	for(i = 0; i < DN_HASHBUCKETS; i++) {
-		rt = dn_route_cache[i];
+	for(i = 0; i <= dn_rt_hash_mask; i++) {
+		read_lock_bh(&dn_rt_hash_table[i].lock);
+		rt = dn_rt_hash_table[i].chain;
 		for(; rt != NULL; rt = rt->u.rt_next) {
 			len += sprintf(buffer + len, "%-8s %-7s %-7s %04d %04d %04d\n",
 					rt->u.dst.dev ? rt->u.dst.dev->name : "*",
@@ -937,6 +952,7 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
 					(int)rt->u.dst.rtt
 					);
 
+
 	                pos = begin + len;
 	
         	        if (pos < offset) {
@@ -946,10 +962,10 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
               		if (pos > offset + length)
                 	        break;
 		}
+		read_unlock_bh(&dn_rt_hash_table[i].lock);
 		if (pos > offset + length)
 			break;
 	}
-	read_unlock_bh(&dn_hash_lock);
 
         *start = buffer + (offset - begin);
         len   -= (offset - begin);
@@ -963,16 +979,54 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
 
 void __init dn_route_init(void)
 {
-	memset(dn_route_cache, 0, sizeof(struct dn_route *) * DN_HASHBUCKETS);
+	int i, goal, order;
 
 	dn_dst_ops.kmem_cachep = kmem_cache_create("dn_dst_cache",
 						   sizeof(struct dn_route),
 						   0, SLAB_HWCACHE_ALIGN,
 						   NULL, NULL);
 
+	if (!dn_dst_ops.kmem_cachep)
+		panic("DECnet: Failed to allocate dn_dst_cache\n");
+
 	dn_route_timer.function = dn_dst_check_expire;
 	dn_route_timer.expires = jiffies + decnet_dst_gc_interval * HZ;
 	add_timer(&dn_route_timer);
+
+	goal = num_physpages >> (26 - PAGE_SHIFT);
+
+	for(order = 0; (1UL << order) < goal; order++)
+		/* NOTHING */;
+
+	/*
+	 * Only want 1024 entries max, since the table is very, very unlikely
+	 * to be larger than that.
+	 */
+	while(order && ((((1UL << order) * PAGE_SIZE) / 
+				sizeof(struct dn_rt_hash_bucket)) >= 2048))
+		order--;
+
+	do {
+		dn_rt_hash_mask = (1UL << order) * PAGE_SIZE /
+			sizeof(struct dn_rt_hash_bucket);
+		while(dn_rt_hash_mask & (dn_rt_hash_mask - 1))
+			dn_rt_hash_mask--;
+		dn_rt_hash_table = (struct dn_rt_hash_bucket *)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (dn_rt_hash_table == NULL && --order > 0);
+
+	if (!dn_rt_hash_table)
+		panic("Failed to allocate DECnet route cache hash table\n");
+
+	printk(KERN_INFO "DECnet: Routing cache hash table of %u buckets, %dKbytes\n", dn_rt_hash_mask, (dn_rt_hash_mask*sizeof(struct dn_rt_hash_bucket))/1024);
+
+	dn_rt_hash_mask--;
+	for(i = 0; i <= dn_rt_hash_mask; i++) {
+		dn_rt_hash_table[i].lock = RW_LOCK_UNLOCKED;
+		dn_rt_hash_table[i].chain = NULL;
+	}
+
+	dn_dst_ops.gc_thresh = (dn_rt_hash_mask + 1);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_create("decnet_cache",0,decnet_cache_get_info);

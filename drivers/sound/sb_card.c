@@ -145,11 +145,6 @@ int pas2 = 0;		/* Set pas2=1 to load this as support for pas2 */
 int support = 0;	/* Set support to load this as a support module */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;		/* Do acer notebook init */
-#ifdef CONFIG_ISAPNP
-int isapnp = 1;
-#else
-int isapnp = 0;
-#endif
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -163,9 +158,6 @@ MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
 MODULE_PARM(esstype, "i");
-#ifdef CONFIG_ISAPNP
-MODULE_PARM(isapnp, "i");
-#endif
 
 void *smw_free = NULL;
 
@@ -233,12 +225,7 @@ int init_module(void)
 	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
 	{
 #ifdef CONFIG_ISAPNP			
-		if (isapnp == 1 && sb_probe_isapnp(&config, &config_mpu)<0)
-		{
-			printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
-			return -EINVAL;
-		}
-		else
+		if (sb_probe_isapnp(&config, &config_mpu)<0)
 		{
 #endif			
 			if (io == -1 || dma == -1 || irq == -1)
@@ -251,6 +238,9 @@ int init_module(void)
 			config.dma = dma;
 			config.dma2 = dma16;
 			config.card_subtype = type;
+#ifdef CONFIG_MIDI
+			config_mpu.io_base = mpu_io;
+#endif
 #ifdef CONFIG_ISAPNP
 		}
 #endif
@@ -261,8 +251,6 @@ int init_module(void)
 		if(config.slots[0]==-1)
 			return -ENODEV;
 #ifdef CONFIG_MIDI
-		if (isapnp == 0) 
-			config_mpu.io_base = mpu_io;
 		if (probe_sbmpu(&config_mpu))
 			sbmpu = 1;
 		if (sbmpu)

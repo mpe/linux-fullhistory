@@ -21,7 +21,7 @@
 /*      cops_ffdrv.h: LocalTalk driver firmware dump for Linux.
  *
  *      Authors:
- *      - Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+ *      - Jay Schulist <jschlst@turbolinux.com>
  */
 
 #include <linux/config.h>

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Tue Dec 21 11:10:12 1999
+ * Modified at:   Sat Dec 25 21:07:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997-1999 Dag Brattli <dagb@cs.uit.no>,
@@ -113,7 +113,7 @@ struct snrm_frame {
 void irlap_send_discovery_xid_frame(struct irlap_cb *, int S, __u8 s, 
 				    __u8 command, discovery_t *discovery);
 void irlap_send_snrm_frame(struct irlap_cb *, struct qos_info *);
-void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr, 
+void irlap_send_test_frame(struct irlap_cb *self, __u8 caddr, __u32 daddr, 
 			   struct sk_buff *cmd);
 void irlap_send_ua_response_frame(struct irlap_cb *, struct qos_info *);
 void irlap_send_dm_frame(struct irlap_cb *self);

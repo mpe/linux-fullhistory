@@ -1,5 +1,5 @@
 filter.txt: Linux Socket Filtering
-Written by: Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+Written by: Jay Schulist <jschlst@turbolinux.com>
 
 Introduction
 ============

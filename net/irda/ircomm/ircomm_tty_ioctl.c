@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Jun 10 14:39:09 1999
- * Modified at:   Tue Dec 14 18:08:09 1999
+ * Modified at:   Wed Jan  5 14:45:43 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -93,10 +93,11 @@ void ircomm_tty_change_speed(struct ircomm_tty_cb *self)
 	/* CTS flow control flag and modem status interrupts */
 	if (cflag & CRTSCTS) {
 		self->flags |= ASYNC_CTS_FLOW;
-		/* self->settings.flow_control |= IRCOMM_RTS_CTS_IN; */
-	} else
+		self->settings.flow_control |= IRCOMM_RTS_CTS_IN;
+	} else {
 		self->flags &= ~ASYNC_CTS_FLOW;
-	
+		self->settings.flow_control &= ~IRCOMM_RTS_CTS_IN;
+	}
 	if (cflag & CLOCAL)
 		self->flags &= ~ASYNC_CHECK_CD;
 	else

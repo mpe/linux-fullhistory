@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.75 1999/12/15 22:39:34 davem Exp $
+ * Version:	$Id: udp.c,v 1.76 2000/01/05 21:27:51 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -664,10 +664,6 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	}
 	return(0);
 }
-
-#ifndef HAVE_CSUM_COPY_USER
-#undef CONFIG_UDP_DELAY_CSUM
-#endif
 
 /*
  * 	This should be easy, if there is something there we

@@ -1,4 +1,4 @@
-/* $Id: rwsem.S,v 1.1 1999/12/28 11:50:39 jj Exp $
+/* $Id: rwsem.S,v 1.2 2000/01/05 01:00:38 davem Exp $
  * Assembly part of rw semaphores.
  *
  * Copyright (C) 1999 Jakub Jelinek (jakub@redhat.com)

@@ -1,8 +1,6 @@
 #ifndef _LINUX_ERRQUEUE_H
 #define _LINUX_ERRQUEUE_H 1
 
-#include <linux/config.h>
-
 struct sock_extended_err
 {
 	__u32	ee_errno;	
@@ -22,6 +20,9 @@ struct sock_extended_err
 #define SO_EE_OFFENDER(ee)	((struct sockaddr*)((ee)+1))
 
 #ifdef __KERNEL__
+
+#include <linux/config.h>
+
 #define SKB_EXT_ERR(skb) ((struct sock_exterr_skb *) ((skb)->cb))
 
 struct sock_exterr_skb

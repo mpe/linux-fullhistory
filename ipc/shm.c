@@ -799,7 +799,7 @@ oom:
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
 
-int shm_swap (int prio, int gfp_mask)
+int shm_swap (int prio, int gfp_mask, zone_t *zone)
 {
 	pte_t page;
 	struct shmid_kernel *shp;
@@ -849,9 +849,7 @@ check_table:
 	if (!pte_present(page))
 		goto check_table;
 	page_map = pte_page(page);
-	if ((gfp_mask & __GFP_DMA) && !PageDMA(page_map))
-		goto check_table;
-	if (!(gfp_mask & __GFP_HIGHMEM) && PageHighMem(page_map))
+	if (zone && (!memclass(page_map->zone, zone)))
 		goto check_table;
 	swap_attempts++;
 

@@ -46,31 +46,25 @@
 static loff_t udf_file_llseek(struct file *, loff_t, int);
 static ssize_t udf_file_read_adinicb (struct file *, char *, size_t, loff_t *);
 static ssize_t udf_file_write (struct file *, const char *, size_t, loff_t *);
-#if BITS_PER_LONG < 64
 static int udf_open_file(struct inode *, struct file *);
-#endif
 static int udf_release_file(struct inode *, struct file *);
 
 static struct file_operations udf_file_operations = {
 	udf_file_llseek,	/* llseek */
 	generic_file_read,	/* read */
 	udf_file_write,		/* write */
-	NULL,				/* readdir */
-	NULL,				/* poll */
-	udf_ioctl,			/* ioctl */
+	NULL,			/* readdir */
+	NULL,			/* poll */
+	udf_ioctl,		/* ioctl */
 	generic_file_mmap,	/* mmap */
-#if BITS_PER_LONG == 64
-	NULL, 				/* open */
-#else
 	udf_open_file,		/* open */
-#endif
-	NULL,				/* flush */
+	NULL,			/* flush */
 	udf_release_file,	/* release */
 	udf_sync_file,		/* fsync */
-	NULL,				/* fasync */
-	NULL,				/* check_media_change */
-	NULL,				/* revalidate */
-	NULL				/* lock */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL,			/* revalidate */
+	NULL			/* lock */
 };
 
 struct inode_operations udf_file_inode_operations = {
@@ -426,7 +420,6 @@ static int udf_release_file(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-#if BITS_PER_LONG < 64
 /*
  * udf_open_file
  *
@@ -435,6 +428,7 @@ static int udf_release_file(struct inode * inode, struct file * filp)
  *
  * DESCRIPTION
  *  Use this to disallow opening RW large files on 32 bit systems.
+ *  On 64 bit systems we force on O_LARGEFILE in sys_open.
  *
  * HISTORY
  *
@@ -445,4 +439,3 @@ static int udf_open_file(struct inode * inode, struct file * filp)
 		return -EFBIG;
 	return 0;
 }
-#endif

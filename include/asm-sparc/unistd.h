@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.59 1999/12/21 14:09:43 jj Exp $ */
+/* $Id: unistd.h,v 1.60 2000/01/05 07:37:50 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -276,15 +276,15 @@
 type name(void) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "t 0x10\n\t" \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
 		      : "=r" (__res)\
-		      : "0" (__NR_##name) \
-		      : "g1", "o0", "cc"); \
+		      : "r" (__g1) \
+		      : "o0", "cc"); \
 if (__res < -255 || __res >= 0) \
     return (type) __res; \
 errno = -__res; \
@@ -295,16 +295,16 @@ return -1; \
 type name(type1 arg1) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "t 0x10\n\t" \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+register long __o0 __asm__ ("o0") = (long)(arg1); \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
-		      : "=r" (__res), "=r" ((long)(arg1)) \
-		      : "0" (__NR_##name),"1" ((long)(arg1)) \
-		      : "g1", "o0", "cc"); \
+		      : "=r" (__res), "=&r" (__o0) \
+		      : "1" (__o0), "r" (__g1) \
+		      : "cc"); \
 if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -315,17 +315,17 @@ return -1; \
 type name(type1 arg1,type2 arg2) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "t 0x10\n\t" \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+register long __o0 __asm__ ("o0") = (long)(arg1); \
+register long __o1 __asm__ ("o1") = (long)(arg2); \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
-		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
-		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
-		      : "g1", "o0", "o1", "cc"); \
+		      : "=r" (__res), "=&r" (__o0) \
+		      : "1" (__o0), "r" (__o1), "r" (__g1) \
+		      : "cc"); \
 if (__res < -255 || __res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -336,20 +336,18 @@ return -1; \
 type name(type1 arg1,type2 arg2,type3 arg3) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "t 0x10\n\t" \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+register long __o0 __asm__ ("o0") = (long)(arg1); \
+register long __o1 __asm__ ("o1") = (long)(arg2); \
+register long __o2 __asm__ ("o2") = (long)(arg3); \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
-		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
-		        "=r" ((long)(arg3)) \
-		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
-		        "3" ((long)(arg3)) \
-		      : "g1", "o0", "o1", "o2", "cc"); \
+		      : "=r" (__res), "=&r" (__o0) \
+		      : "1" (__o0), "r" (__o1), "r" (__o2), "r" (__g1) \
+		      : "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -360,21 +358,19 @@ return -1; \
 type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "or %%g0, %4, %%o3\n\t" \
-		      "t 0x10\n\t" \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+register long __o0 __asm__ ("o0") = (long)(arg1); \
+register long __o1 __asm__ ("o1") = (long)(arg2); \
+register long __o2 __asm__ ("o2") = (long)(arg3); \
+register long __o3 __asm__ ("o3") = (long)(arg4); \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
-		      "sub %%g0,%%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
-		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
-		        "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
-		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
-		        "3" ((long)(arg3)),"4" ((long)(arg4)) \
-		      : "g1", "o0", "o1", "o2", "o3", "cc"); \
+		      : "=r" (__res), "=&r" (__o0) \
+		      : "1" (__o0), "r" (__o1), "r" (__o2), "r" (__o3), "r" (__g1) \
+		      : "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -385,24 +381,21 @@ return -1; \
 	  type5,arg5) \
 type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 { \
-      long __res; \
-\
-__asm__ __volatile__ ("or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "or %%g0, %4, %%o3\n\t" \
-		      "or %%g0, %5, %%o4\n\t" \
-		      "or %%g0, %6, %%g1\n\t" \
-		      "t 0x10\n\t" \
+long __res; \
+register long __g1 __asm__ ("g1") = __NR_##name; \
+register long __o0 __asm__ ("o0") = (long)(arg1); \
+register long __o1 __asm__ ("o1") = (long)(arg2); \
+register long __o2 __asm__ ("o2") = (long)(arg3); \
+register long __o3 __asm__ ("o3") = (long)(arg4); \
+register long __o4 __asm__ ("o4") = (long)(arg5); \
+__asm__ __volatile__ ("t 0x10\n\t" \
 		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+		      "mov %%o0, %0\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
 		      "1:\n\t" \
-		      : "=r" (__res) \
-		      : "r" ((long)(arg1)),"r" ((long)(arg2)), \
-		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
-		        "i" (__NR_##name)  \
-		      : "g1", "o0", "o1", "o2", "o3", "o4", "cc"); \
+		      : "=r" (__res), "=&r" (__o0) \
+		      : "1" (__o0), "r" (__o1), "r" (__o2), "r" (__o3), "r" (__o4), "r" (__g1) \
+		      : "cc"); \
 if (__res < -255 || __res>=0) \
 	return (type) __res; \
 errno = -__res; \

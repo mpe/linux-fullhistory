@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Tue Dec 21 11:27:22 1999
+ * Modified at:   Sat Dec 25 21:07:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>,
@@ -446,7 +446,7 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 		 * Send response. This skb will not be sent out again, and
 		 * will only be used to send out the same info as the cmd
 		 */
-		irlap_send_test_frame(self, info->daddr, skb);
+		irlap_send_test_frame(self, CBROADCAST, info->daddr, skb);
 		dev_kfree_skb(skb);
 		break;
 	case RECV_TEST_RSP:
@@ -1963,13 +1963,12 @@ static int irlap_state_nrm_s(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_start_wd_timer(self, self->wd_timeout);
 
 		/* Send response (info will be copied) */
-		irlap_send_test_frame(self, info->daddr, skb);
+		irlap_send_test_frame(self, self->caddr, info->daddr, skb);
 		dev_kfree_skb(skb);
 		break;
 	default:
 		IRDA_DEBUG(1, __FUNCTION__ "(), Unknown event %d, (%s)\n", 
 			   event, irlap_event[event]);
-
 		if (skb)
 			dev_kfree_skb(skb);
 

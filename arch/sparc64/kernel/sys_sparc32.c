@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.126 1999/12/21 14:09:21 jj Exp $
+/* $Id: sys_sparc32.c,v 1.127 2000/01/04 23:54:41 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3998,4 +3998,38 @@ asmlinkage int sys32_adjtimex(struct timex32 *utp)
 		ret = -EFAULT;
 
 	return ret;
+}
+
+/* This is just a version for 32-bit applications which does
+ * not force O_LARGEFILE on.
+ */
+
+asmlinkage long sparc32_open(const char * filename, int flags, int mode)
+{
+	char * tmp;
+	int fd, error;
+
+	tmp = getname(filename);
+	fd = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
+		fd = get_unused_fd();
+		if (fd >= 0) {
+			struct file * f;
+			lock_kernel();
+			f = filp_open(tmp, flags, mode);
+			unlock_kernel();
+			error = PTR_ERR(f);
+			if (IS_ERR(f))
+				goto out_error;
+			fd_install(fd, f);
+		}
+out:
+		putname(tmp);
+	}
+	return fd;
+
+out_error:
+	put_unused_fd(fd);
+	fd = error;
+	goto out;
 }

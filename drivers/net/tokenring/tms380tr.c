@@ -31,7 +31,7 @@
  *	- David Hein at Texas Instruments 
  *
  *  Maintainer(s):
- *    JS	Jay Schulist		jschlst@samba.anu.edu.au
+ *    JS	Jay Schulist		jschlst@turbolinux.com
  *    CG	Christoph Goos		cgoos@syskonnect.de
  *    AF	Adam Fritzler		mid@auk.cx
  *

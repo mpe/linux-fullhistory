@@ -103,17 +103,11 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 
+#undef DEBUG		/* Enable to print results of read/write_scanner() calls */
+#undef RD_DATA_DUMP	/* Enable to dump data - limited to 24 bytes */
+#undef WR_DATA_DUMP
+
 #include "usb.h"
-
-// #define SCN_DBG /* Enable to print results of read/write_scanner() calls */
-// #define RD_DATA_DUMP /* Enable to dump data - limited to 24 bytes */
-// #define WR_DATA_DUMP
-
-#ifdef SCN_DBG
-#define SCN_DEBUG(X) X
-#else
-#define SCN_DEBUG(X)
-#endif
 
 #define IBUF_SIZE 32768
 #define OBUF_SIZE 4096
@@ -207,14 +201,14 @@ write_scanner(struct file * file, const char * buffer,
 		}
 
 		result = usb_bulk_msg(hps->hpscan_dev,usb_sndbulkpipe(hps->hpscan_dev, hps->oep), obuf, copy_size, &partial, 30*HZ);
-		SCN_DEBUG(printk(KERN_DEBUG "write stats: result:%d copy_size:%lu partial:%lu\n", (int)result, copy_size, partial);)
+		dbg("write stats: result:%d copy_size:%lu partial:%lu", (int)result, copy_size, partial);
 
 		if (result == USB_ST_TIMEOUT) {	/* NAK -- shouldn't happen */
-			printk(KERN_WARNING "write_scanner: NAK recieved.\n");
+			warn("write_scanner: NAK recieved.");
 			ret = -ETIME;
 			break;
 		} else if (result < 0) { /* We should not get any I/O errors */
-			printk(KERN_WARNING "write_scanner: funky result: %d. Please notify the maintainer.\n", result);
+			warn("write_scanner: funky result: %d. Please notify the maintainer.", result);
 			ret = -EIO;
 			break;
 		} 
@@ -223,7 +217,7 @@ write_scanner(struct file * file, const char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG "dump: ");
+			printk(KERN_DEBUG __FILE__ ": dump: ");
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", obuf[cnt]);
 			}
@@ -277,14 +271,14 @@ read_scanner(struct file * file, char * buffer,
 		this_read = (count > IBUF_SIZE) ? IBUF_SIZE : count;
 		
 		result = usb_bulk_msg(hps->hpscan_dev, usb_rcvbulkpipe(hps->hpscan_dev, hps->iep), ibuf, this_read, &partial, 60*HZ);
-		SCN_DEBUG(printk(KERN_DEBUG "read stats: result:%d this_read:%u partial:%lu\n", (int)result, this_read, partial);)
+		dbg("read stats: result:%d this_read:%u partial:%lu", (int)result, this_read, partial);
 
 		if (result == USB_ST_TIMEOUT) { /* NAK -- shouldn't happen */
-			printk(KERN_WARNING "read_scanner: NAK received\n");
+			warn("read_scanner: NAK received");
 			ret = -ETIME;
 			break;
 		} else if ((result < 0) && (result != USB_ST_DATAUNDERRUN)) {
-			printk(KERN_WARNING "read_scanner: funky result: %d. Please notify the maintainer.\n", (int)result);
+			warn("read_scanner: funky result: %d. Please notify the maintainer.", (int)result);
 			ret = -EIO;
 			break;
 		}
@@ -293,7 +287,7 @@ read_scanner(struct file * file, char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG "dump: ");
+			printk(KERN_DEBUG __FILE__ ": dump: ");
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", ibuf[cnt]);
 			}
@@ -333,9 +327,8 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 
 	hps->present = 0;
 
-	if (vendor != 0 || product != 0) {
-		printk(KERN_INFO "USB Scanner Vendor:Product - %x:%x\n", vendor, product);
-	}
+	if (vendor != 0 || product != 0)
+		info("USB Scanner Vendor:Product - %x:%x\n", vendor, product);
 
 /* There doesn't seem to be an imaging class defined in the USB
  * Spec. (yet).  If there is, HP isn't following it and it doesn't
@@ -377,7 +370,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 
 	if (dev->descriptor.bNumConfigurations != 1 || 
 	    dev->config[0].bNumInterfaces != 1) {
-		printk(KERN_INFO "probe_scanner: only simple configurations supported\n");
+		dbg("probe_scanner: only simple configurations supported");
 		return NULL;
 	}
 
@@ -385,12 +378,12 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 
 	if (endpoint[0].bmAttributes != USB_ENDPOINT_XFER_BULK
 	    || endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK) {
-		printk(KERN_INFO "probe_scanner: invalid bulk endpoints\n");
+		dbg("probe_scanner: invalid bulk endpoints");
 		return NULL;
 	}
 
 	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-                printk (KERN_INFO "probe_scanner: failed usb_set_configuration\n");
+                dbg("probe_scanner: failed usb_set_configuration");
 		hps->hpscan_dev = NULL;
                 return NULL;
         }
@@ -418,10 +411,10 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	}
 
 	ident = usb_string(dev, dev->descriptor.iProduct); /* usb_string allocates memory using kmalloc() so kfree() needs to be called afterwards when the pointer is no longer needed. */
-	printk(KERN_INFO "USB Scanner (%s) found at address %d\n", ident, dev->devnum);
+	info("USB Scanner (%s) found at address %d", ident, dev->devnum);
 	kfree(ident);
 
-	SCN_DEBUG(printk(KERN_DEBUG "probe_scanner: using bulk endpoints - In: %x  Out: %x\n", hps->iep, hps->oep);)
+	dbg("probe_scanner: using bulk endpoints - In: %x  Out: %x", hps->iep, hps->oep);
 
 	hps->present = 1;
 	hps->hpscan_dev = dev;
@@ -485,7 +478,7 @@ usb_scanner_init(void)
         if (usb_register(&scanner_driver) < 0)
                 return -1;
 
-	printk(KERN_INFO "USB Scanner support registered.\n");
+	info("USB Scanner support registered.");
 	return 0;
 }
 

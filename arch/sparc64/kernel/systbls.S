@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.61 1999/12/21 14:09:15 jj Exp $
+/* $Id: systbls.S,v 1.62 2000/01/04 23:54:43 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -20,7 +20,7 @@
 	.globl sys_call_table32
 sys_call_table32:
 /*0*/	.word sys_nis_syscall, sparc_exit, sys_fork, sys_read, sys_write
-/*5*/	.word sys_open, sys_close, sys32_wait4, sys_creat, sys_link
+/*5*/	.word sparc32_open, sys_close, sys32_wait4, sys_creat, sys_link
 /*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys32_chown, sys32_mknod
 /*15*/	.word sys32_chmod, sys32_lchown, sparc_brk, sys_perfctr, sys32_lseek
 /*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid

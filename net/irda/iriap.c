@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Fri Dec 17 15:58:16 1999
+ * Modified at:   Sat Dec 25 16:42:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -85,6 +85,7 @@ int __init iriap_init(void)
 {
 	struct ias_object *obj;
 	struct iriap_cb *server;
+	__u8 oct_seq[6];
 	__u16 hints;
 
 	/* Allocate master array */
@@ -102,14 +103,19 @@ int __init iriap_init(void)
 	 *  Register some default services for IrLMP 
 	 */
 	hints  = irlmp_service_to_hint(S_COMPUTER);
-	/*hints |= irlmp_service_to_hint(S_PNP);*/
 	service_handle = irlmp_register_service(hints);
 
-	/* 
-	 *  Register the Device object with LM-IAS
-	 */
+	/* Register the Device object with LM-IAS */
 	obj = irias_new_object("Device", IAS_DEVICE_ID);
 	irias_add_string_attrib(obj, "DeviceName", "Linux");
+
+	oct_seq[0] = 0x01;  /* Version 1 */
+	oct_seq[1] = 0x00;  /* IAS support bits */
+	oct_seq[2] = 0x00;  /* LM-MUX support bits */
+#ifdef CONFIG_IRDA_ULTRA
+	oct_seq[2] |= 0x04; /* Connectionless Data support */
+#endif
+	irias_add_octseq_attrib(obj, "IrLMPSupport", oct_seq, 3);
 	irias_insert_object(obj);
 
 	/*  
@@ -580,7 +586,7 @@ void iriap_getvaluebyclass_response(struct iriap_cb *self, __u16 obj_id,
 	tmp_be16 = cpu_to_be16(obj_id);
 	memcpy(fp+n, &tmp_be16, 2); n += 2;
 
-	switch(value->type) {
+	switch (value->type) {
 	case IAS_STRING:
 		skb_put(skb, 3 + value->len);
 		fp[n++] = value->type;
@@ -710,6 +716,22 @@ void iriap_send_ack(struct iriap_cb *self)
 	irlmp_data_request(self->lsap, skb);
 }
 
+void iriap_connect_request(struct iriap_cb *self)
+{
+	int ret;
+
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IAS_MAGIC, return;);
+
+	ret = irlmp_connect_request(self->lsap, LSAP_IAS, 
+				    self->saddr, self->daddr, 
+				    NULL, NULL);
+	if (ret < 0) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), connect failed!\n");
+		self->confirm(IAS_DISCONNECT, 0, NULL, self->priv);
+	}
+}
+
 /*
  * Function iriap_connect_confirm (handle, skb)
  *
@@ -734,9 +756,7 @@ static void iriap_connect_confirm(void *instance, void *sap,
 	
 	del_timer(&self->watchdog_timer);
 
-	iriap_do_client_event(self, IAP_LM_CONNECT_CONFIRM, NULL);
-
-	dev_kfree_skb(userdata);
+	iriap_do_client_event(self, IAP_LM_CONNECT_CONFIRM, userdata);
 }
 
 /*
@@ -855,7 +875,7 @@ static int iriap_data_indication(void *instance, void *sap,
 			 * no to use self anymore after calling confirm 
 			 */
 			if (self->confirm)
-				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
+				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL,
 					      self->priv);
 			dev_kfree_skb(skb);
 			break;

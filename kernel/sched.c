@@ -673,7 +673,7 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
 #endif
 		p = curr->task;
 		state = p->state;
-		if (state & mode) {
+		if (state & (mode & ~TASK_EXCLUSIVE)) {
 #if WAITQUEUE_DEBUG
 			curr->__waker = (long)__builtin_return_address(0);
 #endif
@@ -681,7 +681,7 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
 				wake_up_process_synchronous(p);
 			else
 				wake_up_process(p);
-			if (state & TASK_EXCLUSIVE)
+			if (state & mode & TASK_EXCLUSIVE)
 				break;
 		}
 	}

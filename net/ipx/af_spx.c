@@ -6,7 +6,7 @@
  *		 Revision Date:  February 9, 1993
  *
  *	Developers:
- *      Jay Schulist    <Jay.Schulist@spacs.k12.wi.us>
+ *      Jay Schulist    <jschlst@turbolinux.com>
  *	Jim Freeman	<jfree@caldera.com>
  *
  *	Changes:

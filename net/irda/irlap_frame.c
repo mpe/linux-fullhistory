@@ -6,10 +6,10 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Tue Dec 21 11:19:19 1999
+ * Modified at:   Wed Jan  5 08:59:04 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -440,7 +440,7 @@ static void irlap_recv_discovery_xid_rsp(struct irlap_cb *self,
 		text = (char *) &discovery_info[2];
 	}
 	/* 
-	 *  Terminate string, should be safe since this is where the 
+	 *  Terminate info string, should be safe since this is where the 
 	 *  FCS bytes resides.
 	 */
 	skb->data[skb->len] = '\0'; 
@@ -1205,7 +1205,7 @@ static void irlap_recv_frmr_frame(struct irlap_cb *self, struct sk_buff *skb,
  *    Send a test frame response
  *
  */
-void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr, 
+void irlap_send_test_frame(struct irlap_cb *self, __u8 caddr, __u32 daddr, 
 			   struct sk_buff *cmd)
 {
 	struct sk_buff *skb;
@@ -1216,21 +1216,19 @@ void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr,
 	if (!skb)
 		return;
 
-	skb_put(skb, sizeof(struct test_frame));
+	/* Broadcast frames must include saddr and daddr fields */
+	if (caddr == CBROADCAST) {
+		frame = (struct test_frame *) 
+			skb_put(skb, sizeof(struct test_frame));
 
-	frame = (struct test_frame *) skb->data;
+		/* Insert the swapped addresses */
+		frame->saddr = cpu_to_le32(self->saddr);
+		frame->daddr = cpu_to_le32(daddr);
+	} else
+		frame = (struct test_frame *) skb_put(skb, LAP_MAX_HEADER);
 
-	/* Build header */
-	if (self->state == LAP_NDM)
-		frame->caddr = CBROADCAST; /* Send response */
-	else
-		frame->caddr = self->caddr;
-
+	frame->caddr = caddr;
 	frame->control = TEST_RSP;
-
-	/* Insert the swapped addresses */
-	frame->saddr = cpu_to_le32(self->saddr);
-	frame->daddr = cpu_to_le32(daddr);
 
 	/* Copy info */
 	info = skb_put(skb, cmd->len);
@@ -1254,22 +1252,27 @@ static void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb,
 
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
-	if (skb->len < sizeof(struct test_frame)) {
-		IRDA_DEBUG(0, __FUNCTION__ "() test frame to short!\n");
-		dev_kfree_skb(skb);
-		return;
-	}
-
 	frame = (struct test_frame *) skb->data;
+		
+	/* Broadcast frames must carry saddr and daddr fields */
+	if (info->caddr == CBROADCAST) {
+		if (skb->len < sizeof(struct test_frame)) {
+			IRDA_DEBUG(0, __FUNCTION__ 
+				   "() test frame to short!\n");
+			dev_kfree_skb(skb);
+			return;
+		}
+		
+		/* Read and swap addresses */
+		info->daddr = le32_to_cpu(frame->saddr);
+		info->saddr = le32_to_cpu(frame->daddr);
 
-	/* Read and swap addresses */
-	info->daddr = le32_to_cpu(frame->saddr);
-	info->saddr = le32_to_cpu(frame->daddr);
-
-	/* Make sure frame is addressed to us */
-	if ((info->saddr != self->saddr) && (info->saddr != BROADCAST)) {
-		dev_kfree_skb(skb);
-		return;
+		/* Make sure frame is addressed to us */
+		if ((info->saddr != self->saddr) && 
+		    (info->saddr != BROADCAST)) {
+			dev_kfree_skb(skb);
+			return;
+		}
 	}
 
 	if (command)
@@ -1378,7 +1381,7 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 	case DM_RSP:
 		irlap_do_event(self, RECV_DM_RSP, skb, &info);
 		break;
-	case DISC_CMD: /* And RD_RSP */
+	case DISC_CMD: /* And RD_RSP since they have the same value */
 		irlap_recv_disc_frame(self, skb, &info, command);
 		break;
 	case TEST_CMD:

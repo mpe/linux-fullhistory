@@ -6,11 +6,11 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Tue Dec 21 21:51:23 1999
+ * Modified at:   Wed Jan  5 13:59:38 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
- *     Copyright (c) 1997, 1998, 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1997, 1998, 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -153,16 +153,16 @@ irport_open(int i, unsigned int iobase, unsigned int irq)
 		return NULL;
 	}
 	memset(self, 0, sizeof(struct irport_cb));
-   
 	spin_lock_init(&self->lock);
 
 	/* Need to store self somewhere */
 	dev_self[i] = self;
 	self->priv = self;
+	self->index = i;
 
 	/* Initialize IO */
-	self->io.iobase   = iobase;
-        self->io.irq      = irq;
+	self->io.iobase    = iobase;
+        self->io.irq       = irq;
         self->io.io_ext    = IO_EXTENT;
         self->io.fifo_size = 16;
 
@@ -218,6 +218,7 @@ irport_open(int i, unsigned int iobase, unsigned int irq)
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
 		return NULL;
 	}
+
 	self->netdev = dev;
 
 	/* May be overridden by piggyback drivers */
@@ -275,7 +276,9 @@ int irport_close(struct irport_cb *self)
 	
 	if (self->rx_buff.head)
 		kfree(self->rx_buff.head);
-	
+
+	/* Remove ourselves */
+	dev_self[self->index] = NULL;
 	kfree(self);
 
 	return 0;

@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.7 1999/12/19 09:17:51 davem Exp $
+/* $Id: pci_sabre.c,v 1.8 2000/01/06 23:51:49 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1032,12 +1032,15 @@ static void __init sabre_base_address_update(struct pci_dev *pdev, int resource)
 
 static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre_bus)
 {
-	struct pci_dev *pdev;
-	u16 word;
+	struct list_head *walk = &sabre_bus->devices;
 
-	for (pdev = sabre_bus->devices; pdev; pdev = pdev->sibling) {
+	for (walk = walk->next; walk != &sabre_bus->devices; walk = walk->next) {
+		struct pci_dev *pdev = pci_dev_b(walk);
+
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
 		    pdev->device == PCI_DEVICE_ID_SUN_SIMBA) {
+			u16 word;
+
 			sabre_read_word(pdev, PCI_COMMAND, &word);
 			word |= PCI_COMMAND_SERR | PCI_COMMAND_PARITY |
 				PCI_COMMAND_MASTER | PCI_COMMAND_MEMORY |
@@ -1054,7 +1057,8 @@ static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre
 static void __init sabre_scan_bus(struct pci_controller_info *p)
 {
 	static int once = 0;
-	struct pci_bus *sabre_bus, *pbus;
+	struct pci_bus *sabre_bus;
+	struct list_head *walk;
 
 	/* Unlike for PSYCHO, we can only have one SABRE
 	 * in a system.  Having multiple SABREs is thus
@@ -1077,7 +1081,9 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 				 &p->pbm_A);
 	apb_init(p, sabre_bus);
 
-	for (pbus = sabre_bus->children; pbus; pbus = pbus->next) {
+	walk = &sabre_bus->children;
+	for (walk = walk->next; walk != &sabre_bus->children; walk = walk->next) {
+		struct pci_bus *pbus = pci_bus_b(walk);
 		struct pci_pbm_info *pbm;
 
 		if (pbus->number == p->pbm_A.pci_first_busno) {

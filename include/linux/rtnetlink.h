@@ -1,7 +1,6 @@
 #ifndef __LINUX_RTNETLINK_H
 #define __LINUX_RTNETLINK_H
 
-#include <linux/config.h>
 #include <linux/netlink.h>
 
 #define RTNL_DEBUG 1
@@ -529,6 +528,8 @@ enum
 /* End of information exported to user level */
 
 #ifdef __KERNEL__
+
+#include <linux/config.h>
 
 extern __inline__ int rtattr_strcmp(struct rtattr *rta, char *str)
 {

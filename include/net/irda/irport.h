@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Sat Dec 11 14:34:18 1999
+ * Modified at:   Mon Jan  3 10:23:34 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1997, 1998-2000 Dag Brattli <dagb@cs.uit.no>
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -66,6 +66,7 @@ struct irport_cb {
  	__u32 flags;               /* Interface flags */
 	__u32 new_speed;
 	int mode;
+	int index;                 /* Instance index */
 
 	spinlock_t lock;           /* For serializing operations */
 

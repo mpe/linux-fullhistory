@@ -361,16 +361,6 @@ static void floppy_off(unsigned int nr);
 #elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)
 
 #define DEVICE_NAME "ida"
-#define DEVICE_INTR do_ida
-#define TIMEOUT_VALUE (25*HZ)
-#define DEVICE_REQUEST do_ida_request0
-#define DEVICE_NR(device) (MINOR(device) >> 4)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
-
-#elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)
-
-#define DEVICE_NAME "ida"
 #define TIMEOUT_VALUE (25*HZ)
 #define DEVICE_REQUEST do_ida_request0
 #define DEVICE_NR(device) (MINOR(device) >> 4)

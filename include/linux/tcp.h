@@ -34,11 +34,13 @@ struct tcphdr {
 		psh:1,
 		ack:1,
 		urg:1,
-		res2:2;
+		ece:1,
+		cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u16	doff:4,
 		res1:4,
-		res2:2,
+		cwr:1,
+		ece:1,
 		urg:1,
 		ack:1,
 		psh:1,
@@ -100,6 +102,8 @@ union tcp_word_hdr {
 #define tcp_flag_word(tp) ( ((union tcp_word_hdr *)(tp))->words [3]) 
 
 enum { 
+	TCP_FLAG_CWR = __constant_htonl(0x00800000), 
+	TCP_FLAG_ECE = __constant_htonl(0x00400000), 
 	TCP_FLAG_URG = __constant_htonl(0x00200000), 
 	TCP_FLAG_ACK = __constant_htonl(0x00100000), 
 	TCP_FLAG_PSH = __constant_htonl(0x00080000), 
@@ -109,5 +113,16 @@ enum {
 	TCP_RESERVED_BITS = __constant_htonl(0x0FC00000),
 	TCP_DATA_OFFSET = __constant_htonl(0xF0000000)
 }; 
+
+/* TCP socket options */
+#define TCP_NODELAY		1	/* Turn off Nagle's algorithm. */
+#define TCP_MAXSEG		2	/* Limit MSS */
+#define TCP_CORK		3	/* Never send partially complete segments */
+#define TCP_KEEPIDLE		4	/* Start keeplives after this period */
+#define TCP_KEEPINTVL		5	/* Interval between keepalives */
+#define TCP_KEEPCNT		6	/* Number of keepalives before death */
+#define TCP_SYNCNT		7	/* Number of SYN retransmits */
+#define TCP_LINGER2		8	/* Life time of orphaned FIN-WAIT-2 state */
+#define TCP_DEFER_ACCEPT	9	/* Wake up listener only when data arrive */
 
 #endif	/* _LINUX_TCP_H */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Mar  8 14:06:12 1999
- * Modified at:   Tue Dec 21 09:00:59 1999
+ * Modified at:   Sat Dec 25 16:06:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -19,9 +19,6 @@
  *     Neither Dag Brattli nor University of Tromsø admit liability nor
  *     provide warranty for any of this software. This material is 
  *     provided "AS-IS" and at no charge.
- *
- *     You probably need to include <sys/types.h> before this one if your
- *     including this file from user-space 
  *
  ********************************************************************/
 
@@ -100,22 +97,22 @@ enum {
 #define LSAP_ANY              0xff
 
 struct sockaddr_irda {
-	sa_family_t   sir_family;   /* AF_IRDA */
-	u_int8_t      sir_lsap_sel; /* LSAP selector */
-	u_int32_t     sir_addr;     /* Device address */
-	char          sir_name[25]; /* Usually <service>:IrDA:TinyTP */
+	sa_family_t sir_family;   /* AF_IRDA */
+	__u8        sir_lsap_sel; /* LSAP selector */
+	__u32       sir_addr;     /* Device address */
+	char        sir_name[25]; /* Usually <service>:IrDA:TinyTP */
 };
 
 struct irda_device_info {
-	u_int32_t     saddr;    /* Address of local interface */
-	u_int32_t     daddr;    /* Address of remote device */
-	char          info[22]; /* Description */
-	u_int8_t      charset;  /* Charset used for description */
-	u_int8_t      hints[2]; /* Hint bits */
+	__u32       saddr;    /* Address of local interface */
+	__u32       daddr;    /* Address of remote device */
+	char        info[22]; /* Description */
+	__u8        charset;  /* Charset used for description */
+	__u8        hints[2]; /* Hint bits */
 };
 
 struct irda_device_list {
-       u_int32_t len;
+       __u32 len;
        struct irda_device_info dev[1];
 };
 
@@ -127,12 +124,12 @@ struct irda_ias_set {
 		unsigned int irda_attrib_int;
 		struct {
 			unsigned short len;
-			u_char OctetSeq[IAS_MAX_OCTET_STRING];
+			__u8 octet_seq[IAS_MAX_OCTET_STRING];
 		} irda_attrib_octet_seq;
 		struct {
-			unsigned char len;
-			unsigned char charset;
-			unsigned char string[IAS_MAX_STRING];
+			__u8 len;
+			__u8 charset;
+			__u8 string[IAS_MAX_STRING];
 		} irda_attrib_string;
 	} attribute;
 };
@@ -165,8 +162,8 @@ struct if_irda_qos {
 
 /* For setting RTS and DTR lines of a dongle */
 struct if_irda_line {
-	unsigned char dtr;
-	unsigned char rts;
+	__u8 dtr;
+	__u8 rts;
 };
 
 /* IrDA interface configuration (data part must not exceed 16 bytes) */

@@ -8,7 +8,7 @@
  * Authors:       Dag Brattli <dagb@cs.uit.no> (initially)
  *		  Jean Tourrilhes <jt@hpl.hp.com> (new version)
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Fri Dec 17 09:16:09 1999
+ * Modified at:   Fri Dec 17 09:10:43 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.

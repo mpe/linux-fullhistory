@@ -29,9 +29,7 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 static long long ext2_file_lseek(struct file *, long long, int);
-#if BITS_PER_LONG < 64
 static int ext2_open_file (struct inode *, struct file *);
-#endif
 
 #define EXT2_MAX_SIZE(bits)							\
 	(((EXT2_NDIR_BLOCKS + (1LL << (bits - 2)) + 				\
@@ -121,11 +119,11 @@ static int ext2_release_file (struct inode * inode, struct file * filp)
 	return 0;
 }
 
-#if BITS_PER_LONG < 64
 /*
  * Called when an inode is about to be open.
  * We use this to disallow opening RW large files on 32bit systems if
- * the caller didn't specify O_LARGEFILE.
+ * the caller didn't specify O_LARGEFILE.  On 64bit systems we force
+ * on this flag in sys_open.
  */
 static int ext2_open_file (struct inode * inode, struct file * filp)
 {
@@ -133,7 +131,6 @@ static int ext2_open_file (struct inode * inode, struct file * filp)
 		return -EFBIG;
 	return 0;
 }
-#endif
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -147,11 +144,7 @@ static struct file_operations ext2_file_operations = {
 	NULL,			/* poll - default */
 	ext2_ioctl,		/* ioctl */
 	generic_file_mmap,	/* mmap */
-#if BITS_PER_LONG == 64	
-	NULL,			/* no special open is needed */
-#else
 	ext2_open_file,
-#endif
 	NULL,			/* flush */
 	ext2_release_file,	/* release */
 	ext2_sync_file,		/* fsync */

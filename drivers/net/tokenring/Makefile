@@ -47,5 +47,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SMCTR),y)
+  L_OBJS += smctr.o
+else
+  ifeq ($(CONFIG_SMCTR),m)
+    M_OBJS += smctr.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 

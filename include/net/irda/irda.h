@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Tue Dec 14 19:01:26 1999
+ * Modified at:   Sat Dec 25 18:58:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -101,7 +101,7 @@ if(!(expr)) { \
 #define IAS_ATTRIB_MAGIC   0x45232
 #define IRDA_TASK_MAGIC    0x38423
 
-#define IAS_DEVICE_ID 0x5342 
+#define IAS_DEVICE_ID 0x0000 /* Defined by IrDA, IrLMP section 4.1 (page 68) */
 #define IAS_PNP_ID    0xd342
 #define IAS_OBEX_ID   0x34323
 #define IAS_IRLAN_ID  0x34234

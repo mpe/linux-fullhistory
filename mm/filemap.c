@@ -211,7 +211,7 @@ repeat:
 	spin_unlock(&pagecache_lock);
 }
 
-int shrink_mmap(int priority, int gfp_mask)
+int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 {
 	int ret = 0, count;
 	LIST_HEAD(young);
@@ -239,9 +239,7 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		dispose = &old;
 		/* don't account passes over not DMA pages */
-		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-			goto dispose_continue;
-		if (!(gfp_mask & __GFP_HIGHMEM) && PageHighMem(page))
+		if (zone && (!memclass(page->zone, zone)))
 			goto dispose_continue;
 
 		count--;

@@ -157,9 +157,8 @@ static void __init
 pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 {
 	struct pbus_set_ranges_data inner;
-	struct pci_bus *child;
 	struct pci_dev *dev;
-	struct list_node *ln;
+	struct list_head *ln;
 
 	inner.found_vga = 0;
 	inner.mem_start = inner.io_start = ~0UL;
@@ -275,10 +274,10 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 void __init
 pci_set_bus_ranges(void)
 {
-	struct list_node *ln;
+	struct list_head *ln;
 
 	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next)
-		pci_set_ranges(pci_bus_b(ln), NULL);
+		pbus_set_ranges(pci_bus_b(ln), NULL);
 }
 
 static void __init

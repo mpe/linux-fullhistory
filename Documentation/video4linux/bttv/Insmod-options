@@ -20,7 +20,7 @@ bttv.o
 		autoload=0/1	autoload helper modules (tuner, audio).
 				default is 1 (on).
 
-	remap, card, radio and pll accept up to four comma-separted arguments
+	remap, card, radio and pll accept up to four comma-separated arguments
 	(for multiple boards).
 
 msp3400.o

@@ -38,7 +38,7 @@ mixer settings too...
 How sound works in detail
 =========================
 
-Still does'nt work?  Looks like some driver hacking is required.
+Still doesn't work?  Looks like some driver hacking is required.
 Below is a do-it-yourself description for you.
 
 The bt8xx chips have 32 general purpose pins, and registers to control

@@ -17,6 +17,9 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ *  Changelog:
+ *  2000-01-01	Added ISAPnP quirks handling
+ *		Peter Denison <peterd@pnd-pc.demon.co.uk>
  */
 
 #include <linux/config.h>
@@ -184,7 +187,7 @@ void isapnp_write_dword(unsigned char idx, unsigned int val)
 	isapnp_write_byte(idx+3, val);
 }
 
-static void *isapnp_alloc(long size)
+void *isapnp_alloc(long size)
 {
 	void *result;
 
@@ -964,6 +967,7 @@ static int __init isapnp_build_device_list(void)
 	int csn;
 	unsigned char header[9], checksum;
 	struct pci_bus *card;
+	struct pci_dev *dev;
 
 	isapnp_wait();
 	isapnp_key();
@@ -992,6 +996,9 @@ static int __init isapnp_build_device_list(void)
 		card->checksum = isapnp_checksum_value;
 
 		list_add_tail(&card->node, &isapnp_cards);
+	}
+	for (dev = isapnp_devices; dev ; dev = dev->next) {
+		isapnp_fixup_device(dev);
 	}
 	return 0;
 }

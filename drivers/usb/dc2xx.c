@@ -57,11 +57,9 @@
 #include <linux/malloc.h>
 #include <linux/module.h>
 
+#undef DEBUG
+
 #include "usb.h"
-
-
-// #define	CAMERA_DEBUG
-
 
 /* XXX need to get registered minor number, cdev 10/MINOR */
 /* XXX or: cdev USB_MAJOR(180)/USB_CAMERA_MINOR */
@@ -163,9 +161,8 @@ static ssize_t camera_read (struct file *file,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
 
-#ifdef	CAMERA_DEBUG
-		printk ("camera.r (%d) - 0x%x %ld\n", len, result, count);
-#endif
+		dbg("read (%d) - 0x%x %ld", len, result, count);
+
 		if (!result) {
 			if (copy_to_user (buf, camera->buf, count))
 				return -EFAULT;
@@ -175,9 +172,8 @@ static ssize_t camera_read (struct file *file,
 		if (result != USB_ST_TIMEOUT)
 			break;
 		interruptible_sleep_on_timeout (&camera->wait, RETRY_TIMEOUT);
-#ifdef	CAMERA_DEBUG
-		printk ("camera.r (%d) - retry\n", len);
-#endif
+
+		dbg("read (%d) - retry", len);
 	}
 	camera->isActive = 0;
 	return -EIO;
@@ -230,10 +226,10 @@ static ssize_t camera_write (struct file *file,
 			result = usb_bulk_msg (camera->dev,
 				 usb_sndbulkpipe (camera->dev, camera->outEP),
 				 obuf, thistime, &count, HZ*10);
-#ifdef	CAMERA_DEBUG
+
 			if (result)
-				printk ("camera.w USB err - %x\n", result);
-#endif
+				dbg("write USB err - %x", result);
+
 			if (count) {
 				obuf += count;
 				thistime -= count;
@@ -262,9 +258,9 @@ static ssize_t camera_write (struct file *file,
 	}
 done:
 	camera->isActive = 0;
-#ifdef	CAMERA_DEBUG
-	printk ("camera.w %d\n", bytes_written); 
-#endif
+
+	dbg("write %d", bytes_written); 
+
 	return bytes_written;
 }
 
@@ -280,9 +276,8 @@ static int camera_open (struct inode *inode, struct file *file)
 		camera->isOpen = 0;
 		return -ENOMEM;
 	}
-#ifdef	CAMERA_DEBUG
-	printk ("camera.open\n"); 
-#endif
+
+	dbg("open"); 
 	
 	/* Keep driver from being unloaded while it's in use */
 	MOD_INC_USE_COUNT;
@@ -300,9 +295,8 @@ static int camera_release (struct inode *inode, struct file *file)
 	kfree (camera->buf);
 	camera->isOpen = 0;
 	MOD_DEC_USE_COUNT;
-#ifdef	CAMERA_DEBUG
-	printk ("camera.close\n"); 
-#endif
+
+	dbg("close"); 
 
 	return 0;
 }
@@ -363,7 +357,7 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	/* these have one config, one interface */
 	if (dev->descriptor.bNumConfigurations != 1
 			|| dev->config[0].bNumInterfaces != 1) {
-		printk (KERN_INFO "Bogus camera config info\n");
+		dbg("Bogus camera config info");
 		return NULL;
 	}
 
@@ -375,16 +369,16 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 			|| interface->bInterfaceProtocol != 0
 			|| interface->bNumEndpoints != 2
 			) {
-		printk (KERN_INFO "Bogus camera interface info\n");
+		dbg("Bogus camera interface info");
 		return NULL;
 	}
 
 	/* can only show one camera at a time through /dev ... */
 	if (!camera->dev) {
 		camera->dev = dev;
-		printk(KERN_INFO "USB Camera is connected\n");
+		info("USB Camera is connected");
 	} else {
-		printk(KERN_INFO "Ignoring additional USB Camera\n");
+		info("Ignoring additional USB Camera");
 		return NULL;
 	}
 
@@ -410,14 +404,14 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 			|| endpoint [0].bmAttributes != USB_ENDPOINT_XFER_BULK
 			|| endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK
 			) {
-		printk (KERN_INFO "Bogus camera endpoints\n");
+		dbg("Bogus camera endpoints");
 		camera->dev = NULL;
 		return NULL;
 	}
 
 
 	if (usb_set_configuration (dev, dev->config[0].bConfigurationValue)) {
-		printk (KERN_INFO "Failed usb_set_configuration: camera\n");
+		err("Failed usb_set_configuration");
 		camera->dev = NULL;
 		return NULL;
 	}
@@ -443,7 +437,7 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 	camera->info = NULL;
 	camera->dev = NULL;
 
-	printk (KERN_INFO "USB Camera disconnected\n");
+	info("USB Camera disconnected");
 }
 
 static /* const */ struct usb_driver camera_driver = {

@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.75 1999/12/23 01:41:44 davem Exp $
+ * Version:	$Id: route.c,v 1.77 2000/01/06 00:41:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -103,8 +103,7 @@
 
 int ip_rt_min_delay = 2*HZ;
 int ip_rt_max_delay = 10*HZ;
-int ip_rt_gc_thresh = RT_HASH_DIVISOR;
-int ip_rt_max_size = RT_HASH_DIVISOR*16;
+int ip_rt_max_size;
 int ip_rt_gc_timeout = RT_GC_TIMEOUT;
 int ip_rt_gc_interval = 60*HZ;
 int ip_rt_gc_min_interval = 5*HZ;
@@ -122,12 +121,8 @@ static unsigned long rt_deadline = 0;
 
 #define RTprint(a...)	printk(KERN_DEBUG a)
 
-static void rt_run_flush(unsigned long dummy);
-
-static struct timer_list rt_flush_timer =
-	{ NULL, NULL, 0, 0L, rt_run_flush };
-static struct timer_list rt_periodic_timer =
-	{ NULL, NULL, 0, 0L, NULL };
+static struct timer_list rt_flush_timer;
+static struct timer_list rt_periodic_timer;
 
 /*
  *	Interface to generic destination cache.
@@ -146,7 +141,7 @@ struct dst_ops ipv4_dst_ops =
 {
 	AF_INET,
 	__constant_htons(ETH_P_IP),
-	RT_HASH_DIVISOR,
+	0,
 
 	rt_garbage_collect,
 	ipv4_dst_check,
@@ -183,7 +178,7 @@ __u8 ip_tos2prio[16] = {
 
 /* The locking scheme is rather straight forward:
  *
- * 1) A BH protected rwlock protects the central route hash.
+ * 1) A BH protected rwlocks protect buckets of the central route hash.
  * 2) Only writers remove entries, and they hold the lock
  *    as they look at rtable reference counts.
  * 3) Only readers acquire references to rtable entries,
@@ -191,17 +186,23 @@ __u8 ip_tos2prio[16] = {
  *    lock held.
  */
 
-static struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
-static rwlock_t		 rt_hash_lock = RW_LOCK_UNLOCKED;
+struct rt_hash_bucket {
+	struct rtable	*chain;
+	rwlock_t	lock;
+} __attribute__((__aligned__(8)));
+
+static struct rt_hash_bucket 	*rt_hash_table;
+static unsigned			rt_hash_mask;
+static int			rt_hash_log;
 
 static int rt_intern_hash(unsigned hash, struct rtable * rth, struct rtable ** res);
 
 static __inline__ unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 {
 	unsigned hash = ((daddr&0xF0F0F0F0)>>4)|((daddr&0x0F0F0F0F)<<4);
-	hash = hash^saddr^tos;
-	hash = hash^(hash>>16);
-	return (hash^(hash>>8)) & 0xFF;
+	hash ^= saddr^tos;
+	hash ^= (hash>>16);
+	return (hash^(hash>>8)) & rt_hash_mask;
 }
 
 #ifndef CONFIG_PROC_FS
@@ -222,11 +223,9 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 		len = 128;
   	}
 	
-  	
-	read_lock_bh(&rt_hash_lock);
-
-	for (i = 0; i<RT_HASH_DIVISOR; i++) {
-		for (r = rt_hash_table[i]; r; r = r->u.rt_next) {
+	for (i = rt_hash_mask; i>=0; i--) {
+		read_lock_bh(&rt_hash_table[i].lock);
+		for (r = rt_hash_table[i].chain; r; r = r->u.rt_next) {
 			/*
 			 *	Spin through entries until we are ready
 			 */
@@ -253,14 +252,15 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				r->rt_spec_dst);
 			sprintf(buffer+len,"%-127s\n",temp);
 			len += 128;
-			if (pos >= offset+length)
+			if (pos >= offset+length) {
+				read_unlock_bh(&rt_hash_table[i].lock);
 				goto done;
+			}
 		}
+		read_unlock_bh(&rt_hash_table[i].lock);
         }
 
 done:
-	read_unlock_bh(&rt_hash_lock);
-  	
   	*start = buffer+len-(pos-offset);
   	len = pos-offset;
   	if (len>length)
@@ -315,21 +315,23 @@ static __inline__ int rt_may_expire(struct rtable *rth, int tmo1, int tmo2)
 /* This runs via a timer and thus is always in BH context. */
 static void rt_check_expire(unsigned long dummy)
 {
-	int i;
+	int i, t;
 	static int rover;
 	struct rtable *rth, **rthp;
 	unsigned long now = jiffies;
 
-	for (i=0; i<RT_HASH_DIVISOR/5; i++) {
+	i = rover;
+
+	for (t=(ip_rt_gc_interval<<rt_hash_log); t>=0; t -= ip_rt_gc_timeout) {
 		unsigned tmo = ip_rt_gc_timeout;
 
-		rover = (rover + 1) & (RT_HASH_DIVISOR-1);
-		rthp = &rt_hash_table[rover];
+		i = (i + 1) & rt_hash_mask;
+		rthp = &rt_hash_table[i].chain;
 
-		write_lock(&rt_hash_lock);
+		write_lock(&rt_hash_table[i].lock);
 		while ((rth = *rthp) != NULL) {
 			if (rth->u.dst.expires) {
-				/* Entrie is expired even if it is in use */
+				/* Entry is expired even if it is in use */
 				if ((long)(now - rth->u.dst.expires) <= 0) {
 					tmo >>= 1;
 					rthp = &rth->u.rt_next;
@@ -347,14 +349,14 @@ static void rt_check_expire(unsigned long dummy)
 			*rthp = rth->u.rt_next;
 			rt_free(rth);
 		}
-		write_unlock(&rt_hash_lock);
+		write_unlock(&rt_hash_table[i].lock);
 
 		/* Fallback loop breaker. */
 		if ((jiffies - now) > 0)
 			break;
 	}
-	rt_periodic_timer.expires = now + ip_rt_gc_interval;
-	add_timer(&rt_periodic_timer);
+	rover = i;
+	mod_timer(&rt_periodic_timer, now + ip_rt_gc_interval);
 }
 
 /* This can run from both BH and non-BH contexts, the latter
@@ -367,11 +369,12 @@ static void rt_run_flush(unsigned long dummy)
 
 	rt_deadline = 0;
 
-	for (i=0; i<RT_HASH_DIVISOR; i++) {
-		write_lock_bh(&rt_hash_lock);
-		rth = rt_hash_table[i];
-		rt_hash_table[i] = NULL;
-		write_unlock_bh(&rt_hash_lock);
+	for (i=rt_hash_mask; i>=0; i--) {
+		write_lock_bh(&rt_hash_table[i].lock);
+		rth = rt_hash_table[i].chain;
+		if (rth)
+			rt_hash_table[i].chain = NULL;
+		write_unlock_bh(&rt_hash_table[i].lock);
 
 		for (; rth; rth=next) {
 			next = rth->u.rt_next;
@@ -418,8 +421,7 @@ void rt_cache_flush(int delay)
 	if (rt_deadline == 0)
 		rt_deadline = now + ip_rt_max_delay;
 
-	rt_flush_timer.expires = now + delay;
-	add_timer(&rt_flush_timer);
+	mod_timer(&rt_flush_timer, now+delay);
 	spin_unlock_bh(&rt_flush_lock);
 }
 
@@ -455,20 +457,20 @@ static int rt_garbage_collect(void)
 		return 0;
 
 	/* Calculate number of entries, which we want to expire now. */
-	goal = atomic_read(&ipv4_dst_ops.entries) - RT_HASH_DIVISOR*ip_rt_gc_elasticity;
+	goal = atomic_read(&ipv4_dst_ops.entries) - (ip_rt_gc_elasticity<<rt_hash_log);
 	if (goal <= 0) {
 		if (equilibrium < ipv4_dst_ops.gc_thresh)
 			equilibrium = ipv4_dst_ops.gc_thresh;
 		goal = atomic_read(&ipv4_dst_ops.entries) - equilibrium;
 		if (goal > 0) {
-			equilibrium += min(goal/2, RT_HASH_DIVISOR);
+			equilibrium += min(goal/2, rt_hash_mask+1);
 			goal = atomic_read(&ipv4_dst_ops.entries) - equilibrium;
 		}
 	} else {
 		/* We are in dangerous area. Try to reduce cache really
 		 * aggressively.
 		 */
-		goal = max(goal/2, RT_HASH_DIVISOR);
+		goal = max(goal/2, rt_hash_mask+1);
 		equilibrium = atomic_read(&ipv4_dst_ops.entries) - goal;
 	}
 
@@ -483,15 +485,12 @@ static int rt_garbage_collect(void)
 	do {
 		int i, k;
 
-		/* The write lock is held during the entire hash
-		 * traversal to ensure consistent state of the rover.
-		 */
-		write_lock_bh(&rt_hash_lock);
-		for (i=0, k=rover; i<RT_HASH_DIVISOR; i++) {
+		for (i=rt_hash_mask, k=rover; i>=0; i--) {
 			unsigned tmo = expire;
 
-			k = (k + 1) & (RT_HASH_DIVISOR-1);
-			rthp = &rt_hash_table[k];
+			k = (k + 1) & rt_hash_mask;
+			rthp = &rt_hash_table[k].chain;
+			write_lock_bh(&rt_hash_table[k].lock);
 			while ((rth = *rthp) != NULL) {
 				if (!rt_may_expire(rth, tmo, expire)) {
 					tmo >>= 1;
@@ -502,11 +501,11 @@ static int rt_garbage_collect(void)
 				rt_free(rth);
 				goal--;
 			}
+			write_unlock_bh(&rt_hash_table[k].lock);
 			if (goal <= 0)
 				break;
 		}
 		rover = k;
-		write_unlock_bh(&rt_hash_lock);
 
 		if (goal <= 0)
 			goto work_done;
@@ -556,20 +555,20 @@ static int rt_intern_hash(unsigned hash, struct rtable * rt, struct rtable ** rp
 	int attempts = !in_interrupt();
 
 restart:
-	rthp = &rt_hash_table[hash];
+	rthp = &rt_hash_table[hash].chain;
 
-	write_lock_bh(&rt_hash_lock);
+	write_lock_bh(&rt_hash_table[hash].lock);
 	while ((rth = *rthp) != NULL) {
 		if (memcmp(&rth->key, &rt->key, sizeof(rt->key)) == 0) {
 			/* Put it first */
 			*rthp = rth->u.rt_next;
-			rth->u.rt_next = rt_hash_table[hash];
-			rt_hash_table[hash] = rth;
+			rth->u.rt_next = rt_hash_table[hash].chain;
+			rt_hash_table[hash].chain = rth;
 
 			rth->u.dst.__use++;
 			dst_hold(&rth->u.dst);
 			rth->u.dst.lastuse = now;
-			write_unlock_bh(&rt_hash_lock);
+			write_unlock_bh(&rt_hash_table[hash].lock);
 
 			rt_drop(rt);
 			*rp = rth;
@@ -584,7 +583,7 @@ restart:
 	 */
 	if (rt->rt_type == RTN_UNICAST || rt->key.iif == 0) {
 		if (!arp_bind_neighbour(&rt->u.dst)) {
-			write_unlock_bh(&rt_hash_lock);
+			write_unlock_bh(&rt_hash_table[hash].lock);
 
 			/* Neighbour tables are full and nothing
 			   can be released. Try to shrink route cache,
@@ -613,7 +612,7 @@ restart:
 		}
 	}
 
-	rt->u.rt_next = rt_hash_table[hash];
+	rt->u.rt_next = rt_hash_table[hash].chain;
 #if RT_CACHE_DEBUG >= 2
 	if (rt->u.rt_next) {
 		struct rtable * trt;
@@ -623,8 +622,8 @@ restart:
 		printk("\n");
 	}
 #endif
-	rt_hash_table[hash] = rt;
-	write_unlock_bh(&rt_hash_lock);
+	rt_hash_table[hash].chain = rt;
+	write_unlock_bh(&rt_hash_table[hash].lock);
 	*rp = rt;
 	return 0;
 }
@@ -692,16 +691,16 @@ static void rt_del(unsigned hash, struct rtable *rt)
 {
 	struct rtable **rthp;
 
-	write_lock_bh(&rt_hash_lock);
+	write_lock_bh(&rt_hash_table[hash].lock);
 	ip_rt_put(rt);
-	for (rthp = &rt_hash_table[hash]; *rthp; rthp = &(*rthp)->u.rt_next) {
+	for (rthp = &rt_hash_table[hash].chain; *rthp; rthp = &(*rthp)->u.rt_next) {
 		if (*rthp == rt) {
 			*rthp = rt->u.rt_next;
 			rt_free(rt);
 			break;
 		}
 	}
-	write_unlock_bh(&rt_hash_lock);
+	write_unlock_bh(&rt_hash_table[hash].lock);
 }
 
 void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
@@ -736,9 +735,9 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 		for (k=0; k<2; k++) {
 			unsigned hash = rt_hash_code(daddr, skeys[i]^(ikeys[k]<<5), tos);
 
-			rthp=&rt_hash_table[hash];
+			rthp=&rt_hash_table[hash].chain;
 
-			read_lock(&rt_hash_lock);
+			read_lock(&rt_hash_table[hash].lock);
 			while ( (rth = *rthp) != NULL) {
 				struct rtable *rt;
 
@@ -759,7 +758,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 					break;
 
 				dst_clone(&rth->u.dst);
-				read_unlock(&rt_hash_lock);
+				read_unlock(&rt_hash_table[hash].lock);
 
 				rt = dst_alloc(&ipv4_dst_ops);
 				if (rt == NULL) {
@@ -806,7 +805,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 					ip_rt_put(rt);
 				goto do_next;
 			}
-			read_unlock(&rt_hash_lock);
+			read_unlock(&rt_hash_table[hash].lock);
 		do_next:
 			;
 		}
@@ -974,8 +973,8 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 	for (i=0; i<2; i++) {
 		unsigned hash = rt_hash_code(daddr, skeys[i], tos);
 
-		read_lock(&rt_hash_lock);
-		for (rth = rt_hash_table[hash]; rth; rth = rth->u.rt_next) {
+		read_lock(&rt_hash_table[hash].lock);
+		for (rth = rt_hash_table[hash].chain; rth; rth = rth->u.rt_next) {
 			if (rth->key.dst == daddr &&
 			    rth->key.src == skeys[i] &&
 			    rth->rt_dst == daddr &&
@@ -1008,7 +1007,7 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 				}
 			}
 		}
-		read_unlock(&rt_hash_lock);
+		read_unlock(&rt_hash_table[hash].lock);
 	}
 	return est_mtu ? : new_mtu;
 }
@@ -1550,8 +1549,8 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 	tos &= IPTOS_TOS_MASK;
 	hash = rt_hash_code(daddr, saddr^(iif<<5), tos);
 
-	read_lock_bh(&rt_hash_lock);
-	for (rth=rt_hash_table[hash]; rth; rth=rth->u.rt_next) {
+	read_lock(&rt_hash_table[hash].lock);
+	for (rth=rt_hash_table[hash].chain; rth; rth=rth->u.rt_next) {
 		if (rth->key.dst == daddr &&
 		    rth->key.src == saddr &&
 		    rth->key.iif == iif &&
@@ -1565,12 +1564,12 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 			rth->u.dst.lastuse = jiffies;
 			dst_hold(&rth->u.dst);
 			rth->u.dst.__use++;
-			read_unlock_bh(&rt_hash_lock);
+			read_unlock(&rt_hash_table[hash].lock);
 			skb->dst = (struct dst_entry*)rth;
 			return 0;
 		}
 	}
-	read_unlock_bh(&rt_hash_lock);
+	read_unlock(&rt_hash_table[hash].lock);
 
 	/* Multicast recognition logic is moved from route cache to here.
 	   The problem was that too many Ethernet cards have broken/missing
@@ -1885,8 +1884,8 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 
 	hash = rt_hash_code(daddr, saddr^(oif<<5), tos);
 
-	read_lock_bh(&rt_hash_lock);
-	for (rth=rt_hash_table[hash]; rth; rth=rth->u.rt_next) {
+	read_lock_bh(&rt_hash_table[hash].lock);
+	for (rth=rt_hash_table[hash].chain; rth; rth=rth->u.rt_next) {
 		if (rth->key.dst == daddr &&
 		    rth->key.src == saddr &&
 		    rth->key.iif == 0 &&
@@ -1897,12 +1896,12 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 			rth->u.dst.lastuse = jiffies;
 			dst_hold(&rth->u.dst);
 			rth->u.dst.__use++;
-			read_unlock_bh(&rt_hash_lock);
+			read_unlock_bh(&rt_hash_table[hash].lock);
 			*rp = rth;
 			return 0;
 		}
 	}
-	read_unlock_bh(&rt_hash_lock);
+	read_unlock_bh(&rt_hash_table[hash].lock);
 
 	return ip_route_output_slow(rp, daddr, saddr, tos, oif);
 }
@@ -2043,7 +2042,9 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 			return -ENODEV;
 		skb->protocol = __constant_htons(ETH_P_IP);
 		skb->dev = dev;
+		local_bh_disable();
 		err = ip_route_input(skb, dst, src, rtm->rtm_tos, dev);
+		local_bh_enable();
 		rt = (struct rtable*)skb->dst;
 		if (!err && rt->u.dst.error)
 			err = -rt->u.dst.error;
@@ -2085,24 +2086,24 @@ int ip_rt_dump(struct sk_buff *skb,  struct netlink_callback *cb)
 
 	s_h = cb->args[0];
 	s_idx = idx = cb->args[1];
-	for (h=0; h < RT_HASH_DIVISOR; h++) {
+	for (h=0; h <= rt_hash_mask; h++) {
 		if (h < s_h) continue;
 		if (h > s_h)
 			s_idx = 0;
-		read_lock_bh(&rt_hash_lock);
-		for (rt = rt_hash_table[h], idx = 0; rt; rt = rt->u.rt_next, idx++) {
+		read_lock_bh(&rt_hash_table[h].lock);
+		for (rt = rt_hash_table[h].chain, idx = 0; rt; rt = rt->u.rt_next, idx++) {
 			if (idx < s_idx)
 				continue;
 			skb->dst = dst_clone(&rt->u.dst);
 			if (rt_fill_info(skb, NETLINK_CB(cb->skb).pid,
 					 cb->nlh->nlmsg_seq, RTM_NEWROUTE, 1) <= 0) {
 				dst_release(xchg(&skb->dst, NULL));
-				read_unlock_bh(&rt_hash_lock);
+				read_unlock_bh(&rt_hash_table[h].lock);
 				goto done;
 			}
 			dst_release(xchg(&skb->dst, NULL));
 		}
-		read_unlock_bh(&rt_hash_lock);
+		read_unlock_bh(&rt_hash_table[h].lock);
 	}
 
 done:
@@ -2231,17 +2232,56 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 #endif
 #endif
 
-
 void __init ip_rt_init(void)
 {
+	int i, order, goal;
+
 	ipv4_dst_ops.kmem_cachep = kmem_cache_create("ip_dst_cache",
 						     sizeof(struct rtable),
 						     0, SLAB_HWCACHE_ALIGN,
 						     NULL, NULL);
-	
+
+	if (!ipv4_dst_ops.kmem_cachep)
+		panic("IP: failed to allocate ip_dst_cache\n");
+
+	goal = num_physpages >> (26 - PAGE_SHIFT);
+
+	for (order = 0; (1UL << order) < goal; order++)
+		/* NOTHING */;
+
+	do {
+		rt_hash_mask = (1UL << order) * PAGE_SIZE /
+			sizeof(struct rt_hash_bucket);
+		while (rt_hash_mask & (rt_hash_mask-1))
+			rt_hash_mask--;
+		rt_hash_table = (struct rt_hash_bucket *)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (rt_hash_table == NULL && --order > 0);
+
+	if (!rt_hash_table)
+		panic("Failed to allocate IP route cache hash table\n");
+
+	printk("IP: routing cache hash table of %u buckets, %dKbytes\n",
+	       rt_hash_mask, (rt_hash_mask*sizeof(struct rt_hash_bucket))/1024);
+
+	for (rt_hash_log=0; (1<<rt_hash_log) != rt_hash_mask; rt_hash_log++)
+		/* NOTHING */;
+
+	rt_hash_mask--;
+	for (i = 0; i <= rt_hash_mask; i++) {
+		rt_hash_table[i].lock = RW_LOCK_UNLOCKED;
+		rt_hash_table[i].chain = NULL;
+	}
+
+	ipv4_dst_ops.gc_thresh = (rt_hash_mask+1);
+	ip_rt_max_size = (rt_hash_mask+1)*16;
+
 	devinet_init();
 	ip_fib_init();
+
+	rt_flush_timer.function = rt_run_flush;
 	rt_periodic_timer.function = rt_check_expire;
+
 	/* All the timers, started at system startup tend
 	   to synchronize. Perturb it a bit.
 	 */

@@ -34,8 +34,6 @@
 #warning This file is not supposed to be used outside of kernel.
 #endif
 
-#define RT_HASH_DIVISOR	    	256
-
 #define RTO_ONLINK	0x01
 #define RTO_TPROXY	0x80000000
 

@@ -41,7 +41,7 @@ grabbing facilities, you must either
   various kernel versions floating around in the net,
   you may obtain one e.g. from:
   http://www.polyware.nl/~middelin/patch/bigphysarea-2.2.1.tar.gz
-  You also have to compile your driber AFTER installing that patch
+  You also have to compile your driver AFTER installing that patch
   in order to get it working
 
   or
@@ -91,9 +91,9 @@ These values do not affect the MJPEG grabbing facilities of the driver,
 they are needed for uncompressed image grabbing only!!!
 
 v4l_nbufs is the number of buffers to allocate, a value of 2 (the default)
-should be sufficient in allmost all cases. Only special applications
+should be sufficient in almost all cases. Only special applications
 (streaming captures) will need more buffers and then mostly the
-MJPEG capturing features of the Buz will be more apropriate.
+MJPEG capturing features of the Buz will be more appropriate.
 So leave this parameter at it's default unless you know what you do.
 
 The things for v4l_bufsize are more complicated:
@@ -107,7 +107,7 @@ In order to be able to capture bigger images you have either to
   the necessary memory during boot time or
 - start your kernel with the mem=xxx option, where xxx is your
   real memory minus the memory needed for the buffers.
-In that case, usefull settings for v4l_bufsize are
+In that case, useful settings for v4l_bufsize are
 - 1296 [Kb] for grabbing 24 bit images of max size 768*576
 - 1728 [Kb] for 32bit images of same size (4*768*576 = 1728 Kb!)
 You may reduce these numbers accordingly if you know you are only
@@ -137,7 +137,7 @@ triton, natoma
 --------------
 
 The driver tries to detect if you have a triton or natome chipset
-in order to take special messures for these chipsets.
+in order to take special measures for these chipsets.
 If this detection fails but you are sure you have such a chipset,
 set the corresponding variable to 1.
 This is a very special option and may go away in the future.
@@ -151,7 +151,7 @@ This driver should be fully compliant to Video for Linux, so all
 tools working with Video for Linux should work with (hopefully)
 no problems.
 
-A description of the Video for Linux programming interace can be found at:
+A description of the Video for Linux programming interface can be found at:
 http://roadrunner.swansea.linux.org.uk/v4lapi.shtml
 
 Besides the Video for Linux interface, the driver has a "proprietary"
@@ -162,7 +162,7 @@ The ioctls for that interface are as follows:
 BUZIOC_G_PARAMS
 BUZIOC_S_PARAMS
 
-Get and set the parameters of the buz. The user should allways
+Get and set the parameters of the buz. The user should always
 do a BUZIOC_G_PARAMS (with a struct buz_params) to obtain the default
 settings, change what he likes and then make a BUZIOC_S_PARAMS call.
 A typical application should at least set the members

@@ -410,7 +410,7 @@ void shrink_dcache_parent(struct dentry * parent)
  *  ...
  *   6 - base-level: try to shrink a bit.
  */
-int shrink_dcache_memory(int priority, unsigned int gfp_mask)
+int shrink_dcache_memory(int priority, unsigned int gfp_mask, zone_t * zone)
 {
 	if (gfp_mask & __GFP_IO) {
 		int count = 0;

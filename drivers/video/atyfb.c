@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.134 1999/12/23 21:32:09 geert Exp $
+/*  $Id: atyfb.c,v 1.136 2000/01/06 23:53:29 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -3657,7 +3657,7 @@ int __init atyfb_init(void)
     u16 tmp;
 #endif
 
-    while ((pdev = pci_find_device(PCI_VENDOR_ID_ATY, PCI_ANY_ID, pdev))) {
+    while ((pdev = pci_find_device(PCI_VENDOR_ID_ATI, PCI_ANY_ID, pdev))) {
 	if ((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 	    struct resource *rp;
 

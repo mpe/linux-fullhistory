@@ -7,6 +7,10 @@
 
 	Modified to avoid chroot and file sharing problems.
 	Mikael Pettersson
+
+	Limit the concurrent number of kmod modprobes to catch loops from
+	"modprobe needs a service that is in a module".
+	Keith Owens <kaos@ocs.com.au> December 1999
 */
 
 #define __KERNEL_SYSCALLS__
@@ -21,6 +25,8 @@
 	modprobe_path is set via /proc/sys.
 */
 char modprobe_path[256] = "/sbin/modprobe";
+
+extern int max_threads;
 
 static inline void
 use_init_fs_context(void)
@@ -113,6 +119,10 @@ int request_module(const char * module_name)
 	int pid;
 	int waitpid_result;
 	sigset_t tmpsig;
+	int i;
+	static atomic_t kmod_concurrent = ATOMIC_INIT(0);
+#define MAX_KMOD_CONCURRENT 50	/* Completely arbitrary value - KAO */
+	static int kmod_loop_msg;
 
 	/* Don't allow request_module() before the root fs is mounted!  */
 	if ( ! current->fs->root ) {
@@ -121,9 +131,31 @@ int request_module(const char * module_name)
 		return -EPERM;
 	}
 
+	/* If modprobe needs a service that is in a module, we get a recursive
+	 * loop.  Limit the number of running kmod threads to max_threads/2 or
+	 * MAX_KMOD_CONCURRENT, whichever is the smaller.  A cleaner method
+	 * would be to run the parents of this process, counting how many times
+	 * kmod was invoked.  That would mean accessing the internals of the
+	 * process tables to get the command line, proc_pid_cmdline is static
+	 * and it is not worth changing the proc code just to handle this case. 
+	 * KAO.
+	 */
+	i = max_threads/2;
+	if (i > MAX_KMOD_CONCURRENT)
+		i = MAX_KMOD_CONCURRENT;
+	atomic_inc(&kmod_concurrent);
+	if (atomic_read(&kmod_concurrent) > i) {
+		if (kmod_loop_msg++ < 5)
+			printk(KERN_ERR
+			       "kmod: runaway modprobe loop assumed and stopped\n");
+		atomic_dec(&kmod_concurrent);
+		return -ENOMEM;
+	}
+
 	pid = kernel_thread(exec_modprobe, (void*) module_name, 0);
 	if (pid < 0) {
 		printk(KERN_ERR "request_module[%s]: fork failed, errno %d\n", module_name, -pid);
+		atomic_dec(&kmod_concurrent);
 		return pid;
 	}
 
@@ -135,6 +167,7 @@ int request_module(const char * module_name)
 	spin_unlock_irq(&current->sigmask_lock);
 
 	waitpid_result = waitpid(pid, NULL, __WCLONE);
+	atomic_dec(&kmod_concurrent);
 
 	/* Allow signals again.. */
 	spin_lock_irq(&current->sigmask_lock);

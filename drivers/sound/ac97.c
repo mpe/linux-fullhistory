@@ -1,3 +1,6 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
 #include "ac97.h"
 
 /* Flag for mono controls. */
@@ -434,6 +437,14 @@ ac97_mixer_ioctl (struct ac97_hwint *dev, unsigned int cmd, caddr_t arg)
 	return put_user(ret, (int *) arg);
 }
 
+EXPORT_SYMBOL(ac97_init);
+EXPORT_SYMBOL(ac97_set_values);
+EXPORT_SYMBOL(ac97_set_mixer);
+EXPORT_SYMBOL(ac97_get_register);
+EXPORT_SYMBOL(ac97_put_register);
+EXPORT_SYMBOL(ac97_get_mixer_scaled);
+EXPORT_SYMBOL(ac97_mixer_ioctl);
+EXPORT_SYMBOL(ac97_reset);
 
 /*
  * Local variables:

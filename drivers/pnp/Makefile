@@ -19,10 +19,10 @@ MI_OBJS  :=
 MIX_OBJS :=
 
 ifeq ($(CONFIG_ISAPNP),y)
-  LX_OBJS += isapnp.o
+  LX_OBJS += isapnp.o quirks.o
 else
   ifeq ($(CONFIG_ISAPNP),m)
-    MX_OBJS += isapnp.o
+    MX_OBJS += isapnp.o quirks.o
   endif
 endif
 

@@ -460,7 +460,7 @@ static int sb201_audio_set_speed(int dev, int speed)
 			speed = 44100;
 		if (devc->opened & OPEN_READ && speed > 15000)
 			speed = 15000;
-		devc->tconst = ((65536 - ((256000000 + s / 2) / s)) >> 8) & 0xff;
+		devc->tconst = (256 - ((1000000 + s / 2) / s)) & 0xff;
 		tmp = 256 - devc->tconst;
 		speed = ((1000000 + tmp / 2) / tmp) / devc->channels;
 
@@ -591,7 +591,7 @@ static int jazz16_audio_set_speed(int dev, int speed)
 		if (speed > 44100)
 			speed = 44100;
 
-		devc->tconst = ((65536 - ((256000000 + s / 2) / s)) >> 8) & 0xff;
+		devc->tconst = (256 - ((1000000 + s / 2) / s)) & 0xff;
 
 		tmp = 256 - devc->tconst;
 		speed = ((1000000 + tmp / 2) / tmp) / devc->channels;

@@ -135,7 +135,7 @@ S:	Supported
 
 APPLETALK NETWORK LAYER
 P:	Jay Schulist
-M:	Jay.Schulist@spacs.k12.wi.us
+M:	jschlst@turbolinux.com
 L:	linux-atalk@netspace.org
 S:	Maintained
 
@@ -469,7 +469,7 @@ S:	Maintained
 
 IPX/SPX NETWORK LAYER
 P:	Jay Schulist
-M:	Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
+M:	jschlst@turbolinux.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
@@ -580,8 +580,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD
-P:	Richard Henderson
-M:	richard@gnu.ai.mit.edu
+P:	Keith Owens
+M:	kaos@ocs.com.au
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
@@ -869,8 +869,15 @@ S:	Supported
 
 SPX NETWORK LAYER
 P:	Jay Schulist
-M:	Jay.Schulist@spacs.k12.wi.us
+M:	jschlst@turbolinux.com
 L:	linux-net@vger.rutgers.edu
+S:	Supported
+
+SNA NETWORK LAYER
+P:	Jay Schulist
+M:	jschlst@turbolinux.com
+L:	linux-sna@turbolinux.com
+W:	http://www.linux-sna.org
 S:	Supported
 
 STALLION TECHNOLOGIES MULTIPORT SERIAL BOARDS

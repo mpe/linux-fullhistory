@@ -5,7 +5,6 @@
    $Id: uhci.h,v 1.30 1999/12/15 17:57:25 fliegl Exp $
  */
 #define MODNAME "usb-uhci"
-#define MODSTR MODNAME": "
 #define VERSTR "version v0.9 time " __TIME__ " " __DATE__
 
 /* Command register */

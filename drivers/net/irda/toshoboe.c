@@ -10,7 +10,7 @@
  * Modified:      Paul Bristow <paul.bristow@technologist.com>
  * Modified:      Mon Nov 11 19:10:05 1999
  * 
- *     Copyright (c) 1999 James McKenzie, All Rights Reserved.
+ *     Copyright (c) 1999-2000 James McKenzie, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -87,7 +87,7 @@ static char *rcsid = "$Id: toshoboe.c,v 1.91 1999/06/29 14:21:06 root Exp $";
 /* No user servicable parts below here */
 
 #include <linux/module.h>
-#include <linux/config.h>
+
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>

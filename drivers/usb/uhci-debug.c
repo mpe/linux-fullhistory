@@ -1,40 +1,34 @@
 /*
  * $Id: uhci-debug.c,v 1.12 1999/12/13 15:24:42 fliegl Exp $
  */
+
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <asm/io.h>
 
+#define DEBUG
+
 #include "usb.h"
 #include "uhci.h"
-#define DEBUG
-#ifdef DEBUG
-#define dbg printk
-#else
-#define dbg nix
-static void nix (const char *format,...)
-{
-}
 
-#endif
 void dump_urb (purb_t purb)
 {
-	printk ("urb                   :%p\n", purb);
-	printk ("next                  :%p\n", purb->next);
-	printk ("dev                   :%p\n", purb->dev);
-	printk ("pipe                  :%08X\n", purb->pipe);
-	printk ("status                :%d\n", purb->status);
-	printk ("transfer_flags        :%08X\n", purb->transfer_flags);
-	printk ("transfer_buffer       :%p\n", purb->transfer_buffer);
-	printk ("transfer_buffer_length:%d\n", purb->transfer_buffer_length);
-	printk ("actual_length         :%d\n", purb->actual_length);
-	printk ("setup_packet          :%p\n", purb->setup_packet);
-	printk ("start_frame           :%d\n", purb->start_frame);
-	printk ("number_of_packets     :%d\n", purb->number_of_packets);
-	printk ("interval              :%d\n", purb->interval);
-	printk ("error_count           :%d\n", purb->error_count);
-	printk ("context               :%p\n", purb->context);
-	printk ("complete              :%p\n", purb->complete);
+	dbg("urb                   :%p", purb);
+	dbg("next                  :%p", purb->next);
+	dbg("dev                   :%p", purb->dev);
+	dbg("pipe                  :%08X", purb->pipe);
+	dbg("status                :%d", purb->status);
+	dbg("transfer_flags        :%08X", purb->transfer_flags);
+	dbg("transfer_buffer       :%p", purb->transfer_buffer);
+	dbg("transfer_buffer_length:%d", purb->transfer_buffer_length);
+	dbg("actual_length         :%d", purb->actual_length);
+	dbg("setup_packet          :%p", purb->setup_packet);
+	dbg("start_frame           :%d", purb->start_frame);
+	dbg("number_of_packets     :%d", purb->number_of_packets);
+	dbg("interval              :%d", purb->interval);
+	dbg("error_count           :%d", purb->error_count);
+	dbg("context               :%p", purb->context);
+	dbg("complete              :%p", purb->complete);
 }
 
 void beep (long freq)
@@ -61,37 +55,36 @@ void beep (long freq)
 void uhci_show_qh (puhci_desc_t qh)
 {
 	if (qh->type != QH_TYPE) {
-		dbg (KERN_DEBUG MODSTR "qh has not QH_TYPE\n");
+		dbg("qh has not QH_TYPE");
 		return;
 	}
-	dbg (KERN_DEBUG MODSTR "uhci_show_qh %p (%08lX):\n", qh, virt_to_bus (qh));
+	dbg("uhci_show_qh %p (%08lX):", qh, virt_to_bus (qh));
 
 	if (qh->hw.qh.head & UHCI_PTR_TERM)
-		dbg (KERN_DEBUG MODSTR "Head Terminate\n");
+		dbg("Head Terminate");
 	else {
 		if (qh->hw.qh.head & UHCI_PTR_QH)
-			dbg (KERN_DEBUG MODSTR "Head points to QH\n");
+			dbg("Head points to QH");
 		else
-			dbg (KERN_DEBUG MODSTR "Head points to TD\n");
+			dbg("Head points to TD");
 
-		dbg (KERN_DEBUG MODSTR "head: %08X\n", qh->hw.qh.head & ~UHCI_PTR_BITS);
+		dbg("head: %08X", qh->hw.qh.head & ~UHCI_PTR_BITS);
 	}
 	if (qh->hw.qh.element & UHCI_PTR_TERM)
-		dbg (KERN_DEBUG MODSTR "Element Terminate\n");
+		dbg("Element Terminate");
 	else {
 
 		if (qh->hw.qh.element & UHCI_PTR_QH)
-			dbg (KERN_DEBUG MODSTR "Element points to QH\n");
+			dbg("Element points to QH");
 		else
-			dbg (KERN_DEBUG MODSTR "Element points to TD\n");
-		dbg (KERN_DEBUG MODSTR "element: %08X\n", qh->hw.qh.element & ~UHCI_PTR_BITS);
+			dbg("Element points to TD");
+		dbg("element: %08X", qh->hw.qh.element & ~UHCI_PTR_BITS);
 	}
 }
 
 void uhci_show_td (puhci_desc_t td)
 {
 	char *spid;
-	dbg (KERN_DEBUG MODSTR "uhci_show_td %p (%08lX) ", td, virt_to_bus (td));
 
 	switch (td->hw.td.info & 0xff) {
 	case USB_PID_SETUP:
@@ -108,7 +101,9 @@ void uhci_show_td (puhci_desc_t td)
 		break;
 	}
 
-	dbg ("MaxLen=%02x DT%d EndPt=%x Dev=%x, PID=%x(%s) (buf=%08x)\n",
+	dbg("uhci_show_td %p (%08lX) MaxLen=%02x DT%d EndPt=%x Dev=%x, PID=%x(%s) (buf=%08x)",
+	     td,
+	     virt_to_bus(td),
 	     td->hw.td.info >> 21,
 	     ((td->hw.td.info >> 19) & 1),
 	     (td->hw.td.info >> 15) & 15,
@@ -117,7 +112,7 @@ void uhci_show_td (puhci_desc_t td)
 	     spid,
 	     td->hw.td.buffer);
 
-	dbg (KERN_DEBUG MODSTR "Len=%02x e%d %s%s%s%s%s%s%s%s%s%s\n",
+	dbg("Len=%02x e%d %s%s%s%s%s%s%s%s%s%s",
 	     td->hw.td.status & 0x7ff,
 	     ((td->hw.td.status >> 27) & 3),
 	     (td->hw.td.status & TD_CTRL_SPD) ? "SPD " : "",
@@ -131,25 +126,24 @@ void uhci_show_td (puhci_desc_t td)
 	     (td->hw.td.status & TD_CTRL_CRCTIMEO) ? "CRC/Timeo " : "",
 	     (td->hw.td.status & TD_CTRL_BITSTUFF) ? "BitStuff " : ""
 		);
-#if 1
+
 	if (td->hw.td.link & UHCI_PTR_TERM)
-		dbg (KERN_DEBUG MODSTR "Link Terminate\n");
+		dbg("Link Terminate");
 	else {
 		if (td->hw.td.link & UHCI_PTR_QH)
-			dbg (KERN_DEBUG MODSTR "%s, link points to QH @ %08x\n",
+			dbg("%s, link points to QH @ %08x",
 			     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : " Breadth first"),
 			     td->hw.td.link & ~UHCI_PTR_BITS);
 		else
-			dbg (KERN_DEBUG MODSTR "%s, link points to TD @ %08x \n",
+			dbg("%s, link points to TD @ %08x",
 			     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : " Breadth first"),
 			     td->hw.td.link & ~UHCI_PTR_BITS);
 	}
-#endif
 }
 
 void uhci_show_td_queue (puhci_desc_t td)
 {
-	dbg (KERN_DEBUG MODSTR "uhci_show_td_queue %p (%08lX):\n", td, virt_to_bus (td));
+	dbg("uhci_show_td_queue %p (%08lX):", td, virt_to_bus (td));
 	while (1) {
 		uhci_show_td (td);
 		if (td->hw.td.link & UHCI_PTR_TERM)
@@ -159,7 +153,7 @@ void uhci_show_td_queue (puhci_desc_t td)
 		if (td != bus_to_virt (td->hw.td.link & ~UHCI_PTR_BITS))
 			td = bus_to_virt (td->hw.td.link & ~UHCI_PTR_BITS);
 		else {
-			dbg (KERN_DEBUG MODSTR "td points to itself!\n");
+			dbg("td points to itself!");
 			break;
 		}
 //              schedule();
@@ -168,12 +162,12 @@ void uhci_show_td_queue (puhci_desc_t td)
 
 void uhci_show_queue (puhci_desc_t qh)
 {
-	dbg (KERN_DEBUG MODSTR "uhci_show_queue %p:\n", qh);
+	dbg("uhci_show_queue %p:", qh);
 	while (1) {
 		uhci_show_qh (qh);
 
 		if (qh->hw.qh.element & UHCI_PTR_QH)
-			dbg (KERN_DEBUG MODSTR "Warning: qh->element points to qh!\n");
+			dbg("Warning: qh->element points to qh!");
 		else if (!(qh->hw.qh.element & UHCI_PTR_TERM))
 			uhci_show_td_queue (bus_to_virt (qh->hw.qh.element & ~UHCI_PTR_BITS));
 
@@ -183,7 +177,7 @@ void uhci_show_queue (puhci_desc_t qh)
 		if (qh != bus_to_virt (qh->hw.qh.head & ~UHCI_PTR_BITS))
 			qh = bus_to_virt (qh->hw.qh.head & ~UHCI_PTR_BITS);
 		else {
-			dbg (KERN_DEBUG MODSTR "qh points to itself!\n");
+			dbg("qh points to itself!");
 			break;
 		}
 	}
@@ -191,7 +185,7 @@ void uhci_show_queue (puhci_desc_t qh)
 
 static void uhci_show_sc (int port, unsigned short status)
 {
-	dbg ("  stat%d     =     %04x   %s%s%s%s%s%s%s%s\n",
+	dbg("  stat%d     =     %04x   %s%s%s%s%s%s%s%s",
 	     port,
 	     status,
 	     (status & USBPORTSC_SUSP) ? "PortSuspend " : "",
@@ -221,7 +215,7 @@ void uhci_show_status (puhci_t s)
 	portsc1 = inw (io_addr + 16);
 	portsc2 = inw (io_addr + 18);
 
-	dbg ("  usbcmd    =     %04x   %s%s%s%s%s%s%s%s\n",
+	dbg("  usbcmd    =     %04x   %s%s%s%s%s%s%s%s",
 	     usbcmd,
 	     (usbcmd & USBCMD_MAXP) ? "Maxp64 " : "Maxp32 ",
 	     (usbcmd & USBCMD_CF) ? "CF " : "",
@@ -232,7 +226,7 @@ void uhci_show_status (puhci_t s)
 	     (usbcmd & USBCMD_HCRESET) ? "HCRESET " : "",
 	     (usbcmd & USBCMD_RS) ? "RS " : "");
 
-	dbg ("  usbstat   =     %04x   %s%s%s%s%s%s\n",
+	dbg("  usbstat   =     %04x   %s%s%s%s%s%s",
 	     usbstat,
 	     (usbstat & USBSTS_HCH) ? "HCHalted " : "",
 	     (usbstat & USBSTS_HCPE) ? "HostControllerProcessError " : "",
@@ -241,11 +235,11 @@ void uhci_show_status (puhci_t s)
 	     (usbstat & USBSTS_ERROR) ? "USBError " : "",
 	     (usbstat & USBSTS_USBINT) ? "USBINT " : "");
 
-	dbg ("  usbint    =     %04x\n", usbint);
-	dbg ("  usbfrnum  =   (%d)%03x\n", (usbfrnum >> 10) & 1,
+	dbg("  usbint    =     %04x", usbint);
+	dbg("  usbfrnum  =   (%d)%03x", (usbfrnum >> 10) & 1,
 	     0xfff & (4 * (unsigned int) usbfrnum));
-	dbg ("  flbaseadd = %08x\n", flbaseadd);
-	dbg ("  sof       =       %02x\n", sof);
+	dbg("  flbaseadd = %08x", flbaseadd);
+	dbg("  sof       =       %02x", sof);
 	uhci_show_sc (1, portsc1);
 	uhci_show_sc (2, portsc2);
 }

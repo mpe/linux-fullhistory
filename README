@@ -9,7 +9,7 @@ public use.  Different releases may have various and sometimes severe
 bugs.  It is *strongly* recommended that you back up the previous kernel
 before installing any new 2.3.xx release.
 
-If you need to use a proven and stable Linux kernel, please use 2.0.37
+If you need to use a proven and stable Linux kernel, please use 2.0.38
 or 2.2.xx.  All features which will be in the 2.3.xx releases will be
 contained in 2.4.xx when the code base has stabilized again. 
 

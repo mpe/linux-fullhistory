@@ -183,7 +183,6 @@ typedef struct page {
 #define ClearPageError(page)	clear_bit(PG_error, &(page)->flags)
 #define PageReferenced(page)	test_bit(PG_referenced, &(page)->flags)
 #define PageDecrAfter(page)	test_bit(PG_decr_after, &(page)->flags)
-#define PageDMA(page)		(contig_page_data.node_zones + ZONE_DMA == (page)->zone)
 #define PageSlab(page)		test_bit(PG_slab, &(page)->flags)
 #define PageSwapCache(page)	test_bit(PG_swap_cache, &(page)->flags)
 #define PageReserved(page)	test_bit(PG_reserved, &(page)->flags)
@@ -432,10 +431,11 @@ out:
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long do_brk(unsigned long, unsigned long);
 
+struct zone_t;
 /* filemap.c */
 extern void remove_inode_page(struct page *);
 extern unsigned long page_unuse(struct page *);
-extern int shrink_mmap(int, int);
+extern int shrink_mmap(int, int, zone_t *);
 extern void truncate_inode_pages(struct inode *, loff_t);
 
 /* generic vm_area_ops exported for stackable file systems */

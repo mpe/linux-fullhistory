@@ -139,41 +139,41 @@
 	       Changed locking to spin with reschedule.
 	       Made use of new <smp_call_function>.
   v1.28
-    19990201   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990201   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Extended the driver to be able to use Cyrix style ARRs.
     19990204   Richard Gooch <rgooch@atnf.csiro.au>
 	       Restructured Cyrix support.
   v1.29
-    19990204   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990204   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Refined ARR support: enable MAPEN in set_mtrr_prepare()
 	       and disable MAPEN in set_mtrr_done().
     19990205   Richard Gooch <rgooch@atnf.csiro.au>
 	       Minor cleanups.
   v1.30
-    19990208   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990208   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Protect plain 6x86s (and other processors without the
                Page Global Enable feature) against accessing CR4 in
                set_mtrr_prepare() and set_mtrr_done().
     19990210   Richard Gooch <rgooch@atnf.csiro.au>
 	       Turned <set_mtrr_up> and <get_mtrr> into function pointers.
   v1.31
-    19990212   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990212   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Major rewrite of cyrix_arr_init(): do not touch ARRs,
                leave them as the BIOS have set them up.
                Enable usage of all 8 ARRs.
                Avoid multiplications by 3 everywhere and other
                code clean ups/speed ups.
-    19990213   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990213   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Set up other Cyrix processors identical to the boot cpu.
                Since Cyrix don't support Intel APIC, this is l'art pour l'art.
                Weigh ARRs by size:
                If size <= 32M is given, set up ARR# we were given.
                If size >  32M is given, set up ARR7 only if it is free,
                fail otherwise.
-    19990214   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990214   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Also check for size >= 256K if we are to set up ARR7,
                mtrr_add() returns the value it gets from set_mtrr()
-    19990218   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990218   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Remove Cyrix "coma bug" workaround from here.
                Moved to linux/arch/i386/kernel/setup.c and
                linux/include/asm-i386/bugs.h
@@ -187,7 +187,7 @@
     19990305   Richard Gooch <rgooch@atnf.csiro.au>
 	       Temporarily disable AMD support now MTRR capability flag is set.
   v1.32
-    19990308   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990308   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Adjust my changes (19990212-19990218) to Richard Gooch's
 	       latest changes. (19990228-19990305)
   v1.33
@@ -201,23 +201,23 @@
     19990512   Richard Gooch <rgooch@atnf.csiro.au>
 	       Minor cleanups.
   v1.35
-    19990707   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990707   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Check whether ARR3 is protected in cyrix_get_free_region()
                and mtrr_del(). The code won't attempt to delete or change it
                from now on if the BIOS protected ARR3. It silently skips ARR3
                in cyrix_get_free_region() or returns with an error code from
                mtrr_del().
-    19990711   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990711   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Reset some bits in the CCRs in cyrix_arr_init() to disable SMM
                if ARR3 isn't protected. This is needed because if SMM is active
                and ARR3 isn't protected then deleting and setting ARR3 again
                may lock up the processor. With SMM entirely disabled, it does
                not happen.
-    19990812   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990812   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Rearrange switch() statements so the driver accomodates to
                the fact that the AMD Athlon handles its MTRRs the same way
                as Intel does.
-    19990814   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990814   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Double check for Intel in mtrr_add()'s big switch() because
 	       that revision check is only valid for Intel CPUs.
     19990819   Alan Cox <alan@redhat.com>
@@ -957,11 +957,11 @@ static void set_mtrr_smp (unsigned int reg, unsigned long base,
     wait_barrier_execute = TRUE;
     wait_barrier_cache_enable = TRUE;
     atomic_set (&undone_count, smp_num_cpus - 1);
-    /*  Flush and disable the local CPU's cache	and start the ball rolling on
-	other CPUs  */
-    set_mtrr_prepare (&ctxt);
+    /*  Start the ball rolling on other CPUs  */
     if (smp_call_function (ipi_handler, &data, 1, 0) != 0)
 	panic ("mtrr: timed out waiting for other CPUs\n");
+    /* Flush and disable the local CPU's cache */
+    set_mtrr_prepare (&ctxt);
     /*  Wait for all other CPUs to flush and disable their caches  */
     while (atomic_read (&undone_count) > 0) barrier ();
     /* Set up for completion wait and then release other CPUs to change MTRRs*/

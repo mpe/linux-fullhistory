@@ -570,6 +570,7 @@ static struct net_device eth0_dev = {
 extern int ibmtr_probe(struct net_device *);
 extern int olympic_probe(struct net_device *);
 extern int tms380tr_probe(struct net_device *);
+extern int smctr_probe(struct net_device *);
 
 static int
 trif_probe(struct net_device *dev)

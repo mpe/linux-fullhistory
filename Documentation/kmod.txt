@@ -45,3 +45,24 @@ If kerneld worked, why replace it?
 
 - kmod reports errors through the normal kernel mechanisms, which avoids
   the chicken and egg problem of kerneld and modular Unix domain sockets
+
+
+Keith Owens <kaos@ocs.com.au> December 1999
+
+The combination of kmod and modprobe can loop, especially if modprobe uses a
+system call that requires a module.  If modules.dep does not exist and modprobe
+was started with the -s option (kmod does this), modprobe tries to syslog() a
+message.  syslog() needs Unix sockets, if Unix sockets are modular then kmod
+runs "modprobe -s net-pf-1".  This runs a second copy of modprobe which
+complains that modules.dep does not exist, tries to use syslog() and starts yet
+another copy of modprobe.  This is not the only possible kmod/modprobe loop,
+just the most common.
+
+To detect loops caused by "modprobe needs a service which is in a module", kmod
+limits the number of concurrent kmod issued modprobes.  See MAX_KMOD_CONCURRENT
+in kernel/kmod.c.  When this limit is exceeded, the kernel issues message "kmod:
+runaway modprobe loop assumed and stopped".
+
+Note for users building a heavily modularised system.  It is a good idea to
+create modules.dep after installing the modules and before booting a kernel for
+the first time.  "depmod -ae m.n.p" where m.n.p is the new kernel version.

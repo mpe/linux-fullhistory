@@ -6,10 +6,10 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Thu Dec 16 23:00:03 1999
+ * Modified at:   Wed Jan  5 11:31:27 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -144,6 +144,7 @@ struct tsap_cb *irttp_open_tsap(__u8 stsap_sel, int credit, notify_t *notify)
 		return NULL;
 	}
 	memset(self, 0, sizeof(struct tsap_cb));
+	spin_lock_init(&self->lock);
 
 	init_timer(&self->todo_timer);
 

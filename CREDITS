@@ -287,9 +287,9 @@ N: Erik Inge Bolsø
 E: knan@mo.himolde.no
 D: Misc kernel hacks
 
-N: Zoltan Boszormenyi
-E: zboszor@mol.hu
-D: MTRR emulation with Cyrix style ARR registers
+N: Zoltán Böszörményi
+E: zboszor@mail.externet.hu
+D: MTRR emulation with Cyrix style ARR registers, Athlon MTRR support
 
 N: John Boyd
 E: boyd@cis.ohio-state.edu

@@ -30,7 +30,7 @@ passed to the ioctl is completed and returned. It contains the following
 information
 <P>
 <TABLE>
-<TR><TD><b>name[32]</b><TD>Cannonical name for this interface</TD>
+<TR><TD><b>name[32]</b><TD>Canonical name for this interface</TD>
 <TR><TD><b>type</b><TD>Type of interface</TD>
 <TR><TD><b>channels</b><TD>Number of radio/tv channels if appropriate</TD>
 <TR><TD><b>audios</b><TD>Number of audio devices if appropriate</TD>
@@ -125,7 +125,7 @@ disabled by passing it a value of 0.
 <P>
 Some capture devices can capture a subfield of the image they actually see.
 This is indicated when VIDEO_TYPE_SUBCAPTURE is defined.
-The video_capture describes the time and spacial subfields to capture.
+The video_capture describes the time and special subfields to capture.
 The video_capture structure contains the following fields.
 <P>
 <TABLE>
@@ -235,7 +235,7 @@ giving the tuner to use. A struct tuner has the following fields
 <P>
 <TABLE>
 <TR><TD><b>tuner</b><TD>Number of the tuner</TD>
-<TR><TD><b>name</b><TD>Cannonical name for this tuner (eg FM/AM/TV)</TD>
+<TR><TD><b>name</b><TD>Canonical name for this tuner (eg FM/AM/TV)</TD>
 <TR><TD><b>rangelow</b><TD>Lowest tunable frequency</TD>
 <TR><TD><b>rangehigh</b><TD>Highest tunable frequency</TD>
 <TR><TD><b>flags</b><TD>Flags describing the tuner</TD>
@@ -279,7 +279,7 @@ The structure contains the following fields
 <P>
 <TABLE>
 <TR><TD><b>audio</b><TD>The channel number</TD>
-<TR><TD><b>volume</b><TD>The voume level</TD>
+<TR><TD><b>volume</b><TD>The volume level</TD>
 <TR><TD><b>bass</b><TD>The bass level</TD>
 <TR><TD><b>treble</b><TD>The treble level</TD>
 <TR><TD><b>flags</b><TD>Flags describing the audio channel</TD>
@@ -359,13 +359,13 @@ For radio devices that support it, it is possible to receive Radio Data
 System (RDS) data by means of a read() on the device.  The data is packed in
 groups of three, as follows:
 <TABLE>
-<TR><TD>First Octet</TD><TD>Least Siginificant Byte of RDS Block</TD></TR>
-<TR><TD>Second Octet</TD><TD>Most Siginificant Byte of RDS Block
+<TR><TD>First Octet</TD><TD>Least Significant Byte of RDS Block</TD></TR>
+<TR><TD>Second Octet</TD><TD>Most Significant Byte of RDS Block
 <TR><TD>Third Octet</TD><TD>Bit 7:</TD><TD>Error bit.  Indicates that
-an uncorrectable error occured during reception of this block.</TD></TR>
+an uncorrectable error occurred during reception of this block.</TD></TR>
 <TR><TD>&nbsp;</TD><TD>Bit 6:</TD><TD>Corrected bit.  Indicates that  
 an error was corrected for this data block.</TD></TR>
-<TR><TD>&nbsp;</TD><TD>Bits 5-3:</TD><TD>Reeived Offset.  Indicates the  
+<TR><TD>&nbsp;</TD><TD>Bits 5-3:</TD><TD>Received Offset.  Indicates the  
 offset received by the sync system.</TD></TR>
 <TR><TD>&nbsp;</TD><TD>Bits 2-0:</TD><TD>Offset Name.  Indicates the  
 offset applied to this data.</TD></TR>

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Dec 16 21:16:14 1999
+ * Modified at:   Sun Dec 26 21:53:10 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -705,7 +705,6 @@ void irlan_get_provider_info(struct irlan_cb *self)
  	frame[0] = CMD_GET_PROVIDER_INFO;
 	frame[1] = 0x00;                 /* Zero parameters */
 	
-	/* irttp_data_request(self->client.tsap_ctrl, skb); */
 	irlan_ctrl_data_request(self, skb);
 }
 

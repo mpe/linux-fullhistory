@@ -5,7 +5,6 @@
 #include <linux/ioctl.h>
 #include <linux/version.h>
 
-
 /* USB constants */
 
 /*
@@ -784,13 +783,15 @@ void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_device(struct usb_device *);
 void usb_show_string(struct usb_device *dev, char *id, int index);
 
-#ifdef USB_DEBUG
-#define PRINTD(format, args...) printk(KERN_DEBUG "usb: " format "\n" , ## args);
-#else /* NOT DEBUGGING */
-#define PRINTD(fmt, arg...) do {} while (0)
-#endif /* USB_DEBUG */
-/* A simple way to change one line from DEBUG to NOT DEBUG: */
-#define XPRINTD(fmt, arg...)	do {} while (0)
+#ifdef DEBUG
+#define dbg(format, arg...) printk(KERN_DEBUG __FILE__ ": " format "\n", ## arg)
+#else
+#define dbg(format, arg...)
+#endif
+#define err(format, arg...) printk(KERN_ERR __FILE__ ": " format "\n", ## arg)
+#define info(format, arg...) printk(KERN_INFO __FILE__ ": " format "\n", ## arg)
+#define warn(format, arg...) printk(KERN_WARNING __FILE__ ": " format "\n", ## arg)
+
 
 /*
  * procfs stuff

@@ -29,10 +29,10 @@ else
 endif
 
 ifeq ($(CONFIG_NSC_FIR),y)
-L_OBJS += pc87108.o
+L_OBJS += nsc_fir.o
 else
   ifeq ($(CONFIG_NSC_FIR),m)
-  M_OBJS += pc87108.o
+  M_OBJS += nsc_fir.o
   endif
 endif
 

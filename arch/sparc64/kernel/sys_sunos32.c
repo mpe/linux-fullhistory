@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.33 1999/12/15 14:24:25 davem Exp $
+/* $Id: sys_sunos32.c,v 1.35 2000/01/06 23:51:50 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -762,7 +762,6 @@ static int get_default (int value, int def_value)
 /* XXXXXXXXXXXXXXXXXXXX */
 asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 {
-	int  ret = -ENODEV;
 	int  server_fd;
 	char *the_name;
 	struct nfs_mount_data linux_nfs_mount;
@@ -1267,15 +1266,14 @@ asmlinkage int sunos_shmsys(int op, u32 arg1, u32 arg2, u32 arg3)
 	return rval;
 }
 
-asmlinkage int sunos_open(u32 filename, int flags, int mode)
-{
-	int ret;
+extern asmlinkage long sparc32_open(const char * filename, int flags, int mode);
 
-	lock_kernel();
+asmlinkage int sunos_open(u32 fname, int flags, int mode)
+{
+	const char *filename = (const char *)(long)fname;
+
 	current->personality |= PER_BSD;
-	ret = sys_open ((char *)A(filename), flags, mode);
-	unlock_kernel();
-	return ret;
+	return sparc32_open(filename, flags, mode);
 }
 
 #define SUNOS_EWOULDBLOCK 35

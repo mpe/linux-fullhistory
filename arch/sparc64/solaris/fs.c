@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.14 1999/09/22 09:28:49 davem Exp $
+/* $Id: fs.c,v 1.15 2000/01/04 23:54:47 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -575,20 +575,24 @@ out:
 	return error;
 }
 
-asmlinkage int solaris_open(u32 filename, int flags, u32 mode)
+extern asmlinkage long sparc32_open(const char * filename, int flags, int mode);
+
+asmlinkage int solaris_open(u32 fname, int flags, u32 mode)
 {
-	int (*sys_open)(const char *,int,int) = 
-		(int (*)(const char *,int,int))SYS(open);
+	const char *filename = (const char *)(long)fname;
 	int fl = flags & 0xf;
 
-/*	if (flags & 0x2000) - allow LFS			*/
+	/* Translate flags first. */
+	if (flags & 0x2000) fl |= O_LARGEFILE;
 	if (flags & 0x8050) fl |= O_SYNC;
 	if (flags & 0x80) fl |= O_NONBLOCK;
 	if (flags & 0x100) fl |= O_CREAT;
 	if (flags & 0x200) fl |= O_TRUNC;
 	if (flags & 0x400) fl |= O_EXCL;
 	if (flags & 0x800) fl |= O_NOCTTY;
-	return sys_open((const char *)A(filename), fl, mode);
+	flags = fl;
+
+	return sparc32_open(filename, flags, mode);
 }
 
 #define SOL_F_SETLK	6

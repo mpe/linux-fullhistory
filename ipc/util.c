@@ -214,7 +214,7 @@ void sem_exit (void)
     return;
 }
 
-int shm_swap (int prio, int gfp_mask)
+int shm_swap (int prio, int gfp_mask, zone_t *zone)
 {
     return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.13 1999/07/30 09:31:13 davem Exp $ */
+/* $Id: checksum.h,v 1.14 2000/01/05 21:27:42 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -29,7 +29,7 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
+extern unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /* the same as csum_partial, but copies from user space while it
  * checksums
@@ -67,7 +67,7 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 }
 
 #if 0
-/* Not implemented, but nobody uses it yet... */
+/* XXX should implement this now... -DaveM */
 extern __inline__ unsigned int 
 csum_partial_copy_to_user(const char *src, char *dst, int len, 
 			  unsigned int sum, int *err)

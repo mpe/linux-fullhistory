@@ -1629,7 +1629,6 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 	int		offset;
 	unsigned long	blocknr;
 	struct kiobuf *	iobuf = NULL;
-	unsigned long	page;
 	struct page *	map;
 	struct buffer_head *tmp, *bh[KIO_MAX_SECTORS];
 
@@ -1661,11 +1660,6 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 
 		for (pageind = 0; pageind < iobuf->nr_pages; pageind++) {
 			map  = iobuf->maplist[pageind];
-			if (map && PageHighMem(map)) {
-				err = -EIO;
-				goto error;
-			}
-			page = page_address(map);
 
 			while (length > 0) {
 				blocknr = b[bufind++];

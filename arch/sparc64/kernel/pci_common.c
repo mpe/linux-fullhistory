@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.5 1999/12/20 05:02:11 davem Exp $
+/* $Id: pci_common.c,v 1.6 2000/01/06 23:51:49 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -59,29 +59,8 @@ static int __init find_device_prom_node(struct pci_pbm_info *pbm,
  */
 static void pci_device_delete(struct pci_dev *pdev)
 {
-	struct pci_dev **dpp;
-
-	/* First, unlink from list of all devices. */
-	dpp = &pci_devices;
-	while (*dpp != NULL) {
-		if (*dpp == pdev) {
-			*dpp = pdev->next;
-			pdev->next = NULL;
-			break;
-		}
-		dpp = &(*dpp)->next;
-	}
-
-	/* Next, unlink from bus sibling chain. */
-	dpp = &pdev->bus->devices;
-	while (*dpp != NULL) {
-		if (*dpp == pdev) {
-			*dpp = pdev->sibling;
-			pdev->sibling = NULL;
-			break;
-		}
-		dpp = &(*dpp)->sibling;
-	}
+	list_del(&pdev->global_list);
+	list_del(&pdev->bus_list);
 
 	/* Ok, all references are gone, free it up. */
 	kfree(pdev);
@@ -175,23 +154,31 @@ void __init pci_fill_in_pbm_cookies(struct pci_bus *pbus,
 				    struct pci_pbm_info *pbm,
 				    int prom_node)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
 	/* This loop is coded like this because the cookie
 	 * fillin routine can delete devices from the tree.
 	 */
-	pdev = pbus->devices;
-	while (pdev != NULL) {
-		struct pci_dev *next = pdev->sibling;
+	walk = walk->next;
+	while (walk != &pbus->devices) {
+		struct pci_dev *pdev = pci_dev_b(walk);
+		struct list_head *walk_next = walk->next;
 
 		pdev_cookie_fillin(pbm, pdev, prom_node);
 
-		pdev = next;
+		walk = walk_next;
 	}
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next) {
-		struct pcidev_cookie *pcp = pbus->self->sysdata;
-		pci_fill_in_pbm_cookies(pbus, pbm, pcp->prom_node);
+	walk = &pbus->children;
+	walk = walk->next;
+	while (walk != &pbus->children) {
+		struct pci_bus *this_pbus = pci_bus_b(walk);
+		struct pcidev_cookie *pcp = this_pbus->self->sysdata;
+		struct list_head *walk_next = walk->next;
+
+		pci_fill_in_pbm_cookies(this_pbus, pbm, pcp->prom_node);
+
+		walk = walk_next;
 	}
 }
 
@@ -315,13 +302,14 @@ static void __init pdev_record_assignments(struct pci_pbm_info *pbm,
 void __init pci_record_assignments(struct pci_pbm_info *pbm,
 				   struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling)
-		pdev_record_assignments(pbm, pdev);
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next)
+		pdev_record_assignments(pbm, pci_dev_b(walk));
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_record_assignments(pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_record_assignments(pbm, pci_bus_b(walk));
 }
 
 static void __init pdev_assign_unassigned(struct pci_pbm_info *pbm,
@@ -415,13 +403,14 @@ static void __init pdev_assign_unassigned(struct pci_pbm_info *pbm,
 void __init pci_assign_unassigned(struct pci_pbm_info *pbm,
 				  struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling)
-		pdev_assign_unassigned(pbm, pdev);
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next)
+		pdev_assign_unassigned(pbm, pci_dev_b(walk));
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_assign_unassigned(pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_assign_unassigned(pbm, pci_bus_b(walk));
 }
 
 static int __init pci_intmap_match(struct pci_dev *pdev, unsigned int *interrupt)
@@ -566,13 +555,14 @@ have_irq:
 void __init pci_fixup_irq(struct pci_pbm_info *pbm,
 			  struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling)
-		pdev_fixup_irq(pdev);
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next)
+		pdev_fixup_irq(pci_dev_b(walk));
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_fixup_irq(pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_fixup_irq(pbm, pci_bus_b(walk));
 }
 
 /* Generic helper routines for PCI error reporting. */
@@ -580,9 +570,10 @@ void pci_scan_for_target_abort(struct pci_controller_info *p,
 			       struct pci_pbm_info *pbm,
 			       struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling) {
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next) {
+		struct pci_dev *pdev = pci_dev_b(walk);
 		u16 status, error_bits;
 
 		pci_read_config_word(pdev, PCI_STATUS, &status);
@@ -597,17 +588,19 @@ void pci_scan_for_target_abort(struct pci_controller_info *p,
 		}
 	}
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_scan_for_target_abort(p, pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_scan_for_target_abort(p, pbm, pci_bus_b(walk));
 }
 
 void pci_scan_for_master_abort(struct pci_controller_info *p,
 			       struct pci_pbm_info *pbm,
 			       struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling) {
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next) {
+		struct pci_dev *pdev = pci_dev_b(walk);
 		u16 status, error_bits;
 
 		pci_read_config_word(pdev, PCI_STATUS, &status);
@@ -621,17 +614,19 @@ void pci_scan_for_master_abort(struct pci_controller_info *p,
 		}
 	}
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_scan_for_master_abort(p, pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_scan_for_master_abort(p, pbm, pci_bus_b(walk));
 }
 
 void pci_scan_for_parity_error(struct pci_controller_info *p,
 			       struct pci_pbm_info *pbm,
 			       struct pci_bus *pbus)
 {
-	struct pci_dev *pdev;
+	struct list_head *walk = &pbus->devices;
 
-	for (pdev = pbus->devices; pdev; pdev = pdev->sibling) {
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next) {
+		struct pci_dev *pdev = pci_dev_b(walk);
 		u16 status, error_bits;
 
 		pci_read_config_word(pdev, PCI_STATUS, &status);
@@ -646,6 +641,7 @@ void pci_scan_for_parity_error(struct pci_controller_info *p,
 		}
 	}
 
-	for (pbus = pbus->children; pbus; pbus = pbus->next)
-		pci_scan_for_parity_error(p, pbm, pbus);
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_scan_for_parity_error(p, pbm, pci_bus_b(walk));
 }

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sun Oct 31 19:41:55 1999
+ * Modified at:   Sun Dec 26 21:52:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -194,7 +194,7 @@ static int irlan_client_state_conn(struct irlan_cb *self, IRLAN_EVENT event,
 	
 	ASSERT(self != NULL, return -1;);
 	
-	switch(event) {
+	switch (event) {
 	case IRLAN_CONNECT_COMPLETE:
 		/* Send getinfo cmd */
 		irlan_get_provider_info(self);

@@ -10,6 +10,7 @@ if [ "$CONFIG_TR" = "y" ]; then
    tristate '  IBM Tropic chipset based adapter support' CONFIG_IBMTR
    tristate '  IBM Olympic chipset PCI adapter support' CONFIG_IBMOL
    tristate '  Generic TMS380 Token Ring ISA/PCI adapter support' CONFIG_TMS380TR
+   tristate '  SMC ISA adapter support' CONFIG_SMCTR
 fi
 
 endmenu

@@ -395,7 +395,7 @@ void prune_icache(int goal)
 	dispose_list(freeable);
 }
 
-int shrink_icache_memory(int priority, int gfp_mask)
+int shrink_icache_memory(int priority, int gfp_mask, zone_t *zone)
 {
 	if (gfp_mask & __GFP_IO)
 	{

@@ -24,7 +24,6 @@
 #ifndef _LINUX_NETDEVICE_H
 #define _LINUX_NETDEVICE_H
 
-#include <linux/config.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -32,6 +31,7 @@
 #include <asm/atomic.h>
 
 #ifdef __KERNEL__
+#include <linux/config.h>
 #ifdef CONFIG_NET_PROFILE
 #include <net/profile.h>
 #endif

@@ -2260,18 +2260,21 @@ srom_search(struct pci_dev *dev)
     u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
     int i, j;
     struct bus_type *lp = &bus;
+    struct list_head *walk = &dev->bus_list;
 
-    for (; (dev=dev->sibling)!= NULL;) {
-	pb = dev->bus->number;
-	vendor = dev->vendor;
-	device = dev->device << 8;
+    for (walk = walk->next; walk != &dev->bus_list; walk = walk->next) {
+	struct pci_dev *this_dev = pci_dev_b(walk);
+
+	pb = this_dev->bus->number;
+	vendor = this_dev->vendor;
+	device = this_dev->device << 8;
 	if (!(is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x)) continue;
 
 	/* Get the chip configuration revision register */
-	pcibios_read_config_dword(pb, dev->devfn, PCI_REVISION_ID, &cfrv);
+	pcibios_read_config_dword(pb, this_dev->devfn, PCI_REVISION_ID, &cfrv);
 
 	/* Set the device number information */
-	lp->device = PCI_SLOT(dev->devfn);
+	lp->device = PCI_SLOT(this_dev->devfn);
 	lp->bus_num = pb;
 	    
 	/* Set the chipset information */
@@ -2281,14 +2284,14 @@ srom_search(struct pci_dev *dev)
 	lp->chipset = device;
 
 	/* Get the board I/O address (64 bits on sparc64) */
-	iobase = dev->resource[0].start;
+	iobase = this_dev->resource[0].start;
 
 	/* Fetch the IRQ to be used */
-	irq = dev->irq;
+	irq = this_dev->irq;
 	if ((irq == 0) || (irq == 0xff) || ((int)irq == -1)) continue;
 	    
 	/* Check if I/O accesses are enabled */
-	pcibios_read_config_word(pb, dev->devfn, PCI_COMMAND, &status);
+	pcibios_read_config_word(pb, this_dev->devfn, PCI_COMMAND, &status);
 	if (!(status & PCI_COMMAND_IO)) continue;
 
 	/* Search for a valid SROM attached to this DECchip */

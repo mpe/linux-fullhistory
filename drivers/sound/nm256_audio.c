@@ -14,6 +14,7 @@
  */
 
 #include <linux/config.h>
+#define __NO_VERSION__
 #include <linux/pci.h>
 #include <linux/module.h>
 #ifdef CONFIG_APM

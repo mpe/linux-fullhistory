@@ -7,8 +7,8 @@
  *  and Martin Mares, November 1997.
  *
  *  Force Cyrix 6x86(MX) and M II processors to report MTRR capability
- *  and fix against Cyrix "coma bug" by
- *      Zoltan Boszormenyi <zboszor@mol.hu> February 1999.
+ *  and Cyrix "coma bug" recognition by
+ *      Zoltán Böszörményi <zboszor@mail.externet.hu> February 1999.
  * 
  *  Force Centaur C6 processors to report MTRR capability.
  *      Bart Hartgers <bart@etpmod.phys.tue.nl>, May 1999.
