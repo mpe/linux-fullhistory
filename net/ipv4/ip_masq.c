@@ -2232,13 +2232,6 @@ void ip_masq_proc_unregister(struct proc_dir_entry *ent)
 	proc_unregister(proc_net_ip_masq, ent->low_ino);
 }
 
-/*
- *	Wrapper over inet_select_addr()
- */
-u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope)
-{
-	return inet_select_addr(dev, dst, scope);
-}
 
 __initfunc(static void masq_proc_init(void))
 {	
@@ -2257,6 +2250,13 @@ __initfunc(static void masq_proc_init(void))
 	}
 }
 #endif	/* CONFIG_PROC_FS */
+/*
+ *	Wrapper over inet_select_addr()
+ */
+u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope)
+{
+	return inet_select_addr(dev, dst, scope);
+}
 
 /*
  *	Initialize ip masquerading

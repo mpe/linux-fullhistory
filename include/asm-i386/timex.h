@@ -34,7 +34,7 @@ extern cycles_t cacheflush_time;
 
 static inline cycles_t get_cycles (void)
 {
-#ifndef CONFIG_TSC
+#ifndef CONFIG_X86_TSC
 	return 0;
 #else
 	unsigned long eax, edx;

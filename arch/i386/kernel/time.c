@@ -118,7 +118,7 @@ static inline unsigned long do_fast_gettimeoffset(void)
 
 #define TICK_SIZE tick
 
-#ifndef CONFIG_TSC
+#ifndef CONFIG_X86_TSC
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -630,6 +630,19 @@ __initfunc(void time_init(void))
  * to disk; this won't break the kernel, though, 'cuz we're
  * smart.  See arch/i386/kernel/apm.c.
  */
+ 	/*
+ 	 *	Firstly we have to do a CPU check for chips with
+ 	 * 	a potentially buggy TSC. At this point we haven't run
+ 	 *	the ident/bugs checks so we must run this hook as it
+ 	 *	may turn off the TSC flag.
+ 	 *
+ 	 *	NOTE: this doesnt yet handle SMP 486 machines where only
+ 	 *	some CPU's have a TSC. Thats never worked and nobody has
+ 	 *	moaned if you have the only one in the world - you fix it!
+ 	 */
+ 
+ 	dodgy_tsc();
+ 	
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
 #ifndef do_gettimeoffset
 		do_gettimeoffset = do_fast_gettimeoffset;

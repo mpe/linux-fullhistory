@@ -241,6 +241,7 @@ void delete_from_swap_cache(struct page *page)
 void free_page_and_swap_cache(unsigned long addr)
 {
 	struct page *page = mem_map + MAP_NR(addr);
+
 	/* 
 	 * If we are the only user, then free up the swap cache. 
 	 */
@@ -248,7 +249,7 @@ void free_page_and_swap_cache(unsigned long addr)
 		delete_from_swap_cache(page);
 	}
 	
-	free_page(addr);
+	__free_page(page);
 }
 
 

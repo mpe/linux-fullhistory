@@ -41,8 +41,8 @@
 #include <linux/major.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/timer.h>
 #include <linux/init.h>
-#include <asm/irq.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -58,6 +58,7 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 
+#include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
@@ -183,6 +184,7 @@ static ssize_t lp_write_interrupt(struct file *file, const char *buf,
   struct inode *inode = file->f_dentry->d_inode;
   unsigned long total_bytes_written = 0;
   unsigned int flags;
+  long timeout;
   int rc;
   int dev = MINOR(inode->i_rdev);
 
@@ -211,12 +213,12 @@ static ssize_t lp_write_interrupt(struct file *file, const char *buf,
 	  /* something blocked printing, so we don't want to sleep too long,
 	     in case we have to rekick the interrupt */
 
-	  current->timeout = jiffies + LP_TIMEOUT_POLLED;
+	  timeout = LP_TIMEOUT_POLLED;
       } else {
-	  current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
+	  timeout = LP_TIMEOUT_INTERRUPT;
       }
   
-      interruptible_sleep_on(&lp_table[dev]->lp_wait_q);
+      interruptible_sleep_on_timeout(&lp_table[dev]->lp_wait_q, timeout);
       restore_flags(flags);
   
       /* we're up again and running. we first disable lp_interrupt(), then
@@ -281,7 +283,7 @@ static ssize_t lp_write_polled(struct file *file, const char *buf,
 	int dev = MINOR(inode->i_rdev);
 
 #ifdef LP_DEBUG
-	if (jiffies-lp_last_call > lp_table[dev]->time) {
+	if (time_after(jiffies, lp_last_call + lp_table[dev]->time)) {
 		lp_total_chars = 0;
 		lp_max_count = 1;
 	}
@@ -336,8 +338,7 @@ static ssize_t lp_write_polled(struct file *file, const char *buf,
 			lp_total_chars = 0;
 #endif
 			current->state = TASK_INTERRUPTIBLE;
-			current->timeout = jiffies + timeout;
-			schedule();
+			schedule_timeout(timeout);
 		}
 	}
 	return temp - buf;

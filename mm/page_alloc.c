@@ -241,18 +241,37 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 			goto nopage;
 		}
 
-		if (freepages.min > nr_free_pages) {
-			int freed;
-			freed = try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX);
-			/*
-			 * Low priority (user) allocations must not
-			 * succeed if we didn't have enough memory
-			 * and we couldn't get more..
-			 */
-			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-				goto nopage;
+		/*
+		 * Avoid going back-and-forth between allocating
+		 * memory and trying to free it. If we get into
+		 * a bad memory situation, we're better off trying
+		 * to free things up until things are better.
+		 *
+		 * Normally we shouldn't ever have to do this, with
+		 * kswapd doing this in the background.
+		 *
+		 * Most notably, this puts most of the onus of
+		 * freeing up memory on the processes that _use_
+		 * the most memory, rather than on everybody.
+		 */
+		if (nr_free_pages > freepages.min) {
+			if (!current->trashing_memory)
+				goto ok_to_allocate;
+			if (nr_free_pages > freepages.low) {
+				current->trashing_memory = 0;
+				goto ok_to_allocate;
+			}
 		}
+		/*
+		 * Low priority (user) allocations must not
+		 * succeed if we are having trouble allocating
+		 * memory.
+		 */
+		current->trashing_memory = 1;
+		if (!try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX) && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+			goto nopage;
 	}
+ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);
 	RMQUEUE(order, (gfp_mask & GFP_DMA));
 	spin_unlock_irqrestore(&page_alloc_lock, flags);

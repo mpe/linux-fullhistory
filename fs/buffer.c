@@ -472,7 +472,7 @@ static inline void remove_from_free_list(struct buffer_head * bh)
 	bh->b_next_free = bh->b_prev_free = NULL;
 }
 
-static inline void remove_from_queues(struct buffer_head * bh)
+static void remove_from_queues(struct buffer_head * bh)
 {
 	if(bh->b_dev == B_FREE) {
 		remove_from_free_list(bh); /* Free list entries should not be
@@ -531,7 +531,7 @@ static inline void put_last_free(struct buffer_head * bh)
 	}
 }
 
-static inline void insert_into_queues(struct buffer_head * bh)
+static void insert_into_queues(struct buffer_head * bh)
 {
 	/* put at end of free list */
 	if(bh->b_dev == B_FREE) {
@@ -687,205 +687,15 @@ void set_blocksize(kdev_t dev, int size)
 }
 
 /*
- * Find a candidate buffer to be reclaimed. 
- * N.B. Must search the entire BUF_LOCKED list rather than terminating
- * when the first locked buffer is found.  Buffers are unlocked at 
- * completion of IO, and under some conditions there may be (many)
- * unlocked buffers after the first locked one.
+ * We used to try various strange things. Let's not.
  */
-static struct buffer_head *find_candidate(struct buffer_head *bh,
-					  int *list_len, int size)
-{
-	if (!bh)
-		goto no_candidate;
-
-	for (; (*list_len) > 0; bh = bh->b_next_free, (*list_len)--) {
-		if (size != bh->b_size && !buffer_touched(bh)) {
-			/* This provides a mechanism for freeing blocks
-			 * of other sizes, this is necessary now that we
-			 * no longer have the lav code.
-			 */
-			try_to_free_buffer(bh,&bh);
-			if (!bh)
-				break;
-			continue;
-		}
-		else if (!bh->b_count		&& 
-			 !buffer_locked(bh)	&& 
-			 !buffer_protected(bh)	&&
-			 !buffer_dirty(bh)) 
-			return bh;
-	}
-
-no_candidate:
-	return NULL;
-}
-
 static void refill_freelist(int size)
 {
-	struct buffer_head * bh, * next;
-	struct buffer_head * candidate[BUF_DIRTY];
-	int buffers[BUF_DIRTY];
-	int i;
-	int needed, obtained=0;
-
-	refilled = 1;
-	
-	/* We are going to try to locate this much memory. */
-	needed = bdf_prm.b_un.nrefill * size;  
-
-	while ((nr_free_pages > freepages.min*2) &&
-	        !buffer_over_max() &&
-		grow_buffers(GFP_BUFFER, size)) {
-		obtained += PAGE_SIZE;
-		if (obtained >= needed)
-			return;
-	}
-
-	/*
-	 * Update the needed amount based on the number of potentially
-	 * freeable buffers. We don't want to free more than one quarter
-	 * of the available buffers.
-	 */
-	i = (nr_buffers_type[BUF_CLEAN] + nr_buffers_type[BUF_LOCKED]) >> 2;
-	if (i < bdf_prm.b_un.nrefill) {
-		needed = i * size;
-		if (needed < PAGE_SIZE)
-			needed = PAGE_SIZE;
-	}
-
-	/* 
-	 * OK, we cannot grow the buffer cache, now try to get some
-	 * from the lru list.
-	 */
-repeat:
-	if (obtained >= needed)
-		return;
-
-	/*
-	 * First set the candidate pointers to usable buffers.  This
-	 * should be quick nearly all of the time.  N.B. There must be 
-	 * no blocking calls after setting up the candidate[] array!
-	 */
-	for (i = BUF_CLEAN; i<BUF_DIRTY; i++) {
-		buffers[i] = nr_buffers_type[i];
-		candidate[i] = find_candidate(lru_list[i], &buffers[i], size);
-	}
-	
-	/*
-	 * Select the older of the available buffers until we reach our goal.
-	 */
-	for (;;) {
-		i = BUF_CLEAN;
-		if (!candidate[BUF_CLEAN]) {
-			if (!candidate[BUF_LOCKED])
-				break;
-			i = BUF_LOCKED;
-		}
-		else if (candidate[BUF_LOCKED] &&
-				(candidate[BUF_LOCKED]->b_lru_time < 
-				 candidate[BUF_CLEAN ]->b_lru_time))
-			i = BUF_LOCKED;
-		/*
-		 * Free the selected buffer and get the next candidate.
-		 */
-		bh = candidate[i];
-		next = bh->b_next_free;
-
-		obtained += bh->b_size;
-		remove_from_queues(bh);
-		put_last_free(bh);
-		if (obtained >= needed)
-			return;
-
-		if (--buffers[i] && bh != next)
-			candidate[i] = find_candidate(next, &buffers[i], size);
-		else
-			candidate[i] = NULL;
-	}	
-
-	/*
-	 * If there are dirty buffers, do a non-blocking wake-up.
-	 * This increases the chances of having buffers available
-	 * for the next call ...
-	 */
-	if (nr_buffers_type[BUF_DIRTY])
-		wakeup_bdflush(0);
-
-	/*
-	 * Allocate buffers to reach half our goal, if possible.
-	 * Since the allocation doesn't block, there's no reason
-	 * to search the buffer lists again. Then return if there
-	 * are _any_ free buffers.
-	 */
-	while (obtained < (needed >> 1) &&
-	       nr_free_pages > freepages.min + 5 &&
-	       grow_buffers(GFP_BUFFER, size))
-		obtained += PAGE_SIZE;
-
-	if (free_list[BUFSIZE_INDEX(size)])
-		return;
-
-	/*
-	 * If there are dirty buffers, wait while bdflush writes
-	 * them out. The buffers become locked, but we can just
-	 * wait for one to unlock ...
-	 */
-	if (nr_buffers_type[BUF_DIRTY])
+	if (!grow_buffers(GFP_KERNEL, size)) {
 		wakeup_bdflush(1);
-
-	/*
-	 * In order to prevent a buffer shortage from exhausting
-	 * the system's reserved pages, we force tasks to wait 
-	 * before using reserved pages for buffers.  This is easily
-	 * accomplished by waiting on an unused locked buffer.
-	 */
-	if ((bh = lru_list[BUF_LOCKED]) != NULL) {
-		for (i = nr_buffers_type[BUF_LOCKED]; i--; bh = bh->b_next_free)
-		{
-			if (bh->b_size != size)
-				continue;
-			if (bh->b_count)
-				continue;
-			if (!buffer_locked(bh))
-				continue;
-			if (buffer_dirty(bh) || buffer_protected(bh))
-				continue;
-			if (MAJOR(bh->b_dev) == LOOP_MAJOR)
-				continue;
-			/*
-			 * We've found an unused, locked, non-dirty buffer of
-			 * the correct size.  Claim it so no one else can, 
-			 * then wait for it to unlock.
-			 */
-			bh->b_count++;
-			wait_on_buffer(bh);
-			bh->b_count--;
-			/*
-			 * Loop back to harvest this (and maybe other) buffers.
-			 */
-			goto repeat;
-		}
+		current->policy |= SCHED_YIELD;
+		schedule();
 	}
-
-	/*
-	 * Convert a reserved page into buffers ... should happen only rarely.
-	 */
-	if (grow_buffers(GFP_ATOMIC, size)) {
-#ifdef BUFFER_DEBUG
-printk("refill_freelist: used reserve page\n");
-#endif
-		return;
-	}
-
-	/*
-	 * System is _very_ low on memory ... sleep and try later.
-	 */
-#ifdef BUFFER_DEBUG
-printk("refill_freelist: task %s waiting for buffers\n", current->comm);
-#endif
-	schedule();
-	goto repeat;
 }
 
 void init_buffer(struct buffer_head *bh, kdev_t dev, int block,
@@ -1636,56 +1446,51 @@ static int grow_buffers(int pri, int size)
 	return 1;
 }
 
-
-/* =========== Reduce the buffer memory ============= */
-
-static inline int buffer_waiting(struct buffer_head * bh)
-{
-	return waitqueue_active(&bh->b_wait);
-}
+/*
+ * Can the buffer be thrown out?
+ */
+#define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
+#define buffer_busy(bh)		((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
 
 /*
- * try_to_free_buffer() checks if all the buffers on this particular page
+ * try_to_free_buffers() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
+ *
+ * Wake up bdflush() if this fails - if we're running low on memory due
+ * to dirty buffers, we need to flush them out as quickly as possible.
  */
-int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp)
+int try_to_free_buffers(struct page * page_map)
 {
-	unsigned long page;
-	struct buffer_head * tmp, * p;
+	struct buffer_head * tmp, * bh = page_map->buffers;
 
-	*bhp = bh;
-	page = (unsigned long) bh->b_data;
-	page &= PAGE_MASK;
 	tmp = bh;
 	do {
-		if (!tmp)
-			return 0;
-		if (tmp->b_count || buffer_protected(tmp) ||
-		    buffer_dirty(tmp) || buffer_locked(tmp) ||
-		    buffer_waiting(tmp))
-			return 0;
+		struct buffer_head * p = tmp;
+
 		tmp = tmp->b_this_page;
+		if (!buffer_busy(p))
+			continue;
+
+		wakeup_bdflush(0);
+		return 0;
 	} while (tmp != bh);
 
 	tmp = bh;
 	do {
-		p = tmp;
+		struct buffer_head * p = tmp;
 		tmp = tmp->b_this_page;
 		nr_buffers--;
-		if (p == *bhp) {
-			*bhp = p->b_prev_free;
-			if (p == *bhp) /* Was this the last in the list? */
-				*bhp = NULL;
-		}
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
+
 	/* Wake up anyone waiting for buffer heads */
 	wake_up(&buffer_wait);
 
+	/* And free the page */
 	buffermem -= PAGE_SIZE;
-	mem_map[MAP_NR(page)].buffers = NULL;
-	free_page(page);
+	page_map->buffers = NULL;
+	__free_page(page_map);
 	return 1;
 }
 

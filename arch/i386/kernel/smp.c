@@ -1058,6 +1058,7 @@ static void smp_tune_scheduling (void)
 		 * scheduling on <=i486 based SMP boards.
 		 */
 		cacheflush_time = 0;
+		return;
 	} else {
 		cachesize = boot_cpu_data.x86_cache_size;
 		if (cachesize == -1)
@@ -1066,7 +1067,7 @@ static void smp_tune_scheduling (void)
 		cacheflush_time = cpu_hz/1024*cachesize/5000;
 	}
 
-	printk("per-CPU timeslice cutoff: %ld.%ld usecs.\n",
+	printk("per-CPU timeslice cutoff: %ld.%02ld usecs.\n",
 		(long)cacheflush_time/(cpu_hz/1000000),
 		((long)cacheflush_time*100/(cpu_hz/1000000)) % 100);
 }
@@ -1302,7 +1303,7 @@ smp_done:
  * Silly serialization to work around CPU bug in P5s.
  * We can safely turn it off on a 686.
  */
-#ifdef CONFIG_GOOD_APIC
+#ifdef CONFIG_X86_GOOD_APIC
 # define FORCE_APIC_SERIALIZATION 0
 #else
 # define FORCE_APIC_SERIALIZATION 1

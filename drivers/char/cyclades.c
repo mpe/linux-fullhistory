@@ -1008,13 +1008,13 @@ check_wild_interrupts(void)
          * occur during the bootup sequence
          */
         timeout = jiffies+(HZ/10);
-        while (timeout >= jiffies)
+        while (time_after_eq(timeout, jiffies))
             ;
         
         cy_triggered = 0;       /* Reset after letting things settle */
 
         timeout = jiffies+(HZ/10);
-        while (timeout >= jiffies)
+        while (time_after_eq(timeout, jiffies))
                 ;
         
         for (i = 0, mask = 1; i < 16; i++, mask <<= 1) {
@@ -1058,7 +1058,7 @@ get_auto_irq(volatile ucchar *address)
     restore_flags(flags);
     
     timeout = jiffies+(HZ/50);
-    while (timeout >= jiffies) {
+    while (time_after_eq(timeout, jiffies)) {
         if (cy_irq_triggered)
             break;
     }
@@ -2601,7 +2601,7 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
 	    schedule_timeout(char_time);
 	    if (signal_pending(current))
 		break;
-	    if (timeout && ((orig_jiffies + timeout) < jiffies))
+	    if (timeout && time_before(orig_jiffies + timeout, jiffies))
 		break;
 	}
 	current->state = TASK_RUNNING;
@@ -3400,8 +3400,7 @@ get_serial_info(struct cyclades_port * info,
     tmp.baud_base = info->baud;
     tmp.custom_divisor = 0;     /*!!!*/
     tmp.hub6 = 0;               /*!!!*/
-    copy_to_user(retinfo,&tmp,sizeof(*retinfo));
-    return 0;
+    return copy_to_user(retinfo,&tmp,sizeof(*retinfo))?-EFAULT:0;
 } /* get_serial_info */
 
 
@@ -3772,7 +3771,8 @@ static int
 get_mon_info(struct cyclades_port * info, struct cyclades_monitor * mon)
 {
 
-    copy_to_user(mon, &info->mon, sizeof(struct cyclades_monitor));
+    if(copy_to_user(mon, &info->mon, sizeof(struct cyclades_monitor)))
+    	return -EFAULT;
     info->mon.int_count  = 0;
     info->mon.char_count = 0;
     info->mon.char_max   = 0;

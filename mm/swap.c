@@ -64,13 +64,13 @@ swap_control_t swap_control = {
 swapstat_t swapstats = {0};
 
 buffer_mem_t buffer_mem = {
-	5,	/* minimum percent buffer */
+	2,	/* minimum percent buffer */
 	10,	/* borrow percent buffer */
 	60	/* maximum percent buffer */
 };
 
 buffer_mem_t page_cache = {
-	5,	/* minimum percent page cache */
+	2,	/* minimum percent page cache */
 	15,	/* borrow percent page cache */
 	75	/* maximum */
 };

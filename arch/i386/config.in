@@ -20,16 +20,17 @@ choice 'Processor family' \
 #
 # Define implied options from the CPU selection here
 #
-if [ "$CONFIG_M386" != "n" ]; then
-  define_bool CONFIG_WP_WORKS_OK y
-  define_bool CONFIG_INVLPG y
-  define_bool CONFIG_BSWAP y
+if [ "$CONFIG_M386" != "y" ]; then
+  define_bool CONFIG_X86_WP_WORKS_OK y
+  define_bool CONFIG_X86_INVLPG y
+  define_bool CONFIG_X86_BSWAP y
+  define_bool CONFIG_X86_POPAD_OK y
 fi
 if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586TSC" = "y" ]; then
-  define_bool CONFIG_TSC y
+  define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
-  define_bool CONFIG_GOOD_APIC y
+  define_bool CONFIG_X86_GOOD_APIC y
 fi
 
 bool 'Math emulation' CONFIG_MATH_EMULATION

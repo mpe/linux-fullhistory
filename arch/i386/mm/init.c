@@ -408,7 +408,7 @@ __initfunc(void test_wp_bit(void))
 	if (boot_cpu_data.wp_works_ok < 0) {
 		boot_cpu_data.wp_works_ok = 0;
 		printk("No.\n");
-#ifdef CONFIG_WP_WORKS_OK
+#ifdef CONFIG_X86_WP_WORKS_OK
 		panic("This kernel doesn't support CPU's with broken WP. Recompile it for a 386!");
 #endif
 	} else

@@ -379,28 +379,8 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 
 #define buffer_under_min()	((buffermem >> PAGE_SHIFT) * 100 < \
 				buffer_mem.min_percent * num_physpages)
-#define buffer_under_borrow()	((buffermem >> PAGE_SHIFT) * 100 < \
-				buffer_mem.borrow_percent * num_physpages)
-#define buffer_under_max()	((buffermem >> PAGE_SHIFT) * 100 < \
-				buffer_mem.max_percent * num_physpages)
-#define buffer_over_min()	((buffermem >> PAGE_SHIFT) * 100 > \
-				buffer_mem.min_percent * num_physpages)
-#define buffer_over_borrow()	((buffermem >> PAGE_SHIFT) * 100 > \
-				buffer_mem.borrow_percent * num_physpages)
-#define buffer_over_max()	((buffermem >> PAGE_SHIFT) * 100 > \
-				buffer_mem.max_percent * num_physpages)
 #define pgcache_under_min()	(page_cache_size * 100 < \
 				page_cache.min_percent * num_physpages)
-#define pgcache_under_borrow()	(page_cache_size * 100 < \
-				page_cache.borrow_percent * num_physpages)
-#define pgcache_under_max()	(page_cache_size * 100 < \
-				page_cache.max_percent * num_physpages)
-#define pgcache_over_min()	(page_cache_size * 100 > \
-				page_cache.min_percent * num_physpages)
-#define pgcache_over_borrow()	(page_cache_size * 100 > \
-				page_cache.borrow_percent * num_physpages)
-#define pgcache_over_max()	(page_cache_size * 100 > \
-				page_cache.max_percent * num_physpages)
 
 #endif /* __KERNEL__ */
 

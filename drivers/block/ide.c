@@ -2583,9 +2583,6 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 		return 0;
 
 	if (drive->forced_geom) {
-		/* bombs otherwise /axboe */
-		if (drive == NULL) 
-			return 0;
 		/*
 		 * Update the current 3D drive values.
 		 */

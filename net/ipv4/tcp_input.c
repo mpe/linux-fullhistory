@@ -2047,27 +2047,16 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 			/* We got an ack, but it's not a good ack. */
 			if(!tcp_ack(sk,th, TCP_SKB_CB(skb)->seq,
-				    TCP_SKB_CB(skb)->ack_seq, len)) {
-				sk->err = ECONNRESET;
-				sk->state_change(sk);
-				tcp_statistics.TcpAttemptFails++;
+				    TCP_SKB_CB(skb)->ack_seq, len)) 
 				return 1;
-			}
 
 			if(th->rst) {
 				tcp_reset(sk);
 				goto discard;
 			}
 
-			if(!th->syn) {
-				/* A valid ack from a different connection
-				 * start.  Shouldn't happen but cover it.
-				 */
-				sk->err = ECONNRESET;
-				sk->state_change(sk);
-				tcp_statistics.TcpAttemptFails++;
-				return 1;
-			}
+			if(!th->syn) 
+				goto discard;
 
 			/* Ok.. it's good. Set up sequence numbers and
 			 * move to established.

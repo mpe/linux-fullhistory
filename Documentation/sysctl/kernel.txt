@@ -33,6 +33,7 @@ show up in /proc/sys/kernel:
 - real-root-dev               ==> Documentation/initrd.txt
 - reboot-cmd                  [ SPARC only ]
 - sg-big-buff                 [ generic SCSI device (sg) ]
+- shmmax                      [ sysv ipc ]
 - version
 - zero-paged                  [ PPC only ]
 
@@ -164,6 +165,15 @@ the value of SG_BIG_BUFF.
 There shouldn't be any reason to change this value. If
 you can come up with one, you probably know what you
 are doing anyway :)
+
+==============================================================
+
+shmmax: 
+
+This value can be used to query and set the run time limit
+on the maximum shared memory segment size that can be created.
+Shared memory segments up to 1Gb are now supported in the 
+kernel.  This value defaults to SHMMAX.
 
 ==============================================================
 

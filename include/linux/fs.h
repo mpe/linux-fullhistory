@@ -738,7 +738,7 @@ extern struct file *inuse_filps;
 
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
-extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**);
+extern int try_to_free_buffers(struct page *);
 
 extern int nr_buffers;
 extern int buffermem;

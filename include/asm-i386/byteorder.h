@@ -12,7 +12,7 @@
 
 static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 {
-#ifdef CONFIG_BSWAP
+#ifdef CONFIG_X86_BSWAP
 	__asm__("bswap %0" : "=r" (x) : "0" (x));
 #else
 	__asm__("xchgb %b0,%h0\n\t"	/* swap lower bytes	*/

@@ -232,6 +232,11 @@
  * Eastlake, Steve Crocker, and Jeff Schiller.
  */
 
+/*
+ * Added a check for signal pending in the extract_entropy() loop to allow
+ * the read(2) syscall to be interrupted. Copyright (C) 1998  Andrea Arcangeli
+ */
+
 #include <linux/utsname.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -1269,7 +1274,14 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 		buf += i;
 		add_timer_randomness(r, &extract_timer_state, nbytes);
 		if (to_user && current->need_resched)
+		{
+			if (signal_pending(current))
+			{
+				ret = -EINTR;
+				break;
+			}
 			schedule();
+		}
 	}
 
 	/* Wipe data just returned from memory */

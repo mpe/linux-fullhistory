@@ -125,7 +125,7 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count;
 
-	count = (limit<<1) >> (priority);
+	count = limit >> priority;
 
 	page = mem_map + clock;
 	do {
@@ -158,10 +158,9 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			struct buffer_head *bh = page->buffers;
 			if (buffer_under_min())
 				continue;
-			if (!try_to_free_buffer(bh, &bh))
+			if (!try_to_free_buffers(page))
 				continue;
 			return 1;
 		}
@@ -180,26 +179,6 @@ int shrink_mmap(int priority, int gfp_mask)
 
 	} while (count > 0);
 	return 0;
-}
-
-/*
- * This is called from try_to_swap_out() when we try to get rid of some
- * pages..  If we're unmapping the last occurrence of this page, we also
- * free it from the page hash-queues etc, as we don't want to keep it
- * in-core unnecessarily.
- */
-unsigned long page_unuse(struct page * page)
-{
-	int count = atomic_read(&page->count);
-
-	if (count != 2)
-		return count;
-	if (!page->inode)
-		return count;
-	if (PageSwapCache(page))
-		panic ("Doing a normal page_unuse of a swap cache page");
-	remove_inode_page(page);
-	return 1;
 }
 
 /*

@@ -85,7 +85,11 @@ static int spx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(PF_IPX, GFP_KERNEL, 1);
+	/*
+	 *	Called on connection receive so cannot be GFP_KERNEL
+	 */
+	 
+	sk = sk_alloc(PF_IPX, GFP_ATOMIC, 1);
 	if(sk == NULL)
                 return (-ENOMEM);
 

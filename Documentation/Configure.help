@@ -1,8 +1,7 @@
 # Maintained by Axel Boldt (boldt@math.ucsb.edu)
 #
 # This version of the Linux kernel configuration help texts
-# corresponds to the kernel versions 2.1.x. Be aware that these are
-# development kernels and need not be completely stable.
+# corresponds to the kernel versions 2.2.x.
 #
 # Translations of this file available on the WWW:
 #
@@ -3595,7 +3594,7 @@ CONFIG_SCSI_AHA1740
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called aha17400.o. If you want to compile it as a
+  The module will be called aha1740.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
 Adaptec AIC7xxx chipset SCSI controller support

@@ -567,6 +567,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	/* ok, now we should be set up.. */
 	p->swappable = 1;
+	p->trashing_memory = 0;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->pdeath_signal = 0;
 

@@ -364,11 +364,14 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
 		MSDOS_SB(sb)->fsinfo_offset =
 			CF_LE_W(b->info_sector) * logical_sector_size + 0x1e0;
+		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(MSDOS_SB(sb)->fsinfo_offset) >= sizeof(struct fat_boot_sector)) {
+			printk("fat_read_super: Bad fsinfo_offset\n");
+			fat_brelse(sb, bh);
+			goto out_invalid;
+		}
 		fsinfo = (struct fat_boot_fsinfo *)
 			&bh->b_data[MSDOS_SB(sb)->fsinfo_offset];
-		if ((MSDOS_SB(sb)->fsinfo_offset - sizeof(MSDOS_SB(sb)->fsinfo_offset) + 1)> bh->b_size) 
-		    	printk("fat_read_super: Bad fsinfo_offset\n");
-		else if (CF_LE_L(fsinfo->signature) != 0x61417272) {
+		if (CF_LE_L(fsinfo->signature) != 0x61417272) {
 			printk("fat_read_super: Did not find valid FSINFO "
 				"signature. Found 0x%x\n",
 				CF_LE_L(fsinfo->signature));

@@ -98,18 +98,18 @@ static const char *version =
 
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
 
-#define BLOCKOUT_2
-
 /* A zero-terminated list of I/O addresses to be probed.
    The 3c501 can be at many locations, but here are the popular ones. */
-static unsigned int netcard_portlist[] __initdata =
-   { 0x280, 0x300, 0};
+static unsigned int netcard_portlist[] __initdata = { 
+	0x280, 0x300, 0
+};
 
 
 /*
@@ -140,10 +140,11 @@ static int el_debug = EL_DEBUG;
 
 struct net_local
 {
-    struct net_device_stats stats;
-    int tx_pkt_start;		/* The length of the current Tx packet. */
-    int collisions;		/* Tx collisions this packet */
-    int loading;		/* Spot buffer load collisions */
+	struct net_device_stats stats;
+	int		tx_pkt_start;	/* The length of the current Tx packet. */
+	int		collisions;	/* Tx collisions this packet */
+	int		loading;	/* Spot buffer load collisions */
+	spinlock_t	lock;		/* Serializing lock */
 };
 
 
@@ -238,6 +239,7 @@ __initfunc(int el1_probe(struct device *dev))
 
 __initfunc(static int el1_probe1(struct device *dev, int ioaddr))
 {
+	struct net_local *lp;
 	const char *mname;		/* Vendor name */
 	unsigned char station_addr[6];
 	int autoirq = 0;
@@ -327,6 +329,9 @@ __initfunc(static int el1_probe1(struct device *dev, int ioaddr))
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
+	lp=dev->priv;
+	spin_lock_init(&lp->lock);
+	
 	/*
 	 *	The EL1-specific entries in the device structure.
 	 */
@@ -398,24 +403,22 @@ static int el_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	save_flags(flags);
-
 	/*
 	 *	Avoid incoming interrupts between us flipping tbusy and flipping
 	 *	mode as the driver assumes tbusy is a faithful indicator of card
 	 *	state
 	 */
 
-	cli();
-
+	spin_lock_irqsave(&lp->lock, flags);
+	
 	/*
 	 *	Avoid timer-based retransmission conflicts.
 	 */
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 	{
-		restore_flags(flags);
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		spin_unlock_irqrestore(&lp->lock, flags);
+		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
 	}
 	else
 	{
@@ -433,9 +436,6 @@ load_it_again_sam:
 		 *	mean no more interrupts can be pending on the card.
 		 */
 
-#ifdef BLOCKOUT_1
-		disable_irq(dev->irq);
-#endif
 		outb_p(AX_SYS, AX_CMD);
 		inb_p(RX_STATUS);
 		inb_p(TX_STATUS);
@@ -447,24 +447,22 @@ load_it_again_sam:
 		 *	loading bytes into the board
 		 */
 
-		restore_flags(flags);
+		spin_unlock_irqrestore(&lp->lock, flags);
+		
 		outw(0x00, RX_BUF_CLR);		/* Set rx packet area to 0. */
 		outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
 		outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
 		outw(gp_start, GP_LOW);		/* the board reuses the same register */
-#ifndef BLOCKOUT_1
+
 		if(lp->loading==2)		/* A receive upset our load, despite our best efforts */
 		{
 			if(el_debug>2)
 				printk("%s: burped during tx load.\n", dev->name);
+			spin_lock_irqsave(&lp->lock, flags);
 			goto load_it_again_sam;	/* Sigh... */
 		}
-#endif
 		outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
 		lp->loading=0;
-#ifdef BLOCKOUT_1
-		enable_irq(dev->irq);
-#endif
 		dev->trans_start = jiffies;
 	}
 
@@ -489,13 +487,15 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (dev == NULL  ||  dev->irq != irq)
 	{
-		printk ("3c501 driver: irq %d for unknown device.\n", irq);
+		printk (KERN_ERR "3c501 driver: irq %d for unknown device.\n", irq);
 		return;
 	}
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
 
+	spin_lock(&lp->lock);
+	
 	/*
 	 *	What happened ?
 	 */
@@ -507,18 +507,13 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 */
 
 	if (el_debug > 3)
-		printk("%s: el_interrupt() aux=%#02x", dev->name, axsr);
+		printk(KERN_DEBUG "%s: el_interrupt() aux=%#02x", dev->name, axsr);
 	if (dev->interrupt)
-		printk("%s: Reentering the interrupt driver!\n", dev->name);
+		printk(KERN_WARNING "%s: Reentering the interrupt driver!\n", dev->name);
 	dev->interrupt = 1;
-#ifndef BLOCKOUT_1
         if(lp->loading==1 && !dev->tbusy)
-        	printk("%s: Inconsistent state loading while not in tx\n",
+        	printk(KERN_WARNING "%s: Inconsistent state loading while not in tx\n",
         		dev->name);
-#endif
-#ifdef BLOCKOUT_3
-	lp->loading=2;		/* So we can spot loading interruptions */
-#endif
 
 	if (dev->tbusy)
 	{
@@ -529,21 +524,22 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     		 */
 
 		int txsr = inb(TX_STATUS);
-#ifdef BLOCKOUT_2
+
 		if(lp->loading==1)
 		{
 			if(el_debug > 2)
 			{
-				printk("%s: Interrupt while loading [", dev->name);
+				printk(KERN_DEBUG "%s: Interrupt while loading [", dev->name);
 				printk(" txsr=%02x gp=%04x rp=%04x]\n", txsr, inw(GP_LOW),inw(RX_LOW));
 			}
 			lp->loading=2;		/* Force a reload */
 			dev->interrupt = 0;
+			spin_unlock(&lp->lock);
 			return;
 		}
-#endif
+
 		if (el_debug > 6)
-			printk(" txsr=%02x gp=%04x rp=%04x", txsr, inw(GP_LOW),inw(RX_LOW));
+			printk(KERN_DEBUG " txsr=%02x gp=%04x rp=%04x", txsr, inw(GP_LOW),inw(RX_LOW));
 
 		if ((axsr & 0x80) && (txsr & TX_READY) == 0)
 		{
@@ -585,6 +581,7 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			outb(AX_XMIT, AX_CMD);
 			lp->stats.collisions++;
 			dev->interrupt = 0;
+			spin_unlock(&lp->lock);
 			return;
 		}
 		else
@@ -654,6 +651,7 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	inb(RX_STATUS);		/* Be certain that interrupts are cleared. */
 	inb(TX_STATUS);
 	dev->interrupt = 0;
+	spin_unlock(&lp->lock);
 	return;
 }
 

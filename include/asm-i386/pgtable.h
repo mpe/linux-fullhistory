@@ -41,7 +41,7 @@
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
-#ifndef CONFIG_INVLPG
+#ifndef CONFIG_X86_INVLPG
 #define __flush_tlb_one(addr) flush_tlb()
 #else
 #define __flush_tlb_one(addr) \

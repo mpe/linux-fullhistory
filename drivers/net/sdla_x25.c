@@ -38,9 +38,6 @@
 * Jan 07, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
-#if	!defined(__KERNEL__) || !defined(MODULE)
-#error	This code MUST be compiled as a kernel module!
-#endif
 
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */

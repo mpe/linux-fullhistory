@@ -41,8 +41,6 @@
 #define DSP_BUFFCOUNT		1	/* 1 is recommended. */
 #endif
 
-#define DMA_AUTOINIT		0x10
-
 #define FM_MONO		0x388	/* This is the I/O address used by AdLib */
 
 #ifndef CONFIG_PAS_BASE

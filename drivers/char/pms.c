@@ -221,7 +221,7 @@ static void pms_colour(short colour)
 			pms_i2c_write(0x8A, 0x00, colour);
 			break;
 		case PHILIPS1:
-			pms_i2c_write(0x42, 012, colour);
+			pms_i2c_write(0x42, 0x12, colour);
 			break;
 	}
 }

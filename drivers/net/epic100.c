@@ -884,6 +884,9 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 	ep->tx_ring[entry].bufaddr = virt_to_bus(skb->data);
 	ep->tx_ring[entry].buflength = skb->len;
 
+	/* tx_bytes counting -- Nolan Leake */	
+	ep->stats.tx_bytes += ep->tx_ring[entry].txlength;
+	
 	if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 	  flag = 0x10; /* No interrupt */
 	  clear_bit(0, (void*)&dev->tbusy);
@@ -1112,6 +1115,8 @@ static int epic_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			ep->stats.rx_packets++;
+			/* rx_bytes counting -- Nolan Leake */
+			ep->stats.rx_bytes += pkt_len;
 		}
 		work_done++;
 		entry = (++ep->cur_rx) % RX_RING_SIZE;

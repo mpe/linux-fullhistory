@@ -5,6 +5,7 @@
  *
  *  Cyrix stuff, June 1998 by:
  *	- Rafael R. Reilova (moved everything from head.S),
+ *        <rreilova@ececs.uc.edu>
  *	- Channing Corn (tests & fixes),
  *	- Andrew D. Balsa (code cleanup).
  */
@@ -113,21 +114,6 @@ __initfunc(static void check_hlt(void))
 	printk("OK.\n");
 }
 
-__initfunc(static void check_tlb(void))
-{
-#ifndef CONFIG_M386
-	/*
-	 * The 386 chips don't support TLB finegrained invalidation.
-	 * They will fault when they hit an invlpg instruction.
-	 */
-	if (boot_cpu_data.x86 == 3) {
-		printk(KERN_EMERG "CPU is a 386 and this kernel was compiled for 486 or better.\n");
-		printk("Giving up.\n");
-		for (;;) ;
-	}
-#endif
-}
-
 /*
  *	Most 386 processors have a bug where a POPAD can lock the 
  *	machine even from user space.
@@ -135,15 +121,15 @@ __initfunc(static void check_tlb(void))
  
 __initfunc(static void check_popad(void))
 {
-#ifdef CONFIG_M386
+#ifndef CONFIG_X86_POPAD_OK
 	int res, inp = (int) &res;
 
 	printk(KERN_INFO "Checking for popad bug... ");
 	__asm__ __volatile__( 
 	  "movl $12345678,%%eax; movl $0,%%edi; pusha; popa; movl (%%edx,%%edi),%%ecx "
-	  : "=eax" (res)
-	  : "edx" (inp)
-	  : "eax", "ecx", "edx", "edi" );
+	  : "=&a" (res)
+	  : "d" (inp)
+	  : "ecx", "edi" );
 	/* If this fails, it means that any user program may lock the CPU hard. Too bad. */
 	if (res != 12345678) printk( "Buggy.\n" );
 		        else printk( "OK.\n" );
@@ -247,62 +233,62 @@ static inline int test_cyrix_52div(void)
 }
 
 /*
- * Cyrix CPUs without cpuid or with cpuid not yet enabled can be detected
- * by the fact that they preserve the flags across the division of 5/2.
- * PII and PPro exhibit this behavior too, but they have cpuid available.
+ * Fix cpuid problems with Cyrix CPU's:
+ *   -- on the Cx686(L) the cpuid is disabled on power up.
+ *   -- braindamaged BIOS disable cpuid on the Cx686MX.
  */
 
-__initfunc(static void check_cyrix_cpu(void))
-{
-	if ((boot_cpu_data.cpuid_level == -1) && (boot_cpu_data.x86 == 4)
-	    && test_cyrix_52div()) {
+extern unsigned char Cx86_dir0_msb;  /* exported HACK from cyrix_model() */
 
-		/* default to an unknown Cx486, (we will differentiate later) */
-		/* NOTE:  using 0xff since 0x00 is a valid DIR0 value */
-		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
-		boot_cpu_data.x86_model = 0xff;
-		boot_cpu_data.x86_mask = 0;
+__initfunc(static void check_cx686_cpuid(void))
+{
+	if (boot_cpu_data.cpuid_level == -1 &&
+	    ((Cx86_dir0_msb == 5) || (Cx86_dir0_msb == 3))) {
+		int eax, dummy;
+		unsigned char ccr3, ccr4;
+
+		cli();
+		ccr3 = getCx86(CX86_CCR3);
+		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10); /* enable MAPEN  */
+		ccr4 = getCx86(CX86_CCR4);
+		setCx86(CX86_CCR4, ccr4 | 0x80);          /* enable cpuid  */
+		setCx86(CX86_CCR3, ccr3);                 /* disable MAPEN */
+		sti();
+
+		/* we have up to level 1 available on the Cx6x86(L|MX) */
+		boot_cpu_data.cpuid_level = 1;
+		cpuid(1, &eax, &dummy, &dummy,
+		      &boot_cpu_data.x86_capability);
+
+		boot_cpu_data.x86 = (eax >> 8) & 15;
+		/*
+ 		 * we already have a cooked step/rev number from DIR1
+		 * so we don't use the cpuid-provided ones.
+		 */
 	}
 }
 
 /*
- * Fix two problems with the Cyrix 6x86 and 6x86L:
- *   -- the cpuid is disabled on power up, enable it, use it.
- *   -- the SLOP bit needs resetting on some motherboards due to old BIOS,
- *      so that the udelay loop calibration works well.  Recalibrate.
+ * Reset the slow-loop (SLOP) bit on the 686(L) which is set by some old
+ * BIOSes for compatability with DOS games.  This makes the udelay loop
+ * work correctly, and improves performance.
  */
 
 extern void calibrate_delay(void) __init;
 
-__initfunc(static void check_cx686_cpuid_slop(void))
+__initfunc(static void check_cx686_slop(void))
 {
-	if (boot_cpu_data.x86_vendor == X86_VENDOR_CYRIX &&
-	    (boot_cpu_data.x86_model & 0xf0) == 0x30) {  /* 6x86(L) */
-		int dummy;
-		unsigned char ccr3, ccr4, ccr5;
+	if (Cx86_dir0_msb == 3) {
+		unsigned char ccr3, ccr5;
 
 		cli();
 		ccr3 = getCx86(CX86_CCR3);
-		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10);      /* enable MAPEN  */
-		ccr4 = getCx86(CX86_CCR4);
-		setCx86(CX86_CCR4, ccr4 | 0x80);               /* enable cpuid  */
+		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10); /* enable MAPEN  */
 		ccr5 = getCx86(CX86_CCR5);
-		if (ccr5 & 2)   /* reset SLOP if needed, old BIOS do this wrong */
-			setCx86(CX86_CCR5, ccr5 & 0xfd);
-		setCx86(CX86_CCR3, ccr3);                      /* disable MAPEN */
+		if (ccr5 & 2)
+			setCx86(CX86_CCR5, ccr5 & 0xfd);  /* reset SLOP */
+		setCx86(CX86_CCR3, ccr3);                 /* disable MAPEN */
 		sti();
-
-		boot_cpu_data.cpuid_level = 1;  /* should cover all 6x86(L) */
-		boot_cpu_data.x86 = 5;
-
-		/* we know we have level 1 available on the 6x86(L) */
-		cpuid(1, &dummy, &dummy, &dummy,
-		      &boot_cpu_data.x86_capability);
-		/*
-		 * DON'T use the x86_mask and x86_model from cpuid, these are
-		 * not as accurate (or the same) as those from the DIR regs.
-		 * already in place after cyrix_model() in setup.c
-		 */
 
 		if (ccr5 & 2) { /* possible wrong calibration done */
 			printk(KERN_INFO "Recalibrating delay loop with SLOP bit reset\n");
@@ -313,9 +299,22 @@ __initfunc(static void check_cx686_cpuid_slop(void))
 }
 
 /*
- * Check wether we are able to run this kernel safely with this
- * configuration.  Various configs imply certain minimum requirements
- * of the machine:
+ * Cyrix CPUs without cpuid or with cpuid not yet enabled can be detected
+ * by the fact that they preserve the flags across the division of 5/2.
+ * PII and PPro exhibit this behavior too, but they have cpuid available.
+ */
+
+__initfunc(static void check_cyrix_cpu(void))
+{
+	if ((boot_cpu_data.cpuid_level == -1) && (boot_cpu_data.x86 == 4)
+	    && test_cyrix_52div()) {
+
+		strcpy(boot_cpu_data.x86_vendor_id, "CyrixInstead");
+	}
+}
+ 
+/*
+ * Check wether we are able to run this kernel safely on SMP.
  *
  * - In order to run on a i386, we need to be compiled for i386
  *   (for due to lack of "invlpg" and working WP on a i386)
@@ -325,32 +324,32 @@ __initfunc(static void check_cx686_cpuid_slop(void))
  *   compiled for a Pentium or lower, as a PPro config implies
  *   a properly working local APIC without the need to do extra
  *   reads from the APIC.
- */
+*/
+
 __initfunc(static void check_config(void))
 {
-	/* Configuring for a i386 will boot on anything */
-#ifndef CONFIG_M386
-	/* Configuring for an i486 only implies 'invlpg' and a working WP bit */
+/*
+ * We'd better not be a i386 if we're configured to use some
+ * i486+ only features! (WP works in supervisor mode and the
+ * new "invlpg" and "bswap" instructions)
+ */
+#if defined(CONFIG_X86_WP_WORKS_OK) || defined(CONFIG_X86_INVLPG) || defined(CONFIG_X86_BSWAP)
 	if (boot_cpu_data.x86 == 3)
 		panic("Kernel requires i486+ for 'invlpg' and other features");
+#endif
 
-#ifndef CONFIG_M486
-
-#ifndef CONFIG_M586
-	/* Configuring for a PPro implies that we have an IO-APIC without the read-before-write bug */
-
-#endif	/* CONFIG_M586 */
-#endif	/* CONFIG_M486 */
-#endif	/* CONFIG_M386 */
-
-/* If we configured ourselves for a TSC, we'd better have one! */
-#ifdef CONFIG_TSC
+/*
+ * If we configured ourselves for a TSC, we'd better have one!
+ */
+#ifdef CONFIG_X86_TSC
 	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC))
 		panic("Kernel compiled for Pentium+, requires TSC");
 #endif
 
-/* If we were told we had a good APIC for SMP, we'd better be a PPro */
-#ifdef CONFIG_GOOD_APIC
+/*
+ * If we were told we had a good APIC for SMP, we'd better be a PPro
+ */
+#if defined(CONFIG_X86_GOOD_APIC) && defined(CONFIG_SMP)
 	if (smp_found_config && boot_cpu_data.x86 <= 5)
 		panic("Kernel compiled for PPro+, assumes local APIC without read-before-write bug");
 #endif
@@ -360,13 +359,13 @@ __initfunc(static void check_bugs(void))
 {
 	check_cyrix_cpu();
 	identify_cpu(&boot_cpu_data);
-	check_config();
+	check_cx686_cpuid();
+	check_cx686_slop();
 #ifndef __SMP__
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);
 #endif
-	check_cx686_cpuid_slop();
-	check_tlb();
+	check_config();
 	check_fpu();
 	check_hlt();
 	check_popad();

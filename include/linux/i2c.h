@@ -163,4 +163,5 @@ int     i2c_read(struct i2c_bus *bus, unsigned char addr);
 int     i2c_write(struct i2c_bus *bus, unsigned char addr,
 		  unsigned char b1, unsigned char b2, int both);
 
+int 	i2c_init(void);
 #endif /* I2C_H */
