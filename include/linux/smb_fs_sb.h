@@ -24,6 +24,7 @@ struct smb_sb_info {
 	struct file * sock_file;
 
         struct smb_mount_data *mnt;
+        unsigned char *temp_buf;
 
 	/* Connections are counted. Each time a new socket arrives,
 	 * generation is incremented.

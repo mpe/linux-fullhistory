@@ -256,6 +256,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #include <linux/minix_fs_i.h>
 #include <linux/ext2_fs_i.h>
 #include <linux/hpfs_fs_i.h>
+#include <linux/ntfs_fs_i.h>
 #include <linux/msdos_fs_i.h>
 #include <linux/umsdos_fs_i.h>
 #include <linux/iso_fs_i.h>
@@ -355,6 +356,7 @@ struct inode {
 		struct minix_inode_info		minix_i;
 		struct ext2_inode_info		ext2_i;
 		struct hpfs_inode_info		hpfs_i;
+		struct ntfs_inode_info          ntfs_i;
 		struct msdos_inode_info		msdos_i;
 		struct umsdos_inode_info	umsdos_i;
 		struct iso_inode_info		isofs_i;
@@ -492,6 +494,7 @@ extern int fasync_helper(struct file *, int, struct fasync_struct **);
 #include <linux/minix_fs_sb.h>
 #include <linux/ext2_fs_sb.h>
 #include <linux/hpfs_fs_sb.h>
+#include <linux/ntfs_fs_sb.h>
 #include <linux/msdos_fs_sb.h>
 #include <linux/iso_fs_sb.h>
 #include <linux/nfs_fs_sb.h>
@@ -526,6 +529,7 @@ struct super_block {
 		struct minix_sb_info	minix_sb;
 		struct ext2_sb_info	ext2_sb;
 		struct hpfs_sb_info	hpfs_sb;
+		struct ntfs_sb_info     ntfs_sb;
 		struct msdos_sb_info	msdos_sb;
 		struct isofs_sb_info	isofs_sb;
 		struct nfs_sb_info	nfs_sb;

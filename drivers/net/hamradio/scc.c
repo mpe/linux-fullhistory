@@ -166,10 +166,7 @@
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <time.h>
+#include <linux/ctype.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 

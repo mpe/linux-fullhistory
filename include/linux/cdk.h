@@ -304,6 +304,10 @@ typedef struct asyport {
 #define	P_DTRFOLLOW	0x20
 #define	P_FAKEDCD	0x40
 
+#define	P_RXIMIN	0x10000
+#define	P_RXITIME	0x20000
+#define	P_RXTHOLD	0x40000
+
 /*
  *	Define a structure to communicate serial port signal and data state
  *	information.

@@ -21,17 +21,31 @@
 
 static int nibblemap[] = { 4,3,3,2,3,2,2,1,3,2,2,1,2,1,1,0 };
 
-static unsigned long count_free(struct buffer_head *map[], unsigned numblocks)
+static unsigned long count_free(struct buffer_head *map[], unsigned numblocks, __u32 numbits)
 {
 	unsigned i, j, sum = 0;
 	struct buffer_head *bh;
   
-	for (i=0; i<numblocks; i++) {
+	for (i=0; i<numblocks-1; i++) {
 		if (!(bh=map[i])) 
 			return(0);
 		for (j=0; j<BLOCK_SIZE; j++)
-			sum += nibblemap[bh->b_data[j] & 0xf] 
-				+ nibblemap[(bh->b_data[j]>>4)&0xf];
+			sum += nibblemap[bh->b_data[j] & 0xf]
+				+ nibblemap[(bh->b_data[j]>>4) & 0xf];
+	}
+
+	if (numblocks==0 || !(bh=map[numblocks-1]))
+		return(0);
+	i = (numbits-(numblocks-1)*BLOCK_SIZE*8)/8;
+	for (j=0; j<i; j++) {
+		sum += nibblemap[bh->b_data[j] & 0xf]
+			+ nibblemap[(bh->b_data[j]>>4) & 0xf];
+	}
+
+	i = numbits%8;
+	if (i!=0) {
+		i = bh->b_data[j] | ~((1<<i) - 1);
+		sum += nibblemap[i & 0xf] + nibblemap[(i>>4) & 0xf];
 	}
 	return(sum);
 }
@@ -108,8 +122,9 @@ repeat:
 
 unsigned long minix_count_free_blocks(struct super_block *sb)
 {
-	return (count_free(sb->u.minix_sb.s_zmap,sb->u.minix_sb.s_zmap_blocks)
-		 << sb->u.minix_sb.s_log_zone_size);
+	return (count_free(sb->u.minix_sb.s_zmap, sb->u.minix_sb.s_zmap_blocks,
+		sb->u.minix_sb.s_nzones - sb->u.minix_sb.s_firstdatazone + 1)
+		<< sb->u.minix_sb.s_log_zone_size);
 }
 
 static struct buffer_head *V1_minix_clear_inode(struct inode *inode)
@@ -266,5 +281,6 @@ struct inode * minix_new_inode(const struct inode * dir)
 
 unsigned long minix_count_free_inodes(struct super_block *sb)
 {
-	return count_free(sb->u.minix_sb.s_imap,sb->u.minix_sb.s_imap_blocks);
+	return count_free(sb->u.minix_sb.s_imap, sb->u.minix_sb.s_imap_blocks,
+		sb->u.minix_sb.s_ninodes + 1);
 }

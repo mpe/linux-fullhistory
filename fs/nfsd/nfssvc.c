@@ -36,27 +36,12 @@
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 #define NFSD_BUFSIZE		(1024 + NFSSVC_MAXBLKSIZE)
 
-#define BLOCKABLE_SIGS	(~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
-#define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
+#define ALLOWED_SIGS	(sigmask(SIGKILL) | sigmask(SIGSTOP))
+#define SHUTDOWN_SIGS	(sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGTERM))
 
 extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);
 struct timeval			nfssvc_boot = { 0, 0 };
-
-/*
- * Make a socket for nfsd
- */
-static int
-nfsd_makesock(struct svc_serv *serv, int protocol, unsigned short port)
-{
-	struct sockaddr_in	sin;
-
-	dprintk("nfsd: creating socket proto = %d\n", protocol);
-	sin.sin_family      = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_port        = htons(port);
-	return svc_create_socket(serv, protocol, &sin);
-}
 
 int
 nfsd_svc(unsigned short port, int nrservs)
@@ -65,17 +50,19 @@ nfsd_svc(unsigned short port, int nrservs)
 	int			error;
 
 	dprintk("nfsd: creating service\n");
+	error = -EINVAL;
 	if (nrservs < 0)
-		return -EINVAL;
+		goto out;
 	if (nrservs > NFSD_MAXSERVS)
 		nrservs = NFSD_MAXSERVS;
 
+	error = -ENOMEM;
 	serv = svc_create(&nfsd_program, NFSD_BUFSIZE, NFSSVC_XDRSIZE);
 	if (serv == NULL) 
-		return -ENOMEM;
+		goto out;
 
-	if ((error = nfsd_makesock(serv, IPPROTO_UDP, port)) < 0
-	 || (error = nfsd_makesock(serv, IPPROTO_TCP, port)) < 0)
+	if ((error = svc_makesock(serv, IPPROTO_UDP, port)) < 0
+	 || (error = svc_makesock(serv, IPPROTO_TCP, port)) < 0)
 		goto failure;
 
 	while (nrservs--) {
@@ -86,6 +73,7 @@ nfsd_svc(unsigned short port, int nrservs)
 
 failure:
 	svc_destroy(serv);		/* Release server */
+out:
 	return error;
 }
 
@@ -98,16 +86,15 @@ nfsd(struct svc_rqst *rqstp)
 	struct svc_serv	*serv = rqstp->rq_server;
 	int		oldumask, err;
 
-	lock_kernel();
 	/* Lock module and set up kernel thread */
 	MOD_INC_USE_COUNT;
+	lock_kernel();
 	exit_mm(current);
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "nfsd");
 
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
-	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
 	current->fs->umask = 0;
 	nfssvc_boot = xtime;			/* record boot time */
 	lockd_up();				/* start lockd */
@@ -116,6 +103,12 @@ nfsd(struct svc_rqst *rqstp)
 	 * The main request loop
 	 */
 	for (;;) {
+		/* Block all but the shutdown signals */
+		spin_lock_irq(&current->sigmask_lock);
+		siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+
 		/*
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
@@ -140,18 +133,13 @@ nfsd(struct svc_rqst *rqstp)
 			svc_drop(rqstp);
 			serv->sv_stats->rpcbadclnt++;
 		} else {
-			/* Process request with all signals blocked.  */
+			/* Process request with signals blocked.  */
 			spin_lock_irq(&current->sigmask_lock);
-			siginitsetinv(&current->blocked, ~BLOCKABLE_SIGS);
+			siginitsetinv(&current->blocked, ALLOWED_SIGS);
 			recalc_sigpending(current);
 			spin_unlock_irq(&current->sigmask_lock);
 			
 			svc_process(serv, rqstp);
-
-			spin_lock_irq(&current->sigmask_lock);
-			siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
-			recalc_sigpending(current);
-			spin_unlock_irq(&current->sigmask_lock);
 		}
 
 		/* Unlock export hash tables */

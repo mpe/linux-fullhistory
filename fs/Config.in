@@ -53,6 +53,12 @@ if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
 fi
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
+
+tristate 'NTFS  filesystem support (read only)' CONFIG_NTFS_FS
+if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool '   NTFS read-write support (experimental)' CONFIG_NTFS_RW
+fi
+
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS

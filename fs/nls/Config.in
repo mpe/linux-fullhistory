@@ -6,7 +6,8 @@ mainmenu_option next_comment
 comment 'Native Language Support'
 
 # msdos and Joliet want NLS
-if [ "$CONFIG_JOLIET" = "y" -o "$CONFIG_FAT_FS" != "n" ]; then
+if [ "$CONFIG_JOLIET" = "y" -o "$CONFIG_FAT_FS" != "n" \
+	-o "$CONFIG_NTFS_FS" != "n" ]; then
   define_bool CONFIG_NLS y
 else
   define_bool CONFIG_NLS n

@@ -886,7 +886,7 @@ if (svsk->sk_sk == NULL)
 /*
  * Create socket for RPC service.
  */
-int
+static int
 svc_create_socket(struct svc_serv *serv, int protocol, struct sockaddr_in *sin)
 {
 	struct svc_sock	*svsk;
@@ -969,3 +969,19 @@ svc_delete_socket(struct svc_sock *svsk)
 		/* svsk->sk_server = NULL; */
 	}
 }
+
+/*
+ * Make a socket for nfsd and lockd
+ */
+int
+svc_makesock(struct svc_serv *serv, int protocol, unsigned short port)
+{
+	struct sockaddr_in	sin;
+
+	dprintk("svc: creating socket proto = %d\n", protocol);
+	sin.sin_family      = AF_INET;
+	sin.sin_addr.s_addr = INADDR_ANY;
+	sin.sin_port        = htons(port);
+	return svc_create_socket(serv, protocol, &sin);
+}
+

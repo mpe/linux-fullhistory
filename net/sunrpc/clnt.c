@@ -753,8 +753,10 @@ call_verify(struct rpc_task *task)
 		rpc_exit(task, error);
 		return NULL;
 	}
-	if (!(p = rpcauth_checkverf(task, p)))
+	if (!(p = rpcauth_checkverf(task, p))) {
+		printk("call_verify: auth check failed\n");
 		goto garbage;		/* bad verifier, retry */
+	}
 	switch ((n = ntohl(*p++))) {
 	case RPC_SUCCESS:
 		return p;
@@ -768,7 +770,8 @@ call_verify(struct rpc_task *task)
 garbage:
 	dprintk("RPC: %4d call_verify: server saw garbage\n", task->tk_pid);
 	task->tk_client->cl_stats->rpcgarbage++;
-	if (0 && task->tk_garb_retry--) {
+	if (task->tk_garb_retry--) {
+		printk("RPC: garbage, retrying %4d\n", task->tk_pid);
 		task->tk_action = call_encode;
 		return NULL;
 	}

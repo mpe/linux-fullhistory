@@ -975,7 +975,7 @@ int
 smb_close_fileid(struct dentry *dentry, __u16 fileid)
 {
 	struct smb_sb_info *server = server_from_dentry(dentry);
-	int result = 0;
+	int result;
 
 	smb_lock_server(server);
 	result = smb_proc_close(server, fileid, CURRENT_TIME);
@@ -1270,6 +1270,9 @@ smb_init_root_dirent(struct smb_sb_info *server, struct smb_fattr *fattr)
 /*
  * Note that we are now returning the name as a reference to avoid
  * an extra copy, and that the upper/lower casing is done in place.
+ *
+ * Bugs Noted:
+ * (1) Pathworks servers may pad the name with extra spaces.
  */
 static __u8 *
 smb_decode_dirent(struct smb_sb_info *server, __u8 *p, 
@@ -1442,10 +1445,6 @@ entries_seen, i, fpos);
  *
  * Bugs Noted:
  * (1) Win NT 4.0 appends a null byte to names and counts it in the length!
- * (2) When using Info Level 1 Win NT 4.0 truncates directory listings 
- * for certain patterns of names and/or lengths. The breakage pattern is
- * completely reproducible and can be toggled by the addition of a single
- * file to the directory. (E.g. echo hi >foo breaks, rm -f foo works.)
  */
 static char *
 smb_decode_long_dirent(struct smb_sb_info *server, char *p,
@@ -1509,24 +1508,29 @@ p, len, entry->name);
 	return result;
 }
 
+/*
+ * Bugs Noted:
+ * (1) When using Info Level 1 Win NT 4.0 truncates directory listings 
+ * for certain patterns of names and/or lengths. The breakage pattern
+ * is completely reproducible and can be toggled by the creation of a
+ * single file. (E.g. echo hi >foo breaks, rm -f foo works.)
+ */
 static int
 smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		      void *cachep)
 {
+	char *p, *mask, *lastname, *param = server->temp_buf;
+	__u16 command;
+	int first, entries, entries_seen;
+
 	/* Both NT and OS/2 accept info level 1 (but see note below). */
 	int info_level = 1;
 	const int max_matches = 512;
-
-	char *p, *mask, *lastname;
-	int first, entries, entries_seen;
 
 	unsigned char *resp_data = NULL;
 	unsigned char *resp_param = NULL;
 	int resp_data_len = 0;
 	int resp_param_len = 0;
-
-	__u16 command;
-
 	int ff_resume_key = 0; /* this isn't being used */
 	int ff_searchcount = 0;
 	int ff_eos = 0;
@@ -1534,8 +1538,6 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	int ff_dir_handle = 0;
 	int loop_count = 0;
 	int mask_len, i, result;
-
-	char param[12 + SMB_MAXPATHLEN + 2]; /* too long for the stack! */
 	static struct qstr star = { "*", 1, 0 };
 
 	/*
@@ -1553,7 +1555,7 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	/*
 	 * Encode the initial path
 	 */
-	mask = &(param[12]);
+	mask = param + 12;
 	mask_len = smb_encode_path(server, mask, dir, &star) - mask;
 	first = 1;
 #ifdef SMBFS_DEBUG_VERBOSE
@@ -1643,11 +1645,6 @@ server->rcls, server->err);
 			entries = -smb_errno(server);
 			break;
 		}
-#ifdef SMBFS_PARANOIA
-if (resp_data + resp_data_len > server->packet + server->packet_size)
-printk("s_p_r_l: data past packet end! data=%p, len=%d, packet=%p\n",
-resp_data + resp_data_len, resp_data_len, server->packet + server->packet_size);
-#endif
 
 		/* parse out some important return info */
 		if (first != 0)
@@ -1799,15 +1796,14 @@ static int
 smb_proc_getattr_trans2(struct smb_sb_info *server, struct dentry *dir,
 			struct smb_fattr *attr)
 {
-	char *p;
-	int result;
+	char *p, *param = server->temp_buf;
 	__u16 date, time;
 	int off_date = 0, off_time = 2;
 	unsigned char *resp_data = NULL;
 	unsigned char *resp_param = NULL;
 	int resp_data_len = 0;
 	int resp_param_len = 0;
-	char param[SMB_MAXPATHLEN + 20]; /* too big for the stack! */
+	int result;
 
       retry:
 	WSET(param, 0, 1);	/* Info level SMB_INFO_STANDARD */
@@ -2023,14 +2019,12 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 			struct dentry *dir, struct smb_fattr *fattr)
 {
 	__u16 date, time;
-	char *p;
-	int result;
-
+	char *p, *param = server->temp_buf;
 	unsigned char *resp_data = NULL;
 	unsigned char *resp_param = NULL;
 	int resp_data_len = 0;
 	int resp_param_len = 0;
-	char param[SMB_MAXPATHLEN + 20]; /* too long for the stack! */
+	int result;
 	char data[26];
 
       retry:
@@ -2082,7 +2076,8 @@ out:
  * Bugs Noted:
  * (1) Win 95 doesn't support the TRANSACT2_SETFILEINFO message 
  * with info level 1 (INFO_STANDARD).
- * (2) Under the core protocol apparently the only way to set the
+ * (2) Win 95 seems not to support setting directory timestamps.
+ * (3) Under the core protocol apparently the only way to set the
  * timestamp is to open and close the file.
  */
 int
@@ -2092,7 +2087,7 @@ smb_proc_settime(struct dentry *dentry, struct smb_fattr *fattr)
 	struct inode *inode = dentry->d_inode;
 	int result;
 
-#ifdef SMBFS_DEBUG_TIMESTAMP
+#ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_proc_settime: setting %s/%s, open=%d\n", 
 dentry->d_parent->d_name.name, dentry->d_name.name, smb_is_open(inode));
 #endif
@@ -2127,16 +2122,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, smb_is_open(inode));
 		}
 	}
 
-#if 1 	/* temporary */
-	if (result)
-	{
-printk("smb_proc_settime: %s/%s failed, open=%d, res=%d, rcls=%d, err=%d\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name, smb_is_open(inode),
-result, server->rcls, server->err);
-		/* squash errors for now */
-		result = 0;
-	}
-#endif
 	smb_unlock_server(server);
 	return result;
 }

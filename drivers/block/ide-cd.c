@@ -180,6 +180,8 @@
  *
  * 4.06  Dec 17, 1997  -- fixed endless "tray open" messages  -ml
  * 4.07  Dec 17, 1997  -- fallback to set pc->stat on "tray open"
+ * 4.08  Dec 18, 1997  -- spew less noise when tray is empty
+ *                     -- fix speed display for ACER 24X, 18X
  *
  *************************************************************************/
 
@@ -242,6 +244,15 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 		if (failed_command &&
 		    failed_command->c[0] == SCMD_READ_SUBCHANNEL)
 			return;
+	}
+	if (reqbuf->error_code == 0x70 && reqbuf->sense_key  == 0x02
+	 && reqbuf->asc        == 0x3a && reqbuf->ascq       == 0x00)
+	{
+		/*
+		 * No disc in drive ("Medium not present"),
+		 * so keep the noise level down to a dull roar.
+		 */
+		return;
 	}
 
 #if VERBOSE_IDE_CD_ERRORS
@@ -466,7 +477,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 			/* Check for tray open. */
 			if (sense_key == NOT_READY) {
 				cdrom_saw_media_change (drive);
-
+#if 0	/* let the upper layers do the complaining */
 				/* Print an error message to the syslog.
 				   Exception: don't print anything if this
 				   is a read subchannel command.  This is
@@ -474,12 +485,13 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 				   with this command, and we don't want
 				   to uselessly fill up the syslog. */
 				if (pc->c[0] != SCMD_READ_SUBCHANNEL)
-					printk ("%s: tray open or drive not ready\n",
-						drive->name);
+					printk ("%s: tray open or drive not ready\n", drive->name);
+#endif
 			} else if (sense_key == UNIT_ATTENTION) {
 				/* Check for media change. */
 				cdrom_saw_media_change (drive);
 				printk ("%s: media changed\n", drive->name);
+				return 0;
 			} else {
 				/* Otherwise, print an error. */
 				ide_dump_status (drive, "packet command error",
@@ -2734,12 +2746,13 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		}
 	}
 
-	if (drive->id && drive->id->model[0]) {
-		CDROM_STATE_FLAGS (drive)->current_speed  = (ntohs(buf.cap.curspeed) + (176/2)) / 176;
-		CDROM_CONFIG_FLAGS (drive)->max_speed = (ntohs(buf.cap.maxspeed) + (176/2)) / 176;
-	} else {  /* no-name ACERs (AOpen) have it backwards */
+	/* The ACER/AOpen 24X cdrom has the speed fields byte-swapped */
+	if (drive->id && !drive->id->model[0] && !strncmp(drive->id->fw_rev, "241N", 4)) {
 		CDROM_STATE_FLAGS (drive)->current_speed  = (((unsigned int)buf.cap.curspeed) + (176/2)) / 176;
 		CDROM_CONFIG_FLAGS (drive)->max_speed = (((unsigned int)buf.cap.maxspeed) + (176/2)) / 176;
+	} else {
+		CDROM_STATE_FLAGS (drive)->current_speed  = (ntohs(buf.cap.curspeed) + (176/2)) / 176;
+		CDROM_CONFIG_FLAGS (drive)->max_speed = (ntohs(buf.cap.maxspeed) + (176/2)) / 176;
 	}
 
         printk ("%s: ATAPI %dX CDROM", 

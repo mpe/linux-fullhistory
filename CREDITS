@@ -958,9 +958,10 @@ D: Busmaster driver for HP 10/100 Mbit Network Adapters
 S: University of Stuttgart, Germany and
 S: Ecole Nationale Superieure des Telecommunications, Paris
 
-N: Martin von Loewis
+N: Martin von Löwis
 E: loewis@informatik.hu-berlin.de
 D: script binary format
+D: NTFS driver
 
 N: Mark Lord
 E: mlord@pobox.com

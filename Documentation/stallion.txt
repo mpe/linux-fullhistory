@@ -2,10 +2,10 @@
 Stallion Multiport Serial Driver Readme
 ---------------------------------------
 
-Copyright (C) 1994-1997,  Stallion Technologies (support@stallion.oz.au).
+Copyright (C) 1994-1997,  Stallion Technologies (support@stallion.com).
 
-Version:   5.3.4
-Date:      15SEP97
+Version:   5.4.1
+Date:      19DEC97
 
 
 
@@ -13,32 +13,36 @@ Date:      15SEP97
 
 There are two drivers that work with the different families of Stallion
 multiport serial boards. One is for the Stallion smart boards - that is
-EasyIO and EasyConnection 8/32, the other for the true Stallion intelligent
-multiport boards - EasyConnection 8/64, ONboard and Brumby.
+EasyIO, EasyConnection 8/32 and EasyConnection 8/64-PCI, the other for
+the true Stallion intelligent multiport boards - EasyConnection 8/64
+(ISA and EISA), ONboard and Brumby.
 
 If you are using any of the Stallion intelligent multiport boards (Brumby,
-ONboard, EasyConnection 8/64) with Linux you will need to get the driver
-utility package. This package is available at most of the Linux archive
-sites (and on CD's that contain these archives). The file will be called
-stallion-X.X.X.tar.gz where X.X.X will be the version number. In particular
-this package contains the board embedded executable images that are
-required for these boards. It also contains the downloader program.
-These boards cannot be used without this.
+ONboard, EasyConnection 8/64 (ISA or EISA)) with Linux you will need to
+get the driver utility package. This package is available at most of the
+Linux archive sites (and on CD's that contain these archives). The file
+will be called stallion-X.X.X.tar.gz where X.X.X will be the version
+number. In particular this package contains the board embedded executable
+images that are required for these boards. It also contains the downloader
+program. These boards cannot be used without this.
 
-The following ftp sites (and their mirrors) definitely have the stallion
-driver utility package: ftp.stallion.com, tsx-11.mit.edu, sunsite.unc.edu.
+The Stallion Technologies ftp site, ftp.stallion.com, will always have
+the latest version of the driver utility package. Other sites that usually
+have the latest version are tsx-11.mit.edu, sunsite.unc.edu and their
+mirrors.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-5.3.1.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-5.3.1.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.3.1.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-5.4.0.tar.gz
+tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-5.4.0.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.4.0.tar.gz
 
 As of the printing of this document the latest version of the driver
-utility package is 5.3.1. If a later version is now available then you
+utility package is 5.4.0. If a later version is now available then you
 should use the latest version.
 
-If you are using the EasyIO or EasyConnection 8/32 boards then you don't
-need this package. Although it does have a handy script to create the
-/dev device nodes for these boards, and a serial stats display program.
+If you are using the EasyIO, EasyConnection 8/32 or EasyConnection 8/64-PCI
+boards then you don't need this package. Although it does have a handy
+script to create the /dev device nodes for these boards, and a serial stats
+display program.
 
 If you require DIP switch settings, EISA/MCA configuration files, or any
 other information related to Stallion boards then have a look at Stallion's
@@ -63,7 +67,7 @@ the instructions below. Both drivers can support up to 4 boards. The smart
 card driver (the stallion.c driver) supports any combination of EasyIO and
 EasyConnection 8/32 boards (up to a total of 4). The intelligent driver
 supports any combination of ONboards, Brumbys, Stallions and EasyConnection
-8/64 boards (up to a total of 4).
+8/64 (ISA and EISA) boards (up to a total of 4).
 
 To set up the driver(s) for the boards that you want to use you need to
 edit the appropriate driver file and add configuration entries.
@@ -76,7 +80,8 @@ If using EasyIO or EasyConnection 8/32 ISA or MCA boards, do:
 	(the comments before this structure should help)
       - save and exit
 
-If using ONboard, Brumby, Stallion or EasyConnection 8/64 boards then do:
+If using ONboard, Brumby, Stallion or EasyConnection 8/64 (ISA or EISA)
+boards then do:
    vi /usr/src/linux/drivers/char/istallion.c
       - find the definition of the stli_brdconf array (of structures)
         near the top of the file
@@ -114,11 +119,11 @@ do a couple of things:
    configuration files for *all* the EasyIO and EasyConnection 8/32 boards
    that are sharing interrupts. The Stallion EasyIO and EasyConnection 8/32
    EISA configuration files required are supplied by Stallion Technologies
-   on the EASY Utilities floppy (usually supplied in the box with the board
-   when purchased. If not, you can pick it up from Stallion's FTP site,
-   ftp.stallion.com). You will need to edit the board resources to choose
-   level triggered interrupts, and make sure to set each board's interrupt
-   to the same IRQ number.
+   on the EASY Utilities floppy diskette (usually supplied in the box with
+   the board when purchased. If not, you can pick it up from Stallion's FTP
+   site, ftp.stallion.com). You will need to edit the board resources to
+   choose level triggered interrupts, and make sure to set each board's
+   interrupt to the same IRQ number.
 
 You must complete both the above steps for this to work. When you reboot
 or load the driver your EasyIO and EasyConnection 8/32 boards will be
@@ -149,8 +154,8 @@ modules, or change it on the board. On EasyIO and EasyConnection 8/32 boards
 the IRQ is software programmable, so if there is a conflict you may need to
 change the IRQ used for a board in the stallion.c configuration structure.
 There are no interrupts to worry about for ONboard, Brumby or EasyConnection
-8/64 boards. The memory region on EasyConnection 8/64 and ONboard boards is
-software programmable, but not on the Brumby boards.
+8/64 (ISA, EISA and MCA) boards. The memory region on EasyConnection 8/64 and
+ONboard boards is software programmable, but not on the Brumby boards.
 
 
 

@@ -433,6 +433,13 @@ M:	io8-linux@specialix.co.uk
 L:	linux-kernel@vger.rutgers.edu ?
 S:	Supported
 
+STALLION TECHNOLOGIES MULTIPORT SERIAL BOARDS
+P:	Greg Ungerer
+M:	support@stallion.oz.au
+M:	gerg@stallion.com
+W:	http://www.stallion.com
+S:	Supported
+
 MOUSE AND MISC DEVICES [GENERAL]
 P:	Alessandro Rubini
 M:	rubini@ipvvis.unipv.it

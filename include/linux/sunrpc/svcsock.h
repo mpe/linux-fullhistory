@@ -49,7 +49,7 @@ struct svc_sock {
 /*
  * Function prototypes.
  */
-int		svc_create_socket(struct svc_serv *, int, struct sockaddr_in *);
+int		svc_makesock(struct svc_serv *, int, unsigned short);
 void		svc_delete_socket(struct svc_sock *);
 int		svc_recv(struct svc_serv *, struct svc_rqst *);
 int		svc_send(struct svc_rqst *);

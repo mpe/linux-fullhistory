@@ -74,40 +74,6 @@ smb_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 	return -EISDIR;
 }
 
-/*
- * Check whether a dentry already exists for the given name,
- * and return the inode number if it has an inode.  This is
- * needed to keep getcwd() working.
- */
-static ino_t
-find_inode_number(struct dentry *dir, struct qstr *name)
-{
-	struct dentry * dentry;
-	ino_t ino = 0;
-
-	/*
-	 * Check for a fs-specific hash function. Note that we must
-	 * calculate the standard hash first, as the d_op->d_hash()
-	 * routine may choose to leave the hash value unchanged.
-	 */
-	name->hash = full_name_hash(name->name, name->len);
-	if (dir->d_op && dir->d_op->d_hash)
-	{
-		if (dir->d_op->d_hash(dir, name) != 0)
-			goto out;
-	}
-
-	dentry = d_lookup(dir, name);
-	if (dentry)
-	{
-		if (dentry->d_inode)
-			ino = dentry->d_inode->i_ino;
-		dput(dentry);
-	}
-out:
-	return ino;
-}
-
 static int 
 smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
@@ -193,7 +159,7 @@ out:
 
 /*
  * Note: in order to allow the smbclient process to open the
- * mount point, we don't revalidate for the connection pid.
+ * mount point, we don't revalidate if conn_pid is NULL.
  */
 static int
 smb_dir_open(struct inode *dir, struct file *file)
@@ -218,8 +184,6 @@ file->f_dentry->d_name.name);
 
 	if (server->conn_pid)
 		error = smb_revalidate_inode(dir);
-	else
-		printk("smb_dir_open: smbclient process\n");
 	return error;
 }
 

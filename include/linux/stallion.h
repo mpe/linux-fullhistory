@@ -131,6 +131,8 @@ typedef struct stlbrd {
 	void		(*isr)(struct stlbrd *brdp);
 	unsigned int	ioaddr1;
 	unsigned int	ioaddr2;
+	unsigned int	iosize1;
+	unsigned int	iosize2;
 	unsigned int	iostatus;
 	unsigned int	ioctrl;
 	unsigned int	ioctrlval;

@@ -4749,6 +4749,20 @@ CONFIG_HPFS_FS
   want). The module is called hpfs.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
+
+Windows NT NTFS support (read only)
+CONFIG_NTFS_FS
+  NTFS is the file system of Microsoft Windows NT. Say Y if you want
+  to access partitions using this file system. The Linux NTFS driver
+  supports most of the mount options of the VFAT driver, see
+  Documentation/filesystems/ntfs.txt. There is an experimental
+  write support available; use at your own risk.
+
+NTFS read-write support (experimental)
+CONFIG_NTFS_RW
+  The read-write support in NTFS is far from being complete and well
+  tested. If you enable this, be prepared to recover the NTFS volume
+  from tape.
   
 System V and Coherent filesystem support
 CONFIG_SYSV_FS

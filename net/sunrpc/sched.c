@@ -388,6 +388,8 @@ __rpc_execute(struct rpc_task *task)
 			/* sync task: sleep here */
 			dprintk("RPC: %4d sync task going to sleep\n",
 							task->tk_pid);
+			if (current->pid == rpciod_pid)
+				printk("RPC: rpciod waiting on sync task!\n");
 			current->timeout = 0;
 			sleep_on(&task->tk_wait);
 
@@ -792,29 +794,21 @@ static void
 rpciod_killall(void)
 {
 	unsigned long flags;
-	sigset_t old_set;
-
-	/* FIXME: What had been going on before was saving and restoring 
-	   current->signal.  This as opposed to blocking signals?  Do we
-	   still need them to wake up out of schedule?  In any case it 
-	   isn't playing nice and a better way should be found.  */
-
-	spin_lock_irqsave(&current->sigmask_lock, flags);
-	old_set = current->blocked;
-	sigfillset(&current->blocked);
-	recalc_sigpending(current);
-	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 
 	while (all_tasks) {
+		current->sigpending = 0;
 		rpc_killall_tasks(NULL);
 		__rpc_schedule();
-		current->timeout = jiffies + HZ / 100;
-		need_resched = 1;
-		schedule();
+		if (all_tasks) {
+printk("rpciod_killall: waiting for tasks to exit\n");
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + 1;
+			schedule();
+			current->timeout = 0;
+		}
 	}
 
 	spin_lock_irqsave(&current->sigmask_lock, flags);
-	current->blocked = old_set;
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 }

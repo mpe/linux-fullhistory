@@ -62,7 +62,6 @@ EXPORT_SYMBOL(rpcauth_releasecred);
 
 /* RPC server stuff */
 EXPORT_SYMBOL(svc_create);
-EXPORT_SYMBOL(svc_create_socket);
 EXPORT_SYMBOL(svc_create_thread);
 EXPORT_SYMBOL(svc_exit_thread);
 EXPORT_SYMBOL(svc_destroy);
@@ -70,6 +69,7 @@ EXPORT_SYMBOL(svc_drop);
 EXPORT_SYMBOL(svc_process);
 EXPORT_SYMBOL(svc_recv);
 EXPORT_SYMBOL(svc_wake_up);
+EXPORT_SYMBOL(svc_makesock);
 
 /* RPC statistics */
 #ifdef CONFIG_PROC_FS

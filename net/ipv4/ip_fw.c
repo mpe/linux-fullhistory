@@ -152,9 +152,12 @@ struct ip_fw *ip_fw_fwd_chain;
 struct ip_fw *ip_fw_in_chain;
 struct ip_fw *ip_fw_out_chain;
 struct ip_fw *ip_acct_chain;
+struct ip_fw *ip_masq_chain;
 
 static struct ip_fw **chains[] =
-	{&ip_fw_fwd_chain, &ip_fw_in_chain, &ip_fw_out_chain, &ip_acct_chain};
+	{&ip_fw_fwd_chain, &ip_fw_in_chain, &ip_fw_out_chain, &ip_acct_chain,
+	 &ip_masq_chain
+	};
 #endif /* CONFIG_IP_ACCT || CONFIG_IP_FIREWALL */
  
 #ifdef CONFIG_IP_FIREWALL

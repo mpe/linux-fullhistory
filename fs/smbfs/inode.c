@@ -364,6 +364,7 @@ smb_put_super(struct super_block *sb)
 	       kill_proc(server->conn_pid, SIGTERM, 1);
 
 	kfree(server->mnt);
+	kfree(sb->u.smbfs_sb.temp_buf);
 	if (server->packet)
 		smb_vfree(server->packet);
 	sb->s_dev = 0;
@@ -376,18 +377,16 @@ smb_put_super(struct super_block *sb)
 struct super_block *
 smb_read_super(struct super_block *sb, void *raw_data, int silent)
 {
-	struct smb_mount_data *mnt, *data = (struct smb_mount_data *) raw_data;
-	struct smb_fattr root;
-	kdev_t dev = sb->s_dev;
+	struct smb_mount_data *mnt;
 	struct inode *root_inode;
 	struct dentry *dentry;
+	struct smb_fattr root;
 
 	MOD_INC_USE_COUNT;
 
-	if (!data)
+	if (!raw_data)
 		goto out_no_data;
-		
-	if (data->version != SMB_MOUNT_VERSION)
+	if (((struct smb_mount_data *) raw_data)->version != SMB_MOUNT_VERSION)
 		goto out_wrong_data;
 
 	lock_super(sb);
@@ -396,7 +395,6 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_blocksize_bits = 10;
 	sb->s_magic = SMB_SUPER_MAGIC;
 	sb->s_flags = 0;
-	sb->s_dev = dev; /* shouldn't need this ... */
 	sb->s_op = &smb_sops;
 
 	sb->u.smbfs_sb.sock_file = NULL;
@@ -410,10 +408,16 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (!sb->u.smbfs_sb.packet)
 		goto out_no_mem;
 
+	/* Allocate the global temp buffer */
+	sb->u.smbfs_sb.temp_buf = kmalloc(SMB_MAXPATHLEN + 20, GFP_KERNEL);
+	if (!sb->u.smbfs_sb.temp_buf)
+		goto out_no_temp;
+
+	/* Allocate the mount data structure */
 	mnt = kmalloc(sizeof(struct smb_mount_data), GFP_KERNEL);
 	if (!mnt)
 		goto out_no_mount;
-	*mnt = *data;
+	*mnt = *((struct smb_mount_data *) raw_data);
 	/* ** temp ** pass config flags in file mode */
 	mnt->version = (mnt->file_mode >> 9);
 #ifdef CONFIG_SMB_WIN95
@@ -450,15 +454,14 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	return sb;
 
 out_no_root:
-	printk(KERN_ERR "smb_read_super: get root inode failed\n");
 	iput(root_inode);
 	kfree(sb->u.smbfs_sb.mnt);
 out_no_mount:
+	kfree(sb->u.smbfs_sb.temp_buf);
+out_no_temp:
 	smb_vfree(sb->u.smbfs_sb.packet);
-	goto out_unlock;
 out_no_mem:
-	printk("smb_read_super: could not alloc packet\n");
-out_unlock:
+	printk(KERN_ERR "smb_read_super: allocation failure\n");
 	unlock_super(sb);
 	goto out_fail;
 out_wrong_data:

@@ -33,29 +33,38 @@ static int
 nsm_mon_unmon(struct nlm_host *host, char *what, u32 proc)
 {
 	struct rpc_clnt	*clnt;
+	int		status;
 	struct nsm_args	args;
 	struct nsm_res	res;
-	int		status;
 
 	dprintk("lockd: nsm_%s(%s)\n", what, host->h_name);
-	if (!(clnt = nsm_create()))
-		return -EACCES;
+	status = -EACCES;
+	clnt = nsm_create();
+	if (!clnt)
+		goto out;
 
 	args.addr = host->h_addr.sin_addr.s_addr;
 	args.prog = NLM_PROGRAM;
 	args.vers = 1;
 	args.proc = NLMPROC_NSM_NOTIFY;
 
-	if ((status = rpc_call(clnt, proc, &args, &res, 0)) < 0)
-		return status;
+	status = rpc_call(clnt, proc, &args, &res, 0);
+	if (status < 0) {
+		printk(KERN_DEBUG "nsm_mon_unmon: rpc failed, status=%d\n",
+			status);
+		goto out;
+	}
 
+	status = -EACCES;
 	if (res.status != 0) {
 		printk(KERN_NOTICE "lockd: cannot %s %s\n", what, host->h_name);
-		return -EACCES;
+		goto out;
 	}
 
 	nsm_local_state = res.state;
-	return 0;
+	status = 0;
+out:
+	return status;
 }
 
 /*
@@ -66,7 +75,8 @@ nsm_monitor(struct nlm_host *host)
 {
 	int		status;
 
-	if ((status = nsm_mon_unmon(host, "monitor", SM_MON)) >= 0)
+	status = nsm_mon_unmon(host, "monitor", SM_MON);
+	if (status >= 0)
 		host->h_monitored = 1;
 	return status;
 }
@@ -90,28 +100,32 @@ nsm_unmonitor(struct nlm_host *host)
 static struct rpc_clnt *
 nsm_create(void)
 {
-	struct sockaddr_in	sin;
 	struct rpc_xprt		*xprt;
-	struct rpc_clnt		*clnt;
+	struct rpc_clnt		*clnt = NULL;
+	struct sockaddr_in	sin;
 
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	sin.sin_port = 0;
 
-	if (!(xprt = xprt_create_proto(IPPROTO_UDP, &sin, NULL)))
-		return NULL;
+	xprt = xprt_create_proto(IPPROTO_UDP, &sin, NULL);
+	if (!xprt)
+		goto out;
 
 	clnt = rpc_create_client(xprt, "localhost",
 				&nsm_program, SM_VERSION,
 				RPC_AUTH_NULL);
-	if (!clnt) {
-		xprt_destroy(xprt);
-	} else {
-		clnt->cl_softrtry = 1;
-		clnt->cl_chatty   = 1;
-		clnt->cl_oneshot  = 1;
-	}
+	if (!clnt)
+		goto out_destroy;
+	clnt->cl_softrtry = 1;
+	clnt->cl_chatty   = 1;
+	clnt->cl_oneshot  = 1;
+out:
 	return clnt;
+
+out_destroy:
+	xprt_destroy(xprt);
+	goto out;
 }
 
 /*

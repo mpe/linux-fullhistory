@@ -18,7 +18,6 @@
 
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/nfs.h>
 #include <linux/in.h>
 #include <linux/uio.h>
 #include <linux/version.h>
@@ -33,11 +32,11 @@
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/svcsock.h>
 #include <linux/lockd/lockd.h>
-
+#include <linux/nfs.h>
 
 #define NLMDBG_FACILITY		NLMDBG_SVC
 #define LOCKD_BUFSIZE		(1024 + NLMSSVC_XDRSIZE)
-#define BLOCKABLE_SIGS		(~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
+#define ALLOWED_SIGS		(sigmask(SIGKILL) | sigmask(SIGSTOP))
 
 extern struct svc_program	nlmsvc_program;
 struct nlmsvc_binding *		nlmsvc_ops = NULL;
@@ -148,23 +147,22 @@ lockd(struct svc_rqst *rqstp)
 		}
 
 		dprintk("lockd: request from %08x\n",
-				(unsigned)ntohl(rqstp->rq_addr.sin_addr.s_addr));
+			(unsigned)ntohl(rqstp->rq_addr.sin_addr.s_addr));
 
 		/*
 		 * Look up the NFS client handle. The handle is needed for
 		 * all but the GRANTED callback RPCs.
 		 */
+		rqstp->rq_client = NULL;
 		if (nlmsvc_ops) {
 			nlmsvc_ops->exp_readlock();
 			rqstp->rq_client =
 				nlmsvc_ops->exp_getclient(&rqstp->rq_addr);
-		} else {
-			rqstp->rq_client = NULL;
 		}
 
-		/* Process request with all signals blocked.  */
+		/* Process request with signals blocked.  */
 		spin_lock_irq(&current->sigmask_lock);
-		siginitsetinv(&current->blocked, ~BLOCKABLE_SIGS);
+		siginitsetinv(&current->blocked, ALLOWED_SIGS);
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 		
@@ -202,22 +200,6 @@ lockd(struct svc_rqst *rqstp)
 }
 
 /*
- * Make a socket for lockd
- * FIXME: Move this to net/sunrpc/svc.c so that we can share this with nfsd.
- */
-static int
-lockd_makesock(struct svc_serv *serv, int protocol, unsigned short port)
-{
-	struct sockaddr_in	sin;
-
-	dprintk("lockd: creating socket proto = %d\n", protocol);
-	sin.sin_family      = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_port        = htons(port);
-	return svc_create_socket(serv, protocol, &sin);
-}
-
-/*
  * Bring up the lockd process if it's not already up.
  */
 int
@@ -252,8 +234,8 @@ lockd_up(void)
 		goto out;
 	}
 
-	if ((error = lockd_makesock(serv, IPPROTO_UDP, 0)) < 0 
-	 || (error = lockd_makesock(serv, IPPROTO_TCP, 0)) < 0) {
+	if ((error = svc_makesock(serv, IPPROTO_UDP, 0)) < 0 
+	 || (error = svc_makesock(serv, IPPROTO_TCP, 0)) < 0) {
 		printk("lockd_up: makesock failed, error=%d\n", error);
 		goto destroy_and_out;
 	}
@@ -302,13 +284,17 @@ lockd_down(void)
 	 * Wait for the lockd process to exit, but since we're holding
 	 * the lockd semaphore, we can't wait around forever ...
 	 */
-	current->timeout = jiffies + 5 * HZ;
+	current->sigpending = 0;
+	current->timeout = jiffies + HZ;
 	interruptible_sleep_on(&lockd_exit);
 	current->timeout = 0;
 	if (nlmsvc_pid) {
 		printk("lockd_down: lockd failed to exit, clearing pid\n");
 		nlmsvc_pid = 0;
 	}
+	spin_lock_irq(&current->sigmask_lock);
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
 out:
 	up(&nlmsvc_sema);
 }

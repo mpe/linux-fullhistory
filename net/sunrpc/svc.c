@@ -172,7 +172,6 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 {
 	struct svc_program	*progp;
 	unsigned long		flags;
-	sigset_t		old_set;
 	int			i, error = 0, dummy;
 
 	progp = serv->sv_program;
@@ -180,18 +179,8 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 	dprintk("RPC: svc_register(%s, %s, %d)\n",
 		progp->pg_name, proto == IPPROTO_UDP? "udp" : "tcp", port);
 
-	/* FIXME: What had been going on before was saving and restoring 
-	   current->signal.  This as opposed to blocking signals?  Do we
-	   still need them to wake up out of schedule?  In any case it 
-	   isn't playing nice and a better way should be found.  */
-
-	if (!port) {
-		spin_lock_irqsave(&current->sigmask_lock, flags);
-		old_set = current->blocked;
-		sigfillset(&current->blocked);
-		recalc_sigpending(current);
-		spin_unlock_irqrestore(&current->sigmask_lock, flags);
-	}
+	if (!port)
+		current->sigpending = 0;
 
 	for (i = 0; i < progp->pg_nvers; i++) {
 		if (progp->pg_vers[i] == NULL)
@@ -207,7 +196,6 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 
 	if (!port) {
 		spin_lock_irqsave(&current->sigmask_lock, flags);
-		current->blocked = old_set;
 		recalc_sigpending(current);
 		spin_unlock_irqrestore(&current->sigmask_lock, flags);
 	}
@@ -235,7 +223,7 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	bufp = argp->buf;
 
 	if (argp->len < 5)
-		goto dropit;
+		goto err_short_len;
 
 	dir  = ntohl(*bufp++);
 	vers = ntohl(*bufp++);
@@ -244,10 +232,8 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	svc_putlong(resp, xdr_one);		/* REPLY */
 	svc_putlong(resp, xdr_zero);		/* ACCEPT */
 
-	if (dir != 0) {		/* direction != CALL */
-		serv->sv_stats->rpcbadfmt++;
-		goto dropit;			/* drop request */
-	}
+	if (dir != 0)		/* direction != CALL */
+		goto err_bad_dir;
 	if (vers != 2)		/* RPC version number */
 		goto err_bad_rpc;
 
@@ -281,7 +267,7 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 
 	procp = versp->vs_proc + proc;
 	if (proc >= versp->vs_nproc || !procp->pc_func)
-		goto err_unknown;
+		goto err_bad_proc;
 	rqstp->rq_server   = serv;
 	rqstp->rq_procinfo = procp;
 
@@ -329,13 +315,28 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	if (procp->pc_release)
 		procp->pc_release(rqstp, NULL, rqstp->rq_resp);
 
-	if (procp->pc_encode != NULL)
-		return svc_send(rqstp);
+	if (procp->pc_encode == NULL)
+		goto dropit;
+sendit:
+	return svc_send(rqstp);
 
 dropit:
 	dprintk("svc: svc_process dropit\n");
 	svc_drop(rqstp);
 	return 0;
+
+err_short_len:
+#ifdef RPC_PARANOIA
+	printk("svc: short len %d, dropping request\n", argp->len);
+#endif
+	goto dropit;			/* drop request */
+
+err_bad_dir:
+#ifdef RPC_PARANOIA
+	printk("svc: bad direction %d, dropping request\n", dir);
+#endif
+	serv->sv_stats->rpcbadfmt++;
+	goto dropit;			/* drop request */
 
 err_bad_rpc:
 	serv->sv_stats->rpcbadfmt++;
@@ -343,7 +344,7 @@ err_bad_rpc:
 	svc_putlong(resp, xdr_zero);	/* RPC_MISMATCH */
 	svc_putlong(resp, xdr_two);	/* Only RPCv2 supported */
 	svc_putlong(resp, xdr_two);
-	goto error;
+	goto sendit;
 
 err_bad_auth:
 	dprintk("svc: authentication failed (%ld)\n", ntohl(auth_stat));
@@ -351,7 +352,7 @@ err_bad_auth:
 	resp->buf[-1] = xdr_one;	/* REJECT */
 	svc_putlong(resp, xdr_one);	/* AUTH_ERROR */
 	svc_putlong(resp, auth_stat);	/* status */
-	goto error;
+	goto sendit;
 
 err_bad_prog:
 #ifdef RPC_PARANOIA
@@ -359,7 +360,7 @@ err_bad_prog:
 #endif
 	serv->sv_stats->rpcbadfmt++;
 	svc_putlong(resp, rpc_prog_unavail);
-	goto error;
+	goto sendit;
 
 err_bad_vers:
 #ifdef RPC_PARANOIA
@@ -369,15 +370,15 @@ err_bad_vers:
 	svc_putlong(resp, rpc_prog_mismatch);
 	svc_putlong(resp, htonl(progp->pg_lovers));
 	svc_putlong(resp, htonl(progp->pg_hivers));
-	goto error;
+	goto sendit;
 
-err_unknown:
+err_bad_proc:
 #ifdef RPC_PARANOIA
 	printk("svc: unknown procedure (%d)\n", proc);
 #endif
 	serv->sv_stats->rpcbadfmt++;
 	svc_putlong(resp, rpc_proc_unavail);
-	goto error;
+	goto sendit;
 
 err_garbage:
 #ifdef RPC_PARANOIA
@@ -385,7 +386,5 @@ err_garbage:
 #endif
 	serv->sv_stats->rpcbadfmt++;
 	svc_putlong(resp, rpc_garbage_args);
-
-error:
-	return svc_send(rqstp);
+	goto sendit;
 }
