@@ -363,7 +363,9 @@ EXPORT_SYMBOL(__memset);
 EXPORT_SYMBOL(memchr);
 
 EXPORT_SYMBOL(csum_partial);
-EXPORT_SYMBOL(csum_partial_copy_sparc64);
+EXPORT_SYMBOL(csum_partial_copy_nocheck);
+EXPORT_SYMBOL(__csum_partial_copy_from_user);
+EXPORT_SYMBOL(__csum_partial_copy_to_user);
 EXPORT_SYMBOL(ip_fast_csum);
 
 /* Moving data to/from/in userspace. */
