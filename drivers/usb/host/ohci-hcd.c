@@ -675,7 +675,7 @@ retry:
 	}
 
 	udev->speed = USB_SPEED_FULL;
-	if (hcd_register_root (udev, ohci_to_hcd(ohci)) != 0) {
+	if (usb_hcd_register_root_hub (udev, ohci_to_hcd(ohci)) != 0) {
 		usb_put_dev (udev);
 		disable (ohci);
 		ohci->hc_control &= ~OHCI_CTRL_HCFS;

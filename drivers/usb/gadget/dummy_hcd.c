@@ -1651,7 +1651,7 @@ static int dummy_start (struct usb_hcd *hcd)
 	root->speed = USB_SPEED_HIGH;
 
 	/* ...then configured, so khubd sees us. */
-	if ((retval = hcd_register_root (root, hcd)) != 0) {
+	if ((retval = usb_hcd_register_root_hub (root, hcd)) != 0) {
 		goto err1;
 	}
 

@@ -1567,7 +1567,7 @@ sl811h_start(struct usb_hcd *hcd)
 	if (sl811->board)
 		hcd->can_wakeup = sl811->board->can_wakeup;
 
-	if (hcd_register_root(udev, hcd) != 0) {
+	if (usb_hcd_register_root_hub(udev, hcd) != 0) {
 		usb_put_dev(udev);
 		sl811h_stop(hcd);
 		return -ENODEV;

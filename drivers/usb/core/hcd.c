@@ -755,7 +755,7 @@ struct usb_bus *usb_alloc_bus (struct usb_operations *op)
  * Assigns a bus number, and links the controller into usbcore data
  * structures so that it can be seen by scanning the bus list.
  */
-int usb_register_bus(struct usb_bus *bus)
+static int usb_register_bus(struct usb_bus *bus)
 {
 	int busnum;
 	int retval;
@@ -799,7 +799,7 @@ int usb_register_bus(struct usb_bus *bus)
  * Recycles the bus number, and unlinks the controller from usbcore data
  * structures so that it won't be seen by scanning the bus list.
  */
-void usb_deregister_bus (struct usb_bus *bus)
+static void usb_deregister_bus (struct usb_bus *bus)
 {
 	dev_info (bus->controller, "USB bus %d deregistered\n", bus->busnum);
 
@@ -821,9 +821,9 @@ void usb_deregister_bus (struct usb_bus *bus)
 }
 
 /**
- * usb_register_root_hub - called by HCD to register its root hub 
+ * usb_hcd_register_root_hub - called by HCD to register its root hub 
  * @usb_dev: the usb root hub device to be registered.
- * @parent_dev: the parent device of this root hub.
+ * @hcd: host controller for this root hub
  *
  * The USB host controller calls this function to register the root hub
  * properly with the USB subsystem.  It sets up the device properly in
@@ -831,10 +831,19 @@ void usb_deregister_bus (struct usb_bus *bus)
  * then calls usb_new_device() to register the usb device.  It also
  * assigns the root hub's USB address (always 1).
  */
-int usb_register_root_hub (struct usb_device *usb_dev, struct device *parent_dev)
+int usb_hcd_register_root_hub (struct usb_device *usb_dev, struct usb_hcd *hcd)
 {
+	struct device *parent_dev = hcd->self.controller;
 	const int devnum = 1;
 	int retval;
+
+	/* hcd->driver->start() reported can_wakeup, probably with
+	 * assistance from board's boot firmware.
+	 * NOTE:  normal devices won't enable wakeup by default.
+	 */
+	if (hcd->can_wakeup)
+		dev_dbg (parent_dev, "supports USB remote wakeup\n");
+	hcd->remote_wakeup = hcd->can_wakeup;
 
 	usb_dev->devnum = devnum;
 	usb_dev->bus->devnum_next = devnum + 1;
@@ -867,7 +876,7 @@ int usb_register_root_hub (struct usb_device *usb_dev, struct device *parent_dev
 	up (&usb_bus_list_lock);
 	return retval;
 }
-EXPORT_SYMBOL (usb_register_root_hub);
+EXPORT_SYMBOL_GPL(usb_hcd_register_root_hub);
 
 
 /*-------------------------------------------------------------------------*/

@@ -339,25 +339,8 @@ extern long usb_calc_bus_time (int speed, int is_input,
 
 extern struct usb_bus *usb_alloc_bus (struct usb_operations *);
 
-extern int usb_register_bus (struct usb_bus *);
-extern void usb_deregister_bus (struct usb_bus *);
-
-extern int usb_register_root_hub (struct usb_device *usb_dev,
-		struct device *parent_dev);
-
-static inline int hcd_register_root (struct usb_device *usb_dev,
-		struct usb_hcd *hcd)
-{
-	/* hcd->driver->start() reported can_wakeup, probably with
-	 * assistance from board's boot firmware.
-	 * NOTE:  normal devices won't enable wakeup by default.
-	 */
-	if (hcd->can_wakeup)
-		dev_dbg (hcd->self.controller, "supports USB remote wakeup\n");
-	hcd->remote_wakeup = hcd->can_wakeup;
-
-	return usb_register_root_hub (usb_dev, hcd->self.controller);
-}
+extern int usb_hcd_register_root_hub (struct usb_device *usb_dev,
+		struct usb_hcd *hcd);
 
 extern void usb_set_device_state(struct usb_device *udev,
 		enum usb_device_state new_state);

@@ -635,7 +635,7 @@ done2:
 	 * Before this point the HC was idle/ready.  After, khubd
 	 * and device drivers may start it running.
 	 */
-	if (first && hcd_register_root (udev, hcd) != 0) {
+	if (first && usb_hcd_register_root_hub (udev, hcd) != 0) {
 		if (hcd->state == USB_STATE_RUNNING)
 			ehci_quiesce (ehci);
 		ehci_reset (ehci);

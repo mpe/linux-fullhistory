@@ -680,7 +680,7 @@ static int uhci_start(struct usb_hcd *hcd)
 
 	udev->speed = USB_SPEED_FULL;
 
-	if (hcd_register_root(udev, hcd) != 0) {
+	if (usb_hcd_register_root_hub(udev, hcd) != 0) {
 		dev_err(uhci_dev(uhci), "unable to start root hub\n");
 		retval = -ENOMEM;
 		goto err_start_root_hub;
