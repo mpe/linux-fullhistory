@@ -380,6 +380,10 @@ acpi_ut_strtoul64 (
 	ACPI_FUNCTION_TRACE ("ut_stroul64");
 
 
+	if ((!string) || !(*string)) {
+		goto error_exit;
+	}
+
 	switch (base) {
 	case ACPI_ANY_BASE:
 	case 10:
@@ -394,7 +398,7 @@ acpi_ut_strtoul64 (
 	/* Skip over any white space in the buffer */
 
 	while (ACPI_IS_SPACE (*string) || *string == '\t') {
-		++string;
+		string++;
 	}
 
 	/*
@@ -403,9 +407,9 @@ acpi_ut_strtoul64 (
 	 */
 	if (base == 0) {
 		if ((*string == '0') &&
-			(ACPI_TOLOWER (*(++string)) == 'x')) {
+			(ACPI_TOLOWER (*(string + 1)) == 'x')) {
 			base = 16;
-			++string;
+			string += 2;
 		}
 		else {
 			base = 10;
@@ -416,10 +420,10 @@ acpi_ut_strtoul64 (
 	 * For hexadecimal base, skip over the leading
 	 * 0 or 0x, if they are present.
 	 */
-	if (base == 16 &&
-		*string == '0' &&
-		ACPI_TOLOWER (*(++string)) == 'x') {
-		string++;
+	if ((base == 16) &&
+		(*string == '0') &&
+		(ACPI_TOLOWER (*(string + 1)) == 'x')) {
+		string += 2;
 	}
 
 	/* Any string left? */
@@ -464,7 +468,7 @@ acpi_ut_strtoul64 (
 
 		return_value *= base;
 		return_value += this_digit;
-		++string;
+		string++;
 	}
 
 	*ret_integer = return_value;

@@ -8,7 +8,7 @@
 #include <linux/acpi.h>
 #include <linux/bootmem.h>
 #include <asm/smp.h>
-
+#include <asm/tlbflush.h>
 
 /* address in low memory of the wakeup routine. */
 unsigned long acpi_wakeup_address = 0;
@@ -27,6 +27,7 @@ static void init_low_mapping(pgd_t *pgd, int pgd_limit)
 		set_pgd(pgd, *(pgd+USER_PTRS_PER_PGD));
 		pgd_ofs++, pgd++;
 	}
+	flush_tlb_all();
 }
 
 /**
