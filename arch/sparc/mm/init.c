@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.33 1996/03/01 07:16:20 davem Exp $
+/*  $Id: init.c,v 1.36 1996/04/16 08:02:54 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -64,7 +64,7 @@ void show_mem(void)
 	i = MAP_NR(high_memory);
 	while (i-- > 0) {
 		total++;
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map + i))
 			reserved++;
 		else if (!mem_map[i].count)
 			free++;
@@ -131,7 +131,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	};
 
 	/* Initialize the protection map with non-constant values
-	 * MMU dependent values.
+	 * MMU dependant values.
 	 */
 	protection_map[0] = PAGE_NONE;
 	protection_map[1] = PAGE_READONLY;
@@ -152,14 +152,35 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	return device_scan(start_mem);
 }
 
-extern void sun4c_test_wp(void);
-extern void srmmu_test_wp(void);
-
 struct cache_palias *sparc_aliases;
 
 extern int min_free_pages;
 extern int free_pages_low;
 extern int free_pages_high;
+
+int physmem_mapped_contig = 1;
+
+static void taint_real_pages(unsigned long start_mem, unsigned long end_mem)
+{
+	unsigned long addr, tmp2 = 0;
+
+	if(physmem_mapped_contig) {
+		for(addr = start_mem; addr < end_mem; addr += PAGE_SIZE) {
+			for(tmp2=0; sp_banks[tmp2].num_bytes != 0; tmp2++) {
+				unsigned long phys_addr = (addr - PAGE_OFFSET);
+				unsigned long base = sp_banks[tmp2].base_addr;
+				unsigned long limit = base + sp_banks[tmp2].num_bytes;
+
+				if((phys_addr >= base) && (phys_addr < limit) &&
+				   ((phys_addr + PAGE_SIZE) < limit))
+					mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
+			}
+		}
+	} else {
+		for(addr = start_mem; addr < end_mem; addr += PAGE_SIZE)
+			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
+	}
+}
 
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
@@ -178,23 +199,13 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	addr = PAGE_OFFSET;
 	while(addr < start_mem) {
-		mem_map[MAP_NR(addr)].reserved = 1;
+		mem_map[MAP_NR(addr)].flags |= (1<<PG_reserved);
 		addr += PAGE_SIZE;
 	}
 
-	for(addr = start_mem; addr < end_mem; addr += PAGE_SIZE) {
-		for(tmp2=0; sp_banks[tmp2].num_bytes != 0; tmp2++) {
-			unsigned long phys_addr = (addr - PAGE_OFFSET);
-			unsigned long base = sp_banks[tmp2].base_addr;
-			unsigned long limit = base + sp_banks[tmp2].num_bytes;
-
-			if((phys_addr >= base) && (phys_addr < limit) &&
-			   ((phys_addr + PAGE_SIZE) < limit))
-				mem_map[MAP_NR(addr)].reserved = 0;
-		}
-	}
+	taint_real_pages(start_mem, end_mem);
 	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
-		if(mem_map[MAP_NR(addr)].reserved) {
+		if(PageReserved(mem_map + MAP_NR(addr))) {
 			if (addr < (unsigned long) &etext)
 				codepages++;
 			else if(addr < start_mem)
@@ -218,21 +229,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	free_pages_low = min_free_pages + (min_free_pages >> 1);
 	free_pages_high = min_free_pages + min_free_pages;
 
-	switch(sparc_cpu_model) {
-	case sun4c:
-	case sun4e:
-		sun4c_test_wp();
-		break;
-	case sun4m:
-	case sun4d:
-		srmmu_test_wp();
-		break;
-	default:
-		printk("mem_init: Could not test WP bit on this machine.\n");
-		printk("mem_init: sparc_cpu_model = %d\n", sparc_cpu_model);
-		printk("mem_init: Halting...\n");
-		panic("mem_init()");
-	};
 }
 
 void si_meminfo(struct sysinfo *val)
@@ -245,7 +241,7 @@ void si_meminfo(struct sysinfo *val)
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map + i))
 			continue;
 		val->totalram++;
 		if (!mem_map[i].count)

@@ -17,7 +17,6 @@
    Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
 */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/md.h>
 #include <linux/raid0.h>
@@ -26,8 +25,6 @@
 #define MAJOR_NR MD_MAJOR
 #define MD_DRIVER
 #define MD_PERSONALITY
-
-#include <linux/blk.h>
 
 static void create_strip_zones (int minor, struct md_dev *mddev)
 {
@@ -179,92 +176,54 @@ static int raid0_stop (int minor, struct md_dev *mddev)
  * Of course, those facts may not be valid anymore (and surely won't...)
  * Hey guys, there's some work out there ;-)
  */
-static int raid0_map (int minor, struct md_dev *mddev, struct request *req)
+static int raid0_map (struct md_dev *mddev, kdev_t *rdev,
+		      unsigned long *rsector, unsigned long size)
 {
   struct raid0_data *data=(struct raid0_data *) mddev->private;
   static struct raid0_hash *hash;
   struct strip_zone *zone;
   struct real_dev *tmp_dev;
-  int i, queue, blk_in_chunk, factor, chunk;
+  int blk_in_chunk, factor, chunk, chunk_size;
   long block, rblock;
-  struct buffer_head *bh;
-  static struct request pending[MAX_REAL]={{0, }, };
 
   factor=FACTOR(mddev);
+  chunk_size=(1UL << FACTOR_SHIFT(factor));
+  block=*rsector >> 1;
+  hash=data->hash_table+(block/data->smallest->size);
 
-  while (req->bh || req->sem)
+  /* Sanity check */
+  if ((chunk_size*2)<(*rsector % (chunk_size*2))+size)
   {
-    block=req->sector >> 1;
-    hash=data->hash_table+(block/data->smallest->size);
-    
-    if (block >= (hash->zone0->size +
-		  hash->zone0->zone_offset))
-    {
-      if (!hash->zone1)
-	printk ("raid0_map : hash->zone1==NULL for block %ld\n", block);
-      zone=hash->zone1;
-    }
-    else
-      zone=hash->zone0;
-    
-    blk_in_chunk=block & ((1UL << FACTOR_SHIFT(factor)) - 1);
-    chunk=(block - zone->zone_offset) / (zone->nb_dev<<FACTOR_SHIFT(factor));
-    tmp_dev=zone->dev[(block >> FACTOR_SHIFT(factor)) % zone->nb_dev];
-    rblock=(chunk << FACTOR_SHIFT(factor)) + blk_in_chunk + zone->dev_offset;
-
-    if (req->sem)		/* This is a paging request */
-    {
-      req->rq_dev=tmp_dev->dev;
-      req->sector=rblock << 1;
-      add_request (blk_dev+MAJOR (tmp_dev->dev), req);
-
-      return REDIRECTED_REQ;
-    }
-
-    queue=tmp_dev - devices[minor];
-    
-				/* This is a buffer request */
-    for (i=blk_in_chunk;
-	 i<(1UL << FACTOR_SHIFT(factor)) && req->bh;
-	 i+=bh->b_size >> 10)
-    {
-      bh=req->bh;
-      if (!buffer_locked(bh))
-	printk("md%d: block %ld not locked\n", minor, bh->b_blocknr);
-
-      bh->b_rdev=tmp_dev->dev;
-#if defined (CONFIG_MD_SUPPORT_RAID1)
-      bh->b_reqshared=NULL;
-      bh->b_sister_req=NULL;
-#endif
-      
-      if (!pending[queue].bh)
-      {
-	pending[queue].rq_dev=tmp_dev->dev;
-	pending[queue].bhtail=pending[queue].bh=bh;
-	pending[queue].sector=rblock << 1;
-	pending[queue].cmd=req->cmd;
-	pending[queue].current_nr_sectors=
-	  pending[queue].nr_sectors=bh->b_size >> 9;
-      }
-      else
-      {
-	pending[queue].bhtail->b_reqnext=bh;
-	pending[queue].bhtail=bh;
-	pending[queue].nr_sectors+=bh->b_size >> 9;
-      }
-
-      end_redirect (req);	/* Separate bh from the request */
-    }
+    printk ("raid0_convert : can't convert block across chunks or bigger than %dk %ld %ld\n", chunk_size, *rsector, size);
+    return (-1);
   }
   
-  req->rq_status=RQ_INACTIVE;
-  wake_up (&wait_for_request);
-  make_md_request (pending, mddev->nb_dev);
-  return REDIRECTED_REQ;	/* Since we already set the request free */
+  if (block >= (hash->zone0->size +
+		hash->zone0->zone_offset))
+  {
+    if (!hash->zone1)
+    {
+      printk ("raid0_convert : hash->zone1==NULL for block %ld\n", block);
+      return (-1);
+    }
+    
+    zone=hash->zone1;
+  }
+  else
+    zone=hash->zone0;
+    
+  blk_in_chunk=block & (chunk_size -1);
+  chunk=(block - zone->zone_offset) / (zone->nb_dev<<FACTOR_SHIFT(factor));
+  tmp_dev=zone->dev[(block >> FACTOR_SHIFT(factor)) % zone->nb_dev];
+  rblock=(chunk << FACTOR_SHIFT(factor)) + blk_in_chunk + zone->dev_offset;
+  
+  *rdev=tmp_dev->dev;
+  *rsector=rblock<<1;
+
+  return (0);
 }
 
-
+			   
 static int raid0_status (char *page, int minor, struct md_dev *mddev)
 {
   int sz=0;

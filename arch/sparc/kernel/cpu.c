@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 
 #include <asm/oplib.h>
+#include <asm/page.h>
 #include <asm/head.h>
 #include <asm/psr.h>
 #include <asm/mbus.h>

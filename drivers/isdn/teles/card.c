@@ -1,14 +1,16 @@
-/*
+/* $Id: card.c,v 1.1 1996/04/13 10:22:42 fritz Exp $
+ *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
  * Author     Jan den Ouden
  * 
- * 
- * 
- * Changelog:
- * 
  * Beat Doebeli         log all D channel traffic
  * 
+ * $Log: card.c,v $
+ * Revision 1.1  1996/04/13 10:22:42  fritz
+ * Initial revision
+ *
+ *
  */
 
 #define __NO_VERSION__

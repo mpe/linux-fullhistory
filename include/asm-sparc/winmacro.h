@@ -1,4 +1,4 @@
-/* $Id: winmacro.h,v 1.13 1995/12/29 21:48:04 davem Exp $
+/* $Id: winmacro.h,v 1.16 1996/03/27 02:43:18 davem Exp $
  * winmacro.h: Window loading-unloading macros.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -111,15 +111,15 @@
         add      %scratch, 1, %scratch; \
         st       %scratch, [%cur_reg + THREAD_W_SAVED];
 
-/* For now on a uniprocessor this is ok. */
 #ifdef __SMP__
-#error SMP not yet
 #define LOAD_CURRENT(dest_reg, idreg) \
         rd       %tbr, %idreg; \
-        srl      %idreg, 24, %idreg; \
+        srl      %idreg, 10, %idreg; \
+	and      %idreg, 0xc, %idreg; \
 	sethi    %hi(C_LABEL(current_set)), %dest_reg; \
 	or       %dest_reg, %lo(C_LABEL(current_set)), %dest_reg; \
-	add      %dest_reg, %idreg, %dest_reg;
+	add      %dest_reg, %idreg, %dest_reg; \
+	ld       [%dest_reg], %dest_reg;
 #else
 #define LOAD_CURRENT(dest_reg, idreg) \
         sethi    %hi(C_LABEL(current_set)), %dest_reg; \

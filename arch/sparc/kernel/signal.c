@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.28 1995/12/29 21:47:18 davem Exp $
+/*  $Id: signal.c,v 1.31 1996/04/18 01:00:41 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -58,24 +58,25 @@ asmlinkage void do_sigpause(unsigned int set, struct pt_regs *regs)
 	_sigpause_common(set, regs);
 }
 
-asmlinkage void do_sigsuspend(unsigned int *sigmaskp, struct pt_regs *regs)
+asmlinkage void do_sigsuspend (struct pt_regs *regs)
 {
-	unsigned int set;
+	unsigned long mask;
+	unsigned long set;
 
-	/* Manual does not state what is supposed to happen if
-	 * the sigmask ptr is bogus.  It does state that EINTR
-	 * is the only valid return value and it indicates
-	 * successful signal delivery.  Must investigate.
-	 */
-	if(verify_area(VERIFY_READ, sigmaskp, sizeof(unsigned int))) {
-		regs->pc = regs->npc;
-		regs->npc += 4;
-		regs->u_regs[UREG_I0] = EFAULT;
-		regs->psr |= PSR_C;
-		return;
+	set = regs->u_regs [UREG_I0];
+	mask = current->blocked;
+	current->blocked = set & _BLOCKABLE;
+	regs->pc = regs->npc;
+	regs->npc += 4;
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		if (do_signal(mask,regs)){
+			regs->psr |= PSR_C;
+			regs->u_regs [UREG_I0] = EINTR;
+			return;
+		}
 	}
-	set = *sigmaskp;
-	_sigpause_common(set, regs);
 }
 
 asmlinkage void do_sigreturn(struct pt_regs *regs)
@@ -152,10 +153,12 @@ setup_frame(struct sigaction *sa, struct sigcontext_struct **fp,
 	   (((unsigned long) sframep) >= KERNBASE) ||
 	   ((sparc_cpu_model == sun4 || sparc_cpu_model == sun4c) &&
 	    ((unsigned long) sframep < 0xe0000000 && (unsigned long) sframep >= 0x20000000))) {
+#if 0 /* fills up the console logs... */
 		printk("%s [%d]: User has trashed signal stack\n",
 		       current->comm, current->pid);
 		printk("Sigstack ptr %p handler at pc<%08lx> for sig<%d>\n",
 		       sframep, pc, signr);
+#endif
 		/* Don't change signal code and address, so that
 		 * post mortem debuggers can have a look.
 		 */

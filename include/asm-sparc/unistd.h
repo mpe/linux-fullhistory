@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.16 1995/12/29 23:14:26 miguel Exp $ */
+/* $Id: unistd.h,v 1.20 1996/04/20 07:54:39 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -11,7 +11,7 @@
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
- * SunOS compatibility based upon preliminary work which is:
+ * SunOS compatability based upon preliminary work which is:
  *
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
  */
@@ -257,6 +257,19 @@
 #define __NR_munlock            238
 #define __NR_mlockall           239
 #define __NR_munlockall         240
+#define __NR_sched_setparam     241
+#define __NR_sched_getparam     242
+#define __NR_sched_setscheduler 243
+#define __NR_sched_getscheduler 244
+#define __NR_sched_yield        245
+#define __NR_sched_get_priority_max 246
+#define __NR_sched_get_priority_min 247
+#define __NR_sched_rr_get_interval  248
+#define __NR_nanosleep          249
+#define __NR_mremap             250
+#define __NR__sysctl            251
+#define __NR_getsid             252
+#define __NR_fdatasync          253
 
 #define _syscall0(type,name) \
 type name(void) \
@@ -270,7 +283,7 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "1:\n\t" \
 		  : "=r" (__res)\
 		  : "0" (__NR_##name) \
-		  : "g1"); \
+		  : "g1", "o0"); \
 if (__res >= 0) \
     return (type) __res; \
 errno = -__res; \
@@ -366,24 +379,28 @@ if (__res>=0) \
 errno = -__res; \
 return -1; \
 } 
-
+#
 #define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4, \
 	  type5,arg5) \
 type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 { \
-long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "or %%g0, %1, %%o0\n\t" \
+      long __res; \
+\
+__asm__ volatile ("or %%g0, %1, %%o0\n\t" \
 		  "or %%g0, %2, %%o1\n\t" \
 		  "or %%g0, %3, %%o2\n\t" \
 		  "or %%g0, %4, %%o3\n\t" \
 		  "or %%g0, %5, %%o4\n\t" \
+		  "or %%g0, %6, %%g1\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
-		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
-		    "=r" ((long)(arg3)), "=r" ((long)(arg4)), "=r" ((long)(arg5)) \
-		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
-		    "3" ((long)(arg3)),"4" ((long)(arg4)),"5" ((long)(arg5)) \
+		  "sub %%g0, %%o0, %0\n\t" \
+		  "1:\n\t" \
+		  : "=r" (__res) \
+		  : "0" ((long)(arg1)),"1" ((long)(arg2)), \
+		    "2" ((long)(arg3)),"3" ((long)(arg4)),"4" ((long)(arg5)), \
+		    "i" (__NR_##name)  \
 		  : "g1", "o0", "o1", "o2", "o3", "o4"); \
 if (__res>=0) \
 	return (type) __res; \
@@ -405,11 +422,11 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-/* static inline _syscall0(int,idle) */
+static inline _syscall0(int,idle)
 static inline _syscall0(int,fork)
 static inline _syscall2(int,clone,unsigned long,flags,char *,ksp)
 static inline _syscall0(int,pause)
-/* static inline _syscall0(int,setup) */
+static inline _syscall0(int,setup)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)
@@ -420,24 +437,9 @@ static inline _syscall1(int,close,int,fd)
 static inline _syscall1(int,_exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
-extern void sys_idle(void);
-static inline void idle(void)
-{
-	sys_idle();
-}
-
-extern int sys_setup(void);
-static inline int setup(void)
-{
-	return sys_setup();
-}
-
-extern int sys_waitpid(int, int *, int);
 static inline pid_t wait(int * wait_stat)
 {
-	long retval;
-	retval = waitpid(-1,wait_stat,0);
-	return retval;
+	return waitpid(-1,wait_stat,0);
 }
 
 /*

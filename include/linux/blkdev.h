@@ -50,9 +50,8 @@ extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern struct wait_queue * wait_for_request;
 extern void resetup_one_dev(struct gendisk *dev, int drive);
 
-/* md needs those functions to requeue requests */
-extern void add_request(struct blk_dev_struct * dev, struct request * req);
-extern struct request *get_md_request (int max_req, kdev_t dev);
+/* md needs this function to remap requests */
+extern int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size);
 
 extern int * blk_size[MAX_BLKDEV];
 

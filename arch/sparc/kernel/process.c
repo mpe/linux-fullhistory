@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.42 1996/02/20 07:45:08 davem Exp $
+/*  $Id: process.c,v 1.49 1996/04/20 07:37:20 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,9 @@
 /*
  * This file handles the architecture-dependent parts of process handling..
  */
+
+#define __KERNEL_SYSCALLS__
+#include <stdarg.h>
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -29,10 +32,13 @@
 #include <asm/delay.h>
 #include <asm/processor.h>
 #include <asm/psr.h>
+#include <asm/system.h>
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
 
 int active_ds = USER_DS;
+
+#ifndef __SMP__
 
 /*
  * the idle loop on a Sparc... ;)
@@ -47,7 +53,55 @@ asmlinkage int sys_idle(void)
 	for (;;) {
 		schedule();
 	}
+	return 0;
 }
+
+#else
+
+/*
+ * the idle loop on a SparcMultiPenguin...
+ */
+asmlinkage int sys_idle(void)
+{
+	if (current->pid != 0)
+		return -EPERM;
+
+	/* endless idle loop with no priority at all */
+	current->counter = -100;
+	schedule();
+	return 0;
+}
+
+/* This is being executed in task 0 'user space'. */
+int cpu_idle(void *unused)
+{
+	volatile int *spap = &smp_process_available;
+	volatile int cval;
+
+	current->priority = -50;
+	while(1) {
+                if(0==read_smp_counter(spap))
+                	continue;
+		while(*spap == -1)
+			;
+		cli();
+		/* Acquire exclusive access. */
+		while((cval = smp_swap(spap, -1)) == -1)
+			;
+                if (0==cval) {
+			/* ho hum, release it. */
+			smp_process_available = 0;
+			sti();
+                        continue;
+                }
+		/* Something interesting happened, whee... */
+		smp_swap(spap, (cval - 1));
+		sti();
+		idle();
+	}
+}
+
+#endif
 
 extern char saved_command_line[];
 
@@ -94,12 +148,20 @@ void show_regs(struct pt_regs * regs)
 void exit_thread(void)
 {
 	flush_user_windows();
+#ifndef __SMP__
 	if(last_task_used_math == current) {
+#else
+	if(current->flags & PF_USEDFPU) {
+#endif
 		/* Keep process from leaving FPU in a bogon state. */
 		put_psr(get_psr() | PSR_EF);
 		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
 		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+#ifndef __SMP__
 		last_task_used_math = NULL;
+#else
+		current->flags &= ~PF_USEDFPU;
+#endif
 	}
 	mmu_exit_hook();
 }
@@ -122,11 +184,20 @@ void flush_thread(void)
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
+#ifndef __SMP__
 	if(last_task_used_math == current) {
+#else
+	if(current->flags & PF_USEDFPU) {
+#endif
 		/* Clean the fpu. */
 		put_psr(get_psr() | PSR_EF);
 		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
 		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+#ifndef __SMP__
+		last_task_used_math = NULL;
+#else
+		current->flags &= ~PF_USEDFPU;
+#endif
 	}
 
 	memset(&current->tss.reg_window[0], 0,
@@ -144,7 +215,7 @@ void flush_thread(void)
  * Parent -->  %o0 == childs  pid, %o1 == 0
  * Child  -->  %o0 == parents pid, %o1 == 1
  *
- * NOTE: We have a separate fork kpsr/kwim because
+ * NOTE: We have a seperate fork kpsr/kwim because
  *       the parent could change these values between
  *       sys_fork invocation and when we reach here
  *       if the parent should sleep while trying to
@@ -160,14 +231,25 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	struct reg_window *old_stack, *new_stack;
 	unsigned long stack_offset;
 
+#ifndef __SMP__
 	if(last_task_used_math == current) {
+#else
+	if(current->flags & PF_USEDFPU) {
+#endif
 		put_psr(get_psr() | PSR_EF);
 		fpsave(&p->tss.float_regs[0], &p->tss.fsr,
 		       &p->tss.fpqueue[0], &p->tss.fpqdepth);
+#ifdef __SMP__
+		current->flags &= ~PF_USEDFPU;
+#endif
 	}
 
 	/* Calculate offset to stack_frame & pt_regs */
-	stack_offset = ((PAGE_SIZE*2) - TRACEREG_SZ);
+	if(sparc_cpu_model == sun4c)
+		stack_offset = ((PAGE_SIZE*3) - TRACEREG_SZ);
+	else
+		stack_offset = ((PAGE_SIZE<<2) - TRACEREG_SZ);
+
 	if(regs->psr & PSR_PS)
 		stack_offset -= REGWIN_SZ;
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));

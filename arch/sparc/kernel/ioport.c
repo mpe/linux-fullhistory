@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.14 1996/01/03 03:34:41 davem Exp $
+/* $Id: ioport.c,v 1.17 1996/03/23 02:39:13 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -31,7 +31,7 @@ static long next_free_region = IOBASE_VADDR;
 static long dvma_next_free   = DVMA_VADDR;
 
 /*
- * sparc_alloc_dev:
+ * sparc_alloc_io:
  * Map and allocates an obio device.
  * Implements a simple linear allocator, you can force the function
  * to use your own mapping, but in practice this should not be used.
@@ -61,7 +61,7 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 		
 	len += offset;
 	if(((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)) {
-		prom_printf("alloc_io: Mapping outside IOBASE area\n");
+		prom_printf("alloc_io: Mapping ouside IOBASE area\n");
 		prom_halt();
 	}
 	if(check_region ((vaddr | offset), len)) {
@@ -84,11 +84,11 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 	return (void *) (base_address | offset);
 }
 
-/* Does DVMA allocations with PAGE_SIZE granularity.  How this basically
+/* Does DVMA allocations with PAGE_SIZE granulatity.  How this basically
  * works is that the ESP chip can do DVMA transfers at ANY address with
- * certain size and boundary restrictions.  But other devices that are
+ * certain size and boundry restrictions.  But other devices that are
  * attached to it and would like to do DVMA have to set things up in
- * a special way, if the DVMA sees a device attached to it transfer data
+ * a special way, if the DVMA see's a device attached to it transfer data
  * at addresses above DVMA_VADDR it will grab them, this way it does not
  * now have to know the peculiarities of where to read the Lance data
  * from. (for example)

@@ -27,8 +27,6 @@
 #define MD_DRIVER
 #define MD_PERSONALITY
 
-#include <linux/blk.h>
-
 static int linear_run (int minor, struct md_dev *mddev)
 {
   int cur=0, i, size, dev0_size, nb_zone;
@@ -105,76 +103,38 @@ static int linear_stop (int minor, struct md_dev *mddev)
 }
 
 
-static int linear_map (int minor, struct md_dev *mddev, struct request *req)
+static int linear_map (struct md_dev *mddev, kdev_t *rdev,
+		       unsigned long *rsector, unsigned long size)
 {
   struct linear_data *data=(struct linear_data *) mddev->private;
   struct linear_hash *hash;
   struct real_dev *tmp_dev;
-  long block, rblock;
-  struct buffer_head *bh, *bh2;
-  int queue, nblk;
-  static struct request pending[MAX_REAL]={{0, }, };
+  long block;
 
-  while (req->nr_sectors)
+  block=*rsector >> 1;
+  hash=data->hash_table+(block/data->smallest->size);
+  
+  if (block >= (hash->dev0->size + hash->dev0->offset))
   {
-    block=req->sector >> 1;
-    hash=data->hash_table+(block/data->smallest->size);
-    
-    if (block >= (hash->dev0->size + hash->dev0->offset))
+    if (!hash->dev1)
     {
-      if (!hash->dev1)
-	printk ("linear_map : hash->dev1==NULL for block %ld\n", block);
-      tmp_dev=hash->dev1;
+      printk ("linear_map : hash->dev1==NULL for block %ld\n", block);
+      return (-1);
     }
-    else
-      tmp_dev=hash->dev0;
     
-    if (block >= (tmp_dev->size + tmp_dev->offset) || block < tmp_dev->offset)
-      printk ("Block %ld out of bounds on dev %04x size %d offset %d\n", block, tmp_dev->dev, tmp_dev->size, tmp_dev->offset);
-    
-    rblock=(block-(tmp_dev->offset));
-    
-    if (req->sem)				/* This is a paging request */
-    {
-      req->rq_dev=tmp_dev->dev;
-      req->sector=rblock << 1;
-      add_request (blk_dev+MAJOR (tmp_dev->dev), req);
-      
-      return REDIRECTED_REQ;
-    }
-
-    queue=tmp_dev - devices[minor];
-
-    for (nblk=0, bh=bh2=req->bh;
-	 bh && rblock + nblk + (bh->b_size >> 10) <= tmp_dev->size;
-	 nblk+=bh->b_size >> 10, bh2=bh, bh=bh->b_reqnext)
-    {
-      if (!buffer_locked(bh))
-	printk("md%d: block %ld not locked\n", minor, bh->b_blocknr);
-      
-      bh->b_rdev=tmp_dev->dev;
-    }
-
-    pending[queue].rq_dev=tmp_dev->dev;
-    pending[queue].cmd=req->cmd;
-    pending[queue].sector=rblock << 1;
-    pending[queue].nr_sectors=nblk << 1;
-    pending[queue].current_nr_sectors=req->bh->b_size >> 9;
-    pending[queue].bh=req->bh;
-    pending[queue].bhtail=bh2;
-    bh2->b_reqnext=NULL;
-    
-    req->bh=bh;
-    req->sector+=nblk << 1;
-    req->nr_sectors-=nblk << 1;
+    tmp_dev=hash->dev1;
   }
+  else
+    tmp_dev=hash->dev0;
+    
+  if (block >= (tmp_dev->size + tmp_dev->offset) || block < tmp_dev->offset)
+    printk ("Block %ld out of bounds on dev %04x size %d offset %d\n", block, tmp_dev->dev, tmp_dev->size, tmp_dev->offset);
+  
+  *rdev=tmp_dev->dev;
+  *rsector=(block-(tmp_dev->offset)) << 1;
 
-  req->rq_status=RQ_INACTIVE;
-  wake_up (&wait_for_request);
-  make_md_request (pending, mddev->nb_dev);
-  return REDIRECTED_REQ;
+  return (0);
 }
-
 
 static int linear_status (char *page, int minor, struct md_dev *mddev)
 {

@@ -1,3 +1,14 @@
+/* $Id: callc.c,v 1.2 1996/04/20 16:42:29 fritz Exp fritz $
+ *
+ * $Log: callc.c,v $
+ * Revision 1.2  1996/04/20 16:42:29  fritz
+ * Changed statemachine to allow reject of incoming calls.
+ *
+ * Revision 1.1  1996/04/13 10:20:59  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 
@@ -59,6 +70,7 @@ enum {
         ST_PRO_W,          /* 13 call clear. (initiator), DISCONNECT req. sent          */
         ST_ANT_W,          /* 14 call clear. (receiver), awaiting DISCONNECT ind.       */
         ST_DISC_BC_HANGUP, /*    d channel gone, wait for b channel deactivation        */
+	ST_OUT_W_HANGUP,      /* Outgoing waiting for D-Channel hangup received */ 
         ST_D_ERR,          /*    d channel released while active                        */
 };
 
@@ -81,6 +93,7 @@ static char    *strState[] =
         "ST_PRO_W",
         "ST_ANT_W",
         "ST_DISC_BC_HANGUP",
+        "ST_OUT_W_HANGUP",
         "ST_D_ERR",
 };
 
@@ -267,6 +280,29 @@ r2(struct FsmInst *fi, int event, void *arg)
         ll_hangup(chanp, 0);
 }
 
+
+static void
+r2_1(struct FsmInst *fi, int event, void *arg)
+{
+        struct Channel *chanp = fi->userdata;
+
+        chanp->is.l4.l4l3(&chanp->is, CC_DISCONNECT_REQ, NULL);
+
+        FsmChangeState(fi, ST_OUT_W_HANGUP);
+}
+
+
+static void
+r2_2(struct FsmInst *fi, int event, void *arg)
+{
+        struct Channel *chanp = fi->userdata;
+
+        FsmChangeState(fi, ST_REL_W);
+        FsmEvent(&chanp->lc_d.lcfi, EV_LC_RELEASE, NULL);
+        ll_hangup(chanp, 0);
+}
+
+
 static void
 r3(struct FsmInst *fi, int event, void *arg)
 {
@@ -276,9 +312,26 @@ r3(struct FsmInst *fi, int event, void *arg)
         FsmChangeState(fi, ST_REL_W);
 }
 
+
+static void
+r3_1(struct FsmInst *fi, int event, void *arg)
+{
+        struct Channel *chanp = fi->userdata;
+
+	chanp->is.l4.l4l3(&chanp->is,CC_DLRL,NULL); 
+	
+        FsmEvent(&chanp->lc_d.lcfi, EV_LC_RELEASE, NULL);
+        FsmChangeState(fi, ST_REL_W);
+        ll_hangup(chanp, 0);
+}
+
+
 static void
 r4(struct FsmInst *fi, int event, void *arg)
 {
+	struct Channel *chanp=fi->userdata;  
+  
+        chanp->is.l4.l4l3(&chanp->is,CC_DLRL,NULL);                                  
         FsmChangeState(fi, ST_NULL);
 }
 
@@ -313,16 +366,14 @@ r7(struct FsmInst *fi, int event, void *arg)
         struct Channel *chanp = fi->userdata;
         isdn_ctrl       ic;
 
-        chanp->is.l4.l4l3(&chanp->is, CC_ALERTING_REQ, NULL);
-
-        FsmChangeState(fi, ST_IN);
-
         /*
          * Report incoming calls only once to linklevel, use octet 3 of
          * channel identification information element. (it's value
          * is copied to chanp->para.bchannel in l3s12(), file isdnl3.c)
          */
         if (((chanp->chan & 1) + 1) & chanp->para.bchannel) {
+                chanp->is.l4.l4l3(&chanp->is, CC_ALERTING_REQ, NULL);
+                FsmChangeState(fi, ST_IN);
                 if (chanp->debug & 1)
                         stat_debug(chanp, "STAT_ICALL");
                 ic.driver = drid;
@@ -335,6 +386,10 @@ r7(struct FsmInst *fi, int event, void *arg)
                 sprintf(ic.num, "%s,%d,0,%s", chanp->para.calling, chanp->para.info,
                         chanp->para.called);
                 iif.statcallb(&ic);
+        } else {
+                chanp->is.l4.l4l3(&chanp->is,CC_DLRL,NULL);
+                FsmEvent(&chanp->lc_d.lcfi, EV_LC_RELEASE, NULL);
+                FsmChangeState(fi, ST_REL_W);
         }
 }
 
@@ -454,6 +509,24 @@ r17(struct FsmInst *fi, int event, void *arg)
         FsmChangeState(fi, ST_ANT_W);
 }
 
+
+static void
+r17_1(struct FsmInst *fi, int event, void *arg)
+{
+        struct Channel *chanp = fi->userdata;
+
+        chanp->data_open = 0;
+        release_ds(chanp->chan);
+
+	chanp->is.l4.l4l3(&chanp->is,CC_DLRL,NULL); 
+	
+	FsmEvent(&chanp->lc_d.lcfi,EV_LC_RELEASE,NULL); 
+	
+        FsmChangeState(fi, ST_NULL);
+        
+        ll_hangup(chanp,!0); 
+}
+
 static void
 r18(struct FsmInst *fi, int event, void *arg)
 {
@@ -481,11 +554,16 @@ static void
 r20(struct FsmInst *fi, int event, void *arg)
 {
         struct Channel *chanp = fi->userdata;
+        
+        chanp->is.l4.l4l3(&chanp->is,CC_DLRL,NULL); 
+        
+        FsmEvent(&chanp->lc_d.lcfi,EV_LC_RELEASE,NULL); 
 
         FsmChangeState(fi, ST_NULL);
 
         ll_hangup(chanp, 0);
 }
+
 
 static void
 r21(struct FsmInst *fi, int event, void *arg)
@@ -520,6 +598,22 @@ r23(struct FsmInst *fi, int event, void *arg)
 
         FsmChangeState(fi, ST_PRO_W);
         chanp->is.l4.l4l3(&chanp->is, CC_DISCONNECT_REQ, NULL);
+}
+
+static void
+r23_1(struct FsmInst *fi, int event, void *arg)
+{
+        struct Channel *chanp = fi->userdata;
+
+        release_ds(chanp->chan);
+
+	chanp->is.l4.l4l3(&chanp->is, CC_DLRL,NULL); 
+	
+	FsmEvent(&chanp->lc_d.lcfi, EV_LC_RELEASE,NULL); 
+	
+        FsmChangeState(fi, ST_NULL);
+        
+        ll_hangup(chanp,!0); 
 }
 
 static void
@@ -562,32 +656,51 @@ r26(struct FsmInst *fi, int event, void *arg)
 
 static struct FsmNode fnlist[] =
 {
-        {ST_NULL, EV_DIAL, r1},
-        {ST_OUT_W, EV_DLEST, r5},
-        {ST_OUT_W, EV_DLRL, r20},
-        {ST_OUT, EV_DISCONNECT_IND, r2},
-        {ST_CLEAR, EV_RELEASE_CNF, r3},
-        {ST_REL_W, EV_DLRL, r4},
-        {ST_NULL, EV_SETUP_IND, r6},
-        {ST_IN_W, EV_DLEST, r7},
-        {ST_IN, EV_RELEASE_IND, r3},
-        {ST_IN, EV_ACCEPTD, r8},
-        {ST_IN_SETUP, EV_SETUP_CMPL_IND, r9},
-        {ST_OUT, EV_SETUP_CNF, r10},
-        {ST_OUT_ESTB, EV_BC_EST, r12},
-        {ST_OUT_ESTB, EV_BC_REL, r23},
-        {ST_IN_DACT, EV_BC_EST, r12},
-        {ST_ACTIVE, EV_HANGUP, r15},
-        {ST_BC_HANGUP, EV_BC_REL, r16},
-        {ST_BC_HANGUP, EV_DISCONNECT_IND, r21},
-        {ST_ACTIVE, EV_BC_REL, r17},
-        {ST_ACTIVE, EV_DISCONNECT_IND, r21},
-        {ST_ACTIVE, EV_DLRL, r24},
-        {ST_ACTIVE, EV_CINF, r26},
-        {ST_PRO_W, EV_RELEASE_IND, r18},
-        {ST_ANT_W, EV_DISCONNECT_IND, r19},
-        {ST_DISC_BC_HANGUP, EV_BC_REL, r22},
-        {ST_D_ERR, EV_BC_REL, r25},
+        {ST_NULL,             EV_DIAL,                r1},
+        {ST_OUT_W,            EV_DLEST,               r5},
+        {ST_OUT_W,            EV_DLRL,                r20},
+        {ST_OUT_W,            EV_RELEASE_CNF,         r2_2 },   
+        {ST_OUT,              EV_DISCONNECT_IND,      r2},
+        {ST_OUT,              EV_SETUP_CNF,           r10},
+        {ST_OUT,              EV_HANGUP,              r2_1},
+        {ST_OUT,              EV_RELEASE_IND,         r20},
+        {ST_OUT,              EV_DLRL,                r2_2},
+        {ST_OUT_W_HANGUP,     EV_RELEASE_IND,         r2_2},
+        {ST_OUT_W_HANGUP,     EV_DLRL,                r20},
+        {ST_CLEAR,            EV_RELEASE_CNF,         r3},
+        {ST_CLEAR,            EV_DLRL,                r20},
+        {ST_REL_W,            EV_DLRL,                r4},
+        {ST_NULL,             EV_SETUP_IND,           r6},
+        {ST_IN_W,             EV_DLEST,               r7},
+        {ST_IN_W,             EV_DLRL,                r3_1},
+        {ST_IN,               EV_DLRL,                r3_1},
+        {ST_IN,               EV_HANGUP,              r3_1},
+        {ST_IN,               EV_RELEASE_IND,         r2_2},
+        {ST_IN,               EV_RELEASE_CNF,         r2_2},
+        {ST_IN,               EV_ACCEPTD,             r8},
+        {ST_IN_SETUP,         EV_HANGUP,              r2_1},
+        {ST_IN_SETUP,         EV_SETUP_CMPL_IND,      r9},
+        {ST_IN_SETUP,         EV_RELEASE_IND,         r2_2},
+        {ST_IN_SETUP,         EV_DISCONNECT_IND,      r2},
+        {ST_IN_SETUP,         EV_DLRL,                r20},
+        {ST_OUT_ESTB,         EV_BC_EST,              r12},
+        {ST_OUT_ESTB,         EV_BC_REL,              r23},
+        {ST_OUT_ESTB,         EV_DLRL,                r23_1},
+        {ST_IN_DACT,          EV_BC_EST,              r12},
+        {ST_IN_DACT,          EV_BC_REL,              r17},
+        {ST_IN_DACT,          EV_DLRL,                r17_1},
+        {ST_ACTIVE,           EV_HANGUP,              r15},
+        {ST_ACTIVE,           EV_BC_REL,              r17},
+        {ST_ACTIVE,           EV_DISCONNECT_IND,      r21},
+        {ST_ACTIVE,           EV_DLRL,                r24},
+        {ST_ACTIVE,           EV_CINF,                r26},
+        {ST_ACTIVE,           EV_RELEASE_IND,         r17},
+        {ST_BC_HANGUP,        EV_BC_REL,              r16},
+        {ST_BC_HANGUP,        EV_DISCONNECT_IND,      r21},
+        {ST_PRO_W,            EV_RELEASE_IND,         r18},
+        {ST_ANT_W,            EV_DISCONNECT_IND,      r19},
+        {ST_DISC_BC_HANGUP,   EV_BC_REL,              r22},
+        {ST_D_ERR,            EV_BC_REL,              r25},
 };
 
 #define FNCOUNT (sizeof(fnlist)/sizeof(struct FsmNode))
@@ -664,15 +777,15 @@ lc_r5(struct FsmInst *fi, int event, void *arg)
 
 static struct FsmNode LcFnList[] =
 {
-        {ST_LC_NULL, EV_LC_ESTABLISH, lc_r1},
-        {ST_LC_ACTIVATE_WAIT, EV_LC_PH_ACTIVATE, lc_r6},
-        {ST_LC_DELAY, EV_LC_TIMER, lc_r2},
-        {ST_LC_ESTABLISH_WAIT, EV_LC_DL_ESTABLISH, lc_r3},
-        {ST_LC_CONNECTED, EV_LC_RELEASE, lc_r4},
-        {ST_LC_CONNECTED, EV_LC_DL_RELEASE, lc_r5},
-        {ST_LC_RELEASE_WAIT, EV_LC_DL_RELEASE, lc_r5},
-        {ST_LC_ACTIVATE_WAIT, EV_LC_TIMER, lc_r5},
-        {ST_LC_ESTABLISH_WAIT, EV_LC_DL_RELEASE, lc_r5},
+        {ST_LC_NULL,                  EV_LC_ESTABLISH,        lc_r1},
+        {ST_LC_ACTIVATE_WAIT,         EV_LC_PH_ACTIVATE,      lc_r6},
+        {ST_LC_DELAY,                 EV_LC_TIMER,            lc_r2},
+        {ST_LC_ESTABLISH_WAIT,        EV_LC_DL_ESTABLISH,     lc_r3},
+        {ST_LC_CONNECTED,             EV_LC_RELEASE,          lc_r4},
+        {ST_LC_CONNECTED,             EV_LC_DL_RELEASE,       lc_r5},
+        {ST_LC_RELEASE_WAIT,          EV_LC_DL_RELEASE,       lc_r5},
+        {ST_LC_ACTIVATE_WAIT,         EV_LC_TIMER,            lc_r5},
+        {ST_LC_ESTABLISH_WAIT,        EV_LC_DL_RELEASE,       lc_r5},
 };
 
 #define LC_FN_COUNT (sizeof(LcFnList)/sizeof(struct FsmNode))
@@ -1275,15 +1388,16 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
         if (err)
                 return (0);
 
-        if (count > BUFFER_SIZE(HSCX_SBUF_ORDER, HSCX_SBUF_BPPS)) {
-                printk(KERN_WARNING "teles_writebuf: packet too large!\n");
-                return (-EINVAL);
-        }
         ptr = DATAPTR(ibh);
         if (chanp->lc_b.l2_establish)
                 i = st->l2.ihsize;
         else
                 i = 0;
+
+        if ((count+i) > BUFFER_SIZE(HSCX_SBUF_ORDER, HSCX_SBUF_BPPS)) {
+                printk(KERN_WARNING "teles_writebuf: packet too large!\n");
+                return (-EINVAL);
+        }
 
         ptr += i;
 

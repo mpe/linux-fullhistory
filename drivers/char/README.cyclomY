@@ -1,6 +1,6 @@
 
-NOTE: Earlier versions of the driver mapped ttyS0 to minor
-number 32, but this is changed in this distribution.  Port ttyS0
+NOTE: Earlier versions of the driver mapped ttyC0 to minor
+number 32, but this is changed in this distribution.  Port ttyC0
 now maps to minor number 0.)  The following patch should be
 applied to /dev/MAKEDEV and the script should then be re-run
 to create new entries for the ports.

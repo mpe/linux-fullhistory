@@ -1,14 +1,8 @@
-/* $Id: socket.h,v 1.5 1995/11/26 01:32:36 davem Exp $ */
+/* $Id: socket.h,v 1.6 1996/04/04 12:51:26 davem Exp $ */
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
-/* Socket-level I/O control calls. */
-#define FIOSETOWN 	0x8901
-#define SIOCSPGRP	0x8902
-#define FIOGETOWN	0x8903
-#define SIOCGPGRP	0x8904
-#define SIOCATMARK	0x8905
-#define SIOCGSTAMP	0x8906		/* Get stamp */
+#include <asm/sockios.h>
 
 /* For setsockoptions(2) */
 #define SOL_SOCKET	0xffff

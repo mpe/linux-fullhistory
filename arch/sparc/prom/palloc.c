@@ -18,7 +18,7 @@
 
 /* Allocate a chunk of memory of size 'num_bytes' giving a suggestion
  * of virtual_hint as the preferred virtual base address of this chunk.
- * There are no guarantees that you will get the allocation, or that
+ * There are no guarentees that you will get the allocation, or that
  * the prom will abide by your "hint".  So check your return value.
  */
 char *

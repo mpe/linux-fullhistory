@@ -1,4 +1,4 @@
-/* $Id: cypress.h,v 1.2 1995/11/25 02:31:29 davem Exp $
+/* $Id: cypress.h,v 1.4 1996/03/12 17:48:12 davem Exp $
  * cypress.h: Cypress module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,7 +24,7 @@
  * BM: Boot Mode -- 0 = not in boot mode, 1 = in boot mode
  * C: Cacheable -- Indicates whether accesses are cacheable while
  *    the MMU is off.  0=no 1=yes
- * MR: MemoryReflection -- Indicates whether the bus attached to the
+ * MR: MemoryReflection -- Indicates whether the bus attacted to the
  *     MBus supports memory reflection. 0=no 1=yes (605 only)
  * CM: CacheMode -- Indicates whether the cache is operating in write
  *     through or copy-back mode. 0=write-through 1=copy-back
@@ -71,5 +71,9 @@ extern inline void cypress_flush_context(void)
 	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
 			     "i" (ASI_M_FLUSH_CTX));
 }
+
+/* XXX Displacement flushes for buggy chips and initial testing
+ * XXX go here.
+ */
 
 #endif /* !(_SPARC_CYPRESS_H) */

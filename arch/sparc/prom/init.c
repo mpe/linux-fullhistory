@@ -1,10 +1,11 @@
-/* $Id: init.c,v 1.6 1995/11/25 01:00:01 davem Exp $
+/* $Id: init.c,v 1.7 1996/04/04 16:31:00 tridge Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 
 #include <asm/openprom.h>
@@ -33,6 +34,12 @@ prom_init(struct linux_romvec *rp)
 {
 	romvec = rp;
 
+#if CONFIG_AP1000
+        prom_vers = PROM_AP1000;
+        prom_meminit();
+        prom_ranges_init();
+	return;
+#endif
 	switch(romvec->pv_romvers) {
 	case 0:
 		prom_vers = PROM_V0;

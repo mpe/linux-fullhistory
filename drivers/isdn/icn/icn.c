@@ -19,6 +19,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.c,v $
+ * Revision 1.18  1996/04/20 16:50:26  fritz
+ * Fixed status-buffer overrun.
+ * Misc. typos
+ *
  * Revision 1.17  1996/02/11 02:39:04  fritz
  * Increased Buffer for status-messages.
  * Removed conditionals for HDLC-firmware.
@@ -100,7 +104,7 @@
 #undef LOADEXTERN
 
 static char
-*revision = "$Revision: 1.17 $";
+*revision = "$Revision: 1.18 $";
 
 static void icn_pollcard(unsigned long dummy);
 
@@ -466,7 +470,10 @@ static void icn_pollit(icn_dev * dev)
 			save_flags(flags);
 			cli();
 			*dev->msg_buf_write++ = (c == 0xff) ? '\n' : c;
-			/* No checks for buffer overflow for raw-status-device */
+                        if (dev->msg_buf_write == dev->msg_buf_read) {
+                                if (++dev->msg_buf_read > dev->msg_buf_end)
+                                        dev->msg_buf_read = dev->msg_buf;
+                        }
 			if (dev->msg_buf_write > dev->msg_buf_end)
 				dev->msg_buf_write = dev->msg_buf;
 			restore_flags(flags);
@@ -795,7 +802,7 @@ static int icn_loadboot(u_char * buffer, icn_dev * dev)
 	}
 	restore_flags(flags);
 	OUTB_P(0, ICN_RUN);	/* Reset Controller */
-	OUTB_P(0, ICN_MAPRAM);	/* Disable RAM     */
+	OUTB_P(0, ICN_MAPRAM);	/* Disable RAM      */
 	icn_shiftout(ICN_CFG, 0x0f, 3, 4);	/* Windowsize= 16k */
 	icn_shiftout(ICN_CFG, (unsigned long) dev->shmem, 23, 10);	/* Set RAM-Addr.   */
 #ifdef BOOT_DEBUG
@@ -947,6 +954,8 @@ static int icn_readstatus(u_char * buf, int len, int user, icn_dev * dev)
 	u_char *p;
 
 	for (p = buf, count = 0; count < len; p++, count++) {
+                if (dev->msg_buf_read == dev->msg_buf_write)
+                        return count;
 		if (user)
 			put_fs_byte(*dev->msg_buf_read++, p);
 		else

@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.12 1996/01/22 05:01:22 fritz Exp fritz $
+/* $Id: icn.h,v 1.13 1996/04/20 16:51:41 fritz Exp $
  *
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.h,v $
+ * Revision 1.13  1996/04/20 16:51:41  fritz
+ * Increased status buffer.
+ * Misc. typos
+ *
  * Revision 1.12  1996/01/22 05:01:22  fritz
  * Revert to GPL.
  *
@@ -184,7 +188,7 @@ typedef struct {
 } pqueue;
 
 typedef struct {
-	unsigned short port;	/* Base-port-address                 */
+	unsigned short port;	/* Base-port-address                */
 	icn_shmem *shmem;	/* Pointer to memory-mapped-buffers */
 	int myid;		/* Driver-Nr. assigned by linklevel */
 	int rvalid;		/* IO-portregion has been requested */
@@ -194,7 +198,7 @@ typedef struct {
 	unsigned short flags;	/* Statusflags                      */
 	int doubleS0;		/* Flag: Double-S0-Card             */
 	int secondhalf;		/* Flag: Second half of a doubleS0  */
-	int ptype;		/* Protocol type (1TR6 or Euro)      */
+	int ptype;		/* Protocol type (1TR6 or Euro)     */
 	struct timer_list st_timer;	/* Timer for Status-Polls           */
 	struct timer_list rb_timer;	/* Timer for B-Channel-Polls        */
 	int channel;		/* Currently mapped Channel         */

@@ -1,3 +1,11 @@
+/* $Id: teles.h,v 1.1 1996/04/13 10:29:00 fritz Exp $
+ *
+ * $Log: teles.h,v $
+ * Revision 1.1  1996/04/13 10:29:00  fritz
+ * Initial revision
+ *
+ *
+ */
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/errno.h>

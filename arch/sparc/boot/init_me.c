@@ -1,4 +1,4 @@
-/* $Id: init_me.c,v 1.2 1995/11/25 00:57:44 davem Exp $
+/* $Id: init_me.c,v 1.3 1996/04/21 10:30:09 davem Exp $
  * init_me.c:  Initialize empirical constants and gather some info from
  *             the boot prom.
  *
@@ -11,7 +11,7 @@
 
 #include "empirical.h"   /* Don't ask... */
 
-#define DEBUG_INIT_ME    /* Tell me what's goin on */
+#define DEBUG_INIT_ME    /* Tell me what's going on */
 
 unsigned int nwindows;   /* Set in bare.S */
 unsigned int nwindowsm1;

@@ -1,4 +1,4 @@
-/* $Id: vaddrs.h,v 1.17 1996/01/10 21:00:16 davem Exp $ */
+/* $Id: vaddrs.h,v 1.19 1996/03/26 06:51:58 miguel Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 
@@ -17,13 +17,13 @@
  * a pointer and then the value in the assembly code
  */
 #define  IOBASE_VADDR   0xfe000000  /* Base for mapping pages */
-#define  IOBASE_LEN     0x00100000  /* Length of the IO area */
-#define  IOBASE_END     0xfe100000
+#define  IOBASE_LEN     0x00200000  /* Length of the IO area */
+#define  IOBASE_END     0xfe200000
 #define  DVMA_VADDR     0xfff00000  /* Base area of the DVMA on suns */
 #define  DVMA_LEN       0x00040000  /* Size of the DVMA address space */
 #define  DVMA_END       0xfff40000
 
-/* IOMMU Mapping area, must be on a 16MB boundary!  Note this
+/* IOMMU Mapping area, must be on a 16MB boundry!  Note this
  * doesn't count the DVMA areas, the prom lives between the
  * iommu mapping area (for scsi transfer buffers) and the
  * dvma upper range (for lance packet ring buffers).
@@ -49,17 +49,17 @@
 #define  SUN4C_LOCK_END    0xffc00000
 
 /* On sun4m machines we need per-cpu virtual areas */
-#define  PERCPU_VADDR   0xff000000  /* Base for per-cpu virtual mappings */
+#define  PERCPU_VADDR   0xffc00000  /* Base for per-cpu virtual mappings */
 #define  PERCPU_ENTSIZE 0x00100000
 #define  PERCPU_LEN     ((PERCPU_ENTSIZE*NCPUS))
 
 /* per-cpu offsets */
 #define  PERCPU_TBR_OFFSET      0x00000      /* %tbr, mainly used for identification. */
 #define  PERCPU_KSTACK_OFFSET   0x01000      /* Beginning of kernel stack for this cpu */
-#define  PERCPU_MBOX_OFFSET     0x02000      /* Prom SMP Mailbox */
-#define  PERCPU_CPUID_OFFSET    0x03000      /* Per-cpu ID number. */
-#define  PERCPU_ISALIVE_OFFSET  0x03004      /* Has CPU been initted yet? */
-#define  PERCPU_ISIDLING_OFFSET 0x03008      /* Is CPU in idle loop spinning? */
+#define  PERCPU_MBOX_OFFSET     0x03000      /* Prom SMP Mailbox */
+#define  PERCPU_CPUID_OFFSET    0x04000      /* Per-cpu ID number. */
+#define  PERCPU_ISALIVE_OFFSET  0x04004      /* Has CPU been initted yet? */
+#define  PERCPU_ISIDLING_OFFSET 0x04008      /* Is CPU in idle loop spinning? */
 
 #endif /* !(_SPARC_VADDRS_H) */
 

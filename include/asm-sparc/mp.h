@@ -1,4 +1,4 @@
-/* $Id: mp.h,v 1.2 1995/11/25 02:32:06 davem Exp $
+/* $Id: mp.h,v 1.3 1996/03/25 20:21:09 davem Exp $
  * mp.h:  Multiprocessing definitions for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,11 +10,9 @@
 #include <asm/page.h>
 #include <asm/vaddrs.h>
 
-extern int linux_smp_still_initting;
-
 struct sparc_percpu {
-	struct tt_entry trap_table[NUM_SPARC_TRAPS];  /* One page */
-	unsigned int kernel_stack[PAGE_SIZE/4];       /* One page */
+	struct tt_entry *trap_table;
+	char *kernel_stack[PAGE_SIZE<<1];
 	int cpuid;          /* Who am I? */
 	int cpu_is_alive;   /* Linux has fired it up. */
 	int cpu_is_idling;  /* Is sitting in the idle loop. */

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.8 1996/03/01 07:15:47 davem Exp $
+# $Id: config.in,v 1.9 1996/04/04 16:30:03 tridge Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -7,15 +7,23 @@ mainmenu_name "Kernel configuration of Linux for SparcStations"
 mainmenu_option next_comment
 comment 'General setup'
 
-# Global things across all Sparc machines.
-define_bool CONFIG_SBUS y
-define_bool CONFIG_SUN_MOUSE y
-define_bool CONFIG_SERIAL y
-define_bool CONFIG_SUN_SERIAL y
-define_bool CONFIG_SUN_KEYBOARD y
-define_bool CONFIG_SUN_CONSOLE y
+bool 'Support for AP1000 multicomputer' CONFIG_AP1000
+
+if [ "$CONFIG_AP1000" = "n" ]; then
+	# Global things across all Sun machines.
+	define_bool CONFIG_SBUS y
+	define_bool CONFIG_SUN_MOUSE y
+	define_bool CONFIG_SERIAL y
+	define_bool CONFIG_SUN_SERIAL y
+	define_bool CONFIG_SUN_KEYBOARD y
+	define_bool CONFIG_SUN_CONSOLE y
+	define_bool CONFIG_SUN_AUXIO y
+	define_bool CONFIG_SUN_IO y
+fi
+
 define_bool CONFIG_NET_ALIAS n
 define_bool CONFIG_BINFMT_AOUT y
+
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC

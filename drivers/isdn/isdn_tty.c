@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.3 1996/02/11 02:12:32 fritz Exp fritz $
+/* $Id: isdn_tty.c,v 1.4 1996/04/20 16:39:54 fritz Exp $
  *
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.4  1996/04/20 16:39:54  fritz
+ * Changed all io to go through generic routines in isdn_common.c
+ * Fixed a real ugly bug in modem-emulator: 'ATA' had been accepted
+ * even when a call has been cancelled from the remote machine.
+ *
  * Revision 1.3  1996/02/11 02:12:32  fritz
  * Bugfixes according to similar fixes in standard serial.c of kernel.
  *
@@ -49,7 +54,7 @@ static void isdn_tty_modem_reset_regs(atemu *, int);
 
 static char *isdn_ttyname_ttyI = "ttyI";
 static char *isdn_ttyname_cui  = "cui";
-char *isdn_tty_revision        = "$Revision: 1.3 $";
+char *isdn_tty_revision        = "$Revision: 1.4 $";
 
 int isdn_tty_try_read(int i, u_char * buf, int len)
 {
@@ -194,8 +199,10 @@ void isdn_tty_modem_hup(modem_info * info)
 {
 	isdn_ctrl cmd;
 
-	dev->mdm.rcvsched[info->line] = 0;
-	dev->mdm.online[info->line] = 0;
+        if (!info)
+                return;
+        dev->mdm.rcvsched[info->line] = 0;
+        dev->mdm.online[info->line] = 0;
 	if (info->isdn_driver >= 0) {
 		cmd.driver = info->isdn_driver;
 		cmd.command = ISDN_CMD_HANGUP;
@@ -204,22 +211,24 @@ void isdn_tty_modem_hup(modem_info * info)
 		isdn_all_eaz(info->isdn_driver, info->isdn_channel);
 		isdn_free_channel(info->isdn_driver, info->isdn_channel, ISDN_USAGE_MODEM);
 	}
-	dev->m_idx[info->drv_index] = -1;
 	info->isdn_driver = -1;
 	info->isdn_channel = -1;
-	info->drv_index = -1;
+        if (info->drv_index >= 0) {
+                info->drv_index = -1;
+                dev->m_idx[info->drv_index] = -1;
+        }
 }
 
 static inline int isdn_tty_paranoia_check(modem_info * info, dev_t device, const char *routine)
 {
 #ifdef MODEM_PARANOIA_CHECK
 	if (!info) {
-		printk(KERN_WARNING "isdn: null info_struct for (%d, %d) in %s\n",
+		printk(KERN_WARNING "isdn_tty: null info_struct for (%d, %d) in %s\n",
 		       MAJOR(device), MINOR(device), routine);
 		return 1;
 	}
 	if (info->magic != ISDN_ASYNC_MAGIC) {
-		printk(KERN_WARNING "isdn: bad magic for modem struct (%d, %d) in %s\n",
+		printk(KERN_WARNING "isdn_tty: bad magic for modem struct (%d, %d) in %s\n",
 		       MAJOR(device), MINOR(device), routine);
 		return 1;
 	}
@@ -253,13 +262,12 @@ static void isdn_tty_change_speed(modem_info * info)
 	} else {
 		info->MCR &= ~UART_MCR_DTR;
 		isdn_tty_modem_reset_regs(&dev->mdm.atmodem[info->line], 0);
-		if (dev->mdm.online[info->line]) {
 #ifdef ISDN_DEBUG_MODEM_HUP
-			printk(KERN_DEBUG "Mhup in changespeed\n");
+                printk(KERN_DEBUG "Mhup in changespeed\n");
 #endif
-			isdn_tty_modem_hup(info);
+                isdn_tty_modem_hup(info);
+		if (dev->mdm.online[info->line])
 			isdn_tty_modem_result(3, info);
-		}
 		return;
 	}
 	/* byte size and parity */
@@ -338,12 +346,10 @@ static void isdn_tty_shutdown(modem_info * info)
 	if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
 		info->MCR &= ~(UART_MCR_DTR | UART_MCR_RTS);
 		isdn_tty_modem_reset_regs(&dev->mdm.atmodem[info->line], 0);
-		if (dev->mdm.online[info->line]) {
 #ifdef ISDN_DEBUG_MODEM_HUP
-			printk(KERN_DEBUG "Mhup in isdn_tty_shutdown\n");
+                printk(KERN_DEBUG "Mhup in isdn_tty_shutdown\n");
 #endif
-			isdn_tty_modem_hup(info);
-		}
+                isdn_tty_modem_hup(info);
 	}
 	if (info->tty)
 		set_bit(TTY_IO_ERROR, &info->tty->flags);
@@ -414,8 +420,8 @@ static int isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * 
 					isdn_dumppkt("T70pack2:", bufptr, buflen, 40);
 #endif
 				}
-				if (dev->drv[info->isdn_driver]->interface->
-				    writebuf(info->isdn_driver, info->isdn_channel, bufptr, buflen, 0) > 0) {
+				if (isdn_writebuf_stub(info->isdn_driver, info->isdn_channel, bufptr,
+                                                       buflen, 0) > 0) {
 					info->xmit_count = 0;
 					info->xmit_size = dev->mdm.atmodem[i].mdmreg[16] * 16;
 #if FUTURE
@@ -607,13 +613,12 @@ static int isdn_tty_set_modem_info(modem_info * info, uint cmd, uint * value)
 		if (arg & TIOCM_DTR) {
 			info->MCR &= ~UART_MCR_DTR;
 			isdn_tty_modem_reset_regs(&dev->mdm.atmodem[info->line], 0);
-			if (dev->mdm.online[info->line]) {
 #ifdef ISDN_DEBUG_MODEM_HUP
-				printk(KERN_DEBUG "Mhup in TIOCMBIC\n");
+                        printk(KERN_DEBUG "Mhup in TIOCMBIC\n");
 #endif
-				isdn_tty_modem_hup(info);
+                        isdn_tty_modem_hup(info);
+			if (dev->mdm.online[info->line])
 				isdn_tty_modem_result(3, info);
-			}
 		}
 		break;
 	case TIOCMSET:
@@ -622,13 +627,12 @@ static int isdn_tty_set_modem_info(modem_info * info, uint cmd, uint * value)
 			     | ((arg & TIOCM_DTR) ? UART_MCR_DTR : 0));
 		if (!(info->MCR & UART_MCR_DTR)) {
 			isdn_tty_modem_reset_regs(&dev->mdm.atmodem[info->line], 0);
-			if (dev->mdm.online[info->line]) {
 #ifdef ISDN_DEBUG_MODEM_HUP
-				printk(KERN_DEBUG "Mhup in TIOCMSET\n");
+                        printk(KERN_DEBUG "Mhup in TIOCMSET\n");
 #endif
-				isdn_tty_modem_hup(info);
+                        isdn_tty_modem_hup(info);
+			if (dev->mdm.online[info->line])
 				isdn_tty_modem_result(3, info);
-			}
 		}
 		break;
 	default:
@@ -780,7 +784,7 @@ static int isdn_tty_block_til_ready(struct tty_struct *tty, struct file *filp, m
 	 */
 	if (tty_hung_up_p(filp) ||
 	    (info->flags & ISDN_ASYNC_CLOSING)) {
-		if (info->flags & ISDN_ASYNC_CLOSING)
+                if (info->flags & ISDN_ASYNC_CLOSING)
                         interruptible_sleep_on(&info->close_wait);
 #ifdef MODEM_DO_RESTART
 		if (info->flags & ISDN_ASYNC_HUP_NOTIFY)
@@ -1172,11 +1176,11 @@ int isdn_tty_modem_init(void)
 	m->cua_modem.subtype = ISDN_SERIAL_TYPE_CALLOUT;
 
 	if (tty_register_driver(&m->tty_modem)) {
-		printk(KERN_WARNING "isdn: Unable to register modem-device\n");
+		printk(KERN_WARNING "isdn_tty: Couldn't register modem-device\n");
 		return -1;
 	}
 	if (tty_register_driver(&m->cua_modem)) {
-		printk(KERN_WARNING "Couldn't register modem-callout-device\n");
+		printk(KERN_WARNING "isdn_tty: Couldn't register modem-callout-device\n");
 		return -2;
 	}
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
@@ -1228,13 +1232,13 @@ int isdn_tty_find_icall(int di, int ch, char *num)
 	if (num[0] == ',') {
 		nr[0] = '0';
 		strncpy(&nr[1], num, 29);
-		printk(KERN_WARNING "isdn: Incoming call without OAD, assuming '0'\n");
+		printk(KERN_WARNING "isdn_tty: Incoming call without OAD, assuming '0'\n");
 	} else
 		strncpy(nr, num, 30);
 	s = strtok(nr, ",");
 	s = strtok(NULL, ",");
 	if (!s) {
-		printk(KERN_WARNING "isdn: Incoming callinfo garbled, ignored: %s\n",
+		printk(KERN_WARNING "isdn_tty: Incoming callinfo garbled, ignored: %s\n",
 		       num);
 		restore_flags(flags);
 		return -1;
@@ -1242,7 +1246,7 @@ int isdn_tty_find_icall(int di, int ch, char *num)
 	si1 = (int)simple_strtoul(s,NULL,10);
 	s = strtok(NULL, ",");
 	if (!s) {
-		printk(KERN_WARNING "isdn: Incoming callinfo garbled, ignored: %s\n",
+		printk(KERN_WARNING "isdn_tty: Incoming callinfo garbled, ignored: %s\n",
 		       num);
 		restore_flags(flags);
 		return -1;
@@ -1250,7 +1254,7 @@ int isdn_tty_find_icall(int di, int ch, char *num)
 	si2 = (int)simple_strtoul(s,NULL,10);
 	eaz = strtok(NULL, ",");
 	if (!eaz) {
-		printk(KERN_WARNING "isdn: Incoming call without CPN, assuming '0'\n");
+		printk(KERN_WARNING "isdn_tty: Incoming call without CPN, assuming '0'\n");
 		eaz = "0";
 	}
 #ifdef ISDN_DEBUG_MODEM_ICALL
@@ -1318,7 +1322,7 @@ static void isdn_tty_at_cout(char *msg, modem_info * info)
 	ulong flags;
 
 	if (!msg) {
-		printk(KERN_WARNING "isdn: Null-Message in isdn_tty_at_cout\n");
+		printk(KERN_WARNING "isdn_tty: Null-Message in isdn_tty_at_cout\n");
 		return;
 	}
 	save_flags(flags);
@@ -1567,7 +1571,7 @@ static void isdn_tty_parse_at(modem_info * info)
 		case 'A':
 			/* A - Accept incoming call */
 			p++;
-			if (m->mdmreg[1]) {
+                        if (dev->mdm.msr[info->line] & UART_MSR_RI) {
 #define FIDOBUG
 #ifdef FIDOBUG
 /* Variables fido... defined temporarily for finding a strange bug */
@@ -2019,8 +2023,8 @@ void isdn_tty_modem_xmit(void)
 							isdn_dumppkt("T70pack4:", bufptr, buflen, 40);
 #endif
 						}
-						if (dev->drv[info->isdn_driver]->interface->
-						    writebuf(info->isdn_driver, info->isdn_channel, bufptr, buflen, 0) > 0) {
+						if (isdn_writebuf_stub(info->isdn_driver, info->isdn_channel,
+                                                                       bufptr, buflen, 0) > 0) {
 							info->xmit_count = 0;
 							info->xmit_size = dev->mdm.atmodem[midx].mdmreg[16] * 16;
 #if FUTURE

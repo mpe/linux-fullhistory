@@ -154,7 +154,8 @@ struct buffer_head {
 	/* First cache line: */
 	unsigned long b_blocknr;	/* block number */
 	kdev_t b_dev;			/* device (B_FREE = free) */
-	kdev_t b_rdev;		        /* Real device */
+	kdev_t b_rdev;			/* Real device */
+	unsigned long b_rsector;	/* Real buffer location on disk */
 	struct buffer_head * b_next;	/* Hash queue list */
 	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
 

@@ -1,10 +1,11 @@
-/* $Id: console.c,v 1.6 1996/01/01 02:46:27 davem Exp $
+/* $Id: console.c,v 1.8 1996/04/05 07:44:35 tridge Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <linux/string.h>
@@ -26,6 +27,9 @@ prom_nbgetchar(void)
 	case PROM_P1275:
 		if( (*(romvec->pv_v2devops).v2_dev_read)(*romvec->pv_v2bootargs.fd_stdin , &inc, 0x1) == 1)
 			return inc;
+		return -1;
+		break;
+	case PROM_AP1000:
 		return -1;
 		break;
 	};
@@ -51,6 +55,15 @@ prom_nbputchar(char c)
 		if( (*(romvec->pv_v2devops).v2_dev_write)(*romvec->pv_v2bootargs.fd_stdout, &outc, 0x1) == 1)
 			return 0;
 		return -1;
+		break;
+	case PROM_AP1000:
+#if CONFIG_AP1000
+		{
+		  extern void ap_putchar(char );
+		  ap_putchar(c);
+		  return 0;
+		}
+#endif
 		break;
 	};
 	return 0; /* Ugh, we could spin forever on unsupported proms ;( */
@@ -110,6 +123,8 @@ prom_query_input_device()
 				return PROMDEV_ITTYB;
 		}
 		return PROMDEV_I_UNK;
+	case PROM_AP1000:
+		return PROMDEV_I_UNK;
 	};
 }
 
@@ -162,6 +177,8 @@ prom_query_output_device()
 			};
 		}
 		break;
+	case PROM_AP1000:
+		return PROMDEV_I_UNK;
 	};
 	return PROMDEV_O_UNK;
 }

@@ -5,21 +5,28 @@
 #
 # General setup
 #
+# CONFIG_AP1000 is not set
 CONFIG_SBUS=y
 CONFIG_SUN_MOUSE=y
+CONFIG_SERIAL=y
 CONFIG_SUN_SERIAL=y
 CONFIG_SUN_KEYBOARD=y
 CONFIG_SUN_CONSOLE=y
+CONFIG_SUN_AUXIO=y
+CONFIG_SUN_IO=y
 # CONFIG_NET_ALIAS is not set
 CONFIG_BINFMT_AOUT=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
-# CONFIG_BINFMT_ELF is not set
+CONFIG_BINFMT_ELF=y
 
 #
 # Floppy, IDE, and other block devices
 #
 # CONFIG_BLK_DEV_FD is not set
+CONFIG_BLK_DEV_RAM=y
+# CONFIG_BLK_DEV_INITRD is not set
+# CONFIG_BLK_DEV_LOOP is not set
 
 #
 # Networking options
@@ -46,6 +53,7 @@ CONFIG_IP_NOSR=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
+# CONFIG_BRIDGE is not set
 # CONFIG_NETLINK is not set
 
 #
@@ -58,7 +66,7 @@ CONFIG_SCSI=y
 #
 CONFIG_BLK_DEV_SD=y
 # CONFIG_CHR_DEV_ST is not set
-# CONFIG_BLK_DEV_SR is not set
+CONFIG_BLK_DEV_SR=y
 # CONFIG_CHR_DEV_SG is not set
 
 #
@@ -66,6 +74,7 @@ CONFIG_BLK_DEV_SD=y
 #
 # CONFIG_SCSI_MULTI_LUN is not set
 CONFIG_SCSI_CONSTANTS=y
+# CONFIG_SCSI_AUTO_BIOSP is not set
 
 #
 # SCSI low-level drivers
@@ -96,8 +105,10 @@ CONFIG_EXT2_FS=y
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
 CONFIG_ROOT_NFS=y
+CONFIG_RNFS_BOOTP=y
+CONFIG_RNFS_RARP=y
 # CONFIG_SMB_FS is not set
-# CONFIG_ISO9660_FS is not set
+CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
 

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.21 1996/02/20 07:45:11 davem Exp $
+/* $Id: rtrap.S,v 1.27 1996/04/03 02:14:41 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,8 +9,10 @@
 #include <asm/ptrace.h>
 #include <asm/psr.h>
 #include <asm/asi.h>
+#include <asm/smp.h>
 #include <asm/contregs.h>
 #include <asm/winmacro.h>
+#include <asm/asmmacro.h>
 
 #define t_psr     l0
 #define t_pc      l1
@@ -90,19 +92,7 @@ ret_trap_continue:
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
-	/* If not current fpu proc, disable fp-ops */
 	LOAD_CURRENT(twin_tmp2, twin_tmp1)
-	set	C_LABEL(last_task_used_math), %twin_tmp1
-	ld	[%twin_tmp1], %twin_tmp1
-	cmp	%twin_tmp2, %twin_tmp1
-	be	1f
-	 nop
-
-	set	PSR_EF, %twin_tmp1
-	andn	%t_psr, %twin_tmp1, %t_psr
-	st	%t_psr, [%sp + REGWIN_SZ + PT_PSR]
-
-1:
 	ld	[%twin_tmp2 + THREAD_W_SAVED], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	be	ret_trap_nobufwins
@@ -163,22 +153,14 @@ ret_trap_userwins_ok:
 	LOAD_PT_YREG(sp, g1)
 	LOAD_PT_GLOBALS(sp)
 
+	LEAVE_SYSCALL
+
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
 	jmp	%t_pc
 	rett	%t_npc
 	
-	/* HyperSparc special nop patching, if we are on a hypersparc
-	 * we nop the top two instructions and the first nop coming
-	 * up to be:
-	 * rd	%iccr, %g0  <-- flush on-chip instruction cache
-	 * jmp	%t_pc
-	 * rett	%t_npc
-	 */
-	nop
-	nop
-
 ret_trap_unaligned_pc:
 	add	%sp, REGWIN_SZ, %o0
 	ld	[%sp + REGWIN_SZ + PT_PC], %o1
@@ -230,6 +212,8 @@ rtrap_patch5:	and	%g1, 0xff, %g1
 	 */
 1:
 	LOAD_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
+
+	LEAVE_SYSCALL
 
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE

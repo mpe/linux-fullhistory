@@ -226,14 +226,11 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors, short disk
  * which is important for drive_stat_acct() above.
  */
 
-struct semaphore request_lock = MUTEX;
-
 void add_request(struct blk_dev_struct * dev, struct request * req)
 {
 	struct request * tmp;
 	short		 disk_index;
 
-	down (&request_lock);
 	switch (MAJOR(req->rq_dev)) {
 		case SCSI_DISK_MAJOR:
 			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
@@ -254,11 +251,10 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 
 	req->next = NULL;
 	cli();
-	if (req->bh && req->bh->b_dev==req->bh->b_rdev)
+	if (req->bh)
 		mark_buffer_clean(req->bh);
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
-		up (&request_lock);
 		(dev->request_fn)();
 		sti();
 		return;
@@ -272,9 +268,8 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	req->next = tmp->next;
 	tmp->next = req;
 
-	up (&request_lock);
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
+	if (scsi_major(MAJOR(req->rq_dev)))
 		(dev->request_fn)();
 
 	sti();
@@ -287,13 +282,13 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	int rw_ahead, max_req;
 
 	count = bh->b_size >> 9;
-	sector = bh->b_blocknr * count;
+	sector = bh->b_rsector;
 	if (blk_size[major])
-		if (blk_size[major][MINOR(bh->b_dev)] < (sector + count)>>1) {
+		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
 			bh->b_state = 0;
 			printk("attempt to access beyond end of device\n");
-			printk("%s: rw=%d, want=%d, limit=%d\n", kdevname(bh->b_dev),
-			 rw, (sector + count)>>1, blk_size[major][MINOR(bh->b_dev)]);
+			printk("%s: rw=%d, want=%d, limit=%d\n", kdevname(bh->b_rdev),
+			 rw, (sector + count)>>1, blk_size[major][MINOR(bh->b_rdev)]);
 			return;
 		}
 	/* Uhhuh.. Nasty dead-lock possible here.. */
@@ -313,7 +308,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				return;
 			}
 			kstat.pgpgin++;
-			max_req = (major == MD_MAJOR) ? NR_REQUEST/2 : NR_REQUEST;	/* reads take precedence */
+			max_req = NR_REQUEST;	/* reads take precedence */
 			break;
 		case WRITEA:
 			rw_ahead = 1;
@@ -329,7 +324,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			 * requests are only for reads.
 			 */
 			kstat.pgpgout++;
-			max_req =  (major == MD_MAJOR) ? NR_REQUEST/3 : (NR_REQUEST * 2) / 3;
+			max_req = (NR_REQUEST * 2) / 3;
 			break;
 		default:
 			printk("make_request: bad block dev cmd, must be R/W/RA/WA\n");
@@ -338,7 +333,6 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	}
 
 /* look for a free request. */
-	down (&request_lock);
 
 	/*
 	 * Try to coalesce the new request with old requests
@@ -371,7 +365,6 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 	     case SCSI_DISK_MAJOR:
 	     case SCSI_CDROM_MAJOR:
-	     case MD_MAJOR:
 
 		do {
 			if (req->sem)
@@ -380,7 +373,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			if (req->nr_sectors >= 244)
 				continue;
-			if (req->rq_dev != bh->b_dev)
+			if (req->rq_dev != bh->b_rdev)
 				continue;
 			/* Can we add it to the end of this request? */
 			if (req->sector + req->nr_sectors == sector) {
@@ -398,16 +391,13 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 		    	req->nr_sectors += count;
 			mark_buffer_clean(bh);
-			up (&request_lock);
 		    	sti();
 		    	return;
 		} while ((req = req->next) != NULL);
 	}
 
-	up (&request_lock);
-	
 /* find an unused request. */
-	req = get_request(max_req, bh->b_dev);
+	req = get_request(max_req, bh->b_rdev);
 	sti();
 
 /* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
@@ -416,7 +406,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			unlock_buffer(bh);
 			return;
 		}
-		req = __get_request_wait(max_req, bh->b_dev);
+		req = __get_request_wait(max_req, bh->b_rdev);
 	}
 
 /* fill up the request-info, and add it to the queue */
@@ -432,15 +422,6 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	req->next = NULL;
 	add_request(major+blk_dev,req);
 }
-
-#ifdef CONFIG_BLK_DEV_MD
-
-struct request *get_md_request (int max_req, kdev_t dev)
-{
-  return (get_request_wait (max_req, dev));
-}
-
-#endif
 
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
@@ -487,6 +468,16 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			       correct_size, bh[i]->b_size);
 			goto sorry;
 		}
+
+		/* Md remaps blocks now */
+		bh[i]->b_rdev = bh[i]->b_dev;
+		bh[i]->b_rsector=bh[i]->b_blocknr*(bh[i]->b_size >> 9);
+#ifdef CONFIG_BLK_DEV_MD
+		if (major==MD_MAJOR &&
+		    md_map (MINOR(bh[i]->b_dev), &bh[i]->b_rdev,
+			    &bh[i]->b_rsector, bh[i]->b_size >> 9))
+		        goto sorry;
+#endif
 	}
 
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
@@ -499,10 +490,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
 
-			/* Md needs this for error recovery */
-			bh[i]->b_rdev = bh[i]->b_dev;
-
-			make_request(major, rw, bh[i]);
+			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 		}
 	}
 	return;
@@ -521,6 +509,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 {
 	int i, j;
 	int buffersize;
+	unsigned long rsector;
+	kdev_t rdev;
 	struct request * req[8];
 	unsigned int major = MAJOR(dev);
 	struct semaphore sem = MUTEX_LOCKED;
@@ -548,25 +538,36 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 	{
 		for (; j < 8 && i < nb; j++, i++, buf += buffersize)
 		{
+		        rdev = dev;
+			rsector = (b[i] * buffersize) >> 9;
+#ifdef CONFIG_BLK_DEV_MD
+			if (major==MD_MAJOR &&
+			    md_map (MINOR(dev), &rdev,
+				    &rsector, buffersize >> 9)) {
+			        printk ("Bad md_map in ll_rw_page_size\n");
+				return;
+			}
+#endif
+			
 			if (j == 0) {
-				req[j] = get_request_wait(NR_REQUEST, dev);
+				req[j] = get_request_wait(NR_REQUEST, rdev);
 			} else {
 				cli();
-				req[j] = get_request(NR_REQUEST, dev);
+				req[j] = get_request(NR_REQUEST, rdev);
 				sti();
 				if (req[j] == NULL)
 					break;
 			}
 			req[j]->cmd = rw;
 			req[j]->errors = 0;
-			req[j]->sector = (b[i] * buffersize) >> 9;
+			req[j]->sector = rsector;
 			req[j]->nr_sectors = buffersize >> 9;
 			req[j]->current_nr_sectors = buffersize >> 9;
 			req[j]->buffer = buf;
 			req[j]->sem = &sem;
 			req[j]->bh = NULL;
 			req[j]->next = NULL;
-			add_request(major+blk_dev,req[j]);
+			add_request(MAJOR(rdev)+blk_dev,req[j]);
 		}
 		run_task_queue(&tq_disk);
 		while (j > 0) {

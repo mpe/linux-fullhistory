@@ -61,7 +61,7 @@ static inline void restore_i387_hard(struct _fpstate *buf)
 	}
 #endif
 	current->used_math = 1;
-	current->flags &= PF_USEDFPU;
+	current->flags &= ~PF_USEDFPU;
 	memcpy_fromfs(&current->tss.i387.hard, buf, sizeof(*buf));
 }
 
@@ -133,7 +133,7 @@ static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
 	if (current->flags & PF_USEDFPU) {
 		__asm__ __volatile__("fnsave %0":"=m" (current->tss.i387.hard));
 		stts();
-		current->flags &= PF_USEDFPU;
+		current->flags &= ~PF_USEDFPU;
 	}
 #else
 	if (current == last_task_used_math) {

@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.20 1996/02/20 07:45:22 davem Exp $
+/* $Id: wuf.S,v 1.22 1996/04/03 02:15:13 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -9,8 +9,10 @@
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
+#include <asm/smp.h>
 #include <asm/asi.h>
 #include <asm/winmacro.h>
+#include <asm/asmmacro.h>
 
 /* Just like the overflow handler we define macros for registers
  * with fixed meanings in this routine.
@@ -178,6 +180,8 @@ fwin_user_stack_is_bolixed:
 	st	%g5, [%twin_tmp1 + THREAD_UMASK]	! one live user window still
 	st	%g0, [%twin_tmp1 + THREAD_W_SAVED]	! no windows in the buffer
 
+	ENTER_SYSCALL
+
 	wr	%t_psr, PSR_ET, %psr			! enable traps
 	WRITE_PAUSE
 
@@ -230,7 +234,7 @@ fwin_user_finish_up:
 	 * check routines in wof.S, these routines are free to use
 	 * any of the local registers they want to as this window
 	 * does not belong to anyone at this point, however the
-	 * outs and ins are still verboten as they are part of
+	 * outs and ins are still verbotten as they are part of
 	 * 'someone elses' window possibly.
 	 */
 
@@ -341,7 +345,7 @@ C_LABEL(srmmu_fwin_stackchk):
 	be	fwin_user_finish_up
 	 nop
 
-	/* Did I ever tell you about my window lobotomy?
+	/* Did I ever tell you about my window labotomy?
 	 * anyways... fwin_user_stack_is_bolixed expects
 	 * to be in window 'W' so make it happy or else
 	 * we watchdog badly.

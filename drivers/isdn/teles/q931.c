@@ -1,4 +1,5 @@
-/*
+/* $Id: q931.c,v 1.2 1996/04/20 16:48:19 fritz Exp $
+ *
  * q931.c               code to decode ITU Q.931 call control messages
  * 
  * Author               Jan den Ouden
@@ -9,6 +10,14 @@
  * 
  * Beat Doebeli         cause texts, display information element
  * 
+ * $Log: q931.c,v $
+ * Revision 1.2  1996/04/20 16:48:19  fritz
+ * Misc. typos
+ *
+ * Revision 1.1  1996/04/13 10:27:49  fritz
+ * Initial revision
+ *
+ *
  */
 
 

@@ -104,8 +104,10 @@ repeat:
 		p = &page->next;
 		offset = start - offset;
 		/* partial truncate, clear end of page */
-		if (offset < PAGE_SIZE)
+		if (offset < PAGE_SIZE) {
 			memset((void *) (offset + page_address(page)), 0, PAGE_SIZE - offset);
+			flush_page_to_ram(page_address(page));
+		}
 	}
 }
 
@@ -391,9 +393,9 @@ static void profile_readahead(int async, struct file *filp)
  *
  * Synchronous read-ahead benefits:
  * --------------------------------
- * Using reasonnable IO xfer length from peripheral devices increase system 
+ * Using reasonable IO xfer length from peripheral devices increase system 
  * performances.
- * Reasonnable means, in this context, not too large but not too small.
+ * Reasonable means, in this context, not too large but not too small.
  * The actual maximum value is MAX_READAHEAD + PAGE_SIZE = 32k
  *
  * Asynchronous read-ahead benefits:
@@ -415,9 +417,9 @@ static void profile_readahead(int async, struct file *filp)
  * ------------------------------
  * In order to maximize overlapping, we must start some asynchronous read 
  * request from the device, as soon as possible.
- * We must be very carefull about:
+ * We must be very careful about:
  * - The number of effective pending IO read requests.
- *   ONE seems to be the only reasonnable value.
+ *   ONE seems to be the only reasonable value.
  * - The total memory pool usage for the file access stream.
  *   We try to have a limit of MAX_READWINDOW = 48K.
  */
@@ -436,16 +438,20 @@ static inline unsigned long generic_file_readahead(struct file * filp, struct in
 	ppos = pos & PAGE_MASK;
 	rapos = filp->f_rapos & PAGE_MASK;
 	max_ahead = 0;
+
 /*
- * If the current page is locked, try some synchronous read-ahead in order
+ * If the current page is locked, and if the current position is outside the
+ * previous read IO request, try some synchronous read-ahead in order
  * to avoid too small IO requests.
  */
 	if (PageLocked(page)) {
-		rapos = ppos;
-		if (rapos < inode->i_size)
-			max_ahead = filp->f_ramax;
-		filp->f_rawin = 0;
-		filp->f_ralen = PAGE_SIZE;
+	        if (!rapos || ppos >= rapos || ppos + filp->f_ralen < rapos) {
+			rapos = ppos;
+			if (rapos < inode->i_size)
+				max_ahead = filp->f_ramax;
+			filp->f_rawin = 0;
+			filp->f_ralen = PAGE_SIZE;
+		}
 	}
 /*
  * The current page is not locked
@@ -749,11 +755,14 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	page = fill_page(inode, offset);
 	if (page && no_share) {
 		unsigned long new_page = __get_free_page(GFP_KERNEL);
-		if (new_page)
+		if (new_page) {
 			memcpy((void *) new_page, (void *) page, PAGE_SIZE);
+			flush_page_to_ram(new_page);
+		}
 		free_page(page);
 		return new_page;
 	}
+	flush_page_to_ram(page);
 	return page;
 }
 
@@ -881,6 +890,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		if (!pte_dirty(pte))
 			return 0;
+		flush_page_to_ram(pte_page(pte));
 		flush_cache_page(vma, address);
 		set_pte(ptep, pte_mkclean(pte));
 		flush_tlb_page(vma, address);

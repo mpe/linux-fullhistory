@@ -170,15 +170,11 @@ static void floppy_off(unsigned int nr);
 /* Kludge to use the same number for both char and block major numbers */
 #elif  (MAJOR_NR == MD_MAJOR) && defined(MD_DRIVER)
 
-#ifndef MD_PERSONALITY
-
 #define DEVICE_NAME "Multiple devices driver"
 #define DEVICE_REQUEST do_md_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
-
-#endif
 
 #elif (MAJOR_NR == SCSI_TAPE_MAJOR)
 
@@ -313,7 +309,7 @@ static void floppy_off(unsigned int nr);
 
 #endif /* MAJOR_NR == whatever */
 
-#if ((MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER) && !defined(MD_DRIVER))
+#if ((MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER))
 
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
@@ -345,9 +341,7 @@ else \
 
 #endif /* DEVICE_TIMEOUT */
 
-#ifndef MD_PERSONALITY
 static void (DEVICE_REQUEST)(void);
-#endif
   
 #ifdef DEVICE_INTR
 #define CLEAR_INTR SET_INTR(NULL)
@@ -372,7 +366,7 @@ static void (DEVICE_REQUEST)(void);
 /* end_request() - SCSI devices have their own version */
 /*               - IDE drivers have their own copy too */
 
-#if ! SCSI_MAJOR(MAJOR_NR) || (defined(MD_DRIVER) && !defined(MD_PERSONALITY))
+#if ! SCSI_MAJOR(MAJOR_NR)
 
 #if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
@@ -381,8 +375,6 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 #ifdef IDE_DRIVER
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup) {
 	struct request *req = hwgroup->rq;
-#elif defined(MD_DRIVER)
-static void end_request (int uptodate, struct request * req) {
 #else
 static void end_request(int uptodate) {
 	struct request *req = CURRENT;
@@ -420,7 +412,7 @@ static void end_request(int uptodate) {
 #ifdef IDE_DRIVER
 	blk_dev[MAJOR(req->rq_dev)].current_request = req->next;
 	hwgroup->rq = NULL;
-#elif !defined(MD_DRIVER)
+#else
 	DEVICE_OFF(req->rq_dev);
 	CURRENT = req->next;
 #endif /* IDE_DRIVER */
@@ -431,36 +423,6 @@ static void end_request(int uptodate) {
 }
 #endif /* defined(IDE_DRIVER) && !defined(_IDE_C) */
 #endif /* ! SCSI_MAJOR(MAJOR_NR) */
-
-#ifdef MD_PERSONALITY
-extern inline void end_redirect (struct request *req)
-{
-  struct buffer_head * bh;
-
-  req->errors = 0;
-  
-  if ((bh = req->bh) != NULL)
-  {
-    req->bh = bh->b_reqnext;
-    bh->b_reqnext = NULL;
-    
-    if ((bh = req->bh) != NULL)
-    {
-      req->sector += req->current_nr_sectors;
-      req->current_nr_sectors = bh->b_size >> 9;
-      
-      if (req->nr_sectors < req->current_nr_sectors)
-      {
-	req->nr_sectors = req->current_nr_sectors;
-	printk("end_redirect : buffer-list destroyed\n");
-      }
-      
-      req->buffer = bh->b_data;
-      return;
-    }
-  }
-}
-#endif /* MD_PERSONALITY */
 
 #endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */
 

@@ -1,3 +1,11 @@
+/* $Id: buffers.c,v 1.1 1996/04/13 10:19:28 fritz Exp $
+ *
+ * $Log: buffers.c,v $
+ * Revision 1.1  1996/04/13 10:19:28  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 #include <linux/mm.h>

@@ -1,10 +1,10 @@
-/* $Id: sparc-stub.c,v 1.10 1996/02/15 09:12:09 davem Exp $
+/* $Id: sparc-stub.c,v 1.15 1996/04/04 12:41:35 davem Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
- * This file originally came from the gdb sources, and the
+ * This file origionally came from the gdb sources, and the
  * copyright notices have been retained below.
  */
 
@@ -106,7 +106,7 @@
 #include <asm/system.h>
 #include <asm/vac-ops.h>
 #include <asm/kgdb.h>
-
+#include <asm/pgtable.h>
 /*
  *
  * external low-level support routines
@@ -161,6 +161,10 @@ unsigned long get_sun4csegmap(unsigned long addr)
 			     "=r" (entry) :
 			     "r" (addr), "i" (ASI_SEGMAP));
 	return entry;
+}
+
+static void flush_cache_all_nop(void)
+{
 }
 
 /* Place where we save old trap entries for restoration */
@@ -363,7 +367,11 @@ void
 set_debug_traps(void)
 {
 	struct hard_trap_info *ht;
+	unsigned long flags;
 	unsigned char c;
+
+	save_flags(flags); cli();
+	flush_cache_all = flush_cache_all_nop;
 
 	/* Initialize our copy of the Linux Sparc trap table */
 	eh_init();
@@ -386,6 +394,7 @@ set_debug_traps(void)
 	putDebugChar('+'); /* ack it */
 
 	initialized = 1; /* connect! */
+	restore_flags(flags);
 }
 
 /* Convert the SPARC hardware trap type code to a unix signal number. */
@@ -430,7 +439,7 @@ hexToInt(char **ptr, int *intValue)
 }
 
 /*
- * This function does all command processing for interfacing to gdb.  It
+ * This function does all command procesing for interfacing to gdb.  It
  * returns 1 if you should skip the instruction at the trap address, 0
  * otherwise.
  */
@@ -636,18 +645,7 @@ handle_exception (unsigned long *registers)
  * breakpoint, and the icache probably has no way of knowing that a data ref to
  * some location may have changed something that is in the instruction cache.
  */
-			/* Only instruction cache flushing on the sun4c/sun4
-			 * for now.  We assume control flow during the kgdb
-			 * transaction has not left the context in which it
-			 * was entered.
-			 */
-			if((sparc_cpu_model==sun4 || sparc_cpu_model==sun4c) &&
-			   (sun4c_vacinfo.num_bytes && sun4c_vacinfo.on))
-				sun4c_flush_context();
-			/* XXX SRMMU and on-chip v8 instruction cache
-			 * XXX flushing goes here!
-			 */
-
+			flush_cache_all();
 			return;
 
 			/* kill the program */

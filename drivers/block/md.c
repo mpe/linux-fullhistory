@@ -41,16 +41,6 @@
 
 #include <linux/blk.h>
 
-#ifdef CONFIG_MD_SUPPORT_RAID5
-int support_for_raid5; /* So raid-5 module won't be inserted if support
-			  was not set in the kernel */
-#endif
-
-#ifdef CONFIG_MD_SUPPORT_RAID1
-int support_for_raid1; /* So raid-1 module won't be inserted if support
-			  was not set in the kernel */
-#endif
-
 static struct hd_struct md_hd_struct[MAX_MD_DEV];
 static int md_blocksizes[MAX_MD_DEV];
 
@@ -374,195 +364,29 @@ static struct file_operations md_fops=
   block_fsync
 };
 
-
-static inline int remap_request (int minor, struct request *req)
+int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size)
 {
+  if ((unsigned int) minor >= MAX_MD_DEV)
+  {
+    printk ("Bad md device %d\n", minor);
+    return (-1);
+  }
+  
   if (!md_dev[minor].pers)
   {
     printk ("Oops ! md%d not running, giving up !\n", minor);
-    return -1;
+    return (-1);
   }
 
-  return (md_dev[minor].pers->map(minor, md_dev+minor, req));
+  return (md_dev[minor].pers->map(md_dev+minor, rdev, rsector, size));
 }
+  
 
 static void do_md_request (void)
 {
-  int minor;
-  long flags;
-  struct request *req;
-    
-  while (1)
-  {
-#ifdef MD_COUNT_SIZE
-    int reqsize, chunksize;
-#endif
-
-    save_flags (flags);
-    cli ();
-    req = blk_dev[MD_MAJOR].current_request;
-    if (!req || (req->rq_status == RQ_INACTIVE))
-    {
-      restore_flags (flags);
-      return;
-    }
-    
-#ifdef MD_COUNT_SIZE
-    reqsize=req->nr_sectors>>1;
-    chunksize=1 << FACTOR_SHIFT(FACTOR(md_dev+MINOR(req->rq_dev)));
-    if (reqsize==chunksize) (md_dev+MINOR(req->rq_dev))->equal_count++;
-    if (reqsize<chunksize) (md_dev+MINOR(req->rq_dev))->smallest_count++;
-    if (reqsize>chunksize) (md_dev+MINOR(req->rq_dev))->biggest_count++;
-#endif
-    
-    blk_dev[MD_MAJOR].current_request = req->next;
-    restore_flags (flags);
-
-    minor = MINOR(req->rq_dev);
-    if ((MAJOR(req->rq_dev) != MD_MAJOR) || (minor >= MAX_REAL))
-    {
-      printk("md: bad device: %s\n", kdevname(req->rq_dev));
-      end_request(0, req);
-      continue;
-    }
-
-    switch (remap_request (minor, req))
-    {
-      case REDIRECTED_BHREQ:	/* All right, redirection was successful */
-      req->rq_status=RQ_INACTIVE;
-      wake_up (&wait_for_request);
-      break;
-
-      case REDIRECTED_REQ:
-      break;			/* Redirected whole request (for swapping) */
-      
-      case REDIRECT_FAILED:	/* Swap redirection failed in RAID-[15] */
-      end_request (0, req);
-      break;
-      
-      default:
-      printk ("remap_request returned strange value !\n");
-    }
-  }
-}
-
-extern struct semaphore request_lock;
-
-void make_md_request (struct request *pending, int n)
-{
-  int i, j, max_req, major=0, rw, found;
-  kdev_t dev;
-  struct buffer_head *bh;
-  struct request *req;
-  long flags;
-  
-  down (&request_lock);
-  save_flags (flags);
-  cli();
-
-  for (i=0; i<n; i++)
-  {
-    if (!pending[i].bh)
-      continue;
-
-    found=0;
-    rw=pending[i].cmd;
-    bh=pending[i].bh;
-    major=MAJOR(dev=pending[i].rq_dev);
-    
-    max_req = (rw == READ) ? NR_REQUEST : ((NR_REQUEST*2)/3);
- 
-    if ((   major == IDE0_MAJOR	/* same as HD_MAJOR */
-	 || major == IDE1_MAJOR
-	 || major == SCSI_DISK_MAJOR
-	 || major == IDE2_MAJOR
-	 || major == IDE3_MAJOR)
-	&& (req = blk_dev[major].current_request))
-    {
-      /*
-       * Thanx to Gadi Oxman <gadio@netvision.net.il>
-       * (He reads my own code better than I do... ;-)
-       */
-      if (major != SCSI_DISK_MAJOR)
-	req = req->next;
-
-      while (req && !found)
-      {
-	if (req->rq_status!=RQ_ACTIVE && &blk_dev[major].plug!=req)
-	  printk ("Saw bad status request !\n");
-
-	if (req->rq_dev == dev &&
-	    !req->sem &&
-	    req->cmd == rw &&
-	    req->sector + req->nr_sectors == pending[i].sector &&
-	    (req->nr_sectors + pending[i].nr_sectors) < 245)
-	{
-	  req->bhtail->b_reqnext = bh;
-	  req->bhtail = pending[i].bhtail;
-	  req->nr_sectors += pending[i].nr_sectors;
-	  found=1;
-	  continue;
-	}
-	
-	if (!found &&
-	    req->rq_dev == dev &&
-	    !req->sem &&
-	    req->cmd == rw &&
-	    req->sector - pending[i].nr_sectors == pending[i].sector &&
-	    (req->nr_sectors + pending[i].nr_sectors) < 245)
-	{
-	  req->nr_sectors += pending[i].nr_sectors;
-	  pending[i].bhtail->b_reqnext = req->bh;
-	  req->buffer = bh->b_data;
-	  req->current_nr_sectors = bh->b_size >> 9;
-	  req->sector = pending[i].sector;
-	  req->bh = bh;
-	  found=1;
-	  continue;
-	}    
-
-	req = req->next;
-      }
-    }
-
-    if (found)
-      continue;
-
-    up (&request_lock);
-    sti ();
-    req=get_md_request (max_req, dev);
-    
-    /* Build it up... */
-    req->cmd = rw;
-    req->errors = 0;
-#if defined (CONFIG_MD_SUPPORT_RAID1)
-    req->shared_count = 0;
-#endif
-    req->sector = pending[i].sector;
-    req->nr_sectors = pending[i].nr_sectors;
-    req->current_nr_sectors = bh->b_size >> 9;
-    req->buffer = bh->b_data;
-    req->sem = NULL;
-    req->bh = bh;
-    req->bhtail = pending[i].bhtail;
-    req->next = NULL;
-
-    add_request (blk_dev + MAJOR(dev), req);
-    down (&request_lock);
-    cli ();
-  }
-
-  up (&request_lock);
-  restore_flags (flags);
-  for (j=0; j<n; j++)
-  {
-    if (!pending[j].bh)
-      continue;
-    
-    pending[j].bh=NULL;
-  }
-}
-
+  printk ("Got md request, not good...");
+  return;
+}  
 
 static struct symbol_table md_symbol_table=
 {
@@ -570,17 +394,6 @@ static struct symbol_table md_symbol_table=
 
   X(devices),
   X(md_size),
-  X(add_request),
-  X(make_md_request),
-
-#ifdef CONFIG_MD_SUPPORT_RAID1
-  X(support_for_raid1),
-#endif
-
-#ifdef CONFIG_MD_SUPPORT_RAID5
-  X(support_for_raid5),
-#endif
-
   X(register_md_personality),
   X(unregister_md_personality),
   X(partition_name),
@@ -665,12 +478,6 @@ int get_md_status (char *page)
     if (md_dev[i].pers != pers[(LINEAR>>PERSONALITY_SHIFT)])
     {
       sz+=sprintf (page+sz, " %dk chunks", 1<<FACTOR_SHIFT(FACTOR(md_dev+i)));
-#ifdef MD_COUNT_SIZES
-      sz+=sprintf (page+sz, " (%d/%d/%d)",
-		   md_dev[i].smallest_count,
-		   md_dev[i].equal_count,
-		   md_dev[i].biggest_count);
-#endif
     }
     sz+=sprintf (page+sz, "\n");
     sz+=md_dev[i].pers->status (page+sz, i, md_dev+i);
@@ -678,90 +485,6 @@ int get_md_status (char *page)
 
   return (sz);
 }
-
-#if defined(CONFIG_MD_SUPPORT_RAID1) || defined(CONFIG_MD_SUPPORT_RAID5)
-
-int md_valid_device (int minor, kdev_t dev, int mode)
-{
-  int i;
-
-  for (i=0; i<md_dev[minor].nb_dev; i++)
-    if (devices[minor][i].dev==dev)
-      break;
-
-  if (i>md_dev[minor].nb_dev)
-  {
-    printk ("Oops, dev %04x not found in md_valid_device\n", dev);
-    return -EINVAL;
-  }
-
-  switch (mode)
-  {
-    case VALID:
-    /* Don't consider INVALID_NEXT as a real invalidation.
-       Maybe that's not the good way to treat such a thing,
-       we'll see. */
-    if (devices[minor][i].invalid==INVALID_ALWAYS)
-    {
-      devices[minor][i].fault_count=0; /* reset fault count */
-      if (md_dev[minor].invalid_dev_count)
-	md_dev[minor].invalid_dev_count--;
-    }
-    break;
-
-    case INVALID:
-    if (devices[minor][i].invalid != VALID )
-      return 0;			/* Don't invalidate twice */
-    
-    if (++devices[minor][i].fault_count > MAX_FAULT(md_dev+minor) &&
-	MAX_FAULT(md_dev+minor)!=0xFF)
-    {
-      /* We cannot tolerate this fault.
-	 So sing a song, and say GoodBye to this device... */
-      
-      mode=INVALID_ALWAYS;
-      md_dev[minor].invalid_dev_count++;
-    }
-    else
-      /* FIXME :
-	 If we reached the max_invalid_dev count, doing one
-	 more invalidation will kill the md_dev. So we choose
-	 not to invalid the physical dev in such a case. But
-	 next access will probably fail... */
-      if (md_dev[minor].invalid_dev_count<=md_dev[minor].pers->max_invalid_dev)
-	mode=INVALID_NEXT;
-      else
-	mode=VALID;
-    break;
-
-    case INVALID_ALWAYS:	/* Only used via MD_INVALID ioctl */
-    md_dev[minor].invalid_dev_count++;
-  }
-  
-  devices[minor][i].invalid=mode;
-  return 0;
-}
-
-
-int md_can_reemit (int minor)
-{
-  /* FIXME :
-     If the device is raid-1 (md_dev[minor].pers->max_invalid_dev=-1),
-     always pretend that we can reemit the request.
-     Problem : if the 2 devices in the pair are dead, will loop
-     forever. Maybe having a per-personality can_reemit function would
-     help. */
-
-  if (!md_dev[minor].pers)
-    return (0);
-  
-  return(md_dev[minor].pers->max_invalid_dev &&
-	 ((md_dev[minor].pers->max_invalid_dev==-1) ?
-	 1 :
-	 md_dev[minor].invalid_dev_count<=md_dev[minor].pers->max_invalid_dev));
-}
-
-#endif
 
 int register_md_personality (int p_num, struct md_personality *p)
 {
@@ -817,12 +540,6 @@ int md_init (void)
 #endif
 #ifdef CONFIG_MD_STRIPED
   raid0_init ();
-#endif
-#ifdef CONFIG_MD_RAID1
-  raid1_init ();
-#endif
-#ifdef CONFIG_MD_RAID5
-  raid5_init ();
 #endif
   
   return (0);

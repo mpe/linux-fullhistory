@@ -135,6 +135,10 @@ extern void teles_setup(char *str, int *ints);
 #ifdef CONFIG_DIGI
 extern void pcxx_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_ISDN_DRV_PCBIT
+extern void pcbit_setup(char *str, int *ints);
+#endif
+
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
@@ -335,6 +339,9 @@ struct {
 #endif
 #ifdef CONFIG_ISDN_DRV_TELES
 	{ "teles=", teles_setup },
+#endif
+#ifdef CONFIG_ISDN_DRV_PCBIT
+	{ "pcbit=", pcbit_setup },
 #endif
 #ifdef CONFIG_DIGI
 	{ "digi=", pcxx_setup },

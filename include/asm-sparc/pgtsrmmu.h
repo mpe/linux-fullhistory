@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.13 1996/03/01 07:20:54 davem Exp $
+/* $Id: pgtsrmmu.h,v 1.16 1996/04/04 16:31:32 tridge Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #ifndef _SPARC_PGTSRMMU_H
 #define _SPARC_PGTSRMMU_H
 
+#include <linux/config.h>
 #include <asm/page.h>
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
@@ -29,7 +30,7 @@
 #define SRMMU_PMD_TABLE_SIZE    0x100 /* 64 entries, 4 bytes a piece */
 #define SRMMU_PGD_TABLE_SIZE    0x400 /* 256 entries, 4 bytes a piece */
 
-#define SRMMU_VMALLOC_START   (0xfe100000)
+#define SRMMU_VMALLOC_START   (0xfe200000)
 
 /* Definition of the values in the ET field of PTD's and PTE's */
 #define SRMMU_ET_MASK         0x3
@@ -106,6 +107,10 @@ extern inline void srmmu_set_mmureg(unsigned long regval)
 extern inline void srmmu_set_ctable_ptr(unsigned long paddr)
 {
 	paddr = ((paddr >> 4) & SRMMU_CTX_PMASK);
+#if CONFIG_AP1000
+	/* weird memory system on the AP1000 */
+        paddr |= (0x8<<28);
+#endif
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (paddr), "r" (SRMMU_CTXTBL_PTR),
 			     "i" (ASI_M_MMUREGS) :
@@ -160,7 +165,7 @@ extern inline unsigned int srmmu_get_faddr(void)
 	return retval;
 }
 
-/* This is guaranteed on all SRMMU's. */
+/* This is guarenteed on all SRMMU's. */
 extern inline void srmmu_flush_whole_tlb(void)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
@@ -210,6 +215,7 @@ extern inline unsigned long srmmu_hwprobe(unsigned long vaddr)
 {
 	unsigned long retval;
 
+	vaddr &= PAGE_MASK;
 	__asm__ __volatile__("lda [%1] %2, %0\n\t" :
 			     "=r" (retval) :
 			     "r" (vaddr | 0x400), "i" (ASI_M_FLUSH_PROBE));

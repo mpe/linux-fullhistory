@@ -17,6 +17,10 @@
          
 	**********************
 	
+	v2.52 (96/04/20)
+	  - Replaced more decimal node ID's with hex, for consistency.
+	  - Changed a couple of printk debug levels.
+
 	v2.51 (96/02/29)
 	  - Inserted a rather important missing "volatile" in autoprobe.
 	  - arc0e and arc0s are now options in drivers/net/Config.in.
@@ -138,6 +142,7 @@
          
 	TO DO: (semi-prioritized)
 	
+         - Smarter recovery from RECON-during-transmit conditions.
          - Make arcnetE_send_packet use arcnet_prepare_tx for loading the
            packet into ARCnet memory.
 	 - Probe for multiple devices in one shot (trying to decide whether
@@ -175,7 +180,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.51 96/02/29 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.52 96/04/20 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -340,7 +345,8 @@ int arcnet_debug = ARCNET_DEBUG;
 #define BUGLVL(x) if ((ARCNET_DEBUG_MAX)&arcnet_debug&(x))
 #define BUGMSG2(x,msg,args...) BUGLVL(x) printk(msg, ## args)
 #define BUGMSG(x,msg,args...) BUGMSG2(x,"%s%6s: " msg, \
-	x==D_NORMAL ? "" : x<=D_INIT_REASONS ? KERN_INFO : KERN_DEBUG , \
+            x==D_NORMAL	? KERN_WARNING : \
+      x<=D_INIT_REASONS	? KERN_INFO    : KERN_DEBUG , \
 	dev->name , ## args)
 
 /* Some useful multiprotocol macros.  The idea here is that GCC will
@@ -836,7 +842,7 @@ int arcnet_probe(struct device *dev)
 	
 	if (!numports)
 	{
-		BUGMSG(D_INIT,"Stage 1: failed.  No ARCnet cards found.\n");
+		BUGMSG(D_NORMAL,"Stage 1: No ARCnet cards found.\n");
 		return -ENODEV;
 	}
 	
@@ -918,7 +924,7 @@ int arcnet_probe(struct device *dev)
 
 	if (!numshmems)
 	{
-		BUGMSG(D_INIT,"Stage 3: failed.  No ARCnet cards found.\n");
+		BUGMSG(D_NORMAL,"Stage 3: No ARCnet cards found.\n");
 		return -ENODEV;
 	}
 
@@ -1038,6 +1044,7 @@ int arcnet_probe(struct device *dev)
 		}
 		else
 		{
+			/* just one shmem and port, assume they match */
 			*(u_char *)(shmems[0]) = TESTvalue;
 		}
 #else
@@ -1091,7 +1098,8 @@ int arcnet_probe(struct device *dev)
 	 */
 	for (shmem = &shmems[0]; shmem-shmems<numshmems; shmem++)
 		*(u_char *)(*shmem) = TESTvalue;
-
+		
+	if (retval) BUGMSG(D_NORMAL,"Stage 5: No ARCnet cards found.\n");
 	return retval;
 }
 
@@ -1174,7 +1182,7 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 	/* get and check the station ID from offset 1 in shmem */
 	lp->stationid = first_mirror[1];
 	if (lp->stationid==0)
-		BUGMSG(D_NORMAL,"WARNING!  Station address 0 is reserved "
+		BUGMSG(D_NORMAL,"WARNING!  Station address 00 is reserved "
 			"for broadcasts!\n");
 	else if (lp->stationid==255)
 		BUGMSG(D_NORMAL,"WARNING!  Station address FF may confuse "
@@ -1499,13 +1507,13 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 		
 		if (status&TXFREEflag)	/* transmit _DID_ finish */
 		{
-			BUGMSG(D_NORMAL,"tx timeout - missed IRQ? (status=%Xh, ticks=%d, mask=%Xh, dest=%d)\n",
+			BUGMSG(D_NORMAL,"tx timeout - missed IRQ? (status=%Xh, ticks=%d, mask=%Xh, dest=%02Xh)\n",
 					status,tickssofar,lp->intmask,lp->lasttrans_dest);
 			lp->stats.tx_errors++;
 		}
 		else
 		{
-			BUGMSG(D_EXTRA,"tx timed out (status=%Xh, tickssofar=%d, intmask=%Xh, dest=%d)\n",
+			BUGMSG(D_EXTRA,"tx timed out (status=%Xh, tickssofar=%d, intmask=%Xh, dest=%02Xh)\n",
 					status,tickssofar,lp->intmask,lp->lasttrans_dest);
 			lp->stats.tx_errors++;
 			lp->stats.tx_aborted_errors++;
@@ -1990,14 +1998,14 @@ arcnet_inthandler(struct device *dev)
 			{
 				if (lp->lasttrans_dest != 0)
 				{
-					BUGMSG(D_EXTRA,"transmit was not acknowledged! (status=%Xh, dest=%d)\n",
+					BUGMSG(D_EXTRA,"transmit was not acknowledged! (status=%Xh, dest=%02Xh)\n",
 						status,lp->lasttrans_dest);
 					lp->stats.tx_errors++;
 					lp->stats.tx_carrier_errors++;
 				}
 				else
 				{
-					BUGMSG(D_DURING,"broadcast was not acknowledged; that's normal (status=%Xh, dest=%d)\n",
+					BUGMSG(D_DURING,"broadcast was not acknowledged; that's normal (status=%Xh, dest=%02Xh)\n",
 							status,
 							lp->lasttrans_dest);
 				}

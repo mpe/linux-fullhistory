@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.17 1996/02/10 04:29:20 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.18 1996/04/04 12:41:38 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -15,6 +15,7 @@
 #include <linux/route.h>
 #include <linux/sockios.h>
 #include <linux/if.h>
+#include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -52,7 +53,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		}
 	}
 
-	/* Binary compatibility is good American knowhow fuckin' up. */
+	/* Binary compatability is good American knowhow fuckin' up. */
 	if(cmd == TIOCNOTTY)
 		return sys_setsid();
 

@@ -23,7 +23,7 @@
 #include <linux/mm.h>
 #include <linux/ioctl.h>
 
-#define MD_VERSION "0.34"
+#define MD_VERSION "0.35"
 
 /* ioctls */
 #define REGISTER_DEV _IO (MD_MAJOR, 1)
@@ -60,13 +60,10 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 
-#undef MD_COUNT_SIZE		/* Define this to have stats about
-				   chunk size in /proc/mdstat */
 #define MAX_REAL     8		/* Max number of physical dev per md dev */
 #define MAX_MD_DEV   4		/* Max number of md dev */
 
@@ -108,7 +105,8 @@ struct md_dev;
 struct md_personality
 {
   char *name;
-  int (*map)(int minor, struct md_dev *md_dev, struct request *req);
+  int (*map)(struct md_dev *md_dev, kdev_t *rdev,
+	     unsigned long *rsector, unsigned long size);
   int (*run)(int minor, struct md_dev *md_dev);
   int (*stop)(int minor, struct md_dev *md_dev);
   int (*status)(char *page, int minor, struct md_dev *md_dev);
@@ -125,24 +123,13 @@ struct md_dev
   int busy;
   int nb_dev;
   void *private;
-#ifdef MD_COUNT_SIZE
-  unsigned int smallest_count;
-  unsigned int biggest_count;
-  unsigned int equal_count;
-#endif
 };
 
 extern struct real_dev devices[MAX_MD_DEV][MAX_REAL];
 extern struct md_dev md_dev[MAX_MD_DEV];
 extern int md_size[MAX_MD_DEV];
 
-extern void make_md_request(struct request *pending, int n);
 extern char *partition_name (kdev_t dev);
-
-#if defined(CONFIG_MD_SUPPORT_RAID1) || defined(CONFIG_MD_SUPPORT_RAID5)
-extern int md_valid_device (int minor, kdev_t dev, int mode);
-extern int md_can_reemit (int minor);
-#endif
 
 extern int register_md_personality (int p_num, struct md_personality *p);
 extern int unregister_md_personality (int p_num);

@@ -1,5 +1,5 @@
-/* $Id: solerrno.h,v 1.3 1995/11/25 02:32:51 davem Exp $
- * solerrno.h: Solaris error return codes for compatibility.
+/* $Id: solerrno.h,v 1.4 1996/03/23 02:40:09 davem Exp $
+ * solerrno.h: Solaris error return codes for compatability.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -41,7 +41,7 @@
 #define	SOL_EPIPE          32    /* Call a plumber                   */
 #define	SOL_EDOM           33    /* Argument was out of fct domain   */
 #define	SOL_ERANGE         34    /* Could not represent math result  */
-#define	SOL_ENOMSG         35    /* Message of req type doesn't exist */
+#define	SOL_ENOMSG         35    /* Message of req type doesnt exist */
 #define	SOL_EIDRM          36    /* Identifier has been removed      */
 #define	SOL_ECHRNG         37    /* Req channel number out of range  */
 #define	SOL_EL2NSYNC       38    /* Could not sync at run level 2    */
@@ -122,7 +122,7 @@
 #define	SOL_ETOOMANYREFS   144   /* Reference limit exceeded         */
 #define	SOL_ETIMEDOUT      145   /* Timed out connection             */
 #define	SOL_ECONNREFUSED   146   /* Connection refused by remote host*/
-#define	SOL_EHOSTDOWN      147   /* Remote host in up in flames      */
+#define	SOL_EHOSTDOWN      147   /* Remote host is up in flames      */
 #define	SOL_EHOSTUNREACH   148   /* Make a left at Easton Ave.....   */
 #define	SOL_EWOULDBLOCK    EAGAIN /* Just an alias */
 #define	SOL_EALREADY       149   /* Operation is already occurring   */

@@ -1,10 +1,11 @@
-# $Id: Makefile,v 1.7 1995/12/10 06:25:02 davem Exp $
+# $Id: Makefile,v 1.9 1996/03/23 01:37:15 davem Exp $
 # Makefile for Sparc library files..
 #
 
 CFLAGS := $(CFLAGS) -ansi
 
-OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o
+OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
+        strlen.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -12,6 +13,9 @@ lib.a: $(OBJS)
 
 memcpy.o: memcpy.S
 	$(CC) -ansi -c -o memcpy.o memcpy.S
+
+strlen.o: strlen.S
+	$(CC) -ansi -c -o strlen.o strlen.S
 
 mul.o: mul.S
 	$(CC) -c -o mul.o mul.S

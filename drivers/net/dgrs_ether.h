@@ -114,7 +114,7 @@ extern PORT	Port[1+SE_NPORTS+1];
 extern int	Nports;		/* Number of genuine ethernet controllers */
 extern int	Nchan;		/* ... plus one for host interface */
 
-extern int	FirstChan;	/* 0 or 1, depedning on whether host is used */
+extern int	FirstChan;	/* 0 or 1, depending on whether host is used */
 extern int	NumChan;	/* 4 or 5 */
 
 /*

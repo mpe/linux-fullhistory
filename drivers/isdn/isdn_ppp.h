@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.1 1996/01/10 21:39:10 fritz Exp fritz $
+/* $Id: isdn_ppp.h,v 1.2 1996/04/20 16:35:11 fritz Exp $
  *
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_ppp.h,v $
+ * Revision 1.2  1996/04/20 16:35:11  fritz
+ * Changed isdn_ppp_receive to use sk_buff as parameter.
+ * Added definition of isdn_ppp_dial_slave and ippp_table.
+ *
  * Revision 1.1  1996/01/10 21:39:10  fritz
  * Initial revision
  *
@@ -41,4 +45,4 @@ extern int  isdn_ppp_ioctl(int, struct file *, unsigned int, unsigned long);
 extern void isdn_ppp_release(int, struct file *);
 extern int  isdn_ppp_dial_slave(char *);
 
-extern struct ippp_struct *ippp_table;
+extern struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.6 1995/11/25 00:57:30 davem Exp $
+# $Id: Makefile,v 1.20 1996/04/16 08:02:50 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -30,8 +30,11 @@ ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/prom/promlib.a \
 	$(TOPDIR)/arch/sparc/lib/lib.a
 
-aoutimage: vmlinux
-	elftoaout -o aoutimage vmlinux
+ifdef CONFIG_AP1000
+SUBDIRS := $(SUBDIRS) arch/sparc/ap1000
+ARCHIVES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(ARCHIVES) 
+DRIVERS := $(DRIVERS) drivers/ap1000/ap1000.a
+endif
 
 archclean:
 	rm -f $(TOPDIR)/arch/sparc/boot/boot

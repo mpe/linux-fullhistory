@@ -24,7 +24,7 @@ enum {
     /* Set input device byte stream format (any of VUID_{NATIVE,FIRM_EVENT}) */
 #define VUIDSFORMAT   _IOW('v', 1, int)
     /* Retrieve input device byte stream format */
-#define VUIDGFORMAT   _IOR(v, 2, int)
+#define VUIDGFORMAT   _IOR('v', 2, int)
 
 /* Possible tag values */
 /*    mouse buttons: */

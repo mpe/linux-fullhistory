@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.17 1996/03/01 07:21:02 davem Exp $ */
+/* $Id: signal.h,v 1.20 1996/03/24 20:21:27 davem Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
 
@@ -120,13 +120,28 @@ struct sigstack {
  * irq handling routines.
  *
  * SA_INTERRUPT is also used by the irq handling routines.
+ *
+ * DJHR
+ * SA_STATIC_ALLOC is used for the SPARC system to indicate that this
+ * interupt handler's irq structure should be statically allocated
+ * by the request_irq routine.
+ * The alternative is that arch/sparc/kernel/irq.c has carnal knowledge
+ * of interrupt usage and that sucks. Also without a flag like this
+ * it may be possible for the free_irq routine to attempt to free
+ * statically allocated data.. which is NOT GOOD.
+ *
  */
 #define SA_PROBE SA_ONESHOT
 #define SA_SAMPLE_RANDOM SA_RESTART
+#define SA_STATIC_ALLOC		0x80
 #endif
 
 /* Type of a signal handler.  */
+#ifdef __KERNEL__
 typedef void (*__sighandler_t)(int, int, struct sigcontext_struct *, char *);
+#else
+typedef void (*__sighandler_t)(int);
+#endif
 
 #define SIG_DFL	((__sighandler_t)0)	/* default signal handling */
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */

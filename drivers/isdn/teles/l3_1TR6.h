@@ -1,3 +1,11 @@
+/* $Id: l3_1TR6.h,v 1.1 1996/04/13 10:25:42 fritz Exp $
+ *
+ * $Log: l3_1TR6.h,v $
+ * Revision 1.1  1996/04/13 10:25:42  fritz
+ * Initial revision
+ *
+ *
+ */
 #ifndef l3_1TR6
 #define l3_1TR6
 

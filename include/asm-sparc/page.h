@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.26 1996/01/03 03:53:07 davem Exp $
+/* $Id: page.h,v 1.27 1996/04/18 01:33:42 davem Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -43,7 +43,9 @@ struct cache_palias {
 
 extern struct cache_palias *sparc_aliases;
 
-#define STRICT_MM_TYPECHECKS
+/* passing structs on the Sparc slow us down tremendously... */
+
+/* #define STRICT_MM_TYPECHECKS */
 
 #ifdef STRICT_MM_TYPECHECKS
 /*

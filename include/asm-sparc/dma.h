@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.13 1996/02/17 17:32:33 miguel Exp $
+/* $Id: dma.h,v 1.15 1996/03/23 02:40:00 davem Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -96,16 +96,20 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_RST_ENET     DMA_RST_SCSI      /* Reset the ENET controller */
 #define DMA_ST_WRITE     0x00000100        /* write from device to memory */
 #define DMA_ENABLE       0x00000200        /* Fire up DMA, handle requests */
-#define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pending Read */
+#define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pendind Read */
+#define DMA_DSBL_RD_DRN  0x00001000        /* No EC drain on slave reads */
 #define DMA_BCNT_ENAB    0x00002000        /* If on, use the byte counter */
 #define DMA_TERM_CNTR    0x00004000        /* Terminal counter */
 #define DMA_CSR_DISAB    0x00010000        /* No FIFO drains during csr */
 #define DMA_SCSI_DISAB   0x00020000        /* No FIFO drains during reg */
+#define DMA_DSBL_WR_INV  0x00020000        /* No EC inval. on slave writes */
 #define DMA_ADD_ENABLE   0x00040000        /* Special ESC DVMA optimization */
-#define DMA_BRST_SZ      0x000c0000        /* SBUS transfer r/w burst size */
+#define DMA_E_BURST8	 0x00040000	   /* ENET: SBUS r/w burst size */
+#define DMA_BRST_SZ      0x000c0000        /* SCSI: SBUS r/w burst size */
 #define DMA_ADDR_DISAB   0x00100000        /* No FIFO drains during addr */
 #define DMA_2CLKS        0x00200000        /* Each transfer = 2 clock ticks */
 #define DMA_3CLKS        0x00400000        /* Each transfer = 3 clock ticks */
+#define DMA_EN_ENETAUI   DMA_3CLKS         /* Put lance into AUI-cable mode */
 #define DMA_CNTR_DISAB   0x00800000        /* No IRQ when DMA_TERM_CNTR set */
 #define DMA_AUTO_NADDR   0x01000000        /* Use "auto nxt addr" feature */
 #define DMA_SCSI_ON      0x02000000        /* Enable SCSI dma */

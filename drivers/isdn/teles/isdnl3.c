@@ -1,3 +1,16 @@
+/* $Id: isdnl3.c,v 1.2 1996/04/20 16:45:05 fritz Exp $
+ *
+ * $Log: isdnl3.c,v $
+ * Revision 1.2  1996/04/20 16:45:05  fritz
+ * Changed to report all incoming calls to Linklevel, not just those
+ * with Service 7.
+ * Misc. typos
+ *
+ * Revision 1.1  1996/04/13 10:24:45  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #define P_1TR6
 #include "teles.h"
@@ -57,6 +70,17 @@ l3s4(struct PStack *st, byte pr, void *arg)
 
 	BufPoolRelease(ibh);
 	newl3state(st, 0);
+	st->l3.l3l4(st, CC_RELEASE_CNF, NULL);
+}
+
+static void
+l3s4_1(struct PStack *st, byte pr, void *arg)
+{
+	struct BufHeader *ibh = arg;
+
+	BufPoolRelease(ibh);
+	newl3state(st, 19);
+	l3_message(st, MT_RELEASE);
 	st->l3.l3l4(st, CC_RELEASE_CNF, NULL);
 }
 
@@ -188,6 +212,7 @@ static void
 l3s12(struct PStack *st, byte pr, void *arg)
 {
 	byte           *p;
+	int		bcfound = 0;
 	struct BufHeader *ibh = arg;
 
 	p = DATAPTR(ibh);
@@ -202,6 +227,7 @@ l3s12(struct PStack *st, byte pr, void *arg)
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
 			0x18, 0))) {
 		st->pa->bchannel = p[2] & 0x3;
+		bcfound++ ;
 	} else
 		printk(KERN_WARNING "l3s12: Channel ident not found\n");
 
@@ -265,14 +291,15 @@ l3s12(struct PStack *st, byte pr, void *arg)
 		strcpy(st->pa->calling, "");
 	BufPoolRelease(ibh);
 
-	if (st->pa->info == 7) {
-		newl3state(st, 6);
-		st->l3.l3l4(st, CC_SETUP_IND, NULL);
-	} else {
-		printk(KERN_WARNING "non-digital call: %s -> %s\n",
-		       st->pa->calling,
-		       st->pa->called);
-	}
+        if (bcfound) {
+                if (st->pa->info != 7) {
+                        printk(KERN_WARNING "non-dgital call: %s -> %s\n",
+                               st->pa->calling,
+                               st->pa->called);
+                }
+                newl3state(st, 6);
+                st->l3.l3l4(st, CC_SETUP_IND, NULL);
+        }
 }
 
 static void
@@ -366,13 +393,32 @@ struct stateentry {
 
 static struct stateentry downstatelist[] =
 {
-	{0, CC_SETUP_REQ, l3s5},
-	{6, CC_REJECT_REQ, l3s13},
-	{6, CC_SETUP_RSP, l3s16},
-	{6, CC_ALERTING_REQ, l3s20},
-	{7, CC_SETUP_RSP, l3s16},
-	{10, CC_DISCONNECT_REQ, l3s18},
-	{12, CC_RELEASE_REQ, l3s3},
+        {0,CC_SETUP_REQ,l3s5},
+        {1,CC_DISCONNECT_REQ,l3s18},
+        {1,CC_RELEASE_REQ,l3s3},
+        {1,CC_DLRL,l3s13},
+        {3,CC_DISCONNECT_REQ,l3s18},
+        {3,CC_RELEASE_REQ,l3s3},
+        {3,CC_DLRL,l3s13},
+        {4,CC_RELEASE_REQ,l3s3},
+        {4,CC_DISCONNECT_REQ,l3s18},
+        {4,CC_DLRL,l3s13},
+        {6,CC_RELEASE_REQ,l3s3},
+        {6,CC_DISCONNECT_REQ,l3s18},
+        {6,CC_ALERTING_REQ,l3s20},
+        {6,CC_DLRL,l3s13},
+        {7,CC_RELEASE_REQ,l3s3},
+        {7,CC_SETUP_RSP,l3s16},
+        {7,CC_DLRL,l3s13},
+        {8,CC_RELEASE_REQ,l3s3},
+        {8,CC_DISCONNECT_REQ,l3s18},
+        {8,CC_DLRL,l3s13},
+        {10,CC_DISCONNECT_REQ,l3s18},
+        {10,CC_RELEASE_REQ,l3s3},
+        {10,CC_DLRL,l3s13},
+        {11,CC_RELEASE_REQ,l3s3},
+        {12,CC_RELEASE_REQ,l3s3},
+        {19,CC_DLRL,l3s13},
 };
 
 static int      downsllen = sizeof(downstatelist) /
@@ -380,20 +426,34 @@ sizeof(struct stateentry);
 
 static struct stateentry datastatelist[] =
 {
-	{0, MT_SETUP, l3s12},
-	{1, MT_CALL_PROCEEDING, l3s6},
-	{1, MT_RELEASE_COMPLETE, l3s7},
-	{3, MT_DISCONNECT, l3s7},
-	{3, MT_CONNECT, l3s8},
-	{3, MT_ALERTING, l3s11},
-	{4, MT_CONNECT, l3s8},
-	{4, MT_DISCONNECT, l3s7},
-	{4, MT_RELEASE, l3s19},
-	{7, MT_RELEASE, l3s19},
-	{8, MT_CONNECT_ACKNOWLEDGE, l3s17},
-	{10, MT_DISCONNECT, l3s7},
-	{11, MT_RELEASE, l3s19},
-	{19, MT_RELEASE_COMPLETE, l3s4},
+        {0,MT_SETUP,l3s12},
+        {1,MT_CALL_PROCEEDING,l3s6},
+        {1,MT_RELEASE_COMPLETE,l3s4},
+        {1,MT_RELEASE,l3s19},
+        {1,MT_DISCONNECT,l3s7},
+        {3,MT_DISCONNECT,l3s7},
+        {3,MT_CONNECT,l3s8},
+        {3,MT_ALERTING,l3s11},
+        {3,MT_RELEASE,l3s19},
+        {3,MT_RELEASE_COMPLETE,l3s4},
+        {4,MT_CONNECT,l3s8},
+        {4,MT_DISCONNECT,l3s7},
+        {4,MT_RELEASE,l3s19},
+        {4,MT_RELEASE_COMPLETE,l3s4},
+        {6,MT_SETUP,l3s12},
+        {7,MT_RELEASE,l3s19},
+        {7,MT_RELEASE_COMPLETE,l3s4_1},
+        {7,MT_DISCONNECT,l3s7},
+        {8,MT_RELEASE,l3s19},
+        {8,MT_CONNECT_ACKNOWLEDGE,l3s17},
+        {8,MT_DISCONNECT,l3s7},
+        {8,MT_RELEASE_COMPLETE,l3s4_1},
+        {10,MT_DISCONNECT,l3s7},
+        {10,MT_RELEASE,l3s19},
+        {10,MT_RELEASE_COMPLETE,l3s4_1},
+        {11,MT_RELEASE,l3s19},
+        {11,MT_RELEASE_COMPLETE,l3s4},
+        {19,MT_RELEASE_COMPLETE,l3s4},
 };
 
 static int      datasllen = sizeof(datastatelist) /

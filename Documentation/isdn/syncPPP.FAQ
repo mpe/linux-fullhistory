@@ -1,0 +1,50 @@
+simple isdn4linux PPP FAQ .. to be continued .. not 'debugged' 
+
+Q: pppd,ipppd, syncPPP , asyncPPP .. what is that ?
+  what should I use?
+A: The pppd is for asynchronous PPP .. asynchron means
+here, the framing is character based. (e.g when
+using ttyI* or tty* devices)
+
+The ipppd handles PPP packets coming in HDLC
+frames (bit based protocol) ... The PPP driver
+in isdn4linux pushs all IP packets direct
+to the network layer and all PPP protocol
+frames to the /dev/ippp* device. 
+So, the ipppd is a simple externel network
+protocol handler.
+
+If you login into a remote machine using the
+/dev/ttyI* devices and then enable PPP on the
+remote terminal server -> use the 'old' pppd
+
+If your remote side immediately starts to send
+frames ... you probably connect to a 
+syncPPP machine .. use the network device part
+of isdn4linux with the 'syncppp' encapsulation
+and make sure, that the ipppd is running and 
+conneted to at least one /dev/ippp*. Check the 
+isdn4linux manual on how to configure a network device.
+
+Q: when I start the ipppd .. I only get the
+   error message "this systems lacks PPP support"
+A: check that at least the device 'ippp0' exists.
+   (you can check this e.g with the program 'ifconfig')
+   The ipppd NEEDS this device under THIS name .. 
+   If this device doesn't exists, use:
+	isdnctrl addif ippp0
+	isdnctrl encap ippp0 syncppp
+	... (see isdn4linux doc for more) ...
+A: Maybe you have compiled the ipppd with another
+   kernel source tree than the kernel you currently
+   run ... 
+
+Q: when I list the netdevices with ifconfig I see, that
+   my ISDN interface has a HWaddr and IRQ=0 and Base 
+   address = 0 
+A: The device is a fake ethernetdevice .. ignore IRQ and baseaddr
+   You need the HWaddr only for ethernet encapsulation.
+   
+
+
+

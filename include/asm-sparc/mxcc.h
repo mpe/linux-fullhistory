@@ -1,4 +1,4 @@
-/* $Id: mxcc.h,v 1.2 1995/11/25 02:32:11 davem Exp $
+/* $Id: mxcc.h,v 1.3 1996/04/20 10:15:44 davem Exp $
  * mxcc.h:  Definitions of the Viking MXCC registers
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,9 @@
 #define MXCC_RREG            0x1C00C04  /* Reset register */
 #define MXCC_EREG            0x1C00E00  /* Error code register */
 #define MXCC_PREG            0x1C00F04  /* Address port register */
+
+/* Some MXCC constants. */
+#define MXCC_STREAM_SIZE     0x20       /* Size in bytes of one stream r/w */
 
 /* The MXCC Control Register:
  *
@@ -48,7 +51,7 @@
  *  31   30 29  28  27  26  25 24-15  14-7   6  5-3   2-0
  *
  * ME: Multiple Errors have occurred
- * CE: Cache consistency Error
+ * CE: Cache consistancy Error
  * PEW: Parity Error during a Write operation
  * PEE: Parity Error involving the External cache
  * ASE: ASynchronous Error
@@ -79,5 +82,31 @@
  *
  * MID: The moduleID of the cpu your read this from.
  */
+
+extern inline void mxcc_set_stream_src(unsigned long *paddr)
+{
+	unsigned long data0 = paddr[0];
+	unsigned long data1 = paddr[1];
+
+	__asm__ __volatile__ ("or %%g0, %0, %%g2\n\t"
+			      "or %%g0, %1, %%g3\n\t"
+			      "stda %%g2, [%2] %3\n\t" : :
+			      "r" (data0), "r" (data1),
+			      "r" (MXCC_SRCSTREAM),
+			      "i" (ASI_M_MXCC) : "g2", "g3");
+}
+
+extern inline void mxcc_set_stream_dst(unsigned long *paddr)
+{
+	unsigned long data0 = paddr[0];
+	unsigned long data1 = paddr[1];
+
+	__asm__ __volatile__ ("or %%g0, %0, %%g2\n\t"
+			      "or %%g0, %1, %%g3\n\t"
+			      "stda %%g2, [%2] %3\n\t" : :
+			      "r" (data0), "r" (data1),
+			      "r" (MXCC_DESSTREAM),
+			      "i" (ASI_M_MXCC) : "g2", "g3");
+}
 
 #endif /* !(_SPARC_MXCC_H) */

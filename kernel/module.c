@@ -304,9 +304,9 @@ sys_delete_module(char *module_name)
 				GET_USE_COUNT(mp) &= ~MOD_AUTOCLEAN;
 				(*mp->cleanup)();
 				mp->state = MOD_DELETED;
-				free_modules();
 			}
 		}
+		free_modules();
 	}
 	return 0;
 }

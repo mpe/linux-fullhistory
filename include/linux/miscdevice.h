@@ -5,6 +5,7 @@
 #define PSMOUSE_MINOR  1
 #define MS_BUSMOUSE_MINOR 2
 #define ATIXL_BUSMOUSE_MINOR 3
+#define SUN_MOUSE_MINOR 6
 #define MISC_DYNAMIC_MINOR 255
 
 extern int misc_init(void);

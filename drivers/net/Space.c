@@ -73,6 +73,7 @@ extern int seeq8005_probe(struct device *);
 extern int tc59x_probe(struct device *);
 extern int dgrs_probe(struct device *);
 extern int smc_init( struct device * );
+extern int sparc_lance_probe(struct device *);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -190,6 +191,9 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_NI52
 	&& ni52_probe(dev)
 #endif
+#ifdef CONFIG_SUNLANCE
+	&& sparc_lance_probe(dev)
+#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
@@ -205,7 +209,7 @@ ethif_probe(struct device *dev)
 #endif
 
 /* This must be AFTER the various FRADs so it initializes FIRST! */
-	
+
 #ifdef CONFIG_DLCI
     extern int dlci_init(struct device *);
     static struct device dlci_dev = { "dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, dlci_init, };
@@ -294,7 +298,7 @@ static struct device strip_bootstrap = {
 #undef NEXT_DEV
 #define NEXT_DEV (&strip_bootstrap)
 #endif   /* STRIP */
-    
+
 #if defined(CONFIG_PPP)
 extern int ppp_init(struct device *);
 static struct device ppp_bootstrap = {
@@ -399,6 +403,21 @@ struct device eql_dev = {
 #endif 
 #endif
 
+#ifdef CONFIG_AP1000
+    extern int apfddi_init(struct device *dev);
+    static struct device fddi_dev = {
+	"fddi", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, apfddi_init };
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&fddi_dev)
+
+    extern int bif_init(struct device *dev);
+    static struct device bif_dev = {
+        "bif", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, bif_init };
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&bif_dev)
+
+#endif
+	
 extern int loopback_init(struct device *dev);
 struct device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/

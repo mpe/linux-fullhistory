@@ -23,6 +23,9 @@
  *		Mike Kilburn	:	htons() missing in ip_build_xmit.
  *		Bradford Johnson:	Fix faulty handling of some frames when 
  *					no route is found.
+ *		Alexander Demenshin:	Missing sk/skb free in ip_queue_xmit
+ *					(in case if packet not accepted by
+ *					output firewall rules)
  */
 
 #include <asm/segment.h>
@@ -360,12 +363,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph = skb->ip_hdr;
 	iph->tot_len = htons(skb->len-(((unsigned char *)iph)-skb->data));
 
-#ifdef CONFIG_FIREWALL
-	if(call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT)
-		/* just don't send this packet */
-		return;
-#endif	
-
 	/*
 	 *	No reassigning numbers to fragments...
 	 */
@@ -380,6 +377,17 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		free = 1;
 
 	skb->free = free;
+
+#ifdef CONFIG_FIREWALL
+	if(call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT) {
+		/* just don't send this packet */
+		/* and free socket buffers ;) <aldem@barnet.kharkov.ua> */
+		if (free)
+		  skb->sk = sk;		/* I am not sure *this* really need, */
+		kfree_skb(skb, FREE_WRITE);	/* but *this* must be here */
+		return;
+	}
+#endif	
 
 	/*
 	 *	Do we need to fragment. Again this is inefficient.

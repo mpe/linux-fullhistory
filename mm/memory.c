@@ -468,7 +468,7 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 		pte_t oldpage = *pte;
 		pte_clear(pte);
 		if (offset >= high_memory || PageReserved(mem_map+MAP_NR(offset)))
-			set_pte(pte, mk_pte(offset, prot));
+ 			set_pte(pte, mk_pte(offset, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
 		offset += PAGE_SIZE;
@@ -506,7 +506,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 
 	offset -= from;
 	dir = pgd_offset(current->mm, from);
-	flush_cache_range(current->mm, beg, from);
+	flush_cache_range(current->mm, beg, end);
 	while (from < end) {
 		pmd_t *pmd = pmd_alloc(dir, from);
 		error = -ENOMEM;
@@ -518,7 +518,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 		from = (from + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	flush_tlb_range(current->mm, beg, from);
+	flush_tlb_range(current->mm, beg, end);
 	return error;
 }
 
@@ -532,7 +532,7 @@ static void put_page(pte_t * page_table, pte_t pte)
 		free_page(pte_page(pte));
 		return;
 	}
-/* no need for invalidate */
+/* no need for flush_tlb */
 	set_pte(page_table, pte);
 }
 
@@ -568,8 +568,9 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		free_page(page);
 		return 0;
 	}
+	flush_page_to_ram(page);
 	set_pte(pte, pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY))));
-/* no need for flush_tlb */
+/* no need for invalidate */
 	return page;
 }
 
@@ -764,6 +765,7 @@ static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struc
 			oom(tsk);
 			pte = BAD_PAGE;
 		}
+		flush_page_to_ram(page);
 	}
 	put_page(page_table, pte);
 }
@@ -797,11 +799,13 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 	pte = *page_table;
 	if (!pte_present(pte))
 		return;
+	flush_cache_page(vma, address);
 	address &= ~PAGE_MASK;
 	address += pte_page(pte);
 	if (address >= high_memory)
 		return;
 	memset((void *) address, 0, PAGE_SIZE - (address & ~PAGE_MASK));
+	flush_page_to_ram(pte_page(pte));
 }
 
 /*
@@ -876,6 +880,7 @@ static inline void do_swap_page(struct task_struct * tsk,
 
 	if (!vma->vm_ops || !vma->vm_ops->swapin) {
 		swap_in(tsk, vma, page_table, pte_val(entry), write_access);
+		flush_page_to_ram(pte_page(*page_table));
 		return;
 	}
 	page = vma->vm_ops->swapin(vma, address - vma->vm_start + vma->vm_offset, pte_val(entry));
@@ -887,6 +892,7 @@ static inline void do_swap_page(struct task_struct * tsk,
 		page = pte_wrprotect(page);
 	++vma->vm_mm->rss;
 	++tsk->maj_flt;
+	flush_page_to_ram(pte_page(page));
 	set_pte(page_table, page);
 	return;
 }
@@ -945,6 +951,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * so we can make it writable and dirty to avoid having to
 	 * handle that later.
 	 */
+	flush_page_to_ram(page);
 	entry = mk_pte(page, vma->vm_page_prot);
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));
@@ -976,10 +983,12 @@ static inline void handle_pte_fault(struct vm_area_struct * vma, unsigned long a
 		return;
 	}
 	set_pte(pte, pte_mkyoung(*pte));
+	flush_tlb_page(vma, address);
 	if (!write_access)
 		return;
 	if (pte_write(*pte)) {
 		set_pte(pte, pte_mkdirty(*pte));
+		flush_tlb_page(vma, address);
 		return;
 	}
 	do_wp_page(current, vma, address, write_access);

@@ -91,8 +91,23 @@
 #define FD_LOCK			0x94	/* Fifo config lock */
 #define FD_RSEEK_OUT		0x8f	/* seek out (i.e. to lower tracks) */
 #define FD_RSEEK_IN		0xcf	/* seek in (i.e. to higher tracks) */
+
+/* the following commands are new in the 82078. They are not used in the
+ * floppy driver, except the first three. These commands may be useful for apps
+ * which use the FDRAWCMD interface. For doc, get the 82078 spec sheets at
+ * http://www-techdoc.intel.com/docs/periph/fd_contr/datasheets/ */
+
 #define FD_PARTID		0x18	/* part id ("extended" version cmd) */
 #define FD_SAVE			0x2e	/* save fdc regs for later restore */
+#define FD_DRIVESPEC		0x8e	/* drive specification: Access to the
+					 * 2 Mbps data transfer rate for tape
+					 * drives */
+
+#define FD_RESTORE		0x4e    /* later restore */
+#define FD_POWERDOWN		0x27	/* configure FDC's powersave features */
+#define FD_FORMAT_N_WRITE	0xef    /* format and write in one go. */
+#define FD_OPTION		0x33	/* ISO format (which is a clean way to
+					 * pack more sectors on a track) */
 
 /* DMA commands */
 #define DMA_READ	0x46
@@ -108,7 +123,7 @@
 #define FDC_82072A	0x50	/* 82072A (on Sparcs) */
 #define FDC_82077_ORIG	0x51	/* Original version of 82077AA, sans LOCK */
 #define FDC_82077	0x52	/* 82077AA-1 */
-#define FDC_82077_UNKN	0x53	/* Unknown 82077 variant */
+#define FDC_82078_UNKN	0x5f	/* Unknown 82078 variant */
 #define FDC_82078	0x60	/* 44pin 82078 or 64pin 82078SL */
 #define FDC_82078_1	0x61	/* 82078-1 (2Mbps fdc) */
 #define FDC_S82078B	0x62	/* S82078B (first seen on Adaptec AVA-2825 VLB

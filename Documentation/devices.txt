@@ -2,14 +2,14 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: April 10, 1996
+		     Last revised: April 20, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
 is a registry of allocated major device numbers, as well as the
 recommended /dev directory nodes for these devices.
 
-The latest version of this list is included with the Linux kernel
+The lastest version of this list is included with the Linux kernel
 sources in LaTeX and ASCII form.  In case of discrepancy, the LaTeX
 version is authoritative.
 
@@ -30,6 +30,9 @@ This document is in the public domain.  The author requests, however,
 that semantically altered versions are not distributed without
 permission of the author, assuming the author can be contacted without
 an unreasonable effort.
+
+In particular, please don't sent patches for this list to Linus, at
+least not without contacting me first.
 
   0 		Unnamed devices (e.g. non-device mounts)
 		  0 = reserved as null device number
@@ -243,6 +246,9 @@ an unreasonable effort.
 		133 = /dev/exttrp	External device trap
 		134 = /dev/apm_bios	Advanced Power Management BIOS
 		135 = /dev/rtc		Real Time Clock
+		136 = /dev/qcam0	QuickCam on lp0
+		137 = /dev/qcam1	QuickCam on lp1
+		138 = /dev/qcam2	QuickCam on lp2
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -342,12 +348,9 @@ an unreasonable effort.
 		  0 = /dev/sjcd		Sanyo CD-ROM
 
  19 char	Cyclades serial card
-		 0 = /dev/ttyC0		First Cyclades port
+		  0 = /dev/ttyC0	First Cyclades port
 		      ...
 		 31 = /dev/ttyC31	32nd Cyclades port
-		
-		It would make more sense for these to start at 0...
-
     block	"Double" compressed disk
 		  0 = /dev/double0	First compressed disk
 		      ...
@@ -360,7 +363,7 @@ an unreasonable effort.
 		mirror devices.
 
  20 char	Cyclades serial card - alternate devices
-		 0 = /dev/cub0		Callout device corresponding to ttyC0
+		  0 = /dev/cub0		Callout device corresponding to ttyC0
 		      ...
 		 31 = /dev/cub31	Callout device corresponding to ttyC31
     block	Hitachi CD-ROM (under development)
@@ -658,21 +661,26 @@ an unreasonable effort.
  43 char	isdn4linux virtual modem
 		  0 = /dev/ttyI0	First virtual modem
 		      ...
-		 15 = /dev/ttyI15	16th virtual modem
+		 63 = /dev/ttyI63	64th virtual modem
 
  44 char	isdn4linux virtual modem - alternate devices
 		  0 = /dev/cui0		Callout device corresponding to ttyI0
 		      ...
-		 15 = /dev/cui15	Callout device corresponding to ttyI15
+		 63 = /dev/cui63	Callout device corresponding to ttyI63
 
  45 char	isdn4linux ISDN BRI driver
 		  0 = /dev/isdn0	First virtual B channel raw data
 		      ...
-		 15 = /dev/isdn15	16th virtual B channel raw data
-		 16 = /dev/isdnctrl0	First channel control/debug
+		 63 = /dev/isdn63	64th virtual B channel raw data
+		 64 = /dev/isdnctrl0	First channel control/debug
 		      ...
-		 31 = /dev/isdnctrl15	16th channel control/debug
-		128 = /dev/isdninfo	ISDN monitor interface
+		127 = /dev/isdnctrl63	64th channel control/debug
+
+		128 = /dev/ippp0	First SyncPPP device
+		      ...
+		191 = /dev/ippp63	64th SyncPPP device
+
+		255 = /dev/isdninfo	ISDN monitor interface
 
  46 char	Comtrol Rocketport serial card
 		  0 = /dev/ttyR0	First Rocketport port
@@ -684,7 +692,17 @@ an unreasonable effort.
 		  1 = /dev/cur1		Callout device corresponding to ttyR1
 		      ...
 
- 48-59		UNALLOCATED
+ 48 char	SDL RISCom serial card
+		  0 = /dev/ttyL0	First RISCom port
+		  1 = /dev/ttyL1	Second RISCom port
+		      ...
+
+ 49 char	SDL RISCom serial card - alternate devices
+		  0 = /dev/cul0		Callout device corresponding to ttyL0
+		  1 = /dev/cul1		Callout device corresponding to ttyL1
+		      ...
+
+ 50-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

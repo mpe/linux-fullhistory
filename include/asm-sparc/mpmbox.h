@@ -38,7 +38,7 @@
  */
 #define MAILBOX_BPT_SPIN      0xfd
 
-/* Oh geese, some other nitwit got a damn watchdog reset.  The party's
+/* Oh geese, some other nitwit got a damn watchdog reset.  The partys
  * over so go call prom_stopcpu().
  */
 #define MAILBOX_WDOG_STOP     0xfe

@@ -1,3 +1,11 @@
+/* $Id: tei.c,v 1.1 1996/04/13 10:28:25 fritz Exp $
+ *
+ * $Log: tei.c,v $
+ * Revision 1.1  1996/04/13 10:28:25  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 

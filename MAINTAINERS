@@ -248,6 +248,13 @@ M:	mj@k332.feld.cvut.cz
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+VFAT FILESYSTEM:
+P:	Gordon Chaffee
+M:	chaffee@plateau.cs.berkeley.edu
+L:	linux-kernel@vger.rutgers.edu
+W:	http://www-plateau.cs.berkeley.edu/people/chaffee
+S:	Maintained
+
 DIGIBOARD DRIVER:
 P:	Christoph Lameter
 M:	clameter@fuller.edu

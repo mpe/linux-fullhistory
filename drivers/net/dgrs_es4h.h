@@ -170,7 +170,7 @@
 /*
  *	Because there are differences between the SE-4 and the SE-6,
  *	we assume that the following globals will be set up at init
- *	time in main.c to containt the appropriate constants from above
+ *	time in main.c to contain the appropriate constants from above
  */
 extern ushort	Gpp;		/* Softcopy of GPP register */
 extern ushort	EEck;		/* Clock bit */

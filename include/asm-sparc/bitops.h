@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.18 1996/01/03 03:53:00 davem Exp $
+/* $Id: bitops.h,v 1.23 1996/04/20 07:54:35 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995, David S. Miller (davem@caip.rutgers.edu).
@@ -13,13 +13,23 @@
 #include <asm/system.h>
 #endif
 
+#ifdef __SMP__
+
+#define SMPVOL volatile
+
+#else
+
+#define SMPVOL
+
+#endif
+
 /* Set bit 'nr' in 32-bit quantity at address 'addr' where bit '0'
  * is in the highest of the four bytes and bit '31' is the high bit
  * within the first byte. Sparc is BIG-Endian. Unless noted otherwise
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long set_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long set_bit(unsigned long nr, SMPVOL void *addr)
 {
 	int mask, flags;
 	unsigned long *ADDR = (unsigned long *) addr;
@@ -34,7 +44,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long clear_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long clear_bit(unsigned long nr, SMPVOL void *addr)
 {
 	int mask, flags;
 	unsigned long *ADDR = (unsigned long *) addr;
@@ -49,7 +59,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long change_bit(unsigned long nr, SMPVOL void *addr)
 {
 	int mask, flags;
 	unsigned long *ADDR = (unsigned long *) addr;
@@ -65,9 +75,9 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 }
 
 /* The following routine need not be atomic. */
-extern __inline__ unsigned long test_bit(int nr, const void *addr)
+extern __inline__ unsigned long test_bit(int nr, const SMPVOL void *addr)
 {
-	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
+	return ((1UL << (nr & 31)) & (((const unsigned int *) addr)[nr >> 5])) != 0;
 }
 
 /* The easy/cheese version for now. */
@@ -99,7 +109,7 @@ extern __inline__ unsigned long find_next_zero_bit(void *addr, unsigned long siz
 	offset &= 31UL;
 	if (offset) {
 		tmp = *(p++);
-		tmp |= ~0UL << (32-offset);
+		tmp |= ~0UL >> (32-offset);
 		if (size < 32)
 			goto found_first;
 		if (~tmp)

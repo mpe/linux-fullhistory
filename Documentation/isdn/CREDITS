@@ -5,7 +5,7 @@ I want to thank all who contributed to this project and especially to:
 Thomas Bogendörfer (tsbogend@bigbug.franken.de)
   Tester, lots of bugfixes and hints.
 
-Alan Cox ()
+Alan Cox (alan@cymru.net)
   For help getting into standard-kernel.
 
 Volker Götz (volker@oops.franken.de)
@@ -24,8 +24,11 @@ Michael Knigge (knick@cove.han.de)
 Andreas Kool (akool@Kool.f.EUnet.de)
   For contribution of the isdnlog/isdnrep-tool
 
-Pedro Roque Marques
-  For lot of new ideas and writing a new driver coming soon.
+Pedro Roque Marques (roque@di.fc.ul.pt)
+  For lot of new ideas and the pcbit driver.
+
+Eberhard Moenkeberg (emoenke@gwdg.de)
+  For testing and help to get into kernel.
 
 Jan den Ouden (denouden@groovin.xs4all.nl)
   For contribution of the teles-driver

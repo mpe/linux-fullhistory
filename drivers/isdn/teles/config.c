@@ -1,3 +1,11 @@
+/* $Id: config.c,v 1.1 1996/04/13 10:23:11 fritz Exp $
+ *
+ * $Log: config.c,v $
+ * Revision 1.1  1996/04/13 10:23:11  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include <linux/types.h>
 #include <linux/stddef.h>

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.6 1996/01/01 02:47:19 davem Exp $
+/* $Id: oplib.h,v 1.7 1996/04/04 16:31:25 tridge Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -15,10 +15,11 @@ extern struct linux_romvec *romvec;
 
 /* Enumeration to describe the prom major version we have detected. */
 enum prom_major_version {
-	PROM_V0,      /* Original sun4c V0 prom */
+	PROM_V0,      /* Origional sun4c V0 prom */
 	PROM_V2,      /* sun4c and early sun4m V2 prom */
 	PROM_V3,      /* sun4m and later, up to sun4d/sun4e machines V3 */
 	PROM_P1275,   /* IEEE compliant ISA based Sun PROM, only sun4u */
+        PROM_AP1000,  /* actually no prom at all */
 };
 
 extern enum prom_major_version prom_vers;
@@ -83,7 +84,7 @@ extern void prom_seek(int device_handle, unsigned int seek_hival,
  * entries.  One for the total amount of physical ram on the machine, one
  * for the amount of physical ram available, and one describing the virtual
  * areas which are allocated by the prom.  So, in a sense the physical
- * available is a calculation of the total physical minus the physical mapped
+ * available is a calculation of the total physical minus the physcial mapped
  * by the prom with virtual mappings.
  *
  * These lists are returned pre-sorted, this should make your life easier

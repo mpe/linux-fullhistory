@@ -29,7 +29,7 @@
  * filesystem and type 'ls xyzzy' to turn on debugging.
  */
 
-#if 1
+#if 0
 #define NFS_PROC_DEBUG
 #endif
 

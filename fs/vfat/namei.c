@@ -1473,6 +1473,8 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 
 	vfat_read_inode(new_inode);
 	MSDOS_I(old_inode)->i_busy = 1;
+	MSDOS_I(old_inode)->i_linked = new_inode;
+	MSDOS_I(new_inode)->i_oldlink = old_inode;
 	fat_cache_inval_inode(old_inode);
 	PRINTK(("vfat_rename 15: old_slots=%d\n",old_slots));
 	old_inode->i_dirt = 1;
@@ -1493,7 +1495,6 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 
 	mark_buffer_dirty(new_bh, 1);
 	dcache_add(new_dir, new_name, new_len, new_ino);
-	iput(new_inode);
 
 	/* XXX: There is some code in the original MSDOS rename that
 	 * is not duplicated here and it might cause a problem in

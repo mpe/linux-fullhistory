@@ -1,6 +1,12 @@
+/* $Id: mod.c,v 1.1 1996/04/13 10:27:02 fritz Exp $
+ *
+ * $Log: mod.c,v $
+ * Revision 1.1  1996/04/13 10:27:02  fritz
+ * Initial revision
+ *
+ *
+ */
 #include "teles.h"
-
-
 
 extern struct IsdnCard cards[];
 extern char   *teles_id;

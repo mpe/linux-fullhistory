@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.23 1996/02/21 17:56:35 miguel Exp $
+/* $Id: loadmmu.c,v 1.33 1996/04/21 10:32:26 davem Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -7,6 +7,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/page.h>
@@ -26,18 +27,48 @@ void (*quick_kernel_fault)(unsigned long);
 void (*mmu_exit_hook)(void);
 void (*mmu_flush_hook)(void);
 
+/* translate between physical and virtual addresses */
+unsigned long (*mmu_v2p)(unsigned long);
+unsigned long (*mmu_p2v)(unsigned long);
+
 char *(*mmu_lockarea)(char *, unsigned long);
 void  (*mmu_unlockarea)(char *, unsigned long);
-char *(*mmu_get_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
-void  (*mmu_release_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
 
+char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
+void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 
 void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long address, pte_t pte);
 
-void (*invalidate_all)(void);
-void (*invalidate_mm)(struct mm_struct *);
-void (*invalidate_range)(struct mm_struct *, unsigned long start, unsigned long end);
-void (*invalidate_page)(struct vm_area_struct *, unsigned long address);
+#ifdef __SMP__
+void (*local_flush_cache_all)(void);
+void (*local_flush_cache_mm)(struct mm_struct *);
+void (*local_flush_cache_range)(struct mm_struct *, unsigned long start,
+				unsigned long end);
+void (*local_flush_cache_page)(struct vm_area_struct *, unsigned long address);
+
+void (*local_flush_tlb_all)(void);
+void (*local_flush_tlb_mm)(struct mm_struct *);
+void (*local_flush_tlb_range)(struct mm_struct *, unsigned long start,
+			      unsigned long end);
+void (*local_flush_tlb_page)(struct vm_area_struct *, unsigned long address);
+void (*local_flush_page_to_ram)(unsigned long address);
+#endif
+
+void (*flush_cache_all)(void);
+void (*flush_cache_mm)(struct mm_struct *);
+void (*flush_cache_range)(struct mm_struct *, unsigned long start,
+			  unsigned long end);
+void (*flush_cache_page)(struct vm_area_struct *, unsigned long address);
+
+void (*flush_tlb_all)(void);
+void (*flush_tlb_mm)(struct mm_struct *);
+void (*flush_tlb_range)(struct mm_struct *, unsigned long start,
+			unsigned long end);
+void (*flush_tlb_page)(struct vm_area_struct *, unsigned long address);
+
+void (*flush_page_to_ram)(unsigned long page);
 
 void (*set_pte)(pte_t *pteptr, pte_t pteval);
 
@@ -60,26 +91,20 @@ void (*switch_to_context)(struct task_struct *tsk);
 
 int (*pte_none)(pte_t);
 int (*pte_present)(pte_t);
-int (*pte_inuse)(pte_t *);
 void (*pte_clear)(pte_t *);
-void (*pte_reuse)(pte_t *);
 
 int (*pmd_none)(pmd_t);
 int (*pmd_bad)(pmd_t);
 int (*pmd_present)(pmd_t);
-int (*pmd_inuse)(pmd_t *);
 void (*pmd_clear)(pmd_t *);
-void (*pmd_reuse)(pmd_t *);
 
 int (*pgd_none)(pgd_t);
 int (*pgd_bad)(pgd_t);
 int (*pgd_present)(pgd_t);
-int (*pgd_inuse)(pgd_t *);
 void (*pgd_clear)(pgd_t *);
-void (*pgd_reuse)(pgd_t *);
 
 pte_t (*mk_pte)(unsigned long, pgprot_t);
-pte_t (*mk_pte_io)(unsigned long, pgprot_t);
+pte_t (*mk_pte_io)(unsigned long, pgprot_t, int);
 void (*pgd_set)(pgd_t *, pmd_t *);
 pte_t (*pte_modify)(pte_t, pgprot_t);
 pgd_t * (*pgd_offset)(struct mm_struct *, unsigned long);
@@ -132,5 +157,5 @@ load_mmu(void)
 		printk("load_mmu:sparc_cpu_model = %d\n", (int) sparc_cpu_model);
 		printk("load_mmu:Halting...\n");
 		panic("load_mmu()");
-	};
+	}
 }

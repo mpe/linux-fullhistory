@@ -132,7 +132,9 @@ enum machine_type {
 #ifdef __i386__
 #define SEGMENT_SIZE	1024
 #else
+#ifndef SEGMENT_SIZE
 #define SEGMENT_SIZE	PAGE_SIZE
+#endif
 #endif
 #endif
 

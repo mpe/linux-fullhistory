@@ -1,8 +1,10 @@
-/* $Id: segment.h,v 1.9 1996/01/14 00:05:33 davem Exp $ */
+/* $Id: segment.h,v 1.10 1996/03/08 01:19:38 miguel Exp $ */
 #ifndef _ASM_SEGMENT_H
 #define _ASM_SEGMENT_H
 
+#ifdef __KERNEL__
 #include <asm/vac-ops.h>
+#endif
 
 #ifndef __ASSEMBLY__
 

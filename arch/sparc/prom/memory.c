@@ -1,19 +1,21 @@
-/* $Id: memory.c,v 1.4 1995/11/25 01:00:02 davem Exp $
+/* $Id: memory.c,v 1.6 1996/04/08 09:02:27 davem Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/kernel.h>
+
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
-/* This routine, for consistency, returns the ram parameters in the
- * V0 prom memory descriptor format.  I choose this format because I
+/* This routine, for consistancy, returns the ram parameters in the
+ * V0 prom memory descriptor format.  I choose this format becuase I
  * think it was the easiest to work with.  I feel the religious
  * arguments now... ;)  Also, I return the linked lists sorted to
- * prevent paging_init() upset stomach as I have not yet written
- * the pepto-bismol kernel module yet.
+ * prevent paging_init() upset stomache as I have not yet written
+ * the pepto-bismal kernel module yet.
  */
 
 struct linux_prom_registers prom_reg_memlist[64];
@@ -173,7 +175,24 @@ prom_meminit(void)
 		/* Sort the other two lists. */
 		prom_sortmemlist(prom_phys_total);
 		prom_sortmemlist(prom_phys_avail);
+		break;
 
+        case PROM_AP1000:
+          /* really simple memory map */
+          prom_phys_total[0].start_adr = 0x00000000;
+          prom_phys_total[0].num_bytes = 0x01000000; /* 16MB */
+          prom_phys_total[0].theres_more = 0x0;
+          prom_prom_taken[0].start_adr = 0x00000000; 
+          prom_prom_taken[0].num_bytes = 0x00000000;
+          prom_prom_taken[0].theres_more = 0x0;
+          prom_phys_avail[0].start_adr = 0x00000000;
+          prom_phys_avail[0].num_bytes = 0x01000000; /* 16MB */
+          prom_phys_avail[0].theres_more = 0x0;
+          prom_sortmemlist(prom_phys_total);
+          prom_sortmemlist(prom_prom_taken);
+          prom_sortmemlist(prom_phys_avail);
+          printk("Initialised AP1000 memory lists (forced 16MB)\n");
+          break;
 	};
 
 	/* Link all the lists into the top-level descriptor. */

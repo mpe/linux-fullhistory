@@ -72,6 +72,8 @@ extern struct screen_info screen_info;
 
 #define VIDEO_TYPE_TGAC		0x40	/* DEC TGA */
 
+#define VIDEO_TYPE_SUN          0x50    /* Sun frame buffer. */
+
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
  * a c_cc[] character, but indicates that a particular special character

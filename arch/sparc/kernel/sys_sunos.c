@@ -1,5 +1,5 @@
-/* $Id: sys_sunos.c,v 1.33 1996/03/01 07:16:00 davem Exp $
- * sys_sunos.c: SunOS specific syscall compatibility support.
+/* $Id: sys_sunos.c,v 1.37 1996/04/19 16:52:38 miguel Exp $
+ * sys_sunos.c: SunOS specific syscall compatability support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -7,13 +7,30 @@
  * Based upon preliminary work which is:
  *
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
+ *
+ * The sunos_poll routine is based on iBCS2's poll routine, this
+ * is the copyright message for that file:
+ *
+ * This file contains the procedures for the handling of poll.
+ *
+ * Copyright (C) 1994 Eric Youngdale
+ *
+ * Created for Linux based loosely upon linux select code, which
+ * in turn is loosely based upon Mathius Lattner's minix
+ * patches by Peter MacDonald. Heavily edited by Linus.
+ *
+ * Poll is used by SVr4 instead of select, and it has considerably
+ * more functionality.  Parts of it are related to STREAMS, and since
+ * we do not have streams, we fake it.  In fact, select() still exists
+ * under SVr4, but libc turns it into a poll() call instead.  We attempt
+ * to do the inverse mapping.
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/mman.h>
-#include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
@@ -23,12 +40,21 @@
 #include <linux/utsname.h>
 #include <linux/fs.h>
 #include <linux/major.h>
+#include <linux/stat.h>
+#include <linux/malloc.h>
+#include <linux/pagemap.h>
+
+#include <asm/segment.h>
+#ifndef KERNEL_DS
+#include <linux/segment.h>
+#endif
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/pconf.h>
 #include <asm/idprom.h> /* for gethostid() */
 #include <asm/unistd.h>
+#include <asm/system.h>
 
 /* For the nfs mount emulation */
 #include <linux/socket.h>
@@ -40,22 +66,7 @@
 #include <linux/time.h>
 #include <linux/personality.h>
 
-static unsigned long get_sparc_unmapped_area(unsigned long len)
-{
-	unsigned long addr = 0xE8000000UL;
-	struct vm_area_struct * vmm;
-
-	if (len > TASK_SIZE)
-		return 0;
-	for (vmm = find_vma(current, addr); ; vmm = vmm->vm_next) {
-		/* At this point:  (!vmm || addr < vmm->vm_end). */
-		if (TASK_SIZE - len < addr)
-			return 0;
-		if (!vmm || addr + len <= vmm->vm_start)
-			return addr;
-		addr = vmm->vm_end;
-	}
-}
+extern unsigned long get_sparc_unmapped_area(unsigned long len);
 
 /* We use the SunOS mmap() semantics. */
 asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
@@ -150,11 +161,13 @@ asmlinkage int sunos_brk(unsigned long brk)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
-	freepages = buffermem >> 12;
+	freepages = buffermem >> PAGE_SHIFT;
+        freepages += page_cache_size;
+	freepages >>= 1;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
 	freepages -= MAP_NR(high_memory) >> 4;
-	freepages -= (newbrk-oldbrk) >> 12;
+	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;
 	if (freepages < 0)
 		return -ENOMEM;
 	/*
@@ -180,7 +193,7 @@ asmlinkage unsigned long sunos_sbrk(int increment)
 }
 
 /* XXX Completely undocumented, and completely magic...
- * XXX I believe it is to increase the size of the stack by
+ * XXX I belive it is to increase the size of the stack by
  * XXX argument 'increment' and return the new end of stack
  * XXX area.  Wheee...
  */
@@ -249,7 +262,7 @@ asmlinkage void sunos_madvise(unsigned long address, unsigned long len,
  * low-bit is one  == Page is currently residing in core
  * All other bits are undefined within the character so there...
  * Also, if you try to get stats on an area outside of the user vm area
- * *or* the passed base address is not aligned on a page boundary you
+ * *or* the passed base address is not aligned on a page boundry you
  * get an error.
  */
 asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
@@ -288,7 +301,7 @@ asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE
- * resource limit and is for backwards compatibility with older sunos
+ * resource limit and is for backwards compatability with older sunos
  * revs.
  */
 asmlinkage long sunos_getdtablesize(void)
@@ -400,7 +413,7 @@ asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 	return cnt - buf.count;
 }
 
-/* Old sunos getdirentries, severely broken compatibility stuff here. */
+/* Old sunos getdirentries, severely broken compatability stuff here. */
 struct sunos_direntry {
     unsigned long  d_ino;
     unsigned short d_reclen;
@@ -688,7 +701,7 @@ asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 		return error;
 	/* Ok, here comes the fun part: Linux's nfs mount needs a
 	 * socket connection to the server, but SunOS mount does not
-	 * require this, so we use the information on the destination
+	 * requiere this, so we use the information on the destination
 	 * address to create a socket and bind it to a reserved
 	 * port on this system
 	 */
@@ -847,3 +860,154 @@ extern asmlinkage long sunos_sysconf (int name)
 	}
 	return -1;
 }
+
+#define POLL_ROUND_UP(x,y) (((x)+(y)-1)/(y))
+
+#define POLLIN 1
+#define POLLPRI 2
+#define POLLOUT 4
+#define POLLERR 8
+#define POLLHUP 16
+#define POLLNVAL 32
+#define POLLRDNORM 64
+#define POLLWRNORM POLLOUT
+#define POLLRDBAND 128
+#define POLLWRBAND 256
+
+#define LINUX_POLLIN (POLLRDNORM | POLLRDBAND | POLLIN)
+#define LINUX_POLLOUT (POLLWRBAND | POLLWRNORM | POLLOUT)
+#define LINUX_POLLERR (POLLERR)
+
+static inline void free_wait(select_table * p)
+{
+	struct select_table_entry * entry = p->entry + p->nr;
+
+	while (p->nr > 0) {
+		p->nr--;
+		entry--;
+		remove_wait_queue(entry->wait_address,&entry->wait);
+	}
+}
+
+
+/* Copied directly from fs/select.c */
+static int check(int flag, select_table * wait, struct file * file)
+{
+	struct inode * inode;
+	struct file_operations *fops;
+	int (*select) (struct inode *, struct file *, int, select_table *);
+
+	inode = file->f_inode;
+	if ((fops = file->f_op) && (select = fops->select))
+		return select(inode, file, flag, wait)
+		    || (wait && select(inode, file, flag, NULL));
+	if (S_ISREG(inode->i_mode))
+		return 1;
+	return 0;
+}
+
+struct poll {
+	int fd;
+	short events;
+	short revents;
+};
+
+int sunos_poll(struct poll * ufds, size_t nfds, int timeout)
+{
+        int i,j, count, fdcount, error, retflag;
+	struct poll * fdpnt;
+	struct poll * fds, *fds1;
+	select_table wait_table, *wait;
+	struct select_table_entry *entry;
+
+	if ((error = verify_area(VERIFY_READ, ufds, nfds*sizeof(struct poll))))
+		return error;
+
+	if (nfds > NR_OPEN)
+		return -EINVAL;
+
+	if (!(entry = (struct select_table_entry*)__get_free_page(GFP_KERNEL))
+	|| !(fds = (struct poll *)kmalloc(nfds*sizeof(struct poll), GFP_KERNEL)))
+		return -ENOMEM;
+
+	memcpy_fromfs(fds, ufds, nfds*sizeof(struct poll));
+
+	if (timeout < 0)
+		current->timeout = 0x7fffffff;
+	else {
+		current->timeout = jiffies + POLL_ROUND_UP(timeout, (1000/HZ));
+		if (current->timeout <= jiffies)
+			current->timeout = 0;
+	}
+
+	count = 0;
+	wait_table.nr = 0;
+	wait_table.entry = entry;
+	wait = &wait_table;
+
+	for(fdpnt = fds, j = 0; j < (int)nfds; j++, fdpnt++) {
+		i = fdpnt->fd;
+		fdpnt->revents = 0;
+		if (!current->files->fd[i] || !current->files->fd[i]->f_inode)
+			fdpnt->revents = POLLNVAL;
+	}
+repeat:
+	current->state = TASK_INTERRUPTIBLE;
+	for(fdpnt = fds, j = 0; j < (int)nfds; j++, fdpnt++) {
+		i = fdpnt->fd;
+
+		if(i < 0) continue;
+		if (!current->files->fd[i] || !current->files->fd[i]->f_inode) continue;
+
+		if ((fdpnt->events & LINUX_POLLIN)
+		&& check(SEL_IN, wait, current->files->fd[i])) {
+			if (fdpnt->events & POLLIN)
+				retflag = POLLIN;
+			if (fdpnt->events & POLLRDNORM)
+				retflag = POLLRDNORM;
+			fdpnt->revents |= retflag; 
+			count++;
+			wait = NULL;
+		}
+
+		if ((fdpnt->events & LINUX_POLLOUT) &&
+		check(SEL_OUT, wait, current->files->fd[i])) {
+			fdpnt->revents |= (LINUX_POLLOUT & fdpnt->events);
+			count++;
+			wait = NULL;
+		}
+
+		if (check(SEL_EX, wait, current->files->fd[i])) {
+			fdpnt->revents |= POLLHUP;
+			count++;
+			wait = NULL;
+		}
+	}
+
+	if ((current->signal & (~current->blocked)))
+		return -EINTR;
+
+	wait = NULL;
+	if (!count && current->timeout > jiffies) {
+		schedule();
+		goto repeat;
+	}
+
+	free_wait(&wait_table);
+	free_page((unsigned long) entry);
+
+	/* OK, now copy the revents fields back to user space. */
+	fds1 = fds;
+	fdcount = 0;
+	for(i=0; i < (int)nfds; i++, ufds++, fds++) {
+		if (fds->revents) {
+			fdcount++;
+		}
+		put_fs_word(fds->revents, &ufds->revents);
+	}
+	kfree(fds1);
+	current->timeout = 0;
+	current->state = TASK_RUNNING;
+	return fdcount;
+}
+

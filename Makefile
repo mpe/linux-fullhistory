@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 92
+SUBLEVEL = 93
 
 ARCH = i386
 
@@ -116,14 +116,15 @@ endif
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o net/network.a
 FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=drivers/block/block.a \
-		 drivers/char/char.a \
-		 drivers/net/net.a
+		 drivers/char/char.a
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
 ifeq ($(CONFIG_ISDN),y)
-DRIVERS	:= $(DRIVERS) drivers/isdn/isdn.a
+DRIVERS := $(DRIVERS) drivers/isdn/isdn.a
 endif
+
+DRIVERS := $(DRIVERS) drivers/net/net.a
 
 ifdef CONFIG_CD_NO_IDESCSI
 DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a

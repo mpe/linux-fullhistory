@@ -12,7 +12,8 @@ To compile isdn4linux with the sync PPP part, you have
 to answer the appropriate question when doing a "make config"
 Don't forget to load the slhc.o
 module before the isdn.o module, if VJ-compression support
-is not compiled into your kernel. 
+is not compiled into your kernel. (e.g if you have PPP or
+CSLIP in the kernel)
 
 Using isdn4linux with sync PPP:
 -------------------------------
@@ -35,18 +36,20 @@ devices .. and so on.
 I've implemented one additional option for the ipppd:
  'useifip' will get (if set to not 0.0.0.0) the IP address 
  for the negotiation from the attached network-interface. 
+(also: ipppd will try to negotiate pointopoint IP as remote IP)
 You must disable BSD-compression, this implementation can't
 handle compressed packets.
 
-Check the rc.isdn.syncppp file for an example setup script.
+Check the etc/rc.isdn.syncppp in the isdn4kernel-util package
+for an example setup script.
+
+To use the MPPP stuff, you must configure a slave device
+with isdn4linux. Now call the ipppd with the '+mp' option.
+To increase the number of links, you must use the
+'addlink' option of the isdnctrl tool.
 
 enjoy it,
     michael
      
 
-PS: I also implemented generic MP (RFC 1717). But in the 
-current isdn4linux link-level driver there is no 
-(or better say: another) way of doing channel bundling. So,
-don't call the ipppd with the `+mp` option to enable 
-MP negotiation.
 

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.7 1996/03/01 07:15:58 davem Exp $
+/* $Id: sys_sparc.c,v 1.10 1996/04/20 08:33:55 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -27,19 +27,19 @@ asmlinkage unsigned long sys_getpagesize(void)
 
 /*
  * sys_pipe() is the normal C calling standard for creating
- * a pipe. It's not the way unix traditionally does this, though.
+ * a pipe. It's not the way unix tranditionally does this, though.
  */
-asmlinkage void sparc_pipe(struct pt_regs *regs)
+asmlinkage int sparc_pipe(struct pt_regs *regs)
 {
 	int fd[2];
 	int error;
 
 	error = do_pipe(fd);
 	if (error) {
-		regs->u_regs[UREG_I0] = error;
+		return error;
 	} else {
-		regs->u_regs[UREG_I0] = fd[0];
 		regs->u_regs[UREG_I1] = fd[1];
+		return fd[0];
 	}
 }
 
@@ -164,4 +164,44 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			return -EINVAL;
 		}
 	return -EINVAL;
+}
+
+unsigned long get_sparc_unmapped_area(unsigned long len)
+{
+	unsigned long addr = 0xE8000000UL;
+	struct vm_area_struct * vmm;
+
+	if (len > TASK_SIZE)
+		return 0;
+	for (vmm = find_vma(current, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (TASK_SIZE - len < addr)
+			return 0;
+		if (!vmm || addr + len <= vmm->vm_start)
+			return addr;
+		addr = vmm->vm_end;
+	}
+}
+
+/* Linux version of mmap */
+asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags, unsigned long fd,
+	unsigned long off)
+{
+	struct file * file = NULL;
+	long retval;
+
+	if (!(flags & MAP_ANONYMOUS)) {
+		if (fd >= NR_OPEN || !(file = current->files->fd[fd])){
+			return -EBADF;
+	    }
+	}
+	if(!(flags & MAP_FIXED) && !addr) {
+		addr = get_sparc_unmapped_area(len);
+		if(!addr){
+			return -ENOMEM;
+		}
+	}
+	retval = do_mmap(file, addr, len, prot, flags, off);
+	return retval;
 }

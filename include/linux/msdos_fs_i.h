@@ -33,6 +33,10 @@ struct msdos_inode_info {
 				   current inode */
 	struct inode *i_old;	/* pointer to the old inode this inode
 				   depends on */
+	struct inode *i_linked;	/* pointer to inode linked to the current one,
+				   happens when an open file is moved */
+	struct inode *i_oldlink;/* pointer to open inode that references
+				   the same file */
 	int i_binary;	/* file contains non-text data */
 };
 

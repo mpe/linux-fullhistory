@@ -690,16 +690,19 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 	}
 	msdos_read_inode(free_inode);
 	MSDOS_I(old_inode)->i_busy = 1;
+	MSDOS_I(old_inode)->i_linked = free_inode;
+	MSDOS_I(free_inode)->i_oldlink = old_inode;
 	fat_cache_inval_inode(old_inode);
 	old_inode->i_dirt = 1;
 	old_de->name[0] = DELETED_FLAG;
 	mark_buffer_dirty(old_bh, 1);
 	mark_buffer_dirty(free_bh, 1);
-	if (!exists) iput(free_inode);
-	else {
+	if (exists) {
 		MSDOS_I(new_inode)->i_depend = free_inode;
 		MSDOS_I(free_inode)->i_old = new_inode;
-		/* free_inode is put when putting new_inode */
+		/* Two references now exist to free_inode so increase count */
+		free_inode->i_count++;
+		/* free_inode is put after putting new_inode and old_inode */
 		iput(new_inode);
 		dcache_add(new_dir, new_name, new_len, new_ino);
 		brelse(new_bh);

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.h,v 1.1 1996/02/11 02:35:13 fritz Exp fritz $
+/* $Id: isdn_net.h,v 1.2 1996/04/20 16:29:43 fritz Exp $
  *
  * header for Linux ISDN subsystem, network related functions (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_net.h,v $
+ * Revision 1.2  1996/04/20 16:29:43  fritz
+ * Misc. typos
+ *
  * Revision 1.1  1996/02/11 02:35:13  fritz
  * Initial revision
  *

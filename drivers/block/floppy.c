@@ -1232,6 +1232,15 @@ static void fdc_specify(void)
 			break;
 		case 1:
 			dtr = 300;
+			if (FDCS->version >= FDC_82078) {
+				/* chose the default rate table, not the one
+				 * where 1 = 2 Mbps */
+				output_byte(FD_DRIVESPEC);
+				if(need_more_output() == MORE_OUTPUT) {
+					output_byte(UNIT(current_drive));
+					output_byte(0xc0);
+				}
+			}
 			break;
 		case 2:
 			dtr = 250;
@@ -3007,7 +3016,15 @@ static inline int raw_cmd_copyin(int cmd, char *param,
 			ptr->next = 0;
 			ptr->buffer_length = 0;
 			param += sizeof(struct floppy_raw_cmd);
-			if (ptr->cmd_count > 16)
+			if (ptr->cmd_count > 33)
+				/* the command may now also take up the space
+				 * initially intended for the reply & the
+				 * reply count. Needed for long 82078 commands
+				 * such as RESTORE, which takes ... 17 command
+				 * bytes. Murphy's law #137: When you reserve
+				 * 16 bytes for a structure, you'll one day
+				 * discover that you really need 17...
+				 */
 				return -EINVAL;
 		}
 
@@ -3817,9 +3834,9 @@ static char get_fdc_version(void)
 			printk(KERN_INFO "FDC %d is a National Semiconductor PC87306\n", fdc);
 			return FDC_87306;
 		default:
-			printk(KERN_INFO "FDC %d init: 82077 variant with PARTID=%d.\n",
+			printk(KERN_INFO "FDC %d init: 82078 variant with unknown PARTID=%d.\n",
 			       fdc, reply_buffer[0] >> 5);
-			return FDC_82077_UNKN;
+			return FDC_82078_UNKN;
 	}
 } /* get_fdc_version */
 

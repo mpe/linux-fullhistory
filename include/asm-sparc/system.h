@@ -1,13 +1,16 @@
-/* $Id: system.h,v 1.24 1996/02/11 00:42:39 davem Exp $ */
+/* $Id: system.h,v 1.29 1996/04/03 02:17:52 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
 #include <linux/kernel.h>
 
 #include <asm/segment.h>
+
+#ifdef __KERNEL__
 #include <asm/page.h>
 #include <asm/oplib.h>
 #include <asm/psr.h>
+#endif
 
 #define EMPTY_PGT       (&empty_bad_page)
 #define EMPTY_PGE	(&empty_bad_page_table)
@@ -44,13 +47,40 @@ extern struct linux_romvec *romvec;
 extern void flush_user_windows(void);
 extern void synchronize_user_stack(void);
 extern void sparc_switch_to(void *new_task);
-#define switch_to(p) do { \
+#ifndef __SMP__
+#define switch_to(prev, next) do { \
 			  flush_user_windows(); \
-		          switch_to_context(p); \
-			  current->tss.current_ds = active_ds; \
-                          active_ds = p->tss.current_ds; \
-                          sparc_switch_to(p); \
+		          switch_to_context(next); \
+			  prev->tss.current_ds = active_ds; \
+                          active_ds = next->tss.current_ds; \
+			  if(last_task_used_math != next) \
+				  next->tss.kregs->psr &= ~PSR_EF; \
+                          sparc_switch_to(next); \
                      } while(0)
+#else
+
+extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
+		   void *fpqueue, unsigned long *fpqdepth);
+
+#define switch_to(prev, next) do { \
+			  cli(); \
+			  if(prev->flags & PF_USEDFPU) { \
+                          	fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
+                          	       &prev->tss.fpqueue[0], &prev->tss.fpqdepth); \
+                          	prev->flags &= ~PF_USEDFPU; \
+                          	prev->tss.kregs->psr &= ~PSR_EF; \
+                          } \
+			  prev->lock_depth = syscall_count; \
+			  kernel_counter += (next->lock_depth - prev->lock_depth); \
+			  syscall_count = next->lock_depth; \
+			  flush_user_windows(); \
+		          switch_to_context(next); \
+			  prev->tss.current_ds = active_ds; \
+                          active_ds = next->tss.current_ds; \
+                          sparc_switch_to(next); \
+			  sti(); \
+                     } while(0)
+#endif
 
 /* Changing the IRQ level on the Sparc. */
 extern inline void setipl(int __new_ipl)

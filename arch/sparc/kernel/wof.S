@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.20 1996/02/20 07:45:18 davem Exp $
+/* $Id: wof.S,v 1.22 1996/04/03 02:15:10 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,8 +9,10 @@
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
+#include <asm/smp.h>
 #include <asm/asi.h>
 #include <asm/winmacro.h>
+#include <asm/asmmacro.h>
 
 /* WARNING: This routine is hairy and _very_ complicated, but it
  *          must be as fast as possible as it handles the allocation
@@ -244,18 +246,14 @@ spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 	mov	%saved_g6, %g6
 	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
 
+	ENTER_SYSCALL
+
 	/* Turn on traps and call c-code to deal with it. */
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
 
-#if 0
-	mov	0, %o1
-	call	C_LABEL(try_to_clear_window_buffer)
-	 add	%sp, REGWIN_SZ, %o0
-#else
 	call	C_LABEL(window_overflow_fault)
 	 nop
-#endif
 
 	/* Return from trap if C-code actually fixes things, if it
 	 * doesn't then we never get this far as the process will

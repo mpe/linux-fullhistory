@@ -1,10 +1,11 @@
-/* $Id: misc.c,v 1.5 1996/02/02 03:37:44 davem Exp $
+/* $Id: misc.c,v 1.8 1996/04/17 23:03:23 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
@@ -30,8 +31,11 @@ prom_feval(char *fstring)
 }
 
 /* We want to do this more nicely some day. */
+#if CONFIG_SUN_CONSOLE
 extern void console_restore_palette(void);
 extern void set_palette(void);
+extern int serial_console;
+#endif
 
 /* Drop into the prom, with the chance to continue with the 'go'
  * prom command.
@@ -39,9 +43,22 @@ extern void set_palette(void);
 void
 prom_halt(void)
 {
-        console_restore_palette ();
+	extern void kernel_enter_debugger(void);
+	extern void install_obp_ticker(void);
+	extern void install_linux_ticker(void);
+    
+	kernel_enter_debugger();
+#if CONFIG_SUN_CONSOLE
+	if(!serial_console)
+		console_restore_palette ();
+#endif
+	install_obp_ticker();
 	(*(romvec->pv_abort))();
-	set_palette ();
+	install_linux_ticker();
+#if CONFIG_SUN_CONSOLE
+	if(!serial_console)
+		set_palette ();
+#endif
 	return;
 }
 
@@ -62,6 +79,10 @@ typedef void (*sfunc_t)(void);
 void
 prom_setsync(sfunc_t funcp)
 {
+#if CONFIG_AP1000
+  printk("not doing setsync\n");
+  return;
+#endif
 	if(!funcp) return;
 	*romvec->pv_synchook = funcp;
 	return;

@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: April 10, 1996}
+\date{Last revised: April 20, 1996}
 \maketitle
 %
 \noindent
@@ -73,6 +73,9 @@ This document is in the public domain.  The author requests, however,
 that semantically altered versions are not distributed without
 permission of the author, assuming the author can be contacted without
 an unreasonable effort.
+
+In particular, please don't sent patches for this list to Linus, at
+least not without contacting me first.
 
 \section{Major numbers}
 
@@ -160,7 +163,9 @@ an unreasonable effort.
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
 \major{46}{}{char }{Comtrol Rocketport serial card}
 \major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
-\major{48}{--59}{}{Unallocated}
+\major{48}{}{char }{SDL RISCom serial card}
+\major{49}{}{char }{SDL RISCom serial card -- alternate devices}
+\major{50}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -417,6 +422,9 @@ physical disks.
 	\minor{133}{/dev/exttrp}{External device trap}
 	\minor{134}{/dev/apm\_bios}{Advanced Power Management BIOS}
 	\minor{135}{/dev/rtc}{Real Time Clock}
+	\minor{136}{/dev/qcam0}{QuickCam on {\file lp0}}
+	\minor{137}{/dev/qcam1}{QuickCam on {\file lp1}}
+	\minor{138}{/dev/qcam2}{QuickCam on {\file lp2}}
 \end{devicelist}
 
 \noindent
@@ -557,10 +565,7 @@ number 3).
 	\minor{0}{/dev/ttyC0}{First Cyclades port}
 	\minordots
 	\minor{31}{/dev/ttyC31}{32nd Cyclades port}
-\end{devicelist}
-\noindent
-It would make more sense for these to start at 0...
-\begin{devicelist}
+\\
 \major{  }{}{block}{``Double'' compressed disk}
 	\minor{0}{/dev/double0}{First compressed disk}
 	\minordots
@@ -960,25 +965,28 @@ driver with this number should not cause ill effects to the system
 \major{43}{}{char }{isdn4linux virtual modem}
 	\minor{0}{/dev/ttyI0}{First virtual modem}
 	\minordots
-	\minor{15}{/dev/ttyI15}{16th virtual modem}
+	\minor{63}{/dev/ttyI63}{64th virtual modem}
 \end{devicelist}
 
 \begin{devicelist}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
 	\minor{0}{/dev/cui0}{Callout device corresponding to {\file ttyI0}}
 	\minordots
-	\minor{15}{/dev/cui15}{Callout device corresponding to {\file ttyI15}}
+	\minor{63}{/dev/cui63}{Callout device corresponding to {\file ttyI63}}
 \end{devicelist}
 
 \begin{devicelist}
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
 	\minor{0}{/dev/isdn0}{First virtual B channel raw data}
 	\minordots
-	\minor{15}{/dev/isdn15}{16th virtual B channel raw data}
-	\minor{16}{/dev/isdnctrl0}{First channel control/debug}
+	\minor{63}{/dev/isdn63}{64th virtual B channel raw data}
+	\minor{64}{/dev/isdnctrl0}{First channel control/debug}
 	\minordots
-	\minor{31}{/dev/isdnctrl15}{16th channel control/debug}
-	\minor{128}{/dev/isdninfo}{ISDN monitor interface}
+	\minor{127}{/dev/isdnctrl63}{64th channel control/debug}
+	\minor{128}{/dev/ippp0}{First SyncPPP device}
+	\minordots
+	\minor{191}{/dev/ippp63}{64th SyncPPP device}
+	\minor{255}{/dev/isdninfo}{ISDN monitor interface}
 \end{devicelist}
 
 \begin{devicelist}
@@ -996,7 +1004,21 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \begin{devicelist}
-\major{48}{--59}{}{Unallocated}
+\major{48}{}{char }{SDL RISCom serial card}
+	\minor{0}{/dev/ttyL0}{First RISCom port}
+	\minor{1}{/dev/ttyL1}{Second RISCom port}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{49}{}{char }{SDL RISCom serial card -- alternate devices}
+	\minor{0}{/dev/cul0}{Callout device corresponding to {\file ttyL0}}
+	\minor{1}{/dev/cul1}{Callout device corresponding to {\file ttyL1}}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{50}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -1,4 +1,4 @@
-/* $Id: ross.h,v 1.4 1996/01/03 03:53:20 davem Exp $
+/* $Id: ross.h,v 1.9 1996/04/08 08:34:21 davem Exp $
  * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -52,60 +52,11 @@
 #define HYPERSPARC_NFAULT     0x00000002
 #define HYPERSPARC_MENABLE    0x00000001
 
-/* Flushes which clear out only the on-chip Ross HyperSparc ICACHE. */
-extern inline void hyper_flush_i_page(unsigned int addr)
-{
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-			     "r" (addr), "i" (ASI_M_IFLUSH_PAGE) :
-			     "memory");
-	return;
-}
-
-extern inline void hyper_flush_i_seg(unsigned int addr)
-{
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-			     "r" (addr), "i" (ASI_M_IFLUSH_SEG) :
-			     "memory");
-	return;
-}
-
-extern inline void hyper_flush_i_region(unsigned int addr)
-{
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-			     "r" (addr), "i" (ASI_M_IFLUSH_REGION) :
-			     "memory");
-	return;
-}
-
-extern inline void hyper_flush_i_ctx(unsigned int addr)
-{
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-			     "r" (addr), "i" (ASI_M_IFLUSH_CTX) :
-			     "memory");
-	return;
-}
-
-extern inline void hyper_flush_i_user(unsigned int addr)
-{
-	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
-			     "r" (addr), "i" (ASI_M_IFLUSH_USER) :
-			     "memory");
-	return;
-}
-
-/* Finally, flush the entire ICACHE. */
-extern inline void hyper_flush_whole_icache(void)
-{
-	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
-			     "i" (ASI_M_FLUSH_IWHOLE));
-	return;
-}
-
 
 /* The ICCR instruction cache register on the HyperSparc.
  *
  * -----------------------------------------------
- * |                                 | FTD | IDC |
+ * |                                 | FTD | ICE |
  * -----------------------------------------------
  *  31                                  1     0
  *
@@ -125,13 +76,29 @@ extern inline void hyper_flush_whole_icache(void)
  *
  * All other bits are read as zeros, and writes to them have no
  * effect.
+ *
+ * Wheee, not many assemblers understand the %iccr register nor
+ * the generic asr r/w instructions.
+ *
+ *  1000 0011 0100 0111 1100 0000 0000 0000   ! rd %iccr, %g1
+ *
+ * 0x  8    3    4    7    c    0    0    0   ! 0x8347c000
+ *
+ *  1011 1111 1000 0000 0110 0000 0000 0000   ! wr %g1, 0x0, %iccr
+ *
+ * 0x  b    f    8    0    6    0    0    0   ! 0xbf806000
+ *
  */
+
+#define HYPERSPARC_ICCR_FTD     0x00000002
+#define HYPERSPARC_ICCR_ICE     0x00000001
 
 extern inline unsigned int get_ross_icr(void)
 {
 	unsigned int icreg;
 
-	__asm__ __volatile__(".word 0xbf402000\n\t" : /* rd %iccr, %g1 */
+	__asm__ __volatile__(".word 0x8347c000\n\t" /* rd %iccr, %g1 */
+			     "mov %%g1, %0\n\t" :
 			     "=r" (icreg) : :
 			     "g1", "memory");
 
@@ -141,7 +108,7 @@ extern inline unsigned int get_ross_icr(void)
 extern inline void put_ross_icr(unsigned int icreg)
 {
 	__asm__ __volatile__("or %%g0, %0, %%g1\n\t"
-			     ".word 0xbf802000\n\t" /* wr %g1, 0x0, %iccr */
+			     ".word 0xbf806000\n\t" /* wr %g1, 0x0, %iccr */
 			     "nop\n\t"
 			     "nop\n\t"
 			     "nop\n\t" : : 
@@ -153,17 +120,55 @@ extern inline void put_ross_icr(unsigned int icreg)
 
 /* HyperSparc specific cache flushing. */
 
-extern int hyper_cache_size;
+/* This is for the on-chip instruction cache. */
+extern inline void hyper_flush_whole_icache(void)
+{
+	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
+			     "i" (ASI_M_FLUSH_IWHOLE));
+	return;
+}
 
-extern inline void hyper_flush_all_combined(void)
+extern int hyper_cache_size;
+extern int hyper_line_size;
+
+extern inline void hyper_clear_all_tags(void)
 {
 	unsigned long addr;
 
-	for(addr = 0; addr < hyper_cache_size; addr += 32)
-		__asm__ __volatile__("sta %%g0, [%0] 0xe\n\t" : :
-				     "r" (addr));
+	for(addr = 0; addr < hyper_cache_size; addr += hyper_line_size)
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+				     "r" (addr), "i" (ASI_M_DATAC_TAG));
 }
 
+extern inline void hyper_flush_unconditional_combined(void)
+{
+	unsigned long addr;
 
+	for(addr = 0; addr < hyper_cache_size; addr += hyper_line_size)
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+				     "r" (addr), "i" (ASI_M_FLUSH_CTX));
+}
+
+extern inline void hyper_flush_cache_user(void)
+{
+	unsigned long addr;
+
+	for(addr = 0; addr < hyper_cache_size; addr += hyper_line_size)
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+				     "r" (addr), "i" (ASI_M_FLUSH_USER));
+}
+
+extern inline void hyper_flush_cache_page(unsigned long page)
+{
+	unsigned long end;
+
+	page &= PAGE_MASK;
+	end = page + PAGE_SIZE;
+	while(page < end) {
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+				     "r" (page), "i" (ASI_M_FLUSH_PAGE));
+		page += hyper_line_size;
+	}
+}
 
 #endif /* !(_SPARC_ROSS_H) */

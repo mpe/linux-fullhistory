@@ -3179,6 +3179,21 @@ CONFIG_ISDN_DRV_TELES
   different D-channel protocol, or non-standard irq/port/shmem
   settings.
 
+PCBIT-D support
+CONFIG_ISDN_DRV_PCBIT
+  This enables support for the PCBIT ISDN-cards. This card is
+  manufactured in Portugal by Octal. For running this card, 
+  additional firmware is necessary, which has to be downloaded into
+  the card using a utility which is distributed separately.  
+  See Documentation/isdn/README for more information.	
+
+Support for AP1000 multicomputer
+CONFIG_AP1000
+  This enables support for a sparc based parallel multi-computer
+  called an AP1000+. For details on our efforts to port Linux to this
+  machine see http://cap.anu.edu.au/cap/projects/linux or mail to
+  hackers@cafe.anu.edu.au
+
 # need an empty line after last entry, for sed script in Configure.
 
 #

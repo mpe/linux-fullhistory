@@ -66,7 +66,6 @@ static struct sun_floppy_ops sun_fdops;
 #define fd_cacheflush(addr, size) /* nothing... */
 #define fd_request_irq()          sun_fd_request_irq()
 #define fd_free_irq()             /* nothing... */
-#define fd_eject(x)               sun_fd_eject()
 
 #define FLOPPY_MOTOR_MASK         0x10
 
@@ -94,7 +93,7 @@ static int FDC2=-1;
 #define N_FDC    1
 #define N_DRIVE  8
 
-/* No 64k boundary crossing problems on the Sparc. */
+/* No 64k boundry crossing problems on the Sparc. */
 #define CROSS_64KB(a,s) (0)
 
 /* Routines unique to each controller type on a Sun. */
@@ -132,14 +131,12 @@ static void sun_82072_fd_outb(unsigned char value, int port)
 		 *               drive attached to a Sun controller
 		 *               and it will be at drive zero.
 		 */
-#if 0
-		if(value & 0xf0)
-#else
-		if(value & 0x10)
-#endif
-			set_auxio(AUXIO_FLPY_DSEL, 0);
-		else
-			set_auxio(0, AUXIO_FLPY_DSEL);
+		{
+			unsigned bits = 0;
+			if (value & 0x10) bits |= AUXIO_FLPY_DSEL;
+			if ((value & 0x80) == 0) bits |= AUXIO_FLPY_EJCT;
+			set_auxio(bits, (~bits) & (AUXIO_FLPY_DSEL|AUXIO_FLPY_EJCT));
+		}
 		break;
 	case 5: /* FD_DATA */
 		sun_fdc->data_82072 = value;
@@ -261,21 +258,6 @@ static inline void sun_fd_enable_dma(void)
 	pdma_areasize = pdma_size;
 }
 
-static int sun_fd_eject(void)
-{
-	if(sparc_cpu_model == sun4c) {
-		set_auxio(AUXIO_FLPY_DSEL, AUXIO_FLPY_EJCT);
-		udelay(1000);
-		set_auxio(AUXIO_FLPY_EJCT, AUXIO_FLPY_DSEL);
-	} else {
-		set_dor(fdc, ~0, 0x90);
-		udelay(500);
-		set_dor(fdc, ~0x80, 0);
-		udelay(500);
-	}
-	return 0;
-}
-
 /* Our low-level entry point in arch/sparc/kernel/entry.S */
 extern void floppy_hardint(int irq, void *unused, struct pt_regs *regs);
 
@@ -343,34 +325,17 @@ static int sun_floppy_init(void)
 		goto no_sun_fdc;
 	}
 
-	/* We need the version as early as possible to set up the
-	 * function pointers correctly.  Assume 82077 for probing
-	 * purposes.
-	 */
-	sun_fdops.fd_inb = sun_82077_fd_inb;
-	sun_fdops.fd_outb = sun_82077_fd_outb;
-	fdc_status = &sun_fdc->status_82077;
-
-	/* This controller detection technique is from the netbsd
-	 * Sun floppy driver, originally Chris Torek of BSDI came
-	 * up with this.  It seems to work pretty well.
-	 */
-	if(sun_fdc->dor_82077 == 0x80) {
-		sun_fdc->dor_82077 = 2;
-		if(sun_fdc->dor_82077 == 0x80) {
-			/* Ok, it's really an 82072. */
-			sun_fdops.fd_inb = sun_82072_fd_inb;
-			sun_fdops.fd_outb = sun_82072_fd_outb;
-			fdc_status = &sun_fdc->status_82072;
-		}
+        if(sparc_cpu_model == sun4c) {
+                sun_fdops.fd_inb = sun_82072_fd_inb;
+                sun_fdops.fd_outb = sun_82072_fd_outb;
+                fdc_status = &sun_fdc->status_82072;
+                /* printk("AUXIO @0x%p\n", auxio_register); */ /* P3 */
+        } else {
+                sun_fdops.fd_inb = sun_82077_fd_inb;
+                sun_fdops.fd_outb = sun_82077_fd_outb;
+                fdc_status = &sun_fdc->status_82077;
+                /* printk("DOR @0x%p\n", &sun_fdc->dor_82077); */ /* P3 */
 	}
-
-	/* P3: The only reliable way which I found for ejection
-	 * of boot floppy. AUXIO_FLPY_EJCT is not enough alone.
-	 */
-	set_auxio(AUXIO_FLPY_EJCT, 0); /* Bring EJECT line to normal. */
-	udelay(1000);
-	sun_fd_eject(0);		/* Send Eject Pulse. */
 
 	/* Success... */
 	return (int) sun_fdc;

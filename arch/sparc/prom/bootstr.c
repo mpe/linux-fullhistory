@@ -1,9 +1,10 @@
-/* $Id: bootstr.c,v 1.4 1996/02/08 07:06:43 zaitcev Exp $
+/* $Id: bootstr.c,v 1.5 1996/04/04 16:30:53 tridge Exp $
  * bootstr.c:  Boot string/argument acquisition from the PROM.
  *
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <asm/oplib.h>
 
 static char barg_buf[256];
@@ -33,6 +34,14 @@ prom_getbootargs(void)
 		cp += strlen(cp);
 		*cp = 0;
 		break;
+        case PROM_AP1000:
+	  /*
+	   * Get message from host boot process.
+	   */
+#if CONFIG_AP1000
+                ap_getbootargs(barg_buf);
+#endif          
+                break;
 	default:
 		barg_buf[0] = 0;
 		break;

@@ -55,12 +55,14 @@
 #define MATSUSHITA_CDROM4_MAJOR 28
 #define STL_SIOMEMMAJOR 28
 #define AZTECH_CDROM_MAJOR 29
+#define GRAPHDEV_MAJOR 29	/* SparcLinux /dev/fb */
 #define CM206_CDROM_MAJOR 32
 #define IDE2_MAJOR	33
 #define IDE3_MAJOR	34
 #define NETLINK_MAJOR	36
 #define IDETAPE_MAJOR	37
-
+#define APBLOCK_MAJOR   60   /* AP1000 Block device */
+#define DDV_MAJOR       61   /* AP1000 DDV block device */
 /*
  * Tests for SCSI devices.
  */

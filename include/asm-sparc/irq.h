@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.8 1995/11/25 02:31:54 davem Exp $
+/* $Id: irq.h,v 1.12 1996/04/03 02:17:34 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -13,8 +13,26 @@
 
 #define NR_IRQS    15
 
-extern void disable_irq(unsigned int);
-extern void enable_irq(unsigned int);
+/* Dave Redman (djhr@tadpole.co.uk)
+ * changed these to function pointers.. it saves cycles and will allow
+ * the irq dependancies to be split into different files at a later date
+ * sun4c_irq.c, sun4m_irq.c etc so we could reduce the kernel size.
+ */
+extern void (*disable_irq)(unsigned int);
+extern void (*enable_irq)(unsigned int);
+extern void (*clear_clock_irq)( void );
+extern void (*clear_profile_irq)( void );
+extern void (*load_profile_irq)( unsigned int timeout );
+extern void (*init_timers)(void (*lvl10_irq)(int, void *, struct pt_regs *));
+extern void claim_ticker14(void (*irq_handler)(int, void *, struct pt_regs *),
+			   int irq,
+			   unsigned int timeout);
+
+#ifdef __SMP__
+extern void (*set_cpu_int)(int, int);
+extern void (*clear_cpu_int)(int, int);
+extern void (*set_irq_udt)(int);
+#endif
 
 extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, const char *devname);
 
@@ -23,7 +41,7 @@ extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struc
  */
 
 /* These registers are used for sending/receiving irqs from/to
- * different cpu's.   
+ * different cpu's.
  */
 struct sun4m_intreg_percpu {
 	unsigned int tbt;        /* Interrupts still pending for this cpu. */
@@ -36,6 +54,19 @@ struct sun4m_intreg_percpu {
 	unsigned char space[PAGE_SIZE - 12];
 };
 
+/*
+ * djhr
+ * Actually the clear and set fields in this struct are misleading..
+ * according to the SLAVIO manual (and the same applies for the SEC)
+ * the clear field clears bits in the mask which will ENABLE that IRQ
+ * the set field sets bits in the mask to DISABLE the IRQ.
+ *
+ * Also the undirected_xx address in the SLAVIO is defined as
+ * RESERVED and write only..
+ *
+ * DAVEM_NOTE: The SLAVIO only specifies behavior on uniprocessor
+ *             sun4m machines, for MP the layout makes more sense.
+ */
 struct sun4m_intregs {
 	struct sun4m_intreg_percpu cpu_intregs[NCPUS];
 	unsigned int tbt;                /* IRQ's that are still pending. */
@@ -51,7 +82,8 @@ struct sun4m_intregs {
 
 extern struct sun4m_intregs *sun4m_interrupts;
 
-/* Bit field defines for the interrupt registers on various
+/* 
+ * Bit field defines for the interrupt registers on various
  * Sparc machines.
  */
 
@@ -64,11 +96,31 @@ extern struct sun4m_intregs *sun4m_interrupts;
 #define SUN4C_INT_E4      0x04     /* Enable level 4 IRQ. */
 #define SUN4C_INT_E1      0x02     /* Enable level 1 IRQ. */
 
-/* The sun4m interrupt registers.  MUST RESEARCH THESE SOME MORE XXX */
-#define SUN4M_INT_ENABLE  0x80000000
-#define SUN4M_INT_E14     0x00000080
-#define SUN4M_INT_E10     0x00080000
+/* Dave Redman (djhr@tadpole.co.uk)
+ * The sun4m interrupt registers.
+ */
+#define SUN4M_INT_ENABLE  	0x80000000
+#define SUN4M_INT_E14     	0x00000080
+#define SUN4M_INT_E10     	0x00080000
 
-/* XXX add cross-cpu ipi functions XXX */
+#define SUN4M_HARD_INT(x)	(0x000000001 << (x))
+#define SUN4M_SOFT_INT(x)	(0x000010000 << (x))
+
+#define	SUN4M_INT_MASKALL	0x80000000	  /* mask all interrupts */
+#define	SUN4M_INT_MODULE_ERR	0x40000000	  /* module error */
+#define	SUN4M_INT_M2S_WRITE	0x20000000	  /* write buffer error */
+#define	SUN4M_INT_ECC		0x10000000	  /* ecc memory error */
+#define	SUN4M_INT_FLOPPY	0x00400000	  /* floppy disk */
+#define	SUN4M_INT_MODULE	0x00200000	  /* module interrupt */
+#define	SUN4M_INT_VIDEO		0x00100000	  /* onboard video */
+#define	SUN4M_INT_REALTIME	0x00080000	  /* system timer */
+#define	SUN4M_INT_SCSI		0x00040000	  /* onboard scsi */
+#define	SUN4M_INT_AUDIO		0x00020000	  /* audio/isdn */
+#define	SUN4M_INT_ETHERNET	0x00010000	  /* onboard ethernet */
+#define	SUN4M_INT_SERIAL	0x00008000	  /* serial ports */
+#define	SUN4M_INT_KBDMS		0x00004000	  /* keyboard/mouse */
+#define	SUN4M_INT_SBUSBITS	0x00003F80	  /* sbus int bits */
+
+#define SUN4M_INT_SBUS(x)	(1 << (x+7))
 
 #endif

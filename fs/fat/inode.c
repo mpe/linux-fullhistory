@@ -28,17 +28,25 @@
 
 void fat_put_inode(struct inode *inode)
 {
-	struct inode *depend;
+	struct inode *depend, *linked;
 	struct super_block *sb;
 
+	depend = MSDOS_I(inode)->i_depend;
+	linked = MSDOS_I(inode)->i_linked;
+	sb = inode->i_sb;
 	if (inode->i_nlink) {
+		if (depend) {
+			iput(depend);
+		}
+		if (linked) {
+			iput(linked);
+			MSDOS_I(inode)->i_linked = NULL;
+		}
 		if (MSDOS_I(inode)->i_busy) fat_cache_inval_inode(inode);
 		return;
 	}
 	inode->i_size = 0;
 	fat_truncate(inode);
-	depend = MSDOS_I(inode)->i_depend;
-	sb = inode->i_sb;
 	clear_inode(inode);
 	if (depend) {
 		if (MSDOS_I(depend)->i_old != inode) {
@@ -49,6 +57,16 @@ void fat_put_inode(struct inode *inode)
 		}
 		MSDOS_I(depend)->i_old = NULL;
 		iput(depend);
+	}
+	if (linked) {
+		if (MSDOS_I(linked)->i_oldlink != inode) {
+			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
+			    linked, inode, MSDOS_I(linked)->i_oldlink);
+			fat_fs_panic(sb,"...");
+			return;
+		}
+		MSDOS_I(linked)->i_oldlink = NULL;
+		iput(linked);
 	}
 }
 
@@ -368,6 +386,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 /* printk("read inode %d\n",inode->i_ino); */
 	MSDOS_I(inode)->i_busy = 0;
 	MSDOS_I(inode)->i_depend = MSDOS_I(inode)->i_old = NULL;
+	MSDOS_I(inode)->i_linked = MSDOS_I(inode)->i_oldlink = NULL;
 	MSDOS_I(inode)->i_binary = 1;
 	inode->i_uid = MSDOS_SB(inode->i_sb)->options.fs_uid;
 	inode->i_gid = MSDOS_SB(inode->i_sb)->options.fs_gid;
@@ -461,6 +480,29 @@ void fat_write_inode(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *raw_entry;
+	struct inode *linked;
+
+	linked = MSDOS_I(inode)->i_linked;
+	if (linked) {
+		if (MSDOS_I(linked)->i_oldlink != inode) {
+			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
+			       linked, inode, MSDOS_I(linked)->i_oldlink);
+			fat_fs_panic(sb,"...");
+			return;
+		}
+		linked->i_version = ++event;
+		linked->i_mode = inode->i_mode;
+		linked->i_uid = inode->i_uid;
+		linked->i_gid = inode->i_gid;
+		linked->i_size = inode->i_size;
+		linked->i_atime = inode->i_atime;
+		linked->i_mtime = inode->i_mtime;
+		linked->i_ctime = inode->i_ctime;
+		linked->i_blocks = inode->i_blocks;
+		linked->i_atime = inode->i_atime;
+		MSDOS_I(linked)->i_attrs = MSDOS_I(inode)->i_attrs;
+		linked->i_dirt = 1;
+	}
 
 	inode->i_dirt = 0;
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;

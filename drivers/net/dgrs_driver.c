@@ -1259,7 +1259,7 @@ dgrs_scan(struct device *dev)
 #ifdef MODULE
 
 /*
- *	Variables that can be overriden from command line
+ *	Variables that can be overridden from command line
  */
 static int	debug = -1;
 static int	dma = -1;

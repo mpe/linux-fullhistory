@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.4 1996/02/11 02:33:26 fritz Exp fritz $
+/* $Id: isdn_common.c,v 1.5 1996/04/20 16:19:07 fritz Exp $
  *
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.5  1996/04/20 16:19:07  fritz
+ * Changed slow timer handlers to increase accuracy.
+ * Added statistic information for usage by xisdnload.
+ * Fixed behaviour of isdnctrl-device on non-blocked io.
+ * Fixed all io to go through generic writebuf-function without
+ * bypassing. Same for incoming data.
+ * Fixed bug: Last channel had been unusable.
+ * Fixed kfree of tty xmit_buf on ppp initialization failure.
+ *
  * Revision 1.4  1996/02/11 02:33:26  fritz
  * Fixed bug in main timer-dispatcher.
  * Bugfix: Lot of tty-callbacks got called regardless of the events already
@@ -61,7 +70,7 @@
 isdn_dev *dev = (isdn_dev *) 0;
 
 static int  has_exported = 0;
-static char *isdn_revision      = "$Revision: 1.4 $";
+static char *isdn_revision      = "$Revision: 1.5 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -159,12 +168,12 @@ static void isdn_timer_funct(ulong dummy)
 			isdn_tty_modem_xmit();
 	}
 	if (tf & ISDN_TIMER_SLOW) {
-		if (++isdn_timer_cnt1 > ISDN_TIMER_02SEC) {
+		if (++isdn_timer_cnt1 >= ISDN_TIMER_02SEC) {
 			isdn_timer_cnt1 = 0;
 			if (tf & ISDN_TIMER_NETDIAL)
 				isdn_net_dial();
 		}
-                if (++isdn_timer_cnt2 > ISDN_TIMER_1SEC) {
+                if (++isdn_timer_cnt2 >= ISDN_TIMER_1SEC) {
                         isdn_timer_cnt2 = 0;
                         if (tf & ISDN_TIMER_NETHANGUP)
                                 isdn_net_autohup();
@@ -233,6 +242,8 @@ static void isdn_receive_callback(int di, int channel, u_char * buf, int len)
 		return;
         if ((i = isdn_dc2minor(di,channel))==-1)
                 return;
+	/* Update statistics */
+        dev->ibytes[i] += len;
 	/* First, try to deliver data to network-device */
 	if (isdn_net_receive_callback(i, buf, len))
 		return;
@@ -375,14 +386,17 @@ static int isdn_status_callback(isdn_ctrl * c)
                                         break;
                                 case 2:	/* For calling back, first reject incoming call ... */
                                 case 3:	/* Interface found, but down, reject call actively  */
+                                        printk(KERN_INFO "isdn: Rejecting Call\n");
                                         cmd.driver = di;
                                         cmd.arg = c->arg;
                                         cmd.command = ISDN_CMD_HANGUP;
                                         dev->drv[di]->interface->command(&cmd);
-                                        if (r == 2)
-                                                /* ... then start dialing. */
-                                                isdn_net_dial();
-                                        break;
+                                        if (r == 3)
+                                                break;
+                                        /* Fall through */
+                                case 4:
+                                        /* ... then start callback. */
+                                        isdn_net_dial();
 			}
                         return 0;
                         break;
@@ -730,8 +744,11 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 
 	if (minor == ISDN_MINOR_STATUS) {
 		char *p;
-		if (!file->private_data)
+		if (!file->private_data) {
+                        if (file->f_flags & O_NONBLOCK)
+                                return -EAGAIN;
 			interruptible_sleep_on(&(dev->info_waitq));
+                }
 		save_flags(flags);
 		p = isdn_statstr();
 		restore_flags(flags);
@@ -760,8 +777,11 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 		if (drvidx < 0)
 			return -ENODEV;
-		if (!dev->drv[drvidx]->stavail)
+		if (!dev->drv[drvidx]->stavail) {
+                        if (file->f_flags & O_NONBLOCK)
+                                return -EAGAIN;
 			interruptible_sleep_on(&(dev->drv[drvidx]->st_waitq));
+                }
 		if (dev->drv[drvidx]->interface->readstat)
 			len = dev->drv[drvidx]->interface->
 			    readstat(buf, MIN(count, dev->drv[drvidx]->stavail), 1);
@@ -769,7 +789,10 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 			len = 0;
 		save_flags(flags);
 		cli();
-		dev->drv[drvidx]->stavail -= len;
+                if (len)
+                        dev->drv[drvidx]->stavail -= len;
+                else
+                        dev->drv[drvidx]->stavail = 0;
 		restore_flags(flags);
 		file->f_pos += len;
 		return len;
@@ -803,7 +826,8 @@ static int isdn_write(struct inode *inode, struct file *file, const char *buf, i
 		if (!dev->drv[drvidx]->running)
 			return -ENODEV;
 		chidx = isdn_minor2chan(minor);
-		while (dev->drv[drvidx]->interface->writebuf(drvidx, chidx, buf, count, 1) != count)
+                dev->obytes[minor] += count;
+		while (isdn_writebuf_stub(drvidx, chidx, buf, count, 1) != count)
 			interruptible_sleep_on(&dev->drv[drvidx]->snd_waitq[chidx]);
 		return count;
 	}
@@ -1008,8 +1032,27 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
 	isdn_net_ioctl_phone phone;
 	isdn_net_ioctl_cfg cfg;
 
-	if (minor == ISDN_MINOR_STATUS)
-		return -EPERM;
+	if (minor == ISDN_MINOR_STATUS) {
+                switch (cmd) {
+                        case IIOCGETCPS:
+                                if (arg) {
+                                        ulong *p = (ulong *)arg;
+                                        int i;
+                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg,
+                                                               sizeof(ulong)*ISDN_MAX_CHANNELS*2)))
+                                                return ret;
+                                        for (i = 0;i<ISDN_MAX_CHANNELS;i++) {
+                                                put_fs_long(dev->ibytes[i],p++);
+                                                put_fs_long(dev->obytes[i],p++);
+                                        }
+                                        return 0;
+                                } else
+                                        return -EINVAL;
+                                break;
+                        default:
+		                return -EINVAL;
+                }
+        }
 	if (!dev->drivers)
 		return -ENODEV;
 	if (minor < ISDN_MINOR_CTRL) {
@@ -1367,7 +1410,6 @@ static int isdn_open(struct inode *ino, struct file *filep)
 
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p;
-
 		if ((p = (infostruct *) kmalloc(sizeof(infostruct), GFP_KERNEL))) {
 			MOD_INC_USE_COUNT;
 			p->next = (char *) dev->infochain;
@@ -1423,12 +1465,10 @@ static void isdn_close(struct inode *ino, struct file *filep)
 	int drvidx;
 	isdn_ctrl c;
 
-	if (!dev->channels)
-		return;
-	MOD_DEC_USE_COUNT;
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p = dev->infochain;
 		infostruct *q = NULL;
+                MOD_DEC_USE_COUNT;
 		while (p) {
 			if (p->private == (char *) &(filep->private_data)) {
 				if (q)
@@ -1441,7 +1481,11 @@ static void isdn_close(struct inode *ino, struct file *filep)
 			p = (infostruct *) (p->next);
 		}
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
+                return;
 	}
+	if (!dev->channels)
+		return;
+	MOD_DEC_USE_COUNT;
 	if (minor < ISDN_MINOR_CTRL) {
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0)
@@ -1463,9 +1507,8 @@ static void isdn_close(struct inode *ino, struct file *filep)
 		return;
 	}
 #ifdef CONFIG_ISDN_PPP
-	if (minor <= ISDN_MINOR_PPPMAX) {
+	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
-        }
 #endif
 }
 
@@ -1559,6 +1602,8 @@ void isdn_free_channel(int di, int ch, int usage)
 		    (dev->chanmap[i] == ch)) {
 			dev->usage[i] &= (ISDN_USAGE_NONE | ISDN_USAGE_EXCLUSIVE);
 			strcpy(dev->num[i], "???");
+                        dev->ibytes[i] = 0;
+                        dev->obytes[i] = 0;
 			isdn_info_update();
 			restore_flags(flags);
 			return;
@@ -1593,17 +1638,20 @@ void isdn_unexclusive_channel(int di, int ch)
 
 void isdn_receive_skb_callback(int drvidx, int chan, struct sk_buff *skb) 
 {
-        int i;
+        int i, len;
 
 	if (dev->global_flags & ISDN_GLOBAL_STOPPED)
 		return;
         if ((i = isdn_dc2minor(drvidx,chan))==-1)
                 return;
+        len = skb->len;
 	if (isdn_net_rcv_skb(i, skb) == 0) {
 		isdn_receive_callback(drvidx, chan, skb->data, skb->len);
 		skb->free = 1;
 		kfree_skb(skb, FREE_READ);
-	}
+	} else
+                /* Update statistics */
+                dev->ibytes[i] += len;
 }
 
 /*
@@ -1613,27 +1661,54 @@ void isdn_receive_skb_callback(int drvidx, int chan, struct sk_buff *skb)
 int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len, 
 		       int user)
 {
-        struct sk_buff * skb;
-        
-        skb = alloc_skb(dev->drv[drvidx]->interface->hl_hdrlen + len, GFP_ATOMIC);
-        if (skb == NULL)
-                return 0;
+        if (dev->drv[drvidx]->interface->writebuf)
+          return dev->drv[drvidx]->interface->writebuf(drvidx, chan, buf,
+                                                       len, user);
+        else {
+          struct sk_buff * skb;
 
-        skb_reserve(skb, dev->drv[drvidx]->interface->hl_hdrlen);
-        skb->free = 1;
+          skb = alloc_skb(dev->drv[drvidx]->interface->hl_hdrlen + len, GFP_ATOMIC);
+          if (skb == NULL)
+                  return 0;
 
-        if (user)
-                memcpy_fromfs(skb_put(skb, len), buf, len);
-        else
-                memcpy(skb_put(skb, len), buf, len);
+          skb_reserve(skb, dev->drv[drvidx]->interface->hl_hdrlen);
+          skb->free = 1;
 
-        return dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, skb);
+          if (user)
+                  memcpy_fromfs(skb_put(skb, len), buf, len);
+          else
+                  memcpy(skb_put(skb, len), buf, len);
+
+          return dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, skb);
+        }
 }
- 
+
+/*
+ * writebuf_skb replacement for NON SKB_ABLE drivers
+ * If lowlevel-device does not support supports skbufs, use
+ * standard send-routine, else sind directly.
+ *
+ * Return: length of data on success, -ERRcode on failure.
+ */
+
+int isdn_writebuf_skb_stub(int drvidx, int chan, struct sk_buff * skb)
+{
+        int ret;
+
+        if (dev->drv[drvidx]->interface->writebuf_skb) 
+		ret = dev->drv[drvidx]->interface->
+			writebuf_skb(drvidx, chan, skb);
+	else {	      
+		if ((ret = dev->drv[drvidx]->interface->
+                     writebuf(drvidx,chan,skb->data,skb->len,0))==skb->len)
+		        dev_kfree_skb(skb, FREE_WRITE);
+        }
+        return ret;
+}
+
 /*
  * Low-level-driver registration
  */
-
 
 int register_isdn(isdn_if * i)
 {
@@ -1648,11 +1723,15 @@ int register_isdn(isdn_if * i)
 		return 0;
 	}
 	n = i->channels;
-	if (dev->channels + n >= ISDN_MAX_CHANNELS) {
+	if (dev->channels + n > ISDN_MAX_CHANNELS) {
 		printk(KERN_WARNING "register_isdn: Max. %d channels supported\n",
 		       ISDN_MAX_CHANNELS);
 		return 0;
 	}
+	if ((!i->writebuf_skb) && (!i->writebuf)) {
+                printk(KERN_WARNING "register_isdn: No write routine given.\n");
+                return 0;
+        }
 	if (!(d = (driver *) kmalloc(sizeof(driver), GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc driver-struct\n");
 		return 0;
@@ -1712,9 +1791,6 @@ int register_isdn(isdn_if * i)
 		if (!dev->drv[drvidx])
 			break;
 	i->channels = drvidx;
-
-	if (i->writebuf_skb && (!i->writebuf))
-                i->writebuf = isdn_writebuf_stub;
  
 	i->rcvcallb_skb = isdn_receive_skb_callback;
 	i->rcvcallb     = isdn_receive_callback;
@@ -1790,7 +1866,7 @@ int isdn_init(void)
 		return -EIO;
 	}
 	memset((char *) dev, 0, sizeof(isdn_dev));
-	for (i = 0; i < ISDN_MAX_DRIVERS; i++)
+	for (i = 0; i < ISDN_MAX_CHANNELS; i++)
 		dev->drvmap[i] = -1;
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->chanmap[i] = -1;
@@ -1818,7 +1894,7 @@ int isdn_init(void)
 		tty_unregister_driver(&dev->mdm.tty_modem);
 		tty_unregister_driver(&dev->mdm.cua_modem);
 		for (i = 0; i < ISDN_MAX_CHANNELS; i++)
-			kfree(dev->mdm.info[i].xmit_buf);
+			kfree(dev->mdm.info[i].xmit_buf - 4);
 		unregister_chrdev(ISDN_MAJOR, "isdn");
 		kfree(dev);
 		return -EIO;

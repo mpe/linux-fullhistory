@@ -380,7 +380,7 @@ probe_clock(int fchild)
 	}
 }
 
-/* Probe and map in the Auxiliary I/O register */
+/* Probe and map in the Auxiliaary I/O register */
 void
 probe_auxio(void)
 {
@@ -402,7 +402,7 @@ probe_auxio(void)
 	prom_apply_obio_ranges(auxregs, 0x1);
 	/* Map the register both read and write */
 	sparc_alloc_io(auxregs[0].phys_addr, (void *) AUXIO_VADDR,
-		       auxregs[0].reg_size, "auxiliaryIO", auxregs[0].which_io, 0x0);
+		       auxregs[0].reg_size, "auxilliaryIO", auxregs[0].which_io, 0x0);
 }
 
 extern unsigned long probe_memory(void);

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.47 1996/02/15 09:11:57 davem Exp $
+/* $Id: head.S,v 1.56 1996/04/04 16:30:22 tridge Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -6,6 +6,7 @@
  */
 
 #include <linux/version.h>
+#include <linux/config.h>
 
 #include <asm/cprefix.h>
 #include <asm/head.h>
@@ -80,6 +81,9 @@ __stext:
 _stext:
 start:
 C_LABEL(trapbase):
+#ifdef __SMP__
+C_LABEL(trapbase_cpu0):
+#endif
 /* We get control passed to us here at t_zero. */
 t_zero:	b gokernel; nop; nop; nop;
 t_tflt:	SPARC_TFAULT                        /* Inst. Access Exception        */
@@ -108,7 +112,11 @@ t_irq11:TRAP_ENTRY_INTERRUPT(11)            /* IRQ Floppy Intr.              */
 t_irq12:TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip         */
 t_irq13:TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.               */
 t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
+#ifndef __SMP__
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
+#else
+	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
+#endif
 t_racc:	TRAP_ENTRY(0x20, do_reg_access)     /* General Register Access Error */
 t_iacce:BAD_TRAP(0x21)                      /* Instr Access Error            */
 t_bad22:BAD_TRAP(0x22) BAD_TRAP(0x23)
@@ -116,7 +124,7 @@ t_cpdis:TRAP_ENTRY(0x24, do_cp_disabled)    /* Co-Processor Disabled         */
 t_uflsh:TRAP_ENTRY(0x25, do_bad_flush)      /* Unimplemented FLUSH inst.     */
 t_bad26:BAD_TRAP(0x26) BAD_TRAP(0x27)
 t_cpexc:TRAP_ENTRY(0x28, do_cp_exception)   /* Co-Processor Exception        */
-t_dacce:BAD_TRAP(0x29)                      /* Data Access Error             */
+t_dacce:SPARC_DFAULT                        /* Data Access Error             */
 t_hwdz:	TRAP_ENTRY(0x2a, do_hw_divzero)     /* Division by zero, you lose... */
 t_dserr:BAD_TRAP(0x2b)                      /* Data Store Error              */
 t_daccm:BAD_TRAP(0x2c)                      /* Data Access MMU-Miss          */
@@ -181,6 +189,214 @@ dbtrap2:BAD_TRAP(0xff)                      /* Debugger/PROM breakpoint #2   */
 	.globl	C_LABEL(end_traptable)
 C_LABEL(end_traptable):
 
+#ifdef __SMP__
+	/* Trap tables for the other cpus. */
+	.globl	C_LABEL(trapbase_cpu1), C_LABEL(trapbase_cpu2), C_LABEL(trapbase_cpu3)
+C_LABEL(trapbase_cpu1):
+	BAD_TRAP(0x0) SRMMU_TFAULT TRAP_ENTRY(0x2, bad_instruction)
+	TRAP_ENTRY(0x3, priv_instruction) TRAP_ENTRY(0x4, fpd_trap_handler)
+	WINDOW_SPILL WINDOW_FILL TRAP_ENTRY(0x7, mna_handler)
+	TRAP_ENTRY(0x8, fpe_trap_handler) SRMMU_DFAULT
+	TRAP_ENTRY(0xa, do_tag_overflow) TRAP_ENTRY(0xb, do_watchpoint)
+	BAD_TRAP(0xc) BAD_TRAP(0xd) BAD_TRAP(0xe) BAD_TRAP(0xf) BAD_TRAP(0x10)
+	TRAP_ENTRY_INTERRUPT(1) TRAP_ENTRY_INTERRUPT(2)
+	TRAP_ENTRY_INTERRUPT(3) TRAP_ENTRY_INTERRUPT(4)
+	TRAP_ENTRY_INTERRUPT(5) TRAP_ENTRY_INTERRUPT(6)
+	TRAP_ENTRY_INTERRUPT(7)	TRAP_ENTRY_INTERRUPT(8)
+	TRAP_ENTRY_INTERRUPT(9) TRAP_ENTRY_INTERRUPT(10)
+	TRAP_ENTRY_INTERRUPT(11) TRAP_ENTRY_INTERRUPT(12)
+	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
+	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
+	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
+	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
+	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
+	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
+	BAD_TRAP(0x37) BAD_TRAP(0x38) BAD_TRAP(0x39) BAD_TRAP(0x3a) BAD_TRAP(0x3b)
+	BAD_TRAP(0x3c) BAD_TRAP(0x3d) BAD_TRAP(0x3e) BAD_TRAP(0x3f) BAD_TRAP(0x40)
+	BAD_TRAP(0x41) BAD_TRAP(0x42) BAD_TRAP(0x43) BAD_TRAP(0x44) BAD_TRAP(0x45)
+	BAD_TRAP(0x46) BAD_TRAP(0x47) BAD_TRAP(0x48) BAD_TRAP(0x49) BAD_TRAP(0x4a)
+	BAD_TRAP(0x4b) BAD_TRAP(0x4c) BAD_TRAP(0x4d) BAD_TRAP(0x4e) BAD_TRAP(0x4f)
+	BAD_TRAP(0x50)
+	BAD_TRAP(0x51) BAD_TRAP(0x52) BAD_TRAP(0x53) BAD_TRAP(0x54) BAD_TRAP(0x55)
+	BAD_TRAP(0x56) BAD_TRAP(0x57) BAD_TRAP(0x58) BAD_TRAP(0x59) BAD_TRAP(0x5a)
+	BAD_TRAP(0x5b) BAD_TRAP(0x5c) BAD_TRAP(0x5d) BAD_TRAP(0x5e) BAD_TRAP(0x5f)
+	BAD_TRAP(0x60) BAD_TRAP(0x61) BAD_TRAP(0x62) BAD_TRAP(0x63) BAD_TRAP(0x64)
+	BAD_TRAP(0x65) BAD_TRAP(0x66) BAD_TRAP(0x67) BAD_TRAP(0x68) BAD_TRAP(0x69)
+	BAD_TRAP(0x6a) BAD_TRAP(0x6b) BAD_TRAP(0x6c) BAD_TRAP(0x6d) BAD_TRAP(0x6e)
+	BAD_TRAP(0x6f) BAD_TRAP(0x70) BAD_TRAP(0x71) BAD_TRAP(0x72) BAD_TRAP(0x73)
+	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
+	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
+	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
+	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
+	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
+	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
+	BAD_TRAP(0x8d) BAD_TRAP(0x8e) BAD_TRAP(0x8f)
+	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
+	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
+	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
+	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
+	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
+	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
+	BAD_TRAP(0xbb) BAD_TRAP(0xbc) BAD_TRAP(0xbd) BAD_TRAP(0xbe) BAD_TRAP(0xbf)
+	BAD_TRAP(0xc0) BAD_TRAP(0xc1) BAD_TRAP(0xc2) BAD_TRAP(0xc3) BAD_TRAP(0xc4)
+	BAD_TRAP(0xc5) BAD_TRAP(0xc6) BAD_TRAP(0xc7) BAD_TRAP(0xc8) BAD_TRAP(0xc9)
+	BAD_TRAP(0xca) BAD_TRAP(0xcb) BAD_TRAP(0xcc) BAD_TRAP(0xcd) BAD_TRAP(0xce)
+	BAD_TRAP(0xcf) BAD_TRAP(0xd0) BAD_TRAP(0xd1) BAD_TRAP(0xd2) BAD_TRAP(0xd3)
+	BAD_TRAP(0xd4) BAD_TRAP(0xd5) BAD_TRAP(0xd6) BAD_TRAP(0xd7) BAD_TRAP(0xd8)
+	BAD_TRAP(0xd9) BAD_TRAP(0xda) BAD_TRAP(0xdb) BAD_TRAP(0xdc) BAD_TRAP(0xdd)
+	BAD_TRAP(0xde) BAD_TRAP(0xdf) BAD_TRAP(0xe0) BAD_TRAP(0xe1) BAD_TRAP(0xe2)
+	BAD_TRAP(0xe3) BAD_TRAP(0xe4) BAD_TRAP(0xe5) BAD_TRAP(0xe6) BAD_TRAP(0xe7)
+	BAD_TRAP(0xe8) BAD_TRAP(0xe9) BAD_TRAP(0xea) BAD_TRAP(0xeb) BAD_TRAP(0xec)
+	BAD_TRAP(0xed) BAD_TRAP(0xee) BAD_TRAP(0xef) BAD_TRAP(0xf0) BAD_TRAP(0xf1)
+	BAD_TRAP(0xf2) BAD_TRAP(0xf3) BAD_TRAP(0xf4) BAD_TRAP(0xf5) BAD_TRAP(0xf6)
+	BAD_TRAP(0xf7) BAD_TRAP(0xf8) BAD_TRAP(0xf9) BAD_TRAP(0xfa) BAD_TRAP(0xfb)
+	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
+
+C_LABEL(trapbase_cpu2):
+	BAD_TRAP(0x0) SRMMU_TFAULT TRAP_ENTRY(0x2, bad_instruction)
+	TRAP_ENTRY(0x3, priv_instruction) TRAP_ENTRY(0x4, fpd_trap_handler)
+	WINDOW_SPILL WINDOW_FILL TRAP_ENTRY(0x7, mna_handler)
+	TRAP_ENTRY(0x8, fpe_trap_handler) SRMMU_DFAULT
+	TRAP_ENTRY(0xa, do_tag_overflow) TRAP_ENTRY(0xb, do_watchpoint)
+	BAD_TRAP(0xc) BAD_TRAP(0xd) BAD_TRAP(0xe) BAD_TRAP(0xf) BAD_TRAP(0x10)
+	TRAP_ENTRY_INTERRUPT(1) TRAP_ENTRY_INTERRUPT(2)
+	TRAP_ENTRY_INTERRUPT(3) TRAP_ENTRY_INTERRUPT(4)
+	TRAP_ENTRY_INTERRUPT(5) TRAP_ENTRY_INTERRUPT(6)
+	TRAP_ENTRY_INTERRUPT(7)	TRAP_ENTRY_INTERRUPT(8)
+	TRAP_ENTRY_INTERRUPT(9) TRAP_ENTRY_INTERRUPT(10)
+	TRAP_ENTRY_INTERRUPT(11) TRAP_ENTRY_INTERRUPT(12)
+	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
+	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
+	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
+	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
+	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
+	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
+	BAD_TRAP(0x37) BAD_TRAP(0x38) BAD_TRAP(0x39) BAD_TRAP(0x3a) BAD_TRAP(0x3b)
+	BAD_TRAP(0x3c) BAD_TRAP(0x3d) BAD_TRAP(0x3e) BAD_TRAP(0x3f) BAD_TRAP(0x40)
+	BAD_TRAP(0x41) BAD_TRAP(0x42) BAD_TRAP(0x43) BAD_TRAP(0x44) BAD_TRAP(0x45)
+	BAD_TRAP(0x46) BAD_TRAP(0x47) BAD_TRAP(0x48) BAD_TRAP(0x49) BAD_TRAP(0x4a)
+	BAD_TRAP(0x4b) BAD_TRAP(0x4c) BAD_TRAP(0x4d) BAD_TRAP(0x4e) BAD_TRAP(0x4f)
+	BAD_TRAP(0x50)
+	BAD_TRAP(0x51) BAD_TRAP(0x52) BAD_TRAP(0x53) BAD_TRAP(0x54) BAD_TRAP(0x55)
+	BAD_TRAP(0x56) BAD_TRAP(0x57) BAD_TRAP(0x58) BAD_TRAP(0x59) BAD_TRAP(0x5a)
+	BAD_TRAP(0x5b) BAD_TRAP(0x5c) BAD_TRAP(0x5d) BAD_TRAP(0x5e) BAD_TRAP(0x5f)
+	BAD_TRAP(0x60) BAD_TRAP(0x61) BAD_TRAP(0x62) BAD_TRAP(0x63) BAD_TRAP(0x64)
+	BAD_TRAP(0x65) BAD_TRAP(0x66) BAD_TRAP(0x67) BAD_TRAP(0x68) BAD_TRAP(0x69)
+	BAD_TRAP(0x6a) BAD_TRAP(0x6b) BAD_TRAP(0x6c) BAD_TRAP(0x6d) BAD_TRAP(0x6e)
+	BAD_TRAP(0x6f) BAD_TRAP(0x70) BAD_TRAP(0x71) BAD_TRAP(0x72) BAD_TRAP(0x73)
+	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
+	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
+	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
+	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
+	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
+	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
+	BAD_TRAP(0x8d) BAD_TRAP(0x8e) BAD_TRAP(0x8f)
+	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
+	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
+	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
+	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
+	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
+	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
+	BAD_TRAP(0xbb) BAD_TRAP(0xbc) BAD_TRAP(0xbd) BAD_TRAP(0xbe) BAD_TRAP(0xbf)
+	BAD_TRAP(0xc0) BAD_TRAP(0xc1) BAD_TRAP(0xc2) BAD_TRAP(0xc3) BAD_TRAP(0xc4)
+	BAD_TRAP(0xc5) BAD_TRAP(0xc6) BAD_TRAP(0xc7) BAD_TRAP(0xc8) BAD_TRAP(0xc9)
+	BAD_TRAP(0xca) BAD_TRAP(0xcb) BAD_TRAP(0xcc) BAD_TRAP(0xcd) BAD_TRAP(0xce)
+	BAD_TRAP(0xcf) BAD_TRAP(0xd0) BAD_TRAP(0xd1) BAD_TRAP(0xd2) BAD_TRAP(0xd3)
+	BAD_TRAP(0xd4) BAD_TRAP(0xd5) BAD_TRAP(0xd6) BAD_TRAP(0xd7) BAD_TRAP(0xd8)
+	BAD_TRAP(0xd9) BAD_TRAP(0xda) BAD_TRAP(0xdb) BAD_TRAP(0xdc) BAD_TRAP(0xdd)
+	BAD_TRAP(0xde) BAD_TRAP(0xdf) BAD_TRAP(0xe0) BAD_TRAP(0xe1) BAD_TRAP(0xe2)
+	BAD_TRAP(0xe3) BAD_TRAP(0xe4) BAD_TRAP(0xe5) BAD_TRAP(0xe6) BAD_TRAP(0xe7)
+	BAD_TRAP(0xe8) BAD_TRAP(0xe9) BAD_TRAP(0xea) BAD_TRAP(0xeb) BAD_TRAP(0xec)
+	BAD_TRAP(0xed) BAD_TRAP(0xee) BAD_TRAP(0xef) BAD_TRAP(0xf0) BAD_TRAP(0xf1)
+	BAD_TRAP(0xf2) BAD_TRAP(0xf3) BAD_TRAP(0xf4) BAD_TRAP(0xf5) BAD_TRAP(0xf6)
+	BAD_TRAP(0xf7) BAD_TRAP(0xf8) BAD_TRAP(0xf9) BAD_TRAP(0xfa) BAD_TRAP(0xfb)
+	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
+
+C_LABEL(trapbase_cpu3):
+	BAD_TRAP(0x0) SRMMU_TFAULT TRAP_ENTRY(0x2, bad_instruction)
+	TRAP_ENTRY(0x3, priv_instruction) TRAP_ENTRY(0x4, fpd_trap_handler)
+	WINDOW_SPILL WINDOW_FILL TRAP_ENTRY(0x7, mna_handler)
+	TRAP_ENTRY(0x8, fpe_trap_handler) SRMMU_DFAULT
+	TRAP_ENTRY(0xa, do_tag_overflow) TRAP_ENTRY(0xb, do_watchpoint)
+	BAD_TRAP(0xc) BAD_TRAP(0xd) BAD_TRAP(0xe) BAD_TRAP(0xf) BAD_TRAP(0x10)
+	TRAP_ENTRY_INTERRUPT(1) TRAP_ENTRY_INTERRUPT(2)
+	TRAP_ENTRY_INTERRUPT(3) TRAP_ENTRY_INTERRUPT(4)
+	TRAP_ENTRY_INTERRUPT(5) TRAP_ENTRY_INTERRUPT(6)
+	TRAP_ENTRY_INTERRUPT(7)	TRAP_ENTRY_INTERRUPT(8)
+	TRAP_ENTRY_INTERRUPT(9) TRAP_ENTRY_INTERRUPT(10)
+	TRAP_ENTRY_INTERRUPT(11) TRAP_ENTRY_INTERRUPT(12)
+	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
+	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
+	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
+	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
+	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
+	BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
+	BAD_TRAP(0x37) BAD_TRAP(0x38) BAD_TRAP(0x39) BAD_TRAP(0x3a) BAD_TRAP(0x3b)
+	BAD_TRAP(0x3c) BAD_TRAP(0x3d) BAD_TRAP(0x3e) BAD_TRAP(0x3f) BAD_TRAP(0x40)
+	BAD_TRAP(0x41) BAD_TRAP(0x42) BAD_TRAP(0x43) BAD_TRAP(0x44) BAD_TRAP(0x45)
+	BAD_TRAP(0x46) BAD_TRAP(0x47) BAD_TRAP(0x48) BAD_TRAP(0x49) BAD_TRAP(0x4a)
+	BAD_TRAP(0x4b) BAD_TRAP(0x4c) BAD_TRAP(0x4d) BAD_TRAP(0x4e) BAD_TRAP(0x4f)
+	BAD_TRAP(0x50)
+	BAD_TRAP(0x51) BAD_TRAP(0x52) BAD_TRAP(0x53) BAD_TRAP(0x54) BAD_TRAP(0x55)
+	BAD_TRAP(0x56) BAD_TRAP(0x57) BAD_TRAP(0x58) BAD_TRAP(0x59) BAD_TRAP(0x5a)
+	BAD_TRAP(0x5b) BAD_TRAP(0x5c) BAD_TRAP(0x5d) BAD_TRAP(0x5e) BAD_TRAP(0x5f)
+	BAD_TRAP(0x60) BAD_TRAP(0x61) BAD_TRAP(0x62) BAD_TRAP(0x63) BAD_TRAP(0x64)
+	BAD_TRAP(0x65) BAD_TRAP(0x66) BAD_TRAP(0x67) BAD_TRAP(0x68) BAD_TRAP(0x69)
+	BAD_TRAP(0x6a) BAD_TRAP(0x6b) BAD_TRAP(0x6c) BAD_TRAP(0x6d) BAD_TRAP(0x6e)
+	BAD_TRAP(0x6f) BAD_TRAP(0x70) BAD_TRAP(0x71) BAD_TRAP(0x72) BAD_TRAP(0x73)
+	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
+	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
+	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
+	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
+	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
+	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
+	BAD_TRAP(0x8d) BAD_TRAP(0x8e) BAD_TRAP(0x8f)
+	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
+	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
+	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
+	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
+	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
+	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
+	BAD_TRAP(0xbb) BAD_TRAP(0xbc) BAD_TRAP(0xbd) BAD_TRAP(0xbe) BAD_TRAP(0xbf)
+	BAD_TRAP(0xc0) BAD_TRAP(0xc1) BAD_TRAP(0xc2) BAD_TRAP(0xc3) BAD_TRAP(0xc4)
+	BAD_TRAP(0xc5) BAD_TRAP(0xc6) BAD_TRAP(0xc7) BAD_TRAP(0xc8) BAD_TRAP(0xc9)
+	BAD_TRAP(0xca) BAD_TRAP(0xcb) BAD_TRAP(0xcc) BAD_TRAP(0xcd) BAD_TRAP(0xce)
+	BAD_TRAP(0xcf) BAD_TRAP(0xd0) BAD_TRAP(0xd1) BAD_TRAP(0xd2) BAD_TRAP(0xd3)
+	BAD_TRAP(0xd4) BAD_TRAP(0xd5) BAD_TRAP(0xd6) BAD_TRAP(0xd7) BAD_TRAP(0xd8)
+	BAD_TRAP(0xd9) BAD_TRAP(0xda) BAD_TRAP(0xdb) BAD_TRAP(0xdc) BAD_TRAP(0xdd)
+	BAD_TRAP(0xde) BAD_TRAP(0xdf) BAD_TRAP(0xe0) BAD_TRAP(0xe1) BAD_TRAP(0xe2)
+	BAD_TRAP(0xe3) BAD_TRAP(0xe4) BAD_TRAP(0xe5) BAD_TRAP(0xe6) BAD_TRAP(0xe7)
+	BAD_TRAP(0xe8) BAD_TRAP(0xe9) BAD_TRAP(0xea) BAD_TRAP(0xeb) BAD_TRAP(0xec)
+	BAD_TRAP(0xed) BAD_TRAP(0xee) BAD_TRAP(0xef) BAD_TRAP(0xf0) BAD_TRAP(0xf1)
+	BAD_TRAP(0xf2) BAD_TRAP(0xf3) BAD_TRAP(0xf4) BAD_TRAP(0xf5) BAD_TRAP(0xf6)
+	BAD_TRAP(0xf7) BAD_TRAP(0xf8) BAD_TRAP(0xf9) BAD_TRAP(0xfa) BAD_TRAP(0xfb)
+	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
+
+	.globl	C_LABEL(cpu0_stack), C_LABEL(cpu1_stack), C_LABEL(cpu2_stack)
+	.globl	C_LABEL(cpu3_stack)
+C_LABEL(cpu0_stack):			.skip 0x2000
+C_LABEL(cpu1_stack):			.skip 0x2000
+C_LABEL(cpu2_stack):			.skip 0x2000
+C_LABEL(cpu3_stack):			.skip 0x2000
+#endif
 	.skip 4096
 
 /* This was the only reasonable way I could think of to properly align
@@ -193,8 +409,8 @@ C_LABEL(end_traptable):
 	.globl C_LABEL(empty_bad_page_table)
 	.globl C_LABEL(empty_zero_page)
 	.globl C_LABEL(swapper_pg_dir)
-C_LABEL(bootup_user_stack):		.skip 0x1000
-C_LABEL(bootup_kernel_stack):		.skip 0x1000
+C_LABEL(bootup_user_stack):		.skip 0x2000
+C_LABEL(bootup_kernel_stack):		.skip 0x2000
 C_LABEL(swapper_pg_dir):		.skip 0x1000
 C_LABEL(pg0):				.skip 0x1000
 C_LABEL(empty_bad_page):		.skip 0x1000
@@ -217,8 +433,6 @@ gokernel:
 		 * in %o7, so we do a pc-relative call to a local
 		 * label, then see what %o7 has.
 		 */
-
-		/* XXX Sparc V9 detection goes here XXX */
 
 		mov	%o7, %g4		! Save %o7
 
@@ -258,6 +472,19 @@ already_mapped:
 
 		/* Copy over the Prom's level 14 clock handler. */
 copy_prom_lvl14:
+#if 1
+		/* DJHR
+		 * preserve our linked/calculated instructions
+		 */
+		set	C_LABEL(lvl14_save), %g1
+		set	t_irq14, %g3
+		sub	%g1, %l6, %g1		! translate to physical
+		sub	%g3, %l6, %g3		! translate to physical
+		ldd	[%g3], %g4
+		std	%g4, [%g1]
+		ldd	[%g3+8], %g4
+		std	%g4, [%g1+8]
+#endif
 		rd	%tbr, %g1
 		andn	%g1, 0xfff, %g1		! proms trap table base
 		or	%g0, (0x1e<<4), %g2	! offset to lvl14 intr
@@ -272,8 +499,6 @@ copy_prom_lvl14:
 /* Must determine whether we are on a sun4c MMU, SRMMU, or SUN4/400 MUTANT
  * MMU so we can remap ourselves properly.  DONT TOUCH %l0 thru %l5 in these
  * remapping routines, we need their values afterwards!
- *
- * XXX UGH, need to write some sun4u SpitFire remapping V9 code RSN... XXX
  */
 		/* Now check whether we are already mapped, if we
 		 * are we can skip all this garbage coming up.
@@ -357,7 +582,7 @@ srmmu_remap:
 
 		/* Calculate to KERNBASE entry.
 		 *
-		 * XXX Should not use empirical constant, but Gas gets an  XXX
+		 * XXX Should not use imperical constant, but Gas gets an  XXX
 		 * XXX upset stomach with the bitshift I would have to use XXX
 		 */
 		add	%o1, 0x3c0, %o3		
@@ -404,7 +629,7 @@ srmmu_nviking:
 		sll	%g1, 0x8, %g1			! make phys addr for l1 tbl
 
 		lda	[%g1] ASI_M_BYPASS, %g2		! get level1 entry for 0x0
-		add	%g1, 0x3c0, %g3			! XXX AWAY WITH EMPIRICALS
+		add	%g1, 0x3c0, %g3			! XXX AWAY WITH IMPERICALS
 		sta	%g2, [%g3] ASI_M_BYPASS		! place at KERNBASE entry
 		b	go_to_highmem
 		 nop					! wheee....
@@ -469,6 +694,11 @@ go_to_highmem:
  * I figure out and store nwindows and nwindowsm1 later on.
  */
 execute_in_high_mem:
+#if CONFIG_AP1000
+                /* we don't have a prom :-( */
+                b sun4m_init
+                nop
+#endif
 		mov	%l0, %o0		! put back romvec
 		mov	%l1, %o1		! and debug_vec
 
@@ -582,7 +812,7 @@ sun4m_init:
  * be sitting in the fault status/address registers.  Read them all to
  * clear them so we don't get magic faults later on.
  */
-/* This sucks, apparently this makes Vikings call prom panic, will fix later */
+/* This sucks, aparently this makes Vikings call prom panic, will fix later */
 
 		rd	%psr, %o1
 		srl	%o1, 28, %o1		! Get a type of the CPU
@@ -647,11 +877,9 @@ sun4c_continue_boot:
 		set	C_LABEL(current_set), %g2
 		st	%g4, [%g2]
 
-		/* So now this should work. */
-		LOAD_CURRENT(g2, g4)
-		set	C_LABEL(bootup_kernel_stack), %g4
-		st	%g4, [%g2 + TASK_KSTACK_PG]
-		st	%g0, [%g2 + THREAD_UMASK]
+		set	C_LABEL(bootup_kernel_stack), %g3
+		st	%g3, [%g4 + TASK_KSTACK_PG]
+		st	%g0, [%g4 + THREAD_UMASK]
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained
  * in the V8 manual. Ok, this method seems to work, Sparc is cool...
@@ -712,6 +940,17 @@ sun4c_continue_boot:
 		PATCH_INSN(rtrap_7win_patch4, rtrap_patch4)
 		PATCH_INSN(rtrap_7win_patch5, rtrap_patch5)
 
+#ifdef __SMP__
+
+		/* Patch for returning from an ipi... */
+		PATCH_INSN(rirq_7win_patch1, rirq_patch1)
+		PATCH_INSN(rirq_7win_patch2, rirq_patch2)
+		PATCH_INSN(rirq_7win_patch3, rirq_patch3)
+		PATCH_INSN(rirq_7win_patch4, rirq_patch4)
+		PATCH_INSN(rirq_7win_patch5, rirq_patch5)
+
+#endif
+
 2:		
 		sethi	%hi( C_LABEL(nwindows) ), %g4
 		st	%g3, [%g4 + %lo( C_LABEL(nwindows) )]	! store final value
@@ -727,6 +966,8 @@ sun4c_continue_boot:
 		/* Finally, turn on traps so that we can call c-code. */
 		rd	%psr, %g3
 		wr	%g3, 0x0, %psr
+		WRITE_PAUSE
+
 		wr	%g3, PSR_ET, %psr
 		WRITE_PAUSE
 
@@ -821,4 +1062,13 @@ C_LABEL(linux_dbvec):
 	.word	0
 	.word	0
 
-	.align 4
+	.align 8
+
+	.globl	C_LABEL(lvl14_save)
+C_LABEL(lvl14_save):
+	.word	0
+	.word	0
+	.word	0
+	.word	0
+	.word	t_irq14
+

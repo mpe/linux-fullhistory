@@ -1,10 +1,11 @@
-/* $Id: time.c,v 1.7 1996/03/01 07:16:05 davem Exp $
+/* $Id: time.c,v 1.12 1996/04/04 16:30:30 tridge Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *
  * This file handles the Sparc specific time handling details.
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -21,15 +22,9 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 
-#define TIMER_IRQ  10    /* Also at level 14, but we ignore that one. */
-
 enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
 struct mostek48t08 *mstk48t08_regs = 0;
-volatile unsigned int *master_l10_limit = 0;
-volatile unsigned int *master_l10_counter = 0;
-struct sun4m_timer_regs *sun4m_timers;
-
 static int set_rtc_mmss(unsigned long);
 
 /*
@@ -40,10 +35,8 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
-	volatile unsigned int clear_intr;
 
-	/* First, clear the interrupt. */
-	clear_intr = *master_l10_limit;
+	clear_clock_irq();
 
 	do_timer(regs);
 
@@ -100,13 +93,13 @@ static void clock_probe(void)
 	/* This will basically traverse the node-tree of the prom to see
 	 * which timer chip is on this machine.
 	 */
-
 	node = 0;
 	if(sparc_cpu_model == sun4) {
 		printk("clock_probe: No SUN4 Clock/Timer support yet...\n");
 		return;
 	}
-	if(sparc_cpu_model == sun4c) node=prom_getchild(prom_root_node);
+	if(sparc_cpu_model == sun4c)
+		node = prom_getchild(prom_root_node);
 	else
 		if(sparc_cpu_model == sun4m)
 			node=prom_getchild(prom_searchsiblings(prom_getchild(prom_root_node), "obio"));
@@ -154,73 +147,6 @@ static void clock_probe(void)
 			return;
 		}
 	}
-
-	if(sparc_cpu_model == sun4c) {
-		/* Map the Timer chip, this is implemented in hardware inside
-		 * the cache chip on the sun4c.
-		 */
-		sun4c_timers = sparc_alloc_io ((void *) SUN4C_TIMER_PHYSADDR, 0,
-					       sizeof(struct sun4c_timer_info),
-					       "timer", 0x0, 0x0);
-
-		/* Have the level 10 timer tick at 100HZ.  We don't touch the
-		 * level 14 timer limit since we are letting the prom handle
-		 * them until we have a real console driver so L1-A works.
-		 */
-		sun4c_timers->timer_limit10 = (((1000000/HZ) + 1) << 10);
-		master_l10_limit = &(sun4c_timers->timer_limit10);
-		master_l10_counter = &(sun4c_timers->cur_count10);
-	} else {
-		/* XXX Fix this SHIT... UP and MP sun4m configurations
-		 * XXX have completely different layouts for the counter
-		 * XXX registers. AIEEE!!!
-		 */
-
-		int reg_count;
-		struct linux_prom_registers cnt_regs[PROMREG_MAX];
-		volatile unsigned long *real_limit;
-		int obio_node, cnt_node;
-
-		cnt_node = 0;
-		if((obio_node =
-		    prom_searchsiblings (prom_getchild(prom_root_node), "obio")) == 0 ||
-		   (obio_node = prom_getchild (obio_node)) == 0 ||
-		   (cnt_node = prom_searchsiblings (obio_node, "counter")) == 0) {
-			prom_printf("Cannot find /obio/counter node\n");
-			prom_halt();
-		}
-		reg_count = prom_getproperty(cnt_node, "reg",
-					     (void *) cnt_regs, sizeof(cnt_regs));
-		reg_count = (reg_count/sizeof(struct linux_prom_registers));
-
-		/* Apply the obio ranges to the timer registers. */
-		prom_apply_obio_ranges(cnt_regs, reg_count);
-
-		/* Map the per-cpu Counter registers. */
-		sparc_alloc_io(cnt_regs[0].phys_addr, 0,
-			       PAGE_SIZE*NCPUS, "counters_percpu",
-			       cnt_regs[0].which_io, 0x0);
-
-		/* Map the system Counter register. */
-		sun4m_timers = sparc_alloc_io(cnt_regs[reg_count-1].phys_addr, 0,
-					      cnt_regs[reg_count-1].reg_size,
-					      "counters_system",
-					      cnt_regs[reg_count-1].which_io, 0x0);
-
-		real_limit = &sun4m_timers->l10_timer_limit;
-		if(reg_count < 4) {
-			/* Uniprocessor timers, ugh. */
-			real_limit = (volatile unsigned long *) sun4m_timers;
-		}
-
-		/* Avoid interrupt bombs... */
-		foo_limit = (volatile) *real_limit;
-
-		/* Must set the master pointer first or we will lose badly. */
-		master_l10_limit = real_limit;
-		master_l10_counter = real_limit + 1;
-		*master_l10_limit =  (((1000000/HZ) + 1) << 10);
-	}
 }
 
 #ifndef BCD_TO_BIN
@@ -236,9 +162,14 @@ void time_init(void)
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
 
+#if CONFIG_AP1000
+	init_timers(timer_interrupt);
+        return;
+#endif
+
 	clock_probe();
-	/*	request_irq(TIMER_IRQ, timer_interrupt, SA_INTERRUPT, "timer", NULL); */
-	enable_irq(TIMER_IRQ);
+	init_timers(timer_interrupt);
+
 	mregs = mstk48t02_regs;
 	if(!mregs) {
 		prom_printf("Something wrong, clock regs not mapped yet.\n");
@@ -256,6 +187,7 @@ void time_init(void)
 	mregs->creg &= ~MSTK_CREG_READ;
 	return;
 }
+
 /* Nothing fancy on the Sparc yet. */
 void do_gettimeofday(struct timeval *tv)
 {
@@ -263,6 +195,9 @@ void do_gettimeofday(struct timeval *tv)
 
 	save_flags(flags);
 	cli();
+#if CONFIG_AP1000
+	ap_gettimeofday(&xtime);
+#endif
 	*tv = xtime;
 	restore_flags(flags);
 }

@@ -1,5 +1,5 @@
 /* swift.h: Specific definitions for the _broken_ Swift SRMMU
- *          MMU.
+ *          MMU module.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -38,6 +38,33 @@ extern inline void swift_inv_data_tag(unsigned long addr)
 			     "r" (addr), "i" (ASI_M_DATAC_TAG));
 }
 
+extern inline void swift_flush_dcache(void)
+{
+	unsigned long addr;
+
+	for(addr = 0; addr < (PAGE_SIZE << 2); addr += 16)
+		swift_inv_data_tag(addr);
+}
+
+extern inline void swift_flush_icache(void)
+{
+	unsigned long addr;
+
+	for(addr = 0; addr < (PAGE_SIZE << 2); addr += 16)
+		swift_inv_insn_tag(addr);
+}
+
+extern inline void swift_idflash_clear(void)
+{
+	unsigned long addr;
+
+	for(addr = 0; addr < (PAGE_SIZE << 2); addr += 16) {
+		swift_inv_insn_tag(addr);
+		swift_inv_data_tag(addr);
+	}
+}
+
+/* Swift is so broken, it isn't even safe to use the following. */
 extern inline void swift_flush_page(unsigned long page)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :

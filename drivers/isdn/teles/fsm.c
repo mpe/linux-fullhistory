@@ -1,3 +1,11 @@
+/* $Id: fsm.c,v 1.1 1996/04/13 10:23:41 fritz Exp $
+ *
+ * $Log: fsm.c,v $
+ * Revision 1.1  1996/04/13 10:23:41  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 

@@ -242,6 +242,10 @@ L_OBJS += lance.o
   endif
 endif
 
+ifeq ($(CONFIG_SUNLANCE),y)
+L_OBJS += sunlance.o
+endif
+
 ifeq ($(CONFIG_AT1700),y)
 L_OBJS += at1700.o
 else

@@ -1,13 +1,17 @@
-/* $Id: fault.c,v 1.53 1996/03/01 07:16:17 davem Exp $
+/* $Id: fault.c,v 1.61 1996/04/12 06:52:35 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <asm/head.h>
+
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/tasks.h>
+#include <linux/smp.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
 
@@ -20,6 +24,7 @@
 #include <asm/memreg.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+#include <asm/smp.h>
 #include <asm/traps.h>
 #include <asm/kdebug.h>
 
@@ -81,6 +86,12 @@ int prom_probe_memory (void)
 	sp_banks[i].base_addr = 0xdeadbeef;
 	sp_banks[i].num_bytes = 0;
 
+	/* Now mask all bank sizes on a page boundry, it is all we can
+	 * use anyways.
+	 */
+	for(i=0; sp_banks[i].num_bytes != 0; i++)
+		sp_banks[i].num_bytes &= PAGE_MASK;
+
 	return tally;
 }
 
@@ -122,6 +133,13 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	struct vm_area_struct *vma;
 	int from_user = !(regs->psr & PSR_PS);
 
+#if 0
+	printk("CPU[%d]: f<pid=%d,tf=%d,wr=%d,addr=%08lx",
+	       smp_processor_id(), current->pid, text_fault,
+	       write, address);
+	printk(",pc=%08lx> ", regs->pc);
+#endif
+
 	if(text_fault)
 		address = regs->pc;
 
@@ -131,8 +149,15 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	 * we'd fault recursively until all our stack is gone. ;-(
 	 */
 	if(!from_user && address >= KERNBASE) {
+#ifdef __SMP__
+		printk("CPU[%d]: Kernel faults at addr=%08lx\n",
+		       smp_processor_id(), address);
+		while(1)
+			;
+#else
 		quick_kernel_fault(address);
 		return;
+#endif
 	}
 
 	vma = find_vma(current, address);
@@ -165,19 +190,13 @@ good_area:
 	 */
 bad_area:
 	if(from_user) {
+#if 0
+		printk("%s [%d]: segfaults at %08lx pc=%08lx\n",
+		       current->comm, current->pid, address, regs->pc);
+#endif
 		current->tss.sig_address = address;
 		current->tss.sig_desc = SUBSIG_NOMAPPING;
 		send_sig(SIGSEGV, current, 1);
-		return;
-	}
-	/* Uh oh, a kernel fault.  Check for bootup wp_test... */
-	if (wp_works_ok < 0 && address == 0x0) {
-		wp_works_ok = 1;
-		printk("This Sparc honours the WP bit even when in supervisor mode. "
-		       "Good.\n");
-		/* Advance program counter over the store. */
-		regs->pc = regs->npc;
-		regs->npc += 4;
 		return;
 	}
 	if((unsigned long) address < PAGE_SIZE) {

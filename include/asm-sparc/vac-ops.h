@@ -1,4 +1,4 @@
-/* $Id: vac-ops.h,v 1.9 1995/12/17 09:02:00 davem Exp $ */
+/* $Id: vac-ops.h,v 1.10 1996/04/04 12:51:36 davem Exp $ */
 #ifndef _SPARC_VAC_OPS_H
 #define _SPARC_VAC_OPS_H
 
@@ -67,7 +67,7 @@
 /* The indexing of cache lines creates a problem.  Because the line
  * field of a virtual address extends past the page offset within
  * the virtual address it is possible to have what are called
- * 'bad aliases' which will create inconsistencies.  So we must make
+ * 'bad aliases' which will create inconsistancies.  So we must make
  * sure that within a context that if a physical page is mapped
  * more than once, that 'extra' line bits are the same.  If this is
  * not the case, and thus is a 'bad alias' we must turn off the
@@ -121,7 +121,5 @@ extern __inline__ void sun4c_disable_vac(void)
 		       "g1");
   sun4c_vacinfo.on = 0;
 }
-
-extern void sun4c_flush_context(void);
 
 #endif /* !(_SPARC_VAC_OPS_H) */

@@ -44,7 +44,7 @@ README for the ISDN-subsystem
   term to that one, which applies to your local ISDN-environment.
 
   When the link-level-module isdn.o is loaded, it supports up to 16
-  low-level-modules with up to 16 channels. (The number 16 is arbitrarily
+  low-level-modules with up to 64 channels. (The number 64 is arbitrarily
   chosen and can be configured at compile-time --ISDN_MAX in isdn.h).
   A low-level-driver can register itself through an interface (which is
   defined in isdnif.h) and gets assigned a slot.
@@ -65,7 +65,7 @@ README for the ISDN-subsystem
 
    In addition the following devices are made available:
 
-   32 tty-devices (16 cuix and 16 ttyIx) with integrated modem-emulator:
+   128 tty-devices (64 cuix and 64 ttyIx) with integrated modem-emulator:
    The functionality is almost the same as that of a serial device
    (the line-discs are handled by the kernel, which lets you run 
    SLIP, CSLIP and asynchronous PPP through the devices. We have tested 
@@ -473,6 +473,14 @@ README for the ISDN-subsystem
    In this case use ping with the option -i <sec> to increase the interval
    between echo-packets.
 
+   "isdnctrl cbdelay <InterfaceName> [seconds]"
+   Sets the delay (default 5 sec) between an incoming call and start of
+   dialing when callback is enabled.
+
+   "isdnctrl cbhup <InterfaceName> [on|off]"
+   This enables (default) or disables an active hangup (reject) when getting an
+   incoming call for an interface which is configured for callback.
+
    "isdnctrl encap <InterfaceName> <EncapType>"
    Selects the type of packet-encapsulation. The encapsulation can be changed
    only while an interface is down.
@@ -489,6 +497,8 @@ README for the ISDN-subsystem
             The Ethernet-address of the interface is faked, from it's
             IP-address: fc:fc:i1:i2:i3:i4, where i1-4 are the IP-addr.-values.
    syncppp  Synchronous PPP
+
+   uihdlc   HDLC with UI-frame-header (for use with DOS ISPA, option -h1)
 
    Watching packets, using standard-tcpdump will fail for all encapsulations
    except ethernet because tcpdump does not know how to handle packets

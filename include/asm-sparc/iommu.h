@@ -92,6 +92,7 @@ struct iommu_regs {
 
 /* The format of an iopte in the page tables */
 #define IOPTE_PAGE          0x07ffff00 /* Physical page number (PA[30:12]) */
+#define IOPTE_CACHE         0x00000080 /* Cached (in vme IOCACHE or Viking/MXCC) */
 #define IOPTE_WRITE         0x00000004 /* Writeable */
 #define IOPTE_VALID         0x00000002 /* IOPTE is valid */
 #define IOPTE_WAZ           0x00000001 /* Write as zeros */
@@ -99,6 +100,8 @@ struct iommu_regs {
 struct iommu_struct {
 	struct iommu_regs *regs;
 	iopte_t *page_table;
+	iopte_t *lowest;     /* to speed up searches... */
+	unsigned long plow;
 	/* For convenience */
 	unsigned long start; /* First managed virtual address */
 	unsigned long end;   /* Last managed virtual address */

@@ -1,4 +1,4 @@
-/* $Id: mbus.h,v 1.5 1995/11/25 02:32:00 davem Exp $
+/* $Id: mbus.h,v 1.6 1996/04/16 09:34:31 zaitcev Exp $
  * mbus.h:  Various defines for MBUS modules.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -45,7 +45,7 @@ extern unsigned int viking_rev, swift_rev, cypress_rev;
 extern unsigned int hwbug_bitmask;
 
 /* First the module type values. To find out which you have, just load
- * the mmu control register from ASI_M_MMUREG alternate address space and
+ * the mmu control register from ASI_M_MMUREG alternate adress space and
  * shift the value right 28 bits.
  */
 /* IMPL field means the company which produced the chip. */
@@ -79,7 +79,7 @@ extern unsigned int hwbug_bitmask;
 /* The CPU ID is encoded in the trap base register, 20 bits to the left of
  * bit zero, with 2 bits being significant.
  */
-#define TBR_ID_SHIFT            0x20
+#define TBR_ID_SHIFT            20
 
 extern inline int get_cpuid(void)
 {

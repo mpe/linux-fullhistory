@@ -137,13 +137,17 @@
 #include "ppa.h"
 #endif
 
+#ifdef CONFIG_SCSI_SUNESP
+#include "esp.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
 
 
 /*
-static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hosts.c,v 1.3 1993/09/24 12:21:00 drew Exp drew $";
+static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.10 1996/04/16 08:09:36 davem Exp $";
 */
 
 /*
@@ -247,6 +251,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_PPA
     PPA,
+#endif
+#ifdef CONFIG_SCSI_SUNESP
+    SCSI_SPARC_ESP,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

@@ -700,7 +700,7 @@ debug_config(struct aic7xxx_host_config *p)
   scsi_conf = inb(SCSICONF + p->base);
 
   /*
-   * Scale the Data FIFO Threshhold and the Bus Release Time; they are
+   * Scale the Data FIFO Threshold and the Bus Release Time; they are
    * stored in formats compatible for writing to sequencer registers.
    */
   dfthresh = p->bus_speed  >> 6;
@@ -3726,7 +3726,7 @@ aic7xxx_register(Scsi_Host_Template *template,
 
   /*
    * Set the QCNT (queue count) mask to deal with broken aic7850s that
-   * sporatically get garbage in the upper bits of their QCNT registers.
+   * sporadically get garbage in the upper bits of their QCNT registers.
    */
   outb(config->qcntmask, QCNTMASK + base);
 

@@ -1,3 +1,11 @@
+/* $Id: isdnl2.c,v 1.1 1996/04/13 10:24:16 fritz Exp $
+ *
+ * $Log: isdnl2.c,v $
+ * Revision 1.1  1996/04/13 10:24:16  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.40 1996/02/03 10:06:01 davem Exp $
+/* $Id: processor.h,v 1.43 1996/03/23 02:40:05 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -24,10 +24,10 @@
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
- * Write Protection works right in supervisor mode on the Sparc...
- * And then there came the Swift module, which isn't so swift...
+ * The sparc has no problems with write protection
  */
-extern char wp_works_ok;
+#define wp_works_ok 1
+#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 /* Whee, this is STACK_TOP and the lowest kernel address too... */
 #define TASK_SIZE	(KERNBASE)
@@ -122,14 +122,14 @@ extern inline void start_thread(struct pt_regs * regs, unsigned long pc, unsigne
 	regs->pc = ((pc & (~3)) - 4);
 	regs->npc = regs->pc + 4;
 	regs->psr = saved_psr;
-	regs->u_regs[UREG_G1] = sp; /* Base of arg/env stack area */
-	regs->u_regs[UREG_G2] = regs->u_regs[UREG_G7] = regs->npc;
 	regs->u_regs[UREG_FP] = (sp - REGWIN_SZ);
 }
 
+#ifdef __KERNEL__
 extern unsigned long (*alloc_kernel_stack)(struct task_struct *tsk);
 extern void (*free_kernel_stack)(unsigned long stack);
 extern struct task_struct *(*alloc_task_struct)(void);
 extern void (*free_task_struct)(struct task_struct *tsk);
+#endif
 
 #endif /* __ASM_SPARC_PROCESSOR_H */

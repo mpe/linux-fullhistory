@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.35 1996/02/21 17:57:30 miguel Exp $ */
+/* $Id: pgtable.h,v 1.45 1996/04/18 03:29:21 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -17,6 +17,8 @@
 #include <asm/sbus.h>
 
 extern void load_mmu(void);
+extern int io_remap_page_range(unsigned long from, unsigned long to,
+			       unsigned long size, pgprot_t prot, int space);
 
 extern void (*quick_kernel_fault)(unsigned long);
 
@@ -24,13 +26,25 @@ extern void (*quick_kernel_fault)(unsigned long);
 extern void (*mmu_exit_hook)(void);
 extern void (*mmu_flush_hook)(void);
 
+/* translate between physical and virtual addresses */
+extern unsigned long (*mmu_v2p)(unsigned long);
+extern unsigned long (*mmu_p2v)(unsigned long);
+
 /* Routines for data transfer buffers. */
 extern char *(*mmu_lockarea)(char *, unsigned long);
 extern void  (*mmu_unlockarea)(char *, unsigned long);
 
 /* Routines for getting a dvma scsi buffer. */
-extern char *(*mmu_get_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
-extern void  (*mmu_release_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
+struct mmu_sglist {
+	/* ick, I know... */
+	char *addr;
+	char *alt_addr;
+	unsigned int len;
+};
+extern char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+extern void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
+extern void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
+extern void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 
 extern unsigned int pmd_shift;
 extern unsigned int pmd_size;
@@ -130,7 +144,7 @@ extern unsigned long empty_zero_page;
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE (&empty_zero_page)
+#define ZERO_PAGE ((unsigned long)(&(empty_zero_page)))
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR      (8*sizeof(unsigned long))
@@ -156,23 +170,17 @@ extern unsigned long high_memory;
 
 extern int (*pte_none)(pte_t);
 extern int (*pte_present)(pte_t);
-extern int (*pte_inuse)(pte_t *);
 extern void (*pte_clear)(pte_t *);
-extern void (*pte_reuse)(pte_t *);
 
 extern int (*pmd_none)(pmd_t);
 extern int (*pmd_bad)(pmd_t);
 extern int (*pmd_present)(pmd_t);
-extern int (*pmd_inuse)(pmd_t *);
 extern void (*pmd_clear)(pmd_t *);
-extern void (*pmd_reuse)(pmd_t *);
 
 extern int (*pgd_none)(pgd_t);
 extern int (*pgd_bad)(pgd_t);
 extern int (*pgd_present)(pgd_t);
-extern int (*pgd_inuse)(pgd_t *);
 extern void (*pgd_clear)(pgd_t *);
-extern void (*pgd_reuse)(pgd_t *);
 
 /*
  * The following only work if pte_present() is true.
@@ -194,7 +202,7 @@ extern pte_t (*pte_mkyoung)(pte_t);
  * and a page entry and page directory to the page they refer to.
  */
 extern pte_t (*mk_pte)(unsigned long, pgprot_t);
-extern pte_t (*mk_pte_io)(unsigned long, pgprot_t);
+extern pte_t (*mk_pte_io)(unsigned long, pgprot_t, int);
 
 extern void (*pgd_set)(pgd_t *, pmd_t *);
 
@@ -242,11 +250,51 @@ extern void (*pgd_free)(pgd_t *);
 
 extern pgd_t * (*pgd_alloc)(void);
 
-/* Fine grained invalidation. */
-extern void (*invalidate_all)(void);
-extern void (*invalidate_mm)(struct mm_struct *);
-extern void (*invalidate_range)(struct mm_struct *, unsigned long start, unsigned long end);
-extern void (*invalidate_page)(struct vm_area_struct *, unsigned long address);
+/* Fine grained cache/tlb flushing. */
+
+#ifdef __SMP__
+extern void (*local_flush_cache_all)(void);
+extern void (*local_flush_cache_mm)(struct mm_struct *);
+extern void (*local_flush_cache_range)(struct mm_struct *, unsigned long start,
+				     unsigned long end);
+extern void (*local_flush_cache_page)(struct vm_area_struct *, unsigned long address);
+
+extern void (*local_flush_tlb_all)(void);
+extern void (*local_flush_tlb_mm)(struct mm_struct *);
+extern void (*local_flush_tlb_range)(struct mm_struct *, unsigned long start,
+				     unsigned long end);
+extern void (*local_flush_tlb_page)(struct vm_area_struct *, unsigned long address);
+
+extern void (*local_flush_page_to_ram)(unsigned long address);
+
+extern void smp_flush_cache_all(void);
+extern void smp_flush_cache_mm(struct mm_struct *mm);
+extern void smp_flush_cache_range(struct mm_struct *mm,
+				  unsigned long start,
+				  unsigned long end);
+extern void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+
+extern void smp_flush_tlb_all(void);
+extern void smp_flush_tlb_mm(struct mm_struct *mm);
+extern void smp_flush_tlb_range(struct mm_struct *mm,
+				  unsigned long start,
+				  unsigned long end);
+extern void smp_flush_tlb_page(struct vm_area_struct *mm, unsigned long page);
+extern void smp_flush_page_to_ram(unsigned long page);
+#endif
+
+extern void (*flush_cache_all)(void);
+extern void (*flush_cache_mm)(struct mm_struct *);
+extern void (*flush_cache_range)(struct mm_struct *, unsigned long start,
+				 unsigned long end);
+extern void (*flush_cache_page)(struct vm_area_struct *, unsigned long address);
+
+extern void (*flush_tlb_all)(void);
+extern void (*flush_tlb_mm)(struct mm_struct *);
+extern void (*flush_tlb_range)(struct mm_struct *, unsigned long start, unsigned long end);
+extern void (*flush_tlb_page)(struct vm_area_struct *, unsigned long address);
+
+extern void (*flush_page_to_ram)(unsigned long page);
 
 /* The permissions for pgprot_val to make a page mapped on the obio space */
 extern unsigned int pg_iobits;
@@ -258,7 +306,13 @@ extern void (*switch_to_context)(struct task_struct *tsk);
  * within a page table are directly modified.  Thus, the following
  * hook is made available.
  */
+
+#if 0 /* XXX try this soon XXX */
+extern void (*set_pte)(struct vm_area_struct *vma, unsigned long address,
+		       pte_t *pteptr, pte_t pteval);
+#else
 extern void (*set_pte)(pte_t *pteptr, pte_t pteval);
+#endif
 
 extern char *(*mmu_info)(void);
 
@@ -271,13 +325,13 @@ extern void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long addres
 extern int invalid_segment;
 
 #define SWP_TYPE(entry) (((entry)>>2) & 0x7f)
-#define SWP_OFFSET(entry) ((entry) >> 9)
+#define SWP_OFFSET(entry) (((entry) >> 9) & 0x7ffff)
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
 
 struct ctx_list {
 	struct ctx_list *next;
 	struct ctx_list *prev;
-	unsigned char ctx_number;
+	unsigned int ctx_number;
 	struct mm_struct *ctx_mm;
 };
 

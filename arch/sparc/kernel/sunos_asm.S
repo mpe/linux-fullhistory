@@ -1,4 +1,4 @@
-/* $Id: sunos_asm.S,v 1.10 1995/12/26 04:09:33 davem Exp $
+/* $Id: sunos_asm.S,v 1.12 1996/04/03 02:14:57 davem Exp $
  * sunos_asm.S: SunOS system calls which must have a low-level
  *              entry point to operate correctly.
  *
@@ -73,8 +73,8 @@ C_LABEL(sunos_execv):
 	call	C_LABEL(sparc_execve)
 	 add	%sp, REGWIN_SZ, %o0
 
-	st	%o0, [%sp + REGWIN_SZ + PT_I0]
-
 	b	C_LABEL(ret_sys_call)
 	 nop
+
+	 
 

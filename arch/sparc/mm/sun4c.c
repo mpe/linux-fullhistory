@@ -20,6 +20,19 @@ extern int num_segmaps, num_contexts;
 struct sun4c_vac_props sun4c_vacinfo;
 static int ctxflushes, segflushes, pageflushes;
 
+/* convert a virtual address to a physical address and vice
+   versa. Easy on the 4c */
+static unsigned long sun4c_v2p(unsigned long vaddr)
+{
+  return(vaddr - PAGE_OFFSET);
+}
+
+static unsigned long sun4c_p2v(unsigned long vaddr)
+{
+  return(vaddr + PAGE_OFFSET);
+}
+
+
 /* Invalidate every sun4c cache line tag. */
 void sun4c_flush_all(void)
 {
@@ -40,7 +53,7 @@ void sun4c_flush_all(void)
 }
 
 /* Blow the entire current context out of the virtual cache. */
-/* static */ inline void sun4c_flush_context(void)
+static inline void sun4c_flush_context(void)
 {
 	unsigned long vaddr;
 
@@ -482,7 +495,7 @@ static inline void sun4c_demap_one(struct sun4c_mmu_ring *crp, unsigned char ctx
 }
 
 /* Using this method to free up mmu entries eliminates a lot of
- * potential races since we have a kernel that incurs tlb
+ * potention races since we have a kernel that incurs tlb
  * replacement faults.  There may be performance penalties.
  */
 static inline struct sun4c_mmu_entry *sun4c_user_strategy(void)
@@ -567,8 +580,8 @@ static void sun4c_update_mmu_cache(struct vm_area_struct *vma, unsigned long add
 /* READ THIS:  If you put any diagnostic printing code in any of the kernel
  *             fault handling code you will lose badly.  This is the most
  *             delicate piece of code in the entire kernel, atomicity of
- *             kernel tlb replacement must be guaranteed.  This is why we
- *             have separate user and kernel allocation rings to alleviate
+ *             kernel tlb replacement must be guarenteed.  This is why we
+ *             have seperate user and kernel allocation rings to alleviate
  *             as many bad interactions as possible.
  *
  * XXX Someday make this into a fast in-window trap handler to avoid
@@ -626,8 +639,7 @@ static void sun4c_quick_kernel_fault(unsigned long address)
 struct task_bucket {
 	struct task_struct task;
 	char _unused1[PAGE_SIZE - sizeof(struct task_struct)];
-	char _unused2[PAGE_SIZE];
-	char kstack[(PAGE_SIZE<<1)];
+	char kstack[(PAGE_SIZE*3)];
 };
 
 struct task_bucket *sun4c_bucket[NR_TASKS];
@@ -717,7 +729,7 @@ static struct task_struct *sun4c_alloc_task_struct(void)
 static unsigned long sun4c_alloc_kernel_stack(struct task_struct *tsk)
 {
 	unsigned long saddr = (unsigned long) tsk;
-	unsigned long page[2];
+	unsigned long page[3];
 
 	if(!saddr)
 		return 0;
@@ -729,24 +741,33 @@ static unsigned long sun4c_alloc_kernel_stack(struct task_struct *tsk)
 		free_page(page[0]);
 		return 0;
 	}
-	saddr += (PAGE_SIZE << 1);
-	sun4c_put_pte(saddr - PAGE_SIZE, 0);
+	page[2] = get_free_page(GFP_KERNEL);
+	if(!page[2]) {
+		free_page(page[0]);
+		free_page(page[1]);
+		return 0;
+	}
+	saddr += PAGE_SIZE;
 	sun4c_put_pte(saddr, BUCKET_PTE(page[0]));
 	sun4c_put_pte(saddr + PAGE_SIZE, BUCKET_PTE(page[1]));
+	sun4c_put_pte(saddr + (PAGE_SIZE<<1), BUCKET_PTE(page[2]));
 	return saddr;
 }
 
 static void sun4c_free_kernel_stack(unsigned long stack)
 {
-	unsigned long page[2];
+	unsigned long page[3];
 
 	page[0] = BUCKET_PTE_PAGE(sun4c_get_pte(stack));
 	page[1] = BUCKET_PTE_PAGE(sun4c_get_pte(stack+PAGE_SIZE));
+	page[2] = BUCKET_PTE_PAGE(sun4c_get_pte(stack+(PAGE_SIZE<<1)));
 	sun4c_flush_segment(stack & SUN4C_REAL_PGDIR_MASK);
 	sun4c_put_pte(stack, 0);
 	sun4c_put_pte(stack + PAGE_SIZE, 0);
+	sun4c_put_pte(stack + (PAGE_SIZE<<1), 0);
 	free_page(page[0]);
 	free_page(page[1]);
+	free_page(page[2]);
 }
 
 static void sun4c_free_task_struct(struct task_struct *tsk)
@@ -779,32 +800,69 @@ static unsigned long sun4c_iobuffer_end;
 static unsigned long *sun4c_iobuffer_map;
 static int iobuffer_map_size;
 
-static char *sun4c_lockpage(char *vaddr, unsigned long _unused)
+/*
+ * Alias our pages so they do not cause a trap.
+ * Also one page may be aliased into several I/O areas and we may
+ * finish these I/O separately.
+ */
+static char *sun4c_lockarea(char *vaddr, unsigned long size)
 {
-	unsigned long vpage, voffset, search, pte;
-	unsigned long npage;
+	unsigned long base, scan;
+	unsigned long npages;
+	unsigned long vpage;
+	unsigned long pte;
+	unsigned long apage;
 
+	npages = (((unsigned long)vaddr & ~PAGE_MASK) +
+		  size + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+
+	scan = 0;
+	for (;;) {
+		scan = find_next_zero_bit(sun4c_iobuffer_map,
+					  iobuffer_map_size, scan);
+		if ((base = scan) + npages > iobuffer_map_size) goto abend;
+		for (;;) {
+			if (scan >= base + npages) goto found;
+			if (test_bit(scan, sun4c_iobuffer_map)) break;
+			scan++;
+		}
+	}
+
+found:
 	vpage = ((unsigned long) vaddr) & PAGE_MASK;
-	voffset = ((unsigned long) vaddr) & ~PAGE_MASK;
-	pte = ((vpage-PAGE_OFFSET) >> PAGE_SHIFT) | pgprot_val(SUN4C_PAGE_KERNEL);
-	pte |= _SUN4C_PAGE_NOCACHE;
-	search = find_first_zero_bit(sun4c_iobuffer_map, iobuffer_map_size);
-	set_bit(search, sun4c_iobuffer_map);
-	npage = (search << PAGE_SHIFT) + sun4c_iobuffer_start;
-	sun4c_flush_page(vpage);
-	sun4c_put_pte(npage, pte);
-	return (char *) (npage + voffset);
+	for (scan = base; scan < base+npages; scan++) {
+		pte = ((vpage-PAGE_OFFSET) >> PAGE_SHIFT);
+ 		pte |= pgprot_val(SUN4C_PAGE_KERNEL);
+		pte |= _SUN4C_PAGE_NOCACHE;
+		set_bit(scan, sun4c_iobuffer_map);
+		apage = (scan << PAGE_SHIFT) + sun4c_iobuffer_start;
+		sun4c_flush_page(vpage);
+		sun4c_put_pte(apage, pte);
+		vpage += PAGE_SIZE;
+	}
+	return (char *) ((base << PAGE_SHIFT) + sun4c_iobuffer_start +
+			 (((unsigned long) vaddr) & ~PAGE_MASK));
+
+abend:
+	printk("DMA vaddr=0x%p size=%08lx\n", vaddr, size);
+	panic("Out of iobuffer table");
+	return 0;
 }
 
-static void sun4c_unlockpage(char *vaddr, unsigned long _unused)
+static void sun4c_unlockarea(char *vaddr, unsigned long size)
 {
-	unsigned long vpage, nr;
+	unsigned long vpage, npages;
 
-	vpage = (unsigned long) vaddr;
-	vpage &= PAGE_MASK;
-	nr = (vpage - sun4c_iobuffer_start) >> PAGE_SHIFT;
-	sun4c_put_pte(vpage, 0);
-	clear_bit(nr, sun4c_iobuffer_map);
+	vpage = (unsigned long)vaddr & PAGE_MASK;
+	npages = (((unsigned long)vaddr & ~PAGE_MASK) +
+		  size + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+	while (npages != 0) {
+		--npages;
+		sun4c_put_pte(vpage, 0);
+		clear_bit((vpage - sun4c_iobuffer_start) >> PAGE_SHIFT,
+			  sun4c_iobuffer_map);
+		vpage += PAGE_SIZE;
+	}
 }
 
 /* Note the scsi code at init time passes to here buffers
@@ -812,32 +870,43 @@ static void sun4c_unlockpage(char *vaddr, unsigned long _unused)
  * by implication and fool the page locking code above
  * if passed to by mistake.
  */
-static char *sun4c_get_scsi_buffer(char *bufptr, unsigned long len, struct linux_sbus *sbus)
+static char *sun4c_get_scsi_one(char *bufptr, unsigned long len, struct linux_sbus *sbus)
 {
-	unsigned long page1, page2;
+	unsigned long page;
 
-	page1 = ((unsigned long) bufptr) & PAGE_MASK;
-	page2 = (((unsigned long) bufptr) + len - 1) & PAGE_MASK;
-	if(page1 != page2) {
-		printk("Problem, trying to lock multipage scsi buffer.\n");
-		printk("page1<%08lx> page2<%08lx>\n", page1, page2);
-		panic("Scsi buffer too big.");
-	}
-	if(page1 > high_memory)
+	page = ((unsigned long) bufptr) & PAGE_MASK;
+	if(page > high_memory)
 		return bufptr; /* already locked */
-	return sun4c_lockpage(bufptr, PAGE_SIZE);
+	return sun4c_lockarea(bufptr, len);
 }
 
-static void sun4c_release_scsi_buffer(char *bufptr, unsigned long len, struct linux_sbus *sbus)
+static void sun4c_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+{
+	while(sz >= 0) {
+		sg[sz].alt_addr = sun4c_lockarea(sg[sz].addr, sg[sz].len);
+		sz--;
+	}
+}
+
+static void sun4c_release_scsi_one(char *bufptr, unsigned long len, struct linux_sbus *sbus)
 {
 	unsigned long page = (unsigned long) bufptr;
 
 	if(page < sun4c_iobuffer_start)
 		return; /* On kernel stack or similar, see above */
-	sun4c_unlockpage(bufptr, PAGE_SIZE);
+	sun4c_unlockarea(bufptr, len);
 }
 
-#define TASK_ENTRY_SIZE    (3 * PAGE_SIZE)
+static void sun4c_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+{
+	while(sz >= 0) {
+		sun4c_unlockarea(sg[sz].alt_addr, sg[sz].len);
+		sg[sz].alt_addr = 0;
+		sz--;
+	}
+}
+
+#define TASK_ENTRY_SIZE    BUCKET_SIZE /* see above */
 #define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
 
 struct vm_area_struct sun4c_kstack_vma;
@@ -858,7 +927,7 @@ static unsigned long sun4c_init_lock_areas(unsigned long start_mem)
 	}
 
 	sun4c_iobuffer_start = SUN4C_REAL_PGDIR_ALIGN(sun4c_taskstack_end);
-	sun4c_iobuffer_end = sun4c_iobuffer_start + SUN4C_REAL_PGDIR_SIZE;
+	sun4c_iobuffer_end = SUN4C_LOCK_END;
 	bitmap_size = (sun4c_iobuffer_end - sun4c_iobuffer_start) >> PAGE_SHIFT;
 	bitmap_size = (bitmap_size + 7) >> 3;
 	bitmap_size = LONG_ALIGN(bitmap_size);
@@ -878,33 +947,181 @@ static unsigned long sun4c_init_lock_areas(unsigned long start_mem)
 	return start_mem;
 }
 
-static void sun4c_invalidate_all(void)
+/* Cache flushing on the sun4c. */
+static void sun4c_flush_cache_all(void)
 {
-	struct sun4c_mmu_entry *this_entry, *next_entry;
+	unsigned long start, end;
 
-	this_entry = sun4c_kernel_ring.ringhd.next;
-	while(sun4c_kernel_ring.num_entries) {
-		next_entry = this_entry->next;
-		sun4c_kernel_unmap(this_entry);
-		free_kernel_entry(this_entry, &sun4c_kernel_ring);
-		this_entry = next_entry;
+	/* Clear all tags in the sun4c cache.
+	 * The cache is write through so this is safe.
+	 */
+	start = AC_CACHETAGS;
+	end = start + sun4c_vacinfo.num_bytes;
+	flush_user_windows();
+	while(start < end) {
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+				     "r" (start), "i" (ASI_CONTROL));
+		start += sun4c_vacinfo.linesize;
 	}
 }
 
-static void sun4c_invalidate_mm(struct mm_struct *mm)
+static void sun4c_flush_cache_mm(struct mm_struct *mm)
 {
-	if(mm->context == NO_CONTEXT)
-		return;
-	sun4c_demap_context(&sun4c_context_ring[mm->context], mm->context);
+	unsigned long flags;
+	int octx;
+
+#ifndef __SMP__
+	if(mm->context != NO_CONTEXT) {
+#endif
+		octx = sun4c_get_context();
+		save_flags(flags); cli();
+		flush_user_windows();
+		sun4c_set_context(mm->context);
+		sun4c_flush_context();
+		sun4c_set_context(octx);
+		restore_flags(flags);
+#ifndef __SMP__
+	}
+#endif
 }
 
-static void sun4c_invalidate_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+static void sun4c_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+	unsigned long flags;
+	int size, octx;
+
+#ifndef __SMP__
+	if(mm->context != NO_CONTEXT) {
+#endif
+		size = start - end;
+
+		flush_user_windows();
+
+		if(size >= sun4c_vacinfo.num_bytes)
+			goto flush_it_all;
+
+		save_flags(flags); cli();
+		octx = sun4c_get_context();
+		sun4c_set_context(mm->context);
+
+		if(size <= (PAGE_SIZE << 1)) {
+			start &= PAGE_MASK;
+			while(start < end) {
+				sun4c_flush_page(start);
+				start += PAGE_SIZE;
+			};
+		} else {
+			start &= SUN4C_REAL_PGDIR_MASK;
+			while(start < end) {
+				sun4c_flush_segment(start);
+				start += SUN4C_REAL_PGDIR_SIZE;
+			}
+		}
+		sun4c_set_context(octx);
+		restore_flags(flags);
+#ifndef __SMP__
+	}
+#endif
+	return;
+
+flush_it_all:
+	/* Cache size bounded flushing, thank you. */
+	sun4c_flush_cache_all();
+}
+
+static void sun4c_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
+{
+	unsigned long flags;
+	int octx;
+	struct mm_struct *mm = vma->vm_mm;
+
+	/* Sun4c has no seperate I/D caches so cannot optimize for non
+	 * text page flushes.
+	 */
+#ifndef __SMP__
+	if(mm->context != NO_CONTEXT) {
+#endif
+		octx = sun4c_get_context();
+		save_flags(flags); cli();
+		flush_user_windows();
+		sun4c_set_context(mm->context);
+		sun4c_flush_page(page);
+		sun4c_set_context(octx);
+		restore_flags(flags);
+#ifndef __SMP__
+	}
+#endif
+}
+
+/* Sun4c cache is write-through, so no need to validate main memory
+ * during a page copy in kernel space.
+ */
+static void sun4c_flush_page_to_ram(unsigned long page)
+{
+}
+
+/* TLB flushing on the sun4c.  These routines count on the cache
+ * flushing code to flush the user register windows so that we need
+ * not do so when we get here.
+ */
+
+static void sun4c_flush_tlb_all(void)
+{
+	struct sun4c_mmu_entry *this_entry, *next_entry;
+	unsigned long flags;
+	int savectx, ctx;
+
+	save_flags(flags); cli();
+	this_entry = sun4c_kernel_ring.ringhd.next;
+	savectx = sun4c_get_context();
+	while(sun4c_kernel_ring.num_entries) {
+		next_entry = this_entry->next;
+		for(ctx = 0; ctx < num_contexts; ctx++) {
+			sun4c_set_context(ctx);
+			sun4c_put_segmap(this_entry->vaddr, invalid_segment);
+		}
+		free_kernel_entry(this_entry, &sun4c_kernel_ring);
+		this_entry = next_entry;
+	}
+	sun4c_set_context(savectx);
+	restore_flags(flags);
+}
+
+static void sun4c_flush_tlb_mm(struct mm_struct *mm)
+{
+	struct sun4c_mmu_entry *this_entry, *next_entry;
+	struct sun4c_mmu_ring *crp;
+	int savectx, ctx;
+
+#ifndef __SMP__
+	if(mm->context != NO_CONTEXT) {
+#endif
+		crp = &sun4c_context_ring[mm->context];
+		savectx = sun4c_get_context();
+		ctx = mm->context;
+		this_entry = crp->ringhd.next;
+		sun4c_set_context(mm->context);
+		while(crp->num_entries) {
+			next_entry = this_entry->next;
+			sun4c_user_unmap(this_entry);
+			free_user_entry(ctx, this_entry);
+			this_entry = next_entry;
+		}
+		sun4c_set_context(savectx);
+#ifndef __SMP__
+	}
+#endif
+}
+
+static void sun4c_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
 	struct sun4c_mmu_entry *this_entry;
 	unsigned char pseg, savectx;
 
+#ifndef __SMP__
 	if(mm->context == NO_CONTEXT)
 		return;
+#endif
 	flush_user_windows();
 	savectx = sun4c_get_context();
 	sun4c_set_context(mm->context);
@@ -914,7 +1131,7 @@ static void sun4c_invalidate_range(struct mm_struct *mm, unsigned long start, un
 		if(pseg == invalid_segment)
 			goto next_one;
 		this_entry = &mmu_entry_pool[pseg];
-		sun4c_user_unmap(this_entry);
+		sun4c_put_segmap(this_entry->vaddr, invalid_segment);
 		free_user_entry(mm->context, this_entry);
 	next_one:
 		start += SUN4C_REAL_PGDIR_SIZE;
@@ -922,22 +1139,23 @@ static void sun4c_invalidate_range(struct mm_struct *mm, unsigned long start, un
 	sun4c_set_context(savectx);
 }
 
-static void sun4c_invalidate_page(struct vm_area_struct *vma, unsigned long page)
+static void sun4c_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	unsigned char savectx;
+	int savectx;
 
-	if(mm->context == NO_CONTEXT)
-		return;
-	flush_user_windows();
-	savectx = sun4c_get_context();
-	sun4c_set_context(mm->context);
-	page &= PAGE_MASK;
-	if(sun4c_get_pte(page) & _SUN4C_PAGE_VALID) {
-		sun4c_flush_page(page);
-		sun4c_put_pte(page, 0);
+#ifndef __SMP__
+	if(mm->context != NO_CONTEXT) {
+#endif
+		savectx = sun4c_get_context();
+		sun4c_set_context(mm->context);
+		page &= PAGE_MASK;
+		if(sun4c_get_pte(page) & _SUN4C_PAGE_VALID)
+			sun4c_put_pte(page, 0);
+		sun4c_set_context(savectx);
+#ifndef __SMP__
 	}
-	sun4c_set_context(savectx);
+#endif
 }
 
 /* Sun4c mmu hardware doesn't update the dirty bit in the pte's
@@ -1045,18 +1263,6 @@ static void sun4c_exit_hook(void)
 	}
 }
 
-void sun4c_test_wp(void)
-{
-	wp_works_ok = -1;
-
-	/* Let it rip... */
-	sun4c_put_pte((unsigned long) 0x0, (_SUN4C_PAGE_VALID | _SUN4C_PAGE_PRIV));
-	__asm__ __volatile__("st %%g0, [0x0]\n\t": : :"memory");
-	sun4c_put_pte((unsigned long) 0x0, 0x0);
-	if (wp_works_ok < 0)
-		wp_works_ok = 0;
-}
-
 static char s4cinfo[512];
 
 static char *sun4c_mmu_info(void)
@@ -1067,7 +1273,7 @@ static char *sun4c_mmu_info(void)
 	for(i=0; i < num_contexts; i++)
 		used_user_entries += sun4c_context_ring[i].num_entries;
 
-	sprintf(s4cinfo, "vacsize: %d bytes\n"
+	sprintf(s4cinfo, "vacsize\t\t: %d bytes\n"
 		"vachwflush\t: %s\n"
 		"vaclinesize\t: %d bytes\n"
 		"mmuctxs\t\t: %d\n"
@@ -1114,13 +1320,7 @@ static unsigned long sun4c_vmalloc_start(void)
 
 static int sun4c_pte_none(pte_t pte)		{ return !pte_val(pte); }
 static int sun4c_pte_present(pte_t pte)	        { return pte_val(pte) & _SUN4C_PAGE_VALID; }
-static int sun4c_pte_inuse(pte_t *ptep)         { return mem_map[MAP_NR(ptep)].reserved || mem_map[MAP_NR(ptep)].count != 1; }
 static void sun4c_pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
-static void sun4c_pte_reuse(pte_t *ptep)
-{
-	if(!mem_map[MAP_NR(ptep)].reserved)
-		mem_map[MAP_NR(ptep)].count++;
-}
 
 static int sun4c_pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 static int sun4c_pmd_bad(pmd_t pmd)
@@ -1129,14 +1329,11 @@ static int sun4c_pmd_bad(pmd_t pmd)
 }
 
 static int sun4c_pmd_present(pmd_t pmd)	        { return pmd_val(pmd) & PGD_PRESENT; }
-static int sun4c_pmd_inuse(pmd_t *pmdp)         { return 0; }
 static void sun4c_pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
-static void sun4c_pmd_reuse(pmd_t * pmdp)       { }
 
 static int sun4c_pgd_none(pgd_t pgd)		{ return 0; }
 static int sun4c_pgd_bad(pgd_t pgd)		{ return 0; }
 static int sun4c_pgd_present(pgd_t pgd)	        { return 1; }
-static int sun4c_pgd_inuse(pgd_t *pgdp)         { return mem_map[MAP_NR(pgdp)].reserved; }
 static void sun4c_pgd_clear(pgd_t * pgdp)	{ }
 
 /*
@@ -1163,7 +1360,7 @@ static pte_t sun4c_mk_pte(unsigned long page, pgprot_t pgprot)
 	return __pte(((page - PAGE_OFFSET) >> PAGE_SHIFT) | pgprot_val(pgprot));
 }
 
-static pte_t sun4c_mk_pte_io(unsigned long page, pgprot_t pgprot)
+static pte_t sun4c_mk_pte_io(unsigned long page, pgprot_t pgprot, int space)
 {
 	return __pte(((page - PAGE_OFFSET) >> PAGE_SHIFT) | pgprot_val(pgprot));
 }
@@ -1212,7 +1409,6 @@ static void sun4c_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdir)
  */
 static void sun4c_pte_free_kernel(pte_t *pte)
 {
-	mem_map[MAP_NR(pte)].reserved = 0;
 	free_page((unsigned long) pte);
 }
 
@@ -1224,7 +1420,6 @@ static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		if (sun4c_pmd_none(*pmd)) {
 			if (page) {
 				pmd_val(*pmd) = PGD_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 			pmd_val(*pmd) = PGD_TABLE | (unsigned long) BAD_PAGETABLE;
@@ -1376,10 +1571,40 @@ void ld_mmu_sun4c(void)
 	    | _SUN4C_PAGE_WRITE | _SUN4C_PAGE_DIRTY;
 	
 	/* Functions */
-	invalidate_all = sun4c_invalidate_all;
-	invalidate_mm = sun4c_invalidate_mm;
-	invalidate_range = sun4c_invalidate_range;
-	invalidate_page = sun4c_invalidate_page;
+#ifndef __SMP__
+	flush_cache_all = sun4c_flush_cache_all;
+	flush_cache_mm = sun4c_flush_cache_mm;
+	flush_cache_range = sun4c_flush_cache_range;
+	flush_cache_page = sun4c_flush_cache_page;
+
+	flush_tlb_all = sun4c_flush_tlb_all;
+	flush_tlb_mm = sun4c_flush_tlb_mm;
+	flush_tlb_range = sun4c_flush_tlb_range;
+	flush_tlb_page = sun4c_flush_tlb_page;
+#else
+	local_flush_cache_all = sun4c_flush_cache_all;
+	local_flush_cache_mm = sun4c_flush_cache_mm;
+	local_flush_cache_range = sun4c_flush_cache_range;
+	local_flush_cache_page = sun4c_flush_cache_page;
+
+	local_flush_tlb_all = sun4c_flush_tlb_all;
+	local_flush_tlb_mm = sun4c_flush_tlb_mm;
+	local_flush_tlb_range = sun4c_flush_tlb_range;
+	local_flush_tlb_page = sun4c_flush_tlb_page;
+
+	flush_cache_all = smp_flush_cache_all;
+	flush_cache_mm = smp_flush_cache_mm;
+	flush_cache_range = smp_flush_cache_range;
+	flush_cache_page = smp_flush_cache_page;
+
+	flush_tlb_all = smp_flush_tlb_all;
+	flush_tlb_mm = smp_flush_tlb_mm;
+	flush_tlb_range = smp_flush_tlb_range;
+	flush_tlb_page = smp_flush_tlb_page;
+#endif
+
+	flush_page_to_ram = sun4c_flush_page_to_ram;
+
 	set_pte = sun4c_set_pte;
 	switch_to_context = sun4c_switch_to_context;
 	pmd_align = sun4c_pmd_align;
@@ -1393,21 +1618,16 @@ void ld_mmu_sun4c(void)
 
 	pte_none = sun4c_pte_none;
 	pte_present = sun4c_pte_present;
-	pte_inuse = sun4c_pte_inuse;
 	pte_clear = sun4c_pte_clear;
-	pte_reuse = sun4c_pte_reuse;
 
 	pmd_none = sun4c_pmd_none;
 	pmd_bad = sun4c_pmd_bad;
 	pmd_present = sun4c_pmd_present;
-	pmd_inuse = sun4c_pmd_inuse;
 	pmd_clear = sun4c_pmd_clear;
-	pmd_reuse = sun4c_pmd_reuse;
 
 	pgd_none = sun4c_pgd_none;
 	pgd_bad = sun4c_pgd_bad;
 	pgd_present = sun4c_pgd_present;
-	pgd_inuse = sun4c_pgd_inuse;
 	pgd_clear = sun4c_pgd_clear;
 
 	mk_pte = sun4c_mk_pte;
@@ -1439,10 +1659,16 @@ void ld_mmu_sun4c(void)
 	update_mmu_cache = sun4c_update_mmu_cache;
 	mmu_exit_hook = sun4c_exit_hook;
 	mmu_flush_hook = sun4c_flush_hook;
-	mmu_lockarea = sun4c_lockpage;
-	mmu_unlockarea = sun4c_unlockpage;
-	mmu_get_scsi_buffer = sun4c_get_scsi_buffer;
-	mmu_release_scsi_buffer = sun4c_release_scsi_buffer;
+	mmu_lockarea = sun4c_lockarea;
+	mmu_unlockarea = sun4c_unlockarea;
+
+	mmu_get_scsi_one = sun4c_get_scsi_one;
+	mmu_get_scsi_sgl = sun4c_get_scsi_sgl;
+	mmu_release_scsi_one = sun4c_release_scsi_one;
+	mmu_release_scsi_sgl = sun4c_release_scsi_sgl;
+
+        mmu_v2p = sun4c_v2p;
+        mmu_p2v = sun4c_p2v;
 	
 	/* Task struct and kernel stack allocating/freeing. */
 	alloc_kernel_stack = sun4c_alloc_kernel_stack;
@@ -1455,6 +1681,5 @@ void ld_mmu_sun4c(void)
 
 	/* These should _never_ get called with two level tables. */
 	pgd_set = 0;
-	pgd_reuse = 0;
 	pgd_page = 0;
 }

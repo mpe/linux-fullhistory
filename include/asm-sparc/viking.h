@@ -1,5 +1,5 @@
-/* $Id: viking.h,v 1.6 1996/03/01 07:21:05 davem Exp $
- * viking.h:  Defines specific to the TI Viking MBUS module.
+/* $Id: viking.h,v 1.12 1996/04/20 10:15:46 davem Exp $
+ * viking.h:  Defines specific to the GNU/Viking MBUS module.
  *            This is SRMMU stuff.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,47 +9,101 @@
 
 #include <asm/mxcc.h>
 
-/* Bits in the SRMMU control register for TI Viking modules.
+/* Bits in the SRMMU control register for GNU/Viking modules.
  *
- * -------------------------------------------------------------
- * |implvers| RSV |DP|RSV|TC|AC|SP|BM|PC|MBM|SB|IC|DC|RSV|NF|ME|
- * -------------------------------------------------------------
- *  31    24 23-20 19  18 17 16 15 14 13  12 11 10  9 8-2  1  0
+ * -----------------------------------------------------------
+ * |impl-vers| RSV |TC|AC|SP|BM|PC|MBM|SB|IC|DC|PSO|RSV|NF|ME|
+ * -----------------------------------------------------------
+ *  31     24 23-17 16 15 14 13 12 11  10  9  8  7  6-2  1  0
  *
- * DP: Data Prefetcher Enable -- 0 = DP is off, 1 = DP is on
- * TC: Tablewalk Cacheable -- 0 = Twalks are not cacheable
- *                            1 = Twalks are cacheable
- * AC: Alternate Cacheable -- 0 = Direct physical accesses not cacheable
- *                            1 = Direct physical accesses are cacheable
+ * TC: Tablewalk Cacheable -- 0 = Twalks are not cacheable in E-cache
+ *                            1 = Twalks are cacheable in E-cache
+ *
+ * GNU/Viking will only cache tablewalks in the E-cache (mxcc) if present
+ * and never caches them internally (or so states the docs).  Therefore
+ * for machines lacking an E-cache (ie. in MBUS mode) this bit must
+ * remain cleared.
+ *
+ * AC: Alternate Cacheable -- 0 = Passthru physical accesses not cacheable
+ *                            1 = Passthru physical accesses cacheable
+ *
+ * This indicates whether accesses are cacheable when no cachable bit
+ * is present in the pte when the processor is in boot-mode or the
+ * access does not need pte's for translation (ie. pass-thru ASI's).
+ * "Cachable" is only referring to E-cache (if present) and not the
+ * on chip split I/D caches of the GNU/Viking.
+ *
  * SP: SnooP Enable -- 0 = bus snooping off, 1 = bus snooping on
+ *
+ * This enables snooping on the GNU/Viking bus.  This must be on
+ * for the hardware cache consistancy mechanisms of the GNU/Viking
+ * to work at all.  On non-mxcc GNU/Viking modules the split I/D
+ * caches will snoop regardless of whether they are enabled, this
+ * takes care of the case where the I or D or both caches are turned
+ * off yet still contain valid data.  Note also that this bit does
+ * not affect GNU/Viking store-buffer snoops, those happen if the
+ * store-buffer is enabled no matter what.
+ *
  * BM: Boot Mode -- 0 = not in boot mode, 1 = in boot mode
+ *
+ * This indicates whether the GNU/Viking is in boot-mode or not,
+ * if it is then all instruction fetch physical addresses are
+ * computed as 0xff0000000 + low 28 bits of requested address.
+ * GNU/Viking boot-mode does not affect data accesses.  Also,
+ * in boot mode instruction accesses bypass the split on chip I/D
+ * caches, they may be cached by the GNU/MXCC if present and enabled.
+ *
  * MBM: MBus Mode -- 0 = not in MBus mode, 1 = in MBus mode
+ *
+ * This indicated the GNU/Viking configuration present.  If in
+ * MBUS mode, the GNU/Viking lacks a GNU/MXCC E-cache.  If it is
+ * not then the GNU/Viking is on a module VBUS connected directly
+ * to a GNU/MXCC cache controller.  The GNU/MXCC can be thus connected
+ * to either an GNU/MBUS (sun4m) or the packet-switched GNU/XBus (sun4d).
+ *
  * SB: StoreBuffer enable -- 0 = store buffer off, 1 = store buffer on
+ *
+ * The GNU/Viking store buffer allows the chip to continue execution
+ * after a store even if the data cannot be placed in one of the
+ * caches during that cycle.  If disabled, all stores operations
+ * occur synchronously.
+ *
  * IC: Instruction Cache -- 0 = off, 1 = on
  * DC: Data Cache -- 0 = off, 1 = 0n
+ *
+ * These bits enable the on-cpu GNU/Viking split I/D caches.  Note,
+ * as mentioned above, these caches will snoop the bus in GNU/MBUS
+ * configurations even when disabled to avoid data corruption.
+ *
  * NF: No Fault -- 0 = faults generate traps, 1 = faults don't trap
  * ME: MMU enable -- 0 = mmu not translating, 1 = mmu translating
  *
  */
 
+#define VIKING_MMUENABLE    0x00000001
+#define VIKING_NOFAULT      0x00000002
+#define VIKING_PSO          0x00000080
 #define VIKING_DCENABLE     0x00000100   /* Enable data cache */
 #define VIKING_ICENABLE     0x00000200   /* Enable instruction cache */
 #define VIKING_SBENABLE     0x00000400   /* Enable store buffer */
 #define VIKING_MMODE        0x00000800   /* MBUS mode */
 #define VIKING_PCENABLE     0x00001000   /* Enable parity checking */
-
-/* Boot mode, 0 at boot-time, 1 after prom initializes the MMU. */
 #define VIKING_BMODE        0x00002000   
 #define VIKING_SPENABLE     0x00004000   /* Enable bus cache snooping */
-
-/* The deal with this AC bit is that if you are going to modify the
- * contents of physical ram using the MMU bypass, you had better set
- * this bit or things will get unsynchronized.  This is only applicable
- * if an E-cache (ie. a PAC) is around and the Viking is not in MBUS mode.
- */
 #define VIKING_ACENABLE     0x00008000   /* Enable alternate caching */
 #define VIKING_TCENABLE     0x00010000   /* Enable table-walks to be cached */
-#define VIKING_DPENABLE     0x00040000   /* Enable the data prefetcher */
+
+/*
+ * GNU/Viking Breakpoint Action Register fields.
+ */
+#define VIKING_ACTION_MIX   0x00001000   /* Enable multiple instructions */
+
+/*
+ * GNU/Viking Cache Tags.
+ */
+#define VIKING_PTAG_VALID   0x01000000   /* Cache block is valid */
+#define VIKING_PTAG_DIRTY   0x00010000   /* Block has been modified */
+#define VIKING_PTAG_SHARED  0x00000100   /* Shared with some other cache */
 
 extern inline void viking_flush_icache(void)
 {
@@ -63,16 +117,50 @@ extern inline void viking_flush_dcache(void)
 			     "i" (ASI_M_DC_FLCLEAR));
 }
 
-/* MXCC stuff... */
-extern inline void viking_enable_mxcc(void)
+extern inline void viking_unlock_icache(void)
 {
+	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+			     "r" (0x80000000), "i" (ASI_M_IC_FLCLEAR));
 }
 
-extern inline void viking_mxcc_scrape(void)
+extern inline void viking_unlock_dcache(void)
 {
-	/* David, what did you learn in school today? */
+	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
+			     "r" (0x80000000), "i" (ASI_M_DC_FLCLEAR));
+}
 
+extern inline void viking_set_bpreg(unsigned long regval)
+{
+	__asm__ __volatile__("sta %0, [%%g0] %1\n\t" : :
+			     "r" (regval),
+			     "i" (ASI_M_ACTION));
+}
 
+extern inline unsigned long viking_get_bpreg(void)
+{
+	unsigned long regval;
+
+	__asm__ __volatile__("lda [%%g0] %1, %0\n\t" :
+			     "=r" (regval) :
+			     "i" (ASI_M_ACTION));
+	return regval;
+}
+
+extern inline void viking_get_dcache_ptag(int set, int block,
+					  unsigned long *data)
+{
+	unsigned long ptag = ((set & 0x7f) << 5) | ((block & 0x3) << 26) |
+			     0x80000000;
+	unsigned long info, page;
+
+	__asm__ __volatile__ ("ldda [%2] %3, %%g2\n\t"
+			      "or %%g0, %%g2, %0\n\t"
+			      "or %%g0, %%g3, %1\n\t" :
+			      "=r" (info), "=r" (page) :
+			      "r" (ptag), "i" (ASI_M_DATAC_TAG) :
+			      "g2", "g3");
+	data[0] = info;
+	data[1] = page;
 }
 
 #endif /* !(_SPARC_VIKING_H) */

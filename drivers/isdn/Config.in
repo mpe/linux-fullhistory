@@ -10,3 +10,4 @@ if [ "$CONFIG_INET" != "n" ]; then
 fi
 dep_tristate 'Teles/NICCY1016PC/Creatix support' CONFIG_ISDN_DRV_TELES $CONFIG_ISDN
 dep_tristate 'ICN B1 and B2 support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
+dep_tristate 'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN

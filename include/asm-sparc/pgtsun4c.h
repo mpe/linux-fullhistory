@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.22 1996/01/24 02:33:45 davem Exp $
+/* $Id: pgtsun4c.h,v 1.24 1996/03/26 06:51:56 miguel Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -37,7 +37,7 @@
  * translations at KERNBASE + 128MB for 1MB, then we begin the VMALLOC
  * area, makes sense.  This works out to the value below.
  */
-#define SUN4C_VMALLOC_START   (0xfe100000)
+#define SUN4C_VMALLOC_START   (0xfe200000)
 
 /*
  * Sparc SUN4C pte fields.
@@ -64,9 +64,6 @@
 #define SUN4C_PAGE_KERNEL   __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_WRITE | \
 				     _SUN4C_PAGE_PRIV | _SUN4C_PAGE_DIRTY | \
 				     _SUN4C_PAGE_REF | _SUN4C_PAGE_NOCACHE)
-
-extern char *sun4c_lockarea(char *vaddr, unsigned long size);
-extern void sun4c_unlockarea(char *vaddr, unsigned long size);
 
 extern __inline__ unsigned long sun4c_get_synchronous_error(void)
 {

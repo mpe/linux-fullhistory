@@ -1,3 +1,11 @@
+/* $Id: llglue.c,v 1.1 1996/04/13 10:26:29 fritz Exp $
+ *
+ * $Log: llglue.c,v $
+ * Revision 1.1  1996/04/13 10:26:29  fritz
+ * Initial revision
+ *
+ *
+ */
 #define __NO_VERSION__
 #include "teles.h"
 #include <linux/malloc.h>

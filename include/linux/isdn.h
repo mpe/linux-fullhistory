@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.2 1996/02/11 02:10:02 fritz Exp fritz $
+/* $Id: isdn.h,v 1.3 1996/04/20 16:54:58 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.3  1996/04/20 16:54:58  fritz
+ * Increased maximum number of channels.
+ * Added some flags for isdn_net to handle callback more reliable.
+ * Fixed delay-definitions to be more accurate.
+ * Misc. typos
+ *
  * Revision 1.2  1996/02/11 02:10:02  fritz
  * Changed IOCTL-names
  * Added rx_netdev, st_netdev, first_skb, org_hcb, and org_hcu to
@@ -45,15 +51,15 @@
  * the correspondent code in isdn.c
  */
 
-#define ISDN_MAX_DRIVERS    16
-#define ISDN_MAX_CHANNELS   16
+#define ISDN_MAX_DRIVERS    32
+#define ISDN_MAX_CHANNELS   64
 #define ISDN_MINOR_B        0
 #define ISDN_MINOR_BMAX     (ISDN_MAX_CHANNELS-1)
 #define ISDN_MINOR_CTRL     ISDN_MAX_CHANNELS
 #define ISDN_MINOR_CTRLMAX  (2*ISDN_MAX_CHANNELS-1)
 #define ISDN_MINOR_PPP      (2*ISDN_MAX_CHANNELS)
 #define ISDN_MINOR_PPPMAX   (3*ISDN_MAX_CHANNELS-1)
-#define ISDN_MINOR_STATUS   128
+#define ISDN_MINOR_STATUS   255
 
 /* New ioctl-codes */
 #define IIOCNETAIF  _IO('I',1)
@@ -76,6 +82,7 @@
 #define IIOCSETMAP  _IO('I',18)
 #define IIOCNETASL  _IO('I',19)
 #define IIOCNETDIL  _IO('I',20)
+#define IIOCGETCPS  _IO('I',21)
 
 #define IIOCNETALN  _IO('I',32)
 #define IIOCNETDLN  _IO('I',33)
@@ -90,6 +97,7 @@
 #define ISDN_NET_ENCAP_IPTYP     2
 #define ISDN_NET_ENCAP_CISCOHDLC 3
 #define ISDN_NET_ENCAP_SYNCPPP   4
+#define ISDN_NET_ENCAP_UIHDLC    5
 
 /* Facility which currently uses an ISDN-channel */
 #define ISDN_USAGE_NONE       0
@@ -128,17 +136,20 @@ typedef struct {
   char slave[10];    /* Name of Slave for Bundling            */
   char eaz[256];     /* EAZ/MSN                               */
   char drvid[25];    /* DriverId for Bindings                 */
-  int  secure;       /* Flag: Secure                          */
-  int  callback;     /* Flag: Callback                        */
   int  onhtime;      /* Hangup-Timeout                        */
   int  charge;       /* Charge-Units                          */
-  int  chargehup;    /* Flag: Charge-Hangup                   */
   int  l2_proto;     /* Layer-2 protocol                      */
   int  l3_proto;     /* Layer-3 protocol                      */
   int  p_encap;      /* Encapsulation                         */
-  int  ihup;         /* Flag: Hangup-Timeout on incoming line */
   int  exclusive;    /* Channel, if bound exclusive           */
+  int  dialmax;      /* Dial Retry-Counter                    */
   int  slavedelay;   /* Delay until slave starts up           */
+  int  cbdelay;      /* Delay before Callback                 */
+  int  chargehup;    /* Flag: Charge-Hangup                   */
+  int  ihup;         /* Flag: Hangup-Timeout on incoming line */
+  int  secure;       /* Flag: Secure                          */
+  int  callback;     /* Flag: Callback                        */
+  int  cbhup;        /* Flag: Reject Call before Callback     */
 } isdn_net_ioctl_cfg;
 
 #ifdef __KERNEL__
@@ -211,8 +222,8 @@ typedef struct {
 
 /* Timer-delays and scheduling-flags */
 #define ISDN_TIMER_RES       3                     /* Main Timer-Resolution  */
-#define ISDN_TIMER_02SEC     (HZ/ISDN_TIMER_RES/5) /* Slow-Timer1 (0.2 sec.) */
-#define ISDN_TIMER_1SEC      (HZ/ISDN_TIMER_RES)   /* Slow-Timer2 (1 sec.)   */
+#define ISDN_TIMER_02SEC     (HZ/(ISDN_TIMER_RES+1)/5) /* Slow-Timer1 .2 sec */
+#define ISDN_TIMER_1SEC      (HZ/(ISDN_TIMER_RES+1)) /* Slow-Timer2 1 sec   */
 #define ISDN_TIMER_MODEMREAD 1
 #define ISDN_TIMER_MODEMPLUS 2
 #define ISDN_TIMER_MODEMRING 4
@@ -226,8 +237,8 @@ typedef struct {
                               ISDN_TIMER_NETDIAL)
 
 /* Timeout-Values for isdn_net_dial() */
-#define ISDN_TIMER_DTIMEOUT10 (10*HZ/(ISDN_TIMER_02SEC*ISDN_TIMER_RES))
-#define ISDN_TIMER_DTIMEOUT15 (15*HZ/(ISDN_TIMER_02SEC*ISDN_TIMER_RES))
+#define ISDN_TIMER_DTIMEOUT10 (10*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
+#define ISDN_TIMER_DTIMEOUT15 (15*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
 
 /* GLOBAL_FLAGS */
 #define ISDN_GLOBAL_STOPPED 1
@@ -237,10 +248,15 @@ typedef struct {
 /* Feature- and status-flags for a net-interface */
 #define ISDN_NET_CONNECTED  0x01       /* Bound to ISDN-Channel             */
 #define ISDN_NET_SECURE     0x02       /* Accept calls from phonelist only  */
-#define ISDN_NET_CALLBACK   0x04       /* callback incoming phonenumber     */
+#define ISDN_NET_CALLBACK   0x04       /* activate callback                 */
+#define ISDN_NET_CBHUP      0x08       /* hangup before callback            */
+#define ISDN_NET_CBOUT      0x10       /* remote machine does callback      */
+#if 0
+/* Unused??? */
 #define ISDN_NET_CLONE      0x08       /* clone a tmp interface when called */
 #define ISDN_NET_TMP        0x10       /* tmp interface until getting an IP */
 #define ISDN_NET_DYNAMIC    0x20       /* this link is dynamically allocated */
+#endif
 #define ISDN_NET_MAGIC      0x49344C02 /* for paranoia-checking             */
 
 /* Phone-list-element */
@@ -261,11 +277,13 @@ typedef struct isdn_net_local_s {
   int                    pre_channel;  /* Preselected isdn-channel         */
   int                    exclusive;    /* If non-zero idx to reserved chan.*/
   int                    flags;        /* Connection-flags                 */
-  int                    dialstate;    /* State for dialing                */
   int                    dialretry;    /* Counter for Dialout-retries      */
   int                    dialmax;      /* Max. Number of Dial-retries      */
-  char                   msn[ISDN_MSNLEN]; /* MSNs/EAZs for this interface */
+  int                    cbdelay;      /* Delay before Callback starts     */
   int                    dtimer;       /* Timeout-counter for dialing      */
+  char                   msn[ISDN_MSNLEN]; /* MSNs/EAZs for this interface */
+  u_char                 cbhup;        /* Flag: Reject Call before Callback*/
+  u_char                 dialstate;    /* State for dialing                */
   u_char                 p_encap;      /* Packet encapsulation             */
                                        /*   0 = Ethernet over ISDN         */
 				       /*   1 = RAW-IP                     */
@@ -554,6 +572,8 @@ typedef struct isdn_devt {
   modem             mdm;		       /* tty-driver-data            */
   isdn_net_dev      *rx_netdev[ISDN_MAX_CHANNELS]; /* rx netdev-pointers     */
   isdn_net_dev      *st_netdev[ISDN_MAX_CHANNELS]; /* stat netdev-pointers   */
+  ulong             ibytes[ISDN_MAX_CHANNELS]; /* Statistics incoming bytes  */
+  ulong             obytes[ISDN_MAX_CHANNELS]; /* Statistics outgoing bytes  */
 } isdn_dev;
 
 extern isdn_dev *dev;
