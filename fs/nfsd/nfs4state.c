@@ -176,15 +176,11 @@ nfs4_put_delegation(struct nfs4_delegation *dp)
 	}
 }
 
-/* release_delegation:
- *
- * Remove the associated file_lock first, then remove the delegation.
+/* Remove the associated file_lock first, then remove the delegation.
  * lease_modify() is called to remove the FS_LEASE file_lock from
  * the i_flock list, eventually calling nfsd's lock_manager
  * fl_release_callback.
- *
  */
-
 static void
 nfs4_close_delegation(struct nfs4_delegation *dp)
 {
@@ -201,7 +197,7 @@ nfs4_close_delegation(struct nfs4_delegation *dp)
 
 /* Called under the state lock. */
 static void
-release_delegation(struct nfs4_delegation *dp)
+unhash_delegation(struct nfs4_delegation *dp)
 {
 	list_del_init(&dp->dl_del_perfile);
 	list_del_init(&dp->dl_del_perclnt);
@@ -345,7 +341,7 @@ expire_client(struct nfs4_client *clp)
 	while (!list_empty(&reaplist)) {
 		dp = list_entry(reaplist.next, struct nfs4_delegation, dl_recall_lru);
 		list_del_init(&dp->dl_recall_lru);
-		release_delegation(dp);
+		unhash_delegation(dp);
 	}
 	list_del(&clp->cl_idhash);
 	list_del(&clp->cl_strhash);
@@ -1859,7 +1855,7 @@ nfs4_laundromat(void)
 	list_for_each_safe(pos, next, &reaplist) {
 		dp = list_entry (pos, struct nfs4_delegation, dl_recall_lru);
 		list_del_init(&dp->dl_recall_lru);
-		release_delegation(dp);
+		unhash_delegation(dp);
 	}
 	test_val = NFSD_LEASE_TIME;
 	list_for_each_safe(pos, next, &close_lru) {
@@ -2064,7 +2060,7 @@ nfs4_preprocess_stateid_op(struct svc_fh *current_fh, stateid_t *stateid, int fl
 			goto out;
 		renew_client(dp->dl_client);
 		if (flags & DELEG_RET)
-			release_delegation(dp);
+			unhash_delegation(dp);
 		if (filpp)
 			*filpp = dp->dl_vfs_file;
 	}
@@ -3239,7 +3235,7 @@ __nfs4_state_shutdown(void)
 	list_for_each_safe(pos, next, &reaplist) {
 		dp = list_entry (pos, struct nfs4_delegation, dl_recall_lru);
 		list_del_init(&dp->dl_recall_lru);
-		release_delegation(dp);
+		unhash_delegation(dp);
 	}
 
 	release_all_files();
