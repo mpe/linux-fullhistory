@@ -35,7 +35,7 @@
 
 struct vt_cons vt_cons[NR_CONSOLES];
 
-extern "C" int sys_ioperm(unsigned long from, unsigned long num, int on);
+asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);

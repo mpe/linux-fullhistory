@@ -155,7 +155,7 @@ char emulating=0;
 static int valid_prefix(unsigned char byte);
 
 
-extern "C" void math_emulate(long arg)
+asmlinkage void math_emulate(long arg)
 {
   unsigned char  FPU_modrm;
   unsigned short code;
@@ -183,7 +183,7 @@ extern "C" void math_emulate(long arg)
       current->used_math = 1;
     }
 
-  FPU_info = (struct info *) &arg;
+  SETUP_DATA_AREA(arg);
 
   /* We cannot handle emulation in v86-mode */
   if (FPU_EFLAGS & 0x00020000)
@@ -401,20 +401,12 @@ do_another_FPU_instruction:
 	      switch ( (FPU_modrm >> 3) & 7 )
 		{
 		case 0:         /* fadd */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 1:         /* fmul */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
@@ -426,38 +418,22 @@ do_another_FPU_instruction:
 		    pop();
 		  break;
 		case 4:         /* fsub */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 5:         /* fsubr */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 6:         /* fdiv */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 7:         /* fdivr */
-#ifdef PECULIAR_486
-		  /* Default, this conveys no information,
-		     but an 80486 does it. */
 		  clear_C1();
-#endif PECULIAR_486
 		  if ( FPU_st0_tag == TW_Zero )
 		    partial_status = status1;  /* Undo any denorm tag,
 					       zero-divide has priority. */
@@ -637,7 +613,7 @@ void __math_abort(struct info * info, unsigned int signal)
 #include <linux/signal.h>
 #include <linux/sched.h>
 
-extern "C" void math_emulate(long arg)
+asmlinkage void math_emulate(long arg)
 {
   printk("math-emulation not enabled and no coprocessor found.\n");
   printk("killing %s.\n",current->comm);

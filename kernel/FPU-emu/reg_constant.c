@@ -67,10 +67,7 @@ static void fld_const(FPU_REG *c)
     }
   push();
   reg_move(c, FPU_st0_ptr);
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
 }
 
 

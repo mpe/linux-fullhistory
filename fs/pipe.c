@@ -288,7 +288,7 @@ struct inode_operations pipe_inode_operations = {
 	NULL			/* permission */
 };
 
-extern "C" int sys_pipe(unsigned long * fildes)
+asmlinkage int sys_pipe(unsigned long * fildes)
 {
 	struct inode * inode;
 	struct file * f[2];

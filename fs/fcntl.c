@@ -35,7 +35,7 @@ static int dupfd(unsigned int fd, unsigned int arg)
 	return arg;
 }
 
-extern "C" int sys_dup2(unsigned int oldfd, unsigned int newfd)
+asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	if (oldfd >= NR_OPEN || !current->filp[oldfd])
 		return -EBADF;
@@ -58,12 +58,12 @@ extern "C" int sys_dup2(unsigned int oldfd, unsigned int newfd)
 	return dupfd(oldfd,newfd);
 }
 
-extern "C" int sys_dup(unsigned int fildes)
+asmlinkage int sys_dup(unsigned int fildes)
 {
 	return dupfd(fildes,0);
 }
 
-extern "C" int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
+asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 

@@ -45,7 +45,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
   short		  exponent;
   char		  zero;		/* flag for an Xx == 0 */
   unsigned short  bits, shift;
-  long long       Xsq;
+  unsigned long long       Xsq;
   FPU_REG	  accum, denom, num, Xx;
 
 
@@ -79,14 +79,14 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 
   denom.sigl = num.sigl;
   denom.sigh = num.sigh;
-  poly_div4((long long *)&(denom.sigl));
+  poly_div4(&significand(&denom));
   denom.sigh += 0x80000000;			/* set the msb */
   Xx.exp = EXP_BIAS;  /* needed to prevent errors in div routine */
   reg_u_div(&num, &denom, &Xx, FULL_PRECISION);
 
   zero = !(Xx.sigh | Xx.sigl);
   
-  mul64((long long *)&Xx.sigl, (long long *)&Xx.sigl, &Xsq);
+  mul64(&significand(&Xx), &significand(&Xx), &Xsq);
   poly_div16(&Xsq);
 
   accum.exp = -1;		/* exponent of accum */
@@ -123,7 +123,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	    {
 	      /* The argument is of the form 1-x */
 	      /* Use  1-1/(1-x) = x/(1-x) */
-	      *((long long *)&num.sigl) = - *((long long *)&(arg->sigl));
+	      significand(&num) = - significand(arg);
 	      normalize(&num);
 	      reg_div(&num, arg, &num, FULL_PRECISION);
 	    }
@@ -149,16 +149,16 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
       return;
     }
 
-  mul64((long long *)&accum.sigl,
-	(long long *)&Xx.sigl, (long long *)&accum.sigl);
+  mul64(&significand(&accum),
+	&significand(&Xx), &significand(&accum));
 
-  *((long long *)(&accum.sigl)) += *((long long *)(&Xx.sigl));
+  significand(&accum) += significand(&Xx);
 
   if ( Xx.sigh > accum.sigh )
     {
       /* There was an overflow */
 
-      poly_div2((long long *)&accum.sigl);
+      poly_div2(&significand(&accum));
       accum.sigh |= 0x80000000;
       accum.exp++;
     }
@@ -179,11 +179,11 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	  /* Shift to get exponent == 0 */
 	  if ( accum.exp < 0 )
 	    {
-	      poly_div2((long long *)&accum.sigl);
+	      poly_div2(&significand(&accum));
 	      accum.exp++;
 	    }
 	  /* Just negate, but throw away the sign */
-	  *((long long *)&(accum.sigl)) = - *((long long *)&(accum.sigl));
+	  significand(&accum) = - significand(&accum);
 	  if ( exponent < 0 )
 	    exponent++;
 	  else
@@ -198,11 +198,11 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
       if ( accum.exp )
 	{
 	  accum.exp++;
-	  poly_div2((long long *)&accum.sigl);
+	  poly_div2(&significand(&accum));
 	}
       while ( shift )
 	{
-	  poly_div2((long long *)&accum.sigl);
+	  poly_div2(&significand(&accum));
 	  if ( shift & 1)
 	    accum.sigh |= 0x80000000;
 	  shift >>= 1;
@@ -227,7 +227,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
 {
   char		sign = 0;
-  long long     Xsq;
+  unsigned long long     Xsq;
   FPU_REG      	arg_pl1, denom, accum, local_arg, poly_arg;
 
 
@@ -263,7 +263,7 @@ int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
   /* Get poly_arg bits aligned as required */
   shrx((unsigned *)&(poly_arg.sigl), -(poly_arg.exp - EXP_BIAS + 3));
 
-  mul64((long long *)&(poly_arg.sigl), (long long *)&(poly_arg.sigl), &Xsq);
+  mul64(&significand(&poly_arg), &significand(&poly_arg), &Xsq);
   poly_div16(&Xsq);
 
   /* Do the basic fixed point polynomial evaluation */

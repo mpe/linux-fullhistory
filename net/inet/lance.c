@@ -7,13 +7,14 @@
     distributed according to the terms of the GNU Public License,
     incorporated herein by reference.
 
-    This driver should work with the Allied Telesis 1500, and NE2100 clones.
+    This driver is for the Allied Telesis AT1500, and should work with
+    NE2100 clones.
 
     The author may be reached as becker@super.org or
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "lance.c:v0.08 8/12/93 becker@super.org\n";
+static char *version = "lance.c:v0.12 9/3/93 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -22,6 +23,7 @@ static char *version = "lance.c:v0.08 8/12/93 becker@super.org\n";
 /*#include <linux/interrupt.h>*/
 #include <linux/ptrace.h>
 #include <linux/errno.h>
+#include <linux/ioport.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 /*#include <asm/system.h>*/
@@ -32,12 +34,12 @@ static char *version = "lance.c:v0.08 8/12/93 becker@super.org\n";
 #include "skbuff.h"
 #include "arp.h"
 
+#ifndef HAVE_AUTOIRQ
 /* From auto_irq.c, should be in a *.h file. */
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 extern struct device *irq2dev_map[16];
-
-extern void printk_stats(struct enet_statistics *stats);
+#endif
 
 #ifdef LANCE_DEBUG
 int lance_debug = LANCE_DEBUG;
@@ -60,6 +62,7 @@ int lance_debug = 1;
 #define LANCE_ADDR 0x12
 #define LANCE_RESET 0x14
 #define LANCE_BUS_IF 0x16
+#define LANCE_TOTAL_SIZE 0x18
 
 /* The LANCE Rx and Tx ring descriptors. */
 struct lance_rx_head {
@@ -96,14 +99,17 @@ struct lance_private {
     int pad0, pad1;		/* Used for alignment */
 };
 
-/* This is a temporary solution to the lack of a ethercard low-memory
-   allocation scheme.  We need it for bus-master or DMA ethercards if
-   they are to work >16M memory systems.  */
+/* We need a ethercard low-memory allocation scheme for for bus-master or
+   DMA ethercards if they are to work >16M memory systems. This is a
+   temporary solution to the lack of one, but it limits us to a single
+   AT1500 and <16M. Bummer. */
+
 #define PKT_BUF_SZ	1550
 static char rx_buffs[PKT_BUF_SZ][RING_SIZE];
 
-int at1500_init(int ioaddr, struct device *dev);
+int at1500_probe1(struct device *dev);
 static int lance_open(struct device *dev);
+static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance_rx(struct device *dev);
 static void lance_interrupt(int reg_ptr);
@@ -119,33 +125,52 @@ static struct sigaction lance_sigaction = { &lance_interrupt, 0, 0, NULL, };
 int at1500_probe(struct device *dev)
 {
     int *port, ports[] = {0x300, 0x320, 0x340, 0x360, 0};
-    int ioaddr = dev->base_addr;
+    int base_addr = dev->base_addr;
 
-    if (ioaddr > 0x100)
-	return ! at1500_init(ioaddr, dev);
+    if (base_addr < 0)
+	return ENXIO;		/* Don't probe at all. */
+    if (base_addr > 0x100)	/* Check a single specified location. */
+	return at1500_probe1(dev);
 
+    /* First probe for the ethercard ID, 0x57, and then look for a LANCE
+       chip. */
+    
     for (port = &ports[0]; *port; port++) {
-	/* Probe for the Allied-Telesys vendor ID.  This will not detect
-	   other NE2100-like ethercards, which must use a hard-wired ioaddr.
-	   There must be a better way to detect a LANCE... */
-	int ioaddr = *port;
-	if (inb(ioaddr) != 0x00
-	    || inb(ioaddr+1) != 0x00
-	    || inb(ioaddr+2) != 0xF4)
+	int probe_addr = *port;
+	short temp;
+
+#ifdef HAVE_PORTRESERVE
+	if (check_region(probe_addr, LANCE_TOTAL_SIZE))
 	    continue;
-	if (at1500_init(ioaddr, dev))
+#endif
+	if (inb(probe_addr + 14) != 0x57
+	    || inb(probe_addr + 15) != 0x57)
+	    continue;
+
+	/* Reset the LANCE. Un-Reset needed only for the real NE2100. */
+	temp = inw(probe_addr+LANCE_RESET); /* Reset the LANCE */
+	outw(temp, probe_addr+LANCE_RESET);	/* "Un-reset" */
+	
+	outw(0x0000, probe_addr+LANCE_ADDR); /* Switch to window 0 */
+	if (inw(probe_addr+LANCE_DATA) != 0x0004)
+	    continue;
+	dev->base_addr = probe_addr;
+	if (at1500_probe1(dev) == 0)
 	    return 0;
     }
-    return 1;			/* ENODEV would be more accurate. */
+
+    dev->base_addr = base_addr;
+    return ENODEV;			/* ENODEV would be more accurate. */
 }
 
 int
-at1500_init(int ioaddr, struct device *dev)
+at1500_probe1(struct device *dev)
 {
     struct lance_private *lp;
+    short ioaddr = dev->base_addr;
+
     int i;
 
-    dev->base_addr = ioaddr;
     printk("%s: LANCE at %#3x, address", dev->name, ioaddr);
 
     /* There is a 16 byte station address PROM at the base address.
@@ -163,11 +188,15 @@ at1500_init(int ioaddr, struct device *dev)
 
     if ((int)dev->priv & 0xff000000  ||  (int) rx_buffs & 0xff000000) {
 	printk(" disabled (buff %#x > 16M).\n", (int)rx_buffs);
-	return 0;
+	return -ENOMEM;
     }
 
     memset(dev->priv, 0, sizeof(struct lance_private));
     lp = (struct lance_private *)dev->priv;
+
+    if ((int)(lp->rx_ring) & 0x07)
+	printk("%s: LANCE Rx and Tx rings not on even boundary.\n",
+	       dev->name);
 
     /* Un-Reset the LANCE, needed only for the NE2100. */
     outw(0, ioaddr+LANCE_RESET);
@@ -181,7 +210,7 @@ at1500_init(int ioaddr, struct device *dev)
     lp->init_block.tx_ring = (int)lp->tx_ring | RING_LEN_BITS;
 
     outw(0x0001, ioaddr+LANCE_ADDR);
-    outw((short) &lp->init_block, ioaddr+LANCE_DATA);
+    outw((short) (int) &lp->init_block, ioaddr+LANCE_DATA);
     outw(0x0002, ioaddr+LANCE_ADDR);
     outw(((int)&lp->init_block) >> 16, ioaddr+LANCE_DATA);
     outw(0x0000, ioaddr+LANCE_ADDR);
@@ -199,10 +228,13 @@ at1500_init(int ioaddr, struct device *dev)
 	    printk(", using IRQ %d.\n", dev->irq);
 	else {
 	    printk(", failed to detect IRQ line.\n");
-	    return 0;
+	    return -EAGAIN;
 	}
     } else
 	printk(" assigned IRQ %d.\n", dev->irq);
+
+    /* The DMA channel may be passed in on this parameter. */
+    dev->dma = dev->mem_start & 0x07;
 
 #ifndef NE2100			/* The NE2100 might not understand */
     /* Turn on auto-select of media (10baseT or BNC) so that the user
@@ -211,9 +243,9 @@ at1500_init(int ioaddr, struct device *dev)
     outw(0x0002, ioaddr+LANCE_BUS_IF);
 #endif
 
-    if ((int)(lp->rx_ring) & 0x07)
-	printk("%s: LANCE Rx and Tx rings not on even boundary.\n",
-	       dev->name);
+#ifdef HAVE_PORTRESERVE
+    snarf_region(ioaddr, LANCE_TOTAL_SIZE);
+#endif
 
     if (lance_debug > 0)
 	printk(version);
@@ -225,7 +257,6 @@ at1500_init(int ioaddr, struct device *dev)
     dev->get_stats = &lance_get_stats;
 
     dev->mem_start = 0;
-    dev->rmem_end = 0x00ffffff;		/* Bogus, needed for dev_rint(). */
 
     /* Fill in the generic field of the device structure. */
     for (i = 0; i < DEV_NUMBUFFS; i++)
@@ -253,7 +284,7 @@ at1500_init(int ioaddr, struct device *dev)
     dev->pa_mask	= 0;
     dev->pa_alen	= sizeof(unsigned long);
 
-    return ioaddr;
+    return 0;
 }
 
 
@@ -268,8 +299,7 @@ lance_open(struct device *dev)
 	return -EAGAIN;
     }
 
-    if (lp->dma < 1)
-	lp->dma = DEFAULT_DMA;
+    lp->dma = dev->dma ? dev->dma : DEFAULT_DMA;
 
     if (request_dma(lp->dma)) {
 	free_irq(dev->irq);
@@ -287,7 +317,8 @@ lance_open(struct device *dev)
     /* Un-Reset the LANCE, needed only for the NE2100. */
     outw(0, ioaddr+LANCE_RESET);
 
-#ifndef NE2100			/* The NE2100 might not understand */
+#ifndef NE2100
+    /* This is really 79C960-specific, NE2100 might not understand */
     /* Turn on auto-select of media (10baseT or BNC). */
     outw(0x0002, ioaddr+LANCE_ADDR);
     outw(0x0002, ioaddr+LANCE_BUS_IF);
@@ -295,29 +326,13 @@ lance_open(struct device *dev)
 
     if (lance_debug > 1)
 	printk("%s: lance_open() irq %d dma %d tx/rx rings %#x/%#x init %#x.\n",
-	       dev->name, dev->irq, lp->dma, lp->tx_ring, lp->rx_ring,
-	       &lp->init_block);
+	       dev->name, dev->irq, lp->dma, (int) lp->tx_ring, (int) lp->rx_ring,
+	       (int) &lp->init_block);
 
-    lp->cur_rx = lp->cur_tx = 0;
-    lp->dirty_rx = lp->dirty_tx = 0;
-
-    for (i = 0; i < RING_SIZE; i++) {
-	lp->rx_ring[i].base = (int)rx_buffs | 0x80000000 + i*PKT_BUF_SZ;
-	lp->rx_ring[i].buf_length = -PKT_BUF_SZ;
-	lp->tx_ring[i].base = 0;
-    }
-
-    lp->init_block.mode = 0x0000;
-    for (i = 0; i < 6; i++)
-	lp->init_block.phys_addr[i] = dev->dev_addr[i];
-    lp->init_block.filter[0] = 0x00000000;
-    lp->init_block.filter[1] = 0x00000000;
-    lp->init_block.rx_ring = (int)lp->rx_ring | RING_LEN_BITS;
-    lp->init_block.tx_ring = (int)lp->tx_ring | RING_LEN_BITS;
-
+    lance_init_ring(dev);
     /* Re-initialize the LANCE, and start it when done. */
     outw(0x0001, ioaddr+LANCE_ADDR);
-    outw((short) &lp->init_block, ioaddr+LANCE_DATA);
+    outw((short) (int) &lp->init_block, ioaddr+LANCE_DATA);
     outw(0x0002, ioaddr+LANCE_ADDR);
     outw(((int)&lp->init_block) >> 16, ioaddr+LANCE_DATA);
 
@@ -338,9 +353,34 @@ lance_open(struct device *dev)
 
     if (lance_debug > 2)
 	printk("%s: LANCE open after %d ticks, init block %#x csr0 %4.4x.\n",
-	       dev->name, i, &lp->init_block, inw(ioaddr+LANCE_DATA));
+	       dev->name, i, (int) &lp->init_block, inw(ioaddr+LANCE_DATA));
 
     return 0;			/* Always succeed */
+}
+
+/* Initialize the LANCE Rx and Tx rings. */
+static void
+lance_init_ring(struct device *dev)
+{
+    struct lance_private *lp = (struct lance_private *)dev->priv;
+    int i;
+
+    lp->cur_rx = lp->cur_tx = 0;
+    lp->dirty_rx = lp->dirty_tx = 0;
+
+    for (i = 0; i < RING_SIZE; i++) {
+	lp->rx_ring[i].base = (int) rx_buffs | (0x80000000 + i*PKT_BUF_SZ);
+	lp->rx_ring[i].buf_length = -PKT_BUF_SZ;
+	lp->tx_ring[i].base = 0;
+    }
+
+    lp->init_block.mode = 0x0000;
+    for (i = 0; i < 6; i++)
+	lp->init_block.phys_addr[i] = dev->dev_addr[i];
+    lp->init_block.filter[0] = 0x00000000;
+    lp->init_block.filter[1] = 0x00000000;
+    lp->init_block.rx_ring = (int)lp->rx_ring | RING_LEN_BITS;
+    lp->init_block.tx_ring = (int)lp->tx_ring | RING_LEN_BITS;
 }
 
 static int
@@ -352,18 +392,16 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
 	int tickssofar = jiffies - dev->trans_start;
-	int entry = lp->cur_tx++;
 	if (tickssofar < 5)
 	    return 1;
 	outw(0, ioaddr+LANCE_ADDR);
-	printk("%s: transmit timed out, status %4.4x.\n", dev->name,
-	       inw(ioaddr+LANCE_DATA));
+	printk("%s: transmit timed out, status %4.4x, resetting.\n",
+	       dev->name, inw(ioaddr+LANCE_DATA));
 
-	if (lp->tx_ring[(entry+1) & RING_MOD_MASK].base >= 0)
-	    dev->tbusy=0;
-	else
-	    outw(0x00, ioaddr+LANCE_DATA),
-	    outw(0x43, ioaddr+LANCE_DATA);;
+	lance_init_ring(dev);
+	outw(0x43, ioaddr+LANCE_DATA);
+
+	dev->tbusy=0;
 	dev->trans_start = jiffies;
 
 	return 0;
@@ -424,7 +462,7 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 		(unsigned char *)(lp->tx_ring[entry].base & 0x00ffffff);
 
 	    printk("%s: tx ring[%d], %#x, sk_buf %#x len %d.\n",
-		   dev->name, entry, &lp->tx_ring[entry],
+		   dev->name, entry, (int) &lp->tx_ring[entry],
 		   lp->tx_ring[entry].base, -lp->tx_ring[entry].length);
 	    printk("%s:  Tx %2.2x %2.2x %2.2x ... %2.2x  %2.2x %2.2x %2.2x...%2.2x len %2.2x %2.2x  %2.2x %2.2x.\n",
 		   dev->name, pkt[0], pkt[1], pkt[2], pkt[5], pkt[6],
@@ -446,7 +484,7 @@ static void
 lance_interrupt(int reg_ptr)
 {
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
-    struct device *dev = irq2dev_map[irq];
+    struct device *dev = (struct device *)(irq2dev_map[irq]);
     struct lance_private *lp;
     int csr0, ioaddr;
 
@@ -485,8 +523,8 @@ lance_interrupt(int reg_ptr)
 	/* This code is broken for >16M RAM systems. */
 	while (dirty_tx != (lp->cur_tx & RING_MOD_MASK)
 	       && lp->tx_ring[dirty_tx].base > 0) {
-	    sk_buff *skb =
-		(sk_buff *)(lp->tx_ring[dirty_tx].base & 0x00ffffff);
+	    struct sk_buff *skb =
+		(struct sk_buff *)(lp->tx_ring[dirty_tx].base & 0x00ffffff);
 	    unsigned short *tmdp = (unsigned short *)(&lp->tx_ring[dirty_tx]);
 	    int status = lp->tx_ring[dirty_tx].base >> 24;
 
@@ -510,6 +548,7 @@ lance_interrupt(int reg_ptr)
 		kfree_skb (skb-1, FREE_WRITE);
 	    dirty_tx = ++lp->dirty_tx & RING_MOD_MASK;
 	}
+	/* mark_bh(INET_BH); */
     }
 
     /* Clear the interrupts we've handled. */
@@ -531,21 +570,10 @@ lance_rx(struct device *dev)
     struct lance_private *lp = (struct lance_private *)dev->priv;
     int entry = lp->cur_rx & RING_MOD_MASK;
 	
-    /* Check to see if we own this entry. */
+    /* If we own the next entry, it's a new packet. Send it up. */
     while (lp->rx_ring[entry].base >= 0) {
 	int status = lp->rx_ring[entry].base >> 24;
-	if (lance_debug > 5) {
-	    unsigned char *pkt =
-		(unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff);
-	    printk("%s: Rx packet at ring entry %d, len %d status %2.2x.\n",
-		   dev->name, entry, lp->rx_ring[entry].msg_length,
-		   lp->rx_ring[entry].base >> 24);
-	    printk("%s:  Rx %2.2x %2.2x %2.2x ... %2.2x  %2.2x %2.2x %2.2x...%2.2x len %2.2x %2.2x  %2.2x %2.2x.\n",
-		   dev->name, pkt[0], pkt[1], pkt[2], pkt[5], pkt[6],
-		   pkt[7], pkt[8], pkt[11], pkt[12], pkt[13],
-		   pkt[14], pkt[15]);
-	}
-	/* If so, copy it to the upper layers. */
+
 	if (status & 0x40) {	/* There was an error. */
 	    lp->stats.rx_errors++;
 	    if (status & 0x20) lp->stats.rx_frame_errors++;
@@ -553,18 +581,43 @@ lance_rx(struct device *dev)
 	    if (status & 0x08) lp->stats.rx_crc_errors++;
 	    if (status & 0x04) lp->stats.rx_fifo_errors++;
 	} else {
-	    if (dev_rint((unsigned char *)(lp->rx_ring[entry].base
-					   & 0x00ffffff),
-			 lp->rx_ring[entry].msg_length, 0, dev)) {
+	    /* Malloc up new buffer, compatible with net-2e. */
+	    short pkt_len = lp->rx_ring[entry].msg_length;
+	    int sksize = sizeof(struct sk_buff) + pkt_len;
+	    struct sk_buff *skb;
+	    skb = (struct sk_buff *) kmalloc(sksize, GFP_ATOMIC);
+	    if (skb == NULL) {
+		printk("%s: Memory squeeze, deferring packet.\n", dev->name);
+		lp->stats.rx_dropped++;	/* Really, deferred. */
+		break;
+	    }
+	    skb->mem_len = sksize;
+	    skb->mem_addr = skb;
+	    skb->len = pkt_len;
+	    skb->dev = dev;
+	    memcpy((unsigned char *) (skb + 1),
+		   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
+		   pkt_len);
+#ifdef HAVE_NETIF_RX
+	    netif_rx(skb);
+#else
+	    skb->lock = 0;
+	    if (dev_rint((unsigned char*)skb, pkt_len, IN_SKBUFF, dev) != 0) {
+		kfree_s(skb, sksize);
 		lp->stats.rx_dropped++;
 		break;
 	    }
+#endif
 	    lp->stats.rx_packets++;
 	}
 
 	lp->rx_ring[entry].base |= 0x80000000;
 	entry = (entry+1) & RING_MOD_MASK;
     }
+
+    /* We should check that at least two ring entries are free.  If not,
+       we should free one and mark stats->rx_dropped++. */
+
     lp->cur_rx = entry;
 
     return 0;
@@ -587,10 +640,6 @@ lance_close(struct device *dev)
     if (lance_debug > 1)
 	printk("%s: Shutting down ethercard, status was %2.2x.\n",
 	       dev->name, inw(ioaddr+LANCE_DATA));
-#ifdef PRINTK_STATS
-    if (lance_debug > 2)
-	printk_stats(&lp->stats);
-#endif
 
     /* We stop the LANCE here -- it occasionally polls
        memory if we don't. */

@@ -129,12 +129,28 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 static int mmap_mem(struct inode * inode, struct file * file,
 	unsigned long addr, size_t len, int prot, unsigned long off)
 {
+	struct vm_area_struct * mpnt;
+
 	if (off & 0xfff || off + len < off)
 		return -ENXIO;
-
 	if (remap_page_range(addr, off, len, prot))
 		return -EAGAIN;
-	
+/* try to create a dummy vmm-structure so that the rest of the kernel knows we are here */
+	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!mpnt)
+		return 0;
+
+	mpnt->vm_task = current;
+	mpnt->vm_start = addr;
+	mpnt->vm_end = addr + len;
+	mpnt->vm_page_prot = prot;
+	mpnt->vm_share = NULL;
+	mpnt->vm_inode = inode;
+	inode->i_count++;
+	mpnt->vm_offset = off;
+	mpnt->vm_ops = NULL;
+	mpnt->vm_next = current->mmap;
+	current->mmap = mpnt;
 	return 0;
 }
 
@@ -187,11 +203,6 @@ static int read_zero(struct inode * node,struct file * file,char * buf,int count
 	return count;
 }
 
-static int write_zero(struct inode * inode,struct file * file,char * buf, int count)
-{
-	return count;
-}
-
 static int mmap_zero(struct inode * inode, struct file * file,
 	unsigned long addr, size_t len, int prot, unsigned long off)
 {
@@ -202,6 +213,15 @@ static int mmap_zero(struct inode * inode, struct file * file,
 	return 0;
 }
 
+/*
+ * Special lseek() function for /dev/null and /dev/zero.  Most notably, you can fopen()
+ * both devices with "a" now.  This was previously impossible.  SRB.
+ */
+
+static int null_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+{
+	return file->f_pos=0;
+}
 /*
  * The memory devices use the full 32 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -227,9 +247,11 @@ static int memory_lseek(struct inode * inode, struct file * file, off_t offset, 
 	return file->f_pos;
 }
 
-#define read_kmem read_mem
-#define write_kmem write_mem
-#define mmap_kmem mmap_mem
+#define read_kmem	read_mem
+#define write_kmem	write_mem
+#define mmap_kmem	mmap_mem
+#define zero_lseek	null_lseek
+#define write_zero	write_null
 
 static struct file_operations ram_fops = {
 	memory_lseek,
@@ -271,7 +293,7 @@ static struct file_operations kmem_fops = {
 };
 
 static struct file_operations null_fops = {
-	memory_lseek,
+	null_lseek,
 	read_null,
 	write_null,
 	NULL,		/* null_readdir */
@@ -297,7 +319,7 @@ static struct file_operations port_fops = {
 };
 
 static struct file_operations zero_fops = {
-	memory_lseek,
+	zero_lseek,
 	read_zero,
 	write_zero,
 	NULL,		/* zero_readdir */

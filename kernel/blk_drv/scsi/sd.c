@@ -49,9 +49,6 @@ Scsi_Disk * rscsi_disks;
 static int * sd_sizes;
 static int * sd_blocksizes;
 
-/* used to re-read partitions. */
-extern void resetup_one_dev(struct gendisk *, unsigned int);
-
 extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 static sd_init_onedisk(int);
@@ -127,7 +124,9 @@ static struct gendisk sd_gendisk = {
 
 static void sd_geninit (void)
 {
-	for (int i = 0; i < NR_SD; ++i)
+	int i;
+
+	for (i = 0; i < NR_SD; ++i)
 		sd[i << 4].nr_sects = rscsi_disks[i].capacity;
 	sd_gendisk.nr_real = NR_SD;
 }
@@ -323,6 +322,7 @@ static void do_sd_request (void)
     };
 
     INIT_SCSI_REQUEST;
+
 
 /* We have to be careful here.  allocate_device will get a free pointer, but
    there is no guarantee that it is queueable.  In normal usage, we want to
@@ -668,6 +668,7 @@ static int sd_init_onedisk(int i)
   int j = 0;
   unsigned char cmd[10];
   unsigned char *buffer;
+  char spintime;
   int the_result, retries;
   Scsi_Cmnd * SCpnt;
 
@@ -677,6 +678,59 @@ static int sd_init_onedisk(int i)
 
   SCpnt = allocate_device(NULL, rscsi_disks[i].device->index, 1);
   buffer = (unsigned char *) scsi_malloc(512);
+
+  spintime = 0;
+
+  /* Spin up drives, as required.  Only do this at boot time */
+  if (current == task[0]){
+    do{
+      cmd[0] = TEST_UNIT_READY;
+      cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
+      memset ((void *) &cmd[2], 0, 8);
+      SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+      SCpnt->sense_buffer[0] = 0;
+      SCpnt->sense_buffer[2] = 0;
+      
+      scsi_do_cmd (SCpnt,
+		   (void *) cmd, (void *) buffer,
+		   512, sd_init_done,  SD_TIMEOUT,
+		   MAX_RETRIES);
+      
+      while(SCpnt->request.dev != 0xfffe);
+      
+      the_result = SCpnt->result;
+      
+      /* Look for non-removable devices that return NOT_READY.  Issue command
+	 to spin up drive for these cases. */
+      if(the_result && !rscsi_disks[i].device->removable && 
+	 SCpnt->sense_buffer[2] == NOT_READY) {
+	int time1;
+	if(!spintime){
+	  cmd[0] = START_STOP;
+	  cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
+	  cmd[1] |= 1;  /* Return immediately */
+	  memset ((void *) &cmd[2], 0, 8);
+	  cmd[4] = 1; /* Start spin cycle */
+	  SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+	  SCpnt->sense_buffer[0] = 0;
+	  SCpnt->sense_buffer[2] = 0;
+	  
+	  scsi_do_cmd (SCpnt,
+		       (void *) cmd, (void *) buffer,
+		       512, sd_init_done,  SD_TIMEOUT,
+		       MAX_RETRIES);
+	  
+	  while(SCpnt->request.dev != 0xfffe);
+
+	  spintime = jiffies;
+	};
+
+	time1 = jiffies;
+	while(jiffies < time1 + 100); /* Wait 1 second for next try */
+      };
+    } while(the_result && spintime && spintime+1500 < jiffies);
+  };  /* current == task[0] */
+
 
   retries = 3;
   do {

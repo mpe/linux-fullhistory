@@ -18,6 +18,7 @@
  */
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/bitops.h>
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -29,6 +30,7 @@
 #include <linux/in.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
+#include <linux/if_ether.h>
 #include "inet.h"
 #include "dev.h"
 #include "eth.h"
@@ -262,8 +264,8 @@ dev_check(unsigned long addr)
 		return dev;
   for (dev = dev_base; dev; dev = dev->next)
 	if ((dev->flags & IFF_UP) && !(dev->flags & IFF_POINTOPOINT) &&
-	    addr == (dev->flags & IFF_LOOPBACK ? dev->pa_addr : dev->pa_addr &
-	    dev->pa_mask))
+	    (dev->flags & IFF_LOOPBACK ? (addr == dev->pa_addr) :
+	    (dev->pa_addr & addr) == (dev->pa_addr & dev->pa_mask)))
 		break;
   /* no need to check broadcast addresses */
   return dev;
@@ -368,9 +370,40 @@ dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
   sti();
 }
 
+/*
+ * Receive a packet from a device driver and queue it for the upper
+ * (protocol) levels.  It always succeeds.
+ */
+void
+netif_rx(struct sk_buff *skb)
+{
+  /* Set any necessary flags. */
+  skb->lock = 0;
+  skb->sk = NULL;
+
+  /* and add it to the "backlog" queue. */
+  cli();
+  if (backlog == NULL) {
+	skb->prev = skb;
+	skb->next = skb;
+	backlog = skb;
+  } else {
+	skb->prev = (struct sk_buff *) backlog->prev;
+	skb->next = (struct sk_buff *) backlog;
+	skb->next->prev = skb;
+	skb->prev->next = skb;
+  }
+  sti();
+   
+  /* If any packet arrived, mark it for processing. */
+  if (backlog != NULL) mark_bh(INET_BH);
+
+  return;
+}
+
 
 /*
- * Fetch a packet from a device driver.
+ * The old interface to fetch a packet from a device driver.
  * This function is the base level entry point for all drivers that
  * want to send a packet to the upper (protocol) levels.  It takes
  * care of de-multiplexing the packet to the various modules based
@@ -389,18 +422,20 @@ dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
   int len2;
 
   if (dev == NULL || buff == NULL || len <= 0) return(1);
-  if (dropping && backlog != NULL) {
-	return(1);
-  }
-  if (dropping) printk("INET: dev_rint: no longer dropping packets.\n");
-  dropping = 0;
-
   if (flags & IN_SKBUFF) {
 	skb = (struct sk_buff *) buff;
   } else {
+	if (dropping) {
+	  if (backlog != NULL)
+	      return(1);
+	  printk("INET: dev_rint: no longer dropping packets.\n");
+	  dropping = 0;
+	}
+
 	skb = (struct sk_buff *) kmalloc(sizeof(*skb) + len, GFP_ATOMIC);
 	if (skb == NULL) {
-		printk("dev_rint: packet dropped (no memory) !\n");
+		printk("dev_rint: packet dropped on %s (no memory) !\n",
+		       dev->name);
 		dropping = 1;
 		return(1);
 	}
@@ -426,25 +461,8 @@ dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
   }
   skb->len = len;
   skb->dev = dev;
-  skb->sk = NULL;
 
-  /* Now add it to the backlog. */
-  cli();
-  if (backlog == NULL) {
-	skb->prev = skb;
-	skb->next = skb;
-	backlog = skb;
-  } else {
-	skb->prev = (struct sk_buff *) backlog->prev;
-	skb->next = (struct sk_buff *) backlog;
-	skb->next->prev = skb;
-	skb->prev->next = skb;
-  }
-  sti();
-   
-  /* If any packet arrived, mark it for processing. */
-  if (backlog != NULL) mark_bh(INET_BH);
-
+  netif_rx(skb);
   /* OK, all done. */
   return(0);
 }
@@ -475,16 +493,11 @@ inet_bh(void *tmp)
   struct packet_type *ptype;
   unsigned short type;
   unsigned char flag = 0;
-  static volatile int in_bh = 0;
+  static volatile char in_bh = 0;
 
-  /* Check && mark our BUSY state. */
-  cli();
-  if (in_bh != 0) {
-	sti();
-	return;
-  }
-  in_bh = 1;
-  sti();
+  /* Atomically check and mark our BUSY state. */
+  if (set_bit(1, (void*)&in_bh))
+      return;
 
   /* Can we send anything now? */
   dev_transmit();
@@ -671,14 +684,46 @@ dev_ifconf(char *arg)
   return(pos - arg);
 }
 
+/* Print device statistics. */
+char *sprintf_stats(char *buffer, struct device *dev)
+{
+  char *pos = buffer;
+  struct enet_statistics *stats = (dev->get_stats ? dev->get_stats(dev): NULL);
+
+  if (stats)
+    pos += sprintf(pos, "%6s:%7d %4d %4d %4d %4d %8d %4d %4d %4d %5d %4d\n",
+		   dev->name,
+		   stats->rx_packets, stats->rx_errors,
+		   stats->rx_dropped + stats->rx_missed_errors,
+		   stats->rx_fifo_errors,
+		   stats->rx_length_errors + stats->rx_over_errors
+		   + stats->rx_crc_errors + stats->rx_frame_errors,
+		   stats->tx_packets, stats->tx_errors, stats->tx_dropped,
+		   stats->tx_fifo_errors, stats->collisions,
+		   stats->tx_carrier_errors + stats->tx_aborted_errors
+		   + stats->tx_window_errors + stats->tx_heartbeat_errors);
+  else
+      pos += sprintf(pos, "%6s: No statistics available.\n", dev->name);
+
+  return pos;
+}
 
 /* Called from the PROCfs module. */
 int
 dev_get_info(char *buffer)
 {
-  return(dev_ifconf(buffer));
-}
+  char *pos = buffer;
+  struct device *dev;
 
+  pos +=
+      sprintf(pos,
+	      "Inter-|   Receive                  |  Transmit\n"
+	      " face |packets errs drop fifo frame|packets errs drop fifo colls carrier\n");
+  for (dev = dev_base; dev != NULL; dev = dev->next) {
+      pos = sprintf_stats(pos, dev);
+  }
+  return pos - buffer;
+}
 
 /* Perform the SIOCxIFxxx calls. */
 static int
@@ -702,18 +747,18 @@ dev_ifsioc(void *arg, unsigned int getset)
 		ret = 0;
 		break;
 	case SIOCSIFFLAGS:
-		ret = dev->flags;
-		dev->flags = ifr.ifr_flags & (
+		{
+		  int old_flags = dev->flags;
+		  dev->flags = ifr.ifr_flags & (
 			IFF_UP | IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 			IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
 			IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI);
-		if ((ret & IFF_UP) && ((dev->flags & IFF_UP) == 0)) {
+		  if ((old_flags & IFF_UP) && ((dev->flags & IFF_UP) == 0)) {
 			ret = dev_close(dev);
-		} else {
-			if (((ret & IFF_UP) == 0) && (dev->flags & IFF_UP)) {
-				ret = dev_open(dev);
-			} else ret = 0;
-		}
+		  } else
+		      ret = (! (old_flags & IFF_UP) && (dev->flags & IFF_UP))
+			? dev_open(dev) : 0;
+	        }
 		break;
 	case SIOCGIFADDR:
 		(*(struct sockaddr_in *)
@@ -820,9 +865,55 @@ dev_ioctl(unsigned int cmd, void *arg)
   int ret;
 
   switch(cmd) {
-	case IP_SET_DEV:
-		printk("INET: Warning: old-style ioctl(IP_SET_DEV) called!\n");
-		return(-EINVAL);
+  case IP_SET_DEV:
+      {	  /* Maintain backwards-compatibility, to be deleted for 1.00. */
+	  struct device *dev;
+	  /* The old 'struct ip_config'. */
+	  struct ip_config {
+	      char name[MAX_IP_NAME];
+	      unsigned long paddr, router, net,up:1,destroy:1;
+	  } ipc;
+	  int retval, loopback;
+
+	  printk("INET: Warning: old-style ioctl(IP_SET_DEV) called!\n");
+	  if (!suser())
+	      return (-EPERM);
+	  
+	  verify_area (VERIFY_WRITE, arg, sizeof (ipc));
+	  memcpy_fromfs(&ipc, arg, sizeof (ipc));
+	  ipc.name[MAX_IP_NAME-1] = 0;
+	  loopback = (strcmp(ipc.name, "loopback") == 0);
+	  dev = dev_get( loopback ? "lo" : ipc.name);
+	  if (dev == NULL)
+	      return -EINVAL;
+	  ipc.destroy = 0;
+	  dev->pa_addr = ipc.paddr;
+	  dev->family = AF_INET;
+	  dev->pa_mask = get_mask(dev->pa_addr);
+	  dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
+	  if (ipc.net != 0xffffffff) {
+	      dev->flags |= IFF_BROADCAST;
+	      dev->pa_brdaddr = ipc.net;
+	  }
+	  
+	  /* To be proper we should delete the route here. */
+	  if (ipc.up == 0)
+	      return (dev->flags & IFF_UP != 0) ? dev_close(dev) : 0;
+
+	  if ((dev->flags & IFF_UP) == 0
+	      && (retval = dev_open(dev)) != 0)
+	      return retval;
+	  printk("%s: adding HOST route of %8.8x.\n", dev->name,
+		 htonl(ipc.paddr));
+	  rt_add(RTF_HOST, ipc.paddr, 0, dev);
+	  if (ipc.router != 0 && ipc.router != -1) {
+	      rt_add(RTF_GATEWAY, ipc.paddr, ipc.router, dev);
+	      printk("%s: adding GATEWAY route of %8.8x.\n",
+		     dev->name, htonl(ipc.paddr));
+
+	  }
+	  return 0;
+      }
 	case SIOCGIFCONF:
 		(void) dev_ifconf((char *) arg);
 		ret = 0;

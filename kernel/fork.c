@@ -23,16 +23,19 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-extern "C" void ret_from_sys_call(void) __asm__("ret_from_sys_call");
+asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
+
+/* These should maybe be in <linux/tasks.h> */
 
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
+#define MIN_TASKS_LEFT_FOR_ROOT 4
 
 extern int shm_fork(struct task_struct *, struct task_struct *);
 long last_pid=0;
 
 static int find_empty_process(void)
 {
-	int i, task_nr;
+	int i, task_nr, tasks_free;
 	int this_user_tasks;
 
 repeat:
@@ -49,17 +52,19 @@ repeat:
 	}
 	if (this_user_tasks > MAX_TASKS_PER_USER && current->uid)
 		return -EAGAIN;
-/* Only the super-user can fill the last available slot */
-	task_nr = 0;
-	for(i=1 ; i<NR_TASKS ; i++)
-		if (!task[i])
-			if (task_nr)
-				return task_nr;
-			else
-				task_nr = i;
-	if (task_nr && suser())
-		return task_nr;
-	return -EAGAIN;
+
+/* Only the super-user can fill the last MIN_TASKS_LEFT_FOR_ROOT slots */
+
+	tasks_free = 0; task_nr = 0;
+	for (i=NR_TASKS-1; i > 0; i--) {
+		if (!task[i]) {
+			tasks_free++;
+			task_nr = i;
+		}
+	} 
+	if (tasks_free <= MIN_TASKS_LEFT_FOR_ROOT && current->uid)
+		return -EAGAIN;
+	return task_nr;
 }
 
 static struct file * copy_fd(struct file * old_file)
@@ -113,7 +118,7 @@ int dup_mmap(struct task_struct * tsk)
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in it's entirety.
  */
-extern "C" int sys_fork(struct pt_regs regs)
+asmlinkage int sys_fork(struct pt_regs regs)
 {
 	struct pt_regs * childregs;
 	struct task_struct *p;
@@ -176,7 +181,7 @@ extern "C" int sys_fork(struct pt_regs regs)
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->tss.ldt = _LDT(nr);
 	if (p->ldt) {
-		if (p->ldt = (struct desc_struct*) __get_free_page(GFP_KERNEL))
+		if ((p->ldt = (struct desc_struct*) __get_free_page(GFP_KERNEL)) != NULL)
 			memcpy(p->ldt, current->ldt, PAGE_SIZE);
 	}
 	p->tss.bitmap = offsetof(struct tss_struct,io_bitmap);

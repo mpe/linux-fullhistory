@@ -50,7 +50,7 @@ SVGA_MODE=	-DSVGA_MODE=3
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -x c++
+CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer # -x c++
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486
@@ -111,7 +111,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.12\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.13\" > tools/version.h
 	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

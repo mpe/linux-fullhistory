@@ -134,6 +134,15 @@ eth_rebuild_header(void *buff, struct device *dev)
   dst = *(unsigned long *) eth->h_dest;
   DPRINTF((DBG_DEV, "ETH: RebuildHeader: SRC=%s ", in_ntoa(src)));
   DPRINTF((DBG_DEV, "DST=%s\n", in_ntoa(dst)));
+/*  Kludge to check IP address before sending an ARP request 
+     to fix invalid IP addresses on ARP calls.  jacob@mayhem 9/5/93  */
+  if (src != dev->pa_addr) {
+   /*	
+     printk("Got bad arp_find request in eth_rebuild_header: %s\n", in_ntoa(src));
+     printk("Replacing with correct source IP address: %s\n", in_ntoa(dev->pa_addr));
+   */
+    src = dev->pa_addr;
+  }
   if (arp_find(eth->h_dest, dst, dev, src)) return(1);
   memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
   return(0);

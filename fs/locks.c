@@ -22,11 +22,13 @@
 
 #define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
 
-static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l);
+static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l,
+                      unsigned int fd);
 static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl);
 static int overlap(struct file_lock *fl1, struct file_lock *fl2);
-static int lock_it(struct file *filp, struct file_lock *caller);
-static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *fl);
+static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd);
+static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *fl,
+                                    unsigned int fd);
 static void free_lock(struct file_lock **fl);
 
 static struct file_lock file_lock_table[NR_FILE_LOCKS];
@@ -64,7 +66,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if (flock.l_type == F_UNLCK)
 		return -EINVAL;
-	if (!copy_flock(filp, &file_lock, &flock))
+	if (!copy_flock(filp, &file_lock, &flock, fd))
 		return -EINVAL;
 
 	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
@@ -106,7 +108,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (error)
 		return error;
 	memcpy_fromfs(&flock, l, sizeof(flock));
-	if (!copy_flock(filp, &file_lock, &flock))
+	if (!copy_flock(filp, &file_lock, &flock, fd))
 		return -EINVAL;
 	switch (file_lock.fl_type) {
 	case F_RDLCK :
@@ -161,14 +163,15 @@ repeat:
 	 * Lock doesn't conflict with any other lock ...
 	 */
 
-	return lock_it(filp, &file_lock);
+	return lock_it(filp, &file_lock, fd);
 }
 
 /*
  * This function is called when the file is closed.
  */
 
-void fcntl_remove_locks(struct task_struct *task, struct file *filp)
+void fcntl_remove_locks(struct task_struct *task, struct file *filp,
+                        unsigned int fd)
 {
 	struct file_lock *fl;
 	struct file_lock **before;
@@ -176,12 +179,12 @@ void fcntl_remove_locks(struct task_struct *task, struct file *filp)
 	/* Find first lock owned by caller ... */
 
 	before = &filp->f_inode->i_flock;
-	while ((fl = *before) && task != fl->fl_owner)
+	while ((fl = *before) && task != fl->fl_owner && fd != fl->fl_fd)
 		before = &fl->fl_next;
 
-	/* The list is sorted by owner ... */
+	/* The list is sorted by owner and fd ... */
 
-	while ((fl = *before) && task == fl->fl_owner)
+	while ((fl = *before) && task == fl->fl_owner && fd == fl->fl_fd)
 		free_lock(before);
 }
 
@@ -190,7 +193,8 @@ void fcntl_remove_locks(struct task_struct *task, struct file *filp)
  * Result is a boolean indicating success.
  */
 
-static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l)
+static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l,
+                      unsigned int fd)
 {
 	off_t start;
 
@@ -215,6 +219,7 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l)
 	if (l->l_len == 0 || (fl->fl_end = start + l->l_len - 1) < 0)
 		fl->fl_end = OFFSET_MAX;
 	fl->fl_owner = current;
+	fl->fl_fd = fd;
 	fl->fl_wait = NULL;		/* just for cleanliness */
 	return 1;
 }
@@ -225,7 +230,8 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l)
 
 static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl)
 {
-	if (caller_fl->fl_owner == sys_fl->fl_owner)
+	if (   caller_fl->fl_owner == sys_fl->fl_owner
+            && caller_fl->fl_fd == sys_fl->fl_fd)
 		return 0;
 	if (!overlap(caller_fl, sys_fl))
 		return 0;
@@ -263,7 +269,7 @@ static int overlap(struct file_lock *fl1, struct file_lock *fl2)
  * To all purists: Yes, I use a few goto's. Just pass on to the next function.
  */
 
-static int lock_it(struct file *filp, struct file_lock *caller)
+static int lock_it(struct file *filp, struct file_lock *caller, unsigned int fd)
 {
 	struct file_lock *fl;
 	struct file_lock *left = 0;
@@ -276,14 +282,18 @@ static int lock_it(struct file *filp, struct file_lock *caller)
 	 */
 
 	before = &filp->f_inode->i_flock;
-	while ((fl = *before) && caller->fl_owner != fl->fl_owner)
+	while (   (fl = *before)
+               && caller->fl_owner != fl->fl_owner
+               && caller->fl_fd != fl->fl_fd)
 		before = &fl->fl_next;
 
 	/*
 	 * Look up all locks of this owner.
 	 */
 
-	while ((fl = *before) && caller->fl_owner == fl->fl_owner) {
+	while (   (fl = *before)
+               && caller->fl_owner == fl->fl_owner
+               && caller->fl_fd == fl->fl_fd) {
 		/*
 		 * Detect adjacent or overlapping regions (if same lock type)
 		 */
@@ -370,7 +380,7 @@ next_lock:
 	if (! added) {
 		if (caller->fl_type == F_UNLCK)
 			return -EINVAL;
-		if (! (caller = alloc_lock(before, caller)))
+		if (! (caller = alloc_lock(before, caller, fd)))
 			return -ENOLCK;
 	}
 	if (right) {
@@ -380,7 +390,7 @@ next_lock:
 			 * have to allocate one more lock (in this case, even
 			 * F_UNLCK may fail!).
 			 */
-			if (! (left = alloc_lock(before, right))) {
+			if (! (left = alloc_lock(before, right, fd))) {
 				if (! added)
 					free_lock(before);
 				return -ENOLCK;
@@ -398,7 +408,8 @@ next_lock:
  */
 
 static struct file_lock *alloc_lock(struct file_lock **pos,
-				    struct file_lock *fl)
+				    struct file_lock *fl,
+                                    unsigned int     fd)
 {
 	struct file_lock *tmp;
 
@@ -417,6 +428,7 @@ static struct file_lock *alloc_lock(struct file_lock **pos,
 	*pos = tmp;
 
 	tmp->fl_owner = current;	/* FIXME: needed? */
+	tmp->fl_fd = fd;		/* FIXME: needed? */
 	tmp->fl_wait = NULL;
 	return tmp;
 }

@@ -51,7 +51,6 @@ static void flush(struct tty_queue * queue)
 
 void flush_input(struct tty_struct * tty)
 {
-        tty->status_changed = 1;
 	tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 	flush(&tty->read_q);
 	wake_up_interruptible(&tty->read_q.proc_list);
@@ -66,7 +65,6 @@ void flush_input(struct tty_struct * tty)
 
 void flush_output(struct tty_struct * tty)
 {
-   	tty->status_changed = 1;
 	tty->ctrl_status |= TIOCPKT_FLUSHWRITE;
 	flush(&tty->write_q);
 	wake_up_interruptible(&tty->write_q.proc_list);
@@ -184,7 +182,7 @@ static int check_change(struct tty_struct * tty, int channel)
 static int set_termios(struct tty_struct * tty, struct termios * termios,
 			int channel)
 {
-	int i;
+	int i, old_flow, new_flow;
 	struct termios old_termios = *tty->termios;
 
 	i = check_change(tty, channel);
@@ -192,6 +190,24 @@ static int set_termios(struct tty_struct * tty, struct termios * termios,
 		return i;
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		((char *)tty->termios)[i]=get_fs_byte(i+(char *)termios);
+
+	/* see if packet mode change of state */
+
+	old_flow = (old_termios.c_iflag & IXON) &&
+	      (old_termios.c_cc[VSTOP] == '\023') &&
+	      (old_termios.c_cc[VSTART] == '\021');
+
+	new_flow = (tty->termios->c_iflag & IXON) &&
+	      (tty->termios->c_cc[VSTOP] == '\023') &&
+	      (tty->termios->c_cc[VSTART] == '\021');
+
+	if (old_flow != new_flow) {
+	  tty->ctrl_status &= ~(TIOCPKT_DOSTOP|TIOCPKT_NOSTOP);
+	  if (new_flow)
+	     tty->ctrl_status |= TIOCPKT_DOSTOP;
+	  else
+	     tty->ctrl_status |= TIOCPKT_NOSTOP;		
+	}
 
 	/* puting mpty's into echo mode is very bad, and I think under
 	   some situations can cause the kernel to do nothing but
@@ -239,7 +255,7 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 static int set_termio(struct tty_struct * tty, struct termio * termio,
 			int channel)
 {
-	int i;
+	int i, old_flow, new_flow;
 	struct termio tmp_termio;
 	struct termios old_termios = *tty->termios;
 
@@ -249,27 +265,31 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	for (i=0 ; i< (sizeof (*termio)) ; i++)
 		((char *)&tmp_termio)[i]=get_fs_byte(i+(char *)termio);
 
-	/* take care of the packet stuff. */
-	if ((tmp_termio.c_iflag & IXON) &&
-	    !(tty->termios->c_iflag & IXON))
-	  {
-	     tty->status_changed = 1;
-	     tty->ctrl_status |= TIOCPKT_DOSTOP;
-	  }
-
-	if ((tty->termios->c_iflag & IXON) &&
-	    !(tmp_termio.c_iflag & IXON))
-	  {
-	     tty->status_changed = 1;
-	     tty->ctrl_status |= TIOCPKT_NOSTOP;
-	  }
-
 	*(unsigned short *)&tty->termios->c_iflag = tmp_termio.c_iflag;
 	*(unsigned short *)&tty->termios->c_oflag = tmp_termio.c_oflag;
 	*(unsigned short *)&tty->termios->c_cflag = tmp_termio.c_cflag;
 	*(unsigned short *)&tty->termios->c_lflag = tmp_termio.c_lflag;
 	for(i=0 ; i < NCC ; i++)
 		tty->termios->c_cc[i] = tmp_termio.c_cc[i];
+
+	/* see if packet mode change of state */
+
+	old_flow = (old_termios.c_iflag & IXON) &&
+	      (old_termios.c_cc[VSTOP] == '\023') &&
+	      (old_termios.c_cc[VSTART] == '\021');
+
+	new_flow = (tty->termios->c_iflag & IXON) &&
+	      (tty->termios->c_cc[VSTOP] == '\023') &&
+	      (tty->termios->c_cc[VSTART] == '\021');
+
+	if (old_flow != new_flow) {
+	  tty->ctrl_status &= ~(TIOCPKT_DOSTOP|TIOCPKT_NOSTOP);
+	  if (new_flow)
+	     tty->ctrl_status |= TIOCPKT_DOSTOP;
+	  else
+	     tty->ctrl_status |= TIOCPKT_NOSTOP;		
+	}
+
 
 	unset_locked_termios(tty->termios, &old_termios,
 			     termios_locked[tty->line]);
@@ -605,7 +625,12 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			     tty->packet = 0;
 			   return (0);
 			}
-
+		case TCSBRK: case TCSBRKP:
+			wait_until_sent(tty);
+			if (!tty->ioctl)
+				return 0;
+			tty->ioctl(tty, file, cmd, arg);
+			return 0;
 		default:
 			if (tty->ioctl) {
 				retval = (tty->ioctl)(tty, file, cmd, arg);

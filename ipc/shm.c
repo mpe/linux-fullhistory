@@ -338,7 +338,7 @@ static int shm_map (struct shm_desc *shmd, int remap)
 		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
 		if (*page_table & PAGE_PRESENT) {
 			page_table = (ulong *) (PAGE_MASK & *page_table);
-			page_table += ((tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1);
+			page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
 			if (*page_table) {
 				if (!remap)
 					return -EINVAL;
@@ -368,7 +368,7 @@ static int shm_map (struct shm_desc *shmd, int remap)
 	     shm_sgn += (1 << SHM_IDX_SHIFT)) { 
 		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
 		page_table = (ulong *) (PAGE_MASK & *page_table);
-		page_table += (tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+		page_table += (tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 		*page_table = shm_sgn;
 	}
 	return 0;
@@ -697,7 +697,7 @@ int shm_swap (int prio)
 			continue;
 		} 
 		pte = (ulong *) (PAGE_MASK & *pte);
-		pte += ((tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1);
+		pte += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
 		tmp = *pte;
 		if (!(tmp & PAGE_PRESENT))
 			continue;

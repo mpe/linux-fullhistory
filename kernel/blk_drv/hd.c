@@ -559,7 +559,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		case BLKFLSBUF:
 			if(!suser())  return -EACCES;
 			if(!inode->i_rdev) return -EINVAL;
-			sync_dev(inode->i_rdev);
+			fsync_dev(inode->i_rdev);
 			invalidate_buffers(inode->i_rdev);
 			return 0;
 

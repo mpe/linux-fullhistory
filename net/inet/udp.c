@@ -202,7 +202,8 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   unsigned char *buff;
   unsigned long saddr;
   int size, tmp;
-
+  int err;
+  
   DPRINTF((DBG_UDP, "UDP: send(dst=%s:%d buff=%X len=%d)\n",
 		in_ntoa(sin->sin_addr.s_addr), ntohs(sin->sin_port),
 		from, len));
@@ -257,7 +258,9 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   buff = (unsigned char *) (uh + 1);
 
   /* Copy the user data. */
-  verify_area(VERIFY_WRITE, from, len);
+  err=verify_area(VERIFY_READ, from, len);
+  if(err)
+  	return(err);
   memcpy_fromfs(buff, from, len);
 
   /* Set up the UDP checksum. */
@@ -276,6 +279,7 @@ udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
 {
   struct sockaddr_in sin;
   int tmp;
+  int err;
 
   DPRINTF((DBG_UDP, "UDP: sendto(len=%d, flags=%X)\n", len, flags));
 
@@ -287,7 +291,9 @@ udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
   /* Get and verify the address. */
   if (usin) {
 	if (addr_len < sizeof(sin)) return(-EINVAL);
-	/* verify_area(VERIFY_WRITE, usin, sizeof(sin));*/
+	err=verify_area(VERIFY_READ, usin, sizeof(sin));
+	if(err)
+		return err;
 	memcpy_fromfs(&sin, usin, sizeof(sin));
 	if (sin.sin_family && sin.sin_family != AF_INET) return(-EINVAL);
 	if (sin.sin_port == 0) return(-EINVAL);
@@ -319,13 +325,16 @@ udp_write(struct sock *sk, unsigned char *buff, int len, int noblock,
 int
 udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
+  int err;
   switch(cmd) {
 	case DDIOCSDBG:
 		{
 			int val;
 
 			if (!suser()) return(-EPERM);
-			verify_area(VERIFY_WRITE, (void *)arg, sizeof(int));
+			err=verify_area(VERIFY_READ, (void *)arg, sizeof(int));
+			if(err)
+				return err;
 			val = get_fs_long((int *)arg);
 			switch(val) {
 				case 0:
@@ -345,8 +354,10 @@ udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sk->prot->wspace(sk)/2;
-			verify_area(VERIFY_WRITE,(void *)arg,
+			err=verify_area(VERIFY_WRITE,(void *)arg,
 					sizeof(unsigned long));
+			if(err)
+				return(err);
 			put_fs_long(amount,(unsigned long *)arg);
 			return(0);
 		}
@@ -370,8 +381,10 @@ udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				 */
 				amount = skb->len;
 			}
-			verify_area(VERIFY_WRITE,(void *)arg,
+			err=verify_area(VERIFY_WRITE,(void *)arg,
 						sizeof(unsigned long));
+			if(err)
+				return(err);
 			put_fs_long(amount,(unsigned long *)arg);
 			return(0);
 		}
@@ -394,6 +407,7 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 {
   int copied = 0;
   struct sk_buff *skb;
+  int er;
 
   if (len == 0) return(0);
   if (len < 0) return(-EINVAL);
@@ -410,9 +424,20 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	return(err);
   }
   if (addr_len) {
-	verify_area(VERIFY_WRITE, addr_len, sizeof(*addr_len));
+	er=verify_area(VERIFY_WRITE, addr_len, sizeof(*addr_len));
+	if(er)
+		return(er);
 	put_fs_long(sizeof(*sin), addr_len);
   }
+  if(sin)
+  {
+  	er=verify_area(VERIFY_WRITE, sin, sizeof(*sin));
+  	if(er)
+  		return(er);
+  }
+  er=verify_area(VERIFY_WRITE,to,len);
+  if(er)
+  	return er;
   sk->inuse = 1;
   while(sk->rqueue == NULL) {
 	if (sk->shutdown & RCV_SHUTDOWN) {
@@ -446,7 +471,9 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	}
   }
   copied = min(len, skb->len);
+  /* This was checked in the wrong place
   verify_area(VERIFY_WRITE, to, copied);
+  */
   memcpy_tofs(to, skb->h.raw + sizeof(struct udphdr), copied);
 
   /* Copy the address. */
@@ -456,7 +483,10 @@ udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	addr.sin_family = AF_INET;
 	addr.sin_port = skb->h.uh->source;
 	addr.sin_addr.s_addr = skb->daddr;
-	verify_area(VERIFY_WRITE, sin, sizeof(*sin));
+	/* Also in the wrong place, jumping out here will lose
+	   a packet for good and leave the socket in use
+	   now tested above
+	verify_area(VERIFY_WRITE, sin, sizeof(*sin));*/
 	memcpy_tofs(sin, &addr, sizeof(*sin));
   }
 
@@ -480,10 +510,13 @@ int
 udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
   struct sockaddr_in sin;
-
+  int er;
+  
   if (addr_len < sizeof(sin)) return(-EINVAL);
 
-  /* verify_area(VERIFY_WRITE, usin, sizeof(sin)); */
+  er=verify_area(VERIFY_READ, usin, sizeof(sin));
+  if(er)
+  	return er;
 
   memcpy_fromfs(&sin, usin, sizeof(sin));
   if (sin.sin_family && sin.sin_family != AF_INET) return(-EAFNOSUPPORT);

@@ -52,11 +52,11 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	switch (flags & MAP_TYPE) {
 	case MAP_SHARED:
 		if ((prot & PROT_WRITE) && !(file->f_mode & 2))
-			return -EINVAL;
+			return -EACCES;
 		/* fall through */
 	case MAP_PRIVATE:
 		if (!(file->f_mode & 1))
-			return -EINVAL;
+			return -EACCES;
 		break;
 
 	default:
@@ -121,7 +121,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	return -1;
 }
 
-extern "C" int sys_mmap(unsigned long *buffer)
+asmlinkage int sys_mmap(unsigned long *buffer)
 {
 	unsigned long fd;
 	struct file * file;
@@ -133,7 +133,7 @@ extern "C" int sys_mmap(unsigned long *buffer)
 		get_fs_long(buffer+2), get_fs_long(buffer+3), get_fs_long(buffer+5));
 }
 
-extern "C" int sys_munmap(unsigned long addr, size_t len)
+asmlinkage int sys_munmap(unsigned long addr, size_t len)
 {
 	struct vm_area_struct *mpnt, **p, *free;
 
@@ -169,7 +169,7 @@ extern "C" int sys_munmap(unsigned long addr, size_t len)
 	while (free) {
 		mpnt = free;
 		free = free->vm_next;
-		if (mpnt->vm_ops->close)
+		if (mpnt->vm_ops && mpnt->vm_ops->close)
 			mpnt->vm_ops->close(mpnt);
 		kfree(mpnt);
 	}
@@ -201,10 +201,6 @@ int generic_mmap(struct inode * inode, struct file * file,
 		return -EINVAL;
 	if (off & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
-	if (len > high_memory || off > high_memory - len) /* avoid overflow */
-		return -ENXIO;
-	if (get_limit(USER_DS)  != TASK_SIZE)
-		return -EINVAL;
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->bmap)
@@ -233,10 +229,6 @@ int generic_mmap(struct inode * inode, struct file * file,
 	mpnt->vm_ops = &file_mmap;
 	mpnt->vm_next = current->mmap;
 	current->mmap = mpnt;
-#if 0
-	printk("VFS: Loaded mmap at %08x -  %08x\n",
-		mpnt->vm_start,	mpnt->vm_end);
-#endif
 	return 0;
 }
 

@@ -21,6 +21,8 @@
 
 #include <linux/ip.h>
 
+#include "sock.h"	/* struct sock */
+
 extern int		backoff(int n);
 
 extern void		ip_print(struct iphdr *ip);

@@ -138,6 +138,7 @@
 #include <asm/system.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #define VERSION          "$Revision: 3.18 $"
 
@@ -528,6 +529,8 @@ int fdomain_16x0_detect( int hostnum )
 
       for (i = 0; !flag && i < PORT_COUNT; i++) {
 	 port_base = ports[i];
+	 if(check_region(port_base, 0x10)) continue;  /* skip if I/O port in
+							 use */
 #if DEBUG_DETECT
 	 printk( " %x,", port_base );
 #endif
@@ -607,6 +610,8 @@ int fdomain_16x0_detect( int hostnum )
       scsi_hosts[this_host].this_id = 7;
    }
    
+   snarf_region(port_base, 0x10);  /* Register */
+
 #if DO_DETECT
 
    /* These routines are here because of the way the SCSI bus behaves after

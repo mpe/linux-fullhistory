@@ -8,6 +8,7 @@
 #define _8390_h
 
 #include <linux/if_ether.h>
+#include <linux/ioport.h>
 
 #define TX_2X_PAGES 12
 #define TX_1X_PAGES 6
@@ -25,10 +26,12 @@ extern void NS8390_init(struct device *dev, int startp);
 extern int ei_open(struct device *dev);
 extern void ei_interrupt(int reg_ptr);
 
+#ifndef HAVE_AUTOIRQ
 /* From auto_irq.c */
 extern struct device *irq2dev_map[16];
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
+#endif
 
 /* Most of these entries should be in 'struct device' (or most of the
    things in there should be here!) */

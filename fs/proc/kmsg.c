@@ -17,7 +17,7 @@
 extern unsigned long log_size;
 extern struct wait_queue * log_wait;
 
-extern "C" int sys_syslog(int type, char * bug, int count);
+asmlinkage int sys_syslog(int type, char * bug, int count);
 
 static int kmsg_open(struct inode * inode, struct file * file)
 {

@@ -86,7 +86,7 @@ static void free_one_table(unsigned long * page_dir)
 		return;
 	*page_dir = 0;
 	if (pg_table >= high_memory || !(pg_table & PAGE_PRESENT)) {
-		printk("Bad page table: [%08x]=%08x\n",page_dir,pg_table);
+		printk("Bad page table: [%p]=%08x\n",page_dir,pg_table);
 		return;
 	}
 	if (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
@@ -278,7 +278,7 @@ int unmap_page_range(unsigned long from, unsigned long size)
 	}
 	size = (size + ~PAGE_MASK) >> PAGE_SHIFT;
 	dir = PAGE_DIR_OFFSET(current->tss.cr3,from);
-	poff = (from >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+	poff = (from >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	if ((pcnt = PTRS_PER_PAGE - poff) > size)
 		pcnt = size;
 
@@ -337,7 +337,7 @@ int zeromap_page_range(unsigned long from, unsigned long size, int mask)
 	}
 	dir = PAGE_DIR_OFFSET(current->tss.cr3,from);
 	size = (size + ~PAGE_MASK) >> PAGE_SHIFT;
-	poff = (from >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+	poff = (from >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	if ((pcnt = PTRS_PER_PAGE - poff) > size)
 		pcnt = size;
 
@@ -399,7 +399,7 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 	}
 	dir = PAGE_DIR_OFFSET(current->tss.cr3,from);
 	size = (size + ~PAGE_MASK) >> PAGE_SHIFT;
-	poff = (from >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+	poff = (from >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	if ((pcnt = PTRS_PER_PAGE - poff) > size)
 		pcnt = size;
 
@@ -472,7 +472,7 @@ unsigned long put_page(struct task_struct * tsk,unsigned long page,
 	if ((prot & (PAGE_MASK|PAGE_PRESENT)) != PAGE_PRESENT)
 		printk("put_page: prot = %08x\n",prot);
 	if (page >= high_memory) {
-		printk("put_page: trying to put page %p at %p\n",page,address);
+		printk("put_page: trying to put page %08x at %08x\n",page,address);
 		return 0;
 	}
 	page_table = PAGE_DIR_OFFSET(tsk->tss.cr3,address);
@@ -484,7 +484,7 @@ unsigned long put_page(struct task_struct * tsk,unsigned long page,
 		*page_table = BAD_PAGETABLE | PAGE_TABLE;
 		return 0;
 	}
-	page_table += (address >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+	page_table += (address >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	if (*page_table) {
 		printk("put_page: page already exists\n");
 		*page_table = 0;
@@ -506,9 +506,9 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	unsigned long tmp, *page_table;
 
 	if (page >= high_memory)
-		printk("put_dirty_page: trying to put page %p at %p\n",page,address);
+		printk("put_dirty_page: trying to put page %08x at %08x\n",page,address);
 	if (mem_map[MAP_NR(page)] != 1)
-		printk("mem_map disagrees with %p at %p\n",page,address);
+		printk("mem_map disagrees with %08x at %08x\n",page,address);
 	page_table = PAGE_DIR_OFFSET(tsk->tss.cr3,address);
 	if (PAGE_PRESENT & *page_table)
 		page_table = (unsigned long *) (PAGE_MASK & *page_table);
@@ -523,7 +523,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 			page_table = (unsigned long *) tmp;
 		}
 	}
-	page_table += (address >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
+	page_table += (address >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	if (*page_table) {
 		printk("put_dirty_page: page already exists\n");
 		*page_table = 0;
@@ -760,7 +760,7 @@ int share_page(struct vm_area_struct * area, struct task_struct * tsk,
 {
 	struct task_struct ** p;
 
-	if (!inode || inode->i_count < 2)
+	if (!inode || inode->i_count < 2 || !area->vm_ops)
 		return 0;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
 		if (!*p)
@@ -773,8 +773,8 @@ int share_page(struct vm_area_struct * area, struct task_struct * tsk,
 			   we can share pages with */
 			if(area){
 			  struct vm_area_struct * mpnt;
-			  for(mpnt = (*p)->mmap; mpnt; mpnt = mpnt->vm_next){
-			    if(mpnt->vm_ops && mpnt->vm_ops == area->vm_ops &&
+			  for (mpnt = (*p)->mmap; mpnt; mpnt = mpnt->vm_next) {
+			    if (mpnt->vm_ops == area->vm_ops &&
 			       mpnt->vm_inode->i_ino == area->vm_inode->i_ino&&
 			       mpnt->vm_inode->i_dev == area->vm_inode->i_dev){
 			      if (mpnt->vm_ops->share(mpnt, area, address))
@@ -851,6 +851,8 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			continue;
 		if (address >= ((mpnt->vm_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
 			continue;
+		if (!mpnt->vm_ops || !mpnt->vm_ops->nopage)
+			break;
 		mpnt->vm_ops->nopage(error_code, mpnt, address);
 		return;
 	}
@@ -858,7 +860,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	get_empty_page(tsk,address);
 	if (tsk != current)
 		return;
-	if (address < tsk->brk)
+	if (address >= tsk->end_data && address < tsk->brk)
 		return;
 	if (address+8192 >= (user_esp & 0xfffff000) && 
 	    address <= current->start_stack)
@@ -872,7 +874,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
  * and the problem, and then passes it off to one of the appropriate
  * routines.
  */
-extern "C" void do_page_fault(struct pt_regs *regs, unsigned long error_code)
+asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
 	unsigned long address;
 	unsigned long user_esp = 0;
@@ -966,9 +968,9 @@ void show_mem(void)
 	int shared = 0;
 
 	printk("Mem-info:\n");
-	printk("Free pages:      %6dkB\n",nr_free_pages<<PAGE_SHIFT-10);
-	printk("Secondary pages: %6dkB\n",nr_secondary_pages<<PAGE_SHIFT-10);
-	printk("Free swap:       %6dkB\n",nr_swap_pages<<PAGE_SHIFT-10);
+	printk("Free pages:      %6dkB\n",nr_free_pages<<(PAGE_SHIFT-10));
+	printk("Secondary pages: %6dkB\n",nr_secondary_pages<<(PAGE_SHIFT-10));
+	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
 	printk("Buffer memory:   %6dkB\n",buffermem>>10);
 	printk("Buffer heads:    %6d\n",nr_buffer_heads);
 	printk("Buffer blocks:   %6d\n",nr_buffers);
@@ -1085,9 +1087,9 @@ void mem_init(unsigned long start_low_mem,
 	printk("Memory: %dk/%dk available (%dk kernel code, %dk reserved, %dk data)\n",
 		tmp >> 10,
 		end_mem >> 10,
-		codepages << PAGE_SHIFT-10,
-		reservedpages << PAGE_SHIFT-10,
-		datapages << PAGE_SHIFT-10);
+		codepages << (PAGE_SHIFT-10),
+		reservedpages << (PAGE_SHIFT-10),
+		datapages << (PAGE_SHIFT-10));
 	return;
 }
 

@@ -37,7 +37,8 @@ static void do_rd_request(void)
 repeat:
 	INIT_REQUEST;
 	addr = rd_start + (CURRENT->sector << 9);
-	len = CURRENT->nr_sectors << 9;
+	len = CURRENT->current_nr_sectors << 9;
+
 	if ((MINOR(CURRENT->dev) != MINOR_RAMDISK) ||
 	    (addr+len > rd_start+rd_length)) {
 		end_request(0);

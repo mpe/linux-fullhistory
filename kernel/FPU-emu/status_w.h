@@ -10,6 +10,7 @@
 #ifndef _STATUS_H_
 #define _STATUS_H_
 
+#include "fpu_emu.h"    /* for definition of PECULIAR_486 */
 
 #ifdef __ASSEMBLER__
 #define	Const__(x)	$##x
@@ -51,8 +52,13 @@
   partial_status &= ~(SW_C0|SW_C1|SW_C2|SW_C3); \
   partial_status |= (cc) & (SW_C0|SW_C1|SW_C2|SW_C3); })
 
-/* Clear the SW_C1 bit, "other bits undefined" */
-#define clear_C1()  { partial_status &= ~SW_C1; }
+#ifdef PECULIAR_486
+   /* Default, this conveys no information, but an 80486 does it. */
+   /* Clear the SW_C1 bit, "other bits undefined". */
+#  define clear_C1()  { partial_status &= ~SW_C1; }
+# else
+#  define clear_C1()
+#endif PECULIAR_486
 
 #endif __ASSEMBLER__
 

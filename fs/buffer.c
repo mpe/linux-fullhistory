@@ -160,7 +160,7 @@ int fsync_dev(dev_t dev)
 	return sync_buffers(dev, 1);
 }
 
-extern "C" int sys_sync(void)
+asmlinkage int sys_sync(void)
 {
 	sync_dev(0);
 	return 0;
@@ -171,7 +171,7 @@ int file_fsync (struct inode *inode, struct file *filp)
 	return fsync_dev(inode->i_dev);
 }
 
-extern "C" int sys_fsync(unsigned int fd)
+asmlinkage int sys_fsync(unsigned int fd)
 {
 	struct file * file;
 	struct inode * inode;

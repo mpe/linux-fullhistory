@@ -265,7 +265,7 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
  * swapping out or forgetting about. This speeds up the search when we
  * actually have to swap.
  */
-extern "C" int sys_idle(void)
+asmlinkage int sys_idle(void)
 {
 	need_resched = 1;
 	return 0;
@@ -661,7 +661,7 @@ repeat:
 	return 0;
 }
 
-extern "C" int sys_swapoff(const char * specialfile)
+asmlinkage int sys_swapoff(const char * specialfile)
 {
 	struct swap_info_struct * p;
 	struct inode * inode;
@@ -713,7 +713,7 @@ extern "C" int sys_swapoff(const char * specialfile)
  *
  * The swapon system call
  */
-extern "C" int sys_swapon(const char * specialfile)
+asmlinkage int sys_swapon(const char * specialfile)
 {
 	struct swap_info_struct * p;
 	struct inode * swap_inode;

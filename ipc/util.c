@@ -13,7 +13,7 @@
 #include <linux/stat.h>
 
 void ipc_init (void);
-extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr); 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr); 
 
 #ifdef CONFIG_SYSVIPC
 
@@ -67,7 +67,7 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 	return 0;
 }
 
-extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr) 
 {
 	
 	if (call <= SEMCTL)
@@ -123,7 +123,7 @@ extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr)
 
 #else /* not CONFIG_SYSVIPC */
 
-extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr) 
 {
     return -ENOSYS;
 }

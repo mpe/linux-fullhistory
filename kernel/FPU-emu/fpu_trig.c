@@ -20,12 +20,13 @@
 
 static void rem_kernel(unsigned long long st0, unsigned long long *y,
 		       unsigned long long st1,
-		       long long q, int n);
+		       unsigned long long q, int n);
 
 #define BETTER_THAN_486
 
 #define FCOS  4
 #define FPTAN 1
+
 
 /* Used only by fptan, fsin, fcos, and fsincos. */
 /* This routine produces very accurate results, similar to
@@ -36,7 +37,7 @@ static void rem_kernel(unsigned long long st0, unsigned long long *y,
 static int trig_arg(FPU_REG *X, int even)
 {
   FPU_REG tmp;
-  long long q;
+  unsigned long long q;
   int old_cw = control_word, saved_status = partial_status;
 
   if ( X->exp >= EXP_BIAS + 63 )
@@ -51,12 +52,12 @@ static int trig_arg(FPU_REG *X, int even)
   reg_div(X, &CONST_PI2, &tmp, PR_64_BITS | RC_CHOP | 0x3f);
   round_to_int(&tmp);  /* Fortunately, this can't overflow
 			  to 2^64 */
-  q = ((long long *)&(tmp.sigl))[0];
+  q = significand(&tmp);
   if ( q )
     {
-      rem_kernel(((unsigned long long *)&(X->sigl))[0],
-		 (unsigned long long *)&(tmp.sigl),
-		 ((unsigned long long *)&(CONST_PI2.sigl))[0],
+      rem_kernel(significand(X),
+		 &significand(&tmp),
+		 significand(&CONST_PI2),
 		 q, X->exp - CONST_PI2.exp);
       tmp.exp = CONST_PI2.exp;
       normalize(&tmp);
@@ -85,7 +86,7 @@ static int trig_arg(FPU_REG *X, int even)
 	{
 	  /* This code gives the effect of having p/2 to better than
 	     128 bits precision. */
-	  ((long long *)&(tmp.sigl))[0] = q + 1;
+	  significand(&tmp) = q + 1;
 	  tmp.exp = EXP_BIAS + 63;
 	  normalize(&tmp);
 	  reg_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION);
@@ -104,7 +105,7 @@ static int trig_arg(FPU_REG *X, int even)
 	{
 	  /* This code gives the effect of having p/2 to better than
 	     128 bits precision. */
-	  ((long long *)&(tmp.sigl))[0] = q;
+	  significand(&tmp) = q;
 	  tmp.exp = EXP_BIAS + 63;
 	  normalize(&tmp);
 	  reg_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION);
@@ -204,10 +205,7 @@ static void single_arg_2_error(void)
 
 static void f2xm1(void)
 {
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   switch ( FPU_st0_tag )
     {
     case TW_Valid:
@@ -363,11 +361,7 @@ static void fxtract(void)
 
   if ( STACK_OVERFLOW )
     {  stack_overflow(); return; }
-
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !(FPU_st0_tag ^ TW_Valid) )
     {
       long e;
@@ -432,29 +426,20 @@ static void fxtract(void)
 
 static void fdecstp(void)
 {
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   top--;  /* FPU_st0_ptr will be fixed in math_emulate() before the next instr */
 }
 
 static void fincstp(void)
 {
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   top++;  /* FPU_st0_ptr will be fixed in math_emulate() before the next instr */
 }
 
 
 static void fsqrt_(void)
 {
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !(FPU_st0_tag ^ TW_Valid) )
     {
       int expon;
@@ -729,7 +714,7 @@ static void fsincos(void)
  */
 static void rem_kernel(unsigned long long st0, unsigned long long *y,
 		       unsigned long long st1,
-		       long long q, int n)
+		       unsigned long long q, int n)
 {
   unsigned long long x;
 
@@ -790,11 +775,11 @@ static void do_fprem(int round)
 		{
 		  round_to_int(&tmp);  /* Fortunately, this can't overflow
 					  to 2^64 */
-		  q = ((long long *)&(tmp.sigl))[0];
+		  q = significand(&tmp);
 
-		  rem_kernel(((unsigned long long *)&(FPU_st0_ptr->sigl))[0],
-			     (unsigned long long *)&(tmp.sigl),
-			     ((unsigned long long *)&(st1_ptr->sigl))[0],
+		  rem_kernel(significand(FPU_st0_ptr),
+			     &significand(&tmp),
+			     significand(st1_ptr),
 			     q, expdif);
 
 		  tmp.exp = st1_ptr->exp;
@@ -808,14 +793,24 @@ static void do_fprem(int round)
 
 	      if ( (round == RC_RND) && (tmp.sigh & 0xc0000000) )
 		{
-		  /* We may need to subtract st(1) once more. */
+		  /* We may need to subtract st(1) once more,
+		     to get a result <= 1/2 of st(1). */
 		  unsigned long long x;
-		  x = ((unsigned long long *)&(st1_ptr->sigl))[0] -
-		    ((unsigned long long *)&(tmp.sigl))[0];
-		  if ( x < ((unsigned long long *)&(tmp.sigl))[0] )
+		  expdif = st1_ptr->exp - tmp.exp;
+		  if ( expdif <= 1 )
 		    {
-		      tmp.sign ^= (SIGN_POS^SIGN_NEG);
-		      ((unsigned long long *)&(tmp.sigl))[0] = x;
+		      if ( expdif == 0 )
+			x = significand(st1_ptr) - significand(&tmp);
+		      else /* expdif is 1 */
+			x = (significand(st1_ptr) << 1) - significand(&tmp);
+		      if ( (x < significand(&tmp)) ||
+			  /* or equi-distant (from 0 & st(1)) and q is odd */
+			  ((x == significand(&tmp)) && (q & 1) ) )
+			{
+			  tmp.sign ^= (SIGN_POS^SIGN_NEG);
+			  significand(&tmp) = x;
+			  q++;
+			}
 		    }
 		}
 
@@ -849,10 +844,10 @@ static void do_fprem(int round)
 
 	  round_to_int(&tmp);  /* Fortunately, this can't overflow to 2^64 */
 
-	  rem_kernel(((unsigned long long *)&(FPU_st0_ptr->sigl))[0],
-		     ((unsigned long long *)&(tmp.sigl)),
-		     ((unsigned long long *)&(st1_ptr->sigl))[0],
-		     ((long long *)&(tmp.sigl))[0],
+	  rem_kernel(significand(FPU_st0_ptr),
+		     &significand(&tmp),
+		     significand(st1_ptr),
+		     significand(&tmp),
 		     tmp.exp - EXP_BIAS
 		     ); 
 	  tmp.exp = exp_1 + expdif;
@@ -882,13 +877,15 @@ static void do_fprem(int round)
 
       control_word = old_cw;
       partial_status = saved_status;
-      normalize(&tmp);
+      normalize_nuo(&tmp);
       reg_move(&tmp, FPU_st0_ptr);
       setcc(cc);
 
-      if ( FPU_st0_ptr->tag != TW_Zero )
-	/* Use round_reg() to properly detect under/overflow etc */
-	round_reg(FPU_st0_ptr, 0, control_word);
+      /* The only condition to be looked for is underflow,
+	 and it can occur here only if underflow is unmasked. */
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (FPU_st0_ptr->tag != TW_Zero)
+	  && !(control_word & CW_Underflow) )
+	arith_underflow(FPU_st0_ptr);
 
       return;
     }
@@ -961,10 +958,7 @@ static void fyl2x(void)
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
 
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       if ( FPU_st0_ptr->sign == SIGN_POS )
@@ -1155,10 +1149,7 @@ static void fpatan(void)
   char st1_tag = st1_ptr->tag;
   char st1_sign = st1_ptr->sign, st0_sign = FPU_st0_ptr->sign;
 
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       int saved_control, saved_status;
@@ -1336,10 +1327,7 @@ static void fyl2xp1(void)
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
 
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       int saved_control, saved_status;
@@ -1560,10 +1548,7 @@ static void fscale(void)
   int old_cw = control_word;
   char sign = FPU_st0_ptr->sign;
 
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       long scale;

@@ -5,10 +5,11 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	@(#)ip.c	1.0.16	06/02/93
+ * Version:	@(#)ip.c	1.0.16b	9/1/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Donald Becker, <becker@super.org>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -382,6 +383,27 @@ do_options(struct iphdr *iph, struct options *opt)
   return(0);
 }
 
+/* This is a version of ip_compute_csum() optimized for IP headers, which
+   always checksum on 4 octet boundaries. */
+static inline unsigned short
+ip_fast_csum(unsigned char * buff, int wlen)
+{
+    unsigned long sum = 0;
+    __asm__("\t clc\n"
+	    "1:\n"
+	    "\t lodsl\n"
+	    "\t adcl %%eax, %%ebx\n"
+	    "\t loop 1b\n"
+	    "\t adcl $0, %%ebx\n"
+	    "\t movl %%ebx, %%eax\n"
+	    "\t shrl $16, %%eax\n"
+	    "\t addw %%ax, %%bx\n"
+	    "\t adcw $0, %%bx\n"
+	    : "=b" (sum) , "=S" (buff)
+	    : "0" (sum), "c" (wlen) ,"1" (buff)
+	    : "ax", "cx", "si", "bx" );
+    return (~sum) & 0xffff;
+}
 
 /*
  * This routine does all the checksum computations that don't
@@ -429,23 +451,21 @@ ip_compute_csum(unsigned char * buff, int len)
   return(sum & 0xffff);
 }
 
-
-/* Check the header of an incoming IP datagram. */
+/* Check the header of an incoming IP datagram.  This version is still used in slhc.c. */
 int
 ip_csum(struct iphdr *iph)
 {
-  if (iph->check == 0) return(0);
-  if (ip_compute_csum((unsigned char *)iph, iph->ihl*4) == 0) return(0);
+  if (iph->check == 0  || ip_fast_csum((unsigned char *)iph, iph->ihl) == 0)
+      return(0);
   return(1);
 }
-
 
 /* Generate a checksym for an outgoing IP datagram. */
 static void
 ip_send_check(struct iphdr *iph)
 {
    iph->check = 0;
-   iph->check = ip_compute_csum((unsigned char *)iph, iph->ihl*4);
+   iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
 
 
@@ -554,21 +574,20 @@ ip_forward(struct sk_buff *skb, struct device *dev)
 int
 ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
-  struct iphdr *iph;
+  struct iphdr *iph = skb->h.iph;
   unsigned char hash;
   unsigned char flag = 0;
+  unsigned char opts_p = 0;	/* Set iff the packet has options. */
   struct inet_protocol *ipprot;
   static struct options opt; /* since we don't use these yet, and they
 				take up stack space. */
   int brd;
 
-  iph = skb->h.iph;
-  memset((char *) &opt, 0, sizeof(opt));
   DPRINTF((DBG_IP, "<<\n"));
-  ip_print(iph);
 
   /* Is the datagram acceptable? */
-  if (ip_csum(iph) || do_options(iph, &opt) || iph->version != 4) {
+  if (iph->version != 4
+      || (iph->check != 0 && ip_fast_csum((unsigned char *)iph, iph->ihl) !=0)) {
 	DPRINTF((DBG_IP, "\nIP: *** datagram error ***\n"));
 	DPRINTF((DBG_IP, "    SRC = %s   ", in_ntoa(iph->saddr)));
 	DPRINTF((DBG_IP, "    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
@@ -577,7 +596,15 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return(0);
   }
 
-  /* Do any IP forwarding required. */
+  if (iph->ihl != 5) {  	/* Fast path for the typical optionless IP packet. */
+      ip_print(iph);		/* Bogus, only for debugging. */
+      memset((char *) &opt, 0, sizeof(opt));
+      if (do_options(iph, &opt) != 0)
+	  return 0;
+      opts_p = 1;
+  }
+
+  /* Do any IP forwarding required.  chk_addr() is expensive -- avoid it someday. */
   if ((brd = chk_addr(iph->daddr)) == 0) {
 #ifdef CONFIG_IP_FORWARD
 	ip_forward(skb, dev);
@@ -588,17 +615,12 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
 
   /*
-   * Deal with fragments: not really...
-   * Fragmentation is definitely a required part of IP (yeah, guys,
-   * I read Linux-Activists.NET too :-), but the current "sk_buff"
-   * allocation stuff doesn't make things simpler.  When we're all
-   * done cleaning up the mess, we'll add Ross Biro's "mbuf" stuff
-   * to the code, which will replace the sk_buff stuff completely.
-   * That will (a) make the code even cleaner, (b) allow me to do
-   * the DDI (Device Driver Interface) the way I want to, and (c),
-   * it will allow for easy addition of fragging.  Any takers? -FvK
-   */
-  if ((iph->frag_off & 32) || (ntohs(iph->frag_off) & 0x1fff)) {
+   * Reassemble IP fragments. */
+
+  if ((iph->frag_off & 0x0020) || (ntohs(iph->frag_off) & 0x1fff)) {
+#ifdef CONFIG_IP_DEFRAG
+      ip_defrag(skb);
+#else
 	printk("\nIP: *** datagram fragmentation not yet implemented ***\n");
 	printk("    SRC = %s   ", in_ntoa(iph->saddr));
 	printk("    DST = %s (ignored)\n", in_ntoa(iph->daddr));
@@ -606,6 +628,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_WRITE);
 	return(0);
+#endif
   }
 
   /* Point into the IP datagram, just past the header. */
@@ -646,7 +669,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	* based on the datagram protocol.  We should really
 	* check the protocol handler's return values here...
 	*/
-	ipprot->handler(skb2, dev, &opt, iph->daddr,
+	ipprot->handler(skb2, dev, opts_p ? &opt : 0, iph->daddr,
 			(ntohs(iph->tot_len) - (iph->ihl * 4)),
 			iph->saddr, 0, ipprot);
 
@@ -751,6 +774,12 @@ ip_retransmit(struct sock *sk, int all)
   skb = sk->send_head;
   while (skb != NULL) {
 	dev = skb->dev;
+	/* I know this can't happen but as it does.. */
+	if(dev==NULL)
+	{
+		printk("ip_forward: NULL device bug!\n");
+		goto oops;
+	}
 
 	/*
 	 * The rebuild_header function sees if the ARP is done.
@@ -773,7 +802,7 @@ ip_retransmit(struct sock *sk, int all)
 		  else dev->queue_xmit(skb, dev, SOPRI_NORMAL );
 	}
 
-	sk->retransmits++;
+oops:	sk->retransmits++;
 	sk->prot->retransmits ++;
 	if (!all) break;
 

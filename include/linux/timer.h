@@ -17,6 +17,8 @@
  * 
  * HD_TIMER		harddisk timer
  *
+ * HD_TIMER2		(atdisk2 patches)
+ *
  * FLOPPY_TIMER		floppy disk timer (not used right now)
  * 
  * SCSI_TIMER		scsi.c timeout timer
@@ -43,6 +45,8 @@
 
 #define TAPE_QIC02_TIMER	22	/* hhb */
 #define MCD_TIMER	23
+
+#define HD_TIMER2	24
 
 struct timer_struct {
 	unsigned long expires;

@@ -63,19 +63,19 @@ print_sk(struct sock *sk)
   }
   printk("  wmem_alloc = %d\n", sk->wmem_alloc);
   printk("  rmem_alloc = %d\n", sk->rmem_alloc);
-  printk("  send_head = %X\n", sk->send_head);
+  printk("  send_head = %p\n", sk->send_head);
   printk("  state = %d\n",sk->state);
-  printk("  wback = %X, rqueue = %X\n", sk->wback, sk->rqueue);
-  printk("  wfront = %X\n", sk->wfront);
+  printk("  wback = %p, rqueue = %p\n", sk->wback, sk->rqueue);
+  printk("  wfront = %p\n", sk->wfront);
   printk("  daddr = %X, saddr = %X\n", sk->daddr,sk->saddr);
   printk("  num = %d", sk->num);
-  printk(" next = %X\n", sk->next);
+  printk(" next = %p\n", sk->next);
   printk("  send_seq = %d, acked_seq = %d, copied_seq = %d\n",
 	  sk->send_seq, sk->acked_seq, sk->copied_seq);
   printk("  rcv_ack_seq = %d, window_seq = %d, fin_seq = %d\n",
 	  sk->rcv_ack_seq, sk->window_seq, sk->fin_seq);
-  printk("  prot = %X\n", sk->prot);
-  printk("  pair = %X, back_log = %X\n", sk->pair,sk->back_log);
+  printk("  prot = %p\n", sk->prot);
+  printk("  pair = %p, back_log = %p\n", sk->pair,sk->back_log);
   printk("  inuse = %d , blog = %d\n", sk->inuse, sk->blog);
   printk("  dead = %d delay_acks=%d\n", sk->dead, sk->delay_acks);
   printk("  retransmits = %d, timeout = %d\n", sk->retransmits, sk->timeout);
@@ -92,9 +92,9 @@ print_skb(struct sk_buff *skb)
 	printk("  print_skb(NULL)\n");
 	return;
   }
-  printk("  prev = %X, next = %X\n", skb->prev, skb->next);
-  printk("  sk = %X link3 = %X\n", skb->sk, skb->link3);
-  printk("  mem_addr = %X, mem_len = %d\n", skb->mem_addr, skb->mem_len);
+  printk("  prev = %p, next = %p\n", skb->prev, skb->next);
+  printk("  sk = %p link3 = %p\n", skb->sk, skb->link3);
+  printk("  mem_addr = %p, mem_len = %d\n", skb->mem_addr, skb->mem_len);
   printk("  used = %d free = %d\n", skb->used,skb->free);
 }
 
@@ -967,6 +967,8 @@ outside_loop:
 		sti();
 		return(-EADDRINUSE);
 	}
+	if (sk2->num != snum) continue;		/* more than one */
+	if (sk2->saddr != sk->saddr) continue;	/* socket per slot ! -FB */
 	if (!sk2->reuse) {
 		sti();
 		return(-EADDRINUSE);

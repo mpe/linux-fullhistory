@@ -68,6 +68,7 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 #define WAS_TIMEDOUT 	0x02
 #define WAS_SENSE	0x04
 #define IS_RESETTING	0x08
+#define ASKED_FOR_SENSE 0x10
 
 extern int last_reset[];
 
@@ -661,7 +662,7 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 	{
 	cli();
-	SCpnt->flags |= WAS_SENSE;
+	SCpnt->flags |= WAS_SENSE | ASKED_FOR_SENSE;
 	update_timeout(SCpnt, SENSE_TIMEOUT);
 	sti();
 	
@@ -805,9 +806,17 @@ static void reset (Scsi_Cmnd * SCpnt)
 
 static int check_sense (Scsi_Cmnd * SCpnt)
 	{
-  /* If there is no sense information, request it.  */
-  if (((SCpnt->sense_buffer[0] & 0x70) >> 4) != 7)
-    return SUGGEST_SENSE;
+  /* If there is no sense information, request it.  If we have already
+     requested it, there is no point in asking again - the firmware must be
+     confused. */
+  if (((SCpnt->sense_buffer[0] & 0x70) >> 4) != 7) {
+    if(!(SCpnt->flags & ASKED_FOR_SENSE))
+      return SUGGEST_SENSE;
+    else
+      return SUGGEST_RETRY;
+      }
+  
+  SCpnt->flags &= ~ASKED_FOR_SENSE;
 
 #ifdef DEBUG_INIT
 	printk("scsi%d : ", SCpnt->host);

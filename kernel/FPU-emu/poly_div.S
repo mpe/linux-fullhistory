@@ -8,9 +8,9 @@
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
- |   void poly_div2(long long *x)                                            |
- |   void poly_div4(long long *x)                                            |
- |   void poly_div16(long long *x)                                           |
+ |   void poly_div2(unsigned long long *x)                                   |
+ |   void poly_div4(unsigned long long *x)                                   |
+ |   void poly_div16(unsigned long long *x)                                  |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 

@@ -737,7 +737,7 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (UN_BUF_AVAIL(upd) || peerupd)
 			put_fs_long(UN_BUF_AVAIL(upd),(unsigned long *)arg);
 		  else
-			put_fs_long(1,(unsigned long *)arg); /* read EOF */
+			put_fs_long(0,(unsigned long *)arg);
 		break;
 	case TIOCOUTQ:
 		if (sock->flags & SO_ACCEPTCON) return(-EINVAL);

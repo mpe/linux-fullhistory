@@ -15,11 +15,12 @@
 */
 
 static char *version =
-    "wd.c:v0.99-12 8/12/93 Donald Becker (becker@super.org)\n";
+    "wd.c:v0.99-13 8/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/errno.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <memory.h>
@@ -59,19 +60,28 @@ static int wd_close_card(struct device *dev);
     The wdprobe1() routine initializes the card and fills the
     station address field. */
 
-int wdprobe(int ioaddr,  struct device *dev)
+int wd_probe(struct device *dev)
 {
     int *port, ports[] = {0x300, 0x280, 0x380, 0x240, 0};
+    short ioaddr = dev->base_addr;
 
+    if (ioaddr < 0)
+	return ENXIO;		/* Don't probe at all. */
     if (ioaddr > 0x100)
-	return wdprobe1(ioaddr, dev);
+	return ! wdprobe1(ioaddr, dev);
 
-    for (port = &ports[0]; *port; port++)
+    for (port = &ports[0]; *port; port++) {
+#ifdef HAVE_PORTRESERVE
+	if (check_region(*port, 32))
+	    continue;
+#endif
 	if (inb(*port + 8) != 0xff
 	    && inb(*port + 9) != 0xff /* Extra check to avoid soundcard. */
 	    && wdprobe1(*port, dev))
-	    return *port;
-    return 0;
+	    return 0;
+    }
+    dev->base_addr = ioaddr;
+    return ENODEV;
 }
 
 int wdprobe1(int ioaddr, struct device *dev)
@@ -93,7 +103,7 @@ int wdprobe1(int ioaddr, struct device *dev)
       printk(" %2.2X", station_addr[i] = inb(ioaddr + 8 + i));
 
   /* The following PureData probe code was contributed by
-     Mike Jagdis <jaggy@purplet.demon.co.uk>. Puredata seem to do software
+     Mike Jagdis <jaggy@purplet.demon.co.uk>. Puredata does software
      configuration differently from others so we have to check for them.
      This detects an 8 bit, 16 bit or dumb (Toshiba, jumpered) card.
      */
@@ -192,6 +202,9 @@ int wdprobe1(int ioaddr, struct device *dev)
   }
 
   /* OK, were are certain this is going to work.  Setup the device. */
+#ifdef HAVE_PORTRESERVE
+  snarf_region(ioaddr, 32);
+#endif
   ethdev_init(dev);
 
   ei_status.name = model_name;
@@ -231,8 +244,9 @@ wd_open(struct device *dev)
   ei_status.reg5 = ((dev->mem_start>>19) & 0x1f) | NIC16;
 
   if (ei_status.word16)
-      outb(ISA16 | ei_status.reg5, ioaddr+WD_CMDREG5);
+      outb(ei_status.reg5, ioaddr+WD_CMDREG5);
   outb(ei_status.reg0, ioaddr); /* WD_CMDREG */
+
   return ei_open(dev);
 }
 
@@ -273,7 +287,8 @@ wd_reset_8390(struct device *dev)
 }
 
 /* Block input and output are easy on shared memory ethercards, and trivial
-   on the Western digital card where there is no choice of how to do it. */
+   on the Western digital card where there is no choice of how to do it.
+   The only complication is if the ring buffer wraps. */
 
 static int
 wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
@@ -281,7 +296,7 @@ wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
     void *xfer_start = (void *)(dev->mem_start + ring_offset
 				- (WD_START_PG<<8));
 
-    /* This mapout won't be necessary when wd_close_card is called. */
+    /* This mapout isn't necessary if wd_close_card is called. */
 #if !defined(WD_no_mapout)
     int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
 
@@ -299,12 +314,6 @@ wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	return dev->rmem_start + count;
     }
     memcpy(buf, xfer_start, count);
-    if (ei_debug > 4) {
-	unsigned short *board = (unsigned short *) xfer_start;
-	printk("%s: wd8013 block_input(cnt=%d offset=%3x addr=%#x) = %2x %2x %2x...\n",
-	       dev->name, count, ring_offset, xfer_start,
-	       board[-1], board[0], board[1]);
-    }
 
 #if !defined(WD_no_mapout)
     /* Turn off 16 bit access so that reboot works. */
@@ -314,8 +323,6 @@ wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
     return ring_offset + count;
 }
 
-/* This could only be outputting to the transmit buffer.  The
-   ping-pong transmit setup doesn't work with this yet. */
 static void
 wd_block_output(struct device *dev, int count, const unsigned char *buf,
 		int start_page)
@@ -332,9 +339,6 @@ wd_block_output(struct device *dev, int count, const unsigned char *buf,
 #endif
 
     memcpy(shmem, buf, count);
-    if (ei_debug > 4)
-	printk("%s: wd80*3 block_output(addr=%#x cnt=%d) -> %2x=%2x %2x=%2x %d...\n",
-	       shmem, count, shmem[23], buf[23], shmem[24], buf[24], memcmp(shmem,buf,count));
 
 #if !defined(WD_no_mapout)
     /* Turn off 16 bit access so that reboot works. */

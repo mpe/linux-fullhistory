@@ -152,7 +152,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
 		low = get_long(tsk,addr & ~(sizeof(long)-1));
 		high = get_long(tsk,(addr+sizeof(long)) & ~(sizeof(long)-1));
-		switch (addr & sizeof(long)-1) {
+		switch (addr & (sizeof(long)-1)) {
 			case 1:
 				low >>= 8;
 				low |= high << 24;
@@ -186,7 +186,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
 		low = get_long(tsk,addr & ~(sizeof(long)-1));
 		high = get_long(tsk,(addr+sizeof(long)) & ~(sizeof(long)-1));
-		switch (addr & sizeof(long)-1) {
+		switch (addr & (sizeof(long)-1)) {
 			case 0: /* shouldn't happen, but safety first */
 				low = data;
 				break;
@@ -216,7 +216,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	return 0;
 }
 
-extern "C" int sys_ptrace(long request, long pid, long addr, long data)
+asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
 
@@ -285,6 +285,10 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			if (res)
 				return res;
 			tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
+			if (addr == DS || addr == ES ||
+			    addr == FS || addr == GS ||
+			    addr == CS || addr == SS)
+				tmp &= 0xffff;
 			put_fs_long(tmp,(unsigned long *) data);
 			return 0;
 		}
@@ -302,8 +306,11 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 				return -EIO;
 			if (addr == DS || addr == ES ||
 			    addr == FS || addr == GS ||
-			    addr == CS || addr == SS)
-				return -EIO;
+			    addr == CS || addr == SS) {
+			    	data &= 0xffff;
+			    	if (data && (data & 3) != 3)
+					return -EIO;
+			}
 			if (addr == EFL) {   /* flags. */
 				data &= FLAG_MASK;
 				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
@@ -382,7 +389,7 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 	}
 }
 
-extern "C" void syscall_trace(void)
+asmlinkage void syscall_trace(void)
 {
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))

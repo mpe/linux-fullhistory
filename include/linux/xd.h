@@ -105,8 +105,6 @@ typedef struct {
 	char *name;
 } XD_SIGNATURE;
 
-extern void resetup_one_dev (struct gendisk *dev,unsigned int drive);
-
 u_long xd_init(u_long mem_start,u_long mem_end);
 static u_char xd_detect (u_char *controller,u_char **address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));

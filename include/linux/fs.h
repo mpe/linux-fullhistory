@@ -6,6 +6,7 @@
  * structures etc.
  */
 
+#include <linux/linkage.h>
 #include <linux/limits.h>
 #include <linux/wait.h>
 #include <linux/types.h>
@@ -229,6 +230,7 @@ struct file {
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list */
 	struct task_struct *fl_owner;	/* NULL if on free list, for sanity checks */
+        unsigned int fl_fd;             /* File descriptor for this lock */
 	struct wait_queue *fl_wait;
 	char fl_type;
 	char fl_whence;
@@ -319,8 +321,8 @@ struct file_system_type {
 
 #ifdef __KERNEL__
 
-extern "C" int sys_open(const char *, int, int);
-extern "C" int sys_close(unsigned int);		/* yes, it's really unsigned */
+asmlinkage int sys_open(const char *, int, int);
+asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
 
 extern int getname(const char * filename, char **result);
 extern void putname(char * name);
@@ -376,6 +378,7 @@ extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern void iput(struct inode * inode);
+extern struct inode * __iget(struct super_block * sb,int nr,int crsmnt);
 extern struct inode * iget(struct super_block * sb,int nr);
 extern struct inode * get_empty_inode(void);
 extern void insert_inode_hash(struct inode *);

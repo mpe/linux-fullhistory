@@ -76,7 +76,7 @@ ip_dump(unsigned char *ptr, int len)
   return;
 
   printk("\r*****\n");
-  printk("%x %d\n", ptr, len);
+  printk("%p %d\n", ptr, len);
   ip = (struct iphdr *) ptr;
   dlen = ntohs(ip->tot_len);
   doff = ((ntohs(ip->frag_off) & IPF_F_OFFSET) << 3);
@@ -688,7 +688,7 @@ slip_init(struct device *dev)
   if (already++ == 0) {
 	printk("SLIP: version %s (%d channels): ",
 				SLIP_VERSION, SL_NRUNIT);
-
+	printk("CSLIP code copyright 1989 Regents of the University of California\n");
 	/* Fill in our LDISC request block. */
 	sl_ldisc.flags	= 0;
 	sl_ldisc.open	= slip_open;

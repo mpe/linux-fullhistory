@@ -442,7 +442,7 @@ void kfree_s(void *obj, int size)
 	}
 
 	restore_flags(flags);
-	printk("Bad address passed to kernel kfree_s(%X, %d)\n",obj, size);
+	printk("Bad address passed to kernel kfree_s(%p, %d)\n",obj, size);
 #ifdef CONFIG_DEBUG_MALLOC
 	printk("Offending code: %s:%d\n",deb_file,deb_line);
 #else

@@ -23,12 +23,13 @@
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>
+#include <linux/ioport.h>
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
 extern char edata, end;
 extern char *linux_banner;
-extern "C" void lcall7(void);
+asmlinkage void lcall7(void);
 struct desc_struct default_ldt;
 
 /*
@@ -43,6 +44,7 @@ struct desc_struct default_ldt;
  * won't be any messing with the stack from main(), but we define
  * some others too.
  */
+#define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
 static inline _syscall0(int,fork)
 static inline _syscall0(int,pause)
@@ -54,7 +56,7 @@ static inline _syscall1(int,dup,int,fd)
 static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp)
 static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
 static inline _syscall1(int,close,int,fd)
-static inline _syscall1(int,exit,int,exitcode)
+static inline _syscall1(int,_exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
 static inline pid_t wait(int * wait_stat)
@@ -189,6 +191,7 @@ struct {
 	char *str;
 	void (*setup_func)(char *, int *);
 } bootsetups[] = {
+	{ "reserve=", reserve_setup },
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
 #endif
@@ -329,7 +332,7 @@ static void copro_timeout(void)
 	outb_p(0,0xf0);
 }
 
-extern "C" void start_kernel(void)
+asmlinkage void start_kernel(void)
 {
 /*
  * Interrupts are still disabled. Do necessary setups, then
@@ -466,9 +469,9 @@ void init(void)
 	if (!(pid=fork())) {
 		close(0);
 		if (open("/etc/rc",O_RDONLY,0))
-			exit(1);
+			_exit(1);
 		execve("/bin/sh",argv_rc,envp_rc);
-		exit(2);
+		_exit(2);
 	}
 	if (pid>0)
 		while (pid != wait(&i))
@@ -484,7 +487,7 @@ void init(void)
 			(void) open("/dev/tty1",O_RDWR,0);
 			(void) dup(0);
 			(void) dup(0);
-			exit(execve("/bin/sh",argv,envp));
+			_exit(execve("/bin/sh",argv,envp));
 		}
 		while (1)
 			if (pid == wait(&i))
@@ -492,5 +495,5 @@ void init(void)
 		printf("\n\rchild %d died with code %04x\n\r",pid,i);
 		sync();
 	}
-	exit(0);
+	_exit(0);
 }

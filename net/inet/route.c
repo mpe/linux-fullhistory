@@ -131,8 +131,10 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
    * an Internet class C network mask.  Yuck :-(
    */
   if (flags & RTF_DYNAMIC) {
-	if (flags & RTF_HOST) rt->rt_dst = dst;
-	  else rt->rt_dst = (dst & htonl(IN_CLASSC_NET));
+	if (flags & RTF_HOST)
+		rt->rt_dst = dst;
+	else
+		rt->rt_dst = (dst & dev->pa_mask);
   } else rt->rt_dst = dst;
 
   rt_print(rt);
@@ -219,8 +221,10 @@ rt_new(struct rtentry *r)
 	dev = dev_check(((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
   else
 	if ((rt = rt_route(((struct sockaddr_in *) &r->rt_gateway)->sin_addr.
-	    s_addr,NULL))) dev = rt->rt_dev;
-	else dev = NULL;
+			   s_addr,NULL)))
+	    dev = rt->rt_dev;
+	else
+	    dev = NULL;
 
   DPRINTF((DBG_RT, "RT: dev for %s gw ",
 	in_ntoa((*(struct sockaddr_in *)&r->rt_dst).sin_addr.s_addr)));
@@ -258,12 +262,14 @@ rt_get_info(char *buffer)
 
   pos = buffer;
 
-  pos += sprintf(pos, "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\n");
+  pos += sprintf(pos,
+		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\n");
   
+  /* This isn't quite right -- r->rt_dst is a struct! */
   for (r = rt_base; r != NULL; r = r->rt_next) {
-        pos += sprintf(pos, "%s\t%08X\t%08X\t%02X\t%d\t%d\n",
+        pos += sprintf(pos, "%s\t%08X\t%08X\t%02X\t%d\t%d\t%d\n",
 		r->rt_dev->name, r->rt_dst, r->rt_gateway,
-		r->rt_flags, r->rt_refcnt, r->rt_use);
+		r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric);
   }
   return(pos - buffer);
 }
@@ -317,7 +323,9 @@ rt_route(unsigned long daddr, struct options *opt)
 int
 rt_ioctl(unsigned int cmd, void *arg)
 {
+  struct device *dev;
   struct rtentry rt;
+  char namebuf[32];
   int ret;
 
   switch(cmd) {
@@ -325,16 +333,17 @@ rt_ioctl(unsigned int cmd, void *arg)
 		ret = dbg_ioctl(arg, DBG_RT);
 		break;
 	case SIOCADDRT:
-		if (!suser()) return(-EPERM);
-		verify_area(VERIFY_WRITE, arg, sizeof(struct rtentry));
-		memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
-		ret = rt_new(&rt);
-		break;
 	case SIOCDELRT:
 		if (!suser()) return(-EPERM);
 		verify_area(VERIFY_WRITE, arg, sizeof(struct rtentry));
 		memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
-		ret = rt_kill(&rt);
+		if (rt.rt_dev) {
+		    verify_area(VERIFY_WRITE, rt.rt_dev, sizeof namebuf);
+		    memcpy_fromfs(&namebuf, rt.rt_dev, sizeof namebuf);
+		    dev = dev_get(namebuf);
+		    rt.rt_dev = dev;
+		}
+		ret = (cmd == SIOCDELRT) ? rt_kill(&rt) : rt_new(&rt);
 		break;
 	default:
 		ret = -EINVAL;

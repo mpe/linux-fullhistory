@@ -312,7 +312,7 @@ void reg_load_int64(void)
   }
 
   e = EXP_BIAS + 63;
-  *((long long *)&FPU_loaded_data.sigl) = s;
+  significand(&FPU_loaded_data) = s;
   FPU_loaded_data.exp = e;
   FPU_loaded_data.tag = TW_Valid;
   normalize_nuo(&FPU_loaded_data);
@@ -417,7 +417,7 @@ void reg_load_bcd(void)
     }
   else
     {
-      *((long long *)&FPU_loaded_data.sigl) = l;
+      significand(&FPU_loaded_data) = l;
       FPU_loaded_data.exp = EXP_BIAS + 63;
       FPU_loaded_data.tag = TW_Valid;
       normalize_nuo(&FPU_loaded_data);
@@ -1033,7 +1033,7 @@ int reg_store_bcd(void)
 
   reg_move(FPU_st0_ptr, &t);
   precision_loss = round_to_int(&t);
-  ll = *(unsigned long long *)(&t.sigl);
+  ll = significand(&t);
 
   /* Check for overflow, by comparing with 999999999999999999 decimal. */
   if ( (t.sigh > 0x0de0b6b3) ||
@@ -1042,14 +1042,16 @@ int reg_store_bcd(void)
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
     invalid_operand:
-      if ( control_word & EX_Invalid )
+      if ( control_word & CW_Invalid )
 	{
 	  /* Produce the QNaN "indefinite" */
 	  RE_ENTRANT_CHECK_OFF
 	  verify_area(VERIFY_WRITE,d,10);
-	  put_fs_byte(0xff,(unsigned char *) d+7); /* This byte undefined */
-	  put_fs_byte(0xff,(unsigned char *) d+8);
-	  put_fs_byte(0xff,(unsigned char *) d+9);
+	  for ( i = 0; i < 7; i++)
+	    put_fs_byte(0, (unsigned char *) d+i); /* These bytes "undefined" */
+	  put_fs_byte(0xc0, (unsigned char *) d+7); /* This byte "undefined" */
+	  put_fs_byte(0xff, (unsigned char *) d+8);
+	  put_fs_byte(0xff, (unsigned char *) d+9);
 	  RE_ENTRANT_CHECK_ON
 	  return 1;
 	}
@@ -1058,8 +1060,8 @@ int reg_store_bcd(void)
     }
   else if ( precision_loss )
     {
-      if ( set_precision_flag(precision_loss) )
-	return 0;
+      /* Precision loss doesn't stop the data transfer */
+      set_precision_flag(precision_loss);
     }
 
   verify_area(VERIFY_WRITE,d,10);
@@ -1096,7 +1098,7 @@ int round_to_int(FPU_REG *r)
   if (r->tag == TW_Zero)
     {
       /* Make sure that zero is returned */
-      *(long long *)&r->sigl = 0;
+      significand(r) = 0;
       return 0;        /* o.k. */
     }
   
@@ -1118,7 +1120,7 @@ int round_to_int(FPU_REG *r)
 	  || (half_or_more && (r->sigl & 1)) )	/* odd -> even */
 	{
 	  if ( very_big ) return 1;        /* overflow */
-	  (*(long long *)(&r->sigl)) ++;
+	  significand(r) ++;
 	  return PRECISION_LOST_UP;
 	}
       break;
@@ -1126,7 +1128,7 @@ int round_to_int(FPU_REG *r)
       if (frac_part && r->sign)
 	{
 	  if ( very_big ) return 1;        /* overflow */
-	  (*(long long *)(&r->sigl)) ++;
+	  significand(r) ++;
 	  return PRECISION_LOST_UP;
 	}
       break;
@@ -1134,7 +1136,7 @@ int round_to_int(FPU_REG *r)
       if (frac_part && !r->sign)
 	{
 	  if ( very_big ) return 1;        /* overflow */
-	  (*(long long *)(&r->sigl)) ++;
+	  significand(r) ++;
 	  return PRECISION_LOST_UP;
 	}
       break;

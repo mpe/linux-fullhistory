@@ -14,7 +14,7 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 
-extern "C" int sys_sysinfo(struct sysinfo *info)
+asmlinkage int sys_sysinfo(struct sysinfo *info)
 {
 	int error;
 	struct sysinfo val;

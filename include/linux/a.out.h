@@ -71,24 +71,26 @@ enum machine_type {
 #define NMAGIC 0410
 /* Code indicating demand-paged executable.  */
 #define ZMAGIC 0413
+/* This indicates a demand-paged executable with the header in the text. 
+   The first page is unmapped to help trap NULL pointer references */
+#define QMAGIC 0314
 
 /* Code indicating core file.  */
 #define CMAGIC 0421
-#if !defined (N_BADMAG)
-#define N_BADMAG(x)					\
- (N_MAGIC(x) != OMAGIC && N_MAGIC(x) != NMAGIC		\
-  && N_MAGIC(x) != ZMAGIC)
-#endif
 
-#define _N_BADMAG(x)					\
- (N_MAGIC(x) != OMAGIC && N_MAGIC(x) != NMAGIC		\
-  && N_MAGIC(x) != ZMAGIC)
+#if !defined (N_BADMAG)
+#define N_BADMAG(x)	  (N_MAGIC(x) != OMAGIC		\
+			&& N_MAGIC(x) != NMAGIC		\
+  			&& N_MAGIC(x) != ZMAGIC \
+		        && N_MAGIC(x) != QMAGIC)
+#endif
 
 #define _N_HDROFF(x) (1024 - sizeof (struct exec))
 
 #if !defined (N_TXTOFF)
 #define N_TXTOFF(x) \
- (N_MAGIC(x) == ZMAGIC ? _N_HDROFF((x)) + sizeof (struct exec) : sizeof (struct exec))
+ (N_MAGIC(x) == ZMAGIC ? _N_HDROFF((x)) + sizeof (struct exec) : \
+  (N_MAGIC(x) == QMAGIC ? 0 : sizeof (struct exec)))
 #endif
 
 #if !defined (N_DATOFF)
@@ -113,7 +115,7 @@ enum machine_type {
 
 /* Address of text segment in memory after it is loaded.  */
 #if !defined (N_TXTADDR)
-#define N_TXTADDR(x) 0
+#define N_TXTADDR(x) (N_MAGIC(x) == QMAGIC ? PAGE_SIZE : 0)
 #endif
 
 /* Address of data segment in memory after it is loaded.

@@ -543,6 +543,9 @@ repeat:
         goto end_unlink;
     if (!(inode = iget(dir->i_sb, de->d_ino)))
         goto end_unlink;
+    retval = -EPERM;
+    if (S_ISDIR(inode->i_mode))
+        goto end_unlink;
     if (de->d_ino != inode->i_ino) {
         iput(inode);
 	brelse(bh);
@@ -550,12 +553,9 @@ repeat:
 	schedule();
 	goto repeat;
     }
-    retval = -EPERM;
     if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
 	    current->euid != dir->i_uid)
-        goto end_unlink;
-    if (S_ISDIR(inode->i_mode))
         goto end_unlink;
     if (!inode->i_nlink) {
         printk("XIA-FS: Deleting nonexistent file (%s %d)\n", WHERE_ERR);
@@ -720,7 +720,7 @@ try_again:
     retval = -ENOENT;
     if (!old_bh)
         goto end_rename;
-    old_inode = iget(old_dir->i_sb, old_de->d_ino);
+    old_inode = __iget(old_dir->i_sb, old_de->d_ino, 0); /* don't cross mnt-points */
     if (!old_inode)
         goto end_rename;
     retval = -EPERM;
@@ -730,7 +730,7 @@ try_again:
         goto end_rename;
     new_bh = xiafs_find_entry(new_dir, new_name, new_len, &new_de, NULL);
     if (new_bh) {
-        new_inode = iget(new_dir->i_sb, new_de->d_ino);
+        new_inode = __iget(new_dir->i_sb, new_de->d_ino, 0);
 	if (!new_inode) {
 	    brelse(new_bh);
 	    new_bh = NULL;

@@ -243,7 +243,7 @@ static int do_umount(dev_t dev)
  * functions, they should be faked here.  -- jrs
  */
 
-extern "C" int sys_umount(char * name)
+asmlinkage int sys_umount(char * name)
 {
 	struct inode * inode;
 	dev_t dev;
@@ -390,7 +390,7 @@ static int do_remount(const char *dir,int flags)
  * isn't present, the flags and data info isn't used, as the syscall assumes we
  * are talking to an older version that didn't understand them.
  */
-extern "C" int sys_mount(char * dev_name, char * dir_name, char * type,
+asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	unsigned long new_flags, void * data)
 {
 	struct file_system_type * fstype;

@@ -41,33 +41,34 @@ __res;})
 
 void page_exception(void);
 
-extern "C" void divide_error(void);
-extern "C" void debug(void);
-extern "C" void nmi(void);
-extern "C" void int3(void);
-extern "C" void overflow(void);
-extern "C" void bounds(void);
-extern "C" void invalid_op(void);
-extern "C" void device_not_available(void);
-extern "C" void double_fault(void);
-extern "C" void coprocessor_segment_overrun(void);
-extern "C" void invalid_TSS(void);
-extern "C" void segment_not_present(void);
-extern "C" void stack_segment(void);
-extern "C" void general_protection(void);
-extern "C" void page_fault(void);
-extern "C" void coprocessor_error(void);
-extern "C" void reserved(void);
-extern "C" void alignment_check(void);
+asmlinkage void divide_error(void);
+asmlinkage void debug(void);
+asmlinkage void nmi(void);
+asmlinkage void int3(void);
+asmlinkage void overflow(void);
+asmlinkage void bounds(void);
+asmlinkage void invalid_op(void);
+asmlinkage void device_not_available(void);
+asmlinkage void double_fault(void);
+asmlinkage void coprocessor_segment_overrun(void);
+asmlinkage void invalid_TSS(void);
+asmlinkage void segment_not_present(void);
+asmlinkage void stack_segment(void);
+asmlinkage void general_protection(void);
+asmlinkage void page_fault(void);
+asmlinkage void coprocessor_error(void);
+asmlinkage void reserved(void);
+asmlinkage void alignment_check(void);
 
 /*static*/ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
 	int i;
 
-	if ((regs->eflags & VM_MASK) || ((0xffff & regs->cs) == USER_CS))
+	if ((regs->eflags & VM_MASK) || (3 & regs->cs) == 3)
 		return;
+
 	printk("%s: %04x\n", str, err & 0xffff);
-	printk("EIP:    %04x:%p\nEFLAGS: %p\n", 0xffff & regs->cs,regs->eip,regs->eflags);
+	printk("EIP:    %04x:%08x\nEFLAGS: %08x\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08x   ebx: %08x   ecx: %08x   edx: %08x\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
 	printk("esi: %08x   edi: %08x   ebp: %08x\n",
@@ -82,31 +83,31 @@ extern "C" void alignment_check(void);
 	do_exit(SIGSEGV);
 }
 
-extern "C" void do_double_fault(struct pt_regs * regs, long error_code)
+asmlinkage void do_double_fault(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("double fault",regs,error_code);
 }
 
-extern "C" void do_general_protection(struct pt_regs * regs, long error_code)
+asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("general protection",regs,error_code);
 }
 
-extern "C" void do_alignment_check(struct pt_regs * regs, long error_code)
+asmlinkage void do_alignment_check(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("alignment check",regs,error_code);
 }
 
-extern "C" void do_divide_error(struct pt_regs * regs, long error_code)
+asmlinkage void do_divide_error(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGFPE, current, 1);
 	die_if_kernel("divide error",regs,error_code);
 }
 
-extern "C" void do_int3(struct pt_regs * regs, long error_code)
+asmlinkage void do_int3(struct pt_regs * regs, long error_code)
 {
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
@@ -114,12 +115,12 @@ extern "C" void do_int3(struct pt_regs * regs, long error_code)
 	die_if_kernel("int3",regs,error_code);
 }
 
-extern "C" void do_nmi(struct pt_regs * regs, long error_code)
+asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 }
 
-extern "C" void do_debug(struct pt_regs * regs, long error_code)
+asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
@@ -127,49 +128,49 @@ extern "C" void do_debug(struct pt_regs * regs, long error_code)
 	die_if_kernel("debug",regs,error_code);
 }
 
-extern "C" void do_overflow(struct pt_regs * regs, long error_code)
+asmlinkage void do_overflow(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("overflow",regs,error_code);
 }
 
-extern "C" void do_bounds(struct pt_regs * regs, long error_code)
+asmlinkage void do_bounds(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("bounds",regs,error_code);
 }
 
-extern "C" void do_invalid_op(struct pt_regs * regs, long error_code)
+asmlinkage void do_invalid_op(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGILL, current, 1);
 	die_if_kernel("invalid operand",regs,error_code);
 }
 
-extern "C" void do_device_not_available(struct pt_regs * regs, long error_code)
+asmlinkage void do_device_not_available(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("device not available",regs,error_code);
 }
 
-extern "C" void do_coprocessor_segment_overrun(struct pt_regs * regs, long error_code)
+asmlinkage void do_coprocessor_segment_overrun(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGFPE, last_task_used_math, 1);
 	die_if_kernel("coprocessor segment overrun",regs,error_code);
 }
 
-extern "C" void do_invalid_TSS(struct pt_regs * regs,long error_code)
+asmlinkage void do_invalid_TSS(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("invalid TSS",regs,error_code);
 }
 
-extern "C" void do_segment_not_present(struct pt_regs * regs,long error_code)
+asmlinkage void do_segment_not_present(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("segment not present",regs,error_code);
 }
 
-extern "C" void do_stack_segment(struct pt_regs * regs,long error_code)
+asmlinkage void do_stack_segment(struct pt_regs * regs,long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("stack segment",regs,error_code);
@@ -210,13 +211,13 @@ void math_error(void)
 	env->twd = 0xffffffff;
 }
 
-extern "C" void do_coprocessor_error(struct pt_regs * regs, long error_code)
+asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 {
 	ignore_irq13 = 1;
 	math_error();
 }
 
-extern "C" void do_reserved(struct pt_regs * regs, long error_code)
+asmlinkage void do_reserved(struct pt_regs * regs, long error_code)
 {
 	send_sig(SIGSEGV, current, 1);
 	die_if_kernel("reserved (15,17-47) error",regs,error_code);

@@ -25,9 +25,9 @@
 
 
 struct sk_buff {
-  struct sk_buff		*next;
-  struct sk_buff		*prev;
-  struct sk_buff		*link3;
+  struct sk_buff		*volatile next;
+  struct sk_buff		*volatile prev;
+  struct sk_buff		*volatile link3;
   struct sock			*sk;
   volatile unsigned long	when;	/* used to compute rtt's	*/
   struct device			*dev;

@@ -21,6 +21,11 @@
 #define _SOCK_H
 
 #include <linux/timer.h>
+#include <linux/ip.h>		/* struct options */
+#include <linux/tcp.h>		/* struct tcphdr */
+
+#include "skbuff.h"		/* struct sk_buff */
+#include "protocol.h"		/* struct inet_protocol */
 
 #define SOCK_ARRAY_SIZE	64
 
@@ -62,14 +67,14 @@ struct sock {
   int				proc;
   struct sock			*next;
   struct sock			*pair;
-  struct sk_buff		*send_tail;
-  struct sk_buff		*send_head;
+  struct sk_buff		*volatile send_tail;
+  struct sk_buff		*volatile send_head;
   struct sk_buff		*volatile back_log;
   struct sk_buff		*send_tmp;
   long				retransmits;
-  struct sk_buff		*wback,
-				*wfront,
-				*rqueue;
+  struct sk_buff		*volatile wback,
+				*volatile wfront,
+				*volatile rqueue;
   struct proto			*prot;
   struct wait_queue		**sleep;
   unsigned long			daddr;

@@ -776,7 +776,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = iget(old_dir->i_sb, old_de->inode);
+	old_inode = __iget(old_dir->i_sb, old_de->inode,0); /* don't cross mnt-points */
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -786,7 +786,7 @@ start_up:
 		goto end_rename;
 	new_bh = ext_find_entry(new_dir,new_name,new_len,&new_de,NULL,NULL);
 	if (new_bh) {
-		new_inode = iget(new_dir->i_sb, new_de->inode);
+		new_inode = __iget(new_dir->i_sb, new_de->inode,0); /* don't cross mnt-points */
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;

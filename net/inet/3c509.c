@@ -1,4 +1,4 @@
-/* el3.c: An 3c509 EtherLink3 ethernet driver for linux. */
+/* 3c509.c: A 3c509 EtherLink3 ethernet driver for linux. */
 /*
     Written 1993 by Donald Becker.
 
@@ -7,13 +7,13 @@
     distributed according to the terms of the GNU Public License,
     incorporated herein by reference.
     
-    This driver should work with the 3Com EtherLinkIII series.
+    This driver is for the 3Com EtherLinkIII series.
 
     The author may be reached as becker@super.org or
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "el3.c: v0.02 8/13/93 becker@super.org\n";
+static char *version = "3c509.c: v0.06 9/3/93 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -23,6 +23,14 @@ static char *version = "el3.c: v0.02 8/13/93 becker@super.org\n";
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/in.h>
+
+#ifndef PRE_PL13
+#include <linux/ioport.h>
+#else
+#define snarf_region(base,extent) do {;}while(0)
+#define check_region(base,extent) (0)
+#endif
+
 /*#include <asm/system.h>*/
 #include <asm/io.h>
 #ifndef port_read
@@ -34,10 +42,12 @@ static char *version = "el3.c: v0.02 8/13/93 becker@super.org\n";
 #include "skbuff.h"
 #include "arp.h"
 
+#ifndef HAVE_AUTOIRQ
 /* From auto_irq.c, should be in a *.h file. */
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 extern struct device *irq2dev_map[16];
+#endif
 
 /* These should be in <asm/io.h>. */
 #define port_read_l(port,buf,nr) \
@@ -49,15 +59,21 @@ __asm__("cld;rep;outsl": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 #ifdef EL3_DEBUG
 int el3_debug = EL3_DEBUG;
 #else
-int el3_debug = 1;
+int el3_debug = 2;
 #endif
 
+/* To minimize the size of the driver source I only define operating
+   constants if they are used several times.  You'll need the manual
+   if you want to understand driver details. */
 /* Offsets from base I/O address. */
 #define EL3_DATA 0x00
 #define EL3_CMD 0x0e
 #define EL3_STATUS 0x0e
 #define ID_PORT 0x100
 #define  EEPROM_READ 0x80
+
+#define EL3WINDOW(win_num) outw(0x0800+(win_num), ioaddr + EL3_CMD)
+
 
 /* Register window 1 offsets, used in normal operation. */
 #define TX_FREE 0x0C
@@ -66,11 +82,12 @@ int el3_debug = 1;
 #define RX_STATUS 0x08
 #define RX_FIFO 0x00
 
+#define WN4_MEDIA	0x0A
+
 struct el3_private {
     struct enet_statistics stats;
 };
 
-static int el3_init(struct device *dev);
 static int read_eeprom(int index);
 static int el3_open(struct device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -85,7 +102,9 @@ static int el3_close(struct device *dev);
 int el3_probe(struct device *dev)
 {
     short lrs_state = 0xff, i;
-    unsigned short iobase = 0;
+    short ioaddr, irq;
+    short *phys_addr = (short *)dev->dev_addr;
+    static int current_tag = 0;
 
     /* Send the ID sequence to the ID_PORT. */
     outb(0x00, ID_PORT);
@@ -96,75 +115,57 @@ int el3_probe(struct device *dev)
 	lrs_state = lrs_state & 0x100 ? lrs_state ^ 0xcf : lrs_state;
     }
 
-    /* The current Space.c initialization makes it difficult to have more
-       than one adaptor initialized.  Send me email if you have a need for
-       multiple adaptors. */
+    /* For the first probe, clear all board's tag registers. */
+    if (current_tag == 0)
+	outb(0xd0, ID_PORT);
+    else		/* Otherwise kill off already-found boards. */
+	outb(0xd8, ID_PORT);
 
-    /* Read in EEPROM data.
-       Only the highest address board will stay on-line. */
+    if (read_eeprom(7) != 0x6d50) {
+	return -ENODEV;
+    }
+
+    /* Read in EEPROM data, which does contention-select.
+       Only the lowest address board will stay "on-line".
+       3Com got the byte order backwards. */
+    for (i = 0; i < 3; i++) {
+	phys_addr[i] = htons(read_eeprom(i));
+    }
 
     {
-	short *phys_addr = (short *)dev->dev_addr;
-	phys_addr[0] = htons(read_eeprom(0));
-	if (phys_addr[0] != 0x6000)
-	    return 1;
-	phys_addr[1] = htons(read_eeprom(1));
-	phys_addr[2] = htons(read_eeprom(2));
+	unsigned short iobase = read_eeprom(8);
+	dev->if_port = iobase >> 14;
+	ioaddr = 0x200 + ((iobase & 0x1f) << 4);
     }
+    irq = read_eeprom(9) >> 12;
 
-    iobase = read_eeprom(8);
-    dev->irq = read_eeprom(9) >> 12;
-
-    /* Activate the adaptor at the EEPROM location (if set), else 0x320. */
-
-    if (iobase == 0x0000) {
-	dev->base_addr = 0x320;
-	outb(0xf2, ID_PORT);
-    } else {
-	dev->base_addr = 0x200 + ((iobase & 0x1f) << 4);
-	outb(0xff, ID_PORT);
-    }
-
-    outw(0x0800, dev->base_addr + EL3_CMD);	 /* Window 0. */
-    printk("%s: 3c509 at %#3.3x  key %4.4x iobase %4.4x.\n",
-	   dev->name, dev->base_addr, inw(dev->base_addr), iobase);
-
-    if (inw(dev->base_addr) == 0x6d50) {
-	el3_init(dev);
-	return 0;
-    } else
+    /* The current Space.c structure makes it difficult to have more
+       than one adaptor initialized.  Send me email if you have a need for
+       multiple adaptors, and we'll work out something.  -becker@super.org */
+    if (dev->base_addr != 0
+	&&  dev->base_addr != (unsigned short)ioaddr) {
 	return -ENODEV;
-}
+    }
 
-static int
-read_eeprom(int index)
-{
-    int timer, bit, word = 0;
-    
-    /* Issue read command, and pause for at least 162 us. for it to complete.
-       Assume extra-fast 16Mhz bus. */
-    outb(EEPROM_READ + index, ID_PORT);
+    /* Set the adaptor tag so that the next card can be found. */
+    outb(0xd0 + ++current_tag, ID_PORT);
 
-    for (timer = 0; timer < 162*4 + 400; timer++)
-	SLOW_DOWN_IO;
+    /* Activate the adaptor at the EEPROM location. */
+    outb(0xff, ID_PORT);
 
-    for (bit = 15; bit >= 0; bit--)
-	word = (word << 1) + (inb(ID_PORT) & 0x01);
-	
-    if (el3_debug > 3)
-	printk("  3c509 EEPROM word %d %#4.4x.\n", index, word);
+    EL3WINDOW(0);
+    if (inw(ioaddr) != 0x6d50)
+	return -ENODEV;
 
-    return word;
-}
+    dev->base_addr = ioaddr;
+    dev->irq = irq;
+    snarf_region(dev->base_addr, 16);
 
-static int
-el3_init(struct device *dev)
-{
-    struct el3_private *lp;
-    int ioaddr = dev->base_addr;
-    int i;
-
-    printk("%s: EL3 at %#3x, address", dev->name, ioaddr);
+    {
+	char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
+	printk("%s: 3c509 at %#3.3x  tag %d, %s port, address ",
+	       dev->name, dev->base_addr, current_tag, if_names[dev->if_port]);
+    }
 
     /* Read in the station address. */
     for (i = 0; i < 6; i++)
@@ -174,9 +175,8 @@ el3_init(struct device *dev)
     /* Make up a EL3-specific-data structure. */
     dev->priv = kmalloc(sizeof(struct el3_private), GFP_KERNEL);
     memset(dev->priv, 0, sizeof(struct el3_private));
-    lp = (struct el3_private *)dev->priv;
 
-    if (el3_debug > 1)
+    if (el3_debug > 0)
 	printk(version);
 
     /* The EL3-specific entries in the device structure. */
@@ -199,7 +199,7 @@ el3_init(struct device *dev)
     dev->hard_header_len = ETH_HLEN;
     dev->mtu		= 1500; /* eth_mtu */
     dev->addr_len	= ETH_ALEN;
-    for (i = 0; i < dev->addr_len; i++) {
+    for (i = 0; i < ETH_ALEN; i++) {
 	dev->broadcast[i]=0xff;
     }
 
@@ -214,6 +214,30 @@ el3_init(struct device *dev)
     return 0;
 }
 
+
+static int
+read_eeprom(int index)
+{
+    int timer, bit, word = 0;
+    
+    /* Issue read command, and pause for at least 162 us. for it to complete.
+       Assume extra-fast 16Mhz bus. */
+    outb(EEPROM_READ + index, ID_PORT);
+
+    /* This should really be done by looking at one of the timer channels. */
+    for (timer = 0; timer < 162*4 + 400; timer++)
+	SLOW_DOWN_IO;
+
+    for (bit = 15; bit >= 0; bit--)
+	word = (word << 1) + (inb(ID_PORT) & 0x01);
+	
+    if (el3_debug > 3)
+	printk("  3c509 EEPROM word %d %#4.4x.\n", index, word);
+
+    return word;
+}
+
+
 
 static int
 el3_open(struct device *dev)
@@ -225,44 +249,50 @@ el3_open(struct device *dev)
 	return -EAGAIN;
     }
 
+    EL3WINDOW(0);
     if (el3_debug > 3)
-	printk("%s: Opening, IRQ %d  status@%x %4.4x reg4 %4.4x.\n",
-	       dev->name, dev->irq, ioaddr + EL3_STATUS,
-	       inw(ioaddr + EL3_STATUS), inw(ioaddr + 4));
-    outw(0x0800, ioaddr + EL3_CMD); /* Make certain we are in window 0. */
+	printk("%s: Opening, IRQ %d  status@%x %4.4x.\n", dev->name,
+	       dev->irq, ioaddr + EL3_STATUS, inw(ioaddr + EL3_STATUS));
 
-    /* This is probably unnecessary. */
+    /* Activate board: this is probably unnecessary. */
     outw(0x0001, ioaddr + 4);
-
-    outw((dev->irq << 12) | 0x0f00, ioaddr + 8);
 
     irq2dev_map[dev->irq] = dev;
 
+    /* Set the IRQ line. */
+    outw((dev->irq << 12) | 0x0f00, ioaddr + 8);
+
     /* Set the station address in window 2 each time opened. */
-    outw(0x0802, ioaddr + EL3_CMD);
+    EL3WINDOW(2);
 
     for (i = 0; i < 6; i++)
 	outb(dev->dev_addr[i], ioaddr + i);
 
-    outw(0x1000, ioaddr + EL3_CMD); /* Start the thinnet transceiver. */
+    if (dev->if_port == 3)
+	/* Start the thinnet transceiver. We should really wait 50ms...*/
+	outw(0x1000, ioaddr + EL3_CMD);
+    else if (dev->if_port == 0) {
+	/* 10baseT interface, enabled link beat and jabber check. */
+	EL3WINDOW(4);
+	outw(inw(ioaddr + WN4_MEDIA) | 0x00C0, ioaddr + WN4_MEDIA);
+    }
+
+    /* Switch to register set 1 for normal use. */
+    EL3WINDOW(1);
 
     outw(0x8005, ioaddr + EL3_CMD); /* Accept b-case and phys addr only. */
     outw(0xA800, ioaddr + EL3_CMD); /* Turn on statistics. */
     outw(0x2000, ioaddr + EL3_CMD); /* Enable the receiver. */
     outw(0x4800, ioaddr + EL3_CMD); /* Enable transmitter. */
     outw(0x78ff, ioaddr + EL3_CMD); /* Allow all status bits to be seen. */
+    dev->interrupt = 0;
+    dev->tbusy = 0;
+    dev->start = 1;
     outw(0x7098, ioaddr + EL3_CMD); /* Set interrupt mask. */
-
-    /* Switch to register set 1 for normal use. */
-    outw(0x0801, ioaddr + EL3_CMD);
 
     if (el3_debug > 3)
 	printk("%s: Opened 3c509  IRQ %d  status %4.4x.\n",
 	       dev->name, dev->irq, inw(ioaddr + EL3_STATUS));
-
-    dev->tbusy = 0;
-    dev->interrupt = 0;
-    dev->start = 1;
 
     return 0;			/* Always succeed */
 }
@@ -278,7 +308,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	int tickssofar = jiffies - dev->trans_start;
 	if (tickssofar < 10)
 	    return 1;
-	printk("%s: transmit timed out, tx_status %4.4x status %4.4x.\n",
+	printk("%s: transmit timed out, tx_status %2.2x status %4.4x.\n",
 	       dev->name, inb(ioaddr + TX_STATUS), inw(ioaddr + EL3_STATUS));
 	dev->trans_start = jiffies;
 	/* Issue TX_RESET and TX_START commands. */
@@ -308,8 +338,9 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     if (inw(ioaddr + EL3_STATUS) & 0x0001) { /* IRQ line active, missed one. */
-      printk("%s: Missed interrupt, status %4.4x.\n", dev->name,
-	     inw(ioaddr + EL3_STATUS));
+      printk("%s: Missed interrupt, status %4.4x  Tx %2.2x Rx %4.4x.\n",
+	     dev->name, inw(ioaddr + EL3_STATUS), inb(ioaddr + TX_STATUS),
+	     inw(ioaddr + RX_STATUS));
       outw(0x7800, ioaddr + EL3_CMD); /* Fake interrupt trigger. */
       outw(0x6899, ioaddr + EL3_CMD); /* Ack IRQ */
       outw(0x78ff, ioaddr + EL3_CMD); /* Allow all status bits to be seen. */
@@ -322,8 +353,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
     outw(skb->len, ioaddr + TX_FIFO);
     outw(0x00, ioaddr + TX_FIFO);
     /* ... and the packet rounded to a doubleword. */
-    port_write(ioaddr + TX_FIFO, (void *)(skb+1),
-	       ((skb->len + 3) >> 1) & ~0x1);
+    port_write_l(ioaddr + TX_FIFO, (void *)(skb+1), (skb->len + 3) >> 2);
     
     dev->trans_start = jiffies;
     if (skb->free)
@@ -360,8 +390,9 @@ static void
 el3_interrupt(int reg_ptr)
 {
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
-    struct device *dev = irq2dev_map[irq];
+    struct device *dev = (struct device *)(irq2dev_map[irq]);
     int ioaddr, status;
+    int i = 0;
 
     if (dev == NULL) {
 	printk ("el3_interrupt(): irq %d for unknown device.\n", irq);
@@ -380,6 +411,9 @@ el3_interrupt(int reg_ptr)
     
     while ((status = inw(ioaddr + EL3_STATUS)) & 0x01) {
 
+	if (status & 0x10)
+	    el3_rx(dev);
+
 	if (status & 0x08) {
 	    if (el3_debug > 5)
 		printk("    TX room bit was handled.\n");
@@ -391,10 +425,12 @@ el3_interrupt(int reg_ptr)
 	if (status & 0x80)		/* Statistics full. */
 	    update_stats(ioaddr, dev);
 	
-	if (status & 0x10)
-	    el3_rx(dev);
-
-	/* Clear the interrupts we've handled. */
+	if (++i > 10) {
+	    printk("%s: Infinite loop in interrupt, status %4.4x.\n",
+		   dev->name, status);
+	    break;
+	}
+	/* Clear the other interrupts we have handled. */
 	outw(0x6899, ioaddr + EL3_CMD); /* Ack IRQ */
     }
 
@@ -403,16 +439,6 @@ el3_interrupt(int reg_ptr)
 	       inw(ioaddr + EL3_STATUS));
     }
     
-    if (inw(ioaddr + EL3_STATUS) & 0x01) {
-	int i = 100000;
-	printk("%s: exiting interrupt with status %4.4x.\n", dev->name,
-	       inw(ioaddr + EL3_STATUS));
-	while (i--)		/* Delay loop to see the message. */
-	    inw(ioaddr + EL3_STATUS);
-	while ((inw(ioaddr + EL3_STATUS) & 0x0010)  && i++ < 20)
-	    outw(0x00, ioaddr + RX_STATUS);
-    }
-
     dev->interrupt = 0;
     return;
 }
@@ -430,7 +456,9 @@ el3_get_stats(struct device *dev)
 }
 
 /* Update statistics.  We change to register window 6, so this
-   must be run single-threaded. */
+   should be run single-threaded if the device is active. This
+   is expected to be a rare operation, and not worth a special
+   window-state variable. */
 static void update_stats(int ioaddr, struct device *dev)
 {
     struct el3_private *lp = (struct el3_private *)dev->priv;
@@ -440,7 +468,7 @@ static void update_stats(int ioaddr, struct device *dev)
     /* Turn off statistics updates while reading. */
     outw(0xB000, ioaddr + EL3_CMD);
     /* Switch to the stats window, and read everything. */
-    outw(0x0806, ioaddr + EL3_CMD);
+    EL3WINDOW(6);
     lp->stats.tx_carrier_errors	+= inb(ioaddr + 0);
     lp->stats.tx_heartbeat_errors	+= inb(ioaddr + 1);
     /* Multiple collisions. */	   inb(ioaddr + 2);
@@ -454,22 +482,8 @@ static void update_stats(int ioaddr, struct device *dev)
     inw(ioaddr + 12);
 
     /* Back to window 1, and turn statistics back on. */
-    outw(0x0801, ioaddr + EL3_CMD);
+    EL3WINDOW(1);
     outw(0xA800, ioaddr + EL3_CMD);
-    return;
-}
-
-/* Print statistics on the kernel error output. */
-void printk_stats(struct enet_statistics *stats)
-{
-
-    printk("  Ethernet statistics:  Rx packets %6d  Tx packets %6d.\n",
-	   stats->rx_packets, stats->tx_packets);
-    printk("   Carrier errors:   %6d.\n", stats->tx_carrier_errors);
-    printk("   Heartbeat errors: %6d.\n", stats->tx_heartbeat_errors);
-    printk("   Collisions:       %6d.\n", stats->collisions);
-    printk("   Rx FIFO problems: %6d.\n", stats->rx_fifo_errors);
-
     return;
 }
 
@@ -498,21 +512,32 @@ el3_rx(struct device *dev)
 	}
 	if ( (! (rx_status & 0x4000))
 	    || ! (rx_status & 0x2000)) { /* Dribble bits are OK. */
-	    short length = rx_status & 0x3ff;
-	    int sksize = sizeof(struct sk_buff) + length + 3;
+	    short pkt_len = rx_status & 0x7ff;
+	    int sksize = sizeof(struct sk_buff) + pkt_len + 3;
 	    struct sk_buff *skb;
 	    skb = (struct sk_buff *) kmalloc(sksize, GFP_ATOMIC);
 
 	    if (el3_debug > 4)
 		printk("       Receiving packet size %d status %4.4x.\n",
-		       length, rx_status);
+		       pkt_len, rx_status);
 	    if (skb != NULL) {
-		skb->lock = 0;
 		skb->mem_len = sksize;
 		skb->mem_addr = skb;
+		skb->len = pkt_len;
+		skb->dev = dev;
+
 		/* 'skb+1' points to the start of sk_buff data area. */
-		port_read(ioaddr+RX_FIFO, (void *)(skb+1), ((length + 3) >> 2) << 1);
-		if (dev_rint((unsigned char *)skb, length, IN_SKBUFF,dev)== 0){
+		port_read_l(ioaddr+RX_FIFO, (void *)(skb+1),
+			    (pkt_len + 3) >> 2);
+
+#ifdef HAVE_NETIF_RX
+		netif_rx(skb);
+		outw(0x4000, ioaddr + EL3_CMD); /* Rx discard */
+		continue;
+#else
+		skb->lock = 0;
+		if (dev_rint((unsigned char *)skb, pkt_len,
+			     IN_SKBUFF,dev)== 0){
 		    if (el3_debug > 6)
 			printk("     dev_rint() happy, status %4.4x.\n",
 			inb(ioaddr + EL3_STATUS));
@@ -527,7 +552,8 @@ el3_rx(struct device *dev)
 		} else {
 		    printk("%s: receive buffers full.\n", dev->name);
 		    kfree_s(skb, sksize);
-		}	    
+		}
+#endif
 	    } else if (el3_debug)
 		printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 		       dev->name, sksize);
@@ -564,22 +590,21 @@ el3_close(struct device *dev)
     outw(0x1800, ioaddr + EL3_CMD);
     outw(0x5000, ioaddr + EL3_CMD);
 
-    /* Turn off thinnet power. */
-    outw(0xb800, ioaddr + EL3_CMD);
-
-    if (el3_debug > 2) {
-	struct el3_private *lp = (struct el3_private *)dev->priv;
-	printk("%s: Status was %4.4x.\n", dev->name, inw(ioaddr + EL3_STATUS));
-	printk_stats(&lp->stats);
+    if (dev->if_port == 3)
+	/* Turn off thinnet power. */
+	outw(0xb800, ioaddr + EL3_CMD);
+    else if (dev->if_port == 0) {
+	/* Disable link beat and jabber, if_port may change ere next open(). */
+	EL3WINDOW(4);
+	outw(inw(ioaddr + WN4_MEDIA) & ~ 0x00C0, ioaddr + WN4_MEDIA);
     }
 
-    /* Free the interrupt line. */
     free_irq(dev->irq);
-    outw(0x1000, ioaddr + EL3_CMD);
+    /* Switching back to window 0 disables the IRQ. */
+    EL3WINDOW(0);
+    /* But we explicitly zero the IRQ line select anyway. */
     outw(0x0f00, ioaddr + 8);
 
-    /* Switch back to register window 0. */
-    outw(0x0800, ioaddr + EL3_CMD);
 
     irq2dev_map[dev->irq] = 0;
 

@@ -20,14 +20,39 @@
 
 extern int core_dump(long signr,struct pt_regs * regs);
 
-extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs);
+asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
-extern "C" int sys_sgetmask(void)
+struct sigcontext_struct {
+	unsigned short gs, __gsh;
+	unsigned short fs, __fsh;
+	unsigned short es, __esh;
+	unsigned short ds, __dsh;
+	unsigned long edi;
+	unsigned long esi;
+	unsigned long ebp;
+	unsigned long esp;
+	unsigned long ebx;
+	unsigned long edx;
+	unsigned long ecx;
+	unsigned long eax;
+	unsigned long trapno;
+	unsigned long err;
+	unsigned long eip;
+	unsigned short cs, __csh;
+	unsigned long eflags;
+	unsigned long esp_at_signal;
+	unsigned short ss, __ssh;
+	unsigned long i387;
+	unsigned long oldmask;
+	unsigned long cr2;
+};
+
+asmlinkage int sys_sgetmask(void)
 {
 	return current->blocked;
 }
 
-extern "C" int sys_ssetmask(int newmask)
+asmlinkage int sys_ssetmask(int newmask)
 {
 	int old=current->blocked;
 
@@ -35,7 +60,7 @@ extern "C" int sys_ssetmask(int newmask)
 	return old;
 }
 
-extern "C" int sys_sigpending(sigset_t *set)
+asmlinkage int sys_sigpending(sigset_t *set)
 {
 	int error;
 	/* fill in "set" with signals pending but blocked. */
@@ -48,7 +73,7 @@ extern "C" int sys_sigpending(sigset_t *set)
 /*
  * atomically swap in the new signal mask, and wait for a signal.
  */
-extern "C" int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
+asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, unsigned long set)
 {
 	unsigned long mask;
 	struct pt_regs * regs = (struct pt_regs *) &restart;
@@ -98,7 +123,7 @@ static void check_pending(int signum)
 	}	
 }
 
-extern "C" int sys_signal(int signum, unsigned long handler)
+asmlinkage int sys_signal(int signum, unsigned long handler)
 {
 	struct sigaction tmp;
 
@@ -116,7 +141,7 @@ extern "C" int sys_signal(int signum, unsigned long handler)
 	return handler;
 }
 
-extern "C" int sys_sigaction(int signum, const struct sigaction * action,
+asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
 	struct sigaction new_sa, *p;
@@ -146,35 +171,54 @@ extern "C" int sys_sigaction(int signum, const struct sigaction * action,
 	return 0;
 }
 
-extern "C" int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 
 /*
  * This sets regs->esp even though we don't actually use sigstacks yet..
  */
-extern "C" int sys_sigreturn(unsigned long oldmask, unsigned long eip, unsigned long esp)
+asmlinkage int sys_sigreturn(unsigned long __unused)
 {
+#define CHECK_SEG(x) if (x) x |= 3
+#define COPY(x) regs->x = context.x
+	struct sigcontext_struct context;
 	struct pt_regs * regs;
 
-	regs = (struct pt_regs *) &oldmask;
-	current->blocked = oldmask & _BLOCKABLE;
-	regs->eip = eip;
-	regs->esp = esp;
-	return 0;
+	regs = (struct pt_regs *) &__unused;
+	memcpy_fromfs(&context,(void *) regs->esp, sizeof(context));
+	current->blocked = context.oldmask & _BLOCKABLE;
+	CHECK_SEG(context.ss);
+	CHECK_SEG(context.cs);
+	CHECK_SEG(context.ds);
+	CHECK_SEG(context.es);
+	CHECK_SEG(context.fs);
+	CHECK_SEG(context.gs);
+	COPY(eip); COPY(eflags);
+	COPY(ecx); COPY(edx);
+	COPY(ebx);
+	COPY(esp); COPY(ebp);
+	COPY(edi); COPY(esi);
+	COPY(cs); COPY(ss);
+	COPY(ds); COPY(es);
+	COPY(fs); COPY(gs);
+	regs->orig_eax = -1;		/* disable syscall checks */
+	return context.eax;
 }
 
 /*
  * Set up a signal frame... Make the stack look the way iBCS2 expects
  * it to look.
  */
-static void setup_frame(unsigned long ** fp, unsigned long eip,
-	struct pt_regs * regs, int signr,
-	unsigned long sa_handler, unsigned long oldmask)
+static void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
+	struct pt_regs * regs, int signr, unsigned long oldmask)
 {
 	unsigned long * frame;
 
 #define __CODE ((unsigned long)(frame+24))
 #define CODE(x) ((unsigned long *) ((x)+__CODE))
-	frame = *fp - 32;
+	frame = *fp;
+	if (regs->ss != USER_DS)
+		frame = (unsigned long *) sa->sa_restorer;
+	frame -= 32;
 	verify_area(VERIFY_WRITE,frame,32*4);
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 	put_fs_long(__CODE,frame);
@@ -186,32 +230,26 @@ static void setup_frame(unsigned long ** fp, unsigned long eip,
 	put_fs_long(regs->edi, frame+6);
 	put_fs_long(regs->esi, frame+7);
 	put_fs_long(regs->ebp, frame+8);
-	put_fs_long(regs->esp, frame+9);
+	put_fs_long((long)*fp, frame+9);
 	put_fs_long(regs->ebx, frame+10);
 	put_fs_long(regs->edx, frame+11);
 	put_fs_long(regs->ecx, frame+12);
 	put_fs_long(regs->eax, frame+13);
-	put_fs_long(0, frame+14);		/* trapno */
-	put_fs_long(0, frame+15);		/* err */
-	put_fs_long(regs->eip, frame+16);
+	put_fs_long(0, frame+14);		/* trapno - not implemented */
+	put_fs_long(0, frame+15);		/* err - not implemented */
+	put_fs_long(eip, frame+16);
 	put_fs_long(regs->cs, frame+17);
 	put_fs_long(regs->eflags, frame+18);
 	put_fs_long(regs->esp, frame+19);
 	put_fs_long(regs->ss, frame+20);
-	put_fs_long(0,frame+21);		/* 387 state pointer */
-/* linux extended stack - easier to handle.. */
-	put_fs_long(regs->eflags, frame+22);
-	put_fs_long(eip, frame+23);
+	put_fs_long(0,frame+21);		/* 387 state pointer - not implemented*/
+/* non-iBCS2 extensions.. */
+	put_fs_long(oldmask, frame+22);
+	put_fs_long(0, frame+23);		/* cr2 - not implemented */
 /* set up the return code... */
 	put_fs_long(0x0000b858, CODE(0));	/* popl %eax ; movl $,%eax */
-	put_fs_long(0x00bb0000, CODE(4));	/* movl $,%ebx */
-	put_fs_long(0xcd000000, CODE(8));	/* int $0x80 */
-	put_fs_long(0x0fa90f80, CODE(12));	/* pop %gs ; pop %fs */
-	put_fs_long(0x611f07a1, CODE(16));	/* pop %es ; pop %ds ; popad */
-	put_fs_long(0x20c48390, CODE(20));	/* nop ; addl $32,%esp */
-	put_fs_long(0x0020c29d, CODE(24));	/* popfl ; ret $32 */
-	put_fs_long(__NR_ssetmask, CODE(2));
-	put_fs_long(oldmask, CODE(7));
+	put_fs_long(0x80cd0000, CODE(4));	/* int $0x80 */
+	put_fs_long(__NR_sigreturn, CODE(2));
 	*fp = frame;
 #undef __CODE
 #undef CODE
@@ -226,14 +264,13 @@ static void setup_frame(unsigned long ** fp, unsigned long eip,
  * the kernel can handle, and then we build all the user-level signal handling
  * stack-frames in one go after that.
  */
-extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs)
+asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
 	unsigned long mask = ~current->blocked;
 	unsigned long handler_signal = 0;
 	unsigned long *frame = NULL;
 	unsigned long eip = 0;
 	unsigned long signr;
-	unsigned long sa_handler;
 	struct sigaction * sa;
 
 	while ((signr = current->signal & mask)) {
@@ -317,20 +354,20 @@ extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	frame = (unsigned long *) regs->esp;
 	signr = 1;
 	sa = current->sigaction;
-	if (regs->cs != USER_CS || regs->ss != USER_DS)
-		printk("Warning: signal handler with nonstandard code/stack segment\n");
 	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
 		if (mask > handler_signal)
 			break;
 		if (!(mask & handler_signal))
 			continue;
-		sa_handler = (unsigned long) sa->sa_handler;
+		setup_frame(sa,&frame,eip,regs,signr,oldmask);
+		eip = (unsigned long) sa->sa_handler;
 		if (sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
 /* force a supervisor-mode page-in of the signal handler to reduce races */
-		__asm__("testb $0,%%fs:%0": :"m" (*(char *) sa_handler));
-		setup_frame(&frame,eip,regs,signr,sa_handler,oldmask);
-		eip = sa_handler;
+		__asm__("testb $0,%%fs:%0": :"m" (*(char *) eip));
+		regs->cs = USER_CS; regs->ss = USER_DS;
+		regs->ds = USER_DS; regs->es = USER_DS;
+		regs->gs = USER_DS; regs->fs = USER_DS;
 		current->blocked |= sa->sa_mask;
 		oldmask |= sa->sa_mask;
 	}

@@ -84,10 +84,7 @@ void load_store_instr(char type)
 switch ( type )
   {
   case 000:       /* fld m32real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_single();
     if ( (FPU_loaded_data.tag == TW_NaN) &&
 	real_2op_NaN(&FPU_loaded_data, &FPU_loaded_data, &FPU_loaded_data) )
@@ -98,18 +95,12 @@ switch ( type )
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 001:      /* fild m32int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_int32();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 002:      /* fld m64real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_double();
     if ( (FPU_loaded_data.tag == TW_NaN) &&
 	real_2op_NaN(&FPU_loaded_data, &FPU_loaded_data, &FPU_loaded_data) )
@@ -120,73 +111,46 @@ switch ( type )
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 003:      /* fild m16int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_int16();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 010:      /* fst m32real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_store_single();
     break;
   case 011:      /* fist m32int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_store_int32();
     break;
   case 012:     /* fst m64real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_store_double();
     break;
   case 013:     /* fist m16int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_store_int16();
     break;
   case 014:     /* fstp m32real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_single() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 015:     /* fistp m32int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_int32() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 016:     /* fstp m64real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_double() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
     break;
   case 017:     /* fistp m16int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_int16() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
@@ -198,10 +162,7 @@ switch ( type )
     frstor();
     break;
   case 023:     /* fbld m80dec */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_bcd();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
@@ -220,18 +181,12 @@ switch ( type )
     NO_NET_INSTR_EFFECT;
     break;
   case 025:      /* fld m80real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_extended();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 027:      /* fild m64int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     reg_load_int64();
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
@@ -244,10 +199,7 @@ switch ( type )
     NO_NET_DATA_EFFECT;
     break;
   case 033:      /* fbstp m80dec */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_bcd() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
@@ -261,10 +213,7 @@ switch ( type )
     NO_NET_INSTR_EFFECT;
     break;
   case 035:      /* fstp m80real */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_extended() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */
@@ -278,10 +227,7 @@ switch ( type )
     NO_NET_INSTR_EFFECT;
     break;
   case 037:      /* fistp m64int */
-#ifdef PECULIAR_486
-    /* Default, this conveys no information, but an 80486 does it. */
     clear_C1();
-#endif PECULIAR_486
     if ( reg_store_int64() )
       pop_0();  /* pop only if the number was actually stored
 		 (see the 80486 manual p16-28) */

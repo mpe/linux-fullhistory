@@ -62,10 +62,16 @@ extern void scrollfront(int);
 #define fake_keyboard_interrupt() \
 __asm__ __volatile__("int $0x21")
 
+unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
+
 unsigned long kbd_dead_keys = 0;
 unsigned long kbd_prev_dead_keys = 0;
 
+/* shift state counters.. */
 static unsigned char k_down[NR_SHIFT] = {0, };
+/* keyboard key bitmap */
+static unsigned long key_down[8] = { 0, };
+
 static int want_console = -1;
 static int last_console = 0;		/* last used VC */
 static char rep = 0;			/* flag telling character repeat */
@@ -134,7 +140,7 @@ static void keyboard_interrupt(int int_pt_regs)
 		kbd_prev_dead_keys = 0;
 	kbd_dead_keys = 0;
 	kb_wait();
-	if (!(inb_p(0x64) & 0x01))
+	if ((inb_p(0x64) & kbd_read_mask) != 0x01)
 		goto end_kbd_intr;
 	scancode = inb(0x60);
 	mark_bh(KEYBOARD_BH);
@@ -149,6 +155,7 @@ static void keyboard_interrupt(int int_pt_regs)
 	kbd = kbd_table + fg_console;
 	if (vc_kbd_flag(kbd,VC_RAW)) {
 		memset(k_down, 0, sizeof(k_down));
+		memset(key_down, 0, sizeof(key_down));
 		put_queue(scancode);
 		goto end_kbd_intr;
 	} else
@@ -160,7 +167,6 @@ end_kbd_intr:
 static inline void translate(unsigned char scancode)
 {
 	char break_flag;
-	static unsigned long key_down[8] = { 0, };
      	static unsigned char e0_keys[] = {
 		0x1c,	/* keypad enter */
 		0x1d,	/* right control */
@@ -584,6 +590,8 @@ static void do_shift(unsigned char value, char up_flag)
 		value = KVAL(K_SHIFT);
 		clr_vc_kbd_flag(kbd, VC_CAPSLOCK);
 	}
+	if (value > 3)
+		return;
 
 	if (up_flag) {
 		if (k_down[value])
@@ -683,7 +691,7 @@ static void kbd_bh(void * unused)
 	}
 	do_keyboard_interrupt();
 	cli();
-	if (inb_p(0x64) & 0x01)
+	if ((inb_p(0x64) & kbd_read_mask) == 0x01)
 		fake_keyboard_interrupt();
 	sti();
 }

@@ -8,6 +8,11 @@
  */
 
 #include <linux/segment.h>
+#include <linux/linkage.h>
+
+extern void disable_irq(unsigned int);
+extern void enable_irq(unsigned int);
+
 #define __STR(x) #x
 #define STR(x) __STR(x)
  
@@ -117,9 +122,9 @@
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
 	
 #define BUILD_IRQ(chip,nr,mask) \
-extern "C" void IRQ_NAME(nr); \
-extern "C" void FAST_IRQ_NAME(nr); \
-extern "C" void BAD_IRQ_NAME(nr); \
+asmlinkage void IRQ_NAME(nr); \
+asmlinkage void FAST_IRQ_NAME(nr); \
+asmlinkage void BAD_IRQ_NAME(nr); \
 __asm__( \
 "\n.align 4\n" \
 "_IRQ" #nr "_interrupt:\n\t" \

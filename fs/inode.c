@@ -87,7 +87,7 @@ void grow_inodes(void)
 	struct inode * inode;
 	int i;
 
-	if(!(inode = (struct inode*) get_free_page(GFP_KERNEL)))
+	if (!(inode = (struct inode*) get_free_page(GFP_KERNEL)))
 		return;
 
 	i=PAGE_SIZE / sizeof(struct inode);
@@ -417,6 +417,11 @@ struct inode * get_pipe_inode(void)
 
 struct inode * iget(struct super_block * sb,int nr)
 {
+	return __iget(sb,nr,1);
+}
+
+struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
+{
 	struct inode * inode, * empty;
 
 	if (!sb)
@@ -435,7 +440,7 @@ repeat:
 		if (!inode->i_count)
 			nr_free_inodes--;
 		inode->i_count++;
-		if (inode->i_mount) {
+		if (crossmntp && inode->i_mount) {
 			int i;
 
 			for (i = 0 ; i<NR_SUPER ; i++)

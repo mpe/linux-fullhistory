@@ -4,7 +4,9 @@
 
 #define sys_clone sys_fork
 
+#ifdef __cplusplus
 extern "C" {
+#endif
 
 extern int sys_setup();
 extern int sys_exit();
@@ -170,7 +172,9 @@ sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
 sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
 sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt};
 
+#ifdef __cplusplus
 }
+#endif
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

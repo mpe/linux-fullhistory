@@ -806,7 +806,7 @@ sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
  * we have this level of indirection. Not a lot of overhead, since more of
  * the work is done via read/write/select directly.
  */
-extern "C" int
+asmlinkage int
 sys_socketcall(int call, unsigned long *args)
 {
   switch(call) {

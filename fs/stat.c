@@ -86,7 +86,7 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 
-extern "C" int sys_stat(char * filename, struct old_stat * statbuf)
+asmlinkage int sys_stat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -102,7 +102,7 @@ extern "C" int sys_stat(char * filename, struct old_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_newstat(char * filename, struct new_stat * statbuf)
+asmlinkage int sys_newstat(char * filename, struct new_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -118,7 +118,7 @@ extern "C" int sys_newstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_lstat(char * filename, struct old_stat * statbuf)
+asmlinkage int sys_lstat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -134,7 +134,7 @@ extern "C" int sys_lstat(char * filename, struct old_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_newlstat(char * filename, struct new_stat * statbuf)
+asmlinkage int sys_newlstat(char * filename, struct new_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -150,7 +150,7 @@ extern "C" int sys_newlstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_fstat(unsigned int fd, struct old_stat * statbuf)
+asmlinkage int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
@@ -165,7 +165,7 @@ extern "C" int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
+asmlinkage int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
@@ -180,7 +180,7 @@ extern "C" int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 	return 0;
 }
 
-extern "C" int sys_readlink(const char * path, char * buf, int bufsiz)
+asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 {
 	struct inode * inode;
 	int error;

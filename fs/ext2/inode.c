@@ -351,7 +351,10 @@ void ext2_write_super (struct super_block * sb)
 #ifdef EXT2FS_DEBUG
 		printk ("ext2_write_super: setting valid to 0\n");
 #endif
-		es->s_valid = 0;
+		if (es->s_valid) {
+			es->s_valid = 0;
+			es->s_mtime = CURRENT_TIME;
+		}
 		ext2_commit_super (sb, es);
 	}
 	sb->s_dirt = 0;
@@ -370,8 +373,10 @@ int ext2_remount (struct super_block * sb, int * flags)
 		/* OK, we are remounting a valid rw partition rdonly, so set
 		   the rdonly flag and then mark the partition as valid
 		   again. */
-		sb->s_flags |= MS_RDONLY;
 		es->s_valid = sb->u.ext2_sb.s_was_mounted_valid;
+		es->s_mtime = CURRENT_TIME;
+		sb->u.ext2_sb.s_sbh->b_dirt = 1;
+		sb->s_dirt = 1;
 		ext2_commit_super (sb, es);
 	}
 	else {
@@ -382,6 +387,12 @@ int ext2_remount (struct super_block * sb, int * flags)
 		if (!es->s_valid)
 			printk ("EXT2-fs warning: remounting unchecked fs, "
 				"running e2fsck is recommended\n");
+		else {
+			es->s_valid = 0;
+			es->s_mtime = CURRENT_TIME;
+			sb->u.ext2_sb.s_sbh->b_dirt = 1;
+			sb->s_dirt = 1;
+		}
 	}
 	return 0;
 }

@@ -54,7 +54,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
   short		exponent;
   FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
   FPU_REG       argSq;
-  long long     arg_signif, argSqSq;
+  unsigned long long     arg_signif, argSqSq;
   
 
   exponent = arg->exp - EXP_BIAS;
@@ -64,7 +64,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
     { arith_invalid(y_reg); return; }  /* Need a positive number */
 #endif PARANOID
 
-  *(long long *)&arg_signif = *(long long *)&(arg->sigl);
+  arg_signif = significand(arg);
   if ( exponent < -1 )
     {
       /* shift the argument right by the required places */
@@ -72,8 +72,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
 	arg_signif++;	/* round up */
     }
 
-  mul64(&arg_signif, &arg_signif, (long long *)(&argSq.sigl));
-  mul64((long long *)(&argSq.sigl), (long long *)(&argSq.sigl), &argSqSq);
+  mul64(&arg_signif, &arg_signif, &significand(&argSq));
+  mul64(&significand(&argSq), &significand(&argSq), &argSqSq);
 
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(pos_poly.sign) = 0;
@@ -88,11 +88,11 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
 
   /* Do the basic fixed point polynomial evaluation */
   polynomial(&neg_poly.sigl, (unsigned *)&argSqSq, oddnegterms, HIPOWERon-1);
-  mul64((long long *)(&argSq.sigl), (long long *)(&neg_poly.sigl),
-	(long long *)(&neg_poly.sigl));
+  mul64(&significand(&argSq), &significand(&neg_poly),
+	&significand(&neg_poly));
 
   /* Subtract the mantissas */
-  *((long long *)(&pos_poly.sigl)) -= *((long long *)(&neg_poly.sigl));
+  significand(&pos_poly) -= significand(&neg_poly);
 
   /* Convert to 64 bit signed-compatible */
   pos_poly.exp -= 1;
@@ -110,8 +110,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
   
   /* Do the basic fixed point polynomial evaluation */
   polynomial(&pos_poly.sigl, (unsigned *)&argSqSq, evenplterms, HIPOWERep-1);
-  mul64((long long *)(&argSq.sigl),
-	(long long *)(&pos_poly.sigl), (long long *)(&pos_poly.sigl));
+  mul64(&significand(&argSq),
+	&significand(&pos_poly), &significand(&pos_poly));
   
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(neg_poly.sign) = 0;
@@ -121,7 +121,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
   polynomial(&neg_poly.sigl, (unsigned *)&argSqSq, evennegterms, HIPOWERen-1);
 
   /* Subtract the mantissas */
-  *((long long *)(&neg_poly.sigl)) -= *((long long *)(&pos_poly.sigl));
+  significand(&neg_poly) -= significand(&pos_poly);
   /* and multiply by argSq */
 
   /* Convert argSq to a valid reg number */

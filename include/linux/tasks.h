@@ -4,6 +4,6 @@
 /*
  * This is the maximum nr of tasks - change it if you need to
  */
-#define NR_TASKS	64
+#define NR_TASKS	128
 
 #endif

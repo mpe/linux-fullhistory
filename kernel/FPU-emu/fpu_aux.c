@@ -139,10 +139,7 @@ void fxch_i()
       stack_underflow();
       return;
     }
-#ifdef PECULIAR_486
-  /* Default, this conveys no information, but an 80486 does it. */
   clear_C1();
-#endif PECULIAR_486
   reg_move(FPU_st0_ptr, &t);
   reg_move(sti_ptr, FPU_st0_ptr);
   reg_move(&t, sti_ptr);

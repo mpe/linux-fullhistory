@@ -20,6 +20,8 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 #include <asm/io.h>
+#include <linux/ioport.h>
+
 #include "../blk.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -526,6 +528,7 @@ int wd7000_detect(int hostnum)
     int i,j;
     char const *base_address = NULL;
 
+    if(check_region(IO_BASE, 4)) return 0;  /* IO ports in use */
     for(i=0;i<(sizeof(wd_bases)/sizeof(char *));i++){
 	for(j=0;j<NUM_SIGNATURES;j++){
 	    if(!memcmp((void *)(wd_bases[i] + signatures[j].offset),
@@ -537,6 +540,7 @@ int wd7000_detect(int hostnum)
     }
     if (base_address == NULL) return 0;
 
+    snarf_region(IO_BASE, 4); /* Register our ports */
     /* Store our host number */
     wd7000_host = hostnum;
 

@@ -61,13 +61,13 @@ struct	shminfo {
 #define SHM_ID_MASK	((1<<_SHM_ID_BITS)-1)
 #define SHM_IDX_SHIFT	(SHM_ID_SHIFT+_SHM_ID_BITS)
 #define SHM_IDX_MASK	((1<<_SHM_IDX_BITS)-1)
-#define SHM_READ_ONLY	(1<<BITS_PER_PTR-1)
+#define SHM_READ_ONLY	(1<<(BITS_PER_PTR-1))
 
-#define SHMMAX (1<<PAGE_SHIFT+_SHM_IDX_BITS)	/* max shared seg size (bytes) */
-#define SHMMIN 1	 /* really PAGE_SIZE */	/* min shared seg size (bytes)*/
+#define SHMMAX 0x400000				/* max shared seg size (bytes) */
+#define SHMMIN 1	 /* really PAGE_SIZE */	/* min shared seg size (bytes) */
 #define SHMMNI (1<<_SHM_ID_BITS)		/* max num of segs system wide */
-#define SHMALL (1<<_SHM_IDX_BITS+_SHM_ID_BITS)	/* max shm system wide (pages) */
-#define	SHMLBA PAGE_SIZE			/* attach addr a multiple of this */
+#define SHMALL (1<<(_SHM_IDX_BITS+_SHM_ID_BITS))/* max shm system wide (pages) */
+#define	SHMLBA 0x1000				/* attach addr a multiple of this */
 #define SHMSEG SHMMNI				/* max shared segs per process */
 
 #ifdef __KERNEL__

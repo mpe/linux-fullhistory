@@ -34,6 +34,9 @@ ifdef CONFIG_XIA_FS
 FS_SUBDIRS := $(FS_SUBDIRS) xiafs
 endif
 
+ifdef CONFIG_BINFMT_ELF
+BINFMTS := $(BINFMTS) binfmt_elf.o
+endif
 
 .c.s:
 	$(CC) $(CFLAGS) -S $<
@@ -44,7 +47,7 @@ endif
 
 OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
-	select.o fifo.o locks.o filesystems.o
+	select.o fifo.o locks.o filesystems.o $(BINFMTS)
 
 all: fs.o filesystems.a
 

@@ -13,7 +13,7 @@
 */
 
 static char *version =
-    "hp.c:v0.99.12+ 8/12/93 Donald Becker (becker@super.org)\n";
+    "hp.c:v0.99.13 8/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -40,7 +40,7 @@ static char *version =
 #define HP_8BSTOP_PG	0x80	/* Last page +1 of RX ring */
 #define HP_16BSTOP_PG	0xFF	/* Last page +1 of RX ring */
 
-int hpprobe(int ioaddr, struct device *dev);
+int hp_probe(struct device *dev);
 int hpprobe1(int ioaddr, struct device *dev);
 
 static void hp_reset_8390(struct device *dev);
@@ -59,17 +59,27 @@ static char irqmap[16] = { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0};
     Also initialize the card and fill in STATION_ADDR with the station
    address. */
 
-int hpprobe(int ioaddr,  struct device *dev)
+int hp_probe(struct device *dev)
 {
     int *port, ports[] = {0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240, 0};
+    short ioaddr = dev->base_addr;
 
+    if (ioaddr < 0)
+	return ENXIO;		/* Don't probe at all. */
     if (ioaddr > 0x100)
-	return hpprobe1(ioaddr, dev);
+	return ! hpprobe1(ioaddr, dev);
 
-    for (port = &ports[0]; *port; port++)
-	if (inb_p(*port) != 0xff && hpprobe1(*port, dev))
-	    return dev->base_addr;
-    return 0;
+    for (port = &ports[0]; *port; port++) {
+#ifdef HAVE_PORTRESERVE
+	if (check_region(*port, 32))
+	    continue;
+#endif
+	if (inb_p(*port) != 0xff && hpprobe1(*port, dev)) {
+	    return 0;
+	}
+    }
+    dev->base_addr = ioaddr;
+    return ENODEV;
 }
 
 int hpprobe1(int ioaddr, struct device *dev)
@@ -140,6 +150,10 @@ int hpprobe1(int ioaddr, struct device *dev)
       }
   }
 
+#ifdef HAVE_PORTRESERVE
+    snarf_region(ioaddr, 32);
+#endif
+
   if (ei_debug > 1)
       printk(version);
 
@@ -179,7 +193,7 @@ hp_reset_8390(struct device *dev)
 	    printk("%s: hp_reset_8390() did not complete.\n", dev->name);
 	    return;
 	}
-    if (ei_debug > 1) printk("8390 reset done.", jiffies);
+    if (ei_debug > 1) printk("8390 reset done (%d).", jiffies);
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you

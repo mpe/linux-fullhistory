@@ -8,6 +8,7 @@
 #ifdef __KERNEL__
 
 #include <linux/config.h>
+#include <linux/linkage.h>
 
 #define INT_MAX		((int)(~0U>>1))
 #define UINT_MAX	(~0U)
@@ -20,12 +21,14 @@
 int verify_area(int type, void * addr, unsigned long count);
 
 extern void math_error(void);
-volatile void panic(const char * str);
+volatile void panic(const char * fmt, ...)
+	__attribute__ ((format (printf, 1, 2)));
 volatile void do_exit(long error_code);
 unsigned long simple_strtoul(const char *,char **,unsigned int);
 int sprintf(char * buf, const char * fmt, ...);
 
-extern "C" int printk(const char * fmt, ...);
+asmlinkage int printk(const char * fmt, ...)
+	__attribute__ ((format (printf, 1, 2)));
 
 #ifdef CONFIG_DEBUG_MALLOC
 #define kmalloc(a,b) deb_kmalloc(__FILE__,__LINE__, a,b)

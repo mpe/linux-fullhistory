@@ -10,6 +10,8 @@
  * 	Note : TMC-880 boards don't work because they have two bits in 
  *		the status register flipped, I'll fix this "RSN"
  *
+ *      This card does all the I/O via memory mapped I/O, so there is no need
+ *      to check or snarf a region of the I/O address space.
  */
 
 /*
@@ -825,9 +827,9 @@ connect_loop :
  *	going on.
  */
 	cli();
+	DATA = (unsigned char) ((1 << target) | (controller_type == SEAGATE ? 0x80 : 0x40));
 	CONTROL = BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL | 
 		(reselect ? CMD_ATTN : 0);
-	DATA = (unsigned char) ((1 << target) | (controller_type == SEAGATE ? 0x80 : 0x40));
 	sti();
 		while (!((status_read = STATUS) & STAT_BSY) && 
 			(jiffies < clock) && !st0x_aborted)

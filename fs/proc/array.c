@@ -194,7 +194,7 @@ static int get_stat(int pid, char * buffer)
 	if (vsize) {
 		eip = KSTK_EIP(vsize);
 		esp = KSTK_ESP(vsize);
-		vsize = (*p)->brk + PAGE_SIZE-1;
+		vsize = (*p)->brk - (*p)->start_code + PAGE_SIZE-1;
 		if (esp)
 			vsize += TASK_SIZE - esp;
 	}
@@ -264,7 +264,7 @@ static int get_statm(int pid, char * buffer)
 		return 0;
 	tpag = (*p)->end_code / PAGE_SIZE;
 	if ((*p)->state != TASK_ZOMBIE) {
-	  pagedir = PAGE_DIR_OFFSET((*p)->tss.cr3,(*p)->start_code);
+	  pagedir = (unsigned long *) (*p)->tss.cr3;
 	  for (i = 0; i < 0x300; ++i) {
 	    if ((ptbl = pagedir[i]) == 0) {
 	      tpag -= PTRS_PER_PAGE;

@@ -14,15 +14,8 @@
 */
 
 static char *version =
-    "8390.c:v0.99-12 8/9/93 for 0.99.12+ Donald Becker (becker@super.org)\n";
+    "8390.c:v0.99-13 9/3/93 for 0.99.13 Donald Becker (becker@super.org)\n";
 #include <linux/config.h>
-#if !defined(EL2) && !defined(NE2000) && !defined(WD80x3) && !defined(HPLAN)
-/* They don't know what they want -- give it all to them! */
-#define EL2
-#define NE2000
-#define WD80x3
-#define HPLAN
-#endif
 
 /*
   Braindamage remaining:
@@ -93,12 +86,6 @@ static void ei_rx_overrun(struct device *dev);
 void NS8390_init(struct device *dev, int startp);
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 				int start_page);
-
-extern int el2autoprobe(int ioaddr, struct device *dev);
-extern int el2probe(int ioaddr, struct device *dev);
-extern int neprobe(int ioaddr, struct device *dev);
-extern int wdprobe(int ioaddr, struct device *dev);
-extern int hpprobe(int ioaddr, struct device *dev);
 
 struct sigaction ei_sigaction = { ei_interrupt, 0, 0, NULL, };
 
@@ -260,7 +247,7 @@ void
 ei_interrupt(int reg_ptr)
 {
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
-    struct device *dev = irq2dev_map[irq];
+    struct device *dev = (struct device *)(irq2dev_map[irq]);
     int e8390_base;
     int interrupts, boguscount = 0;
     struct ei_device *ei_local;
@@ -580,35 +567,14 @@ get_stats(struct device *dev)
     return &ei_local->stat;
 }
 
-int
-ethif_init(struct device *dev)
-{
-    if (1
-#ifdef WD80x3
-	&& ! wdprobe(dev->base_addr, dev)
-#endif
-#ifdef EL2
-	&& ! el2autoprobe(dev->base_addr, dev)
-#endif
-#ifdef NE2000
-	&& ! neprobe(dev->base_addr, dev)
-#endif
-#ifdef HPLAN
-	&& ! hpprobe(dev->base_addr, dev)
-#endif
-	&& 1 ) {
-	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
-    }
-    if (ei_debug > 1)
-	printk(version);
-    return 0;
-}
-
-/* Initialize the rest of the device structure. */
+/* Initialize the rest of the 8390 device structure. */
 int
 ethdev_init(struct device *dev)
 {
     int i;
+
+    if (ei_debug > 1)
+	printk(version);
 
     for (i = 0; i < DEV_NUMBUFFS; i++)
 	dev->buffs[i] = NULL;

@@ -13,6 +13,10 @@ bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 *
+* Program binary formats
+*
+bool 'Elf executables' CONFIG_BINFMT_ELF y
+*
 * SCSI support
 *
 bool 'SCSI support?' CONFIG_SCSI n
@@ -68,7 +72,7 @@ bool 'Mitsumi CDROM driver support' CONFIG_MCD n
 *
 bool 'Standard (minix) fs support' CONFIG_MINIX_FS y
 bool 'Extended fs support' CONFIG_EXT_FS n
-bool 'Second extended fs support' CONFIG_EXT2_FS n
+bool 'Second extended fs support' CONFIG_EXT2_FS y
 bool 'xiafs filesystem support' CONFIG_XIA_FS n
 bool 'msdos fs support' CONFIG_MSDOS_FS y
 bool '/proc filesystem support' CONFIG_PROC_FS y
@@ -79,8 +83,11 @@ bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
 *
 bool 'Keyboard meta-key sends ESC-prefix' CONFIG_KBD_META y
 bool 'Keyboard Num Lock on by default' CONFIG_KBD_NUML y
-bool 'Logitech busmouse support' CONFIG_BUSMOUSE n
+bool 'Logitech busmouse support' CONFIG_BUSMOUSE y
+bool 'QuickPort mouse support' CONFIG_QUICKPORT_MOUSE y
+if [ "$CONFIG_QUICKPORT_MOUSE" = "n" ]
 bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
+fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
 bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION y

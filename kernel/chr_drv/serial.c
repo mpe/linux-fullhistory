@@ -456,7 +456,7 @@ static inline void figure_RS_timer(void)
 		if (IRQ_timer[i] < timeout)
 			timeout = IRQ_timer[i];
 	}
-	timer_table[RS_TIMER].expires = timeout;
+	timer_table[RS_TIMER].expires = jiffies + timeout;
 	timer_active |= 1 << RS_TIMER;
 }
 
@@ -514,7 +514,7 @@ static void rs_interrupt(int irq)
 				break; 		/* Prevent infinite loops */
 		}
 	}
-	if (info = IRQ_ports[irq]) {
+	if ((info = IRQ_ports[irq]) != NULL) {
 #ifdef 0
 		do {
 			serial_outp(info, UART_IER, 0);
@@ -1321,12 +1321,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	
 	switch (cmd) {
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
-			wait_until_sent(tty);
 			if (!arg)
 				send_break(info, HZ/4);	/* 1/4 second */
 			return 0;
 		case TCSBRKP:	/* support for POSIX tcsendbreak() */
-			wait_until_sent(tty);
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:

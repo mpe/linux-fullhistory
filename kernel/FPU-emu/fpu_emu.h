@@ -58,6 +58,7 @@
 #ifndef __ASSEMBLER__
 
 #include <linux/math_emu.h>
+#include <linux/linkage.h>
 
 #ifdef PARANOID
 extern char emulating;
@@ -110,33 +111,36 @@ extern  FPU_REG  FPU_loaded_data;
 		 *(long *)&((y)->exp) = *(long *)&((x)->exp); \
 		 *(long long *)&((y)->sigl) = *(long long *)&((x)->sigl); }
 
+#define significand(x) ( ((unsigned long long *)&((x)->sigl))[0] )
+
 
 /*----- Prototypes for functions written in assembler -----*/
 /* extern void reg_move(FPU_REG *a, FPU_REG *b); */
 
-extern "C" void mul64(long long *a, long long *b, long long *result);
-extern "C" void poly_div2(long long *x);
-extern "C" void poly_div4(long long *x);
-extern "C" void poly_div16(long long *x);
-extern "C" void polynomial(unsigned accum[], unsigned x[],
+asmlinkage void mul64(unsigned long long *a, unsigned long long *b,
+		      unsigned long long *result);
+asmlinkage void poly_div2(unsigned long long *x);
+asmlinkage void poly_div4(unsigned long long *x);
+asmlinkage void poly_div16(unsigned long long *x);
+asmlinkage void polynomial(unsigned accum[], unsigned x[],
 		       unsigned short terms[][4], int n);
-extern "C" void normalize(FPU_REG *x);
-extern "C" void normalize_nuo(FPU_REG *x);
-extern "C" int reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+asmlinkage void normalize(FPU_REG *x);
+asmlinkage void normalize_nuo(FPU_REG *x);
+asmlinkage int reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		    unsigned int control_w);
-extern "C" int reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+asmlinkage int reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" int reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+asmlinkage int reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" int reg_u_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+asmlinkage int reg_u_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" int reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+asmlinkage int reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" int wm_sqrt(FPU_REG *n, unsigned int control_w);
-extern "C" unsigned	shrx(void *l, unsigned x);
-extern "C" unsigned	shrxs(void *v, unsigned x);
-extern "C" unsigned long div_small(unsigned long long *x, unsigned long y);
-extern "C" void round_reg(FPU_REG *arg, unsigned int extent,
+asmlinkage int wm_sqrt(FPU_REG *n, unsigned int control_w);
+asmlinkage unsigned	shrx(void *l, unsigned x);
+asmlinkage unsigned	shrxs(void *v, unsigned x);
+asmlinkage unsigned long div_small(unsigned long long *x, unsigned long y);
+asmlinkage void round_reg(FPU_REG *arg, unsigned int extent,
 		      unsigned int control_w);
 
 #ifndef MAKING_PROTO

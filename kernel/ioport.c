@@ -9,6 +9,9 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/ioport.h>
+
+static unsigned long ioport_registrar[IO_BITMAP_SIZE] = {0, /* ... */};
 
 #define _IODEBUG
 
@@ -40,56 +43,87 @@ static void dump_io_bitmap(void)
 }
 #endif
 
+/* Set EXTENT bits starting at BASE in BITMAP to value TURN_ON. */
+asmlinkage void set_bitmap(unsigned long *bitmap,
+						   short base, short extent, int new_value)
+{
+	int mask;
+	unsigned long *bitmap_base = bitmap + (base >> 5);
+	unsigned short low_index = base & 0x1f;
+	int length = low_index + extent;
+
+	if (low_index != 0) {
+		mask = (~0 << low_index);
+		if (length < 32)
+				mask &= ~(~0 << length);
+		if (new_value)
+			*bitmap_base++ |= mask;
+		else
+			*bitmap_base++ &= ~mask;
+		length -= 32;
+	}
+
+	mask = (new_value ? ~0 : 0);
+	while (length >= 32) {
+		*bitmap_base++ = mask;
+		length -= 32;
+	}
+
+	if (length > 0) {
+		mask = ~(~0 << length);
+		if (new_value)
+			*bitmap_base++ |= mask;
+		else
+			*bitmap_base++ &= ~mask;
+	}
+}
+
+/* Check for set bits in BITMAP starting at BASE, going to EXTENT. */
+asmlinkage int check_bitmap(unsigned long *bitmap, short base, short extent)
+{
+	int mask;
+	unsigned long *bitmap_base = bitmap + (base >> 5);
+	unsigned short low_index = base & 0x1f;
+	int length = low_index + extent;
+
+	if (low_index != 0) {
+		mask = (~0 << low_index);
+		if (length < 32)
+				mask &= ~(~0 << length);
+		if (*bitmap_base++ & mask)
+			return 1;
+		length -= 32;
+	}
+	while (length >= 32) {
+		if (*bitmap_base++ != 0)
+			return 1;
+		length -= 32;
+	}
+
+	if (length > 0) {
+		mask = ~(~0 << length);
+		if (*bitmap_base++ & mask)
+			return 1;
+	}
+	return 0;
+}
+
 /*
  * this changes the io permissions bitmap in the current task.
  */
-extern "C" int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
+asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
-	unsigned long froml, lindex, tnum, numl, rindex, mask;
-	unsigned long *iop;
-
 	if (from + num <= from)
 		return -EINVAL;
 	if (from + num > IO_BITMAP_SIZE*32)
 		return -EINVAL;
 	if (!suser())
 		return -EPERM;
-	froml = from >> 5;
-	lindex = from & 0x1f;
-	tnum = lindex + num;
-	numl = (tnum + 0x1f) >> 5;
-	rindex = tnum & 0x1f;
 
 #ifdef IODEBUG
 	printk("io: from=%d num=%d %s\n", from, num, (turn_on ? "on" : "off"));
 #endif
-
-	if (numl) {
-		iop = (unsigned long *)current->tss.io_bitmap + froml;
-		if (lindex != 0) {
-			mask = (~0 << lindex);
-			if (--numl == 0 && rindex)
-				mask &= ~(~0 << rindex);
-			if (turn_on)
-				*iop++ &= ~mask;
-			else
-				*iop++ |= mask;
-		}
-		if (numl) {
-			if (rindex)
-				--numl;
-			mask = (turn_on ? 0 : ~0);
-			while (numl--)
-				*iop++ = mask;
-			if (numl && rindex) {
-				mask = ~(~0 << rindex);
-				if (turn_on)
-					*iop++ &= ~mask;
-				else
-					*iop++ |= mask;
-			}
-		}
-	}
+	set_bitmap((unsigned long *)current->tss.io_bitmap, from, num, !turn_on);
 	return 0;
 }
 
@@ -105,7 +139,7 @@ unsigned int *stack;
  * on system-call entry - see also fork() and the signal handling
  * code.
  */
-extern "C" int sys_iopl(long ebx,long ecx,long edx,
+asmlinkage int sys_iopl(long ebx,long ecx,long edx,
 	     long esi, long edi, long ebp, long eax, long ds,
 	     long es, long fs, long gs, long orig_eax,
 	     long eip,long cs,long eflags,long esp,long ss)
@@ -118,4 +152,33 @@ extern "C" int sys_iopl(long ebx,long ecx,long edx,
 		return -EPERM;
 	*(&eflags) = (eflags & 0xffffcfff) | (level << 12);
 	return 0;
+}
+
+
+void snarf_region(unsigned int from, unsigned int num)
+{
+	if (from > IO_BITMAP_SIZE*32)
+		return;
+	if (from + num > IO_BITMAP_SIZE*32)
+		num = IO_BITMAP_SIZE*32 - from;
+	set_bitmap(ioport_registrar, from, num, 1);
+	return;
+}
+
+int check_region(unsigned int from, unsigned int num)
+{
+	if (from > IO_BITMAP_SIZE*32)
+		return 0;
+	if (from + num > IO_BITMAP_SIZE*32)
+		num = IO_BITMAP_SIZE*32 - from;
+	return check_bitmap(ioport_registrar, from, num);
+}
+
+/* Called from init/main.c to reserve IO ports. */
+void reserve_setup(char *str, int *ints)
+{
+	int i;
+
+	for (i = 1; i < ints[0]; i += 2)
+		snarf_region(ints[i], ints[i+1]);
 }

@@ -20,7 +20,7 @@
 OBJS	= Space.o sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
 	  eth.o packet.o arp.o dev.o 8390.o wd.o ne.o el2.o hp.o plip.o \
 	  slip.o slhc.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o\
-	  lance.o
+	  lance.o 3c509.o #ip-frag.o
 
 ifdef CONFIG_INET
 
@@ -38,36 +38,39 @@ CARDS :=
 include	CONFIG
 
 
-Space.o:	CONFIG Space.c Makefile
+Space.o:	Space.c CONFIG /usr/include/linux/autoconf.h
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(OPTS) $(CARDS) $(DL_OPTS) \
-							-c Space.c -o $@
+							-c $< -o $@
 
-8390.o:		CONFIG 8390.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(CARDS) -c 8390.c -o $@
+8390.o:		8390.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(CARDS) -c $< -o $@
 
-wd.o:		CONFIG wd.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c wd.c -o $@
+wd.o:		wd.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $< -o $@
 
-el2.o:		CONFIG el2.c el2reg.h Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c el2.c -o $@
+el2.o:		el2.c CONFIG el2reg.h
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $< -o $@
 
-ne.o:		CONFIG ne.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c ne.c -o $@
+ne.o:		ne.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $< -o $@
 
-hp.o:		CONFIG hp.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c hp.c -o $@
+hp.o:		hp.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $< -o $@
 
-plip.o:		CONFIG plip.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c plip.c -o $@
+plip.o:		plip.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(PLIP_OPTS) -c $< -o $@
 
-slip.o:		CONFIG slip.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(SLIP_OPTS) -c slip.c -o $@
+slip.o:		slip.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(SLIP_OPTS) -c $< -o $@
 
-d_link.o:	CONFIG d_link.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(DL_OPTS) -c d_link.c -o $@
+d_link.o:	d_link.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(DL_OPTS) -c $< -o $@
 
-lance.o:	CONFIG lance.c Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(AT_OPTS) -c lance.c -o $@
+lance.o:	lance.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(AT_OPTS) -c $< -o $@
+
+3c509.o:	3c509.c CONFIG
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL3_OPTS) -c $< -o $@
 
 subdirs:	dummy
 		for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done

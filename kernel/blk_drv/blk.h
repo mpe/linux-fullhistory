@@ -3,6 +3,7 @@
 
 #include <linux/sched.h>
 #include <linux/locks.h>
+#include <linux/genhd.h>
 
 /*
  * NR_REQUEST is the number of entries in the request-queue.

@@ -618,7 +618,7 @@ void copy_to_cooked(struct tty_struct * tty)
 		}
 		if (I_IXON(tty) && !tty->lnext) {
 			if (c == STOP_CHAR(tty)) {
-			        tty->status_changed = 1;
+				tty->ctrl_status &= ~(TIOCPKT_START);
 				tty->ctrl_status |= TIOCPKT_STOP;
 				tty->stopped=1;
 				if (tty->stop)
@@ -631,7 +631,7 @@ void copy_to_cooked(struct tty_struct * tty)
 			}
 			if (((I_IXANY(tty)) && tty->stopped) ||
 			    (c == START_CHAR(tty))) {
-			        tty->status_changed = 1;
+			    	tty->ctrl_status &= ~(TIOCPKT_STOP);
 				tty->ctrl_status |= TIOCPKT_START;
 				tty->stopped=0;
 				if (tty->start)
@@ -646,18 +646,27 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (L_ISIG(tty) && !tty->lnext) {
 			if (c == INTR_CHAR(tty)) {
 				kill_pg(tty->pgrp, SIGINT, 1);
-				flush_input(tty);
+				if (! _L_FLAG(tty, NOFLSH)) {
+				  flush_input(tty);
+				  flush_output(tty);
+				}
 				continue;
 			}
 			if (c == QUIT_CHAR(tty)) {
 				kill_pg(tty->pgrp, SIGQUIT, 1);
-				flush_input(tty);
+				if (! _L_FLAG(tty, NOFLSH)) {
+				  flush_input(tty);
+				  flush_output(tty);
+				}
 				continue;
 			}
 			if (c == SUSPEND_CHAR(tty)) {
 				if (!is_orphaned_pgrp(tty->pgrp)) {
 					kill_pg(tty->pgrp, SIGTSTP, 1);
-					flush_input(tty);
+					if (! _L_FLAG(tty, NOFLSH)) {
+					  flush_input(tty);
+					  flush_output(tty);
+					}
 				}
 				continue;
 			}
@@ -750,9 +759,9 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 		minimum = nr;
 
 	/* deal with packet mode:  First test for status change */
-	if (tty->packet && tty->link && tty->link->status_changed) {
+	if (tty->packet && tty->link && tty->link->ctrl_status) {
 		put_fs_byte (tty->link->ctrl_status, b);
-		tty->link->status_changed = 0;
+		tty->link->ctrl_status = 0;
 		return 1;
 	}
 	  
@@ -1310,7 +1319,6 @@ static int tty_open(struct inode * inode, struct file * filp)
 	 * variables get cleared.  Come to think of it, is anything 
 	 * using the packet mode at all???  - Ted, 1/27/93
 	 */
-	tty->status_changed = 0;
 	tty->ctrl_status = 0;
 	tty->packet = 0;
 
@@ -1596,7 +1604,7 @@ static void initialize_termios(int line, struct termios * tp)
 		tp->c_lflag = ISIG | ICANON | ECHO |
 			ECHOCTL | ECHOKE;
 	} else if (IS_A_SERIAL(line)) {
-		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL | CLOCAL;
+		tp->c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 		tp->c_oflag = OPOST | ONLCR | XTABS;
 	} else if (IS_A_PTY_MASTER(line)) {
 		tp->c_cflag = B9600 | CS8 | CREAD;

@@ -42,7 +42,7 @@ void Un_impl(void)
   byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
-  printk("Unimplemented FPU Opcode at eip=%p : %02x ",
+  printk("Unimplemented FPU Opcode at eip=%08x : %02x ",
 	 FPU_ORIG_EIP, byte1);
 
   if (FPU_modrm >= 0300)
@@ -86,7 +86,7 @@ if ( partial_status & SW_Denorm_Op )   printk("SW: denormalized operand\n");
 if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
 
-  printk("At %p: %02x ", FPU_ORIG_EIP, byte1);
+  printk("At %08x: %02x ", FPU_ORIG_EIP, byte1);
   if (FPU_modrm >= 0300)
     printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
   else
@@ -312,7 +312,7 @@ void exception(int n)
 
 /* Real operation attempted on two operands, one a NaN. */
 /* Returns nz if the exception is unmasked */
-extern "C" int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+asmlinkage int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   FPU_REG *x;
   int signalling;
@@ -326,7 +326,7 @@ extern "C" int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	{
 	  signalling = !(a->sigh & b->sigh & 0x40000000);
 	  /* find the "larger" */
-	  if ( *(long long *)&(a->sigl) < *(long long *)&(b->sigl) )
+	  if ( significand(a) < significand(b) )
 	    x = b;
 	}
       else
@@ -378,7 +378,7 @@ extern "C" int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 
 /* Invalid arith operation on Valid registers */
 /* Returns nz if the exception is unmasked */
-extern "C" int arith_invalid(FPU_REG *dest)
+asmlinkage int arith_invalid(FPU_REG *dest)
 {
 
   EXCEPTION(EX_Invalid);
@@ -395,7 +395,7 @@ extern "C" int arith_invalid(FPU_REG *dest)
 
 
 /* Divide a finite number by zero */
-extern "C" int divide_by_zero(int sign, FPU_REG *dest)
+asmlinkage int divide_by_zero(int sign, FPU_REG *dest)
 {
 
   if ( control_word & CW_ZeroDiv )
@@ -430,7 +430,7 @@ int set_precision_flag(int flags)
 
 
 /* This may be called often, so keep it lean */
-extern "C" void set_precision_flag_up(void)
+asmlinkage void set_precision_flag_up(void)
 {
   if ( control_word & CW_Precision )
     partial_status |= (SW_Precision | SW_C1);   /* The masked response */
@@ -441,7 +441,7 @@ extern "C" void set_precision_flag_up(void)
 
 
 /* This may be called often, so keep it lean */
-extern "C" void set_precision_flag_down(void)
+asmlinkage void set_precision_flag_down(void)
 {
   if ( control_word & CW_Precision )
     {   /* The masked response */
@@ -453,7 +453,7 @@ extern "C" void set_precision_flag_down(void)
 }
 
 
-extern "C" int denormal_operand(void)
+asmlinkage int denormal_operand(void)
 {
   if ( control_word & CW_Denormal )
     {   /* The masked response */
@@ -468,7 +468,7 @@ extern "C" int denormal_operand(void)
 }
 
 
-extern "C" int arith_overflow(FPU_REG *dest)
+asmlinkage int arith_overflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Overflow )
@@ -502,7 +502,7 @@ extern "C" int arith_overflow(FPU_REG *dest)
 }
 
 
-extern "C" int arith_underflow(FPU_REG *dest)
+asmlinkage int arith_underflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Underflow )

@@ -497,6 +497,9 @@ repeat:
 		goto end_unlink;
 	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_unlink;
+	retval = -EPERM;
+	if (S_ISDIR(inode->i_mode))
+		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		iput(inode);
 		brelse(bh);
@@ -504,12 +507,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
 	    current->euid != dir->i_uid)
-		goto end_unlink;
-	if (S_ISDIR(inode->i_mode))
 		goto end_unlink;
 	if (!inode->i_nlink) {
 		printk("Deleting nonexistent file (%04x:%d), %d\n",
@@ -689,7 +689,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = iget(old_dir->i_sb, old_de->inode);
+	old_inode = __iget(old_dir->i_sb, old_de->inode,0); /* don't cross mnt-points */
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -699,7 +699,7 @@ start_up:
 		goto end_rename;
 	new_bh = minix_find_entry(new_dir,new_name,new_len,&new_de);
 	if (new_bh) {
-		new_inode = iget(new_dir->i_sb, new_de->inode);
+		new_inode = __iget(new_dir->i_sb, new_de->inode, 0);
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;

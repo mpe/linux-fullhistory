@@ -266,7 +266,7 @@ int namei(const char * pathname, struct inode ** res_inode)
  *
  * namei for open - this is in fact almost the whole open-routine.
  *
- * Note that the low bits of "flag" aren't the same asin the open
+ * Note that the low bits of "flag" aren't the same as in the open
  * system call - they are 00 - no permissions needed
  *			  01 - read permission needed
  *			  10 - write permission needed
@@ -369,6 +369,8 @@ int open_namei(const char * pathname, int flag, int mode,
  				return -ETXTBSY;
  			}
 			for(mpnt = (*p)->mmap; mpnt; mpnt = mpnt->vm_next) {
+				if (mpnt->vm_page_prot & PAGE_RW)
+					continue;
 				if (inode == mpnt->vm_inode) {
 					iput(inode);
 					return -ETXTBSY;
@@ -376,6 +378,16 @@ int open_namei(const char * pathname, int flag, int mode,
 			}
  		}
  	}
+	if (flag & O_TRUNC) {
+	      inode->i_size = 0;
+	      if (inode->i_op && inode->i_op->truncate)
+	           inode->i_op->truncate(inode);
+	      if ((error = notify_change(NOTIFY_SIZE, inode))) {
+		   iput(inode);
+		   return error;
+	      }
+	      inode->i_dirt = 1;
+	}
 	*res_inode = inode;
 	return 0;
 }
@@ -409,7 +421,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	return dir->i_op->mknod(dir,basename,namelen,mode,dev);
 }
 
-extern "C" int sys_mknod(const char * filename, int mode, dev_t dev)
+asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	char * tmp;
@@ -452,7 +464,7 @@ static int do_mkdir(const char * pathname, int mode)
 	return dir->i_op->mkdir(dir,basename,namelen,mode);
 }
 
-extern "C" int sys_mkdir(const char * pathname, int mode)
+asmlinkage int sys_mkdir(const char * pathname, int mode)
 {
 	int error;
 	char * tmp;
@@ -493,7 +505,7 @@ static int do_rmdir(const char * name)
 	return dir->i_op->rmdir(dir,basename,namelen);
 }
 
-extern "C" int sys_rmdir(const char * pathname)
+asmlinkage int sys_rmdir(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -534,7 +546,7 @@ static int do_unlink(const char * name)
 	return dir->i_op->unlink(dir,basename,namelen);
 }
 
-extern "C" int sys_unlink(const char * pathname)
+asmlinkage int sys_unlink(const char * pathname)
 {
 	int error;
 	char * tmp;
@@ -575,7 +587,7 @@ static int do_symlink(const char * oldname, const char * newname)
 	return dir->i_op->symlink(dir,basename,namelen,oldname);
 }
 
-extern "C" int sys_symlink(const char * oldname, const char * newname)
+asmlinkage int sys_symlink(const char * oldname, const char * newname)
 {
 	int error;
 	char * from, * to;
@@ -631,7 +643,7 @@ static int do_link(struct inode * oldinode, const char * newname)
 	return dir->i_op->link(oldinode, dir, basename, namelen);
 }
 
-extern "C" int sys_link(const char * oldname, const char * newname)
+asmlinkage int sys_link(const char * oldname, const char * newname)
 {
 	int error;
 	char * to;
@@ -703,7 +715,7 @@ static int do_rename(const char * oldname, const char * newname)
 		new_dir, new_base, new_len);
 }
 
-extern "C" int sys_rename(const char * oldname, const char * newname)
+asmlinkage int sys_rename(const char * oldname, const char * newname)
 {
 	int error;
 	char * from, * to;

@@ -168,6 +168,9 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 			if (*bhe) {
 				wait_on_buffer(*bhe);
 				if (!(*bhe)->b_uptodate) {	/* read error? */
+				        brelse(*bhe);
+					if (++bhe == &buflist[NBUF])
+					  bhe = buflist;
 					left = 0;
 					break;
 				}

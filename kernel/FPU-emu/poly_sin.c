@@ -82,13 +82,13 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
     {
       /* shift the argument right by the required places */
       if ( shrx(&(fixed_arg.sigl), -1-exponent) >= 0x80000000U )
-	(*((long long *)(&(fixed_arg.sigl))))++;	/* round up */
+	significand(&fixed_arg)++;	/* round up */
     }
   
-  mul64((long long *)&(fixed_arg.sigl), (long long *)&(fixed_arg.sigl),
-	(long long *)&(arg_sqrd.sigl));
-  mul64((long long *)&(arg_sqrd.sigl), (long long *)&(arg_sqrd.sigl),
-	(long long *)&(arg_to_4.sigl));
+  mul64(&significand(&fixed_arg), &significand(&fixed_arg),
+	&significand(&arg_sqrd));
+  mul64(&significand(&arg_sqrd), &significand(&arg_sqrd),
+	&significand(&arg_to_4));
   
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(accum.sign) = 0;
@@ -103,11 +103,11 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
   
   /* Do the basic fixed point polynomial evaluation */
   polynomial(&(negaccum.sigl), &(arg_to_4.sigl), negterms, HIPOWER-1);
-  mul64((long long *)&(arg_sqrd.sigl), (long long *)&(negaccum.sigl),
-	(long long *)&(negaccum.sigl));
+  mul64(&significand(&arg_sqrd), &significand(&negaccum),
+	&significand(&negaccum));
 
   /* Subtract the mantissas */
-  *((long long *)(&(accum.sigl))) -= *((long long *)(&(negaccum.sigl)));
+  significand(&accum) -= significand(&negaccum);
   
   /* Convert to 64 bit signed-compatible */
   accum.exp = EXP_BIAS - 1 + accum.exp;

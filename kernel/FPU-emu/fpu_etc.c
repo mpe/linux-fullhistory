@@ -22,10 +22,7 @@ static void fchs(void)
   if ( NOT_EMPTY_0 )
     {
       FPU_st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
-#ifdef PECULIAR_486
-      /* Default, this conveys no information, but an 80486 does it. */
       clear_C1();
-#endif PECULIAR_486
     }
   else
     stack_underflow();
@@ -36,10 +33,7 @@ static void fabs(void)
   if ( FPU_st0_tag ^ TW_Empty )
     {
       FPU_st0_ptr->sign = SIGN_POS;
-#ifdef PECULIAR_486
-      /* Default, this conveys no information, but an 80486 does it. */
       clear_C1();
-#endif PECULIAR_486
     }
   else
     stack_underflow();

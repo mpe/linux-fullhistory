@@ -14,6 +14,10 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
+/* This sets the pointer FPU_info to point to the argument part
+   of the stack frame of math_emulate() */
+#define SETUP_DATA_AREA(arg)    FPU_info = (struct info *) &arg
+
 #define I387			(current->tss.i387)
 #define FPU_info		(I387.soft.info)
 

@@ -43,6 +43,7 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -194,6 +195,12 @@ int ultrastor_detect(int hostnum)
     PORT_ADDRESS = 0;
     for (i = 0; i < ARRAY_SIZE(ultrastor_ports_14f); i++) {
 	PORT_ADDRESS = ultrastor_ports_14f[i];
+	if(check_region(PORT_ADDRESS, 4)) continue;
+#else
+	if(check_region(PORT_ADDRESS, 4)) {
+	  printk("Ultrastor I/O space already in use\n");
+	  return FALSE;
+	};
 #endif
 
 #if (ULTRASTOR_DEBUG & UD_DETECT)
@@ -248,6 +255,7 @@ int ultrastor_detect(int hostnum)
 	   PORT_ADDRESS);
 #endif
 
+    snarf_region(PORT_ADDRESS, 4); /* Register the I/O space that we use */
     /* All above tests passed, must be the right thing.  Get some useful
        info. */
     *(char *)&config_1 = inb(CONFIG(PORT_ADDRESS + 0));
@@ -348,7 +356,7 @@ static inline void build_sg_list(Scsi_Cmnd *SCpnt)
 	/* Save ourselves some casts; can eliminate when we don't have to look at it anymore! */
 	sglist = (ultrastor_sg_list *) SCpnt->host_scribble;
 	for (i = 0; i < SCpnt->use_sg; i++) {
-		sglist[i].address = sl[i].address;
+		sglist[i].address = (unsigned long) sl[i].address;
 		sglist[i].num_bytes = sl[i].length;
 		transfer_length += sl[i].length;
 	}

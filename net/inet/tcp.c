@@ -1433,9 +1433,11 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
   t1->dest = th->source;
   t1->source = th->dest;
   t1->seq = th->ack_seq; /* add one so it will be in the right range */
+  t1->ack_seq = htonl(ntohl(th->seq)+1);
   t1->rst = 1;
+  t1->ack_seq = htonl(ntohl(th->seq)+1); /* send correct ack -FB */
   t1->window = 0;		/* should be set to 0 -FB */
-  t1->ack = 0;
+  t1->ack = 1;
   t1->syn = 0;
   t1->urg = 0;
   t1->fin = 0;

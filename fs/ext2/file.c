@@ -155,6 +155,9 @@ struct inode_operations ext2_file_inode_operations = {
 			if (*bhe) {
 				wait_on_buffer (*bhe);
 				if (!(*bhe)->b_uptodate) { /* read error? */
+				        brelse(*bhe);
+					if (++bhe == &buflist[NBUF])
+					  bhe = buflist;
 					left = 0;
 					break;
 				}

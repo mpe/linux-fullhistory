@@ -42,12 +42,52 @@ unsigned long bh_active = 0;
 unsigned long bh_mask = 0xFFFFFFFF;
 struct bh_struct bh_base[32]; 
 
+void disable_irq(unsigned int irq_nr)
+{
+	unsigned long flags;
+	unsigned char mask;
+
+	mask = 1 << (irq_nr & 7);
+	save_flags(flags);
+	if (irq_nr < 8) {
+		cli();
+		cache_21 |= mask;
+		outb(cache_21,0x21);
+		restore_flags(flags);
+		return;
+	}
+	cli();
+	cache_A1 |= mask;
+	outb(cache_A1,0xA1);
+	restore_flags(flags);
+}
+
+void enable_irq(unsigned int irq_nr)
+{
+	unsigned long flags;
+	unsigned char mask;
+
+	mask = ~(1 << (irq_nr & 7));
+	save_flags(flags);
+	if (irq_nr < 8) {
+		cli();
+		cache_21 &= mask;
+		outb(cache_21,0x21);
+		restore_flags(flags);
+		return;
+	}
+	cli();
+	cache_A1 &= mask;
+	outb(cache_A1,0xA1);
+	restore_flags(flags);
+}
+
 /*
  * do_bottom_half() runs at normal kernel priority: all interrupts
  * enabled.  do_bottom_half() is atomic with respect to itself: a
  * bottom_half handler need not be re-entrant.
  */
-extern "C" void do_bottom_half(void)
+asmlinkage void do_bottom_half(void)
 {
 	unsigned long active;
 	unsigned long mask, left;
@@ -156,7 +196,7 @@ static struct sigaction irq_sigaction[16] = {
  * IRQ's should use this format: notably the keyboard/timer
  * routines.
  */
-extern "C" void do_IRQ(int irq, struct pt_regs * regs)
+asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
@@ -168,7 +208,7 @@ extern "C" void do_IRQ(int irq, struct pt_regs * regs)
  * stuff - the handler is also running with interrupts disabled unless
  * it explicitly enables them later.
  */
-extern "C" void do_fast_IRQ(int irq)
+asmlinkage void do_fast_IRQ(int irq)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 

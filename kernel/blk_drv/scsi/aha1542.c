@@ -15,6 +15,7 @@
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #include <linux/sched.h>
 #include <asm/dma.h>
@@ -178,7 +179,7 @@ int aha1542_test_port(int bse)
     
     /*  DEB(printk("aha1542_test_port called \n")); */
     
-    outb(SRST|IRST/*|SCRST*/, CONTROL);
+    outb(HRST|IRST/*|SCRST*/, CONTROL);
     
     debug = 1;
     /* Expect INIT and IDLE, any of the others are bad */
@@ -663,8 +664,10 @@ int aha1542_detect(int hostnum)
     
     indx = 0;
     while(indx < sizeof(bases)/sizeof(bases[0])){
-      i = aha1542_test_port(bases[indx]);
-      if (i) break;
+      if(!check_region(bases[indx], 4)){
+	i = aha1542_test_port(bases[indx]);
+	if (i) break;
+      };
       indx++;
     }
     if (indx == sizeof(bases)/sizeof(bases[0])) return 0;
@@ -755,6 +758,7 @@ int aha1542_detect(int hostnum)
 	  aha1542_command(0, cmd, buffer, 512);
       }
 #endif
+    snarf_region(bases[indx], 4);  /* Register the IO ports that we use */
     aha1542_host = hostnum;
     return 1;
 }

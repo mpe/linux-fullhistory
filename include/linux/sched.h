@@ -83,9 +83,10 @@ extern unsigned long avenrun[];		/* Load averages */
 extern void sched_init(void);
 extern void show_state(void);
 extern void trap_init(void);
-extern void panic(const char * str);
+extern void panic(const char * fmt, ...)
+	__attribute__ ((format (printf, 1, 2)));
 
-extern "C" void schedule(void);
+asmlinkage void schedule(void);
 
 #endif /* __KERNEL__ */
 
@@ -255,7 +256,7 @@ struct task_struct {
 /* min_flt */	0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
-		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
+		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \

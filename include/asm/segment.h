@@ -1,7 +1,7 @@
 #ifndef _ASM_SEGMENT_H
 #define _ASM_SEGMENT_H
 
-static inline unsigned char get_fs_byte(const char * addr)
+static inline unsigned char get_user_byte(const char * addr)
 {
 	register unsigned char _v;
 
@@ -9,15 +9,9 @@ static inline unsigned char get_fs_byte(const char * addr)
 	return _v;
 }
 
-static inline unsigned char get_fs_byte(const unsigned char * addr)
-{
-	register unsigned char _v;
+#define get_fs_byte(addr) get_user_byte((char *)(addr))
 
-	__asm__ ("movb %%fs:%1,%0":"=q" (_v):"m" (*addr));
-	return _v;
-}
-
-static inline unsigned short get_fs_word(const short *addr)
+static inline unsigned short get_user_word(const short *addr)
 {
 	unsigned short _v;
 
@@ -25,15 +19,9 @@ static inline unsigned short get_fs_word(const short *addr)
 	return _v;
 }
 
-static inline unsigned short get_fs_word(const unsigned short *addr)
-{
-	unsigned short _v;
+#define get_fs_word(addr) get_user_word((short *)(addr))
 
-	__asm__ ("movw %%fs:%1,%0":"=r" (_v):"m" (*addr));
-	return _v;
-}
-
-static inline unsigned long get_fs_long(const int *addr)
+static inline unsigned long get_user_long(const int *addr)
 {
 	unsigned long _v;
 
@@ -41,69 +29,28 @@ static inline unsigned long get_fs_long(const int *addr)
 	return _v;
 }
 
-static inline unsigned long get_fs_long(const unsigned int *addr)
-{
-	unsigned long _v;
+#define get_fs_long(addr) get_user_long((int *)(addr))
 
-	__asm__ ("movl %%fs:%1,%0":"=r" (_v):"m" (*addr)); \
-	return _v;
-}
-
-static inline unsigned long get_fs_long(const long *addr)
-{
-	unsigned long _v;
-
-	__asm__ ("movl %%fs:%1,%0":"=r" (_v):"m" (*addr)); \
-	return _v;
-}
-
-static inline unsigned long get_fs_long(const unsigned long *addr)
-{
-	unsigned long _v;
-
-	__asm__ ("movl %%fs:%1,%0":"=r" (_v):"m" (*addr)); \
-	return _v;
-}
-
-static inline void put_fs_byte(char val,char *addr)
+static inline void put_user_byte(char val,char *addr)
 {
 __asm__ ("movb %0,%%fs:%1": /* no outputs */ :"iq" (val),"m" (*addr));
 }
 
-static inline void put_fs_byte(char val,unsigned char *addr)
-{
-__asm__ ("movb %0,%%fs:%1": /* no outputs */ :"iq" (val),"m" (*addr));
-}
+#define put_fs_byte(x,addr) put_user_byte((x),(char *)(addr))
 
-static inline void put_fs_word(short val,short * addr)
+static inline void put_user_word(short val,short * addr)
 {
 __asm__ ("movw %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
 }
 
-static inline void put_fs_word(short val,unsigned short * addr)
-{
-__asm__ ("movw %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
-}
+#define put_fs_word(x,addr) put_user_word((x),(short *)(addr))
 
-static inline void put_fs_long(unsigned long val,int * addr)
+static inline void put_user_long(unsigned long val,int * addr)
 {
 __asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
 }
 
-static inline void put_fs_long(unsigned long val,unsigned int * addr)
-{
-__asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
-}
-
-static inline void put_fs_long(unsigned long val,long * addr)
-{
-__asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
-}
-
-static inline void put_fs_long(unsigned long val,unsigned long * addr)
-{
-__asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
-}
+#define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
 
 static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
 {

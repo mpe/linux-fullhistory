@@ -47,7 +47,7 @@ struct wait_queue * log_wait = NULL;
  * 	6 -- Disable printk's to console
  * 	7 -- Enable printk's to console
  */
-extern "C" int sys_syslog(int type, char * buf, int len)
+asmlinkage int sys_syslog(int type, char * buf, int len)
 {
 	unsigned long i, j, count;
 	int do_clear = 0;
@@ -104,7 +104,7 @@ extern "C" int sys_syslog(int type, char * buf, int len)
 				count = logged_chars;
 			j = log_start + log_size - count;
 			for (i = 0; i < count; i++) {
-				c = *((char *) log_buf + (j++ & LOG_BUF_LEN-1));
+				c = *((char *) log_buf+(j++ & (LOG_BUF_LEN-1)));
 				put_fs_byte(c, buf++);
 			}
 			if (do_clear)
@@ -124,7 +124,7 @@ extern "C" int sys_syslog(int type, char * buf, int len)
 }
 			
 
-extern "C" int printk(const char *fmt, ...)
+asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
 	int i,j;
@@ -133,7 +133,7 @@ extern "C" int printk(const char *fmt, ...)
 	i=vsprintf(buf,fmt,args);
 	va_end(args);
 	for (j = 0; j < i ; j++) {
-		log_buf[(log_start+log_size) & LOG_BUF_LEN-1] = buf[j];
+		log_buf[(log_start+log_size) & (LOG_BUF_LEN-1)] = buf[j];
 		if (log_size < LOG_BUF_LEN)
 			log_size++;
 		else

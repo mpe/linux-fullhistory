@@ -33,6 +33,73 @@
 #define	NEXT_DEV	NULL
 
 
+/* A unifed ethernet device probe.  This is the easiest way to have every
+   ethernet adaptor have the name "eth[0123...]".
+   */
+
+extern int wd_probe(struct device *dev);
+extern int el2_probe(struct device *dev);
+extern int ne_probe(struct device *dev);
+extern int hp_probe(struct device *dev);
+extern int znet_probe(struct device *);
+extern int express_probe(struct device *);
+extern int el3_probe(struct device *);
+extern int atp_probe(struct device *);
+extern int at1500_probe(struct device *);
+extern int depca_probe(struct device *);
+extern int el1_probe(struct device *);
+
+static int
+ethif_probe(struct device *dev)
+{
+    short base_addr = dev->base_addr;
+
+    if (base_addr < 0  ||  base_addr == 1)
+	return 1;		/* ENXIO */
+
+    if (1
+#if defined(CONFIG_WD80x3) || defined(WD80x3)
+	&& wd_probe(dev)
+#endif
+#if defined(CONFIG_EL2) || defined(EL2)
+	&& el2_probe(dev)
+#endif
+#if defined(CONFIG_NE2000) || defined(NE2000)
+	&& ne_probe(dev)
+#endif
+#if defined(CONFIG_HPLAN) || defined(HPLAN)
+	&& hp_probe(dev)
+#endif
+#ifdef CONFIG_AT1500
+	&& at1500_probe(dev)
+#endif
+#ifdef CONFIG_EL3
+	&& el3_probe(dev)
+#endif
+#ifdef CONFIG_ZNET
+	&& znet_probe(dev)
+#endif
+#ifdef CONFIG_EEXPRESS
+	&& express_probe(dev)
+#endif
+#ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */
+	&& atp_probe(dev)
+#endif
+#ifdef CONFIG_DEPCA
+	&& depca_probe(dev)
+#endif
+#ifdef CONFIG_EL1
+	&& el1_probe(dev)
+#endif
+	&& 1 ) {
+	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
+    }
+    return 0;
+}
+
+
+/* This remains seperate because it requires the addr and IRQ to be
+   set. */
 #if defined(D_LINK) || defined(CONFIG_DE600)
     extern int d_link_init(struct device *);
     static struct device d_link_dev = {
@@ -51,101 +118,32 @@
 #   define NEXT_DEV	(&d_link_dev)
 #endif
 
-#ifdef CONFIG_EL1
-#error 
-#   ifndef EL1_IRQ
-#	define EL1_IRQ 9
-#   endif
-#   ifndef EL1
-#	define EL1 0
-#   endif
-    extern int el1_init(struct device *);
-    static struct device el1_dev = {
-        "el0", 0, 0, 0, 0, EL1,	EL1_IRQ, 0, 0, 0, NEXT_DEV, el1_init
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&el1_dev)
-#endif  /* EL1 */
+/* The first device defaults to I/O base '0', which means autoprobe. */
+#ifdef EI8390
+# define ETH0_ADDR EI8390
+#else
+# define ETH0_ADDR 0
+#endif
+#ifdef EI8390_IRQ
+# define ETH0_IRQ EI8390_IRQ
+#else
+# define ETH0_IRQ 0
+#endif
+/* "eth0" defaults to autoprobe, other use a base of "-0x20", "don't probe".
+   Enable these with boot-time setup. 0.99pl13+ can optionally autoprobe. */
 
-#ifdef CONFIG_DEPCA
-    extern int depca_probe(struct device *);
-    static struct device depca_dev = {
-        "depca0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, depca_probe,
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&depca_dev)
-#endif  /* CONFIG_DEPCA */
+static struct device eth3_dev = {
+    "eth3", 0,0,0,0,0xffe0 /* I/O base*/, 0,0,0,0, NEXT_DEV, ethif_probe };
+static struct device eth2_dev = {
+    "eth2", 0,0,0,0,0xffe0 /* I/O base*/, 0,0,0,0, &eth3_dev, ethif_probe };
+static struct device eth1_dev = {
+    "eth1", 0,0,0,0,0xffe0 /* I/O base*/, 0,0,0,0, &eth2_dev, ethif_probe };
 
+static struct device eth0_dev = {
+    "eth0", 0, 0, 0, 0, ETH0_ADDR, ETH0_IRQ, 0, 0, 0, &eth1_dev, ethif_probe };
 
-#ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */
-    extern int atp_probe(struct device *);
-    static struct device atp_dev = {
-        "atp0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, atp_probe,
-    };
 #   undef NEXT_DEV
-#   define NEXT_DEV	(&atp_dev)
-#endif  /* CONFIG_ATP */
-
-#ifdef CONFIG_EL3
-    extern int el3_probe(struct device *);
-    static struct device eliii0_dev = {
-        "eliii0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, el3_probe,
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&eliii0_dev)
-#endif  /* CONFIG_3C509 aka EL3 */
-
-#ifdef CONFIG_ZNET
-    extern int znet_probe(struct device *);
-    static struct device znet_dev = {
-	"znet", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, znet_probe, };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&znet_dev)
-#endif  /* CONFIG_ZNET */
-
-#ifdef CONFIG_EEXPRESS
-    extern int express_probe(struct device *);
-    static struct device express0_dev = {
-	"exp0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, express_probe, };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&express0_dev)
-#endif  /* CONFIG_EEPRESS */
-
-#ifdef CONFIG_AT1500
-    extern int at1500_probe(struct device *);
-    static struct device lance_dev = {
-        "le0",
-	0,0,0,0, 0 /* I/O Base */, 0 /* pre-set IRQ */,
-        0, 0, 0, NEXT_DEV, at1500_probe,
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&lance_dev)
-#endif  /* AT1500BT */
-
-#if defined(EI8390) || defined(CONFIG_EL2) || defined(CONFIG_NE2000) \
-    || defined(CONFIG_WD80x3) || defined(CONFIG_HPLAN)
-#   ifndef EI8390
-#	define EI8390 0
-#   endif
-#   ifndef EI8390_IRQ
-#	define EI8390_IRQ 0
-#   endif
-    extern int ethif_init(struct device *);
-    static struct device ei8390_dev = {
-	"eth0",
-	0,				/* auto-config			*/
-	0,
-	0,
-	0,
-	EI8390,
-	EI8390_IRQ,
-	0, 0, 0,
-	NEXT_DEV,
-	ethif_init
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&ei8390_dev)
-#endif  /* The EI8390 drivers. */
+#   define NEXT_DEV	(&eth0_dev)
 
 #if defined(PLIP) || defined(CONFIG_PLIP)
     extern int plip_init(struct device *);

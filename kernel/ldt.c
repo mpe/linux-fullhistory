@@ -86,7 +86,7 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 	return 0;
 }
 
-extern "C" int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
+asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 {
 	if (func == 0)
 		return read_ldt(ptr, bytecount);

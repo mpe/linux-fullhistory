@@ -1,7 +1,13 @@
 
-	Linux kernel release 0.99 patchlevel 12
+	Linux kernel release 0.99 patchlevel 13
 
-These are the release notes for linux version 0.99.12.  Read them
+[ Just to show everybody that I have no personal integrity at all, this
+release is dedicated to Martin Mueller and Sebastian Hetze just because
+they wrote the German Linux Anwenderhandbuch.  The fact that they sent
+me some of the money they made on selling it has nothing at all to do
+with the dedication.  Oh, no.  That would be crass.  ]
+
+These are the release notes for linux version 0.99.13.  Read them
 carefully, as they tell you what's new, explain how to install the
 kernel, and what to do if something goes wrong. 
 

@@ -194,7 +194,7 @@ static void setup_dev(struct gendisk *dev)
 }
 	
 /* This may be used only once, enforced by 'static int callable' */
-extern "C" int sys_setup(void * BIOS)
+asmlinkage int sys_setup(void * BIOS)
 {
 	static int callable = 1;
 	struct gendisk *p;

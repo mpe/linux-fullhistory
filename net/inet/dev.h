@@ -169,6 +169,9 @@ extern int		dev_open(struct device *dev);
 extern int		dev_close(struct device *dev);
 extern void		dev_queue_xmit(struct sk_buff *skb, struct device *dev,
 				       int pri);
+#define HAVE_NETIF_RX 1
+extern void		netif_rx(struct sk_buff *skb);
+/* The old interface to netif_rx(). */
 extern int		dev_rint(unsigned char *buff, long len, int flags,
 				 struct device * dev);
 extern void		dev_transmit(void);

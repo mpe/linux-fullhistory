@@ -127,9 +127,11 @@ static void st_sleep_done (Scsi_Cmnd * SCpnt)
 /* Convert the result to success code */
 static int st_chk_result(Scsi_Cmnd * SCpnt)
 {
+#ifdef DEBUG
   int dev = SCpnt->request.dev;
+#endif
   int result = SCpnt->result;
-  char * sense = SCpnt->sense_buffer;
+  unsigned char * sense = SCpnt->sense_buffer;
 
   if (!result)
     return 0;

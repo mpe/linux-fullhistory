@@ -55,8 +55,8 @@
 #define TIOCPKT_FLUSHWRITE	 2
 #define TIOCPKT_STOP		 4
 #define TIOCPKT_START		 8
-#define TIOCPKT_DOSTOP		16
-#define TIOCPKT_NOSTOP		32
+#define TIOCPKT_NOSTOP		16
+#define TIOCPKT_DOSTOP		32
 
 struct winsize {
 	unsigned short ws_row;

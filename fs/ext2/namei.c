@@ -549,6 +549,8 @@ repeat:
 	retval = -EPERM;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_rmdir;
+	if (inode->i_dev != dir->i_dev)
+		goto end_rmdir;
 	if (de->inode != inode->i_ino) {
 		iput(inode);
 		brelse(bh);
@@ -558,8 +560,6 @@ repeat:
 	}
 	if ((dir->i_mode & S_ISVTX) && current->euid &&
 	    inode->i_uid != current->euid)
-		goto end_rmdir;
-	if (inode->i_dev != dir->i_dev)
 		goto end_rmdir;
 	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
 		goto end_rmdir;
@@ -620,6 +620,9 @@ repeat:
 		goto end_unlink;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_unlink;
+	retval = -EPERM;
+	if (S_ISDIR(inode->i_mode))
+		goto end_unlink;
 	if (de->inode != inode->i_ino) {
 		iput(inode);
 		brelse(bh);
@@ -627,12 +630,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
 	    current->euid != dir->i_uid)
-		goto end_unlink;
-	if (S_ISDIR(inode->i_mode))
 		goto end_unlink;
 	if (!inode->i_nlink) {
 		printk ("Deleting nonexistent file (%04x:%d), %d\n",
@@ -853,7 +853,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = iget (old_dir->i_sb, old_de->inode);
+	old_inode = __iget (old_dir->i_sb, old_de->inode, 0); /* don't cross mnt-points */
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -863,7 +863,7 @@ start_up:
 		goto end_rename;
 	new_bh = ext2_find_entry (new_dir, new_name, new_len, &new_de);
 	if (new_bh) {
-		new_inode = iget (new_dir->i_sb, new_de->inode);
+		new_inode = __iget (new_dir->i_sb, new_de->inode, 0); /* no mntp cross */
 		if (!new_inode) {
 			brelse (new_bh);
 			new_bh = NULL;
@@ -937,6 +937,8 @@ start_up:
 		new_inode->i_nlink--;
 		new_inode->i_dirt = 1;
 	}
+	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
+	old_dir->i_dirt = 1;
 	old_bh->b_dirt = 1;
 	new_bh->b_dirt = 1;
 	if (dir_bh) {

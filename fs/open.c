@@ -19,14 +19,14 @@
 
 #include <asm/segment.h>
 
-extern void fcntl_remove_locks(struct task_struct *, struct file *);
+extern void fcntl_remove_locks(struct task_struct *, struct file *, unsigned int fd);
 
-extern "C" int sys_ustat(int dev, struct ustat * ubuf)
+asmlinkage int sys_ustat(int dev, struct ustat * ubuf)
 {
 	return -ENOSYS;
 }
 
-extern "C" int sys_statfs(const char * path, struct statfs * buf)
+asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 {
 	struct inode * inode;
 	int error;
@@ -46,7 +46,7 @@ extern "C" int sys_statfs(const char * path, struct statfs * buf)
 	return 0;
 }
 
-extern "C" int sys_fstatfs(unsigned int fd, struct statfs * buf)
+asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 {
 	struct inode * inode;
 	struct file * file;
@@ -65,7 +65,7 @@ extern "C" int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	return 0;
 }
 
-extern "C" int sys_truncate(const char * path, unsigned int length)
+asmlinkage int sys_truncate(const char * path, unsigned int length)
 {
 	struct inode * inode;
 	int error;
@@ -91,7 +91,7 @@ extern "C" int sys_truncate(const char * path, unsigned int length)
 	return error;
 }
 
-extern "C" int sys_ftruncate(unsigned int fd, unsigned int length)
+asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 {
 	struct inode * inode;
 	struct file * file;
@@ -114,7 +114,7 @@ extern "C" int sys_ftruncate(unsigned int fd, unsigned int length)
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
  */
-extern "C" int sys_utime(char * filename, struct utimbuf * times)
+asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 {
 	struct inode * inode;
 	long actime,modtime;
@@ -155,7 +155,7 @@ extern "C" int sys_utime(char * filename, struct utimbuf * times)
  * XXX we should use the real ids for checking _all_ components of the
  * path.  Now we only use them for the final component of the path.
  */
-extern "C" int sys_access(const char * filename,int mode)
+asmlinkage int sys_access(const char * filename,int mode)
 {
 	struct inode * inode;
 	int res, i_mode;
@@ -189,7 +189,7 @@ extern "C" int sys_access(const char * filename,int mode)
 	return -EACCES;
 }
 
-extern "C" int sys_chdir(const char * filename)
+asmlinkage int sys_chdir(const char * filename)
 {
 	struct inode * inode;
 	int error;
@@ -210,7 +210,7 @@ extern "C" int sys_chdir(const char * filename)
 	return (0);
 }
 
-extern "C" int sys_chroot(const char * filename)
+asmlinkage int sys_chroot(const char * filename)
 {
 	struct inode * inode;
 	int error;
@@ -231,7 +231,7 @@ extern "C" int sys_chroot(const char * filename)
 	return (0);
 }
 
-extern "C" int sys_fchmod(unsigned int fd, mode_t mode)
+asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 {
 	struct inode * inode;
 	struct file * file;
@@ -252,7 +252,7 @@ extern "C" int sys_fchmod(unsigned int fd, mode_t mode)
 	return notify_change(NOTIFY_MODE, inode);
 }
 
-extern "C" int sys_chmod(const char * filename, mode_t mode)
+asmlinkage int sys_chmod(const char * filename, mode_t mode)
 {
 	struct inode * inode;
 	int error;
@@ -278,7 +278,7 @@ extern "C" int sys_chmod(const char * filename, mode_t mode)
 	return error;
 }
 
-extern "C" int sys_fchown(unsigned int fd, uid_t user, gid_t group)
+asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	struct file * file;
@@ -305,7 +305,7 @@ extern "C" int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	return -EPERM;
 }
 
-extern "C" int sys_chown(const char * filename, uid_t user, gid_t group)
+asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	int error;
@@ -378,18 +378,7 @@ int do_open(const char * filename,int flags,int mode)
 		f->f_count--;
 		return error;
 	}
-	if (flag & O_TRUNC) {
-		inode->i_size = 0;
-		if (inode->i_op && inode->i_op->truncate)
-			inode->i_op->truncate(inode);
-		if ((error = notify_change(NOTIFY_SIZE, inode))) {
-			iput(inode);
-			current->filp[fd] = NULL;
-			f->f_count--;
-			return error;
-		}
-		inode->i_dirt = 1;
-	}
+
 	f->f_inode = inode;
 	f->f_pos = 0;
 	f->f_reada = 0;
@@ -409,7 +398,7 @@ int do_open(const char * filename,int flags,int mode)
 	return (fd);
 }
 
-extern "C" int sys_open(const char * filename,int flags,int mode)
+asmlinkage int sys_open(const char * filename,int flags,int mode)
 {
 	char * tmp;
 	int error;
@@ -422,12 +411,12 @@ extern "C" int sys_open(const char * filename,int flags,int mode)
 	return error;
 }
 
-extern "C" int sys_creat(const char * pathname, int mode)
+asmlinkage int sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
-int close_fp(struct file *filp)
+int close_fp(struct file *filp, unsigned int fd)
 {
 	struct inode *inode;
 
@@ -437,7 +426,7 @@ int close_fp(struct file *filp)
 	}
 	inode = filp->f_inode;
 	if (inode && S_ISREG(inode->i_mode))
-		fcntl_remove_locks(current, filp);
+		fcntl_remove_locks(current, filp, fd);
 	if (filp->f_count > 1) {
 		filp->f_count--;
 		return 0;
@@ -450,7 +439,7 @@ int close_fp(struct file *filp)
 	return 0;
 }
 
-extern "C" int sys_close(unsigned int fd)
+asmlinkage int sys_close(unsigned int fd)
 {	
 	struct file * filp;
 
@@ -460,14 +449,14 @@ extern "C" int sys_close(unsigned int fd)
 	if (!(filp = current->filp[fd]))
 		return -EBADF;
 	current->filp[fd] = NULL;
-	return (close_fp (filp));
+	return (close_fp (filp, fd));
 }
 
 /*
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.
  */
-extern "C" int sys_vhangup(void)
+asmlinkage int sys_vhangup(void)
 {
 	struct tty_struct *tty;
 

@@ -21,6 +21,7 @@
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #include <linux/sched.h>
 #include <asm/dma.h>
@@ -432,6 +433,12 @@ int aha1740_detect(int hostnum)
     for ( slot=MINEISA; slot <= MAXEISA; slot++ )
     {
 	base = SLOTBASE(slot);
+
+	/* The ioports for eisa boards are generally beyond that used in the
+	   check,snarf_region code, but this may change at some point, so we
+	   go through the motions. */
+
+	if(check_region(base, 0x5c)) continue;  /* See if in use */
 	if ( aha1740_test_port())  break;
     }
     if ( slot > MAXEISA )
@@ -455,6 +462,7 @@ int aha1740_detect(int hostnum)
         printk("Unable to allocate IRQ for adaptec controller.\n");
         return 0;
     }
+    snarf_region(base, 0x5c);  /* Reserve the space that we need to use */
     return 1;
 }
 

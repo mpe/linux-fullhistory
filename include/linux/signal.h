@@ -53,6 +53,9 @@ typedef unsigned int sigset_t;		/* 32 bits */
 */
 #define SIGPWR		30
 
+/* Arggh. Bad user source code wants this.. */
+#define SIGBUS		SIGUNUSED
+
 /*
  * sa_flags values: SA_STACK is not currently supported, but will allow the
  * usage of signal stacks by using the (now obsolete) sa_restorer field in

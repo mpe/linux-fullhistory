@@ -51,7 +51,7 @@ unsigned long prof_len = 0;
 extern void mem_use(void);
 
 extern int timer_interrupt(void);
-extern "C" int system_call(void);
+asmlinkage int system_call(void);
 
 static unsigned long init_kernel_stack[1024];
 struct task_struct init_task = INIT_TASK;
@@ -82,7 +82,7 @@ struct {
  * Careful.. There are problems with IBM-designed IRQ13 behaviour.
  * Don't touch unless you *really* know how it works.
  */
-extern "C" void math_state_restore(void)
+asmlinkage void math_state_restore(void)
 {
 	__asm__ __volatile__("clts");
 	if (last_task_used_math == current)
@@ -115,7 +115,7 @@ extern "C" void math_state_restore(void)
  * The "confuse_gcc" goto is used only to get better assembly code..
  * Djikstra probably hates me.
  */
-extern "C" void schedule(void)
+asmlinkage void schedule(void)
 {
 	int c;
 	struct task_struct * p;
@@ -143,7 +143,16 @@ extern "C" void schedule(void)
 confuse_gcc1:
 
 /* this is the scheduler proper: */
-
+#if 0
+	/* give processes that go to sleep a bit higher priority.. */
+	/* This depends on the values for TASK_XXX */
+	/* This gives smoother scheduling for some things, but */
+	/* can be very unfair under some circumstances, so.. */
+ 	if (TASK_UNINTERRUPTIBLE >= (unsigned) current->state &&
+	    current->counter < current->priority*2) {
+		++current->counter;
+	}
+#endif
 	c = -1;
 	next = p = &init_task;
 	for (;;) {
@@ -160,7 +169,7 @@ confuse_gcc2:
 	switch_to(next);
 }
 
-extern "C" int sys_pause(void)
+asmlinkage int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
@@ -193,9 +202,9 @@ void wake_up(struct wait_queue **q)
 		}
 		if (!tmp->next) {
 			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
-			printk("        q = %08x\n",q);
-			printk("       *q = %08x\n",*q);
-			printk("      tmp = %08x\n",tmp);
+			printk("        q = %p\n",q);
+			printk("       *q = %p\n",*q);
+			printk("      tmp = %p\n",tmp);
 			break;
 		}
 		tmp = tmp->next;
@@ -219,9 +228,9 @@ void wake_up_interruptible(struct wait_queue **q)
 		}
 		if (!tmp->next) {
 			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
-			printk("        q = %08x\n",q);
-			printk("       *q = %08x\n",*q);
-			printk("      tmp = %08x\n",tmp);
+			printk("        q = %p\n",q);
+			printk("       *q = %p\n",*q);
+			printk("      tmp = %p\n",tmp);
 			break;
 		}
 		tmp = tmp->next;
@@ -421,7 +430,7 @@ static void do_timer(struct pt_regs * regs)
 	sti();
 }
 
-extern "C" int sys_alarm(long seconds)
+asmlinkage int sys_alarm(long seconds)
 {
 	struct itimerval it_new, it_old;
 
@@ -432,37 +441,37 @@ extern "C" int sys_alarm(long seconds)
 	return(it_old.it_value.tv_sec + (it_old.it_value.tv_usec / 1000000));
 }
 
-extern "C" int sys_getpid(void)
+asmlinkage int sys_getpid(void)
 {
 	return current->pid;
 }
 
-extern "C" int sys_getppid(void)
+asmlinkage int sys_getppid(void)
 {
 	return current->p_pptr->pid;
 }
 
-extern "C" int sys_getuid(void)
+asmlinkage int sys_getuid(void)
 {
 	return current->uid;
 }
 
-extern "C" int sys_geteuid(void)
+asmlinkage int sys_geteuid(void)
 {
 	return current->euid;
 }
 
-extern "C" int sys_getgid(void)
+asmlinkage int sys_getgid(void)
 {
 	return current->gid;
 }
 
-extern "C" int sys_getegid(void)
+asmlinkage int sys_getegid(void)
 {
 	return current->egid;
 }
 
-extern "C" int sys_nice(long increment)
+asmlinkage int sys_nice(long increment)
 {
 	int newprio;
 

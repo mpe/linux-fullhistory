@@ -44,13 +44,13 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-extern "C" int sys_exit(int exit_code);
-extern "C" int sys_close(unsigned fd);
-extern "C" int sys_open(const char *, int, int);
+asmlinkage int sys_exit(int exit_code);
+asmlinkage int sys_close(unsigned fd);
+asmlinkage int sys_open(const char *, int, int);
 
 extern void shm_exit (void);
 
-static int open_inode(struct inode * inode, int mode)
+int open_inode(struct inode * inode, int mode)
 {
 	int error, fd;
 	struct file *f, **fpp;
@@ -116,6 +116,7 @@ int core_dump(long signr, struct pt_regs * regs)
 	struct file file;
 	unsigned short fs;
 	int has_dumped = 0;
+	char corefile[6+sizeof(current->comm)];
 	register int dump_start, dump_size;
 	struct user dump;
 
@@ -128,7 +129,9 @@ int core_dump(long signr, struct pt_regs * regs)
 		return 0;
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	if (open_namei("core",O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
+	memcpy(corefile,"core.",5);
+	memcpy(corefile+5,current->comm,sizeof(current->comm));
+	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
 		inode = NULL;
 		goto end_coredump;
 	}
@@ -225,7 +228,7 @@ end_coredump:
  *
  * Also note that we take the address to load from from the file itself.
  */
-extern "C" int sys_uselib(const char * library)
+asmlinkage int sys_uselib(const char * library)
 {
 	int fd, retval;
 	struct file * file;
@@ -316,7 +319,7 @@ static int count(char ** argv)
  * it is expensive to load a segment register, we try to avoid calling
  * set_fs() unless we absolutely have to.
  */
-static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
+unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
 	char *tmp, *pag = NULL;
@@ -459,7 +462,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->mmap = NULL;
 	while (mpnt) {
 		mpnt1 = mpnt->vm_next;
-		if (mpnt->vm_ops->close)
+		if (mpnt->vm_ops && mpnt->vm_ops->close)
 			mpnt->vm_ops->close(mpnt);
 		kfree(mpnt);
 		mpnt = mpnt1;
@@ -649,6 +652,7 @@ restart_interp:
 		}
 	}
 
+	bprm.sh_bang = sh_bang;
 	fmt = formats;
 	do {
 		int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
@@ -672,7 +676,7 @@ exec_error1:
 /*
  * sys_execve() executes a new program.
  */
-extern "C" int sys_execve(struct pt_regs regs)
+asmlinkage int sys_execve(struct pt_regs regs)
 {
 	int error;
 	char * filename;
@@ -694,9 +698,16 @@ extern int load_aout_binary(struct linux_binprm *,
 			    struct pt_regs * regs);
 extern int load_aout_library(int fd);
 
+extern int load_elf_binary(struct linux_binprm *,
+			    struct pt_regs * regs);
+extern int load_elf_library(int fd);
+
 /* Here are the actual binaries that will be accepted  */
 struct linux_binfmt formats[] = {
 	{load_aout_binary, load_aout_library},
+#ifdef CONFIG_BINFMT_ELF
+	{load_elf_binary, load_elf_library},
+#endif
 	{NULL, NULL}
 };
 
@@ -713,17 +724,20 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned long p = bprm->p;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
-	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC) ||
+	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC && 
+	     N_MAGIC(ex) != QMAGIC) ||
 	    ex.a_trsize || ex.a_drsize ||
 	    bprm->inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
-	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
+
+	if (N_MAGIC(ex) == ZMAGIC &&
 	    (N_TXTOFF(ex) < bprm->inode->i_sb->s_blocksize)) {
 		printk("N_TXTOFF < BLOCK_SIZE. Please convert binary.");
 		return -ENOEXEC;
 	}
-	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) != OMAGIC) {
+
+	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) == ZMAGIC) {
 		printk("N_TXTOFF != BLOCK_SIZE. See a.out.h.");
 		return -ENOEXEC;
 	}
@@ -732,7 +746,10 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	flush_old_exec(bprm);
 	current->start_brk = current->brk = ex.a_bss +
 		(current->end_data = ex.a_data +
-		 (current->end_code = ex.a_text));
+		 (current->end_code = N_TXTADDR(ex) + ex.a_text));
+
+	current->start_code += N_TXTADDR(ex);
+
 	current->rss = 0;
 	current->suid = current->euid = bprm->e_uid;
 	current->mmap = NULL;
@@ -751,23 +768,25 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		file = current->filp[fd];
 		if (!file->f_op || !file->f_op->mmap) {
 			sys_close(fd);
-			read_exec(bprm->inode, 1024, (char *) 0, ex.a_text+ex.a_data);
+			read_exec(bprm->inode, N_TXTOFF(ex), 
+				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data);
 			goto beyond_if;
 		}
-		error = do_mmap(file, 0, ex.a_text,
+		error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
 				PROT_READ | PROT_EXEC,
 				MAP_FIXED | MAP_SHARED, N_TXTOFF(ex));
-		if (error != 0) {
+
+		if (error != N_TXTADDR(ex)) {
 			sys_close(fd);
 			send_sig(SIGSEGV, current, 0);
 			return 0;
 		};
 		
-		error = do_mmap(file, ex.a_text, ex.a_data,
+ 		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE, N_TXTOFF(ex) + ex.a_text);
 		sys_close(fd);
-		if (error != ex.a_text) {
+		if (error != N_TXTADDR(ex) + ex.a_text) {
 			send_sig(SIGSEGV, current, 0);
 			return 0;
 		};
@@ -775,7 +794,7 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		bprm->inode->i_count++;
 	}
 beyond_if:
-	zeromap_page_range((ex.a_text + ex.a_data + 0xfff) & 0xfffff000,ex.a_bss, PAGE_COPY);
+	zeromap_page_range((N_TXTADDR(ex) + ex.a_text + ex.a_data + 0xfff) & 0xfffff000,ex.a_bss, PAGE_COPY);
 	p += change_ldt(ex.a_text,bprm->page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;
 	p = (unsigned long) create_tables((char *)p,bprm->argc,bprm->envc);
@@ -795,6 +814,7 @@ int load_aout_library(int fd)
 	struct  inode * inode;
 	unsigned int len;
 	unsigned int bss;
+	unsigned int start_addr;
 	int error;
 	
 	file = current->filp[fd];
@@ -807,8 +827,8 @@ int load_aout_library(int fd)
 	set_fs(USER_DS);
 	
 	/* We come in here for the regular a.out style of shared libraries */
-	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize ||
-	    ex.a_drsize || ex.a_entry & 0xfff ||
+	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || ex.a_trsize ||
+	    ex.a_drsize || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
 	    inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
@@ -818,15 +838,22 @@ int load_aout_library(int fd)
 		return -ENOEXEC;
 	}
 	
+	if (N_FLAGS(ex)) return -ENOEXEC;
+
+	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
+	   this off to get the starting address for the page */
+
+	start_addr =  ex.a_entry & 0xfffff000;
+
 	/* Now use mmap to map the library into memory. */
-	error = do_mmap(file, ex.a_entry, ex.a_text + ex.a_data,
+	error = do_mmap(file, start_addr, ex.a_text + ex.a_data,
 			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_FIXED | MAP_PRIVATE,
 			N_TXTOFF(ex));
-	if (error != ex.a_entry)
+	if (error != start_addr)
 		return error;
 	len = (ex.a_text + ex.a_data + 0xfff) & 0xfffff000;
 	bss = ex.a_text + ex.a_data + ex.a_bss;
 	if (bss > len)
-		zeromap_page_range(ex.a_entry + len, bss-len, PAGE_COPY);
+		zeromap_page_range(start_addr + len, bss-len, PAGE_COPY);
 	return 0;
 }

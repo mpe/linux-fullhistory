@@ -38,10 +38,7 @@ static unsigned	oddplterms[HIPOWERop][2] =
   { 0xf1dd2dbf, 0x000a530a }
 };
 
-
-static unsigned denomterm[2] =
-{ 0xfc4bd208, 0xea2e6612 };
-
+static unsigned long long denomterm = 0xea2e6612fc4bd208LL;
 
 
 /*--- poly_atan() -----------------------------------------------------------+
@@ -53,7 +50,7 @@ void	poly_atan(FPU_REG *arg)
   short		exponent;
   FPU_REG       odd_poly, even_poly, pos_poly, neg_poly, ratio;
   FPU_REG       argSq;
-  long long     arg_signif, argSqSq;
+  unsigned long long     arg_signif, argSqSq;
   
 
 #ifdef PARANOID
@@ -97,20 +94,20 @@ void	poly_atan(FPU_REG *arg)
 
 	  recursions++;
 
-	  arg_signif = *(long long *)&(arg->sigl);
+	  arg_signif = significand(arg);
 	  if ( exponent < -1 )
 	    {
 	      if ( shrx(&arg_signif, -1-exponent) >= 0x80000000U )
 		arg_signif++;	/* round up */
 	    }
-	  *(long long *)&(numerator.sigl) = -arg_signif;
+	  significand(&numerator) = -arg_signif;
 	  numerator.exp = EXP_BIAS - 1;
 	  normalize(&numerator);                       /* 1 - arg */
 
-	  arg_signif = *(long long *)&(arg->sigl);
+	  arg_signif = significand(arg);
 	  if ( shrx(&arg_signif, -exponent) >= 0x80000000U )
 	    arg_signif++;	/* round up */
-	  *(long long *)&(denom.sigl) = arg_signif;
+	  significand(&denom) = arg_signif;
 	  denom.sigh |= 0x80000000;                    /* 1 + arg */
 
 	  arg->exp = numerator.exp;
@@ -120,7 +117,7 @@ void	poly_atan(FPU_REG *arg)
 	}
     }
 
-  *(long long *)&arg_signif = *(long long *)&(arg->sigl);
+  arg_signif = significand(arg);
 
 #ifdef PARANOID
   /* This must always be true */
@@ -136,8 +133,8 @@ void	poly_atan(FPU_REG *arg)
   
   /* Now have arg_signif with binary point at the left
      .1xxxxxxxx */
-  mul64(&arg_signif, &arg_signif, (long long *)(&argSq.sigl));
-  mul64((long long *)(&argSq.sigl), (long long *)(&argSq.sigl), &argSqSq);
+  mul64(&arg_signif, &arg_signif, &significand(&argSq));
+  mul64(&significand(&argSq), &significand(&argSq), &argSqSq);
 
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(pos_poly.sign) = 0;
@@ -146,8 +143,8 @@ void	poly_atan(FPU_REG *arg)
   /* Do the basic fixed point polynomial evaluation */
   polynomial(&pos_poly.sigl, (unsigned *)&argSqSq,
 	     (unsigned short (*)[4])oddplterms, HIPOWERop-1);
-  mul64((long long *)(&argSq.sigl), (long long *)(&pos_poly.sigl),
-	(long long *)(&pos_poly.sigl));
+  mul64(&significand(&argSq), &significand(&pos_poly),
+	&significand(&pos_poly));
 
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(neg_poly.sign) = 0;
@@ -158,7 +155,7 @@ void	poly_atan(FPU_REG *arg)
 	     (unsigned short (*)[4])oddnegterms, HIPOWERon-1);
 
   /* Subtract the mantissas */
-  *((long long *)(&pos_poly.sigl)) -= *((long long *)(&neg_poly.sigl));
+  significand(&pos_poly) -= significand(&neg_poly);
 
   reg_move(&pos_poly, &odd_poly);
   poly_add_1(&odd_poly);
@@ -166,8 +163,7 @@ void	poly_atan(FPU_REG *arg)
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(even_poly.sign) = 0;
 
-  mul64((long long *)(&argSq.sigl),
-	(long long *)(&denomterm), (long long *)(&even_poly.sigl));
+  mul64(&significand(&argSq), &denomterm, &significand(&even_poly));
 
   poly_add_1(&even_poly);
 
@@ -198,7 +194,7 @@ char round = (src->sigl & 3) == 3;
 shrx(&src->sigl, 1);
 
 #ifdef OBSOLETE
-if ( round ) (*(long long *)&src->sigl)++;   /* Round to even */
+if ( round ) significand(src)++;   /* Round to even */
 #endif OBSOLETE
 
 src->sigh |= 0x80000000;

@@ -6,15 +6,15 @@ extern void stack_underflow(void);
 extern void stack_underflow_i(int i);
 extern void stack_underflow_pop(int i);
 extern int set_precision_flag(int flags);
-extern "C" void exception(int n);
-extern "C" int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
-extern "C" int arith_invalid(FPU_REG *dest);
-extern "C" int divide_by_zero(int sign, FPU_REG *dest);
-extern "C" void set_precision_flag_up(void);
-extern "C" void set_precision_flag_down(void);
-extern "C" int denormal_operand(void);
-extern "C" int arith_overflow(FPU_REG *dest);
-extern "C" int arith_underflow(FPU_REG *dest);
+asmlinkage void exception(int n);
+asmlinkage int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
+asmlinkage int arith_invalid(FPU_REG *dest);
+asmlinkage int divide_by_zero(int sign, FPU_REG *dest);
+asmlinkage void set_precision_flag_up(void);
+asmlinkage void set_precision_flag_down(void);
+asmlinkage int denormal_operand(void);
+asmlinkage int arith_overflow(FPU_REG *dest);
+asmlinkage int arith_underflow(FPU_REG *dest);
 
 /* fpu_arith.c */
 extern void fadd__(void);
@@ -50,7 +50,7 @@ extern void fst_i_(void);
 extern void fstp_i(void);
 
 /* fpu_entry.c */
-extern "C" void math_emulate(long arg);
+asmlinkage void math_emulate(long arg);
 extern void __math_abort(struct info *info, unsigned int signal);
 
 /* fpu_etc.c */

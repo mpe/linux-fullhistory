@@ -17,11 +17,12 @@
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-12B 8/12/93 Donald Becker (becker@super.org)\n";
+    "ne.c:v0.99-13 8/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/errno.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #ifndef port_read
@@ -41,7 +42,7 @@ static char *version =
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
-int neprobe(int ioaddr, struct device *dev);
+int ne_probe(struct device *dev);
 static int neprobe1(int ioaddr, struct device *dev, int verbose);
 
 static void ne_reset_8390(struct device *dev);
@@ -72,17 +73,28 @@ static void ne_block_output(struct device *dev, const int count,
 	E2010	 starts at 0x100 and ends at 0x4000.
 	E2010-x starts at 0x100 and ends at 0xffff.  */
 
-int neprobe(int ioaddr,  struct device *dev)
+int ne_probe(struct device *dev)
 {
     int *port, ports[] = {0x300, 0x280, 0x320, 0x340, 0x360, 0};
+    short ioaddr = dev->base_addr;
 
+    if (ioaddr < 0)
+	return ENXIO;		/* Don't probe at all. */
     if (ioaddr > 0x100)
-	return neprobe1(ioaddr, dev, 1);
+	return ! neprobe1(ioaddr, dev, 1);
 
-    for (port = &ports[0]; *port; port++)
-	if (inb_p(*port) != 0xff && neprobe1(*port, dev, 0))
-	    return dev->base_addr = *port;
-    return 0;
+    for (port = &ports[0]; *port; port++) {
+#ifdef HAVE_PORTRESERVE
+	if (check_region(*port, 32))
+	    continue;
+#endif
+	if (inb_p(*port) != 0xff && neprobe1(*port, dev, 0)) {
+	    dev->base_addr = *port;
+	    return 0;
+	}
+    }
+    dev->base_addr = ioaddr;
+    return ENODEV;
 }
 
 static int neprobe1(int ioaddr, struct device *dev, int verbose)
@@ -216,12 +228,15 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	}
     }
 
-    printk("\n%s: %s found at %#x, using IRQ %d.\n",
-	   dev->name, name, ioaddr, dev->irq);
-
     dev->base_addr = ioaddr;
 
+#ifdef HAVE_PORTRESERVE
+    snarf_region(ioaddr, 32);
+#endif
+
     ethdev_init(dev);
+    printk("\n%s: %s found at %#x, using IRQ %d.\n",
+	   dev->name, name, ioaddr, dev->irq);
 
     if (ei_debug > 0)
 	printk(version);

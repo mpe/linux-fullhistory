@@ -16,7 +16,7 @@
 */
 
 static char *version =
-    "el2.c:v0.99.12B 8/12/93 Donald Becker (becker@super.org)\n";
+    "el2.c:v0.99.13 8/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -30,9 +30,9 @@ static char *version =
 #include "8390.h"
 #include "el2reg.h"
 
-int el2autoprobe(int ioaddr, struct device *dev);
+int el2_probe(struct device *dev);
 int el2_pio_autoprobe(struct device *dev);
-int el2probe(int ioaddr, struct device *dev);
+int el2probe1(int ioaddr, struct device *dev);
 
 static int el2_open(struct device *dev);
 static int el2_close(struct device *dev);
@@ -55,13 +55,15 @@ static int el2_block_input(struct device *dev, int count, char *buf,
 static int ports[] = {0x300,0x310,0x330,0x350,0x250,0x280,0x2a0,0x2e0,0};
 
 int
-el2autoprobe(int ioaddr, struct device *dev)
+el2_probe(struct device *dev)
 {
     int *addr, addrs[] = { 0xddffe, 0xd9ffe, 0xcdffe, 0xc9ffe, 0};
+    short ioaddr = dev->base_addr;
 
-    /* Non-autoprobe case first: */
+    if (ioaddr < 0)
+	return ENXIO;		/* Don't probe at all. */
     if (ioaddr > 0)
-	return el2probe(ioaddr, dev);
+	return ! el2probe1(ioaddr, dev);
 
     for (addr = addrs; *addr; addr++) {
 	int i;
@@ -70,13 +72,19 @@ el2autoprobe(int ioaddr, struct device *dev)
 	for(i = 7; i >= 0; i--, base_bits >>= 1)
 	    if (base_bits & 0x1)
 		break;
-	if (base_bits == 1 &&  el2probe(ports[i], dev))
-	    return dev->base_addr;
+	if (base_bits != 1)
+	    continue;
+#ifdef HAVE_PORTRESERVE
+	if (check_region(ports[i], 16))
+	    continue;
+#endif
+	if (el2probe1(ports[i], dev))
+	    return 0;
     }
-#ifdef probe_nonshared_memory
+#ifndef no_probe_nonshared_memory
     return el2_pio_autoprobe(dev);
 #else
-    return 0;
+    return ENODEV;
 #endif
 }
 
@@ -87,21 +95,25 @@ el2_pio_autoprobe(struct device *dev)
 {
     int i;
     for (i = 0; i < 8; i++) {
+#ifdef HAVE_PORTRESERVE
+	if (check_region(ports[i], 16))
+	    continue;
+#endif
 	/* Reset and/or avoid any lurking NE2000 */
 	if (inb_p(ports[i] + 0x408) == 0xff)
 	    continue;
 	if (inb(ports[i] + 0x403) == (0x80 >> i) /* Preliminary check */
-	    && el2probe(ports[i], dev))
-	    return dev->base_addr;
+	    && el2probe1(ports[i], dev))
+	    return 0;
     }
-    return 0;
+    return ENODEV;
 }
 
 /* Probe for the Etherlink II card at I/O port base IOADDR,
    returning non-zero on sucess.  If found, set the station
    address and memory parameters in DEVICE. */
 int
-el2probe(int ioaddr, struct device *dev)
+el2probe1(int ioaddr, struct device *dev)
 {
     int i, iobase_reg, membase_reg, saved_406;
     unsigned char *station_addr = dev->dev_addr;
@@ -134,6 +146,9 @@ el2probe(int ioaddr, struct device *dev)
 	return 0;
     }
 
+#ifdef HAVE_PORTRESERVE
+    snarf_region(ioaddr, 16);
+#endif
     ethdev_init(dev);
 
     /* Map the 8390 back into the window. */
@@ -336,10 +351,10 @@ el2_block_output(struct device *dev, int count,
 	memcpy(dest_addr, buf, count);
 	if (ei_debug > 2  &&  memcmp(dest_addr, buf, count))
 	    printk("%s: 3c503 send_packet() bad memory copy @ %#5x.\n",
-		   dev->name, dest_addr);
+		   dev->name, (int) dest_addr);
 	else if (ei_debug > 4)
 	    printk("%s: 3c503 send_packet() good memory copy @ %#5x.\n",
-		   dev->name, dest_addr);
+		   dev->name, (int) dest_addr);
 	return;
     }
     /* No shared memory, put the packet out the slow way. */
@@ -383,7 +398,7 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	    if (ei_debug > 4)
 		printk("%s: 3c503 block_input() @ %#5x+%x=%5x.\n",
 		       dev->name, dev->mem_start, ring_offset,
-		       (char *)dev->mem_start + ring_offset);
+		       dev->mem_start + ring_offset);
 	    memcpy(buf, (char *)dev->mem_start + ring_offset, semi_count);
 	    count -= semi_count;
 	    memcpy(buf + semi_count, (char *)dev->rmem_start, count);
@@ -392,7 +407,7 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	if (ei_debug > 4)
 	    printk("%s: 3c503 block_input() @ %#5x+%x=%5x.\n",
 		   dev->name, dev->mem_start, ring_offset,
-		   (char *)dev->mem_start + ring_offset);
+		   dev->mem_start + ring_offset);
 	memcpy(buf, (char *)dev->mem_start + ring_offset, count);
 	return ring_offset + count;
     }

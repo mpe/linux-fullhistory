@@ -274,7 +274,7 @@ int kill_proc(int pid, int sig, int priv)
  * POSIX specifies that kill(-1,sig) is unspecified, but what we have
  * is probably wrong.  Should make it like BSD or SYSV.
  */
-extern "C" int sys_kill(int pid,int sig)
+asmlinkage int sys_kill(int pid,int sig)
 {
 	int err, retval = 0, count = 0;
 
@@ -376,7 +376,7 @@ fake_volatile:
 		current->mmap = NULL;
 		while (mpnt) {
 			mpnt1 = mpnt->vm_next;
-			if (mpnt->vm_ops->close)
+			if (mpnt->vm_ops && mpnt->vm_ops->close)
 				mpnt->vm_ops->close(mpnt);
 			kfree(mpnt);
 			mpnt = mpnt1;
@@ -491,12 +491,12 @@ fake_volatile:
 	goto fake_volatile;
 }
 
-extern "C" int sys_exit(int error_code)
+asmlinkage int sys_exit(int error_code)
 {
 	do_exit((error_code&0xff)<<8);
 }
 
-extern "C" int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
+asmlinkage int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
 {
 	int flag, retval;
 	struct wait_queue wait = { current, NULL };
@@ -587,7 +587,7 @@ end_wait4:
  * sys_waitpid() remains for compatibility. waitpid() should be
  * implemented by calling sys_wait4() from libc.a.
  */
-extern "C" int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
+asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 {
 	return sys_wait4(pid, stat_addr, options, NULL);
 }
