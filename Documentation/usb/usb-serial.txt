@@ -46,7 +46,7 @@ ConnectTech WhiteHEAT 4 port converter
 
 Current status:
   The device's firmware is downloaded on connection, the new firmware 
-  runs properly and all four ports are successfuly recognized and connected.
+  runs properly and all four ports are successfully recognized and connected.
   Data can be sent and received through the device on all ports.
   Hardware flow control needs to be implemented.
 

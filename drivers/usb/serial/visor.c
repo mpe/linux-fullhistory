@@ -434,3 +434,5 @@ void visor_exit (void)
 module_init(visor_init);
 module_exit(visor_exit);
 
+MODULE_AUTHOR("Greg Kroah-Hartman <greg@kroah.com>");
+MODULE_DESCRIPTION("USB HandSpring Visor driver");

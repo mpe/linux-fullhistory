@@ -9,7 +9,7 @@
  *    what file operation caused you trouble and if you can duplicate
  *    the problem, send a script that demonstrates it.
  *
- *  Short name translation 1999 by Wolfram Pienkoss <wp@bsz.shk.th.schule.de>
+ *  Short name translation 1999 by Wolfram Pienkoss <wp@bszh.de>
  */
 
 #define __NO_VERSION__

@@ -12,18 +12,19 @@ CFLAGS_protocol.o:= -I../../scsi/
 CFLAGS_transport.o:= -I../../scsi/
 CFLAGS_debug.o:= -I../../scsi/
 CFLAGS_usb.o:= -I../../scsi/
-CFLAGS_scm.o:= -I../../scsi/
+CFLAGS_shuttle_usbat.o:= -I../../scsi/
+CFLAGS_sddr09.o:= -I../../scsi/
 
 ifeq ($(CONFIG_USB_STORAGE_DEBUG),y)
 	O_OBJS += debug.o
 endif
 
 ifeq ($(CONFIG_USB_STORAGE_HP8200e),y)
-	O_OBJS += scm.o
+	O_OBJS += shuttle_usbat.o
 endif
 
 ifeq ($(CONFIG_USB_STORAGE_SDDR09),y)
-	O_OBJS += scm.o
+	O_OBJS += sddr09.o
 endif
 
 ifeq ($(CONFIG_USB_STORAGE_FREECOM),y)

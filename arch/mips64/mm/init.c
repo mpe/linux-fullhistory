@@ -200,7 +200,7 @@ int do_check_pgt_cache(int low, int high)
 asmlinkage int sys_cacheflush(void *addr, int bytes, int cache)
 {
 	/* XXX Just get it working for now... */
-	flush_cache_all();
+	flush_cache_l1();
 	return 0;
 }
 

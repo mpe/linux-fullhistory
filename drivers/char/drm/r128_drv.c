@@ -466,8 +466,6 @@ int r128_open(struct inode *inode, struct file *filp)
 		spin_unlock(&dev->count_lock);
 	}
 	
-	unlock_kernel();
-
 	return retcode;
 }
 

@@ -117,7 +117,7 @@ extern void __global_restore_flags(unsigned long);
 #define sti() __global_sti()
 #define save_flags(x) ((x)=__global_save_flags())
 #define restore_flags(x) __global_restore_flags(x)
-#define save_and_cli(x) do { save_flags(flags); cli(); } while(0)
+#define save_and_cli(x) do { save_flags(x); cli(); } while(0)
 
 #else
 

@@ -1,4 +1,3 @@
-# $Id: Makefile,v 1.5 2000/01/21 22:34:03 ralf Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -33,7 +32,7 @@ endif
 # machines may also.  Since BFD is incredibly buggy with respect to
 # crossformat linking we rely on the elf2ecoff tool for format conversion.
 #
-CFLAGS		+= -mabi=64 -G 0 -mno-abicalls -fno-pic -pipe
+CFLAGS		+= -mabi=64 -G 0 -mno-abicalls -fno-pic -Wa,--trap -pipe
 LINKFLAGS	+= -G 0 -static # -N
 MODFLAGS	+= -mlong-calls
 

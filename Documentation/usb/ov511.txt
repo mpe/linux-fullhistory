@@ -158,7 +158,7 @@ MODULE PARAMETERS:
   DEFAULT: 5
   DESC: This is the number of times the driver will try to sync and detect the
         internal i2c bus (which connects the OV511 and sensor). If you are
-        getting intermittant detection failures ("Failed to read sensor ID...")
+        getting intermittent detection failures ("Failed to read sensor ID...")
         you should increase this by a modest amount. If setting it to 20 or so
         doesn't fix things, look elsewhere for the cause of the problem.
 

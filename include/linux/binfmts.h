@@ -11,13 +11,16 @@
  */
 #define MAX_ARG_PAGES 32
 
+/* sizeof(linux_binprm->buf) */
+#define BINPRM_BUF_SIZE 128
+
 #ifdef __KERNEL__
 
 /*
  * This structure is used to hold the arguments that are used when loading binaries.
  */
 struct linux_binprm{
-	char buf[128];
+	char buf[BINPRM_BUF_SIZE];
 	struct page *page[MAX_ARG_PAGES];
 	unsigned long p; /* current top of mem */
 	int sh_bang;

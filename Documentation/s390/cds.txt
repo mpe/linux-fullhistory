@@ -778,7 +778,7 @@ flag    : 0 (zero) or DOIO_WAIT_FOR_INTERRUPT
 The halt_IO() function returns :
 
       0 - successful completion or request successfuly initiated
--EBUSY  - the device is currently performing a sysnchonous I/O
+-EBUSY  - the device is currently performing a synchronous I/O
           operation : do_IO() with flag DOIO_WAIT_FOR_INTERRUPT
           or an error was encountered and the device is currently
           be sensed

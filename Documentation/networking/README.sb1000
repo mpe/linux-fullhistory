@@ -30,7 +30,7 @@ cable modem easy.
       http://home.adelphia.net/~siglercm/sb1000.html
       http://linuxpower.cx/~cable/
 
-   along with these utilties.
+   along with these utilities.
 
 3.) The standard isapnp tools.  These are necessary to configure your SB1000
 card at boot time (or afterwards by hand) since it's a PnP card.

@@ -62,5 +62,5 @@ Errata:
 
 This driver is under the GNU General Public License. Its Firmware image is
 included as an initialized C-array and is licensed by SMC to the Linux
-users of this driver. However no waranty about its fitness is expressed or
+users of this driver. However no warranty about its fitness is expressed or
 implied by SMC.

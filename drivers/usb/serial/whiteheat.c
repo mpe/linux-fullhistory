@@ -549,3 +549,5 @@ void whiteheat_exit (void)
 module_init(whiteheat_init);
 module_exit(whiteheat_exit);
 
+MODULE_AUTHOR("Greg Kroah-Hartman <greg@kroah.com>");
+MODULE_DESCRIPTION("USB ConnectTech WhiteHEAT driver");

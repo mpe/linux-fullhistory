@@ -146,7 +146,7 @@ README for the ISDN-subsystem
                             x = 38400: 198
                           Note on value in Reg 19:
                             There is _NO_ common convention for 38400 baud.
-                            The value 198 is choosen arbitrarily. Users
+                            The value 198 is chosen arbitrarily. Users
                             _MUST_ negotiate this value before establishing
                             a connection.
                AT&Sx    Set window-size (x = 1..8) (not yet implemented)

@@ -126,7 +126,7 @@ for details) through the following functions:
   __s32 i2c_smbus_read_block_data(int file, __u8 command, __u8 *values);
   __s32 i2c_smbus_write_block_data(int file, __u8 command, __u8 length, 
                                    __u8 *values);
-All these tranactions return -1 on failure; you can read errno to see
+All these transactions return -1 on failure; you can read errno to see
 what happened. The 'write' transactions return 0 on success; the
 'read' transactions return the read value, except for read_block, which
 returns the number of values read. The block buffers need not be longer

@@ -1,5 +1,4 @@
-/* $Id: binfmt_elf32.c,v 1.1 1999/11/24 06:56:13 ralf Exp $
- *
+/*
  * Support for 32-bit Linux/MIPS ELF binaries.
  *
  * Copyright (C) 1999 Ralf Baechle
@@ -28,7 +27,8 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
-#define elf_check_arch(x)	((x)->e_machine == EM_MIPS || (x)->e_machine == EM_MIPS_RS4_BE)
+#define elf_check_arch(x)	\
+	((x)->e_machine == EM_MIPS || (x)->e_machine == EM_MIPS_RS4_BE)
 
 #define TASK32_SIZE		0x80000000UL
 #undef ELF_ET_DYN_BASE

@@ -23,7 +23,7 @@ usage and information passing to the completion handler.
 - URBs can be linked. After completing one URB, the next one can be
 automatically submitted. This is especially useful for ISO transfers:
 You only have read/write the data from/to the buffers in the completion 
-handler, the continous streaming itself is transparently done by the 
+handler, the continuous streaming itself is transparently done by the 
 URB-machinery.
 
 1.2. The URB structure
@@ -104,7 +104,7 @@ transfer_flags.
 
 Usually, (to reduce restart time) the completion handler is called
 AFTER the URB re-submission. You can get the other way by setting
-USB_URB_EARLY_COMPLETE in transfer_flags. This is implicite for
+USB_URB_EARLY_COMPLETE in transfer_flags. This is implicit for
 INT transfers.
 
 1.5. How to submit an URB?
@@ -131,7 +131,7 @@ For isochronous endpoints, subsequent submitting of URBs to the same endpoint
 with the ASAP flag result in a seamless ISO streaming. Exception: The 
 execution cannot be scheduled later than 900 frames from the 'now'-time. 
 The same applies to INT transfers, but here the seamless continuation is 
-independent of the transfer flags (implicitely ASAP).
+independent of the transfer flags (implicitly ASAP).
 
 1.6. How to cancel an already running URB?
 
@@ -174,14 +174,14 @@ It is allowed to specify a varying length from frame to frame (e.g. for
 audio synchronisation/adaptive transfer rates). You can also use the length 
 0 to omit one or more frames (striping).
 
-As can be concluded from above, the UHCI-driver does not care for continous
+As can be concluded from above, the UHCI-driver does not care for continuous
 data in case of short packet ISO reads! There's no fixup_isoc() like in the 
 old driver. There may be a common routine to do this in the future, but this 
 has nothing to do with the UHCI-driver!
 
 For scheduling you can choose your own start frame or ASAP. As written above,
 queuing more than one ISO frame with ASAP to the same device&endpoint result 
-in seamless ISO streaming. For continous streaming you have to use URB
+in seamless ISO streaming. For continuous streaming you have to use URB
 linking. 
 
 1.9. How to start interrupt (INT) transfers?

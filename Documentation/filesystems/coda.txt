@@ -1531,7 +1531,7 @@ kernel support.
 
 
   DDeessccrriippttiioonn Remove all entries in the cache lying in a directory
-  CodaFid, and all children of this directory. This call is issed when
+  CodaFid, and all children of this directory. This call is issued when
   Venus receives a callback on the directory.
 
 
@@ -1630,7 +1630,7 @@ kernel support.
 
   The following requirements should be accommodated:
 
-  1. The message queueus should have open and close routines.  On Unix
+  1. The message queues should have open and close routines.  On Unix
      the opening of the character devices are such routines.
 
   +o  Before opening, no messages can be placed.

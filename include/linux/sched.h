@@ -243,10 +243,24 @@ struct signal_struct {
 
 /*
  * Some day this will be a full-fledged user tracking system..
- * Right now it is only used to track how many processes a
- * user has, but it has the potential to track memory usage etc.
  */
-struct user_struct;
+struct user_struct {
+	atomic_t __count;	/* reference count */
+	atomic_t processes;	/* How many processes does this user have? */
+	atomic_t files;		/* How many open files does this user have? */
+
+	/* Hash table maintenance information */
+	struct user_struct *next, **pprev;
+	unsigned int uid;
+};
+
+#define get_current_user() ({ 				\
+	struct user_struct *__user = current->user;	\
+	atomic_inc(&__user->__count);			\
+	__user; })
+
+extern struct user_struct root_user;
+#define INIT_USER (&root_user)
 
 struct task_struct {
 	/*
@@ -427,6 +441,7 @@ struct task_struct {
     cap_permitted:	CAP_FULL_SET,					\
     keep_capabilities:	0,						\
     rlim:		INIT_RLIMITS,					\
+    user:		INIT_USER,					\
     comm:		"swapper",					\
     thread:		INIT_THREAD,					\
     fs:			&init_fs,					\
@@ -489,8 +504,8 @@ static inline struct task_struct *find_task_by_pid(int pid)
 }
 
 /* per-UID process charging. */
-extern int alloc_uid(struct task_struct *);
-void free_uid(struct task_struct *);
+extern struct user_struct * alloc_uid(uid_t);
+extern void free_uid(struct user_struct *);
 
 #include <asm/current.h>
 

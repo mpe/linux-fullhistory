@@ -63,7 +63,7 @@ values upon creation, so you don't necessarily have to change all of them.
 
 When you're ready with filling in the files in the comx[n] directory, you can
 configure the corresponding network interface with the standard network 
-configuration utilites. If you're unble to bring the interfaces up, look up
+configuration utilities. If you're unable to bring the interfaces up, look up
 the various kernel log files on your system, and consult the messages for
 a probable reason.
 

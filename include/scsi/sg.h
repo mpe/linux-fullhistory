@@ -11,9 +11,11 @@ Original driver (sg.h):
 Version 2 and 3 extensions to driver:
 *       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 3.1.15 (20000528)
+    Version: 3.1.16 (20000716)
     This version is for 2.3/2.4 series kernels.
 
+    Changes since 3.1.15 (20000528)
+    	- further (scatter gather) buffer length changes
     Changes since 3.1.14 (20000503)
         - fix aha1542 odd length buffer problem
         - make multiple readers on same fd safe

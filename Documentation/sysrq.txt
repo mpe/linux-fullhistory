@@ -74,14 +74,14 @@ On other - If you know of the key combos for other architectures, please
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Well, un'R'aw is very handy when your X server or a svgalib program crashes.
 
-sa'K' (Secure Access Key) is usefull when you want to be sure there are no
+sa'K' (Secure Access Key) is useful when you want to be sure there are no
 trojan program is running at console and which could grab your password
 when you would try to login. It will kill all programs on given console
 and thus letting you make sure that the login prompt you see is actually
 the one from init, not some trojan program.
 IMPORTANT:In its true form it is not a true SAK like the one in   :IMPORTANT
 IMPORTATN:c2 compliant systems, and it should be mistook as such. :IMPORTANT
-	It seems other find it usefull as (System Attention Key) which is
+	It seems other find it useful as (System Attention Key) which is
 useful when you want to exit a program that will not let you switch consoles.
 (For example, X or a svgalib program.)
 

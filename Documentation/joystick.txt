@@ -166,7 +166,7 @@ other system.
 
   It also supports extensions like additional hats and buttons compatible
 with CH Flightstick Pro, ThrustMaster FCS or 6 and 8 button gamepads. Saitek
-Cyborg 'digital' joysticks are also supportted by this driver, because
+Cyborg 'digital' joysticks are also supported by this driver, because
 they're basically souped up CHF sticks.
 
   However the only types that can be autodetected are:
@@ -475,7 +475,7 @@ models, the additional buttons on the 'Plus' versions are not supported yet.
 	inputattach --magellan /dev/tts/x &
 
 command. After that the Magellan will be detected, initialized, will beep,
-and the /dev/input/jsX device should become useable.
+and the /dev/input/jsX device should become usable.
 
 3.17 I-Force devices 
 ~~~~~~~~~~~~~~~~~~~~
@@ -491,7 +491,7 @@ but is not limited to:
 	inputattach --iforce /dev/tts/x &
 
 command. After that the I-Force device will be detected, and the
-/dev/input/jsX device should become useable.
+/dev/input/jsX device should become usable.
 
   In case you're using the device via the USB port, the inputattach command
 isn't needed.

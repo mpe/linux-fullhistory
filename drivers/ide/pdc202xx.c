@@ -862,7 +862,6 @@ void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20265) ||
 	    (hwif->pci_dev->device == PCI_DEVICE_ID_PROMISE_20267)) {
 		hwif->resetproc	= &pdc202xx_reset;
-		hwif->tri_proc	= &pdc202xx_tristate;
 	}
 
 #ifdef CONFIG_BLK_DEV_IDEDMA

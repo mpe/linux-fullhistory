@@ -127,21 +127,36 @@ static int init_model2_sat = -1;
 static int init_model2_yb = -1;
 
 MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug level: 0-9 (default=0)");
 MODULE_PARM(flags, "i");
+MODULE_PARM_DESC(flags, "Bitfield: 0=VIDIOCSYNC, 1=B/W, 2=show hints, 3=show stats, 4=test pattern, 5=seperate frames, 6=clean frames");
 MODULE_PARM(framerate, "i");
+MODULE_PARM_DESC(framerate, "Framerate setting: 0=slowest, 6=fastest (default=2)");
 MODULE_PARM(lighting, "i");
+MODULE_PARM_DESC(lighting, "Photosensitivity: 0=bright, 1=medium (default), 2=low light");
 MODULE_PARM(sharpness, "i");
+MODULE_PARM_DESC(sharpness, "Model1 noise reduction: 0=smooth, 6=sharp (default=4)");
 MODULE_PARM(videosize, "i");
+MODULE_PARM_DESC(videosize, "Image size: 0=128x96, 1=176x144, 2=352x288, 3=320x240, 4=352x240 (default=1)");
 MODULE_PARM(init_brightness, "i");
+MODULE_PARM_DESC(init_brightness, "Brightness preconfiguration: 0-255 (default=128)");
 MODULE_PARM(init_contrast, "i");
+MODULE_PARM_DESC(init_contrast, "Contrast preconfiguration: 0-255 (default=192)");
 MODULE_PARM(init_color, "i");
+MODULE_PARM_DESC(init_color, "Dolor preconfiguration: 0-255 (default=128)");
 MODULE_PARM(init_hue, "i");
+MODULE_PARM_DESC(init_hue, "Hue preconfiguration: 0-255 (default=128)");
 MODULE_PARM(hue_correction, "i");
+MODULE_PARM_DESC(hue_correction, "YUV colorspace regulation: 0-255 (default=128)");
 
 MODULE_PARM(init_model2_rg, "i");
+MODULE_PARM_DESC(init_model2_rg, "Model2 preconfiguration: 0-255 (default=112)");
 MODULE_PARM(init_model2_rg2, "i");
+MODULE_PARM_DESC(init_model2_rg2, "Model2 preconfiguration: 0-255 (default=47)");
 MODULE_PARM(init_model2_sat, "i");
+MODULE_PARM_DESC(init_model2_sat, "Model2 preconfiguration: 0-255 (default=52)");
 MODULE_PARM(init_model2_yb, "i");
+MODULE_PARM_DESC(init_model2_yb, "Model2 preconfiguration: 0-255 (default=160)");
 
 MODULE_AUTHOR ("module author");
 MODULE_DESCRIPTION ("IBM/Xirlink C-it USB Camera Driver for Linux (c) 2000");

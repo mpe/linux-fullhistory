@@ -38,14 +38,14 @@ the driver now re-sizes buffers based on MTU settings as well.
 message_level: Controls level of messages created by the driver. Defaults to 0:
 which only displays start-up and critical messages.  Presently any non-zero 
 value will display all soft messages as well.  NB This does not turn 
-debuging messages on, that must be done by modified the source code.
+debugging messages on, that must be done by modified the source code.
 
 Multi-card:
 
 The driver will detect multiple cards and will work with shared interrupts,
 each card is assigned the next token ring device, i.e. tr0 , tr1, tr2.  The 
 driver should also happily reside in the system with other drivers.  It has 
-been tested with ibmtr.c running, and I personnally have had one Olicom PCI 
+been tested with ibmtr.c running, and I personally have had one Olicom PCI 
 card and two IBM olympic cards (all on the same interrupt), all running
 together. 
 
@@ -68,7 +68,7 @@ mode.  All unexpected MAC frames (beaconing etc.) will be received
 by the driver and the source and destination addresses printed. 
 Also an entry will be added in  /proc/net called olympic_tr. This 
 displays low level information about the configuration of the ring and
-the adapter. This feature has been designed for network adiministrators
+the adapter. This feature has been designed for network administrators
 to assist in the diagnosis of network / ring problems.
 
 6/8/99 Peter De Schrijver and Mike Phillips

@@ -17,7 +17,7 @@ For each of the 32 bits
   Go low for less than 2T (Around 750us)
 
 Rather than repeat a signal when the button is held down certain buttons
-generate the following code to indicate repitition.
+generate the following code to indicate repetition.
 
 Go low for approx 16T
 Go high for approx 4T

@@ -286,7 +286,7 @@ b. Timeout/IRQ errors.
     Unfortunately, these drives seem to become very confused when we perform
     the standard Linux ATA disk drive probe. If you own one of these drives,
     you can bypass the ATA probing which confuses these CDROM drives, by 
-    adding `append="hdX=noprobe hdX=cdrom"' to your lilo.conf file and runing 
+    adding `append="hdX=noprobe hdX=cdrom"' to your lilo.conf file and running 
     lilo (again where X is the drive letter corresponding to where your drive 
     is installed.)
     

@@ -182,7 +182,7 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 {
 	struct binfmt_entry *fmt;
 	struct file * file;
-	char iname[128];
+	char iname[BINPRM_BUF_SIZE];
 	char *iname_addr = iname;
 	int retval;
 
@@ -194,8 +194,8 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	read_lock(&entries_lock);
 	fmt = check_file(bprm);
 	if (fmt) {
-		strncpy(iname, fmt->interpreter, 127);
-		iname[127] = '\0';
+		strncpy(iname, fmt->interpreter, BINPRM_BUF_SIZE - 1);
+		iname[BINPRM_BUF_SIZE - 1] = '\0';
 	}
 	read_unlock(&entries_lock);
 	if (!fmt)
@@ -324,7 +324,7 @@ static int proc_write_register(struct file *file, const char *buffer,
 
 	/* more sanity checks */
 	if (err || !(!cnt || (!(--cnt) && (*sp == '\n'))) ||
-	    (e->size < 1) || ((e->size + e->offset) > 127) ||
+	    (e->size < 1) || ((e->size + e->offset) > (BINPRM_BUF_SIZE - 1)) ||
 	    !(e->proc_name) || !(e->interpreter) || entry_proc_setup(e))
 		goto free_err;
 

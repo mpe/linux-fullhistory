@@ -49,6 +49,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 static int debug = 1;
 MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug level");
 
 static kmem_cache_t *uhci_td_cachep;
 static kmem_cache_t *uhci_qh_cachep;
@@ -2541,5 +2542,8 @@ void cleanup_module(void)
 	pm_unregister_all(handle_pm_event);
 	uhci_cleanup();
 }
+
+MODULE_AUTHOR("Linus Torvalds, Johannes Erdfelt, Randy Dunlap, Georg Acher, Deti Fliegl, Thomas Sailer, Roman Weissgaerber");
+MODULE_DESCRIPTION("USB Universal Host Controller Interface driver");
 #endif //MODULE
 

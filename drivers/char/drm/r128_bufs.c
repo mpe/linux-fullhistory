@@ -31,6 +31,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/config.h>
 #include "drmP.h"
 #include "r128_drv.h"
 #include "linux/un.h"

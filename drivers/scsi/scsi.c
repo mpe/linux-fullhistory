@@ -1912,7 +1912,7 @@ out:
  * their hosts through the modules entrypoints, and don't use the big
  * list in hosts.c.
  */
-#if defined(CONFIG_MODULES) || defined(CONFIG_BLK_DEV_IDESCSI) || defined(CONFIG_USB_STORAGE)	/* a big #ifdef block... */
+#if defined(CONFIG_MODULES) || defined(CONFIG_BLK_DEV_IDESCSI) || defined(CONFIG_USB_STORAGE) || defined(CONFIG_USB_MICROTEK)	/* a big #ifdef block... */
 
 /*
  * This entry point should be called by a loadable module if it is trying

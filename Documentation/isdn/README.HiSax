@@ -77,7 +77,7 @@ Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
 
 If you know other passive cards with the Siemens chipset, please let me know.
 To use the PNP cards you need the isapnptools.
-You can combine any card, if there is no conflict between the ressources
+You can combine any card, if there is no conflict between the resources
 (io, mem, irq).
 
 
@@ -532,7 +532,7 @@ to e.g. the Internet:
       /sbin/isdnctrl huptimeout isdn0 0
       /sbin/isdnctrl l2_prot isdn0 hdlc
       # Attention you must not set an outgoing number !!! This won't work !!!
-      # The incomming number is LEASED0 for the first card, LEASED1 for the
+      # The incoming number is LEASED0 for the first card, LEASED1 for the
       # second and so on.
       /sbin/isdnctrl addphone isdn0 in LEASED0
       # Here is no need to bind the channel.
@@ -551,7 +551,7 @@ a) Use state of the art isdn4k-utils
 
 Here an example script:
 #!/bin/sh
-# Start/Stop ISDN lesaed line connection
+# Start/Stop ISDN leased line connection
 
 I4L_AS_MODULE=yes
 I4L_REMOTE_IS_CISCO=no

@@ -721,3 +721,5 @@ void keyspan_exit (void)
 module_init(keyspan_init);
 module_exit(keyspan_exit);
 
+MODULE_AUTHOR("Hugh Blemings <hugh@linuxcare.com>");
+MODULE_DESCRIPTION("Keyspan USB to Serial Converter driver");

@@ -103,7 +103,7 @@ static int multicast_filter_limit = 32;
 MODULE_AUTHOR("Petko Manolov <petkan@spct.net>");
 MODULE_DESCRIPTION("ADMtek AN986 Pegasus USB Ethernet driver");
 MODULE_PARM(loopback, "i");
-
+MODULE_PARM_DESC(loopback, "Enable loopback mode (Bit 0) and ??? (Bit 1)");
 
 static struct usb_eth_dev usb_dev_id[] = {
 	{"Billionton USB-100", 0x08dd, 0x0986, NULL},

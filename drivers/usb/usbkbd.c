@@ -36,6 +36,7 @@
 #include <linux/usb.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("USB HID Boot Protocol keyboard driver");
 
 static unsigned char usb_kbd_keycode[256] = {
 	  0,  0,  0,  0, 30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38,

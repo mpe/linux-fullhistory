@@ -445,3 +445,5 @@ void usb_rio_cleanup(void)
 module_init(usb_rio_init);
 module_exit(usb_rio_cleanup);
 
+MODULE_AUTHOR("Cesar Miquel <miquel@df.uba.ar>");
+MODULE_DESCRIPTION("USB Rio 500 driver");

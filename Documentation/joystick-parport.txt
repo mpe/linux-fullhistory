@@ -22,7 +22,7 @@ connecting such devices.
 
 2. Devices supported
 ~~~~~~~~~~~~~~~~~~~~
-  Many console and 8-bit coputer gamepads and joysticks are supported. The
+  Many console and 8-bit computer gamepads and joysticks are supported. The
 following subsections discuss usage of each.
 
 2.1 NES and SNES
@@ -328,7 +328,7 @@ controllers:
 ~~~~~~~~
   All the Sega controllers are more or less based on the standard 2-button
 Multisystem joystick. However, since they don't use switches and use TTL
-logic, the only driver useable with them is the db9.c driver.
+logic, the only driver usable with them is the db9.c driver.
 
 2.4.1 Sega Master System
 ~~~~~~~~~~~~~~~~~~~~~~~~

@@ -6,8 +6,6 @@
  * with a lot of changes to make this thing work for R3000s
  * Copyright (C) 1998, 2000 Harald Koerfgen
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov
- *
- * $Id: r2300.c,v 1.16 2000/03/13 10:33:05 raiko Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -294,7 +292,7 @@ static inline void r3k_flush_cache_all(void)
  
 static void r3k_flush_cache_mm(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (mm->context != 0) {
 
 #ifdef DEBUG_CACHE
 		printk("cmm[%d]", (int)mm->context);
@@ -309,7 +307,7 @@ static void r3k_flush_cache_range(struct mm_struct *mm,
 {
 	struct vm_area_struct *vma;
 
-	if(mm->context == 0) 
+	if (mm->context == 0) 
 		return;
 
 	start &= PAGE_MASK;
@@ -317,15 +315,15 @@ static void r3k_flush_cache_range(struct mm_struct *mm,
 	printk("crange[%d,%08lx,%08lx]", (int)mm->context, start, end);
 #endif
 	vma = find_vma(mm, start);
-	if(vma) {
-		if(mm->context != current->mm->context) {
+	if (vma) {
+		if (mm->context != current->active_mm->context) {
 			flush_cache_all();
 		} else {
 			unsigned long flags, physpage;
 
 			save_and_cli(flags);
-			while(start < end) {
-				if((physpage = get_phys_page(start, mm)))
+			while (start < end) {
+				if ((physpage = get_phys_page(start, mm)))
 					r3k_flush_icache_range(physpage, PAGE_SIZE);
 		
 				start += PAGE_SIZE;
@@ -340,7 +338,7 @@ static void r3k_flush_cache_page(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 
-	if(mm->context == 0)
+	if (mm->context == 0)
 		return;
 
 #ifdef DEBUG_CACHE
@@ -349,7 +347,7 @@ static void r3k_flush_cache_page(struct vm_area_struct *vma,
 	if (vma->vm_flags & VM_EXEC) {
 		unsigned long physpage;
 
-		if((physpage = get_phys_page(page, vma->vm_mm)))
+		if ((physpage = get_phys_page(page, vma->vm_mm)))
 			r3k_flush_icache_range(physpage, PAGE_SIZE);
 
 	}
@@ -416,7 +414,7 @@ void flush_tlb_all(void)
 
 void flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != 0) {
+	if (mm->context != 0) {
 		unsigned long flags;
 
 #ifdef DEBUG_TLB
@@ -542,7 +540,13 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	pte_t *ptep;
 	int idx, pid;
 
-	pid = (get_entryhi() & 0xfc0);
+	/*
+	 * Handle debugger faulting in for debugee.
+	 */
+	if (current->active_mm != vma->vm_mm)
+		return;
+
+	pid = get_entryhi() & 0xfc0;
 
 #ifdef DEBUG_TLB
 	if((pid != (vma->vm_mm->context & 0xfc0)) || (vma->vm_mm->context == 0)) {

@@ -1,7 +1,7 @@
 Text file for ipddp.c:
 	AppleTalk-IP Decapsulation and AppleTalk-IP Encapsulation
 
-This text file writen by Jay Schulist <jschlst@turbolinux.com>
+This text file is written by Jay Schulist <jschlst@turbolinux.com>
 
 Introduction
 ------------

@@ -88,11 +88,11 @@ static struct file_operations * get_chrfops(unsigned int major, unsigned int min
 		char name[20];
 		sprintf(name, "char-major-%d", major);
 		request_module(name);
-	}
-	read_lock(&chrdevs_lock);
-	ret = fops_get(chrdevs[major].fops);
-	read_unlock(&chrdevs_lock);
 
+		read_lock(&chrdevs_lock);
+		ret = fops_get(chrdevs[major].fops);
+		read_unlock(&chrdevs_lock);
+	}
 #endif
 	return ret;
 }

@@ -320,7 +320,7 @@ in the Sound-HOWTO).
 
 7)  Turn on debug in drivers/sound/sound_config.h (DEB, DDB, MDB).
 
-8)  If the system reports insuffcient DMA memory then you may want to
+8)  If the system reports insufficient DMA memory then you may want to
     load sound with the "dmabufs=1" option. Or in /etc/conf.modules add
 	
 	preinstall sound dmabufs=1
@@ -354,7 +354,7 @@ Module Loading:
 
 When a sound card is first referenced and sound is modular the sound system
 will ask for the sound devices to be loaded. Initially it requests that
-the driver for the sound system is loaded. It then wwill ask for 
+the driver for the sound system is loaded. It then will ask for 
 sound-slot-0, where 0 is the first sound card. (sound-slot-1 the second and
 so on). Thus you can do
 

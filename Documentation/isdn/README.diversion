@@ -57,7 +57,7 @@ Table of contents
    compared to the mechanism of ipfwadm or ipchains. If a given rule matches
    the checking process is finished and the rule matching will be applied
    to the call.
-   The rules include primary and secondary service indentifiers, called 
+   The rules include primary and secondary service identifiers, called 
    number and subaddress, callers number and subaddress and whether the rule
    matches to all filtered calls or only those when all B-channel resources
    are exhausted.
@@ -82,7 +82,7 @@ Table of contents
    available in some countries (for example germany). Countries requiring the 
    keypad protocol for activating static diversions (like the netherlands) are
    not supported but may use the tty devices for this purpose.
-   The dynamic diversion servives may be used in all countries if the provider
+   The dynamic diversion services may be used in all countries if the provider
    enables the feature CF (call forwarding). This should work on both MSN- and
    point-to-point lines.
    To add and delete rules the additional divertctrl program is needed. This

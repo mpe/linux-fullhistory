@@ -12,7 +12,7 @@ Every chip that's detected as a later-than-es1688 chip has a 6 bits logarithmic
 master volume control.
 
 Every chip that's detected as a ES1887 now has Full Duplex support. Made a 
-little testprogram that showes that is works, haven't seen a real program that
+little testprogram that shows that is works, haven't seen a real program that
 needs this however.
 
 For ESS chips an additional parameter "esstype" can be specified. This controls

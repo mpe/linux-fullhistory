@@ -137,7 +137,7 @@ bmap:		yes
 may be called from the request handler (/dev/loop).
 	->sync_page() locking rules are not well-defined - usually it is called
 with lock on page, but that is not guaranteed. Considering the currently
-existsing instances of this method ->sync_page() itself doesn't look
+existing instances of this method ->sync_page() itself doesn't look
 well-defined...
 	->bmap() is currently used by legacy ioctl() (FIBMAP) provided by some
 filesystems and by the swapper. The latter will eventually go away. All

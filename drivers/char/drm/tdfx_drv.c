@@ -446,9 +446,11 @@ int tdfx_release(struct inode *inode, struct file *filp)
 					  atomic_read(&dev->ioctl_count),
 					  dev->blocked);
 				spin_unlock(&dev->count_lock);
+				unlock_kernel();
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
+			unlock_kernel();
 			return tdfx_takedown(dev);
 		}
 		spin_unlock(&dev->count_lock);

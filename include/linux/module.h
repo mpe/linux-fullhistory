@@ -143,8 +143,13 @@ struct module_info
 #define __MODULE_STRING(x)	__MODULE_STRING_1(x)
 
 /* Find a symbol exported by the kernel or another module */
+#ifdef CONFIG_MODULES
 extern unsigned long get_module_symbol(char *, char *);
 extern void put_module_symbol(unsigned long);
+#else
+static inline unsigned long get_module_symbol(char *unused1, char *unused2) { return 0; };
+static inline void put_module_symbol(unsigned long unused) { };
+#endif
 
 extern int try_inc_mod_count(struct module *mod);
 

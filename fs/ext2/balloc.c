@@ -16,7 +16,6 @@
 #include <linux/locks.h>
 #include <linux/quotaops.h>
 
-
 /*
  * balloc.c contains the blocks allocation and deallocation routines
  */
@@ -379,10 +378,8 @@ int ext2_new_block (const struct inode * inode, unsigned long goal,
 	    ((sb->u.ext2_sb.s_resuid != current->fsuid) &&
 	     (sb->u.ext2_sb.s_resgid == 0 ||
 	      !in_group_p (sb->u.ext2_sb.s_resgid)) && 
-	     !capable(CAP_SYS_RESOURCE))) {
-		unlock_super (sb);
-		return 0;
-	}
+	     !capable(CAP_SYS_RESOURCE)))
+		goto out;
 
 	ext2_debug ("goal=%lu.\n", goal);
 
@@ -475,16 +472,13 @@ repeat:
 		gdp = ext2_get_group_desc (sb, i, &bh2);
 		if (!gdp) {
 			*err = -EIO;
-			unlock_super (sb);
-			return 0;
+			goto out;
 		}
 		if (le16_to_cpu(gdp->bg_free_blocks_count) > 0)
 			break;
 	}
-	if (k >= sb->u.ext2_sb.s_groups_count) {
-		unlock_super (sb);
-		return 0;
-	}
+	if (k >= sb->u.ext2_sb.s_groups_count)
+		goto out;
 	bitmap_nr = load_block_bitmap (sb, i);
 	if (bitmap_nr < 0)
 		goto io_error;
@@ -500,8 +494,7 @@ repeat:
 	if (j >= EXT2_BLOCKS_PER_GROUP(sb)) {
 		ext2_error (sb, "ext2_new_block",
 			    "Free blocks count corrupted for block group %d", i);
-		unlock_super (sb);
-		return 0;
+		goto out;
 	}
 
 search_back:
@@ -520,9 +513,8 @@ got_block:
 	 * Check quota for allocation of this block.
 	 */
 	if(DQUOT_ALLOC_BLOCK(sb, inode, 1)) {
-		unlock_super(sb);
 		*err = -EDQUOT;
-		return 0;
+		goto out;
 	}
 
 	tmp = j + i * EXT2_BLOCKS_PER_GROUP(sb) + le32_to_cpu(es->s_first_data_block);
@@ -550,31 +542,50 @@ got_block:
 #ifdef EXT2_PREALLOCATE
 	if (prealloc_block) {
 		int	prealloc_goal;
+		unsigned long next_block = tmp + 1;
 
 		prealloc_goal = es->s_prealloc_blocks ?
 			es->s_prealloc_blocks : EXT2_DEFAULT_PREALLOC_BLOCKS;
 
+		/* Writer: ->i_prealloc* */
+		/*
+		 * Can't happen right now, will need handling if we go for
+		 * per-group spinlocks. Handling == skipping preallocation if
+		 * condition below will be true. For now there is no legitimate
+		 * way it could happen, thus the BUG().
+		 */
+		if (*prealloc_count)
+			BUG();
 		*prealloc_count = 0;
-		*prealloc_block = tmp + 1;
+		*prealloc_block = next_block;
+		/* Writer: end */
 		for (k = 1;
 		     k < prealloc_goal && (j + k) < EXT2_BLOCKS_PER_GROUP(sb);
-		     k++) {
+		     k++, next_block++) {
 			if (DQUOT_PREALLOC_BLOCK(sb, inode, 1))
 				break;
-			if (ext2_set_bit (j + k, bh->b_data)) {
+			/* Writer: ->i_prealloc* */
+			if (*prealloc_block + *prealloc_count != next_block ||
+			    ext2_set_bit (j + k, bh->b_data)) {
+				/* Writer: end */
 				DQUOT_FREE_BLOCK(sb, inode, 1);
  				break;
 			}
 			(*prealloc_count)++;
+			/* Writer: end */
 		}	
+		/*
+		 * As soon as we go for per-group spinlocks we'll need these
+		 * done inside the loop above.
+		 */
 		gdp->bg_free_blocks_count =
 			cpu_to_le16(le16_to_cpu(gdp->bg_free_blocks_count) -
-			       *prealloc_count);
+			       (k - 1));
 		es->s_free_blocks_count =
 			cpu_to_le32(le32_to_cpu(es->s_free_blocks_count) -
-			       *prealloc_count);
+			       (k - 1));
 		ext2_debug ("Preallocated a further %lu bits.\n",
-			    *prealloc_count);
+			       (k - 1));
 	}
 #endif
 
@@ -591,8 +602,7 @@ got_block:
 			    "block(%d) >= blocks count(%d) - "
 			    "block_group = %d, es == %p ",j,
 			le32_to_cpu(es->s_blocks_count), i, es);
-		unlock_super (sb);
-		return 0;
+		goto out;
 	}
 
 	ext2_debug ("allocating block %d. "
@@ -609,6 +619,7 @@ got_block:
 	
 io_error:
 	*err = -EIO;
+out:
 	unlock_super (sb);
 	return 0;
 	

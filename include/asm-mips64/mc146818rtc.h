@@ -43,4 +43,6 @@ struct rtc_ops {
 
 extern struct rtc_ops *rtc_ops;
 
+#define RTC_IRQ 8
+
 #endif /* _ASM_MC146818RTC_H */

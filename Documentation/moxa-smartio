@@ -23,7 +23,7 @@ Content
     -C168P/H/HS, C168H/PCI 8 port multiport board.
 
    This driver has been modified a little and cleaned up from the Moxa
-   contributed driver code and merged into Linux 2.2.14pre. In paticular
+   contributed driver code and merged into Linux 2.2.14pre. In particular
    official major/minor numbers have been assigned which are different to
    those the original Moxa supplied driver used.
 
@@ -83,7 +83,7 @@ Content
 
        PCI board
        ---------
-       You may need to adjust IRQ useage in BIOS to avoid from IRQ conflict
+       You may need to adjust IRQ usage in BIOS to avoid from IRQ conflict
        with other ISA devices. Please refer to hardware installation
        procedure in User's Manual in advance.
 
@@ -150,7 +150,7 @@ Content
 
 	  # insmod mxser
 
-	  to activate the moduler driver. You may run "lsmod" to check
+	  to activate the modular driver. You may run "lsmod" to check
 	  if "mxser.o" is activated.
 
        2. Create special files by executing "msmknod".
@@ -158,7 +158,7 @@ Content
 	  # ./msmknod
 
 	  Default major numbers for dial-in device and callout device are
-	  174, 175. Msmknod will delete any special files occuping the same
+	  174, 175. Msmknod will delete any special files occupying the same
 	  device naming.
 
        3. Up to now, you may manually execute "insmod mxser" to activate
@@ -209,7 +209,7 @@ Content
 	  below.
 	  a. # cd /moxa/mxser/driver
 	     # vi mxser.c
-	  b. Find the array mxserBoardCAP[] as belows.
+	  b. Find the array mxserBoardCAP[] as below.
 
 	     static int mxserBoardCAP[]
 	     = {0x00, 0x00, 0x00, 0x00};
@@ -260,7 +260,7 @@ Content
 	   f. cp /usr/src/linux/arch/i386/boot/bzImage /boot/vmlinuz
 	   g. Please make sure the boot kernel (vmlinuz) is in the
 	      correct position. If you use 'lilo' utility, you should
-	      check /etc/lilo.conf 'image' item specifiedd the path
+	      check /etc/lilo.conf 'image' item specified the path
 	      which is the 'vmlinuz' path, or you will load wrong
 	      (or old) boot kernel image (vmlinuz).
 	   h. chmod 400 /vmlinuz
@@ -372,7 +372,7 @@ Content
 -----------------------------------------------------------------------------
 6. Troubleshooting
 
-   The boot time error mesages and solutions are stated as clearly as
+   The boot time error messages and solutions are stated as clearly as
    possible. If all the possible solutions fail, please contact our technical
    support team to get more help.
 
@@ -388,7 +388,7 @@ Content
    which device causes the situation,please check /proc/interrupts to find
    free IRQ and simply change another free IRQ for Moxa board.
 
-   Error msg: Board #: C1xx Series(CAP=xxx) interupt number invalid.
+   Error msg: Board #: C1xx Series(CAP=xxx) interrupt number invalid.
    Solution:
    Each port within the same multiport board shares the same IRQ. Please set
    one IRQ (IRQ doesn't equal to zero) for one Moxa board.

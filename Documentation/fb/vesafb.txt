@@ -62,7 +62,7 @@ So the table for the Kernel mode numbers are:
 16M |  0x312    0x315    0x318    0x31B   
 
 To enable one of those modes you have to specify "vga=ask" in the
-lilo.conf file and rerun LILO. Then you can type in the descired
+lilo.conf file and rerun LILO. Then you can type in the desired
 mode at the "vga=ask" prompt. For example if you like to use 
 1024x768x256 colors you have to say "305" at this prompt.
 

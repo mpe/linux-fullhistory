@@ -31,7 +31,7 @@ README.act2000
 README.eicon
 	- info on driver for Eicon active cards.
 README.concap
-	- info on "CONCAP" ecapsulation protocol interface used for X.25.
+	- info on "CONCAP" encapsulation protocol interface used for X.25.
 README.diversion
 	- info on module for isdn diversion services.
 README.sc

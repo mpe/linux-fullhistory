@@ -36,7 +36,7 @@ The Epoch is January 1st 1998. For backward compatibility reasons we don't
 expose this new way of representing time. Instead we use something very 
 similar to the struct tm, i.e. struct rtc_time, as used by hwclock.
 One of the reasons for doing it this way is to allow for EFI to still evolve
-without necessarily impatcing any of the user applications. The decoupling
+without necessarily impacting any of the user applications. The decoupling
 enables flexibility and permits writing wrapper code is ncase things change.
 
 The driver exposes two interfaces, one via the device file and a set of ioctl()s.

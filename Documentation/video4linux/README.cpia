@@ -107,7 +107,7 @@ FEATURES:
   device opens
 - complete control over camera via proc-interface (_all_ camera settings are
   supported), there is also a python-gtk application available for this [3]
-- works under SMP (but the driver is completly serialized and synchronous)
+- works under SMP (but the driver is completely serialized and synchronous)
   so you get no benefit from SMP, but at least it does not crash your box
 - might work for non-Intel architecture, let us know about this
 
@@ -159,7 +159,7 @@ IMPLEMENTATION NOTES:
 
 The camera can act in two modes, streaming or grabbing. Right now a
 polling grab-scheme is used. Maybe interrupt driven streaming will be
-used for a ansychronous mmap interface in the next major release of the
+used for a asynchronous mmap interface in the next major release of the
 driver. This might give a better frame rate.
 
 ---------------------------------------------------------------------------

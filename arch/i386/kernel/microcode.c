@@ -145,11 +145,10 @@ static int microcode_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/* our specific f_op->release() method needs no locking */
 static int microcode_release(struct inode *inode, struct file *file)
 {
-	lock_kernel();
 	clear_bit(MICROCODE_IS_OPEN, &microcode_status);
-	unlock_kernel();
 	return 0;
 }
 

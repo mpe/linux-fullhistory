@@ -19,7 +19,7 @@ and many Linux driver to support it.
 
 	This is the driver for the ISA version of the first generation
 of the Wavelan, now discontinued. The device is 2 Mb/s, composed of a
-Intel 82586 controler and a Lucent Modem, and is NOT 802.11 compliant.
+Intel 82586 controller and a Lucent Modem, and is NOT 802.11 compliant.
 	The driver has been tested with the following hardware :
 	o Wavelan ISA 915 MHz (full length ISA card) 
 	o Wavelan ISA 915 MHz 2.0 (half length ISA card) 
@@ -38,7 +38,7 @@ Intel 82586 controler and a Lucent Modem, and is NOT 802.11 compliant.
 
 	This is the driver for the PCMCIA version of the first
 generation of the Wavelan, now discontinued. The device is 2 Mb/s,
-composed of a Intel 82593 controler (totally different from the 82586)
+composed of a Intel 82593 controller (totally different from the 82586)
 and a Lucent Modem, and NOT 802.11 compatible.
 	The driver has been tested with the following hardware :
 	o Wavelan Pcmcia 915 MHz 2.0 (Pcmcia card + separate

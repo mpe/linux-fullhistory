@@ -51,6 +51,7 @@
 #include <linux/usb.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("USB Wacom Graphire and Wacom Intuos tablet driver");
 
 /*
  * Wacom Graphire packet:

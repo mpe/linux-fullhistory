@@ -228,7 +228,7 @@ REVISION HISTORY
 				creating applications using BiSync
    				streaming.        
 
-2.0.5   Aug 04, 1999 		CHDLC initializatin bug fix.
+2.0.5   Aug 04, 1999 		CHDLC initialization bug fix.
 				PPP interrupt driven driver: 
   				Fix to the PPP line hangup problem.
 				New PPP firmware
@@ -241,13 +241,13 @@ REVISION HISTORY
 				Streaming HDLC API has been taken out.  
 				 Available as a patch.                 
 
-2.0.6   Aug 17, 1999		Increased debugging in statup scripts
-				Fixed insallation bugs from 2.0.5
+2.0.6   Aug 17, 1999		Increased debugging in startup scripts
+				Fixed installation bugs from 2.0.5
 				Kernel patch works for both 2.2.10 and 2.2.11 kernels.
 				There is no functional difference between the two packages         
 
 2.0.7   Aug 26, 1999		o  Merged X25API code into WANPIPE.
-				o  Fixed a memeory leak for X25API
+				o  Fixed a memory leak for X25API
 				o  Updated the X25API code for 2.2.X kernels.
 				o  Improved NEM handling.   
 

@@ -246,7 +246,7 @@ CONFIG_VT_CONSOLE=y
 #
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
-# CONFIG_DRM_TDFX is not set
+# CONFIG_AGP is not set
 
 #
 # File systems

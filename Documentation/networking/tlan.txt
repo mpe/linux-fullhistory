@@ -51,7 +51,7 @@ II.   Driver Options
 	   0x01		Turn on general debugging messages.
 	   0x02		Turn on receive debugging messages.
 	   0x04		Turn on transmit debugging messages.
-	   0x08		Turn on list debugging messsages.
+	   0x08		Turn on list debugging messages.
 
 	2. You can append aui=1 to the end of the insmod line to cause
            the adapter to use the AUI interface instead of the 10 Base T

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.3 2000/07/20 01:06:40 mdharm Exp $
+ * $Id: transport.c,v 1.4 2000/07/25 23:04:47 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -203,7 +203,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
 	int pipe;
 
 	/* calculate the appropriate pipe information */
-	if (US_DIRECTION(us->srb->cmnd[0]))
+	if (us->srb->sc_data_direction == SCSI_DATA_READ)
 		pipe = usb_rcvbulkpipe(us->pusb_dev, us->ep_in);
 	else
 		pipe = usb_sndbulkpipe(us->pusb_dev, us->ep_out);
@@ -258,7 +258,7 @@ static int us_transfer_partial(struct us_data *us, char *buf, int length)
  * function simply determines if we're going to use scatter-gather or not,
  * and acts appropriately.  For now, it also re-interprets the error codes.
  */
-static void us_transfer(Scsi_Cmnd *srb, struct us_data* us, int dir_in)
+static void us_transfer(Scsi_Cmnd *srb, struct us_data* us)
 {
 	int i;
 	int result = -1;
@@ -414,8 +414,9 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 	if (need_auto_sense) {
 		int temp_result;
 		void* old_request_buffer;
-		int old_sg;
-		int old_request_bufflen;
+		unsigned short old_sg;
+		unsigned old_request_bufflen;
+		unsigned char old_sc_data_direction;
 		unsigned char old_cmnd[MAX_COMMAND_SIZE];
 
 		US_DEBUGP("Issuing auto-REQUEST_SENSE\n");
@@ -431,13 +432,21 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[4] = 18;
 		srb->cmnd[5] = 0;
 
-		/* set the buffer length for transfer */
+		/* set the transfer direction */
+		old_sc_data_direction = srb->sc_data_direction;
+		srb->sc_data_direction = SCSI_DATA_READ;
+
+		/* use the new buffer we have */
 		old_request_buffer = srb->request_buffer;
+		srb->request_buffer = srb->sense_buffer;
+
+		/* set the buffer length for transfer */
 		old_request_bufflen = srb->request_bufflen;
+		srb->request_bufflen = 18;
+
+		/* set up for no scatter-gather use */
 		old_sg = srb->use_sg;
 		srb->use_sg = 0;
-		srb->request_bufflen = 18;
-		srb->request_buffer = srb->sense_buffer;
 
 		/* issue the auto-sense command */
 		temp_result = us->transport(us->srb, us);
@@ -462,6 +471,7 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		srb->request_buffer = old_request_buffer;
 		srb->request_bufflen = old_request_bufflen;
 		srb->use_sg = old_sg;
+		srb->sc_data_direction = old_sc_data_direction;
 		memcpy(srb->cmnd, old_cmnd, MAX_COMMAND_SIZE);
 
 		/* If things are really okay, then let's show that */
@@ -555,7 +565,7 @@ int usb_stor_CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
 	if (us_transfer_length(srb, us)) {
-		us_transfer(srb, us, US_DIRECTION(srb->cmnd[0]));
+		us_transfer(srb, us);
 		US_DEBUGP("CBI data stage result is 0x%x\n", srb->result);
 
 		/* if it was aborted, we need to indicate that */
@@ -656,7 +666,7 @@ int usb_stor_CB_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* DATA STAGE */
 	/* transfer the data payload for this command, if one exists*/
 	if (us_transfer_length(srb, us)) {
-		us_transfer(srb, us, US_DIRECTION(srb->cmnd[0]));
+		us_transfer(srb, us);
 		US_DEBUGP("CB data stage result is 0x%x\n", srb->result);
 
 		/* if it was aborted, we need to indicate that */
@@ -718,7 +728,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* set up the command wrapper */
 	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
 	bcb.DataTransferLength = cpu_to_le32(us_transfer_length(srb, us));
-	bcb.Flags = US_DIRECTION(srb->cmnd[0]) << 7;
+	bcb.Flags = srb->sc_data_direction == SCSI_DATA_READ ? 1 << 7 : 0;
 	bcb.Tag = srb->serial_number;
 	bcb.Lun = srb->cmnd[1] >> 5;
 	bcb.Length = srb->cmd_len;
@@ -755,7 +765,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	if (result == 0) {
 		/* send/receive data payload, if there is any */
 		if (bcb.DataTransferLength) {
-			us_transfer(srb, us, bcb.Flags);
+			us_transfer(srb, us);
 			US_DEBUGP("Bulk data transfer result 0x%x\n", 
 				  srb->result);
 

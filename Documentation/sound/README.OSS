@@ -81,7 +81,7 @@ contributors. (I could have forgotten some names.)
 	Gregor Hoffleit	Mozart support (initial version)
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
 	James Hightower Spotting a tiny but important bug in CS423x support.
-	Denis Sablic	OPTi 82C924 spesific enhancements (non PnP mode)
+	Denis Sablic	OPTi 82C924 specific enhancements (non PnP mode)
 	Tim MacKenzie	Full duplex support for OPTi 82C930.
 	
 	Please look at lowlevel/README for more contributors.
@@ -512,7 +512,7 @@ Yamaha OPL3-SA1
 
 	There are also chips called OPL3-SA2, OPL3-SA3, ..., OPL3SA-N. They
 	are PnP chips and will not work with the OPL3-SA1 driver. You should 
-	use the standard MSS, MPU401 and OPL3 options with thses chips and to
+	use the standard MSS, MPU401 and OPL3 options with these chips and to
 	activate the card using isapnptools.
 
 4Front Technologies SoftOSS
@@ -1275,7 +1275,7 @@ with ES688).
 NOTE! ESS cards are not compatible with MSS/WSS so don't worry if MSS support
 of OSS doesn't work with it.
 
-There are some ES1688/688 based sound cards and (particularily) motherboards
+There are some ES1688/688 based sound cards and (particularly) motherboards
 which use software configurable I/O port relocation feature of the chip.
 This ESS proprietary feature is supported only by OSS/Linux.
 
@@ -1285,7 +1285,7 @@ At least a card called (Pearl?) Hypersound 16 supports IRQ 15 but it doesn't
 work.
 
 ES1868 is a PnP chip which is (supposed to be) compatible with ESS1688
-brobably works with OSS/Free after initialization using isapnptools.
+probably works with OSS/Free after initialization using isapnptools.
 
 Reveal cards
 ------------

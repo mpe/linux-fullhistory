@@ -25,14 +25,14 @@ conv=binary,text,auto (default binary)
 	- there is a list of text extensions (I thing it's better to not convert
 	text file than to damage binary file). If you want to change that list,
 	change it in the source. Original readonly HPFS contained some strange
-	heuristic alghoritm that I removed. I thing it's danger to let the
+	heuristic algorithm that I removed. I thing it's danger to let the
 	computer decide whether file is text or binary. For example, DJGPP
 	binaries contain small text message at the beginning and they could be
 	misidentified and damaged under some circumstances.
 check=none,normal,strict (default normal)
 	Check level. Selecting none will cause only little speedup and big
 	danger. I tried to write it so that it won't crash if check=normal on
-	corrupted filesystems. check=strict means many superflous checks -
+	corrupted filesystems. check=strict means many superfluous checks -
 	used for debugging (for example it checks if file is allocated in
 	bitmaps when accessing it).
 errors=continue,remount-ro,panic (default remount-ro)
@@ -65,12 +65,12 @@ access it under names 'a.', 'a..', 'a .  . . ' etc.
 
 Extended attributes
 
-On HPFS partion, OS/2 can associate to each file a special information called
+On HPFS partitions, OS/2 can associate to each file a special information called
 extended attributes. Extended attributes are pairs of (key,value) where key is
 an ascii string identifying that attribute and value is any string of bytes of
 variable length. OS/2 stores window and icon positions and file types there. So
 why not use it for unix-specific info like file owner or access rights? This
-driver can do it. If you chown/chgrp/chmod on a hpfs partion, extended
+driver can do it. If you chown/chgrp/chmod on a hpfs partition, extended
 attributes with keys "UID", "GID" or "MODE" and 2-byte values are created. Only
 that extended attributes those value differs from defaults specified in mount
 options are created. Once created, the extended attributes are never deleted,
@@ -89,7 +89,7 @@ values doesn't work.
 
 Symlinks
 
-You can do symlinks on HPFS partion, symlinks are achieved by setting extended
+You can do symlinks on HPFS partition, symlinks are achieved by setting extended
 attribute named "SYMLINK" with symlink value. Like on ext2, you can chown and
 chgrp symlinks but I don't know what is it good for. chmoding symlink results
 in chmoding file where symlink points. These symlinks are just for Linux use and
@@ -107,12 +107,12 @@ file has a pointer to codepage it's name is in. However OS/2 was created in
 America where people don't care much about codepages and so multiple codepages
 support is quite buggy. I have Czech OS/2 working in codepage 852 on my disk.
 Once I booted English OS/2 working in cp 850 and I created a file on my 852
-partion. It marked file name codepage as 850 - good. But when I again booted
+partition. It marked file name codepage as 850 - good. But when I again booted
 Czech OS/2, the file was completely inaccessible under any name. It seems that
 OS/2 uppercases the search pattern with it's system code page (852) and file
 name it's comparing to with its code page (850). These could never match. Is it
-really what IBM developers wanted? But problems countinue. When I created in
-Czech OS/2 another file in that direcotry, that file was inaccesible too. OS/2
+really what IBM developers wanted? But problems continued. When I created in
+Czech OS/2 another file in that directory, that file was inaccessible too. OS/2
 probably uses different uppercasing method when searching where to place a file
 (note, that files in HPFS directory must be sorted) and when searching for
 a file. Finally when I opened this directory in PmShell, PmShell crashed (the
@@ -199,7 +199,7 @@ File names like "a .b" are marked as 'long' by OS/2 but chkdsk "corrects" it and
 marks them as short (and writes "minor fs error corrected"). This bug is not in
 HPFS386.
 
-Codepage bugs decsribed above.
+Codepage bugs described above.
 
 If you don't install fixpacks, there are many, many more...
 
@@ -266,7 +266,7 @@ History
 1.99 Corrected a possible problem when there's not enough space while deleting
 	file
      Now it tries to truncate the file if there's not enough space when deleting
-     Removed a lot of redundat code
+     Removed a lot of redundant code
 2.00 Fixed a bug in rename (it was there since 1.96)
      Better anti-fragmentation strategy
 

@@ -66,7 +66,7 @@ Limitations
 There are known and unknown bugs, features and misfeatures.
 Currently there are following known bugs:
  + This driver is still experimental and is not finished.  Too many
-   bugs/eratta to list here.
+   bugs/errata to list here.
 
 --
 Brad Douglas <brad@neruo.com>

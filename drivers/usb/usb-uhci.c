@@ -2885,4 +2885,6 @@ void cleanup_module (void)
 	uhci_cleanup ();
 }
 
+MODULE_AUTHOR("Georg Acher, Deti Fliegl, Thomas Sailer, Roman Weissgaerber");
+MODULE_DESCRIPTION("USB Universal Host Controller Interface driver");
 #endif //MODULE

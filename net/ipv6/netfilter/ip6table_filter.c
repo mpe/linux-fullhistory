@@ -44,7 +44,7 @@ static struct
       0, NULL, { } },
     {
 	    /* LOCAL_IN */
-	    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
+	    { { { { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, "", "", { 0 }, { 0 }, 0, 0, 0 },
 		0,
 		sizeof(struct ip6t_entry),
 		sizeof(struct ip6t_standard),
@@ -52,7 +52,7 @@ static struct
 	      { { { { IP6T_ALIGN(sizeof(struct ip6t_standard_target)), "" } }, { } },
 		-NF_ACCEPT - 1 } },
 	    /* FORWARD */
-	    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
+	    { { { { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, "", "", { 0 }, { 0 }, 0, 0, 0 },
 		0,
 		sizeof(struct ip6t_entry),
 		sizeof(struct ip6t_standard),
@@ -60,7 +60,7 @@ static struct
 	      { { { { IP6T_ALIGN(sizeof(struct ip6t_standard_target)), "" } }, { } },
 		-NF_ACCEPT - 1 } },
 	    /* LOCAL_OUT */
-	    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
+	    { { { { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, "", "", { 0 }, { 0 }, 0, 0, 0 },
 		0,
 		sizeof(struct ip6t_entry),
 		sizeof(struct ip6t_standard),
@@ -69,7 +69,7 @@ static struct
 		-NF_ACCEPT - 1 } }
     },
     /* ERROR */
-    { { { { 0 }, { 0 }, { 0 }, { 0 }, "", "", { 0 }, { 0 }, 0, 0, 0 },
+    { { { { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, { { { 0 } } }, "", "", { 0 }, { 0 }, 0, 0, 0 },
 	0,
 	sizeof(struct ip6t_entry),
 	sizeof(struct ip6t_error),

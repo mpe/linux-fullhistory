@@ -19,9 +19,13 @@
 #include <linux/slab.h>
 #include <linux/skbuff.h>
 #include <linux/filter.h>
+#include <linux/shm.h>
+#include <linux/sem.h>
+#include <linux/msg.h>
 
 #include <asm/uaccess.h>
 #include <asm/mman.h>
+#include <asm/ipc.h>
 
 
 #define A(__x) ((unsigned long)(__x))
@@ -359,16 +363,18 @@ static int
 nargs(unsigned int arg, char **ap)
 {
 	char *ptr;
-	int n;
+	int n, ret;
 
 	n = 0;
 	do {
 		/* egcs is stupid */
 		if (!access_ok(VERIFY_READ, arg, sizeof (unsigned int)))
 			return -EFAULT;
-		__get_user((long)ptr,(int *)A(arg));
-		if (ap)
-			*ap++ = ptr;
+		if (IS_ERR(ret = __get_user((long)ptr,(int *)A(arg))))
+			return ret;
+		if (ap)		/* no access_ok needed, we allocated */
+			if (IS_ERR(ret = __put_user(ptr, ap++)))
+				return ret;
 		arg += sizeof(unsigned int);
 		n++;
 	} while (ptr);
@@ -387,7 +393,11 @@ sys32_execve(abi64_no_regargs, struct pt_regs regs)
 	char * filename;
 
 	na = nargs(argv, NULL);
+	if (IS_ERR(na))
+		return(na);
 	ne = nargs(envp, NULL);
+	if (IS_ERR(ne))
+		return(ne);
 	len = (na + ne + 2) * sizeof(*av);
 	/*
 	 *  kmalloc won't work because the `sys_exec' code will attempt
@@ -403,20 +413,25 @@ sys32_execve(abi64_no_regargs, struct pt_regs regs)
 	up(&current->mm->mmap_sem);
 
 	if (IS_ERR(av))
-		return((long) av);
+		return (long) av;
 	ae = av + na + 1;
-	av[na] = (char *)0;
-	ae[ne] = (char *)0;
-	(void)nargs(argv, av);
-	(void)nargs(envp, ae);
+	if (IS_ERR(r = __put_user(0, (av + na))))
+		goto out;
+	if (IS_ERR(r = __put_user(0, (ae + ne))))
+		goto out;
+	if (IS_ERR(r = nargs(argv, av)))
+		goto out;
+	if (IS_ERR(r = nargs(envp, ae)))
+		goto out;
 	filename = getname((char *) (long)regs.regs[4]);
 	r = PTR_ERR(filename);
 	if (IS_ERR(filename))
-		return(r);
+		goto out;
 
 	r = do_execve(filename, av, ae, &regs);
 	putname(filename);
 	if (IS_ERR(r))
+out:
 		sys_munmap((unsigned long)av, len);
 	return(r);
 }
@@ -1337,3 +1352,413 @@ asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg
 		return sys_fcntl(fd, cmd, (unsigned long)arg);
 	}
 }
+
+struct msgbuf32 { s32 mtype; char mtext[1]; };
+
+struct ipc_perm32
+{
+	key_t    	  key;
+        __kernel_uid_t32  uid;
+        __kernel_gid_t32  gid;
+        __kernel_uid_t32  cuid;
+        __kernel_gid_t32  cgid;
+        __kernel_mode_t32 mode;
+        unsigned short  seq;
+};
+
+struct semid_ds32 {
+        struct ipc_perm32 sem_perm;               /* permissions .. see ipc.h */
+        __kernel_time_t32 sem_otime;              /* last semop time */
+        __kernel_time_t32 sem_ctime;              /* last change time */
+        u32 sem_base;              /* ptr to first semaphore in array */
+        u32 sem_pending;          /* pending operations to be processed */
+        u32 sem_pending_last;    /* last pending operation */
+        u32 undo;                  /* undo requests on this array */
+        unsigned short  sem_nsems;              /* no. of semaphores in array */
+};
+
+struct msqid_ds32
+{
+        struct ipc_perm32 msg_perm;
+        u32 msg_first;
+        u32 msg_last;
+        __kernel_time_t32 msg_stime;
+        __kernel_time_t32 msg_rtime;
+        __kernel_time_t32 msg_ctime;
+        u32 wwait;
+        u32 rwait;
+        unsigned short msg_cbytes;
+        unsigned short msg_qnum;  
+        unsigned short msg_qbytes;
+        __kernel_ipc_pid_t32 msg_lspid;
+        __kernel_ipc_pid_t32 msg_lrpid;
+};
+
+struct shmid_ds32 {
+        struct ipc_perm32       shm_perm;
+        int                     shm_segsz;
+        __kernel_time_t32       shm_atime;
+        __kernel_time_t32       shm_dtime;
+        __kernel_time_t32       shm_ctime;
+        __kernel_ipc_pid_t32    shm_cpid; 
+        __kernel_ipc_pid_t32    shm_lpid; 
+        unsigned short          shm_nattch;
+};
+
+#define IPCOP_MASK(__x)	(1UL << (__x))
+
+static int
+do_sys32_semctl(int first, int second, int third, void *uptr)
+{
+	union semun fourth;
+	u32 pad;
+	int err, err2;
+	struct semid64_ds s;
+	struct semid_ds32 *usp;
+	mm_segment_t old_fs;
+
+	if (!uptr)
+		return -EINVAL;
+	err = -EFAULT;
+	if (get_user (pad, (u32 *)uptr))
+		return err;
+	if(third == SETVAL)
+		fourth.val = (int)pad;
+	else
+		fourth.__pad = (void *)A(pad);
+	switch (third) {
+
+	case IPC_INFO:
+	case IPC_RMID:
+	case IPC_SET:
+	case SEM_INFO:
+	case GETVAL:
+	case GETPID:
+	case GETNCNT:
+	case GETZCNT:
+	case GETALL:
+	case SETVAL:
+	case SETALL:
+		err = sys_semctl (first, second, third, fourth);
+		break;
+
+	case IPC_STAT:
+	case SEM_STAT:
+		usp = (struct semid_ds32 *)A(pad);
+		fourth.__pad = &s;
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_semctl (first, second, third, fourth);
+		set_fs (old_fs);
+		err2 = put_user(s.sem_perm.key, &usp->sem_perm.key);
+		err2 |= __put_user(s.sem_perm.uid, &usp->sem_perm.uid);
+		err2 |= __put_user(s.sem_perm.gid, &usp->sem_perm.gid);
+		err2 |= __put_user(s.sem_perm.cuid,
+				   &usp->sem_perm.cuid);
+		err2 |= __put_user (s.sem_perm.cgid,
+				    &usp->sem_perm.cgid);
+		err2 |= __put_user (s.sem_perm.mode,
+				    &usp->sem_perm.mode);
+		err2 |= __put_user (s.sem_perm.seq, &usp->sem_perm.seq);
+		err2 |= __put_user (s.sem_otime, &usp->sem_otime);
+		err2 |= __put_user (s.sem_ctime, &usp->sem_ctime);
+		err2 |= __put_user (s.sem_nsems, &usp->sem_nsems);
+		if (err2)
+			err = -EFAULT;
+		break;
+
+	}
+
+	return err;
+}
+
+static int
+do_sys32_msgsnd (int first, int second, int third, void *uptr)
+{
+	struct msgbuf *p = kmalloc (second + sizeof (struct msgbuf)
+				    + 4, GFP_USER);
+	struct msgbuf32 *up = (struct msgbuf32 *)uptr;
+	mm_segment_t old_fs;
+	int err;
+
+	if (!p)
+		return -ENOMEM;
+	err = get_user (p->mtype, &up->mtype);
+	err |= __copy_from_user (p->mtext, &up->mtext, second);
+	if (err)
+		goto out;
+	old_fs = get_fs ();
+	set_fs (KERNEL_DS);
+	err = sys_msgsnd (first, p, second, third);
+	set_fs (old_fs);
+out:
+	kfree (p);
+	return err;
+}
+
+static int
+do_sys32_msgrcv (int first, int second, int msgtyp, int third,
+		 int version, void *uptr)
+{
+	struct msgbuf32 *up;
+	struct msgbuf *p;
+	mm_segment_t old_fs;
+	int err;
+
+	if (!version) {
+		struct ipc_kludge *uipck = (struct ipc_kludge *)uptr;
+		struct ipc_kludge ipck;
+
+		err = -EINVAL;
+		if (!uptr)
+			goto out;
+		err = -EFAULT;
+		if (copy_from_user (&ipck, uipck, sizeof (struct ipc_kludge)))
+			goto out;
+		uptr = (void *)A(ipck.msgp);
+		msgtyp = ipck.msgtyp;
+	}
+	err = -ENOMEM;
+	p = kmalloc (second + sizeof (struct msgbuf) + 4, GFP_USER);
+	if (!p)
+		goto out;
+	old_fs = get_fs ();
+	set_fs (KERNEL_DS);
+	err = sys_msgrcv (first, p, second + 4, msgtyp, third);
+	set_fs (old_fs);
+	if (err < 0)
+		goto free_then_out;
+	up = (struct msgbuf32 *)uptr;
+	if (put_user (p->mtype, &up->mtype) ||
+	    __copy_to_user (&up->mtext, p->mtext, err))
+		err = -EFAULT;
+free_then_out:
+	kfree (p);
+out:
+	return err;
+}
+
+static int
+do_sys32_msgctl (int first, int second, void *uptr)
+{
+	int err = -EINVAL, err2;
+	struct msqid_ds m;
+	struct msqid64_ds m64;
+	struct msqid_ds32 *up = (struct msqid_ds32 *)uptr;
+	mm_segment_t old_fs;
+
+	switch (second) {
+
+	case IPC_INFO:
+	case IPC_RMID:
+	case MSG_INFO:
+		err = sys_msgctl (first, second, (struct msqid_ds *)uptr);
+		break;
+
+	case IPC_SET:
+		err = get_user (m.msg_perm.uid, &up->msg_perm.uid);
+		err |= __get_user (m.msg_perm.gid, &up->msg_perm.gid);
+		err |= __get_user (m.msg_perm.mode, &up->msg_perm.mode);
+		err |= __get_user (m.msg_qbytes, &up->msg_qbytes);
+		if (err)
+			break;
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_msgctl (first, second, &m);
+		set_fs (old_fs);
+		break;
+
+	case IPC_STAT:
+	case MSG_STAT:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_msgctl (first, second, (void *) &m64);
+		set_fs (old_fs);
+		err2 = put_user (m64.msg_perm.key, &up->msg_perm.key);
+		err2 |= __put_user(m64.msg_perm.uid, &up->msg_perm.uid);
+		err2 |= __put_user(m64.msg_perm.gid, &up->msg_perm.gid);
+		err2 |= __put_user(m64.msg_perm.cuid, &up->msg_perm.cuid);
+		err2 |= __put_user(m64.msg_perm.cgid, &up->msg_perm.cgid);
+		err2 |= __put_user(m64.msg_perm.mode, &up->msg_perm.mode);
+		err2 |= __put_user(m64.msg_perm.seq, &up->msg_perm.seq);
+		err2 |= __put_user(m64.msg_stime, &up->msg_stime);
+		err2 |= __put_user(m64.msg_rtime, &up->msg_rtime);
+		err2 |= __put_user(m64.msg_ctime, &up->msg_ctime);
+		err2 |= __put_user(m64.msg_cbytes, &up->msg_cbytes);
+		err2 |= __put_user(m64.msg_qnum, &up->msg_qnum);
+		err2 |= __put_user(m64.msg_qbytes, &up->msg_qbytes);
+		err2 |= __put_user(m64.msg_lspid, &up->msg_lspid);
+		err2 |= __put_user(m64.msg_lrpid, &up->msg_lrpid);
+		if (err2)
+			err = -EFAULT;
+		break;
+
+	}
+
+	return err;
+}
+
+static int
+do_sys32_shmat (int first, int second, int third, int version, void *uptr)
+{
+	unsigned long raddr;
+	u32 *uaddr = (u32 *)A((u32)third);
+	int err = -EINVAL;
+
+	if (version == 1)
+		return err;
+	if (version == 1)
+		return err;
+	err = sys_shmat (first, uptr, second, &raddr);
+	if (err)
+		return err;
+	err = put_user (raddr, uaddr);
+	return err;
+}
+
+static int
+do_sys32_shmctl (int first, int second, void *uptr)
+{
+	int err = -EFAULT, err2;
+	struct shmid_ds s;
+	struct shmid64_ds s64;
+	struct shmid_ds32 *up = (struct shmid_ds32 *)uptr;
+	mm_segment_t old_fs;
+	struct shm_info32 {
+		int used_ids;
+		u32 shm_tot, shm_rss, shm_swp;
+		u32 swap_attempts, swap_successes;
+	} *uip = (struct shm_info32 *)uptr;
+	struct shm_info si;
+
+	switch (second) {
+
+	case IPC_INFO:
+	case IPC_RMID:
+	case SHM_LOCK:
+	case SHM_UNLOCK:
+		err = sys_shmctl (first, second, (struct shmid_ds *)uptr);
+		break;
+	case IPC_SET:
+		err = get_user (s.shm_perm.uid, &up->shm_perm.uid);
+		err |= __get_user (s.shm_perm.gid, &up->shm_perm.gid);
+		err |= __get_user (s.shm_perm.mode, &up->shm_perm.mode);
+		if (err)
+			break;
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_shmctl (first, second, &s);
+		set_fs (old_fs);
+		break;
+
+	case IPC_STAT:
+	case SHM_STAT:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_shmctl (first, second, (void *) &s64);
+		set_fs (old_fs);
+		if (err < 0)
+			break;
+		err2 = put_user (s64.shm_perm.key, &up->shm_perm.key);
+		err2 |= __put_user (s64.shm_perm.uid, &up->shm_perm.uid);
+		err2 |= __put_user (s64.shm_perm.gid, &up->shm_perm.gid);
+		err2 |= __put_user (s64.shm_perm.cuid,
+				    &up->shm_perm.cuid);
+		err2 |= __put_user (s64.shm_perm.cgid,
+				    &up->shm_perm.cgid);
+		err2 |= __put_user (s64.shm_perm.mode,
+				    &up->shm_perm.mode);
+		err2 |= __put_user (s64.shm_perm.seq, &up->shm_perm.seq);
+		err2 |= __put_user (s64.shm_atime, &up->shm_atime);
+		err2 |= __put_user (s64.shm_dtime, &up->shm_dtime);
+		err2 |= __put_user (s64.shm_ctime, &up->shm_ctime);
+		err2 |= __put_user (s64.shm_segsz, &up->shm_segsz);
+		err2 |= __put_user (s64.shm_nattch, &up->shm_nattch);
+		err2 |= __put_user (s64.shm_cpid, &up->shm_cpid);
+		err2 |= __put_user (s64.shm_lpid, &up->shm_lpid);
+		if (err2)
+			err = -EFAULT;
+		break;
+
+	case SHM_INFO:
+		old_fs = get_fs ();
+		set_fs (KERNEL_DS);
+		err = sys_shmctl (first, second, (void *)&si);
+		set_fs (old_fs);
+		if (err < 0)
+			break;
+		err2 = put_user (si.used_ids, &uip->used_ids);
+		err2 |= __put_user (si.shm_tot, &uip->shm_tot);
+		err2 |= __put_user (si.shm_rss, &uip->shm_rss);
+		err2 |= __put_user (si.shm_swp, &uip->shm_swp);
+		err2 |= __put_user (si.swap_attempts,
+				    &uip->swap_attempts);
+		err2 |= __put_user (si.swap_successes,
+				    &uip->swap_successes);
+		if (err2)
+			err = -EFAULT;
+		break;
+
+	}
+	return err;
+}
+
+asmlinkage long
+sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u32 fifth)
+{
+	int version, err;
+
+	version = call >> 16; /* hack for backward compatibility */
+	call &= 0xffff;
+
+	switch (call) {
+
+	case SEMOP:
+		/* struct sembuf is the same on 32 and 64bit :)) */
+		err = sys_semop (first, (struct sembuf *)A(ptr),
+				 second);
+		break;
+	case SEMGET:
+		err = sys_semget (first, second, third);
+		break;
+	case SEMCTL:
+		err = do_sys32_semctl (first, second, third,
+				       (void *)A(ptr));
+		break;
+
+	case MSGSND:
+		err = do_sys32_msgsnd (first, second, third,
+				       (void *)A(ptr));
+		break;
+	case MSGRCV:
+		err = do_sys32_msgrcv (first, second, fifth, third,
+				       version, (void *)A(ptr));
+		break;
+	case MSGGET:
+		err = sys_msgget ((key_t) first, second);
+		break;
+	case MSGCTL:
+		err = do_sys32_msgctl (first, second, (void *)A(ptr));
+		break;
+
+	case SHMAT:
+		err = do_sys32_shmat (first, second, third,
+				      version, (void *)A(ptr));
+		break;
+	case SHMDT: 
+		err = sys_shmdt ((char *)A(ptr));
+		break;
+	case SHMGET:
+		err = sys_shmget (first, second, third);
+		break;
+	case SHMCTL:
+		err = do_sys32_shmctl (first, second, (void *)A(ptr));
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+
+	return err;
+}
+

@@ -30,7 +30,7 @@ an Enterprise Storage Server (Seascape) should work fine as well.
 We currently implement one partition per volume, which is the whole
 volume, skipping the first blocks up to the volume label. These are
 reserved for IPL records and IBM's volume label to assure
-accessability of the DASD from other OSs. In a later stage we will
+accessibility of the DASD from other OSs. In a later stage we will
 provide support of partitions, maybe VTOC oriented or using a kind of
 partition table in the label record.
 
@@ -38,7 +38,7 @@ USAGE
 
 -Low-level format (?CKD only)
 For using an ECKD-DASD as a Linux harddisk you have to low-level
-format the tracks by issueing the BLKDASDFORMAT-ioctl on that
+format the tracks by issuing the BLKDASDFORMAT-ioctl on that
 device. This will erase any data on that volume including IBM volume
 labels, VTOCs etc. The ioctl may take a 'struct format_data *' or
 'NULL' as an argument.  

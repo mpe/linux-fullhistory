@@ -841,6 +841,7 @@ void __exit dabusb_cleanup (void)
 MODULE_AUTHOR ("Deti Fliegl, deti@fliegl.de");
 MODULE_DESCRIPTION ("DAB-USB Interface Driver for Linux (c)1999");
 MODULE_PARM (buffers, "i");
+MODULE_PARM_DESC (buffers, "Number of buffers (default=256)");
 
 int __init init_module (void)
 {

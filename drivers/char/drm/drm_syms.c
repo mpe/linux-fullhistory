@@ -1,4 +1,4 @@
-
+#include <linux/config.h>
 #include "drmP.h"
 
 /* Misc. support (init.c) */

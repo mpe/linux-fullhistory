@@ -254,53 +254,56 @@ static int parse_options (char * options, unsigned long * sb_block,
 	return 1;
 }
 
-static void ext2_setup_super (struct super_block * sb,
-			      struct ext2_super_block * es)
+static int ext2_setup_super (struct super_block * sb,
+			      struct ext2_super_block * es,
+			      int read_only)
 {
+	int res = 0;
 	if (le32_to_cpu(es->s_rev_level) > EXT2_MAX_SUPP_REV) {
 			printk ("EXT2-fs warning: revision level too high, "
 				"forcing read/only mode\n");
-			sb->s_flags |= MS_RDONLY;
+			res = MS_RDONLY;
 	}
-	if (!(sb->s_flags & MS_RDONLY)) {
-		if (!(sb->u.ext2_sb.s_mount_state & EXT2_VALID_FS))
-			printk ("EXT2-fs warning: mounting unchecked fs, "
-				"running e2fsck is recommended\n");
-		else if ((sb->u.ext2_sb.s_mount_state & EXT2_ERROR_FS))
-			printk ("EXT2-fs warning: mounting fs with errors, "
-				"running e2fsck is recommended\n");
-		else if ((__s16) le16_to_cpu(es->s_max_mnt_count) >= 0 &&
-		         le16_to_cpu(es->s_mnt_count) >=
-			 (unsigned short) (__s16) le16_to_cpu(es->s_max_mnt_count))
-			printk ("EXT2-fs warning: maximal mount count reached, "
-				"running e2fsck is recommended\n");
-		else if (le32_to_cpu(es->s_checkinterval) &&
-			(le32_to_cpu(es->s_lastcheck) + le32_to_cpu(es->s_checkinterval) <= CURRENT_TIME))
-			printk ("EXT2-fs warning: checktime reached, "
-				"running e2fsck is recommended\n");
-		es->s_state = cpu_to_le16(le16_to_cpu(es->s_state) & ~EXT2_VALID_FS);
-		if (!(__s16) le16_to_cpu(es->s_max_mnt_count))
-			es->s_max_mnt_count = (__s16) cpu_to_le16(EXT2_DFL_MAX_MNT_COUNT);
-		es->s_mnt_count=cpu_to_le16(le16_to_cpu(es->s_mnt_count) + 1);
-		es->s_mtime = cpu_to_le32(CURRENT_TIME);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
-		sb->s_dirt = 1;
-		if (test_opt (sb, DEBUG))
-			printk ("[EXT II FS %s, %s, bs=%lu, fs=%lu, gc=%lu, "
-				"bpg=%lu, ipg=%lu, mo=%04lx]\n",
-				EXT2FS_VERSION, EXT2FS_DATE, sb->s_blocksize,
-				sb->u.ext2_sb.s_frag_size,
-				sb->u.ext2_sb.s_groups_count,
-				EXT2_BLOCKS_PER_GROUP(sb),
-				EXT2_INODES_PER_GROUP(sb),
-				sb->u.ext2_sb.s_mount_opt);
+	if (read_only)
+		return res;
+	if (!(sb->u.ext2_sb.s_mount_state & EXT2_VALID_FS))
+		printk ("EXT2-fs warning: mounting unchecked fs, "
+			"running e2fsck is recommended\n");
+	else if ((sb->u.ext2_sb.s_mount_state & EXT2_ERROR_FS))
+		printk ("EXT2-fs warning: mounting fs with errors, "
+			"running e2fsck is recommended\n");
+	else if ((__s16) le16_to_cpu(es->s_max_mnt_count) >= 0 &&
+		 le16_to_cpu(es->s_mnt_count) >=
+		 (unsigned short) (__s16) le16_to_cpu(es->s_max_mnt_count))
+		printk ("EXT2-fs warning: maximal mount count reached, "
+			"running e2fsck is recommended\n");
+	else if (le32_to_cpu(es->s_checkinterval) &&
+		(le32_to_cpu(es->s_lastcheck) + le32_to_cpu(es->s_checkinterval) <= CURRENT_TIME))
+		printk ("EXT2-fs warning: checktime reached, "
+			"running e2fsck is recommended\n");
+	es->s_state = cpu_to_le16(le16_to_cpu(es->s_state) & ~EXT2_VALID_FS);
+	if (!(__s16) le16_to_cpu(es->s_max_mnt_count))
+		es->s_max_mnt_count = (__s16) cpu_to_le16(EXT2_DFL_MAX_MNT_COUNT);
+	es->s_mnt_count=cpu_to_le16(le16_to_cpu(es->s_mnt_count) + 1);
+	es->s_mtime = cpu_to_le32(CURRENT_TIME);
+	mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+	sb->s_dirt = 1;
+	if (test_opt (sb, DEBUG))
+		printk ("[EXT II FS %s, %s, bs=%lu, fs=%lu, gc=%lu, "
+			"bpg=%lu, ipg=%lu, mo=%04lx]\n",
+			EXT2FS_VERSION, EXT2FS_DATE, sb->s_blocksize,
+			sb->u.ext2_sb.s_frag_size,
+			sb->u.ext2_sb.s_groups_count,
+			EXT2_BLOCKS_PER_GROUP(sb),
+			EXT2_INODES_PER_GROUP(sb),
+			sb->u.ext2_sb.s_mount_opt);
 #ifdef CONFIG_EXT2_CHECK
-		if (test_opt (sb, CHECK)) {
-			ext2_check_blocks_bitmap (sb);
-			ext2_check_inodes_bitmap (sb);
-		}
-#endif
+	if (test_opt (sb, CHECK)) {
+		ext2_check_blocks_bitmap (sb);
+		ext2_check_inodes_bitmap (sb);
 	}
+#endif
+	return res;
 }
 
 static int ext2_check_descriptors (struct super_block * sb)
@@ -601,7 +604,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		printk ("EXT2-fs: get root inode failed\n");
 		return NULL;
 	}
-	ext2_setup_super (sb, es);
+	ext2_setup_super (sb, es, sb->s_flags & MS_RDONLY);
 	return sb;
 }
 
@@ -685,8 +688,8 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 		 * by e2fsck since we originally mounted the partition.)
 		 */
 		sb->u.ext2_sb.s_mount_state = le16_to_cpu(es->s_state);
-		sb->s_flags &= ~MS_RDONLY;
-		ext2_setup_super (sb, es);
+		if (!ext2_setup_super (sb, es, 0))
+			sb->s_flags &= ~MS_RDONLY;
 	}
 	return 0;
 }

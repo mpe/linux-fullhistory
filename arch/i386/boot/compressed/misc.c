@@ -298,6 +298,7 @@ void setup_normal_output_buffer(void)
 	if ((ALT_MEM_K > EXT_MEM_K ? ALT_MEM_K : EXT_MEM_K) < 1024) error("Less than 2MB of memory.\n");
 #endif
 	output_data = (char *)0x100000; /* Points to 1M */
+	free_mem_end_ptr = (long)real_mode;
 }
 
 struct moveparams {

@@ -555,7 +555,7 @@ static inline int must_not_trace_exec(struct task_struct * p)
 
 /* 
  * Fill the binprm structure from the inode. 
- * Check permissions, then read the first 512 bytes
+ * Check permissions, then read the first 128 (BINPRM_BUF_SIZE) bytes
  */
 int prepare_binprm(struct linux_binprm *bprm)
 {
@@ -646,8 +646,8 @@ int prepare_binprm(struct linux_binprm *bprm)
 		}
 	}
 
-	memset(bprm->buf,0,sizeof(bprm->buf));
-	return kernel_read(bprm->file,0,bprm->buf,128);
+	memset(bprm->buf,0,BINPRM_BUF_SIZE);
+	return kernel_read(bprm->file,0,bprm->buf,BINPRM_BUF_SIZE);
 }
 
 /*
@@ -819,14 +819,14 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int retval;
 	int i;
 
-	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
-	memset(bprm.page, 0, MAX_ARG_PAGES*sizeof(bprm.page[0])); 
-
 	file = open_exec(filename);
 
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		return retval;
+
+	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
+	memset(bprm.page, 0, MAX_ARG_PAGES*sizeof(bprm.page[0])); 
 
 	bprm.file = file;
 	bprm.filename = filename;

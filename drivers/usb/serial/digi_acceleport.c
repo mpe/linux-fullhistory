@@ -1768,4 +1768,6 @@ void digi_exit (void)
 module_init(digi_init);
 module_exit(digi_exit);
 
+MODULE_AUTHOR("Peter Berger <pberger@brimson.com>, Al Borchers <borchers@steinerpoint.com>");
+MODULE_DESCRIPTION("Digi AccelePort USB-4 Serial Converter driver");
 

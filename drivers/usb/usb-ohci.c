@@ -65,6 +65,9 @@
  */
 #include <linux/adb.h>
 #include <linux/pmu.h>
+#ifndef CONFIG_PM
+#define CONFIG_PM
+#endif
 #endif
 
 
@@ -415,9 +418,11 @@ static int sohci_submit_urb (urb_t * urb)
 	int i, size = 0;
 	unsigned long flags;
 	
-	if (!urb->dev || !urb->dev->bus) return -EINVAL;
+	if (!urb->dev || !urb->dev->bus)
+		return -EINVAL;
 	
-	if (urb->hcpriv) return -EINVAL; /* urb already in use */
+	if (urb->hcpriv)			/* urb already in use */
+		return -EINVAL;
 
 //	if(usb_endpoint_halted (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe))) 
 //		return -EPIPE;
@@ -435,8 +440,10 @@ static int sohci_submit_urb (urb_t * urb)
 	
 	/* when controller's hung, permit only roothub cleanup attempts
 	 * such as powering down ports */
-	if (ohci->disabled)
+	if (ohci->disabled) {
+		usb_dec_dev_use (urb->dev);	
 		return -ESHUTDOWN;
+	}
 
 	/* every endpoint has a ed, locate and fill it */
 	if (!(ed = ep_add_ed (urb->dev, pipe, urb->interval, 1))) {
@@ -1730,7 +1737,9 @@ static int rh_submit_urb (urb_t * urb)
 	urb_print (urb, "RET(rh)", usb_pipeout (urb->pipe));
 #endif
 
-	if (urb->complete) urb->complete (urb);
+	if (urb->complete)
+	    	urb->complete (urb);
+	usb_dec_dev_use (urb->dev);
 	return 0;
 }
 
@@ -1880,7 +1889,9 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 			ohci->ohci_dev->slot_name);
 		// e.g. due to PCI Master/Target Abort
 
-#ifndef	DEBUG
+#ifdef	DEBUG
+		ohci_dump (ohci, 1);
+#else
 		// FIXME: be optimistic, hope that bug won't repeat often.
 		// Make some non-interrupt context restart the controller.
 		// Count and limit the retries though; either hardware or
@@ -1910,6 +1921,8 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	}
 	writel (ints, &regs->intrstatus);
 	writel (OHCI_INTR_MIE, &regs->intrenable);	
+
+	/* FIXME:  check URB timeouts */
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1921,7 +1934,7 @@ static ohci_t * __devinit hc_alloc_ohci (void * mem_base)
 	ohci_t * ohci;
 	struct usb_bus * bus;
 
-	ohci = (ohci_t *) __get_free_pages (GFP_KERNEL, 1);
+	ohci = (ohci_t *) kmalloc (sizeof *ohci, GFP_KERNEL);
 	if (!ohci)
 		return NULL;
 		
@@ -1932,7 +1945,7 @@ static ohci_t * __devinit hc_alloc_ohci (void * mem_base)
 
 	bus = usb_alloc_bus (&sohci_device_operations);
 	if (!bus) {
-		free_pages ((unsigned long) ohci, 1);
+		kfree (ohci);
 		return NULL;
 	}
 
@@ -1974,7 +1987,7 @@ static void hc_release_ohci (ohci_t * ohci)
 	/* unmap the IO address space */
 	iounmap (ohci->regs);
        
-	free_pages ((unsigned long) ohci, 1);	
+	kfree (ohci);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -2085,13 +2098,27 @@ static void hc_restart (ohci_t *ohci)
 static int __devinit
 ohci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
 {
-	unsigned long mem_resource;
+	unsigned long mem_resource, mem_len;
 	u8 latency, limit;
 	void *mem_base;
 
 	if (pci_enable_device(dev) < 0)
 		return -ENODEV;
 	
+	/* we read its hardware registers as memory */
+	mem_resource = pci_resource_start(dev, 0);
+	mem_len = pci_resource_len(dev, 0);
+	if (!request_mem_region (mem_resource, mem_len, ohci_pci_driver.name)) {
+		dbg ("controller already in use");
+		return -EBUSY;
+	}
+
+	mem_base = ioremap_nocache (mem_resource, mem_len);
+	if (!mem_base) {
+		err("Error mapping OHCI memory");
+		return -EFAULT;
+	}
+
 	/* controller writes into our memory */
 	pci_set_master (dev);
 	pci_read_config_byte (dev, PCI_LATENCY_TIMER, &latency);
@@ -2101,15 +2128,6 @@ ohci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
 			dbg ("PCI latency reduced to max %d", limit);
 			pci_write_config_byte (dev, PCI_LATENCY_TIMER, limit);
 		}
-	}
-
-	/* we read its hardware registers as memory */
-	mem_resource = pci_resource_start(dev, 0);
-	/* request_mem_region ... */
-	mem_base = ioremap_nocache (mem_resource, 4096);
-	if (!mem_base) {
-		err("Error mapping OHCI memory");
-		return -EFAULT;
 	}
 
 	return hc_found_ohci (dev, dev->irq, mem_base);
@@ -2145,6 +2163,8 @@ ohci_pci_remove (struct pci_dev *dev)
 			&ohci->regs->control);
 
 	hc_release_ohci (ohci);
+
+	release_mem_region (pci_resource_start (dev, 0), pci_resource_len (dev, 0));
 }
 
 
@@ -2233,7 +2253,7 @@ ohci_pci_resume (struct pci_dev *dev)
 
 /*-------------------------------------------------------------------------*/
 
-static const struct __devinitdata pci_device_id	ohci_pci_ids [] = { {
+static const struct pci_device_id __devinitdata ohci_pci_ids [] = { {
 
 	/* handle any USB OHCI controller */
 	class: 		((PCI_CLASS_SERIAL_USB << 8) | 0x10),
@@ -2328,4 +2348,5 @@ module_exit (ohci_hcd_cleanup);
 #endif /* MODULE */
 
 
+MODULE_AUTHOR ("Roman Weissgaerber <weissg@vienna.at>");
 MODULE_DESCRIPTION ("USB OHCI Host Controller Driver");

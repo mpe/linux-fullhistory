@@ -125,7 +125,7 @@ if you have questions, comments or corrections.
 
 	  Although platform dependent, and certainly the case for embedded
 	  8xx, traditionally memory is mapped at physical address zero,
-	  and I/O devices above phsical address 0x80000000.  The lowest
+	  and I/O devices above physical address 0x80000000.  The lowest
 	  and highest (above 0xf0000000) I/O addresses are traditionally 
 	  used for devices or registers we need to map during kernel 
 	  initialization and prior to KVM operation.  For this reason, 

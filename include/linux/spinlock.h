@@ -118,6 +118,7 @@ typedef struct {
   #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 #endif
 
+#define rwlock_init(lock)	do { } while(0)
 #define read_lock(lock)		(void)(lock) /* Not "unused variable". */
 #define read_unlock(lock)	do { } while(0)
 #define write_lock(lock)	(void)(lock) /* Not "unused variable". */

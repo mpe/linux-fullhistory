@@ -6,7 +6,7 @@ Tools that manage md devices can be found at
 You can boot (if you selected boot support in the configuration) with your md 
 device with the following kernel command lines:
 
-for old raid arrays without persistant superblocks:
+for old raid arrays without persistent superblocks:
   md=<md device no.>,<raid level>,<chunk size factor>,<fault level>,dev0,dev1,...,devn
 
 for raid arrays with persistant superblocks

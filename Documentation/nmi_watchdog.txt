@@ -7,7 +7,7 @@ on Intel SMP hardware there is a feature that enables us to generate
 'watchdog NMI interrupts'. (NMI: Non Maskable Interrupt - these get
 executed even if the system is otherwise locked up hard) This can be
 used to debug hard kernel lockups. By executing periodic NMI interrupts,
-the kernel can monitor wether any CPU has locked up, and print out
+the kernel can monitor whether any CPU has locked up, and print out
 debugging messages if so.  You can enable/disable the NMI watchdog at boot
 time with the 'nmi_watchdog=1' boot parameter. Eg. the relevant
 lilo.conf entry:

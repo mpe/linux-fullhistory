@@ -1071,15 +1071,11 @@ D: Berkshire PC Watchdog Driver
 D: Small/Industrial Driver Project
 
 N: Nick Holloway
-E: Nick.Holloway@alfie.demon.co.uk
-E: Nick.Holloway@parallax.co.uk
-W: http://www.alfie.demon.co.uk/
-P: 1024/75C49395 3A F0 E3 4E B7 9F E0 7E  47 A3 B0 D5 68 6A C2 FB
+E: Nick.Holloway@pyrites.org.uk
+W: http://www.pyrites.org.uk/
+P: 1024/36115A04 F4E1 3384 FCFD C055 15D6  BA4C AB03 FBF8 3611 5A04
 D: Occasional Linux hacker...
-S: 15 Duke Street
-S: Chapelfields
-S: Coventry
-S: CV5 8BZ
+S: (ask for current address)
 S: United Kingdom
 
 N: Ron Holt
@@ -1555,6 +1551,12 @@ D: Linux/MIPS Deskstation support, Provided OI/OB for Linux
 S: 8786 Niwot Road
 S: Niwot, Colorado 80503
 S: USA
+
+N: Robert M. Love
+E: rml@tech9.net
+E: rml@ufl.edu
+D: misc. kernel hacking and debugging
+S: FL, USA
 
 N: Martin von Löwis
 E: loewis@informatik.hu-berlin.de

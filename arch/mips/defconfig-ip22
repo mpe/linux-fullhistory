@@ -29,6 +29,13 @@ CONFIG_SGI=y
 # CONFIG_PCI is not set
 
 #
+# Loadable module support
+#
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+CONFIG_KMOD=y
+
+#
 # CPU selection
 #
 # CONFIG_CPU_R3000 is not set
@@ -63,9 +70,6 @@ CONFIG_SYSCTL=y
 # Parallel port support
 #
 # CONFIG_PARPORT is not set
-CONFIG_MODULES=y
-# CONFIG_MODVERSIONS is not set
-CONFIG_KMOD=y
 # CONFIG_PCMCIA is not set
 
 #

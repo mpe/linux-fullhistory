@@ -44,7 +44,7 @@ The kernel command line takes options looking like the following:
 the two numbers are the node address 1,2 = 1.2 For 2.2.xx kernels
 and early 2.3.xx kernels, you must use a comma when specifying the
 DECnet address like this. For more recent 2.3.xx kernels, you may
-use almost charecter except space, although a `.` would be the most
+use almost any character except space, although a `.` would be the most
 obvious choice :-)
 
 There used to be a third number specifying the node type. This option

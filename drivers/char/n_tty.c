@@ -1154,9 +1154,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 				nr -= num;
 				if (nr == 0)
 					break;
-				current->state = TASK_RUNNING;
 				get_user(c, b);
-				current->state = TASK_INTERRUPTIBLE;
 				if (opost(c, tty) < 0)
 					break;
 				b++; nr--;
@@ -1164,9 +1162,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 			if (tty->driver.flush_chars)
 				tty->driver.flush_chars(tty);
 		} else {
-			current->state = TASK_RUNNING;
 			c = tty->driver.write(tty, 1, b, nr);
-			current->state = TASK_INTERRUPTIBLE;
 			if (c < 0) {
 				retval = c;
 				goto break_out;

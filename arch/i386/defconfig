@@ -478,13 +478,13 @@ CONFIG_PSMOUSE=y
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
+# CONFIG_AGP is not set
 CONFIG_DRM=y
 CONFIG_DRM_TDFX=y
 # CONFIG_DRM_GAMMA is not set
 # CONFIG_DRM_R128 is not set
 # CONFIG_DRM_I810 is not set
 # CONFIG_DRM_MGA is not set
-# CONFIG_AGP is not set
 CONFIG_PCMCIA_SERIAL=y
 
 #

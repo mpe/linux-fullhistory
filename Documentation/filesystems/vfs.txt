@@ -24,7 +24,7 @@ What is it?                                                           <section>
 
 The Virtual File System (otherwise known as the Virtual Filesystem
 Switch) is the software layer in the kernel that provides the
-filesystem interface to userspace programmes. It also provides an
+filesystem interface to userspace programs. It also provides an
 abstraction within the kernel which allows different filesystem
 implementations to co-exist.
 
@@ -34,7 +34,7 @@ A Quick Look At How It Works                                          <section>
 
 In this section I'll briefly describe how things work, before
 launching into the details. I'll start with describing what happens
-when user programmes open and manipulate files, and then look from the
+when user programs open and manipulate files, and then look from the
 other view which is how a filesystem is supported and subsequently
 mounted.
 

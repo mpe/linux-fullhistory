@@ -689,3 +689,6 @@ static void __exit acm_exit(void)
 
 module_init(acm_init);
 module_exit(acm_exit);
+
+MODULE_AUTHOR("Armin Fuerst, Pavel Machek, Johannes Erdfelt, Vojtech Pavlik");
+MODULE_DESCRIPTION("USB Abstract Control Model driver for USB modems and ISDN adapters");

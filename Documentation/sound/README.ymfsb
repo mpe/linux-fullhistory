@@ -28,7 +28,7 @@ ABOUT THIS DRIVER
  It can only play 22.05kHz / 8bit / Stereo samples, control external MIDI
  port.
  If you want to use your card as recent "16-bit" card, you should use
- Alsa or OSS/Linux driver. Ofcource you can write native PCI driver for
+ Alsa or OSS/Linux driver. Of course you can write native PCI driver for
  your cards :)
 
 

@@ -137,7 +137,7 @@ Installation
          -Pcbr:max_pcr=<xxx>
          where:
              xxx = the maximum peak cell rate, from 170 - 353207.
-         This option may only be set on the trasmit machine.
+         This option may only be set on the transmit machine.
 
 
 OUTSTANDING ISSUES

@@ -20,7 +20,7 @@ What's left to be done for 32-bit UIDs on all Linux architectures:
 - Decide whether or not to keep backwards compatibility with the system
   accounting file, or if we should break it as the comments suggest
   (currently, the old 16-bit UID and GID are still written to disk, and
-  part of the former pad sparce is used to store separate 32-bit UID and
+  part of the former pad space is used to store separate 32-bit UID and
   GID)
 
 - Need to validate that OS emulation calls the 16-bit UID

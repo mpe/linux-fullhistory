@@ -31,7 +31,7 @@ Richard Gooch
 There are two interfaces to /proc/mtrr: one is an ASCII interface
 which allows you to read and write. The other is an ioctl()
 interface. The ASCII interface is meant for administration. The
-ioctl() interface is meant for C programmes (i.e. the X server). The
+ioctl() interface is meant for C programs (i.e. the X server). The
 interfaces are described below, with sample commands and C code.
 
 ===============================================================================
@@ -96,11 +96,11 @@ Removing MTRRs from the C-shell:
 or using bash:
 % echo "disable=2" >| /proc/mtrr
 ===============================================================================
-Reading MTRRs from a C programme using ioctl()'s:
+Reading MTRRs from a C program using ioctl()'s:
 
 /*  mtrr-show.c
 
-    Source file for mtrr-show (example programme to show MTRRs using ioctl()'s)
+    Source file for mtrr-show (example program to show MTRRs using ioctl()'s)
 
     Copyright (C) 1997-1998  Richard Gooch
 
@@ -124,7 +124,7 @@ Reading MTRRs from a C programme using ioctl()'s:
 */
 
 /*
-    This programme will use an ioctl() on /proc/mtrr to show the current MTRR
+    This program will use an ioctl() on /proc/mtrr to show the current MTRR
     settings. This is an alternative to reading /proc/mtrr.
 
 

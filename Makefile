@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 4
 SUBLEVEL = 0
-EXTRAVERSION = -test5
+EXTRAVERSION = -test6
 
 KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
@@ -128,8 +128,8 @@ DRIVERS-y :=
 DRIVERS-m :=
 DRIVERS-  :=
 
-DRIVERS-$(CONFIG_DRM) += drivers/char/drm/drm.o
 DRIVERS-$(CONFIG_AGP) += drivers/char/agp/agp.o
+DRIVERS-$(CONFIG_DRM) += drivers/char/drm/drm.o
 DRIVERS-$(CONFIG_NUBUS) += drivers/nubus/nubus.a
 DRIVERS-$(CONFIG_ISDN) += drivers/isdn/isdn.a
 DRIVERS-$(CONFIG_NET_FC) += drivers/net/fc/fc.a
@@ -177,6 +177,8 @@ include arch/$(ARCH)/Makefile
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
+# likewise for -fno-delete-null-pointer-checks
+CFLAGS += $(shell if $(CC) -fno-delete-null-pointer-checks -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-delete-null-pointer-checks"; fi)
 
 export	CPPFLAGS CFLAGS AFLAGS
 
@@ -308,7 +310,7 @@ modules_install:
 	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE); \
 	mkdir -p $$MODLIB; \
 	rm -f $$MODLIB/build; \
-	ln -s $TOPDIR $$MODLIB/build; \
+	ln -s $$TOPDIR $$MODLIB/build; \
 	cd modules; \
 	MODULES=""; \
 	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \

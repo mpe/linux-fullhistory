@@ -58,7 +58,7 @@ CFLAGS += $(shell if $(CC) -march=k6 -S -o /dev/null -xc /dev/null >/dev/null 2>
 endif
 
 ifdef CONFIG_MK7
-CFLAGS += $(shell if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686"; fi) -malign-functions=4 -fschedule-insns2 -mwide-multiply -fexpensive-optimizations
+CFLAGS += $(shell if $(CC) -march=athlon -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=athlon"; else  if $(CC) -march=i686 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-march=i686 -malign-functions=4";  fi fi) 
 endif
 
 ifdef CONFIG_MCRUSOE

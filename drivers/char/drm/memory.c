@@ -30,6 +30,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/config.h>
 #include "drmP.h"
 
 typedef struct drm_mem_stats {

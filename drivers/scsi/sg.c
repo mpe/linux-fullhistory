@@ -17,8 +17,8 @@
  * any later version.
  *
  */
- static char * sg_version_str = "Version: 3.1.15 (20000528)";
- static int sg_version_num = 30115; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 3.1.16 (20000716)";
+ static int sg_version_num = 30116; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -1890,9 +1890,9 @@ static void sg_link_reserve(Sg_fd * sfp, Sg_request * srp, int size)
     Sg_scatter_hold * req_schp = &srp->data;
     Sg_scatter_hold * rsv_schp = &sfp->reserve;
 
+    srp->res_used = 1;
     SCSI_LOG_TIMEOUT(4, printk("sg_link_reserve: size=%d\n", size));
-    /* round request up to next highest SG_SECTOR_SZ byte boundary */
-    size = (size + SG_SECTOR_MSK) & (~SG_SECTOR_MSK);
+    size = (size + 1) & (~1);    /* round to even for aha1542 */
     if (rsv_schp->k_use_sg > 0) {
         int k, num;
         int rem = size;
@@ -1901,22 +1901,26 @@ static void sg_link_reserve(Sg_fd * sfp, Sg_request * srp, int size)
 	for (k = 0; k < rsv_schp->k_use_sg; ++k, ++sclp) {
             num = (int)sclp->length;
             if (rem <= num) {
-                sfp->save_scat_len = num;
-                sclp->length = (unsigned)rem;
-                break;
+		if (0 == k) {
+		    req_schp->k_use_sg = 0;
+		    req_schp->buffer = sclp->address;
+		}
+		else {
+    		    sfp->save_scat_len = num;
+    		    sclp->length = (unsigned)rem;
+    		    req_schp->k_use_sg = k + 1;
+    		    req_schp->sglist_len = rsv_schp->sglist_len;
+    		    req_schp->buffer = rsv_schp->buffer;
+		}
+		req_schp->bufflen = size;
+		req_schp->buffer_mem_src = rsv_schp->buffer_mem_src;
+		req_schp->b_malloc_len = rsv_schp->b_malloc_len;
+		break;
             }
             else
                 rem -= num;
         }
-	if (k < rsv_schp->k_use_sg) {
-	    req_schp->k_use_sg = k + 1;   /* adjust scatter list length */
-            req_schp->bufflen = size;
-            req_schp->sglist_len = rsv_schp->sglist_len;
-            req_schp->buffer = rsv_schp->buffer;
-	    req_schp->buffer_mem_src = rsv_schp->buffer_mem_src;
-            req_schp->b_malloc_len = rsv_schp->b_malloc_len;
-        }
-        else
+	if (k >= rsv_schp->k_use_sg)
 	    SCSI_LOG_TIMEOUT(1, printk("sg_link_reserve: BAD size\n"));
     }
     else {
@@ -1924,10 +1928,8 @@ static void sg_link_reserve(Sg_fd * sfp, Sg_request * srp, int size)
         req_schp->bufflen = size;
         req_schp->buffer = rsv_schp->buffer;
 	req_schp->buffer_mem_src = rsv_schp->buffer_mem_src;
-	req_schp->k_use_sg = rsv_schp->k_use_sg;
         req_schp->b_malloc_len = rsv_schp->b_malloc_len;
     }
-    srp->res_used = 1;
 }
 
 static void sg_unlink_reserve(Sg_fd * sfp, Sg_request * srp)
@@ -1937,7 +1939,7 @@ static void sg_unlink_reserve(Sg_fd * sfp, Sg_request * srp)
 
     SCSI_LOG_TIMEOUT(4, printk("sg_unlink_reserve: req->k_use_sg=%d\n",
 			       (int)req_schp->k_use_sg));
-    if (rsv_schp->k_use_sg > 0) {
+    if ((rsv_schp->k_use_sg > 0) && (req_schp->k_use_sg > 0)) {
         struct scatterlist * sclp = (struct scatterlist *)rsv_schp->buffer;
 
 	if (sfp->save_scat_len > 0)
@@ -2118,13 +2120,12 @@ static Sg_fd * sg_add_sfp(Sg_device * sdp, int dev)
 }
 
 static int sg_remove_sfp(Sg_device * sdp, Sg_fd * sfp)
-{	/* if this is to be locked remember that it is called from _bh */
+{
     Sg_request * srp;
     Sg_request * tsrp;
     int dirty = 0;
     int res = 0;
 
-    /* no lock since not expecting any parallel action on this fd */
     srp = sfp->headrp;
     if (srp) {
 	while (srp) {

@@ -482,7 +482,7 @@ the physical linelength differs from the visible length. With ProMST,
 xres_virtual must be set to 2048. For ET4000, xres_virtual depends on the
 initialisation of the video-card.
 If you're missing a corresponding yres_virtual: the external part is legacy,
-therefore we don't support hardware-dependend functions like hardware-scroll,
+therefore we don't support hardware-dependent functions like hardware-scroll,
 panning or blanking.
 
 4.1.7) eclock:

@@ -1050,3 +1050,6 @@ void __exit microtek_drv_exit(void)
 
 module_init(microtek_drv_init);
 module_exit(microtek_drv_exit);
+
+MODULE_AUTHOR("John Fremlin <vii@penguinpowered.com>, Oliver Neukum <Oliver.Neukum@lrz.uni-muenchen.de>");
+MODULE_DESCRIPTION("Microtek Scanmaker X6 USB scanner driver");

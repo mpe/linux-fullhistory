@@ -121,11 +121,11 @@ data in the file is raw data so it's not very useful for imaging.
 
 MESSAGES
 
-On occassion the message 'usb_control/bulk_msg: timeout' or something
+On occasions the message 'usb_control/bulk_msg: timeout' or something
 similar will appear in '/var/adm/messages' or on the console or both,
 depending on how your system is configured.  This is a side effect
 that scanners are sometimes very slow at warming up and/or
-initialiazing.  In most cases, however, only several of these messages
+initializing.  In most cases, however, only several of these messages
 should appear and is generally considered to be normal.  If you see
 a message of the type 'excessive NAK's received' then this should
 be considered abnormal and generally indicates that the USB system is

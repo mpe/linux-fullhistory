@@ -78,6 +78,7 @@ void output_task_defines(void)
 	offset("#define TASK_FLAGS         ", struct task_struct, flags);
 	offset("#define TASK_SIGPENDING    ", struct task_struct, sigpending);
 	offset("#define TASK_NEED_RESCHED  ", struct task_struct, need_resched);
+	offset("#define TASK_PTRACE        ", struct task_struct, ptrace);
 	offset("#define TASK_COUNTER       ", struct task_struct, counter);
 	offset("#define TASK_NICE          ", struct task_struct, nice);
 	offset("#define TASK_MM            ", struct task_struct, mm);

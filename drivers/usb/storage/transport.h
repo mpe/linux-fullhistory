@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Transport Functions Header File
  *
- * $Id: transport.h,v 1.4 2000/07/23 18:40:38 groovyjava Exp $
+ * $Id: transport.h,v 1.6 2000/07/27 14:42:43 groovyjava Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -46,10 +46,6 @@
 #include "usb.h"
 #include "scsi.h"
 
-/* bit set if input */
-extern unsigned char us_direction[256/8];
-#define US_DIRECTION(x) ((us_direction[x>>3] >> (x & 7)) & 1)
-
 /* Protocols */
 
 #define US_PR_CBI	0x00		/* Control/Bulk/Interrupt */
@@ -59,7 +55,8 @@ extern unsigned char us_direction[256/8];
 #define US_PR_SCM_ATAPI	0x80		/* SCM-ATAPI bridge */
 #endif
 #ifdef CONFIG_USB_STORAGE_SDDR09
-#define US_PR_SCM_SCSI	0x81		/* SCM-SCSI bridge */
+#define US_PR_EUSB_SDDR09	0x81	/* SCM-SCSI bridge for
+						SDDR-09 */
 #endif
 
 /*

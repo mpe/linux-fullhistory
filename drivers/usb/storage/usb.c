@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.11 2000/07/24 20:37:24 mdharm Exp $
+ * $Id: usb.c,v 1.14 2000/07/27 14:42:43 groovyjava Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -50,8 +50,11 @@
 #include "transport.h"
 #include "protocol.h"
 #include "debug.h"
-#if defined(CONFIG_USB_STORAGE_HP8200e) || defined(CONFIG_USB_STORAGE_SDDR09)
-#include "scm.h"
+#ifdef CONFIG_USB_STORAGE_HP8200e
+#include "shuttle_usbat.h"
+#endif
+#ifdef CONFIG_USB_STORAGE_SDDR09
+#include "sddr09.h"
 #endif
 
 #include <linux/module.h>
@@ -117,9 +120,9 @@ static int usb_stor_control_thread(void * __us)
 
 	/* signal that we've started the thread */
 	up(&(us->notify));
+	set_current_state(TASK_INTERRUPTIBLE);
 
 	for(;;) {
-		set_current_state(TASK_INTERRUPTIBLE);
 		US_DEBUGP("*** thread sleeping.\n");
 		schedule();
 		US_DEBUGP("*** thread awakened.\n");
@@ -137,15 +140,27 @@ static int usb_stor_control_thread(void * __us)
 
 		switch (action) {
 		case US_ACT_COMMAND:
+			/* reject the command if the direction indicator 
+			 * is UNKNOWN
+			 */
+			if (us->srb->sc_data_direction == SCSI_DATA_UNKNOWN) {
+				US_DEBUGP("UNKNOWN data direction\n");
+				us->srb->result = DID_ERROR;
+				set_current_state(TASK_INTERRUPTIBLE);
+				us->srb->scsi_done(us->srb);
+				us->srb = NULL;
+				break;
+			}
+			
 			/* reject if target != 0 or if LUN is higher than
 			 * the maximum known LUN
 			 */
 			if (us->srb->target || (us->srb->lun > us->max_lun)) {
 				US_DEBUGP("Bad device number (%d/%d)\n",
 					  us->srb->target, us->srb->lun);
-
 				us->srb->result = DID_BAD_TARGET << 16;
 
+				set_current_state(TASK_INTERRUPTIBLE);
 				us->srb->scsi_done(us->srb);
 				us->srb = NULL;
 				break;
@@ -155,6 +170,8 @@ static int usb_stor_control_thread(void * __us)
 			if ((us->srb->cmnd[0] == START_STOP) &&
 			    (us->flags & US_FL_START_STOP)) {
 				us->srb->result = GOOD;
+
+				set_current_state(TASK_INTERRUPTIBLE);
 				us->srb->scsi_done(us->srb);
 				us->srb = NULL;
 				break;
@@ -194,9 +211,11 @@ static int usb_stor_control_thread(void * __us)
 			if (us->srb->result != DID_ABORT << 16) {
 				US_DEBUGP("scsi cmd done, result=0x%x\n", 
 					   us->srb->result);
+				set_current_state(TASK_INTERRUPTIBLE);
 				us->srb->scsi_done(us->srb);
 			} else {
 				US_DEBUGP("scsi command aborted\n");
+				set_current_state(TASK_INTERRUPTIBLE);
 				up(&(us->notify));
 			}
 			us->srb = NULL;
@@ -253,12 +272,12 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		US_SC_UFI,  US_PR_CBI, US_FL_SINGLE_LUN},
 	{ 0x0693, 0x0002, 0x0100, 0x0100, "Hagiwara FlashGate SmartMedia",
 		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH},
-	{ 0x0781, 0x0001, 0x0200, 0x0200, "Sandisk ImageMate (SDDR-01)",
+	{ 0x0781, 0x0001, 0x0200, 0x0200, "Sandisk ImageMate (SDDR-05a)",
 		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN | US_FL_START_STOP},
 #ifdef CONFIG_USB_STORAGE_SDDR09
 	{ 0x0781, 0x0200, 0x0100, 0x0100, "Sandisk ImageMate (SDDR-09)",
-		US_SC_SCSI, US_PR_SCM_SCSI,
-		US_FL_SINGLE_LUN | US_FL_START_STOP | US_FL_NEED_INIT},
+		US_SC_SCSI, US_PR_EUSB_SDDR09,
+		US_FL_SINGLE_LUN | US_FL_START_STOP},
 #endif
 	{ 0x0781, 0x0002, 0x0009, 0x0009, "Sandisk Imagemate (SDDR-31)",
 		US_SC_SCSI, US_PR_BULK, US_FL_IGNORE_SER},
@@ -447,7 +466,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* set the interface -- STALL is an acceptable response here */
 #ifdef CONFIG_USB_STORAGE_SDDR09
-	if (protocol != US_PR_SCM_SCSI)
+	if (protocol != US_PR_EUSB_SDDR09)
 		result = usb_set_interface(dev, 
 			altsetting->bInterfaceNumber, 0);
 	else
@@ -631,8 +650,8 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 #endif
 
 #ifdef CONFIG_USB_STORAGE_SDDR09
-		case US_PR_SCM_SCSI:
-			ss->transport_name = "SCM/SCSI";
+		case US_PR_EUSB_SDDR09:
+			ss->transport_name = "EUSB/SDDR09";
 			ss->transport = sddr09_transport;
 			ss->transport_reset = usb_stor_CB_reset;
 			ss->max_lun = 1;
@@ -855,3 +874,6 @@ void __exit usb_stor_exit(void)
 
 module_init(usb_stor_init) ;
 module_exit(usb_stor_exit) ;
+
+MODULE_AUTHOR("Michael Gee <michael@linuxspecific.com>, David L. Brown, Jr. <usb-storage@davidb.org>, Matthew Dharm <mdharm-usb@one-eyed-alien.net>");
+MODULE_DESCRIPTION("USB Mass Storage driver");

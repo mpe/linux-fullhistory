@@ -127,7 +127,7 @@ everything is working.
 
   The c-qcam is IEEE1284 compatible, so if you are using the proc file
 system (CONFIG_PROC_FS), the parallel printer support
-(CONFIG_PRINTER), the IEEE 1284 sytem,(CONFIG_PRINTER_READBACK), you
+(CONFIG_PRINTER), the IEEE 1284 system,(CONFIG_PRINTER_READBACK), you
 should be able to read some identification from your quickcam with
 
          modprobe -v parport

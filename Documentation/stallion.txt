@@ -62,7 +62,7 @@ configuration structure. Note that kernel PCI support is required to use PCI
 boards.
 
 There are two methods of configuring ISA, EISA and MCA boards into the drivers.
-If using the driver as a loadable module then the simplist method is to pass
+If using the driver as a loadable module then the simplest method is to pass
 the driver configuration as module arguments. The other method is to modify
 the driver source to add configuration lines for each board in use.
 
@@ -108,7 +108,7 @@ when loading the driver. The general form of the configuration argument is
 
 where:
 
-    board?  -- specifies the arbitary board number of this board,
+    board?  -- specifies the arbitrary board number of this board,
                can be in the range 0 to 3.
 
     name    -- textual name of this board. The board name is the comman

@@ -14,6 +14,7 @@
  * the dcache entry is deleted or garbage collected.
  */
 
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/fs.h>

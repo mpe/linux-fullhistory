@@ -26,6 +26,11 @@ CONFIG_ORION=y
 # CONFIG_PCI is not set
 
 #
+# Loadable module support
+#
+# CONFIG_MODULES is not set
+
+#
 # CPU selection
 #
 # CONFIG_CPU_R3000 is not set
@@ -60,7 +65,6 @@ CONFIG_NET=y
 # Parallel port support
 #
 # CONFIG_PARPORT is not set
-# CONFIG_MODULES is not set
 # CONFIG_PCMCIA is not set
 
 #
@@ -199,7 +203,6 @@ CONFIG_BLK_DEV_INITRD=y
 #
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
-# CONFIG_DRM_TDFX is not set
 # CONFIG_AGP is not set
 
 #

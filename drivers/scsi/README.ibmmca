@@ -10,10 +10,10 @@
   General Public License. Originally written by Martin Kolinek, December 1995.
          Officially maintained by Michael Lang since January 1999.
 	   
- 	                       Version 3.1e
+ 	                       Version 3.2
 	
 	
-   Last update: 20 February 1999
+   Last update: 29 July 2000
 
 
    Authors of this Driver
@@ -23,7 +23,8 @@
     - Klaus Kudielka (multiple SCSI-host management/detection, adaption to
                       Linux Kernel 2.1.x, module support)
     - Michael Lang (assigning original pun,lun mapping, dynamical ldn 
-                    assignment, this file, patch, official driver maintenance)
+                    assignment, this file, patch, official driver maintenance
+		    and subsequent pains related with the driver :-))
 
    Table of Contents
    -----------------
@@ -51,7 +52,11 @@
      5.3 Bugreports
      5.4 Support WWW-page
    6 References
-   7 Trademarks
+   7 Credits to
+     7.1 People
+     7.2 Sponsors & Supporters
+   8 Trademarks
+   9 Disclaimer
 
                               * * *
 
@@ -64,7 +69,7 @@
    quite outdated. The history of the driver development is also kept inside 
    here. Multiple historical developments have been summarized to shorten the 
    textsize a bit. At the end of this file you can find a small manual for 
-   this driver and hints to get it running even on your machine (hopefully).
+   this driver and hints to get it running on your machine.
 
    2 Driver Description
    --------------------
@@ -74,27 +79,35 @@
    Microchannel-bus support is enabled, as the IBM SCSI-subsystem needs the
    Microchannel. In a next step, a free interrupt is chosen and the main
    interrupt handler is connected to it to handle answers of the SCSI-
-   subsystem(s). In a further step, it is checked, wether there was a forced
-   detection of the adapter via the kernel commandline, where the I/O port
-   and the SCSI-subsystem id can be specified. The next step checks if there
-   is an integrated SCSI-subsystem installed. This register area is fixed 
-   through all IBM PS/2 MCA-machines and appears as something like a virtual 
-   slot 10 of the MCA-bus. If POS-register 2 is not 0xff, there must be a SCSI-
+   subsystem(s). If the F/W SCSI-adapter is forced by the BIOS to use IRQ11
+   instead of IRQ14, IRQ11 is used for the IBM SCSI-2 F/W adapter. In a 
+   further step it is checked, if the adapter gets detected by force from
+   the kernel commandline, where the I/O port and the SCSI-subsystem id can 
+   be specified. The next step checks if there is an integrated SCSI-subsystem
+   installed. This register area is fixed through all IBM PS/2 MCA-machines 
+   and appears as something like a virtual slot 10 of the MCA-bus. On most
+   PS/2 machines, the POS registers of slot 10 are set to 0xff or 0x00 if not
+   integrated SCSI-controller is available. But on certain PS/2s, like model 
+   9595, this slot 10 is used to store other information which at earlier
+   stage confused the driver and resulted in the detection of some ghost-SCSI. 
+   If POS-register 2 and 3 are not 0x00 and not 0xff, but all other POS
+   registers are either 0xff or 0x00, there must be an integrated SCSI-
    subsystem present and it will be registered as IBM Integrated SCSI-
    Subsystem. The next step checks, if there is a slot-adapter installed on 
    the MCA-bus. To get this, the first two POS-registers, that represent the 
    adapter ID are checked. If they fit to one of the ids, stored in the 
-   adapter list, a SCSI-subsystem is assumed to be found and will be 
+   adapter list, a SCSI-subsystem is assumed to be found in a slot and will be 
    registered. This check is done through all possible MCA-bus slots to allow 
    more than one SCSI-adapter to be present in the PS/2-system and this is 
    already the first point of problems. Looking into the technical reference 
    manual for the IBM PS/2 common interfaces, the POS2 register must have 
-   different interpretation of its single bits. While one can assume, that the
-   integrated subsystem has a fix I/O-address at 0x3540 - 0x3547, further
-   installed IBM SCSI-adapters must use a different I/O-address. This is
-   expressed by bit 1 to 3 of POS2 (multiplied by 8 + 0x3540). Bits 2 and 3 
-   are reserved for the integrated subsystem, but not for the adapters! The
-   following list shows, how the bits of POS2 and POS3 should be interpreted.
+   different interpretation of its single bits to avoid overlapping I/O
+   regions. While one can assume, that the integrated subsystem has a fix 
+   I/O-address at 0x3540 - 0x3547, further installed IBM SCSI-adapters must 
+   use a different I/O-address. This is expressed by bit 1 to 3 of POS2 
+   (multiplied by 8 + 0x3540). Bits 2 and 3 are reserved for the integrated 
+   subsystem, but not for the adapters! The following list shows, how the 
+   bits of POS2 and POS3 should be interpreted.
    
    The POS2-register of all PS/2 models' integrated SCSI-subsystems has the 
    following interpretation of bits:
@@ -102,20 +115,25 @@
                            Bit 3 - 2 : Reserved
                            Bit 1     : 8k NVRAM Disabled
                            Bit 0     : Chip Enable (EN-Signal)
-   The POS3-register is interpreted as follows (for ALL IBM SCSI-subsys.):
+   The POS3-register is interpreted as follows (for most IBM SCSI-subsys.):
                            Bit 7 - 5 : SCSI ID
                            Bit 4 - 0 : Reserved = 0
-   (taken from "IBM, PS/2 Hardware Interface Technical Reference, Common
-   Interfaces (1991)"). 
-   In short words, this means, that IBM PS/2 machines only support 1 single 
-   subsystem by default. But (additional) slot-adapters must have another 
-   configuration on pos2 in order to be enabled to use more than one IBM SCSI-
-   subsystem, e.g. for a network server. From tests with the IBM SCSI Adapter 
-   w/cache, the POS2-register for slot adapters should be interpreted in the 
-   following way:
-                           Bit 7 - 4 : Chip Revision ID (Release)
-                           Bit 3 - 1 : port offset factor ( * 8 + 0x3540 )
-                           Bit 0     : Chip Enable (EN-Signal)
+   The slot-adapters have different interpretation of these bits. The IBM SCSI
+   adapter (w/Cache) and the IBM SCSI-2 F/W adapter use the following
+   interpretation of the POS2 register:
+                           Bit 7 - 4 : ROM Segment Address Select
+			   Bit 3 - 1 : Adapter I/O Address Select (*8+0x3540)
+			   Bit 0     : Adapter Enable (EN-Signal)
+   and for the POS3 register:
+                           Bit 7 - 5 : SCSI ID 
+			   Bit 4     : Fairness Enable (SCSI ID3 f. F/W)
+			   Bit 3 - 0 : Arbitration Level
+   The most modern product of the series is the IBM SCSI-2 F/W adapter, it 
+   allows dual-bus SCSI and SCSI-wide addressing, which means, PUNs may be
+   between 0 and 15. Here, Bit 4 is the high-order bit of the 4-bit wide
+   adapter PUN expression. In short words, this means, that IBM PS/2 machines 
+   can only support 1 single integrated subsystem by default. Additional
+   slot-adapters get ports assigned by the automatic configuration tool.
 
    One day I found a patch in ibmmca_detect(), forcing the I/O-address to be 
    0x3540 for integrated SCSI-subsystems, there was a remark placed, that on 
@@ -156,12 +174,18 @@
    number or pun, also called the scsi id, this is the number you select
    with hardware jumpers), and each physical unit can have up to 8 
    "logical units" (each identified by logical unit number, or lun, 
-   between 0 and 7). 
+   between 0 and 7). The IBM SCSI-2 F/W adapter offers this on up to two
+   busses and provides support for 30 logical devices at the same time, where
+   in wide-addressing mode you can have 16 puns with 32 luns on each device.
+   This section dexribes you the handling of devices on non-F/W adapters.
+   Just imagine, that you can have 16 * 32 = 512 devices on a F/W adapter
+   which means a lot of possible devices for such a small machine.
 
    Typically the adapter has pun=7, so puns of other physical units
-   are between 0 and 6. Almost all physical units have only one   
-   logical unit, with lun=0. A CD-ROM jukebox would be an example of 
-   a physical unit with more than one logical unit.
+   are between 0 and 6(15). On a wide-adapter a pun higher than 7 is
+   possible, but is normally not used. Almost all physical units have only 
+   one logical unit, with lun=0. A CD-ROM jukebox would be an example of a 
+   physical unit with more than one logical unit.
 
    The embedded microprocessor of the IBM SCSI-subsystem hides the complex
    two-dimensional (pun,lun) organization from the operating system.
@@ -169,7 +193,8 @@
    checks, on its own, all 56 possible (pun,lun) combinations, and the first 
    15 devices found are assigned into a one-dimensional array of so-called 
    "logical devices", identified by "logical device numbers" or ldn. The last 
-   ldn=15 is reserved for the subsystem itself.
+   ldn=15 is reserved for the subsystem itself. Wide adapters may have 
+   to check up to 15 * 8 = 120 pun/lun combinations.
    
    2.3 SCSI-Device Recognition and dynamical ldn Assignment
    --------------------------------------------------------
@@ -177,8 +202,12 @@
    numbers are also hidden. The two possibilities to get around this problem
    is to offer fake pun/lun combinations to the operating system or to 
    delete the whole mapping of the adapter and to reassign the ldns, using
-   the immediate assign command of the SCSI-subsystem. At the beginning of the
-   development of this driver, the following approach was used:
+   the immediate assign command of the SCSI-subsystem for probing through
+   all possible pun/lun combinations. a ldn is a "logical device number"
+   which is used by IBM SCSI-subsystems to access some valid SCSI-device.
+   At the beginning of the development of this driver, the following approach 
+   was used:
+   
    First, the driver checked the ldn's (0 to 6) to find out which ldn's
    have devices assigned. This was done by the functions check_devices() and
    device_exists(). The interrupt handler has a special paragraph of code
@@ -199,7 +228,7 @@
    and later, realizes the device recognition in the following way:
    The physical SCSI-devices on the SCSI-bus are probed via immediate_assign- 
    and device_inquiry-commands, that is all implemented in a completely new
-   made check_devices() subroutine. This delivers a exact map of the physical
+   made check_devices() subroutine. This delivers an exact map of the physical
    SCSI-world that is now stored in the get_scsi[][]-array. This means,
    that the once hidden pun,lun assignment is now known to this driver.
    It no longer believes in default-settings of the subsystem and maps all
@@ -230,7 +259,7 @@
    can be different from the old, faked puns. Therefore, Linux will eventually
    change /dev/sdXXX assignments and prompt you for corrupted superblock
    repair on boottime. In this case DO NOT PANIC, YOUR DISKS ARE STILL OK!!!
-   You have to reboot (CTRL-D) with a old kernel and set the /etc/fstab-file
+   You have to reboot (CTRL-D) with an old kernel and set the /etc/fstab-file
    entries right. After that, the system should come up as errorfree as before.
    If your boot-partition is not coming up, also edit the /etc/lilo.conf-file
    in a Linux session booted on old kernel and run lilo before reboot. Check
@@ -332,17 +361,19 @@
    ----------------------------------
    The following IBM SCSI-subsystems are supported by this driver:
    
-     - IBM Fast SCSI-2 Adapter
+     - IBM Fast/Wide SCSI-2 Adapter
      - IBM 7568 Industrial Computer SCSI Adapter w/cache
      - IBM Expansion Unit SCSI Controller
      - IBM SCSI Adapter w/Cache
      - IBM SCSI Adapter
      - IBM Integrated SCSI Controller
+     - All clones, 100% compatible with the chipset and subsystem command
+       system of IBM SCSI-adapters (forced detection)
      
    2.14 Linux Kernel Versions
    --------------------------
    The IBM SCSI-subsystem low level driver is prepared to be used with
-   all versions of Linux between 2.0.x and 2.2.x. The compatibility checks
+   all versions of Linux between 2.0.x and 2.4.x. The compatibility checks
    are fully implemented up from version 3.1e of the driver. This means, that
    you just need the latest ibmmca.h and ibmmca.c file and copy it in the
    linux/drivers/scsi directory. The code is automatically adapted during 
@@ -717,18 +748,149 @@
       addition more flexibility.
    - Michael Lang
 
+   Apr 23, 2000 (v3.2pre1)
+   1) During a very long time, I collected a huge amount of bugreports from
+      various people, trying really quite different things on their SCSI-
+      PS/2s. Today, all these bugreports are taken into account and should be
+      mostly solved. The major topics were:
+      - Driver crashes during boottime by no obvious reason.
+      - Driver panics while the midlevel-SCSI-driver is trying to inquire
+        the SCSI-device properties, even though hardware is in perfect state.
+      - Displayed info for the various slot-cards is interpreted wrong.
+      The main reasons for the crashes were two:
+      1) The commands to check for device information like INQUIRY, 
+         TEST_UNIT_READY, REQUEST_SENSE and MODE_SENSE cause the devices
+	 to deliver information of up to 255 bytes. Midlevel drivers offer
+	 1024 bytes of space for the answer, but the IBM-SCSI-adapters do
+	 not accept this, as they stick quite near to ANSI-SCSI and report
+	 a COMMAND_ERROR message which causes the driver to panic. The main
+	 problem was located around the INQUIRY command. Now, for all the
+	 mentioned commands, the buffersize, sent to the adapter is at 
+	 maximum 255 which seems to be a quite reasonable solution. 
+	 TEST_UNIT_READY gets a buffersize of 0 to make sure, that no 
+	 data is transferred in order to avoid any possible command failure.
+      2) On unsuccessful TEST_UNIT_READY, the midlevel-driver has to send
+         a REQUEST_SENSE in order to see, where the problem is located. This
+	 REQUEST_SENSE may have various length in its answer-buffer. IBM
+	 SCSI-subsystems report a command failure, if the returned buffersize
+	 is different from the sent buffersize, but this can be supressed by
+	 a special bit, which is now done and problems seem to be solved.
+   2) Code adaption to all kernel-releases. Now, the 3.2 code compiles on 
+      2.0.x, 2.1.x, 2.2.x and 2.3.x kernel releases without any code-changes.
+   3) Commandline-parameters are recognized again, even under Kernel 2.3.x or
+      higher.
+   - Michael Lang   
+
+   April 27, 2000 (v3.2pre2)
+   1) Bypassed commands get read by the adapter by one cycle instead of two.
+      This increases SCSI-performance.
+   2) Synchronous datatransfer is provided for sure to be 5 MHz on older
+      SCSI and 10 MHz on internal F/W SCSI-adapter.
+   3) New commandline parameters allow to force the adapter to slow down while
+      in synchronous transfer. Could be helpful for very old devices.
+   - Michael Lang
+   
+   June 2, 2000 (v3.2pre5)
+   1) Added Jim Shorney's contribution to make the activity indicator
+      flashing in addition to the LED-alphanumeric display-panel on
+      models 95A. To be enabled to choose this feature freely, a new
+      commandline parameter is added, called 'activity'.
+   2) Added the READ_CONTROL bit for test_unit_ready SCSI-command.
+   3) Added some suppress_exception bits to read_device_capacity and
+      all device_inquiry occurences in the driver code.
+   4) Complaints about the various KERNEL_VERSION implementations are
+      taken into account. Every local_LinuxKernelVersion occurence is
+      now replaced by KERNEL_VERSION, defined in linux/version.h. 
+      Corresponding changes were applied to ibmmca.h, too. This was a
+      contribution to all kernel-parts by Philipp Hahn.
+   - Michael Lang
+   
+   July 17, 2000 (v3.2pre8)
+   A long period of collecting bugreports from all corners of the world
+   now lead to the following corrections to the code:
+   1) SCSI-2 F/W support crashed with a COMMAND ERROR. The reason for this 
+      was, that it is possible to disbale Fast-SCSI for the external bus.
+      The feature-control command, where this crash appeared regularly tried
+      to set the maximum speed of 10MHz synchronous transfer speed and that
+      reports a COMMAND ERROR, if external bus Fast-SCSI is disabled. Now,
+      the feature-command probes down from maximum speed until the adapter 
+      stops to complain, which is at the same time the maximum possible
+      speed selected in the reference program. So, F/W external can run at
+      5 MHz (slow-) or 10 MHz (fast-SCSI). During feature probing, the 
+      COMMAND ERROR message is used to detect if the adapter does not complain.
+   2) Up to now, only combined busmode is supported, if you use external
+      SCSI-devices, attached to the F/W-controller. If dual bus is selected,
+      only the internal SCSI-devices get accessed by Linux. For most 
+      applications, this should do fine. 
+   3) Wide-SCSI-addressing (16-Bit) is now possible for the internal F/W
+      bus on the F/W adapter. If F/W adapter is detected, the driver
+      automatically uses the extended PUN/LUN <-> LDN mapping tables, which
+      are now new from 3.2pre8. This allows PUNs between 0 and 15 and should
+      provide more fun with the F/W adapter.
+   4) Several machines use the SCSI: POS registers for internal/undocumented
+      storage of system relevant info. This confused the driver, mainly on
+      models 9595, as it expected no onboard SCSI only, if all POS in
+      the integrated SCSI-area are set to 0x00 or 0xff. Now, the mechanism
+      to check for integrated SCSI is much more restrictive and these problems
+      should be history.
+   - Michael Lang          
+
+   July 18, 2000 (v3.2pre9)
+   This develop rather quickly at the moment. Two major things were still
+   missing in 3.2pre8:
+   1) The adapter PUN for F/W adapters has 4-bits, while all other adapters
+      have 3-bits. This is now taken into account for F/W.
+   2) When you select CONFIG_IBMMCA_SCSI_ORDER_STANDARD, you should 
+      normally get the inverse probing order of your devices on the SCSI-bus.
+      The ANSI device order gets scrambled in version 3.2pre8!! Now, a new
+      and tested algorithm inverts the device-order on the SCSI-bus and
+      automatically avoids accidental access to whatever SCSI PUN the adapter 
+      is set and works with SCSI- and Wide-SCSI-addressing.
+   - Michael Lang
+
+   July 23, 2000 (v3.2pre10 unpublished) 
+   1) LED panel display supports wide-addressing in ibmmca=display mode.
+   2) Adapter-information and autoadaption to address-space is done.
+   3) Auto-probing for maximum synchronous SCSI transfer rate is working.
+   4) Optimization to some embedded function calls is applied.
+   5) Added some comment for the user to wait for SCSI-devices beeing probed.
+   6) Finished version 3.2 for Kernel 2.4.0. It least, I thought it is but...
+   - Michael Lang
+   
+   July 26, 2000 (v3.2pre11)
+   1) I passed a horrible weekend getting mad with NMIs on kernel 2.2.14 and
+      a model 9595. Asking around in the community, nobody except of me has
+      seen such errors. Weired, but I am trying to recompile everything on
+      the model 9595. Maybe, as I use a specially modified gcc, that could
+      cause problems. But, it was not the reason. The true background was,
+      that the kernel was compiled for i386 and the 9595 has a 486DX-2. 
+      Normally, no troubles should appear, but for this special machine,
+      only the right processor support is working fine!
+   2) Previous problems with synchronous speed, slowing down from one adapter 
+      to the next during probing are corrected. Now, local variables store
+      the synchronous bitmask for every single adapter found on the MCA bus.
+   3) LED alphanumeric panel support for XX95 systems is now showing some
+      alive rotator during boottime. This makes sense, when no monitor is 
+      connected to the system. You can get rid of all display activity, if
+      you do not use any parameter or just ibmmcascsi=activity, for the 
+      harddrive activity LED, existant on all PS/2, except models 8595-XXX.
+      If no monitor is available, please use ibmmcascsi=display, which works
+      fine together with the linuxinfo utility for the LED-panel.
+   - Michael Lang
+   
+   July 29, 2000 (v3.2)
+   1) Submission of this driver for kernel 2.4test-XX and 2.2.17.
+   - Michael Lang
+   
    4 To do
    -------
+        - IBM SCSI-2 F/W external SCSI bus support in seperate mode.
 	- It seems that the handling of bad disks is really bad -
 	  non-existent, in fact.
         - More testing of the full driver-controlled dynamical ldn 
-          (re)mapping for up to 56 SCSI-devices.
-        - Support more of the SCSI-command set.
-	- Support some of the caching abilities, particularly Read Prefetch.
-	  This fetches data into the cache, which later gets hit by the
-	  regular Read Data. (<--- This is coming soon!!!!)
-        - Abort and Reset functions still slightly buggy or better say,
-	  it is the new episode, called SCREAM III.
+          (re)mapping for up to 56 SCSI-devices. I guess, it won't work
+	  at the moment, but nobody ever really tried it.
+        - Abort and Reset functions still slightly buggy.
 
    5 Users' Manual
    ---------------
@@ -749,7 +911,13 @@
 				
 		    where '-' stays dark, 'D' shows the SCSI-device id
 		    and 'A' shows the SCSI hostindex, beeing currently 
-		    accessed.
+		    accessed. During boottime, this will give the message
+		    
+		                SCSIini*
+				
+                    on the LED-panel, where the * represents a rotator, 
+		    showing the activity during the probing phase of the
+		    driver which can take up to two minutes per SCSI-adapter.
 	 adisplay   This works like display, but gives more optical overview 
 	            of the activities on the SCSI-bus. The display will have
 		    the following output:
@@ -761,7 +929,22 @@
 		    hostindex. If display nor adisplay is set, the internal
 		    PS/2 harddisk LED is used for media-activities. So, if
 		    you really do not have a system with a LED-display, you
-		    should not set display or adisplay.
+		    should not set display or adisplay. Keep in mind, that
+		    display and adisplay can only be used alternatively. It
+		    is not recommended to use this option, if you have some
+		    wide-addressed devices e.g. at the SCSI-2 F/W adapter in
+		    your system. In addition, the usage of the display for
+		    other tasks in parallel, like the linuxinfo-utility makes 
+		    no sense with this option.
+	 activity   This enables the PS/2 harddisk LED activity indicator.
+	            Most PS/2 have no alphanumeric LED display, but some
+		    indicator. So you should use this parameter to activate it.
+		    If you own model 9595 (Server95), you can have both, the 
+		    LED panel and the activity indicator in parallel. However,
+		    some PS/2s, like the 8595 do not have any harddisk LED 
+		    activity indicator, which means, that you must use the
+		    alphanumeric LED display if you want to monitor SCSI-
+		    activity.
 	 bypass     This commandline parameter forces the driver never to use
 	            SCSI-subsystems' integrated SCSI-command set. Except of
 		    the immediate assign, which is of vital importance for
@@ -775,7 +958,10 @@
 		    this flag will slow-down SCSI-accesses slightly, as the 
 		    software generated commands are always slower than the 
 		    hardware. Non-harddisk devices always get read/write-
-		    commands in bypass mode.
+		    commands in bypass mode. On the most recent releases of 
+		    the Linux IBM-SCSI-driver, the bypass command should be
+		    no longer a necessary thing, if you are sure about your
+		    SCSI-hardware!
 	 normal     This is the parameter, introduced on the 2.0.x development
 	            rail by ZP Gu. This parameter defines the SCSI-device
 		    scan order in the new industry standard. This means, that
@@ -789,6 +975,19 @@
 		    pun=6 gets sda and a harddisk at pun=0 gets sdb. If you
 		    like to have the same SCSI-device order, as in DOS, OS-9
 		    or OS/2, just use this parameter.
+         fast       SCSI-I/O in synchronous mode is done at 5 MHz for IBM-
+                    SCSI-devices. SCSI-2 Fast/Wide Adapter/A external bus
+                    should then run at 10 MHz if Fast-SCSI is enabled,
+                    and at 5 MHz if Fast-SCSI is disabled on the external
+                    bus. This is the default setting when nothing is 
+                    specified here.
+         medium     Synchronous rate is at 50% approximately, which means
+                    2.5 MHz for IBM SCSI-adapters and 5.0 MHz for F/W ext.
+                    SCSI-bus (when Fast-SCSI speed enabled on external bus).
+         slow       The slowest possible synchronous transfer rate is set. 
+                    This means 1.82 MHz for IBM SCSI-adapters and 2.0 MHz
+                    for F/W external bus at Fast-SCSI speed on the external
+		    bus.
 		    
    A further option is that you can force the SCSI-driver to accept a SCSI-
    subsystem at a certain I/O-address with a predefined adapter PUN. This
@@ -805,7 +1004,7 @@
         ibmmcascsi=adisplay,bypass
 	
    This will use the advanced display mode for the model 95 LED display and
-   every SCSI-command passed to a attached device will get bypassed in order
+   every SCSI-command passed to an attached device will get bypassed in order
    not to use any of the subsystem built-in commands.
    
         ibmmcascsi=display,0x3558,7
@@ -837,9 +1036,9 @@
 	with OS/2 and DOS, you have to activate this flag in the kernel
 	configuration or you should set 'ansi' as parameter for the kernel.
 	The parameter 'normal' sets the new industry standard, starting
-	from pun 0, scaning up to pun 6. This allows you to change your 
+	from pun 0, scanning up to pun 6. This allows you to change your 
 	opinion still after having already compiled the kernel.
-     Q: Why can I not find the IBM MCA SCSI support in the config menue?
+     Q: Why I cannot find the IBM MCA SCSI support in the config menue?
      A: You have to activate MCA bus support, first.
      Q: Where can I find the latest info about this driver?
      A: See the file MAINTAINERS for the current WWW-address, which offers
@@ -849,13 +1048,9 @@
      A: Just force it to be recognized by kernel parameters. See section 5.1.
      Q: The driver screws up, if it starts to probe SCSI-devices, is there
         some way out of it?
-     A: This is based on some problems with the driver. In such cases, send
-        e-mail to the maintainer. If you are owner of a model with the serial
-	number 95XX, just send as subject NOTIFY 95XX PROBLEM and the 
-	maintainer immediately knows about your problem. But please:
-	Check your hardware and only if it works fine with other operating
-	systems, send E-Mail to me to notify the troubles. See the homepage
-	for how to send bug-reports or please read the next Q/A, here:
+     A: Yes, that was some recognition problem of the correct SCSI-adapter
+        and its I/O base addresses. Upgrade your driver to the latest release
+	and it should be fine again.
      Q: I get a message: panic IBM MCA SCSI: command error .... , what can
         I do against this?
      A: Previously, I followed the way by ignoring command errors by using
@@ -867,8 +1062,8 @@
         ibmmcascsi=forgiveall. Are there other possibilities to prevent
 	such panics?
      A: No, get just the latest release of the driver and it should work 
-        better and better with increasing version number. Forget this
-	ibmmcascsi=forgiveall, as also ignorecmd are obsolete.
+        better and better with increasing version number. Forget about this
+	ibmmcascsi=forgiveall, as also ignorecmd are obsolete.!
      Q: Linux panics or stops without any comment, but it is probable, that my
         harddisk(s) have bad blocks.
      A: Sorry, the bad-block handling is still a feeble point of this driver,
@@ -893,10 +1088,45 @@
 	Astonishingly, reset works in most cases quite ok, but the harddisks
 	won't run in synchonous mode anymore after a reset, until you reboot.
      Q: Why does my XXX w/Cache adapter not use read-prefetch?
-     A: w/Cache technical manuals are incoming here, so if I understood the
-        command of read-prefetch, it should be an easy thing to get harddisks
-	read in read-prefetch with w/Cache controllers. Some weeks or months,
-	still ahead and a lot of work still to do, sigh ...
+     A: Ok, that is not completely possible. If a cache is present, the 
+        adapter tries to use it internally. Explicitly, one can use the cache
+	with a read prefetch command, maybe in future, but this requires
+	some major overhead of SCSI-commands that risks the performance to
+	go down more than it gets improved. Tests with that are running.
+     Q: I have a IBM SCSI-2 Fast/Wide adapter, it boots in some way and hangs.
+     A: Yes, that is understood, as for sure, your SCSI-2 Fast/Wide adapter
+        was in such a case recognized as integrated SCSI-adapter or something 
+	else, but not as the correct adapter. As the I/O-ports get assigned 
+	wrongly by that reason, the system should crash in most cases. You 
+	should upgrade to the latest release of the SCSI-driver. The 
+	recommended version is 3.2 or later. Here, the F/W support is in
+	a stable and reliable condition. Wide-addressing is in addition 
+	supported.
+     Q: I get a Ooops message and something like "killing interrupt".
+     A: The reason for this is that the IBM SCSI-subsystem only sends a 
+        termination status back, if some error appeared. In former releases
+	of the driver, it was not checked, if the termination status block
+	is NULL. From version 3.2, it is taken care of this.
+     Q: I have a F/W adapter and the driver sees my internal SCSI-devices,
+        but ignores the external ones.
+     A: Select combined busmode in the config-program and check for that
+        no SCSI-id on the external devices appears on internal devices.
+        Reboot afterwards. Dual busmode is supported, but works only for the
+	internal bus, yet. External bus is still ignored. Take care for your
+	SCSI-ids. If combined bus-mode is activated, on some adapters, 
+	the wide-addressing is not possible, so devices with ids between 8 
+	and 15 get ignored by the driver & adapter!
+     Q: I have a 9595 and I get a NMI during heavy SCSI I/O e.g. during fsck.
+        A COMMAND ERROR is reported and characters on the screen are missing.
+	Warm reboot is not possible. Things look like quite weired.
+     A: Check the processor type of your 9595. If you have an 80486 or 486DX-2
+        processor complex on your mainboard and you compiled a kernel that
+	supports 80386 processors, it is possible, that the kernel cannot
+	keep track of the PS/2 interrupt handling and stops on an NMI. Just
+	compile a kernel for the correct processor type of your PS/2 and
+	everything should be fine. This is necessary even if one assumes,
+	that some 80486 system should be downward compatible to 80386
+	software.
 	
    5.3 Bugreports
    --------------
@@ -909,7 +1139,9 @@
    Zubkoff, as Linus is burried in E-Mail and Leonard is supervising all
    SCSI-drivers and won't have the time left to look inside every single
    driver to fix a bug and especially DO NOT send modified code to Linus
-   Torvalds, which has not been checked here!!! Recently, I got a lot of 
+   Torvalds or Alan J. Cox which has not been checked here!!! They are both
+   quite burried in E-mail (as me, sometimes, too) and one should first check
+   for problems on my local teststand. Recently, I got a lot of 
    bugreports for errors in the ibmmca.c code, which I could not imagine, but
    a look inside some Linux-distribution showed me quite often some modified
    code, which did no longer work on most other machines than the one of the
@@ -934,23 +1166,36 @@
         http://www.uni-mainz.de/~langm000/linux.html
 	
    Here you can find info about the background of this driver, patches,
-   news and a bugreport form.
+   troubleshooting support, news and a bugreport form. Please check that
+   WWW-page regularly for latest hints.
+   
+   For the bugreport, please fill out the formular on the corresponding
+   WWW-page. Read the dedicated instructions and write as much as you
+   know about your problem. If you do not like such formulars, please send
+   some e-mail directly, but at least with the same information as required by
+   the formular.
+   
+   If you have extensive bugreports, including Ooops messages and 
+   screen-shots, please feel free to send it directly to the address
+   of the maintainer, too. The current address of the maintainer is:
+   
+            Michael Lang <langa2@kph.uni-mainz.de>
    
    6 References
    ------------
-   The source of information is "Update for the PS/2 Hardware 
-   Interface Technical Reference, Common Interfaces", September 1991, 
-   part number 04G3281, available in the U.S. for $21.75 at 
-   1-800-IBM-PCTB, elsewhere call your local friendly IBM 
-   representative. E.g. in Germany, "Hallo IBM" works really great.
-   In addition to SCSI subsystem, this update contains fairly detailed 
-   (at hardware register level) sections on diskette  controller,
-   keyboard controller, serial port controller, VGA, and XGA.
+   IBM Corp., "Update for the PS/2 Hardware Interface Technical Reference, 
+   Common Interfaces", Armonk, September 1991, PN 04G3281, 
+   (available in the U.S. for $21.75 at 1-800-IBM-PCTB or in Germany for
+   around 40,-DM at "Hallo IBM").
   
-   Additional information from "Personal System/2 Micro Channel SCSI
-   Adapter with Cache Technical Reference", March 1990, PN 68X2365,
-   probably available from the same source (or possibly found buried
-   in officemates desk).
+   IBM Corp., "Personal System/2 Micro Channel SCSI
+   Adapter with Cache Technical Reference", Armonk, March 1990, PN 68X2365.
+
+   IBM Corp., "Personal System/2 Micro Channel SCSI
+   Adapter Technical Reference", Armonk, March 1990, PN 68X2397.
+
+   IBM Corp., "SCSI-2 Fast/Wide Adapter/A Technical Reference - Dual Bus",
+   Armonk, March 1994, PN 83G7545.
  
    Friedhelm Schmidt, "SCSI-Bus und IDE-Schnittstelle - Moderne Peripherie-
    Schnittstellen: Hardware, Protokollbeschreibung und Anwendung", 2. Aufl.
@@ -965,14 +1210,101 @@
    Helmut Rompel, "IBM Computerwelt GUIDE", What is what bei IBM., Systeme *
    Programme * Begriffe, IWT-Verlag GmbH - Muenchen, 1988
    
-   7 Trademarks
+   7 Credits to
+   ------------
+   7.1 People
+   ----------
+   Klaus Grimm
+                who already a long time ago gave me the old code from the
+		SCSI-driver in order to get it running for some old machine
+		in our institute.
+   Martin Kolinek
+                who wrote the first release of the IBM SCSI-subsystem driver.
+   Chris Beauregard
+                who for a long time maintained MCA-Linux and the SCSI-driver
+		in the beginning. Chris, wherever you are: Cheers to you!
+   Klaus Kudielka
+                with whom in the 2.1.x times, I had a quite fruitful
+                cooperation to get the driver running as a module and to get
+		it running with multiple SCSI-adapters.
+   David Weinehall
+                for his excellent maintenance of the MCA-stuff and the quite 
+		detailed bug reports and ideas for this driver (and his 
+		patience ;-)).
+   Alan J. Cox  
+                for his bugreports and his bold activities in cross-checking
+		the driver-code with his teststand.
+		
+   7.2 Sponsors & Supporters
+   -------------------------
+   "Hallo IBM",
+   IBM-Deutschland GmbH
+                the service of IBM-Deutschland for customers. Their E-Mail
+		service is unbeatable. Whatever old stuff I asked for, I 
+		always got some helpful answers.
+   Karl-Otto Reimers,
+   IBM Klub - Sparte IBM Geschichte, Sindelfingen
+                for sending me a copy of the w/Cache manual from the 
+		IBM-Deutschland archives.
+   Harald Staiger
+                for his extensive hardware donations which allows me today
+		still to test the driver in various constellations.
+   Erich Fritscher
+                for his very kind sponsoring.
+   Louis Ohland,
+   Charles Lasitter
+                for support by shipping me an IBM SCSI-2 Fast/Wide manual.
+                In addition, the contribution of various hardware is quite 
+                decessive and will make it possible to add FWSR (RAID)
+                adapter support to the driver in the near future! So,
+                complaints about no RAID support won't remain forever.
+                Yes, folks, that is no joke, RAID support is going to rise!
+   Erik Weber
+                for the great deal we made about a model 9595 and the nice
+                surrounding equipment and the cool trip to Mannheim
+                second-hand computer market.
+   Anthony Hogbin
+                for his direct shipment of a SCSI F/W adapter, which allowed
+                me immediately on the first stage to try it on model 8557
+                together with onboard SCSI adapter and some SCSI w/Cache.
+   Andreas Hotz
+                for his support by memory and an IBM SCSI-adapter. Collecting
+                all this together now allows me to try really things with
+                the driver at maximum load and variety on various models in
+                a very quick and efficient way.
+   Peter Jennewein
+                for his model 30, which serves me as part of my teststand
+		and his cool remark about how you make an ordinary diskette
+		drive working and how to connect it to an IBM-diskette port.
+   Johannes Gutenberg-University, Mainz &
+   Institut fuer Kernphysik, MAMI
+                for the offered space, the link, placed on the central
+                homepage and the space to store and offer the driver and 
+		related material and the free working times, which allow
+                me to answer all your e-mail.
+                   
+   8 Trademarks
    ------------
    IBM, PS/2, OS/2, Microchannel are registered trademarks of International 
-   Business Machines Corp.
+   Business Machines Corporation
    
    MS-DOS is a registered trademark of Microsoft Corporation
    
-   OS-9 is a registered trademark of Microware Systems
+   Microware, OS-9 are registered trademarks of Microware Systems
+   
+   9 Disclaimer
+   ------------
+   Beside the GNU public license and the dependant disclaimers and disclaimers
+   concerning the Linux-kernel in special, this SCSI-driver comes without any
+   warranty. Its functionality is tested as good as possible on certain 
+   machines and combinations of computer hardware, which does not exclude,
+   that dataloss or severe damage of hardware is possible while using this
+   part of software on some arbitrary computer hardware or in combination 
+   with other software packages. It is highly recommended to make backup
+   copies of your data before using this software.
+   
+   This driver supports hardware, produced by International Business Machines
+   Corporation (IBM).
    
 ------
 Michael Lang 

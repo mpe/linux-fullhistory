@@ -170,24 +170,6 @@ pfn_t szmem(pfn_t fpage, pfn_t maxpmem)
 }
 
 /*
- * HACK ALERT - Things do not work if this is not here. Maybe this is
- * acting as a pseudocacheflush operation. The write pattern seems to
- * be important, writing a 0 does not help.
- */
-void setup_test(cnodeid_t node, pfn_t start, pfn_t end)
-{
-	unsigned long *ptr = __va(start << PAGE_SHIFT);
-	unsigned long size = 4 * 1024 * 1024;	/* 4M L2 caches */
-
-	while (size) {
-		size -= sizeof(unsigned long);
-		*ptr = (0xdeadbeefbabeb000UL|node);
-		/* *ptr = 0; */
-		ptr++;
-	}
-}
-
-/*
  * Currently, the intranode memory hole support assumes that each slot
  * contains at least 32 MBytes of memory. We assume all bootmem data
  * fits on the first slot.
@@ -210,8 +192,7 @@ void __init prom_meminit(void)
 		/* Foll line hack for non discontigmem; remove once discontigmem
 		 * becomes the default. */
 		max_low_pfn = (slot_lastpfn - slot_firstpfn);
-		if (node != 0) 
-			setup_test(node, slot_freepfn, slot_lastpfn);
+
 		/*
 		 * Allocate the node data structure on the node first.
 		 */

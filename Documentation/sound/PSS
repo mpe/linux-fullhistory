@@ -3,7 +3,7 @@ downloadable programs and also has an AD1848 "Microsoft Sound System"
 device. The PSS driver enables MSS and MPU401 modes of the card. SB 
 is not enabled since it doesn't work concurrently with MSS. 
 
-If you build this driver as a module then the driver takes the folowing
+If you build this driver as a module then the driver takes the following
 parameters
 
 pss_io. 	The I/O base the PSS card is configured at (normally 0x220

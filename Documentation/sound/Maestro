@@ -70,7 +70,7 @@ maestro chip.
 
 As this is a PCI device, the module does not need to be informed of
 any IO or IRQ resources it should use, it devines these from the
-system.  Somtimes, on sucky PCs, the BIOS fails to allocated resources
+system.  Sometimes, on sucky PCs, the BIOS fails to allocated resources
 for the maestro.  This will result in a message like:
 	maestro: PCI subsystem reports IRQ 0, this might not be correct.
 from the kernel.  Should this happen the sound chip most likely will

@@ -393,8 +393,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 FILE LOCKING (flock() and fcntl()/lockf())
-P:	Andy Walker
-M:	andy@lysaker.kvaerner.no
+P:	Matthew Wilcox
+M:	willy@thepuffingroup.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

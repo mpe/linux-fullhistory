@@ -108,16 +108,27 @@ static int cams = 1;
 static int retry_sync = 0;
 
 MODULE_PARM(autoadjust, "i");
+MODULE_PARM_DESC(autoadjust, "CCD dynamically changes exposure");
 MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug level: 0=none, 1=init/detection, 2=warning, 3=config/control, 4=function call, 5=max");
 MODULE_PARM(fix_rgb_offset, "i");
+MODULE_PARM_DESC(fix_rgb_offset, "Fix vertical misalignment of red and blue at 640x480");
 MODULE_PARM(snapshot, "i");
+MODULE_PARM_DESC(snapshot, "Enable snapshot mode");
 MODULE_PARM(sensor, "i");
+MODULE_PARM_DESC(sensor, "Override sensor detection");
 MODULE_PARM(i2c_detect_tries, "i");
+MODULE_PARM_DESC(i2c_detect_tries, "Number of tries to detect sensor");
 MODULE_PARM(aperture, "i");
+MODULE_PARM_DESC(aperture, "Read the OV7610/7620 specs");
 MODULE_PARM(force_rgb, "i");
+MODULE_PARM_DESC(force_rgb, "Read RBG instead of BGR");
 MODULE_PARM(buf_timeout, "i");
+MODULE_PARM_DESC(buf_timeout, "Number of seconds before buffer deallocation");
 MODULE_PARM(cams, "i");
+MODULE_PARM_DESC(cams, "Number of simultaneous cameras");
 MODULE_PARM(retry_sync, "i");
+MODULE_PARM_DESC(retry_sync, "Prevent apps from timing out");
 
 MODULE_AUTHOR("Mark McClelland <mmcclelland@delphi.com> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>");
 MODULE_DESCRIPTION("OV511 USB Camera Driver");

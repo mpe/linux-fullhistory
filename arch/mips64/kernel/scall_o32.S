@@ -20,7 +20,7 @@
 #include <asm/unistd.h>
 
 /* This duplicates the definition from <linux/sched.h> */
-#define PF_TRACESYS	0x00000020	/* tracing system calls */
+#define PT_TRACESYS	0x00000002	/* tracing system calls */
 
 /* This duplicates the definition from <asm/signal.h> */
 #define SIGILL		4		/* Illegal instruction (ANSI).  */
@@ -60,8 +60,8 @@ NESTED(handle_sys, PT_SIZE, sp)
 	bgez	t0, stackargs
 
 stack_done:
-	ld	t0, TASK_FLAGS($28)	# syscall tracing enabled?
-	andi	t0, PF_TRACESYS
+	ld	t0, TASK_PTRACE($28)	# syscall tracing enabled?
+	andi	t0, PT_TRACESYS
 	bnez	t0, trace_a_syscall
 
 	jalr	t2			# Do The Real Thing (TM)
@@ -318,7 +318,7 @@ illegal_syscall:
 	sys	sys32_wait4	4
 	sys	sys_swapoff	1			/* 4115 */
 	sys	sys_sysinfo	1
-	sys	sys_ipc		6
+	sys	sys32_ipc		6
 	sys	sys_fsync	1
 	sys	sys32_sigreturn	0
 	sys	sys_clone	0			/* 4120 */

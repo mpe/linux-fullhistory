@@ -3732,4 +3732,6 @@ void cleanup_module(void)
 	usb_deregister(&usb_audio_driver);
 }
 
+MODULE_AUTHOR("Alan Cox <alan@lxorguk.ukuu.org.uk>, Thomas Sailer (sailer@ife.ee.ethz.ch)");
+MODULE_DESCRIPTION("USB Audio Class driver");
 #endif

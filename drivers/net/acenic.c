@@ -607,6 +607,7 @@ MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
 
+#endif
 
 void __exit ace_module_cleanup(void)
 {
@@ -695,7 +696,6 @@ void __exit ace_module_cleanup(void)
 		root_dev = next;
 	}
 }
-#endif
 
 
 int __init ace_module_init(void)

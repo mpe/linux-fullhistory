@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.5 2000/07/24 18:55:39 mdharm Exp $
+ * $Id: scsiglue.c,v 1.6 2000/07/25 23:04:47 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -48,21 +48,6 @@
 #include "debug.h"
 
 #include <linux/malloc.h>
-
-/* direction table -- this indicates the direction of the data
- * transfer for each command code -- a 1 indicates input
- */
-/* FIXME: we need to use the new direction indicators in the Scsi_Cmnd
- * structure, not this table.  First we need to evaluate if it's being set
- * correctly for us, though
- */
-unsigned char us_direction[256/8] = {
-	0x28, 0x81, 0x14, 0x14, 0x20, 0x01, 0x90, 0x77, 
-	0x0C, 0x20, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
 
 /*
  * kernel thread actions

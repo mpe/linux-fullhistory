@@ -42,7 +42,7 @@ multiple route tables to get the flexibility.
 
 	There is no "borrowing" or "sharing" scheme. This is a simple
 traffic limiter. We implement Van Jacobson and Sally Floyd's CBQ
-architecture into Linux 2.2. THis is the preferred solution. Shaper is
+architecture into Linux 2.2. This is the preferred solution. Shaper is
 for simple or back compatible setups.
 
 Alan

@@ -93,7 +93,7 @@ include:
     this driver release?
 
 Before you can compile, install and use the SpellCaster ISA ISDN driver, you
-must ensure that the following software is installed, configuraed and running:
+must ensure that the following software is installed, configured and running:
 
 	- Linux kernel 2.0.20 or later with the required init and ps
 	  versions. Please see your distribution vendor for the correct
@@ -189,7 +189,7 @@ A) 10 steps to the establishment of a basic HDLC connection
 	basic HDLC connection between its two channels.  Two network 
 	interfaces are created and two routes added between the channels.
 
-	i)   using the isdnctrl utitity, add an interface with "addif" and 
+	i)   using the isdnctrl utility, add an interface with "addif" and 
 	     name it "isdn0"
 	ii)  add the outgoing and inbound telephone numbers
 	iii) set the Layer 2 protocol to hdlc
@@ -213,7 +213,7 @@ B) Establishment of a PPP connection
 	This file is a script used to configure a BRI ISDN TA to establish a 
 	PPP connection 	between the two channels.  The file is almost 
 	identical to the HDLC connection example except that the packet 
-	ecapsulation type has to be set.
+	encapsulation type has to be set.
 	
 	use the same procedure as in the HDLC connection from steps i) to 
 	iii) then, after the Layer 2 protocol is set, set the encapsulation 
@@ -238,7 +238,7 @@ C) Establishment of a MLPPP connection
 	This file is a script used to configure a BRI ISDN TA to accept a 
 	Multi Link PPP connection. 
 	
-	i)   using the isdnctrl utitity, add an interface with "addif" and 
+	i)   using the isdnctrl utility, add an interface with "addif" and 
 	     name it "ippp0"
 	ii)  add the inbound telephone number
 	iii) set the Layer 2 protocol to hdlc and the Layer 3 protocol to 

@@ -77,7 +77,7 @@ Persistent DMA Buffers:
 The sound modules normally allocate DMA buffers during open() and
 deallocate them during close(). Linux can often have problems allocating
 DMA buffers for ISA cards on machines with more than 16MB RAM. This is
-because ISA DMA buffers must exist below the 16MB boundry and it is quite
+because ISA DMA buffers must exist below the 16MB boundary and it is quite
 possible that we can't find a large enough free block in this region after
 the machine has been running for any amount of time. The way to avoid this
 problem is to allocate the DMA buffers during module load and deallocate

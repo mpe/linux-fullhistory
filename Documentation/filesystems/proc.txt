@@ -1047,7 +1047,7 @@ low and the high value.
 
 On a  low-memory,  single  CPU system, you can safely set these values to 0 so
 you don't  waste  memory.  It  is  used  on SMP systems so that the system can
-perform fast  pagetable allocations without having to aquire the kernel memory
+perform fast  pagetable allocations without having to acquire the kernel memory
 lock.
 
 For large  systems,  the  settings  are probably fine. For normal systems they

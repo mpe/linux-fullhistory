@@ -62,7 +62,7 @@ obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_VIDC)	+= vidc_mod.o
 obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o ad1848.o
-obj-$(CONFIG_SOUND_AD1816)	+= ad1816.o
+obj-$(CONFIG_SOUND_AD1816)	+= ad1816.o sound.o
 obj-$(CONFIG_SOUND_ACI_MIXER)	+= aci.o
 obj-$(CONFIG_SOUND_AWE32_SYNTH)	+= awe_wave.o
 

@@ -347,6 +347,9 @@ void cleanup_module(void)
 	usb_deregister(&usb_dsbr100_driver);
 }
 
+MODULE_AUTHOR("Markus Demleitner <msdemlei@tucana.harvard.edu>");
+MODULE_DESCRIPTION("D-Link DSB-R100 USB radio driver");
+
 /*
 vi: ts=8
 Sigh.  Of course, I am one of the ts=2 heretics, but Linus' wish is

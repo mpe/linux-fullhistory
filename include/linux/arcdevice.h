@@ -76,7 +76,7 @@
 #define D_TIMING	4096	/* show time needed to copy buffers to card */
 
 #ifndef ARCNET_DEBUG_MAX
-#define ARCNET_DEBUG_MAX (~0)	/* enable ALL debug messages       */
+#define ARCNET_DEBUG_MAX (127)	/* change to ~0 if you want detailed debugging */
 #endif
 
 #ifndef ARCNET_DEBUG

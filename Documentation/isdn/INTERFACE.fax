@@ -4,7 +4,7 @@ $Id: INTERFACE.fax,v 1.1 1999/08/11 20:30:28 armin Exp $
 Description of the fax-subinterface between linklevel and hardwarelevel of 
   isdn4linux. 
 
-  The communication between linklevel (LL) and harwarelevel (HL) for fax
+  The communication between linklevel (LL) and hardwarelevel (HL) for fax
   is based on the struct T30_s (defined in isdnif.h).
   This struct is allocated in the LL.  
   In order to use fax, the LL provides the pointer to this struct with the 
@@ -60,7 +60,7 @@ Structure T30_s:
   depending on progress and type of connection.
   If the phase changes because of an AT command, the LL driver
   changes this value. Otherwise the HL-driver takes care of it, but
-  only neccessary on call establishment (from IDLE to PHASE_A).
+  only necessary on call establishment (from IDLE to PHASE_A).
   (one of the constants ISDN_FAX_PHASE_[IDLE,A,B,C,D,E])
 
   -  direction

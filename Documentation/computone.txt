@@ -93,7 +93,7 @@ Previously, the driver sources were packaged with a set of patch files
 to update the character drivers' makefile and configuration file, and other 
 kernel source files. A build script (ip2build) was included which applies 
 the patches if needed, and build any utilities needed.
-What you recieve may be a single patch file in conventional kernel
+What you receive may be a single patch file in conventional kernel
 patch format build script. That form can also be applied by
 running patch -p1 < ThePatchFile.  Otherwise run ip2build.
  
@@ -191,7 +191,7 @@ Higher speeds can be obtained using the setserial utility which remaps
 Intelliport II installations using the PowerPort expansion module can
 use the custom speed setting to select the highest speeds: 153,600 bps,
 230,400 bps, 307,200 bps, 460,800bps and 921,600 bps. The base for
-custom baud rate configuration is fixed at 921,600 for cards/expantion
+custom baud rate configuration is fixed at 921,600 for cards/expansion
 modules with ST654's and 115200 for those with Cirrus CD1400's.  This
 corresponds to the maximum bit rates those chips are capable.  
 For example if the baud base is 921600 and the baud divisor is 18 then
@@ -220,13 +220,13 @@ DEVFS is the DEVice File System available as an add on package for the
 2.2.x kernels and available as a configuration option in 2.3.46 and higher.
 Devfs allows for the automatic creation and management of device names
 under control of the device drivers themselves.  The Devfs namespace is
-hierarchial and reduces the clutter present in the normal flat /dev
+hierarchical and reduces the clutter present in the normal flat /dev
 namespace.  Devfs names and conventional device names may be intermixed.
 A userspace daemon, devfsd, exists to allow for automatic creation and
 management of symbolic links from the devfs name space to the conventional
 names.  More details on devfs can be found on the DEVFS home site at
 <http://www.atnf.csiro.au/~rgooch/linux/> or in the file kernel
-documenation files, .../linux/Documenation/filesystems/devfs/REAME.
+documentation files, .../linux/Documentation/filesystems/devfs/REAME.
 
 If you are using devfs, existing devices are automatically created within
 the devfs name space.  Normal devices will be ttf/0 - ttf/255 and callout

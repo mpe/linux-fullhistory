@@ -6,6 +6,7 @@
 
 #include <linux/config.h>
 #include <asm/system.h>
+#include <asm/cache.h>
 
 #define SIGCHLD 20
 
@@ -577,7 +578,7 @@ ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
 	ldl	$3,TASK_PROCESSOR($8)
 	lda	$4,softirq_state
-	sll	$3,5,$3
+	sll	$3,L1_CACHE_SHIFT,$3
 	addq	$3,$4,$4
 	ldq	$4,0($4)
 	sll	$4,32,$3

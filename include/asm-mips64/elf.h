@@ -26,14 +26,15 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  */
 #define elf_check_arch(hdr)						\
 ({									\
-	int __res = 0;							\
+	int __res = 1;							\
 	struct elfhdr *__h = (hdr);					\
 									\
-	if ((__h->e_machine != EM_MIPS) && (__h->e_machine != EM_MIPS))	\
-		__res = -ENOEXEC;					\
+	if ((__h->e_machine != EM_MIPS) &&				\
+	    (__h->e_machine != EM_MIPS_RS4_BE))				\
+		__res = 0;						\
 	if (sizeof(elf_caddr_t) == 8 &&					\
 	    __h->e_ident[EI_CLASS] == ELFCLASS32)			\
-	        __res = -ENOEXEC;					\
+	        __res = 0;						\
 									\
 	__res;								\
 })

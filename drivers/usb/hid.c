@@ -1524,3 +1524,6 @@ static void __exit hid_exit(void)
 
 module_init(hid_init);
 module_exit(hid_exit);
+
+MODULE_AUTHOR("Andreas Gal, Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("USB HID support drivers");

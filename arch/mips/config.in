@@ -10,15 +10,6 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
-   bool '  Kernel module loader' CONFIG_KMOD
-fi
-endmenu
-
-mainmenu_option next_comment
 comment 'Machine selection'
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
@@ -100,80 +91,88 @@ fi
 endmenu
 
 mainmenu_option next_comment
-	comment 'CPU selection'
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
+fi
+endmenu
 
-	choice 'CPU type' \
-		"R3000 CONFIG_CPU_R3000	\
-		 R6000 CONFIG_CPU_R6000	\
-		 R4300 CONFIG_CPU_R4300	\
-		 R4x00 CONFIG_CPU_R4X00	\
-		 R5000 CONFIG_CPU_R5000	\
-		 R56x0 CONFIG_CPU_NEVADA \
-		 R8000 CONFIG_CPU_R8000	\
-		 R10000 CONFIG_CPU_R10000" R4x00
+mainmenu_option next_comment
+comment 'CPU selection'
 
-	bool 'Override CPU Options' CONFIG_CPU_ADVANCED
+choice 'CPU type' \
+	"R3000 CONFIG_CPU_R3000	\
+	 R6000 CONFIG_CPU_R6000	\
+	 R4300 CONFIG_CPU_R4300	\
+	 R4x00 CONFIG_CPU_R4X00	\
+	 R5000 CONFIG_CPU_R5000	\
+	 R56x0 CONFIG_CPU_NEVADA \
+	 R8000 CONFIG_CPU_R8000	\
+	 R10000 CONFIG_CPU_R10000" R4x00
 
-	if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
-		bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
-		bool '  Writeback Buffer available' CONFIG_CPU_HAS_WB
-	else
-		if [ "$CONFIG_CPU_R3000" = "y" ]; then
-			if [ "$CONFIG_DECSTATION" = "y" ]; then
-				define_bool CONFIG_CPU_HAS_LLSC n
-				define_bool CONFIG_CPU_HAS_WB y
-			else
-				define_bool CONFIG_CPU_HAS_LLSC n
-				define_bool CONFIG_CPU_HAS_WB n
-			fi
-		else
-			define_bool CONFIG_CPU_HAS_LLSC y
-			define_bool CONFIG_CPU_HAS_WB n
-		fi
-	fi
+bool 'Override CPU Options' CONFIG_CPU_ADVANCED
+
+if [ "$CONFIG_CPU_ADVANCED" = "y" ]; then
+   bool '  ll/sc Instructions available' CONFIG_CPU_HAS_LLSC
+   bool '  Writeback Buffer available' CONFIG_CPU_HAS_WB
+else
+   if [ "$CONFIG_CPU_R3000" = "y" ]; then
+      if [ "$CONFIG_DECSTATION" = "y" ]; then
+	 define_bool CONFIG_CPU_HAS_LLSC n
+	 define_bool CONFIG_CPU_HAS_WB y
+      else
+	 define_bool CONFIG_CPU_HAS_LLSC n
+	 define_bool CONFIG_CPU_HAS_WB n
+      fi
+   else
+      define_bool CONFIG_CPU_HAS_LLSC y
+      define_bool CONFIG_CPU_HAS_WB n
+   fi
+fi
 endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
+if [ "$CONFIG_DECSTATION" = "y" -o "$CONFIG_DDB5074" = "y" ]; then
+   define_bool CONFIG_CPU_LITTLE_ENDIAN y
+else
+   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
+fi
 
-	if [ "$CONFIG_DECSTATION" = "y" -o "$CONFIG_DDB5074" = "y" ]; then
-	   define_bool CONFIG_CPU_LITTLE_ENDIAN y
-	else
-	   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
-	fi
+if [ "$CONFIG_PROC_FS" = "y" ]; then
+   define_bool CONFIG_KCORE_ELF y
+fi
+define_bool CONFIG_ELF_KERNEL y
 
-	if [ "$CONFIG_PROC_FS" = "y" ]; then
-	   define_bool CONFIG_KCORE_ELF y
-	fi
-	define_bool CONFIG_ELF_KERNEL y
+if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
+   bool 'Include IRIX binary compatibility' CONFIG_BINFMT_IRIX 
+   bool 'Include forward keyboard' CONFIG_FORWARD_KEYBOARD 
+fi
 
-	if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
-	   bool 'Include IRIX binary compatibility' CONFIG_BINFMT_IRIX 
-	   bool 'Include forward keyboard' CONFIG_FORWARD_KEYBOARD 
-	fi
+define_bool CONFIG_BINFMT_AOUT n
+define_bool CONFIG_BINFMT_ELF y
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
-	define_bool CONFIG_BINFMT_AOUT n
-	define_bool CONFIG_BINFMT_ELF y
-	tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+bool 'Networking support' CONFIG_NET
 
-	bool 'Networking support' CONFIG_NET
+if [ "$CONFIG_PCI" = "y" ]; then
+    source drivers/pci/Config.in
+fi
 
-	if [ "$CONFIG_PCI" = "y" ]; then
-	    source drivers/pci/Config.in
-	fi
+bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
+bool 'Sysctl support' CONFIG_SYSCTL
 
-	bool 'System V IPC' CONFIG_SYSVIPC
-	bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
-	bool 'Sysctl support' CONFIG_SYSCTL
+source drivers/parport/Config.in
 
-        source drivers/parport/Config.in
-
-	if [ "$CONFIG_DECSTATION" = "y" ]; then
-            bool 'TURBOchannel support' CONFIG_TC
-#           if [ "$CONFIG_TC" = "y" ]; then
-#              bool ' Access.Bus support' CONFIG_ACCESSBUS
-#           fi
-	fi
+if [ "$CONFIG_DECSTATION" = "y" ]; then
+    bool 'TURBOchannel support' CONFIG_TC
+#    if [ "$CONFIG_TC" = "y" ]; then
+#	bool ' Access.Bus support' CONFIG_ACCESSBUS
+#    fi
+fi
 endmenu
 
 if [ "$CONFIG_ISA" = "y" ]; then
@@ -196,24 +195,24 @@ fi
 
 if [ "$CONFIG_DECSTATION" != "y" -a \
      "$CONFIG_SGI_IP22" != "y" ]; then
-    source drivers/telephony/Config.in
+   source drivers/telephony/Config.in
 fi
 
 if [ "$CONFIG_SGI_IP22" != "y" -a \
      "$CONFIG_DECSTATION" != "y" ]; then
 
-    mainmenu_option next_comment
-    comment 'ATA/IDE/MFM/RLL support'
+   mainmenu_option next_comment
+   comment 'ATA/IDE/MFM/RLL support'
     
-    tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
+   tristate 'ATA/IDE/MFM/RLL support' CONFIG_IDE
     
-    if [ "$CONFIG_IDE" != "n" ]; then
+   if [ "$CONFIG_IDE" != "n" ]; then
       source drivers/ide/Config.in
-    else
+   else
       define_bool CONFIG_BLK_DEV_IDE_MODES n
       define_bool CONFIG_BLK_DEV_HD n
-    fi
-    endmenu
+   fi
+   endmenu
 fi
 
 mainmenu_option next_comment
@@ -228,7 +227,7 @@ endmenu
 
 if [ "$CONFIG_DECSTATION" != "y" -a \
      "$CONFIG_SGI_IP22" != "y" ]; then
-    source drivers/i2o/Config.in
+   source drivers/i2o/Config.in
 fi
 
 if [ "$CONFIG_NET" = "y" ]; then
@@ -336,7 +335,7 @@ if [ "$CONFIG_SGI_IP22" = "y" ]; then
       if [ "$CONFIG_SGI_NEWPORT_CONSOLE" != "y" ]; then
 	 define_bool CONFIG_DUMMY_CONSOLE y
       else
-         define_bool CONFIG_FONT_8x16 y
+	 define_bool CONFIG_FONT_8x16 y
       fi
       bool 'SGI PROM Console Support' CONFIG_SGI_PROM_CONSOLE
    fi

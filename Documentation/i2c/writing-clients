@@ -36,7 +36,7 @@ address.
     /* dec_use        */  &foo_dev_use    /* May be NULL */
   }
  
-The name can be choosen freely, and may be upto 40 characters long. Please
+The name can be chosen freely, and may be upto 40 characters long. Please
 use something descriptive here.
 
 The id should be a unique ID. The range 0xf000 to 0xffff is reserved for
@@ -659,7 +659,7 @@ kernel booting is completed.
 Command function
 ================
 
-A generic ioctl-like function call back is supported. You will seldomly
+A generic ioctl-like function call back is supported. You will seldom
 need this. You may even set it to NULL.
 
   /* No commands defined */
@@ -733,7 +733,7 @@ SMBus communication
                                         u8 command, u8 length,
                                         u8 *values);
 
-All these tranactions return -1 on failure. The 'write' transactions 
+All these transactions return -1 on failure. The 'write' transactions 
 return 0 on success; the 'read' transactions return the read value, except 
 for read_block, which returns the number of values read. The block buffers 
 need not be longer than 32 bytes.
@@ -749,7 +749,7 @@ Below all general purpose routines are listed, that were not mentioned
 before.
 
   /* This call returns a unique low identifier for each registered adapter,
-   * or -1 if the adapter was not regisitered.
+   * or -1 if the adapter was not registered.
    */
   extern int i2c_adapter_id(struct i2c_adapter *adap);
 
@@ -791,7 +791,7 @@ The third, sixth and ninth parameters should always be NULL, and the
 fourth should always be 0. The fifth is the mode of the /proc file;
 0644 is safe, as the file will be owned by root:root. 
 
-The seventh and eigth parameters should be &sensors_proc_real and
+The seventh and eighth parameters should be &sensors_proc_real and
 &sensors_sysctl_real if you want to export lists of reals (scaled
 integers). You can also use your own function for them, as usual.
 Finally, the last parameter is the call-back to gather the data

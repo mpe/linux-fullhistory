@@ -142,11 +142,11 @@ REVISION HISTORY
 
 2.0.8   Nov 02, 1999            - Fixed up the X25API code.
                                 - Clear call bug fixed.i
-                                - Eanbled driver for multi-card
+                                - Enabled driver for multi-card
                                   operation.                                
 
 2.0.7   Aug 26, 1999		- Merged X25API code into WANPIPE.
-				- Fixed a memeory leak for X25API
+				- Fixed a memory leak for X25API
 				- Updated the X25API code for 2.2.X kernels.
 				- Improved NEM handling.
 

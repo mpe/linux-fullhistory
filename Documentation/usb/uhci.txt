@@ -32,7 +32,7 @@ The invention of the basic concept, and major coding were completed in two
 days (and nights) on the 16th and 17th of October 1999, now known as the
 great USB-October-Revolution started by GA, DF, and TS ;-)
 
-Since the concept is in no way UHCI dependant, we hope that it will also be 
+Since the concept is in no way UHCI dependent, we hope that it will also be 
 transfered to the OHCI-driver, so both drivers share a common API.
 
 1.2. Advantages and disadvantages
@@ -58,7 +58,7 @@ and its semantics were unnecessary complicated in our opinion.
 
 1.4. What's really working?
 
-As said above, CTRL und BULK already work fine even with the wrappers,
+As said above, CTRL and BULK already work fine even with the wrappers,
 so legacy code wouldn't notice the change.
 Regarding to Thomas, ISO transfers now run stable with USB audio.
 INT transfers (e.g. mouse driver) work fine, too.
@@ -113,7 +113,7 @@ before the End Chain QH (for BULK). Since only the QH->next pointers are
 affected, no atomic memory operation is required. The three QHs in the
 common chain are never equipped with TDs!
 
-For ISO or INT, the TD for each frame is simply inserted into the apropriate
+For ISO or INT, the TD for each frame is simply inserted into the appropriate
 ISO/INT-TD-chain for the desired frame. The 7 skeleton INT-TDs are scattered
 among the 1024 frames similar to the old UHCI driver.
 

@@ -14,7 +14,7 @@ WHAT'S NEW
   1. Support modem interface for 8738. (select in kernel configuration)
   2. Enable S/PDIF-in to S/PDIF-out (S/PDIF loop).
   3. Enable 4 channels analog duplicate mode on 3 jack or 4 jack
-     configurateion.
+     configuration.
 
 
    Be aware: C-Media Electronics Inc. is basically an IC design house,

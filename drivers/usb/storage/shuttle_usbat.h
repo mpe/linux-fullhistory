@@ -1,8 +1,6 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  * Header File
  *
- * $Id: scm.h,v 1.3 2000/07/24 19:19:52 mdharm Exp $
- *
  * Current development and maintainance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
@@ -23,60 +21,56 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef _USB_SCM_H
-#define _USB_SCM_H
+#ifndef _USB_SHUTTLE_USBAT_H
+#define _USB_SHUTTLE_USBAT_H
 
-#define SCM_EPP_PORT		0x10
-#define SCM_EPP_REGISTER	0x30
-#define SCM_ATA			0x40
-#define SCM_ISA			0x50
+#define USBAT_EPP_PORT		0x10
+#define USBAT_EPP_REGISTER	0x30
+#define USBAT_ATA		0x40
+#define USBAT_ISA		0x50
 
 /* SCM User I/O Data registers */
 
-#define SCM_UIO_EPAD		0x80 // Enable Peripheral Control Signals
-#define SCM_UIO_CDT		0x40 // Card Detect (Read Only)
+#define USBAT_UIO_EPAD		0x80 // Enable Peripheral Control Signals
+#define USBAT_UIO_CDT		0x40 // Card Detect (Read Only)
 				     // CDT = ACKD & !UI1 & !UI0
-#define SCM_UIO_1		0x20 // I/O 1
-#define SCM_UIO_0		0x10 // I/O 0
-#define SCM_UIO_EPP_ATA		0x08 // 1=EPP mode, 0=ATA mode
-#define SCM_UIO_UI1		0x04 // Input 1
-#define SCM_UIO_UI0		0x02 // Input 0
-#define SCM_UIO_INTR_ACK	0x01 // Interrupt (ATA & ISA)/Acknowledge (EPP)
+#define USBAT_UIO_1		0x20 // I/O 1
+#define USBAT_UIO_0		0x10 // I/O 0
+#define USBAT_UIO_EPP_ATA	0x08 // 1=EPP mode, 0=ATA mode
+#define USBAT_UIO_UI1		0x04 // Input 1
+#define USBAT_UIO_UI0		0x02 // Input 0
+#define USBAT_UIO_INTR_ACK	0x01 // Interrupt (ATA & ISA)/Acknowledge (EPP)
 
 /* SCM User I/O Enable registers */
 
-#define SCM_UIO_DRVRST		0x80 // Reset Peripheral
-#define SCM_UIO_ACKD		0x40 // Enable Card Detect
-#define SCM_UIO_OE1		0x20 // I/O 1 set=output/clr=input
+#define USBAT_UIO_DRVRST	0x80 // Reset Peripheral
+#define USBAT_UIO_ACKD		0x40 // Enable Card Detect
+#define USBAT_UIO_OE1		0x20 // I/O 1 set=output/clr=input
 				     // If ACKD=1, set OE1 to 1 also.
-#define SCM_UIO_OE0		0x10 // I/O 0 set=output/clr=input
-#define SCM_UIO_ADPRST		0x01 // Reset SCM chip
+#define USBAT_UIO_OE0		0x10 // I/O 0 set=output/clr=input
+#define USBAT_UIO_ADPRST	0x01 // Reset SCM chip
 
-/* SCM-specific commands */
+/* USBAT-specific commands */
 
-extern int scm_read(struct us_data *us, unsigned char access,
+extern int usbat_read(struct us_data *us, unsigned char access,
 	unsigned char reg, unsigned char *content);
-extern int scm_write(struct us_data *us, unsigned char access,
+extern int usbat_write(struct us_data *us, unsigned char access,
 	unsigned char reg, unsigned char content);
-extern int scm_read_block(struct us_data *us, unsigned char access,
+extern int usbat_read_block(struct us_data *us, unsigned char access,
 	unsigned char reg, unsigned char *content, unsigned short len,
 	int use_sg);
-extern int scm_write_block(struct us_data *us, unsigned char access,
+extern int usbat_write_block(struct us_data *us, unsigned char access,
 	unsigned char reg, unsigned char *content, unsigned short len,
 	int use_sg);
-extern int scm_multiple_write(struct us_data *us, unsigned char access,
+extern int usbat_multiple_write(struct us_data *us, unsigned char access,
 	unsigned char *registers, unsigned char *data_out,
 	unsigned short num_registers);
-extern int scm_read_user_io(struct us_data *us, unsigned char *data_flags);
-extern int scm_write_user_io(struct us_data *us,
+extern int usbat_read_user_io(struct us_data *us, unsigned char *data_flags);
+extern int usbat_write_user_io(struct us_data *us,
 	unsigned char enable_flags, unsigned char data_flags);
 
 /* HP 8200e stuff */
 
 extern int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us);
-
-/* Sandisk SDDR-09 stuff */
-
-extern int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us);
 
 #endif

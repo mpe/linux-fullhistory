@@ -1,7 +1,7 @@
 
 The OHCI HCD layer is a simple but nearly complete implementation of what the
 USB people would call a HCD  for the OHCI. 
- (ISO comming soon, Bulk, INT u. CTRL transfers enabled)
+ (ISO coming soon, Bulk, INT u. CTRL transfers enabled)
 It is based on Linus Torvalds UHCI code and Gregory Smith OHCI fragments (0.03 source tree).
 The layer (functions) on top of it, is for interfacing to the alternate-usb device-drivers. 
 
@@ -35,11 +35,11 @@ Features:
 
 - Endpoint Descriptor (ED) handling more static approach 
  (EDs should be allocated in parallel to the SET CONFIGURATION command and they live
- as long as the function (device) is alive or another configuration is choosen.
+ as long as the function (device) is alive or another configuration is chosen.
  In the HCD layer the EDs has to be allocated manually either by calling a subroutine
  or by sending a USB root hub vendor specific command to the virtual root hub.
  At the alternate linux usb stack EDs will be added (allocated) at their first use.
- ED will be unlinked from the HC chains if they are not bussy.
+ ED will be unlinked from the HC chains if they are not busy.
  
  files: ohci-hcd.c ohci-hcd.h
  routines:   (do not use for drivers, use the top layer alternate usb commands instead)

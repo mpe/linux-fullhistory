@@ -25,7 +25,7 @@
             -Wall -Wstrict-prototypes -O6 -c dmfe.c"
 
 
-  B. The following steps teach you how to active DM9102 board:
+  B. The following steps teach you how to activate a DM9102 board:
 
         1. Used the upper compiler command to compile dmfe.c
 
@@ -40,13 +40,13 @@
            "ifconfig eth0 172.22.3.18"
                           ^^^^^^^^^^^ Your IP address
 
-        4. Active the IP routing table. For some distributions, it is not
+        4. Activate the IP routing table. For some distributions, it is not
            necessary. You can type "route" to check.
 
            "route add default eth0"
 
 
-        5. Well done. Your DM9102 adapter actived now.
+        5. Well done. Your DM9102 adapter is now activated.
 
 
    C. Object files description:

@@ -23,7 +23,7 @@ obj-		:=
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia rio
+ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia rio drm agp
 
 #
 # This file contains the font map for the default (hardware) font
@@ -109,16 +109,7 @@ else
 endif
 
 obj-$(CONFIG_MAGIC_SYSRQ) += sysrq.o
-
 obj-$(CONFIG_ATARI_DSP56K) += dsp56k.o
-ifeq ($(CONFIG_ATARI_DSP56K),y)
-S = y
-else
-  ifeq ($(CONFIG_ATARI_DSP56K),m)
-  SM = y
-  endif
-endif
-
 obj-$(CONFIG_ROCKETPORT) += rocket.o
 obj-$(CONFIG_MOXA_SMARTIO) += mxser.o
 obj-$(CONFIG_MOXA_INTELLIO) += moxa.o
@@ -135,10 +126,6 @@ obj-$(CONFIG_SYNCLINK) += synclink.o
 obj-$(CONFIG_N_HDLC) += n_hdlc.o
 obj-$(CONFIG_SPECIALIX) += specialix.o
 obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
-
-# After much ado, we found that an object can safely be declared as
-# both a module and into the kernel. Below that is filtered out.
-# So this should simply provide the wanted functionality!
 obj-$(CONFIG_SX) += sx.o generic_serial.o
 obj-$(CONFIG_RIO) += rio/rio.o generic_serial.o
 obj-$(CONFIG_SH_SCI) += sh-sci.o generic_serial.o
@@ -166,14 +153,6 @@ else
 endif
 
 obj-$(CONFIG_BUSMOUSE) += busmouse.o
-ifeq ($(CONFIG_BUSMOUSE),y)
-M = y
-else
-  ifeq ($(CONFIG_BUSMOUSE),m)
-  MM = m
-  endif
-endif
-
 obj-$(CONFIG_DTLK) += dtlk.o
 obj-$(CONFIG_R3964) += n_r3964.o
 obj-$(CONFIG_APPLICOM) += applicom.o
@@ -203,72 +182,17 @@ obj-$(CONFIG_977_WATCHDOG) += wdt977.o
 obj-$(CONFIG_DS1620) += ds1620.o
 obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 
-#
-# for external dependencies in arm/config.in and video/config.in
-#
-ifeq ($(CONFIG_BUS_I2C),y)
-	L_I2C=y
-else
-  ifeq ($(CONFIG_BUS_I2C),m)
-	L_I2C=m
-  endif
-endif
-
+obj-$(CONFIG_BUS_I2C) += i2c-old.o
 obj-$(CONFIG_VIDEO_BT848) += bttv.o msp3400.o \
-	tda7432.o tda8425.o tda985x.o tda9875.o tea6300.o tea6420.o
-ifeq ($(CONFIG_VIDEO_BT848),y)
-L_TUNERS=y
-else
-  ifeq ($(CONFIG_VIDEO_BT848),m)
-    L_TUNERS=m
-  endif
-endif
+	tda7432.o tda8425.o tda985x.o tda9875.o tea6300.o tea6420.o tuner.o
 obj-$(CONFIG_SOUND_TVMIXER) += tvmixer.o
 
-obj-$(CONFIG_VIDEO_ZR36120) += zoran.o
-ifeq ($(CONFIG_VIDEO_ZR36120),y)
-L_I2C=y
-L_TUNERS=y
-L_DECODERS=y
-else
-  ifeq ($(CONFIG_VIDEO_ZR36120),m)
-    L_I2C=m
-    L_TUNERS=m
-    L_DECODERS=m
-  endif
-endif
-
-obj-$(CONFIG_I2C_PARPORT) += i2c-parport.o
-ifeq ($(CONFIG_I2C_PARPORT),y)
-L_I2C = y
-else
-  ifeq ($(CONFIG_I2C_PARPORT),m)
-    L_I2C = m
-  endif
-endif
-
-obj-$(CONFIG_VIDEO_SAA5249) += saa5249.o
-ifeq ($(CONFIG_VIDEO_SAA5249),y)
-L_I2C=y
-else
-  ifeq ($(CONFIG_VIDEO_SAA5249),m)
-    L_I2C=m
-  endif
-endif
-
+obj-$(CONFIG_VIDEO_ZR36120) += zoran.o i2c-old.o tuner.o saa7110.o saa7111.o saa7185.o 
+obj-$(CONFIG_I2C_PARPORT) += i2c-parport.o i2c-old.o
+obj-$(CONFIG_VIDEO_SAA5249) += saa5249.o i2c-old.o
 obj-$(CONFIG_VIDEO_CQCAM) += c-qcam.o
 obj-$(CONFIG_VIDEO_BWQCAM) += bw-qcam.o
-obj-$(CONFIG_VIDEO_ZORAN) += buz.o
-ifeq ($(CONFIG_VIDEO_ZORAN),y)
-L_I2C=y
-L_DECODERS=y
-else
-  ifeq ($(CONFIG_VIDEO_ZORAN),m)
-    L_I2C=m
-    L_DECODERS=m
-  endif
-endif
-
+obj-$(CONFIG_VIDEO_ZORAN) += buz.o i2c-old.o saa7110.o saa7111.o saa7185.o 
 obj-$(CONFIG_VIDEO_LML33) += bt856.o bt819.o
 obj-$(CONFIG_VIDEO_PMS) += pms.o
 obj-$(CONFIG_VIDEO_PLANB) += planb.o
@@ -305,24 +229,17 @@ endif
 
 obj-$(CONFIG_H8) += h8.o
 obj-$(CONFIG_PPDEV) += ppdev.o
-
-# set when a framegrabber supports external tuners
-obj-$(L_TUNERS) += tuner.o
-
-# set when a framegrabber supports external decoders
-obj-$(L_DECODERS) += saa7110.o saa7111.o saa7185.o
-
-# set when a framegrabber implements i2c support
-obj-$(L_I2C) += i2c-old.o
-
 obj-$(CONFIG_DZ) += dz.o
 obj-$(CONFIG_NWBUTTON) += nwbutton.o
 obj-$(CONFIG_NWFLASH) += nwflash.o
 
 ifeq ($(CONFIG_DRM),y)
   SUB_DIRS += drm
-  ALL_SUB_DIRS += drm
   MOD_SUB_DIRS += drm
+else
+  ifeq ($(CONFIG_DRM),m)
+  MOD_SUB_DIRS += drm
+  endif
 endif
 
 ifeq ($(CONFIG_PCMCIA),y)
@@ -336,11 +253,9 @@ endif
 
 ifeq ($(CONFIG_AGP), y)
   SUB_DIRS += agp
-  ALL_SUB_DIRS += agp
   MOD_SUB_DIRS += agp
 else
   ifeq ($(CONFIG_AGP), m)
-    ALL_SUB_DIRS += agp
     MOD_SUB_DIRS += agp
   endif
 endif

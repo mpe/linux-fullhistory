@@ -45,7 +45,7 @@ fps we ought to get... Here is the scenario: capturing frames
 to memory is done in the so-called snapshot mode. In this mode
 the Zoran stops after capturing a frame worth of data and wait
 till the application set GRAB bit to indicate readiness for the
-next frame. After detecting a set bit, the chip neetly waits
+next frame. After detecting a set bit, the chip neatly waits
 till the start of a frame, captures it and it goes back to off.
 Smart ppl will notice the problem here. Its the waiting on the
 _next_ frame each time we set the GRAB bit... Oh well, 12,5 fps

@@ -466,6 +466,28 @@ extern inline void cap_emulate_setxuid(int old_ruid, int old_euid,
 	}
 }
 
+static int set_user(uid_t new_ruid)
+{
+	struct user_struct *new_user, *old_user;
+
+	/* What if a process setreuid()'s and this brings the
+	 * new uid over his NPROC rlimit?  We can check this now
+	 * cheaply with the new uid cache, so if it matters
+	 * we should be checking for it.  -DaveM
+	 */
+	new_user = alloc_uid(new_ruid);
+	if (!new_user)
+		return -EAGAIN;
+	old_user = current->user;
+	atomic_dec(&old_user->processes);
+	atomic_inc(&new_user->processes);
+
+	current->uid = new_ruid;
+	current->user = new_user;
+	free_uid(old_user);
+	return 0;
+}
+
 /*
  * Unprivileged users may change the real uid to the effective uid
  * or vice versa.  (BSD-style)
@@ -483,28 +505,33 @@ extern inline void cap_emulate_setxuid(int old_ruid, int old_euid,
  */
 asmlinkage long sys_setreuid(uid_t ruid, uid_t euid)
 {
-	int old_ruid, old_euid, old_suid, new_ruid;
+	int old_ruid, old_euid, old_suid, new_ruid, new_euid;
 
 	new_ruid = old_ruid = current->uid;
-	old_euid = current->euid;
+	new_euid = old_euid = current->euid;
 	old_suid = current->suid;
+
 	if (ruid != (uid_t) -1) {
-		if ((old_ruid == ruid) || 
-		    (current->euid==ruid) ||
-		    capable(CAP_SETUID))
-			new_ruid = ruid;
-		else
+		new_ruid = ruid;
+		if ((old_ruid != ruid) &&
+		    (current->euid != ruid) &&
+		    !capable(CAP_SETUID))
 			return -EPERM;
 	}
+
 	if (euid != (uid_t) -1) {
-		if ((old_ruid == euid) ||
-		    (current->euid == euid) ||
-		    (current->suid == euid) ||
-		    capable(CAP_SETUID))
-			current->fsuid = current->euid = euid;
-		else
+		new_euid = euid;
+		if ((old_ruid != euid) &&
+		    (current->euid != euid) &&
+		    (current->suid != euid) &&
+		    !capable(CAP_SETUID))
 			return -EPERM;
 	}
+
+	if (new_ruid != old_ruid && set_user(new_ruid) < 0)
+		return -EAGAIN;
+
+	current->fsuid = current->euid = new_euid;
 	if (ruid != (uid_t) -1 ||
 	    (euid != (uid_t) -1 && euid != old_ruid))
 		current->suid = current->euid;
@@ -512,17 +539,6 @@ asmlinkage long sys_setreuid(uid_t ruid, uid_t euid)
 	if (current->euid != old_euid)
 		current->dumpable = 0;
 
-	if(new_ruid != old_ruid) {
-		/* What if a process setreuid()'s and this brings the
-		 * new uid over his NPROC rlimit?  We can check this now
-		 * cheaply with the new uid cache, so if it matters
-		 * we should be checking for it.  -DaveM
-		 */
-		free_uid(current);
-		current->uid = new_ruid;
-		alloc_uid(current);
-	}
-	
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
 	}
@@ -550,22 +566,22 @@ asmlinkage long sys_setuid(uid_t uid)
 
 	old_ruid = new_ruid = current->uid;
 	old_suid = current->suid;
-	if (capable(CAP_SETUID))
-		new_ruid = current->euid = current->suid = current->fsuid = uid;
-	else if ((uid == current->uid) || (uid == current->suid))
-		current->fsuid = current->euid = uid;
-	else
+	if (capable(CAP_SETUID)) {
+		if (uid != old_ruid && set_user(uid) < 0)
+			return -EAGAIN;
+		current->suid = uid;
+	} else if (uid == current->uid) {
+		/* Nothing - just set fsuid/euid */
+	}  else if (uid == current->suid) {
+		if (set_user(uid) < 0)
+			return -EAGAIN;
+	} else
 		return -EPERM;
 
-	if (current->euid != old_euid)
-		current->dumpable = 0;
+	current->fsuid = current->euid = uid;
 
-       if (new_ruid != old_ruid) {
-		/* See comment above about NPROC rlimit issues... */
-		free_uid(current);
-		current->uid = new_ruid;
-		alloc_uid(current);
-	}
+	if (old_euid != uid)
+		current->dumpable = 0;
 
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
@@ -597,10 +613,8 @@ asmlinkage long sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 			return -EPERM;
 	}
 	if (ruid != (uid_t) -1) {
-		/* See above commentary about NPROC rlimit issues here. */
-		free_uid(current);
-		current->uid = ruid;
-		alloc_uid(current);
+		if (ruid != current->uid && set_user(ruid) < 0)
+			return -EAGAIN;
 	}
 	if (euid != (uid_t) -1) {
 		if (euid != current->euid)

@@ -1667,7 +1667,7 @@ void __init sock_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "Linux NET4.0 for Linux 2.3\n");
+	printk(KERN_INFO "Linux NET4.0 for Linux 2.4\n");
 	printk(KERN_INFO "Based upon Swansea University Computer Society NET3.039\n");
 
 	/*

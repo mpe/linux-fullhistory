@@ -38,7 +38,8 @@ static void release(struct task_struct * p)
 			spin_unlock_irq(&runqueue_lock);
 		} while (has_cpu);
 #endif
-		free_uid(p);
+		atomic_dec(&p->user->processes);
+		free_uid(p->user);
 		unhash_process(p);
 
 		release_thread(p);

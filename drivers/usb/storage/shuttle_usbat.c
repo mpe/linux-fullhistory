@@ -1,7 +1,5 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  *
- * $Id: scm.c,v 1.4 2000/07/24 19:19:52 mdharm Exp $
- *
  * SCM driver v0.2:
  *
  * Removed any reference to maxlen for bulk transfers.
@@ -52,7 +50,7 @@
 #include "protocol.h"
 #include "usb.h"
 #include "debug.h"
-#include "scm.h"
+#include "shuttle_usbat.h"
 
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -63,6 +61,10 @@ extern int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	void *data, u16 size);
 extern int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 	unsigned int len, unsigned int *act_len);
+
+#define short_pack(b1,b2) ( ((u16)(b1)) | ( ((u16)(b2))<<8 ) )
+#define LSB_of(s) ((s)&0xFF)
+#define MSB_of(s) ((s)>>8)
 
 /*
  * Send a control message and wait for the response.
@@ -83,62 +85,53 @@ extern int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
  *
  */
 
-static int scm_send_control(struct us_data *us,
-		     unsigned char command[8],
-		     unsigned char *xfer_data,
-		     unsigned int xfer_len) {
+static int usbat_send_control(struct us_data *us,
+		int pipe,
+		unsigned char request,
+		unsigned char requesttype,
+		unsigned short value,
+		unsigned short index,
+		unsigned char *xfer_data,
+		unsigned int xfer_len) {
 
 	int result;
-	int pipe;
-	void *buffer = NULL;
-
-	command[6] = xfer_len&0xFF;
-	command[7] = (xfer_len>>8)&0xFF;
-
-	// Get the receive or send control pipe number, based on
-	// the direction indicated by the request type.
-
-	if (command[0] & USB_DIR_IN)
-		pipe = usb_rcvctrlpipe(us->pusb_dev,0);
-	else
-		pipe = usb_sndctrlpipe(us->pusb_dev,0);
-
 
 	// If data is going to be sent or received with the URB,
 	// then allocate a buffer for it. If data is to be sent,
 	// copy the data into the buffer.
-
+/*
 	if (xfer_len > 0) {
 		buffer = kmalloc(xfer_len, GFP_KERNEL);
 		if (!(command[0] & USB_DIR_IN))
 			memcpy(buffer, xfer_data, xfer_len);
 	}
-
+*/
 	// Send the URB to the device and wait for a response.
 
 	/* Why are request and request type reversed in this call? */
 
 	result = usb_stor_control_msg(us, pipe,
-		      command[1], command[0],
-		      (((unsigned short)command[3])<<8) | command[2],
-		      (((unsigned short)command[5])<<8) | command[3],
-		      buffer,
-		      xfer_len);
+			request, requesttype, value, index,
+			xfer_data, xfer_len);
 
 
 	// If data was sent or received with the URB, free the buffer we
 	// allocated earlier, but not before reading the data out of the
 	// buffer if we wanted to receive data.
-
+/*
 	if (xfer_len > 0) {
 		if (command[0] & USB_DIR_IN)
 			memcpy(xfer_data, buffer, xfer_len);
 		kfree(buffer);
 	}
-
+*/
 	// Check the return code for the command.
 
 	if (result < 0) {
+		/* if the command was aborted, indicate that */
+		if (result == -ENOENT)
+			return USB_STOR_TRANSPORT_ABORTED;
+
 		/* a stall is a fatal condition from the device */
 		if (result == -EPIPE) {
 			US_DEBUGP("-- Stall on control pipe. Clearing\n");
@@ -154,7 +147,7 @@ static int scm_send_control(struct us_data *us,
 	return USB_STOR_TRANSPORT_GOOD;
 }
 
-static int scm_raw_bulk(struct us_data *us, 
+static int usbat_raw_bulk(struct us_data *us, 
 		int direction,
 		unsigned char *data,
 		unsigned short len) {
@@ -182,20 +175,20 @@ static int scm_raw_bulk(struct us_data *us,
 
                 /* NAK - that means we've retried a few times already */
        	        if (result == -ETIMEDOUT) {
-                        US_DEBUGP("scm_raw_bulk():"
+                        US_DEBUGP("usbat_raw_bulk():"
 				" device NAKed\n");
                         return US_BULK_TRANSFER_FAILED;
                 }
 
                 /* -ENOENT -- we canceled this transfer */
                 if (result == -ENOENT) {
-                        US_DEBUGP("scm_raw_bulk():"
+                        US_DEBUGP("usbat_raw_bulk():"
 				" transfer aborted\n");
                         return US_BULK_TRANSFER_ABORTED;
                 }
 
 		if (result == -EPIPE) {
-			US_DEBUGP("scm_raw_bulk():"
+			US_DEBUGP("usbat_raw_bulk():"
 				" output pipe stalled\n");
 			return USB_STOR_TRANSPORT_FAILED;
 		}
@@ -220,7 +213,7 @@ static int scm_raw_bulk(struct us_data *us,
  * Note: direction must be set if command_len == 0.
  */
 
-static int scm_bulk_transport(struct us_data *us,
+static int usbat_bulk_transport(struct us_data *us,
 			  unsigned char *command,
 			  unsigned short command_len,
 			  int direction,
@@ -236,15 +229,19 @@ static int scm_bulk_transport(struct us_data *us,
 	int i;
 	struct scatterlist *sg;
 	char string[64];
+	int pipe;
 
+/*
 	if (command_len != 0) {
 
-		/* Fix up the command's data length */
+		// Fix up the command's data length
 
 		command[6] = len&0xFF;
 		command[7] = (len>>8)&0xFF;
 
-		result = scm_send_control(us, 
+		
+
+		result = usbat_send_control(us, 
 					  execute,
 					  command,
 					  command_len);
@@ -252,7 +249,7 @@ static int scm_bulk_transport(struct us_data *us,
 		if (result != USB_STOR_TRANSPORT_GOOD)
 			return result;
 	}
-
+*/
 	if (len==0)
 		return USB_STOR_TRANSPORT_GOOD;
 
@@ -289,11 +286,11 @@ static int scm_bulk_transport(struct us_data *us,
 		  len, use_sg);
 
 	if (!use_sg)
-		result = scm_raw_bulk(us, direction, data, len);
+		result = usbat_raw_bulk(us, direction, data, len);
 	else {
 		sg = (struct scatterlist *)data;
 		for (i=0; i<use_sg && transferred<len; i++) {
-			result = scm_raw_bulk(us, direction,
+			result = usbat_raw_bulk(us, direction,
 				sg[i].address, 
 				len-transferred > sg[i].length ?
 					sg[i].length : len-transferred);
@@ -306,7 +303,7 @@ static int scm_bulk_transport(struct us_data *us,
 	return result;
 }
 
-int scm_read(struct us_data *us,
+int usbat_read(struct us_data *us,
 	     unsigned char access,
 	     unsigned char reg, 
 	     unsigned char *content) {
@@ -316,17 +313,21 @@ int scm_read(struct us_data *us,
 		0xC0, access, reg, 0x00, 0x00, 0x00, 0x00, 0x00
 	};
 
-	result =  scm_send_control(us, command, content, 1);
-
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	// US_DEBUGP("SCM: Reg %d -> %02X\n", reg, *content);
+	result = usbat_send_control(us,
+		usb_rcvctrlpipe(us->pusb_dev,0),
+		access,
+		0xC0,
+		(u16)reg,
+		0,
+		content,
+		1);
+		
+	// result =  usbat_send_control(us, command, content, 1);
 
 	return result;
 }
 
-int scm_write(struct us_data *us,
+int usbat_write(struct us_data *us,
 	     unsigned char access,
 	     unsigned char reg, 
 	     unsigned char content) {
@@ -336,17 +337,21 @@ int scm_write(struct us_data *us,
 		0x40, access|0x01, reg, content, 0x00, 0x00, 0x00, 0x00
 	};
 
-	result =  scm_send_control(us, command, NULL, 0);
-
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	// US_DEBUGP("SCM: Reg %d <- %02X\n", reg, content);
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		access|0x01,
+		0x40,
+		short_pack(reg, content),
+		0,
+		NULL,
+		0);
+		
+	// result =  usbat_send_control(us, command, NULL, 0);
 
 	return result;
 }
 
-int scm_set_shuttle_features(struct us_data *us,
+int usbat_set_shuttle_features(struct us_data *us,
 	     unsigned char external_trigger,
 	     unsigned char epp_control, 
 	     unsigned char mask_byte, 
@@ -360,15 +365,21 @@ int scm_set_shuttle_features(struct us_data *us,
 		test_pattern, mask_byte, subcountL, subcountH
 	};
 
-	result =  scm_bulk_transport(us, command, 8, 0, NULL, 0, 0);
-
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x80,
+		0x40,
+		0,
+		0,
+		command,
+		8);
+		
+	// result =  usbat_bulk_transport(us, command, 8, 0, NULL, 0, 0);
 
 	return result;
 }
 
-int scm_read_block(struct us_data *us,
+int usbat_read_block(struct us_data *us,
 	     unsigned char access,
 	     unsigned char reg, 
 	     unsigned char *content,
@@ -377,16 +388,27 @@ int scm_read_block(struct us_data *us,
 
 	int result;
 	unsigned char command[8] = {
-		0xC0, access|0x02, reg, 0x00, 0x00, 0x00, 0x00, 0x00
+		0xC0, access|0x02, reg, 0x00, 0x00, 0x00, 
+		LSB_of(len), MSB_of(len)
 	};
 
-	result =  scm_bulk_transport(us,
-		command, 8, 0, content, len, use_sg);
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x80,
+		0x40,
+		0,
+		0,
+		command,
+		8);
 
 	if (result != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	// US_DEBUGP("SCM: Read data, result %d\n", result);
+	result = usbat_bulk_transport(us,
+		NULL, 0, SCSI_DATA_READ, content, len, use_sg);
+		
+	// result =  usbat_bulk_transport(us,
+	//	command, 8, 0, content, len, use_sg);
 
 	return result;
 }
@@ -396,7 +418,7 @@ int scm_read_block(struct us_data *us,
  * an error condition.
  */
 
-int scm_wait_not_busy(struct us_data *us) {
+int usbat_wait_not_busy(struct us_data *us) {
 
 	int i;
 	int result;
@@ -406,7 +428,7 @@ int scm_wait_not_busy(struct us_data *us) {
 	   but probably not more than 15 minutes or so */
 
 	for (i=0; i<500; i++) {
- 		result = scm_read(us, SCM_ATA, 0x17, &status);
+ 		result = usbat_read(us, USBAT_ATA, 0x17, &status);
 		US_DEBUGP("SCM: Write ATA data status is %02X\n", status);
 		if (result!=USB_STOR_TRANSPORT_GOOD)
 			return result;
@@ -432,7 +454,7 @@ int scm_wait_not_busy(struct us_data *us) {
 	return USB_STOR_TRANSPORT_GOOD;
 }
 
-int scm_write_block(struct us_data *us,
+int usbat_write_block(struct us_data *us,
 	     unsigned char access,
 	     unsigned char reg, 
 	     unsigned char *content,
@@ -441,19 +463,35 @@ int scm_write_block(struct us_data *us,
 
 	int result;
 	unsigned char command[8] = {
-		0x40, access|0x03, reg, 0x00, 0x00, 0x00, 0x00, 0x00
+		0x40, access|0x03, reg, 0x00, 0x00, 0x00, 
+		LSB_of(len), MSB_of(len)
 	};
 
-	result =  scm_bulk_transport(us,
-		command, 8, 0, content, len, use_sg);
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x80,
+		0x40,
+		0,
+		0,
+		command,
+		8);
 
-	if (result!=USB_STOR_TRANSPORT_GOOD)
+	if (result != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	return scm_wait_not_busy(us);
+	result = usbat_bulk_transport(us,
+		NULL, 0, SCSI_DATA_WRITE, content, len, use_sg);
+
+	if (result != USB_STOR_TRANSPORT_GOOD)
+		return result;
+
+	// result =  usbat_bulk_transport(us,
+	//	command, 8, 0, content, len, use_sg);
+
+	return usbat_wait_not_busy(us);
 }
 
-int scm_write_block_test(struct us_data *us,
+int usbat_write_block_test(struct us_data *us,
 	     unsigned char access,
 	     unsigned char *registers,
 	     unsigned char *data_out,
@@ -467,10 +505,15 @@ int scm_write_block_test(struct us_data *us,
 	     int use_sg) {
 
 	int result;
+
+	// Not really sure the 0x07, 0x17, 0xfc, 0xe7 is necessary here,
+	// but that's what came out of the trace.
+
 	unsigned char command[16] = {
-		0x40, access|0x07, 0x07, 0x17, 0xfc, 0xe7, 0x00, 0x00,
+		0x40, access|0x07, 0x07, 0x17, 0xfc, 0xe7,
+		LSB_of(num_registers*2), MSB_of(num_registers*2),
 		0x40, access|0x05, data_reg, status_reg,
-		qualifier, timeout, 0x00, 0x00
+		qualifier, timeout, LSB_of(len), MSB_of(len)
 	};
 	int i;
 	unsigned char data[num_registers*2];
@@ -478,28 +521,44 @@ int scm_write_block_test(struct us_data *us,
 	struct scatterlist *sg;
 	char string[64];
 
-	command[14] = len&0xFF;
-	command[15] = (len>>8)&0xFF;
-
 	for (i=0; i<num_registers; i++) {
 		data[i<<1] = registers[i];
 		data[1+(i<<1)] = data_out[i];
 	}
 
-	result =  scm_bulk_transport(us,
-		command, 16, 0, data, num_registers*2, 0);
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x80,
+		0x40,
+		0,
+		0,
+		command,
+		16);
+
+	if (result != USB_STOR_TRANSPORT_GOOD)
+		return result;
+
+	result = usbat_bulk_transport(us,
+		NULL, 0, SCSI_DATA_WRITE, data, num_registers*2, 0);
+
+	// result =  usbat_bulk_transport(us,
+	//	command, 16, 0, data, num_registers*2, 0);
 
 	if (result!=USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	transferred = 0;
+	// transferred = 0;
 
 	US_DEBUGP("Transfer out %d bytes, sg buffers %d\n",
 		len, use_sg);
 
+	result = usbat_bulk_transport(us,
+		NULL, 0, SCSI_DATA_WRITE, content, len, use_sg);
+
+/*
 	if (!use_sg) {
 
-		/* Debug-print the first 48 bytes of the transfer */
+		// Debug-print the first 48 bytes of the transfer
 
 		string[0] = 0;
 		for (i=0; i<len && i<48; i++) {
@@ -513,13 +572,13 @@ int scm_write_block_test(struct us_data *us,
 		if (string[0]!=0)
 			US_DEBUGP("%s\n", string);
 
-		result = scm_raw_bulk(us, SCSI_DATA_WRITE, content, len);
+		result = usbat_raw_bulk(us, SCSI_DATA_WRITE, content, len);
 
 	} else {
 
 		sg = (struct scatterlist *)content;
 		for (i=0; i<use_sg && transferred<len; i++) {
-			result = scm_raw_bulk(us, SCSI_DATA_WRITE,
+			result = usbat_raw_bulk(us, SCSI_DATA_WRITE,
 				sg[i].address, 
 				len-transferred > sg[i].length ?
 					sg[i].length : len-transferred);
@@ -528,14 +587,14 @@ int scm_write_block_test(struct us_data *us,
 			transferred += sg[i].length;
 		}
 	}
-
+*/
 	if (result!=USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	return scm_wait_not_busy(us);
+	return usbat_wait_not_busy(us);
 }
 
-int scm_multiple_write(struct us_data *us, 
+int usbat_multiple_write(struct us_data *us, 
 			unsigned char access,
 			unsigned char *registers,
 			unsigned char *data_out,
@@ -544,8 +603,9 @@ int scm_multiple_write(struct us_data *us,
 	int result;
 	unsigned char data[num_registers*2];
 	int i;
-	unsigned char cmd[8] = {
-		0x40, access|0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	unsigned char command[8] = {
+		0x40, access|0x07, 0x00, 0x00, 0x00, 0x00,
+		LSB_of(num_registers*2), MSB_of(num_registers*2)
 	};
 
 	for (i=0; i<num_registers; i++) {
@@ -553,12 +613,73 @@ int scm_multiple_write(struct us_data *us,
 		data[1+(i<<1)] = data_out[i];
 	}
 
-	result = scm_bulk_transport(us, cmd, 8, 0, data, num_registers*2, 0);
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x80,
+		0x40,
+		0,
+		0,
+		command,
+		8);
+
+	if (result != USB_STOR_TRANSPORT_GOOD)
+		return result;
+
+	result = usbat_bulk_transport(us,
+		NULL, 0, SCSI_DATA_WRITE, data, num_registers*2, 0);
+
+	// result = usbat_bulk_transport(us, cmd, 8, 0, 
+	//	data, num_registers*2, 0);
 
 	if (result!=USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	return scm_wait_not_busy(us);
+	return usbat_wait_not_busy(us);
+}
+
+int usbat_read_user_io(struct us_data *us,
+		unsigned char *data_flags) {
+
+	unsigned char command[8] = {
+		0xC0, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+	int result;
+
+	result = usbat_send_control(us,
+		usb_rcvctrlpipe(us->pusb_dev,0),
+		0x82,
+		0xC0,
+		0,
+		0,
+		data_flags,
+		1);
+		
+	// result = usbat_send_control(us, command, data_flags, 1);
+
+	return result;
+}
+
+int usbat_write_user_io(struct us_data *us,
+		unsigned char enable_flags,
+		unsigned char data_flags) {
+
+	unsigned char command[8] = {
+		0x40, 0x82, enable_flags, data_flags, 0x00, 0x00, 0x00, 0x00
+	};
+	int result;
+
+	result = usbat_send_control(us,
+		usb_sndctrlpipe(us->pusb_dev,0),
+		0x82,
+		0x40,
+		short_pack(enable_flags, data_flags),
+		0,
+		NULL,
+		0);
+		
+	// result = usbat_send_control(us, command, NULL, 0);
+
+	return result;
 }
 
 static int hp_8200e_select_and_test_registers(struct us_data *us) {
@@ -571,126 +692,43 @@ static int hp_8200e_select_and_test_registers(struct us_data *us) {
 
 	for (selector = 0xA0; selector <= 0xB0; selector += 0x10) {
 
-		if ( (result = scm_write(us, SCM_ATA, 0x16, selector)) != 
+		if ( (result = usbat_write(us, USBAT_ATA, 0x16, selector)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x17, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x17, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x16, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x16, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x14, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x14, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x15, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x15, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_write(us, SCM_ATA, 0x14, 0x55)) != 
+		if ( (result = usbat_write(us, USBAT_ATA, 0x14, 0x55)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_write(us, SCM_ATA, 0x15, 0xAA)) != 
+		if ( (result = usbat_write(us, USBAT_ATA, 0x15, 0xAA)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x14, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x14, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 
-		if ( (result = scm_read(us, SCM_ATA, 0x15, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x15, &status)) != 
 				USB_STOR_TRANSPORT_GOOD)
 			return result;
 	}
 
-	return result;
-}
-
-int scm_read_user_io(struct us_data *us,
-		unsigned char *data_flags) {
-
-	unsigned char command[8] = {
-		0xC0, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-	};
-	int result;
-
-	result = scm_send_control(us, command, data_flags, 1);
-
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	// US_DEBUGP("SCM: User I/O flags -> %02X\n", *data_flags);
-
-	return result;
-}
-
-int scm_write_user_io(struct us_data *us,
-		unsigned char enable_flags,
-		unsigned char data_flags) {
-
-	unsigned char command[8] = {
-		0x40, 0x82, enable_flags, data_flags, 0x00, 0x00, 0x00, 0x00
-	};
-	int result;
-
-	result = scm_send_control(us, command, NULL, 0);
-
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	// US_DEBUGP("SCM: User I/O flags <- %02X\n", data_flags);
-
-	return result;
-}
-
-static int init_sddr09(struct us_data *us) {
-
-	int result;
-	unsigned char data[14];
-	unsigned char command[8] = {
-		0xc1, 0x01, 0, 0, 0, 0, 0, 0
-	};
-	unsigned char command2[8] = {
-		0x41, 0, 0, 0, 0, 0, 0, 0
-	};
-	unsigned char tur[12] = {
-		0x03, 0x20, 0, 0, 0x0e, 0, 0, 0, 0, 0, 0, 0
-	};
-
-	if ( (result = scm_send_control(us, command, data, 2)) !=
-			USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	US_DEBUGP("SDDR09: %02X %02X\n", data[0], data[1]);
-
-	command[1] = 0x08;
-
-	if ( (result = scm_send_control(us, command, data, 2)) !=
-			USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	US_DEBUGP("SDDR09: %02X %02X\n", data[0], data[1]);
-/*
-	if ( (result = scm_send_control(us, command2, tur, 12)) !=
-			USB_STOR_TRANSPORT_GOOD) {
-		US_DEBUGP("SDDR09: request sense failed\n");
-		return result;
-	}
-
-	if ( (result = scm_raw_bulk(
-		us, SCSI_DATA_READ, data, 14)) !=
-			USB_STOR_TRANSPORT_GOOD) {
-		US_DEBUGP("SDDR09: request sense bulk in failed\n");
-		return result;
-	}
-
-	US_DEBUGP("SDDR09: request sense worked\n");
-*/
 	return result;
 }
 
@@ -701,88 +739,118 @@ static int init_8200e(struct us_data *us) {
 
 	// Enable peripheral control signals
 
-	if ( (result = scm_write_user_io(us,
-	  SCM_UIO_OE1 | SCM_UIO_OE0,
-	  SCM_UIO_EPAD | SCM_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
+	if ( (result = usbat_write_user_io(us,
+	  USBAT_UIO_OE1 | USBAT_UIO_OE0,
+	  USBAT_UIO_EPAD | USBAT_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 1\n");
 
 	wait_ms(2000);
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	US_DEBUGP("INIT 2\n");
+
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 3\n");
 
 	// Reset peripheral, enable periph control signals
 	// (bring reset signal up)
 
-	if ( (result = scm_write_user_io(us,
-	  SCM_UIO_DRVRST | SCM_UIO_OE1 | SCM_UIO_OE0,
-	  SCM_UIO_EPAD | SCM_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
+	if ( (result = usbat_write_user_io(us,
+	  USBAT_UIO_DRVRST | USBAT_UIO_OE1 | USBAT_UIO_OE0,
+	  USBAT_UIO_EPAD | USBAT_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 4\n");
 
 	// Enable periph control signals
 	// (bring reset signal down)
 
-	if ( (result = scm_write_user_io(us,
-	  SCM_UIO_OE1 | SCM_UIO_OE0,
-	  SCM_UIO_EPAD | SCM_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
+	if ( (result = usbat_write_user_io(us,
+	  USBAT_UIO_OE1 | USBAT_UIO_OE0,
+	  USBAT_UIO_EPAD | USBAT_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 5\n");
 
 	wait_ms(250);
 
 	// Write 0x80 to ISA port 0x3F
 
-	if ( (result = scm_write(us, SCM_ISA, 0x3F, 0x80)) !=
+	if ( (result = usbat_write(us, USBAT_ISA, 0x3F, 0x80)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 6\n");
 
 	// Read ISA port 0x27
 
-	if ( (result = scm_read(us, SCM_ISA, 0x27, &status)) !=
+	if ( (result = usbat_read(us, USBAT_ISA, 0x27, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	US_DEBUGP("INIT 7\n");
+
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 8\n");
 
 	if ( (result = hp_8200e_select_and_test_registers(us)) !=
 			 USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	US_DEBUGP("INIT 9\n");
+
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 10\n");
 
 	// Enable periph control signals and card detect
 
-	if ( (result = scm_write_user_io(us,
-	  SCM_UIO_ACKD |SCM_UIO_OE1 | SCM_UIO_OE0,
-	  SCM_UIO_EPAD | SCM_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
+	if ( (result = usbat_write_user_io(us,
+	  USBAT_UIO_ACKD |USBAT_UIO_OE1 | USBAT_UIO_OE0,
+	  USBAT_UIO_EPAD | USBAT_UIO_1)) != USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	US_DEBUGP("INIT 11\n");
+
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 12\n");
 
 	wait_ms(1400);
 
-	if ( (result = scm_read_user_io(us, &status)) !=
+	if ( (result = usbat_read_user_io(us, &status)) !=
 			USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 13\n");
 
 	if ( (result = hp_8200e_select_and_test_registers(us)) !=
 			 USB_STOR_TRANSPORT_GOOD)
 		return result;
 
-	if ( (result = scm_set_shuttle_features(us, 
+	US_DEBUGP("INIT 14\n");
+
+	if ( (result = usbat_set_shuttle_features(us, 
 			0x83, 0x00, 0x88, 0x08, 0x15, 0x14)) !=
 			 USB_STOR_TRANSPORT_GOOD)
 		return result;
+
+	US_DEBUGP("INIT 15\n");
 
 	return result;
 }
@@ -923,7 +991,7 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 			data[i] = (i-7 >= srb->cmd_len) ? 0 : srb->cmnd[i-7];
 		}
 
-		result = scm_write_block_test(us, SCM_ATA, 
+		result = usbat_write_block_test(us, USBAT_ATA, 
 			registers, data, 19,
 			0x10, 0x17, 0xFD, 0x30,
 			srb->request_buffer, 
@@ -932,16 +1000,16 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 		return result;
 	}
 
-	if ( (result = scm_multiple_write(us, 
-			SCM_ATA,
+	if ( (result = usbat_multiple_write(us, 
+			USBAT_ATA,
 			registers, data, 7)) != USB_STOR_TRANSPORT_GOOD) {
 		return result;
 	}
 
 	// Write the 12-byte command header.
 
-	if ( (result = scm_write_block(us, 
-			SCM_ATA, 0x10, srb->cmnd, 12, 0)) !=
+	if ( (result = usbat_write_block(us, 
+			USBAT_ATA, 0x10, srb->cmnd, 12, 0)) !=
 				USB_STOR_TRANSPORT_GOOD) {
 		return result;
 	}
@@ -953,14 +1021,15 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 
 		// How many bytes to read in? Check cylL register
 
-		if ( (result = scm_read(us, SCM_ATA, 0x14, &status)) != 
+		if ( (result = usbat_read(us, USBAT_ATA, 0x14, &status)) != 
 		    USB_STOR_TRANSPORT_GOOD) {
 			return result;
 		}
 
 		if (len>0xFF) { // need to read cylH also
 			len = status;
-			if ( (result = scm_read(us, SCM_ATA, 0x15, &status)) !=
+			if ( (result = usbat_read(us, USBAT_ATA, 0x15,
+				&status)) !=
 				    USB_STOR_TRANSPORT_GOOD) {
 				return result;
 			}
@@ -970,7 +1039,7 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 			len = status;
 			
 
-		result = scm_read_block(us, SCM_ATA, 0x10, 
+		result = usbat_read_block(us, USBAT_ATA, 0x10, 
 			srb->request_buffer, len, srb->use_sg);
 
 		/* Debug-print the first 32 bytes of the transfer */
@@ -995,162 +1064,4 @@ int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us)
 	return result;
 }
 
-
-/*
- * Transport for the Sandisk SDDR-09
- */
-int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us)
-{
-	int result;
-	unsigned int len;
-	unsigned char send_scsi_command[8] = {
-		0x41, 0, 0, 0, 0, 0, 0, 0
-	};
-	int i;
-	char string[64];
-	unsigned char *ptr;
-	unsigned char inquiry_response[36] = {
-		0x00, 0x80, 0x00, 0x02, 0x1F, 0x00, 0x00, 0x00,
-		'S', 'a', 'n', 'D', 'i', 's', 'k', ' ',
-		'I', 'm', 'a', 'g', 'e', 'M', 'a', 't',
-		'e', ' ', 'S', 'D', 'D', 'R', '0', '9',
-		' ', ' ', ' ', ' '
-	};
-
-	/* This table tells us:
-	   X = command not supported
-	   L = return length in cmnd[4] (8 bits).
-	   H = return length in cmnd[7] and cmnd[8] (16 bits).
-	   D = return length in cmnd[6] to cmnd[9] (32 bits).
-	   B = return length/blocksize in cmnd[6] to cmnd[8].
-	   T = return length in cmnd[6] to cmnd[8] (24 bits).
-	   0-9 = fixed return length
-	   W = 24 bytes
-	   h = return length/2048 in cmnd[7-8].
-	*/
-
-	static char *lengths =
-
-	/* 0123456789ABCDEF   0123456789ABCDEF */
-
-	  "0XXL0XXXXXXXXXXX" "XXLXXXXXXXX0XX0X"  /* 00-1F */
-	  "XXXXX8XXhXH0XXX0" "XXXXX0XXXXXXXXXX"  /* 20-3F */
-	  "XXHHL0X0XXH0XX0X" "XHH00HXX0TH0H0XX"  /* 40-5F */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 60-7F */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* 80-9F */
-	  "X0XXX0XXDXDXXXXX" "XXXXXXXXX000XHBX"  /* A0-BF */
-	  "XXXXXXXXXXXXXXXX" "XXXXXXXXXXXXXXXX"  /* C0-DF */
-	  "XDXXXXXXXXXXXXXX" "XXW00HXXXXXXXXXX"; /* E0-FF */
-
-	if (us->flags & US_FL_NEED_INIT) {
-		US_DEBUGP("SDDR-09: initializing\n");
-		init_sddr09(us);
-		us->flags &= ~US_FL_NEED_INIT;
-	}
-
-	/* if (srb->sc_data_direction == SCSI_DATA_WRITE) */
-		len = srb->request_bufflen;
-	/* else {
-
-		switch (lengths[srb->cmnd[0]]) {
-
-		case 'L':
-			len = srb->cmnd[4];
-			break;
-		case '0':
-		case '1':
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-			len = lengths[srb->cmnd[0]]-'0';
-			break;
-		case 'H':
-			len = (((unsigned int)srb->cmnd[7])<<8) | srb->cmnd[8];
-			break;
-		case 'h':
-			len = (((unsigned int)srb->cmnd[7])<<8) | srb->cmnd[8];
-			len <<= 11; // *2048
-			break;
-		case 'T':
-			len = (((unsigned int)srb->cmnd[6])<<16) |
-			      (((unsigned int)srb->cmnd[7])<<8) |
-			      srb->cmnd[8];
-			break;
-		case 'D':
-			len = (((unsigned int)srb->cmnd[6])<<24) |
-			      (((unsigned int)srb->cmnd[7])<<16) |
-			      (((unsigned int)srb->cmnd[8])<<8) |
-			      srb->cmnd[9];
-			break;
-		case 'W':
-			len = 24;
-			break;
-		case 'B':
-			// Let's try using the command structure's
-			//    request_bufflen here
-			len = srb->request_bufflen;
-			break;
-		default:
-			US_DEBUGP("Error: UNSUPPORTED COMMAND %02X\n",
-				srb->cmnd[0]);
-			return USB_STOR_TRANSPORT_ERROR;
-		}
-	} */
-
-	if (srb->request_bufflen > 0xFFFF) {
-		US_DEBUGP("Error: len = %08X... what do I do now?\n",
-			len);
-		return USB_STOR_TRANSPORT_ERROR;
-	}
-
-	/* Dummy up a response for INQUIRY since SDDR09 doesn't
-	   respond to INQUIRY commands */
-
-	if (srb->cmnd[0] == INQUIRY) {
-		memcpy(srb->request_buffer, inquiry_response, 36);
-		return USB_STOR_TRANSPORT_GOOD;
-	}
-
-	for (; srb->cmd_len<12; srb->cmd_len++)
-		srb->cmnd[srb->cmd_len] = 0;
-
-	srb->cmnd[1] = 0x20;
-
-	string[0] = 0;
-	for (i=0; i<12; i++)
-	  sprintf(string+strlen(string), "%02X ", srb->cmnd[i]);
-
-	US_DEBUGP("SDDR09: Send control for command %s\n",
-		string);
-
-	if ( (result = scm_send_control(us, send_scsi_command, 
-			srb->cmnd, 12)) != USB_STOR_TRANSPORT_GOOD)
-		return result;
-
-	US_DEBUGP("SDDR09: Control for command OK\n");
-	
-	if (srb->sc_data_direction == SCSI_DATA_WRITE ||
-	    srb->sc_data_direction == SCSI_DATA_READ) {
-
-		US_DEBUGP("SDDR09: %s %d bytes\n",
-			srb->sc_data_direction==SCSI_DATA_WRITE ?
-			  "sending" : "receiving",
-			len);
-
-		result = scm_bulk_transport(us,
-			NULL, 0, srb->sc_data_direction,
-			srb->request_buffer, 
-			len, srb->use_sg);
-
-		return result;
-
-	} 
-
-	return result;
-}
 

@@ -84,7 +84,7 @@ Here are the targets available at the top level:
 	occasionally.  If you are adding configuration options, it's
 	nice if you do it before you publish your patch!
 
-	You can run 'make checkhelp' withoug configuring the kernel.
+	You can run 'make checkhelp' without configuring the kernel.
 	Also, 'make checkhelp' does not modify any files.
 
     make dep, make depend

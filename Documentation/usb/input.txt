@@ -134,7 +134,7 @@ instead.
 
 3.1.3 usbkbd.c
 ~~~~~~~~~~~~~~
-  Much like usbmouse.c, this module talks to keyboards with a simpplified
+  Much like usbmouse.c, this module talks to keyboards with a simplified
 HIDBP protocol. It's smaller, but doesn't support any extra special keys.
 Use hid.c instead if there isn't any special reason to use this.
 
@@ -158,7 +158,7 @@ matter of a couple days to add it.
 
 3.2 Event handlers
 ~~~~~~~~~~~~~~~~~~
-  Event handlers distrubite the events from the devices to userland and
+  Event handlers distribute the events from the devices to userland and
 kernel, as needed.
 
 3.2.1 keybdev.c
@@ -230,7 +230,7 @@ And so on up to js31.
 ~~~~~~~~~~~~~
   Evdev is the generic input event interface. It passes the events generated
 in the kernel straight to the program, with timestamps. The API is still
-evolving, but should be useable now. It's described in section 5.
+evolving, but should be usable now. It's described in section 5.
 
   This should be the way for GPM and X to get keyboard and mouse mouse
 events. It allows for multihead in X without any specific multihead kernel
@@ -273,7 +273,7 @@ emulated, characters should appear if you move it.
   You can test the joystick emulation with the 'jstest' utility, available
 in the joystick package (see Documentation/joystick.txt).
 
-  You can test the event devics with the 'evtest' utitily available on the
+  You can test the event devics with the 'evtest' utility available on the
 input driver homepage (see the URL above).
 
 5. Event interface
@@ -295,7 +295,7 @@ struct input_event {
 };
 
   'time' is the timestamp, it returns the time at which the event happened.
-Type is for example EV_REL for relative momement, REL_KEY for a keypress or
+Type is for example EV_REL for relative movement, REL_KEY for a keypress or
 release. More types are defined in include/linux/input.h.
 
   'code' is event code, for example REL_X or KEY_BACKSPACE, again a complete

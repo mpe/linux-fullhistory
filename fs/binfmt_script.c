@@ -18,7 +18,7 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *cp, *i_name, *i_arg;
 	struct file *file;
-	char interp[128];
+	char interp[BINPRM_BUF_SIZE];
 	int retval;
 
 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang)) 
@@ -33,9 +33,9 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	fput(bprm->file);
 	bprm->file = NULL;
 
-	bprm->buf[127] = '\0';
+	bprm->buf[BINPRM_BUF_SIZE - 1] = '\0';
 	if ((cp = strchr(bprm->buf, '\n')) == NULL)
-		cp = bprm->buf+127;
+		cp = bprm->buf+BINPRM_BUF_SIZE-1;
 	*cp = '\0';
 	while (cp > bprm->buf) {
 		cp--;

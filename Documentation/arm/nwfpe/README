@@ -15,7 +15,7 @@ have attempted to use the C_SYMBOL_NAME macro wherever this may be
 important.
 
 Another choice I made was in the file structure.  I have attempted to
-contain all operating system specfic code in one module (fpmodule.*).
+contain all operating system specific code in one module (fpmodule.*).
 All the other files contain emulator specific code.  This should allow
 others to port the emulator to NetBSD for instance relatively easily.
 

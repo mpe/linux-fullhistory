@@ -35,7 +35,7 @@ PHYSICAL DESCRIPTION
 --------------------
 The RadioTrack card is an ISA 8-bit FM radio card.  The radio frequency (RF)
 input is simply an antenna lead, and the output is a power audio signal
-available through a miniature phono plug.  Its RF frequencies of operation are
+available through a miniature phone plug.  Its RF frequencies of operation are
 more or less limited from 87.0 to 109.0 MHz (the commercial FM broadcast
 band).  Although the registers can be programmed to request frequencies beyond
 these limits, experiments did not give promising results.  The variable

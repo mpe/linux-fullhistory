@@ -10,7 +10,7 @@
  *  VFAT extensions by Gordon Chaffee <chaffee@plateau.cs.berkeley.edu>
  *  Merged with msdos fs by Henrik Storner <storner@osiris.ping.dk>
  *  Rewritten for constant inumbers. Plugged buffer overrun in readdir(). AV
- *  Short name translation 1999 by Wolfram Pienkoss <wp@bsz.shk.th.schule.de>
+ *  Short name translation 1999 by Wolfram Pienkoss <wp@bszh.de>
  */
 
 #define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))

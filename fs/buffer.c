@@ -1341,13 +1341,27 @@ static void create_empty_buffers(struct page *page, struct inode *inode, unsigne
 	page_cache_get(page);
 }
 
+/*
+ * We are taking a block for data and we don't want any output from any
+ * buffer-cache aliases starting from return from that function and
+ * until the moment when something will explicitly mark the buffer
+ * dirty (hopefully that will not happen until we will free that block ;-)
+ * We don't even need to mark it not-uptodate - nobody can expect
+ * anything from a newly allocated buffer anyway. We used to used
+ * unmap_buffer() for such invalidation, but that was wrong. We definitely
+ * don't want to mark the alias unmapped, for example - it would confuse
+ * anyone who might pick it with bread() afterwards...
+ */
+
 static void unmap_underlying_metadata(struct buffer_head * bh)
 {
 	struct buffer_head *old_bh;
 
 	old_bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
 	if (old_bh) {
-		unmap_buffer(old_bh);
+		mark_buffer_clean(old_bh);
+		wait_on_buffer(old_bh);
+		clear_bit(BH_Req, &old_bh->b_state);
 		/* Here we could run brelse or bforget. We use
 		   bforget because it will try to put the buffer
 		   in the freelist. */

@@ -86,18 +86,24 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat,
 struct page * alloc_pages(int gfp_mask, unsigned long order)
 {
 	struct page *ret = 0;
-	unsigned long flags;
 	int startnode, tnode;
+#ifndef CONFIG_NUMA
+	unsigned long flags;
 	static int nextnid = 0;
+#endif
 
 	if (order >= MAX_ORDER)
 		return NULL;
+#ifdef CONFIG_NUMA
+	tnode = numa_node_id();
+#else
 	spin_lock_irqsave(&node_lock, flags);
 	tnode = nextnid;
 	nextnid++;
 	if (nextnid == numnodes)
 		nextnid = 0;
 	spin_unlock_irqrestore(&node_lock, flags);
+#endif
 	startnode = tnode;
 	while (tnode < numnodes) {
 		if ((ret = alloc_pages_node(tnode++, gfp_mask, order)))

@@ -68,7 +68,7 @@ increased.
 Likewise, a similar encapsulation protocol will frequently be needed by
 several different interfaces of even different hardware type, e.g. the
 synchronous ppp implementation used by the isdn driver and the
-asyncronous ppp implementation used by the ppp driver have a lot of
+asynchronous ppp implementation used by the ppp driver have a lot of
 similar code in them. By cleanly separating the encapsulation protocol
 from the hardware specific interface stuff such code could be shared
 better in future.

@@ -512,7 +512,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			retval = PTR_ERR(interpreter);
 			if (IS_ERR(interpreter))
 				goto out_free_interp;
-			retval = kernel_read(interpreter, 0, bprm->buf, 128);
+			retval = kernel_read(interpreter, 0, bprm->buf, BINPRM_BUF_SIZE);
 			if (retval < 0)
 				goto out_free_dentry;
 

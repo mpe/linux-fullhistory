@@ -1,4 +1,4 @@
-This driver is for Compaq's SMART2 Intellegent Disk Array Controllers.
+This driver is for Compaq's SMART2 Intelligent Disk Array Controllers.
 
 Supported Cards:
 ----------------

@@ -139,7 +139,7 @@ Loading the firmware into the card:
   To load a 4B-card, the same command is used, except a second firmware
   file is appended to the commandline of icnctrl.
 
-  -> After dowloading firmware, the two LEDs at the back cover of the card
+  -> After downloading firmware, the two LEDs at the back cover of the card
      (ICN-4B: 4 LEDs) must be blinking intermittently now. If a connection
      is up, the corresponding led is lit continuously.
 

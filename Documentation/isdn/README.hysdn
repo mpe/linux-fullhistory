@@ -92,7 +92,7 @@ Table of contents
    3 -> card is booted and active
 
    And the last field (device) shows the name of the ethernet device assigned
-   to this card. Up to the first successfull boot this field only shows a -
+   to this card. Up to the first successful boot this field only shows a -
    to tell that no net device has been allocated up to now. Once a net device
    has been allocated it remains assigned to this card, even if a card is
    rebooted and an boot error occurs. 
@@ -128,12 +128,12 @@ Table of contents
    get the cards and drivers log data. Card messages always start with the
    keyword LOG. All other lines are output from the driver. 
    The driver log data may be redirected to the syslog by selecting the 
-   approriate bitmask. The cards log messages will always be send to this
+   appropriate bitmask. The cards log messages will always be send to this
    interface but never to the syslog.
 
    A root user may write a decimal or hex (with 0x) value t this file to select
    desired output options. As mentioned above the cards log dat is always 
-   written to the cardlog file independant of the following options only used
+   written to the cardlog file independent of the following options only used
    to check and debug the driver itself:
 
    For example: 

@@ -103,7 +103,7 @@ S:  Product=ssss
 S:  SerialNumber=ssss
 |   |__Serial Number of this device as read from the device,
 |      except that it is a generated string for USB host controllers
-|      (virtual root hubs), and represent's the host controller's
+|      (virtual root hubs), and represents the host controller's
 |      unique identification in the system (currently I/O or
 |      memory-mapped base address).
 |__String info tag

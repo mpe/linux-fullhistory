@@ -81,7 +81,7 @@ EXPORT_SYMBOL(csum_partial_copy);
  * Functions to control caches.
  */
 EXPORT_SYMBOL(_flush_page_to_ram);
-EXPORT_SYMBOL(_flush_cache_all);
+EXPORT_SYMBOL(_flush_cache_l1);
 #ifndef CONFIG_COHERENT_IO
 EXPORT_SYMBOL(_dma_cache_wback_inv);
 EXPORT_SYMBOL(_dma_cache_inv);

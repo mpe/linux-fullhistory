@@ -10,7 +10,7 @@
 O_TARGET := kernel.o
 O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o \
 	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
-	    sysctl.o acct.o capability.o ptrace.o timer.o
+	    sysctl.o acct.o capability.o ptrace.o timer.o user.o
 
 OX_OBJS  += signal.o sys.o
 

@@ -140,7 +140,7 @@ It contains...
       THE KIND OF CVF I SUPPORT". The function must maintain the module
       usage counters for safety, i.e. do MOD_INC_USE_COUNT at the beginning
       and MOD_DEC_USE_COUNT at the end. The function *must not* assume that
-      successful recongition would lead to a call of the mount_cvf function
+      successful recognition would lead to a call of the mount_cvf function
       later. 
   - mount_cvf:
       A function that sets up some values or initializes something additional

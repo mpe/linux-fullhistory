@@ -217,7 +217,7 @@ sys_sysmips(int cmd, long arg1, int arg2, int arg3)
 		return 0;
 
 	case FLUSH_CACHE:
-		flush_cache_all();
+		flush_cache_l1();
 		return 0;
 
 	case MIPS_RDNVRAM:

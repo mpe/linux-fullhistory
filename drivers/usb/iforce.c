@@ -38,6 +38,7 @@
 #include <linux/config.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("USB/RS232 I-Force joysticks and wheels driver");
 
 #define USB_VENDOR_ID_LOGITECH		0x046d
 #define USB_DEVICE_ID_LOGITECH_WMFORCE	0xc281

@@ -88,7 +88,7 @@ insmod), first check whether there is a more recent version.
 
 	If you have a FIFO-able FDC, the floppy driver automatically
 	falls back on non DMA mode if no DMA-able memory can be found.
-	If you want to avoid this, explicitely ask for 'yesdma'.
+	If you want to avoid this, explicitly ask for 'yesdma'.
 
  floppy=yesdma
 	Tells the floppy driver that a workable DMA channel is available.

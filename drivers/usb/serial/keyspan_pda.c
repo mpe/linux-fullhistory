@@ -720,3 +720,5 @@ void keyspan_pda_exit (void)
 module_init(keyspan_pda_init);
 module_exit(keyspan_pda_exit);
 
+MODULE_AUTHOR("Brian Warner <warner@lothar.com>");
+MODULE_DESCRIPTION("USB Keyspan PDA Converter driver");

@@ -7,7 +7,7 @@ There are 3 Types of this card available. A ISA-, MCA-, and PCMCIA-Bus
 Version. Currently, only the ISA-Bus version of the card is supported.
 However MCA and PCMCIA will follow soon.
 
-The ISA-Bus Version uses 8 IO-ports. The base port adress has to be set
+The ISA-Bus Version uses 8 IO-ports. The base port address has to be set
 manually using the DIP switches.
 
 Setting up the DIP switches for the IBM Active 2000 ISDN card:

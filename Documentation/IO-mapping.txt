@@ -176,7 +176,7 @@ ioremap() function "vremap()".  ioremap() is the proper name, but I
 didn't think straight when I wrote it originally.  People who have to
 support both can do something like:
  
-	/* support old naming sillyness */
+	/* support old naming silliness */
 	#if LINUX_VERSION_CODE < 0x020100                                     
 	#define ioremap vremap
 	#define iounmap vfree                                                     

@@ -741,3 +741,5 @@ void ftdi_sio_exit (void)
 module_init(ftdi_sio_init);
 module_exit(ftdi_sio_exit);
 
+MODULE_AUTHOR("Greg Kroah-Hartman <greg@kroah.com>, Bill Ryder <bryder@sgi.com>");
+MODULE_DESCRIPTION("USB FTDI SIO driver");

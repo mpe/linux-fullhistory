@@ -80,7 +80,7 @@ Here are the basic grammar elements.
 
     A /word/ is a single unquoted word, a single-quoted string, or a
     double-quoted string.  If the word is unquoted or double quoted,
-    then $-substition will be performed on the word.
+    then $-substitution will be performed on the word.
 
     A /symbol/ is a single unquoted word.  A symbol must have a name of
     the form CONFIG_*.  scripts/mkdep.c relies on this convention in order
@@ -231,7 +231,7 @@ Note that the bool verb does not have a default value.  People keep
 trying to write Config Language scripts with a default value for bool,
 but *all* of the existing language interpreters discard additional values.
 Feel free to submit a multi-interpreter patch to linux-kbuild if you
-want to implement this as an enhancment.
+want to implement this as an enhancement.
 
 Configure:  implemented
 Menuconfig: implemented

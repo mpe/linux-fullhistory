@@ -223,6 +223,18 @@ static void __init quirk_piix3usb(struct pci_dev *dev)
 }
 
 /*
+ * VIA VT82C598 has its device ID settable and many BIOSes
+ * set it to the ID of VT82C597 for backward compatibility.
+ * We need to switch it off to be able to recognize the real
+ * type of the chip.
+ */
+static void __init quirk_vt82c598_id(struct pci_dev *dev)
+{
+	pci_write_config_byte(dev, 0xfc, 0);
+	pci_read_config_word(dev, PCI_DEVICE_ID, &dev->device);
+}
+
+/*
  *  The main table of quirks.
  */
 
@@ -232,7 +244,6 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	/*
 	 * Its not totally clear which chipsets are the problematic ones
 	 * We know 82C586 and 82C596 variants are affected.
-	 *
 	 */
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C596,	quirk_isa_dma_hangs },
@@ -251,6 +262,7 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_2, 	quirk_natoma },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0,	quirk_vt82c598_id },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_3,	quirk_vt82c586_acpi },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_vt82c686_acpi },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371AB_3,	quirk_piix4_acpi },

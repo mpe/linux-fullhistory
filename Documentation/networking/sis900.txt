@@ -161,7 +161,7 @@
 
   Silicon Integrated System Corp. is cooperating closely with core Linux
   Kernel developers. The revisions of SiS 900 driver are distributed by
-  the usuall channels for kernel tar files and patches. Those kernel tar
+  the usual channels for kernel tar files and patches. Those kernel tar
   files for official kernel and patches for kernel pre-release can be
   download at official kernel ftp site
   <http://ftp.kernel.org/pub/linux/kernel/> and its mirrors.  The 1.06

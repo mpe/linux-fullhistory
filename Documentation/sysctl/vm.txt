@@ -118,11 +118,11 @@ freepages.min	When the number of free pages in the system
 		reaches this number, only the kernel can
 		allocate more memory.
 freepages.low	If the number of free pages gets below this
-		point, the kernel starts swapping agressively.
+		point, the kernel starts swapping aggressively.
 freepages.high	The kernel tries to keep up to this amount of
 		memory free; if memory comes below this point,
 		the kernel gently starts swapping in the hopes
-		that it never has to do real agressive swapping.
+		that it never has to do real aggressive swapping.
 
 ==============================================================
 
@@ -198,7 +198,7 @@ In 2.2, the page cache is used for 3 main purposes:
 - swap cache
 
 When your system is both deep in swap and high on cache,
-it probably means that a lot of the swaped data is being
+it probably means that a lot of the swapped data is being
 cached, making for more efficient swapping than possible
 with the 2.0 kernel.
 
@@ -213,7 +213,7 @@ each processor will be between the low and the high value.
 On a low-memory, single CPU system you can safely set these
 values to 0 so you don't waste the memory. On SMP systems it
 is used so that the system can do fast pagetable allocations
-without having to aquire the kernel memory lock.
+without having to acquire the kernel memory lock.
 
 For large systems, the settings are probably OK. For normal
 systems they won't hurt a bit. For small systems (<16MB ram)

@@ -857,7 +857,7 @@ static int rivafb_set_var (struct fb_var_screeninfo *var, int con,
 		v.blue.offset = 0;
 #endif
 		v.red.length = 5;
-		v.green.length = 5;
+		v.green.length = 6;
 		v.blue.length = 5;
 		break;
 #endif
@@ -1390,8 +1390,8 @@ static int riva_setcolreg (unsigned regno, unsigned red, unsigned green,
 		    ((green & 0xf800) << 2) | ((blue & 0xf800) >> 3);
 #else
 		rivainfo->con_cmap.cfb16[regno] =
-		    ((red & 0xf800) >> 1) |
-		    ((green & 0xf800) >> 6) | ((blue & 0xf800) >> 11);
+		    ((red & 0xf800) >> 0) |
+		    ((green & 0xf800) >> 5) | ((blue & 0xf800) >> 11);
 #endif
 		break;
 #endif				/* FBCON_HAS_CFB16 */

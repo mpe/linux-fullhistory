@@ -14,13 +14,7 @@ obj-m	:=
 obj-n	:=
 obj-	:=
 
-ifeq ($(CONFIG_USB_SERIAL),y)
-	obj-y += usbserial.o
-endif
-ifeq ($(CONFIG_USB_SERIAL),m)
-	obj-m += usbserial.o
-endif
-
+obj-$(CONFIG_USB_SERIAL)                        += usbserial.o
 obj-$(CONFIG_USB_SERIAL_VISOR)			+= visor.o
 obj-$(CONFIG_USB_SERIAL_WHITEHEAT)		+= whiteheat.o
 obj-$(CONFIG_USB_SERIAL_FTDI_SIO)		+= ftdi_sio.o

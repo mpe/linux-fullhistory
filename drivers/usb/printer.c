@@ -527,3 +527,6 @@ static void __exit usblp_exit(void)
 
 module_init(usblp_init);
 module_exit(usblp_exit);
+
+MODULE_AUTHOR("Michael Gee, Pavel Machek, Vojtech Pavlik, Randy Dunlap");
+MODULE_DESCRIPTION("USB Printer Device Class driver");
