@@ -420,7 +420,7 @@ sun_mouse_read(struct file *file, char *buffer,
 
 static unsigned int sun_mouse_poll(struct file *file, poll_table *wait)
 {
-	poll_wait(&sunmouse.proc_list, wait);
+	poll_wait(file, &sunmouse.proc_list, wait);
 	if(sunmouse.ready)
 		return POLLIN | POLLRDNORM;
 	return 0;

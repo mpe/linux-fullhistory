@@ -211,7 +211,7 @@ static int maui_init(int irq)
 	outb((0x80), HOST_CTRL_PORT);	/* Leave reset */
 	outb((0xD0), HOST_CTRL_PORT);	/* Cause interrupt */
 
-#ifndef __SMP__
+#ifdef __SMP__
 	for (i = 0; i < 1000000 && !irq_ok; i++);
 
 	if (!irq_ok)

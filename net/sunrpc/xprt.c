@@ -48,11 +48,11 @@
 #include <linux/udp.h>
 #include <linux/unistd.h>
 #include <linux/sunrpc/clnt.h>
+#include <linux/file.h>
+
 #include <net/sock.h>
 
-#if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
-#endif
 
 #define SOCK_HAS_USER_DATA
 
@@ -319,7 +319,7 @@ xprt_close(struct rpc_xprt *xprt)
 	sk->write_space  = xprt->old_write_space;
 
 	if (xprt->file)
-		close_fp(xprt->file);
+		fput(xprt->file);
 	else
 		sock_release(xprt->sock);
 }

@@ -758,6 +758,7 @@ sys_rt_sigqueueinfo(int pid, int sig, siginfo_t *uinfo)
 	   Nor can they impersonate a kill(), which adds source info.  */
 	if (info.si_code >= 0)
 		return -EPERM;
+	info.si_signo = sig;
 
 	/* POSIX.1b doesn't mention process groups.  */
 	return kill_proc_info(sig, &info, pid);
@@ -860,7 +861,7 @@ sys_sigprocmask(int how, old_sigset_t *set, old_sigset_t *oset)
 			sigdelsetmask(&current->blocked, new_set);
 			break;
 		case SIG_SETMASK:
-			siginitset(&current->blocked, new_set);
+			current->blocked.sig[0] = new_set;
 			break;
 		}
 

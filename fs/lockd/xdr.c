@@ -128,7 +128,7 @@ nlm_decode_lock(u32 *p, struct nlm_lock *lock)
 		return NULL;
 
 	memset(fl, 0, sizeof(*fl));
-	fl->fl_owner = current;
+	fl->fl_owner = current->files;
 	fl->fl_pid   = ntohl(*p++);
 	fl->fl_flags = FL_POSIX;
 	fl->fl_type  = F_RDLCK;		/* as good as anything else */

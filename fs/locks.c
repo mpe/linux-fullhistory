@@ -471,10 +471,9 @@ out:
  * This function is called when the file is being removed
  * from the task's fd array.
  */
-void locks_remove_posix(struct task_struct *task, struct file *filp)
+void locks_remove_posix(struct file *filp, fl_owner_t owner)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
-	void * owner = task->files;
 	struct file_lock file_lock, *fl;
 	struct file_lock **before;
 
@@ -575,7 +574,7 @@ int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
 
 int locks_mandatory_locked(struct inode *inode)
 {
-	void * owner = current->files;
+	fl_owner_t owner = current->files;
 	struct file_lock *fl;
 
 	/* Search the lock list for this inode for any POSIX locks.

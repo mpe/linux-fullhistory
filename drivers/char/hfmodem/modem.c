@@ -561,6 +561,7 @@ unsigned int hfmodem_poll(struct file *file, poll_table *wait)
 	unsigned long flags;
 	int i, cnt1, cnt2;
 	
+	poll_wait(file, &dev->wait, wait);
 	save_flags(flags);
 	cli();
 	for (i = cnt1 = cnt2 = 0; i < HFMODEM_NUMTXSLOTS; i++) {
@@ -576,7 +577,6 @@ unsigned int hfmodem_poll(struct file *file, poll_table *wait)
 			cnt2++;
 	}
 	restore_flags(flags);
-	poll_wait(&dev->wait, wait);
         if (cnt1 || !cnt2)
                 return POLLIN | POLLRDNORM;
         return 0;

@@ -38,7 +38,8 @@ static inline int mlock_fixup_start(struct vm_area_struct * vma,
 	n->vm_end = end;
 	vma->vm_offset += vma->vm_start - n->vm_start;
 	n->vm_flags = newflags;
-	n->vm_dentry = dget(vma->vm_dentry);
+	if (n->vm_file)
+		n->vm_file->f_count++;
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -58,7 +59,8 @@ static inline int mlock_fixup_end(struct vm_area_struct * vma,
 	n->vm_start = start;
 	n->vm_offset += n->vm_start - vma->vm_start;
 	n->vm_flags = newflags;
-	n->vm_dentry = dget(vma->vm_dentry);
+	if (n->vm_file)
+		n->vm_file->f_count++;
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -87,8 +89,8 @@ static inline int mlock_fixup_middle(struct vm_area_struct * vma,
 	vma->vm_offset += vma->vm_start - left->vm_start;
 	right->vm_offset += right->vm_start - left->vm_start;
 	vma->vm_flags = newflags;
-	if (vma->vm_dentry)
-		vma->vm_dentry->d_count += 2;
+	if (vma->vm_file)
+		vma->vm_file->f_count += 2;
 
 	if (vma->vm_ops && vma->vm_ops->open) {
 		vma->vm_ops->open(left);

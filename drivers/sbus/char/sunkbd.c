@@ -1317,7 +1317,7 @@ static int kbd_fasync (struct file *filp, int on)
 
 static unsigned int kbd_poll (struct file *f, poll_table *wait)
 {
-	poll_wait(&kbd_wait, wait);
+	poll_wait(f, &kbd_wait, wait);
 	if (kbd_head != kbd_tail)
 		return POLLIN | POLLRDNORM;
 	return 0;

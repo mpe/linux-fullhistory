@@ -220,7 +220,8 @@ static int fb_mmap(struct file *file, struct vm_area_struct * vma)
 	if (remap_page_range(vma->vm_start, vma->vm_offset,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 

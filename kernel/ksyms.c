@@ -197,6 +197,7 @@ EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
+EXPORT_SYMBOL(locks_remove_flock);
 EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(get_cached_page);
 EXPORT_SYMBOL(put_cached_page);
@@ -205,10 +206,6 @@ EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
 EXPORT_SYMBOL(is_subdir);
-
-#ifdef CONFIG_AUTOFS_FS_MODULE
-EXPORT_SYMBOL(locks_remove_flock);
-#endif
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

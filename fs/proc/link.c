@@ -105,8 +105,8 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 				break;
 			vma = p->mm->mmap;
 			while (vma) {
-				if (vma->vm_flags & VM_EXECUTABLE)
-					return dget(vma->vm_dentry);
+				if ((vma->vm_flags & VM_EXECUTABLE) && vma->vm_file)
+					return dget(vma->vm_file->f_dentry);
 
 				vma = vma->vm_next;
 			}

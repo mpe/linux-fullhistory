@@ -44,11 +44,13 @@
 #include <linux/malloc.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
+#include <linux/file.h>
+#include <linux/proc_fs.h>
+#include <linux/vmalloc.h>
+
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/af_unix.h>
-#include <linux/proc_fs.h>
-#include <linux/vmalloc.h>
 #include <net/scm.h>
 
 /* Internal data structures and random procedures: */
@@ -275,7 +277,7 @@ tail:
 			 */
 			 
 			if(s->socket && s->socket->file && s->socket->file->f_count)
-				close_fp(s->socket->file);
+				fput(s->socket->file);
 		}
 		else
 			s->protinfo.af_unix.marksweep&=~MARKED;	/* unmark everything for next collection */

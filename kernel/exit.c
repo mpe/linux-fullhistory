@@ -164,7 +164,7 @@ static inline void close_files(struct files_struct * files)
 				struct file * file = files->fd[i];
 				if (file) {
 					files->fd[i] = NULL;
-					close_fp(file);
+					close_fp(file, files);
 				}
 			}
 			i++;

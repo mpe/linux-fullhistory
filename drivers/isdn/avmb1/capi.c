@@ -207,7 +207,7 @@ capi_poll(struct file *file, poll_table * wait)
 		return POLLERR;
 
 	cdev = &capidevs[minor];
-	poll_wait(&(cdev->recv_wait), wait);
+	poll_wait(file, &(cdev->recv_wait), wait);
 	mask = POLLOUT | POLLWRNORM;
 	if (!skb_queue_empty(&cdev->recv_queue))
 		mask |= POLLIN | POLLRDNORM;

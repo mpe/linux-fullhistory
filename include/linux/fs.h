@@ -418,13 +418,20 @@ extern int init_private_file(struct file *, struct dentry *, int);
 #define FL_ACCESS	8	/* for processes suspended by mandatory locking */
 #define FL_LOCKD	16	/* lock held by rpc.lockd */
 
+/*
+ * The POSIX file lock owner is determined by
+ * the "struct files_struct" in the thread group
+ * (or NULL for no owner - BSD locks).
+ */
+typedef struct files_struct *fl_owner_t;
+
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
 	struct file_lock *fl_nextlink;	/* doubly linked list of all locks */
 	struct file_lock *fl_prevlink;	/* used to simplify lock removal */
 	struct file_lock *fl_nextblock; /* circular list of blocked processes */
 	struct file_lock *fl_prevblock;
-	void *fl_owner;			/* usu. the process' task_struct */
+	fl_owner_t fl_owner;
 	unsigned int fl_pid;
 	struct wait_queue *fl_wait;
 	struct file *fl_file;
@@ -448,7 +455,7 @@ extern int fcntl_getlk(unsigned int fd, struct flock *l);
 extern int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l);
 
 /* fs/locks.c */
-extern void locks_remove_posix(struct task_struct *, struct file *);
+extern void locks_remove_posix(struct file *, fl_owner_t id);
 extern void locks_remove_flock(struct file *);
 extern struct file_lock *posix_test_lock(struct file *, struct file_lock *);
 extern int posix_lock_file(struct file *, struct file_lock *, unsigned int);
@@ -594,13 +601,13 @@ struct inode_operations {
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
 	struct dentry * (*follow_link) (struct dentry *, struct dentry *);
-	int (*readpage) (struct dentry *, struct page *);
-	int (*writepage) (struct dentry *, struct page *);
+	int (*readpage) (struct file *, struct page *);
+	int (*writepage) (struct file *, struct page *);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
-	int (*updatepage) (struct dentry *, struct page *, const char *,
+	int (*updatepage) (struct file *, struct page *, const char *,
 				unsigned long, unsigned int, int);
 	int (*revalidate) (struct dentry *);
 };
@@ -646,7 +653,7 @@ extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
 extern int __fput(struct file *);
-extern int close_fp(struct file *);
+extern int close_fp(struct file *, fl_owner_t id);
 
 extern char * getname(const char * filename);
 extern void putname(char * name);
@@ -796,7 +803,7 @@ extern struct buffer_head * breada(kdev_t dev,int block, int size,
 
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
-extern int generic_readpage(struct dentry *, struct page *);
+extern int generic_readpage(struct file *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char*, size_t, loff_t*);

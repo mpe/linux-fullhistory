@@ -112,7 +112,7 @@ static unsigned int joystick_poll(struct file *file, poll_table *wait)
 {
     int minor = DEVICE_NR(file->f_dentry->d_inode->i_rdev);
 
-    poll_wait(&joystick[minor].wait, wait);
+    poll_wait(file, &joystick[minor].wait, wait);
     if (joystick[minor].ready)
 	return POLLIN | POLLRDNORM;
     return 0;

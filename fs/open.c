@@ -770,7 +770,11 @@ int __fput(struct file *filp)
 	return error;
 }
 
-int close_fp(struct file *filp)
+/*
+ * "id" is the POSIX thread ID. We use the
+ * files pointer for this..
+ */
+int close_fp(struct file *filp, fl_owner_t id)
 {
 	struct dentry *dentry = filp->f_dentry;
 
@@ -779,7 +783,7 @@ int close_fp(struct file *filp)
 		return 0;
 	}
 	if (dentry->d_inode)
-		locks_remove_posix(current, filp);
+		locks_remove_posix(filp, id);
 	return fput(filp);
 }
 
@@ -801,7 +805,7 @@ asmlinkage int sys_close(unsigned int fd)
 		put_unused_fd(fd);
 		FD_CLR(fd, &files->close_on_exec);
 		files->fd[fd] = NULL;
-		error = close_fp(filp);
+		error = close_fp(filp, files);
 	}
 	unlock_kernel();
 	return error;

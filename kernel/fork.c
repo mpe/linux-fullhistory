@@ -211,7 +211,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 	flush_cache_mm(current->mm);
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
-		struct dentry *dentry;
+		struct file *file;
 
 		retval = -ENOMEM;
 		tmp = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
@@ -222,11 +222,11 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_mm = mm;
 		mm->map_count++;
 		tmp->vm_next = NULL;
-		dentry = tmp->vm_dentry;
-		if (dentry) {
-			dget(dentry);
+		file = tmp->vm_file;
+		if (file) {
+			file->f_count++;
 			if (tmp->vm_flags & VM_DENYWRITE)
-				dentry->d_inode->i_writecount--;
+				file->f_dentry->d_inode->i_writecount--;
       
 			/* insert tmp into the share list, just after mpnt */
 			if((tmp->vm_next_share = mpnt->vm_next_share) != NULL)

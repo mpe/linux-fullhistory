@@ -2101,8 +2101,8 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 {
 	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
 		struct vm_area_struct *vmaring;
-		struct dentry *dentry;
-		struct inode *inode = NULL;
+		struct file *file;
+		struct inode *inode;
 		unsigned long flags, offset, vaddr, start;
 		int alias_found = 0;
 		pgd_t *pgdp;
@@ -2111,11 +2111,10 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 
 		save_and_cli(flags);
 
-		dentry = vma->vm_dentry;
-		if(dentry)
-			inode = dentry->d_inode;
-		if (!inode)
+		file = vma->vm_file;
+		if (!file)
 			goto done;
+		inode = file->f_dentry->d_inode;
 		offset = (address & PAGE_MASK) - vma->vm_start;
 		vmaring = inode->i_mmap; 
 		do {

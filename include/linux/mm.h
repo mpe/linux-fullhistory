@@ -48,7 +48,7 @@ struct vm_area_struct {
 
 	struct vm_operations_struct * vm_ops;
 	unsigned long vm_offset;
-	struct dentry * vm_dentry;
+	struct file * vm_file;
 	unsigned long vm_pte;			/* shared mem */
 };
 

@@ -732,7 +732,8 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 		vma->vm_page_prot))
 		return -EAGAIN;
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 
 	dmap->mapping_flags |= DMA_MAP_MAPPED;
 

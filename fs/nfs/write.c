@@ -493,8 +493,9 @@ wait_on_write_request(struct nfs_wreq *req)
  * (for now), and we currently do this synchronously only.
  */
 int
-nfs_writepage(struct dentry *dentry, struct page *page)
+nfs_writepage(struct file * file, struct page *page)
 {
+	struct dentry *dentry = file->f_dentry;
 	return nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE);
 }
 
@@ -505,9 +506,10 @@ nfs_writepage(struct dentry *dentry, struct page *page)
  * things with a page scheduled for an RPC call (e.g. invalidate it).
  */
 int
-nfs_updatepage(struct dentry *dentry, struct page *page, const char *buffer,
+nfs_updatepage(struct file *file, struct page *page, const char *buffer,
 			unsigned long offset, unsigned int count, int sync)
 {
+	struct dentry	*dentry = file->f_dentry;
 	struct inode	*inode = dentry->d_inode;
 	u8		*page_addr = (u8 *) page_address(page);
 	struct nfs_wreq	*req;

@@ -42,7 +42,7 @@ static unsigned int netlink_poll(struct file *file, poll_table * wait)
 
 	if (sock->ops->poll==NULL)
 		return 0;
-	return sock->ops->poll(sock, wait);
+	return sock->ops->poll(file, sock, wait);
 }
 
 /*

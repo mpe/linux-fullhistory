@@ -210,20 +210,20 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct dentry *, struct page *);
+extern int  nfs_writepage(struct file *, struct page *);
 extern int  nfs_find_dentry_request(struct inode *, struct dentry *);
 extern int  nfs_check_failed_request(struct inode *);
 extern int  nfs_check_error(struct inode *);
 extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern void nfs_invalidate_pages(struct inode *);
-extern int  nfs_updatepage(struct dentry *, struct page *, const char *,
+extern int  nfs_updatepage(struct file *, struct page *, const char *,
 			unsigned long, unsigned int, int);
 
 /*
  * linux/fs/nfs/read.c
  */
-extern int  nfs_readpage(struct dentry *, struct page *);
+extern int  nfs_readpage(struct file *, struct page *);
 
 /*
  * linux/fs/mount_clnt.c

@@ -37,6 +37,7 @@
 #include <linux/vmalloc.h>
 #include <linux/blkdev.h>
 #include <linux/sysrq.h>
+#include <linux/file.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -332,31 +333,29 @@ asmlinkage int sys_fsync(unsigned int fd)
 
 	lock_kernel();
 	err = -EBADF;
-
-	if (fd >= NR_OPEN)
-		goto out;
-
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if (!file)
 		goto out;
 
 	dentry = file->f_dentry;
 	if (!dentry)
-		goto out;
+		goto out_putf;
 
 	inode = dentry->d_inode;
 	if (!inode)
-		goto out;
+		goto out_putf;
 
 	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
-		goto out;
+		goto out_putf;
 
 	/* We need to protect against concurrent writers.. */
 	down(&inode->i_sem);
-	err = file->f_op->fsync(file, file->f_dentry);
+	err = file->f_op->fsync(file, dentry);
 	up(&inode->i_sem);
 
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return err;
@@ -371,29 +370,27 @@ asmlinkage int sys_fdatasync(unsigned int fd)
 
 	lock_kernel();
 	err = -EBADF;
-
-	if (fd >= NR_OPEN)
-		goto out;
-
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if (!file)
 		goto out;
 
 	dentry = file->f_dentry;
 	if (!dentry)
-		goto out;
+		goto out_putf;
 
 	inode = dentry->d_inode;
 	if (!inode)
-		goto out;
+		goto out_putf;
 
 	err = -EINVAL;
 	if (!file->f_op || !file->f_op->fsync)
-		goto out;
+		goto out_putf;
 
 	/* this needs further work, at the moment it is identical to fsync() */
-	err = file->f_op->fsync(file, file->f_dentry);
+	err = file->f_op->fsync(file, dentry);
 
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return err;
@@ -1530,8 +1527,9 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-int generic_readpage(struct dentry * dentry, struct page * page)
+int generic_readpage(struct file * file, struct page * page)
 {
+	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long block;
 	int *p, nr[PAGE_SIZE/512];

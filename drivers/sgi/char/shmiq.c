@@ -365,7 +365,7 @@ shmiq_qcntl_poll (struct file *filp, poll_table *wait)
 	if (!shmiqs [minor].mapped)
 		return 0;
 	
-	poll_wait (&shmiqs [minor].proc_list, wait);
+	poll_wait (filp, &shmiqs [minor].proc_list, wait);
 	s = shmiqs [minor].shmiq_vaddr;
 	if (s->head != s->tail)
 		return POLLIN | POLLRDNORM;

@@ -111,7 +111,7 @@ void __scm_destroy(struct scm_cookie *scm)
 	if (fpl) {
 		scm->fp = NULL;
 		for (i=fpl->count-1; i>=0; i--)
-			close_fp(fpl->fp[i]);
+			fput(fpl->fp[i]);
 		kfree(fpl);
 	}
 }

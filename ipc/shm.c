@@ -561,7 +561,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
-	shmd->vm_dentry = NULL;
+	shmd->vm_file = NULL;
 	shmd->vm_offset = 0;
 	shmd->vm_ops = &shm_vm_ops;
 

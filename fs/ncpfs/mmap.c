@@ -33,7 +33,8 @@ static inline int min(int a, int b)
 static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 				     unsigned long address, int no_share)
 {
-	struct dentry *dentry = area->vm_dentry;
+	struct file *file = area->vm_file;
+	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long page;
 	unsigned int clear;
@@ -136,7 +137,8 @@ int ncp_mmap(struct file *file, struct vm_area_struct *vma)
 		inode->i_atime = CURRENT_TIME;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	vma->vm_ops = &ncp_file_mmap;
 	return 0;
 }

@@ -17,6 +17,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/sysrq.h>
+#include <linux/interrupt.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void unblank_console(void);
@@ -42,6 +43,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 	printk(KERN_EMERG "Kernel panic: %s\n",buf);
 	if (current == task[0])
 		printk(KERN_EMERG "In swapper task - not syncing\n");
+	else if (in_interrupt())
+		printk(KERN_EMERG "In interrupt handler - not syncing\n");
 	else
 		sys_sync();
 
