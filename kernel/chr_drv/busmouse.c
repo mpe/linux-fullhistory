@@ -31,7 +31,12 @@
  *           Added a couple of new functions to handle differences in using
  *             MS vs. Logitech (where the int variable wasn't appropriate).
  *
- * version 0.2
+ * Modified by Peter Cervasio (address above) (26SEP92)
+ * Changes:  Included code to (properly?) detect when a Microsoft mouse is
+ *           really attached to the machine.  Don't know what this does to
+ *           Logitech bus mice, but all it does is read ports.
+ *
+ * version 0.3
  */
 
 #include	<linux/kernel.h>
@@ -254,9 +259,40 @@ long bus_mouse_init(long kmem_start)
 	return kmem_start;
 }
 
+#define MS_DELAY 100000
+
 long ms_bus_mouse_init(long kmem_start)
-{	
-	
+{
+	register int mse_byte;
+	int i, delay_val, msfound = 1;
+
+	if (inb(MS_MSE_SIGNATURE_PORT) == 0xde) {
+	    for (delay_val=0; delay_val<MS_DELAY;) delay_val++;
+
+	    mse_byte = inb(MS_MSE_SIGNATURE_PORT);
+	    for (delay_val=0; delay_val<MS_DELAY; ) delay_val++;
+
+	    for (i = 0; i < 4; i++) {
+	        for (delay_val=0; delay_val<MS_DELAY;) delay_val++;
+		if (inb(MS_MSE_SIGNATURE_PORT) == 0xde) {
+
+		    for (delay_val=0; delay_val<MS_DELAY; ) delay_val++;
+		    if (inb(MS_MSE_SIGNATURE_PORT) == mse_byte)
+		        msfound = 0;
+		    else
+		        msfound = 1;
+		}
+		else
+		    msfound = 1;
+	    }
+	}
+
+	if (msfound == 1) {
+	    printk("No Microsoft bus mouse detected.\n");
+	    mouse.present = 0;
+	    return kmem_start;
+	}
+
 	MS_MSE_INT_OFF();
 	
 	mouse.present = 1;

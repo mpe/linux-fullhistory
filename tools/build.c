@@ -32,7 +32,7 @@
 #define MINIX_HEADER 32
 #define GCC_HEADER 1024
 
-#define SYS_SIZE 0x5000
+#define SYS_SIZE 0x7000
 
 #define DEFAULT_MAJOR_ROOT 0
 #define DEFAULT_MINOR_ROOT 0

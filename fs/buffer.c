@@ -28,7 +28,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#ifdef CONFIG_BLK_DEV_SR
+#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
 extern int check_cdrom_media_change(int, int);
 #endif
 
@@ -133,7 +133,7 @@ void check_disk_change(int dev)
 		brelse(bh);
 		break;
 
-#ifdef CONFIG_BLK_DEV_SR
+#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
          case 11: /* CDROM */
 		i = check_cdrom_media_change(dev, 0);
 		if (i) printk("Flushing buffers and inodes for CDROM\n");

@@ -15,6 +15,7 @@
 #include <asm/segment.h>
 
 #include <linux/errno.h>
+#include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/ext_fs.h>
 #include <linux/stat.h>
@@ -73,6 +74,13 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 		while (offset < 1024 && filp->f_pos < inode->i_size) {
 			offset += de->rec_len;
 			filp->f_pos += de->rec_len;
+			if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
+			    de->rec_len < de->name_len + 8) {
+				printk ("ext_readdir: bad directory entry\n");
+				printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
+					inode->i_dev, inode->i_ino, offset, de->rec_len, de->name_len);
+				return 0;
+			}
 			if (de->inode) {
 				for (i = 0; i < de->name_len; i++)
 					if (c = de->name[i])

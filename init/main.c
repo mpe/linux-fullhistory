@@ -162,8 +162,8 @@ void start_kernel(void)
 	envp_init[1] = term;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
-	if (memory_end > 16*1024*1024)
-		memory_end = 16*1024*1024;
+	if (memory_end > MAX_MEGABYTES*1024*1024)
+		memory_end = MAX_MEGABYTES*1024*1024;
 	memory_start = 1024*1024;
 	low_memory_start = (unsigned long) &end;
 	low_memory_start += 0xfff;

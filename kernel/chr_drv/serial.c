@@ -328,7 +328,7 @@ static void init(struct async_struct * info)
 	outb_p(UART_MCR_LOOP | 0x0A, UART_MCR + port);
 	status1 = inb_p(UART_MSR + port) & 0xF0;
 	outb_p(scratch, UART_MCR + port);
-	outb_p(scratch, UART_MSR + port);
+	outb_p(scratch2, UART_MSR + port);
 	if (status1 != 0x90) {
 		info->type = PORT_UNKNOWN;
 		return;
@@ -379,9 +379,7 @@ static void init(struct async_struct * info)
  */
 void rs_write(struct tty_struct * tty)
 {
-	int line = tty->line - 64;
-
-	do_rs_write(rs_table+line);
+	do_rs_write(rs_table+DEV_TO_SL(tty->line));
 }
 
 /*
@@ -571,6 +569,10 @@ static int set_serial_info(struct async_struct * info,
 	irq = ISR->irq;
 	if (irq == 2)
 		irq = 9;
+	if (!new_irq)
+		new_irq = irq;
+	if (!new_port)
+		new_port = info->port;
 	if (irq != new_irq) {
 		/*
 		 * We need to change the IRQ for this board.  OK, if
@@ -582,7 +584,7 @@ static int set_serial_info(struct async_struct * info,
 			sa.sa_flags = (SA_INTERRUPT);
 			sa.sa_mask = 0;
 			sa.sa_restorer = NULL;
-			retval = irqaction(irq,&sa);
+			retval = irqaction(new_irq,&sa);
 			if (retval)
 				return retval;
 		}
@@ -608,6 +610,7 @@ static int set_serial_info(struct async_struct * info,
 		if (ISR->next_ISR)
 			ISR->next_ISR->prev_ISR = ISR;
 		IRQ_ISR[new_irq] = ISR;
+		ISR->irq = new_irq;
 	}
 	cli();
 	if (new_port != info->port) {

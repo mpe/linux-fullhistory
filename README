@@ -72,10 +72,24 @@ want to include these in the kernel, do the following:
 	- remove the corresponding lines in the initialization of
 	  file_systems in fs/super.c.
 
-5.  To configure more ptys do this:
-	- change NR_PTYS in include/linux/tty.h to the number you want
-	- create the new files in /dev
-	- recompile the kernel
+5.  The TCP/IP code is in the standard sources as of version 0.98, but
+it is not compiled into the normal binary. To get TCP/IP working, you
+have to:
+
+	- edit 'net/Makefile', defining the SUBDIRS and SOCK_FLAGS
+	  variables correctly (currently commented out).  Likewise, you
+	  have to edit the rule for linking net.o in the Makefile (again
+	  removing a '#' to make tcp/tcpip.o active)
+	- make sure you have the /usr/include/netinet/protocols.h header
+	  file.  If you don't have it, you should be able to find it at
+	  the same place you got the kernel, or with a newer compiler
+	  version.
+	- remove all object (*.o) files in the net/ subdirectory, making
+	  sure that they are recompiled with the correct Makefile
+	  definitions.
+	- Additionally, you obviously need the tcp/ip programs to make any
+	  use of the kernel feature.  If you haven't joined the TCP/IP
+	  mailing list, do so. 
 
 
 * Running make
@@ -105,7 +119,8 @@ copy.  This requires dd.
 
 "make dep" updates all dependencies.  This requires sed.  It modifies
 the makefiles directly (the end of them, starting at the ###Dependencies
--line at the end).
+-line at the end).  "make dep" is required after patching, or the kernel
+may not compile cleanly. 
 
 "make clean" will remove all object files and other files created by the
 compilation.  This requires basename.
@@ -120,4 +135,4 @@ The tee part is so that you can check what is going on while the
 compilation runs.  If you have GNU emacs and use M-x compile you don't
 need this, of course.
 
-		Lars Wirzeniu
+		Lars Wirzenius

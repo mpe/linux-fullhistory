@@ -48,6 +48,13 @@ struct sockaddr {
 #define SO_KEEPALIVE	9
 #define SO_OOBINLINE   10
 #define SO_NO_CHECK    11
+#define SO_PRIORITY    12
+#define SO_LINGER      13
+
+/* the different priorities */
+#define SOPRI_INTERACTIVE	0
+#define SOPRI_NORMAL		1
+#define SOPRI_BACKGROUND	2
 
 /* setsockoptions level */
 #define SOL_SOCKET	1

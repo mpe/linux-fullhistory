@@ -792,6 +792,10 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
+	if (address >= TASK_SIZE) {
+		printk("Unable to handle kernel paging request at address %08x\n",address);
+		do_exit(SIGSEGV);
+	}
 	if (esp[2] & VM_MASK) {
 		unsigned int bit;
 

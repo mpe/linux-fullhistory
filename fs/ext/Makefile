@@ -50,12 +50,12 @@ chrdev.o : chrdev.c /usr/include/linux/sched.h /usr/include/linux/head.h /usr/in
   /usr/include/linux/vm86.h /usr/include/linux/ext_fs.h /usr/include/linux/tty.h \
   /usr/include/linux/termios.h /usr/include/asm/system.h /usr/include/linux/stat.h \
   /usr/include/linux/fcntl.h /usr/include/linux/errno.h 
-dir.o : dir.c /usr/include/asm/segment.h /usr/include/linux/errno.h /usr/include/linux/fs.h \
-  /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
-  /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
-  /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
-  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
-  /usr/include/linux/ext_fs.h /usr/include/linux/stat.h 
+dir.o : dir.c /usr/include/asm/segment.h /usr/include/linux/errno.h /usr/include/linux/kernel.h \
+  /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
+  /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
+  /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
+  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/ext_fs.h /usr/include/linux/stat.h 
 fifo.o : fifo.c /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/fs.h \
   /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \

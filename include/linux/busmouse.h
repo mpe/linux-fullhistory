@@ -60,7 +60,7 @@
 /*--------- MICROSOFT BUSMOUSE ITEMS -------------*/
 
 #define	MS_MSE_DATA_PORT	        0x23d
-#define	MS_MSE_SIGNATURE_PORT	        0x23d
+#define	MS_MSE_SIGNATURE_PORT	        0x23e
 #define	MS_MSE_CONTROL_PORT	        0x23c
 #define	MS_MSE_CONFIG_PORT		0x23f
 

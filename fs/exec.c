@@ -101,13 +101,16 @@ int core_dump(long signr, struct pt_regs * regs)
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
-/* write and seek example: from kernel space */
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+/* changed the size calculations - should hopefully work better. lbt */
 	dump.magic = CMAGIC;
-	dump.u_tsize = current->end_code / PAGE_SIZE;
-	dump.u_dsize = (current->brk - current->end_code) / PAGE_SIZE;
-	dump.u_ssize =((current->start_stack +(PAGE_SIZE-1)) / PAGE_SIZE) -
-	  (regs->esp/ PAGE_SIZE);
+	dump.start_code = 0;
+	dump.start_stack = regs->esp & ~(PAGE_SIZE - 1);
+	dump.u_tsize = ((unsigned long) current->end_code) >> 12;
+	dump.u_dsize = ((unsigned long) (current->brk + (PAGE_SIZE-1))) >> 12;
+	dump.u_dsize -= dump.u_tsize;
+	dump.u_ssize = 0;
+	if (dump.start_stack < TASK_SIZE)
+		dump.u_ssize = ((unsigned long) (TASK_SIZE - dump.start_stack)) >> 12;
 /* If the size of the dump file exceeds the rlimit, then see what would happen
    if we wrote the stack, but not the data area.  */
 	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE/1024 >
@@ -121,8 +124,6 @@ int core_dump(long signr, struct pt_regs * regs)
 	dump.u_ar0 = (struct pt_regs *)(((int)(&dump.regs)) -((int)(&dump)));
 	dump.signal = signr;
 	dump.regs = *regs;
-	dump.start_code = 0;
-	dump.start_stack = regs->esp & ~(PAGE_SIZE - 1);
 /* Flag indicating the math stuff is valid. */
 	if (dump.u_fpvalid = current->used_math) {
 		if (last_task_used_math == current)
@@ -130,6 +131,7 @@ int core_dump(long signr, struct pt_regs * regs)
 		else
 			memcpy(&dump.i387,&current->tss.i387,sizeof(dump.i387));
 	};
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	DUMP_WRITE(&dump,sizeof(dump));
 	DUMP_SEEK(sizeof(dump));
  /* Dump the task struct.  Not be used by gdb, but could be useful */
@@ -140,14 +142,14 @@ int core_dump(long signr, struct pt_regs * regs)
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x17));
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
-		dump_start = current->end_code;
-		dump_size = current->brk - current->end_code;
+		dump_start = dump.u_tsize << 12;
+		dump_size = dump.u_dsize << 12;
 		DUMP_WRITE(dump_start,dump_size);
 	};
 /* Now prepare to dump the stack area */
 	if (dump.u_ssize != 0) {
-		dump_start = regs->esp & ~(PAGE_SIZE - 1);
-		dump_size = dump.u_ssize * PAGE_SIZE;
+		dump_start = dump.start_stack;
+		dump_size = dump.u_ssize << 12;
 		DUMP_WRITE(dump_start,dump_size);
 	};
 close_coredump:

@@ -155,7 +155,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 		tmp = *(unsigned long *) tmp;
 		if (tmp & PAGE_PRESENT) {
 			tmp &= 0xfffff000;
-			pg_table = (0xA00000 >> PAGE_SHIFT) + (unsigned long *) tmp;
+			pg_table = (0xA0000 >> PAGE_SHIFT) + (unsigned long *) tmp;
 			tmp = 32;
 			while (tmp--) {
 				if (PAGE_PRESENT & *pg_table)

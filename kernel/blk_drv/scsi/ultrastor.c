@@ -1,5 +1,5 @@
 /*
- *	ultrastor.c	Copyright (C) 1991, 1992 David B. Gentzel
+ *	ultrastor.c	Copyright (C) 1992 David B. Gentzel
  *	Low-level SCSI driver for UltraStor 14F
  *	by David B. Gentzel, Whitfield Software Services, Carnegie, PA
  *	    (gentzel@nova.enet.dec.com)
@@ -24,9 +24,8 @@
 /*
  * CAVEATS: ???
  *    This driver is VERY stupid.  It takes no advantage of much of the power
- *    of the UltraStor controller.  We just sit-and-spin while waiting for
- *    commands to complete.  I hope to go back and beat it into shape, but
- *    PLEASE, anyone else who would like to, please make improvements!
+ *    of the UltraStor controller.  I hope to go back and beat it into shape,
+ *    but PLEASE, anyone else who would like to, please make improvements!
  *
  *    By defining NO_QUEUEING in ultrastor.h, you disable the queueing feature
  *    of the mid-level SCSI driver.  Once I'm satisfied that the queueing
@@ -155,7 +154,7 @@ static const unsigned short ultrastor_ports[] = {
 };
 #endif
 
-void ultrastor_interrupt(void);
+static void ultrastor_interrupt(int cpl);
 
 static void (*ultrastor_done)(int, int) = 0;
 
@@ -292,11 +291,19 @@ int ultrastor_14f_detect(int hostnum)
     host_number = hostnum;
     scsi_hosts[hostnum].this_id = config.ha_scsi_id;
 #ifndef NO_QUEUEING
-    set_intr_gate(0x20 + config.interrupt, ultrastor_interrupt);
-    /* gate to PIC 2 */
-    outb_p(inb_p(0x21) & ~BIT(2), 0x21);
-    /* enable the interrupt */
-    outb(inb_p(0xA1) & ~BIT(config.interrupt - 8), 0xA1);
+    {
+	struct sigaction sa;
+
+	sa.sa_handler = ultrastor_interrupt;
+	sa.sa_mask = 0;
+	sa.sa_flags = SA_INTERRUPT;	/* ??? Do we really need this? */
+	sa.sa_restorer = 0;
+	if (irqaction(config.interrupt, &sa)) {
+	    printk("Unable to get IRQ%u for UltraStor controller\n",
+		   config.interrupt);
+	    return FALSE;
+	}
+    }
 #endif
     return TRUE;
 }
@@ -309,7 +316,7 @@ const char *ultrastor_14f_info(void)
 }
 
 static struct mscp mscp = {
-    OP_SCSI, DTD_SCSI, FALSE, TRUE, FALSE	/* This stuff doesn't change */
+    OP_SCSI, DTD_SCSI, 0, 1, 0		/* This stuff doesn't change */
 };
 
 int ultrastor_14f_queuecommand(unsigned char target, const void *cmnd,
@@ -437,15 +444,15 @@ int ultrastor_14f_reset(void)
 }
 
 #ifndef NO_QUEUEING
-void ultrastor_interrupt_service(void)
+static void ultrastor_interrupt(int cpl)
 {
 #if (ULTRASTOR_DEBUG & UD_INTERRUPT)
-    printk("US14F: interrupt_service: called: status = %08X\n",
+    printk("US14F: interrupt: called: status = %08X\n",
 	   (mscp.adapter_status << 16) | mscp.target_status);
 #endif
 
     if (ultrastor_done == 0)
-	panic("US14F: interrupt_service: unexpected interrupt!\n");
+	panic("US14F: interrupt: unexpected interrupt!\n");
     else {
 	void (*done)(int, int);
 
@@ -464,40 +471,9 @@ void ultrastor_interrupt_service(void)
     }
 
 #if (ULTRASTOR_DEBUG & UD_INTERRUPT)
-    printk("US14F: interrupt_service: returning\n");
+    printk("US14F: interrupt: returning\n");
 #endif
 }
-
-__asm__("
-_ultrastor_interrupt:
-	cld
-	pushl %eax
-	pushl %ecx
-	pushl %edx
-	push %ds
-	push %es
-	push %fs
-	movl $0x10,%eax
-	mov %ax,%ds
-	mov %ax,%es
-	movl $0x17,%eax
-	mov %ax,%fs
-	movb $0x20,%al
-	outb %al,$0xA0		# EOI to interrupt controller #1
-	outb %al,$0x80		# give port chance to breathe
-	outb %al,$0x80
-	outb %al,$0x80
-	outb %al,$0x80
-	outb %al,$0x20
-	call _ultrastor_interrupt_service
-	pop %fs
-	pop %es
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %eax
-	iret
-");
 #endif
 
 #endif

@@ -251,23 +251,27 @@ static inline int wait_DRQ(void)
 static void read_intr(void)
 {
 	int i;
+	int retries = 100000;
 
-	i = (unsigned) inb_p(HD_STATUS);
-	if ((i & STAT_MASK) != STAT_OK) {
-		printk("HD: read_intr: status = 0x%02x\n",i);
-		goto bad_read;
+	do {
+		i = (unsigned) inb_p(HD_STATUS);
+		if ((i & STAT_MASK) != STAT_OK)
+			break;
+		if (i & DRQ_STAT)
+			goto ok_to_read;
+	} while (--retries > 0);
+	sti();
+	printk("HD: read_intr: status = 0x%02x\n",i);
+	if (i & ERR_STAT) {
+		i = (unsigned) inb(HD_ERROR);
+		printk("HD: read_intr: error = 0x%02x\n",i);
 	}
-	if (wait_DRQ()) {
-		printk("HD: read_intr: no DRQ\n");
-		goto bad_read;
-	}
+	bad_rw_intr();
+	cli();
+	do_hd_request();
+	return;
+ok_to_read:
 	port_read(HD_DATA,CURRENT->buffer,256);
-	i = (unsigned) inb_p(HD_STATUS);
-	if (!(i & BUSY_STAT))
-		if ((i & STAT_MASK) != STAT_OK) {
-			printk("HD: read_intr: second status = 0x%02x\n",i);
-			goto bad_read;
-		}
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
@@ -290,29 +294,31 @@ static void read_intr(void)
 #endif
 	do_hd_request();
 	return;
-bad_read:
-	if (i & ERR_STAT) {
-		i = (unsigned) inb(HD_ERROR);
-		printk("HD: read_intr: error = 0x%02x\n",i);
-	}
-	bad_rw_intr();
-	do_hd_request();
-	return;
 }
 
 static void write_intr(void)
 {
 	int i;
+	int retries = 100000;
 
-	i = (unsigned) inb_p(HD_STATUS);
-	if ((i & STAT_MASK) != STAT_OK) {
-		printk("HD: write_intr: status = 0x%02x\n",i);
-		goto bad_write;
+	do {
+		i = (unsigned) inb_p(HD_STATUS);
+		if ((i & STAT_MASK) != STAT_OK)
+			break;
+		if ((CURRENT->nr_sectors <= 1) || (i & DRQ_STAT))
+			goto ok_to_write;
+	} while (--retries > 0);
+	sti();
+	printk("HD: write_intr: status = 0x%02x\n",i);
+	if (i & ERR_STAT) {
+		i = (unsigned) inb(HD_ERROR);
+		printk("HD: write_intr: error = 0x%02x\n",i);
 	}
-	if (CURRENT->nr_sectors > 1 && wait_DRQ()) {
-		printk("HD: write_intr: no DRQ\n");
-		goto bad_write;
-	}
+	bad_rw_intr();
+	cli();
+	do_hd_request();
+	return;
+ok_to_write:
 	CURRENT->sector++;
 	i = --CURRENT->nr_sectors;
 	--CURRENT->current_nr_sectors;
@@ -329,16 +335,6 @@ static void write_intr(void)
 #endif
 		do_hd_request();
 	}
-	return;
-bad_write:
-	sti();
-	if (i & ERR_STAT) {
-		i = (unsigned) inb(HD_ERROR);
-		printk("HD: write_intr: error = 0x%02x\n",i);
-	}
-	bad_rw_intr();
-	cli();
-	do_hd_request();
 	return;
 }
 
@@ -587,7 +583,7 @@ static void hd_interrupt(int unused)
 }
 
 /*
- * This is the harddisk IRQ descruption. The SA_INTERRUPT in sa_flags
+ * This is the harddisk IRQ description. The SA_INTERRUPT in sa_flags
  * means we run the IRQ-handler with interrupts disabled: this is bad for
  * interrupt latency, but anything else has led to problems on some
  * machines...

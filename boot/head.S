@@ -4,6 +4,10 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#if (MAX_MEGABYTES != 16) && (MAX_MEGABYTES != 32)
+#error "MAX_MEGABYTES must be 16 or 32"
+#endif
+
 /*
  *  head.s contains the 32-bit startup code.
  *
@@ -114,6 +118,8 @@ rp_sidt:
  * I put the kernel page tables right after the page directory,
  * using 4 of them to span 16 Mb of physical memory. People with
  * more than 16MB will have to expand this.
+ * When MAX_MEGABYTES == 32, this is set up for a maximum of 32 MB
+ * (ref: 17Apr92)  (redone for 0.97 kernel changes, 1Aug92, ref)
  */
 .org 0x1000
 pg0:
@@ -128,6 +134,20 @@ pg2:
 pg3:
 
 .org 0x5000
+#if MAX_MEGABYTES == 32
+pg4:
+
+.org 0x6000
+pg5:
+
+.org 0x7000
+pg6:
+
+.org 0x8000
+pg7:
+
+.org 0x9000
+#endif
 /*
  * empty_bad_page is a bogus page that will be used when out of memory,
  * so that a process isn't accidentally killed due to a page fault when
@@ -136,7 +156,11 @@ pg3:
 .globl _empty_bad_page
 _empty_bad_page:
 
+#if MAX_MEGABYTES == 32
+.org 0xa000
+#else
 .org 0x6000
+#endif
 /*
  * empty_bad_page_table is similar to the above, but is used when the
  * system needs a bogus page-table
@@ -144,7 +168,11 @@ _empty_bad_page:
 .globl _empty_bad_page_table
 _empty_bad_page_table:
 
+#if MAX_MEGABYTES == 32
+.org 0xb000
+#else
 .org 0x7000
+#endif
 /*
  * tmp_floppy_area is used by the floppy-driver when DMA cannot
  * reach to a buffer-block. It needs to be aligned, so that it isn't
@@ -232,10 +260,17 @@ ignore_int:
  * I've tried to show which constants to change by having
  * some kind of marker at them (search for "16Mb"), but I
  * won't guarantee that's all :-( )
+ *
+ * (ref: added support for up to 32mb, 17Apr92)  -- Rik Faith
+ * (ref: update, 25Sept92)  -- croutons@crunchy.uucp 
  */
 .align 2
 setup_paging:
+#if MAXMEGABYTES == 32
+	movl $1024*9,%ecx		/* 9 pages - swapper_pg_dir+8 page tables */
+#else 
 	movl $1024*5,%ecx		/* 5 pages - swapper_pg_dir+4 page tables */
+#endif
 	xorl %eax,%eax
 	xorl %edi,%edi			/* swapper_pg_dir is at 0x000 */
 	cld;rep;stosl
@@ -246,8 +281,18 @@ setup_paging:
 	movl $pg1+7,_swapper_pg_dir+3076	/*  --------- " " --------- */
 	movl $pg2+7,_swapper_pg_dir+3080	/*  --------- " " --------- */
 	movl $pg3+7,_swapper_pg_dir+3084	/*  --------- " " --------- */
+#if MAX_MEGABYTES == 32
+	movl $pg4+7,_swapper_pg_dir+3088	/*  --------- " " --------- */
+	movl $pg5+7,_swapper_pg_dir+3092	/*  --------- " " --------- */
+	movl $pg6+7,_swapper_pg_dir+3096	/*  --------- " " --------- */
+	movl $pg7+7,_swapper_pg_dir+3100	/*  --------- " " --------- */
+
+	movl $pg7+4092,%edi
+	movl $0x1fff007,%eax		/*  32Mb - 4096 + 7 (r/w user,p) */
+#else 
 	movl $pg3+4092,%edi
-	movl $0xfff007,%eax		/*  16Mb - 4096 + 7 (r/w user,p) */
+	movl $0x0fff007,%eax		/*  16Mb - 4096 + 7 (r/w user,p) */
+#endif
 	std
 1:	stosl			/* fill pages backwards - more efficient :-) */
 	subl $0x1000,%eax
@@ -282,10 +327,14 @@ gdt_descr:
 	.word 256*8-1
 	.long 0xc0000000+_gdt
 
+/*
+ * This gdt setup gives the kernel a 1GB address space at virtual
+ * address 0xC0000000 - space enough for expansion, I hope.
+ */
 .align 4
 _gdt:
 	.quad 0x0000000000000000	/* NULL descriptor */
-	.quad 0xc0c09a0000000fff	/* 16Mb at 0xC0000000 */
-	.quad 0xc0c0920000000fff	/* 16Mb */
+	.quad 0xc0c39a000000ffff	/* 1GB at 0xC0000000 */
+	.quad 0xc0c392000000ffff	/* 1GB */
 	.quad 0x0000000000000000	/* TEMPORARY - don't use */
 	.fill 252,8,0			/* space for LDT's and TSS's etc */

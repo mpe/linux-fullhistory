@@ -122,6 +122,14 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 			if (prev_dir)
 				*prev_dir = NULL;
 		}
+		if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
+		    de->rec_len < de->name_len + 8) {
+			printk ("ext_find_entry: bad dir entry\n");
+			printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
+				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
+			brelse (bh);
+			return NULL;
+		}
 		if (ext_match(namelen,name,de)) {
 			*res_dir = de;
 			if (next_dir)
@@ -252,6 +260,14 @@ printk ("ext_add_entry : creating next block\n");
 			dir->i_size += de->rec_len;
 			dir->i_dirt = 1;
 			dir->i_ctime = CURRENT_TIME;
+		}
+		if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
+		    de->rec_len < de->name_len + 8) {
+			printk ("ext_addr_entry: bad dir entry\n");
+			printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
+				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
+			brelse (bh);
+			return NULL;
 		}
 		if (!de->inode && de->rec_len >= rec_len) {
 			if (de->rec_len > rec_len
@@ -470,6 +486,14 @@ static int empty_dir(struct inode * inode)
 				continue;
 			}
 			de = (struct ext_dir_entry *) bh->b_data;
+		}
+		if (de->rec_len < 8 || de->rec_len %4 != 0 ||
+		    de->rec_len < de->name_len + 8) {
+			printk ("empty_dir: bad dir entry\n");
+			printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
+				inode->i_dev, inode->i_ino, offset, de->rec_len, de->name_len);
+			brelse (bh);
+			return 1;
 		}
 		if (de->inode) {
 			brelse(bh);

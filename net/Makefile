@@ -32,6 +32,7 @@ subdirs: dummy
 clean:
 	rm -f core *.o *.a tmp_make
 	for i in *.c;do rm -f `basename $$i .c`.s;done
+	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE) clean) || exit; done
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make

@@ -4,14 +4,14 @@
 # default of FLOPPY is used by 'build'.
 #
 
-ROOT_DEV = /dev/hdb1
+ROOT_DEV =# /dev/hdb1
 
 #
 # uncomment this if you want kernel profiling: the profile_shift is the
 # granularity of the profiling (5 = 32-byte granularity)
 #
 
-PROFILING = -DPROFILE_SHIFT=2
+PROFILING =# -DPROFILE_SHIFT=2
 
 #
 # uncomment the correct keyboard:
@@ -30,9 +30,9 @@ PROFILING = -DPROFILE_SHIFT=2
 # 0x08 - tilde (~)
 # 0x10 - dieresis (umlaut)
 
-KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
+# KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKBD_FINNISH_LATIN1 -DKBDFLAGS=0x9F
-# KEYBOARD = -DKBD_US -DKBDFLAGS=0
+KEYBOARD = -DKBD_US -DKBDFLAGS=0
 # KEYBOARD = -DKBD_GR -DKBDFLAGS=0
 # KEYBOARD = -DKBD_GR_LATIN1 -DKBDFLAGS=0x9F
 # KEYBOARD = -DKBD_FR -DKBDFLAGS=0
@@ -43,6 +43,8 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # KEYBOARD = -DKBD_DVORAK -DKBDFLAGS=0
 # KEYBOARD = -DKBD_SG -DKBDFLAGS=0
 # KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_SF -DKBDFLAGS=0
+# KEYBOARD = -DKBD_SF_LATIN1 -DKBDFLAGS=0x9F
 # KEYBOARD = -DKDB_NO
 
 #
@@ -52,10 +54,23 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 MATH_EMULATION = -DKERNEL_MATH_EMULATION
 
 #
+# Maximum memory used by the kernel. This is normally 16MB - some of the
+# SCSI drivers may have problems with anything else due to DMA limits. The
+# drivers should check, but they don't. The ONLY valid values for
+# MAX_MEGABYTES are 16 and 32 - anything else needs kernel diffs.
+#
+# EVEN IF YOU HAVE > 16MB, YOU SHOULD EDIT THIS ONLY IF YOU ARE 100%
+# SURE YOU AREN'T USING ANY DEVICE THAT DOES UNCHECKED DMA!!  THE
+# FLOPPY DRIVER IS OK, BUT OTHERS MIGHT HAVE PROBLEMS.
+#
+
+MAX_MEGABYTES = 16
+
+#
 # standard CFLAGS
 #
 
-CFLAGS =-Wall -O6 -fomit-frame-pointer
+CFLAGS =-Wall -O6 -fomit-frame-pointer -DMAX_MEGABYTES=$(MAX_MEGABYTES)
 
 #
 # if you want the ram-disk device, define this to be the
@@ -80,7 +95,7 @@ LD	=ld
 HOSTCC	=gcc -static
 CC	=gcc -DKERNEL
 MAKE	=make
-CPP	=$(CC) -E
+CPP	=$(CC) -E -DMAX_MEGABYTES=$(MAX_MEGABYTES)
 AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
@@ -112,7 +127,7 @@ linuxsubdirs: dummy
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.97.pl6-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -133,6 +148,9 @@ tools/build: tools/build.c
 	-o tools/build tools/build.c
 
 boot/head.o: boot/head.s
+
+boot/head.s: boot/head.S
+	$(CPP) -traditional boot/head.S -o boot/head.s
 
 tools/version.o: tools/version.c tools/version.h
 
@@ -173,7 +191,7 @@ kernel: dummy
 
 clean:
 	rm -f Image System.map tmp_make core boot/bootsect boot/setup \
-		boot/bootsect.s boot/setup.s init/main.s
+		boot/bootsect.s boot/setup.s boot/head.s init/main.s
 	rm -f init/*.o tools/system tools/build boot/*.o tools/*.o
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
