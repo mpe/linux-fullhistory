@@ -30,8 +30,8 @@ struct nfs_fhbase {
 	struct dentry *		fb_dentry;	/* dentry cookie */
 	ino_t			fb_ino;		/* our inode number */
 	ino_t			fb_dirino;	/* dir inode number */
-	dev_t			fb_dev;		/* our device */
-	dev_t			fb_xdev;
+	kdev_t			fb_dev;		/* our device */
+	kdev_t			fb_xdev;
 	ino_t			fb_xino;
 };
 
@@ -80,7 +80,7 @@ u32	fh_verify(struct svc_rqst *, struct svc_fh *, int, int);
 void	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *);
 void	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);
-void	nfsd_fh_flush(dev_t);
+void	nfsd_fh_flush(kdev_t);
 void	nfsd_fh_init(void);
 void	nfsd_fh_free(void);
 

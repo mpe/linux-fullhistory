@@ -60,7 +60,7 @@ struct ip_fwuser
 #define IP_FW_F_MARKABS	0x0008  /* Set the mark to fw_mark, not add. */
 #define IP_FW_F_WILDIF	0x0010  /* Need only match start of interface name. */
 #define IP_FW_F_NETLINK 0x0020  /* Redirect to netlink: 2.1.x only */
-#define IP_FW_F_MASK	0x002F	/* All possible flag bits mask   */
+#define IP_FW_F_MASK	0x003F	/* All possible flag bits mask   */
 
 /* Values for "fw_invflg" field. */
 #define IP_FW_INV_SRCIP 0x0001  /* Invert the sense of fw_src. */

@@ -1234,7 +1234,7 @@ icn_writecmd(const u_char * buf, int len, int user, icn_card * card)
 			icn_map_channel(lastmap_card, lastmap_channel);
 		restore_flags(flags);
 		if (len) {
-			udelay(1000);
+			mdelay(1);
 			if (loop++ > 20)
 				break;
 		} else

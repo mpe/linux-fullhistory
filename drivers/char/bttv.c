@@ -242,7 +242,7 @@ static int I2CRead(struct i2c_bus *bus, unsigned char addr)
 		stat=btread(BT848_INT_STAT);
 		if (stat & BT848_INT_I2CDONE)
                         break;
-                udelay(1000);
+                mdelay(1);
 	}
   
 	if (!i) 
@@ -284,7 +284,7 @@ static int I2CWrite(struct i2c_bus *bus, unsigned char addr, unsigned char b1,
 		stat=btread(BT848_INT_STAT);
 		if (stat & BT848_INT_I2CDONE)
 			break;
-                udelay(1000);
+                mdelay(1);
 	}
   
 	if (!i) 
@@ -475,7 +475,7 @@ static void bt848_muxsel(struct bttv *btv, uint input)
 
 	/* This seems to get rid of some synchronization problems */
 	btand(~(3<<5), BT848_IFORM);
-	udelay(10000); 
+	mdelay(10); 
 
 	if (input==3) 
 	{
@@ -1587,12 +1587,13 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.depth!=8 && v.depth!=16 && v.depth!=24 && v.depth!=32)
 				return -EINVAL;
-			if (v.base)
+			if (v.base) {
 			        /* also handle virtual base addresses */
 			        if ((unsigned int)v.base>=0xe0000000UL)
 			                btv->win.vidadr=(uint)v.base;
 				else 
 				  btv->win.vidadr= __va(uvirt_to_bus((uint)v.base));
+			}
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=v.depth/8;

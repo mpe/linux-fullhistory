@@ -82,6 +82,7 @@ struct ipx_route_def
 
 extern int ipxrtr_route_skb(struct sk_buff *);
 extern int ipx_if_offset(unsigned long ipx_net_number);
+extern void ipx_remove_socket(struct sock *sk);
 #endif /* def __KERNEL__ */
 
 #endif /* def _IPX_H_ */

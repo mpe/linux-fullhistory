@@ -1305,7 +1305,7 @@ void local_flush_cache_range(struct mm_struct *mm, unsigned long start,
  * someday.
  *
  * For the MBX860 (at this time anyway), there is nothing to initialize
- * associated the the PROM.  Rather than include all of the prom.c
+ * the associated PROM.  Rather than include all of the prom.c
  * functions in the image just to get prom_init, all we really need right
  * now is the initialization of the physical memory region.
  */

@@ -39,11 +39,11 @@ struct rpc_task {
 	/*
 	 * RPC call state
 	 */
-	u32			tk_proc;	/* procedure number */
-	u32 *			tk_buffer;	/* XDR buffer */
+	__u32			tk_proc;	/* procedure number */
+	__u32 *			tk_buffer;	/* XDR buffer */
 	void *			tk_argp;	/* argument storage */
 	void *			tk_resp;	/* result storage */
-	u8			tk_garb_retry,
+	__u8			tk_garb_retry,
 				tk_cred_retry,
 				tk_suid_retry;
 

@@ -45,7 +45,7 @@
 #endif
 
 /*
- * Now lets try our best to supply some reasonable default values for
+ * Now let's try our best to supply some reasonable default values for
  * whatever defines GCC didn't supply.  This cannot be done correct for
  * all possible combinations of options, so be careful with your options
  * to GCC.  Best bet is to keep your fingers off the a.out GCC and use

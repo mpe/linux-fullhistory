@@ -543,7 +543,8 @@ __initfunc(static int check_pcibios(void))
 		pci_indirect.address = pcibios_entry + PAGE_OFFSET;
 
 		save_flags(flags); cli();
-		__asm__("lcall (%%edi)\n\t"
+		__asm__ __volatile__(
+			"lcall (%%edi)\n\t"
 			"jc 1f\n\t"
 			"xor %%ah, %%ah\n"
 			"1:"

@@ -216,10 +216,10 @@ on the kernel command line, as detailed above.
 
 Go read the NET-2-HOWTO and ETHERNET-HOWTO for Linux; they should be
 available where you picked up this driver.  Think of your ARCnet as a
-souped-up (or down, as the case may be) ethernet card.
+souped-up (or down, as the case may be) Ethernet card.
 
 By the way, be sure to change all references from "eth0" to "arc0" in the
-HOWTOs.  Remember that ARCnet isn't a "true" ethernet, and the device name
+HOWTOs.  Remember that ARCnet isn't a "true" Ethernet, and the device name
 is DIFFERENT.
 
 
@@ -245,7 +245,7 @@ The ARCnet drivers will now sort out their names automatically.
 How do I get it to work with...?
 --------------------------------
 
-NFS: Should be fine linux->linux, just pretend you're using ethernet cards. 
+NFS: Should be fine linux->linux, just pretend you're using Ethernet cards. 
         oak.oakland.edu:/simtel/msdos/nfs has some nice DOS clients.  There
         is also a DOS-based NFS server called SOSS.  It doesn't multitask
         quite the way Linux does (actually, it doesn't multitask AT ALL) but
@@ -271,7 +271,7 @@ Windows:  See DOS :)  Trumpet Winsock works fine with either the Novell or
 
 LAN Manager and Windows for Workgroups: These programs use protocols that
         are incompatible with the internet standard.  They try to pretend
-        the cards are ethernet, and confuse everyone else on the network. 
+        the cards are Ethernet, and confuse everyone else on the network. 
         
         However, v2.00 and higher of the Linux ARCnet driver supports this
         protocol via the 'arc0e' device.  See the section on "Multiprotocol

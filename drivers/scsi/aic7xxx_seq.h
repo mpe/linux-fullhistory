@@ -496,12 +496,12 @@ static unsigned char seqprog[] = {
 #define	SCB_PAGING      	0x8
 #define	TWIN_CHANNEL    	0x4
 #define	TARGET_MODE     	0x2
-struct patch {
+struct sequencer_patch {
 	int	options;
 	int	negative;
 	int	begin;
 	int	end;
-} patches[] = {
+} sequencer_patches[] = {
 	{ 0x00000002, 0, 0x001, 0x002 },
 	{ 0x00000002, 1, 0x002, 0x003 },
 	{ 0x00000004, 0, 0x009, 0x00d },

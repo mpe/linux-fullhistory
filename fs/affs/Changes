@@ -32,7 +32,7 @@ Version 3.9
 -----------
 
 - Moved cleanup from release_file() to put_inode().
-  This makes the the first one obsolete.
+  This makes the first one obsolete.
 
 - truncate() zeroes the unused remainder of a
   partially used last block when a file is truncated.

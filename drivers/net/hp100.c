@@ -338,7 +338,7 @@ static void hp100_RegisterDump( struct device *dev );
 /* TODO: This function should not really be needed in a good design... */
 static void wait( void )
 {
-  udelay( 1000 );
+  mdelay(1);
 }
 
 /*
@@ -1899,7 +1899,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
 		if ( lp->lan_type == HP100_LAN_100 )
 		  lp->hub_status = hp100_login_to_vg_hub( dev, FALSE );
 		hp100_start_interface( dev );
-		udelay(1000);
+		mdelay(1);
 	      }
         }
       dev->trans_start = jiffies;

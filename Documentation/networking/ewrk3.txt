@@ -35,9 +35,9 @@ sequences). To utilise this ability, you have to do 8 things:
     'ifconfig eth?? down' then 'rmmod ewrk3'.
 
 The performance we've  achieved so far  has been measured through the 'ttcp'
-tool   at 975kB/s.  This  measures  the  total  tcp  stack performance which
+tool   at 975kB/s.  This  measures  the  total  TCP  stack performance which
 includes the   card,  so don't  expect   to get   much nearer  the  1.25MB/s
-theoretical ethernet rate.
+theoretical Ethernet rate.
 
 
 Enjoy!

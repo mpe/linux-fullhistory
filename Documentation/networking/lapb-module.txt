@@ -6,7 +6,7 @@ The LAPB module will be a separately compiled module for use by any parts of
 the Linux operating system that require a LAPB service. This document
 defines the interfaces to, and the services provided by this module. The
 term module in this context does not imply that the LAPB module is a
-seperately loadable module, although it may be. The term module is used in
+separately loadable module, although it may be. The term module is used in
 its more standard meaning.
 
 The interface to the LAPB module consists of functions to the module,

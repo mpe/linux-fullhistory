@@ -129,6 +129,15 @@ void io_apic_write (unsigned int reg, unsigned int value)
 }
 
 /*
+ * Syncronize the IO-APIC and the CPU by doing
+ * a dummy read from the IO-APIC
+ */
+static inline void io_apic_sync(void)
+{
+	(void) *(IO_APIC_BASE+4);
+}
+
+/*
  * We disable IO-APIC IRQs by setting their 'destination CPU mask' to
  * zero. Trick, trick.
  */
@@ -141,6 +150,7 @@ void disable_IO_APIC_irq(unsigned int irq)
 		*(((int *)&entry)+1) = io_apic_read(0x11+pin*2);
 		entry.dest.logical.logical_dest = 0x0;
 		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
+		io_apic_sync();
 	}
 }
 
@@ -165,6 +175,7 @@ void mask_IO_APIC_irq(unsigned int irq)
 		*(((int *)&entry)+0) = io_apic_read(0x10+pin*2);
 		entry.mask = 1;
 		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));
+		io_apic_sync();
 	}
 }
 
@@ -891,6 +902,229 @@ __initfunc(static int timer_irq_works (void))
 
 	return 0;
 }
+
+#ifdef __SMP__
+
+/*
+ * In the SMP+IOAPIC case it might happen that there are an unspecified
+ * number of pending IRQ events unhandled. These cases are very rare,
+ * so we 'resend' these IRQs via IPIs, to the same CPU. It's much
+ * better to do it this way as thus we do not have to be aware of
+ * 'pending' interrupts in the IRQ path, except at this point.
+ */
+static inline void self_IPI (unsigned int irq)
+{
+	irq_desc_t *desc = irq_desc + irq;
+
+	if (desc->events && !desc->ipi) {
+		desc->ipi = 1;
+		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
+	}
+}
+
+/*
+ * Edge triggered needs to resend any interrupt
+ * that was delayed.
+ */
+static void enable_edge_ioapic_irq(unsigned int irq)
+{
+	self_IPI(irq);
+	enable_IO_APIC_irq(irq);
+}
+
+static void disable_edge_ioapic_irq(unsigned int irq)
+{
+	disable_IO_APIC_irq(irq);
+}
+
+/*
+ * Level triggered interrupts can just be masked
+ */
+static void enable_level_ioapic_irq(unsigned int irq)
+{
+	unmask_IO_APIC_irq(irq);
+}
+
+static void disable_level_ioapic_irq(unsigned int irq)
+{
+	mask_IO_APIC_irq(irq);
+}
+
+/*
+ * Enter and exit the irq handler context..
+ */
+static inline void enter_ioapic_irq(int cpu)
+{
+	hardirq_enter(cpu);
+	while (test_bit(0,&global_irq_lock)) barrier();
+}
+
+static inline void exit_ioapic_irq(int cpu)
+{
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}	
+
+static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
+{
+	irq_desc_t *desc = irq_desc + irq;
+	struct irqaction * action;
+
+	spin_lock(&irq_controller_lock);
+
+	/*
+	 * Edge triggered IRQs can be acked immediately
+	 * and do not need to be masked.
+	 */
+	ack_APIC_irq();
+	desc->ipi = 0;
+	desc->events = 1;
+
+	/*
+	 * If the irq is disabled for whatever reason, we cannot
+	 * use the action we have..
+	 */
+	action = NULL;
+	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+		action = desc->action;
+		desc->status = IRQ_INPROGRESS;
+		desc->events = 0;
+	}
+	spin_unlock(&irq_controller_lock);
+
+	/*
+	 * If there is no IRQ handler or it was disabled, exit early.
+	 */
+	if (!action)
+		return;
+
+	enter_ioapic_irq(cpu);
+
+	/*
+	 * Edge triggered interrupts need to remember
+	 * pending events..
+	 */
+	for (;;) {
+		int pending;
+
+		handle_IRQ_event(irq, regs);
+
+		spin_lock(&irq_controller_lock);
+		pending = desc->events;
+		desc->events = 0;
+		if (!pending)
+			break;
+		spin_unlock(&irq_controller_lock);
+	}
+	desc->status &= IRQ_DISABLED;
+	spin_unlock(&irq_controller_lock);
+
+	exit_ioapic_irq(cpu);
+}
+
+static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
+						 struct pt_regs * regs)
+{
+	irq_desc_t *desc = irq_desc + irq;
+	struct irqaction * action;
+
+	spin_lock(&irq_controller_lock);
+	/*
+	 * In the level triggered case we first disable the IRQ
+	 * in the IO-APIC, then we 'early ACK' the IRQ, then we
+	 * handle it and enable the IRQ when finished.
+	 *
+	 * disable has to happen before the ACK, to avoid IRQ storms.
+	 * So this all has to be within the spinlock.
+	 */
+	mask_IO_APIC_irq(irq);
+
+	desc->ipi = 0;
+
+	/*
+	 * If the irq is disabled for whatever reason, we must
+	 * not enter the irq action.
+	 */
+	action = NULL;
+	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
+		action = desc->action;
+		desc->status = IRQ_INPROGRESS;
+	}
+
+	ack_APIC_irq();
+	spin_unlock(&irq_controller_lock);
+
+	/* Exit early if we had no action or it was disabled */
+	if (!action)
+		return;
+
+	enter_ioapic_irq(cpu);
+
+	handle_IRQ_event(irq, regs);
+
+	spin_lock(&irq_controller_lock);
+	desc->status &= ~IRQ_INPROGRESS;
+	if (!desc->status)
+		unmask_IO_APIC_irq(irq);
+	spin_unlock(&irq_controller_lock);
+
+	exit_ioapic_irq(cpu);
+}
+
+/*
+ * Level and edge triggered IO-APIC interrupts need different handling,
+ * so we use two separate irq descriptors. edge triggered IRQs can be
+ * handled with the level-triggered descriptor, but that one has slightly
+ * more overhead. Level-triggered interrupts cannot be handled with the
+ * edge-triggered handler, without risking IRQ storms and other ugly
+ * races.
+ */
+
+static struct hw_interrupt_type ioapic_edge_irq_type = {
+	"IO-APIC-edge",
+	do_edge_ioapic_IRQ,
+	enable_edge_ioapic_irq,
+	disable_edge_ioapic_irq
+};
+
+static struct hw_interrupt_type ioapic_level_irq_type = {
+	"IO-APIC-level",
+	do_level_ioapic_IRQ,
+	enable_level_ioapic_irq,
+	disable_level_ioapic_irq
+};
+
+void init_IO_APIC_traps(void)
+{
+	int i;
+	/*
+	 * NOTE! The local APIC isn't very good at handling
+	 * multiple interrupts at the same interrupt level.
+	 * As the interrupt level is determined by taking the
+	 * vector number and shifting that right by 4, we
+	 * want to spread these out a bit so that they don't
+	 * all fall in the same interrupt level
+	 *
+	 * also, we've got to be careful not to trash gate
+	 * 0x80, because int 0x80 is hm, kindof importantish ;)
+	 */
+	for (i = 0; i < NR_IRQS ; i++) {
+		if ((IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ &&
+		    (IO_APIC_IRQ(i))) {
+			if (IO_APIC_irq_trigger(i))
+				irq_desc[i].handler = &ioapic_level_irq_type;
+			else
+				irq_desc[i].handler = &ioapic_edge_irq_type;
+			/*
+			 * disable it in the 8259A:
+			 */
+			cached_irq_mask |= 1 << i;
+			if (i < 16)
+				set_8259A_irq_mask(i);
+		}
+	}
+}
+#endif
 
 /*
  * This code may look a bit paranoid, but it's supposed to cooperate with

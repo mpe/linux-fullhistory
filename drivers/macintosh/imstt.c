@@ -234,12 +234,12 @@ struct ibm_single_crmodevals
 struct ims_crmodevals
 {
 	int pitch;
-	struct tt_single_rmodevals tt[2];  // for each ramdac  seperate tt config
+	struct tt_single_rmodevals tt[2];  // for each RAMDAC separate tt config
 
-	struct tvp_single_rmodevals tvp_clock;  // for each ramdac  seperate clock config
+	struct tvp_single_rmodevals tvp_clock;  // for each RAMDAC separate clock config
 	struct tvp_single_crmodevals tvp[3]; 	   // for each colormode 
 
-	struct ibm_single_rmodevals ibm_clock;  // for each ramdac  seperate clock config
+	struct ibm_single_rmodevals ibm_clock;  // for each RAMDAC separate clock config
 //	struct ibm_single_crmodevals ibm[3];	   // for each color mode 
 };
 
@@ -661,7 +661,7 @@ map_imstt_display(struct device_node *dp, int which)
 }
 
 /*
- * We dont need it ( all is done in ims_init )
+ * We don't need it ( all is done in ims_init )
 static void
 set_imstt_clock_tvp(char* tvprv)
 {

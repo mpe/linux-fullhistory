@@ -150,7 +150,7 @@ extern int serial_console;
 void machine_halt(void)
 {
 	sti();
-	udelay(8000);
+	mdelay(8);
 	cli();
 #ifdef CONFIG_SUN_CONSOLE
 	if (!serial_console)
@@ -165,7 +165,7 @@ void machine_restart(char * cmd)
 	char *p;
 	
 	sti();
-	udelay(8000);
+	mdelay(8);
 	cli();
 
 	p = strchr (reboot_command, '\n');

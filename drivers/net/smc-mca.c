@@ -54,7 +54,7 @@ static void ultramca_block_input(struct device *dev, int count,
                                  int ring_offset);
 static void ultramca_block_output(struct device *dev, int count,
                                   const unsigned char *buf,
-                                  const start_page);
+                                  const int start_page);
 static int ultramca_close_card(struct device *dev);
 
 #define START_PG        0x00    /* First page of TX buffer */

@@ -10,7 +10,7 @@
  * 		This module implements the AX.25 protocol for kernel-based
  *		devices like TTYs. It interfaces between a raw TTY, and the
  *		kernel's AX.25 protocol layers, just like slip.c.
- *		AX.25 needs to be seperated from slip.c while slip.c is no
+ *		AX.25 needs to be separated from slip.c while slip.c is no
  *		longer a static kernel device since it is a module.
  *		This method clears the way to implement other kiss protocols
  *		like mkiss smack g8bpq ..... so far only mkiss is implemented.

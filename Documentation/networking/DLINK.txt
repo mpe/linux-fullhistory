@@ -72,7 +72,7 @@ Released 1994-06-13
 
 	o Get the latest net binaries, according to current net.wisdom.
 
-	o Read the NET-2 and Ethernet HOWTO's and modify your setup.
+	o Read the NET-2 and Ethernet HOWTOs and modify your setup.
 
 	o If your parallel port has a strange address or irq,
 	  modify "linux/drivers/net/CONFIG" accordingly, or adjust

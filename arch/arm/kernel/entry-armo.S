@@ -397,12 +397,12 @@ Laddrexcptn_illegal_mode:
 /*=============================================================================
  * Interrupt (IRQ) handler
  *-----------------------------------------------------------------------------
- * Note: if in user mode, then *no* kernel routine is running, so dont have
+ * Note: if in user mode, then *no* kernel routine is running, so do not have
  *       to save svc lr
  * (r13 points to irq temp save area)
  */
 
-vector_IRQ:	ldr	r13, .LCirq			@ Ill leave this one in just in case...
+vector_IRQ:	ldr	r13, .LCirq			@ I will leave this one in just in case...
 		sub	lr, lr, #4
 		str	lr, [r13]
 		tst	lr, #3

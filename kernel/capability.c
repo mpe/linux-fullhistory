@@ -25,9 +25,7 @@ static inline void cap_touser(__u32 *u, const kernel_cap_t *k)
      copy_to_user(u, k, sizeof(*k));
 }
 
-#ifdef __SMP__
-static spinlock_t task_capability_lock;
-#endif
+spinlock_t task_capability_lock;
 
 /*
  * For sys_getproccap() and sys_setproccap(), any of the three

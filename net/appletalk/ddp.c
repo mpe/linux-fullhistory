@@ -254,7 +254,7 @@ static struct atalk_route atrtr_default; /* For probing devices or in a routerle
  */
 
 /*
- * Drop a device. Doesn't drop any of its routes - that is the the callers
+ * Drop a device. Doesn't drop any of its routes - that is the caller's
  * problem. Called when we down the interface or delete the address.
  */
 static void atif_drop_device(struct device *dev)

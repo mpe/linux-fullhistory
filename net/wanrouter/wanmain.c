@@ -24,6 +24,7 @@
 * Jun 27, 1997  Alan Cox	realigned with vendor code
 * Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
 * Apr 20, 1998	Alan Cox	Fixed 2.1 symbols
+* May 17, 1998  K. Baranowski	Fixed SNAP encapsulation in wan_encapsulate
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -288,11 +289,11 @@ int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev)
 	case ETH_P_IPX:		/* SNAP encapsulation */
 	case ETH_P_ARP:
 		hdr_len += 7;
-		skb_push(skb, 6);
+		skb_push(skb, 7);
 		skb->data[0] = 0;
 		skb->data[1] = NLPID_SNAP;
-		memcpy(&skb->data[1], oui_ether, sizeof(oui_ether));
-		*((unsigned short*)&skb->data[4]) = htons(skb->protocol);
+		memcpy(&skb->data[2], oui_ether, sizeof(oui_ether));
+		*((unsigned short*)&skb->data[5]) = htons(skb->protocol);
 		break;
 
 	default:		/* Unknown packet type */

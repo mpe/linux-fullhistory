@@ -37,7 +37,7 @@ static int fifo_cfg = 0x0020;				/* Bypass external Tx FIFO. */
 
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1518 effectively disables this feature. */
-static const rx_copybreak = 100;
+static const int rx_copybreak = 100;
 
 /* Keep the ring sizes a power of two for efficiency.
    Making the Tx ring too large decreases the effectiveness of channel
@@ -948,7 +948,7 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 	return;
 }
 
-/* This routine is logically part of the interrupt handler, but seperated
+/* This routine is logically part of the interrupt handler, but separated
    for clarity and better register allocation. */
 static int
 yellowfin_rx(struct device *dev)

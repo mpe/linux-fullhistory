@@ -451,7 +451,7 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
 			save_flags(pflags);
 			cli();
 			SDLA_WINDOW(dev, window);
-			waiting = ((volatile)(cmd_buf->opp_flag));
+			waiting = ((volatile int)(cmd_buf->opp_flag));
 			restore_flags(pflags);
 		}
 	}

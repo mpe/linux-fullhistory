@@ -4,7 +4,7 @@
  * This is a modified version of the CDU-31A device driver (see below).
  * Changes were made using documentation for the CDU-531 (which Sony
  * assures me is very similar to the 535) and partial disassembly of the
- * DOS driver.  I used Minyard's driver and replaced the the CDU-31A
+ * DOS driver.  I used Minyard's driver and replaced the CDU-31A
  * commands with the CDU-531 commands.  This was complicated by a different
  * interface protocol with the drive.  The driver is still polled.
  *

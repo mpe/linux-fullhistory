@@ -42,8 +42,8 @@ int ap_verify_data(char *d,int len)
 	return res;
 }
 
-/* How many bogo mips in the entire machine
-Dont worry about float because when it gets this big, its irrelevant */
+/* How many BogoMIPS in the entire machine
+Don't worry about float because when it gets this big, it's irrelevant */
 int mpp_agg_bogomips(void)
 {
   return mpp_num_cells()*loops_per_sec/500000; /* cheat in working it out */

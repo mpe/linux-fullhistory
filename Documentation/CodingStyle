@@ -132,7 +132,7 @@ The maximum length of a function is inversely proportional to the
 complexity and indentation level of that function.  So, if you have a
 conceptually simple function that is just one long (but simple)
 case-statement, where you have to do lots of small things for a lot of
-different cases, it's ok to have a longer function. 
+different cases, it's OK to have a longer function. 
 
 However, if you have a complex function, and you suspect that a
 less-than-gifted first-year high-school student might not even

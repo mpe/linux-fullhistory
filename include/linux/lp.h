@@ -129,6 +129,8 @@ struct lp_struct {
 #endif
 	struct wait_queue *wait_q;
 	unsigned int last_error;
+	volatile unsigned int irq_detected:1;
+	volatile unsigned int irq_missed:1;
 };
 
 /*

@@ -18,7 +18,7 @@
  *	AX.25 032	Joerg(DL1BKE)	Fixed DAMA timeout bug
  *	AX.25 033	Jonathan(G4KLX)	Modularisation functions.
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
- *	AX.25 036	Jonathan(G4KLX)	Split Standard and DAMA code into seperate files.
+ *	AX.25 036	Jonathan(G4KLX)	Split Standard and DAMA code into separate files.
  *			Joerg(DL1BKE)	Fixed DAMA Slave. We are *required* to start with
  *					standard AX.25 mode.
  *	AX.25 037	Jonathan(G4KLX)	New timer architecture.

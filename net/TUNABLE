@@ -10,7 +10,7 @@ NUM_PROTO		Maximum loadable address family, will need recompile
 MAX_LINKS		Maximum number of netlink minor devices. (1-32)
 MAX_QBYTES		Size of a netlink device queue (tunable)
 RIF_TABLE_SIZE		Token ring RIF cache size (tunable)
-AARP_HASH_SIZE		Size of appletalk hash table (tunable)
+AARP_HASH_SIZE		Size of Appletalk hash table (tunable)
 AX25_DEF_T1		AX.25 parameters. These are all tunable via
 AX25_DEF_T2		SIOCAX25SETPARMS
 AX25_DEF_T3		T1-T3,N2 have the meanings in the specification

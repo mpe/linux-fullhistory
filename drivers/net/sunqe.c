@@ -263,7 +263,7 @@ static int qe_init(struct sunqe *qep, int from_irq)
 
 	/* Wait a little bit for the link to come up... */
 	if(!(mregs->phyconfig & MREGS_PHYCONFIG_LTESTDIS)) {
-		udelay(5000);
+		mdelay(5);
 		if(!(mregs->phyconfig & MREGS_PHYCONFIG_LSTAT))
 			printk("%s: Warning, link state is down.\n", qep->dev->name);
 	}

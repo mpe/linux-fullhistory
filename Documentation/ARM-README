@@ -29,7 +29,7 @@ Contributors
 Todo list
 ---------
 
-  This is the list of changes to be done (roughly prioritorised):
+  This is the list of changes to be done (roughly prioritised):
 
   * fully test new MEMC translation code
   * fully test new AcornSCSI driver.
@@ -123,7 +123,7 @@ Kernel initialisation abort codes
 Request to developers
 ---------------------
 
-  When writing device drivers which include a separate assember file, please
+  When writing device drivers which include a separate assembler file, please
   include it in with the C file, and not the arch/arm/lib directory.  This
   allows the driver to be compiled as a loadable module without requiring
   half the code to be compiled into the kernel image.

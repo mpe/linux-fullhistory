@@ -3361,7 +3361,6 @@ static void stli_ecpmcreset(stlibrd_t *brdp)
 static void stli_onbinit(stlibrd_t *brdp)
 {
 	unsigned long	memconf;
-	int		i;
 
 #if DEBUG
 	printk("stli_onbinit(brdp=%d)\n", (int) brdp);
@@ -3370,13 +3369,12 @@ static void stli_onbinit(stlibrd_t *brdp)
 	outb(ONB_ATSTOP, (brdp->iobase + ONB_ATCONFR));
 	udelay(10);
 	outb(ONB_ATDISABLE, (brdp->iobase + ONB_ATCONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 
 	memconf = (brdp->memaddr & ONB_ATADDRMASK) >> ONB_ATADDRSHFT;
 	outb(memconf, (brdp->iobase + ONB_ATMEMAR));
 	outb(0x1, brdp->iobase);
-	udelay(1000);
+	mdelay(1);
 }
 
 /*****************************************************************************/
@@ -3425,7 +3423,6 @@ static char *stli_onbgetmemptr(stlibrd_t *brdp, unsigned long offset, int line)
 
 static void stli_onbreset(stlibrd_t *brdp)
 {	
-	int	i;
 
 #if DEBUG
 	printk("stli_onbreset(brdp=%x)\n", (int) brdp);
@@ -3434,8 +3431,7 @@ static void stli_onbreset(stlibrd_t *brdp)
 	outb(ONB_ATSTOP, (brdp->iobase + ONB_ATCONFR));
 	udelay(10);
 	outb(ONB_ATDISABLE, (brdp->iobase + ONB_ATCONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 }
 
 /*****************************************************************************/
@@ -3447,7 +3443,6 @@ static void stli_onbreset(stlibrd_t *brdp)
 static void stli_onbeinit(stlibrd_t *brdp)
 {
 	unsigned long	memconf;
-	int		i;
 
 #if DEBUG
 	printk("stli_onbeinit(brdp=%d)\n", (int) brdp);
@@ -3457,15 +3452,14 @@ static void stli_onbeinit(stlibrd_t *brdp)
 	outb(ONB_EISTOP, (brdp->iobase + ONB_EICONFR));
 	udelay(10);
 	outb(ONB_EIDISABLE, (brdp->iobase + ONB_EICONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 
 	memconf = (brdp->memaddr & ONB_EIADDRMASKL) >> ONB_EIADDRSHFTL;
 	outb(memconf, (brdp->iobase + ONB_EIMEMARL));
 	memconf = (brdp->memaddr & ONB_EIADDRMASKH) >> ONB_EIADDRSHFTH;
 	outb(memconf, (brdp->iobase + ONB_EIMEMARH));
 	outb(0x1, brdp->iobase);
-	udelay(1000);
+	mdelay(1);
 }
 
 /*****************************************************************************/
@@ -3521,7 +3515,6 @@ static char *stli_onbegetmemptr(stlibrd_t *brdp, unsigned long offset, int line)
 
 static void stli_onbereset(stlibrd_t *brdp)
 {	
-	int	i;
 
 #if DEBUG
 	printk("stli_onbereset(brdp=%x)\n", (int) brdp);
@@ -3530,8 +3523,7 @@ static void stli_onbereset(stlibrd_t *brdp)
 	outb(ONB_EISTOP, (brdp->iobase + ONB_EICONFR));
 	udelay(10);
 	outb(ONB_EIDISABLE, (brdp->iobase + ONB_EICONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 }
 
 /*****************************************************************************/
@@ -3542,7 +3534,6 @@ static void stli_onbereset(stlibrd_t *brdp)
 
 static void stli_bbyinit(stlibrd_t *brdp)
 {
-	int	i;
 
 #if DEBUG
 	printk("stli_bbyinit(brdp=%d)\n", (int) brdp);
@@ -3551,10 +3542,9 @@ static void stli_bbyinit(stlibrd_t *brdp)
 	outb(BBY_ATSTOP, (brdp->iobase + BBY_ATCONFR));
 	udelay(10);
 	outb(0, (brdp->iobase + BBY_ATCONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 	outb(0x1, brdp->iobase);
-	udelay(1000);
+	mdelay(1);
 }
 
 /*****************************************************************************/
@@ -3587,7 +3577,6 @@ static char *stli_bbygetmemptr(stlibrd_t *brdp, unsigned long offset, int line)
 
 static void stli_bbyreset(stlibrd_t *brdp)
 {	
-	int	i;
 
 #if DEBUG
 	printk("stli_bbyreset(brdp=%x)\n", (int) brdp);
@@ -3596,8 +3585,7 @@ static void stli_bbyreset(stlibrd_t *brdp)
 	outb(BBY_ATSTOP, (brdp->iobase + BBY_ATCONFR));
 	udelay(10);
 	outb(0, (brdp->iobase + BBY_ATCONFR));
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 }
 
 /*****************************************************************************/
@@ -3608,15 +3596,13 @@ static void stli_bbyreset(stlibrd_t *brdp)
 
 static void stli_stalinit(stlibrd_t *brdp)
 {
-	int	i;
 
 #if DEBUG
 	printk("stli_stalinit(brdp=%d)\n", (int) brdp);
 #endif
 
 	outb(0x1, brdp->iobase);
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 }
 
 /*****************************************************************************/
@@ -3646,7 +3632,6 @@ static char *stli_stalgetmemptr(stlibrd_t *brdp, unsigned long offset, int line)
 static void stli_stalreset(stlibrd_t *brdp)
 {	
 	volatile unsigned long	*vecp;
-	int			i;
 
 #if DEBUG
 	printk("stli_stalreset(brdp=%x)\n", (int) brdp);
@@ -3655,8 +3640,7 @@ static void stli_stalreset(stlibrd_t *brdp)
 	vecp = (volatile unsigned long *) (brdp->membase + 0x30);
 	*vecp = 0xffff0000;
 	outb(0, brdp->iobase);
-	for (i = 0; (i < 1000); i++)
-		udelay(1000);
+	mdelay(1000);
 }
 
 /*****************************************************************************/
@@ -4167,10 +4151,9 @@ static inline int stli_eisamemprobe(stlibrd_t *brdp)
 		outb(ONB_EISTOP, (brdp->iobase + ONB_EICONFR));
 		udelay(10);
 		outb(ONB_EIDISABLE, (brdp->iobase + ONB_EICONFR));
-		for (i = 0; (i < 100); i++)
-			udelay(1000);
+		mdelay(100);
 		outb(0x1, brdp->iobase);
-		udelay(1000);
+		mdelay(1);
 		stli_onbeenable(brdp);
 	} else {
 		return(-ENODEV);

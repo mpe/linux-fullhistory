@@ -56,13 +56,13 @@ PPC, you can end up with a setup like this:
 where all the addresses actually point to the same thing, it's just seen 
 through different translations..
 
-Similarly, on the alpha, the normal translation is
+Similarly, on the Alpha, the normal translation is
 
  physical address:	0
  virtual address:	0xfffffc0000000000
  bus address:		0x40000000
 
-(but there are also alpha's where the physical address and the bus address
+(but there are also Alphas where the physical address and the bus address
 are the same). 
 
 Anyway, the way to look up all these translations, you do
@@ -169,7 +169,7 @@ For such memory, you can do things like
 
 Ok, that just about covers the basics of accessing IO portably.  Questions?
 Comments? You may think that all the above is overly complex, but one day you
-might find yourself with a 500MHz alpha in front of you, and then you'll be
+might find yourself with a 500 MHz Alpha in front of you, and then you'll be
 happy that your driver works ;)
 
 Note that kernel versions 2.0.x (and earlier) mistakenly called the

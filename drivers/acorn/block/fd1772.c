@@ -507,7 +507,7 @@ static void check_change(void)
 	if (fdc_busy)
 		return;		/* Don't start poking about if the fdc is busy */
 
-	return;			/* lets just forget it for the mo DAG */
+	return;			/* let's just forget it for the mo DAG */
 
 	if (++drive > 1 || !unit[drive].connected)
 		drive = 0;
@@ -533,7 +533,7 @@ static void check_change(void)
 
 
 /* Handling of the Head Settling Flag: This flag should be set after each
- * seek operation, because we dont't use seeks with verify.
+ * seek operation, because we don't use seeks with verify.
  */
 
 static __inline__ void set_head_settle_flag(void)

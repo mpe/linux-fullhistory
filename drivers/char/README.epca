@@ -44,7 +44,7 @@ The four user programs listed below are described in this document:
    as it does not require the rebuilding of the kernel.  In order to use lilo
    to configure Digi boards at boot time an appropriate append command should
    be added to /etc/lilo.conf below the appropriate label decleration.  
-   See footer 4.  The append commands format is a string of comma seperated
+   See footer 4.  The append commands format is a string of comma separated
    identifiers or integers used to configure supported boards.  These six
    values in order are:
 

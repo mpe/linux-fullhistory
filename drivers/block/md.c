@@ -290,7 +290,7 @@ static int analyze_sbs (int minor, int pnum)
 	}
 
 	/*
-	 * Ok, we have all disks and the array is ready to run. Lets
+	 * OK, we have all disks and the array is ready to run. Let's
 	 * find the freshest superblock, that one will be the superblock
 	 * that represents the whole array.
 	 */
@@ -1134,7 +1134,7 @@ int md_do_sync(struct md_dev *mddev)
 		}
 
 		/*
-		 * Lets sleep some if we are faster than our speed limit:
+		 * Let's sleep some if we are faster than our speed limit:
 		 */
 		while (blocksize*j/(jiffies-starttime+1)*HZ/1024 > SPEED_LIMIT)
 		{

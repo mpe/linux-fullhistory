@@ -236,7 +236,7 @@ Your cooperation is appreciated.
 		  1 = /dev/loop1	Second loopback device
 		      ...
 
-		The loopback devices are used to mount filesystems not
+		The loopback devices are used to mount file systems not
 		associated with block devices.	The binding to the
 		loopback devices is handled by mount(8) or losetup(8).
 
@@ -288,7 +288,7 @@ Your cooperation is appreciated.
 		      ...
 
 		The metadisk driver is used to span a
-		filesystem across multiple physical disks.
+		file system across multiple physical disks.
 
  10 char	Non-serial mice, misc features
 		  0 = /dev/logibm	Logitech bus mouse
@@ -387,11 +387,11 @@ Your cooperation is appreciated.
 		 33 = /dev/patmgr1	Sequencer patch manager
 		 34 = /dev/midi02	Third MIDI port
 		 50 = /dev/midi03	Fourth MIDI port
-    block	BIOS harddrive callback support
-		  0 = /dev/dos_hda	First BIOS harddrive whole disk
-		 64 = /dev/dos_hdb	Second BIOS harddrive whole disk
-		128 = /dev/dos_hdc	Third BIOS harddrive whole disk
-		192 = /dev/dos_hdd	Fourth BIOS harddrive whole disk
+    block	BIOS hard drive callback support
+		  0 = /dev/dos_hda	First BIOS hard drive whole disk
+		 64 = /dev/dos_hdb	Second BIOS hard drive whole disk
+		128 = /dev/dos_hdc	Third BIOS hard drive whole disk
+		192 = /dev/dos_hdd	Fourth BIOS hard drive whole disk
 
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
@@ -785,18 +785,18 @@ Your cooperation is appreciated.
 		  1 = /dev/nb1		Second network block device
 		      ...
 
-		Network Block Device is somehow similar to loopback
-		devices: If you read from it, it sends packet accross
-		network asking server for data. If you write to it, it
-		sends packet telling server to write. It could be used
-		to mounting filesystems over the net, swapping over
-		the net, implementing block device in userland etc.
+		The network block device is similar to a loopback device:
+		if you read from it, it sends packets across the network
+		asking the server for data. If you write to it, it sends
+		packets telling the server to write. It could be used to
+		mount file systems over the net, swap over the net, 
+		implement block devices in userland, etc.
 
  44 char	isdn4linux virtual modem - alternate devices
 		  0 = /dev/cui0		Callout device corresponding to ttyI0
 		      ...
 		 63 = /dev/cui63	Callout device corresponding to ttyI63
-    block	Flash Translatio Layer (FTL) filesystems
+    block	Flash Translation Layer (FTL) file systems
 		  0 = /dev/ftla		FTL on first Memory Technology Device
 		 16 = /dev/ftlb		FTL on second Memory Technology Device
 		 32 = /dev/ftlc		FTL on third Memory Technology Device
@@ -1247,7 +1247,7 @@ exist, they should have the following uses.
 /dev/cdwriter	CD-writer	symbolic	Current CD-writer device
 /dev/scanner	scanner		symbolic	Current scanner device
 /dev/modem	modem port	symbolic	Current dialout device
-/dev/root	root device	symbolic	Current root filesystem
+/dev/root	root device	symbolic	Current root file system
 /dev/swap	swap device	symbolic	Current swap device
 
 /dev/modem should not be used for a modem which supports dialin as
@@ -1280,7 +1280,7 @@ for a session; this includes virtual consoles, serial ports, and
 pseudoterminals (PTYs).
 
 All terminal devices share a common set of capabilities known as line
-diciplines; these include the common terminal line dicipline as well
+disciplines; these include the common terminal line discipline as well
 as SLIP and PPP modes.
 
 All terminal devices are named similarly; this section explains the
@@ -1359,7 +1359,7 @@ port TTY, for which no alternate device would exist.
 	Pseudoterminals (PTYs)
 
 Pseudoterminals, or PTYs, are used to create login sessions or provide
-other capabilities requiring a TTY line dicipline (including SLIP or
+other capabilities requiring a TTY line discipline (including SLIP or
 PPP capability) to arbitrary data-generation processes.  Each PTY has
 a master side, named /dev/pty[p-za-e][0-9a-f], and a slave side, named
 /dev/tty[p-za-e][0-9a-f].  The kernel arbitrates the use of PTYs by

@@ -1,7 +1,7 @@
 
 	Linux kernel release 2.1.xx
 
-These are the release notes for linux version 2.1.  Read them carefully,
+These are the release notes for Linux version 2.1.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
 
@@ -45,7 +45,7 @@ ON WHAT HARDWARE DOES IT RUN?
 DOCUMENTATION:
 
  - There is a lot of documentation available both in electronic form on
-   the internet and in books, both Linux-specific and pertaining to
+   the Internet and in books, both Linux-specific and pertaining to
    general UNIX questions.  I'd recommend looking into the documentation
    subdirectories on any Linux ftp site for the LDP (Linux Documentation
    Project) books.  This README is not meant to be documentation on the
@@ -170,7 +170,7 @@ CONFIGURING the kernel:
 COMPILING the kernel:
 
  - Make sure you have gcc-2.7.0 or newer available.  It seems older gcc
-   versions can have problems compiling newer versions of linux.  This
+   versions can have problems compiling newer versions of Linux.  This
    is mainly because the older compilers can only generate "a.out"-format
    executables.  As of Linux 2.1.0, the kernel must be compiled as an
    "ELF" binary.  If you upgrade your compiler, remember to get the new

@@ -19,7 +19,7 @@ fi
 endmenu
 
 mainmenu_option next_comment
-comment 'Platform dependant setup'
+comment 'Platform-dependent setup'
 
 bool 'Amiga support' CONFIG_AMIGA
 bool 'Atari support' CONFIG_ATARI

@@ -93,7 +93,7 @@ int aha1740_proc_info(char *buffer, char **start, off_t offset,
     }
     host = HOSTDATA(shpnt);
 
-    len = sprintf(buffer, "aha174x at IO:%x, IRQ %d, SLOT %d.\n"
+    len = sprintf(buffer, "aha174x at IO:%lx, IRQ %d, SLOT %d.\n"
 		  "Extended translation %sabled.\n",
 		  shpnt->io_port, shpnt->irq, host->slot,
 		  host->translation ? "en" : "dis");

@@ -1042,7 +1042,7 @@ static int ibmmca_getinfo (char *buf, int slot, void *dev)
   int len = 0;
 
   len += sprintf (buf + len, "Subsystem PUN: %d\n", subsystem_pun);
-  len += sprintf (buf + len, "I/O base address: 0x%x\n", IM_CMD_REG);
+  len += sprintf (buf + len, "I/O base address: 0x%lx\n", IM_CMD_REG);
   return len;
 }
 
@@ -1269,7 +1269,7 @@ static void check_devices (struct Scsi_Host *shpnt)
 		    issue_cmd (shpnt, IM_RESET_IMM_CMD, IM_IMM_CMD | ldn);
 		    while (reset_status == IM_RESET_IN_PROGRESS && --ticks) 
 		      {
-			udelay(1000000/HZ);
+			mdelay(1+999/HZ);
 			barrier();
 		      }
 		    /* if reset did not complete, just claim */
@@ -2072,7 +2072,7 @@ ibmmca_reset (Scsi_Cmnd * cmd, unsigned int reset_flags)
   reset_status = IM_RESET_IN_PROGRESS;
   issue_cmd (shpnt, IM_RESET_IMM_CMD, IM_IMM_CMD | 0xf);
   while (reset_status == IM_RESET_IN_PROGRESS && --ticks) {
-    udelay(1000000/HZ);
+    mdelay(1+999/HZ);
     barrier();
   }
   /* if reset did not complete, just return an error*/
@@ -2205,7 +2205,7 @@ int ibmmca_proc_info (char *buffer, char **start, off_t offset, int length,
 #endif
    len += sprintf(buffer+len, "               This Hostnumber..........: %d\n",
 		  hostno);
-   len += sprintf(buffer+len, "               Base I/O-Port............: 0x%x\n",
+   len += sprintf(buffer+len, "               Base I/O-Port............: 0x%lx\n",
 		  IM_CMD_REG);
    len += sprintf(buffer+len, "               (Shared) IRQ.............: %d\n",
 		  IM_IRQ);

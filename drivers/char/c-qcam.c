@@ -149,7 +149,7 @@ static int qc_detect(struct qcam_device *qcam)
 	ostat = stat = parport_read_status(qcam->pport);
 	for (i=0; i<250; i++) 
 	{
-		udelay(1000);
+		mdelay(1);
 		stat = parport_read_status(qcam->pport);
 		if (ostat != stat) 
 		{
@@ -166,9 +166,9 @@ static void qc_reset(struct qcam_device *qcam)
 {
 	parport_write_control(qcam->pport, 0xc);
 	parport_write_control(qcam->pport, 0x8);
-	udelay(1000);
+	mdelay(1);
 	parport_write_control(qcam->pport, 0xc);
-	udelay(1000);          
+	mdelay(1);          
 }
 
 /* Reset the QuickCam and program for brightness, contrast,
@@ -325,7 +325,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 	{
 		/* Turn the port around */
 		parport_frob_control(q->pport, 0x20, 0x20);
-		udelay(3000);
+		mdelay(3);
 		qcam_set_ack(q, 0);
 		if (qcam_await_ready1(q, 1)) {
 			kfree(tmpbuf);
@@ -392,7 +392,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 			return len;
 		}
 		parport_frob_control(q->pport, 0x20, 0);
-		udelay(3000);
+		mdelay(3);
 		qcam_set_ack(q, 1);
 		if (qcam_await_ready1(q, 0))
 		{

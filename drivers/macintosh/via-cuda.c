@@ -168,7 +168,7 @@ init_via()
     eieio();
 
     /* delay 4ms and then clear any pending interrupt */
-    udelay(4000);
+    mdelay(4);
     x = via[SR]; eieio();
 
     /* sync with the CUDA - assert TACK without TIP */

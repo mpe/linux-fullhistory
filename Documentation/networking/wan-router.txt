@@ -41,7 +41,7 @@ This kernel module introduces the notion of a WAN Link Driver (WLD) to Linux
 operating system and provides generic hardware-independent services for such
 drivers.  Why can existing Linux network device interface not be used for
 this purpose?  Well, it can.  However, there are a few key differences between
-a typical network interface (e.g. ethernet) and a WAN link.
+a typical network interface (e.g. Ethernet) and a WAN link.
 
 Many WAN protocols, such as X.25 and frame relay, allow for multiple logical
 connections (known as `virtual circuits' in X.25 terminology) over a single
@@ -50,7 +50,7 @@ to a different geographical location and, therefore, different network.  As a
 result, it is the virtual circuit, not the physical link, that represents a
 route and, therefore, a network interface in Linux terms.
 
-To further complicate things, virtual cuircits are usually volatile in nature
+To further complicate things, virtual circuits are usually volatile in nature
 (excluding so called `permanent' virtual circuits or PVCs).  With almost no
 time required to set up and tear down a virtual circuit, it is highly desirable
 to implement on-demand connections in order to minimize network charges.  So
@@ -59,7 +59,7 @@ network interfaces and cope as multiple virtual circuits come into existence
 and go away dynamically.
  
 Last, but not least, WAN configuration is much more complex than that of say
-ethernet and may well amount to several dozens of parameters.  Some of them
+Ethernet and may well amount to several dozens of parameters.  Some of them
 are "link-wide"  while others are virtual circuit-specific.  The same holds
 true for WAN statistics which is by far more extensive and extremely useful
 when troubleshooting WAN connections.  Extending the ifconfig utility to suit
@@ -71,9 +71,9 @@ Most of these problems are taken care of by this module.  Its goal is to
 provide a user with more-or-less standard look and feel for all WAN devices and
 assist a WAN device driver writer by providing common services, such as:
 
- o User-level interface via /proc filesystem
+ o User-level interface via /proc file system
  o Centralized configuration
- o Device managenent (setup, shutdown, etc.)
+ o Device management (setup, shutdown, etc.)
  o Network interface management (dynamic creation/destruction)
  o Protocol encapsulation/decapsulation
 
@@ -84,7 +84,7 @@ available from
 			or
 	ftp.sangoma.com/pub/linux/vX.Y.Z/wanpipe-X.Y.Z.tgz
 
-where vX.Y.Z represent the linux kernel version number.
+where vX.Y.Z represent the Linux kernel version number.
 
 For technical questions and/or comments regarding this product please e-mail
 to jaspreet@sangoma.com or dm@sangoma.com.
@@ -107,7 +107,7 @@ Ave, Cambridge, MA 02139, USA.
 
 
 
-ACKNOLEGEMENTS
+ACKNOWLEDGMENTS
 
 This product is based on the WANPIPE(tm) Multiprotocol WAN Router developed
 by Sangoma Technologies Inc. for Linux 1.2.x.  Release of Linux 2.0 in summer
@@ -173,7 +173,7 @@ REVISION HISTORY
 1.0.1	January 30, 1997
 
 			      -	Implemented user-readable status and statistics
-				via /proc filesystem
+				via /proc file system
 
 1.0.0	December 31, 1996
 

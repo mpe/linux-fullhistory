@@ -1889,7 +1889,7 @@ dp_over:
 |
 | Input: a0  points to a normalized number in internal extended format
 |	 d0  is the round precision (=1 for sgl; =2 for dbl)
-|	 d1  is the the single precision or double precision
+|	 d1  is the single precision or double precision
 |	     denorm threshold
 |
 | Output: (In the format for dest_sgl or dest_dbl)

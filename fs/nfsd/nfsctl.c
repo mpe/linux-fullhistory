@@ -124,7 +124,7 @@ nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 	if (!(clp = exp_getclient(sin)))
 		err = -EPERM;
 	else
-		err = exp_rootfh(clp, data->gf_dev, data->gf_ino, res);
+		err = exp_rootfh(clp, to_kdev_t(data->gf_dev), data->gf_ino, res);
 	exp_unlock();
 
 	return err;

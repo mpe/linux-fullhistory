@@ -143,7 +143,7 @@ chmod 666 /dev/cup*
 
 The ESP module and the serial module should not conflict (they can be used at
 the same time).  After the ESP module has been loaded the ports on the ESP card
-will no longer be accessable by the serial driver.
+will no longer be accessible by the serial driver.
 
 If I/O errors are experienced when accessing the port, check for IRQ and DMA
 conflicts ('cat /proc/interrupts' and 'cat /proc/dma' for a list of IRQs and

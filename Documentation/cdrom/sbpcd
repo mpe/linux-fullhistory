@@ -304,8 +304,8 @@ The driver uses the "variable BLOCK_SIZE" feature. To use it, you have to
 specify "block=2048" as a mount option. Doing this will disable the direct
 execution of a binary from the CD; you have to copy it to a device with the
 standard BLOCK_SIZE (1024) first. So, do not use this if your system is
-directly "running from the CDROM" (like some of YGGDRASIL's installation
-variants). There are CDs on the market (like the german "unifix" Linux
+directly "running from the CDROM" (like some of Yggdrasil's installation
+variants). There are CDs on the market (like the German "unifix" Linux
 distribution) which MUST get handled with a block_size of 1024. Generally,
 one can say all the CDs which hold files of the name YMTRANS.TBL are defective;
 do not use block=2048 with those.

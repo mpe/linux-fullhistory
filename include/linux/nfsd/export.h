@@ -60,7 +60,7 @@ struct svc_export {
 	struct svc_client *	ex_client;
 	int			ex_flags;
 	struct dentry *		ex_dentry;
-	dev_t			ex_dev;
+	kdev_t			ex_dev;
 	ino_t			ex_ino;
 	uid_t			ex_anon_uid;
 	gid_t			ex_anon_gid;
@@ -84,8 +84,8 @@ int			exp_writelock(void);
 void			exp_unlock(void);
 struct svc_client *	exp_getclient(struct sockaddr_in *sin);
 void			exp_putclient(struct svc_client *clp);
-struct svc_export *	exp_get(struct svc_client *clp, dev_t dev, ino_t ino);
-int			exp_rootfh(struct svc_client *, dev_t, ino_t,
+struct svc_export *	exp_get(struct svc_client *clp, kdev_t dev, ino_t ino);
+int			exp_rootfh(struct svc_client *, kdev_t, ino_t,
 					struct knfs_fh *);
 int			nfserrno(int errno);
 void			exp_nlmdetach(void);

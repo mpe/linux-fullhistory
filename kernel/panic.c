@@ -35,7 +35,6 @@ NORET_TYPE void panic(const char * fmt, ...)
 {
 	static char buf[1024];
 	va_list args;
-	int i;
 
 	va_start(args, fmt);
 	vsprintf(buf, fmt, args);
@@ -60,8 +59,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 * We can't use the "normal" timers since we just panicked..
 	 	 */
 		printk(KERN_EMERG "Rebooting in %d seconds..",panic_timeout);
-		for(i = 0; i < (panic_timeout*1000); i++)
-			udelay(1000);
+		mdelay(panic_timeout*1000);
 		/*
 		 *	Should we run the reboot notifier. For the moment Im
 		 *	choosing not too. It might crash, be corrupt or do

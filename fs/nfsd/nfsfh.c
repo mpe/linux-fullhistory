@@ -29,7 +29,7 @@ struct fh_entry {
 	struct dentry * dentry;
 	unsigned long reftime;
 	ino_t	ino;
-	dev_t	dev;
+	kdev_t	dev;
 };
 
 #define NFSD_MAXFH PAGE_SIZE/sizeof(struct fh_entry)
@@ -42,7 +42,7 @@ static unsigned long nfsd_next_expire = 0;
 
 static int add_to_fhcache(struct dentry *, int);
 static int nfsd_d_validate(struct dentry *);
-struct dentry * lookup_inode(dev_t, ino_t, ino_t);
+struct dentry * lookup_inode(kdev_t, ino_t, ino_t);
 
 static LIST_HEAD(fixup_head);
 static LIST_HEAD(path_inuse);
@@ -55,7 +55,7 @@ struct nfsd_fixup {
 	struct list_head lru;
 	ino_t	dir;
 	ino_t	ino;
-	dev_t	dev;
+	kdev_t	dev;
 	struct dentry *dentry;
 	unsigned long reftime;
 };
@@ -65,11 +65,11 @@ struct nfsd_path {
 	unsigned long reftime;
 	int	users;
 	ino_t	ino;
-	dev_t	dev;
+	kdev_t	dev;
 	char	name[1];
 };
 
-static struct nfsd_fixup * find_cached_lookup(dev_t dev, ino_t dir, ino_t ino)
+static struct nfsd_fixup * find_cached_lookup(kdev_t dev, ino_t dir, ino_t ino)
 {
 	struct list_head *tmp = fixup_head.next;
 
@@ -226,14 +226,14 @@ printk("add_to_path_cache: added %s, paths=%d\n", new->name, nfsd_nr_paths);
 	 */
 retry:
 	kfree(new);
-	printk("add_to_path_cache: path length changed, retrying\n");
+	printk(KERN_DEBUG "add_to_path_cache: path length changed, retrying\n");
 	goto restart;
 }
 
 /*
  * Search for a path entry for the specified (dev, inode).
  */
-struct nfsd_path *get_path_entry(dev_t dev, ino_t ino)
+struct nfsd_path *get_path_entry(kdev_t dev, ino_t ino)
 {
 	struct nfsd_path *pe;
 	struct list_head *tmp;
@@ -264,7 +264,7 @@ static void put_path(struct nfsd_path *pe)
 static void free_path_entry(struct nfsd_path *pe)
 {
 	if (pe->users)
-		printk("free_path_entry: %s in use, users=%d\n",
+		printk(KERN_DEBUG "free_path_entry: %s in use, users=%d\n",
 			pe->name, pe->users);
 	list_del(&pe->lru);
 	kfree(pe);
@@ -381,7 +381,7 @@ out:
  * searching for a dentry given the inode: as we walk up the tree,
  * it's likely that a dentry exists before we reach the root.
  */
-struct dentry * lookup_inode(dev_t dev, ino_t dirino, ino_t ino)
+struct dentry * lookup_inode(kdev_t dev, ino_t dirino, ino_t ino)
 {
 	struct super_block *sb;
 	struct dentry *root, *dentry, *result;
@@ -457,7 +457,8 @@ struct dentry * lookup_inode(dev_t dev, ino_t dirino, ino_t ino)
 		 * Make sure we can't get caught in a loop ...
 		 */
 		if (dirino == dirent.ino && dirino != root_ino) {
-			printk("lookup_inode: looping?? (ino=%ld, path=%s)\n",
+			printk(KERN_DEBUG 
+			       "lookup_inode: looping?? (ino=%ld, path=%s)\n",
 				dirino, name);	
 			goto out_root;
 		}
@@ -649,7 +650,7 @@ repeat:
 /*
  * Find an entry in the dir cache for the specified inode number.
  */
-static struct fh_entry *find_fhe_by_ino(dev_t dev, ino_t ino)
+static struct fh_entry *find_fhe_by_ino(kdev_t dev, ino_t ino)
 {
 	struct fh_entry * fhe = &dirstable[0];
 	int i;
@@ -667,7 +668,7 @@ static struct fh_entry *find_fhe_by_ino(dev_t dev, ino_t ino)
  * Find the (directory) dentry with the specified (dev, inode) number.
  * Note: this leaves the dentry in the cache.
  */
-static struct dentry *find_dentry_by_ino(dev_t dev, ino_t ino)
+static struct dentry *find_dentry_by_ino(kdev_t dev, ino_t ino)
 {
 	struct fh_entry *fhe;
 	struct nfsd_path *pe;
@@ -1129,14 +1130,14 @@ fh_update(struct svc_fh *fhp)
 	struct inode *inode;
 
 	if (!fhp->fh_dverified) {
-		printk("fh_update: fh not verified!\n");
+		printk(KERN_DEBUG "fh_update: fh not verified!\n");
 		goto out;
 	}
 
 	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 	if (!inode) {
-		printk("fh_update: %s/%s still negative!\n",
+		printk(KERN_DEBUG "fh_update: %s/%s still negative!\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name);
 		goto out;
 	}
@@ -1157,7 +1158,7 @@ fh_put(struct svc_fh *fhp)
 		fh_unlock(fhp);
 		fhp->fh_dverified = 0;
 		if (!dentry->d_count) {
-			printk("fh_put: %s/%s has d_count 0!\n",
+			printk(KERN_DEBUG "fh_put: %s/%s has d_count 0!\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name);
 			return;
 		}
@@ -1204,10 +1205,10 @@ out:
 	return valid;
 
 bad_addr:
-	printk("nfsd_d_validate: invalid address %lx\n", dent_addr);
+	printk(KERN_DEBUG "nfsd_d_validate: invalid address %lx\n", dent_addr);
 	goto out;
 bad_align:
-	printk("nfsd_d_validate: unaligned address %lx\n", dent_addr);
+	printk(KERN_DEBUG "nfsd_d_validate: unaligned address %lx\n", dent_addr);
 	goto out;
 }
 
@@ -1218,7 +1219,7 @@ bad_align:
  * This is called when revoking the last export for a
  * device, so that it can be unmounted cleanly.
  */
-void nfsd_fh_flush(dev_t dev)
+void nfsd_fh_flush(kdev_t dev)
 {
 	struct fh_entry *fhe;
 	int i, pass = 2;
@@ -1260,7 +1261,7 @@ void nfsd_fh_free(void)
 		free_fixup_entry(fp);
 		i++;
 	}
-	printk("nfsd_fh_free: %d fixups freed\n", i);
+	printk(KERN_DEBUG "nfsd_fh_free: %d fixups freed\n", i);
 
 	i = 0;
 	while ((tmp = path_inuse.next) != &path_inuse) {
@@ -1269,18 +1270,23 @@ void nfsd_fh_free(void)
 		free_path_entry(pe);
 		i++;
 	}
-	printk("nfsd_fh_free: %d paths freed\n", i);
+	printk(KERN_DEBUG "nfsd_fh_free: %d paths freed\n", i);
 
-	printk("nfsd_fh_free: verified %d, put %d\n",
+	printk(KERN_DEBUG "nfsd_fh_free: verified %d, put %d\n",
 		nfsd_nr_verified, nfsd_nr_put);
 }
 
 void nfsd_fh_init(void)
 {
+	/* Sanity check */ 
+	extern void __my_nfsfh_is_too_big(void); 
+	if (sizeof(struct nfs_fhbase) > 32) 
+		__my_nfsfh_is_too_big(); 
+
 	memset(filetable, 0, NFSD_MAXFH*sizeof(struct fh_entry));
 	memset(dirstable, 0, NFSD_MAXFH*sizeof(struct fh_entry));
 	INIT_LIST_HEAD(&path_inuse);
 	INIT_LIST_HEAD(&fixup_head);
 
-	printk("nfsd_init: initialized fhcache, entries=%lu\n", NFSD_MAXFH);
+	printk(KERN_DEBUG "nfsd_init: initialized fhcache, entries=%lu\n", NFSD_MAXFH);
 }

@@ -20,7 +20,7 @@
  * $Revision: 1.4 $
  * $Date: 1997/10/17 00:03:51 $
  *
- *      This file contains the the symbols that the ftape low level
+ *      This file contains the symbols that the ftape low level
  *      part of the QIC-40/80/3010/3020 floppy-tape driver "ftape"
  *      exports to it's high level clients
  */

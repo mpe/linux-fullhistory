@@ -631,7 +631,7 @@ typedef u32 zorro_id;
 
     /*
      *  GVP identifies most of its products through the 'extended product code'
-     *  (epc). The epc has to be and'ed with the GVP_PRODMASK before the
+     *  (epc). The epc has to be ANDed with the GVP_PRODMASK before the
      *  identification.
      */
 

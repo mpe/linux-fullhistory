@@ -66,6 +66,11 @@ extern int udp6_get_info(char *, char **, off_t, int, int);
 extern int afinet6_get_info(char *, char **, off_t, int, int);
 #endif
 
+#ifdef CONFIG_SYSCTL
+extern void ipv6_sysctl_register(void);
+extern void ipv6_sysctl_unregister(void);
+#endif
+
 static int inet6_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;

@@ -87,7 +87,7 @@ int b1pci_init(void)
 
 	printk(KERN_INFO "b1pci: revision %s\n", rev);
 
-	while (dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev)) {
+	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev))) {
 		unsigned int ioaddr = dev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
 		unsigned int irq = dev->irq;
 		printk(KERN_INFO

@@ -1492,7 +1492,7 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 	}
 
 	/*
-	 * The indirect register I12 has some read only bits. Lets
+	 * The indirect register I12 has some read only bits. Let's
 	 * try to change them.
 	 */
 

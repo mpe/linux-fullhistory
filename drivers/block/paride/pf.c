@@ -617,7 +617,7 @@ static void pf_req_sense( int unit, int quiet )
         int     r;
 
         r = pf_command(unit,rs_cmd,16,"Request sense");
-        udelay(1000);
+        mdelay(1);
         if (!r) pf_completion(unit,buf,"Request sense");
 
         if ((!r)&&(!quiet)) 
@@ -630,7 +630,7 @@ static int pf_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 {       int r;
 
         r = pf_command(unit,cmd,dlen,fun);
-        udelay(1000);
+        mdelay(1);
         if (!r) r = pf_completion(unit,buf,fun);
         if (r) pf_req_sense(unit,!fun);
         
@@ -864,7 +864,7 @@ static int pf_start( int unit, int cmd, int b, int c )
 
 	i = pf_command(unit,io_cmd,c*512,"start i/o");
 
-        udelay(1000);
+        mdelay(1);
 
 	return i;	
 }

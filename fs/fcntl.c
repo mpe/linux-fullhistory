@@ -152,7 +152,7 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			/*
 			 * XXX If f_owner is a process group, the
 			 * negative return value will get converted
-			 * into an error.  Oops.  If we keep the the
+			 * into an error.  Oops.  If we keep the
 			 * current syscall conventions, the only way
 			 * to fix this will be in libc.
 			 */

@@ -143,7 +143,7 @@ int myport = *(int*)(dev->misc);
 	outbits(8, 0xa0, myport);
 /* XXX - get rid of this once setvol is implemented properly - XXX */
 /* these insist on turning the thing on.  not sure I approve... */
-	udelay(1000);
+	mdelay(1);
 	outb(0, myport);
 	outb(0xc8, myport);
 
@@ -156,9 +156,9 @@ int res;
 int myport = *(int*)(dev->misc);
 
 	outb(0xf8, myport);
-	udelay(200000);
+	mdelay(200);
 	res = (int)inb(myport);
-	udelay(10000);
+	mdelay(10);
 	outb(0xe8, myport);
 	if(res == 0xfd)
 		return 1;
@@ -189,14 +189,14 @@ void outbits(int bits, int data, int port)
 void decvol(int port)
 {
 	outb(0x48, port);
-	udelay(100000);
+	mdelay(100);
 	outb(0xc8, port);
 }
 
 void incvol(int port)
 {
 	outb(0x88, port);
-	udelay(100000);
+	mdelay(100);
 	outb(0xc8, port);
 }
 

@@ -1107,7 +1107,7 @@ static int fdomain_arbitrate( void )
       status = inb( TMC_Status_port );        /* Read adapter status */
       if (status & 0x02)		      /* Arbitration complete */
 	    return 0;
-      udelay(1000);			/* Wait one millisecond */
+      mdelay(1);			/* Wait one millisecond */
    } while (--timeout);
 
    /* Make bus idle */
@@ -1145,7 +1145,7 @@ static int fdomain_select( int target )
 	 outb( 0x80, SCSI_Cntl_port );
 	 return 0;
       }
-      udelay(1000);			/* wait one msec */
+      mdelay(1);			/* wait one msec */
    } while (--timeout);
    /* Make bus idle */
    fdomain_make_bus_idle();

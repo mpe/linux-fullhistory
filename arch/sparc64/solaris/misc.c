@@ -164,7 +164,7 @@ asmlinkage int solaris_utssys(u32 buf, u32 flags, int which, u32 buf2)
 {
 	switch (which) {
 	case 0:	/* old uname */
-		/* Lets cheat */
+		/* Let's cheat */
 		set_utsfield(((struct sol_uname *)A(buf))->sysname, 
 			"SunOS", 1, 0);
 		set_utsfield(((struct sol_uname *)A(buf))->nodename, 

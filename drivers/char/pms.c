@@ -630,7 +630,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 		while (cnt <= 0) 
 		{ 
 			/*
-			 *	Dont copy too far
+			 *	Don't copy too far
 			 */
 			int dt=dw;
 			if(dt+len>count)

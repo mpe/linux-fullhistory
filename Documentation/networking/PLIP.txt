@@ -45,13 +45,13 @@ Disadvantages of PLIP
 
 Doesn't work over a modem, like SLIP and PPP. Limited range, 15 m.
 Can only be used to connect three (?) Linux boxes. Doesn't connect to
-an existing ethernet. Isn't standard (not even de facto standard, like
+an existing Ethernet. Isn't standard (not even de facto standard, like
 SLIP).
 
 Performance
 ==========
 
-PLIP easily outperforms ethernet cards....(ups, I was dreaming, but
+PLIP easily outperforms Ethernet cards....(ups, I was dreaming, but
 it *is* getting late. EOB)
 
 PLIP hardware interconnection

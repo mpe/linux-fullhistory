@@ -16,7 +16,7 @@
 |		result is provably monotonic in double precision.
 |
 |	Speed: The program sTAN takes approximately 170 cycles for
-|		input argument X such that |X| < 15Pi, which is the the usual
+|		input argument X such that |X| < 15Pi, which is the usual
 |		situation.
 |
 |	Algorithm:

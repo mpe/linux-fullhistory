@@ -372,7 +372,7 @@ static int nubus_video_card(struct nubus_device_specifier *ns, int slot, struct 
 {
 	if(nt->category==NUBUS_CAT_DISPLAY)
 		return 0;
-	/* Claim all video cards. We dont yet do driver specifics tho. */
+	/* Claim all video cards. We don't yet do driver specifics though. */
 	return -ENODEV;
 }
 

@@ -285,14 +285,14 @@ setup_sigcontext(struct pt_regs *regs, struct sigcontext *sc, sigset_t *set)
 #if 0
 	if (current->used_math) {	/* fp is active.  */
 		set_cp0_status(ST0_CU1, ST0_CU1);
-		save_fp_context(sc);		/* cpu dependant */
+		save_fp_context(sc);		/* CPU-dependent */
 		last_task_used_math = NULL;
 		regs->cp0_status &= ~ST0_CU1;
 		current->used_math = 0;
 	}
 #endif
 set_cp0_status(ST0_CU1, ST0_CU1);
-save_fp_context(sc);		/* cpu dependant */
+save_fp_context(sc);		/* CPU-dependent */
 
 	__put_user(set->sig[0], &sc->sc_sigset[0]);
 	__put_user(set->sig[1], &sc->sc_sigset[1]);

@@ -529,7 +529,7 @@
  */
 
 #define MAX_RX_PDL              30   /* Card limit = 31 */
-#define MAX_RX_FRAG             2    /* Dont need more... */
+#define MAX_RX_FRAG             2    /* Don't need more... */
 #define MAX_TX_PDL              29
 #define MAX_TX_FRAG             2   /* Limit = 31 */
 

@@ -3,7 +3,7 @@
 |
 |	Takes the result and puts it in where the user expects it.
 |	Library functions return result in fp0.	If fp0 is not the
-|	users destination register then fp0 is moved to the the
+|	users destination register then fp0 is moved to the
 |	correct floating-point destination register.  fp0 and fp1
 |	are then restored to the original contents. 
 |

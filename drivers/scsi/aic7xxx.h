@@ -51,7 +51,7 @@
 	proc_info: aic7xxx_proc_info,				\
 	name: NULL,						\
 	detect: aic7xxx_detect,					\
-	release: NULL,						\
+	release: aic7xxx_release,				\
 	info: aic7xxx_info,					\
 	command: NULL,						\
 	queuecommand: aic7xxx_queue,				\
@@ -81,7 +81,7 @@
 	proc_info: aic7xxx_proc_info,				\
 	name: NULL,						\
 	detect: aic7xxx_detect,					\
-	release: NULL,						\
+	release: aic7xxx_release,				\
 	info: aic7xxx_info,					\
 	command: NULL,						\
 	queuecommand: aic7xxx_queue,				\
@@ -105,6 +105,7 @@ extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *, unsigned int);
 extern int aic7xxx_abort(Scsi_Cmnd *);
+extern int aic7xxx_release(struct Scsi_Host *);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);
 

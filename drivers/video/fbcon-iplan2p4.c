@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/video/iplan2p4.c -- Low level frame buffer operations for
- *				      interleaved bitplanes à la Atari (4
- *				      planes, 2 bytes interleave)
+ *  linux/drivers/video/fbcon-iplan2p4.c -- Low level frame buffer operations
+ *				   for interleaved bitplanes à la Atari (4
+ *				   planes, 2 bytes interleave)
  *
  *	Created 5 Apr 1997 by Geert Uytterhoeven
  *
@@ -46,7 +46,7 @@ static inline void movepl(u8 *d, u32 val)
 }
 
 /* Sets the bytes in the visible column at d, height h, to the value
- * val for a 4 plane screen. The the bis of the color in 'color' are
+ * val for a 4 plane screen. The bits of the color in 'color' are
  * moved (8 times) to the respective bytes. This means:
  *
  * for(h times; d += bpr)

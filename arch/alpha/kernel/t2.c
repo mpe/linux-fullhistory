@@ -636,7 +636,7 @@ void t2_machine_check(unsigned long vector, unsigned long la_ptr,
 	printk(KERN_CRIT "  T2 machine check: %s%s\n",
 	       reason, mchk_header->elfl_retry ? " (retryable)" : "");
 
-	/* dump the the logout area to give all info: */
+	/* dump the logout area to give all info: */
 
 	ptr = (unsigned long *)la_ptr;
 	for (i = 0; i < mchk_header->elfl_size / sizeof(long); i += 2) {

@@ -604,7 +604,7 @@ handle_exception (struct pt_regs *regs)
 		}
 			break;
 		case 'H':
-			/* dont do anything, yet, just acknowledge */
+			/* don't do anything, yet, just acknowledge */
 			hexToInt(&ptr, &addr);
 			strcpy(remcomOutBuffer,"OK");
 			break;

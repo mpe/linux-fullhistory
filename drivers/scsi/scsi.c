@@ -1313,7 +1313,7 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 	 * host).
 	 */
 	spin_unlock_irq(&io_request_lock);
-	while (--ticks_remaining >= 0) udelay(1000000/HZ);
+	while (--ticks_remaining >= 0) mdelay(1+999/HZ);
 	host->last_reset = jiffies - MIN_RESET_DELAY;
 	spin_lock_irq(&io_request_lock);
     }

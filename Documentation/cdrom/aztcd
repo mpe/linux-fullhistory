@@ -173,7 +173,7 @@ and remove it via   rmmod  aztcd.
 If you did not set the correct base address in aztcd.h, you can also supply the
 base address when loading the driver via
                     insmod /lib/modules/X.X.X/misc/aztcd.o aztcd=<base address>
-Again specifing aztcd=-1 will cause autoprobing.
+Again specifying aztcd=-1 will cause autoprobing.
 If you do not have the iso9660-filesystem in your boot kernel, you also have
 to load it before you can mount the CDROM:
                     insmod /lib/modules/X.X.X/fs/isofs.o

@@ -546,7 +546,7 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
 }
 
 /*
- * Why is this a seperate function?  Because the kernel_thread code
+ * Why is this a separate function?  Because the kernel_thread code
  * effectively does a fork, and there is a builtin exit() call when
  * the child returns.   The difficulty is that scsi_init() is
  * marked __initfunc(), which means the memory is unmapped after bootup

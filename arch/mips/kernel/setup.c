@@ -177,7 +177,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	atag = bi_TagFind(tag_vram_base);
 	memcpy(&mips_vram_base, TAGVALPTR(atag), atag->size);
 
-	/* Save defaults for configuration dependand routines.  */
+	/* Save defaults for configuration-dependent routines.  */
 	irq_setup = default_irq_setup;
 	fd_cacheflush = default_fd_cacheflush;
 #ifdef CONFIG_BLK_DEV_IDE

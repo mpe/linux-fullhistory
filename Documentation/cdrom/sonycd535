@@ -1,7 +1,7 @@
               README FOR LINUX SONY CDU-535/531 DRIVER
               ========================================
 
-This is the the Sony CDU-535 (and 531) driver version 0.7 for Linux.
+This is the Sony CDU-535 (and 531) driver version 0.7 for Linux.
 I do not think I have the documentation to add features like DMA support
 so if anyone else wants to pursue it or help me with it, please do.
 (I need to see what was done for the CDU-31A driver -- perhaps I can

@@ -860,7 +860,7 @@ Configuring ATP is little bit tricky since it uses so many I/O, IRQ and
 DMA numbers. Using the same values than with DOS/Win is a good idea. Don't
 attempt to use the same IRQ or DMA channels twice.
 
-The SB mode of ATP is implemented so the the ATP driver just enables SB
+The SB mode of ATP is implemented so the ATP driver just enables SB
 in the proper address. The SB driver handles the rest. You have to configure
 both the SB driver and the SB mode of ATP to use the same IRQ, DMA and I/O
 settings.

@@ -340,7 +340,7 @@ static void scsi_tt_intr (int irq, void *dummy, struct pt_regs *fp)
 		}
 	}
 
-	/* If the DMA is active but not finished, we have the the case
+	/* If the DMA is active but not finished, we have the case
 	 * that some other 5380 interrupt occurred within the DMA transfer.
 	 * This means we have residual bytes, if the desired end address
 	 * is not yet reached. Maybe we have to fetch some bytes from the

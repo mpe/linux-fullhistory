@@ -137,7 +137,7 @@ void free_pointer_table (pmd_t *ptable)
 		return;
 	} else {
 		/*
-		 * move this descriptor the the front of the list, since
+		 * move this descriptor to the front of the list, since
 		 * it has one or more free tables.
 		 */
 		save_flags(flags);

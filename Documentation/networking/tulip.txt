@@ -1,7 +1,7 @@
-                Tulip ethernet card driver
+                Tulip Ethernet Card Driver
 
 The Tulip driver is developed by Donald Becker and changed by
-Takashi Manabe. This driver is designed to work with PCI ethernet
+Takashi Manabe. This driver is designed to work with PCI Ethernet
 cards which use the DECchip DC21x4x family. This driver hopefully
 works with all of 1.2.x and 1.3.x kernels, but I tested only
 with 1.2.13, 1.3.39, 1.3.49, 1.3.52, 1.3.57 and later.

@@ -401,14 +401,7 @@ static struct file_operations coda_psdev_fops = {
 
 #ifdef CONFIG_PROC_FS
 
-struct proc_dir_entry proc_sys_root = {
-        PROC_SYS, 3, "sys",                     /* inode, name */
-        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,   /* mode, nlink, uid, gid */
-        0, &proc_dir_inode_operations,          /* size, ops */
-        NULL, NULL,                             /* get_info, fill_inode */
-        NULL,                                   /* next */
-        NULL, NULL                              /* parent, subdir */
-};
+extern struct proc_dir_entry proc_sys_root;
 
 struct proc_dir_entry proc_fs_coda = {
         PROC_FS_CODA, 4, "coda",

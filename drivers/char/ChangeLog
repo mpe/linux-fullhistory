@@ -84,7 +84,7 @@ Thu Feb 27 01:53:08 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* serial.c (change_speed): Add support for the termios flag
 		CMSPAR, which allows the user to select stick parity.
-		(i.e, if PARODD is set, the the parity bit is always 1; if
+		(i.e, if PARODD is set, the parity bit is always 1; if
 		PARRODD is not set, then the parity bit is always 0).
 
 Wed Feb 26 19:03:10 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
@@ -479,7 +479,7 @@ Sat Feb 18 12:13:51 1995  Theodore Y. Ts'o  (tytso@rt-11)
 Fri Feb 17 09:34:09 1995  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_interrupt_single, rs_interrupt, rs_interrupt_multi): 
-		Change the the number of passes made from 64 to be 256,
+		Change the number of passes made from 64 to be 256,
 		configurable with the #define RS_ISR_PASS_LIMIT.
 
 	* serial.c (rs_init, set_serial_info, get_serial_info, rs_close):

@@ -1,6 +1,48 @@
 #ifndef __irq_h
 #define __irq_h
 
+#include <asm/irq.h>
+
+/*
+ * Interrupt controller descriptor. This is all we need
+ * to describe about the low-level hardware.
+ */
+struct hw_interrupt_type {
+	const char * typename;
+	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);
+	void (*enable)(unsigned int irq);
+	void (*disable)(unsigned int irq);
+};
+
+
+/*
+ * Status: reason for being disabled: somebody has
+ * done a "disable_irq()" or we must not re-enter the
+ * already executing irq..
+ */
+#define IRQ_INPROGRESS	1
+#define IRQ_DISABLED	2
+
+/*
+ * This is the "IRQ descriptor", which contains various information
+ * about the irq, including what kind of hardware handling it has,
+ * whether it is disabled etc etc.
+ *
+ * Pad this out to 32 bytes for cache and indexing reasons.
+ */
+typedef struct {
+	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
+	unsigned int events;			/* Do we have any pending events? */
+	unsigned int ipi;			/* Have we sent off the pending IPI? */
+	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
+	struct irqaction *action;		/* IRQ action list */
+	unsigned int unused[3];
+} irq_desc_t;
+
+extern irq_desc_t irq_desc[NR_IRQS];
+
+extern int handle_IRQ_event(unsigned int, struct pt_regs *);
+
 /*
  * Various low-level irq details needed by irq.c, process.c,
  * time.c, io_apic.c and smp.c
@@ -27,6 +69,7 @@ void init_pic_mode (void);
 void print_IO_APIC (void);
 
 extern unsigned int io_apic_irqs;
+extern unsigned int cached_irq_mask;
 
 #define IO_APIC_VECTOR(irq)	(0x51+((irq)<<3))
 
@@ -159,7 +202,7 @@ static inline void x86_do_profile (unsigned long eip)
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
 		/*
-		 * Dont ignore out-of-bounds EIP values silently,
+		 * Don't ignore out-of-bounds EIP values silently,
 		 * put them into the last histogram slot, so if
 		 * present, they will show up as a sharp peak.
 		 */

@@ -32,8 +32,8 @@
 typedef struct svc_client	svc_client;
 typedef struct svc_export	svc_export;
 
-static svc_export *	exp_find(svc_client *clp, dev_t dev);
-static svc_export *	exp_parent(svc_client *clp, dev_t dev);
+static svc_export *	exp_find(svc_client *clp, kdev_t dev);
+static svc_export *	exp_parent(svc_client *clp, kdev_t dev);
 static void		exp_unexport_all(svc_client *clp);
 static void		exp_do_unexport(svc_export *unexp);
 static svc_client *	exp_getclientbyname(char *name);
@@ -46,6 +46,7 @@ static int		exp_verify_string(char *cp, int max);
 #define CLIENT_HASHMASK		(CLIENT_HASHMAX - 1)
 #define CLIENT_HASH(a) \
 		((((a)>>24) ^ ((a)>>16) ^ ((a)>>8) ^(a)) & CLIENT_HASHMASK)
+/* XXX: is this adequate for 32bit kdev_t ? */
 #define EXPORT_HASH(dev)	((dev) & (NFSCLNT_EXPMAX - 1))
 
 struct svc_clnthash {
@@ -69,7 +70,7 @@ static struct wait_queue *	hash_wait = NULL;
  * Find a client's export for a device.
  */
 static inline svc_export *
-exp_find(svc_client *clp, dev_t dev)
+exp_find(svc_client *clp, kdev_t dev)
 {
 	svc_export *	exp;
 
@@ -83,7 +84,7 @@ exp_find(svc_client *clp, dev_t dev)
  * Find the client's export entry matching xdev/xino.
  */
 svc_export *
-exp_get(svc_client *clp, dev_t dev, ino_t ino)
+exp_get(svc_client *clp, kdev_t dev, ino_t ino)
 {
 	svc_export *	exp;
 
@@ -97,7 +98,7 @@ exp_get(svc_client *clp, dev_t dev, ino_t ino)
  * Check whether there are any exports for a device.
  */
 static int
-exp_device_in_use(dev_t dev)
+exp_device_in_use(kdev_t dev)
 {
 	struct svc_client *clp;
 
@@ -112,7 +113,7 @@ exp_device_in_use(dev_t dev)
  * Look up the device of the parent fs.
  */
 static inline int
-nfsd_parentdev(dev_t *devp)
+nfsd_parentdev(kdev_t *devp)
 {
 	struct super_block	*sb;
 
@@ -129,10 +130,10 @@ nfsd_parentdev(dev_t *devp)
  * only by the export syscall to keep the export tree consistent.
  */
 static svc_export *
-exp_parent(svc_client *clp, dev_t dev)
+exp_parent(svc_client *clp, kdev_t dev)
 {
 	svc_export	*exp;
-	dev_t		xdev = dev;
+	kdev_t		xdev = dev;
 
 	do {
 		exp = exp_find(clp, xdev);
@@ -155,7 +156,7 @@ exp_export(struct nfsctl_export *nxp)
 	struct dentry	*dentry = NULL;
 	struct inode	*inode = NULL;
 	int		i, err;
-	dev_t		dev;
+	kdev_t		dev;
 	ino_t		ino;
 
 	/* Consistency check */
@@ -166,7 +167,7 @@ exp_export(struct nfsctl_export *nxp)
 	dprintk("exp_export called for %s:%s (%x/%ld fl %x).\n",
 			nxp->ex_client, nxp->ex_path,
 			nxp->ex_dev, nxp->ex_ino, nxp->ex_flags);
-	dev = nxp->ex_dev;
+	dev = to_kdev_t(nxp->ex_dev);
 	ino = nxp->ex_ino;
 
 	/* Try to lock the export table for update */
@@ -205,7 +206,10 @@ exp_export(struct nfsctl_export *nxp)
 	if(!inode)
 		goto finish;
 	err = -EINVAL;
-	if(inode->i_dev != nxp->ex_dev || inode->i_ino != nxp->ex_ino) {
+	if(inode->i_dev != dev || inode->i_ino != nxp->ex_ino) {
+
+		printk(KERN_DEBUG "exp_export: i_dev = %x, dev = %x\n",
+			inode->i_dev, dev); 
 		/* I'm just being paranoid... */
 		goto finish;
 	}
@@ -386,7 +390,7 @@ out:
  * since its harder to fool a kernel module than a user space program.
  */
 int
-exp_rootfh(struct svc_client *clp, dev_t dev, ino_t ino, struct knfs_fh *f)
+exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino, struct knfs_fh *f)
 {
 	struct svc_export	*exp = NULL;
 	struct svc_fh		fh;

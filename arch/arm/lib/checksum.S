@@ -207,7 +207,7 @@ ENTRY(csum_partial_copy_from_user)
 		blt	.too_small_user
 		tst	r1, #2			@ Test destination alignment
 		beq	.dst_aligned_user
-		subs	r2, r2, #2		@ We dont know if SRC is aligned...
+		subs	r2, r2, #2		@ We do not know if SRC is aligned...
 		load2b	ip, r8
 		orr	ip, ip, r8, lsl #8
 		adds	r3, r3, ip
@@ -469,7 +469,7 @@ ENTRY(csum_partial_copy)
 		blt	Ltoo_small
 		tst	r1, #2			@ Test destination alignment
 		beq	Ldst_aligned
-		subs	r2, r2, #2		@ We dont know if SRC is aligned...
+		subs	r2, r2, #2		@ We do not know if SRC is aligned...
 		ldrb	ip, [r0], #1
 		ldrb	r8, [r0], #1
 		orr	ip, ip, r8, lsl #8

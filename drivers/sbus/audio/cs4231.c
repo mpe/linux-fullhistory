@@ -73,7 +73,7 @@ static void cs4231_pollinput(struct sparcaudio_driver *drv);
 static int cs4231_length_to_samplecount(struct audio_prinfo *thisdir, unsigned int length);
 static void cs4231_getsamplecount(struct sparcaudio_driver *drv, unsigned int length, unsigned int value);
 
-#define CHIP_READY udelay(100); cs4231_ready(drv); udelay(1000);
+#define CHIP_READY udelay(100); cs4231_ready(drv); mdelay(1);
 
 /* Enable cs4231 interrupts atomically. */
 static __inline__ void cs4231_enable_interrupts(struct sparcaudio_driver *drv)

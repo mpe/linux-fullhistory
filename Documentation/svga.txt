@@ -70,7 +70,7 @@ a mode. It's also possible to press only <RETURN> which leaves the current mode.
    The mode list usually contains a few basic modes and some VESA modes.  In
 case your chipset has been detected, some chipset-specific modes are shown as
 well (some of these might be missing or unusable on your machine as different
-BIOSes are often shipped with the same card and the mode numbers depend purely
+BIOSs are often shipped with the same card and the mode numbers depend purely
 on the VGA BIOS).
 
    The modes displayed on the menu are partially sorted: The list starts with
@@ -139,8 +139,8 @@ The ID numbers can be divided to three regions:
 
    If you add 0x8000 to the mode ID, the program will try to recalculate
 vertical display timing according to mode parameters, which can be used to
-eliminate some annoying bugs of certain VGA BIOS'es (usually those used for
-cards with S3 chipsets and old Cirrus Logic BIOSes) -- mainly extra lines at the
+eliminate some annoying bugs of certain VGA BIOSs (usually those used for
+cards with S3 chipsets and old Cirrus Logic BIOSs) -- mainly extra lines at the
 end of the display.
 
 4. Options
@@ -179,7 +179,7 @@ of the table (which also includes a video card name to be displayed on the
 top of the menu).
 
    CONFIG_VIDEO_400_HACK - force setting of 400 scan lines for standard VGA
-modes. This option is intended to be used on certain buggy BIOS'es which draw
+modes. This option is intended to be used on certain buggy BIOSs which draw
 some useless logo using font download and then fail to reset the correct mode.
 Don't use unless needed as it forces resetting the video card.
 

@@ -25,10 +25,10 @@ fi
 bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   if [ "$CONFIG_PMAC" = "y" ]; then
-    bool 'MACE (Power Mac ethernet) support' CONFIG_MACE
+    bool 'MACE (Power Mac Ethernet) support' CONFIG_MACE
   fi
   if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
-    bool 'MIPS JAZZ onboard SONIC ethernet support' CONFIG_MIPS_JAZZ_SONIC
+    bool 'MIPS JAZZ onboard SONIC Ethernet support' CONFIG_MIPS_JAZZ_SONIC
   fi
   bool '3COM cards' CONFIG_NET_VENDOR_3COM
   if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
@@ -99,7 +99,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
 
-    tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
+    tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP

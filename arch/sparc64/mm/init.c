@@ -925,7 +925,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 
 	/* The funny offsets are to make page table operations much quicker and
 	 * requite less state, see pgtable.h for gory details.
-	 * pgtable.h assumes null_pmd_table is null_pte_table - PAGE_SIZE, lets
+	 * pgtable.h assumes null_pmd_table is null_pte_table - PAGE_SIZE, let's
 	 * check it now.
 	 */
 	null_pte_table=__pa(((unsigned long)&empty_null_pte_table)+shift);

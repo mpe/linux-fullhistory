@@ -1446,7 +1446,7 @@ do_sync_known:
 		}
 
 		/* We've talked to this guy before,
-		 * but never negotiated.. lets try,
+		 * but never negotiated.  Let's try,
 		 * need to attempt WIDE first, before
 		 * sync nego, as per SCSI 2 standard.
 		 */
@@ -3100,7 +3100,7 @@ static int esp_select_complete(struct Sparc_ESP *esp, struct Sparc_ESP_regs *ere
 			       esp->esp_id, SCptr->target, SCptr->lun);
 			SDptr->sync_max_offset = 0;
 			SDptr->sync_min_period = 0;
-			SDptr->sync = 1; /* so we dont negotiate again */
+			SDptr->sync = 1; /* so we don't negotiate again */
 
 			/* Run the command again, this time though we
 			 * won't try to negotiate for synchronous transfers.
@@ -3215,7 +3215,7 @@ static inline int check_singlebyte_msg(struct Sparc_ESP *esp,
 	switch(esp->cur_msgin[0]) {
 	default:
 		/* We don't want to hear about it. */
-		ESPLOG(("esp%d: msg %02x which we dont know about\n", esp->esp_id,
+		ESPLOG(("esp%d: msg %02x which we don't know about\n", esp->esp_id,
 			esp->cur_msgin[0]));
 		return MESSAGE_REJECT;
 
@@ -3451,7 +3451,7 @@ static inline int check_multibyte_msg(struct Sparc_ESP *esp,
 			       esp->esp_id, size);
 			message_out = MESSAGE_REJECT;
 		} else {
-			/* Things look good, lets see what we got. */
+			/* Things look good; let's see what we got. */
 			if(size == 16) {
 				/* Set config 3 register for this target. */
 				printk("esp%d: 16 byte WIDE transfers enabled for target %d.\n",

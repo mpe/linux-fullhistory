@@ -375,7 +375,7 @@ static void layout_dev(struct pci_dev *dev)
 			 *
 			 * In sparse memory address space, the first
 			 * octant (16MB) of every 128MB segment is
-			 * aliased to the the very first 16MB of the
+			 * aliased to the very first 16 MB of the
 			 * address space (i.e., it aliases the ISA
 			 * memory address space).  Thus, we try to
 			 * avoid allocating PCI devices in that range.

@@ -118,7 +118,7 @@ A. Changes
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    ftape-2.x didn't handle the MTBSF tape operation correctly. A MTBSF
    call (i.e. "mt -f /dev/nqft0 bsf #COUNT") should space over #COUNT
-   file marks and then position at the EOT tape side of the the file
+   file marks and then position at the EOT tape side of the file
    mark. This has to be taken literally, i.e. "mt -f /dev/nqft0 bsf 1"
    should simply position at the start of the current volume.
 

@@ -1,5 +1,5 @@
     Originally,   this  driver  was    written  for the  Digital   Equipment
-    Corporation series of EtherWORKS ethernet cards:
+    Corporation series of EtherWORKS Ethernet cards:
 
         DE425 TP/COAX EISA
 	DE434 TP PCI

@@ -838,7 +838,7 @@ Fri Feb 09 20:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	working conditions (3 commands per lun, FAST SCSI, no command queueing).
 	I get the stack overflow problem with the 2 drivers at the same 
 	frequency.
-	With only 2 commands per lun, I dont have the problem with any driver.
+	With only 2 commands per lun, I don't have the problem with any driver.
 	It seems that the madness of recursion and the recent introduction of
 	the silly generic read function have broken performance and reliability 
 	of scsi drivers.

@@ -1093,7 +1093,7 @@ do_sync_known:
 		}
 #endif
 		/* We've talked to this guy before,
-		 * but never negotiated.. lets try,
+		 * but never negotiated.  Let's try,
 		 * need to attempt WIDE first, before
 		 * sync nego, as per SCSI 2 standard.
 		 */
@@ -3002,7 +3002,7 @@ static inline int check_multibyte_msg(struct NCR_ESP *esp,
 			       esp->esp_id, size);
 			message_out = MESSAGE_REJECT;
 		} else {
-			/* Things look good, lets see what we got. */
+			/* Things look good; let's see what we got. */
 			if(size == 16) {
 				/* Set config 3 register for this target. */
 				printk("esp%d: 16 byte WIDE transfers enabled for target %d.\n",

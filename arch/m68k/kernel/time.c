@@ -38,7 +38,7 @@ static inline void do_profile (unsigned long pc)
 			++prof_buffer[pc];
 		else
 		/*
-		 * Dont ignore out-of-bounds PC values silently,
+		 * Don't ignore out-of-bounds PC values silently,
 		 * put them into the last histogram slot, so if
 		 * present, they will show up as a sharp peak.
 		 */

@@ -134,6 +134,17 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
         both channels to use the IRQ assigned to Channel A, 1 to force both
         channels to use the IRQ assigned to Channel B, and -1 will disable
         this horrible abomination of a hack.  The default is disabled (-1).
+    "aic7xxx=pci_parity:x" - This option controls whether or not the driver
+        enables PCI parity error checking on the PCI bus.  By default, this
+        checking is disabled.  To enable the checks, simply specify pci_parity
+        with no value afterwords.  To reverse the parity from even to odd,
+        supply any number other than 0 or 255.  In short:
+          pci_parity     - Even parity checking (even is the normal PCI parity)
+          pci_parity:x   - Where x > 0, Odd parity checking
+          pci_parity:0   - No check (default)
+        NOTE: In order to get Even PCI parity checking, you must use the
+        version of the option that does not include the : and a number at
+        the end (unless you want to enter exactly 2^32 - 1 as the number).
     "aic7xxx=tag_info:{{8,8..},{8,8..},..}" - This option is used to enable
         tagged queueing on specific devices.  As of driver version 5.0.6, we
         now globally enable tagged queueing by default, but we also disable

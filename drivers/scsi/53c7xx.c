@@ -284,7 +284,7 @@
 #ifdef NO_IO_SPACE
 /*
  * The following make the definitions in 53c7xx.h (write8, etc) smaller,
- * we don't have seperate i/o space anyway.
+ * we don't have separate i/o space anyway.
  */
 #undef inb
 #undef outb
@@ -2518,7 +2518,7 @@ NCR53c7x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 * RGH:  I don't really like it - You get an interrupt which
 	 * calls NCR53c7x0_intr(), which calls this function (via
 	 * intr_dma()), which calls NCR53c7x0_intr().....
-	 * Anyway lets see how it goes for now.
+	 * Anyway let's see how it goes for now.
 	 */
 	hostdata->emulated_intfly = 1;
 	NCR53c7x0_intr(host->irq, NULL, NULL);
@@ -5681,7 +5681,7 @@ print_lots (struct Scsi_Host *host) {
 	    
 	/*
 	 * For the 53c710, the following will report value 0 for SCNTL3
-	 * and STEST0 - we dont have these registers.
+	 * and STEST0 - we don't have these registers.
 	 */
     	printk ("scsi%d : DCMD|DBC=0x%x, DNAD=0x%x (virt 0x%p)\n"
 		"         DSA=0x%lx (virt 0x%p)\n"

@@ -231,7 +231,7 @@ static inline void kb_wait(void)
 	do {
 		if (! (inb_p(KBD_STATUS_REG) & KBD_STAT_IBF))
 			return;
-		udelay(1000);
+		mdelay(1);
 		timeout--;
 	} while (timeout);
 #ifdef KBD_REPORT_TIMEOUTS
@@ -583,7 +583,7 @@ static int send_data(unsigned char data)
 				return 1;
 			if (resend)
 				break;
-			udelay(1000);
+			mdelay(1);
 			if (!--timeout) {
 #ifdef KBD_REPORT_TIMEOUTS
 				printk(KERN_WARNING "Keyboard timeout\n");

@@ -160,7 +160,7 @@ el2_probe1(struct device *dev, int ioaddr))
 
     /* Reset and/or avoid any lurking NE2000 */
     if (inb(ioaddr + 0x408) == 0xff) {
-    	udelay(1000);
+    	mdelay(1);
 	return ENODEV;
     }
 

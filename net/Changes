@@ -23,7 +23,7 @@ o	Routing cache (only in ip_build_header so far)	[TESTED]
 o	eql load balancing driver.			[TESTED]
 o	Token ring drivers.				[TESTED]
 o	IPIP and tunnels				[TESTED]
-o	Fix ethernet/token ring promisc broadcast error [TESTED]
+o	Fix Ethernet/token ring promisc broadcast error [TESTED]
 	(pkt_type set to OTHERHOST in error).
 o	Fixed bug in the routing caches			[TESTED]
 o	Protocol header cache support			[TESTED]
@@ -100,7 +100,7 @@ o	Major AX.25/NetROM fixes [John Nalor]		[TESTED]
 
 ------->>>>>  NET3 030  <<<<<----------
 
-o	Long word align ethernet IP headers (64byte align for pentium) [TESTED]
+o	Long word align Ethernet IP headers (64byte align for Pentium) [TESTED]
 		(less helpful than I'd have liked)
 o	Fixed variable length header support to really work	[TESTED]
 o	Mend appletalk/ipx partially			[TESTED]
@@ -132,7 +132,7 @@ o	Do fast cases of ip_build_xmit first
 	slows fragmented I/O down, speeds up smaller
 	packets. UDP send ttcp can now touch 7.5Mbyte/sec
 	with nothing else going on. UDP recv is slower 8( [TESTED]
-o	Fixed and enabled ethernet header caches	[TESTED]
+o	Fixed and enabled Ethernet header caches	[TESTED]
 o	Removed junk from igmp				[TESTED]
 o	Obscure UDP/copy&sum bug fix			[TESTED]
 o	Fixed multicast					[TESTED]
@@ -195,7 +195,7 @@ o	Smarter buffer use options for sockets		[TESTED]
 o	AF_UNIX smarter buffer driving			[TESTED]
 o	AF_UNIX full BSD semantics on STREAM writes	[TESTED]
 o	IOVEC's support repeated calls to copy more	[TESTED]
-o	Zero fragment 'solaris nfs' bug fixed <Werner>  [TESTED]
+o	Zero fragment 'Solaris NFS' bug fixed <Werner>  [TESTED]
 o	NetROM supports sendmsg/recvmsg			[TESTED]
 o	Sendmsg verify_iovec bugfix			[TESTED]
 o	ARP PERM is really permanent now <Craig>	[TESTED]
@@ -416,8 +416,8 @@ lose one frame per window full of data without measurable speed loss.
 [done]
 
 4.	RFC1323. These are the extensions for very fast nets.
-RFC1323 will be useful for Linux talking to systems over 100Mb/sec
-ethernet and over ATM as it allows large windows and protects from some
+RFC1323 will be useful for Linux talking to systems over 100 Mb/sec
+Ethernet and over ATM as it allows large windows and protects from some
 potential high speed TCP problems.
 [In progress]
 

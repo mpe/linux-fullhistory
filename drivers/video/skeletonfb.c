@@ -271,7 +271,7 @@ struct fbgen_hwswitch xxx_switch = {
 
 
 
-/* ------------ Hardware Independant Functions ------------ */
+/* ------------ Hardware Independent Functions ------------ */
 
 
     /*

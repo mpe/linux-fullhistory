@@ -139,7 +139,7 @@ hacr_write_slow(u_long	ioaddr,
 {
   hacr_write(ioaddr, hacr);
   /* delay might only be needed sometimes */
-  udelay(1000L);
+  mdelay(1);
 } /* hacr_write_slow */
 
 /*------------------------------------------------------------------*/
@@ -284,7 +284,7 @@ psa_write(u_long	ioaddr,
       count = 0;
       while((count++ < 100) &&
 	    (hasr_read(ioaddr) & HASR_PSA_BUSY))
-	udelay(1000);
+	mdelay(1);
     }
 
   wv_16_on(ioaddr, hacr);
@@ -528,7 +528,7 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_WRITE);
 
       /* Wavelan doc says : wait at least 10 ms for EEBUSY = 0 */
-      udelay(10000);
+      mdelay(10);
       fee_wait(ioaddr, 10, 100);
     }
 
@@ -2629,16 +2629,16 @@ wv_receive(device *	dev)
  * the transmit.
  *
  * The principle :
- * Each block contain a transmit command, a nop command,
+ * Each block contains a transmit command, a nop command,
  * a transmit block descriptor and a buffer.
- * The CU read the transmit block which point to the tbd,
- * read the tbd and the the content of the buffer.
- * When it has finish with it, it goes to the next command
- * which in our case is the nop. The nop point on itself,
- * so the CU stop here.
+ * The CU reads the transmit block which points to the tbd,
+ * reads the tbd and the content of the buffer.
+ * When it has finished with it, it goes to the next command
+ * which in our case is the nop. The nop points on itself,
+ * so the CU stops here.
  * When we add the next block, we modify the previous nop
  * to make it point on the new tx command.
- * Simple, isn't it ?
+ * Simple, isn't it?
  *
  * (called in wavelan_packet_xmit())
  */
@@ -2772,7 +2772,7 @@ if (lp->tx_n_in_use > 0)
 /*------------------------------------------------------------------*/
 /*
  * This routine is called when we want to send a packet (NET3 callback)
- * In this routine, we check if the the harware is ready to accept
+ * In this routine, we check if the hardware is ready to accept
  * the packet. We also prevent reentrance. Then, we call the function
  * to send the packet...
  */

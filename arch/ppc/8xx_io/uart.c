@@ -2324,7 +2324,7 @@ __initfunc(int rs_8xx_init(void))
 		 * make it out of the transmit buffer.
 		 */
 		if (i == CONFIG_SERIAL_CONSOLE_PORT)
-			udelay(2000);
+			mdelay(2);
 #endif
 		info = kmalloc(sizeof(ser_info_t), GFP_KERNEL);
 		if (info) {

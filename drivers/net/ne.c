@@ -25,6 +25,9 @@
     Paul Gortmaker	: Support for PCI ne2k clones, similar to lance.c
     Paul Gortmaker	: Allow users with bad cards to avoid full probe.
     Paul Gortmaker	: PCI probe changes, more PCI cards supported.
+    rjohnson@analogic.com : Changed init order so an interrupt will only
+    occur after memory is allocated for dev->priv. Deallocated memory
+    last in cleanup_modue()
 
 */
 
@@ -401,7 +404,7 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 	outb_p(0x00, ioaddr + EN0_RCNTLO);
 	outb_p(0x00, ioaddr + EN0_RCNTHI);
 	outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
-	udelay(10000);		/* wait 10ms for interrupt to propagate */
+	mdelay(10);		/* wait 10ms for interrupt to propagate */
 	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
 	dev->irq = autoirq_report(0);
 	if (ei_debug > 2)
@@ -416,6 +419,12 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 	return EAGAIN;
     }
 
+    /* Allocate dev->priv and fill in 8390 specific dev fields. */
+    if (ethdev_init(dev)) {
+        printk (" unable to get memory for dev->priv.\n");
+        return -ENOMEM;
+    }
+   
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
@@ -423,19 +432,12 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 				 pci_irq_line ? SA_SHIRQ : 0, name, dev);
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
+
+            kfree(dev->priv);
 	    return EAGAIN;
 	}
     }
-
     dev->base_addr = ioaddr;
-
-    /* Allocate dev->priv and fill in 8390 specific dev fields. */
-    if (ethdev_init(dev)) {
-	printk (" unable to get memory for dev->priv.\n");
-	free_irq(dev->irq, dev);
-	return -ENOMEM;
-    }
-
     request_region(ioaddr, NE_IO_EXTENT, name);
 
     for(i = 0; i < ETHER_ADDR_LEN; i++) {
@@ -773,11 +775,11 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
 		struct device *dev = &dev_ne[this_dev];
 		if (dev->priv != NULL) {
+			free_irq(dev->irq, dev);
+			release_region(dev->base_addr, NE_IO_EXTENT);
 			unregister_netdev(dev);
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq, dev);
-			release_region(dev->base_addr, NE_IO_EXTENT);
 		}
 	}
 }

@@ -225,7 +225,7 @@ __initfunc(int envctrl_init(void))
 	i2c->csr = CONTROL_PIN | CONTROL_ES1;
 	i2c->data = CLK_4_43 | BUS_CLK_90;
 	i2c->csr = CONTROL_PIN | CONTROL_ES0 | CONTROL_ACK;
-	udelay(10000);
+	mdelay(10);
 
 	return scan_bus();
 #else

@@ -340,7 +340,7 @@ static int num_ewrk3s = 0, num_eth = 0;
  */
 #define INIT_EWRK3 {\
     outb(EEPROM_INIT, EWRK3_IOPR);\
-    udelay(1000);\
+    mdelay(1);\
 }
 
 
@@ -1139,7 +1139,7 @@ static int ewrk3_close(struct device *dev)
 
 	/*
 	   ** Clean out the TX and RX queues here (note that one entry
-	   ** may get added to either the TXD or RX queues if the the TX or RX
+	   ** may get added to either the TXD or RX queues if the TX or RX
 	   ** just starts processing a packet before the STOP_EWRK3 command
 	   ** is received. This will be flushed in the ewrk3_open() call).
 	 */

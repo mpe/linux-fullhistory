@@ -4,7 +4,7 @@
  * This module supports a network interface wich provides lapb_sematics
  * -- as defined in ../../Documentation/networking/x25-iface.txt -- to
  * the upper layer and assumes that the lower layer provides a reliable
- * data link service by means of the the concap_device_ops callbacks.
+ * data link service by means of the concap_device_ops callbacks.
  *
  * Only protocol specific stuff goes here. Device specific stuff
  * goes to another -- device related -- concap_proto support source file.

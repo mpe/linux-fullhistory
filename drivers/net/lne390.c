@@ -56,7 +56,7 @@ static void lne390_reset_8390(struct device *dev);
 
 static void lne390_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
 static void lne390_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset);
-static void lne390_block_output(struct device *dev, int count, const unsigned char *buf, const start_page);
+static void lne390_block_output(struct device *dev, int count, const unsigned char *buf, const int start_page);
 
 #define LNE390_START_PG		0x00    /* First page of TX buffer	*/
 #define LNE390_STOP_PG		0x80    /* Last page +1 of RX ring	*/
@@ -279,7 +279,7 @@ static void lne390_reset_8390(struct device *dev)
 	outb(0x04, ioaddr + LNE390_RESET_PORT);
 	if (ei_debug > 1) printk("%s: resetting the LNE390...", dev->name);
 
-	udelay(2*1000);
+	mdelay(2);
 
 	ei_status.txing = 0;
 	outb(0x01, ioaddr + LNE390_RESET_PORT);

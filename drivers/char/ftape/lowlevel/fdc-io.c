@@ -214,7 +214,7 @@ int fdc_command(const __u8 * cmd_data, int cmd_len)
 		 * sending the step pulses to the drive. Therefore the
 		 * non-interrupt level driver has no chance to tell
 		 * whether the isr() just has issued a seek. Therefore
-		 * we HAVE TO have a look at the the ft_hide_interrupt
+		 * we HAVE TO have a look at the ft_hide_interrupt
 		 * flag: it signals the non-interrupt level part of
 		 * the driver that it has to wait for the fdc until it
 		 * has completet seeking.

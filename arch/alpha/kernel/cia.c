@@ -725,7 +725,7 @@ void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	printk(KERN_CRIT "   vector=0x%lx la_ptr=0x%lx pc=0x%lx\n",
 	       vector, la_ptr, regs->pc);
 
-	/* dump the the logout area to give all info: */
+	/* dump the logout area to give all info: */
 
 	ptr = (unsigned long *)la_ptr;
 	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {

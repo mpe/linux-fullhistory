@@ -293,6 +293,16 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		memset((void *)start_mem, 0, PAGE_SIZE);
 		start_mem += PAGE_SIZE;
 		set_pte(pg_table, pte);
+
+		/*
+		 * Do the same for the IO-APIC
+		 */
+		apic_area = 0xFEC00000;
+		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
+		pte = mk_pte(start_mem, PAGE_KERNEL);
+		memset((void *)start_mem, 0, PAGE_SIZE);
+		start_mem += PAGE_SIZE;
+		set_pte(pg_table, pte);		
 	}
 
 	local_flush_tlb();

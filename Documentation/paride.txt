@@ -12,7 +12,7 @@ host computer.  While some devices (notably scanners) use ad-hoc methods
 to pass commands and data through the parallel port interface, most 
 external devices are actually identical to an internal model, but with
 a parallel-port adapter chip added in.  Some of the original parallel port
-adapters were little more than mechanisms for mulitplexing a SCSI bus.
+adapters were little more than mechanisms for multiplexing a SCSI bus.
 (The Iomega PPA-3 adapter used in the ZIP drives is an example of this
 approach).  Most current designs, however, take a different approach.
 The adapter chip reproduces a small ISA or IDE bus in the external device

@@ -452,7 +452,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 			}
 			break;  /* Exit 'timer' loop */
 		}
-		udelay(1000);  /* 1 msec */
+		mdelay(1);  /* 1 msec */
 	}
 	*cp = 0;
 	puts("\n");

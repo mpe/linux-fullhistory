@@ -2,13 +2,13 @@
 
        Thomas M. Sailer, HB9JNX/AE4WA, <sailer@ife.ee.ethz.ch>
 
-This driver allows either SoundBlaster (sbc) or WindowsSoundSystem (wss)
+This driver allows either SoundBlaster (sbc) or Windows Sound System (wss)
 compatible soundcards to be used as either 1200 baud AFSK or 9600 baud FSK
 AX.25 packet radio modems. Only half duplex operation is supported; an
 attempt to include full duplex support failed because the hardware did
 not support it (it appeared that the card only provides one DMA channel,
-although the Codec chip would support two channels). The driver needs
-some processing power! A 486DX/2 66MHz is a minimum requirement, otherwise
+although the codec chip would support two channels). The driver needs
+some processing power! A 66 MHz 486 DX2 is a minimum requirement.  Otherwise
 interactive performance of the computer may become sluggish. This driver
 does *not* support telephone modem standards, it is intended for radio
 use only.

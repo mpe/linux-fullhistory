@@ -88,14 +88,14 @@ static int msp3400c_reset(struct i2c_bus *bus)
 {
 	int ret = 0;
     
-	udelay(2000);
+	mdelay(2);
 	i2c_start(bus);
 	i2c_sendbyte(bus, I2C_MSP3400C,2000);
 	i2c_sendbyte(bus, 0x00,0);
 	i2c_sendbyte(bus, 0x80,0);
 	i2c_sendbyte(bus, 0x00,0);
 	i2c_stop(bus);
-	udelay(2000);
+	mdelay(2);
 	i2c_start(bus);
 	if (0 != i2c_sendbyte(bus, I2C_MSP3400C,2000) ||
 		0 != i2c_sendbyte(bus, 0x00,0) ||
@@ -106,7 +106,7 @@ static int msp3400c_reset(struct i2c_bus *bus)
 		printk(KERN_ERR "msp3400: chip reset failed, penguin on i2c bus?\n");
 	}
 	i2c_stop(bus);
-	udelay(2000);
+	mdelay(2);
 	return ret;
 }
 

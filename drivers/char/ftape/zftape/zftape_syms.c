@@ -20,7 +20,7 @@
  * $Revision: 1.3 $
  * $Date: 1997/10/05 19:19:14 $
  *
- *      This file contains the the symbols that the zftape frontend to 
+ *      This file contains the symbols that the zftape frontend to 
  *      the ftape floppy tape driver exports 
  */		 
 

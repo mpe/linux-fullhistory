@@ -7,7 +7,7 @@ Introduction
 ============
 
 Ethertap provides packet reception and transmission for user
-space programs. It can be viewed as a simple ethernet device,
+space programs. It can be viewed as a simple Ethernet device,
 which instead of receiving packets from a network wire, it receives
 them from user space.
 

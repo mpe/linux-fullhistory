@@ -73,7 +73,7 @@ soundmodem.txt
 tcp.txt
 	- short blurb on how TCP output takes place.
 tulip.txt
-	- info on using DEC 21040/21041/21140 based PCI ethernet cards.
+	- info on using DEC 21040/21041/21140 based PCI Ethernet cards.
 vortex.txt
 	- info on using 3Com Vortex (3c590, 3c592, 3c595, 3c597) e'net cards.
 wan-router.txt

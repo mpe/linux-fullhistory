@@ -209,7 +209,7 @@ use autofs as well as the new NFS utils.
 RPM
 ===
 
-   If you run RedHat Linux or any other distribution that uses RPM, you
+   If you run Red Hat Linux or any other distribution that uses RPM, you
 need to upgrade RPM to version 2.2.7 or later.
 
 DOSEMU
@@ -471,7 +471,7 @@ distribution), most of these are available in RPM format.  Check around
 your favorite Red Hat mirror site before installing the non-RPM
 version.  Remember, you might need to use the -force option to get the
 upgrade to install.  ftp://ftp.redhat.com/pub/contrib/ will have almost
-everything you need, as does RedHat 5.0.
+everything you need, as does Red Hat 5.0.
 
    Those of you running Debian (or a different distribution that
 supports .deb packages) can look in the "unstable" and

@@ -35,7 +35,7 @@
  *					"SIOCAX25OPTRT" to set IP mode and a 'permanent' flag
  *					on routes.
  *	AX.25 033	Jonathan(G4KLX)	Remove auto-router.
- *			Joerg(DL1BKE)	Moved BPQ Ethernet driver to seperate device.
+ *			Joerg(DL1BKE)	Moved BPQ Ethernet driver to separate device.
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  *			Jonathan(G4KLX)	Support for packet forwarding.
  */

@@ -193,7 +193,7 @@ struct kernel_vm86_struct {
  * this way. In front of 'return-eip' may be some data, depending on
  * compilation, so we don't rely on this and save the pointer to 'oldregs'
  * in 'regs32' above.
- * However, with GCC-2.7.2 and the the current CFLAGS you see exactly this:
+ * However, with GCC-2.7.2 and the current CFLAGS you see exactly this:
 
 	long return-eip;        from call to vm86()
 	struct pt_regs oldregs;  user space registers as saved by syscall

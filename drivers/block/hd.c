@@ -804,7 +804,7 @@ __initfunc(int hd_init(void))
 #define DEVICE_BUSY busy[target]
 #define USAGE access_count[target]
 #define CAPACITY (hd_info[target].head*hd_info[target].sect*hd_info[target].cyl)
-/* We assume that the the bios parameters do not change, so the disk capacity
+/* We assume that the BIOS parameters do not change, so the disk capacity
    will not change */
 #undef MAYBE_REINIT
 #define GENDISK_STRUCT hd_gendisk

@@ -64,7 +64,7 @@ extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
  * additional page protection (when Mx_CTR.PPCS = 1) that allows TLB hit
  * based upon user/super access.  The TLB does not have accessed nor write
  * protect.  We assume that if the TLB get loaded with an entry it is
- * accessed, and overload the the changed bit for write protect.  We use
+ * accessed, and overload the changed bit for write protect.  We use
  * two bits in the software pte that are supposed to be set to zero in
  * the TLB entry (24 and 25) for these indicators.  Although the level 1
  * descriptor contains the guarded and writethrough/copyback bits, we can

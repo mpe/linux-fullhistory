@@ -69,7 +69,8 @@ static void ultra32_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 static void ultra32_block_input(struct device *dev, int count,
 				struct sk_buff *skb, int ring_offset);
 static void ultra32_block_output(struct device *dev, int count,
-				 const unsigned char *buf, const start_page);
+				 const unsigned char *buf,
+				 const int start_page);
 static int ultra32_close(struct device *dev);
 
 #define ULTRA32_CMDREG	0	/* Offset to ASIC command register. */

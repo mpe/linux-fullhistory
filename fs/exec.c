@@ -428,6 +428,8 @@ static int exec_mmap(void)
 	 * Failure ... restore the prior mm_struct.
 	 */
 fail_restore:
+	/* The pgd belongs to the parent ... don't free it! */
+	mm->pgd = NULL;
 	current->mm = old_mm;
 	mmput(mm);
 

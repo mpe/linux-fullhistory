@@ -992,7 +992,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
     aha152x_reset_ports(shpnt);
       
-    printk("aha152x%d: vital data: PORTBASE=0x%03x, IRQ=%d, SCSI ID=%d,"
+    printk("aha152x%d: vital data: PORTBASE=0x%03lx, IRQ=%d, SCSI ID=%d,"
            " reconnect=%s, parity=%s, synchronous=%s, delay=%d, extended translation=%s\n",
            i,
            shpnt->io_port,
@@ -3176,7 +3176,7 @@ int aha152x_proc_info(char *buffer, char **start,
   save_flags(flags);
   cli();
   
-  SPRINTF("ioports 0x%04x to 0x%04x\n",
+  SPRINTF("ioports 0x%04lx to 0x%04lx\n",
           shpnt->io_port, shpnt->io_port+shpnt->n_io_port-1);
   SPRINTF("interrupt 0x%02x\n", shpnt->irq);
   SPRINTF("disconnection/reconnection %s\n", 

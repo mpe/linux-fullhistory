@@ -123,7 +123,7 @@ Lconvertmemc:	mov	r3, r1, lsr #13			@
  *	     address  Address of fault.
  *	     pte      New PTE at address
  * Purpose : Update the mapping for this address.
- * Notes   : does the ARM3 run faster if you dont use the result in the next instruction?
+ * Notes   : does the ARM3 run faster if you do not use the result in the next instruction?
  */
 _arm2_3_update_cache:
 		tst	r2, #PAGE_PRESENT

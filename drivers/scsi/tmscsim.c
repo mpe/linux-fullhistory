@@ -921,7 +921,7 @@ int DC390_reset(Scsi_Cmnd *cmd, unsigned int resetFlags)
     outb(bval,ioport+CtrlReg1);  /* disable interrupt */
     DC390_ResetSCSIBus( pACB );
     for( i=0; i<500; i++ )
-	udelay(1000);
+	mdelay(1);
     bval = inb(ioport+CtrlReg1);
     bval &= ~DIS_INT_ON_SCSI_RST;
     outb(bval,ioport+CtrlReg1); /* re-enable interrupt */

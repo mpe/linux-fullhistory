@@ -10,13 +10,14 @@
  *	<tomsoft@informatik.tu-chemnitz.de>
  */
 
-#ifndef __SMP__
-#define NR_IRQS 16
-#else
-#define NR_IRQS 24
-#endif
-
 #define TIMER_IRQ 0
+
+/*
+ * 16 XT IRQ's, 8 potential APIC interrupt sources.
+ * Right now the APIC is only used for SMP, but this
+ * may change.
+ */
+#define NR_IRQS 24
 
 static __inline__ int irq_cannonicalize(int irq)
 {

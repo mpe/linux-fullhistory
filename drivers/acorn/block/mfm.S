@@ -150,7 +150,7 @@ readdma_loop:
   subs r7,r7,#4        @ Decrement bytes to go
   bne readdma_loop
 
-  @ Try reading multiple blocks - if this was fast enough then I dont think
+  @ Try reading multiple blocks - if this was fast enough then I do not think
   @ this should help - NO taken out DAG - new interrupt handler has
   @ non-consecutive memory blocks
   @ sub r0,r0,#8

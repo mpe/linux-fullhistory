@@ -9,9 +9,9 @@
  * 08-04-98	RMK	Shifts re-ordered
  */
 
-@ Regs: [] = corruptable
+@ Regs: [] = corruptible
 @       {} = used
-@       () = dont use
+@       () = do not use
 
 #include <linux/linkage.h>
 #include <asm/assembler.h>

@@ -504,7 +504,7 @@ void lca_machine_check (unsigned long vector, unsigned long la,
 		printk(KERN_CRIT "  Unknown errorlog size %d\n", el.c->size);
 	}
 
-	/* dump the the logout area to give all info: */
+	/* dump the logout area to give all info: */
 
 	ptr = (unsigned long *) la;
 	for (i = 0; i < el.c->size / sizeof(long); i += 2) {

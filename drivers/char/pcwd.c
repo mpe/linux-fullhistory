@@ -126,7 +126,7 @@ __initfunc(static int pcwd_checkcard(void))
 
 	/* Sleep 1/2 second (or 500000 microseconds :) */
 
-		udelay(500000L);
+		mdelay(500);
 		done = 0;
 
 	/* If there's a heart beat in both instances, then this means we
@@ -455,7 +455,7 @@ __initfunc(static int send_command(int cmd))
 	int i;
 
 	outb_p(cmd, current_readport + 2);
-	udelay(1000L);
+	mdelay(1);
 
 	i = inb(current_readport);
 	i = inb(current_readport);

@@ -417,7 +417,7 @@ static int tangent_wait_reset(int ioaddr)
         int timeout=0;
 
         while(timeout < 5000 && (inb(ioaddr+TANG_CARD_STATUS)&TANG_TX_READY)==0)
-		udelay(1000);   /* Wait 1000 useconds */
+		mdelay(1);   /* Wait 1000 useconds */
 
 	return 0;
 }

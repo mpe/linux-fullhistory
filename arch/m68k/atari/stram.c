@@ -53,7 +53,7 @@
  * ++roman:
  * 
  * New version of ST-Ram buffer allocation. Instead of using the
- * 1 MB - 4 KB that remain when the the ST-Ram chunk starts at $1000
+ * 1 MB - 4 KB that remain when the ST-Ram chunk starts at $1000
  * (1 MB granularity!), such buffers are reserved like this:
  *
  *  - If the kernel resides in ST-Ram anyway, we can take the buffer

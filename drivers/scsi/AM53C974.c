@@ -778,7 +778,7 @@ __initfunc(static int AM53C974_init(Scsi_Host_Template * tpnt, struct pci_dev *p
 	AM53C974_write_8(CMDREG, CMDREG_RBUS);	/* reset SCSI bus */
 	udelay(10);
 	AM53C974_config_after_reset(instance);
-	udelay(500000);
+	mdelay(500);
 	return (1);
 }
 
@@ -823,7 +823,7 @@ const char *AM53C974_info(struct Scsi_Host *instance)
 {
 	static char info[100];
 
-	sprintf(info, "AM53/79C974 PCscsi driver rev. %d.%d; host I/O address: 0x%x; irq: %d\n",
+	sprintf(info, "AM53/79C974 PCscsi driver rev. %d.%d; host I/O address: 0x%lx; irq: %d\n",
 	  AM53C974_DRIVER_REVISION_MAJOR, AM53C974_DRIVER_REVISION_MINOR,
 		instance->io_port, instance->irq);
 	return (info);

@@ -28,7 +28,7 @@ IMPORTANT!	Read this if you are installing a separately
   sound support during "make config"). Please refer to kernel documentation
   for instructions about configuring and compiling kernel. File Readme.cards
   contains card specific instructions for configuring this driver for
-  use with various soundcards.
+  use with various sound cards.
 
 Boot time configuration (using lilo and insmod) 
 -----------------------------------------------

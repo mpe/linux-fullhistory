@@ -369,8 +369,8 @@ static void unmap_pci_mem(vm_offset_t vaddr, u_long size)
 
 static void DELAY(long us)
 {
-	for (;us>1000;us-=1000) udelay(1000);
-	if (us) udelay(us);
+	if (us/1000) mdelay(us/1000);
+	if (us%1000) udelay(us%1000);
 }
 
 /*
@@ -1874,7 +1874,7 @@ struct ncb {
 **	we reach them (for forward jumps).
 **	Therefore we declare a struct here.
 **	If you make changes inside the script,
-**	DONT FORGET TO CHANGE THE LENGTHS HERE!
+**	DON'T FORGET TO CHANGE THE LENGTHS HERE!
 **
 **----------------------------------------------------------
 */
@@ -3782,7 +3782,7 @@ static void ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int le
 		case 0x8:
 			/*
 			**	JUMP / CALL
-			**	dont't relocate if relative :-)
+			**	don't relocate if relative :-)
 			*/
 			if (opcode & 0x00800000)
 				relocs = 0;
@@ -6249,7 +6249,7 @@ static void ncr_getsync(ncb_p np, u_char sfac, u_char *fakp, u_char *scntl3p)
 	/*
 	**	Why not to try the immediate lower divisor and to choose 
 	**	the one that allows the fastest output speed ?
-	**	We dont want input speed too much greater than output speed.
+	**	We don't want input speed too much greater than output speed.
 	*/
 	if (div >= 1 && fak < 8) {
 		u_long fak2, per2;

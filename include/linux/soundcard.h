@@ -606,7 +606,7 @@ typedef struct buffmem_desc {
  * 
  *	APF_NORMAL (the default) and APF_NETWORK make the driver to cleanup the
  *	playback buffer whenever an underrun occurs. This consumes some time
- *	preven's looping the existing buffer.
+ *	prevents looping the existing buffer.
  *	APF_CPUINTENS is intended to be set by CPU intensive applications which
  *	are likely to run out of time occasionally. In this mode the buffer cleanup is
  *	disabled which saves CPU time but also let's the previous buffer content to

@@ -49,8 +49,8 @@ Go on and compile your kernel and modules. Install the modules. Run depmod -a.
 
 Using isapnptools
 -----------------
-In most systems with a PnP bios you do not need to use isapnp. The
-initialization provided by the bios is sufficient for the driver
+In most systems with a PnP BIOS you do not need to use isapnp. The
+initialization provided by the BIOS is sufficient for the driver
 to pick up the card and continue initialization.
 
 If that fails, or if you have other PnP cards, you need to use isapnp
@@ -155,10 +155,10 @@ the mad16 driver (use "modprobe mad16" to prevent auto-unloading)
 before the cdrom is accessed the first time.
 
 Using the sound driver built-in to the kernel may help here, but...
-Most new systems have a PnP bios and also two IDE controllers.
+Most new systems have a PnP BIOS and also two IDE controllers.
 The IDE controller on the sound card may be needed only on older
 systems (which have only one IDE controller) but these systems
-also do not have a PnP bios - requiring isapnptools and a modularized
+also do not have a PnP BIOS - requiring isapnptools and a modularized
 driver.
 
 Known problems

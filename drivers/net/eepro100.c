@@ -1,4 +1,4 @@
-/* drivers/net/eepro100.c: An Intel i82557 ethernet driver for linux. */
+/* drivers/net/eepro100.c: An Intel i82557 Ethernet driver for Linux. */
 /*
    NOTICE: this version tested with kernels 1.3.72 and later only!
 	Written 1996-1997 by Donald Becker.
@@ -143,7 +143,7 @@ int speedo_debug = 3;
 I. Board Compatibility
 
 This device driver is designed for the Intel i82557 "Speedo3" chip, Intel's
-single-chip fast ethernet controller for PCI, as used on the Intel
+single-chip fast Ethernet controller for PCI, as used on the Intel
 EtherExpress Pro 100 adapter.
 
 II. Board-specific settings
@@ -197,7 +197,7 @@ An additional complexity of these non-transmit commands are that they may be
 added asynchronous to the normal transmit queue, so we disable interrupts
 whenever the Tx descriptor ring is manipulated.
 
-A notable aspect of the these special configure commands is that they do
+A notable aspect of these special configure commands is that they do
 work with the normal Tx ring entry scavenge method.  The Tx ring scavenge
 is done at interrupt time using the 'dirty_tx' index, and checking for the
 command-complete bit.  While the setup frames may have the NoOp command on the

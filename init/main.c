@@ -1070,7 +1070,6 @@ __initfunc(asmlinkage void start_kernel(void))
 	signals_init();
 	inode_init();
 	file_table_init();
-	sock_init();
 #if defined(CONFIG_SYSVIPC)
 	ipc_init();
 #endif
@@ -1083,6 +1082,7 @@ __initfunc(asmlinkage void start_kernel(void))
 #ifdef __SMP__
 	smp_init();
 #endif
+	sock_init();
 #ifdef CONFIG_SYSCTL
 	sysctl_init();
 #endif

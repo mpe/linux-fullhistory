@@ -912,7 +912,7 @@ err_exit:
       shutdown,
 
    Seems, now it is clean. The solution is to consider netdevice and
-   line discipline sides as two independant threads.
+   line discipline sides as two independent threads.
 
    By-product (not desired): sl? does not feel hangups and remains open.
    It is supposed, that user level program (dip, diald, slattach...)

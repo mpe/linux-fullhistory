@@ -909,7 +909,7 @@ isdnloop_parse_cmd(isdnloop_card * card)
 					isdnloop_fake(card->rcard[ch - 1], buf, card->rch[ch - 1] + 1);
 					/* Fall through */
 				case 3:
-					/* si1 does not match, dont alert but start timer */
+					/* si1 does not match, don't alert but start timer */
 					isdnloop_start_ctimer(card, ch - 1);
 					break;
 				case 1:

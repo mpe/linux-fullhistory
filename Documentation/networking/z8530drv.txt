@@ -254,7 +254,7 @@ speed 1200		# the default baudrate
 clock dpll		# clock source: 
 			# 	dpll     = normal halfduplex operation
 			# 	external = MODEM provides own Rx/Tx clock
-			#	divider  = use fullduplex divider if
+			#	divider  = use full duplex divider if
 			#		   installed (1)
 mode nrzi		# HDLC encoding mode
 			#	nrzi = 1k2 MODEM, G3RUH 9k6 MODEM
@@ -450,7 +450,7 @@ speed:
      Example: sccparam /dev/scc3 speed 9600
 
 txdelay:
-     The delay (in units of 10ms) after keying of the 
+     The delay (in units of 10 ms) after keying of the 
      transmitter, until the first byte is sent. This is usually 
      called "TXDELAY" in a TNC.  When 0 is specified, the driver 
      will just wait until the CTS signal is asserted. This 
@@ -472,7 +472,7 @@ persist:
 
 slottime:
      This is the time between samples of the channel. It is 
-     expressed in units of 10ms.  About 200-300 ms (value 20-30) 
+     expressed in units of 10 ms.  About 200-300 ms (value 20-30) 
      seems to be a good value.
 
      Example: sccparam /dev/scc0 slot 20
@@ -484,7 +484,7 @@ tail:
      SCC before the transmitter is keyed down. The value depends 
      on the baudrate selected.  A few character times should be 
      sufficient, e.g. 40ms at 1200 baud. (value 4)
-     The value of this parameter is in 10ms units.
+     The value of this parameter is in 10 ms units.
 
      Example: sccparam /dev/scc2 4
 
@@ -507,9 +507,9 @@ full:
 wait:
      The initial waittime before any transmit attempt, after the 
      frame has been queue for transmit.  This is the length of 
-     the first slot in CSMA mode.  In fullduplex modes it is
+     the first slot in CSMA mode.  In full duplex modes it is
      set to 0 for maximum performance.
-     The value of this parameter is in 10ms units. 
+     The value of this parameter is in 10 ms units. 
 
      Example: sccparam /dev/scc1 wait 4
 
@@ -534,7 +534,7 @@ min:
      Example: sccparam /dev/scc3 min 10
 
 idle
-     This parameter specifies the maximum idle time in fullduplex 
+     This parameter specifies the maximum idle time in full duplex 
      2 mode, in seconds.  When no frames have been sent for this 
      time, the transmitter will be keyed down.  A value of 0 is
      has same result as the fullduplex mode 1. This parameter

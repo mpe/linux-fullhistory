@@ -19,7 +19,7 @@ o	Dump bootup pages once booted somehow.
 o	Clean up warnings/volatiles.
 o	Fix load_TR() for non contiguous processor ids
 o	Iterate over the slave timer requests if one is lost (keep a count per cpu)
-o	Distribute irq's (locking present just needs the 82489 to be asked
+o	Distribute IRQs (locking present just needs the 82489 to be asked
 	nicely).
 o	486 startup code.
 o	How to handle mixed FPU/non FPU processors.

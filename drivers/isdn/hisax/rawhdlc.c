@@ -135,7 +135,7 @@
 #include "rawhdlc.h"
 
 /* There's actually an identical copy of this table in the PPP code
- * (ppp_crc16_table), but I don't want this code dependant on PPP
+ * (ppp_crc16_table), but I don't want this code dependent on PPP
  */
 
 // static 

@@ -1428,7 +1428,7 @@ DC390_ScsiRstDetect( PACB pACB )
 #endif
 
     /* delay a second */
-    { unsigned int msec = 1*1000; while (--msec) udelay(1000); }
+    mdelay(1000);
 
     save_flags(flags);
     cli();

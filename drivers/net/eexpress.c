@@ -743,7 +743,7 @@ static void eexp_hw_set_interface(struct device *dev)
 		break;
 	}
 	outb(oldval, dev->base_addr+0x300e);
-	udelay(20000);
+	mdelay(20);
 }
 
 /*
@@ -1357,7 +1357,7 @@ static void eexp_hw_init586(struct device *dev)
 	eexp_hw_rxinit(dev);
 
 	outb(0,ioaddr+EEPROM_Ctrl);
-	udelay(5000);
+	mdelay(5);
 
 	scb_command(dev, 0xf000);
 	outb(0,ioaddr+SIGNAL_CA);

@@ -24,7 +24,7 @@
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
-# via ftp (user: anonymous) from sunsite.unc.edu in the directory
+# via FTP (user: anonymous) from sunsite.unc.edu in the directory
 # /pub/Linux/docs/HOWTO. Before you start compiling, make sure that
 # you have the necessary versions of all programs and libraries
 # required to compile and run this kernel; they are listed in the file
@@ -99,7 +99,7 @@ CONFIG_MATH_EMULATION
   is broken. Try "man bootparam" or see the documentation of your boot
   loader (lilo or loadlin) about how to pass options to the kernel at
   boot time. The lilo procedure is also explained in the SCSI-HOWTO,
-  available via ftp (user: anonymous) in
+  available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.) This means that it is a
   good idea to say Y here if you intend to use this kernel on
   different machines. More information about the internals of Linux
@@ -157,7 +157,7 @@ CONFIG_BLK_DEV_LOOP
   the CD, or want to use floppy images without first writing them to
   floppy. This option also allows you to mount a filesystem with
   encryption. To use these features, you need a recent version of
-  mount (available via ftp (user: anonymous) from
+  mount (available via FTP (user: anonymous) from
   ftp://ftp.win.tue.nl/pub/linux/util/). Note that this loop device
   has nothing to do with the loopback device used for network
   connections from the machine to itself. Most users will answer N
@@ -195,7 +195,7 @@ CONFIG_BLK_DEV_IDE
   Useful information about large (>540MB) IDE disks, sound card IDE
   ports, module support, and other topics, is contained in
   Documentation/ide.txt. For detailed information about hard drives,
-  consult the Disk-HOWTO, available via ftp (user: anonymous) from
+  consult the Disk-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. To fine-tune IDE
   drive/interface parameters for improved performance, look for the
   hdparm package at
@@ -218,7 +218,7 @@ CONFIG_BLK_DEV_HD_ONLY
   for systems with only older MFM/RLL/ESDI drives. Choosing the old
   driver can save 13kB or so of kernel memory. If you are unsure, then
   just choose the Enhanced IDE/MFM/RLL driver instead of this one. For
-  more detailed information, read the Disk-HOWTO, available via ftp
+  more detailed information, read the Disk-HOWTO, available via FTP
   (user: anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 Use old disk-only driver on primary interface
@@ -262,7 +262,7 @@ CONFIG_BLK_DEV_IDECD
   CDROM drive, you can say N to all other CDROM options, but be sure
   to say Y to "ISO9660 cdrom filesystem support".
 
-  Read the CDROM-HOWTO, available via ftp (user: anonymous) in
+  Read the CDROM-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO and the file
   Documentation/cdrom/ide-cd. Note that older versions of lilo (the
   Linux boot loader) cannot properly deal with IDE/ATAPI CDROMs, so
@@ -338,7 +338,7 @@ CONFIG_BLK_DEV_CMD640
   to enable the CMD640 bugfix/support: "ide0=cmd640_vlb". (Try "man
   bootparam" or see the documentation of your boot loader about how to
   pass options to the kernel. The lilo procedure is also explained in
-  the SCSI-HOWTO, available via ftp (user: anonymous) in
+  the SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.)
 
   The CMD640 chip is also used on add-in cards by Acculogic, and on
@@ -694,10 +694,10 @@ CONFIG_BLK_DEV_MD
   logical block device. This can be used to combine several redundant
   hard disks to a RAID1/4/5 device so as to provide protection against
   hard disk failures. More information and the necessary tools are
-  available over ftp (user: anonymous) from
+  available over FTP (user: anonymous) from
   ftp://sweet-smoke.ufr-info-p7.ibp.fr/pub/Linux in the md package and
   the md-FAQ. Please read drivers/block/README.md and the relevant
-  section of the Disk-HOWTO, available via ftp (user: anonymous) from
+  section of the Disk-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If unsure, say N.
 
 Linear (append) mode
@@ -872,7 +872,7 @@ CONFIG_NET_ALIAS
   typically used for services that act differently based on the
   address they listen on (e.g. "multihosting" or "virtual domains" or
   "virtual hosting services" on the web server apache and the ftp
-  server wuftpd -- read the Virtual-Services-HOWTO, available via ftp
+  server wuftpd -- read the Virtual-Services-HOWTO, available via FTP
   (user: anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO)
   or for connecting to different logical networks through the same
   physical interface (most commonly an Ethernet networking card). See
@@ -969,7 +969,7 @@ CONFIG_ALPHA_AVANTI
   want to read the Linux/Alpha homepage on the WWW at
   http://www.azstarnet.com/~axplinux/ (to browse the WWW, you need to
   have access to a machine on the Internet that has a program like
-  lynx or netscape) and also the Alpha-HOWTO, available via ftp (user:
+  lynx or netscape) and also the Alpha-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. For this
   question, it suffices to give a unique prefix of the option you want
   to choose. The choices:
@@ -1047,7 +1047,7 @@ CONFIG_SERIAL_MANY_PORTS
   Say Y here if you have dumb serial boards other than the four
   standard COM 1/2/3/4 ports. This may happen if you have an AST
   FourPort, Accent Async, Boca (read the Boca mini-HOWTO, available
-  via ftp (user: anonymous) from
+  via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini), or other custom
   serial port hardware which acts similar to standard serial port
   hardware. If you only use the standard COM 1/2/3/4 ports, you can
@@ -1099,7 +1099,7 @@ CONFIG_PCI
   bus system, i.e. the way the CPU talks to the other stuff inside
   your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
   VESA. If you have PCI, say Y, otherwise N. The PCI-HOWTO, available
-  via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO,
+  via FTP (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO,
   contains valuable information about which PCI hardware does work
   under Linux and which doesn't.
 
@@ -1171,12 +1171,12 @@ CONFIG_SYSVIPC
   and exchange information. It is generally considered to be a good
   thing, and some programs won't run unless you say Y here. In
   particular, if you want to run the DOS emulator dosemu under Linux
-  (read the DOSEMU-HOWTO, available via ftp (user: anonymous) in
+  (read the DOSEMU-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO), you'll need to say Y
   here.
   
   You can find documentation about IPC with "info ipc" and also in
-  section 6.4 of the Linux Programmer's Guide, available via ftp
+  section 6.4 of the Linux Programmer's Guide, available via FTP
   (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/LDP/programmers-guide.
 
@@ -1265,7 +1265,7 @@ CONFIG_BINFMT_JAVA
   becoming a universal executable format.
 
   If you want to execute JAVA binaries, read the Java on Linux HOWTO,
-  available via ftp (user: anonymous) at
+  available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You will then need to
   install the run time system contained in the Java Developers Kit
   (JDK) as described in the HOWTO. This is completely independent of
@@ -1379,7 +1379,7 @@ CONFIG_VIDEO_SELECT
   "vga=ask" which brings up a video mode menu on kernel startup. Try
   "man bootparam" or see the documentation of your boot loader about
   how to pass options to the kernel. The lilo procedure is also
-  explained in the SCSI-HOWTO, available via ftp (user: anonymous) in
+  explained in the SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Read
   Documentation/svga.txt for more information about the Video mode
   selection support. If unsure, say N.
@@ -1761,7 +1761,7 @@ CONFIG_IP_MASQUERADE
   addresses. (This last problem can also be solved by connecting the
   Linux box to the Internet using SLiRP [SLiRP is a SLIP/PPP emulator
   that works if you have a regular dial up shell account on some UNIX
-  computer; get it via ftp (user: anonymous) from
+  computer; get it via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/network/serial/ ].) 
 
   The IP masquerading code will only work if IP forwarding is enabled
@@ -1774,7 +1774,7 @@ CONFIG_IP_MASQUERADE
   from a boot time script after the /proc filesystem has been mounted. 
 
   Details on how to set things up are contained in the IP Masquerade
-  mini-HOWTO, available via ftp (user: anonymous) from
+  mini-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini.
 
   If you say Y here, you should also say Y to "IP: always defragment",
@@ -1801,7 +1801,7 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   ipautofw is a program by Richard Lynch allowing additional support
   for masquerading protocols which do not (as yet) have their own
   protocol helpers. Information and source for ipautofw is available
-  via ftp (user: anonymous) from
+  via FTP (user: anonymous) from
   ftp://ftp.netis.com/pub/members/rlynch/
 
   The ipautofw code is still under development and so is currently
@@ -1811,37 +1811,6 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   inserted in and removed from the running kernel whenever you want).
   The module will be called ip_masq_autofw.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
-
-IP: ipportfw masquerade support
-CONFIG_IP_MASQUERADE_IPPORTFW
-  ipportfw is an addition to IP Masquerading written by Steven Clarke
-  to allow some forwarding of packets from outside to inside a
-  firewall on given ports. Information and source for ipportfw is
-  available from
-  http://www.monmouth.demon.co.uk/ipsubs/portforwarding.html
-  The portfw code is still under development and so is currently
-  marked EXPERIMENTAL.
-  If you want this, say Y.
-
-IP: ICMP masquerading
-CONFIG_IP_MASQUERADE_ICMP
-  The basic masquerade code described for CONFIG_IP_MASQUERADE only
-  handles TCP or UDP packets (and ICMP errors for existing 
-  connections).  This option adds additional support for masquerading
-  ICMP packets, such as ping or the probes used by the Windows 95
-  tracert program.
-  If you want this, say Y.
-
-IP: ipautofw masquerade support
-CONFIG_IP_MASQUERADE_IPAUTOFW (Experimental)
-  ipautofw is a program by Richard Lynch allowing additional
-  support for masquerading protocols which do not (as yet)
-  have additional protocol helpers.  
-  Information and source for ipautofw is available from
-  ftp://ftp.netis.com/pub/members/rlynch/
-  The ipautofw code is still under development and so is currently
-  marked EXPERIMENTAL.
-  If you want this, say Y.
 
 IP: ipportfw masquerade support
 CONFIG_IP_MASQUERADE_IPPORTFW
@@ -1892,7 +1861,7 @@ CONFIG_IP_ALIAS
   the WWW at http://www.thesphere.com/~dlp/TwoServers/ (to browse the
   WWW, you need to have access to a machine on the Internet that has a
   program like lynx or netscape) and also in the
-  Virtual-Hosting-HOWTO, available via ftp (user: anonymous) from
+  Virtual-Hosting-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   Another scenario would be
@@ -1936,7 +1905,7 @@ CONFIG_IP_PIMSM_V2
 
 PC/TCP compatibility mode
 CONFIG_INET_PCTCP
-  If you have been having difficulties telneting to your Linux machine
+  If you have been having difficulties telnetting to your Linux machine
   from a DOS system that uses (broken) PC/TCP networking software (all
   versions up to OnNet 2.0) over your local Ethernet try saying Y
   here.  Everyone else says N. People having problems with NCSA telnet
@@ -2092,7 +2061,7 @@ CONFIG_IPX
   This is support for the Novell networking protocol, IPX, commonly
   used for local networks of Windows machines. You need it if you want
   to access Novell NetWare file or print servers using the Linux
-  Novell client ncpfs (available via ftp (user: anonymous) from
+  Novell client ncpfs (available via FTP (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/system/filesystems/) or from within the
   Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO). In order to do the former,
@@ -2137,24 +2106,22 @@ IPX: SPX networking (EXPERIMENTAL)
 CONFIG_SPX
   The (SPP-derived) Sequenced Packet eXchange (SPX) protocol. Novell's
   networking protocol which monitors transmissions to guarantee
-  successful delivery. An example server/client program (SPX-0.0x.tar.gz) 
-  is available at ftp://ftp.spacs.k12.wi.us/users/jschlst/SPX-0.0x.tar.gz.
-  It is safe to say Y/M here.
+  successful delivery. It is safe to say Y/M here.
 
 Appletalk DDP
 CONFIG_ATALK
   Appletalk is the way Apple computers speak to each other on a
-  network. If your linux box is connected to such a network and you
+  network. If your Linux box is connected to such a network and you
   want to join the conversation, say Y. You will need to use the
   netatalk package so that your Linux box can act as a print and file
-  server for macs as well as access appletalk printers. Check out
+  server for Macs as well as access Appletalk printers. Check out
   http://artoo.hitchcock.org/~flowerpt/projects/linux-netatalk/ on the
   WWW for details (to browse the WWW, you need to have access to a
   machine on the Internet that has a program like lynx or
-  netscape). EtherTalk is the name used for appletalk over Ethernet
+  netscape). EtherTalk is the name used for Appletalk over Ethernet
   and the cheaper and slower LocalTalk is appletalk over a proprietary
   apple network using serial links. Ethertalk and Localtalk are fully 
-  supported by Linux. The NET-2-HOWTO, available via ftp (user: anonymous)
+  supported by Linux. The NET-2-HOWTO, available via FTP (user: anonymous)
   in sunsite.unc.edu:/pub/Linux/docs/HOWTO contains valuable information
   as well. This driver is also available as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
@@ -2183,7 +2150,7 @@ IP to Appletalk-IP Encapsulation support
 CONFIG_IPDDP_ENCAP
   If you say Y here, the kernel will be able to encapsulate IP packets
   inside Appletalk frames; this is useful if your Linux box is stuck
-  on an appletalk network (which hopefully contains a decapsulator
+  on an Appletalk network (which hopefully contains a decapsulator
   somewhere). Please see Documentation/networking/ipddp.txt for more
   information. If you say Y here, you cannot say Y to "Appletalk-IP to
   IP Decapsulation support", below.
@@ -2192,7 +2159,7 @@ Appletalk-IP to IP Decapsulation support
 CONFIG_IPDDP_DECAP
   If you say Y here, the kernel will be able to decapsulate
   Appletalk-IP frames to IP packets; this is useful if you want your
-  Linux box to act as an Internet gateway for an appletalk
+  Linux box to act as an Internet gateway for an Appletalk
   network. Please see Documentation/networking/ipddp.txt for more
   information. If you say Y here, you cannot say Y to "IP to
   Appletalk-IP Encapsulation support", above.
@@ -2232,7 +2199,7 @@ CONFIG_HAMRADIO
   Y here. You want to read http://www.tapr.org/tapr/html/pkthome.html
   (to browse the WWW, you need to have access to a machine on the
   Internet that has a program like lynx or netscape) and the HAM-HOWTO
-  and the AX25-HOWTO, both available via ftp (user: anonymous) from
+  and the AX25-HOWTO, both available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that the answer to
   this question won't directly affect the kernel: saying N will just
   cause this configure script to skip all the questions about amateur
@@ -2255,7 +2222,7 @@ CONFIG_AX25
 
   Information about where to get supporting software for Linux amateur
   radio as well as information about how to configure an AX.25 port is
-  contained in the AX25-HOWTO, available via ftp (user: anonymous) in
+  contained in the AX25-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You might also want to
   check out the file Documentation/networking/ax25.txt in the kernel
   source. More information about digital amateur radio in general is
@@ -2293,7 +2260,7 @@ CONFIG_NETROM
 
   A comprehensive listing of all the software for Linux amateur radio
   users as well as information about how to configure an AX.25 port is
-  contained in the AX25-HOWTO, available via ftp (user: anonymous) in
+  contained in the AX25-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You also might want to
   check out the file Documentation/networking/ax25.txt. More
   information about digital amateur radio in general is on the WWW at
@@ -2314,7 +2281,7 @@ CONFIG_ROSE
 
   A comprehensive listing of all the software for Linux amateur radio
   users as well as information about how to configure an AX.25 port is
-  contained in the AX25-HOWTO, available via ftp (user: anonymous) in
+  contained in the AX25-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You also might want to check
   out the file Documentation/networking/ax25.txt. More information
   about digital amateur radio in general is on the WWW at
@@ -2379,7 +2346,7 @@ CONFIG_DMASCC
   automatically.
 
   If you have one of these cards, you can say Y here and should read
-  the HAM-HOWTO, available via ftp (user: anonymous) in
+  the HAM-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver operates multiple boards simultaneously. If you compile
@@ -2403,7 +2370,7 @@ CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   in order to communicate with other computers.  If you want to use
   this, read Documentation/networking/z8530drv.txt and the
-  AX.25-HOWTO, available via ftp (user: anonymous) at
+  AX.25-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  Also make sure to say Y to
   "Amateur Radio AX.25 Level 2" support. 
 
@@ -2580,7 +2547,7 @@ CONFIG_X25
   entry point can carry several logical point-to-point connections
   (called "virtual circuits") to other computers connected to the X.25
   network. Governments, banks, and other organizations tend to use it
-  to connect to each other or to form Wide Area Networks (WAN's). Many
+  to connect to each other or to form Wide Area Networks (WANs). Many
   countries have public X.25 networks.  X.25 consists of two
   protocols: the higher level Packet Layer Protocol (PLP) (say Y here
   if you want that) and the lower level data link layer protocol LAPB
@@ -2641,12 +2608,12 @@ CONFIG_BRIDGE
   other third party bridge products. 
 
   In order to use this, you'll need the bridge configuration tools
-  available via ftp (user: anonymous) from
+  available via FTP (user: anonymous) from
   ftp://shadow.cabi.net/pub/Linux. Please read the Bridge mini-HOWTO
   for more information. Note that if your box acts as a bridge, it
   probably contains several Ethernet devices, but the kernel is not
   able to recognize more than one at boot time without help; for
-  details read the Ethernet-HOWTO, available via ftp (user: anonymous)
+  details read the Ethernet-HOWTO, available via FTP (user: anonymous)
   in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. The Bridging code is
   still in test. If unsure, say N.
 
@@ -2698,7 +2665,7 @@ CONFIG_SCSI
   that "speaks" the SCSI protocol), because you will be asked for
   it. You also need to say Y here if you want support for the parallel
   port version of the 100MB IOMEGA ZIP drive. Please read the
-  SCSI-HOWTO, available via ftp (user: anonymous) in
+  SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   This driver is also available as a module ( = code which can be
@@ -2713,7 +2680,7 @@ SCSI disk support
 CONFIG_BLK_DEV_SD
   If you want to use a SCSI hard disk or the SCSI or parallel port
   version of the IOMEGA ZIP drive under Linux, say Y and read the
-  SCSI-HOWTO and the Disk-HOWTO, both available via ftp (user:
+  SCSI-HOWTO and the Disk-HOWTO, both available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. This is
   NOT for SCSI CDROMs.
 
@@ -2729,7 +2696,7 @@ CONFIG_BLK_DEV_SD
 SCSI tape support
 CONFIG_CHR_DEV_ST
   If you want to use a SCSI tapedrive under Linux, say Y and read the
-  SCSI-HOWTO, available via ftp (user: anonymous) in
+  SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO and
   drivers/scsi/README.st in the kernel source. This is NOT for SCSI
   CDROMs.
@@ -2756,7 +2723,7 @@ CONFIG_BLK_DEV_SR
 Enable vendor-specific extensions (for SCSI CDROM)
 CONFIG_BLK_DEV_SR_VENDOR
   This enables the usage of vendor specific SCSI commands. This is
-  required to support multisession CD's with old NEC/TOSHIBA cdrom
+  required to support multisession CDs with old NEC/TOSHIBA cdrom
   drives (and HP Writers). If you have such a drive and get the first
   session only, try saying Y here; everybody else says N.
 
@@ -2767,11 +2734,11 @@ CONFIG_CHR_DEV_SG
   CDROMs or tapes, say Y here. These won't be supported by the kernel
   directly, so you need some additional software which knows how to
   talk to these devices using the SCSI protocol. For CD-writers, you
-  would need the program cdwrite, available via ftp (user: anonymous)
+  would need the program cdwrite, available via FTP (user: anonymous)
   from ftp://sunsite.unc.edu/pub/Linux/utils/disk-management; for other
   devices, it's possible that you'll have to write the driver software
   yourself, so have a look at the SCSI-HOWTO and at the
-  SCSI-Programming-HOWTO, both available via ftp (user: anonymous) in
+  SCSI-Programming-HOWTO, both available via FTP (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. 
 
   If you want to compile this as a module ( = code which can be
@@ -2828,7 +2795,7 @@ Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
   This is support for the AHA-1510, AHA-1520, AHA-1522, and AHA-2825
   SCSI host adapters. It is explained in section 3.3 of the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
+  SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. You might also want to
   read the comments at the top of drivers/scsi/aha152x.c.
 
@@ -2840,7 +2807,7 @@ CONFIG_SCSI_AHA152X
 Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
   This is support for a SCSI host adapter. It is explained in section
-  3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  3.4 of the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  Note that Trantor was
   recently purchased by Adaptec, and some former Trantor products are
   being sold under the Adaptec name. If it doesn't work out of the
@@ -2854,7 +2821,7 @@ CONFIG_SCSI_AHA1542
 Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740
   This is support for a SCSI host adapter. It is explained in section
-  3.5 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  3.5 of the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/aha1740.h.
@@ -2873,7 +2840,7 @@ CONFIG_SCSI_AIC7XXX
   Information on the configuration options for this controller can be
   found by checking the help file for each of the available
   configuration options. You also want to read
-  drivers/scsi/README.aic7xxx and the SCSI-HOWTO, available via ftp
+  drivers/scsi/README.aic7xxx and the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note
   that the AHA2920 SCSI host adapter is *not* supported by this
   driver; choose "Future Domain 16xx SCSI support" instead if you have
@@ -2971,7 +2938,7 @@ CONFIG_SCSI_OMIT_FLASHPOINT
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
   This is support for DTC 3180/3280 SCSI Host Adapters.  Please read
-  the SCSI-HOWTO, available via ftp (user: anonymous) at
+  the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO and the file
   drivers/scsi/README.dtc3x80.  
 
@@ -2987,7 +2954,7 @@ CONFIG_SCSI_EATA_DMA
   and the DPT PM2011B and PM2012B controllers.  Note that there is
   also another driver for the same hardware: "EATA ISA/EISA/PCI
   support". You should only say Y to one of them. Please read the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
+  SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   This driver is also available as a module (= code which can be
@@ -3002,7 +2969,7 @@ CONFIG_SCSI_EATA_PIO
   host adapters could also use this driver but are discouraged from
   doing so, since this driver only supports hard disks and lacks
   numerous features.  You might want to have a look at the SCSI-HOWTO,
-  available via ftp (user: anonymous) at
+  available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   If you want to compile this as a module ( = code which can be
@@ -3016,7 +2983,7 @@ CONFIG_SCSI_U14_34F
   The source at drivers/scsi/u14-34f.c contains some information about
   this hardware. If the driver doesn't work out of the box, you may
   have to change some settings in drivers/scsi/u14-34f.c.  Read the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
+  SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that there is also
   another driver for the same hardware: "UltraStor SCSI support",
   below.  You should say Y to both only if you want 24F support as
@@ -3046,7 +3013,7 @@ CONFIG_SCSI_FUTURE_DOMAIN
   (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and
   other adapters based on the Future Domain chipsets (Quantum
   ISA-200S, ISA-250MG; Adaptec AHA-2920; and at least one IBM board).
-  It is explained in section 3.7 of the SCSI-HOWTO, available via ftp
+  It is explained in section 3.7 of the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   This driver is also available as a module ( = code which can be
@@ -3058,7 +3025,7 @@ Generic NCR5380/53c400 SCSI support
 CONFIG_SCSI_GENERIC_NCR5380
   This is the generic NCR family of SCSI controllers, not to be
   confused with the NCR 53c7 or 8xx controllers. It is explained in
-  section 3.8 of the SCSI-HOWTO, available via ftp (user: anonymous)
+  section 3.8 of the SCSI-HOWTO, available via FTP (user: anonymous)
   at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work
   out of the box, you may have to change some settings in
   drivers/scsi/g_NCR5380.h.
@@ -3087,7 +3054,7 @@ NCR53c7,8xx SCSI support
 CONFIG_SCSI_NCR53C7xx
   This is the 53c7 and 8xx NCR family of SCSI controllers, not to be
   confused with the NCR 5380 controllers. It is explained in section
-  3.8 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  3.8 of the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/53c7,8xx.h.
@@ -3260,7 +3227,7 @@ CONFIG_SCSI_IBMMCA
   'ibmmcascsi=display' as an additional kernel parameter. Try "man
   bootparam" or see the documentation of your boot loader about how to
   pass options to the kernel. The lilo procedure is also explained in
-  the SCSI-HOWTO, available via ftp (user: anonymous) in
+  the SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this driver as a module ( = code which can be
@@ -3326,7 +3293,7 @@ CONFIG_SCSI_IN2000
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
   This is support for a SCSI host adapter. It is explained in section
-  3.10 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  3.10 of the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/pas16.h.
@@ -3339,7 +3306,7 @@ CONFIG_SCSI_PAS16
 PCI2000 support
 CONFIG_SCSI_PCI2000
   This is support for the PCI2000I EIDE interface card which acts as a
-  SCSI host adapter. Please read the SCSI-HOWTO, available via ftp
+  SCSI host adapter. Please read the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module called pci2000.o ( = code
@@ -3350,7 +3317,7 @@ CONFIG_SCSI_PCI2000
 PCI2220i support
 CONFIG_SCSI_PCI2220I
   This is support for the PCI2220i EIDE interface card which acts as a
-  SCSI host adapter. Please read the SCSI-HOWTO, available via ftp
+  SCSI host adapter. Please read the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module called pci2220i.o ( = code
@@ -3361,7 +3328,7 @@ CONFIG_SCSI_PCI2220I
 PSI240i support
 CONFIG_SCSI_PSI240I
   This is support for the PSI240i EIDE interface card which acts as a
-  SCSI host adapter. Please read the SCSI-HOWTO, available via ftp
+  SCSI host adapter. Please read the SCSI-HOWTO, available via FTP
   (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module called psi240i.o ( = code
@@ -3377,7 +3344,7 @@ CONFIG_SCSI_QLOGIC_FAS
   does NOT support the PCI version. The PCI versions are supported by
   the Qlogic ISP driver though.  Information about this driver is
   contained in drivers/scsi/README.qlogicfas.  You should also read
-  the SCSI-HOWTO, available via ftp (user: anonymous) at
+  the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -3393,7 +3360,7 @@ CONFIG_SCSI_QLOGIC_ISP
   Y here, make sure to say Y to "PCI BIOS support" as well. More
   information is contained in the file
   drivers/scsi/README.qlogicisp. You should also read the SCSI-HOWTO,
-  available via ftp (user: anonymous) at
+  available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -3405,7 +3372,7 @@ Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE
   These are 8-bit SCSI controllers; the ST-01 is also supported by
   this driver. It is explained in section 3.9 of the SCSI-HOWTO,
-  available via ftp (user: anonymous) at
+  available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/seagate.h.
@@ -3418,7 +3385,7 @@ CONFIG_SCSI_SEAGATE
 Trantor T128/T128F/T228 SCSI support
 CONFIG_SCSI_T128
   This is support for a SCSI host adapter. It is explained in section
-  3.11 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  3.11 of the SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/t128.h. Note that Trantor was purchased by Adaptec, and
@@ -3433,7 +3400,7 @@ UltraStor SCSI support
 CONFIG_SCSI_ULTRASTOR
   This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
   adapter family. This driver is explained in section 3.12 of the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
+  SCSI-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/ultrastor.h.
@@ -3464,7 +3431,7 @@ CONFIG_SCSI_EATA
   to "PCI bios support", the addresses of all the PCI SCSI controllers
   reported by BIOS32 are probed as well.  You want to read
   the start of drivers/scsi/eata.c and the SCSI-HOWTO, available via
-  ftp (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
+  FTP (user: anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   Note that there is also another driver for the same hardware
   available: "EATA-DMA support". You should say Y to only one of them.
@@ -3499,7 +3466,7 @@ NCR53c406a SCSI support
 CONFIG_SCSI_NCR53C406A
   This is support for the NCR53c406a SCSI host adapter. For user
   configurable parameters, check out drivers/scsi/NCR53c406.c in the
-  kernel source. Also read the SCSI-HOWTO, available via ftp (user:
+  kernel source. Also read the SCSI-HOWTO, available via FTP (user:
   anonymous) at ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   If you want to compile this driver as a module ( = code which can be
@@ -3523,7 +3490,7 @@ AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read
   drivers/scsi/README.AM53C974 for details. Also, the SCSI-HOWTO,
-  available via ftp (user: anonymous) at
+  available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO, is for you. 
 
   If you want to compile this driver as a module ( = code which can be
@@ -3548,7 +3515,7 @@ CONFIG_SCSI_PPA
   (a 100Mb removable media device). For more information about this
   driver and how to use it you should read the file
   drivers/scsi/README.ppa. You should also read the SCSI-HOWTO, which
-  is available via ftp (user: anonymous) from
+  is available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. If you use this driver,
   you will still be able to use the parallel port for other tasks,
   such as a printer; it is safe to compile both drivers into the
@@ -3635,7 +3602,7 @@ CONFIG_NETDEVICES
   computer at all or if all your connections will be over a telephone
   line with a modem either via UUCP (UUCP is a protocol to forward
   mail and news between unix hosts over telephone lines; read the
-  UUCP-HOWTO, available via ftp (user: anonymous) in
+  UUCP-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO) or dialing up a shell
   account or a BBS, even using term (term is a program which gives you
   almost full Internet connectivity if you have a regular dial up
@@ -3669,7 +3636,7 @@ CONFIG_DUMMY
   address. It is most commonly used in order to make your currently
   inactive SLIP address seem like a real address for local programs.
   If you use SLIP or PPP, you might want to say Y here. Read about it
-  in the Network Administrator's Guide, available via ftp (user:
+  in the Network Administrator's Guide, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/LDP. Since this
   thing often comes in handy, the default is Y. It won't enlarge your
   kernel either. What a deal.
@@ -3693,11 +3660,11 @@ CONFIG_SLIP
 
   Normally, your access provider has to support SLIP in order for you
   to be able to use it, but there is now a SLIP emulator called SLiRP
-  around (available via ftp (user: anonymous) from
+  around (available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/network/serial/ ) which
   allows you to use SLIP over a regular dial up shell connection. If
   you plan to use SLiRP, make sure to say Y to CSLIP, below. The
-  NET-2-HOWTO, available via ftp (user: anonymous) in
+  NET-2-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO, explains how to
   configure SLIP. Note that you don't need this option if you just
   want to run term (term is a program which gives you almost full
@@ -3720,11 +3687,11 @@ CONFIG_SLIP_COMPRESSED
   TCP/IP headers (not on the data itself), but it has to be supported
   on both ends. Ask your access provider if you are not sure and say
   Y, just in case. You will still be able to use plain SLIP. If you
-  plan to use SLiRP, the SLIP emulator (available via ftp (user:
+  plan to use SLiRP, the SLIP emulator (available via FTP (user:
   anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/network/serial/) which allows
   you to use SLIP over a regular dial up shell connection, you
-  definitely want to say Y here. The NET-2-HOWTO, available via ftp
+  definitely want to say Y here. The NET-2-HOWTO, available via FTP
   (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO,
   explains how to configure CSLIP. This won't enlarge your kernel.
 
@@ -3751,7 +3718,7 @@ CONFIG_PPP
   serial) lines. Ask your access provider if they support it, because
   otherwise you can't use it (not quite true any more: the free
   program SLiRP can emulate a PPP line if you just have a regular dial
-  up shell account on some UNIX computer; get it via ftp (user:
+  up shell account on some UNIX computer; get it via FTP (user:
   anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/network/serial/). Note that
   you don't need "PPP support" if you just want to run term (term is a
@@ -3791,7 +3758,7 @@ CONFIG_NET_RADIO
   interfaces. 
 
   Some user-level drivers for scarab devices which don't require
-  special kernel support are available via ftp (user: anonymous) from
+  special kernel support are available via FTP (user: anonymous) from
   ftp://shadow.cabi.net/pub/Linux.
 
 STRIP (Metricom Starmode radio IP)
@@ -3828,7 +3795,7 @@ CONFIG_WAVELAN
   This driver support the ISA version of the Wavelan card. A separate
   driver for the pcmcia hardware is available in David Hinds's pcmcia
   package. If you want to use an ISA Wavelan card under Linux, say Y
-  and read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  and read the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Some more specific
   information is contained in Documentation/networking/wavelan.txt.
   You will also need the wireless tools package available from
@@ -3941,7 +3908,7 @@ CONFIG_PLIP
   has a program like lynx or netscape) and winsock or NCSA's telnet.
 
   If you want to use PLIP, say Y and read the PLIP mini-HOWTO,
-  available via ftp (user: anonymous) in
+  available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini as well as the
   NET-2-HOWTO in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that
   the PLIP protocol was changed and this PLIP driver won't work
@@ -4286,7 +4253,7 @@ CONFIG_NET_ETHERNET
 
   If your Linux machine will be connected to an Ethernet and you have
   an Ethernet network card installed in your computer, say Y here and
-  read the Ethernet-HOWTO, available via ftp (user: anonymous) from
+  read the Ethernet-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   Note that the answer to this question won't directly affect the
@@ -4312,7 +4279,7 @@ CONFIG_SUN_INTEL
 Western Digital/SMC cards
 CONFIG_NET_VENDOR_SMC
   If you have a network (Ethernet) card belonging to this class, say Y
-  and read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  and read the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   Note that the answer to this question doesn't directly affect the
@@ -4323,7 +4290,7 @@ CONFIG_NET_VENDOR_SMC
 WD80*3 support
 CONFIG_WD80x3
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -4336,7 +4303,7 @@ SMC Ultra MCA support
 CONFIG_ULTRAMCA
   If you have a network (Ethernet) card of this type and are running
   an MCA based system (PS/2), say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -4348,7 +4315,7 @@ CONFIG_ULTRAMCA
 SMC Ultra support
 CONFIG_ULTRA
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
   
   Important: There have been many reports that, with some motherboards
@@ -4367,7 +4334,7 @@ CONFIG_ULTRA
 SMC Ultra32 EISA support
 CONFIG_ULTRA32
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.  
 
   This driver is also available as a module ( = code which can be
@@ -4381,9 +4348,9 @@ CONFIG_SMC9194
   This is support for the SMC9xxx based Ethernet cards. Choose this
   option if you have a DELL laptop with the docking station, or
   another SMC9192/9194 based chipset. Say Y if you want it compiled
-  into the kernel, and read the the file
+  into the kernel, and read the file
   Documentation/networking/smc9.txt and the Ethernet-HOWTO, available
-  via ftp (user: anonymous) in
+  via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4396,7 +4363,7 @@ Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (Ethernet) card belonging to this class, such
   as the NI5010, NI5210 or NI6210, say Y and read the Ethernet-HOWTO,
-  available via ftp (user: anonymous) in
+  available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Note that the answer to this question doesn't directly affect the
@@ -4407,7 +4374,7 @@ CONFIG_NET_VENDOR_RACAL
 NI5010 support
 CONFIG_NI5010
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that this is still
   experimental code. 
 
@@ -4420,7 +4387,7 @@ CONFIG_NI5010
 NI5210 support
 CONFIG_NI52
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -4432,7 +4399,7 @@ CONFIG_NI52
 NI6510 support
 CONFIG_NI65
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   This driver is also available as a module ( = code which can be
@@ -4444,14 +4411,14 @@ CONFIG_NI65
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Some LinkSys cards are
   of this type.
 
 3COM cards
 CONFIG_NET_VENDOR_3COM
   If you have a network (Ethernet) card belonging to this class, say Y
-  and read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  and read the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Note that the answer to this question doesn't directly affect the
@@ -4462,7 +4429,7 @@ CONFIG_NET_VENDOR_3COM
 3c501 support
 CONFIG_EL1
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Also, consider buying a
   new card, since the 3c501 is slow, broken, and obsolete: you will
   have problems. Some people suggest to ping ("man ping") a nearby
@@ -4477,7 +4444,7 @@ CONFIG_EL1
 3c503 support
 CONFIG_EL2
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4490,7 +4457,7 @@ CONFIG_EL2
 CONFIG_ELPLUS
   Information about this network (Ethernet) card can be found in
   Documentation/networking/3c505.txt. If you have a card of this type,
-  say Y and read the Ethernet-HOWTO, available via ftp (user:
+  say Y and read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -4502,7 +4469,7 @@ CONFIG_ELPLUS
 3c507 support
 CONFIG_EL16
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4514,7 +4481,7 @@ CONFIG_EL16
 3c523 support 
 CONFIG_ELMC
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4527,7 +4494,7 @@ CONFIG_ELMC
 CONFIG_EL3
   If you have a network (Ethernet) card belonging to the 3Com
   EtherLinkIII series, say Y and read the Ethernet-HOWTO, available
-  via ftp (user: anonymous) in
+  via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If your card is not working you may need to use the DOS
@@ -4545,7 +4512,7 @@ CONFIG_VORTEX
   If you have a 3Com "Vortex" or "Boomerang" series network (Ethernet)
   card (Fast EtherLink 3c590/3c592/3c595/3c597 or the EtherLink XL
   3c900 or 3c905), say Y and read the Ethernet-HOWTO, available via
-  ftp (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+  FTP (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
   More specific information is in Documentation/networking/vortex.txt
   and in the comments at the beginning of drivers/net/3c59x.c.
 
@@ -4560,7 +4527,7 @@ CONFIG_NET_ISA
   bus system (that's the way the components of the card talk to each
   other) is ISA (as opposed to EISA, VLB or PCI), say Y. Make sure you
   know the name of your card. Read the Ethernet-HOWTO, available via
-  ftp (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+  FTP (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
   If unsure, say Y.
 
   Note that the answer to this question doesn't directly affect the
@@ -4579,7 +4546,7 @@ CONFIG_ARCNET
   below.
 
   You might also want to have a look at the Ethernet-HOWTO, available
-  via ftp (user: anonymous) in
+  via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO (even though ARCnet is
   not really Ethernet).
 
@@ -4667,7 +4634,7 @@ CONFIG_ARCNET_COM20020
 Cabletron E21xx support
 CONFIG_E2100
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4680,7 +4647,7 @@ CS89x0 support
 CONFIG_CS89x0
   Support for CS89x0 chipset based Ethernet cards. If you have a
   network (Ethernet) card of this type, say Y and read the
-  Ethernet-HOWTO, available via ftp (user: anonymous) in
+  Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO as well as
   Documentation/networking/cs89x0.txt.
 
@@ -4693,7 +4660,7 @@ CONFIG_CS89x0
 DEPCA support
 CONFIG_DEPCA
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO as well as
   drivers/net/depca.c.
 
@@ -4708,7 +4675,7 @@ CONFIG_EWRK3
   This driver supports the DE203, DE204 and DE205 network (Ethernet)
   cards. If this is for you, say Y and read
   Documentation/networking/ewrk3.txt in the kernel source as well as
-  the Ethernet-HOWTO, available via ftp (user: anonymous) from
+  the Ethernet-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -4720,13 +4687,13 @@ CONFIG_EWRK3
 SEEQ8005 support
 CONFIG_SEEQ8005
   This is a driver for the SEEQ 8005 network (Ethernet) card. If this
-  is for you, read the Ethernet-HOWTO, available via ftp (user:
+  is for you, read the Ethernet-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 AT1700 support
 CONFIG_AT1700
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4739,7 +4706,7 @@ CONFIG_AT1700
 FMV-181/182/183/184 support
 CONFIG_FMV18X
   If you have a Fujitsu FMV-181/182/183/184 network (Ethernet) card,
-  say Y and read the Ethernet-HOWTO, available via ftp (user:
+  say Y and read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you use an FMV-183 or FMV-184 and it is not working, you may need
@@ -4755,7 +4722,7 @@ EtherExpressPro support
 CONFIG_EEXPRESS_PRO
   If you have a network (Ethernet) card of this type, say Y. Note
   however that the EtherExpressPro 100 Ethernet card has its own
-  separate driver. Please read the Ethernet-HOWTO, available via ftp
+  separate driver. Please read the Ethernet-HOWTO, available via FTP
   (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4767,7 +4734,7 @@ CONFIG_EEXPRESS_PRO
 EtherExpress support
 CONFIG_EEXPRESS
   If you have an EtherExpress16 network (Ethernet) card, say Y and
-  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  read the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Note that the Intel
   EtherExpress16 card used to be regarded as a very poor choice
   because the driver was very unreliable. We now have a new driver
@@ -4782,7 +4749,7 @@ CONFIG_EEXPRESS
 HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4794,7 +4761,7 @@ CONFIG_HPLAN_PLUS
 HP PCLAN (27245 and other 27xxx series) support
 CONFIG_HPLAN
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4806,7 +4773,7 @@ CONFIG_HPLAN
 HP 10/100VG PCLAN (ISA, EISA, PCI) support
 CONFIG_HP100
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -4818,7 +4785,7 @@ CONFIG_HP100
 NE2000/NE1000 support
 CONFIG_NE2000
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Many Ethernet cards
   without a specific driver are compatible with NE2000.
 
@@ -4831,14 +4798,14 @@ CONFIG_NE2000
 SK_G16 support
 CONFIG_SK_G16
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 EISA, VLB, PCI and on board controllers
 CONFIG_NET_EISA
   This is another class of network cards which attach directly to the
   bus. If you have one of those, say Y and read the Ethernet-HOWTO,
-  available via ftp (user: anonymous) from
+  available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Note that the answer to this question doesn't directly affect the
@@ -4850,13 +4817,13 @@ CONFIG_NET_EISA
 AMD PCnet32 (VLB and PCI) support
 CONFIG_PCNET32
   If you have a PCnet32 or PCnetPCI based network (Ethernet) card, say
-  Y here and read the Ethernet-HOWTO, available via ftp (user:
+  Y here and read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 Ansel Communications EISA 3200 support
 CONFIG_AC3200
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4868,7 +4835,7 @@ CONFIG_AC3200
 Racal-Interlan EISA ES3210 support
 CONFIG_ES3210
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4880,7 +4847,7 @@ CONFIG_ES3210
 Mylex EISA LNE390A/LNE390B support
 CONFIG_LNE390
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4892,7 +4859,7 @@ CONFIG_LNE390
 Apricot Xen-II on board Ethernet
 CONFIG_APRICOT
   If you have a network (Ethernet) controller of this type, say Y and
-  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  read the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -4906,7 +4873,7 @@ CONFIG_DE4X5
   This is support for the DIGITAL series of PCI/EISA Ethernet cards.
   These include the DE425, DE434, DE435, DE450 and DE500 models. If
   you have a network card of this type, say Y and read the
-  Ethernet-HOWTO, available via ftp (user: anonymous) in
+  Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. More specific
   information is contained in Documentation/networking/de4x5.txt.
 
@@ -4924,7 +4891,7 @@ CONFIG_DEC_ELCP
   of this type. (If your card is NOT SMC EtherPower 10/100 PCI
   (smc9332dst), you can also try the driver for "Generic DECchip"
   cards, above. However, most people with a network card of this type
-  will say Y here.) Do read the Ethernet-HOWTO, available via ftp
+  will say Y here.) Do read the Ethernet-HOWTO, available via FTP
   (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
   More specific information is contained in
   Documentation/networking/tulip.txt.
@@ -4940,7 +4907,7 @@ CONFIG_DGRS
   This is support for the Digi International RightSwitch series of
   PCI/EISA Ethernet switch cards. These include the SE-4 and the SE-6
   models. If you have a network card of this type, say Y and read the
-  Ethernet-HOWTO, available via ftp (user: anonymous) in
+  Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. More specific
   information is contained in Documentation/networking/dgrs.txt.
 
@@ -4953,7 +4920,7 @@ CONFIG_DGRS
 EtherExpressPro/100 support
 CONFIG_EEXPRESS_PRO100
   If you have an Intel EtherExpressPro 100 PCI network (Ethernet)
-  card, say Y and read the Ethernet-HOWTO, available via ftp (user:
+  card, say Y and read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4965,7 +4932,7 @@ CONFIG_EEXPRESS_PRO100
 ICL EtherTeam 16i/32 support
 CONFIG_ETH16I
   If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  the Ethernet-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -4977,7 +4944,7 @@ CONFIG_ETH16I
 TI ThunderLAN support (EXPERIMENTAL)
 CONFIG_TLAN
   If you have a TLAN based network card which is supported by this
-  driver, say Y and read the Ethernet-HOWTO, available via ftp (user:
+  driver, say Y and read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Devices
   currently supported are the Compaq Netelligent 10, Netelligent
   10/100, and Internal NetFlex 3.
@@ -4992,9 +4959,9 @@ CONFIG_TLAN
 
 SMC EtherPower II (EXPERIMENTAL)
 CONFIG_EPIC100
-  If you have an SMC EtherPower II 9432 PCI ethernet network card
+  If you have an SMC EtherPower II 9432 PCI Ethernet network card
   which is based on the SMC83c170, say Y and read the Ethernet-HOWTO,
-  available via ftp (user: anonymous) in
+  available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -5008,14 +4975,14 @@ CONFIG_ZNET
   The Zenith Z-Note notebook computer has a built-in network
   (Ethernet) card, and this is the Linux driver for it. Note that the
   IBM Thinkpad 300 is compatible with the Z-Note and is also supported
-  by this driver. Read the Ethernet-HOWTO, available via ftp (user:
+  by this driver. Read the Ethernet-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 Pocket and portable adapters
 CONFIG_NET_POCKET
   Cute little network (Ethernet) devices which attach to the parallel
   port ("pocket adapters"), commonly used with laptops. If you have
-  one of those, say Y and read the Ethernet-HOWTO, available via ftp
+  one of those, say Y and read the Ethernet-HOWTO, available via FTP
   (user: anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to plug a network card into the PCMCIA slot of your
@@ -5038,7 +5005,7 @@ AT-LAN-TEC/RealTek pocket adapter support
 CONFIG_ATP
   This is a network (Ethernet) device which attaches to your parallel
   port. Read drivers/net/atp.c as well as the Ethernet-HOWTO,
-  available via ftp (user: anonymous) from
+  available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO if you want to use this.
   If you intend to use this driver, you should have said N to the
   Parallel Printer support, because the two drivers don't like each
@@ -5048,7 +5015,7 @@ D-Link DE600 pocket adapter support
 CONFIG_DE600
   This is a network (Ethernet) device which attaches to your parallel
   port. Read Documentation/networking/DLINK.txt as well as the
-  Ethernet-HOWTO, available via ftp (user: anonymous) from
+  Ethernet-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO if you want to use this.
   It is possible to have several devices share a single parallel port
   and it is safe to compile the corresponding drivers into the kernel.
@@ -5062,7 +5029,7 @@ D-Link DE620 pocket adapter support
 CONFIG_DE620
   This is a network (Ethernet) device which attaches to your parallel
   port. Read Documentation/networking/DLINK.txt as well as the
-  Ethernet-HOWTO, available via ftp (user: anonymous) from
+  Ethernet-HOWTO, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO if you want to use this.
   It is possible to have several devices share a single parallel port
   and it is safe to compile the corresponding drivers into the kernel.
@@ -5080,7 +5047,7 @@ CONFIG_TR
   connected to such a Token Ring network and want to use your Token
   Ring card under Linux, say Y here and to the driver for your
   particular card below and read the Token-Ring mini-HOWTO, available
-  via ftp (user:anonymous) from
+  via FTP (user:anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. Most people can say N
   here.
 
@@ -5088,7 +5055,7 @@ IBM Tropic chipset based adapter support
 CONFIG_IBMTR
   This is support for all IBM Token Ring cards that don't use DMA. If
   you have such a beast, say Y and read the Token-Ring mini-HOWTO,
-  available via ftp (user:anonymous) from
+  available via FTP (user:anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Warning: this driver will almost definitely fail if more than one
@@ -5105,7 +5072,7 @@ CONFIG_SHAPER
   limit the rate of outgoing data flow over some other network
   device. See Documentation/networking/shaper.txt for more
   information.  To set up and configure shaper devices, you need the
-  shapecfg program, available via ftp (user: anonymous) from
+  shapecfg program, available via FTP (user: anonymous) from
   ftp://shadow.cabi.net/pub/Linux in the shaper package.  
 
   This driver is also available as a module ( = code which can be
@@ -5143,7 +5110,7 @@ CONFIG_ARM_ETHERH
   If you have an Acorn system with one of these network cards, you
   should say Y to this option if you wish to use it with Linux.
 
-EBSA-110 ethernet interface
+EBSA-110 Ethernet interface
 CONFIG_AM79C961A
   If you wish to compile a kernel for the EBSA-110, then you should
   always answer Y to this.
@@ -5151,7 +5118,7 @@ CONFIG_AM79C961A
 Support CDROM drives that are not SCSI or IDE/ATAPI
 CONFIG_CD_NO_IDESCSI
   If you have a CDROM drive that is neither SCSI nor IDE/ATAPI, say Y
-  here, otherwise N. Read the CDROM-HOWTO, available via ftp (user:
+  here, otherwise N. Read the CDROM-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. 
 
   Note that the answer to this question doesn't directly affect the
@@ -5417,7 +5384,7 @@ CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
   usage (also called disk quotas). Currently, it works only for the
   ext2 filesystem. You need additional software in order to use quota
-  support; for details, read the Quota mini-HOWTO, available via ftp
+  support; for details, read the Quota mini-HOWTO, available via FTP
   (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini. Probably the quota
   support is only useful for multi user systems. If unsure, say N.
@@ -5437,7 +5404,7 @@ CONFIG_OMIRR
   problem for continuing work on the remaining ones, because there is
   no master copy. Every computer that wants to participate in the
   mirroring needs to run the daemon omirrd, contained in the omirr
-  package which is available via ftp (user: anonymous) from
+  package which is available via FTP (user: anonymous) from
   ftp://ftp.isa.de/pub/home/luik. You must say Y if you want to use
   in.omirrd, but you should (but need not) say N if you don't (for
   performance reasons).
@@ -5625,7 +5592,7 @@ CONFIG_EXT2_FS
   to say Y to "NFS filesystem support" below). Saying Y here will
   enlarge your kernel by about 41 kB.
 
-  The Ext2fs-Undeletion mini-HOWTO, available via ftp (user:
+  The Ext2fs-Undeletion mini-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini,
   gives information about how to retrieve deleted files on ext2fs
   filesystems.
@@ -5649,7 +5616,7 @@ CONFIG_ISO9660_FS
   If you have a CDROM drive and want to do more with it than just
   listen to audio CDs and watch its LEDs, say Y (and read
   Documentation/filesystems/isofs.txt and the CDROM-HOWTO, available
-  via ftp (user: anonymous) from
+  via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO), thereby enlarging your
   kernel by about 27 kB; otherwise say N.
 
@@ -5694,7 +5661,7 @@ CONFIG_MSDOS_FS
   This allows you to mount MSDOS partitions of your hard drive (unless
   they are compressed; to access compressed MSDOS partitions under
   Linux, you can either use the DOS emulator DOSEMU, described in the
-  DOSEMU-HOWTO, available via ftp (user: anonymous) at
+  DOSEMU-HOWTO, available via FTP (user: anonymous) at
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO, or try dmsdosfs in
   ftp://sunsite.unc.edu/pub/Linux/system/filesystems/dosfs. If you
   intend to use dosemu with a non-compressed MSDOS partition, say Y
@@ -5791,7 +5758,7 @@ CONFIG_NFS_FS
   client's hard disk. For this to work, the server must run the
   programs nfsd and mountd (but does not need to have NFS filesystem
   support enabled in its kernel). NFS is explained in the Network
-  Administrator's Guide, available via ftp (user: anonymous) in
+  Administrator's Guide, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/LDP, on its man page: "man
   nfs", and in the NFS-HOWTO.
 
@@ -5805,7 +5772,7 @@ CONFIG_NFS_FS
 
   If you are configuring a diskless machine which will mount its root
   filesystem over NFS (in order to do that, check out the netboot
-  package, available via ftp (user: anonymous) from
+  package, available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/system/boot/ethernet/, extract with
   "tar xzvf filename", and say Y to "Root file system on NFS" and to
   "IP: kernel level autoconfiguration"), then you cannot compile this
@@ -5835,7 +5802,7 @@ CONFIG_NFSD
   is that it is faster; it might not be completely stable yet, though.
   You will need the support software from the linux-nfs package
   available at ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/.
-  Please read the NFS-HOWTO, available via ftp (user: anonymous) from
+  Please read the NFS-HOWTO, available via FTP (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. 
 
   The NFS server is also available as a module ( = code which can be
@@ -5890,7 +5857,7 @@ CONFIG_SYSV_FS
   Binary Compatibility Standard] is a kernel module which lets you run
   SCO, Xenix, Wyse, UnixWare, Dell Unix and System V programs under
   Linux and is often needed to run commercial software that's only
-  available for those systems. It's available via ftp (user:
+  available for those systems. It's available via FTP (user:
   anonymous) from ftp://tsx-11.mit.edu/pub/linux/BETA).
 
   If you only intend to mount files from some other Unix over the
@@ -6086,13 +6053,13 @@ CONFIG_SMB_FS
   if the Windows machines use TCP/IP as the underlying transport
   protocol, and not Netbeui. For details, read
   Documentation/filesystems/smbfs.txt and the SMB-HOWTO, available via
-  ftp (user: anonymous) from
+  FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Note: if you just want your box to act as an SMB *server* and make
   files and printing services available to Windows clients (which need
   to have a TCP/IP stack), you don't need to say Y here; you can use
-  the program samba (available via ftp (user: anonymous) in
+  the program samba (available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/system/network/samba) for that.
 
   General information about how to connect Linux, Windows machines and
@@ -6425,7 +6392,7 @@ CONFIG_NLS_ISO8859_2
   If you want to display filenames with native language characters
   from the Microsoft fat filesystem family or from JOLIET CDROMs
   correctly on the screen, you need to include the appropriate
-  input/output character sets. Say Y here for the the Latin 2 character
+  input/output character sets. Say Y here for the Latin 2 character
   set, which works for most Latin-written Slavic and Central European
   languages: Czech, German, Hungarian, Polish, Rumanian, Croatian,
   Slovak, Slovene.
@@ -6536,7 +6503,7 @@ Standard/generic serial support
 CONFIG_SERIAL
   This selects whether you want to include the driver for the standard
   serial ports. The standard answer is Y. People who might say N here
-  are those that are setting up dedicated Ethernet WWW/ftp servers, or
+  are those that are setting up dedicated Ethernet WWW/FTP servers, or
   users that have one of the various bus mice instead of a serial
   mouse and don't intend to use their machine's standard serial port
   for anything. (Note that the Cyclades and Stallion multi serial port
@@ -6563,7 +6530,7 @@ CONFIG_SERIAL_CONSOLE
   command line option such as "console=ttyS1". (Try "man bootparam" or
   see the documentation of your boot loader (lilo or loadlin) about
   how to pass options to the kernel at boot time. The lilo procedure
-  is also explained in the SCSI-HOWTO, available via ftp (user:
+  is also explained in the SCSI-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.) If you
   don't have a VGA card installed and you say Y here, the kernel will
   automatically use /dev/ttyS0 as system console.
@@ -6744,7 +6711,7 @@ CONFIG_PRINTER
   If you intend to attach a printer to the parallel port of your Linux
   box (as opposed to using a serial printer; if the connector at the
   printer has 9 or 25 holes ["female"], then it's serial), say Y. Also
-  read the Printing-HOWTO, available via ftp (user: anonymous) in
+  read the Printing-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   It is possible to share one parallel port among several devices
@@ -6759,7 +6726,7 @@ CONFIG_PRINTER
   command line option. (Try "man bootparam" or see the documentation
   of your boot loader (lilo or loadlin) about how to pass options to
   the kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available via ftp (user: anonymous) in
+  SCSI-HOWTO, available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.) The standard base
   addresses as well as the syntax of the "lp" command line option can
   be found in drivers/char/lp.c.
@@ -6779,7 +6746,7 @@ CONFIG_MOUSE
   a serial mouse. Most people have a regular serial MouseSystem or
   Microsoft mouse (made by Logitech) that plugs into a COM port
   (rectangular with 9 or 25 pins). These people say N here. If you
-  have something else, read the Busmouse-HOWTO, available via ftp
+  have something else, read the Busmouse-HOWTO, available via FTP
   (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO and
   say Y here.
 
@@ -6797,7 +6764,7 @@ CONFIG_BUSMOUSE
   generally a round connector with 9 pins. Note that the newer mice
   made by Logitech don't use the Logitech protocol anymore; for those,
   you don't need this option. You want to read the Busmouse-HOWTO,
-  available via ftp (user: anonymous) in
+  available via FTP (user: anonymous) in
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -6816,7 +6783,7 @@ CONFIG_PSMOUSE
   machines. The trackballs of some laptops are PS/2 mice also. In
   particular, the C&T 82C710 mouse on TI Travelmates is a PS/2 mouse.
   Although PS/2 mice are not technically bus mice, they are explained
-  in detail in the Busmouse-HOWTO, available via ftp (user: anonymous)
+  in detail in the Busmouse-HOWTO, available via FTP (user: anonymous)
   in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. When using a PS/2
   mouse, you can get problems if you want to use the mouse both on the
   Linux console and under X. Using the "-R" option of the Linux mouse
@@ -6834,7 +6801,7 @@ C&T 82C710 mouse port support (as on TI Travelmate)
 CONFIG_82C710_MOUSE
   This is a certain kind of PS/2 mouse used on the TI Travelmate. If
   you are unsure, try first to say N here and come back if the mouse
-  doesn't work. Read the Busmouse-HOWTO, available via ftp (user:
+  doesn't work. Read the Busmouse-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
 PC110 digitizer pad support
@@ -6854,7 +6821,7 @@ Microsoft busmouse support
 CONFIG_MS_BUSMOUSE
   These animals (also called Inport mice) are connected to an
   expansion board using a round connector with 9 pins. If this is what
-  you have, say Y and read the Busmouse-HOWTO, available via ftp
+  you have, say Y and read the Busmouse-HOWTO, available via FTP
   (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you are unsure, say N and read the HOWTO nevertheless: it will
@@ -6871,7 +6838,7 @@ ATIXL busmouse support
 CONFIG_ATIXL_BUSMOUSE
   This is a rare type of busmouse that is connected to the back of an
   ATI video card. Note that most ATI mice are actually Microsoft
-  busmice. Read the Busmouse-HOWTO, available via ftp (user:
+  busmice. Read the Busmouse-HOWTO, available via FTP (user:
   anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   If you want to compile this as a module ( = code which can be
@@ -6902,7 +6869,7 @@ Do you want runtime configuration for QIC-02
 CONFIG_QIC02_DYNCONF
   You can either configure this driver once and for all by editing a
   header file (include/linux/tpqic02.h), in which case you should
-  say N, or you can fetch a program via anonymous ftp which is able
+  say N, or you can fetch a program via anonymous FTP which is able
   to configure this driver during runtime. The program to do this is
   called 'qic02conf' and it is part of the 'tpqic02-support-X.Y.tar.gz'
   support package.
@@ -7241,7 +7208,7 @@ CONFIG_APM
   receive notification of APM "events" (e.g., battery status change).
 
   Supporting software is available; for more information, read the
-  Battery Powered Linux mini-HOWTO, available via ftp (user:
+  Battery Powered Linux mini-HOWTO, available via FTP (user:
   anonymous) from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini.
 
   This driver does not spin down disk drives (see the hdparm(8)
@@ -7360,7 +7327,7 @@ CONFIG_WATCHDOG
   kernel source.
 
   The watchdog is usually used together with the watchdog daemon which
-  is available via ftp (user: anonymous) from
+  is available via FTP (user: anonymous) from
   ftp://tsx-11.mit.edu/pub/linux/sources/sbin/. This daemon can also
   monitor NFS connections and can reboot the machine when the process
   table is full.
@@ -7522,7 +7489,7 @@ CONFIG_SOUND
   than an occasional beep, say Y. Be sure to have all the information
   about your sound card and its configuration down (I/O port,
   interrupt and DMA channel), because you will be asked for it. You
-  want to read the Sound-HOWTO, available via ftp (user: anonymous)
+  want to read the Sound-HOWTO, available via FTP (user: anonymous)
   from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO. There is also some
   information in various README files in drivers/sound, esp. in
   Readme.cards which you should read first to find out whether your
@@ -7744,7 +7711,7 @@ CONFIG_AWE32_SYNTH
   Say Y here if you have a SoundBlaster SB32, AWE32-PnP, SB AWE64 or
   similar sound card. See drivers/sound/lowlevel/README.awe,
   Documentation/sound/AWE32 and the Soundblaster-AWE mini-HOWTO,
-  available via ftp (user: anonymous) from
+  available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/mini for more info.
 
 Gallant's Audio Excel DSP 16 support (SC-6000 and SC-6600)
@@ -7758,7 +7725,7 @@ CONFIG_AEDSP16
   questions.  Read the drivers/sound/lowlevel/README.aedsp16 file and
   the head of drivers/sound/lowlevel/aedsp16.c to get more information
   about this driver and its configuration.  This driver supports Audio
-  Excel DSP 16 but not the III nor Pnp versions of this card. Read
+  Excel DSP 16 but not the III nor PnP versions of this card. Read
   drivers/sound/lowlevel/README.aedsp16 if you want to know something
   more on how to use the III version with this sound driver.
 
@@ -8746,20 +8713,20 @@ CONFIG_VIDEO_PMS
 # LocalWords:  CONFIG coprocessor DX Pentium SX lilo loadlin HOWTO ftp sunsite
 # LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
 # LocalWords:  cdrom diskless netboot nfs xzvf ATAPI MB ide pavia rubini pl pd
-# LocalWords:  HD CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios cezar ATEN
+# LocalWords:  HD CDROMs IDECD NEC MITSUMI filesystem XT XD PCI BIOS cezar ATEN
 # LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl dmesg hlt
 # LocalWords:  BINFMT Linkable http ac uk jo html GCC Sparc AVANTI CABRIOLET EB
 # LocalWords:  netscape gcc LD CC toplevel MODVERSIONS insmod rmmod modprobe IP
 # LocalWords:  genksyms INET loopback gatewaying ethernet PPP ARP Arp MEMSIZE
 # LocalWords:  howto multicasting MULTICAST MBONE firewalling ipfw ACCT resp ip
 # LocalWords:  proc acct IPIP encapsulator decapsulator klogd PCTCP RARP EXT PS
-# LocalWords:  telneting subnetted NAGLE rlogin NOSR ttyS TGA techinfo mbone nl
+# LocalWords:  telnetting subnetted NAGLE rlogin NOSR ttyS TGA techinfo mbone nl
 # LocalWords:  Mb SKB IPX Novell dosemu Appletalk DDP ATALK tapedrive vmalloc
 # LocalWords:  SD CHR scsi thingy SG CD LUNs LUN jukebox Adaptec BusLogic EATA
 # LocalWords:  buslogic DMA DPT ATT eata dma PIO UltraStor fdomain umsdos ext
 # LocalWords:  QLOGIC qlogic TMC seagate Trantor ultrastor FASST wd NETDEVICES
 # LocalWords:  unix BBS linux nullmodem CSLIP PLIP Kirch's LDP CSlip SL SCC IRQ
-# LocalWords:  Turbo Laplink plip NCSA port's ReQuest IRQs EQL SMC AMD PCnet NE
+# LocalWords:  Turbo Laplink plip NCSA ReQuest IRQs EQL SMC AMD PCnet NE
 # LocalWords:  COM ELPLUS Com EtherLinkIII VLB Arcnet arcnet Cabletron DEPCA DE
 # LocalWords:  depca EtherWorks EWRK ewrk SEEQ EtherExpressPro EEXPRESS NI xxx
 # LocalWords:  EtherExpress WaveLAN wavelan PCLAN HPLAN VG SK Ansel Xen de ZNET
@@ -8780,7 +8747,7 @@ CONFIG_VIDEO_PMS
 # LocalWords:  chipset FB multicast MROUTE appletalk ifconfig IBMTR multiport
 # LocalWords:  Multisession STALDRV EasyIO EC EasyConnection ISTALLION ONboard
 # LocalWords:  Brumby pci TNC cis ohio faq usenet NETLINK dev hydra ca Tyne mem
-# LocalWords:  carleton Deskstation DECstation SUNFD JENSEN Noname XXXM SLiRP
+# LocalWords:  carleton Deskstation DECstation SUNFD JENSEN Noname SLiRP
 # LocalWords:  pppd Zilog ZS SRM bootloader ez mainmenu rarp ipfwadm paride pcd
 # LocalWords:  RTNETLINK mknod xos MTU lwared Macs mac netatalk macs cs Wolff
 # LocalWords:  dartmouth flowerpt MultiMaster FlashPoint tudelft etherexpress
@@ -8802,10 +8769,10 @@ CONFIG_VIDEO_PMS
 # LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem ufr
 # LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD
 # LocalWords:  initrd tue util DES funet des OnNet BIOSP smc Travan Iomega CMS
-# LocalWords:  FC DC dc PPA IOMEGA's ppa RNFS FMV Fujitsu ARPD arpd loran layes
+# LocalWords:  FC DC dc PPA ppa RNFS FMV Fujitsu ARPD arpd loran layes
 # LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA mrouted sync sec
 # LocalWords:  Starmode Metricom MosquitoNet mosquitonet kbit nfsroot Digiboard
-# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu ethernets HBAs MEX
+# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu HBAs MEX
 # LocalWords:  Shifflett netcom js jshiffle WIC DECchip ELCP EtherPower dst RTC
 # LocalWords:  rtc SMP lp Digi Intl RightSwitch DGRS dgrs AFFS Amiga UFS SDL AP
 # LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au artoo ufs
@@ -8814,7 +8781,7 @@ CONFIG_VIDEO_PMS
 # LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
 # LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
 # LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk DEFRAG
-# LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
+# LocalWords:  download Packetwin Baycom baycom interwork ascii JNT
 # LocalWords:  Camtec proxying indyramp defragment defragmented UDP FAS FASXX
 # LocalWords:  FastSCSI SIO FDC qlogicfas QLogic qlogicisp setbaycom ife ee LJ
 # LocalWords:  ethz ch Travelmates ProAudioSpectrum ProAudio SoundMan SB SBPro
@@ -8857,10 +8824,10 @@ CONFIG_VIDEO_PMS
 # LocalWords:  smp HiSax SiemensChipSet Siemens AVM Elsa ITK hisax PCC MICROR
 # LocalWords:  Mircolink EURO DSS Spellcaster BRI sc spellcast Digiboards GPIO
 # LocalWords:  SYMBIOS COMPAT SDMS rev ASUS Tekram HX VX API ibmmcascsi ASY asy
-# LocalWords:  loader's PCnetPCI automounter AUTOFS amd autofs VT Gallant's Pnp
+# LocalWords:  loader's PCnetPCI automounter AUTOFS amd autofs VT Gallant's PnP
 # LocalWords:  AEDSP aedsp enskip tik Sysctl sysctl PARPORT parport pnp IDs EPP
 # LocalWords:  Autoprobe bart patrickr HDLS READBACK AB usr DAMA DS SparQ aten
-# LocalWords:  Symbios PCscsi tmscsim RoamAbout GHz Hinds's contrib mathematik
+# LocalWords:  Symbios PCscsi tmscsim RoamAbout GHz Hinds' contrib mathematik
 # LocalWords:  darmstadt okir DIGIEPCA International's Xem digiepca epca bootup
 # LocalWords:  zorro CAPI AVMB capi avmb VP SYN syncookies EM em pc Ethertalk
 # LocalWords:  Dayna DL Daynatalk LT PhoneNET ATB Daystar queueing CMDS SCBs ls
@@ -8869,7 +8836,7 @@ CONFIG_VIDEO_PMS
 # LocalWords:  stuttgart rdist TRANS hostnames mango jukeboxes ESS userland PD
 # LocalWords:  hardlinked NAMETRANS env mtab fstab umount nologin runlevel gid
 # LocalWords:  transname filespace adm Nodename hostname uname Kernelname bootp
-# LocalWords:  KERNNAME kname ktype kernelname Kerneltype KERNTYPE Alt SCB's RX
+# LocalWords:  KERNNAME kname ktype kernelname Kerneltype KERNTYPE Alt RX
 # LocalWords:  dataless kerneltype SYSNAME Netbeui Comtrol Rocketport palmtop
 # LocalWords:  nvram SYSRQ SysRq PrintScreen sysrq NVRAMs NvRAM Shortwave RTTY
 # LocalWords:  HFMODEM shortwave Sitor Amtor Pactor GTOR hfmodem hayes TX TMOUT
@@ -8879,7 +8846,7 @@ CONFIG_VIDEO_PMS
 # LocalWords:  misconfigured autoconfiguration IPGRE ICMP tracert ipautofw PIM
 # LocalWords:  netis rlynch autofw ipportfw monmouth ipsubs portforwarding pimd
 # LocalWords:  portfw PIMSM netweb usc pim pf EUI aggregatable PB decapsulate
-# LocalWords:  ipddp Decapsulation DECAP bool HAMRADIO WAN's tcpdump af CD's tx
+# LocalWords:  ipddp Decapsulation DECAP bool HAMRADIO tcpdump af CDs tx
 # LocalWords:  ethertap multisession PPC MMIO GDT GDTH ICP gdth hamradio LAN's
 # LocalWords:  lmh weejock AIMSlab RadioTrack RTRACK HZP OptoSCC TRX rx TRXECHO
 # LocalWords:  DMASCC paccomm dmascc addr cfg oevsv oe kib picpar FDX baudrate

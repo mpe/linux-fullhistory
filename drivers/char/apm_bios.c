@@ -38,7 +38,7 @@
  *         Linux 1.3.85
  *    1.1: support user-space standby and suspend, power off after system
  *         halted, Linux 1.3.98
- *    1.2: When resetting RTC after resume, take care so that the the time
+ *    1.2: When resetting RTC after resume, take care so that the time
  *         is only incorrect by 30-60mS (vs. 1S previously) (Gabor J. Toth
  *         <jtoth@princeton.edu>); improve interaction between
  *         screen-blanking and gpm (Stephen Rothwell); Linux 1.99.4

@@ -429,7 +429,7 @@ etherh_probe1(struct device *dev)
 	ei_status.interface_num = 0;
 	if_type = "10BaseT";
 	etherh_setif(dev);
-	udelay(1000);
+	mdelay(1);
 	if (!etherh_getifstat(dev)) {
 		if_type = "10Base2";
 		ei_status.interface_num = 1;

@@ -136,7 +136,7 @@ The standard port, and irq values are these:
 Note that the first parameter reserves 8 contiguous ioports, whereas the
 second value denotes a single ioport. If in doubt, do a 'cat /proc/ioports'.
 
-In all probability the device uses these ports and irqs if it is attached
+In all probability the device uses these ports and IRQs if it is attached
 to the appropriate ide channel.  Pass the parameter for the correct ide
 channel to the kernel, as explained above.
 
@@ -181,7 +181,7 @@ when the drive is jumpered correctly.
 
 Courtesy of Scott Snyder, the driver supports ATAPI cdrom drives
 such as the NEC-260 and the new MITSUMI triple/quad speed drives.
-Such drives will be identified at boot time, just like a harddisk.
+Such drives will be identified at boot time, just like a hard disk.
 
 If for some reason your cdrom drive is *not* found at boot time, you can force
 the probe to look harder by supplying a kernel command line parameter
@@ -191,7 +191,7 @@ via LILO, such as:
 or
 	hdd=cdrom	/* hdd = "slave" on second interface */
 
-For example, a GW2000 system might have a harddrive on the primary
+For example, a GW2000 system might have a hard drive on the primary
 interface (/dev/hda) and an IDE cdrom drive on the secondary interface
 (/dev/hdc).  To mount a CD in the cdrom drive, one would use something like:
 
@@ -450,7 +450,7 @@ To ensure that LILO can boot linux, the boot files (kernel and /boot/*)
 must reside within the first 1024 cylinders of the drive.  If your linux
 root partition is *not* completely within the first 1024 cyls (quite common),
 then you can use LILO to boot linux from files on your DOS partition
-by doing the following after installing slackware (or whatever):
+by doing the following after installing Slackware (or whatever):
 
 	0. Boot from the "boot floppy" created during the installation
         1. Mount your DOS partition as /dos (and stick it in /etc/fstab)

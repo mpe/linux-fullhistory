@@ -344,7 +344,7 @@ Sat Mar 22 19:43:40 1997  Paul H. Hargrove  <hargrove@sccm.stanford.edu>
 	Note that these routines are now tested on Intel, PPC and Alpha.
 
 	* Makefile:
-	Add -fno-builtin the the CFLAGS.
+	Add -fno-builtin to the CFLAGS.
 
 Fri Feb 14 10:50:14 1997  Paul H. Hargrove  <hargrove@sccm.stanford.edu>
 

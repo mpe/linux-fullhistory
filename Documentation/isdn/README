@@ -387,7 +387,7 @@ README for the ISDN-subsystem
    command "isdnctrl addphone <InterfaceName> in <caller-id>"
    Euro-ISDN does not transmit the leading '0' of the caller-id for an
    incoming call, therefore you should configure it accordingly.
-   If the real number for the dialout e.g. is "09311234567" the the number
+   If the real number for the dialout e.g. is "09311234567" the number
    to configure here is "9311234567". The pattern-match function 
    works similar to the shell mechanism.
 
@@ -408,7 +408,7 @@ README for the ISDN-subsystem
    Returns the EAZ of an interface.
 
    "isdnctrl delphone <InterfaceName> in|out <number>" 
-   Deletes a number from one of the the access-lists of the interface.
+   Deletes a number from one of the access-lists of the interface.
 
    "isdnctrl delif <InterfaceName>" 
    Removes the interface (and possible slaves) from the kernel.

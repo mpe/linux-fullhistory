@@ -1130,7 +1130,7 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
  
 asmlinkage int sys_getpid(void)
 {
-	/* This is SMP safe - current->pid doesnt change */
+	/* This is SMP safe - current->pid doesn't change */
 	return current->pid;
 }
 

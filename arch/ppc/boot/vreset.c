@@ -416,7 +416,6 @@ unsigned char AC[21] = {
 static int scanPCI(int start_slt);
 static int PCIVendor(int);
 static void printslots(void);
-int delayLoop(int);
 extern void puthex(unsigned long);
 extern void puts(const char *);
 static void unlockS3(void);
@@ -495,7 +494,7 @@ vga_init(unsigned char *ISA_mem)
 			puts("VGA Chip Vendor ID: ");
 			puthex(PCIVendor(slot));
 			puts("\n");
-			delayLoop(1);
+			mdelay(1000);
 	#endif
 		};
 	
@@ -513,10 +512,10 @@ vga_init(unsigned char *ISA_mem)
 	
 	#ifdef DEBUG
 		printslots();
-		delayLoop(5);	
+		mdelay(5000);
 	#endif
 	
-		delayLoop(1);	/* give time for the video monitor to come up */
+		mdelay(1000);	/* give time for the video monitor to come up */
         }
 	return (1);  /* 'CRT' I/O supported */
 }
@@ -805,21 +804,6 @@ scanPCI(int start_slt)
 
 	return ( theSlot );
 }
-
-/* Delay for a certain number of seconds */
-/* Note: They loop is used since 'udelay' can't handle really long counts! */
-
-int
-delayLoop(int k)
-{
-	int i;
-	while (k-- > 0) {
-		for (i = 0;  i < 1000;  i++) {
-			udelay(1000);
-		}
-	}
-}
-
 
 /* return Vendor ID of card in the slot */
 static

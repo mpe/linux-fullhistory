@@ -17,11 +17,11 @@ other information you have!
 INTRODUCTION TO ARCNET
 ----------------------
 
-ARCnet is a network type which works in a way similar to popular "ethernet"
+ARCnet is a network type which works in a way similar to popular Ethernet
 networks but which is also different in some very important ways.
 
 First of all, you can get ARCnet cards in at least two speeds: 2.5Mbps
-(slower than ethernet) and 100Mbps (faster than normal ethernet).  In fact,
+(slower than Ethernet) and 100Mbps (faster than normal Ethernet).  In fact,
 there are others as well, but these are less common.  The different hardware
 types, as far as I'm aware, are not compatible and so you cannot wire a
 100Mbps card to a 2.5Mbps card, and so on.  From what I hear, my driver does
@@ -29,7 +29,7 @@ work with 100Mbps cards, but I haven't been able to verify this myself,
 since I only have the 2.5Mbps variety.  It is probably not going to saturate
 your 100Mbps card.  Stop complaining :)
 
-You also cannot connect an ARCnet card to any kind of ethernet card and
+You also cannot connect an ARCnet card to any kind of Ethernet card and
 expect it to work.  
 
 There are two "types" of ARCnet - STAR topology and BUS topology.  This
@@ -41,7 +41,7 @@ true; see below under "Cabling."
 Once you get past these little stumbling blocks, ARCnet is actually quite a
 well-designed standard.  It uses something called "modified token passing"
 which makes it completely incompatible with so-called "Token Ring" cards,
-but which makes transfers much more reliable than ethernet does.  In fact,
+but which makes transfers much more reliable than Ethernet does.  In fact,
 ARCnet will guarantee that a packet arrives safely at the destination, and
 even if it can't possibly be delivered properly (ie. because of a cable
 break, or because the destination computer does not exist) it will at least
@@ -53,9 +53,9 @@ useful for realtime networks.
 
 In addition, all known ARCnet cards have an (almost) identical programming
 interface.  This means that with one "arcnet" driver you can support any
-card; whereas, with ethernet, each manufacturer uses what is sometimes a
+card; whereas, with Ethernet, each manufacturer uses what is sometimes a
 completely different programming interface, leading to a lot of different,
-sometimes very similar, ethernet drivers.  Of course, always using the same
+sometimes very similar, Ethernet drivers.  Of course, always using the same
 programming interface also means that when high-performance hardware
 facilities like PCI busmastering DMA appear, it's hard to take advantage of
 them.  Let's not go into that.
@@ -63,10 +63,10 @@ them.  Let's not go into that.
 One thing that makes ARCnet cards difficult to program for, however, is the
 limit on their packet sizes; standard ARCnet can only send packets that are
 up to 508 bytes in length.  This is smaller than the internet "bare minimum"
-of 576 bytes, let alone the ethernet MTU of 1500.  To compensate, an extra
+of 576 bytes, let alone the Ethernet MTU of 1500.  To compensate, an extra
 level of encapsulation is defined by RFC1201, which I call "packet
 splitting," that allows "virtual packets" to grow as large as 64K each,
-although they are generally kept down to the ethernet-style 1500 bytes.
+although they are generally kept down to the Ethernet-style 1500 bytes.
 
 For more information on the advantages and disadvantages (mostly the
 advantages) of ARCnet networks, you might try the "ARCnet Trade Association"
@@ -319,7 +319,7 @@ All ARCnet cards should have a total of four or five different settings:
 	- Avery's favourite: 0xD0000
 
   - the station address:  Every ARCnet card has its own "unique" network
-    address from 0 to 255.  Unlike ethernet, you can set this address
+    address from 0 to 255.  Unlike Ethernet, you can set this address
     yourself with a jumper or switch (or on some cards, with special
     software).  Since it's only 8 bits, you can only have 254 ARCnet cards
     on a network.  DON'T use 0 or 255, since these are reserved (although
@@ -1169,7 +1169,7 @@ Carl de Billy <CARL@carainfo.com> explains J3 and J4:
 
 DIP Switches:
 
-	The dipswitches accessible on the accessible end of the card while
+	The DIP switches accessible on the accessible end of the card while
         it is installed, is used to set the arcnet address.  There are 8
         switches.  Use an address from 1 to 254.
 
@@ -1184,7 +1184,7 @@ DIP Switches:
 	11111110	1
 	11111111	0	(Don't use this!)
 
-	There is another dipswitch array of 8 switches at the top of the
+	There is another array of eight DIP switches at the top of the
         card.  There are five labelled MS0-MS4 which seem to control the
         memory address, and another three labelled IO0-IO2 which seem to
         control the base I/O address of the card.

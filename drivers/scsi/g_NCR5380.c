@@ -645,7 +645,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #else
     PRINTP("NO NCR53C400 driver extensions\n");
 #endif
-    PRINTP("Using %s mapping at %s 0x%x, " ANDP STRVAL(NCR5380_map_config) ANDP STRVAL(NCR5380_map_name) ANDP scsi_ptr->NCR5380_instance_name);
+    PRINTP("Using %s mapping at %s 0x%lx, " ANDP STRVAL(NCR5380_map_config) ANDP STRVAL(NCR5380_map_name) ANDP scsi_ptr->NCR5380_instance_name);
     if (scsi_ptr->irq == IRQ_NONE)
 	PRINTP("no interrupt\n");
     else

@@ -21,6 +21,7 @@ swapper_pg_dir=SWAPPER_PGD
 	.ent	__start
 _stext:
 __start:
+	.prologue 0
 	br	$27,1f
 1:	ldgp	$29,0($27)
 	/* We need to get current loaded up with our first task...  */
@@ -39,6 +40,7 @@ __start:
 	/* on entry here from SRM console, the HWPCB of this processor */
 	/* has been loaded, and $27 contains the task pointer */
 __start_cpu:
+	.prologue 0
 	/* first order of business, load the GP */
 	br	$26,1f
 1:	ldgp	$29,0($26)
@@ -57,6 +59,7 @@ __start_cpu:
 	.globl	wrent
 	.ent	wrent
 wrent:
+	.prologue 0
 	call_pal PAL_wrent
 	ret	($26)
 	.end wrent
@@ -65,6 +68,7 @@ wrent:
 	.globl	wrkgp
 	.ent	wrkgp
 wrkgp:
+	.prologue 0
 	call_pal PAL_wrkgp
 	ret	($26)
 	.end wrkgp
@@ -73,6 +77,7 @@ wrkgp:
 	.globl	wrusp
 	.ent	wrusp
 wrusp:
+	.prologue 0
 	call_pal PAL_wrusp
 	ret	($26)
 	.end wrusp
@@ -81,6 +86,7 @@ wrusp:
 	.globl	rdusp
 	.ent	rdusp
 rdusp:
+	.prologue 0
 	call_pal PAL_rdusp
 	ret	($26)
 	.end rdusp
@@ -89,6 +95,7 @@ rdusp:
 	.globl	rdmces
 	.ent	rdmces
 rdmces:
+	.prologue 0
 	call_pal PAL_rdmces
 	ret	($26)
 	.end rdmces
@@ -97,6 +104,7 @@ rdmces:
 	.globl	wrmces
 	.ent	wrmces
 wrmces:
+	.prologue 0
 	call_pal PAL_wrmces
 	ret	($26)
 	.end wrmces
@@ -105,6 +113,7 @@ wrmces:
 	.globl  whami
 	.ent    whami
 whami:
+	.prologue 0
 	call_pal PAL_whami
 	ret     ($26)
 	.end whami
@@ -127,6 +136,7 @@ wripir:
 	.globl	cserve_ena
 	.ent	cserve_ena
 cserve_ena:
+	.prologue 0
 	bis	$16,$16,$17
 	lda	$16,52($31)
 	call_pal PAL_cserve
@@ -137,6 +147,7 @@ cserve_ena:
 	.globl	cserve_dis
 	.ent	cserve_dis
 cserve_dis:
+	.prologue 0
 	bis	$16,$16,$17
 	lda	$16,53($31)
 	call_pal PAL_cserve

@@ -36,21 +36,21 @@ contains a reason code for the exception.
 
 do_page_fault first obtains the unaccessible address from the CPU 
 control register CR2. If the address is within the virtual address 
-space of the process, the fault probably occured, because the page 
-was not swapped in, write protected or something similiar. However, 
+space of the process, the fault probably occurred, because the page 
+was not swapped in, write protected or something similar. However, 
 we are interested in the other case: the address is not valid, there 
 is no vma that contains this address. In this case, the kernel jumps 
 to the bad_area label. 
 
 There it uses the address of the instruction that caused the exception 
-(i.e. regs->eip) to find an address where the excecution can continue 
+(i.e. regs->eip) to find an address where the execution can continue 
 (fixup). If this search is successful, the fault handler modifies the 
 return address (again regs->eip) and returns. The execution will 
 continue at the address in fixup.
 
 Where does fixup point to?
 
-Since we jump to the the contents of fixup, fixup obviously points 
+Since we jump to the contents of fixup, fixup obviously points 
 to executable code. This code is hidden inside the user access macros. 
 I have picked the get_user macro defined in include/asm/uacess.h as an
 example. The definition is somewhat hard to follow, so let's peek at 

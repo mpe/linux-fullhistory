@@ -113,12 +113,12 @@ extern int arcnet_debug;
 
 /* macros to simplify debug checking */
 #define BUGLVL(x) if ((ARCNET_DEBUG_MAX)&arcnet_debug&(x))
-#define BUGMSG2(x,msg,args...) BUGLVL(x) printk(msg, ## args)
-#define BUGMSG(x,msg,args...) do { \
+#define BUGMSG2(x,msg,args...) do { BUGLVL(x) printk(msg, ## args); } while (0)
+#define BUGMSG(x,msg,args...) \
 	BUGMSG2(x,"%s%6s: " msg, \
             x==D_NORMAL	? KERN_WARNING : \
       x<=D_INIT_REASONS	? KERN_INFO    : KERN_DEBUG , \
-	dev->name , ## args); } while (0)
+	dev->name , ## args)
 
 
 #define SETMASK AINTMASK(lp->intmask)

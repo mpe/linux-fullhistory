@@ -940,7 +940,7 @@ void sb_dsp_unload(struct address_info *hw_config)
 			free_irq(devc->irq, devc);
 			sound_unload_mixerdev(devc->my_mixerdev);
 			/* We don't have to do this bit any more the UART401 is its own
-				master  -- Krzystof Halasa */
+				master  -- Krzysztof Halasa */
 			/* sound_unload_mididev(devc->my_mididev); */
 			sound_unload_audiodev(devc->my_dev);
 		}
@@ -1039,7 +1039,7 @@ static int smw_midi_init(sb_devc * devc, struct address_info *hw_config)
 	outb((control | 3), mpu_base + 7);	/* Set last two bits to 1 (?) */
 	outb(((control & 0xfe) | 2), mpu_base + 7);	/* xxxxxxx0 resets the mc */
 
-	udelay(3000);	/* Wait at least 1ms */
+	mdelay(3);	/* Wait at least 1ms */
 
 	outb((control & 0xfc), mpu_base + 7);	/* xxxxxx00 enables RAM */
 

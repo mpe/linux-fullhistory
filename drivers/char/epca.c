@@ -3956,7 +3956,7 @@ void epca_setup(char *str, int *ints)
 					translate (To an unsigned long obviously),  the second argument
 					can be the address of any character variable or a NULL.  If a
 					variable is given, the end pointer of the string will be stored 
-					in that variable; if a NULL is given the the end pointer will 
+					in that variable; if a NULL is given the end pointer will 
 					not be returned.  The last argument is the base to use.  If 
 					a 0 is indicated, the routine will attempt to determine the 
 					proper base by looking at the values prefix (A '0' for octal,

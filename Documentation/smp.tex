@@ -24,8 +24,8 @@ processors.}
 \hfill Alan Cox, 1995
 
 
-The author wishes to thank Caldera Inc ( http://www.caldera.com )
-whose donation of an ASUS dual pentium board made this project possible, 
+The author wishes to thank Caldera Inc. ( http://www.caldera.com )
+whose donation of an ASUS dual Pentium board made this project possible, 
 and Thomas Radke, whose initial work on multiprocessor Linux formed 
 the backbone of this project.
 
@@ -35,7 +35,7 @@ processors and glue chipsets with a hardware/software specification. The
 specification places much of the onus for hard work on the chipset and 
 hardware rather than the operating system.
 
-The Intel pentium processors have a wide variety of inbuilt facilities for 
+The Intel Pentium processors have a wide variety of inbuilt facilities for 
 supporting multiprocessing, including hardware cache coherency, built in 
 interprocessor interrupt handling and a set of atomic test and set, 
 exchange and similar operations. The cache coherency in particular makes the 
@@ -176,7 +176,7 @@ threads it is necessary to replace these with tests that the process id is
 The memory management core of the existing Linux system functions 
 adequately within the multiprocessor framework providing the locking is 
 used. Certain processor specific areas do need changing, in particular 
-invalidate() must invalidate the TLB's of all processors before it returns.
+invalidate() must invalidate the TLBs of all processors before it returns.
 
 
 \subsubsection{Miscellaneous Functions}
@@ -210,7 +210,7 @@ interrupt and kernel syscall entry function handling and finally the
 extensions to standard kernel facilities to cope with multiple processors.
 
 \subsubsection{Initialisation}	
-The intel MP architecture captures all the processors except for a single 
+The Intel MP architecture captures all the processors except for a single 
 processor known as the 'boot processor' in the BIOS at boot time. Thus a 
 single processor enters the kernel bootup code. The first processor 
 executes the bootstrap code, loads and uncompresses the kernel. Having 
@@ -266,8 +266,8 @@ is mapped with a vremap() call and the apic pointer is adjusted
 appropriately. From then on the real APIC logical identity register is 
 read.
 
-Message passing is accomplished using a pair of IPI's on interrupt 13 
-(unused by the 80486 FPU's in SMP mode) and interrupt 16. Two are used in 
+Message passing is accomplished using a pair of IPIs on interrupt 13 
+(unused by the 80486 FPUs in SMP mode) and interrupt 16. Two are used in 
 order to separate messages that cannot be processed until the receiver 
 obtains the kernel spinlock from messages that can be processed 
 immediately. In effect IRQ 13 is a fast IRQ handler that does not obtain 

@@ -512,7 +512,7 @@ static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int m
 
 	for(i=0;i<32;i++)
 	{
-		udelay(4000);
+		mdelay(4);
 		if(inw(PORT+L_DATAREG) & (CSR0_IDON | CSR0_MERR) )
 			break; /* init ok ? */
 	}

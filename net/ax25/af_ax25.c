@@ -80,7 +80,7 @@
  *						datagrams per socket.
  *	AX.25 033	Jonathan(G4KLX)		Removed auto-router.
  *			Hans(PE1AYX)		Converted to Module.
- *			Joerg(DL1BKE)		Moved BPQ Ethernet to seperate driver.
+ *			Joerg(DL1BKE)		Moved BPQ Ethernet to separate driver.
  *	AX.25 034	Jonathan(G4KLX)		2.1 changes
  *			Alan(GW4PTS)		Small POSIXisations
  *	AX.25 035	Alan(GW4PTS)		Started fixing to the new

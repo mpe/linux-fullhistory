@@ -29,7 +29,7 @@ struct fhc_internal_regs {
 /*0x0100*/	u32	fhc_jtag_cmd;	/* FHC JTAG Command Register		*/
 };
 
-/* Part of same space of regs, but mapped seperately in PROM reg property
+/* Part of same space of regs, but mapped separately in PROM reg property
  * for the FHC, thus we have the following few structs...
  */
 struct fhc_ign_reg {

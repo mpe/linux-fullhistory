@@ -335,7 +335,7 @@ smp4m_ticker:
 
 	/* Here is where we check for possible SMP IPI passed to us
 	 * on some level other than 15 which is the NMI and only used
-	 * for cross calls.  That has a seperate entry point below.
+	 * for cross calls.  That has a separate entry point below.
 	 */
 maybe_smp4m_msg:
 	GET_PROCESSOR_MID(o3, o2)

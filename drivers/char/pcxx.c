@@ -619,7 +619,7 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 ** worth noting that while I'm not sure what this hunk of code is supposed
 ** to do, it is not present in the serial.c driver.  Hmmm.  If you know,
 ** please send me a note.  brian@ilinx.com
-** Dont know either what this is supposed to do clameter@waterf.org.
+** Don't know either what this is supposed to do clameter@waterf.org.
 */
 		if(tty->ldisc.num != ldiscs[N_TTY].num) {
 			if(tty->ldisc.close)

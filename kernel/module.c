@@ -323,7 +323,7 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		dep->ref = mod;
 		dep->next_ref = d->refs;
 		d->refs = dep;
-		/* Being referenced by a dependant module counts as a 
+		/* Being referenced by a dependent module counts as a 
 		   use as far as kmod is concerned.  */
 		d->flags |= MOD_USED_ONCE;
 	}

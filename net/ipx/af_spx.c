@@ -48,6 +48,8 @@ static void spx_retransmit(unsigned long data);
 static void spx_watchdog(unsigned long data);
 void spx_rcv(struct sock *sk, int bytes);
 
+extern void ipx_remove_socket(struct sock *sk);
+
 /* Create the SPX specific data */
 static int spx_sock_init(struct sock *sk)
 {
@@ -328,6 +330,8 @@ static int spx_connect(struct socket *sock, struct sockaddr *uaddr,
  * As we simply have a default retry time of 1*HZ and a max retry
  * time of 5*HZ. Between those values we increase the timeout based
  * on the number of retransmit tries.
+ *
+ * FixMe: This is quite fake, but will work for now. (JS)
  */
 static inline unsigned long spx_calc_rtt(int tries)
 {
@@ -344,11 +348,12 @@ static int spx_route_skb(struct spx_opt *pdata, struct sk_buff *skb, int type)
 	int err = 0;
 
 	skb = skb_unshare(skb, GFP_ATOMIC);
-	if(skb==NULL)
-		return -ENOBUFS;
+	if(skb == NULL)
+		return (-ENOBUFS);
 
 	switch(type)
 	{
+		case (CONREQ):
 		case (DATA):
 			if(!skb_queue_empty(&pdata->retransmit_queue))
 			{
@@ -366,7 +371,6 @@ static int spx_route_skb(struct spx_opt *pdata, struct sk_buff *skb, int type)
         	        skb_queue_tail(&pdata->retransmit_queue, skb2);
 
 		case (ACK):
-		case (CONREQ):
 		case (CONACK):
 		case (WDREQ):
 		case (WDACK):
@@ -388,7 +392,8 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
 {
         struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
         struct ipxspxhdr *ipxh;
-	int flags, err;
+	unsigned long flags;
+	int err;
 
 	if(skb == NULL)
 	{
@@ -397,11 +402,11 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
 
 		save_flags(flags);
 		cli();
-        	skb = sock_alloc_send_skb(sk, size, 0, 0, &err);
+        	skb = sock_alloc_send_skb(sk, size, 1, 0, &err);
         	if(skb == NULL)
                 	return (-ENOMEM);
         	skb_reserve(skb, offset);
-        	skb->nh.raw = skb_put(skb, sizeof(struct ipxspxhdr));
+        	skb->h.raw = skb->nh.raw = skb_put(skb,sizeof(struct ipxspxhdr));
 		restore_flags(flags);
 	}
 
@@ -435,10 +440,10 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
                 	pdata->sequence++;
 			break;
 
-		case (ACK):	/* Connection/WD/Data ACK */
+		case (ACK):	/* ACK */
 			pdata->rmt_seq++;
-		case (WDACK):
-		case (CONACK):
+		case (WDACK):	/* WD ACK */
+		case (CONACK):	/* Connection ACK */
 			ipxh->spx.cctl 		= CCTL_SYS;
 			ipxh->spx.ackseq 	= htons(pdata->rmt_seq);
 			break;
@@ -472,9 +477,7 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
 	}
 
 	/* Send data */
-	spx_route_skb(pdata, skb, type);
-
-        return (0);
+        return (spx_route_skb(pdata, skb, type));
 }
 
 /* Check the state of the connection and send a WD request if needed. */
@@ -484,6 +487,8 @@ static void spx_watchdog(unsigned long data)
         struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
 
         del_timer(&pdata->watchdog);
+	if(pdata->state == SPX_CLOSED)
+                return;
 	if(pdata->retries > pdata->max_retries)
         {
 		spx_close_socket(sk);	/* Unilateral Abort */
@@ -502,21 +507,27 @@ static void spx_retransmit(unsigned long data)
 	struct sock *sk = (struct sock*)data;
         struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
 	struct sk_buff *skb;
+	unsigned long flags;
 	int err;
 
 	del_timer(&pdata->retransmit);
+	if(pdata->state == SPX_CLOSED)
+		return;
 	if(pdata->retransmits > RETRY_COUNT)
 	{
 		spx_close_socket(sk);   /* Unilateral Abort */
                 return;
         }
 
-	/* need to leave skb on the queue! */
+	/* Need to leave skb on the queue, aye the fear */
+	save_flags(flags);
+	cli();
 	skb = skb_peek(&pdata->retransmit_queue);
 	if(skb_cloned(skb))
                 skb = skb_copy(skb, GFP_ATOMIC);
         else
                 skb = skb_clone(skb, GFP_ATOMIC);
+	restore_flags(flags);
 
 	pdata->retransmit.expires = jiffies + spx_calc_rtt(pdata->retransmits);
 	add_timer(&pdata->retransmit);
@@ -527,13 +538,46 @@ static void spx_retransmit(unsigned long data)
 	return;
 }
 
+/* Check packet for retransmission, ConReqAck aware */
+static int spx_retransmit_chk(struct spx_opt *pdata, int ackseq, int type)
+{
+	struct ipxspxhdr *ipxh;
+	struct sk_buff *skb;
+
+	skb = skb_dequeue(&pdata->retransmit_queue);
+	if(!skb)
+		return (-ENOENT);
+
+	/* Check Data/ACK seq */
+	switch(type)
+	{
+		case ACK:	/* Check Sequence, Should == 1 */
+			ipxh = (struct ipxspxhdr *)skb->nh.raw;
+			if(!(ntohs(ipxh->spx.sequence) - htons(ackseq)))
+				break;
+
+		case CONACK:
+			del_timer(&pdata->retransmit);
+			pdata->retransmits = 0;
+			kfree_skb(skb);
+			if(skb_queue_empty(&pdata->retransmit_queue))
+			{
+				skb = skb_dequeue(&pdata->transmit_queue);
+				if(skb != NULL)
+					spx_route_skb(pdata, skb, TQUEUE);
+			}
+			return (0);
+	}
+
+	skb_queue_head(&pdata->retransmit_queue, skb);
+	return (-1);
+}
+
 /* SPX packet receive engine */
 void spx_rcv(struct sock *sk, int bytes)
 {
 	struct sk_buff *skb;
-	struct sk_buff *skb2;
 	struct ipxspxhdr *ipxh;
-	struct ipxspxhdr *ipxh2;
 	struct spx_opt *pdata = &sk->tp_pinfo.af_spx;
 
 	skb = skb_dequeue(&sk->receive_queue);
@@ -543,15 +587,13 @@ void spx_rcv(struct sock *sk, int bytes)
 
 	/* Can't receive on a closed connection */
         if((pdata->state == SPX_CLOSED) && (ipxh->spx.sequence != 0))
-		return;
+		goto toss_skb;
 	if(ntohs(ipxh->ipx.ipx_pktsize) < SPX_SYS_PKT_LEN)
-		return;
+		goto toss_skb;
         if(ipxh->ipx.ipx_type != IPX_TYPE_SPX)
-		return;
-
-	/* insanity - rcv'd ACK of unsent data ?? */
+		goto toss_skb;
         if(ntohs(ipxh->spx.ackseq) > pdata->sequence)
-		return;
+		goto toss_skb;
 
 	/* Reset WD timer on any received packet */
 	del_timer(&pdata->watchdog);
@@ -577,7 +619,7 @@ void spx_rcv(struct sock *sk, int bytes)
 			}
 			else	/* WD Request */
 				spx_transmit(sk, skb, WDACK, 0);
-			break;
+			goto finish;
 
 		case CCTL_SYS:	/* ACK */
 			if((ipxh->spx.dtype == 0)       /* ConReq ACK */
@@ -588,62 +630,56 @@ void spx_rcv(struct sock *sk, int bytes)
                                 && (pdata->state != SPX_CONNECTED))
                         {
                                 pdata->state = SPX_CONNECTED;
+				pdatat->dest_connid = ipxh->spx.sconn;
+
+				if(spx_retransmit_chk(pdata, 0, CONACK) < 0)
+					goto toss_skb;
 
                                 skb_queue_tail(&sk->receive_queue, skb);
                                 wake_up_interruptible(sk->sleep);
-                                break;
+                                goto finish;
                         }
 
-			/* Check Data/ACK seq */
-                        skb2 = skb_dequeue(&pdata->retransmit_queue);
-                        if(skb2)
-                        {
-				ipxh2 = (struct ipxspxhdr *)skb2->nh.raw;
-                                if((ntohs(ipxh2->spx.sequence)
-                                        == (ntohs(ipxh->spx.ackseq) - 1))
-					|| (ntohs(ipxh2->spx.sequence) == 65535
-					&& ntohs(ipxh->spx.ackseq) == 0))
-                                {
-					del_timer(&pdata->retransmit);
-					pdata->retransmits = 0;
-                                        kfree_skb(skb2);
-					if(skb_queue_empty(&pdata->retransmit_queue))
-					{
-						skb2 = skb_dequeue(&pdata->transmit_queue);
-						if(skb2 != NULL)
-							spx_route_skb(pdata, skb2, TQUEUE);
-					}
-                                }
-                                else    /* Out of Seq - ERROR! */
-				skb_queue_head(&pdata->retransmit_queue, skb2);
-                        }
+			spx_retransmit_chk(pdata, ipxh->spx.ackseq, ACK);
+			goto toss_skb;
 
-			kfree_skb(skb);
-			break;
-
-		case (CCTL_ACK):	/* Informed Disconnect */
+		case (CCTL_ACK):
+			/* Informed Disconnect */
 			if(ipxh->spx.dtype == SPX_DTYPE_ECONN)
 			{
+				
 				spx_transmit(sk, skb, DISACK, 0);
 				spx_close_socket(sk);
+				goto finish;
 			}
-			break;
+			/* Fall through */
 
 		default:
 			if(ntohs(ipxh->spx.sequence) == pdata->rmt_seq)
 			{
 				pdata->rmt_seq = ntohs(ipxh->spx.sequence);
+				pdata->rmt_ack = ntohs(ipxh->spx.ackseq);
+				if(pdata->rmt_ack > 0 || pdata->rmt_ack == 0)
+					spx_retransmit_chk(pdata,pdata->rmt_ack, ACK);
+
 				skb_queue_tail(&pdata->rcv_queue, skb);
 				wake_up_interruptible(sk->sleep);
-				spx_transmit(sk, NULL, ACK, 0);
-				break;
+				if(ipxh->spx.cctl&CCTL_ACK)
+					spx_transmit(sk, NULL, ACK, 0);
+				goto finish;
 			}
 
-			/* Catch All */
-			kfree_skb(skb);
-			break;
+			if(ipxh->spx.dtype == SPX_DTYPE_ECACK)
+			{
+				if(pdata->state != SPX_CLOSED)
+					spx_close_socket(sk);
+				goto toss_skb;
+			}
 	}
 
+toss_skb:	/* Catch All */
+	kfree_skb(skb);
+finish:
         return;
 }
 
@@ -665,13 +701,16 @@ static int spx_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	offset	= ipx_if_offset(sk->tp_pinfo.af_spx.dest_addr.net);
         size 	= offset + sizeof(struct ipxspxhdr) + len;
+
+	cli();
         skb  	= sock_alloc_send_skb(sk, size, 0, flags&MSG_DONTWAIT, &err);
         if(skb == NULL)
                 return (err);
+	sti();
 
 	skb->sk = sk;
         skb_reserve(skb, offset);
-	skb->nh.raw = skb_put(skb, sizeof(struct ipxspxhdr));
+	skb->h.raw = skb->nh.raw = skb_put(skb, sizeof(struct ipxspxhdr));
 
 	err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
 	if(err)
@@ -844,7 +883,7 @@ void spx_proto_init(void)
 
 	/* route socket(PF_IPX, SOCK_SEQPACKET) calls through spx_create() */
 
-	printk(KERN_INFO "Sequenced Packet eXchange (SPX) 0.01 for Linux NET3.037\n");
+	printk(KERN_INFO "Sequenced Packet eXchange (SPX) 0.02 for Linux NET3.037\n");
 	return;
 }
 

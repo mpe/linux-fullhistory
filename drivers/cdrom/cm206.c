@@ -299,7 +299,7 @@ void send_command_polled(int command)
 {
   int loop=POLLOOP;
   while (!(inw(r_line_status) & ls_transmitter_buffer_empty) && loop>0) {
-    udelay(1000);		/* one millisec delay */
+    mdelay(1);		/* one millisec delay */
     --loop;
   }
   outw(command, r_uart_transmit);
@@ -309,7 +309,7 @@ uch receive_echo_polled(void)
 {
   int loop=POLLOOP;
   while (!(inw(r_line_status) & ls_receive_buffer_full) && loop>0) {
-    udelay(1000);
+    mdelay(1);
     --loop;
   }
   return ((uch) inw(r_uart_receive));
@@ -1194,7 +1194,7 @@ int cm206_reset(struct cdrom_device_info * cdi)
   stop_read();
   reset_cm260();
   outw(dc_normal | dc_break | READ_AHEAD, r_data_control);
-  udelay(1000);			/* 750 musec minimum */
+  mdelay(1);			/* 750 musec minimum */
   outw(dc_normal | READ_AHEAD, r_data_control);
   cd->sector_last = -1;		/* flag no data buffered */
   cd->adapter_last = -1;    
@@ -1358,7 +1358,7 @@ __initfunc(int cm206_init(void))
   /* Now, the problem here is that reset_cm260 can generate an
      interrupt. It seems that this can cause a kernel oops some time
      later. So we wait a while and `service' this interrupt. */
-  udelay(1000);
+  mdelay(1);
   outw(dc_normal | READ_AHEAD, r_data_control);
   sti();
   printk(" using IRQ %d\n", cm206_irq);

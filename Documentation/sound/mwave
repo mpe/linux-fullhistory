@@ -1,7 +1,7 @@
 	How to try and survive an IBM Mwave under Linux SB drivers
 
 
-* IBM refuse to provide documentation. If anyone can ever find out what
+* IBM refuses to provide documentation. If anyone can ever find out what
   MWD50430.EXE actually does to load firmware then this comedy could go
   away.
 
@@ -12,9 +12,9 @@
 
 ----------------------------------------------------------------------------
 
-OK, First thing - the IRQ problem IS a problem, whether the test is bypassed or
+OK, first thing - the IRQ problem IS a problem, whether the test is bypassed or
 not. And it is NOT a linux problem - it is an MWAVE problem that is fixed with
-the latest MWAVE patches. So, in other words, DON'T bypass the test for MWAVES!!
+the latest MWAVE patches. So, in other words, don't bypass the test for MWAVES!
 
 My config is Win 95 on HDA1, swap on HDA2, RH 5 on HDA3.
 
@@ -132,7 +132,7 @@ doc=yes
 the doc=yes parm is an environment variable that my init scripts use, it is not
 a kernel argument.
 
-However, the apm=off parm IS a kernel argument!!!!!!! APM, at least in my setup,
+However, the apm=off parm IS a kernel argument!  APM, at least in my setup,
 causes the kernel to crash when loaded via loadlin (but NOT when loaded via
 LILO). The APM stuff COULD be forced out of the kernel via the kernel compile
 options. BUT I, instead, got hold of an unofficial patch to the APM drivers that

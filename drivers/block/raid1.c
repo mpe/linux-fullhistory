@@ -164,7 +164,7 @@ void raid1_end_request (struct buffer_head *bh, int uptodate)
 	PRINTK(("raid1_end_request(), write branch.\n"));
 
 	/*
-	 * lets see if all mirrored write operations have finished 
+	 * Let's see if all mirrored write operations have finished 
 	 * already [we have irqs off, so we can decrease]:
 	 */
 

@@ -463,7 +463,7 @@ printk("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
 #endif
 			return;
 		}
-		udelay(1000);
+		mdelay(1);
 	}
 #if 0
 	printk("secondary_cpu_start: SUCCESS for CPU %d!!!\n", cpuid);
@@ -490,7 +490,7 @@ send_cpu_msg(char *str, int cpuid)
                         printk("Processor %x not ready\n", cpuid);
                         return;
                 }
-                udelay(1000);
+                mdelay(1);
         }
 
         cp1 = (char *) &cpu->ipc_buffer[1];
@@ -506,7 +506,7 @@ send_cpu_msg(char *str, int cpuid)
                         printk("Processor %x not ready\n", cpuid);
                         return;
                 }
-                udelay(1000);
+                mdelay(1);
         }
 }
 

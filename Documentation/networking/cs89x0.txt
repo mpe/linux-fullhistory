@@ -72,7 +72,7 @@ loaded at run-time as a device driver module.
 1.2.2 Files in the Driver Archive:
 
   readme.txt  - this file
-  release.txt - known defects and modifcation log
+  release.txt - known defects and modification log
   cs89x0.c    - driver C code
   cs89x0.h    - driver header file
   cs89x0.o    - pre-compiled module (for v2.0 kernel)
@@ -196,7 +196,7 @@ Example:
 
     insmod cs89x0.o io=0x200 irq=0xA media=aui
 
-This exmaple loads the module and configures the adapter to use an IO port base
+This example loads the module and configures the adapter to use an IO port base
 address of 200h, interrupt 10, and use the AUI media connection.  The following
 configuration options are available on the command line:
 
@@ -235,7 +235,7 @@ is:
   * irq 
   * media type (no autodetect)
 
-The following addtional parameters are CS89XX defaults (values used with no 
+The following additional parameters are CS89XX defaults (values used with no 
 EEPROM or command-line argument).
 
   * DMA Burst = enabled
@@ -545,8 +545,8 @@ I/O Address    	Device                        IRQ      Device
                                               12       Mouse (PS/2)                              
 Memory Address  Device                        13       Math Coprocessor
 --------------  ---------------------         14       Hard Disk controller
-A000-BFFF	EGA Graphics Adpater
-A000-C7FF	VGA Graphics Adpater
+A000-BFFF	EGA Graphics Adapter
+A000-C7FF	VGA Graphics Adapter
 B000-BFFF	Mono Graphics Adapter
 B800-BFFF	Color Graphics Adapter
 E000-FFFF	AT BIOS

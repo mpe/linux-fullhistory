@@ -83,9 +83,9 @@ isa_reset(unsigned short portbase)
         found = 0;
         if ((reg = inb(portbase + ISA_COR)) != 0xff) {
                 outb(reg | ISA_COR_RESET, portbase + ISA_COR);
-                udelay(10000);
+                mdelay(10);
                 outb(reg, portbase + ISA_COR);
-                udelay(10000);
+                mdelay(10);
 
                 for (i = 0; i < 16; i++) {
                         if (inb(portbase + ISA_ISR) & ISA_ISR_SERIAL)

@@ -264,7 +264,7 @@ kernel_clone:
 	stq $18,40($30)
 	bis $31,2,$0	/* Register v0: syscall nr for fork() */
 	SAVE_ALL
-	jsr $26,sys_clone
+	bsr $26,sys_clone
 	stq $0,0($30)
 	br $31,ret_from_sys_call
 .end	kernel_clone
@@ -559,6 +559,7 @@ sys_clone:
 .globl  alpha_switch_to
 .ent    alpha_switch_to
 alpha_switch_to:
+	.prologue 0
 	bsr $1,do_switch_stack
 	call_pal PAL_swpctx
 	lda $16,-2($31)
@@ -1179,6 +1180,6 @@ sys_call_table:
 	.quad sys_getrusage
 	.quad sys_wait4				/* 365 */
 	.quad sys_adjtimex
-	.quad sys_ni_syscall
+	.quad sys_getcwd
 	.quad sys_ni_syscall
 	.quad sys_ni_syscall			/* 369 */

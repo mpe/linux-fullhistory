@@ -9211,12 +9211,8 @@ asc_prt_line(char *buf, int buflen, char *fmt, ...)
 STATIC void
 DvcSleepMilliSecond(ulong n)
 {
-    ulong i;
-
     ASC_DBG1(4, "DvcSleepMilliSecond: %lu\n", n);
-    for (i = 0; i < n; i++) {
-        udelay(1000);
-    }
+    mdelay(n);
 }
 
 STATIC int

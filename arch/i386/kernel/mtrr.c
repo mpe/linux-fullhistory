@@ -110,6 +110,10 @@
     19980502   Richard Gooch <rgooch@atnf.csiro.au>
 	       Documentation improvement: mention Pentium II and AGP.
   v1.20
+    19980521   Richard Gooch <rgooch@atnf.csiro.au>
+	       Only manipulate interrupt enable flag on local CPU.
+	       Allow enclosed uncachable regions.
+  v1.21
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -143,7 +147,7 @@
 #include <asm/atomic.h>
 #include <linux/smp.h>
 
-#define MTRR_VERSION            "1.20 (19980502)"
+#define MTRR_VERSION            "1.21 (19980521)"
 
 #define TRUE  1
 #define FALSE 0
@@ -244,8 +248,8 @@ static void set_mtrr_prepare(struct set_mtrr_context *ctxt)
 {
     unsigned long tmp;
 
-    /* disable interrupts */
-    save_flags(ctxt->flags); cli();
+    /* disable interrupts locally */
+    __save_flags (ctxt->flags); __cli ();
 
     /* save value of CR4 and clear Page Global Enable (bit 7) */
     asm volatile ("movl  %%cr4, %0\n\t"
@@ -290,8 +294,8 @@ static void set_mtrr_done(struct set_mtrr_context *ctxt)
     asm volatile ("movl  %0, %%cr4"
                   : : "r" (ctxt->cr4val) : "memory");
 
-    /* re-enable interrupts (if enabled previously) */
-    restore_flags(ctxt->flags);
+    /* re-enable interrupts locally (if enabled previously) */
+    __restore_flags (ctxt->flags);
 }   /*  End Function set_mtrr_done  */
 
 
@@ -804,8 +808,10 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 		    base, size, lbase, lsize);
 	    return -EINVAL;
 	}
+	/*  New region is enclosed by an existing region  */
 	if (ltype != type)
 	{
+	    if (type == MTRR_TYPE_UNCACHABLE) continue;
 	    spin_unlock (&main_lock);
 	    printk ( "mtrr: type mismatch for %lx,%lx old: %s new: %s\n",
 		     base, size, attrib_to_str (ltype), attrib_to_str (type) );
@@ -1202,7 +1208,7 @@ __initfunc(int mtrr_init(void))
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
 #  if !defined(__SMP__) || defined(MODULE) 
     printk("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
-#endif
+#  endif
 
 #  ifdef __SMP__
 #    ifdef MODULE

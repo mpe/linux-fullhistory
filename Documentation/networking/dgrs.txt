@@ -1,7 +1,7 @@
 	The Digi Intl. RightSwitch SE-X (dgrs) Device Driver
 
 This is a Linux driver for the Digi International RightSwitch SE-X
-EISA and PCI boards.  These are 4 (EISA) or 6 (PCI) port ethernet
+EISA and PCI boards.  These are 4 (EISA) or 6 (PCI) port Ethernet
 switches and a NIC combined into a single board.  This driver can
 be compiled into the kernel statically or as a loadable module.
 

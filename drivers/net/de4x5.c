@@ -1036,9 +1036,9 @@ static int (*dc_infoblock[])(struct device *dev, u_char, u_char *) = {
 
 #define PHY_HARD_RESET {\
     outl(GEP_HRST, DE4X5_GEP);           /* Hard RESET the PHY dev. */\
-    udelay(1000);                        /* Assert for 1ms */\
+    mdelay(1);                        /* Assert for 1ms */\
     outl(0x00, DE4X5_GEP);\
-    udelay(2000);                        /* Wait for 2ms */\
+    mdelay(2);                        /* Wait for 2ms */\
 }
 
 
@@ -1430,7 +1430,7 @@ de4x5_sw_reset(struct device *dev)
     /* Poll for setup frame completion (adapter interrupts are disabled now) */
     sti();                                       /* Ensure timer interrupts */
     for (j=0, i=0;(i<500) && (j==0);i++) {       /* Upto 500ms delay */
-	udelay(1000);
+	mdelay(1);
 	if ((s32)le32_to_cpu(lp->tx_ring[lp->tx_new].status) >= 0) j=1;
     }
     outl(omr, DE4X5_OMR);                        /* Stop everything! */
@@ -4415,7 +4415,7 @@ srom_exec(struct device *dev, u_char *p)
     while (count--) {
 	gep_wr(((lp->chipset==DC21140) && (lp->ibn!=5) ? 
 		                                   *p++ : TWIDDLE(w++)), dev);
-	udelay(2000);                       /* 2ms per action */
+	mdelay(2);                       /* 2ms per action */
     }
 
     if (lp->chipset != DC21140) {

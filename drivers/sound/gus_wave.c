@@ -384,7 +384,7 @@ static void gus_write_addr(int reg, unsigned long address, int frac, int is16bit
 	gus_write16(reg, (unsigned short) ((address >> 7) & 0xffff));
 	gus_write16(reg + 1, (unsigned short) ((address << 9) & 0xffff)
 		    + (frac << 5));
-	/* Could writing twice fix problems with GUS_VOICE_POS() ? Lets try... */
+	/* Could writing twice fix problems with GUS_VOICE_POS()? Let's try. */
 	gus_delay();
 	gus_write16(reg, (unsigned short) ((address >> 7) & 0xffff));
 	gus_write16(reg + 1, (unsigned short) ((address << 9) & 0xffff)
@@ -500,12 +500,13 @@ static void gus_set_voice_pos(int voice, long position)
 	int sample_no;
 
 	if ((sample_no = sample_map[voice]) != -1) {
-		if (position < samples[sample_no].len)
+		if (position < samples[sample_no].len) {
 			if (voices[voice].volume_irq_mode == VMODE_START_NOTE)
 				voices[voice].offset_pending = position;
 			else
 				gus_write_addr(0x0a, sample_ptrs[sample_no] + position, 0,
 				 samples[sample_no].mode & WAVE_16_BITS);
+		}
 	}
 }
 

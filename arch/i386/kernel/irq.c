@@ -61,7 +61,7 @@ atomic_t nmi_counter;
  *
  * (0x0000ffff for NR_IRQS==16, 0x00ffffff for NR_IRQS=24)
  */
-static unsigned int cached_irq_mask = (1<<NR_IRQS)-1;
+unsigned int cached_irq_mask = (1<<NR_IRQS)-1;
 
 #define cached_21	((cached_irq_mask | io_apic_irqs) & 0xff)
 #define cached_A1	(((cached_irq_mask | io_apic_irqs) >> 8) & 0xff)
@@ -86,17 +86,23 @@ spinlock_t irq_controller_lock;
  */
 unsigned int io_apic_irqs = 0;
 
-struct hw_interrupt_type {
-	const char * typename;
-	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);
-	void (*enable)(unsigned int irq);
-	void (*disable)(unsigned int irq);
-};
-
-
 static void do_8259A_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
 static void enable_8259A_irq (unsigned int irq);
 static void disable_8259A_irq (unsigned int irq);
+
+/*
+ * Dummy controller type for unused interrupts
+ */
+static void do_none(unsigned int irq, int cpu, struct pt_regs * regs) { }
+static void enable_none(unsigned int irq) { }
+static void disable_none(unsigned int irq) { }
+
+static struct hw_interrupt_type no_irq_type = {
+	"none",
+	do_none,
+	enable_none,
+	disable_none
+};
 
 static struct hw_interrupt_type i8259A_irq_type = {
 	"XT-PIC",
@@ -105,73 +111,9 @@ static struct hw_interrupt_type i8259A_irq_type = {
 	disable_8259A_irq
 };
 
-
-#ifdef __SMP__
-
-/*
- * Level and edge triggered IO-APIC interrupts need different handling,
- * so we use two separate irq descriptors. edge triggered IRQs can be
- * handled with the level-triggered descriptor, but that one has slightly
- * more overhead. Level-triggered interrupts cannot be handled with the
- * edge-triggered handler, without risking IRQ storms and other ugly
- * races.
- */
-
-static void do_edge_ioapic_IRQ (unsigned int irq, int cpu,
-						 struct pt_regs * regs);
-static void enable_edge_ioapic_irq (unsigned int irq);
-static void disable_edge_ioapic_irq (unsigned int irq);
-
-static struct hw_interrupt_type ioapic_edge_irq_type = {
-	"IO-APIC-edge",
-	do_edge_ioapic_IRQ,
-	enable_edge_ioapic_irq,
-	disable_edge_ioapic_irq
-};
-
-static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
-						 struct pt_regs * regs);
-static void enable_level_ioapic_irq (unsigned int irq);
-static void disable_level_ioapic_irq (unsigned int irq);
-
-static struct hw_interrupt_type ioapic_level_irq_type = {
-	"IO-APIC-level",
-	do_level_ioapic_IRQ,
-	enable_level_ioapic_irq,
-	disable_level_ioapic_irq
-};
-
-#endif
-
-/*
- * Status: reason for being disabled: somebody has
- * done a "disable_irq()" or we must not re-enter the
- * already executing irq..
- */
-#define IRQ_INPROGRESS	1
-#define IRQ_DISABLED	2
-
-/*
- * This is the "IRQ descriptor", which contains various information
- * about the irq, including what kind of hardware handling it has,
- * whether it is disabled etc etc.
- *
- * Pad this out to 32 bytes for cache and indexing reasons.
- */
-typedef struct {
-	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
-	unsigned int events;			/* Do we have any pending events? */
-	unsigned int ipi;			/* Have we sent off the pending IPI? */
-	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
-	struct irqaction *action;		/* IRQ action list */
-	unsigned int unused[3];
-} irq_desc_t;
-
 irq_desc_t irq_desc[NR_IRQS] = {
-	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* standard ISA IRQs */
-#ifdef __SMP__
-	[16 ... 23] = { 0, 0, 0, &ioapic_edge_irq_type, }, /* 'high' PCI IRQs */
-#endif
+	[0 ... 15] = { 0, 0, 0, &i8259A_irq_type, },	/* default to standard ISA IRQs */
+	[16 ... 23] = { 0, 0, 0, &no_irq_type, },	/* 'high' PCI IRQs filled in on demand */
 };
 
 
@@ -641,7 +583,7 @@ void __global_restore_flags(unsigned long flags)
 
 #endif
 
-static int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
+int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
 {
 	struct irqaction * action;
 	int status;
@@ -741,176 +683,6 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 	irq_exit(cpu, irq);
 }
-
-#ifdef __SMP__
-
-/*
- * In the SMP+IOAPIC case it might happen that there are an unspecified
- * number of pending IRQ events unhandled. These cases are very rare,
- * so we 'resend' these IRQs via IPIs, to the same CPU. It's much
- * better to do it this way as thus we dont have to be aware of
- * 'pending' interrupts in the IRQ path, except at this point.
- */
-static inline void self_IPI (unsigned int irq)
-{
-	irq_desc_t *desc = irq_desc + irq;
-
-	if (desc->events && !desc->ipi) {
-		desc->ipi = 1;
-		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
-	}
-}
-
-/*
- * Edge triggered needs to resend any interrupt
- * that was delayed.
- */
-static void enable_edge_ioapic_irq(unsigned int irq)
-{
-	self_IPI(irq);
-	enable_IO_APIC_irq(irq);
-}
-
-static void disable_edge_ioapic_irq(unsigned int irq)
-{
-	disable_IO_APIC_irq(irq);
-}
-
-/*
- * Level triggered interrupts can just be masked
- */
-static void enable_level_ioapic_irq(unsigned int irq)
-{
-	unmask_IO_APIC_irq(irq);
-}
-
-static void disable_level_ioapic_irq(unsigned int irq)
-{
-	mask_IO_APIC_irq(irq);
-}
-
-/*
- * Enter and exit the irq handler context..
- */
-static inline void enter_ioapic_irq(int cpu)
-{
-	hardirq_enter(cpu);
-	while (test_bit(0,&global_irq_lock)) barrier();
-}
-
-static inline void exit_ioapic_irq(int cpu)
-{
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
-}	
-
-static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
-{
-	irq_desc_t *desc = irq_desc + irq;
-	struct irqaction * action;
-
-	spin_lock(&irq_controller_lock);
-
-	/*
-	 * Edge triggered IRQs can be acked immediately
-	 * and do not need to be masked.
-	 */
-	ack_APIC_irq();
-	desc->ipi = 0;
-	desc->events = 1;
-
-	/*
-	 * If the irq is disabled for whatever reason, we cannot
-	 * use the action we have..
-	 */
-	action = NULL;
-	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
-		action = desc->action;
-		desc->status = IRQ_INPROGRESS;
-		desc->events = 0;
-	}
-	spin_unlock(&irq_controller_lock);
-
-	/*
-	 * If there is no IRQ handler or it was disabled, exit early.
-	 */
-	if (!action)
-		return;
-
-	enter_ioapic_irq(cpu);
-
-	/*
-	 * Edge triggered interrupts need to remember
-	 * pending events..
-	 */
-	for (;;) {
-		int pending;
-
-		handle_IRQ_event(irq, regs);
-
-		spin_lock(&irq_controller_lock);
-		pending = desc->events;
-		desc->events = 0;
-		if (!pending)
-			break;
-		spin_unlock(&irq_controller_lock);
-	}
-	desc->status &= IRQ_DISABLED;
-	spin_unlock(&irq_controller_lock);
-
-	exit_ioapic_irq(cpu);
-}
-
-static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
-						 struct pt_regs * regs)
-{
-	irq_desc_t *desc = irq_desc + irq;
-	struct irqaction * action;
-
-	spin_lock(&irq_controller_lock);
-	/*
-	 * In the level triggered case we first disable the IRQ
-	 * in the IO-APIC, then we 'early ACK' the IRQ, then we
-	 * handle it and enable the IRQ when finished.
-	 *
-	 * disable has to happen before the ACK, to avoid IRQ storms.
-	 * So this all has to be within the spinlock.
-	 */
-	mask_IO_APIC_irq(irq);
-
-	desc->ipi = 0;
-
-	/*
-	 * If the irq is disabled for whatever reason, we must
-	 * not enter the irq action.
-	 */
-	action = NULL;
-	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
-		action = desc->action;
-		desc->status = IRQ_INPROGRESS;
-	}
-
-	ack_APIC_irq();
-	spin_unlock(&irq_controller_lock);
-
-	/* Exit early if we had no action or it was disabled */
-	if (!action)
-		return;
-
-	enter_ioapic_irq(cpu);
-
-	handle_IRQ_event(irq, regs);
-
-	spin_lock(&irq_controller_lock);
-	desc->status &= ~IRQ_INPROGRESS;
-	if (!desc->status)
-		unmask_IO_APIC_irq(irq);
-	spin_unlock(&irq_controller_lock);
-
-	exit_ioapic_irq(cpu);
-}
-
-#endif
 
 
 /*
@@ -1197,39 +969,6 @@ out:
 	spin_unlock_irq(&irq_controller_lock);
 	return irq_found;
 }
-
-#ifdef __SMP__
-void init_IO_APIC_traps(void)
-{
-	int i;
-	/*
-	 * NOTE! The local APIC isn't very good at handling
-	 * multiple interrupts at the same interrupt level.
-	 * As the interrupt level is determined by taking the
-	 * vector number and shifting that right by 4, we
-	 * want to spread these out a bit so that they don't
-	 * all fall in the same interrupt level
-	 *
-	 * also, we've got to be careful not to trash gate
-	 * 0x80, because int 0x80 is hm, kindof importantish ;)
-	 */
-	for (i = 0; i < NR_IRQS ; i++) {
-		if ((IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ &&
-		    (IO_APIC_IRQ(i))) {
-			if (IO_APIC_irq_trigger(i))
-				irq_desc[i].handler = &ioapic_level_irq_type;
-			else
-				irq_desc[i].handler = &ioapic_edge_irq_type;
-			/*
-			 * disable it in the 8259A:
-			 */
-			cached_irq_mask |= 1 << i;
-			if (i < 16)
-				set_8259A_irq_mask(i);
-		}
-	}
-}
-#endif
 
 __initfunc(void init_IRQ(void))
 {

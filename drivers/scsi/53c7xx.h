@@ -1580,7 +1580,7 @@ struct NCR53c7x0_hostdata {
 
 #ifdef BIG_ENDIAN
 /* If we are big-endian, then we are not Intel, so probably don't have
- * an i/o map as well as a memory map.  So, lets assume memory mapped.
+ * an i/o map as well as a memory map.  So, let's assume memory mapped.
  * Also, I am having terrible problems trying to persuade the compiler
  * not to lay down code which does a read after write for these macros.
  * If you remove 'volatile' from writeb() and friends it is ok....

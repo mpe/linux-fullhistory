@@ -1808,7 +1808,7 @@ __initfunc(unsigned int SK_rom_addr(void))
 void SK_reset_board(void)
 {
     writeb(0x00, SK_PORT);       /* Reset active */
-    udelay(5000);                /* Delay min 5ms */
+    mdelay(5);                /* Delay min 5ms */
     writeb(SK_RESET, SK_PORT);   /* Set back to normal operation */
 
 } /* End of SK_reset_board() */

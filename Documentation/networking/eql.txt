@@ -33,7 +33,7 @@
   TCP implementation is pretty fast though.--)
 
 
-  I suggest to ISP's out there that it would probably be fair to charge
+  I suggest to ISPs out there that it would probably be fair to charge
   a load-balancing client 75% of the cost of the second line and 50% of
   the cost of the third line etc...
 

@@ -2193,7 +2193,7 @@ static inline int stl_initeio(stlbrd_t *brdp)
 	}
  
 /*
- *	Everything looks OK, so lets go ahead and probe for the hardware.
+ *	Everything looks OK, so let's go ahead and probe for the hardware.
  */
 	brdp->clk = CD1400_CLK;
 	brdp->isr = stl_eiointr;
@@ -2568,7 +2568,7 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *dev)
 #endif
 
 /*
- *	We have all resources from the board, so lets setup the actual
+ *	We have all resources from the board, so let's setup the actual
  *	board structure now.
  */
 	switch (brdtype) {

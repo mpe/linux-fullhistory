@@ -521,7 +521,7 @@ static void pcd_req_sense( int unit, int quiet )
 	int 	r;
 
 	r = pcd_command(unit,rs_cmd,16,"Request sense");
-	udelay(1000);
+	mdelay(1);
 	if (!r) pcd_completion(unit,buf,"Request sense");
 
 	PCD.last_sense = -1;
@@ -538,7 +538,7 @@ static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 {	int r;
 
 	r = pcd_command(unit,cmd,dlen,fun);
-	udelay(1000);
+	mdelay(1);
 	if (!r) r = pcd_completion(unit,buf,fun);
 	if (r) pcd_req_sense(unit,!fun);
 	
@@ -768,7 +768,7 @@ static void pcd_start( void )
 		return;
 	}
 
-	udelay(1000);
+	mdelay(1);
 
 	ps_set_intr(do_pcd_read_drq,pcd_ready,PCD_TMO,nice);
 
@@ -802,7 +802,7 @@ static void do_pcd_read_drq( void )
 
 	if (pcd_completion(unit,pcd_buffer,"read block")) {
                 if (pcd_retries < PCD_RETRIES) {
-                        udelay(1000);
+                        mdelay(1);
                         pcd_retries++;
 			pi_do_claimed(PI,pcd_start);
                         return;

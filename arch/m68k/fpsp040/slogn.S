@@ -17,7 +17,7 @@
 |		result is provably monotonic in double precision.
 |
 |	Speed: The program slogn takes approximately 190 cycles for input 
-|		argument X such that |X-1| >= 1/16, which is the the usual 
+|		argument X such that |X-1| >= 1/16, which is the usual 
 |		situation. For those arguments, slognp1 takes approximately
 |		 210 cycles. For the less common arguments, the program will
 |		 run no worse than 10% slower.

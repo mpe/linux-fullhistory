@@ -178,7 +178,7 @@ MODINCL = $(TOPDIR)/include/linux/modules
 # The -w option (enable warnings) for genksyms will return here in 2.1
 # So where has it gone ???
 #
-# Added the SMP seperator to stop module accidents between uniproc/smp
+# Added the SMP separator to stop module accidents between uniproc/smp
 # intel boxes - AC - from bits by Michael Chastain
 #
 

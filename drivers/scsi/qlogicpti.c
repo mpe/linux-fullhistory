@@ -382,7 +382,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 	}
 
 	qregs->hcctrl = HCCTRL_RESET;
-	udelay(1000);
+	mdelay(1);
 
 	qregs->sbus_ctrl = (SBUS_CTRL_GENAB | SBUS_CTRL_ERIRQ);
 	set_sbus_cfg1(qregs, qpti->bursts);
@@ -456,7 +456,7 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 
 	/* Reset the ISP again. */
 	qregs->hcctrl = HCCTRL_RESET;
-	udelay(1000);
+	mdelay(1);
 
 	qlogicpti_enable_irqs(qregs);
 	qregs->sbus_semaphore = 0;

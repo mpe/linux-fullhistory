@@ -284,7 +284,7 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 			return 0;
 	}
 	
-	/* The shared case is hard. Lets do the conventional zeroing. */ 
+	/* The shared case is hard. Let's do the conventional zeroing. */ 
 	do {
 		unsigned long unwritten = clear_user(buf, PAGE_SIZE);
 		if (unwritten)

@@ -170,7 +170,7 @@ void gdth_halt(void);
 static unchar   DebugState = DEBUG_GDTH;
 extern int sys_syslog(int,char*,int);
 #define LOGEN           sys_syslog(7,NULL,0);
-#define WAITSEC(a)      {ulong idx; for(idx=0;idx<a*1000L;++idx) udelay(1000);}
+#define WAITSEC(a)      mdelay((a)*1000)
 
 #ifdef SLOWMOTION_GDTH
 #define SLOWM   WAITSEC(2)  
@@ -542,7 +542,7 @@ static int gdth_init_eisa(ushort eisa_adr,gdth_ha_str *ha)
             printk("GDT-EISA: Initialization error (DEINIT failed)\n");
             return 0;
         }
-        udelay(1000);
+        mdelay(1);
         TRACE2(("wait for DEINIT: retries=%ld\n",retries));
     }
     prot_ver = inb(eisa_adr+MAILBOXREG);
@@ -572,7 +572,7 @@ static int gdth_init_eisa(ushort eisa_adr,gdth_ha_str *ha)
                 printk("GDT-EISA: Initialization error (get IRQ failed)\n");
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         ha->irq = inb(eisa_adr+MAILBOXREG);
         outb(0xff,eisa_adr+EDOORREG);
@@ -663,7 +663,7 @@ static int gdth_init_isa(ulong bios_adr,gdth_ha_str *ha)
 	    gdth_munmap(ha->brd);
             return 0;
         }
-        udelay(1000);
+        mdelay(1);
     }
     prot_ver = (unchar)readl(&dp2_ptr->u.ic.S_Info[0]);
     writeb(0, &dp2_ptr->u.ic.Status);
@@ -694,7 +694,7 @@ static int gdth_init_isa(ulong bios_adr,gdth_ha_str *ha)
 	    gdth_munmap(ha->brd);
             return 0;
         }
-        udelay(1000);
+        mdelay(1);
     }
     writeb(0, &dp2_ptr->u.ic.Status);
     writeb(0xff, &dp2_ptr->io.irqdel);
@@ -749,7 +749,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         prot_ver = (unchar)readl(&dp6_ptr->u.ic.S_Info[0]);
         writeb(0, &dp6_ptr->u.ic.S_Status);
@@ -778,7 +778,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         writeb(0, &dp6_ptr->u.ic.S_Status);
         writeb(0xff, &dp6_ptr->io.irqdel);
@@ -822,7 +822,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         prot_ver = (unchar)readl(&dp6c_ptr->u.ic.S_Info[0]);
         writeb(0, &dp6c_ptr->u.ic.Status);
@@ -852,7 +852,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         writeb(0, &dp6c_ptr->u.ic.S_Status);
 
@@ -891,7 +891,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         prot_ver = (unchar)readl(&dp6m_ptr->u.ic.S_Info[0]);
         writeb(0, &dp6m_ptr->u.ic.S_Status);
@@ -919,7 +919,7 @@ static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha)
 		gdth_munmap(ha->brd);
                 return 0;
             }
-            udelay(1000);
+            mdelay(1);
         }
         writeb(0, &dp6m_ptr->u.ic.S_Status);
     }
@@ -1186,7 +1186,7 @@ static int gdth_wait(int hanum,int index,ulong time)
             answer_found = TRUE;
             break;
         }
-        udelay(1000);
+        mdelay(1);
     } while (--time);
     gdth_from_wait = FALSE;
     
@@ -1249,7 +1249,7 @@ static int gdth_internal_cmd(int hanum,unchar service,ushort opcode,ulong p1,
         }
         if (ha->status != S_BSY || --retries == 0)
             break;
-        udelay(1000);   
+        mdelay(1);   
     }   
     
     return (ha->status != S_OK ? 0:1);
@@ -1541,7 +1541,7 @@ static void gdth_next(int hanum)
                         return;
                     }
                     while (gdth_test_busy(hanum))
-                        udelay(1000);
+                        mdelay(1);
                 }
                 firsttime = FALSE;
             }

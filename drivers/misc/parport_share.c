@@ -37,7 +37,6 @@
 #define PARPORT_DEFAULT_TIMESLICE	(HZ/5)
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
-static int portcount = 0;
 
 void (*parport_probe_hook)(struct parport *port) = NULL;
 
@@ -67,6 +66,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 				      struct parport_operations *ops)
 {
 	struct parport *tmp;
+	int portnum;
 
 	/* Check for a previously registered port.
 	   NOTE: we will ignore irq and dma if we find a previously
@@ -82,6 +82,22 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 		return NULL;
 	}
 
+	/* Search for the lowest free parport number. */
+	for (portnum = 0; ; portnum++) {
+		struct parport *itr = portlist;
+		while (itr) {
+			if (itr->number == portnum)
+				/* No good, already used. */
+				break;
+			else
+				itr = itr->next;
+		}
+
+		if (itr == NULL)
+			/* Got to the end of the list. */
+			break;
+	}
+	
 	/* Init our structure */
  	memset(tmp, 0, sizeof(struct parport));
 	tmp->base = base;
@@ -92,7 +108,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->devices = tmp->cad = NULL;
 	tmp->flags = 0;
 	tmp->ops = ops;
-	tmp->number = portcount;
+	tmp->number = portnum;
 	spin_lock_init (&tmp->lock);
 
 	tmp->name = kmalloc(15, GFP_KERNEL);
@@ -101,7 +117,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 		kfree(tmp);
 		return NULL;
 	}
-	sprintf(tmp->name, "parport%d", portcount);
+	sprintf(tmp->name, "parport%d", portnum);
 
 	/* Chain the entry to our list. */
 	if (portlist_tail)
@@ -109,8 +125,6 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	portlist_tail = tmp;
 	if (!portlist)
 		portlist = tmp;
-
-	portcount++;
 
 	tmp->probe_info.class = PARPORT_CLASS_LEGACY;  /* assume the worst */
 	tmp->waithead = tmp->waittail = NULL;

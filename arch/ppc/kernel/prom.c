@@ -101,7 +101,7 @@ extern unsigned long reloc_offset(void);
  * and data have been mapped to KERNELBASE.  At this point the code
  * is running at whatever address it has been loaded at, so
  * references to extern and static variables must be relocated
- * explicitly.  The procedure reloc_offset() returns the the address
+ * explicitly.  The procedure reloc_offset() returns the address
  * we're currently running at minus the address we were linked at.
  * (Note that strings count as static variables.)
  *

@@ -4422,7 +4422,7 @@ cyy_init_card(volatile ucchar *true_base_addr,int index))
     for(chip_number=0; chip_number<CyMAX_CHIPS_PER_CARD; chip_number++){
         base_addr = true_base_addr
 	               + (cy_chip_offset[chip_number]<<index);
-        udelay(1000L);
+        mdelay(1);
         if(cy_readb(base_addr+(CyCCR<<index)) != 0x00){
             /*************
             printk(" chip #%d at %#6lx is never idle (CCR != 0)\n",
@@ -4448,7 +4448,7 @@ cyy_init_card(volatile ucchar *true_base_addr,int index))
         }
 
         cy_writeb((u_long)base_addr+(CyCCR<<index), CyCHIP_RESET);
-        udelay(1000L);
+        mdelay(1);
 
         if(cy_readb(base_addr+(CyGFRCR<<index)) == 0x00){
             /*

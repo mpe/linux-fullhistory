@@ -1169,7 +1169,7 @@ int quota_on(kdev_t dev, short type, char *path)
 	}
 
 	if (inode->i_size == 0 || (inode->i_size % sizeof(struct dqblk)) != 0) {
-		iput(inode);
+		dput(dentry);
 		return(-EINVAL);
 	}
 

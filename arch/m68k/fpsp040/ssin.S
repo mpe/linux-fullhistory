@@ -21,7 +21,7 @@
 |		result is provably monotonic in double precision.
 |
 |	Speed: The programs sSIN and sCOS take approximately 150 cycles for
-|		input argument X such that |X| < 15Pi, which is the the usual
+|		input argument X such that |X| < 15Pi, which is the usual
 |		situation. The speed for sSINCOS is approximately 190 cycles.
 |
 |	Algorithm:

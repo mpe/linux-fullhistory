@@ -436,7 +436,7 @@ static void pt_req_sense( int unit, int quiet )
         int     r;
 
         r = pt_command(unit,rs_cmd,16,"Request sense");
-        udelay(1000);
+        mdelay(1);
         if (!r) pt_completion(unit,buf,"Request sense");
 
 	PT.last_sense = -1;
@@ -453,7 +453,7 @@ static int pt_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 {       int r;
 
         r = pt_command(unit,cmd,dlen,fun);
-        udelay(1000);
+        mdelay(1);
         if (!r) r = pt_completion(unit,buf,fun);
         if (r) pt_req_sense(unit,!fun);
         
@@ -820,7 +820,7 @@ static ssize_t pt_read(struct file * filp, char * buf,
 
 	    r = pt_command(unit,rd_cmd,n,"read");
 
-	    udelay(1000);
+	    mdelay(1);
 
 	    if (r) {
 	        pt_req_sense(unit,0);
@@ -906,7 +906,7 @@ static ssize_t pt_write(struct file * filp, const char * buf,
 
             r = pt_command(unit,wr_cmd,n,"write");
 
-            udelay(1000);
+            mdelay(1);
 
             if (r) {			/* error delivering command only */
                 pt_req_sense(unit,0);

@@ -203,7 +203,7 @@ static unsigned long do_slow_gettimeoffset(void)
 	 *     (see c't 95/10 page 335 for Neptun bug.)
 	 */
 
-/* you can safely undefine this if you dont have the Neptun chipset */
+/* you can safely undefine this if you don't have the Neptune chipset */
 
 #define BUGGY_NEPTUN_TIMER
 
@@ -217,7 +217,7 @@ static unsigned long do_slow_gettimeoffset(void)
 			if( inb(0x20) & 0x01 ) {
 				/*
 				 * We cannot detect lost timer interrupts ... 
-				 * well, thats why we call them lost, dont we? :)
+				 * well, that's why we call them lost, don't we? :)
 				 * [hmm, on the Pentium and Alpha we can ... sort of]
 				 */
 				count -= LATCH;

@@ -721,7 +721,7 @@ pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
 
 	if (unacked) {
 
-		if (dev->send_seq > dev->unack_seq)
+		if (dev->send_seq > dev->unack_seq) {
 			if (ack <= dev->unack_seq || ack > dev->send_seq) {
 				printk(KERN_DEBUG
 				     "layer 2 ack unacceptable - dev %d",
@@ -734,6 +734,7 @@ pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
 				       dev->id);
 				pcbit_l2_error(dev);
 			}
+		}
 		/* ack is acceptable */
 
 

@@ -1093,7 +1093,7 @@ u32 TLan_HandleStatOverflow( struct device *dev, u16 host_int )
 	 *	of the list.  If the frame was the last in the Rx
 	 *	channel (EOC), the function restarts the receive channel
 	 *	by sending an Rx Go command to the adapter.  Then it
-	 *	activates/continues the the activity LED.
+	 *	activates/continues the activity LED.
 	 *
 	 **************************************************************/
 
@@ -1509,7 +1509,7 @@ void TLan_ResetLists( struct device *dev )
 	 *		io_base		Base IO port of the device of
 	 *				which to print DIO registers.
 	 *
-	 *	This function prints out all the the internal (DIO)
+	 *	This function prints out all the internal (DIO)
 	 *	registers of a TLAN chip.
 	 *
 	 **************************************************************/
@@ -2061,7 +2061,7 @@ int TLan_PhyInternalCheck( struct device *dev )
 		TLan_MiiSync( io );
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_PDOWN | MII_GC_LOOPBK | MII_GC_ISOLATE );
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK );
-		udelay(50000);
+		mdelay(50);
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_RESET | MII_GC_LOOPBK );
 		TLan_MiiSync( io );
 	}
@@ -2074,7 +2074,7 @@ int TLan_PhyInternalCheck( struct device *dev )
 	/* TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_DUPLEX ); */
 	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0 );
 
-	udelay(500000);
+	mdelay(500);
 
 	TLan_MiiReadReg( io, phy, TLAN_TLPHY_CTL, &value );
 	if ( aui ) 
@@ -2197,7 +2197,7 @@ static int TLan_PhyDp83840aCheck( struct device *dev )
 		TLan_MiiSync( io );
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_PDOWN | MII_GC_LOOPBK | MII_GC_ISOLATE );
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_LOOPBK );
-		udelay(500000);
+		mdelay(500);
 		TLan_MiiWriteReg( io, phy, MII_GEN_CTL, MII_GC_RESET | MII_GC_LOOPBK );
 		TLan_MiiSync( io );
 	}
@@ -2215,7 +2215,7 @@ static int TLan_PhyDp83840aCheck( struct device *dev )
        	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0x1000 );
 	TLan_MiiWriteReg( io, phy, MII_GEN_CTL, 0x1200 );
 
-	udelay(50000);
+	mdelay(50);
 #if 0
 	/* Read Possible Latched Link Status */
 	TLan_MiiReadReg( io, phy, MII_GEN_STS, &value ); 
