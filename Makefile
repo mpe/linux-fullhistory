@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 39
+SUBLEVEL = 40
 
 ARCH = i386
 
@@ -223,12 +223,14 @@ drivers: dummy
 net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
+MODFLAGS = -DMODULE
+
 ifdef CONFIG_MODVERSIONS
-MODV = -DMODVERSIONS
+MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
 modules: include/linux/version.h
-	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE $(MODV)" modules; done
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) $(MODFLAGS)" modules; done
 
 modules_install:
 	@( \
@@ -280,17 +282,18 @@ backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.gz
 	sync
 
-#depend dep: .hdepend
-depend dep: archdep .hdepend include/linux/version.h
+dep-files: archdep .hdepend include/linux/version.h
 	$(AWK) -f scripts/depend.awk init/*.c > .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
 	mv .tmpdepend .depend
+
+MODVERFILE :=
+
 ifdef CONFIG_MODVERSIONS
-	@echo updating $(TOPDIR)/include/linux/modversions.h
-	@(cd $(TOPDIR)/include/linux/modules; for f in *.ver;\
-	do echo "#include <linux/modules/$${f}>"; done) \
-	> $(TOPDIR)/include/linux/modversions.h
+MODVERFILE := $(TOPDIR)/include/linux/modversions.h
 endif
+
+depend dep: dep-files $(MODVERFILE)
 
 ifdef CONFIGURATION
 ..$(CONFIGURATION):

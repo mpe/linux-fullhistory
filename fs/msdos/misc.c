@@ -365,7 +365,7 @@ int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 
 static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
     int *number,int *ino,struct buffer_head **res_bh,
-    struct msdos_dir_entry **res_de)
+    struct msdos_dir_entry **res_de,char scantype)
 {
 	struct buffer_head *bh;
 	struct msdos_dir_entry *data;
@@ -375,8 +375,15 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 	if (!(bh = bread(sb->s_dev,sector,SECTOR_SIZE))) return -EIO;
 	data = (struct msdos_dir_entry *) bh->b_data;
 	for (entry = 0; entry < MSDOS_DPS; entry++) {
-		if (name) RSS_NAME
-		else {
+/* RSS_COUNT:  if (data[entry].name == name) done=true else done=false. */
+		if (name) {
+			RSS_NAME
+			if (done && scantype) {   /* scantype != SCAN_ANY */
+				done = (data[entry].attr & ATTR_HIDDEN)
+					? (scantype==SCAN_HID)
+					: (scantype==SCAN_NOTHID);
+			}
+		} else {
 			if (!ino) RSS_COUNT
 			else {
 				if (number) RSS_START
@@ -405,13 +412,13 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
  */
 
 static int raw_scan_root(struct super_block *sb,const char *name,int *number,int *ino,
-    struct buffer_head **res_bh,struct msdos_dir_entry **res_de)
+    struct buffer_head **res_bh,struct msdos_dir_entry **res_de,char scantype)
 {
 	int count,cluster;
 
 	for (count = 0; count < MSDOS_SB(sb)->dir_entries/MSDOS_DPS; count++) {
 		if ((cluster = raw_scan_sector(sb,MSDOS_SB(sb)->dir_start+count,
-		    name,number,ino,res_bh,res_de)) >= 0) return cluster;
+		    name,number,ino,res_bh,res_de,scantype)) >= 0) return cluster;
 	}
 	return -ENOENT;
 }
@@ -424,7 +431,7 @@ static int raw_scan_root(struct super_block *sb,const char *name,int *number,int
 
 static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
     int *number,int *ino,struct buffer_head **res_bh,struct msdos_dir_entry
-    **res_de)
+    **res_de,char scantype)
 {
 	int count,cluster;
 
@@ -435,7 +442,7 @@ static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
 		for (count = 0; count < MSDOS_SB(sb)->cluster_size; count++) {
 			if ((cluster = raw_scan_sector(sb,(start-2)*
 			    MSDOS_SB(sb)->cluster_size+MSDOS_SB(sb)->data_start+
-			    count,name,number,ino,res_bh,res_de)) >= 0)
+			    count,name,number,ino,res_bh,res_de,scantype)) >= 0)
 				return cluster;
 		}
 		if (!(start = fat_access(sb,start,-1))) {
@@ -458,12 +465,14 @@ static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
  *       being created.
  */
 
-static int raw_scan(struct super_block *sb,int start,const char *name,int *number,
-    int *ino,struct buffer_head **res_bh,struct msdos_dir_entry **res_de)
+static int raw_scan(struct super_block *sb, int start, const char *name,
+    int *number, int *ino, struct buffer_head **res_bh,
+    struct msdos_dir_entry **res_de, char scantype)
 {
-	if (start)
-		return raw_scan_nonroot(sb,start,name,number,ino,res_bh,res_de);
-	else return raw_scan_root(sb,name,number,ino,res_bh,res_de);
+	if (start) return raw_scan_nonroot
+		(sb,start,name,number,ino,res_bh,res_de,scantype);
+	else return raw_scan_root
+		(sb,name,number,ino,res_bh,res_de,scantype);
 }
 
 
@@ -482,19 +491,19 @@ int msdos_parent_ino(struct inode *dir,int locked)
 	if (dir->i_ino == MSDOS_ROOT_INO) return dir->i_ino;
 	if (!locked) lock_creation(); /* prevent renames */
 	if ((curr = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,MSDOS_DOTDOT,
-	    &zero,NULL,NULL,NULL)) < 0) {
+	    &zero,NULL,NULL,NULL,SCAN_ANY)) < 0) {
 		if (!locked) unlock_creation();
 		return curr;
 	}
 	if (!curr) nr = MSDOS_ROOT_INO;
 	else {
 		if ((prev = raw_scan(dir->i_sb,curr,MSDOS_DOTDOT,&zero,NULL,
-		    NULL,NULL)) < 0) {
+		    NULL,NULL,SCAN_ANY)) < 0) {
 			if (!locked) unlock_creation();
 			return prev;
 		}
 		if ((error = raw_scan(dir->i_sb,prev,NULL,&curr,&nr,NULL,
-		    NULL)) < 0) {
+		    NULL,SCAN_ANY)) < 0) {
 			if (!locked) unlock_creation();
 			return error;
 		}
@@ -515,11 +524,11 @@ int msdos_subdirs(struct inode *dir)
 
 	count = 0;
 	if (dir->i_ino == MSDOS_ROOT_INO)
-		(void) raw_scan_root(dir->i_sb,NULL,&count,NULL,NULL,NULL);
+		(void) raw_scan_root(dir->i_sb,NULL,&count,NULL,NULL,NULL,SCAN_ANY);
 	else {
 		if (!MSDOS_I(dir)->i_start) return 0; /* in mkdir */
 		else (void) raw_scan_nonroot(dir->i_sb,MSDOS_I(dir)->i_start,
-		    NULL,&count,NULL,NULL,NULL);
+		    NULL,&count,NULL,NULL,NULL,SCAN_ANY);
 	}
 	return count;
 }
@@ -531,14 +540,14 @@ int msdos_subdirs(struct inode *dir)
  */
 
 int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
-    struct msdos_dir_entry **res_de,int *ino)
+    struct msdos_dir_entry **res_de,int *ino, char scantype)
 {
 	int res;
 
-	if (name)
-		res = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,name,NULL,ino,
-		    res_bh,res_de);
-	else res = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,NULL,NULL,ino,
-		    res_bh,res_de);
-	return res < 0 ? res : 0;
+	res = (name)
+		? raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,
+		    name, NULL, ino, res_bh, res_de, scantype)
+		: raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,
+		    NULL, NULL, ino, res_bh, res_de, scantype);
+	return res<0 ? res : 0;
 }

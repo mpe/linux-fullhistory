@@ -144,14 +144,14 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 		{
 			video_type = VIDEO_TYPE_EGAM;
 			video_mem_term = 0xb8000;
-			display_desc = "EGA+";
+			strcpy(display_desc, "EGA+");
 			request_region(0x3b0,16,"ega");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_MDA;
 			video_mem_term = 0xb2000;
-			display_desc = "*MDA";
+			strcpy(display_desc, "*MDA");
 			request_region(0x3b0,12,"mda");
 			request_region(0x3bf, 1,"mda");
 		}
@@ -170,11 +170,11 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 
 			if (!ORIG_VIDEO_ISVGA) {
 				video_type = VIDEO_TYPE_EGAC;
-				display_desc = "EGA";
+				strcpy(display_desc, "EGA");
 				request_region(0x3c0,32,"ega");
 			} else {
 				video_type = VIDEO_TYPE_VGAC;
-				display_desc = "VGA+";
+				strcpy(display_desc, "VGA+");
 				request_region(0x3c0,32,"vga+");
 
 #ifdef VGA_CAN_DO_64KB
@@ -215,7 +215,7 @@ con_type_init(unsigned long kmem_start, char *display_desc)
 		{
 			video_type = VIDEO_TYPE_CGA;
 			video_mem_term = 0xba000;
-			display_desc = "*CGA";
+			strcpy(display_desc, "*CGA");
 			request_region(0x3d4,2,"cga");
 		}
 	}

@@ -138,17 +138,26 @@ ifdef CONFIG_MODVERSIONS
 SYMTAB_OBJS = $(LX_OBJS) $(OX_OBJS) $(MX_OBJS)
 ifneq "$(strip $(SYMTAB_OBJS))" ""
 
-%.ver: %.c
+MODINCL = $(TOPDIR)/include/linux/modules
+
+$(MODINCL)/%.ver: %.c
 	@if [ ! -x /sbin/genksyms ]; then echo "Please read: README.modules"; fi
-	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | /sbin/genksyms -w $(TOPDIR)/include/linux/modules
-	@ln -sf $(TOPDIR)/include/linux/modules/$@ .
+	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | /sbin/genksyms -w $(MODINCL)
 
 $(SYMTAB_OBJS:.o=.ver): $(TOPDIR)/include/linux/autoconf.h
 
-$(TOPDIR)/include/linux/modversions.h: $(SYMTAB_OBJS:.o=.ver)
+$(TOPDIR)/include/linux/modversions.h: $(join $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver))
 	@echo updating $(TOPDIR)/include/linux/modversions.h
-	@(cd $(TOPDIR)/include/linux/modules; for f in *.ver;\
-	do echo "#include <linux/modules/$${f}>"; done) \
+	@(echo "#ifdef MODVERSIONS";\
+	echo "#undef  CONFIG_MODVERSIONS";\
+	echo "#define CONFIG_MODVERSIONS";\
+	echo "#ifndef _set_ver";\
+	echo "#define _set_ver(sym,vers) sym ## _R ## vers";\
+	echo "#endif";\
+	cd $(TOPDIR)/include/linux/modules; for f in *.ver;\
+	do echo "#include <linux/modules/$${f}>"; done; \
+	echo "#undef  CONFIG_MODVERSIONS";\
+	echo "#endif") \
 	> $(TOPDIR)/include/linux/modversions.h
 
 $(MX_OBJS): $(TOPDIR)/include/linux/modversions.h

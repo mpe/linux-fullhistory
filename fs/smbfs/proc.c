@@ -5,8 +5,6 @@
  *
  */
 
-#include <linux/module.h>
-
 #include <linux/fs.h>
 #include <linux/smbno.h>
 #include <linux/smb_fs.h>

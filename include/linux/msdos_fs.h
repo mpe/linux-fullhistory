@@ -35,6 +35,11 @@
 #define ATTR_UNUSED  (ATTR_VOLUME | ATTR_ARCH | ATTR_SYS | ATTR_HIDDEN)
 	/* attribute bits that are copied "as is" */
 
+#define SCAN_ANY     0  /* either hidden or not */
+#define SCAN_HID     1  /* only hidden */
+#define SCAN_NOTHID  2  /* only not hidden */
+#define SCAN_NOTANY  3  /* test name, then use SCAN_HID or SCAN_NOTHID */
+
 #define DELETED_FLAG 0xe5 /* marks file as deleted when in name[0] */
 #define IS_FREE(n) (!*(n) || *(const unsigned char *) (n) == DELETED_FLAG || \
   *(const unsigned char *) (n) == FD_FILL_BYTE)
@@ -54,8 +59,8 @@
 /*
  * Conversion from and to little-endian byte order. (no-op on i386/i486)
  *
- * Naming: Ca_b_c, where a: F = from, T = to, b: LE = little-endian, BE = big-
- * endian, c: W = word (16 bits), L = longword (32 bits)
+ * Naming: Ca_b_c, where a: F = from, T = to, b: LE = little-endian,
+ * BE = big-endian, c: W = word (16 bits), L = longword (32 bits)
  */
 
 #define CF_LE_W(v) (v)
@@ -99,16 +104,13 @@ struct fat_cache {
 };
 
 /* Determine whether this FS has kB-aligned data. */
-
 #define MSDOS_CAN_BMAP(mib) (!(((mib)->cluster_size & 1) || \
     ((mib)->data_start & 1)))
 
 /* Convert attribute bits and a mask to the UNIX mode. */
-
 #define MSDOS_MKMODE(a,m) (m & (a & ATTR_RO ? S_IRUGO|S_IXUGO : S_IRWXUGO))
 
 /* Convert the UNIX mode to MS-DOS attribute bits. */
-
 #define MSDOS_MKATTR(m) ((m & S_IWUGO) ? ATTR_NONE : ATTR_RO)
 
 #ifdef __KERNEL__
@@ -127,7 +129,7 @@ extern void date_unix2dos(int unix_date,__u16 *time, __u16 *date);
 extern int msdos_get_entry(struct inode *dir,loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de);
 extern int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
-    struct msdos_dir_entry **res_de,int *ino);
+    struct msdos_dir_entry **res_de,int *ino,char scantype);
 extern int msdos_parent_ino(struct inode *dir,int locked);
 extern int msdos_subdirs(struct inode *dir);
 

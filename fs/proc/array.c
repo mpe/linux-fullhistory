@@ -482,10 +482,11 @@ static int get_stat(int pid, char * buffer)
 		tty_pgrp = -1;
 
 	/* scale priority and nice values from timeslices to -20..20 */
+	/* to make it look like a "normal" unix priority/nice value  */
 	priority = tsk->counter;
-	priority = (priority * 10 + DEF_PRIORITY / 2) / DEF_PRIORITY - 20;
+	priority = 20 - (priority * 10 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 	nice = tsk->priority;
-	nice = (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY - 20;
+	nice = 20 - (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 
 	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu \
@@ -507,10 +508,8 @@ static int get_stat(int pid, char * buffer)
 		tsk->stime,
 		tsk->cutime,
 		tsk->cstime,
-		priority,  /* this is the kernel priority ---
-				   subtract 20 in your user-level program. */
-		nice,	   /* this is the nice value ---
-				   subtract 20 in your user-level program. */
+		priority,
+		nice,
 		tsk->timeout,
 		tsk->it_real_value,
 		tsk->start_time,

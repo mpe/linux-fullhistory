@@ -1,8 +1,8 @@
-#ifdef MODULE
-#include <linux/autoconf.h>
-#include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
+/*
+ * drivers/scsi/sd_ioctl.c
+ *
+ * ioctl handling for SCSI disks
+ */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>

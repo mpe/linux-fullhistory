@@ -9,21 +9,16 @@
 
 #ifdef __GENKSYMS__
 #  define _set_ver(sym,vers) sym
+#  undef  MODVERSIONS
 #  define MODVERSIONS
 #else /* ! __GENKSYMS__ */
 # ifdef MODVERSIONS
-#  undef CONFIG_MODVERSIONS /* the *.ver files need this... */
-#  define CONFIG_MODVERSIONS /* the *.ver files need this... */
-#  ifdef MODULE
-#   define _set_ver(sym,vers) sym ## _R ## vers
-#   include <linux/modversions.h>
-#  else /* !MODULE */
+#  ifndef MODULE
 #   ifdef EXPORT_SYMTAB
 #    define _set_ver(sym,vers) sym
 #    include <linux/modversions.h>
 #   endif /* EXPORT_SYMTAB */
 #  endif /* MODULE */
-#  undef CONFIG_MODVERSIONS /* the *.ver files needed this... */
 # endif /* MODVERSIONS */
 #endif /* __GENKSYMS__ */
 

@@ -5,8 +5,6 @@
  *
  */
 
-#include <linux/module.h>
-
 #include <asm/segment.h>
 #include <asm/system.h>
 

@@ -2,10 +2,7 @@
  * We should not even be trying to compile this if we are not doing
  * a module.
  */
-#ifndef MODULE
-#error Go away.
-#endif
-
+#define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/config.h>
 
@@ -16,6 +13,7 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/blk.h>
+#include <linux/fs.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>

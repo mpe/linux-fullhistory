@@ -1799,11 +1799,11 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				/* Add more stuff to the end of skb->len */
 				if (!(flags & MSG_OOB)) 
 				{
-					copy = min(sk->mss - (skb->len - hdrlen), len);
+					copy = min(sk->mss - (skb->len - hdrlen), seglen);
 					/* FIXME: this is really a bug. */
 					if (copy <= 0) 
 					{
-				  		printk("TCP: **bug**: \"copy\" <= 0!!\n");
+						printk("TCP: **bug**: \"copy\" <= 0: %d - (%ld - %d) <= %d\n", sk->mss, skb->len, hdrlen, seglen);
 				  		copy = 0;
 					}		  
 					memcpy_fromfs(skb_put(skb,copy), from, copy);
@@ -1836,8 +1836,8 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			copy = sk->window_seq - sk->write_seq;
 			if (copy <= 0 || copy < (sk->max_window >> 1) || copy > sk->mss)
 				copy = sk->mss;
-			if (copy > len)
-				copy = len;
+			if (copy > seglen)
+				copy = seglen;
 
 		/*
 		 *	We should really check the window here also. 
@@ -1933,7 +1933,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			}
 			skb->dev = dev;
 			skb->h.th =(struct tcphdr *)skb_put(skb,sizeof(struct tcphdr));
-			tmp = tcp_build_header(skb->h.th, sk, len-copy);
+			tmp = tcp_build_header(skb->h.th, sk, seglen-copy);
 			if (tmp < 0) 
 			{
 				sock_wfree(sk, skb);
@@ -2306,7 +2306,7 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		if (sk->err) 
 		{
-			copied = -xchg(&sk->err,0);
+			copied = sock_error(sk);
 			break;
 		}
 

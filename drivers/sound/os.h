@@ -3,8 +3,6 @@
 #undef NO_INLINE_ASM
 #undef SHORT_BANNERS
 
-#include <linux/module.h>
-
 #include <linux/param.h>
 #include <linux/types.h>
 #include <linux/errno.h>

@@ -10,7 +10,6 @@
 
 .text
 #include <linux/tasks.h>
-#include <linux/fd.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 

@@ -22,6 +22,7 @@ struct msdos_sb_info {
 	int fat_lock;
 	int prev_free; /* previously returned free cluster number */
 	int free_clusters; /* -1 if undefined */
+	char dotsOK;
 };
 
 #endif

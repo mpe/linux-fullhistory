@@ -82,7 +82,8 @@ int register_binfmt(struct linux_binfmt * fmt)
 			return -EBUSY;
 		tmp = &(*tmp)->next;
 	}
-	*tmp = fmt;
+	fmt->next = formats;
+	formats = fmt;
 	return 0;	
 }
 

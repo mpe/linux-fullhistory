@@ -30,6 +30,8 @@
  * Created modular version by Peter Trattler (peter@sbox.tu-graz.ac.at)
  */
 
+#include <linux/module.h>
+
 #include "sound_config.h"
 
 #ifdef CONFIGURE_SOUNDCARD
@@ -604,7 +606,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 	}
     }
   dmap->raw_buf = start_addr;
-  dmap->raw_buf_phys = virt_to_phys (start_addr);
+  dmap->raw_buf_phys = virt_to_bus (start_addr);
 
   memset (dmap->raw_buf, 0x00, audio_devs[dev]->buffsize);
 

@@ -2499,7 +2499,8 @@ static void resize_dma_pool(void)
 	for(i=0; i < dma_sectors >> 3; i++)
 	    scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
 	if (dma_malloc_pages)
-	    scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+	    scsi_init_free((char *) dma_malloc_pages,
+                           (dma_sectors>>3)*sizeof(*dma_malloc_pages));
 	dma_malloc_pages = NULL;
 	if (dma_malloc_freelist)
 	    scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
@@ -2555,8 +2556,10 @@ static void resize_dma_pool(void)
 	memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
 	
 	new_dma_malloc_pages = (unsigned char **)
-	    scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
-	memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
+	    scsi_init_malloc((new_dma_sectors>>3)*sizeof(*new_dma_malloc_pages),
+                             GFP_ATOMIC);
+	memset(new_dma_malloc_pages, 0,
+               (new_dma_sectors>>3)*sizeof(*new_dma_malloc_pages));
     }
     
     /*
@@ -2582,8 +2585,10 @@ static void resize_dma_pool(void)
     
     if (dma_malloc_pages)
     {
-	memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
-	scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+	memcpy(new_dma_malloc_pages, dma_malloc_pages,
+               (dma_sectors>>3)*sizeof(*dma_malloc_pages));
+	scsi_init_free((char *) dma_malloc_pages,
+                       (dma_sectors>>3)*sizeof(*dma_malloc_pages));
     }
     
     dma_free_sectors += new_dma_sectors - dma_sectors;
@@ -3084,7 +3089,7 @@ int init_module(void) {
     
     /* One pointer per page for the page list */
     dma_malloc_pages = (unsigned char **)
-	scsi_init_malloc(dma_sectors >> 1, GFP_ATOMIC);
+	scsi_init_malloc((dma_sectors >> 3)*sizeof(*dma_malloc_pages), GFP_ATOMIC);
     dma_malloc_pages[0] = (unsigned char *)
 	scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
     return 0;

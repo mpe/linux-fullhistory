@@ -1,9 +1,10 @@
 /*
  *  linux/fs/msdos/dir.c
+ *  MS-DOS directory handling functions
  *
  *  Written 1992,1993 by Werner Almesberger
  *
- *  MS-DOS directory handling functions
+ *  Hidden files 1995 by Albert Cahalan <albert@ccs.neu.edu> <adc@coe.neu.edu>
  */
 
 #include <linux/fs.h>
@@ -85,13 +86,20 @@ int msdos_readdir(
 		return -ENOENT;
 	bh = NULL;
 	while ((ino = msdos_get_entry(inode,&filp->f_pos,&bh,&de)) > -1) {
-		if (!IS_FREE(de->name)
-			&& !(de->attr & (ATTR_VOLUME|ATTR_SYS|ATTR_HIDDEN))) {
-			char bufname[12];
+		if (!IS_FREE(de->name) && !(de->attr & ATTR_VOLUME)) {
+			char bufname[13];
 			char *ptname = bufname;
+			int dotoffset = 0;
+			if ((de->attr & ATTR_HIDDEN) && MSDOS_SB(sb)->dotsOK) {
+				bufname[0] = '.';
+				dotoffset = 1;
+				ptname = bufname+1;
+			}
 			for (i = last = 0; i < 8; i++) {
 				if (!(c = de->name[i])) break;
 				if (c >= 'A' && c <= 'Z') c += 32;
+				/* see namei.c, msdos_format_name */
+				if (c == 0x05) c = 0xE5;
 				if (c != ' ')
 					last = i+1;
 				ptname[i] = c;
@@ -112,7 +120,7 @@ int msdos_readdir(
 					ino = inode->i_ino;
 				else if (!strcmp(de->name,MSDOS_DOTDOT))
 					ino = msdos_parent_ino(inode,0);
-				if (filldir(dirent, bufname, i, oldpos, ino) < 0) {
+				if (filldir(dirent, bufname, i+dotoffset, oldpos, ino) < 0) {
 					filp->f_pos = oldpos;
 					break;
 				}

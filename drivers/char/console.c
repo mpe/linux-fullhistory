@@ -1909,7 +1909,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  */
 unsigned long con_init(unsigned long kmem_start)
 {
-	char display_desc[5] = "????";
+	char display_desc[] = "????";
 	int currcons = 0;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;

@@ -5,8 +5,6 @@
  *
  */
 
-#include <linux/module.h>
-
 #include <linux/sched.h>
 #include <linux/smb_fs.h>
 #include <linux/errno.h>

@@ -332,6 +332,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ETH16),y)
+L_OBJS += eth16i.o
+else
+  ifeq ($(CONFIG_ETH16),m)
+  M_OBJS += eth16i.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
 CONFIG_PI = CONFIG_PI

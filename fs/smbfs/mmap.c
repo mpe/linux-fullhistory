@@ -5,8 +5,6 @@
  *
  */
 
-#include <linux/module.h>
-
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

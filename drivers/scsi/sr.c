@@ -14,7 +14,7 @@
  *	    Modified by Eric Youngdale eric@aib.com to support loadable
  *	    low-level scsi drivers.
  *
- *	 Modified by Thomas Quinot thomas@melchior.frmug.fr.net to
+ *	 Modified by Thomas Quinot thomas@melchior.cuivre.fdn.fr to
  *	 provide auto-eject.
  *
  */
@@ -69,13 +69,13 @@ static void sr_release(struct inode * inode, struct file * file)
 {
 	sync_dev(inode->i_rdev);
 	if(! --scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
-        {
-            sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+	{
+	    sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
 	    if (scsi_CDs[MINOR(inode->i_rdev)].auto_eject)
-                sr_ioctl(inode, NULL, CDROMEJECT, 0);
-        }
+		sr_ioctl(inode, NULL, CDROMEJECT, 0);
+	}
 	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
-            (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
+	    (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
 	if(sr_template.usage_count) (*sr_template.usage_count)--;
 }
 
@@ -307,7 +307,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *   kraxel@cs.tu-berlin.de (Gerd Knorr)
  */
 /*
- * 19950704 operator@melchior.frmug.fr.net (Thomas Quinot)
+ * 19950704 operator@melchior.cuivre.fdn.fr (Thomas Quinot)
  *
  *   - SONY:	Same as Nec.
  *
@@ -368,7 +368,7 @@ static void sr_photocd(struct inode *inode)
 	    break;
 	}
 	if (rec[14] != 0 && rec[14] != 0xb0) {
-	    printk("sr_photocd: Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    printk("sr_photocd: (NEC) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
 	}
@@ -407,7 +407,7 @@ static void sr_photocd(struct inode *inode)
 				      SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
 		    printk("sr_photocd: drive not ready\n");
 		} else {
-		    printk("sr_photocd: Hmm, seems the CDROM doesn't support multisession CD's\n");
+		    printk("sr_photocd: (TOSHIBA) Hmm, seems the CDROM doesn't support multisession CD's\n");
 		    no_multi = 1;
 		}
 	    } else
@@ -468,32 +468,37 @@ static void sr_photocd(struct inode *inode)
 	}
 	break;
 
-    case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.frmug.fr.net> */
+    case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
     case SCSI_MAN_PIONEER:
 #ifdef DEBUG
-        printk("sr_photocd: use SONY/PIONEER code\n");
+	printk("sr_photocd: use SONY/PIONEER code\n");
 #endif
-        memset(buf,0,40);
-        *((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
-        *((unsigned long*)buf+1) = 0x0c;  /* and receive 0x0c bytes */
-        cmd[0] = 0x43; /* Read TOC */
-        cmd[8] = 0x0c;
-        cmd[9] = 0x40;
-        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-                               SCSI_IOCTL_SEND_COMMAND, buf);
-        
-        if ((rc != 0) || ((rec[0] << 8) + rec[1] != 0x0a)) {
-            printk("sr_photocd: ioctl error (SONY): 0x%x\n",rc);
-            break;
-        }
-        sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
-        is_xa = !!sector;
+	memset(buf,0,40);
+	*((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
+	*((unsigned long*)buf+1) = 0x0c;  /* and receive 0x0c bytes */
+	cmd[0] = 0x43; /* Read TOC */
+	cmd[8] = 0x0c;
+	cmd[9] = 0x40;
+	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+			       SCSI_IOCTL_SEND_COMMAND, buf);
+	
+	if (rc != 0) {
+	    printk("sr_photocd: ioctl error (SONY): 0x%x\n",rc);
+	    break;
+	}
+	if ((rec[0] << 8) + rec[1] != 0x0a) {
+	    printk("sr_photocd: (SONY) Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    no_multi = 1;
+	    break;
+	}
+	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
+	is_xa = !!sector;
 #ifdef DEBUG
-        if (sector)
-            printk ("sr_photocd: multisession CD detected. start: %lu\n",sector);
+	if (sector)
+	    printk ("sr_photocd: multisession CD detected. start: %lu\n",sector);
 #endif
-        break;
-                
+	break;
+		
     case SCSI_MAN_NEC_OLDCDR:
     case SCSI_MAN_UNKNOWN:
     default:
@@ -565,15 +570,15 @@ static void do_sr_request (void)
 	
 	INIT_SCSI_REQUEST;
  
-        SDev = scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device;
-        
-        /*
-         * I am not sure where the best place to do this is.  We need
-         * to hook in a place where we are likely to come if in user
-         * space.
-         */
-        if( SDev->was_reset )
-        {
+	SDev = scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device;
+	
+	/*
+	 * I am not sure where the best place to do this is.  We need
+	 * to hook in a place where we are likely to come if in user
+	 * space.
+	 */
+	if( SDev->was_reset )
+	{
  	    /*
  	     * We need to relock the door, but we might
  	     * be in an interrupt handler.  Only do this
@@ -582,11 +587,11 @@ static void do_sr_request (void)
  	     */
  	    if( SDev->removable && !intr_count )
  	    {
-                scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
+		scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
  	    }
  	    SDev->was_reset = 0;
-        }
-        
+	}
+	
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
 				    scsi_CDs[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
@@ -1060,7 +1065,7 @@ static int sr_init()
 					     sizeof(int), GFP_ATOMIC);
 	for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
 	blksize_size[MAJOR_NR] = sr_blocksizes;
-        return 0;
+	return 0;
 }
 
 void sr_finish()

@@ -405,9 +405,6 @@ int smb_current_malloced;
 
 #ifdef MODULE
 
-/* looks ugly, taken from gcc-info */
-static void *shut_up_gcc = (&shut_up_gcc, kernel_version);
-
 static struct file_system_type smb_fs_type = {
         smb_read_super, "smbfs", 0, NULL
         };

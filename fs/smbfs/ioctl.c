@@ -4,7 +4,6 @@
  *  Copyright (C) 1995 by Volker Lendecke
  *
  */
-#include <linux/module.h>
 
 #include <asm/segment.h>
 #include <linux/errno.h>
