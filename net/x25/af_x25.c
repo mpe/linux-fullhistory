@@ -1118,13 +1118,14 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct x25_facilities facilities;
 			if (copy_from_user(&facilities, (void *)arg, sizeof(facilities)))
 				return -EFAULT;
-			if (sk->state != TCP_LISTEN)
+			if (sk->state != TCP_LISTEN && sk->state != TCP_CLOSE)
 				return -EINVAL;
 			if (facilities.pacsize_in < X25_PS16 || facilities.pacsize_in > X25_PS4096)
 				return -EINVAL;
 			if (facilities.pacsize_out < X25_PS16 || facilities.pacsize_out > X25_PS4096)
 				return -EINVAL;
-			if (sk->protinfo.x25->neighbour->extended) {
+			if (sk->state == TCP_CLOSE || sk->protinfo.x25->neighbour->extended) 
+			{
 				if (facilities.winsize_in < 1 || facilities.winsize_in > 127)
 					return -EINVAL;
 				if (facilities.winsize_out < 1 || facilities.winsize_out > 127)
@@ -1188,7 +1189,7 @@ static int x25_get_info(char *buffer, char **start, off_t offset, int length, in
 
 	cli();
 
-	len += sprintf(buffer, "dest_addr  src_addr   dev   lci st vs vr va   t  t2 t21 t22 t23 Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr  src_addr   dev   lci st vs vr va   t  t2 t21 t22 t23 Snd-Q Rcv-Q inode\n");
 
 	for (s = x25_list; s != NULL; s = s->next) {
 		if (s->protinfo.x25->neighbour == NULL || (dev = s->protinfo.x25->neighbour->dev) == NULL)
@@ -1196,7 +1197,7 @@ static int x25_get_info(char *buffer, char **start, off_t offset, int length, in
 		else
 			devname = s->protinfo.x25->neighbour->dev->name;
 
-		len += sprintf(buffer + len, "%-10s %-10s %-5s %3.3X  %d  %d  %d  %d %3lu %3lu %3lu %3lu %3lu %5d %5d\n",
+		len += sprintf(buffer + len, "%-10s %-10s %-5s %3.3X  %d  %d  %d  %d %3lu %3lu %3lu %3lu %3lu %5d %5d %ld\n",
 			(s->protinfo.x25->dest_addr.x25_addr[0] == '\0')   ? "*" : s->protinfo.x25->dest_addr.x25_addr,
 			(s->protinfo.x25->source_addr.x25_addr[0] == '\0') ? "*" : s->protinfo.x25->source_addr.x25_addr,
 			devname, 
@@ -1211,7 +1212,8 @@ static int x25_get_info(char *buffer, char **start, off_t offset, int length, in
 			s->protinfo.x25->t22 / HZ,
 			s->protinfo.x25->t23 / HZ,
 			atomic_read(&s->wmem_alloc),
-			atomic_read(&s->rmem_alloc));
+			atomic_read(&s->rmem_alloc),
+			s->socket != NULL ? s->socket->inode->i_ino : 0L);
 
 		pos = begin + len;
 

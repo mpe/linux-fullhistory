@@ -143,7 +143,9 @@ static void scsi_dump_status(void);
 
 void scsi_old_times_out (Scsi_Cmnd * SCpnt)
 {
+    unsigned long flags;
 
+    spin_lock_irqsave(&io_request_lock, flags);
     switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET | IN_RESET2 | IN_RESET3))
     {
     case NORMAL_TIMEOUT:
@@ -154,12 +156,12 @@ void scsi_old_times_out (Scsi_Cmnd * SCpnt)
 	}
 
 	if (!scsi_abort (SCpnt, DID_TIME_OUT))
-	    return;
+	    break;
     case IN_ABORT:
 	printk("SCSI host %d abort (pid %ld) timed out - resetting\n",
 	       SCpnt->host->host_no, SCpnt->pid);
 	if (!scsi_reset (SCpnt, SCSI_RESET_ASYNCHRONOUS))
-	    return;
+	    break;
     case IN_RESET:
     case (IN_ABORT | IN_RESET):
 	/* This might be controversial, but if there is a bus hang,
@@ -173,7 +175,7 @@ void scsi_old_times_out (Scsi_Cmnd * SCpnt)
 	SCpnt->internal_timeout |= IN_RESET2;
         scsi_reset (SCpnt,
 		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_BUS_RESET);
-        return;
+        break;
     case (IN_ABORT | IN_RESET | IN_RESET2):
 	/* Obviously the bus reset didn't work.
 	 * Let's try even harder and call for an HBA reset.
@@ -185,28 +187,29 @@ void scsi_old_times_out (Scsi_Cmnd * SCpnt)
 	SCpnt->internal_timeout |= IN_RESET3;
         scsi_reset (SCpnt,
 		    SCSI_RESET_ASYNCHRONOUS | SCSI_RESET_SUGGEST_HOST_RESET);
-	return;
+	break;
 
     default:
 	printk("SCSI host %d reset (pid %ld) timed out again -\n",
 	       SCpnt->host->host_no, SCpnt->pid);
 	printk("probably an unrecoverable SCSI bus or device hang.\n");
-	return;
+	break;
 
     }
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
 }
 
-
+/*
+ *  From what I can find in scsi_obsolete.c, this function is only called
+ *  by scsi_old_done and scsi_reset.  Both of these functions run with the
+ *  io_request_lock already held, so we need do nothing here about grabbing
+ *  any locks.
+ */
 static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 {
-    unsigned long flags;
-
-    save_flags(flags);
-    cli();
     SCpnt->flags |= WAS_SENSE | ASKED_FOR_SENSE;
     update_timeout(SCpnt, SENSE_TIMEOUT);
-    restore_flags(flags);
 
 
     memcpy ((void *) SCpnt->cmnd , (void *) generic_sense,
@@ -688,28 +691,25 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
 static int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 {
     int oldto;
-    unsigned long flags;
     struct Scsi_Host * host = SCpnt->host;
 
     while(1)
     {
-	save_flags(flags);
-	cli();
 
 	/*
 	 * Protect against races here.  If the command is done, or we are
 	 * on a different command forget it.
 	 */
 	if (SCpnt->serial_number != SCpnt->serial_number_at_timeout) {
-	    restore_flags(flags);
 	    return 0;
 	}
 
 	if (SCpnt->internal_timeout & IN_ABORT)
 	{
-	    restore_flags(flags);
+	    spin_unlock_irq(&io_request_lock);
 	    while (SCpnt->internal_timeout & IN_ABORT)
 		barrier();
+	    spin_lock_irq(&io_request_lock);
 	}
 	else
 	{
@@ -725,7 +725,6 @@ static int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 		       SCpnt->channel, SCpnt->target, SCpnt->lun);
 	    }
 
-	    restore_flags(flags);
 	    if (!host->host_busy) {
 		SCpnt->internal_timeout &= ~IN_ABORT;
 		update_timeout(SCpnt, oldto);
@@ -749,11 +748,8 @@ static int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 				   */
 	    case SCSI_ABORT_SNOOZE:
 		if(why == DID_TIME_OUT) {
-		    save_flags(flags);
-		    cli();
 		    SCpnt->internal_timeout &= ~IN_ABORT;
 		    if(SCpnt->flags & WAS_TIMEDOUT) {
-			restore_flags(flags);
 			return 1; /* Indicate we cannot handle this.
 				   * We drop down into the reset handler
 				   * and try again
@@ -763,15 +759,11 @@ static int scsi_abort (Scsi_Cmnd * SCpnt, int why)
 			oldto = SCpnt->timeout_per_command;
 			update_timeout(SCpnt, oldto);
 		    }
-		    restore_flags(flags);
 		}
 		return 0;
 	    case SCSI_ABORT_PENDING:
 		if(why != DID_TIME_OUT) {
-		    save_flags(flags);
-		    cli();
 		    update_timeout(SCpnt, oldto);
-		    restore_flags(flags);
 		}
 		return 0;
 	    case SCSI_ABORT_SUCCESS:
@@ -837,7 +829,6 @@ static void scsi_mark_bus_reset(struct Scsi_Host *Host, int channel)
 static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 {
     int temp;
-    unsigned long flags;
     Scsi_Cmnd * SCpnt1;
     Scsi_Device * SDpnt;
     struct Scsi_Host * host = SCpnt->host;
@@ -894,8 +885,6 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 #endif
 
     while (1) {
-	save_flags(flags);
-	cli();
 
 	/*
 	 * Protect against races here.  If the command is done, or we are
@@ -903,15 +892,15 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	 */
 	if (reset_flags & SCSI_RESET_ASYNCHRONOUS)
 	  if (SCpnt->serial_number != SCpnt->serial_number_at_timeout) {
-	    restore_flags(flags);
 	    return 0;
 	  }
 
 	if (SCpnt->internal_timeout & IN_RESET)
 	{
-	    restore_flags(flags);
+	    spin_unlock_irq(&io_request_lock);
 	    while (SCpnt->internal_timeout & IN_RESET)
 		barrier();
+	    spin_lock_irq(&io_request_lock);
 	}
 	else
 	{
@@ -920,7 +909,6 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 
 	    if (host->host_busy)
 	    {
-		restore_flags(flags);
                 for(SDpnt = host->host_queue; SDpnt; SDpnt = SDpnt->next)
                 {
                     SCpnt1 = SDpnt->device_queue;
@@ -955,7 +943,6 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	    else
 	    {
 		if (!host->block) host->host_busy++;
-		restore_flags(flags);
 		host->last_reset = jiffies;
 	        SCpnt->flags |= (WAS_RESET | IS_RESETTING);
 		temp = host->hostt->reset(SCpnt, reset_flags);
@@ -985,10 +972,7 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	        else if (temp & SCSI_RESET_BUS_RESET)
 		  scsi_mark_bus_reset(host, SCpnt->channel);
 		else scsi_mark_device_reset(SCpnt->device);
-		save_flags(flags);
-		cli();
 		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
-		restore_flags(flags);
 		return 0;
 	    case SCSI_RESET_PENDING:
 	        if (temp & SCSI_RESET_HOST_RESET)
@@ -1048,11 +1032,8 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		 * and we return 1 so that we get a message on the
 		 * screen.
 		 */
-		save_flags(flags);
-		cli();
 		SCpnt->internal_timeout &= ~(IN_RESET|IN_RESET2|IN_RESET3);
 		update_timeout(SCpnt, 0);
-		restore_flags(flags);
 		/* If you snooze, you lose... */
 	    case SCSI_RESET_ERROR:
 	    default:

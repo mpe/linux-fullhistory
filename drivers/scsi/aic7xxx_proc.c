@@ -53,9 +53,6 @@ proc_debug(const char *fmt, ...)
 
 static int aic7xxx_buffer_size = 0;
 static char *aic7xxx_buffer = NULL;
-static const char *bus_names[] = { "Single", "Twin", "Wide" };
-static const char *chip_names[] = { "AIC-777x", "AIC-785x", "AIC-786x",
-   "AIC-787x", "AIC-788x" };
 
 
 /*+F*************************************************************************
@@ -87,13 +84,14 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   struct Scsi_Host *HBAptr;
   struct aic7xxx_host *p;
   int    size = 0;
+  unsigned char i;
 #ifdef AIC7XXX_PROC_STATS
   struct aic7xxx_xferstats *sp;
   unsigned char target, lun;
-  int i;
 #endif
 
   HBAptr = NULL;
+
   for(p=first_aic7xxx; p->host->host_no != hostno; p=p->next)
     ;
 
@@ -109,6 +107,7 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
       return (length);
     }
   }
+
   HBAptr = p->host;
 
   if (inout == TRUE) /* Has data been written to the file? */ 
@@ -124,16 +123,20 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
    * if proc_stats is defined, then we sweep the stats structure to see
    * how many drives we will be printing out for and add 384 bytes per
    * device with active stats.
+   *
+   * Hmmmm...that 1.5k seems to keep growing as items get added so they
+   * can be easily viewed for debugging purposes.  So, we bumped that
+   * 1.5k to 4k so we can quit having to bump it all the time.
    */
 
-  size = 1536;
+  size = 4096;
 #ifdef AIC7XXX_PROC_STATS
   for (target = 0; target < MAX_TARGETS; target++)
   {
     for (lun = 0; lun < MAX_LUNS; lun++)
     {
       if (p->stats[target][lun].xfers != 0)
-        size += 384;
+        size += 512;
     }
   }
 #endif
@@ -156,29 +159,20 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
 
   size = 0;
   size += sprintf(BLS, "Adaptec AIC7xxx driver version: ");
-  size += sprintf(BLS, "%s/", rcs_version(AIC7XXX_C_VERSION));
-  size += sprintf(BLS, "%s", rcs_version(AIC7XXX_H_VERSION));
-#if 0
-  size += sprintf(BLS, "%s\n", rcs_version(AIC7XXX_SEQ_VER));
-#endif
+  size += sprintf(BLS, "%s/", AIC7XXX_C_VERSION);
+  size += sprintf(BLS, "%s", AIC7XXX_H_VERSION);
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Compile Options:\n");
 #ifdef AIC7XXX_RESET_DELAY
   size += sprintf(BLS, "  AIC7XXX_RESET_DELAY    : %d\n", AIC7XXX_RESET_DELAY);
 #endif
-#ifdef AIC7XXX_CMDS_PER_LUN
-  size += sprintf(BLS, "  AIC7XXX_CMDS_PER_LUN   : %d\n", AIC7XXX_CMDS_PER_LUN);
-#endif
-#ifdef AIC7XXX_TAGGED_QUEUEING
-  size += sprintf(BLS, "  AIC7XXX_TAGGED_QUEUEING: Enabled\n");
-#else
-  size += sprintf(BLS, "  AIC7XXX_TAGGED_QUEUEING: Disabled\n");
-#endif
-#ifdef AIC7XXX_PAGE_ENABLE
-  size += sprintf(BLS, "  AIC7XXX_PAGE_ENABLE    : Enabled\n");
-#else
-  size += sprintf(BLS, "  AIC7XXX_PAGE_ENABLE    : Disabled\n");
-#endif
+  size += sprintf(BLS, "  AIC7XXX_TAGGED_QUEUEING: Adapter Support Enabled\n");
+  size += sprintf(BLS, "                             Check below to see "
+                       "which\n"
+                       "                             devices use tagged "
+                       "queueing\n");
+  size += sprintf(BLS, "  AIC7XXX_PAGE_ENABLE    : Enabled (This is no longer "
+                       "an option)\n");
 #ifdef AIC7XXX_PROC_STATS
   size += sprintf(BLS, "  AIC7XXX_PROC_STATS     : Enabled\n");
 #else
@@ -187,17 +181,54 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
   size += sprintf(BLS, "           SCSI Adapter: %s\n",
-      board_names[p->chip_type]);
-  size += sprintf(BLS, "                         (%s chipset)\n",
-      chip_names[p->chip_class]);
-  size += sprintf(BLS, "               Host Bus: %s\n", bus_names[p->bus_type]);
-  size += sprintf(BLS, "                Base IO: 0x%lx\n", p->base);
-  size += sprintf(BLS, "         Base IO Memory: 0x%lx\n", p->mbase);
+      board_names[p->board_name_index]);
+  if (p->flags & AHC_TWIN)
+    size += sprintf(BLS, "                         Twin Channel\n");
+  else
+  {
+    char *channel = "";
+    char *ultra = "";
+    char *wide = "Narrow ";
+    if (p->flags & AHC_MULTI_CHANNEL)
+    {
+      channel = " Channel A";
+      if (p->flags & (AHC_CHNLB|AHC_CHNLC))
+        channel = (p->flags & AHC_CHNLB) ? " Channel B" : " Channel C";
+    }
+    if (p->type & AHC_WIDE)
+      wide = "Wide ";
+    if (p->type & AHC_ULTRA)
+      ultra = "Ultra ";
+    size += sprintf(BLS, "                           %s%sController%s\n",
+      ultra, wide, channel);
+  }
+  if( !(p->maddr) )
+  {
+    size += sprintf(BLS, "    Programmed I/O Base: %lx\n", p->base);
+  }
+  else
+  {
+    size += sprintf(BLS, "    PCI MMAPed I/O Base: 0x%lx\n", p->mbase);
+  }
+  if( !(p->type & AHC_AIC78x0) )
+  {
+    size += sprintf(BLS, "    BIOS Memory Address: 0x%08x\n", p->bios_address);
+    size += sprintf(BLS, "                         %s\n",
+            (p->flags & AHC_BIOS_ENABLED) ? "Enabled" : "Disabled");
+  }
+  else
+  {
+    size += sprintf(BLS, "      Adaptec SCSI BIOS: %s\n",
+            (p->flags & AHC_BIOS_ENABLED) ? "Enabled" : "Disabled");
+  }
   size += sprintf(BLS, "                    IRQ: %d\n", HBAptr->irq);
-  size += sprintf(BLS, "                   SCBs: Used %d, HW %d, Page %d\n",
-      p->scb_data->numscbs, p->scb_data->maxhscbs, p->scb_data->maxscbs);
-  size += sprintf(BLS, "             Interrupts: %d", p->isr_count);
-  if (p->chip_class == AIC_777x)
+  size += sprintf(BLS, "                   SCBs: Active %d, Max Active %d,\n",
+            p->activescbs, p->max_activescbs);
+  size += sprintf(BLS, "                         Allocated %d, HW %d, "
+            "Page %d\n", p->scb_data->numscbs, p->scb_data->maxhscbs,
+            p->scb_data->maxscbs);
+  size += sprintf(BLS, "             Interrupts: %ld", p->isr_count);
+  if (p->type & AHC_AIC7770)
   {
     size += sprintf(BLS, " %s\n",
         (p->pause & IRQMS) ? "(Level Sensitive)" : "(Edge Triggered)");
@@ -206,16 +237,39 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   {
     size += sprintf(BLS, "\n");
   }
-  size += sprintf(BLS, "          Serial EEPROM: %s\n",
-      (p->flags & HAVE_SEEPROM) ? "True" : "False");
+  size += sprintf(BLS, "      BIOS Control Word: 0x%04x\n",
+            p->bios_control);
+  size += sprintf(BLS, "   Adapter Control Word: 0x%04x\n",
+            p->adapter_control);
   size += sprintf(BLS, "   Extended Translation: %sabled\n",
-      (p->flags & EXTENDED_TRANSLATION) ? "En" : "Dis");
+      (p->flags & AHC_EXTEND_TRANS_A) ? "En" : "Dis");
   size += sprintf(BLS, "         SCSI Bus Reset: %sabled\n",
       aic7xxx_no_reset ? "Dis" : "En");
-  size += sprintf(BLS, "             Ultra SCSI: %sabled\n",
-      (p->flags & ULTRA_ENABLED) ? "En" : "Dis");
-  size += sprintf(BLS, "Disconnect Enable Flags: 0x%x\n", p->discenable);
-  
+  size += sprintf(BLS, "Disconnect Enable Flags: 0x%04x\n", p->discenable);
+  if (p->type & AHC_ULTRA)
+  {
+    size += sprintf(BLS, "     Ultra Enable Flags: 0x%04x\n", p->ultraenb);
+  }
+  size += sprintf(BLS, " Tag Queue Enable Flags: 0x%04x\n", p->tagenable);
+  size += sprintf(BLS, "Ordered Queue Tag Flags: 0x%04x\n", p->orderedtag);
+#ifdef AIC7XXX_CMDS_PER_LUN
+  size += sprintf(BLS, "Default Tag Queue Depth: %d\n", AIC7XXX_CMDS_PER_LUN);
+#else
+  size += sprintf(BLS, "Default Tag Queue Depth: %d\n", 8);
+#endif
+  size += sprintf(BLS, "    Tagged Queue By Device array for aic7xxx host "
+                       "instance %d:\n", p->instance);
+  size += sprintf(BLS, "      {");
+  for(i=0; i < (MAX_TARGETS - 1); i++)
+    size += sprintf(BLS, "%d,",aic7xxx_tag_info[p->instance].tag_commands[i]);
+  size += sprintf(BLS, "%d}\n",aic7xxx_tag_info[p->instance].tag_commands[i]);
+  size += sprintf(BLS, "    Actual queue depth per device for aic7xxx host "
+                       "instance %d:\n", p->instance);
+  size += sprintf(BLS, "      {");
+  for(i=0; i < (MAX_TARGETS - 1); i++)
+    size += sprintf(BLS, "%d,", p->dev_max_queue_depth[i]);
+  size += sprintf(BLS, "%d}\n", p->dev_max_queue_depth[i]);
+
 #ifdef AIC7XXX_PROC_STATS
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Statistics:\n");
@@ -228,15 +282,15 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
       {
         continue;
       }
-      if (p->bus_type == AIC_TWIN)
+      if (p->type & AHC_TWIN)
       {
-        size += sprintf(BLS, "CHAN#%c (TGT %d LUN %d):\n",
-            'A' + (target >> 3), (target & 0x7), lun);
+        size += sprintf(BLS, "(scsi%d:%d:%d:%d)\n",
+            p->host_no, (target >> 3), (target & 0x7), lun);
       }
       else
       {
-        size += sprintf(BLS, "CHAN#%c (TGT %d LUN %d):\n",
-            'A', target, lun);
+        size += sprintf(BLS, "(scsi%d:%d:%d:%d)\n",
+            p->host_no, 0, target, lun);
       }
       size += sprintf(BLS, "nxfers %ld (%ld read;%ld written)\n",
           sp->xfers, sp->r_total, sp->w_total);

@@ -218,17 +218,6 @@ extern kmem_cache_t *tcp_timewait_cachep;
 	 !ipv6_addr_cmp(&(__sk)->net_pinfo.af_inet6.rcv_saddr, (__daddr))	&& \
 	 (!((__sk)->bound_dev_if) || ((__sk)->bound_dev_if == (__dif))))
 
-/* tcp_ipv4.c: These sysctl variables need to be shared between v4 and v6
- * because the v6 tcp code to intialize a connection needs to interoperate
- * with the v4 code using the same variables.
- * FIXME: It would be better to rewrite the connection code to be
- * address family independent and just leave one copy in the ipv4 section.
- * This would also clean up some code duplication. -- erics
- */
-extern int sysctl_tcp_timestamps;
-extern int sysctl_tcp_window_scaling;
-extern int sysctl_tcp_sack;
-
 /* These can have wildcards, don't try too hard. */
 static __inline__ int tcp_lhashfn(unsigned short num)
 {
@@ -718,9 +707,9 @@ struct tcp_skb_cb {
 #define TCP_CWND_SHIFT	1
 
 /* This determines how many packets are "in the network" to the best
- * or our knowledge.  In many cases it is conservative, but where
+ * of our knowledge.  In many cases it is conservative, but where
  * detailed information is available from the receiver (via SACK
- * blocks etc.) we can make more agressive calculations.
+ * blocks etc.) we can make more aggressive calculations.
  *
  * Use this for decisions involving congestion control, use just
  * tp->packets_out to determine if the send queue is empty or not.
@@ -809,7 +798,6 @@ static char *statename[]={
 
 static __inline__ void tcp_set_state(struct sock *sk, int state)
 {
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	int oldstate = sk->state;
 
 	sk->state = state;
@@ -825,10 +813,13 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		break;
 
 	case TCP_CLOSE:
+	    {
+		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 		/* Should be about 2 rtt's */
 		net_reset_timer(sk, TIME_DONE, min(tp->srtt * 2, TCP_DONE_TIME));
 		sk->prot->unhash(sk);
 		/* fall through */
+	    }
 	default:
 		if (oldstate==TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab--;
@@ -940,9 +931,6 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	/* Set the clamp no higher than max representable value */
 	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
-
-/* Do new listen semantics */
-#define TCP_NEW_LISTEN
 
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req, struct open_request *prev)
 {

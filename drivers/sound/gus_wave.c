@@ -11,10 +11,13 @@
  * for more info.
  */
 /*
- * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Thomas Sailer    : ioctl code reworked (vmalloc/vfree removed)
+ * Frank van de Pol : Fixed GUS MAX interrupt handling. Enabled simultanious
+ *                    usage of CS4231A codec, GUS wave and MIDI for GUS MAX.
  */
+ 
+ 
 #include <linux/config.h>
-
 
 #define GUSPNP_AUTODETECT
 
@@ -70,10 +73,11 @@ struct voice_info
 };
 
 static struct voice_alloc_info *voice_alloc;
-
+static struct address_info *gus_hw_config;
 extern int      gus_base;
 extern int      gus_irq, gus_dma;
 extern int      gus_pnp_flag;
+extern int      gus_no_wave_dma;
 static int      gus_dma2 = -1;
 static int      dual_dma_mode = 0;
 static long     gus_mem_size = 0;
@@ -833,7 +837,7 @@ static void gus_initialize(void)
 
 	gus_select_voice(0);	/* This disables writes to IRQ/DMA reg */
 
-	gusintr(gus_irq, NULL, NULL);	/* Serve pending interrupts */
+	gusintr(gus_irq, (void *)gus_hw_config, NULL);	/* Serve pending interrupts */
 
 	inb(u_Status);		/* Touch the status register */
 
@@ -1649,22 +1653,26 @@ static int guswave_open(int dev, int mode)
 
 	voice_alloc->timestamp = 0;
 
-	if ((err = DMAbuf_open_dma(gus_devnum)) < 0)
-	{
-		/* printk( "GUS: Loading samples without DMA\n"); */
-		gus_no_dma = 1;	/* Upload samples using PIO */
+	if (gus_no_wave_dma) {
+		gus_no_dma = 1;
+	} else {
+		if ((err = DMAbuf_open_dma(gus_devnum)) < 0)
+		{
+			/* printk( "GUS: Loading samples without DMA\n"); */
+			gus_no_dma = 1;	/* Upload samples using PIO */
+		}
+		else
+			gus_no_dma = 0;
 	}
-	else
-		gus_no_dma = 0;
 
 	init_waitqueue(&dram_sleeper);
 	gus_busy = 1;
 	active_device = GUS_DEV_WAVE;
 
-	gusintr(gus_irq, NULL, NULL);	/* Serve pending interrupts */
+	gusintr(gus_irq, (void *)gus_hw_config, NULL);	/* Serve pending interrupts */
 	gus_initialize();
 	gus_reset();
-	gusintr(gus_irq, NULL, NULL);	/* Serve pending interrupts */
+	gusintr(gus_irq, (void *)gus_hw_config, NULL);	/* Serve pending interrupts */
 
 	return 0;
 }
@@ -2953,6 +2961,7 @@ void gus_wave_init(struct address_info *hw_config)
 	gus_irq = irq;
 	gus_dma = dma;
 	gus_dma2 = dma2;
+	gus_hw_config = hw_config;
 
 	if (gus_dma2 == -1)
 		gus_dma2 = dma;
@@ -3114,8 +3123,8 @@ void gus_wave_init(struct address_info *hw_config)
 	reset_sample_memory();
 
 	gus_initialize();
-
-	if (gus_mem_size > 0)
+	
+	if ((gus_mem_size > 0) & !gus_no_wave_dma)
 	{
 		if ((dev = sound_alloc_audiodev()) != -1)
 		{

@@ -26,7 +26,7 @@ piggy.o:	$(SYSTEM)
 		$(OBJCOPY) $(SYSTEM) $$tmppiggy; \
 		gzip -f -9 < $$tmppiggy > $$tmppiggy.gz; \
 		echo "SECTIONS { .data : { input_len = .; LONG(input_data_end - input_data) input_data = .; *(.data) input_data_end = .; }}" > $$tmppiggy.lnk; \
-		$(LD) -m elf_arm -r -o piggy.o -b binary $$tmppiggy.gz -b elf32-arm -T $$tmppiggy.lnk; \
+		$(LD) -r -o piggy.o -b binary $$tmppiggy.gz -b elf32-arm -T $$tmppiggy.lnk; \
 		rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk;
 
 clean:;		rm -f vmlinux core

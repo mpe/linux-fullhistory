@@ -34,7 +34,7 @@ struct ipxhdr
 #define IPX_TYPE_UNKNOWN	0x00
 #define IPX_TYPE_RIP		0x01	/* may also be 0 */
 #define IPX_TYPE_SAP		0x04	/* may also be 0 */
-#define IPX_TYPE_SPX		0x05	/* Not yet implemented */
+#define IPX_TYPE_SPX		0x05	/* SPX protocol */
 #define IPX_TYPE_NCP		0x11	/* $lots for docs on this (SPIT) */
 #define IPX_TYPE_PPROP		0x14	/* complicated flood fill brdcast [Not supported] */
 	ipx_address	ipx_dest __attribute__ ((packed));
@@ -75,5 +75,8 @@ typedef struct ipx_route {
 
 #define IPX_MIN_EPHEMERAL_SOCKET	0x4000
 #define IPX_MAX_EPHEMERAL_SOCKET	0x7fff
+
+extern int ipx_register_spx(struct proto_ops **, struct net_proto_family *);
+extern int ipx_unregister_spx(void);
 
 #endif /* def _NET_INET_IPX_H_ */

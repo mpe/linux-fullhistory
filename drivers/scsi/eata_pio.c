@@ -56,6 +56,8 @@
 
 #include <linux/stat.h>
 #include <linux/config.h>	/* for CONFIG_PCI */
+#include <linux/blk.h>
+#include <asm/spinlock.h>
 
 struct proc_dir_entry proc_scsi_eata_pio = {
     PROC_SCSI_EATA_PIO, 9, "eata_pio",
@@ -107,6 +109,17 @@ void IncStat(Scsi_Pointer *SCp, uint Increment)
 	    SCp->this_residual=SCp->buffer->length;
 	}
     }
+}
+
+void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs);
+
+void do_eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    eata_pio_int_handler(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 void eata_pio_int_handler(int irq, void *dev_id, struct pt_regs * regs)
@@ -697,7 +710,7 @@ int register_pio_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     }
     
     if (!reg_IRQ[gc->IRQ]) {    /* Interrupt already registered ? */
-	if (!request_irq(gc->IRQ, eata_pio_int_handler, SA_INTERRUPT, 
+	if (!request_irq(gc->IRQ, do_eata_pio_int_handler, SA_INTERRUPT, 
 			 "EATA-PIO", NULL)){
 	    reg_IRQ[gc->IRQ]++;
 	    if (!gc->IRQ_TR)
@@ -983,7 +996,7 @@ int eata_pio_detect(Scsi_Host_Template * tpnt)
     
     for (i = 0; i <= MAXIRQ; i++)
 	if (reg_IRQ[i])
-	    request_irq(i, eata_pio_int_handler, SA_INTERRUPT, "EATA-PIO", NULL);
+	    request_irq(i, do_eata_pio_int_handler, SA_INTERRUPT, "EATA-PIO", NULL);
     
     HBA_ptr = first_HBA;
   

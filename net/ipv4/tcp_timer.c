@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.47 1998/04/03 10:52:05 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.48 1998/04/06 08:42:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -460,11 +460,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 #endif
 						(*conn->class->destructor)(conn);
 						tcp_dec_slow_timer(TCP_SLT_SYNACK);
-#ifdef TCP_NEW_LISTEN
-					tp->syn_backlog--;
-#else
-					sk->ack_backlog--;
-#endif
+						tp->syn_backlog--;
 						tcp_openreq_free(conn);
 
 						if (!tp->syn_wait_queue)

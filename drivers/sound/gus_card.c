@@ -3,6 +3,7 @@
  *
  * Detection routine for the Gravis Ultrasound.
  */
+ 
 /*
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
@@ -10,6 +11,15 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+/*
+ * Frank van de Pol : Fixed GUS MAX interrupt handling, enabled simultanious
+ *                    usage of CS4231A codec, GUS wave and MIDI for GUS MAX.
+ *
+ * Status:
+ *              Tested... 
+ */
+      
+ 
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -23,10 +33,14 @@
 void            gusintr(int irq, void *dev_id, struct pt_regs *dummy);
 
 int             gus_base = 0, gus_irq = 0, gus_dma = 0;
+int             gus_no_wave_dma = 0; 
 extern int      gus_wave_volume;
 extern int      gus_pcm_volume;
 extern int      have_gus_max;
 int             gus_pnp_flag = 0;
+#ifdef CONFIG_GUS16
+static int      db16 = 0;	/* Has a Gus16 AD1848 on it */
+#endif
 
 void attach_gus_card(struct address_info *hw_config)
 {
@@ -120,6 +134,10 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 
 #ifdef CONFIG_GUSMAX
 	if (have_gus_max)
+		adintr(irq, (void *)hw_config->slots[1], NULL);
+#endif
+#ifdef CONFIG_GUS16
+	if (db16)
 		adintr(irq, (void *)hw_config->slots[3], NULL);
 #endif
 
@@ -192,6 +210,8 @@ void unload_gus_db16(struct address_info *hw_config)
 }
 #endif
 
+
+
 #ifdef MODULE
 
 static struct address_info config;
@@ -207,7 +227,10 @@ int             dma = -1;
 int             dma16 = -1;	/* Set this for modules that need it */
 int             type = 0;	/* 1 for PnP */
 int             gus16 = 0;
-static int      db16 = 0;	/* Has a Gus16 AD1848 on it */
+#ifdef CONFIG_GUSMAX
+static int      no_wave_dma = 0;/* Set if no dma is to be used for the 
+				   wave table (GF1 chip) */
+#endif
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -215,7 +238,12 @@ MODULE_PARM(dma, "i");
 MODULE_PARM(dma16, "i");
 MODULE_PARM(type, "i");
 MODULE_PARM(gus16, "i");
+#ifdef CONFIG_GUSMAX
+MODULE_PARM(no_wave_dma, "i");
+#endif
+#ifdef CONFIG_GUS16
 MODULE_PARM(db16, "i");
+#endif
 
 int init_module(void)
 {
@@ -231,6 +259,10 @@ int init_module(void)
 	config.dma = dma;
 	config.dma2 = dma16;
 	config.card_subtype = type;
+	
+#ifdef CONFIG_GUSMAX
+	gus_no_wave_dma = no_wave_dma;
+#endif
 
 #if defined(CONFIG_GUS16)
 	if (probe_gus_db16(&config) && gus16)

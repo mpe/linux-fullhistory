@@ -82,7 +82,10 @@ extern __inline__ void copy_thread_css (struct context_save_struct *save)
 	unsigned long *stack = (unsigned long *)sp;			\
 	set_fs(USER_DS);						\
 	memzero(regs->uregs, sizeof(regs->uregs));			\
-	regs->ARM_cpsr = sp <= 0x04000000 ? USR26_MODE : USR_MODE;	\
+	if (current->personality == PER_LINUX_32BIT)			\
+		regs->ARM_cpsr = USR_MODE;				\
+	else								\
+		regs->ARM_cpsr = USR26_MODE;				\
 	regs->ARM_pc = pc;		/* pc */			\
 	regs->ARM_sp = sp;		/* sp */			\
 	regs->ARM_r2 = stack[2];	/* r2 (envp) */			\

@@ -286,6 +286,7 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags);
 static void NCR5380_information_transfer (struct Scsi_Host *instance);
 #ifndef DONT_USE_INTR
 static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs);
+static void do_NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs);
 #endif
 static void NCR5380_main (void);
 static void NCR5380_print_options (struct Scsi_Host *instance);

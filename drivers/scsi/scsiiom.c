@@ -269,6 +269,15 @@ DC390_Interrupt( int irq, void *dev_id, struct pt_regs *regs)
     }
 }
 
+static void
+do_DC390_Interrupt( int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    DC390_Interrupt(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 static void
 DC390_DataOut_0( PACB pACB, PSRB pSRB, PUCHAR psstatus)

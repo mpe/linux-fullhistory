@@ -113,7 +113,7 @@ static int rose_send_frame(struct sk_buff *skb, struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	neigh->ax25 = ax25_send_frame(skb, 0, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
+	neigh->ax25 = ax25_send_frame(skb, 260, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 
 	return (neigh->ax25 != NULL);
 }
@@ -293,6 +293,11 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 
 	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
 		kfree_skb(skb);
+		return;
+	}
+
+	if (neigh->loopback) {
+		rose_loopback_queue(skb, neigh);
 		return;
 	}
 

@@ -25,11 +25,8 @@ install: $(CONFIGURE) Image
 zinstall: $(CONFIGURE) zImage
 	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) zImage $(TOPDIR)/System.map "$(INSTALL_PATH)"
 
-tools/build: tools/build.c
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -I$(TOPDIR)/include
-
 clean:
-	rm -f Image zImage tools/build
+	rm -f Image zImage
 	@$(MAKE) -C compressed clean
 
 dep:

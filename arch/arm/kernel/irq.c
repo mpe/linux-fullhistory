@@ -33,16 +33,10 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/hardware.h>
-#include <asm/irq-no.h>
 #include <asm/arch/irq.h>
 
+unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
-#ifdef __SMP__
-atomic_t __arm_bh_counter;
-#else
-int __arm_bh_counter;
-#endif
-
 spinlock_t irq_controller_lock;
 
 #ifndef SMP
@@ -80,12 +74,20 @@ void enable_irq(unsigned int irq_nr)
 
 struct irqaction *irq_action[NR_IRQS];
 
-/*
- * Bitmask indicating valid interrupt numbers
+#ifdef CONFIG_ARCH_ACORN
+/* Bitmask indicating valid interrupt numbers
+ * (to be moved to include/asm-arm/arch-*)
  */
 unsigned long validirqs[NR_IRQS / 32] = {
-	0x003fffff,	0x000001ff,	0x000000ff,	0x00000000
+	0x003ffe7f,	0x000001ff,	0x000000ff,	0x00000000
 };
+
+#define valid_irq(x) ((x) < NR_IRQS && validirqs[(x) >> 5] & (1 << ((x) & 31)))
+#else
+
+#define valid_irq(x) ((x) < NR_IRQS)
+
+#endif
 
 int get_irq_list(char *buf)
 {
@@ -98,7 +100,7 @@ int get_irq_list(char *buf)
 		if (!action)
 			continue;
 		p += sprintf(p, "%3d: %10u   %s",
-			     i, kstat.irqs[0][i], action->name);
+			     i, kstat_irqs(i), action->name);
 		for (action = action->next; action; action = action->next) {
 			p += sprintf(p, ", %s", action->name);
 		}
@@ -126,7 +128,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	cpu = smp_processor_id();
 	irq_enter(cpu, irq);
-	kstat.irqs[0][irq]++;
+	kstat.irqs[cpu][irq]++;
 
 	/* Return with this interrupt masked if no action */
 	status = 0;
@@ -143,13 +145,26 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 		if (status & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
 		__cli();
+
+		switch (irq) {
 #if defined(HAS_IOMD) || defined(HAS_IOC)
-		if (irq != IRQ_KEYBOARDTX && irq != IRQ_EXPANSIONCARD)
+		case IRQ_KEYBOARDTX:
+		case IRQ_EXPANSIONCARD:
+			break;
 #endif
-		{
+#ifdef HAS_IOMD
+		case IRQ_DMA0:
+		case IRQ_DMA1:
+		case IRQ_DMA2:
+		case IRQ_DMA3:
+			break;
+#endif
+
+		default:
 			spin_lock(&irq_controller_lock);
 			unmask_irq(irq);
 			spin_unlock(&irq_controller_lock);
+			break;
 		}
 	}
 
@@ -235,7 +250,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	unsigned long retval;
 	struct irqaction *action;
         
-	if (irq >= NR_IRQS || !(validirqs[irq >> 5] & (1 << (irq & 31))))
+	if (!valid_irq(irq))
 		return -EINVAL;
 	if (!handler)
 		return -EINVAL;
@@ -263,7 +278,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	struct irqaction * action, **p;
 	unsigned long flags;
 
-	if (irq >= NR_IRQS || !(validirqs[irq >> 5] & (1 << (irq & 31)))) {
+	if (!valid_irq(irq)) {
 		printk(KERN_ERR "Trying to free IRQ%d\n",irq);
 #ifdef CONFIG_DEBUG_ERRORS
 		__backtrace();
@@ -294,7 +309,7 @@ unsigned long probe_irq_on (void)
 
 	/* first snaffle up any unassigned irqs */
 	for (i = 15; i > 0; i--) {
-		if (!irq_action[i]) {
+		if (!irq_action[i] && valid_irq(i)) {
 			enable_irq(i);
 			irqs |= 1 << i;
 		}
@@ -323,5 +338,7 @@ int probe_irq_off (unsigned long irqs)
 
 __initfunc(void init_IRQ(void))
 {
+	extern void init_dma(void);
 	irq_init_irq();
+	init_dma();
 }

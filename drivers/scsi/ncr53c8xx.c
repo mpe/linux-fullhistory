@@ -112,6 +112,7 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -557,6 +558,7 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 static void ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs);
+static void do_ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs);
 #else
 static void ncr53c8xx_intr(int irq, struct pt_regs * regs);
 #endif
@@ -4612,10 +4614,10 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	if (bootverbose > 1)
 		printf("%s: requesting shared irq %d (dev_id=0x%lx)\n",
 		        ncr_name(np), device->slot.irq, (u_long) np);
-	if (request_irq(device->slot.irq, ncr53c8xx_intr,
+	if (request_irq(device->slot.irq, do_ncr53c8xx_intr,
 			SA_INTERRUPT|SA_SHIRQ, "ncr53c8xx", np)) {
 #else
-	if (request_irq(device->slot.irq, ncr53c8xx_intr,
+	if (request_irq(device->slot.irq, do_ncr53c8xx_intr,
 			SA_INTERRUPT, "ncr53c8xx", np)) {
 #endif
 #else
@@ -9798,6 +9800,14 @@ static void ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
      ncr_exception((ncb_p) dev_id);
      spin_unlock_irqrestore(&io_request_lock, flags);
      if (DEBUG_FLAGS & DEBUG_TINY) printf ("]\n");
+}
+static void do_ncr53c8xx_intr(int irq, void *dev_id, struct pt_regs *regs)
+{
+     unsigned long flags;
+
+     spin_lock_irqsave(&io_request_lock, flags);
+     ncr53c8xx_intr(irq, dev_id, regs);
+     spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 #else

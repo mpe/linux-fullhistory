@@ -112,7 +112,6 @@ static void read_intr (ide_drive_t *drive)
 	int i;
 	unsigned int msect, nsect;
 	struct request *rq;
-	unsigned long flags;
 
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		ide_error(drive, "read_intr", stat);
@@ -162,7 +161,6 @@ static void write_intr (ide_drive_t *drive)
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = hwgroup->rq;
-	unsigned long flags;
 	int error = 0;
 
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
@@ -239,7 +237,6 @@ static void multwrite_intr (ide_drive_t *drive)
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	struct request *rq = &hwgroup->wrq;
-	unsigned long flags;
 	int error = 0;
 
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {

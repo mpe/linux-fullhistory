@@ -33,16 +33,13 @@ extern __inline__ void proc_hard_reset(void)
 /*
  * We can wait for an interrupt...
  */
-#if 0
 #define proc_idle()			\
 	do {				\
 	__asm__ __volatile__(		\
 "	mcr	p15, 0, %0, c15, c8, 2"	\
 	  : : "r" (0));			\
 	} while (0)
-#else
-#define proc_idle()
-#endif
+
 /*
  * A couple of speedups for the ARM
  */

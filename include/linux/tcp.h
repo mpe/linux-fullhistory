@@ -65,8 +65,13 @@ enum {
   TCP_CLOSE_WAIT,
   TCP_LAST_ACK,
   TCP_LISTEN,
-  TCP_CLOSING	/* now a valid state */
+  TCP_CLOSING,	 /* now a valid state */
+
+  TCP_MAX_STATES /* Leave at the end! */
 };
+
+#define TCP_STATE_MASK	0xF
+#define TCP_ACTION_FIN	1 << 7
 
 enum {
   TCPF_ESTABLISHED = (1 << 1),

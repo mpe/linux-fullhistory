@@ -3,9 +3,10 @@
  *
  * Copyright (C) 1995, 1996 Russell King.
  *
- * Speedups & 1bpp code (C) 1996 Philip Blundel & Russell King.
+ * Speedups & 1bpp code (C) 1996 Philip Blundell & Russell King.
  *
  * 10-04-96	RMK	Various cleanups & reduced register usage.
+ * 08-04-98	RMK	Shifts re-ordered
  */
 
 @ Regs: [] = corruptable
@@ -32,22 +33,22 @@ ENTRY(ll_write_char)
 @
 @ Smashable regs: {r0 - r3}, [r4 - r7], (r8 - fp), [ip], (sp), [lr], (pc)
 @
-		eor	ip, r1, #UNDERLINE << 24
+		eor	ip, r1, #UNDERLINE << 9
 /*
  * calculate colours
  */
-		tst	r1, #INVERSE << 24
-		moveq	r2, r1, lsr #8
-		moveq	r3, r1, lsr #16
-		movne	r2, r1, lsr #16
-		movne	r3, r1, lsr #8
+		tst	r1, #INVERSE << 9
+		moveq	r2, r1, lsr #16
+		moveq	r3, r1, lsr #24
+		movne	r2, r1, lsr #24
+		movne	r3, r1, lsr #16
 		and	r3, r3, #255
 		and	r2, r2, #255
 /*
  * calculate offset into character table
  */
-		and	r1, r1, #255
-		mov	r1, r1, lsl #3
+		mov	r1, r1, lsl #23
+		mov	r1, r1, lsr #20
 /*
  * calculate offset required for each row [maybe I should make this an argument to this fn.
  * Have to see what the register usage is like in the calling routines.
@@ -67,7 +68,7 @@ ENTRY(ll_write_char)
 		add	r0, r0, r5, lsl #3		@ Move to bottom of character
 		add	r1, r1, #7
 		ldrb	r7, [r6, r1]
-		tst	ip, #UNDERLINE << 24
+		tst	ip, #UNDERLINE << 9
 		eoreq	r7, r7, #255
 		teq	r4, #8
 		beq	Lrow8bpplp
@@ -131,7 +132,7 @@ Lrow8bpplp:	mov	ip, r7, lsr #4
 @
 Lrow1bpp:	add	r6, r6, r1
 		ldmia	r6, {r4, r7}
-		tst	ip, #INVERSE << 24
+		tst	ip, #INVERSE << 9
 		mvnne	r4, r4
 		mvnne	r7, r7
 		strb	r4, [r0], r5
@@ -147,7 +148,7 @@ Lrow1bpp:	add	r6, r6, r1
 		mov	r7, r7, lsr #8
 		strb	r7, [r0], r5
 		mov	r7, r7, lsr #8
-		tst	ip, #UNDERLINE << 24
+		tst	ip, #UNDERLINE << 9
 		mvneq	r7, r7
 		strb	r7, [r0], r5
 		LOADREGS(fd, sp!, {r4 - r7, pc})

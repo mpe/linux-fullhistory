@@ -117,6 +117,7 @@
 
 #include <linux/blk.h>
 #include <linux/stat.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "sd.h"
@@ -1638,7 +1639,14 @@ DB(DB_INTR,printk("} "))
 
 }
 
+static void do_in2000_intr(int irq, void *dev_id, struct pt_regs *regs)
+{
+   unsigned long flags;
 
+   spin_lock_irqsave(&io_request_lock, flags);
+   in2000_intr(irq, dev_id, regs);
+   spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 #define RESET_CARD         0
 #define RESET_CARD_AND_BUS 1
@@ -2064,7 +2072,7 @@ char buf[32];
       write1_io(0,IO_FIFO_READ);             /* start fifo out in read mode */
       write1_io(0,IO_INTR_MASK);    /* allow all ints */
       x = int_tab[(switches & (SW_INT0 | SW_INT1)) >> SW_INT_SHIFT];
-      if (request_irq(x, in2000_intr, SA_INTERRUPT, "in2000", NULL)) {
+      if (request_irq(x, do_in2000_intr, SA_INTERRUPT, "in2000", NULL)) {
          printk("in2000_detect: Unable to allocate IRQ.\n");
          detect_count--;
          continue;

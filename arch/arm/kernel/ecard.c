@@ -13,6 +13,7 @@
  *			now register their own routine to control interrupts (recommended).
  * 29-Sep-1997	RMK	Expansion card interrupt hardware not being re-enabled on reset from
  *			Linux. (Caused cards not to respond under RiscOS without hard reset).
+ * 15-Feb-1998	RMK	Added DMA support
  */
 
 #define ECARD_C
@@ -24,13 +25,14 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
-#include <asm/irq-no.h>
-#include <asm/ecard.h>
-#include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/arch/irq.h>
+#include <asm/ecard.h>
+#include <asm/irq.h>
+#include <asm/dma.h>
 
 #ifdef CONFIG_ARCH_ARC
 #include <asm/arch/oldlatches.h>
@@ -59,9 +61,11 @@ static const struct expcard_blacklist {
   BLACKLIST_LOADER(MANU_ATOMWIDE,	PROD_ATOMWIDE_3PSERIAL,	atomwide_serial_loader),
   BLACKLIST_LOADER(MANU_OAK,		PROD_OAK_SCSI,		oak_scsi_loader),
 
+/* Supported cards with broken loader */
+  { MANU_ALSYSTEMS, PROD_ALSYS_SCSIATAPI, noloader, "AlSystems PowerTec SCSI (loader blacklisted)" },
+
 /* Unsupported cards with no loader */
-BLACKLIST_NOLOADER(MANU_ALSYSTEMS,	PROD_ALSYS_SCSIATAPI),
-BLACKLIST_NOLOADER(MANU_MCS,		PROD_MCS_CONNECT32)
+  BLACKLIST_NOLOADER(MANU_MCS,		PROD_MCS_CONNECT32)
 };
 
 extern int setup_arm_irq(int, struct irqaction *);
@@ -75,7 +79,6 @@ static ecard_t expcard[MAX_ECARDS];
 static signed char irqno_to_expcard[16];
 static unsigned int ecard_numcards, ecard_numirqcards;
 static unsigned int have_expmask;
-static unsigned long kmem;
 
 static void ecard_def_irq_enable (ecard_t *ec, int irqnr)
 {
@@ -176,20 +179,6 @@ void ecard_disablefiq (unsigned int fiqnr)
 		if (ec->ops->fiqdisable)
 			ec->ops->fiqdisable (ec, fiqnr);
 	}
-}
-
-static void *ecard_malloc(int len)
-{
-	int r;
-
-	len = (len + 3) & ~3;
-
-	if (kmem) {
-		r = kmem;
-		kmem += len;
-		return (void *)r;
-	} else
-		return kmalloc(len, GFP_KERNEL);
 }
 
 static void ecard_irq_noexpmask(int intr_no, void *dev_id, struct pt_regs *regs)
@@ -301,13 +290,13 @@ static void ecard_readbytes (void *addr, ecard_t *ec, int off, int len, int usel
 			lowaddress = 0;
 		}
 		while (lowaddress <= laddr) {
-			byte = inb (ec->podaddr + haddr);
+			byte = inb(ec->podaddr + haddr);
 			lowaddress += 1;
 		}
 		while (len--) {
 			*a++ = byte;
 			if (len) {
-				byte = inb (ec->podaddr + haddr);
+				byte = inb(ec->podaddr + haddr);
 				lowaddress += 1;
 			}
 		}
@@ -417,7 +406,7 @@ int ecard_readchunk (struct in_chunk_dir *cd, ecard_t *ec, int id, int num)
 		}
 		if (c_id(&excd) == 0x80) { /* loader */
 			if (!ec->loader) {
-				ec->loader = (loader_t)ecard_malloc(c_len(&excd));
+				ec->loader = (loader_t)kmalloc(c_len(&excd), GFP_KERNEL);
 				ecard_readbytes(ec->loader, ec, (int)c_start(&excd), c_len(&excd), useld);
 			}
 			continue;
@@ -441,20 +430,39 @@ int ecard_readchunk (struct in_chunk_dir *cd, ecard_t *ec, int id, int num)
 	return 1;
 }
 
-unsigned int ecard_address (ecard_t *ec, card_type_t memc, card_speed_t speed)
+unsigned int ecard_address (ecard_t *ec, card_type_t type, card_speed_t speed)
 {
 	switch (ec->slot_no) {
 	case 0:
 	case 1:
 	case 2:
 	case 3:
-		return (memc ? MEMCECIO_BASE : IOCECIO_BASE + (speed << 17)) + (ec->slot_no << 12);
+		switch (type) {
+		case ECARD_MEMC:
+			return MEMCECIO_BASE + (ec->slot_no << 12);
+
+		case ECARD_IOC:
+			return IOCECIO_BASE + (speed << 17) + (ec->slot_no << 12);
+
+		default:
+			return 0;
+		}
+
 #ifdef IOCEC4IO_BASE
 	case 4:
 	case 5:
 	case 6:
 	case 7:
-		return (memc ? 0 : IOCEC4IO_BASE + (speed << 17)) + ((ec->slot_no - 4) << 12);
+		switch (type) {
+		case ECARD_MEMC:
+			return 0;
+
+		case ECARD_IOC:
+			return IOCEC4IO_BASE + (speed << 17) + ((ec->slot_no - 4) << 12);
+
+		default:
+			return 0;
+		}
 #endif
 #ifdef MEMCEC8IO_BASE
 	case 8:
@@ -470,7 +478,7 @@ unsigned int ecard_address (ecard_t *ec, card_type_t memc, card_speed_t speed)
  * If bit 1 of the first byte of the card is set,
  * then the card does not exist.
  */
-static int ecard_probe (int card, int freeslot)
+__initfunc(static int ecard_probe (int card, int freeslot))
 {
 	ecard_t *ec = expcard + freeslot;
 	struct ex_ecld excld;
@@ -480,7 +488,7 @@ static int ecard_probe (int card, int freeslot)
 	irqno_to_expcard[card] = -1;
 
 	ec->slot_no = card;
-	if ((ec->podaddr = ecard_address (ec, 0, ECARD_SYNC)) == 0)
+	if ((ec->podaddr = ecard_address (ec, ECARD_IOC, ECARD_SYNC)) == 0)
 		return 0;
 
 	excld.r_ecld = 2;
@@ -490,8 +498,9 @@ static int ecard_probe (int card, int freeslot)
 
 	irqno_to_expcard[card] = freeslot;
 
-	ec->irq = -1;
-	ec->fiq = -1;
+	ec->irq = NO_IRQ;
+	ec->fiq = NO_IRQ;
+	ec->dma = NO_DMA;
 	ec->cld.ecld = e_ecld(&excld);
 	ec->cld.manufacturer = e_manu(&excld);
 	ec->cld.product = e_prod(&excld);
@@ -514,15 +523,20 @@ static int ecard_probe (int card, int freeslot)
 			break;
 		}
 
-	if (card != 8) {
-		ec->irq = 32 + card;
+	ec->irq = 32 + card;
 #if 0
-		ec->fiq = 96 + card;
+	/* We don't support FIQs on expansion cards at the moment */
+	ec->fiq = 96 + card;
 #endif
-	} else {
+#ifdef CONFIG_ARCH_RPC
+	if (card != 8) {
+		/* On RiscPC, only first two slots have DMA capability
+		 */
+		if (card < 2)
+			ec->dma = 2 + card;
+	} else
 		ec->irq = 11;
-		ec->fiq = -1;
-	}
+#endif
 
 	if ((ec->cld.ecld & 0x78) == 0) {
 		struct in_chunk_dir incd;
@@ -551,11 +565,10 @@ static struct irqaction irqexpansioncard = { ecard_irq_noexpmask, SA_INTERRUPT, 
  * Locate all hardware - interrupt management and
  * actual cards.
  */
-unsigned long ecard_init(unsigned long start_mem)
+__initfunc(void ecard_init(void))
 {
 	int i, nc = 0;
 
-	kmem = (start_mem | 3) & ~3;
 	memset (expcard, 0, sizeof (expcard));
 
 #ifdef HAS_EXPMASK
@@ -565,6 +578,7 @@ unsigned long ecard_init(unsigned long start_mem)
 		have_expmask = -1;
 	}
 #endif
+
 	printk("Installed expansion cards:");
 
 	/*
@@ -578,27 +592,25 @@ unsigned long ecard_init(unsigned long start_mem)
 
 	ecard_numirqcards = nc;
 
-	/*
-	 * Now probe other cards with different interrupt lines
+	/* Now probe other cards with different interrupt lines
 	 */
 #ifdef MEMCEC8IO_BASE
 	if (ecard_probe (8, nc))
 		nc += 1;
 #endif
+
 	printk("\n");
 	ecard_numcards = nc;
 
 	if (nc && setup_arm_irq(IRQ_EXPANSIONCARD, &irqexpansioncard)) {
 		printk ("Could not allocate interrupt for expansion cards\n");
-		return kmem;
+		return;
 	}
 	
 #ifdef HAS_EXPMASK
 	if (nc && have_expmask)
 		EXPMASK_ENABLE = have_expmask;
 #endif
+
 	oldlatch_init ();
-	start_mem = kmem;
-	kmem = 0;
-	return start_mem;	
 }

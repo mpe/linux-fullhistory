@@ -57,7 +57,7 @@ ENTRY(insw)
 		mov	r2, r2, lsl#1
 ENTRY(inswb)
 		mov	ip, sp
-		stmfd	sp!, {r4 - r10 ,fp ,ip ,lr ,pc}
+		stmfd	sp!, {r4 - r10, fp, ip, lr, pc}
 		sub	fp, ip, #4
 		addr	r3, r0
 		add	r0, r3, r0, lsl #2
@@ -70,7 +70,7 @@ ENTRY(inswb)
 		strgeb	r4, [r1], #1
 		movgt	r4, r4, LSR#8
 		strgtb	r4, [r1], #1
-		ldmleea	fp, {r4 - r10, fp, sp, pc}^
+		LOADREGS(leea, fp, {r4 - r10, fp, sp, pc})
 		sub	r2, r2, #2
 Linswok:	mov	ip, #0xFF
 		orr	ip, ip, ip, lsl #8

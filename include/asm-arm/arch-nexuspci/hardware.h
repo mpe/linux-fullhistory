@@ -30,6 +30,7 @@
 #define MAPTOPHYS(a)		((unsigned long)(a) - PAGE_OFFSET + RAM_BASE)
 #define KERNTOPHYS(a)		((unsigned long)(&a))
 #define KERNEL_BASE		(0xc0008000)
+#define SAFE_ADDR		0x40000000
 
 #else
 

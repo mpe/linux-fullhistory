@@ -27,13 +27,13 @@
 
 struct pgtable_cache_struct quicklists;
 
-void __bad_pte(pmd_t *pmd)
+void __bad_pmd(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 	set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
 }
 
-void __bad_pte_kernel(pmd_t *pmd)
+void __bad_pmd_kernel(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 	set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
@@ -72,7 +72,7 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 	}
 	free_small_page ((unsigned long) pte);
 	if (pmd_bad(*pmd)) {
-		__bad_pte(pmd);
+		__bad_pmd(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + offset;
@@ -94,13 +94,26 @@ pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
 	}
 	free_small_page ((unsigned long) pte);
 	if (pmd_bad(*pmd)) {
-		__bad_pte_kernel(pmd);
+		__bad_pmd_kernel(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + offset;
 }
 
 extern void die_if_kernel(char *msg, struct pt_regs *regs, unsigned int err, unsigned int ret);
+
+#ifdef DEBUG
+static int sp_valid (unsigned long *sp)
+{
+	unsigned long addr = (unsigned long) sp;
+
+	if (addr >= 0xb0000000 && addr < 0xd0000000)
+		return 1;
+	if (addr >= 0x03ff0000 && addr < 0x04000000)
+		return 1;
+	return 0;
+}
+#endif
 
 static void kernel_page_fault (unsigned long addr, int mode, struct pt_regs *regs,
 			       struct task_struct *tsk, struct mm_struct *mm)
@@ -178,6 +191,16 @@ bad_area:
 		printk ("%s: memory violation at pc=0x%08lx, lr=0x%08lx (bad address=0x%08lx, code %d)\n",
 			tsk->comm, regs->ARM_pc, regs->ARM_lr, addr, mode);
 #ifdef DEBUG
+		{
+			unsigned int i, j;
+			unsigned long *sp = (unsigned long *) (regs->ARM_sp - 128);
+			for (j = 0; j < 20 && sp_valid (sp); j++) {
+				printk ("%p: ", sp);
+				for (i = 0; i < 8 && sp_valid (sp); i += 1, sp++)
+					printk ("%08lx ", *sp);
+				printk ("\n");
+			}
+		}
 		show_regs (regs);
 		c_backtrace (regs->ARM_fp, regs->ARM_cpsr);
 #endif
@@ -208,7 +231,6 @@ do_DataAbort (unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 {
 	if (user_mode(regs))
 		error_code |= FAULT_CODE_USER;
-
 #define DIE(signr,nam)\
 		force_sig(signr, current);\
 		die_if_kernel(nam, regs, fsr, signr);\
@@ -229,18 +251,22 @@ do_DataAbort (unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 	case 11:
 		DIE(SIGSEGV, "Domain fault")
 	case 13:/* permission fault on section */
-#ifndef DEBUG
+#ifdef DEBUG
 		{
-			unsigned int i, j, a;
-static int count=2;
-if (count-- == 0) while (1);
-			a = regs->ARM_sp;
-			for (j = 0; j < 10; j++) {
-				printk ("%08x: ", a);
-				for (i = 0; i < 8; i += 1, a += 4)
-					printk ("%08lx ", *(unsigned long *)a);
+			unsigned int i, j;
+			unsigned long *sp;
+
+			printk ("%s: section permission fault (bad address=0x%08lx, code %d)\n",
+				current->comm, addr, error_code);
+			sp = (unsigned long *) (regs->ARM_sp - 128);
+			for (j = 0; j < 20 && sp_valid (sp); j++) {
+				printk ("%p: ", sp);
+				for (i = 0; i < 8 && sp_valid (sp); i += 1, sp++)
+					printk ("%08lx ", *sp);
 				printk ("\n");
 			}
+			show_regs (regs);
+			c_backtrace(regs->ARM_fp, regs->ARM_cpsr);
 		}
 #endif
 		DIE(SIGSEGV, "Permission fault")

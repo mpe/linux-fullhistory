@@ -112,6 +112,7 @@ int dtc_proc_info (char *buffer, char **start, off_t offset,
 #endif
 
 #define NCR5380_intr dtc_intr
+#define do_NCR5380_intr do_dtc_intr
 #define NCR5380_queue_command dtc_queue_command
 #define NCR5380_abort dtc_abort
 #define NCR5380_reset dtc_reset

@@ -252,6 +252,7 @@
 #include <linux/ioport.h>
 #include <linux/time.h>
 #include <linux/blk.h>
+#include <asm/spinlock.h>
 
 #ifdef CONFIG_AMIGA
 #include <asm/pgtable.h>
@@ -313,7 +314,8 @@ static int shutdown (struct Scsi_Host *host);
 static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result);
 static int disable (struct Scsi_Host *host);
 static int NCR53c7xx_run_tests (struct Scsi_Host *host);
-void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
+static void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
+static void do_NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 static int ncr_halt (struct Scsi_Host *host);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
@@ -1069,10 +1071,10 @@ NCR53c7x0_init (struct Scsi_Host *host) {
      */
 
 #ifdef CONFIG_MVME16x
-    if (request_irq(IRQ_MVME16x_SCSI, NCR53c7x0_intr, 0, "SCSI-script", NULL))
+    if (request_irq(IRQ_MVME16x_SCSI, do_NCR53c7x0_intr, 0, "SCSI-script", NULL))
 	panic ("Couldn't get SCSI IRQ");
 #ifdef MVME16x_INTFLY
-    else if (request_irq(IRQ_MVME16x_FLY, NCR53c7x0_intr, 0, "SCSI-intfly", NULL))
+    else if (request_irq(IRQ_MVME16x_FLY, do_NCR53c7x0_intr, 0, "SCSI-intfly", NULL))
 	panic ("Couldn't get INT_FLY IRQ");
 #endif
 #else
@@ -1081,9 +1083,9 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     if (!search) {
 #ifdef CONFIG_AMIGA
-	if (request_irq(IRQ_AMIGA_PORTS, NCR53c7x0_intr, 0, "53c7xx", NCR53c7x0_intr)) {
+	if (request_irq(IRQ_AMIGA_PORTS, do_NCR53c7x0_intr, 0, "53c7xx", NCR53c7x0_intr)) {
 #else
-	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7xx", NULL)) {
+	if (request_irq(host->irq, do_NCR53c7x0_intr, SA_INTERRUPT, "53c7xx", NULL)) {
 #endif
 	    printk("scsi%d : IRQ%d not free, detaching\n"
 	           "         You have either a configuration problem, or a\n"
@@ -4068,6 +4070,20 @@ void dump_log(void)
 }
 #endif
 
+/* Function : NCR53c7x0_intr
+ *
+ * Purpose : grab the global io_request_lock spin lock before entering the
+ *      real interrupt routine.
+ */
+static void
+do_NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    NCR53c7x0_intr(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
+
 /*
  * Function : static void NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs)
  *
@@ -4082,7 +4098,7 @@ void dump_log(void)
  * script interrupt handler will call back to this function.
  */
 
-void 
+static void 
 NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
     NCR53c7x0_local_declare();
     struct Scsi_Host *host;			/* Host we are looking at */

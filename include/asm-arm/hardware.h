@@ -140,6 +140,11 @@ do {								\
 #define IOMD_ECTCR	__IOMD(0x0C8)
 #define IOMD_DMAEXT	__IOMD(0x0CC)
 
+#define DMA_EXT_IO0	1
+#define DMA_EXT_IO1	2
+#define DMA_EXT_IO2	4
+#define DMA_EXT_IO3	8
+
 #define IOMD_IO0CURA	__IOMD(0x100)
 #define IOMD_IO0ENDA	__IOMD(0x104)
 #define IOMD_IO0CURB	__IOMD(0x108)
@@ -194,6 +199,9 @@ do {								\
 #define IOMD_DMASTAT	__IOMD(0x1F0)
 #define IOMD_DMAREQ	__IOMD(0x1F4)
 #define IOMD_DMAMASK	__IOMD(0x1F8)
+
+#define DMA_END_S	(1 << 31)
+#define DMA_END_L	(1 << 30)
 
 #define DMA_CR_C	0x80
 #define DMA_CR_D	0x40

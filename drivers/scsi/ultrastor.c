@@ -137,6 +137,7 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/dma.h>
 
 #define ULTRASTOR_PRIVATE	/* Get the private stuff from ultrastor.h */
@@ -294,6 +295,7 @@ static const unsigned short ultrastor_ports_14f[] = {
 #endif
 
 static void ultrastor_interrupt(int, void *, struct pt_regs *);
+static void do_ultrastor_interrupt(int, void *, struct pt_regs *);
 static inline void build_sg_list(struct mscp *, Scsi_Cmnd *SCpnt);
 
 
@@ -507,7 +509,7 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
     config.mscp_free = ~0;
 #endif
 
-    if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor", NULL)) {
+    if (request_irq(config.interrupt, do_ultrastor_interrupt, 0, "Ultrastor", NULL)) {
 	printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 	       config.interrupt);
 	return FALSE;
@@ -577,7 +579,7 @@ static int ultrastor_24f_detect(Scsi_Host_Template * tpnt)
 	  printk("U24F: invalid IRQ\n");
 	  return FALSE;
 	}
-      if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor", NULL))
+      if (request_irq(config.interrupt, do_ultrastor_interrupt, 0, "Ultrastor", NULL))
 	{
 	  printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 		 config.interrupt);
@@ -1155,6 +1157,15 @@ static void ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #if (ULTRASTOR_DEBUG & UD_INTERRUPT)
     printk("USx4F: interrupt: returning\n");
 #endif
+}
+
+static void do_ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    ultrastor_interrupt(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 #ifdef MODULE

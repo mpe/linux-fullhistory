@@ -30,13 +30,6 @@
 #define		ACTNEGEN        	0x02
 #define		STPWEN          	0x01
 
-#define	SCSISIGI        		0x03
-#define		ATNI            	0x10
-#define		SELI            	0x08
-#define		BSYI            	0x04
-#define		REQI            	0x02
-#define		ACKI            	0x01
-
 #define	SCSISIGO        		0x03
 #define		CDO             	0x80
 #define		IOO             	0x40
@@ -46,6 +39,13 @@
 #define		BSYO            	0x04
 #define		REQO            	0x02
 #define		ACKO            	0x01
+
+#define	SCSISIGI        		0x03
+#define		ATNI            	0x10
+#define		SELI            	0x08
+#define		BSYI            	0x04
+#define		REQI            	0x02
+#define		ACKI            	0x01
 
 #define	SCSIRATE        		0x04
 #define		WIDEXFER        	0x80
@@ -147,6 +147,16 @@
 #define		SELID_MASK      	0xf0
 #define		ONEBIT          	0x08
 
+#define	SPIOCAP         		0x1b
+#define		SOFT1           	0x80
+#define		SOFT0           	0x40
+#define		SOFTCMDEN       	0x20
+#define		HAS_BRDCTL      	0x10
+#define		SEEPROM         	0x08
+#define		EEPROM          	0x04
+#define		ROM             	0x02
+#define		SSPIOCPS        	0x01
+
 #define	BRDCTL          		0x1d
 #define		BRDDAT7         	0x80
 #define		BRDDAT6         	0x40
@@ -181,11 +191,9 @@
 
 #define	DISC_DSB        		0x32
 
-#define	MSG_LEN         		0x34
+#define	MSG_OUT         		0x34
 
-#define	MSG_OUT         		0x35
-
-#define	DMAPARAMS       		0x3d
+#define	DMAPARAMS       		0x35
 #define		WIDEODD         	0x40
 #define		SCSIEN          	0x20
 #define		SDMAENACK       	0x10
@@ -196,36 +204,21 @@
 #define		FIFOFLUSH       	0x02
 #define		FIFORESET       	0x01
 
-#define	SCBCOUNT        		0x3e
-
-#define	COMP_SCBCOUNT   		0x3f
-
-#define	QCNTMASK        		0x40
-
-#define	SEQ_FLAGS       		0x41
-#define		RESELECTED      	0x80
-#define		IDENTIFY_SEEN   	0x40
-#define		TAGGED_SCB      	0x20
+#define	SEQ_FLAGS       		0x36
+#define		IDENTIFY_SEEN   	0x80
+#define		SCBPTR_VALID    	0x20
 #define		DPHASE          	0x10
-#define		PAGESCBS        	0x04
+#define		AMTARGET        	0x08
 #define		WIDE_BUS        	0x02
 #define		TWIN_BUS        	0x01
 
-#define	SAVED_TCL       		0x42
+#define	SAVED_TCL       		0x37
 
-#define	SG_COUNT        		0x43
+#define	SG_COUNT        		0x38
 
-#define	SG_NEXT         		0x44
+#define	SG_NEXT         		0x39
 
-#define	WAITING_SCBH    		0x48
-
-#define	SAVED_LINKPTR   		0x49
-
-#define	SAVED_SCBPTR    		0x4a
-
-#define	REJBYTE         		0x4b
-
-#define	LASTPHASE       		0x4c
+#define	LASTPHASE       		0x3d
 #define		P_MESGIN        	0xe0
 #define		PHASE_MASK      	0xe0
 #define		P_STATUS        	0xc0
@@ -238,40 +231,46 @@
 #define		P_BUSFREE       	0x01
 #define		P_DATAOUT       	0x00
 
-#define	MSGIN_EXT_LEN   		0x4d
+#define	WAITING_SCBH    		0x3e
 
-#define	MSGIN_EXT_OPCODE		0x4e
+#define	DISCONNECTED_SCBH		0x3f
 
-#define	MSGIN_EXT_BYTES 		0x4f
+#define	FREE_SCBH       		0x40
 
-#define	DISCONNECTED_SCBH		0x52
+#define	HSCB_ADDR       		0x41
 
-#define	FREE_SCBH       		0x53
+#define	SCBID_ADDR      		0x45
 
-#define	HSCB_ADDR       		0x54
+#define	TMODE_CMDADDR   		0x49
 
-#define	CUR_SCBID       		0x58
+#define	KERNEL_QINPOS   		0x4d
 
-#define	ARG_1           		0x59
-#define	RETURN_1        		0x59
+#define	QINPOS          		0x4e
+
+#define	QOUTPOS         		0x4f
+
+#define	TMODE_CMDADDR_NEXT		0x50
+
+#define	ARG_1           		0x51
+#define	RETURN_1        		0x51
 #define		SEND_MSG        	0x80
 #define		SEND_SENSE      	0x40
 #define		SEND_REJ        	0x20
+#define		MSGOUT_PHASEMIS 	0x10
+
+#define	LAST_MSG        		0x52
 
 #define	SCSICONF        		0x5a
-
-#define	CMDOUTCNT       		0x5a
-
-#define	SCSICONF2       		0x5b
+#define		TERM_ENB        	0x80
 #define		RESET_SCSI      	0x40
-
-#define	FIFODEPTH       		0x5b
+#define		HWSCSIID        	0x0f
+#define		HSCSIID         	0x07
 
 #define	HOSTCONF        		0x5d
 
 #define	HA_274_BIOSCTRL 		0x5f
-#define		BIOSDISABLED    	0x30
 #define		BIOSMODE        	0x30
+#define		BIOSDISABLED    	0x30
 #define		CHANNEL_B_PRIMARY	0x08
 
 #define	SEQCTL          		0x60
@@ -315,15 +314,15 @@
 
 #define	STACK           		0x6f
 
+#define	BCTL            		0x84
+#define		ACE             	0x08
+#define		ENABLE          	0x01
+
 #define	DSCOMMAND       		0x84
 #define		CACHETHEN       	0x80
 #define		DPARCKEN        	0x40
 #define		MPARCKEN        	0x20
 #define		EXTREQLCK       	0x10
-
-#define	BCTL            		0x84
-#define		ACE             	0x08
-#define		ENABLE          	0x01
 
 #define	BUSTIME         		0x85
 #define		BOFF            	0xf0
@@ -356,13 +355,13 @@
 #define		SEQINT_MASK     	0xf1
 #define		DATA_OVERRUN    	0xe1
 #define		MSGIN_PHASEMIS  	0xd1
-#define		MSG_BUFFER_BUSY 	0xc1
+#define		TRACEPOINT2     	0xc1
+#define		TRACEPOINT      	0xb1
 #define		AWAITING_MSG    	0xa1
-#define		ABORT_CMDCMPLT  	0x91
 #define		RESIDUAL        	0x81
 #define		BAD_STATUS      	0x71
 #define		REJECT_MSG      	0x61
-#define		NO_MATCH_BUSY   	0x51
+#define		ABORT_REQUESTED 	0x51
 #define		EXTENDED_MSG    	0x41
 #define		NO_MATCH        	0x31
 #define		NO_IDENT        	0x21
@@ -374,17 +373,21 @@
 #define		BAD_PHASE       	0x01
 #define		SEQINT          	0x01
 
-#define	ERROR           		0x92
-#define		PARERR          	0x08
-#define		ILLOPCODE       	0x04
-#define		ILLSADDR        	0x02
-#define		ILLHADDR        	0x01
-
 #define	CLRINT          		0x92
+#define		CLRPARERR       	0x10
 #define		CLRBRKADRINT    	0x08
 #define		CLRSCSIINT      	0x04
 #define		CLRCMDINT       	0x02
 #define		CLRSEQINT       	0x01
+
+#define	ERROR           		0x92
+#define		PCIERRSTAT      	0x40
+#define		MPARERR         	0x20
+#define		DPARERR         	0x10
+#define		SQPARERR        	0x08
+#define		ILLOPCODE       	0x04
+#define		ILLSADDR        	0x02
+#define		ILLHADDR        	0x01
 
 #define	DFCNTRL         		0x93
 
@@ -410,16 +413,14 @@
 
 #define	QOUTCNT         		0x9e
 
-#define	SCB_BASE        		0xa0
-
 #define	SCB_CONTROL     		0xa0
 #define		MK_MESSAGE      	0x80
 #define		DISCENB         	0x40
 #define		TAG_ENB         	0x20
-#define		MUST_DMAUP_SCB  	0x10
-#define		ABORT_SCB       	0x08
 #define		DISCONNECTED    	0x04
 #define		SCB_TAG_TYPE    	0x03
+
+#define	SCB_BASE        		0xa0
 
 #define	SCB_TCL         		0xa1
 #define		TID             	0xf0
@@ -439,8 +440,6 @@
 #define	SCB_DATAPTR     		0xac
 
 #define	SCB_DATACNT     		0xb0
-
-#define	SCB_LINKED_NEXT 		0xb3
 
 #define	SCB_CMDPTR      		0xb4
 
@@ -466,10 +465,24 @@
 #define		DI_2840         	0x01
 
 
-#define	MAX_OFFSET_16BIT	0x08
+#define	CMD_GROUP_CODE_SHIFT	0x05
 #define	BUS_8_BIT	0x00
+#define	QOUTFIFO_OFFSET	0x01
+#define	CMD_GROUP2_BYTE_DELTA	0xfa
+#define	MAX_OFFSET_8BIT	0x0f
+#define	BUS_16_BIT	0x01
+#define	QINFIFO_OFFSET	0x02
+#define	CMD_GROUP5_BYTE_DELTA	0x0b
+#define	MAX_OFFSET_16BIT	0x08
+#define	UNTAGGEDSCB_OFFSET	0x00
 #define	SCB_LIST_NULL	0xff
 #define	SG_SIZEOF	0x08
-#define	MAX_OFFSET_8BIT	0x0f
+#define	CMD_GROUP4_BYTE_DELTA	0x04
+#define	CMD_GROUP0_BYTE_DELTA	0xfc
+#define	HOST_MSG	0xff
 #define	BUS_32_BIT	0x02
-#define	BUS_16_BIT	0x01
+
+
+/* Downloaded Constant Definitions */
+#define	TMODE_NUMCMDS	0x01
+#define	QCNTMASK	0x00

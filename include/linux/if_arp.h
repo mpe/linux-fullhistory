@@ -64,6 +64,7 @@
 #define ARPHRD_PIMREG	779		/* PIMSM register interface	*/
 #define ARPHRD_HIPPI	780		/* High Performance Parallel Interface */
 #define ARPHRD_ASH	781		/* Nexus 64Mbps Ash		*/
+#define ARPHRD_ECONET	782		/* Acorn Econet			*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

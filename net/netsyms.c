@@ -64,11 +64,16 @@ extern struct datalink_proto   *make_EII_client(void);
 extern struct datalink_proto   *make_8023_client(void);
 extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
+#ifdef CONFIG_SYSCTL
+extern int sysctl_max_syn_backlog;
+#endif
 #endif
 
 #ifdef CONFIG_ATALK_MODULE
 #include <net/sock.h>
 #endif
+
+EXPORT_SYMBOL(dev_lockct);
 
 /* Skbuff symbols. */
 EXPORT_SYMBOL(skb_push_errstr);
@@ -177,17 +182,10 @@ EXPORT_SYMBOL(make_EII_client);
 EXPORT_SYMBOL(destroy_EII_client);
 #endif
 
-#ifdef CONFIG_ATALK_MODULE
 EXPORT_SYMBOL(sklist_destroy_socket);
-#endif
-
-#if defined(CONFIG_ATALK_MODULE) || defined(CONFIG_PACKET_MODULE)
 EXPORT_SYMBOL(sklist_insert_socket);
-#endif
 
-#ifdef CONFIG_SMB_FS_MODULE
 EXPORT_SYMBOL(scm_detach_fds);
-#endif
 
 #ifdef CONFIG_INET
 /* Internet layer registration */
@@ -211,6 +209,7 @@ EXPORT_SYMBOL(ip_mc_inc_group);
 EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
+EXPORT_SYMBOL(__release_sock);
 
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
@@ -242,11 +241,8 @@ EXPORT_SYMBOL(destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
-EXPORT_SYMBOL(__release_sock);
 EXPORT_SYMBOL(net_timer);
 /* UDP/TCP exported functions for TCPv6 */
-EXPORT_SYMBOL(sysctl_tcp_timestamps);
-EXPORT_SYMBOL(sysctl_tcp_window_scaling);
 EXPORT_SYMBOL(sock_rspace);
 EXPORT_SYMBOL(udp_ioctl);
 EXPORT_SYMBOL(udp_connect);
@@ -301,6 +297,9 @@ EXPORT_SYMBOL(tcp_write_xmit);
 EXPORT_SYMBOL(dev_loopback_xmit);
 EXPORT_SYMBOL(tcp_regs);
 
+#ifdef CONFIG_SYSCTL
+EXPORT_SYMBOL(sysctl_max_syn_backlog);
+#endif
 #endif
 
 #ifdef CONFIG_NETLINK
@@ -328,18 +327,16 @@ EXPORT_SYMBOL(neigh_add);
 EXPORT_SYMBOL(neigh_dump_info);
 #endif
 
-#ifdef CONFIG_PACKET_MODULE
 EXPORT_SYMBOL(dev_set_allmulti);
 EXPORT_SYMBOL(dev_set_promiscuity);
 EXPORT_SYMBOL(sklist_remove_socket);
 EXPORT_SYMBOL(rtnl_wait);
 EXPORT_SYMBOL(rtnl_rlockct);
-#endif
+EXPORT_SYMBOL(rtnl_lock);
+EXPORT_SYMBOL(rtnl_unlock);
 
-#if defined(CONFIG_IPV6_MODULE) || defined(CONFIG_PACKET_MODULE)
-EXPORT_SYMBOL(dev_lockct);
 EXPORT_SYMBOL(sock_wmalloc);
-#endif
+EXPORT_SYMBOL(sock_rmalloc);
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
@@ -424,9 +421,6 @@ EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
 EXPORT_SYMBOL(dev_mc_delete);
-
-EXPORT_SYMBOL(rtnl_lock);
-EXPORT_SYMBOL(rtnl_unlock);
 
 EXPORT_SYMBOL(if_port_text);
 

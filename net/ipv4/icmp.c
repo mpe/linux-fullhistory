@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.39 1998/03/08 05:56:19 davem Exp $
+ *	Version: $Id: icmp.c,v 1.40 1998/04/11 09:38:24 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -1026,7 +1026,6 @@ static unsigned long dummy;
  *	dst_entry gets expired too early. The same should happen when
  *	the cache grows too big.
  */
-int sysctl_icmp_sourcequench_time = 1*HZ; 
 int sysctl_icmp_destunreach_time = 1*HZ;
 int sysctl_icmp_timeexceed_time = 1*HZ;
 int sysctl_icmp_paramprob_time = 1*HZ;
@@ -1044,7 +1043,7 @@ static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
 /* DEST UNREACH (3) */
  { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1, &sysctl_icmp_destunreach_time },
 /* SOURCE QUENCH (4) */
- { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, &sysctl_icmp_sourcequench_time },
+ { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, },
 /* REDIRECT (5) */
  { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1, },
  { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },

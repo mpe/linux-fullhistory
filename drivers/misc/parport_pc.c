@@ -36,7 +36,6 @@
 
 #include <asm/ptrace.h>
 #include <asm/io.h>
-#include <asm/dma.h>
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -275,159 +274,6 @@ struct parport_operations parport_pc_ops =
 	parport_pc_inc_use_count,
 	parport_pc_dec_use_count
 };
-
-/* --- DMA detection -------------------------------------- */
-
-/*
- * Prepare DMA channels from 0-8 to transmit towards buffer
- */
-static int parport_prepare_dma(char *buff, int size)
-{
-	int tmp = 0;
-	int i,retv;
-	
-	for (i = 0; i < 8; i++) {
-		retv = request_dma(i, "probe");
-		if (retv)
-			continue;
-		tmp |= 1 << i;
-
-		cli();
-		disable_dma(i);
-		clear_dma_ff(i);
-		set_dma_addr(i, virt_to_bus(buff));
-		set_dma_count(i, size);
-		set_dma_mode(i, DMA_MODE_READ);
-		sti();
-	}
-
-	return tmp;
-}
-
-/*
- * Activate all DMA channels passed in dma
- */
-static int parport_enable_dma(int dma)
-{
-	int i;
-	
-	for (i = 0; i < 8; i++)
-		if (dma & (1 << i)) {
-			cli();
-			enable_dma(i);
-			sti();
-		}
-
-	return dma;
-}
-
-static int parport_detect_dma_transfer(int dma, int size)
-{
-	int i,n,retv;
-	int count=0;
-
-	retv = PARPORT_DMA_NONE;
-	for (i = 0; i < 8; i++)
-		if (dma & (1 << i)) {
-			disable_dma(i);
-			clear_dma_ff(i);
-			n = get_dma_residue(i);
-			if (n != size) {
-				retv = i;
-				if (count > 0) {
-					retv = PARPORT_DMA_NONE; /* Multiple DMA's */
-					printk(KERN_ERR "parport: multiple DMA detected.  Huh?\n");
-				}
-				count++;
-			}
-			free_dma(i);
-		}
-
-	return retv;	
-}
-
-/* Only if supports ECP mode */
-static int programmable_dma_support(struct parport *pb)
-{
-	unsigned char dma, oldstate = parport_pc_read_econtrol(pb);
-
-	parport_pc_write_econtrol(pb, 0xe0); /* Configuration MODE */
-	
-	dma = parport_pc_read_configb(pb) & 0x07;
-
-	parport_pc_write_econtrol(pb, oldstate);
-	
-	if (dma == 0 || dma == 4) /* Jumper selection */
-		return PARPORT_DMA_NONE;
-	else
-		return dma;
-}
-
-/* Only called if port supports ECP mode.
- *
- * The only restriction on DMA channels is that it has to be
- * between 0 to 7 (inclusive). Used only in an ECP mode, DMAs are
- * considered a shared resource and hence they should be registered
- * when needed and then immediately unregistered.
- *
- * DMA autoprobes for ECP mode are known not to work for some
- * main board BIOS configs. I had to remove everything from the
- * port, set the mode to SPP, reboot to DOS, set the mode to ECP,
- * and reboot again, then I got IRQ probes and DMA probes to work.
- * [Is the BIOS doing a device detection?]
- *
- * A value of PARPORT_DMA_NONE is allowed indicating no DMA support.
- *
- * if( 0 < DMA < 4 )
- *    1Byte DMA transfer
- * else // 4 < DMA < 8
- *    2Byte DMA transfer
- *
- */
-static int parport_dma_probe(struct parport *pb)
-{
-	int dma,retv;
-	unsigned char dsr,dsr_read;
-	char *buff;
-
-	retv = programmable_dma_support(pb);
-	if (retv != PARPORT_DMA_NONE)
-		return retv;
-	
-	if (!(buff = kmalloc(2048, GFP_KERNEL | GFP_DMA))) {
-	    printk(KERN_ERR "parport: memory squeeze\n");
-	    return PARPORT_DMA_NONE;
-	}
-	
- 	dsr = pb->ops->read_control(pb);
-	dsr_read = (dsr & ~(0x20)) | 0x04;    /* Direction == read */
-
-	pb->ops->write_econtrol(pb, 0xc0);	   /* ECP MODE */
- 	pb->ops->write_control(pb, dsr_read );
-	dma = parport_prepare_dma(buff, 1000);
-	pb->ops->write_econtrol(pb, 0xd8);	   /* ECP FIFO + enable DMA */
-	parport_enable_dma(dma);
-	udelay(500);           /* Give some for DMA tranfer */
-	retv = parport_detect_dma_transfer(dma, 1000);
-	
-	/*
-	 * National Semiconductors only supports DMA tranfers
-	 * in ECP MODE
-	 */
-	if (retv == PARPORT_DMA_NONE) {
-		pb->ops->write_econtrol(pb, 0x60);	   /* ECP MODE */
-		pb->ops->write_control(pb, dsr_read );
-		dma=parport_prepare_dma(buff,1000);
-		pb->ops->write_econtrol(pb, 0x68);	   /* ECP FIFO + enable DMA */
-		parport_enable_dma(dma);
-		udelay(500);           /* Give some for DMA tranfer */
-		retv = parport_detect_dma_transfer(dma, 1000);
-	}
-	
-	kfree(buff);
-	
-	return retv;
-}
 
 /* --- Mode detection ------------------------------------- */
 
@@ -807,6 +653,7 @@ out:
 static int probe_one_port(unsigned long int base, int irq, int dma)
 {
 	struct parport tmpport, *p;
+	int probedirq = PARPORT_IRQ_NONE;
 	if (check_region(base, 3)) return 0;
 	tmpport.base = base;
 	tmpport.ops = &parport_pc_ops;
@@ -830,12 +677,16 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;
 		parport_irq_probe(p);
+	} else if (p->irq == PARPORT_IRQ_PROBEONLY) {
+		p->irq = PARPORT_IRQ_NONE;
+		parport_irq_probe(p);
+		probedirq = p->irq;
+		p->irq = PARPORT_IRQ_NONE;
 	}
 	if (p->irq != PARPORT_IRQ_NONE)
 		printk(", irq %d", p->irq);
 	if (p->dma == PARPORT_DMA_AUTO)		
-		p->dma = (p->modes & PARPORT_MODE_PCECP)?
-			parport_dma_probe(p):PARPORT_DMA_NONE;
+		p->dma = PARPORT_DMA_NONE;
 	if (p->dma != PARPORT_DMA_NONE)
 		printk(", dma %d", p->dma);
 	printk(" [");
@@ -851,6 +702,8 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	}
 #undef printmode
 	printk("]\n");
+	if (probedirq != PARPORT_IRQ_NONE) 
+		printk("%s: detected irq %d; use procfs to enable interrupt-driven operation.\n", p->name, probedirq);
 	parport_proc_register(p);
 	p->flags |= PARPORT_FLAG_COMA;
 
@@ -875,9 +728,9 @@ int parport_pc_init(int *io, int *irq, int *dma)
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
 		/* Probe all the likely ports. */
-		count += probe_one_port(0x3bc, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
-		count += probe_one_port(0x378, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
-		count += probe_one_port(0x278, PARPORT_IRQ_AUTO, PARPORT_DMA_AUTO);
+		count += probe_one_port(0x3bc, irq[0], dma[0]);
+		count += probe_one_port(0x378, irq[0], dma[0]);
+		count += probe_one_port(0x278, irq[0], dma[0]);
 	}
 
 	/* Give any attached devices a chance to gather their thoughts */
@@ -890,15 +743,22 @@ int parport_pc_init(int *io, int *irq, int *dma)
 
 #ifdef MODULE
 static int io[PARPORT_PC_MAX_PORTS+1] = { [0 ... PARPORT_PC_MAX_PORTS] = 0 };
-static int dma[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_DMA_AUTO };
-static int irq[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_AUTO };
+static int dma[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_DMA_NONE };
+static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
+static char *irq = NULL;
 MODULE_PARM(io, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
-MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
 
 int init_module(void)
 {	
-	return (parport_pc_init(io, irq, dma)?0:1);
+	/* Work out how many ports we have, then get parport_share to parse
+	   the irq values. */
+	unsigned int i;
+	for (i = 0; i < PARPORT_PC_MAX_PORTS && io[i]; i++);
+	parport_parse_irqs(i, irq, irqval);
+
+	return (parport_pc_init(io, irqval, dma)?0:1);
 }
 
 void cleanup_module(void)

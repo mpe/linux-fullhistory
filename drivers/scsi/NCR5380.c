@@ -1279,6 +1279,9 @@ static void NCR5380_main (void) {
 }
 
 #ifndef DONT_USE_INTR
+#include <linux/blk.h>
+#include <asm/spinlock.h>
+
 /*
  * Function : void NCR5380_intr (int irq)
  * 
@@ -1390,6 +1393,16 @@ static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs) {
 	    } /* if (instance->irq == irq) */
     } while (!done);
 }
+
+
+static void do_NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs) {
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    NCR5380_intr(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
+
 #endif
 
 #ifdef NCR5380_STATS

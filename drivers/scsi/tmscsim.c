@@ -41,6 +41,7 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -1157,7 +1158,7 @@ __initfunc(int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT inde
 
     if( !used_irq )
     {
-	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT | SA_SHIRQ, "tmscsim", NULL))
+	if( request_irq(Irq, do_DC390_Interrupt, SA_INTERRUPT | SA_SHIRQ, "tmscsim", NULL))
 	{
 	    printk("DC390: register IRQ error!\n");
 	    return( -1 );

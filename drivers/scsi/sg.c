@@ -95,6 +95,8 @@ static int sg_ioctl(struct inode * inode,struct file * file,
 	return 0;
     case SG_GET_TIMEOUT:
 	return scsi_generics[dev].timeout;
+    case SG_EMULATED_HOST:
+    	return put_user(scsi_generics[dev].device->host->hostt->emulated, (int *) arg);
     default:
 	return scsi_ioctl(scsi_generics[dev].device, cmd_in, (void *) arg);
     }
@@ -364,6 +366,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 static ssize_t sg_write(struct file *filp, const char *buf, 
                         size_t count, loff_t *ppos)
 {
+    unsigned long	  flags;
     struct inode         *inode = filp->f_dentry->d_inode;
     int			  bsize,size,amt,i;
     unsigned char	  cmnd[MAX_COMMAND_SIZE];
@@ -531,9 +534,11 @@ static ssize_t sg_write(struct file *filp, const char *buf,
      * do not do any more here - when the interrupt arrives, we will
      * then do the post-processing.
      */
+    spin_lock_irqsave(&io_request_lock, flags);
     scsi_do_cmd (SCpnt,(void *) cmnd,
 		 (void *) device->buff,amt,
 		 sg_command_done,device->timeout,SG_DEFAULT_RETRIES);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
 #ifdef DEBUG
     printk("done cmd\n");

@@ -19,6 +19,7 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -57,6 +58,7 @@ static struct fsc_state *all_53c94s;
 static void mac53c94_init(struct fsc_state *);
 static void mac53c94_start(struct fsc_state *);
 static void mac53c94_interrupt(int, void *, struct pt_regs *);
+static void do_mac53c94_interrupt(int, void *, struct pt_regs *);
 static void cmd_done(struct fsc_state *, int result);
 static void set_dma_cmds(struct fsc_state *, Scsi_Cmnd *);
 static int data_goes_out(Scsi_Cmnd *);
@@ -117,7 +119,7 @@ mac53c94_detect(Scsi_Host_Template *tp)
 		*prev_statep = state;
 		prev_statep = &state->next;
 
-		if (request_irq(state->intr, mac53c94_interrupt, 0,
+		if (request_irq(state->intr, do_mac53c94_interrupt, 0,
 				"53C94", state)) {
 			printk(KERN_ERR "mac53C94: can't get irq %d\n", state->intr);
 		}
@@ -268,6 +270,16 @@ mac53c94_start(struct fsc_state *state)
 
 	if (cmd->use_sg > 0 || cmd->request_bufflen != 0)
 		set_dma_cmds(state, cmd);
+}
+
+static void
+do_mac53c94_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	mac53c94_interrupt(irq, dev_id, ptregs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static void

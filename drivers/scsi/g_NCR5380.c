@@ -251,7 +251,7 @@ __initfunc(int generic_NCR5380_detect(Scsi_Host_Template * tpnt)) {
 	    instance->irq = NCR5380_probe_irq(instance, 0xffff);
 
 	if (instance->irq != IRQ_NONE) 
-	    if (request_irq(instance->irq, generic_NCR5380_intr, SA_INTERRUPT, "NCR5380", NULL)) {
+	    if (request_irq(instance->irq, do_generic_NCR5380_intr, SA_INTERRUPT, "NCR5380", NULL)) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

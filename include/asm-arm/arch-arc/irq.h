@@ -6,7 +6,7 @@
  * Changelog:
  *   24-09-1996	RMK	Created
  *   10-10-1996	RMK	Brought up to date with arch-sa110eval
- *   05-11-1996	RMK	Changed interrupt numbers & uses new inb/outb macros
+ *   22-10-1996	RMK	Changed interrupt numbers & uses new inb/outb macros
  *   11-01-1998	RMK	Added mask_and_ack_irq
  */
 

@@ -102,6 +102,7 @@
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 
 #if LINUX_VERSION_CODE >= 0x010300
 #include <linux/blk.h>
@@ -116,6 +117,7 @@
 
 #if LINUX_VERSION_CODE >= 0x010346
 static void gdth_interrupt(int irq,void *dev_id,struct pt_regs *regs);
+static void do_gdth_interrupt(int irq,void *dev_id,struct pt_regs *regs);
 #else
 static void gdth_interrupt(int irq,struct pt_regs *regs);
 #endif
@@ -2155,6 +2157,15 @@ static void gdth_clear_events()
 /* SCSI interface functions */
 
 #if LINUX_VERSION_CODE >= 0x010346
+static void do_gdth_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    gdth_interrupt(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
+
 static void gdth_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 #else
 static void gdth_interrupt(int irq,struct pt_regs *regs)
@@ -2759,7 +2770,7 @@ int gdth_detect(Scsi_Host_Template *shtp)
             save_flags(flags);
             cli();
 #if LINUX_VERSION_CODE >= 0x010346 
-            if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
+            if (request_irq(ha->irq,do_gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
 #else
             if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth")) 
 #endif
@@ -2868,7 +2879,7 @@ int gdth_detect(Scsi_Host_Template *shtp)
             save_flags(flags);
             cli();
 #if LINUX_VERSION_CODE >= 0x010346 
-            if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
+            if (request_irq(ha->irq,do_gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
 #else
             if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth")) 
 #endif
@@ -2974,7 +2985,7 @@ int gdth_detect(Scsi_Host_Template *shtp)
             save_flags(flags);
             cli();
 #if LINUX_VERSION_CODE >= 0x010346 
-            if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
+            if (request_irq(ha->irq,do_gdth_interrupt,SA_INTERRUPT,"gdth",NULL))
 #else
             if (request_irq(ha->irq,gdth_interrupt,SA_INTERRUPT,"gdth")) 
 #endif

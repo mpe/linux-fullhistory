@@ -4,6 +4,9 @@
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
+extern unsigned int local_bh_count[NR_CPUS];
+#define in_bh()			(local_bh_count[smp_processor_id()] != 0)
+
 #define get_active_bhs()	(bh_mask & bh_active)
 #define clear_active_bhs(x)	atomic_clear_mask((int)(x),&bh_active)
 
@@ -25,6 +28,29 @@ extern inline void mark_bh(int nr)
 	set_bit(nr, &bh_active);
 }
 
+#ifdef __SMP__
+#error SMP not supported
+#else
+
+extern inline void start_bh_atomic(void)
+{
+	local_bh_count[smp_processor_id()]++;
+	barrier();
+}
+
+extern inline void end_bh_atomic(void)
+{
+	barrier();
+	local_bh_count[smp_processor_id()]--;
+}
+
+/* These are for the irq's testing the lock */
+#define softirq_trylock(cpu)	(in_bh() ? 0 : (local_bh_count[smp_processor_id()]=1))
+#define softirq_endlock(cpu)	(local_bh_count[smp_processor_id()] = 0)
+#define synchronize_bh()	do { } while (0)
+
+#endif	/* SMP */
+
 /*
  * These use a mask count to correctly handle
  * nested disable/enable calls
@@ -33,6 +59,7 @@ extern inline void disable_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
 	bh_mask_count[nr]++;
+	synchronize_bh();
 }
 
 extern inline void enable_bh(int nr)
@@ -40,29 +67,5 @@ extern inline void enable_bh(int nr)
 	if (!--bh_mask_count[nr])
 		bh_mask |= 1 << nr;
 }
-
-#ifdef __SMP__
-#error SMP not supported
-#else
-
-extern int __arm_bh_counter;
-
-extern inline void start_bh_atomic(void)
-{
-	__arm_bh_counter++;
-	barrier();
-}
-
-extern inline void end_bh_atomic(void)
-{
-	barrier();
-	__arm_bh_counter--;
-}
-
-/* These are for the irq's testing the lock */
-#define softirq_trylock()	(__arm_bh_counter ? 0 : (__arm_bh_counter=1))
-#define softirq_endlock()	(__arm_bh_counter = 0)
-
-#endif	/* SMP */
 
 #endif	/* __ASM_SOFTIRQ_H */

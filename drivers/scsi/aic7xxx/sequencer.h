@@ -11,10 +11,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions, and the following disclaimer,
  *    without modification, immediately at the beginning of the file.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 2. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * Where this Software is combined with software released under the terms of 
@@ -36,49 +33,46 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *      $Id: sequencer.h,v 1.2 1997/06/27 19:38:52 gibbs Exp $
+ *      $Id: sequencer.h,v 1.3 1997/09/27 19:37:31 gibbs Exp $
  */
 
-#if defined(__KERNEL__)
-typedef unsigned char u_int8_t;
-#endif
-
 struct ins_format1 {
-	u_int8_t immediate;
-	u_int8_t source;
-	u_int8_t destination;
-	u_int8_t opcode_ret;
+	unsigned char immediate;
+	unsigned char source;
+	unsigned char destination;
+	unsigned char opcode_ret;
+#define DOWNLOAD_CONST_IMMEDIATE 0x80
 };
 
 struct ins_format2 {
-	u_int8_t shift_control;
-	u_int8_t source;
-	u_int8_t destination;
-	u_int8_t opcode_ret;
+	unsigned char shift_control;
+	unsigned char source;
+	unsigned char destination;
+	unsigned char opcode_ret;
 #define RETURN_BIT 0x01
 };
 
 struct ins_format3 {
-	u_int8_t immediate;
-	u_int8_t source;
-	u_int8_t address;
-	u_int8_t opcode_addr;
+	unsigned char immediate;
+	unsigned char source;
+	unsigned char address;
+	unsigned char opcode_addr;
 #define ADDR_HIGH_BIT 0x01
 };
 
+#ifndef __KERNEL__
 struct instruction {
 	union {
 		struct ins_format1 format1;
 		struct ins_format2 format2;
 		struct ins_format3 format3;
-		u_int8_t	   bytes[4];
+		unsigned char	   bytes[4];
 	} format;
 	u_int	srcline;
 	struct symbol *patch_label;
-	struct {
-		struct instruction *stqe_next; /* next element */
-	} links;
+	STAILQ_ENTRY(instruction) links;
 };
+#endif
 
 #define	AIC_OP_OR	0x0
 #define	AIC_OP_AND	0x1

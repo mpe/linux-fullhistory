@@ -7,6 +7,40 @@ mainmenu_name "Linux Kernel Configuration"
 define_bool CONFIG_ARM y
 
 mainmenu_option next_comment
+comment 'System type and processor type'
+choice 'ARM system type'	\
+	"Archimedes		CONFIG_ARCH_ARC \
+	 A5000			CONFIG_ARCH_A5K \
+	 RiscPC			CONFIG_ARCH_RPC \
+	 EBSA-110		CONFIG_ARCH_EBSA110 \
+	 EBSA-285		CONFIG_ARCH_EBSA285 \
+	 NexusPCI		CONFIG_ARCH_NEXUSPCI" RiscPC
+if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" -o "$CONFIG_ARCH_RPC" = "y" ]; then
+  define_bool CONFIG_ARCH_ACORN y
+else
+  define_bool CONFIG_ARCH_ACORN n
+fi
+if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
+  define_bool CONFIG_PCI y
+else
+  define_bool CONFIG_PCI n
+fi
+if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA110" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
+  define_bool CONFIG_CPU_SA110 y
+else
+  if [ "$CONFIG_ARCH_A5K" = "y" ]; then
+    define_bool CONFIG_CPU_ARM3 y
+  else
+    choice 'ARM cpu type'		\
+	"ARM2			CONFIG_CPU_ARM2 \
+	 ARM3			CONFIG_CPU_ARM3 \
+	 ARM6/7			CONFIG_CPU_ARM6 \
+	 StrongARM		CONFIG_CPU_SA110" StrongARM
+  fi
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
@@ -22,40 +56,13 @@ endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
-choice 'ARM system type'	\
-	"Archimedes		CONFIG_ARCH_ARC \
-	 A5000			CONFIG_ARCH_A5K \
-	 RiscPC			CONFIG_ARCH_RPC \
-	 EBSA-110		CONFIG_ARCH_EBSA110 \
-	 NexusPCI		CONFIG_ARCH_NEXUSPCI" RiscPC
-if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" -o "$CONFIG_ARCH_RPC" = "y" ]; then
-  define_bool CONFIG_ARCH_ACORN y
-else
-  define_bool CONFIG_ARCH_ACORN n
-fi
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
-  define_bool CONFIG_PCI y
-else
-  define_bool CONFIG_PCI n
-fi
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA110" = "y" ]; then
-  define_bool CONFIG_CPU_SA110 y
-else
-  if [ "$CONFIG_ARCH_A5K" = "y" ]; then
-    define_bool CONFIG_CPU_ARM3 y
-  else
-    choice 'ARM cpu type'		\
-	"ARM2			CONFIG_CPU_ARM2 \
-	 ARM3			CONFIG_CPU_ARM3 \
-	 ARM6/7			CONFIG_CPU_ARM6 \
-	 StrongARM		CONFIG_CPU_SA110" StrongARM
-  fi
-fi
 bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
 bool 'Use new compilation options (for GCC 2.8)' CONFIG_BINUTILS_NEW
 bool 'Debug kernel errors' CONFIG_DEBUG_ERRORS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+# This needs kernel/acct.c to be updated
+#bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
@@ -70,6 +77,7 @@ fi
 endmenu
 
 source arch/arm/drivers/block/Config.in
+source drivers/acorn/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
@@ -81,7 +89,7 @@ comment 'SCSI support'
 tristate 'SCSI support?' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-  source arch/arm/drivers/scsi/Config.in
+  source drivers/scsi/Config.in
 fi
 endmenu
 
@@ -91,7 +99,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 
   bool 'Network device support?' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source arch/arm/drivers/net/Config.in
+    source drivers/net/Config.in
   fi
   endmenu
 fi
@@ -128,7 +136,7 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
 
   tristate 'Sound support' CONFIG_SOUND
   if [ "$CONFIG_SOUND" != "n" ]; then
-    source arch/arm/drivers/sound/Config.in
+    source drivers/sound/Config.in
   fi
   endmenu
 fi

@@ -126,6 +126,11 @@ extern int  nr_init(struct device *);
 /* nr_in.c */
 extern int  nr_process_rx_frame(struct sock *, struct sk_buff *);
 
+/* nr_loopback.c */
+extern void nr_loopback_init(void);
+extern void nr_loopback_clear(void);
+extern int  nr_loopback_queue(struct sk_buff *);
+
 /* nr_out.c */
 extern void nr_output(struct sock *, struct sk_buff *);
 extern void nr_send_nak_frame(struct sock *);
@@ -153,7 +158,7 @@ extern void nr_requeue_frames(struct sock *);
 extern int  nr_validate_nr(struct sock *, unsigned short);
 extern int  nr_in_rx_window(struct sock *, unsigned short);
 extern void nr_write_internal(struct sock *, int);
-extern void nr_transmit_dm(struct sk_buff *);
+extern void nr_transmit_refusal(struct sk_buff *, int);
 extern void nr_disconnect(struct sock *, int);
 
 /* nr_timer.c */

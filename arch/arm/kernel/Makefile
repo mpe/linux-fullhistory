@@ -19,15 +19,24 @@ else
 O_OBJS += armksyms.o
 endif
 
+ifdef CONFIG_PCI
+  O_OBJS += bios32.o
+endif
+
 ifdef CONFIG_ARCH_ACORN
   O_OBJS += setup.o ecard.o iic.o dma.o
   ifdef CONFIG_ARCH_ARC
     O_OBJS += oldlatches.o
   endif
+  O_OBJS += dma-$(MACHINE).o
 endif
 
 ifeq ($(MACHINE),ebsa110)
-  O_OBJS += setup-ebsa110.o dma.o
+  O_OBJS += setup-ebsa110.o dma.o dma-dummy.o
+endif
+
+ifeq ($(MACHINE),ebsa285)
+  O_OBJS += dma.o dma-dummy.o leds-ebsa285.o setup-ebsa110.o
 endif
 
 ifeq ($(MACHINE),nexuspci)
@@ -37,9 +46,12 @@ endif
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
 	$(CC) -D__ASSEMBLY__ -traditional -c $(HEAD_OBJ:.o=.S) -o $@
 
+$(ENTRY_OBJ): $(ENTRY_OBJ:.o=.S)
+	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $(ENTRY_OBJ:.o=.S) -o $@
+
 include $(TOPDIR)/Rules.make
 
-$(ENTRY_OBJ:.o=.S): ../lib/constants.h
+$(ENTRY_OBJ): ../lib/constants.h
 
 .PHONY: ../lib/constants.h
 

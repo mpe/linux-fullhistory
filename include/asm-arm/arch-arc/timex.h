@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-arc/timex.h
  *
- * Archimedes architecture timex specifications
+ * Acorn Archimedes/A5000 architecture timex specifications
  *
  * Copyright (C) 1997, 1998 Russell King
  */

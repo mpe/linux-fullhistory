@@ -141,10 +141,6 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 
 		case ROSE_RR:
 		case ROSE_RNR:
-			if (frametype == ROSE_RNR)
-				sk->protinfo.rose->condition |= ROSE_COND_PEER_RX_BUSY;
-			else
-				sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
 			if (!rose_validate_nr(sk, nr)) {
 				rose_write_internal(sk, ROSE_RESET_REQUEST);
 				sk->protinfo.rose->condition = 0x00;
@@ -157,8 +153,11 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				rose_stop_idletimer(sk);
 			} else {
 				rose_frames_acked(sk, nr);
-				if (frametype == ROSE_RNR)
-					rose_requeue_frames(sk);
+				if (frametype == ROSE_RNR) {
+					sk->protinfo.rose->condition |= ROSE_COND_PEER_RX_BUSY;
+				} else {
+					sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
+				}
 			}
 			break;
 
@@ -177,16 +176,26 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				break;
 			}
 			rose_frames_acked(sk, nr);
-			if (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)
-				break;
 			if (ns == sk->protinfo.rose->vr) {
 				rose_start_idletimer(sk);
 				if (sock_queue_rcv_skb(sk, skb) == 0) {
 					sk->protinfo.rose->vr = (sk->protinfo.rose->vr + 1) % ROSE_MODULUS;
 					queued = 1;
 				} else {
-					sk->protinfo.rose->condition |= ROSE_COND_OWN_RX_BUSY;
+					/* Should never happen ! */
+					rose_write_internal(sk, ROSE_RESET_REQUEST);
+					sk->protinfo.rose->condition = 0x00;
+					sk->protinfo.rose->vs        = 0;
+					sk->protinfo.rose->vr        = 0;
+					sk->protinfo.rose->va        = 0;
+					sk->protinfo.rose->vl        = 0;
+					sk->protinfo.rose->state     = ROSE_STATE_4;
+					rose_start_t2timer(sk);
+					rose_stop_idletimer(sk);
+					break;
 				}
+				if (atomic_read(&sk->rmem_alloc) > (sk->rcvbuf / 2))
+					sk->protinfo.rose->condition |= ROSE_COND_OWN_RX_BUSY;
 			}
 			/*
 			 * If the window is full, ack the frame, else start the

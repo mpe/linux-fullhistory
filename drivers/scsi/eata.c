@@ -316,6 +316,7 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/byteorder.h>
+#include <asm/spinlock.h>
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -599,7 +600,7 @@ static unsigned long io_port[] __initdata = {
 #define V2DEV(addr) ((addr) ? H2DEV(virt_to_bus((void *)addr)) : 0)
 #define DEV2V(addr) ((addr) ? DEV2H(bus_to_virt((unsigned long)addr)) : 0)
 
-static void interrupt_handler(int, void *, struct pt_regs *);
+static void do_interrupt_handler(int, void *, struct pt_regs *);
 static void flush_dev(Scsi_Device *, unsigned long, unsigned int, unsigned int);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
@@ -872,7 +873,7 @@ __initfunc (static inline int port_detect \
       }
 
    /* Board detected, allocate its IRQ */
-   if (request_irq(irq, interrupt_handler,
+   if (request_irq(irq, do_interrupt_handler,
              SA_INTERRUPT | ((subversion == ESA) ? SA_SHIRQ : 0),
              driver_name, (void *) &sha[j])) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
@@ -1935,7 +1936,7 @@ static inline void ihdlr(int irq, void *shap, struct pt_regs *regs) {
    return;
 }
 
-static void interrupt_handler(int irq, void *shap, struct pt_regs *regs) {
+static void do_interrupt_handler(int irq, void *shap, struct pt_regs *regs) {
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,95)
 

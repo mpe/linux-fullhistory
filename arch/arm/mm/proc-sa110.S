@@ -161,8 +161,6 @@ _sa110_flush_icache_area:
 		blt	1b
 		mcr	p15, 0, r0, c7, c5, 0		@ flush I cache
 		mov	pc, lr
-
-@LC0:		.word	_current
 /*
  * Function: sa110_switch_to (struct task_struct *prev, struct task_struct *next)
  *
@@ -183,10 +181,10 @@ _sa110_switch_to:
 		stmfd	sp!, {ip}			@ Save cpsr_SVC
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r0, [r1, #ADDR_LIMIT]
+		ldr	r0, [r1, #TSK_ADDR_LIMIT]
 		teq	r0, #0
-		moveq	r0, #KERNEL_DOMAIN
-		movne	r0, #USER_DOMAIN
+		moveq	r0, #DOM_KERNELDOMAIN
+		movne	r0, #DOM_USERDOMAIN
 		mcr	p15, 0, r0, c3, c0		@ Set segment
 		ldr	r0, [r1, #TSS_MEMMAP]		@ Page table pointer
 		ldr	r3, =Lclean_switch
@@ -227,8 +225,6 @@ _sa110_data_abort:
 		mov	r2, r2, lsr #19			@ b1 = L
 		and	r3, r2, #0x69 << 2
 		and	r2, r2, #2
-//		teq	r3, #0x21 << 2
-//		orreq	r2, r2, #1			@ b0 = {LD,ST}RT
 		mrc	p15, 0, r1, c5, c0, 0		@ get FSR
 		and	r1, r1, #255
 		mov	pc, lr

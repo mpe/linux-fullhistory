@@ -5,10 +5,14 @@ drivers.
 You can pass parameters to the parport code to override its automatic
 detection of your hardware.  This is particularly useful if you want
 to use IRQs, since in general these can't be autoprobed successfully.
+By default IRQs are not used even if they _can_ be probed.  This is
+because there are a lot of people using the same IRQ for their
+parallel port and a sound card or network card.
 
 The parport code is split into two parts: generic (which deals with
 port-sharing) and architecture-dependent (which deals with actually
 using the port).
+
 
 Parport as modules
 ==================
@@ -20,31 +24,33 @@ If you load the parport code as a module, say
 to load the generic parport code.  You then must load the
 architecture-dependent code with (for example):
 
-	# insmod parport_pc.o io=0x378,0x278 irq=7,5
+	# insmod parport_pc.o io=0x3bc,0x378,0x278 irq=none,7,auto
 
-to tell the parport code that you want two PC-style ports, one at
-0x378 using IRQ 7, and one at 0x278 using IRQ 5.  Currently, PC-style
-(parport_pc) and ARC onboard (parport_arc) parallel ports are
-supported.
+to tell the parport code that you want three PC-style ports, one at
+0x3bc with no IRQ, one at 0x378 using IRQ 7, and one at 0x278 with an
+auto-detected IRQ.  Currently, PC-style (parport_pc) and Sun Ultra/AX
+(parport_ax) hardware is supported; more is in the works.
 
-Kerneld
--------
 
-If you use kerneld, you will find it useful to edit /etc/conf.modules.
+KMod
+----
+
+If you use kmod, you will find it useful to edit /etc/conf.modules.
 Here is an example of the lines that need to be added:
 
 	alias parport_lowlevel parport_pc
-	options parport_pc io=0x378,0x278 irq=7,5
+	options parport_pc io=0x378,0x278 irq=7,auto
 
-Kerneld, in conjunction with parport, will automatically load
-parport_pc whenever a parallel port device driver (such as lp) is
-loaded.
+KMod will then automatically load parport_pc (with the options
+"io=0x378,0x278 irq=7,auto") whenever a parallel port device driver
+(such as lp) is loaded.
+
 
 Parport probe [optional]
 -------------
 
 Once the architecture-dependent part of the parport code is loaded
-into the kernel, you insert the parport_probe module with:
+into the kernel, you can insert the parport_probe module with:
 
 	# insmod parport_probe.o
 
@@ -53,22 +59,25 @@ message similar to:
 
 	parport0: Printer, BJC-210 (Canon)
 
-(If you are using kerneld and have configured parport_probe as a 
-module, this will just happen.)
+(If you are using kmod and have configured parport_probe as a module,
+this will just happen.)
 
 
-Parport, but not as modules
-===========================
+Parport linked into the kernel statically
+=========================================
 
 If you compile the parport code into the kernel, then you can use
 kernel boot parameters to get the same effect.  Add something like the
 following to your LILO command line:
 
-	parport=0x378,7 parport=0x278,5
+	parport=0x3bc parport=0x378,7 parport=0x278,auto
 
 You can have many `parport=...' statements, one for each port you want
 to add.  Adding `parport=0' to the kernel command-line will disable
-parport support entirely.
+parport support entirely.  Adding `parport=auto' to the kernel
+command-line will make parport use any IRQ lines or DMA channels that
+it auto-detects.
+
 
 Files in /proc
 ==============
@@ -90,10 +99,10 @@ File:				Contents:
 				and DMA channel.
 
 /proc/parport/0/irq		The IRQ that parport is using for that
-				port (as above).  This is in a
-				separate file to allow you to alter it
-				by writing a new value in (IRQ number
-				or "none").
+				port.  This is in a separate file to
+                                allow you to alter it by writing a new
+				value in (IRQ number or "none").
+
 
 Device drivers
 ==============
@@ -121,7 +130,7 @@ regardless of base address.
 
 Also:
 
- * If you selected the device autoprobe at compile time, you can say
+ * If you selected the IEEE-1284 autoprobe at compile time, you can say
    `lp=auto' on the kernel command line, and lp will create devices
    only for those ports that seem to have printers attached.
 
@@ -129,10 +138,7 @@ Also:
    the command line, or with `insmod plip timid=1' when using modules,
    it will avoid any ports that seem to be in use by other devices.
 
- * If your BIOS allows you to engage "ECP mode", you may find that
-   your port's IRQ can be autoprobed, without having to specify any 
-   parameters.
-
+ * IRQ autoprobing works only for a few port types at the moment.
 
 --
 Philip.Blundell@pobox.com

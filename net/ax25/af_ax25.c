@@ -1622,7 +1622,7 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 
 	cli();
 
-	len += sprintf(buffer, "dest_addr src_addr   dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr src_addr   dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   Snd-Q Rcv-Q inode\n");
 
 	for (ax25 = ax25_list; ax25 != NULL; ax25 = ax25->next) {
 		if (ax25->ax25_dev == NULL)
@@ -1658,9 +1658,10 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			ax25->paclen);
 
 		if (ax25->sk != NULL) {
-			len += sprintf(buffer + len, " %5d %5d\n",
+			len += sprintf(buffer + len, " %5d %5d %ld\n",
 				atomic_read(&ax25->sk->wmem_alloc),
-				atomic_read(&ax25->sk->rmem_alloc));
+				atomic_read(&ax25->sk->rmem_alloc),
+				ax25->sk->socket != NULL ? ax25->sk->socket->inode->i_ino : 0L);
 		} else {
 			len += sprintf(buffer + len, "\n");
 		}

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/scsi/ide-scsi.c	Version 0.5		Jan   2, 1998
+ * linux/drivers/scsi/ide-scsi.c	Version 0.6		Jan  27, 1998
  *
  * Copyright (C) 1996 - 1998 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -20,9 +20,12 @@
  *                       Use variable timeout for each command.
  * Ver 0.5   Jan  2 98   Fix previous PD/CD support.
  *                       Allow disabling of SCSI-6 to SCSI-10 transformation.
+ * Ver 0.6   Jan 27 98   Allow disabling of SCSI command translation layer
+ *                        for access through /dev/sg.
+ *                       Fix MODE_SENSE_6/MODE_SELECT_6/INQUIRY translation.
  */
 
-#define IDESCSI_VERSION "0.5"
+#define IDESCSI_VERSION "0.6"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -37,6 +40,7 @@
 
 #include <asm/io.h>
 #include <asm/bitops.h>
+#include <asm/uaccess.h>
 
 #include "../block/ide.h"
 
@@ -44,6 +48,7 @@
 #include "hosts.h"
 #include "sd.h"
 #include "ide-scsi.h"
+#include <scsi/sg.h>
 
 #define IDESCSI_DEBUG_LOG		0
 
@@ -68,12 +73,25 @@ typedef struct idescsi_pc_s {
  */
 #define PC_DMA_IN_PROGRESS		0	/* 1 while DMA in progress */
 #define PC_WRITING			1	/* Data direction */
+#define PC_TRANSFORM			2	/* transform SCSI commands */
+
+/*
+ *	SCSI command transformation layer
+ */
+#define IDESCSI_TRANSFORM		0	/* Enable/Disable transformation */
+#define IDESCSI_SG_TRANSFORM		1	/* /dev/sg transformation */
+
+/*
+ *	Log flags
+ */
+#define IDESCSI_LOG_CMD			0	/* Log SCSI commands */
 
 typedef struct {
 	ide_drive_t *drive;
 	idescsi_pc_t *pc;			/* Current packet command */
 	unsigned int flags;			/* Status/Action flags */
-	int transform;				/* Transform SCSI-6 commands */
+	int transform;				/* SCSI cmd translation layer */
+	int log;				/* log flags */
 } idescsi_scsi_t;
 
 /*
@@ -153,11 +171,10 @@ static void idescsi_output_buffers (ide_drive_t *drive, idescsi_pc_t *pc, unsign
  */
 static inline void idescsi_transform_pc1 (ide_drive_t *drive, idescsi_pc_t *pc)
 {
-	idescsi_scsi_t *scsi = drive->driver_data;
-	u8 *c = pc->c, *buf = pc->buffer, *sc = pc->scsi_cmd->cmnd;
-	int i;
+	u8 *c = pc->c, *scsi_buf = pc->buffer, *sc = pc->scsi_cmd->cmnd;
+	char *atapi_buf;
 
-	if (!scsi->transform)
+	if (!test_bit(PC_TRANSFORM, &pc->flags))
 		return;
 	if (drive->media == ide_cdrom) {
 		if (c[0] == READ_6 || c[0] == WRITE_6) {
@@ -165,35 +182,54 @@ static inline void idescsi_transform_pc1 (ide_drive_t *drive, idescsi_pc_t *pc)
 			c[3] = c[1] & 0x1f;	c[2] = 0;		c[1] &= 0xe0;
 			c[0] += (READ_10 - READ_6);
 		}
-		if (c[0] == MODE_SENSE || (c[0] == MODE_SELECT && buf[3] == 8)) {
-			pc->request_transfer -= 4;
+		if (c[0] == MODE_SENSE || c[0] == MODE_SELECT) {
+			if (!scsi_buf)
+				return;
+			if ((atapi_buf = kmalloc(pc->buffer_size + 4, GFP_ATOMIC)) == NULL)
+				return;
+			memset(atapi_buf, 0, pc->buffer_size + 4);
 			memset (c, 0, 12);
-			c[0] = sc[0] | 0x40;	c[2] = sc[2];		c[8] = sc[4] - 4;
-			if (c[0] == MODE_SENSE_10) return;
-			for (i = 0; i <= 7; i++) buf[i] = 0;
-			for (i = 8; i < pc->buffer_size - 4; i++) buf[i] = buf[i + 4];
+			c[0] = sc[0] | 0x40;	c[1] = sc[1];		c[2] = sc[2];
+			c[8] = sc[4] + 4;	c[9] = sc[5];
+			if (sc[4] + 4 > 255)
+				c[7] = sc[4] + 4 - 255;
+			if (c[0] == MODE_SELECT_10) {
+				atapi_buf[1] = scsi_buf[0];	/* Mode data length */
+				atapi_buf[2] = scsi_buf[1];	/* Medium type */
+				atapi_buf[3] = scsi_buf[2];	/* Device specific parameter */
+				atapi_buf[7] = scsi_buf[3];	/* Block descriptor length */
+				memcpy(atapi_buf + 8, scsi_buf + 4, pc->buffer_size - 4);
+			}
+			pc->buffer = atapi_buf;
+			pc->request_transfer += 4;
+			pc->buffer_size += 4;
 		}
 	}
 }
 
 static inline void idescsi_transform_pc2 (ide_drive_t *drive, idescsi_pc_t *pc)
 {
-	idescsi_scsi_t *scsi = drive->driver_data;
-	u8 *buf = pc->buffer;
-	int i;
+	u8 *atapi_buf = pc->buffer;
+	u8 *sc = pc->scsi_cmd->cmnd;
+	u8 *scsi_buf = pc->scsi_cmd->request_buffer;
 
-	if (!scsi->transform)
+	if (!test_bit(PC_TRANSFORM, &pc->flags))
 		return;
 	if (drive->media == ide_cdrom) {
-		if (pc->c[0] == MODE_SENSE_10 && pc->scsi_cmd->cmnd[0] == MODE_SENSE) {
-			buf[0] = buf[1];	buf[1] = buf[2];
-			buf[2] = 0;		buf[3] = 8;
-			for (i = pc->buffer_size - 1; i >= 12; i--) buf[i] = buf[i - 4];
-			for (i = 11; i >= 4; i--) buf[i] = 0;
+		if (pc->c[0] == MODE_SENSE_10 && sc[0] == MODE_SENSE) {
+			scsi_buf[0] = atapi_buf[1];		/* Mode data length */
+			scsi_buf[1] = atapi_buf[2];		/* Medium type */
+			scsi_buf[2] = atapi_buf[3];		/* Device specific parameter */
+			scsi_buf[3] = atapi_buf[7];		/* Block descriptor length */
+			memcpy(scsi_buf + 4, atapi_buf + 8, pc->request_transfer - 8);
 		}
-		if (pc->c[0] == INQUIRY)
-			buf[2] |= 2;
+		if (pc->c[0] == INQUIRY) {
+			scsi_buf[2] |= 2;			/* ansi_revision */
+			scsi_buf[3] = (scsi_buf[3] & 0xf0) | 2;	/* response data format */
+		}
 	}
+	if (atapi_buf && atapi_buf != scsi_buf)
+		kfree(atapi_buf);
 }
 
 static inline void idescsi_free_bh (struct buffer_head *bh)
@@ -207,12 +243,24 @@ static inline void idescsi_free_bh (struct buffer_head *bh)
 	}
 }
 
+static void hexdump(u8 *x, int len)
+{
+	int i;
+
+	printk("[ ");
+	for (i = 0; i < len; i++)
+		printk("%x ", x[i]);
+	printk("]\n");
+}
+
 static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 {
 	ide_drive_t *drive = hwgroup->drive;
 	idescsi_scsi_t *scsi = drive->driver_data;
 	struct request *rq = hwgroup->rq;
 	idescsi_pc_t *pc = (idescsi_pc_t *) rq->buffer;
+	int log = test_bit(IDESCSI_LOG_CMD, &scsi->log);
+	u8 *scsi_buf = pc->scsi_cmd->request_buffer;
 
 	if (rq->cmd != IDESCSI_PC_RQ) {
 		ide_end_request (uptodate, hwgroup);
@@ -220,21 +268,23 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	}
 	ide_end_drive_cmd (drive, 0, 0);
 	if (rq->errors >= ERROR_MAX) {
-#if IDESCSI_DEBUG_LOG
-		printk ("ide-scsi: %s: I/O error for %lu\n", drive->name, pc->scsi_cmd->serial_number);
-#endif /* IDESCSI_DEBUG_LOG */
 		pc->scsi_cmd->result = DID_ERROR << 16;
+		if (log)
+			printk ("ide-scsi: %s: I/O error for %lu\n", drive->name, pc->scsi_cmd->serial_number);
 	} else if (rq->errors) {
-#if IDESCSI_DEBUG_LOG
-		printk ("ide-scsi: %s: check condition for %lu\n", drive->name, pc->scsi_cmd->serial_number);
-#endif /* IDESCSI_DEBUG_LOG */
 		pc->scsi_cmd->result = (CHECK_CONDITION << 1) | (DID_OK << 16);
+		if (log)
+			printk ("ide-scsi: %s: check condition for %lu\n", drive->name, pc->scsi_cmd->serial_number);
 	} else {
-#if IDESCSI_DEBUG_LOG
-		printk ("ide-scsi: %s: success for %lu\n", drive->name, pc->scsi_cmd->serial_number);
-#endif /* IDESCSI_DEBUG_LOG */
 		pc->scsi_cmd->result = DID_OK << 16;
 		idescsi_transform_pc2 (drive, pc);
+		if (log) {
+			printk ("ide-scsi: %s: suc %lu", drive->name, pc->scsi_cmd->serial_number);
+			if (!test_bit(PC_WRITING, &pc->flags) && pc->actually_transferred && pc->actually_transferred <= 1024 && pc->buffer) {
+				printk(", rst = ");
+				hexdump(scsi_buf, IDE_MIN(16, pc->scsi_cmd->request_bufflen));
+			} else printk("\n");
+		}
 	}
 	pc->done(pc->scsi_cmd);
 	idescsi_free_bh (rq->bh);
@@ -274,9 +324,8 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	status = GET_STAT();						/* Clear the interrupt */
 
 	if ((status & DRQ_STAT) == 0) {					/* No more interrupts */
-#if IDESCSI_DEBUG_LOG
-		printk (KERN_INFO "Packet command completed, %d bytes transferred\n", pc->actually_transferred);
-#endif /* IDESCSI_DEBUG_LOG */
+		if (test_bit(IDESCSI_LOG_CMD, &scsi->log))
+			printk (KERN_INFO "Packet command completed, %d bytes transferred\n", pc->actually_transferred);
 		ide_sti();
 		if (status & ERR_STAT)
 			rq->errors++;
@@ -306,11 +355,13 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 		}
 	}
 	if (ireason & IDESCSI_IREASON_IO) {
+		clear_bit(PC_WRITING, &pc->flags);
 		if (pc->sg)
 			idescsi_input_buffers (drive, pc, bcount);
 		else
 			atapi_input_bytes (drive,pc->current_position,bcount);
 	} else {
+		set_bit(PC_WRITING, &pc->flags);
 		if (pc->sg)
 			idescsi_output_buffers (drive, pc, bcount);
 		else
@@ -421,7 +472,8 @@ static void idescsi_add_settings(ide_drive_t *drive)
 	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	-1,	-1,		TYPE_SHORT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
 	ide_add_setting(drive,	"bios_head",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	255,	1,		1,		&drive->bios_head,	NULL);
 	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	63,	1,		1,		&drive->bios_sect,	NULL);
-	ide_add_setting(drive,	"transform",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1,	1,		1,		&scsi->transform,	NULL);
+	ide_add_setting(drive,	"transform",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	3,	1,		1,		&scsi->transform,	NULL);
+	ide_add_setting(drive,	"log",		SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1,	1,		1,		&scsi->log,		NULL);
 }
 
 /*
@@ -437,7 +489,11 @@ static void idescsi_setup (ide_drive_t *drive, idescsi_scsi_t *scsi, int id)
 	scsi->drive = drive;
 	if (drive->id && (drive->id->config & 0x0060) == 0x20)
 		set_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags);
-	scsi->transform = 1;
+	set_bit(IDESCSI_TRANSFORM, &scsi->transform);
+	clear_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
+#if IDESCSI_DEBUG_LOG
+	set_bit(IDESCSI_LOG_CMD, &scsi->log);
+#endif /* IDESCSI_DEBUG_LOG */
 	idescsi_add_settings(drive);
 }
 
@@ -554,6 +610,19 @@ const char *idescsi_info (struct Scsi_Host *host)
 	return "SCSI host adapter emulation for IDE ATAPI devices";
 }
 
+int idescsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
+{
+	ide_drive_t *drive = idescsi_drives[dev->id];
+	idescsi_scsi_t *scsi = drive->driver_data;
+
+	if (cmd == SG_SET_TRANSFORM) {
+		set_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
+		return 0;
+	} else if (cmd == SG_GET_TRANSFORM)
+		return put_user(test_bit(IDESCSI_SG_TRANSFORM, &scsi->transform), (int *) arg);
+	return -EINVAL;
+}
+
 static inline struct buffer_head *idescsi_kmalloc_bh (int count)
 {
 	struct buffer_head *bh, *bhp, *first_bh;
@@ -624,20 +693,27 @@ static inline struct buffer_head *idescsi_dma_bh (ide_drive_t *drive, idescsi_pc
 	return first_bh;
 }
 
+static inline int should_transform(ide_drive_t *drive, Scsi_Cmnd *cmd)
+{
+	idescsi_scsi_t *scsi = drive->driver_data;
+
+	if (MAJOR(cmd->request.rq_dev) == SCSI_GENERIC_MAJOR)
+		return test_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
+	return test_bit(IDESCSI_TRANSFORM, &scsi->transform);
+}
+
 int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 {
 	ide_drive_t *drive = idescsi_drives[cmd->target];
+	idescsi_scsi_t *scsi;
 	struct request *rq = NULL;
 	idescsi_pc_t *pc = NULL;
-
-#if IDESCSI_DEBUG_LOG
-	printk ("idescsi_queue called, serial = %lu, cmd[0] = %x, id = %d\n", cmd->serial_number, cmd->cmnd[0], cmd->target);
-#endif	/* IDESCSI_DEBUG_LOG */
 
 	if (!drive) {
 		printk (KERN_ERR "ide-scsi: drive id %d not present\n", cmd->target);
 		goto abort;
 	}
+	scsi = drive->driver_data;
 	pc = kmalloc (sizeof (idescsi_pc_t), GFP_ATOMIC);
 	rq = kmalloc (sizeof (struct request), GFP_ATOMIC);
 	if (rq == NULL || pc == NULL) {
@@ -661,7 +737,19 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 	pc->scsi_cmd = cmd;
 	pc->done = done;
 	pc->timeout = jiffies + cmd->timeout_per_command;
+
+	if (should_transform(drive, cmd))
+		set_bit(PC_TRANSFORM, &pc->flags);
 	idescsi_transform_pc1 (drive, pc);
+
+	if (test_bit(IDESCSI_LOG_CMD, &scsi->log)) {
+		printk ("ide-scsi: %s: que %lu, cmd = ", drive->name, cmd->serial_number);
+		hexdump(cmd->cmnd, cmd->cmd_len);
+		if (memcmp(pc->c, cmd->cmnd, cmd->cmd_len)) {
+			printk ("ide-scsi: %s: que %lu, tsl = ", drive->name, cmd->serial_number);
+			hexdump(pc->c, 12);
+		}
+	}
 
 	ide_init_drive_cmd (rq);
 	rq->buffer = (char *) pc;

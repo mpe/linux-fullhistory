@@ -26,6 +26,7 @@
 #include <linux/unistd.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/spinlock.h>
 
 #include "sd.h"
 #include "hosts.h"
@@ -516,6 +517,7 @@ static int	isp1020_load_parameters(struct Scsi_Host *);
 static int	isp1020_mbox_command(struct Scsi_Host *, u_short []); 
 static int	isp1020_return_status(struct Status_Entry *);
 static void	isp1020_intr_handler(int, void *, struct pt_regs *);
+static void	do_isp1020_intr_handler(int, void *, struct pt_regs *);
 
 #if USE_NVRAM_DEFAULTS
 static int	isp1020_get_defaults(struct Scsi_Host *);
@@ -585,7 +587,7 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 
 		host->this_id = hostdata->host_param.initiator_scsi_id;
 
-		if (request_irq(host->irq, isp1020_intr_handler, SA_INTERRUPT | SA_SHIRQ,
+		if (request_irq(host->irq, do_isp1020_intr_handler, SA_INTERRUPT | SA_SHIRQ,
 				"qlogicisp", host))
 		{
 			printk("qlogicisp : interrupt %d already in use\n",
@@ -800,6 +802,15 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 
 
 #define ASYNC_EVENT_INTERRUPT	0x01
+
+void do_isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	isp1020_intr_handler(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {

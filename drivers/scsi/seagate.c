@@ -91,6 +91,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -343,6 +344,7 @@ static const Signature signatures[] =
 
 static int hostno = -1;
 static void seagate_reconnect_intr (int, void *, struct pt_regs *);
+static void do_seagate_reconnect_intr (int, void *, struct pt_regs *);
 
 #ifdef FAST
 static int fast = 1;
@@ -505,7 +507,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
  */
     instance = scsi_register (tpnt, 0);
     hostno = instance->host_no;
-    if (request_irq ((int) irq, seagate_reconnect_intr, SA_INTERRUPT,
+    if (request_irq ((int) irq, do_seagate_reconnect_intr, SA_INTERRUPT,
                 (controller_type == SEAGATE) ? "seagate" : "tmc-8xx", NULL))
     {
       printk ("scsi%d : unable to allocate IRQ%d\n", hostno, (int) irq);
@@ -630,6 +632,16 @@ static int should_reconnect = 0;
  * host adapter.  This occurs on the interrupt triggered by the target
  * asserting SEL.
  */
+
+static void do_seagate_reconnect_intr (int irq, void *dev_id, 
+                                    struct pt_regs *regs)
+{
+  unsigned long flags;
+
+  spin_lock_irqsave(&io_request_lock, flags);
+  seagate_reconnect_intr(irq, dev_id, regs);
+  spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 static void seagate_reconnect_intr (int irq, void *dev_id, 
                                     struct pt_regs *regs)

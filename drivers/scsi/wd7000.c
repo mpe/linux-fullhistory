@@ -154,6 +154,7 @@
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <linux/ioport.h>
@@ -1148,6 +1149,15 @@ void wd7000_intr_handle (int irq, void *dev_id, struct pt_regs *regs)
 #endif
 }
 
+void do_wd7000_intr_handle (int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    wd7000_intr_handle(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
+
 
 int wd7000_queuecommand (Scsi_Cmnd *SCpnt, void (*done) (Scsi_Cmnd *))
 {
@@ -1314,7 +1324,7 @@ int wd7000_init (Adapter *host)
 	return (0);
     }
 
-    if (request_irq (host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000", NULL)) {
+    if (request_irq (host->irq, do_wd7000_intr_handle, SA_INTERRUPT, "wd7000", NULL)) {
 	printk ("wd7000_init: can't get IRQ %d.\n", host->irq);
 	return (0);
     }

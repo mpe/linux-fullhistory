@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/smp.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -30,7 +31,6 @@
 #include <asm/delay.h>
 
 #include <linux/timex.h>
-#include <asm/irq-no.h>
 #include <asm/hardware.h>
 
 extern int setup_arm_irq(int, struct irqaction *);
@@ -143,12 +143,12 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	update_rtc ();
 }
 
-static struct irqaction irqtimer0 = { timer_interrupt, 0, 0, "timer", NULL, NULL};
+static struct irqaction irqtimer = { timer_interrupt, 0, 0, "timer", NULL, NULL};
 
-void time_init(void)
+__initfunc(void time_init(void))
 {
 	xtime.tv_sec = setup_timer();
 	xtime.tv_usec = 0;
 
-	setup_arm_irq(IRQ_TIMER0, &irqtimer0);
+	setup_arm_irq(IRQ_TIMER, &irqtimer);
 }

@@ -10,16 +10,6 @@
 #define __ASM_ARM_ARCH_IO_H
 
 /*
- * Virtual view <-> DMA view memory address translations
- * virt_to_bus: Used to translate the virtual address to an
- *              address suitable to be passed to set_dma_addr
- * bus_to_virt: Used to convert an address for DMA operations
- *              to an address that the kernel can use.
- */
-#define virt_to_bus(x)	((unsigned long)(x))
-#define bus_to_virt(x)	((void *)(x))
-
-/*
  * This architecture does not require any delayed IO, and
  * has the constant-optimised IO
  */
@@ -146,7 +136,18 @@ DECLARE_IO(long,l,"")
 	result & 0xffff;							\
 })
 
-#define __outlc(v,p) __outwc((v),(p))
+#define __outlc(v,p)								\
+({										\
+	unsigned long v = value;						\
+	if (__PORT_PCIO((port)))						\
+		__asm__ __volatile__(						\
+		"str	%0, [%1, %2]"						\
+		: : "r" (v), "r" (PCIO_BASE), "Jr" ((port) << 2));		\
+	else									\
+		__asm__ __volatile__(						\
+		"str	%0, [%1, %2]"						\
+		: : "r" (v), "r" (IO_BASE), "r" ((port) << 2));			\
+})
 
 #define __inlc(port)								\
 ({										\

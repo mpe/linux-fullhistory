@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.110 1998/04/03 09:49:51 freitag Exp $
+ * Version:	$Id: tcp.c,v 1.111 1998/04/06 16:09:05 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -197,7 +197,7 @@
  *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
  *	Willy Konynenberg	:	Transparent proxying support.
  *	Mike McLagan		:	Routing by source
- *		Keith Owens	:	Do proper meging with partial SKB's in
+ *		Keith Owens	:	Do proper merging with partial SKB's in
  *					tcp_do_sendmsg to avoid burstiness.
  *		Eric Schenk	:	Fix fast close down bug with
  *					shutdown() followed by close().
@@ -451,35 +451,6 @@ static struct open_request *tcp_find_established(struct tcp_opt *tp,
 }
 
 /*
- *	This routine closes sockets which have been at least partially
- *	opened, but not yet accepted. Currently it is only called by
- *	tcp_close, and timeout mirrors the value there.
- */
-
-static void tcp_close_pending (struct sock *sk)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *req = tp->syn_wait_queue;
-
-	while(req) {
-		struct open_request *iter;
-		
-		if (req->sk)
-			tcp_close(req->sk, 0);
-
-		iter = req;
-		req = req->dl_next;
-		
-		(*iter->class->destructor)(iter);
-		tcp_dec_slow_timer(TCP_SLT_SYNACK);
-		sk->ack_backlog--;
-		tcp_openreq_free(iter);
-	}
-
-	tcp_synq_init(tp);
-}
-
-/*
  *	Walk down the receive queue counting readable data.
  *
  *	Must be called with the socket lock held.
@@ -513,14 +484,12 @@ static int tcp_readable(struct sock *sk)
 		 * avoid overlaps.
 		 */
 		sum = skb->len - (counted - TCP_SKB_CB(skb)->seq);
-		if (skb->h.th->syn)
-			sum++;
-		if (sum > 0) {
+		if (sum >= 0) {
 			/* Add it up, move on. */
 			amount += sum;
-			if (skb->h.th->syn)
-				amount--;
 			counted += sum;
+			if (skb->h.th->syn)
+				counted++;
 		}
 
 		/* Don't count urg data ... but do it in the right place!
@@ -608,7 +577,7 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 		/* More than half of the socket queue free? */
 		space = atomic_read(&sk->wmem_alloc) / 2;
 #endif
-		/* Always wake the user up when an error occured */
+		/* Always wake the user up when an error occurred */
 		if (sock_wspace(sk) >= space || sk->err)
 			mask |= POLLOUT | POLLWRNORM;
 		if (tp->urg_data)
@@ -619,44 +588,41 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 
 int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
+	int answ;
+
 	switch(cmd) {
-		case TIOCINQ:
+	case TIOCINQ:
 #ifdef FIXME	/* FIXME: */
-		case FIONREAD:
+	case FIONREAD:
 #endif
-		{
-			unsigned long amount;
-
-			if (sk->state == TCP_LISTEN)
-				return(-EINVAL);
-
-			lock_sock(sk);
-			amount = tcp_readable(sk);
-			release_sock(sk);
-			return put_user(amount, (int *)arg);
-		}
-		case SIOCATMARK:
+		if (sk->state == TCP_LISTEN)
+			return(-EINVAL);
+		lock_sock(sk);
+		answ = tcp_readable(sk);
+		release_sock(sk);
+		break;
+	case SIOCATMARK:
 		{
 			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-			int answ = tp->urg_data && tp->urg_seq == tp->copied_seq;
-			return put_user(answ,(int *) arg);
+			answ = tp->urg_data && tp->urg_seq == tp->copied_seq;
+			break;
 		}
-		case TIOCOUTQ:
-		{
-			unsigned long amount;
-
-			if (sk->state == TCP_LISTEN)
-				return(-EINVAL);
-			amount = sock_wspace(sk);
-			return put_user(amount, (int *)arg);
-		}
-		default:
-			return(-ENOIOCTLCMD);
+	case TIOCOUTQ:
+		if (sk->state == TCP_LISTEN)
+			return(-EINVAL);
+		answ = sock_wspace(sk);
+		break;
+	default:
+		return(-ENOIOCTLCMD);
 	};
+
+	return put_user(answ, (int *)arg);
 }
 
 /*
  *	Wait for a socket to get into the connected state
+ *
+ *	Note: must be called with the socket locked.
  */
 static int wait_for_tcp_connect(struct sock * sk, int flags)
 {
@@ -729,6 +695,8 @@ static void wait_for_tcp_memory(struct sock * sk)
 /*
  *	This routine copies from a user buffer into a socket,
  *	and starts the transmit system.
+ *
+ *	Note: must be called with the socket locked.
  */
 
 int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
@@ -737,6 +705,10 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	int mss_now = sk->mss;
 	int err = 0;
 	int copied  = 0;
+
+	/* Verify that the socket is locked */
+	if (!sk->sock_readers)
+		printk("tcp_do_sendmsg: socket not locked!\n");
 
 	/* Wait for a connection to finish. */
 	if ((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
@@ -951,7 +923,6 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 			struct msghdr *msg, int len, int flags, 
 			int *addr_len)
 {
-	int err=0; 
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/* No URG data to read. */
@@ -961,22 +932,19 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 	if (sk->err)
 		return sock_error(sk);
 
-	if (sk->state == TCP_CLOSE || sk->done) {
-		if (!sk->done) {
-			sk->done = 1;
-			return 0;
-		}
+	if (sk->done)
 		return -ENOTCONN;
-	}
 
-	if (sk->shutdown & RCV_SHUTDOWN) {
+	if (sk->state == TCP_CLOSE || (sk->shutdown & RCV_SHUTDOWN)) {
 		sk->done = 1;
 		return 0;
 	}
 
 	lock_sock(sk);
 	if (tp->urg_data & URG_VALID) {
+		int err = 0; 
 		char c = tp->urg_data;
+
 		if (!(flags & MSG_PEEK))
 			tp->urg_data = URG_READ;
 			
@@ -994,11 +962,13 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 		if(len>0)
 		{
 			err = memcpy_toiovec(msg->msg_iov, &c, 1);
+			/* N.B. already set above ... */
 			msg->msg_flags|=MSG_OOB;
 		}
 		else
 			msg->msg_flags|=MSG_TRUNC;
 			
+		/* N.B. Is this right?? If len == 0 we didn't read any data */ 
 		return err ? -EFAULT : 1;
 	}
 	release_sock(sk);
@@ -1286,43 +1256,43 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 }
 
 /*
+ * Check whether to renew the timer.
+ */
+static inline void tcp_check_fin_timer(struct sock *sk)
+{
+	if (sk->state == TCP_FIN_WAIT2 && !sk->timer.prev)
+		tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
+}
+
+/*
  *	State processing on a close. This implements the state shift for
  *	sending our FIN frame. Note that we only send a FIN for some
  *	states. A shutdown() may have already sent the FIN, or we may be
  *	closed.
  */
 
+static unsigned char new_state[16] = {
+  /* current state:        new state:      action:	*/
+  /* (Invalid)		*/ TCP_CLOSE,
+  /* TCP_ESTABLISHED	*/ TCP_FIN_WAIT1 | TCP_ACTION_FIN,
+  /* TCP_SYN_SENT	*/ TCP_CLOSE,
+  /* TCP_SYN_RECV	*/ TCP_FIN_WAIT1 | TCP_ACTION_FIN,
+  /* TCP_FIN_WAIT1	*/ TCP_FIN_WAIT1,
+  /* TCP_FIN_WAIT2	*/ TCP_FIN_WAIT2,
+  /* TCP_TIME_WAIT	*/ TCP_CLOSE,
+  /* TCP_CLOSE		*/ TCP_CLOSE,
+  /* TCP_CLOSE_WAIT	*/ TCP_LAST_ACK  | TCP_ACTION_FIN,
+  /* TCP_LAST_ACK	*/ TCP_LAST_ACK,
+  /* TCP_LISTEN		*/ TCP_CLOSE,
+  /* TCP_CLOSING	*/ TCP_CLOSING,
+};
+
 static int tcp_close_state(struct sock *sk, int dead)
 {
-	int ns=TCP_CLOSE;
-	int send_fin=0;
-	switch(sk->state) {
-		case TCP_SYN_SENT:	/* No SYN back, no FIN needed */
-			break;
-		case TCP_SYN_RECV:
-		case TCP_ESTABLISHED:	/* Closedown begin */
-			ns=TCP_FIN_WAIT1;
-			send_fin=1;
-			break;
-		case TCP_FIN_WAIT1:	/* Already closing, or FIN sent: no change */
-		case TCP_FIN_WAIT2:
-		case TCP_CLOSING:
-			ns=sk->state;
-			break;
-		case TCP_CLOSE:
-		case TCP_LISTEN:
-			break;
-		case TCP_LAST_ACK:	/* Could have shutdown() then close()
-					 * (but don't do send_fin again!) */
-			ns=TCP_LAST_ACK;
-			break;
-		case TCP_CLOSE_WAIT:	/* They have FIN'd us. We send our FIN and
-					   wait only for the ACK */
-			ns=TCP_LAST_ACK;
-			send_fin=1;
-	};
+	int next = (int) new_state[sk->state];
+	int ns = (next & TCP_STATE_MASK);
 
-	tcp_set_state(sk,ns);
+	tcp_set_state(sk, ns);
 
 	/*	This is a (useful) BSD violating of the RFC. There is a
 	 *	problem with TCP as specified in that the other end could
@@ -1332,10 +1302,10 @@ static int tcp_close_state(struct sock *sk, int dead)
 	 *	that we won't make the old 4*rto = almost no time - whoops
 	 *	reset mistake.
 	 */
-	if(dead && ns == TCP_FIN_WAIT2 && !sk->timer.prev)
-		tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
+	if (dead)
+		tcp_check_fin_timer(sk);
 
-	return send_fin;
+	return (next & TCP_ACTION_FIN);
 }
 
 /*
@@ -1378,11 +1348,46 @@ static inline int closing(struct sock * sk)
 	return ((1 << sk->state) & (TCPF_FIN_WAIT1|TCPF_CLOSING|TCPF_LAST_ACK));
 }
 
+/*
+ *	This routine closes sockets which have been at least partially
+ *	opened, but not yet accepted. Currently it is only called by
+ *	tcp_close, and timeout mirrors the value there.
+ */
+
+static void tcp_close_pending (struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct open_request *req = tp->syn_wait_queue;
+
+	while(req) {
+		struct open_request *iter;
+		
+		if (req->sk)
+			tcp_close(req->sk, 0);
+
+		iter = req;
+		req = req->dl_next;
+		
+		(*iter->class->destructor)(iter);
+		tcp_dec_slow_timer(TCP_SLT_SYNACK);
+		sk->ack_backlog--;
+		tcp_openreq_free(iter);
+	}
+
+	tcp_synq_init(tp);
+}
 
 void tcp_close(struct sock *sk, unsigned long timeout)
 {
 	struct sk_buff *skb;
 	int data_was_unread = 0;
+
+	/*
+	 * Check whether the socket is locked ... supposedly
+	 * it's impossible to tcp_close() a locked socket.
+	 */
+	if (sk->sock_readers)
+		printk("tcp_close: socket already locked!\n");
 
 	/* We need to grab some memory, and put together a FIN,
 	 * and then put it into the queue to be sent.
@@ -1436,12 +1441,14 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		struct task_struct *tsk = current;
 		struct wait_queue wait = { tsk, NULL };
 
-		tsk->state = TASK_INTERRUPTIBLE;
 		tsk->timeout = timeout;
 		add_wait_queue(sk->sleep, &wait);
 		release_sock(sk);
 
-		while (closing(sk)) {
+		while (1) {
+			tsk->state = TASK_INTERRUPTIBLE;
+			if (!closing(sk))
+				break;
 			schedule();
 			if (signal_pending(tsk) || !tsk->timeout)
 				break;
@@ -1457,8 +1464,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
 	 * we may need to set up a timer.
          */
-	if (sk->state == TCP_FIN_WAIT2 && !sk->timer.prev)
-		tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
+	tcp_check_fin_timer(sk);
 
 	sk->dead = 1;
 	release_sock(sk);
@@ -1472,7 +1478,7 @@ static struct open_request * wait_for_connect(struct sock * sk,
 					      struct open_request **pprev)
 {
 	struct wait_queue wait = { current, NULL };
-	struct open_request *req = NULL;
+	struct open_request *req;
 
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
@@ -1486,6 +1492,7 @@ static struct open_request * wait_for_connect(struct sock * sk,
 		if (signal_pending(current))
 			break;
 	}
+	current->state = TASK_RUNNING;
 	remove_wait_queue(sk->sleep, &wait);
 	return req;
 }
@@ -1515,14 +1522,14 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	/* Find already established connection */
 	req = tcp_find_established(tp, &prev);
 	if (!req) {
-	    /* If this is a non blocking socket don't sleep */
-	    error = EAGAIN;
-	    if (flags & O_NONBLOCK)
+		/* If this is a non blocking socket don't sleep */
+		error = EAGAIN;
+		if (flags & O_NONBLOCK)
 			goto out;
 	    
-	    error = ERESTARTSYS;
-	    req = wait_for_connect(sk, &prev);
-	    if (!req) 
+		error = ERESTARTSYS;
+		req = wait_for_connect(sk, &prev);
+		if (!req) 
 			goto out;
 	}
 

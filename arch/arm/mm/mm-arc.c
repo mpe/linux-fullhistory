@@ -5,3 +5,4 @@
  *
  * Copyright (C) 1998 Russell King
  */
+#include <asm/arch/mm-init.h>

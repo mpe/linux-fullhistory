@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.74 1998/04/03 09:50:01 freitag Exp $
+ *	$Id: tcp_ipv6.c,v 1.76 1998/04/06 08:42:34 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -41,6 +41,8 @@
 #include <net/ip6_route.h>
 
 #include <asm/uaccess.h>
+
+extern int sysctl_max_syn_backlog;
 
 static void	tcp_v6_send_reset(struct sk_buff *skb);
 static void	tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len, 
@@ -225,9 +227,6 @@ static struct sock *tcp_v6_lookup_listener(struct in6_addr *daddr, unsigned shor
 	return result;
 }
 
-/* Until this is verified... -DaveM */
-/* #define USE_QUICKSYNS */
-
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
  * It is assumed that this code only gets called from within NET_BH.
@@ -241,12 +240,6 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 	__u16 hnum = ntohs(dport);
 	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	int hash;
-
-#ifdef USE_QUICKSYNS
-	/* Incomming connection short-cut. */
-	if (th && th->syn == 1 && th->ack == 0)
-		goto listener_shortcut;
-#endif
 
 	/* Check TCP register quick cache first. */
 	sk = TCP_RHASH(sport);
@@ -276,9 +269,6 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 				goto hit;
 		}
 	}
-#ifdef USE_QUICKSYNS
-listener_shortcut:
-#endif
 	sk = tcp_v6_lookup_listener(daddr, hnum, dif);
 hit:
 	return sk;
@@ -638,6 +628,7 @@ void tcp_v6_err(struct sk_buff *skb, int type, int code, unsigned char *header, 
 		if (req->sk) {
 			sk = req->sk; /* report error in accept */
 		} else {
+			tp->syn_backlog--;
 			tcp_synq_unlink(tp, req, prev);
 			req->class->destructor(req);
 			tcp_openreq_free(req);
@@ -717,6 +708,9 @@ static struct or_calltable or_ipv6 = {
 	tcp_v6_send_reset
 };
 
+#define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
+#define BACKLOGMAX(sk) sysctl_max_syn_backlog
+
 /* FIXME: this is substantially similar to the ipv4 code.
  * Can some kind of merge be done? -- erics
  */
@@ -742,9 +736,9 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	/*
 	 *	There are no SYN attacks on IPv6, yet...
 	 */
-	if (sk->ack_backlog >= sk->max_ack_backlog) {
+	if (BACKLOG(sk) >= BACKLOGMAX(sk)) {
 		printk(KERN_DEBUG "droping syn ack:%d max:%d\n",
-		       sk->ack_backlog, sk->max_ack_backlog);
+		       BACKLOG(sk), BACKLOGMAX(sk));
 		goto drop;		
 	}
 
@@ -753,7 +747,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 		goto drop;
 	}
 
-	sk->ack_backlog++;
+	BACKLOG(sk)++;
 
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
@@ -820,7 +814,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	struct tcp_opt *newtp;
 	struct sock *newsk;
 	int mss;
-
+      
 	if (skb->protocol == __constant_htons(ETH_P_IP)) {
 		/*
 		 *	v6 mapped
@@ -848,6 +842,9 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	}
 
 
+	if (sk->ack_backlog > sk->max_ack_backlog)
+		return NULL; 
+
 	if (dst == NULL) {
 		/*
 		 *	options / mss / route cache
@@ -866,6 +863,8 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (dst->error || dst->pmtu < 576)
 		goto out;
 	
+	sk->tp_pinfo.af_tcp.syn_backlog--;
+	sk->ack_backlog++;
 
 	mss = dst->pmtu - sizeof(struct ipv6hdr);
 #if 0
@@ -1005,6 +1004,10 @@ static void tcp_v6_rst_req(struct sock *sk, struct sk_buff *skb)
 	if (before(TCP_SKB_CB(skb)->seq, req->snt_isn) ||
 	    after(TCP_SKB_CB(skb)->seq, req->snt_isn+1))
 		return;
+	if(req->sk)
+		sk->ack_backlog--;
+	else
+		tp->syn_backlog--;
 	tcp_synq_unlink(tp, req, prev);
 	req->class->destructor(req);
 	tcp_openreq_free(req); 

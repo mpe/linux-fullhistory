@@ -125,6 +125,7 @@
 #include <linux/unistd.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/spinlock.h>
 #include "sd.h"
 #include "hosts.h"
 #include "qlogicfas.h"
@@ -446,7 +447,7 @@ rtrc(0)
 #if QL_USE_IRQ
 /*----------------------------------------------------------------*/
 /* interrupt handler */
-static void	       ql_ihandl(int irq, void *dev_id, struct pt_regs * regs)
+static void	    ql_ihandl(int irq, void *dev_id, struct pt_regs * regs)
 {
 Scsi_Cmnd	   *icmd;
 	REG0;
@@ -463,6 +464,15 @@ Scsi_Cmnd	   *icmd;
 	qlcmd = NULL;
 /* if result is CHECK CONDITION done calls qcommand to request sense */
 	(icmd->scsi_done) (icmd);
+}
+
+static void	    do_ql_ihandl(int irq, void *dev_id, struct pt_regs * regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	ql_ihandl(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 #endif
 
@@ -609,7 +619,7 @@ host->proc_dir =  &proc_scsi_qlogicfas;
 	else
 		printk( "Ql: Using preset IRQ %d\n", qlirq );
 
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogicfas", NULL))
+	if (qlirq >= 0 && !request_irq(qlirq, do_ql_ihandl, 0, "qlogicfas", NULL))
 		host->can_queue = 1;
 #endif
 	request_region( qbase , 0x10 ,"qlogicfas");

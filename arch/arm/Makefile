@@ -12,6 +12,9 @@
 #
 # Copyright (C) 1995, 1996 by Russell King
 
+CFLAGS_PROC	:=
+ASFLAGS_PROC	:=
+
 ifeq ($(CONFIG_CPU_ARM2),y)
 PROCESSOR	 = armo
 ASFLAGS_PROC	+= -m2
@@ -65,7 +68,6 @@ endif
 # ZRELADDR - Compressed kernel relocating address (point at which uncompressed kernel is loaded).
 #
 
-HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o arch/arm/kernel/init_task.o
 COMPRESSED_HEAD	 = head.o
 
 ifeq ($(PROCESSOR),armo)
@@ -79,11 +81,13 @@ endif
 
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k
+ARCHDIR		 = arc
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
 
 ifeq ($(CONFIG_ARCH_ARC),y)
 MACHINE		 = arc
+ARCHDIR		 = arc
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
 
@@ -96,6 +100,7 @@ endif
 
 ifeq ($(CONFIG_ARCH_RPC),y)
 MACHINE		 = rpc
+ARCHDIR		 = rpc
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 ZTEXTADDR	 = 0x10008000
 ZRELADDR	 = 0x10008000
@@ -103,6 +108,14 @@ endif
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 MACHINE		 = ebsa110
+ARCHDIR		 = ebsa110
+ZTEXTADDR	 = 0x00008000
+ZRELADDR	 = 0x00008000
+endif
+
+ifeq ($(CONFIG_ARCH_EBSA285),y)
+MACHINE		 = ebsa285
+ARCHDIR		 = ebsa285
 ZTEXTADDR	 = 0x00008000
 ZRELADDR	 = 0x00008000
 endif
@@ -129,35 +142,55 @@ ifeq ($(CONFIG_FRAME_POINTER),y)
 CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
 endif
 CFLAGS		:= $(CFLAGS_PROC) $(CFLAGS) -pipe
-ASFLAGS		:= $(ASFLAGS_PROC) $(ASFLAGS) -D__ASSEMBLY__
+ASFLAGS		:= $(ASFLAGS_PROC) $(ASFLAGS)
 LINKFLAGS	 = -T $(TOPDIR)/arch/arm/vmlinux.lds -e stext -Ttext $(TEXTADDR)
 ZLINKFLAGS	 = -Ttext $(ZTEXTADDR)
 
 SUBDIRS		:= $(SUBDIRS:drivers=) arch/arm/lib arch/arm/kernel arch/arm/mm arch/arm/drivers
+HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o arch/arm/kernel/init_task.o
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
 LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 
-DRIVERS		:= arch/arm/drivers/block/block.a \
-		   arch/arm/drivers/char/char.a \
-		   drivers/misc/misc.a \
-		   arch/arm/drivers/net/net.a
+BLOCK_DRIVERS	:= arch/arm/drivers/block/block.a
+CDROM_DRIVERS	:= drivers/cdrom/cdrom.a
+CHAR_DRIVERS	:= arch/arm/drivers/char/char.a
+MISC_DRIVERS	:= drivers/misc/misc.a
+NET_DRIVERS	:= drivers/net/net.a
+PARIDE_DRIVERS	:= drivers/block/paride/paride.a
+PCI_DRIVERS	:= drivers/pci/pci.a
+SCSI_DRIVERS	:= drivers/scsi/scsi.a
+SOUND_DRIVERS	:= drivers/sound/sound.a
+
+ifeq ($(CONFIG_ARCH_ACORN),y)
+BLOCK_DRIVERS	+= drivers/acorn/block/acorn-block.a
+CHAR_DRIVERS	+= drivers/acorn/char/acorn-char.a
+NET_DRIVERS	+= drivers/acorn/net/acorn-net.a drivers/net/net.a
+SCSI_DRIVERS	+= drivers/acorn/scsi/acorn-scsi.a
+endif
+
+DRIVERS		:= $(BLOCK_DRIVERS) $(CHAR_DRIVERS) $(MISC_DRIVERS) $(NET_DRIVERS)
 
 ifeq ($(CONFIG_SCSI),y)
-DRIVERS		:= $(DRIVERS) arch/arm/drivers/scsi/scsi.a
+DRIVERS		:= $(DRIVERS) $(SCSI_DRIVERS)
 endif
-
 ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR),)
-DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
+DRIVERS		:= $(DRIVERS) $(CDROM_DRIVERS)
 endif
-
+ifdef CONFIG_PCI
+DRIVERS		:= $(DRIVERS) $(PCI_DRIVERS)
+endif
 ifeq ($(CONFIG_SOUND),y)
-DRIVERS		:= $(DRIVERS) arch/arm/drivers/sound/sound.a
+DRIVERS		:= $(DRIVERS) $(SOUND_DRIVERS)
+endif
+ifeq ($(CONFIG_PARIDE),y)
+DRIVERS		:= $(DRIVERS) $(PARIDE_DRIVERS)
 endif
 
 symlinks::
 	$(RM) include/asm-arm/arch include/asm-arm/proc
-	(cd include/asm-arm; ln -sf arch-$(MACHINE) arch; ln -sf proc-$(PROCESSOR) proc)
+	(cd include/asm-arm; ln -sf arch-$(ARCHDIR) arch; ln -sf proc-$(PROCESSOR) proc)
 
+# Once we've finished integrating the sources, the @$(MAKE) will disappear
 mrproper::
 	rm -f include/asm-arm/arch include/asm-arm/proc
 	@$(MAKE) -C arch/$(ARCH)/drivers mrproper
@@ -183,7 +216,6 @@ install: vmlinux
 	@$(MAKEBOOT) install
 
 # My testing targets (that short circuit a few dependencies)
-#
 zImg:;	@$(MAKEBOOT) zImage
 Img:;	@$(MAKEBOOT) Image
 i:;	@$(MAKEBOOT) install
@@ -191,8 +223,7 @@ zi:;	@$(MAKEBOOT) zinstall
 
 archclean:
 	@$(MAKEBOOT) clean
-	@$(MAKE) -C arch/arm/lib clean
+	$(RM) arch/arm/lib/constants.h
 
 archdep:
 	@$(MAKEBOOT) dep
-sed -e /^MACHINE..*=/s,= .*,= rpc,;/^PROCESSOR..*=/s,= .*,= armv, linux/arch/arm/Makefile.normal

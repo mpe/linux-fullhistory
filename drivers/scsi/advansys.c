@@ -668,6 +668,9 @@
 #include <linux/blk.h>
 #include <linux/stat.h>
 #endif /* version >= v1.3.0 */
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,95)
+#include <asm/spinlock.h>
+#endif
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
@@ -4880,8 +4883,12 @@ advansys_detect(Scsi_Host_Template *tpnt)
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,70)
             if ((ret = request_irq(shp->irq, advansys_interrupt,
                             SA_INTERRUPT, "advansys")) != 0)
-#else /* version >= v1.3.70 */
+#elif LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,95)
             if ((ret = request_irq(shp->irq, advansys_interrupt,
+                            SA_INTERRUPT | (share_irq == TRUE ? SA_SHIRQ : 0),
+                            "advansys", boardp)) != 0)
+#else /* version >= 2.1.95 */
+            if ((ret = request_irq(shp->irq, do_advansys_interrupt,
                             SA_INTERRUPT | (share_irq == TRUE ? SA_SHIRQ : 0),
                             "advansys", boardp)) != 0)
 #endif /* version >= v1.3.70 */
@@ -6204,6 +6211,18 @@ advansys_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     ASC_DBG(1, "advansys_interrupt: end\n");
     return;
 }
+
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,95)
+static void
+do_advansys_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    advansys_interrupt(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
+#endif
 
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
 /*

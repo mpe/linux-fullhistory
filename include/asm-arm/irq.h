@@ -1,7 +1,19 @@
 #ifndef __ASM_ARM_IRQ_H
 #define __ASM_ARM_IRQ_H
 
-#include <asm/irq-no.h>
+#include <asm/arch/irqs.h>
+
+#ifndef NR_IRQS
+#define NR_IRQS	128
+#endif
+
+/*
+ * Use this value to indicate lack of interrupt
+ * capability
+ */
+#ifndef NO_IRQ
+#define NO_IRQ	255
+#endif
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);

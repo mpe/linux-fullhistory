@@ -5,15 +5,11 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o delay.o fp_support.o \
+L_OBJS   := backtrace.o bitops.o checksum.o delay.o fp_support.o \
 	    loaders.o memcpy.o memfastset.o system.o string.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
-endif
-
-ifdef CONFIG_INET
-  L_OBJS += checksum.o
 endif
 
 ifdef CONFIG_ARCH_ACORN
@@ -26,30 +22,27 @@ ifdef CONFIG_ARCH_ACORN
   endif
 endif
 
-ifdef CONFIG_ARCH_EBSA110
+ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
+endif
+
+ifeq ($(MACHINE),ebsa285)
+  L_OBJS += io-ebsa285.o
 endif
 
 include $(TOPDIR)/Rules.make
 
-constants.h: getconstants
-	./getconstants > constants.h
+constants.h: getconsdata.o extractconstants.pl
+	$(PERL) extractconstants.pl $(OBJDUMP) > $@
 
-getconstants: getconstants.c getconstants.h
-	$(HOSTCC) -D__KERNEL__ -o getconstants getconstants.c
-
-getconstants.h: getconsdata.c
+getconsdata.o: getconsdata.c
 	$(CC) $(CFLAGS) -c getconsdata.c
-	$(PERL) extractinfo.perl $(OBJDUMP) > $@
 
 %.o: %.S
-ifndef $(CONFIG_BINUTILS_NEW)
+ifneq ($(CONFIG_BINUTILS_NEW),y)
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.$<.s
 	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..tmp.$<.s
 	$(RM) ..tmp.$<.s
 else
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
 endif
-
-clean:
-	$(RM) getconstants constants.h getconstants.h

@@ -38,6 +38,23 @@ typedef struct { void *null; } elf_fpregset_t;
 
 #define ELF_ET_DYN_BASE	(2 * TASK_SIZE / 3)
 
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  This could be done in userspace,
+   but it's not easy, and we've already done it here.  */
+
+#define ELF_HWCAP	(0)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo. */
+
+#define ELF_PLATFORM	(NULL)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ex,ibcs2) \
+	current->personality = PER_LINUX_32BIT
+#endif
+
 #define R_ARM_NONE	(0)
 #define R_ARM_32	(1)	/* => ld 32 */
 #define R_ARM_PC26	(2)	/* => ld b/bl branches */

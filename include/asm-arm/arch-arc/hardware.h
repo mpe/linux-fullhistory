@@ -3,19 +3,30 @@
  *
  * Copyright (C) 1996 Russell King.
  *
- * This file contains the hardware definitions of the A3/4/5xx series machines.
+ * This file contains the hardware definitions of the
+ * Acorn Archimedes/A5000 machines.
+ *
+ * Modifications:
+ *  04-04-1998	PJB/RMK	Merged arc and a5k versions
  */
 
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
+#include <linux/config.h>
+
 /*
- * What hardware must be present
+ * What hardware must be present - these can be tested by the kernel
+ * source.
  */
 #define HAS_IOC
 #define HAS_MEMC
 #define HAS_MEMC1A
 #define HAS_VIDC
+
+#ifdef CONFIG_ARCH_A5K
+#define HAS_PCIO
+#endif
 
 /*
  * Optional hardware
@@ -29,8 +40,10 @@
  */
 #define VIDC_BASE		0x80100000
 #define IOCEC4IO_BASE		0x8009c000
+#ifdef CONFIG_ARCH_ARC
 #define LATCHAADDR		0x80094010
 #define LATCHBADDR		0x80094006
+#endif
 #define IOCECIO_BASE		0x80090000
 #define IOC_BASE		0x80080000
 #define MEMCECIO_BASE		0x80000000

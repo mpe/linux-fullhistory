@@ -8,6 +8,12 @@
 #include <asm/assembler.h>
 #include <linux/linkage.h>
 
+#ifndef ENTRY
+#define ENTRY(x...)				\
+		.globl	_##x;			\
+_##x:
+#endif
+
 		.text
 #define ENTER	\
 		mov	ip,sp	;\
@@ -84,6 +90,7 @@ ENTRY(memmove)
 		blt	6b
 		ands	ip, r1, #3
 		beq	1b
+
 8:		bic	r1, r1, #3
 		ldr	r7, [r1], #4
 		cmp	ip, #2
@@ -105,14 +112,14 @@ ENTRY(memmove)
 		subs	r2, r2, #16
 		bge	9b
 		adds	r2, r2, #12
-		blt	1b
+		blt	100f
 10:		mov	r3, r7, lsr #8
 		ldr	r7, [r1], #4
 		orr	r3, r3, r7, lsl #24
 		str	r3, [r0], #4
 		subs	r2, r2, #4
 		bge	10b
-		sub	r1, r1, #3
+100:		sub	r1, r1, #3
 		b	6b
 
 11:		cmp	r2, #12

@@ -178,17 +178,29 @@
 
 /*
  * We define the bits in the page tables as follows:
- *  PTE_BUFFERABLE	page is dirty
- *  PTE_AP_WRITE	page is writable
+ *  PTE_BUFFERABLE	page is writable
+ *  PTE_AP_WRITE	page is dirty
  *  PTE_AP_READ		page is a young (unsetting this causes faults for any access)
  *
  * Any page that is mapped in is assumed to be readable...
  */
-#define PAGE_NONE       __pgprot(PTE_TYPE_SMALL)
-#define PAGE_SHARED     __pgprot(PTE_TYPE_SMALL | PTE_CACHEABLE | PTE_AP_READ | PTE_AP_WRITE)
-#define PAGE_COPY       __pgprot(PTE_TYPE_SMALL | PTE_CACHEABLE | PTE_AP_READ)
-#define PAGE_READONLY   __pgprot(PTE_TYPE_SMALL | PTE_CACHEABLE | PTE_AP_READ)
-#define PAGE_KERNEL     __pgprot(PTE_TYPE_SMALL | PTE_CACHEABLE | PTE_BUFFERABLE | PTE_AP_WRITE)
+#if 0
+#define _PTE_YOUNG	PTE_AP_READ
+#define _PTE_DIRTY	PTE_AP_WRITE
+#define _PTE_READ	PTE_CACHEABLE
+#define _PTE_WRITE	PTE_BUFFERABLE
+#else
+#define _PTE_YOUNG	PTE_CACHEABLE
+#define _PTE_DIRTY	PTE_BUFFERABLE
+#define _PTE_READ	PTE_AP_READ
+#define _PTE_WRITE	PTE_AP_WRITE
+#endif
+
+#define PAGE_NONE       __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG)
+#define PAGE_SHARED     __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ | _PTE_WRITE)
+#define PAGE_COPY       __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ)
+#define PAGE_READONLY   __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ)
+#define PAGE_KERNEL     __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_DIRTY | _PTE_WRITE)
 
 #define _PAGE_USER_TABLE	(PMD_TYPE_TABLE | PMD_DOMAIN(DOMAIN_USER))
 #define _PAGE_KERNEL_TABLE	(PMD_TYPE_TABLE | PMD_DOMAIN(DOMAIN_KERNEL))
@@ -249,7 +261,7 @@ extern unsigned long *empty_zero_page;
 /* to set the page-dir */
 #define SET_PAGE_DIR(tsk,pgdir)					\
 do {								\
-	tsk->tss.memmap = __virt_to_phys(pgdir);		\
+	tsk->tss.memmap = __virt_to_phys((unsigned long)pgdir);	\
 	if ((tsk) == current)					\
 		__asm__ __volatile__(				\
 		"mcr%?	p15, 0, %0, c2, c0, 0\n"		\
@@ -276,7 +288,7 @@ extern __inline__ int pte_present(pte_t pte)
 		return 0;
 	}
 #else
-	return ((pte_val(pmd) + 1) & PMD_TYPE_MASK);
+	return ((pte_val(pte) + 1) & 2);
 #endif
 }
 
@@ -300,18 +312,24 @@ extern __inline__ int pmd_bad(pmd_t pmd)
 		return 1;
 	}
 #else
-	return (pmd_val(pmd) & PMD_TYPE_SECT);
+	return pmd_val(pmd) & 2;
 #endif
 }
 
 extern __inline__ int pmd_present(pmd_t pmd)
 {
+#if 0
+	/* This is what it really does, the else
+	   part is just to make it easier for the compiler */
 	switch (pmd_val(pmd) & PMD_TYPE_MASK) {
 	case PMD_TYPE_TABLE:
 		return 1;
 	default:
 		return 0;
 	}
+#else
+	return ((pmd_val(pmd) + 1) & 2);
+#endif
 }
 
 /*
@@ -336,19 +354,14 @@ extern __inline__ int pte_write(pte_t pte)
 	return pte_val(pte) & PTE_AP_WRITE;
 }
 
-extern __inline__ int pte_cacheable(pte_t pte)
-{
-	return pte_val(pte) & PTE_CACHEABLE;
-}
-
 extern __inline__ int pte_dirty(pte_t pte)
 {
-	return pte_val(pte) & PTE_BUFFERABLE;
+	return pte_val(pte) & _PTE_DIRTY;
 }
 
 extern __inline__ int pte_young(pte_t pte)
 {
-	return pte_val(pte) & PTE_AP_READ;
+	return pte_val(pte) & _PTE_YOUNG;
 }
 
 extern __inline__ pte_t pte_wrprotect(pte_t pte)
@@ -455,7 +468,7 @@ extern __inline__ void set_pte(pte_t *pteptr, pte_t pteval)
 
 extern __inline__ unsigned long pte_page(pte_t pte)
 {
-	return (unsigned long)phys_to_virt(pte_val(pte) & PAGE_MASK);
+	return __phys_to_virt(pte_val(pte) & PAGE_MASK);
 }
 
 extern __inline__ pmd_t mk_user_pmd(pte_t *ptep)
@@ -484,7 +497,7 @@ extern __inline__ void set_pmd(pmd_t *pmdp, pmd_t pmd)
 
 extern __inline__ unsigned long pmd_page(pmd_t pmd)
 {
-	return (unsigned long)phys_to_virt(pmd_val(pmd) & 0xfffffc00);
+	return __phys_to_virt(pmd_val(pmd) & 0xfffffc00);
 }
 
 /* to find an entry in a kernel page-table-directory */
@@ -513,13 +526,14 @@ extern void free_small_page(unsigned long page);
  * used to allocate a kernel page table - this turns on ASN bits
  * if any.
  */
- 
+
 #ifndef __SMP__
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
 } quicklists;
+
 #define pgd_quicklist (quicklists.pgd_cache)
 #define pmd_quicklist ((unsigned long *)0)
 #define pte_quicklist (quicklists.pte_cache)
@@ -596,8 +610,8 @@ extern __inline__ void free_pmd_slow(pmd_t *pmd)
 {
 }
 
-extern void __bad_pte(pmd_t *pmd);
-extern void __bad_pte_kernel(pmd_t *pmd);
+extern void __bad_pmd(pmd_t *pmd);
+extern void __bad_pmd_kernel(pmd_t *pmd);
 
 #define pte_free_kernel(pte)	free_pte_fast(pte)
 #define pte_free(pte)		free_pte_fast(pte)
@@ -616,7 +630,7 @@ extern __inline__ pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		return page + address;
 	}
 	if (pmd_bad(*pmd)) {
-		__bad_pte_kernel(pmd);
+		__bad_pmd_kernel(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -628,14 +642,14 @@ extern __inline__ pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 
 	if (pmd_none(*pmd)) {
 		pte_t *page = (pte_t *) get_pte_fast();
-		
+
 		if (!page)
 			return get_pte_slow(pmd, address);
-		set_pmd(pmd, mk_user_pmd(page);
+		set_pmd(pmd, mk_user_pmd(page));
 		return page + address;
 	}
 	if (pmd_bad(*pmd)) {
-		__bad_pte(pmd);
+		__bad_pmd(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -654,9 +668,10 @@ extern __inline__ pmd_t *pmd_alloc(pgd_t *pgd, unsigned long address)
 	return (pmd_t *) pgd;
 }
 
-#define pmd_free_kernel         pmd_free
-#define pmd_alloc_kernel        pmd_alloc
+#define pmd_free_kernel		pmd_free
+#define pmd_alloc_kernel	pmd_alloc
 
+#if 0
 extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
@@ -672,6 +687,7 @@ extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
 }
+#endif
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
@@ -689,4 +705,3 @@ extern __inline__ void update_mmu_cache(struct vm_area_struct * vma,
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
 
 #endif /* __ASM_PROC_PAGE_H */
-

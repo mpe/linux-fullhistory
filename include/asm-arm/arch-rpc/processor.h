@@ -29,6 +29,6 @@
 #define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
 
 #define INIT_MMAP \
-{ &init_mm, 0xc0000000, 0xc2000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
+{ &init_mm, 0, 0, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #endif

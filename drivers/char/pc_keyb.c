@@ -145,12 +145,12 @@ __initfunc(static char *initialize_kbd2(void))
 	 */
 
         do {
-	kbd_write(KBD_DATA_REG, KBD_CMD_RESET);
+		kbd_write(KBD_DATA_REG, KBD_CMD_RESET);
                 status = kbd_wait_for_input();
                 if (status == KBD_REPLY_ACK)
 			break;
                 else if (status != KBD_REPLY_RESEND)
-		return "Keyboard reset failed, no ACK";
+			return "Keyboard reset failed, no ACK";
         } while (1);
 
 	if (kbd_wait_for_input() != KBD_REPLY_POR)
@@ -164,12 +164,12 @@ __initfunc(static char *initialize_kbd2(void))
 	 */
 
 	do {
-	kbd_write(KBD_DATA_REG, KBD_CMD_DISABLE);
+		kbd_write(KBD_DATA_REG, KBD_CMD_DISABLE);
 		status = kbd_wait_for_input();
 		if (status == KBD_REPLY_ACK)
 			break;
 		else if (status != KBD_REPLY_RESEND)
-		return "Disable keyboard: no ACK";
+			return "Disable keyboard: no ACK";
 	} while (1);
 
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_WRITE_MODE);

@@ -697,8 +697,12 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
 			    ax25->ax25_dev->dev, 0, sysctl_netrom_obsolescence_count_initialiser);
 
-	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
-		return nr_rx_frame(skb, dev);
+	if ((dev = nr_dev_get(nr_dest)) != NULL) {	/* Its for me */
+		if (ax25 == NULL)			/* Its from me */
+			return nr_loopback_queue(skb);
+		else
+			return nr_rx_frame(skb, dev);
+	}
 
 	if (!sysctl_netrom_routing_control && ax25 != NULL)
 		return 0;

@@ -163,6 +163,7 @@ int t128_proc_info (char *buffer, char **start, off_t offset,
 #endif
 
 #define NCR5380_intr t128_intr
+#define do_NCR5380_intr do_t128_intr
 #define NCR5380_queue_command t128_queue_command
 #define NCR5380_abort t128_abort
 #define NCR5380_reset t128_reset

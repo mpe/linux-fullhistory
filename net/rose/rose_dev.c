@@ -134,11 +134,11 @@ static int rose_set_mac_address(struct device *dev, void *addr)
 {
 	struct sockaddr *sa = addr;
 
-	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
+	rose_del_loopback_node((rose_address *)dev->dev_addr);
 
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
 
-	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
+	rose_add_loopback_node((rose_address *)dev->dev_addr);
 
 	return 0;
 }
@@ -150,7 +150,7 @@ static int rose_open(struct device *dev)
 
 	MOD_INC_USE_COUNT;
 
-	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
+	rose_add_loopback_node((rose_address *)dev->dev_addr);
 
 	return 0;
 }
@@ -162,7 +162,7 @@ static int rose_close(struct device *dev)
 
 	MOD_DEC_USE_COUNT;
 
-	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
+	rose_del_loopback_node((rose_address *)dev->dev_addr);
 
 	return 0;
 }

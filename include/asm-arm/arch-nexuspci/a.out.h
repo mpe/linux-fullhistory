@@ -8,7 +8,7 @@
 #define __ASM_ARCH_A_OUT_H
 
 #ifdef __KERNEL__
-#define STACK_TOP		(0xc0000000)
+#define STACK_TOP		((current->personality==PER_LINUX_32BIT)? 0xc0000000 : 0x04000000)
 #define LIBRARY_START_TEXT	(0x00c00000)
 #endif
 

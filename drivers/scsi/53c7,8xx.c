@@ -253,6 +253,7 @@ typedef unsigned int  u32;
 #include <linux/time.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -290,6 +291,7 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host);
 static int NCR53c8xx_script_len;
 static int NCR53c8xx_dsa_len;
 static void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
+static void do_NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 static int ncr_halt (struct Scsi_Host *host);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
@@ -1134,9 +1136,9 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     if (!search) {
 #ifdef __powerpc__
-	if (request_irq(host->irq, NCR53c7x0_intr, SA_SHIRQ, "53c7,8xx", NULL)) 
+	if (request_irq(host->irq, do_NCR53c7x0_intr, SA_SHIRQ, "53c7,8xx", NULL)) 
 #else
-	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx", NULL))
+	if (request_irq(host->irq, do_NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx", NULL))
 #endif
 	  {
 	  
@@ -4388,6 +4390,22 @@ intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	    hostdata->dstat |= DSTAT_DFE;
     	}
     }
+}
+
+/*
+ * Function : do_NCR53c7x0_intr()
+ *
+ * Purpose : A quick wrapper function added to grab the io_request_lock
+ *      spin lock prior to entering the real interrupt handler.  Needed
+ *      for 2.1.95 and above.
+ */
+static void
+do_NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs) {
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    NCR53c7x0_intr(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 /*

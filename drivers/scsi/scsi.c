@@ -332,7 +332,6 @@ void
 scsi_make_blocked_list(void)  
 {
     int block_count = 0, index;
-    unsigned long flags;
     struct Scsi_Host * sh[128], * shpnt;
 
     /*
@@ -1078,7 +1077,6 @@ Scsi_Cmnd * scsi_allocate_device (struct request ** reqp, Scsi_Device * device,
     kdev_t dev;
     struct request * req = NULL;
     int tablesize;
-    unsigned long flags;
     struct buffer_head * bh, *bhp;
     struct Scsi_Host * host;
     Scsi_Cmnd * SCpnt = NULL;
@@ -1278,7 +1276,6 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG_DELAY
     unsigned long clock;
 #endif
-    unsigned long        flags;
     struct Scsi_Host   * host;
     int                  rtn = 0;
     unsigned long        timeout;
@@ -1373,7 +1370,9 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 	SCpnt->result = temp;
 #ifdef DEBUG_DELAY
 	clock = jiffies + 4 * HZ;
+	spin_unlock_irq(&io_request_lock);
 	while (jiffies < clock) barrier();
+	spin_lock_irq(&io_request_lock);
 	printk("done(host = %d, result = %04x) : routine at %p\n",
 	       host->host_no, temp, host->hostt->command);
 #endif
@@ -1401,7 +1400,6 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 		  void *buffer, unsigned bufflen, void (*done)(Scsi_Cmnd *),
 		  int timeout, int retries)
 {
-    unsigned long flags;
     struct Scsi_Host * host = SCpnt->host;
     Scsi_Device      * device = SCpnt->device;
 
@@ -1795,7 +1793,6 @@ static void scsi_unregister_host(Scsi_Host_Template *);
 void *scsi_malloc(unsigned int len)
 {
     unsigned int nbits, mask;
-    unsigned long flags;
     int i, j;
     if(len % SECTOR_SIZE != 0 || len > PAGE_SIZE)
 	return NULL;
@@ -1821,7 +1818,6 @@ void *scsi_malloc(unsigned int len)
 int scsi_free(void *obj, unsigned int len)
 {
     unsigned int page, sector, nbits, mask;
-    unsigned long flags;
 
 #ifdef DEBUG
     unsigned long ret = 0;
@@ -2400,7 +2396,6 @@ static void resize_dma_pool(void)
     struct Scsi_Host * shpnt;
     struct Scsi_Host * host = NULL;
     Scsi_Device * SDpnt;
-    unsigned long flags;
     FreeSectorBitmap * new_dma_malloc_freelist = NULL;
     unsigned int new_dma_sectors = 0;
     unsigned int new_need_isa_buffer = 0;
@@ -2709,7 +2704,6 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
  */
 static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 {
-    unsigned long                 flags;
     int                           online_status;
     int                           pcount;
     Scsi_Cmnd                   * SCpnt;

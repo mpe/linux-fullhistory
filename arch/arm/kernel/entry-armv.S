@@ -9,7 +9,7 @@
  * Note:  there is a StrongARM bug in the STMIA rn, {regs}^ instruction that causes
  * it to save wrong values...  Be aware!
  */
-#include <linux/config.h> /* for CONFIG_ARCH_EBSA110 /*
+#include <linux/config.h> /* for CONFIG_ARCH_EBSA110 */
 #include <linux/autoconf.h>
 #include <linux/linkage.h>
 
@@ -20,15 +20,6 @@
 #include "../lib/constants.h"
 
 		.text
-
-@ Offsets into task structure
-@ ---------------------------
-@
-#define STATE		0
-#define COUNTER		4
-#define PRIORITY	8
-#define FLAGS		12
-#define SIGPENDING	16
 
 #define PF_TRACESYS	0x20
 
@@ -82,21 +73,24 @@
 		strb	r12, [r12, #0x38]	@ Disable FIQ register
 		.endm
 
-		.macro	get_irqnr_and_base, irqnr, base
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
 		mov	r4, #ioc_base_high		@ point at IOC
 		.if	ioc_base_low
 		orr	r4, r4, #ioc_base_low
 		.endif
-		ldrb	\irqnr, [r4, #0x24]		@ get high priority first
+		ldrb	\irqstat, [r4, #0x24]		@ get high priority first
 		adr	\base, irq_prio_h
-		teq	\irqnr, #0
+		teq	\irqstat, #0
 #ifdef IOMD_BASE
-		ldreqb	\irqnr, [r4, #0x1f4]		@ get dma
+		ldreqb	\irqstat, [r4, #0x1f4]		@ get dma
 		adreq	\base, irq_prio_d
-		teqeq	\irqnr, #0
+		teqeq	\irqstat, #0
 #endif
-		ldreqb	\irqnr, [r4, #0x14]		@ get low priority
+		ldreqb	\irqstat, [r4, #0x14]		@ get low priority
 		adreq	\base, irq_prio_l
+
+		teq	\irqstat, #0
+		ldrneb	\irqnr, [r5, \irqstat]		@ get IRQ number
 		.endm
 
 /*
@@ -160,10 +154,13 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		.macro	disable_fiq
 		.endm
 
-		.macro	get_irqnr_and_base, irqnr, base
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
 		mov	r4, #0xf3000000
-		ldrb	\irqnr, [r4]			@ get interrupts
+		ldrb	\irqstat, [r4]			@ get interrupts
 		adr	\base, irq_prio_ebsa110
+
+		teq	\irqstat, #0
+		ldrneb	\irqnr, [r5, \irqstat]		@ get IRQ number
 		.endm
 
 		.macro	irq_prio_table
@@ -187,6 +184,26 @@ irq_prio_ebsa110:
 		.byte	 6, 6, 6, 6, 2, 2, 2, 2, 3, 3, 6, 6, 2, 2, 2, 2
 		.byte	 6, 6, 6, 6, 2, 2, 2, 2, 3, 3, 6, 6, 2, 2, 2, 2
 		.byte	 6, 6, 6, 6, 2, 2, 2, 2, 3, 3, 6, 6, 2, 2, 2, 2
+		.endm
+
+#elif defined(CONFIG_ARCH_EBSA285)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+		mov	r4, #0xfe000000
+		ldr	\irqstat, [r4, #0x180]		@ get interrupts
+		mov	\irqnr, #0
+1001:		tst	\irqstat, #1
+		addeq	\irqnr, \irqnr, #1
+		moveq	\irqstat, \irqstat, lsr #1
+		tsteq	\irqnr, #32
+		beq	1001b
+		teq	\irqnr, #32
+		.endm
+
+		.macro	irq_prio_table
 		.endm
 
 #else
@@ -265,6 +282,16 @@ irq_prio_ebsa110:
 		.macro	adrsvc, cond, reg, label
 		adr\cond	\reg, \label
 		.endm
+
+/*=============================================================================
+ * Address exception handler
+ *-----------------------------------------------------------------------------
+ * These aren't too critical.
+ * (they're not supposed to happen, and won't happen in 32-bit mode).
+ */
+
+vector_addrexcptn:
+		b	vector_addrexcptn
 
 /*=============================================================================
  * Undefined FIQs
@@ -400,86 +427,6 @@ vector_data:	@
 		b	__dabt_svc			@  3  (SVC_26 / SVC_32)
 
 /*=============================================================================
- * Undefined instruction handler
- *-----------------------------------------------------------------------------
- * Handles floating point instructions
- */
-__und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
-		stmia	sp, {r0 - r12}			@ Save r0 - r12
-		add	r8, sp, #S_PC
-		stmdb	r8, {sp, lr}^			@ Save user r0 - r12
-		ldr	r4, .LCund
-		ldmia	r4, {r5 - r7}
-		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
-		mov	fp, #0
-
-		adr	r1, .LC2
-		ldmia	r1, {r1, r4}
-		ldr	r1, [r1]
-		get_current_task r2
-		teq	r1, r2
-		blne	SYMBOL_NAME(math_state_restore)
-		adrsvc,	al, r9, SYMBOL_NAME(fpreturn)
-		adrsvc	al, lr, SYMBOL_NAME(fpundefinstr)
-		ldr	pc, [r4]			@ Call FP module USR entry point
-
-		.globl	SYMBOL_NAME(fpundefinstr)
-SYMBOL_NAME(fpundefinstr):				@ Called by FP module on undefined instr
-		mov	r0, lr
-		mov	r1, sp
-		mrs	r4, cpsr			@ Enable interrupts
-		bic	r4, r4, #I_BIT
-		msr	cpsr, r4
-		bl	SYMBOL_NAME(do_undefinstr)
-		b	ret_from_exception		@ Normal FP exit
-
-__und_svc:	sub	sp, sp, #S_FRAME_SIZE
-		stmia	sp, {r0 - r12}			@ save r0 - r12
-		mov	r6, lr
-		ldr	r7, .LCund
-		ldmia	r7, {r7 - r9}
-		add	r5, sp, #S_FRAME_SIZE
-		add	r4, sp, #S_SP
-		stmia	r4, {r5 - r9}			@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
-
-		adr	r1, .LC2
-		ldmia	r1, {r1, r4}
-		ldr	r1, [r1]
-		mov	r2, sp, lsr #13
-		mov	r2, r2, lsl #13
-		teq	r1, r2
-		blne	SYMBOL_NAME(math_state_restore)
-		adrsvc	al, r9, SYMBOL_NAME(fpreturnsvc)
-		adrsvc	al, lr, SYMBOL_NAME(fpundefinstrsvc)
-		ldr	pc, [r4]			@ Call FP module SVC entry point
-
-		.globl	SYMBOL_NAME(fpundefinstrsvc)
-SYMBOL_NAME(fpundefinstrsvc):
-		mov	r0, r5				@ unsigned long pc
-		mov	r1, sp				@ struct pt_regs *regs
-		bl	SYMBOL_NAME(do_undefinstr)
-
-		.globl	SYMBOL_NAME(fpreturnsvc)
-SYMBOL_NAME(fpreturnsvc):
-		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
-		msr	spsr, lr
-		ldmia	sp, {r0 - pc}^			@ Restore SVC registers
-
-.LC2:		.word	SYMBOL_NAME(last_task_used_math)
-		.word	SYMBOL_NAME(fp_enter)
-
-__und_invalid:	sub	sp, sp, #S_FRAME_SIZE
-		stmia	sp, {r0 - lr}
-		mov	r7, r0
-		ldr	r4, .LCund
-		ldmia	r4, {r5, r6}			@ Get UND/IRQ/FIQ/ABT pc, cpsr
-		add	r4, sp, #S_PC
-		stmia	r4, {r5, r6, r7}		@ Save UND/IRQ/FIQ/ABT pc, cpsr, old_r0
-		mov	r0, sp				@ struct pt_regs *regs
-		mov	r1, #BAD_UNDEFINSTR		@ int reason
-		and	r2, r6, #31			@ int mode
-		b	SYMBOL_NAME(bad_mode)		@ Does not ever return...
-/*=============================================================================
  * Prefetch abort handler
  *-----------------------------------------------------------------------------
  */
@@ -529,73 +476,6 @@ __pabt_invalid:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 t:		.ascii "*** undef ***\r\n\0"
 		.align
 #endif
-
-/*=============================================================================
- * Address exception handler
- *-----------------------------------------------------------------------------
- * These aren't too critical.
- * (they're not supposed to happen, and won't happen in 32-bit mode).
- */
-
-vector_addrexcptn:
-		b	vector_addrexcptn
-
-/*=============================================================================
- * Interrupt (IRQ) handler
- *-----------------------------------------------------------------------------
- */
-__irq_usr:	sub	sp, sp, #S_FRAME_SIZE
-		stmia	sp, {r0 - r12}			@ save r0 - r12
-		add	r8, sp, #S_PC
-		stmdb	r8, {sp, lr}^
-		ldr	r4, .LCirq
-		ldmia	r4, {r5 - r7}			@ get saved PC, SPSR
-		stmia	r8, {r5 - r7}			@ save pc, psr, old_r0
-1:		get_irqnr_and_base r6, r5
-		teq	r6, #0
-		ldrneb	r0, [r5, r6]			@ get IRQ number
-		movne	r1, sp
-		@
-		@ routine called with r0 = irq number, r1 = struct pt_regs *
-		@
-		adrsvc	ne, lr, 1b
-		bne	do_IRQ
-		b	ret_with_reschedule
-
-		irq_prio_table
-
-__irq_svc:	sub	sp, sp, #S_FRAME_SIZE
-		stmia	sp, {r0 - r12}			@ save r0 - r12
-		mov	r6, lr
-		ldr	r7, .LCirq
-		ldmia	r7, {r7 - r9}
-		add	r5, sp, #S_FRAME_SIZE
-		add	r4, sp, #S_SP
-		stmia	r4, {r5, r6, r7, r8, r9}	@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
-1:		get_irqnr_and_base r6, r5
-		teq	r6, #0
-		ldrneb	r0, [r5, r6]			@ get IRQ number
-		movne	r1, sp
-		@
-		@ routine called with r0 = irq number, r1 = struct pt_regs *
-		@
-		adrsvc	ne, lr, 1b
-		bne	do_IRQ
-		ldr	r0, [sp, #S_PSR]
-		msr	spsr, r0
-		ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
-
-__irq_invalid:	sub	sp, sp, #S_FRAME_SIZE	@ Allocate space on stack for frame
-		stmfd	sp, {r0 - lr}		@ Save r0 - lr
-		mov	r7, #-1
-		ldr	r4, .LCirq
-		ldmia	r4, {r5, r6}		@ get saved pc, psr
-		add	r4, sp, #S_PC
-		stmia	r4, {r5, r6, r7}
-		mov	fp, #0
-		mov	r0, sp
-		mov	r1, #BAD_IRQ
-		b	SYMBOL_NAME(bad_mode)
 
 /*=============================================================================
  * Data abort handler code
@@ -655,6 +535,139 @@ __dabt_invalid:	sub	sp, sp, #S_FRAME_SIZE
 		and	r2, r6, #31
 		b	SYMBOL_NAME(bad_mode)
 
+/*=============================================================================
+ * Interrupt (IRQ) handler
+ *-----------------------------------------------------------------------------
+ */
+__irq_usr:	sub	sp, sp, #S_FRAME_SIZE
+		stmia	sp, {r0 - r12}			@ save r0 - r12
+		add	r8, sp, #S_PC
+		stmdb	r8, {sp, lr}^
+		ldr	r4, .LCirq
+		ldmia	r4, {r5 - r7}			@ get saved PC, SPSR
+		stmia	r8, {r5 - r7}			@ save pc, psr, old_r0
+1:		get_irqnr_and_base r0, r6, r5
+		movne	r1, sp
+		@
+		@ routine called with r0 = irq number, r1 = struct pt_regs *
+		@
+		adrsvc	ne, lr, 1b
+		bne	do_IRQ
+		b	ret_with_reschedule
+
+		irq_prio_table
+
+__irq_svc:	sub	sp, sp, #S_FRAME_SIZE
+		stmia	sp, {r0 - r12}			@ save r0 - r12
+		mov	r6, lr
+		ldr	r7, .LCirq
+		ldmia	r7, {r7 - r9}
+		add	r5, sp, #S_FRAME_SIZE
+		add	r4, sp, #S_SP
+		stmia	r4, {r5, r6, r7, r8, r9}	@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
+1:		get_irqnr_and_base r0, r6, r5
+		movne	r1, sp
+		@
+		@ routine called with r0 = irq number, r1 = struct pt_regs *
+		@
+		adrsvc	ne, lr, 1b
+		bne	do_IRQ
+		ldr	r0, [sp, #S_PSR]
+		msr	spsr, r0
+		ldmia	sp, {r0 - pc}^			@ load r0 - pc, cpsr
+
+__irq_invalid:	sub	sp, sp, #S_FRAME_SIZE	@ Allocate space on stack for frame
+		stmfd	sp, {r0 - lr}		@ Save r0 - lr
+		mov	r7, #-1
+		ldr	r4, .LCirq
+		ldmia	r4, {r5, r6}		@ get saved pc, psr
+		add	r4, sp, #S_PC
+		stmia	r4, {r5, r6, r7}
+		mov	fp, #0
+		mov	r0, sp
+		mov	r1, #BAD_IRQ
+		b	SYMBOL_NAME(bad_mode)
+
+/*=============================================================================
+ * Undefined instruction handler
+ *-----------------------------------------------------------------------------
+ * Handles floating point instructions
+ */
+__und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
+		stmia	sp, {r0 - r12}			@ Save r0 - r12
+		add	r8, sp, #S_PC
+		stmdb	r8, {sp, lr}^			@ Save user r0 - r12
+		ldr	r4, .LCund
+		ldmia	r4, {r5 - r7}
+		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
+		mov	fp, #0
+
+		adr	r1, .LC2
+		ldmia	r1, {r1, r4}
+		ldr	r1, [r1]
+		get_current_task r2
+		teq	r1, r2
+		blne	SYMBOL_NAME(math_state_restore)
+		adrsvc	al, r9, SYMBOL_NAME(fpreturn)
+		adrsvc	al, lr, SYMBOL_NAME(fpundefinstr)
+		ldr	pc, [r4]			@ Call FP module USR entry point
+
+		.globl	SYMBOL_NAME(fpundefinstr)
+SYMBOL_NAME(fpundefinstr):				@ Called by FP module on undefined instr
+		mov	r0, lr
+		mov	r1, sp
+		mrs	r4, cpsr			@ Enable interrupts
+		bic	r4, r4, #I_BIT
+		msr	cpsr, r4
+		bl	SYMBOL_NAME(do_undefinstr)
+		b	ret_from_exception		@ Normal FP exit
+
+__und_svc:	sub	sp, sp, #S_FRAME_SIZE
+		stmia	sp, {r0 - r12}			@ save r0 - r12
+		mov	r6, lr
+		ldr	r7, .LCund
+		ldmia	r7, {r7 - r9}
+		add	r5, sp, #S_FRAME_SIZE
+		add	r4, sp, #S_SP
+		stmia	r4, {r5 - r9}			@ save sp_SVC, lr_SVC, pc, cpsr, old_ro
+
+		adr	r1, .LC2
+		ldmia	r1, {r1, r4}
+		ldr	r1, [r1]
+		mov	r2, sp, lsr #13
+		mov	r2, r2, lsl #13
+		teq	r1, r2
+		blne	SYMBOL_NAME(math_state_restore)
+		adrsvc	al, r9, SYMBOL_NAME(fpreturnsvc)
+		adrsvc	al, lr, SYMBOL_NAME(fpundefinstrsvc)
+		ldr	pc, [r4]			@ Call FP module SVC entry point
+
+		.globl	SYMBOL_NAME(fpundefinstrsvc)
+SYMBOL_NAME(fpundefinstrsvc):
+		mov	r0, r5				@ unsigned long pc
+		mov	r1, sp				@ struct pt_regs *regs
+		bl	SYMBOL_NAME(do_undefinstr)
+
+		.globl	SYMBOL_NAME(fpreturnsvc)
+SYMBOL_NAME(fpreturnsvc):
+		ldr	lr, [sp, #S_PSR]		@ Get SVC cpsr
+		msr	spsr, lr
+		ldmia	sp, {r0 - pc}^			@ Restore SVC registers
+
+.LC2:		.word	SYMBOL_NAME(last_task_used_math)
+		.word	SYMBOL_NAME(fp_enter)
+
+__und_invalid:	sub	sp, sp, #S_FRAME_SIZE
+		stmia	sp, {r0 - lr}
+		mov	r7, r0
+		ldr	r4, .LCund
+		ldmia	r4, {r5, r6}			@ Get UND/IRQ/FIQ/ABT pc, cpsr
+		add	r4, sp, #S_PC
+		stmia	r4, {r5, r6, r7}		@ Save UND/IRQ/FIQ/ABT pc, cpsr, old_r0
+		mov	r0, sp				@ struct pt_regs *regs
+		mov	r1, #BAD_UNDEFINSTR		@ int reason
+		and	r2, r6, #31			@ int mode
+		b	SYMBOL_NAME(bad_mode)		@ Does not ever return...
 
 #include "entry-common.S"
 

@@ -1,199 +1,189 @@
 /*
  * linux/arch/arm/kernel/dma.c
  *
- * Copyright (C) 1995, 1996 Russell King
+ * Copyright (C) 1995-1998 Russell King
+ *
+ * Front-end to the DMA handling.  You must provide the following
+ * architecture-specific routines:
+ *
+ *  int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id);
+ *  void arch_free_dma(dmach_t channel, dma_t *dma);
+ *  void arch_enable_dma(dmach_t channel, dma_t *dma);
+ *  void arch_disable_dma(dmach_t channel, dma_t *dma);
+ *  int arch_get_dma_residue(dmach_t channel, dma_t *dma);
+ *
+ * Moved DMA resource allocation here...
  */
-
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>
+#include <linux/init.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
-#define KERNEL_ARCH_DMA
 #include <asm/dma.h>
 
-static unsigned long dma_address[8];
-static unsigned long dma_count[8];
-static char dma_direction[8] = { -1, -1, -1, -1, -1, -1, -1};
+#include "dma.h"
 
-#if defined(CONFIG_ARCH_A5K) || defined(CONFIG_ARCH_RPC)
-#define DMA_PCIO
-#endif
-#if defined(CONFIG_ARCH_ARC) && defined(CONFIG_BLK_DEV_FD)
-#define DMA_OLD
-#endif
+static dma_t dma_chan[MAX_DMA_CHANNELS];
 
-void enable_dma (unsigned int dmanr)
+/* Get dma list
+ * for /proc/dma
+ */
+int get_dma_list(char *buf)
 {
-	switch (dmanr) {
-#ifdef DMA_PCIO
-		case 2: {
-			void *fiqhandler_start;
-			unsigned int fiqhandler_length;
-			extern void floppy_fiqsetup (unsigned long len, unsigned long addr,
-					unsigned long port);
-		    	switch (dma_direction[dmanr]) {
-	    		case 1: {
-				extern unsigned char floppy_fiqin_start, floppy_fiqin_end;
-				fiqhandler_start = &floppy_fiqin_start;
-				fiqhandler_length = &floppy_fiqin_end - &floppy_fiqin_start;
-				break;
-			}
-			case 0: {
-				extern unsigned char floppy_fiqout_start, floppy_fiqout_end;
-				fiqhandler_start = &floppy_fiqout_start;
-				fiqhandler_length = &floppy_fiqout_end - &floppy_fiqout_start;
-				break;
-			}
-		    	default:
-				printk ("enable_dma: dma%d not initialised\n", dmanr);
-				return;
-			}
-			memcpy ((void *)0x1c, fiqhandler_start, fiqhandler_length);
-			flush_page_to_ram(0);
-			floppy_fiqsetup (dma_count[dmanr], dma_address[dmanr], (int)PCIO_FLOPPYDMABASE);
-			enable_irq (64);
-			return;
-		}
-#endif
-#ifdef DMA_OLD
-		case 0: { /* Data DMA */
-			switch (dma_direction[dmanr]) {
-			case 1: /* read */
-	    	    	{
-				extern unsigned char fdc1772_dma_read, fdc1772_dma_read_end;
-				extern void fdc1772_setupdma(unsigned int count,unsigned int addr);
-				unsigned long flags;
-#ifdef DEBUG
-				printk("enable_dma fdc1772 data read\n");
-#endif
-				save_flags(flags);
-				cliIF();
-			
-				memcpy ((void *)0x1c, (void *)&fdc1772_dma_read,
-					&fdc1772_dma_read_end - &fdc1772_dma_read);
-				fdc1772_setupdma(dma_count[dmanr],dma_address[dmanr]); /* Sets data pointer up */
-				enable_irq (64);
-				restore_flags(flags);
-			}
-			break;
+	int i, len = 0;
 
-			case 0: /* write */
-		        {
-				extern unsigned char fdc1772_dma_write, fdc1772_dma_write_end;
-				extern void fdc1772_setupdma(unsigned int count,unsigned int addr);
-				unsigned long flags;
+	for (i = 0; i < MAX_DMA_CHANNELS; i++) {
+		if (dma_chan[i].lock)
+			len += sprintf(buf + len, "%2d: %s\n",
+				       i, dma_chan[i].device_id);
+	}
+	return len;
+}
 
-#ifdef DEBUG
-				printk("enable_dma fdc1772 data write\n");
-#endif
-				save_flags(flags);
-				cliIF();
-				memcpy ((void *)0x1c, (void *)&fdc1772_dma_write,
-					&fdc1772_dma_write_end - &fdc1772_dma_write);
-				fdc1772_setupdma(dma_count[dmanr],dma_address[dmanr]); /* Sets data pointer up */
-				enable_irq (64);
+/* Request DMA channel
+ *
+ * On certain platforms, we have to allocate an interrupt as well...
+ */
+int request_dma(dmach_t channel, const char *device_id)
+{
+	if (channel < MAX_DMA_CHANNELS) {
+		int ret;
 
-				restore_flags(flags);
-			}
-			break;
-	    		default:
-				printk ("enable_dma: dma%d not initialised\n", dmanr);
-				return;
-			}
-		}
-		break;
+		if (xchg(&dma_chan[channel].lock, 1) != 0)
+			return -EBUSY;
 
-		case 1: { /* Command end FIQ - actually just sets a flag */
-			/* Need to build a branch at the FIQ address */
-			extern void fdc1772_comendhandler(void);
-			unsigned long flags;
+		ret = arch_request_dma(channel, &dma_chan[channel], device_id);
+		if (!ret) {
+			dma_chan[channel].device_id = device_id;
+			dma_chan[channel].active    = 0;
+			dma_chan[channel].invalid   = 1;
+		} else
+			xchg(&dma_chan[channel].lock, 0);
 
-			/*printk("enable_dma fdc1772 command end FIQ\n");*/
-			save_flags(flags);
-			cliIF();
-	
-			*((unsigned int *)0x1c)=0xea000000 | (((unsigned int)fdc1772_comendhandler-(0x1c+8))/4); /* B fdc1772_comendhandler */
-
-			restore_flags(flags);
-		}
-		break;
-#endif
-		case DMA_0:
-		case DMA_1:
-		case DMA_2:
-		case DMA_3:
-		case DMA_S0:
-		case DMA_S1:
-			arch_enable_dma (dmanr - DMA_0);
-			break;
-
-		default:
-			printk ("enable_dma: dma %d not supported\n", dmanr);
+		return ret;
+	} else {
+		printk (KERN_ERR "Trying to allocate DMA%d\n", channel);
+		return -EINVAL;
 	}
 }
 
-void set_dma_mode (unsigned int dmanr, char mode)
+/* Free DMA channel
+ *
+ * On certain platforms, we have to free interrupt as well...
+ */
+void free_dma(dmach_t channel)
 {
-	if (dmanr < 8) {
-		if (mode == DMA_MODE_READ)
-			dma_direction[dmanr] = 1;
-		else if (mode == DMA_MODE_WRITE)
-			dma_direction[dmanr] = 0;
-		else
-			printk ("set_dma_mode: dma%d: invalid mode %02X not supported\n",
-				dmanr, mode);
-	} else if (dmanr < MAX_DMA_CHANNELS)
-		arch_set_dma_mode (dmanr - DMA_0, mode);
-	else
-		printk ("set_dma_mode: dma %d not supported\n", dmanr);
+	if (channel >= MAX_DMA_CHANNELS) {
+		printk (KERN_ERR "Trying to free DMA%d\n", channel);
+		return;
+	}
+
+	if (xchg(&dma_chan[channel].lock, 0) == 0) {
+		if (dma_chan[channel].active) {
+			printk (KERN_ERR "Freeing active DMA%d\n", channel);
+			arch_disable_dma(channel, &dma_chan[channel]);
+			dma_chan[channel].active = 0;
+		}
+
+		printk (KERN_ERR "Trying to free free DMA%d\n", channel);
+		return;
+	}
+	arch_free_dma(channel, &dma_chan[channel]);
 }
 
-void set_dma_addr (unsigned int dmanr, unsigned int addr)
+/* Set DMA Scatter-Gather list
+ */
+void set_dma_sg (dmach_t channel, dmasg_t *sg, int nr_sg)
 {
-	if (dmanr < 8)
-		dma_address[dmanr] = (unsigned long)addr;
-	else if (dmanr < MAX_DMA_CHANNELS)
-		arch_set_dma_addr (dmanr - DMA_0, addr);
-	else
-		printk ("set_dma_addr: dma %d not supported\n", dmanr);
+	dma_chan[channel].sg = sg;
+	dma_chan[channel].sgcount = nr_sg;
+	dma_chan[channel].invalid = 1;
 }
 
-void set_dma_count (unsigned int dmanr, unsigned int count)
+/* Set DMA address
+ *
+ * Copy address to the structure, and set the invalid bit
+ */
+void set_dma_addr (dmach_t channel, unsigned long physaddr)
 {
-	if (dmanr < 8)
-		dma_count[dmanr] = (unsigned long)count;
-	else if (dmanr < MAX_DMA_CHANNELS)
-		arch_set_dma_count (dmanr - DMA_0, count);
-	else
-	    	printk ("set_dma_count: dma %d not supported\n", dmanr);
+	if (dma_chan[channel].active)
+		printk(KERN_ERR "set_dma_addr: altering DMA%d"
+		       " address while DMA active\n",
+		       channel);
+
+	dma_chan[channel].sg = &dma_chan[channel].buf;
+	dma_chan[channel].sgcount = 1;
+	dma_chan[channel].buf.address = physaddr;
+	dma_chan[channel].invalid = 1;
 }
 
-int get_dma_residue (unsigned int dmanr)
+/* Set DMA byte count
+ *
+ * Copy address to the structure, and set the invalid bit
+ */
+void set_dma_count (dmach_t channel, unsigned long count)
 {
-	if (dmanr < 8) {
-		switch (dmanr) {
-#if defined(CONFIG_ARCH_A5K) || defined(CONFIG_ARCH_RPC)
-		case 2: {
-			extern int floppy_fiqresidual (void);
-			return floppy_fiqresidual ();
+	if (dma_chan[channel].active)
+		printk(KERN_ERR "set_dma_count: altering DMA%d"
+		       " count while DMA active\n",
+		       channel);
+
+	dma_chan[channel].sg = &dma_chan[channel].buf;
+	dma_chan[channel].sgcount = 1;
+	dma_chan[channel].buf.length = count;
+	dma_chan[channel].invalid = 1;
+}
+
+/* Set DMA direction mode
+ */
+void set_dma_mode (dmach_t channel, dmamode_t mode)
+{
+	if (dma_chan[channel].active)
+		printk(KERN_ERR "set_dma_mode: altering DMA%d"
+		       " mode while DMA active\n",
+		       channel);
+
+	dma_chan[channel].dma_mode = mode;
+	dma_chan[channel].invalid = 1;
+}
+
+/* Enable DMA channel
+ */
+void enable_dma (dmach_t channel)
+{
+	if (dma_chan[channel].lock) {
+		if (dma_chan[channel].active == 0) {
+			dma_chan[channel].active = 1;
+			arch_enable_dma(channel, &dma_chan[channel]);
 		}
-#endif
-#if defined(CONFIG_ARCH_ARC) && defined(CONFIG_BLK_DEV_FD)
-		case 0: {
-			extern unsigned int fdc1772_bytestogo;
-			return fdc1772_bytestogo;
+	} else
+		printk (KERN_ERR "Trying to enable free DMA%d\n", channel);
+}
+
+/* Disable DMA channel
+ */
+void disable_dma (dmach_t channel)
+{
+	if (dma_chan[channel].lock) {
+		if (dma_chan[channel].active == 1) {
+			dma_chan[channel].active = 0;
+			arch_disable_dma(channel, &dma_chan[channel]);
 		}
-#endif
-		default:
-			return -1;
-		}
-	} else if (dmanr < MAX_DMA_CHANNELS)
-		return arch_dma_count (dmanr - DMA_0);
-	return -1;
+	} else
+		printk (KERN_ERR "Trying to disable free DMA%d\n", channel);
+}
+
+int get_dma_residue(dmach_t channel)
+{
+	return arch_get_dma_residue(channel, &dma_chan[channel]);
+}
+
+__initfunc(void init_dma(void))
+{
+	arch_dma_init(dma_chan);
 }

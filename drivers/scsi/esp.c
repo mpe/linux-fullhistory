@@ -37,6 +37,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/idprom.h>
+#include <asm/spinlock.h>
 
 #define DEBUG_ESP
 /* #define DEBUG_ESP_HME */
@@ -172,6 +173,7 @@ static int esps_running = 0;
 
 /* Forward declarations. */
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs);
+static void do_esp_intr(int irq, void *dev_id, struct pt_regs *pregs);
 
 /* Debugging routines */
 struct esp_cmdstrings {
@@ -799,7 +801,7 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 					goto esp_irq_acquired; /* BASIC rulez */
 				}
 			}
-			if(request_irq(esp->ehost->irq, esp_intr, SA_SHIRQ,
+			if(request_irq(esp->ehost->irq, do_esp_intr, SA_SHIRQ,
 				       "Sparc ESP SCSI", NULL))
 				panic("Cannot acquire ESP irq line");
 esp_irq_acquired:
@@ -812,7 +814,7 @@ esp_irq_acquired:
 			dcookie.imap = dcookie.iclr = 0;
 			dcookie.pil = -1;
 			dcookie.bus_cookie = sbus;
-			if(request_irq(esp->ehost->irq, esp_intr,
+			if(request_irq(esp->ehost->irq, do_esp_intr,
 				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
 				       "Sparc ESP SCSI", &dcookie))
 				panic("Cannot acquire ESP irq line");
@@ -4036,6 +4038,15 @@ again:
 
 esp_handle_done:
 	return;
+}
+
+static void do_esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	esp_intr(irq, dev_id, pregs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 #ifndef __sparc_v9__

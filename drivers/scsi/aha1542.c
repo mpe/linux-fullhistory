@@ -30,6 +30,7 @@
 #include <linux/proc_fs.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -129,6 +130,8 @@ static struct Scsi_Host * aha_host[7] = {NULL,};  /* One for each IRQ level (9-1
 
 static void setup_mailboxes(int base_io, struct Scsi_Host * shpnt);
 static int aha1542_restart(struct Scsi_Host * shost);
+static void aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs);
+static void do_aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs);
 
 #define aha1542_intr_reset(base)  outb(IRST, CONTROL(base))
 
@@ -361,6 +364,16 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     return debug;				/* 1 = ok */
   fail:
     return 0;					/* 0 = not ok */
+}
+
+/* A quick wrapper for do_aha1542_intr_handle to grab the spin lock */
+static void do_aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    aha1542_intr_handle(irq, dev_id, regs);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 /* A "high" level interrupt handler */
@@ -1013,7 +1026,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    DEB(printk("aha1542_detect: enable interrupt channel %d\n", irq_level));
 		    save_flags(flags);
 		    cli();
-		    if (request_irq(irq_level,aha1542_intr_handle, 0, "aha1542", NULL)) {
+		    if (request_irq(irq_level,do_aha1542_intr_handle, 0, "aha1542", NULL)) {
 			    printk("Unable to allocate IRQ for adaptec controller.\n");
 			    restore_flags(flags);
 			    goto unregister;

@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-a5k/uncompress.h
+ * linux/include/asm-arm/arch-arc/uncompress.h
  *
  * Copyright (C) 1996 Russell King
  */

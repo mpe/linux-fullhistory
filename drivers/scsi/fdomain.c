@@ -264,6 +264,7 @@
 #include "hosts.h"
 #include "fdomain.h"
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
@@ -948,7 +949,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       /* Register the IRQ with the kernel */
 
       retcode = request_irq( interrupt_level,
-			     fdomain_16x0_intr, SA_INTERRUPT, "fdomain", NULL);
+			     do_fdomain_16x0_intr, SA_INTERRUPT, "fdomain", NULL);
 
       if (retcode < 0) {
 	 if (retcode == -EINVAL) {
@@ -1608,6 +1609,15 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
    in_interrupt_flag = 0;
 #endif
    return;
+}
+
+void do_fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
+{
+   unsigned long flags;
+
+   spin_lock_irqsave(&io_request_lock, flags);
+   fdomain_16x0_intr(irq, dev_id, regs);
+   spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 int fdomain_16x0_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))

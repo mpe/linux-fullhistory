@@ -72,10 +72,10 @@ _arm6_7_switch_to:
 		stmfd	sp!, {ip}			@ Save cpsr_SVC
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r0, [r1, #ADDR_LIMIT]
+		ldr	r0, [r1, #TSK_ADDR_LIMIT]
 		teq	r0, #0
-		moveq	r0, #KERNEL_DOMAIN
-		movne	r0, #USER_DOMAIN
+		moveq	r0, #DOM_KERNELDOMAIN
+		movne	r0, #DOM_USERDOMAIN
 		mcr	p15, 0, r0, c3, c0		@ Set domain reg
 		ldr	r0, [r1, #TSS_MEMMAP]		@ Page table pointer
 		mov	r1, #0

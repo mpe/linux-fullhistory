@@ -87,6 +87,7 @@ struct rose_neigh {
 	unsigned int		number;
 	char			restarted;
 	char			dce_mode;
+	char			loopback;
 	struct sk_buff_head	queue;
 	struct timer_list	t0timer;
 	struct timer_list	ftimer;
@@ -97,6 +98,7 @@ struct rose_node {
 	rose_address		address;
 	unsigned short		mask;
 	unsigned char		count;
+	char			loopback;
 	struct rose_neigh	*neighbour[3];
 };
 
@@ -179,11 +181,21 @@ extern void rose_transmit_diagnostic(struct rose_neigh *, unsigned char);
 extern void rose_transmit_clear_request(struct rose_neigh *, unsigned int, unsigned char, unsigned char);
 extern void rose_transmit_link(struct sk_buff *, struct rose_neigh *);
 
+/* rose_loopback.c */
+extern void rose_loopback_init(void);
+extern void rose_loopback_clear(void);
+extern int  rose_loopback_queue(struct sk_buff *, struct rose_neigh *);
+
 /* rose_out.c */
 extern void rose_kick(struct sock *);
 extern void rose_enquiry_response(struct sock *);
 
 /* rose_route.c */
+extern struct rose_neigh *rose_loopback_neigh;
+
+extern int  rose_add_loopback_neigh(void);
+extern int  rose_add_loopback_node(rose_address *);
+extern void rose_del_loopback_node(rose_address *);
 extern void rose_rt_device_down(struct device *);
 extern void rose_link_device_down(struct device *);
 extern struct device *rose_dev_first(void);

@@ -35,6 +35,7 @@
 #include <linux/proc_fs.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -466,6 +467,14 @@ finished:;
 		OpDone (SCpnt, rc << 16);
 	return 0;
 	}
+static void do_Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
+	{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	Irq_Handler(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	}
 /****************************************************************
  *	Name:	internal_done :LOCAL
  *
@@ -552,7 +561,7 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 				}
 			if ( setirq )																// if not shared, posses
 				{
-				if ( request_irq (pshost->irq, Irq_Handler, 0, "pci2000", NULL) )
+				if ( request_irq (pshost->irq, do_Irq_Handler, 0, "pci2000", NULL) )
 					{
 					printk ("Unable to allocate IRQ for PSI-2000 controller.\n");
 					goto unregister;

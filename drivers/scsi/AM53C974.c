@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#incldue <asm/spinlock.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
@@ -361,6 +362,7 @@ static __inline__ void initialize_SCp(Scsi_Cmnd *cmd);
 static __inline__ void run_main(void);
 static void AM53C974_main (void);
 static void AM53C974_intr(int irq, void *dev_id, struct pt_regs *regs);
+static void do_AM53C974_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void AM53C974_intr_disconnect(struct Scsi_Host *instance); 
 static int AM53C974_sync_neg(struct Scsi_Host *instance, int target, unsigned char *msg);
 static __inline__ void AM53C974_set_async(struct Scsi_Host *instance, int target);
@@ -716,7 +718,7 @@ for (search = first_host;
                  (search->irq != instance->irq) || (search == instance) );
      search = search->next);
 if (!search) {
-   if (request_irq(instance->irq, AM53C974_intr, SA_INTERRUPT, "AM53C974", NULL)) {
+   if (request_irq(instance->irq, do_AM53C974_intr, SA_INTERRUPT, "AM53C974", NULL)) {
       printk("scsi%d: IRQ%d not free, detaching\n", instance->host_no, instance->irq);
       scsi_unregister(instance);
       return 0; } 
@@ -974,6 +976,24 @@ do {
        } /* for instance */
    } while (!done);
 main_running = 0;
+}
+
+/************************************************************************
+* Function : AM53C974_intr(int irq, void *dev_id, struct pt_regs *regs) *
+*                                                                       *
+* Purpose : interrupt handler                                           *
+*                                                                       *
+* Inputs : irq - interrupt line, regs - ?                               *
+*                                                                       *
+* Returns : nothing                                                     *
+************************************************************************/
+static void do_AM53C974_intr(int irq, void *dev_id, struct pt_regs *regs)
+{
+unsigned long flags;
+
+spin_lock_irqsave(&io_request_lock, flags);
+AM53C974_intr(irq, dev_id, regs);
+spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 /************************************************************************

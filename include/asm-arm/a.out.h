@@ -1,16 +1,18 @@
 #ifndef __ARM_A_OUT_H__
 #define __ARM_A_OUT_H__
 
+#include <linux/types.h>
+
 struct exec
 {
-  unsigned long a_info;		/* Use macros N_MAGIC, etc for access */
-  unsigned a_text;		/* length of text, in bytes */
-  unsigned a_data;		/* length of data, in bytes */
-  unsigned a_bss;		/* length of uninitialized data area for file, in bytes */
-  unsigned a_syms;		/* length of symbol table data in file, in bytes */
-  unsigned a_entry;		/* start address */
-  unsigned a_trsize;		/* length of relocation info for text, in bytes */
-  unsigned a_drsize;		/* length of relocation info for data, in bytes */
+  __u32 a_info;		/* Use macros N_MAGIC, etc for access */
+  __u32 a_text;		/* length of text, in bytes */
+  __u32 a_data;		/* length of data, in bytes */
+  __u32 a_bss;		/* length of uninitialized data area for file, in bytes */
+  __u32 a_syms;		/* length of symbol table data in file, in bytes */
+  __u32 a_entry;	/* start address */
+  __u32 a_trsize;	/* length of relocation info for text, in bytes */
+  __u32 a_drsize;	/* length of relocation info for data, in bytes */
 };
 
 /*

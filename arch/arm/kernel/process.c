@@ -69,8 +69,10 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	for (;;)
 	{
+#if 0 //def ARCH_IDLE_OK
 		if (!hlt_counter && !need_resched)
 			proc_idle ();
+#endif
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -142,7 +144,7 @@ void show_regs(struct pt_regs * regs)
 "	mrc p15, 0, %1, c2, c0\n"
 "	mrc p15, 0, %2, c3, c0\n"
  : "=r" (ctrl), "=r" (transbase), "=r" (dac));
-  printk("Control: %04X  Table: %08X  DAC: %08X",
+  printk("Control: %04X  Table: %08X  DAC: %08X  ",
   	ctrl, transbase, dac);
   }
 #endif

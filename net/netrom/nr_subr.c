@@ -229,7 +229,7 @@ void nr_write_internal(struct sock *sk, int frametype)
  * This routine is called when a Connect Acknowledge with the Choke Flag
  * set is needed to refuse a connection.
  */
-void nr_transmit_dm(struct sk_buff *skb)
+void nr_transmit_refusal(struct sk_buff *skb, int mine)
 {
 	struct sk_buff *skbn;
 	unsigned char *dptr;
@@ -258,10 +258,18 @@ void nr_transmit_dm(struct sk_buff *skb)
 
 	*dptr++ = sysctl_netrom_network_ttl_initialiser;
 
-	*dptr++ = skb->data[15];
-	*dptr++ = skb->data[16];
-	*dptr++ = 0;
-	*dptr++ = 0;
+	if (mine) {
+		*dptr++ = 0;
+		*dptr++ = 0;
+		*dptr++ = skb->data[15];
+		*dptr++ = skb->data[16];
+	} else {
+		*dptr++ = skb->data[15];
+		*dptr++ = skb->data[16];
+		*dptr++ = 0;
+		*dptr++ = 0;
+	}
+
 	*dptr++ = NR_CONNACK | NR_CHOKE_FLAG;
 	*dptr++ = 0;
 

@@ -30,6 +30,12 @@ struct sg_header
 #define SG_SET_TIMEOUT 0x2201  /* set timeout *(int *)arg==timeout */
 #define SG_GET_TIMEOUT 0x2202  /* get timeout return timeout */
 
+#define SG_EMULATED_HOST 0x2203 /* true for emulated host adapter (ATAPI) */
+
+/* Used to configure SCSI command transformation layer for ATAPI devices */
+#define SG_SET_TRANSFORM 0x2204
+#define SG_GET_TRANSFORM 0x2205
+
 #define SG_DEFAULT_TIMEOUT (60*HZ) /* 1 minute timeout */
 #define SG_DEFAULT_RETRIES 1
 

@@ -16,7 +16,8 @@
 #define __ASM_ECARD_H
 
 /*
- * Currently understood cards
+ * Currently understood cards (but not necessarily
+ * supported):
  *                        Manufacturer  Product ID
  */
 #define MANU_ACORN		0x0000
@@ -60,6 +61,8 @@
 #define MANU_MCS		0x0063
 #define PROD_MCS_CONNECT32		0x0125
 
+#define MANU_EESOX		0x0064
+#define PROD_EESOX_SCSI2		0x008c
 
 
 #ifdef ECARD_C
@@ -72,8 +75,9 @@
 
 /* Type of card's address space */
 typedef enum {
-	ECARD_IOC  = 0,
-	ECARD_MEMC = 1
+	ECARD_IOC,
+	ECARD_MEMC,
+	ECARD_DEBI
 } card_type_t;
 
 /* Speed of card for ECARD_IOC address space */
@@ -124,10 +128,12 @@ struct expansion_card {
 	unsigned char		irqmask;	/* IRQ mask			*/
 	unsigned char		fiqmask;	/* FIQ mask			*/
 	unsigned char  		claimed;	/* Card claimed?		*/
+
 	CONST unsigned char	slot_no;	/* Slot number			*/
+	CONST unsigned char	dma;		/* DMA number (for request_dma)	*/
 	CONST unsigned char	irq;		/* IRQ number (for request_irq)	*/
 	CONST unsigned char	fiq;		/* FIQ number (for request_irq)	*/
-	CONST unsigned short	unused;
+
 	CONST struct in_ecld	cld;		/* Card Identification		*/
 	void			*irq_data;	/* Data for use for IRQ by card	*/
 	void			*fiq_data;	/* Data for use for FIQ by card	*/

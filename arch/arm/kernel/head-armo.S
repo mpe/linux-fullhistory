@@ -42,7 +42,7 @@ Lcontinue:	str	r5, [r6]
 		b	SYMBOL_NAME(start_kernel)
 
 LC1:		.word	SYMBOL_NAME(_stext)
-LC0:		.word	SYMBOL_NAME(_edata)
+LC0:		.word	SYMBOL_NAME(__bss_start)
 		.word	SYMBOL_NAME(arm_id)
 		.word	SYMBOL_NAME(_end)
 		.word	SYMBOL_NAME(init_task_union)+8192

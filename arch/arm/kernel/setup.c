@@ -26,15 +26,16 @@
 #include <linux/major.h>
 #include <linux/utsname.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 
-#include <asm/segment.h>
-#include <asm/system.h>
 #include <asm/hardware.h>
-#include <asm/pgtable.h>
-#include <asm/arch/mmu.h>
-#include <asm/procinfo.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
+#include <asm/procinfo.h>
+#include <asm/segment.h>
 #include <asm/setup.h>
+#include <asm/system.h>
+#include <asm/arch/mmu.h>
 
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
@@ -153,13 +154,17 @@ static void setup_initrd (struct param_struct *params, unsigned long memory_end)
 #define setup_initrd(p,m)
 #endif
 
+#ifdef IOEB_BASE
 static inline void check_ioeb_present(void)
 {
 	if (((*IOEB_BASE) & 15) == 5)
 		armidlist[armidindex].features |= F_IOEB;
 }
+#else
+#define check_ioeb_present()
+#endif
 
-static void get_processor_type (void)
+static inline void get_processor_type (void)
 {
 	for (armidindex = 0; ; armidindex ++)
 		if (!((armidlist[armidindex].id ^ arm_id) &
@@ -179,11 +184,14 @@ static void get_processor_type (void)
 
 #define COMMAND_LINE_SIZE 256
 
+/* Can this be initdata?  --pb
+ *  command_line can be, saved_command_line can't though
+ */
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
-void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+__initfunc(void setup_arch(char **cmdline_p,
+	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	static unsigned char smptrap;
 	unsigned long memory_start, memory_end;

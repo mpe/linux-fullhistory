@@ -1,56 +1,54 @@
-/*
- *=============================================================================
- *		Low-level interface code
- *-----------------------------------------------------------------------------
- *		Trap initialisation
- *-----------------------------------------------------------------------------
- *
- * Note - FIQ code has changed.  The default is a couple of words in 0x1c, 0x20
- * that call _unexp_fiq.  Nowever, we now copy the FIQ routine to 0x1c (removes
- * some excess cycles).
- *
- * What we need to put into 0-0x1c are ldrs to branch to 0xC0000000
- * (the kernel).
- * 0x1c onwards is reserved for FIQ, so I think that I will allocate 0xe0 onwards for
- * the actuall address to jump to.
+/*============================================================================
+ * All exits to user mode from the kernel go through this code.
  */
-/*
- * these go into 0x00
- */
-.Lbranches:	swi	SYS_ERROR0
-		ldr	pc, .Lbranches + 0xe4
-		ldr	pc, .Lbranches + 0xe8
-		ldr	pc, .Lbranches + 0xec
-		ldr	pc, .Lbranches + 0xf0
-		ldr	pc, .Lbranches + 0xf4
-		ldr	pc, .Lbranches + 0xf8
-		ldr	pc, .Lbranches + 0xfc
-/*
- * this is put into 0xe4 and above
- */
-.Ljump_addresses:
-		.word	vector_undefinstr	@ 0xe4
-		.word	vector_swi		@ 0xe8
-		.word	vector_prefetch		@ 0xec
-		.word	vector_data		@ 0xf0
-		.word	vector_addrexcptn	@ 0xf4
-		.word	vector_IRQ		@ 0xf8
-		.word	_unexp_fiq		@ 0xfc
-/*
- * initialise the trap system
- */
-ENTRY(trap_init)
-		stmfd	sp!, {r4 - r7, lr}
-		initialise_traps_extra
-		mov	r0, #0xe4
-		adr	r1, .Ljump_addresses
-		ldmia	r1, {r1 - r6}
-		stmia	r0, {r1 - r6}
-		mov	r0, #0
-		adr	r1, .Lbranches
-		ldmia	r1, {r1 - r7}
-		stmia	r0, {r1 - r7}
-		LOADREGS(fd, sp!, {r4 - r7, pc})
+
+		.globl	ret_from_sys_call
+
+		.globl	SYMBOL_NAME(fpreturn)
+SYMBOL_NAME(fpreturn):
+ret_from_exception:
+		adr	r0, 1f
+		ldmia	r0, {r0, r1}
+		ldr	r0, [r0]
+		ldr	r1, [r1]
+		tst	r0, r1
+		blne	SYMBOL_NAME(do_bottom_half)
+ret_from_intr:	ldr	r0, [sp, #S_PSR]
+		tst	r0, #3
+		beq	ret_with_reschedule
+		b	ret_from_all
+
+ret_signal:	mov	r1, sp
+		adrsvc	al, lr, ret_from_all
+		b	SYMBOL_NAME(do_signal)
+
+2:		bl	SYMBOL_NAME(schedule)
+
+ret_from_sys_call:
+		adr	r0, 1f
+		ldmia	r0, {r0, r1}
+		ldr	r0, [r0]
+		ldr	r1, [r1]
+		tst	r0, r1
+		adrsvc	ne, lr, ret_from_intr
+		bne	SYMBOL_NAME(do_bottom_half)
+
+ret_with_reschedule:
+		ldr	r0, 1f + 8
+		ldr	r0, [r0]
+		teq	r0, #0
+		bne	2b
+
+		get_current_task r1
+		ldr	r1, [r1, #TSK_SIGPENDING]
+		teq	r1, #0
+		bne	ret_signal
+
+ret_from_all:	restore_user_regs
+
+1:		.word	SYMBOL_NAME(bh_mask)
+		.word	SYMBOL_NAME(bh_active)
+		.word	SYMBOL_NAME(need_resched)
 
 /*=============================================================================
  * SWI handler
@@ -77,7 +75,7 @@ vector_swi:	save_user_regs
 		bcs	2f
 
 		get_current_task r5
-		ldr	ip, [r5, #FLAGS]	@ check for syscall tracing
+		ldr	ip, [r5, #TSK_FLAGS]	@ check for syscall tracing
 		tst	ip, #PF_TRACESYS
 		bne	1f
 
@@ -91,7 +89,7 @@ vector_swi:	save_user_regs
 
 1:		ldr	r7, [sp, #S_IP]		@ save old IP
 		mov	r0, #0
-		str	r7, [sp, #S_IP]		@ trace entry [IP = 0]
+		str	r0, [sp, #S_IP]		@ trace entry [IP = 0]
 		bl	SYMBOL_NAME(syscall_trace)
 		str	r7, [sp, #S_IP]
 		ldmia	sp, {r0 - r3}		@ have to reload r0 - r3
@@ -193,57 +191,59 @@ sys_rt_sigreturn_wrapper:
 		add	r0, sp, #4
 		b	SYMBOL_NAME(sys_rt_sigreturn)
 
-/*============================================================================
- * All exits to user mode from the kernel go through this code.
+/*
+ *=============================================================================
+ *		Low-level interface code
+ *-----------------------------------------------------------------------------
+ *		Trap initialisation
+ *-----------------------------------------------------------------------------
+ *
+ * Note - FIQ code has changed.  The default is a couple of words in 0x1c, 0x20
+ * that call _unexp_fiq.  Nowever, we now copy the FIQ routine to 0x1c (removes
+ * some excess cycles).
+ *
+ * What we need to put into 0-0x1c are ldrs to branch to 0xC0000000
+ * (the kernel).
+ * 0x1c onwards is reserved for FIQ, so I think that I will allocate 0xe0 onwards for
+ * the actuall address to jump to.
  */
-
-		.globl	ret_from_sys_call
-
-		.globl	SYMBOL_NAME(fpreturn)
-SYMBOL_NAME(fpreturn):
-ret_from_exception:
-		adr	r0, 1f
-		ldmia	r0, {r0, r1}
-		ldr	r0, [r0]
-		ldr	r1, [r1]
-		tst	r0, r1
-		blne	SYMBOL_NAME(do_bottom_half)
-ret_from_intr:	ldr	r0, [sp, #S_PSR]
-		tst	r0, #3
-		beq	ret_with_reschedule
-		b	ret_from_all
-
-ret_signal:	mov	r1, sp
-		adrsvc	al, lr, ret_from_all
-		b	SYMBOL_NAME(do_signal)
-
-2:		bl	SYMBOL_NAME(schedule)
-
-ret_from_sys_call:
-		adr	r0, 1f
-		ldmia	r0, {r0, r1}
-		ldr	r0, [r0]
-		ldr	r1, [r1]
-		tst	r0, r1
-		adrsvc	ne, lr, ret_from_intr
-		bne	SYMBOL_NAME(do_bottom_half)
-
-ret_with_reschedule:
-		ldr	r0, 1f + 8
-		ldr	r0, [r0]
-		teq	r0, #0
-		bne	2b
-
-		get_current_task r1
-		ldr	r1, [r1, #SIGPENDING]
-		teq	r1, #0
-		bne	ret_signal
-
-ret_from_all:	restore_user_regs
-
-1:		.word	SYMBOL_NAME(bh_mask)
-		.word	SYMBOL_NAME(bh_active)
-		.word	SYMBOL_NAME(need_resched)
+/*
+ * these go into 0x00
+ */
+.Lbranches:	swi	SYS_ERROR0
+		ldr	pc, .Lbranches + 0xe4
+		ldr	pc, .Lbranches + 0xe8
+		ldr	pc, .Lbranches + 0xec
+		ldr	pc, .Lbranches + 0xf0
+		ldr	pc, .Lbranches + 0xf4
+		ldr	pc, .Lbranches + 0xf8
+		ldr	pc, .Lbranches + 0xfc
+/*
+ * this is put into 0xe4 and above
+ */
+.Ljump_addresses:
+		.word	vector_undefinstr	@ 0xe4
+		.word	vector_swi		@ 0xe8
+		.word	vector_prefetch		@ 0xec
+		.word	vector_data		@ 0xf0
+		.word	vector_addrexcptn	@ 0xf4
+		.word	vector_IRQ		@ 0xf8
+		.word	_unexp_fiq		@ 0xfc
+/*
+ * initialise the trap system
+ */
+ENTRY(trap_init)
+		stmfd	sp!, {r4 - r7, lr}
+		initialise_traps_extra
+		mov	r0, #0xe4
+		adr	r1, .Ljump_addresses
+		ldmia	r1, {r1 - r6}
+		stmia	r0, {r1 - r6}
+		mov	r0, #0
+		adr	r1, .Lbranches
+		ldmia	r1, {r1 - r7}
+		stmia	r0, {r1 - r7}
+		LOADREGS(fd, sp!, {r4 - r7, pc})
 
 /*============================================================================
  * FP support

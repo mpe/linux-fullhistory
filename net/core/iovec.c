@@ -29,7 +29,8 @@
 #include <net/checksum.h>
 
 /*
- *	Verify iovec
+ *	Verify iovec. The caller must ensure that the iovec is big enough
+ *	to hold the message iovec.
  *
  *	Save time not doing verify_area. copy_*_user will make this work
  *	in any case.
@@ -37,8 +38,7 @@
 
 int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 {
-	int size = m->msg_iovlen * sizeof(struct iovec);
-	int err, ct;
+	int size, err, ct;
 	
 	if(m->msg_namelen)
 	{
@@ -53,28 +53,16 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	} else
 		m->msg_name = NULL;
 
-	if (m->msg_iovlen > UIO_FASTIOV)
-	{
-		err = -ENOMEM;
-		iov = kmalloc(size, GFP_KERNEL);
-		if (!iov)
-			goto out;
-	}
-	
+	err = -EFAULT;
+	size = m->msg_iovlen * sizeof(struct iovec);
 	if (copy_from_user(iov, m->msg_iov, size))
-		goto out_free;
+		goto out;
 	m->msg_iov=iov;
 
 	for (err = 0, ct = 0; ct < m->msg_iovlen; ct++)
 		err += iov[ct].iov_len;
 out:
 	return err;
-
-out_free:
-	err = -EFAULT;
-	if (m->msg_iovlen > UIO_FASTIOV)
-		kfree(iov);
-	goto out;
 }
 
 /*

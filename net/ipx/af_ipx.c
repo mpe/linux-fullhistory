@@ -1,5 +1,5 @@
 /*
- *	Implements an IPX socket layer (badly - but I'm working on it).
+ *	Implements an IPX socket layer.
  *
  *	This code is derived from work by
  *		Ross Biro	: 	Writing the original IP stack
@@ -47,6 +47,7 @@
  *	Revision 0.36:	Internal bump up for 2.1
  *	Revision 0.37:	Began adding POSIXisms.
  *	Revision 0.38:  Asynchronous socket stuff made current.
+ *	Revision 0.39: 	SPX interfaces
  *
  *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
  *	pair. Also, now usage count is managed this way
@@ -111,6 +112,8 @@ static struct datalink_proto	*pSNAP_datalink = NULL;
 
 static struct proto_ops ipx_dgram_ops;
 
+static struct net_proto_family *spx_family_ops;
+
 static ipx_route 	*ipx_routes = NULL;
 static ipx_interface	*ipx_interfaces = NULL;
 static ipx_interface	*ipx_primary_net = NULL;
@@ -163,7 +166,7 @@ static int ipxcfg_get_config_data(ipx_config_data *arg)
  *	use this facility.
  */
 
-static void ipx_remove_socket(struct sock *sk)
+void ipx_remove_socket(struct sock *sk)
 {
 	struct sock	*s;
 	ipx_interface	*intrfc;
@@ -762,8 +765,8 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 					if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)==FW_ACCEPT)
 					{
 					        skb2 = skb_clone(skb, GFP_ATOMIC);
-					ipxrtr_route_skb(skb2);
-				}
+						ipxrtr_route_skb(skb2);
+					}
 				}
 			}
 			/*
@@ -1264,6 +1267,9 @@ static __u16 ipx_set_checksum(struct ipxhdr *packet,int length)
 	 */
 
 	__u32 i=length>>1;
+	char    hops = packet->ipx_tctrl;
+
+	packet->ipx_tctrl = 0;     /* hop count excluded from checksum calc */
 
 	/*
 	 *	Loop through all complete words except the checksum field
@@ -1279,6 +1285,7 @@ static __u16 ipx_set_checksum(struct ipxhdr *packet,int length)
 	if(packet->ipx_pktsize&htons(1))
 		sum+=ntohs(0xff00)&*p;
 
+	packet->ipx_tctrl = hops;
 	/*
 	 *	Do final fixup
 	 */
@@ -1713,19 +1720,24 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 static int ipx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
-	sk=sk_alloc(AF_IPX, GFP_KERNEL, 1);
-	if(sk==NULL)
-		return(-ENOMEM);
 	switch(sock->type)
 	{
 		case SOCK_DGRAM:
+			sk=sk_alloc(AF_IPX, GFP_KERNEL, 1);
+			if(sk==NULL)
+				return(-ENOMEM);
                         sock->ops = &ipx_dgram_ops;
                         break;
-		case SOCK_STREAM:	/* Allow higher levels to piggyback */
 		case SOCK_SEQPACKET:
-			printk(KERN_CRIT "IPX: _create-ing non_DGRAM socket\n");
+			/*
+			 *	From this point on SPX sockets are handled
+			 *	by af_spx.c and the methods replaced.
+			 */
+			if(spx_family_ops)
+				return spx_family_ops->create(sock,protocol);
+			/* Fall through if SPX is not loaded */			
+		case SOCK_STREAM:	/* Allow higher levels to piggyback */
 		default:
-			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
 	sock_init_data(sock,sk);
@@ -2249,6 +2261,34 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
+/*
+ *	SPX interface support
+ */
+
+int ipx_register_spx(struct proto_ops **p, struct net_proto_family *spx)
+{
+	if(spx_family_ops!=NULL)
+		return -EBUSY;
+	cli();
+	MOD_INC_USE_COUNT;
+	*p=&ipx_dgram_ops;
+	spx_family_ops=spx;
+	sti();
+	return 0;
+}
+
+int ipx_unregister_spx(void)
+{
+	spx_family_ops=NULL;
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+
+/*
+ *	Socket family declarations
+ */
+ 
 static struct net_proto_family ipx_family_ops = {
 	AF_IPX,
 	ipx_create
@@ -2256,7 +2296,6 @@ static struct net_proto_family ipx_family_ops = {
 
 static struct proto_ops ipx_dgram_ops = {
 	AF_IPX,
-
 	sock_no_dup,
 	ipx_release,
 	ipx_bind,
@@ -2280,7 +2319,7 @@ static struct proto_ops ipx_dgram_ops = {
 static struct packet_type ipx_8023_packet_type =
 
 {
-	0,	/* MUTTER ntohs(ETH_P_8023),*/
+	0,	/* MUTTER ntohs(ETH_P_802_3),*/
 	NULL,		/* All devices */
 	ipx_rcv,
 	NULL,
@@ -2371,6 +2410,10 @@ int ipx_if_offset(unsigned long ipx_net_number)
 /* Export symbols for higher layers */
 EXPORT_SYMBOL(ipxrtr_route_skb);
 EXPORT_SYMBOL(ipx_if_offset);
+EXPORT_SYMBOL(ipx_remove_socket);
+EXPORT_SYMBOL(ipx_register_spx);
+EXPORT_SYMBOL(ipx_unregister_spx);
+
 
 #ifdef MODULE
 /* Note on MOD_{INC,DEC}_USE_COUNT:
@@ -2387,7 +2430,8 @@ EXPORT_SYMBOL(ipx_if_offset);
  */
 
 __initfunc(static void ipx_proto_finito(void))
-{	ipx_interface	*ifc;
+{
+	ipx_interface	*ifc;
 
 	while (ipx_interfaces) {
 		ifc = ipx_interfaces;

@@ -37,6 +37,11 @@ int             translate_code = 0;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 static int      pas_sb_base = 0;
+#ifndef CONFIG_PAS_JOYSTICK
+static int	joystick = 0;
+#else
+static int 	joystick = 1;
+#endif
 
 
 char            pas_model = 0;
@@ -142,9 +147,7 @@ static int config_pas_hw(struct address_info *hw_config)
 						 */ , 0xB88);
 
 	pas_write(0x80
-#ifdef PAS_JOYSTICK_ENABLE
-		  | 0x40
-#endif
+		  | joystick?0x40:0
 		  ,0xF388);
 
 	if (pas_irq < 0 || pas_irq > 15)
@@ -379,6 +382,8 @@ MODULE_PARM(sb_io,"i");
 MODULE_PARM(sb_irq,"i");
 MODULE_PARM(sb_dma,"i");
 MODULE_PARM(sb_dma16,"i");
+
+MODULE_PARM(joystick,"i");
 
 struct address_info config;
 struct address_info sbhw_config;

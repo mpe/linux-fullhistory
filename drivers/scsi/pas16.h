@@ -186,6 +186,7 @@ int pas16_proc_info (char *buffer ,char **start, off_t offset,
 
 
 #define NCR5380_intr pas16_intr
+#define do_NCR5380_intr do_pas16_intr
 #define NCR5380_queue_command pas16_queue_command
 #define NCR5380_abort pas16_abort
 #define NCR5380_reset pas16_reset

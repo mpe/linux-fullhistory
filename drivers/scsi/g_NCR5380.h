@@ -155,6 +155,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     NCR5380_map_name = (NCR5380_map_type)((instance)->NCR5380_instance_name)
 
 #define NCR5380_intr generic_NCR5380_intr
+#define do_NCR5380_intr do_generic_NCR5380_intr
 #define NCR5380_queue_command generic_NCR5380_queue_command
 #define NCR5380_abort generic_NCR5380_abort
 #define NCR5380_reset generic_NCR5380_reset

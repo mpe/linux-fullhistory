@@ -259,6 +259,28 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 }
 
 /*
+ *	Find next free circuit ID.
+ */
+static unsigned short nr_find_next_circuit(void)
+{
+	unsigned short id = circuit;
+	unsigned char i, j;
+
+	for (;;) {
+		i = id / 256;
+		j = id % 256;
+
+		if (i != 0 && j != 0)
+			if (nr_find_socket(i, j) == NULL)
+				break;
+
+		id++;
+	}
+
+	return id;
+}
+
+/*
  *	Deferred destroy.
  */
 void nr_destroy_socket(struct sock *);
@@ -535,12 +557,12 @@ static int nr_release(struct socket *sock, struct socket *peer)
 	switch (sk->protinfo.nr->state) {
 
 		case NR_STATE_0:
+		case NR_STATE_1:
 		case NR_STATE_2:
 			nr_disconnect(sk, 0);
 			nr_destroy_socket(sk);
 			break;
 
-		case NR_STATE_1:
 		case NR_STATE_3:
 			nr_clear_queues(sk);
 			sk->protinfo.nr->n2count = 0;
@@ -670,8 +692,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	sk->protinfo.nr->dest_addr = addr->sax25_call;
 
-	while (nr_find_socket((unsigned char)circuit / 256, (unsigned char)circuit % 256) != NULL)
-		circuit++;
+	circuit = nr_find_next_circuit();
 
 	sk->protinfo.nr->my_index = circuit / 256;
 	sk->protinfo.nr->my_id    = circuit % 256;
@@ -764,7 +785,6 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	sti();
 
 	/* Now attach up the new socket */
-	skb->sk = NULL;
 	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk = newsk;
@@ -802,7 +822,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	struct sock *make;	
 	ax25_address *src, *dest, *user;
 	unsigned short circuit_index, circuit_id;
-	unsigned short frametype, window, timeout;
+	unsigned short peer_circuit_index, peer_circuit_id;
+	unsigned short frametype, flags, window, timeout;
 
 	skb->sk = NULL;		/* Initially we don't know who it's for */
 
@@ -813,28 +834,46 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	src  = (ax25_address *)(skb->data + 0);
 	dest = (ax25_address *)(skb->data + 7);
 
-	circuit_index = skb->data[15];
-	circuit_id    = skb->data[16];
-	frametype     = skb->data[19] & 0x0F;
+	circuit_index      = skb->data[15];
+	circuit_id         = skb->data[16];
+	peer_circuit_index = skb->data[17];
+	peer_circuit_id    = skb->data[18];
+	frametype          = skb->data[19] & 0x0F;
+	flags              = skb->data[19] & 0xF0;
 
 #ifdef CONFIG_INET
 	/*
 	 * Check for an incoming IP over NET/ROM frame.
 	 */
-	 if (frametype == NR_PROTOEXT && circuit_index == NR_PROTO_IP && circuit_id == NR_PROTO_IP) {
+	if (frametype == NR_PROTOEXT && circuit_index == NR_PROTO_IP && circuit_id == NR_PROTO_IP) {
 		skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
-	 	skb->h.raw = skb->data;
+		skb->h.raw = skb->data;
 
 		return nr_rx_ip(skb, dev);
-	 }
+	}
 #endif
 
 	/*
 	 * Find an existing socket connection, based on circuit ID, if it's
 	 * a Connect Request base it on their circuit ID.
+	 *
+	 * Circuit ID 0/0 is not valid but it could still be a "reset" for a
+	 * circuit that no longer exists at the other end ...
 	 */
-	if ((frametype != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id)) != NULL) ||
-	    (frametype == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id)) != NULL)) {
+
+	sk = NULL;
+
+	if (circuit_index == 0 && circuit_id == 0) {
+		if (frametype == NR_CONNACK && flags == NR_CHOKE_FLAG)
+			sk = nr_find_peer(peer_circuit_index, peer_circuit_id);
+	} else {
+		if (frametype == NR_CONNREQ)
+			sk = nr_find_peer(circuit_index, circuit_id);
+		else
+			sk = nr_find_socket(circuit_index, circuit_id);
+	}
+
+	if (sk != NULL) {
 		skb->h.raw = skb->data;
 
 		if (frametype == NR_CONNACK && skb->len == 22)
@@ -845,15 +884,17 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 		return nr_process_rx_frame(sk, skb);
 	}
 
-	switch (frametype) {
-		case NR_CONNREQ:
-			break;
-		case NR_DISCREQ:
-		case NR_DISCACK:
-			return 0;
-		default:
-			nr_transmit_dm(skb);
-			return 0;
+	/*
+	 * Now it should be a CONNREQ.
+	 */
+	if (frametype != NR_CONNREQ) {
+		/*
+		 * Never reply to a CONNACK/CHOKE.
+		 */
+		if (frametype != NR_CONNACK || flags != NR_CHOKE_FLAG)
+			nr_transmit_refusal(skb, 1);
+
+		return 0;
 	}
 
 	sk = nr_find_listener(dest);
@@ -861,7 +902,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	user = (ax25_address *)(skb->data + 21);
 
 	if (sk == NULL || sk->ack_backlog == sk->max_ack_backlog || (make = nr_make_new(sk)) == NULL) {
-		nr_transmit_dm(skb);
+		nr_transmit_refusal(skb, 0);
 		return 0;
 	}
 
@@ -877,6 +918,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 
 	make->protinfo.nr->your_index  = circuit_index;
 	make->protinfo.nr->your_id     = circuit_id;
+
+	circuit = nr_find_next_circuit();
 
 	make->protinfo.nr->my_index    = circuit / 256;
 	make->protinfo.nr->my_id       = circuit % 256;
@@ -1131,7 +1174,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 
 	cli();
 
-	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st  vs  vr  va    t1     t2     t4      idle   n2  wnd Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st  vs  vr  va    t1     t2     t4      idle   n2  wnd Snd-Q Rcv-Q inode\n");
 
 	for (s = nr_list; s != NULL; s = s->next) {
 		if ((dev = s->protinfo.nr->device) == NULL)
@@ -1143,7 +1186,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			ax2asc(&s->protinfo.nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->protinfo.nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %3d %3d %3d %3lu/%03lu %2lu/%02lu %3lu/%03lu %3lu/%03lu %2d/%02d %3d %5d %5d\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %3d %3d %3d %3lu/%03lu %2lu/%02lu %3lu/%03lu %3lu/%03lu %2d/%02d %3d %5d %5d %ld\n",
 			ax2asc(&s->protinfo.nr->source_addr),
 			devname,
 			s->protinfo.nr->my_index,
@@ -1166,7 +1209,8 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			s->protinfo.nr->n2,
 			s->protinfo.nr->window,
 			atomic_read(&s->wmem_alloc),
-			atomic_read(&s->rmem_alloc));
+			atomic_read(&s->rmem_alloc),
+			s->socket != NULL ? s->socket->inode->i_ino : 0L);
 
 		pos = begin + len;
 
@@ -1273,6 +1317,8 @@ __initfunc(void nr_proto_init(struct net_proto *pro))
 	nr_register_sysctl();
 #endif
 
+	nr_loopback_init();
+
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_nr);
 	proc_net_register(&proc_net_nr_neigh);
@@ -1305,6 +1351,8 @@ void cleanup_module(void)
 	proc_net_unregister(PROC_NET_NR_NEIGH);
 	proc_net_unregister(PROC_NET_NR_NODES);
 #endif
+	nr_loopback_clear();
+
 	nr_rt_free();
 
 	ax25_protocol_release(AX25_P_NETROM);

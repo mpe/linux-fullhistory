@@ -7,8 +7,14 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
+ifeq ($(MACHINE),a5k)
+MMARCH=arc
+else
+MMARCH=$(MACHINE)
+endif
+
 O_TARGET := mm.o
-O_OBJS   := init.o extable.o fault-$(PROCESSOR).o mm-$(MACHINE).o
+O_OBJS   := init.o extable.o fault-$(PROCESSOR).o mm-$(MMARCH).o
 
 ifeq ($(PROCESSOR),armo)
  O_OBJS += proc-arm2,3.o
@@ -28,9 +34,9 @@ proc-sa110.o:	../lib/constants.h
 ../lib/constants.h:
 	@$(MAKE) -C ../lib constants.h
 
+ifneq ($(CONFIG_BINUTILS_NEW),y)
 %.o: %.S
-ifndef $(CONFIG_BINUTILS_NEW)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.s
-	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..tmp.s
-	$(RM) ..tmp.s
+	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..$@.tmp.s
+	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..$@.tmp.s
+	$(RM) ..$@.tmp.s
 endif

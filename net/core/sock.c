@@ -589,38 +589,37 @@ void sock_kfree_s(struct sock *sk, void *mem, int size)
  */
 unsigned long sock_rspace(struct sock *sk)
 {
-	int amt;
+	int amt = 0;
 
 	if (sk != NULL) {
-		/* This used to have some bizzare complications that
+		/* This used to have some bizarre complications that
 		 * to attempt to reserve some amount of space. This doesn't
 	 	 * make sense, since the number returned here does not
 		 * actually reflect allocated space, but rather the amount
 		 * of space we committed to. We gamble that we won't
 		 * run out of memory, and returning a smaller number does
-		 * not change the gamble. If we loose the gamble tcp still
+		 * not change the gamble. If we lose the gamble tcp still
 		 * works, it may just slow down for retransmissions.
 		 */
 		amt = sk->rcvbuf - atomic_read(&sk->rmem_alloc);
 		if (amt < 0) 
-			return(0);
-		return(amt);
+			amt = 0;
 	}
-	return(0);
+	return amt;
 }
 
 
 /* FIXME: this is also insane. See above comment */
 unsigned long sock_wspace(struct sock *sk)
 {
-	if (sk != NULL) {
-		if (sk->shutdown & SEND_SHUTDOWN)
-			return(0);
-		if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf) 
-			return(0);
-		return sk->sndbuf - atomic_read(&sk->wmem_alloc);
+	int amt = 0;
+
+	if (sk != NULL && !(sk->shutdown & SEND_SHUTDOWN)) {
+		amt = sk->sndbuf - atomic_read(&sk->wmem_alloc);
+		if (amt < 0) 
+			amt = 0;
 	}
-	return(0);
+	return amt;
 }
 
 /* It is almost wait_for_tcp_memory minus release_sock/lock_sock.
@@ -653,13 +652,17 @@ static void sock_wait_for_wmem(struct sock * sk)
  *	Generic send/receive buffer handlers
  */
 
-struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigned long fallback, int noblock, int *errcode)
+struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, 
+			unsigned long fallback, int noblock, int *errcode)
 {
 	int err;
 	struct sk_buff *skb;
 
-	do {
-		if ((err = xchg(&sk->err,0)) != 0)
+	while (1) {
+		unsigned long try_size = size;
+
+		err = sock_error(sk);
+		if (err != 0)
 			goto failure;
 
 		/*
@@ -676,33 +679,32 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		if (sk->shutdown&SEND_SHUTDOWN)
 			goto failure;
 
-		if (!fallback)
-			skb = sock_wmalloc(sk, size, 0, sk->allocation);
-		else {
-			/* The buffer get won't block, or use the atomic queue. It does
-			   produce annoying no free page messages still.... */
+		if (fallback) {
+			/* The buffer get won't block, or use the atomic queue.
+			 * It does produce annoying no free page messages still.
+			 */
 			skb = sock_wmalloc(sk, size, 0, GFP_BUFFER);
-			if (!skb)
-				skb=sock_wmalloc(sk, fallback, 0, sk->allocation);
+			if (skb)
+				break;
+			try_size = fallback;
 		}
+		skb = sock_wmalloc(sk, try_size, 0, sk->allocation);
+		if (skb)
+			break;
 
 		/*
 		 *	This means we have too many buffers for this socket already.
 		 */
 
-		/* The following code is stolen "as is" from tcp.c */
-
-		if (skb==NULL) {
-			sk->socket->flags |= SO_NOSPACE;
-			err = -EAGAIN;
-			if (noblock)
-				goto failure;
-			err = -ERESTARTSYS;
-			if (signal_pending(current))
-				goto failure;
-			sock_wait_for_wmem(sk);
-		}
-	} while (skb==NULL);
+		sk->socket->flags |= SO_NOSPACE;
+		err = -EAGAIN;
+		if (noblock)
+			goto failure;
+		err = -ERESTARTSYS;
+		if (signal_pending(current))
+			goto failure;
+		sock_wait_for_wmem(sk);
+	}
 
 	return skb;
 

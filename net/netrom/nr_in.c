@@ -129,6 +129,10 @@ static int nr_state2_machine(struct sock *sk, struct sk_buff *skb, int frametype
 {
 	switch (frametype) {
 
+		case NR_CONNACK | NR_CHOKE_FLAG:
+			nr_disconnect(sk, ECONNRESET);
+			break;
+
 		case NR_DISCREQ:
 			nr_write_internal(sk, NR_DISCACK);
 
@@ -170,6 +174,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			nr_disconnect(sk, 0);
 			break;
 
+		case NR_CONNACK | NR_CHOKE_FLAG:
 		case NR_DISCACK:
 			nr_disconnect(sk, ECONNRESET);
 			break;

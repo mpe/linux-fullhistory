@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.104 1998/04/01 07:41:24 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.106 1998/04/10 23:56:19 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -42,6 +42,11 @@
  *		Andi Kleen	:	Moved open_request checking here
  *					and process RSTs for open_requests.
  *		Andi Kleen	:	Better prune_queue, and other fixes.
+ *		Andrey Savochkin:	Fix RTT measurements in the presnce of
+ *					timestamps.
+ *		Andrey Savochkin:	Check sequence numbers correctly when
+ *					removing SACKs due to in sequence incoming
+ *					data segments.
  */
 
 #include <linux/config.h>
@@ -667,7 +672,20 @@ static void tcp_ack_probe(struct sock *sk, __u32 ack)
 static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 			       u32 seq, u32 ack, int flag)
 {
-	__u32 seq_rtt = (jiffies-tp->rcv_tsecr);
+	__u32 seq_rtt;
+
+	/* RTTM Rule: A TSecr value received in a segment is used to
+	 * update the averaged RTT measurement only if the segment
+	 * acknowledges some new data, i.e., only if it advances the
+	 * left edge of the send window.
+	 *
+	 * See draft-ietf-tcplw-high-performance-00, section 3.3.
+	 * 1998/04/10 Andrey V. Savochkin <saw@msu.ru>
+	 */
+	if (!(flag & FLAG_DATA_ACKED))
+		return;
+
+	seq_rtt = jiffies-tp->rcv_tsecr;
 	tcp_rtt_estimator(tp, seq_rtt);
 	if (tp->retransmits) {
 		if (tp->packets_out == 0) {
@@ -683,8 +701,7 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 		}
 	} else {
 		tcp_set_rto(tp);
-		if (flag & FLAG_DATA_ACKED)
-			tcp_cong_avoid(tp, seq, ack, seq_rtt);
+		tcp_cong_avoid(tp, seq, ack, seq_rtt);
 	}
 	/* NOTE: safe here so long as cong_ctl doesn't use rto */
 	tcp_bound_rto(tp);
@@ -1224,7 +1241,8 @@ static void tcp_sack_remove_skb(struct tcp_opt *tp, struct sk_buff *skb)
 	 * from the front of a SACK.
 	 */
 	for(this_sack = 0; this_sack < num_sacks; this_sack++, sp++) {
-		if(!after(sp->start_seq, TCP_SKB_CB(skb)->seq) &&
+		/* Check if the start of the sack is covered by skb. */
+		if(!before(sp->start_seq, TCP_SKB_CB(skb)->seq) &&
 		   before(sp->start_seq, TCP_SKB_CB(skb)->end_seq))
 			break;
 	}

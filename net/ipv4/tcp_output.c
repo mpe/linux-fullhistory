@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.83 1998/04/03 08:10:45 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.84 1998/04/06 08:48:29 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -37,6 +37,10 @@
 
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
+extern int sysctl_tcp_sack;
+
+/* People can turn this off for buggy TCP's found in printers etc. */
+int sysctl_tcp_retrans_collapse = 1;
 
 /* Get rid of any delayed acks, we sent one already.. */
 static __inline__ void clear_delayed_acks(struct sock * sk)
@@ -494,7 +498,8 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	if(!(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_SYN) &&
 	   (skb->len < (current_mss >> 1)) &&
 	   (skb->next != tp->send_head) &&
-	   (skb->next != (struct sk_buff *)&sk->write_queue))
+	   (skb->next != (struct sk_buff *)&sk->write_queue) &&
+	   (sysctl_tcp_retrans_collapse != 0))
 		tcp_retrans_try_collapse(sk, skb, current_mss);
 
 	if(tp->af_specific->rebuild_header(sk))

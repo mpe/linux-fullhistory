@@ -37,6 +37,7 @@
 #include <linux/proc_fs.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -431,6 +432,14 @@ irqerror:;
 	SCpnt->result = DecodeError (shost, status);
 	SCpnt->scsi_done (SCpnt);
 	}
+static void do_Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
+	{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	Irq_Handler(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	}
 /****************************************************************
  *	Name:	Pci2220i_QueueCommand
  *
@@ -691,7 +700,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 				}
 			if ( setirq )																// if not shared, posses
 				{
-				if ( request_irq (pshost->irq, Irq_Handler, 0, "pci2220i", NULL) )
+				if ( request_irq (pshost->irq, do_Irq_Handler, 0, "pci2220i", NULL) )
 					{
 					printk ("Unable to allocate IRQ for PSI-2220I controller.\n");
 					goto unregister;

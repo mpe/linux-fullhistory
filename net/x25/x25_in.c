@@ -184,11 +184,6 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 
 		case X25_RR:
 		case X25_RNR:
-			if (frametype == X25_RNR) {
-				sk->protinfo.x25->condition |= X25_COND_PEER_RX_BUSY;
-			} else {
-				sk->protinfo.x25->condition &= ~X25_COND_PEER_RX_BUSY;
-			}
 			if (!x25_validate_nr(sk, nr)) {
 				x25_clear_queues(sk);
 				x25_write_internal(sk, X25_RESET_REQUEST);
@@ -201,8 +196,11 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				sk->protinfo.x25->state     = X25_STATE_4;
 			} else {
 				x25_frames_acked(sk, nr);
-				if (frametype == X25_RNR)
-					x25_requeue_frames(sk);
+				if (frametype == X25_RNR) {
+					sk->protinfo.x25->condition |= X25_COND_PEER_RX_BUSY;
+				} else {
+					sk->protinfo.x25->condition &= ~X25_COND_PEER_RX_BUSY;
+				}
 			}
 			break;
 
@@ -221,15 +219,25 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				break;
 			}
 			x25_frames_acked(sk, nr);
-			if (sk->protinfo.x25->condition & X25_COND_OWN_RX_BUSY)
-				break;
 			if (ns == sk->protinfo.x25->vr) {
 				if (x25_queue_rx_frame(sk, skb, m) == 0) {
 					sk->protinfo.x25->vr = (sk->protinfo.x25->vr + 1) % modulus;
 					queued = 1;
 				} else {
-					sk->protinfo.x25->condition |= X25_COND_OWN_RX_BUSY;
+					/* Should never happen */
+					x25_clear_queues(sk);
+					x25_write_internal(sk, X25_RESET_REQUEST);
+					x25_start_t22timer(sk);
+					sk->protinfo.x25->condition = 0x00;
+					sk->protinfo.x25->vs        = 0;
+					sk->protinfo.x25->vr        = 0;
+					sk->protinfo.x25->va        = 0;
+					sk->protinfo.x25->vl        = 0;
+					sk->protinfo.x25->state     = X25_STATE_4;
+					break;
 				}
+				if (atomic_read(&sk->rmem_alloc) > (sk->rcvbuf / 2))
+					sk->protinfo.x25->condition |= X25_COND_OWN_RX_BUSY;
 			}
 			/*
 			 *	If the window is full Ack it immediately, else

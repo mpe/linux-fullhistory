@@ -150,6 +150,7 @@ struct ucred {
 #define AF_ROUTE	AF_NETLINK /* Alias to emulate 4.4BSD */
 #define AF_PACKET	17	/* Packet family		*/
 #define AF_ASH		18	/* Ash				*/
+#define AF_ECONET	19	/* Acorn Econet			*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */

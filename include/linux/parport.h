@@ -14,6 +14,7 @@
 #define PARPORT_IRQ_AUTO  -2
 #define PARPORT_DMA_AUTO  -2
 #define PARPORT_DISABLE   -2
+#define PARPORT_IRQ_PROBEONLY -3
 
 #define PARPORT_CONTROL_STROBE    0x1
 #define PARPORT_CONTROL_AUTOFD    0x2
@@ -291,6 +292,7 @@ extern __inline__ unsigned int parport_yield_blocking(struct pardevice *dev)
 
 #define PARPORT_FLAG_COMA		1
 
+extern void parport_parse_irqs(int, const char *, int irqval[]);
 extern int parport_ieee1284_nibble_mode_ok(struct parport *, unsigned char);
 extern int parport_wait_peripheral(struct parport *, unsigned char, unsigned
 				   char);

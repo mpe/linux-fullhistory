@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-sa100eval/irqs.h
+ * linux/include/asm-arm/arch-ebsa110/irqs.h
  *
  * Copyright (C) 1996 Russell King
  */
@@ -12,3 +12,5 @@
 #define IRQ_TIMER1		5
 #define IRQ_PCMCIA		6
 #define IRQ_IMMEDIATE		7
+
+#define IRQ_TIMER		IRQ_TIMER0

@@ -34,7 +34,7 @@
 
 struct binfmt_entry {
 	struct binfmt_entry *next;
-	int id;
+	long id;
 	int flags;			/* type, status, etc. */
 	int offset;			/* offset of magic */
 	int size;			/* size of magic/mask */
@@ -243,7 +243,7 @@ _ret:
 static char *copyarg(char **dp, const char **sp, int *count,
 		     char del, int special, int *err)
 {
-	char c, *res = *dp;
+	char c = 0, *res = *dp;
 
 	while (!*err && ((c = *((*sp)++)), (*count)--) && (c != del)) {
 		switch (c) {
@@ -370,7 +370,7 @@ static int proc_read_status(char *page, char **start, off_t off,
 	if (!data)
 		sprintf(page, "%s\n", (enabled ? "enabled" : "disabled"));
 	else {
-		if (!(e = get_entry((int) data))) {
+		if (!(e = get_entry((long) data))) {
 			err = -ENOENT;
 			goto _err;
 		}
@@ -428,7 +428,7 @@ static int proc_write_status(struct file *file, const char *buffer,
 		count--;
 	if ((count == 1) && !(buffer[0] & ~('0' | '1'))) {
 		if (data) {
-			if ((e = get_entry((int) data)))
+			if ((e = get_entry((long) data)))
 				e->flags = (e->flags & ~ENTRY_ENABLED)
 					    | (int)(buffer[0] - '0');
 			put_entry(e);
@@ -437,7 +437,7 @@ static int proc_write_status(struct file *file, const char *buffer,
 		}
 	} else if ((count == 2) && (buffer[0] == '-') && (buffer[1] == '1')) {
 		if (data)
-			clear_entry((int) data);
+			clear_entry((long) data);
 		else
 			clear_entries();
 	} else {

@@ -410,7 +410,7 @@ static void layout_dev(struct pci_dev *dev)
 			pcibios_write_config_dword(bus->number, dev->devfn,
 						   off, base);
 			handle = HANDLE(bus->number) | base;
-			dev->base_address[PCI_BASE_INDEX(off)] = handle;
+			dev->base_address[idx] = handle;
 			DBG_DEVS(("layout_dev: dev 0x%x MEM @ 0x%lx (0x%x)\n",
 				  dev->device, handle, size));
 		}

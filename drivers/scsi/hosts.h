@@ -108,6 +108,11 @@ typedef struct	SHT
     const char *(* info)(struct Scsi_Host *);
 
     /*
+     * ioctl interface
+     */
+    int (*ioctl)(Scsi_Device *dev, int cmd, void *arg);
+
+    /*
      * The command function takes a target, a command (this is a SCSI
      * command formatted as per the SCSI spec, nothing strange), a
      * data buffer pointer, and data buffer length pointer.  The return
@@ -263,6 +268,11 @@ typedef struct	SHT
      * to use the new error handling code.
      */
     unsigned use_new_eh_code:1;
+
+    /*
+     * True for emulated SCSI host adapters (e.g. ATAPI)
+     */
+    unsigned emulated:1;
 
 } Scsi_Host_Template;
 

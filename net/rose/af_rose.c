@@ -1261,7 +1261,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 
 	cli();
 
-	len += sprintf(buffer, "dest_addr  dest_call src_addr   src_call  dev   lci st vs vr va   t  t1  t2  t3  hb    idle Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr  dest_call src_addr   src_call  dev   lci st vs vr va   t  t1  t2  t3  hb    idle Snd-Q Rcv-Q inode\n");
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if ((dev = s->protinfo.rose->device) == NULL)
@@ -1278,7 +1278,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 		else
 			callsign = ax2asc(&s->protinfo.rose->source_call);
 
-		len += sprintf(buffer + len, "%-10s %-9s %-5s %3.3X  %d  %d  %d  %d %3lu %3lu %3lu %3lu %3lu %3lu/%03lu %5d %5d\n",
+		len += sprintf(buffer + len, "%-10s %-9s %-5s %3.3X  %d  %d  %d  %d %3lu %3lu %3lu %3lu %3lu %3lu/%03lu %5d %5d %ld\n",
 			rose2asc(&s->protinfo.rose->source_addr),
 			callsign,
 			devname, 
@@ -1295,7 +1295,8 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 			ax25_display_timer(&s->protinfo.rose->idletimer) / (60 * HZ),
 			s->protinfo.rose->idle / (60 * HZ),
 			atomic_read(&s->wmem_alloc),
-			atomic_read(&s->rmem_alloc));
+			atomic_read(&s->rmem_alloc),
+			s->socket != NULL ? s->socket->inode->i_ino : 0L);
 
 		pos = begin + len;
 
@@ -1408,6 +1409,9 @@ __initfunc(void rose_proto_init(struct net_proto *pro))
 #ifdef CONFIG_SYSCTL
 	rose_register_sysctl();
 #endif
+	rose_loopback_init();
+
+	rose_add_loopback_neigh();
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_rose);
@@ -1443,6 +1447,8 @@ void cleanup_module(void)
 	proc_net_unregister(PROC_NET_RS_NODES);
 	proc_net_unregister(PROC_NET_RS_ROUTES);
 #endif
+	rose_loopback_clear();
+
 	rose_rt_free();
 
 	ax25_protocol_release(AX25_P_ROSE);

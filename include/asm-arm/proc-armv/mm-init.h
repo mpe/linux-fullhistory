@@ -35,76 +35,120 @@
  *
  * We set it up using the section page table entries.
  */
-
-#include <asm/arch/mmap.h>
 #include <asm/pgtable.h>
  
-#define V2P(x)	virt_to_phys(x)
 #define PTE_SIZE (PTRS_PER_PTE * 4)
 
-#define PMD_SECT	(PMD_TYPE_SECT | PMD_DOMAIN(DOMAIN_KERNEL) | PMD_SECT_CACHEABLE)
+extern unsigned long setup_io_pagetables(unsigned long start_mem);
 
-static inline void setup_swapper_dir (int index, unsigned long entry)
+/*
+ * Add a SECTION mapping between VIRT and PHYS in domain DOMAIN with protection PROT
+ */
+static inline void
+alloc_init_section(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
 {
-	pmd_t pmd;
+	pgd_t *pgdp;
+	pmd_t *pmdp;
 
-	pmd_val(pmd) = entry;
-	set_pmd (pmd_offset (swapper_pg_dir + index, 0), pmd);
+	pgdp = pgd_offset_k(virt);
+	pmdp = pmd_offset(pgdp, virt);
+
+	pmd_val(*pmdp) = phys | PMD_TYPE_SECT | PMD_DOMAIN(domain) | prot;
 }
 
-static inline unsigned long setup_pagetables(unsigned long start_mem, unsigned long end_mem)
+/*
+ * Clear any mapping
+ */
+static inline void
+free_init_section(unsigned long virt)
+{
+	pgd_t *pgdp;
+	pmd_t *pmdp;
+
+	pgdp = pgd_offset_k(virt);
+	pmdp = pmd_offset(pgdp, virt);
+
+	pmd_clear(pmdp);
+}
+
+/*
+ * Add a PAGE mapping between VIRT and PHYS in domain DOMAIN with protection PROT
+ */
+static inline void
+alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
+{
+	pgd_t *pgdp;
+	pmd_t *pmdp;
+	pte_t *ptep;
+
+	pgdp = pgd_offset_k(virt);
+	pmdp = pmd_offset(pgdp, virt);
+
+	if (pmd_none(*pmdp)) {
+		unsigned long memory = *mem;
+
+		memory = (memory + PTE_SIZE - 1) & ~(PTE_SIZE - 1);
+
+		ptep = (pte_t *)memory;
+		memzero(ptep, PTE_SIZE);
+
+		pmd_val(*pmdp) = __virt_to_phys(memory) | PMD_TYPE_TABLE | PMD_DOMAIN(domain);
+
+		*mem = memory + PTE_SIZE;
+	}
+
+	ptep = pte_offset(pmdp, virt);
+
+	pte_val(*ptep) = phys | prot | PTE_TYPE_SMALL;
+}
+
+static inline unsigned long
+setup_pagetables(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long address;
-	unsigned int spi;
-	union { unsigned long l; unsigned long *p; } u;
 
-	/* map in zero page */
-	u.l = ((start_mem + (PTE_SIZE-1)) & ~(PTE_SIZE-1));
-	start_mem = u.l + PTE_SIZE;
-	memzero (u.p, PTE_SIZE);
-	*u.p = V2P(PAGE_OFFSET) | PTE_CACHEABLE | PTE_TYPE_SMALL;
-	setup_swapper_dir (0, V2P(u.l) | PMD_TYPE_TABLE | PMD_DOMAIN(DOMAIN_USER));
+	/*
+	 * map in zero page
+	 */
+	alloc_init_page(&start_mem, 0, __virt_to_phys(PAGE_OFFSET), DOMAIN_USER, PTE_CACHEABLE);
 
-	for (spi = 1; spi < (PAGE_OFFSET >> PGDIR_SHIFT); spi++)
-		pgd_val(swapper_pg_dir[spi]) = 0;
+	/*
+	 * ensure no mappings in user space
+	 */
+	for (address = PGDIR_SIZE; address < PAGE_OFFSET; address += PGDIR_SIZE)
+		free_init_section(address);
 
-	/* map in physical ram & kernel */
-	address = PAGE_OFFSET;
-	while (spi < end_mem >> PGDIR_SHIFT) {
-		setup_swapper_dir (spi++,
-				V2P(address) | PMD_SECT |
-				PMD_SECT_BUFFERABLE | PMD_SECT_AP_WRITE);
-		address += PGDIR_SIZE;
-	}
-	while (spi < PTRS_PER_PGD)
-		pgd_val(swapper_pg_dir[spi++]) = 0;
+	/*
+	 * map in physical ram & kernel
+	 */
+	for (address = PAGE_OFFSET; address < end_mem; address += PGDIR_SIZE)
+		alloc_init_section(&start_mem, address, __virt_to_phys(address), DOMAIN_KERNEL,
+				   PMD_SECT_CACHEABLE | PMD_SECT_BUFFERABLE | PMD_SECT_AP_WRITE);
+
+	/*
+	 * unmap everything else
+	 */
+	for (address = end_mem; address; address += PGDIR_SIZE)
+		free_init_section(address);
 
 	/*
 	 * An area to invalidate the cache
 	 */
-	setup_swapper_dir (0xdf0, SAFE_ADDR | PMD_SECT | PMD_SECT_AP_READ);
+	alloc_init_section(&start_mem, 0xdf000000, SAFE_ADDR, DOMAIN_KERNEL,
+			   PMD_SECT_CACHEABLE | PMD_SECT_AP_READ);
 
-	/* map in IO */
-	address = IO_START;
-	spi = IO_BASE >> PGDIR_SHIFT;
-	pgd_val(swapper_pg_dir[spi-1]) = 0xc0000000 | PMD_TYPE_SECT |
-					 PMD_DOMAIN(DOMAIN_KERNEL) | PMD_SECT_AP_WRITE;
-	while (address < IO_START + IO_SIZE && address) {
-		pgd_val(swapper_pg_dir[spi++]) = address |
-						PMD_TYPE_SECT | PMD_DOMAIN(DOMAIN_IO) |
-						PMD_SECT_AP_WRITE;
-		address += PGDIR_SIZE;
-	}
-
-#ifdef HAVE_MAP_VID_MEM
-	map_screen_mem(0, 0, 0);
-#endif
+	/*
+	 * Now set up our IO mappings
+	 */
+	start_mem = setup_io_pagetables(start_mem);
 
 	flush_cache_all();
+
 	return start_mem;
 }
 
-static inline void mark_usable_memory_areas(unsigned long *start_mem, unsigned long end_mem)
+static inline
+void mark_usable_memory_areas(unsigned long *start_mem, unsigned long end_mem)
 {
 	unsigned long smem;
 

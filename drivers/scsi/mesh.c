@@ -23,6 +23,7 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -138,6 +139,7 @@ static void phase_mismatch(struct mesh_state *);
 static void reselected(struct mesh_state *);
 static void handle_reset(struct mesh_state *);
 static void mesh_interrupt(int, void *, struct pt_regs *);
+static void do_mesh_interrupt(int, void *, struct pt_regs *);
 static void handle_msgin(struct mesh_state *);
 static void mesh_done(struct mesh_state *);
 static void mesh_completed(struct mesh_state *, Scsi_Cmnd *);
@@ -207,7 +209,7 @@ mesh_detect(Scsi_Host_Template *tp)
 		*prev_statep = ms;
 		prev_statep = &ms->next;
 
-		if (request_irq(ms->meshintr, mesh_interrupt, 0, "MESH", ms)) {
+		if (request_irq(ms->meshintr, do_mesh_interrupt, 0, "MESH", ms)) {
 			printk(KERN_ERR "MESH: can't get irq %d\n", ms->meshintr);
 		}
 
@@ -973,6 +975,16 @@ handle_reset(struct mesh_state *ms)
 	}
 	ms->phase = idle;
 	out_8(&mr->sync_params, ASYNC_PARAMS);
+}
+
+static void
+do_mesh_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	mesh_interrupt(irq, dev_id, ptregs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static void

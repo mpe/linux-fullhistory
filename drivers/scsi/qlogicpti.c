@@ -31,6 +31,7 @@
 #include <asm/sbus.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/machines.h>
 #include <asm/ptrace.h>
 #include <asm/pgtable.h>
@@ -562,6 +563,7 @@ static inline void qlogicpti_set_hostdev_defaults(struct qlogicpti *qpti)
 }
 
 static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
+static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
 
 /* Detect all PTI Qlogic ISP's in the machine. */
 __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
@@ -669,7 +671,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 					goto qpti_irq_acquired; /* BASIC rulez */
 				}
 			}
-			if(request_irq(qpti->qhost->irq, qlogicpti_intr_handler,
+			if(request_irq(qpti->qhost->irq, do_qlogicpti_intr_handler,
 				       SA_SHIRQ, "PTI Qlogic/ISP SCSI", NULL)) {
 				printk("Cannot acquire PTI Qlogic/ISP irq line\n");
 				/* XXX Unmap regs, unregister scsi host, free things. */
@@ -685,7 +687,7 @@ qpti_irq_acquired:
 			dcookie.imap = dcookie.iclr = 0;
 			dcookie.pil = -1;
 			dcookie.bus_cookie = sbus;
-			if(request_irq(qpti->qhost->irq, qlogicpti_intr_handler,
+			if(request_irq(qpti->qhost->irq, do_qlogicpti_intr_handler,
 				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
 				       "PTI Qlogic/ISP SCSI", &dcookie)) {
 				printk("Cannot acquire PTI Qlogic/ISP irq line\n");
@@ -1038,6 +1040,15 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 	}
 
 	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
+}
+
+static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	qlogicpti_intr_handler(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 #ifndef __sparc_v9__

@@ -66,8 +66,12 @@
 #endif
 
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
+#if defined(CONFIG_SPX) || defined(CONFIG_SPX_MODULE)
+#include <net/spx.h>
+#else
 #include <net/ipx.h>
-#endif
+#endif /* CONFIG_SPX */
+#endif /* CONFIG_IPX */
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 #include <linux/atalk.h>
@@ -413,7 +417,11 @@ struct sock {
 #endif
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 		struct raw6_opt		tp_raw;
-#endif
+#endif /* CONFIG_IPV6 */
+#if defined(CONFIG_SPX) || defined (CONFIG_SPX_MODULE)
+		struct spx_opt		af_spx;
+#endif /* CONFIG_SPX */
+
 	} tp_pinfo;
 
 	int			err, err_soft;	/* Soft holds errors that don't

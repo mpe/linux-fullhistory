@@ -239,23 +239,32 @@ static void lp_error(int minor)
 }
 
 static int lp_check_status(int minor) {
+	static unsigned char last = 0;
 	unsigned char status = r_str(minor);
 	if ((status & LP_POUTPA)) {
-		printk(KERN_INFO "lp%d out of paper\n", minor);
-		if (LP_F(minor) & LP_ABORT)
-			return 1;
-		lp_error(minor);
+		if (last != LP_POUTPA) {
+			last = LP_POUTPA;
+			printk(KERN_INFO "lp%d out of paper\n", minor);
+		}
 	} else if (!(status & LP_PSELECD)) {
-		printk(KERN_INFO "lp%d off-line\n", minor);
-		if (LP_F(minor) & LP_ABORT)
-			return 1;
-		lp_error(minor);
+		if (last != LP_PSELECD) {
+			last = LP_PSELECD;
+			printk(KERN_INFO "lp%d off-line\n", minor);
+		}
 	} else if (!(status & LP_PERRORP)) {
-		printk(KERN_ERR "lp%d printer error\n", minor);
+		if (last != LP_PERRORP) {
+			last = LP_PERRORP;
+			printk(KERN_ERR "lp%d on fire!\n", minor);
+		}
+	}
+	else last = 0;
+
+	if (last != 0) {
 		if (LP_F(minor) & LP_ABORT)
 			return 1;
 		lp_error(minor);
 	}
+
 	return 0;
 }
 

@@ -131,8 +131,4 @@ static __inline__ void irq_init_irq(void)
 	outb(0, IOMD_IRQMASKB);
 	outb(0, IOMD_FIQMASK);
 	outb(0, IOMD_DMAMASK);
-	outb(0, IOMD_IO0CR);
-	outb(0, IOMD_IO1CR);
-	outb(0, IOMD_IO2CR);
-	outb(0, IOMD_IO3CR);
 }

@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := rose.o
-O_OBJS	 := af_rose.o rose_dev.o rose_in.o rose_link.o rose_out.o rose_route.o rose_subr.o rose_timer.o
+O_OBJS	 := af_rose.o rose_dev.o rose_in.o rose_link.o rose_loopback.o \
+	    rose_out.o rose_route.o rose_subr.o rose_timer.o
 M_OBJS   := $(O_TARGET)
 
 ifeq ($(CONFIG_SYSCTL),y)

@@ -59,17 +59,27 @@ static int verify_stack_pointer (unsigned long stackptr, int size)
 		return 0;
 }
 
-static void dump_stack (unsigned long *start, unsigned long *end, int offset, int max)
+/*
+ * Dump out the contents of some memory nicely...
+ */
+void dump_mem(unsigned long bottom, unsigned long top)
 {
-	unsigned long *p;
+	unsigned long p = bottom & ~31;
 	int i;
 
-	for (p = start + offset, i = 0; i < max && p < end; i++, p++) {
-		if (i && (i & 7) == 0)
-			printk ("\n       ");
-		printk ("%08lx ", *p);
+	for (p = bottom & ~31; p < top;) {
+		printk("%08lx: ", p);
+
+		for (i = 0; i < 8; i++, p += 4) {
+			if (p < bottom || p >= top)
+				printk("         ");
+			else
+				printk("%08lx ", *(unsigned long *)p);
+			if (i == 3)
+				printk(" ");
+		}
+		printk ("\n");
 	}
-	printk ("\n");
 }
 
 /*
@@ -139,28 +149,26 @@ void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret)
 		break;
 	}
 
-	console_verbose ();
-	printk ("Internal error: %s: %x\n", str, err);
-	printk ("CPU: %d", smp_processor_id());
-	show_regs (regs);
-	printk ("Process %s (pid: %d, stackpage=%08lx)\nStack: ",
+	console_verbose();
+	printk("Internal error: %s: %x\n", str, err);
+	printk("CPU: %d", smp_processor_id());
+	show_regs(regs);
+	printk("Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, 4096+(unsigned long)current);
 
 	cstack = (unsigned long)(regs + 1);
 	sstack = 4096+(unsigned long)current;
 
-	if (*(unsigned long *)sstack != STACK_MAGIC)
-		printk ("*** corrupted stack page\n       ");
-
-	if (verify_stack_pointer (cstack, 4))
-		printk ("%08lx invalid kernel stack pointer\n", cstack);
+	printk("Stack: ");
+	if (verify_stack_pointer(cstack, 4))
+		printk("invalid kernel stack pointer %08lx", cstack);
 	else if(cstack > sstack + 4096)
-		printk("(sp overflow)\n");
+		printk("(sp overflow)");
 	else if(cstack < sstack)
-		printk("(sp underflow)\n");
-	else
-		dump_stack ((unsigned long *)sstack, (unsigned long *)sstack + 1024,
-			cstack - sstack, kstack_depth_to_print);
+		printk("(sp underflow)");
+	printk("\n");
+
+	dump_mem(cstack, sstack + 4096);
 
 	frameptr = regs->ARM_fp;
 	if (frameptr) {
@@ -172,7 +180,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret)
 		}
 	}
 
-	dump_instr (instruction_pointer(regs));
+	dump_instr(instruction_pointer(regs));
 	died = 0;
 	if (ret != -1)
 		do_exit (ret);

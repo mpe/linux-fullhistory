@@ -298,6 +298,7 @@
 #include <linux/stat.h>
 #include <linux/mca.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 #include <asm/io.h>
 #include "sd.h"
 #include "scsi.h"
@@ -834,6 +835,7 @@ static struct Scsi_Host *hosts[IM_MAX_HOSTS+1] = { NULL };
 
 /*local functions in forward declaration */
 static void interrupt_handler (int irq, void *dev_id, struct pt_regs *regs);
+static void do_interrupt_handler (int irq, void *dev_id, struct pt_regs *regs);
 static void issue_cmd (struct Scsi_Host *shpnt, unsigned long cmd_reg, 
                        unsigned char attn_reg);
 static void internal_done (Scsi_Cmnd * cmd);
@@ -855,6 +857,17 @@ static int ldn_access_load(struct Scsi_Host *shpnt, int ldn);
 static int ldn_access_total_read_write(struct Scsi_Host *shpnt);
 
 /*--------------------------------------------------------------------*/
+
+
+static void 
+do_interrupt_handler (int irq, void *dev_id, struct pt_regs *regs)
+{
+  unsigned long flags;
+
+  spin_lock_irqsave(&io_request_lock, flags);
+  interrupt_handler(irq, dev_id, regs);
+  spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 static void 
 interrupt_handler (int irq, void *dev_id, struct pt_regs *regs)
@@ -1526,7 +1539,7 @@ ibmmca_detect (Scsi_Host_Template * template)
     return 0;
 
   /* get interrupt request level */
-  if (request_irq (IM_IRQ, interrupt_handler, SA_SHIRQ, "ibmmca", hosts))
+  if (request_irq (IM_IRQ, do_interrupt_handler, SA_SHIRQ, "ibmmca", hosts))
     {
       printk("IBM MCA SCSI: Unable to get IRQ %d.\n", IM_IRQ);
       return 0;

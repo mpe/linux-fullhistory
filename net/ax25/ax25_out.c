@@ -362,7 +362,7 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 
 	ax25_addr_build(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
-	skb->dev      = ax25->ax25_dev->dev;
+	skb->dev = ax25->ax25_dev->dev;
 
 	ax25_queue_xmit(skb);
 }

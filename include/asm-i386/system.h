@@ -138,8 +138,8 @@ __asm__("movw %%dx,%0\n\t" \
 	 "d" (limit) \
 	:"dx")
 
-#define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
-#define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
+#define set_base(ldt,base) _set_base( ((char *)&(ldt)) , (base) )
+#define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , ((limit)-1)>>12 )
 
 static inline unsigned long _get_base(char * addr)
 {

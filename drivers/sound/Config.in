@@ -2,6 +2,7 @@ dep_tristate 'ProAudioSpectrum 16 support' CONFIG_PAS $CONFIG_SOUND
 if [ "$CONFIG_PAS" = "y" ]; then
     int 'PAS16 IRQ 3, 4, 5, 7, 9, 10, 11, 12, 14 or 15' CONFIG_PAS_IRQ 10
     int 'PAS16 DMA 0, 1, 3, 5, 6 or 7' CONFIG_PAS_DMA 3
+    bool 'Enable PAS16 joystick port' CONFIG_PAS_JOYSTICK
 fi
 
 dep_tristate '100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB $CONFIG_SOUND

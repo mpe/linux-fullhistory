@@ -10,10 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions, and the following disclaimer,
  *    without modification, immediately at the beginning of the file.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 2. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * Where this Software is combined with software released under the terms of 
@@ -393,6 +390,27 @@ register SELID {
 }
 
 /*
+ * Serial Port I/O Cabability register (p. 4-95 aic7860 Data Book)
+ * Indicates if external logic has been attached to the chip to
+ * perform the tasks of accessing a serial eeprom, testing termination
+ * strength, and performing cable detection.  On the aic7860, most of
+ * these features are handled on chip, but on the aic7855 an attached
+ * aic3800 does the grunt work.
+ */
+register SPIOCAP {
+	address			0x01b
+	access_mode RW
+	bit	SOFT1		0x80
+	bit	SOFT0		0x40
+	bit	SOFTCMDEN	0x20	
+	bit	HAS_BRDCTL	0x10	/* External Board control */
+	bit	SEEPROM		0x08	/* External serial eeprom logic */
+	bit	EEPROM		0x04	/* Writable external BIOS ROM */
+	bit	ROM		0x02	/* Logic for accessing external ROM */
+	bit	SSPIOCPS	0x01	/* Termination and cable detection */
+}
+
+/*
  * SCSI Block Control (p. 3-32)
  * Controls Bus type and channel selection.  In a twin channel configuration
  * addresses 0x00-0x1e are gated to the appropriate channel based on this
@@ -622,26 +640,19 @@ register INTSTAT {
 	mask	NO_IDENT	0x20|SEQINT	/* no IDENTIFY after reconnect*/
 	mask	NO_MATCH	0x30|SEQINT	/* no cmd match for reconnect */
 	mask	EXTENDED_MSG	0x40|SEQINT	/* Extended message received */
-	mask	NO_MATCH_BUSY	0x50|SEQINT	/* Couldn't find BUSY SCB */
+	mask	ABORT_REQUESTED 0x50|SEQINT	/* Reconect of aborted SCB */
 	mask	REJECT_MSG	0x60|SEQINT	/* Reject message received */
 	mask	BAD_STATUS	0x70|SEQINT	/* Bad status from target */
 	mask	RESIDUAL	0x80|SEQINT	/* Residual byte count != 0 */
-	mask	ABORT_CMDCMPLT	0x91		/*
-						 * Command tagged for abort
-						 * completed successfully.
-						 */
 	mask	AWAITING_MSG	0xa0|SEQINT	/*
 						 * Kernel requested to specify
-                                                 * a message to this target
-                                                 * (command was null), so tell
-                                                 * it that it can fill the
-                                                 * message buffer.
-                                                 */
-	mask	MSG_BUFFER_BUSY	0xc0|SEQINT	/*
-						 * Sequencer wants to use the
-						 * message buffer, but it
-						 * already contains a message
+						 * a message to this target
+						 * (command was null), so tell
+						 * it that it can fill the
+						 * message buffer.
 						 */
+	mask	TRACEPOINT	0xb0|SEQINT
+	mask	TRACEPOINT2	0xc0|SEQINT
 	mask	MSGIN_PHASEMIS	0xd0|SEQINT	/*
 						 * Target changed phase on us
 						 * when we were expecting
@@ -665,7 +676,10 @@ register INTSTAT {
 register ERROR {
 	address			0x092
 	access_mode RO
-	bit	PARERR		0x08
+	bit	PCIERRSTAT	0x40	/* PCI only */
+	bit	MPARERR		0x20	/* PCI only */
+	bit	DPARERR		0x10	/* PCI only */
+	bit	SQPARERR	0x08
 	bit	ILLOPCODE	0x04
 	bit	ILLSADDR	0x02
 	bit	ILLHADDR	0x01
@@ -677,6 +691,7 @@ register ERROR {
 register CLRINT {
 	address			0x092
 	access_mode WO
+	bit	CLRPARERR	0x10	/* PCI only */
 	bit	CLRBRKADRINT	0x08
 	bit	CLRSCSIINT      0x04
 	bit	CLRCMDINT 	0x02
@@ -771,8 +786,6 @@ scb {
 		bit	MK_MESSAGE      0x80
 		bit	DISCENB         0x40
 		bit	TAG_ENB		0x20
-		bit	MUST_DMAUP_SCB	0x10
-		bit	ABORT_SCB	0x08
 		bit	DISCONNECTED	0x04
 		mask	SCB_TAG_TYPE	0x03
 	}
@@ -801,10 +814,11 @@ scb {
 		size	4
 	}
 	SCB_DATACNT {
-		size	3
-	}
-	SCB_LINKED_NEXT {
-		size	1
+		/*
+		 * Really only 3 bytes, but padded to make
+		 * the kernel's job easier.
+		 */
+		size	4
 	}
 	SCB_CMDPTR {
 		size	4
@@ -924,6 +938,9 @@ scratch_ram {
 	TARG_SCRATCH {
 		size		16
 	}
+	/*
+	 * Bit vector of targets that have ULTRA enabled.
+	 */
 	ULTRA_ENB {
 		size		2
 	}
@@ -934,14 +951,11 @@ scratch_ram {
 		size		2
 	}
 	/*
-	 * Length of pending message
+	 * Single byte buffer used to designate the type or message
+	 * to send to a target.
 	 */
-	MSG_LEN	{
-		size		1
-	}
-	/* We reserve 8bytes to store outgoing messages */
 	MSG_OUT {
-		size		8
+		size		1
 	}
 	/* Parameters for DMA Logic */
 	DMAPARAMS {
@@ -956,35 +970,12 @@ scratch_ram {
 		bit	FIFOFLUSH	0x02
 		bit	FIFORESET	0x01
 	}
-	/*
-	 * Number of SCBs supported by
-	 * this card.
-	 */
-	SCBCOUNT {
-		size		1
-	}
-	/*
-	 * Two's complement of SCBCOUNT
-	 */
-	COMP_SCBCOUNT {
-		size		1
-	}
-	/*
-	 * Mask of bits to test against
-	 * when looking at the Queue Count
-	 * registers.  Works around a bug
-	 * on aic7850 chips. 
-	 */
-	QCNTMASK {
-		size		1
-	}
 	SEQ_FLAGS {
 		size		1
-		bit	RESELECTED	0x80
-		bit	IDENTIFY_SEEN	0x40
-		bit	TAGGED_SCB	0x20
+		bit	IDENTIFY_SEEN	0x80
+		bit	SCBPTR_VALID	0x20
 		bit	DPHASE		0x10
-		bit	PAGESCBS	0x04
+		bit	AMTARGET	0x08
 		bit	WIDE_BUS	0x02
 		bit	TWIN_BUS	0x01
 	}
@@ -996,32 +987,13 @@ scratch_ram {
 	SAVED_TCL {
 		size		1
 	}
+	/* Working value of the number of SG segments left */
 	SG_COUNT {
 		size		1
 	}
-	/* working value of SG pointer */
+	/* Working value of SG pointer */
 	SG_NEXT	{
 		size		4
-	}
-	/*
-	 * head of list of SCBs awaiting
-	 * selection
-	 */
-	WAITING_SCBH {
-		size		1
-	}
-	SAVED_LINKPTR {
-		size		1
-	}
-	SAVED_SCBPTR {
-		size		1
-	}
-	/*
-	 * The sequencer will stick the frist byte of any rejected message here
-	 * so we can see what is getting thrown away.
-	 */
-	REJBYTE	{
-		size		1
 	}
 	/*
 	 * The last bus phase as seen by the sequencer. 
@@ -1040,23 +1012,12 @@ scratch_ram {
 		mask	P_MESGIN	CDI|IOI|MSGI
 		mask	P_BUSFREE	0x01
 	}
-	MSGIN_EXT_LEN {
-		size		1
-	}
-	MSGIN_EXT_OPCODE {
-		size		1
-	}
 	/*
-	 * location 3, stores the last
-	 * byte of an extended message if
-	 * it passes the two bytes of space
-	 * we allow now.  This byte isn't
-	 * used for anything, it just makes
-	 * the code shorter for tossing
-	 * extra bytes.
+	 * head of list of SCBs awaiting
+	 * selection
 	 */
-	MSGIN_EXT_BYTES	{
-		size		3
+	WAITING_SCBH {
+		size		1
 	}
 	/*
 	 * head of list of SCBs that are
@@ -1073,10 +1034,40 @@ scratch_ram {
 	FREE_SCBH {
 		size		1
 	}
+	/*
+	 * Address of the hardware scb array in the host.
+	 */
 	HSCB_ADDR {
 		size		4
 	}
-	CUR_SCBID {
+	/*
+	 * Address of the 256 byte array storing the SCBID of outstanding
+	 * untagged SCBs indexed by TCL.
+	 */
+	SCBID_ADDR {
+		size		4
+	}
+	/*
+	 * Address of the array of command descriptors used to store
+	 * information about incoming selections.
+	 */
+	TMODE_CMDADDR {
+		size		4
+	}
+	KERNEL_QINPOS {
+		size		1
+	}
+	QINPOS {
+		size		1
+	}
+	QOUTPOS {
+		size		1
+	}
+	/*
+	 * Offset into the command descriptor array for the next
+	 * available desciptor to use.
+	 */
+	TMODE_CMDADDR_NEXT {
 		size		1
 	}
 	ARG_1 {
@@ -1084,30 +1075,13 @@ scratch_ram {
 		mask	SEND_MSG	0x80
 		mask	SEND_SENSE	0x40
 		mask	SEND_REJ	0x20
+		mask	MSGOUT_PHASEMIS	0x10
 		alias	RETURN_1
 	}
 	/*
-	 * Running count of commands placed in
-	 * the QOUTFIFO.  This is cleared by the
-	 * kernel driver every FIFODEPTH commands.
-	 *
-	 * NOTE: These scratch RAM registers are overlaying SCSICONF
-	 *       and SCSICONF2 and are only used on cards that are
-	 *       capable of SCB paging.   Currently, only the PCI
-	 *       controllers can do this, which is good because the
-	 *       AIC-7770 based controllers use the SCSICONF register
-	 *       to control termination.  In other words, do not
-	 *       destroy the contents of SCSICONF and SCSICONF2 for
-	 *       AIC-7770 based controllers.
+	 * Snapshot of MSG_OUT taken after each message is sent.
 	 */
-	CMDOUTCNT {
-		size		1
-	}
-	/*
-	 * Maximum number of entries allowed in
-	 * the QOUT/INFIFO.
-	 */
-	FIFODEPTH {
+	LAST_MSG {
 		size		1
 	}
 	/*
@@ -1118,12 +1092,10 @@ scratch_ram {
 	SCSICONF {
 		address		0x05a
 		size		1
+		bit	TERM_ENB	0x80
 		bit	RESET_SCSI	0x40
-	}
-        SCSICONF2 {
-		address		0x05b
-		size		1
-		bit	RESET_SCSI	0x40
+		mask	HSCSIID		0x07	/* our SCSI ID */
+		mask	HWSCSIID	0x0f	/* our SCSI ID if Wide Bus */
 	}
 	HOSTCONF {
 		address		0x05d
@@ -1140,6 +1112,10 @@ scratch_ram {
 
 const SCB_LIST_NULL	0xff
 
+/* Offsets into the SCBID array where different data is stored */
+const UNTAGGEDSCB_OFFSET	0
+const QOUTFIFO_OFFSET		1
+const QINFIFO_OFFSET		2
 
 /* WDTR Message values */
 const BUS_8_BIT		0x00
@@ -1147,3 +1123,24 @@ const BUS_16_BIT		0x01
 const BUS_32_BIT		0x02
 const MAX_OFFSET_8BIT		0x0f
 const MAX_OFFSET_16BIT	0x08
+const HOST_MSG		0xFF
+
+/* Target mode command processing constants */
+const CMD_GROUP_CODE_SHIFT	0x05
+const CMD_GROUP0_BYTE_DELTA	-4
+const CMD_GROUP2_BYTE_DELTA	-6
+const CMD_GROUP4_BYTE_DELTA	4
+const CMD_GROUP5_BYTE_DELTA	11
+
+/*
+ * Downloaded (kernel inserted) constants
+ */
+/*
+ * Mask of bits to test against when looking at the Queue Count
+ * registers.  Works around a bug on aic7850 chips. 
+ */
+const QCNTMASK		download
+/*
+ * Number of command descriptors in the command descriptor array.
+ */
+const TMODE_NUMCMDS	download

@@ -1,11 +1,21 @@
-/* $Revision: 2.1 $$Date: 1997/10/24 16:03:00 $
+/* $Revision: 2.3 $$Date: 1998/03/16 18:01:12 $
  * linux/include/linux/cyclades.h
  *
- * This file is maintained by Marcio Saito <marcio@cyclades.com> and
+ * This file is maintained by Ivan Passos <ivan@cyclades.com>, 
+ * Marcio Saito <marcio@cyclades.com> and
  * Randolph Bentson <bentson@grieg.seaslug.org>.
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 2.3  1998/03/16 18:01:12  ivan
+ *changes in the cyclades_port structure to get it closer to the 
+ *standard serial port structure;
+ *added constants for new ioctls;
+ *Revision 2.2  1998/02/17 16:50:00  ivan
+ *changes in the cyclades_port structure (addition of shutdown_wait and 
+ *chip_rev variables);
+ *added constants for new ioctls and for CD1400 rev. numbers.
+ *
  *Revision 2.1	1997/10/24 16:03:00  ivan
  *added rflow (which allows enabling the CD1400 special flow control 
  *feature) and rtsdtr_inv (which allows DTR/RTS pin inversion) to 
@@ -58,10 +68,14 @@ struct cyclades_monitor {
 #define CYGETDEFTIMEOUT         0x435908
 #define CYSETDEFTIMEOUT         0x435909
 #define CYSETRFLOW		0x43590a
-#define CYRESETRFLOW		0x43590b
+#define CYGETRFLOW		0x43590b
 #define CYSETRTSDTR_INV		0x43590c
-#define CYRESETRTSDTR_INV	0x43590d
+#define CYGETRTSDTR_INV		0x43590d
 #define CYZPOLLCYCLE		0x43590e
+#define CYGETCD1400VER		0x43590f
+#define CYGETCARDINFO		0x435910
+#define	CYSETWAIT		0x435911
+#define	CYGETWAIT		0x435912
 
 /*************** CYCLOM-Z ADDITIONS ***************/
 
@@ -77,6 +91,8 @@ struct cyclades_monitor {
 #define MAX_BOARD       4       /* Max number of boards */
 #define MAX_PORT        128     /* Max number of ports per board */
 #define MAX_DEV         256     /* Max number of ports total */
+
+#define	CYZ_FIFO_SIZE	16
 
 #define CYZ_BOOT_NWORDS 0x100
 struct CYZ_BOOT_CTRL {
@@ -473,12 +489,13 @@ struct cyclades_chip {
 
 struct cyclades_port {
 	int                     magic;
-	int                     type;
 	int			card;
 	int			line;
 	int			flags; 		/* defined in tty.h */
+	int                     type;		/* UART type */
 	struct tty_struct 	*tty;
 	int			read_status_mask;
+	int			ignore_status_mask;
 	int			timeout;
 	int			xmit_fifo_size;
 	int                     cor1,cor2,cor3,cor4,cor5;
@@ -486,13 +503,15 @@ struct cyclades_port {
 	int			baud;
 	int			rflow;
 	int			rtsdtr_inv;
-	int			ignore_status_mask;
+	int			chip_rev;
+	int			custom_divisor;
+	int                     x_char; /* to be pushed out ASAP */
 	int			close_delay;
-	int			IER; 	/* Interrupt Enable Register */
-	int			event;
+	unsigned short		closing_wait;
+	unsigned short		closing_wait2;
+	unsigned long		event;
 	unsigned long		last_active;
 	int			count;	/* # of fd on device */
-	int                     x_char; /* to be pushed out ASAP */
 	int                     x_break;
 	int			blocked_open; /* # of blocked opens */
 	long			session; /* Session of opening process */
@@ -508,6 +527,7 @@ struct cyclades_port {
 	struct termios		callout_termios;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
+	struct wait_queue	*shutdown_wait;
         struct cyclades_monitor mon;
 	unsigned long		jiffies[3];
 	unsigned long		rflush_count;
@@ -517,13 +537,14 @@ struct cyclades_port {
  * Events are used to schedule things to happen at timer-interrupt
  * time, instead of at cy interrupt time.
  */
-#define Cy_EVENT_READ_PROCESS	0
-#define Cy_EVENT_WRITE_WAKEUP	1
-#define Cy_EVENT_HANGUP		2
-#define Cy_EVENT_BREAK		3
-#define Cy_EVENT_OPEN_WAKEUP	4
+#define Cy_EVENT_READ_PROCESS		0
+#define Cy_EVENT_WRITE_WAKEUP		1
+#define Cy_EVENT_HANGUP			2
+#define Cy_EVENT_BREAK			3
+#define Cy_EVENT_OPEN_WAKEUP		4
+#define Cy_EVENT_SHUTDOWN_WAKEUP	5
 
-
+#define	CLOSING_WAIT_DELAY	30
 
 #define CyMAX_CHIPS_PER_CARD	8
 #define CyMAX_CHAR_FIFO		12
@@ -538,10 +559,13 @@ struct cyclades_port {
 
 /**** CD1400 registers ****/
 
-#define CyRegSize  0x0400
-#define Cy_HwReset 0x1400
-#define Cy_ClrIntr 0x1800
-#define Cy_EpldRev 0x1e00
+#define CD1400_REV_G	0x46
+#define CD1400_REV_J	0x48
+
+#define CyRegSize  	0x0400
+#define Cy_HwReset 	0x1400
+#define Cy_ClrIntr 	0x1800
+#define Cy_EpldRev 	0x1e00
 
 /* Global Registers */
 

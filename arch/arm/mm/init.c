@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/smp.h>
+#include <linux/init.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -102,7 +103,7 @@ void show_mem(void)
 /*
  * paging_init() sets up the page tables...
  */
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	extern unsigned long free_area_init(unsigned long, unsigned long);
 
@@ -129,7 +130,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
  * memory is free.  This is done after various parts of the system have
  * claimed their memory after the kernel image.
  */
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	extern void sound_init(void);
 	int codepages = 0;

@@ -11,6 +11,7 @@
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -35,7 +36,6 @@ static void a3000_intr (int irq, void *dummy, struct pt_regs *fp)
 
     if (!(status & ISTR_INT_P))
 	return;
-
     if (status & ISTR_INTS)
     {
 	/* disable PORTS interrupt */
@@ -48,6 +48,14 @@ static void a3000_intr (int irq, void *dummy, struct pt_regs *fp)
     }
 }
 
+static void do_a3000_intr (int irq, void *dummy, struct pt_regs *fp)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    a3000_intr(irq, dummy, fp);
+    spin_unlock_irqrestore(&io_request_lock, flags);
+}
 static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 {
     unsigned short cntr = CNTR_PDMD | CNTR_INTEN;
@@ -186,7 +194,7 @@ __initfunc(int a3000_detect(Scsi_Host_Template *tpnt))
     DMA(a3000_host)->DAWR = DAWR_A3000;
     wd33c93_init(a3000_host, (wd33c93_regs *)&(DMA(a3000_host)->SASR),
 		 dma_setup, dma_stop, WD33C93_FS_12_15);
-    request_irq(IRQ_AMIGA_PORTS, a3000_intr, 0, "A3000 SCSI", a3000_intr);
+    request_irq(IRQ_AMIGA_PORTS, do_a3000_intr, 0, "A3000 SCSI", a3000_intr);
     DMA(a3000_host)->CNTR = CNTR_PDMD | CNTR_INTEN;
     called = 1;
 

@@ -547,20 +547,19 @@ int sock_wake_async(struct socket *sock, int how)
 		return -1;
 	switch (how)
 	{
-		case 0:
-			kill_fasync(sock->fasync_list, SIGIO);
+	case 1:
+		if (sock->flags & SO_WAITDATA)
 			break;
-		case 1:
-			if (!(sock->flags & SO_WAITDATA))
-				kill_fasync(sock->fasync_list, SIGIO);
+		goto call_kill;
+	case 2:
+		if (!(sock->flags & SO_NOSPACE))
 			break;
-		case 2:
-			if (sock->flags & SO_NOSPACE)
-			{
-				kill_fasync(sock->fasync_list, SIGIO);
-				sock->flags &= ~SO_NOSPACE;
-			}
-			break;
+		sock->flags &= ~SO_NOSPACE;
+		/* fall through */
+	case 0:
+	call_kill:
+		kill_fasync(sock->fasync_list, SIGIO);
+		break;
 	}
 	return 0;
 }
@@ -827,6 +826,7 @@ restart:
 			sys_close(err);
 			goto restart;
 		}
+		/* N.B. Should check for errors here */
 		move_addr_to_user(address, len, upeer_sockaddr, upeer_addrlen);
 	}
 
@@ -912,13 +912,13 @@ asmlinkage int sys_getpeername(int fd, struct sockaddr *usockaddr, int *usockadd
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
-	int len;
-	int err;
+	int len, err;
 
 	lock_kernel();
 	if ((sock = sockfd_lookup(fd, &err))!=NULL)
 	{
-		if((err=sock->ops->getname(sock, (struct sockaddr *)address, &len, 1))==0)
+		err = sock->ops->getname(sock, (struct sockaddr *)address, &len, 1);
+		if (!err)
 			err=move_addr_to_user(address,len, usockaddr, usockaddr_len);
 		sockfd_put(sock);
 	}
@@ -940,28 +940,22 @@ asmlinkage int sys_send(int fd, void * buff, size_t len, unsigned flags)
 
 	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
-	if (!sock)
-		goto out;
-	err = -EINVAL;
-	if (len < 0)
-		goto out_put;
+	if (sock) {
+		iov.iov_base=buff;
+		iov.iov_len=len;
+		msg.msg_name=NULL;
+		msg.msg_namelen=0;
+		msg.msg_iov=&iov;
+		msg.msg_iovlen=1;
+		msg.msg_control=NULL;
+		msg.msg_controllen=0;
+		if (sock->file->f_flags & O_NONBLOCK)
+			flags |= MSG_DONTWAIT;
+		msg.msg_flags = flags;
+		err = sock_sendmsg(sock, &msg, len);
 
-	iov.iov_base=buff;
-	iov.iov_len=len;
-	msg.msg_name=NULL;
-	msg.msg_namelen=0;
-	msg.msg_iov=&iov;
-	msg.msg_iovlen=1;
-	msg.msg_control=NULL;
-	msg.msg_controllen=0;
-	if (sock->file->f_flags & O_NONBLOCK)
-		flags |= MSG_DONTWAIT;
-	msg.msg_flags = flags;
-	err = sock_sendmsg(sock, &msg, len);
-
-out_put:
-	sockfd_put(sock);
-out:
+		sockfd_put(sock);
+	}
 	unlock_kernel();
 	return err;
 }
@@ -1140,11 +1134,11 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 {
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
-	struct iovec iov[UIO_FASTIOV];
+	struct iovec iovstack[UIO_FASTIOV], *iov = iovstack;
 	unsigned char ctl[sizeof(struct cmsghdr) + 20];	/* 20 is size of ipv6_pktinfo */
 	unsigned char *ctl_buf = ctl;
 	struct msghdr msg_sys;
-	int err, ctl_len, total_len;
+	int err, ctl_len, iov_size, total_len;
 	
 	lock_kernel();
 
@@ -1152,20 +1146,29 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		goto out; 
 
+	sock = sockfd_lookup(fd, &err);
+	if (!sock) 
+		goto out;
+
 	/* do not move before msg_sys is valid */
 	err = -EINVAL;
 	if (msg_sys.msg_iovlen > UIO_MAXIOV)
-		goto out;
+		goto out_put;
+
+	/* Check whether to allocate the iovec area*/
+	err = -ENOMEM;
+	iov_size = msg_sys.msg_iovlen * sizeof(struct iovec);
+	if (msg_sys.msg_iovlen > 1 /* UIO_FASTIOV */) {
+		iov = sock_kmalloc(sock->sk, iov_size, GFP_KERNEL);
+		if (!iov)
+			goto out_put;
+	}
 
 	/* This will also move the address data into kernel space */
 	err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
 	if (err < 0) 
-		goto out;
-	total_len=err;
-
-	sock = sockfd_lookup(fd, &err);
-	if (!sock) 
 		goto out_freeiov;
+	total_len = err;
 
 	ctl_len = msg_sys.msg_controllen; 
 	if (ctl_len) 
@@ -1181,7 +1184,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 			err = -ENOBUFS;
 			ctl_buf = sock_kmalloc(sock->sk, ctl_len, GFP_KERNEL);
 			if (ctl_buf == NULL) 
-				goto out_put;
+				goto out_freeiov;
 		}
 		err = -EFAULT;
 		if (copy_from_user(ctl_buf, msg_sys.msg_control, ctl_len))
@@ -1197,11 +1200,11 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 out_freectl:
 	if (ctl_buf != ctl)    
 		sock_kfree_s(sock->sk, ctl_buf, ctl_len);
+out_freeiov:
+	if (iov != iovstack)
+		sock_kfree_s(sock->sk, iov, iov_size);
 out_put:
 	sockfd_put(sock);
-out_freeiov:
-	if (msg_sys.msg_iov != iov)
-		kfree(msg_sys.msg_iov);
 out:       
 	unlock_kernel();
 	return err;
@@ -1218,9 +1221,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct iovec *iov=iovstack;
 	struct msghdr msg_sys;
 	unsigned long cmsg_ptr;
-	int err;
-	int total_len;
-	int len = 0;
+	int err, iov_size, total_len, len;
 
 	/* kernel mode address */
 	char addr[MAX_SOCK_ADDR];
@@ -1234,10 +1235,23 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		goto out;
 
-	err=-EINVAL;
-	if (msg_sys.msg_iovlen > UIO_MAXIOV)
+	sock = sockfd_lookup(fd, &err);
+	if (!sock)
 		goto out;
+
+	err = -EINVAL;
+	if (msg_sys.msg_iovlen > UIO_MAXIOV)
+		goto out_put;
 	
+	/* Check whether to allocate the iovec area*/
+	err = -ENOMEM;
+	iov_size = msg_sys.msg_iovlen * sizeof(struct iovec);
+	if (msg_sys.msg_iovlen > UIO_FASTIOV) {
+		iov = sock_kmalloc(sock->sk, iov_size, GFP_KERNEL);
+		if (!iov)
+			goto out_put;
+	}
+
 	/*
 	 *	Save the user-mode address (verify_iovec will change the
 	 *	kernel msghdr to use the kernel address space)
@@ -1245,41 +1259,43 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	 
 	uaddr = msg_sys.msg_name;
 	uaddr_len = &msg->msg_namelen;
-	err=verify_iovec(&msg_sys, iov, addr, VERIFY_WRITE);
-	if (err<0)
-		goto out;
-
+	err = verify_iovec(&msg_sys, iov, addr, VERIFY_WRITE);
+	if (err < 0)
+		goto out_freeiov;
 	total_len=err;
 
 	cmsg_ptr = (unsigned long)msg_sys.msg_control;
 	msg_sys.msg_flags = 0;
 	
-	if ((sock = sockfd_lookup(fd, &err))!=NULL)
-	{
-		if (sock->file->f_flags & O_NONBLOCK)
-			flags |= MSG_DONTWAIT;
-		err=sock_recvmsg(sock, &msg_sys, total_len, flags);
-		if(err>=0)
-			len=err;
-		sockfd_put(sock);
-	}
-	if (msg_sys.msg_iov != iov)
-		kfree(msg_sys.msg_iov);
-
-	if (uaddr != NULL && err>=0)
-		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
+	if (sock->file->f_flags & O_NONBLOCK)
+		flags |= MSG_DONTWAIT;
+	err = sock_recvmsg(sock, &msg_sys, total_len, flags);
 	if (err < 0)
-		goto out;
+		goto out_freeiov;
+	len = err;
+
+	if (uaddr != NULL) {
+		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
+		if (err < 0)
+			goto out_freeiov;
+	}
 	err = __put_user(msg_sys.msg_flags, &msg->msg_flags);
 	if (err)
-		goto out;
+		goto out_freeiov;
 	err = __put_user((unsigned long)msg_sys.msg_control-cmsg_ptr, 
 							 &msg->msg_controllen);
+	if (err)
+		goto out_freeiov;
+	err = len;
+
+out_freeiov:
+	if (iov != iovstack)
+		sock_kfree_s(sock->sk, iov, iov_size);
+out_put:
+	sockfd_put(sock);
 out:
 	unlock_kernel();
-	if(err<0)
-		return err;
-	return len;
+	return err;
 }
 
 
@@ -1462,10 +1478,13 @@ __initfunc(void sock_init(void))
 	 
 	sk_init();
 
+#ifdef SLAB_SKB
 	/*
 	 *	Initialize skbuff SLAB cache 
 	 */
 	skb_init();
+#endif
+
 
 	/*
 	 *	Wan router layer. 

@@ -12,6 +12,7 @@
 #include <asm/amigahw.h>
 #include <linux/zorro.h>
 #include <asm/irq.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -35,7 +36,6 @@ static void a2091_intr (int irq, void *dummy, struct pt_regs *fp)
 {
     unsigned int status;
     struct Scsi_Host *instance;
-
     for (instance = first_instance; instance &&
 	 instance->hostt == a2091_template; instance = instance->next)
     {
@@ -52,6 +52,15 @@ static void a2091_intr (int irq, void *dummy, struct pt_regs *fp)
 	    custom.intena = IF_SETCLR | IF_PORTS;
 	}
     }
+}
+
+static void do_a2091_intr (int irq, void *dummy, struct pt_regs *fp)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    a2091_intr(irq, dummy, fp);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
@@ -220,7 +229,7 @@ __initfunc(int a2091_detect(Scsi_Host_Template *tpnt))
 	if (num_a2091++ == 0) {
 	    first_instance = instance;
 	    a2091_template = instance->hostt;
-	    request_irq(IRQ_AMIGA_PORTS, a2091_intr, 0, "A2091 SCSI", a2091_intr);
+	    request_irq(IRQ_AMIGA_PORTS, do_a2091_intr, 0, "A2091 SCSI", a2091_intr);
 	}
 	DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
 	zorro_config_board(key, 0);

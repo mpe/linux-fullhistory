@@ -12,6 +12,7 @@
 #include <asm/amigahw.h>
 #include <linux/zorro.h>
 #include <asm/irq.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -49,6 +50,15 @@ static void gvp11_intr (int irq, void *dummy, struct pt_regs *fp)
 	/* enable PORTS interrupt */
 	custom.intena = IF_SETCLR | IF_PORTS;
     }
+}
+
+static void do_gvp11_intr (int irq, void *dummy, struct pt_regs *fp)
+{
+    unsigned long flags;
+
+    spin_lock_irqsave(&io_request_lock, flags);
+    gvp11_intr(irq, dummy, fp);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static int gvp11_xfer_mask = 0;
@@ -361,7 +371,7 @@ __initfunc(int gvp11_detect(Scsi_Host_Template *tpnt))
 	if (num_gvp11++ == 0) {
 		first_instance = instance;
 		gvp11_template = instance->hostt;
-		request_irq(IRQ_AMIGA_PORTS, gvp11_intr, 0,
+		request_irq(IRQ_AMIGA_PORTS, do_gvp11_intr, 0,
 			    "GVP11 SCSI", gvp11_intr);
 	}
 	DMA(instance)->CNTR = GVP11_DMAC_INT_ENABLE;

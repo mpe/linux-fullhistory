@@ -21,8 +21,17 @@
 #define IRQ_KEYBOARDTX		14
 #define IRQ_KEYBOARDRX		15
 
+#define IRQ_DMA0		16
+#define IRQ_DMA1		17
+#define IRQ_DMA2		18
+#define IRQ_DMA3		19
+#define IRQ_DMAS0		20
+#define IRQ_DMAS1		21
+
 #define FIQ_FLOPPYDATA		0
 #define FIQ_ECONET		2
 #define FIQ_SERIALPORT		4
 #define FIQ_EXPANSIONCARD	6
 #define FIQ_FORCE		7
+
+#define IRQ_TIMER		IRQ_TIMER0

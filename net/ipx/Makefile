@@ -17,6 +17,14 @@ ifeq ($(CONFIG_SYSCTL),y)
   O_OBJS += sysctl_net_ipx.o
 endif
 
+ifeq ($(CONFIG_SPX),y)
+OX_OBJS += af_spx.o
+else
+  ifeq ($(CONFIG_SPX),m)
+  MX_OBJS += af_spx.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 tar:

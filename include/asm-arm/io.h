@@ -17,10 +17,20 @@
 #include <asm/arch/io.h>
 
 /* unsigned long virt_to_phys(void *x) */
-#define virt_to_phys(x)		__virt_to_phys((unsigned long)(x))
+#define virt_to_phys(x)		(__virt_to_phys((unsigned long)(x)))
 
 /* void *phys_to_virt(unsigned long x) */
 #define phys_to_virt(x)		((void *)(__phys_to_virt((unsigned long)(x))))
+
+/*
+ * Virtual view <-> DMA view memory address translations
+ * virt_to_bus: Used to translate the virtual address to an
+ *              address suitable to be passed to set_dma_addr
+ * bus_to_virt: Used to convert an address for DMA operations
+ *              to an address that the kernel can use.
+ */
+#define virt_to_bus(x)	(__virt_to_bus((unsigned long)(x)))
+#define bus_to_virt(x)	((void *)(__bus_to_virt(x)))
 
 /*
  * These macros actually build the multi-value IO function prototypes

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.131 1998/04/03 10:52:04 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.133 1998/04/06 08:42:28 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -38,13 +38,12 @@
  *					open_request handling and moved
  *					most of it into the af independent code.
  *					Added tail drop and some other bugfixes.
- *					Added new listen sematics (ifdefed by
- *					TCP_NEW_LISTEN for now)
+ *					Added new listen sematics.
  *		Mike McLagan	:	Routing by source
  *	Juan Jose Ciarlante:		ip_dynaddr bits
  *		Andi Kleen:		various fixes.
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
- *	Andi Kleen		:	Fix TCP_NEW_LISTEN and make it the default.
+ *	Andi Kleen		:	Fix new listen.
  */
 
 #include <linux/config.h>
@@ -337,9 +336,6 @@ static struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int d
 	return result;
 }
 
-/* Until this is verified... -DaveM */
-/* #define USE_QUICKSYNS */
-
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
  * It is assumed that this code only gets called from within NET_BH.
@@ -353,12 +349,6 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	struct sock *sk;
 	int hash;
-
-#ifdef USE_QUICKSYNS
-	/* Incomming connection short-cut. */
-	if (th && th->syn == 1 && th->ack == 0)
-		goto listener_shortcut;
-#endif
 
 	/* Check TCP register quick cache first. */
 	sk = TCP_RHASH(sport);
@@ -380,9 +370,6 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next)
 		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 			goto hit;
-#ifdef USE_QUICKSYNS
-listener_shortcut:
-#endif
 	sk = tcp_v4_lookup_listener(daddr, hnum, dif);
 hit:
 	return sk;
@@ -813,11 +800,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (req->sk) {	/* not yet accept()ed */
 			sk = req->sk; /* report error in accept */
 		} else {
-#ifdef TCP_NEW_LISTEN
 			tp->syn_backlog--;
-#else
-			sk->ack_backlog--;
-#endif
 			tcp_synq_unlink(tp, req, prev);
 			req->class->destructor(req);
 			tcp_openreq_free(req);
@@ -1030,13 +1013,8 @@ struct or_calltable or_ipv4 = {
 	tcp_v4_send_reset
 };
 
-#ifdef TCP_NEW_LISTEN
 #define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
 #define BACKLOGMAX(sk) sysctl_max_syn_backlog
-#else
-#define BACKLOG(sk) ((sk)->ack_backlog)
-#define BACKLOGMAX(sk) ((sk)->max_ack_backlog)
-#endif
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, 
 						__u32 isn)
@@ -1068,9 +1046,8 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	} else { 
 		if (isn == 0)
 			isn = tcp_v4_init_sequence(sk, skb);
+		BACKLOG(sk)++;
 	}
-
-	BACKLOG(sk)++;
 
 	req = tcp_openreq_alloc();
 	if (req == NULL) {
@@ -1289,10 +1266,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	int snd_mss;
 	int mtu;
 
-#ifdef TCP_NEW_LISTEN
 	if (sk->ack_backlog > sk->max_ack_backlog)
 		goto exit; /* head drop */
-#endif
 	if (dst == NULL) { 
 		struct rtable *rt;
 		
@@ -1303,10 +1278,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	        dst = &rt->u.dst;
 	}
 
-#ifdef TCP_NEW_LISTEN
 	sk->tp_pinfo.af_tcp.syn_backlog--;
 	sk->ack_backlog++;
-#endif
 
 	mtu = dst->pmtu;
 	if (mtu < 68)
@@ -1353,11 +1326,7 @@ static void tcp_v4_rst_req(struct sock *sk, struct sk_buff *skb)
 	    after(TCP_SKB_CB(skb)->seq, req->snt_isn+1))
 		return;
 	tcp_synq_unlink(tp, req, prev);
-#ifdef TCP_NEW_LISTEN
 	(req->sk ? sk->ack_backlog : tp->syn_backlog)--;
-#else
-	sk->ack_backlog--;
-#endif
 	req->class->destructor(req);
 	tcp_openreq_free(req); 
 }
@@ -1483,7 +1452,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		skb->csum = csum_partial((char *)th, len, 0);
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
-			printk(KERN_DEBUG "TCPv4 bad checksum from %ld.%ld.%ld.%ld:%04x to %ld.%ld.%ld.%ld:%04x, "
+			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
 			       "len=%d/%d/%d\n",
  			       NIPQUAD(ntohl(skb->nh.iph->saddr)),
 			       ntohs(th->source), 

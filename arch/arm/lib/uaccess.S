@@ -13,13 +13,21 @@
 #include <asm/errno.h>
 
 		.text
-
+#ifdef ENTRY
 #define USER(x...)					\
 9999:		x;					\
 		.section __ex_table,"a";		\
 		.align	3;				\
 		.long	9999b,9001f;			\
 		.previous
+#else
+#define USER(x...)					\
+		x
+#define ENTRY(x...)					\
+		.globl	_##x;				\
+_##x:
+#define TESTING
+#endif
 
 #define PAGE_SHIFT 12
 
@@ -278,12 +286,12 @@ USER(		strgebt	r3, [r0], #1)			// May fault
 USER(		strgtbt	r3, [r0], #1)			// May fault
 		b	.c2u_finished
 
+#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
 		.previous
-
-
+#endif
 
 /* Prototype: unsigned long __arch_copy_from_user(void *to,const void *from,unsigned long n);
  * Purpose  : copy a block from user memory to kernel memory
@@ -538,10 +546,12 @@ USER(		ldrget	r3, [r1], #0)			// May fault
 		strgtb	r3, [r0], #1
 		b	.cfu_finished
 
+#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
 		.previous
+#endif
 
 /* Prototype: int __arch_clear_user(void *addr, size_t sz)
  * Purpose  : clear some user memory
@@ -556,7 +566,7 @@ ENTRY(__arch_clear_user)
 		blt	2f
 		ands	ip, r0, #3
 		beq	1f
-		cmp	ip, #1
+		cmp	ip, #2
 USER(		strbt	r2, [r0], #1)
 USER(		strlebt	r2, [r0], #1)
 USER(		strltbt	r2, [r0], #1)
@@ -566,9 +576,9 @@ USER(		strltbt	r2, [r0], #1)
 USER(		strplt	r2, [r0], #4)
 USER(		strplt	r2, [r0], #4)
 		bpl	1b
-2:		adds	r1, r1, #4		@  3  2  1  0 -1 -2 -3
+		adds	r1, r1, #4		@  3  2  1  0 -1 -2 -3
 USER(		strplt	r2, [r0], #4)
-		tst	r1, #2			@ 1x 1x 0x 0x 1x 1x 0x
+2:		tst	r1, #2			@ 1x 1x 0x 0x 1x 1x 0x
 USER(		strnebt	r2, [r0], #1)
 USER(		strnebt	r2, [r0], #1)
 		tst	r1, #1			@ x1 x0 x1 x0 x1 x0 x1
@@ -576,6 +586,7 @@ USER(		strnebt	r2, [r0], #1)
 		mov	r0, #0
 		LOADREGS(fd,sp!, {r1, pc})
 
+#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, pc})
@@ -611,21 +622,25 @@ USER(		ldrbt	r1, [r0], #1)
  */
 ENTRY(__arch_strncpy_from_user)
 		stmfd	sp!, {lr}
-		mov	ip, r2
+		add	ip, r1, #1
 1:		subs	r2, r2, #1
 		bmi	2f
 USER(		ldrbt	r3, [r1], #1)
 		strb	r3, [r0], #1
 		teq	r3, #0
 		bne	1b
-2:		subs	r0, ip, r2
-		LOADREGS(fd,sp!, {pc})
+		sub	r0, r1, ip
+		LOADREGS(fd, sp!, {pc})
+2:		sub	ip, ip, #1
+		sub	r0, r1, ip
+		LOADREGS(fd, sp!, {pc})
 
 		.section .fixup,"ax"
 		.align	0
 9001:		mov	r0, #-EFAULT
-		LOADREGS(fd,sp!, {pc})
+		LOADREGS(fd, sp!, {pc})
 		.previous
 
 		.align
+#endif
 

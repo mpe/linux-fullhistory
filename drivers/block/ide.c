@@ -1267,7 +1267,6 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 
 static void do_ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 {
-	unsigned long flags;
 	ide_hwgroup_t *hwgroup = dev_id;
 	ide_hwif_t *hwif = hwgroup->hwif;
 	ide_handler_t *handler;

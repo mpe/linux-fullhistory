@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.32 1998/04/03 09:49:47 freitag Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.34 1998/04/11 09:38:26 freitag Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -48,6 +48,7 @@ extern int sysctl_tcp_hoe_retransmits;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_sack;
+extern int sysctl_tcp_retrans_collapse;
 extern int sysctl_tcp_keepalive_time;
 extern int sysctl_tcp_keepalive_probes;
 extern int sysctl_tcp_max_ka_probes;
@@ -62,7 +63,6 @@ extern int sysctl_tcp_syn_taildrop;
 extern int sysctl_max_syn_backlog; 
 
 /* From icmp.c */
-extern int sysctl_icmp_sourcequench_time; 
 extern int sysctl_icmp_destunreach_time;
 extern int sysctl_icmp_timeexceed_time;
 extern int sysctl_icmp_paramprob_time;
@@ -104,6 +104,9 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
         {NET_IPV4_TCP_SACK, "tcp_sack",
          &sysctl_tcp_sack, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_RETRANS_COLLAPSE, "tcp_retrans_collapse",
+         &sysctl_tcp_retrans_collapse, sizeof(int), 0644, NULL,
          &proc_dointvec},
         {NET_IPV4_FORWARD, "ip_forward",
          &ipv4_devconf.forwarding, sizeof(int), 0644, NULL,
@@ -166,8 +169,6 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_ICMP_ECHO_IGNORE_BROADCASTS, "icmp_echo_ignore_broadcasts",
 	 &sysctl_icmp_echo_ignore_broadcasts, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
-	{NET_IPV4_ICMP_SOURCEQUENCH_RATE, "icmp_sourcequench_rate",
-	 &sysctl_icmp_sourcequench_time, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_ICMP_DESTUNREACH_RATE, "icmp_destunreach_rate",
 	 &sysctl_icmp_destunreach_time, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_ICMP_TIMEEXCEED_RATE, "icmp_timeexceed_rate",
