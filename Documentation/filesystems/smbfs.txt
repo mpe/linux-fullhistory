@@ -1,27 +1,20 @@
 Smbfs is a filesystem that implements the SMB protocol, which is the
 protocol used by Windows for Workgroups, Windows 95 and Windows NT.
-Smbfs was inspired by samba, the program written by Andrew Tridgell
+Smbfs was inspired by Samba, the program written by Andrew Tridgell
 that turns any unix host into a file server for DOS or Windows clients.
 See ftp://nimbus.anu.edu.au/pub/tridge/samba/ for this interesting
 program suite and much more information on SMB, NetBIOS over TCP/IP,
 and explanations for concepts like netbios name or share.
 
-To use smbfs, you need to install the Samba package (Samba-1.9.17p1 or
-later), and you need the special mount program from the smbfs package
-(smbfs-2.1.0 or later), found on
+To use smbfs, you must first install the Samba package (Samba-1.9.18p1 or
+later). This package includes the special smbmount utility needed to mount
+smbfs volumes. Refer to the smbmount(8) and smbmnt(8) manpages for the
+details regarding smbfs mounts.
 
-	ftp://ftp.gwdg.de/pub/linux/misc/smbfs/dontuse
-
-After downloading the smbfs package, apply the patch to the smbclient
-program and recompile.  Smbfs can then be mounted from the smbclient
-command line, as for example:
-
-	smb: \>mount /mnt/tmp -f 755
-
-For convenience, you may wish to package the command in a script like this:
-
-#!/bin/sh
-echo "mount /mnt/tmp -f 755" | smbclient //server/c$ -U administrator%
+The smbmount utility reads the Samba smb.conf config file for some of its
+options, and at least one of these is important for smbfs operation. You
+should enable the TCP_NODELAY socket option, or else directory listings
+will be dramatically slower (under Win NT at least).
 
 Mount-Time Options
 Windows 95 has several bugs that affect SMB operations, and smbfs includes
@@ -37,11 +30,12 @@ to the file mode argument of the mount command for the Win 95 servers.
 Option                  Value  Effect
 Identify Win 95 Server    1    Enables bug fixes
 Use Core Attributes       2    Speeds up directory scans, only mtime
+Use Dir Attributes        4    Alternate way to get file attributes
 
 To apply the options, sum the values and prepend it to the file mode. For
-example, to use both options with file mode 755, you would prepend 3 to 755:
+example, to use options 1 and 2 with file mode 755, you would specify 3755:
 
-	cnt>mount /mnt/tmp -f 3755
+	mount /mnt/tmp -f 3755
 
 Smbfs will print a message at mount time confirming the selected options.
 Note that _only_ Windows 95 servers require special treatment; using the

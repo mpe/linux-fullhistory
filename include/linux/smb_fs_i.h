@@ -21,15 +21,14 @@ struct smb_inode_info {
 	 * file handles are local to a connection. A file is open if
 	 * (open == generation).
 	 */
-        unsigned int open;
+        unsigned int open;	/* open generation */
 	__u16 fileid;		/* What id to handle a file with? */
 	__u16 attr;		/* Attribute fields, DOS value */
 
-	__u16 access;		/* Access bits. */
+	__u16 access;		/* Access mode */
 	__u16 cache_valid;	/* dircache valid? */
 	unsigned long oldmtime;	/* last time refreshed */
 	unsigned long closed;	/* timestamp when closed */
-	void * dentry;		/* The dentry we were opened with */
 };
 
 #endif

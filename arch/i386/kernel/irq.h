@@ -19,7 +19,12 @@ void ack_APIC_irq (void);
 void setup_IO_APIC (void);
 void init_IO_APIC_traps(void);
 
-extern const unsigned int io_apic_irqs;
+#ifdef __SMP__
+ extern unsigned int io_apic_irqs;
+#else
+ extern const unsigned int io_apic_irqs;
+#endif
+
 #define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
 
 #define MAX_IRQ_SOURCES 128

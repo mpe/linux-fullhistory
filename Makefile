@@ -343,14 +343,17 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
-	rm -f `find . -type f -name 'core' -print`
-	rm -f `find . -name '.*.flags' -print`
+	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
+	rm -f core `find . -type f -name 'core' -print`
+	rm -f core `find . -name '.*.flags' -print`
+	rm -f core `find . -size 0`
 	rm -f vmlinux System.map
 	rm -f .tmp*
 	rm -f drivers/char/consolemap_deftbl.c drivers/char/conmakehash
 	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
-	rm -f `find modules/ -type f -print`
+	if [ -d modules ]; then \
+		rm -f core `find modules/ -type f -print`; \
+	fi
 	rm -f submenu*
 
 mrproper: clean

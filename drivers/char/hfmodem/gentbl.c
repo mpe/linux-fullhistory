@@ -25,8 +25,8 @@
  */
 
 /*****************************************************************************/
-      
-#include <linux/hfmodem.h>
+
+/* This is compiled with HOSTCC - do not include any <linux/foo.h> headers. */
 #include <math.h>
 #include <stdio.h>
 

@@ -159,7 +159,6 @@ extern unsigned char *apic_reg;
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern volatile int cpu_number_map[NR_CPUS];
-extern volatile int cpu_logical_map[NR_CPUS];
 extern volatile unsigned long smp_invalidate_needed;
 extern void smp_flush_tlb(void);
 extern volatile unsigned long kernel_flag, kernel_counter;
@@ -171,6 +170,11 @@ extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern void smp_local_timer_interrupt(struct pt_regs * regs);
 extern void setup_APIC_clock (void);
+extern volatile int __cpu_logical_map[NR_CPUS];
+extern inline int cpu_logical_map(int cpu)
+{
+	return __cpu_logical_map[cpu];
+}
 
 
 /*
@@ -235,5 +239,12 @@ extern __inline int hard_smp_processor_id(void)
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
+#else
+#ifndef ASSEMBLY
+extern inline int cpu_logical_map(int cpu)
+{
+	return cpu;
+}
+#endif
 #endif
 #endif

@@ -2,6 +2,7 @@
 #define _LINUX_KERNEL_STAT_H
 
 #include <asm/irq.h>
+#include <asm/smp.h>
 #include <linux/smp.h>
 #include <linux/tasks.h>
 
@@ -25,7 +26,7 @@ struct kernel_stat {
 	unsigned int dk_drive_wblk[DK_NDRIVE];
 	unsigned int pgpgin, pgpgout;
 	unsigned int pswpin, pswpout;
-	unsigned int interrupts[NR_CPUS][NR_IRQS];
+	unsigned int irqs[NR_CPUS][NR_IRQS];
 	unsigned int ipackets, opackets;
 	unsigned int ierrors, oerrors;
 	unsigned int collisions;
@@ -33,5 +34,18 @@ struct kernel_stat {
 };
 
 extern struct kernel_stat kstat;
+
+/*
+ * Number of interrupts per specific IRQ source, since bootup
+ */
+extern inline int kstat_irqs (int irq)
+{
+	int i, sum=0;
+
+	for (i = 0 ; i < smp_num_cpus ; i++)
+		sum += kstat.irqs[cpu_logical_map(i)][irq];
+
+	return sum;
+}
 
 #endif /* _LINUX_KERNEL_STAT_H */

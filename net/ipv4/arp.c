@@ -392,7 +392,9 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 
 /* END OF OBSOLETE FUNCTIONS */
 
-
+/*
+ * Note: requires bh_atomic locking.
+ */
 int arp_bind_neighbour(struct dst_entry *dst)
 {
 	struct device *dev = dst->dev;
@@ -734,11 +736,9 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 	start_bh_atomic();
 	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 1);
 	if (neigh) {
-		unsigned state = 0;
-		if (r->arp_flags&ATF_PERM)
+		unsigned state = NUD_STALE;
+		if (r->arp_flags & ATF_PERM)
 			state = NUD_PERMANENT;
-		else
-			state = NUD_STALE;
 		err = neigh_update(neigh, (r->arp_flags&ATF_COM) ?
 				   r->arp_ha.sa_data : NULL, state, 1, 0);
 		neigh_release(neigh);
@@ -764,16 +764,21 @@ static unsigned arp_state_to_flags(struct neighbour *neigh)
 static int arp_req_get(struct arpreq *r, struct device *dev)
 {
 	u32 ip = ((struct sockaddr_in *) &r->arp_pa)->sin_addr.s_addr;
-	struct neighbour *neigh = neigh_lookup(&arp_tbl, &ip, dev);
+	struct neighbour *neigh;
+	int err = -ENXIO;
+
+	start_bh_atomic();
+	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 0);
 	if (neigh) {
 		memcpy(r->arp_ha.sa_data, neigh->ha, dev->addr_len);
 		r->arp_ha.sa_family = dev->type;
 		strncpy(r->arp_dev, dev->name, sizeof(r->arp_dev));
 		r->arp_flags = arp_state_to_flags(neigh);
 		neigh_release(neigh);
-		return 0;
+		err = 0;
 	}
-	return -ENXIO;
+	end_bh_atomic();
+	return err;
 }
 
 int arp_req_delete(struct arpreq *r, struct device * dev)
@@ -802,7 +807,7 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 
 	err = -ENXIO;
 	start_bh_atomic();
-	neigh = neigh_lookup(&arp_tbl, &ip, dev);
+	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 0);
 	if (neigh) {
 		err = neigh_update(neigh, NULL, NUD_FAILED, 1, 0);
 		neigh_release(neigh);
@@ -856,6 +861,11 @@ int arp_ioctl(unsigned int cmd, void *arg)
 		err = -EINVAL;
 		if ((r.arp_flags & ATF_COM) && r.arp_ha.sa_family != dev->type)
 			goto out;
+	} else if (cmd != SIOCSARP) {
+		/* dev has not been set ... */
+		printk(KERN_ERR "arp_ioctl: invalid, null device\n");
+		err = -EINVAL;
+		goto out;
 	}
 
 	switch(cmd) {
@@ -863,6 +873,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 	        err = arp_req_delete(&r, dev);
 		break;
 	case SIOCSARP:
+		/* This checks for dev == NULL */
 		err = arp_req_set(&r, dev);
 		break;
 	case SIOCGARP:

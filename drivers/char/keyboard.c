@@ -603,7 +603,7 @@ static void do_fn(unsigned char value, char up_flag)
 static void do_pad(unsigned char value, char up_flag)
 {
 	static const char *pad_chars = "0123456789+-*/\015,.?()";
-	static const char *app_map = "pqrstuvwxylSRQMnn?PQ";
+	static const char *app_map = "pqrstuvwxylSRQMnnmPQ";
 
 	if (up_flag)
 		return;		/* no action, if this is a key release */

@@ -2338,15 +2338,11 @@ static boolean BusLogic_TestInterrupts(BusLogic_HostAdapter_T *HostAdapter)
     Issue the Test Command Complete Interrupt commands.
   */
  
-  InitialInterruptCount = 0;
-  for (i=0; i<NR_CPUS; i++)
-	InitialInterruptCount += kstat.interrupts[i][HostAdapter->IRQ_Channel];
+  InitialInterruptCount = kstat_irqs(HostAdapter->IRQ_Channel);
   for (i = 0; i < TestCount; i++)
     BusLogic_Command(HostAdapter, BusLogic_TestCommandCompleteInterrupt,
 		     NULL, 0, NULL, 0);
-  FinalInterruptCount = 0;
-  for (i=0; i<NR_CPUS; i++)
-  	FinalInterruptCount += kstat.interrupts[i][HostAdapter->IRQ_Channel];
+  FinalInterruptCount = kstat_irqs(HostAdapter->IRQ_Channel);
   /*
     Verify that BusLogic_InterruptHandler was called at least TestCount
     times.  Shared IRQ Channels could cause more than TestCount interrupts to

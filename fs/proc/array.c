@@ -221,20 +221,14 @@ static int get_loadavg(char * buffer)
 
 static int get_kstat(char * buffer)
 {
-	int i, j, len;
+	int i, len;
 	unsigned sum = 0;
 	extern unsigned long total_forks;
 	unsigned long ticks;
 
 	ticks = jiffies * smp_num_cpus;
-#ifndef __SMP__
 	for (i = 0 ; i < NR_IRQS ; i++)
-		sum += kstat.interrupts[0][i];
-#else
-	for (j = 0 ; j < smp_num_cpus ; j++)
-		for (i = 0 ; i < NR_IRQS ; i++)
-			sum += kstat.interrupts[cpu_logical_map[j]][i];
-#endif
+		sum += kstat_irqs(i);
 
 #ifdef __SMP__
 	len = sprintf(buffer,
@@ -246,12 +240,12 @@ static int get_kstat(char * buffer)
 	for (i = 0 ; i < smp_num_cpus; i++)
 		len += sprintf(buffer + len, "cpu%d %u %u %u %lu\n",
 			i,
-			kstat.per_cpu_user[cpu_logical_map[i]],
-			kstat.per_cpu_nice[cpu_logical_map[i]],
-			kstat.per_cpu_system[cpu_logical_map[i]],
-			jiffies - (  kstat.per_cpu_user[cpu_logical_map[i]] \
-			           + kstat.per_cpu_nice[cpu_logical_map[i]] \
-			           + kstat.per_cpu_system[cpu_logical_map[i]]));
+			kstat.per_cpu_user[cpu_logical_map(i)],
+			kstat.per_cpu_nice[cpu_logical_map(i)],
+			kstat.per_cpu_system[cpu_logical_map(i)],
+			jiffies - (  kstat.per_cpu_user[cpu_logical_map(i)] \
+			           + kstat.per_cpu_nice[cpu_logical_map(i)] \
+			           + kstat.per_cpu_system[cpu_logical_map(i)]));
 	len += sprintf(buffer + len,
 		"disk %u %u %u %u\n"
 		"disk_rio %u %u %u %u\n"
@@ -292,17 +286,8 @@ static int get_kstat(char * buffer)
 		kstat.pswpin,
 		kstat.pswpout,
 		sum);
-	for (i = 0 ; i < NR_IRQS ; i++) {
-#ifndef __SMP__
-		len += sprintf(buffer + len, " %u", kstat.interrupts[0][i]);
-#else
-		int sum=0;
-
-		for (j = 0 ; j < smp_num_cpus ; j++)
-			sum += kstat.interrupts[cpu_logical_map[j]][i];
-		len += sprintf(buffer + len, " %u", sum);
-#endif
-	}
+	for (i = 0 ; i < NR_IRQS ; i++)
+		len += sprintf(buffer + len, " %u", kstat_irqs(i));
 	len += sprintf(buffer + len,
 		"\nctxt %u\n"
 		"btime %lu\n"
@@ -1147,8 +1132,8 @@ static int get_pidcpu(int pid, char * buffer)
 	for (i = 0 ; i < smp_num_cpus; i++)
 		len += sprintf(buffer + len, "cpu%d %lu %lu\n",
 			i,
-			tsk->per_cpu_utime[cpu_logical_map[i]],
-			tsk->per_cpu_stime[cpu_logical_map[i]]);
+			tsk->per_cpu_utime[cpu_logical_map(i)],
+			tsk->per_cpu_stime[cpu_logical_map(i)]);
 
 	return len;
 }

@@ -351,8 +351,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, error);
 		inode = smb_iget(dir->i_sb, &finfo);
 		if (inode)
 		{
-			/* cache the dentry pointer */
-			inode->u.smbfs_i.dentry = dentry;
 	add_entry:
 			dentry->d_op = &smbfs_dentry_operations;
 			d_add(dentry, inode);
@@ -372,8 +370,8 @@ smb_instantiate(struct dentry *dentry, __u16 fileid, int have_id)
 {
 	struct smb_sb_info *server = server_from_dentry(dentry);
 	struct inode *inode;
-	struct smb_fattr fattr;
 	int error;
+	struct smb_fattr fattr;
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_instantiate: file %s/%s, fileid=%u\n",
@@ -395,8 +393,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, fileid);
 		inode->u.smbfs_i.access = SMB_O_RDWR;
 		inode->u.smbfs_i.open = server->generation;
 	}
-	/* cache the dentry pointer */
-	inode->u.smbfs_i.dentry = dentry;
 	d_instantiate(dentry, inode);
 out:
 	return error;

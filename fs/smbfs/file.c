@@ -54,10 +54,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 static int
 smb_readpage_sync(struct dentry *dentry, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
 	char *buffer = (char *) page_address(page);
 	unsigned long offset = page->offset;
-	int rsize = smb_get_rsize(SMB_SERVER(inode));
+	int rsize = smb_get_rsize(server_from_dentry(dentry));
 	int count = PAGE_SIZE;
 	int result;
 
@@ -81,14 +80,14 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 		if (count < rsize)
 			rsize = count;
 
-		result = smb_proc_read(inode, offset, rsize, buffer);
+		result = smb_proc_read(dentry, offset, rsize, buffer);
 		if (result < 0)
 			goto io_error;
 
 		count -= result;
 		offset += result;
 		buffer += result;
-		inode->i_atime = CURRENT_TIME;
+		dentry->d_inode->i_atime = CURRENT_TIME;
 		if (result < rsize)
 			break;
 	} while (count);
@@ -129,7 +128,7 @@ smb_writepage_sync(struct dentry *dentry, struct page *page,
 {
 	struct inode *inode = dentry->d_inode;
 	u8 *buffer = (u8 *) page_address(page) + offset;
-	int wsize = smb_get_wsize(SMB_SERVER(inode));
+	int wsize = smb_get_wsize(server_from_dentry(dentry));
 	int result, written = 0;
 
 	offset += page->offset;
@@ -142,7 +141,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, wsize);
 		if (count < wsize)
 			wsize = count;
 
-		result = smb_proc_write(inode, offset, wsize, buffer);
+		result = smb_proc_write(dentry, offset, wsize, buffer);
 		if (result < 0)
 			goto io_error;
 		/* N.B. what if result < wsize?? */

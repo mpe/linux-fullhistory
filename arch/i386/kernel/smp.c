@@ -115,7 +115,7 @@ unsigned long cpu_present_map = 0;			/* Bitmask of existing CPU's 				*/
 int smp_num_cpus = 1;					/* Total count of live CPU's 				*/
 int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical number		*/
-volatile int cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
+volatile int __cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map that's also checked in the spinlock */
 volatile unsigned long kstack_ptr;			/* Stack vector for booting CPU's			*/
@@ -526,7 +526,7 @@ __initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 				 *	set some other information about it.
 				 */
 				nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
-				cpu_logical_map[0] = boot_cpu_id;
+				__cpu_logical_map[0] = boot_cpu_id;
 				global_irq_holder = boot_cpu_id;
 				current->processor = boot_cpu_id;
 
@@ -717,7 +717,7 @@ __initfunc(static void do_boot_cpu(int i))
 		panic("No idle process for CPU %d", i);
 
 	idle->processor = i;
-	cpu_logical_map[cpucount] = i;
+	__cpu_logical_map[cpucount] = i;
 	cpu_number_map[i] = cpucount;
 
 	/* start_eip had better be page-aligned! */
@@ -861,7 +861,7 @@ __initfunc(static void do_boot_cpu(int i))
 			/* number CPUs logically, starting from 1 (BSP is 0) */
 #if 0
 			cpu_number_map[i] = cpucount;
-			cpu_logical_map[cpucount] = i;
+			__cpu_logical_map[cpucount] = i;
 #endif
 			printk("OK.\n");
 			printk("CPU%d: ", i);
@@ -927,6 +927,7 @@ __initfunc(void smp_boot_cpus(void))
 	if (!smp_found_config)
 	{
 		printk(KERN_NOTICE "SMP motherboard not detected. Using dummy APIC emulation.\n");
+		io_apic_irqs = 0;
 		return;
 	}
 
@@ -1087,6 +1088,12 @@ __initfunc(void smp_boot_cpus(void))
 	if(smp_b_stepping)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
+
+	/*
+	 * Here we can be sure that there is an IO-APIC in the system, lets
+	 * go and set it up:
+	 */
+	setup_IO_APIC();
 }
 
 /*

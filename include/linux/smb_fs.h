@@ -76,6 +76,7 @@ smb_vfree(void *obj)
  */
 #define SMB_FIX_WIN95	0x0001	/* Win 95 server */
 #define SMB_FIX_OLDATTR	0x0002	/* Use core getattr (Win 95 speedup) */
+#define SMB_FIX_DIRATTR	0x0004	/* Use find_first for getattr */
 
 /* linux/fs/smbfs/mmap.c */
 int smb_mmap(struct file *, struct vm_area_struct *);
@@ -95,7 +96,6 @@ struct super_block *smb_read_super(struct super_block *, void *, int);
 void smb_get_inode_attr(struct inode *, struct smb_fattr *);
 void smb_invalidate_inodes(struct smb_sb_info *);
 int  smb_revalidate_inode(struct dentry *);
-int  smb_refresh_inode(struct inode *);
 int  smb_notify_change(struct dentry *, struct iattr *);
 unsigned long smb_invent_inos(unsigned long);
 struct inode *smb_iget(struct super_block *, struct smb_fattr *);
@@ -112,8 +112,8 @@ int smb_close(struct inode *);
 void smb_close_dentry(struct dentry *);
 int smb_close_fileid(struct dentry *, __u16);
 int smb_open(struct dentry *, int);
-int smb_proc_read(struct inode *, off_t, int, char *);
-int smb_proc_write(struct inode *, off_t, int, const char *);
+int smb_proc_read(struct dentry *, off_t, int, char *);
+int smb_proc_write(struct dentry *, off_t, int, const char *);
 int smb_proc_create(struct dentry *, __u16, time_t, __u16 *);
 int smb_proc_mv(struct dentry *, struct dentry *);
 int smb_proc_mkdir(struct dentry *);

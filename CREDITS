@@ -465,11 +465,12 @@ S: 26506 Norden
 S: Germany
 
 N: Jeremy Fitzhardinge
-E: jeremy@sw.oz.au
+E: jeremy@zip.com.au
 D: Improved mmap and munmap handling
 D: General mm minor tidyups
-S: 99 Albermarle Street
-S: Newtown 2042
+S: 67 Surrey St.
+S: Darlinghurst, Sydney
+S: NSW 2010
 S: Australia
 
 N: Ralf Flaxa
@@ -705,6 +706,7 @@ S: United Kingdom
 N: Ron Holt
 E: ron@caldera.com
 W: http://www.holt.org/
+P: 1024/1FD44539 DF 4B EB 9F 5B 68 38 9A  40 E3 FB 71 D1 C8 0B 56
 D: Kernel development
 D: Minor kernel modifications to support Wabi and Wine
 S: Caldera, Inc.
@@ -820,9 +822,11 @@ S: Germany
 
 N: Ian Kluft
 E: ikluft@thunder.sbay.org
-D: Smail binary packages for Slackware and Debian
-S: 2200 Monroe Street #1509
-S: Santa Clara, California 95050-3452
+W: http://www.kluft.com/~ikluft/
+D: NET-1 beta testing & minor patches, original Smail binary packages for
+D: Slackware and Debian, vote-taker for 2nd comp.os.linux reorganization
+S: PO Box 611311
+S: San Jose, CA 95161-1311
 S: USA
 
 N: Alain L. Knaff
@@ -976,6 +980,14 @@ D: Hard Disk Parameter (hdparm) utility
 S: 33 Ridgefield Cr
 S: Nepean, Ontario
 S: Canada K2H 6S3
+
+N: Jamie Lokier
+E: jamie@imbolc.ucc.ie
+D: Reboot-through-BIOS for broken 486 motherboards
+S: 26 Oatlands Road
+S: Oxford
+S: OX2 0ET
+S: United Kingdom
 
 N: Warner Losh
 E: imp@village.org
@@ -1146,6 +1158,7 @@ S: USA
 
 N: Rick Miller
 E: rdmiller@execpc.com
+W: http://www.execpc.com/~rdmiller/
 D: Original Linux Device Registrar (Major/minor numbers)
 D: au-play, bwBASIC
 S: S78 W16203 Woods Road
@@ -1309,8 +1322,12 @@ E: Frederic.Potter@masi.ibp.fr
 D: Some PCI kernel support
 
 N: Stefan Probst
-E: snprobst@immd4.informatik.uni-erlangen.de
-D: The Linux Support Team Erlangen
+E: sp@caldera.de
+D: The Linux Support Team Erlangen, 1993-97
+S: Caldera (Deutschland) GmbH
+S: Lazarettstrasse 8
+S: 91054 Erlangen
+S: Germany
 
 N: Daniel Quinlan
 E: quinlan@pathname.com
@@ -1651,6 +1668,14 @@ D: Author of a German book on Linux
 S: Obere Heerbergstrasse 17
 S: 97078 Wuerzburg
 S: Germany
+
+N: Greg Ungerer
+E: gerg@stallion.com
+D: Author of Stallion multiport serial drivers
+S: Stallion Technologies
+S: 33 Woodstock Rd
+S: Toowong, QLD. 4066
+S: Australia
 
 N: Jeffrey A. Uphoff
 E: juphoff@nrao.edu

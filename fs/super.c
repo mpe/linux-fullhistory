@@ -95,28 +95,37 @@ struct vfsmount *lookup_vfsmnt(kdev_t dev)
 	/* NOTREACHED */
 }
 
-struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_name)
+static struct vfsmount *add_vfsmnt(struct super_block *sb,
+			const char *dev_name, const char *dir_name)
 {
 	struct vfsmount *lptr;
-	char *tmp;
+	char *tmp, *name;
 
 	lptr = (struct vfsmount *)kmalloc(sizeof(struct vfsmount), GFP_KERNEL);
-        if (!lptr)
-		return NULL;
+	if (!lptr)
+		goto out;
 	memset(lptr, 0, sizeof(struct vfsmount));
 
-	lptr->mnt_dev = dev;
+	lptr->mnt_sb = sb;
+	lptr->mnt_dev = sb->s_dev;
+	lptr->mnt_flags = sb->s_flags;
 	sema_init(&lptr->mnt_sem, 1);
+
+	/* N.B. Is it really OK to have a vfsmount without names? */
 	if (dev_name && !IS_ERR(tmp = getname(dev_name))) {
-		if ((lptr->mnt_devname =
-		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
-			strcpy(lptr->mnt_devname, tmp);
+		name = (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL);
+		if (name) {
+			strcpy(name, tmp);
+			lptr->mnt_devname = name;
+		}
 		putname(tmp);
 	}
 	if (dir_name && !IS_ERR(tmp = getname(dir_name))) {
-		if ((lptr->mnt_dirname =
-		    (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL)) != (char *)NULL)
-			strcpy(lptr->mnt_dirname, tmp);
+		name = (char *) kmalloc(strlen(tmp)+1, GFP_KERNEL);
+		if (name) {
+			strcpy(name, tmp);
+			lptr->mnt_dirname = name;
+		}
 		putname(tmp);
 	}
 
@@ -126,10 +135,11 @@ struct vfsmount *add_vfsmnt(kdev_t dev, const char *dev_name, const char *dir_na
 		vfsmnttail->mnt_next = lptr;
 		vfsmnttail = lptr;
 	}
-	return (lptr);
+out:
+	return lptr;
 }
 
-void remove_vfsmnt(kdev_t dev)
+static void remove_vfsmnt(kdev_t dev)
 {
 	struct vfsmount *lptr, *tofree;
 
@@ -496,6 +506,23 @@ out:
 	return err;
 }
 
+/*
+ * Find a super_block with no device assigned.
+ */
+static struct super_block *get_empty_super(void)
+{
+	struct super_block *s = 0+super_blocks;
+
+	for (; s < NR_SUPER+super_blocks; s++) {
+		if (s->s_dev)
+			continue;
+		if (!s->s_lock)
+			return s;
+		printk("VFS: empty superblock %p locked!\n", s);
+	}
+	return NULL;
+}
+
 static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 				       void *data, int silent)
 {
@@ -503,44 +530,39 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	struct file_system_type *type;
 
 	if (!dev)
-		goto out_fail;
+		goto out_null;
 	check_disk_change(dev);
 	s = get_super(dev);
 	if (s)
-		return s;
+		goto out;
+
 	type = get_fs_type(name);
 	if (!type) {
 		printk("VFS: on device %s: get_fs_type(%s) failed\n",
 		       kdevname(dev), name);
-		goto out_fail;
+		goto out;
 	}
-	for (s = 0+super_blocks ;; s++) {
-		if (s >= NR_SUPER+super_blocks)
-			goto out_fail;
-		if (s->s_dev)
-			continue;
-		if (s->s_lock) {
-			printk("VFS: empty superblock %p locked!\n", s);
-			continue;
-		}
-		break;
-	}
+	s = get_empty_super();
+	if (!s)
+		goto out;
 	s->s_dev = dev;
 	s->s_flags = flags;
 	s->s_dirt = 0;
 	/* N.B. Should lock superblock now ... */
-	if (!type->read_super(s,data, silent))
-		goto fail;
+	if (!type->read_super(s, data, silent))
+		goto out_fail;
 	s->s_dev = dev; /* N.B. why do this again?? */
 	s->s_rd_only = 0;
 	s->s_type = type;
+out:
 	return s;
 
 	/* N.B. s_dev should be cleared in type->read_super */
-fail:
-	s->s_dev = 0;
 out_fail:
-	return NULL;
+	s->s_dev = 0;
+out_null:
+	s = NULL;
+	goto out;
 }
 
 /*
@@ -603,17 +625,16 @@ static void d_mount(struct dentry *covered, struct dentry *dentry)
 	dentry->d_covers = covered;
 }
 
-static int do_umount(kdev_t dev,int unmount_root)
+static int do_umount(kdev_t dev, int unmount_root)
 {
 	struct super_block * sb;
 	int retval;
 	
+	retval = -ENOENT;
 	sb = get_super(dev);
-	if (!sb)
-		return -ENOENT;
+	if (!sb || !sb->s_root)
+		goto out;
 
-	if (!sb->s_root)
-		return -ENOENT;
 	/*
 	 * Before checking whether the filesystem is still busy,
 	 * make sure the kernel doesn't hold any quotafiles open
@@ -659,7 +680,6 @@ static int do_umount(kdev_t dev,int unmount_root)
 			sb->s_op->put_super(sb);
 	}
 	remove_vfsmnt(dev);
-	retval = 0;
 out:
 	return retval;
 }
@@ -781,7 +801,7 @@ int fs_may_mount(kdev_t dev)
 
 int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const char * type, int flags, void * data)
 {
-	struct dentry * dir_d = NULL;
+	struct dentry * dir_d;
 	struct super_block * sb;
 	struct vfsmount *vfsmnt;
 	int error;
@@ -806,15 +826,13 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		goto dput_and_out;
 
 	/*
-	 * Check whether to read the super block
+	 * Note: If the superblock already exists,
+	 * read_super just does a get_super().
 	 */
-	sb = get_super(dev);
-	if (!sb || !sb->s_root) {
-		error = -EINVAL;
-		sb = read_super(dev,type,flags,data,0);
-		if (!sb)
-			goto dput_and_out;
-	}
+	error = -EINVAL;
+	sb = read_super(dev, type, flags, data, 0);
+	if (!sb)
+		goto dput_and_out;
 
 	/*
 	 * We may have slept while reading the super block, 
@@ -825,20 +843,19 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		goto dput_and_out;
 
 	error = -ENOMEM;
-	vfsmnt = add_vfsmnt(dev, dev_name, dir_name);
-	if (vfsmnt) {
-		vfsmnt->mnt_sb = sb;
-		vfsmnt->mnt_flags = flags;
-		d_mount(dir_d, sb->s_root);
-		error = 0;
-		goto out;		/* we don't dput(dir) - see umount */
-	}
+	vfsmnt = add_vfsmnt(sb, dev_name, dir_name);
+	if (!vfsmnt)
+		goto dput_and_out;
+	d_mount(dir_d, sb->s_root);
+	error = 0;	/* we don't dput(dir_d) - see umount */
 
-dput_and_out:
-	dput(dir_d);
 out:
 	up(&mount_sem);
 	return error;	
+
+dput_and_out:
+	dput(dir_d);
+	goto out;
 }
 
 
@@ -1063,14 +1080,11 @@ __initfunc(static void do_mount_root(void))
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
 		ROOT_DEV = 0;
 		if ((fs_type = get_fs_type("nfs"))) {
-			if ((vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/"))) {
-
-				sb = &super_blocks[0];
-				while (sb->s_dev) sb++;
-				vfsmnt->mnt_sb = sb;
-
-				sb->s_dev = get_unnamed_dev();
-				sb->s_flags = root_mountflags & ~MS_RDONLY;
+			sb = get_empty_super(); /* "can't fail" */
+			sb->s_dev = get_unnamed_dev();
+			sb->s_flags = root_mountflags & ~MS_RDONLY;
+			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
+			if (vfsmnt) {
 				if (nfs_root_mount(sb) >= 0) {
 					sb->s_rd_only = 0;
 					sb->s_dirt = 0;
@@ -1081,9 +1095,10 @@ __initfunc(static void do_mount_root(void))
 					printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
 					return;
 				}
-				sb->s_dev = 0;
-				put_unnamed_dev(sb->s_dev);
+				remove_vfsmnt(sb->s_dev);
 			}
+			put_unnamed_dev(sb->s_dev);
+			sb->s_dev = 0;
 		}
 		if (!ROOT_DEV) {
 			printk(KERN_ERR "VFS: Unable to mount root fs via NFS, trying floppy.\n");
@@ -1136,12 +1151,10 @@ __initfunc(static void do_mount_root(void))
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
-			vfsmnt = add_vfsmnt(ROOT_DEV, "/dev/root", "/");
-			if (!vfsmnt)
-				panic("VFS: add_vfsmnt failed for root fs");
-			vfsmnt->mnt_sb = sb;
-			vfsmnt->mnt_flags = root_mountflags;
-			return;
+			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
+			if (vfsmnt)
+				return;
+			panic("VFS: add_vfsmnt failed for root fs");
 		}
 	}
 	panic("VFS: Unable to mount root fs on %s",
@@ -1225,10 +1238,8 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		return error;
 	}
 	remove_vfsmnt(old_root_dev);
-	vfsmnt = add_vfsmnt(old_root_dev,"/dev/root.old",put_old);
+	vfsmnt = add_vfsmnt(old_root->d_sb, "/dev/root.old", put_old);
 	if (vfsmnt) {
-		vfsmnt->mnt_sb = old_root->d_inode->i_sb;
-		vfsmnt->mnt_flags = vfsmnt->mnt_sb->s_flags;
 		d_mount(dir_d,old_root);
 		return 0;
 	}

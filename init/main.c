@@ -927,8 +927,6 @@ int cpu_idle(void *unused)
 
 #else
 
-extern void setup_IO_APIC(void);
-
 /*
  *	Multiprocessor idle thread is in arch/...
  */
@@ -1051,7 +1049,6 @@ __initfunc(asmlinkage void start_kernel(void))
 	printk("POSIX conformance testing by UNIFIX\n");
 #ifdef __SMP__
 	smp_init();
-	setup_IO_APIC();
 #endif
 #ifdef CONFIG_SYSCTL
 	sysctl_init();

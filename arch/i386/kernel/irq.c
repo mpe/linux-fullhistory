@@ -120,15 +120,16 @@ static int irq_owner [NR_IRQS] = { NO_PROC_ID, };
 #ifndef __SMP__
   static const unsigned int io_apic_irqs = 0;
 #else
-	/*
-	 * the timer interrupt is not connected to the IO-APIC on all boards
-	 * (mine is such ;), and since it is not performance critical anyway,
-	 * we route it through the INTA pin and win lots of design simplicity.
-	 * Ditto the obsolete EISA dma chaining irq. All other interrupts are
-	 * routed through the IO-APIC, distributed amongst all CPUs, dependent
-	 * on irq traffic and CPU load.
-	 */
-  const unsigned int io_apic_irqs = ~((1<<0)|(1<<2)|(1<<13));
+  /*
+   * Default to all normal IRQ's _not_ using the IO APIC.
+   *
+   * To get IO-APIC interrupts you should either:
+   *  - turn some of them into IO-APIC interrupts at runtime
+   *    with some magic system call interface.
+   *  - explicitly use irq 16-19 depending on which PCI irq
+   *    line your PCI controller uses.
+   */
+  unsigned int io_apic_irqs = 0xFF0000;
 #endif
 
 static inline int ack_irq(int irq)
@@ -179,14 +180,16 @@ static inline int ack_irq(int irq)
 
 void set_8259A_irq_mask(int irq)
 {
-	if (irq >= 16) {
-		printk ("HUH #3 (%d)?\n", irq);
-		return;
-	}
-	if (irq & 8) {
-		outb(cached_A1,0xA1);
-	} else {
-		outb(cached_21,0x21);
+	/*
+	 * (it might happen that we see IRQ>15 on a UP box, with SMP
+	 * emulation)
+	 */
+	if (irq < 16) {
+		if (irq & 8) {
+			outb(cached_A1,0xA1);
+		} else {
+			outb(cached_21,0x21);
+		}
 	}
 }
 
@@ -356,12 +359,13 @@ int get_irq_list(char *buf)
 			continue;
 		p += sprintf(p, "%3d: ",i);
 #ifndef __SMP__
-		p += sprintf(p, "%10u ", kstat.interrupts[0][i]);
+		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
 		for (j=0; j<smp_num_cpus; j++)
 			p += sprintf(p, "%10u ",
-				kstat.interrupts[cpu_logical_map[j]][i]);
+				kstat.irqs[cpu_logical_map(j)][i]);
 #endif
+
 		if (IO_APIC_IRQ(i))
 			p += sprintf(p, " IO-APIC ");
 		else
@@ -596,15 +600,13 @@ again:
 	while (test_bit(0,&global_irq_lock)) mb();
 #endif
 
-	kstat.interrupts[cpu][irq]++;
+	kstat.irqs[cpu][irq]++;
 	status = 0;
 	action = *(irq + irq_action);
 
 	if (action) {
-#if 0
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
-#endif
 
 		do {
 			status |= action->flags;
@@ -897,7 +899,7 @@ unsigned long probe_irq_on (void)
 	/*
 	 * save current irq counts
 	 */
-	memcpy(probe_irqs,kstat.interrupts,NR_CPUS*NR_IRQS*sizeof(int));
+	memcpy(probe_irqs,kstat.irqs,NR_CPUS*NR_IRQS*sizeof(int));
 
 	/*
 	 * first, enable any unassigned irqs
@@ -922,7 +924,7 @@ unsigned long probe_irq_on (void)
 	 */
 	for (i=0; i<NR_IRQS; i++)
 		for (j=0; j<NR_CPUS; j++)
-			if (kstat.interrupts[j][i] != probe_irqs[j][i])
+			if (kstat.irqs[j][i] != probe_irqs[j][i])
 				irqs &= ~(i<<1);
 
 	return irqs;
@@ -935,7 +937,7 @@ int probe_irq_off (unsigned long irqs)
 	for (i=0; i<NR_IRQS; i++) {
 		int sum = 0;
 		for (j=0; j<NR_CPUS; j++) {
-			sum += kstat.interrupts[j][i];
+			sum += kstat.irqs[j][i];
 			sum -= probe_irqs[j][i];
 		}
 		if (sum && (irqs & (i<<1))) {

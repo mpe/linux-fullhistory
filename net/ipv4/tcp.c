@@ -614,7 +614,7 @@ unsigned int tcp_poll(struct socket *sock, poll_table *wait)
 			mask |= POLLIN | POLLRDNORM;
 
 #if 1 /* This needs benchmarking and real world tests */
-		space = sk->dst_cache->pmtu + 128;
+		space = (sk->dst_cache ? sk->dst_cache->pmtu : sk->mss) + 128;
 		if (space < 2048) /* XXX */
 			space = 2048;
 #else /* 2.0 way */
@@ -663,7 +663,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			return put_user(amount, (int *)arg);
 		}
 		default:
-			return(-EINVAL);
+			return(-ENOIOCTLCMD);
 	};
 }
 
