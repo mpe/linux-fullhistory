@@ -408,6 +408,7 @@ static _INLINE_ void receive_chars(struct sgi_serial *info, struct pt_regs *regs
 			show_state();
 			return;
 		} else if (ch == 2) {
+			show_buffers();
 			return;
 		}
 		/* It is a 'keyboard interrupt' ;-) */

@@ -26,6 +26,8 @@
 
 /* Thread it... -DaveM */
 
+/* async buffer flushing, 1999 Andrea Arcangeli <andrea@suse.de> */
+
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
@@ -41,6 +43,7 @@
 #include <linux/init.h>
 #include <linux/quotaops.h>
 #include <linux/iobuf.h>
+#include <linux/bigmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -76,6 +79,7 @@ static rwlock_t hash_table_lock = RW_LOCK_UNLOCKED;
 static struct buffer_head *lru_list[NR_LIST];
 static spinlock_t lru_list_lock = SPIN_LOCK_UNLOCKED;
 static int nr_buffers_type[NR_LIST] = {0,};
+static unsigned long size_buffers_type[NR_LIST] = {0,};
 
 static struct buffer_head * unused_list = NULL;
 static int nr_unused_buffer_heads = 0;
@@ -114,18 +118,18 @@ union bdflush_param {
 				each time we call refill */
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
-		int dummy1;    /* unused */
+		int interval; /* jiffies delay between kupdate flushes */
 		int age_buffer;  /* Time for normal buffer to age before we flush it */
 		int age_super;  /* Time for superblock to age before we flush it */
 		int dummy2;    /* unused */
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 256, 5*HZ, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
-int bdflush_max[N_PARAM] = {100,50000, 20000, 20000,1000, 6000*HZ, 6000*HZ, 2047, 5};
+int bdflush_max[N_PARAM] = {100,50000, 20000, 20000,600*HZ, 6000*HZ, 6000*HZ, 2047, 5};
 
 void wakeup_bdflush(int);
 
@@ -482,6 +486,7 @@ static void __insert_into_lru_list(struct buffer_head * bh, int blist)
 	(*bhp)->b_prev_free->b_next_free = bh;
 	(*bhp)->b_prev_free = bh;
 	nr_buffers_type[blist]++;
+	size_buffers_type[blist] += bh->b_size;
 }
 
 static void __remove_from_lru_list(struct buffer_head * bh, int blist)
@@ -495,6 +500,7 @@ static void __remove_from_lru_list(struct buffer_head * bh, int blist)
 			lru_list[blist] = NULL;
 		bh->b_next_free = bh->b_prev_free = NULL;
 		nr_buffers_type[blist]--;
+		size_buffers_type[blist] -= bh->b_size;
 	}
 }
 
@@ -813,6 +819,27 @@ out:
 	return bh;
 }
 
+/* -1 -> no need to flush
+    0 -> async flush
+    1 -> sync flush (wait for I/O completation) */
+static int balance_dirty_state(kdev_t dev)
+{
+	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
+
+	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
+	tot = nr_lru_pages + nr_free_pages - nr_free_bigpages;
+	hard_dirty_limit = tot * bdf_prm.b_un.nfract / 100;
+	soft_dirty_limit = hard_dirty_limit >> 1;
+
+	if (dirty > soft_dirty_limit)
+	{
+		if (dirty > hard_dirty_limit)
+			return 1;
+		return 0;
+	}
+	return -1;
+}
+
 /*
  * if a new dirty buffer is created we need to balance bdflush.
  *
@@ -820,23 +847,13 @@ out:
  * pressures on different devices - thus the (currently unused)
  * 'dev' parameter.
  */
-static int too_many_dirty_buffers;
-
 void balance_dirty(kdev_t dev)
 {
-	int dirty = nr_buffers_type[BUF_DIRTY];
-	int ndirty = bdf_prm.b_un.ndirty;
+	int state = balance_dirty_state(dev);
 
-	if (dirty > ndirty) {
-		if (dirty > 2*ndirty) {
-			too_many_dirty_buffers = 1;
-			wakeup_bdflush(1);
-			return;
-		}
-		wakeup_bdflush(0);
-	}
-	too_many_dirty_buffers = 0;
-	return;
+	if (state < 0)
+		return;
+	wakeup_bdflush(state);
 }
 
 static inline void __mark_dirty(struct buffer_head *bh, int flag)
@@ -1364,6 +1381,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	unsigned long bbits, blocks, i, len;
 	struct buffer_head *bh, *head;
 	char * target_buf;
+	int need_balance_dirty;
 
 	target_buf = (char *)page_address(page) + offset;
 
@@ -1403,6 +1421,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	i = 0;
 	bh = head;
 	partial = 0;
+	need_balance_dirty = 0;
 	do {
 		if (!bh)
 			BUG();
@@ -1473,8 +1492,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 		set_bit(BH_Uptodate, &bh->b_state);
 		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
 			__mark_dirty(bh, 0);
-			if (too_many_dirty_buffers)
-				balance_dirty(bh->b_dev);
+			need_balance_dirty = 1;
 		}
 
 		if (err) {
@@ -1487,6 +1505,9 @@ skip:
 		block++;
 		bh = bh->b_this_page;
 	} while (bh != head);
+
+	if (need_balance_dirty)
+		balance_dirty(bh->b_dev);
 
 	/*
 	 * is this a partial write that happened to make all buffers
@@ -1519,6 +1540,7 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	struct buffer_head *bh, *head;
 	char * target_buf, *target_data;
 	unsigned long data_offset = offset;
+	int need_balance_dirty;
 
 	offset = inode->i_size - page->offset;
 	if (page->offset>inode->i_size)
@@ -1566,6 +1588,7 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	i = 0;
 	bh = head;
 	partial = 0;
+	need_balance_dirty = 0;
 	do {
 		if (!bh)
 			BUG();
@@ -1644,8 +1667,7 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 		set_bit(BH_Uptodate, &bh->b_state);
 		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
 			__mark_dirty(bh, 0);
-			if (too_many_dirty_buffers)
-				balance_dirty(bh->b_dev);
+			need_balance_dirty = 1;
 		}
 
 		if (err) {
@@ -1658,6 +1680,9 @@ skip:
 		block++;
 		bh = bh->b_this_page;
 	} while (bh != head);
+
+	if (need_balance_dirty)
+		balance_dirty(bh->b_dev);
 
 	/*
 	 * is this a partial write that happened to make all buffers
@@ -2168,10 +2193,50 @@ out:
 
 busy_buffer_page:
 	/* Uhhuh, start writeback so that we don't end up with all dirty pages */
-	too_many_dirty_buffers = 1;
 	wakeup_bdflush(0);
 	ret = 0;
 	goto out;
+}
+
+/* ================== Debugging =================== */
+
+void show_buffers(void)
+{
+	struct buffer_head * bh;
+	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
+	int protected = 0;
+	int nlist;
+	static char *buf_types[NR_LIST] = { "CLEAN", "LOCKED", "DIRTY" };
+
+	printk("Buffer memory:   %6dkB\n", atomic_read(&buffermem) >> 10);
+
+#ifdef __SMP__ /* trylock does nothing on UP and so we could deadlock */
+	if (!spin_trylock(&lru_list_lock))
+		return;
+	for(nlist = 0; nlist < NR_LIST; nlist++) {
+		found = locked = dirty = used = lastused = protected = 0;
+		bh = lru_list[nlist];
+		if(!bh) continue;
+
+		do {
+			found++;
+			if (buffer_locked(bh))
+				locked++;
+			if (buffer_protected(bh))
+				protected++;
+			if (buffer_dirty(bh))
+				dirty++;
+			if (atomic_read(&bh->b_count))
+				used++, lastused = found;
+			bh = bh->b_next_free;
+		} while (bh != lru_list[nlist]);
+		printk("%8s: %d buffers, %d used (last=%d), "
+		       "%d locked, %d protected, %d dirty\n",
+		       buf_types[nlist], found, used, lastused,
+		       locked, protected, dirty);
+	}
+	spin_unlock(&lru_list_lock);
+#endif
 }
 
 /* ===================== Init ======================= */
@@ -2246,21 +2311,92 @@ void __init buffer_init(unsigned long memory_size)
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
  */
-static DECLARE_WAIT_QUEUE_HEAD(bdflush_wait);
 static DECLARE_WAIT_QUEUE_HEAD(bdflush_done);
 struct task_struct *bdflush_tsk = 0;
 
-void wakeup_bdflush(int wait)
+void wakeup_bdflush(int block)
 {
+	DECLARE_WAITQUEUE(wait, current);
+
 	if (current == bdflush_tsk)
 		return;
-	if (wait)
-		run_task_queue(&tq_disk);
-	wake_up(&bdflush_wait);
-	if (wait)
-		sleep_on(&bdflush_done);
+
+	if (!block)
+	{
+		wake_up_process(bdflush_tsk);
+		return;
+	}
+
+	/* kflushd can wakeup us before we have a chance to
+	   go to sleep so we must be smart in handling
+	   this wakeup event from kflushd to avoid deadlocking in SMP
+	   (we are not holding any lock anymore in these two paths). */
+	__set_current_state(TASK_UNINTERRUPTIBLE);
+	add_wait_queue(&bdflush_done, &wait);
+
+	wake_up_process(bdflush_tsk);
+	schedule();
+
+	remove_wait_queue(&bdflush_done, &wait);
+	__set_current_state(TASK_RUNNING);
 }
 
+/* This is the _only_ function that deals with flushing async writes
+   to disk.
+   NOTENOTENOTENOTE: we _only_ need to browse the DIRTY lru list
+   as all dirty buffers lives _only_ in the DIRTY lru list.
+   As we never browse the LOCKED and CLEAN lru lists they are infact
+   completly useless. */
+static void flush_dirty_buffers(int check_flushtime)
+{
+	struct buffer_head * bh, *next;
+	int flushed = 0, i;
+
+ restart:
+	spin_lock(&lru_list_lock);
+	bh = lru_list[BUF_DIRTY];
+	if (!bh)
+		goto out_unlock;
+	for (i = nr_buffers_type[BUF_DIRTY]; i-- > 0; bh = next)
+	{
+		next = bh->b_next_free;
+
+		if (!buffer_dirty(bh))
+		{
+			__refile_buffer(bh);
+			continue;
+		}
+		if (buffer_locked(bh))
+			continue;
+
+		if (check_flushtime)
+		{
+			/* The dirty lru list is chronogical ordered so
+			   if the current bh is not yet timed out,
+			   then also all the following bhs
+			   will be too young. */
+			if (time_before(jiffies, bh->b_flushtime))
+				goto out_unlock;
+		}
+		else
+		{
+			if (++flushed > bdf_prm.b_un.ndirty)
+				goto out_unlock;
+		}
+
+		/* OK, now we are committed to write it out. */
+		atomic_inc(&bh->b_count);
+		spin_unlock(&lru_list_lock);
+		ll_rw_block(WRITE, 1, &bh);
+		atomic_dec(&bh->b_count);
+
+		if (current->need_resched)
+			schedule();
+		goto restart;
+	}
+ out_unlock:
+	spin_unlock(&lru_list_lock);
+}
 
 /* 
  * Here we attempt to write back old buffers.  We also try to flush inodes 
@@ -2272,47 +2408,13 @@ void wakeup_bdflush(int wait)
 
 static int sync_old_buffers(void)
 {
-	int nlist;
-
 	lock_kernel();
 	sync_supers(0);
 	sync_inodes(0);
 	unlock_kernel();
 
-	for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++) {
-		struct buffer_head *bh;
-	repeat:
-		spin_lock(&lru_list_lock);
-		bh = lru_list[nlist];
-		if(bh) {
-			struct buffer_head *next;
-			int i;
-			for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
-				next = bh->b_next_free;
-
-				/* If the buffer is not on the proper list,
-				 * then refile it.
-				 */
-				if ((nlist == BUF_DIRTY &&
-				     (!buffer_dirty(bh) && !buffer_locked(bh))) ||
-				    (nlist == BUF_LOCKED && !buffer_locked(bh))) {
-					__refile_buffer(bh);
-					continue;
-				}
-				 
-				if (buffer_locked(bh) || !buffer_dirty(bh))
-					continue;
-
-				/* OK, now we are committed to write it out. */
-				atomic_inc(&bh->b_count);
-				spin_unlock(&lru_list_lock);
-				ll_rw_block(WRITE, 1, &bh);
-				atomic_dec(&bh->b_count);
-				goto repeat;
-			}
-		}
-		spin_unlock(&lru_list_lock);
-	}
+	flush_dirty_buffers(1);
+	/* must really sync all the active I/O request to disk here */
 	run_task_queue(&tq_disk);
 	return 0;
 }
@@ -2328,6 +2430,10 @@ asmlinkage long sys_bdflush(int func, long data)
 		return -EPERM;
 
 	if (func == 1) {
+		/* do_exit directly and let kupdate to do its work alone. */
+		do_exit(0);
+#if 0 /* left here as it's the only example of lazy-mm-stuff used from
+	 a syscall that doesn't care about the current mm context. */
 		int error;
 		struct mm_struct *user_mm;
 
@@ -2341,6 +2447,7 @@ asmlinkage long sys_bdflush(int func, long data)
 		error = sync_old_buffers();
 		end_lazy_tlb(user_mm);
 		return error;
+#endif
 	}
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */
@@ -2383,85 +2490,103 @@ int bdflush(void * unused)
 	sprintf(current->comm, "kflushd");
 	bdflush_tsk = current;
 
-	for (;;) {
-		int nlist;
+	/* avoid getting signals */
+	spin_lock_irq(&current->sigmask_lock);
+	flush_signals(current);
+	sigfillset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
 
+	for (;;) {
 		CHECK_EMERGENCY_SYNC
 
-		for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++) {
-			int nr, major, written = 0;
-			struct buffer_head *next;
+		flush_dirty_buffers(0);
 
-		repeat:
-			spin_lock(&lru_list_lock);
-			next = lru_list[nlist];
-			nr = nr_buffers_type[nlist];
-			while (nr-- > 0) {
-				struct buffer_head *bh = next;
-
-				next = next->b_next_free;
-					
-				/* If the buffer is not on the correct list,
-				 * then refile it.
-				 */
-				if ((nlist == BUF_DIRTY &&
-				     (!buffer_dirty(bh) && !buffer_locked(bh))) ||
-				    (nlist == BUF_LOCKED && !buffer_locked(bh))) {
-					__refile_buffer(bh);
-					continue;
-				}
-
-				/* If we aren't in panic mode, don't write out too much
-				 * at a time. Also, don't write out buffers we don't
-				 * really have to write out yet..
-				 */
-				if (!too_many_dirty_buffers) {
-					if (written > bdf_prm.b_un.ndirty)
-						break;
-					if (time_before(jiffies, bh->b_flushtime))
-						continue;
-				}
-
-				if (buffer_locked(bh) || !buffer_dirty(bh))
-					 continue;
-
-				major = MAJOR(bh->b_dev);
-				written++;
-
-				/*
-				 * For the loop major we can try to do asynchronous writes,
-				 * but we have to guarantee that we're making some progress..
-				 */
-				atomic_inc(&bh->b_count);
-				spin_unlock(&lru_list_lock);
-				ll_rw_block(WRITE, 1, &bh);
-				atomic_dec(&bh->b_count);
-				goto repeat;
-			}
-			spin_unlock(&lru_list_lock);
-		}
-		run_task_queue(&tq_disk);
+		/* If wakeup_bdflush will wakeup us
+		   after our bdflush_done wakeup, then
+		   we must make sure to not sleep
+		   in schedule_timeout otherwise
+		   wakeup_bdflush may wait for our
+		   bdflush_done wakeup that would never arrive
+		   (as we would be sleeping) and so it would
+		   deadlock in SMP. */
+		__set_current_state(TASK_INTERRUPTIBLE);
 		wake_up(&bdflush_done);
-		
 		/*
 		 * If there are still a lot of dirty buffers around,
 		 * skip the sleep and flush some more. Otherwise, we
-		 * sleep for a while and mark us as not being in panic
-		 * mode..
+		 * sleep for a while.
 		 */
-		if (!too_many_dirty_buffers || nr_buffers_type[BUF_DIRTY] < bdf_prm.b_un.ndirty) {
-			too_many_dirty_buffers = 0;
-			spin_lock_irq(&current->sigmask_lock);
-			flush_signals(current);
-			spin_unlock_irq(&current->sigmask_lock);
-			interruptible_sleep_on_timeout(&bdflush_wait, 5*HZ);
+		if (balance_dirty_state(NODEV) < 0)
+			schedule_timeout(5*HZ);
+		/* Remember to mark us as running otherwise
+		   the next schedule will block. */
+		__set_current_state(TASK_RUNNING);
+	}
+}
+
+/*
+ * This is the kernel update daemon. It was used to live in userspace
+ * but since it's need to run safely we want it unkillable by mistake.
+ * You don't need to change your userspace configuration since
+ * the userspace `update` will do_exit(0) at the first sys_bdflush().
+ */
+int kupdate(void * unused) 
+{
+	struct task_struct * tsk = current;
+	int interval;
+
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	strcpy(tsk->comm, "kupdate");
+
+	/* sigstop and sigcont will stop and wakeup kupdate */
+	spin_lock_irq(&tsk->sigmask_lock);
+	sigfillset(&tsk->blocked);
+	siginitsetinv(&current->blocked, sigmask(SIGCONT) | sigmask(SIGSTOP));
+	recalc_sigpending(tsk);
+	spin_unlock_irq(&tsk->sigmask_lock);
+
+	for (;;) {
+		/* update interval */
+		interval = bdf_prm.b_un.interval;
+		if (interval)
+		{
+			tsk->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(interval);
 		}
+		else
+		{
+		stop_kupdate:
+			tsk->state = TASK_STOPPED;
+			schedule(); /* wait for SIGCONT */
+		}
+		/* check for sigstop */
+		if (signal_pending(tsk))
+		{
+			int stopped = 0;
+			spin_lock_irq(&tsk->sigmask_lock);
+			if (sigismember(&tsk->signal, SIGSTOP))
+			{
+				sigdelset(&tsk->signal, SIGSTOP);
+				stopped = 1;
+			}
+			recalc_sigpending(tsk);
+			spin_unlock_irq(&tsk->sigmask_lock);
+			if (stopped)
+				goto stop_kupdate;
+		}
+#ifdef DEBUG
+		printk("kupdate() activated...\n");
+#endif
+		sync_old_buffers();
 	}
 }
 
 static int __init bdflush_init(void)
 {
 	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	kernel_thread(kupdate, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	return 0;
 }
 

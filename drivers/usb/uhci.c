@@ -2169,6 +2169,8 @@ static int start_uhci(struct pci_dev *dev)
                 /* disable legacy emulation */
                 pci_write_config_word(dev, USBLEGSUP, USBLEGSUP_DEFAULT);
 
+		pci_enable_device(dev);
+
 		return found_uhci(dev->irq, io_addr, io_size);
 	}
 	return -1;

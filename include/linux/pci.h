@@ -406,6 +406,7 @@ struct pci_ops {
 
 void pcibios_init(void);
 void pcibios_fixup_bus(struct pci_bus *);
+int pcibios_enable_device(struct pci_dev *);
 char *pcibios_setup (char *str);
 
 void pcibios_update_resource(struct pci_dev *, struct resource *,
@@ -460,9 +461,11 @@ int pci_read_config_dword(struct pci_dev *dev, int where, u32 *val);
 int pci_write_config_byte(struct pci_dev *dev, int where, u8 val);
 int pci_write_config_word(struct pci_dev *dev, int where, u16 val);
 int pci_write_config_dword(struct pci_dev *dev, int where, u32 val);
+int pci_enable_device(struct pci_dev *dev);
 void pci_set_master(struct pci_dev *dev);
+int pci_set_power_state(struct pci_dev *dev, int state);
 
-/* Helper functions (drivers/pci/setup.c) */
+/* Helper functions for low-level code (drivers/pci/setup.c) */
 
 int pci_claim_resource(struct pci_dev *, int);
 void pci_assign_unassigned_resources(u32 min_io, u32 min_mem);
@@ -471,7 +474,7 @@ void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
 
 /*
- * simple PCI probing for drivers
+ * simple PCI probing for drivers (drivers/pci/helper.c)
  */
  
 struct pci_simple_probe_entry;
@@ -524,8 +527,8 @@ extern inline struct pci_dev *pci_find_subsys(unsigned int vendor, unsigned int 
 unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from)
 { return NULL; }
 
-extern inline void pci_set_master(struct pci_dev *dev) 
-{ return; }
+extern inline void pci_set_master(struct pci_dev *dev) { }
+extern inline int pci_enable_device(struct pci_dev *dev) { return 0; }
 
 extern inline int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
 		      pci_simple_probe_callback cb, void *drvr_data)

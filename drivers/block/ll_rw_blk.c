@@ -416,10 +416,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
 
-	/* We'd better have a real physical mapping! */
-	if (!buffer_mapped(bh))
-		BUG();
-
 	/* It had better not be a new buffer by the time we see it */
 	if (buffer_new(bh))
 		BUG();
@@ -479,6 +475,13 @@ void make_request(int major,int rw, struct buffer_head * bh)
                                " must be R/W/RA/WA\n");
 			goto end_io;
 	}
+
+	/* We'd better have a real physical mapping!
+	   Check this bit only if the buffer was dirty and just locked
+	   down by us so at this point flushpage will block and
+	   won't clear the mapped bit under us. */
+	if (!buffer_mapped(bh))
+		BUG();
 
 /* look for a free request. */
        /* Loop uses two requests, 1 for loop and 1 for the real device.
@@ -694,7 +697,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 
       sorry:
 	for (i = 0; i < nr; i++) {
-		clear_bit(BH_Dirty, &bh[i]->b_state);
+		mark_buffer_clean(bh[i]); /* remeber to refile it */
 		clear_bit(BH_Uptodate, &bh[i]->b_state);
 		bh[i]->b_end_io(bh[i], 0);
 	}

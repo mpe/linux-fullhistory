@@ -934,11 +934,14 @@ extern void do_generic_file_read(struct file * filp, loff_t *ppos, read_descript
 
 
 extern struct super_block *get_super(kdev_t);
+struct super_block *get_empty_super(void);
+void remove_vfsmnt(kdev_t dev);
 extern void put_super(kdev_t);
 unsigned long generate_cluster(kdev_t, int b[], int);
 unsigned long generate_cluster_swab32(kdev_t, int b[], int);
 extern kdev_t ROOT_DEV;
 
+extern void show_buffers(void);
 extern void mount_root(void);
 
 #ifdef CONFIG_BLK_DEV_INITRD

@@ -106,6 +106,7 @@ void show_mem(void)
 	printk("%ld page tables cached\n",pgtable_cache_size);
 	if (sparc_cpu_model == sun4m || sparc_cpu_model == sun4d)
 		printk("%ld page dirs cached\n", pgd_cache_size);
+	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif

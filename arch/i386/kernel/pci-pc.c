@@ -688,7 +688,7 @@ static struct irq_routing_table * __init pcibios_get_irq_routing_table(void)
 	struct irq_routing_table *rt;
 	int ret, map;
 
-	if (pci_probe & PCI_NO_IRQ_SCAN)
+	if (!(pci_probe & PCI_BIOS_IRQ_SCAN))
 		return NULL;
 	pcibios_irq_page = __get_free_page(GFP_KERNEL);
 	if (!pcibios_irq_page)
@@ -868,7 +868,30 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 		if (suba < subb)
 			pci_scan_bus(suba+1, pci_root->ops, NULL);	/* Bus B */
 	}
-	pci_probe |= PCI_NO_PEER_FIXUP;
+}
+
+static void __init pci_fixup_rcc(struct pci_dev *d)
+{
+	/*
+	 * RCC host bridges -- Find and scan all secondary buses.
+	 * Register 0x44 contains first, 0x45 last bus number routed there.
+	 */
+	u8 busno;
+	pci_read_config_byte(d, 0x44, &busno);
+	printk("PCI: RCC host bridge: secondary bus %02x\n", busno);
+	pci_scan_bus(busno, pci_root->ops, NULL);
+}
+
+static void __init pci_fixup_compaq(struct pci_dev *d)
+{
+	/*	
+	 * Compaq host bridges -- Find and scan all secondary buses.
+	 * This time registers 0xc8 and 0xc9.
+	 */
+	u8 busno;
+	pci_read_config_byte(d, 0xc8, &busno);
+	printk("PCI: Compaq host bridge: secondary bus %02x\n", busno);
+	pci_scan_bus(busno, pci_root->ops, NULL);
 }
 
 static void __init pci_fixup_umc_ide(struct pci_dev *d)
@@ -905,6 +928,9 @@ static void __init pci_fixup_ide_bases(struct pci_dev *d)
 
 struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_HE,		pci_fixup_rcc },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_LE,		pci_fixup_rcc },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_COMPAQ,	PCI_DEVICE_ID_COMPAQ_6010,	pci_fixup_compaq },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide },
 	{ PCI_FIXUP_HEADER,	PCI_ANY_ID,		PCI_ANY_ID,			pci_fixup_ide_bases },
 	{ 0 }
@@ -918,6 +944,8 @@ extern int skip_ioapic_setup;
 
 #define PIRQ_SIGNATURE	(('$' << 0) + ('P' << 8) + ('I' << 16) + ('R' << 24))
 #define PIRQ_VERSION 0x0100
+
+static struct irq_routing_table *pirq_table;
 
 /*
  *  Search 0xf0000 -- 0xfffff for the PCI IRQ Routing Table.
@@ -974,7 +1002,6 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
 		 */
 		if (busmap[i] && pci_scan_bus(i, pci_root->ops, NULL))
 			printk("PCI: Discovered primary peer bus %02x [IRQ]\n", i);
-	pci_probe |= PCI_NO_PEER_FIXUP;
 }
 
 /*
@@ -982,7 +1009,7 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
  *  table, but unfortunately we have to know the interrupt router chip.
  */
 
-static char * __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin)
+static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin, int assign)
 {
 	struct irq_info *q;
 	struct pci_dev *router;
@@ -1012,9 +1039,9 @@ static char * __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_
 		return NULL;
 	}
 	DBG(" -> PIRQ %02x, mask %04x", pirq, mask);
-	if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
+	if (!assign || (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
 		newirq = 0;
-	else for(newirq = 15; newirq && !(mask & (1 << newirq)); newirq--)
+	else for(newirq = 13; newirq && !(mask & (1 << newirq)); newirq--)
 		;
 	if (!(router = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
 		DBG(" -> router not found\n");
@@ -1068,7 +1095,7 @@ static void __init pcibios_fixup_irqs(void)
 	struct pci_dev *dev;
 	u8 pin;
 
-	rtable = pcibios_find_irq_routing_table();
+	rtable = pirq_table = pcibios_find_irq_routing_table();
 #ifdef CONFIG_PCI_BIOS
 	if (!rtable && pci_bios_present)
 		rtable = pcibios_get_irq_routing_table();
@@ -1106,7 +1133,7 @@ static void __init pcibios_fixup_irqs(void)
 					dev->irq = irq;
 				}
 			}
-			rtable = NULL;	/* Avoid IRQ assignment below */
+			pirq_table = NULL;	/* Avoid automatic IRQ assignment */
 		}
 #endif
 		/*
@@ -1114,10 +1141,10 @@ static void __init pcibios_fixup_irqs(void)
 		 */
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
-		if (pin && !dev->irq && rtable && rtable->version) {
-			char *msg = pcibios_lookup_irq(dev, rtable, pin);
+		if (pin && !dev->irq && pirq_table) {
+			char *msg = pcibios_lookup_irq(dev, pirq_table, pin, 0);
 			if (msg)
-				printk("PCI: Assigned IRQ %d to device %s [%s]\n", dev->irq, dev->slot_name, msg);
+				printk("PCI: Found IRQ %d for device %s [%s]\n", dev->irq, dev->slot_name, msg);
 		}
 	}
 
@@ -1173,7 +1200,7 @@ void __init pcibios_init(void)
 	pci_scan_bus(0, ops, NULL);
 
 	pcibios_fixup_irqs();
-	if (!(pci_probe & PCI_NO_PEER_FIXUP))
+	if (pci_probe & PCI_PEER_FIXUP)
 		pcibios_fixup_peer_bridges();
 	pcibios_resource_survey();
 
@@ -1199,8 +1226,8 @@ char * __init pcibios_setup(char *str)
 	} else if (!strcmp(str, "nosort")) {
 		pci_probe |= PCI_NO_SORT;
 		return NULL;
-	} else if (!strcmp(str, "noirq")) {
-		pci_probe |= PCI_NO_IRQ_SCAN;
+	} else if (!strcmp(str, "biosirq")) {
+		pci_probe |= PCI_BIOS_IRQ_SCAN;
 		return NULL;
 	}
 #endif
@@ -1214,12 +1241,30 @@ char * __init pcibios_setup(char *str)
 		return NULL;
 	}
 #endif
-	else if (!strcmp(str, "nopeer")) {
-		pci_probe |= PCI_NO_PEER_FIXUP;
+	else if (!strcmp(str, "peer")) {
+		pci_probe |= PCI_PEER_FIXUP;
 		return NULL;
 	} else if (!strcmp(str, "rom")) {
 		pci_probe |= PCI_ASSIGN_ROMS;
 		return NULL;
 	}
 	return str;
+}
+
+int pcibios_enable_device(struct pci_dev *dev)
+{
+	int err;
+
+	if ((err = pcibios_enable_resources(dev)) < 0)
+		return err;
+	if (!dev->irq && pirq_table) {
+		u8 pin;
+		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+		if (pin) {
+			char *msg = pcibios_lookup_irq(dev, pirq_table, pin, 1);
+			if (msg)
+				printk("PCI: Assigned IRQ %d to device %s [%s]\n", dev->irq, dev->slot_name, msg);
+		}
+	}
+	return 0;
 }

@@ -4,9 +4,18 @@
 
 		"What should you avoid when writing PCI drivers"
 
-	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 17-Jun-1999
+	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 09-Oct-1999
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+0. Structure of PCI drivers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Aa typical PCI device driver needs to perform the following actions:
+
+	1. Find PCI devices it's able to handle
+	2. Enable them
+	3. Access their configuration space
+	4. Discover addresses and IRQ numbers
 
 1. How to find PCI devices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -19,6 +28,9 @@ ID, it should use:
 
    For class-based search, use pci_find_class(CLASS_ID, dev).
 
+   If you need to match by subsystem vendor/device ID, use
+pci_find_subsys(VENDOR_ID, DEVICE_ID, SUBSYS_VENDOR_ID, SUBSYS_DEVICE_ID, dev).
+
    You can use the constant PCI_ANY_ID as a wildcard replacement for
 VENDOR_ID or DEVICE_ID.  This allows searching for any device from a
 specific vendor, for example.
@@ -26,44 +38,57 @@ specific vendor, for example.
    In case you want to do some complex matching, look at pci_devices -- it's
 a linked list of pci_dev structures for all PCI devices in the system.
 
-   All these methods return a pointer to a pci_dev structure which is used as a
-parameter for many other PCI functions. The rest of them accept bus and
-device/function numbers which can be found in pci_dev->bus->number and
-pci_dev->devfn. Feel free to use all other fields of the pci_dev structure, but
-don't modify them.
+   The `struct pci_dev *' pointer serves as an identification of a PCI device
+and is passed to all other functions operating on PCI devices.
 
-   The pci_present() function can be used to test presence of PCI in the
-machine.
+2. Enabling devices
+~~~~~~~~~~~~~~~~~~~
+   Before you do anything with the device you've found, you need to enable
+it by calling pci_enable_device() which enables I/O and memory regions of
+the device, assigns missing resources if needed and wakes up the device
+if it was in suspended state. Please note that this function can fail.
 
-2. How to access PCI config space
+   If you want to use the device in bus mastering mode, call pci_set_master()
+which enables the bus master bit in PCI_COMMAND register and also fixes
+the latency timer value if it's set to something bogus by the BIOS.
+
+3. How to access PCI config space
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    You can use pci_(read|write)_config_(byte|word|dword) to access the config
-space of a device represented by pci_dev. All these functions return 0 when
-successful or an error code (PCIBIOS_...) which can be translated to a text
+space of a device represented by struct pci_dev *. All these functions return 0
+when successful or an error code (PCIBIOS_...) which can be translated to a text
 string by pcibios_strerror. Most drivers expect that accesses to valid PCI
 devices don't fail.
-
-   In case you want to address the devices by bus/device/function numbers,
-use pcibios_(read_write)_config_(byte|word|dword).
 
    If you access fields in the standard portion of the config header, please
 use symbolic names of locations and bits declared in <linux/pci.h>.
 
-3. Addresses and interrupts
+   If you need to access Extended PCI Capability registers, just call
+pci_find_capability() for the particular capability and it will find the
+corresponding register block for you.
+
+4. Addresses and interrupts
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
    Memory and port addresses and interrupt numbers should NOT be read from the
 config space. You should use the values in the pci_dev structure as they might
 have been remapped by the kernel.
 
-4. Obsolete functions
+5. Other interesting functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+pci_find_slot()			Find pci_dev corresponding to given bus and
+				slot numbers.
+pci_set_power_state()		Set PCI Power Management state (0=D0 ... 3=D3)
+
+6. Obsolete functions
 ~~~~~~~~~~~~~~~~~~~~~
-<linux/bios32.h> is obsolete and should not be included in new code.
+There are several functions kept only for compatibility with old drivers
+not updated to the new PCI interface. Please don't use them in new code.
 
-pcibios_find_(device|class) are also obsolete and should be replaced by
-pci_find_(device|class).
-
-5. Bus mastering
-~~~~~~~~~~~~~~~~
-   If you need to setup a bus-mastering card, just call pci_set_master(). It
-should set PCI_COMMAND_MASTER in the command register and adjust the latency
-timer if needed.
+pcibios_present()		Since ages, you don't need to test presence
+				of PCI subsystem when trying to talk with it.
+				If it's not there, the list of PCI devices
+				is empty and all functions for searching for
+				devices just return NULL.
+pcibios_(read|write)_*		Superseded by their pci_(read|write)_*
+				counterparts.
+pcibios_find_*			Superseded by their pci_find_* counterparts.

@@ -10,15 +10,15 @@ if [ "$CONFIG_VT" = "y" ]; then
 fi
 tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
 if [ "$CONFIG_SERIAL" = "y" ]; then
-   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
+   bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
 bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
-   bool '   Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
-   bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
-   bool '   Autodetect IRQ on standard ports (unsafe)' CONFIG_SERIAL_DETECT_IRQ
-   bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
-   bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
+   bool '  Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
+   bool '  Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
+   bool '  Autodetect IRQ on standard ports (unsafe)' CONFIG_SERIAL_DETECT_IRQ
+   bool '  Support special multiport boards' CONFIG_SERIAL_MULTIPORT
+   bool '  Support the Bell Technologies HUB6 card' CONFIG_HUB6
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
@@ -86,31 +86,31 @@ tristate 'QIC-02 tape support' CONFIG_QIC02_TAPE
 if [ "$CONFIG_QIC02_TAPE" != "n" ]; then
   bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF
   if [ "$CONFIG_QIC02_DYNCONF" != "y" ]; then
-    comment '   Edit configuration parameters in ./include/linux/tpqic02.h!'
+    comment '  Edit configuration parameters in ./include/linux/tpqic02.h!'
   else
-    comment '   Setting runtime QIC-02 configuration is done with qic02conf'
-    comment '   from the tpqic02-support package.  It is available at'
-    comment '   metalab.unc.edu or ftp://titus.cfw.com/pub/Linux/util/'
+    comment '  Setting runtime QIC-02 configuration is done with qic02conf'
+    comment '  from the tpqic02-support package.  It is available at'
+    comment '  metalab.unc.edu or ftp://titus.cfw.com/pub/Linux/util/'
   fi
   dep_tristate 'Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
-  dep_tristate ' Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
+  dep_tristate '  Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
 fi
 
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
   mainmenu_option next_comment
   comment 'Watchdog Cards'
-  bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
-  tristate '   WDT Watchdog timer' CONFIG_WDT
+  bool '  Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
+  tristate '  WDT Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" != "n" ]; then
-     bool '       WDT501 features' CONFIG_WDT_501
+     bool '    WDT501 features' CONFIG_WDT_501
      if [ "$CONFIG_WDT_501" = "y" ]; then
-         bool '       Fan Tachometer' CONFIG_WDT_501_FAN
+         bool '      Fan Tachometer' CONFIG_WDT_501_FAN
      fi
   fi
-  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
-  tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
-  tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+  tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
+  tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
+  tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
   endmenu
 fi
 

@@ -135,7 +135,7 @@ out:
 	return lptr;
 }
 
-static void remove_vfsmnt(kdev_t dev)
+void remove_vfsmnt(kdev_t dev)
 {
 	struct vfsmount *lptr, *tofree;
 
@@ -508,7 +508,7 @@ out:
 /*
  * Find a super_block with no device assigned.
  */
-static struct super_block *get_empty_super(void)
+struct super_block *get_empty_super(void)
 {
 	struct super_block *s;
 

@@ -18,12 +18,13 @@
 #define PCI_NO_SORT 0x100
 #define PCI_BIOS_SORT 0x200
 #define PCI_NO_CHECKS 0x400
-#define PCI_NO_PEER_FIXUP 0x800
+#define PCI_PEER_FIXUP 0x800
 #define PCI_ASSIGN_ROMS 0x1000
-#define PCI_NO_IRQ_SCAN 0x2000
+#define PCI_BIOS_IRQ_SCAN 0x2000
 
 extern unsigned int pci_probe;
 
 /* pci-i386.c */
 
 void pcibios_resource_survey(void);
+int pcibios_enable_resources(struct pci_dev *);

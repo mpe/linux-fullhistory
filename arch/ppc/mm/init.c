@@ -289,6 +289,7 @@ void show_mem(void)
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
 	printk("%d pages in page table cache\n",(int)pgtable_cache_size);
+	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif

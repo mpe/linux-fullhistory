@@ -33,7 +33,7 @@
  * that shared pages stay shared while being swapped.
  */
 
-static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, int wait)
+static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
@@ -52,7 +52,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	type = SWP_TYPE(entry);
 	if (type >= nr_swapfiles) {
 		printk("Internal error: bad swap-device\n");
-		return;
+		return 0;
 	}
 
 	/* Don't allow too many pending pages in flight.. */
@@ -63,23 +63,18 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max) {
 		printk("rw_swap_page: weirdness\n");
-		return;
+		return 0;
 	}
 	if (p->swap_map && !p->swap_map[offset]) {
 		printk(KERN_ERR "rw_swap_page: "
 			"Trying to %s unallocated swap (%08lx)\n", 
 			(rw == READ) ? "read" : "write", entry);
-		return;
+		return 0;
 	}
 	if (!(p->flags & SWP_USED)) {
 		printk(KERN_ERR "rw_swap_page: "
 			"Trying to swap to unused swap-device\n");
-		return;
-	}
-
-	if (!PageLocked(page)) {
-		printk(KERN_ERR "VM: swap page is unlocked\n");
-		return;
+		return 0;
 	}
 
 	if (rw == READ) {
@@ -104,13 +99,13 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		for (i=0, j=0; j< PAGE_SIZE ; i++, j += block_size)
 			if (!(zones[i] = bmap(swapf,block++))) {
 				printk("rw_swap_page: bad swap file\n");
-				return;
+				return 0;
 			}
 		zones_used = i;
 		dev = swapf->i_dev;
 	} else {
 		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
-		return;
+		return 0;
 	}
  	if (!wait) {
  		set_bit(PG_decr_after, &page->flags);
@@ -124,9 +119,9 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
  	 * decrementing the page count, and unlocking the page in the
  	 * swap lock map - in the IO completion handler.
  	 */
- 	if (!wait) {
- 		return;
-	}
+ 	if (!wait)
+ 		return 1;
+
  	wait_on_page(page);
 	/* This shouldn't happen, but check to be sure. */
 	if (page_count(page) == 0)
@@ -138,6 +133,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		(char *) page_address(page), 
 		page_count(page));
 #endif
+	return 1;
 }
 
 /*
@@ -157,7 +153,8 @@ void rw_swap_page(int rw, struct page *page, int wait)
 		PAGE_BUG(page);
 	if (page->inode != &swapper_inode)
 		PAGE_BUG(page);
-	rw_swap_page_base(rw, entry, page, wait);
+	if (!rw_swap_page_base(rw, entry, page, wait))
+		UnlockPage(page);
 }
 
 /*
@@ -173,5 +170,6 @@ void rw_swap_page_nolock(int rw, unsigned long entry, char *buf, int wait)
 		PAGE_BUG(page);
 	if (PageSwapCache(page))
 		PAGE_BUG(page);
-	rw_swap_page_base(rw, entry, page, wait);
+	if (!rw_swap_page_base(rw, entry, page, wait))
+		UnlockPage(page);
 }

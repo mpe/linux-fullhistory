@@ -129,3 +129,8 @@ char * __init pcibios_setup(char *str)
 {
 	return str;
 }
+
+int pcibios_enable_device(struct pci_dev *dev)
+{
+	return pcibios_enable_resources(dev);
+}

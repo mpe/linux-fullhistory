@@ -140,6 +140,64 @@ pci_find_parent_resource(struct pci_dev *dev, struct resource *res)
 	return best;
 }
 
+/*
+ *  Set power management state of a device.  For transitions from state D3
+ *  it isn't as straightforward as one could assume since many devices forget
+ *  their configuration space during wakeup.  Returns old power state.
+ */
+int
+pci_set_power_state(struct pci_dev *dev, int new_state)
+{
+	u32 base[5], romaddr;
+	u16 pci_command, pwr_command;
+	u8  pci_latency, pci_cacheline;
+	int i, old_state;
+	int pm = pci_find_capability(dev, PCI_CAP_ID_PM);
+
+	if (!pm)
+		return 0;
+	pci_read_config_word(dev, pm + PCI_PM_CTRL, &pwr_command);
+	old_state = pwr_command & PCI_PM_CTRL_STATE_MASK;
+	if (old_state == new_state)
+		return old_state;
+	DBG("PCI: %s goes from D%d to D%d\n", dev->slot_name, old_state, new_state);
+	if (old_state == 3) {
+		pci_read_config_word(dev, PCI_COMMAND, &pci_command);
+		pci_write_config_word(dev, PCI_COMMAND, pci_command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY));
+		for (i = 0; i < 5; i++)
+			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + i*4, &base[i]);
+		pci_read_config_dword(dev, PCI_ROM_ADDRESS, &romaddr);
+		pci_read_config_byte(dev, PCI_LATENCY_TIMER, &pci_latency);
+		pci_read_config_byte(dev, PCI_CACHE_LINE_SIZE, &pci_cacheline);
+		pci_write_config_word(dev, pm + PCI_PM_CTRL, new_state);
+		for (i = 0; i < 5; i++)
+			pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + i*4, base[i]);
+		pci_write_config_dword(dev, PCI_ROM_ADDRESS, romaddr);
+		pci_write_config_byte(dev, PCI_INTERRUPT_LINE, dev->irq);
+		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, pci_cacheline);
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, pci_latency);
+		pci_write_config_word(dev, PCI_COMMAND, pci_command);
+	} else
+		pci_write_config_word(dev, pm + PCI_PM_CTRL, (pwr_command & ~PCI_PM_CTRL_STATE_MASK) | new_state);
+	return old_state;
+}
+
+/*
+ *  Initialize device before it's used by a driver. Ask low-level code
+ *  to enable I/O and memory. Wake up the device if it was suspended.
+ *  Beware, this function can fail.
+ */
+int
+pci_enable_device(struct pci_dev *dev)
+{
+	int err;
+
+	if ((err = pcibios_enable_device(dev)) < 0)
+		return err;
+	pci_set_power_state(dev, 0);
+	return 0;
+}
+
 
 /*
  * This interrupt-safe spinlock protects all accesses to PCI

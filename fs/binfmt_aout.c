@@ -270,7 +270,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	unsigned long fd_offset;
 	unsigned long rlim;
 	int retval;
-	static unsigned long error_time=0;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -281,29 +280,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	}
 
 	fd_offset = N_TXTOFF(ex);
-
-#ifdef __i386__
-	if (N_MAGIC(ex) == ZMAGIC && fd_offset != BLOCK_SIZE) {
-		if((jiffies-error_time) >5)
-		{
-			printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
-			error_time=jiffies;
-		}
-		return -ENOEXEC;
-	}
-
-	if (N_MAGIC(ex) == ZMAGIC && ex.a_text &&
-	    bprm->dentry->d_inode->i_op &&
-	    bprm->dentry->d_inode->i_op->get_block &&
-	    (fd_offset < bprm->dentry->d_inode->i_sb->s_blocksize)) {
-		if((jiffies-error_time) >5)
-		{
-			printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
-			error_time=jiffies;
-		}
-		return -ENOEXEC;
-	}
-#endif
 
 	/* Check initial limits. This avoids letting people circumvent
 	 * size limits imposed on them by creating programs with large
@@ -364,26 +340,32 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		flush_icache_range((unsigned long) 0,
 				   (unsigned long) ex.a_text+ex.a_data);
 	} else {
+		static unsigned long error_time, error_time2;
 		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&
-		    (N_MAGIC(ex) != NMAGIC))
+		    (N_MAGIC(ex) != NMAGIC) && (jiffies-error_time2) > 5*HZ)
+		{
 			printk(KERN_NOTICE "executable not page aligned\n");
+			error_time2 = jiffies;
+		}
 
 		fd = open_dentry(bprm->dentry, O_RDONLY);
 		if (fd < 0)
 			return fd;
 		file = fget(fd);
 
-		if ((fd_offset & ~PAGE_MASK) != 0) {
+		if ((fd_offset & ~PAGE_MASK) != 0 &&
+		    (jiffies-error_time) > 5*HZ)
+		{
 			printk(KERN_WARNING 
 			       "fd_offset is not page aligned. Please convert program: %s\n",
-			       file->f_dentry->d_name.name
-			       );
+			       file->f_dentry->d_name.name);
+			error_time = jiffies;
 		}
 
 		if (!file->f_op || !file->f_op->mmap || ((fd_offset & ~PAGE_MASK) != 0)) {
 			fput(file);
 			sys_close(fd);
-			do_brk(0, ex.a_text+ex.a_data);
+			do_brk(N_TXTADDR(ex), ex.a_text+ex.a_data);
 			read_exec(bprm->dentry, fd_offset,
 				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data, 0);
 			flush_icache_range((unsigned long) N_TXTADDR(ex),
@@ -493,12 +475,6 @@ do_load_aout_library(int fd)
 		goto out_putf;
 	}
 
-	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
-	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
-		printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
-		goto out_putf;
-	}
-
 	if (N_FLAGS(ex))
 		goto out_putf;
 
@@ -508,14 +484,17 @@ do_load_aout_library(int fd)
 	start_addr =  ex.a_entry & 0xfffff000;
 
 	if ((N_TXTOFF(ex) & ~PAGE_MASK) != 0) {
-		printk(KERN_WARNING 
-		       "N_TXTOFF is not page aligned. Please convert library: %s\n",
-		       file->f_dentry->d_name.name
-		       );
-		
-		do_mmap(NULL, start_addr & PAGE_MASK, ex.a_text + ex.a_data + ex.a_bss,
-			PROT_READ | PROT_WRITE | PROT_EXEC,
-			MAP_FIXED| MAP_PRIVATE, 0);
+		static unsigned long error_time;
+
+		if ((jiffies-error_time) > 5*HZ)
+		{
+			printk(KERN_WARNING 
+			       "N_TXTOFF is not page aligned. Please convert library: %s\n",
+			       file->f_dentry->d_name.name);
+			error_time = jiffies;
+		}
+
+		do_brk(start_addr, ex.a_text + ex.a_data + ex.a_bss);
 		
 		read_exec(file->f_dentry, N_TXTOFF(ex),
 			  (char *)start_addr, ex.a_text + ex.a_data, 0);

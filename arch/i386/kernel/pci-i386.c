@@ -177,7 +177,7 @@ static int __init pcibios_assign_resource(struct pci_dev *dev, int i)
  *	(4) Assign new addresses to resources which were either
  *	    not configured at all or misconfigured.  If explicitly
  *	    requested by the user, configure expansion ROM address
- *	    as well.  Finally enable the I/O and Memory bits.
+ *	    as well.
  */
 
 static void __init pcibios_allocate_bus_resources(struct pci_bus *bus)
@@ -252,21 +252,18 @@ static void __init pcibios_allocate_resources(int pass)
 static void __init pcibios_assign_resources(void)
 {
 	struct pci_dev *dev;
-	u16 cmd, old_cmd;
 	int idx;
-	int fault = 0;
 	struct resource *r;
 
 	for(dev=pci_devices; dev; dev=dev->next) {
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		old_cmd = cmd;
 		for(idx=0; idx<6; idx++) {
 			r = &dev->resource[idx];
 			if (((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) ||
-			    ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA && (r->flags & IORESOURCE_IO)))
+			    ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA && (r->flags & IORESOURCE_IO)) ||
+			    !dev->class || (dev->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 				/*
 				 *  Don't touch IDE controllers and I/O ports of video cards!
-				 *  Neither enable anything in their command registers.
+				 *  Also avoid classless devices and host bridges.
 				 */
 				continue;
 			if (!r->start && r->end) {
@@ -275,24 +272,9 @@ static void __init pcibios_assign_resources(void)
 				 *  the BIOS forgot to do so or because we have decided the old
 				 *  address was unusable for some reason.
 				 */
-				if (pcibios_assign_resource(dev, idx) < 0)
-					fault = 1;
-			}
-			if (r->flags & IORESOURCE_IO)
-				cmd |= PCI_COMMAND_IO;
-			if (r->flags & IORESOURCE_MEM)
-				cmd |= PCI_COMMAND_MEMORY;
-		}
-
-		if (cmd != old_cmd) {
-			if (fault)
-				printk("PCI: Not enabling device %s because of resource collisions\n", dev->slot_name);
-			else {
-				printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
-				pci_write_config_word(dev, PCI_COMMAND, cmd);
+				pcibios_assign_resource(dev, idx);
 			}
 		}
-
 		if (pci_probe & PCI_ASSIGN_ROMS) {
 			r = &dev->resource[PCI_ROM_RESOURCE];
 			r->end -= r->start;
@@ -309,4 +291,30 @@ void __init pcibios_resource_survey(void)
 	pcibios_allocate_resources(0);
 	pcibios_allocate_resources(1);
 	pcibios_assign_resources();
+}
+
+int pcibios_enable_resources(struct pci_dev *dev)
+{
+	u16 cmd, old_cmd;
+	int idx;
+	struct resource *r;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	old_cmd = cmd;
+	for(idx=0; idx<6; idx++) {
+		r = &dev->resource[idx];
+		if (!r->start && r->end) {
+			printk(KERN_ERR "PCI: Device %s not available because of resource collisions\n", dev->slot_name);
+			return -EINVAL;
+		}
+		if (r->flags & IORESOURCE_IO)
+			cmd |= PCI_COMMAND_IO;
+		if (r->flags & IORESOURCE_MEM)
+			cmd |= PCI_COMMAND_MEMORY;
+	}
+	if (cmd != old_cmd) {
+		printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	return 0;
 }

@@ -150,6 +150,7 @@ void show_mem(void)
 #ifndef __SMP__
 	printk("%d entries in page dir cache\n",pgd_cache_size);
 #endif	
+	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
 #endif
