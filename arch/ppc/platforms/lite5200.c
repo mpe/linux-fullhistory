@@ -35,6 +35,8 @@
 #include <asm/ocp.h>
 #include <asm/mpc52xx.h>
 
+#include <syslib/mpc52xx_pci.h>
+
 
 extern int powersave_nap;
 
@@ -79,21 +81,40 @@ lite5200_show_cpuinfo(struct seq_file *m)
 	return 0;
 }
 
+#ifdef CONFIG_PCI
+static int
+lite5200_map_irq(struct pci_dev *dev, unsigned char idsel, unsigned char pin)
+{
+	return (pin == 1) && (idsel==24) ? MPC52xx_IRQ0 : -1;
+}
+#endif
+
 static void __init
 lite5200_setup_cpu(void)
 {
+	struct mpc52xx_xlb  __iomem *xlb;
 	struct mpc52xx_intr *intr;
 
 	u32 intr_ctrl;
 
 	/* Map zones */
+	xlb  = ioremap(MPC52xx_XLB,sizeof(struct mpc52xx_xlb));
 	intr = (struct mpc52xx_intr *)
 		ioremap(MPC52xx_INTR,sizeof(struct mpc52xx_intr));
 
-	if (!intr) {
-		printk("lite5200.c: Error while mapping INTR during lite5200_setup_cpu\n");
+	if (!xlb || !intr) {
+		printk("lite5200.c: Error while mapping XLB/INTR during "
+				"lite5200_setup_cpu\n");
 		goto unmap_regs;
 	}
+
+	/* Configure the XLB Arbiter */
+	out_be32(&xlb->master_pri_enable, 0xff);
+	out_be32(&xlb->master_priority, 0x11111111);
+
+	/* Enable ram snooping for 1GB window */
+	out_be32(&xlb->config, in_be32(&xlb->config) | MPC52xx_XLB_CFG_SNOOP);
+	out_be32(&xlb->snoop_window, MPC52xx_PCI_TARGET_MEM | 0x1d);
 
 	/* IRQ[0-3] setup : IRQ0     - Level Active Low  */
 	/*                  IRQ[1-3] - Level Active High */
@@ -104,6 +125,7 @@ lite5200_setup_cpu(void)
 
 	/* Unmap reg zone */
 unmap_regs:
+	if (xlb)  iounmap(xlb);
 	if (intr) iounmap(intr);
 }
 
@@ -115,6 +137,11 @@ lite5200_setup_arch(void)
 
 	/* CPU & Port mux setup */
 	lite5200_setup_cpu();
+
+#ifdef CONFIG_PCI
+	/* PCI Bridge setup */
+	mpc52xx_find_bridges();
+#endif
 }
 
 void __init
@@ -153,7 +180,7 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	/* BAT setup */
 	mpc52xx_set_bat();
 
-	/* No ISA bus AFAIK */
+	/* No ISA bus by default */
 	isa_io_base		= 0;
 	isa_mem_base		= 0;
 
@@ -166,6 +193,10 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.show_percpuinfo	= NULL;
 	ppc_md.init_IRQ		= mpc52xx_init_irq;
 	ppc_md.get_irq		= mpc52xx_get_irq;
+
+#ifdef CONFIG_PCI
+	ppc_md.pci_map_irq	= lite5200_map_irq;
+#endif
 
 	ppc_md.find_end_of_memory = mpc52xx_find_end_of_memory;
 	ppc_md.setup_io_mappings  = mpc52xx_map_io;
