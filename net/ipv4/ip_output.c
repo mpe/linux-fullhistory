@@ -498,7 +498,7 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		skb->data_len = first_len - skb_headlen(skb);
 		skb->len = first_len;
 		iph->tot_len = htons(first_len);
-		iph->frag_off |= htons(IP_MF);
+		iph->frag_off = htons(IP_MF);
 		ip_send_check(iph);
 
 		for (;;) {
