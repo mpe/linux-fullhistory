@@ -6,6 +6,7 @@
  * 02-nov-2000	Nicolas Pitre		Added read-modify-write with cache
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

@@ -51,7 +51,7 @@ with pcmcia-cs.
 o  Gnu C                  2.91.66                 # gcc --version
 o  Gnu make               3.77                    # make --version
 o  binutils               2.9.1.0.25              # ld -v
-o  util-linux             2.10o                   # kbdrate -v
+o  util-linux             2.10o                   # fdformat --version
 o  modutils               2.3.18                  # insmod -V
 o  e2fsprogs              1.19                    # tune2fs --version
 o  pcmcia-cs              3.1.21                  # cardmgr -V

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acexcep.h - Exception codes returned by the ACPI subsystem
- *       $Revision: 35 $
+ *       $Revision: 37 $
  *
  *****************************************************************************/
 
@@ -89,6 +89,7 @@
 #define AE_BAD_SIGNATURE                (ACPI_STATUS) (0x0001 | AE_CODE_ACPI_TABLES)
 #define AE_BAD_HEADER                   (ACPI_STATUS) (0x0002 | AE_CODE_ACPI_TABLES)
 #define AE_BAD_CHECKSUM                 (ACPI_STATUS) (0x0003 | AE_CODE_ACPI_TABLES)
+#define AE_BAD_VALUE                    (ACPI_STATUS) (0x0004 | AE_CODE_ACPI_TABLES)
 
 #define AE_CODE_TBL_MAX                 0x0003
 
@@ -114,8 +115,9 @@
 #define AE_AML_BAD_NAME                 (ACPI_STATUS) (0x000F | AE_CODE_AML)
 #define AE_AML_NAME_NOT_FOUND           (ACPI_STATUS) (0x0010 | AE_CODE_AML)
 #define AE_AML_INTERNAL                 (ACPI_STATUS) (0x0011 | AE_CODE_AML)
+#define AE_AML_INVALID_SPACE_ID         (ACPI_STATUS) (0x0012 | AE_CODE_AML)
 
-#define AE_CODE_AML_MAX                 0x0011
+#define AE_CODE_AML_MAX                 0x0012
 
 /*
  * Internal exceptions used for control
@@ -177,6 +179,7 @@ static NATIVE_CHAR          *acpi_gbl_exception_names_tbl[] =
 	"AE_BAD_SIGNATURE",
 	"AE_BAD_HEADER",
 	"AE_BAD_CHECKSUM",
+	"AE_BAD_VALUE",
 };
 
 static NATIVE_CHAR          *acpi_gbl_exception_names_aml[] =
@@ -198,6 +201,7 @@ static NATIVE_CHAR          *acpi_gbl_exception_names_aml[] =
 	"AE_AML_BAD_NAME",
 	"AE_AML_NAME_NOT_FOUND",
 	"AE_AML_INTERNAL",
+	"AE_AML_INVALID_SPACE_ID",
 };
 
 static NATIVE_CHAR          *acpi_gbl_exception_names_ctrl[] =

@@ -2,7 +2,7 @@
  *
  * Module Name: nsutils - Utilities for accessing ACPI namespace, accessing
  *                        parents and siblings and Scope manipulation
- *              $Revision: 69 $
+ *              $Revision: 74 $
  *
  *****************************************************************************/
 
@@ -93,7 +93,7 @@ acpi_ns_get_type (
 {
 
 	if (!handle) {
-		REPORT_WARNING ("Ns_get_type: Null handle");
+		REPORT_WARNING (("Ns_get_type: Null handle\n"));
 		return (ACPI_TYPE_ANY);
 	}
 
@@ -120,7 +120,7 @@ acpi_ns_local (
 	if (!acpi_cm_valid_object_type (type)) {
 		/* Type code out of range  */
 
-		REPORT_WARNING ("Ns_local: Invalid Object Type");
+		REPORT_WARNING (("Ns_local: Invalid Object Type\n"));
 		return (NSP_NORMAL);
 	}
 
@@ -150,9 +150,10 @@ acpi_ns_internalize_name (
 {
 	NATIVE_CHAR             *result = NULL;
 	NATIVE_CHAR             *internal_name;
-	u32                     num_segments;
+	u32                     num_segments = 0;
 	u8                      fully_qualified = FALSE;
 	u32                     i;
+	u32                     num_carats = 0;
 
 
 	if ((!external_name)     ||
@@ -178,6 +179,16 @@ acpi_ns_internalize_name (
 		external_name++;
 	}
 
+	else {
+		/*
+		 * Handle Carat prefixes
+		 */
+
+		while (*external_name == '^') {
+			num_carats++;
+			external_name++;
+		}
+	}
 
 	/*
 	 * Determine the number of ACPI name "segments" by counting
@@ -186,17 +197,19 @@ acpi_ns_internalize_name (
 	 * + 1, and zero separators is ok.
 	 */
 
-	num_segments = 1;
-	for (i = 0; external_name[i]; i++) {
-		if (acpi_ns_valid_path_separator (external_name[i])) {
-			num_segments++;
+	if (*external_name) {
+		num_segments = 1;
+		for (i = 0; external_name[i]; i++) {
+			if (acpi_ns_valid_path_separator (external_name[i])) {
+				num_segments++;
+			}
 		}
 	}
 
 
 	/* We need a segment to store the internal version of the name */
 
-	internal_name = acpi_cm_callocate ((ACPI_NAME_SIZE * num_segments) + 4);
+	internal_name = acpi_cm_callocate ((ACPI_NAME_SIZE * num_segments) + 4 + num_carats);
 	if (!internal_name) {
 		return (AE_NO_MEMORY);
 	}
@@ -206,14 +219,49 @@ acpi_ns_internalize_name (
 
 	if (fully_qualified) {
 		internal_name[0] = '\\';
-		internal_name[1] = AML_MULTI_NAME_PREFIX_OP;
-		internal_name[2] = (char) num_segments;
-		result = &internal_name[3];
+
+		if (num_segments <= 1) {
+			result = &internal_name[1];
+		}
+		else if (num_segments == 2) {
+			internal_name[1] = AML_DUAL_NAME_PREFIX;
+			result = &internal_name[2];
+		}
+		else {
+			internal_name[1] = AML_MULTI_NAME_PREFIX_OP;
+			internal_name[2] = (char) num_segments;
+			result = &internal_name[3];
+		}
+
 	}
+
 	else {
-		internal_name[0] = AML_MULTI_NAME_PREFIX_OP;
-		internal_name[1] = (char) num_segments;
-		result = &internal_name[2];
+		/*
+		 * Not fully qualified.
+		 * Handle Carats first, then append the name segments
+		 */
+
+		i = 0;
+		if (num_carats) {
+			for (i = 0; i < num_carats; i++) {
+				internal_name[i] = '^';
+			}
+		}
+
+		if (num_segments == 1) {
+			result = &internal_name[i];
+		}
+
+		else if (num_segments == 2) {
+			internal_name[i] = AML_DUAL_NAME_PREFIX;
+			result = &internal_name[i+1];
+		}
+
+		else {
+			internal_name[i] = AML_MULTI_NAME_PREFIX_OP;
+			internal_name[i+1] = (char) num_segments;
+			result = &internal_name[i+2];
+		}
 	}
 
 
@@ -264,6 +312,157 @@ acpi_ns_internalize_name (
 	*converted_name = internal_name;
 
 
+
+	return (AE_OK);
+}
+
+
+/****************************************************************************
+ *
+ * FUNCTION:    Acpi_ns_externalize_name
+ *
+ * PARAMETERS:  *Internal_name         - Internal representation of name
+ *              **Converted_name       - Where to return the resulting
+ *                                        external representation of name
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Convert internal name (e.g. 5c 2f 02 5f 50 52 5f 43 50 55 30)
+ *              to its external form (e.g. "\_PR_.CPU0")
+ *
+ ****************************************************************************/
+
+ACPI_STATUS
+acpi_ns_externalize_name (
+	u32                     internal_name_length,
+	char                    *internal_name,
+	u32                     *converted_name_length,
+	char                    **converted_name)
+{
+	u32                     prefix_length = 0;
+	u32                     names_index = 0;
+	u32                     names_count = 0;
+	u32                     i = 0;
+	u32                     j = 0;
+
+
+	if (!internal_name_length   ||
+		!internal_name          ||
+		!converted_name_length  ||
+		!converted_name)
+	{
+		return (AE_BAD_PARAMETER);
+	}
+
+
+	/*
+	 * Check for a prefix (one '\' | one or more '^').
+	 */
+	switch (internal_name[0])
+	{
+	case '\\':
+		prefix_length = 1;
+		break;
+
+	case '^':
+		for (i = 0; i < internal_name_length; i++) {
+			if (internal_name[i] != '^') {
+				prefix_length = i + 1;
+			}
+		}
+
+		if (i == internal_name_length) {
+			prefix_length = i;
+		}
+
+		break;
+	}
+
+	/*
+	 * Check for object names.  Note that there could be 0-255 of these
+	 * 4-byte elements.
+	 */
+	if (prefix_length < internal_name_length) {
+		switch (internal_name[prefix_length])
+		{
+
+		/* <count> 4-byte names */
+
+		case AML_MULTI_NAME_PREFIX_OP:
+			names_index = prefix_length + 2;
+			names_count = (u32) internal_name[prefix_length + 1];
+			break;
+
+
+		/* two 4-byte names */
+
+		case AML_DUAL_NAME_PREFIX:
+			names_index = prefix_length + 1;
+			names_count = 2;
+			break;
+
+
+		/* Null_name */
+
+		case 0:
+			names_index = 0;
+			names_count = 0;
+			break;
+
+
+		/* one 4-byte name */
+
+		default:
+			names_index = prefix_length;
+			names_count = 1;
+			break;
+		}
+	}
+
+	/*
+	 * Calculate the length of Converted_name, which equals the length
+	 * of the prefix, length of all object names, length of any required
+	 * punctuation ('.') between object names, plus the NULL terminator.
+	 */
+	*converted_name_length = prefix_length + (4 * names_count) +
+			   ((names_count > 0) ? (names_count - 1) : 0) + 1;
+
+	/*
+	 * Check to see if we're still in bounds.  If not, there's a problem
+	 * with Internal_name (invalid format).
+	 */
+	if (*converted_name_length > internal_name_length) {
+		REPORT_ERROR (("Ns_externalize_name: Invalid internal name\n"));
+		return (AE_BAD_PATHNAME);
+	}
+
+	/*
+	 * Build Converted_name...
+	 */
+
+	(*converted_name) = acpi_cm_callocate (*converted_name_length);
+	if (!(*converted_name)) {
+		return (AE_NO_MEMORY);
+	}
+
+	j = 0;
+
+	for (i = 0; i < prefix_length; i++) {
+		(*converted_name)[j++] = internal_name[i];
+	}
+
+	if (names_count > 0) {
+		for (i = 0; i < names_count; i++) {
+			if (i > 0) {
+				(*converted_name)[j++] = '.';
+			}
+
+			(*converted_name)[j++] = internal_name[names_index++];
+			(*converted_name)[j++] = internal_name[names_index++];
+			(*converted_name)[j++] = internal_name[names_index++];
+			(*converted_name)[j++] = internal_name[names_index++];
+		}
+	}
 
 	return (AE_OK);
 }
@@ -425,7 +624,7 @@ acpi_ns_opens_scope (
 	if (!acpi_cm_valid_object_type (type)) {
 		/* type code out of range  */
 
-		REPORT_WARNING ("Ns_opens_scope: Invalid Object Type");
+		REPORT_WARNING (("Ns_opens_scope: Invalid Object Type\n"));
 		return (NSP_NORMAL);
 	}
 
@@ -464,8 +663,6 @@ acpi_ns_get_node (
 	NATIVE_CHAR             *internal_path = NULL;
 
 
-	scope_info.scope.node = start_node;
-
 	/* Ensure that the namespace has been initialized */
 
 	if (!acpi_gbl_root_node) {
@@ -487,19 +684,9 @@ acpi_ns_get_node (
 
 	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
 
-	/* NS_ALL means start from the root */
+	/* Setup lookup scope (search starting point) */
 
-	if (NS_ALL == scope_info.scope.node) {
-		scope_info.scope.node = acpi_gbl_root_node;
-	}
-
-	else {
-		scope_info.scope.node = start_node;
-		if (!scope_info.scope.node) {
-			status = AE_BAD_PARAMETER;
-			goto unlock_and_exit;
-		}
-	}
+	scope_info.scope.node = start_node;
 
 	/* Lookup the name in the namespace */
 
@@ -509,8 +696,6 @@ acpi_ns_get_node (
 			 NULL, return_node);
 
 
-
-unlock_and_exit:
 
 	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
 
@@ -578,6 +763,10 @@ acpi_ns_get_parent_object (
 	ACPI_NAMESPACE_NODE     *node)
 {
 
+
+	if (!node) {
+		return (NULL);
+	}
 
 	/*
 	 * Walk to the end of this peer list.

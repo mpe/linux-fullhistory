@@ -70,7 +70,7 @@ int default_fat_access(struct super_block *sb,int nr,int new_value)
 	}
 	if (MSDOS_SB(sb)->fat_bits == 32) {
 		p_first = p_last = NULL; /* GCC needs that stuff */
-		next = CF_LE_L(((unsigned long *) bh->b_data)[(first &
+		next = CF_LE_L(((__u32 *) bh->b_data)[(first &
 		    (SECTOR_SIZE-1)) >> 2]);
 		/* Fscking Microsoft marketing department. Their "32" is 28. */
 		next &= 0xfffffff;
@@ -79,12 +79,12 @@ int default_fat_access(struct super_block *sb,int nr,int new_value)
 
 	} else if (MSDOS_SB(sb)->fat_bits == 16) {
 		p_first = p_last = NULL; /* GCC needs that stuff */
-		next = CF_LE_W(((unsigned short *) bh->b_data)[(first &
+		next = CF_LE_W(((__u16 *) bh->b_data)[(first &
 		    (SECTOR_SIZE-1)) >> 1]);
 		if (next >= 0xfff7) next = -1;
 	} else {
-		p_first = &((unsigned char *) bh->b_data)[first & (SECTOR_SIZE-1)];
-		p_last = &((unsigned char *) bh2->b_data)[(first+1) &
+		p_first = &((__u8 *) bh->b_data)[first & (SECTOR_SIZE-1)];
+		p_last = &((__u8 *) bh2->b_data)[(first+1) &
 		    (SECTOR_SIZE-1)];
 		if (nr & 1) next = ((*p_first >> 4) | (*p_last << 4)) & 0xfff;
 		else next = (*p_first+(*p_last << 8)) & 0xfff;
@@ -92,10 +92,10 @@ int default_fat_access(struct super_block *sb,int nr,int new_value)
 	}
 	if (new_value != -1) {
 		if (MSDOS_SB(sb)->fat_bits == 32) {
-			((unsigned long *) bh->b_data)[(first & (SECTOR_SIZE-1)) >>
+			((__u32 *) bh->b_data)[(first & (SECTOR_SIZE-1)) >>
 			    2] = CT_LE_L(new_value);
 		} else if (MSDOS_SB(sb)->fat_bits == 16) {
-			((unsigned short *) bh->b_data)[(first & (SECTOR_SIZE-1)) >>
+			((__u16 *) bh->b_data)[(first & (SECTOR_SIZE-1)) >>
 			    1] = CT_LE_W(new_value);
 		} else {
 			if (nr & 1) {

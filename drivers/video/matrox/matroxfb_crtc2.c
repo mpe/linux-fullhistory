@@ -104,9 +104,14 @@ static void matroxfb_dh_restore(struct matroxfb_dh_fb_info* m2info,
 		tmp |= 0x00000001;	/* enable CRTC2 */
 
 		if (ACCESS_FBINFO(output.sh) & MATROXFB_OUTPUT_CONN_SECONDARY) {
-			tmp |= 0x00000002; /* source from VDOCLK */
-			tmp |= 0xC0000000; /* enable vvidrst & hvidrst */
-			/* MGA TVO is our clock source */
+			if (ACCESS_FBINFO(devflags.g450dac)) {
+				tmp |= 0x00000006; /* source from secondary pixel PLL */
+				/* no vidrst */
+			} else {
+				tmp |= 0x00000002; /* source from VDOCLK */
+				tmp |= 0xC0000000; /* enable vvidrst & hvidrst */
+				/* MGA TVO is our clock source */
+			}
 		} else if (ACCESS_FBINFO(output.sh) & MATROXFB_OUTPUT_CONN_PRIMARY) {
 			tmp |= 0x00000004; /* source from pixclock */
 			/* PIXPLL is our clock source */

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: achware.h -- hardware specific interfaces
- *       $Revision: 41 $
+ *       $Revision: 48 $
  *
  *****************************************************************************/
 
@@ -31,15 +31,15 @@
 
 
 ACPI_STATUS
-acpi_hw_initialize(
+acpi_hw_initialize (
 	void);
 
 ACPI_STATUS
-acpi_hw_shutdown(
+acpi_hw_shutdown (
 	void);
 
 ACPI_STATUS
-acpi_hw_initialize_system_info(
+acpi_hw_initialize_system_info (
 	void);
 
 ACPI_STATUS
@@ -56,11 +56,37 @@ acpi_hw_get_mode_capabilities (
 
 /* Register I/O Prototypes */
 
+
 u32
-acpi_hw_register_access (
+acpi_hw_register_bit_access (
 	NATIVE_UINT             read_write,
 	u8                      use_lock,
-	u32                     register_id, ... /* DWORD Value */);
+	u32                     register_id,
+	... /* DWORD Write Value */);
+
+u32
+acpi_hw_register_read (
+	u8                      use_lock,
+	u32                     register_id);
+
+void
+acpi_hw_register_write (
+	u8                      use_lock,
+	u32                     register_id,
+	u32                     value);
+
+u32
+acpi_hw_low_level_read (
+	u32                     width,
+	ACPI_GAS                *reg,
+	u32                     offset);
+
+void
+acpi_hw_low_level_write (
+	u32                     width,
+	u32                     value,
+	ACPI_GAS                *reg,
+	u32                     offset);
 
 void
 acpi_hw_clear_acpi_status (
@@ -125,6 +151,16 @@ ACPI_STATUS
 acpi_hw_get_cx_info (
 	u32                     cx_states[]);
 
+ACPI_STATUS
+acpi_hw_get_cx_handler (
+	u32                     cx_state,
+	ACPI_C_STATE_HANDLER    *handler);
+
+ACPI_STATUS
+acpi_hw_set_cx_handler (
+	u32                     cx_state,
+	ACPI_C_STATE_HANDLER    handler);
+
 
 /* Throttling Prototypes */
 
@@ -164,6 +200,10 @@ acpi_hw_pmt_ticks (
 u32
 acpi_hw_pmt_resolution (
 	void);
+
+ACPI_STATUS
+acpi_get_timer (
+	u32                     *out_ticks);
 
 
 #endif /* __ACHWARE_H__ */

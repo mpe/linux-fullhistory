@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: cmutils - common utility procedures
- *              $Revision: 18 $
+ *              $Revision: 21 $
  *
  ******************************************************************************/
 
@@ -618,6 +618,55 @@ acpi_cm_delete_generic_state_cache (
 
 /*******************************************************************************
  *
+ * FUNCTION:    Acpi_cm_resolve_package_references
+ *
+ * PARAMETERS:  Obj_desc        - The Package object on which to resolve refs
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Walk through a package and turn internal references into values
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_cm_resolve_package_references (
+	ACPI_OPERAND_OBJECT     *obj_desc)
+{
+	u32                 count;
+	ACPI_OPERAND_OBJECT *sub_object;
+
+	if (obj_desc->common.type != ACPI_TYPE_PACKAGE) {
+		/* Must be a package */
+
+		REPORT_ERROR (("Must resolve Package Refs on a Package\n"));
+		return(AE_ERROR);
+	}
+
+	for (count = 0; count < obj_desc->package.count; count++) {
+		sub_object = obj_desc->package.elements[count];
+
+		if (sub_object->common.type == INTERNAL_TYPE_REFERENCE) {
+			if (sub_object->reference.op_code == AML_ZERO_OP) {
+				sub_object->common.type = ACPI_TYPE_NUMBER;
+				sub_object->number.value = 0;
+			}
+			else if (sub_object->reference.op_code == AML_ONE_OP) {
+				sub_object->common.type = ACPI_TYPE_NUMBER;
+				sub_object->number.value = 1;
+			}
+			else if (sub_object->reference.op_code == AML_ONES_OP) {
+				sub_object->common.type = ACPI_TYPE_NUMBER;
+				sub_object->number.value = ACPI_INTEGER_MAX;
+			}
+		}
+	}
+
+	return(AE_OK);
+}
+
+
+/*******************************************************************************
+ *
  * FUNCTION:    _Report_error
  *
  * PARAMETERS:  Module_name         - Caller's module name (for error output)
@@ -635,13 +684,11 @@ void
 _report_error (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message)
+	u32                     component_id)
 {
 
-	debug_print (module_name, line_number, component_id, ACPI_ERROR,
-			 "*** Error: %s\n", message);
 
+	acpi_os_printf ("%8s-%04d: *** Error: ", module_name, line_number);
 }
 
 
@@ -664,13 +711,10 @@ void
 _report_warning (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message)
+	u32                     component_id)
 {
 
-	debug_print (module_name, line_number, component_id, ACPI_WARN,
-			 "*** Warning: %s\n", message);
-
+	acpi_os_printf ("%8s-%04d: *** Warning: ", module_name, line_number);
 }
 
 
@@ -693,13 +737,10 @@ void
 _report_info (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message)
+	u32                     component_id)
 {
 
-	debug_print (module_name, line_number, component_id, ACPI_INFO,
-			 "*** Info: %s\n", message);
-
+	acpi_os_printf ("%8s-%04d: *** Info: ", module_name, line_number);
 }
 
 

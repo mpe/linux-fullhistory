@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psscope - Parser scope stack management routines
- *              $Revision: 18 $
+ *              $Revision: 22 $
  *
  *****************************************************************************/
 
@@ -118,7 +118,7 @@ acpi_ps_init_scope (
  *
  * PARAMETERS:  Parser_state        - Current parser state object
  *              Op                  - Current op to be pushed
- *              Next_arg            - Next op argument (to be pushed)
+ *              Remaining_args      - List of args remaining
  *              Arg_count           - Fixed or variable number of args
  *
  * RETURN:      Status
@@ -175,8 +175,9 @@ acpi_ps_push_scope (
  *
  * PARAMETERS:  Parser_state        - Current parser state object
  *              Op                  - Where the popped op is returned
- *              Next_arg            - Where the popped "next argument" is
+ *              Arg_list            - Where the popped "next argument" is
  *                                    returned
+ *              Arg_count           - Count of objects in Arg_list
  *
  * RETURN:      Status
  *
@@ -188,7 +189,8 @@ void
 acpi_ps_pop_scope (
 	ACPI_PARSE_STATE        *parser_state,
 	ACPI_PARSE_OBJECT       **op,
-	u32                     *arg_list)
+	u32                     *arg_list,
+	u32                     *arg_count)
 {
 	ACPI_GENERIC_STATE      *scope = parser_state->scope;
 
@@ -204,6 +206,7 @@ acpi_ps_pop_scope (
 
 		*op                     = scope->parse_scope.op;
 		*arg_list               = scope->parse_scope.arg_list;
+		*arg_count              = scope->parse_scope.arg_count;
 		parser_state->pkg_end   = scope->parse_scope.pkg_end;
 
 		/* All done with this scope state structure */
@@ -216,6 +219,7 @@ acpi_ps_pop_scope (
 
 		*op                     = NULL;
 		*arg_list               = 0;
+		*arg_count              = 0;
 	}
 
 

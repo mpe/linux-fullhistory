@@ -2,7 +2,7 @@
  *
  * Module Name: nseval - Object evaluation interfaces -- includes control
  *                       method lookup and execution.
- *              $Revision: 76 $
+ *              $Revision: 79 $
  *
  ******************************************************************************/
 
@@ -99,7 +99,7 @@ acpi_ns_evaluate_relative (
 
 	/* Lookup the name in the namespace */
 
-	scope_info.scope.node = prefix_node->child;
+	scope_info.scope.node = prefix_node;
 	status = acpi_ns_lookup (&scope_info, internal_path, ACPI_TYPE_ANY,
 			 IMODE_EXECUTE, NS_NO_UPSEARCH, NULL,
 			 &node);
@@ -432,28 +432,14 @@ acpi_ns_get_object_value (
 		}
 
 		/*
-		 *  Just copy from the original to the return object
+		 * Just copy from the original to the return object
+		 *
+		 * TBD: [Future] - need a low-level object copy that handles
+		 * the reference count automatically.  (Don't want to copy it)
 		 */
 
-		switch (node->type)
-		{
-		case ACPI_TYPE_PROCESSOR:
-		   obj_desc->processor.proc_id      = val_desc->processor.proc_id;
-		   obj_desc->processor.address      = val_desc->processor.address;
-		   obj_desc->processor.sys_handler  = val_desc->processor.sys_handler;
-		   obj_desc->processor.drv_handler  = val_desc->processor.drv_handler;
-		   obj_desc->processor.addr_handler = val_desc->processor.addr_handler;
-
-		   break;
-
-		case ACPI_TYPE_POWER:
-			obj_desc->power_resource.system_level   = val_desc->power_resource.system_level;
-			obj_desc->power_resource.resource_order = val_desc->power_resource.resource_order;
-			obj_desc->power_resource.sys_handler    = val_desc->power_resource.sys_handler;
-			obj_desc->power_resource.drv_handler    = val_desc->power_resource.drv_handler;
-
-			break;
-		}
+		MEMCPY (obj_desc, val_desc, sizeof (ACPI_OPERAND_OBJECT));
+		obj_desc->common.reference_count = 1;
 	}
 
 
@@ -483,9 +469,17 @@ acpi_ns_get_object_value (
 		 * NOTE: we can get away with passing in NULL for a walk state
 		 * because Obj_desc is guaranteed to not be a reference to either
 		 * a method local or a method argument
+		 *
+		 * Even though we do not technically need to use the interpreter
+		 * for this, we must enter it because we could hit an opregion.
+		 * The opregion access code assumes it is in the interpreter.
 		 */
 
+		acpi_aml_enter_interpreter();
+
 		status = acpi_aml_resolve_to_value (&obj_desc, NULL);
+
+		acpi_aml_exit_interpreter();
 	}
 
 	/*

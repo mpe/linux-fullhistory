@@ -1,9 +1,9 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsutils - Utilities for the resource manager
- *              $Revision: 10 $
+ *              $Revision: 12 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -33,7 +33,7 @@
 	 MODULE_NAME         ("rsutils")
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_get_prt_method_data
  *
@@ -117,7 +117,7 @@ cleanup:
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_get_crs_method_data
  *
@@ -200,7 +200,7 @@ cleanup:
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_get_prs_method_data
  *
@@ -281,7 +281,7 @@ cleanup:
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_set_srs_method_data
  *
@@ -310,6 +310,7 @@ acpi_rs_set_srs_method_data (
 	u8                      *byte_stream = NULL;
 	u32                     buffer_size_needed = 0;
 
+
 	/* already validated params, so we won't repeat here */
 
 	/*
@@ -325,7 +326,6 @@ acpi_rs_set_srs_method_data (
 	status = acpi_rs_create_byte_stream (in_buffer->pointer,
 			   byte_stream,
 			   &buffer_size_needed);
-
 	/*
 	 * We expect a return of AE_BUFFER_OVERFLOW
 	 *  if not, exit with the error
@@ -338,7 +338,6 @@ acpi_rs_set_srs_method_data (
 	 * Allocate the buffer needed
 	 */
 	byte_stream = acpi_cm_callocate(buffer_size_needed);
-
 	if (NULL == byte_stream) {
 		return (AE_NO_MEMORY);
 	}
@@ -349,7 +348,6 @@ acpi_rs_set_srs_method_data (
 	status = acpi_rs_create_byte_stream (in_buffer->pointer,
 			   byte_stream,
 			   &buffer_size_needed);
-
 	if (ACPI_FAILURE (status)) {
 		goto cleanup;
 	}

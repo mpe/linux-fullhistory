@@ -374,7 +374,7 @@ struct mavenregs {
 struct matrox_hw_state {
 	u_int32_t	MXoptionReg;
 	unsigned char	DACclk[6];
-	unsigned char	DACreg[64];
+	unsigned char	DACreg[80];
 	unsigned char	MiscOutReg;
 	unsigned char	DACpal[768];
 	unsigned char	CRTC[25];
@@ -531,6 +531,7 @@ struct matrox_fb_info {
 		unsigned int	ydstorg;	/* offset in bytes from video start to usable memory */
 						/* 0 except for 6MB Millenium */
 		int		memtype;
+		int		g450dac;
 			      } devflags;
 	struct display_switch	dispsw;
 	struct {

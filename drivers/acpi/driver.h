@@ -35,6 +35,7 @@
  * cpu.c
  */
 int acpi_cpu_init(void);
+u32 acpi_read_pm_timer(void);
 
 extern unsigned long acpi_c2_exit_latency;
 extern unsigned long acpi_c3_exit_latency;
@@ -50,8 +51,11 @@ int acpi_run(void (*callback)(void*), void *context);
  * ec.c
  */
 int acpi_ec_init(void);
-int acpi_ec_read(int addr, int *value);
-int acpi_ec_write(int addr, int value);
+
+/*
+ * cmbatt.c
+ */
+int acpi_cmbatt_init(void);
 
 /*
  * sys.c
@@ -62,54 +66,10 @@ int acpi_enter_sx(acpi_sstate_t state);
 extern volatile acpi_sstate_t acpi_sleep_state;
 
 /*
- * tables.c
+ * table.c
  */
-extern struct acpi_facp acpi_facp;
+extern FADT_DESCRIPTOR acpi_fadt;
 
-int acpi_load_tables(void);
-
-/*
- * access ACPI registers
- */
-
-extern inline u32
-acpi_read_pm1_control(struct acpi_facp *facp)
-{
-	u32 value = 0;
-	if (facp->pm1a_cnt)
-		value = inw(facp->pm1a_cnt);
-	if (facp->pm1b_cnt)
-		value |= inw(facp->pm1b_cnt);
-	return value;
-}
-
-extern inline void 
-acpi_write_pm1_control(struct acpi_facp *facp, u32 value)
-{
-	if (facp->pm1a_cnt)
-		outw(value, facp->pm1a_cnt);
-	if (facp->pm1b_cnt)
-		outw(value, facp->pm1b_cnt);
-}
-
-extern inline u32 
-acpi_read_pm1_status(struct acpi_facp *facp)
-{
-	u32 value = 0;
-	if (facp->pm1a_evt)
-		value = inw(facp->pm1a_evt);
-	if (facp->pm1b_evt)
-		value |= inw(facp->pm1b_evt);
-	return value;
-}
-
-extern inline void 
-acpi_write_pm1_status(struct acpi_facp *facp, u32 value)
-{
-	if (facp->pm1a_evt)
-		outw(value, facp->pm1a_evt);
-	if (facp->pm1b_evt)
-		outw(value, facp->pm1b_evt);
-}
+int acpi_find_and_load_tables(u64 rsdp);
 
 #endif /* __DRIVER_H */

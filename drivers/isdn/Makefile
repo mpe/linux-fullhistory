@@ -1,145 +1,70 @@
-SUB_DIRS     :=
-MOD_SUB_DIRS :=
-ALL_SUB_DIRS := icn pcbit hisax avmb1 act2000 eicon divert hysdn
+# Makefile for the kernel ISDN subsystem and device drivers.
 
-L_OBJS :=
-LX_OBJS :=
-M_OBJS :=
-MX_OBJS :=
-O_OBJS :=
-OX_OBJS :=
-L_TARGET :=
-O_TARGET :=
+# The target object and module list name.
 
-ifeq ($(CONFIG_ISDN),y)
-  L_TARGET := isdn.a
-  L_OBJS += isdn_net.o isdn_tty.o isdn_cards.o isdn_v110.o
-  LX_OBJS += isdn_common.o 
-  ifdef CONFIG_ISDN_PPP
-    L_OBJS += isdn_ppp.o
-  endif
-  ifdef CONFIG_ISDN_X25
-    L_OBJS += isdn_x25iface.o
-    L_OBJS += isdn_concap.o
-  endif
-  ifdef CONFIG_ISDN_AUDIO
-    L_OBJS += isdn_audio.o
-    ifdef CONFIG_ISDN_TTY_FAX
-      L_OBJS += isdn_ttyfax.o
-    endif
-  endif
-else
-  ifeq ($(CONFIG_ISDN),m)
-    M_OBJS += isdn.o
-    O_TARGET += isdn.o
-    O_OBJS += isdn_net.o isdn_tty.o isdn_v110.o
-    OX_OBJS += isdn_common.o
-    ifdef CONFIG_ISDN_PPP
-      O_OBJS += isdn_ppp.o
-      M_OBJS += isdn_bsdcomp.o
-    endif
-    ifdef CONFIG_ISDN_X25
-      O_OBJS += isdn_x25iface.o
-      O_OBJS += isdn_concap.o
-    endif  
-    ifdef CONFIG_ISDN_AUDIO
-      O_OBJS += isdn_audio.o
-      ifdef CONFIG_ISDN_TTY_FAX
-        O_OBJS += isdn_ttyfax.o
-      endif
-    endif
-  endif
-endif
+O_TARGET	:= isdn.a
 
-ifeq ($(CONFIG_ISDN_DIVERSION),y)
- ifeq ($(CONFIG_MODULES),y)
-    MOD_SUB_DIRS += divert
- endif
-endif
+# Objects that export symbols.
 
-ifeq ($(CONFIG_ISDN_DRV_HISAX),y)
-  L_OBJS += hisax/hisax.o
-  SUB_DIRS += hisax
-  MOD_SUB_DIRS += hisax
-else
-  ifeq ($(CONFIG_ISDN_DRV_HISAX),m)
-    MOD_SUB_DIRS += hisax
-  endif
-endif
+export-objs	:= isdn_common.o
 
-ifeq ($(CONFIG_ISDN_DRV_ICN),y)
-  L_OBJS += icn/icn_obj.o
-  SUB_DIRS += icn
-  MOD_SUB_DIRS += icn
-else
-  ifeq ($(CONFIG_ISDN_DRV_ICN),m)
-    MOD_SUB_DIRS += icn
-  endif
-endif
+# Multipart objects.
 
-ifeq ($(CONFIG_ISDN_DRV_PCBIT),y)
-  L_OBJS += pcbit/pcbit.o
-  SUB_DIRS += pcbit
-  MOD_SUB_DIRS += pcbit
-else
-  ifeq ($(CONFIG_ISDN_DRV_PCBIT),m)
-    MOD_SUB_DIRS += pcbit
-  endif
-endif
+list-multi	:= isdn.o
+isdn-objs	:= isdn_net.o isdn_tty.o isdn_cards.o isdn_v110.o \
+		   isdn_common.o
 
-ifeq ($(CONFIG_ISDN_DRV_SC),y)
-  L_OBJS += sc/sc.o
-  SUB_DIRS += sc
-  MOD_SUB_DIRS += sc
-else
-  ifeq ($(CONFIG_ISDN_DRV_SC),m)
-    MOD_SUB_DIRS += sc
-  endif
-endif
+# Optional parts of multipart objects.
 
-ifeq ($(CONFIG_ISDN_CAPI),y)
-  L_OBJS += avmb1/avmb1.o
-  SUB_DIRS += avmb1
-  MOD_SUB_DIRS += avmb1
-else
-  ifeq ($(CONFIG_ISDN_CAPI),m)
-    MOD_SUB_DIRS += avmb1
-  endif
-endif
+isdn-objs-$(CONFIG_ISDN_PPP)		+= isdn_ppp.o
+isdn-objs-$(CONFIG_ISDN_X25)		+= isdn_concap.o isdn_x25iface.o
+isdn-objs-$(CONFIG_ISDN_AUDIO)		+= isdn_audio.o
+isdn-objs-$(CONFIG_ISDN_TTY_FAX)	+= isdn_ttyfax.o
+isdn-objs-$(CONFIG_ISDN_WITH_ABC)	+= isdn_dwabc.o
 
-ifeq ($(CONFIG_ISDN_DRV_LOOP),y)
-  L_OBJS += isdnloop/isdnloop.o
-  SUB_DIRS += isdnloop
-  MOD_SUB_DIRS += isdnloop
-else
-  ifeq ($(CONFIG_ISDN_DRV_LOOP),m)
-    MOD_SUB_DIRS += isdnloop
-  endif
-endif
+isdn-objs				+= $(isdn-objs-y)
 
-ifeq ($(CONFIG_ISDN_DRV_ACT2000),y)
-  L_OBJS += act2000/act2000.o
-  SUB_DIRS += act2000
-  MOD_SUB_DIRS += act2000
-else
-  ifeq ($(CONFIG_ISDN_DRV_ACT2000),m)
-    MOD_SUB_DIRS += act2000
-  endif
-endif
+# Object file lists.
 
-ifeq ($(CONFIG_ISDN_DRV_EICON),y)
-  L_OBJS += eicon/eicon.o
-  SUB_DIRS += eicon
-  MOD_SUB_DIRS += eicon
-else
-  ifeq ($(CONFIG_ISDN_DRV_EICON),m)
-    MOD_SUB_DIRS += eicon
-  endif
-endif
+obj-y	:=
+obj-m	:=
+obj-n	:=
+obj-	:=
 
-ifeq ($(CONFIG_HYSDN),y)
-  MOD_SUB_DIRS += hysdn
-endif
+# Object files in subdirectories
+
+subdir-$(CONFIG_ISDN_DIVERSION)		+= divert
+subdir-$(CONFIG_ISDN_DRV_HISAX)		+= hisax
+subobj-$(CONFIG_ISDN_DRV_HISAX)		+= hisax/hisax_drv.o
+subdir-$(CONFIG_ISDN_DRV_ICN)		+= icn
+subobj-$(CONFIG_ISDN_DRV_ICN)		+= icn/icn_drv.o
+subdir-$(CONFIG_ISDN_DRV_PCBIT)		+= pcbit
+subobj-$(CONFIG_ISDN_DRV_PCBIT)		+= pcbit/pcbit_drv.o
+subdir-$(CONFIG_ISDN_DRV_SC)		+= sc
+subobj-$(CONFIG_ISDN_DRV_SC)		+= sc/sc_drv.o
+subdir-$(CONFIG_ISDN_CAPI)		+= avmb1
+subobj-$(CONFIG_ISDN_CAPI)		+= avmb1/avmb1.o
+subdir-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop
+subobj-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop/isdnloop_drv.o
+subdir-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000
+subobj-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000/act2000_drv.o
+subdir-$(CONFIG_ISDN_DRV_EICON)		+= eicon
+subobj-$(CONFIG_ISDN_DRV_EICON)		+= eicon/eicon_drv.o
+subdir-$(CONFIG_HYSDN)			+= hysdn
+subobj-$(CONFIG_HYSDN)			+= hysdn/hysdn_drv.o
+
+obj-y					+= $(subobj-y)
+
+# Each configuration option enables a list of files.
+
+obj-$(CONFIG_ISDN)			+= isdn.o
+obj-$(CONFIG_ISDN_PPP_BSDCOMP)		+= isdn_bsdcomp.o
+
+# The global Rules.make.
 
 include $(TOPDIR)/Rules.make
 
+# Link rules for multi-part drivers.
+
+isdn.o: $(isdn-objs)
+	$(LD) -r -o $@ $(isdn-objs)

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amsystem - Interface to OS services
- *              $Revision: 51 $
+ *              $Revision: 52 $
  *
  *****************************************************************************/
 
@@ -202,7 +202,7 @@ acpi_aml_system_acquire_mutex (
 	}
 
 	status = acpi_aml_system_wait_semaphore (obj_desc->mutex.semaphore,
-			  time_desc->number.value);
+			  (u32) time_desc->number.value);
 	return (status);
 }
 
@@ -299,7 +299,7 @@ acpi_aml_system_wait_event (
 
 	if (obj_desc) {
 		status = acpi_aml_system_wait_semaphore (obj_desc->event.semaphore,
-				  time_desc->number.value);
+				  (u32) time_desc->number.value);
 	}
 
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: accommon.h -- prototypes for the common (subsystem-wide) procedures
- *       $Revision: 74 $
+ *       $Revision: 82 $
  *
  *****************************************************************************/
 
@@ -43,7 +43,7 @@
 
 void
 acpi_cm_init_globals (
-	ACPI_INIT_DATA *init_data);
+	void);
 
 void
 acpi_cm_terminate (
@@ -51,7 +51,7 @@ acpi_cm_terminate (
 
 
 /*
- * Acpi_cm_init - miscellaneous initialization and shutdown
+ * Cm_init - miscellaneous initialization and shutdown
  */
 
 ACPI_STATUS
@@ -62,9 +62,15 @@ ACPI_STATUS
 acpi_cm_subsystem_shutdown (
 	void);
 
+ACPI_STATUS
+acpi_cm_validate_fadt (
+	void);
+
 /*
- * Acpi_cm_global - Global data structures and procedures
+ * Cm_global - Global data structures and procedures
  */
+
+#ifdef ACPI_DEBUG
 
 NATIVE_CHAR *
 acpi_cm_get_mutex_name (
@@ -73,6 +79,13 @@ acpi_cm_get_mutex_name (
 NATIVE_CHAR *
 acpi_cm_get_type_name (
 	u32                     type);
+
+NATIVE_CHAR *
+acpi_cm_get_region_name (
+	u8                      space_id);
+
+#endif
+
 
 u8
 acpi_cm_valid_object_type (
@@ -84,7 +97,7 @@ acpi_cm_allocate_owner_id (
 
 
 /*
- * Acpi_cm_clib - Local implementations of C library functions
+ * Cm_clib - Local implementations of C library functions
  */
 
 NATIVE_UINT
@@ -161,7 +174,7 @@ acpi_cm_to_lower (
 
 
 /*
- * Acpi_cm_copy - Object construction and conversion interfaces
+ * Cm_copy - Object construction and conversion interfaces
  */
 
 ACPI_STATUS
@@ -204,7 +217,7 @@ acpi_cm_build_copy_internal_package_object (
 
 
 /*
- * Acpi_cm_create - Object creation
+ * Cm_create - Object creation
  */
 
 ACPI_STATUS
@@ -221,7 +234,7 @@ _cm_create_internal_object (
 
 
 /*
- * Acpi_cm_debug - Debug interfaces
+ * Cm_debug - Debug interfaces
  */
 
 u32
@@ -315,22 +328,19 @@ void
 _report_info (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message);
+	u32                     component_id);
 
 void
 _report_error (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message);
+	u32                     component_id);
 
 void
 _report_warning (
 	NATIVE_CHAR             *module_name,
 	u32                     line_number,
-	u32                     component_id,
-	NATIVE_CHAR             *message);
+	u32                     component_id);
 
 void
 acpi_cm_dump_buffer (
@@ -341,7 +351,7 @@ acpi_cm_dump_buffer (
 
 
 /*
- * Acpi_cm_delete - Object deletion
+ * Cm_delete - Object deletion
  */
 
 void
@@ -362,7 +372,7 @@ acpi_cm_delete_internal_object_list (
 
 
 /*
- * Acpi_cm_eval - object evaluation
+ * Cm_eval - object evaluation
  */
 
 /* Method name strings */
@@ -378,9 +388,9 @@ acpi_cm_delete_internal_object_list (
 
 ACPI_STATUS
 acpi_cm_evaluate_numeric_object (
-	NATIVE_CHAR             *method_name,
+	NATIVE_CHAR             *object_name,
 	ACPI_NAMESPACE_NODE     *device_node,
-	u32                     *address);
+	ACPI_INTEGER            *address);
 
 ACPI_STATUS
 acpi_cm_execute_HID (
@@ -399,7 +409,7 @@ acpi_cm_execute_UID (
 
 
 /*
- * Acpi_cm_error - exception interfaces
+ * Cm_error - exception interfaces
  */
 
 NATIVE_CHAR *
@@ -408,7 +418,7 @@ acpi_cm_format_exception (
 
 
 /*
- * Acpi_cm_mutex - mutual exclusion interfaces
+ * Cm_mutex - mutual exclusion interfaces
  */
 
 ACPI_STATUS
@@ -437,7 +447,7 @@ acpi_cm_release_mutex (
 
 
 /*
- * Acpi_cm_object - internal object create/delete/cache routines
+ * Cm_object - internal object create/delete/cache routines
  */
 
 void *
@@ -459,7 +469,7 @@ acpi_cm_valid_internal_object (
 
 
 /*
- * Acpi_cm_ref_cnt - Object reference count management
+ * Cm_ref_cnt - Object reference count management
  */
 
 void
@@ -471,7 +481,7 @@ acpi_cm_remove_reference (
 	ACPI_OPERAND_OBJECT     *object);
 
 /*
- * Acpi_cm_size - Object size routines
+ * Cm_size - Object size routines
  */
 
 ACPI_STATUS
@@ -491,7 +501,7 @@ acpi_cm_get_object_size(
 
 
 /*
- * Acpi_cm_state - Generic state creation/cache routines
+ * Cm_state - Generic state creation/cache routines
  */
 
 void
@@ -536,7 +546,7 @@ acpi_cm_delete_object_cache (
 	void);
 
 /*
- * Acpi_cmutils
+ * Cmutils
  */
 
 u8
@@ -546,6 +556,10 @@ acpi_cm_valid_acpi_name (
 u8
 acpi_cm_valid_acpi_character (
 	NATIVE_CHAR             character);
+
+ACPI_STATUS
+acpi_cm_resolve_package_references (
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 
 /*

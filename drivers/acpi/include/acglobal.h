@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acglobal.h - Declarations for global variables
- *       $Revision: 84 $
+ *       $Revision: 92 $
  *
  *****************************************************************************/
 
@@ -74,13 +74,12 @@ extern      u32                         acpi_gbl_nesting_level;
  * of each in the system.  Each global points to the actual table.
  *
  */
-ACPI_EXTERN ROOT_SYSTEM_DESCRIPTOR_POINTER      *acpi_gbl_RSDP;
-ACPI_EXTERN ROOT_SYSTEM_DESCRIPTION_TABLE       *acpi_gbl_RSDT;
-ACPI_EXTERN FIRMWARE_ACPI_CONTROL_STRUCTURE     *acpi_gbl_FACS;
-ACPI_EXTERN FIXED_ACPI_DESCRIPTION_TABLE        *acpi_gbl_FACP;
-ACPI_EXTERN APIC_TABLE                          *acpi_gbl_APIC;
-ACPI_EXTERN ACPI_TABLE_HEADER                   *acpi_gbl_DSDT;
-ACPI_EXTERN ACPI_TABLE_HEADER                   *acpi_gbl_SBST;
+ACPI_EXTERN RSDP_DESCRIPTOR             *acpi_gbl_RSDP;
+ACPI_EXTERN XSDT_DESCRIPTOR             *acpi_gbl_XSDT;
+ACPI_EXTERN FADT_DESCRIPTOR             *acpi_gbl_FADT;
+ACPI_EXTERN ACPI_TABLE_HEADER           *acpi_gbl_DSDT;
+ACPI_EXTERN ACPI_COMMON_FACS            *acpi_gbl_FACS;
+
 /*
  * Since there may be multiple SSDTs and PSDTS, a single pointer is not
  * sufficient; Therefore, there isn't one!
@@ -99,7 +98,6 @@ extern      ACPI_TABLE_SUPPORT          acpi_gbl_acpi_table_data[NUM_ACPI_TABLES
  * (The table maps local handles to the real OS handles)
  */
 ACPI_EXTERN ACPI_MUTEX_INFO             acpi_gbl_acpi_mutex_info [NUM_MTX];
-extern      ACPI_INIT_DATA              acpi_gbl_acpi_init_data;
 
 
 /*****************************************************************************
@@ -164,6 +162,7 @@ ACPI_EXTERN ACPI_OBJECT_NOTIFY_HANDLER  acpi_gbl_sys_notify;
 extern      u8                          acpi_gbl_shutdown;
 extern      u32                         acpi_gbl_system_flags;
 extern      u32                         acpi_gbl_startup_flags;
+extern      u8                          acpi_gbl_decode_to8bit[];
 
 
 /*****************************************************************************
@@ -198,22 +197,7 @@ ACPI_EXTERN ALLOCATION_INFO            *acpi_gbl_tail_alloc_ptr;
  ****************************************************************************/
 
 
-ACPI_EXTERN u32                         acpi_gbl_when_to_parse_methods;
 ACPI_EXTERN ACPI_WALK_LIST             *acpi_gbl_current_walk_list;
-
-/* Base of AML block, and pointer to current location in it */
-
-ACPI_EXTERN u8                         *acpi_gbl_Pcode_base;
-ACPI_EXTERN u8                         *acpi_gbl_Pcode;
-
-/*
- * Length of AML block, and remaining length of current package.
- */
-ACPI_EXTERN u32                         acpi_gbl_Pcode_block_len;
-ACPI_EXTERN u32                         acpi_gbl_Pcode_len;
-
-ACPI_EXTERN u32                         acpi_gbl_buf_seq;           /* Counts allocated Buffer descriptors */
-ACPI_EXTERN u32                         acpi_gbl_node_err;   /* Indicate if inc_error should be called */
 
 /*
  * Handle to the last method found - used during pass1 of load
@@ -239,10 +223,6 @@ ACPI_EXTERN u8                          acpi_gbl_cm_single_step;
  ****************************************************************************/
 
 ACPI_EXTERN ACPI_PARSE_OBJECT           *acpi_gbl_parsed_namespace_root;
-
-extern ACPI_OPCODE_INFO                 acpi_gbl_aml_op_info[];
-extern u8                               acpi_gbl_aml_op_info_index[256];
-
 
 /*****************************************************************************
  *
@@ -290,9 +270,10 @@ ACPI_EXTERN u32                         acpi_gbl_event_count[NUM_FIXED_EVENTS];
  *
  ****************************************************************************/
 
+#ifdef ENABLE_DEBUGGER
 ACPI_EXTERN u8                          acpi_gbl_method_executing;
 ACPI_EXTERN u8                          acpi_gbl_db_terminate_threads;
-
+#endif
 
 /* Memory allocation metrics - Debug Only! */
 

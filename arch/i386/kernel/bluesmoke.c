@@ -75,7 +75,7 @@ void mcheck_init(struct cpuinfo_x86 *c)
 	if( c->x86_vendor != X86_VENDOR_INTEL )
 		return;
 	
-	if( !test_bit(X86_FEATURE_TSC, &c->x86_capability) )
+	if( !test_bit(X86_FEATURE_MCE, &c->x86_capability) )
 		return;
 		
 	if( !test_bit(X86_FEATURE_MCA, &c->x86_capability) )

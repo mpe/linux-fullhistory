@@ -1009,6 +1009,7 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 	struct buffer_head *bh;
 	int method1 = INT_MAX, method2 = INT_MAX;
 
+#if 0
 	/*
 	 * Attempt to add entries :-)
 	 */
@@ -1039,6 +1040,7 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 			atomic_dec(&bh->b_count);
 		}
 	}
+#endif
 	PRINTK("handle_stripe() -- begin writing, stripe %lu\n", sh->sector);
 	/*
 	 * Writing, need to update parity buffer.

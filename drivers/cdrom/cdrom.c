@@ -224,11 +224,14 @@
   3.11 Jun 12, 2000 - Jens Axboe <axboe@suse.de>
   -- Fix bug in getting rpc phase 2 region info.
   -- Reinstate "correct" CDROMPLAYTRKIND
- 
+
+   3.12 Oct 18, 2000 - Jens Axboe <axboe@suse.de>
+  -- Use quiet bit on packet commands not known to work
+
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.11"
-#define VERSION "Id: cdrom.c 3.11 2000/06/12"
+#define REVISION "Revision: 3.12"
+#define VERSION "Id: cdrom.c 3.12 2000/10/18"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -701,6 +704,21 @@ static int cdrom_read_mech_status(struct cdrom_device_info *cdi,
 	struct cdrom_device_ops *cdo = cdi->ops;
 	int length;
 
+	/*
+	 * Sanyo changer isn't spec compliant (doesn't use regular change
+	 * LOAD_UNLOAD command, and it doesn't implement the mech status
+	 * command below
+	 */
+	if (cdi->sanyo_slot) {
+		buf->hdr.nslots = 3;
+		buf->hdr.curslot = cdi->sanyo_slot == 3 ? 0 : cdi->sanyo_slot;
+		for (length = 0; length < 3; length++) {
+			buf->slots[length].disc_present = 1;
+			buf->slots[length].change = 0;
+		}
+		return 0;
+	}
+
 	length = sizeof(struct cdrom_mechstat_header) +
 		 cdi->capacity * sizeof(struct cdrom_slot);
 
@@ -767,9 +785,10 @@ static int cdrom_load_unload(struct cdrom_device_info *cdi, int slot)
 	/* The Sanyo 3 CD changer uses byte 7 of the 
 	GPCMD_TEST_UNIT_READY to command to switch CDs instead of
 	using the GPCMD_LOAD_UNLOAD opcode. */
-	if (cdi->sanyo_slot && slot) {
+	if (cdi->sanyo_slot && -1 < slot) {
 		cgc.cmd[0] = GPCMD_TEST_UNIT_READY;
 		cgc.cmd[7] = slot;
+		cgc.cmd[4] = cgc.cmd[8] = 0;
 		cdi->sanyo_slot = slot ? slot : 3;
 	}
 
@@ -953,6 +972,7 @@ void init_cdrom_command(struct cdrom_generic_command *cgc, void *buf, int len,
 	cgc->buffer = (char *) buf;
 	cgc->buflen = len;
 	cgc->data_direction = type;
+	cgc->timeout = 5*HZ;
 }
 
 /* DVD handling */
@@ -1860,6 +1880,48 @@ static int cdrom_switch_blocksize(struct cdrom_device_info *cdi, int size)
 	return cdo->generic_packet(cdi, &cgc);
 }
 
+static int cdrom_do_cmd(struct cdrom_device_info *cdi,
+			struct cdrom_generic_command *cgc)
+{
+	struct request_sense *usense, sense;
+	unsigned char *ubuf;
+	int ret;
+
+	if (cgc->data_direction == CGC_DATA_UNKNOWN)
+		return -EINVAL;
+
+	if (cgc->buflen < 0 || cgc->buflen >= 131072)
+		return -EINVAL;
+
+	if ((ubuf = cgc->buffer)) {
+		cgc->buffer = kmalloc(cgc->buflen, GFP_KERNEL);
+		if (cgc->buffer == NULL)
+			return -ENOMEM;
+	}
+
+	usense = cgc->sense;
+	cgc->sense = &sense;
+	if (usense && !access_ok(VERIFY_WRITE, usense, sizeof(*usense)))
+		return -EFAULT;
+
+	if (cgc->data_direction == CGC_DATA_READ) {
+		if (!access_ok(VERIFY_READ, ubuf, cgc->buflen))
+			return -EFAULT;
+	} else if (cgc->data_direction == CGC_DATA_WRITE) {
+		if (copy_from_user(cgc->buffer, ubuf, cgc->buflen)) {
+			kfree(cgc->buffer);
+			return -EFAULT;
+		}
+	}
+
+	ret = cdi->ops->generic_packet(cdi, cgc);
+	__copy_to_user(usense, cgc->sense, sizeof(*usense));
+	if (!ret && cgc->data_direction == CGC_DATA_READ)
+		__copy_to_user(ubuf, cgc->buffer, cgc->buflen);
+	kfree(cgc->buffer);
+	return ret;
+}
+
 static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		     unsigned long arg)
 {		
@@ -1923,7 +1985,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 	case CDROMREADAUDIO: {
 		struct cdrom_read_audio ra;
-		int lba, frames;
+		int lba;
 
 		IOCTL_IN(arg, struct cdrom_read_audio, ra);
 
@@ -1937,14 +1999,10 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 			return -EINVAL;
 
 		/* FIXME: we need upper bound checking, too!! */
-		if (lba < 0)
+		if (lba < 0 || ra.nframes <= 0)
 			return -EINVAL;
 
-		/* do max 8 frames at the time */
-		frames = ra.nframes > 8 ? 8 : ra.nframes;
-
-		if ((cgc.buffer = (char *) kmalloc(CD_FRAMESIZE_RAW * frames,
-						   GFP_KERNEL)) == NULL)
+		if ((cgc.buffer = (char *) kmalloc(CD_FRAMESIZE_RAW, GFP_KERNEL)) == NULL)
 			return -ENOMEM;
 
 		if (!access_ok(VERIFY_WRITE, ra.buf, ra.nframes*CD_FRAMESIZE_RAW)) {
@@ -1953,13 +2011,12 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 		cgc.data_direction = CGC_DATA_READ;
 		while (ra.nframes > 0) {
-			ret = cdrom_read_block(cdi, &cgc, lba, frames, 1, CD_FRAMESIZE_RAW);
+			ret = cdrom_read_block(cdi, &cgc, lba, 1, 1, CD_FRAMESIZE_RAW);
 			if (ret) break;
-			__copy_to_user(ra.buf, cgc.buffer,
-				       CD_FRAMESIZE_RAW * frames);
-			ra.buf += (CD_FRAMESIZE_RAW * frames);
-			ra.nframes -= frames;
-			lba += frames;
+			__copy_to_user(ra.buf, cgc.buffer, CD_FRAMESIZE_RAW);
+			ra.buf += CD_FRAMESIZE_RAW;
+			ra.nframes--;
+			lba++;
 		}
 		kfree(cgc.buffer);
 		return ret;
@@ -2051,7 +2108,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cgc.buffer = mask;
 		if ((ret = cdrom_mode_sense(cdi, &cgc, 
 				GPMODE_AUDIO_CTL_PAGE, 1)))
-		    return ret;
+			return ret;
 
 		buffer[offset+9] = volctrl.channel0 & mask[offset+9];
 		buffer[offset+11] = volctrl.channel1 & mask[offset+11];
@@ -2117,52 +2174,11 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 
 	case CDROM_SEND_PACKET: {
-		__u8 *userbuf, copy = 0;
-		struct request_sense *sense;
 		if (!CDROM_CAN(CDC_GENERIC_PACKET))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SEND_PACKET\n"); 
 		IOCTL_IN(arg, struct cdrom_generic_command, cgc);
-		copy = !!cgc.buflen;
-		userbuf = cgc.buffer;
-		cgc.buffer = NULL;
-		sense = cgc.sense;
-		if (userbuf != NULL && copy) {
-			/* usually commands just copy data one way, i.e.
-			 * we send a buffer to the drive and the command
-			 * specifies whether the drive will read or
-			 * write to that buffer. usually the buffers
-			 * are very small, so we don't loose that much
-			 * by doing a redundant copy each time. */
-			if (!access_ok(VERIFY_WRITE, userbuf, cgc.buflen)) {
-				printk("can't get write perms\n");
-				return -EFAULT;
-			}
-			if (!access_ok(VERIFY_READ, userbuf, cgc.buflen)) {
-				printk("can't get read perms\n");
-				return -EFAULT;
-			}
-		}
-		/* reasonable limits */
-		if (cgc.buflen < 0 || cgc.buflen > 131072) {
-			printk("invalid size given\n");
-			return -EINVAL;
-		}
-		if (copy) {
-			cgc.buffer = kmalloc(cgc.buflen, GFP_KERNEL);
-			if (cgc.buffer == NULL)
-				return -ENOMEM;
-			__copy_from_user(cgc.buffer, userbuf, cgc.buflen);
-		}
-		ret = cdo->generic_packet(cdi, &cgc);
-		if (copy && !ret)
-			__copy_to_user(userbuf, cgc.buffer, cgc.buflen);
-		/* copy back sense data */
-		if (sense != NULL)
-			if (copy_to_user(sense, cgc.sense, sizeof(struct request_sense)))
-				ret = -EFAULT;
-		kfree(cgc.buffer);
-		return ret;
+		return cdrom_do_cmd(cdi, &cgc);
 		}
 	case CDROM_NEXT_WRITABLE: {
 		long next = 0;
@@ -2199,6 +2215,7 @@ int cdrom_get_track_info(kdev_t dev, __u16 track, __u8 type,
 	cgc.cmd[4] = (track & 0xff00) >> 8;
 	cgc.cmd[5] = track & 0xff;
 	cgc.cmd[8] = 8;
+	cgc.quiet = 1;
 
 	if ((ret = cdo->generic_packet(cdi, &cgc)))
 		return ret;
@@ -2220,6 +2237,7 @@ int cdrom_get_disc_info(kdev_t dev, disc_information *di)
 	init_cdrom_command(&cgc, di, sizeof(*di), CGC_DATA_READ);
 	cgc.cmd[0] = GPCMD_READ_DISC_INFO;
 	cgc.cmd[8] = cgc.buflen = 2;
+	cgc.quiet = 1;
 
 	if ((ret = cdo->generic_packet(cdi, &cgc)))
 		return ret;
@@ -2250,9 +2268,6 @@ int cdrom_get_last_written(kdev_t dev, long *last_written)
 	int ret = -1;
 
 	if (!CDROM_CAN(CDC_GENERIC_PACKET))
-		goto use_toc;
-
-	if (!CDROM_CAN(CDC_CD_R | CDC_CD_RW | CDC_DVD_R | CDC_DVD_RAM))
 		goto use_toc;
 
 	if ((ret = cdrom_get_disc_info(dev, &di)))
@@ -2556,12 +2571,13 @@ ctl_table cdrom_cdrom_table[] = {
 	{0}
 	};
 
+#ifdef CONFIG_PROC_FS
 /* Make sure that /proc/sys/dev is there */
 ctl_table cdrom_root_table[] = {
 	{CTL_DEV, "dev", NULL, 0, 0555, cdrom_cdrom_table},
 	{0}
 	};
-
+#endif /* CONFIG_PROC_FS */
 static struct ctl_table_header *cdrom_sysctl_header;
 
 static void cdrom_sysctl_register(void)
@@ -2572,9 +2588,8 @@ static void cdrom_sysctl_register(void)
 		return;
 
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
-#ifdef CONFIG_PROC_FS
 	cdrom_root_table->child->de->owner = THIS_MODULE;
-#endif /* CONFIG_PROC_FS */
+
 	/* set the defaults */
 	cdrom_sysctl_settings.autoclose = autoclose;
 	cdrom_sysctl_settings.autoeject = autoeject;

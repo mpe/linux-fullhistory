@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.168 2000/12/11 18:59:35 davem Exp $
+/* $Id: sys_sparc32.c,v 1.171 2000/12/13 16:34:55 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -865,17 +865,13 @@ asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg
 			mm_segment_t old_fs;
 			long ret;
 			
-			if(get_flock(&f, (struct flock32 *)arg))
+			if (get_flock(&f, (struct flock32 *)arg))
 				return -EFAULT;
 			old_fs = get_fs(); set_fs (KERNEL_DS);
 			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
 			set_fs (old_fs);
 			if (ret) return ret;
-			if (f.l_start >= 0x7fffffffUL ||
-			    f.l_len >= 0x7fffffffUL ||
-			    f.l_start + f.l_len >= 0x7fffffffUL)
-				return -EOVERFLOW;
-			if(put_flock(&f, (struct flock32 *)arg))
+			if (put_flock(&f, (struct flock32 *)arg))
 				return -EFAULT;
 			return 0;
 		}
@@ -2966,8 +2962,6 @@ static int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 
 			err = copy_from_user(kaddr + offset, (char *)A(str),
 					     bytes_to_copy);
-			flush_dcache_page(page);
-			flush_page_to_ram(page);
 			kunmap(page);
 
 			if (err)
@@ -3453,7 +3447,7 @@ asmlinkage int sys32_get_kernel_syms(struct kernel_sym32 *table)
 	set_fs (KERNEL_DS);
 	sys_get_kernel_syms(tbl);
 	set_fs (old_fs);
-	for (i = 0; i < len; i++, table += sizeof (struct kernel_sym32)) {
+	for (i = 0; i < len; i++, table++) {
 		if (put_user (tbl[i].value, &table->value) ||
 		    copy_to_user (table->name, tbl[i].name, 60))
 			break;

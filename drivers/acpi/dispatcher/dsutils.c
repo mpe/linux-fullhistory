@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: dsutils - Dispatcher utilities
- *              $Revision: 44 $
+ *              $Revision: 50 $
  *
  ******************************************************************************/
 
@@ -52,7 +52,8 @@
 
 u8
 acpi_ds_is_result_used (
-	ACPI_PARSE_OBJECT       *op)
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_OPCODE_INFO        *parent_info;
 
@@ -85,13 +86,6 @@ acpi_ds_is_result_used (
 	}
 
 
-	/* Never delete the return value associated with a return opcode */
-
-	if (op->parent->opcode == AML_RETURN_OP) {
-		return (TRUE);
-	}
-
-
 	/*
 	 * Decide what to do with the result based on the parent.  If
 	 * the parent opcode will not use the result, delete the object.
@@ -105,7 +99,53 @@ acpi_ds_is_result_used (
 	 * In these cases, the parent will never use the return object
 	 */
 	case OPTYPE_CONTROL:        /* IF, ELSE, WHILE only */
+
+		switch (op->parent->opcode)
+		{
+		case AML_RETURN_OP:
+
+			/* Never delete the return value associated with a return opcode */
+
+			return (TRUE);
+			break;
+
+		case AML_IF_OP:
+		case AML_WHILE_OP:
+
+			/*
+			 * If we are executing the predicate AND this is the predicate op,
+			 * we will use the return value!
+			 */
+
+			if ((walk_state->control_state->common.state == CONTROL_PREDICATE_EXECUTING) &&
+				(walk_state->control_state->control.predicate_op == op))
+			{
+				return (TRUE);
+			}
+
+			break;
+		}
+
+
+		/* Fall through to not used case below */
+
+
 	case OPTYPE_NAMED_OBJECT:   /* Scope, method, etc. */
+
+		/*
+		 * These opcodes allow Term_arg(s) as operands and therefore
+		 * method calls.  The result is used.
+		 */
+		if ((op->parent->opcode == AML_REGION_OP)       ||
+			(op->parent->opcode == AML_CREATE_FIELD_OP) ||
+			(op->parent->opcode == AML_BIT_FIELD_OP)    ||
+			(op->parent->opcode == AML_BYTE_FIELD_OP)   ||
+			(op->parent->opcode == AML_WORD_FIELD_OP)   ||
+			(op->parent->opcode == AML_DWORD_FIELD_OP)  ||
+			(op->parent->opcode == AML_QWORD_FIELD_OP))
+		{
+			return (TRUE);
+		}
 
 		return (FALSE);
 		break;
@@ -158,13 +198,13 @@ acpi_ds_delete_result_if_not_used (
 	}
 
 
-	if (!acpi_ds_is_result_used (op)) {
+	if (!acpi_ds_is_result_used (op, walk_state)) {
 		/*
 		 * Must pop the result stack (Obj_desc should be equal
 		 *  to Result_obj)
 		 */
 
-		status = acpi_ds_result_stack_pop (&obj_desc, walk_state);
+		status = acpi_ds_result_pop (&obj_desc, walk_state);
 		if (ACPI_SUCCESS (status)) {
 			acpi_cm_remove_reference (result_obj);
 		}
@@ -193,7 +233,8 @@ acpi_ds_delete_result_if_not_used (
 ACPI_STATUS
 acpi_ds_create_operand (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_PARSE_OBJECT       *arg)
+	ACPI_PARSE_OBJECT       *arg,
+	u32                     arg_index)
 {
 	ACPI_STATUS             status = AE_OK;
 	NATIVE_CHAR             *name_string;
@@ -237,6 +278,7 @@ acpi_ds_create_operand (
 		parent_op = arg->parent;
 		if ((acpi_ps_is_node_op (parent_op->opcode)) &&
 			(parent_op->opcode != AML_METHODCALL_OP) &&
+			(parent_op->opcode != AML_REGION_OP) &&
 			(parent_op->opcode != AML_NAMEPATH_OP))
 		{
 			/* Enter name into namespace if not found */
@@ -340,7 +382,7 @@ acpi_ds_create_operand (
 			 * by the evaluation of this argument
 			 */
 
-			status = acpi_ds_result_stack_pop (&obj_desc, walk_state);
+			status = acpi_ds_result_pop_from_bottom (&obj_desc, walk_state);
 			if (ACPI_FAILURE (status)) {
 				/*
 				 * Only error is underflow, and this indicates
@@ -404,17 +446,14 @@ acpi_ds_create_operands (
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_PARSE_OBJECT       *arg;
-	u32                     args_pushed = 0;
-
-
-	arg = first_arg;
+	u32                     arg_count = 0;
 
 
 	/* For all arguments in the list... */
 
+	arg = first_arg;
 	while (arg) {
-
-		status = acpi_ds_create_operand (walk_state, arg);
+		status = acpi_ds_create_operand (walk_state, arg, arg_count);
 		if (ACPI_FAILURE (status)) {
 			goto cleanup;
 		}
@@ -422,7 +461,7 @@ acpi_ds_create_operands (
 		/* Move on to next argument, if any */
 
 		arg = arg->next;
-		args_pushed++;
+		arg_count++;
 	}
 
 	return (status);
@@ -435,7 +474,7 @@ cleanup:
 	 * objects
 	 */
 
-	acpi_ds_obj_stack_pop_and_delete (args_pushed, walk_state);
+	acpi_ds_obj_stack_pop_and_delete (arg_count, walk_state);
 
 	return (status);
 }
@@ -539,8 +578,10 @@ acpi_ds_map_opcode_to_data_type (
 		case AML_NAMEPATH_OP:
 			data_type = INTERNAL_TYPE_REFERENCE;
 			break;
-		}
 
+		default:
+			break;
+		}
 		break;
 
 
@@ -557,8 +598,10 @@ acpi_ds_map_opcode_to_data_type (
 
 			data_type = ACPI_TYPE_PACKAGE;
 			break;
-		}
 
+		default:
+			break;
+		}
 		break;
 
 
@@ -581,21 +624,18 @@ acpi_ds_map_opcode_to_data_type (
 
 		flags = OP_HAS_RETURN_VALUE;
 		data_type = ACPI_TYPE_ANY;
-
 		break;
 
 	case OPTYPE_METHOD_CALL:
 
 		flags = OP_HAS_RETURN_VALUE;
 		data_type = ACPI_TYPE_METHOD;
-
 		break;
 
 
 	case OPTYPE_NAMED_OBJECT:
 
 		data_type = acpi_ds_map_named_opcode_to_data_type (opcode);
-
 		break;
 
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psopcode - Parser opcode information table
- *              $Revision: 20 $
+ *              $Revision: 24 $
  *
  *****************************************************************************/
 
@@ -33,9 +33,6 @@
 	 MODULE_NAME         ("psopcode")
 
 
-u8 acpi_gbl_aml_short_op_info_index[];
-u8 acpi_gbl_aml_long_op_info_index[];
-
 #define _UNK                        0x6B
 /*
  * Reserved ASCII characters.  Do not use any of these for
@@ -51,112 +48,6 @@ u8 acpi_gbl_aml_long_op_info_index[];
 #define NUM_EXTENDED_OPCODE         MAX_EXTENDED_OPCODE + 1
 #define MAX_INTERNAL_OPCODE
 #define NUM_INTERNAL_OPCODE         MAX_INTERNAL_OPCODE + 1
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_ps_get_opcode_info
- *
- * PARAMETERS:  Opcode              - The AML opcode
- *
- * RETURN:      A pointer to the info about the opcode.  NULL if the opcode was
- *              not found in the table.
- *
- * DESCRIPTION: Find AML opcode description based on the opcode.
- *              NOTE: This procedure must ALWAYS return a valid pointer!
- *
- ******************************************************************************/
-
-ACPI_OPCODE_INFO *
-acpi_ps_get_opcode_info (
-	u16                     opcode)
-{
-	ACPI_OPCODE_INFO        *op_info;
-	u8                      upper_opcode;
-	u8                      lower_opcode;
-
-
-	/* Split the 16-bit opcode into separate bytes */
-
-	upper_opcode = (u8) (opcode >> 8);
-	lower_opcode = (u8) opcode;
-
-	/* Default is "unknown opcode" */
-
-	op_info = &acpi_gbl_aml_op_info [_UNK];
-
-
-	/*
-	 * Detect normal 8-bit opcode or extended 16-bit opcode
-	 */
-
-	switch (upper_opcode)
-	{
-	case 0:
-
-		/* Simple (8-bit) opcode: 0-255, can't index beyond table  */
-
-		op_info = &acpi_gbl_aml_op_info [acpi_gbl_aml_short_op_info_index [lower_opcode]];
-		break;
-
-
-	case AML_EXTOP:
-
-		/* Extended (16-bit, prefix+opcode) opcode */
-
-		if (lower_opcode <= MAX_EXTENDED_OPCODE) {
-			op_info = &acpi_gbl_aml_op_info [acpi_gbl_aml_long_op_info_index [lower_opcode]];
-		}
-		break;
-
-
-	case AML_LNOT_OP:
-
-		/* This case is for the bogus opcodes LNOTEQUAL, LLESSEQUAL, LGREATEREQUAL */
-		/* TBD: [Investigate] remove this case? */
-
-		break;
-
-
-	default:
-
-		break;
-	}
-
-
-	/* Get the Op info pointer for this opcode */
-
-	return (op_info);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_ps_get_opcode_name
- *
- * PARAMETERS:  Opcode              - The AML opcode
- *
- * RETURN:      A pointer to the name of the opcode (ASCII String)
- *              Note: Never returns NULL.
- *
- * DESCRIPTION: Translate an opcode into a human-readable string
- *
- ******************************************************************************/
-
-NATIVE_CHAR *
-acpi_ps_get_opcode_name (
-	u16                     opcode)
-{
-	ACPI_OPCODE_INFO             *op;
-
-
-	op = acpi_ps_get_opcode_info (opcode);
-
-	/* Always guaranteed to return a valid pointer */
-
-	DEBUG_ONLY_MEMBERS (return op->name);
-	return ("AE_NOT_CONFIGURED");
-}
 
 
 /*******************************************************************************
@@ -387,7 +278,7 @@ acpi_ps_get_opcode_name (
 #define ARGI_REVISION_OP                ARG_NONE
 #define ARGI_DEBUG_OP                   ARG_NONE
 #define ARGI_FATAL_OP                   ARGI_LIST3 (ARGI_NUMBER,     ARGI_NUMBER,        ARGI_NUMBER)
-#define ARGI_REGION_OP                  ARGI_INVALID_OPCODE
+#define ARGI_REGION_OP                  ARGI_LIST2 (ARGI_NUMBER,     ARGI_NUMBER)
 #define ARGI_DEF_FIELD_OP               ARGI_INVALID_OPCODE
 #define ARGI_DEVICE_OP                  ARGI_INVALID_OPCODE
 #define ARGI_PROCESSOR_OP               ARGI_INVALID_OPCODE
@@ -412,7 +303,7 @@ acpi_ps_get_opcode_name (
  */
 
 
-ACPI_OPCODE_INFO    acpi_gbl_aml_op_info[] =
+static ACPI_OPCODE_INFO    aml_op_info[] =
 {
 /* Index          Opcode                                   Type                   Class                 Has Arguments?   Name                 Parser Args             Interpreter Args */
 
@@ -539,7 +430,7 @@ ACPI_OPCODE_INFO    acpi_gbl_aml_op_info[] =
  * index into the table above
  */
 
-u8 acpi_gbl_aml_short_op_info_index[256] =
+static u8 aml_short_op_info_index[256] =
 {
 /*              0     1     2     3     4     5     6     7  */
 /* 0x00 */    0x00, 0x01, _UNK, _UNK, _UNK, _UNK, 0x02, _UNK,
@@ -577,7 +468,7 @@ u8 acpi_gbl_aml_short_op_info_index[256] =
 };
 
 
-u8 acpi_gbl_aml_long_op_info_index[NUM_EXTENDED_OPCODE] =
+static u8 aml_long_op_info_index[NUM_EXTENDED_OPCODE] =
 {
 /*              0     1     2     3     4     5     6     7  */
 /* 0x00 */    _UNK, 0x46, 0x47, _UNK, _UNK, _UNK, _UNK, _UNK,
@@ -602,5 +493,110 @@ u8 acpi_gbl_aml_long_op_info_index[NUM_EXTENDED_OPCODE] =
 
 /*              0     1     2     3     4     5     6     7  */
 /* 0x00 */
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ps_get_opcode_info
+ *
+ * PARAMETERS:  Opcode              - The AML opcode
+ *
+ * RETURN:      A pointer to the info about the opcode.  NULL if the opcode was
+ *              not found in the table.
+ *
+ * DESCRIPTION: Find AML opcode description based on the opcode.
+ *              NOTE: This procedure must ALWAYS return a valid pointer!
+ *
+ ******************************************************************************/
+
+ACPI_OPCODE_INFO *
+acpi_ps_get_opcode_info (
+	u16                     opcode)
+{
+	ACPI_OPCODE_INFO        *op_info;
+	u8                      upper_opcode;
+	u8                      lower_opcode;
+
+
+	/* Split the 16-bit opcode into separate bytes */
+
+	upper_opcode = (u8) (opcode >> 8);
+	lower_opcode = (u8) opcode;
+
+	/* Default is "unknown opcode" */
+
+	op_info = &aml_op_info [_UNK];
+
+
+	/*
+	 * Detect normal 8-bit opcode or extended 16-bit opcode
+	 */
+
+	switch (upper_opcode)
+	{
+	case 0:
+
+		/* Simple (8-bit) opcode: 0-255, can't index beyond table  */
+
+		op_info = &aml_op_info [aml_short_op_info_index [lower_opcode]];
+		break;
+
+
+	case AML_EXTOP:
+
+		/* Extended (16-bit, prefix+opcode) opcode */
+
+		if (lower_opcode <= MAX_EXTENDED_OPCODE) {
+			op_info = &aml_op_info [aml_long_op_info_index [lower_opcode]];
+		}
+		break;
+
+
+	case AML_LNOT_OP:
+
+		/* This case is for the bogus opcodes LNOTEQUAL, LLESSEQUAL, LGREATEREQUAL */
+		/* TBD: [Investigate] remove this case? */
+
+		break;
+
+
+	default:
+
+		break;
+	}
+
+
+	/* Get the Op info pointer for this opcode */
+
+	return (op_info);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ps_get_opcode_name
+ *
+ * PARAMETERS:  Opcode              - The AML opcode
+ *
+ * RETURN:      A pointer to the name of the opcode (ASCII String)
+ *              Note: Never returns NULL.
+ *
+ * DESCRIPTION: Translate an opcode into a human-readable string
+ *
+ ******************************************************************************/
+
+NATIVE_CHAR *
+acpi_ps_get_opcode_name (
+	u16                     opcode)
+{
+	ACPI_OPCODE_INFO             *op;
+
+
+	op = acpi_ps_get_opcode_info (opcode);
+
+	/* Always guaranteed to return a valid pointer */
+
+	return ("AE_NOT_CONFIGURED");
+}
 
 

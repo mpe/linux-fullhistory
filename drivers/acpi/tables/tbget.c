@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: tbget - ACPI Table get* routines
- *              $Revision: 22 $
+ *              $Revision: 40 $
  *
  *****************************************************************************/
 
@@ -32,6 +32,7 @@
 #define _COMPONENT          TABLE_MANAGER
 	 MODULE_NAME         ("tbget")
 
+#define RSDP_CHECKSUM_LENGTH 20
 
 /*******************************************************************************
  *
@@ -127,7 +128,7 @@ acpi_tb_get_table_ptr (
 
 ACPI_STATUS
 acpi_tb_get_table (
-	void                    *physical_address,
+	ACPI_PHYSICAL_ADDRESS   physical_address,
 	ACPI_TABLE_HEADER       *buffer_ptr,
 	ACPI_TABLE_DESC         *table_info)
 {
@@ -239,9 +240,10 @@ acpi_tb_get_all_tables (
 
 		MEMSET (&table_info, 0, sizeof (ACPI_TABLE_DESC));
 
-		/* Get the table via the RSDT */
+		/* Get the table via the XSDT */
 
-		status = acpi_tb_get_table ((void *) acpi_gbl_RSDT->table_offset_entry[index],
+		status = acpi_tb_get_table ((ACPI_PHYSICAL_ADDRESS)
+				 acpi_gbl_XSDT->table_offset_entry[index],
 				 table_ptr, &table_info);
 
 		/* Ignore a table that failed verification */
@@ -266,15 +268,25 @@ acpi_tb_get_all_tables (
 			 * determine if there are enough tables to continue.
 			 */
 
-			acpi_tb_delete_single_table (&table_info);
+			acpi_tb_uninstall_table (&table_info);
 		}
+	}
+
+
+	/*
+	 * Convert the FADT to a common format.  This allows earlier revisions of the
+	 * table to coexist with newer versions, using common access code.
+	 */
+	status = acpi_tb_convert_table_fadt ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
 	}
 
 
 	/*
 	 * Get the minimum set of ACPI tables, namely:
 	 *
-	 * 1) FACP (via RSDT in loop above)
+	 * 1) FADT (via RSDT in loop above)
 	 * 2) FACS
 	 * 3) DSDT
 	 *
@@ -282,14 +294,15 @@ acpi_tb_get_all_tables (
 
 
 	/*
-	 * Get the FACS (must have the FACP first, from loop above)
-	 * Acpi_tb_get_table_facs will fail if FACP pointer is not valid
+	 * Get the FACS (must have the FADT first, from loop above)
+	 * Acpi_tb_get_table_facs will fail if FADT pointer is not valid
 	 */
 
 	status = acpi_tb_get_table_facs (table_ptr, &table_info);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
+
 
 	/* Install the FACS */
 
@@ -298,10 +311,22 @@ acpi_tb_get_all_tables (
 		return (status);
 	}
 
+	/*
+	 * Create the common FACS pointer table
+	 * (Contains pointers to the original table)
+	 */
 
-	/* Get the DSDT (We know that the FACP if valid now) */
+	status = acpi_tb_build_common_facs (&table_info);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
 
-	status = acpi_tb_get_table ((void *) acpi_gbl_FACP->dsdt, table_ptr, &table_info);
+
+	/*
+	 * Get the DSDT (We know that the FADT is valid now)
+	 */
+
+	status = acpi_tb_get_table (acpi_gbl_FADT->Xdsdt, table_ptr, &table_info);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -321,8 +346,264 @@ acpi_tb_get_all_tables (
 	 * Initialize the capabilities flags.
 	 * Assumes that platform supports ACPI_MODE since we have tables!
 	 */
-
 	acpi_gbl_system_flags |= acpi_hw_get_mode_capabilities ();
+
+
+	/* Always delete the RSDP mapping, we are done with it */
+
+	acpi_tb_delete_acpi_table (ACPI_TABLE_RSDP);
+
+	return (status);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_tb_verify_rsdp
+ *
+ * PARAMETERS:  Number_of_tables    - Where the table count is placed
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Load and validate the RSDP (ptr) and RSDT (table)
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_tb_verify_rsdp (
+	ACPI_PHYSICAL_ADDRESS   rsdp_physical_address)
+{
+	ACPI_TABLE_DESC         table_info;
+	ACPI_STATUS             status;
+	u8                      *table_ptr;
+
+
+	/*
+	 * Obtain access to the RSDP structure
+	 */
+	status = acpi_os_map_memory (rsdp_physical_address,
+			  sizeof (RSDP_DESCRIPTOR),
+			  (void **) &table_ptr);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	/*
+	 *  The signature and checksum must both be correct
+	 */
+	if (STRNCMP ((NATIVE_CHAR *) table_ptr, RSDP_SIG, sizeof (RSDP_SIG)-1) != 0) {
+		/* Nope, BAD Signature */
+
+		status = AE_BAD_SIGNATURE;
+		goto cleanup;
+	}
+
+	if (acpi_tb_checksum (table_ptr, RSDP_CHECKSUM_LENGTH) != 0) {
+		/* Nope, BAD Checksum */
+
+		status = AE_BAD_CHECKSUM;
+		goto cleanup;
+	}
+
+	/* TBD: Check extended checksum if table version >= 2 */
+
+	/* The RSDP supplied is OK */
+
+	table_info.pointer     = (ACPI_TABLE_HEADER *) table_ptr;
+	table_info.length      = sizeof (RSDP_DESCRIPTOR);
+	table_info.allocation  = ACPI_MEM_MAPPED;
+	table_info.base_pointer = table_ptr;
+
+	/* Save the table pointers and allocation info */
+
+	status = acpi_tb_init_table_descriptor (ACPI_TABLE_RSDP, &table_info);
+	if (ACPI_FAILURE (status)) {
+		goto cleanup;
+	}
+
+
+	/* Save the RSDP in a global for easy access */
+
+	acpi_gbl_RSDP = (RSDP_DESCRIPTOR *) table_info.pointer;
+	return (status);
+
+
+	/* Error exit */
+cleanup:
+
+	acpi_os_unmap_memory (table_ptr, sizeof (RSDP_DESCRIPTOR));
+	return (status);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_tb_get_table_rsdt
+ *
+ * PARAMETERS:  Number_of_tables    - Where the table count is placed
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Load and validate the RSDP (ptr) and RSDT (table)
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_tb_get_table_rsdt (
+	u32                     *number_of_tables)
+{
+	ACPI_TABLE_DESC         table_info;
+	ACPI_STATUS             status = AE_OK;
+	ACPI_PHYSICAL_ADDRESS   physical_address;
+	u32                     signature_length;
+	char                    *table_signature;
+
+
+	/*
+	 * Get the RSDT from the RSDP
+	 */
+
+	/*
+	 * For RSDP revision 0 or 1, we use the RSDT.
+	 * For RSDP revision 2 (and above), we use the XSDT
+	 */
+	if (acpi_gbl_RSDP->revision < 2) {
+#ifdef _IA64
+		/* 0.71 RSDP has 64bit Rsdt address field */
+		physical_address = ((RSDP_DESCRIPTOR_REV071 *)acpi_gbl_RSDP)->rsdt_physical_address;
+#else
+		physical_address = acpi_gbl_RSDP->rsdt_physical_address;
+#endif
+		table_signature = RSDT_SIG;
+		signature_length = sizeof (RSDT_SIG) -1;
+	}
+	else {
+		physical_address = (ACPI_PHYSICAL_ADDRESS) acpi_gbl_RSDP->xsdt_physical_address;
+		table_signature = XSDT_SIG;
+		signature_length = sizeof (XSDT_SIG) -1;
+	}
+
+
+	/* Get the RSDT/XSDT */
+
+	status = acpi_tb_get_table (physical_address, NULL, &table_info);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+
+	/* Check the RSDT or XSDT signature */
+
+	if (STRNCMP ((char *) table_info.pointer, table_signature,
+			  signature_length))
+	{
+		/* Invalid RSDT or XSDT signature */
+
+		REPORT_ERROR (("Invalid signature where RSDP indicates %s should be located\n",
+				  table_signature));
+
+		return (status);
+	}
+
+
+	/* Valid RSDT signature, verify the checksum */
+
+	status = acpi_tb_verify_table_checksum (table_info.pointer);
+
+
+	/* Convert and/or copy to an XSDT structure */
+
+	status = acpi_tb_convert_to_xsdt (&table_info, number_of_tables);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	/* Save the table pointers and allocation info */
+
+	status = acpi_tb_init_table_descriptor (ACPI_TABLE_XSDT, &table_info);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	acpi_gbl_XSDT = (XSDT_DESCRIPTOR *) table_info.pointer;
+
+	return (status);
+}
+
+
+/******************************************************************************
+ *
+ * FUNCTION:    Acpi_tb_get_table_facs
+ *
+ * PARAMETERS:  *Buffer_ptr             - If Buffer_ptr is valid, read data from
+ *                                          buffer rather than searching memory
+ *              *Table_info             - Where the table info is returned
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Returns a pointer to the FACS as defined in FADT.  This
+ *              function assumes the global variable FADT has been
+ *              correctly initialized.  The value of FADT->Firmware_ctrl
+ *              into a far pointer which is returned.
+ *
+ *****************************************************************************/
+
+ACPI_STATUS
+acpi_tb_get_table_facs (
+	ACPI_TABLE_HEADER       *buffer_ptr,
+	ACPI_TABLE_DESC         *table_info)
+{
+	void                    *table_ptr = NULL;
+	u32                     size;
+	u8                      allocation;
+	ACPI_STATUS             status = AE_OK;
+
+
+	/* Must have a valid FADT pointer */
+
+	if (!acpi_gbl_FADT) {
+		return (AE_NO_ACPI_TABLES);
+	}
+
+	size = sizeof (FACS_DESCRIPTOR);
+	if (buffer_ptr) {
+		/*
+		 * Getting table from a file -- allocate a buffer and
+		 * read the table.
+		 */
+		table_ptr = acpi_cm_allocate (size);
+		if(!table_ptr) {
+			return (AE_NO_MEMORY);
+		}
+
+		MEMCPY (table_ptr, buffer_ptr, size);
+
+		/* Save allocation type */
+
+		allocation = ACPI_MEM_ALLOCATED;
+	}
+
+	else {
+		/* Just map the physical memory to our address space */
+
+		status = acpi_tb_map_acpi_table (acpi_gbl_FADT->Xfirmware_ctrl,
+				   &size, &table_ptr);
+		if (ACPI_FAILURE(status)) {
+			return (status);
+		}
+
+		/* Save allocation type */
+
+		allocation = ACPI_MEM_MAPPED;
+	}
+
+
+	/* Return values */
+
+	table_info->pointer     = table_ptr;
+	table_info->length      = size;
+	table_info->allocation  = allocation;
+	table_info->base_pointer = table_ptr;
 
 	return (status);
 }

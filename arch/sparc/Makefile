@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.47 2000/07/15 00:04:27 davem Exp $
+# $Id: Makefile,v 1.48 2000/12/15 00:41:24 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -35,7 +35,7 @@ LINKFLAGS = -T arch/sparc/vmlinux.lds
 
 HEAD := arch/sparc/kernel/head.o arch/sparc/kernel/init_task.o
 
-SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/prom \
+SUBDIRS += arch/sparc/kernel arch/sparc/lib arch/sparc/prom \
 	arch/sparc/mm arch/sparc/math-emu
 
 CORE_FILES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(CORE_FILES) \

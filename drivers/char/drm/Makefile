@@ -37,40 +37,50 @@ else
  endif
 endif
 
-gamma-objs := $(lib-objs) gamma_drv.o gamma_dma.o
-tdfx-objs  := $(lib-objs) tdfx_drv.o                tdfx_context.o
-r128-objs  := $(lib-objs) r128_drv.o  r128_dma.o    r128_context.o r128_bufs.o
-ffb-objs   := $(lib-objs) ffb_drv.o                 ffb_context.o
-mga-objs   := $(lib-objs) mga_drv.o   mga_dma.o     mga_context.o  mga_bufs.o \
-	      mga_state.o
-i810-objs  := $(lib-objs) i810_drv.o  i810_dma.o    i810_context.o i810_bufs.o
+gamma-objs := gamma_drv.o gamma_dma.o
+tdfx-objs  := tdfx_drv.o                tdfx_context.o
+r128-objs  := r128_drv.o  r128_dma.o    r128_context.o r128_bufs.o
+ffb-objs   := ffb_drv.o                 ffb_context.o
+mga-objs   := mga_drv.o   mga_dma.o     mga_context.o  mga_bufs.o  mga_state.o
+i810-objs  := i810_drv.o  i810_dma.o    i810_context.o i810_bufs.o
 
 obj-$(CONFIG_DRM_GAMMA) += gamma.o
 obj-$(CONFIG_DRM_TDFX)  += tdfx.o
 obj-$(CONFIG_DRM_R128)  += r128.o
 obj-$(CONFIG_DRM_FFB)   += ffb.o
-
-ifneq ($CONFIG_AGP),)
 obj-$(CONFIG_DRM_MGA)   += mga.o
 obj-$(CONFIG_DRM_I810)  += i810.o
+
+
+# When linking into the kernel, link the library just once. 
+# If making modules, we include the library into each module
+
+ifdef MAKING_MODULES
+  lib = drmlib.a
+else
+  obj-y += drmlib.a
 endif
 
 include $(TOPDIR)/Rules.make
 
-gamma.o: $(gamma-objs)
-	$(LD) -r -o $@ $(gamma-objs)
+drmlib.a: $(lib-objs)
+	rm -f $@
+	$(AR) $(EXTRA_ARFLAGS) rcs $@ $(lib-objs)
 
-tdfx.o: $(tdfx-objs)
-	$(LD) -r -o $@ $(tdfx-objs)
+gamma.o: $(gamma-objs) $(lib)
+	$(LD) -r -o $@ $(gamma-objs) $(lib)
 
-mga.o: $(mga-objs)
-	$(LD) -r -o $@ $(mga-objs)
+tdfx.o: $(tdfx-objs) $(lib)
+	$(LD) -r -o $@ $(tdfx-objs) $(lib)
 
-i810.o: $(i810-objs)
-	$(LD) -r -o $@ $(i810-objs)
+mga.o: $(mga-objs) $(lib)
+	$(LD) -r -o $@ $(mga-objs) $(lib)
 
-r128.o: $(r128-objs)
-	$(LD) -r -o $@ $(r128-objs)
+i810.o: $(i810-objs) $(lib)
+	$(LD) -r -o $@ $(i810-objs) $(lib)
 
-ffb.o: $(ffb-objs)
-	$(LD) -r -o $@ $(ffb-objs)
+r128.o: $(r128-objs) $(lib)
+	$(LD) -r -o $@ $(r128-objs) $(lib)
+
+ffb.o: $(ffb-objs) $(lib)
+	$(LD) -r -o $@ $(ffb-objs) $(lib)

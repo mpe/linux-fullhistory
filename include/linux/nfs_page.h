@@ -33,8 +33,8 @@ struct nfs_page {
 	unsigned long		wb_timeout;	/* when to read/write/commit */
 	unsigned int		wb_offset,	/* Offset of read/write */
 				wb_bytes,	/* Length of request */
-				wb_count,	/* reference count */
-				wb_flags;
+				wb_count;	/* reference count */
+	unsigned long		wb_flags;
 	struct nfs_writeverf	wb_verf;	/* Commit cookie */
 };
 

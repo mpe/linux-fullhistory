@@ -1,12 +1,12 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsaddr - Acpi_rs_address16_resource
  *                       Acpi_rs_address16_stream
  *                       Acpi_rs_address32_resource
  *                       Acpi_rs_address32_stream
- *              $Revision: 9 $
+ *              $Revision: 12 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -28,16 +28,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsaddr")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_address16_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                              stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -53,7 +54,7 @@
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_address16_resource (
@@ -253,11 +254,11 @@ acpi_rs_address16_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_address16_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -268,7 +269,7 @@ acpi_rs_address16_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_address16_stream (
@@ -350,7 +351,6 @@ acpi_rs_address16_stream (
 	 */
 	MOVE_UNALIGNED16_TO_16 (buffer,
 			 &linked_list->data.address16.min_address_range);
-
 	buffer += 2;
 
 	/*
@@ -358,7 +358,6 @@ acpi_rs_address16_stream (
 	 */
 	MOVE_UNALIGNED16_TO_16 (buffer,
 			 &linked_list->data.address16.max_address_range);
-
 	buffer += 2;
 
 	/*
@@ -366,7 +365,6 @@ acpi_rs_address16_stream (
 	 */
 	MOVE_UNALIGNED16_TO_16 (buffer,
 			  &linked_list->data.address16.address_translation_offset);
-
 	buffer += 2;
 
 	/*
@@ -374,7 +372,6 @@ acpi_rs_address16_stream (
 	 */
 	MOVE_UNALIGNED16_TO_16 (buffer,
 			 &linked_list->data.address16.address_length);
-
 	buffer += 2;
 
 	/*
@@ -418,11 +415,12 @@ acpi_rs_address16_stream (
 	return (AE_OK);
 }
 
-/***************************************************************************
+
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_address32_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -438,7 +436,7 @@ acpi_rs_address16_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_address32_resource (
@@ -641,11 +639,11 @@ acpi_rs_address32_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_address32_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -656,7 +654,7 @@ acpi_rs_address32_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_address32_stream (
@@ -676,7 +674,6 @@ acpi_rs_address32_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x87;
-
 	buffer += 1;
 
 	/*
@@ -684,7 +681,6 @@ acpi_rs_address32_stream (
 	 */
 
 	length_field = (u16 *)buffer;
-
 	buffer += 2;
 
 	/*
@@ -693,22 +689,17 @@ acpi_rs_address32_stream (
 	temp8 = (u8) (linked_list->data.address32.resource_type & 0x03);
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
 	 * Set the general flags
 	 */
 	temp8 = (u8) (linked_list->data.address32.producer_consumer & 0x01);
-
 	temp8 |= (linked_list->data.address32.decode & 0x01) << 1;
-
 	temp8 |= (linked_list->data.address32.min_address_fixed & 0x01) << 2;
-
 	temp8 |= (linked_list->data.address32.max_address_fixed & 0x01) << 3;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -747,7 +738,6 @@ acpi_rs_address32_stream (
 	 */
 	MOVE_UNALIGNED32_TO_32 (buffer,
 			 &linked_list->data.address32.min_address_range);
-
 	buffer += 4;
 
 	/*
@@ -755,7 +745,6 @@ acpi_rs_address32_stream (
 	 */
 	MOVE_UNALIGNED32_TO_32 (buffer,
 			 &linked_list->data.address32.max_address_range);
-
 	buffer += 4;
 
 	/*
@@ -763,7 +752,6 @@ acpi_rs_address32_stream (
 	 */
 	MOVE_UNALIGNED32_TO_32 (buffer,
 			  &linked_list->data.address32.address_translation_offset);
-
 	buffer += 4;
 
 	/*
@@ -771,7 +759,6 @@ acpi_rs_address32_stream (
 	 */
 	MOVE_UNALIGNED32_TO_32 (buffer,
 			 &linked_list->data.address32.address_length);
-
 	buffer += 4;
 
 	/*
@@ -781,7 +768,6 @@ acpi_rs_address32_stream (
 		temp8 = (u8) linked_list->data.address32.resource_source_index;
 
 		*buffer = temp8;
-
 		buffer += 1;
 
 		temp_pointer = (NATIVE_CHAR *) buffer;

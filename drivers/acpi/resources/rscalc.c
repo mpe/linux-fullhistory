@@ -1,10 +1,10 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rscalc - Acpi_rs_calculate_byte_stream_length
  *                       Acpi_rs_calculate_list_length
- *              $Revision: 9 $
+ *              $Revision: 16 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -26,16 +26,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rscalc")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_calculate_byte_stream_length
  *
- * PARAMETERS:
- *              Linked_list         - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list         - Pointer to the resource linked list
  *              Size_needed         - u32 pointer of the size buffer needed
  *                                      to properly return the parsed data
  *
@@ -45,7 +46,7 @@
  *              the size buffer needed to hold the linked list that conveys
  *              the resource data.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_calculate_byte_stream_length (
@@ -279,15 +280,14 @@ acpi_rs_calculate_byte_stream_length (
 	*size_needed = byte_stream_size_needed;
 
 	return (AE_OK);
+}
 
-} /* Acpi_rs_calculate_byte_stream_length */
 
-
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_calculate_list_length
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource byte stream
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource byte stream
  *              Byte_stream_buffer_length - Size of Byte_stream_buffer
  *              Size_needed             - u32 pointer of the size buffer
  *                                          needed to properly return the
@@ -299,7 +299,7 @@ acpi_rs_calculate_byte_stream_length (
  *              the size buffer needed to hold the linked list that conveys
  *              the resource data.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_calculate_list_length (
@@ -344,7 +344,6 @@ acpi_rs_calculate_list_length (
 
 				structure_size = sizeof (MEMORY24_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA;
-
 				break;
 
 			case LARGE_VENDOR_DEFINED:
@@ -481,7 +480,6 @@ acpi_rs_calculate_list_length (
 				 *  Interrupt table length to the Temp8 variable.
 				 */
 				buffer += 3;
-
 				temp8 = *buffer;
 
 				/*
@@ -521,7 +519,7 @@ acpi_rs_calculate_list_length (
 
 				break;
 
-/* 64-bit not currently supported */
+/* TBD: [Future] 64-bit not currently supported */
 /*
 			case 0x8A:
 				break;
@@ -555,7 +553,6 @@ acpi_rs_calculate_list_length (
 				 *  trailing bytes
 				 */
 				buffer = byte_stream_buffer;
-
 				temp8 = *buffer;
 
 				if(temp8 & 0x01) {
@@ -587,7 +584,6 @@ acpi_rs_calculate_list_length (
 				structure_size = sizeof (IO_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA +
 						  (number_of_interrupts * sizeof (u32));
-
 				break;
 
 
@@ -621,7 +617,6 @@ acpi_rs_calculate_list_length (
 				structure_size = sizeof (DMA_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA +
 						  (number_of_channels * sizeof (u32));
-
 				break;
 
 
@@ -634,7 +629,6 @@ acpi_rs_calculate_list_length (
 				 * Determine if it there are two or three trailing bytes
 				 */
 				buffer = byte_stream_buffer;
-
 				temp8 = *buffer;
 
 				if(temp8 & 0x01) {
@@ -657,7 +651,6 @@ acpi_rs_calculate_list_length (
 				 * End Dependent Functions Resource
 				 */
 				bytes_consumed = 1;
-
 				structure_size = RESOURCE_LENGTH;
 				break;
 
@@ -667,7 +660,6 @@ acpi_rs_calculate_list_length (
 				 * IO Port Resource
 				 */
 				bytes_consumed = 8;
-
 				structure_size = sizeof (IO_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA;
 				break;
@@ -679,7 +671,6 @@ acpi_rs_calculate_list_length (
 				 * Fixed IO Port Resource
 				 */
 				bytes_consumed = 4;
-
 				structure_size = sizeof (FIXED_IO_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA;
 				break;
@@ -700,7 +691,6 @@ acpi_rs_calculate_list_length (
 				 * Ensure a 32-bit boundry for the structure
 				 */
 				temp8 = (u8) ROUND_UP_TO_32_bITS (temp8);
-
 				structure_size = sizeof (VENDOR_RESOURCE) +
 						  RESOURCE_LENGTH_NO_DATA +
 						  (temp8 * sizeof (u8));
@@ -713,7 +703,6 @@ acpi_rs_calculate_list_length (
 				 * End Tag
 				 */
 				bytes_consumed = 2;
-
 				structure_size = RESOURCE_LENGTH;
 				break;
 
@@ -749,14 +738,14 @@ acpi_rs_calculate_list_length (
 	*size_needed = buffer_size;
 
 	return (AE_OK);
+}
 
-} /* Acpi_rs_calculate_list_length */
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_calculate_pci_routing_table_length
  *
- * PARAMETERS:
- *              Package_object          - Pointer to the package object
+ * PARAMETERS:  Package_object          - Pointer to the package object
  *              Buffer_size_needed      - u32 pointer of the size buffer
  *                                          needed to properly return the
  *                                          parsed data
@@ -767,17 +756,22 @@ acpi_rs_calculate_list_length (
  *                calculates the size of the corresponding linked list of
  *                descriptions.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_calculate_pci_routing_table_length (
 	ACPI_OPERAND_OBJECT     *package_object,
 	u32                     *buffer_size_needed)
 {
-	u32                      number_of_elements;
-	u32                      temp_size_needed;
-	ACPI_OPERAND_OBJECT      **top_object_list;
-	u32                      index;
+	u32                     number_of_elements;
+	u32                     temp_size_needed = 0;
+	ACPI_OPERAND_OBJECT     **top_object_list;
+	u32                     index;
+	ACPI_OPERAND_OBJECT     *package_element;
+	ACPI_OPERAND_OBJECT     **sub_object_list;
+	u8                      name_found;
+	u32                     table_index;
+
 
 	number_of_elements = package_object->package.count;
 
@@ -791,8 +785,6 @@ acpi_rs_calculate_pci_routing_table_length (
 	 * NOTE: The Number_of_elements is incremented by one to add an end
 	 * table structure that is essentially a structure of zeros.
 	 */
-	temp_size_needed = (number_of_elements + 1) *
-			  (sizeof (PCI_ROUTING_TABLE) - 1);
 
 	/*
 	 * But each PRT_ENTRY structure has a pointer to a string and
@@ -801,11 +793,6 @@ acpi_rs_calculate_pci_routing_table_length (
 	top_object_list = package_object->package.elements;
 
 	for (index = 0; index < number_of_elements; index++) {
-		ACPI_OPERAND_OBJECT     *package_element;
-		ACPI_OPERAND_OBJECT     **sub_object_list;
-		u8                      name_found;
-		u32                     table_index;
-
 		/*
 		 * Dereference the sub-package
 		 */
@@ -835,6 +822,8 @@ acpi_rs_calculate_pci_routing_table_length (
 			}
 		}
 
+		temp_size_needed += (sizeof (PCI_ROUTING_TABLE) - 1);
+
 		/*
 		 * Was a String type found?
 		 */
@@ -844,7 +833,6 @@ acpi_rs_calculate_pci_routing_table_length (
 			 * terminating NULL
 			 */
 			temp_size_needed += (*sub_object_list)->string.length;
-			temp_size_needed = ROUND_UP_TO_32_bITS (temp_size_needed);
 		}
 
 		else {
@@ -855,13 +843,19 @@ acpi_rs_calculate_pci_routing_table_length (
 			temp_size_needed += sizeof(u32);
 		}
 
+
+		/* Round up the size since each element must be aligned */
+
+		temp_size_needed = ROUND_UP_TO_64_bITS (temp_size_needed);
+
 		/*
 		 * Point to the next ACPI_OPERAND_OBJECT
 		 */
 		top_object_list++;
 	}
 
-	*buffer_size_needed = temp_size_needed;
+
+	*buffer_size_needed = temp_size_needed + sizeof (PCI_ROUTING_TABLE);
 
 	return (AE_OK);
 }

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Name: acobject.h - Definition of ACPI_OPERAND_OBJECT  (Internal object only)
- *       $Revision: 71 $
+ *       $Revision: 75 $
  *
  *****************************************************************************/
 
@@ -58,7 +58,7 @@
  */
 
 
-#define ACPI_OBJECT_COMMON_HEADER           /* Two 32-bit fields, one pointer, 8-bit flag */\
+#define ACPI_OBJECT_COMMON_HEADER           /* 32-bits plus 8-bit flag */\
 	u8                          data_type;          /* To differentiate various internal objs */\
 	u8                          type;               /* ACPI_OBJECT_TYPE */\
 	u16                         reference_count;    /* For object deletion management */\
@@ -74,7 +74,7 @@
 /*
  * Common bitfield for the field objects
  */
-#define ACPI_COMMON_FIELD_INFO              /* Three 32-bit values */\
+#define ACPI_COMMON_FIELD_INFO              /* Three 32-bit values plus 8*/\
 	u8                          granularity;\
 	u16                         length; \
 	u32                         offset;             /* Byte offset within containing object */\
@@ -111,7 +111,7 @@ typedef struct /* NUMBER - has value */
 {
 	ACPI_OBJECT_COMMON_HEADER
 
-	u32                         value;
+	ACPI_INTEGER                value;
 
 } ACPI_OBJECT_NUMBER;
 
@@ -155,8 +155,9 @@ typedef struct /* FIELD UNIT */
 	ACPI_OBJECT_COMMON_HEADER
 
 	ACPI_COMMON_FIELD_INFO
-	u32                         sequence;           /* Container's sequence number */
 
+	union acpi_operand_obj      *extra;             /* Pointer to executable AML (in field definition) */
+	ACPI_NAMESPACE_NODE         *node;              /* containing object */
 	union acpi_operand_obj      *container;         /* Containing object (Buffer) */
 
 } ACPI_OBJECT_FIELD_UNIT;
@@ -218,16 +219,10 @@ typedef struct /* REGION */
 
 	u8                          space_id;
 	u32                         length;
-	u32                         address;
-	void                        *region_context;    /* Region Specific data (Handler->Context
-			  optional things like PCI _ADR) */
-
-	/* TBD: [Restructure] This field can go away when Pass3 is implemented */
-	union acpi_operand_obj      *method;            /* Associated control method */
-
+	ACPI_PHYSICAL_ADDRESS       address;
+	union acpi_operand_obj      *extra;             /* Pointer to executable AML (in region definition) */
 
 	union acpi_operand_obj      *addr_handler;      /* Handler for system notifies */
-	ACPI_NAMESPACE_NODE         *REGmethod;         /* _REG method for this region (if any) */
 	ACPI_NAMESPACE_NODE         *node;              /* containing object */
 	union acpi_operand_obj      *next;
 
@@ -372,6 +367,27 @@ typedef struct /* Reference - Local object type */
 } ACPI_OBJECT_REFERENCE;
 
 
+/*
+ * Extra object is used as additional storage for types that
+ * have AML code in their declarations (Term_args) that must be
+ * evaluated at run time.
+ *
+ * Currently: Region and Field_unit types
+ */
+
+typedef struct /* EXTRA */
+{
+	ACPI_OBJECT_COMMON_HEADER
+	u8                          byte_fill1;
+	u16                         word_fill1;
+	u32                         pcode_length;
+	u8                          *pcode;
+	ACPI_NAMESPACE_NODE         *method_REG;        /* _REG method for this region (if any) */
+	void                        *region_context;    /* Region-specific data */
+
+} ACPI_OBJECT_EXTRA;
+
+
 /******************************************************************************
  *
  * ACPI_OPERAND_OBJECT  Descriptor - a giant union of all of the above
@@ -401,6 +417,7 @@ typedef union acpi_operand_obj
 	ACPI_OBJECT_REFERENCE       reference;
 	ACPI_OBJECT_NOTIFY_HANDLER  notify_handler;
 	ACPI_OBJECT_ADDR_HANDLER    addr_handler;
+	ACPI_OBJECT_EXTRA           extra;
 
 } ACPI_OPERAND_OBJECT;
 

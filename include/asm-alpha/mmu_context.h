@@ -11,7 +11,6 @@
 #include <asm/system.h>
 #include <asm/machvec.h>
 
-
 /*
  * Force a context reload. This is needed when we change the page
  * table pointer or when we update the ASN of the current process.
@@ -93,12 +92,7 @@ extern unsigned long last_asn;
 #endif /* CONFIG_SMP */
 
 #define WIDTH_HARDWARE_ASN	8
-#ifdef CONFIG_SMP
-#define WIDTH_THIS_PROCESSOR	5
-#else
-#define WIDTH_THIS_PROCESSOR	0
-#endif
-#define ASN_FIRST_VERSION (1UL << (WIDTH_THIS_PROCESSOR + WIDTH_HARDWARE_ASN))
+#define ASN_FIRST_VERSION (1UL << WIDTH_HARDWARE_ASN)
 #define HARDWARE_ASN_MASK ((1UL << WIDTH_HARDWARE_ASN) - 1)
 
 /*
@@ -137,19 +131,24 @@ __EXTERN_INLINE void
 ev5_switch_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm,
 	      struct task_struct *next, long cpu)
 {
-	/* Check if our ASN is of an older version, or on a different CPU,
-	   and thus invalid.  */
-	/* ??? If we have two threads on different cpus, we'll continually
-	   fight over the context.  Find a way to record a per-mm, per-cpu
-	   value for the asn.  */
+	/* Check if our ASN is of an older version, and thus invalid. */
+	unsigned long asn;
+	unsigned long mmc;
 
-	unsigned long asn = cpu_last_asn(cpu);
-	unsigned long mmc = next_mm->context;
-	
+#ifdef CONFIG_SMP
+	cpu_data[cpu].asn_lock = 1;
+	barrier();
+#endif
+	asn = cpu_last_asn(cpu);
+	mmc = next_mm->context[cpu];
 	if ((mmc ^ asn) & ~HARDWARE_ASN_MASK) {
 		mmc = __get_new_mm_context(next_mm, cpu);
-		next_mm->context = mmc;
+		next_mm->context[cpu] = mmc;
 	}
+#ifdef CONFIG_SMP
+	else
+		cpu_data[cpu].need_new_asn = 1;
+#endif
 
 	/* Always update the PCB ASN.  Another thread may have allocated
 	   a new mm->context (via flush_tlb_mm) without the ASN serial
@@ -178,6 +177,23 @@ ev4_switch_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm,
 }
 
 extern void __load_new_mm_context(struct mm_struct *);
+
+#ifdef CONFIG_SMP
+#define check_mmu_context()					\
+do {								\
+	int cpu = smp_processor_id();				\
+	cpu_data[cpu].asn_lock = 0;				\
+	barrier();						\
+	if (cpu_data[cpu].need_new_asn) {			\
+		struct mm_struct * mm = current->active_mm;	\
+		cpu_data[cpu].need_new_asn = 0;			\
+		if (!mm->context[cpu])			\
+			__load_new_mm_context(mm);		\
+	}							\
+} while(0)
+#else
+#define check_mmu_context()  do { } while(0)
+#endif
 
 __EXTERN_INLINE void
 ev5_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
@@ -208,7 +224,10 @@ ev4_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
 extern inline int
 init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
-	mm->context = 0;
+	int i;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		mm->context[cpu_logical_map(i)] = 0;
         tsk->thread.ptbr = ((unsigned long)mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
 	return 0;
 }

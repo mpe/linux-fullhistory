@@ -694,6 +694,11 @@ static void __init do_boot_cpu (int apicid)
 		apic_write_around(APIC_ICR, APIC_DM_STARTUP
 					| (start_eip >> 12));
 
+		/*
+		 * Give the other CPU some time to accept the IPI.
+		 */
+		udelay(300);
+
 		Dprintk("Startup point 1.\n");
 
 		Dprintk("Waiting for send to finish...\n");

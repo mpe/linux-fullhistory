@@ -12,8 +12,6 @@ lvm-mod-objs	:= lvm.o lvm-snap.o
 # and xor.o must come before md.o, as they each initialise 
 # themselves, and md.o may use the personalities when it 
 # auto-initialised.
-# The use of MIX_OBJS allows link order to be maintained even
-# though some are export-objs and some aren't.
 
 obj-$(CONFIG_MD_LINEAR)		+= linear.o
 obj-$(CONFIG_MD_RAID0)		+= raid0.o

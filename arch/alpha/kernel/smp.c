@@ -106,8 +106,9 @@ static inline void __init
 smp_store_cpu_info(int cpuid)
 {
 	cpu_data[cpuid].loops_per_sec = loops_per_sec;
-	cpu_data[cpuid].last_asn
-	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
+	cpu_data[cpuid].last_asn = ASN_FIRST_VERSION;
+	cpu_data[cpuid].need_new_asn = 0;
+	cpu_data[cpuid].asn_lock = 0;
 	local_irq_count(cpuid) = 0;
 	local_bh_count(cpuid) = 0;
 }
@@ -898,12 +899,16 @@ flush_tlb_all(void)
 	tbia();
 }
 
+#define asn_locked() (cpu_data[smp_processor_id()].asn_lock)
+
 static void
 ipi_flush_tlb_mm(void *x)
 {
 	struct mm_struct *mm = (struct mm_struct *) x;
-	if (mm == current->active_mm)
+	if (mm == current->active_mm && !asn_locked())
 		flush_tlb_current(mm);
+	else
+		flush_tlb_other(mm);
 }
 
 void
@@ -911,10 +916,18 @@ flush_tlb_mm(struct mm_struct *mm)
 {
 	if (mm == current->active_mm) {
 		flush_tlb_current(mm);
-		if (atomic_read(&mm->mm_users) <= 1)
+		if (atomic_read(&mm->mm_users) <= 1) {
+			int i, cpu, this_cpu = smp_processor_id();
+			for (i = 0; i < smp_num_cpus; i++) {
+				cpu = cpu_logical_map(i);
+				if (cpu == this_cpu)
+					continue;
+				if (mm->context[cpu])
+					mm->context[cpu] = 0;
+			}
 			return;
-	} else
-		flush_tlb_other(mm);
+		}
+	}
 
 	if (smp_call_function(ipi_flush_tlb_mm, mm, 1, 1)) {
 		printk(KERN_CRIT "flush_tlb_mm: timed out\n");
@@ -931,8 +944,12 @@ static void
 ipi_flush_tlb_page(void *x)
 {
 	struct flush_tlb_page_struct *data = (struct flush_tlb_page_struct *)x;
-	if (data->mm == current->active_mm)
-		flush_tlb_current_page(data->mm, data->vma, data->addr);
+	struct mm_struct * mm = data->mm;
+
+	if (mm == current->active_mm && !asn_locked())
+		flush_tlb_current_page(mm, data->vma, data->addr);
+	else
+		flush_tlb_other(mm);
 }
 
 void
@@ -943,10 +960,18 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 
 	if (mm == current->active_mm) {
 		flush_tlb_current_page(mm, vma, addr);
-		if (atomic_read(&mm->mm_users) <= 1)
+		if (atomic_read(&mm->mm_users) <= 1) {
+			int i, cpu, this_cpu = smp_processor_id();
+			for (i = 0; i < smp_num_cpus; i++) {
+				cpu = cpu_logical_map(i);
+				if (cpu == this_cpu)
+					continue;
+				if (mm->context[cpu])
+					mm->context[cpu] = 0;
+			}
 			return;
-	} else
-		flush_tlb_other(mm);
+		}
+	}
 
 	data.vma = vma;
 	data.mm = mm;
@@ -968,8 +993,10 @@ static void
 ipi_flush_icache_page(void *x)
 {
 	struct mm_struct *mm = (struct mm_struct *) x;
-	if (mm == current->active_mm)
+	if (mm == current->active_mm && !asn_locked())
 		__load_new_mm_context(mm);
+	else
+		flush_tlb_other(mm);
 }
 
 void
@@ -980,11 +1007,19 @@ flush_icache_page(struct vm_area_struct *vma, struct page *page)
 	if ((vma->vm_flags & VM_EXEC) == 0)
 		return;
 
-	mm->context = 0;
 	if (mm == current->active_mm) {
 		__load_new_mm_context(mm);
-		if (atomic_read(&mm->mm_users) <= 1)
+		if (atomic_read(&mm->mm_users) <= 1) {
+			int i, cpu, this_cpu = smp_processor_id();
+			for (i = 0; i < smp_num_cpus; i++) {
+				cpu = cpu_logical_map(i);
+				if (cpu == this_cpu)
+					continue;
+				if (mm->context[cpu])
+					mm->context[cpu] = 0;
+			}
 			return;
+		}
 	}
 
 	if (smp_call_function(ipi_flush_icache_page, mm, 1, 1)) {

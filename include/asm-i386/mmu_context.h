@@ -6,11 +6,9 @@
 #include <asm/atomic.h>
 #include <asm/pgalloc.h>
 
-/*
- * possibly do the LDT unload here?
- */
-#define destroy_context(mm)		do { } while(0)
-#define init_new_context(tsk,mm)	0
+/* Segment information */
+extern void destroy_context(struct mm_struct *);
+extern int init_new_context(struct task_struct *, struct mm_struct *);
 
 #ifdef CONFIG_SMP
 
@@ -33,7 +31,7 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, str
 		/*
 		 * Re-load LDT if necessary
 		 */
-		if (prev->segments != next->segments)
+		if (prev->context.segments != next->context.segments)
 			load_LDT(next);
 #ifdef CONFIG_SMP
 		cpu_tlbstate[cpu].state = TLBSTATE_OK;

@@ -16,10 +16,5 @@ obj-$(CONFIG_I2O_LAN)	+= i2o_lan.o
 obj-$(CONFIG_I2O_SCSI)	+= i2o_scsi.o
 obj-$(CONFIG_I2O_PROC)	+= i2o_proc.o
 
-O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
-
 include $(TOPDIR)/Rules.make
 

@@ -2,7 +2,7 @@
  *
  * Module Name: nsxfobj - Public interfaces to the ACPI subsystem
  *                         ACPI Object oriented interfaces
- *              $Revision: 65 $
+ *              $Revision: 75 $
  *
  ******************************************************************************/
 
@@ -28,6 +28,7 @@
 #include "acpi.h"
 #include "acinterp.h"
 #include "acnamesp.h"
+#include "acdispat.h"
 
 
 #define _COMPONENT          NAMESPACE
@@ -484,6 +485,8 @@ unlock_and_exit:
  *              Max_depth           - Depth to which search is to reach
  *              User_function       - Called when an object of "Type" is found
  *              Context             - Passed to user function
+ *              Return_value        - Location where return value of
+ *                                    User_function is put if terminated early
  *
  * RETURNS      Return value from the User_function if terminated early.
  *              Otherwise, returns NULL.
@@ -544,3 +547,151 @@ acpi_walk_namespace (
 }
 
 
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ns_get_device_callback
+ *
+ * PARAMETERS:  Callback from Acpi_get_device
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Takes callbacks from Walk_namespace and filters out all non-
+ *              present devices, or if they specified a HID, it filters based
+ *              on that.
+ *
+ ******************************************************************************/
+
+static ACPI_STATUS
+acpi_ns_get_device_callback (
+	ACPI_HANDLE             obj_handle,
+	u32                     nesting_level,
+	void                    *context,
+	void                    **return_value)
+{
+	ACPI_STATUS             status;
+	ACPI_NAMESPACE_NODE     *node;
+	u32                     flags;
+	DEVICE_ID               device_id;
+	ACPI_GET_DEVICES_INFO   *info;
+
+
+	info = context;
+
+	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
+
+	node = acpi_ns_convert_handle_to_entry (obj_handle);
+	if (!node) {
+		acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
+		return (AE_BAD_PARAMETER);
+	}
+
+	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
+
+	/*
+	 * Run _STA to determine if device is present
+	 */
+
+	status = acpi_cm_execute_STA (node, &flags);
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	if (!(flags & 0x01)) {
+		/* don't return at the device or children of the device if not there */
+
+		return (AE_CTRL_DEPTH);
+	}
+
+	/*
+	 * Filter based on device HID
+	 */
+	if (info->hid != NULL) {
+		status = acpi_cm_execute_HID (node, &device_id);
+
+		if (status == AE_NOT_FOUND) {
+			return (AE_OK);
+		}
+
+		else if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+
+		if (STRNCMP (device_id.buffer, info->hid, sizeof (device_id.buffer)) != 0) {
+			return (AE_OK);
+		}
+	}
+
+	info->user_function (obj_handle, nesting_level, info->context, return_value);
+
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_get_devices
+ *
+ * PARAMETERS:  HID                 - HID to search for. Can be NULL.
+ *              User_function       - Called when a matching object is found
+ *              Context             - Passed to user function
+ *              Return_value        - Location where return value of
+ *                                    User_function is put if terminated early
+ *
+ * RETURNS      Return value from the User_function if terminated early.
+ *              Otherwise, returns NULL.
+ *
+ * DESCRIPTION: Performs a modified depth-first walk of the namespace tree,
+ *              starting (and ending) at the object specified by Start_handle.
+ *              The User_function is called whenever an object that matches
+ *              the type parameter is found.  If the user function returns
+ *              a non-zero value, the search is terminated immediately and this
+ *              value is returned to the caller.
+ *
+ *              This is a wrapper for Walk_namespace, but the callback performs
+ *              additional filtering. Please see Acpi_get_device_callback.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_get_devices (
+	NATIVE_CHAR             *HID,
+	WALK_CALLBACK           user_function,
+	void                    *context,
+	void                    **return_value)
+{
+	ACPI_STATUS             status;
+	ACPI_GET_DEVICES_INFO   info;
+
+
+	/* Parameter validation */
+
+	if (!user_function) {
+		return (AE_BAD_PARAMETER);
+	}
+
+	/*
+	 * We're going to call their callback from OUR callback, so we need
+	 * to know what it is, and their context parameter.
+	 */
+	info.context      = context;
+	info.user_function = user_function;
+	info.hid          = HID;
+
+	/*
+	 * Lock the namespace around the walk.
+	 * The namespace will be unlocked/locked around each call
+	 * to the user function - since this function
+	 * must be allowed to make Acpi calls itself.
+	 */
+
+	acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
+	status = acpi_ns_walk_namespace (ACPI_TYPE_DEVICE,
+			   ACPI_ROOT_OBJECT, ACPI_UINT32_MAX,
+			   NS_WALK_UNLOCK,
+			   acpi_ns_get_device_callback, &info,
+			   return_value);
+
+	acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
+
+	return (status);
+}

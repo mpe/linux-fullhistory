@@ -1,3 +1,5 @@
+include $(TOPDIR)/Rules.make
+
 all:	pdutr.h timertr.h
 
 pdutr.h: pdutr.pre compile.awk			
@@ -9,5 +11,3 @@ timertr.h: timertr.pre compile.awk
 clean:
 	touch pdutr.h timertr.h
 	rm pdutr.h timertr.h
-
-

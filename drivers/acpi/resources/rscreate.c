@@ -1,11 +1,11 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rscreate - Acpi_rs_create_resource_list
  *                         Acpi_rs_create_pci_routing_table
  *                         Acpi_rs_create_byte_stream
- *              $Revision: 16 $
+ *              $Revision: 22 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -182,11 +182,12 @@ acpi_rs_create_pci_routing_table (
 		 * contain a u32 Address, a u8 Pin, a Name and a u8
 		 * Source_index.
 		 */
-		top_object_list = package_object->package.elements;
+		top_object_list     = package_object->package.elements;
+		number_of_elements  = package_object->package.count;
+		user_prt            = (PCI_ROUTING_TABLE *) buffer;
 
-		number_of_elements = package_object->package.count;
 
-		user_prt = (PCI_ROUTING_TABLE *) buffer;
+		buffer = ROUND_PTR_UP_TO_8 (buffer, u8);
 
 		for (index = 0; index < number_of_elements; index++) {
 			/*
@@ -197,6 +198,7 @@ acpi_rs_create_pci_routing_table (
 			 */
 			buffer += user_prt->length;
 			user_prt = (PCI_ROUTING_TABLE *) buffer;
+
 
 			/*
 			 * Fill in the Length field with the information we
@@ -237,7 +239,7 @@ acpi_rs_create_pci_routing_table (
 
 			if (ACPI_TYPE_NUMBER == (*sub_object_list)->common.type) {
 				user_prt->data.pin =
-						(*sub_object_list)->number.value;
+						(u32) (*sub_object_list)->number.value;
 			}
 
 			else {
@@ -257,8 +259,6 @@ acpi_rs_create_pci_routing_table (
 				 * Add to the Length field the length of the string
 				 */
 				user_prt->length += (*sub_object_list)->string.length;
-				user_prt->length =
-					ROUND_UP_TO_32_bITS (user_prt->length);
 			}
 
 			else {
@@ -280,6 +280,10 @@ acpi_rs_create_pci_routing_table (
 				}
 			}
 
+			/* Now align the current length */
+
+			user_prt->length = ROUND_UP_TO_64_bITS (user_prt->length);
+
 			/*
 			 * Dereference the Source Index
 			 */
@@ -287,7 +291,7 @@ acpi_rs_create_pci_routing_table (
 
 			if (ACPI_TYPE_NUMBER == (*sub_object_list)->common.type) {
 				user_prt->data.source_index =
-						(*sub_object_list)->number.value;
+						(u32) (*sub_object_list)->number.value;
 			}
 
 			else {
@@ -314,7 +318,6 @@ acpi_rs_create_pci_routing_table (
 	*output_buffer_length = buffer_size_needed;
 
 	return (AE_OK);
-
 }
 
 
@@ -393,6 +396,5 @@ acpi_rs_create_byte_stream (
 	}
 
 	return (AE_OK);
-
 }
 

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.30 2000/08/29 07:01:54 davem Exp $
+/* $Id: misc.c,v 1.31 2000/12/14 22:57:25 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -763,6 +763,7 @@ int init_solaris_emul(void)
 {
 	register_exec_domain(&solaris_exec_domain);
 	init_socksys();
+	return 0;
 }
 #endif
 

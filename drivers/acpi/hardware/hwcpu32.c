@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: hwcpu32.c - CPU support for IA32 (Throttling, Cx_states)
- *              $Revision: 33 $
+ *              $Revision: 39 $
  *
  *****************************************************************************/
 
@@ -132,7 +132,7 @@ acpi_hw_enter_c2(
 	 * We have to do something useless after reading LVL2 because chipsets
 	 * cannot guarantee that STPCLK# gets asserted in time to freeze execution.
 	 */
-	acpi_os_in8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk);
+	acpi_hw_register_read (ACPI_MTX_DO_NOT_LOCK, PM2_CONTROL);
 
 	/*
 	 * Compute Time in C2:
@@ -171,7 +171,6 @@ acpi_hw_enter_c3(
 	u32                     *pm_timer_ticks)
 {
 	u32                     timer = 0;
-	u8                      pm2_cnt_blk = 0;
 	u32                     bus_master_status = 0;
 
 
@@ -187,12 +186,12 @@ acpi_hw_enter_c3(
 	 *  eventually cause a demotion to C2
 	 */
 	if (1 == (bus_master_status =
-		acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, BM_STS)))
+		acpi_hw_register_bit_access (ACPI_READ, ACPI_MTX_LOCK, BM_STS)))
 	{
 		/*
 		 * Clear the BM_STS bit by setting it.
 		 */
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_STS, 1);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_STS, 1);
 		*pm_timer_ticks = 0;
 		return (AE_OK);
 	}
@@ -207,9 +206,7 @@ acpi_hw_enter_c3(
 	 * ----------------------
 	 * Set the PM2_CNT.ARB_DIS bit (bit #0), preserving all other bits.
 	 */
-	pm2_cnt_blk = acpi_os_in8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk);
-	pm2_cnt_blk |= 0x01;
-	acpi_os_out8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk, pm2_cnt_blk);
+	 acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, ARB_DIS, 1);
 
 	/*
 	 * Get the timer base before entering C state
@@ -229,8 +226,7 @@ acpi_hw_enter_c3(
 	 * We have to do something useless after reading LVL3 because chipsets
 	 * cannot guarantee that STPCLK# gets asserted in time to freeze execution.
 	 */
-	acpi_os_in8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk);
-
+	acpi_hw_register_read (ACPI_MTX_DO_NOT_LOCK, PM2_CONTROL);
 	/*
 	 * Immediately compute the time in the C state
 	 */
@@ -241,9 +237,7 @@ acpi_hw_enter_c3(
 	 * ------------------------
 	 * Clear the PM2_CNT.ARB_DIS bit (bit #0), preserving all other bits.
 	 */
-	pm2_cnt_blk = acpi_os_in8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk);
-	pm2_cnt_blk &= 0xFE;
-	acpi_os_out8 ((ACPI_IO_ADDRESS) acpi_gbl_FACP->pm2_cnt_blk, pm2_cnt_blk);
+	acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, ARB_DIS, 0);
 
 	/* TBD: [Unhandled]: Support 24-bit timers (this algorithm assumes 32-bit) */
 
@@ -332,7 +326,7 @@ acpi_hw_set_cx (
 	switch (cx_state)
 	{
 	case 3:
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 1);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 1);
 		break;
 	}
 
@@ -346,7 +340,7 @@ acpi_hw_set_cx (
 	switch (acpi_hw_active_cx_state)
 	{
 	case 3:
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 0);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, BM_RLD, 0);
 		break;
 	}
 
@@ -408,15 +402,15 @@ acpi_hw_get_cx_info (
 	 * and on SMP systems when P_LVL2_UP (which indicates C2 only on UP)
 	 * is not set.
 	 */
-	if (acpi_gbl_FACP->plvl2_lat <= 100) {
+	if (acpi_gbl_FADT->plvl2_lat <= 100) {
 		if (!SMP_system) {
 			acpi_hw_cx_handlers[2] = acpi_hw_enter_c2;
-			cx_states[2] = acpi_gbl_FACP->plvl2_lat;
+			cx_states[2] = acpi_gbl_FADT->plvl2_lat;
 		}
 
-		else if (!acpi_gbl_FACP->plvl2_up) {
+		else if (!acpi_gbl_FADT->plvl2_up) {
 			acpi_hw_cx_handlers[2] = acpi_hw_enter_c2;
-			cx_states[2] = acpi_gbl_FACP->plvl2_lat;
+			cx_states[2] = acpi_gbl_FADT->plvl2_lat;
 		}
 	}
 
@@ -431,12 +425,12 @@ acpi_hw_get_cx_info (
 	 * cannot be used on SMP systems, and flushing caches (e.g. WBINVD)
 	 * is simply too costly (at this time).
 	 */
-	if (acpi_gbl_FACP->plvl3_lat <= 1000) {
-		if (!SMP_system && (acpi_gbl_FACP->pm2_cnt_blk &&
-			acpi_gbl_FACP->pm2_cnt_len))
+	if (acpi_gbl_FADT->plvl3_lat <= 1000) {
+		if (!SMP_system && (acpi_gbl_FADT->Xpm2_cnt_blk.address &&
+			acpi_gbl_FADT->pm2_cnt_len))
 		{
 			acpi_hw_cx_handlers[3] = acpi_hw_enter_c3;
-			cx_states[3] = acpi_gbl_FACP->plvl3_lat;
+			cx_states[3] = acpi_gbl_FADT->plvl3_lat;
 		}
 	}
 

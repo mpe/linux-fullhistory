@@ -1,52 +1,50 @@
-L_OBJS :=
-M_OBJS :=
-LX_OBJS :=
-MX_OBJS :=
-O_OBJS :=
-OX_OBJS :=
-L_TARGET :=
-O_TARGET :=
+# Makefile for the eicon ISDN device driver
 
-ifeq ($(CONFIG_ISDN_DRV_EICON_STANDALONE),y)
+# The target object and module list name.
 
- ifeq ($(CONFIG_PCI),y)
-   O_OBJS += common.o idi.o bri.o pri.o log.o xlog.o kprintf.o fpga.o fourbri.o
-   O_OBJS += lincfg.o linchr.o linsys.o linio.o
-   O_OBJS += fcheck.o
-   OX_OBJS += Divas_mod.o
- endif
+O_TARGET	:= eicon_drv.o
 
-else
+# Objects that export symbols.
 
- OX_OBJS += eicon_mod.o
- O_OBJS := eicon_isa.o eicon_pci.o eicon_idi.o eicon_io.o
- O_OBJS += fcheck.o
- ifeq ($(CONFIG_PCI),y)
-  ifeq ($(CONFIG_ISDN_DRV_EICON_PCI),y)
-   O_OBJS += common.o idi.o bri.o pri.o log.o xlog.o kprintf.o fpga.o fourbri.o
-   O_OBJS += lincfg.o linchr.o linsys.o linio.o
-  endif
- endif
+export-objs	:= Divas_mod.o eicon_mod.o
 
-endif
+# Multipart objects.
 
-O_TARGET :=
+list-multi	:= eicon.o divas.o
+eicon-objs	:= eicon_mod.o eicon_isa.o eicon_pci.o eicon_idi.o \
+		   eicon_io.o fcheck.o
+divas-objs	:= common.o idi.o bri.o pri.o log.o xlog.o kprintf.o fpga.o \
+		   fourbri.o lincfg.o linchr.o linsys.o linio.o fcheck.o \
+		   Divas_mod.o
 
-ifeq ($(CONFIG_ISDN_DRV_EICON),y)
-  O_TARGET += eicon.o
-else
-  O_TARGET += eicon.o
-  M_OBJS   = eicon.o
-endif
+# Optional parts of multipart objects.
 
+eicon-objs-$(CONFIG_ISDN_DRV_EICON_PCI) += common.o idi.o bri.o pri.o log.o \
+		   xlog.o kprintf.o fpga.o fourbri.o lincfg.o linchr.o \
+		   linsys.o linio.o
+
+eicon-objs 	+= $(eicon-objs-y)
+
+# Object file lists.
+
+obj-y	:=
+obj-m	:=
+obj-n	:=
+obj-	:=
+
+# Each configuration option enables a list of files.
+
+obj-$(CONFIG_ISDN_DRV_EICON_OLD)	+= eicon.o
+obj-$(CONFIG_ISDN_DRV_EICON_DIVAS)	+= divas.o
 
 include $(TOPDIR)/Rules.make
 
-MD5FILES += common.c idi.c bri.c pri.c log.c xlog.c kprintf.c fpga.c \
-            fourbri.c fcheck.c
+# Link rules for multi-part drivers.
 
-FCHECK = $(shell md5sum -c md5sums.asc >> /dev/null;echo $$?)
+eicon.o: $(eicon-objs)
+	$(LD) -r -o $@ $(eicon-objs)
 
-fcheck.o: $(MD5FILES)
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -D FILECHECK=$(FCHECK) -c -o fcheck.o fcheck.c
+divas.o: $(divas-objs)
+	$(LD) -r -o $@ $(divas-objs)
+
 

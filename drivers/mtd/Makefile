@@ -10,28 +10,6 @@
 #
 # $Id: Makefile,v 1.22 2000/07/14 08:10:52 dwmw2 Exp $
 
-ifndef CONFIG_MTD
-
-# We're being invoked outside a normal kernel build. Fake it
-EXTRA_CFLAGS= -I$(shell pwd)/../include
-
-MIX_OBJS = mtdcore.o doc2000.o doc2001.o cfi_probe.o cfi_cmdset_0001.o \
-	map_ram.o map_rom.o cfi_cmdset_0002.o
-MI_OBJS = doc1000.o docprobe.o slram.o pmc551.o mtdram.o physmap.o \
-	nora.o octagon-5066.o pnc2000.o rpxlite.o vmax301.o mtdchar.o \
-	mtdblock.o ftl.o nftl.o
-
-CFLAGS_nftl.o := -DCONFIG_NFTL_RW
-CFLAGS_mtdram.o := -DCONFIG_MTDRAM_TOTAL_SIZE=4096 -DCONFIG_MTDRAM_ERASE_SIZE=128
-CFLAGS_physmap.o := -DCONFIG_MTD_PHYSMAP_START=0x8000000 -DCONFIG_MTD_PHYSMAP_LEN=0x4000000
-
-else 
-
-O_OBJS          :=
-OX_OBJS         :=
-M_OBJS          :=
-MX_OBJS         :=
-
 # Object file lists.
 
 obj-y           :=
@@ -44,7 +22,7 @@ SUB_DIRS	:=
 ALL_SUB_DIRS 	:=
 MOD_SUB_DIRS	:=
 
-export-objs	:=	mtdcore.o mtdpart.o
+export-objs	:=	mtdcore.o mtdpart.o jedec.o
 list-multi	:=
 
 # MTD devices
@@ -79,32 +57,5 @@ obj-$(CONFIG_MTD_CHAR)		+= mtdchar.o
 obj-$(CONFIG_MTD_BLOCK)		+= mtdblock.o
 obj-$(CONFIG_FTL)		+= ftl.o
 obj-$(CONFIG_NFTL)		+= nftl.o nftlmount.o
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-
-multi-y         := $(filter $(list-multi), $(obj-y))
-multi-m         := $(filter $(list-multi), $(obj-m))
-int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Files that are both resident and modular: remove from modular.
-
-obj-m           := $(filter-out $(obj-y), $(obj-m))
-int-m           := $(filter-out $(int-y), $(int-m))
-
-# Take multi-part drivers out of obj-y and put components in.
-
-obj-y           := $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-
-O_OBJS          := $(filter-out $(export-objs), $(obj-y))
-OX_OBJS         := $(filter     $(export-objs), $(obj-y))
-M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
-
-
-endif
 
 include $(TOPDIR)/Rules.make

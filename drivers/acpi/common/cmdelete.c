@@ -1,9 +1,9 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: cmdelete - object deletion and reference count utilities
- *              $Revision: 53 $
+ *              $Revision: 60 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -34,7 +34,7 @@
 	 MODULE_NAME         ("cmdelete")
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_delete_internal_obj
  *
@@ -52,6 +52,7 @@ acpi_cm_delete_internal_obj (
 	ACPI_OPERAND_OBJECT     *object)
 {
 	void                    *obj_pointer = NULL;
+	ACPI_OPERAND_OBJECT     *handler_desc;
 
 
 	if (!object) {
@@ -120,6 +121,36 @@ acpi_cm_delete_internal_obj (
 		break;
 
 
+	case ACPI_TYPE_REGION:
+
+
+		if (object->region.extra) {
+			/*
+			 * Free the Region_context if and only if the handler is one of the
+			 * default handlers -- and therefore, we created the context object
+			 * locally, it was not created by an external caller.
+			 */
+			handler_desc = object->region.addr_handler;
+			if ((handler_desc) &&
+				(handler_desc->addr_handler.hflags == ADDR_HANDLER_DEFAULT_INSTALLED))
+			{
+				obj_pointer = object->region.extra->extra.region_context;
+			}
+
+			/* Now we can free the Extra object */
+
+			acpi_cm_delete_object_desc (object->region.extra);
+		}
+		break;
+
+
+	case ACPI_TYPE_FIELD_UNIT:
+
+		if (object->field_unit.extra) {
+			acpi_cm_delete_object_desc (object->field_unit.extra);
+		}
+		break;
+
 	default:
 		break;
 	}
@@ -148,7 +179,7 @@ acpi_cm_delete_internal_obj (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_delete_internal_object_list
  *
@@ -197,12 +228,11 @@ acpi_cm_delete_internal_object_list (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_update_ref_count
  *
  * PARAMETERS:  *Object         - Object whose ref count is to be updated
- *              Count           - Current ref count
  *              Action          - What to do
  *
  * RETURN:      New ref count
@@ -211,7 +241,7 @@ acpi_cm_delete_internal_object_list (
  *
  ******************************************************************************/
 
-void
+static void
 acpi_cm_update_ref_count (
 	ACPI_OPERAND_OBJECT     *object,
 	u32                     action)
@@ -287,7 +317,7 @@ acpi_cm_update_ref_count (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_update_object_reference
  *
@@ -397,9 +427,8 @@ acpi_cm_update_object_reference (
 				 * these are simply ignored
 				 */
 
-				status =
-					acpi_cm_create_update_state_and_push (object->package.elements[i],
-							   action, &state_list);
+				status = acpi_cm_create_update_state_and_push (
+						 object->package.elements[i], action, &state_list);
 				if (ACPI_FAILURE (status)) {
 					return (status);
 				}
@@ -409,9 +438,9 @@ acpi_cm_update_object_reference (
 
 		case ACPI_TYPE_FIELD_UNIT:
 
-			status =
-				acpi_cm_create_update_state_and_push (object->field_unit.container,
-						   action, &state_list);
+			status = acpi_cm_create_update_state_and_push (
+					 object->field_unit.container, action, &state_list);
+
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
@@ -420,9 +449,8 @@ acpi_cm_update_object_reference (
 
 		case INTERNAL_TYPE_DEF_FIELD:
 
-			status =
-				acpi_cm_create_update_state_and_push (object->field.container,
-						   action, &state_list);
+			status = acpi_cm_create_update_state_and_push (
+					 object->field.container, action, &state_list);
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
@@ -431,16 +459,14 @@ acpi_cm_update_object_reference (
 
 		case INTERNAL_TYPE_BANK_FIELD:
 
-			status =
-				acpi_cm_create_update_state_and_push (object->bank_field.bank_select,
-						   action, &state_list);
+			status = acpi_cm_create_update_state_and_push (
+					 object->bank_field.bank_select, action, &state_list);
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 
-			status =
-				acpi_cm_create_update_state_and_push (object->bank_field.container,
-						   action, &state_list);
+			status = acpi_cm_create_update_state_and_push (
+					 object->bank_field.container, action, &state_list);
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
@@ -448,8 +474,6 @@ acpi_cm_update_object_reference (
 
 
 		case ACPI_TYPE_REGION:
-
-			acpi_cm_update_ref_count (object->region.method, action);
 
 	/* TBD: [Investigate]
 			Acpi_cm_update_ref_count (Object->Region.Addr_handler, Action);
@@ -490,7 +514,7 @@ acpi_cm_update_object_reference (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_add_reference
  *
@@ -517,7 +541,6 @@ acpi_cm_add_reference (
 		return;
 	}
 
-
 	/*
 	 * We have a valid ACPI internal object, now increment the reference count
 	 */
@@ -528,7 +551,7 @@ acpi_cm_add_reference (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_cm_remove_reference
  *
@@ -562,15 +585,6 @@ acpi_cm_remove_reference (
 
 	acpi_cm_update_object_reference (object, REF_DECREMENT);
 
-	/*
-	 * If the reference count has reached zero,
-	 * delete the object and all sub-objects contained within it
-	 */
-/*
-	if (Object->Common.Reference_count == 0) {
-		Acpi_cm_delete_internal_obj (Object);
-	}
-*/
 	return;
 }
 

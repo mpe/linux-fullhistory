@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amconfig - Namespace reconfiguration (Load/Unload opcodes)
- *              $Revision: 23 $
+ *              $Revision: 26 $
  *
  *****************************************************************************/
 
@@ -51,7 +51,7 @@
  *
  ****************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_aml_exec_load_table (
 	ACPI_OPERAND_OBJECT     *rgn_desc,
 	ACPI_HANDLE             *ddb_handle)
@@ -139,12 +139,17 @@ acpi_aml_exec_load_table (
 
 	/* Add the table to the namespace */
 
-	status = acpi_load_namespace ();
-	if (ACPI_FAILURE (status)) {
+	/* TBD: [Restructure] - change to whatever new interface is appropriate */
+/*
+	Status = Acpi_load_namespace ();
+	if (ACPI_FAILURE (Status)) {
+*/
 		/* TBD: [Errors] Unload the table on failure ? */
-
-		goto cleanup;
+/*
+		goto Cleanup;
 	}
+*/
+
 
 	/* TBD: [Investigate] we need a pointer to the table desc */
 
@@ -179,7 +184,7 @@ cleanup:
  *
  ****************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_aml_exec_unload_table (
 	ACPI_HANDLE             ddb_handle)
 {
@@ -219,7 +224,7 @@ acpi_aml_exec_unload_table (
 
 	/* Delete the table itself */
 
-	acpi_tb_delete_single_table (table_info->installed_desc);
+	acpi_tb_uninstall_table (table_info->installed_desc);
 
 	/* Delete the table descriptor (Ddb_handle) */
 

@@ -91,7 +91,7 @@ LIBS := $(TOPDIR)/arch/i386/lib/lib.a $(LIBS) $(TOPDIR)/arch/i386/lib/lib.a
 
 ifdef CONFIG_MATH_EMULATION
 SUBDIRS += arch/i386/math-emu
-SUBDIRS += arch/i386/math-emu/math.o
+DRIVERS += arch/i386/math-emu/math.o
 endif
 
 arch/i386/kernel: dummy

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cminit - Common ACPI subsystem initialization
- *              $Revision: 79 $
+ *              $Revision: 89 $
  *
  *****************************************************************************/
 
@@ -37,231 +37,111 @@
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_cm_facp_register_error
+ * FUNCTION:    Acpi_cm_fadt_register_error
  *
  * PARAMETERS:  *Register_name          - Pointer to string identifying register
  *              Value                   - Actual register contents value
  *              Acpi_test_spec_section  - TDS section containing assertion
  *              Acpi_assertion          - Assertion number being tested
  *
- * RETURN:      none
+ * RETURN:      AE_BAD_VALUE
  *
  * DESCRIPTION: Display failure message and link failure to TDS assertion
  *
  ******************************************************************************/
 
-void
-acpi_cm_facp_register_error (
+static ACPI_STATUS
+acpi_cm_fadt_register_error (
 	NATIVE_CHAR             *register_name,
-	u32                     value)
+	UINT64                  value)
 {
 
-	REPORT_ERROR ("Invalid FACP register value");
+	REPORT_ERROR (
+		("Invalid FADT register value, %s=%X (FADT=%p)\n",
+		register_name, value, acpi_gbl_FADT));
 
+
+	return (AE_BAD_VALUE);
 }
 
 
 /******************************************************************************
  *
- * FUNCTION:    Acpi_cm_hardware_initialize
+ * FUNCTION:    Acpi_cm_validate_fadt
  *
  * PARAMETERS:  None
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Initialize and validate various ACPI registers
+ * DESCRIPTION: Validate various ACPI registers in the FADT
  *
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_cm_hardware_initialize (void)
+acpi_cm_validate_fadt (
+	void)
 {
-	ACPI_STATUS             status = AE_OK;
-	u32                     index;
+	ACPI_STATUS                 status = AE_OK;
 
 
-	/* Are we running on the actual hardware */
+	/*
+	 * Verify Fixed ACPI Description Table fields,
+	 * but don't abort on any problems, just display error
+	 */
 
-	if (!acpi_gbl_acpi_hardware_present) {
-		/* No, just return */
-
-		return (AE_OK);
+	if (acpi_gbl_FADT->pm1_evt_len < 4) {
+		status = acpi_cm_fadt_register_error ("PM1_EVT_LEN",
+				  (u32) acpi_gbl_FADT->pm1_evt_len);
 	}
 
-	/* We must have the ACPI tables by the time we get here */
-
-	if (!acpi_gbl_FACP) {
-		acpi_gbl_restore_acpi_chipset = FALSE;
-
-		return (AE_NO_ACPI_TABLES);
+	if (!acpi_gbl_FADT->pm1_cnt_len) {
+		status = acpi_cm_fadt_register_error ("PM1_CNT_LEN",
+				  (u32) acpi_gbl_FADT->pm1_cnt_len);
 	}
 
-	/* Must support *some* mode! */
-/*
-	if (!(System_flags & SYS_MODES_MASK)) {
-		Restore_acpi_chipset = FALSE;
-
-		return (AE_ERROR);
+	if (!acpi_gbl_FADT->Xpm1a_evt_blk.address) {
+		status = acpi_cm_fadt_register_error ("PM1a_EVT_BLK",
+				  acpi_gbl_FADT->Xpm1a_evt_blk.address);
 	}
 
-*/
+	if (!acpi_gbl_FADT->Xpm1a_cnt_blk.address) {
+		status = acpi_cm_fadt_register_error ("PM1a_CNT_BLK",
+				  acpi_gbl_FADT->Xpm1a_cnt_blk.address);
+	}
 
+	if (!acpi_gbl_FADT->Xpm_tmr_blk.address) {
+		status = acpi_cm_fadt_register_error ("PM_TMR_BLK",
+				  acpi_gbl_FADT->Xpm_tmr_blk.address);
+	}
 
-	switch (acpi_gbl_system_flags & SYS_MODES_MASK)
+	if ((acpi_gbl_FADT->Xpm2_cnt_blk.address &&
+		!acpi_gbl_FADT->pm2_cnt_len))
 	{
-		/* Identify current ACPI/legacy mode   */
-
-	case (SYS_MODE_ACPI):
-
-		acpi_gbl_original_mode = SYS_MODE_ACPI;
-		break;
-
-
-	case (SYS_MODE_LEGACY):
-
-		acpi_gbl_original_mode = SYS_MODE_LEGACY;
-		break;
-
-
-	case (SYS_MODE_ACPI | SYS_MODE_LEGACY):
-
-		if (acpi_hw_get_mode () == SYS_MODE_ACPI) {
-			acpi_gbl_original_mode = SYS_MODE_ACPI;
-		}
-		else {
-			acpi_gbl_original_mode = SYS_MODE_LEGACY;
-		}
-
-		break;
+		status = acpi_cm_fadt_register_error ("PM2_CNT_LEN",
+				  (u32) acpi_gbl_FADT->pm2_cnt_len);
 	}
 
-
-	if (acpi_gbl_system_flags & SYS_MODE_ACPI) {
-		/* Target system supports ACPI mode */
-
-		/*
-		 * The purpose of this block of code is to save the initial state
-		 * of the ACPI event enable registers. An exit function will be
-		 * registered which will restore this state when the application
-		 * exits. The exit function will also clear all of the ACPI event
-		 * status bits prior to restoring the original mode.
-		 *
-		 * The location of the PM1a_evt_blk enable registers is defined as the
-		 * base of PM1a_evt_blk + PM1a_evt_blk_length / 2. Since the spec further
-		 * fully defines the PM1a_evt_blk to be a total of 4 bytes, the offset
-		 * for the enable registers is always 2 from the base. It is hard
-		 * coded here. If this changes in the spec, this code will need to
-		 * be modified. The PM1b_evt_blk behaves as expected.
-		 */
-
-		acpi_gbl_pm1_enable_register_save =
-			acpi_os_in16 ((acpi_gbl_FACP->pm1a_evt_blk + 2));
-		if (acpi_gbl_FACP->pm1b_evt_blk) {
-			acpi_gbl_pm1_enable_register_save |=
-				acpi_os_in16 ((acpi_gbl_FACP->pm1b_evt_blk + 2));
-		}
-
-
-		/*
-		 * The GPEs behave similarly, except that the length of the register
-		 * block is not fixed, so the buffer must be allocated with malloc
-		 */
-
-		if (acpi_gbl_FACP->gpe0blk && acpi_gbl_FACP->gpe0blk_len) {
-			/* GPE0 specified in FACP  */
-
-			acpi_gbl_gpe0enable_register_save =
-				acpi_cm_allocate (DIV_2 (acpi_gbl_FACP->gpe0blk_len));
-			if (!acpi_gbl_gpe0enable_register_save) {
-				return (AE_NO_MEMORY);
-			}
-
-			/* Save state of GPE0 enable bits */
-
-			for (index = 0; index < DIV_2 (acpi_gbl_FACP->gpe0blk_len); index++) {
-				acpi_gbl_gpe0enable_register_save[index] =
-					acpi_os_in8 (acpi_gbl_FACP->gpe0blk +
-					DIV_2 (acpi_gbl_FACP->gpe0blk_len));
-			}
-		}
-
-		else {
-			acpi_gbl_gpe0enable_register_save = NULL;
-		}
-
-		if (acpi_gbl_FACP->gpe1_blk && acpi_gbl_FACP->gpe1_blk_len) {
-			/* GPE1 defined */
-
-			acpi_gbl_gpe1_enable_register_save =
-				acpi_cm_allocate (DIV_2 (acpi_gbl_FACP->gpe1_blk_len));
-			if (!acpi_gbl_gpe1_enable_register_save) {
-				return (AE_NO_MEMORY);
-			}
-
-			/* save state of GPE1 enable bits */
-
-			for (index = 0; index < DIV_2 (acpi_gbl_FACP->gpe1_blk_len); index++) {
-				acpi_gbl_gpe1_enable_register_save[index] =
-					acpi_os_in8 (acpi_gbl_FACP->gpe1_blk +
-					DIV_2 (acpi_gbl_FACP->gpe1_blk_len));
-			}
-		}
-
-		else {
-			acpi_gbl_gpe1_enable_register_save = NULL;
-		}
-
-
-		/*
-		 * Verify Fixed ACPI Description Table fields,
-		 * but don't abort on any problems, just display error
-		 */
-
-		if (acpi_gbl_FACP->pm1_evt_len < 4) {
-			acpi_cm_facp_register_error ("PM1_EVT_LEN",
-					 (u32) acpi_gbl_FACP->pm1_evt_len);
-		}
-
-		if (!acpi_gbl_FACP->pm1_cnt_len) {
-			acpi_cm_facp_register_error ("PM1_CNT_LEN",
-					 (u32) acpi_gbl_FACP->pm1_cnt_len);
-		}
-
-		if (!acpi_gbl_FACP->pm1a_evt_blk) {
-			acpi_cm_facp_register_error ("PM1a_EVT_BLK", acpi_gbl_FACP->pm1a_evt_blk);
-		}
-
-		if (!acpi_gbl_FACP->pm1a_cnt_blk) {
-			acpi_cm_facp_register_error ("PM1a_CNT_BLK", acpi_gbl_FACP->pm1a_cnt_blk);
-		}
-
-		if (!acpi_gbl_FACP->pm_tmr_blk) {
-			acpi_cm_facp_register_error ("PM_TMR_BLK", acpi_gbl_FACP->pm_tmr_blk);
-		}
-
-		if (acpi_gbl_FACP->pm2_cnt_blk && !acpi_gbl_FACP->pm2_cnt_len) {
-			acpi_cm_facp_register_error ("PM2_CNT_LEN",
-					 (u32) acpi_gbl_FACP->pm2_cnt_len);
-		}
-
-		if (acpi_gbl_FACP->pm_tm_len < 4) {
-			acpi_cm_facp_register_error ("PM_TM_LEN",
-					 (u32) acpi_gbl_FACP->pm_tm_len);
-		}
-
-		/* length not multiple of 2    */
-		if (acpi_gbl_FACP->gpe0blk && (acpi_gbl_FACP->gpe0blk_len & 1)) {
-			acpi_cm_facp_register_error ("GPE0_BLK_LEN",
-					 (u32) acpi_gbl_FACP->gpe0blk_len);
-		}
-
-		/* length not multiple of 2    */
-		if (acpi_gbl_FACP->gpe1_blk && (acpi_gbl_FACP->gpe1_blk_len & 1)) {
-			acpi_cm_facp_register_error ("GPE1_BLK_LEN",
-					 (u32) acpi_gbl_FACP->gpe1_blk_len);
-		}
+	if (acpi_gbl_FADT->pm_tm_len < 4) {
+		status = acpi_cm_fadt_register_error ("PM_TM_LEN",
+				  (u32) acpi_gbl_FADT->pm_tm_len);
 	}
 
+	/* length of GPE blocks must be a multiple of 2 */
+
+
+	if (acpi_gbl_FADT->Xgpe0blk.address &&
+		(acpi_gbl_FADT->gpe0blk_len & 1))
+	{
+		status = acpi_cm_fadt_register_error ("GPE0_BLK_LEN",
+				  (u32) acpi_gbl_FADT->gpe0blk_len);
+	}
+
+	if (acpi_gbl_FADT->Xgpe1_blk.address &&
+		(acpi_gbl_FADT->gpe1_blk_len & 1))
+	{
+		status = acpi_cm_fadt_register_error ("GPE1_BLK_LEN",
+				  (u32) acpi_gbl_FADT->gpe1_blk_len);
+	}
 
 	return (status);
 }
@@ -354,8 +234,6 @@ acpi_cm_subsystem_shutdown (void)
 #ifdef ENABLE_DEBUGGER
 	acpi_cm_dump_current_allocations (ACPI_UINT32_MAX, NULL);
 #endif
-
-	BREAKPOINT3;
 
 	return (AE_OK);
 }

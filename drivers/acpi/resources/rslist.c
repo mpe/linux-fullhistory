@@ -1,10 +1,10 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rslist - Acpi_rs_byte_stream_to_list
  *                       Acpi_list_to_byte_stream
- *              $Revision: 6 $
+ *              $Revision: 8 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -32,11 +32,11 @@
 	 MODULE_NAME         ("rslist")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_byte_stream_to_list
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource byte stream
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource byte stream
  *              Byte_stream_buffer_length - Length of Byte_stream_buffer
  *              Output_buffer           - Pointer to the buffer that will
  *                                          contain the output structures
@@ -46,7 +46,7 @@
  * DESCRIPTION: Takes the resource byte stream and parses it, creating a
  *              linked list of resources in the caller's output buffer
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_byte_stream_to_list (
@@ -157,7 +157,7 @@ acpi_rs_byte_stream_to_list (
 
 				break;
 
-/* 64-bit not currently supported */
+/* TBD: [Future] 64-bit not currently supported */
 /*
 			case 0x8A:
 				break;
@@ -309,15 +309,14 @@ acpi_rs_byte_stream_to_list (
 	}
 
 	return (AE_OK);
+}
 
-} /* Acpi_rs_byte_stream_to_list */
 
-
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_list_to_byte_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Byte_steam_size_needed  - Calculated size of the byte stream
  *                                          needed from calling
  *                                          Acpi_rs_calculate_byte_stream_length()
@@ -332,7 +331,7 @@ acpi_rs_byte_stream_to_list (
  * DESCRIPTION: Takes the resource linked list and parses it, creating a
  *              byte stream of resources in the caller's output buffer
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_list_to_byte_stream (
@@ -503,6 +502,5 @@ acpi_rs_list_to_byte_stream (
 	}
 
 	return  (AE_OK);
-
-} /* Acpi_rs_list_to_byte_stream */
+}
 

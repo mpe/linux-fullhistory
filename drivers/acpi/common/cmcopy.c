@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmcopy - Internal to external object translation utilities
- *              $Revision: 56 $
+ *              $Revision: 59 $
  *
  *****************************************************************************/
 
@@ -63,7 +63,7 @@ PKG_SEARCH_INFO                 level[MAX_PACKAGE_DEPTH];
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_cm_build_external_simple_object (
 	ACPI_OPERAND_OBJECT     *internal_obj,
 	ACPI_OBJECT             *external_obj,
@@ -199,7 +199,7 @@ acpi_cm_build_external_simple_object (
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_cm_build_external_package_object (
 	ACPI_OPERAND_OBJECT     *internal_obj,
 	u8                      *buffer,
@@ -487,6 +487,10 @@ acpi_cm_build_internal_simple_object (
 }
 
 
+#ifdef ACPI_FUTURE_IMPLEMENTATION
+
+/* Code to convert packages that are parameters to control methods */
+
 /******************************************************************************
  *
  * FUNCTION:    Acpi_cm_build_internal_package_object
@@ -506,7 +510,7 @@ acpi_cm_build_internal_simple_object (
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_cm_build_internal_package_object (
 	ACPI_OPERAND_OBJECT     *internal_obj,
 	u8                      *buffer,
@@ -641,6 +645,8 @@ acpi_cm_build_internal_package_object (
 	}   /* while (1)  */
 }
 
+#endif /* Future implementation */
+
 
 /******************************************************************************
  *
@@ -667,6 +673,10 @@ acpi_cm_build_internal_object (
 		/*
 		 * Package objects contain other objects (which can be objects)
 		 * buildpackage does it all
+		 *
+		 * TBD: Package conversion must be completed and tested
+		 * NOTE: this code converts packages as input parameters to
+		 * control methods only.  This is a very, very rare case.
 		 */
 /*
 		Status = Acpi_cm_build_internal_package_object(Internal_obj,

@@ -3210,9 +3210,9 @@ Matrox unified accelerated driver (EXPERIMENTAL)
 CONFIG_FB_MATROX
   Say Y here if you have a Matrox Millennium, Matrox Millennium II,
   Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
-  Mystique G200, Matrox Millennium G200, Matrox Marvel G200 video or
-  Matrox G400 card in your box. At this time, support for the G100,
-  Mystique G200 and Marvel G200 is untested.
+  Mystique G200, Matrox Millennium G200, Matrox Marvel G200 video,
+  Matrox G400 or G450 card in your box. At this time, support for the G100
+  is untested and support for G450 is highly experimental.
 
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
@@ -3241,13 +3241,13 @@ CONFIG_FB_MATROX_MYSTIQUE
   packed pixel and 32 bpp packed pixel. You can also use font widths
   different from 8.
 
-Matrox G100/G200/G400 support
+Matrox G100/G200/G400/G450 support
 CONFIG_FB_MATROX_G100
-  Say Y here if you have a Matrox Productiva G100, Matrox Mystique
-  G200, Matrox Marvel G200 or Matrox Millennium G200 video card. If
-  you select "Advanced lowlevel driver options", you should check 8
-  bpp packed pixel, 16 bpp packed pixel, 24 bpp packed pixel and 32
-  bpp packed pixel. You can also use font widths different from 8.
+  Say Y here if you have a Matrox G100, G200, G400 or G450 based
+  video card. If you select "Advanced lowlevel driver options", you 
+  should check 8 bpp packed pixel, 16 bpp packed pixel, 24 bpp packed 
+  pixel and 32 bpp packed pixel. You can also use font widths 
+  different from 8.
 
   If you need support for G400 secondary head, you must first say Y to
   "I2C support" and "I2C bit-banging support" in the character devices
@@ -3270,6 +3270,8 @@ CONFIG_FB_MATROX_I2C
   
 Matrox G400 second head support
 CONFIG_FB_MATROX_MAVEN
+  WARNING !!! This support does not work with G450 !!!
+
   Say Y or M here if you want to use a secondary head (meaning two
   monitors in parallel) on G400 or MGA-TVO add-on on G200. Secondary
   head is not compatible with accelerated XFree 3.3.x SVGA servers -
@@ -3294,6 +3296,30 @@ CONFIG_FB_MATROX_MAVEN
   painting procedures (the secondary head does not use acceleration
   engine).
   
+  There is no need for enabling 'Matrox multihead support' if you have
+  only one Matrox card in the box.
+
+Matrox G450 second head support
+CONFIG_FB_MATROX_G450
+  Say Y or M here if you want to use a secondary head (meaning two
+  monitors in parallel) on G450.
+
+  If you compile it as module, two modules are created,
+  matroxfb_crtc2.o and matroxfb_g450.o. Both modules are needed if you
+  want two independent display devices.
+
+  The driver starts in monitor mode and currently does not support
+  output in TV modes. You must use the matroxset tool (available
+  at ftp://platan.vc.cvut.cz/pub/linux/matrox-latest) to swap primary
+  and secondary head outputs. Secondary head driver always start in
+  640x480 resolution and you must use fbset to change it.
+
+  Also do not forget that second head supports only 16 and 32 bpp
+  packed pixels, so it is a good idea to compile them into the kernel
+  too. You can use only some font widths, as the driver uses generic
+  painting procedures (the secondary head does not use acceleration
+  engine).
+
   There is no need for enabling 'Matrox multihead support' if you have
   only one Matrox card in the box.
 
@@ -3547,6 +3573,30 @@ CONFIG_PARPORT_OTHER
   Say Y here if you want to be able to load driver modules to support
   other non-standard types of parallel ports. This causes a
   performance loss, so most people say N.
+
+Sun Ultra/AX-style hardware 
+CONFIG_PARPORT_AX
+  Say Y here if you need support for the parallel port hardware on Sun
+  Ultra/AX machines. This code is also available as a module (say M),
+  called parport_ax.o. If in doubt, saying N is the safe plan.
+
+Amiga built-in parallel port support
+CONFIG_PARPORT_AMIGA
+  Say Y here if you need support for the parallel port hardware on
+  Amiga machines. This code is also available as a module (say M),
+  called parport_amiga.o. If in doubt, saying N is the safe plan.
+
+Atari built-in parallel port support
+CONFIG_PARPORT_ATARI
+  Say Y here if you need support for the parallel port hardware on
+  Atari machines. This code is also available as a module (say M),
+  called parport_atari.o. If in doubt, saying N is the safe plan.
+
+Multiface 3 parallel port card support
+CONFIG_PARPORT_MFC3
+  Say Y here if you need parallel port support for the MFC3 card.
+  This code is also available as a module (say M), called
+  parport_mfc3.o. If in doubt, saying N is the safe plan.
 
 Support IEEE1284 status readback
 CONFIG_PRINTER_READBACK
@@ -13140,40 +13190,35 @@ CONFIG_PM
   will issue the hlt instruction if nothing is to be done, thereby
   sending the processor to sleep and saving power.
 
-ACPI support
+ACPI Support
 CONFIG_ACPI
-  The Advanced Configuration and Power Interface is a standard
-  designed to allow the operating system more control over power
-  management issues, such as suspending a computer in a low power
-  consumption state after a certain time of inaction. It aims to be
-  an improved version of APM (see below). ACPI has to be
-  supported by the motherboard. You can read more about the standard
-  at http://www.teleport.com/~acpi/ . 
+  ACPI/OSPM support for Linux is currently under development. As such, 
+  this support is preliminary and EXPERIMENTAL. Configuring ACPI support
+  enables kernel interfaces that allow higher level software (OSPM) to
+  manipulate ACPI defined hardware and software interfaces, including
+  the evaluation of ACPI control methods. If unsure, choose N here.
+  Note, this option will enlarge your kernel by about 120K.
 
-  If your computer supports ACPI and you want to use it, say Y here.
-  You will then need supporting software; for location and more
-  information, please read Documentation/pm.txt and the Battery
-  Powered Linux mini-HOWTO, available from
-  http://www.linuxdoc.org/docs.html#howto .
+  This support requires an ACPI compliant platform (hardware/firmware).
+  If both ACPI and Advanced Power Management (APM) support are
+  configured, ACPI is used.
 
-  If you say Y here and also to "Advanced Power Management" (APM)
-  below, then ACPI has precedence in the sense that, if your hardware
-  supports ACPI, it will be used and APM won't.
+  This code DOES NOT currently provide a complete OSPM implementation --
+  it has not yet reached APM's level of functionality. When fully
+  implemented, Linux ACPI/OSPM will provide a more robust functional
+  replacement for legacy configuration and power management interfaces,
+  including the Plug-and-Play BIOS specification (PNP BIOS), the Multi-
+  Processor Specification (MPS), and the Advanced Power Management 
+  specification (APM).
 
-ACPI interpreter (EXPERIMENTAL)
-CONFIG_ACPI_INTERPRETER
-  If you say Y here, an ACPI interpreter will be included in your
-  kernel, eventually making the full range of ACPI features
-  available on systems that support ACPI.  Note, this option will
-  enlarge your kernel by about 120K.
-
-  The interpreter is currently experimental so only say Y if
-  you know what you are doing.
-
-Enter S1 for sleep (EXPERIMENTAL)
-CONFIG_ACPI_S1_SLEEP
-  If you say Y here, ACPI compliant devices can enter level 1 of ACPI
-  saving power levels. Basically, this will let them enter sleep mode.
+  Linux support for ACPI/OSPM is based on Intel Corporation's ACPI
+  Component Architecture (ACPI CA). The latest ACPI CA source code,
+  documentation, debug builds, and implementation status information
+  can be downloaded from:
+  http://developer.intel.com/technology/iapc/acpi/downloads.htm
+  
+  The ACPI mailing list may also be of interest:
+  http://phobos.fs.tum.de/acpi/index.html
 
 Advanced Power Management BIOS support
 CONFIG_APM

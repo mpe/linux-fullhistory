@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amnames - interpreter/scanner name load/execute
- *              $Revision: 70 $
+ *              $Revision: 71 $
  *
  *****************************************************************************/
 
@@ -90,7 +90,7 @@ acpi_aml_allocate_name_string (
 
 	name_string = acpi_cm_allocate (size_needed);
 	if (!name_string) {
-		REPORT_ERROR ("Aml_allocate_name_string: name allocation failure");
+		REPORT_ERROR (("Aml_allocate_name_string: name allocation failure\n"));
 		return (NULL);
 	}
 
@@ -380,8 +380,8 @@ acpi_aml_get_name_string (
 	if (AE_CTRL_PENDING == status && has_prefix) {
 		/* Ran out of segments after processing a prefix */
 
-		REPORT_ERROR ("Ran out of segments after processing a prefix");
-
+		REPORT_ERROR (
+			("Aml_do_name: Malformed Name at %p\n", name_string));
 		status = AE_AML_BAD_NAME;
 	}
 

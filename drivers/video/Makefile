@@ -3,8 +3,8 @@
 # Rewritten to use lists instead of if-statements.
 
 O_TARGET := video.o
-O_OBJS   :=
-M_OBJS   :=
+
+mod-subdirs	:= matrox
 
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
@@ -14,8 +14,8 @@ export-objs    := fbmem.o fbcmap.o fbcon.o fbmon.o modedb.o \
 		  fbcon-vga.o fbcon-iplan2p2.o fbcon-iplan2p4.o \
 		  fbcon-iplan2p8.o fbcon-vga-planes.o fbcon-cfb16.o \
 		  fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o \
-		  fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o fbcon-vga8-planes.o \
-		  matrox/matroxfb.o cyber2000fb.o fbcon-hga.o
+		  fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o \
+		  cyber2000fb.o fbcon-hga.o
 
 # Each configuration option enables a list of files.
 

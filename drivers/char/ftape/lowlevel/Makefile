@@ -23,38 +23,28 @@
 #      driver for Linux.
 #
 
-#
-#  This isn't used inside the kernel, only for my private development
-#  version
-#
-ifndef TOPDIR
-TOPDIR=../..
-include $(TOPDIR)/MCONFIG
-endif
-
 O_TARGET := ftape.o
-O_OBJS    = ftape-init.o fdc-io.o fdc-isr.o \
+
+export-objs := ftape_syms.o
+
+obj-y     = ftape-init.o fdc-io.o fdc-isr.o \
 	    ftape-bsm.o ftape-ctl.o ftape-read.o ftape-rw.o \
 	    ftape-write.o ftape-io.o ftape-calibr.o ftape-ecc.o fc-10.o \
-	    ftape-buffer.o ftape-format.o
+	    ftape-buffer.o ftape-format.o ftape_syms.o
 
-ifeq ($(CONFIG_FTAPE),y)
-O_OBJS   += ftape-setup.o
-endif
+obj-$(CONFIG_FTAPE) += ftape-setup.o
 
 ifndef CONFIG_FT_NO_TRACE_AT_ALL
-O_OBJS   += ftape-tracing.o
+obj-y   += ftape-tracing.o
 endif
 
 ifeq ($(CONFIG_PROC_FS),y)
 ifeq ($(CONFIG_FT_PROC_FS),y)
-O_OBJS += ftape-proc.o
+obj-y += ftape-proc.o
 endif
 endif
 
-OX_OBJS = ftape_syms.o
-
-M_OBJS  = $(O_TARGET)
+obj-m  = $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

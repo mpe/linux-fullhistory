@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dswscope - Scope stack manipulation
- *              $Revision: 38 $
+ *              $Revision: 40 $
  *
  *****************************************************************************/
 
@@ -89,14 +89,14 @@ acpi_ds_scope_stack_push (
 	if (!node) {
 		/*  invalid scope   */
 
-		REPORT_ERROR ("Ds_scope_stack_push: null scope passed");
+		REPORT_ERROR (("Ds_scope_stack_push: null scope passed\n"));
 		return (AE_BAD_PARAMETER);
 	}
 
 	/* Make sure object type is valid */
 
 	if (!acpi_aml_validate_object_type (type)) {
-		REPORT_WARNING ("Ds_scope_stack_push: type code out of range");
+		REPORT_WARNING (("Ds_scope_stack_push: type code out of range\n"));
 	}
 
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: hwacpi - ACPI hardware functions - mode and timer
- *              $Revision: 22 $
+ *              $Revision: 32 $
  *
  *****************************************************************************/
 
@@ -34,6 +34,147 @@
 
 /******************************************************************************
  *
+ * FUNCTION:    Acpi_hw_initialize
+ *
+ * PARAMETERS:  None
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Initialize and validate various ACPI registers
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_hw_initialize (
+	void)
+{
+	ACPI_STATUS             status = AE_OK;
+	u32                     index;
+
+
+	/* We must have the ACPI tables by the time we get here */
+
+	if (!acpi_gbl_FADT) {
+		acpi_gbl_restore_acpi_chipset = FALSE;
+
+		return (AE_NO_ACPI_TABLES);
+	}
+
+	/* Must support *some* mode! */
+/*
+	if (!(System_flags & SYS_MODES_MASK)) {
+		Restore_acpi_chipset = FALSE;
+
+		return (AE_ERROR);
+	}
+
+*/
+
+
+	switch (acpi_gbl_system_flags & SYS_MODES_MASK)
+	{
+		/* Identify current ACPI/legacy mode   */
+
+	case (SYS_MODE_ACPI):
+
+		acpi_gbl_original_mode = SYS_MODE_ACPI;
+		break;
+
+
+	case (SYS_MODE_LEGACY):
+
+		acpi_gbl_original_mode = SYS_MODE_LEGACY;
+		break;
+
+
+	case (SYS_MODE_ACPI | SYS_MODE_LEGACY):
+
+		if (acpi_hw_get_mode () == SYS_MODE_ACPI) {
+			acpi_gbl_original_mode = SYS_MODE_ACPI;
+		}
+		else {
+			acpi_gbl_original_mode = SYS_MODE_LEGACY;
+		}
+
+		break;
+	}
+
+
+	if (acpi_gbl_system_flags & SYS_MODE_ACPI) {
+		/* Target system supports ACPI mode */
+
+		/*
+		 * The purpose of this code is to save the initial state
+		 * of the ACPI event enable registers. An exit function will be
+		 * registered which will restore this state when the application
+		 * exits. The exit function will also clear all of the ACPI event
+		 * status bits prior to restoring the original mode.
+		 *
+		 * The location of the PM1a_evt_blk enable registers is defined as the
+		 * base of PM1a_evt_blk + DIV_2(PM1a_evt_blk_length). Since the spec further
+		 * fully defines the PM1a_evt_blk to be a total of 4 bytes, the offset
+		 * for the enable registers is always 2 from the base. It is hard
+		 * coded here. If this changes in the spec, this code will need to
+		 * be modified. The PM1b_evt_blk behaves as expected.
+		 */
+
+		acpi_gbl_pm1_enable_register_save = (u16) acpi_hw_register_read (ACPI_MTX_LOCK, PM1_EN);
+
+
+		/*
+		 * The GPEs behave similarly, except that the length of the register
+		 * block is not fixed, so the buffer must be allocated with malloc
+		 */
+
+		if (acpi_gbl_FADT->Xgpe0blk.address && acpi_gbl_FADT->gpe0blk_len) {
+			/* GPE0 specified in FADT  */
+
+			acpi_gbl_gpe0enable_register_save =
+				acpi_cm_allocate (DIV_2 (acpi_gbl_FADT->gpe0blk_len));
+			if (!acpi_gbl_gpe0enable_register_save) {
+				return (AE_NO_MEMORY);
+			}
+
+			/* Save state of GPE0 enable bits */
+
+			for (index = 0; index < DIV_2 (acpi_gbl_FADT->gpe0blk_len); index++) {
+				acpi_gbl_gpe0enable_register_save[index] =
+					(u8) acpi_hw_register_read (ACPI_MTX_LOCK, GPE0_EN_BLOCK | index);
+			}
+		}
+
+		else {
+			acpi_gbl_gpe0enable_register_save = NULL;
+		}
+
+		if (acpi_gbl_FADT->Xgpe1_blk.address && acpi_gbl_FADT->gpe1_blk_len) {
+			/* GPE1 defined */
+
+			acpi_gbl_gpe1_enable_register_save =
+				acpi_cm_allocate (DIV_2 (acpi_gbl_FADT->gpe1_blk_len));
+			if (!acpi_gbl_gpe1_enable_register_save) {
+				return (AE_NO_MEMORY);
+			}
+
+			/* save state of GPE1 enable bits */
+
+			for (index = 0; index < DIV_2 (acpi_gbl_FADT->gpe1_blk_len); index++) {
+				acpi_gbl_gpe1_enable_register_save[index] =
+					(u8) acpi_hw_register_read (ACPI_MTX_LOCK, GPE1_EN_BLOCK | index);
+			}
+		}
+
+		else {
+			acpi_gbl_gpe1_enable_register_save = NULL;
+		}
+	}
+
+	return (status);
+}
+
+
+/******************************************************************************
+ *
  * FUNCTION:    Acpi_hw_set_mode
  *
  * PARAMETERS:  Mode            - SYS_MODE_ACPI or SYS_MODE_LEGACY
@@ -56,7 +197,7 @@ acpi_hw_set_mode (
 	if (mode == SYS_MODE_ACPI) {
 		/* BIOS should have disabled ALL fixed and GP events */
 
-		acpi_os_out8 (acpi_gbl_FACP->smi_cmd, acpi_gbl_FACP->acpi_enable);
+		acpi_os_out8 (acpi_gbl_FADT->smi_cmd, acpi_gbl_FADT->acpi_enable);
 	}
 
 	else if (mode == SYS_MODE_LEGACY) {
@@ -65,7 +206,7 @@ acpi_hw_set_mode (
 		 * enable bits to default
 		 */
 
-		acpi_os_out8 (acpi_gbl_FACP->smi_cmd, acpi_gbl_FACP->acpi_disable);
+		acpi_os_out8 (acpi_gbl_FADT->smi_cmd, acpi_gbl_FADT->acpi_disable);
 	}
 
 	if (acpi_hw_get_mode () == mode) {
@@ -78,8 +219,7 @@ acpi_hw_set_mode (
 
 /******************************************************************************
  *
- * FUNCTION:    Acpi_hw
-
+ * FUNCTION:    Acpi_hw_get_mode
  *
  * PARAMETERS:  none
  *
@@ -95,7 +235,7 @@ acpi_hw_get_mode (void)
 {
 
 
-	if (acpi_hw_register_access (ACPI_READ, ACPI_MTX_LOCK, SCI_EN)) {
+	if (acpi_hw_register_bit_access (ACPI_READ, ACPI_MTX_LOCK, SCI_EN)) {
 		return (SYS_MODE_ACPI);
 	}
 	else {
@@ -177,7 +317,7 @@ acpi_hw_pmt_ticks (void)
 {
 	u32                      ticks;
 
-	ticks = acpi_os_in32 (acpi_gbl_FACP->pm_tmr_blk);
+	ticks = acpi_os_in32 ((ACPI_IO_ADDRESS) acpi_gbl_FADT->Xpm_tmr_blk.address);
 
 	return (ticks);
 }
@@ -198,7 +338,7 @@ acpi_hw_pmt_ticks (void)
 u32
 acpi_hw_pmt_resolution (void)
 {
-	if (0 == acpi_gbl_FACP->tmr_val_ext) {
+	if (0 == acpi_gbl_FADT->tmr_val_ext) {
 		return (24);
 	}
 

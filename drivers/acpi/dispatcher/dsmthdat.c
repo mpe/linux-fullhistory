@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: dsmthdat - control method arguments and local variables
- *              $Revision: 34 $
+ *              $Revision: 36 $
  *
  ******************************************************************************/
 
@@ -71,10 +71,10 @@ acpi_ds_method_data_init (
 	for (i = 0; i < MTH_NUM_ARGS; i++) {
 		MOVE_UNALIGNED32_TO_32 (&walk_state->arguments[i].name,
 				 NAMEOF_ARG_NTE);
-
 		walk_state->arguments[i].name      |= (i << 24);
 		walk_state->arguments[i].data_type  = ACPI_DESC_TYPE_NAMED;
-		walk_state->arguments[i].type       = INTERNAL_TYPE_METHOD_ARGUMENT;
+		walk_state->arguments[i].type       = ACPI_TYPE_ANY;
+		walk_state->arguments[i].flags      = ANOBJ_END_OF_PEER_LIST | ANOBJ_METHOD_ARG;
 	}
 
 	/* Init the method locals */
@@ -85,7 +85,8 @@ acpi_ds_method_data_init (
 
 		walk_state->local_variables[i].name  |= (i << 24);
 		walk_state->local_variables[i].data_type = ACPI_DESC_TYPE_NAMED;
-		walk_state->local_variables[i].type   = INTERNAL_TYPE_METHOD_LOCAL_VAR;
+		walk_state->local_variables[i].type   = ACPI_TYPE_ANY;
+		walk_state->local_variables[i].flags  = ANOBJ_END_OF_PEER_LIST | ANOBJ_METHOD_LOCAL;
 	}
 
 	return (AE_OK);

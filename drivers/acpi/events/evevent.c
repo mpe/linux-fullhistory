@@ -2,7 +2,7 @@
  *
  * Module Name: evevent - Fixed and General Purpose Acpi_event
  *                          handling and dispatch
- *              $Revision: 13 $
+ *              $Revision: 30 $
  *
  *****************************************************************************/
 
@@ -34,6 +34,86 @@
 	 MODULE_NAME         ("evevent")
 
 
+/**************************************************************************
+ *
+ * FUNCTION:    Acpi_ev_initialize
+ *
+ * PARAMETERS:  None
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Ensures that the system control interrupt (SCI) is properly
+ *              configured, disables SCI event sources, installs the SCI
+ *              handler
+ *
+ *************************************************************************/
+
+ACPI_STATUS
+acpi_ev_initialize (
+	void)
+{
+	ACPI_STATUS             status;
+
+
+	/* Make sure we've got ACPI tables */
+
+	if (!acpi_gbl_DSDT) {
+		return (AE_NO_ACPI_TABLES);
+	}
+
+
+	/* Make sure the BIOS supports ACPI mode */
+
+	if (SYS_MODE_LEGACY == acpi_hw_get_mode_capabilities()) {
+		return (AE_ERROR);
+	}
+
+
+	acpi_gbl_original_mode = acpi_hw_get_mode();
+
+	/*
+	 * Initialize the Fixed and General Purpose Acpi_events prior. This is
+	 * done prior to enabling SCIs to prevent interrupts from occuring
+	 * before handers are installed.
+	 */
+
+	status = acpi_ev_fixed_event_initialize ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	status = acpi_ev_gpe_initialize ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	/* Install the SCI handler */
+
+	status = acpi_ev_install_sci_handler ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+
+	/* Install handlers for control method GPE handlers (_Lxx, _Exx) */
+
+	status = acpi_ev_init_gpe_control_methods ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	/* Install the handler for the Global Lock */
+
+	status = acpi_ev_init_global_lock_handler ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+
+	return (status);
+}
+
+
 /******************************************************************************
  *
  * FUNCTION:    Acpi_ev_fixed_event_initialize
@@ -58,16 +138,11 @@ acpi_ev_fixed_event_initialize(void)
 		acpi_gbl_fixed_event_handlers[i].context = NULL;
 	}
 
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_PMTIMER +
-			 TMR_EN, 0);
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_GLOBAL +
-			 TMR_EN, 0);
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_POWER_BUTTON +
-			 TMR_EN, 0);
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_SLEEP_BUTTON +
-			 TMR_EN, 0);
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK, ACPI_EVENT_RTC +
-			 TMR_EN, 0);
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, TMR_EN, 0);
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, GBL_EN, 0);
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, PWRBTN_EN, 0);
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, SLPBTN_EN, 0);
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, RTC_EN, 0);
 
 	return (AE_OK);
 }
@@ -89,25 +164,17 @@ u32
 acpi_ev_fixed_event_detect(void)
 {
 	u32                     int_status = INTERRUPT_NOT_HANDLED;
-	u32                     status_register = 0;
-	u32                     enable_register = 0;
+	u32                     status_register;
+	u32                     enable_register;
 
 	/*
 	 * Read the fixed feature status and enable registers, as all the cases
 	 * depend on their values.
 	 */
 
-	status_register = (u32) acpi_os_in16 (acpi_gbl_FACP->pm1a_evt_blk);
-	if (acpi_gbl_FACP->pm1b_evt_blk) {
-		status_register |= (u32) acpi_os_in16 (acpi_gbl_FACP->pm1b_evt_blk);
-	}
+	status_register = acpi_hw_register_read (ACPI_MTX_DO_NOT_LOCK, PM1_STS);
+	enable_register = acpi_hw_register_read (ACPI_MTX_DO_NOT_LOCK, PM1_EN);
 
-	enable_register = (u32) acpi_os_in16 (acpi_gbl_FACP->pm1a_evt_blk +
-			   DIV_2 (acpi_gbl_FACP->pm1_evt_len));
-	if (acpi_gbl_FACP->pm1b_evt_blk) {
-		enable_register |= (u32) acpi_os_in16 (acpi_gbl_FACP->pm1b_evt_blk +
-				   DIV_2 (acpi_gbl_FACP->pm1_evt_len));
-	}
 
 	/* power management timer roll over */
 
@@ -162,20 +229,53 @@ u32
 acpi_ev_fixed_event_dispatch (
 	u32                     event)
 {
+	u32 register_id;
+
 	/* Clear the status bit */
 
-	acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK, TMR_STS +
-			 event, 1);
+	switch (event)
+	{
+	case ACPI_EVENT_PMTIMER:
+		register_id = TMR_STS;
+		break;
+
+	case ACPI_EVENT_GLOBAL:
+		register_id = GBL_STS;
+		break;
+
+	case ACPI_EVENT_POWER_BUTTON:
+		register_id = PWRBTN_STS;
+		break;
+
+	case ACPI_EVENT_SLEEP_BUTTON:
+		register_id = SLPBTN_STS;
+		break;
+
+	case ACPI_EVENT_RTC:
+		register_id = RTC_STS;
+		break;
+
+	default:
+		return 0;
+		break;
+	}
+
+	acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK, register_id, 1);
 
 	/*
 	 * Make sure we've got a handler.  If not, report an error.
 	 * The event is disabled to prevent further interrupts.
 	 */
 	if (NULL == acpi_gbl_fixed_event_handlers[event].handler) {
-		acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK,
-				 TMR_EN + event, 0);
+		register_id = (PM1_EN | REGISTER_BIT_ID(register_id));
 
-		REPORT_ERROR("No installed handler for fixed event.");
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_DO_NOT_LOCK,
+				 register_id, 0);
+
+		REPORT_ERROR (
+			("Ev_gpe_dispatch: No installed handler for fixed event [%08X]\n",
+			event));
+
 		return (INTERRUPT_NOT_HANDLED);
 	}
 
@@ -210,15 +310,28 @@ acpi_ev_gpe_initialize (void)
 
 
 	/*
-	 * Setup various GPE counts
+	 * Set up various GPE counts
+	 *
+	 * You may ask,why are the GPE register block lengths divided by 2?
+	 * From the ACPI 2.0 Spec, section, 4.7.1.6 General-Purpose Event
+	 * Registers, we have,
+	 *
+	 * "Each register block contains two registers of equal length
+	 * GPEx_STS and GPEx_EN (where x is 0 or 1). The length of the
+	 * GPE0_STS and GPE0_EN registers is equal to half the GPE0_LEN
+	 * The length of the GPE1_STS and GPE1_EN registers is equal to
+	 * half the GPE1_LEN. If a generic register block is not supported
+	 * then its respective block pointer and block length values in the
+	 * FADT table contain zeros. The GPE0_LEN and GPE1_LEN do not need
+	 * to be the same size."
 	 */
 
-	gpe0register_count      = (u16) DIV_2 (acpi_gbl_FACP->gpe0blk_len);
-	gpe1_register_count     = (u16) DIV_2 (acpi_gbl_FACP->gpe1_blk_len);
+	gpe0register_count          = (u16) DIV_2 (acpi_gbl_FADT->gpe0blk_len);
+	gpe1_register_count         = (u16) DIV_2 (acpi_gbl_FADT->gpe1_blk_len);
 	acpi_gbl_gpe_register_count = gpe0register_count + gpe1_register_count;
 
 	if (!acpi_gbl_gpe_register_count) {
-		REPORT_WARNING ("No GPEs defined in the FACP");
+		REPORT_WARNING (("Zero GPEs are defined in the FADT\n"));
 		return (AE_OK);
 	}
 
@@ -262,10 +375,10 @@ acpi_ev_gpe_initialize (void)
 
 	for (i = 0; i < gpe0register_count; i++) {
 		acpi_gbl_gpe_registers[register_index].status_addr =
-				 (u16) (acpi_gbl_FACP->gpe0blk + i);
+				 (u16) (acpi_gbl_FADT->Xgpe0blk.address + i);
 
 		acpi_gbl_gpe_registers[register_index].enable_addr =
-				 (u16) (acpi_gbl_FACP->gpe0blk + i + gpe0register_count);
+				 (u16) (acpi_gbl_FADT->Xgpe0blk.address + i + gpe0register_count);
 
 		acpi_gbl_gpe_registers[register_index].gpe_base = (u8) MUL_8 (i);
 
@@ -289,13 +402,13 @@ acpi_ev_gpe_initialize (void)
 
 	for (i = 0; i < gpe1_register_count; i++) {
 		acpi_gbl_gpe_registers[register_index].status_addr =
-				 (u16) (acpi_gbl_FACP->gpe1_blk + i);
+				 (u16) (acpi_gbl_FADT->Xgpe1_blk.address + i);
 
 		acpi_gbl_gpe_registers[register_index].enable_addr =
-				 (u16) (acpi_gbl_FACP->gpe1_blk + i + gpe1_register_count);
+				 (u16) (acpi_gbl_FADT->Xgpe1_blk.address + i + gpe1_register_count);
 
 		acpi_gbl_gpe_registers[register_index].gpe_base =
-				 (u8) (acpi_gbl_FACP->gpe1_base + MUL_8 (i));
+				 (u8) (acpi_gbl_FADT->gpe1_base + MUL_8 (i));
 
 		for (j = 0; j < 8; j++) {
 			gpe_number = acpi_gbl_gpe_registers[register_index].gpe_base + j;
@@ -339,7 +452,7 @@ acpi_ev_gpe_initialize (void)
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_ev_save_method_info (
 	ACPI_HANDLE             obj_handle,
 	u32                     level,
@@ -446,29 +559,6 @@ acpi_ev_init_gpe_control_methods (void)
 
 /******************************************************************************
  *
- * FUNCTION:    Acpi_ev_gpe_cleanup
- *
- * PARAMETERS:  None
- *
- * RETURN:      None
- *
- * DESCRIPTION: Cleanup in preparation for unload.
- *
- ******************************************************************************/
-
-void
-acpi_ev_gpe_cleanup (void)
-{
-
-	acpi_cm_free (acpi_gbl_gpe_registers);
-	acpi_cm_free (acpi_gbl_gpe_info);
-
-	return;
-}
-
-
-/******************************************************************************
- *
  * FUNCTION:    Acpi_ev_gpe_detect
  *
  * PARAMETERS:  None
@@ -549,7 +639,7 @@ acpi_ev_gpe_detect (void)
  *
  ******************************************************************************/
 
-void
+static void
 acpi_ev_asynch_execute_gpe_method (
 	void                    *context)
 {
@@ -557,38 +647,28 @@ acpi_ev_asynch_execute_gpe_method (
 	ACPI_GPE_LEVEL_INFO     gpe_info;
 
 
-	/* Take a snapshot of the GPE info for this level */
-
+	/*
+	 * Take a snapshot of the GPE info for this level
+	 */
 	acpi_cm_acquire_mutex (ACPI_MTX_EVENTS);
 	gpe_info = acpi_gbl_gpe_info [gpe_number];
 	acpi_cm_release_mutex (ACPI_MTX_EVENTS);
 
 	/*
-	 * Function Handler (e.g. EC):
-	 * ---------------------------
-	 * Execute the installed function handler to handle this event.
-	 */
-	if (gpe_info.handler) {
-		gpe_info.handler (gpe_info.context);
-	}
-
-	/*
 	 * Method Handler (_Lxx, _Exx):
 	 * ----------------------------
-	 * Acpi_evaluate the _Lxx/_Exx control method that corresponds to this GPE.
+	 * Evaluate the _Lxx/_Exx control method that corresponds to this GPE.
 	 */
-	else if (gpe_info.method_handle) {
+	if (gpe_info.method_handle) {
 		acpi_ns_evaluate_by_handle (gpe_info.method_handle, NULL, NULL);
 	}
 
 	/*
 	 * Level-Triggered?
 	 * ----------------
-	 * If level-triggered, clear the GPE status bit after execution.  Note
-	 * that edge-triggered events are cleared prior to calling (via DPC)
-	 * this function.
+	 * If level-triggered we clear the GPE status bit after handling the event.
 	 */
-	if (gpe_info.type | ACPI_EVENT_LEVEL_TRIGGERED) {
+	if (gpe_info.type & ACPI_EVENT_LEVEL_TRIGGERED) {
 		acpi_hw_clear_gpe (gpe_number);
 	}
 
@@ -624,11 +704,13 @@ u32
 acpi_ev_gpe_dispatch (
 	u32                     gpe_number)
 {
+		ACPI_GPE_LEVEL_INFO     gpe_info;
 
 	/*DEBUG_INCREMENT_EVENT_COUNT (EVENT_GENERAL);*/
 
-	/* Ensure that we have a valid GPE number */
-
+	/*
+	 * Valid GPE number?
+	 */
 	if (acpi_gbl_gpe_valid[gpe_number] == ACPI_GPE_INVALID) {
 		return (INTERRUPT_NOT_HANDLED);
 	}
@@ -638,48 +720,59 @@ acpi_ev_gpe_dispatch (
 	 */
 	acpi_hw_disable_gpe (gpe_number);
 
-	/*
-	 * Edge-Triggered?
-	 * ---------------
-	 * If edge-triggered, clear the GPE status bit now.  Note that
-	 * level-triggered events are cleared after the GPE is serviced
-	 * (see Acpi_ev_asynch_execute_gpe_method).
-	 */
-	if (acpi_gbl_gpe_info [gpe_number].type | ACPI_EVENT_EDGE_TRIGGERED) {
-		acpi_hw_clear_gpe (gpe_number);
-	}
+		gpe_info = acpi_gbl_gpe_info [gpe_number];
 
-	/*
-	 * Queue-up the Handler:
-	 * ---------------------
-	 * Queue the handler, which is either an installable function handler
-	 * (e.g. EC) or a control method (e.g. _Lxx/_Exx) for later execution.
-	 */
-	if (acpi_gbl_gpe_info [gpe_number].handler ||
-		acpi_gbl_gpe_info [gpe_number].method_handle)
-	{
-		if (ACPI_FAILURE (acpi_os_queue_for_execution (OSD_PRIORITY_GPE,
-				 acpi_ev_asynch_execute_gpe_method,
-				 (void*)(NATIVE_UINT)gpe_number)))
-		{
-			/*
-			 * Shoudn't occur, but if it does report an error. Note that
-			 * the GPE will remain disabled until the ACPI Core Subsystem
-			 * is restarted, or the handler is removed/reinstalled.
-			 */
-			REPORT_ERROR ("Unable to queue-up handler for GPE.");
+		/*
+		 * Edge-Triggered?
+		 * ---------------
+		 * If edge-triggered, clear the GPE status bit now.  Note that
+		 * level-triggered events are cleared after the GPE is serviced.
+		 */
+		if (gpe_info.type & ACPI_EVENT_EDGE_TRIGGERED) {
+				acpi_hw_clear_gpe (gpe_number);
 		}
-	}
 
-	/*
-	 * Non Handled GPEs:
-	 * -----------------
-	 * GPEs without handlers are disabled and kept that way until a handler
-	 * is registered for them.
-	 */
-	else {
-		REPORT_ERROR ("No installed handler for GPE.");
-	}
+		/*
+		 * Function Handler (e.g. EC)?
+		 */
+		if (gpe_info.handler) {
+				/* Invoke function handler (at interrupt level). */
+				gpe_info.handler (gpe_info.context);
+
+				/* Level-Triggered? */
+				if (gpe_info.type & ACPI_EVENT_LEVEL_TRIGGERED) {
+						acpi_hw_clear_gpe (gpe_number);
+				}
+
+				/* Enable GPE */
+				acpi_hw_enable_gpe (gpe_number);
+		}
+		/*
+		 * Method Handler (e.g. _Exx/_Lxx)?
+		 */
+		else if (gpe_info.method_handle) {
+				if (ACPI_FAILURE(acpi_os_queue_for_execution (OSD_PRIORITY_GPE,
+			acpi_ev_asynch_execute_gpe_method, (void*)(NATIVE_UINT)gpe_number)))
+				{
+						/*
+						 * Shoudn't occur, but if it does report an error. Note that
+						 * the GPE will remain disabled until the ACPI Core Subsystem
+						 * is restarted, or the handler is removed/reinstalled.
+						 */
+						REPORT_ERROR (("Acpi_ev_gpe_dispatch: Unable to queue handler for GPE bit [%X]\n", gpe_number));
+				}
+		}
+		/*
+		 * No Handler? Report an error and leave the GPE disabled.
+		 */
+		else {
+				REPORT_ERROR (("Acpi_ev_gpe_dispatch: No installed handler for GPE [%X]\n", gpe_number));
+
+				/* Level-Triggered? */
+				if (gpe_info.type & ACPI_EVENT_LEVEL_TRIGGERED) {
+						acpi_hw_clear_gpe (gpe_number);
+				}
+		}
 
 	return (INTERRUPT_HANDLED);
 }

@@ -1,9 +1,9 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsdump - Functions do dump out the resource structures.
- *              $Revision: 10 $
+ *              $Revision: 13 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -25,12 +25,13 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsdump")
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_irq
  *
@@ -64,11 +65,11 @@ acpi_rs_dump_irq (
 			 SHARED == irq_data->shared_exclusive ?
 			 "Shared" : "Exclusive");
 
-	acpi_os_printf ("\t\t%d Interrupts ( ",
+	acpi_os_printf ("\t\t%X Interrupts ( ",
 			 irq_data->number_of_interrupts);
 
 	for (index = 0; index < irq_data->number_of_interrupts; index++) {
-		acpi_os_printf ("%d ", irq_data->interrupts[index]);
+		acpi_os_printf ("%X ", irq_data->interrupts[index]);
 	}
 
 	acpi_os_printf (")\n");
@@ -76,7 +77,7 @@ acpi_rs_dump_irq (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_dma
  *
@@ -144,11 +145,11 @@ acpi_rs_dump_dma (
 		break;
 	}
 
-	acpi_os_printf ("\t\t_number of Channels: %d ( ",
+	acpi_os_printf ("\t\t_number of Channels: %X ( ",
 			 dma_data->number_of_channels);
 
 	for (index = 0; index < dma_data->number_of_channels; index++) {
-		acpi_os_printf ("%d ", dma_data->channels[index]);
+		acpi_os_printf ("%X ", dma_data->channels[index]);
 	}
 
 	acpi_os_printf (")\n");
@@ -156,7 +157,7 @@ acpi_rs_dump_dma (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_start_dependent_functions
  *
@@ -221,7 +222,7 @@ acpi_rs_dump_start_dependent_functions (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_io
  *
@@ -245,23 +246,23 @@ acpi_rs_dump_io (
 	acpi_os_printf ("\t\t%d bit decode\n",
 			 DECODE_16 == io_data->io_decode ? 16 : 10);
 
-	acpi_os_printf ("\t\t_range minimum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range minimum base: %08X\n",
 			 io_data->min_base_address);
 
-	acpi_os_printf ("\t\t_range maximum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range maximum base: %08X\n",
 			 io_data->max_base_address);
 
-	acpi_os_printf ("\t\t_alignment: 0x%08x\n",
+	acpi_os_printf ("\t\t_alignment: %08X\n",
 			 io_data->alignment);
 
-	acpi_os_printf ("\t\t_range Length: 0x%08x\n",
+	acpi_os_printf ("\t\t_range Length: %08X\n",
 			 io_data->range_length);
 
 	return;
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_fixed_io
  *
@@ -281,17 +282,17 @@ acpi_rs_dump_fixed_io (
 
 
 	acpi_os_printf ("\t_fixed Io Resource\n");
-	acpi_os_printf ("\t\t_range base address: 0x%08x",
+	acpi_os_printf ("\t\t_range base address: %08X",
 			 fixed_io_data->base_address);
 
-	acpi_os_printf ("\t\t_range length: 0x%08x",
+	acpi_os_printf ("\t\t_range length: %08X",
 			 fixed_io_data->range_length);
 
 	return;
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_vendor_specific
  *
@@ -313,10 +314,10 @@ acpi_rs_dump_vendor_specific (
 
 	acpi_os_printf ("\t_vendor Specific Resource\n");
 
-	acpi_os_printf ("\t\t_length: 0x%08x\n", vendor_data->length);
+	acpi_os_printf ("\t\t_length: %08X\n", vendor_data->length);
 
 	for (index = 0; index < vendor_data->length; index++) {
-		acpi_os_printf ("\t\t_byte %d: 0x%08x\n",
+		acpi_os_printf ("\t\t_byte %X: %08X\n",
 				 index, vendor_data->reserved[index]);
 	}
 
@@ -324,7 +325,7 @@ acpi_rs_dump_vendor_specific (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_memory24
  *
@@ -350,23 +351,23 @@ acpi_rs_dump_memory24 (
 			 memory24_data->read_write_attribute ?
 			 "/Write" : " only");
 
-	acpi_os_printf ("\t\t_range minimum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range minimum base: %08X\n",
 			 memory24_data->min_base_address);
 
-	acpi_os_printf ("\t\t_range maximum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range maximum base: %08X\n",
 			 memory24_data->max_base_address);
 
-	acpi_os_printf ("\t\t_alignment: 0x%08x\n",
+	acpi_os_printf ("\t\t_alignment: %08X\n",
 			 memory24_data->alignment);
 
-	acpi_os_printf ("\t\t_range length: 0x%08x\n",
+	acpi_os_printf ("\t\t_range length: %08X\n",
 			 memory24_data->range_length);
 
 	return;
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_memory32
  *
@@ -392,23 +393,23 @@ acpi_rs_dump_memory32 (
 			 memory32_data->read_write_attribute ?
 			 "/Write" : " only");
 
-	acpi_os_printf ("\t\t_range minimum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range minimum base: %08X\n",
 			 memory32_data->min_base_address);
 
-	acpi_os_printf ("\t\t_range maximum base: 0x%08x\n",
+	acpi_os_printf ("\t\t_range maximum base: %08X\n",
 			 memory32_data->max_base_address);
 
-	acpi_os_printf ("\t\t_alignment: 0x%08x\n",
+	acpi_os_printf ("\t\t_alignment: %08X\n",
 			 memory32_data->alignment);
 
-	acpi_os_printf ("\t\t_range length: 0x%08x\n",
+	acpi_os_printf ("\t\t_range length: %08X\n",
 			 memory32_data->range_length);
 
 	return;
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_fixed_memory32
  *
@@ -434,17 +435,17 @@ acpi_rs_dump_fixed_memory32 (
 			 fixed_memory32_data->read_write_attribute ?
 			 "/Write" : " Only");
 
-	acpi_os_printf ("\t\t_range base address: 0x%08x\n",
+	acpi_os_printf ("\t\t_range base address: %08X\n",
 			 fixed_memory32_data->range_base_address);
 
-	acpi_os_printf ("\t\t_range length: 0x%08x\n",
+	acpi_os_printf ("\t\t_range length: %08X\n",
 			 fixed_memory32_data->range_length);
 
 	return;
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_address16
  *
@@ -561,23 +562,23 @@ acpi_rs_dump_address16 (
 			 ADDRESS_FIXED == address16_data->max_address_fixed ?
 			 "" : "not");
 
-	acpi_os_printf ("\t\t_granularity: 0x%08x\n",
+	acpi_os_printf ("\t\t_granularity: %08X\n",
 			 address16_data->granularity);
 
-	acpi_os_printf ("\t\t_address range min: 0x%08x\n",
+	acpi_os_printf ("\t\t_address range min: %08X\n",
 			 address16_data->min_address_range);
 
-	acpi_os_printf ("\t\t_address range max: 0x%08x\n",
+	acpi_os_printf ("\t\t_address range max: %08X\n",
 			 address16_data->max_address_range);
 
-	acpi_os_printf ("\t\t_address translation offset: 0x%08x\n",
+	acpi_os_printf ("\t\t_address translation offset: %08X\n",
 			 address16_data->address_translation_offset);
 
-	acpi_os_printf ("\t\t_address Length: 0x%08x\n",
+	acpi_os_printf ("\t\t_address Length: %08X\n",
 			 address16_data->address_length);
 
 	if (0xFF != address16_data->resource_source_index) {
-		acpi_os_printf ("\t\t_resource Source Index: %d\n",
+		acpi_os_printf ("\t\t_resource Source Index: %X\n",
 				 address16_data->resource_source_index);
 		acpi_os_printf ("\t\t_resource Source: %s\n",
 				 address16_data->resource_source);
@@ -587,7 +588,7 @@ acpi_rs_dump_address16 (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_address32
  *
@@ -703,23 +704,23 @@ acpi_rs_dump_address32 (
 			 ADDRESS_FIXED == address32_data->max_address_fixed ?
 			 "" : "not ");
 
-	acpi_os_printf ("\t\t_granularity: 0x%08x\n",
+	acpi_os_printf ("\t\t_granularity: %08X\n",
 			 address32_data->granularity);
 
-	acpi_os_printf ("\t\t_address range min: 0x%08x\n",
+	acpi_os_printf ("\t\t_address range min: %08X\n",
 			 address32_data->min_address_range);
 
-	acpi_os_printf ("\t\t_address range max: 0x%08x\n",
+	acpi_os_printf ("\t\t_address range max: %08X\n",
 			 address32_data->max_address_range);
 
-	acpi_os_printf ("\t\t_address translation offset: 0x%08x\n",
+	acpi_os_printf ("\t\t_address translation offset: %08X\n",
 			 address32_data->address_translation_offset);
 
-	acpi_os_printf ("\t\t_address Length: 0x%08x\n",
+	acpi_os_printf ("\t\t_address Length: %08X\n",
 			 address32_data->address_length);
 
 	if(0xFF != address32_data->resource_source_index) {
-		acpi_os_printf ("\t\t_resource Source Index: %d\n",
+		acpi_os_printf ("\t\t_resource Source Index: %X\n",
 				 address32_data->resource_source_index);
 		acpi_os_printf ("\t\t_resource Source: %s\n",
 				 address32_data->resource_source);
@@ -729,7 +730,7 @@ acpi_rs_dump_address32 (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_extended_irq
  *
@@ -767,17 +768,17 @@ acpi_rs_dump_extended_irq (
 			 SHARED == ext_irq_data->shared_exclusive ?
 			 "Shared" : "Exclusive");
 
-	acpi_os_printf ("\t\t_interrupts : %d ( ",
+	acpi_os_printf ("\t\t_interrupts : %X ( ",
 			 ext_irq_data->number_of_interrupts);
 
 	for (index = 0; index < ext_irq_data->number_of_interrupts; index++) {
-		acpi_os_printf ("%d ", ext_irq_data->interrupts[index]);
+		acpi_os_printf ("%X ", ext_irq_data->interrupts[index]);
 	}
 
 	acpi_os_printf (")\n");
 
 	if(0xFF != ext_irq_data->resource_source_index) {
-		acpi_os_printf ("\t\t_resource Source Index: %d",
+		acpi_os_printf ("\t\t_resource Source Index: %X",
 				 ext_irq_data->resource_source_index);
 		acpi_os_printf ("\t\t_resource Source: %s",
 				 ext_irq_data->resource_source);
@@ -787,7 +788,7 @@ acpi_rs_dump_extended_irq (
 }
 
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_resource_list
  *
@@ -886,7 +887,7 @@ acpi_rs_dump_resource_list (
 	return;
 }
 
-/******************************************************************************
+/*******************************************************************************
  *
  * FUNCTION:    Acpi_rs_dump_irq_list
  *
@@ -912,16 +913,16 @@ acpi_rs_dump_irq_list (
 		prt_element = (PCI_ROUTING_TABLE *)buffer;
 
 		while (!done) {
-			acpi_os_printf ("\t_pCI IRQ Routing Table structure %x.\n", count++);
+			acpi_os_printf ("\t_pCI IRQ Routing Table structure %X.\n", count++);
 
-			acpi_os_printf ("\t\t_address: 0x%x\n",
+			acpi_os_printf ("\t\t_address: %X\n",
 					 prt_element->data.address);
 
-			acpi_os_printf ("\t\t_pin: 0x%x\n", prt_element->data.pin);
+			acpi_os_printf ("\t\t_pin: %X\n", prt_element->data.pin);
 
 			acpi_os_printf ("\t\t_source: %s\n", prt_element->data.source);
 
-			acpi_os_printf ("\t\t_source_index: 0x%x\n",
+			acpi_os_printf ("\t\t_source_index: %X\n",
 					 prt_element->data.source_index);
 
 			buffer += prt_element->length;

@@ -23,45 +23,22 @@
 #      Linux.
 #
 
-#
-#  This isn't used inside the kernel, only for my private development
-#  version
-#
-ifndef TOPDIR
-TOPDIR= ..
-include $(TOPDIR)/MCONFIG
-endif
+O_TARGET := ftape.o
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) lowlevel zftape compressor
+subdir-$(CONFIG_FTAPE) += lowlevel
+subdir-$(CONFIG_ZFTAPE) += zftape
+subdir-$(CONFIG_ZFT_COMPRESSOR) += compressor
 
 ifeq ($(CONFIG_FTAPE),y)
-  O_TARGET := ftape.o
-  SUB_DIRS += lowlevel
-  O_OBJS   += lowlevel/ftape.o
-else
-  ifeq ($(CONFIG_FTAPE),m)
-  MOD_SUB_DIRS += lowlevel
-  endif
+  obj-y    += lowlevel/ftape.o
 endif
 
 ifeq ($(CONFIG_ZFTAPE),y)
-  SUB_DIRS += zftape
-  O_OBJS   += zftape/zftape.o
-else
-  ifeq ($(CONFIG_ZFTAPE),m)
-  MOD_SUB_DIRS += zftape
-  endif
+  obj-y   += zftape/zftape.o
 endif
 
 ifeq ($(CONFIG_ZFT_COMPRESSOR),y)
-  SUB_DIRS += compressor
-  O_OBJS   += compressor/zft-compressor.o
-else
-  ifeq ($(CONFIG_ZFT_COMPRESSOR),m)
-  MOD_SUB_DIRS += compressor
-  endif
+  obj-y += compressor/zft-compressor.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -1,11 +1,17 @@
 /*
- * $Id: capi.c,v 1.44 2000/11/25 17:00:59 kai Exp $
+ * $Id: capi.c,v 1.45 2000/12/02 19:47:29 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.45  2000/12/02 19:47:29  kai
+ * Change the Makefiles to new style.
+ * There may be problems there that I missed, so this shouldn't go into
+ * an offical kernel any time soon.
+ * However, if I didn't commit it, we wouldn't find the bugs...
+ *
  * Revision 1.44  2000/11/25 17:00:59  kai
  * compatibility cleanup - final part for the time being
  *
@@ -236,12 +242,12 @@
 #include <linux/devfs_fs_kernel.h>
 #include "capiutil.h"
 #include "capicmd.h"
-#ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 #include "capifs.h"
-#endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
+#endif
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.44 $";
+static char *revision = "$Revision: 1.45 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -518,7 +524,7 @@ static struct capincci *capincci_alloc(struct capidev *cdev, __u32 ncci)
 #ifdef _DEBUG_REFCOUNT
 		printk(KERN_DEBUG "set mp->nccip\n");
 #endif
-#ifdef CONFIG_ISDN_CAPIFS
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 		kdev = MKDEV(capi_rawmajor, mp->minor);
 		capifs_new_ncci('r', mp->minor, kdev);
 		kdev = MKDEV(capi_ttymajor, mp->minor);
@@ -543,7 +549,7 @@ static void capincci_free(struct capidev *cdev, __u32 ncci)
 			*pp = (*pp)->next;
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 			if ((mp = np->minorp) != 0) {
-#ifdef CONFIG_ISDN_CAPIFS
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 				capifs_free_ncci('r', mp->minor);
 				capifs_free_ncci(0, mp->minor);
 #endif

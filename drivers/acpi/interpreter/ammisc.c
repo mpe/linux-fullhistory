@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: ammisc - ACPI AML (p-code) execution - specific opcodes
- *              $Revision: 67 $
+ *              $Revision: 71 $
  *
  *****************************************************************************/
 
@@ -100,6 +100,7 @@ cleanup:
 
 	/* If we get back from the OS call, we might as well keep going. */
 
+	REPORT_WARNING (("An AML \"fatal\" Opcode (Fatal_op) was executed\n"));
 	return (AE_OK);
 }
 
@@ -223,7 +224,7 @@ acpi_aml_exec_index (
 		ret_desc->reference.op_code     = AML_INDEX_OP;
 		ret_desc->reference.target_type = ACPI_TYPE_BUFFER_FIELD;
 		ret_desc->reference.object      = obj_desc;
-		ret_desc->reference.offset      = idx_desc->number.value;
+		ret_desc->reference.offset      = (u32) idx_desc->number.value;
 
 		status = acpi_aml_exec_store (ret_desc, res_desc, walk_state);
 	}
@@ -320,7 +321,7 @@ acpi_aml_exec_match (
 		goto cleanup;
 	}
 
-	index = start_desc->number.value;
+	index = (u32) start_desc->number.value;
 	if (index >= (u32) pkg_desc->package.count) {
 		status = AE_AML_PACKAGE_LIMIT;
 		goto cleanup;

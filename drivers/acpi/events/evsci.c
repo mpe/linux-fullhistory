@@ -2,7 +2,7 @@
  *
  * Module Name: evsci - System Control Interrupt configuration and
  *                      legacy to ACPI mode state transition functions
- *              $Revision: 59 $
+ *              $Revision: 67 $
  *
  ******************************************************************************/
 
@@ -48,7 +48,7 @@
  *
  * FUNCTION:    Acpi_ev_sci_handler
  *
- * PARAMETERS:  none
+ * PARAMETERS:  Context   - Calling Context
  *
  * RETURN:      Status code indicates whether interrupt was handled.
  *
@@ -58,7 +58,7 @@
  *
  ******************************************************************************/
 
-u32
+static u32
 acpi_ev_sci_handler (void *context)
 {
 	u32                     interrupt_handled = INTERRUPT_NOT_HANDLED;
@@ -68,7 +68,7 @@ acpi_ev_sci_handler (void *context)
 	 * Make sure that ACPI is enabled by checking SCI_EN.  Note that we are
 	 * required to treat the SCI interrupt as sharable, level, active low.
 	 */
-	if (!acpi_hw_register_access (ACPI_READ, ACPI_MTX_DO_NOT_LOCK, SCI_EN)) {
+	if (!acpi_hw_register_bit_access (ACPI_READ, ACPI_MTX_DO_NOT_LOCK, SCI_EN)) {
 		/* ACPI is not enabled;  this interrupt cannot be for us */
 
 		return (INTERRUPT_NOT_HANDLED);
@@ -110,7 +110,7 @@ acpi_ev_install_sci_handler (void)
 	u32                     except = AE_OK;
 
 
-	except = acpi_os_install_interrupt_handler ((u32) acpi_gbl_FACP->sci_int,
+	except = acpi_os_install_interrupt_handler ((u32) acpi_gbl_FADT->sci_int,
 			  acpi_ev_sci_handler,
 			  NULL);
 
@@ -163,7 +163,7 @@ acpi_ev_remove_sci_handler (void)
 
 #endif
 
-	acpi_os_remove_interrupt_handler ((u32) acpi_gbl_FACP->sci_int,
+	acpi_os_remove_interrupt_handler ((u32) acpi_gbl_FADT->sci_int,
 			   acpi_ev_sci_handler);
 
 	return (AE_OK);
@@ -208,20 +208,11 @@ acpi_ev_restore_acpi_state (void)
 	if (acpi_gbl_restore_acpi_chipset == TRUE) {
 		/* Restore the fixed events */
 
-		if (acpi_os_in16 (acpi_gbl_FACP->pm1a_evt_blk + 2) !=
-			acpi_gbl_pm1_enable_register_save)
-		{
-			acpi_os_out16 ((acpi_gbl_FACP->pm1a_evt_blk + 2),
-					   acpi_gbl_pm1_enable_register_save);
-		}
-
-		if (acpi_gbl_FACP->pm1b_evt_blk) {
-			if (acpi_os_in16 (acpi_gbl_FACP->pm1b_evt_blk + 2) !=
+		if (acpi_hw_register_read (ACPI_MTX_LOCK, PM1_EN) !=
 				acpi_gbl_pm1_enable_register_save)
-			{
-				acpi_os_out16 ((acpi_gbl_FACP->pm1b_evt_blk + 2),
-						   acpi_gbl_pm1_enable_register_save);
-			}
+		{
+			acpi_hw_register_write (ACPI_MTX_LOCK, PM1_EN,
+				acpi_gbl_pm1_enable_register_save);
 		}
 
 
@@ -232,26 +223,24 @@ acpi_ev_restore_acpi_state (void)
 
 		/* Now restore the GPEs */
 
-		for (index = 0; index < DIV_2 (acpi_gbl_FACP->gpe0blk_len); index++) {
-			if (acpi_os_in8 (acpi_gbl_FACP->gpe0blk +
-				DIV_2 (acpi_gbl_FACP->gpe0blk_len)) !=
-				acpi_gbl_gpe0enable_register_save[index])
+		for (index = 0; index < DIV_2 (acpi_gbl_FADT->gpe0blk_len); index++) {
+			if (acpi_hw_register_read (ACPI_MTX_LOCK, GPE0_EN_BLOCK | index) !=
+					acpi_gbl_gpe0enable_register_save[index])
 			{
-				acpi_os_out8 ((acpi_gbl_FACP->gpe0blk +
-						  DIV_2 (acpi_gbl_FACP->gpe0blk_len)),
-						  acpi_gbl_gpe0enable_register_save[index]);
+				acpi_hw_register_write (ACPI_MTX_LOCK, GPE0_EN_BLOCK | index,
+					acpi_gbl_gpe0enable_register_save[index]);
 			}
 		}
 
-		if (acpi_gbl_FACP->gpe1_blk && acpi_gbl_FACP->gpe1_blk_len) {
-			for (index = 0; index < DIV_2 (acpi_gbl_FACP->gpe1_blk_len); index++) {
-				if (acpi_os_in8 (acpi_gbl_FACP->gpe1_blk +
-					DIV_2 (acpi_gbl_FACP->gpe1_blk_len)) !=
+		/* GPE 1 present? */
+
+		if (acpi_gbl_FADT->gpe1_blk_len) {
+			for (index = 0; index < DIV_2 (acpi_gbl_FADT->gpe1_blk_len); index++) {
+				if (acpi_hw_register_read (ACPI_MTX_LOCK, GPE1_EN_BLOCK | index) !=
 					acpi_gbl_gpe1_enable_register_save[index])
 				{
-					acpi_os_out8 ((acpi_gbl_FACP->gpe1_blk +
-							  DIV_2 (acpi_gbl_FACP->gpe1_blk_len)),
-							  acpi_gbl_gpe1_enable_register_save[index]);
+					acpi_hw_register_write (ACPI_MTX_LOCK, GPE1_EN_BLOCK | index,
+						acpi_gbl_gpe1_enable_register_save[index]);
 				}
 			}
 		}

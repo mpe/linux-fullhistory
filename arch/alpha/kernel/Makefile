@@ -13,29 +13,31 @@
 	$(CC) $(AFLAGS) -c -o $*.o $<
 
 O_TARGET := kernel.o
-O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o irq_alpha.o \
-	    signal.o setup.o ptrace.o time.o semaphore.o
-OX_OBJS  := alpha_ksyms.o
 
-L_TARGET := rest.a
-L_OBJS	 := irq_i8259.o irq_srm.o irq_pyxis.o \
+export-objs := alpha_ksyms.o
+
+obj-y    := entry.o traps.o process.o osf_sys.o irq.o irq_alpha.o \
+	    signal.o setup.o ptrace.o time.o semaphore.o alpha_ksyms.o
+
+#
+# FIXME!
+# These should be made conditional on the stuff that needs them!
+#
+obj-y	 += irq_i8259.o irq_srm.o irq_pyxis.o \
 	    es1888.o smc37c669.o smc37c93x.o ns87312.o
 
-ifdef CONFIG_SMP
-O_OBJS   += smp.o irq_smp.o
-endif
-
-ifdef CONFIG_PCI
-O_OBJS   += pci.o pci_iommu.o
-endif
-
 ifdef CONFIG_VGA_HOSE
-L_OBJS	 += console.o
+obj-y	 += console.o
 endif
+
+
+obj-$(CONFIG_SMP)    += smp.o irq_smp.o
+
+obj-$(CONFIG_PCI)    += pci.o pci_iommu.o
 
 ifdef CONFIG_ALPHA_GENERIC
 
-O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
+obj-y 	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
 	    core_polaris.o core_t2.o core_tsunami.o core_titan.o \
 	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o sys_eiger.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_nautilus.o sys_titan.o \
@@ -46,99 +48,53 @@ O_OBJS	 += core_apecs.o core_cia.o core_irongate.o core_lca.o core_mcpcia.o \
 else
 
 # Core logic support
-ifdef CONFIG_ALPHA_APECS
-O_OBJS   += core_apecs.o
-endif
-ifdef CONFIG_ALPHA_CIA
-O_OBJS   += core_cia.o
-endif
-ifdef CONFIG_ALPHA_IRONGATE
-O_OBJS   += core_irongate.o
-endif
-ifdef CONFIG_ALPHA_LCA
-O_OBJS   += core_lca.o
-endif
-ifdef CONFIG_ALPHA_MCPCIA
-O_OBJS   += core_mcpcia.o
-endif
-ifdef CONFIG_ALPHA_T2
-O_OBJS   += core_t2.o
-endif
-ifdef CONFIG_ALPHA_TSUNAMI
-O_OBJS   += core_tsunami.o
-endif
-ifdef CONFIG_ALPHA_TITAN
-O_OBJS   += core_titan.o
-endif
-ifdef CONFIG_ALPHA_POLARIS
-O_OBJS   += core_polaris.o
-endif
-ifdef CONFIG_ALPHA_WILDFIRE
-O_OBJS	+= core_wildfire.o
-endif
+obj-$(CONFIG_ALPHA_APECS) += core_apecs.o
+obj-$(CONFIG_ALPHA_CIA) += core_cia.o
+
+obj-$(CONFIG_ALPHA_IRONGATE) += core_irongate.o
+obj-$(CONFIG_ALPHA_LCA) += core_lca.o
+obj-$(CONFIG_ALPHA_MCPCIA) += core_mcpcia.o
+obj-$(CONFIG_ALPHA_T2) += core_t2.o
+obj-$(CONFIG_ALPHA_TSUNAMI) += core_tsunami.o
+obj-$(CONFIG_ALPHA_TITAN) += core_titan.o
+obj-$(CONFIG_ALPHA_POLARIS) += core_polaris.o
+obj-$(CONFIG_ALPHA_WILDFIRE) += core_wildfire.o
 
 # Board support
 ifneq ($(CONFIG_ALPHA_ALCOR)$(CONFIG_ALPHA_XLT),)
-O_OBJS   += sys_alcor.o
+obj-y    += sys_alcor.o
 endif
 ifneq ($(CONFIG_ALPHA_CABRIOLET)$(CONFIG_ALPHA_EB164)$(CONFIG_ALPHA_EB66P)$(CONFIG_ALPHA_LX164)$(CONFIG_ALPHA_PC164),)
-O_OBJS   += sys_cabriolet.o
+obj-y    += sys_cabriolet.o
 endif
-ifdef CONFIG_ALPHA_DP264
-O_OBJS   += sys_dp264.o
-endif
-ifdef CONFIG_ALPHA_TITAN
-O_OBJS   += sys_titan.o
-endif
+
+obj-$(CONFIG_ALPHA_DP264) += sys_dp264.o
+obj-$(CONFIG_ALPHA_TITAN) += sys_titan.o
+
 ifneq ($(CONFIG_ALPHA_EB64P)$(CONFIG_ALPHA_EB66),)
-O_OBJS   += sys_eb64p.o
+obj-y    += sys_eb64p.o
 endif
-ifdef CONFIG_ALPHA_EIGER
-O_OBJS   += sys_eiger.o
-endif
-ifdef CONFIG_ALPHA_JENSEN
-O_OBJS   += sys_jensen.o
-endif
-ifdef CONFIG_ALPHA_MIATA
-O_OBJS   += sys_miata.o
-endif
-ifdef CONFIG_ALPHA_MIKASA
-O_OBJS   += sys_mikasa.o
-endif
-ifdef CONFIG_ALPHA_NAUTILUS
-O_OBJS   += sys_nautilus.o
-endif
-ifdef CONFIG_ALPHA_NORITAKE
-O_OBJS   += sys_noritake.o
-endif
-ifdef CONFIG_ALPHA_RAWHIDE
-O_OBJS   += sys_rawhide.o
-endif
-ifdef CONFIG_ALPHA_RUFFIAN
-O_OBJS   += sys_ruffian.o
-endif
-ifdef CONFIG_ALPHA_RX164
-O_OBJS   += sys_rx164.o
-endif
-ifdef CONFIG_ALPHA_SABLE
-O_OBJS   += sys_sable.o
-endif
+
+obj-$(CONFIG_ALPHA_EIGER) += sys_eiger.o
+obj-$(CONFIG_ALPHA_JENSEN) += sys_jensen.o
+obj-$(CONFIG_ALPHA_MIATA) += sys_miata.o
+obj-$(CONFIG_ALPHA_MIKASA) += sys_mikasa.o
+obj-$(CONFIG_ALPHA_NAUTILUS) += sys_nautilus.o
+obj-$(CONFIG_ALPHA_NORITAKE) += sys_noritake.o
+obj-$(CONFIG_ALPHA_RAWHIDE) += sys_rawhide.o
+obj-$(CONFIG_ALPHA_RUFFIAN) += sys_ruffian.o
+obj-$(CONFIG_ALPHA_RX164) += sys_rx164.o
+obj-$(CONFIG_ALPHA_SABLE) += sys_sable.o
+
 ifneq ($(CONFIG_ALPHA_BOOK1)$(CONFIG_ALPHA_AVANTI)$(CONFIG_ALPHA_NONAME)$(CONFIG_ALPHA_P2K)$(CONFIG_ALPHA_XL),)
-O_OBJS   += sys_sio.o
+obj-y    += sys_sio.o
 endif
-ifdef CONFIG_ALPHA_SX164
-O_OBJS   += sys_sx164.o
-endif
-ifdef CONFIG_ALPHA_TAKARA
-O_OBJS   += sys_takara.o
-endif
-ifdef CONFIG_ALPHA_WILDFIRE
-O_OBJS	+= sys_wildfire.o
-endif
+
+obj-$(CONFIG_ALPHA_SX164) += sys_sx164.o
+obj-$(CONFIG_ALPHA_TAKARA) += sys_takara.o
+obj-$(CONFIG_ALPHA_WILDFIRE) += sys_wildfire.o
 
 endif # GENERIC
-
-O_OBJS	+= $(L_TARGET)
 
 all: kernel.o head.o
 

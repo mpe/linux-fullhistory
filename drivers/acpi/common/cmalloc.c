@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmalloc - local memory allocation routines
- *              $Revision: 73 $
+ *              $Revision: 79 $
  *
  *****************************************************************************/
 
@@ -57,11 +57,15 @@ _cm_allocate (
 	u32                     line)
 {
 	void                    *address = NULL;
+	DEBUG_ONLY_MEMBERS (\
+	ACPI_STATUS             status)
+
 
 	/* Check for an inadvertent size of zero bytes */
 
 	if (!size) {
-		REPORT_ERROR ("Cm_allocate: Attempt to allocate zero bytes");
+		_REPORT_ERROR (module, line, component,
+				("Cm_allocate: Attempt to allocate zero bytes\n"));
 		size = 1;
 	}
 
@@ -70,7 +74,7 @@ _cm_allocate (
 		/* Report allocation error */
 
 		_REPORT_ERROR (module, line, component,
-			"Cm_allocate: Memory allocation failure");
+				("Cm_allocate: Could not allocate size %X\n", size));
 
 		return (NULL);
 	}
@@ -103,11 +107,15 @@ _cm_callocate (
 	u32                     line)
 {
 	void                    *address = NULL;
+	DEBUG_ONLY_MEMBERS (\
+	ACPI_STATUS             status)
+
 
 	/* Check for an inadvertent size of zero bytes */
 
 	if (!size) {
-		REPORT_ERROR ("Cm_callocate: Attempt to allocate zero bytes");
+		_REPORT_ERROR (module, line, component,
+				("Cm_callocate: Attempt to allocate zero bytes\n"));
 		return (NULL);
 	}
 
@@ -118,8 +126,7 @@ _cm_callocate (
 		/* Report allocation error */
 
 		_REPORT_ERROR (module, line, component,
-			"Cm_callocate: Memory allocation failure");
-
+				("Cm_callocate: Could not allocate size %X\n", size));
 		return (NULL);
 	}
 
@@ -153,7 +160,7 @@ _cm_free (
 
 	if (NULL == address) {
 		_REPORT_ERROR (module, line, component,
-			"_Cm_free: Trying to delete a NULL address.");
+			("_Cm_free: Trying to delete a NULL address\n"));
 
 		return;
 	}

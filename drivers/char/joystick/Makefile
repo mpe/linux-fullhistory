@@ -2,18 +2,7 @@
 # Makefile for the joystick drivers.
 #
 
-# Subdirs.
-
-SUB_DIRS	:=
-MOD_SUB_DIRS	:= $(SUB_DIRS)
-MOD_IN_SUB_DIRS	:= $(SUB_DIRS)
-ALL_SUB_DIRS	:= $(SUB_DIRS)
-
-# The target object and module list name.
-
 O_TARGET	:= js.o
-M_OBJS		:=
-O_OBJS		:=
 
 # Objects that export symbols.
 
@@ -69,18 +58,6 @@ obj-$(CONFIG_INPUT_GAMECON)	+= gamecon.o
 obj-$(CONFIG_INPUT_TURBOGRAFX)	+= turbografx.o
 
 obj-$(CONFIG_INPUT_AMIJOY)	+= amijoy.o
-
-# Files that are both resident and modular: remove from modular.
-
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-int-m		:= $(filter-out $(int-y), $(int-m))
-
-# Translate to Rules.make lists.
-
-O_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
-OX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 # The global Rules.make.
 

@@ -38,29 +38,6 @@ extern void __load_new_mm_context(struct mm_struct *);
 extern void smp_imb(void);
 #endif
 
-/* We need to flush the userspace icache after setting breakpoints in
-   ptrace.  I don't think it's needed in do_swap_page, or do_no_page,
-   but I don't know how to get rid of it either.
-
-   Instead of indiscriminately using imb, take advantage of the fact
-   that icache entries are tagged with the ASN and load a new mm context.  */
-/* ??? Ought to use this in arch/alpha/kernel/signal.c too.  */
-
-#ifndef CONFIG_SMP
-static inline void
-flush_icache_page(struct vm_area_struct *vma, struct page *page)
-{
-	if (vma->vm_flags & VM_EXEC) {
-		struct mm_struct *mm = vma->vm_mm;
-		mm->context = 0;
-		if (current->active_mm == mm)
-			__load_new_mm_context(mm);
-	}
-}
-#else
-extern void flush_icache_page(struct vm_area_struct *vma, struct page *page);
-#endif
-
 
 /*
  * Use a few helper functions to hide the ugly broken ASN
@@ -83,8 +60,38 @@ ev5_flush_tlb_current(struct mm_struct *mm)
 static inline void
 flush_tlb_other(struct mm_struct *mm)
 {
-	mm->context = 0;
+	long * mmc = &mm->context[smp_processor_id()];
+	/*
+	 * Check it's not zero first to avoid cacheline ping pong when
+	 * possible.
+	 */
+	if (*mmc)
+		*mmc = 0;
 }
+
+/* We need to flush the userspace icache after setting breakpoints in
+   ptrace.  I don't think it's needed in do_swap_page, or do_no_page,
+   but I don't know how to get rid of it either.
+
+   Instead of indiscriminately using imb, take advantage of the fact
+   that icache entries are tagged with the ASN and load a new mm context.  */
+/* ??? Ought to use this in arch/alpha/kernel/signal.c too.  */
+
+#ifndef CONFIG_SMP
+static inline void
+flush_icache_page(struct vm_area_struct *vma, struct page *page)
+{
+	if (vma->vm_flags & VM_EXEC) {
+		struct mm_struct *mm = vma->vm_mm;
+		if (current->active_mm == mm)
+			__load_new_mm_context(mm);
+		else
+			mm->context[smp_processor_id()] = 0;
+	}
+}
+#else
+extern void flush_icache_page(struct vm_area_struct *vma, struct page *page);
+#endif
 
 /*
  * Flush just one page in the current TLB set.
@@ -140,7 +147,7 @@ ev5_flush_tlb_current_page(struct mm_struct * mm,
  */
 static inline void flush_tlb(void)
 {
-	flush_tlb_current(current->mm);
+	flush_tlb_current(current->active_mm);
 }
 
 /*
@@ -170,10 +177,10 @@ static inline void flush_tlb_all(void)
  */
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {
-	if (mm != current->mm)
-		flush_tlb_other(mm);
-	else
+	if (mm == current->active_mm)
 		flush_tlb_current(mm);
+	else
+		flush_tlb_other(mm);
 }
 
 /*
@@ -189,10 +196,10 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 {
 	struct mm_struct * mm = vma->vm_mm;
 
-	if (mm != current->mm)
-		flush_tlb_other(mm);
-	else
+	if (mm == current->active_mm)
 		flush_tlb_current_page(mm, vma, addr);
+	else
+		flush_tlb_other(mm);
 }
 
 /*

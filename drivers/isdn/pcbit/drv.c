@@ -134,8 +134,6 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	memset(dev->b2, 0, sizeof(struct pcbit_chan));
 	dev->b2->id = 1;
 
-
-	INIT_LIST_HEAD(&dev->qdelivery.list);
 	dev->qdelivery.sync = 0;
 	dev->qdelivery.routine = pcbit_deliver;
 	dev->qdelivery.data = dev;

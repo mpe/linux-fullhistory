@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dswload - Dispatcher namespace load callbacks
- *              $Revision: 19 $
+ *              $Revision: 24 $
  *
  *****************************************************************************/
 
@@ -84,6 +84,7 @@ acpi_ds_load1_begin_op (
 	/* Map the raw opcode into an internal object type */
 
 	data_type = acpi_ds_map_named_opcode_to_data_type (opcode);
+
 
 
 	/*
@@ -438,6 +439,11 @@ acpi_ds_load2_end_op (
 	case AML_WORD_FIELD_OP:
 	case AML_DWORD_FIELD_OP:
 
+		/*
+		 * Create the field object, but the field buffer and index must
+		 * be evaluated later during the execution phase
+		 */
+
 		/* Get the Name_string argument */
 
 		if (op->opcode == AML_CREATE_FIELD_OP) {
@@ -468,15 +474,22 @@ acpi_ds_load2_end_op (
 			op->node = new_node;
 
 			/*
-			 * If this is NOT a control method, we need to evaluate this opcode now.
+			 * If there is no object attached to the node, this node was just created and
+			 * we need to create the field object.  Otherwise, this was a lookup of an
+			 * existing node and we don't want to create the field object again.
 			 */
-
-			/* THIS WON"T WORK. Must execute all operands like Add().  => Must do an execute pass
-			if (!Walk_state->Method_desc) {
-				Status = Acpi_ds_exec_end_op (Walk_state, Op);
+			if (!new_node->object) {
+				/*
+				 * The Field definition is not fully parsed at this time.
+				 * (We must save the address of the AML for the buffer and index operands)
+				 */
+				status = acpi_aml_exec_create_field (((ACPI_PARSE2_OBJECT *) op)->data,
+						   ((ACPI_PARSE2_OBJECT *) op)->length,
+						   new_node, walk_state);
 			}
-			*/
 		}
+
+
 		break;
 
 
@@ -619,7 +632,8 @@ acpi_ds_load2_end_op (
 
 		status = acpi_aml_exec_create_region (((ACPI_PARSE2_OBJECT *) op)->data,
 				   ((ACPI_PARSE2_OBJECT *) op)->length,
-				   arg->value.integer, walk_state);
+				   (ACPI_ADDRESS_SPACE_TYPE) arg->value.integer,
+				   walk_state);
 
 		break;
 
@@ -639,7 +653,15 @@ acpi_ds_load2_end_op (
 
 	case AML_NAME_OP:
 
-		status = acpi_ds_create_node (walk_state, node, op);
+		/*
+		 * Because of the execution pass through the non-control-method
+		 * parts of the table, we can arrive here twice.  Only init
+		 * the named object node the first time through
+		 */
+
+		if (!node->object) {
+			status = acpi_ds_create_node (walk_state, node, op);
+		}
 
 		break;
 
@@ -661,4 +683,5 @@ cleanup:
 	acpi_ds_obj_stack_pop (1, walk_state);
 	return (status);
 }
+
 

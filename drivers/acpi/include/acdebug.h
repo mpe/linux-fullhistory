@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acdebug.h - ACPI/AML debugger
- *       $Revision: 35 $
+ *       $Revision: 37 $
  *
  *****************************************************************************/
 
@@ -205,6 +205,7 @@ acpi_db_find_references (
 
 void
 acpi_db_display_op (
+	ACPI_WALK_STATE         *walk_state,
 	ACPI_PARSE_OBJECT       *origin,
 	u32                     num_opcodes);
 
@@ -218,7 +219,12 @@ acpi_db_display_path (
 
 void
 acpi_db_display_opcode (
+	ACPI_WALK_STATE         *walk_state,
 	ACPI_PARSE_OBJECT       *op);
+
+void
+acpi_db_decode_internal_object (
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 
 /*

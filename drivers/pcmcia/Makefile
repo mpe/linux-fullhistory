@@ -16,6 +16,7 @@ multi-list = pcmcia_core.o yenta_socket.o
 
 yenta_socket-objs := pci_socket.o yenta.o
 pcmcia_core-objs := cistpl.o rsrc_mgr.o bulkmem.o cs.o
+
 ifeq ($(CONFIG_CARDBUS),y)
   pcmcia_core-objs += cardbus.o
 endif
@@ -48,8 +49,8 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-pcmcia_core.o:  $(CORE_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ $(CORE_OBJS)
+pcmcia_core.o:  $(pcmcia_core-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(pcmcia_core-objs)
 
-yenta_socket.o: $(CARDBUS_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ yenta.o pci_socket.o
+yenta_socket.o: $(yenta_socket-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(yenta_socket-objs)

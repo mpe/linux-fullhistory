@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amfield - ACPI AML (p-code) execution - field manipulation
- *              $Revision: 70 $
+ *              $Revision: 74 $
  *
  *****************************************************************************/
 
@@ -105,7 +105,7 @@ acpi_aml_setup_field (
 
 
 	/*
-	 * If the address and length have not been previously evaluated,
+	 * If the Region Address and Length have not been previously evaluated,
 	 * evaluate them and save the results.
 	 */
 	if (!(rgn_desc->region.flags & AOPOBJ_DATA_VALID)) {
@@ -114,6 +114,16 @@ acpi_aml_setup_field (
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
+	}
+
+
+	if ((obj_desc->common.type == ACPI_TYPE_FIELD_UNIT) &&
+		(!(obj_desc->common.flags & AOPOBJ_DATA_VALID)))
+	{
+		/*
+		 * Field Buffer and Index have not been previously evaluated,
+		 */
+		return (AE_AML_INTERNAL);
 	}
 
 	if (rgn_desc->region.length <
@@ -213,7 +223,16 @@ acpi_aml_access_named_field (
 	actual_byte_length = buffer_length;
 	if (buffer_length > byte_field_length) {
 		actual_byte_length = byte_field_length;
+	}
 
+	/* TBD: should these round down to a power of 2? */
+
+	if (DIV_8(bit_granularity) > byte_field_length) {
+		bit_granularity = MUL_8(byte_field_length);
+	}
+
+	if (byte_granularity > byte_field_length) {
+		byte_granularity = byte_field_length;
 	}
 
 

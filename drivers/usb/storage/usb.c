@@ -93,7 +93,8 @@ static int my_host_number;
 struct us_data *us_list;
 struct semaphore us_list_semaphore;
 
-static void * storage_probe(struct usb_device *dev, unsigned int ifnum);
+static void * storage_probe(struct usb_device *dev, unsigned int ifnum,
+			    const struct usb_device_id *id);
 static void storage_disconnect(struct usb_device *dev, void *ptr);
 struct usb_driver usb_storage_driver = {
 	name:		"usb-storage",
@@ -615,7 +616,8 @@ static int usb_stor_allocate_irq(struct us_data *ss)
 }
 
 /* Probe to see if a new device is actually a SCSI device */
-static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
+static void * storage_probe(struct usb_device *dev, unsigned int ifnum,
+			    const struct usb_device_id *id)
 {
 	int i;
 	char mf[USB_STOR_STRING_LEN];		     /* manufacturer */

@@ -1,15 +1,32 @@
-L_OBJS :=
-M_OBJS :=
-O_OBJS := module.o capi.o act2000_isa.o
+# Makefile for the act2000 ISDN device driver
 
-O_TARGET :=
-ifeq ($(CONFIG_ISDN_DRV_ACT2000),y)
-  O_TARGET += act2000.o
-else
-  ifeq ($(CONFIG_ISDN_DRV_ACT2000),m)
-	O_TARGET += act2000.o
-	M_OBJS = act2000.o
-  endif
-endif
+# The target object and module list name.
+
+O_TARGET	:= act2000_drv.o
+
+# Objects that export symbols.
+
+export-objs	:=
+
+# Multipart objects.
+
+list-multi	:= act2000.o
+act2000-objs	:= module.o capi.o act2000_isa.o
+
+# Object file lists.
+
+obj-y	:=
+obj-m	:=
+obj-n	:=
+obj-	:=
+
+# Each configuration option enables a list of files.
+
+obj-$(CONFIG_ISDN_DRV_ACT2000)	+= act2000.o
 
 include $(TOPDIR)/Rules.make
+
+# Link rules for multi-part drivers.
+
+act2000.o: $(act2000-objs)
+	$(LD) -r -o $@ $(act2000-objs)

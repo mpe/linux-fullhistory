@@ -155,7 +155,7 @@ obj-$(CONFIG_QIC02_TAPE) += tpqic02.o
 subdir-$(CONFIG_FTAPE) += ftape
 subdir-$(CONFIG_DRM) += drm
 subdir-$(CONFIG_PCMCIA) += pcmcia
-subdir-$(CONFIG_agp) += agp
+subdir-$(CONFIG_AGP) += agp
 
 ifeq ($(CONFIG_FTAPE),y)
 obj-y       += ftape/ftape.o

@@ -223,8 +223,6 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 					memset(kaddr+offset+len, 0, PAGE_SIZE-offset-len);
 			}
 			err = copy_from_user(kaddr + offset, str, bytes_to_copy);
-			flush_dcache_page(page);
-			flush_page_to_ram(page);
 			kunmap(page);
 
 			if (err)
@@ -281,6 +279,7 @@ void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long a
 		__free_page(page);
 		return;
 	}
+	flush_dcache_page(page);
 	flush_page_to_ram(page);
 	set_pte(pte, pte_mkdirty(pte_mkwrite(mk_pte(page, PAGE_COPY))));
 /* no need for flush_tlb */

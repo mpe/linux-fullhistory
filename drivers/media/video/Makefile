@@ -9,11 +9,6 @@
 # parent makes..
 #
 
-O_OBJS		:=
-OX_OBJS		:=
-M_OBJS		:=
-MX_OBJS		:=
-
 # Object file lists.
 
 obj-y		:=
@@ -75,15 +70,6 @@ int-m           := $(filter-out $(int-y), $(int-m))
 # Take multi-part drivers out of obj-y and put components in.
 
 obj-y           := $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-
-O_OBJS          := $(filter-out $(export-objs), $(obj-y))
-OX_OBJS         := $(filter     $(export-objs), $(obj-y))
-M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

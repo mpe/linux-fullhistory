@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.45 2000/07/18 15:24:28 jj Exp $
+# $Id: Makefile,v 1.46 2000/12/14 22:57:26 davem Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -67,7 +67,7 @@ LINKFLAGS = -T arch/sparc64/vmlinux.lds
 
 HEAD := arch/sparc64/kernel/head.o arch/sparc64/kernel/init_task.o
 
-SUBDIRS := $(SUBDIRS) arch/sparc64/kernel arch/sparc64/lib arch/sparc64/mm \
+SUBDIRS += arch/sparc64/kernel arch/sparc64/lib arch/sparc64/mm \
 	arch/sparc64/prom
 
 ifneq ($(CONFIG_SOLARIS_EMUL),n)

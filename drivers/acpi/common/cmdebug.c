@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmdebug - Debug print routines
- *              $Revision: 60 $
+ *              $Revision: 61 $
  *
  *****************************************************************************/
 
@@ -118,7 +118,7 @@ function_trace_ptr (
 
 	acpi_gbl_nesting_level++;
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
-			 " %2.2ld Entered Function: %s, 0x%p\n",
+			 " %2.2ld Entered Function: %s, %p\n",
 			 acpi_gbl_nesting_level, function_name, pointer);
 }
 
@@ -184,7 +184,7 @@ function_trace_u32 (
 
 	acpi_gbl_nesting_level++;
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
-			 " %2.2ld Entered Function: %s, 0x%lX\n",
+			 " %2.2ld Entered Function: %s, %lX\n",
 			 acpi_gbl_nesting_level, function_name, integer);
 }
 
@@ -285,7 +285,7 @@ function_value_exit (
 {
 
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
-			 " %2.2ld Exiting Function: %s, 0x%X\n",
+			 " %2.2ld Exiting Function: %s, %X\n",
 			 acpi_gbl_nesting_level, function_name, value);
 
 	acpi_gbl_nesting_level--;
@@ -319,7 +319,7 @@ function_ptr_exit (
 {
 
 	debug_print (module_name, line_number, component_id, TRACE_FUNCTIONS,
-			 " %2.2ld Exiting Function: %s, 0x%p\n",
+			 " %2.2ld Exiting Function: %s, %p\n",
 			 acpi_gbl_nesting_level, function_name, ptr);
 
 	acpi_gbl_nesting_level--;

@@ -45,7 +45,7 @@ __load_new_mm_context(struct mm_struct *next_mm)
 	unsigned long mmc;
 
 	mmc = __get_new_mm_context(next_mm, smp_processor_id());
-	next_mm->context = mmc;
+	next_mm->context[smp_processor_id()] = mmc;
 	current->thread.asn = mmc & HARDWARE_ASN_MASK;
         current->thread.ptbr
 	  = ((unsigned long) next_mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;

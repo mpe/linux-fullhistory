@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmobject - ACPI object create/delete/size/cache routines
- *              $Revision: 27 $
+ *              $Revision: 32 $
  *
  *****************************************************************************/
 
@@ -193,7 +193,7 @@ _cm_allocate_object_desc (
 			/* Allocation failed */
 
 			_REPORT_ERROR (module_name, line_number, component_id,
-					  "Could not allocate Object Descriptor");
+					  ("Could not allocate an object descriptor\n"));
 
 			return (NULL);
 		}
@@ -499,16 +499,21 @@ acpi_cm_get_package_object_size (
 {
 
 	ACPI_OPERAND_OBJECT     *this_internal_obj;
-	ACPI_OPERAND_OBJECT     *parent_obj[MAX_PACKAGE_DEPTH] = { 0,0,0,0,0 };
+	ACPI_OPERAND_OBJECT     *parent_obj[MAX_PACKAGE_DEPTH];
 	ACPI_OPERAND_OBJECT     *this_parent;
 	u32                     this_index;
-	u32                     index[MAX_PACKAGE_DEPTH] = { 0,0,0,0,0 };
+	u32                     index[MAX_PACKAGE_DEPTH];
 	u32                     length = 0;
 	u32                     object_space;
 	u32                     current_depth = 0;
 	u32                     package_count = 1;
 	ACPI_STATUS             status;
 
+
+	/* Init the package stack TBD: replace with linked list */
+
+	MEMSET(parent_obj, 0, MAX_PACKAGE_DEPTH);
+	MEMSET(index, 0, MAX_PACKAGE_DEPTH);
 
 	parent_obj[0] = internal_obj;
 
@@ -519,7 +524,7 @@ acpi_cm_get_package_object_size (
 
 
 		/*
-		 * Check for 1) An unitialized package element.  It is completely
+		 * Check for 1) An uninitialized package element.  It is completely
 		 *              legal to declare a package and leave it uninitialized
 		 *           2) Any type other than a package.  Packages are handled
 		 *              below.

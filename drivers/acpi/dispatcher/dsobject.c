@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dsobject - Dispatcher object management routines
- *              $Revision: 43 $
+ *              $Revision: 53 $
  *
  *****************************************************************************/
 
@@ -64,8 +64,12 @@ acpi_ds_init_one_object (
 {
 	OBJECT_TYPE_INTERNAL    type;
 	ACPI_STATUS             status;
-	INIT_WALK_INFO          *info = (INIT_WALK_INFO *) context;
+	ACPI_INIT_WALK_INFO     *info = (ACPI_INIT_WALK_INFO *) context;
+	u8                      table_revision;
 
+
+	info->object_count++;
+	table_revision = info->table_desc->pointer->revision;
 
 	/*
 	 * We are only interested in objects owned by the table that
@@ -98,6 +102,14 @@ acpi_ds_init_one_object (
 
 		info->method_count++;
 
+		/*
+		 * Set the execution data width (32 or 64) based upon the
+		 * revision number of the parent ACPI table.
+		 */
+
+		if (table_revision == 1) {
+			((ACPI_NAMESPACE_NODE *)obj_handle)->flags |= ANOBJ_DATA_WIDTH_32;
+		}
 
 		/*
 		 * Always parse methods to detect errors, we may delete
@@ -113,14 +125,10 @@ acpi_ds_init_one_object (
 		}
 
 		/*
-		 * Keep the parse tree only if we are parsing all methods
-		 * at init time (versus just-in-time)
+		 * Delete the parse tree.  We simple re-parse the method
+		 * for every execution since there isn't much overhead
 		 */
-
-		if (acpi_gbl_when_to_parse_methods != METHOD_PARSE_AT_INIT) {
-			acpi_ns_delete_namespace_subtree (obj_handle);
-		}
-
+		acpi_ns_delete_namespace_subtree (obj_handle);
 		break;
 
 	default:
@@ -154,12 +162,13 @@ acpi_ds_initialize_objects (
 	ACPI_NAMESPACE_NODE     *start_node)
 {
 	ACPI_STATUS             status;
-	INIT_WALK_INFO          info;
+	ACPI_INIT_WALK_INFO     info;
 
 
-	info.method_count = 0;
+	info.method_count   = 0;
 	info.op_region_count = 0;
-	info.table_desc = table_desc;
+	info.object_count   = 0;
+	info.table_desc     = table_desc;
 
 
 	/* Walk entire namespace from the supplied root */
@@ -218,7 +227,7 @@ acpi_ds_init_object_from_op (
 
 		/* First arg is a number */
 
-		acpi_ds_create_operand (walk_state, op->value.arg);
+		acpi_ds_create_operand (walk_state, op->value.arg, 0);
 		arg_desc = walk_state->operands [walk_state->num_operands - 1];
 		acpi_ds_obj_stack_pop (1, walk_state);
 
@@ -239,16 +248,24 @@ acpi_ds_init_object_from_op (
 
 		/* Get the value, delete the internal object */
 
-		(*obj_desc)->buffer.length = arg_desc->number.value;
+		(*obj_desc)->buffer.length = (u32) arg_desc->number.value;
 		acpi_cm_remove_reference (arg_desc);
 
 		/* Allocate the buffer */
 
-		(*obj_desc)->buffer.pointer =
-				  acpi_cm_callocate ((*obj_desc)->buffer.length);
+		if ((*obj_desc)->buffer.length == 0) {
+			(*obj_desc)->buffer.pointer = NULL;
+			REPORT_WARNING (("Buffer created with zero length in AML\n"));
+			break;
+		}
 
-		if (!(*obj_desc)->buffer.pointer) {
-			return (AE_NO_MEMORY);
+		else {
+			(*obj_desc)->buffer.pointer =
+					  acpi_cm_callocate ((*obj_desc)->buffer.length);
+
+			if (!(*obj_desc)->buffer.pointer) {
+				return (AE_NO_MEMORY);
+			}
 		}
 
 		/*
@@ -360,7 +377,7 @@ acpi_ds_init_object_from_op (
  *
  ****************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_ds_build_internal_simple_obj (
 	ACPI_WALK_STATE         *walk_state,
 	ACPI_PARSE_OBJECT       *op,
@@ -369,6 +386,8 @@ acpi_ds_build_internal_simple_obj (
 	ACPI_OPERAND_OBJECT     *obj_desc;
 	OBJECT_TYPE_INTERNAL    type;
 	ACPI_STATUS             status;
+	u32                     length;
+	char                    *name;
 
 
 	if (op->opcode == AML_NAMEPATH_OP) {
@@ -387,6 +406,22 @@ acpi_ds_build_internal_simple_obj (
 					  (ACPI_NAMESPACE_NODE **)&(op->node));
 
 			if (ACPI_FAILURE (status)) {
+				if (status == AE_NOT_FOUND) {
+					name = NULL;
+					acpi_ns_externalize_name (ACPI_UINT32_MAX, op->value.string, &length, &name);
+
+					if (name) {
+						REPORT_WARNING (("Reference %s AML %X not found\n",
+								 name, op->aml_offset));
+						acpi_cm_free (name);
+					}
+					else {
+						REPORT_WARNING (("Reference %s AML %X not found\n",
+								   op->value.string, op->aml_offset));
+					}
+					*obj_desc_ptr = NULL;
+				}
+
 				return (status);
 			}
 		}
@@ -473,7 +508,7 @@ acpi_ds_build_internal_package_obj (
 	if (!obj_desc->package.elements) {
 		/* Package vector allocation failure   */
 
-		REPORT_ERROR ("Ds_build_internal_package_obj: Package vector allocation failure");
+		REPORT_ERROR (("Ds_build_internal_package_obj: Package vector allocation failure\n"));
 
 		acpi_cm_delete_object_desc (obj_desc);
 		return (AE_NO_MEMORY);
@@ -578,7 +613,7 @@ acpi_ds_create_node (
 	status = acpi_ds_build_internal_object (walk_state,
 			 op->value.arg, &obj_desc);
 	if (ACPI_FAILURE (status)) {
-		goto cleanup;
+		return (status);
 	}
 
 

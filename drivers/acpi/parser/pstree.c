@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: pstree - Parser op tree manipulation/traversal/search
- *              $Revision: 23 $
+ *              $Revision: 25 $
  *
  *****************************************************************************/
 
@@ -284,117 +284,6 @@ acpi_ps_get_depth_next (
 	}
 
 	return (next);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_ps_fetch_prefix
- *
- * PARAMETERS:  Scope           - Op to fetch prefix for
- *              Path            - A namestring containing the prefix
- *              io              - Direction flag
- *
- * RETURN:      Op referenced by the prefix
- *
- * DESCRIPTION: Fetch and handle path prefix ('\\' or '^')
- *
- ******************************************************************************/
-
-ACPI_PARSE_OBJECT *
-acpi_ps_fetch_prefix (
-	ACPI_PARSE_OBJECT       *scope,
-	NATIVE_CHAR             **path,
-	u32                     io)
-{
-	u32                     prefix = io ? GET8 (*path):**path;
-
-
-	switch (prefix)
-	{
-	case '\\':
-	case '/':
-
-		/* go to the root */
-
-		*path += 1;
-		while (scope->parent) {
-			scope = scope->parent;
-		}
-		break;
-
-
-	case '^':
-
-		/* go up one level */
-
-		*path += 1;
-		scope = scope->parent;
-		break;
-	}
-
-	if (scope && !scope->parent) {
-		/* searching from the root, start with its children */
-
-		scope = acpi_ps_get_child (scope);
-	}
-
-	return (scope);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    Acpi_ps_fetch_name
- *
- * PARAMETERS:  Path            - A string containing the name segment
- *              io              - Direction flag
- *
- * RETURN:      The 4-s8 ASCII ACPI Name as a u32
- *
- * DESCRIPTION: Fetch ACPI name segment (dot-delimited)
- *
- ******************************************************************************/
-
-u32
-acpi_ps_fetch_name (
-	NATIVE_CHAR             **path,
-	u32                     io)
-{
-	u32                     name = 0;
-	NATIVE_CHAR             *nm;
-	u32                     i;
-	NATIVE_CHAR             ch;
-
-
-	if (io) {
-		/* Get the name from the path pointer */
-
-		MOVE_UNALIGNED32_TO_32 (&name, *path);
-		*path += 4;
-	}
-
-	else {
-		if (**path == '.') {
-			*path += 1;
-		}
-
-		nm = (NATIVE_CHAR *) &name;
-		for (i = 0; i < 4; i++) {
-			ch = **path;
-			if (ch && ch != '.') {
-				*nm = ch;
-				*path += 1;
-			}
-
-			else {
-				*nm = '_';
-			}
-			nm++;
-		}
-	}
-
-	return (name);
 }
 
 

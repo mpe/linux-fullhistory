@@ -132,7 +132,7 @@ int sr_set_blocklength(int minor, int blocklength)
 	modesel->density = density;
 	modesel->block_length_med = (blocklength >> 8) & 0xff;
 	modesel->block_length_lo = blocklength & 0xff;
-	if (0 == (rc = sr_do_ioctl(minor, cmd, buffer, sizeof(*modesel), 0, SCSI_DATA_WRITE))) {
+	if (0 == (rc = sr_do_ioctl(minor, cmd, buffer, sizeof(*modesel), 0, SCSI_DATA_WRITE, NULL))) {
 		scsi_CDs[minor].device->sector_size = blocklength;
 	}
 #ifdef DEBUG
@@ -176,7 +176,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 12;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1, SCSI_DATA_READ);
+		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1, SCSI_DATA_READ, NULL);
 		if (rc != 0)
 			break;
 		if ((buffer[0] << 8) + buffer[1] < 0x0a) {
@@ -200,7 +200,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			cmd[0] = 0xde;
 			cmd[1] = (scsi_CDs[minor].device->lun << 5) | 0x03;
 			cmd[2] = 0xb0;
-			rc = sr_do_ioctl(minor, cmd, buffer, 0x16, 1, SCSI_DATA_READ);
+			rc = sr_do_ioctl(minor, cmd, buffer, 0x16, 1, SCSI_DATA_READ, NULL);
 			if (rc != 0)
 				break;
 			if (buffer[14] != 0 && buffer[14] != 0xb0) {
@@ -224,7 +224,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 			memset(cmd, 0, MAX_COMMAND_SIZE);
 			cmd[0] = 0xc7;
 			cmd[1] = (scsi_CDs[minor].device->lun << 5) | 3;
-			rc = sr_do_ioctl(minor, cmd, buffer, 4, 1, SCSI_DATA_READ);
+			rc = sr_do_ioctl(minor, cmd, buffer, 4, 1, SCSI_DATA_READ, NULL);
 			if (rc == -EINVAL) {
 				printk(KERN_INFO "sr%d: Hmm, seems the drive "
 				       "doesn't support multisession CD's\n", minor);
@@ -249,7 +249,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[1] = (scsi_CDs[minor].device->lun << 5);
 		cmd[8] = 0x04;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 0x04, 1, SCSI_DATA_READ);
+		rc = sr_do_ioctl(minor, cmd, buffer, 0x04, 1, SCSI_DATA_READ, NULL);
 		if (rc != 0) {
 			break;
 		}
@@ -263,7 +263,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		cmd[6] = rc & 0x7f;	/* number of last session */
 		cmd[8] = 0x0c;
 		cmd[9] = 0x40;
-		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1, SCSI_DATA_READ);
+		rc = sr_do_ioctl(minor, cmd, buffer, 12, 1, SCSI_DATA_READ, NULL);
 		if (rc != 0) {
 			break;
 		}

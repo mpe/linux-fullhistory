@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amfldio - Aml Field I/O
- *              $Revision: 26 $
+ *              $Revision: 32 $
  *
  *****************************************************************************/
 
@@ -59,7 +59,7 @@ acpi_aml_read_field_data (
 {
 	ACPI_STATUS             status;
 	ACPI_OPERAND_OBJECT     *rgn_desc = NULL;
-	u32                     address;
+	ACPI_PHYSICAL_ADDRESS   address;
 	u32                     local_value = 0;
 	u32                     field_byte_width;
 
@@ -91,9 +91,6 @@ acpi_aml_read_field_data (
 	address = rgn_desc->region.address +
 			  (obj_desc->field.offset * field_byte_width) +
 			  field_byte_offset;
-
-
-
 
 
 	/* Invoke the appropriate Address_space/Op_region handler */
@@ -318,7 +315,7 @@ cleanup:
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_aml_write_field_data (
 	ACPI_OPERAND_OBJECT     *obj_desc,
 	u32                     field_byte_offset,
@@ -327,7 +324,7 @@ acpi_aml_write_field_data (
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_OPERAND_OBJECT     *rgn_desc = NULL;
-	u32                     address;
+	ACPI_PHYSICAL_ADDRESS   address;
 	u32                     field_byte_width;
 
 
@@ -351,8 +348,6 @@ acpi_aml_write_field_data (
 	address = rgn_desc->region.address +
 			  (obj_desc->field.offset * field_byte_width) +
 			  field_byte_offset;
-
-
 
 	/* Invoke the appropriate Address_space/Op_region handler */
 
@@ -379,7 +374,7 @@ acpi_aml_write_field_data (
  *
  ****************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_aml_write_field_data_with_update_rule (
 	ACPI_OPERAND_OBJECT     *obj_desc,
 	u32                     mask,

@@ -412,15 +412,15 @@ void show_regs(struct pt_regs * regs)
 /*
  * No need to lock the MM as we are the last user
  */
-void release_segments(struct mm_struct *mm)
+void destroy_context(struct mm_struct *mm)
 {
-	void * ldt = mm->segments;
+	void * ldt = mm->context.segments;
 
 	/*
 	 * free the LDT
 	 */
 	if (ldt) {
-		mm->segments = NULL;
+		mm->context.segments = NULL;
 		clear_LDT();
 		vfree(ldt);
 	}
@@ -478,7 +478,7 @@ void flush_thread(void)
 void release_thread(struct task_struct *dead_task)
 {
 	if (dead_task->mm) {
-		void * ldt = dead_task->mm->segments;
+		void * ldt = dead_task->mm->context.segments;
 
 		// temporary debugging check
 		if (ldt) {
@@ -493,29 +493,24 @@ void release_thread(struct task_struct *dead_task)
  * we do not have to muck with descriptors here, that is
  * done in switch_mm() as needed.
  */
-void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
+int init_new_context(struct task_struct *p, struct mm_struct *new_mm)
 {
-	struct mm_struct * old_mm = current->mm;
-	void * old_ldt = old_mm->segments, * ldt;
+	struct mm_struct * old_mm;
+	void *old_ldt, *ldt;
 
-	if (!old_ldt) {
+	ldt = NULL;
+	old_mm = current->mm;
+	if (old_mm && (old_ldt = old_mm->context.segments) != NULL) {
 		/*
-		 * default LDT - use the one from init_task
+		 * Completely new LDT, we initialize it from the parent:
 		 */
-		new_mm->segments = NULL;
-		return;
-	}
-
-	/*
-	 * Completely new LDT, we initialize it from the parent:
-	 */
-	ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-	if (!ldt)
-		printk(KERN_WARNING "ldt allocation failed\n");
-	else
+		ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+		if (!ldt)
+			return -ENOMEM;
 		memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
-	new_mm->segments = ldt;
-	return;
+	}
+	new_mm->context.segments = ldt;
+	return 0;
 }
 
 /*

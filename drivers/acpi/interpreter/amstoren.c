@@ -3,7 +3,7 @@
  *
  * Module Name: amstoren - AML Interpreter object store support,
  *                         Store to Node (namespace object)
- *              $Revision: 21 $
+ *              $Revision: 24 $
  *
  *****************************************************************************/
 
@@ -430,10 +430,20 @@ acpi_aml_store_object_to_node (
 
 	case ACPI_TYPE_FIELD_UNIT:
 
+
+		/*
+		 * If the Field Buffer and Index have not been previously evaluated,
+		 * evaluate them and save the results.
+		 */
+		if (!(dest_desc->common.flags & AOPOBJ_DATA_VALID)) {
+			status = acpi_ds_get_field_unit_arguments (dest_desc);
+			if (ACPI_FAILURE (status)) {
+				return (status);
+			}
+		}
+
 		if ((!dest_desc->field_unit.container ||
-			ACPI_TYPE_BUFFER != dest_desc->field_unit.container->common.type ||
-			dest_desc->field_unit.sequence !=
-				dest_desc->field_unit.container->buffer.sequence))
+			ACPI_TYPE_BUFFER != dest_desc->field_unit.container->common.type))
 		{
 			status = AE_AML_INTERNAL;
 			goto clean_up_and_bail_out;
@@ -487,7 +497,12 @@ acpi_aml_store_object_to_node (
 
 	case ACPI_TYPE_NUMBER:
 
+
 		dest_desc->number.value = val_desc->number.value;
+
+		/* Truncate value if we are executing from a 32-bit ACPI table */
+
+		acpi_aml_truncate_for32bit_table (dest_desc, walk_state);
 		break;
 
 

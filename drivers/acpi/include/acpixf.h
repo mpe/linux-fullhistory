@@ -35,8 +35,12 @@
  */
 
 ACPI_STATUS
-acpi_initialize (
-	ACPI_INIT_DATA          *init_data);
+acpi_initialize_subsystem (
+	void);
+
+ACPI_STATUS
+acpi_enable_subsystem (
+	u32                     flags);
 
 ACPI_STATUS
 acpi_terminate (
@@ -65,8 +69,12 @@ acpi_format_exception (
  */
 
 ACPI_STATUS
-acpi_load_firmware_tables (
-	void);
+acpi_find_root_pointer (
+	ACPI_PHYSICAL_ADDRESS   *rsdp_physical_address);
+
+ACPI_STATUS
+acpi_load_tables (
+	ACPI_PHYSICAL_ADDRESS   rsdp_physical_address);
 
 ACPI_STATUS
 acpi_load_table (
@@ -94,10 +102,6 @@ acpi_get_table (
  */
 
 ACPI_STATUS
-acpi_load_namespace (
-	void);
-
-ACPI_STATUS
 acpi_walk_namespace (
 	ACPI_OBJECT_TYPE        type,
 	ACPI_HANDLE             start_object,
@@ -105,6 +109,13 @@ acpi_walk_namespace (
 	WALK_CALLBACK           user_function,
 	void                    *context,
 	void *                  *return_value);
+
+ACPI_STATUS
+acpi_get_devices (
+	NATIVE_CHAR             *HID,
+	WALK_CALLBACK           user_function,
+	void                    *context,
+	void                    **return_value);
 
 ACPI_STATUS
 acpi_get_name (
@@ -203,6 +214,14 @@ acpi_install_gpe_handler (
 	void                    *context);
 
 ACPI_STATUS
+acpi_acquire_global_lock (
+	void);
+
+ACPI_STATUS
+acpi_release_global_lock (
+	void);
+
+ACPI_STATUS
 acpi_remove_gpe_handler (
 	u32                     gpe_number,
 	GPE_HANDLER             handler);
@@ -259,11 +278,11 @@ acpi_get_irq_routing_table (
 
 ACPI_STATUS
 acpi_set_firmware_waking_vector (
-	void                    *physical_address);
+	ACPI_PHYSICAL_ADDRESS   physical_address);
 
 ACPI_STATUS
 acpi_get_firmware_waking_vector (
-	void                    **physical_address);
+	ACPI_PHYSICAL_ADDRESS   *physical_address);
 
 ACPI_STATUS
 acpi_get_processor_throttling_info (

@@ -235,12 +235,8 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 bool 'Power Management support' CONFIG_PM
 
-dep_bool '  ACPI support' CONFIG_ACPI $CONFIG_PM
-if [ "$CONFIG_ACPI" != "n" ]; then
-   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool '    ACPI interpreter (EXPERIMENTAL)' CONFIG_ACPI_INTERPRETER
-      bool '    Enter S1 for sleep (EXPERIMENTAL)' CONFIG_ACPI_S1_SLEEP
-   fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   dep_bool '  ACPI support' CONFIG_ACPI $CONFIG_PM
 fi
 
 dep_tristate '  Advanced Power Management BIOS support' CONFIG_APM $CONFIG_PM

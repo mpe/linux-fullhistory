@@ -1,7 +1,7 @@
 /******************************************************************************
  *
- * Module Name: evregion - ACPI Address_space / Op_region handler dispatch
- *              $Revision: 76 $
+ * Module Name: evregion - ACPI Address_space (Op_region) handler dispatch
+ *              $Revision: 90 $
  *
  *****************************************************************************/
 
@@ -34,202 +34,6 @@
 	 MODULE_NAME         ("evregion")
 
 
-#define PCI_ROOT_HID_STRING        "PNP0A03"
-#define PCI_ROOT_HID_VALUE         0x030AD041       /* EISAID("PNP0A03") */
-
-
-/******************************************************************************
- *
- * FUNCTION:    Acpi_ev_find_one_pci_root_bus
- *
- * PARAMETERS:
- *
- * RETURN:      None
- *
- * DESCRIPTION:
- *
- *****************************************************************************/
-
-ACPI_STATUS
-acpi_ev_find_one_pci_root_bus (
-	ACPI_HANDLE             obj_handle,
-	u32                     nesting_level,
-	void                    *context,
-	void                    **return_value)
-{
-	ACPI_NAMESPACE_NODE     *node;
-	ACPI_OPERAND_OBJECT     *obj_desc;
-	ACPI_STATUS             status;
-
-
-	node = (ACPI_NAMESPACE_NODE *) obj_handle;
-	obj_desc = ((ACPI_NAMESPACE_NODE *) obj_handle)->object;
-
-
-	/*
-	 * We are looking for all valid _HID objects.
-	 */
-
-	if (STRNCMP ((NATIVE_CHAR *) &node->name, METHOD_NAME__HID, ACPI_NAME_SIZE) ||
-		(!obj_desc))
-	{
-		return (AE_OK);
-	}
-
-
-	/*
-	 * Found an _HID object.
-	 * Now we need a HID with the value EISAID("PNP0A03")
-	 * HID can be either a number or a string.
-	 */
-
-	switch (obj_desc->common.type)
-	{
-	case ACPI_TYPE_NUMBER:
-
-		if (obj_desc->number.value != PCI_ROOT_HID_VALUE) {
-			return (AE_OK);
-		}
-
-		break;
-
-	case ACPI_TYPE_STRING:
-
-		if (STRNCMP (obj_desc->string.pointer, PCI_ROOT_HID_STRING,
-				  sizeof (PCI_ROOT_HID_STRING)))
-		{
-			return (AE_OK);
-		}
-
-		break;
-
-	default:
-
-		return (AE_OK);
-	}
-
-
-	/*
-	 * We found a valid PCI_ROOT_HID.
-	 * The parent of the HID entry is the PCI device;  Install the default PCI
-	 * handler for this PCI device.
-	 */
-
-	status = acpi_install_address_space_handler (acpi_ns_get_parent_object (node),
-			   ADDRESS_SPACE_PCI_CONFIG,
-			   ACPI_DEFAULT_HANDLER, NULL, NULL);
-
-	return (AE_OK);
-}
-
-
-/******************************************************************************
- *
- * FUNCTION:    Acpi_ev_find_pci_root_buses
- *
- * PARAMETERS:
- *
- * RETURN:      None
- *
- * DESCRIPTION:
- *
- *****************************************************************************/
-
-ACPI_STATUS
-acpi_ev_find_pci_root_buses (
-	void)
-{
-
-	acpi_ns_walk_namespace (ACPI_TYPE_ANY, ACPI_ROOT_OBJECT, ACPI_UINT32_MAX,
-			   FALSE, acpi_ev_find_one_pci_root_bus, NULL, NULL);
-
-	return (AE_OK);
-}
-
-/******************************************************************************
- *
- * FUNCTION:    Acpi_ev_init_one_device
- *
- * PARAMETERS:  The usual "I'm a namespace callback" stuff
- *
- * RETURN:      ACPI_STATUS
- *
- * DESCRIPTION: This is called once per device soon after ACPI is enabled
- *              to initialize each device. It determines if the device is
- *              present, and if so, calls _INI.
- *
- *****************************************************************************/
-
-ACPI_STATUS
-acpi_ev_init_one_device (
-	ACPI_HANDLE             obj_handle,
-	u32                     nesting_level,
-	void                    *context,
-	void                    **return_value)
-{
-	ACPI_STATUS             status;
-	ACPI_OPERAND_OBJECT    *ret_obj;
-
-
-	/*
-	 * Run _STA to determine if we can run _INI on the device.
-	 */
-	status = acpi_ns_evaluate_relative(obj_handle, "_STA", NULL, &ret_obj);
-	if (AE_NOT_FOUND == status) {
-		 /* No _STA means device is present */
-	}
-	else if (ACPI_FAILURE (status)) {
-		return (status);
-	}
-	else if (ret_obj) {
-		if (ACPI_TYPE_NUMBER != ret_obj->common.type) {
-			status = AE_AML_OPERAND_TYPE;
-			goto cleanup;
-		}
-
-		/*
-		 * if _STA "present" bit not set, we're done.
-		 */
-		if (!(ret_obj->number.value & 1)) {
-			goto cleanup;
-		}
-	}
-
-	/*
-	 * The device is present. Run _INI.
-	 */
-
-	status = acpi_ns_evaluate_relative(obj_handle, "_INI", NULL, NULL);
-
-cleanup:
-
-	acpi_cm_remove_reference (ret_obj);
-	return (status);
-}
-
-/******************************************************************************
- *
- * FUNCTION:    Acpi_ev_init_devices
- *
- * PARAMETERS:  None
- *
- * RETURN:      ACPI_STATUS
- *
- * DESCRIPTION: This initializes all ACPI devices.
- *
- *****************************************************************************/
-
-ACPI_STATUS
-acpi_ev_init_devices (
-	void)
-{
-	acpi_ns_walk_namespace (ACPI_TYPE_ANY, ACPI_ROOT_OBJECT, ACPI_UINT32_MAX,
-			   FALSE, acpi_ev_init_one_device, NULL, NULL);
-
-	return (AE_OK);
-}
-
-
 /**************************************************************************
  *
  * FUNCTION:    Acpi_ev_install_default_address_space_handlers
@@ -250,23 +54,45 @@ acpi_ev_install_default_address_space_handlers (
 
 
 	/*
-	 * NOTE:    All address spaces (PCI Config, EC, SMBus) are scope dependent
-	 *          and registration must occur for a specific device.  In the case
-	 *          system memory and IO address spaces there is currently no device
-	 *          associated with the address space.  For these we use the root.
+	 * All address spaces (PCI Config, EC, SMBus) are scope dependent
+	 * and registration must occur for a specific device.  In the case
+	 * system memory and IO address spaces there is currently no device
+	 * associated with the address space.  For these we use the root.
+	 * We install the default PCI config space handler at the root so
+	 * that this space is immediately available even though the we have
+	 * not enumerated all the PCI Root Buses yet.  This is to conform
+	 * to the ACPI specification which states that the PCI config
+	 * space must be always available -- even though we are nowhere
+	 * near ready to find the PCI root buses at this point.
+	 *
+	 * NOTE: We ignore AE_EXIST because this means that a handler has
+	 * already been installed (via Acpi_install_address_space_handler)
 	 */
 
 	status = acpi_install_address_space_handler (acpi_gbl_root_node,
 			   ADDRESS_SPACE_SYSTEM_MEMORY,
 			   ACPI_DEFAULT_HANDLER, NULL, NULL);
-	if (ACPI_FAILURE (status)) {
+	if ((ACPI_FAILURE (status)) &&
+		(status != AE_EXIST))
+	{
 		return (status);
 	}
 
 	status = acpi_install_address_space_handler (acpi_gbl_root_node,
 			   ADDRESS_SPACE_SYSTEM_IO,
 			   ACPI_DEFAULT_HANDLER, NULL, NULL);
-	if (ACPI_FAILURE (status)) {
+	if ((ACPI_FAILURE (status)) &&
+		(status != AE_EXIST))
+	{
+		return (status);
+	}
+
+	status = acpi_install_address_space_handler (acpi_gbl_root_node,
+			   ADDRESS_SPACE_PCI_CONFIG,
+			   ACPI_DEFAULT_HANDLER, NULL, NULL);
+	if ((ACPI_FAILURE (status)) &&
+		(status != AE_EXIST))
+	{
 		return (status);
 	}
 
@@ -275,7 +101,7 @@ acpi_ev_install_default_address_space_handlers (
 }
 
 
-/* TBD: [Restructure] Move to the methods directory */
+/* TBD: [Restructure] Move elsewhere */
 
 /**************************************************************************
  *
@@ -290,7 +116,7 @@ acpi_ev_install_default_address_space_handlers (
  *
  *************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_ev_execute_reg_method (
 	ACPI_OPERAND_OBJECT    *region_obj,
 	u32                     function)
@@ -301,7 +127,7 @@ acpi_ev_execute_reg_method (
 	ACPI_STATUS             status;
 
 
-	if (region_obj->region.REGmethod == NULL) {
+	if (region_obj->region.extra->extra.method_REG == NULL) {
 		return (AE_OK);
 	}
 
@@ -337,7 +163,7 @@ acpi_ev_execute_reg_method (
 	/*
 	 *  Execute the method, no return value
 	 */
-	status = acpi_ns_evaluate_by_handle (region_obj->region.REGmethod, params, NULL);
+	status = acpi_ns_evaluate_by_handle (region_obj->region.extra->extra.method_REG, params, NULL);
 	return (status);
 }
 
@@ -364,7 +190,7 @@ ACPI_STATUS
 acpi_ev_address_space_dispatch (
 	ACPI_OPERAND_OBJECT     *region_obj,
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value)
 {
@@ -381,7 +207,7 @@ acpi_ev_address_space_dispatch (
 	handler_desc = region_obj->region.addr_handler;
 
 	if (!handler_desc) {
-		return(AE_EXIST);
+		return(AE_NOT_EXIST);
 	}
 
 	/*
@@ -421,11 +247,13 @@ acpi_ev_address_space_dispatch (
 			return(status);
 		}
 
+		region_obj->region.flags |= AOPOBJ_INITIALIZED;
+
 		/*
 		 *  Save the returned context for use in all accesses to
 		 *  this particular region.
 		 */
-		region_obj->region.region_context = region_context;
+		region_obj->region.extra->extra.region_context = region_context;
 	}
 
 	/*
@@ -447,7 +275,7 @@ acpi_ev_address_space_dispatch (
 	 */
 	status = handler (function, address, bit_width, value,
 			 handler_desc->addr_handler.context,
-			 region_obj->region.region_context);
+			 region_obj->region.extra->extra.region_context);
 
 
 	if (!(handler_desc->addr_handler.flags & ADDR_HANDLER_DEFAULT_INSTALLED)) {
@@ -462,7 +290,7 @@ acpi_ev_address_space_dispatch (
 
 /******************************************************************************
  *
- * FUNCTION:    Acpi_ev_disassociate_region_and_handler
+ * FUNCTION:    Acpi_ev_disassociate_region_from_handler
  *
  * PARAMETERS:  Handler_obj     - Handler Object
  *              Region_obj      - Region Object
@@ -482,9 +310,11 @@ acpi_ev_disassociate_region_from_handler(
 	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_OPERAND_OBJECT     **last_obj_ptr;
 	ADDRESS_SPACE_SETUP     region_setup;
-	void                    *region_context = region_obj->region.region_context;
+	void                    *region_context;
 	ACPI_STATUS             status;
 
+
+	region_context = region_obj->region.extra->extra.region_context;
 
 	/*
 	 *  Get the address handler from the region object
@@ -533,6 +363,8 @@ acpi_ev_disassociate_region_from_handler(
 			/*
 			 *  Init routine may fail, Just ignore errors
 			 */
+
+			region_obj->region.flags &= ~(AOPOBJ_INITIALIZED);
 
 			/*
 			 *  Remove handler reference in the region

@@ -18,6 +18,7 @@ extern unsigned long event;
 #include <asm/semaphore.h>
 #include <asm/page.h>
 #include <asm/ptrace.h>
+#include <asm/mmu.h>
 
 #include <linux/smp.h>
 #include <linux/tty.h>
@@ -208,7 +209,6 @@ struct mm_struct {
 	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
 	spinlock_t page_table_lock;
-	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -217,11 +217,9 @@ struct mm_struct {
 	unsigned long cpu_vm_mask;
 	unsigned long swap_cnt;	/* number of pages to swap on next pass */
 	unsigned long swap_address;
-	/*
-	 * This is an architecture-specific pointer: the portable
-	 * part of Linux does not know about any segments.
-	 */
-	void * segments;
+
+	/* Architecture-specific MM context */
+	mm_context_t context;
 };
 
 #define INIT_MM(name) \
@@ -235,7 +233,6 @@ struct mm_struct {
 	map_count:	1, 				\
 	mmap_sem:	__MUTEX_INITIALIZER(name.mmap_sem), \
 	page_table_lock: SPIN_LOCK_UNLOCKED, 		\
-	segments:	NULL 				\
 }
 
 struct signal_struct {

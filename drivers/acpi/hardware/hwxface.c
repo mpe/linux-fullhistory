@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Name: hwxface.c - Hardware access external interfaces
- *              $Revision: 31 $
+ *              $Revision: 36 $
  *
  *****************************************************************************/
 
@@ -69,7 +69,7 @@ acpi_get_processor_throttling_info (
 	NATIVE_UINT             num_throttle_states;
 	NATIVE_UINT             buffer_space_needed;
 	NATIVE_UINT             i;
-	u8                      duty_width = 0;
+	u8                      duty_width;
 	ACPI_NAMESPACE_NODE     *cpu_node;
 	ACPI_OPERAND_OBJECT     *cpu_obj;
 	ACPI_CPU_THROTTLING_STATE *state_ptr;
@@ -100,12 +100,10 @@ acpi_get_processor_throttling_info (
 		return (AE_NOT_FOUND);
 	}
 
-#ifndef _IA64
 	/*
-	 * No Duty fields in IA64 tables
+	 * (Duty Width on IA-64 is zero)
 	 */
-	duty_width = acpi_gbl_FACP->duty_width;
-#endif
+	duty_width = acpi_gbl_FADT->duty_width;
 
 	/*
 	 *  P0 must always have a P_BLK all others may be null
@@ -115,7 +113,7 @@ acpi_get_processor_throttling_info (
 	 *
 	 */
 	if (!cpu_obj->processor.length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.address))
+		(ACPI_UINT16_MAX < cpu_obj->processor.address))
 	{
 		/*
 		 *  Acpi_even though we can't throttle, we still have one state (100%)
@@ -177,8 +175,8 @@ acpi_get_processor_throttling_state (
 	ACPI_OPERAND_OBJECT     *cpu_obj;
 	u32                     num_throttle_states;
 	u32                     duty_cycle;
-	u8                      duty_offset = 0;
-	u8                      duty_width = 0;
+	u8                      duty_offset;
+	u8                      duty_width;
 
 
 	/* Convert and validate the device handle */
@@ -195,13 +193,11 @@ acpi_get_processor_throttling_state (
 		return (AE_NOT_FOUND);
 	}
 
-#ifndef _IA64
 	/*
 	 * No Duty fields in IA64 tables
 	 */
-	duty_offset = acpi_gbl_FACP->duty_offset;
-	duty_width = acpi_gbl_FACP->duty_width;
-#endif
+	duty_offset = acpi_gbl_FADT->duty_offset;
+	duty_width = acpi_gbl_FADT->duty_width;
 
 	/*
 	 *  Must have a valid P_BLK P0 must have a P_BLK all others may be null
@@ -211,7 +207,7 @@ acpi_get_processor_throttling_state (
 	 *  also, if Duty_width is zero there are no additional states
 	 */
 	if (!cpu_obj->processor.length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.address))
+		(ACPI_UINT16_MAX < cpu_obj->processor.address))
 	{
 		*throttle_state = 0;
 		return(AE_OK);
@@ -263,8 +259,8 @@ acpi_set_processor_throttling_state (
 	ACPI_NAMESPACE_NODE    *cpu_node;
 	ACPI_OPERAND_OBJECT    *cpu_obj;
 	u32                     num_throttle_states = 0;
-	u8                      duty_offset = 0;
-	u8                      duty_width = 0;
+	u8                      duty_offset;
+	u8                      duty_width;
 	u32                     duty_cycle = 0;
 
 
@@ -282,13 +278,11 @@ acpi_set_processor_throttling_state (
 		return (AE_NOT_FOUND);
 	}
 
-#ifndef _IA64
 	/*
 	 * No Duty fields in IA64 tables
 	 */
-	duty_offset = acpi_gbl_FACP->duty_offset;
-	duty_width = acpi_gbl_FACP->duty_width;
-#endif
+	duty_offset = acpi_gbl_FADT->duty_offset;
+	duty_width = acpi_gbl_FADT->duty_width;
 
 	/*
 	 *  Must have a valid P_BLK P0 must have a P_BLK all others may be null
@@ -298,7 +292,7 @@ acpi_set_processor_throttling_state (
 	 *  also, if Duty_width is zero there are no additional states
 	 */
 	if (!cpu_obj->processor.length || !duty_width ||
-		(0xFFFF < cpu_obj->processor.address))
+		(ACPI_UINT16_MAX < cpu_obj->processor.address))
 	{
 		/*
 		 *  If caller wants to set the state to the only state we handle
@@ -314,7 +308,7 @@ acpi_set_processor_throttling_state (
 		return (AE_SUPPORT);
 	}
 
-	num_throttle_states = (int) acpi_hw_local_pow (2,duty_width);
+	num_throttle_states = (u32) acpi_hw_local_pow (2,duty_width);
 
 	/*
 	 * Convert throttling state to duty cycle (invert).
@@ -533,8 +527,9 @@ acpi_get_timer (
 
 ACPI_STATUS
 acpi_set_firmware_waking_vector (
-	void                    *physical_address)
+	ACPI_PHYSICAL_ADDRESS physical_address)
 {
+
 
 	/* Make sure that we have an FACS */
 
@@ -544,7 +539,12 @@ acpi_set_firmware_waking_vector (
 
 	/* Set the vector */
 
-	* ((void **) acpi_gbl_FACS->firmware_waking_vector) = physical_address;
+	if (acpi_gbl_FACS->vector_width == 32) {
+		* (u32 *) acpi_gbl_FACS->firmware_waking_vector = (u32) physical_address;
+	}
+	else {
+		*acpi_gbl_FACS->firmware_waking_vector = physical_address;
+	}
 
 	return (AE_OK);
 }
@@ -555,7 +555,7 @@ acpi_set_firmware_waking_vector (
  * FUNCTION:    Acpi_get_firmware_waking_vector
  *
  * PARAMETERS:  *Physical_address   - Output buffer where contents of
- *                                    the d_firmware_waking_vector field of
+ *                                    the Firmware_waking_vector field of
  *                                    the FACS will be stored.
  *
  * RETURN:      Status
@@ -566,8 +566,9 @@ acpi_set_firmware_waking_vector (
 
 ACPI_STATUS
 acpi_get_firmware_waking_vector (
-	void                    **physical_address)
+	ACPI_PHYSICAL_ADDRESS *physical_address)
 {
+
 
 	if (!physical_address) {
 		return (AE_BAD_PARAMETER);
@@ -581,8 +582,12 @@ acpi_get_firmware_waking_vector (
 
 	/* Get the vector */
 
-	*physical_address = * ((void **) acpi_gbl_FACS->firmware_waking_vector);
-
+	if (acpi_gbl_FACS->vector_width == 32) {
+		*physical_address = * (u32 *) acpi_gbl_FACS->firmware_waking_vector;
+	}
+	else {
+		*physical_address = *acpi_gbl_FACS->firmware_waking_vector;
+	}
 
 	return (AE_OK);
 }

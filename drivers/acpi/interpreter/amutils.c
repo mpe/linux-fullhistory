@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amutils - interpreter/scanner utilities
- *              $Revision: 53 $
+ *              $Revision: 64 $
  *
  *****************************************************************************/
 
@@ -131,24 +131,44 @@ acpi_aml_validate_object_type (
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_aml_buf_seq
+ * FUNCTION:    Acpi_aml_truncate_for32bit_table
  *
- * RETURN:      The next buffer descriptor sequence number
+ * PARAMETERS:  Obj_desc        - Object to be truncated
+ *              Walk_state      - Current walk state
+ *                                (A method must be executing)
  *
- * DESCRIPTION: Provide a unique sequence number for each Buffer descriptor
- *              allocated during the interpreter's existence.  These numbers
- *              are used to relate Field_unit descriptors to the Buffers
- *              within which the fields are defined.
+ * RETURN:      none
  *
- *              Just increment the global counter and return it.
+ * DESCRIPTION: Truncate a number to 32-bits if the currently executing method
+ *              belongs to a 32-bit ACPI table.
  *
  ******************************************************************************/
 
-u32
-acpi_aml_buf_seq (void)
+void
+acpi_aml_truncate_for32bit_table (
+	ACPI_OPERAND_OBJECT     *obj_desc,
+	ACPI_WALK_STATE         *walk_state)
 {
 
-	return (++acpi_gbl_buf_seq);
+	/*
+	 * Object must be a valid number and we must be executing
+	 * a control method
+	 */
+
+	if ((!obj_desc) ||
+		(obj_desc->common.type != ACPI_TYPE_NUMBER) ||
+		(!walk_state->method_node))
+	{
+		return;
+	}
+
+	if (walk_state->method_node->flags & ANOBJ_DATA_WIDTH_32) {
+		/*
+		 * We are running a method that exists in a 32-bit ACPI table.
+		 * Truncate the value to 32 bits by zeroing out the upper 32-bit field
+		 */
+		obj_desc->number.value &= (UINT64) ACPI_UINT32_MAX;
+	}
 }
 
 
@@ -242,20 +262,18 @@ acpi_aml_release_global_lock (
 
 u32
 acpi_aml_digits_needed (
-	u32                     val,
+	ACPI_INTEGER            val,
 	u32                     base)
 {
 	u32                     num_digits = 0;
 
 
 	if (base < 1) {
-		/*  impossible base */
-
-		REPORT_ERROR ("Aml_digits_needed: Impossible base");
+		REPORT_ERROR (("Aml_digits_needed: Internal error - Invalid base\n"));
 	}
 
 	else {
-		for (num_digits = 1 + (val < 0) ; val /= base ; ++num_digits) { ; }
+		for (num_digits = 1 + (val < 0); (val = ACPI_DIVIDE (val,base)); ++num_digits) { ; }
 	}
 
 	return (num_digits);
@@ -268,11 +286,11 @@ acpi_aml_digits_needed (
  *
  * PARAMETERS:  Value           - Value to be converted
  *
- * RETURN:      Convert a 32-bit value to big-endian (swap the bytes)
+ * DESCRIPTION: Convert a 32-bit value to big-endian (swap the bytes)
  *
  ******************************************************************************/
 
-u32
+static u32
 _ntohl (
 	u32                     value)
 {
@@ -307,7 +325,7 @@ _ntohl (
  * PARAMETERS:  Numeric_id      - EISA ID to be converted
  *              Out_string      - Where to put the converted string (8 bytes)
  *
- * RETURN:      Convert a numeric EISA ID to string representation
+ * DESCRIPTION: Convert a numeric EISA ID to string representation
  *
  ******************************************************************************/
 
@@ -330,6 +348,39 @@ acpi_aml_eisa_id_to_string (
 	out_string[5] = hex[(id >> 4) & 0xf];
 	out_string[6] = hex[id & 0xf];
 	out_string[7] = 0;
+
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_aml_unsigned_integer_to_string
+ *
+ * PARAMETERS:  Value           - Value to be converted
+ *              Out_string      - Where to put the converted string (8 bytes)
+ *
+ * RETURN:      Convert a number to string representation
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_aml_unsigned_integer_to_string (
+	ACPI_INTEGER            value,
+	NATIVE_CHAR             *out_string)
+{
+	u32                     count;
+	u32                     digits_needed;
+
+
+	digits_needed = acpi_aml_digits_needed (value, 10);
+
+	out_string[digits_needed] = '\0';
+
+	for (count = digits_needed; count > 0; count--) {
+		out_string[count-1] = (NATIVE_CHAR) ('0' + (ACPI_MODULO (value, 10)));
+		value = ACPI_DIVIDE (value, 10);
+	}
 
 	return (AE_OK);
 }
@@ -376,8 +427,8 @@ acpi_aml_build_copy_internal_package_object (
 	level_ptr               = &copy_level[0];
 	current_depth           = 0;
 
-	dest_obj->common.type       = source_obj->common.type;
-	dest_obj->package.count     = source_obj->package.count;
+	dest_obj->common.type   = source_obj->common.type;
+	dest_obj->package.count = source_obj->package.count;
 
 
 	/*
@@ -391,7 +442,7 @@ acpi_aml_build_copy_internal_package_object (
 	if (!dest_obj->package.elements) {
 		/* Package vector allocation failure   */
 
-		REPORT_ERROR ("Aml_build_copy_internal_package_object: Package vector allocation failure");
+		REPORT_ERROR (("Aml_build_copy_internal_package_object: Package vector allocation failure\n"));
 		return (AE_NO_MEMORY);
 	}
 
@@ -400,8 +451,8 @@ acpi_aml_build_copy_internal_package_object (
 
 	while (1) {
 		this_index      = level_ptr->index;
-		this_dest_obj   = (ACPI_OPERAND_OBJECT  *) level_ptr->dest_obj->package.elements[this_index];
-		this_source_obj = (ACPI_OPERAND_OBJECT  *) level_ptr->source_obj->package.elements[this_index];
+		this_dest_obj   = (ACPI_OPERAND_OBJECT *) level_ptr->dest_obj->package.elements[this_index];
+		this_source_obj = (ACPI_OPERAND_OBJECT *) level_ptr->source_obj->package.elements[this_index];
 
 		if (IS_THIS_OBJECT_TYPE (this_source_obj, ACPI_TYPE_PACKAGE)) {
 			/*

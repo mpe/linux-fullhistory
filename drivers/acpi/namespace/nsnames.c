@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nsnames - Name manipulation and search
- *              $Revision: 48 $
+ *              $Revision: 51 $
  *
  ******************************************************************************/
 
@@ -86,7 +86,7 @@ acpi_ns_get_table_pathname (
 
 	name_buffer = acpi_cm_callocate (size + 1);
 	if (!name_buffer) {
-		REPORT_ERROR ("Ns_get_table_pathname: allocation failure");
+		REPORT_ERROR (("Ns_get_table_pathname: allocation failure\n"));
 		return (NULL);
 	}
 
@@ -168,6 +168,12 @@ acpi_ns_handle_to_pathname (
 		  next_node = acpi_ns_get_parent_object (next_node))
 	{
 		size += PATH_SEGMENT_LENGTH;
+	}
+
+	/* Special case for size still 0 - no parent for "special" nodes */
+
+	if (!size) {
+		size = PATH_SEGMENT_LENGTH;
 	}
 
 	/* Set return length to the required path length */

@@ -30,11 +30,52 @@ extern void get_sectorsize(int);
 /* In fact, it is very slow if it has to spin up first */
 #define IOCTL_TIMEOUT 30*HZ
 
+/* ATAPI drives don't have a SCMD_PLAYAUDIO_TI command.  When these drives
+   are emulating a SCSI device via the idescsi module, they need to have
+   CDROMPLAYTRKIND commands translated into CDROMPLAYMSF commands for them */
+
+static int sr_fake_playtrkind(struct cdrom_device_info *cdi, struct cdrom_ti *ti)
+{
+	struct cdrom_tocentry trk0_te, trk1_te;
+	struct cdrom_tochdr tochdr;
+	u_char sr_cmd[10];
+	int ntracks, ret;
+
+	if ((ret = sr_audio_ioctl(cdi, CDROMREADTOCHDR, &tochdr)))
+		return ret;
+
+	ntracks = tochdr.cdth_trk1 - tochdr.cdth_trk0 + 1;
+	
+	if (ti->cdti_trk1 == ntracks) 
+		ti->cdti_trk1 = CDROM_LEADOUT;
+	else 
+		ti->cdti_trk1 ++;
+
+	trk0_te.cdte_track = ti->cdti_trk0;
+	trk0_te.cdte_format = CDROM_MSF;
+	trk1_te.cdte_track = ti->cdti_trk1;
+	trk1_te.cdte_format = CDROM_MSF;
+	
+	if ((ret = sr_audio_ioctl(cdi, CDROMREADTOCENTRY, &trk0_te)))
+		return ret;
+	if ((ret = sr_audio_ioctl(cdi, CDROMREADTOCENTRY, &trk1_te)))
+		return ret;
+	
+	sr_cmd[0] = GPCMD_PLAY_AUDIO_MSF;
+	sr_cmd[3] = trk0_te.cdte_addr.msf.minute;
+	sr_cmd[4] = trk0_te.cdte_addr.msf.second;
+	sr_cmd[5] = trk0_te.cdte_addr.msf.frame;
+	sr_cmd[6] = trk1_te.cdte_addr.msf.minute;
+	sr_cmd[7] = trk1_te.cdte_addr.msf.second;
+	sr_cmd[8] = trk1_te.cdte_addr.msf.frame;
+	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE, NULL);
+}
+
 /* We do our own retries because we want to know what the specific
    error code is.  Normally the UNIT_ATTENTION code will automatically
    clear after one error */
 
-int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflength, int quiet, int readwrite)
+int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflength, int quiet, int readwrite, struct request_sense *sense)
 {
 	Scsi_Request *SRpnt;
 	Scsi_Device *SDev;
@@ -132,7 +173,10 @@ int sr_do_ioctl(int target, unsigned char *sr_cmd, void *buffer, unsigned buflen
 			err = -EIO;
 		}
 	}
-	result = SRpnt->sr_result;
+
+	if (sense)
+		memcpy(sense, SRpnt->sr_sense_buffer, sizeof(*sense));
+
 	/* Wake up a process waiting for device */
 	scsi_release_request(SRpnt);
 	SRpnt = NULL;
@@ -149,7 +193,7 @@ static int test_unit_ready(int minor)
 	sr_cmd[0] = GPCMD_TEST_UNIT_READY;
 	sr_cmd[1] = ((scsi_CDs[minor].device->lun) << 5);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-	return sr_do_ioctl(minor, sr_cmd, NULL, 0, 1, SCSI_DATA_NONE);
+	return sr_do_ioctl(minor, sr_cmd, NULL, 0, 1, SCSI_DATA_NONE, NULL);
 }
 
 int sr_tray_move(struct cdrom_device_info *cdi, int pos)
@@ -161,7 +205,7 @@ int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
 	sr_cmd[4] = (pos == 0) ? 0x03 /* close */ : 0x02 /* eject */ ;
 
-	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE);
+	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE, NULL);
 }
 
 int sr_lock_door(struct cdrom_device_info *cdi, int lock)
@@ -238,7 +282,7 @@ int sr_get_mcn(struct cdrom_device_info *cdi, struct cdrom_mcn *mcn)
 	sr_cmd[8] = 24;
 	sr_cmd[9] = 0;
 
-	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0, SCSI_DATA_READ);
+	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0, SCSI_DATA_READ, NULL);
 
 	memcpy(mcn->medium_catalog_number, buffer + 9, 13);
 	mcn->medium_catalog_number[13] = 0;
@@ -267,7 +311,7 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 	sr_cmd[2] = (speed >> 8) & 0xff;	/* MSB for speed (in kbytes/sec) */
 	sr_cmd[3] = speed & 0xff;	/* LSB */
 
-	if (sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE))
+	if (sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE, NULL))
 		return -EIO;
 	return 0;
 }
@@ -296,7 +340,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
 			sr_cmd[8] = 12;		/* LSB of length */
 
-			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1, SCSI_DATA_READ);
+			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1, SCSI_DATA_READ, NULL);
 
 			tochdr->cdth_trk0 = buffer[2];
 			tochdr->cdth_trk1 = buffer[3];
@@ -315,7 +359,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 			sr_cmd[6] = tocentry->cdte_track;
 			sr_cmd[8] = 12;		/* LSB of length */
 
-			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0, SCSI_DATA_READ);
+			result = sr_do_ioctl(target, sr_cmd, buffer, 12, 0, SCSI_DATA_READ, NULL);
 
 			tocentry->cdte_ctrl = buffer[5] & 0xf;
 			tocentry->cdte_adr = buffer[5] >> 4;
@@ -341,7 +385,10 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void *arg)
 		sr_cmd[7] = ti->cdti_trk1;
 		sr_cmd[8] = ti->cdti_ind1;
 
-		result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0, SCSI_DATA_NONE);
+		result = sr_do_ioctl(target, sr_cmd, NULL, 0, 0, SCSI_DATA_NONE, NULL);
+		if (result == -EDRIVE_CANT_DO_THIS)
+			result = sr_fake_playtrkind(cdi, ti);
+
 		break;
 	}
 
@@ -402,7 +449,7 @@ int sr_read_cd(int minor, unsigned char *dest, int lba, int format, int blksize)
 		cmd[9] = 0x10;
 		break;
 	}
-	return sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ);
+	return sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ, NULL);
 }
 
 /*
@@ -440,7 +487,7 @@ int sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 	cmd[4] = (unsigned char) (lba >> 8) & 0xff;
 	cmd[5] = (unsigned char) lba & 0xff;
 	cmd[8] = 1;
-	rc = sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ);
+	rc = sr_do_ioctl(minor, cmd, dest, blksize, 0, SCSI_DATA_READ, NULL);
 
 	return rc;
 }

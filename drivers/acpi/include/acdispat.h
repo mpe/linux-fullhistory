@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acdispat.h - dispatcher (parser to interpreter interface)
- *       $Revision: 29 $
+ *       $Revision: 33 $
  *
  *****************************************************************************/
 
@@ -61,7 +61,11 @@ acpi_ds_obj_stack_pop_object (
 	ACPI_WALK_STATE         *walk_state);
 
 
-/* dsregion - Op region support */
+/* dsopcode - support for late evaluation */
+
+ACPI_STATUS
+acpi_ds_get_field_unit_arguments (
+	ACPI_OPERAND_OBJECT     *obj_desc);
 
 ACPI_STATUS
 acpi_ds_get_region_arguments (
@@ -83,6 +87,13 @@ acpi_ds_exec_end_control_op (
 
 
 /* dsexec - Parser/Interpreter interface, method execution callbacks */
+
+
+ACPI_STATUS
+acpi_ds_get_predicate_value (
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_PARSE_OBJECT       *op,
+	u32                     has_result_obj);
 
 ACPI_STATUS
 acpi_ds_exec_begin_op (
@@ -142,6 +153,18 @@ acpi_ds_load2_begin_op (
 
 ACPI_STATUS
 acpi_ds_load2_end_op (
+	ACPI_WALK_STATE         *state,
+	ACPI_PARSE_OBJECT       *op);
+
+ACPI_STATUS
+acpi_ds_load3_begin_op (
+	u16                     opcode,
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_PARSE_OBJECT       **out_op);
+
+ACPI_STATUS
+acpi_ds_load3_end_op (
 	ACPI_WALK_STATE         *state,
 	ACPI_PARSE_OBJECT       *op);
 
@@ -284,6 +307,11 @@ acpi_ds_create_node (
 /* dsregn - Parser/Interpreter interface - Op Region parsing */
 
 ACPI_STATUS
+acpi_ds_eval_field_unit_operands (
+	ACPI_WALK_STATE         *walk_state,
+	ACPI_PARSE_OBJECT       *op);
+
+ACPI_STATUS
 acpi_ds_eval_region_operands (
 	ACPI_WALK_STATE         *walk_state,
 	ACPI_PARSE_OBJECT       *op);
@@ -297,7 +325,8 @@ acpi_ds_initialize_region (
 
 u8
 acpi_ds_is_result_used (
-	ACPI_PARSE_OBJECT       *op);
+	ACPI_PARSE_OBJECT       *op,
+	ACPI_WALK_STATE         *walk_state);
 
 void
 acpi_ds_delete_result_if_not_used (
@@ -308,7 +337,8 @@ acpi_ds_delete_result_if_not_used (
 ACPI_STATUS
 acpi_ds_create_operand (
 	ACPI_WALK_STATE         *walk_state,
-	ACPI_PARSE_OBJECT       *arg);
+	ACPI_PARSE_OBJECT       *arg,
+	u32                     args_remaining);
 
 ACPI_STATUS
 acpi_ds_create_operands (
@@ -377,12 +407,10 @@ acpi_ds_pop_walk_state (
 
 ACPI_STATUS
 acpi_ds_result_stack_pop (
-	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_ds_result_stack_push (
-	void                    *object,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
@@ -397,5 +425,31 @@ void
 acpi_ds_delete_walk_state_cache (
 	void);
 
+ACPI_STATUS
+acpi_ds_result_insert (
+	void                    *object,
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state);
+
+ACPI_STATUS
+acpi_ds_result_remove (
+	ACPI_OPERAND_OBJECT     **object,
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state);
+
+ACPI_STATUS
+acpi_ds_result_pop (
+	ACPI_OPERAND_OBJECT     **object,
+	ACPI_WALK_STATE         *walk_state);
+
+ACPI_STATUS
+acpi_ds_result_push (
+	ACPI_OPERAND_OBJECT     *object,
+	ACPI_WALK_STATE         *walk_state);
+
+ACPI_STATUS
+acpi_ds_result_pop_from_bottom (
+	ACPI_OPERAND_OBJECT     **object,
+	ACPI_WALK_STATE         *walk_state);
 
 #endif /* _ACDISPAT_H_ */

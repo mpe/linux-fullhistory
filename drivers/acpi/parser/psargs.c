@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psargs - Parse AML opcode arguments
- *              $Revision: 35 $
+ *              $Revision: 40 $
  *
  *****************************************************************************/
 
@@ -33,20 +33,6 @@
 	 MODULE_NAME         ("psargs")
 
 
-u32
-acpi_ps_pkg_length_encoding_size (
-	u32                     first_byte)
-{
-
-	/*
-	 * Bits 6-7 contain the number of bytes
-	 * in the encoded package length (-1)
-	 */
-
-	return ((first_byte >> 6) + 1);
-}
-
-
 /*******************************************************************************
  *
  * FUNCTION:    Acpi_ps_get_next_package_length
@@ -59,55 +45,6 @@ acpi_ps_pkg_length_encoding_size (
  * DESCRIPTION: Decode and return a package length field
  *
  ******************************************************************************/
-
-u32
-xxx_acpi_ps_get_next_package_length (
-	ACPI_PARSE_STATE        *parser_state)
-{
-	u32                     encoding_length;
-	u32                     package_length = 0;
-	u8                      *aml_ptr = parser_state->aml;
-
-
-	encoding_length = acpi_ps_pkg_length_encoding_size ((u32) GET8 (aml_ptr));
-
-
-	switch (encoding_length)
-	{
-	case 1: /* 1-byte encoding (bits 0-5) */
-
-		package_length = ((u32) GET8 (aml_ptr) & 0x3f);
-		break;
-
-
-	case 2: /* 2-byte encoding (next byte + bits 0-3) */
-
-		package_length = ((((u32) GET8 (aml_ptr + 1)) << 4) |
-				   (((u32) GET8 (aml_ptr)) & 0x0f));
-		break;
-
-
-	case 3: /* 3-byte encoding (next 2 bytes + bits 0-3) */
-
-		package_length = ((((u32) GET8 (aml_ptr + 2)) << 12) |
-				   (((u32) GET8 (aml_ptr + 1)) << 4) |
-				   (((u32) GET8 (aml_ptr)) & 0x0f));
-		break;
-
-
-	case 4: /* 4-byte encoding (next 3 bytes + bits 0-3) */
-
-		package_length = ((((u32) GET8 (aml_ptr + 3)) << 20) |
-				   (((u32) GET8 (aml_ptr + 2)) << 12) |
-				   (((u32) GET8 (aml_ptr + 1)) << 4) |
-				   (((u32) GET8 (aml_ptr)) & 0x0f));
-		break;
-	}
-
-	parser_state->aml += encoding_length;
-
-	return (package_length);
-}
 
 u32
 acpi_ps_get_next_package_length (
@@ -125,32 +62,33 @@ acpi_ps_get_next_package_length (
 	{
 	case 0: /* 1-byte encoding (bits 0-5) */
 
-		length = (encoded_length & 0x3f);
+		length = (encoded_length & 0x3F);
 		break;
 
 
 	case 1: /* 2-byte encoding (next byte + bits 0-3) */
 
-		length = (GET8 (parser_state->aml) << 4) | (encoded_length & 0xf);
+		length = ((GET8 (parser_state->aml) << 04) |
+				 (encoded_length & 0x0F));
 		parser_state->aml++;
 		break;
 
 
 	case 2: /* 3-byte encoding (next 2 bytes + bits 0-3) */
 
-		length = ( (GET8 (parser_state->aml + 1) << 12)
-			   | (GET8 (parser_state->aml) << 4)
-			   | (encoded_length & 0xf));
+		length = ((GET8 (parser_state->aml + 1) << 12) |
+				  (GET8 (parser_state->aml)    << 04) |
+				  (encoded_length & 0x0F));
 		parser_state->aml += 2;
 		break;
 
 
 	case 3: /* 4-byte encoding (next 3 bytes + bits 0-3) */
 
-		length = ( (GET8 (parser_state->aml + 2) << 20)
-			   | (GET8 (parser_state->aml + 1) << 12)
-			   | (GET8 (parser_state->aml) << 4)
-			   | (encoded_length & 0xf));
+		length = ((GET8 (parser_state->aml + 2) << 20) |
+				  (GET8 (parser_state->aml + 1) << 12) |
+				  (GET8 (parser_state->aml)    << 04) |
+				  (encoded_length & 0x0F));
 		parser_state->aml += 3;
 		break;
 	}
@@ -441,6 +379,10 @@ acpi_ps_get_next_namepath (
 
 					name_op->node = method_node;
 					acpi_ps_append_arg (arg, name_op);
+
+					if (!(ACPI_OPERAND_OBJECT  *) method_node->object) {
+						return;
+					}
 
 					*arg_count = ((ACPI_OPERAND_OBJECT *) method_node->object)->method.param_count;
 				}

@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsio - Acpi_rs_io_resource
  *                     Acpi_rs_fixed_io_resource
@@ -6,9 +6,9 @@
  *                     Acpi_rs_fixed_io_stream
  *                     Acpi_rs_dma_resource
  *                     Acpi_rs_dma_stream
- *              $Revision: 7 $
+ *              $Revision: 10 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -30,16 +30,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsio")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_io_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -55,7 +56,7 @@
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_io_resource (
@@ -133,11 +134,11 @@ acpi_rs_io_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_fixed_io_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -153,7 +154,7 @@ acpi_rs_io_resource (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_fixed_io_resource (
@@ -207,11 +208,11 @@ acpi_rs_fixed_io_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_io_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -222,7 +223,7 @@ acpi_rs_fixed_io_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_io_stream (
@@ -239,7 +240,6 @@ acpi_rs_io_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x47;
-
 	buffer += 1;
 
 	/*
@@ -248,7 +248,6 @@ acpi_rs_io_stream (
 	temp8 = (u8) (linked_list->data.io.io_decode & 0x01);
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -256,8 +255,7 @@ acpi_rs_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.io.min_base_address;
 
-	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
+	MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
 	buffer += 2;
 
 	/*
@@ -265,8 +263,7 @@ acpi_rs_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.io.max_base_address;
 
-	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
+	MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
 	buffer += 2;
 
 	/*
@@ -275,7 +272,6 @@ acpi_rs_io_stream (
 	temp8 = (u8) linked_list->data.io.alignment;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -284,7 +280,6 @@ acpi_rs_io_stream (
 	temp8 = (u8) linked_list->data.io.range_length;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -297,11 +292,11 @@ acpi_rs_io_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_fixed_io_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -312,7 +307,7 @@ acpi_rs_io_stream (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_fixed_io_stream (
@@ -337,8 +332,7 @@ acpi_rs_fixed_io_stream (
 	 */
 	temp16 = (u16) linked_list->data.fixed_io.base_address;
 
-	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
+	MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
 	buffer += 2;
 
 	/*
@@ -347,7 +341,6 @@ acpi_rs_fixed_io_stream (
 	temp8 = (u8) linked_list->data.fixed_io.range_length;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -360,11 +353,11 @@ acpi_rs_fixed_io_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_dma_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -380,7 +373,7 @@ acpi_rs_fixed_io_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_dma_resource (
@@ -402,14 +395,12 @@ acpi_rs_dma_resource (
 	 * The number of bytes consumed are Constant
 	 */
 	*bytes_consumed = 3;
-
 	output_struct->id = dma;
 
 	/*
 	 * Point to the 8-bits of Byte 1
 	 */
 	buffer += 1;
-
 	temp8 = *buffer;
 
 	/* Decode the IRQ bits */
@@ -431,9 +422,8 @@ acpi_rs_dma_resource (
 	/*
 	 * Point to Byte 2
 	 */
-	 buffer += 1;
-
-	 temp8 = *buffer;
+	buffer += 1;
+	temp8 = *buffer;
 
 	/*
 	 * Check for transfer preference (Bits[1:0])
@@ -468,11 +458,11 @@ acpi_rs_dma_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_dma_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -483,7 +473,7 @@ acpi_rs_dma_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_dma_stream (
@@ -501,9 +491,7 @@ acpi_rs_dma_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x2A;
-
 	buffer += 1;
-
 	temp8 = 0;
 
 	/*
@@ -518,20 +506,16 @@ acpi_rs_dma_stream (
 	}
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
 	 * Set the DMA Info
 	 */
 	temp8 = (u8) ((linked_list->data.dma.type & 0x03) << 5);
-
 	temp8 |= ((linked_list->data.dma.bus_master & 0x01) << 2);
-
 	temp8 |= (linked_list->data.dma.transfer & 0x03);
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*

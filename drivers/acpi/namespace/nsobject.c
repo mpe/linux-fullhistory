@@ -2,7 +2,7 @@
  *
  * Module Name: nsobject - Utilities for objects attached to namespace
  *                         table entries
- *              $Revision: 44 $
+ *              $Revision: 47 $
  *
  ******************************************************************************/
 
@@ -73,29 +73,28 @@ acpi_ns_attach_object (
 	if (!acpi_gbl_root_node) {
 		/* Name space not initialized  */
 
-		REPORT_ERROR ("Ns_attach_object: Name space not initialized");
+		REPORT_ERROR (("Ns_attach_object: Namespace not initialized\n"));
 		return (AE_NO_NAMESPACE);
 	}
 
 	if (!node) {
 		/* Invalid handle */
 
-		REPORT_ERROR ("Ns_attach_object: Null Named_obj handle");
+		REPORT_ERROR (("Ns_attach_object: Null Named_obj handle\n"));
 		return (AE_BAD_PARAMETER);
 	}
 
 	if (!object && (ACPI_TYPE_ANY != type)) {
 		/* Null object */
 
-		REPORT_ERROR ("Ns_attach_object: Null object, but type"
-				  "not ACPI_TYPE_ANY");
+		REPORT_ERROR (("Ns_attach_object: Null object, but type not ACPI_TYPE_ANY\n"));
 		return (AE_BAD_PARAMETER);
 	}
 
 	if (!VALID_DESCRIPTOR_TYPE (node, ACPI_DESC_TYPE_NAMED)) {
 		/* Not a name handle */
 
-		REPORT_ERROR ("Ns_attach_object: Invalid handle");
+		REPORT_ERROR (("Ns_attach_object: Invalid handle\n"));
 		return (AE_BAD_PARAMETER);
 	}
 
@@ -355,7 +354,6 @@ acpi_ns_get_attached_object (
 	if (!handle) {
 		/* handle invalid */
 
-		REPORT_WARNING ("Ns_get_attached_object: Null handle");
 		return (NULL);
 	}
 

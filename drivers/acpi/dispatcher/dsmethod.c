@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dsmethod - Parser/Interpreter interface - control method parsing
- *              $Revision: 52 $
+ *              $Revision: 53 $
  *
  *****************************************************************************/
 
@@ -387,7 +387,7 @@ acpi_ds_restart_control_method (
 			 * NULL if no return value
 			 */
 
-			status = acpi_ds_result_stack_push (return_desc, walk_state);
+			status = acpi_ds_result_push (return_desc, walk_state);
 			if (ACPI_FAILURE (status)) {
 				acpi_cm_remove_reference (return_desc);
 				return (status);

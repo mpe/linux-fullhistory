@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresop - AML Interpreter operand/object resolution
- *              $Revision: 15 $
+ *              $Revision: 18 $
  *
  *****************************************************************************/
 
@@ -41,6 +41,44 @@
 
 /*******************************************************************************
  *
+ * FUNCTION:    Acpi_aml_check_object_type
+ *
+ * PARAMETERS:  Type_needed         Object type needed
+ *              This_type           Actual object type
+ *              Object              Object pointer
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Check required type against actual type
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_aml_check_object_type (
+	ACPI_OBJECT_TYPE        type_needed,
+	ACPI_OBJECT_TYPE        this_type,
+	void                    *object)
+{
+
+
+	if (type_needed == ACPI_TYPE_ANY) {
+		/* All types OK, so we don't perform any typechecks */
+
+		return (AE_OK);
+	}
+
+
+	if (type_needed != this_type) {
+		return (AE_AML_OPERAND_TYPE);
+	}
+
+
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_aml_resolve_operands
  *
  * PARAMETERS:  Opcode              Opcode being interpreted
@@ -71,6 +109,7 @@ acpi_aml_resolve_operands (
 	u32                     arg_types;
 	ACPI_OPCODE_INFO        *op_info;
 	u32                     this_arg_type;
+	ACPI_OBJECT_TYPE        type_needed;
 
 
 	op_info = acpi_ps_get_opcode_info (opcode);
@@ -81,8 +120,7 @@ acpi_aml_resolve_operands (
 
 	arg_types = op_info->runtime_args;
 	if (arg_types == ARGI_INVALID_OPCODE) {
-		status = AE_AML_INTERNAL;
-		goto cleanup;
+		return (AE_AML_INTERNAL);
 	}
 
 
@@ -96,8 +134,7 @@ acpi_aml_resolve_operands (
 
 	while (GET_CURRENT_ARG_TYPE (arg_types)) {
 		if (!stack_ptr || !*stack_ptr) {
-			status = AE_AML_INTERNAL;
-			goto cleanup;
+			return (AE_AML_INTERNAL);
 		}
 
 		/* Extract useful items */
@@ -120,8 +157,7 @@ acpi_aml_resolve_operands (
 			/* Check for bad ACPI_OBJECT_TYPE */
 
 			if (!acpi_aml_validate_object_type (object_type)) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
+				return (AE_AML_OPERAND_TYPE);
 			}
 
 			if (object_type == (u8) INTERNAL_TYPE_REFERENCE) {
@@ -149,29 +185,31 @@ acpi_aml_resolve_operands (
 					break;
 
 				default:
-					status = AE_AML_OPERAND_TYPE;
-					goto cleanup;
+					return (AE_AML_OPERAND_TYPE);
 					break;
 				}
 			}
-
 		}
 
 		else {
 			/* Invalid descriptor */
 
-			status = AE_AML_OPERAND_TYPE;
-			goto cleanup;
+			return (AE_AML_OPERAND_TYPE);
 		}
 
 
 		/*
-		 * Decode a character from the type string
+		 * Get one argument type, point to the next
 		 */
 
 		this_arg_type = GET_CURRENT_ARG_TYPE (arg_types);
 		INCREMENT_ARG_LIST (arg_types);
 
+
+		/*
+		 * Handle cases where the object does not need to be
+		 * resolved to a value
+		 */
 
 		switch (this_arg_type)
 		{
@@ -182,13 +220,15 @@ acpi_aml_resolve_operands (
 			/* Need an operand of type INTERNAL_TYPE_REFERENCE */
 
 			if (VALID_DESCRIPTOR_TYPE (obj_desc, ACPI_DESC_TYPE_NAMED))            /* direct name ptr OK as-is */ {
-				break;
+				goto next_operand;
 			}
 
-			if (INTERNAL_TYPE_REFERENCE != object_type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
+			status = acpi_aml_check_object_type (INTERNAL_TYPE_REFERENCE,
+					  object_type, obj_desc);
+			if (ACPI_FAILURE (status)) {
+				return (status);
 			}
+
 
 			if (AML_NAME_OP == obj_desc->reference.op_code) {
 				/*
@@ -200,159 +240,120 @@ acpi_aml_resolve_operands (
 				acpi_cm_remove_reference (obj_desc);
 				(*stack_ptr) = temp_handle;
 			}
-			break;
 
-
-		case ARGI_NUMBER:   /* Number */
-
-			/* Need an operand of type ACPI_TYPE_NUMBER */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_NUMBER != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_STRING:
-
-			/* Need an operand of type ACPI_TYPE_STRING or ACPI_TYPE_BUFFER */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if ((ACPI_TYPE_STRING != (*stack_ptr)->common.type) &&
-				(ACPI_TYPE_BUFFER != (*stack_ptr)->common.type))
-			{
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_BUFFER:
-
-			/* Need an operand of type ACPI_TYPE_BUFFER */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_BUFFER != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_MUTEX:
-
-			/* Need an operand of type ACPI_TYPE_MUTEX */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_MUTEX != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_EVENT:
-
-			/* Need an operand of type ACPI_TYPE_EVENT */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_EVENT != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_REGION:
-
-			/* Need an operand of type ACPI_TYPE_REGION */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_REGION != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		 case ARGI_IF:   /* If */
-
-			/* Need an operand of type INTERNAL_TYPE_IF */
-
-			if (INTERNAL_TYPE_IF != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
-			break;
-
-
-		case ARGI_PACKAGE:   /* Package */
-
-			/* Need an operand of type ACPI_TYPE_PACKAGE */
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
-			if (ACPI_TYPE_PACKAGE != (*stack_ptr)->common.type) {
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
-			}
+			goto next_operand;
 			break;
 
 
 		case ARGI_ANYTYPE:
 
-
 			/*
 			 * We don't want to resolve Index_op reference objects during
 			 * a store because this would be an implicit De_ref_of operation.
 			 * Instead, we just want to store the reference object.
+			 * -- All others must be resolved below.
 			 */
 
 			if ((opcode == AML_STORE_OP) &&
 				((*stack_ptr)->common.type == INTERNAL_TYPE_REFERENCE) &&
 				((*stack_ptr)->reference.op_code == AML_INDEX_OP))
 			{
-				break;
+				goto next_operand;
 			}
+			break;
+		}
 
-			/* All others must be resolved */
 
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
+		/*
+		 * Resolve this object to a value
+		 */
+
+		status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+
+
+		/*
+		 * Check the resulting object (value) type
+		 */
+		switch (this_arg_type)
+		{
+		/*
+		 * For the simple cases, only one type of resolved object
+		 * is allowed
+		 */
+		case ARGI_NUMBER:   /* Number */
+
+			/* Need an operand of type ACPI_TYPE_NUMBER */
+
+			type_needed = ACPI_TYPE_NUMBER;
+			break;
+
+		case ARGI_BUFFER:
+
+			/* Need an operand of type ACPI_TYPE_BUFFER */
+
+			type_needed = ACPI_TYPE_BUFFER;
+			break;
+
+		case ARGI_MUTEX:
+
+			/* Need an operand of type ACPI_TYPE_MUTEX */
+
+			type_needed = ACPI_TYPE_MUTEX;
+			break;
+
+		case ARGI_EVENT:
+
+			/* Need an operand of type ACPI_TYPE_EVENT */
+
+			type_needed = ACPI_TYPE_EVENT;
+			break;
+
+		case ARGI_REGION:
+
+			/* Need an operand of type ACPI_TYPE_REGION */
+
+			type_needed = ACPI_TYPE_REGION;
+			break;
+
+		case ARGI_IF:   /* If */
+
+			/* Need an operand of type INTERNAL_TYPE_IF */
+
+			type_needed = INTERNAL_TYPE_IF;
+			break;
+
+		case ARGI_PACKAGE:   /* Package */
+
+			/* Need an operand of type ACPI_TYPE_PACKAGE */
+
+			type_needed = ACPI_TYPE_PACKAGE;
+			break;
+
+		case ARGI_ANYTYPE:
+
+			/* Any operand type will do */
+
+			type_needed = ACPI_TYPE_ANY;
+			break;
+
+
+		/*
+		 * The more complex cases allow multiple resolved object types
+		 */
+
+		case ARGI_STRING:
+
+			/* Need an operand of type ACPI_TYPE_STRING or ACPI_TYPE_BUFFER */
+
+			if ((ACPI_TYPE_STRING != (*stack_ptr)->common.type) &&
+				(ACPI_TYPE_BUFFER != (*stack_ptr)->common.type))
+			{
+				return (AE_AML_OPERAND_TYPE);
 			}
-
-			/* All types OK, so we don't perform any typechecks */
-
+			goto next_operand;
 			break;
 
 
@@ -366,11 +367,6 @@ acpi_aml_resolve_operands (
 			 *  error with a size of 4.
 			 */
 
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
-
 			/* Need a buffer, string, package or Node reference */
 
 			if (((*stack_ptr)->common.type != ACPI_TYPE_BUFFER) &&
@@ -378,8 +374,7 @@ acpi_aml_resolve_operands (
 				((*stack_ptr)->common.type != ACPI_TYPE_PACKAGE) &&
 				((*stack_ptr)->common.type != INTERNAL_TYPE_REFERENCE))
 			{
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
+				return (AE_AML_OPERAND_TYPE);
 			}
 
 			/*
@@ -387,44 +382,49 @@ acpi_aml_resolve_operands (
 			 */
 			if ((*stack_ptr)->common.type == INTERNAL_TYPE_REFERENCE) {
 				if (!(*stack_ptr)->reference.node) {
-					status = AE_AML_OPERAND_TYPE;
-					goto cleanup;
+					return (AE_AML_OPERAND_TYPE);
 				}
 			}
-
+			goto next_operand;
 			break;
 
 
 		case ARGI_COMPLEXOBJ:
-
-			status = acpi_aml_resolve_to_value (stack_ptr, walk_state);
-			if (ACPI_FAILURE (status)) {
-				goto cleanup;
-			}
 
 			/* Need a buffer or package */
 
 			if (((*stack_ptr)->common.type != ACPI_TYPE_BUFFER) &&
 				((*stack_ptr)->common.type != ACPI_TYPE_PACKAGE))
 			{
-				status = AE_AML_OPERAND_TYPE;
-				goto cleanup;
+				return (AE_AML_OPERAND_TYPE);
 			}
+			goto next_operand;
 			break;
 
 
-		/* Unknown abbreviation passed in */
-
 		default:
-			status = AE_BAD_PARAMETER;
-			goto cleanup;
 
-		}   /* switch (*Types++) */
+			/* Unknown type */
+
+			return (AE_BAD_PARAMETER);
+		}
 
 
 		/*
+		 * Make sure that the original object was resolved to the
+		 * required object type (Simple cases only).
+		 */
+		status = acpi_aml_check_object_type (type_needed,
+				  (*stack_ptr)->common.type, *stack_ptr);
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+
+
+next_operand:
+		/*
 		 * If more operands needed, decrement Stack_ptr to point
-		 * to next operand on stack (after checking for underflow).
+		 * to next operand on stack
 		 */
 		if (GET_CURRENT_ARG_TYPE (arg_types)) {
 			stack_ptr--;
@@ -433,9 +433,7 @@ acpi_aml_resolve_operands (
 	}   /* while (*Types) */
 
 
-cleanup:
-
-  return (status);
+	return (status);
 }
 
 

@@ -3,7 +3,7 @@
  * Name: amlcode.h - Definitions for AML, as included in "definition blocks"
  *                   Declarations and definitions contained herein are derived
  *                   directly from the ACPI specification.
- *       $Revision: 39 $
+ *       $Revision: 42 $
  *
  *****************************************************************************/
 
@@ -42,9 +42,11 @@
 #define AML_WORD_OP                 (u16) 0x0b
 #define AML_DWORD_OP                (u16) 0x0c
 #define AML_STRING_OP               (u16) 0x0d
+#define AML_QWORD_OP                (u16) 0x0e     /* ACPI 2.0 */
 #define AML_SCOPE_OP                (u16) 0x10
 #define AML_BUFFER_OP               (u16) 0x11
 #define AML_PACKAGE_OP              (u16) 0x12
+#define AML_VAR_PACKAGE_OP          (u16) 0x13     /* ACPI 2.0 */
 #define AML_METHOD_OP               (u16) 0x14
 #define AML_DUAL_NAME_PREFIX        (u16) 0x2e
 #define AML_MULTI_NAME_PREFIX_OP    (u16) 0x2f
@@ -90,6 +92,8 @@
 #define AML_FIND_SET_LEFT_BIT_OP    (u16) 0x81
 #define AML_FIND_SET_RIGHT_BIT_OP   (u16) 0x82
 #define AML_DEREF_OF_OP             (u16) 0x83
+#define AML_CONCAT_RES_OP           (u16) 0x84     /* ACPI 2.0 */
+#define AML_MOD_OP                  (u16) 0x85     /* ACPI 2.0 */
 #define AML_NOTIFY_OP               (u16) 0x86
 #define AML_SIZE_OF_OP              (u16) 0x87
 #define AML_INDEX_OP                (u16) 0x88
@@ -99,12 +103,21 @@
 #define AML_BYTE_FIELD_OP           (u16) 0x8c
 #define AML_BIT_FIELD_OP            (u16) 0x8d
 #define AML_TYPE_OP                 (u16) 0x8e
+#define AML_QWORD_FIELD_OP          (u16) 0x8f     /* ACPI 2.0 */
 #define AML_LAND_OP                 (u16) 0x90
 #define AML_LOR_OP                  (u16) 0x91
 #define AML_LNOT_OP                 (u16) 0x92
 #define AML_LEQUAL_OP               (u16) 0x93
 #define AML_LGREATER_OP             (u16) 0x94
 #define AML_LLESS_OP                (u16) 0x95
+#define AML_TO_BUFFER_OP            (u16) 0x96     /* ACPI 2.0 */
+#define AML_TO_DECSTRING_OP         (u16) 0x97     /* ACPI 2.0 */
+#define AML_TO_HEXSTRING_OP         (u16) 0x98     /* ACPI 2.0 */
+#define AML_TO_INTEGER_OP           (u16) 0x99     /* ACPI 2.0 */
+#define AML_TO_STRING_OP            (u16) 0x9c     /* ACPI 2.0 */
+#define AML_COPY_OP                 (u16) 0x9d     /* ACPI 2.0 */
+#define AML_MID_OP                  (u16) 0x9e     /* ACPI 2.0 */
+#define AML_CONTINUE_OP             (u16) 0x9f     /* ACPI 2.0 */
 #define AML_IF_OP                   (u16) 0xa0
 #define AML_ELSE_OP                 (u16) 0xa1
 #define AML_WHILE_OP                (u16) 0xa2
@@ -125,6 +138,7 @@
 #define AML_SHIFT_LEFT_BIT_OP       (u16) 0x5b11
 #define AML_COND_REF_OF_OP          (u16) 0x5b12
 #define AML_CREATE_FIELD_OP         (u16) 0x5b13
+#define AML_LOAD_TABLE_OP           (u16) 0x5b1f     /* ACPI 2.0 */
 #define AML_LOAD_OP                 (u16) 0x5b20
 #define AML_STALL_OP                (u16) 0x5b21
 #define AML_SLEEP_OP                (u16) 0x5b22
@@ -147,6 +161,7 @@
 #define AML_THERMAL_ZONE_OP         (u16) 0x5b85
 #define AML_INDEX_FIELD_OP          (u16) 0x5b86
 #define AML_BANK_FIELD_OP           (u16) 0x5b87
+#define AML_DATA_REGION_OP          (u16) 0x5b88     /* ACPI 2.0 */
 
 
 /* Bogus opcodes (they are actually two separate opcodes) */
@@ -278,6 +293,21 @@
 #define OPTYPE_BOGUS                22
 
 
+/* Predefined Operation Region Space_iDs */
+
+typedef enum
+{
+	REGION_MEMORY               = 0,
+	REGION_IO,
+	REGION_PCI_CONFIG,
+	REGION_EC,
+	REGION_SMBUS,
+	REGION_CMOS,
+	REGION_PCI_BAR
+
+} AML_REGION_TYPES;
+
+
 /* Comparison operation codes for Match_op operator */
 
 typedef enum
@@ -347,23 +377,15 @@ typedef enum
 
 /* Array sizes.  Used for range checking also */
 
-#define NUM_REGION_TYPES        5
+#define NUM_REGION_TYPES        7
 #define NUM_ACCESS_TYPES        7
 #define NUM_UPDATE_RULES        3
 #define NUM_MATCH_OPS           7
 #define NUM_OPCODES             256
 #define NUM_FIELD_NAMES         2
 
-/* External declarations of the AML tables */
 
-extern u8                       acpi_gbl_aml            [NUM_OPCODES];
-extern u16                      acpi_gbl_pfx            [NUM_OPCODES];
-extern NATIVE_CHAR              *acpi_gbl_region_types  [NUM_REGION_TYPES];
-extern NATIVE_CHAR              *acpi_gbl_match_ops     [NUM_MATCH_OPS];
-extern NATIVE_CHAR              *acpi_gbl_access_types  [NUM_ACCESS_TYPES];
-extern NATIVE_CHAR              *acpi_gbl_update_rules  [NUM_UPDATE_RULES];
-extern NATIVE_CHAR              *acpi_gbl_FEnames       [NUM_FIELD_NAMES];
-
+#define USER_REGION_BEGIN       0x80
 
 /*
  * AML tables
@@ -371,61 +393,10 @@ extern NATIVE_CHAR              *acpi_gbl_FEnames       [NUM_FIELD_NAMES];
 
 #ifdef DEFINE_AML_GLOBALS
 
-/* Data used in keeping track of fields */
+/* External declarations of the AML tables */
 
-NATIVE_CHAR *acpi_gbl_FEnames[NUM_FIELD_NAMES] =
-{
-	"skip",
-	"?access?"
-};              /* FE = Field Element */
-
-
-/* Region type decoding */
-
-NATIVE_CHAR *acpi_gbl_region_types[NUM_REGION_TYPES] =
-{
-	"System_memory",
-	"System_iO",
-	"PCIConfig",
-	"Embedded_control",
-	"SMBus"
-};
-
-
-NATIVE_CHAR *acpi_gbl_match_ops[NUM_MATCH_OPS] =
-{
-	"Error",
-	"MTR",
-	"MEQ",
-	"MLE",
-	"MLT",
-	"MGE",
-	"MGT"
-};
-
-
-/* Access type decoding */
-
-NATIVE_CHAR *acpi_gbl_access_types[NUM_ACCESS_TYPES] =
-{
-	"Any_acc",
-	"Byte_acc",
-	"Word_acc",
-	"DWord_acc",
-	"Block_acc",
-	"SMBSend_recv_acc",
-	"SMBQuick_acc"
-};
-
-
-/* Update rule decoding */
-
-NATIVE_CHAR *acpi_gbl_update_rules[NUM_UPDATE_RULES] =
-{
-	"Preserve",
-	"Write_as_ones",
-	"Write_as_zeros"
-};
+extern u8                       acpi_gbl_aml            [NUM_OPCODES];
+extern u16                      acpi_gbl_pfx            [NUM_OPCODES];
 
 
 #endif /* DEFINE_AML_GLOBALS */

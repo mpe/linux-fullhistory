@@ -20,7 +20,7 @@
  *          Modified by Gerd Knorr <kraxel@cs.tu-berlin.de> to support the
  *          generic cdrom interface
  *
- *       Modified by Jens Axboe <axboe@image.dk> - Uniform sr_packet()
+ *       Modified by Jens Axboe <axboe@suse.de> - Uniform sr_packet()
  *       interface, capabilities probe additions, ioctl cleanups, etc.
  *
  *       Modified by Richard Gooch <rgooch@atnf.csiro.au> to support devfs
@@ -56,9 +56,7 @@
 #include <scsi/scsi_ioctl.h>	/* For the door lock/unlock commands */
 #include "constants.h"
 
-#ifdef MODULE
 MODULE_PARM(xa_test, "i");	/* see sr_ioctl.c */
-#endif
 
 #define MAX_RETRIES	3
 #define SR_TIMEOUT	(30 * HZ)
@@ -200,9 +198,10 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 	int this_count = SCpnt->bufflen >> 9;
 	int good_sectors = (result == 0 ? this_count : 0);
 	int block_sectors = 0;
+	int device_nr = DEVICE_NR(SCpnt->request.rq_dev);
 
 #ifdef DEBUG
-	printk("sr.c done: %x %x\n", result, SCpnt->request.bh->b_data);
+	printk("sr.c done: %x %p\n", result, SCpnt->request.bh->b_data);
 #endif
 	/*
 	   Handle MEDIUM ERRORs or VOLUME OVERFLOWs that indicate partial success.
@@ -220,7 +219,6 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 		(SCpnt->sense_buffer[4] << 16) |
 		(SCpnt->sense_buffer[5] << 8) |
 		SCpnt->sense_buffer[6];
-		int device_nr = DEVICE_NR(SCpnt->request.rq_dev);
 		if (SCpnt->request.bh != NULL)
 			block_sectors = SCpnt->request.bh->b_size >> 9;
 		if (block_sectors < 4)
@@ -241,6 +239,7 @@ static void rw_intr(Scsi_Cmnd * SCpnt)
 		    scsi_CDs[device_nr].capacity - error_sector < 4 * 75)
 			sr_sizes[device_nr] = error_sector >> 1;
 	}
+
 	/*
 	 * This calls the generic completion function, now that we know
 	 * how many actual sectors finished, and how many sectors we need
@@ -261,22 +260,95 @@ static request_queue_t *sr_find_queue(kdev_t dev)
 	return &scsi_CDs[MINOR(dev)].device->request_queue;
 }
 
+static int sr_scatter_pad(Scsi_Cmnd *SCpnt, int s_size)
+{
+	struct scatterlist *sg, *old_sg = NULL;
+	int i, fsize, bsize, sg_ent;
+	char *front, *back;
+
+	back = front = NULL;
+	sg_ent = SCpnt->use_sg;
+	bsize = 0; /* gcc... */
+
+	/*
+	 * need front pad
+	 */
+	if ((fsize = SCpnt->request.sector % (s_size >> 9))) {
+		fsize <<= 9;
+		sg_ent++;
+		if ((front = scsi_malloc(fsize)) == NULL)
+			goto no_mem;
+	}
+	/*
+	 * need a back pad too
+	 */
+	if ((bsize = s_size - ((SCpnt->request_bufflen + fsize) % s_size))) {
+		sg_ent++;
+		if ((back = scsi_malloc(bsize)) == NULL)
+			goto no_mem;
+	}
+
+	/*
+	 * extend or allocate new scatter-gather table
+	 */
+	if (SCpnt->use_sg)
+		old_sg = (struct scatterlist *) SCpnt->request_buffer;
+	else {
+		SCpnt->use_sg = 1;
+		sg_ent++;
+	}
+
+	SCpnt->sglist_len = ((sg_ent * sizeof(struct scatterlist)) + 511) & ~511;
+	if ((sg = scsi_malloc(SCpnt->sglist_len)) == NULL)
+		goto no_mem;
+
+	memset(sg, 0, SCpnt->sglist_len);
+
+	i = 0;
+	if (fsize) {
+		sg[0].address = sg[0].alt_address = front;
+		sg[0].length = fsize;
+		i++;
+	}
+	if (old_sg) {
+		memcpy(sg + i, old_sg, SCpnt->use_sg * sizeof(struct scatterlist));
+		scsi_free(old_sg, ((SCpnt->use_sg * sizeof(struct scatterlist)) + 511) & ~511);
+	} else {
+		sg[i].address = SCpnt->request_buffer;
+		sg[i].length = SCpnt->request_bufflen;
+	}
+
+	SCpnt->request_bufflen += (fsize + bsize);
+	SCpnt->request_buffer = sg;
+	SCpnt->use_sg += i;
+
+	if (bsize) {
+		sg[SCpnt->use_sg].address = back;
+		sg[SCpnt->use_sg].alt_address = back;
+		sg[SCpnt->use_sg].length = bsize;
+		SCpnt->use_sg++;
+	}
+
+	return 0;
+
+no_mem:
+	printk("sr: ran out of mem for scatter pad\n");
+	if (front)
+		scsi_free(front, fsize);
+	if (back)
+		scsi_free(back, bsize);
+
+	return 1;
+}
+
+
 static int sr_init_command(Scsi_Cmnd * SCpnt)
 {
-	int dev, devm, block, this_count;
+	int dev, devm, block, this_count, s_size;
 
 	devm = MINOR(SCpnt->request.rq_dev);
 	dev = DEVICE_NR(SCpnt->request.rq_dev);
 
-	block = SCpnt->request.sector;
-	this_count = SCpnt->request_bufflen >> 9;
-
-	if (!SCpnt->request.bh) {
-		/*
-		 * Umm, yeah, right.   Swapping to a cdrom.  Nice try.
-		 */
-		return 0;
-	}
 	SCSI_LOG_HLQUEUE(1, printk("Doing sr request, dev = %d, block = %d\n", devm, block));
 
 	if (dev >= sr_template.nr_dev ||
@@ -288,46 +360,43 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 	}
 	if (scsi_CDs[dev].device->changed) {
 		/*
-		 * quietly refuse to do anything to a changed disc until the changed
-		 * bit has been reset
+		 * quietly refuse to do anything to a changed disc until the
+		 * changed bit has been reset
 		 */
-		/* printk("SCSI disk has been changed. Prohibiting further I/O.\n"); */
 		return 0;
 	}
+
+	if ((SCpnt->request.cmd == WRITE) && !scsi_CDs[dev].device->writeable)
+		return 0;
+
 	/*
 	 * we do lazy blocksize switching (when reading XA sectors,
 	 * see CDROMREADMODE2 ioctl) 
 	 */
-	if (scsi_CDs[dev].device->sector_size > 2048) {
+	s_size = scsi_CDs[dev].device->sector_size;
+	if (s_size > 2048) {
 		if (!in_interrupt())
 			sr_set_blocklength(DEVICE_NR(CURRENT->rq_dev), 2048);
 		else
 			printk("sr: can't switch blocksize: in interrupt\n");
 	}
 
-	if ((SCpnt->request.cmd == WRITE) && !scsi_CDs[dev].device->writeable)
+	if (s_size != 512 && s_size != 1024 && s_size != 2048) {
+		printk("sr: bad sector size %d\n", s_size);
 		return 0;
+	}
 
-	if (scsi_CDs[dev].device->sector_size == 1024) {
-		if ((block & 1) || (SCpnt->request.nr_sectors & 1)) {
-			printk("sr.c:Bad 1K block number requested (%d %ld)",
-                               block, SCpnt->request.nr_sectors);
+	block = SCpnt->request.sector / (s_size >> 9);
+
+	/*
+	 * request doesn't start on hw block boundary, add scatter pads
+	 */
+	if ((SCpnt->request.sector % (s_size >> 9)) || (SCpnt->request_bufflen % s_size))
+		if (sr_scatter_pad(SCpnt, s_size))
 			return 0;
-		} else {
-			block = block >> 1;
-			this_count = this_count >> 1;
-		}
-	}
-	if (scsi_CDs[dev].device->sector_size == 2048) {
-		if ((block & 3) || (SCpnt->request.nr_sectors & 3)) {
-			printk("sr.c:Bad 2K block number requested (%d %ld)",
-                               block, SCpnt->request.nr_sectors);
-			return 0;
-		} else {
-			block = block >> 2;
-			this_count = this_count >> 2;
-		}
-	}
+
+	this_count = (SCpnt->request_bufflen >> 9) / (s_size >> 9);
+
 	switch (SCpnt->request.cmd) {
 	case WRITE:
 		SCpnt->cmnd[0] = WRITE_10;
@@ -338,7 +407,8 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 		SCpnt->sc_data_direction = SCSI_DATA_READ;
 		break;
 	default:
-		panic("Unknown sr command %d\n", SCpnt->request.cmd);
+		printk("Unknown sr command %d\n", SCpnt->request.cmd);
+		return 0;
 	}
 
 	SCSI_LOG_HLQUEUE(2, printk("sr%d : %s %d/%ld 512 byte blocks.\n",
@@ -375,6 +445,18 @@ static int sr_init_command(Scsi_Cmnd * SCpnt)
 	 * of capability to this function.
 	 */
 	SCpnt->done = rw_intr;
+
+	{
+		struct scatterlist *sg = SCpnt->request_buffer;
+		int i, size = 0;
+		for (i = 0; i < SCpnt->use_sg; i++)
+			size += sg[i].length;
+
+		if (size != SCpnt->request_bufflen && SCpnt->use_sg) {
+			printk("sr: mismatch count %d, bytes %d\n", size, SCpnt->request_bufflen);
+			SCpnt->request_bufflen = size;
+		}
+	}
 
 	/*
 	 * This indicates that the command is ready from our end to be
@@ -587,7 +669,7 @@ void get_capabilities(int i)
 	cmd[2] = 0x2a;
 	cmd[4] = 128;
 	cmd[3] = cmd[5] = 0;
-	rc = sr_do_ioctl(i, cmd, buffer, 128, 1, SCSI_DATA_READ);
+	rc = sr_do_ioctl(i, cmd, buffer, 128, 1, SCSI_DATA_READ, NULL);
 
 	if (-EINVAL == rc) {
 		/* failed, drive has'nt this mode page */
@@ -655,53 +737,12 @@ void get_capabilities(int i)
  */
 static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command *cgc)
 {
-	Scsi_Request *SRpnt;
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
-	unsigned char *buffer = cgc->buffer;
-	int buflen;
 
-	/* get the device */
-	SRpnt = scsi_allocate_request(device);
-	if (SRpnt == NULL)
-		return -ENODEV;	/* this just doesn't seem right /axboe */
-
-	/* use buffer for ISA DMA */
-	buflen = (cgc->buflen + 511) & ~511;
-	if (cgc->buffer && SRpnt->sr_host->unchecked_isa_dma &&
-	    (virt_to_phys(cgc->buffer) + cgc->buflen - 1 > ISA_DMA_THRESHOLD)) {
-		buffer = scsi_malloc(buflen);
-		if (buffer == NULL) {
-			printk("sr: SCSI DMA pool exhausted.");
-			return -ENOMEM;
-		}
-		memcpy(buffer, cgc->buffer, cgc->buflen);
-	}
 	/* set the LUN */
 	cgc->cmd[1] |= device->lun << 5;
 
-	/* do the locking and issue the command */
-	SRpnt->sr_request.rq_dev = cdi->dev;
-	/* scsi_wait_req sets the command length */
-	SRpnt->sr_cmd_len = 0;
-
-	SRpnt->sr_data_direction = cgc->data_direction;
-	scsi_wait_req(SRpnt, (void *) cgc->cmd, (void *) buffer, cgc->buflen,
-		      SR_TIMEOUT, MAX_RETRIES);
-
-	if ((cgc->stat = SRpnt->sr_result))
-		cgc->sense = (struct request_sense *) SRpnt->sr_sense_buffer;
-
-	/* release */
-	SRpnt->sr_request.rq_dev = MKDEV(0, 0);
-	scsi_release_request(SRpnt);
-	SRpnt = NULL;
-
-	/* write DMA buffer back if used */
-	if (buffer && (buffer != cgc->buffer)) {
-		memcpy(cgc->buffer, buffer, cgc->buflen);
-		scsi_free(buffer, buflen);
-	}
-
+	cgc->stat = sr_do_ioctl(MINOR(cdi->dev), cgc->cmd, cgc->buffer, cgc->buflen, cgc->quiet, cgc->data_direction, cgc->sense);
 
 	return cgc->stat;
 }

@@ -112,7 +112,7 @@ acpi_os_free (
 
 ACPI_STATUS
 acpi_os_map_memory (
-	void                    *physical_address,
+	ACPI_PHYSICAL_ADDRESS   physical_address,
 	u32                     length,
 	void                    **logical_address);
 
@@ -187,6 +187,37 @@ acpi_os_out16 (
 void
 acpi_os_out32 (
 	ACPI_IO_ADDRESS         out_port,
+	u32                     value);
+
+/*
+ * Platform/Hardware independent physical memory interfaces
+ */
+
+u8
+acpi_os_mem_in8 (
+	ACPI_PHYSICAL_ADDRESS   in_addr);
+
+u16
+acpi_os_mem_in16 (
+	ACPI_PHYSICAL_ADDRESS   in_addr);
+
+u32
+acpi_os_mem_in32 (
+	ACPI_PHYSICAL_ADDRESS   in_addr);
+
+void
+acpi_os_mem_out8 (
+	ACPI_PHYSICAL_ADDRESS   out_addr,
+	u8                      value);
+
+void
+acpi_os_mem_out16 (
+	ACPI_PHYSICAL_ADDRESS   out_addr,
+	u16                     value);
+
+void
+acpi_os_mem_out32 (
+	ACPI_PHYSICAL_ADDRESS   out_addr,
 	u32                     value);
 
 

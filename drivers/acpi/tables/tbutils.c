@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: tbutils - Table manipulation utilities
- *              $Revision: 26 $
+ *              $Revision: 31 $
  *
  *****************************************************************************/
 
@@ -107,7 +107,9 @@ acpi_tb_system_table_pointer (
 
 	/* Check for a pointer within the DSDT */
 
-	if (IS_IN_ACPI_TABLE (where, acpi_gbl_DSDT)) {
+	if ((acpi_gbl_DSDT) &&
+		(IS_IN_ACPI_TABLE (where, acpi_gbl_DSDT)))
+	{
 		return (TRUE);
 	}
 
@@ -186,7 +188,7 @@ acpi_tb_validate_table_header (
 
 	MOVE_UNALIGNED32_TO_32 (&signature, &table_header->signature);
 	if (!acpi_cm_valid_acpi_name (signature)) {
-		REPORT_WARNING ("Invalid table signature found");
+		REPORT_WARNING (("Invalid table signature found\n"));
 		return (AE_BAD_SIGNATURE);
 	}
 
@@ -194,7 +196,7 @@ acpi_tb_validate_table_header (
 	/* Validate the table length */
 
 	if (table_header->length < sizeof (ACPI_TABLE_HEADER)) {
-		REPORT_WARNING ("Invalid table header length found");
+		REPORT_WARNING (("Invalid table header length found\n"));
 		return (AE_BAD_HEADER);
 	}
 
@@ -220,7 +222,7 @@ acpi_tb_validate_table_header (
 
 ACPI_STATUS
 acpi_tb_map_acpi_table (
-	void                    *physical_address,
+	ACPI_PHYSICAL_ADDRESS   physical_address,
 	u32                     *size,
 	void                    **logical_address)
 {
@@ -294,18 +296,20 @@ ACPI_STATUS
 acpi_tb_verify_table_checksum (
 	ACPI_TABLE_HEADER       *table_header)
 {
-	u8                      check_sum;
+	u8                      checksum;
 	ACPI_STATUS             status = AE_OK;
 
 
 	/* Compute the checksum on the table */
 
-	check_sum = acpi_tb_checksum (table_header, table_header->length);
+	checksum = acpi_tb_checksum (table_header, table_header->length);
 
 	/* Return the appropriate exception */
 
-	if (check_sum) {
-		REPORT_ERROR ("Invalid ACPI table checksum");
+	if (checksum) {
+		REPORT_WARNING (("Invalid checksum (%X) in table %4.4s\n",
+			checksum, &table_header->signature));
+
 		status = AE_BAD_CHECKSUM;
 	}
 

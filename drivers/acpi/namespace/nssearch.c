@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nssearch - Namespace search
- *              $Revision: 57 $
+ *              $Revision: 60 $
  *
  ******************************************************************************/
 
@@ -169,7 +169,7 @@ acpi_ns_search_node (
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_ns_search_parent_tree (
 	u32                     target_name,
 	ACPI_NAMESPACE_NODE     *node,
@@ -270,7 +270,7 @@ acpi_ns_search_and_enter (
 	/* Parameter validation */
 
 	if (!node || !target_name || !return_node) {
-		REPORT_ERROR ("Ns_search_and_enter: bad (null)parameter");
+		REPORT_ERROR (("Ns_search_and_enter: bad (null) parameter\n"));
 		return (AE_BAD_PARAMETER);
 	}
 
@@ -278,7 +278,7 @@ acpi_ns_search_and_enter (
 	/* Name must consist of printable characters */
 
 	if (!acpi_cm_valid_acpi_name (target_name)) {
-		REPORT_ERROR ("Ns_search_and_enter: Bad character in ACPI Name");
+		REPORT_ERROR (("Ns_search_and_enter: Bad character in ACPI Name\n"));
 		return (AE_BAD_CHARACTER);
 	}
 

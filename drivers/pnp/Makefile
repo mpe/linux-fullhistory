@@ -13,11 +13,8 @@ O_TARGET := pnp.o
 export-objs := isapnp.o
 multi-objs := isa-pnp.o
 
-ifdef CONFIG_PROC_FS
-PROC_OBJS   += isapnp_proc.o
-endif
-
-isa-pnp-objs := isapnp.o quirks.o $(PROC_OBJS)
+proc-$(CONFIG_PROC_FS) = isapnp_proc.o
+isa-pnp-objs := isapnp.o quirks.o $(proc-y)
 
 obj-$(CONFIG_ISAPNP) += isa-pnp.o
 

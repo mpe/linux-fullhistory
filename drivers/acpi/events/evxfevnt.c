@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evxfevnt - External Interfaces, ACPI event disable/enable
- *              $Revision: 19 $
+ *              $Revision: 26 $
  *
  *****************************************************************************/
 
@@ -35,14 +35,6 @@
 	 MODULE_NAME         ("evxfevnt")
 
 
-ACPI_STATUS
-acpi_ev_find_pci_root_buses (
-	void);
-
-ACPI_STATUS
-acpi_ev_init_devices (
-	void);
-
 /**************************************************************************
  *
  * FUNCTION:    Acpi_enable
@@ -51,9 +43,7 @@ acpi_ev_init_devices (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Ensures that the system control interrupt (SCI) is properly
- *              configured, disables SCI event sources, installs the SCI
- *              handler, and transfers the system into ACPI mode.
+ * DESCRIPTION: Transfers the system into ACPI mode.
  *
  *************************************************************************/
 
@@ -69,50 +59,10 @@ acpi_enable (void)
 		return (AE_NO_ACPI_TABLES);
 	}
 
-	/* Init the hardware */
-
-	/*
-	 * With the advent of a 3-pass parser, we need to be
-	 *  prepared to execute on initialized HW before the
-	 *  namespace has completed its load.
-	 */
-
-	status = acpi_cm_hardware_initialize ();
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
-
-
 	/* Make sure the BIOS supports ACPI mode */
 
 	if (SYS_MODE_LEGACY == acpi_hw_get_mode_capabilities()) {
 		return (AE_ERROR);
-	}
-
-
-	acpi_gbl_original_mode = acpi_hw_get_mode();
-
-	/*
-	 * Initialize the Fixed and General Purpose Acpi_events prior. This is
-	 * done prior to enabling SCIs to prevent interrupts from occuring
-	 * before handers are installed.
-	 */
-
-	status = acpi_ev_fixed_event_initialize ();
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
-
-	status = acpi_ev_gpe_initialize ();
-	if (ACPI_FAILURE (status)) {
-		return (status);
-	}
-
-	/* Install the SCI handler */
-
-	status = acpi_ev_install_sci_handler ();
-	if (ACPI_FAILURE (status)) {
-		return (status);
 	}
 
 	/* Transition to ACPI mode */
@@ -121,32 +71,6 @@ acpi_enable (void)
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
-
-	/* Install handlers for control method GPE handlers (_Lxx, _Exx) */
-
-	acpi_ev_init_gpe_control_methods ();
-
-	status = acpi_ev_init_global_lock_handler ();
-
-	/*
-	 * Perform additional initialization that may cause control methods
-	 * to be executed
-	 *
-	 * It may be wise to move this code to a new interface
-	 */
-
-
-	/*
-	 *  Install PCI config space handler for all PCI root bridges.  A PCI root
-	 *  bridge is found by searching for devices containing a HID with the value
-	 *  EISAID("PNP0A03")
-	 */
-
-	acpi_ev_find_pci_root_buses ();
-
-	/* Call _INI on all devices */
-
-	acpi_ev_init_devices ();
 
 	return (status);
 }
@@ -250,7 +174,12 @@ acpi_enable_event (
 		 * enable register bit)
 		 */
 
-		acpi_hw_register_access (ACPI_WRITE, TRUE, register_id, 1);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, register_id, 1);
+
+		if (1 != acpi_hw_register_bit_access(ACPI_READ, ACPI_MTX_LOCK, register_id)) {
+			return (AE_ERROR);
+		}
+
 		break;
 
 
@@ -344,7 +273,12 @@ acpi_disable_event (
 		 * enable register bit)
 		 */
 
-		acpi_hw_register_access (ACPI_WRITE, TRUE, register_id, 0);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, register_id, 0);
+
+		if (0 != acpi_hw_register_bit_access(ACPI_READ, ACPI_MTX_LOCK, register_id)) {
+			return (AE_ERROR);
+		}
+
 		break;
 
 
@@ -435,7 +369,7 @@ acpi_clear_event (
 		 * status register bit)
 		 */
 
-		acpi_hw_register_access (ACPI_WRITE, TRUE, register_id, 1);
+		acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK, register_id, 1);
 		break;
 
 
@@ -532,7 +466,7 @@ acpi_get_event_status (
 
 		/* Get the status of the requested fixed event */
 
-		*event_status = acpi_hw_register_access (ACPI_READ, TRUE, register_id);
+		*event_status = acpi_hw_register_bit_access (ACPI_READ, ACPI_MTX_LOCK, register_id);
 		break;
 
 

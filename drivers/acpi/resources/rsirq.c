@@ -1,12 +1,12 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsirq - Acpi_rs_irq_resource,
  *                      Acpi_rs_irq_stream
  *                      Acpi_rs_extended_irq_resource
  *                      Acpi_rs_extended_irq_stream
- *              $Revision: 8 $
+ *              $Revision: 11 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -28,16 +28,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsirq")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_irq_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -53,7 +54,7 @@
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_irq_resource (
@@ -77,9 +78,7 @@ acpi_rs_irq_resource (
 	 *  (Bits:0-1)
 	 */
 	temp8 = *buffer;
-
 	*bytes_consumed = (temp8 & 0x03) + 1;
-
 	output_struct->id = irq;
 
 	/*
@@ -91,6 +90,7 @@ acpi_rs_irq_resource (
 	output_struct->data.irq.number_of_interrupts = 0;
 
 	/* Decode the IRQ bits */
+
 	for (i = 0, index = 0; index < 16; index++) {
 		if((temp16 >> index) & 0x01) {
 			output_struct->data.irq.interrupts[i] = index;
@@ -109,7 +109,6 @@ acpi_rs_irq_resource (
 	 */
 	if (4 == *bytes_consumed) {
 		buffer += 2;
-
 		temp8 = *buffer;
 
 		/*
@@ -166,11 +165,11 @@ acpi_rs_irq_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_irq_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -181,7 +180,7 @@ acpi_rs_irq_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_irq_stream (
@@ -213,7 +212,6 @@ acpi_rs_irq_stream (
 	}
 
 	buffer += 1;
-
 	temp16 = 0;
 
 	/*
@@ -227,8 +225,7 @@ acpi_rs_irq_stream (
 		temp16 |= 0x1 << temp8;
 	}
 
-	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
+	MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
 	buffer += 2;
 
 	/*
@@ -236,7 +233,6 @@ acpi_rs_irq_stream (
 	 */
 	if (IRQinfo_byte_needed) {
 		temp8 = 0;
-
 		temp8 = (u8) ((linked_list->data.irq.shared_exclusive &
 				 0x01) << 4);
 
@@ -251,7 +247,6 @@ acpi_rs_irq_stream (
 		}
 
 		*buffer = temp8;
-
 		buffer += 1;
 	}
 
@@ -265,11 +260,11 @@ acpi_rs_irq_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_extended_irq_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -285,7 +280,7 @@ acpi_rs_irq_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_extended_irq_resource (
@@ -450,11 +445,11 @@ acpi_rs_extended_irq_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_extended_irq_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -463,9 +458,9 @@ acpi_rs_extended_irq_resource (
  * RETURN:      Status  AE_OK if okay, else a valid ACPI_STATUS code
  *
  * DESCRIPTION: Take the linked list resource structure and fills in the
- *                  the appropriate bytes in a byte stream
+ *              the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_extended_irq_stream (
@@ -518,7 +513,6 @@ acpi_rs_extended_irq_stream (
 	temp8 = (u8) linked_list->data.extended_irq.number_of_interrupts;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	for (index = 0;

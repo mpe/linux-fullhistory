@@ -36,7 +36,7 @@ typedef struct {
 
 extern Scsi_CD *scsi_CDs;
 
-int sr_do_ioctl(int, unsigned char *, void *, unsigned, int, int);
+int sr_do_ioctl(int, unsigned char *, void *, unsigned, int, int, struct request_sense *);
 
 int sr_lock_door(struct cdrom_device_info *, int);
 int sr_tray_move(struct cdrom_device_info *, int);

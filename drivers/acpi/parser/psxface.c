@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psxface - Parser external interfaces
- *              $Revision: 36 $
+ *              $Revision: 37 $
  *
  *****************************************************************************/
 
@@ -40,11 +40,13 @@
  *
  * FUNCTION:    Acpi_psx_execute
  *
- * PARAMETERS:  Obj_desc            - A method object containing both the AML
+ * PARAMETERS:  Method_node         - A method object containing both the AML
  *                                    address and length.
  *              **Params            - List of parameters to pass to method,
  *                                    terminated by NULL. Params itself may be
  *                                    NULL if no parameters are being passed.
+ *              **Return_obj_desc   - Return object from execution of the
+ *                                    method.
  *
  * RETURN:      Status
  *

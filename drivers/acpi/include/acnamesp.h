@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acnamesp.h - Namespace subcomponent prototypes and defines
- *       $Revision: 94 $
+ *       $Revision: 98 $
  *
  *****************************************************************************/
 
@@ -62,6 +62,36 @@
 
 
 ACPI_STATUS
+acpi_ns_load_namespace (
+	void);
+
+ACPI_STATUS
+acpi_ns_initialize_objects (
+	void);
+
+ACPI_STATUS
+acpi_ns_initialize_devices (
+	u32                     flags);
+
+
+/* Namespace init - nsxfinit */
+
+ACPI_STATUS
+acpi_ns_init_one_device (
+	ACPI_HANDLE             obj_handle,
+	u32                     nesting_level,
+	void                    *context,
+	void                    **return_value);
+
+ACPI_STATUS
+acpi_ns_init_one_object (
+	ACPI_HANDLE             obj_handle,
+	u32                     level,
+	void                    *context,
+	void                    **return_value);
+
+
+ACPI_STATUS
 acpi_ns_walk_namespace (
 	OBJECT_TYPE_INTERNAL    type,
 	ACPI_HANDLE             start_object,
@@ -85,6 +115,11 @@ acpi_ns_delete_namespace_by_owner (
 
 
 /* Namespace loading - nsload */
+
+ACPI_STATUS
+acpi_ns_one_complete_parse (
+	u32                     pass_number,
+	ACPI_TABLE_DESC         *table_desc);
 
 ACPI_STATUS
 acpi_ns_parse_table (
@@ -319,10 +354,6 @@ acpi_ns_search_node (
 	ACPI_NAMESPACE_NODE     *node,
 	OBJECT_TYPE_INTERNAL    type,
 	ACPI_NAMESPACE_NODE     **ret_node);
-
-ACPI_NAMESPACE_NODE *
-acpi_ns_create_node (
-	u32                     acpi_name);
 
 void
 acpi_ns_install_node (

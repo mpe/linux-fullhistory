@@ -133,11 +133,9 @@ static inline int dup_mmap(struct mm_struct * mm)
 	mm->mmap_avl = NULL;
 	mm->mmap_cache = NULL;
 	mm->map_count = 0;
-	mm->context = 0;
 	mm->cpu_vm_mask = 0;
 	mm->swap_cnt = 0;
 	mm->swap_address = 0;
-	mm->segments = NULL;
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct file *file;
@@ -319,11 +317,6 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	up(&current->mm->mmap_sem);
 	if (retval)
 		goto free_pt;
-
-	/*
-	 * child gets a private LDT (if there was an LDT in the parent)
-	 */
-	copy_segments(tsk, mm);
 
 	if (init_new_context(tsk,mm))
 		goto free_pt;

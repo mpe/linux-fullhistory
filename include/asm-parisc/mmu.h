@@ -6,6 +6,10 @@
 #define _PARISC_MMU_H_
 
 #ifndef __ASSEMBLY__
+
+/* Default "unsigned long" context */
+typedef unsigned long mm_context_t;
+
 /* Hardware Page Table Entry */
 typedef struct _PTE {
 	unsigned long v:1;	/* Entry is valid */

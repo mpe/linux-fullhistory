@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.7 2000/03/31 04:06:24 davem Exp $
+# $Id: Makefile,v 1.8 2000/12/14 22:57:25 davem Exp $
 # Makefile for the linux Sparc64-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -14,6 +14,6 @@
 	$(CC) $(AFLAGS) -ansi -c $< -o $*.o
 
 O_TARGET := mm.o
-O_OBJS   := ultra.o fault.o init.o generic.o extable.o modutil.o
+obj-y    := ultra.o fault.o init.o generic.o extable.o modutil.o
 
 include $(TOPDIR)/Rules.make

@@ -2,7 +2,7 @@
  *
  * Module Name: evmisc - ACPI device notification handler dispatch
  *                       and ACPI Global Lock support
- *              $Revision: 13 $
+ *              $Revision: 20 $
  *
  *****************************************************************************/
 
@@ -157,7 +157,7 @@ acpi_ev_notify_dispatch (
  *
  **************************************************************************/
 
-void
+static void
 acpi_ev_global_lock_thread (
 	void                    *context)
 {
@@ -185,7 +185,7 @@ acpi_ev_global_lock_thread (
  *
  **************************************************************************/
 
-u32
+static u32
 acpi_ev_global_lock_handler (
 	void                    *context)
 {
@@ -199,7 +199,7 @@ acpi_ev_global_lock_handler (
 	 * take another interrupt when it becomes free.
 	 */
 
-	global_lock = &acpi_gbl_FACS->global_lock;
+	global_lock = acpi_gbl_FACS->global_lock;
 	ACPI_ACQUIRE_GLOBAL_LOCK (global_lock, acquired);
 	if (acquired) {
 		/* Got the lock, now wake all threads waiting for it */
@@ -275,9 +275,9 @@ acpi_ev_acquire_global_lock(void)
 	}
 
 
-	/* We must acquire the actualy hardware lock */
+	/* We must acquire the actual hardware lock */
 
-	global_lock = &acpi_gbl_FACS->global_lock;
+	global_lock = acpi_gbl_FACS->global_lock;
 	ACPI_ACQUIRE_GLOBAL_LOCK (global_lock, acquired);
 	if (acquired) {
 	   /* We got the lock */
@@ -298,11 +298,8 @@ acpi_ev_acquire_global_lock(void)
 	  * Since this wait will block, we must release the interpreter
 	  */
 
-	acpi_aml_exit_interpreter ();
 	status = acpi_aml_system_wait_semaphore (acpi_gbl_global_lock_semaphore,
 			  ACPI_UINT32_MAX);
-	acpi_aml_enter_interpreter ();
-
 
 	return (status);
 }
@@ -323,14 +320,14 @@ acpi_ev_release_global_lock (void)
 	void                    *global_lock;
 
 
-	if (!acpi_gbl_FACS) {
+	if (!acpi_gbl_global_lock_thread_count) {
+		REPORT_WARNING(("Releasing a non-acquired Global Lock\n"));
 		return;
 	}
 
    /* One fewer thread has the global lock */
 
 	acpi_gbl_global_lock_thread_count--;
-
 
 	/* Have all threads released the lock? */
 
@@ -340,7 +337,7 @@ acpi_ev_release_global_lock (void)
 		 * release
 		 */
 
-		global_lock = &acpi_gbl_FACS->global_lock;
+		global_lock = acpi_gbl_FACS->global_lock;
 		ACPI_RELEASE_GLOBAL_LOCK (global_lock, pending);
 		acpi_gbl_global_lock_acquired = FALSE;
 
@@ -349,8 +346,8 @@ acpi_ev_release_global_lock (void)
 		 * register
 		 */
 		if (pending) {
-			acpi_hw_register_access (ACPI_WRITE, ACPI_MTX_LOCK,
-					 PM1_CONTROL | GBL_RLS, 1);
+			acpi_hw_register_bit_access (ACPI_WRITE, ACPI_MTX_LOCK,
+					 GBL_RLS, 1);
 		}
 	}
 

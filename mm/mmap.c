@@ -885,7 +885,6 @@ void exit_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt;
 
-	release_segments(mm);
 	spin_lock(&mm->page_table_lock);
 	mpnt = mm->mmap;
 	mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;

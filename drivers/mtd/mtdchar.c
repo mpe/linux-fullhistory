@@ -9,6 +9,7 @@
 
 #include <linux/mtd/compatmac.h>
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mtd/mtd.h>

@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsmem24 - Acpi_rs_memory24_resource
  *                        Acpi_rs_memory24_stream
@@ -6,9 +6,9 @@
  *                        Acpi_rs_fixed_memory32_resource
  *                        Acpi_rs_memory32_range_stream
  *                        Acpi_rs_fixed_memory32_stream
- *              $Revision: 7 $
+ *              $Revision: 10 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -30,16 +30,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsmemory")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_memory24_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -55,7 +56,7 @@
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_memory24_resource (
@@ -78,54 +79,42 @@ acpi_rs_memory24_resource (
 	buffer += 1;
 
 	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
 	buffer += 2;
-
 	*bytes_consumed = temp16 + 3;
-
 	output_struct->id = memory24;
 
 	/*
 	 * Check Byte 3 the Read/Write bit
 	 */
 	temp8 = *buffer;
-
 	buffer += 1;
-
 	output_struct->data.memory24.read_write_attribute = temp8 & 0x01;
 
 	/*
 	 * Get Min_base_address (Bytes 4-5)
 	 */
 	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
 	buffer += 2;
-
 	output_struct->data.memory24.min_base_address = temp16;
 
 	/*
 	 * Get Max_base_address (Bytes 6-7)
 	 */
 	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
 	buffer += 2;
-
 	output_struct->data.memory24.max_base_address = temp16;
 
 	/*
 	 * Get Alignment (Bytes 8-9)
 	 */
 	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
 	buffer += 2;
-
 	output_struct->data.memory24.alignment = temp16;
 
 	/*
 	 * Get Range_length (Bytes 10-11)
 	 */
 	MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
 	output_struct->data.memory24.range_length = temp16;
 
 	/*
@@ -142,11 +131,11 @@ acpi_rs_memory24_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_memory24_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -157,7 +146,7 @@ acpi_rs_memory24_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_memory24_stream (
@@ -174,16 +163,13 @@ acpi_rs_memory24_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x81;
-
 	buffer += 1;
 
 	/*
 	 * The length field is static
 	 */
 	temp16 = 0x09;
-
 	MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
-
 	buffer += 2;
 
 	/*
@@ -227,11 +213,11 @@ acpi_rs_memory24_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_memory32_range_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -247,7 +233,7 @@ acpi_rs_memory24_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_memory32_range_resource (
@@ -332,11 +318,11 @@ acpi_rs_memory32_range_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_fixed_memory32_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -352,7 +338,7 @@ acpi_rs_memory32_range_resource (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_fixed_memory32_resource (
@@ -414,11 +400,11 @@ acpi_rs_fixed_memory32_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_memory32_range_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -429,7 +415,7 @@ acpi_rs_fixed_memory32_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_memory32_range_stream (
@@ -497,11 +483,11 @@ acpi_rs_memory32_range_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_fixed_memory32_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -512,7 +498,7 @@ acpi_rs_memory32_range_stream (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_fixed_memory32_stream (

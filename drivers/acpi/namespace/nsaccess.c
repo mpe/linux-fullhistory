@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nsaccess - Top-level functions for accessing ACPI namespace
- *              $Revision: 108 $
+ *              $Revision: 115 $
  *
  ******************************************************************************/
 
@@ -87,8 +87,6 @@ acpi_ns_root_initialize (void)
 				 IMODE_LOAD_PASS2, NS_NO_UPSEARCH,
 				 NULL, &new_node);
 
-		if (ACPI_FAILURE (status) ||
-			(!new_node))
 
 		/*
 		 * Name entered successfully.
@@ -122,7 +120,7 @@ acpi_ns_root_initialize (void)
 			case ACPI_TYPE_NUMBER:
 
 				obj_desc->number.value =
-						(u32) STRTOUL (init_val->val, NULL, 10);
+						(ACPI_INTEGER) STRTOUL (init_val->val, NULL, 10);
 				break;
 
 
@@ -138,11 +136,7 @@ acpi_ns_root_initialize (void)
 				 */
 				obj_desc->string.pointer = acpi_cm_allocate (
 						   (obj_desc->string.length + 1));
-
 				if (!obj_desc->string.pointer) {
-					REPORT_ERROR ("Initial value string"
-							  "allocation failure");
-
 					acpi_cm_remove_reference (obj_desc);
 					status = AE_NO_MEMORY;
 					goto unlock_and_exit;
@@ -190,7 +184,8 @@ acpi_ns_root_initialize (void)
 
 
 			default:
-				REPORT_ERROR ("Unsupported initial type value");
+				REPORT_ERROR (("Unsupported initial type value %X\n",
+					init_val->type));
 				acpi_cm_remove_reference (obj_desc);
 				obj_desc = NULL;
 				continue;
@@ -253,6 +248,9 @@ acpi_ns_lookup (
 	u8                      null_name_path = FALSE;
 	OBJECT_TYPE_INTERNAL    type_to_check_for;
 	OBJECT_TYPE_INTERNAL    this_search_type;
+
+	DEBUG_ONLY_MEMBERS      (u32 i)
+
 
 	if (!return_node) {
 		return (AE_BAD_PARAMETER);
@@ -379,8 +377,7 @@ acpi_ns_lookup (
 				if (!this_node) {
 					/* Current scope has no parent scope */
 
-					REPORT_ERROR ("Too many parent prefixes (^) - reached root");
-
+					REPORT_ERROR (("Too many parent prefixes (^) - reached root\n"));
 					return (AE_NOT_FOUND);
 				}
 
@@ -442,7 +439,7 @@ acpi_ns_lookup (
 			this_search_type = type;
 		}
 
-		/* Pluck and ACPI name from the front of the pathname */
+		/* Pluck one ACPI name from the front of the pathname */
 
 		MOVE_UNALIGNED32_TO_32 (&simple_name, pathname);
 
@@ -467,25 +464,29 @@ acpi_ns_lookup (
 		 * If 1) This is the last segment (Num_segments == 0)
 		 *    2) and looking for a specific type
 		 *       (Not checking for TYPE_ANY)
-		 *    3) which is not a local type (TYPE_DEF_ANY)
-		 *    4) which is not a local type (TYPE_SCOPE)
-		 *    5) which is not a local type (TYPE_INDEX_FIELD_DEFN)
-		 *    6) and type of object is known (not TYPE_ANY)
-		 *    7) and object does not match request
+		 *    3) Which is not an alias
+		 *    4) which is not a local type (TYPE_DEF_ANY)
+		 *    5) which is not a local type (TYPE_SCOPE)
+		 *    6) which is not a local type (TYPE_INDEX_FIELD_DEFN)
+		 *    7) and type of object is known (not TYPE_ANY)
+		 *    8) and object does not match request
 		 *
 		 * Then we have a type mismatch.  Just warn and ignore it.
 		 */
 		if ((num_segments       == 0)                               &&
 			(type_to_check_for  != ACPI_TYPE_ANY)                   &&
+			(type_to_check_for  != INTERNAL_TYPE_ALIAS)             &&
 			(type_to_check_for  != INTERNAL_TYPE_DEF_ANY)           &&
 			(type_to_check_for  != INTERNAL_TYPE_SCOPE)             &&
 			(type_to_check_for  != INTERNAL_TYPE_INDEX_FIELD_DEFN)  &&
-			(this_node->type != ACPI_TYPE_ANY)                  &&
-			(this_node->type != type_to_check_for))
+			(this_node->type    != ACPI_TYPE_ANY)                   &&
+			(this_node->type    != type_to_check_for))
 		{
 			/* Complain about a type mismatch */
 
-			REPORT_WARNING ("Type mismatch");
+			REPORT_WARNING (
+				("Ns_lookup: %4.4s, type %X, checking for type %X\n",
+				&simple_name, this_node->type, type_to_check_for));
 		}
 
 		/*

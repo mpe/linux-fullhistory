@@ -52,8 +52,4 @@ obj-$(CONFIG_MODULES)		+= netsyms.o
 obj-$(CONFIG_SYSCTL)		+= sysctl_net.o
 endif
 
-
-# Subdirectories that should be entered when MAKING_MODULES=1, even if set to 'y'.
-both-m		:= $(filter $(mod-subdirs), $(subdir-y))
-
 include $(TOPDIR)/Rules.make

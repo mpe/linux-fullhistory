@@ -8,71 +8,22 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 #
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 L_TARGET := ieee1394.a
-L_OBJS   :=
-LX_OBJS  :=
-M_OBJS   :=
-MX_OBJS  :=
-MI_OBJS  :=
-MIX_OBJS :=
-O_OBJS   :=
-OX_OBJS  :=
 
-ifeq ($(CONFIG_IEEE1394),y)
-L_OBJS  += ieee1394_core.o ieee1394_transactions.o hosts.o highlevel.o csr.o guid.o
-LX_OBJS += ieee1394_syms.o
-else
-  ifeq ($(CONFIG_IEEE1394),m)
-  M_OBJS  += ieee1394.o
-  O_TARGET = ieee1394.o
-  O_OBJS  += ieee1394_core.o ieee1394_transactions.o hosts.o highlevel.o csr.o guid.o
-  OX_OBJS += ieee1394_syms.o
-  endif
-endif
+export-objs := ieee1394_syms.o
 
-ifeq ($(CONFIG_IEEE1394_PCILYNX),y)
-L_OBJS += pcilynx.o
-else
-  ifeq ($(CONFIG_IEEE1394_PCILYNX),m)
-  M_OBJS += pcilynx.o
-  endif
-endif
+list-multi := ieee1394.o
+ieee1394-objs := ieee1394_core.o ieee1394_transactions.o hosts.o \
+		 highlevel.o csr.o guid.o ieee1394_syms.o
 
-ifeq ($(CONFIG_IEEE1394_AIC5800),y)
-L_OBJS += aic5800.o
-else
-  ifeq ($(CONFIG_IEEE1394_AIC5800),m)
-  M_OBJS += aic5800.o
-  endif
-endif
+obj-$(CONFIG_IEEE1394) += ieee1394.o
+obj-$(CONFIG_IEEE1394_PCILYNX) += pcilynx.o
+obj-$(CONFIG_IEEE1394_AIC5800) += aic5800.o
+obj-$(CONFIG_IEEE1394_OHCI1394) += ohci1394.o
+obj-$(CONFIG_IEEE1394_VIDEO1394) += video1394.o
+obj-$(CONFIG_IEEE1394_RAWIO) += raw1394.o
 
-ifeq ($(CONFIG_IEEE1394_OHCI1394),y)
-LX_OBJS += ohci1394.o
-else
-  ifeq ($(CONFIG_IEEE1394_OHCI1394),m)
-  MX_OBJS += ohci1394.o
-  endif
-endif
-
-ifeq ($(CONFIG_IEEE1394_VIDEO1394),y)
-L_OBJS += video1394.o
-else
-  ifeq ($(CONFIG_IEEE1394_VIDEO1394),m)
-  M_OBJS += video1394.o
-  endif
-endif
-
-ifeq ($(CONFIG_IEEE1394_RAWIO),y)
-L_OBJS += raw1394.o
-else
-  ifeq ($(CONFIG_IEEE1394_RAWIO),m)
-  M_OBJS += raw1394.o
-  endif
-endif
-
+ieee1394.o: $(ieee1394-objs)
+	$(LD) -r -o $@ $(ieee1394-objs)
 
 include $(TOPDIR)/Rules.make

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psutils - Parser miscellaneous utilities (Parser only)
- *              $Revision: 29 $
+ *              $Revision: 30 $
  *
  *****************************************************************************/
 
@@ -460,7 +460,12 @@ acpi_ps_is_deferred_op (
 	u16                     opcode)
 {
 	return ((u8)
-		   (opcode == AML_METHOD_OP ||
+		   (opcode == AML_METHOD_OP         ||
+			opcode == AML_CREATE_FIELD_OP   ||
+			opcode == AML_BIT_FIELD_OP      ||
+			opcode == AML_BYTE_FIELD_OP     ||
+			opcode == AML_WORD_FIELD_OP     ||
+			opcode == AML_DWORD_FIELD_OP    ||
 			opcode == AML_REGION_OP));
 }
 

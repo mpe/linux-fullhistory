@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.34.6.2 2000/11/28 12:02:46 kai Exp $
+/* $Id: hfc_pci.c,v 1.34.6.3 2000/12/10 23:39:19 kai Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -35,7 +35,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.34.6.2 $";
+static const char *hfcpci_revision = "$Revision: 1.34.6.3 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -61,6 +61,7 @@ static const PCI_ENTRY id_list[] =
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00B, "Billion", "B00B"},
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00C, "Billion", "B00C"},
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B100, "Seyeon", "B100"},
+	{PCI_VENDOR_ID_ABOCOM, PCI_DEVICE_ID_ABOCOM_2BD1, "Abocom/Magitek", "2BD1"},
 	{PCI_VENDOR_ID_ASUSTEK, PCI_DEVICE_ID_ASUSTEK_0675, "Asuscom/Askey", "675"},
 	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_T_CONCEPT, "German telekom", "T-Concept"},
 	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_A1T, "German telekom", "A1T"},

@@ -1,219 +1,74 @@
-L_OBJS :=
-M_OBJS :=
-LX_OBJS :=
-MX_OBJS :=
-O_OBJS :=
-OX_OBJS :=
-L_TARGET :=
-O_TARGET :=
+# Makefile for the hisax ISDN device driver
 
-O_OBJS := isdnl1.o tei.o isdnl2.o isdnl3.o \
-          lmgr.o q931.o callc.o fsm.o cert.o
+# The target object and module list name.
 
-# EXTRA_CFLAGS += -S
+O_TARGET	:= hisax_drv.o
 
-ifeq ($(CONFIG_HISAX_EURO),y)
-	 O_OBJS += l3dss1.o
-endif
+# Objects that export symbols.
 
-ifeq ($(CONFIG_HISAX_NI1),y)
-       O_OBJS += l3ni1.o
-endif
+export-objs	:= config.o
 
-ifeq ($(CONFIG_HISAX_1TR6),y)
-	 O_OBJS += l3_1tr6.o
-endif
+# Multipart objects.
 
-ISAC_OBJ :=
-HSCX_OBJ :=
-ISAR_OBJ :=
-HFC_OBJ :=
-HFC_2BDS0 :=
-JADE_OBJ :=
-W6692_OBJ :=
-NETJ_OBJ :=
-ICC_OBJ :=
+list-multi	:= hisax.o
+hisax-objs	:= config.o isdnl1.o tei.o isdnl2.o isdnl3.o \
+		   lmgr.o q931.o callc.o fsm.o cert.o
 
-ifeq ($(CONFIG_HISAX_16_0),y)
-	 O_OBJS += teles0.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
+# Optional parts of multipart objects.
 
-ifeq ($(CONFIG_HISAX_16_3),y)
-	 O_OBJS += teles3.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
+hisax-objs-$(CONFIG_HISAX_EURO) += l3dss1.o
+hisax-objs-$(CONFIG_HISAX_NI1) += l3ni1.o
+hisax-objs-$(CONFIG_HISAX_1TR6) += l3_1tr6.o
 
-ifeq ($(CONFIG_HISAX_TELESPCI),y)
-	 O_OBJS += telespci.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
+hisax-objs-$(CONFIG_HISAX_16_0) += teles0.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_16_3) += teles3.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_TELESPCI) += telespci.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_S0BOX) += s0box.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_AVM_A1) += avm_a1.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_AVM_A1_PCMCIA) += avm_a1p.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_FRITZPCI) += avm_pci.o isac.o arcofi.o
+hisax-objs-$(CONFIG_HISAX_AVM_A1) += avm_a1.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_ELSA) += elsa.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_IX1MICROR2) += ix1_micro.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_DIEHLDIVA) += diva.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_ASUSCOM) += asuscom.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_TELEINT) += teleint.o isac.o arcofi.o hfc_2bs0.o
+hisax-objs-$(CONFIG_HISAX_SEDLBAUER) += sedlbauer.o isac.o arcofi.o hscx.o isar.o
+hisax-objs-$(CONFIG_HISAX_SPORTSTER) += sportster.o isac.o arcofi.o hfc_2bs0.o
+hisax-objs-$(CONFIG_HISAX_MIC) += mic.o isac.o arcofi.o hfc_2bs0.o
+hisax-objs-$(CONFIG_HISAX_NETJET) += nj_s.o netjet.o isac.o arcofi.o
+hisax-objs-$(CONFIG_HISAX_NETJET_U) += nj_u.o netjet.o icc.o
+hisax-objs-$(CONFIG_HISAX_HFCS) += hfcscard.o hfc_2bds0.o
+hisax-objs-$(CONFIG_HISAX_HFC_PCI) += hfc_pci.o
+hisax-objs-$(CONFIG_HISAX_HFC_SX) += hfc_sx.o
+hisax-objs-$(CONFIG_HISAX_NICCY) += niccy.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_ISURF) += isurf.o isac.o arcofi.o isar.o
+hisax-objs-$(CONFIG_HISAX_HSTSAPHIR) += saphir.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_BKM_A4T) += bkm_a4t.o isac.o arcofi.o jade.o
+hisax-objs-$(CONFIG_HISAX_SCT_QUADRO) += bkm_a8.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_GAZEL) += gazel.o isac.o arcofi.o hscx.o
+hisax-objs-$(CONFIG_HISAX_W6692) += w6692.o
+#hisax-objs-$(CONFIG_HISAX_TESTEMU) += testemu.o
 
-ifeq ($(CONFIG_HISAX_S0BOX),y)
-	 O_OBJS += s0box.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
+hisax-objs += $(sort $(hisax-objs-y))
 
-ifeq ($(CONFIG_HISAX_AVM_A1),y)
-	 O_OBJS += avm_a1.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
+# Object file lists.
 
-ifeq ($(CONFIG_HISAX_AVM_A1_PCMCIA),y)
-	 O_OBJS += avm_a1p.o
- 	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
- 
-ifeq ($(CONFIG_HISAX_FRITZPCI),y)
-	 O_OBJS += avm_pci.o
- 	 ISAC_OBJ := isac.o
-endif
+obj-y	:=
+obj-m	:=
+obj-n	:=
+obj-	:=
 
+# Each configuration option enables a list of files.
 
-ifeq ($(CONFIG_HISAX_ELSA),y)
-	 O_OBJS += elsa.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_IX1MICROR2),y)
-	 O_OBJS += ix1_micro.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_DIEHLDIVA),y)
-	 O_OBJS += diva.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_ASUSCOM),y)
-	 O_OBJS += asuscom.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_TELEINT),y)
-	 O_OBJS += teleint.o
-	 ISAC_OBJ := isac.o
-	 HFC_OBJ := hfc_2bs0.o
-endif
-
-ifeq ($(CONFIG_HISAX_SEDLBAUER),y)
-	 O_OBJS += sedlbauer.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-	 ISAR_OBJ := isar.o
-endif
-
-ifeq ($(CONFIG_HISAX_SPORTSTER),y)
-	 O_OBJS += sportster.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_MIC),y)
-	 O_OBJS += mic.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_NETJET),y)
-	 O_OBJS += nj_s.o
-	 NETJ_OBJ := netjet.o
-	 ISAC_OBJ := isac.o
-endif
-
-ifeq ($(CONFIG_HISAX_NETJET_U),y)
-	 O_OBJS += nj_u.o
-	 NETJ_OBJ := netjet.o
-	 ICC_OBJ := icc.o
-endif
-
-ifeq ($(CONFIG_HISAX_HFCS),y)
-	 O_OBJS += hfcscard.o
-	 HFC_2BDS0 := hfc_2bds0.o
-endif
-
-ifeq ($(CONFIG_HISAX_HFC_PCI),y)
-	 HFC_2BDS0 += hfc_pci.o
-endif
-
-ifeq ($(CONFIG_HISAX_HFC_SX),y)
-	 HFC_2BDS0 += hfc_sx.o
-endif
-
-ifeq ($(CONFIG_HISAX_NICCY),y)
-	 O_OBJS += niccy.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_ISURF),y)
-	 O_OBJS += isurf.o
-	 ISAC_OBJ := isac.o
-	 ISAR_OBJ := isar.o
-endif
-
-ifeq ($(CONFIG_HISAX_HSTSAPHIR),y)
-	 O_OBJS += saphir.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_BKM_A4T),y)
-	 O_OBJS += bkm_a4t.o
-	 ISAC_OBJ := isac.o
-	 JADE_OBJ := jade.o
-endif
-ifeq ($(CONFIG_HISAX_SCT_QUADRO),y)
-	 O_OBJS += bkm_a8.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_GAZEL),y)
-	 O_OBJS += gazel.o
-	 ISAC_OBJ := isac.o
-	 HSCX_OBJ := hscx.o
-endif
-
-ifeq ($(CONFIG_HISAX_W6692),y)
-	W6692_OBJ := w6692.o
-endif
-
-# ifeq ($(CONFIG_HISAX_TESTEMU),y)
-#	 O_OBJS += testemu.o
-# endif
-
-ifeq ($(ISAC_OBJ), isac.o)
-	ISAC_OBJ += arcofi.o
-endif
-
-O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(ISAR_OBJ) $(JADE_OBJ)
-O_OBJS += $(HFC_OBJ) $(HFC_2BDS0) $(W6692_OBJ) $(NETJ_OBJ) $(ICC_OBJ)
-OX_OBJS += config.o
-
-O_TARGET :=
-
-ifeq ($(CONFIG_ISDN_DRV_HISAX),y)
-  O_TARGET += hisax.o
-else
-  ifeq ($(CONFIG_ISDN_DRV_HISAX),m)
-    O_TARGET += hisax.o
-    M_OBJS += hisax.o
-  endif
-endif
-
+obj-$(CONFIG_ISDN_DRV_HISAX)	+= hisax.o
 
 include $(TOPDIR)/Rules.make
+
+# Link rules for multi-part drivers.
+
+hisax.o: $(hisax-objs)
+	$(LD) -r -o $@ $(hisax-objs)
 
 MD5FILES += isac.c isdnl1.c isdnl2.c isdnl3.c \
 	    tei.c callc.c cert.c l3dss1.c l3_1tr6.c \

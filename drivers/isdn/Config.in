@@ -4,8 +4,9 @@
 if [ "$CONFIG_INET" != "n" ]; then
    bool '  Support synchronous PPP' CONFIG_ISDN_PPP
    if [ "$CONFIG_ISDN_PPP" != "n" ]; then
-      bool '    Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
-      bool '    Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
+      bool     '    Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
+      bool     '    Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
+      tristate '    Support BSD compression with sync PPP' CONFIG_ISDN_PPP_BSDCOMP
    fi
 fi
 bool '  Support audio via ISDN' CONFIG_ISDN_AUDIO
@@ -75,57 +76,54 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
 fi
 endmenu
 
+### Active ISDN cards
+
 mainmenu_option next_comment
 comment 'Active ISDN cards'
+
 dep_tristate 'ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
 dep_tristate 'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
 if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
    dep_tristate 'Spellcaster support (EXPERIMENTAL)' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
    dep_tristate 'IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 fi
+
 dep_tristate 'Eicon active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
-   if [ "$CONFIG_ISDN_DRV_EICON_STANDALONE" != "y" ]; then
-      if [ "$CONFIG_PCI" = "y" ]; then
-         bool '    Eicon PCI DIVA Server BRI/PRI/4BRI support' CONFIG_ISDN_DRV_EICON_PCI
-      fi
-      bool '    Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+   tristate '  Old Eicon driver' CONFIG_ISDN_DRV_EICON_OLD
+   if [ "$CONFIG_ISDN_DRV_EICON_OLD" != "n" ]; then 
+      dep_bool  '    Eicon PCI DIVA Server BRI/PRI/4BRI support' CONFIG_ISDN_DRV_EICON_PCI $CONFIG_PCI
+      bool      '    Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
    fi
-   if [ "$CONFIG_PCI" = "y" ]; then
-      bool '    build eicon driver type standalone' CONFIG_ISDN_DRV_EICON_STANDALONE
-   fi
+   dep_tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS
 fi
-dep_tristate 'CAPI2.0 support' CONFIG_ISDN_CAPI $CONFIG_ISDN
-if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-   bool 'CAPI2.0 Middleware support' CONFIG_ISDN_CAPI_MIDDLEWARE
-   if [ "$CONFIG_ISDN_CAPI_MIDDLEWARE" != "n" ]; then
-   	bool 'CAPI2.0 filesystem support' CONFIG_ISDN_CAPIFS
-   fi
-fi
+
+# CAPI subsystem
+
+tristate     'CAPI2.0 support' CONFIG_ISDN_CAPI
 if [ "$CONFIG_ISDN_CAPI" != "n" ]; then
-   bool '  AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA
-   bool '  AVM B1 PCI support' CONFIG_ISDN_DRV_AVMB1_B1PCI
-   if [ "$CONFIG_ISDN_DRV_AVMB1_B1PCI" != "n" ]; then
-      if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-         bool '  AVM B1 PCI V4 support' CONFIG_ISDN_DRV_AVMB1_B1PCIV4
-      fi
-   fi
-   bool '  AVM T1/T1-B ISA support' CONFIG_ISDN_DRV_AVMB1_T1ISA
-   bool '  AVM B1/M1/M2 PCMCIA support' CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-   bool '  AVM T1/T1-B PCI support' CONFIG_ISDN_DRV_AVMB1_T1PCI
-   if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-      bool '  AVM C4 support' CONFIG_ISDN_DRV_AVMB1_C4
-   fi
-   bool '  Verbose reason code reporting (kernel size +=7K)' CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
+   dep_bool     '  CAPI2.0 Middleware support (EXPERIMENTAL)' CONFIG_ISDN_CAPI_MIDDLEWARE $CONFIG_EXPERIMENTAL
+   dep_tristate '  CAPI2.0 filesystem support' CONFIG_ISDN_CAPI_CAPIFS $CONFIG_ISDN_CAPI_MIDDLEWARE
+   dep_tristate '  CAPI2.0 /dev/capi support' CONFIG_ISDN_CAPI_CAPI20 $CONFIG_ISDN_CAPIFS
+   dep_tristate '  CAPI2.0 capidrv interface support' CONFIG_ISDN_CAPI_CAPIDRV $CONFIG_ISDN
+   bool         '  Verbose reason code reporting (kernel size +=7K)' CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
 fi
-if [ "$CONFIG_PROC_FS" != "n" ]; then
-   if [ "$CONFIG_MODULES" != "n" ]; then
-      bool 'Hypercope HYSDN cards (Champ, Ergo, Metro) support (module)' CONFIG_HYSDN
-   fi
+
+# CAPI drivers
+
+if [ "$CONFIG_ISDN_CAPI" != "n" ]; then
+   tristate     '  AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA
+   dep_tristate '  AVM B1 PCI support' CONFIG_ISDN_DRV_AVMB1_B1PCI $CONFIG_PCI
+   dep_mbool    '    AVM B1 PCI V4 support' CONFIG_ISDN_DRV_AVMB1_B1PCIV4 $CONFIG_ISDN_DRV_AVMB1_B1PCI
+   tristate     '  AVM T1/T1-B ISA support' CONFIG_ISDN_DRV_AVMB1_T1ISA
+   dep_tristate '  AVM B1/M1/M2 PCMCIA support' CONFIG_ISDN_DRV_AVMB1_B1PCMCIA $CONFIG_PCMCIA
+   dep_tristate '  AVM B1/M1/M2 PCMCIA cs module' CONFIG_ISDN_DRV_AVMB1_AVM_CS $CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+   dep_tristate '  AVM T1/T1-B PCI support' CONFIG_ISDN_DRV_AVMB1_T1PCI $CONFIG_PCI
+   dep_tristate '  AVM C4 support' CONFIG_ISDN_DRV_AVMB1_C4 $CONFIG_PCI
 fi
-if [ "$CONFIG_HYSDN" != "n" ]; then
-   if [ "$CONFIG_ISDN_CAPI" != "n" ]; then
-      bool '  HYSDN CAPI 2.0 support' CONFIG_HYSDN_CAPI
-   fi 
-fi
+
+# HYSDN
+
+dep_tristate '  Hypercope HYSDN cards (Champ, Ergo, Metro) support (module)' CONFIG_HYSDN m $CONFIG_PROC_FS
+dep_mbool    '    HYSDN CAPI 2.0 support' CONFIG_HYSDN_CAPI $CONFIG_HYSDN $CONFIG_ISDN_CAPI
 endmenu

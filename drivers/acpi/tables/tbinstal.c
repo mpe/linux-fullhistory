@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: tbinstal - ACPI table installation and removal
- *              $Revision: 29 $
+ *              $Revision: 34 $
  *
  *****************************************************************************/
 
@@ -307,7 +307,7 @@ acpi_tb_delete_acpi_tables (void)
 	 * Memory can either be mapped or allocated
 	 */
 
-	for (type = 0; type < ACPI_TABLE_MAX; type++) {
+	for (type = 0; type < NUM_ACPI_TABLES; type++) {
 		acpi_tb_delete_acpi_table (type);
 	}
 
@@ -352,35 +352,24 @@ acpi_tb_delete_acpi_table (
 		acpi_gbl_RSDP = NULL;
 		break;
 
-	case ACPI_TABLE_APIC:
-		acpi_gbl_APIC = NULL;
-		break;
-
 	case ACPI_TABLE_DSDT:
 		acpi_gbl_DSDT = NULL;
 		break;
 
-	case ACPI_TABLE_FACP:
-		acpi_gbl_FACP = NULL;
+	case ACPI_TABLE_FADT:
+		acpi_gbl_FADT = NULL;
 		break;
 
 	case ACPI_TABLE_FACS:
 		acpi_gbl_FACS = NULL;
 		break;
 
-	case ACPI_TABLE_PSDT:
-		break;
-
-	case ACPI_TABLE_RSDT:
-		acpi_gbl_RSDT = NULL;
+	case ACPI_TABLE_XSDT:
+		acpi_gbl_XSDT = NULL;
 		break;
 
 	case ACPI_TABLE_SSDT:
-		break;
-
-	case ACPI_TABLE_SBST:
-		acpi_gbl_SBST = NULL;
-
+	case ACPI_TABLE_PSDT:
 	default:
 		break;
 	}
@@ -424,7 +413,7 @@ acpi_tb_free_acpi_tables_of_type (
 	 */
 
 	for (i = 0; i < count; i++) {
-		table_desc = acpi_tb_delete_single_table (table_desc);
+		table_desc = acpi_tb_uninstall_table (table_desc);
 	}
 
 	return;
@@ -439,6 +428,53 @@ acpi_tb_free_acpi_tables_of_type (
  *
  * RETURN:      None.
  *
+ * DESCRIPTION: Low-level free for a single ACPI table.  Handles cases where
+ *              the table was allocated a buffer or was mapped.
+ *
+ ******************************************************************************/
+
+void
+acpi_tb_delete_single_table (
+	ACPI_TABLE_DESC         *table_desc)
+{
+
+	if (!table_desc) {
+		return;
+	}
+
+	if (table_desc->pointer) {
+		/* Valid table, determine type of memory allocation */
+
+		switch (table_desc->allocation)
+		{
+
+		case ACPI_MEM_NOT_ALLOCATED:
+			break;
+
+
+		case ACPI_MEM_ALLOCATED:
+
+			acpi_cm_free (table_desc->base_pointer);
+			break;
+
+
+		case ACPI_MEM_MAPPED:
+
+			acpi_os_unmap_memory (table_desc->base_pointer, table_desc->length);
+			break;
+		}
+	}
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_tb_uninstall_table
+ *
+ * PARAMETERS:  Table_info          - A table info struct
+ *
+ * RETURN:      None.
+ *
  * DESCRIPTION: Free the memory associated with an internal ACPI table that
  *              is either installed or has never been installed.
  *              Table mutex should be locked.
@@ -446,7 +482,7 @@ acpi_tb_free_acpi_tables_of_type (
  ******************************************************************************/
 
 ACPI_TABLE_DESC *
-acpi_tb_delete_single_table (
+acpi_tb_uninstall_table (
 	ACPI_TABLE_DESC         *table_desc)
 {
 	ACPI_TABLE_DESC         *next_desc;
@@ -470,33 +506,10 @@ acpi_tb_delete_single_table (
 
 	/* Free the memory allocated for the table itself */
 
-	if (table_desc->pointer) {
-		/* Valid table, determine type of memory allocation */
-
-		switch (table_desc->allocation)
-		{
-
-		case ACPI_MEM_NOT_ALLOCATED:
-
-			break;
-
-
-		case ACPI_MEM_ALLOCATED:
-
-			acpi_cm_free (table_desc->base_pointer);
-			break;
-
-
-		case ACPI_MEM_MAPPED:
-
-			acpi_os_unmap_memory (table_desc->base_pointer, table_desc->length);
-			break;
-		}
-	}
+	acpi_tb_delete_single_table (table_desc);
 
 
 	/* Free the table descriptor (Don't delete the list head, tho) */
-
 
 	if ((table_desc->prev) == (table_desc->next)) {
 

@@ -24,8 +24,8 @@
 #include <linux/mm.h>
 #include <linux/pci.h>
 #include <linux/acpi.h>
-#include <linux/delay.h>
 #include <asm/io.h>
+#include <asm/delay.h>
 #include "acpi.h"
 #include "driver.h"
 
@@ -36,16 +36,16 @@ static int acpi_irq_irq = 0;
 static OSD_HANDLER acpi_irq_handler = NULL;
 static void *acpi_irq_context = NULL;
 
-char *
-strupr(char *str)
-{
-	char *s = str;
-	while (*s) {
-		*s = TOUPPER(*s);
-		s++;
-	}
-	return str;
-}
+#ifdef ENABLE_DEBUGGER
+
+#include <linux/kdb.h>
+
+/* stuff for debugger support */
+int acpi_in_debugger = 0;
+extern NATIVE_CHAR line_buf[80];
+
+#endif
+
 
 ACPI_STATUS
 acpi_os_initialize(void)
@@ -79,7 +79,17 @@ acpi_os_vprintf(const NATIVE_CHAR *fmt, va_list args)
 {
 	static char buffer[512];
 	int size = vsprintf(buffer, fmt, args);
+
+#ifdef ENABLE_DEBUGGER
+	if (acpi_in_debugger) {
+		kdb_printf("%s", buffer);
+	} else {
+		printk("%s", buffer);
+	}
+#else
 	printk("%s", buffer);
+#endif
+
 	return size;
 }
 
@@ -105,8 +115,13 @@ acpi_os_free(void *ptr)
 }
 
 ACPI_STATUS
-acpi_os_map_memory(void *phys, u32 size, void **virt)
+acpi_os_map_memory(ACPI_PHYSICAL_ADDRESS phys, u32 size, void **virt)
 {
+	if (phys > ULONG_MAX) {
+		printk(KERN_ERR "ACPI: Cannot map memory that high\n");
+		return AE_ERROR;
+	}
+
 	if ((unsigned long) phys < virt_to_phys(high_memory)) {
 		*virt = phys_to_virt((unsigned long) phys);
 		return AE_OK;
@@ -212,12 +227,48 @@ acpi_os_out32(ACPI_IO_ADDRESS port, u32 val)
 	outl(val, port);
 }
 
+UINT8
+acpi_os_mem_in8 (ACPI_PHYSICAL_ADDRESS phys_addr)
+{
+	return (*(u8*) (u32) phys_addr);
+}
+
+UINT16
+acpi_os_mem_in16 (ACPI_PHYSICAL_ADDRESS phys_addr)
+{
+	return (*(u16*) (u32) phys_addr);
+}
+
+UINT32
+acpi_os_mem_in32 (ACPI_PHYSICAL_ADDRESS phys_addr)
+{
+	return (*(u32*) (u32) phys_addr);
+}
+
+void
+acpi_os_mem_out8 (ACPI_PHYSICAL_ADDRESS phys_addr, UINT8 value)
+{
+	*(u8*) (u32) phys_addr = value;
+}
+
+void
+acpi_os_mem_out16 (ACPI_PHYSICAL_ADDRESS phys_addr, UINT16 value)
+{
+	*(u16*) (u32) phys_addr = value;
+}
+
+void
+acpi_os_mem_out32 (ACPI_PHYSICAL_ADDRESS phys_addr, UINT32 value)
+{
+	*(u32*) (u32) phys_addr = value;
+}
+
 ACPI_STATUS
 acpi_os_read_pci_cfg_byte(
-				  u32 bus,
-				  u32 func,
-				  u32 addr,
-				  u8 * val)
+			  u32 bus,
+			  u32 func,
+			  u32 addr,
+			  u8 * val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -228,10 +279,10 @@ acpi_os_read_pci_cfg_byte(
 
 ACPI_STATUS
 acpi_os_read_pci_cfg_word(
-				  u32 bus,
-				  u32 func,
-				  u32 addr,
-				  u16 * val)
+			  u32 bus,
+			  u32 func,
+			  u32 addr,
+			  u16 * val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -242,10 +293,10 @@ acpi_os_read_pci_cfg_word(
 
 ACPI_STATUS
 acpi_os_read_pci_cfg_dword(
-				   u32 bus,
-				   u32 func,
-				   u32 addr,
-				   u32 * val)
+			   u32 bus,
+			   u32 func,
+			   u32 addr,
+			   u32 * val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -256,10 +307,10 @@ acpi_os_read_pci_cfg_dword(
 
 ACPI_STATUS
 acpi_os_write_pci_cfg_byte(
-				   u32 bus,
-				   u32 func,
-				   u32 addr,
-				   u8 val)
+			   u32 bus,
+			   u32 func,
+			   u32 addr,
+			   u8 val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -270,10 +321,10 @@ acpi_os_write_pci_cfg_byte(
 
 ACPI_STATUS
 acpi_os_write_pci_cfg_word(
-				   u32 bus,
-				   u32 func,
-				   u32 addr,
-				   u16 val)
+			   u32 bus,
+			   u32 func,
+			   u32 addr,
+			   u16 val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -284,10 +335,10 @@ acpi_os_write_pci_cfg_word(
 
 ACPI_STATUS
 acpi_os_write_pci_cfg_dword(
-				    u32 bus,
-				    u32 func,
-				    u32 addr,
-				    u32 val)
+			    u32 bus,
+			    u32 func,
+			    u32 addr,
+			    u32 val)
 {
 	int devfn = PCI_DEVFN((func >> 16) & 0xffff, func & 0xffff);
 	struct pci_dev *dev = pci_find_slot(bus & 0xffff, devfn);
@@ -302,9 +353,9 @@ acpi_os_write_pci_cfg_dword(
 
 ACPI_STATUS
 acpi_os_queue_for_execution(
-				    u32 priority,
-				    OSD_EXECUTION_CALLBACK callback,
-				    void *context)
+			    u32 priority,
+			    OSD_EXECUTION_CALLBACK callback,
+			    void *context)
 {
 	if (acpi_run(callback, context))
 		return AE_ERROR;
@@ -318,7 +369,8 @@ acpi_os_queue_for_execution(
 ACPI_STATUS
 acpi_os_create_semaphore(u32 max_units, u32 init, ACPI_HANDLE * handle)
 {
-	*handle = (ACPI_HANDLE) 0;
+	/* a hack to fake out sems until we implement them */
+	*handle = (ACPI_HANDLE) handle;
 	return AE_OK;
 }
 
@@ -362,6 +414,19 @@ acpi_os_dbg_assert(void *failure, void *file, u32 line, NATIVE_CHAR *msg)
 u32
 acpi_os_get_line(NATIVE_CHAR *buffer)
 {
+
+#ifdef ENABLE_DEBUGGER
+	if (acpi_in_debugger) {
+		u32 chars;
+
+		kdb_read(buffer, sizeof(line_buf));
+
+		/* remove the CR kdb includes */
+		chars = strlen(buffer) - 1;
+		buffer[chars] = '\0';
+	}
+#endif
+
 	return 0;
 }
 

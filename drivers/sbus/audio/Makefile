@@ -15,9 +15,4 @@ obj-$(CONFIG_SPARCAUDIO_CS4231)		+= cs4231.o
 obj-$(CONFIG_SPARCAUDIO_DBRI)		+= dbri.o
 obj-$(CONFIG_SPARCAUDIO_DUMMY)		+= dmy.o
 
-O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
-
 include $(TOPDIR)/Rules.make

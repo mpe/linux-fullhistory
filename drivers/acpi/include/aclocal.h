@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: aclocal.h - Internal data types used across the ACPI subsystem
- *       $Revision: 77 $
+ *       $Revision: 93 $
  *
  *****************************************************************************/
 
@@ -125,7 +125,7 @@ typedef u16                         ACPI_OWNER_ID;
 
 /* TBD: [Restructure] get rid of the need for this! */
 
-#define TABLE_ID_DSDT               (ACPI_OWNER_ID) 0xD1D1
+#define TABLE_ID_DSDT               (ACPI_OWNER_ID) 0x8000
 
 /*****************************************************************************
  *
@@ -157,8 +157,8 @@ typedef struct acpi_node
 {
 	u8                      data_type;
 	u8                      type;           /* Type associated with this name */
-	u32                     name;           /* ACPI Name, always 4 chars per ACPI spec */
 	u16                     owner_id;
+	u32                     name;           /* ACPI Name, always 4 chars per ACPI spec */
 
 
 	void                    *object;        /* Pointer to attached ACPI object (optional) */
@@ -175,9 +175,11 @@ typedef struct acpi_node
 
 /* Node flags */
 
-#define ANOBJ_AML_ATTACHMENT        0x1
-#define ANOBJ_END_OF_PEER_LIST      0x2
-
+#define ANOBJ_AML_ATTACHMENT        0x01
+#define ANOBJ_END_OF_PEER_LIST      0x02
+#define ANOBJ_DATA_WIDTH_32         0x04     /* Parent table is 64-bits */
+#define ANOBJ_METHOD_ARG            0x40
+#define ANOBJ_METHOD_LOCAL          0x80
 
 /*
  * ACPI Table Descriptor.  One per ACPI table
@@ -190,6 +192,7 @@ typedef struct acpi_table_desc
 	ACPI_TABLE_HEADER       *pointer;
 	void                    *base_pointer;
 	u8                      *aml_pointer;
+	UINT64                  physical_address;
 	u32                     aml_length;
 	u32                     length;
 	u32                     count;
@@ -399,6 +402,22 @@ typedef struct acpi_pscope_state
 } ACPI_PSCOPE_STATE;
 
 
+/*
+ * Result values - used to accumulate the results of nested
+ * AML arguments
+ */
+typedef struct acpi_result_values
+{
+	ACPI_STATE_COMMON
+	union acpi_operand_obj  *obj_desc [OBJ_NUM_OPERANDS];
+	u8                      num_results;
+	u8                      last_insert;
+
+} ACPI_RESULT_VALUES;
+
+
+/* Generic state is union of structs above */
+
 typedef union acpi_gen_state
 {
 	ACPI_COMMON_STATE       common;
@@ -406,6 +425,7 @@ typedef union acpi_gen_state
 	ACPI_UPDATE_STATE       update;
 	ACPI_SCOPE_STATE        scope;
 	ACPI_PSCOPE_STATE       parse_scope;
+	ACPI_RESULT_VALUES      results;
 
 } ACPI_GENERIC_STATE;
 
@@ -453,8 +473,7 @@ typedef struct acpi_opcode_info
 	u32                     parse_args;     /* Grammar/Parse time arguments */
 	u32                     runtime_args;   /* Interpret time arguments */
 
-	DEBUG_ONLY_MEMBERS (
-	NATIVE_CHAR             *name)          /* op name (debug only) */
+	DEBUG_ONLY_MEMBERS (NATIVE_CHAR *name)  /* op name (debug only) */
 
 } ACPI_OPCODE_INFO;
 
@@ -481,7 +500,7 @@ typedef union acpi_parse_val
 	DEBUG_ONLY_MEMBERS (\
 	NATIVE_CHAR             op_name[16])    /* op name (debug only) */\
 			  /* NON-DEBUG members below: */\
-	ACPI_NAMESPACE_NODE     *node;/* for use by interpreter */\
+	ACPI_NAMESPACE_NODE     *node;          /* for use by interpreter */\
 	ACPI_PARSE_VALUE        value;          /* Value or args associated with the opcode */\
 
 
@@ -543,8 +562,9 @@ typedef struct acpi_parse_state
 #define NEXT_OP_DOWNWARD    1
 #define NEXT_OP_UPWARD      2
 
-#define WALK_METHOD         1
 #define WALK_NON_METHOD     0
+#define WALK_METHOD         1
+#define WALK_METHOD_RESTART 2
 
 typedef struct acpi_walk_state
 {
@@ -553,17 +573,17 @@ typedef struct acpi_walk_state
 	u8                      last_predicate;                     /* Result of last predicate */
 	u8                      next_op_info;                       /* Info about Next_op */
 	u8                      num_operands;                       /* Stack pointer for Operands[] array */
-	u8                      num_results;                        /* Stack pointer for Results[] array */
 	u8                      current_result;                     /* */
 
 	struct acpi_walk_state  *next;                              /* Next Walk_state in list */
-	ACPI_PARSE_OBJECT       *origin;                            /* Start of walk */
+	ACPI_PARSE_OBJECT       *origin;                            /* Start of walk [Obsolete] */
 
 /* TBD: Obsolete with removal of WALK procedure ? */
 	ACPI_PARSE_OBJECT       *prev_op;                           /* Last op that was processed */
 	ACPI_PARSE_OBJECT       *next_op;                           /* next op to be processed */
 
 
+	ACPI_GENERIC_STATE      *results;                           /* Stack of accumulated results */
 	ACPI_GENERIC_STATE      *control_state;                     /* List of control states (nested IFs) */
 	ACPI_GENERIC_STATE      *scope_info;                        /* Stack of nested scopes */
 	ACPI_PARSE_STATE        *parser_state;                      /* Current state of parser */
@@ -577,7 +597,6 @@ typedef struct acpi_walk_state
 	ACPI_PARSE_OBJECT       *method_call_op;                    /* Method_call Op if running a method */
 	struct acpi_node        *method_call_node;                  /* Called method Node*/
 	union acpi_operand_obj  *operands[OBJ_NUM_OPERANDS];        /* Operands passed to the interpreter */
-	union acpi_operand_obj  *results[OBJ_NUM_OPERANDS];         /* Accumulated results */
 	struct acpi_node        arguments[MTH_NUM_ARGS];            /* Control method arguments */
 	struct acpi_node        local_variables[MTH_NUM_LOCALS];    /* Control method locals */
 	u32                     parse_flags;
@@ -607,13 +626,30 @@ typedef struct acpi_walk_list
 
 /* Info used by Acpi_ps_init_objects */
 
-typedef struct init_walk_info
+typedef struct acpi_init_walk_info
 {
-	u32                     method_count;
-	u32                     op_region_count;
+	u16                     method_count;
+	u16                     op_region_count;
+	u16                     field_count;
+	u16                     op_region_init;
+	u16                     field_init;
+	u16                     object_count;
 	ACPI_TABLE_DESC         *table_desc;
 
-} INIT_WALK_INFO;
+} ACPI_INIT_WALK_INFO;
+
+
+/* Info used by TBD */
+
+typedef struct acpi_device_walk_info
+{
+	u32                     flags;
+	u16                     device_count;
+	u16                     num_STA;
+	u16                     num_INI;
+	ACPI_TABLE_DESC         *table_desc;
+
+} ACPI_DEVICE_WALK_INFO;
 
 
 /* TBD: [Restructure] Merge with struct above */
@@ -625,6 +661,14 @@ typedef struct acpi_walk_info
 
 } ACPI_WALK_INFO;
 
+typedef struct acpi_get_devices_info
+{
+	WALK_CALLBACK           user_function;
+	void                    *context;
+	NATIVE_CHAR             *hid;
+
+} ACPI_GET_DEVICES_INFO;
+
 
 /*****************************************************************************
  *
@@ -633,16 +677,23 @@ typedef struct acpi_walk_info
  ****************************************************************************/
 
 
+/* PCI */
+
+#define PCI_ROOT_HID_STRING         "PNP0A03"
+#define PCI_ROOT_HID_VALUE          0x030AD041       /* EISAID("PNP0A03") */
+
+
 /* Sleep states */
 
-#define SLWA_DEBUG_LEVEL    4
-#define GTS_CALL            0
-#define GTS_WAKE            1
+#define SLWA_DEBUG_LEVEL            4
+#define GTS_CALL                    0
+#define GTS_WAKE                    1
 
 /* Cx States */
 
-#define MAX_CX_STATE_LATENCY 0xFFFFFFFF
-#define MAX_CX_STATES       4
+#define MAX_CX_STATE_LATENCY        0xFFFFFFFF
+#define MAX_CX_STATES               4
+
 
 /*
  * The #define's and enum below establish an abstract way of identifying what
@@ -650,66 +701,85 @@ typedef struct acpi_walk_info
  * values as they are used in switch statements and offset calculations.
  */
 
-#define REGISTER_BLOCK_MASK     0xFF00
-#define BIT_IN_REGISTER_MASK    0x00FF
-#define PM1_EVT                 0x0100
-#define PM1_CONTROL             0x0200
-#define PM2_CONTROL             0x0300
-#define PM_TIMER                0x0400
-#define PROCESSOR_BLOCK         0x0500
-#define GPE0_STS_BLOCK          0x0600
-#define GPE0_EN_BLOCK           0x0700
-#define GPE1_STS_BLOCK          0x0800
-#define GPE1_EN_BLOCK           0x0900
+#define REGISTER_BLOCK_MASK         0xFF00  /* Register Block Id    */
+#define BIT_IN_REGISTER_MASK        0x00FF  /* Bit Id in the Register Block Id    */
+#define BYTE_IN_REGISTER_MASK       0x00FF  /* Register Offset in the Register Block    */
 
-enum
-{
-	/* PM1 status register ids */
+#define REGISTER_BLOCK_ID(reg_id)   (reg_id & REGISTER_BLOCK_MASK)
+#define REGISTER_BIT_ID(reg_id)     (reg_id & BIT_IN_REGISTER_MASK)
+#define REGISTER_OFFSET(reg_id)     (reg_id & BYTE_IN_REGISTER_MASK)
 
-	TMR_STS =   (PM1_EVT        | 0x01),
-	BM_STS,
-	GBL_STS,
-	PWRBTN_STS,
-	SLPBTN_STS,
-	RTC_STS,
-	WAK_STS,
+/*
+ * Access Rule
+ *  To access a Register Bit:
+ *  -> Use Bit Name (= Register Block Id | Bit Id) defined in the enum.
+ *
+ *  To access a Register:
+ *  -> Use Register Id (= Register Block Id | Register Offset)
+ */
 
-	/* PM1 enable register ids */
 
-	TMR_EN,
-	/* need to skip 1 enable number since there's no bus master enable register */
-	GBL_EN =    (PM1_EVT        | 0x0A),
-	PWRBTN_EN,
-	SLPBTN_EN,
-	RTC_EN,
+/*
+ * Register Block Id
+ */
+#define PM1_STS                     0x0100
+#define PM1_EN                      0x0200
+#define PM1_CONTROL                 0x0300
+#define PM2_CONTROL                 0x0400
+#define PM_TIMER                    0x0500
+#define PROCESSOR_BLOCK             0x0600
+#define GPE0_STS_BLOCK              0x0700
+#define GPE0_EN_BLOCK               0x0800
+#define GPE1_STS_BLOCK              0x0900
+#define GPE1_EN_BLOCK               0x0A00
+#define SMI_CMD_BLOCK               0x0B00
 
-	/* PM1 control register ids */
+/*
+ * Address space bitmasks for mmio or io spaces
+ */
 
-	SCI_EN =    (PM1_CONTROL    | 0x01),
-	BM_RLD,
-	GBL_RLS,
-	SLP_TYPE_A,
-	SLP_TYPE_B,
-	SLP_EN,
+#define SMI_CMD_ADDRESS_SPACE       0x01
+#define PM1_BLK_ADDRESS_SPACE       0x02
+#define PM2_CNT_BLK_ADDRESS_SPACE   0x04
+#define PM_TMR_BLK_ADDRESS_SPACE    0x08
+#define GPE0_BLK_ADDRESS_SPACE      0x10
+#define GPE1_BLK_ADDRESS_SPACE      0x20
 
-	/* PM2 control register ids */
+/*
+ * Control bit definitions
+ */
+#define TMR_STS     (PM1_STS | 0x01)
+#define BM_STS      (PM1_STS | 0x02)
+#define GBL_STS     (PM1_STS | 0x03)
+#define PWRBTN_STS  (PM1_STS | 0x04)
+#define SLPBTN_STS  (PM1_STS | 0x05)
+#define RTC_STS     (PM1_STS | 0x06)
+#define WAK_STS     (PM1_STS | 0x07)
 
-	ARB_DIS =   (PM2_CONTROL    | 0x01),
+#define TMR_EN      (PM1_EN | 0x01)
+			   /* no BM_EN */
+#define GBL_EN      (PM1_EN | 0x03)
+#define PWRBTN_EN   (PM1_EN | 0x04)
+#define SLPBTN_EN   (PM1_EN | 0x05)
+#define RTC_EN      (PM1_EN | 0x06)
+#define WAK_EN      (PM1_EN | 0x07)
 
-	/* PM Timer register ids */
+#define SCI_EN      (PM1_CONTROL | 0x01)
+#define BM_RLD      (PM1_CONTROL | 0x02)
+#define GBL_RLS     (PM1_CONTROL | 0x03)
+#define SLP_TYPE_A  (PM1_CONTROL | 0x04)
+#define SLP_TYPE_B  (PM1_CONTROL | 0x05)
+#define SLP_EN      (PM1_CONTROL | 0x06)
 
-	TMR_VAL =   (PM_TIMER       | 0x01),
+#define ARB_DIS     (PM2_CONTROL | 0x01)
 
-	GPE0_STS =  (GPE0_STS_BLOCK | 0x01),
-	GPE0_EN =   (GPE0_EN_BLOCK  | 0x01),
+#define TMR_VAL     (PM_TIMER | 0x01)
 
-	GPE1_STS =  (GPE1_STS_BLOCK | 0x01),
-	GPE1_EN =   (GPE0_EN_BLOCK  | 0x01),
+#define GPE0_STS    (GPE0_STS_BLOCK | 0x01)
+#define GPE0_EN     (GPE0_EN_BLOCK  | 0x01)
 
-	/* Last register value is one less than LAST_REG */
-
-	LAST_REG
-};
+#define GPE1_STS    (GPE1_STS_BLOCK | 0x01)
+#define GPE1_EN     (GPE1_EN_BLOCK  | 0x01)
 
 
 #define TMR_STS_MASK        0x0001
@@ -720,8 +790,9 @@ enum
 #define RTC_STS_MASK        0x0400
 #define WAK_STS_MASK        0x8000
 
-#define ALL_FIXED_STS_BITS  (TMR_STS_MASK   | BM_STS_MASK  | GBL_STS_MASK | PWRBTN_STS_MASK |  \
-			 SLPBTN_STS_MASK | RTC_STS_MASK | WAK_STS_MASK)
+#define ALL_FIXED_STS_BITS  (TMR_STS_MASK   | BM_STS_MASK  | GBL_STS_MASK \
+					   | PWRBTN_STS_MASK | SLPBTN_STS_MASK \
+					   | RTC_STS_MASK | WAK_STS_MASK)
 
 #define TMR_EN_MASK         0x0001
 #define GBL_EN_MASK         0x0020
@@ -736,6 +807,7 @@ enum
 #define SLP_EN_MASK         0x2000
 
 #define ARB_DIS_MASK        0x0001
+#define TMR_VAL_MASK        0xFFFFFFFF
 
 #define GPE0_STS_MASK
 #define GPE0_EN_MASK
@@ -746,16 +818,6 @@ enum
 
 #define ACPI_READ           1
 #define ACPI_WRITE          2
-
-#define LOW_BYTE            0x00FF
-#define ONE_BYTE            0x08
-
-#ifndef SET
-	#define SET             1
-#endif
-#ifndef CLEAR
-	#define CLEAR           0
-#endif
 
 
 /* Plug and play */
@@ -796,24 +858,11 @@ enum
 
 /* MUST HAVES */
 
-
-typedef enum
-{
-	DWORD_DEVICE_ID,
-	STRING_PTR_DEVICE_ID,
-	STRING_DEVICE_ID
-
-}   DEVICE_ID_TYPE;
+#define DEVICE_ID_LENGTH                0x09
 
 typedef struct
 {
-	DEVICE_ID_TYPE      type;
-	union
-	{
-		u32                 number;
-		NATIVE_CHAR         *string_ptr;
-		NATIVE_CHAR         buffer[9];
-	} data;
+		NATIVE_CHAR         buffer[DEVICE_ID_LENGTH];
 
 } DEVICE_ID;
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: actables.h - ACPI table management
- *       $Revision: 20 $
+ *       $Revision: 27 $
  *
  *****************************************************************************/
 
@@ -37,19 +37,26 @@ acpi_tb_handle_to_object (
 	u16                     table_id,
 	ACPI_TABLE_DESC         **table_desc);
 
-
 /*
- * Acpi_tbfac - FACP, FACS utilities
+ * tbconvrt - Table conversion routines
  */
 
 ACPI_STATUS
-acpi_tb_get_table_facs (
-	ACPI_TABLE_HEADER       *buffer_ptr,
+acpi_tb_convert_to_xsdt (
+	ACPI_TABLE_DESC         *table_info,
+	u32                     *number_of_tables);
+
+ACPI_STATUS
+acpi_tb_convert_table_fadt (
+	void);
+
+ACPI_STATUS
+acpi_tb_build_common_facs (
 	ACPI_TABLE_DESC         *table_info);
 
 
 /*
- * Acpi_tbget - Table "get" routines
+ * tbget - Table "get" routines
  */
 
 ACPI_STATUS
@@ -60,13 +67,22 @@ acpi_tb_get_table_ptr (
 
 ACPI_STATUS
 acpi_tb_get_table (
-	void                    *physical_address,
+	ACPI_PHYSICAL_ADDRESS   physical_address,
+	ACPI_TABLE_HEADER       *buffer_ptr,
+	ACPI_TABLE_DESC         *table_info);
+
+ACPI_STATUS
+acpi_tb_verify_rsdp (
+	ACPI_PHYSICAL_ADDRESS   RSDP_physical_address);
+
+ACPI_STATUS
+acpi_tb_get_table_facs (
 	ACPI_TABLE_HEADER       *buffer_ptr,
 	ACPI_TABLE_DESC         *table_info);
 
 
 /*
- * Acpi_tbgetall - Get all firmware ACPI tables
+ * tbgetall - Get all firmware ACPI tables
  */
 
 ACPI_STATUS
@@ -76,7 +92,7 @@ acpi_tb_get_all_tables (
 
 
 /*
- * Acpi_tbinstall - Table installation
+ * tbinstall - Table installation
  */
 
 ACPI_STATUS
@@ -96,7 +112,7 @@ acpi_tb_init_table_descriptor (
 
 
 /*
- * Acpi_tbremove - Table removal and deletion
+ * tbremove - Table removal and deletion
  */
 
 void
@@ -107,8 +123,12 @@ void
 acpi_tb_delete_acpi_table (
 	ACPI_TABLE_TYPE         type);
 
-ACPI_TABLE_DESC *
+void
 acpi_tb_delete_single_table (
+	ACPI_TABLE_DESC         *table_desc);
+
+ACPI_TABLE_DESC *
+acpi_tb_uninstall_table (
 	ACPI_TABLE_DESC         *table_desc);
 
 void
@@ -117,7 +137,7 @@ acpi_tb_free_acpi_tables_of_type (
 
 
 /*
- * Acpi_tbrsd - RSDP, RSDT utilities
+ * tbrsd - RSDP, RSDT utilities
  */
 
 ACPI_STATUS
@@ -135,7 +155,7 @@ acpi_tb_find_rsdp (
 
 
 /*
- * Acpi_tbutils - common table utilities
+ * tbutils - common table utilities
  */
 
 u8
@@ -144,7 +164,7 @@ acpi_tb_system_table_pointer (
 
 ACPI_STATUS
 acpi_tb_map_acpi_table (
-	void                    *physical_address,
+	ACPI_PHYSICAL_ADDRESS   physical_address,
 	u32                     *size,
 	void                    **logical_address);
 

@@ -31,7 +31,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 	struct mm_struct * mm = current->mm;
 
 	err = 0;
-	if (!mm->segments)
+	if (!mm->context.segments)
 		goto out;
 
 	size = LDT_ENTRIES*LDT_ENTRY_SIZE;
@@ -39,7 +39,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 		size = bytecount;
 
 	err = size;
-	if (copy_to_user(ptr, mm->segments, size))
+	if (copy_to_user(ptr, mm->context.segments, size))
 		err = -EFAULT;
 out:
 	return err;
@@ -87,13 +87,12 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	 * limited by MAX_LDT_DESCRIPTORS.
 	 */
 	down(&mm->mmap_sem);
-	if (!mm->segments) {
-		
+	if (!mm->context.segments) {
 		error = -ENOMEM;
-		mm->segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-		if (!mm->segments)
+		mm->context.segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+		if (!mm->context.segments)
 			goto out_unlock;
-		memset(mm->segments, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
+		memset(mm->context.segments, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		
 		if (atomic_read(&mm->mm_users) > 1)
 			printk(KERN_WARNING "LDT allocated for cloned task!\n");
@@ -104,7 +103,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		load_LDT(mm);
 	}
 
-	lp = (__u32 *) ((ldt_info.entry_number << 3) + (char *) mm->segments);
+	lp = (__u32 *) ((ldt_info.entry_number << 3) + (char *) mm->context.segments);
 
    	/* Allow LDTs to be cleared by the user. */
    	if (ldt_info.base_addr == 0 && ldt_info.limit == 0) {

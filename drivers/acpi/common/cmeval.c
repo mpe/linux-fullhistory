@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmeval - Object evaluation
- *              $Revision: 14 $
+ *              $Revision: 19 $
  *
  *****************************************************************************/
 
@@ -37,7 +37,8 @@
  *
  * FUNCTION:    Acpi_cm_evaluate_numeric_object
  *
- * PARAMETERS:  Device_node         - Node for the device
+ * PARAMETERS:  *Object_name        - Object name to be evaluated
+ *              Device_node         - Node for the device
  *              *Address            - Where the value is returned
  *
  * RETURN:      Status
@@ -53,7 +54,7 @@ ACPI_STATUS
 acpi_cm_evaluate_numeric_object (
 	NATIVE_CHAR             *object_name,
 	ACPI_NAMESPACE_NODE     *device_node,
-	u32                     *address)
+	ACPI_INTEGER            *address)
 {
 	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_STATUS             status;
@@ -151,15 +152,13 @@ acpi_cm_execute_HID (
 		if (obj_desc->common.type == ACPI_TYPE_NUMBER) {
 			/* Convert the Numeric HID to string */
 
-			acpi_aml_eisa_id_to_string (obj_desc->number.value, hid->data.buffer);
-			hid->type = STRING_DEVICE_ID;
+			acpi_aml_eisa_id_to_string ((u32) obj_desc->number.value, hid->buffer);
 		}
 
 		else {
 			/* Copy the String HID from the returned object */
 
-			hid->data.string_ptr = obj_desc->string.pointer;
-			hid->type = STRING_PTR_DEVICE_ID;
+			STRNCPY(hid->buffer, obj_desc->string.pointer, sizeof(hid->buffer));
 		}
 	}
 
@@ -226,16 +225,15 @@ acpi_cm_execute_UID (
 
 	else {
 		if (obj_desc->common.type == ACPI_TYPE_NUMBER) {
-			/* Convert the Numeric HID to string */
+			/* Convert the Numeric UID to string */
 
-			uid->data.number = obj_desc->number.value;
+			acpi_aml_unsigned_integer_to_string (obj_desc->number.value, uid->buffer);
 		}
 
 		else {
-			/* Copy the String HID from the returned object */
+			/* Copy the String UID from the returned object */
 
-			uid->data.string_ptr = obj_desc->string.pointer;
-			uid->type = STRING_PTR_DEVICE_ID;
+			STRNCPY(uid->buffer, obj_desc->string.pointer, sizeof(uid->buffer));
 		}
 	}
 
@@ -276,35 +274,35 @@ acpi_cm_execute_STA (
 
 	status = acpi_ns_evaluate_relative (device_node,
 			 METHOD_NAME__STA, NULL, &obj_desc);
-	if (ACPI_FAILURE (status)) {
-
-
-		return (status);
+	if (AE_NOT_FOUND == status) {
+		*flags = 0x0F;
+		status = AE_OK;
 	}
 
 
-	/* Did we get a return object? */
+	else /* success */ {
+		/* Did we get a return object? */
 
-	if (!obj_desc) {
-		return (AE_TYPE);
+		if (!obj_desc) {
+			return (AE_TYPE);
+		}
+
+		/* Is the return object of the correct type? */
+
+		if (obj_desc->common.type != ACPI_TYPE_NUMBER) {
+			status = AE_TYPE;
+		}
+
+		else {
+			/* Extract the status flags */
+
+			*flags = (u32) obj_desc->number.value;
+		}
+
+		/* On exit, we must delete the return object */
+
+		acpi_cm_remove_reference (obj_desc);
 	}
-
-	/* Is the return object of the correct type? */
-
-	if (obj_desc->common.type != ACPI_TYPE_NUMBER) {
-		status = AE_TYPE;
-	}
-
-	else {
-		/* Extract the status flags */
-
-		*flags = obj_desc->number.value;
-	}
-
-
-	/* On exit, we must delete the return object */
-
-	acpi_cm_remove_reference (obj_desc);
 
 	return (status);
 }

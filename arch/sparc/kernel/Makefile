@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.61 2000/09/03 13:58:04 anton Exp $
+# $Id: Makefile,v 1.62 2000/12/15 00:41:17 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -18,34 +18,23 @@ SH = $(CONFIG_SHELL)
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
+
+export-objs := sparc_ksyms.o
 IRQ_OBJS := irq.o sun4m_irq.o sun4c_irq.o sun4d_irq.o
-O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
+obj-y    := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    process.o signal.o ioport.o setup.o idprom.o \
 	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o \
 	    time.o windows.o cpu.o devices.o sclow.o \
 	    tadpole.o tick14.o ptrace.o sys_solaris.o \
-	    unaligned.o muldiv.o pcic.o semaphore.o
+	    unaligned.o muldiv.o pcic.o semaphore.o sparc_ksyms.o
 
-OX_OBJS  := sparc_ksyms.o
-
-ifdef CONFIG_SUN4
-O_OBJS += sun4setup.o
-endif
+obj-$(CONFIG_SUN4) += sun4setup.o
+obj-$(CONFIG_SMP) += trampoline.o smp.o sun4m_smp.o sun4d_smp.o
+obj-$(CONFIG_SUN_AUXIO) += auxio.o
+obj-$(CONFIG_PCI) += ebus.o
 
 ifdef CONFIG_SUNOS_EMUL
-O_OBJS += sys_sunos.o sunos_ioctl.o
-endif
-
-ifdef CONFIG_SMP
-O_OBJS += trampoline.o smp.o sun4m_smp.o sun4d_smp.o
-endif
-
-ifdef CONFIG_SUN_AUXIO
-O_OBJS += auxio.o
-endif
-
-ifdef CONFIG_PCI
-O_OBJS += ebus.o
+obj-y += sys_sunos.o sunos_ioctl.o
 endif
 
 head.o: head.S

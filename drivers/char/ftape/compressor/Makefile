@@ -24,19 +24,11 @@
 #      Linux.
 #
 
-#
-#  This isn't used inside the kernel, only for my private development
-#  version
-#
-ifndef TOPDIR
-TOPDIR=../..
-include $(TOPDIR)/MCONFIG
-endif
-
 O_TARGET := zft-compressor.o
-O_OBJS    = zftape-compress.o lzrw3.o
 
-M_OBJS    = $(O_TARGET)
+obj-y    = zftape-compress.o lzrw3.o
+
+obj-m    = $(O_TARGET)
 
 CFLAGS_lzrw3.o	:= -O6 -funroll-all-loops
 

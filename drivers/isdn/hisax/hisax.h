@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 2.52 2000/11/25 17:01:00 kai Exp $
+/* $Id: hisax.h,v 2.52.6.1 2000/12/06 16:59:19 kai Exp $
  *
  *   Basic declarations, defines and prototypes
  *

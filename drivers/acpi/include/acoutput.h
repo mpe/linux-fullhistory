@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acoutput.h -- debug output
- *       $Revision: 63 $
+ *       $Revision: 66 $
  *
  *****************************************************************************/
 
@@ -60,6 +60,8 @@
 #define DEBUGGER                    0x00100000
 #define ALL_COMPONENTS              0x001FFFFF
 
+#define COMPONENT_DEFAULT           (ALL_COMPONENTS)
+
 
 /* Exception level -- used in the global "Debug_level" */
 
@@ -104,12 +106,12 @@
 #define VERBOSE_TABLES              0x40000000
 #define VERBOSE_EVENTS              0x80000000
 
-#define VERBOSE_ALL                 0x70000000
+#define VERBOSE_ALL                 0xF0000000
 
 
 /* Defaults for Debug_level, debug and normal */
 
-#define DEBUG_DEFAULT               (ACPI_OK | ACPI_WARN | ACPI_ERROR | ACPI_DEBUG_OBJECT | TRACE_TABLES | TRACE_IO)
+#define DEBUG_DEFAULT               (ACPI_OK | ACPI_WARN | ACPI_ERROR | ACPI_DEBUG_OBJECT)
 #define NORMAL_DEFAULT              (ACPI_OK | ACPI_WARN | ACPI_ERROR | ACPI_DEBUG_OBJECT)
 #define DEBUG_ALL                   (VERBOSE_AML_DISASSEMBLE | TRACE_ALL | ACPI_ALL)
 

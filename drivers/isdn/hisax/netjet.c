@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.24 2000/11/24 17:05:38 kai Exp $
+/* $Id: netjet.c,v 1.24.6.1 2000/12/06 16:59:20 kai Exp $
  *
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -29,7 +29,7 @@
 #define virt_to_bus (u_int)
 #endif
 
-const char *NETjet_revision = "$Revision: 1.24 $";
+const char *NETjet_revision = "$Revision: 1.24.6.1 $";
 
 /* Interface functions */
 

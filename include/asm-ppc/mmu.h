@@ -6,6 +6,9 @@
 #ifndef _PPC_MMU_H_
 #define _PPC_MMU_H_
 
+/* Default "unsigned long" context */
+typedef unsigned long mm_context_t;
+
 #include <linux/config.h>
 
 #ifndef __ASSEMBLY__

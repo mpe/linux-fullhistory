@@ -125,6 +125,7 @@ do {							\
 	current = (next);				\
 	pcbb = virt_to_phys(&current->thread);		\
 	(last) = alpha_switch_to(pcbb, (prev));		\
+	check_mmu_context();				\
 } while (0)
 
 extern struct task_struct* alpha_switch_to(unsigned long, struct task_struct*);

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evxface - External interfaces for ACPI events
- *              $Revision: 88 $
+ *              $Revision: 97 $
  *
  *****************************************************************************/
 
@@ -81,9 +81,9 @@ acpi_install_fixed_event_handler (
 	acpi_gbl_fixed_event_handlers[event].handler = handler;
 	acpi_gbl_fixed_event_handlers[event].context = context;
 
-	if (1 != acpi_hw_register_access (ACPI_WRITE,
-			  ACPI_MTX_LOCK, event + TMR_EN, 1))
-	{
+	status = acpi_enable_event(event, ACPI_EVENT_FIXED);
+
+	if (!ACPI_SUCCESS(status)) {
 		/* Remove the handler */
 
 		acpi_gbl_fixed_event_handlers[event].handler = NULL;
@@ -131,11 +131,12 @@ acpi_remove_fixed_event_handler (
 
 	/* Disable the event before removing the handler - just in case... */
 
-	if (0 != acpi_hw_register_access (ACPI_WRITE,
-			  ACPI_MTX_LOCK, event + TMR_EN, 0))
-	{
+	status = acpi_disable_event(event, ACPI_EVENT_FIXED);
+
+	if (!ACPI_SUCCESS(status)) {
 		status = AE_ERROR;
-		goto cleanup;
+		acpi_cm_release_mutex (ACPI_MTX_EVENTS);
+		return (status);
 	}
 
 	/* Remove the handler */
@@ -143,7 +144,6 @@ acpi_remove_fixed_event_handler (
 	acpi_gbl_fixed_event_handlers[event].handler = NULL;
 	acpi_gbl_fixed_event_handlers[event].context = NULL;
 
-cleanup:
 	acpi_cm_release_mutex (ACPI_MTX_EVENTS);
 	return (status);
 }
@@ -426,14 +426,14 @@ unlock_and_exit:
  *
  * PARAMETERS:  Gpe_number      - The GPE number.  The numbering scheme is
  *                                bank 0 first, then bank 1.
- *              Trigger         - Whether this GPE should be treated as an
+ *              Type            - Whether this GPE should be treated as an
  *                                edge- or level-triggered interrupt.
  *              Handler         - Address of the handler
  *              Context         - Value passed to the handler on each GPE
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Install a handler for a General Purpose Acpi_event.
+ * DESCRIPTION: Install a handler for a General Purpose Event.
  *
  ******************************************************************************/
 
@@ -554,11 +554,9 @@ cleanup:
  * DESCRIPTION: Acquire the ACPI Global Lock
  *
  ******************************************************************************/
-
 ACPI_STATUS
 acpi_acquire_global_lock (
-	u32                     timeout,
-	u32                     *out_handle)
+	void)
 {
 	ACPI_STATUS             status;
 
@@ -573,7 +571,6 @@ acpi_acquire_global_lock (
 	status = acpi_ev_acquire_global_lock ();
 	acpi_aml_exit_interpreter ();
 
-	*out_handle = 0;
 	return (status);
 }
 
@@ -592,12 +589,8 @@ acpi_acquire_global_lock (
 
 ACPI_STATUS
 acpi_release_global_lock (
-	u32                     handle)
+	void)
 {
-
-
-	/* TBD: [Restructure] Validate handle */
-
 	acpi_ev_release_global_lock ();
 	return (AE_OK);
 }

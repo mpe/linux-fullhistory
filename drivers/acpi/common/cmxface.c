@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmxface - External interfaces for "global" ACPI functions
- *              $Revision: 43 $
+ *              $Revision: 55 $
  *
  *****************************************************************************/
 
@@ -39,7 +39,7 @@
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_initialize
+ * FUNCTION:    Acpi_initialize_subsystem
  *
  * PARAMETERS:  None
  *
@@ -51,20 +51,22 @@
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_initialize (ACPI_INIT_DATA *init_data)
+acpi_initialize_subsystem (
+	void)
 {
 	ACPI_STATUS             status;
 
 
 	/* Initialize all globals used by the subsystem */
 
-	acpi_cm_init_globals (init_data);
+	acpi_cm_init_globals ();
 
 	/* Initialize the OS-Dependent layer */
 
 	status = acpi_os_initialize ();
 	if (ACPI_FAILURE (status)) {
-		REPORT_ERROR ("OSD Initialization Failure");
+		REPORT_ERROR (("OSD failed to initialize, %s\n",
+			acpi_cm_format_exception (status)));
 		return (status);
 	}
 
@@ -72,13 +74,137 @@ acpi_initialize (ACPI_INIT_DATA *init_data)
 
 	status = acpi_cm_mutex_initialize ();
 	if (ACPI_FAILURE (status)) {
-		REPORT_ERROR ("Global Mutex Initialization Failure");
+		REPORT_ERROR (("Global mutex creation failure, %s\n",
+			acpi_cm_format_exception (status)));
 		return (status);
 	}
+
+	/*
+	 * Initialize the namespace manager and
+	 * the root of the namespace tree
+	 */
+
+	status = acpi_ns_root_initialize ();
+	if (ACPI_FAILURE (status)) {
+		REPORT_ERROR (("Namespace initialization failure, %s\n",
+			acpi_cm_format_exception (status)));
+		return (status);
+	}
+
 
 	/* If configured, initialize the AML debugger */
 
 	DEBUGGER_EXEC (acpi_db_initialize ());
+
+	return (status);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_enable_subsystem
+ *
+ * PARAMETERS:  Flags           - Init/enable Options
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Completes the subsystem initialization including hardware.
+ *              Puts system into ACPI mode if it isn't already.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_enable_subsystem (
+	u32                     flags)
+{
+	ACPI_STATUS             status = AE_OK;
+
+
+	/* Sanity check the FADT for valid values */
+
+	status = acpi_cm_validate_fadt ();
+	if (ACPI_FAILURE (status)) {
+		return (status);
+	}
+
+	/*
+	 * Install the default Op_region handlers. These are
+	 * installed unless other handlers have already been
+	 * installed via the Install_address_space_handler interface
+	 */
+
+	if (!(flags & ACPI_NO_ADDRESS_SPACE_INIT)) {
+		status = acpi_ev_install_default_address_space_handlers ();
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
+	/*
+	 * We must initialize the hardware before we can enable ACPI.
+	 */
+
+	if (!(flags & ACPI_NO_HARDWARE_INIT)) {
+		status = acpi_hw_initialize ();
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
+	/*
+	 * Enable ACPI on this platform
+	 */
+
+	if (!(flags & ACPI_NO_ACPI_ENABLE)) {
+		status = acpi_enable ();
+		if (ACPI_FAILURE (status)) {
+			/* TBD: workaround. Old Lions don't enable properly */
+			/*return (Status);*/
+		}
+	}
+
+	/*
+	 * Note:
+	 * We must have the hardware AND events initialized before we can execute
+	 * ANY control methods SAFELY.  Any control method can require ACPI hardware
+	 * support, so the hardware MUST be initialized before execution!
+	 */
+
+	if (!(flags & ACPI_NO_EVENT_INIT)) {
+		status = acpi_ev_initialize ();
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
+
+	/*
+	 * Initialize all device objects in the namespace
+	 * This runs the _STA, _INI, and _HID methods, and detects
+	 * the PCI root bus(es)
+	 */
+
+	if (!(flags & ACPI_NO_DEVICE_INIT)) {
+		status = acpi_ns_initialize_devices (flags & ACPI_NO_PCI_INIT);
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
+
+	/*
+	 * Initialize the objects that remain unitialized.  This
+	 * runs the executable AML that is part of the declaration of Op_regions
+	 * and Fields.
+	 */
+
+	if (!(flags & ACPI_NO_OBJECT_INIT)) {
+		status = acpi_ns_initialize_objects ();
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
 
 	return (status);
 }
@@ -102,7 +228,7 @@ acpi_terminate (void)
 
 	/* Terminate the AML Debuger if present */
 
-	acpi_gbl_db_terminate_threads = TRUE;
+	DEBUGGER_EXEC(acpi_gbl_db_terminate_threads = TRUE);
 
 	/* TBD: [Investigate] This is no longer needed?*/
 /*    Acpi_cm_release_mutex (ACPI_MTX_DEBUG_CMD_READY); */
@@ -202,7 +328,7 @@ acpi_get_system_info (
 	/* Current status of the ACPI tables, per table type */
 
 	info_ptr->num_table_types = NUM_ACPI_TABLES;
-	for (i = 0; i < NUM_ACPI_TABLES; i++); {
+	for (i = 0; i < NUM_ACPI_TABLES; i++) {
 		info_ptr->table_info[i].count = acpi_gbl_acpi_tables[i].count;
 	}
 

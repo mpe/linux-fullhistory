@@ -40,10 +40,6 @@ obj-$(CONFIG_SMP)	+= smp.o smpboot.o trampoline.o
 obj-$(CONFIG_X86_LOCAL_APIC)	+= apic.o
 obj-$(CONFIG_X86_IO_APIC)	+= io_apic.o mpparse.o
 obj-$(CONFIG_X86_VISWS_APIC)	+= visws_apic.o
-
-# if the interpreter is used, it overrides acpi.c
-ifneq ($(CONFIG_ACPI_INTERPRETER),y)
 obj-$(CONFIG_ACPI)	+= acpi.o
-endif
 
 include $(TOPDIR)/Rules.make

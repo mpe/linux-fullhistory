@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresolv - AML Interpreter object resolution
- *              $Revision: 74 $
+ *              $Revision: 78 $
  *
  *****************************************************************************/
 
@@ -69,18 +69,19 @@ acpi_aml_get_field_unit_value (
 		status = AE_AML_NO_OPERAND;
 	}
 
-	else if (!field_desc->field_unit.container) {
+	if (!(field_desc->common.flags & AOPOBJ_DATA_VALID)) {
+		status = acpi_ds_get_field_unit_arguments (field_desc);
+		if (ACPI_FAILURE (status)) {
+			return (status);
+		}
+	}
+
+	if (!field_desc->field_unit.container) {
 		status = AE_AML_INTERNAL;
 	}
 
 	else if (ACPI_TYPE_BUFFER != field_desc->field_unit.container->common.type) {
 		status = AE_AML_OPERAND_TYPE;
-	}
-
-	else if (field_desc->field_unit.sequence
-			 != field_desc->field_unit.container->buffer.sequence)
-	{
-		status = AE_AML_INTERNAL;
 	}
 
 	else if (!result_desc) {
@@ -114,7 +115,7 @@ acpi_aml_get_field_unit_value (
 		mask = ((u32) 1 << field_desc->field_unit.length) - (u32) 1;
 	}
 	else {
-		mask = 0xFFFFFFFF;
+		mask = ACPI_UINT32_MAX;
 	}
 
 	result_desc->number.type = (u8) ACPI_TYPE_NUMBER;
@@ -186,7 +187,7 @@ acpi_aml_resolve_to_value (
 	 */
 
 	if (VALID_DESCRIPTOR_TYPE (*stack_ptr, ACPI_DESC_TYPE_NAMED)) {
-		status = acpi_aml_resolve_node_to_value ((ACPI_NAMESPACE_NODE **) stack_ptr);
+		status = acpi_aml_resolve_node_to_value ((ACPI_NAMESPACE_NODE **) stack_ptr, walk_state);
 	}
 
 
@@ -340,7 +341,11 @@ acpi_aml_resolve_object_to_value (
 		case AML_ONES_OP:
 
 			stack_desc->common.type = (u8) ACPI_TYPE_NUMBER;
-			stack_desc->number.value = 0xFFFFFFFF;
+			stack_desc->number.value = ACPI_INTEGER_MAX;
+
+			/* Truncate value if we are executing from a 32-bit ACPI table */
+
+			acpi_aml_truncate_for32bit_table (stack_desc, walk_state);
 			break;
 
 

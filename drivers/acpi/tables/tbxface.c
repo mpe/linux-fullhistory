@@ -2,7 +2,7 @@
  *
  * Module Name: tbxface - Public interfaces to the ACPI subsystem
  *                         ACPI table oriented interfaces
- *              $Revision: 24 $
+ *              $Revision: 32 $
  *
  *****************************************************************************/
 
@@ -37,43 +37,69 @@
 
 /*******************************************************************************
  *
- * FUNCTION:    Acpi_load_firmware_tables
+ * FUNCTION:    Acpi_load_tables
  *
  * PARAMETERS:  None
  *
  * RETURN:      Status
  *
- * DESCRIPTION: This function is called to load the ACPI tables from BIOS
+ * DESCRIPTION: This function is called to load the ACPI tables from the
+ *              provided RSDT
  *
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_load_firmware_tables (void)
+acpi_load_tables (
+	ACPI_PHYSICAL_ADDRESS   rsdp_physical_address)
 {
 	ACPI_STATUS             status = AE_OK;
 	u32                     number_of_tables = 0;
 
 
-	/* Get the RSDT first */
+	/* Map and validate the RSDP */
 
-	status = acpi_tb_get_table_rsdt (&number_of_tables);
+	status = acpi_tb_verify_rsdp (rsdp_physical_address);
 	if (ACPI_FAILURE (status)) {
+		REPORT_ERROR (("Acpi_load_tables: RSDP Failed validation: %s\n",
+				  acpi_cm_format_exception (status)));
 		goto error_exit;
 	}
 
+	/* Get the RSDT via the RSDP */
+
+	status = acpi_tb_get_table_rsdt (&number_of_tables);
+	if (ACPI_FAILURE (status)) {
+		REPORT_ERROR (("Acpi_load_tables: Could not load RSDT: %s\n",
+				  acpi_cm_format_exception (status)));
+		goto error_exit;
+	}
 
 	/* Now get the rest of the tables */
 
 	status = acpi_tb_get_all_tables (number_of_tables, NULL);
 	if (ACPI_FAILURE (status)) {
+		REPORT_ERROR (("Acpi_load_tables: Error getting required tables (DSDT/FADT/FACS): %s\n",
+				  acpi_cm_format_exception (status)));
 		goto error_exit;
 	}
 
+
+	/* Load the namespace from the tables */
+
+	status = acpi_ns_load_namespace ();
+	if (ACPI_FAILURE (status)) {
+		REPORT_ERROR (("Acpi_load_tables: Could not load namespace: %s\n",
+				  acpi_cm_format_exception (status)));
+		goto error_exit;
+	}
 
 	return (AE_OK);
 
 
 error_exit:
+	REPORT_ERROR (("Acpi_load_tables: Could not load tables: %s\n",
+			  acpi_cm_format_exception (status)));
+
 	return (status);
 }
 
@@ -110,7 +136,7 @@ acpi_load_table (
 
 	/* Copy the table to a local buffer */
 
-	status = acpi_tb_get_table (NULL, table_ptr, &table_info);
+	status = acpi_tb_get_table (0, table_ptr, &table_info);
 	if (ACPI_FAILURE (status)) {
 		return (status);
 	}
@@ -119,8 +145,21 @@ acpi_load_table (
 
 	status = acpi_tb_install_table (NULL, &table_info);
 	if (ACPI_FAILURE (status)) {
-		/* TBD: [Errors] must free table allocated by Acpi_tb_get_table */
+		/* Free table allocated by Acpi_tb_get_table */
+
+		acpi_tb_delete_single_table (&table_info);
+		return (status);
 	}
+
+
+	status = acpi_ns_load_table (table_info.installed_desc, acpi_gbl_root_node);
+	if (ACPI_FAILURE (status)) {
+		/* Uninstall table and free the buffer */
+
+		acpi_tb_uninstall_table (table_info.installed_desc);
+		return (status);
+	}
+
 
 	return (status);
 }
@@ -289,12 +328,11 @@ acpi_get_table (
 
 
 	/*
-	 *  Must have a buffer
+	 *  If we have a buffer, we must have a length too
 	 */
 	if ((instance == 0)                 ||
 		(!ret_buffer)                   ||
-		(!ret_buffer->pointer)          ||
-		(!ret_buffer->length))
+		((!ret_buffer->pointer) && (ret_buffer->length)))
 	{
 		return (AE_BAD_PARAMETER);
 	}
@@ -331,7 +369,7 @@ acpi_get_table (
 		/*
 		 *  RSD PTR is the only "table" without a header
 		 */
-		ret_buf_len = sizeof (ROOT_SYSTEM_DESCRIPTOR_POINTER);
+		ret_buf_len = sizeof (RSDP_DESCRIPTOR);
 	}
 	else {
 		ret_buf_len = tbl_ptr->length;

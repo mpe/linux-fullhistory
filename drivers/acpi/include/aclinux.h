@@ -1,7 +1,7 @@
 /******************************************************************************
  *
- * Module Name: nsdump - table dumping routines for debug
- *              $Revision: 78 $
+ * Name: aclinux.h - OS specific defines, etc.
+ *       $Revision: 4 $
  *
  *****************************************************************************/
 
@@ -23,14 +23,45 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-
-#include "acpi.h"
-#include "acinterp.h"
-#include "acnamesp.h"
-#include "actables.h"
+#ifndef __ACLINUX_H__
+#define __ACLINUX_H__
 
 
-#define _COMPONENT          NAMESPACE
-	 MODULE_NAME         ("nsdump")
+#define ACPI_OS_NAME                "Linux"
 
+#include <linux/config.h>
+#include <linux/string.h>
+#include <linux/kernel.h>
+#include <linux/ctype.h>
+#include <asm/system.h>
+#include <asm/atomic.h>
 
+/* Linux uses GCC */
+
+#include "acgcc.h"
+
+#undef DEBUGGER_THREADING
+#define DEBUGGER_THREADING          DEBUGGER_SINGLE_THREADED
+
+/* Linux ia32 can't do int64 well */
+#ifndef _IA64
+#define ACPI_NO_INTEGER64_SUPPORT
+#endif
+
+#if 0
+
+/* Use native Linux string library */
+
+#define ACPI_USE_SYSTEM_CLIBRARY
+
+/* Special functions */
+
+#define strtoul             simple_strtoul
+
+/* Linux clib doesn't to strupr, but we do. */
+char *
+strupr(char *str);
+
+#endif /* 0 */
+
+#endif /* __ACLINUX_H__ */

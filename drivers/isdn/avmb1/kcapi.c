@@ -1,11 +1,16 @@
 /*
- * $Id: kcapi.c,v 1.21 2000/11/23 20:45:14 kai Exp $
+ * $Id: kcapi.c,v 1.21.6.1 2000/12/10 23:39:19 kai Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.21.6.1  2000/12/10 23:39:19  kai
+ * in 2.4 we don't have tq_scheduler anymore.
+ * also add one supported card to hfc_pci.c
+ * (from main branch)
+ *
  * Revision 1.21  2000/11/23 20:45:14  kai
  * fixed module_init/exit stuff
  * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
@@ -30,7 +35,7 @@
  * Revision 1.15  2000/04/06 15:01:25  calle
  * Bugfix: crash in capidrv.c when reseting a capi controller.
  * - changed code order on remove of controller.
- * - using tq schedule for notifier in kcapi.c.
+ * - using tq_schedule for notifier in kcapi.c.
  * - now using spin_lock_irqsave() and spin_unlock_irqrestore().
  * strange: sometimes even MP hang on unload of isdn.o ...
  *
@@ -131,7 +136,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.21 $";
+static char *revision = "$Revision: 1.21.6.1 $";
 
 /* ------------------------------------------------------------- */
 

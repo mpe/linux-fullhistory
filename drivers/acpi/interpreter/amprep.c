@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amprep - ACPI AML (p-code) execution - field prep utilities
- *              $Revision: 67 $
+ *              $Revision: 69 $
  *
  *****************************************************************************/
 
@@ -48,7 +48,7 @@
  *
  ******************************************************************************/
 
-u32
+static u32
 acpi_aml_decode_field_access_type (
 	u32                     access)
 {
@@ -97,7 +97,7 @@ acpi_aml_decode_field_access_type (
  *
  ******************************************************************************/
 
-ACPI_STATUS
+static ACPI_STATUS
 acpi_aml_prep_common_field_object (
 	ACPI_OPERAND_OBJECT     *obj_desc,
 	u8                      field_flags,

@@ -2,32 +2,36 @@
 # Makefile for the Linux ACPI interpreter
 #
 
-SUB_DIRS        := 
-MOD_SUB_DIRS    := $(SUB_DIRS)
-MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS    := $(SUB_DIRS)
-
 O_TARGET := acpi.o
-O_OBJS   :=
-M_OBJS   :=
+
+export-objs := ksyms.o
 
 export ACPI_CFLAGS
 ACPI_CFLAGS := -D_LINUX
+
+#
+# CONFIG_ACPI_KERNEL_CONFIG is currently only IA64
+#
+ifdef CONFIG_ACPI_KERNEL_CONFIG
+  ACPI_CFLAGS += -DCONFIG_ACPI_KERNEL_CONFIG_ONLY
+endif
 
 EXTRA_CFLAGS += -I./include
 
 EXTRA_CFLAGS += $(ACPI_CFLAGS)
 
-# if the interpreter is used, it overrides arch/i386/kernel/acpi.c
-ifeq ($(CONFIG_ACPI_INTERPRETER),y)
+acpi-subdirs := common dispatcher events hardware \
+		interpreter namespace parser resources tables
 
-  SUB_DIRS += common dispatcher events hardware\
-	      interpreter namespace parser resources tables
+subdir-$(CONFIG_ACPI) += $(acpi-subdirs)
 
-  ACPI_OBJS := $(patsubst %,%.o,$(SUB_DIRS))
-  ACPI_OBJS += $(patsubst %.c,%.o,$(wildcard *.c))
+obj-$(CONFIG_ACPI) := $(patsubst %,%.o,$(acpi-subdirs))
+obj-$(CONFIG_ACPI) += os.o ksyms.o
 
-  O_OBJS += $(ACPI_OBJS)
+ifdef CONFIG_ACPI_KERNEL_CONFIG
+  obj-$(CONFIG_ACPI) += acpiconf.o osconf.o
+else
+  obj-$(CONFIG_ACPI) += driver.o cmbatt.o cpu.o ec.o ksyms.o sys.o table.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amcreate - Named object creation
- *              $Revision: 44 $
+ *              $Revision: 51 $
  *
  *****************************************************************************/
 
@@ -66,197 +66,54 @@
  *
  ******************************************************************************/
 
+
 ACPI_STATUS
 acpi_aml_exec_create_field (
-	u16                     opcode,
+	u8                      *aml_ptr,
+	u32                     aml_length,
+	ACPI_NAMESPACE_NODE     *node,
 	ACPI_WALK_STATE         *walk_state)
 {
-	ACPI_OPERAND_OBJECT     *res_desc = NULL;
-	ACPI_OPERAND_OBJECT     *cnt_desc = NULL;
-	ACPI_OPERAND_OBJECT     *off_desc = NULL;
-	ACPI_OPERAND_OBJECT     *src_desc = NULL;
-	ACPI_OPERAND_OBJECT     *field_desc;
-	ACPI_OPERAND_OBJECT     *obj_desc;
-	OBJECT_TYPE_INTERNAL    res_type;
 	ACPI_STATUS             status;
-	u32                     num_operands = 3;
-	u32                     offset;
-	u32                     bit_offset;
-	u16                     bit_count;
-	u8                      type_found;
+	ACPI_OPERAND_OBJECT     *obj_desc;
+	ACPI_OPERAND_OBJECT     *tmp_desc;
 
 
-	/* Resolve the operands */
+	/* Create the region descriptor */
 
-	status = acpi_aml_resolve_operands (opcode, WALK_OPERANDS, walk_state);
-
-	/* Get the operands */
-
-	status |= acpi_ds_obj_stack_pop_object (&res_desc, walk_state);
-	if (AML_CREATE_FIELD_OP == opcode) {
-		num_operands = 4;
-		status |= acpi_ds_obj_stack_pop_object (&cnt_desc, walk_state);
-	}
-
-	status |= acpi_ds_obj_stack_pop_object (&off_desc, walk_state);
-	status |= acpi_ds_obj_stack_pop_object (&src_desc, walk_state);
-
-	if (ACPI_FAILURE (status)) {
-		/* Invalid parameters on object stack  */
-
+	obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_FIELD_UNIT);
+	if (!obj_desc) {
+		status = AE_NO_MEMORY;
 		goto cleanup;
 	}
 
+	/* Construct the field object */
 
-	offset = off_desc->number.value;
-
+	obj_desc->field_unit.access     = (u8) ACCESS_ANY_ACC;
+	obj_desc->field_unit.lock_rule  = (u8) GLOCK_NEVER_LOCK;
+	obj_desc->field_unit.update_rule = (u8) UPDATE_PRESERVE;
 
 	/*
-	 * If Res_desc is a Name, it will be a direct name pointer after
-	 * Acpi_aml_resolve_operands()
+	 * Allocate a method object for this field unit
 	 */
 
-	if (!VALID_DESCRIPTOR_TYPE (res_desc, ACPI_DESC_TYPE_NAMED)) {
-		status = AE_AML_OPERAND_TYPE;
+	obj_desc->field_unit.extra = acpi_cm_create_internal_object (
+			 INTERNAL_TYPE_EXTRA);
+	if (!obj_desc->field_unit.extra) {
+		status = AE_NO_MEMORY;
 		goto cleanup;
 	}
-
 
 	/*
-	 * Setup the Bit offsets and counts, according to the opcode
+	 * Remember location in AML stream of the field unit
+	 * opcode and operands -- since the buffer and index
+	 * operands must be evaluated.
 	 */
 
-	switch (opcode)
-	{
+	obj_desc->field_unit.extra->extra.pcode     = aml_ptr;
+	obj_desc->field_unit.extra->extra.pcode_length = aml_length;
+	obj_desc->field_unit.node = node;
 
-	/* Def_create_bit_field */
-
-	case AML_BIT_FIELD_OP:
-
-		/* Offset is in bits, Field is a bit */
-
-		bit_offset = offset;
-		bit_count = 1;
-		break;
-
-
-	/* Def_create_byte_field */
-
-	case AML_BYTE_FIELD_OP:
-
-		/* Offset is in bytes, field is a byte */
-
-		bit_offset = 8 * offset;
-		bit_count = 8;
-		break;
-
-
-	/* Def_create_word_field */
-
-	case AML_WORD_FIELD_OP:
-
-		/* Offset is in bytes, field is a word */
-
-		bit_offset = 8 * offset;
-		bit_count = 16;
-		break;
-
-
-	/* Def_create_dWord_field */
-
-	case AML_DWORD_FIELD_OP:
-
-		/* Offset is in bytes, field is a dword */
-
-		bit_offset = 8 * offset;
-		bit_count = 32;
-		break;
-
-
-	/* Def_create_field */
-
-	case AML_CREATE_FIELD_OP:
-
-		/* Offset is in bits, count is in bits */
-
-		bit_offset = offset;
-		bit_count = (u16) cnt_desc->number.value;
-		break;
-
-
-	default:
-
-		status = AE_AML_BAD_OPCODE;
-		goto cleanup;
-	}
-
-
-	/*
-	 * Setup field according to the object type
-	 */
-
-	switch (src_desc->common.type)
-	{
-
-	/* Source_buff :=  Term_arg=>Buffer */
-
-	case ACPI_TYPE_BUFFER:
-
-		if (bit_offset + (u32) bit_count >
-			(8 * (u32) src_desc->buffer.length))
-		{
-			status = AE_AML_BUFFER_LIMIT;
-			goto cleanup;
-		}
-
-
-		/* Allocate an object for the field */
-
-		field_desc = acpi_cm_create_internal_object (ACPI_TYPE_FIELD_UNIT);
-		if (!field_desc) {
-			status = AE_NO_MEMORY;
-			goto cleanup;
-		}
-
-		/* Construct the field object */
-
-		field_desc->field_unit.access     = (u8) ACCESS_ANY_ACC;
-		field_desc->field_unit.lock_rule  = (u8) GLOCK_NEVER_LOCK;
-		field_desc->field_unit.update_rule = (u8) UPDATE_PRESERVE;
-		field_desc->field_unit.length     = bit_count;
-		field_desc->field_unit.bit_offset = (u8) (bit_offset % 8);
-		field_desc->field_unit.offset     = DIV_8 (bit_offset);
-		field_desc->field_unit.container  = src_desc;
-		field_desc->field_unit.sequence   = src_desc->buffer.sequence;
-
-		/* An additional reference for Src_desc */
-
-		acpi_cm_add_reference (src_desc);
-
-		break;
-
-
-	/* Improper object type */
-
-	default:
-
-		type_found = src_desc->common.type;
-
-		if ((type_found > (u8) INTERNAL_TYPE_REFERENCE) ||
-			!acpi_cm_valid_object_type (type_found))
-
-
-		status = AE_AML_OPERAND_TYPE;
-		goto cleanup;
-	}
-
-
-	if (AML_CREATE_FIELD_OP == opcode) {
-		/* Delete object descriptor unique to Create_field */
-
-		acpi_cm_remove_reference (cnt_desc);
-		cnt_desc = NULL;
-	}
 
 	/*
 	 * This operation is supposed to cause the destination Name to refer
@@ -268,11 +125,9 @@ acpi_aml_exec_create_field (
 	 * reference before calling Acpi_aml_exec_store().
 	 */
 
-	res_type = acpi_ns_get_type (res_desc);
-
 	/* Type of Name's existing value */
 
-	switch (res_type)
+	switch (acpi_ns_get_type (node))
 	{
 
 	case ACPI_TYPE_FIELD_UNIT:
@@ -282,21 +137,21 @@ acpi_aml_exec_create_field (
 	case INTERNAL_TYPE_DEF_FIELD:
 	case INTERNAL_TYPE_INDEX_FIELD:
 
-		obj_desc = acpi_ns_get_attached_object (res_desc);
-		if (obj_desc) {
+		tmp_desc = acpi_ns_get_attached_object (node);
+		if (tmp_desc) {
 			/*
 			 * There is an existing object here;  delete it and zero out the
 			 * object field within the Node
 			 */
 
-			acpi_cm_remove_reference (obj_desc);
-			acpi_ns_attach_object ((ACPI_NAMESPACE_NODE *) res_desc, NULL,
+			acpi_cm_remove_reference (tmp_desc);
+			acpi_ns_attach_object ((ACPI_NAMESPACE_NODE *) node, NULL,
 					 ACPI_TYPE_ANY);
 		}
 
 		/* Set the type to ANY (or the store below will fail) */
 
-		((ACPI_NAMESPACE_NODE *) res_desc)->type = ACPI_TYPE_ANY;
+		((ACPI_NAMESPACE_NODE *) node)->type = ACPI_TYPE_ANY;
 
 		break;
 
@@ -309,32 +164,29 @@ acpi_aml_exec_create_field (
 
 	/* Store constructed field descriptor in result location */
 
-	status = acpi_aml_exec_store (field_desc, res_desc, walk_state);
+	status = acpi_aml_exec_store (obj_desc, (ACPI_OPERAND_OBJECT *) node, walk_state);
 
 	/*
 	 * If the field descriptor was not physically stored (or if a failure
 	 * above), we must delete it
 	 */
-	if (field_desc->common.reference_count <= 1) {
-		acpi_cm_remove_reference (field_desc);
+	if (obj_desc->common.reference_count <= 1) {
+		acpi_cm_remove_reference (obj_desc);
 	}
+
+
+	return (AE_OK);
 
 
 cleanup:
 
-	/* Always delete the operands */
+	/* Delete region object and method subobject */
 
-	acpi_cm_remove_reference (off_desc);
-	acpi_cm_remove_reference (src_desc);
+	if (obj_desc) {
+		/* Remove deletes both objects! */
 
-	if (AML_CREATE_FIELD_OP == opcode) {
-		acpi_cm_remove_reference (cnt_desc);
-	}
-
-	/* On failure, delete the result descriptor */
-
-	if (ACPI_FAILURE (status)) {
-		acpi_cm_remove_reference (res_desc); /* Result descriptor */
+		acpi_cm_remove_reference (obj_desc);
+		obj_desc = NULL;
 	}
 
 	return (status);
@@ -543,25 +395,23 @@ ACPI_STATUS
 acpi_aml_exec_create_region (
 	u8                      *aml_ptr,
 	u32                     aml_length,
-	u32                     region_space,
+	u8                      region_space,
 	ACPI_WALK_STATE         *walk_state)
 {
 	ACPI_STATUS             status;
-	ACPI_OPERAND_OBJECT     *obj_desc_region;
+	ACPI_OPERAND_OBJECT     *obj_desc;
 	ACPI_NAMESPACE_NODE     *node;
 
 
-	if (region_space >= NUM_REGION_TYPES) {
-		/* TBD: [Future] In ACPI 2.0, valid region space
-		 *  includes types 0-6 (Adding CMOS and PCIBARTarget).
-		 *  Also, types 0x80-0xff are defined as "OEM Region
-		 *  Space handler"
-		 *
-		 * Should this return an error, or should we just keep
-		 * going?  How do we handle the OEM region handlers?
-		 */
-
-		REPORT_WARNING ("Unable to decode the Region_space");
+	/*
+	 * Space ID must be one of the predefined IDs, or in the user-defined
+	 * range
+	 */
+	if ((region_space >= NUM_REGION_TYPES) &&
+		(region_space < USER_REGION_BEGIN))
+	{
+		REPORT_ERROR (("Invalid Address_space type %X\n", region_space));
+		return (AE_AML_INVALID_SPACE_ID);
 	}
 
 
@@ -571,8 +421,8 @@ acpi_aml_exec_create_region (
 
 	/* Create the region descriptor */
 
-	obj_desc_region = acpi_cm_create_internal_object (ACPI_TYPE_REGION);
-	if (!obj_desc_region) {
+	obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_REGION);
+	if (!obj_desc) {
 		status = AE_NO_MEMORY;
 		goto cleanup;
 	}
@@ -580,32 +430,34 @@ acpi_aml_exec_create_region (
 	/*
 	 * Allocate a method object for this region.
 	 */
-	obj_desc_region->region.method = acpi_cm_create_internal_object (
-			 ACPI_TYPE_METHOD);
-	if (!obj_desc_region->region.method) {
+
+	obj_desc->region.extra = acpi_cm_create_internal_object (
+			 INTERNAL_TYPE_EXTRA);
+	if (!obj_desc->region.extra) {
 		status = AE_NO_MEMORY;
 		goto cleanup;
 	}
-
-	/* Init the region from the operands */
-
-	obj_desc_region->region.space_id    = (u8) region_space;
-	obj_desc_region->region.address     = 0;
-	obj_desc_region->region.length      = 0;
 
 	/*
 	 * Remember location in AML stream of address & length
 	 * operands since they need to be evaluated at run time.
 	 */
-	obj_desc_region->region.method->method.pcode     = aml_ptr;
-	obj_desc_region->region.method->method.pcode_length = aml_length;
+
+	obj_desc->region.extra->extra.pcode      = aml_ptr;
+	obj_desc->region.extra->extra.pcode_length = aml_length;
+
+	/* Init the region from the operands */
+
+	obj_desc->region.space_id     = region_space;
+	obj_desc->region.address      = 0;
+	obj_desc->region.length       = 0;
 
 
 	/* Install the new region object in the parent Node */
 
-	obj_desc_region->region.node = node;
+	obj_desc->region.node = node;
 
-	status = acpi_ns_attach_object (node, obj_desc_region,
+	status = acpi_ns_attach_object (node, obj_desc,
 			  (u8) ACPI_TYPE_REGION);
 
 	if (ACPI_FAILURE (status)) {
@@ -617,7 +469,7 @@ acpi_aml_exec_create_region (
 	 * Namespace is NOT locked at this point.
 	 */
 
-	status = acpi_ev_initialize_region (obj_desc_region, FALSE);
+	status = acpi_ev_initialize_region (obj_desc, FALSE);
 
 	if (ACPI_FAILURE (status)) {
 		/*
@@ -635,11 +487,11 @@ cleanup:
 	if (ACPI_FAILURE (status)) {
 		/* Delete region object and method subobject */
 
-		if (obj_desc_region) {
+		if (obj_desc) {
 			/* Remove deletes both objects! */
 
-			acpi_cm_remove_reference (obj_desc_region);
-			obj_desc_region = NULL;
+			acpi_cm_remove_reference (obj_desc);
+			obj_desc = NULL;
 		}
 	}
 

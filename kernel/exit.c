@@ -425,7 +425,7 @@ NORET_TYPE void do_exit(long code)
 	struct task_struct *tsk = current;
 
 	if (in_interrupt())
-		printk("Aiee, killing interrupt handler\n");
+		panic("Aiee, killing interrupt handler!");
 	if (!tsk->pid)
 		panic("Attempted to kill the idle task!");
 	if (tsk->pid == 1)

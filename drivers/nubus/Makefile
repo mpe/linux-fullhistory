@@ -11,17 +11,11 @@
 
 L_TARGET := nubus.a
 
-ifeq ($(CONFIG_MODULES),y)
-O_TARGET := nubus_n_syms.o
-OX_OBJS  := nubus_syms.o
-O_OBJS   := nubus.o
-L_OBJS   := nubus_n_syms.o
-else
-L_OBJS   := nubus.o
-endif
+export-objs := nubus_syms.o
 
-ifdef CONFIG_PROC_FS
-L_OBJS   += proc.o
-endif
+obj-y   := nubus.o
+
+obj-$(CONFIG_MODULES) += nubus_syms.o 
+obj-$(CONFIG_PROC_FS) += proc.o
 
 include $(TOPDIR)/Rules.make

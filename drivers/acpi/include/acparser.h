@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: acparser.h - AML Parser subcomponent prototypes and defines
- *       $Revision: 46 $
+ *       $Revision: 47 $
  *
  *****************************************************************************/
 
@@ -188,7 +188,8 @@ void
 acpi_ps_pop_scope (
 	ACPI_PARSE_STATE        *parser_state,
 	ACPI_PARSE_OBJECT       **op,
-	u32                     *arg_list);
+	u32                     *arg_list,
+	u32                     *arg_count);
 
 ACPI_STATUS
 acpi_ps_push_scope (

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acinterp.h - Interpreter subcomponent prototypes and defines
- *       $Revision: 79 $
+ *       $Revision: 86 $
  *
  *****************************************************************************/
 
@@ -120,7 +120,9 @@ acpi_aml_access_named_field (
 
 ACPI_STATUS
 acpi_aml_exec_create_field (
-	u16                     opcode,
+	u8                      *aml_ptr,
+	u32                     aml_length,
+	ACPI_NAMESPACE_NODE     *node,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
@@ -160,7 +162,7 @@ ACPI_STATUS
 acpi_aml_exec_create_region (
 	u8                      *aml_ptr,
 	u32                     acpi_aml_length,
-	u32                     region_space,
+	u8                      region_space,
 	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
@@ -324,7 +326,8 @@ acpi_aml_resolve_to_value (
 
 ACPI_STATUS
 acpi_aml_resolve_node_to_value (
-	ACPI_NAMESPACE_NODE     **stack_ptr);
+	ACPI_NAMESPACE_NODE     **stack_ptr,
+	ACPI_WALK_STATE         *walk_state);
 
 ACPI_STATUS
 acpi_aml_resolve_object_to_value (
@@ -440,6 +443,11 @@ void
 acpi_aml_exit_interpreter (
 	void);
 
+void
+acpi_aml_truncate_for32bit_table (
+	ACPI_OPERAND_OBJECT     *obj_desc,
+	ACPI_WALK_STATE         *walk_state);
+
 u8
 acpi_aml_validate_object_type (
 	ACPI_OBJECT_TYPE        type);
@@ -453,17 +461,18 @@ acpi_aml_release_global_lock (
 	u8                      locked);
 
 u32
-acpi_aml_buf_seq (
-	void);
-
-u32
 acpi_aml_digits_needed (
-	u32                     value,
+	ACPI_INTEGER            value,
 	u32                     base);
 
 ACPI_STATUS
 acpi_aml_eisa_id_to_string (
 	u32                     numeric_id,
+	NATIVE_CHAR             *out_string);
+
+ACPI_STATUS
+acpi_aml_unsigned_integer_to_string (
+	ACPI_INTEGER            value,
 	NATIVE_CHAR             *out_string);
 
 ACPI_STATUS
@@ -480,7 +489,7 @@ acpi_aml_build_copy_internal_package_object (
 ACPI_STATUS
 acpi_aml_system_memory_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -489,7 +498,7 @@ acpi_aml_system_memory_space_handler (
 ACPI_STATUS
 acpi_aml_system_io_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -498,7 +507,7 @@ acpi_aml_system_io_space_handler (
 ACPI_STATUS
 acpi_aml_pci_config_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -507,7 +516,7 @@ acpi_aml_pci_config_space_handler (
 ACPI_STATUS
 acpi_aml_embedded_controller_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -516,7 +525,7 @@ acpi_aml_embedded_controller_space_handler (
 ACPI_STATUS
 acpi_aml_sm_bus_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,

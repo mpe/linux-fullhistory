@@ -280,7 +280,9 @@ struct cdrom_generic_command
 	int			stat;
 	struct request_sense	*sense;
 	unsigned char		data_direction;
-	void			*reserved[3];
+	int			quiet;
+	int			timeout;
+	void			*reserved[1];
 };
 
 

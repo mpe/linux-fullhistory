@@ -4,41 +4,17 @@
 #
 
 L_TARGET := fc4.a
-M_OBJS   :=
 
-ifeq ($(CONFIG_FC4),y)
-  FC4 = fc.o
-  ifeq ($(CONFIG_MODULES),y)
-    O_TARGET := fc_n_syms.o
-    O_OBJS   := fc.o
-    OX_OBJS  := fc_syms.o
-    FC4      := $(O_TARGET)
-  endif
-  L_OBJS += $(FC4)
-else
-  ifeq ($(CONFIG_FC4),m)
-    MIX_OBJS += fc_syms.o
-    M_OBJS += fc4.o
-  endif
-endif
+export-objs := fc_syms.o
 
-ifeq ($(CONFIG_FC4_SOC),y)
-L_OBJS += soc.o
-else
-  ifeq ($(CONFIG_FC4_SOC),m)
-  M_OBJS += soc.o
-  endif
-endif
+list-multi := fc4.o
+fc4-objs := fc.o fc_syms.o
 
-ifeq ($(CONFIG_FC4_SOCAL),y)
-L_OBJS += socal.o
-else
-  ifeq ($(CONFIG_FC4_SOCAL),m)
-  M_OBJS += socal.o
-  endif
-endif
+obj-$(CONFIG_FC4) += fc4.o
+obj-$(CONFIG_FC4_SOC) += soc.o
+obj-$(CONFIG_FC4_SOCAL) += socal.o
+
+fc4.o: $(fc4-objs)
+	$(LD) -r -o $@ $(fc4-objs)
 
 include $(TOPDIR)/Rules.make
-
-fc4.o: $(MIX_OBJS) fc.o
-	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) fc.o

@@ -43,9 +43,5 @@ subdir-$(CONFIG_HAMRADIO)	+= net/hamradio
 subdir-$(CONFIG_I2C)		+= i2c
 subdir-$(CONFIG_ACPI)		+= acpi
 
-
-# Subdirectories that should be entered when MAKING_MODULES=1, even if set to 'y'.
-both-m		:= $(filter $(mod-subdirs), $(subdir-y))
-
 include $(TOPDIR)/Rules.make
 

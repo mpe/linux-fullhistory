@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amregion - ACPI default Op_region (address space) handlers
- *              $Revision: 35 $
+ *              $Revision: 41 $
  *
  *****************************************************************************/
 
@@ -58,7 +58,7 @@
 ACPI_STATUS
 acpi_aml_system_memory_space_handler (
 	u32                     function,
-	u32                     address, /* TBD: [Future] Should this be A POINTER for 64-bit support? */
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -98,8 +98,8 @@ acpi_aml_system_memory_space_handler (
 	 *    2) Address beyond the current mapping?
 	 */
 
-	if (((u8 *) address < mem_info->mapped_physical_address) ||
-		(((u8 *) address + length) >
+	if ((address < mem_info->mapped_physical_address) ||
+		((address + length) >
 			(mem_info->mapped_physical_address + mem_info->mapped_length)))
 	{
 		/*
@@ -118,13 +118,15 @@ acpi_aml_system_memory_space_handler (
 
 		/* Create a new mapping starting at the address given */
 
-		status = acpi_os_map_memory ((void *) address, SYSMEM_REGION_WINDOW_SIZE,
+		status = acpi_os_map_memory (address, SYSMEM_REGION_WINDOW_SIZE,
 				  (void **) &mem_info->mapped_logical_address);
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
 
-		mem_info->mapped_physical_address = (u8 *) address;
+		/* TBD: should these pointers go to 64-bit in all cases ? */
+
+		mem_info->mapped_physical_address = address;
 		mem_info->mapped_length = SYSMEM_REGION_WINDOW_SIZE;
 	}
 
@@ -134,8 +136,10 @@ acpi_aml_system_memory_space_handler (
 	 * access
 	 */
 
+	/* TBD: should these pointers go to 64-bit in all cases ? */
+
 	logical_addr_ptr = mem_info->mapped_logical_address +
-			  ((u8 *) address - mem_info->mapped_physical_address);
+			  (address - mem_info->mapped_physical_address);
 
 	/* Perform the memory read or write */
 
@@ -212,7 +216,7 @@ acpi_aml_system_memory_space_handler (
 ACPI_STATUS
 acpi_aml_system_io_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,
@@ -304,7 +308,7 @@ acpi_aml_system_io_space_handler (
 ACPI_STATUS
 acpi_aml_pci_config_space_handler (
 	u32                     function,
-	u32                     address,
+	ACPI_PHYSICAL_ADDRESS   address,
 	u32                     bit_width,
 	u32                     *value,
 	void                    *handler_context,

@@ -82,7 +82,7 @@ extern inline void clear_LDT(void)
 extern inline void load_LDT (struct mm_struct *mm)
 {
 	int cpu = smp_processor_id();
-	void *segments = mm->segments;
+	void *segments = mm->context.segments;
 	int count = LDT_ENTRIES;
 
 	if (!segments) {

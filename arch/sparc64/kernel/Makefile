@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.62 2000/08/12 08:35:53 ecd Exp $
+# $Id: Makefile,v 1.63 2000/12/14 22:57:25 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -18,40 +18,27 @@ SH = $(CONFIG_SHELL)
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
-O_OBJS   := process.o setup.o cpu.o idprom.o \
-	    traps.o devices.o auxio.o \
-	    irq.o ptrace.o time.o sys_sparc.o signal.o \
-	    unaligned.o central.o pci.o starfire.o semaphore.o \
-	    power.o sbus.o iommu_common.o
-OX_OBJS  := sparc64_ksyms.o
 
-ifdef CONFIG_PCI
-  O_OBJS += ebus.o pci_common.o pci_iommu.o \
-	    pci_psycho.o pci_sabre.o 
-endif
+export-objs	:= sparc64_ksyms.o
+obj-y		:= process.o setup.o cpu.o idprom.o \
+		   traps.o devices.o auxio.o \
+		   irq.o ptrace.o time.o sys_sparc.o signal.o \
+		   unaligned.o central.o pci.o starfire.o semaphore.o \
+		   power.o sbus.o iommu_common.o sparc64_ksyms.o
+
+obj-$(CONFIG_PCI)	 += ebus.o pci_common.o pci_iommu.o \
+			    pci_psycho.o pci_sabre.o 
+obj-$(CONFIG_SMP)	 += smp.o trampoline.o
+obj-$(CONFIG_SPARC32_COMPAT) += sys32.o sys_sparc32.o signal32.o ioctl32.o
+obj-$(CONFIG_BINFMT_ELF32) += binfmt_elf32.o
+obj-$(CONFIG_BINFMT_AOUT32) += binfmt_aout32.o
 
 ifdef CONFIG_SUNOS_EMUL
-  O_OBJS += sys_sunos32.o sunos_ioctl32.o
+  obj-y += sys_sunos32.o sunos_ioctl32.o
 else
   ifdef CONFIG_SOLARIS_EMUL
-    O_OBJS += sys_sunos32.o sunos_ioctl32.o
+    obj-y += sys_sunos32.o sunos_ioctl32.o
   endif
-endif
-
-ifdef CONFIG_SMP
-O_OBJS += smp.o trampoline.o
-endif
-
-ifdef CONFIG_SPARC32_COMPAT
-  O_OBJS += sys32.o sys_sparc32.o signal32.o ioctl32.o
-endif
-
-ifdef CONFIG_BINFMT_ELF32
-  O_OBJS += binfmt_elf32.o
-endif
-
-ifdef CONFIG_BINFMT_AOUT32
-  O_OBJS += binfmt_aout32.o
 endif
 
 head.o: head.S ttable.S itlb_base.S dtlb_base.S dtlb_backend.S dtlb_prot.S \

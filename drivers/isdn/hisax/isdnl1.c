@@ -1,4 +1,4 @@
-/* $Id: isdnl1.c,v 2.41 2000/11/24 17:05:37 kai Exp $
+/* $Id: isdnl1.c,v 2.41.6.1 2000/12/10 22:01:04 kai Exp $
  *
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -15,7 +15,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 2.41 $";
+const char *l1_revision = "$Revision: 2.41.6.1 $";
 
 #define __NO_VERSION__
 #include <linux/init.h>
@@ -343,7 +343,6 @@ init_bcstate(struct IsdnCardState *cs,
 
 	bcs->cs = cs;
 	bcs->channel = bc;
-	INIT_LIST_HEAD(&bcs->tqueue.list);
 	bcs->tqueue.sync = 0;
 	bcs->tqueue.routine = (void *) (void *) BChannel_bh;
 	bcs->tqueue.data = bcs;

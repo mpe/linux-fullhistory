@@ -14,6 +14,7 @@ export-objs    :=  matroxfb_base.o matroxfb_accel.o matroxfb_DAC1064.o matroxfb_
 obj-$(CONFIG_FB_MATROX)           += matroxfb_base.o matroxfb_accel.o matroxfb_DAC1064.o matroxfb_Ti3026.o matroxfb_misc.o
 obj-$(CONFIG_FB_MATROX_I2C)       += i2c-matroxfb.o
 obj-$(CONFIG_FB_MATROX_MAVEN)     += matroxfb_maven.o matroxfb_crtc2.o
+obj-$(CONFIG_FB_MATROX_G450)	  += matroxfb_g450.o matroxfb_crtc2.o
 
 include $(TOPDIR)/Rules.make
 

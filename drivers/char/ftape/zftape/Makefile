@@ -23,18 +23,6 @@
 #      ftape
 #
 
-#
-#  This isn't used inside the kernel, only for my private development
-#  version
-#
-ifndef TOPDIR
-TOPDIR=../..
-include $(TOPDIR)/MCONFIG
-endif
-
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
 
 # ZFT_OBSOLETE - enable the MTIOC_ZFTAPE_GETBLKSZ ioctl. You should
 #                leave this enabled for compatibility with taper.
@@ -42,13 +30,14 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 EXTRA_CFLAGS := -DZFT_OBSOLETE
 
 O_TARGET := zftape.o
-O_OBJS   := zftape-rw.o zftape-ctl.o zftape-read.o \
+
+export-objs := zftape_syms.o
+
+obj-y    := zftape-rw.o zftape-ctl.o zftape-read.o \
 	    zftape-write.o zftape-vtbl.o zftape-eof.o \
-	    zftape-init.o zftape-buffers.o
+	    zftape-init.o zftape-buffers.o zftape_syms.o
 
-OX_OBJS  += zftape_syms.o
-
-M_OBJS   := $(O_TARGET)
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

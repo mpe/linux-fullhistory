@@ -27,16 +27,14 @@
 #define _COMPONENT	OS_DEPENDENT
 	MODULE_NAME	("sys")
 
-#define ACPI_SLP_TYP(typa, typb) (((int)(typa) << 8) | (int)(typb))
-#define ACPI_SLP_TYPA(value) \
-        ((((value) >> 8) << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK)
-#define ACPI_SLP_TYPB(value) \
-        ((((value) & 0xff) << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK)
+#define ACPI_SLP_TYP(typa, typb)	(((int)(typa) << 8) | (int)(typb))
+#define ACPI_SLP_TYPA(value)		((value) >> 8)
+#define ACPI_SLP_TYPB(value)		((value) & 0xff)
 
 struct acpi_enter_sx_ctx
 {
 	wait_queue_head_t wait;
-	int state;
+	unsigned int      state;
 };
 
 volatile acpi_sstate_t acpi_sleep_state = ACPI_S0;
@@ -49,10 +47,8 @@ static void
 acpi_enter_sx_async(void *context)
 {
 	struct acpi_enter_sx_ctx *ctx = (struct acpi_enter_sx_ctx*) context;
-	struct acpi_facp *facp = &acpi_facp;
 	ACPI_OBJECT_LIST arg_list;
 	ACPI_OBJECT arg;
-	u16 value;
 
 	/*
          * _PSW methods could be run here to enable wake-on keyboard, LAN, etc.
@@ -69,34 +65,26 @@ acpi_enter_sx_async(void *context)
 
 	acpi_evaluate_object(NULL, "\\_PTS", &arg_list, NULL);
 	
-	// clear wake status
-	acpi_write_pm1_status(facp, ACPI_WAK);
-	
+	// clear wake status by writing a 1
+	acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, WAK_STS, 1);
+		
 	acpi_sleep_state = ctx->state;
 
 	// set ACPI_SLP_TYPA/b and ACPI_SLP_EN
-	__cli();
-	if (facp->pm1a_cnt) {
-		value = inw(facp->pm1a_cnt) & ~ACPI_SLP_TYP_MASK;
-		value |= (ACPI_SLP_TYPA(acpi_slptyp[ctx->state])
-			  | ACPI_SLP_EN);
-		outw(value, facp->pm1a_cnt);
-	}
-	if (facp->pm1b_cnt) {
-		value = inw(facp->pm1b_cnt) & ~ACPI_SLP_TYP_MASK;
-		value |= (ACPI_SLP_TYPB(acpi_slptyp[ctx->state])
-			  | ACPI_SLP_EN);
-		outw(value, facp->pm1b_cnt);
-	}
-	__sti();
+	acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, SLP_TYPE_A,
+		ACPI_SLP_TYPA(acpi_slptyp[ctx->state]));
+	acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, SLP_TYPE_B,
+		ACPI_SLP_TYPB(acpi_slptyp[ctx->state]));
+	acpi_hw_register_bit_access(ACPI_WRITE, ACPI_MTX_LOCK, SLP_EN, 1);
 	
 	if (ctx->state != ACPI_S1) {
+		/* we should have just shut off - what are we doing here? */
 		printk(KERN_ERR "ACPI: S%d failed\n", ctx->state);
 		goto out;
 	}
 
 	// wait until S1 is entered
-	while (!(acpi_read_pm1_status(facp) & ACPI_WAK))
+	while (!(acpi_hw_register_bit_access(ACPI_READ, ACPI_MTX_LOCK, WAK_STS)))
 		safe_halt();
 
 	// run the _WAK method
@@ -125,7 +113,7 @@ acpi_power_off(void)
 {
 	struct acpi_enter_sx_ctx ctx;
 
-	if (acpi_facp.hdr.signature != ACPI_FACP_SIG
+	if ((STRNCMP(acpi_fadt.header.signature, ACPI_FADT_SIGNATURE, ACPI_SIG_LEN) != 0)
 	    || acpi_slptyp[ACPI_S5] == ACPI_INVALID)
 		return;
 	
@@ -142,7 +130,7 @@ acpi_enter_sx(acpi_sstate_t state)
 {
 	struct acpi_enter_sx_ctx ctx;
 
-	if (acpi_facp.hdr.signature != ACPI_FACP_SIG
+	if ((STRNCMP(acpi_fadt.header.signature, ACPI_FADT_SIGNATURE, ACPI_SIG_LEN) != 0)
 	    || acpi_slptyp[state] == ACPI_INVALID)
 		return -EINVAL;
 	
@@ -162,23 +150,28 @@ acpi_enter_sx(acpi_sstate_t state)
 int
 acpi_sys_init(void)
 {
-	u8 sx, typa, typb;
+	u8 sx;
+	u8 type_a;
+	u8 type_b;
+
+	printk(KERN_INFO "ACPI: System firmware supports:");
 
 	for (sx = ACPI_S0; sx <= ACPI_S5; sx++) {
 		int ca_sx = (sx <= ACPI_S4) ? sx : (sx + 1);
 		if (ACPI_SUCCESS(
 			   acpi_hw_obtain_sleep_type_register_data(ca_sx,
-								   &typa,
-								   &typb)))
-			acpi_slptyp[sx] = ACPI_SLP_TYP(typa, typb);
-		else
-			acpi_slptyp[sx] = ACPI_INVALID;
-	}
-	if (acpi_slptyp[ACPI_S1] != ACPI_INVALID)
-		printk(KERN_INFO "ACPI: S1 supported\n");
-	if (acpi_slptyp[ACPI_S5] != ACPI_INVALID)
-		printk(KERN_INFO "ACPI: S5 supported\n");
+								   &type_a,
+								   &type_b))) {
 
+			acpi_slptyp[sx] = ACPI_SLP_TYP(type_a, type_b);
+			printk(" S%d", sx);
+		}
+		else {
+			acpi_slptyp[sx] = ACPI_INVALID;
+		}
+	}
+	printk("\n");
+	
 	pm_power_off = acpi_power_off;
 
 	return 0;

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amresnte - AML Interpreter object resolution
- *              $Revision: 21 $
+ *              $Revision: 25 $
  *
  *****************************************************************************/
 
@@ -65,7 +65,9 @@
 
 ACPI_STATUS
 acpi_aml_resolve_node_to_value (
-	ACPI_NAMESPACE_NODE     **stack_ptr)
+	ACPI_NAMESPACE_NODE     **stack_ptr,
+	ACPI_WALK_STATE         *walk_state)
+
 {
 	ACPI_STATUS             status = AE_OK;
 	ACPI_OPERAND_OBJECT     *val_desc = NULL;
@@ -76,7 +78,7 @@ acpi_aml_resolve_node_to_value (
 	u8                      locked;
 	u8                      attached_aml_pointer = FALSE;
 	u8                      aml_opcode = 0;
-	u32                     temp_val;
+	ACPI_INTEGER            temp_val;
 	OBJECT_TYPE_INTERNAL    object_type;
 
 
@@ -114,8 +116,7 @@ acpi_aml_resolve_node_to_value (
 	 *  and Method locals and arguments have a pseudo-Node
 	 */
 	if (entry_type == ACPI_TYPE_DEVICE ||
-		entry_type == INTERNAL_TYPE_METHOD_ARGUMENT ||
-		entry_type == INTERNAL_TYPE_METHOD_LOCAL_VAR)
+		(node->flags & (ANOBJ_METHOD_ARG | ANOBJ_METHOD_LOCAL)))
 	{
 		return (AE_OK);
 	}
@@ -174,7 +175,6 @@ acpi_aml_resolve_node_to_value (
 
 		obj_desc = val_desc;
 		acpi_cm_add_reference (obj_desc);
-
 		break;
 
 
@@ -211,90 +211,18 @@ acpi_aml_resolve_node_to_value (
 	case ACPI_TYPE_NUMBER:
 
 		/*
-		 * An ACPI_TYPE_NUMBER can be either an object or an AML pointer
+		 * The Node has an attached internal object, make sure that it's a
+		 * number
 		 */
 
-		if (attached_aml_pointer) {
-			/*
-			 * The attachment points into the AML stream, get the number from
-			 * there.  The actual number is based upon the AML opcode
-			 *
-			 * Note: Word_op and DWord_op will not work properly if the
-			 *       processor's endianness does not match the AML's.
-			 */
-
-			switch (aml_opcode)
-			{
-
-			case AML_ZERO_OP:
-
-				temp_val = 0;
-				break;
-
-
-			case AML_ONE_OP:
-
-				temp_val = 1;
-				break;
-
-
-			case AML_ONES_OP:
-
-				temp_val = 0xFFFFFFFF;
-				break;
-
-
-			case AML_BYTE_OP:
-
-				temp_val = (u32) ((u8 *) val_desc)[1];
-				break;
-
-
-			case AML_WORD_OP:
-
-				MOVE_UNALIGNED16_TO_32 (&temp_val, &((u8 *) val_desc)[1]);
-				break;
-
-
-			case AML_DWORD_OP:
-
-				MOVE_UNALIGNED32_TO_32 (&temp_val, &((u8 *) val_desc)[1]);
-				break;
-
-
-			default:
-
-				return (AE_AML_BAD_OPCODE);
-
-			} /* switch */
-
-
-			/* Create and initialize a new object */
-
-			obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_NUMBER);
-			if (!obj_desc) {
-				return (AE_NO_MEMORY);
-			}
-
-			obj_desc->number.value = temp_val;
+		if (ACPI_TYPE_NUMBER != val_desc->common.type) {
+			return (AE_AML_OPERAND_TYPE);
 		}
 
-		else {
-			/*
-			 * The Node has an attached internal object, make sure that it's a
-			 * number
-			 */
+		/* Return an additional reference to the object */
 
-			if (ACPI_TYPE_NUMBER != val_desc->common.type) {
-				return (AE_AML_OPERAND_TYPE);
-			}
-
-			/* Return an additional reference to the object */
-
-			obj_desc = val_desc;
-			acpi_cm_add_reference (obj_desc);
-		}
-
+		obj_desc = val_desc;
+		acpi_cm_add_reference (obj_desc);
 		break;
 
 
@@ -331,7 +259,7 @@ acpi_aml_resolve_node_to_value (
 		 * Fill in the object specific details
 		 */
 		if (ACPI_TYPE_BUFFER == object_type) {
-			obj_desc->buffer.pointer = acpi_cm_callocate(val_desc->field.length);
+			obj_desc->buffer.pointer = acpi_cm_callocate (val_desc->field.length);
 			if (!obj_desc->buffer.pointer) {
 				acpi_cm_remove_reference(obj_desc);
 				return (AE_NO_MEMORY);
@@ -339,18 +267,15 @@ acpi_aml_resolve_node_to_value (
 
 			obj_desc->buffer.length = val_desc->field.length;
 
-			status = acpi_aml_access_named_field (ACPI_READ,
-					  (ACPI_HANDLE) node,
-					  obj_desc->buffer.pointer,
-					  obj_desc->buffer.length);
+			status = acpi_aml_access_named_field (ACPI_READ, (ACPI_HANDLE) node,
+					  obj_desc->buffer.pointer, obj_desc->buffer.length);
 
 			if (ACPI_FAILURE (status)) {
 				return (status);
 			}
 		}
 		else {
-			status = acpi_aml_access_named_field (ACPI_READ,
-					  (ACPI_HANDLE) node,
+			status = acpi_aml_access_named_field (ACPI_READ, (ACPI_HANDLE) node,
 					  &temp_val, sizeof (temp_val));
 
 			if (ACPI_FAILURE (status)) {
@@ -384,8 +309,7 @@ acpi_aml_resolve_node_to_value (
 		/* perform the update */
 
 		status = acpi_aml_access_named_field (ACPI_WRITE,
-				 val_desc->bank_field.bank_select,
-				 &val_desc->bank_field.value,
+				 val_desc->bank_field.bank_select, &val_desc->bank_field.value,
 				 sizeof (val_desc->bank_field.value));
 
 		acpi_aml_release_global_lock (locked);
@@ -403,6 +327,8 @@ acpi_aml_resolve_node_to_value (
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
+
+		/* Create an object for the result */
 
 		obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_NUMBER);
 		if (!obj_desc) {
@@ -431,10 +357,10 @@ acpi_aml_resolve_node_to_value (
 		locked = acpi_aml_acquire_global_lock (obj_desc->field_unit.lock_rule);
 
 		/* Perform the update */
+
 		status = acpi_aml_access_named_field (ACPI_WRITE,
-				 val_desc->index_field.index,
-				 &val_desc->index_field.value,
-				 sizeof (val_desc->index_field.value));
+				  val_desc->index_field.index, &val_desc->index_field.value,
+				  sizeof (val_desc->index_field.value));
 
 		acpi_aml_release_global_lock (locked);
 
@@ -444,12 +370,13 @@ acpi_aml_resolve_node_to_value (
 
 		/* Read Data value */
 
-		status = acpi_aml_access_named_field (ACPI_READ,
-				   val_desc->index_field.data,
-				   &temp_val, sizeof (temp_val));
+		status = acpi_aml_access_named_field (ACPI_READ, val_desc->index_field.data,
+				  &temp_val, sizeof (temp_val));
 		if (ACPI_FAILURE (status)) {
 			return (status);
 		}
+
+		/* Create an object for the result */
 
 		obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_NUMBER);
 		if (!obj_desc) {
@@ -470,6 +397,8 @@ acpi_aml_resolve_node_to_value (
 			return (AE_AML_OPERAND_TYPE);
 			break;
 		}
+
+		/* Create object for result */
 
 		obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_ANY);
 		if (!obj_desc) {
@@ -504,11 +433,61 @@ acpi_aml_resolve_node_to_value (
 		acpi_cm_add_reference (obj_desc);
 		break;
 
+
 	/* TYPE_Any is untyped, and thus there is no object associated with it */
 
 	case ACPI_TYPE_ANY:
 
 		return (AE_AML_OPERAND_TYPE);  /* Cannot be AE_TYPE */
+		break;
+
+
+	/*
+	 * The only named references allowed are named constants
+	 *
+	 * e.g.     Name (\OSFL, Ones)
+	 */
+	case INTERNAL_TYPE_REFERENCE:
+
+		switch (val_desc->reference.op_code)
+		{
+
+		case AML_ZERO_OP:
+
+			temp_val = 0;
+			break;
+
+
+		case AML_ONE_OP:
+
+			temp_val = 1;
+			break;
+
+
+		case AML_ONES_OP:
+
+			temp_val = ACPI_INTEGER_MAX;
+			break;
+
+
+		default:
+
+			return (AE_AML_BAD_OPCODE);
+		}
+
+		/* Create object for result */
+
+		obj_desc = acpi_cm_create_internal_object (ACPI_TYPE_NUMBER);
+		if (!obj_desc) {
+			return (AE_NO_MEMORY);
+		}
+
+		obj_desc->number.value = temp_val;
+
+		/* Truncate value if we are executing from a 32-bit ACPI table */
+
+		acpi_aml_truncate_for32bit_table (obj_desc, walk_state);
+		break;
 
 
 	/* Default case is for unknown types */

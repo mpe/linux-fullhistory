@@ -9,13 +9,9 @@
 # parent makes..
 #
 
-MEDIAS = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
-
-SUB_DIRS     := video radio
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
+subdir-y     := video radio
 
 O_TARGET     := media.o
-O_OBJS       := $(MEDIAS)
+obj-y        := $(join $(subdir-y),$(subdir-y:%=/%.o))
 
 include $(TOPDIR)/Rules.make

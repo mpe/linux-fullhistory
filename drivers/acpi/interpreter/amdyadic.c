@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: amdyadic - ACPI AML (p-code) execution for dyadic operators
- *              $Revision: 63 $
+ *              $Revision: 68 $
  *
  *****************************************************************************/
 
@@ -106,7 +106,7 @@ acpi_aml_exec_dyadic1 (
 
 				/* Dispatch the notify to the appropriate handler */
 
-				acpi_ev_notify_dispatch (node, val_desc->number.value);
+				acpi_ev_notify_dispatch (node, (u32) val_desc->number.value);
 				break;
 
 			default:
@@ -117,7 +117,8 @@ acpi_aml_exec_dyadic1 (
 
 	default:
 
-		REPORT_ERROR ("Acpi_aml_exec_dyadic1: Unknown dyadic opcode");
+		REPORT_ERROR (("Acpi_aml_exec_dyadic1: Unknown dyadic opcode %X\n",
+			opcode));
 		status = AE_AML_BAD_OPCODE;
 	}
 
@@ -162,7 +163,6 @@ acpi_aml_exec_dyadic2_r (
 	ACPI_OPERAND_OBJECT     *ret_desc   = NULL;
 	ACPI_OPERAND_OBJECT     *ret_desc2  = NULL;
 	ACPI_STATUS             status      = AE_OK;
-	u32                     remainder;
 	u32                     num_operands = 3;
 	NATIVE_CHAR             *new_buf;
 
@@ -276,8 +276,9 @@ acpi_aml_exec_dyadic2_r (
 
 	case AML_DIVIDE_OP:
 
-		if ((u32) 0 == obj_desc2->number.value) {
-			REPORT_ERROR ("Aml_exec_dyadic2_r/Divide_op: Divide by zero");
+		if (!obj_desc2->number.value) {
+			REPORT_ERROR
+				(("Aml_exec_dyadic2_r/Divide_op: Divide by zero\n"));
 
 			status = AE_AML_DIVIDE_BY_ZERO;
 			goto cleanup;
@@ -289,14 +290,15 @@ acpi_aml_exec_dyadic2_r (
 			goto cleanup;
 		}
 
-		remainder               = obj_desc->number.value %
-				   obj_desc2->number.value;
-		ret_desc->number.value  = remainder;
+		/* Remainder (modulo) */
+
+		ret_desc->number.value  = ACPI_MODULO (obj_desc->number.value,
+				  obj_desc2->number.value);
 
 		/* Result (what we used to call the quotient) */
 
-		ret_desc2->number.value = obj_desc->number.value /
-				  obj_desc2->number.value;
+		ret_desc2->number.value = ACPI_DIVIDE (obj_desc->number.value,
+				  obj_desc2->number.value);
 		break;
 
 
@@ -360,7 +362,7 @@ acpi_aml_exec_dyadic2_r (
 					  obj_desc2->string.length + 1);
 			if (!new_buf) {
 				REPORT_ERROR
-					("Aml_exec_dyadic2_r/Concat_op: String allocation failure");
+					(("Aml_exec_dyadic2_r/Concat_op: String allocation failure\n"));
 				status = AE_NO_MEMORY;
 				goto cleanup;
 			}
@@ -389,7 +391,7 @@ acpi_aml_exec_dyadic2_r (
 					  obj_desc2->buffer.length);
 			if (!new_buf) {
 				REPORT_ERROR
-					("Aml_exec_dyadic2_r/Concat_op: Buffer allocation failure");
+					(("Aml_exec_dyadic2_r/Concat_op: Buffer allocation failure\n"));
 				status = AE_NO_MEMORY;
 				goto cleanup;
 			}
@@ -412,7 +414,7 @@ acpi_aml_exec_dyadic2_r (
 
 	default:
 
-		REPORT_ERROR ("Acpi_aml_exec_dyadic2_r: Unknown dyadic opcode");
+		REPORT_ERROR (("Acpi_aml_exec_dyadic2_r: Unknown dyadic opcode %X\n", opcode));
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}
@@ -548,7 +550,7 @@ acpi_aml_exec_dyadic2_s (
 
 	default:
 
-		REPORT_ERROR ("Acpi_aml_exec_dyadic2_s: Unknown dyadic synchronization opcode");
+		REPORT_ERROR (("Acpi_aml_exec_dyadic2_s: Unknown dyadic synchronization opcode %X\n", opcode));
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 	}
@@ -560,7 +562,7 @@ acpi_aml_exec_dyadic2_s (
 	 */
 
 	if (status == AE_TIME) {
-		ret_desc->number.value = (u32)(-1);  /* TRUE, op timed out */
+		ret_desc->number.value = ACPI_INTEGER_MAX;  /* TRUE, op timed out */
 		status = AE_OK;
 	}
 
@@ -695,7 +697,7 @@ acpi_aml_exec_dyadic2 (
 
 	default:
 
-		REPORT_ERROR ("Acpi_aml_exec_dyadic2: Unknown dyadic opcode");
+		REPORT_ERROR (("Acpi_aml_exec_dyadic2: Unknown dyadic opcode %X\n", opcode));
 		status = AE_AML_BAD_OPCODE;
 		goto cleanup;
 		break;
@@ -705,7 +707,7 @@ acpi_aml_exec_dyadic2 (
 	/* Set return value to logical TRUE (all ones) or FALSE (zero) */
 
 	if (lboolean) {
-		ret_desc->number.value = 0xffffffff;
+		ret_desc->number.value = ACPI_INTEGER_MAX;
 	}
 	else {
 		ret_desc->number.value = 0;

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amstorob - AML Interpreter object store support, store to object
- *              $Revision: 16 $
+ *              $Revision: 18 $
  *
  *****************************************************************************/
 
@@ -294,6 +294,10 @@ acpi_aml_store_object_to_object (
 	case ACPI_TYPE_NUMBER:
 
 		dest_desc->number.value = val_desc->number.value;
+
+		/* Truncate value if we are executing from a 32-bit ACPI table */
+
+		acpi_aml_truncate_for32bit_table (dest_desc, walk_state);
 		break;
 
 	default:

@@ -1,4 +1,4 @@
-// $Id: l3ni1.c,v 2.5 2000/11/19 17:02:48 kai Exp $
+// $Id: l3ni1.c,v 2.5.6.1 2000/12/06 16:59:19 kai Exp $
 //
 //-----------------------------------------------------------------------------
 //
@@ -26,7 +26,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *ni1_revision = "$Revision: 2.5 $";
+const char *ni1_revision = "$Revision: 2.5.6.1 $";
 
 #define EXT_BEARER_CAPS 1
 

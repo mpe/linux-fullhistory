@@ -7,25 +7,15 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS) char audio
-ALL_SUB_DIRS := $(SUB_DIRS) char audio
-
-O_OBJS   := sbus.o dvma.o
 O_TARGET := sbus_all.o
+obj-y    := sbus.o dvma.o
 
-# Character devices for SBUS-based machines.
-#
-ifeq ($(CONFIG_SBUSCHAR),y)
-SUB_DIRS += char
-O_OBJS += char/sunchar.o
-endif
+subdir-y += char
+subdir-m += char
+obj-$(CONFIG_SBUSCHAR) += char/sunchar.o
 
-# Audio devices for SBUS-based machines.
-#
-ifeq ($(CONFIG_SPARCAUDIO),y)
-SUB_DIRS += audio
-O_OBJS += audio/sparcaudio.o
-endif
+subdir-y += audio
+subdir-m += audio
+obj-$(CONFIG_SPARCAUDIO) += audio/sparcaudio.o
 
 include $(TOPDIR)/Rules.make

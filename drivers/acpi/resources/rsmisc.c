@@ -1,4 +1,4 @@
-/******************************************************************************
+/*******************************************************************************
  *
  * Module Name: rsmisc - Acpi_rs_end_tag_resource
  *                       Acpi_rs_end_tag_stream
@@ -8,9 +8,9 @@
  *                       Acpi_rs_end_dependent_functions_resource
  *                       Acpi_rs_start_dependent_functions_stream
  *                       Acpi_rs_end_dependent_functions_stream
- *              $Revision: 7 $
+ *              $Revision: 10 $
  *
- *****************************************************************************/
+ ******************************************************************************/
 
 /*
  *  Copyright (C) 2000 R. Byron Moore
@@ -32,16 +32,17 @@
 
 
 #include "acpi.h"
+#include "acresrc.h"
 
 #define _COMPONENT          RESOURCE_MANAGER
 	 MODULE_NAME         ("rsmisc")
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_end_tag_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -57,7 +58,7 @@
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_end_tag_resource (
@@ -94,11 +95,11 @@ acpi_rs_end_tag_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_end_tag_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -109,7 +110,7 @@ acpi_rs_end_tag_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_end_tag_stream (
@@ -125,7 +126,6 @@ acpi_rs_end_tag_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x79;
-
 	buffer += 1;
 
 	/*
@@ -135,7 +135,6 @@ acpi_rs_end_tag_stream (
 	temp8 = 0;
 
 	*buffer = temp8;
-
 	buffer += 1;
 
 	/*
@@ -147,11 +146,12 @@ acpi_rs_end_tag_stream (
 	return (AE_OK);
 }
 
-/***************************************************************************
+
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_vendor_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -167,7 +167,7 @@ acpi_rs_end_tag_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_vendor_resource (
@@ -230,7 +230,6 @@ acpi_rs_vendor_resource (
 	}
 
 	output_struct->id = vendor_specific;
-
 	output_struct->data.vendor_specific.length = temp16;
 
 	for (index = 0; index < temp16; index++) {
@@ -259,11 +258,11 @@ acpi_rs_vendor_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_vendor_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -274,7 +273,7 @@ acpi_rs_vendor_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_vendor_stream (
@@ -300,13 +299,11 @@ acpi_rs_vendor_stream (
 		 * Set the descriptor field and length bytes
 		 */
 		*buffer = 0x84;
-
 		buffer += 1;
 
 		temp16 = (u16) linked_list->data.vendor_specific.length;
 
-		MOVE_UNALIGNED16_TO_16 (&temp16, buffer);
-
+		MOVE_UNALIGNED16_TO_16 (buffer, &temp16);
 		buffer += 2;
 	}
 
@@ -319,11 +316,9 @@ acpi_rs_vendor_stream (
 		 * Set the descriptor field
 		 */
 		temp8 = 0x70;
-
 		temp8 |= linked_list->data.vendor_specific.length;
 
 		*buffer = temp8;
-
 		buffer += 1;
 	}
 
@@ -332,6 +327,7 @@ acpi_rs_vendor_stream (
 	 */
 	for (index = 0; index < linked_list->data.vendor_specific.length; index++) {
 		temp8 = linked_list->data.vendor_specific.reserved[index];
+
 		*buffer = temp8;
 		buffer += 1;
 	}
@@ -345,11 +341,12 @@ acpi_rs_vendor_stream (
 	return (AE_OK);
 }
 
-/***************************************************************************
+
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_start_dependent_functions_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -365,7 +362,7 @@ acpi_rs_vendor_stream (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_start_dependent_functions_resource (
@@ -441,11 +438,11 @@ acpi_rs_start_dependent_functions_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_end_dependent_functions_resource
  *
- * PARAMETERS:
- *              Byte_stream_buffer      - Pointer to the resource input byte
+ * PARAMETERS:  Byte_stream_buffer      - Pointer to the resource input byte
  *                                          stream
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes consumed from
@@ -461,7 +458,7 @@ acpi_rs_start_dependent_functions_resource (
  *                  structure pointed to by the Output_buffer. Return the
  *                  number of bytes consumed from the byte stream.
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_end_dependent_functions_resource (
@@ -498,11 +495,11 @@ acpi_rs_end_dependent_functions_resource (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_start_dependent_functions_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -513,7 +510,8 @@ acpi_rs_end_dependent_functions_resource (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
+
 ACPI_STATUS
 acpi_rs_start_dependent_functions_stream (
 	RESOURCE                *linked_list,
@@ -537,18 +535,15 @@ acpi_rs_start_dependent_functions_stream (
 	}
 	else {
 		*buffer = 0x31;
-
 		buffer += 1;
 
 		/*
 		 * Set the Priority Byte Definition
 		 */
 		temp8 = 0;
-
 		temp8 = (u8)
 			((linked_list->data.start_dependent_functions.performance_robustness &
 			  0x03) << 2);
-
 		temp8 |=
 			(linked_list->data.start_dependent_functions.compatibility_priority &
 			 0x03);
@@ -568,11 +563,11 @@ acpi_rs_start_dependent_functions_stream (
 }
 
 
-/***************************************************************************
+/*******************************************************************************
+ *
  * FUNCTION:    Acpi_rs_end_dependent_functions_stream
  *
- * PARAMETERS:
- *              Linked_list             - Pointer to the resource linked list
+ * PARAMETERS:  Linked_list             - Pointer to the resource linked list
  *              Output_buffer           - Pointer to the user's return buffer
  *              Bytes_consumed          - u32 pointer that is filled with
  *                                          the number of bytes of the
@@ -583,7 +578,7 @@ acpi_rs_start_dependent_functions_stream (
  * DESCRIPTION: Take the linked list resource structure and fills in the
  *                  the appropriate bytes in a byte stream
  *
- ***************************************************************************/
+ ******************************************************************************/
 
 ACPI_STATUS
 acpi_rs_end_dependent_functions_stream (
@@ -599,7 +594,6 @@ acpi_rs_end_dependent_functions_stream (
 	 * The descriptor field is static
 	 */
 	*buffer = 0x38;
-
 	buffer += 1;
 
 	/*

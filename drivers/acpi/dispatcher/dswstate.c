@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dswstate - Dispatcher parse tree walk management routines
- *              $Revision: 31 $
+ *              $Revision: 35 $
  *
  *****************************************************************************/
 
@@ -49,12 +49,253 @@
  ******************************************************************************/
 
 ACPI_STATUS
-acpi_ds_result_stack_clear (
+xxx_acpi_ds_result_stack_clear (
 	ACPI_WALK_STATE         *walk_state)
 {
+/*
+	Walk_state->Num_results = 0;
+	Walk_state->Current_result = 0;
+*/
+	return (AE_OK);
+}
 
-	walk_state->num_results = 0;
-	walk_state->current_result = 0;
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_result_insert
+ *
+ * PARAMETERS:  Object              - Object to push
+ *              Walk_state          - Current Walk state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Push an object onto this walk's result stack
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_ds_result_insert (
+	void                    *object,
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state)
+{
+	ACPI_GENERIC_STATE      *state;
+
+
+	state = walk_state->results;
+	if (!state) {
+		return (AE_NOT_EXIST);
+	}
+
+	if (index >= OBJ_NUM_OPERANDS) {
+		return (AE_BAD_PARAMETER);
+	}
+
+	if (!object) {
+		return (AE_BAD_PARAMETER);
+	}
+
+	state->results.obj_desc [index] = object;
+	state->results.num_results++;
+
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_result_remove
+ *
+ * PARAMETERS:  Object              - Where to return the popped object
+ *              Walk_state          - Current Walk state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Pop an object off the bottom of this walk's result stack.  In
+ *              other words, this is a FIFO.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_ds_result_remove (
+	ACPI_OPERAND_OBJECT     **object,
+	u32                     index,
+	ACPI_WALK_STATE         *walk_state)
+{
+	ACPI_GENERIC_STATE      *state;
+
+
+	state = walk_state->results;
+	if (!state) {
+		return (AE_NOT_EXIST);
+	}
+
+
+
+	/* Check for a valid result object */
+
+	if (!state->results.obj_desc [index]) {
+		return (AE_AML_NO_OPERAND);
+	}
+
+	/* Remove the object */
+
+	state->results.num_results--;
+
+	*object = state->results.obj_desc [index];
+	state->results.obj_desc [index] = NULL;
+
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_result_pop
+ *
+ * PARAMETERS:  Object              - Where to return the popped object
+ *              Walk_state          - Current Walk state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Pop an object off the bottom of this walk's result stack.  In
+ *              other words, this is a FIFO.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_ds_result_pop (
+	ACPI_OPERAND_OBJECT     **object,
+	ACPI_WALK_STATE         *walk_state)
+{
+	u32                     index;
+	ACPI_GENERIC_STATE      *state;
+
+
+	state = walk_state->results;
+	if (!state) {
+		return (AE_OK);
+	}
+
+
+	if (!state->results.num_results) {
+		return (AE_STACK_UNDERFLOW);
+	}
+
+	/* Remove top element */
+
+	state->results.num_results--;
+
+	for (index = OBJ_NUM_OPERANDS; index; index--) {
+		/* Check for a valid result object */
+
+		if (state->results.obj_desc [index -1]) {
+			*object = state->results.obj_desc [index -1];
+			state->results.obj_desc [index -1] = NULL;
+
+			return (AE_OK);
+		}
+	}
+
+
+	return (AE_STACK_UNDERFLOW);
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_result_pop
+ *
+ * PARAMETERS:  Object              - Where to return the popped object
+ *              Walk_state          - Current Walk state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Pop an object off the bottom of this walk's result stack.  In
+ *              other words, this is a FIFO.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_ds_result_pop_from_bottom (
+	ACPI_OPERAND_OBJECT     **object,
+	ACPI_WALK_STATE         *walk_state)
+{
+	u32                     index;
+	ACPI_GENERIC_STATE      *state;
+
+
+	state = walk_state->results;
+	if (!state) {
+		return (AE_NOT_EXIST);
+	}
+
+
+	if (!state->results.num_results) {
+		return (AE_STACK_UNDERFLOW);
+	}
+
+	/* Remove Bottom element */
+
+	*object = state->results.obj_desc [0];
+
+
+	/* Push entire stack down one element */
+
+	for (index = 0; index < state->results.num_results; index++) {
+		state->results.obj_desc [index] = state->results.obj_desc [index + 1];
+	}
+
+	state->results.num_results--;
+
+	/* Check for a valid result object */
+
+	if (!*object) {
+		return (AE_AML_NO_OPERAND);
+	}
+
+	
+	return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    Acpi_ds_result_pop
+ *
+ * PARAMETERS:  Object              - Where to return the popped object
+ *              Walk_state          - Current Walk state
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Pop an object off the bottom of this walk's result stack.  In
+ *              other words, this is a FIFO.
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+acpi_ds_result_push (
+	ACPI_OPERAND_OBJECT     *object,
+	ACPI_WALK_STATE         *walk_state)
+{
+	ACPI_GENERIC_STATE      *state;
+
+
+	state = walk_state->results;
+	if (!state) {
+		return (AE_OK);
+	}
+
+	if (state->results.num_results == OBJ_NUM_OPERANDS) {
+		return (AE_STACK_OVERFLOW);
+	}
+
+	if (!object) {
+		return (AE_BAD_PARAMETER);
+	}
+
+
+	state->results.obj_desc [state->results.num_results] = object;
+	state->results.num_results++;
 
 	return (AE_OK);
 }
@@ -69,23 +310,23 @@ acpi_ds_result_stack_clear (
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Push an object onto this walk's result stack
+ * DESCRIPTION:
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_result_stack_push (
-	void                    *object,
 	ACPI_WALK_STATE         *walk_state)
 {
+	ACPI_GENERIC_STATE      *state;
 
 
-	if (walk_state->num_results >= OBJ_NUM_OPERANDS) {
-		return (AE_STACK_OVERFLOW);
+	state = acpi_cm_create_generic_state ();
+	if (!state) {
+		return (AE_NO_MEMORY);
 	}
 
-	walk_state->results [walk_state->num_results] = object;
-	walk_state->num_results++;
+	acpi_cm_push_generic_state (&walk_state->results, state);
 
 	return (AE_OK);
 }
@@ -95,42 +336,31 @@ acpi_ds_result_stack_push (
  *
  * FUNCTION:    Acpi_ds_result_stack_pop
  *
- * PARAMETERS:  Object              - Where to return the popped object
- *              Walk_state          - Current Walk state
+ * PARAMETERS:  Walk_state          - Current Walk state
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Pop an object off the bottom of this walk's result stack.  In
- *              other words, this is a FIFO.
+ * DESCRIPTION:
  *
  ******************************************************************************/
 
 ACPI_STATUS
 acpi_ds_result_stack_pop (
-	ACPI_OPERAND_OBJECT     **object,
 	ACPI_WALK_STATE         *walk_state)
 {
+	ACPI_GENERIC_STATE      *state;
 
 
 	/* Check for stack underflow */
 
-	if (walk_state->num_results == 0) {
+	if (walk_state->results == NULL) {
 		return (AE_AML_NO_OPERAND);
 	}
 
 
-	/* Pop the stack */
+	state = acpi_cm_pop_generic_state (&walk_state->results);
 
-	walk_state->num_results--;
-
-	/* Check for a valid result object */
-
-	if (!walk_state->results [walk_state->num_results]) {
-		return (AE_AML_NO_OPERAND);
-	}
-
-	*object = walk_state->results [walk_state->num_results];
-	walk_state->results [walk_state->num_results] = NULL;
+	acpi_cm_delete_generic_state (state);
 
 	return (AE_OK);
 }
@@ -414,7 +644,7 @@ acpi_ds_get_current_walk_state (
  *
  ******************************************************************************/
 
-void
+static void
 acpi_ds_push_walk_state (
 	ACPI_WALK_STATE         *walk_state,
 	ACPI_WALK_LIST          *walk_list)
@@ -528,7 +758,9 @@ acpi_ds_create_walk_state (
 
 	/* Init the method args/local */
 
+#ifndef _ACPI_ASL_COMPILER
 	acpi_ds_method_data_init (walk_state);
+#endif
 
 	/* Put the new state at the head of the walk list */
 
@@ -565,6 +797,7 @@ acpi_ds_delete_walk_state (
 		return;
 	}
 
+
 	/* Always must free any linked control states */
 
 	while (walk_state->control_state) {
@@ -574,7 +807,6 @@ acpi_ds_delete_walk_state (
 		acpi_cm_delete_generic_state (state);
 	}
 
-
 	/* Always must free any linked parse states */
 
 	while (walk_state->scope_info) {
@@ -583,6 +815,16 @@ acpi_ds_delete_walk_state (
 
 		acpi_cm_delete_generic_state (state);
 	}
+
+	/* Always must free any stacked result states */
+
+	while (walk_state->results) {
+		state = walk_state->results;
+		walk_state->results = state->common.next;
+
+		acpi_cm_delete_generic_state (state);
+	}
+
 
 	/* If walk cache is full, just free this wallkstate object */
 
