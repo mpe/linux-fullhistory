@@ -157,13 +157,20 @@ You can either use "get_dvb_firmware dibusb" to download the firmware or you
 can get it directly via
 
 for USB1.1 (AN2135)
-http://linuxtv.org/cgi-bin/cvsweb.cgi/dvb-kernel/firmware/dvb-dibusb-5.0.0.11.fw?rev=1.1&content-type=text/plain
+http://www.linuxtv.org/downloads/firmware/dvb-dibusb-5.0.0.11.fw
 
 for USB1.1 (AN2235) (a few Artec T1 devices)
-http://linuxtv.org/cgi-bin/cvsweb.cgi/dvb-kernel/firmware/dvb-dibusb-an2235-1.fw?rev=1.1&content-type=text/plain
+http://www.linuxtv.org/downloads/firmware/dvb-dibusb-an2235-1.fw
 
-for USB2.0 (FX2)
-http://linuxtv.org/cgi-bin/cvsweb.cgi/dvb-kernel/firmware/dvb-dibusb-6.0.0.5.fw?rev=1.1&content-type=text/plain
+for USB2.0 (FX2) Hauppauge, DiBcom
+http://www.linuxtv.org/downloads/firmware/dvb-dibusb-6.0.0.5.fw
+
+for USB2.0 ADSTech/Kworld USB2.0
+http://www.linuxtv.org/downloads/firmware/dvb-dibusb-adstech-usb2-1.fw
+
+for USB2.0 HanfTek
+http://www.linuxtv.org/downloads/firmware/dvb-dibusb-an2235-1.fw
+
 
 1.2. Compiling
 
@@ -203,7 +210,7 @@ in vdr is working now also.
 
 2. Known problems and bugs
 
-- none this time
+- Don't remove the USB device while running an DVB application, your system will die.
 
 2.1. Adding support for devices
 
@@ -242,7 +249,7 @@ now use the dmx_sw_filter function instead of dmx_sw_filter_packet. I hope the
 linux-dvb software filter is able to get the best of the garbled TS.
 
 The bug, where the TS is distorted by a heavy usage of the device is gone
-definitely.  All dibusb-devices I was using (Twinhan, Kworld, DiBcom) are
+definitely. All dibusb-devices I was using (Twinhan, Kworld, DiBcom) are
 working like charm now with VDR. Sometimes I even was able to record a channel
 and watch another one.
 
