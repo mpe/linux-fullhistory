@@ -76,12 +76,18 @@ resume:
 		/* Decrement count for unused children */
 		count += (dentry->d_count - 1);
 
-		/* Mountpoints don't count (either mountee or mounter) */
-		if (d_mountpoint(dentry) ||
-		    dentry != dentry->d_covers) {
+		/* Mountpoints don't count */
+		if (d_mountpoint(dentry)) {
 			DPRINTK(("is_tree_busy: mountpoint dentry=%p covers=%p mounts=%p\n",
 				 dentry, dentry->d_covers, dentry->d_mounts));
 			adj++;
+		}
+
+		/* ... and roots - twice as much... */
+		if (dentry != dentry->d_covers) {
+			DPRINTK(("is_tree_busy: mountpoint dentry=%p covers=%p mounts=%p\n",
+				 dentry, dentry->d_covers, dentry->d_mounts));
+			adj+=2;
 		}
 
 		/* Ignore autofs's extra reference */

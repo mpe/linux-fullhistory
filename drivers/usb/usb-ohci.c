@@ -81,11 +81,8 @@ static void urb_rm_priv (urb_t * urb)
 {
 	urb_priv_t * urb_priv = urb->hcpriv;
 	int i;
-	void * wait;
 	
 	if (!urb_priv) return;
-	
-	wait = urb_priv->wait;
 	
 	for (i = 0; i < urb_priv->length; i++) {
 		if (urb_priv->td [i]) {
@@ -94,11 +91,8 @@ static void urb_rm_priv (urb_t * urb)
 	}
 	kfree (urb->hcpriv);
 	urb->hcpriv = NULL;
-	
-	if (wait) {
-		add_wait_queue (&op_wakeup, wait); 
-		wake_up (&op_wakeup);
-	}
+
+	wake_up (&op_wakeup);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -476,7 +470,6 @@ static int sohci_submit_urb (urb_t * urb)
 	urb_priv->td_cnt = 0;
 	urb_priv->state = 0;
 	urb_priv->ed = ed;	
-	urb_priv->wait = NULL;
 	
 	/* allocate the TDs */
 	for (i = 0; i < size; i++) { 
@@ -540,20 +533,20 @@ static int sohci_unlink_urb (urb_t * urb)
 		if (urb->status == USB_ST_URB_PENDING) { /* URB active? */
 			urb_priv_t  * urb_priv = urb->hcpriv;
 			urb_priv->state = URB_DEL; 
+
 			/* we want to delete the TDs of an URB from an ed 
 			 * request the deletion, it will be handled at the next USB-frame */
-			urb_priv->wait = &wait;
 			
 			spin_lock_irqsave (&usb_ed_lock, flags);
 			ep_rm_ed (urb->dev, urb_priv->ed);
 			urb_priv->ed->state |= ED_URB_DEL;
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
 
+			add_wait_queue (&op_wakeup, &wait);
 			current->state = TASK_UNINTERRUPTIBLE;
-			if(schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
-				remove_wait_queue (&op_wakeup, &wait); 
-			else
+			if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
 				err("unlink URB timeout!");
+			remove_wait_queue (&op_wakeup, &wait); 
 		} else 
 			urb_rm_priv (urb);
 		usb_dec_dev_use (urb->dev);		
@@ -611,7 +604,7 @@ static int sohci_free_dev (struct usb_device * usb_dev)
   		spin_unlock_irqrestore (&usb_ed_lock, flags);
   		
 		if (cnt > 0) {
-			dev->wait = &wait;
+			add_wait_queue (&op_wakeup, &wait);
 			current->state = TASK_UNINTERRUPTIBLE;
 			schedule_timeout (HZ / 10);
 			remove_wait_queue (&op_wakeup, &wait);
@@ -1160,10 +1153,8 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
    	 		ed->hwINFO = cpu_to_le32 (OHCI_ED_SKIP); 
    	 		ed->state = ED_NEW; 
    	 		/* if all eds are removed wake up sohci_free_dev */
-   	 		if ((! --dev->ed_cnt) && dev->wait) {
-   	 			add_wait_queue (&op_wakeup, dev->wait); 
+   	 		if (!--dev->ed_cnt)
 				wake_up (&op_wakeup);
-			}
    	 	}
    	 	else {
    	 		ed->state &= ~ED_URB_DEL;
@@ -1924,21 +1915,9 @@ static int hc_start_ohci (struct pci_dev * dev)
 {
 	unsigned long mem_base;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 	mem_base = dev->resource[0].start;
 	if (pci_enable_device(dev) < 0)
 		return -ENODEV;
-#else
-	u16 cmd;
-
-	mem_base = dev->base_address[0];
-	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO) return -ENODEV;
-	mem_base &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	/* Some Mac firmware will switch memory response off */
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	pci_write_config_word(dev, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY);
-#endif
 	
 	pci_set_master (dev);
 	mem_base = (unsigned long) ioremap_nocache (mem_base, 4096);
@@ -1998,15 +1977,15 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 	if (ohci) {
 		switch (rqst) {
 		case PM_SUSPEND:
-			dbg("USB-Bus suspend: %p", ohci->regs);
-			if (ohci->bus->root_hub)
-				usb_disconnect (&ohci->bus->root_hub);
-			hc_reset (ohci);
+			dbg("USB-Bus suspend: %p", ohci);
+			writel (ohci->hc_control = 0xFF, &ohci->regs->control);
+			wait_ms (10);
 			break;
 		case PM_RESUME:
-			dbg("USB-Bus resume: %p", ohci->regs);
-			if ((temp = hc_reset (ohci)) < 0 || (temp = hc_start (ohci)) < 0)
-				err ("can't restart controller, %d", temp);
+			dbg("USB-Bus resume: %p", ohci);
+			writel (ohci->hc_control = 0x7F, &ohci->regs->control);
+			wait_ms (20);
+			writel (ohci->hc_control = 0xBF, &ohci->regs->control);
 			break;
 		}
 	}

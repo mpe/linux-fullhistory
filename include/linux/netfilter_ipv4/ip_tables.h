@@ -346,6 +346,9 @@ struct ipt_match
 			  unsigned int matchinfosize,
 			  unsigned int hook_mask);
 
+	/* Called when entry of this type deleted. */
+	void (*destroy)(void *matchinfo, unsigned int matchinfosize);
+
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;
 };
@@ -374,6 +377,9 @@ struct ipt_target
 			  void *targinfo,
 			  unsigned int targinfosize,
 			  unsigned int hook_mask);
+
+	/* Called when entry of this type deleted. */
+	void (*destroy)(void *targinfo, unsigned int targinfosize);
 
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;

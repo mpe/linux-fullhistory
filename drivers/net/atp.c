@@ -571,9 +571,7 @@ net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		for (i = 0; i < 6; i++)
 			write_reg_byte(ioaddr, PAR0 + i, dev->dev_addr[i]);
 #ifdef TIMED_CHECKER
-		del_timer(&atp_timer);
-		atp_timer.expires = jiffies + TIMED_CHECKER;
-		add_timer(&atp_timer);
+		mod_timer(&atp_timer, jiffies+TIMED_CHECKER);
 #endif
 	}
 
@@ -605,9 +603,7 @@ static void atp_timed_checker(unsigned long ignored)
 	for (i = 0; i < 6; i++)
 		write_reg_byte(ioaddr, PAR0 + i, atp_timed_dev->dev_addr[i]);
 	spin_unlock(&lp->lock);
-	del_timer(&atp_timer);
-	atp_timer.expires = jiffies + TIMED_CHECKER;
-	add_timer(&atp_timer);
+	mod_timer(&atp_timer, jiffies+TIMED_CHECKER);
 }
 #endif
 

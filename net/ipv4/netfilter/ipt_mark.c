@@ -34,7 +34,7 @@ checkentry(const char *tablename,
 }
 
 static struct ipt_match mark_match
-= { { NULL, NULL }, "mark", &match, &checkentry, THIS_MODULE };
+= { { NULL, NULL }, "mark", &match, &checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

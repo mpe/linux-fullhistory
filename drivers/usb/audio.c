@@ -2159,10 +2159,10 @@ static int usb_audio_mmap(struct file *file, struct vm_area_struct *vma)
 		db = &as->usbin.dma;
 	} else
 		return -EINVAL;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,22)
+
 	if (vma->vm_pgoff != 0)
 		return -EINVAL;
-#endif
+
 	return dmabuf_mmap(db,  vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot);
 }
 

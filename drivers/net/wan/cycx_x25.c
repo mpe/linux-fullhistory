@@ -1513,11 +1513,8 @@ static void reset_timer(struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 
-	if (chan->svc) {
-		del_timer(&chan->timer);
-		chan->timer.expires = jiffies + chan->idle_tmout * HZ;
-		add_timer(&chan->timer);
-	}
+	if (chan->svc)
+		mod_timer(&chan->timer, jiffies+chan->idle_tmout*HZ);
 }
 #ifdef CYCLOMX_X25_DEBUG
 static void x25_dump_config(TX25Config *conf)

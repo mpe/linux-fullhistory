@@ -144,14 +144,21 @@ static unsigned long acpi_opts = ACPI_ENABLED;
 
 struct acpi_errata_info
 {
-	const char *oem;
-	const char *oem_table;
-	u32 oem_rev;
-	unsigned long options;
+	const char *signature; // table signature (eg. "RSDT")
+	const char *oem;       // OEM name
+	const char *oem_table; // OEM table identifier (optional)
+	u32 oem_rev;           // OEM table revision (optional)
+	unsigned long options; // errata options
 };
 
+/*
+ * We must identify systems that need ACPI_TRUST_TABLES solely from the
+ * RSDP ("RSD PTR ").  All other options should be flagged from the
+ * RSDT ("RSDT") which can be better identified.
+ */
 struct acpi_errata_info acpi_errata[] =
 {
+	{"RSD PTR ", "AMI   ", NULL, 0, ACPI_TRUST_TABLES | ACPI_COPY_TABLES},
 	{NULL, NULL, 0, 0},
 };
 
@@ -521,6 +528,51 @@ static void acpi_destroy_table(struct acpi_table_info *info)
 }
 
 /*
+ * Match ACPI table and set options based on platform errata, if any
+ */
+static int __init acpi_find_errata(struct acpi_table *table)
+{
+	struct acpi_errata_info *info;
+	int size;
+
+	for (info = acpi_errata; info->signature && info->oem; info++) {
+		size = strlen(info->signature);
+		if (memcmp(&table->signature, info->signature, size))
+			continue;
+		if (strcmp(info->signature, "RSD PTR ")) {
+			// ordinary ACPI table
+			size = strlen(info->oem);
+			if (memcmp(table->oem, info->oem, size))
+				continue;
+			if (info->oem_table) {
+				size = strlen(info->oem_table);
+				if (memcmp(table->oem_table,
+					   info->oem_table,
+					   size))
+					continue;
+			}
+			if (info->oem_rev && table->oem_rev != info->oem_rev)
+				continue;
+		}
+		else {
+			// special handling for RSDP
+			size = strlen(info->oem);
+			if (memcmp(((struct acpi_rsdp*) table)->oem,
+				   info->oem,
+				   size))
+				continue;
+		}
+
+		printk(KERN_INFO
+		       "ACPI: found platform errata 0x%08lx\n",
+		       info->options);
+		acpi_opts |= info->options;
+		return 0;
+	}
+	return -1;
+}
+
+/*
  * Locate and map ACPI tables
  */
 static int __init acpi_find_tables(void)
@@ -556,6 +608,14 @@ static int __init acpi_find_tables(void)
 	if (i >= ACPI_BIOS_ROM_END)
 		return -ENODEV;
 
+	// find any errata based on the RSDP
+	if (!acpi_find_errata((struct acpi_table*) rsdp)) {
+		if (acpi_opts & ACPI_DISABLED)
+			return -EINVAL;
+		else if (acpi_opts & ACPI_CHIPSET_ONLY)
+			return -ENODEV;
+	}
+
 	// fetch RSDT from RSDP
 	rsdt = acpi_map_table(rsdp->rsdt);
 	if (!rsdt) {
@@ -569,6 +629,15 @@ static int __init acpi_find_tables(void)
 		acpi_unmap_table(rsdt);
 		return -EINVAL;
 	}
+
+	// find any errata based on the RSDT
+	if (!acpi_find_errata(rsdt)) {
+		if (acpi_opts & ACPI_DISABLED)
+			return -EINVAL;
+		else if (acpi_opts & ACPI_CHIPSET_ONLY)
+			return -ENODEV;
+	}
+
 	// search RSDT for FACP
 	acpi_facp.table = NULL;
 	rsdt_entry = (u32 *) (rsdt + 1);

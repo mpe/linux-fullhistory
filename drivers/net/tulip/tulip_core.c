@@ -1348,6 +1348,7 @@ static void tulip_suspend (struct pci_dev *pdev)
 		netif_device_detach (dev);
 		tulip_down (dev);
 	}
+	pci_set_power_state(pdev, 3);
 }
 
 
@@ -1355,6 +1356,7 @@ static void tulip_resume (struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 
+	pci_enable_device(pdev);
 	if (dev && !netif_device_present (dev)) {
 		tulip_up (dev);
 		netif_device_attach (dev);

@@ -80,11 +80,11 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 			continue;
 		}
 
-		if ( !is_root_busy(dentry->d_mounts) ) {
+		if ( may_umount(dentry->d_mounts->d_sb) == 0 ) {
 			DPRINTK(("autofs: signaling expire on %s\n", ent->name));
 			return ent; /* Expirable! */
 		}
-		DPRINTK(("autofs: didn't expire due to is_root_busy: %s\n", ent->name));
+		DPRINTK(("autofs: didn't expire due to may_umount: %s\n", ent->name));
 	}
 	return NULL;		/* No expirable entries */
 }

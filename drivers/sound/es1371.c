@@ -2664,11 +2664,12 @@ static int __devinit es1371_probe(struct pci_dev *pcidev, const struct pci_devic
 		printk(KERN_ERR PFX "io ports %#lx-%#lx in use\n", s->io, s->io+ES1371_EXTENT-1);
 		goto err_region;
 	}
+	if (pci_enable_device(pcidev))
+		goto err_irq;
 	if (request_irq(s->irq, es1371_interrupt, SA_SHIRQ, "es1371", s)) {
 		printk(KERN_ERR PFX "irq %u in use\n", s->irq);
 		goto err_irq;
 	}
-	pci_enable_device(pcidev);
 	printk(KERN_INFO PFX "found es1371 rev %d at io %#lx irq %u\n"
 	       KERN_INFO PFX "features: joystick 0x%x\n", s->rev, s->io, s->irq, joystick[devindex]);
 	/* register devices */

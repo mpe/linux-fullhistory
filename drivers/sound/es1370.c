@@ -2494,11 +2494,12 @@ static int __devinit es1370_probe(struct pci_dev *pcidev, const struct pci_devic
 		printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);
 		goto err_region;
 	}
+	if (pci_enable_device(pcidev))
+		goto err_irq;
 	if (request_irq(s->irq, es1370_interrupt, SA_SHIRQ, "es1370", s)) {
 		printk(KERN_ERR "es1370: irq %u in use\n", s->irq);
 		goto err_irq;
 	}
-	pci_enable_device(pcidev);
 	/* initialize codec registers */
 	/* note: setting CTRL_SERR_DIS is reported to break
 	 * mic bias setting (by Kim.Berts@fisub.mail.abb.com) */

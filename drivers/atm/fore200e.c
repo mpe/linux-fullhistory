@@ -647,6 +647,9 @@ fore200e_pca_detect(const struct fore200e_bus* bus, int index)
 	if (pci_dev == NULL)
 	    return NULL;
     } while (count--);
+
+    if (pci_enable_device(pci_dev))
+	return NULL;
     
     fore200e = fore200e_kmalloc(sizeof(struct fore200e), GFP_KERNEL);
     if (fore200e == NULL)
@@ -655,7 +658,7 @@ fore200e_pca_detect(const struct fore200e_bus* bus, int index)
     fore200e->bus       = bus;
     fore200e->bus_dev   = pci_dev;    
     fore200e->irq       = pci_dev->irq;
-    fore200e->phys_base = (pci_dev->resource[0].start & PCI_BASE_ADDRESS_MEM_MASK);
+    fore200e->phys_base = pci_resource_start (pci_dev, 0);
 
 #if defined(__powerpc__)
     fore200e->phys_base += KERNELBASE;
@@ -663,7 +666,6 @@ fore200e_pca_detect(const struct fore200e_bus* bus, int index)
 
     sprintf(fore200e->name, "%s-%d", bus->model_name, index - 1);
 
-    pci_enable_device(pci_dev);
     pci_set_master(pci_dev);
 
     return fore200e;

@@ -51,7 +51,10 @@ enum ip_conntrack_status {
 	IPS_EXPECTED = 0x01,
 
 	/* We've seen packets both ways: bit 1 set.  Can be set, not unset. */
-	IPS_SEEN_REPLY = 0x02
+	IPS_SEEN_REPLY = 0x02,
+
+	/* Packet seen leaving box: bit 2 set.  Can be set, not unset. */
+	IPS_CONFIRMED = 0x04
 };
 
 struct ip_conntrack_expect
@@ -88,7 +91,7 @@ struct ip_conntrack
 	struct ip_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
 
 	/* Have we seen traffic both ways yet? (bitset) */
-	unsigned int status;
+	volatile unsigned int status;
 
 	/* Timer function; drops refcnt when it goes off. */
 	struct timer_list timeout;

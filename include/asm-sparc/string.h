@@ -34,7 +34,7 @@ extern __kernel_size_t __memset(void *,int,__kernel_size_t);
 
 #define __HAVE_ARCH_MEMCPY
 
-extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_t n)
+static inline void *__constant_memcpy(void *to, const void *from, __kernel_size_t n)
 {
 	extern void __copy_1page(void *, const void *);
 
@@ -53,7 +53,7 @@ extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_
 	return to;
 }
 
-extern inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_size_t n)
+static inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_size_t n)
 {
 	__memcpy(to, from, n);
 	return to;
@@ -67,7 +67,7 @@ extern inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_si
 
 #define __HAVE_ARCH_MEMSET
 
-extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size_t count)
+static inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size_t count)
 {
 	extern void bzero_1page(void *);
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
@@ -83,7 +83,7 @@ extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size
 	return s;
 }
 
-extern inline void *__constant_c_memset(void *s, char c, __kernel_size_t count)
+static inline void *__constant_c_memset(void *s, char c, __kernel_size_t count)
 {
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
@@ -94,7 +94,7 @@ extern inline void *__constant_c_memset(void *s, char c, __kernel_size_t count)
 	return s;
 }
 
-extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
+static inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
 {
 	__memset(s, c, count);
 	return s;
@@ -134,7 +134,7 @@ extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
 
 extern int __strncmp(const char *, const char *, __kernel_size_t);
 
-extern inline int __constant_strncmp(const char *src, const char *dest, __kernel_size_t count)
+static inline int __constant_strncmp(const char *src, const char *dest, __kernel_size_t count)
 {
 	register int retval;
 	switch(count) {

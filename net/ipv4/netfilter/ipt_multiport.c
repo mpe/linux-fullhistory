@@ -84,7 +84,7 @@ checkentry(const char *tablename,
 }
 
 static struct ipt_match multiport_match
-= { { NULL, NULL }, "multiport", &match, &checkentry, THIS_MODULE };
+= { { NULL, NULL }, "multiport", &match, &checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

@@ -14,6 +14,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/27/2000) Ryan VanderBijl
+ * 	Put calls to *_paranoia_checks into one function.
+ * 
  * (04/23/2000) gkh
  *	Fixed bug that Randy Dunlap found for Generic devices with no bulk out ports.
  *	Moved when the startup code printed out the devices that are supported.
@@ -318,6 +321,20 @@ static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS] = {NULL, };
 
 
+static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, const char *function) 
+{ 
+	/* if no port was specified, or it fails a paranoia check */
+	if (!port || 
+		port_paranoia_check (port, function) ||
+		serial_paranoia_check (port->serial, function)) {
+		/* then say that we dont have a valid usb_serial thing, which will
+		 * end up genrating -ENODEV return values */ 
+		return NULL;
+	}
+
+	return port->serial;
+}
+
 
 static struct usb_serial *get_serial_by_minor (int minor)
 {
@@ -357,7 +374,7 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 		for (i = *minor+1; (i < (*minor + num_ports)) && (i < SERIAL_TTY_MINORS); ++i)
 			serial_table[i] = serial;
 		return serial;
-		}
+	}
 	return NULL;
 }
 
@@ -454,16 +471,9 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 static void serial_close(struct tty_struct *tty, struct file * filp)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
+	struct usb_serial *serial = get_usb_serial (port, "serial_close");
 
-	dbg("serial_close");
-
-	if (port_paranoia_check (port, "serial_close")) {
-		return;
-	}
-
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_close")) {
+	if (!serial) {
 		return;
 	}
 
@@ -486,16 +496,9 @@ static void serial_close(struct tty_struct *tty, struct file * filp)
 static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
+	struct usb_serial *serial = get_usb_serial (port, "serial_write");
 	
-	dbg("serial_write");
-	
-	if (port_paranoia_check (port, "serial_write")) {
-		return -ENODEV;
-	}
-	
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_write")) {
+	if (!serial) {
 		return -ENODEV;
 	}
 	
@@ -518,26 +521,19 @@ static int serial_write (struct tty_struct * tty, int from_user, const unsigned 
 static int serial_write_room (struct tty_struct *tty) 
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_write_room");
-	
-	if (port_paranoia_check (port, "serial_write")) {
+	struct usb_serial *serial = get_usb_serial (port, "serial_write_room");
+
+	if (!serial) {
 		return -ENODEV;
 	}
-	
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_write")) {
-		return -ENODEV;
-	}
-	
+
 	dbg("serial_write_room port %d", port->number);
 	
 	if (!port->active) {
 		dbg ("port not open");
 		return -EINVAL;
 	}
-	
+
 	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->write_room) {
 		return (serial->type->write_room(port));
@@ -550,24 +546,17 @@ static int serial_write_room (struct tty_struct *tty)
 static int serial_chars_in_buffer (struct tty_struct *tty) 
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_chars_in_buffer");
-	
-	if (port_paranoia_check (port, "serial_chars_in_buffer")) {
+	struct usb_serial *serial = get_usb_serial (port, "serial_chars_in_buffer");
+
+	if (!serial) {
 		return -ENODEV;
 	}
-	
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_chars_in_buffer")) {
-		return -ENODEV;
-	}
-	
+
 	if (!port->active) {
 		dbg ("port not open");
 		return -EINVAL;
 	}
-	
+
 	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->chars_in_buffer) {
 		return (serial->type->chars_in_buffer(port));
@@ -580,21 +569,14 @@ static int serial_chars_in_buffer (struct tty_struct *tty)
 static void serial_throttle (struct tty_struct * tty)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_throttle");
-	
-	if (port_paranoia_check (port, "serial_throttle")) {
+	struct usb_serial *serial = get_usb_serial (port, "serial_throttle");
+
+	if (!serial) {
 		return;
 	}
-	
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_throttle")) {
-		return;
-	}
-	
+
 	dbg("serial_throttle port %d", port->number);
-	
+
 	if (!port->active) {
 		dbg ("port not open");
 		return;
@@ -612,21 +594,14 @@ static void serial_throttle (struct tty_struct * tty)
 static void serial_unthrottle (struct tty_struct * tty)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_unthrottle");
-	
-	if (port_paranoia_check (port, "serial_unthrottle")) {
+	struct usb_serial *serial = get_usb_serial (port, "serial_unthrottle");
+
+	if (!serial) {
 		return;
 	}
-	
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_unthrottle")) {
-		return;
-	}
-	
+
 	dbg("serial_unthrottle port %d", port->number);
-	
+
 	if (!port->active) {
 		dbg ("port not open");
 		return;
@@ -644,21 +619,14 @@ static void serial_unthrottle (struct tty_struct * tty)
 static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_ioctl");
-	
-	if (port_paranoia_check (port, "serial_ioctl")) {
+	struct usb_serial *serial = get_usb_serial (port, "serial_ioctl");
+
+	if (!serial) {
 		return -ENODEV;
 	}
 
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_ioctl")) {
-		return -ENODEV;
-	}
-	
 	dbg("serial_ioctl port %d", port->number);
-	
+
 	if (!port->active) {
 		dbg ("port not open");
 		return -ENODEV;
@@ -676,16 +644,9 @@ static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned in
 static void serial_set_termios (struct tty_struct *tty, struct termios * old)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_set_termios");
-	
-	if (port_paranoia_check (port, "serial_set_termios")) {
-		return;
-	}
+	struct usb_serial *serial = get_usb_serial (port, "serial_set_termios");
 
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_set_termios")) {
+	if (!serial) {
 		return;
 	}
 
@@ -708,16 +669,9 @@ static void serial_set_termios (struct tty_struct *tty, struct termios * old)
 static void serial_break (struct tty_struct *tty, int break_state)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial;
-	
-	dbg("serial_break");
-	
-	if (port_paranoia_check (port, "serial_break")) {
-		return;
-	}
+	struct usb_serial *serial = get_usb_serial (port, "serial_break");
 
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "serial_break")) {
+	if (!serial) {
 		return;
 	}
 
@@ -861,22 +815,15 @@ static int generic_chars_in_buffer (struct usb_serial_port *port)
 static void generic_read_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
-	struct usb_serial *serial;
-       	struct tty_struct *tty;
-       	unsigned char *data = urb->transfer_buffer;
+	struct usb_serial *serial = get_usb_serial (port, "generic_read_bulk_callback");
+	struct tty_struct *tty;
+	unsigned char *data = urb->transfer_buffer;
 	int i;
 
-	dbg("generic_read_bulk_callback");
-
-	if (port_paranoia_check (port, "generic_read_bulk_callback")) {
+	if (!serial) {
 		return;
 	}
 
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "generic_read_bulk_callback")) {
-		return;
-	}
-	
 	if (urb->status) {
 		dbg("nonzero read bulk status received: %d", urb->status);
 		return;
@@ -911,20 +858,13 @@ static void generic_read_bulk_callback (struct urb *urb)
 static void generic_write_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
-	struct usb_serial *serial;
-       	struct tty_struct *tty;
+	struct usb_serial *serial = get_usb_serial (port, "generic_write_bulk_callback");
+	struct tty_struct *tty;
 
-	dbg("generic_write_bulk_callback");
-
-	if (port_paranoia_check (port, "generic_write_bulk_callback")) {
+	if (!serial) {
 		return;
 	}
 
-	serial = port->serial;
-	if (serial_paranoia_check (serial, "generic_write_bulk_callback")) {
-		return;
-	}
-	
 	if (urb->status) {
 		dbg("nonzero write bulk status received: %d", urb->status);
 		return;

@@ -1811,6 +1811,7 @@ int __init zatm_detect(void)
 		while ((pci_dev = pci_find_device(PCI_VENDOR_ID_ZEITNET,type ?
 		    PCI_DEVICE_ID_ZEITNET_1225 : PCI_DEVICE_ID_ZEITNET_1221,
 		    pci_dev))) {
+			if (pci_enable_device(pci_dev)) break;
 			dev = atm_dev_register(DEV_LABEL,&ops,-1,NULL);
 			if (!dev) break;
 			zatm_dev->pci_dev = pci_dev;

@@ -120,7 +120,7 @@ static int check(const char *tablename,
 }
 
 static struct ipt_target ipt_reject_reg
-= { { NULL, NULL }, "REJECT", reject, check, THIS_MODULE };
+= { { NULL, NULL }, "REJECT", reject, check, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

@@ -124,7 +124,7 @@ ipt_limit_checkentry(const char *tablename,
 }
 
 static struct ipt_match ipt_limit_reg
-= { { NULL, NULL }, "limit", ipt_limit_match, ipt_limit_checkentry,
+= { { NULL, NULL }, "limit", ipt_limit_match, ipt_limit_checkentry, NULL,
     THIS_MODULE };
 
 static int __init init(void)

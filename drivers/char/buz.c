@@ -3324,7 +3324,10 @@ static int find_zr36057(void)
 
 		spin_lock_init(&zr->lock);
 
-		zr->zr36057_adr = zr->pci_dev->resource[0].start;
+		if (pci_enable_device(dev))
+			continue;
+
+		zr->zr36057_adr = pci_resource_start(zr->pci_dev, 0);
 		pci_read_config_byte(zr->pci_dev, PCI_CLASS_REVISION, &zr->revision);
 		if (zr->revision < 2) {
 			printk(KERN_INFO "%s: Zoran ZR36057 (rev %d) irq: %d, memory: 0x%08x.\n",
@@ -3332,8 +3335,8 @@ static int find_zr36057(void)
 		} else {
 			unsigned short ss_vendor_id, ss_id;
 
-			pci_read_config_word(zr->pci_dev, PCI_SUBSYSTEM_VENDOR_ID, &ss_vendor_id);
-			pci_read_config_word(zr->pci_dev, PCI_SUBSYSTEM_ID, &ss_id);
+			ss_vendor_id = zr->pci_dev->subsystem_vendor;
+			ss_id = zr->pci_dev->subsystem_device;
 			printk(KERN_INFO "%s: Zoran ZR36067 (rev %d) irq: %d, memory: 0x%08x\n",
 			       zr->name, zr->revision, zr->pci_dev->irq, zr->zr36057_adr);
 			printk(KERN_INFO "%s: subsystem vendor=0x%04x id=0x%04x\n",
@@ -3346,6 +3349,10 @@ static int find_zr36057(void)
 		}
 
 		zr->zr36057_mem = ioremap(zr->zr36057_adr, 0x1000);
+		if (!zr->zr36057_mem) {
+			printk(KERN_ERR "%s: ioremap failed\n", zr->name);
+			/* XXX handle error */
+		}
 
 		/* set PCI latency timer */
 		pci_read_config_byte(zr->pci_dev, PCI_LATENCY_TIMER, &latency);

@@ -3206,6 +3206,7 @@ __initfunc(int ia_detect(void))
 		IF_INIT(printk("ia detected at bus:%d dev: %d function:%d\n",
                      iadev->pci->bus->number, PCI_SLOT(iadev->pci->devfn), 
                                                  PCI_FUNC(iadev->pci->devfn));)  
+		if (pci_enable_device(iadev->pci)) break;
 		dev = atm_dev_register(DEV_LABEL, &ops, -1, NULL);
 		if (!dev) break;  
 		IF_INIT(printk(DEV_LABEL "registered at (itf :%d)\n", 

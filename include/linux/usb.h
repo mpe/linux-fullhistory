@@ -82,18 +82,19 @@
 #define USB_PID_OUT                            0xe1
 #define USB_PID_ACK                            0xd2
 #define USB_PID_DATA0                          0xc3
-#define USB_PID_UNDEF_4                        0xb4
+#define USB_PID_PING                           0xb4	/* USB 2.0 */
 #define USB_PID_SOF                            0xa5
-#define USB_PID_UNDEF_6                        0x96
-#define USB_PID_UNDEF_7                        0x87
-#define USB_PID_UNDEF_8                        0x78
+#define USB_PID_NYET                           0x96	/* USB 2.0 */
+#define USB_PID_DATA2                          0x87	/* USB 2.0 */
+#define USB_PID_SPLIT                          0x78	/* USB 2.0 */
 #define USB_PID_IN                             0x69
 #define USB_PID_NAK                            0x5a
 #define USB_PID_DATA1                          0x4b
-#define USB_PID_PREAMBLE                       0x3c
+#define USB_PID_PREAMBLE                       0x3c	/* Token mode */
+#define USB_PID_ERR                            0x3c	/* USB 2.0: handshake mode */
 #define USB_PID_SETUP                          0x2d
 #define USB_PID_STALL                          0x1e
-#define USB_PID_UNDEF_F                        0x0f
+#define USB_PID_MDATA                          0x0f	/* USB 2.0 */
 
 /*
  * Standard requests
@@ -133,43 +134,6 @@
 #include <linux/list.h>
 
 #define USB_MAJOR 180
-
-/* for 2.2-kernels */
- 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-
-static __inline__ void list_add_tail(struct list_head *new, struct list_head *head)
-{
-	__list_add(new, head->prev, head);
-}
-#define LIST_HEAD_INIT(name) { &(name), &(name) }
-
-typedef struct wait_queue wait_queue_t;
-
-typedef struct wait_queue *wait_queue_head_t;
-#define DECLARE_WAITQUEUE(wait, current) \
-	struct wait_queue wait = { current, NULL }
-#define DECLARE_WAIT_QUEUE_HEAD(wait)\
-	wait_queue_head_t wait
-
-#define init_waitqueue_head(x) *x=NULL
-#define init_MUTEX(x) *(x)=MUTEX
-#define DECLARE_MUTEX(name) struct semaphore name=MUTEX
-#define DECLARE_MUTEX_LOCKED(name) struct semaphore name=MUTEX_LOCKED
-
-
-#define __set_current_state(state_value)                        \
-	do { current->state = state_value; } while (0)
-#ifdef CONFIG_SMP
-#define set_current_state(state_value)          \
-	set_mb(current->state, state_value)
-#else
-#define set_current_state(state_value)          \
-	__set_current_state(state_value)
-#endif
-
-#endif // 2.2.x
-
 
 static __inline__ void wait_ms(unsigned int ms)
 {

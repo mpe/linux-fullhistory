@@ -321,7 +321,7 @@ void ipmr_expire_process(unsigned long dummy)
 	struct mfc_cache *c, **cp;
 
 	if (!spin_trylock(&mfc_unres_lock)) {
-		mod_timer(&ipmr_expire_timer, jiffies + HZ/10);
+		mod_timer(&ipmr_expire_timer, jiffies+HZ/10);
 		return;
 	}
 
@@ -661,9 +661,7 @@ ipmr_cache_unresolved(vifi_t vifi, struct sk_buff *skb)
 		c->next = mfc_unres_queue;
 		mfc_unres_queue = c;
 
-		if (!del_timer(&ipmr_expire_timer))
-			ipmr_expire_timer.expires = c->mfc_un.unres.expires;
-		add_timer(&ipmr_expire_timer);
+		mod_timer(&ipmr_expire_timer, c->mfc_un.unres.expires);
 	}
 
 	/*

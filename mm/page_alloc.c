@@ -285,9 +285,11 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 		goto allocate_ok;
 
 	/* If we're a memory hog, unmap some pages */
-	if (current->hog && low_on_memory &&
-			(gfp_mask & __GFP_WAIT))
-		swap_out(4, gfp_mask);
+	if (current->hog && low_on_memory && (gfp_mask & __GFP_WAIT)) {
+	//	swap_out(6, gfp_mask);
+	//	shm_swap(6, gfp_mask, (zone_t *)(zone));
+		try_to_free_pages(gfp_mask, (zone_t *)(zone));
+	}
 
 	/*
 	 * (If anyone calls gfp from interrupts nonatomically then it

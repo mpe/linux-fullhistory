@@ -103,6 +103,7 @@ check_for_demasq(struct sk_buff **pskb)
 	struct ip_conntrack_protocol *protocol;
 	struct ip_conntrack_tuple_hash *h;
 	enum ip_conntrack_info ctinfo;
+	struct ip_conntrack *ct;
 	int ret;
 
 	protocol = find_proto(iph->protocol);
@@ -113,31 +114,18 @@ check_for_demasq(struct sk_buff **pskb)
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		/* ICMP errors. */
-		if (icmp_error_track(*pskb)) {
-			/* If it is valid, tranlsate it */
-			if ((*pskb)->nfct) {
-				struct ip_conntrack *ct
-					= (struct ip_conntrack *)
-					(*pskb)->nfct->master;
-				enum ip_conntrack_dir dir;
-
-				if ((*pskb)->nfct-ct->infos >= IP_CT_IS_REPLY)
-					dir = IP_CT_DIR_REPLY;
-				else
-					dir = IP_CT_DIR_ORIGINAL;
-
-				icmp_reply_translation(*pskb,
-						       ct,
-						       NF_IP_PRE_ROUTING,
-						       dir);
-			}
+		if ((ct = icmp_error_track(*pskb, &ctinfo))) {
+			icmp_reply_translation(*pskb, ct,
+					       NF_IP_PRE_ROUTING,
+					       CTINFO2DIR(ctinfo));
 			return NF_ACCEPT;
 		}
 		/* Fall thru... */
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 		if (!get_tuple(iph, (*pskb)->len, &tuple, protocol)) {
-			printk("ip_fw_compat_masq: Couldn't get tuple\n");
+			if (net_ratelimit())
+				printk("ip_fw_compat_masq: Can't get tuple\n");
 			return NF_ACCEPT;
 		}
 		break;
@@ -166,8 +154,9 @@ check_for_demasq(struct sk_buff **pskb)
 					    NF_IP_PRE_ROUTING,
 					    pskb);
 			} else
-				printk("ip_fw_compat_masq: conntrack"
-				       " didn't like\n");
+				if (net_ratelimit()) 
+					printk("ip_fw_compat_masq: conntrack"
+					       " didn't like\n");
 		}
 	} else {
 		if (h)

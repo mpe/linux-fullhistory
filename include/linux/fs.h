@@ -625,6 +625,7 @@ struct super_block {
 	struct list_head	s_files;
 
 	struct block_device	*s_bdev;
+	struct list_head	s_mounts;	/* vfsmount(s) of this one */
 	struct quota_mount_options s_dquot;	/* Diskquota specific options */
 
 	union {
@@ -785,6 +786,7 @@ struct file_system_type var = { \
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
+extern int may_umount(struct super_block *);
 
 static inline int vfs_statfs(struct super_block *sb, struct statfs *buf)
 {
@@ -821,7 +823,7 @@ static inline int locks_verify_locked(struct inode *inode)
 	return 0;
 }
 
-extern inline int locks_verify_area(int read_write, struct inode *inode,
+static inline int locks_verify_area(int read_write, struct inode *inode,
 				    struct file *filp, loff_t offset,
 				    size_t count)
 {
@@ -830,7 +832,7 @@ extern inline int locks_verify_area(int read_write, struct inode *inode,
 	return 0;
 }
 
-extern inline int locks_verify_truncate(struct inode *inode,
+static inline int locks_verify_truncate(struct inode *inode,
 				    struct file *filp,
 				    loff_t size)
 {
@@ -898,7 +900,6 @@ extern struct file_operations write_pipe_fops;
 extern struct file_operations rdwr_pipe_fops;
 
 extern int fs_may_remount_ro(struct super_block *);
-extern int fs_may_mount(kdev_t);
 
 extern int try_to_free_buffers(struct page *);
 extern void refile_buffer(struct buffer_head * buf);
@@ -912,7 +913,7 @@ extern void refile_buffer(struct buffer_head * buf);
 /*
  * This is called by bh->b_end_io() handlers when I/O has completed.
  */
-extern inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
+static inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
 {
 	if (on)
 		set_bit(BH_Uptodate, &bh->b_state);
@@ -922,12 +923,12 @@ extern inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
 
 #define atomic_set_buffer_clean(bh) test_and_clear_bit(BH_Dirty, &(bh)->b_state)
 
-extern inline void __mark_buffer_clean(struct buffer_head *bh)
+static inline void __mark_buffer_clean(struct buffer_head *bh)
 {
 	refile_buffer(bh);
 }
 
-extern inline void mark_buffer_clean(struct buffer_head * bh)
+static inline void mark_buffer_clean(struct buffer_head * bh)
 {
 	if (atomic_set_buffer_clean(bh))
 		__mark_buffer_clean(bh);
@@ -935,12 +936,12 @@ extern inline void mark_buffer_clean(struct buffer_head * bh)
 
 #define atomic_set_buffer_protected(bh) test_and_set_bit(BH_Protected, &(bh)->b_state)
 
-extern inline void __mark_buffer_protected(struct buffer_head *bh)
+static inline void __mark_buffer_protected(struct buffer_head *bh)
 {
 	refile_buffer(bh);
 }
 
-extern inline void mark_buffer_protected(struct buffer_head * bh)
+static inline void mark_buffer_protected(struct buffer_head * bh)
 {
 	if (!atomic_set_buffer_protected(bh))
 		__mark_buffer_protected(bh);
@@ -1034,6 +1035,7 @@ extern loff_t default_llseek(struct file *file, loff_t offset, int origin);
 extern struct dentry * lookup_dentry(const char *, unsigned int);
 extern int walk_init(const char *, unsigned, struct nameidata *);
 extern int walk_name(const char *, struct nameidata *);
+extern int follow_down(struct vfsmount **, struct dentry **);
 extern struct dentry * lookup_one(const char *, struct dentry *);
 extern struct dentry * __namei(const char *, unsigned int);
 
@@ -1064,13 +1066,13 @@ extern struct buffer_head * getblk(kdev_t, int, int);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
 extern int is_read_only(kdev_t);
 extern void __brelse(struct buffer_head *);
-extern inline void brelse(struct buffer_head *buf)
+static inline void brelse(struct buffer_head *buf)
 {
 	if (buf)
 		__brelse(buf);
 }
 extern void __bforget(struct buffer_head *);
-extern inline void bforget(struct buffer_head *buf)
+static inline void bforget(struct buffer_head *buf)
 {
 	if (buf)
 		__bforget(buf);
@@ -1119,7 +1121,6 @@ extern int vfs_readdir(struct file *, filldir_t, void *);
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);
-void remove_vfsmnt(kdev_t dev);
 extern void put_super(kdev_t);
 unsigned long generate_cluster(kdev_t, int b[], int);
 unsigned long generate_cluster_swab32(kdev_t, int b[], int);

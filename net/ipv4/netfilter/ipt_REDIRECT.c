@@ -58,7 +58,7 @@ redirect_target(struct sk_buff **pskb,
 	struct ip_conntrack *ct;
 	enum ip_conntrack_info ctinfo;
 	u_int32_t newdst;
-	const struct ip_nat_range *r = targinfo;
+	const struct ip_nat_multi_range *mr = targinfo;
 	struct ip_nat_multi_range newrange;
 
 	IP_NF_ASSERT(hooknum == NF_IP_PRE_ROUTING
@@ -77,16 +77,17 @@ redirect_target(struct sk_buff **pskb,
 
 	/* Transfer from original range. */
 	newrange = ((struct ip_nat_multi_range)
-		{ 1, { { r->flags | IP_NAT_RANGE_MAP_IPS,
+		{ 1, { { mr->range[0].flags | IP_NAT_RANGE_MAP_IPS,
 			 newdst, newdst,
-			 r->min, r->max } } });
+			 mr->range[0].min, mr->range[0].max } } });
 
 	/* Hand modified range to generic setup. */
 	return ip_nat_setup_info(ct, &newrange, hooknum);
 }
 
 static struct ipt_target redirect_reg
-= { { NULL, NULL }, "REDIRECT", redirect_target, redirect_check, THIS_MODULE };
+= { { NULL, NULL }, "REDIRECT", redirect_target, redirect_check, NULL,
+    THIS_MODULE };
 
 static int __init init(void)
 {

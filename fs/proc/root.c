@@ -76,32 +76,12 @@ void __init proc_root_init(void)
 
 static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentry)
 {
-	struct task_struct *p;
-
 	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
-		extern unsigned long total_forks;
-		static int last_timestamp = 0;
+		int nlink = proc_root.nlink;
 
-		/*
-		 * this one can be a serious 'ps' performance problem if
-		 * there are many threads running - thus we do 'lazy'
-		 * link-recalculation - we change it only if the number
-		 * of threads has increased.
-		 */
-		if (total_forks != last_timestamp) {
-			int nlink = proc_root.nlink;
+		nlink += nr_threads;
 
-			read_lock(&tasklist_lock);
-			last_timestamp = total_forks;
-			for_each_task(p)
-				nlink++;
-			read_unlock(&tasklist_lock);
-			/*
-			 * subtract the # of idle threads which
-			 * do not show up in /proc:
-			 */
-			dir->i_nlink = nlink - smp_num_cpus;
-		}
+		dir->i_nlink = nlink;
 	}
 
 	if (!proc_lookup(dir, dentry))

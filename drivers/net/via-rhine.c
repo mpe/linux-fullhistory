@@ -454,11 +454,8 @@ static int __devinit via_rhine_init_one (struct pci_dev *pdev,
 
 	ioaddr = pci_resource_start (pdev, pci_flags & PCI_ADDR0 ? 0 : 1);
 
-	if (pci_enable_device (pdev)) {
-		printk (KERN_ERR "unable to init PCI device (card #%d)\n",
-			card_idx);
+	if (pci_enable_device (pdev))
 		goto err_out_free_dma;
-	}
 	
 	if (pci_flags & PCI_USES_MASTER)
 		pci_set_master (pdev);
@@ -1294,15 +1291,7 @@ static struct pci_driver via_rhine_driver = {
 
 static int __init via_rhine_init (void)
 {
-	int rc;
-	
-	MOD_INC_USE_COUNT;
-	
-	rc = pci_module_init (&via_rhine_driver);
-	
-	MOD_DEC_USE_COUNT;
-	
-	return rc;
+	return pci_module_init (&via_rhine_driver);
 }
 
 

@@ -137,11 +137,12 @@ int __init tms_pci_probe(void)
 		if (versionprinted++ == 0)
 			printk("%s", version);
 
-		pci_enable_device(pdev);
+		if (pci_enable_device(pdev))
+			continue;
 
 		/* Remove I/O space marker in bit 0. */
 		pci_irq_line = pdev->irq;
-		pci_ioaddr = pdev->resource[0].start ; 
+		pci_ioaddr = pci_resource_start (pdev, 0);
 		
 		if(check_region(pci_ioaddr, TMS_PCI_IO_EXTENT))
 			continue;
@@ -149,11 +150,15 @@ int __init tms_pci_probe(void)
 		/* At this point we have found a valid card. */
     
 		dev = init_trdev(NULL, 0);
+		if (!dev) {
+			continue; /*return (-ENOMEM);*/ /* continue; ?? */
+		}
 		
-		request_region(pci_ioaddr, TMS_PCI_IO_EXTENT, cardinfo->name);
+		request_region(pci_ioaddr, TMS_PCI_IO_EXTENT, cardinfo->name); /* XXX check return */
 		if(request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
 			       cardinfo->name, dev)) { 
 			release_region(pci_ioaddr, TMS_PCI_IO_EXTENT); 
+			/* XXX free trdev */
 			continue; /*return (-ENODEV);*/ /* continue; ?? */
 		}
 

@@ -667,9 +667,7 @@ static int NCR5380_set_timer(struct Scsi_Host *instance)
 	((struct NCR5380_hostdata *) instance->hostdata)->next_timer = tmp;
 	*prev = instance;
    
-	del_timer(&usleep_timer);
-	usleep_timer.expires = ((struct NCR5380_hostdata *) expires_first->hostdata)->time_expires;
-	add_timer(&usleep_timer);
+	mod_timer(&usleep_timer, ((struct NCR5380_hostdata *) expires_first->hostdata)->time_expires);
 	restore_flags(flags);
 	return 0;
 }

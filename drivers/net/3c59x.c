@@ -1736,9 +1736,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
 			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
 			/* The timer will reenable interrupts. */
-			del_timer(&vp->timer);
-			vp->timer.expires = RUN_AT(1);
-			add_timer(&vp->timer);
+			mod_timer(&vp->timer, jiffies+1*HZ);
 			break;
 		}
 		/* Acknowledge the IRQ. */
@@ -1854,9 +1852,7 @@ static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
 			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
 			/* The timer will reenable interrupts. */
-			del_timer(&vp->timer);
-			vp->timer.expires = RUN_AT(1);
-			add_timer(&vp->timer);
+			mod_timer(&vp->timer, jiffies+1*HZ);
 			break;
 		}
 		/* Acknowledge the IRQ. */

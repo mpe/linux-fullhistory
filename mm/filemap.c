@@ -97,9 +97,6 @@ void remove_inode_page(struct page *page)
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 
-	/* Initiate completion of any async operations */
-	sync_page(page);
-
 	spin_lock(&pagecache_lock);
 	remove_page_from_inode_queue(page);
 	remove_page_from_hash_queue(page);
@@ -238,14 +235,13 @@ repeat:
 
 int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 {
-	int ret = 0, loop = 0, count;
+	int ret = 0, count;
 	LIST_HEAD(young);
 	LIST_HEAD(old);
 	LIST_HEAD(forget);
 	struct list_head * page_lru, * dispose;
 	struct page * page = NULL;
 	struct zone_struct * p_zone;
-	int maxloop = 256 >> priority;
 	
 	if (!zone)
 		BUG();
@@ -262,30 +258,26 @@ again:
 		list_del(page_lru);
 		p_zone = page->zone;
 
-		/*
-		 * These two tests are there to make sure we don't free too
-		 * many pages from the "wrong" zone. We free some anyway,
-		 * they are the least recently used pages in the system.
-		 * When we don't free them, leave them in &old.
-		 */
-		dispose = &old;
-		if (p_zone != zone && (loop > (maxloop / 4) ||
-				p_zone->free_pages > p_zone->pages_high))
-			goto dispose_continue;
+		/* This LRU list only contains a few pages from the system,
+		 * so we must fail and let swap_out() refill the list if
+		 * there aren't enough freeable pages on the list */
 
 		/* The page is in use, or was used very recently, put it in
 		 * &young to make sure that we won't try to free it the next
 		 * time */
 		dispose = &young;
-
 		if (test_and_clear_bit(PG_referenced, &page->flags))
 			goto dispose_continue;
 
-		count--;
+		if (p_zone->free_pages > p_zone->pages_high)
+			goto dispose_continue;
+
 		if (!page->buffers && page_count(page) > 1)
 			goto dispose_continue;
 
-		/* Page not used -> free it; if that fails -> &old */
+		count--;
+		/* Page not used -> free it or put it on the old list
+		 * so it gets freed first the next time */
 		dispose = &old;
 		if (TryLockPage(page))
 			goto dispose_continue;
@@ -375,9 +367,8 @@ made_buffer_progress:
 	/* nr_lru_pages needs the spinlock */
 	nr_lru_pages--;
 
-	loop++;
 	/* wrong zone?  not looped too often?    roll again... */
-	if (page->zone != zone && loop < maxloop)
+	if (page->zone != zone && count)
 		goto again;
 
 out:

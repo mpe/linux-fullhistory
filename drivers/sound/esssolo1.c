@@ -2252,11 +2252,12 @@ static int __devinit solo1_probe(struct pci_dev *pcidev, const struct pci_device
 		printk(KERN_ERR "solo1: io ports in use\n");
 		goto err_region4;
 	}
+	if (pci_enable_device(pcidev))
+		goto err_irq;
 	if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
 		printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
 		goto err_irq;
 	}
-	pci_enable_device(pcidev);
 	printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
 	printk(KERN_INFO "solo1: joystick port at %#lx\n", s->gpbase+1);
 	/* register devices */

@@ -1852,17 +1852,14 @@ int __init find_zoran(void)
 	unsigned char revision;
 	int zoran_num=0;
 
-	if (!pcibios_present())
-	{
-		printk(KERN_DEBUG "zoran: PCI-BIOS not present or not accessible!\n");
-		return 0;
-	}
-
 	while ((dev = pci_find_device(PCI_VENDOR_ID_ZORAN,PCI_DEVICE_ID_ZORAN_36120, dev)))
 	{
 		/* Ok, a ZR36120/ZR36125 found! */
 		ztv = &zorans[zoran_num];
 		ztv->dev = dev;
+
+		if (pci_enable_device(dev))
+			return -EIO;
 
 		pci_read_config_byte(dev, PCI_CLASS_REVISION, &revision);
 		printk(KERN_INFO "zoran: Zoran %x (rev %d) ",

@@ -2372,8 +2372,8 @@ static int __init amb_probe (void) {
     
     // read resources from PCI configuration space
     u8 irq = pci_dev->irq;
-    u32 * membase = bus_to_virt (pci_dev->resource[0].start);
-    u32 iobase = pci_dev->resource[1].start;
+    u32 * membase = bus_to_virt (pci_resource_start (pci_dev, 0));
+    u32 iobase = pci_resource_start (pci_dev, 1);
     
     void setup_dev (void) {
       unsigned char pool;
@@ -2419,6 +2419,9 @@ static int __init amb_probe (void) {
     void setup_pci_dev (void) {
       unsigned char lat;
       
+      /* XXX check return value */
+      pci_enable_device (pci_dev);
+
       // enable bus master accesses
       pci_set_master (pci_dev);
       

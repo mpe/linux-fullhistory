@@ -157,9 +157,46 @@ invert_tuple(struct ip_conntrack_tuple *inverse,
 }
 
 static void
+clean_from_lists(struct ip_conntrack *ct)
+{
+	MUST_BE_WRITE_LOCKED(&ip_conntrack_lock);
+	/* Remove from both hash lists */
+	LIST_DELETE(&ip_conntrack_hash
+		    [hash_conntrack(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple)],
+		    &ct->tuplehash[IP_CT_DIR_ORIGINAL]);
+	LIST_DELETE(&ip_conntrack_hash
+		    [hash_conntrack(&ct->tuplehash[IP_CT_DIR_REPLY].tuple)],
+		    &ct->tuplehash[IP_CT_DIR_REPLY]);
+	/* If our expected is in the list, take it out. */
+	if (ct->expected.expectant) {
+		IP_NF_ASSERT(list_inlist(&expect_list, &ct->expected));
+		IP_NF_ASSERT(ct->expected.expectant == ct);
+		LIST_DELETE(&expect_list, &ct->expected);
+	}
+}
+
+static void
 destroy_conntrack(struct nf_conntrack *nfct)
 {
 	struct ip_conntrack *ct = (struct ip_conntrack *)nfct;
+
+	/* Unconfirmed connections haven't been cleaned up by the
+	   timer: hence they cannot be simply deleted here. */
+	if (!(ct->status & IPS_CONFIRMED)) {
+		WRITE_LOCK(&ip_conntrack_lock);
+		/* Race check: they can't get a reference if noone has
+                   one and we have the write lock. */
+		if (atomic_read(&ct->ct_general.use) == 0) {
+			clean_from_lists(ct);
+			WRITE_UNLOCK(&ip_conntrack_lock);
+		} else {
+			/* Either a last-minute confirmation (ie. ct
+			   now has timer attached), or a last-minute
+			   new skb has reference (still unconfirmed). */
+			WRITE_UNLOCK(&ip_conntrack_lock);
+			return;
+		}
+	}
 
 	IP_NF_ASSERT(atomic_read(&nfct->use) == 0);
 	IP_NF_ASSERT(!timer_pending(&ct->timeout));
@@ -178,19 +215,7 @@ static void death_by_timeout(unsigned long ul_conntrack)
 	struct ip_conntrack *ct = (void *)ul_conntrack;
 
 	WRITE_LOCK(&ip_conntrack_lock);
-	/* Remove from both hash lists */
-	LIST_DELETE(&ip_conntrack_hash
-		    [hash_conntrack(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple)],
-		    &ct->tuplehash[IP_CT_DIR_ORIGINAL]);
-	LIST_DELETE(&ip_conntrack_hash
-		    [hash_conntrack(&ct->tuplehash[IP_CT_DIR_REPLY].tuple)],
-		    &ct->tuplehash[IP_CT_DIR_REPLY]);
-	/* If our expected is in the list, take it out. */
-	if (ct->expected.expectant) {
-		IP_NF_ASSERT(list_inlist(&expect_list, &ct->expected));
-		IP_NF_ASSERT(ct->expected.expectant == ct);
-		LIST_DELETE(&expect_list, &ct->expected);
-	}
+	clean_from_lists(ct);
 	WRITE_UNLOCK(&ip_conntrack_lock);
 	ip_conntrack_put(ct);
 }
@@ -235,6 +260,26 @@ ip_conntrack_find_get(const struct ip_conntrack_tuple *tuple,
 	return h;
 }
 
+/* Confirm a connection */
+void
+ip_conntrack_confirm(struct ip_conntrack *ct)
+{
+	DEBUGP("Confirming conntrack %p\n", ct);
+	WRITE_LOCK(&ip_conntrack_lock);
+	/* Race check */
+	if (!(ct->status & IPS_CONFIRMED)) {
+		IP_NF_ASSERT(!timer_pending(&ct->timeout));
+		ct->status |= IPS_CONFIRMED;
+		/* Timer relative to confirmation time, not original
+		   setting time, otherwise we'd get timer wrap in
+		   wierd delay cases. */
+		ct->timeout.expires += jiffies;
+		add_timer(&ct->timeout);
+		atomic_inc(&ct->ct_general.use);
+	}
+	WRITE_UNLOCK(&ip_conntrack_lock);
+}
+
 /* Returns true if a connection correspondings to the tuple (required
    for NAT). */
 int
@@ -250,24 +295,28 @@ ip_conntrack_tuple_taken(const struct ip_conntrack_tuple *tuple,
 	return h != NULL;
 }
 
-/* Returns TRUE if it dealt with ICMP, and filled in skb fields */
-int icmp_error_track(struct sk_buff *skb)
+/* Returns conntrack if it dealt with ICMP, and filled in skb fields */
+struct ip_conntrack *
+icmp_error_track(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 {
-	const struct iphdr *iph = skb->nh.iph;
-	struct icmphdr *hdr = (struct icmphdr *)((u_int32_t *)iph + iph->ihl);
+	const struct iphdr *iph;
+	struct icmphdr *hdr;
 	struct ip_conntrack_tuple innertuple, origtuple;
-	struct iphdr *inner = (struct iphdr *)(hdr + 1);
-	size_t datalen = skb->len - iph->ihl*4 - sizeof(*hdr);
+	struct iphdr *inner;
+	size_t datalen;
 	struct ip_conntrack_protocol *innerproto;
 	struct ip_conntrack_tuple_hash *h;
-	enum ip_conntrack_info ctinfo;
 
-	if (iph->protocol != IPPROTO_ICMP)
-		return 0;
+	IP_NF_ASSERT(iph->protocol == IPPROTO_ICMP);
+
+	iph = skb->nh.iph;
+	hdr = (struct icmphdr *)((u_int32_t *)iph + iph->ihl);
+	inner = (struct iphdr *)(hdr + 1);
+	datalen = skb->len - iph->ihl*4 - sizeof(*hdr);
 
 	if (skb->len < iph->ihl * 4 + sizeof(struct icmphdr)) {
 		DEBUGP("icmp_error_track: too short\n");
-		return 1;
+		return NULL;
 	}
 
 	if (hdr->type != ICMP_DEST_UNREACH
@@ -275,12 +324,12 @@ int icmp_error_track(struct sk_buff *skb)
 	    && hdr->type != ICMP_TIME_EXCEEDED
 	    && hdr->type != ICMP_PARAMETERPROB
 	    && hdr->type != ICMP_REDIRECT)
-		return 0;
+		return NULL;
 
 	/* Ignore it if the checksum's bogus. */
 	if (ip_compute_csum((unsigned char *)hdr, sizeof(*hdr) + datalen)) {
 		DEBUGP("icmp_error_track: bad csum\n");
-		return 1;
+		return NULL;
 	}
 
 	innerproto = find_proto(inner->protocol);
@@ -290,28 +339,68 @@ int icmp_error_track(struct sk_buff *skb)
 		DEBUGP("icmp_error: ! get_tuple p=%u (%u*4+%u dlen=%u)\n",
 		       inner->protocol, inner->ihl, 8,
 		       datalen);
-		return 1;
+		return NULL;
 	}
 
 	/* Ordinarily, we'd expect the inverted tupleproto, but it's
 	   been preserved inside the ICMP. */
 	if (!invert_tuple(&innertuple, &origtuple, innerproto)) {
 		DEBUGP("icmp_error_track: Can't invert tuple\n");
-		return 1;
+		return NULL;
 	}
 	h = ip_conntrack_find_get(&innertuple, NULL);
 	if (!h) {
 		DEBUGP("icmp_error_track: no match\n");
-		return 1;
+		return NULL;
+	}
+	if (!(h->ctrack->status & IPS_CONFIRMED)) {
+		DEBUGP("icmp_error_track: unconfirmed\n");
+		ip_conntrack_put(h->ctrack);
+		return NULL;
 	}
 
-	ctinfo = IP_CT_RELATED;
+	*ctinfo = IP_CT_RELATED;
 	if (DIRECTION(h) == IP_CT_DIR_REPLY)
-		ctinfo += IP_CT_IS_REPLY;
+		*ctinfo += IP_CT_IS_REPLY;
 
 	/* Update skb to refer to this connection */
-	skb->nfct = &h->ctrack->infos[ctinfo];
-	return 1;
+	skb->nfct = &h->ctrack->infos[*ctinfo];
+	return h->ctrack;
+}
+
+/* There's a small race here where we may free a just-replied to
+   connection.  Too bad: we're in trouble anyway. */
+static inline int unreplied(const struct ip_conntrack_tuple_hash *i)
+{
+	/* Unconfirmed connections either really fresh or transitory
+           anyway */
+	if (!(i->ctrack->status & IPS_SEEN_REPLY)
+	    && (i->ctrack->status & IPS_CONFIRMED))
+		return 1;
+	return 0;
+}
+
+static int early_drop(struct list_head *chain)
+{
+	/* Traverse backwards: gives us oldest, which is roughly LRU */
+	struct ip_conntrack_tuple_hash *h;
+	int dropped = 0;
+
+	READ_LOCK(&ip_conntrack_lock);
+	h = LIST_FIND(chain, unreplied, struct ip_conntrack_tuple_hash *);
+	if (h)
+		atomic_inc(&h->ctrack->ct_general.use);
+	READ_UNLOCK(&ip_conntrack_lock);
+
+	if (!h)
+		return dropped;
+
+	if (del_timer(&h->ctrack->timeout)) {
+		death_by_timeout((unsigned long)h->ctrack);
+		dropped = 1;
+	}
+	ip_conntrack_put(h->ctrack);
+	return dropped;
 }
 
 static inline int helper_cmp(const struct ip_conntrack_helper *i,
@@ -345,29 +434,38 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 	enum ip_conntrack_info ctinfo;
 	unsigned long extra_jiffies;
 	int i;
+	static unsigned int drop_next = 0;
+
+	hash = hash_conntrack(tuple);
+
+	if (ip_conntrack_max &&
+	    atomic_read(&ip_conntrack_count) >= ip_conntrack_max) {
+		if (net_ratelimit())
+			printk(KERN_WARNING "ip_conntrack: maximum limit of"
+			       " %d entries exceeded\n", ip_conntrack_max);
+
+		/* Try dropping from random chain, or else from the
+                   chain about to put into (in case they're trying to
+                   bomb one hash chain). */
+		if (!early_drop(&ip_conntrack_hash[drop_next++])
+		    && !early_drop(&ip_conntrack_hash[hash]))
+			return 1;
+	}
 
 	if (!invert_tuple(&repl_tuple, tuple, protocol)) {
 		DEBUGP("Can't invert tuple.\n");
 		return 1;
 	}
-
-	if(ip_conntrack_max &&
-	    (atomic_read(&ip_conntrack_count) >= ip_conntrack_max)) {
-		if (net_ratelimit())
-			printk(KERN_WARNING "ip_conntrack: maximum limit of %d entries exceeded\n", ip_conntrack_max);
-		return 1;
-	}
+	repl_hash = hash_conntrack(&repl_tuple);
 
 	conntrack = kmem_cache_alloc(ip_conntrack_cachep, GFP_ATOMIC);
 	if (!conntrack) {
 		DEBUGP("Can't allocate conntrack.\n");
 		return 1;
 	}
-	hash = hash_conntrack(tuple);
-	repl_hash = hash_conntrack(&repl_tuple);
 
 	memset(conntrack, 0, sizeof(struct ip_conntrack));
-	atomic_set(&conntrack->ct_general.use, 2);
+	atomic_set(&conntrack->ct_general.use, 1);
 	conntrack->ct_general.destroy = destroy_conntrack;
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *tuple;
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].ctrack = conntrack;
@@ -381,17 +479,17 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 		kmem_cache_free(ip_conntrack_cachep, conntrack);
 		return 1;
 	}
+	/* Don't set timer yet: wait for confirmation */
+	init_timer(&conntrack->timeout);
 	conntrack->timeout.data = (unsigned long)conntrack;
 	conntrack->timeout.function = death_by_timeout;
-	conntrack->timeout.expires = jiffies + extra_jiffies;
-	add_timer(&conntrack->timeout);
+	conntrack->timeout.expires = extra_jiffies;
 
 	/* Sew in at head of hash list. */
 	WRITE_LOCK(&ip_conntrack_lock);
 	/* Check noone else beat us in the race... */
 	if (__ip_conntrack_find(tuple, NULL)) {
 		WRITE_UNLOCK(&ip_conntrack_lock);
-		printk("ip_conntrack: Wow someone raced us!\n");
 		kmem_cache_free(ip_conntrack_cachep, conntrack);
 		return 0;
 	}
@@ -417,70 +515,70 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 		     &conntrack->tuplehash[IP_CT_DIR_ORIGINAL]);
 	list_prepend(&ip_conntrack_hash[repl_hash],
 		     &conntrack->tuplehash[IP_CT_DIR_REPLY]);
+	atomic_inc(&ip_conntrack_count);
 	WRITE_UNLOCK(&ip_conntrack_lock);
 
 	/* Update skb to refer to this connection */
 	skb->nfct = &conntrack->infos[ctinfo];
 
-	atomic_inc(&ip_conntrack_count);
 	return 1;
 }
 
-static void
-resolve_normal_ct(struct sk_buff *skb, int create)
+/* On success, returns conntrack ptr, sets skb->nfct and ctinfo */
+static inline struct ip_conntrack *
+resolve_normal_ct(struct sk_buff *skb,
+		  struct ip_conntrack_protocol *proto,
+		  enum ip_conntrack_info *ctinfo)
 {
 	struct ip_conntrack_tuple tuple;
 	struct ip_conntrack_tuple_hash *h;
-	struct ip_conntrack_protocol *proto;
-	enum ip_conntrack_info ctinfo;
 
-	proto = find_proto(skb->nh.iph->protocol);
 	if (!get_tuple(skb->nh.iph, skb->len, &tuple, proto))
-		return;
+		return NULL;
 
 	/* Loop around search/insert race */
 	do {
 		/* look for tuple match */
 		h = ip_conntrack_find_get(&tuple, NULL);
-		if (!h && (!create || init_conntrack(&tuple, proto, skb)))
-			return;
+		if (!h && init_conntrack(&tuple, proto, skb))
+			return NULL;
 	} while (!h);
 
 	/* It exists; we have (non-exclusive) reference. */
 	if (DIRECTION(h) == IP_CT_DIR_REPLY) {
-		ctinfo = IP_CT_ESTABLISHED + IP_CT_IS_REPLY;
+		/* Reply on unconfirmed connection => unclassifiable */
+		if (!(h->ctrack->status & IPS_CONFIRMED)) {
+			DEBUGP("Reply on unconfirmed connection\n");
+			ip_conntrack_put(h->ctrack);
+			return NULL;
+		}
+
+		*ctinfo = IP_CT_ESTABLISHED + IP_CT_IS_REPLY;
 		h->ctrack->status |= IPS_SEEN_REPLY;
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
 		if (h->ctrack->status & IPS_SEEN_REPLY) {
 			DEBUGP("ip_conntrack_in: normal packet for %p\n",
 			       h->ctrack);
-		        ctinfo = IP_CT_ESTABLISHED;
+		        *ctinfo = IP_CT_ESTABLISHED;
 		} else if (h->ctrack->status & IPS_EXPECTED) {
 			DEBUGP("ip_conntrack_in: related packet for %p\n",
 			       h->ctrack);
-			ctinfo = IP_CT_RELATED;
+			*ctinfo = IP_CT_RELATED;
 		} else {
 			DEBUGP("ip_conntrack_in: new packet for %p\n",
 			       h->ctrack);
-			ctinfo = IP_CT_NEW;
+			*ctinfo = IP_CT_NEW;
 		}
 	}
-	skb->nfct = &h->ctrack->infos[ctinfo];
+	skb->nfct = &h->ctrack->infos[*ctinfo];
+	return h->ctrack;
 }
 
 /* Return conntrack and conntrack_info a given skb */
-static struct ip_conntrack *
-__ip_conntrack_get(struct sk_buff *skb,
-		   enum ip_conntrack_info *ctinfo,
-		   int create)
+inline struct ip_conntrack *
+ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 {
-	if (!skb->nfct) {
-		/* It may be an icmp error... */
-		if (!icmp_error_track(skb))
-			resolve_normal_ct(skb, create);
-	}
-
 	if (skb->nfct) {
 		struct ip_conntrack *ct
 			= (struct ip_conntrack *)skb->nfct->master;
@@ -493,11 +591,6 @@ __ip_conntrack_get(struct sk_buff *skb,
 	return NULL;
 }
 
-struct ip_conntrack *
-ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
-{
-	return __ip_conntrack_get(skb, ctinfo, 0);
-}
 
 /* Netfilter hook itself. */
 unsigned int ip_conntrack_in(unsigned int hooknum,
@@ -526,15 +619,19 @@ unsigned int ip_conntrack_in(unsigned int hooknum,
 			return NF_STOLEN;
 	}
 
-	ct = __ip_conntrack_get(*pskb, &ctinfo, 1);
-	if (!ct) {
-		/* Not valid part of a connection */
-		return NF_ACCEPT;
-	}
-
 	proto = find_proto((*pskb)->nh.iph->protocol);
-	ret = proto->packet(ct, (*pskb)->nh.iph, (*pskb)->len, ctinfo);
 
+	/* It may be an icmp error... */
+	if ((*pskb)->nh.iph->protocol != IPPROTO_ICMP 
+	    || !(ct = icmp_error_track(*pskb, &ctinfo))) {
+		if (!(ct = resolve_normal_ct(*pskb, proto, &ctinfo))) {
+			/* Not valid part of a connection */
+			return NF_ACCEPT;
+		}
+	}
+	IP_NF_ASSERT((*pskb)->nfct);
+
+	ret = proto->packet(ct, (*pskb)->nh.iph, (*pskb)->len, ctinfo);
 	if (ret == -1) {
 		/* Invalid */
 		nf_conntrack_put((*pskb)->nfct);
@@ -665,10 +762,15 @@ void ip_ct_refresh(struct ip_conntrack *ct, unsigned long extra_jiffies)
 	IP_NF_ASSERT(ct->timeout.data == (unsigned long)ct);
 
 	WRITE_LOCK(&ip_conntrack_lock);
-	/* Need del_timer for race avoidance (may already be dying). */
-	if (del_timer(&ct->timeout)) {
-		ct->timeout.expires = jiffies + extra_jiffies;
-		add_timer(&ct->timeout);
+	/* Timer may not be active yet */
+	if (!(ct->status & IPS_CONFIRMED))
+		ct->timeout.expires = extra_jiffies;
+	else {
+		/* Need del_timer for race avoidance (may already be dying). */
+		if (del_timer(&ct->timeout)) {
+			ct->timeout.expires = jiffies + extra_jiffies;
+			add_timer(&ct->timeout);
+		}
 	}
 	WRITE_UNLOCK(&ip_conntrack_lock);
 }
@@ -740,6 +842,17 @@ ip_ct_selective_cleanup(int (*kill)(const struct ip_conntrack *i, void *data),
 		/* Time to push up daises... */
 		if (del_timer(&h->ctrack->timeout))
 			death_by_timeout((unsigned long)h->ctrack);
+		else if (!(h->ctrack->status & IPS_CONFIRMED)) {
+			/* Unconfirmed connection.  Clean from lists,
+			   mark confirmed so it gets cleaned as soon
+			   as packet comes back. */
+			WRITE_LOCK(&ip_conntrack_lock);
+			if (!(h->ctrack->status & IPS_CONFIRMED)) {
+				clean_from_lists(h->ctrack);
+				h->ctrack->status |= IPS_CONFIRMED;
+			}
+			WRITE_UNLOCK(&ip_conntrack_lock);
+		}
 		/* ... else the timer will get him soon. */
 
 		ip_conntrack_put(h->ctrack);
@@ -836,7 +949,14 @@ void ip_conntrack_cleanup(void)
 #ifdef CONFIG_SYSCTL
 	unregister_sysctl_table(ip_conntrack_sysctl_header);
 #endif
+ 
+ i_see_dead_people:
 	ip_ct_selective_cleanup(kill_all, NULL);
+	if (atomic_read(&ip_conntrack_count) != 0) {
+		schedule();
+		goto i_see_dead_people;
+	}
+
 	kmem_cache_destroy(ip_conntrack_cachep);
 	vfree(ip_conntrack_hash);
 	nf_unregister_sockopt(&so_getorigdst);

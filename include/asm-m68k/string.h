@@ -5,7 +5,7 @@
 #include <asm/page.h>
 
 #define __HAVE_ARCH_STRCPY
-extern inline char * strcpy(char * dest,const char *src)
+static inline char * strcpy(char * dest,const char *src)
 {
   char *xdest = dest;
 
@@ -18,7 +18,7 @@ extern inline char * strcpy(char * dest,const char *src)
 }
 
 #define __HAVE_ARCH_STRNCPY
-extern inline char * strncpy(char *dest, const char *src, size_t n)
+static inline char * strncpy(char *dest, const char *src, size_t n)
 {
   char *xdest = dest;
 
@@ -38,7 +38,7 @@ extern inline char * strncpy(char *dest, const char *src, size_t n)
 }
 
 #define __HAVE_ARCH_STRCAT
-extern inline char * strcat(char * dest, const char * src)
+static inline char * strcat(char * dest, const char * src)
 {
 	char *tmp = dest;
 
@@ -51,7 +51,7 @@ extern inline char * strcat(char * dest, const char * src)
 }
 
 #define __HAVE_ARCH_STRNCAT
-extern inline char * strncat(char *dest, const char *src, size_t count)
+static inline char * strncat(char *dest, const char *src, size_t count)
 {
 	char *tmp = dest;
 
@@ -70,7 +70,7 @@ extern inline char * strncat(char *dest, const char *src, size_t count)
 }
 
 #define __HAVE_ARCH_STRCHR
-extern inline char * strchr(const char * s, int c)
+static inline char * strchr(const char * s, int c)
 {
   const char ch = c;
   
@@ -81,7 +81,7 @@ extern inline char * strchr(const char * s, int c)
 }
 
 #define __HAVE_ARCH_STRPBRK
-extern inline char * strpbrk(const char * cs,const char * ct)
+static inline char * strpbrk(const char * cs,const char * ct)
 {
   const char *sc1,*sc2;
   
@@ -93,7 +93,7 @@ extern inline char * strpbrk(const char * cs,const char * ct)
 }
 
 #define __HAVE_ARCH_STRSPN
-extern inline size_t strspn(const char *s, const char *accept)
+static inline size_t strspn(const char *s, const char *accept)
 {
   const char *p;
   const char *a;
@@ -114,7 +114,7 @@ extern inline size_t strspn(const char *s, const char *accept)
 }
 
 #define __HAVE_ARCH_STRTOK
-extern inline char * strtok(char * s,const char * ct)
+static inline char * strtok(char * s,const char * ct)
 {
   char *sbegin, *send;
   
@@ -137,7 +137,7 @@ extern inline char * strtok(char * s,const char * ct)
 /* strstr !! */
 
 #define __HAVE_ARCH_STRLEN
-extern inline size_t strlen(const char * s)
+static inline size_t strlen(const char * s)
 {
   const char *sc;
   for (sc = s; *sc != '\0'; ++sc) ;
@@ -147,7 +147,7 @@ extern inline size_t strlen(const char * s)
 /* strnlen !! */
 
 #define __HAVE_ARCH_STRCMP
-extern inline int strcmp(const char * cs,const char * ct)
+static inline int strcmp(const char * cs,const char * ct)
 {
   char __res;
 
@@ -166,7 +166,7 @@ extern inline int strcmp(const char * cs,const char * ct)
 }
 
 #define __HAVE_ARCH_STRNCMP
-extern inline int strncmp(const char * cs,const char * ct,size_t count)
+static inline int strncmp(const char * cs,const char * ct,size_t count)
 {
   char __res;
 
@@ -199,7 +199,7 @@ extern inline int strncmp(const char * cs,const char * ct,size_t count)
  * 680[46]0 doesn't really care due to their copy-back caches.
  *						10/09/96 - Jes Sorensen
  */
-extern inline void * __memset_g(void * s, int c, size_t count)
+static inline void * __memset_g(void * s, int c, size_t count)
 {
   void *xs = s;
   size_t temp;
@@ -304,7 +304,7 @@ extern inline void * __memset_g(void * s, int c, size_t count)
  * caveat is that the destination address must be 16-byte aligned.
  *                                            01/09/96 - Jes Sorensen
  */
-extern inline void * __memset_page(void * s,int c,size_t count)
+static inline void * __memset_page(void * s,int c,size_t count)
 {
   unsigned long data, tmp;
   void *xs, *sp;
@@ -381,7 +381,7 @@ extern inline void * __memset_page(void * s,int c,size_t count)
  * both source and destination must be 16-byte aligned, if not we fall
  * back to the generic memcpy function.  - Jes
  */
-extern inline void * __memcpy_page(void * to, const void * from, size_t count)
+static inline void * __memcpy_page(void * to, const void * from, size_t count)
 {
   unsigned long tmp;
   void *xto = to;
@@ -429,7 +429,7 @@ extern inline void * __memcpy_page(void * to, const void * from, size_t count)
  memcpy((to),(from),(n)))
 
 #define __HAVE_ARCH_MEMMOVE
-extern inline void * memmove(void * dest,const void * src, size_t n)
+static inline void * memmove(void * dest,const void * src, size_t n)
 {
   void *xdest = dest;
   size_t temp;

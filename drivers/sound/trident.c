@@ -2343,12 +2343,15 @@ static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device
 	}
 	pci_read_config_byte(pci_dev, PCI_CLASS_REVISION, &revision);
 
-	iobase = pci_dev->resource[0].start;
+	iobase = pci_resource_start (pci_dev, 0);
 	if (check_region(iobase, 256)) {
 		printk(KERN_ERR "trident: can't allocate I/O space at 0x%4.4lx\n",
 		       iobase);
 		return -ENODEV;
 	}
+
+	if (pci_enable_device(pci_dev))
+		return -ENODEV;
 
 	if ((card = kmalloc(sizeof(struct trident_card), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "trident: out of memory\n");
@@ -2371,7 +2374,6 @@ static int __init trident_probe(struct pci_dev *pci_dev, const struct pci_device
 	devs = card;
 
 	pci_set_master(pci_dev);
-	pci_enable_device(pci_dev);
 
 	printk(KERN_INFO "trident: %s found at IO 0x%04lx, IRQ %d\n",
 	       card_names[pci_id->driver_data], card->iobase, card->irq);

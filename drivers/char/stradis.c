@@ -2048,6 +2048,9 @@ static int configure_saa7146(struct pci_dev *dev, int num)
 	init_waitqueue_head(&saa->debiq);
 	init_waitqueue_head(&saa->vidq);
 	spin_lock_init(&saa->lock);
+
+	if (pci_enable_device(dev))
+		return -EIO;
 	
 	saa->id = dev->device;
 	saa->irq = dev->irq;

@@ -387,8 +387,8 @@ int swap_out(unsigned int priority, int gfp_mask)
 				if (!p->swappable || !mm || mm->rss <= 0)
 					continue;
 				/* small processes are swapped out less */
-				while ((mm->swap_cnt << 2 * (i + 1) < max_cnt))
-					i++;
+				while ((mm->swap_cnt << 2 * (i + 1) < max_cnt)
+						&& i++ < 10)
 				mm->swap_cnt >>= i;
 				mm->swap_cnt += i; /* if swap_cnt reaches 0 */
 				/* we're big -> hog treatment */
@@ -437,14 +437,13 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 {
 	int priority;
 	int count = SWAP_CLUSTER_MAX;
-	int ret;
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
 	priority = 6;
 	do {
-		while ((ret = shrink_mmap(priority, gfp_mask, zone))) {
+		while (shrink_mmap(priority, gfp_mask, zone)) {
 			if (!--count)
 				goto done;
 		}
@@ -467,9 +466,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 			}
 		}
 
-		/* Then, try to page stuff out..
-		 * We use swapcount here because this doesn't actually
-		 * free pages */
+		/* Then, try to page stuff out.. */
 		while (swap_out(priority, gfp_mask)) {
 			if (!--count)
 				goto done;
@@ -530,12 +527,16 @@ int kswapd(void *unused)
 		pgdat = pgdat_list;
 		while (pgdat) {
 			for (i = 0; i < MAX_NR_ZONES; i++) {
-				zone = pgdat->node_zones + i;
+			    int count = SWAP_CLUSTER_MAX;
+			    zone = pgdat->node_zones + i;
+			    do {
 				if (tsk->need_resched)
 					schedule();
 				if ((!zone->size) || (!zone->zone_wake_kswapd))
 					continue;
 				do_try_to_free_pages(GFP_KSWAPD, zone);
+			   } while (zone->free_pages < zone->pages_low &&
+					   --count);
 			}
 			pgdat = pgdat->node_next;
 		}

@@ -466,9 +466,7 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
         ipxh->spx.allocseq      = htons(pdata->alloc);
 
 	/* Reset/Set WD timer */
-        del_timer(&pdata->watchdog);
-        pdata->watchdog.expires = jiffies + VERIFY_TIMEOUT;
-        add_timer(&pdata->watchdog);
+        mod_timer(&pdata->watchdog, jiffies+VERIFY_TIMEOUT);
 
 	switch(type)
 	{

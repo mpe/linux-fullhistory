@@ -3078,7 +3078,8 @@ static int __devinit tulip_pci_probe(struct pci_dev *pdev, const struct pci_devi
 
 	printk(KERN_INFO "tulip_attach(%s)\n", pdev->slot_name);
 
-	pci_enable_device (pdev);
+	if (pci_enable_device (pdev))
+		return -ENODEV;
 	pci_set_master (pdev);
 	dev = tulip_probe1(pdev, NULL,
 			   pci_resource_start (pdev, 0), pdev->irq,

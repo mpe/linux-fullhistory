@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/27/2000) Ryan VanderBijl
+ * 	Fixed memory leak in visor_close
+ *
  * (03/26/2000) gkh
  *	Split driver up into device specific pieces.
  * 
@@ -110,6 +113,7 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 		/* send a shutdown message to the device */
 		usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
 				0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+		kfree (transfer_buffer);
 	}
 
 	/* shutdown our bulk reads and writes */

@@ -13,6 +13,7 @@ struct notifier_block;
 #include <net/route.h>
 #include <linux/netfilter_ipv4/compat_firewall.h>
 #include <linux/netfilter_ipv4/ip_conntrack.h>
+#include <linux/netfilter_ipv4/ip_conntrack_core.h>
 
 static struct firewall_ops *fwops;
 
@@ -60,6 +61,18 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 	return 0;
 }
 
+static inline void
+confirm_connection(struct sk_buff *skb)
+{
+	if (skb->nfct) {
+		struct ip_conntrack *ct
+			= (struct ip_conntrack *)skb->nfct->master;
+
+		if (!(ct->status & IPS_CONFIRMED))
+			ip_conntrack_confirm(ct);
+	}
+}
+
 static unsigned int
 fw_in(unsigned int hooknum,
       struct sk_buff **pskb,
@@ -105,10 +118,14 @@ fw_in(unsigned int hooknum,
 		ret = fwops->fw_output(fwops, PF_INET,
 				       (struct net_device *)out,
 				       (*pskb)->nh.raw, &redirpt, pskb);
-		if (fwops->fw_acct_out && (ret == FW_ACCEPT || ret == FW_SKIP))
-			fwops->fw_acct_out(fwops, PF_INET,
-					   (struct net_device *)in,
-					   (*pskb)->nh.raw, &redirpt, pskb);
+		if (ret == FW_ACCEPT || ret == FW_SKIP) {
+			if (fwops->fw_acct_out)
+				fwops->fw_acct_out(fwops, PF_INET,
+						   (struct net_device *)in,
+						   (*pskb)->nh.raw, &redirpt,
+						   pskb);
+			confirm_connection(*pskb);
+		}
 		break;
 	}
 
@@ -155,6 +172,16 @@ fw_in(unsigned int hooknum,
 	}
 }
 
+static unsigned int fw_confirm(unsigned int hooknum,
+			       struct sk_buff **pskb,
+			       const struct net_device *in,
+			       const struct net_device *out,
+			       int (*okfn)(struct sk_buff *))
+{
+	confirm_connection(*pskb);
+	return NF_ACCEPT;
+}
+
 extern int ip_fw_ctl(int optval, void *user, unsigned int len);
 
 static int sock_fn(struct sock *sk, int optval, void *user, unsigned int len)
@@ -173,6 +200,9 @@ static struct nf_hook_ops postroute_ops
 
 static struct nf_hook_ops forward_ops
 = { { NULL, NULL }, fw_in, PF_INET, NF_IP_FORWARD, NF_IP_PRI_FILTER };
+
+static struct nf_hook_ops local_in_ops
+= { { NULL, NULL }, fw_confirm, PF_INET, NF_IP_LOCAL_IN, NF_IP_PRI_LAST - 1 };
 
 static struct nf_sockopt_ops sock_ops
 = { { NULL, NULL }, PF_INET, 64, 64 + 1024 + 1, &sock_fn, 0, 0, NULL,
@@ -202,6 +232,7 @@ static int init_or_cleanup(int init)
 	nf_register_hook(&preroute_ops);
 	nf_register_hook(&postroute_ops);
 	nf_register_hook(&forward_ops);
+	nf_register_hook(&local_in_ops);
 
 	return ret;
 
@@ -209,6 +240,7 @@ static int init_or_cleanup(int init)
 	nf_unregister_hook(&preroute_ops);
 	nf_unregister_hook(&postroute_ops);
 	nf_unregister_hook(&forward_ops);
+	nf_unregister_hook(&local_in_ops);
 
 	masq_cleanup();
 

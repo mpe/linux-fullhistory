@@ -651,10 +651,8 @@ static int __devinit eepro100_init_one (struct pci_dev *pdev,
 		acpi_idle_state = pwr_command & PCI_PM_CTRL_STATE_MASK;
 	}
 
-	if (pci_enable_device(pdev)) {
-		printk(KERN_ERR "eepro100: Could not enable PCI device\n");
+	if (pci_enable_device(pdev))
 		goto err_out_free_mmio_region;
-	}
 
 	pci_set_master(pdev);
 

@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/pm.h>
 
 #include <asm/page.h>
 #include <asm/dma.h>	/* isa_dma_bridge_buggy */
@@ -1020,6 +1021,106 @@ struct pci_bus * __init pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata
 	return b;
 }
 
+#ifdef CONFIG_PM
+
+/*
+ * PCI Power management..
+ *
+ * This needs to be done centralized, so that we power manage PCI
+ * devices in the right order: we should not shut down PCI bridges
+ * before we've shut down the devices behind them, and we should
+ * not wake up devices before we've woken up the bridge to the
+ * device.. Eh?
+ *
+ * We do not touch devices that don't have a driver that exports
+ * a suspend/resume function. That is just too dangerous. If the default
+ * PCI suspend/resume functions work for a device, the driver can
+ * easily implement them (ie just have a suspend function that calls
+ * the pci_set_power_state() function).
+ */
+static int pci_pm_suspend_device(struct pci_dev *dev)
+{
+	if (dev) {
+		struct pci_driver *driver = dev->driver;
+		if (driver && driver->suspend)
+			driver->suspend(dev);
+	}
+	return 0;
+}
+
+static int pci_pm_resume_device(struct pci_dev *dev)
+{
+	if (dev) {
+		struct pci_driver *driver = dev->driver;
+		if (driver && driver->resume)
+			driver->resume(dev);
+	}
+	return 0;
+}
+
+static int pci_pm_suspend_bus(struct pci_bus *bus)
+{
+	struct list_head *list;
+
+	/* Walk the bus children list */
+	list_for_each(list, &bus->children) 
+		pci_pm_suspend_bus(pci_bus_b(list));
+
+	/* Walk the device children list */
+	list_for_each(list, &bus->devices)
+		pci_pm_suspend_device(pci_dev_b(list));
+
+	/* Suspend the bus controller.. */
+	pci_pm_suspend_device(bus->self);
+	return 0;
+}
+
+static int pci_pm_resume_bus(struct pci_bus *bus)
+{
+	struct list_head *list;
+
+	pci_pm_resume_device(bus->self);
+
+	/* Walk the device children list */
+	list_for_each(list, &bus->devices)
+		pci_pm_resume_device(pci_dev_b(list));
+
+	/* And then walk the bus children */
+	list_for_each(list, &bus->children)
+		pci_pm_resume_bus(pci_bus_b(list));
+	return 0;
+}
+
+static int pci_pm_suspend(void)
+{
+	struct list_head *list;
+
+	list_for_each(list, &pci_root_buses)
+		pci_pm_suspend_bus(pci_bus_b(list));
+	return 0;
+}
+
+static int pci_pm_resume(void)
+{
+	struct list_head *list;
+
+	list_for_each(list, &pci_root_buses)
+		pci_pm_resume_bus(pci_bus_b(list));
+	return 0;
+}
+
+static int pci_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data)
+{
+	switch (rqst) {
+	case PM_SUSPEND:
+		return pci_pm_suspend();
+	case PM_RESUME:
+		return pci_pm_resume();
+	}	
+	return 0;
+}
+#endif
+
 void __init pci_init(void)
 {
 	struct pci_dev *dev;
@@ -1029,6 +1130,10 @@ void __init pci_init(void)
 	pci_for_each_dev(dev) {
 		pci_fixup_device(PCI_FIXUP_FINAL, dev);
 	}
+
+#ifdef CONFIG_PM
+	pm_register(PM_PCI_DEV, 0, pci_pm_callback);
+#endif
 }
 
 static int __init pci_setup(char *str)

@@ -1152,7 +1152,8 @@ int __init i82596_probe(struct net_device *dev)
 		if (memcmp(eth_addr, "\x00\x00\x49", 3) != 0)
 			return -ENODEV;
 
-		request_region(ioaddr, I596_TOTAL_SIZE, "i596");
+		if (!request_region(ioaddr, I596_TOTAL_SIZE, "i596"))
+			return -ENODEV;
 
 		dev->base_addr = ioaddr;
 		dev->irq = 10;

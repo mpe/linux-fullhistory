@@ -2759,9 +2759,6 @@ static int __init hrz_probe (void) {
   
   PRINTD (DBG_FLOW, "hrz_probe");
   
-  if (!pci_present())
-    return 0;
-  
   devs = 0;
   pci_dev = NULL;
   while ((pci_dev = pci_find_device
@@ -2770,8 +2767,8 @@ static int __init hrz_probe (void) {
     hrz_dev * dev;
     
     // adapter slot free, read resources from PCI configuration space
-    u32 iobase = pci_dev->resource[0].start;
-    u32 * membase = bus_to_virt (pci_dev->resource[1].start);
+    u32 iobase = pci_resource_start (pci_dev, 0);
+    u32 * membase = bus_to_virt (pci_resource_start (pci_dev, 1));
     u8 irq = pci_dev->irq;
     
     // check IO region
@@ -2779,7 +2776,10 @@ static int __init hrz_probe (void) {
       PRINTD (DBG_WARN, "IO range already in use");
       continue;
     }
-    
+
+    if (pci_enable_device (pci_dev))
+      continue;
+
     dev = kmalloc (sizeof(hrz_dev), GFP_KERNEL);
     if (!dev) {
       // perhaps we should be nice: deregister all adapters and abort?

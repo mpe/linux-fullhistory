@@ -60,7 +60,7 @@ masquerade_target(struct sk_buff **pskb,
 {
 	struct ip_conntrack *ct;
 	enum ip_conntrack_info ctinfo;
-	const struct ip_nat_range *r;
+	const struct ip_nat_multi_range *mr;
 	struct ip_nat_multi_range newrange;
 	u_int32_t newsrc;
 	struct rtable *rt;
@@ -76,7 +76,7 @@ masquerade_target(struct sk_buff **pskb,
 	IP_NF_ASSERT(ct && (ctinfo == IP_CT_NEW
 				  || ctinfo == IP_CT_RELATED));
 
-	r = targinfo;
+	mr = targinfo;
 
 	if (ip_route_output(&rt, (*pskb)->nh.iph->daddr,
 			    0,
@@ -97,9 +97,9 @@ masquerade_target(struct sk_buff **pskb,
 
 	/* Transfer from original range. */
 	newrange = ((struct ip_nat_multi_range)
-		{ 1, { { r->flags | IP_NAT_RANGE_MAP_IPS,
+		{ 1, { { mr->range[0].flags | IP_NAT_RANGE_MAP_IPS,
 			 newsrc, newsrc,
-			 r->min, r->max } } });
+			 mr->range[0].min, mr->range[0].max } } });
 
 	/* Hand modified range to generic setup. */
 	return ip_nat_setup_info(ct, &newrange, hooknum);
@@ -142,7 +142,7 @@ static struct notifier_block masq_dev_notifier = {
 };
 
 static struct ipt_target masquerade
-= { { NULL, NULL }, "MASQUERADE", masquerade_target, masquerade_check,
+= { { NULL, NULL }, "MASQUERADE", masquerade_target, masquerade_check, NULL,
     THIS_MODULE };
 
 static int __init init(void)

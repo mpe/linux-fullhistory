@@ -303,11 +303,9 @@ static unsigned int changed_floppies = 0xff, fake_change = 0;
         timer_active |= (1 << FLOPPY_TIMER);			\
 	} while(0)
 
-#define	START_TIMEOUT()					\
-    do {						\
-        del_timer( &timeout_timer );			\
-        timeout_timer.expires = jiffies + FLOPPY_TIMEOUT;	\
-        add_timer( &timeout_timer );			\
+#define	START_TIMEOUT()					     \
+    do {						     \
+        mod_timer(&timeout_timer, jiffies+FLOPPY_TIMEOUT); \
 	} while(0)
 
 #define	STOP_TIMEOUT()					\

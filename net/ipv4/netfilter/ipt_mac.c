@@ -46,7 +46,7 @@ ipt_mac_checkentry(const char *tablename,
 }
 
 static struct ipt_match mac_match
-= { { NULL, NULL }, "mac", &match, &ipt_mac_checkentry, THIS_MODULE };
+= { { NULL, NULL }, "mac", &match, &ipt_mac_checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

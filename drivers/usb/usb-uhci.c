@@ -29,9 +29,7 @@
 #include <linux/interrupt.h>	/* for in_interrupt() */
 #include <linux/init.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 #include <linux/pm.h>
-#endif
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -2634,7 +2632,6 @@ _static int __init uhci_start_usb (uhci_t *s)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 _static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 {
 	uhci_t *s = (uhci_t*) dev->data;
@@ -2651,7 +2648,6 @@ _static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 	}
 	return 0;
 }
-#endif
 
 _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_addr, unsigned int io_size)
 {
@@ -2754,11 +2750,11 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 
 	//chain new uhci device into global list
 	devs = s;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
+
 	pmdev = pm_register(PM_PCI_DEV, PM_PCI_ID(dev), handle_pm_event);
 	if (pmdev)
 		pmdev->data = s;
-#endif
+
 	return 0;
 }
 
@@ -2768,19 +2764,12 @@ _static int __init start_uhci (struct pci_dev *dev)
 
 	/* Search for the IO base address.. */
 	for (i = 0; i < 6; i++) {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,8)
+
 		unsigned int io_addr = dev->resource[i].start;
 		unsigned int io_size =
 		dev->resource[i].end - dev->resource[i].start + 1;
 		if (!(dev->resource[i].flags & 1))
 			continue;
-#else
-		unsigned int io_addr = dev->base_address[i];
-		unsigned int io_size = 0x14;
-		if (!(io_addr & 1))
-			continue;
-		io_addr &= ~1;
-#endif
 
 		/* Is it already in use? */
 		if (check_region (io_addr, io_size))
@@ -2835,10 +2824,10 @@ int __init uhci_init (void)
 		if (type != 0)
 			continue;
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,8)
+
 		if (pci_enable_device (dev) < 0)
 			continue;
-#endif
+
 		if(!dev->irq)
 		{
 			err("Found UHCI device with no IRQ assigned. Check BIOS settings!");
@@ -2879,9 +2868,7 @@ int init_module (void)
 
 void cleanup_module (void)
 {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 	pm_unregister_all (handle_pm_event);
-#endif
 	uhci_cleanup ();
 }
 

@@ -663,11 +663,8 @@ static void watch_stereo(struct i2c_client *client)
 	}
 	if (once)
 		msp->watch_stereo = 0;
-	if (msp->watch_stereo) {
-		del_timer(&msp->wake_stereo);
-		msp->wake_stereo.expires = jiffies + 5*HZ;
-		add_timer(&msp->wake_stereo);
-	}
+	if (msp->watch_stereo)
+		mod_timer(&msp->wake_stereo, jiffies+5*HZ);
 }
 
 static int msp3400c_thread(void *data)
@@ -874,11 +871,8 @@ static int msp3400c_thread(void *data)
 		/* unmute */
 		msp3400c_setvolume(client, msp->left, msp->right);
 
-		if (msp->watch_stereo) {
-			del_timer(&msp->wake_stereo);
-			msp->wake_stereo.expires = jiffies + 5*HZ;
-			add_timer(&msp->wake_stereo);
-		}
+		if (msp->watch_stereo) 
+			mod_timer(&msp->wake_stereo, jiffies+5*HZ);
 
 		if (debug)
 			msp3400c_print_mode(msp);
@@ -1092,11 +1086,8 @@ static int msp3410d_thread(void *data)
 		msp3400c_settreble(client, msp->treble);
 		msp3400c_setvolume(client, msp->left, msp->right);
 
-		if (msp->watch_stereo) {
-			del_timer(&msp->wake_stereo);
-			msp->wake_stereo.expires = jiffies + HZ;
-			add_timer(&msp->wake_stereo);
-		}
+		if (msp->watch_stereo) 
+			mod_timer(&msp->wake_stereo, jiffies+HZ);
 
 		msp->active = 0;
 	}

@@ -20,8 +20,9 @@ extern struct ip_conntrack_protocol *find_proto(u_int8_t protocol);
 extern struct ip_conntrack_protocol *__find_proto(u_int8_t protocol);
 extern struct list_head protocol_list;
 
-/* Returns TRUE if it dealt with ICMP, and filled in skb->nfct */
-int icmp_error_track(struct sk_buff *skb);
+/* Returns conntrack if it dealt with ICMP, and filled in skb->nfct */
+extern struct ip_conntrack *icmp_error_track(struct sk_buff *skb,
+					     enum ip_conntrack_info *ctinfo);
 extern int get_tuple(const struct iphdr *iph, size_t len,
 		     struct ip_conntrack_tuple *tuple,
 		     struct ip_conntrack_protocol *protocol);
@@ -30,6 +31,9 @@ extern int get_tuple(const struct iphdr *iph, size_t len,
 struct ip_conntrack_tuple_hash *
 ip_conntrack_find_get(const struct ip_conntrack_tuple *tuple,
 		      const struct ip_conntrack *ignored_conntrack);
+
+/* Confirm a connection */
+void ip_conntrack_confirm(struct ip_conntrack *ct);
 
 extern unsigned int ip_conntrack_htable_size;
 extern struct list_head *ip_conntrack_hash;

@@ -83,9 +83,7 @@ static int softdog_open(struct inode *inode, struct file *file)
 	/*
 	 *	Activate timer
 	 */
-	del_timer(&watchdog_ticktock);
-	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
-	add_timer(&watchdog_ticktock);
+	mod_timer(&watchdog_ticktock, jiffies+(soft_margin*HZ));
 	timer_alive=1;
 	return 0;
 }
@@ -104,15 +102,6 @@ static int softdog_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void softdog_ping(void)
-{
-	/*
-	 *	Refresh the timer.
-	 */
-
-	mod_timer(&watchdog_ticktock, jiffies + (soft_margin * HZ));
-}
-
 static ssize_t softdog_write(struct file *file, const char *data, size_t len, loff_t *ppos)
 {
 	/*  Can't seek (pwrite) on this device  */
@@ -122,9 +111,8 @@ static ssize_t softdog_write(struct file *file, const char *data, size_t len, lo
 	/*
 	 *	Refresh the timer.
 	 */
-	if(len)
-	{
-		softdog_ping();
+	if(len) {
+		mod_timer(&watchdog_ticktock, jiffies+(soft_margin*HZ));
 		return 1;
 	}
 	return 0;
@@ -151,7 +139,7 @@ static int softdog_ioctl(struct inode *inode, struct file *file,
 		case WDIOC_GETBOOTSTATUS:
 			return put_user(0,(int *)arg);
 		case WDIOC_KEEPALIVE:
-			softdog_ping();
+			mod_timer(&watchdog_ticktock, jiffies+(soft_margin*HZ));
 			return 0;
 	}
 }

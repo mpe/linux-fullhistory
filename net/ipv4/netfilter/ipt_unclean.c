@@ -558,7 +558,7 @@ checkentry(const char *tablename,
 }
 
 static struct ipt_match unclean_match
-= { { NULL, NULL }, "unclean", &match, &checkentry, THIS_MODULE };
+= { { NULL, NULL }, "unclean", &match, &checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

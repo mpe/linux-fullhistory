@@ -114,23 +114,28 @@ int __init abyss_probe(void)
 		if (versionprinted++ == 0)
 			printk("%s", version);
 
-		pci_enable_device(pdev);
+		if (pci_enable_device(pdev))
+			continue;
 
 		/* Remove I/O space marker in bit 0. */
 		pci_irq_line = pdev->irq;
-		pci_ioaddr = pdev->resource[0].start ; 
+		pci_ioaddr = pci_resource_start (pdev, 0);
 		
-		if(check_region(pci_ioaddr, ABYSS_IO_EXTENT))
+		if(!request_region(pci_ioaddr, ABYSS_IO_EXTENT, "abyss"))
 			continue;
 		
 		/* At this point we have found a valid card. */
 		
 		dev = init_trdev(NULL, 0);
+		if (!dev) {
+			release_region(pci_ioaddr, ABYSS_IO_EXTENT);
+			continue;
+		}
 		
-		request_region(pci_ioaddr, ABYSS_IO_EXTENT, "abyss");
 		if(request_irq(pdev->irq, tms380tr_interrupt, SA_SHIRQ,
 			       "abyss", dev)) { 
 			release_region(pci_ioaddr, ABYSS_IO_EXTENT) ; 
+			/* XXX free trdev */
 			continue; /*return (-ENODEV);*/ /* continue; ?? */
 		}
 		
@@ -140,7 +145,6 @@ int __init abyss_probe(void)
 		  }
 		*/
 
-		pci_ioaddr &= ~3 ; 
 		dev->base_addr	= pci_ioaddr;
 		dev->irq 		= pci_irq_line;
 		dev->dma		= 0;

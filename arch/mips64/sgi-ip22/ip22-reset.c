@@ -87,9 +87,7 @@ static void blink_timeout(unsigned long data)
 	sgi_hpc_write1 ^= (HPC3_WRITE1_LC0OFF|HPC3_WRITE1_LC1OFF);
 	hpc3mregs->write1 = sgi_hpc_write1;
 
-	del_timer(&blink_timer);
-	blink_timer.expires = jiffies + data;
-	add_timer(&blink_timer);
+	mod_timer(&blink_timer, jiffies+data);
 }
 
 static void debounce(unsigned long data)

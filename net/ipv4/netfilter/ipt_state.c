@@ -42,7 +42,7 @@ static int check(const char *tablename,
 }
 
 static struct ipt_match state_match
-= { { NULL, NULL }, "state", &match, &check, THIS_MODULE };
+= { { NULL, NULL }, "state", &match, &check, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

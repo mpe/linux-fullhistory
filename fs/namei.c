@@ -11,6 +11,8 @@
 /* [Feb 1997 T. Schoebel-Theuer] Complete rewrite of the pathname
  * lookup logic.
  */
+/* [Feb-Apr 2000, AV] Rewrite to the new namespace architecture.
+ */
 
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
@@ -26,11 +28,6 @@
 #include <asm/pgtable.h>
 
 #include <asm/namei.h>
-
-/* This can be removed after the beta phase. */
-#define CACHE_SUPERVISE	/* debug the correctness of dcache entries */
-#undef DEBUG		/* some other debugging */
-
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
@@ -83,6 +80,15 @@
  * semantics.  See the comments in "open_namei" and "do_link" below.
  *
  * [10-Sep-98 Alan Modra] Another symlink change.
+ */
+
+/* [Feb-Apr 2000 AV] Complete rewrite. Rules for symlinks:
+ *	inside the path - always follow.
+ *	in the last component in creation/removal/renaming - never follow.
+ *	if LOOKUP_FOLLOW passed - follow.
+ *	if the pathname has trailing slashes - follow.
+ *	otherwise - don't follow.
+ * (applied in that order).
  */
 
 /* In order to reduce some races, while at the same time doing additional
@@ -270,12 +276,43 @@ loop:
 	return -ELOOP;
 }
 
-static inline int follow_down(struct dentry ** dentry, struct vfsmount **mnt)
+static inline int follow_up(struct vfsmount **mnt, struct dentry **base)
 {
-	struct dentry * parent = dget((*dentry)->d_mounts);
-	dput(*dentry);
-	*dentry = parent;
+	struct vfsmount *parent=(*mnt)->mnt_parent;
+	struct dentry *dentry;
+	if (parent == *mnt)
+		return 0;
+	dentry=dget((*mnt)->mnt_mountpoint);
+	mntget(parent);
+	mntput(*mnt);
+	*mnt = parent;
+	dput(*base);
+	*base = dentry;
 	return 1;
+}
+
+static inline int __follow_down(struct vfsmount **mnt, struct dentry **dentry)
+{
+	struct list_head *p = (*dentry)->d_vfsmnt.next;
+	while (p != &(*dentry)->d_vfsmnt) {
+		struct vfsmount *tmp;
+		tmp = list_entry(p, struct vfsmount, mnt_clash);
+		if (tmp->mnt_parent == *mnt) {
+			*mnt = mntget(tmp);
+			mntput(tmp->mnt_parent);
+			/* tmp holds the mountpoint, so... */
+			dput(*dentry);
+			*dentry = dget(tmp->mnt_root);
+			return 1;
+		}
+		p = p->next;
+	}
+	return 0;
+}
+
+int follow_down(struct vfsmount **mnt, struct dentry **dentry)
+{
+	return __follow_down(mnt,dentry);
 }
 
 /*
@@ -343,12 +380,20 @@ int walk_name(const char * name, struct nameidata *nd)
 			case 2:	
 				if (this.name[1] != '.')
 					break;
-				if (nd->dentry != current->fs->root) {
-					dentry = dget(nd->dentry->d_covers->d_parent);
-					dput(nd->dentry);
-					nd->dentry = dentry;
-					inode = dentry->d_inode;
+				while (1) {
+					if (nd->dentry == current->fs->root &&
+					    nd->mnt == current->fs->rootmnt)
+						break;
+					if (nd->dentry != nd->mnt->mnt_root) {
+						dentry = dget(nd->dentry->d_parent);
+						dput(nd->dentry);
+						nd->dentry = dentry;
+						break;
+					}
+					if (!follow_up(&nd->mnt, &nd->dentry))
+						break;
 				}
+				inode = nd->dentry->d_inode;
 				/* fallthrough */
 			case 1:
 				continue;
@@ -371,7 +416,7 @@ int walk_name(const char * name, struct nameidata *nd)
 				break;
 		}
 		/* Check mountpoints.. */
-		while (d_mountpoint(dentry) && follow_down(&dentry, &nd->mnt))
+		while (d_mountpoint(dentry) && __follow_down(&nd->mnt, &dentry))
 			;
 
 		err = -ENOENT;
@@ -415,12 +460,20 @@ last_component:
 			case 2:	
 				if (this.name[1] != '.')
 					break;
-				if (nd->dentry != current->fs->root) {
-					dentry = dget(nd->dentry->d_covers->d_parent);
-					dput(nd->dentry);
-					nd->dentry = dentry;
-					inode = dentry->d_inode;
+				while (1) {
+					if (nd->dentry == current->fs->root &&
+					    nd->mnt == current->fs->rootmnt)
+						break;
+					if (nd->dentry != nd->mnt->mnt_root) {
+						dentry = dget(nd->dentry->d_parent);
+						dput(nd->dentry);
+						nd->dentry = dentry;
+						break;
+					}
+					if (!follow_up(&nd->mnt, &nd->dentry))
+						break;
 				}
+				inode = nd->dentry->d_inode;
 				/* fallthrough */
 			case 1:
 				goto return_base;
@@ -437,7 +490,7 @@ last_component:
 			if (IS_ERR(dentry))
 				break;
 		}
-		while (d_mountpoint(dentry) && follow_down(&dentry, &nd->mnt))
+		while (d_mountpoint(dentry) && __follow_down(&nd->mnt, &dentry))
 			;
 		inode = dentry->d_inode;
 		if ((lookup_flags & LOOKUP_FOLLOW)

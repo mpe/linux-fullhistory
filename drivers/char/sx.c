@@ -2472,6 +2472,8 @@ int sx_init(void)
 		while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
 		                                PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8, 
 			                              pdev))) {
+			if (pci_enable_device(pdev))
+				continue;
 #else
 			for (i=0;i< SX_NBOARDS;i++) {
 				if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
@@ -2503,14 +2505,16 @@ int sx_init(void)
 
 			/* CF boards use base address 3.... */
 			if (IS_CF_BOARD (board))
-				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_3,
-				                      &tint);
+				board->hw_base = pci_resource_start (pdev, 3);
 			else
-				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2,
-				                      &tint);
-			board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
+				board->hw_base = pci_resource_start (pdev, 2);
 			board->base2 = 
 			board->base = (ulong) ioremap(board->hw_base, WINDOW_LEN (board));
+			if (!board->base) {
+				printk(KERN_ERR "ioremap failed\n");
+				/* XXX handle error */
+			}
+
 			/* Most of the stuff on the CF board is offset by
 			   0x18000 ....  */
 			if (IS_CF_BOARD (board)) board->base += 0x18000;

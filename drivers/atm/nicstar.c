@@ -452,6 +452,14 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
 
    error = 0;
 
+   if (pci_enable_device(pcidev))
+   {
+      printk("nicstar%d: can't enable PCI device\n", i);
+      error = 2;
+      ns_init_card_error(card, error);
+      return error;
+   }
+
    if ((card = kmalloc(sizeof(ns_dev), GFP_KERNEL)) == NULL)
    {
       printk("nicstar%d: can't allocate memory for device structure.\n", i);

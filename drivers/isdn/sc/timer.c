@@ -91,9 +91,7 @@ void check_reset(unsigned long data)
 	else  {
 		pr_debug("%s: No signature yet, waiting another %d jiffies.\n", 
 			adapter[card]->devicename, CHECKRESET_TIME);
-		del_timer(&adapter[card]->reset_timer);
-		adapter[card]->reset_timer.expires = jiffies + CHECKRESET_TIME;
-		add_timer(&adapter[card]->reset_timer);
+		mod_timer(&adapter[card]->reset_timer, jiffies+CHECKRESET_TIME);
 	}
 	restore_flags(flags);
 		
@@ -138,9 +136,7 @@ void check_phystat(unsigned long data)
 	/* Reinitialize the timer */
 	save_flags(flags);
 	cli();
-	del_timer(&adapter[card]->stat_timer);
-	adapter[card]->stat_timer.expires = jiffies + CHECKSTAT_TIME;
-	add_timer(&adapter[card]->stat_timer);
+	mod_timer(&adapter[card]->stat_timer, jiffies+CHECKSTAT_TIME);
 	restore_flags(flags);
 
 	/* Send a new cePhyStatus message */

@@ -1995,12 +1995,14 @@ int init_module(void)
 				if (card >= BOARD_COUNT)
 					break;
 					
+				if (pci_enable_device(dev))
+					break;
+
 				/* found a PCI ISI card! */
-				ioaddr = dev->resource[3].start; /* i.e at offset 0x1c in the
-								* PCI configuration register
-								* space.
-								*/
-				ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+				ioaddr = pci_resource_start (dev, 3); /* i.e at offset 0x1c in the
+								       * PCI configuration register
+								       * space.
+								       */
 				pciirq = dev->irq;
 				printk(KERN_INFO "ISI PCI Card(Device ID 0x%x)\n", device_id[idx]);
 				/*

@@ -1120,7 +1120,11 @@ static int __devinit epic100_init_one (struct pci_dev *pdev,
 	if (!request_region(ioaddr, EPIC_TOTAL_SIZE, EPIC100_MODULE_NAME))
 		return -EBUSY;
 
-	pci_enable_device (pdev);
+	i = pci_enable_device (pdev);
+	if (i) {
+		release_region(ioaddr, EPIC_TOTAL_SIZE);
+		return i;
+	}
 
 	/* EPIC-specific code: Soft-reset the chip ere setting as master. */
 	outl(0x0001, ioaddr + GENCTL);

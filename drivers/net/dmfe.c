@@ -367,7 +367,7 @@ static int __init dmfe_probe(void)
 				
 		/* Enable Master/IO access, Disable memory access */
 		
-		pci_enable_device (net_dev);
+		pci_enable_device (net_dev); /* XXX check return val */
 		pci_set_master(net_dev);
 		
 		/* Set Latency Timer 80h */

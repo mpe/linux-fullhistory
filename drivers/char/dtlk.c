@@ -241,6 +241,8 @@ static ssize_t dtlk_write(struct file *file, const char *buf,
 static unsigned int dtlk_poll(struct file *file, poll_table * wait)
 {
 	int mask = 0;
+	unsigned long expires;
+
 	TRACE_TEXT(" dtlk_poll");
 	/*
 	   static long int j;
@@ -261,9 +263,8 @@ static unsigned int dtlk_poll(struct file *file, poll_table * wait)
 	/* there are no exception conditions */
 
 	/* There won't be any interrupts, so we set a timer instead. */
-	del_timer(&dtlk_timer);
-	dtlk_timer.expires = jiffies + 3*HZ / 100;
-	add_timer(&dtlk_timer);
+	expires = jiffies + 3*HZ / 100;
+	mod_timer(&dtlk_timer, expires);
 
 	return mask;
 }

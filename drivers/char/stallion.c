@@ -2778,6 +2778,8 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
 		devp->bus->number, devp->devfn);
 #endif
 
+	if (pci_enable_device(devp))
+		return(-EIO);
 	if ((brdp = stl_allocbrd()) == (stlbrd_t *) NULL)
 		return(-ENOMEM);
 	if ((brdp->brdnr = stl_getbrdnr()) < 0) {

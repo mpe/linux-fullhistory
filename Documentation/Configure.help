@@ -1830,7 +1830,7 @@ limit match support
 CONFIG_IP_NF_MATCH_LIMIT
   limit matching allows you to control the rate at which a rule can be
   matched: mainly useful in combination with the LOG target ("LOG
-  target support", below).
+  target support", below) and to avoid some Denial of Service attacks.
 
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.  If unsure, say `N'.

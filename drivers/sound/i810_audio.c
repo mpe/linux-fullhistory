@@ -1735,14 +1735,16 @@ static int __init i810_probe(struct pci_dev *pci_dev, const struct pci_device_id
 		return -ENODEV;
 	}
 
+	if (pci_enable_device(pci_dev))
+		return -EIO;
 	if ((card = kmalloc(sizeof(struct i810_card), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "i810_audio: out of memory\n");
 		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(*card));
 
-	card->iobase = pci_dev->resource[1].start;
-	card->ac97base = pci_dev->resource[0].start;
+	card->iobase = pci_resource_start (pci_dev, 1);
+	card->ac97base = pci_resource_start (pci_dev, 0);
 	card->pci_dev = pci_dev;
 	card->pci_id = pci_id->device;
 	card->irq = pci_dev->irq;
@@ -1752,7 +1754,6 @@ static int __init i810_probe(struct pci_dev *pci_dev, const struct pci_device_id
 	devs = card;
 
 	pci_set_master(pci_dev);
-	pci_enable_device(pci_dev);
 
 	printk(KERN_INFO "i810: %s found at IO 0x%04lx and 0x%04lx, IRQ %d\n",
 	       card_names[pci_id->driver_data], card->iobase, card->ac97base, 

@@ -232,9 +232,7 @@ tbf_dequeue(struct Qdisc* sch)
 			if (delay == 0)
 				delay = 1;
 
-			del_timer(&q->wd_timer);
-			q->wd_timer.expires = jiffies + delay;
-			add_timer(&q->wd_timer);
+			mod_timer(&q->wd_timer, jiffies+delay);
 		}
 
 		/* Maybe we have a shorter packet in the queue,

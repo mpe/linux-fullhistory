@@ -118,7 +118,7 @@ checkentry(const char *tablename,
 }
 
 static struct ipt_match owner_match
-= { { NULL, NULL }, "owner", &match, &checkentry, THIS_MODULE };
+= { { NULL, NULL }, "owner", &match, &checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

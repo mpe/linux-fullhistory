@@ -47,7 +47,7 @@ checkentry(const char *tablename,
 }
 
 static struct ipt_target ipt_mark_reg
-= { { NULL, NULL }, "MARK", target, checkentry, THIS_MODULE };
+= { { NULL, NULL }, "MARK", target, checkentry, NULL, THIS_MODULE };
 
 static int __init init(void)
 {

@@ -63,6 +63,7 @@ struct dentry {
 	struct dentry * d_parent;	/* parent directory */
 	struct dentry * d_mounts;	/* mount information */
 	struct dentry * d_covers;
+	struct list_head d_vfsmnt;
 	struct list_head d_hash;	/* lookup hash list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct list_head d_child;	/* child of parent list */
@@ -162,7 +163,7 @@ extern void prune_icache(int);
 extern struct dentry * d_alloc_root(struct inode *);
 
 /* test whether root is busy without destroying dcache */
-extern int is_root_busy(struct dentry *);
+extern int d_active_refs(struct dentry *);
 
 /* test whether we have any submounts in a subdir tree */
 extern int have_submounts(struct dentry *);
@@ -235,10 +236,9 @@ static __inline__ int d_unhashed(struct dentry *dentry)
 
 extern void dput(struct dentry *);
 
-/* MOUNT_REWRITE: replace with the check for d_vfsmnt */
 static __inline__ int d_mountpoint(struct dentry *dentry)
 {
-	return dentry != dentry->d_mounts;
+	return !list_empty(&dentry->d_vfsmnt);
 }
 
 

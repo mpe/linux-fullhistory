@@ -205,6 +205,9 @@ int __init applicom_init(void)
 		if (dev->device  > MAX_PCI_DEVICE_NUM || dev->device == 0)
 			continue;
 		
+		if (pci_enable_device(dev))
+			return -EIO;
+
 		RamIO = ioremap(PCI_BASE_ADDRESS(dev), LEN_RAM_IO);
 
 		if (!RamIO) {

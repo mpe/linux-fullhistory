@@ -121,7 +121,8 @@ int awc4500_pci_probe(struct net_device *dev)
 //				printk(KERN_ERR "aironet4X00 mem addrs not available for maping \n");
 //				continue;
 //		}
-		request_region(pci_ioaddr, AIRONET4X00_IO_SIZE, "aironet4x00 ioaddr");
+		if (!request_region(pci_ioaddr, AIRONET4X00_IO_SIZE, "aironet4x00 ioaddr"))
+			continue;
 //		request_region(pci_cisaddr, AIRONET4X00_CIS_SIZE, "aironet4x00 cis");
 //		request_region(pci_memaddr, AIRONET4X00_MEM_SIZE, "aironet4x00 mem");
 

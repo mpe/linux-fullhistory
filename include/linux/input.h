@@ -416,7 +416,7 @@ struct input_id {
 #include <linux/devfs_fs_kernel.h>
 
 #define NBITS(x) ((((x)-1)/BITS_PER_LONG)+1)
-#define BIT(x)	(1<<((x)%BITS_PER_LONG))
+#define BIT(x)	(1UL<<((x)%BITS_PER_LONG))
 #define LONG(x) ((x)/BITS_PER_LONG)
 
 struct input_dev {

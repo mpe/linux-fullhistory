@@ -182,7 +182,8 @@ static int __init sis900_probe (struct pci_dev *pci_dev, const struct pci_device
 	}
 
 	/* setup various bits in PCI command register */
-	pci_enable_device (pci_dev);
+	if (pci_enable_device (pci_dev))
+		return -ENODEV;
 	pci_set_master(pci_dev);
 
 	/* do the real low level jobs */

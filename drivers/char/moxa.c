@@ -482,13 +482,15 @@ int moxa_init(void)
 #endif
 	/* Find PCI boards here */
 #ifdef CONFIG_PCI
-	if (pci_present()) {
+	{
 		struct pci_dev *p = NULL;
 		n = sizeof(moxa_pcibrds) / sizeof(moxa_pciinfo);
 		i = 0;
 		while (i < n) {
 			while((p = pci_find_device(moxa_pcibrds[i].vendor_id, moxa_pcibrds[i].device_id, p))!=NULL)
 			{
+				if (pci_enable_device(p))
+					continue;
 				if (numBoards >= MAX_BOARDS) {
 					if (verbose)
 						printk("More than %d MOXA Intellio family boards found. Board is ignored.", MAX_BOARDS);
@@ -513,7 +515,7 @@ static int moxa_get_PCI_conf(struct pci_dev *p, int board_type, moxa_board_conf 
 {
 	unsigned int val;
 
-	board->baseAddr = p->resource[2].start;
+	board->baseAddr = pci_resource_start (p, 2);
 	board->boardType = board_type;
 	switch (board_type) {
 	case MOXA_BOARD_C218_ISA:

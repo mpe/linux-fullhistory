@@ -589,6 +589,9 @@ cleanup_match(struct ipt_entry_match *m, unsigned int *i)
 	if (i && (*i)-- == 0)
 		return 1;
 
+	if (m->u.match->destroy)
+		m->u.match->destroy(m->data, m->match_size - sizeof(*m));
+
 	if (m->u.match->me)
 		__MOD_DEC_USE_COUNT(m->u.match->me);
 
@@ -769,6 +772,8 @@ cleanup_entry(struct ipt_entry *e, unsigned int *i)
 	/* Cleanup all matches */
 	IPT_MATCH_ITERATE(e, cleanup_match, NULL);
 	t = ipt_get_target(e);
+	if (t->u.target->destroy)
+		t->u.target->destroy(t->data, t->target_size - sizeof(*t));
 	if (t->u.target->me)
 		__MOD_DEC_USE_COUNT(t->u.target->me);
 
@@ -1094,7 +1099,7 @@ do_replace(void *user, unsigned int len)
 	/* Silent error: too late now. */
 	copy_to_user(tmp.counters, counters,
 		     sizeof(struct ipt_counters) * tmp.num_counters);
-
+	vfree(counters);
 	up(&ipt_mutex);
 	return 0;
 

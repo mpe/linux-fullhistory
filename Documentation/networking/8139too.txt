@@ -169,6 +169,33 @@ suggestions welcome)
 
 Change History
 --------------
+Version 0.9.4.1 - April 27, 2000 - third public beta release
+
+* Replace several "magic numbers" with symbolic constants
+* Differentiate between board-specific info and chip-specific info
+  (allows for easier support of specific boards or chips)
+* Move some of the transmit side outside of the spinlock
+  by using atomic variables.  Use spin_lock_irq instead of
+  spin_lock_irq{save,restore} in select places, for better performance.
+* New module option "media" for forcing media selection.  Functions the
+  same as "options" in other drivers, and will soon be renamed
+  'options' to be homogeneous.
+* New power management wake-up code
+* Slightly more verbose chip id messages in kernel log
+* Add/correct chip register constant list
+* New chipset wake up (open) logic
+* No longer locks CONFIGx updates
+* Do not set Interfame Gap (IFG) bits in TxConfig
+* Better Rx reset logic in case of Rx FIFO Overflow
+* For chips which support it, enable bit to automatically clear Rx
+  FIFO overflow
+* No longer enable and disable interrupts in interrupt handler
+  (technique borrowed from BSD driver, appears to have problems
+   with some chips)
+* H/W spinlock now protects ioctl
+* Chipset-dependent RxConfig settings
+
+
 Version 0.9.3.3.2 - Feb 22, 2000 - second public beta release
 
 * Begin integration of Daniel Kobras' MMIO flush patch (disabled for now)
@@ -187,8 +214,9 @@ Version 0.9.3.3.2 - Feb 22, 2000 - second public beta release
 * Reset NWay registers to sane defaults on rtl8139_open/hw_start
 * Miscellaneous code cleanup
 
-Version 0.7.0 - Feb 7, 2000 - first public beta release
 
+Version 0.7.0 - Feb 7, 2000 - first public beta release
+* Initial public version, derived from Donald Becker's rtl8139.c v1.08r
 
 [EOF]
 

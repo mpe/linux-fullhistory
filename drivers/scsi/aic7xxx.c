@@ -3585,9 +3585,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
       if ( !(p->dev_timer_active & (0x01 << MAX_TARGETS)) ||
             time_after_eq(p->dev_timer.expires, p->dev_expires[i]) )
       {
-        del_timer(&p->dev_timer);
-        p->dev_timer.expires = p->dev_expires[i];
-        add_timer(&p->dev_timer);
+        mod_timer(&p->dev_timer, p->dev_expires[i]);
         p->dev_timer_active |= (0x01 << MAX_TARGETS);
       }
     }
@@ -5045,11 +5043,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
                 }
                 else if ( time_after_eq(p->dev_timer.expires,
                                         p->dev_expires[tindex]) )
-                {
-                  del_timer(&p->dev_timer);
-                  p->dev_timer.expires = p->dev_expires[tindex];
-                  add_timer(&p->dev_timer);
-                }
+                  mod_timer(&p->dev_timer, p->dev_expires[tindex]);
               }
 #ifdef AIC7XXX_VERBOSE_DEBUGGING
               if( (aic7xxx_verbose & VERBOSE_MINOR_ERROR) ||
@@ -12058,9 +12052,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
       if ( !(p->dev_timer_active & (0x01 << MAX_TARGETS)) ||
             time_after_eq(p->dev_timer.expires, p->dev_expires[p->scsi_id]) )
       {
-        del_timer(&p->dev_timer);
-        p->dev_timer.expires = p->dev_expires[p->scsi_id];
-        add_timer(&p->dev_timer);
+        mod_timer(&p->dev_timer, p->dev_expires[p->scsi_id]);
         p->dev_timer_active |= (0x01 << MAX_TARGETS);
       }
       aic7xxx_reset_channel(p, cmd->channel, TRUE);

@@ -279,9 +279,7 @@ act2000_poll(unsigned long data)
 	act2000_receive(card);
         save_flags(flags);
         cli();
-        del_timer(&card->ptimer);
-        card->ptimer.expires = jiffies + 3;
-        add_timer(&card->ptimer);
+        mod_timer(&card->ptimer, jiffies+3);
         restore_flags(flags);
 }
 

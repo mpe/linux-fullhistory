@@ -442,7 +442,7 @@ extern struct task_struct *pidhash[PIDHASH_SZ];
 
 #define pid_hashfn(x)	((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
-extern __inline__ void hash_pid(struct task_struct *p)
+static inline void hash_pid(struct task_struct *p)
 {
 	struct task_struct **htable = &pidhash[pid_hashfn(p->pid)];
 
@@ -452,14 +452,14 @@ extern __inline__ void hash_pid(struct task_struct *p)
 	p->pidhash_pprev = htable;
 }
 
-extern __inline__ void unhash_pid(struct task_struct *p)
+static inline void unhash_pid(struct task_struct *p)
 {
 	if(p->pidhash_next)
 		p->pidhash_next->pidhash_pprev = p->pidhash_pprev;
 	*p->pidhash_pprev = p->pidhash_next;
 }
 
-extern __inline__ struct task_struct *find_task_by_pid(int pid)
+static inline struct task_struct *find_task_by_pid(int pid)
 {
 	struct task_struct *p, **htable = &pidhash[pid_hashfn(pid)];
 
@@ -525,7 +525,7 @@ extern int kill_proc(pid_t, int, int);
 extern int do_sigaction(int, const struct k_sigaction *, struct k_sigaction *);
 extern int do_sigaltstack(const stack_t *, stack_t *, unsigned long);
 
-extern inline int signal_pending(struct task_struct *p)
+static inline int signal_pending(struct task_struct *p)
 {
 	return (p->sigpending != 0);
 }
@@ -593,7 +593,7 @@ extern void free_irq(unsigned int, void *);
  * These will be removed, but in the mean time, when the SECURE_NOROOT 
  * flag is set, uids don't grant privilege.
  */
-extern inline int suser(void)
+static inline int suser(void)
 {
 	if (!issecure(SECURE_NOROOT) && current->euid == 0) { 
 		current->flags |= PF_SUPERPRIV;
@@ -602,7 +602,7 @@ extern inline int suser(void)
 	return 0;
 }
 
-extern inline int fsuser(void)
+static inline int fsuser(void)
 {
 	if (!issecure(SECURE_NOROOT) && current->fsuid == 0) {
 		current->flags |= PF_SUPERPRIV;
@@ -617,7 +617,7 @@ extern inline int fsuser(void)
  * fsuser(). See include/linux/capability.h for defined capabilities.
  */
 
-extern inline int capable(int cap)
+static inline int capable(int cap)
 {
 #if 1 /* ok now */
 	if (cap_raised(current->cap_effective, cap))
@@ -707,7 +707,7 @@ extern void daemonize(void);
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
 
-extern inline void add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
+static inline void add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
 {
 	unsigned long flags;
 
@@ -716,7 +716,7 @@ extern inline void add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
 	wq_write_unlock_irqrestore(&q->lock, flags);
 }
 
-extern inline void add_wait_queue_exclusive(wait_queue_head_t *q,
+static inline void add_wait_queue_exclusive(wait_queue_head_t *q,
 							wait_queue_t * wait)
 {
 	unsigned long flags;
@@ -726,7 +726,7 @@ extern inline void add_wait_queue_exclusive(wait_queue_head_t *q,
 	wq_write_unlock_irqrestore(&q->lock, flags);
 }
 
-extern inline void remove_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
+static inline void remove_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
 {
 	unsigned long flags;
 
@@ -820,12 +820,12 @@ static inline void del_from_runqueue(struct task_struct * p)
 	p->run_list.next = NULL;
 }
 
-extern inline int task_on_runqueue(struct task_struct *p)
+static inline int task_on_runqueue(struct task_struct *p)
 {
 	return (p->run_list.next != NULL);
 }
 
-extern inline void unhash_process(struct task_struct *p)
+static inline void unhash_process(struct task_struct *p)
 {
 	if (task_on_runqueue(p)) BUG();
 	write_lock_irq(&tasklist_lock);

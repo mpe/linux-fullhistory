@@ -137,7 +137,6 @@ EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(update_atime);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_empty_super);
-EXPORT_SYMBOL(remove_vfsmnt);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(_fput);
 EXPORT_SYMBOL(igrab);
@@ -145,6 +144,7 @@ EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
+EXPORT_SYMBOL(follow_down);
 EXPORT_SYMBOL(lookup_dentry);
 EXPORT_SYMBOL(walk_init);
 EXPORT_SYMBOL(walk_name);
@@ -214,7 +214,6 @@ EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
 EXPORT_SYMBOL(locks_mandatory_area);
 EXPORT_SYMBOL(dput);
-EXPORT_SYMBOL(is_root_busy);
 EXPORT_SYMBOL(have_submounts);
 EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
@@ -309,6 +308,7 @@ EXPORT_SYMBOL(console_loglevel);
 /* filesystem registration */
 EXPORT_SYMBOL(register_filesystem);
 EXPORT_SYMBOL(unregister_filesystem);
+EXPORT_SYMBOL(may_umount);
 
 /* executable format registration */
 EXPORT_SYMBOL(register_binfmt);

@@ -337,53 +337,6 @@ repeat:
 	}
 }
 
-/**
- * is_root_busy - check if a root dentry could be freed
- * @root: Dentry to work down from
- *
- * Check whether a root dentry would be in use if all of its
- * child dentries were freed. This allows a non-destructive
- * test for unmounting a device.
- *
- * Return non zero if the root is still busy.
- */
- 
-int is_root_busy(struct dentry *root)
-{
-	struct dentry *this_parent = root;
-	struct list_head *next;
-	int count = root->d_count;
-
-	check_lock();
-
-repeat:
-	next = this_parent->d_subdirs.next;
-resume:
-	while (next != &this_parent->d_subdirs) {
-		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
-		next = tmp->next;
-		/* Decrement count for unused children */
-		count += (dentry->d_count - 1);
-		if (!list_empty(&dentry->d_subdirs)) {
-			this_parent = dentry;
-			goto repeat;
-		}
-		/* root is busy if any leaf is busy */
-		if (dentry->d_count)
-			return 1;
-	}
-	/*
-	 * All done at this level ... ascend and resume the search.
-	 */
-	if (this_parent != root) {
-		next = this_parent->d_child.next; 
-		this_parent = this_parent->d_parent;
-		goto resume;
-	}
-	return (count > 1); /* remaining users? */
-}
-
 /*
  * Search for at least 1 mount point in the dentry's subdirs.
  * We descend to the next level whenever the d_subdirs
@@ -429,6 +382,37 @@ resume:
 		goto resume;
 	}
 	return 0; /* No mount points found in tree */
+}
+
+int d_active_refs(struct dentry *root)
+{
+	struct dentry *this_parent = root;
+	struct list_head *next;
+	int count = root->d_count;
+
+repeat:
+	next = this_parent->d_subdirs.next;
+resume:
+	while (next != &this_parent->d_subdirs) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
+		/* Decrement count for unused children */
+		count += (dentry->d_count - 1);
+		if (!list_empty(&dentry->d_subdirs)) {
+			this_parent = dentry;
+			goto repeat;
+		}
+	}
+	/*
+	 * All done at this level ... ascend and resume the search.
+	 */
+	if (this_parent != root) {
+		next = this_parent->d_child.next; 
+		this_parent = this_parent->d_parent;
+		goto resume;
+	}
+	return count;
 }
 
 /*
@@ -576,6 +560,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 		
 	dentry->d_mounts = dentry;
 	dentry->d_covers = dentry;
+	INIT_LIST_HEAD(&dentry->d_vfsmnt);
 	INIT_LIST_HEAD(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);
 	INIT_LIST_HEAD(&dentry->d_subdirs);
@@ -895,6 +880,7 @@ char * __d_path(struct dentry *dentry, struct vfsmount *vfsmnt,
 {
 	char * end = buffer+buflen;
 	char * retval;
+	int namelen;
 
 	*--end = '\0';
 	buflen--;
@@ -910,14 +896,18 @@ char * __d_path(struct dentry *dentry, struct vfsmount *vfsmnt,
 
 	for (;;) {
 		struct dentry * parent;
-		int namelen;
 
-		if (dentry == root)
+		if (dentry == root && vfsmnt == rootmnt)
 			break;
-		dentry = dentry->d_covers;
+		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
+			/* Global root? */
+			if (vfsmnt->mnt_parent == vfsmnt)
+				goto global_root;
+			dentry = vfsmnt->mnt_mountpoint;
+			vfsmnt = vfsmnt->mnt_parent;
+			continue;
+		}
 		parent = dentry->d_parent;
-		if (dentry == parent)
-			break;
 		namelen = dentry->d_name.len;
 		buflen -= namelen + 1;
 		if (buflen < 0)
@@ -929,6 +919,14 @@ char * __d_path(struct dentry *dentry, struct vfsmount *vfsmnt,
 		dentry = parent;
 	}
 	return retval;
+global_root:
+	namelen = dentry->d_name.len;
+	buflen -= namelen;
+	if (buflen >= 0) {
+		end -= namelen;
+		memcpy(end, dentry->d_name.name, namelen);
+	}
+	return end;
 }
 
 /*

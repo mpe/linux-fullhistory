@@ -189,10 +189,8 @@ static int __devinit ne2k_pci_init_one (struct pci_dev *pdev,
 	}
 	
 	i = pci_enable_device (pdev);
-	if (i) {
-		printk (KERN_ERR "ne2k-pci: cannot enable device\n");
+	if (i)
 		return i;
-	}
 	
 	if (request_region (ioaddr, NE_IO_EXTENT, "ne2k-pci") == NULL) {
 		printk (KERN_ERR "ne2k-pci: I/O resource 0x%x @ 0x%lx busy\n",
@@ -567,7 +565,6 @@ static int __init ne2k_pci_init(void)
 {
 	int rc;
 	
-	MOD_INC_USE_COUNT;
 	lock_8390_module();
 	
 	rc = pci_module_init (&ne2k_driver);
@@ -576,8 +573,6 @@ static int __init ne2k_pci_init(void)
 	if (rc <= 0)
 		unlock_8390_module();
 
-	MOD_DEC_USE_COUNT;
-	
 	return rc;
 }
 

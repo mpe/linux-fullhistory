@@ -30,7 +30,7 @@
  */
 
 #define __HAVE_ARCH_STRCPY
-extern inline char * strcpy(char * dest,const char *src)
+static inline char * strcpy(char * dest,const char *src)
 {
 int d0, d1, d2;
 __asm__ __volatile__(
@@ -44,7 +44,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRNCPY
-extern inline char * strncpy(char * dest,const char *src,size_t count)
+static inline char * strncpy(char * dest,const char *src,size_t count)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
@@ -63,7 +63,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRCAT
-extern inline char * strcat(char * dest,const char * src)
+static inline char * strcat(char * dest,const char * src)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
@@ -80,7 +80,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRNCAT
-extern inline char * strncat(char * dest,const char * src,size_t count)
+static inline char * strncat(char * dest,const char * src,size_t count)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
@@ -103,7 +103,7 @@ return dest;
 }
 
 #define __HAVE_ARCH_STRCMP
-extern inline int strcmp(const char * cs,const char * ct)
+static inline int strcmp(const char * cs,const char * ct)
 {
 int d0, d1;
 register int __res;
@@ -124,7 +124,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRNCMP
-extern inline int strncmp(const char * cs,const char * ct,size_t count)
+static inline int strncmp(const char * cs,const char * ct,size_t count)
 {
 register int __res;
 int d0, d1, d2;
@@ -147,7 +147,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRCHR
-extern inline char * strchr(const char * s, int c)
+static inline char * strchr(const char * s, int c)
 {
 int d0;
 register char * __res;
@@ -166,7 +166,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRRCHR
-extern inline char * strrchr(const char * s, int c)
+static inline char * strrchr(const char * s, int c)
 {
 int d0, d1;
 register char * __res;
@@ -183,7 +183,7 @@ return __res;
 }
 
 #define __HAVE_ARCH_STRLEN
-extern inline size_t strlen(const char * s)
+static inline size_t strlen(const char * s)
 {
 int d0;
 register int __res;
@@ -196,7 +196,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline void * __memcpy(void * to, const void * from, size_t n)
+static inline void * __memcpy(void * to, const void * from, size_t n)
 {
 int d0, d1, d2;
 __asm__ __volatile__(
@@ -218,7 +218,7 @@ return (to);
  * This looks horribly ugly, but the compiler can optimize it totally,
  * as the count is constant.
  */
-extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
+static inline void * __constant_memcpy(void * to, const void * from, size_t n)
 {
 	switch (n) {
 		case 0:
@@ -300,7 +300,7 @@ __asm__ __volatile__( \
  *	This CPU favours 3DNow strongly (eg AMD Athlon)
  */
 
-extern inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
+static inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
 {
 	if(len<512 || in_interrupt())
 		return __constant_memcpy(to, from, len);
@@ -349,7 +349,7 @@ extern void __struct_cpy_bug (void);
 })
 
 #define __HAVE_ARCH_MEMMOVE
-extern inline void * memmove(void * dest,const void * src, size_t n)
+static inline void * memmove(void * dest,const void * src, size_t n)
 {
 int d0, d1, d2;
 if (dest<src)
@@ -376,7 +376,7 @@ return dest;
 #define memcmp __builtin_memcmp
 
 #define __HAVE_ARCH_MEMCHR
-extern inline void * memchr(const void * cs,int c,size_t count)
+static inline void * memchr(const void * cs,int c,size_t count)
 {
 int d0;
 register void * __res;
@@ -392,7 +392,7 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern inline void * __memset_generic(void * s, char c,size_t count)
+static inline void * __memset_generic(void * s, char c,size_t count)
 {
 int d0, d1;
 __asm__ __volatile__(
@@ -412,7 +412,7 @@ return s;
  * things 32 bits at a time even when we don't know the size of the
  * area at compile-time..
  */
-extern inline void * __constant_c_memset(void * s, unsigned long c, size_t count)
+static inline void * __constant_c_memset(void * s, unsigned long c, size_t count)
 {
 int d0, d1;
 __asm__ __volatile__(
@@ -432,7 +432,7 @@ return (s);
 
 /* Added by Gertjan van Wingerde to make minix and sysv module work */
 #define __HAVE_ARCH_STRNLEN
-extern inline size_t strnlen(const char * s, size_t count)
+static inline size_t strnlen(const char * s, size_t count)
 {
 int d0;
 register int __res;
@@ -453,7 +453,7 @@ return __res;
 /* end of additional stuff */
 
 #define __HAVE_ARCH_STRSTR
-extern inline char * strstr(const char * cs,const char * ct)
+static inline char * strstr(const char * cs,const char * ct)
 {
 int	d0, d1;
 register char * __res;
@@ -486,7 +486,7 @@ return __res;
  * This looks horribly ugly, but the compiler can optimize it totally,
  * as we by now know that both pattern and count is constant..
  */
-extern inline void * __constant_c_and_count_memset(void * s, unsigned long pattern, size_t count)
+static inline void * __constant_c_and_count_memset(void * s, unsigned long pattern, size_t count)
 {
 	switch (count) {
 		case 0:
@@ -545,7 +545,7 @@ __asm__  __volatile__( \
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
 #define __HAVE_ARCH_MEMSCAN
-extern inline void * memscan(void * addr, int c, size_t size)
+static inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)
 		return addr;

@@ -11,7 +11,7 @@ extern void _fput(struct file *);
  * Check whether the specified task has the fd open. Since the task
  * may not have a files_struct, we must test for p->files != NULL.
  */
-extern inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
+static inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
 {
 	struct file * file = NULL;
 
@@ -23,7 +23,7 @@ extern inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
 /*
  * Check whether the specified fd has an open file.
  */
-extern inline struct file * fcheck(unsigned int fd)
+static inline struct file * fcheck(unsigned int fd)
 {
 	struct file * file = NULL;
 	struct files_struct *files = current->files;
@@ -33,7 +33,7 @@ extern inline struct file * fcheck(unsigned int fd)
 	return file;
 }
 
-extern inline struct file * frip(struct files_struct *files, unsigned int fd)
+static inline struct file * frip(struct files_struct *files, unsigned int fd)
 {
 	struct file * file = NULL;
 
@@ -42,7 +42,7 @@ extern inline struct file * frip(struct files_struct *files, unsigned int fd)
 	return file;
 }
 
-extern inline struct file * fget(unsigned int fd)
+static inline struct file * fget(unsigned int fd)
 {
 	struct file * file = NULL;
 	struct files_struct *files = current->files;
@@ -58,8 +58,8 @@ extern inline struct file * fget(unsigned int fd)
 /*
  * 23/12/1998 Marcin Dalecki <dalecki@cs.net.pl>: 
  * 
- * Since those functions where calling other functions, it was compleatly 
- * bogous to make them all "extern inline".
+ * Since those functions where calling other functions, it was completely 
+ * bogos to make them all "static inline".
  *
  * The removal of this pseudo optimization saved me scandaleous:
  *
@@ -71,7 +71,7 @@ extern inline struct file * fget(unsigned int fd)
  * I suspect there are many other similar "optimizations" across the
  * kernel...
  */
-extern inline void fput(struct file * file)
+static inline void fput(struct file * file)
 {
 	if (atomic_dec_and_test(&file->f_count))
 		_fput(file);
@@ -88,7 +88,7 @@ extern void put_filp(struct file *);
  * fput() the struct file we are about to overwrite in this case.
  */
 
-extern inline void fd_install(unsigned int fd, struct file * file)
+static inline void fd_install(unsigned int fd, struct file * file)
 {
 	struct files_struct *files = current->files;
 	struct file * result;

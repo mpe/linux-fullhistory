@@ -121,8 +121,8 @@ static struct nf_hook_ops ipt_ops[]
 		NF_IP_PRI_FILTER }
 };
 
-/* Default to no forward for security reasons. */
-static int forward = NF_DROP;
+/* Default to forward because I got too much mail already. */
+static int forward = NF_ACCEPT;
 MODULE_PARM(forward, "i");
 
 static int __init init(void)

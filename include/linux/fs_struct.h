@@ -31,8 +31,10 @@ static inline void set_fs_root(struct fs_struct *fs,
 	struct vfsmount *old_rootmnt = fs->rootmnt;
 	fs->rootmnt = mntget(mnt);
 	fs->root = dget(dentry);
-	dput(old_root);
-	mntput(old_rootmnt);
+	if (old_root) {
+		dput(old_root);
+		mntput(old_rootmnt);
+	}
 }
 
 /*
@@ -48,8 +50,10 @@ static inline void set_fs_pwd(struct fs_struct *fs,
 	struct vfsmount *old_pwdmnt = fs->pwdmnt;
 	fs->pwdmnt = mntget(mnt);
 	fs->pwd = dget(dentry);
-	dput(old_pwd);
-	mntput(old_pwdmnt);
+	if (old_pwd) {
+		dput(old_pwd);
+		mntput(old_pwdmnt);
+	}
 }
 
 struct fs_struct *copy_fs_struct(struct fs_struct *old);

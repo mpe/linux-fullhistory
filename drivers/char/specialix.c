@@ -2351,11 +2351,14 @@ int specialix_init(void)
 			                        pdev);
 			if (!pdev) break;
 
+			if (pci_enable_device(pdev)) {
+				i++;
+				continue;
+			}
+
 			sx_board[i].irq = pdev->irq;
 
-			pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2, &tint);
-			/* Mask out the fact that it's IO-space */
-			sx_board[i].base = tint & PCI_BASE_ADDRESS_IO_MASK; 
+			sx_board[i].base = pci_resource_start (pdev, 2);
 
 			sx_board[i].flags |= SX_BOARD_IS_PCI;
 			if (!sx_probe(&sx_board[i]))

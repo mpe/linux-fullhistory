@@ -2520,7 +2520,8 @@ static int __devinit sv_probe(struct pci_dev *pcidev, const struct pci_device_id
 		printk(KERN_ERR "sv: io ports %#lx-%#lx in use\n", s->iosynth, s->iosynth+SV_EXTENT_SYNTH-1);
 		goto err_region1;
 	}
-	pci_enable_device(pcidev);
+	if (pci_enable_device(pcidev))
+		goto err_irq;
 	/* initialize codec registers */
 	outb(0x80, s->ioenh + SV_CODEC_CONTROL); /* assert reset */
 	udelay(50);

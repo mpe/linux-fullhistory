@@ -1255,6 +1255,7 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 		goto err_out_free_pio_region;
 	}
 	
+	/* XXX check enable_device for failure */
 	pci_enable_device (pdev);
 	pci_set_master (pdev);
 
@@ -1263,6 +1264,7 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 #else
 	real_ioaddr = ioaddr = pci_resource_start (pdev, 1);
 	ioaddr = (long) ioremap(ioaddr, YELLOWFIN_SIZE);
+	/* XXX check for failure */
 #endif
 	irq = pdev->irq;
 

@@ -86,6 +86,12 @@ print_conntrack(char *buffer, const struct ip_conntrack *conntrack)
 	len += print_tuple(buffer + len,
 			   &conntrack->tuplehash[IP_CT_DIR_REPLY].tuple,
 			   proto);
+#if 0
+	if (!(conntrack->status & IPS_CONFIRMED))
+		len += sprintf(buffer + len, "[UNCONFIRMED] ");
+	len += sprintf(buffer + len, "use=%u ",
+		       atomic_read(&conntrack->ct_general.use));
+#endif
 	len += sprintf(buffer + len, "\n");
 
 	return len;
@@ -157,6 +163,22 @@ list_conntracks(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
+static unsigned int ip_confirm(unsigned int hooknum,
+			       struct sk_buff **pskb,
+			       const struct net_device *in,
+			       const struct net_device *out,
+			       int (*okfn)(struct sk_buff *))
+{
+	/* We've seen it coming out the other side: confirm */
+	if ((*pskb)->nfct) {
+		struct ip_conntrack *ct
+			= (struct ip_conntrack *)(*pskb)->nfct->master;
+		if (!(ct->status & IPS_CONFIRMED))
+			ip_conntrack_confirm(ct);
+	}
+	return NF_ACCEPT;
+}
+
 static unsigned int ip_refrag(unsigned int hooknum,
 			      struct sk_buff **pskb,
 			      const struct net_device *in,
@@ -164,6 +186,14 @@ static unsigned int ip_refrag(unsigned int hooknum,
 			      int (*okfn)(struct sk_buff *))
 {
 	struct rtable *rt = (struct rtable *)(*pskb)->dst;
+
+	/* We've seen it coming out the other side: confirm */
+	if ((*pskb)->nfct) {
+		struct ip_conntrack *ct
+			= (struct ip_conntrack *)(*pskb)->nfct->master;
+		if (!(ct->status & IPS_CONFIRMED))
+			ip_conntrack_confirm(ct);
+	}
 
 	/* Local packets are never produced too large for their
 	   interface.  We degfragment them at LOCAL_OUT, however,
@@ -203,6 +233,8 @@ static struct nf_hook_ops ip_conntrack_local_out_ops
 /* Refragmenter; last chance. */
 static struct nf_hook_ops ip_conntrack_out_ops
 = { { NULL, NULL }, ip_refrag, PF_INET, NF_IP_POST_ROUTING, NF_IP_PRI_LAST };
+static struct nf_hook_ops ip_conntrack_local_in_ops
+= { { NULL, NULL }, ip_confirm, PF_INET, NF_IP_LOCAL_IN, NF_IP_PRI_LAST-1 };
 
 static int init_or_cleanup(int init)
 {
@@ -230,10 +262,17 @@ static int init_or_cleanup(int init)
 		printk("ip_conntrack: can't register post-routing hook.\n");
 		goto cleanup_inandlocalops;
 	}
+	ret = nf_register_hook(&ip_conntrack_local_in_ops);
+	if (ret < 0) {
+		printk("ip_conntrack: can't register local in hook.\n");
+		goto cleanup_inoutandlocalops;
+	}
 
 	return ret;
 
  cleanup:
+	nf_unregister_hook(&ip_conntrack_local_in_ops);
+ cleanup_inoutandlocalops:
 	nf_unregister_hook(&ip_conntrack_out_ops);
  cleanup_inandlocalops:
 	nf_unregister_hook(&ip_conntrack_local_out_ops);
