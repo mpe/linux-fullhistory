@@ -635,6 +635,9 @@ running once the system is up.
 
 	keepinitrd	[HW,ARM]
 
+	kstack=N	[IA-32, X86-64] Print N words from the kernel stack
+			in oops dumps.
+
 	l2cr=		[PPC]
 
 	lapic		[IA-32,APIC] Enable the local APIC even if BIOS disabled it.
