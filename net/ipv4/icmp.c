@@ -283,7 +283,10 @@ struct icmp_err icmp_err_convert[] = {
   { ENETUNREACH,	1 },	/*	ICMP_NET_ANO		*/
   { EHOSTUNREACH,	1 },	/*	ICMP_HOST_ANO		*/
   { EOPNOTSUPP,		0 },	/*	ICMP_NET_UNR_TOS	*/
-  { EOPNOTSUPP,		0 }	/*	ICMP_HOST_UNR_TOS	*/
+  { EOPNOTSUPP,		0 },	/*	ICMP_HOST_UNR_TOS	*/
+  { EOPNOTSUPP,		1 },	/*	ICMP_PKT_FILTERED	*/
+  { EOPNOTSUPP,		1 },	/*	ICMP_PREC_VIOLATION	*/
+  { EOPNOTSUPP,		1 }	/*	ICMP_PREC_CUTOFF	*/
 };
 
 /*
@@ -734,7 +737,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			default:
 				break;
 		}
-		if(icmph->code>15)	/* Invalid type */
+		if(icmph->code>NR_ICMP_UNREACH)	/* Invalid type */
 			return;
 	}
 	

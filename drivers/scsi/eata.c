@@ -1,6 +1,10 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      27 Sep 1996 rev. 2.12 for linux 2.1.0
+ *          Portability cleanups (virtual/bus addressing, little/big endian
+ *          support).
+ *
  *      09 Jul 1996 rev. 2.11 for linux 2.0.4
  *          Number of internal retries is now limited.
  *
@@ -127,6 +131,7 @@
 #include <linux/ioport.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/byteorder.h>
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -331,6 +336,11 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
+#define H2DEV(x) htonl(x)
+#define DEV2H(x) H2DEV(x)
+#define V2DEV(addr) ((addr) ? H2DEV(virt_to_bus((void *)addr)) : 0)
+#define DEV2V(addr) ((addr) ? DEV2H(bus_to_virt((unsigned long)addr)) : 0)
+
 static void eata2x_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 
@@ -347,11 +357,11 @@ static inline unchar do_dma (ushort iobase, unsigned int addr, unchar cmd) {
 
    if (wait_on_busy(iobase)) return TRUE;
 
-   if (addr) {
-      outb((char)  addr,        iobase + REG_LOW);
-      outb((char) (addr >> 8),  iobase + REG_LM);
-      outb((char) (addr >> 16), iobase + REG_MID);
-      outb((char) (addr >> 24), iobase + REG_MSB);
+   if ((addr = V2DEV(addr))) {
+      outb((char) (addr >> 24), iobase + REG_LOW);
+      outb((char) (addr >> 16), iobase + REG_LM);
+      outb((char) (addr >> 8),  iobase + REG_MID);
+      outb((char)  addr,        iobase + REG_MSB);
       }
 
    outb(cmd, iobase + REG_CMD);
@@ -403,14 +413,14 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    /* Check the controller "EATA" signature */
    if (info.sign != EATA_SIGNATURE) return FALSE;
 
-   if (ntohl(info.data_len) < EATA_2_0A_SIZE) {
+   if (DEV2H(info.data_len) < EATA_2_0A_SIZE) {
       printk("%s: config structure size (%ld bytes) too short, detaching.\n", 
-	     name, ntohl(info.data_len));
+	     name, DEV2H(info.data_len));
       return FALSE;
       }
-   else if (ntohl(info.data_len) == EATA_2_0A_SIZE)
+   else if (DEV2H(info.data_len) == EATA_2_0A_SIZE)
       protocol_rev = 'A';
-   else if (ntohl(info.data_len) == EATA_2_0B_SIZE)
+   else if (DEV2H(info.data_len) == EATA_2_0B_SIZE)
       protocol_rev = 'B';
    else
       protocol_rev = 'C';
@@ -552,8 +562,8 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 	     info.forcaddr, info.max_id, info.max_chan);
 
    printk("%s: Version 0x%x, SYNC 0x%x, infol %ld, cpl %ld spl %ld.\n", 
-	  name, info.version, info.sync, ntohl(info.data_len), 
-	  ntohl(info.cp_len), ntohl(info.sp_len));
+	  name, info.version, info.sync, DEV2H(info.data_len), 
+	  DEV2H(info.cp_len), DEV2H(info.sp_len));
 #endif
 
    return TRUE;
@@ -603,12 +613,12 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
    for (k = 0; k < SCpnt->use_sg; k++) {
-      cpp->sglist[k].address = htonl((unsigned int) sgpnt[k].address);
-      cpp->sglist[k].num_bytes = htonl((unsigned int) sgpnt[k].length);
+      cpp->sglist[k].address = V2DEV(sgpnt[k].address);
+      cpp->sglist[k].num_bytes = H2DEV(sgpnt[k].length);
       }
 
-   cpp->data_address = htonl((unsigned int) cpp->sglist);
-   cpp->data_len = htonl((SCpnt->use_sg * sizeof(struct sg_list)));
+   cpp->data_address = V2DEV(cpp->sglist);
+   cpp->data_len = H2DEV((SCpnt->use_sg * sizeof(struct sg_list)));
 }
 
 int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
@@ -670,8 +680,8 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 
    memset(spp, 0, sizeof(struct mssp));
 
-   /* The EATA protocol uses Big Endian format, while Intel is Little Endian */
-   cpp->sp_addr = htonl((unsigned int) spp);
+   /* The EATA protocol uses Big Endian format */
+   cpp->sp_addr = V2DEV(spp);
 
    SCpnt->scsi_done = done;
    cpp->index = i;
@@ -693,7 +703,7 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->target = SCpnt->target;
    cpp->lun = SCpnt->lun;  
    cpp->SCpnt = SCpnt;
-   cpp->sense_addr = htonl((unsigned int) SCpnt->sense_buffer); 
+   cpp->sense_addr = V2DEV(SCpnt->sense_buffer); 
    cpp->sense_len = sizeof SCpnt->sense_buffer;
 
    if (SCpnt->use_sg) {
@@ -701,8 +711,8 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       build_sg_list(cpp, SCpnt);
       }
    else {
-      cpp->data_address = htonl((unsigned int) SCpnt->request_buffer);
-      cpp->data_len = htonl(SCpnt->request_bufflen);
+      cpp->data_address = V2DEV(SCpnt->request_buffer);
+      cpp->data_len = H2DEV(SCpnt->request_bufflen);
       }
 
    memcpy(cpp->cdb, SCpnt->cmnd, SCpnt->cmd_len);

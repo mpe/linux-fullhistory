@@ -248,14 +248,11 @@ typedef unsigned int  u32;
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linuxv/malloc.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/time.h>
-#ifdef LINUX_1_2
-#include "../block/blk.h"
-#else
 #include <linux/blk.h>
-#endif
 #undef current
 
 #include "scsi.h"

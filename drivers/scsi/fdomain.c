@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Thu Aug  8 14:58:51 1996 by r.faith@ieee.org
+ * Revised: Wed Oct  2 11:10:55 1996 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995, 1996 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.44 1996/08/08 18:58:53 root Exp $
+ * $Id: fdomain.c,v 5.45 1996/10/02 15:13:06 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -105,6 +105,7 @@
  1.3.72      5.39         8 Feb 1996  Adaptec AHA-2920 board
  1.3.85      5.41         4 Apr 1996
  2.0.12      5.44         8 Aug 1996  Use ID 7 for all PCI cards
+ 2.1.1       5.45         2 Oct 1996  Update ROM accesses for 2.1.x
 
  
 
@@ -276,7 +277,7 @@ struct proc_dir_entry proc_scsi_fdomain = {
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
   
-#define VERSION          "$Revision: 5.44 $"
+#define VERSION          "$Revision: 5.45 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -363,7 +364,7 @@ enum out_port_type {
 };
 
 static int               port_base         = 0;
-static void              *bios_base        = NULL;
+static unsigned long     bios_base         = 0;
 static int               bios_major        = 0;
 static int               bios_minor        = 0;
 static int               PCI_bus           = 0;
@@ -397,16 +398,17 @@ static int               Write_SCSI_Data_port;
 static int               FIFO_Size = 0x2000; /* 8k FIFO for
 						pre-tmc18c30 chips */
 
-extern void              fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs );
+extern void              fdomain_16x0_intr( int irq, void *dev_id,
+					    struct pt_regs * regs );
 
-static void *addresses[] = {
-   (void *)0xc8000,
-   (void *)0xca000,
-   (void *)0xce000,
-   (void *)0xde000,
-   (void *)0xcc000,		/* Extra addresses for PCI boards */
-   (void *)0xd0000,
-   (void *)0xe0000,
+static unsigned long addresses[] = {
+   0xc8000,
+   0xca000,
+   0xce000,
+   0xde000,
+   0xcc000,		/* Extra addresses for PCI boards */
+   0xd0000,
+   0xe0000,
 };
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( unsigned ))
 		       
@@ -425,7 +427,7 @@ static unsigned short ints[] = { 3, 5, 10, 11, 12, 14, 15, 0 };
 
   This driver works *ONLY* for Future Domain cards using the TMC-1800,
   TMC-18C50, or TMC-18C30 chip.  This includes models TMC-1650, 1660, 1670,
-  and 1680.
+  and 1680.  These are all 16-bit cards.
 
   The following BIOS signature signatures are for boards which do *NOT*
   work with this driver (these TMC-8xx and TMC-9xx boards may work with the
@@ -438,6 +440,12 @@ static unsigned short ints[] = { 3, 5, 10, 11, 12, 14, 15, 0 };
   FUTURE DOMAIN CORP. (C) 1986-1990 V6.0209/18/90
   FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90
   FUTURE DOMAIN CORP. (C) 1992 V8.00.004/02/92
+
+  (The cards which do *NOT* work are all 8-bit cards -- although some of
+  them have a 16-bit form-factor, the upper 8-bits are used only for IRQs
+  and are *NOT* used for data.  You can tell the difference by following
+  the tracings on the circuit board -- if only the IRQ lines are involved,
+  you have a "8-bit" card, and should *NOT* use this driver.)
 
 */
 
@@ -501,8 +509,8 @@ static void print_banner( struct Scsi_Host *shpnt )
       if (bios_minor >= 0) printk( "%d", bios_minor );
       else                 printk( "?." );
    
-      printk( " at 0x%x using scsi id %d\n",
-	      (unsigned)bios_base, shpnt->this_id );
+      printk( " at 0x%lx using scsi id %d\n",
+	      bios_base, shpnt->this_id );
    }
 
 				/* If this driver works for later FD PCI
@@ -577,7 +585,7 @@ static int fdomain_is_valid_port( int port )
       if (inb( port + MSB_ID_Code ) != 0x60) return 0;
       chip = tmc18c50;
 
-#if 0
+#if 1
 
 				/* Try to toggle 32-bit mode.  This only
 				   works on an 18c30 chip.  (User reports
@@ -675,16 +683,13 @@ static int fdomain_isa_detect( int *irq, int *iobase )
       switch (Quantum) {
       case 2:			/* ISA_200S */
       case 3:			/* ISA_250MG */
-	 base = *((char *)bios_base + 0x1fa2)
-	       + (*((char *)bios_base + 0x1fa3) << 8);
+	 base = readb(bios_base + 0x1fa2) + (readb(bios_base + 0x1fa3) << 8);
 	 break;
       case 4:			/* ISA_200S (another one) */
-	 base = *((char *)bios_base + 0x1fa3)
-	       + (*((char *)bios_base + 0x1fa4) << 8);
+	 base = readb(bios_base + 0x1fa3) + (readb(bios_base + 0x1fa4) << 8);
 	 break;
       default:
-	 base = *((char *)bios_base + 0x1fcc)
-	       + (*((char *)bios_base + 0x1fcd) << 8);
+	 base = readb(bios_base + 0x1fcc) + (readb(bios_base + 0x1fcd) << 8);
 	 break;
       }
    
@@ -944,11 +949,12 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       
       for (i = 0; !bios_base && i < ADDRESS_COUNT; i++) {
 #if DEBUG_DETECT
-	 printk( " %x(%x),", (unsigned)addresses[i], (unsigned)bios_base );
+	 printk( " %lx(%lx),", addresses[i], bios_base );
 #endif
 	 for (j = 0; !bios_base && j < SIGNATURE_COUNT; j++) {
-	    if (!memcmp( ((char *)addresses[i] + signatures[j].sig_offset),
-			 signatures[j].signature, signatures[j].sig_length )) {
+	    if (check_signature(addresses[i] + signatures[j].sig_offset,
+				signatures[j].signature,
+				signatures[j].sig_length )) {
 	       bios_major = signatures[j].major_bios_version;
 	       bios_minor = signatures[j].minor_bios_version;
 	       PCI_bus    = (signatures[j].flag == 1);
@@ -1927,11 +1933,12 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
    unsigned char    *data     = (unsigned char *)(sizes + 2);
    unsigned char    do_read[] = { READ_6, 0, 0, 0, 1, 0 };
    int              retcode;
+   unsigned long    offset;
    struct drive_info {
       unsigned short cylinders;
       unsigned char  heads;
       unsigned char  sectors;
-   } *i;
+   } i;
    
    /* NOTES:
       The RAM area starts at 0x1f00 from the bios_base address.
@@ -1983,28 +1990,30 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
       case 2:			/* ISA_200S */
 				/* The value of 25 has never been verified.
 				   It should probably be 15. */
-	 i = (struct drive_info *)( (char *)bios_base + 0x1f33 + drive * 25 );
+	 offset = bios_base + 0x1f33 + drive * 25;
 	 break;
       case 3:			/* ISA_250MG */
-	 i = (struct drive_info *)( (char *)bios_base + 0x1f36 + drive * 15 );
+	 offset = bios_base + 0x1f36 + drive * 15;
 	 break;
       case 4:			/* ISA_200S (another one) */
-	 i = (struct drive_info *)( (char *)bios_base + 0x1f34 + drive * 15 );
+	 offset = bios_base + 0x1f34 + drive * 15;
 	 break;
       default:
-	 i = (struct drive_info *)( (char *)bios_base + 0x1f31 + drive * 25 );
+	 offset = bios_base + 0x1f31 + drive * 25;
 	 break;
       }
-      info_array[0] = i->heads;
-      info_array[1] = i->sectors;
-      info_array[2] = i->cylinders;
+      memcpy_fromio( &i, offset, sizeof( struct drive_info ) );
+      info_array[0] = i.heads;
+      info_array[1] = i.sectors;
+      info_array[2] = i.cylinders;
    } else if (bios_major == 3
 	      && bios_minor >= 0
 	      && bios_minor < 4) { /* 3.0 and 3.2 BIOS */
-      i = (struct drive_info *)( (char *)bios_base + 0x1f71 + drive * 10 );
-      info_array[0] = i->heads + 1;
-      info_array[1] = i->sectors;
-      info_array[2] = i->cylinders;
+      memcpy_fromio( &i, bios_base + 0x1f71 + drive * 10,
+		     sizeof( struct drive_info ) );
+      info_array[0] = i.heads + 1;
+      info_array[1] = i.sectors;
+      info_array[2] = i.cylinders;
    } else {			/* 3.4 BIOS (and up?) */
       /* This algorithm was provided by Future Domain (much thanks!). */
 

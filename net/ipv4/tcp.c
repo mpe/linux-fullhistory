@@ -573,7 +573,7 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	 * until we time out, or the user gives up.
 	 */
 
-	if (code < 13)
+	if(code<=NR_ICMP_UNREACH)
 	{
 		if(icmp_err_convert[code].fatal || sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
 		{

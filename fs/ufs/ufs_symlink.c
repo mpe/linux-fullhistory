@@ -6,16 +6,15 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.3 1996/04/25 09:12:11 davem Exp $
+ * $Id: ufs_symlink.c,v 1.5 1996/05/19 03:55:56 krioles Exp $
  *
  */
 
 #include <linux/fs.h>
+#include <linux/ufs_fs.h>
 #include <linux/sched.h>
 
 #include <asm/segment.h>
-
-extern int ufs_bmap (struct inode *, int);
 
 static int
 ufs_readlink(struct inode * inode, char * buffer, int buflen)
@@ -55,7 +54,7 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 		link = bh->b_data;
 	}
 	else {
-	        link = (char *)&(inode->u.ufs_i.ui_db[0]);
+	        link = (char *)&(inode->u.ufs_i.i_data[0]);
 	}
 	i = 0;
 	while (i < buflen && (c = link[i])) {
@@ -122,7 +121,7 @@ ufs_follow_link(struct inode * dir, struct inode * inode,
 	        link = bh->b_data;
 	} else {
 	        /* fast symlink */
-	        link = (char *)&(inode->u.ufs_i.ui_db[0]);
+	        link = (char *)&(inode->u.ufs_i.i_data[0]);
 	}
 	current->link_count++;
 	error = open_namei (link, flag, mode, res_inode, dir);
@@ -172,12 +171,3 @@ struct inode_operations ufs_symlink_inode_operations = {
 	NULL,			/* smap */
 };
 
-/*
- * Local Variables: ***
- * c-indent-level: 8 ***
- * c-continued-statement-offset: 8 ***
- * c-brace-offset: -8 ***
- * c-argdecl-indent: 0 ***
- * c-label-offset: -8 ***
- * End: ***
- */

@@ -84,7 +84,7 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 if ((context.x & 0xfffc) && (context.x & 3) != 3) goto badframe; COPY(x);
 #define COPY_SEG_STRICT(x) \
 if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
-	struct sigcontext_struct context;
+	struct sigcontext context;
 	struct pt_regs * regs;
 
 	regs = (struct pt_regs *) &__unused;

@@ -63,11 +63,8 @@ INSTALLING the kernel:
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.
 
- - You can also upgrade between 2.1.xx releases by patching.  Each
-   patch that is released for 2.1.xx contains only bugfixes.  No
-   new features will be added to the Linux kernel until the 2.1.xx
-   development effort begins.  To install by patching, get all the
-   newer patch files and do
+ - You can also upgrade between 2.1.xx releases by patching.  To install
+   by patching, get all the newer patch files and do
 
 		cd /usr/src
 		gzip -cd patchXX.gz | patch -p0
@@ -144,10 +141,13 @@ COMPILING the kernel:
 
  - Make sure you have gcc-2.7.0 or newer available.  It seems older gcc
    versions can have problems compiling newer versions of linux.  This
-   is mainly because they only compile programs in the a.out binary
-   format.  As of Linux 2.1.0, the kernel must be compiled as ELF.  If
-   you upgrade your compiler, remember to get the new binutils package too
-   (for as/ld/nm and company).
+   is mainly because the older compilers can only generate "a.out"-format
+   executables.  As of Linux 2.1.0, the kernel must be compiled as an
+   "ELF" binary.  If you upgrade your compiler, remember to get the new
+   binutils package too (for as/ld/nm and company).
+
+   Please note that you can still run a.out user programs with this
+   kernel.
 
  - Do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy
@@ -173,10 +173,10 @@ COMPILING the kernel:
 
    For some, this is on a floppy disk, in which case you can "cp
    /usr/src/linux/arch/i386/boot/zImage /dev/fd0" to make a bootable
-   floppy.  Note that a change in the 1.3.x series prevented a kernel
-   copied to a 720k double-density 3.5" floppy from booting.  In this
+   floppy.  Please note that you can not boot a kernel by
+   directly dumping it to a 720k double-density 3.5" floppy.  In this
    case, it is highly recommended that you install LILO on your
-   double-density bootfloppy or switch to high-density floppies.
+   double-density boot floppy or switch to high-density floppies.
 
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo.conf.  The

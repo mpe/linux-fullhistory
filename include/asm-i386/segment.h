@@ -33,15 +33,8 @@
 #define put_fs_word(x,addr) put_user((x),(unsigned short *)(addr))
 #define put_fs_long(x,addr) put_user((x),(unsigned int *)(addr))
 
-static inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
-{
-	memcpy(to, from, n);
-}
-
-static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
-{
-	memcpy(to, from, n);
-}
+#define memcpy_fromfs(to,from,n) memcpy((to),(from),(n))
+#define memcpy_tofs(to,from,n)   memcpy((to),(from),(n))
 
 /*
  * The fs value determines whether argument validity checking should be
@@ -53,11 +46,7 @@ static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
       
 #define get_fs()	(current->tss.segment)
 #define set_fs(x)	(current->tss.segment = (x))
-
-static inline unsigned long get_ds(void)
-{
-	return KERNEL_DS;
-}
+#define get_ds()	(KERNEL_DS)
 
 #endif /* __ASSEMBLY__ */
 

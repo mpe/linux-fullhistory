@@ -662,12 +662,12 @@ static inline void build_sg_list(register struct mscp *mscp, Scsi_Cmnd *SCpnt)
 	sl = (struct scatterlist *) SCpnt->request_buffer;
 	max = SCpnt->use_sg;
 	for (i = 0; i < max; i++) {
-		mscp->sglist[i].address = (unsigned int)sl[i].address;
+		mscp->sglist[i].address = virt_to_bus(sl[i].address);
 		mscp->sglist[i].num_bytes = sl[i].length;
 		transfer_length += sl[i].length;
 	}
 	mscp->number_of_sg_list = max;
-	mscp->transfer_data = (unsigned int)mscp->sglist;
+	mscp->transfer_data = virt_to_bus(mscp->sglist);
 	/* ??? May not be necessary.  Docs are unclear as to whether transfer
 	   length field is ignored or whether it should be set to the total
 	   number of bytes of the transfer.  */
@@ -723,7 +723,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     } else {
 	/* Unset scatter/gather flag in SCSI command packet */
 	my_mscp->sg = FALSE;
-	my_mscp->transfer_data = (unsigned int)SCpnt->request_buffer;
+	my_mscp->transfer_data = virt_to_bus(SCpnt->request_buffer);
 	my_mscp->transfer_data_length = SCpnt->request_bufflen;
     }
     my_mscp->command_link = 0;		/*???*/
@@ -733,7 +733,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     memcpy(my_mscp->scsi_cdbs, SCpnt->cmnd, my_mscp->length_of_scsi_cdbs);
     my_mscp->adapter_status = 0;
     my_mscp->target_status = 0;
-    my_mscp->sense_data = (unsigned int)&SCpnt->sense_buffer;
+    my_mscp->sense_data = virt_to_bus(&SCpnt->sense_buffer);
     my_mscp->done = done;
     my_mscp->SCint = SCpnt;
     SCpnt->host_scribble = (unsigned char *)my_mscp;
@@ -791,7 +791,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     }
 
     /* Store pointer in OGM address bytes */
-    outl((unsigned int)my_mscp, config.ogm_address);
+    outl(virt_to_bus(my_mscp), config.ogm_address);
 
     /* Issue OGM interrupt */
     if (config.slot) {
@@ -867,9 +867,9 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 	out[28 + i * 3] = '\n';
 	out[29 + i * 3] = 0;
 	ogm_status = inb(port0 + 22);
-	ogm_addr = inl(port0 + 23);
+	ogm_addr = (unsigned int)bus_to_virt(inl(port0 + 23));
 	icm_status = inb(port0 + 27);
-	icm_addr = inl(port0 + 28);
+	icm_addr = (unsigned int)bus_to_virt(inl(port0 + 28));
 	restore_flags(flags);
       }
 
@@ -905,7 +905,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 
 	save_flags(flags);
 	cli();
-	outl((int)&config.mscp[mscp_index], config.ogm_address);
+	outl(virt_to_bus(&config.mscp[mscp_index]), config.ogm_address);
 	inb(0xc80);	/* delay */
 	outb(0x80, config.ogm_address - 1);
 	outb(0x2, LCL_DOORBELL_INTR(config.doorbell_address));
@@ -1038,7 +1038,7 @@ static void ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #if ULTRASTOR_MAX_CMDS == 1
     mscp = &config.mscp[0];
 #else
-    mscp = (struct mscp *)inl(config.icm_address);
+    mscp = (struct mscp *)bus_to_virt(inl(config.icm_address));
     mscp_index = mscp - config.mscp;
     if (mscp_index >= ULTRASTOR_MAX_CMDS) {
 	printk("Ux4F interrupt: bad MSCP address %x\n", (unsigned int) mscp);

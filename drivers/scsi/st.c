@@ -11,7 +11,7 @@
   Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Jul  7 10:08:46 1996 by root@kai.makisara.fi
+  Last modified: Tue Oct  1 22:53:51 1996 by makisara@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -2192,7 +2192,8 @@ get_location(struct inode * inode, unsigned int *block, int *partition,
       return (-EBUSY);
 
     if ((STp->buffer)->last_result_fatal != 0 ||
-	((STp->buffer)->b_data[0] & 4)) {
+	(STp->device->scsi_level >= SCSI_2 &&
+	 ((STp->buffer)->b_data[0] & 4) != 0)) {
       *block = *partition = 0;
 #if DEBUG
       if (debugging)

@@ -2252,6 +2252,21 @@ cmd->scsi_done(cmd);
 return SCSI_ABORT_SUCCESS;
 }
 
+
+/*
+ * AM53C974_release()
+ *
+ * Release resources allocated for a single AM53C974 adapter.
+ */
+int
+AM53C974_release(struct Scsi_Host *shp)
+{
+	free_irq(shp->irq, NULL);
+	scsi_unregister(shp);
+	return 0;
+}
+
+
 #ifdef MODULE
 static Scsi_Host_Template driver_template = AM53C974;
 

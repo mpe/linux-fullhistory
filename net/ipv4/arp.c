@@ -1984,13 +1984,14 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	{
 		if (!mask && ip)
 			return -EINVAL;
-		if (!dev)
+		if (!dev) {
 			dev = dev_getbytype(r->arp_ha.sa_family);
+			if (!dev)
+				return -ENODEV;
+		}
 	}
 	else
 	{
-		if (ip_chk_addr(ip) && dev->type != ARPHRD_METRICOM)
-			return -EINVAL;
 		if (!dev)
 		{
 			struct rtable * rt;
@@ -1999,9 +2000,13 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 				return -ENETUNREACH;
 			dev = rt->rt_dev;
 			ip_rt_put(rt);
+			if (!dev)
+				return -ENODEV;
 		}
+		if (dev->type != ARPHRD_METRICOM && ip_chk_addr(ip))
+			return -EINVAL;
 	}
-	if (!dev || (dev->flags&(IFF_LOOPBACK|IFF_NOARP)))
+	if (dev->flags & (IFF_LOOPBACK | IFF_NOARP))
 		return -ENODEV;
 
 	if (r->arp_ha.sa_family != dev->type)	

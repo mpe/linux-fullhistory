@@ -9,19 +9,27 @@
 /*
  * "down_failed" is called with the eventual return address
  * in %eax, and the address of the semaphore in %ecx. We need
- * to increment the number of waiters on the semaphore,
- * call "__down()", and then eventually return to try again.
+ * to call "__down()", and then re-try until we succeed..
  */
-ENTRY(down_failed)
-	pushl %eax
-	pushl %ecx
+ENTRY(__down_failed)
+	pushl %eax	/* return address */
+	pushl %edx	/* save %edx */
+1:	pushl %ecx	/* save %ecx (and argument) */
 	call SYMBOL_NAME(__down)
-	popl %ecx
+	popl %ecx	/* restore %ecx (count on __down not changing it) */
+#ifdef __SMP__
+	lock
+#endif
+	decl (%ecx)
+	js 1b
+	popl %edx	/* restore %edx */
 	ret
 
-ENTRY(up_wakeup)
-	pushl %eax
-	pushl %ecx
+ENTRY(__up_wakeup)
+	pushl %eax	/* return address */
+	pushl %edx	/* save %edx */
+	pushl %ecx	/* save %ecx (and argument) */
 	call SYMBOL_NAME(__up)
-	popl %ecx
+	popl %ecx	/* restore %ecx (count on __up not changing it) */
+	popl %edx	/* restore %edx */
 	ret

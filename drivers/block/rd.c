@@ -180,14 +180,14 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 #ifdef CONFIG_BLK_DEV_INITRD
 
-static int initrd_read(struct inode *inode,struct file *file,char *buf,
-    int count)
+static long initrd_read(struct inode *inode,struct file *file,
+	char *buf, unsigned long count)
 {
 	int left;
 
 	left = initrd_end-initrd_start-file->f_pos;
 	if (count > left) count = left;
-	if (count <= 0) return 0;
+	if (count == 0) return 0;
 	memcpy_tofs(buf,(char *) initrd_start+file->f_pos,count);
 	file->f_pos += count;
 	return count;
@@ -350,8 +350,8 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 	/*
 	 * Read block 0 to test for gzipped kernel
 	 */
-	if (fp->f_op->lseek)
-		fp->f_op->lseek(fp->f_inode, fp, start_block * BLOCK_SIZE, 0);
+	if (fp->f_op->llseek)
+		fp->f_op->llseek(fp->f_inode, fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;
 	
 	fp->f_op->read(fp->f_inode, fp, buf, size);
@@ -370,8 +370,8 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 	/*
 	 * Read block 1 to test for minix and ext2 superblock
 	 */
-	if (fp->f_op->lseek)
-		fp->f_op->lseek(fp->f_inode, fp,
+	if (fp->f_op->llseek)
+		fp->f_op->llseek(fp->f_inode, fp,
 				(start_block+1) * BLOCK_SIZE, 0);
 	fp->f_pos = (start_block+1) * BLOCK_SIZE;
 
@@ -400,8 +400,8 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 	       start_block);
 	
 done:
-	if (fp->f_op->lseek)
-		fp->f_op->lseek(fp->f_inode, fp, start_block * BLOCK_SIZE, 0);
+	if (fp->f_op->llseek)
+		fp->f_op->llseek(fp->f_inode, fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;	
 
 	if ((nblocks > 0) && blk_size[MAJOR(device)]) {

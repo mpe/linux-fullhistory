@@ -1,7 +1,7 @@
 #ifndef _ALPHA_STAT_H
 #define _ALPHA_STAT_H
 
-struct old_stat {
+struct __old_kernel_stat {
 	unsigned int	st_dev;
 	unsigned int	st_ino;
 	unsigned int	st_mode;
@@ -19,7 +19,7 @@ struct old_stat {
 	unsigned int	st_gen;
 };
 
-struct new_stat {
+struct stat {
 	unsigned int	st_dev;
 	unsigned int	st_ino;
 	unsigned int	st_mode;

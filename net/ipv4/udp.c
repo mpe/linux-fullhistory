@@ -193,7 +193,7 @@ void udp_err(int type, int code, unsigned char *header, __u32 daddr,
 	/* 4.1.3.3. */
 	/* After the comment above, that should be no surprise. */
 
-	if (code < 13 && icmp_err_convert[code].fatal)
+	if(code<=NR_ICMP_UNREACH && icmp_err_convert[code].fatal)
 	{
 		/*
 		 *	4.x BSD compatibility item. Break RFC1122 to

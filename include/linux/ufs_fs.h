@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_fs.h,v 1.1 1996/04/21 14:45:11 davem Exp $
+ * $Id: ufs_fs.h,v 1.7 1996/08/13 19:27:59 ecd Exp $
  *
  */
 
@@ -31,6 +31,10 @@
 #define UFS_NDADDR 12
 #define UFS_NINDIR 3
 
+#define UFS_IND_BLOCK	(UFS_NDADDR + 0)
+#define UFS_DIND_BLOCK	(UFS_NDADDR + 1)
+#define UFS_TIND_BLOCK	(UFS_NDADDR + 2)
+
 #define UFS_ROOTINO 2
 
 #define UFS_USEEFT  ((__u16)65535)
@@ -47,6 +51,8 @@
 #define UFS_DEBUG_NAMEI 0x00000004
 #define UFS_DEBUG_LINKS 0x00000008
 
+#define UFS_ADDR_PER_BLOCK(sb)		((sb)->u.ufs_sb.s_bsize >> 2)
+#define UFS_ADDR_PER_BLOCK_BITS(sb)	((sb)->u.ufs_sb.s_bshift - 2)
 
 /* Test if the inode number is valid. */
 #define ufs_ino_ok(inode)  ((inode->i_ino < 2) &&  \
@@ -65,6 +71,10 @@
 #define ufs_ino2cg(inode)  ((inode)->i_ino/(inode)->i_sb->u.ufs_sb.s_ipg)
 
 #define	UFS_MAXNAMLEN 255
+
+#define ufs_lbn(sb, block)		((block) >> (sb)->u.ufs_sb.s_lshift)
+#define ufs_boff(sb, block)		((block) & ~((sb)->u.ufs_sb.s_lmask))
+#define ufs_dbn(sb, block, boff)	((block) + ufs_boff((sb), (boff)))
 
 struct ufs_direct {
 	__u32  d_ino;			/* inode number of this entry */
@@ -93,61 +103,78 @@ typedef struct _ufsquad {
 struct ufs_superblock {
 	__u32	fs_link;	/* UNUSED */
 	__u32	fs_rlink;	/* UNUSED */
-	__u32	fs_sblkno;
-	__u32	fs_cblkno;
-	__u32	fs_iblkno;
-	__u32	fs_dblkno;
-	__u32	fs_cgoffset;
-	__u32	fs_cgmask;
-	time_t	fs_time;	/* XXX - check type */
-	__u32	fs_size;
-	__u32	fs_dsize;
-	__u32	fs_ncg;
-	__u32	fs_bsize;
-	__u32	fs_fsize;
-	__u32	fs_frag;
-	__u32	fs_minfree;
-	__u32	fs_rotdelay;
-	__u32	fs_rps;
-	__u32	fs_bmask;
-	__u32	fs_fmask;
-	__u32	fs_bshift;
-	__u32	fs_fshift;
-	__u32	fs_maxcontig;
-	__u32	fs_maxbpg;
-	__u32	fs_fragshift;
-	__u32	fs_fsbtodb;
-	__u32	fs_sbsize;
-	__u32	fs_csmask;
-	__u32	fs_csshift;
-	__u32	fs_nindir;
-	__u32	fs_inopb;
-	__u32	fs_nspf;
-	__u32	fs_optim;
-	__u32	fs_XXX1;
-	__u32	fs_interleave;
-	__u32	fs_trackskew;
-	__u32	fs_id[2];
-	__u32	fs_csaddr;
-	__u32	fs_cssize;
-	__u32	fs_cgsize;
-	__u32	fs_ntrak;
-	__u32	fs_nsect;
-	__u32	fs_spc;
-	__u32	fs_ncyl;
-	__u32	fs_cpg;
-	__u32	fs_ipg;
-	__u32	fs_fpg;
-	struct ufs_csum fs_cstotal;
-	__u8	fs_fmod;
-	__u8	fs_clean;
-	__u8	fs_ronly;
-	__u8	fs_flags;
-	__u8	fs_fsmnt[MAXMNTLEN];
-	__u32	fs_cgrotor;
-	struct ufs_csum * fs_csp[MAXCSBUFS];
-	__u32	fs_cpc;
-	__u16	fs_opostbl[16][8];	/* old rotation block list head */
+	__u32	fs_sblkno;	/* addr of super-block in filesys */
+	__u32	fs_cblkno;	/* offset of cyl-block in filesys */
+	__u32	fs_iblkno;	/* offset of inode-blocks in filesys */
+	__u32	fs_dblkno;	/* offset of first data after cg */
+	__u32	fs_cgoffset;	/* cylinder group offset in cylinder */
+	__u32	fs_cgmask;	/* used to calc mod fs_ntrak */
+	time_t	fs_time;	/* last time written */
+	__u32	fs_size;	/* number of blocks in fs */
+	__u32	fs_dsize;	/* number of data blocks in fs */
+	__u32	fs_ncg;		/* number of cylinder groups */
+	__u32	fs_bsize;	/* size of basic blocks in fs */
+	__u32	fs_fsize;	/* size of frag blocks in fs */
+	__u32	fs_frag;	/* number of frags in a block in fs */
+/* these are configuration parameters */
+	__u32	fs_minfree;	/* minimum percentage of free blocks */
+	__u32	fs_rotdelay;	/* num of ms for optimal next block */
+	__u32	fs_rps;		/* disk revolutions per second */
+/* these fields can be computed from the others */
+	__u32	fs_bmask;	/* ``blkoff'' calc of blk offsets */
+	__u32	fs_fmask;	/* ``fragoff'' calc of frag offsets */
+	__u32	fs_bshift;	/* ``lblkno'' calc of logical blkno */
+	__u32	fs_fshift;	/* ``numfrags'' calc number of frags */
+/* these are configuration parameters */
+	__u32	fs_maxcontig;	/* max number of contiguous blks */
+	__u32	fs_maxbpg;	/* max number of blks per cyl group */
+/* these fields can be computed from the others */
+	__u32	fs_fragshift;	/* block to frag shift */
+	__u32	fs_fsbtodb;	/* fsbtodb and dbtofsb shift constant */
+	__u32	fs_sbsize;	/* actual size of super block */
+	__u32	fs_csmask;	/* csum block offset */
+	__u32	fs_csshift;	/* csum block number */
+	__u32	fs_nindir;	/* value of NINDIR */
+	__u32	fs_inopb;	/* value of INOPB */
+	__u32	fs_nspf;	/* value of NSPF */
+/* yet another configuration parameter */
+	__u32	fs_optim;	/* optimization preference, see below */
+/* these fields are derived from the hardware */
+	__u32	fs_npsect;	/* # sectors/track including spares */
+	__u32	fs_interleave;	/* hardware sector interleave */
+	__u32	fs_trackskew;	/* sector 0 skew, per track */
+/* a unique id for this filesystem (currently unused and unmaintained) */
+/* In 4.3 Tahoe this space is used by fs_headswitch and fs_trkseek */
+/* Neither of those fields is used in the Tahoe code right now but */
+/* there could be problems if they are.                            */
+	__u32	fs_id[2];	/* file system id */
+/* sizes determined by number of cylinder groups and their sizes */
+	__u32	fs_csaddr;	/* blk addr of cyl grp summary area */
+	__u32	fs_cssize;	/* size of cyl grp summary area */
+	__u32	fs_cgsize;	/* cylinder group size */
+/* these fields are derived from the hardware */
+	__u32	fs_ntrak;	/* tracks per cylinder */
+	__u32	fs_nsect;	/* sectors per track */
+	__u32	fs_spc;		/* sectors per cylinder */
+/* this comes from the disk driver partitioning */
+	__u32	fs_ncyl;	/* cylinders in file system */
+/* these fields can be computed from the others */
+	__u32	fs_cpg;		/* cylinders per group */
+	__u32	fs_ipg;		/* inodes per group */
+	__u32	fs_fpg;		/* blocks per group * fs_frag */
+/* this data must be re-computed after crashes */
+	struct ufs_csum fs_cstotal;	/* cylinder summary information */
+/* these fields are cleared at mount time */
+	__u8	fs_fmod;	/* super block modified flag */
+	__u8	fs_clean;	/* file system is clean flag */
+	__u8	fs_ronly;	/* mounted read-only flag */
+	__u8	fs_flags;	/* currently unused flag */
+	__u8	fs_fsmnt[MAXMNTLEN];	/* name mounted on */
+/* these fields retain the current block allocation info */
+	__u32	fs_cgrotor;	/* last cg searched */
+	struct ufs_csum * fs_csp[MAXCSBUFS];	/* list of fs_cs info buffers */
+	__u32	fs_cpc;		/* cyl per cycle in postbl */
+	__u16	fs_opostbl[16][8];	/* old rotation block list head */	
 	__s32	fs_sparecon[55];	/* reserved for future constants */
 	__s32	fs_state;		/* file system state time stamp */
 	ufsquad	fs_qbmask;		/* ~usb_bmask - for use with __s64 size */
@@ -184,15 +211,60 @@ struct ufs_inode {
 	__u32	ui_oeftflag;		/* 0x7c reserved */
 };
 
+
+#ifdef __KERNEL__
+/*
+ * Function prototypes
+ */
+
+/* ufs_inode.c */
+extern int ufs_bmap (struct inode *, int);
+extern void ufs_read_inode(struct inode * inode);
+extern void ufs_put_inode(struct inode * inode);
+
+extern void ufs_print_inode (struct inode *);
+
+/* ufs_namei.c */
+extern int ufs_lookup (struct inode *, const char *, int, struct inode **);
+
+/* ufs_super.c */
+extern void ufs_warning (struct super_block *, const char *, const char *, ...)
+        __attribute__ ((format (printf, 3, 4)));
 extern int init_ufs_fs(void);
 
-#endif /* __LINUX_UFS_FS_H */
 /*
- * Local Variables: ***
- * c-indent-level: 8 ***
- * c-continued-statement-offset: 8 ***
- * c-brace-offset: -8 ***
- * c-argdecl-indent: 0 ***
- * c-label-offset: -8 ***
- * End: ***
+ * Inodes and files operations
  */
+
+/* ufs_dir.c */
+extern struct inode_operations ufs_dir_inode_operations;
+extern struct file_operations ufs_dir_operations;
+
+/* ufs_file.c */
+extern struct inode_operations ufs_file_inode_operations;
+extern struct file_operations ufs_file_operations;
+
+/* ufs_symlink.c */
+extern struct inode_operations ufs_symlink_inode_operations;
+extern struct file_operations ufs_symlink_operations;
+
+/* Byte swapping 32/16-bit quantities into little endian format. */
+extern int ufs_need_swab;
+
+extern __inline__ __u32 ufs_swab32(__u32 value)
+{
+	return (ufs_need_swab ? ((value >> 24) |
+				((value >> 8) & 0xff00) |
+				((value << 8) & 0xff0000) |
+				 (value << 24)) : value);
+}
+
+extern __inline__ __u16 ufs_swab16(__u16 value)
+{
+	return (ufs_need_swab ? ((value >> 8) |
+				 (value << 8)) : value);
+}
+
+#endif	/* __KERNEL__ */
+
+#endif /* __LINUX_UFS_FS_H */

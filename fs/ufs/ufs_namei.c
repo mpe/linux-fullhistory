@@ -6,13 +6,14 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_namei.c,v 1.3 1996/04/25 09:12:07 davem Exp $
+ * $Id: ufs_namei.c,v 1.7 1996/06/01 14:56:49 ecd Exp $
  *
  */
 
 #include <linux/fs.h>
+#include <linux/ufs_fs.h>
 
-extern unsigned int ufs_bmap(struct inode * inode, int block); /* XXX */
+#include <linux/string.h>
 
 /*
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
@@ -20,15 +21,15 @@ extern unsigned int ufs_bmap(struct inode * inode, int block); /* XXX */
  */
 static int ufs_match (int len, const char * const name, struct ufs_direct * d)
 {
-	if (!d || len > UFS_MAXNAMLEN)
+	if (!d || len > UFS_MAXNAMLEN) /* XXX - name space */
 		return 0;
 	/*
 	 * "" means "." ---> so paths like "/usr/lib//libc.a" work
 	 */
-	if (!len && (d->d_namlen == 1) && (d->d_name[0] == '.') &&
+	if (!len && (ufs_swab16(d->d_namlen) == 1) && (d->d_name[0] == '.') &&
 	   (d->d_name[1] == '\0'))
 		return 1;
-	if (len != d->d_namlen)
+	if (len != ufs_swab16(d->d_namlen))
 		return 0;
 	return !memcmp(name, d->d_name, len);
 }
@@ -41,6 +42,9 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	struct buffer_head * bh;
 	struct ufs_direct * d;
 
+	if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG)
+		printk("Passed name: %s\nPassed length: %d\n", name, len);
+
 	/*
 	 * Touching /xyzzy in a filesystem toggles debugging messages.
 	 */
@@ -50,6 +54,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        printk("UFS debugging %s\n",
 	               (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) ?
 	               "on": "off");
+		iput(dir);
 	        return(-ENOENT);
 	}
 
@@ -62,6 +67,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        printk("UFS inode debugging %s\n",
 	               (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG_INODE) ?
 	               "on": "off");
+		iput(dir);
 	        return(-ENOENT);
 	}
 
@@ -71,6 +77,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        printk("UFS namei debugging %s\n",
 	               (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG_NAMEI) ?
 	               "on": "off");
+		iput(dir);
 	        return(-ENOENT);
 	}
 
@@ -80,6 +87,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        printk("UFS symlink debugging %s\n",
 	               (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG_LINKS) ?
 	               "on": "off");
+		iput(dir);
 	        return(-ENOENT);
 	}
 
@@ -99,19 +107,21 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	        }
 	        if (fragno == 0) {
 	                /* XXX - bug bug bug */
+			iput(dir);
 	                return(-ENOENT);
 	        }
 	        bh = bread(dir->i_dev, fragno, dir->i_sb->s_blocksize);
 	        if (bh == NULL) {
 	                printk("ufs_lookup: bread failed: ino %lu, lfragno %lu",
 	                       dir->i_ino, lfragno);
+			iput(dir);
 	                return(-EIO);
 	        }
 	        d = (struct ufs_direct *)(bh->b_data);
-	        while (((char *)d - bh->b_data + d->d_reclen) <=
+	        while (((char *)d - bh->b_data + ufs_swab16(d->d_reclen)) <=
 	               dir->i_sb->s_blocksize) {
 	                /* XXX - skip block if d_reclen or d_namlen is 0 */
-	                if ((d->d_reclen == 0) || (d->d_namlen == 0)) {
+	                if ((ufs_swab16(d->d_reclen) == 0) || (ufs_swab16(d->d_namlen) == 0)) {
 	                        if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	                                printk("ufs_lookup: skipped space in directory, ino %lu\n",
 	                                       dir->i_ino);
@@ -120,35 +130,28 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	                }
 	                if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	                        printk("lfragno 0x%lx  direct d 0x%x  d_ino %u  d_reclen %u  d_namlen %u  d_name `%s'\n",
-	                               lfragno, (unsigned int)d, d->d_ino, d->d_reclen, d->d_namlen, d->d_name);
+	                               lfragno, (unsigned int)d, ufs_swab32(d->d_ino), ufs_swab16(d->d_reclen), ufs_swab16(d->d_namlen), d->d_name);
 	                }
-	                if ((d->d_namlen == len) &&
+	                if ((ufs_swab16(d->d_namlen) == len) &&
 	                    /* XXX - don't use strncmp() - see ext2fs */
 	                    (ufs_match(len, name, d))) {
 	                        /* We have a match */
-	                        *result = iget(dir->i_sb, d->d_ino);
+	                        *result = iget(dir->i_sb, ufs_swab32(d->d_ino));
 	                        brelse(bh);
+				iput(dir);
 	                        return(0);
 	                } else {
 	                        /* XXX - bounds checking */
 	                        if (dir->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	                                printk("ufs_lookup: wanted (%s,%d) got (%s,%d)\n",
-	                                       name, len, d->d_name, d->d_namlen);
+	                                       name, len, d->d_name, ufs_swab16(d->d_namlen));
 	                        }
 	                }
-	                d = (struct ufs_direct *)((char *)d + d->d_reclen);
+	                d = (struct ufs_direct *)((char *)d + ufs_swab16(d->d_reclen));
 	        }
 	        brelse(bh);
 	}
+	iput(dir);
 	return(-ENOENT);
 }
 
-/*
- * Local Variables: ***
- * c-indent-level: 8 ***
- * c-continued-statement-offset: 8 ***
- * c-brace-offset: -8 ***
- * c-argdecl-indent: 0 ***
- * c-label-offset: -8 ***
- * End: ***
- */

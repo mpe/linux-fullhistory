@@ -174,6 +174,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_AM53C974),y)
 L_OBJS += AM53C974.o
+else
+  ifeq ($(CONFIG_SCSI_AM53C974),m)
+  M_OBJS += AM53C974.o
+  endif
 endif
 
 ifeq ($(CONFIG_SCSI_BUSLOGIC),y)

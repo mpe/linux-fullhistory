@@ -46,6 +46,10 @@
 #define ICMP_HOST_ANO		10
 #define ICMP_NET_UNR_TOS	11
 #define ICMP_HOST_UNR_TOS	12
+#define ICMP_PKT_FILTERED	13	/* Packet filtered */
+#define ICMP_PREC_VIOLATION	14	/* Precedence violation */
+#define ICMP_PREC_CUTOFF	15	/* Precedence cut off */
+#define NR_ICMP_UNREACH	15	  /* instead of hardcoding immediate value */
 
 /* Codes for REDIRECT. */
 #define ICMP_REDIR_NET		0	/* Redirect Net			*/

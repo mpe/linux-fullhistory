@@ -636,7 +636,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  panic("Foooooooood fight!");
 	};
 	any2scsi(cptr[i].dataptr, SCSI_PA(sgpnt[i].address));
-	if(SCSI_PA(sgpnt[i].address+sgpnt[i].length) > ISA_DMA_THRESHOLD)
+	if(SCSI_PA(sgpnt[i].address+sgpnt[i].length-1) > ISA_DMA_THRESHOLD)
 	  BAD_DMA("sgpnt", sgpnt[i].address, sgpnt[i].length);
 	any2scsi(cptr[i].datalen, sgpnt[i].length);
       };
@@ -651,7 +651,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       ccb[mbo].op = 0;	      /* SCSI Initiator Command */
       SCpnt->host_scribble = NULL;
       any2scsi(ccb[mbo].datalen, bufflen);
-      if(buff && SCSI_PA(buff+bufflen) > ISA_DMA_THRESHOLD)
+      if(buff && SCSI_PA(buff+bufflen-1) > ISA_DMA_THRESHOLD)
         BAD_DMA("buff", buff, bufflen);
       any2scsi(ccb[mbo].dataptr, SCSI_PA(buff));
     };
@@ -950,7 +950,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 
 		    /* For now we do this - until kmalloc is more intelligent
 		       we are resigned to stupid hacks like this */
-		    if (SCSI_PA(shpnt+1) > ISA_DMA_THRESHOLD) {
+		    if (SCSI_PA(shpnt) >= ISA_DMA_THRESHOLD) {
 		      printk("Invalid address for shpnt with 1542.\n");
 		      goto unregister;
 		    }

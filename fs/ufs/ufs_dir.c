@@ -6,16 +6,12 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_dir.c,v 1.3 1996/04/25 09:12:00 davem Exp $
+ * $Id: ufs_dir.c,v 1.7 1996/05/21 19:01:45 davem Exp $
  *
  */
 
 #include <linux/fs.h>
-
-/* XXX */
-extern int ufs_lookup (struct inode *, const char *, int, struct inode **);
-extern int ufs_bmap (struct inode *, int);
-extern void ufs_print_inode (struct inode *);
+#include <linux/ufs_fs.h>
 
 /*
  * This is blatantly stolen from ext2fs
@@ -47,7 +43,6 @@ ufs_readdir (struct inode * inode, struct file * filp, void * dirent,
 
 	while (!error && !stored && filp->f_pos < inode->i_size) {
 		lblk = (filp->f_pos) >> sb->s_blocksize_bits;
-	        blk = ufs_bmap(inode, lblk);
 	        /* XXX - ufs_bmap() call needs error checking */
 	        blk = ufs_bmap(inode, lblk);
 		bh = bread (sb->s_dev, blk, sb->s_blocksize);
@@ -74,9 +69,9 @@ revalidate:
 				 * least that it is non-zero.  A
 				 * failure will be detected in the
 				 * dirent test below. */
-				if (de->d_reclen < 1)
+				if (ufs_swab16(de->d_reclen) < 1)
 					break;
-				i += de->d_reclen;
+				i += ufs_swab16(de->d_reclen);
 			}
 			offset = i;
 			filp->f_pos = (filp->f_pos & ~(sb->s_blocksize - 1))
@@ -88,7 +83,8 @@ revalidate:
 		       && offset < sb->s_blocksize) {
 			de = (struct ufs_direct *) (bh->b_data + offset);
 	                /* XXX - put in a real ufs_check_dir_entry() */
-	                if ((de->d_reclen == 0) || (de->d_namlen == 0)) {
+	                if ((ufs_swab16(de->d_reclen) == 0)
+                             || (ufs_swab16(de->d_namlen) == 0)) {
 	                        filp->f_pos = (filp->f_pos & (sb->s_blocksize - 1)) + sb->s_blocksize;
 	                        brelse(bh);
 	                        return stored;
@@ -104,8 +100,8 @@ revalidate:
 				return stored;
 			}
 #endif /* XXX */
-			offset += de->d_reclen;
-			if (de->d_ino) {
+			offset += ufs_swab16(de->d_reclen);
+			if (ufs_swab32(de->d_ino)) {
 				/* We might block in the next section
 				 * if the data destination is
 				 * currently swapped out.  So, use a
@@ -113,21 +109,22 @@ revalidate:
 				 * not the directory has been modified
 				 * during the copy operation. */
 				unsigned long version;
-				dcache_add(inode, de->d_name, de->d_namlen,
-	                                   de->d_ino);
+				dcache_add(inode, de->d_name,
+					   ufs_swab16(de->d_namlen),
+	                                   ufs_swab32(de->d_ino));
 				version = inode->i_version;
 	                        if (inode->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	                                printk("ufs_readdir: filldir(%s,%u)\n",
-	                                       de->d_name, de->d_ino);
+	                                       de->d_name, ufs_swab32(de->d_ino));
 	                        }
-				error = filldir(dirent, de->d_name, de->d_namlen, filp->f_pos, de->d_ino);
+				error = filldir(dirent, de->d_name, ufs_swab16(de->d_namlen), filp->f_pos, ufs_swab32(de->d_ino));
 				if (error)
 					break;
 				if (version != inode->i_version)
 					goto revalidate;
 				stored ++;
 			}
-			filp->f_pos += de->d_reclen;
+			filp->f_pos += ufs_swab16(de->d_reclen);
 		}
 		offset = 0;
 		brelse (bh);

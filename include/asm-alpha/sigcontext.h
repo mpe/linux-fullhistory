@@ -1,7 +1,7 @@
 #ifndef _ASMAXP_SIGCONTEXT_H
 #define _ASMAXP_SIGCONTEXT_H
 
-struct sigcontext_struct {
+struct sigcontext {
 	/*
 	 * what should we have here? I'd probably better use the same
 	 * stack layout as OSF/1, just in case we ever want to try

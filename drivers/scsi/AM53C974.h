@@ -273,7 +273,7 @@ extern struct proc_dir_entry proc_scsi_am53c974;
     NULL,                       /* int (*proc_info)(char *, char **, off_t, int, int, int); */ \
     "AM53C974",        		/* name                                         */  \
     AM53C974_detect,   		/* int (* detect)(struct SHT *)                 */  \
-    NULL,              		/* int (*release)(struct Scsi_Host *)           */  \
+    AM53C974_release,		/* int (*release)(struct Scsi_Host *)           */  \
     AM53C974_info,     		/* const char *(* info)(struct Scsi_Host *)     */  \
     AM53C974_command,  		/* int (* command)(Scsi_Cmnd *)                 */  \
     AM53C974_queue_command,	/* int (* queuecommand)(Scsi_Cmnd *,                \
@@ -293,6 +293,7 @@ extern struct proc_dir_entry proc_scsi_am53c974;
 
 void AM53C974_setup(char *str, int *ints);
 int AM53C974_detect(Scsi_Host_Template *tpnt);
+int AM53C974_release(struct Scsi_Host *shp);
 int AM53C974_biosparm(Disk *disk, int dev, int *info_array);
 const char *AM53C974_info(struct Scsi_Host *);
 int AM53C974_command(Scsi_Cmnd *SCpnt);

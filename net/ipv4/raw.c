@@ -100,7 +100,7 @@ void raw_err (int type, int code, unsigned char *header, __u32 daddr,
 		sk->error_report(sk);
 	}
 
-	if(code<13)
+	if(code<=NR_ICMP_UNREACH)
 	{
 		sk->err = icmp_err_convert[code & 0xff].errno;
 		sk->error_report(sk);

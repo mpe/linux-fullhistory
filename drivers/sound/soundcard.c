@@ -52,8 +52,8 @@ snd_ioctl_return (int *addr, int value)
   return 0;
 }
 
-static int
-sound_read (inode_handle * inode, file_handle * file, char *buf, int count)
+static long
+sound_read (inode_handle * inode, file_handle * file, char *buf, unsigned long count)
 {
   int             dev;
 
@@ -64,8 +64,8 @@ sound_read (inode_handle * inode, file_handle * file, char *buf, int count)
   return sound_read_sw (dev, &files[dev], buf, count);
 }
 
-static int
-sound_write (inode_handle * inode, file_handle * file, const char *buf, int count)
+static long
+sound_write (inode_handle * inode, file_handle * file, const char *buf, unsigned long count)
 {
   int             dev;
 
@@ -76,8 +76,8 @@ sound_write (inode_handle * inode, file_handle * file, const char *buf, int coun
   return sound_write_sw (dev, &files[dev], buf, count);
 }
 
-static int
-sound_lseek (inode_handle * inode, file_handle * file, off_t offset, int orig)
+static long long
+sound_lseek (inode_handle * inode, file_handle * file, long long offset, int orig)
 {
   return -(EPERM);
 }

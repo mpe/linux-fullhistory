@@ -220,10 +220,7 @@ static inline int is_revectored(int nr, struct revectored_struct * bitmap)
 {
 	if (verify_area(VERIFY_READ, bitmap, 256/8) < 0)
 		return 1;
-	__asm__ __volatile__("btl %2,%%fs:%1\n\tsbbl %0,%0"
-		:"=r" (nr)
-		:"m" (*bitmap),"r" (nr));
-	return nr;
+	return test_bit(nr, bitmap);
 }
 
 /*
@@ -234,16 +231,16 @@ static inline int is_revectored(int nr, struct revectored_struct * bitmap)
 #define pushb(base, ptr, val) \
 __asm__ __volatile__( \
 	"decw %w0\n\t" \
-	"movb %2,%%fs:0(%1,%0)" \
+	"movb %2,0(%1,%0)" \
 	: "=r" (ptr) \
 	: "r" (base), "q" (val), "0" (ptr))
 
 #define pushw(base, ptr, val) \
 __asm__ __volatile__( \
 	"decw %w0\n\t" \
-	"movb %h2,%%fs:0(%1,%0)\n\t" \
+	"movb %h2,0(%1,%0)\n\t" \
 	"decw %w0\n\t" \
-	"movb %b2,%%fs:0(%1,%0)" \
+	"movb %b2,0(%1,%0)" \
 	: "=r" (ptr) \
 	: "r" (base), "q" (val), "0" (ptr))
 
@@ -251,21 +248,21 @@ __asm__ __volatile__( \
 __asm__ __volatile__( \
 	"decw %w0\n\t" \
 	"rorl $16,%2\n\t" \
-	"movb %h2,%%fs:0(%1,%0)\n\t" \
+	"movb %h2,0(%1,%0)\n\t" \
 	"decw %w0\n\t" \
-	"movb %b2,%%fs:0(%1,%0)\n\t" \
+	"movb %b2,0(%1,%0)\n\t" \
 	"decw %w0\n\t" \
 	"rorl $16,%2\n\t" \
-	"movb %h2,%%fs:0(%1,%0)\n\t" \
+	"movb %h2,0(%1,%0)\n\t" \
 	"decw %w0\n\t" \
-	"movb %b2,%%fs:0(%1,%0)" \
+	"movb %b2,0(%1,%0)" \
 	: "=r" (ptr) \
 	: "r" (base), "q" (val), "0" (ptr))
 
 #define popb(base, ptr) \
 ({ unsigned long __res; \
 __asm__ __volatile__( \
-	"movb %%fs:0(%1,%0),%b2\n\t" \
+	"movb 0(%1,%0),%b2\n\t" \
 	"incw %w0" \
 	: "=r" (ptr), "=r" (base), "=q" (__res) \
 	: "0" (ptr), "1" (base), "2" (0)); \
@@ -274,9 +271,9 @@ __res; })
 #define popw(base, ptr) \
 ({ unsigned long __res; \
 __asm__ __volatile__( \
-	"movb %%fs:0(%1,%0),%b2\n\t" \
+	"movb 0(%1,%0),%b2\n\t" \
 	"incw %w0\n\t" \
-	"movb %%fs:0(%1,%0),%h2\n\t" \
+	"movb 0(%1,%0),%h2\n\t" \
 	"incw %w0" \
 	: "=r" (ptr), "=r" (base), "=q" (__res) \
 	: "0" (ptr), "1" (base), "2" (0)); \
@@ -285,14 +282,14 @@ __res; })
 #define popl(base, ptr) \
 ({ unsigned long __res; \
 __asm__ __volatile__( \
-	"movb %%fs:0(%1,%0),%b2\n\t" \
+	"movb 0(%1,%0),%b2\n\t" \
 	"incw %w0\n\t" \
-	"movb %%fs:0(%1,%0),%h2\n\t" \
+	"movb 0(%1,%0),%h2\n\t" \
 	"incw %w0\n\t" \
 	"rorl $16,%2\n\t" \
-	"movb %%fs:0(%1,%0),%b2\n\t" \
+	"movb 0(%1,%0),%b2\n\t" \
 	"incw %w0\n\t" \
-	"movb %%fs:0(%1,%0),%h2\n\t" \
+	"movb 0(%1,%0),%h2\n\t" \
 	"incw %w0\n\t" \
 	"rorl $16,%2" \
 	: "=r" (ptr), "=r" (base), "=q" (__res) \

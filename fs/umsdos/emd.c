@@ -23,11 +23,10 @@
 /*
 	Read a file into kernel space memory
 */
-int umsdos_file_read_kmem(
-	struct inode *inode,
+long umsdos_file_read_kmem (struct inode *inode,
 	struct file *filp,
 	char *buf,
-	int count)
+	unsigned long count)
 {
 	int ret;
 	int old_fs = get_fs();	
@@ -39,11 +38,10 @@ int umsdos_file_read_kmem(
 /*
 	Write to a file from kernel space
 */
-int umsdos_file_write_kmem(
-	struct inode *inode,
+long umsdos_file_write_kmem (struct inode *inode,
 	struct file *filp,
 	const char *buf,
-	int count)
+	unsigned long count)
 {
 	int ret;
 	int old_fs = get_fs();
@@ -60,11 +58,10 @@ int umsdos_file_write_kmem(
 
 	Return 0 if ok, a negative error code if not.
 */
-int umsdos_emd_dir_write (
-	struct inode *emd_dir,
+long umsdos_emd_dir_write (struct inode *emd_dir,
 	struct file *filp,
 	char *buf,	/* buffer in kernel memory, not in user space */
-	int count)
+	unsigned long count)
 {
 	int written;
 	filp->f_flags = 0;
@@ -76,18 +73,17 @@ int umsdos_emd_dir_write (
 	The block of data is NOT in user space.
 	Return 0 if ok, -EIO if any error.
 */
-int umsdos_emd_dir_read (
-	struct inode *emd_dir,
+long umsdos_emd_dir_read (struct inode *emd_dir,
 	struct file *filp,
 	char *buf,	/* buffer in kernel memory, not in user space */
-	int count)
+	unsigned long count)
 {
-	int ret = 0;
+	long int ret = 0;
 	int sizeread;
 	filp->f_flags = 0;
 	sizeread = umsdos_file_read_kmem (emd_dir,filp,buf,count);
 	if (sizeread != count){
-		printk ("UMSDOS: problem with EMD file. Can't read pos = %Ld (%d != %d)\n"
+		printk ("UMSDOS: problem with EMD file. Can't read pos = %Ld (%d != %ld)\n"
 			,filp->f_pos,sizeread,count);
 		ret = -EIO;
 	}

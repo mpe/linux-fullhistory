@@ -127,7 +127,6 @@ static int posix_lock_file(struct file *filp, struct file_lock *caller,
 			   unsigned int wait);
 static int posix_locks_deadlock(struct task_struct *my_task,
 				struct task_struct *blocked_task);
-static int locks_overlap(struct file_lock *fl1, struct file_lock *fl2);
 static void posix_remove_locks(struct file_lock **before, struct task_struct *task);
 static void flock_remove_locks(struct file_lock **before, struct file *filp);
 
@@ -135,6 +134,10 @@ static struct file_lock *locks_alloc_lock(struct file_lock *fl);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
 static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait);
 static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx);
+
+static void locks_insert_block(struct file_lock *blocker, struct file_lock *waiter);
+static void locks_delete_block(struct file_lock *blocker, struct file_lock *waiter);
+static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait);
 
 static struct file_lock *file_lock_table = NULL;
 
@@ -152,13 +155,21 @@ static inline void locks_free_lock(struct file_lock *fl)
 	return;
 }
 
+/* Check if two locks overlap each other.
+ */
+static inline int locks_overlap(struct file_lock *fl1, struct file_lock *fl2)
+{
+	return ((fl1->fl_end >= fl2->fl_start) &&
+		(fl2->fl_end >= fl1->fl_start));
+}
+
 /* Insert waiter into blocker's block list.
  * We use a circular list so that processes can be easily woken up in
  * the order they blocked. The documentation doesn't require this but
  * it seems seems like the reasonable thing to do.
  */
-static inline void locks_insert_block(struct file_lock *blocker, 
-				      struct file_lock *waiter)
+static void locks_insert_block(struct file_lock *blocker, 
+			       struct file_lock *waiter)
 {
 	struct file_lock *prevblock;
 
@@ -180,8 +191,8 @@ static inline void locks_insert_block(struct file_lock *blocker,
 /* Remove waiter from blocker's block list.
  * When blocker ends up pointing to itself then the list is empty.
  */
-static inline void locks_delete_block(struct file_lock *blocker,
-				      struct file_lock *waiter)
+static void locks_delete_block(struct file_lock *blocker,
+			       struct file_lock *waiter)
 {
 	struct file_lock *nextblock;
 	struct file_lock *prevblock;
@@ -206,8 +217,7 @@ static inline void locks_delete_block(struct file_lock *blocker,
  * If told to wait then schedule the processes until the block list
  * is empty, otherwise empty the block list ourselves.
  */
-static inline void locks_wake_up_blocks(struct file_lock *blocker,
-					unsigned int wait)
+static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 {
 	struct file_lock *waiter;
 
@@ -305,8 +315,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	struct flock flock;
 	struct inode *inode;
 
-	/*
-	 * Get arguments and validate them ...
+	/* Get arguments and validate them ...
 	 */
 
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
@@ -493,21 +502,14 @@ repeat:
 	if ((fl = inode->i_flock) == NULL || (fl->fl_flags & FL_FLOCK))
 		return (0);
 	
-	/*
-	 * Search the lock list for this inode for locks that conflict with
+	/* Search the lock list for this inode for locks that conflict with
 	 * the proposed read/write.
 	 */
 	while (fl != NULL) {
-		if (fl->fl_owner == current ||
-		    fl->fl_end < offset || fl->fl_start >= offset + count)
-			goto next_lock;
-
-		/*
-		 * Block for writes against a "read" lock,
+		/* Block for writes against a "read" lock,
 		 * and both reads and writes against a "write" lock.
 		 */
-		if ((read_write == FLOCK_VERIFY_WRITE) ||
-		    (fl->fl_type == F_WRLCK)) {
+		if (posix_locks_conflict(fl, &tfl)) {
 			if (filp && (filp->f_flags & O_NONBLOCK))
 				return (-EAGAIN);
 			if (current->signal & ~current->blocked)
@@ -521,15 +523,13 @@ repeat:
 
 			if (current->signal & ~current->blocked)
 				return (-ERESTARTSYS);
-			/*
-			 * If we've been sleeping someone might have
+			/* If we've been sleeping someone might have
 			 * changed the permissions behind our back.
 			 */
 			if ((inode->i_mode & (S_ISGID | S_IXGRP)) != S_ISGID)
 				break;
 			goto repeat;
 		}
-	next_lock:
 		fl = fl->fl_next;
 	}
 #endif
@@ -675,14 +675,6 @@ static int locks_conflict(struct file_lock *caller_fl, struct file_lock *sys_fl)
 	return (0);	/* This should never happen */
 }
 
-/* Check if two locks overlap each other.
- */
-static int locks_overlap(struct file_lock *fl1, struct file_lock *fl2)
-{
-	return ((fl1->fl_end >= fl2->fl_start) &&
-		(fl2->fl_end >= fl1->fl_start));
-}
-
 /* This function tests for deadlock condition before putting a process to
  * sleep. The detection scheme is no longer recursive. Recursive was neat,
  * but dangerous - we risked stack corruption if the lock data was bad, or
@@ -777,11 +769,8 @@ repeat:
 			interruptible_sleep_on(&new_fl->fl_wait);
 			locks_delete_block(fl, new_fl);
 			if (current->signal & ~current->blocked) {
-				/* If we are here, than we were awakened
-				 * by a signal, so new_fl is still in the
-				 * block queue of fl. We need to remove 
-				 * new_fl and then free it.
-				 * 	Dmitry Gorodchanin 09/02/96.
+				/* Awakened by a signal. Free the new
+				 * lock and return an error.
 				 */
 				locks_free_lock(new_fl);
 				return (-ERESTARTSYS);
@@ -795,8 +784,8 @@ repeat:
 }
 
 /* Add a POSIX style lock to a file.
- * We merge adjacent locks whenever possible. POSIX locks come after FLOCK
- * locks in the list and are sorted by owner task, then by starting address
+ * We merge adjacent locks whenever possible. POSIX locks are sorted by owner
+ * task, then by starting address
  *
  * Kai Petzke writes:
  * To make freeing a lock much faster, we keep a pointer to the lock before the
@@ -839,18 +828,17 @@ repeat:
 			fl = fl->fl_next;
   		}
   	}
-	/*
-	 * Find the first old lock with the same owner as the new lock.
+
+	/* Find the first old lock with the same owner as the new lock.
 	 */
 	
 	before = &filp->f_inode->i_flock;
 
-	/* First skip FLOCK locks and locks owned by other processes.
+	/* First skip locks owned by other processes.
 	 */
 	while ((fl = *before) && (caller->fl_owner != fl->fl_owner)) {
 		before = &fl->fl_next;
 	}
-	
 
 	/* Process locks with this owner.
 	 */

@@ -80,8 +80,8 @@ ncp_make_open(struct inode *i, int right)
         return -EACCES;
 }
 
-static int 
-ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
+static long
+ncp_file_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	int bufsize, already_read;
 	off_t pos;
@@ -164,9 +164,9 @@ ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
         return already_read;
 }
 
-static int 
+static long
 ncp_file_write(struct inode *inode, struct file *file, const char *buf,
-	       int count)
+	       unsigned long count)
 {
 	int bufsize, already_written;
         off_t pos;

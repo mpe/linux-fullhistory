@@ -86,7 +86,7 @@ asmlinkage int do_sigsuspend(unsigned long mask, struct pt_regs * regs, struct s
 /*
  * Do a signal return; undo the signal stack.
  */
-asmlinkage void do_sigreturn(struct sigcontext_struct * sc, 
+asmlinkage void do_sigreturn(struct sigcontext * sc, 
 	struct pt_regs * regs, struct switch_stack * sw)
 {
 	unsigned long mask;
@@ -155,10 +155,10 @@ static void setup_frame(struct sigaction * sa,
 {
 	int i;
 	unsigned long oldsp;
-	struct sigcontext_struct * sc;
+	struct sigcontext * sc;
 
 	oldsp = rdusp();
-	sc = ((struct sigcontext_struct *) oldsp) - 1;
+	sc = ((struct sigcontext *) oldsp) - 1;
 
 	/* check here if we would need to switch stacks.. */
 	if (verify_area(VERIFY_WRITE, sc, sizeof(*sc)))

@@ -1,6 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      27 Sep 1996 rev. 2.12 for linux 2.1.0
+ *          Portability cleanups (virtual/bus addressing, little/big endian
+ *          support).
+ *
  *      09 Jul 1996 rev. 2.11 for linux 2.0.4
  *          "Data over/under-run" no longer implies a redo on all targets.
  *          Number of internal retries is now limited.
@@ -157,6 +161,7 @@
 #include <linux/ioport.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/byteorder.h>
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include "scsi.h"
@@ -266,8 +271,8 @@ struct mscp {
    Scsi_Cmnd *SCpnt;
 
    struct sg_list {
-      unsigned int address;     /* Segment Address */
-      unsigned int num_bytes;   /* Segment Length */
+      unsigned int address;             /* Segment Address */
+      unsigned int num_bytes;           /* Segment Length */
       } sglist[MAX_SGLIST];
 
    unsigned int index;   /* cp index */
@@ -302,6 +307,20 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
+#if defined(__BIG_ENDIAN)
+#define H2DEV(x) ((unsigned long)( \
+	(((unsigned long)(x) & 0x000000ffU) << 24) | \
+	(((unsigned long)(x) & 0x0000ff00U) <<  8) | \
+	(((unsigned long)(x) & 0x00ff0000U) >>  8) | \
+	(((unsigned long)(x) & 0xff000000U) >> 24)))
+#else
+#define H2DEV(x) (x)
+#endif
+
+#define DEV2H(x) H2DEV(x)
+#define V2DEV(addr) ((addr) ? H2DEV(virt_to_bus((void *)addr)) : 0)
+#define DEV2V(addr) ((addr) ? DEV2H(bus_to_virt((unsigned long)addr)) : 0)
+
 static void u14_34f_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 
@@ -322,8 +341,8 @@ static int board_inquiry(unsigned int j) {
    memset(cpp, 0, sizeof(struct mscp));
    cpp->opcode = OP_HOST_ADAPTER;
    cpp->xdir = DTD_IN;
-   cpp->data_address = virt_to_bus(HD(j)->board_id);
-   cpp->data_len = sizeof(HD(j)->board_id);
+   cpp->data_address = V2DEV(HD(j)->board_id);
+   cpp->data_len = H2DEV(sizeof(HD(j)->board_id));
    cpp->scsi_cdbs_len = 6;
    cpp->scsi_cdbs[0] = HA_CMD_INQUIRY;
 
@@ -338,7 +357,7 @@ static int board_inquiry(unsigned int j) {
    outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
 
    /* Store pointer in OGM address bytes */
-   outl(virt_to_bus(cpp), sh[j]->io_port + REG_OGM);
+   outl(V2DEV(cpp), sh[j]->io_port + REG_OGM);
 
    /* Issue OGM interrupt */
    outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
@@ -568,14 +587,14 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
    for (k = 0; k < SCpnt->use_sg; k++) {
-      cpp->sglist[k].address = virt_to_bus(sgpnt[k].address);
-      cpp->sglist[k].num_bytes = sgpnt[k].length;
+      cpp->sglist[k].address = V2DEV(sgpnt[k].address);
+      cpp->sglist[k].num_bytes = H2DEV(sgpnt[k].length);
       data_len += sgpnt[k].length;
       }
 
    cpp->use_sg = SCpnt->use_sg;
-   cpp->data_address = virt_to_bus(cpp->sglist);
-   cpp->data_len = data_len;
+   cpp->data_address = V2DEV(cpp->sglist);
+   cpp->data_len = H2DEV(data_len);
 }
 
 int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
@@ -649,7 +668,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->target = SCpnt->target;
    cpp->lun = SCpnt->lun;
    cpp->SCpnt = SCpnt;
-   cpp->sense_addr = virt_to_bus(SCpnt->sense_buffer);
+   cpp->sense_addr = V2DEV(SCpnt->sense_buffer);
    cpp->sense_len = sizeof SCpnt->sense_buffer;
 
    if (SCpnt->use_sg) {
@@ -657,8 +676,8 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       build_sg_list(cpp, SCpnt);
       }
    else {
-      cpp->data_address = virt_to_bus(SCpnt->request_buffer);
-      cpp->data_len = SCpnt->request_bufflen;
+      cpp->data_address = V2DEV(SCpnt->request_buffer);
+      cpp->data_len = H2DEV(SCpnt->request_bufflen);
       }
 
    cpp->scsi_cdbs_len = SCpnt->cmd_len;
@@ -675,7 +694,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       }
 
    /* Store pointer in OGM address bytes */
-   outl(virt_to_bus(cpp), sh[j]->io_port + REG_OGM);
+   outl(V2DEV(cpp), sh[j]->io_port + REG_OGM);
 
    /* Issue OGM interrupt */
    outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
@@ -901,7 +920,7 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 	 if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
 			      BN(j), HD(j)->iocount);
 
-	 spp = (struct mscp *)bus_to_virt(inl(sh[j]->io_port + REG_ICM));
+	 spp = (struct mscp *)DEV2V(inl(sh[j]->io_port + REG_ICM));
 
 	 /* Clear interrupt pending flag */
 	 outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);

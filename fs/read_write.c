@@ -16,84 +16,95 @@
 
 #include <asm/segment.h>
 
-asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
+static long long default_llseek(struct inode *inode,
+	struct file *file,
+	long long offset,
+	int origin)
 {
-	struct file * file;
-	long tmp = -1;
+	long long retval;
 
-	if (fd >= NR_OPEN || !(file=current->files->fd[fd]) || !(file->f_inode))
-		return -EBADF;
-	if (origin > 2)
-		return -EINVAL;
-	if (file->f_op && file->f_op->llseek)
-		return file->f_op->llseek(file->f_inode,file,offset,origin);
-
-/* this is the default handler if no lseek handler is present */
 	switch (origin) {
-		case 0:
-			tmp = offset;
+		case 2:
+			offset += inode->i_size;
 			break;
 		case 1:
-			tmp = file->f_pos + offset;
-			break;
-		case 2:
-			if (!file->f_inode)
-				return -EINVAL;
-			tmp = file->f_inode->i_size + offset;
-			break;
+			offset += file->f_pos;
 	}
-	if (tmp < 0)
-		return -EINVAL;
-	if (tmp != file->f_pos) {
-		file->f_pos = tmp;
-		file->f_reada = 0;
-		file->f_version = ++event;
+	retval = -EINVAL;
+	if (offset >= 0) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_reada = 0;
+			file->f_version = ++event;
+		}
+		retval = offset;
 	}
-	return file->f_pos;
+	return retval;
+}
+
+static inline long long llseek(struct inode * inode, struct file *file,
+	long long offset, unsigned int origin)
+{
+	long long (*fn)(struct inode *, struct file *, long long, int);
+
+	fn = default_llseek;
+	if (file->f_op && file->f_op->llseek)
+		fn = file->f_op->llseek;
+	return fn(inode, file, offset, origin);
+}
+
+asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
+{
+	long retval;
+	struct file * file;
+	struct inode * inode;
+
+	retval = -EBADF;
+	if (fd >= NR_OPEN ||
+	    !(file = current->files->fd[fd]) ||
+	    !(inode = file->f_inode))
+		goto bad;
+	retval = -EINVAL;
+	if (origin > 2)
+		goto bad;
+	retval = llseek(inode, file, offset, origin);
+bad:
+	return retval;
 }
 
 asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 			  unsigned long offset_low, loff_t * result,
 			  unsigned int origin)
 {
+	long retval;
 	struct file * file;
-	loff_t tmp = -1;
-	loff_t offset;
-	int err;
+	struct inode * inode;
+	long long offset;
 
-	if (fd >= NR_OPEN || !(file=current->files->fd[fd]) || !(file->f_inode))
-		return -EBADF;
+	retval = -EBADF;
+	if (fd >= NR_OPEN ||
+	    !(file = current->files->fd[fd]) ||
+	    !(inode = file->f_inode))
+		goto bad;
+	retval = -EINVAL;
 	if (origin > 2)
-		return -EINVAL;
-	if ((err = verify_area(VERIFY_WRITE, result, sizeof(loff_t))))
-		return err;
-	offset = (loff_t) (((unsigned long long) offset_high << 32) | offset_low);
+		goto bad;
 
-	if (file->f_op && file->f_op->llseek)
-		return file->f_op->llseek(file->f_inode,file,offset,origin);
+	retval = verify_area(VERIFY_WRITE, result, sizeof(offset));
+	if (retval)
+		goto bad;
 
-	switch (origin) {
-		case 0:
-			tmp = offset;
-			break;
-		case 1:
-			tmp = file->f_pos + offset;
-			break;
-		case 2:
-			if (!file->f_inode)
-				return -EINVAL;
-			tmp = file->f_inode->i_size + offset;
-			break;
+	offset = llseek(inode, file,
+		(((unsigned long long) offset_high << 32) | offset_low),
+		origin);
+
+	retval = offset;
+	if (offset >= 0) {
+		put_user(offset, result);
+		retval = 0;
 	}
-	if (tmp < 0)
-		return -EINVAL;
-	if (tmp != file->f_pos) {
-		file->f_pos = tmp;
-		file->f_reada = 0;
-		file->f_version = ++event;
-	}
-	memcpy_tofs(result, &file->f_pos, sizeof(loff_t));
-	return 0;
+bad:
+	return retval;
 }
 
 asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)

@@ -24,8 +24,8 @@ struct ncp_dirent {
 	unsigned long f_pos;
 };
 
-static int 
-ncp_dir_read(struct inode *inode, struct file *filp, char *buf, int count);
+static long
+ncp_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count);
 
 static int 
 ncp_readdir(struct inode *inode, struct file *filp,
@@ -192,8 +192,8 @@ ncp_find_inode(struct inode *inode)
 	return NULL;
 }
 	
-static int 
-ncp_dir_read(struct inode *inode, struct file *filp, char *buf, int count)
+static long
+ncp_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
 {
 	return -EISDIR;
 }

@@ -20,9 +20,9 @@
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
+static void cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 {
-	struct old_stat tmp;
+	struct __old_kernel_stat tmp;
 
 	printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
 		current->comm);
@@ -44,9 +44,9 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 
 #endif
 
-static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
+static void cp_new_stat(struct inode * inode, struct stat * statbuf)
 {
-	struct new_stat tmp;
+	struct stat tmp;
 	unsigned int blocks, indirect;
 
 	memset(&tmp, 0, sizeof(tmp));
@@ -107,7 +107,7 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_stat(char * filename, struct old_stat * statbuf)
+asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -124,7 +124,7 @@ asmlinkage int sys_stat(char * filename, struct old_stat * statbuf)
 }
 #endif
 
-asmlinkage int sys_newstat(char * filename, struct new_stat * statbuf)
+asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -146,7 +146,7 @@ asmlinkage int sys_newstat(char * filename, struct new_stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_lstat(char * filename, struct old_stat * statbuf)
+asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -164,7 +164,7 @@ asmlinkage int sys_lstat(char * filename, struct old_stat * statbuf)
 
 #endif
 
-asmlinkage int sys_newlstat(char * filename, struct new_stat * statbuf)
+asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 {
 	struct inode * inode;
 	int error;
@@ -186,7 +186,7 @@ asmlinkage int sys_newlstat(char * filename, struct new_stat * statbuf)
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-asmlinkage int sys_fstat(unsigned int fd, struct old_stat * statbuf)
+asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
@@ -203,7 +203,7 @@ asmlinkage int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 
 #endif
 
-asmlinkage int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
+asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
