@@ -53,6 +53,9 @@
 #define ACPI_SLP_TYP2 0x1000
 #define ACPI_SLP_EN   0x2000
 
+#define ACPI_SLP_TYP_MASK  0x1c00
+#define ACPI_SLP_TYP_SHIFT 10
+
 /* PM_TMR masks */
 #define ACPI_TMR_MASK	0x00ffffff
 #define ACPI_TMR_HZ	3580000 /* 3.58 MHz */
@@ -81,6 +84,9 @@
 #define ACPI_RTC_64	  0x00000080
 #define ACPI_TMR_VAL_EXT  0x00000100
 #define ACPI_DCK_CAP	  0x00000200
+
+/* FACS flags */
+#define ACPI_S4BIOS	  0x00000001
 
 struct acpi_rsdp {
 	__u32 signature[2];
@@ -145,6 +151,15 @@ struct acpi_facp {
 	__u32 flags;
 };
 
+struct acpi_facs {
+	__u32 signature;
+	__u32 length;
+	__u32 hw_signature;
+	__u32 fw_wake_vector;
+	__u32 global_lock;
+	__u32 flags;
+};
+
 /*
  * Sysctl declarations
  */
@@ -166,7 +181,11 @@ enum
 	ACPI_P_LVL3,
 	ACPI_P_LVL2_LAT,
 	ACPI_P_LVL3_LAT,
+	ACPI_S5_SLP_TYP
 };
+
+#define ACPI_P_LVL_DISABLED	0x80
+#define ACPI_SLP_TYP_DISABLED	(~0UL)
 
 /*
  * PIIX4-specific ACPI info (for systems with PIIX4 but no ACPI tables)
@@ -208,6 +227,7 @@ enum
 #ifdef __KERNEL__
 
 extern void (*acpi_idle)(void);
+extern void (*acpi_power_off)(void);
 
 #endif
 

@@ -133,6 +133,12 @@
 #include <asm/uaccess.h>
 #include <asm/desc.h>
 
+/*
+ * Make APM look as much as just another ACPI module as possible..
+ */
+#include <linux/acpi.h>
+
+
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
 
@@ -1399,6 +1405,11 @@ static int apm(void *unused)
 		if (apm_engage_power_management(0x0001) == APM_SUCCESS)
 			apm_bios_info.flags &= ~APM_BIOS_DISENGAGED;
 	}
+
+/* Install our power off handler.. */
+#ifdef CONFIG_APM_POWER_OFF
+	acpi_power_off = apm_power_off;
+#endif
 
 	apm_mainloop();
 	return 0;

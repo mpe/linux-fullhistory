@@ -2476,7 +2476,7 @@ static void __init get_of_addrs (const struct device_node *dp,
 	for (i = 0; i < dp->n_addrs; ++i) {
 		unsigned long addr = dp->addrs[i].address;
 		unsigned long size = dp->addrs[i].size;
-		printk ("dp->addrs[%d].address = $lx, dp->addrs[%d].size = %lx\n",
+		printk ("dp->addrs[%d].address = %lx, dp->addrs[%d].size = %lx\n",
 			i, addr, i, size);
 		if (size >= 0x800000) {
 			*display = addr;

@@ -20,6 +20,7 @@ restrictions referred to are that the relevant option is valid if:
     ISDN	Appropriate ISDN support is enabled.
     JOY 	Appropriate joystick support is enabled.
     LP		Printer support is enabled.
+    LOOP	Loopback device support is enabled.
     MCA 	MCA bus support is enabled.
     MDA 	The MDA console is enabled.
     MOUSE	Appropriate mouse support is enabled.
@@ -207,6 +208,9 @@ or  lp=auto		driver.  'lp=reset' (which can be specified in
     ltpc=		[HW]
 
     mac5380=		[HW,SCSI]
+
+    max_loop=[0-255]	[LOOP] States the maximum number of loopback devices
+    			that can be mounted.
 
     maxcpus=		[SMP] States the maximum number of processors that
 			an SMP kernel should make use of.

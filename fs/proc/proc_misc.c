@@ -140,16 +140,16 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
  * display in kilobytes.
  */
 #define K(x) ((x) << (PAGE_SHIFT - 10))
-
+#define B(x) ((x) << PAGE_SHIFT)
         si_meminfo(&i);
         si_swapinfo(&i);
         len = sprintf(page, "        total:    used:    free:  shared: buffers:  cached:\n"
                 "Mem:  %8lu %8lu %8lu %8lu %8lu %8u\n"
                 "Swap: %8lu %8lu %8lu\n",
-                K(i.totalram), K(i.totalram-i.freeram), K(i.freeram),
-                K(i.sharedram), K(i.bufferram),
-                K(atomic_read(&page_cache_size)), K(i.totalswap),
-                K(i.totalswap-i.freeswap), K(i.freeswap));
+                B(i.totalram), B(i.totalram-i.freeram), B(i.freeram),
+                B(i.sharedram), B(i.bufferram),
+                B(atomic_read(&page_cache_size)), B(i.totalswap),
+                B(i.totalswap-i.freeswap), B(i.freeswap));
         /*
          * Tagged format, for easy grepping and expansion.
          * The above will go away eventually, once the tools
@@ -181,7 +181,7 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
 	if (len>count) len = count;
 	if (len<0) len = 0;
 	return len;
-
+#undef B
 #undef K
 }
 

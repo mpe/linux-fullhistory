@@ -286,6 +286,10 @@ W: http://math-www.uni-paderborn.de/~axel/
 D: Configuration help text support
 D: Linux CD and Support Giveaway List
 
+N: Erik Inge Bolsø
+E: knan@mo.himolde.no
+D: Misc kernel hacks
+
 N: Zoltan Boszormenyi
 E: zboszor@mol.hu
 D: MTRR emulation with Cyrix style ARR registers

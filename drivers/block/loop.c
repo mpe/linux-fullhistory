@@ -23,9 +23,12 @@
  * Reed H. Petty, rhp@draper.net
  *
  * Maximum number of loop devices now dynamic via max_loop module parameter.
- * Still fixed at 8 devices when compiled into the kernel normally.
  * Russell Kroll <rkroll@exploits.org> 19990701
  * 
+ * Maximum number of loop devices when compiled-in now selectable by passing
+ * max_loop=<1-255> to the kernel on boot.
+ * Erik I. Bolsø, <eriki@himolde.no>, Oct 31, 1999
+ *
  * Still To Fix:
  * - Advisory locking is ignored here. 
  * - Should use an own CAP_* category instead of CAP_SYS_ADMIN 
@@ -723,15 +726,12 @@ int __init loop_init(void)
 	}
 
 	if ((max_loop < 1) || (max_loop > 255)) {
-		printk (KERN_WARNING "loop: max_loop must be between 1 and 255\n");
-		return -EINVAL;
+		printk (KERN_WARNING "loop: invalid max_loop (must be between 1 and 255), using default (8)\n");
+		max_loop = 8;
 	}
 
-#ifndef MODULE
 	printk(KERN_INFO "loop: registered device at major %d\n", MAJOR_NR);
-#else
 	printk(KERN_INFO "loop: enabling %d loop devices\n", max_loop);
-#endif
 
 	loop_dev = kmalloc (max_loop * sizeof(struct loop_device), GFP_KERNEL);
 	if (!loop_dev) {
@@ -777,4 +777,14 @@ void cleanup_module(void)
 	kfree (loop_sizes);
 	kfree (loop_blksizes);
 }
+#endif
+
+#ifndef MODULE
+static int __init max_loop_setup(char *str)
+{
+	max_loop = simple_strtol(str,NULL,0);
+	return 1;
+}
+
+__setup("max_loop=", max_loop_setup);
 #endif

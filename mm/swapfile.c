@@ -243,7 +243,7 @@ static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		return;
 	set_pte(dir, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	swap_free(entry);
-	get_page(mem_map + MAP_NR(page));
+	get_page(page);
 	++vma->vm_mm->rss;
 }
 

@@ -29,9 +29,6 @@
 #include <linux/delay.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-#include <linux/apm_bios.h>
-#endif
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -65,6 +62,11 @@ void enable_hlt(void)
  * Powermanagement idle function, if any..
  */
 void (*acpi_idle)(void) = NULL;
+
+/*
+ * Power off function, if any
+ */
+void (*acpi_power_off)(void) = NULL;
 
 /*
  * The idle thread. There's no useful work to be
@@ -310,9 +312,8 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-	apm_power_off();
-#endif
+	if (acpi_power_off)
+		acpi_power_off();
 }
 
 

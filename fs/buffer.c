@@ -823,7 +823,7 @@ static int balance_dirty_state(kdev_t dev)
 	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
-	tot = nr_lru_pages + nr_free_pages + nr_free_highpages;
+	tot = nr_lru_pages + nr_free_pages - nr_free_highpages;
 	hard_dirty_limit = tot * bdf_prm.b_un.nfract / 100;
 	soft_dirty_limit = hard_dirty_limit >> 1;
 
@@ -1294,7 +1294,9 @@ static void unmap_underlying_metadata(struct buffer_head * bh)
 {
 #if 0
 	if (buffer_new(bh)) {
-		struct old_bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
+		struct buffer_head *old_bh;
+
+		old_bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
 		if (old_bh) {
 			unmap_buffer(old_bh);
 			/* Here we could run brelse or bforget. We use

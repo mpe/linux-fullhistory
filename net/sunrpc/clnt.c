@@ -545,6 +545,7 @@ call_status(struct rpc_task *task)
 
 	if (status >= 0) {
 		task->tk_action = call_decode;
+		return;
 	}
 
 	task->tk_status = 0;

@@ -387,7 +387,7 @@ ncp_ObtainSpecificDirBase(struct ncp_server *server,
 	ncp_add_byte(server, 6); /* subfunction */
 	ncp_add_byte(server, nsSrc);
 	ncp_add_byte(server, nsDst);
-	ncp_add_word(server, 0x8006); /* get all */
+	ncp_add_word(server, htons(0x0680)); /* get all */
 	ncp_add_dword(server, RIM_ALL);
 	ncp_add_handle_path(server, vol_num, dir_base, 1, path);
 

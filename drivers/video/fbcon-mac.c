@@ -455,7 +455,7 @@ static int get_pixel_mac(struct display *p, int pixel_x, int pixel_y)
   u8 *dest, bit;
   u16 *dest16;
   u32 *dest32;
-  u8 pixel;
+  u8 pixel=0;
 
   switch (p->var.bits_per_pixel) {
   case 1:

@@ -707,7 +707,7 @@ repeat:
 
 	/* Do we need to expand the fdset array? */
 	if (fd >= current->files->max_fdset) {
-		error = expand_fdset(files, 0);
+		error = expand_fdset(files, fd);
 		if (!error) {
 			error = -EMFILE;
 			goto repeat;

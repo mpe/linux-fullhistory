@@ -10,15 +10,6 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
-fi
-endmenu
-
-mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_VT y
@@ -49,25 +40,36 @@ bool 'PCI support' CONFIG_PCI
 source drivers/sbus/char/Config.in
 source drivers/sbus/audio/Config.in
 
-tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
+fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
-tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
-  tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
-  bool 'Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
+   tristate '  Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
+   bool '  Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
 fi
+tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
+   tristate 'Solaris binary emulation (EXPERIMENTAL)' CONFIG_SOLARIS_EMUL
 fi
 source drivers/parport/Config.in
 dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
 if [ "$CONFIG_PCI" = "y" ]; then
-  tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
+   tristate 'SUNW, envctrl support' CONFIG_ENVCTRL
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 
@@ -78,41 +80,41 @@ bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
-  tristate '   Linear (append) mode' CONFIG_MD_LINEAR
-  tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
-  tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
-  tristate '   RAID-4/RAID-5 mode' CONFIG_MD_RAID5
+   tristate '  Linear (append) mode' CONFIG_MD_LINEAR
+   tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED
+   tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
+   tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5
 fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
-  bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
+   bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 
 if [ "$CONFIG_PCI" = "y" ]; then
-	tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
-	if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
-	  dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
-	  dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
-	  dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
-	  dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
-	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
-	  define_bool CONFIG_BLK_DEV_IDEPCI y
-	  define_bool CONFIG_BLK_DEV_IDEDMA y
-	  define_bool CONFIG_IDEDMA_AUTO y
-	  define_bool IDEDMA_NEW_DRIVE_LISTINGS y
-	  define_bool CONFIG_BLK_DEV_NS87415 y
-	  define_bool CONFIG_BLK_DEV_CMD646 y
-	fi
+   tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
+   if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
+      dep_tristate '  Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
+      dep_tristate '  Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
+      dep_tristate '  Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
+      dep_tristate '  Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
+      dep_tristate '  SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
+      define_bool CONFIG_BLK_DEV_IDEPCI y
+      define_bool CONFIG_BLK_DEV_IDEDMA y
+      define_bool CONFIG_IDEDMA_AUTO y
+      define_bool CONFIG_IDEDMA_NEW_DRIVE_LISTINGS y
+      define_bool CONFIG_BLK_DEV_NS87415 y
+      define_bool CONFIG_BLK_DEV_CMD646 y
+   fi
 fi
 
 endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
-	source net/Config.in
+   source net/Config.in
 fi
 
 mainmenu_option next_comment
@@ -121,95 +123,95 @@ comment 'SCSI support'
 tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-	comment 'SCSI support type (disk, tape, CDrom)'
+   comment 'SCSI support type (disk, tape, CDrom)'
 
-	dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
-	dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
-	dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
-	if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
-	  bool '  Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
-	fi
-	dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
+   dep_tristate '  SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
+   dep_tristate '  SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
+   dep_tristate '  SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+   if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
+      bool '    Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+   fi
+   dep_tristate '  SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
-	comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
+   comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
 
-	bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
+   bool '  Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN
 
-	bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
+   bool '  Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS
 
-	mainmenu_option next_comment
-	comment 'SCSI low-level drivers'
+   mainmenu_option next_comment
+   comment 'SCSI low-level drivers'
 
-	bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
-	tristate 'PTI Qlogic,ISP Driver' CONFIG_SCSI_QLOGICPTI $CONFIG_SCSI
+   bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
+   tristate 'PTI Qlogic, ISP Driver' CONFIG_SCSI_QLOGICPTI $CONFIG_SCSI
 
-	if [ "$CONFIG_PCI" != "n" ]; then
-	  dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
-	  if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
-	    bool '   Enable Tagged Command Queueing (TCQ) by default' CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
-	    int  '   Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
-	    bool '   Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
-	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
-	  fi
-	  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
-	  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
-	    int  '  default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
-	    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
-	    int  '  synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
-	    bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
-	    if [ "$CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS" = "0" ]; then
-	      bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-	    fi
-	    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	      bool '  assume boards are SYMBIOS compatible' CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
-	    fi
-	  fi
-          dep_tristate 'Qlogic ISP SCSI support' CONFIG_SCSI_QLOGIC_ISP $CONFIG_SCSI
-	fi
+   if [ "$CONFIG_PCI" != "n" ]; then
+      dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
+      if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
+	 bool '  Enable tagged command queueing (TCQ) by default' CONFIG_AIC7XXX_TAGGED_QUEUEING Y
+	 int  '  Maximum number of TCQ commands per device' CONFIG_AIC7XXX_CMDS_PER_DEVICE 8
+  	 bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
+	 int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
+      fi
+      dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
+      if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
+	 int 'default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
+	 int 'maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
+	 int 'synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
+	 bool '  enable profiling' CONFIG_SCSI_NCR53C8XX_PROFILE
+	 if [ "$CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS" = "0" ]; then
+	    bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
+	 fi
+	 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	    bool '  assume boards are SYMBIOS compatible (EXPERIMENTAL)' CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+	 fi
+      fi
+      dep_tristate 'Qlogic ISP SCSI support' CONFIG_SCSI_QLOGIC_ISP $CONFIG_SCSI
+   fi
 
-	endmenu
+   endmenu
 fi
 endmenu
 
 source drivers/fc4/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
-	mainmenu_option next_comment
-	comment 'Network device support'
+   mainmenu_option next_comment
+   comment 'Network device support'
 
-	bool 'Network device support' CONFIG_NETDEVICES
-	if [ "$CONFIG_NETDEVICES" = "y" ]; then
-		tristate 'Dummy net driver support' CONFIG_DUMMY
-		tristate 'PPP (point-to-point) support' CONFIG_PPP
-		if [ ! "$CONFIG_PPP" = "n" ]; then
-		   comment 'CCP compressors for PPP are only built as modules.'
-		fi
-		tristate 'SLIP (serial line) support' CONFIG_SLIP
-		if [ "$CONFIG_SLIP" != "n" ]; then
-		  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
-		  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
-		  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
-		fi
-		bool 'Sun LANCE support' CONFIG_SUNLANCE
-		tristate 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
-		if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-		  tristate 'Sun BigMAC 10/100baseT support' CONFIG_SUNBMAC
-		fi
-		tristate 'Sun QuadEthernet support' CONFIG_SUNQE
-		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
-		if [ "$CONFIG_PCI" = "y" ]; then
-			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
-			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
-			tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
-			tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
-			tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
-			tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
-		fi
-#		bool 'FDDI driver support' CONFIG_FDDI
-#		if [ "$CONFIG_FDDI" = "y" ]; then
-#		fi
-	fi
-	endmenu
+   bool 'Network device support' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      tristate '  Dummy net driver support' CONFIG_DUMMY
+      tristate '  PPP (point-to-point) support' CONFIG_PPP
+      if [ ! "$CONFIG_PPP" = "n" ]; then
+	 comment '    CCP compressors for PPP are only built as modules.'
+      fi
+      tristate '  SLIP (serial line) support' CONFIG_SLIP
+      if [ "$CONFIG_SLIP" != "n" ]; then
+	 bool '    CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+	 bool '    Keepalive and linefill' CONFIG_SLIP_SMART
+	 bool '    Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
+      fi
+      bool '  Sun LANCE support' CONFIG_SUNLANCE
+      tristate '  Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
+      fi
+      tristate '  Sun QuadEthernet support' CONFIG_SUNQE
+      tristate '  MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
+      if [ "$CONFIG_PCI" = "y" ]; then
+	 tristate '  Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+	 tristate '  3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+	 tristate '  RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
+	 tristate '  PCI NE2000 support' CONFIG_NE2K_PCI
+	 tristate '  EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
+	 tristate '  Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
+      fi
+#      bool '  FDDI driver support' CONFIG_FDDI
+#      if [ "$CONFIG_FDDI" = "y" ]; then
+#      fi
+   fi
+endmenu
 fi
 
 # This one must be before the filesystem configs. -DaveM
@@ -217,7 +219,7 @@ mainmenu_option next_comment
 comment 'Unix 98 PTY support'
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
-	int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
+   int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
 fi
 endmenu
 
@@ -225,9 +227,9 @@ mainmenu_option next_comment
 comment 'Video For Linux'
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
-  if [ "$CONFIG_PCI" != "n" ]; then
-    dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
-  fi
+   if [ "$CONFIG_PCI" != "n" ]; then
+      dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+   fi
 fi
 endmenu
 

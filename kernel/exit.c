@@ -455,6 +455,7 @@ asmlinkage long sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struc
 	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
 	flag = 0;
+	current->state = TASK_INTERRUPTIBLE;
 	read_lock(&tasklist_lock);
  	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {
@@ -521,12 +522,12 @@ repeat:
 		retval = -ERESTARTSYS;
 		if (signal_pending(current))
 			goto end_wait4;
-		current->state=TASK_INTERRUPTIBLE;
 		schedule();
 		goto repeat;
 	}
 	retval = -ECHILD;
 end_wait4:
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&current->wait_chldexit,&wait);
 	return retval;
 }

@@ -470,20 +470,14 @@ out:
 static time_t ncp_obtain_mtime(struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
-	struct inode *parent = dentry->d_parent->d_inode;
 	struct ncp_server *server = NCP_SERVER(inode);
 	struct nw_info_struct i;
-	int len = dentry->d_name.len;
-	__u8 __name[len + 1];
 
 	if (!ncp_conn_valid(server) ||
-	    (inode == inode->i_sb->s_root->d_inode) ||
-	    ncp_is_server_root(parent))
+	    ncp_is_server_root(inode))
 		return 0;
 
-	memcpy(__name, dentry->d_name.name, len);
-	io2vol(server, __name, !ncp_preserve_case(parent));
-	if (ncp_obtain_info(server, parent, __name, &i))
+	if (ncp_obtain_info(server, inode, NULL, &i))
 		return 0;
 
 	return ncp_date_dos2unix(le16_to_cpu(i.modifyTime),
@@ -498,7 +492,8 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct ncp_server *server = NCP_SERVER(inode);
 	union  ncp_dir_cache *cache = NULL;
 	struct ncp_cache_control ctl;
-	int result;
+	int result, mtime_valid = 0;
+	time_t mtime = 0;
 
 	ctl.page  = NULL;
 	ctl.cache = NULL;
@@ -535,12 +530,11 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		goto init_cache;
 
 	if (filp->f_pos == 2) {
-		time_t mtime;
-
 		if (jiffies - ctl.head.time >= NCP_MAX_AGE(server))
 			goto init_cache;
 
 		mtime = ncp_obtain_mtime(dentry);
+		mtime_valid = 1;
 		if ((!mtime) || (mtime != ctl.head.mtime))
 			goto init_cache;
 	}
@@ -599,7 +593,11 @@ invalid_cache:
 	ctl.cache = cache;
 init_cache:
 	ncp_invalidate_dircache_entries(dentry);
-	ctl.head.mtime = ncp_obtain_mtime(dentry);
+	if (!mtime_valid) {
+		mtime = ncp_obtain_mtime(dentry);
+		mtime_valid = 1;
+	}
+	ctl.head.mtime = mtime;
 	ctl.head.time = jiffies;
 	ctl.head.eof = 0;
 	ctl.fpos = 2;

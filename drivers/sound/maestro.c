@@ -2339,7 +2339,7 @@ static int ess_mmap(struct file *file, struct vm_area_struct *vma)
 		db = &s->dma_adc;
 	} else 
 		return -EINVAL;
-	if (vma->vm_offset != 0)
+	if (vma->vm_pgoff != 0)
 		return -EINVAL;
 	size = vma->vm_end - vma->vm_start;
 	if (size > (PAGE_SIZE << db->buforder))

@@ -74,6 +74,7 @@ static struct ctl_table_header *acpi_sysctl = NULL;
 
 static struct acpi_facp *acpi_facp = NULL;
 static int acpi_fake_facp = 0;
+static struct acpi_facs *acpi_facs = NULL;
 static unsigned long acpi_facp_addr = 0;
 static unsigned long acpi_dsdt_addr = 0;
 
@@ -88,8 +89,19 @@ static unsigned long acpi_p_lvl2_lat = ~0UL;
 static unsigned long acpi_p_lvl3_lat = ~0UL;
 
 /* Initialize to guaranteed harmless port read */
-static unsigned long acpi_p_lvl2 = 0x80;
-static unsigned long acpi_p_lvl3 = 0x80;
+static unsigned long acpi_p_lvl2 = ACPI_P_LVL_DISABLED;
+static unsigned long acpi_p_lvl3 = ACPI_P_LVL_DISABLED;
+
+// bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
+static unsigned long acpi_slp_typ[] = 
+{
+	ACPI_SLP_TYP_DISABLED, /* S0 */
+	ACPI_SLP_TYP_DISABLED, /* S1 */
+	ACPI_SLP_TYP_DISABLED, /* S2 */
+	ACPI_SLP_TYP_DISABLED, /* S3 */
+	ACPI_SLP_TYP_DISABLED, /* S4 */
+	ACPI_SLP_TYP_DISABLED  /* S5 */
+};
 
 static struct ctl_table acpi_table[] =
 {
@@ -125,10 +137,14 @@ static struct ctl_table acpi_table[] =
 
 	{ACPI_P_LVL2_LAT, "p_lvl2_lat",
 	 &acpi_p_lvl2_lat, sizeof(acpi_p_lvl2_lat),
-	 0600, NULL, &acpi_do_ulong},
+	 0644, NULL, &acpi_do_ulong},
 
 	{ACPI_P_LVL3_LAT, "p_lvl3_lat",
 	 &acpi_p_lvl3_lat, sizeof(acpi_p_lvl3_lat),
+	 0644, NULL, &acpi_do_ulong},
+
+	{ACPI_S5_SLP_TYP, "s5_slp_typ",
+	 &acpi_slp_typ[5], sizeof(acpi_slp_typ[5]),
 	 0600, NULL, &acpi_do_ulong},
 
 	{0}
@@ -136,7 +152,7 @@ static struct ctl_table acpi_table[] =
 
 static struct ctl_table acpi_dir_table[] =
 {
-	{CTL_ACPI, "acpi", NULL, 0, 0500, acpi_table},
+	{CTL_ACPI, "acpi", NULL, 0, 0555, acpi_table},
 	{0}
 };
 
@@ -379,6 +395,11 @@ static int __init acpi_find_tables(void)
 			acpi_facp = (struct acpi_facp*) dt;
 			acpi_facp_addr = *rsdt_entry;
 			acpi_dsdt_addr = acpi_facp->dsdt;
+
+			if (acpi_facp->facs) {
+				acpi_facs = (struct acpi_facs*)
+					acpi_map_table(acpi_facp->facs);
+			}
 		}
 		else {
 			acpi_unmap_table(dt);
@@ -405,6 +426,7 @@ static void acpi_destroy_tables(void)
 		acpi_unmap_table((struct acpi_table*) acpi_facp);
 	else
 		kfree(acpi_facp);
+	acpi_unmap_table((struct acpi_table*) acpi_facs);
 }
 
 /*
@@ -575,8 +597,8 @@ static void acpi_idle_handler(void)
 	case 3:
 		pm2_cnt = acpi_facp->pm2_cnt;
 		if (pm2_cnt) {
-			/* Disable PCI arbitration while sleeping,
-			   to avoid DMA corruption? */
+				/* Disable PCI arbitration while sleeping,
+				   to avoid DMA corruption? */
 			outb(inb(pm2_cnt) | ACPI_ARB_DIS, pm2_cnt);
 			inb(acpi_p_lvl3);
 			outb(inb(pm2_cnt) & ~ACPI_ARB_DIS, pm2_cnt);
@@ -599,6 +621,42 @@ static void acpi_idle_handler(void)
 		sleep_level = 2;
 	else
 		sleep_level = 1;
+}
+
+/*
+ * Enter system sleep state
+ */
+static void acpi_enter_sx(int state)
+{
+	unsigned long slp_typ = acpi_slp_typ[state];
+	if (slp_typ != ACPI_SLP_TYP_DISABLED) {
+		u16 typa, typb, value;
+
+		// bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
+		typa = (slp_typ >> 8) & 0xff;
+		typb = slp_typ & 0xff;
+
+		typa = ((typa << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
+		typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
+
+		// set SLP_TYPa/b and SLP_EN
+		if (acpi_facp->pm1a_cnt) {
+			value = inw(acpi_facp->pm1a_cnt) & ~ACPI_SLP_TYP_MASK;
+			outw(value | typa | ACPI_SLP_EN, acpi_facp->pm1a_cnt);
+		}
+		if (acpi_facp->pm1b_cnt) {
+			value = inw(acpi_facp->pm1b_cnt) & ~ACPI_SLP_TYP_MASK;
+			outw(value | typb | ACPI_SLP_EN, acpi_facp->pm1b_cnt);
+		}
+	}
+}
+
+/*
+ * Enter soft-off (S5)
+ */
+static void acpi_power_off_handler(void)
+{
+	acpi_enter_sx(5);
 }
 
 /*
@@ -806,7 +864,7 @@ static int acpi_do_event(ctl_table *ctl,
 			 size_t *len)
 {
 	u32 pm1_status = 0, gpe_status = 0;
-	char str[4 * sizeof(u32) + 6];
+	char str[4 * sizeof(u32) + 7];
 	int size;
 
 	if (write)
@@ -879,6 +937,7 @@ static int __init acpi_init(void)
 		return 0;
 #endif
 
+	acpi_power_off = acpi_power_off_handler;
 	acpi_idle = acpi_idle_handler;
 
 	return 0;
@@ -890,6 +949,7 @@ static int __init acpi_init(void)
 static void __exit acpi_exit(void)
 {
 	acpi_idle = NULL;
+	acpi_power_off = NULL;
 
 	unregister_sysctl_table(acpi_sysctl);
 	acpi_disable(acpi_facp);
