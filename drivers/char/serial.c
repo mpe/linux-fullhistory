@@ -871,8 +871,13 @@ static int startup(struct async_struct * info)
 	 * here.
 	 */
 	if (serial_inp(info, UART_LSR) == 0xff) {
-		restore_flags(flags);
-		return -ENODEV;
+			restore_flags(flags);
+		if (suser()) {
+			if (info->tty)
+				set_bit(TTY_IO_ERROR, &info->tty->flags);
+			return 0;
+		} else
+			return -ENODEV;
 	}
 	
 	/*
@@ -892,7 +897,13 @@ static int startup(struct async_struct * info)
 		retval = irqaction(info->irq,&sa);
 		if (retval) {
 			restore_flags(flags);
-			return retval;
+			if (suser()) {
+				if (info->tty)
+					set_bit(TTY_IO_ERROR,
+						&info->tty->flags);
+				return 0;
+			} else
+				return retval;
 		}
 	}
 
@@ -1410,10 +1421,13 @@ static int set_serial_info(struct async_struct * info,
 	}
 
 	/* Make sure address is not already in use */
-	for (i = 0 ; i < NR_PORTS; i++)
-		if ((info != &rs_table[i]) &&
-		    (rs_table[i].port == new_serial.port) && rs_table[i].type)
-			return -EADDRINUSE;
+	if (new_serial.type) {
+		for (i = 0 ; i < NR_PORTS; i++)
+			if ((info != &rs_table[i]) &&
+			    (rs_table[i].port == new_serial.port) &&
+			    rs_table[i].type)
+				return -EADDRINUSE;
+	}
 
 	if ((change_port || change_irq) && (info->count > 1))
 		return -EBUSY;

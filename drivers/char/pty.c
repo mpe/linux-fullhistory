@@ -133,7 +133,7 @@ static int pty_chars_in_buffer(struct tty_struct *tty)
 {
 	struct tty_struct *to = tty->link;
 
-	if (!to)
+	if (!to || !to->ldisc.chars_in_buffer)
 		return 0;
 
 	return to->ldisc.chars_in_buffer(to);

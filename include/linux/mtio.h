@@ -90,10 +90,29 @@ struct	mtget {
 #define MT_ISSCSI1		0x71	/* Generic ANSI SCSI-1 tape unit */
 #define MT_ISSCSI2		0x72	/* Generic ANSI SCSI-2 tape unit */
 
+/* QIC-40/QIC-80 ftape supported drives.
+ * 20bit vendor ID + 0x800000
+ */
+#define MT_ISFTAPE_UNKNOWN      0x800000
+#define MT_ISCMSDJ10_DJ20       0x800047
+#define MT_ISCMSDJ10_DJ20_NEW   0x8011c4
+#define MT_ISARCHIVE_5580I      0x800005
+#define MT_ISARCHIVE_XL9250I    0x80014a
+#define MT_ISARCHIVE_31250Q     0x800146
+#define MT_ISINSIGHT_80	        0x810005
+#define MT_ISCONNER_C250MQT     0x80014c
+#define MT_ISWANGTEK_2040F      0x8001c1
+#define MT_ISWANGTEK_2080F      0x8001c8
+#define MT_ISIOMEGA_250         0x808880
+#define MT_ISSUMMIT_SE150       0x800180
+#define MT_ISSUMMIT_SE250       0x800181
+#define MT_ISESCOM_IDTBU120E    0x800140
+
 struct mt_tape_info {
 	long t_type;		/* device type id (mt_type) */
 	char *t_name;		/* descriptive name */
 };
+
 #define MT_TAPE_INFO	{ \
 	{MT_ISUNKNOWN,		"Unknown type of tape device"}, \
 	{MT_ISQIC02,		"Generic QIC-02 tape streamer"}, \
@@ -108,6 +127,20 @@ struct mt_tape_info {
 	{MT_ISEVEREX_FT40A,	"Everex FT40A, QIC-40"}, \
 	{MT_ISSCSI1,		"Generic SCSI-1 tape"}, \
 	{MT_ISSCSI2,		"Generic SCSI-2 tape"}, \
+	{MT_ISFTAPE_UNKNOWN,	"Unknown floppy interface tape drive"},\
+	{MT_ISCMSDJ10_DJ20,	"Colorado DJ-10/DJ-20"},\
+	{MT_ISCMSDJ10_DJ20_NEW, "Colorado DJ-10/DJ-20 (new)"},\
+	{MT_ISARCHIVE_5580I,	"Archive 5580i"},\
+        {MT_ISARCHIVE_XL9250I,  "Archive XL9250i [Conner/Escom]"},\
+	{MT_ISARCHIVE_31250Q,	"Escom/Archive 31250Q"},\
+        {MT_ISINSIGHT_80,	"Insight 80 Mb"},\
+        {MT_ISCONNER_C250MQT,   "Conner C250MQT"},\
+        {MT_ISWANGTEK_2040F,	"Wangtek 3040F"},\
+        {MT_ISWANGTEK_2080F,	"Wangtek 3080F"},\
+        {MT_ISIOMEGA_250,       "Iomega 250"},\
+        {MT_ISSUMMIT_SE150,	"Summit SE 150"},\
+        {MT_ISSUMMIT_SE250,	"Summit SE 250/Mountain FS8000"},\
+        {MT_ISESCOM_IDTBU120E,  "Identity IDTBU120E, Escom?"},\
 	{0, NULL} \
 }
 

@@ -1,6 +1,36 @@
-This is snapshot 015
+Changes for 1.1.21
 
-Changes for the 015 snapshot
+o	Small bug fix in the apricot xen-ii driver code (Mark Evans)
+o	DE600 changes + DE620 driver (Bj0rn Eckwall)
+o	WWW error return bug fixed (Everyone!)
+o	SLIP default address is now better
+o	Small changes to PLIP (Niibe)
+o	Added PF_UNSPEC	(Dominic Kubla)
+o	TCP fastpath for receive.
+o	Turbo charged tcp checksum routine (Arnt Gulbrandsen)
+o	PPP locking bug fixes (Florian La Roche)
+
+To Do
+
+o	Include the HP onboard lance fixes.
+o	Fix Unix domain sockets.
+o	Fix the _SLOW_ TCP window calculation junk in tcp_data/tcp_ack.
+o	Make the dev_add_proto() list hashed by protocol type.
+o	Remove the call to dev->header_type - load it into the skbuff.
+	instead to avoid the extra calls and cache misses.
+o	Include new sk_buff skb_push() code and move toward using it.
+o	Fix the PI driver so pi0a can be down when pi0b is up without getting
+	crashes. Also fix the stuff to allow piconfig to set the parameters.
+o	Make AX.25 set the packet type - certainly before it hits IP.
+o	sk_buff building at the top level - pure kernel interfaces to the
+	protocol layers
+o	Clean up NFS, merge NFS/TCP code.
+o	SIGIO
+o	IP forwarding use of options properly (needs new sk_buff code)
+o	Reroute TCP retransmits if needed (needs new sk_buffs)
+
+
+Changes for 1.1.20
 
 o	All read/write buffers are validated at the top level _only_
 o	All address structures are moved to and from user mode at the top
@@ -45,29 +75,6 @@ o	Added Donald's multicast reception while promiscuous fix for the
 	8390 drivers.
 o	Potential ARP TCP-retransmit clear race fixed. Incredibly
 	unlikely to occur but no doubt it will 8(.
-
-To Do
-
-o	Fast path the tcp for packets in order with no flags set - we ought
-	to hit cable speed on slower machines if we fix that and the below.
-	(under test - define TCP_FASTPATH in tcp.c if you want to be brave
-	 and report any findings.)
-o	Include the HP onboard lance fixes.
-o	Fix Unix domain sockets.
-o	Fix the _SLOW_ TCP window calculation junk in tcp_data/tcp_ack.
-o	Make the dev_add_proto() list hashed by protocol type.
-o	Remove the call to dev->header_type - load it into the skbuff.
-	instead to avoid the extra calls and cache misses.
-o	Include new sk_buff skb_push() code and move toward using it.
-o	Fix the PI driver so pi0a can be down when pi0b is up without getting
-	crashes. Also fix the stuff to allow piconfig to set the parameters.
-o	Make AX.25 set the packet type - certainly before it hits IP.
-o	sk_buff building at the top level - pure kernel interfaces to the
-	protocol layers
-o	Clean up NFS, merge NFS/TCP code.
-o	SIGIO
-o	IP forwarding use of options properly (needs new sk_buff code)
-o	Reroute TCP retransmits if needed (needs new sk_buffs)
 
 
 Fixes added for 1.1.19

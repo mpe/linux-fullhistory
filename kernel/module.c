@@ -120,6 +120,8 @@ sys_delete_module(char *module_name)
 			return error;
 		if ((mp = find_module(name)) == NULL)
 			return -ENOENT;
+		if (GET_USE_COUNT(mp) != 0)
+			return -EBUSY;
 		if (mp->state == MOD_RUNNING)
 			(*mp->cleanup)();
 		mp->state = MOD_DELETED;

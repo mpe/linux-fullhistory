@@ -16,6 +16,7 @@
  *		Linus Torvalds, <torvalds@cs.helsinki.fi>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  *		Matthew Dillon, <dillon@apollo.west.oic.com>
+ *		Arnt Gulbrandsen, <agulbra@no.unit.nvg>
  *
  * Fixes:	
  *		Alan Cox	:	Numerous verify_area() calls
@@ -74,6 +75,7 @@
  *		Matthew Dillon	:	Fixed another RST bug
  *		Alan Cox	:	Move to kernel side addressing changes.
  *		Alan Cox	:	Beginning work on TCP fastpathing (not yet usable)
+ *		Arnt Gulbrandsen:	Turbocharged tcp_check() routine.
  *
  *
  * To Fix:
@@ -85,10 +87,6 @@
  *			Fast path the code. Two things here - fix the window calculation
  *		so it doesn't iterate over the queue, also spot packets with no funny
  *		options arriving in order and process directly.
- *			Any assembler hacker who can speed up the checksum routines will
- *		be welcome as well as someone who feels like writing a single 'checksum udp
- *		and copy up to user mode for the first n bytes at the same time' routine.
- *		which should be quicker than the current sum then copy for the UDP layer.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -154,7 +152,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
-#undef TCP_FASTPATH
+#define TCP_FASTPATH
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
@@ -184,6 +182,8 @@ static __inline__ int min(unsigned int a, unsigned int b)
    of two things. Firstly we will bin packets even within the window
    in order to get the data we are waiting for into the memory limit.
    Secondly we bin common duplicate forms at receive time
+   
+   TODO: add sk->window_clamp to limit windows over the DE600 and AX.25
 
    Better heuristics welcome
 */
@@ -524,64 +524,79 @@ unsigned short tcp_check(struct tcphdr *th, int len,
 	unsigned long sum;
    
 	if (saddr == 0) saddr = ip_my_addr();
-	
-	__asm__("\t addl %%ecx,%%ebx\n"
-		"\t adcl %%edx,%%ebx\n"
-		"\t adcl $0, %%ebx\n"
-		: "=b"(sum)
-		: "0"(daddr), "c"(saddr), "d"((ntohs(len) << 16) + IPPROTO_TCP*256)
-		: "cx","bx","dx" );
-   
-	if (len > 3) 
-	{
-		__asm__("\tclc\n"
-			"1:\n"
-			"\t lodsl\n"
-			"\t adcl %%eax, %%ebx\n"
-			"\t loop 1b\n"
-			"\t adcl $0, %%ebx\n"
-			: "=b"(sum) , "=S"(th)
-			: "0"(sum), "c"(len/4) ,"1"(th)
-			: "ax", "cx", "bx", "si" );
-	}
-   
-	/* Convert from 32 bits to 16 bits. */
-	__asm__("\t movl %%ebx, %%ecx\n"
-		"\t shrl $16,%%ecx\n"
-		"\t addw %%cx, %%bx\n"
-		"\t adcw $0, %%bx\n"
-		: "=b"(sum)
-		: "0"(sum)
-		: "bx", "cx");
-   
-	/* Check for an extra word. */
 
-	if ((len & 2) != 0) 
-	{
-		__asm__("\t lodsw\n"
-			"\t addw %%ax,%%bx\n"
-			"\t adcw $0, %%bx\n"
-			: "=b"(sum), "=S"(th)
-			: "0"(sum) ,"1"(th)
-			: "si", "ax", "bx");
-  	}
-   
-   	/* Now check for the extra byte. */
-  	if ((len & 1) != 0) 
-  	{
-		__asm__("\t lodsb\n"
-			"\t movb $0,%%ah\n"
-			"\t addw %%ax,%%bx\n"
-			"\t adcw $0, %%bx\n"
-			: "=b"(sum)
-			: "0"(sum) ,"S"(th)
-			: "si", "ax", "bx");
-  	}
-   
+/*
+ * stupid, gcc complains when I use just one __asm__ block,
+ * something about too many reloads, but this is just two
+ * instructions longer than what I want
+ */
+	__asm__("
+	    addl %%ecx, %%ebx
+	    adcl %%edx, %%ebx
+	    adcl $0, %%ebx
+	    "
+	: "=b"(sum)
+	: "0"(daddr), "c"(saddr), "d"((ntohs(len) << 16) + IPPROTO_TCP*256)
+	: "bx", "cx", "dx" );
+	__asm__("
+	    movl %%ecx, %%edx
+	    cld
+	    cmpl $32, %%ecx
+	    jb 2f
+	    shrl $5, %%ecx
+	    clc
+1:	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    lodsl
+	    adcl %%eax, %%ebx
+	    loop 1b
+	    adcl $0, %%ebx
+	    movl %%edx, %%ecx
+2:	    andl $28, %%ecx
+	    cmpl $4, %%ecx
+	    jb 4f
+	    shrl $2, %%ecx
+	    clc
+3:	    lodsl
+	    adcl %%eax, %%ebx
+	    loop 3b
+	    adcl $0, %%ebx
+4:	    movl $0, %%eax
+	    testw $2, %%dx
+	    je 5f
+	    lodsw
+	    addl %%eax, %%ebx
+	    movw $0, %%ax
+5:	    test $1, %%edx
+	    je 6f
+	    lodsb
+	    addl %%eax, %%ebx
+6:	    movl %%ebx, %%eax
+	    shrl $16, %%eax
+	    addw %%ax, %%bx
+	    adcw $0, %%bx
+	    "
+	: "=b"(sum)
+	: "0"(sum), "c"(len), "S"(th)
+	: "ax", "bx", "cx", "dx", "si" );
+
   	/* We only want the bottom 16 bits, but we never cleared the top 16. */
   
   	return((~sum) & 0xffff);
 }
+
 
 
 void tcp_send_check(struct tcphdr *th, unsigned long saddr, 

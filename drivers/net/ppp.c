@@ -711,12 +711,14 @@ static void ppp_write_wakeup(struct tty_struct *tty)
 		return;
 	}
 
-	if (!ppp->xtail || (ppp->flags & SC_XMIT_BUSY))
+	if (!ppp->xtail)
 		return;
 
 	cli();
-	if (ppp->flags & SC_XMIT_BUSY)
+	if (ppp->flags & SC_XMIT_BUSY) {
+		sti();
 		return;
+	}
 	ppp->flags |= SC_XMIT_BUSY;
 	sti();
 	
@@ -746,7 +748,7 @@ static void ppp_write_wakeup(struct tty_struct *tty)
 
 /* stuff a single character into the receive buffer */
 
-inline void
+static inline void
 ppp_enqueue(struct ppp *ppp, unsigned char c)
 {
   unsigned long flags;
@@ -1966,8 +1968,7 @@ ppp_check_fcs(struct ppp *ppp)
 
 static char hex[] = "0123456789ABCDEF";
 
-inline void ppp_print_hex (register char *out, char *in, int count);
-inline void ppp_print_hex (register char *out, char *in, int count)
+static inline void ppp_print_hex (register char *out, char *in, int count)
 {
   register unsigned char next_ch;
 
@@ -1981,8 +1982,7 @@ inline void ppp_print_hex (register char *out, char *in, int count)
   }
 }
 
-inline void ppp_print_char (register char *out, char *in, int count);
-inline void ppp_print_char (register char *out, char *in, int count)
+static inline void ppp_print_char (register char *out, char *in, int count)
 {
   register unsigned char next_ch;
 

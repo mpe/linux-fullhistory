@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
-#include <linux/binfmts.h>
 #include <linux/ptrace.h>
 #include <linux/sys.h>
 #include <linux/utsname.h>
@@ -29,6 +28,9 @@ extern void *sys_call_table;
 extern char * ftape_big_buffer;
 extern void (*do_floppy)(void);
 #endif
+
+extern int request_dma(unsigned int dmanr);
+extern void free_dma(unsigned int dmanr);
 
 extern int do_execve(char * filename, char ** argv, char ** envp,
 		struct pt_regs * regs);
@@ -104,11 +106,16 @@ struct {
 	X(unregister_exec_domain),
 
 	/* interrupt handling */
+	X(irqaction),
 	X(request_irq),
 	X(free_irq),
 	X(bh_active),
 	X(bh_mask),
 
+	/* dma handling */
+	X(request_dma),
+	X(free_dma),	
+	
 	/* process management */
 	X(wake_up),
 	X(wake_up_interruptible),

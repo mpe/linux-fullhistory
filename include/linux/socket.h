@@ -36,6 +36,7 @@ struct linger {
 #define AF_MAX		8	/* For now.. */
 
 /* Protocol families, same as address families. */
+#define PF_UNSPEC	AF_UNSPEC
 #define PF_UNIX		AF_UNIX
 #define PF_INET		AF_INET
 #define PF_AX25		AF_AX25

@@ -956,7 +956,8 @@ static int normal_select(struct tty_struct * tty, struct inode * inode,
 {
 	switch (sel_type) {
 		case SEL_IN:
-			if (input_available_p(tty, MIN_CHAR(tty)))
+			if (input_available_p(tty, TIME_CHAR(tty) ? 0 :
+					      MIN_CHAR(tty)))
 				return 1;
 			/* fall through */
 		case SEL_EX:

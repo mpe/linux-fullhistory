@@ -1,11 +1,11 @@
 static char *version =
-	"de600.c: $Revision: 1.35 $,  Bjorn Ekwall (bj0rn@blox.se)\n";
+	"de600.c: $Revision: 1.39 $,  Bjorn Ekwall (bj0rn@blox.se)\n";
 /*
  *	de600.c
  *
  *	Linux driver for the D-Link DE-600 Ethernet pocket adapter.
  *
- *	Portions (C) Copyright 1993 by Bjorn Ekwall
+ *	Portions (C) Copyright 1993, 1994 by Bjorn Ekwall
  *	The Author may be reached as bj0rn@blox.se
  *
  *	Based on adapter information gathered from DE600.ASM by D-Link Inc.,
@@ -50,9 +50,34 @@ static char *version =
 #define SLOW_IO_BY_JUMPING /* Looks "better" than dummy write to port 0x80 :-) */
 
 /*
- * For fix to TCP "slowdown", take a look at the "#define DE600_MAX_WINDOW"
- * near the end of the file...
+ * If you want to enable automatic continuous checking for the DE600,
+ * keep this #define enabled.
+ * It doesn't cost much per packet, so I think it is worth it!
+ * If you disagree, comment away the #define, and live with it...
+ *
  */
+#define CHECK_LOST_DE600
+
+/*
+ * Enable this #define if you want the adapter to do a "ifconfig down" on
+ * itself when we have detected that something is possibly wrong with it.
+ * The default behaviour is to retry with "adapter_init()" until success.
+ * This should be used for debugging purposes only.
+ * (Depends on the CHECK_LOST_DE600 above)
+ *
+ */
+#define SHUTDOWN_WHEN_LOST
+
+/*
+ * See comment at "de600_rspace()"!
+ * This is an *ugly* hack, but for now it achieves its goal of
+ * faking a TCP flow-control that will not flood the poor DE600.
+ *
+ * Tricks TCP to announce a small max window (max 2 fast packets please :-)
+ *
+ * Comment away at your own risk!
+ */
+#define FAKE_SMALL_MAX
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifdef DE600_DEBUG
@@ -61,7 +86,7 @@ static char *version =
 #define DE600_DEBUG 0
 #define PRINTK(x) /**/
 #endif
-static unsigned int de600_debug = DE600_DEBUG;
+unsigned int de600_debug = DE600_DEBUG;
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -81,12 +106,16 @@ static unsigned int de600_debug = DE600_DEBUG;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#ifdef MODULE
 #include <linux/module.h>
 #include "../../tools/version.h"
+
+#ifdef FAKE_SMALL_MAX
+static unsigned long de600_rspace(struct sock *sk);
+#include "../../net/inet/sock.h"
 #endif
 
 #define netstats enet_statistics
+typedef unsigned char byte;
 
 /**************************************************
  *                                                *
@@ -206,14 +235,9 @@ static unsigned int de600_debug = DE600_DEBUG;
 /*
  * Index to functions, as function prototypes.
  */
-#if 0
-/* For tricking tcp.c to announce a small max window (max 2 fast packets please :-) */
-static unsigned long	de600_rspace(struct sock *sk);
-#endif
-
 /* Routines used internally. (See "convenience macros") */
-static int		de600_read_status(struct device *dev);
-static unsigned	char	de600_read_byte(unsigned char type, struct device *dev);
+static byte	de600_read_status(struct device *dev);
+static byte	de600_read_byte(unsigned char type, struct device *dev);
 
 /* Put in the device structure. */
 static int	de600_open(struct device *dev);
@@ -229,7 +253,7 @@ static void	de600_rx_intr(struct device *dev);
 /* Initialization */
 static void	trigger_interrupt(struct device *dev);
 int		de600_probe(struct device *dev);
-static void	adapter_init(struct device *dev);
+static int	adapter_init(struct device *dev);
 
 /*
  * D-Link driver variables:
@@ -242,6 +266,7 @@ static volatile int		tx_fifo[TX_PAGES];
 static volatile int		tx_fifo_in = 0;
 static volatile int		tx_fifo_out = 0;
 static volatile int		free_tx_pages = TX_PAGES;
+static int			was_down = 0;
 
 /*
  * Convenience macros/functions for D-Link adapter
@@ -278,10 +303,10 @@ static volatile int		free_tx_pages = TX_PAGES;
 
 #define tx_page_adr(a) (((a) + 1) * MEM_2K)
 
-static inline int
+static inline byte
 de600_read_status(struct device *dev)
 {
-	int	status;
+	byte status;
 
 	outb_p(STATUS, DATA_PORT);
 	status = inb(STATUS_PORT);
@@ -290,9 +315,9 @@ de600_read_status(struct device *dev)
 	return status;
 }
 
-static inline unsigned char
+static inline byte
 de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros */
-	unsigned char	lo;
+	byte lo;
 
 	(void)outb_p((type), DATA_PORT);
 	lo = ((unsigned char)inb(STATUS_PORT)) >> 4;
@@ -311,10 +336,6 @@ de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros 
 static int
 de600_open(struct device *dev)
 {
-#if 0
-	extern struct proto tcp_prot;
-#endif
-
 	if (request_irq(DE600_IRQ, de600_interrupt)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
 		return 1;
@@ -324,21 +345,10 @@ de600_open(struct device *dev)
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif
-	adapter_init(dev);
-
-	/*
-	 * Yes, I know!
-	 * This is really not nice, but since a machine that uses DE-600
-	 * rarely uses any other TCP/IP connection device simultaneously,
-	 * this hack shouldn't really slow anything up.
-	 * (I don't know about slip though... but it won't break it)
-	 *
-	 * This fix is better than changing in tcp.h IMHO
-	 */
-#if 0	 
-	tcp_prot.rspace = de600_rspace; /* was: sock_rspace */
-#endif
-
+	dev->start = 1;
+	if (adapter_init(dev)) {
+		return 1;
+	}
 
 	return 0;
 }
@@ -356,15 +366,14 @@ de600_close(struct device *dev)
 	de600_put_command(0);
 	select_prn();
 
-	free_irq(DE600_IRQ);
-	irq2dev_map[DE600_IRQ] = NULL;
-	dev->start = 0;
+	if (dev->start) {
+		free_irq(DE600_IRQ);
+		irq2dev_map[DE600_IRQ] = NULL;
+		dev->start = 0;
 #ifdef MODULE
-	MOD_DEC_USE_COUNT;
+		MOD_DEC_USE_COUNT;
 #endif
-#if 0
-	tcp_prot.rspace = sock_rspace; /* see comment above! */
-#endif
+	}
 	return 0;
 }
 
@@ -391,10 +400,10 @@ trigger_interrupt(struct device *dev)
 static int
 de600_start_xmit(struct sk_buff *skb, struct device *dev)
 {
-	int		transmit_from;
-	int		len;
-	int		tickssofar;
-	unsigned char	*buffer = skb->data;
+	int	transmit_from;
+	int	len;
+	int	tickssofar;
+	byte	*buffer = skb->data;
 
 	/*
 	 * If some higher layer thinks we've missed a
@@ -420,7 +429,9 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 			"network cable problem"
 			);
 		/* Restart the adapter. */
-		adapter_init(dev);
+		if (adapter_init(dev)) {
+			return 1;
+		}
 	}
 
 	/* Start real output */
@@ -431,9 +442,20 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	cli();
 	select_nic();
-
 	tx_fifo[tx_fifo_in] = transmit_from = tx_page_adr(tx_fifo_in) - len;
 	tx_fifo_in = (tx_fifo_in + 1) % TX_PAGES; /* Next free tx page */
+
+#ifdef CHECK_LOST_DE600
+	/* This costs about 40 instructions per packet... */
+	de600_setup_address(NODE_ADDRESS, RW_ADDR);
+	de600_read_byte(READ_DATA, dev);
+	if (was_down || (de600_read_byte(READ_DATA, dev) != 0xde)) {
+		if (adapter_init(dev)) {
+			sti();
+			return 1;
+		}
+	}
+#endif
 
 	de600_setup_address(transmit_from, RW_ADDR);
 	for ( ; len > 0; --len, ++buffer)
@@ -442,7 +464,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (free_tx_pages-- == TX_PAGES) { /* No transmission going on */
 		dev->trans_start = jiffies;
 		dev->tbusy = 0;	/* allow more packets into adapter */
-		/* Send page and generate an interrupt */
+		/* Send page and generate a faked interrupt */
 		de600_setup_address(transmit_from, TX_ADDR);
 		de600_put_command(TX_ENABLE);
 	}
@@ -453,6 +475,13 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 	
 	sti(); /* interrupts back on */
 	
+#ifdef FAKE_SMALL_MAX
+	/* This will "patch" the socket TCP proto at an early moment */
+	if (skb->sk && (skb->sk->protocol == IPPROTO_TCP) &&
+		(skb->sk->prot->rspace != &de600_rspace))
+		skb->sk->prot->rspace = de600_rspace; /* Ugh! */
+#endif
+
 	dev_kfree_skb (skb, FREE_WRITE);
 
 	return 0;
@@ -467,7 +496,7 @@ de600_interrupt(int reg_ptr)
 {
 	int		irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
 	struct device	*dev = irq2dev_map[irq];
-	unsigned char	irq_status;
+	byte		irq_status;
 	int		retrig = 0;
 	int		boguscount = 0;
 
@@ -482,7 +511,7 @@ de600_interrupt(int reg_ptr)
 	irq_status = de600_read_status(dev);
 
 	do {
-		PRINTK(("de600_interrupt (%2.2X)\n", irq_status));
+		PRINTK(("de600_interrupt (%02X)\n", irq_status));
 
 		if (irq_status & RX_GOOD)
 			de600_rx_intr(dev);
@@ -496,7 +525,7 @@ de600_interrupt(int reg_ptr)
 			retrig = 0;
 
 		irq_status = de600_read_status(dev);
-	} while ( (irq_status & RX_GOOD) || ((++boguscount < 10) && retrig) );
+	} while ( (irq_status & RX_GOOD) || ((++boguscount < 100) && retrig) );
 	/*
 	 * Yeah, it _looks_ like busy waiting, smells like busy waiting
 	 * and I know it's not PC, but please, it will only occur once
@@ -571,8 +600,12 @@ de600_rx_intr(struct device *dev)
 	de600_put_command(RX_ENABLE);
 	sti();
 
-	if ((size < 32)  ||  (size > 1535))
+	if ((size < 32)  ||  (size > 1535)) {
 		printk("%s: Bogus packet size %d.\n", dev->name, size);
+		if (size > 10000)
+			adapter_init(dev);
+		return;
+	}
 
 	skb = alloc_skb(size, GFP_ATOMIC);
 	sti();
@@ -651,9 +684,9 @@ de600_probe(struct device *dev)
 		return ENODEV;
 	}
 
-	printk(", Ethernet Address: %2.2X", dev->dev_addr[0]);
+	printk(", Ethernet Address: %02X", dev->dev_addr[0]);
 	for (i = 1; i < ETH_ALEN; i++)
-		printk(":%2.2X",dev->dev_addr[i]);
+		printk(":%02X",dev->dev_addr[i]);
 	printk("\n");
 
 	/* Initialize the device structure. */
@@ -673,21 +706,49 @@ de600_probe(struct device *dev)
 	return 0;
 }
 
-static void
+static int
 adapter_init(struct device *dev)
 {
 	int	i;
+	long flags;
 
+	save_flags(flags);
 	cli();
-	dev->tbusy = 0;		/* Transmit busy...  */
-	dev->interrupt = 0;
-	dev->start = 1;
 
 	select_nic();
 	rx_page = 0; /* used by RESET */
 	de600_put_command(RESET);
 	de600_put_command(STOP_RESET);
+#ifdef CHECK_LOST_DE600
+	/* Check if it is still there... */
+	/* Get the some bytes of the adapter ethernet address from the ROM */
+	de600_setup_address(NODE_ADDRESS, RW_ADDR);
+	de600_read_byte(READ_DATA, dev);
+	if ((de600_read_byte(READ_DATA, dev) != 0xde) ||
+	    (de600_read_byte(READ_DATA, dev) != 0x15)) {
+	/* was: if (de600_read_status(dev) & 0xf0) { */
+		printk("Something has happened to the DE-600!  Please check it"
+#ifdef SHUTDOWN_WHEN_LOST
+			" and do a new ifconfig"
+#endif /* SHUTDOWN_WHEN_LOST */
+			"!\n");
+#ifdef SHUTDOWN_WHEN_LOST
+		/* Goodbye, cruel world... */
+		dev->flags &= ~IFF_UP;
+		de600_close(dev);
+#endif /* SHUTDOWN_WHEN_LOST */
+		was_down = 1;
+		dev->tbusy = 1;		/* Transmit busy...  */
+		return 1; /* failed */
+	}
+#endif /* CHECK_LOST_DE600 */
+	if (was_down) {
+		printk("Thanks, I feel much better now!\n");
+		was_down = 0;
+	}
 
+	dev->tbusy = 0;		/* Transmit busy...  */
+	dev->interrupt = 0;
 	tx_fifo_in = 0;
 	tx_fifo_out = 0;
 	free_tx_pages = TX_PAGES;
@@ -703,10 +764,12 @@ adapter_init(struct device *dev)
 	/* Enable receiver */
 	de600_put_command(RX_ENABLE);
 	select_prn();
-	sti();
+	restore_flags(flags);
+
+	return 0; /* OK */
 }
 
-#if 0
+#ifdef FAKE_SMALL_MAX
 /*
  *	The new router code (coming soon 8-) ) will fix this properly.
  */
@@ -714,16 +777,21 @@ adapter_init(struct device *dev)
 #define DE600_MAX_WINDOW 2048
 #define DE600_TCP_WINDOW_DIFF 1024
 /*
- * Copied from sock.c
+ * Copied from "net/inet/sock.c"
  *
  * Sets a lower max receive window in order to achieve <= 2
  * packets arriving at the adapter in fast succession.
- * (No way that a DE-600 can cope with an ethernet saturated with its packets :-)
+ * (No way that a DE-600 can keep up with a net saturated
+ *  with packets homing in on it :-( )
  *
  * Since there are only 2 receive buffers in the DE-600
  * and it takes some time to copy from the adapter,
  * this is absolutely necessary for any TCP performance whatsoever!
  *
+ * Note that the returned window info will never be smaller than
+ * DE600_MIN_WINDOW, i.e. 1024
+ * This differs from the standard function, that can return an
+ * arbitraily small window!
  */
 #define min(a,b)	((a)<(b)?(a):(b))
 static unsigned long
@@ -735,22 +803,23 @@ de600_rspace(struct sock *sk)
 /*
  * Hack! You might want to play with commenting away the following line,
  * if you know what you do!
- */
   	sk->max_unacked = DE600_MAX_WINDOW - DE600_TCP_WINDOW_DIFF;
+ */
 
-	if (sk->rmem_alloc >= SK_RMEM_MAX-2*DE600_MIN_WINDOW) return(0);
-	amt = min((SK_RMEM_MAX-sk->rmem_alloc)/2-DE600_MIN_WINDOW, DE600_MAX_WINDOW);
+	if (sk->rmem_alloc >= sk->rcvbuf-2*DE600_MIN_WINDOW) return(0);
+	amt = min((sk->rcvbuf-sk->rmem_alloc)/2/*-DE600_MIN_WINDOW*/, DE600_MAX_WINDOW);
 	if (amt < 0) return(0);
 	return(amt);
   }
   return(0);
 }
 #endif
-
+
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+static char nullname[8];
 static struct device de600_dev = {
-	"        " /*"de600"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
+	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
 
 int
 init_module(void)

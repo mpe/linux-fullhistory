@@ -1633,10 +1633,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
   	struct iphdr *iph;
   	unsigned char *ptr;
 
-	/* All buffers without an owner socket get freed */
-  	if (sk == NULL) 
-  		free = 1;
-  	
   	/* Sanity check */
   	if (dev == NULL) 
   	{
@@ -1677,6 +1673,10 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	else
 		free=1;
 		
+	/* All buffers without an owner socket get freed */
+  	if (sk == NULL) 
+  		free = 1;
+  	
   	skb->free = free;		
 
 	/*

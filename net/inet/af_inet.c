@@ -847,7 +847,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	}
 
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK))
-		return -EINPROGRESS;	/* Connecting is currently in progress */
+		return -EALREADY;	/* Connecting is currently in progress */
   	
 	if (sock->state != SS_CONNECTING) 
 	{
@@ -1303,7 +1303,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("NET3 TCP/IP protcols stack v016\n");
+	printk("NET3 TCP/IP protocols stack v016\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

@@ -102,6 +102,7 @@ bool 'DEPCA support' CONFIG_DEPCA n
 #bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 #bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
 bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
+bool 'D-Link DE620 pocket adaptor support' CONFIG_DE620 n
 bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
 fi
 fi

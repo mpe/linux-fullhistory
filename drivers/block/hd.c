@@ -655,6 +655,8 @@ static void hd_geninit(void)
 			hd_info[drive].ctl = *(8+BIOS);
 			hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
 			hd_info[drive].sect = *(14+BIOS);
+			if (hd_info[drive].cyl && NR_HD == drive)
+				NR_HD++;
 			BIOS += 16;
 		}
 

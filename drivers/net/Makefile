@@ -91,6 +91,15 @@ endif
 ifdef CONFIG_DE600
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(de600.o)
 endif
+de600.o: de600.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE600_OPTS) -c $<
+	
+ifdef CONFIG_DE620
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(de620.o)
+endif
+de620.o: de620.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
+	
 ifdef CONFIG_AT1500
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(lance.o)
 endif

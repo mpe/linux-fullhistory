@@ -57,6 +57,7 @@ extern int e2100_probe(struct device *);
 /* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
+extern int de620_probe(struct device *);
 
 static int
 ethif_probe(struct device *dev)
@@ -115,8 +116,11 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)
 #endif
-#ifdef CONFIG_DE600
+#ifdef CONFIG_DE600		/* D-Link DE-600 adapter */
 	&& de600_probe(dev)
+#endif
+#ifdef CONFIG_DE620		/* D-Link DE-620 adapter */
+	&& de620_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

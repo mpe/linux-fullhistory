@@ -22,6 +22,7 @@
  *		Charles Hedrick :	CSLIP header length problem fix.
  *		Alan Cox	:	Corrected non-IP cases of the above.
  *		Alan Cox	:	Now uses hardware type as per FvK.
+ *		Alan Cox	:	Default to 192.168.0.0 (RFC 1597)
  *
  *
  *	FIXME:	This driver still makes some IP'ish assumptions. It should build cleanly KISS TNC only without
@@ -400,12 +401,14 @@ static void slip_write_wakeup(struct tty_struct *tty)
 		return;
 	}
 
-	if (!sl->xtail || (sl->flags & SLF_XMIT_BUSY))
+	if (!sl->xtail)
 		return;
 
 	cli();
-	if (sl->flags & SLF_XMIT_BUSY)
+	if (sl->flags & SLF_XMIT_BUSY) {
+		sti();
 		return;
+	}
 	sl->flags |= SLF_XMIT_BUSY;
 	sti();
 	
@@ -596,7 +599,7 @@ sl_open(struct device *dev)
   dev->flags|=IFF_UP;
   /* Needed because address '0' is special */
   if(dev->pa_addr==0)
-  	dev->pa_addr=ntohl(0xC0000001);
+  	dev->pa_addr=ntohl(0xC0A80001);
   return(0);
 }
 

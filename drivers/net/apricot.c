@@ -636,11 +636,14 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end)
     if (check_region(ioaddr, APRICOT_TOTAL_SIZE))
 	return mem_start;
 
-    /* very similar to the SMC card except that the checksum is 0x200 */
     for (i = 0; i < 8; i++)
 	checksum += inb(ioaddr + 8 + i);
 
-    if (checksum != 0x200) return mem_start;
+    /* checksum is a multiple of 0x100, got this wrong first time
+       some machines have 0x100, some 0x200. The DOS driver doesn't
+       even bother with the checksum */
+
+    if (checksum % 0x100) return mem_start;
 
     dev = init_etherdev(0, (sizeof (struct i596_private) + 0xf), &mem_start);
 

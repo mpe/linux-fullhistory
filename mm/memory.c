@@ -1057,7 +1057,9 @@ void show_mem(void)
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	show_buffers();
+#ifdef CONFIG_NET
 	show_net_buffers();
+#endif
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);

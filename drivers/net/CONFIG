@@ -30,6 +30,10 @@
 #	  DE600_IO	The DE600 I/O-port address (0x378 == default)
 #	  DE600_IRQ	The DE600 IRQ number to use (IRQ7 == default)
 #	  DE600_DEBUG	Enable or disable DE600 debugging (default off)
+#  DE620		The D-Link DE-600 Portable Ethernet Adaptor.
+#	  DE620_IO	The DE620 I/O-port address (0x378 == default)
+#	  DE620_IRQ	The DE620 IRQ number to use (IRQ7 == default)
+#	  DE620_DEBUG	Enable or disable DE600 debugging (default off)
 #  DEPCA		The DIGITAL series of AT Ethernet Cards (DE100, DE200)
 #	  DEPCA_IRQ	Set the desired IRQ (=0, for autoprobe)
 #	  DEPCA_DEBUG	Set the desired debug level

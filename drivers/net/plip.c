@@ -172,6 +172,7 @@ struct net_local {
     struct plip_local rcv_data;
     unsigned long  trigger_us;
     unsigned long  nibble_us;
+    unsigned long  unit_us;
 };
 
 /* Routines used internally. */
@@ -948,10 +949,12 @@ static int plip_ioctl(struct device *dev, struct ifreq *rq)
 		case PLIP_GET_TIMEOUT:
 			pc->trigger=nl->trigger_us;
 			pc->nibble=nl->nibble_us;
+			pc->unit=nl->unit_us;
 			break;
 		case PLIP_SET_TIMEOUT:
 			nl->trigger_us=pc->trigger;
 			nl->nibble_us=pc->nibble;
+			nl->unit_us=pc->unit;
 			break;
 		default:
 			return -EOPNOTSUPP;

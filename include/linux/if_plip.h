@@ -20,6 +20,7 @@ struct plipconf
 	unsigned short pcmd;
 	unsigned long  nibble;
 	unsigned long  trigger;
+	unsigned long  unit;
 };
 
 #define PLIP_GET_TIMEOUT	0x1
