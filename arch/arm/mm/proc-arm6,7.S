@@ -413,12 +413,12 @@ ENTRY(cpu_arm7_reset)
 
 cpu_armvlsi_name:
 		.asciz	"ARM/VLSI"
-cpu_arm6_name:	.asciz	"arm6"
+cpu_arm6_name:	.asciz	"ARM 6"
 cpu_arm610_name:
-		.asciz	"arm610"
-cpu_arm7_name:	.asciz	"arm7"
+		.asciz	"ARM 610"
+cpu_arm7_name:	.asciz	"ARM 7"
 cpu_arm710_name:
-		.asciz	"arm710"
+		.asciz	"ARM 710"
 		.align
 
 		.section ".text.init", #alloc, #execinstr

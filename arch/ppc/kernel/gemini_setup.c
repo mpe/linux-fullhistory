@@ -331,7 +331,7 @@ void __init gemini_init_IRQ(void)
 
 	/* gemini has no 8259 */
 	open_pic.irq_offset = 0;
-	for( i=0; i < OPENPIC_VEC_SPURIOUS; i++ ) 
+	for( i=0; i < NR_IRQS; i++ ) 
 		irq_desc[i].ctl = &open_pic;
 	openpic_init(1);
 #ifdef __SMP__

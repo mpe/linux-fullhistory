@@ -56,6 +56,7 @@ extern void t2_machine_check(u64, u64, struct pt_regs *);
 /* core_tsunami.c */
 extern struct pci_ops tsunami_pci_ops;
 extern void tsunami_init_arch(void);
+extern void tsunami_kill_arch(int);
 extern void tsunami_machine_check(u64, u64, struct pt_regs *);
 
 /* setup.c */
@@ -110,7 +111,6 @@ extern void entUna(void);
 extern void entDbg(void);
 
 /* process.c */
-extern void common_kill_arch (int mode, char *reboot_cmd);
 extern void cpu_idle(void) __attribute__((noreturn));
 
 /* ptrace.c */

@@ -31,6 +31,7 @@
 #include <linux/hfs_fs.h>
 #include <linux/devpts_fs.h>
 #include <linux/bfs_fs.h>
+#include <linux/adfs_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>

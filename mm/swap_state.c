@@ -52,93 +52,6 @@ void add_to_swap_cache(struct page *page, swp_entry_t entry)
 	add_to_page_cache(page, &swapper_space, entry.val);
 }
 
-/*
- * Verify that a swap entry is valid and increment its swap map count.
- *
- * Note: if swap_map[] reaches SWAP_MAP_MAX the entries are treated as
- * "permanent", but will be reclaimed by the next swapoff.
- */
-int swap_duplicate(swp_entry_t entry)
-{
-	struct swap_info_struct * p;
-	unsigned long offset, type;
-	int result = 0;
-
-	/* Swap entry 0 is illegal */
-	if (!entry.val)
-		goto out;
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles)
-		goto bad_file;
-	p = type + swap_info;
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max)
-		goto bad_offset;
-	if (!p->swap_map[offset])
-		goto bad_unused;
-	/*
-	 * Entry is valid, so increment the map count.
-	 */
-	if (p->swap_map[offset] < SWAP_MAP_MAX)
-		p->swap_map[offset]++;
-	else {
-		static int overflow = 0;
-		if (overflow++ < 5)
-			printk("VM: swap entry overflow\n");
-		p->swap_map[offset] = SWAP_MAP_MAX;
-	}
-	result = 1;
-out:
-	return result;
-
-bad_file:
-	printk("Bad swap file entry %08lx\n", entry.val);
-	goto out;
-bad_offset:
-	printk("Bad swap offset entry %08lx\n", entry.val);
-	goto out;
-bad_unused:
-	printk("Unused swap offset entry %08lx\n", entry.val);
-	goto out;
-}
-
-int swap_count(struct page *page)
-{
-	struct swap_info_struct * p;
-	unsigned long offset, type;
-	swp_entry_t entry;
-	int retval = 0;
-
-	entry.val = page->index;
-	if (!entry.val)
-		goto bad_entry;
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles)
-		goto bad_file;
-	p = type + swap_info;
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max)
-		goto bad_offset;
-	if (!p->swap_map[offset])
-		goto bad_unused;
-	retval = p->swap_map[offset];
-out:
-	return retval;
-
-bad_entry:
-	printk(KERN_ERR "swap_count: null entry!\n");
-	goto out;
-bad_file:
-	printk("Bad swap file entry %08lx\n", entry.val);
-	goto out;
-bad_offset:
-	printk("Bad swap offset entry %08lx\n", entry.val);
-	goto out;
-bad_unused:
-	printk("Unused swap offset entry %08lx\n", entry.val);
-	goto out;
-}
-
 static inline void remove_from_swap_cache(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
@@ -166,9 +79,7 @@ void __delete_from_swap_cache(struct page *page)
 	swap_cache_del_total++;
 #endif
 	remove_from_swap_cache(page);
-	lock_kernel();
 	swap_free(entry);
-	unlock_kernel();
 }
 
 static void delete_from_swap_cache_nolock(struct page *page)

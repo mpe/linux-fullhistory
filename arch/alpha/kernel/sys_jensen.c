@@ -140,6 +140,6 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	init_irq:		jensen_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		NULL,
-	kill_arch:		common_kill_arch,
+	kill_arch:		NULL,
 };
 ALIAS_MV(jensen)

@@ -392,8 +392,6 @@ static void *previous_irqholder = NULL;
 
 static void show(char * str, void *where);
 
-#define SYNC_OTHER_CPUS(x)	udelay((x)+1);
-
 static inline void
 wait_on_irq(int cpu, void *where)
 {
@@ -414,7 +412,6 @@ wait_on_irq(int cpu, void *where)
 
 		/* Duh, we have to loop. Release the lock to avoid deadlocks */
 		spin_unlock(&global_irq_lock);
-		mb();
 
 		for (;;) {
 			if (!--count) {
@@ -422,7 +419,7 @@ wait_on_irq(int cpu, void *where)
 				count = MAXCOUNT;
 			}
 			__sti();
-			SYNC_OTHER_CPUS(cpu);
+			udelay(1); /* make sure to run pending irqs */
 			__cli();
 
 			if (atomic_read(&global_irq_count))

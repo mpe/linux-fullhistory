@@ -325,7 +325,7 @@ struct alpha_machine_vector alphabook1_mv __initmv = {
 	init_irq:		sio_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		alphabook1_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		NULL,
 	pci_map_irq:		noname_map_irq,
 	pci_swizzle:		common_swizzle,
 

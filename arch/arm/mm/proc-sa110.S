@@ -456,9 +456,9 @@ ENTRY(cpu_sa1100_reset)
 
 cpu_manu_name:	.asciz	"Intel"
 ENTRY(cpu_sa110_name)
-		.asciz	"sa110"
+		.asciz	"StrongARM-110"
 ENTRY(cpu_sa1100_name)
-		.asciz	"sa1100"
+		.asciz	"StrongARM-1100"
 		.align
 
 		.section ".text.init", #alloc, #execinstr

@@ -208,7 +208,7 @@ struct alpha_machine_vector eiger_mv __initmv = {
 	init_irq:		eiger_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		eiger_map_irq,
 	pci_swizzle:		eiger_swizzle,
 };

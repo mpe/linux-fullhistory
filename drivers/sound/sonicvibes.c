@@ -82,6 +82,7 @@
  *    03.09.99   0.21  change read semantics for MIDI to match
  *                     OSS more closely; remove possible wakeup race
  *    28.10.99   0.22  More waitqueue races fixed
+ *    01.12.99   0.23  New argument to allocate_resource
  *
  */
 
@@ -2433,7 +2434,7 @@ static int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.22 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.23 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2457,7 +2458,7 @@ static int __init init_sonicvibes(void)
 			memcpy(ddmaname, sv_ddma_name, ddmanamelen);
 			pcidev->resource[RESOURCE_DDMA].name = ddmaname;
 			if (allocate_resource(&ioport_resource, pcidev->resource+RESOURCE_DDMA, 
-					      2*SV_EXTENT_DMA, 0x1000, 0x10000-2*SV_EXTENT_DMA, 1024)) {
+					      2*SV_EXTENT_DMA, 0x1000, 0x10000-2*SV_EXTENT_DMA, 1024, pcidev)) {
 				pcidev->resource[RESOURCE_DDMA].name = NULL;
 				kfree(ddmaname);
 				printk(KERN_ERR "sv: cannot allocate DDMA controller io ports\n");

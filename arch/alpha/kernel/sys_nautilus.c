@@ -87,29 +87,16 @@ nautilus_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 }
 
 void
-nautilus_kill_arch (int mode, char *restart_cmd)
+nautilus_kill_arch(int mode)
 {
 	u8 tmp;
 
-#ifdef CONFIG_RTC
-	rtc_kill_pit();
-#endif
-
-	switch(mode) {
-        case LINUX_REBOOT_CMD_HALT:
-		printk("Press Reset bottun");
-		break;
-	case LINUX_REBOOT_CMD_RESTART:
+	if (mode == LINUX_REBOOT_CMD_RESTART) {
 		pcibios_read_config_byte(0, 0x38, 0x43, &tmp);
 		pcibios_write_config_byte(0, 0x38, 0x43, tmp | 0x80);
 		outb(1, 0x92);
 		outb(0, 0x92);
-		printk("Press Reset button");
-		break;
-        case LINUX_REBOOT_CMD_POWER_OFF:
 	}
-
-	while (1);
 }
 
 /* Machine check handler code

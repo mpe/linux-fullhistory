@@ -79,6 +79,7 @@ static void remove_bpts(void);
 static void insert_bpts(void);
 static struct bpt *at_breakpoint(unsigned pc);
 static void bpt_cmds(void);
+static void cacheflush(void);
 
 extern int print_insn_big_powerpc(FILE *, unsigned long, unsigned);
 extern void printf(const char *fmt, ...);
@@ -342,11 +343,9 @@ cmds(struct pt_regs *excp)
 		case 't':
 			backtrace(excp);
 			break;
-#if 0
 		case 'f':
-			openforth();
+			cacheflush();
 			break;
-#endif
 		case 'h':
 			dump_hash_table();
 			break;
@@ -539,6 +538,30 @@ prregs(struct pt_regs *fp)
 	       fp->nip, fp->msr, fp->link, fp->ccr);
 	printf("ctr = %.8x   xer = %.8x   trap = %4x\n",
 	       fp->ctr, fp->xer, fp->trap);
+}
+
+void
+cacheflush(void)
+{
+	int cmd;
+	unsigned nflush;
+
+	cmd = inchar();
+	if (cmd != 'i')
+		termch = cmd;
+	scanhex(&adrs);
+	if (termch != '\n')
+		termch = 0;
+	nflush = 1;
+	scanhex(&nflush);
+	nflush = (nflush + 31) / 32;
+	if (cmd != 'i') {
+		for (; nflush > 0; --nflush, adrs += 0x20)
+			cflush((void *) adrs);
+	} else {
+		for (; nflush > 0; --nflush, adrs += 0x20)
+			cinval((void *) adrs);
+	}
 }
 
 unsigned int

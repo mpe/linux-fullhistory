@@ -20,7 +20,6 @@
  * 	(jj@sunsite.ms.mff.cuni.cz)
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/smp_lock.h>

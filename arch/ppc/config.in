@@ -66,7 +66,7 @@ if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
 
-if [ "$CONFIG_4xx" = "y" ] || [ "$CONFIG_8xx" = "y" ]; then
+if [ "$CONFIG_4xx" = "y" -o "$CONFIG_8xx" = "y" ]; then
   bool 'Math emulation' CONFIG_MATH_EMULATION
 fi
 endmenu

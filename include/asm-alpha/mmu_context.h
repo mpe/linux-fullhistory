@@ -160,6 +160,8 @@ ev4_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm, long cpu)
 
         current->thread.ptbr
 	  = ((unsigned long) next_mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
+
+	__reload_thread(&current->thread);
 }
 
 __EXTERN_INLINE void

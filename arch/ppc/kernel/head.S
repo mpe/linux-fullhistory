@@ -1352,30 +1352,6 @@ _GLOBAL(set_context)
 	SYNC
 	blr
 
-/*
- * We put a few things here that have to be page-aligned.
- * This stuff goes at the beginning of the data segment,
- * which is page-aligned.
- */
-	.data
-	.globl	sdata
-sdata:
-	.globl	empty_zero_page
-empty_zero_page:
-	.space	4096
-
-	.globl	swapper_pg_dir
-swapper_pg_dir:
-	.space	4096	
-
-/*
- * This space gets a copy of optional info passed to us by the bootstrap
- * Used to pass parameters into the kernel like root=/dev/sda1, etc.
- */	
-	.globl	cmd_line
-cmd_line:
-	.space	512
-	
 /* 
  * An undocumented "feature" of 604e requires that the v bit
  * be cleared before changing BAT values.
@@ -1412,10 +1388,26 @@ clear_bats:
 #endif /* !defined(CONFIG_GEMINI) */
 	blr
 
-flush_tlbs:
-	lis	r20, 0x1000
-1:	addic.	r20, r20, -0x1000
-	tlbie	r20
-	blt	1b
-	sync
-	blr
+/*
+ * We put a few things here that have to be page-aligned.
+ * This stuff goes at the beginning of the data segment,
+ * which is page-aligned.
+ */
+	.data
+	.globl	sdata
+sdata:
+	.globl	empty_zero_page
+empty_zero_page:
+	.space	4096
+
+	.globl	swapper_pg_dir
+swapper_pg_dir:
+	.space	4096	
+
+/*
+ * This space gets a copy of optional info passed to us by the bootstrap
+ * Used to pass parameters into the kernel like root=/dev/sda1, etc.
+ */	
+	.globl	cmd_line
+cmd_line:
+	.space	512

@@ -270,9 +270,9 @@ _arm2_3_check_bugs:
 		bics	pc, lr, #0x04000000		@ Clear FIQ disable bit
 
 armvlsi_name:	.asciz	"ARM/VLSI"
-_arm2_name:	.asciz	"arm2"
-_arm250_name:	.asciz	"arm250"
-_arm3_name:	.asciz	"arm3"
+_arm2_name:	.asciz	"ARM 2"
+_arm250_name:	.asciz	"ARM 250"
+_arm3_name:	.asciz	"ARM 3"
 
 		.section ".text.init", #alloc, #execinstr
 /*

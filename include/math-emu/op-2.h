@@ -113,9 +113,9 @@
 #define _FP_FRAC_OVERP_2(fs,X)	(_FP_FRAC_HIGH_##fs(X) & _FP_OVERFLOW_##fs)
 #define _FP_FRAC_EQ_2(X, Y)	(X##_f1 == Y##_f1 && X##_f0 == Y##_f0)
 #define _FP_FRAC_GT_2(X, Y)	\
-  (X##_f1 > Y##_f1 || X##_f1 == Y##_f1 && X##_f0 > Y##_f0)
+  (X##_f1 > Y##_f1 || (X##_f1 == Y##_f1 && X##_f0 > Y##_f0))
 #define _FP_FRAC_GE_2(X, Y)	\
-  (X##_f1 > Y##_f1 || X##_f1 == Y##_f1 && X##_f0 >= Y##_f0)
+  (X##_f1 > Y##_f1 || (X##_f1 == Y##_f1 && X##_f0 >= Y##_f0))
 
 #define _FP_ZEROFRAC_2		0, 0
 #define _FP_MINFRAC_2		0, 1

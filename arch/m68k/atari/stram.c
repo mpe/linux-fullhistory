@@ -649,6 +649,7 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 
 	/* now swapping to this device ok */
 	p->pages = j + k;
+	swap_list_lock();
 	nr_swap_pages += j;
 	p->flags = SWP_WRITEOK;
 
@@ -666,6 +667,7 @@ static int __init swap_init(unsigned long start_mem, unsigned long swap_data)
 	} else {
 		swap_info[prev].next = p - swap_info;
 	}
+	swap_list_unlock();
 
 	printk( KERN_INFO "Using %dk (%d pages) of ST-RAM as swap space.\n",
 			p->pages << 2, p->pages );
@@ -924,6 +926,9 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 			DPRINTK("unswap: map[i=%lu]=%u nr_swap=%u\n",
 				i, map[i], nr_swap_pages);
 
+			swap_device_lock(stram_swap_info);
+			map[i]++;
+			swap_device_unlock(stram_swap_info);
 			/* Get a page for the entry, using the existing
 			   swap cache page if there is one.  Otherwise,
 			   get a clean page and read the swap into it. */
@@ -945,18 +950,24 @@ static int unswap_by_read(unsigned short *map, unsigned long max,
 				stat_swap_force++;
 	#endif
 			}
-			else if (map[i])
+			else {
+				swap_free(entry);
 				return -ENOMEM;
+			}
 		}
 
 		DPRINTK( "unswap: map[i=%lu]=%u nr_swap=%u\n",
 				 i, map[i], nr_swap_pages );
+		swap_list_lock();
+		swap_device_lock(stram_swap_info);
 		map[i] = SWAP_MAP_BAD;
 		if (stram_swap_info->lowest_bit == i)
 			stram_swap_info->lowest_bit++;
 		if (stram_swap_info->highest_bit == i)
 			stram_swap_info->highest_bit--;
 		--nr_swap_pages;
+		swap_device_unlock(stram_swap_info);
+		swap_list_unlock();
 	}
 
 	return 0;
@@ -1022,6 +1033,8 @@ static void free_stram_region( unsigned long offset, unsigned long n_pages )
 		return;
 	}
 
+	swap_list_lock();
+	swap_device_lock(stram_swap_info);
 	/* un-reserve the freed pages */
 	for( ; n_pages > 0; ++offset, --n_pages ) {
 		if (map[offset] != SWAP_MAP_BAD)
@@ -1038,6 +1051,8 @@ static void free_stram_region( unsigned long offset, unsigned long n_pages )
 	if (stram_swap_info->prio > swap_info[swap_list.next].prio)
 		swap_list.next = swap_list.head;
 	nr_swap_pages += n_pages;
+	swap_device_unlock(stram_swap_info);
+	swap_list_unlock();
 }
 
 

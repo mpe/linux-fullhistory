@@ -6,11 +6,11 @@
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/page.h>
-#include <asm/pgtable.h>
 #include <linux/adb.h>
 #include <linux/pmu.h>
 #include <asm/prom.h>
 #include <asm/bootx.h>
+#include <asm/processor.h>
 
 static volatile unsigned char *sccc, *sccd;
 unsigned long TXRDY, RXRDY;
@@ -41,7 +41,7 @@ xmon_map_scc(void)
 
 #ifdef CONFIG_BOOTX_TEXT
 		if (boot_infos != 0 && find_via_pmu()) {
-			printk(KERN_INFO "xmon uses screen and keyboard\n");
+			printk("xmon uses screen and keyboard\n");
 			use_screen = 1;
 			map_bootx_text();
 			return;

@@ -4,6 +4,8 @@
 /*
  * Alpha floating-point control register defines:
  */
+#define FPCR_DNOD	(1UL<<47)	/* denorm INV trap disable */
+#define FPCR_DNZ	(1UL<<48)	/* denorms to zero */
 #define FPCR_INVD	(1UL<<49)	/* invalid op disable (opt.) */
 #define FPCR_DZED	(1UL<<50)	/* division by zero disable (opt.) */
 #define FPCR_OVFD	(1UL<<51)	/* overflow disable (optional) */
@@ -42,9 +44,16 @@
 #define IEEE_TRAP_ENABLE_OVF	(1UL<<3)	/* overflow */
 #define IEEE_TRAP_ENABLE_UNF	(1UL<<4)	/* underflow */
 #define IEEE_TRAP_ENABLE_INE	(1UL<<5)	/* inexact */
+#define IEEE_TRAP_ENABLE_DNO	(1UL<<6)	/* denorm */
 #define IEEE_TRAP_ENABLE_MASK	(IEEE_TRAP_ENABLE_INV | IEEE_TRAP_ENABLE_DZE |\
 				 IEEE_TRAP_ENABLE_OVF | IEEE_TRAP_ENABLE_UNF |\
-				 IEEE_TRAP_ENABLE_INE)
+				 IEEE_TRAP_ENABLE_INE | IEEE_TRAP_ENABLE_DNO)
+
+/* Denorm and Underflow flushing */
+#define IEEE_MAP_DMZ		(1UL<<12)	/* Map denorm inputs to zero */
+#define IEEE_MAP_UMZ		(1UL<<13)	/* Map underflowed outputs to zero */
+
+#define IEEE_MAP_MASK		(IEEE_MAP_DMZ | IEEE_MAP_UMZ)
 
 /* status bits coming from fpcr: */
 #define IEEE_STATUS_INV		(1UL<<17)
@@ -52,12 +61,16 @@
 #define IEEE_STATUS_OVF		(1UL<<19)
 #define IEEE_STATUS_UNF		(1UL<<20)
 #define IEEE_STATUS_INE		(1UL<<21)
+#define IEEE_STATUS_DNO		(1UL<<22)
 
 #define IEEE_STATUS_MASK	(IEEE_STATUS_INV | IEEE_STATUS_DZE |	\
 				 IEEE_STATUS_OVF | IEEE_STATUS_UNF |	\
-				 IEEE_STATUS_INE)
+				 IEEE_STATUS_INE | IEEE_STATUS_DNO)
 
-#define IEEE_SW_MASK		(IEEE_TRAP_ENABLE_MASK | IEEE_STATUS_MASK)
+#define IEEE_SW_MASK		(IEEE_TRAP_ENABLE_MASK | IEEE_STATUS_MASK | IEEE_MAP_MASK)
+
+#define IEEE_CURRENT_RM_SHIFT	32
+#define IEEE_CURRENT_RM_MASK	(3UL<<IEEE_CURRENT_RM_SHIFT)
 
 #define IEEE_STATUS_TO_EXCSUM_SHIFT	16
 
@@ -78,6 +91,7 @@ ieee_swcr_to_fpcr(unsigned long sw)
 		      | IEEE_TRAP_ENABLE_DZE
 		      | IEEE_TRAP_ENABLE_OVF)) << 48;
 	fp |= (~sw & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE)) << 57;
+	fp |= (~sw & IEEE_TRAP_ENABLE_DNO) << 41;
 	return fp;
 }
 
@@ -90,6 +104,7 @@ ieee_fpcr_to_swcr(unsigned long fp)
 			     | IEEE_TRAP_ENABLE_DZE
 			     | IEEE_TRAP_ENABLE_OVF);
 	sw |= (~fp >> 57) & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE);
+	sw |= (~fp >> 41) & IEEE_TRAP_ENABLE_DNO;
 	return sw;
 }
 
@@ -124,6 +139,8 @@ static inline void wrfpcr(unsigned long val)
 
 extern unsigned long alpha_read_fp_reg (unsigned long reg);
 extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
+extern unsigned long alpha_read_fp_reg_s (unsigned long reg);
+extern void alpha_write_fp_reg_s (unsigned long reg, unsigned long val);
 
 #endif /* __KERNEL__ */
 

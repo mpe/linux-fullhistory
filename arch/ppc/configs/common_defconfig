@@ -274,7 +274,6 @@ CONFIG_BMAC=y
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
-# CONFIG_YELLOWFIN is not set
 # CONFIG_RTL8139 is not set
 # CONFIG_DM9102 is not set
 # CONFIG_AT1700 is not set
@@ -283,7 +282,6 @@ CONFIG_BMAC=y
 CONFIG_NET_EISA=y
 CONFIG_PCNET32=y
 # CONFIG_ADAPTEC_STARFIRE is not set
-# CONFIG_ACENIC is not set
 # CONFIG_AC3200 is not set
 # CONFIG_APRICOT is not set
 # CONFIG_CS89x0 is not set
@@ -301,6 +299,13 @@ CONFIG_DE4X5=y
 # CONFIG_EPIC100 is not set
 # CONFIG_ZNET is not set
 # CONFIG_NET_POCKET is not set
+
+#
+# Ethernet (1000 Mbit)
+#
+# CONFIG_YELLOWFIN is not set
+# CONFIG_ACENIC is not set
+# CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set
 

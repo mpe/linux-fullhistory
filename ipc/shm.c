@@ -289,9 +289,7 @@ out_up:
 			__free_page (pte_page(pte));
 			rss++;
 		} else {
-			lock_kernel();
 			swap_free(pte_to_swp_entry(pte));
-			unlock_kernel();
 			swp++;
 		}
 	}
@@ -772,9 +770,7 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 			}
 			delete_from_swap_cache(page);
 			page = replace_with_highmem(page);
-			lock_kernel();
 			swap_free(entry);
-			unlock_kernel();
 			if(shp != shm_lock(shp->id))
 				BUG();
 			shm_swp--;
@@ -862,9 +858,7 @@ check_table:
 	if (--counter < 0) { /* failed */
 failed:
 		shm_unlockall();
-		lock_kernel();
 		__swap_free(swap_entry, 2);
-		unlock_kernel();
 		return 0;
 	}
 	if (page_count(page_map) != 1)

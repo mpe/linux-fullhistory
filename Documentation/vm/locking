@@ -85,3 +85,24 @@ The current implementation of the vmlist lock uses the page_table_lock,
 which is also the spinlock that page stealers use to protect changes to
 the victim process' ptes. Thus we have a reduction in the total number
 of locks. 
+
+swap_list_lock/swap_device_lock
+-------------------------------
+The swap devices are chained in priority order from the "swap_list" header. 
+The "swap_list" is used for the round-robin swaphandle allocation strategy.
+The #free swaphandles is maintained in "nr_swap_pages". These two together
+are protected by the swap_list_lock. 
+
+The swap_device_lock, which is per swap device, protects the reference 
+counts on the corresponding swaphandles, maintained in the "swap_map"
+array, and the "highest_bit" and "lowest_bit" fields.
+
+Both of these are spinlocks, and are never acquired from intr level. The
+locking heirarchy is swap_list_lock -> swap_device_lock.
+
+To prevent races between swap space deletion or async readahead swapins
+deciding whether a swap handle is being used, ie worthy of being read in
+from disk, and an unmap -> swap_free making the handle unused, the swap
+delete and readahead code grabs a temp reference on the swaphandle to
+prevent warning messages from swap_duplicate <- read_swap_cache_async.
+

@@ -94,8 +94,8 @@ cpu_idle(void)
 	}
 }
 
-void
-common_kill_arch (int mode, char *restart_cmd)
+static void
+common_shutdown(int mode, char *restart_cmd)
 {
 	/* The following currently only has any effect on SRM.  We should
 	   fix MILO to understand it.  Should be pretty easy.  Also we can
@@ -144,6 +144,9 @@ common_kill_arch (int mode, char *restart_cmd)
 	rtc_kill_pit();
 #endif
 
+	if (alpha_mv.kill_arch)
+		alpha_mv.kill_arch(mode);
+
 	if (!alpha_using_srm && mode != LINUX_REBOOT_CMD_RESTART) {
 		/* Unfortunately, since MILO doesn't currently understand
 		   the hwrpb bits above, we can't reliably halt the 
@@ -160,21 +163,23 @@ common_kill_arch (int mode, char *restart_cmd)
 void
 machine_restart(char *restart_cmd)
 {
-	alpha_mv.kill_arch(LINUX_REBOOT_CMD_RESTART, restart_cmd);
+	common_shutdown(LINUX_REBOOT_CMD_RESTART, restart_cmd);
 }
 
 void
 machine_halt(void)
 {
-	alpha_mv.kill_arch(LINUX_REBOOT_CMD_HALT, NULL);
+	common_shutdown(LINUX_REBOOT_CMD_HALT, NULL);
 }
 
-void machine_power_off(void)
+void
+machine_power_off(void)
 {
-	alpha_mv.kill_arch(LINUX_REBOOT_CMD_POWER_OFF, NULL);
+	common_shutdown(LINUX_REBOOT_CMD_POWER_OFF, NULL);
 }
 
-void show_regs(struct pt_regs * regs)
+void
+show_regs(struct pt_regs * regs)
 {
 	printk("\nps: %04lx pc: [<%016lx>]\n", regs->ps, regs->pc);
 	printk("rp: [<%016lx>] sp: %p\n", regs->r26, regs+1);
@@ -195,7 +200,8 @@ void show_regs(struct pt_regs * regs)
 /*
  * Re-start a thread when doing execve()
  */
-void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
+void
+start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 {
 	set_fs(USER_DS);
 	regs->pc = pc;
@@ -206,11 +212,13 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 /*
  * Free current thread data structures etc..
  */
-void exit_thread(void)
+void
+exit_thread(void)
 {
 }
 
-void flush_thread(void)
+void
+flush_thread(void)
 {
 	/* Arrange for each exec'ed process to start off with a clean slate
 	   with respect to the FPU.  This is all exceptions disabled.  Note
@@ -221,7 +229,8 @@ void flush_thread(void)
 	wrfpcr(FPCR_DYN_NORMAL | FPCR_INVD | FPCR_DZED | FPCR_OVFD | FPCR_INED);
 }
 
-void release_thread(struct task_struct *dead_task)
+void
+release_thread(struct task_struct *dead_task)
 {
 }
 
@@ -234,15 +243,17 @@ void release_thread(struct task_struct *dead_task)
  * Notice that "fork()" is implemented in terms of clone,
  * with parameters (SIGCHLD, 0).
  */
-int alpha_clone(unsigned long clone_flags, unsigned long usp,
-		struct switch_stack * swstack)
+int
+alpha_clone(unsigned long clone_flags, unsigned long usp,
+	    struct switch_stack * swstack)
 {
 	if (!usp)
 		usp = rdusp();
 	return do_fork(clone_flags, usp, (struct pt_regs *) (swstack+1));
 }
 
-int alpha_vfork(struct switch_stack * swstack)
+int
+alpha_vfork(struct switch_stack * swstack)
 {
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(),
 			(struct pt_regs *) (swstack+1));
@@ -259,8 +270,9 @@ int alpha_vfork(struct switch_stack * swstack)
  * for a kernel fork().
  */
 
-int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
-	struct task_struct * p, struct pt_regs * regs)
+int
+copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
+	    struct task_struct * p, struct pt_regs * regs)
 {
 	extern void ret_from_sys_call(void);
 	extern void ret_from_smp_fork(void);
@@ -298,7 +310,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 /*
  * fill in the user structure for a core dump..
  */
-void dump_thread(struct pt_regs * pt, struct user * dump)
+void
+dump_thread(struct pt_regs * pt, struct user * dump)
 {
 	/* switch stack follows right below pt_regs: */
 	struct switch_stack * sw = ((struct switch_stack *) pt) - 1;
@@ -355,7 +368,8 @@ void dump_thread(struct pt_regs * pt, struct user * dump)
 	memcpy((char *)dump->regs + EF_SIZE, sw->fp, 32 * 8);
 }
 
-int dump_fpu (struct pt_regs * regs, elf_fpregset_t *r)
+int
+dump_fpu(struct pt_regs * regs, elf_fpregset_t *r)
 {
 	/* switch stack follows right below pt_regs: */
 	struct switch_stack * sw = ((struct switch_stack *) regs) - 1;
@@ -373,7 +387,8 @@ int dump_fpu (struct pt_regs * regs, elf_fpregset_t *r)
  *
  * Don't do this at home.
  */
-asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
+asmlinkage int
+sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
 {
@@ -400,7 +415,8 @@ extern void scheduling_functions_end_here(void);
 #define first_sched	((unsigned long) scheduling_functions_start_here)
 #define last_sched	((unsigned long) scheduling_functions_end_here)
 
-unsigned long get_wchan(struct task_struct *p)
+unsigned long
+get_wchan(struct task_struct *p)
 {
 	unsigned long schedule_frame;
 	unsigned long pc;

@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/drivers/char/serial-card.c
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1999 Russell King.
  *
  * A generic handler of serial expansion cards that use 16550s or
  * the like.
@@ -22,9 +22,13 @@
  *  22-04-1998	RMK	Removed old register_pre_init_serial
  */
 #include <linux/module.h>
+#include <linux/types.h>
 #include <linux/serial.h>
 #include <linux/errno.h>
+#include <linux/init.h>
+
 #include <asm/ecard.h>
+#include <asm/string.h>
 
 #ifndef NUM_SERIALS
 #define NUM_SERIALS	MY_NUMPORTS * MAX_ECARDS
@@ -42,8 +46,6 @@ static struct expansion_card *expcard[MAX_ECARDS];
 		__serial_addr[__serial_pcount] = (addr);	\
 		__serial_pcount += 1;				\
 	} while (0)
-#undef MY_INIT
-#define MY_INIT init_module
 #else
 #define ADD_ECARD(ec,card)
 #define ADD_PORT(port,addr)
@@ -55,8 +57,7 @@ static inline int serial_register_onedev (unsigned long port, int irq)
 {
     struct serial_struct req;
 
-    memset(&req, 0, sizeof(serial_struct));
-
+    memset(&req, 0, sizeof(req));
     req.baud_base = MY_BAUD_BASE;
     req.irq = irq;
     req.port = port;
@@ -65,7 +66,7 @@ static inline int serial_register_onedev (unsigned long port, int irq)
     return register_serial(&req);
 }
 
-int MY_INIT (void)
+static int __init INIT (void)
 {
     int card = 0;
 
@@ -103,9 +104,9 @@ int MY_INIT (void)
     return card ? 0 : -ENODEV;
 }
 
-#ifdef MODULE
-void cleanup_module (void)
+static void __exit EXIT (void)
 {
+#ifdef MODULE
     int i;
 
     for (i = 0; i < __serial_pcount; i++) {
@@ -116,5 +117,10 @@ void cleanup_module (void)
     for (i = 0; i < MAX_ECARDS; i++)
 	if (expcard[i])
 	    ecard_release (expcard[i]);
-}
 #endif
+}
+
+EXPORT_NO_SYMBOLS;
+
+module_init(INIT);
+module_exit(EXIT);

@@ -4,13 +4,10 @@
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/stddef.h>
-#include <linux/reboot.h>
 #include <linux/nvram.h>
 #include <linux/init.h>
 #include <asm/init.h>
-#include <asm/ptrace.h>
 #include <asm/io.h>
-#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/prom.h>
 #include <linux/adb.h>

@@ -7,7 +7,6 @@
  * Universite Pierre et Marie Curie (Paris VI)
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 

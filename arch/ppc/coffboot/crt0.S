@@ -9,10 +9,6 @@
 	.text
 	.globl	_start
 _start:
-	.long	__start,0,0
-
-	.globl	__start
-__start:
 	lis	9,_start@h
 	lis	8,_etext@ha
 	addi	8,8,_etext@l

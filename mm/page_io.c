@@ -35,38 +35,16 @@
 
 static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int wait)
 {
-	unsigned long type, offset;
-	struct swap_info_struct * p;
+	unsigned long offset;
 	int zones[PAGE_SIZE/512];
 	int zones_used;
 	kdev_t dev = 0;
 	int block_size;
-
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles) {
-		printk("Internal error: bad swap-device\n");
-		return 0;
-	}
+	struct inode *swapf = 0;
 
 	/* Don't allow too many pending pages in flight.. */
 	if (atomic_read(&nr_async_pages) > pager_daemon.swap_cluster)
 		wait = 1;
-
-	p = &swap_info[type];
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max) {
-		printk("rw_swap_page: weirdness\n");
-		return 0;
-	}
-	if (p->swap_map && !p->swap_map[offset]) {
-		printk("VM: Bad swap entry %08lx\n", entry.val);
-		return 0;
-	}
-	if (!(p->flags & SWP_USED)) {
-		printk(KERN_ERR "rw_swap_page: "
-			"Trying to swap to unused swap-device\n");
-		return 0;
-	}
 
 	if (rw == READ) {
 		ClearPageUptodate(page);
@@ -74,15 +52,13 @@ static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int w
 	} else
 		kstat.pswpout++;
 
-	if (p->swap_device) {
+	get_swaphandle_info(entry, &offset, &dev, &swapf);
+	if (dev) {
 		zones[0] = offset;
 		zones_used = 1;
-		dev = p->swap_device;
 		block_size = PAGE_SIZE;
-	} else if (p->swap_file) {
-		struct inode *swapf = p->swap_file->d_inode;
-		int i;
-		int j;
+	} else if (swapf) {
+		int i, j;
 		unsigned int block = offset
 			<< (PAGE_SHIFT - swapf->i_sb->s_blocksize_bits);
 
@@ -95,7 +71,6 @@ static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int w
 		zones_used = i;
 		dev = swapf->i_dev;
 	} else {
-		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
 		return 0;
 	}
  	if (!wait) {

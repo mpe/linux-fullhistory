@@ -23,12 +23,58 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-
 #ifdef __KERNEL__
-
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
+#endif /* __KERNEL__ */
+
+/*
+ * System sleep states
+ */
+enum
+{
+	ACPI_S0, /* working */
+	ACPI_S1, /* sleep */
+	ACPI_S2, /* sleep */
+	ACPI_S3, /* sleep */
+	ACPI_S4, /* non-volatile sleep */
+	ACPI_S5, /* soft-off */
+};
+
+typedef int acpi_sstate_t;
+
+/*
+ * Device states
+ */
+enum
+{
+	ACPI_D0, /* fully-on */
+	ACPI_D1, /* partial-on */
+	ACPI_D2, /* partial-on */
+	ACPI_D3, /* fully-off */
+};
+
+typedef int acpi_dstate_t;
+
+/*
+ * HID (PnP) values
+ */
+enum
+{
+	ACPI_UNKNOWN_HID =  0x00000000, /* generic */
+	ACPI_KBC_HID =	    0x41d00303, /* keyboard controller */
+	ACPI_COM_HID =	    0x41d00500, /* serial port */
+	ACPI_FDC_HID =	    0x41d00700, /* floppy controller */
+	ACPI_VGA_HID =	    0x41d00900, /* VGA controller */
+	ACPI_ISA_HID =	    0x41d00a00, /* ISA bus */
+	ACPI_EISA_HID =	    0x41d00a01, /* EISA bus */
+	ACPI_PCI_HID =	    0x41d00a03, /* PCI bus */
+};
+
+typedef int acpi_hid_t;
+
+#ifdef __KERNEL__
 
 /*
  * Device types
@@ -53,51 +99,6 @@ typedef int acpi_dev_t;
  * Device addresses
  */
 #define ACPI_PCI_ADR(dev) ((dev)->bus->number << 16 | (dev)->devfn)
-
-/*
- * HID (PnP) values
- */
-enum
-{
-	ACPI_UNKNOWN_HID =  0x00000000, /* generic */
-	ACPI_KBC_HID =	    0x41d00303, /* keyboard controller */
-	ACPI_COM_HID =	    0x41d00500, /* serial port */
-	ACPI_FDC_HID =	    0x41d00700, /* floppy controller */
-	ACPI_VGA_HID =	    0x41d00900, /* VGA controller */
-	ACPI_ISA_HID =	    0x41d00a00, /* ISA bus */
-	ACPI_EISA_HID =	    0x41d00a01, /* EISA bus */
-	ACPI_PCI_HID =	    0x41d00a03, /* PCI bus */
-};
-
-typedef int acpi_hid_t;
-
-/*
- * Device states
- */
-enum
-{
-	ACPI_D0, /* fully-on */
-	ACPI_D1, /* partial-on */
-	ACPI_D2, /* partial-on */
-	ACPI_D3, /* fully-off */
-};
-
-typedef int acpi_dstate_t;
-
-/*
- * System sleep states
- */
-enum
-{
-	ACPI_S0, /* working */
-	ACPI_S1, /* sleep */
-	ACPI_S2, /* sleep */
-	ACPI_S3, /* sleep */
-	ACPI_S4, /* non-volatile sleep */
-	ACPI_S5, /* soft-off */
-};
-
-typedef int acpi_sstate_t;
 
 struct acpi_dev;
 
@@ -136,7 +137,7 @@ struct acpi_dev
 
 #ifdef CONFIG_ACPI
 
-extern wait_queue_head_t acpi_idle_wait;
+extern wait_queue_head_t acpi_control_wait;
 
 /*
  * Register a device with the ACPI subsystem
@@ -168,8 +169,8 @@ extern inline void acpi_dev_idle(struct acpi_dev *dev)
 {
 	if (dev) {
 		dev->idle = jiffies;
-		if (waitqueue_active(&acpi_idle_wait))
-			wake_up(&acpi_idle_wait);
+		if (waitqueue_active(&acpi_control_wait))
+			wake_up(&acpi_control_wait);
 	}
 }
 
@@ -361,7 +362,10 @@ enum
 	ACPI_P_BLK,
 	ACPI_P_LVL2_LAT,
 	ACPI_P_LVL3_LAT,
+	ACPI_S0_SLP_TYP,
+	ACPI_S1_SLP_TYP,
 	ACPI_S5_SLP_TYP,
+	ACPI_SLEEP,
 };
 
 #define ACPI_SLP_TYP_DISABLED	(~0UL)

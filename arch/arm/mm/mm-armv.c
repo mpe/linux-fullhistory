@@ -25,6 +25,29 @@ extern void free_page_2k(unsigned long page);
 extern pte_t *get_bad_pte_table(void);
 
 /*
+ * These are useful for identifing cache coherency
+ * problems by allowing the cache or the cache and
+ * writebuffer to be turned off.  (Note: the write
+ * buffer should not be on and the cache off).
+ */
+static int __init nocache_setup(char *__unused)
+{
+	cr_alignment &= ~4;
+	cr_no_alignment &= ~4;
+	set_cr(cr_alignment);
+}
+
+static int __init nowrite_setup(char *__unused)
+{
+	cr_alignment &= ~(8|4);
+	cr_no_alignment &= ~(8|4);
+	set_cr(cr_alignment);
+}
+
+__setup("nocache", nocache_setup);
+__setup("nowb", nowrite_setup);
+
+/*
  * need to get a 16k page for level 1
  */
 pgd_t *get_pgd_slow(void)
@@ -353,7 +376,7 @@ void __init create_memmap_holes(void)
 {
 	unsigned int start_pfn, end_pfn = -1;
 	struct page *pg = NULL;
-	unsigned int sz, i;
+	unsigned int i;
 
 	for (i = 0; i < meminfo.nr_banks; i++) {
 		if (meminfo.bank[i].size == 0)

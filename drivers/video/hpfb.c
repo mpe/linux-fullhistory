@@ -22,6 +22,7 @@
 #include <asm/blinken.h>
 #include <asm/hwtest.h>
 
+#include <video/fbcon.h>
 #include <video/fbcon-mfb.h>
 #include <video/fbcon-cfb2.h>
 #include <video/fbcon-cfb4.h>

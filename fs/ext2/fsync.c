@@ -22,7 +22,6 @@
  * we can depend on generic_block_fdatasync() to sync the data blocks.
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 
 

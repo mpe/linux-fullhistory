@@ -274,14 +274,13 @@ miata_init_pci(void)
 }
 
 static void
-miata_kill_arch (int mode, char *reboot_cmd)
+miata_kill_arch(int mode)
 {
 	/* Who said DEC engineers have no sense of humor? ;-)  */
 	if (alpha_using_srm) {
 		*(vuip) PYXIS_RESET = 0x0000dead;
 		mb();
 	}
-	common_kill_arch(mode, reboot_cmd);
 }
 
 

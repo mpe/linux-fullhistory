@@ -14,23 +14,26 @@
  */
 	.globl	setup_bats
 setup_bats:
-	mr	4,3
-	mfpvr	3
-	rlwinm	3,3,16,16,31		/* r3 = 1 for 601, 4 for 604 */
-	cmpi	0,3,1
+	mfpvr	5
+	rlwinm	5,5,16,16,31		/* r3 = 1 for 601, 4 for 604 */
+	cmpi	0,5,1
+	li	0,0
 	bne	4f
-	ori	4,4,4			/* set up BAT registers for 601 */
-	li	5,0x7f
-	mtibatu	3,4
-	mtibatl	3,5
-	isync
-	blr
-4:	ori	4,4,0xfe		/* set up BAT registers for 604 */
-	li	5,2
-	mtdbatl	3,5
-	mtdbatu	3,4
-	mtibatl	3,5
-	mtibatu	3,4
+	mtibatl	3,0			/* invalidate BAT first */
+	ori	3,3,4			/* set up BAT registers for 601 */
+	li	4,0x7f
+	mtibatu	3,3
+	mtibatl	3,4
+	b	5f
+4:	mtdbatu	3,0			/* invalidate BATs first */
+	mtibatu	3,0
+	ori	3,3,0xff		/* set up BAT registers for 604 */
+	li	4,2
+	mtdbatl	3,4
+	mtdbatu	3,3
+	mtibatl	3,4
+	mtibatu	3,3
+5:	sync
 	isync
 	blr
 

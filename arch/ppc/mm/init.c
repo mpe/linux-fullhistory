@@ -324,24 +324,23 @@ void show_mem(void)
 
 void si_meminfo(struct sysinfo *val)
 {
-	int i;
+	int i, c;
 
 	i = max_mapnr;
-	val->totalram = 0;
-	val->sharedram = 0;
+	val->totalram = totalram_pages;
 	val->freeram = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);
+	val->sharedram = 0;
 	while (i-- > 0)  {
 		if (PageReserved(mem_map+i))
 			continue;
-		val->totalram++;
-		if (!atomic_read(&mem_map[i].count))
-			continue;
-		val->sharedram += atomic_read(&mem_map[i].count) - 1;
+		c = atomic_read(&mem_map[i].count);
+		if (c > 1)
+			val->sharedram += c - 1;
 	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
-	return;
+	val->totalhigh = 0;
+	val->freehigh = 0;
+	val->mem_unit = PAGE_SIZE;
 }
 
 void *
@@ -716,7 +715,7 @@ static void __init mapin_ram(void)
 				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
 #ifndef CONFIG_8xx
 			else
-				/* On the powerpc (not 8xx), no user access
+				/* On the powerpc, denying user access
 				   forces R/W kernel access */
 				f |= _PAGE_USER;
 #endif /* CONFIG_8xx */
@@ -875,7 +874,7 @@ void __init MMU_init(void)
 		setbat(3, 0x90000000, 0x90000000, 0x10000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
-#if 0
+#if 1
 		{
 			unsigned long base = 0xf3000000;
 			struct device_node *macio = find_devices("mac-io");
@@ -968,6 +967,7 @@ void __init do_init_bootmem(void)
 
 	/* remove the bootmem bitmap from the available memory */
 	mem_pieces_remove(&phys_avail, start, boot_mapsize, 1);
+
 	/* add everything in phys_avail into the bootmem map */
 	for (i = 0; i < phys_avail.n_regions; ++i)
 		free_bootmem(phys_avail.regions[i].address,
@@ -1053,9 +1053,9 @@ void __init mem_init(void)
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
-#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
+#if defined(CONFIG_CHRP) || defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC)
 	extern unsigned int rtas_data, rtas_size;
-#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
+#endif /* CONFIG_CHRP || CONFIG_PMAC || CONFIG_ALL_PPC */
 	max_mapnr = max_low_pfn;
 	high_memory = (void *) __va(max_low_pfn * PAGE_SIZE);
 	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
@@ -1071,13 +1071,13 @@ void __init mem_init(void)
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
-#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
+#if defined(CONFIG_CHRP) || defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC)
 	/* mark the RTAS pages as reserved */
 	if ( rtas_data )
 		for (addr = rtas_data; addr < PAGE_ALIGN(rtas_data+rtas_size) ;
 		     addr += PAGE_SIZE)
 			SetPageReserved(mem_map + MAP_NR(addr));
-#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
+#endif /* CONFIG_CHRP || CONFIG_PMAC || CONFIG_ALL_PPC */
 	
 	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
 	     addr += PAGE_SIZE) {
@@ -1088,12 +1088,12 @@ void __init mem_init(void)
 		else if (addr >= (unsigned long)&__init_begin
 			 && addr < (unsigned long)&__init_end)
 			initpages++;
-		else if (addr < (ulong) klimit)
+		else
 			datapages++;
 	}
 
         printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
-	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
+	       (unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
 	       initpages << (PAGE_SHIFT-10),

@@ -330,6 +330,30 @@ int get_cpuinfo(char *buffer)
 	return len;
 }
 
+#ifndef CONFIG_MACH_SPECIFIC
+void __init
+intuit_machine_type(void)
+{
+	char *model;
+	struct device_node *root;
+			
+	/* ask the OF info if we're a chrp or pmac */
+	root = find_path_device("/");
+	if (root != 0) {
+		/* assume pmac unless proven to be chrp -- Cort */
+		_machine = _MACH_Pmac;
+		model = get_property(root, "device_type", NULL);
+		if (model && !strncmp("chrp", model, 4))
+			_machine = _MACH_chrp;
+		else {
+			model = get_property(root, "model", NULL);
+			if (model && !strncmp(model, "IBM", 3))
+				_machine = _MACH_chrp;
+		}
+	}
+}
+#endif /* CONFIG_MACH_SPECIFIC */
+
 /*
  * Find out what kind of machine we're on and save any data we need
  * from the early boot process (devtree is copied on pmac by prom_init() )
@@ -362,34 +386,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		{
 			_machine = _MACH_prep;
 		} else
-		{
-			char *model;
-			struct device_node *root;
-			
 			have_of = 1;
-			
-			/* prom_init has already been called from __start */
-			if (boot_infos)
-				relocate_nodes();
-			
-			/* ask the OF info if we're a chrp or pmac */
-			/* we need to set _machine before calling finish_device_tree */
-			root = find_path_device("/");
-			if (root != 0) {
-				/* assume pmac unless proven to be chrp -- Cort */
-				_machine = _MACH_Pmac;
-				model = get_property(root, "device_type", NULL);
-				if (model && !strncmp("chrp", model, 4))
-					_machine = _MACH_chrp;
-				else {
-					model = get_property(root, "model", NULL);
-					if (model && !strncmp(model, "IBM", 3))
-						_machine = _MACH_chrp;
-				}
-			}
-			
-			finish_device_tree();
-		}
 	}
 #endif /* CONFIG_MACH_SPECIFIC */
 
@@ -398,7 +395,13 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		/* prom_init has already been called from __start */
 		if (boot_infos)
 			relocate_nodes();
+#ifndef CONFIG_MACH_SPECIFIC
+		/* we need to set _machine before calling finish_device_tree */
+		if (_machine == 0)
+			intuit_machine_type();
+#endif /* CONFIG_MACH_SPECIFIC */
 		finish_device_tree();
+
 		/*
 		 * If we were booted via quik, r3 points to the physical
 		 * address of the command-line parameters.

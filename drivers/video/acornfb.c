@@ -418,15 +418,19 @@ acornfb_set_timing(struct fb_var_screeninfo *var)
 
 	ext_ctl = acornfb_default_econtrol();
 
-	if (var->sync & FB_SYNC_HOR_HIGH_ACT)
-		ext_ctl |= VIDC20_ECTL_HS_HSYNC;
-	else
-		ext_ctl |= VIDC20_ECTL_HS_NHSYNC;
+	if (var->sync & FB_SYNC_COMP_HIGH_ACT) /* should be FB_SYNC_COMP */
+		ext_ctl |= VIDC20_ECTL_HS_NCSYNC | VIDC20_ECTL_VS_NCSYNC;
+	else {
+		if (var->sync & FB_SYNC_HOR_HIGH_ACT)
+			ext_ctl |= VIDC20_ECTL_HS_HSYNC;
+		else
+			ext_ctl |= VIDC20_ECTL_HS_NHSYNC;
 
-	if (var->sync & FB_SYNC_VERT_HIGH_ACT)
-		ext_ctl |= VIDC20_ECTL_VS_VSYNC;
-	else
-		ext_ctl |= VIDC20_ECTL_VS_NVSYNC;
+		if (var->sync & FB_SYNC_VERT_HIGH_ACT)
+			ext_ctl |= VIDC20_ECTL_VS_VSYNC;
+		else
+			ext_ctl |= VIDC20_ECTL_VS_NVSYNC;
+	}
 
 	outl(VIDC20_ECTL | ext_ctl, IO_VIDC_BASE);
 
@@ -1211,43 +1215,55 @@ acornfb_blank(int blank, struct fb_info *info)
  * Everything after here is initialisation!!!
  */
 static struct fb_videomode modedb[] __initdata = {
-	{	/* 640x250 @ 50Hz, 15.6 kHz hsync */
-		NULL, 50, 640, 250, 62500, 185, 123,  38, 21,  76, 3,
+	{	/* 320x256 @ 50Hz */
+		NULL, 50,  320,  256, 125000,  92,  62,  35, 19,  38, 2,
+		FB_SYNC_COMP_HIGH_ACT,
+		FB_VMODE_NONINTERLACED
+	}, {	/* 640x250 @ 50Hz, 15.6 kHz hsync */
+		NULL, 50,  640,  250,  62500, 185, 123,  38, 21,  76, 3,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x256 @ 50Hz, 15.6 kHz hsync */
-		NULL, 50, 640, 256, 62500, 185, 123,  35, 18,  76, 3,
+		NULL, 50,  640,  256,  62500, 185, 123,  35, 18,  76, 3,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x512 @ 50Hz, 26.8 kHz hsync */
-		NULL, 50, 640, 512, 41667, 113,  87,  18,  1,  56, 3,
+		NULL, 50,  640,  512,  41667, 113,  87,  18,  1,  56, 3,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x250 @ 70Hz, 31.5 kHz hsync */
-		NULL, 70, 640, 250, 39722,  48,  16, 109, 88,  96, 2,
+		NULL, 70,  640,  250,  39722,  48,  16, 109, 88,  96, 2,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x256 @ 70Hz, 31.5 kHz hsync */
-		NULL, 70, 640, 256, 39722,  48,  16, 106, 85,  96, 2,
+		NULL, 70,  640,  256,  39722,  48,  16, 106, 85,  96, 2,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x352 @ 70Hz, 31.5 kHz hsync */
-		NULL, 70, 640, 352, 39722,  48,  16,  58, 37,  96, 2,
+		NULL, 70,  640,  352,  39722,  48,  16,  58, 37,  96, 2,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 640x480 @ 60Hz, 31.5 kHz hsync */
-		NULL, 60, 640, 480, 39722,  48,  16,  32, 11,  96, 2,
+		NULL, 60,  640,  480,  39722,  48,  16,  32, 11,  96, 2,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 800x600 @ 56Hz, 35.2 kHz hsync */
-		NULL, 56, 800, 600, 27778, 101,  23,  22,  1, 100, 2,
+		NULL, 56,  800,  600,  27778, 101,  23,  22,  1, 100, 2,
 		0,
 		FB_VMODE_NONINTERLACED
 	}, {	/* 896x352 @ 60Hz, 21.8 kHz hsync */
-		NULL, 60, 896, 352, 41667,  59,  27,   9,  0, 118, 3,
+		NULL, 60,  896,  352,  41667,  59,  27,   9,  0, 118, 3,
 		0,
 		FB_VMODE_NONINTERLACED
-	},
+	}, {	/* 1024x 768 @ 60Hz, 48.4 kHz hsync */
+		NULL, 60, 1024,  768,  15385, 160,  24,  29,  3, 136, 6,
+		0,
+		FB_VMODE_NONINTERLACED
+	}, {	/* 1280x1024 @ 60Hz, 63.8 kHz hsync */
+		NULL, 60, 1280, 1024,   9090, 186,  96,  38,  1, 160, 3,
+		0,
+		FB_VMODE_NONINTERLACED
+	}
 };
 
 static struct fb_videomode __initdata

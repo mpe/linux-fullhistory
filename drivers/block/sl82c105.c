@@ -61,6 +61,7 @@ static unsigned int get_timing_sl82c105(ide_pio_data_t *p)
 static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
 {
 	ide_hwif_t *hwif = HWIF(drive);
+	ide_startstop_t startstop;
 
 	if (pio > 2) {
 		/* FIXME: I don't believe that this SELECT_DRIVE is required,
@@ -74,7 +75,7 @@ static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
 		OUT_BYTE(0x03, IDE_FEATURE_REG);
 		OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
 
-		if (ide_wait_stat(drive, DRIVE_READY,
+		if (ide_wait_stat(&startstop, drive, DRIVE_READY,
 				  BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD)) {
 			printk("%s: drive not ready for command\n",
 			       drive->name);

@@ -17,6 +17,7 @@
 
 #include <asm/pgtable.h>
 
+spinlock_t swaplock = SPIN_LOCK_UNLOCKED;
 unsigned int nr_swapfiles = 0;
 
 struct swap_list_t swap_list = {-1, -1};
@@ -89,24 +90,29 @@ swp_entry_t __get_swap_page(unsigned short count)
 	int type, wrapped = 0;
 
 	entry.val = 0;	/* Out of memory */
+	if (count >= SWAP_MAP_MAX)
+		goto bad_count;
+	swap_list_lock();
 	type = swap_list.next;
 	if (type < 0)
 		goto out;
 	if (nr_swap_pages == 0)
 		goto out;
-	if (count >= SWAP_MAP_MAX)
-		goto bad_count;
 
 	while (1) {
 		p = &swap_info[type];
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
+			swap_device_lock(p);
 			offset = scan_swap_map(p, count);
+			swap_device_unlock(p);
 			if (offset) {
+				int curtp = type;
+
 				entry = SWP_ENTRY(type,offset);
 				type = swap_info[type].next;
 				if (type < 0 ||
 					p->prio != swap_info[type].prio) {
-						swap_list.next = swap_list.head;
+						swap_list.next = curtp;
 				} else {
 					swap_list.next = type;
 				}
@@ -124,6 +130,7 @@ swp_entry_t __get_swap_page(unsigned short count)
 				goto out;	/* out of swap space */
 	}
 out:
+	swap_list_unlock();
 	return entry;
 
 bad_count:
@@ -133,6 +140,10 @@ bad_count:
 }
 
 
+/*
+ * Caller has made sure that the swapdevice corresponding to entry
+ * is still around or has not been recycled.
+ */
 void __swap_free(swp_entry_t entry, unsigned short count)
 {
 	struct swap_info_struct * p;
@@ -147,13 +158,15 @@ void __swap_free(swp_entry_t entry, unsigned short count)
 	p = & swap_info[type];
 	if (!(p->flags & SWP_USED))
 		goto bad_device;
-	if (p->prio > swap_info[swap_list.next].prio)
-		swap_list.next = swap_list.head;
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max)
 		goto bad_offset;
 	if (!p->swap_map[offset])
 		goto bad_free;
+	swap_list_lock();
+	if (p->prio > swap_info[swap_list.next].prio)
+		swap_list.next = type;
+	swap_device_lock(p);
 	if (p->swap_map[offset] < SWAP_MAP_MAX) {
 		if (p->swap_map[offset] < count)
 			goto bad_count;
@@ -165,6 +178,8 @@ void __swap_free(swp_entry_t entry, unsigned short count)
 			nr_swap_pages++;
 		}
 	}
+	swap_device_unlock(p);
+	swap_list_unlock();
 out:
 	return;
 
@@ -181,6 +196,8 @@ bad_free:
 	printk("VM: Bad swap entry %08lx\n", entry.val);
 	goto out;
 bad_count:
+	swap_device_unlock(p);
+	swap_list_unlock();
 	printk(KERN_ERR "VM: Bad count %hd current count %hd\n", count, p->swap_map[offset]);
 	goto out;
 }
@@ -209,14 +226,21 @@ swp_entry_t acquire_swap_entry(struct page *page)
 	if (offset >= p->max)
 		goto new_swap_entry;
 	/* Has it been re-used for something else? */
+	swap_list_lock();
+	swap_device_lock(p);
 	if (p->swap_map[offset])
-		goto new_swap_entry;
+		goto unlock_new_swap_entry;
 
 	/* We're cool, we can just use the old one */
 	p->swap_map[offset] = 1;
+	swap_device_unlock(p);
 	nr_swap_pages--;
+	swap_list_unlock();
 	return entry;
 
+unlock_new_swap_entry:
+	swap_device_unlock(p);
+	swap_list_unlock();
 new_swap_entry:
 	return get_swap_page();
 }
@@ -360,11 +384,22 @@ static int try_to_unuse(unsigned int type)
 		/*
 		 * Find a swap page in use and read it in.
 		 */
+		swap_device_lock(si);
 		for (i = 1; i < si->max ; i++) {
 			if (si->swap_map[i] > 0 && si->swap_map[i] != SWAP_MAP_BAD) {
+				/*
+				 * Prevent swaphandle from being completely
+				 * unused by swap_free while we are trying
+				 * to read in the page - this prevents warning
+				 * messages from rw_swap_page_base.
+				 */
+				if (si->swap_map[i] != SWAP_MAP_MAX)
+					si->swap_map[i]++;
+				swap_device_unlock(si);
 				goto found_entry;
 			}
 		}
+		swap_device_unlock(si);
 		break;
 
 	found_entry:
@@ -375,11 +410,7 @@ static int try_to_unuse(unsigned int type)
                    page and read the swap into it. */
 		page = read_swap_cache(entry);
 		if (!page) {
-			/*
-			 * Continue searching if the entry became unused.
-			 */
-			if (si->swap_map[i] == 0)
-				continue;
+			swap_free(entry);
   			return -ENOMEM;
 		}
 		read_lock(&tasklist_lock);
@@ -395,12 +426,18 @@ static int try_to_unuse(unsigned int type)
 		/*
 		 * Check for and clear any overflowed swap map counts.
 		 */
-		if (si->swap_map[i] != 0) {
+		swap_free(entry);
+		swap_list_lock();
+		swap_device_lock(si);
+		if (si->swap_map[i] > 0) {
 			if (si->swap_map[i] != SWAP_MAP_MAX)
-				printk("VM: Undead swap entry %08lx\n", entry.val);
-			si->swap_map[i] = 0;
+				printk("VM: Undead swap entry %08lx\n", 
+								entry.val);
 			nr_swap_pages++;
+			si->swap_map[i] = 0;
 		}
+		swap_device_unlock(si);
+		swap_list_unlock();
 	}
 	return 0;
 }
@@ -423,6 +460,7 @@ asmlinkage long sys_swapoff(const char * specialfile)
 		goto out;
 
 	prev = -1;
+	swap_list_lock();
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
 		p = swap_info + type;
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
@@ -438,8 +476,10 @@ asmlinkage long sys_swapoff(const char * specialfile)
 		prev = type;
 	}
 	err = -EINVAL;
-	if (type < 0)
+	if (type < 0) {
+		swap_list_unlock();
 		goto out_dput;
+	}
 
 	if (prev < 0) {
 		swap_list.head = p->next;
@@ -450,10 +490,13 @@ asmlinkage long sys_swapoff(const char * specialfile)
 		/* just pick something that's safe... */
 		swap_list.next = swap_list.head;
 	}
+	nr_swap_pages -= p->pages;
+	swap_list_unlock();
 	p->flags = SWP_USED;
 	err = try_to_unuse(type);
 	if (err) {
 		/* re-insert swap space back into swap_list */
+		swap_list_lock();
 		for (prev = -1, i = swap_list.head; i >= 0; prev = i, i = swap_info[i].next)
 			if (p->prio >= swap_info[i].prio)
 				break;
@@ -462,6 +505,8 @@ asmlinkage long sys_swapoff(const char * specialfile)
 			swap_list.head = swap_list.next = p - swap_info;
 		else
 			swap_info[prev].next = p - swap_info;
+		nr_swap_pages += p->pages;
+		swap_list_unlock();
 		p->flags = SWP_WRITEOK;
 		goto out_dput;
 	}
@@ -480,7 +525,6 @@ asmlinkage long sys_swapoff(const char * specialfile)
 
 	dentry = p->swap_file;
 	p->swap_file = NULL;
-	nr_swap_pages -= p->pages;
 	p->swap_device = 0;
 	vfree(p->swap_map);
 	p->swap_map = NULL;
@@ -583,6 +627,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	p->cluster_nr = 0;
+	p->sdev_lock = SPIN_LOCK_UNLOCKED;
 	p->max = 1;
 	p->next = -1;
 	if (swap_flags & SWAP_FLAG_PREFER) {
@@ -746,6 +791,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	p->swap_map[0] = SWAP_MAP_BAD;
 	p->flags = SWP_WRITEOK;
 	p->pages = nr_good_pages;
+	swap_list_lock();
 	nr_swap_pages += nr_good_pages;
 	printk(KERN_INFO "Adding Swap: %dk swap-space (priority %d)\n",
 	       nr_good_pages<<(PAGE_SHIFT-10), p->prio);
@@ -764,6 +810,7 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	} else {
 		swap_info[prev].next = p - swap_info;
 	}
+	swap_list_unlock();
 	error = 0;
 	goto out;
 bad_swap:
@@ -810,4 +857,170 @@ void si_swapinfo(struct sysinfo *val)
 	val->freeswap = freeswap;
 	val->totalswap = totalswap;
 	return;
+}
+
+/*
+ * Verify that a swap entry is valid and increment its swap map count.
+ * Kernel_lock is held, which guarantees existance of swap device.
+ *
+ * Note: if swap_map[] reaches SWAP_MAP_MAX the entries are treated as
+ * "permanent", but will be reclaimed by the next swapoff.
+ */
+int swap_duplicate(swp_entry_t entry)
+{
+	struct swap_info_struct * p;
+	unsigned long offset, type;
+	int result = 0;
+
+	/* Swap entry 0 is illegal */
+	if (!entry.val)
+		goto out;
+	type = SWP_TYPE(entry);
+	if (type >= nr_swapfiles)
+		goto bad_file;
+	p = type + swap_info;
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max)
+		goto bad_offset;
+	if (!p->swap_map[offset])
+		goto bad_unused;
+	/*
+	 * Entry is valid, so increment the map count.
+	 */
+	swap_device_lock(p);
+	if (p->swap_map[offset] < SWAP_MAP_MAX)
+		p->swap_map[offset]++;
+	else {
+		static int overflow = 0;
+		if (overflow++ < 5)
+			printk("VM: swap entry overflow\n");
+		p->swap_map[offset] = SWAP_MAP_MAX;
+	}
+	swap_device_unlock(p);
+	result = 1;
+out:
+	return result;
+
+bad_file:
+	printk("Bad swap file entry %08lx\n", entry.val);
+	goto out;
+bad_offset:
+	printk("Bad swap offset entry %08lx\n", entry.val);
+	goto out;
+bad_unused:
+	printk("Unused swap offset entry in swap_dup %08lx\n", entry.val);
+	goto out;
+}
+
+/*
+ * Page lock needs to be held in all cases to prevent races with
+ * swap file deletion.
+ */
+int swap_count(struct page *page)
+{
+	struct swap_info_struct * p;
+	unsigned long offset, type;
+	swp_entry_t entry;
+	int retval = 0;
+
+	entry.val = page->index;
+	if (!entry.val)
+		goto bad_entry;
+	type = SWP_TYPE(entry);
+	if (type >= nr_swapfiles)
+		goto bad_file;
+	p = type + swap_info;
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max)
+		goto bad_offset;
+	if (!p->swap_map[offset])
+		goto bad_unused;
+	retval = p->swap_map[offset];
+out:
+	return retval;
+
+bad_entry:
+	printk(KERN_ERR "swap_count: null entry!\n");
+	goto out;
+bad_file:
+	printk("Bad swap file entry %08lx\n", entry.val);
+	goto out;
+bad_offset:
+	printk("Bad swap offset entry %08lx\n", entry.val);
+	goto out;
+bad_unused:
+	printk("Unused swap offset entry in swap_count %08lx\n", entry.val);
+	goto out;
+}
+
+/*
+ * Kernel_lock protects against swap device deletion.
+ */
+void get_swaphandle_info(swp_entry_t entry, unsigned long *offset, 
+			kdev_t *dev, struct inode **swapf)
+{
+	unsigned long type;
+	struct swap_info_struct *p;
+
+	type = SWP_TYPE(entry);
+	if (type >= nr_swapfiles) {
+		printk("Internal error: bad swap-device\n");
+		return;
+	}
+
+	p = &swap_info[type];
+	*offset = SWP_OFFSET(entry);
+	if (*offset >= p->max) {
+		printk("rw_swap_page: weirdness\n");
+		return;
+	}
+	if (p->swap_map && !p->swap_map[*offset]) {
+		printk("VM: Bad swap entry %08lx\n", entry.val);
+		return;
+	}
+	if (!(p->flags & SWP_USED)) {
+		printk(KERN_ERR "rw_swap_page: "
+			"Trying to swap to unused swap-device\n");
+		return;
+	}
+
+	if (p->swap_device) {
+		*dev = p->swap_device;
+	} else if (p->swap_file) {
+		*swapf = p->swap_file->d_inode;
+	} else {
+		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
+	}
+	return;
+}
+
+/*
+ * Kernel_lock protects against swap device deletion. Grab an extra
+ * reference on the swaphandle so that it dos not become unused.
+ */
+int valid_swaphandles(swp_entry_t entry, unsigned long *offset)
+{
+	int ret = 0, i = 1 << page_cluster;
+	unsigned long toff;
+	struct swap_info_struct *swapdev = SWP_TYPE(entry) + swap_info;
+
+	*offset = SWP_OFFSET(entry);
+	toff = *offset = (*offset >> page_cluster) << page_cluster;
+
+	swap_device_lock(swapdev);
+	do {
+		/* Don't read-ahead past the end of the swap area */
+		if (toff >= swapdev->max)
+			break;
+		/* Don't read in bad or busy pages */
+		if (!swapdev->swap_map[toff])
+			break;
+		if (swapdev->swap_map[toff] == SWAP_MAP_BAD)
+			break;
+		swapdev->swap_map[toff]++;
+		toff++;
+		ret++;
+	} while (--i);
+	swap_device_unlock(swapdev);
+	return ret;
 }

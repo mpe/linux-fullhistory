@@ -18,7 +18,6 @@
  *  General cleanup and race fixes, wsh, 1998
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
 

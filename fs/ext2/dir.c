@@ -18,7 +18,6 @@
  *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 
 

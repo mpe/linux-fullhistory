@@ -18,7 +18,6 @@
  *  	for B-tree directories by Theodore Ts'o (tytso@mit.edu), 1998
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/quotaops.h>

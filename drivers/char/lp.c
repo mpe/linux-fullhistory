@@ -278,7 +278,7 @@ static int lp_check_status(int minor)
 	int error = 0;
 	unsigned int last = lp_table[minor].last_error;
 	unsigned char status = r_str(minor);
-	if (status & LP_PERRORP)
+	if ((status & LP_PERRORP) && !(LP_F(minor) & LP_CAREFUL))
 		/* No error. */
 		last = 0;
 	else if ((status & LP_POUTPA)) {
@@ -293,12 +293,15 @@ static int lp_check_status(int minor)
 			printk(KERN_INFO "lp%d off-line\n", minor);
 		}
 		error = -EIO;
-	} else {
+	} else if (!(status & LP_PERRORP)) {
 		if (last != LP_PERRORP) {
 			last = LP_PERRORP;
 			printk(KERN_INFO "lp%d on fire\n", minor);
 		}
 		error = -EIO;
+	} else {
+		last = 0; /* Come here if LP_CAREFUL is set and no
+                             errors are reported. */
 	}
 
 	lp_table[minor].last_error = last;
@@ -542,14 +545,12 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_ABORTOPEN;
 			break;
-#ifdef OBSOLETED
 		case LPCAREFUL:
 			if (arg)
 				LP_F(minor) |= LP_CAREFUL;
 			else
 				LP_F(minor) &= ~LP_CAREFUL;
 			break;
-#endif
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;

@@ -26,6 +26,13 @@
 
 int TSUNAMI_bootcpu;
 
+static struct 
+{
+	unsigned long wsba[4];
+	unsigned long wsm[4];
+	unsigned long tba[4];
+} saved_pchip[2];
+
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
  * One plausible explanation is that the I/O controller does not properly
@@ -84,7 +91,7 @@ static int
 mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
-	struct pci_controler *hose = dev->sysdata ? : probing_hose;
+	struct pci_controler *hose = dev->sysdata;
 	unsigned long addr;
 	u8 bus = dev->bus->number;
 	u8 device_fn = dev->devfn;
@@ -264,7 +271,7 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	hose->index = index;
 
 	hose->io_space->start = TSUNAMI_IO(index) - TSUNAMI_IO_BIAS;
-	hose->io_space->end = hose->io_space->start + 0xffff;
+	hose->io_space->end = hose->io_space->start + TSUNAMI_IO_SPACE - 1;
 	hose->io_space->name = pci_io_names[index];
 	hose->io_space->flags = IORESOURCE_IO;
 
@@ -277,6 +284,27 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 		printk(KERN_ERR "Failed to request IO on hose %d\n", index);
 	if (request_resource(&iomem_resource, hose->mem_space) < 0)
 		printk(KERN_ERR "Failed to request MEM on hose %d\n", index);
+
+	/*
+	 * Save the existing PCI window translations.  SRM will 
+	 * need them when we go to reboot.
+	 */
+
+	saved_pchip[index].wsba[0] = pchip->wsba[0].csr;
+	saved_pchip[index].wsm[0] = pchip->wsm[0].csr;
+	saved_pchip[index].tba[0] = pchip->tba[0].csr;
+
+	saved_pchip[index].wsba[1] = pchip->wsba[1].csr;
+	saved_pchip[index].wsm[1] = pchip->wsm[1].csr;
+	saved_pchip[index].tba[1] = pchip->tba[1].csr;
+
+	saved_pchip[index].wsba[2] = pchip->wsba[2].csr;
+	saved_pchip[index].wsm[2] = pchip->wsm[2].csr;
+	saved_pchip[index].tba[2] = pchip->tba[2].csr;
+
+	saved_pchip[index].wsba[3] = pchip->wsba[3].csr;
+	saved_pchip[index].wsm[3] = pchip->wsm[3].csr;
+	saved_pchip[index].tba[3] = pchip->tba[3].csr;
 
 	/*
 	 * Set up the PCI->physical memory translation windows.
@@ -350,6 +378,34 @@ tsunami_init_arch(void)
 	tsunami_init_one_pchip(TSUNAMI_pchip0, 0);
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
 		tsunami_init_one_pchip(TSUNAMI_pchip1, 1);
+}
+
+static void
+tsunami_kill_one_pchip(tsunami_pchip *pchip, int index)
+{
+	pchip->wsba[0].csr = saved_pchip[index].wsba[0];
+	pchip->wsm[0].csr = saved_pchip[index].wsm[0];
+	pchip->tba[0].csr = saved_pchip[index].tba[0];
+
+	pchip->wsba[1].csr = saved_pchip[index].wsba[1];
+	pchip->wsm[1].csr = saved_pchip[index].wsm[1];
+	pchip->tba[1].csr = saved_pchip[index].tba[1];
+
+	pchip->wsba[2].csr = saved_pchip[index].wsba[2];
+	pchip->wsm[2].csr = saved_pchip[index].wsm[2];
+	pchip->tba[2].csr = saved_pchip[index].tba[2];
+
+	pchip->wsba[3].csr = saved_pchip[index].wsba[3];
+	pchip->wsm[3].csr = saved_pchip[index].wsm[3];
+	pchip->tba[3].csr = saved_pchip[index].tba[3];
+}
+
+void
+tsunami_kill_arch(int mode)
+{
+	tsunami_kill_one_pchip(TSUNAMI_pchip0, 0);
+	if (TSUNAMI_cchip->csc.csr & 1L<<14)
+		tsunami_kill_one_pchip(TSUNAMI_pchip1, 1);
 }
 
 static inline void

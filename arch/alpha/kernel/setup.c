@@ -327,6 +327,28 @@ setup_memory(void)
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 }
+
+int __init page_is_ram(unsigned long pfn)
+{
+	struct memclust_struct * cluster;
+	struct memdesc_struct * memdesc;
+	int i;
+
+	memdesc = (struct memdesc_struct *) (hwrpb->mddt_offset + (unsigned long) hwrpb);
+	for_each_mem_cluster(memdesc, cluster, i)
+	{
+		if (pfn >= cluster->start_pfn  &&
+		    pfn < cluster->start_pfn + cluster->numpages)
+		{
+			if (cluster->usage & 3)
+				return 0;
+			else
+				return 1;
+		}
+	}
+
+	return 0;
+}
 #undef PFN_UP
 #undef PFN_DOWN
 #undef PFN_PHYS

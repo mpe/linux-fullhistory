@@ -5,10 +5,6 @@
  *  Origional Copyright (C) 1995  Linus Torvalds
  */
 
-/*
- * This file handles the architecture-dependent parts of process handling..
- */
-
 #include <stdarg.h>
 
 #include <linux/errno.h>
@@ -39,7 +35,7 @@ extern char *processor_modes[];
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
-static int hlt_counter=0;
+static int hlt_counter;
 
 void disable_hlt(void)
 {
@@ -50,6 +46,21 @@ void enable_hlt(void)
 {
 	hlt_counter--;
 }
+
+static int __init nohlt_setup(char *__unused)
+{
+	hlt_counter = 1;
+	return 0;
+}
+
+static int __init hlt_setup(char *__unused)
+{
+	hlt_counter = 0;
+	return 0;
+}
+
+__setup("nohlt", nohlt_setup);
+__setup("hlt", hlt_setup);
 
 /*
  * The idle loop on an ARM...
@@ -93,6 +104,7 @@ void machine_restart(char * __unused)
 
 	mdelay(1000);
 	printk("Reboot failed -- System halted\n");
+	cli();
 	while (1);
 }
 
@@ -110,18 +122,18 @@ void show_regs(struct pt_regs * regs)
 
 	flags = condition_codes(regs);
 
-	printk( "pc : [<%08lx>]    lr : [<%08lx>]\n"
-		"sp : %08lx  ip : %08lx  fp : %08lx\n",
+	printk("pc : [<%08lx>]    lr : [<%08lx>]\n"
+	       "sp : %08lx  ip : %08lx  fp : %08lx\n",
 		instruction_pointer(regs),
 		regs->ARM_lr, regs->ARM_sp,
 		regs->ARM_ip, regs->ARM_fp);
-	printk( "r10: %08lx  r9 : %08lx  r8 : %08lx\n",
+	printk("r10: %08lx  r9 : %08lx  r8 : %08lx\n",
 		regs->ARM_r10, regs->ARM_r9,
 		regs->ARM_r8);
-	printk( "r7 : %08lx  r6 : %08lx  r5 : %08lx  r4 : %08lx\n",
+	printk("r7 : %08lx  r6 : %08lx  r5 : %08lx  r4 : %08lx\n",
 		regs->ARM_r7, regs->ARM_r6,
 		regs->ARM_r5, regs->ARM_r4);
-	printk( "r3 : %08lx  r2 : %08lx  r1 : %08lx  r0 : %08lx\n",
+	printk("r3 : %08lx  r2 : %08lx  r1 : %08lx  r0 : %08lx\n",
 		regs->ARM_r3, regs->ARM_r2,
 		regs->ARM_r1, regs->ARM_r0);
 	printk("Flags: %c%c%c%c",

@@ -183,7 +183,7 @@ struct alpha_machine_vector eb64p_mv __initmv = {
 	init_irq:		eb64p_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		NULL,
 	pci_map_irq:		eb64p_map_irq,
 	pci_swizzle:		common_swizzle,
 };

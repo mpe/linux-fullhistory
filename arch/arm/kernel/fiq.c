@@ -42,7 +42,7 @@
 
 #include <asm/fiq.h>
 #include <asm/io.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 

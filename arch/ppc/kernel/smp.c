@@ -161,14 +161,15 @@ void smp_message_recv(void)
 void smp_send_reschedule(int cpu)
 {
 	/*
+	 * This is only used if `cpu' is running an idle task,
+	 * so it will reschedule itself anyway...
+	 *
 	 * This isn't the case anymore since the other CPU could be
 	 * sleeping and won't reschedule until the next interrupt (such
 	 * as the timer).
 	 *  -- Cort
 	 */
-	/* This is only used if `cpu' is running an idle task,
-	   so it will reschedule itself anyway... */
-	/*smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);*/
+	smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);
 }
 
 void smp_send_stop(void)
@@ -310,7 +311,6 @@ void __init smp_boot_cpus(void)
 			openpic_enable_IPI(i);
                 cpu_nr = (readb(GEMINI_CPUSTAT) & GEMINI_CPU_COUNT_MASK)>>2;
                 cpu_nr = (cpu_nr == 0) ? 4 : cpu_nr;
-cpu_nr = 2;		
 		break;
 	}
 

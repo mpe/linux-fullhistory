@@ -115,6 +115,7 @@ union _FP_UNION_D
 #define FP_CMP_EQ_D(r,X,Y)	_FP_CMP_EQ(D,2,r,X,Y)
 
 #define FP_TO_INT_D(r,X,rsz,rsg)	_FP_TO_INT(D,2,r,X,rsz,rsg)
+#define FP_TO_INT_ROUND_D(r,X,rsz,rsg)	_FP_TO_INT_ROUND(D,2,r,X,rsz,rsg)
 #define FP_FROM_INT_D(X,r,rs,rt)	_FP_FROM_INT(D,2,X,r,rs,rt)
 
 #define _FP_FRAC_HIGH_D(X)	_FP_FRAC_HIGH_2(X)
@@ -189,6 +190,7 @@ union _FP_UNION_D
 #define FP_CMP_EQ_D(r,X,Y)	_FP_CMP_EQ(D,1,r,X,Y)
 
 #define FP_TO_INT_D(r,X,rsz,rsg)	_FP_TO_INT(D,1,r,X,rsz,rsg)
+#define FP_TO_INT_ROUND_D(r,X,rsz,rsg)	_FP_TO_INT_ROUND(D,1,r,X,rsz,rsg)
 #define FP_FROM_INT_D(X,r,rs,rt)	_FP_FROM_INT(D,1,X,r,rs,rt)
 
 #define _FP_FRAC_HIGH_D(X)	_FP_FRAC_HIGH_1(X)

@@ -71,6 +71,7 @@
 #include <linux/fb.h>
 #include <asm/atarikb.h>
 
+#include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
 #include <video/fbcon-cfb16.h>
 #include <video/fbcon-iplan2p2.h>

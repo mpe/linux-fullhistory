@@ -404,8 +404,10 @@ _GLOBAL(atomic_set_mask)
  * The *_ns versions don't do byte-swapping.
  */
 _GLOBAL(_insb)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,1
+	blelr-
 00:	lbz	r5,0(r3)
 	eieio
 	stbu	r5,1(r4)
@@ -413,8 +415,10 @@ _GLOBAL(_insb)
 	blr
 
 _GLOBAL(_outsb)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,1
+	blelr-
 00:	lbzu	r5,1(r4)
 	stb	r5,0(r3)
 	eieio
@@ -422,8 +426,10 @@ _GLOBAL(_outsb)
 	blr	
 
 _GLOBAL(_insw)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
+	blelr-
 00:	lhbrx	r5,0,r3
 	eieio
 	sthu	r5,2(r4)
@@ -431,8 +437,10 @@ _GLOBAL(_insw)
 	blr
 
 _GLOBAL(_outsw)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
+	blelr-
 00:	lhzu	r5,2(r4)
 	eieio
 	sthbrx	r5,0,r3	
@@ -440,8 +448,10 @@ _GLOBAL(_outsw)
 	blr	
 
 _GLOBAL(_insl)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
+	blelr-
 00:	lwbrx	r5,0,r3
 	eieio
 	stwu	r5,4(r4)
@@ -449,8 +459,10 @@ _GLOBAL(_insl)
 	blr
 
 _GLOBAL(_outsl)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
+	blelr-
 00:	lwzu	r5,4(r4)
 	stwbrx	r5,0,r3
 	eieio
@@ -459,8 +471,10 @@ _GLOBAL(_outsl)
 
 _GLOBAL(ide_insw)
 _GLOBAL(_insw_ns)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
+	blelr-
 00:	lhz	r5,0(r3)
 	eieio
 	sthu	r5,2(r4)
@@ -469,8 +483,10 @@ _GLOBAL(_insw_ns)
 
 _GLOBAL(ide_outsw)
 _GLOBAL(_outsw_ns)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,2
+	blelr-
 00:	lhzu	r5,2(r4)
 	sth	r5,0(r3)
 	eieio
@@ -478,8 +494,10 @@ _GLOBAL(_outsw_ns)
 	blr	
 
 _GLOBAL(_insl_ns)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
+	blelr-
 00:	lwz	r5,0(r3)
 	eieio
 	stwu	r5,4(r4)
@@ -487,8 +505,10 @@ _GLOBAL(_insl_ns)
 	blr
 
 _GLOBAL(_outsl_ns)
+	cmpw	0,r5,0
 	mtctr	r5
 	subi	r4,r4,4
+	blelr-
 00:	lwzu	r5,4(r4)
 	stw	r5,0(r3)
 	eieio
@@ -929,7 +949,7 @@ _GLOBAL(sys_call_table)
 	.long sys_sigpending
 	.long sys_sethostname
 	.long sys_setrlimit	/* 75 */
-	.long sys_getrlimit
+	.long sys_old_getrlimit
 	.long sys_getrusage
 	.long sys_gettimeofday
 	.long sys_settimeofday
@@ -1047,4 +1067,5 @@ _GLOBAL(sys_call_table)
 	.long sys_ni_syscall		/* streams1 */
 	.long sys_ni_syscall		/* streams2 */
 	.long sys_vfork
-	.space (NR_syscalls-183)*4
+	.long sys_getrlimit	/* 190 */
+	.space (NR_syscalls-190)*4

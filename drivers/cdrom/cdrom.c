@@ -1072,6 +1072,31 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 			return ret;
 		break;
 
+	/* Get region settings */
+	case DVD_LU_SEND_RPC_STATE:
+		cdinfo(CD_DVD, "entering DVD_LU_SEND_RPC_STATE\n");
+		setup_report_key(&cgc, 0, 8);
+
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
+
+		ai->lrpcs.type = (buf[4] >> 6) & 3;
+		ai->lrpcs.vra = (buf[4] >> 3) & 7;
+		ai->lrpcs.ucca = buf[4] & 7;
+		ai->lrpcs.region_mask = buf[5];
+		ai->lrpcs.rpc_scheme = buf[6];
+		break;
+
+		/* Set region settings */
+	case DVD_HOST_SEND_RPC_STATE:
+		cdinfo(CD_DVD, "entering DVD_HOST_SEND_RPC_STATE\n");
+		setup_send_key(&cgc, 0, 6);
+		buf[4] = ai->hrpcs.pdrc;
+
+		if ((ret = cdo->generic_packet(cdi, &cgc)))
+			return ret;
+		break;
+
 	default:
 		cdinfo(CD_WARNING, "Invalid DVD key ioctl (%d)\n", ai->type);
 		return -ENOTTY;
@@ -1528,6 +1553,9 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		if (!CDROM_CAN(CDC_LOCK))
 			return -EDRIVE_CANT_DO_THIS;
 		keeplocked = arg ? 1 : 0;
+		/* don't unlock the door on multiple opens */
+		if ((cdi->use_count != 1) && !arg)
+			return -EBUSY;
 		return cdo->lock_door(cdi, arg);
 		}
 
@@ -1861,14 +1889,19 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	case CDROMPLAYTRKIND: {
 		struct cdrom_ti ti;
 		struct cdrom_tocentry entry;
+		struct cdrom_tochdr tochdr;
 
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n");
 		IOCTL_IN(arg, struct cdrom_ti, ti);
 		entry.cdte_format = CDROM_MSF;
 
 		/* get toc entry for start and end track */
-		entry.cdte_track = ti.cdti_trk0;
-		if (cdi->ops->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
+		if (cdo->audio_ioctl(cdi, CDROMREADTOCHDR, &tochdr))
+			return -EINVAL;
+		entry.cdte_track = ti.cdti_trk1 + 1;
+		if (entry.cdte_track > tochdr.cdth_trk1)
+			return -EINVAL;
+		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
 			return -EINVAL;
 
 		cgc.cmd[3] = entry.cdte_addr.msf.minute;

@@ -244,6 +244,10 @@ void __init mem_init(void)
 	unsigned int codepages, datapages, initpages;
 	int i;
 
+	codepages = &_etext - &_text;
+	datapages = &_end - &_etext;
+	initpages = &__init_end - &__init_begin;
+
 	max_mapnr   = max_low_pfn;
 	high_memory = (void *)__va(max_low_pfn * PAGE_SIZE);
 
@@ -261,29 +265,28 @@ void __init mem_init(void)
 	 * Since our memory may not be contiguous, calculate the
 	 * real number of pages we have in this system
 	 */
+	printk("Memory:");
+
 	num_physpages = 0;
-	for (i = 0; i < meminfo.nr_banks; i++)
+	for (i = 0; i < meminfo.nr_banks; i++) {
 		num_physpages += meminfo.bank[i].size >> PAGE_SHIFT;
+		printk(" %ldMB", meminfo.bank[i].size >> 20);
+	}
 
-	codepages = (int)&_etext - &_text;
-	datapages = (int)&_end - &_etext;
-	initpages = (int)&__init_end - &__init_start;
-
-	printk("Memory: %luk/%luM available (%dK code, %dK data, %dK init)\n",
+	printk(" = %luMB total\n", num_physpages >> (20 - PAGE_SHIFT)); 
+	printk("Memory: %luKB available (%dK code, %dK data, %dK init)\n",
 		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
-		num_physpages >> (20 - PAGE_SHIFT),
-		codepages << (PAGE_SHIFT-10),
-		datapages << (PAGE_SHIFT-10),
-		initpages << (PAGE_SHIFT-10));
+		codepages >> 10, datapages >> 10, initpages >> 10);
 
-#ifdef CONFIG_CPU_26
-	if (max_mapnr <= 128) {
+	if (PAGE_SIZE >= 16384 && max_mapnr <= 128) {
 		extern int sysctl_overcommit_memory;
-		/* On a machine this small we won't get anywhere without
-		   overcommit, so turn it on by default.  */
+		/*
+		 * On a machine this small we won't get
+		 * anywhere without overcommit, so turn
+		 * it on by default.
+		 */
 		sysctl_overcommit_memory = 1;
 	}
-#endif
 }
 
 static inline void free_area(unsigned long addr, unsigned long end, char *s)
@@ -332,6 +335,19 @@ void free_initmem(void)
 
 	printk("\n");
 }
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
 
 void si_meminfo(struct sysinfo *val)
 {

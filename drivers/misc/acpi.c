@@ -27,6 +27,7 @@
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/sched.h>
+#include <linux/time.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
 #include <linux/ioport.h>
@@ -54,6 +55,13 @@
 #define DECLARE_WAIT_QUEUE_HEAD(x) struct wait_queue * x = NULL
 #endif
 
+/*
+ * Yes, it's unfortunate that we are relying on get_cmos_time
+ * because it is slow (> 1 sec.) and i386 only.	 It might be better
+ * to use some of the code from drivers/char/rtc.c in the near future
+ */
+extern unsigned long get_cmos_time(void);
+
 static int acpi_control_thread(void *context);
 static int acpi_do_ulong(ctl_table *ctl,
 			 int write,
@@ -70,15 +78,13 @@ static int acpi_do_event(ctl_table *ctl,
 			 struct file *file,
 			 void *buffer,
 			 size_t *len);
-#if 0
-static int acpi_do_sleep_wake(ctl_table *ctl,
-			      int write,
-			      struct file *file,
-			      void *buffer,
-			      size_t *len);
-#endif
+static int acpi_do_sleep(ctl_table *ctl,
+			 int write,
+			 struct file *file,
+			 void *buffer,
+			 size_t *len);
 
-DECLARE_WAIT_QUEUE_HEAD(acpi_idle_wait);
+DECLARE_WAIT_QUEUE_HEAD(acpi_control_wait);
 
 static struct ctl_table_header *acpi_sysctl = NULL;
 
@@ -88,10 +94,16 @@ static struct acpi_facs *acpi_facs = NULL;
 static unsigned long acpi_facp_addr = 0;
 static unsigned long acpi_dsdt_addr = 0;
 
+// current system sleep state (S0 - S4)
+static acpi_sstate_t acpi_sleep_state = ACPI_S0;
+// time sleep began
+static unsigned long acpi_sleep_start = 0;
+
 static spinlock_t acpi_event_lock = SPIN_LOCK_UNLOCKED;
 static volatile u32 acpi_pm1_status = 0;
 static volatile u32 acpi_gpe_status = 0;
 static volatile u32 acpi_gpe_level = 0;
+static volatile acpi_sstate_t acpi_event_state = ACPI_S0;
 static DECLARE_WAIT_QUEUE_HEAD(acpi_event_wait);
 
 static spinlock_t acpi_devs_lock = SPIN_LOCK_UNLOCKED;
@@ -153,14 +165,19 @@ static struct ctl_table acpi_table[] =
 	 &acpi_p_lvl3_lat, sizeof(acpi_p_lvl3_lat),
 	 0644, NULL, &acpi_do_ulong},
 
-	{ACPI_S5_SLP_TYP, "s5_slp_typ",
-	 &acpi_slp_typ[5], sizeof(acpi_slp_typ[5]),
+	{ACPI_S0_SLP_TYP, "s0_slp_typ",
+	 &acpi_slp_typ[ACPI_S0], sizeof(acpi_slp_typ[ACPI_S0]),
 	 0600, NULL, &acpi_do_ulong},
 
-#if 0
-	{123, "sleep", (void*) 1, 0, 0600, NULL, &acpi_do_sleep_wake},
-	{124, "wake", NULL, 0, 0600, NULL, &acpi_do_sleep_wake},
-#endif
+	{ACPI_S1_SLP_TYP, "s1_slp_typ",
+	 &acpi_slp_typ[ACPI_S1], sizeof(acpi_slp_typ[ACPI_S1]),
+	 0600, NULL, &acpi_do_ulong},
+
+	{ACPI_S5_SLP_TYP, "s5_slp_typ",
+	 &acpi_slp_typ[ACPI_S5], sizeof(acpi_slp_typ[ACPI_S5]),
+	 0600, NULL, &acpi_do_ulong},
+
+	{ACPI_SLEEP, "sleep", NULL, 0, 0600, NULL, &acpi_do_sleep},
 
 	{0}
 };
@@ -578,6 +595,7 @@ static void acpi_irq(int irq, void *dev_id, struct pt_regs *regs)
 	acpi_pm1_status |= pm1_status;
 	acpi_gpe_status |= gpe_status;
 	spin_unlock_irqrestore(&acpi_event_lock, flags);
+	acpi_event_state = acpi_sleep_state;
 	wake_up_interruptible(&acpi_event_wait);
 }
 
@@ -735,6 +753,25 @@ static int acpi_enter_dx(acpi_dstate_t state)
 }
 
 /*
+ * Update system time from real-time clock
+ */
+static void acpi_update_clock(void)
+{
+	if (acpi_sleep_start) {
+		unsigned long delta;
+		struct timeval tv;
+		
+		delta = get_cmos_time() - acpi_sleep_start;
+		do_gettimeofday(&tv);
+		tv.tv_sec += delta;
+		do_settimeofday(&tv);
+		
+		acpi_sleep_start = 0;
+	}
+}
+
+
+/*
  * Enter system sleep state
  */
 static void acpi_enter_sx(acpi_sstate_t state)
@@ -751,8 +788,13 @@ static void acpi_enter_sx(acpi_sstate_t state)
 		typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 
 		if (state != ACPI_S0) {
+			acpi_sleep_start = get_cmos_time();
 			acpi_enter_dx(ACPI_D3);
+			acpi_sleep_state = state;
 		}
+
+		// clear wake status
+		acpi_write_pm1_status(acpi_facp, ACPI_WAK);
 
 		// set SLP_TYPa/b and SLP_EN
 		if (acpi_facp->pm1a_cnt) {
@@ -765,7 +807,15 @@ static void acpi_enter_sx(acpi_sstate_t state)
 		}
 
 		if (state == ACPI_S0) {
+			acpi_sleep_state = state;
 			acpi_enter_dx(ACPI_D0);
+			acpi_sleep_start = 0;
+		}
+		else if (state == ACPI_S1) {
+			// wait until S1 is entered
+			while (!(acpi_read_pm1_status(acpi_facp) & ACPI_WAK)) ;
+			// finished sleeping, update system time
+			acpi_update_clock();
 		}
 	}
 }
@@ -983,7 +1033,8 @@ static int acpi_do_event(ctl_table *ctl,
 			 size_t *len)
 {
 	u32 pm1_status = 0, gpe_status = 0;
-	char str[4 * sizeof(u32) + 7];
+	acpi_sstate_t event_state = 0;
+	char str[27];
 	int size;
 
 	if (write)
@@ -1003,6 +1054,7 @@ static int acpi_do_event(ctl_table *ctl,
 		gpe_status = acpi_gpe_status;
 		acpi_gpe_status = 0;
 		spin_unlock_irqrestore(&acpi_event_lock, flags);
+		event_state = acpi_event_state;
 		
 		if (pm1_status || gpe_status)
 			break;
@@ -1013,7 +1065,10 @@ static int acpi_do_event(ctl_table *ctl,
 			return -ERESTARTSYS;
 	}
 
-	size = sprintf(str, "0x%08x 0x%08x\n", pm1_status, gpe_status);
+	size = sprintf(str, "0x%08x 0x%08x 0x%01x\n",
+		       pm1_status,
+		       gpe_status,
+		       event_state);
 	copy_to_user(buffer, str, size);
 	*len = size;
 	file->f_pos += size;
@@ -1021,15 +1076,14 @@ static int acpi_do_event(ctl_table *ctl,
 	return 0;
 }
 
-#if 0
 /*
- * Sleep or wake system
+ * Enter system sleep state
  */
-static int acpi_do_sleep_wake(ctl_table *ctl,
-			      int write,
-			      struct file *file,
-			      void *buffer,
-			      size_t *len)
+static int acpi_do_sleep(ctl_table *ctl,
+			 int write,
+			 struct file *file,
+			 void *buffer,
+			 size_t *len)
 {
 	if (!write) {
 		if (file->f_pos) {
@@ -1039,18 +1093,12 @@ static int acpi_do_sleep_wake(ctl_table *ctl,
 	}
 	else
 	{
-		// just shutdown some devices for now
-		if (ctl->data) {
-			acpi_enter_dx(ACPI_D3);
-		}
-		else {
-			acpi_enter_dx(ACPI_D0);
-		}
+		acpi_enter_sx(ACPI_S1);
+		acpi_enter_sx(ACPI_S0);
 	}
 	file->f_pos += *len;
 	return 0;
 }
-#endif
 
 /*
  * Initialize and enable ACPI
@@ -1184,11 +1232,11 @@ static int acpi_control_thread(void *context)
 	strcpy(current->comm, "acpi");
 	
 	for(;;) {
-		interruptible_sleep_on(&acpi_idle_wait);
+		interruptible_sleep_on(&acpi_control_wait);
 		if (signal_pending(current))
 			break;
 
-		// find all idle devices and set idle timer based on policy
+		// find all idle devices and set idle timer
 	}
 
 	return 0;
@@ -1199,7 +1247,7 @@ __initcall(acpi_init);
 /*
  * Module visible symbols
  */
-EXPORT_SYMBOL(acpi_idle_wait);
+EXPORT_SYMBOL(acpi_control_wait);
 EXPORT_SYMBOL(acpi_register);
 EXPORT_SYMBOL(acpi_unregister);
 EXPORT_SYMBOL(acpi_wakeup);

@@ -899,7 +899,7 @@ __stubs_end:
 		b	__real_stubs_start + (vector_IRQ - __stubs_start)
 		b	__real_stubs_start + (vector_FIQ - __stubs_start)
 
-ENTRY(trap_init)
+ENTRY(__trap_init)
 		stmfd	sp!, {r4 - r6, lr}
 
 		adr	r1, .LCvectors			@ set up the vectors

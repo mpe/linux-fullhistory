@@ -225,13 +225,14 @@ EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
 EXPORT_SYMBOL(find_path_device);
 EXPORT_SYMBOL(find_phandle);
+EXPORT_SYMBOL(device_is_compatible);
+EXPORT_SYMBOL(machine_is_compatible);
 EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
-EXPORT_SYMBOL(device_is_compatible);
 #endif /* defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC) */
 #if defined(CONFIG_SCSI) && (defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC))
 EXPORT_SYMBOL(note_scsi_host);

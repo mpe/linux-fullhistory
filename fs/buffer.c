@@ -1378,24 +1378,17 @@ out:
 	return err;
 }
 
-int block_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+int block_write_range(struct dentry *dentry, struct page *page,
+		unsigned zerofrom, unsigned from, unsigned to,
+		const char * buf)
 {
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
+	unsigned zeroto = 0, block_start, block_end;
 	unsigned long block;
-	int err, partial;
-	unsigned long blocksize, start_block, end_block;
-	unsigned long start_offset, start_bytes, end_bytes;
-	unsigned long bbits, blocks, i, len;
-	struct buffer_head *bh, *head;
-	char *target_buf, *kaddr;
-	int need_balance_dirty;
-
-	kaddr = (char *)kmap(page);
-	target_buf = kaddr + offset;
-
-	if (!PageLocked(page))
-		BUG();
+	int err = 0, partial = 0, need_balance_dirty = 0;
+	unsigned blocksize, bbits;
+	struct buffer_head *bh, *head, *wait[2], **wait_bh=wait;
+	char *kaddr = (char *)kmap(page);
 
 	blocksize = inode->i_sb->s_blocksize;
 	if (!page->buffers)
@@ -1404,49 +1397,21 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 
 	bbits = inode->i_sb->s_blocksize_bits;
 	block = page->index << (PAGE_CACHE_SHIFT - bbits);
-	blocks = PAGE_CACHE_SIZE >> bbits;
-	start_block = offset >> bbits;
-	end_block = (offset + bytes - 1) >> bbits;
-	start_offset = offset & (blocksize - 1);
-	start_bytes = blocksize - start_offset;
-	if (start_bytes > bytes)
-		start_bytes = bytes;
-	end_bytes = (offset+bytes) & (blocksize - 1);
-	if (end_bytes > bytes)
-		end_bytes = bytes;
 
-	if (offset < 0 || offset >= PAGE_SIZE)
-		BUG();
-	if (bytes+offset < 0 || bytes+offset > PAGE_SIZE)
-		BUG();
-	if (start_block < 0 || start_block >= blocks)
-		BUG();
-	if (end_block < 0 || end_block >= blocks)
-		BUG();
-
-	i = 0;
-	bh = head;
-	partial = 0;
-	need_balance_dirty = 0;
-	do {
+	/*
+	 * First pass - map what needs to be mapped, initiate reads
+	 * on the boundaries if needed (i.e. if block is partially covered
+	 * _and_ is not up-to-date _and_ is not new).
+	 */
+	for(bh = head, block_start = 0; bh != head || !block_start;
+	    block++, block_start=block_end, bh = bh->b_this_page) {
 		if (!bh)
 			BUG();
-
-		if ((i < start_block) || (i > end_block)) {
-			if (!buffer_uptodate(bh))
-				partial = 1;
-			goto skip;
-		}
-
-		/*
-		 * If the buffer is not up-to-date, we need to ask the low-level
-		 * FS to do something for us (we used to have assumptions about
-		 * the meaning of b_blocknr etc, that's bad).
-		 *
-		 * If "update" is set, that means that the low-level FS should
-		 * try to make sure that the block is up-to-date because we're
-		 * not going to fill it completely.
-		 */
+		block_end = block_start+blocksize;
+		if (block_end <= zerofrom)
+			continue;
+		if (block_start >= to)
+			break;
 		bh->b_end_io = end_buffer_io_sync;
 		if (!buffer_mapped(bh)) {
 			err = inode->i_op->get_block(inode, block, bh, 1);
@@ -1454,71 +1419,71 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 				goto out;
 			unmap_underlying_metadata(bh);
 		}
-
-		if (!buffer_uptodate(bh) && (start_offset || (end_bytes && (i == end_block)))) {
-			if (buffer_new(bh)) {
-				memset(kaddr + i*blocksize, 0, blocksize);
-			} else {
-				ll_rw_block(READ, 1, &bh);
-				wait_on_buffer(bh);
-				err = -EIO;
-				if (!buffer_uptodate(bh))
-					goto out;
+		if (buffer_new(bh)) {
+			zeroto = block_end;
+			if (block_start < zerofrom)
+				zerofrom = block_start;
+			continue;
+		}
+		if (!buffer_uptodate(bh) &&
+		     (block_start < zerofrom || block_end > to)) {
+			ll_rw_block(READ, 1, &bh);
+			*wait_bh++=bh;
+		}
+	}
+	/*
+	 * If we issued read requests - let them complete.
+	 */
+	while(wait_bh > wait) {
+		wait_on_buffer(*--wait_bh);
+		err = -EIO;
+		if (!buffer_uptodate(*wait_bh))
+			goto out;
+	}
+	/*
+	 * Now we can copy the data.
+	 */
+	if (zerofrom < from)
+		memset(kaddr+zerofrom, 0, from-zerofrom);
+	if (from < to)
+		err = copy_from_user(kaddr+from, buf, to-from);
+	if (to < zeroto)
+		memset(kaddr+to, 0, zeroto-to);
+	if (err < 0)
+		goto out;
+	/*
+	 * Second pass: check if all out-of-range blocks are up-to-date
+	 * and mark the rest up-to-date and dirty.
+	 *
+	 * NOTE! This also does a direct dirty balace check,
+	 * rather than relying on bdflush just waking up every
+	 * once in a while. This is to catch (and slow down)
+	 * the processes that write tons of buffer..
+	 *
+	 * Note how we do NOT want to do this in the full block
+	 * case: full pages are flushed not by the people who
+	 * dirtied them, but by people who need memory. And we
+	 * should not penalize them for somebody else writing
+	 * lots of dirty pages.
+	 */
+	for(bh = head, block_start = 0;
+	    bh != head || !block_start;
+	    block_start=block_end, bh = bh->b_this_page) {
+		block_end = block_start + blocksize;
+		if (block_end <= zerofrom || block_start >= zeroto) {
+			if (!buffer_uptodate(bh))
+				partial = 1;
+		} else {
+			set_bit(BH_Uptodate, &bh->b_state);
+			if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
+				__mark_dirty(bh, 0);
+				need_balance_dirty = 1;
 			}
 		}
-
-		len = blocksize;
-		if (start_offset) {
-			len = start_bytes;
-			start_offset = 0;
-		} else if (end_bytes && (i == end_block)) {
-			len = end_bytes;
-			end_bytes = 0;
-		}
-		if (target_buf >= kaddr + PAGE_SIZE)
-			BUG();
-		if (target_buf+len-1 >= kaddr + PAGE_SIZE)
-			BUG();
-		err = copy_from_user(target_buf, buf, len);
-		target_buf += len;
-		buf += len;
-
-		/*
-		 * we dirty buffers only after copying the data into
-		 * the page - this way we can dirty the buffer even if
-		 * the bh is still doing IO.
-		 *
-		 * NOTE! This also does a direct dirty balace check,
-		 * rather than relying on bdflush just waking up every
-		 * once in a while. This is to catch (and slow down)
-		 * the processes that write tons of buffer..
-		 *
-		 * Note how we do NOT want to do this in the full block
-		 * case: full pages are flushed not by the people who
-		 * dirtied them, but by people who need memory. And we
-		 * should not penalize them for somebody else writing
-		 * lots of dirty pages.
-		 */
-		set_bit(BH_Uptodate, &bh->b_state);
-		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
-			__mark_dirty(bh, 0);
-			need_balance_dirty = 1;
-		}
-
-		if (err) {
-			err = -EFAULT;
-			goto out;
-		}
-
-skip:
-		i++;
-		block++;
-		bh = bh->b_this_page;
-	} while (bh != head);
+	}
 
 	if (need_balance_dirty)
 		balance_dirty(bh->b_dev);
-
 	/*
 	 * is this a partial write that happened to make all buffers
 	 * uptodate then we can optimize away a bogus readpage() for
@@ -1528,11 +1493,27 @@ skip:
 	if (!partial)
 		SetPageUptodate(page);
 	kunmap(page);
-	return bytes;
+	return 0;
 out:
 	ClearPageUptodate(page);
 	kunmap(page);
 	return err;
+}
+
+int block_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+{
+	struct dentry *dentry = file->f_dentry;
+	int err;
+
+	if (!PageLocked(page))
+		BUG();
+	if (offset < 0 || offset >= PAGE_SIZE)
+		BUG();
+	if (bytes+offset < 0 || bytes+offset > PAGE_SIZE)
+		BUG();
+
+	err = block_write_range(dentry, page, offset,offset,offset+bytes, buf);
+	return err ? err : bytes;
 }
 
 /*
@@ -1544,167 +1525,16 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	unsigned long block;
-	int err, partial;
-	unsigned long blocksize, start_block, end_block;
-	unsigned long start_offset, start_bytes, end_bytes;
-	unsigned long bbits, blocks, i, len;
-	struct buffer_head *bh, *head;
-	char * target_buf, *target_data;
-	unsigned long data_offset = offset;
-	int need_balance_dirty;
+	int err;
+	unsigned zerofrom = offset;
 
-	offset = inode->i_size - (page->index << PAGE_CACHE_SHIFT);
 	if (page->index > (inode->i_size >> PAGE_CACHE_SHIFT))
-		offset = 0;
-	else if (offset >= data_offset)
-		offset = data_offset;
-	bytes += data_offset - offset;
-
-	target_buf = (char *)page_address(page) + offset;
-	target_data = (char *)page_address(page) + data_offset;
-
-	if (!PageLocked(page))
-		BUG();
-
-	blocksize = inode->i_sb->s_blocksize;
-	if (!page->buffers)
-		create_empty_buffers(page, inode, blocksize);
-	head = page->buffers;
-
-	bbits = inode->i_sb->s_blocksize_bits;
-	block = page->index << (PAGE_CACHE_SHIFT - bbits);
-	blocks = PAGE_CACHE_SIZE >> bbits;
-	start_block = offset >> bbits;
-	end_block = (offset + bytes - 1) >> bbits;
-	start_offset = offset & (blocksize - 1);
-	start_bytes = blocksize - start_offset;
-	if (start_bytes > bytes)
-		start_bytes = bytes;
-	end_bytes = (offset+bytes) & (blocksize - 1);
-	if (end_bytes > bytes)
-		end_bytes = bytes;
-
-	if (offset < 0 || offset > PAGE_SIZE)
-		BUG();
-	if (bytes+offset < 0 || bytes+offset > PAGE_SIZE)
-		BUG();
-	if (start_block < 0 || start_block > blocks)
-		BUG();
-	if (end_block < 0 || end_block >= blocks)
-		BUG();
-
-	i = 0;
-	bh = head;
-	partial = 0;
-	need_balance_dirty = 0;
-	do {
-		if (!bh)
-			BUG();
-
-		if ((i < start_block) || (i > end_block)) {
-			if (!buffer_uptodate(bh))
-				partial = 1;
-			goto skip;
-		}
-
-		/*
-		 * If the buffer is not up-to-date, we need to ask the low-level
-		 * FS to do something for us (we used to have assumptions about
-		 * the meaning of b_blocknr etc, that's bad).
-		 *
-		 * If "update" is set, that means that the low-level FS should
-		 * try to make sure that the block is up-to-date because we're
-		 * not going to fill it completely.
-		 */
-		bh->b_end_io = end_buffer_io_sync;
-		if (!buffer_mapped(bh)) {
-			err = inode->i_op->get_block(inode, block, bh, 1);
-			if (err)
-				goto out;
-			unmap_underlying_metadata(bh);
-		}
-
-		if (!buffer_uptodate(bh) && (start_offset || (end_bytes && (i == end_block)))) {
-			if (buffer_new(bh)) {
-				memset(bh->b_data, 0, bh->b_size);
-			} else {
-				ll_rw_block(READ, 1, &bh);
-				wait_on_buffer(bh);
-				err = -EIO;
-				if (!buffer_uptodate(bh))
-					goto out;
-			}
-		}
-
-		len = blocksize;
-		if (start_offset) {
-			len = start_bytes;
-			start_offset = 0;
-		} else if (end_bytes && (i == end_block)) {
-			len = end_bytes;
-			end_bytes = 0;
-		}
-		err = 0;
-		if (target_buf+len<=target_data)
-			memset(target_buf, 0, len);
-		else if (target_buf<target_data) {
-			memset(target_buf, 0, target_data-target_buf);
-			copy_from_user(target_data, buf,
-					len+target_buf-target_data);
-		} else
-			err = copy_from_user(target_buf, buf, len);
-		target_buf += len;
-		buf += len;
-
-		/*
-		 * we dirty buffers only after copying the data into
-		 * the page - this way we can dirty the buffer even if
-		 * the bh is still doing IO.
-		 *
-		 * NOTE! This also does a direct dirty balace check,
-		 * rather than relying on bdflush just waking up every
-		 * once in a while. This is to catch (and slow down)
-		 * the processes that write tons of buffer..
-		 *
-		 * Note how we do NOT want to do this in the full block
-		 * case: full pages are flushed not by the people who
-		 * dirtied them, but by people who need memory. And we
-		 * should not penalize them for somebody else writing
-		 * lots of dirty pages.
-		 */
-		set_bit(BH_Uptodate, &bh->b_state);
-		if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
-			__mark_dirty(bh, 0);
-			need_balance_dirty = 1;
-		}
-
-		if (err) {
-			err = -EFAULT;
-			goto out;
-		}
-
-skip:
-		i++;
-		block++;
-		bh = bh->b_this_page;
-	} while (bh != head);
-
-	if (need_balance_dirty)
-		balance_dirty(bh->b_dev);
-
-	/*
-	 * is this a partial write that happened to make all buffers
-	 * uptodate then we can optimize away a bogus readpage() for
-	 * the next read(). Here we 'discover' wether the page went
-	 * uptodate as a result of this (potentially partial) write.
-	 */
-	if (!partial)
-		SetPageUptodate(page);
-	return bytes;
-out:
-	ClearPageUptodate(page);
-	return err;
+		zerofrom = 0;
+	else if (page->index == (inode->i_size >> PAGE_CACHE_SHIFT) &&
+		 offset > (inode->i_size & ~PAGE_CACHE_MASK))
+		zerofrom = inode->i_size & ~PAGE_CACHE_MASK;
+	err = block_write_range(dentry, page, zerofrom,offset,offset+bytes,buf);
+	return err ? err : bytes;
 }
 
 

@@ -273,12 +273,42 @@ srm_paging_stop (void)
 }
 #endif
 
+static void printk_memory_info(void)
+{
+	unsigned long codesize, reservedpages, datasize, initsize, tmp;
+	extern int page_is_ram(unsigned long) __init;
+	extern char _text, _etext, _data, _edata;
+	extern char __init_begin, __init_end;
+
+	/* printk all informations */
+	reservedpages = 0;
+	for (tmp = 0; tmp < max_low_pfn; tmp++)
+		/*
+		 * Only count reserved RAM pages
+		 */
+		if (page_is_ram(tmp) && PageReserved(mem_map+tmp))
+			reservedpages++;
+
+	codesize =  (unsigned long) &_etext - (unsigned long) &_text;
+	datasize =  (unsigned long) &_edata - (unsigned long) &_data;
+	initsize =  (unsigned long) &__init_end - (unsigned long) &__init_begin;
+
+	printk("Memory: %luk/%luk available (%luk kernel code, %luk reserved, %luk data, %luk init)\n",
+	       (unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
+	       max_mapnr << (PAGE_SHIFT-10),
+	       codesize >> 10,
+	       reservedpages << (PAGE_SHIFT-10),
+	       datasize >> 10,
+	       initsize >> 10);
+}
+
 void
 mem_init(void)
 {
 	max_mapnr = num_physpages = max_low_pfn;
 	totalram_pages += free_all_bootmem();
-	printk("Memory: %luk available\n", totalram_pages << (PAGE_SHIFT-10));
+
+	printk_memory_info();
 }
 
 void

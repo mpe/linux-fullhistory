@@ -20,7 +20,6 @@
 #include <linux/mman.h>
 #include <linux/tty.h>
 #include <linux/console.h>
-#include <linux/console_struct.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #ifdef CONFIG_KMOD
@@ -30,15 +29,14 @@
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
 #endif
-#ifdef __powerpc__
+
 #include <asm/io.h>
-#endif
 #include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
 #include <linux/fb.h>
-
+#include <video/fbcon.h>
 
     /*
      *  Frame buffer device initialization and setup routines
@@ -228,35 +226,11 @@ static int num_pref_init_funcs __initdata = 0;
 
 struct fb_info *registered_fb[FB_MAX];
 int num_registered_fb = 0;
-int fbcon_softback_size = 32768;
-
-char con2fb_map[MAX_NR_CONSOLES];
+extern int fbcon_softback_size; 
 
 static int first_fb_vc = 0;
 static int last_fb_vc = MAX_NR_CONSOLES-1;
 static int fbcon_is_default = 1;
-
-static int PROC_CONSOLE(const struct fb_info *info)
-{
-	int fgc;
-	
-	if (info->display_fg != NULL)
-		fgc = info->display_fg->vc_num;
-	else
-		return -1;
-		
-	if (!current->tty)
-		return fgc;
-
-	if (current->tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
-		/* XXX Should report error here? */
-		return fgc;
-
-	if (MINOR(current->tty->device) < 1)
-		return fgc;
-
-	return MINOR(current->tty->device) - 1;
-}
 
 static int fbmem_read_proc(char *buf, char **start, off_t offset,
 			   int len, int *eof, void *private)
@@ -319,63 +293,6 @@ fb_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	    return -EFAULT;
 	file->f_pos += copy_size;
 	return copy_size;
-}
-
-
-static int set_all_vcs(int fbidx, struct fb_ops *fb,
-		       struct fb_var_screeninfo *var, struct fb_info *info)
-{
-    int unit, err;
-
-    var->activate |= FB_ACTIVATE_TEST;
-    err = fb->fb_set_var(var, PROC_CONSOLE(info), info);
-    var->activate &= ~FB_ACTIVATE_TEST;
-    if (err)
-	    return err;
-    for (unit = 0; unit < MAX_NR_CONSOLES; unit++)
-	    if (fb_display[unit].conp && con2fb_map[unit] == fbidx)
-		    fb->fb_set_var(var, unit, info);
-    return 0;
-}
-
-static void set_con2fb_map(int unit, int newidx)
-{
-    int oldidx = con2fb_map[unit];
-    struct fb_info *oldfb, *newfb;
-    struct vc_data *conp;
-    char *fontdata;
-    unsigned short fontwidth, fontheight, fontwidthlog, fontheightlog;
-    int userfont;
-
-    if (newidx != con2fb_map[unit]) {
-       oldfb = registered_fb[oldidx];
-       newfb = registered_fb[newidx];
-       if (newfb->fbops->fb_open(newfb,0))
-	   return;
-       oldfb->fbops->fb_release(oldfb,0);
-       conp = fb_display[unit].conp;
-       fontdata = fb_display[unit].fontdata;
-       fontwidth = fb_display[unit]._fontwidth;
-       fontheight = fb_display[unit]._fontheight;
-       fontwidthlog = fb_display[unit]._fontwidthlog;
-       fontheightlog = fb_display[unit]._fontheightlog;
-       userfont = fb_display[unit].userfont;
-       con2fb_map[unit] = newidx;
-       fb_display[unit] = *(newfb->disp);
-       fb_display[unit].conp = conp;
-       fb_display[unit].fontdata = fontdata;
-       fb_display[unit]._fontwidth = fontwidth;
-       fb_display[unit]._fontheight = fontheight;
-       fb_display[unit]._fontwidthlog = fontwidthlog;
-       fb_display[unit]._fontheightlog = fontheightlog;
-       fb_display[unit].userfont = userfont;
-       fb_display[unit].fb_info = newfb;
-       if (!newfb->changevar)
-	   newfb->changevar = oldfb->changevar;
-       /* tell console var has changed */
-       if (newfb->changevar)
-	   newfb->changevar(unit);
-    }
 }
 
 #ifdef CONFIG_KMOD

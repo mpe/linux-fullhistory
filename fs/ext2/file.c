@@ -18,7 +18,6 @@
  * 	(jj@sunsite.ms.mff.cuni.cz)
  */
 
-#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 

@@ -1,12 +1,10 @@
-#include <linux/config.h>
-
 #ifndef _PPC_PGTABLE_H
 #define _PPC_PGTABLE_H
 
+#include <linux/config.h>
+
 #ifndef __ASSEMBLY__
 #include <linux/threads.h>
-#include <linux/sched.h>
-#include <asm/atomic.h>
 #include <asm/processor.h>		/* For TASK_SIZE */
 #include <asm/mmu.h>
 #include <asm/page.h>
@@ -276,8 +274,8 @@ extern pte_t * __bad_pagetable(void);
 /*
  * Permanent address of a page.
  */
-#define page_address(page) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
-#define __page_address(page) ({ if (PageHighMem(page)) BUG(); PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT); })
+#define page_address(page)  ({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define __page_address(page) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
 #define pages_to_mb(x)		((x) >> (20-PAGE_SHIFT))
 #define pte_page(x)		(mem_map+pte_pagenr(x))
 
@@ -290,7 +288,7 @@ extern pte_t * __bad_pagetable(void);
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-#define pgd_clear(xp) 				do { } while(0)
+#define pgd_clear(xp)				do { } while (0)
 
 #define pgd_page(pgd) \
 	((unsigned long) __va(pgd_val(pgd) & PAGE_MASK))
@@ -371,19 +369,13 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	return pte;
 }
 
-#define page_pte_prot(page,prot) mk_pte(page, prot)
-#define page_pte(page)	page_pte_prot(page, __pgprot(0))
-
 #define pmd_page(pmd)	(pmd_val(pmd))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* to find an entry in a page-table-directory */
-extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
-{
-	return mm->pgd + (address >> PGDIR_SHIFT);
-}
+#define pgd_offset(mm, address)	 ((mm)->pgd + ((address) >> PGDIR_SHIFT))
 
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
@@ -395,79 +387,6 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 {
 	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
-}
-
-/*
- * This is handled very differently on the PPC since out page tables
- * are all 0's and I want to be able to use these zero'd pages elsewhere
- * as well - it gives us quite a speedup.
- *
- * Note that the SMP/UP versions are the same but we don't need a
- * per cpu list of zero pages because we do the zero-ing with the cache
- * off and the access routines are lock-free but the pgt cache stuff
- * is per-cpu since it isn't done with any lock-free access routines
- * (although I think we need arch-specific routines so I can do lock-free).
- *
- * I need to generalize this so we can use it for other arch's as well.
- * -- Cort
- */
-#ifdef __SMP__
-#define quicklists	cpu_data[smp_processor_id()]
-#else
-extern struct pgtable_cache_struct {
-	unsigned long *pgd_cache;
-	unsigned long *pte_cache;
-	unsigned long pgtable_cache_sz;
-} quicklists;
-#endif
-
-#define pgd_quicklist 		(quicklists.pgd_cache)
-#define pmd_quicklist 		((unsigned long *)0)
-#define pte_quicklist 		(quicklists.pte_cache)
-#define pgtable_cache_size 	(quicklists.pgtable_cache_sz)
-
-extern unsigned long *zero_cache;    /* head linked list of pre-zero'd pages */
-extern atomic_t zero_sz;	     /* # currently pre-zero'd pages */
-extern atomic_t zeropage_hits;	     /* # zero'd pages request that we've done */
-extern atomic_t zeropage_calls;      /* # zero'd pages request that've been made */
-extern atomic_t zerototal;	     /* # pages zero'd over time */
-
-#define zero_quicklist     	(zero_cache)
-#define zero_cache_sz  	 	(zero_sz)
-#define zero_cache_calls 	(zeropage_calls)
-#define zero_cache_hits  	(zeropage_hits)
-#define zero_cache_total 	(zerototal)
-
-/* return a pre-zero'd page from the list, return NULL if none available -- Cort */
-extern unsigned long get_zero_page_fast(void);
-
-extern void __bad_pte(pmd_t *pmd);
-
-extern inline void set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct task_struct * p;
-	pgd_t *pgd;
-#ifdef __SMP__
-	int i;
-#endif	
-        
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef __SMP__
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
-	   modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_cache; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
 }
 
 extern pgd_t swapper_pg_dir[1024];
@@ -486,11 +405,10 @@ extern pgd_t swapper_pg_dir[1024];
 extern void flush_hash_segments(unsigned low_vsid, unsigned high_vsid);
 extern void flush_hash_page(unsigned context, unsigned long va);
 
-
 /* Encode and de-code a swap entry */
-#define SWP_TYPE(entry) (((entry).val >> 1) & 0x3f)
-#define SWP_OFFSET(entry) ((entry).val >> 8)
-#define SWP_ENTRY(type,offset) ((swp_entry_t) { (((type) << 1) | ((offset) << 8)) })
+#define SWP_TYPE(entry)			(((entry).val >> 1) & 0x3f)
+#define SWP_OFFSET(entry)		((entry).val >> 8)
+#define SWP_ENTRY(type, offset)		((swp_entry_t) { ((type) << 1) | ((offset) << 8) })
 #define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
 

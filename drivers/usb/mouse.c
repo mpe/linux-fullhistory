@@ -212,6 +212,8 @@ static ssize_t write_mouse(struct file * file,
 
 /*
  * Look like a PS/2 mouse, please..
+ * In XFree86 (3.3.5 tested) you must select Protocol "NetMousePS/2",
+ *  then use your wheel as Button 4 and 5 via ZAxisMapping 4 5.
  *
  * The PS/2 protocol is fairly strange, but
  * oh, well, it's at least common..

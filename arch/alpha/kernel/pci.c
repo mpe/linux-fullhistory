@@ -40,7 +40,6 @@ const char pci_hae0_name[] = "HAE0";
  */
 
 struct pci_controler *hose_head, **hose_tail = &hose_head;
-struct pci_controler *probing_hose;
 
 /*
  * Quirks.
@@ -213,13 +212,12 @@ pcibios_fixup_bus(struct pci_bus *bus)
 {
 	/* Propogate hose info into the subordinate devices.  */
 
-	struct pci_controler *hose = probing_hose;
+	struct pci_controler *hose = (struct pci_controler *) bus->sysdata;
 	struct pci_dev *dev;
 
 	bus->resource[0] = hose->io_space;
 	bus->resource[1] = hose->mem_space;
 	for (dev = bus->devices; dev; dev = dev->sibling) {
-		dev->sysdata = hose;
 		if ((dev->class >> 8) != PCI_CLASS_BRIDGE_PCI)
 			pcibios_fixup_device_resources(dev, bus);
 	}
@@ -297,13 +295,11 @@ common_init_pci(void)
 	for (next_busno = 0, hose = hose_head; hose; hose = hose->next) {
 		hose->first_busno = next_busno;
 		hose->last_busno = 0xff;
-		probing_hose = hose;
 		bus = pci_scan_bus(next_busno, alpha_mv.pci_ops, hose);
 		hose->bus = bus;
 		next_busno = hose->last_busno = bus->subordinate;
 		next_busno += 1;
 	}
-	probing_hose = NULL;
 
 	pci_assign_unassigned_resources(alpha_mv.min_io_address,
 				        alpha_mv.min_mem_address);

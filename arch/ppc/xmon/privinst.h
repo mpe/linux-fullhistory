@@ -70,4 +70,13 @@ static inline void store_inst(void *p)
     asm volatile ("dcbst 0,%0; sync; icbi 0,%0; isync" : : "r" (p));
 }
 
+static inline void cflush(void *p)
+{
+    asm volatile ("dcbf 0,%0; icbi 0,%0" : : "r" (p));
+}
+
+static inline void cinval(void *p)
+{
+    asm volatile ("dcbi 0,%0; icbi 0,%0" : : "r" (p));
+}
 

@@ -427,7 +427,7 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	init_irq:		dp264_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		dp264_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		dp264_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -454,7 +454,7 @@ struct alpha_machine_vector monet_mv __initmv = {
 	init_irq:		dp264_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		monet_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		monet_map_irq,
 	pci_swizzle:		monet_swizzle,
 };
@@ -480,7 +480,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	init_irq:		dp264_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		webbrick_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -506,7 +506,7 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	init_irq:		clipper_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		tsunami_kill_arch,
 	pci_map_irq:		clipper_map_irq,
 	pci_swizzle:		common_swizzle,
 };

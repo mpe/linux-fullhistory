@@ -43,8 +43,9 @@ ifdef CONFIG_4xx
 else
   ifdef CONFIG_8xx
     HEAD := arch/ppc/kernel/head_8xx.o
+  else
+    HEAD := arch/ppc/kernel/head.o
   endif
-  HEAD := arch/ppc/kernel/head.o
 endif
 
 ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm arch/ppc/lib

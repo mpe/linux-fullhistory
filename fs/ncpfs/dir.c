@@ -585,8 +585,8 @@ read_really:
 	ctl.head.eof = ctl.valid;
 finished:
 	if (page) {
-		kunmap(page);
 		cache->head = ctl.head;
+		kunmap(page);
 		SetPageUptodate(page);
 		UnlockPage(page);
 		page_cache_release(page);

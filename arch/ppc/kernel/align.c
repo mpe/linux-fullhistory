@@ -7,6 +7,7 @@
  * Copyright (c) 1999 Grant Erickson <grant@lcse.umn.edu>
  *   PowerPC 403GCX/405GP modifications.
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/ptrace.h>

@@ -70,10 +70,10 @@
 #include <asm/uaccess.h>
 
 #include "sfp-util.h"
-#include "soft-fp.h"
-#include "single.h"
-#include "double.h"
-#include "quad.h"
+#include <math-emu/soft-fp.h>
+#include <math-emu/single.h>
+#include <math-emu/double.h>
+#include <math-emu/quad.h>
 
 #define FLOATFUNC(x) extern int x(void *,void *,void *)
 

@@ -56,7 +56,7 @@ struct resource *isapnp_rdp_res = NULL;
 
 int isapnp_disable = 0;			/* Disable ISA PnP */
 int isapnp_rdp = 0;			/* Read Data Port */
-int isapnp_reset = 0;			/* reset all PnP cards (deactivate) */
+int isapnp_reset = 1;			/* reset all PnP cards (deactivate) */
 int isapnp_skip_pci_scan = 0;		/* skip PCI resource scanning */
 int isapnp_verbose = 1;			/* verbose mode */
 int isapnp_reserve_irq[16] = { [0 ... 15] = -1 };	/* reserve (don't use) some IRQ */
@@ -129,7 +129,7 @@ static inline void write_data(unsigned char x)
 static inline void write_address(unsigned char x)
 {
 	outb(x, _PIDXR);
-	udelay(10);
+	udelay(20);
 }
 
 static inline unsigned char read_data(void)
@@ -240,6 +240,7 @@ void isapnp_deactivate(unsigned char logdev)
 {
 	isapnp_device(logdev);
 	isapnp_write_byte(ISAPNP_CFG_ACTIVATE, 0);
+	udelay(500);
 }
 
 static void __init isapnp_peek(unsigned char *data, int bytes)
@@ -252,7 +253,7 @@ static void __init isapnp_peek(unsigned char *data, int bytes)
 			d = isapnp_read_byte(0x05);
 			if (d & 1)
 				break;
-			udelay(10);
+			udelay(100);
 		}
 		if (!(d & 1)) {
 			*data++ = 0xff;
@@ -365,7 +366,10 @@ static int __init isapnp_isolate(void)
 			udelay(250);
 			iteration++;
 			isapnp_wake(0x00);
+			isapnp_set_rdp();
+			udelay(1000);
 			write_address(0x01);
+			udelay(1000);
 			goto __next;
 		}
 		if (iteration == 1) {

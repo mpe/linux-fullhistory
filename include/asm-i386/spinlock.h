@@ -56,8 +56,17 @@ typedef struct {
 	"jmp 1b\n" \
 	".previous"
 
+/*
+ * Sadly, some early PPro chips require the locked access,
+ * otherwise we could just always simply do
+ *
+ * 	#define spin_unlock_string \
+ *		"movb $0,%0"
+ *
+ * Which is noticeably faster.
+ */
 #define spin_unlock_string \
-	"movb $0,%0"
+	"lock ; btrl $0,%0"
 
 extern inline void spin_lock(spinlock_t *lock)
 {

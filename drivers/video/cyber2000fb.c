@@ -622,18 +622,32 @@ static int cyber2000fb_decode_crtc(struct par_info *hw, struct fb_var_screeninfo
 static int
 cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 {
+	static unsigned int divisors_2000[] = { 1, 2, 4, 8 };
+	static unsigned int divisors_2010[] = { 1, 2, 4, 6 };
 	unsigned long pll_ps = var->pixclock;
 	unsigned long ref_ps = 69842;
+	unsigned int *divisors;
 	int div2, div1, mult;
 
 	/*
 	 * Step 1:
-	 *   find div2 such that 150MHz < fpll < 220MHz
+	 *   find div2 such that 115MHz < fpll < 257MHz
 	 *   and 0 <= div2 < 4
 	 */
-	for (div2 = 0; div2 < 4; div2++, pll_ps >>= 1)
-		if (6667 > pll_ps && pll_ps > 4545)
+	if (current_par.dev_id == PCI_DEVICE_ID_INTERG_2010)
+		divisors = divisors_2010;
+	else
+		divisors = divisors_2000;
+
+	for (div2 = 0; div2 < 4; div2++) {
+		unsigned long new_pll;
+
+		new_pll = pll_ps / divisors[div2];
+		if (8696 > new_pll && new_pll > 3891) {
+			pll_ps = new_pll;
 			break;
+		}
+	}
 
 	if (div2 == 4)
 		return -EINVAL;
@@ -656,20 +670,22 @@ cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 			break;
 	}
 #else
-	if (pll_ps == 4630) {		/* 216.0, 108.0, 54.00, 27.000 */
-		mult = 181;		/* 4630   9260   18520  37040  */
+					/*  /1     /2     /4     /6     /8    */
+					/*                      (2010) (2000) */
+	if (pll_ps == 4630) {		/* 216.0, 108.0, 54.00, 36.000 27.000 */
+		mult = 181;		/* 4630   9260   18520  27780  37040  */
 		div1 = 12;
-	} else if (pll_ps == 4965) {	/* 201.0, 100.5, 50.25, 25.125 */
-		mult = 211;		/* 4965   9930   19860  39720  */
+	} else if (pll_ps == 4965) {	/* 201.0, 100.5, 50.25, 33.500 25.125 */
+		mult = 211;		/* 4965   9930   19860  29790  39720  */
 		div1 = 15;
-	} else if (pll_ps == 5050) {	/* 198.0,  99.0, 49.50, 24.750 */
-		mult = 83;		/* 5050   10100  20200  40400  */
+	} else if (pll_ps == 5050) {	/* 198.0,  99.0, 49.50, 33.000 24.750 */
+		mult = 83;		/* 5050   10100  20200  30300  40400  */
 		div1 = 6;
-	} else if (pll_ps == 6349) {	/* 158.0,  79.0, 39.50, 19.750 */
-		mult = 209;		/* 6349   12698  25396  50792  */
+	} else if (pll_ps == 6349) {	/* 158.0,  79.0, 39.50, 26.333 19.750 */
+		mult = 209;		/* 6349   12698  25396  38094  50792  */
 		div1 = 19;
-	} else if (pll_ps == 6422) {	/* 156.0,  78.0, 39.00, 19.500 */
-		mult = 190;		/* 6422   12844  25688  51376  */
+	} else if (pll_ps == 6422) {	/* 156.0,  78.0, 39.00, 26.000 19.500 */
+		mult = 190;		/* 6422   12844  25688  38532  51376  */
 		div1 = 17;
 	} else
 		return -EINVAL;
@@ -1043,6 +1059,29 @@ static struct fb_ops cyber2000fb_ops =
 	cyber2000fb_ioctl
 };
 
+int cyber2000fb_attach(struct cyberpro_info *info)
+{
+	if (current_par.initialised) {
+		info->regs    = CyberRegs;
+		info->fb      = current_par.screen_base;
+		info->fb_size = current_par.screen_size;
+
+		strncpy(info->dev_name, current_par.dev_name, sizeof(info->dev_name));
+
+		MOD_INC_USE_COUNT;
+	}
+
+	return current_par.initialised;
+}
+
+void cyber2000fb_detach(void)
+{
+	MOD_DEC_USE_COUNT;
+}
+
+EXPORT_SYMBOL(cyber2000fb_attach);
+EXPORT_SYMBOL(cyber2000fb_detach);
+
 /*
  * These parameters give
  * 640x480, hsync 31.5kHz, vsync 60Hz
@@ -1244,6 +1283,7 @@ int __init cyber2000fb_init(void)
 
 	smem_base = dev->resource[0].start;
 	mmio_base = dev->resource[0].start + 0x00800000;
+	current_par.dev_id = dev->device;
 
 	/*
 	 * Map in the registers

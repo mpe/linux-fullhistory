@@ -23,6 +23,11 @@
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
 
+#ifdef __SMP__
+extern void FASTCALL( __write_lock_failed(rwlock_t *rw));
+extern void FASTCALL( __read_lock_failed(rwlock_t *rw));
+#endif
+
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
 extern struct drive_info_struct drive_info;
 EXPORT_SYMBOL(drive_info);
@@ -92,6 +97,8 @@ EXPORT_SYMBOL(__cpu_logical_map);
 EXPORT_SYMBOL(smp_num_cpus);
 EXPORT_SYMBOL(cpu_present_map);
 EXPORT_SYMBOL(cpu_online_map);
+EXPORT_SYMBOL_NOVERS(__write_lock_failed);
+EXPORT_SYMBOL_NOVERS(__read_lock_failed);
 
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);

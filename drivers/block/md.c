@@ -1176,98 +1176,85 @@ void mdsyncd (void *data)
 
 #ifdef CONFIG_MD_BOOT
 struct {
-	int set;
-	int ints[100];
-	char str[100];
+	unsigned long set;
+	int pers[MAX_MD_DEV];
+	kdev_t devices[MAX_MD_DEV][MAX_REAL];
 } md_setup_args __initdata = {
-	0,{0},{0}
+	0,{0},{{0}}
 };
 
-/* called from init/main.c */
-void __init md_setup(char *str,int *ints)
+/*
+ * Parse the command-line parameters given our kernel, but do not
+ * actually try to invoke the MD device now; that is handled by
+ * md_setup_drive after the low-level disk drivers have initialised.
+ *
+ * 27/11/1999: Fixed to work correctly with the 2.3 kernel (which
+ *             assigns the task of parsing integer arguments to the
+ *             invoked program now).  Added ability to initialise all
+ *             the MD devices (by specifying multiple "md=" lines)
+ *             instead of just one.  -- KTK
+ */
+int __init md_setup(char *str)
 {
-	int i;
-	for(i=0;i<=ints[0];i++) {
-		md_setup_args.ints[i] = ints[i];
-		strcpy(md_setup_args.str, str);
-/*      printk ("md: ints[%d]=%d.\n", i, ints[i]);*/
-	}
-	md_setup_args.set=1;
-	return;
-}
+	int minor, level, factor, fault, i;
+	kdev_t device;
+	char *devnames, *pername;
 
-void __init do_md_setup(char *str,int *ints)
-{
-	int minor, pers, factor, fault;
-	kdev_t dev;
-	int i=1;
-
-	if(ints[0] < 4) {
-		printk ("md: Too few Arguments (%d).\n", ints[0]);
-		return;
-	}
-   
-	minor=ints[i++];
-   
-	if (minor >= MAX_MD_DEV) {
+	if(get_option(&str, &minor) != 2 ||	/* MD Number */
+	   get_option(&str, &level) != 2 ||	/* RAID Personality */
+	   get_option(&str, &factor) != 2 ||	/* Chunk Size */
+	   get_option(&str, &fault) != 2) {
+		printk("md: Too few arguments supplied to md=.\n");
+		return 0;
+	} else if (minor >= MAX_MD_DEV) {
 		printk ("md: Minor device number too high.\n");
-		return;
+		return 0;
+	} else if (md_setup_args.set & (1 << minor)) {
+		printk ("md: Warning - md=%d,... has been specified twice;\n"
+			"    will discard the first definition.\n", minor);
 	}
-
-	pers = 0;
-	
-	switch(ints[i++]) {  /* Raidlevel  */
-	case -1:
+	switch(level) {
 #ifdef CONFIG_MD_LINEAR
-		pers = LINEAR;
-		printk ("md: Setting up md%d as linear device.\n",minor);
-#else 
-	        printk ("md: Linear mode not configured." 
-			"Recompile the kernel with linear mode enabled!\n");
-#endif
+	case -1:
+		level = LINEAR;
+		pername = "linear";
 		break;
-	case 0:
-		pers = STRIPED;
+#endif
 #ifdef CONFIG_MD_STRIPED
-		printk ("md: Setting up md%d as a striped device.\n",minor);
-#else 
-	        printk ("md: Striped mode not configured." 
-			"Recompile the kernel with striped mode enabled!\n");
+	case 0:
+		level = STRIPED;
+		pername = "striped";
+		break;
 #endif
-		break;
-/*      not supported yet
-	case 1:
-		pers = RAID1;
-		printk ("md: Setting up md%d as a raid1 device.\n",minor);
-		break;
-	case 5:
-		pers = RAID5;
-		printk ("md: Setting up md%d as a raid5 device.\n",minor);
-		break;
-*/
-	default:	   
-		printk ("md: Unknown or not supported raid level %d.\n", ints[--i]);
-		return;
+	default:
+		printk ("md: The kernel has not been configured for raid%d"
+			" support!\n", level);
+		return 0;
+	}
+	devnames = str;
+	for (i = 0; str; i++) {
+		if ((device = name_to_kdev_t(str))) {
+			md_setup_args.devices[minor][i] = device;
+		} else {
+			printk ("md: Unknown device name, %s.\n", str);
+			return 0;
+		}
+		if ((str = strchr(str, ',')) != NULL)
+			str++;
+	}
+	if (!i) {
+		printk ("md: No devices specified for md%d?\n", minor);
+		return 0;
 	}
 
-	if(pers) {
-
-	  factor=ints[i++]; /* Chunksize  */
-	  fault =ints[i++]; /* Faultlevel */
-   
-	  pers=pers | factor | (fault << FAULT_SHIFT);   
-   
-	  while( str && (dev = name_to_kdev_t(str))) {
-	    do_md_add (minor, dev);
-	    if((str = strchr (str, ',')) != NULL)
-	      str++;
-	  }
-
-	  do_md_run (minor, pers);
-	  printk ("md: Loading md%d.\n",minor);
-	}
-   
+	printk ("md: Will configure md%d (%s) from %s, below.\n",
+		minor, pername, devnames);
+	md_setup_args.devices[minor][i] = (kdev_t) 0;
+	md_setup_args.pers[minor] = level | factor | (fault << FAULT_SHIFT);
+	md_setup_args.set |= (1 << minor);
+	return 0;
 }
+
 #endif
 
 void linear_init (void);
@@ -1318,7 +1305,18 @@ int __init md_init (void)
 #ifdef CONFIG_MD_BOOT
 void __init md_setup_drive(void)
 {
-	if(md_setup_args.set)
-		do_md_setup(md_setup_args.str, md_setup_args.ints);
+	int minor, i;
+	kdev_t dev;
+
+	for (minor = 0; minor < MAX_MD_DEV; minor++) {
+		if ((md_setup_args.set & (1 << minor)) == 0)
+			continue;
+		printk("md: Loading md%d.\n", minor);
+		for (i = 0; (dev = md_setup_args.devices[minor][i]); i++)
+			do_md_add (minor, dev);
+		do_md_run (minor, md_setup_args.pers[minor]);
+	}
 }
+
+__setup("md=", md_setup);
 #endif

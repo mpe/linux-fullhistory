@@ -113,7 +113,7 @@ die_if_kernel(char * str, struct pt_regs *regs, long err, unsigned long *r9_15)
 }
 
 #ifndef CONFIG_MATHEMU
-static long dummy_emul() { return 0; }
+static long dummy_emul(void) { return 0; }
 long (*alpha_fp_emul_imprecise)(struct pt_regs *regs, unsigned long writemask)
   = (void *)dummy_emul;
 long (*alpha_fp_emul) (unsigned long pc)

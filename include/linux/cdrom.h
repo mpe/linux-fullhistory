@@ -584,6 +584,8 @@ typedef union {
 #define DVD_LU_SEND_TITLE_KEY	7
 #define DVD_LU_SEND_ASF		8
 #define DVD_INVALIDATE_AGID	9
+#define DVD_LU_SEND_RPC_STATE	10
+#define DVD_HOST_SEND_RPC_STATE	11
 
 /* State data */
 typedef __u8 dvd_key[5];		/* 40-bit value, MSB is first elem. */
@@ -643,6 +645,18 @@ struct dvd_lu_send_asf {
 	unsigned asf		: 1;
 };
 
+struct dvd_host_send_rpcstate {
+	__u8 pdrc;
+};
+
+struct dvd_lu_send_rpcstate {
+	__u8 type		: 2;
+	__u8 vra		: 3;
+	__u8 ucca		: 3;
+	__u8 region_mask;
+	__u8 rpc_scheme;
+};
+
 typedef union {
 	__u8 type;
 
@@ -653,6 +667,8 @@ typedef union {
 	struct dvd_send_key		hsk;
 	struct dvd_lu_send_title_key	lstk;
 	struct dvd_lu_send_asf		lsasf;
+	struct dvd_host_send_rpcstate	hrpcs;
+	struct dvd_lu_send_rpcstate	lrpcs;
 } dvd_authinfo;
 
 #ifdef __KERNEL__

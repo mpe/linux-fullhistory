@@ -10,7 +10,7 @@
 #define _PPC_BOOTINFO_H
 
 struct bi_record {
-    unsigned short tag;			/* tag ID */
+    unsigned long tag;			/* tag ID */
     unsigned long size;			/* size of record (in bytes) */
     unsigned long data[0];		/* data */
 };

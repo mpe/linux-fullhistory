@@ -947,33 +947,28 @@ out_unlock:
  */
 void swapin_readahead(swp_entry_t entry)
 {
-	int i;
+	int i, num;
 	struct page *new_page;
-	unsigned long offset = SWP_OFFSET(entry);
-	struct swap_info_struct *swapdev = SWP_TYPE(entry) + swap_info;
-	
-	offset = (offset >> page_cluster) << page_cluster;
+	unsigned long offset;
 
-	i = 1 << page_cluster;
-	do {
-		/* Don't read-ahead past the end of the swap area */
-		if (offset >= swapdev->max)
-			break;
+	/*
+	 * Get the number of handles we should do readahead io to. Also,
+	 * grab temporary references on them, releasing them as io completes.
+	 */
+	num = valid_swaphandles(entry, &offset);
+	for (i = 0; i < num; offset++, i++) {
 		/* Don't block on I/O for read-ahead */
-		if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster)
+		if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster) {
+			while (i++ < num)
+				swap_free(SWP_ENTRY(SWP_TYPE(entry), offset++));
 			break;
-		/* Don't read in bad or busy pages */
-		if (!swapdev->swap_map[offset])
-			break;
-		if (swapdev->swap_map[offset] == SWAP_MAP_BAD)
-			break;
-
+		}
 		/* Ok, do the async read-ahead now */
 		new_page = read_swap_cache_async(SWP_ENTRY(SWP_TYPE(entry), offset), 0);
 		if (new_page != NULL)
 			__free_page(new_page);
-		offset++;
-	} while (--i);
+		swap_free(SWP_ENTRY(SWP_TYPE(entry), offset));
+	}
 	return;
 }
 
@@ -997,9 +992,7 @@ static int do_swap_page(struct task_struct * tsk,
 
 	vma->vm_mm->rss++;
 	tsk->min_flt++;
-	lock_kernel();
 	swap_free(entry);
-	unlock_kernel();
 
 	pte = mk_pte(page, vma->vm_page_prot);
 

@@ -1656,7 +1656,7 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 		if (prev_auto_state != devc->no_autoselect)
 			vnc_configure_mixer(devc);
-		waveartist_mixer_set(devc, SOUND_MIXER_RECSRC, SOUND_MASK_MIC);
+
 		return 0;
 	}
 

@@ -15,6 +15,13 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
+unsigned long
+resource_fixup(struct pci_dev * dev, struct resource * res,
+	       unsigned long start, unsigned long size)
+{
+	return start;
+}
+
 #ifdef CONFIG_CPU_32
 asmlinkage int sys_iopl(unsigned long turn_on)
 {

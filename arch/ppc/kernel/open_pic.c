@@ -63,9 +63,15 @@ struct hw_interrupt_type open_pic = {
 #define check_arg_pri(pri) \
     if (pri < 0 || pri >= OPENPIC_NUM_PRI) \
 	printk("openpic.c:%d: illegal priority %d\n", __LINE__, pri);
-#define check_arg_irq(irq) \
+/*
+ * Turned this check off since the IPI's are treated as irqs
+ * but they're above NumSources -- Cort
+ */
+#define check_arg_irq(irq)
+#if 0
     if (irq < 0 || irq >= (NumSources+open_pic.irq_offset)) \
 	printk("openpic.c:%d: illegal irq %d\n", __LINE__, irq);
+#endif
 #define check_arg_cpu(cpu) \
     if (cpu < 0 || cpu >= NumProcessors) \
 	printk("openpic.c:%d: illegal cpu %d\n", __LINE__, cpu);
@@ -201,15 +207,12 @@ void __init openpic_init(int main_pic)
 		/* Initialize IPI interrupts */
 		if ( ppc_md.progress ) ppc_md.progress("openpic ipi",0x3bb);
 		for (i = 0; i < OPENPIC_NUM_IPI; i++) {
-			/* Disabled, Priority 0 */
-			openpic_initipi(i, 0, OPENPIC_VEC_IPI+i);
+			/* Disabled, Priority 8 */
+			openpic_initipi(i, 8, OPENPIC_VEC_IPI+i);
 		}
 	    
 		/* Initialize external interrupts */
 		if ( ppc_md.progress ) ppc_md.progress("openpic ext",0x3bc);
-		/* SIOint (8259 cascade) is special */
-		openpic_initirq(0, 8, open_pic.irq_offset, 1, 1);
-		openpic_mapirq(0, 1<<0);
 		for (i = 1; i < NumSources; i++) {
 			/* Enabled, Priority 8 */
 			openpic_initirq(i, 8, open_pic.irq_offset+i, 0,
@@ -223,6 +226,9 @@ void __init openpic_init(int main_pic)
 		openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
 		if ( _machine != _MACH_gemini )
 		{
+			/* SIOint (8259 cascade) is special */
+			openpic_initirq(0, 8, open_pic.irq_offset, 1, 1);
+			openpic_mapirq(0, 1<<0);
 			if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
 					"82c59 cascade", NULL))
 				printk("Unable to get OpenPIC IRQ 0 for cascade\n");

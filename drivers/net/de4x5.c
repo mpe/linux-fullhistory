@@ -425,11 +425,15 @@
       0.544   8-May-99    Fix for buggy SROM in Motorola embedded boards using
                            a 21143 by <mmporter@home.com>.
 			  Change PCI/EISA bus probing order.
+      0.545  28-Nov-99    Further Moto SROM bug fix from 
+                           <mporter@eng.mcd.mot.com>
+                          Remove double checking for DEBUG_RX in de4x5_dbg_rx()
+			   from report by <geert@linux-m68k.org>
  
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.544 1999/5/8 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.545 1999/11/28 davies@maniac.ultranet.com\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -4817,6 +4821,7 @@ type3_infoblock(struct net_device *dev, u_char count, u_char *p)
     } else if ((lp->media == INIT) && (lp->timeout < 0)) {
         lp->ibn = 3;
 	lp->active = *p;
+	if (MOTO_SROM_BUG) lp->active = 0;
 	lp->infoblock_csr6 = OMR_MII_100;
 	lp->useMII = TRUE;
 	lp->infoblock_media = ANS;
@@ -5521,14 +5526,12 @@ de4x5_dbg_rx(struct sk_buff *skb, int len)
 	       (u_char)skb->data[12],
 	       (u_char)skb->data[13],
 	       len);
-	if (de4x5_debug & DEBUG_RX) {
-	    for (j=0; len>0;j+=16, len-=16) {
-		printk("    %03x: ",j);
-		for (i=0; i<16 && i<len; i++) {
-		    printk("%02x ",(u_char)skb->data[i+j]);
-		}
-		printk("\n");
-	    }
+	for (j=0; len>0;j+=16, len-=16) {
+	  printk("    %03x: ",j);
+	  for (i=0; i<16 && i<len; i++) {
+	    printk("%02x ",(u_char)skb->data[i+j]);
+	  }
+	  printk("\n");
 	}
     }
 

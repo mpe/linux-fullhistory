@@ -665,7 +665,6 @@ static int cdrom_timer_expiry(ide_drive_t *drive)
 	struct packet_command *pc = (struct packet_command *) rq->buffer;
 	unsigned long wait = 0;
 
-	printk("in expiry\n");
 	/* blank and format can take an extremly long time to
 	 * complete, if the IMMED bit was not set.
 	 */

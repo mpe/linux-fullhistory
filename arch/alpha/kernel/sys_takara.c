@@ -244,7 +244,7 @@ struct alpha_machine_vector takara_mv __initmv = {
 	init_irq:		takara_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		takara_init_pci,
-	kill_arch:		common_kill_arch,
+	kill_arch:		NULL,
 	pci_map_irq:		takara_map_irq,
 	pci_swizzle:		takara_swizzle,
 };

@@ -381,10 +381,10 @@ void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 static inline void do_flush_tlb_all_local(void)
 {
 	local_flush_tlb();
-	if(current->mm==0) {
+	if (!current->mm && current->active_mm) {
 		unsigned long cpu = smp_processor_id();
-		clear_bit(cpu, &current->active_mm->cpu_vm_mask);
 
+		clear_bit(cpu, &current->active_mm->cpu_vm_mask);
 		cpu_tlbbad[cpu] = 1;
 	}
 }
@@ -396,8 +396,9 @@ static void flush_tlb_all_ipi(void* info)
 
 void flush_tlb_all(void)
 {
-	if(cpu_online_map ^ (1<<smp_processor_id()))
-		smp_call_function (flush_tlb_all_ipi,0,1,1);
+	if (cpu_online_map ^ (1 << smp_processor_id()))
+		while (smp_call_function (flush_tlb_all_ipi,0,0,1) == -EBUSY)
+			mb();
 
 	do_flush_tlb_all_local();
 }

@@ -24,7 +24,7 @@
 #ifndef SOFT_FP_H
 #define SOFT_FP_H
 
-#include "sfp-machine.h"
+#include <asm/sfp-machine.h>
 
 /* Allow sfp-machine to have its own byte order definitions. */
 #ifndef __BYTE_ORDER
@@ -81,6 +81,11 @@
 
 #ifndef FP_HANDLE_EXCEPTIONS
 #define FP_HANDLE_EXCEPTIONS do {} while (0)
+#endif
+
+/* By default we never flush denormal input operands to signed zero. */
+#ifndef FP_DENORM_ZERO
+#define FP_DENORM_ZERO 0
 #endif
 
 #ifndef FP_INHIBIT_RESULTS

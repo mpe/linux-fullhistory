@@ -4142,15 +4142,6 @@ int __init rs_init(void)
 {
 	int i;
 	struct serial_state * state;
-	extern void atomwide_serial_init (void);
-	extern void dualsp_serial_init (void);
-
-#ifdef CONFIG_ATOMWIDE_SERIAL
-	atomwide_serial_init ();
-#endif
-#ifdef CONFIG_DUALSP_SERIAL
-	dualsp_serial_init ();
-#endif
 
 	if (timer_table[RS_TIMER].fn) {
 		printk("RS_TIMER already set, another serial driver "

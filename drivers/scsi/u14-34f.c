@@ -691,10 +691,10 @@ static inline int port_detect \
    char *bus_type, dma_name[16];
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
-   void *bios_segment_table[8] = {
-      NULL,
-      (void *) 0xc4000, (void *) 0xc8000, (void *) 0xcc000, (void *) 0xd0000,
-      (void *) 0xd4000, (void *) 0xd8000, (void *) 0xdc000
+   unsigned long bios_segment_table[8] = {
+      0,
+      0xc4000, 0xc8000, 0xcc000, 0xd0000,
+      0xd4000, 0xd8000, 0xdc000
       };
 
    /* Allowed IRQs */

@@ -255,61 +255,6 @@ struct fb_ops {
     int (*fb_rasterimg)(struct fb_info *info, int start);
 };
 
-
-   /*
-    *    This is the interface between the low-level console driver and the
-    *    low-level frame buffer device
-    */
-
-struct display {
-    /* Filled in by the frame buffer device */
-
-    struct fb_var_screeninfo var;   /* variable infos. yoffset and vmode */
-				    /* are updated by fbcon.c */
-    struct fb_cmap cmap;            /* colormap */
-    char *screen_base;              /* pointer to top of virtual screen */    
-				    /* (virtual address) */
-    int visual;
-    int type;                       /* see FB_TYPE_* */
-    int type_aux;                   /* Interleave for interleaved Planes */
-    u_short ypanstep;               /* zero if no hardware ypan */
-    u_short ywrapstep;              /* zero if no hardware ywrap */
-    u_long line_length;             /* length of a line in bytes */
-    u_short can_soft_blank;         /* zero if no hardware blanking */
-    u_short inverse;                /* != 0 text black on white as default */
-    struct display_switch *dispsw;  /* low level operations */
-    void *dispsw_data;		    /* optional dispsw helper data */
-
-#if 0
-    struct fb_fix_cursorinfo fcrsr;
-    struct fb_var_cursorinfo *vcrsr;
-    struct fb_cursorstate crsrstate;
-#endif
-
-    /* Filled in by the low-level console driver */
-
-    struct vc_data *conp;           /* pointer to console data */
-    struct fb_info *fb_info;        /* frame buffer for this console */
-    int vrows;                      /* number of virtual rows */
-    unsigned short cursor_x;	    /* current cursor position */
-    unsigned short cursor_y;
-    int fgcol;                      /* text colors */
-    int bgcol;
-    u_long next_line;               /* offset to one line below */
-    u_long next_plane;              /* offset to next plane */
-    u_char *fontdata;               /* Font associated to this display */
-    unsigned short _fontheightlog;
-    unsigned short _fontwidthlog;
-    unsigned short _fontheight;
-    unsigned short _fontwidth;
-    int userfont;                   /* != 0 if fontdata kmalloc()ed */
-    u_short scrollmode;             /* Scroll Method */
-    short yscroll;                  /* Hardware scrolling */
-    unsigned char fgshift, bgshift;
-    unsigned short charmask;	    /* 0xff or 0x1ff */
-};
-
-
 struct fb_info {
    char modename[40];			/* default video mode */
    kdev_t node;
@@ -415,15 +360,11 @@ extern int unregister_framebuffer(const struct fb_info *fb_info);
 
 extern int num_registered_fb;
 extern struct fb_info *registered_fb[FB_MAX];
-extern char con2fb_map[MAX_NR_CONSOLES];
 
 /* drivers/video/fbmon.c */
 extern int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
 			       const struct fb_info *fb_info);
 extern int fbmon_dpms(const struct fb_info *fb_info);
-
-/* drivers/video/fbcon.c */
-extern struct display fb_display[MAX_NR_CONSOLES];
 
 /* drivers/video/fbcmap.c */
 extern int fb_alloc_cmap(struct fb_cmap *cmap, int len, int transp);

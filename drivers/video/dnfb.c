@@ -14,6 +14,7 @@
 #include <linux/fb.h>
 #include <linux/module.h>
 
+#include <video/fbcon.h>
 #include <video/fbcon-mfb.h>
 
 
