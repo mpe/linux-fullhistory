@@ -1374,7 +1374,13 @@ int sk_alloc_slab(struct proto *prot, char *name)
 				       prot->slab_obj_size, 0,
 				       SLAB_HWCACHE_ALIGN, NULL, NULL);
 
-	return prot->slab != NULL ? 0 : -ENOBUFS;
+	if (prot->slab == NULL) {
+		printk(KERN_CRIT "%s: Can't create sock SLAB cache!\n",
+		       prot->name);
+		return -ENOBUFS;
+	}
+
+	return 0;
 }
 
 EXPORT_SYMBOL(sk_alloc_slab);
