@@ -47,6 +47,14 @@ void reprogram_timer(void)
 {
 	unsigned long   usecs_per_tick;
 
+	/*
+	 *	The user is changing the timer rate before setting a timer
+	 *	slap, bad bad not allowed.
+	 */
+	 
+	if(!tmr)
+		return;
+		
 	usecs_per_tick = (60 * 1000000) / (curr_tempo * curr_timebase);
 
 	/*

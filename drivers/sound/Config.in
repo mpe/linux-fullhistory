@@ -6,6 +6,8 @@ fi
 
 dep_tristate '100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB $CONFIG_SOUND
 if [ "$CONFIG_SB" = "y" ]; then
+    bool 'Is the card a Soundman Games ?' CONFIG_SM_GAMES
+    bool 'Are you using the IBM Mwave "emulation" of SB ?' CONFIG_SB_MWAVE
     hex 'I/O base for SB Check from manual of the card' CONFIG_SB_BASE 220
     int 'Sound Blaster IRQ Check from manual of the card' CONFIG_SB_IRQ 7
     int 'Sound Blaster DMA 0, 1 or 3' CONFIG_SB_DMA 1

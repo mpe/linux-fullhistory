@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 
 #include <asm/head.h>
 #include <asm/system.h>
@@ -864,10 +865,6 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	return device_scan (PAGE_ALIGN (start_mem));
 }
 
-extern int min_free_pages;
-extern int free_pages_low;
-extern int free_pages_high;
-
 __initfunc(static void taint_real_pages(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long addr, tmp2 = 0;
@@ -946,11 +943,11 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	       initpages << (PAGE_SHIFT-10), 
 	       PAGE_OFFSET, end_mem);
 
-	min_free_pages = nr_free_pages >> 7;
-	if(min_free_pages < 16)
-		min_free_pages = 16;
-	free_pages_low = min_free_pages + (min_free_pages >> 1);
-	free_pages_high = min_free_pages + min_free_pages;
+	freepages.low = nr_free_pages >> 7;
+	if(freepages.low < 16)
+		freepages.low = 16;
+	freepages.low = freepages.low + (freepages.low >> 1);
+	freepages.high = freepages.low + freepages.low;
 }
 
 void free_initmem (void)

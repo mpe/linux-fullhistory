@@ -81,11 +81,14 @@ static unsigned char casefold[256] = {
 /*
  * Hash a string to an integer in a case-independent way
  */
-unsigned int hfs_strhash(const struct hfs_name *cname)
+unsigned long hfs_strhash(const struct hfs_name *cname)
 {
-	/* Currently just sum of the 'order' of first and last characters */
-	return ((unsigned int)caseorder[cname->Name[0]] +
-		(unsigned int)caseorder[cname->Name[cname->Len - 1]]);
+	unsigned long hash = init_name_hash();
+	unsigned int i;
+	for (i = 0; i < cname->Len; i++) {
+	        hash = partial_name_hash(caseorder[cname->Name[i]], hash);
+	}
+	return end_name_hash(hash);
 }
 
 /*

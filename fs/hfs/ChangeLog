@@ -1,12 +1,55 @@
-Wed Jan  7 19:33:33 1998  a sun  <asun@zoology.washington.edu>
+Wed Jan 21 14:04:26 1998  a sun  <asun@zoology.washington.edu>
 
-	* inode.c
-	don't hfs_cat_put in hfs_iget. that's a bad idea and results
-	in screwed up entry counts.
+	* inode.c, sysdep.c
+	use d_iput to uncache dentry from catalog entry instead of relying
+	on put_inode. no more NULL pointer dereferences!
 
 	* catalog.c
-	modified hfs_cat_put to undirty deleted entries without trying to 
-	write them out.
+	cleaned up hfs_cat_put a little.
+	
+	ISSUES (non-fatal): mv dir dir2 while creating files in dir screws
+	                    up directory counts.
+		
+			    deletion using netatalk screws up directory
+ 			    counts.
+
+Thu Jan 15 19:14:28 1998  a sun  <asun@zoology.washington.edu>
+
+	* catalog.c
+	make deletion happen when requested instead of waiting until
+	an hfs_cat_put as the dcache can hold onto entries for quite
+	some time.
+
+Wed Jan 14 14:43:16 1998  a sun  <asun@zoology.washington.edu>
+	
+	* catalog.c
+	the current catalog allocation scheme allocates
+	PAGE_SIZE/sizeof(struct hfs_cat_entry) entries at a time and keeps
+	a pool of free entries up to this allocation unit * 8.
+
+	* inode.c
+	make sure to always hfs_cat_put if hfs_iget is going to return
+	NULL.
+
+	* string.c, catalog.c
+	use linux' hashing method to generate hashes. the old hashing was
+ 	getting collisions. catalog.c also has a larger hash table to
+ 	prevent collisions.
+	
+Tue Jan 13 13:06:01 1998  a sun  <asun@zoology.washington.edu>
+
+	* version.c
+	bumped to 0.95+asun3
+
+	* catalog.c
+	re-wrote to dynamically allocate/delete catalog entries. on a 486,
+	entries fit into the size-256 slab.
+
+Wed Jan  7 19:33:33 1998  a sun  <asun@zoology.washington.edu>
+
+	* inode.c 
+	don't hfs_cat_put gratuitously in hfs_iget. that's a bad
+ 	idea and results in screwed up entry counts.
 
 Tue Jan  6 14:38:24 1998  a sun  <asun@zoology.washington.edu>
 

@@ -5,10 +5,12 @@
  */
 
 /*
- * This file should contain most things doing the swapping from/to disk.
+ * This file contains the default values for the opereation of the
+ * Linux VM subsystem. Finetuning documentation can be found in
+ * linux/Documentation/sysctl/vm.txt.
  * Started 18.12.91
- *
  * Swap aging added 23.2.95, Stephen Tweedie.
+ * Buffermem limits added 12.3.98, Rik van Riel.
  */
 
 #include <linux/mm.h>
@@ -33,15 +35,18 @@
 
 /*
  * We identify three levels of free memory.  We never let free mem
- * fall below the min_free_pages except for atomic allocations.  We
- * start background swapping if we fall below free_pages_high free
- * pages, and we begin intensive swapping below free_pages_low.
+ * fall below the freepages.min except for atomic allocations.  We
+ * start background swapping if we fall below freepages.high free
+ * pages, and we begin intensive swapping below freepages.low.
  *
- * Keep these three variables contiguous for sysctl(2).  
+ * These values are there to keep GCC from complaining. Actual
+ * initialization is done in mm/page_alloc.c or arch/sparc(64)/mm/init.c.
  */
-int min_free_pages = 48;
-int free_pages_low = 72;
-int free_pages_high = 96;
+freepages_t freepages = {
+	48,	/* freepages.min */
+	72,	/* freepages.low */
+	96	/* freepages.high */
+};
 
 /* We track the number of pages currently being asynchronously swapped
    out, so that we don't try to swap TOO many pages out at once */
@@ -55,53 +60,15 @@ atomic_t nr_async_pages = ATOMIC_INIT(0);
 
 swap_control_t swap_control = {
 	20, 3, 1, 3,		/* Page aging */
-	10, 2, 2, 4,		/* Buffer aging */
 	32, 4,			/* Aging cluster */
 	8192, 8192,		/* Pageout and bufferout weights */
-	-200,			/* Buffer grace */
-	1, 1,			/* Buffs/pages to free */
-	RCL_ROUND_ROBIN		/* Balancing policy */
 };
 
 swapstat_t swapstats = {0};
 
-/* General swap control */
-
-/* Parse the kernel command line "swap=" option at load time: */
-__initfunc(void swap_setup(char *str, int *ints))
-{
-	int * swap_vars[8] = {
-		&MAX_PAGE_AGE,
-		&PAGE_ADVANCE,
-		&PAGE_DECLINE,
-		&PAGE_INITIAL_AGE,
-		&AGE_CLUSTER_FRACT,
-		&AGE_CLUSTER_MIN,
-		&PAGEOUT_WEIGHT,
-		&BUFFEROUT_WEIGHT
-	};
-	int i;
-	for (i=0; i < ints[0] && i < 8; i++) {
-		if (ints[i+1])
-			*(swap_vars[i]) = ints[i+1];
-	}
-}
-
-/* Parse the kernel command line "buff=" option at load time: */
-__initfunc(void buff_setup(char *str, int *ints))
-{
-	int * buff_vars[6] = {
-		&MAX_BUFF_AGE,
-		&BUFF_ADVANCE,
-		&BUFF_DECLINE,
-		&BUFF_INITIAL_AGE,
-		&BUFFEROUT_WEIGHT,
-		&BUFFERMEM_GRACE
-	};
-	int i;
-	for (i=0; i < ints[0] && i < 6; i++) {
-		if (ints[i+1])
-			*(buff_vars[i]) = ints[i+1];
-	}
-}
+buffer_mem_t buffer_mem = {
+	6,	/* minimum percent buffer + cache memory */
+	20,	/* borrow percent buffer + cache memory */
+	90	/* maximum percent buffer + cache memory */
+};
 

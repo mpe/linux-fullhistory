@@ -28,7 +28,6 @@
 
 static sb_devc *detected_devc = NULL;	/* For communication from probe to init */
 static sb_devc *last_devc = NULL;	/* For MPU401 initialization */
-static sb_devc *irq2devc[16] = {NULL};
 static unsigned char jazz_irq_bits[] = {
 	0, 0, 2, 3, 0, 1, 0, 4, 0, 2, 5, 0, 0, 0, 0, 6
 };
@@ -123,15 +122,9 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 	int status;
 	unsigned char   src = 0xff;
 
-	sb_devc *devc = irq2devc[irq];
+	sb_devc *devc = dev_id;
 
-	if (devc == NULL || devc->irq != irq)
-	{
-		DEB(printk("sbintr: Bogus interrupt IRQ%d\n", irq));
-		return;
-	}
 	devc->irq_ok = 1;
-
 	if (devc->model == MDL_SB16)
 	{
 		src = sb_getmixer(devc, IRQ_STAT);	/* Interrupt source register */
@@ -710,6 +703,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	sb_devc *devc;
 	char name[100];
 	extern int sb_be_quiet;
+	extern int mwave_bug;
 
 /*
  * Check if we had detected a SB device earlier
@@ -743,21 +737,19 @@ void sb_dsp_init(struct address_info *hw_config)
 
 	if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && hw_config->irq > 0)
 	{			/* IRQ setup */
-		if (snd_set_irq_handler(hw_config->irq, sbintr, "soundblaster", devc->osp) < 0)
+		if (request_irq(hw_config->irq, sbintr, 0, "soundblaster", devc) < 0)
 		{
 			printk(KERN_ERR "SB: Can't allocate IRQ%d\n", hw_config->irq);
 			sound_unload_audiodev(devc->dev);
 			return;
 		}
-		irq2devc[hw_config->irq] = devc;
 		devc->irq_ok = 0;
 
 		if (devc->major == 4)
 			if (!sb16_set_irq_hw(devc, devc->irq))	/* Unsupported IRQ */
 			{
-				snd_release_irq(devc->irq);
+				free_irq(devc->irq, devc);
 				sound_unload_audiodev(devc->dev);
-				irq2devc[hw_config->irq] = NULL;
 				return;
 			}
 		if ((devc->type == 0 || devc->type == MDL_ESS) &&
@@ -777,7 +769,7 @@ void sb_dsp_init(struct address_info *hw_config)
 		/* Skip IRQ detection if SMP (doesn't work) */
 		devc->irq_ok = 1;
 #else
-		if (devc->major == 4 && devc->minor <= 11)	/* Won't work */
+		if ((devc->major == 4 && devc->minor <= 11 ) || mwave_bug )	/* Won't work */
 			devc->irq_ok = 1;
 		else
 		{
@@ -883,6 +875,7 @@ void sb_dsp_init(struct address_info *hw_config)
 		}
 	}
 	hw_config->card_subtype = devc->model;
+	hw_config->slots[0]=devc->dev;
 	last_devc = devc;	/* For SB MPU detection */
 
 	if (!(devc->caps & SB_NO_AUDIO) && devc->dma8 >= 0)
@@ -915,15 +908,8 @@ void sb_dsp_disable_recording(int io_base)
 void sb_dsp_unload(struct address_info *hw_config)
 {
 	sb_devc *devc;
-	int irq = hw_config->irq;
 
-	if (irq < 0)
-		irq *= -1;
-
-	if (irq > 2 && irq < 16)
-		devc = irq2devc[irq];
-	else
-		devc = NULL;
+	devc = audio_devs[hw_config->slots[0]]->devc;
 
 	if (devc && devc->base == hw_config->io_base)
 	{
@@ -937,12 +923,12 @@ void sb_dsp_unload(struct address_info *hw_config)
 		}
 		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) && devc->irq > 0)
 		{
-			snd_release_irq(devc->irq);
-			irq2devc[devc->irq] = NULL;
+			free_irq(devc->irq, devc);
 			sound_unload_mixerdev(devc->my_mixerdev);
 			sound_unload_mididev(devc->my_mididev);
 			sound_unload_audiodev(devc->my_dev);
 		}
+		kfree(devc);
 	}
 	else
 		release_region(hw_config->io_base, 16);

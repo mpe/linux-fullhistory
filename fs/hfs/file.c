@@ -98,11 +98,10 @@ struct buffer_head *hfs_getblk(struct hfs_fork *fork, int block, int create)
 		   to the file until we return, so it can't have moved.
 		*/
 	       if (tmp) {
-	               hfs_cat_mark_dirty(fork->entry);
-		       return getblk(dev, tmp, HFS_SECTOR_SIZE);
+		 hfs_cat_mark_dirty(fork->entry);
+		 return getblk(dev, tmp, HFS_SECTOR_SIZE);
 	       }
 	       return NULL;
-
 	} else {
 		/* If reading the block, then retry since the
 		   location on disk could have changed while
@@ -236,6 +235,7 @@ static hfs_rwret_t hfs_file_write(struct file * filp, const char * buf,
  */
 static void hfs_file_truncate(struct inode * inode)
 {
+ 	/*struct inode *inode = dentry->d_inode;*/
 	struct hfs_fork *fork = HFS_I(inode)->fork;
 
 	fork->lsize = inode->i_size;
@@ -268,7 +268,7 @@ static inline void xlate_to_user(char *buf, const char *data, int count)
  */
 static inline void xlate_from_user(char *data, const char *buf, int count)
 {
-	copy_from_user(data, buf, count);
+	count -= copy_from_user(data, buf, count);
 	while (count--) {
 		if (*data == '\n') {
 			*data = '\r';
@@ -398,16 +398,16 @@ hfs_s32 hfs_do_read(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 			} else {
 				chars = HFS_SECTOR_SIZE - offset;
 			}
-			count -= chars;
-			read += chars;
 			p = (*bhe)->b_data + offset;
 			if (convert) {
 				xlate_to_user(buf, p, chars);
 			} else {
-				copy_to_user(buf, p, chars);
+				chars -= copy_to_user(buf, p, chars);
 			}
 			brelse(*bhe);
+			count -= chars;
 			buf += chars;
+			read += chars;
 			offset = 0;
 			if (++bhe == &buflist[NBUF]) {
 				bhe = buflist;
@@ -479,7 +479,7 @@ hfs_s32 hfs_do_write(struct inode *inode, struct hfs_fork * fork, hfs_u32 pos,
 		if (convert) {
 			xlate_from_user(p, buf, c);
 		} else {
-			copy_from_user(p, buf, c);
+			c -= copy_from_user(p, buf, c);
 		}
 		update_vm_cache(inode,pos,p,c);
 		pos += c;

@@ -69,6 +69,7 @@ int             trix = 0;	/* Set trix=1 to load this as support for trix */
 int             pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
 int             sm_games = 0;	/* Mixer - see sb_mixer.c */
 int             acer = 0;	/* Do acer notebook init */
+int		mwave_bug = 0;	/* Using the dreadful mwave sb emulation */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -80,10 +81,11 @@ MODULE_PARM(mad16, "i");
 MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
+MODULE_PARM(mwave_bug, "i");
 
-static int      sbmpu = 0;
+static int sbmpu = 0;
 
-void           *smw_free = NULL;
+void *smw_free = NULL;
 
 int init_module(void)
 {
@@ -119,8 +121,7 @@ int init_module(void)
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 	if (smw_free)
 		kfree(smw_free);
@@ -133,19 +134,20 @@ cleanup_module(void)
 
 #else
 
-#ifdef SM_GAMES
+#ifdef CONFIG_SM_GAMES
 int             sm_games = 1;
-
 #else
 int             sm_games = 0;
-
 #endif
-#ifdef SB_ACER
+#ifdef CONFIG_SB_ACER
 int             acer = 1;
-
 #else
 int             acer = 0;
-
+#endif
+#ifdef CONFIG_SB_MWAVE
+int		mwave_bug = 1;
+#else
+int 		mwave_bug = 0;
 #endif
 #endif
 #endif

@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.25 1998/03/11 07:12:56 davem Exp $
+ * Version:	$Id: proc.c,v 1.26 1998/03/13 08:02:12 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -77,11 +77,12 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	unsigned long  dest, src;
 	unsigned short destp, srcp;
 	int timer_active, timer_active1, timer_active2;
+	int tw_bucket = 0;
 	unsigned long timer_expires;
 	struct tcp_opt *tp = &sp->tp_pinfo.af_tcp;
 
 	dest  = sp->daddr;
-	src   = sp->saddr;
+	src   = sp->rcv_saddr;
 	destp = sp->dummy_th.dest;
 	srcp  = sp->dummy_th.source;
 	
@@ -96,30 +97,47 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	
 	destp = ntohs(destp);
 	srcp  = ntohs(srcp);
-	timer_active1 = del_timer(&tp->retransmit_timer);
-	timer_active2 = del_timer(&sp->timer);
-	if (!timer_active1) tp->retransmit_timer.expires=0;
-	if (!timer_active2) sp->timer.expires=0;
-	timer_active=0;
-	timer_expires=jiffies;
+	if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
+		struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sp;
+
+		tw_bucket	= 1;
+		timer_active1	= timer_active2 = 0;
+		timer_active	= 3;
+		timer_expires	= tw->timer.expires;
+	} else {
+		timer_active1 = del_timer(&tp->retransmit_timer);
+		timer_active2 = del_timer(&sp->timer);
+		if (!timer_active1) tp->retransmit_timer.expires=0;
+		if (!timer_active2) sp->timer.expires=0;
+		timer_active	= 0;
+		timer_expires	= (unsigned) -1;
+	}
 	if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
-		timer_active=1;
-		timer_expires=tp->retransmit_timer.expires;
+		timer_active	= 1;
+		timer_expires	= tp->retransmit_timer.expires;
 	}
 	if (timer_active2 && sp->timer.expires < timer_expires) {
-		timer_active=2;
-		timer_expires=sp->timer.expires;
+		timer_active	= 2;
+		timer_expires	= sp->timer.expires;
 	}
+	if(timer_active == 0)
+		timer_expires = jiffies;
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 		i, src, srcp, dest, destp, sp->state, 
-		format==0?tp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
-		format==0?tp->rcv_nxt-tp->copied_seq:atomic_read(&sp->rmem_alloc),
-				timer_active, timer_expires-jiffies,
-		tp->retransmits,
-		sp->socket ? sp->socket->inode->i_uid:0,
-		timer_active?sp->timeout:0,
-		sp->socket ? sp->socket->inode->i_ino:0);
+		(tw_bucket ?
+		 0 :
+		 (format == 0) ?
+		 tp->write_seq-tp->snd_una : atomic_read(&sp->wmem_alloc)),
+		(tw_bucket ?
+		 0 :
+		 (format == 0) ?
+		 tp->rcv_nxt-tp->copied_seq: atomic_read(&sp->rmem_alloc)),
+		timer_active, timer_expires-jiffies,
+		(tw_bucket ? 0 : tp->retransmits),
+		(!tw_bucket && sp->socket) ? sp->socket->inode->i_uid : 0,
+		(!tw_bucket && timer_active) ? sp->timeout : 0,
+		(!tw_bucket && sp->socket) ? sp->socket->inode->i_ino : 0);
 	
 	if (timer_active1) add_timer(&tp->retransmit_timer);
 	if (timer_active2) add_timer(&sp->timer);	

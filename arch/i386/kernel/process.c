@@ -44,6 +44,7 @@
 #ifdef CONFIG_MATH_EMULATION
 #include <asm/math_emu.h>
 #endif
+#include "irq.h"
 
 #ifdef __SMP__
 asmlinkage void ret_from_smpfork(void) __asm__("ret_from_smpfork");
@@ -280,6 +281,12 @@ static inline void kb_wait(void)
 
 void machine_restart(char * __unused)
 {
+#if __SMP__
+	/*
+	 * turn off the IO-APIC, so we can do a clean reboot
+	 */
+	init_pic_mode();
+#endif
 
 	if(!reboot_thru_bios) {
 		/* rebooting needs to touch the page at absolute addr 0 */
@@ -510,9 +517,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);
 	else
 		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&default_ldt, 1);
-	p->tss.bitmap = offsetof(struct thread_struct,io_bitmap);
-	for (i = 0; i < IO_BITMAP_SIZE+1 ; i++) /* IO bitmap is actually SIZE+1 */
-		p->tss.io_bitmap[i] = ~0;
+	/*
+	 * a bitmap offset pointing outside of the TSS limit causes a nicely
+	 * controllable SIGSEGV. The first sys_ioperm() call sets up the
+	 * bitmap properly.
+	 */
+	p->tss.bitmap = sizeof(struct thread_struct);
+
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 

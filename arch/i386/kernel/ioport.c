@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/stddef.h>
 
 /* Set EXTENT bits starting at BASE in BITMAP to value TURN_ON. */
 static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_value)
@@ -53,12 +54,25 @@ static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_
  */
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
+	struct thread_struct * t = &current->tss;
+
 	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
 		return -EINVAL;
 	if (!suser())
 		return -EPERM;
+	/*
+	 * If it's the first ioperm() call in this thread's lifetime, set the
+	 * IO bitmap up. ioperm() is much less timing critical than clone(),
+	 * this is why we delay this operation until now:
+	 */
+#define IO_BITMAP_OFFSET offsetof(struct thread_struct,io_bitmap)
+
+	if (t->bitmap != IO_BITMAP_OFFSET) {
+		t->bitmap = IO_BITMAP_OFFSET;
+		memset(t->io_bitmap,0xff,(IO_BITMAP_SIZE+1)*4);
+	}
 		
-	set_bitmap((unsigned long *)current->tss.io_bitmap, from, num, !turn_on);
+	set_bitmap((unsigned long *)t->io_bitmap, from, num, !turn_on);
 	return 0;
 }
 

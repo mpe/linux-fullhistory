@@ -73,17 +73,13 @@ static void init_file_inode(struct inode *inode, hfs_u8 fork)
  */
 void hfs_put_inode(struct inode * inode)
 {
-	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
-
-	entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE(inode->i_ino))] = NULL;
-	hfs_cat_put(entry);
-
 	if (inode->i_count == 1) {
-		struct hfs_hdr_layout *tmp = HFS_I(inode)->layout;
-		if (tmp) {
-			HFS_I(inode)->layout = NULL;
-			HFS_DELETE(tmp);
-		}
+	  struct hfs_hdr_layout *tmp = HFS_I(inode)->layout;
+
+	  if (tmp) {
+		HFS_I(inode)->layout = NULL;
+		HFS_DELETE(tmp);
+	  }
 	}
 }
 
@@ -153,7 +149,7 @@ int hfs_notify_change(struct dentry *dentry, struct iattr * attr)
 	/* We must change all in-core inodes corresponding to this file. */
 	for (i = 0; i < 4; ++i) {
 	  if (de[i] && (de[i] != dentry)) {
-			inode_setattr(de[i]->d_inode, attr);
+		inode_setattr(de[i]->d_inode, attr);
 	  }
 	}
 
@@ -213,7 +209,7 @@ int hfs_notify_change(struct dentry *dentry, struct iattr * attr)
  * benefit from a way to pass an additional (void *) through iget() to
  * the VFS read_inode() function.
  *
- * hfs_iget no longer touches hfs_cat_entries.
+ * this will hfs_cat_put() the entry if it fails.
  */
 struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 		       struct dentry *dentry)
@@ -239,25 +235,15 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 	sb = entry->mdb->sys_mdb;
 	sys_entry = &entry->sys_entry[HFS_ITYPE_TO_INT(type)];
 
-	if (*sys_entry && (inode = (*sys_entry)->d_inode)) {
-		/* There is an existing inode for this file/dir.  Use it. */
-		++inode->i_count;
-		return inode;
+	if (!(inode = iget(sb, ntohl(entry->cnid) | type))) {
+	        hfs_cat_put(entry);
+	        return NULL;
 	}
 
-	if (!(inode = iget(sb, ntohl(entry->cnid) | type)))
-	        return NULL;
-
 	if (inode->i_dev != sb->s_dev) {
-	        iput(inode);
+	        iput(inode); /* automatically does an hfs_cat_put */
 		inode = NULL;
-	} else if (inode->i_mode) {
-		/* The inode has been initialized by another process.
-		   Note that if hfs_put_inode() is sleeping in hfs_cat_put()
-		   then we still need to attach it to the entry. */
-		if (!(*sys_entry))
-			*sys_entry = dentry; /* cache dentry */
-	} else {
+	} else if (!inode->i_mode) {
 		/* Initialize the inode */
 		struct hfs_sb_info *hsb = HFS_SB(sb);
 
@@ -281,10 +267,11 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 
 		if (!inode->i_mode) {
 			clear_inode(inode);
+			hfs_cat_put(entry);
 			inode = NULL;
-		} 
+		} else
+			*sys_entry = dentry; /* cache dentry */
 
-		*sys_entry = dentry; /* cache dentry */
 	}
 
 	return inode;

@@ -1,10 +1,9 @@
 #ifndef __irq_h
 #define __irq_h
 
-#include <linux/config.h>
-
 /*
- * Various low-level irq details needed by irq.c and smp.c
+ * Various low-level irq details needed by irq.c, process.c,
+ * time.c, io_apic.c and smp.c
  *
  * Interrupt entry/exit code at both C and assembly level
  */
@@ -20,6 +19,7 @@ void init_IO_APIC_traps(void);
 int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
 void make_8259A_irq (unsigned int irq);
 void send_IPI (int dest, int vector);
+void init_pic_mode (void);
 
 extern unsigned int io_apic_irqs;
 

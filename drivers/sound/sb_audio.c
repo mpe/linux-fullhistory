@@ -1151,14 +1151,14 @@ void sb_audio_init(sb_devc * devc, char *name)
 	}
 
 	if ((devc->my_dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
-						   name,
-						   driver,
-					     sizeof(struct audio_driver),
-						   audio_flags,
-						   format_mask,
-						   devc,
-						   devc->dma8,
-						   devc->dma8)) < 0)
+						name,
+						driver,
+						sizeof(struct audio_driver),
+						audio_flags,
+						format_mask,
+						devc,
+						devc->dma8,
+						devc->dma8)) < 0)
 	{
 		  printk(KERN_ERR "sb: unable to install audio.\n");
 		  return;

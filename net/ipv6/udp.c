@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.23 1998/03/08 05:56:59 davem Exp $
+ *	$Id: udp.c,v 1.24 1998/03/12 03:20:21 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

@@ -193,12 +193,14 @@ static ctl_table vm_table[] = {
 	{VM_SWAPOUT, "swapout_interval",
 	 &swapout_interval, sizeof(int), 0600, NULL, &proc_dointvec_jiffies},
 	{VM_FREEPG, "freepages", 
-	 &min_free_pages, 3*sizeof(int), 0600, NULL, &proc_dointvec},
+	 &freepages, sizeof(freepages_t), 0600, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &bdflush_min, &bdflush_max},
 	{VM_OVERCOMMIT_MEMORY, "overcommit_memory", &sysctl_overcommit_memory,
 	 sizeof(sysctl_overcommit_memory), 0644, NULL, &proc_dointvec},
+	{VM_BUFFERMEM, "buffermem",
+	 &buffer_mem, sizeof(buffer_mem_t), 0600, NULL, &proc_dointvec},
 	{0}
 };
 

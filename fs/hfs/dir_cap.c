@@ -1,5 +1,4 @@
-/* linux/fs/hfs/dir_cap.c
- *
+/*
  * Copyright (C) 1995-1997  Paul H. Hargrove
  * This file may be distributed under the terms of the GNU Public License.
  *
@@ -154,11 +153,12 @@ static int cap_lookup(struct inode * dir, struct dentry *dentry)
 	struct hfs_cat_entry *entry;
 	struct hfs_cat_key key;
 	struct inode *inode = NULL;
-	
+
 	if (!dir || !S_ISDIR(dir->i_mode)) {
-		goto done;
+		return -ENOENT;
 	}
 
+	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
 	dtype = HFS_ITYPE(dir->i_ino);
 
@@ -215,13 +215,13 @@ static int cap_lookup(struct inode * dir, struct dentry *dentry)
 			 HFS_I(dir)->file_type, dentry);
 
 	/* Don't return a resource fork for a directory */
-	if (inode && (dtype == HFS_CAP_RDIR) &&
+	if (inode && (dtype == HFS_CAP_RDIR) && 
 	    (HFS_I(inode)->entry->type == HFS_CDR_DIR)) {
+	        iput(inode); /* this does an hfs_cat_put */
 		inode = NULL;
 	}
 
 done:
-	dentry->d_op = &hfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }
@@ -261,7 +261,7 @@ static int cap_readdir(struct file * filp,
 		return -EBADF;
 	}
 
-        entry = HFS_I(dir)->entry;
+	entry = HFS_I(dir)->entry;
 	type = HFS_ITYPE(dir->i_ino);
 	skip_dirs = (type == HFS_CAP_RDIR);
 
@@ -368,7 +368,7 @@ static int cap_readdir(struct file * filp,
  * related calls (create, rename, and mknod). the directory calls
  * should be immune. the relevant calls in dir.c call drop_dentry 
  * upon successful completion. */
-void hfs_cap_drop_dentry(const ino_t type, struct dentry *dentry)
+void hfs_cap_drop_dentry(struct dentry *dentry, const ino_t type)
 {
   if (type == HFS_CAP_DATA) { /* given name */
     hfs_drop_special(DOT_FINDERINFO, dentry->d_parent, dentry);

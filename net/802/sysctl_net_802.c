@@ -24,6 +24,5 @@ ctl_table tr_table[] = {
 	{NET_TR_RIF_TIMEOUT, "rif_timeout", &sysctl_tr_rif_timeout, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{0}
-	 {0}
 };
 #endif

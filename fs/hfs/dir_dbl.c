@@ -135,11 +135,12 @@ static int dbl_lookup(struct inode * dir, struct dentry *dentry)
 	struct hfs_cat_entry *entry;
 	struct hfs_cat_key key;
 	struct inode *inode = NULL;
-	
+
 	if (!dir || !S_ISDIR(dir->i_mode)) {
-		goto done;
+		return -ENOENT;
 	}
 
+	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
 	
 	/* Perform name-mangling */
@@ -175,12 +176,11 @@ static int dbl_lookup(struct inode * dir, struct dentry *dentry)
 		hfs_nameout(dir, &cname, dentry->d_name.name+1,
 			    dentry->d_name.len-1);
 		hfs_cat_build_key(entry->cnid, &cname, &key);
-		inode = hfs_iget(hfs_cat_get(entry->mdb, &key), 
+		inode = hfs_iget(hfs_cat_get(entry->mdb, &key),
 				 HFS_DBL_HDR, dentry);
 	}
 	
 done:
-	dentry->d_op = &hfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }
@@ -219,7 +219,7 @@ static int dbl_readdir(struct file * filp,
 		return -EBADF;
 	}
 
-        entry = HFS_I(dir)->entry;
+	entry = HFS_I(dir)->entry;
 
 	if (filp->f_pos == 0) {
 		/* Entry 0 is for "." */
@@ -414,14 +414,14 @@ static int dbl_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	int error;
 
-	if (is_hdr(new_dir, new_dentry->d_name.name, 
+	if (is_hdr(new_dir, new_dentry->d_name.name,
 		   new_dentry->d_name.len)) {
 		error = -EPERM;
 	} else {
 		error = hfs_rename(old_dir, old_dentry,
 				   new_dir, new_dentry);
 		if ((error == -ENOENT) /*&& !must_be_dir*/ &&
-		    is_hdr(old_dir, old_dentry->d_name.name, 
+		    is_hdr(old_dir, old_dentry->d_name.name,
 			   old_dentry->d_name.len)) {
 			error = -EPERM;
 		}
@@ -435,9 +435,8 @@ static int dbl_rename(struct inode *old_dir, struct dentry *old_dentry,
  * as far as i can tell, the calls that need to do this are the file
  * related calls (create, rename, and mknod). the directory calls
  * should be immune. the relevant calls in dir.c call drop_dentry 
- * upon successful completion. this allocates an array for %name
- * on the first attempt to access it. */
-void hfs_dbl_drop_dentry(const ino_t type, struct dentry *dentry)
+ * upon successful completion. */
+void hfs_dbl_drop_dentry(struct dentry *dentry, const ino_t type)
 {
   unsigned char tmp_name[HFS_NAMEMAX + 1];
   struct dentry *de = NULL;

@@ -244,7 +244,6 @@ EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);
 EXPORT_SYMBOL(net_timer);
 /* UDP/TCP exported functions for TCPv6 */
-EXPORT_SYMBOL(sysctl_tcp_sack);
 EXPORT_SYMBOL(sysctl_tcp_timestamps);
 EXPORT_SYMBOL(sysctl_tcp_window_scaling);
 EXPORT_SYMBOL(sock_rspace);
@@ -272,6 +271,7 @@ EXPORT_SYMBOL(tcp_slt_array);
 EXPORT_SYMBOL(__tcp_inc_slow_timer);
 EXPORT_SYMBOL(tcp_statistics);
 EXPORT_SYMBOL(tcp_rcv_state_process);
+EXPORT_SYMBOL(tcp_timewait_state_process);
 EXPORT_SYMBOL(tcp_do_sendmsg);
 EXPORT_SYMBOL(tcp_v4_build_header);
 EXPORT_SYMBOL(tcp_v4_rebuild_header);
@@ -293,6 +293,11 @@ EXPORT_SYMBOL(ipv4_specific);
 EXPORT_SYMBOL(tcp_simple_retransmit);
 
 EXPORT_SYMBOL(xrlim_allow);
+
+EXPORT_SYMBOL(tcp_write_xmit);
+EXPORT_SYMBOL(dev_loopback_xmit);
+EXPORT_SYMBOL(tcp_regs);
+
 #endif
 
 #ifdef CONFIG_NETLINK

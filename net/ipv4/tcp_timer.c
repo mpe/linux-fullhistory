@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.38 1998/03/10 05:11:17 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.39 1998/03/13 08:02:17 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -89,20 +89,24 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 		 * The delayed ack timer can be set if we are changing the
 		 * retransmit timer when removing acked frames.
 		 */
-		del_timer(&tp->probe_timer);
-		del_timer(&tp->retransmit_timer);
+		if(tp->probe_timer.prev)
+			del_timer(&tp->probe_timer);
+		if(tp->retransmit_timer.prev)
+			del_timer(&tp->retransmit_timer);
 		tp->retransmit_timer.expires=jiffies+when;
 		add_timer(&tp->retransmit_timer);
 		break;
 
 	case TIME_DACK:
-		del_timer(&tp->delack_timer);
+		if(tp->delack_timer.prev)
+			del_timer(&tp->delack_timer);
 		tp->delack_timer.expires=jiffies+when;
 		add_timer(&tp->delack_timer);
 		break;
 
 	case TIME_PROBE0:
-		del_timer(&tp->probe_timer);
+		if(tp->probe_timer.prev)
+			del_timer(&tp->probe_timer);
 		tp->probe_timer.expires=jiffies+when;
 		add_timer(&tp->probe_timer);
 		break;	
@@ -137,8 +141,7 @@ static int tcp_write_err(struct sock *sk, int force)
 	
 	/* Time wait the socket. */
 	if (!force && ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING))) {
-		tcp_set_state(sk,TCP_TIME_WAIT);
-		tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+		tcp_time_wait(sk);
 	} else {
 		/* Clean up time. */
 		tcp_set_state(sk, TCP_CLOSE);
@@ -216,10 +219,9 @@ void tcp_probe_timer(unsigned long data)
 			sk->err = ETIMEDOUT;
 		sk->error_report(sk);
 
-		/* Time wait the socket. */
 		if ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
-			tcp_set_state(sk, TCP_TIME_WAIT);
-			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			/* Time wait the socket. */
+			tcp_time_wait(sk);
 		} else {
 			/* Clean up time. */
 			tcp_set_state(sk, TCP_CLOSE);

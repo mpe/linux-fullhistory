@@ -262,6 +262,9 @@ fail_nomem:
 
 /*
  * Allocate and initialize an mm_struct.
+ *
+ * NOTE! The mm mutex will be locked until the
+ * caller decides that all systems are go..
  */
 struct mm_struct * mm_alloc(void)
 {
@@ -274,7 +277,7 @@ struct mm_struct * mm_alloc(void)
 		mm->count = 1;
 		mm->map_count = 0;
 		mm->def_flags = 0;
-		mm->mmap_sem = MUTEX;
+		mm->mmap_sem = MUTEX_LOCKED;
 		/*
 		 * Leave mm->pgd set to the parent's pgd
 		 * so that pgd_offset() is always valid.
@@ -327,6 +330,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	retval = dup_mmap(mm);
 	if (retval)
 		goto free_pt;
+	up(&mm->mmap_sem);
 	return 0;
 
 free_mm:

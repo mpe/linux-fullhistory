@@ -34,7 +34,7 @@ struct hfs_inode_info {
 	struct hfs_hdr_layout		*layout;
 
         /* for dentry cleanup */
-        void (*d_drop_op)(const ino_t, struct dentry *);
+        void (*d_drop_op)(struct dentry *, const ino_t);
 };
 
 #endif

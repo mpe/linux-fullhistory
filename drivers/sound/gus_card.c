@@ -30,7 +30,7 @@ int             gus_pnp_flag = 0;
 
 void attach_gus_card(struct address_info *hw_config)
 {
-	snd_set_irq_handler(hw_config->irq, gusintr, "Gravis Ultrasound", hw_config->osp);
+	snd_set_irq_handler(hw_config->irq, gusintr, "Gravis Ultrasound", hw_config->osp, hw_config);
 
 	gus_wave_init(hw_config);
 
@@ -101,7 +101,7 @@ void unload_gus(struct address_info *hw_config)
 
 	release_region(hw_config->io_base, 16);
 	release_region(hw_config->io_base + 0x100, 12);		/* 0x10c-> is MAX */
-	snd_release_irq(hw_config->irq);
+	snd_release_irq(hw_config->irq, hw_config);
 
 	sound_free_dma(hw_config->dma);
 
@@ -111,14 +111,15 @@ void unload_gus(struct address_info *hw_config)
 
 void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
-	unsigned char   src;
-	extern int      gus_timer_enabled;
+	unsigned char src;
+	extern int gus_timer_enabled;
+	struct address_info *hw_config=dev_id;
 
 	sti();
 
 #ifdef CONFIG_GUSMAX
 	if (have_gus_max)
-		adintr(irq, NULL, NULL);
+		adintr(irq, (void *)hw_config->slots[3], NULL);
 #endif
 
 	while (1)

@@ -16,6 +16,7 @@ usage.
 
 Currently, these files are in /proc/sys/vm:
 - bdflush
+- buffermem
 - freepages
 - overcommit_memory
 - swapctl
@@ -88,11 +89,27 @@ number of jiffies per second is 100, except on Alpha machines
 age_super is for filesystem metadata.
 
 ==============================================================
+buffermem:
 
+The three values in this file correspond to the values in
+the struct buffer_mem. It controls how much memory should
+be used for buffer and cache memory. Note that memorymapped
+files are also counted as cache memory...
+
+The values are:
+min_percent	-- this is the minumum percentage of memory
+		   that should be spent on buffer + page cache
+borrow_percent  -- when Linux is short on memory, and buffer
+                   and cache use more than this percentage of
+                   memory, free pages are stolen from them
+max_percent     -- this is the maximum amount of memory that
+                   can be used for buffer and cache memory 
+
+==============================================================
 freepages:
 
-This file contains three values: min_free_pages, free_pages_low
-and free_pages_high in order.
+This file contains the values in the struct freepages. That
+struct contains three members: min, low and high.
 
 These numbers are used by the VM subsystem to keep a reasonable
 number of pages on the free page list, so that programs can
@@ -100,25 +117,23 @@ allocate new pages without having to wait for the system to
 free used pages first. The actual freeing of pages is done
 by kswapd, a kernel daemon.
 
-min_free_pages  -- when the number of free pages reaches this
-                   level, only the kernel can allocate memory
-                   for _critical_ tasks only
-free_pages_low  -- when the number of free pages drops below
-                   this level, kswapd is woken up immediately
-free_pages_high -- this is kswapd's target, when more than
-                   free_pages_high pages are free, kswapd will
-                   stop swapping.
+min  -- when the number of free pages reaches this
+        level, only the kernel can allocate memory
+        for _critical_ tasks only
+low  -- when the number of free pages drops below
+        this level, kswapd is woken up immediately
+high -- this is kswapd's target, when more than <high>
+        pages are free, kswapd will stop swapping.
 
-When the number of free pages is between free_pages_low and
-free_pages_high, and kswapd hasn't run for swapout_interval
-jiffies, then kswapd is woken up too. See swapout_interval
-for more info.
+When the number of free pages is between low and high,
+and kswapd hasn't run for swapout_interval jiffies, then
+kswapd is woken up too. See swapout_interval for more info.
 
 When free memory is always low on your system, and kswapd has
 trouble keeping up with allocations, you might want to
-increase these values, especially free_pages_high and perhaps
-free_pages_low. I've found that a 1:2:4 relation for these
-values tend to work rather well in a heavily loaded system.
+increase these values, especially high and perhaps low.
+I've found that a 1:2:4 relation for these values tend to work
+rather well in a heavily loaded system.
 
 ==============================================================
 
@@ -163,9 +178,7 @@ static inline int vm_enough_memory(long pages)
 
 swapctl:
 
-This file contains no less than 16 variables, of which about
-half is actually used :-) In the listing below, the unused
-variables are marked as such.
+This file contains no less than 8 variables.
 All of these values are used by kswapd, and the usage can be
 found in linux/mm/vmscan.c.
 
@@ -177,18 +190,10 @@ typedef struct swap_control_v5
     unsigned int    sc_page_advance;
     unsigned int    sc_page_decline;
     unsigned int    sc_page_initial_age;
-    unsigned int    sc_max_buff_age;      /* unused */
-    unsigned int    sc_buff_advance;      /* unused */
-    unsigned int    sc_buff_decline;      /* unused */
-    unsigned int    sc_buff_initial_age;  /* unused */
     unsigned int    sc_age_cluster_fract;
     unsigned int    sc_age_cluster_min;
     unsigned int    sc_pageout_weight;
     unsigned int    sc_bufferout_weight;
-    unsigned int    sc_buffer_grace;      /* unused */
-    unsigned int    sc_nr_buffs_to_free;  /* unused */
-    unsigned int    sc_nr_pages_to_free;  /* unused */
-    enum RCL_POLICY sc_policy;            /* RCL_PERSIST hardcoded */
 } swap_control_v5;
 --------------------------------------------------------------
 
@@ -207,9 +212,8 @@ is adjusted according to the following scheme:
   (default 1)
 And when a page reaches age 0, it's ready to be swapped out.
 
-The variables sc_age_cluster_fract till sc_bufferout_weight
-have to do with the amount of scanning kswapd is doing on
-each call to try_to_swap_out().
+The next four variables can be used to control kswapd's
+agressiveness in swapping out pages.
 
 sc_age_cluster_fract is used to calculate how many pages from
 a process are to be scanned by kswapd. The formula used is
@@ -221,9 +225,12 @@ also scan small processes.
 
 The values of sc_pageout_weight and sc_bufferout_weight are
 used to control the how many tries kswapd will do in order
-to swapout one page / buffer. As with sc_age_cluster_fract,
-the actual value is calculated by several more or less complex
-formulae and the default value is good for every purpose.
+to swapout one page / buffer. These values can be used to
+finetune the ratio between user pages and buffer/cache memory.
+When you find that your Linux system is swapping out too much
+process pages in order to satisfy buffer memory demands, you
+might want to either increase sc_bufferout_weight, or decrease
+the value of sc_pageout_weight.
 
 ==============================================================
 

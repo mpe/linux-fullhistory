@@ -86,14 +86,15 @@ out_free:
  
 int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 {
-	int err = -EFAULT; 
+	int err;
 
 	while(len>0)
 	{
 		if(iov->iov_len)
 		{
 			int copy = min(iov->iov_len, len);
-			if (copy_to_user(iov->iov_base, kdata, copy))
+			err = copy_to_user(iov->iov_base, kdata, copy);
+			if (err)
 				goto out;
 			kdata+=copy;
 			len-=copy;

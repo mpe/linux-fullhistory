@@ -1237,6 +1237,8 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	newsk = skb->sk;
 	newsk->pair = NULL;
+	newsk->socket = newsock;
+	newsk->sleep = &newsock->wait;
 	sti();
 
 	/* Now attach up the new socket */

@@ -164,7 +164,7 @@ static int config_pas_hw(struct address_info *hw_config)
 		}
 		else
 		{
-			if (snd_set_irq_handler(pas_irq, pasintr, "PAS16", hw_config->osp) < 0)
+			if (request_irq(pas_irq, pasintr, "PAS16", 0, NULL) < 0)
 				ok = 0;
 		}
 	}
@@ -355,7 +355,7 @@ void
 unload_pas(struct address_info *hw_config)
 {
 	sound_free_dma(hw_config->dma);
-	snd_release_irq(hw_config->irq);
+	free_irq(hw_config->irq, NULL);
 }
 
 #ifdef MODULE

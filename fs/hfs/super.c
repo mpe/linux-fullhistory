@@ -163,8 +163,8 @@ static int hfs_statfs(struct super_block *sb, struct statfs *buf, int len)
 	tmp.f_blocks = mdb->alloc_blksz * mdb->fs_ablocks;
 	tmp.f_bfree = mdb->alloc_blksz * mdb->free_ablocks;
 	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = mdb->fs_ablocks;   /* According to the statfs manual page, -1 is the  */
-	tmp.f_ffree = mdb->free_ablocks; /* correct value when the meaning is undefined. */ 
+	tmp.f_files = mdb->fs_ablocks;  
+	tmp.f_ffree = mdb->free_ablocks;
 	tmp.f_namelen = HFS_NAMELEN;
 
 	return copy_to_user(buf, &tmp, len) ? -EFAULT : 0;
@@ -459,16 +459,13 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	if (!root_inode) 
 		goto bail_no_root;
 	  
-	/* cache the dentry in the inode */
-	s->s_root = 
-	  HFS_I(root_inode)->entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE_NORM)] =
-	  d_alloc_root(root_inode, NULL);
+	s->s_root = d_alloc_root(root_inode, NULL);
 	if (!s->s_root) 
 		goto bail_no_root;
 
-	/* HFS_SUPERBLK prevents the root inode from being flushed 
-	 * inadvertantly. */
-	HFS_I(root_inode)->entry->state = HFS_SUPERBLK;
+	/* fix up pointers. */
+	HFS_I(root_inode)->entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE_NORM)] =
+	  s->s_root;
 	s->s_root->d_op = &hfs_dentry_operations;
 
 	/* everything's okay */

@@ -191,9 +191,6 @@ struct raw_opt {
 
 struct tcp_opt
 {
-	/* TCP bind bucket hash linkage. */
-	struct sock		*bind_next;
-	struct sock		**bind_pprev;
 	int	tcp_header_len;	/* Bytes of tcp header to send		*/
 
 /*
@@ -220,7 +217,7 @@ struct tcp_opt
 
 	__u32	snd_wl2;	/* Ack sequence for update		*/
 	__u32	snd_wnd;	/* The window we expect to receive	*/
-	__u16	max_window;
+	__u32	max_window;
 	__u8	pending;	/* pending events			*/
 	__u8	retransmits;
 	__u32	last_ack_sent;	/* last ack we sent			*/
@@ -262,8 +259,7 @@ struct tcp_opt
  *      Options received (usually on last packet, some only on SYN packets).
  */
 	char	tstamp_ok,	/* TIMESTAMP seen on SYN packet		*/
-		wscale_ok,	/* Wscale seen on SYN packet		*/
-		sack_ok;	/* SACK_PERM seen on SYN packet		*/
+		wscale_ok;	/* Wscale seen on SYN packet		*/
 	char	saw_tstamp;	/* Saw TIMESTAMP on last packet		*/
         __u16	in_mss;		/* MSS option received from sender	*/
         __u8	snd_wscale;	/* Window scaling received from sender	*/
@@ -272,9 +268,6 @@ struct tcp_opt
         __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
         __u32	ts_recent;	/* Time stamp to echo next		*/
         __u32	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
-        int	sacks;		/* Number of SACK blocks if any		*/
-        __u32	left_sack[4];	/* Left edges of blocks         	*/
-        __u32	right_sack[4];	/* Right edges of blocks        	*/
 
  	struct timer_list	probe_timer;		/* Probes	*/
 	__u32	basertt;	/* Vegas baseRTT			*/
@@ -346,6 +339,10 @@ struct sock
 	/* This must be first. */
 	struct sock		*sklist_next;
 	struct sock		*sklist_prev;
+
+	/* Local port binding hash linkage. */
+	struct sock		*bind_next;
+	struct sock		**bind_pprev;
 
 	/* Main hash linkage for various protocol lookup tables. */
 	struct sock		*next;

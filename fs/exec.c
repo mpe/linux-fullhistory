@@ -418,6 +418,7 @@ static int exec_mmap(void)
 	retval = new_page_tables(current);
 	if (retval)
 		goto fail_restore;
+	up(&mm->mmap_sem);
 	mmput(old_mm);
 	return 0;
 

@@ -83,9 +83,6 @@ static unsigned int ipddp_debug = IPDDP_DEBUG;
 /* Index to functions, as function prototypes. */
 static int ipddp_xmit(struct sk_buff *skb, struct device *dev);
 static struct net_device_stats *ipddp_get_stats(struct device *dev);
-static int ipddp_rebuild_header(struct sk_buff *skb);
-static int ipddp_hard_header(struct sk_buff *skb, struct device *dev,
-                unsigned short type, void *daddr, void *saddr, unsigned len);
 static int ipddp_create(struct ipddp_route *new_rt);
 static int ipddp_delete(struct ipddp_route *rt);
 static struct ipddp_route* ipddp_find_route(struct ipddp_route *rt);
@@ -119,10 +116,10 @@ int ipddp_init(struct device *dev)
 
 	/* Let the user now what mode we are in */
 	if(ipddp_mode == IPDDP_ENCAP)
-		printk("%s: Appletalk-IP Encapsulation mode by Bradford W. Johnson <johns393@maroon.tc.umn.edu>\n", 
+		printk("%s: Appletalk-IP Encap. mode by Bradford W. Johnson <johns393@maroon.tc.umn.edu>\n", 
 			dev->name);
 	if(ipddp_mode == IPDDP_DECAP)
-		printk("%s: Appletalk-IP Decapsulation mode by Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n", 
+		printk("%s: Appletalk-IP Decap. mode by Jay Schulist <Jay.Schulist@spacs.k12.wi.us>\n", 
 			dev->name);
 
 	/* Fill in the device structure with ethernet-generic values. */
@@ -140,8 +137,6 @@ int ipddp_init(struct device *dev)
         dev->stop 	    = ipddp_close;
         dev->get_stats      = ipddp_get_stats;
         dev->do_ioctl       = ipddp_ioctl;
-	dev->hard_header    = ipddp_hard_header;        /* see ip_output.c */
-	dev->rebuild_header = ipddp_rebuild_header;
 
         dev->type = ARPHRD_IPDDP;       	/* IP over DDP tunnel */
         dev->mtu = 585;
@@ -158,24 +153,6 @@ int ipddp_init(struct device *dev)
 }
 
 /*
- * Transmit LLAP/ELAP frame using aarp_send_ddp.
- */
-static int ipddp_xmit(struct sk_buff *skb, struct device *dev)
-{
-        /* Retrieve the saved address hint */
-        struct at_addr *at = (struct at_addr *)skb->data;
-        skb_pull(skb,4);
-
-        ((struct net_device_stats *) dev->priv)->tx_packets++;
-        ((struct net_device_stats *) dev->priv)->tx_bytes+=skb->len;
-
-        if(aarp_send_ddp(skb->dev, skb, at, NULL) < 0)
-                dev_kfree_skb(skb);
-
-        return 0;
-}
-
-/*
  * Get the current statistics. This may be called with the card open or closed.
  */
 static struct net_device_stats *ipddp_get_stats(struct device *dev)
@@ -184,18 +161,14 @@ static struct net_device_stats *ipddp_get_stats(struct device *dev)
 }
 
 /*
- * Now the packet really wants to go out. On entry skb->data points to the
- * ddpehdr we reserved earlier. skb->h.raw will be the higher level header.
+ * Transmit LLAP/ELAP frame using aarp_send_ddp.
  */
-static int ipddp_rebuild_header(struct sk_buff *skb)
+static int ipddp_xmit(struct sk_buff *skb, struct device *dev)
 {
 	u32 paddr = ((struct rtable*)skb->dst)->rt_gateway;
         struct ddpehdr *ddp;
-        struct at_addr at;
         struct ipddp_route *rt;
         struct at_addr *our_addr;
-
-	/* Wow! I'll eat my hat if this routine is really called. --ANK */
 
 	/*
          * Find appropriate route to use, based only on IP number.
@@ -205,25 +178,21 @@ static int ipddp_rebuild_header(struct sk_buff *skb)
                 if(rt->ip == paddr)
                         break;
         }
-
         if(rt == NULL)
-        {
-                printk("%s: unreachable dst %s\n", cardname, in_ntoa(paddr));
-                return -ENETUNREACH;
-        }
+                return 0;
 
         our_addr = atalk_find_dev_addr(rt->dev);
 
 	if(ipddp_mode == IPDDP_DECAP)
 		/* 
 		 * Pull off the excess room that should not be there.
-        	 * This is the case for Localtalk, this may not hold
-        	 * true for Ethertalk, etc. 
+		 * This is due to a hard-header problem. This is the
+		 * quick fix for now though, till it breaks.
 		 */
-		skb_pull(skb, 31-(sizeof(struct ddpehdr)+1));
+		skb_pull(skb, 35-(sizeof(struct ddpehdr)+1));
 
 	/* Create the Extended DDP header */
-	ddp = (struct ddpehdr *) (skb->data+4);
+	ddp = (struct ddpehdr *)skb->data;
         ddp->deh_len = skb->len;
         ddp->deh_hops = 1;
         ddp->deh_pad = 0;
@@ -231,7 +200,7 @@ static int ipddp_rebuild_header(struct sk_buff *skb)
 
 	/*
          * For Localtalk we need aarp_send_ddp to strip the
-         * Ext DDP header and place a Shrt DDP header on it.
+         * long DDP header and place a shot DDP header on it.
          */
         if(rt->dev->type == ARPHRD_LOCALTLK)
         {
@@ -248,24 +217,16 @@ static int ipddp_rebuild_header(struct sk_buff *skb)
         ddp->deh_dport = 72;
         ddp->deh_sport = 72;
 
-        *((__u8 *)(ddp+1)) = 22;        		/* ddp type = IP */
-        *((__u16 *)ddp)=ntohs(*((__u16 *)ddp));		/* fix up length field */
+        *((__u8 *)(ddp+1)) = 22;        	/* ddp type = IP */
+        *((__u16 *)ddp)=ntohs(*((__u16 *)ddp));	/* fix up length field */
 
-	/* Hide it at the start of the buffer, we pull it out in ipddp_xmit */
-        at = rt->at;
-        memcpy(skb->data,(void *)&at,sizeof(at));
-
-	skb->dev = rt->dev;	/* set skb->dev to appropriate device */
         skb->protocol = htons(ETH_P_ATALK);     /* Protocol has changed */
 
-        return 0;
-}
+	((struct net_device_stats *) dev->priv)->tx_packets++;
+        ((struct net_device_stats *) dev->priv)->tx_bytes+=skb->len;
 
-static int ipddp_hard_header(struct sk_buff *skb, struct device *dev, 
-		unsigned short type, void *daddr, void *saddr, unsigned len)
-{
-        /* Push down the header space and the type byte */
-        skb_push(skb, sizeof(struct ddpehdr)+1+4);
+        if(aarp_send_ddp(rt->dev, skb, &rt->at, NULL) < 0)
+                dev_kfree_skb(skb);
 
         return 0;
 }

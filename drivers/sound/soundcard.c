@@ -26,6 +26,7 @@
 #include <linux/fcntl.h>
 #include <linux/ctype.h>
 #include <linux/stddef.h>
+#include <linux/kmod.h>
 #ifdef __KERNEL__
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -438,7 +439,7 @@ static int sound_open(struct inode *inode, struct file *file)
 
 	case SND_DEV_CTL:
 		dev >>= 4;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (dev >= 0 && dev < MAX_MIXER_DEV && mixer_devs[dev] == NULL) {
 		char modname[20];
 		sprintf(modname, "mixer%d", dev);
@@ -554,14 +555,14 @@ static int sound_mixer_ioctl(int mixdev, unsigned int cmd, caddr_t arg)
 {
  	if (mixdev < 0 || mixdev >= MAX_MIXER_DEV)
  		return -ENXIO;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
  	/* Try to load the mixer... */
  	if (mixer_devs[mixdev] == NULL) {
  		char modname[20];
  		sprintf(modname, "mixer%d", mixdev);
  		request_module(modname);
  	}
-#endif	/* CONFIG_KERNELD */
+#endif	/* CONFIG_KMOD */
  	if (mixdev >= num_mixers || !mixer_devs[mixdev])
  		return -ENXIO;
 	if (cmd == SOUND_MIXER_INFO)
@@ -800,7 +801,7 @@ free_all_irqs(void)
 		if (irqs & (1ul << i))
 		{
 			printk(KERN_WARNING "Sound warning: IRQ%d was left allocated - fixed.\n", i);
-			snd_release_irq(i);
+			snd_release_irq(i, NULL);
 		}
 	}
 	irqs = 0;
@@ -894,14 +895,14 @@ void cleanup_module(void)
 }
 #endif
 
-int snd_set_irq_handler(int interrupt_level, void (*iproc) (int, void *, struct pt_regs *), char *name, int *osp)
+int snd_set_irq_handler(int interrupt_level, void (*iproc) (int, void *, struct pt_regs *), char *name, int *osp, void *dev_id)
 {
-	int             retcode;
-	unsigned long   flags;
+	int retcode;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	retcode = request_irq(interrupt_level, iproc, 0, name, NULL);
+	retcode = request_irq(interrupt_level, iproc, 0, name, dev_id);
 	
 	if (retcode < 0)
 	{
@@ -914,13 +915,13 @@ int snd_set_irq_handler(int interrupt_level, void (*iproc) (int, void *, struct 
 	return retcode;
 }
 
-void snd_release_irq(int vect)
+void snd_release_irq(int vect, void *dev_id)
 {
 	if (!(irqs & (1ul << vect)))
 		return;
 
 	irqs &= ~(1ul << vect);
-	free_irq(vect, NULL);
+	free_irq(vect, dev_id);
 }
 
 int sound_alloc_dma(int chn, char *deviceID)

@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.5 1998/03/06 01:23:22 davem Exp $
+ * Version:	$Id: proc.c,v 1.6 1998/03/13 08:02:19 davem Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -21,6 +21,7 @@
 #include <linux/net.h>
 #include <linux/in6.h>
 #include <net/sock.h>
+#include <net/tcp.h>
 #include <net/transp_v6.h>
 
 /* This is the main implementation workhorse of all these routines. */
@@ -52,21 +53,35 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 	SOCKHASH_LOCK();
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
+		struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sp;
+		int tw_bucket = 0;
+
 		pos += 149;
 		if(pos < offset)
 			goto next;
 		tp = &(sp->tp_pinfo.af_tcp);
-		dest  = &sp->net_pinfo.af_inet6.daddr;
-		src   = &sp->net_pinfo.af_inet6.rcv_saddr;
+		if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
+			tw_bucket = 1;
+			dest  = &tw->v6_daddr;
+			src   = &tw->v6_rcv_saddr;
+		} else {
+			dest  = &sp->net_pinfo.af_inet6.daddr;
+			src   = &sp->net_pinfo.af_inet6.rcv_saddr;
+		}
 		destp = ntohs(sp->dummy_th.dest);
 		srcp  = ntohs(sp->dummy_th.source);
-
-		timer_active1 = del_timer(&tp->retransmit_timer);
-		timer_active2 = del_timer(&sp->timer);
-		if(!timer_active1) tp->retransmit_timer.expires = 0;
-		if(!timer_active2) sp->timer.expires = 0;
-		timer_active = 0;
-		timer_expires = (unsigned) -1;
+		if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
+			timer_active1	= timer_active2 = 0;
+			timer_active	= 3;
+			timer_expires	= tw->timer.expires;
+		} else {
+			timer_active1 = del_timer(&tp->retransmit_timer);
+			timer_active2 = del_timer(&sp->timer);
+			if(!timer_active1) tp->retransmit_timer.expires = 0;
+			if(!timer_active2) sp->timer.expires = 0;
+			timer_active = 0;
+			timer_expires = (unsigned) -1;
+		}
 		if(timer_active1 && tp->retransmit_timer.expires < timer_expires) {
 			timer_active = timer_active1;
 			timer_expires = tp->retransmit_timer.expires;
@@ -75,6 +90,8 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			timer_active = timer_active2;
 			timer_expires = sp->timer.expires;
 		}
+		if(timer_active == 0)
+			timer_expires = jiffies;
 		sprintf(tmpbuf, "%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
 			"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 			i,
@@ -83,13 +100,23 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			dest->s6_addr32[0], dest->s6_addr32[1],
 			dest->s6_addr32[2], dest->s6_addr32[3], destp,
 			sp->state,
-			format==0?tp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc),
-			format==0?tp->rcv_nxt-tp->copied_seq:atomic_read(&sp->rmem_alloc),
+			(tw_bucket ?
+			 0 :
+			 (format == 0) ?
+			 tp->write_seq-tp->snd_una :
+			 atomic_read(&sp->wmem_alloc)),
+			(tw_bucket ?
+			 0 :
+			 (format == 0) ?
+			 tp->rcv_nxt-tp->copied_seq :
+			 atomic_read(&sp->rmem_alloc)),
 			timer_active, timer_expires-jiffies,
-			tp->retransmits,
-			sp->socket ? sp->socket->inode->i_uid:0,
-			timer_active?sp->timeout:0,
-			sp->socket ? sp->socket->inode->i_ino:0);
+			(tw_bucket ? 0 : tp->retransmits),
+			((!tw_bucket && sp->socket) ?
+			 sp->socket->inode->i_uid : 0),
+			(!tw_bucket && timer_active) ? sp->timeout : 0,
+			((!tw_bucket && sp->socket) ?
+			 sp->socket->inode->i_ino : 0));
 
 		if(timer_active1) add_timer(&tp->retransmit_timer);
 		if(timer_active2) add_timer(&sp->timer);

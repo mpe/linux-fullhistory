@@ -23,6 +23,12 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ *		     general sleep/wakeup clean up.
+ * Alan Cox	   : reformatted. Fixed SMP bugs. Moved to kernel alloc/free
+ *		     of irqs. Use dev_id.
+ *
+ * Status:
+ *		Tested. Believed fully functional.
  */
 
 #include <linux/config.h>
@@ -144,9 +150,9 @@ static void ad1848_tmr_reprogram(int dev);
 
 static int ad_read(ad1848_info * devc, int reg)
 {
-	unsigned long   flags;
-	int             x;
-	int             timeout = 900000;
+	unsigned long flags;
+	int x;
+	int timeout = 900000;
 
 	while (timeout > 0 && inb(devc->base) == 0x80)	/*Are we initializing */
 		timeout--;
@@ -163,11 +169,10 @@ static int ad_read(ad1848_info * devc, int reg)
 
 static void ad_write(ad1848_info * devc, int reg, int data)
 {
-	unsigned long   flags;
-	int             timeout = 900000;
+	unsigned long flags;
+	int timeout = 900000;
 
-	while (timeout > 0 &&
-	       inb(devc->base) == 0x80)		/*Are we initializing */
+	while (timeout > 0 && inb(devc->base) == 0x80)	/* Are we initializing */
 		timeout--;
 
 	save_flags(flags);
@@ -180,7 +185,7 @@ static void ad_write(ad1848_info * devc, int reg, int data)
 
 static void wait_for_calibration(ad1848_info * devc)
 {
-	int             timeout = 0;
+	int timeout = 0;
 
 	/*
 	 * Wait until the auto calibration process has finished.
@@ -1751,7 +1756,11 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 		else
 			devc->audio_flags |= DMA_DUPLEX;
 	}
-	
+
+	portc = (ad1848_port_info *) kmalloc(sizeof(ad1848_port_info), GFP_KERNEL);
+	if(portc==NULL)
+		return -1;
+		
 	if ((my_dev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 					     dev_name,
 					     &ad1848_audio_driver,
@@ -1762,12 +1771,11 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 					     dma_playback,
 					     dma_capture)) < 0)
 	{
+		kfree(portc);
+		portc=NULL;
 		return -1;
 	}
-	portc = (ad1848_port_info *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(ad1848_port_info)));
-	sound_mem_sizes[sound_nblocks] = sizeof(ad1848_port_info);
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
+	
 	audio_devs[my_dev]->portc = portc;
 	memset((char *) portc, 0, sizeof(*portc));
 
@@ -1777,23 +1785,21 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 
 	if (irq > 0)
 	{
-		irq2dev[irq] = devc->dev_no = my_dev;
-		if (snd_set_irq_handler(devc->irq, adintr,
-					  devc->name,
-					  NULL) < 0)
+		devc->dev_no = my_dev;
+		if (request_irq(devc->irq, adintr, 0, devc->name, (void *)my_dev) < 0)
 		{
-			printk(KERN_WARNING "ad1848: IRQ in use\n");
+			printk(KERN_WARNING "ad1848: Unable to allocate IRQ\n");
 		}
 		if (devc->model != MD_1848 && devc->model != MD_C930)
 		{
-			int             x;
-			unsigned char   tmp = ad_read(devc, 16);
+			int x;
+			unsigned char tmp = ad_read(devc, 16);
 
 			devc->timer_ticks = 0;
 
 			ad_write(devc, 21, 0x00);	/* Timer MSB */
 			ad_write(devc, 20, 0x10);	/* Timer LSB */
-
+#ifndef __SMP__
 			ad_write(devc, 16, tmp | 0x40);	/* Enable timer */
 			for (x = 0; x < 100000 && devc->timer_ticks == 0; x++);
 			ad_write(devc, 16, tmp & ~0x40);	/* Disable timer */
@@ -1805,6 +1811,9 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 				DDB(printk("Interrupt test OK\n"));
 				devc->irq_ok = 1;
 			}
+#else
+			devc->irq_ok=1;
+#endif			
 		}
 		else
 			devc->irq_ok = 1;	/* Couldn't test. assume it's OK */
@@ -1840,7 +1849,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 
 void ad1848_control(int cmd, int arg)
 {
-	ad1848_info    *devc;
+	ad1848_info *devc;
 
 	if (nr_ad1848_devs < 1)
 		return;
@@ -1850,7 +1859,7 @@ void ad1848_control(int cmd, int arg)
 	switch (cmd)
 	{
 		case AD1848_SET_XTAL:	/* Change clock frequency of AD1845 (only ) */
-		if (devc->model != MD_1845)
+			if (devc->model != MD_1845)
 				return;
 			ad_enter_MCE(devc);
 			ad_write(devc, 29, (ad_read(devc, 29) & 0x1f) | (arg << 5));
@@ -1859,8 +1868,8 @@ void ad1848_control(int cmd, int arg)
 
 		case AD1848_MIXER_REROUTE:
 		{
-			int             o = (arg >> 8) & 0xff;
-			int             n = arg & 0xff;
+			int o = (arg >> 8) & 0xff;
+			int n = arg & 0xff;
 
 			if (n == SOUND_MIXER_NONE)
 			{	/* Just hide this control */
@@ -1906,12 +1915,14 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 		
 	if (devc != NULL)
 	{
+		if(audio_devs[dev]->portc!=NULL)
+			kfree(audio_devs[dev]->portc);
 		release_region(devc->base, 4);
 
 		if (!share_dma)
 		{
 			if (irq > 0)
-				snd_release_irq(devc->irq);
+				free_irq(devc->irq, NULL);
 
 			sound_free_dma(audio_devs[dev]->dmap_out->dma);
 
@@ -1926,35 +1937,15 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 
 void adintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
-	unsigned char   status;
-	ad1848_info    *devc;
-	int             dev;
-	int             alt_stat = 0xff;
-	unsigned char   c930_stat = 0;
-	int             cnt = 0;
+	unsigned char status;
+	ad1848_info *devc;
+	int dev;
+	int alt_stat = 0xff;
+	unsigned char c930_stat = 0;
+	int cnt = 0;
 
-	if (irq < 0 || irq > 15)
-	{
-		dev = -1;
-	}
-	else
-		dev = irq2dev[irq];
-
-	if (dev < 0 || dev >= num_audiodevs)
-	{
-		for (irq = 0; irq < 17; irq++)
-			if (irq2dev[irq] != -1)
-				break;
-
-		if (irq > 15)
-		{
-			/* printk("ad1848.c: Bogus interrupt %d\n", irq); */
-			return;
-		}
-		dev = irq2dev[irq];
-		devc = (ad1848_info *) audio_devs[dev]->devc;
-	} else
-		devc = (ad1848_info *) audio_devs[dev]->devc;
+	dev = (int)dev_id;
+	devc = (ad1848_info *) audio_devs[dev]->devc;
 
 interrupt_again:		/* Jump back here if int status doesn't reset */
 
@@ -2542,12 +2533,12 @@ EXPORT_SYMBOL(unload_ms_sound);
 
 #ifdef MODULE
 
-MODULE_PARM(io, "i");
-MODULE_PARM(irq, "i");
-MODULE_PARM(dma, "i");
-MODULE_PARM(dma2, "i");
-MODULE_PARM(type, "i");
-MODULE_PARM(deskpro_xl, "i");
+MODULE_PARM(io, "i");			/* I/O for a raw AD1848 card */
+MODULE_PARM(irq, "i");			/* IRQ to use */
+MODULE_PARM(dma, "i");			/* First DMA channel */
+MODULE_PARM(dma2, "i");			/* Second DMA channel */
+MODULE_PARM(type, "i");			/* Card type */
+MODULE_PARM(deskpro_xl, "i");		/* Special magic for Deskpro XL boxen */
 
 int io = -1;
 int irq = -1;

@@ -6571,12 +6571,6 @@ CONFIG_JOYSTICK
   be called joystick.o. If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
-ARC console time
-CONFIG_RTC_ARC
-  If you boot your Alpha using the ARC firmware, say Y here. This option
-  adjusts the RTC clock to take into account the different starting epoch
-  used by ARC.
-
 Sound card support
 CONFIG_SOUND
   If you have a Sound Card in your Computer, i.e. if it can say more
@@ -6611,6 +6605,16 @@ CONFIG_SB
   drivers/sound/Readme.cards file before answering this question. For
   an unknown card you may answer Y if the card claims to be
   SoundBlaster compatible.
+
+Are you using the IBM Mwave "emulation" of SB ?
+CONFIG_SB_MWAVE
+  The IBM Mwave can do whats loosely describable as emulation of an 8bit
+  soundblaster if you load the right firmware from DOS warm boot and pray
+  and your machine happens to like you. Say Y if you are doing this as the
+  IRQ test normally fails on the mwave emulation. If you'd like real MWAVE
+  support phone IBM (425-556-8822) and ask them why they still haven't 
+  released any documentation.
+  [http://204.200.238.31/cgi-bin/link.pl?co=i&cl=/ts/ibm/contact.html]
 
 Generic OPL2/OPL3 FM synthesizer support
 CONFIG_ADLIB

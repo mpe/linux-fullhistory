@@ -17,6 +17,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -172,9 +173,6 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 
 struct cache_palias *sparc_aliases;
 
-extern int min_free_pages;
-extern int free_pages_low;
-extern int free_pages_high;
 extern void srmmu_frob_mem_map(unsigned long);
 
 int physmem_mapped_contig = 1;
@@ -265,11 +263,11 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	       initpages << (PAGE_SHIFT-10),
 	       PAGE_OFFSET, end_mem);
 
-	min_free_pages = nr_free_pages >> 7;
-	if(min_free_pages < 16)
-		min_free_pages = 16;
-	free_pages_low = min_free_pages + (min_free_pages >> 1);
-	free_pages_high = min_free_pages + min_free_pages;
+	freepages.min = nr_free_pages >> 7;
+	if(freepages.min < 16)
+		freepages.min = 16;
+	freepages.low = freepages.min + (freepages.min >> 1);
+	freepages.high = freepages.min + freepages.min;
 }
 
 void free_initmem (void)

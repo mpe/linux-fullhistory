@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.51 1998/03/08 05:56:40 davem Exp $
+ * Version:	$Id: udp.c,v 1.53 1998/03/12 03:20:00 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -828,7 +828,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				 * of this packet since that is all
 				 * that will be read.
 				 */
-				amount = skb->tail - skb->h.raw;
+				amount = skb->len - sizeof(struct udphdr);
 			}
 			return put_user(amount, (int *)arg);
 		}

@@ -95,7 +95,7 @@ static inline void update_dirs_plus(struct hfs_cat_entry *dir, int is_dir)
 }
 
 /*
- * update_dirs_plus()
+ * update_dirs_minus()
  *
  * Update the fields 'i_size', 'i_nlink', 'i_ctime', 'i_mtime' and
  * 'i_version' of the inodes associated with a directory that has
@@ -138,10 +138,9 @@ static inline void mark_inodes_deleted(struct hfs_cat_entry *entry,
 
 	for (i = 0; i < 4; ++i) {
 		if ((de = entry->sys_entry[i]) && (dentry != de)) {
-		    entry->sys_entry[i] = NULL;
-		    dget(de);
-		    d_delete(de);
-		    dput(de);
+		      dget(de);
+		      d_delete(de);
+		      dput(de);
 		}
 	}
 }
@@ -198,7 +197,7 @@ int hfs_create(struct inode * dir, struct dentry *dentry, int mode)
 		        error = -EIO;
    		} else {
 		  if (HFS_I(dir)->d_drop_op)
-		    HFS_I(dir)->d_drop_op(HFS_I(dir)->file_type, dentry);
+		    HFS_I(dir)->d_drop_op(dentry, HFS_I(dir)->file_type);
 		  d_instantiate(dentry, inode);
 		}
 	}
@@ -285,7 +284,7 @@ int hfs_unlink(struct inode * dir, struct dentry *dentry)
 	struct hfs_cat_key key;
 	int error;
 
-	if (build_key(&key, dir, dentry->d_name.name, 
+	if (build_key(&key, dir, dentry->d_name.name,
 		      dentry->d_name.len)) {
 		error = -EPERM;
 	} else if (!(victim = hfs_cat_get(entry->mdb, &key))) {
@@ -386,15 +385,15 @@ int hfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		} else {
 		  /* no existing inodes. just drop negative dentries */
 		  if (HFS_I(new_dir)->d_drop_op) 
-		    HFS_I(new_dir)->d_drop_op(HFS_I(new_dir)->file_type,
-						   new_dentry);
+		    HFS_I(new_dir)->d_drop_op(new_dentry, 
+					      HFS_I(new_dir)->file_type);
 		  update_dirs_plus(new_parent, is_dir);
 		}
 
 		/* update dcache */
 		d_move(old_dentry, new_dentry);
 	}
-	 
+
 	hfs_cat_put(victim);	/* Note that hfs_cat_put(NULL) is safe. */
 	return error;
 }

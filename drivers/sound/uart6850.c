@@ -10,6 +10,11 @@
  * Extended by Alan Cox for Red Hat Software. Now a loadable MIDI driver.
  * 28/4/97 - (C) Copyright Alan Cox. Released under the GPL version 2.
  *
+ * Alan Cox:	Updated for new modular code. Removed snd_* irq handling. Now
+ *		uses native linux resources
+ *
+ *	Status: Testing required
+ *
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -297,7 +302,7 @@ int probe_uart6850(struct address_info *hw_config)
 	uart6850_base = hw_config->io_base;
 	uart6850_irq = hw_config->irq;
 
-	if (snd_set_irq_handler(uart6850_irq, m6850intr, "MIDI6850", uart6850_osp) < 0)
+	if (request_irq(uart6850_irq, m6850intr, 0, "MIDI6850", NULL) < 0)
 		return 0;
 
 	ok = reset_uart6850();
@@ -307,7 +312,7 @@ int probe_uart6850(struct address_info *hw_config)
 
 void unload_uart6850(struct address_info *hw_config)
 {
-	snd_release_irq(hw_config->irq);
+	free_irq(hw_config->irq, NULL);
 	sound_unload_mididev(hw_config->slots[4]);
 }
 

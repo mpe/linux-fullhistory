@@ -1265,7 +1265,9 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		}
 
 		chunk = min(skb->len, size);
-		/* N.B. This could fail with -EFAULT */
+		/* N.B. This could fail with a non-zero value (which means -EFAULT
+		 *      and the non-zero value is the number of bytes not copied).
+		 */
 		memcpy_toiovec(msg->msg_iov, skb->data, chunk);
 		copied += chunk;
 		size -= chunk;

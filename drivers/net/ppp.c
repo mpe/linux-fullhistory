@@ -51,7 +51,7 @@
 
 /* $Id: ppp.c,v 1.14 1997/11/27 06:04:45 paulus Exp $ */
 
-#include <linux/config.h> /* for CONFIG_KERNELD */
+#include <linux/config.h> /* for CONFIG_KMOD */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

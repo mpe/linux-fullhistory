@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.56 1998/03/11 02:20:52 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.59 1998/03/13 08:02:20 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -44,7 +44,6 @@
 
 #define ICMP_PARANOIA
 
-extern int sysctl_tcp_sack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 
@@ -113,7 +112,7 @@ static int tcp_v6_verify_bind(struct sock *sk, unsigned short snum)
 			int addr_type = ipv6_addr_type(&sk->net_pinfo.af_inet6.rcv_saddr);
 
 			/* We must walk the whole port owner list in this case. -DaveM */
-			for(sk2 = tb->owners; sk2; sk2 = sk2->tp_pinfo.af_tcp.bind_next) {
+			for(sk2 = tb->owners; sk2; sk2 = sk2->bind_next) {
 				if(!sk_reuse || !sk2->reuse || sk2->state == TCP_LISTEN) {
 					if(addr_type == IPV6_ADDR_ANY	||
 					   !sk2->rcv_saddr		||
@@ -141,7 +140,7 @@ static void tcp_v6_hash(struct sock *sk)
 		struct sock **skp;
 
 		SOCKHASH_LOCK();
-		skp = &tcp_established_hash[tcp_v6_sk_hashfn(sk)];
+		skp = &tcp_established_hash[(sk->hashent = tcp_v6_sk_hashfn(sk))];
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
 		*skp = sk;
@@ -181,14 +180,10 @@ static void tcp_v6_rehash(struct sock *sk)
 	if(state != TCP_CLOSE) {
 		struct sock **skp;
 
-		if(state == TCP_LISTEN) {
+		if(state == TCP_LISTEN)
 			skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
-		} else {
-			int hash = tcp_v6_sk_hashfn(sk);
-			if(state == TCP_TIME_WAIT)
-				hash += (TCP_HTABLE_SIZE/2);
-			skp = &tcp_established_hash[hash];
-		}
+		else
+			skp = &tcp_established_hash[(sk->hashent = tcp_v6_sk_hashfn(sk))];
 
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
@@ -224,6 +219,7 @@ static struct sock *tcp_v6_lookup_listener(struct in6_addr *daddr, unsigned shor
 
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
+ * It is assumed that this code only gets called from within NET_BH.
  */
 static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 					   struct in6_addr *saddr, u16 sport,
@@ -250,8 +246,7 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 		goto hit;
 
 	/* Optimize here for direct hit, only listening connections can
-	 * have wildcards anyways.  It is assumed that this code only
-	 * gets called from within NET_BH.
+	 * have wildcards anyways.
 	 */
 	hash = tcp_v6_hashfn(daddr, hnum, saddr, sport);
 	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
@@ -270,10 +265,12 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next)
 		if(sk->num		== hnum			&& /* local port     */
 		   sk->family		== AF_INET6		&& /* address family */
-		   sk->dummy_th.dest	== sport		&& /* remote port    */
-		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.daddr, saddr)	&&
-		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr, daddr))
-			goto hit;
+		   sk->dummy_th.dest	== sport) {		   /* remote port    */
+			struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sk;
+			if(!ipv6_addr_cmp(&tw->v6_daddr, saddr)	&&
+			   !ipv6_addr_cmp(&tw->v6_rcv_saddr, daddr))
+				goto hit;
+		}
 #ifdef USE_QUICKSYNS
 listener_shortcut:
 #endif
@@ -520,8 +517,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	 *	Put in the TCP options to say MTU.
 	 */
 
-        tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_sack,
-                sysctl_tcp_timestamps,
+        tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_timestamps,
                 sysctl_tcp_window_scaling,tp->rcv_wscale);
         th->doff = sizeof(*th)/4 + (tmp>>2);
 	buff->csum = 0;
@@ -623,7 +619,7 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 
 	sk = tcp_v6_lookup(daddr, th->dest, saddr, th->source);
 
-	if (sk == NULL) {
+	if (sk == NULL || sk->state == TCP_TIME_WAIT) {
 		/* XXX: Update ICMP error count */
 		return;
 	}
@@ -800,7 +796,7 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	}
 	th->window = htons(req->rcv_wnd);
 
-	tmp = tcp_syn_build_options(skb, req->mss, req->sack_ok, req->tstamp_ok,
+	tmp = tcp_syn_build_options(skb, req->mss, req->tstamp_ok,
 		req->wscale_ok,req->rcv_wscale);
 	skb->csum = 0;
 	th->doff = (sizeof(*th) + tmp)>>2;
@@ -873,14 +869,13 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	req->rcv_isn = skb->seq;
 	req->snt_isn = isn;
-	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+	tp.tstamp_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
 	tcp_parse_options(skb->h.th,&tp,0);
 	if (tp.saw_tstamp)
                 req->ts_recent = tp.rcv_tsval;
         req->mss = tp.in_mss;
         req->tstamp_ok = tp.tstamp_ok;
-        req->sack_ok = tp.sack_ok;
         req->snd_wscale = tp.snd_wscale;
         req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = skb->h.th->source;
@@ -984,7 +979,6 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 
 	ip6_dst_store(newsk, dst);
 
-        newtp->sack_ok = req->sack_ok;
         newtp->tstamp_ok = req->tstamp_ok;
 	newtp->window_clamp = req->window_clamp;
 	newtp->rcv_wnd = req->rcv_wnd;
@@ -1186,12 +1180,14 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 			goto no_tcp_socket;
 		}
 
-		skb->sk = sk;
 		skb->seq = ntohl(th->seq);
 		skb->end_seq = skb->seq + th->syn + th->fin + len - th->doff*4;
 		skb->ack_seq = ntohl(th->ack_seq);
-
 		skb->used = 0;
+		if(sk->state == TCP_TIME_WAIT)
+			goto do_time_wait;
+
+		skb->sk = sk;
 	}
 
 	/*
@@ -1254,6 +1250,12 @@ discard_it:
 
 	kfree_skb(skb);
 	return 0;
+
+do_time_wait:
+	if(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
+				      skb, th, &(IPCB(skb)->opt), skb->len))
+		goto no_tcp_socket;
+	goto discard_it;
 }
 
 static int tcp_v6_rebuild_header(struct sock *sk, struct sk_buff *skb)
@@ -1407,10 +1409,8 @@ static int tcp_v6_init_sock(struct sock *sk)
 	tp->in_mss = 536;
 	/* tp->rcv_wnd = 8192; */
 	tp->tstamp_ok = 0;
-	tp->sack_ok = 0;
 	tp->wscale_ok = 0;
 	tp->snd_wscale = 0;
-	tp->sacks = 0;
 	tp->saw_tstamp = 0;
 	tp->syn_backlog = 0;
 

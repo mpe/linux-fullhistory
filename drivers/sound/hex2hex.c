@@ -66,14 +66,27 @@ int loadhex(FILE *inf, unsigned char *buf)
 
 int main( int argc, const char * argv [] )
 {
-	const char * varline = argv[1];
+	const char * varline;
 	int i,l;
+	int id=0;
 
+	if(argv[1] && strcmp(argv[1], "-i")==0)
+	{
+		argv++;
+		argc--;
+		id=1;
+	}
+	if(argv[1]==NULL)
+	{
+		fprintf(stderr,"hex2hex: [-i] filename\n");
+		exit(1);
+	}
+	varline = argv[1;
 	l = loadhex(stdin, buf);
 
 	printf("/*\n *\t Computer generated file. Do not edit.\n */\n");
         printf("static int %s_len = %d;\n", varline, l);
-	printf("static unsigned char %s[] = {\n", varline);
+	printf("static unsigned char %s[] %s = {\n", varline, id?"__initdata":"");
 
 	for (i=0;i<l;i++)
 	{

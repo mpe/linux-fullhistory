@@ -6,7 +6,7 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie.
  *  kswapd added: 7.1.96  sct
  *  Removed kswapd_ctl limits, and swap out as many pages as needed
- *  to bring the system back to free_pages_high: 2.4.97, Rik van Riel.
+ *  to bring the system back to freepages.high: 2.4.97, Rik van Riel.
  *  Version: $Id: vmscan.c,v 1.5 1998/02/23 22:14:28 sct Exp $
  */
 
@@ -22,6 +22,8 @@
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
 #include <linux/dcache.h>
+#include <linux/fs.h>
+#include <linux/pagemap.h>
 
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
@@ -454,11 +456,14 @@ static inline int do_try_to_free_page(int gfp_mask)
 	stop = 3;
 	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
+	if (BUFFER_MEM > buffer_mem.borrow_percent * num_physpages / 100)
+		state = 0;
 
 	switch (state) {
 		do {
 		case 0:
-			if (shrink_mmap(i, gfp_mask))
+			if (BUFFER_MEM > (buffer_mem.min_percent * num_physpages /100) &&
+					shrink_mmap(i, gfp_mask))
 				return 1;
 			state = 1;
 		case 1:
@@ -550,15 +555,15 @@ int kswapd(void *unused)
 		swapstats.wakeups++;
 		/* Do the background pageout: 
 		 * When we've got loads of memory, we try
-		 * (free_pages_high - nr_free_pages) times to
+		 * (freepages.high - nr_free_pages) times to
 		 * free memory. As memory gets tighter, kswapd
 		 * gets more and more agressive. -- Rik.
 		 */
-		tries = free_pages_high - nr_free_pages;
-		if (tries < min_free_pages) {
-			tries = min_free_pages;
+		tries = freepages.high - nr_free_pages;
+		if (tries < freepages.min) {
+			tries = freepages.min;
 		}
-		else if (nr_free_pages < (free_pages_low + min_free_pages) / 2) 
+		if (nr_free_pages < freepages.high + freepages.low)
 			tries <<= 1;
 		while (tries--) {
 			int gfp_mask;
@@ -590,9 +595,10 @@ void swap_tick(void)
 	int want_wakeup = 0, memory_low = 0;
 	int pages = nr_free_pages + atomic_read(&nr_async_pages);
 
-	if (pages < free_pages_low)
+	if (pages < freepages.low)
 		memory_low = want_wakeup = 1;
-	else if (pages < free_pages_high && jiffies >= next_swap_jiffies)
+	else if ((pages < freepages.high || BUFFER_MEM > (num_physpages * buffer_mem.max_percent / 100))
+			&& jiffies >= next_swap_jiffies)
 		want_wakeup = 1;
 
 	if (want_wakeup) { 

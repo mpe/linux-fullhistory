@@ -26,8 +26,8 @@
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
 #include <asm/lsu.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 /* #define SYSCALL_TRACING */
@@ -327,7 +327,7 @@ void do_fpother(struct pt_regs *regs)
 	case (2 << 14): /* unfinished_FPop */
 	case (3 << 14): /* unimplemented_FPop */
 #ifdef CONFIG_MATHEMU_MODULE
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 		if (!handle_mathemu)
 			request_module("math-emu");
 #endif

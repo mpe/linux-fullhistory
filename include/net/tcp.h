@@ -131,16 +131,52 @@ static __inline__ void tcp_sk_bindify(struct sock *sk)
 			tb->flags = 0;
 	} else {
 		if((tb->flags & TCPB_FLAG_FASTREUSE) &&
-		   ((sk->reuse != 0) || (sk->state == TCP_LISTEN)))
+		   ((sk->reuse == 0) || (sk->state == TCP_LISTEN)))
 			tb->flags &= ~TCPB_FLAG_FASTREUSE;
 	}
-	if((sk->tp_pinfo.af_tcp.bind_next = tb->owners) != NULL)
-		tb->owners->tp_pinfo.af_tcp.bind_pprev =
-			&sk->tp_pinfo.af_tcp.bind_next;
+	if((sk->bind_next = tb->owners) != NULL)
+		tb->owners->bind_pprev = &sk->bind_next;
 	tb->owners = sk;
-	sk->tp_pinfo.af_tcp.bind_pprev = &tb->owners;
+	sk->bind_pprev = &tb->owners;
 	sk->prev = (struct sock *) tb;
 }
+
+/* This is a TIME_WAIT bucket.  It works around the memory consumption
+ * problems of sockets in such a state on heavily loaded servers, but
+ * without violating the protocol specification.
+ */
+struct tcp_tw_bucket {
+	/* These _must_ match the beginning of struct sock precisely.
+	 * XXX Yes I know this is gross, but I'd have to edit every single
+	 * XXX networking file if I created a "struct sock_header". -DaveM
+	 */
+	struct sock		*sklist_next;
+	struct sock		*sklist_prev;
+	struct sock		*bind_next;
+	struct sock		**bind_pprev;
+	struct sock		*next;
+	struct sock		**pprev;
+	__u32			daddr;
+	__u32			rcv_saddr;
+	int			bound_dev_if;
+	unsigned short		num;
+	unsigned char		state,
+				family;		/* sk->zapped */
+	__u16			source;		/* sk->dummy_th.source */
+	__u16			dest;		/* sk->dummy_th.dest */
+
+	/* And these are ours. */
+	__u32			rcv_nxt;
+	struct tcp_func		*af_specific;
+	struct tcp_bind_bucket	*tb;
+	struct timer_list	timer;
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	struct in6_addr		v6_daddr;
+	struct in6_addr		v6_rcv_saddr;
+#endif
+};
+
+extern kmem_cache_t *tcp_timewait_cachep;
 
 /* tcp_ipv4.c: These sysctl variables need to be shared between v4 and v6
  * because the v6 tcp code to intialize a connection needs to interoperate
@@ -149,7 +185,6 @@ static __inline__ void tcp_sk_bindify(struct sock *sk)
  * address family independent and just leave one copy in the ipv4 section.
  * This would also clean up some code duplication. -- erics
  */
-extern int sysctl_tcp_sack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 
@@ -244,9 +279,6 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCPOPT_NOP		1	/* Padding */
 #define TCPOPT_EOL		0	/* End of options */
 #define TCPOPT_MSS		2	/* Segment size negotiating */
-/*
- *	We don't use these yet, but they are for PAWS and big windows
- */
 #define TCPOPT_WINDOW		3	/* Window scaling */
 #define TCPOPT_SACK_PERM        4       /* SACK Permitted */
 #define TCPOPT_SACK             5       /* SACK Block */
@@ -260,6 +292,10 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCPOLEN_WINDOW         3
 #define TCPOLEN_SACK_PERM      2
 #define TCPOLEN_TIMESTAMP      10
+
+/* But this is what stacks really send out. */
+#define TCPOLEN_TSTAMP_ALIGNED	12
+#define TCPOLEN_WSCALE_ALIGNED	4
 
 /*
  *      TCP option flags for parsed options.
@@ -310,7 +346,6 @@ struct open_request {
 	__u8			__pad;
 	unsigned snd_wscale : 4, 
 		rcv_wscale : 4, 
-		sack_ok : 1,
 		tstamp_ok : 1,
 		wscale_ok : 1;
 	/* The following two fields can be easily recomputed I think -AK */
@@ -406,7 +441,7 @@ extern __inline int after(__u32 seq1, __u32 seq2)
 /* is s2<=s1<=s3 ? */
 extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 {
-	return (after(seq1+1, seq2) && before(seq1, seq3+1));
+	return seq3 - seq2 >= seq1 - seq2;
 }
 
 
@@ -440,6 +475,11 @@ extern int			tcp_rcv_established(struct sock *sk,
 						    struct sk_buff *skb,
 						    struct tcphdr *th, 
 						    __u16 len);
+
+extern int			tcp_timewait_state_process(struct tcp_tw_bucket *tw,
+							   struct sk_buff *skb,
+							   struct tcphdr *th,
+							   void *opt, __u16 len);
 
 extern void			tcp_close(struct sock *sk, 
 					  unsigned long timeout);
@@ -695,29 +735,37 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	default:
 		if (oldstate==TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab--;
-		if (state == TCP_TIME_WAIT)
-			sk->prot->rehash(sk);
 	}
 }
 
 static __inline__ void tcp_build_options(__u32 *ptr, struct tcp_opt *tp)
 {
-	/* FIXME: We will still need to do SACK here. */
 	if (tp->tstamp_ok) {
-		*ptr = ntohl((TCPOPT_NOP << 24)
-			| (TCPOPT_NOP << 16)
-                        | (TCPOPT_TIMESTAMP << 8)
-			| TCPOLEN_TIMESTAMP);
+		*ptr = __constant_htonl((TCPOPT_NOP << 24) |
+					(TCPOPT_NOP << 16) |
+					(TCPOPT_TIMESTAMP << 8) |
+					TCPOLEN_TIMESTAMP);
 		/* rest filled in by tcp_update_options */
 	}
 }
 
 static __inline__ void tcp_update_options(__u32 *ptr, struct tcp_opt *tp)
 {
-	/* FIXME: We will still need to do SACK here. */
 	if (tp->tstamp_ok) {
 		*++ptr = htonl(jiffies);
 		*++ptr = htonl(tp->ts_recent);
+	}
+}
+
+static __inline__ void tcp_build_and_update_options(__u32 *ptr, struct tcp_opt *tp)
+{
+	if (tp->tstamp_ok) {
+		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) |
+					  (TCPOPT_NOP << 16) |
+					  (TCPOPT_TIMESTAMP << 8) |
+					  TCPOLEN_TIMESTAMP);
+		*ptr++ = htonl(jiffies);
+		*ptr   = htonl(tp->ts_recent);
 	}
 }
 
@@ -725,7 +773,6 @@ static __inline__ void tcp_update_options(__u32 *ptr, struct tcp_opt *tp)
  *	This routines builds a generic TCP header. 
  *	They also build the RFC1323 Timestamp, but don't fill the
  *	actual timestamp in (you need to call tcp_update_options for this).
- *	It can't (unfortunately) do SACK as well.
  *	XXX: pass tp instead of sk here.
  */
  
@@ -750,9 +797,10 @@ static inline void tcp_build_header_data(struct tcphdr *th, struct sock *sk, int
  * It would be especially magical to compute the checksum for this
  * stuff on the fly here.
  */
-extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sack, int ts, int offer_wscale, int wscale)
+extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int ts, int offer_wscale, int wscale)
 {
-	int count = 4 + (offer_wscale ? 4 : 0) +  ((ts || sack) ? 4 : 0) +  (ts ? 8 : 0);
+	int count = 4 + (offer_wscale ? TCPOLEN_WSCALE_ALIGNED : 0) +
+		((ts) ? TCPOLEN_TSTAMP_ALIGNED : 0);
 	unsigned char *optr = skb_put(skb,count);
 	__u32 *ptr = (__u32 *)optr;
 
@@ -761,20 +809,10 @@ extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sa
 	 */
 	*ptr++ = htonl((TCPOPT_MSS << 24) | (TCPOLEN_MSS << 16) | mss);
 	if (ts) {
-		if (sack) {
-			*ptr++ = htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16)
-					| (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
-			*ptr++ = htonl(jiffies);	/* TSVAL */
-			*ptr++ = htonl(0);		/* TSECR */
-		} else {
-			*ptr++ = htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
-					| (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
-			*ptr++ = htonl(jiffies);	/* TSVAL */
-			*ptr++ = htonl(0);		/* TSECR */
-		}
-	} else if (sack) {
-		*ptr++ = htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16)
-				| (TCPOPT_NOP << 8) | TCPOPT_NOP);
+		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
+					  (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
+		*ptr++ = htonl(jiffies);	/* TSVAL */
+		*ptr++ = __constant_htonl(0);	/* TSECR */
 	}
 	if (offer_wscale)
 		*ptr++ = htonl((TCPOPT_WINDOW << 24) | (TCPOLEN_WINDOW << 16) | (wscale << 8));
@@ -823,33 +861,15 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
 
-/* #define SYNQ_DEBUG 1 */
-
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req, struct open_request *prev)
 {
-#ifdef SYNQ_DEBUG
-	if (prev->dl_next != req) {
-		printk(KERN_DEBUG "synq_unlink: bad prev ptr: %p\n",prev);
-		return;
-	}
-#endif
-	if(!req->dl_next) {
-#ifdef SYNQ_DEBUG
-		if (tp->syn_wait_last != (void*) req)
-			printk(KERN_DEBUG "synq_unlink: bad last ptr %p,%p\n",
-			       req,tp->syn_wait_last);
-#endif
+	if(!req->dl_next)
 		tp->syn_wait_last = (struct open_request **)prev;
-	}
 	prev->dl_next = req->dl_next;
 }
 
 extern __inline__ void tcp_synq_queue(struct tcp_opt *tp, struct open_request *req)
 { 
-#ifdef SYNQ_DEBUG
-	if (*tp->syn_wait_last != NULL)
-	    printk("synq_queue: last ptr doesn't point to last req.\n"); 
-#endif
 	req->dl_next = NULL;
 	*tp->syn_wait_last = req; 
 	tp->syn_wait_last = &req->dl_next;
@@ -864,14 +884,11 @@ extern __inline__ void tcp_synq_init(struct tcp_opt *tp)
 extern __inline__ struct open_request *tcp_synq_unlink_tail(struct tcp_opt *tp)
 {
 	struct open_request *head = tp->syn_wait_queue;
-#ifdef SYNQ_DEBUG
-	if (!head) {
-		printk(KERN_DEBUG "tail drop on empty queue? - bug\n"); 
-		return NULL;
-	}
-#endif
+#if 0
+	/* Should be a net-ratelimit'd thing, not all the time. */
 	printk(KERN_DEBUG "synq tail drop with expire=%ld\n", 
 	       head->expires-jiffies);
+#endif
 	if (head->dl_next == NULL)
 		tp->syn_wait_last = &tp->syn_wait_queue;
 	tp->syn_wait_queue = head->dl_next;
@@ -902,10 +919,9 @@ extern __inline__ void tcp_dec_slow_timer(int timer)
 static __inline__ void tcp_sk_unbindify(struct sock *sk)
 {
 	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *) sk->prev;
-	if(sk->tp_pinfo.af_tcp.bind_next)
-		sk->tp_pinfo.af_tcp.bind_next->tp_pinfo.af_tcp.bind_pprev =
-			sk->tp_pinfo.af_tcp.bind_pprev;
-	*(sk->tp_pinfo.af_tcp.bind_pprev) = sk->tp_pinfo.af_tcp.bind_next;
+	if(sk->bind_next)
+		sk->bind_next->bind_pprev = sk->bind_pprev;
+	*sk->bind_pprev = sk->bind_next;
 	if(tb->owners == NULL)
 		tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
 }

@@ -8,7 +8,6 @@
  */
 
 .text
-#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>

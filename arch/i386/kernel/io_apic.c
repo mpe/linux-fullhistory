@@ -513,11 +513,19 @@ void print_IO_APIC (void)
 	return;
 }
 
-void init_sym_mode (void)
+static void init_sym_mode (void)
 {
 	printk("enabling Symmetric IO mode ... ");
 		outb (0x70, 0x22);
 		outb (0x01, 0x23);
+	printk("...done.\n");
+}
+
+void init_pic_mode (void)
+{
+	printk("disabling Symmetric IO mode ... ");
+		outb (0x70, 0x22);
+		outb (0x00, 0x23);
 	printk("...done.\n");
 }
 

@@ -832,9 +832,10 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	/* We can't use skb_copy_datagram here */
 	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
-	if (err)
+	if (err) {
+		err = -EFAULT;
 		goto out_free;
-
+	}
 	sk->stamp=skb->stamp;
 
 	if (msg->msg_name)

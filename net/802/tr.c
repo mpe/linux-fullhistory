@@ -511,12 +511,14 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
  *	too much for this.
  */
 
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry tr_rif_proc = {
 	PROC_NET_TR_RIF, 6, "tr_rif",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_net_inode_operations,
 	rif_get_info
 };
+#endif
 
 __initfunc(void rif_init(struct net_proto *unused))
 {
@@ -529,3 +531,5 @@ __initfunc(void rif_init(struct net_proto *unused))
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&tr_rif_proc);
 #endif
+}
+}

@@ -36,10 +36,10 @@ struct swap_info_struct {
 extern int nr_swap_pages;
 extern int nr_free_pages;
 extern atomic_t nr_async_pages;
-extern int min_free_pages;
-extern int free_pages_low;
-extern int free_pages_high;
 extern struct inode swapper_inode;
+extern unsigned long page_cache_size;
+extern int buffermem;
+#define BUFFER_MEM ((buffermem >> PAGE_SHIFT) + page_cache_size)
 
 /* Incomplete types for prototype declarations: */
 struct task_struct;

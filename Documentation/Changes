@@ -148,7 +148,7 @@ in some standard tools.  Check in /proc/net/rt_local to verify their
 presence.
 
    To turn on IP forwarding, issue the following command:   echo 1 >
-/proc/sys/net/ipv4/ip_forwarding
+/proc/sys/net/ipv4/ip_forward
 
    To run bootpd, you'll need to issue the following command:   echo 1
 >/proc/sys/net/ipv4/ip_boot_agent

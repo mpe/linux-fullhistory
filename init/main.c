@@ -78,8 +78,6 @@ extern void dquot_init(void);
 extern void smp_setup(char *str, int *ints);
 extern void ioapic_pirq_setup(char *str, int *ints);
 extern void no_scroll(char *str, int *ints);
-extern void swap_setup(char *str, int *ints);
-extern void buff_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void msmouse_setup(char *str, int *ints);
@@ -490,8 +488,6 @@ static struct kernel_param cooked_params[] __initdata = {
 #if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
 	{ "video=", video_setup },
 #endif
-	{ "swap=", swap_setup },
-	{ "buff=", buff_setup },
 	{ "panic=", panic_setup },
 	{ "console=", console_setup },
 #ifdef CONFIG_VT

@@ -164,8 +164,7 @@ static hfs_rwret_t cap_info_read(struct file *filp, char *buf,
 			memcount = left;
 		}
 		cap_build_meta(&meta, entry);
-		/* is copy_to_user guaranteed to write memcount? */
-		copy_to_user(buf, ((char *)&meta) + pos, memcount);
+		memcount -= copy_to_user(buf, ((char *)&meta) + pos, memcount);
 		left -= memcount;
 		read += memcount;
 		pos += memcount;
@@ -291,6 +290,8 @@ static hfs_rwret_t cap_info_write(struct file *filp, const char *buf,
  */
 static void cap_info_truncate(struct inode *inode)
 {
+  	/*struct inode *inode = dentry->d_inode;*/
+
 	if (inode->i_size > HFS_FORK_MAX) {
 		inode->i_size = HFS_FORK_MAX;
 	}

@@ -3,7 +3,6 @@
  * Copyright (C) 1992 Krishna Balasubramanian 
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/msg.h>

@@ -63,13 +63,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-/* Adjust starting epoch if ARC console time is being used */
-#ifdef CONFIG_RTC_ARC
-#define ARCFUDGE 20 
-#else
-#define ARCFUDGE 0
-#endif
-
 /*
  *	We sponge a minor off of the misc major. No need slurping
  *	up another valuable major dev number for this. If you add
@@ -126,12 +119,8 @@ unsigned char days_in_mo[] =
  *	so that there is no possibility of conflicting with the
  *	set_rtc_mmss() call that happens during some timer interrupts.
  *	(See ./arch/XXXX/kernel/time.c for the set_rtc_mmss() function.)
- *
- *	On Alpha we won't get any interrupts anyway, as they all end up
- *	in the system timer code.
  */
 
-#ifndef __alpha__
 static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/*
@@ -152,11 +141,9 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		add_timer(&rtc_irq_timer);
 	}
 }
-#endif
 
 /*
  *	Now all the various file operations that we export.
- *      They are all useless on Alpha...  *sigh*.
  */
 
 static long long rtc_llseek(struct file *file, loff_t offset, int origin)
@@ -167,9 +154,6 @@ static long long rtc_llseek(struct file *file, loff_t offset, int origin)
 static ssize_t rtc_read(struct file *file, char *buf,
 			size_t count, loff_t *ppos)
 {
-#ifdef __alpha__
-	return -EIO;
-#else
 	struct wait_queue wait = { current, NULL };
 	unsigned long data;
 	ssize_t retval;
@@ -201,7 +185,6 @@ static ssize_t rtc_read(struct file *file, char *buf,
 	remove_wait_queue(&rtc_wait, &wait);
 
 	return retval;
-#endif
 }
 
 static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
@@ -212,7 +195,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct rtc_time wtime; 
 
 	switch (cmd) {
-#ifndef __alpha__
 	case RTC_AIE_OFF:	/* Mask alarm int. enab. bit	*/
 	{
 		mask_rtc_irq_bit(RTC_AIE);
@@ -260,7 +242,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		set_rtc_irq_bit(RTC_UIE);
 		return 0;
 	}
-#endif
 	case RTC_ALM_READ:	/* Read the present alarm time */
 	{
 		/*
@@ -335,7 +316,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 				   sizeof(struct rtc_time)))
 			return -EFAULT;
 
-		yrs = rtc_tm.tm_year + 1900 + ARCFUDGE;
+		yrs = rtc_tm.tm_year + 1900;
 		mon = rtc_tm.tm_mon + 1;   /* tm_mon starts at zero */
 		day = rtc_tm.tm_mday;
 		hrs = rtc_tm.tm_hour;
@@ -400,7 +381,6 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	{
 		return put_user(rtc_freq, (unsigned long *)arg);
 	}
-#ifndef __alpha__
 	case RTC_IRQP_SET:	/* Set periodic IRQ rate.	*/
 	{
 		int tmp = 0;
@@ -437,7 +417,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		restore_flags(flags);
 		return 0;
 	}
-#else /* __alpha__ */
+#ifdef __alpha__
 	case RTC_EPOCH_READ:	/* Read the epoch.	*/
 	{
 		return put_user (epoch, (unsigned long *)arg);
@@ -467,18 +447,15 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
  *	We enforce only one user at a time here with the open/close.
  *	Also clear the previous interrupt data on an open, and clean
  *	up things on a close.
- *	On Alpha we just open, for we don't mess with interrups anyway.
  */
 
 static int rtc_open(struct inode *inode, struct file *file)
 {
-#ifndef __alpha__
 	if(rtc_status & RTC_IS_OPEN)
 		return -EBUSY;
 
 	rtc_status |= RTC_IS_OPEN;
 	rtc_irq_data = 0;
-#endif
 	return 0;
 }
 
@@ -489,7 +466,6 @@ static int rtc_release(struct inode *inode, struct file *file)
 	 * in use, and clear the data.
 	 */
 
-#ifndef __alpha__
 	unsigned char tmp;
 	unsigned long flags;
 
@@ -510,11 +486,9 @@ static int rtc_release(struct inode *inode, struct file *file)
 
 	rtc_irq_data = 0;
 	rtc_status &= ~RTC_IS_OPEN;
-#endif
 	return 0;
 }
 
-#ifndef __alpha__
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
 	poll_wait(file, &rtc_wait, wait);
@@ -522,7 +496,6 @@ static unsigned int rtc_poll(struct file *file, poll_table *wait)
 		return POLLIN | POLLRDNORM;
 	return 0;
 }
-#endif
 
 /*
  *	The various file operations we support.
@@ -533,11 +506,7 @@ static struct file_operations rtc_fops = {
 	rtc_read,
 	NULL,		/* No write */
 	NULL,		/* No readdir */
-#ifdef __alpha__
-	NULL,		/* No select on Alpha */
-#else
 	rtc_poll,
-#endif
 	rtc_ioctl,
 	NULL,		/* No mmap */
 	rtc_open,
@@ -560,14 +529,12 @@ __initfunc(int rtc_init(void))
 	char *guess = NULL;
 #endif
 	printk(KERN_INFO "Real Time Clock Driver v%s\n", RTC_VERSION);
-#ifndef __alpha__
 	if(request_irq(RTC_IRQ, rtc_interrupt, SA_INTERRUPT, "rtc", NULL))
 	{
 		/* Yeah right, seeing as irq 8 doesn't even hit the bus. */
 		printk(KERN_ERR "rtc: IRQ %d is not free.\n", RTC_IRQ);
 		return -EIO;
 	}
-#endif
 	misc_register(&rtc_dev);
 	/* Check region? Naaah! Just snarf it up. */
 	request_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
@@ -599,8 +566,8 @@ __initfunc(int rtc_init(void))
 		guess = "Digital UNIX";
 	}
 	if (guess)
-		printk("rtc: %s epoch (%ld) detected\n", guess, epoch);
-#else
+		printk("rtc: %s epoch (%lu) detected\n", guess, epoch);
+#endif
 	init_timer(&rtc_irq_timer);
 	rtc_irq_timer.function = rtc_dropped_irq;
 	rtc_wait = NULL;
@@ -610,7 +577,6 @@ __initfunc(int rtc_init(void))
 	CMOS_WRITE(((CMOS_READ(RTC_FREQ_SELECT) & 0xF0) | 0x06), RTC_FREQ_SELECT);
 	restore_flags(flags);
 	rtc_freq = 1024;
-#endif
 	return 0;
 }
 
@@ -626,7 +592,6 @@ __initfunc(int rtc_init(void))
  *	for something that requires a steady > 1KHz signal anyways.)
  */
 
-#ifndef __alpha__
 void rtc_dropped_irq(unsigned long data)
 {
 	unsigned long flags;
@@ -643,7 +608,6 @@ void rtc_dropped_irq(unsigned long data)
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
 	restore_flags(flags);
 }
-#endif
 
 /*
  *	Info exported via "/proc/rtc".
@@ -672,9 +636,10 @@ int get_rtc_status(char *buf)
 	 */
 	p += sprintf(p,
 		     "rtc_time\t: %02d:%02d:%02d\n"
-		     "rtc_date\t: %04d-%02d-%02d\n",
+		     "rtc_date\t: %04d-%02d-%02d\n"
+	 	     "rtc_epoch\t: %04lu\n",
 		     tm.tm_hour, tm.tm_min, tm.tm_sec,
-		     tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+		     tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, epoch);
 
 	get_rtc_alm_time(&tm);
 
@@ -788,11 +753,8 @@ void get_rtc_time(struct rtc_time *rtc_tm)
 	 * Account for differences between how the RTC uses the values
 	 * and how they are defined in a struct rtc_time;
 	 */
-	if ((rtc_tm->tm_year += epoch - 1900) <= 69)
+	if ((rtc_tm->tm_year += (epoch - 1900)) <= 69)
 		rtc_tm->tm_year += 100;
-
-	/* if ARCFUDGE == 0, the optimizer should do away with this */
-	rtc_tm->tm_year -= ARCFUDGE;
 
 	rtc_tm->tm_mon--;
 }
@@ -832,7 +794,6 @@ void get_rtc_alm_time(struct rtc_time *alm_tm)
  * meddles with the interrupt enable/disable bits.
  */
 
-#ifndef __alpha__
 void mask_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
@@ -862,4 +823,3 @@ void set_rtc_irq_bit(unsigned char bit)
 	rtc_irq_data = 0;
 	restore_flags(flags);
 }
-#endif

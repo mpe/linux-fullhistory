@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.101 1998/03/11 07:12:54 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.106 1998/03/13 14:15:54 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -60,8 +60,6 @@
 
 #include <linux/inet.h>
 
-extern int sysctl_tcp_sack;
-extern int sysctl_tcp_tsack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_syncookies;
@@ -155,7 +153,8 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 	if(tb != NULL) {
 		struct tcp_bind_bucket **head =
 			&tcp_bound_hash[tcp_bhashfn(snum)];
-		tb->port = (snum | 0x10000);
+		tb->port = snum;
+		tb->flags = TCPB_FLAG_LOCKED;
 		tb->owners = NULL;
 		if((tb->next = *head) != NULL)
 			tb->next->pprev = &tb->next;
@@ -188,7 +187,7 @@ static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 			int sk_reuse = sk->reuse;
 
 			/* We must walk the whole port owner list in this case. -DaveM */
-			for(sk2 = tb->owners; sk2; sk2 = sk2->tp_pinfo.af_tcp.bind_next) {
+			for(sk2 = tb->owners; sk2; sk2 = sk2->bind_next) {
 				if(sk->bound_dev_if == sk2->bound_dev_if) {
 					if(!sk_reuse || !sk2->reuse || sk2->state == TCP_LISTEN) {
 						if(!sk2->rcv_saddr		||
@@ -246,7 +245,7 @@ static void tcp_v4_hash(struct sock *sk)
 		struct sock **skp;
 
 		SOCKHASH_LOCK();
-		skp = &tcp_established_hash[tcp_sk_hashfn(sk)];
+		skp = &tcp_established_hash[(sk->hashent = tcp_sk_hashfn(sk))];
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
 		*skp = sk;
@@ -286,14 +285,10 @@ static void tcp_v4_rehash(struct sock *sk)
 	if(state != TCP_CLOSE) {
 		struct sock **skp;
 
-		if(state == TCP_LISTEN) {
+		if(state == TCP_LISTEN)
 			skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
-		} else {
-			int hash = tcp_sk_hashfn(sk);
-			if(state == TCP_TIME_WAIT)
-				hash += (TCP_HTABLE_SIZE/2);
-			skp = &tcp_established_hash[hash];
-		}
+		else
+			skp = &tcp_established_hash[(sk->hashent = tcp_sk_hashfn(sk))];
 
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
@@ -349,6 +344,7 @@ static struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int d
 
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
+ * It is assumed that this code only gets called from within NET_BH.
  */
 static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 					   u32 saddr, u16 sport,
@@ -375,8 +371,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 		goto hit;
 
 	/* Optimize here for direct hit, only listening connections can
-	 * have wildcards anyways.  It is assumed that this code only
-	 * gets called from within NET_BH.
+	 * have wildcards anyways.
 	 */
 	hash = tcp_hashfn(daddr, hnum, saddr, sport);
 	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
@@ -447,7 +442,7 @@ static struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 		s = tb->owners;
 	}
 pass2:
-	for(; s; s = s->tp_pinfo.af_tcp.bind_next) {
+	for(; s; s = s->bind_next) {
 		int score = 0;
 		if(s->rcv_saddr) {
 			if((s->num != hpnum || s->rcv_saddr != paddr) &&
@@ -591,7 +586,8 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	lock_sock(sk);
 
 	/* Do this early, so there is less state to unwind on failure. */
-	buff = sock_wmalloc(sk, MAX_SYN_SIZE, 0, GFP_KERNEL);
+	buff = sock_wmalloc(sk, (MAX_SYN_SIZE + sizeof(struct sk_buff)),
+			    0, GFP_KERNEL);
 	if (buff == NULL) {
 		release_sock(sk);
 		ip_rt_put(rt);
@@ -637,10 +633,18 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	/* No failure conditions can result past this point. */
 
+	/* We'll fix this up when we get a response from the other end.
+	 * See tcp_input.c:tcp_rcv_state_process case TCP_SYN_SENT.
+	 */
+	tp->tcp_header_len = sizeof(struct tcphdr) +
+		(sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
+
 	th = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
 	buff->h.th = th;
 
 	memcpy(th,(void *)&(sk->dummy_th), sizeof(*th));
+	/* th->doff gets fixed up below if we tack on options. */
+
 	buff->seq = tp->write_seq++;
 	th->seq = htonl(buff->seq);
 	tp->snd_nxt = tp->write_seq;
@@ -658,11 +662,9 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if(sk->mtu < 64)
 		sk->mtu = 64;	/* Sanity limit */
 
-	if (sk->user_mss)
-		sk->mss = sk->user_mss;
-	else
-		sk->mss = (sk->mtu - sizeof(struct iphdr) -
-			   sizeof(struct tcphdr));
+	sk->mss = (sk->mtu - sizeof(struct iphdr) - tp->tcp_header_len);
+	if(sk->user_mss)
+		sk->mss = min(sk->mss, sk->user_mss);
 
 	if (sk->mss < 1) {
 		printk(KERN_DEBUG "intial sk->mss below 1\n");
@@ -677,9 +679,8 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		&tp->rcv_wscale);
 	th->window = htons(tp->rcv_wnd);
 
-	tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_sack,
-		sysctl_tcp_timestamps,
-		sysctl_tcp_window_scaling,tp->rcv_wscale);
+	tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_timestamps,
+		sysctl_tcp_window_scaling, tp->rcv_wscale);
 	buff->csum = 0;
 	th->doff = (sizeof(*th)+ tmp)>>2;
 
@@ -861,7 +862,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	th = (struct tcphdr*)(dp+(iph->ihl<<2));
 
 	sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev->ifindex);
-	if (sk == NULL) {
+	if (sk == NULL || sk->state == TCP_TIME_WAIT) {
 		icmp_statistics.IcmpInErrors++;
 		return; 
 	}
@@ -1018,7 +1019,8 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 	skb1->csum = csum_partial((u8 *) th1, sizeof(*th1), 0);
 	th1->check = tcp_v4_check(th1, sizeof(*th1), skb1->nh.iph->saddr,
 				  skb1->nh.iph->daddr, skb1->csum);
-	/* FIXME: should this carry an options packet? */
+
+	/* Do not place TCP options in a reset. */
 	ip_queue_xmit(skb1);
 	tcp_statistics.TcpOutSegs++;
 	tcp_statistics.TcpOutRsts++;
@@ -1070,6 +1072,10 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	mss = (skb->dst->pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 	if (sk->user_mss)
 		mss = min(mss, sk->user_mss);
+
+	/* tcp_syn_build_options will do an skb_put() to obtain the TCP
+	 * options bytes below.
+	 */
 	skb->h.th = th = (struct tcphdr *) skb_put(skb, sizeof(struct tcphdr));
 
 	/* Don't offer more than they did.
@@ -1110,16 +1116,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 		req->rcv_wscale = rcv_wscale; 
 	}
 	th->window = htons(req->rcv_wnd);
-
-	/* XXX Partial csum of 4 byte quantity is itself! -DaveM
-	 * Yes, but it's a bit harder to special case now. It's
-	 * now computed inside the tcp_v4_send_check() to clean up
-	 * updating the options fields in the mainline send code.
-	 * If someone thinks this is really bad let me know and
-	 * I'll try to do it a different way. -- erics
-	 */
-
-	tmp = tcp_syn_build_options(skb, req->mss, req->sack_ok, req->tstamp_ok,
+	tmp = tcp_syn_build_options(skb, req->mss, req->tstamp_ok,
 		req->wscale_ok,req->rcv_wscale);
 	skb->csum = 0;
 	th->doff = (sizeof(*th) + tmp)>>2;
@@ -1238,14 +1235,13 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
 	req->rcv_isn = skb->seq;
- 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
+ 	tp.tstamp_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
 	tcp_parse_options(th,&tp,want_cookie);
 	if (tp.saw_tstamp)
 		req->ts_recent = tp.rcv_tsval;
 	req->mss = tp.in_mss;
 	req->tstamp_ok = tp.tstamp_ok;
-	req->sack_ok = tp.sack_ok;
 	req->snd_wscale = tp.snd_wscale;
 	req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = th->source;
@@ -1374,7 +1370,6 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 
 		newtp->saw_tstamp = 0;
 		newtp->in_mss = 536;
-		newtp->sacks = 0;
 
 		init_timer(&newtp->probe_timer);
 		newtp->probe_timer.function = &tcp_probe_timer;
@@ -1448,7 +1443,6 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (newsk->mtu < 64)
 		newsk->mtu = 64;
 
-	newtp->sack_ok = req->sack_ok;
 	newtp->tstamp_ok = req->tstamp_ok;
 	newtp->window_clamp = req->window_clamp;
 	newtp->rcv_wnd = req->rcv_wnd;
@@ -1463,8 +1457,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (newtp->tstamp_ok) {
 		newtp->ts_recent = req->ts_recent;
 		newtp->ts_recent_stamp = jiffies;
-		newtp->tcp_header_len = sizeof(struct tcphdr) + 12;	/* FIXME: define constant! */
-		newsk->dummy_th.doff += 3;
+		newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+		newsk->dummy_th.doff += (TCPOLEN_TSTAMP_ALIGNED >> 2);
 	} else {
 		newtp->tcp_header_len = sizeof(struct tcphdr);
 	}
@@ -1653,6 +1647,8 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 
 	skb->used = 0;
 
+	if (sk->state == TCP_TIME_WAIT)
+		goto do_time_wait;
 	if (!sk->sock_readers)
 		return tcp_v4_do_rcv(sk, skb);
 
@@ -1666,6 +1662,12 @@ discard_it:
 	/* Discard frame. */
 	kfree_skb(skb);
   	return 0;
+
+do_time_wait:
+	if(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
+				      skb, th, &(IPCB(skb)->opt), skb->len))
+		goto no_tcp_socket;
+	goto discard_it;
 }
 
 int tcp_v4_build_header(struct sock *sk, struct sk_buff *skb)
@@ -1816,11 +1818,9 @@ static int tcp_v4_init_sock(struct sock *sk)
 	/* FIXME: tie this to sk->rcvbuf? (May be unnecessary) */
 	/* tp->rcv_wnd = 8192; */
 	tp->tstamp_ok = 0;
-	tp->sack_ok = 0;
 	tp->wscale_ok = 0;
 	tp->in_mss = 536;
 	tp->snd_wscale = 0;
-	tp->sacks = 0;
 	tp->saw_tstamp = 0;
 	tp->syn_backlog = 0;
 

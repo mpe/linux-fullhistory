@@ -19,13 +19,16 @@
 #include <linux/hfs_fs.h>
 
 static int hfs_hash_dentry(struct dentry *, struct qstr *);
-static int hfs_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
+static int hfs_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
+static void hfs_dentry_iput(struct dentry *, struct inode *);
 struct dentry_operations hfs_dentry_operations =
 {
 	NULL,	                /* d_validate(struct dentry *) */
 	hfs_hash_dentry,	/* d_hash */
 	hfs_compare_dentry,    	/* d_compare */
-	NULL	                /* d_delete(struct dentry *) */
+	NULL,	                /* d_delete(struct dentry *) */
+	NULL,                   /* d_release(struct dentry *) */
+	hfs_dentry_iput         /* d_iput(struct dentry *, struct inode *) */
 };
 
 /*
@@ -55,19 +58,16 @@ hfs_buffer hfs_buffer_get(hfs_sysmdb sys_mdb, int block, int read) {
 
 /* dentry case-handling: just lowercase everything */
 
-/* should we use hfs_strhash? if so, it probably needs to be beefed 
- * up a little. */
+/* hfs_strhash now uses the same hashing function as the dcache. */
 static int hfs_hash_dentry(struct dentry *dentry, struct qstr *this)
 {
-        unsigned char name[HFS_NAMELEN];
-	int len = this->len;
+        struct hfs_name cname;
 	
-	if (len > HFS_NAMELEN)
+	if ((cname.Len = this->len) > HFS_NAMELEN)
 	        return 0;
-  
-	strncpy(name, this->name, len);
-	hfs_tolower(name, len);
-	this->hash = full_name_hash(name, len);
+	
+	strncpy(cname.Name, this->name, this->len);
+	this->hash = hfs_strhash(&cname);
 	return 0;
 }
 
@@ -86,18 +86,11 @@ static int hfs_compare_dentry(struct dentry *dentry, struct qstr *a,
 	return hfs_streq(&s1, &s2);
 }
 
-
-/* toss a catalog entry. this does it by dropping the dentry. */
-void hfs_cat_prune(struct hfs_cat_entry *entry)
+static void hfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 {
-        int i;
+	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
-	for (i = 0; i < 4; i++) {
-	       struct dentry *de = entry->sys_entry[i];
-	       if (de) {
-			dget(de);
-		 	d_drop(de);
-		 	dput(de);
-	       }
-	}
+	entry->sys_entry[HFS_ITYPE_TO_INT(HFS_ITYPE(inode->i_ino))] = NULL;
+        hfs_cat_put(entry);
+	iput(inode);
 }

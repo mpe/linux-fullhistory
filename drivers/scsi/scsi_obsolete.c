@@ -43,7 +43,6 @@
  * driver uses the new code this *ENTIRE* file will be nuked.
  */
 
-#include <linux/config.h> /* for CONFIG_KERNELD */
 #define __NO_VERSION__
 #include <linux/module.h>
 

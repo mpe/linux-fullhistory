@@ -731,7 +731,8 @@ static void refill_freelist(int size)
 	/* We are going to try to locate this much memory. */
 	needed = bdf_prm.b_un.nrefill * size;  
 
-	while ((nr_free_pages > min_free_pages*2) && 
+	while ((nr_free_pages > freepages.min*2) &&
+	        BUFFER_MEM < (buffer_mem.max_percent * num_physpages / 100) &&
 		grow_buffers(GFP_BUFFER, size)) {
 		obtained += PAGE_SIZE;
 		if (obtained >= needed)
@@ -815,7 +816,8 @@ repeat:
 	 * are _any_ free buffers.
 	 */
 	while (obtained < (needed >> 1) &&
-	       nr_free_pages > min_free_pages + 5 &&
+	       nr_free_pages > freepages.min + 5 &&
+	       BUFFER_MEM < (buffer_mem.max_percent * num_physpages / 100) &&
 	       grow_buffers(GFP_BUFFER, size))
 		obtained += PAGE_SIZE;
 

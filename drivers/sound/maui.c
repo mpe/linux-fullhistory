@@ -9,7 +9,15 @@
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ *
+ *	Changes:
+ *		Alan Cox		General clean up, use kernel IRQ 
+ *					system
+ *
+ *	Status:
+ *		Untested
  */
+ 
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -327,7 +335,7 @@ int probe_maui(struct address_info *hw_config)
 	maui_base = hw_config->io_base;
 	maui_osp = hw_config->osp;
 
-	if (snd_set_irq_handler(hw_config->irq, mauiintr, "Maui", maui_osp) < 0)
+	if (request_irq(hw_config->irq, mauiintr, 0, "Maui", NULL) < 0)
 		return 0;
 
 	/*
@@ -342,26 +350,26 @@ int probe_maui(struct address_info *hw_config)
 			maui_read() == -1 || maui_read() == -1)
 			if (!maui_init(hw_config->irq))
 			{
-				snd_release_irq(hw_config->irq);
+				free_irq(hw_config->irq, NULL);
 				return 0;
 			}
 	}
 	if (!maui_write(0xCF))	/* Report hardware version */
 	{
 		printk(KERN_ERR "No WaveFront firmware detected (card uninitialized?)\n");
-		snd_release_irq(hw_config->irq);
+		free_irq(hw_config->irq, NULL);
 		return 0;
 	}
 	if ((tmp1 = maui_read()) == -1 || (tmp2 = maui_read()) == -1)
 	{
 		printk(KERN_ERR "No WaveFront firmware detected (card uninitialized?)\n");
-		snd_release_irq(hw_config->irq);
+		free_irq(hw_config->irq, NULL);
 		return 0;
 	}
 	if (tmp1 == 0xff || tmp2 == 0xff)
 	{
-		  snd_release_irq(hw_config->irq);
-		  return 0;
+		free_irq(hw_config->irq, NULL);
+		return 0;
 	}
 	if (trace_init)
 		printk(KERN_DEBUG "WaveFront hardware version %d.%d\n", tmp1, tmp2);
@@ -439,7 +447,7 @@ void unload_maui(struct address_info *hw_config)
 	if (irq < 0)
 		irq = -irq;
 	if (irq > 0)
-		snd_release_irq(irq);
+		free_irq(irq, NULL);
 }
 
 #ifdef MODULE
@@ -452,8 +460,7 @@ static int fw_load = 0;
 struct address_info cfg;
 
 /*
- *	Install a CS4232 based card. Need to have ad1848 and mpu401
- *	loaded ready.
+ *	Install a Maui card. Needs mpu401 loaded already.
  */
 
 int init_module(void)

@@ -1404,6 +1404,31 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		return (0);
 	}
 
+#if defined(CONFIG_IPDDP) || defined(CONFIG_IPDDP_MODULE)
+        /*
+         *      Check if IP-over-DDP
+         */
+        if(skb->data[12] == 22)
+        {
+                struct device *dev;
+
+		/* This needs to be able to handle ipddp"N" devices */
+                if((dev = dev_get("ipddp0")) == NULL)
+                        return (-ENODEV);
+
+                skb->protocol = htons(ETH_P_IP);
+                skb_pull(skb, 13);
+                skb->dev = dev;
+                skb->h.raw = skb->data;
+
+                ((struct net_device_stats *)dev->priv)->rx_packets++;
+                ((struct net_device_stats *)dev->priv)->rx_bytes += skb->len+13;
+                netif_rx(skb);  /* Send the SKB up to a higher place. */
+
+                return (0);
+        }
+#endif
+
 	/*
 	 * Which socket - atalk_search_socket() looks for a *full match*
 	 * of the <net,node,port> tuple.
@@ -1420,38 +1445,6 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		return (0);
 	}
 
-#ifdef CONFIG_IPDDP
-	/*
-	 *	Check if IP-over-DDP
-	 */
-	if(skb->data[12] == 22) 
-	{
-		struct device *dev;
-                struct net_device_stats *estats;
-
-		if((dev = dev_get("ipddp0")) == NULL)
-                	return (-ENODEV);
-
-		estats = (struct net_device_stats *) dev->priv;
-		skb->protocol = htons(ETH_P_IP);
-		skb_pull(skb, 13);
-		skb->dev = dev;
-		skb->h.raw = skb->data;
-		skb->nh.raw = skb->data;
-
-	/*	printk("passing up ipddp, 0x%02x better be 45\n",skb->data[0]);
-	 *	printk("tot_len %d, skb->len %d\n",
-	 *		ntohs(skb->h.iph->tot_len),skb->len);
-	 */
-
-		estats->rx_packets++;
-		estats->rx_bytes += skb->len + 13;
-		netif_rx(skb);	/* Send the SKB up to a higher place. */
-
-		return (0);
-	}
-#endif /* CONFIG_IPDDP */
-	
 	/*
 	 *	Queue packet (standard)
 	 */

@@ -2,25 +2,30 @@
  * sound/opl3.c
  *
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
- */
-/*
+ *
+*
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
+ *
+ *
+ * Changes
+ *	Thomas Sailer   ioctl code reworked (vmalloc/vfree removed)
+ *	Alan Cox	modularisation, fixed sound_mem allocs.
+ *
+ * Status
+ *	Believed to work. Badly needs rewriting a bit to support multiple
+ *	OPL3 devices.
  */
-/*
- * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
- */
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 
 /*
  * Major improvements to the FM handling 30AUG92 by Rob Hooft,
- */
-/*
  * hooft@chem.ruu.nl
  */
 
@@ -109,32 +114,32 @@ static int opl3_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	struct sbi_instrument ins;
 	
 	switch (cmd) {
-	case SNDCTL_FM_LOAD_INSTR:
-		printk(KERN_WARNING "Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
-		if (__copy_from_user(&ins, arg, sizeof(ins)))
-			return -EFAULT;
-		if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR) {
-			printk("FM Error: Invalid instrument number %d\n", ins.channel);
+		case SNDCTL_FM_LOAD_INSTR:
+			printk(KERN_WARNING "Warning: Obsolete ioctl(SNDCTL_FM_LOAD_INSTR) used. Fix the program.\n");
+			if (copy_from_user(&ins, arg, sizeof(ins)))
+				return -EFAULT;
+			if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR) {
+				printk(KERN_WARNING "FM Error: Invalid instrument number %d\n", ins.channel);
+				return -EINVAL;
+			}
+			return store_instr(ins.channel, &ins);
+
+		case SNDCTL_SYNTH_INFO:
+			devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
+			if (copy_to_user(arg, &devc->fm_info, sizeof(devc->fm_info)))
+				return -EFAULT;
+			return 0;
+
+		case SNDCTL_SYNTH_MEMAVL:
+			return 0x7fffffff;
+
+		case SNDCTL_FM_4OP_ENABLE:
+			if (devc->model == 2)
+				enter_4op_mode();
+			return 0;
+
+		default:
 			return -EINVAL;
-		}
-		return store_instr(ins.channel, &ins);
-
-	case SNDCTL_SYNTH_INFO:
-		devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
-		if (__copy_to_user(arg, &devc->fm_info, sizeof(devc->fm_info)))
-			return -EFAULT;
-		return 0;
-
-	case SNDCTL_SYNTH_MEMAVL:
-		return 0x7fffffff;
-
-	case SNDCTL_FM_4OP_ENABLE:
-		if (devc->model == 2)
-			enter_4op_mode();
-		return 0;
-
-	default:
-		return -EINVAL;
 	}
 }
 
@@ -151,8 +156,8 @@ int opl3_detect(int ioaddr, int *osp)
 	 * Note2! The chip is initialized if detected.
 	 */
 
-	unsigned char   stat1, signature;
-	int             i;
+	unsigned char stat1, signature;
+	int i;
 
 	if (devc != NULL)
 	{
@@ -160,10 +165,7 @@ int opl3_detect(int ioaddr, int *osp)
 		return 0;
 	}
 
-	devc = (struct opl_devinfo *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(*devc)));
-	sound_mem_sizes[sound_nblocks] = sizeof(*devc);
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
+	devc = (struct opl_devinfo *)kmalloc(sizeof(*devc), GFP_KERNEL);
 
 	if (devc == NULL)
 	{
@@ -333,7 +335,7 @@ static char fm_volume_table[128] =
 
 static void calc_vol(unsigned char *regbyte, int volume, int main_vol)
 {
-	int level =     (~*regbyte & 0x3f);
+	int level = (~*regbyte & 0x3f);
 
 	if (main_vol > 127)
 		main_vol = 127;
@@ -814,7 +816,8 @@ static int opl3_load_patch(int dev, int format, const char *addr,
 		return -EINVAL;
 	}
 
-	copy_from_user(&((char *) &ins)[offs], &(addr)[offs], sizeof(ins) - offs);
+	if(copy_from_user(&((char *) &ins)[offs], &(addr)[offs], sizeof(ins) - offs))
+		return -EFAULT;
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	{
@@ -1199,6 +1202,7 @@ void cleanup_module(void)
 {
 	if (devc)
 	{
+		kfree(devc);
 		devc = NULL;
 		sound_unload_synthdev(me);
 	}

@@ -83,8 +83,9 @@ void MIDIbuf_init(void);
 /*	From soundcard.c	*/
 void request_sound_timer (int count);
 void sound_stop_timer(void);
-int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp);
-void snd_release_irq(int vect);
+/* These two are about to die.. */
+int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp, void *dev_id);
+void snd_release_irq(int vect, void *ptr);
 void sound_dma_malloc(int dev);
 void sound_dma_free(int dev);
 void conf_printf(char *name, struct address_info *hw_config);

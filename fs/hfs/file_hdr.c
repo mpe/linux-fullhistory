@@ -288,12 +288,10 @@ static inline void adjust_forks(struct hfs_cat_entry *entry,
 		    (descr->length != entry->u.file.data_fork.lsize)) {
 			entry->u.file.data_fork.lsize = descr->length;
 			hfs_extent_adj(&entry->u.file.data_fork);
-			hfs_cat_mark_dirty(entry);
 		} else if ((descr->id == HFS_HDR_RSRC) &&
 			   (descr->length != entry->u.file.rsrc_fork.lsize)) {
 			entry->u.file.rsrc_fork.lsize = descr->length;
 			hfs_extent_adj(&entry->u.file.rsrc_fork);
-			hfs_cat_mark_dirty(entry);
 		}
 	}
 }
@@ -414,7 +412,7 @@ static hfs_rwret_t hdr_read(struct file * filp, char * buf,
 		}
 
 		hdr_build_meta(&meta, layout, entry);
-		copy_to_user(buf, ((char *)&meta) + pos, left);
+		left -= copy_to_user(buf, ((char *)&meta) + pos, left);
 		count -= left;
 		read += left;
 		pos += left;
@@ -531,7 +529,7 @@ static hfs_rwret_t hdr_read(struct file * filp, char * buf,
 
 		/* transfer the data */
 		if (p) {
-			copy_to_user(buf, p + offset, left);
+			left -= copy_to_user(buf, p + offset, left);
 		} else if (fork) {
 			left = hfs_do_read(inode, fork, offset, buf, left,
 					   filp->f_reada != 0);
@@ -654,6 +652,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 		/* Handle possible size changes for the forks */
 		if (entry->type == HFS_CDR_FIL) {
 			adjust_forks(entry, layout);
+			hfs_cat_mark_dirty(entry);
 		}
 	}
 
@@ -887,6 +886,8 @@ done:
  */
 static void hdr_truncate(struct inode *inode)
 {
+  	/*struct inode *inode = dentry->d_inode;*/
+	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 	struct hfs_hdr_layout *layout;
 	size_t size = inode->i_size;
 	int lcv, last;
@@ -907,14 +908,14 @@ static void hdr_truncate(struct inode *inode)
 		}
 
 		if (descr->id == HFS_HDR_RSRC) {
-			fork = &HFS_I(inode)->entry->u.file.rsrc_fork;
+			fork = &entry->u.file.rsrc_fork;
 #if 0
 /* Can't yet truncate the data fork via a header file, since there is the
  * possibility to truncate via the data file, and the only locking is at
  * the inode level.
  */
 		} else if (descr->id == HFS_HDR_DATA) {
-			fork = &HFS_I(inode)->entry->u.file.data_fork;
+			fork = &entry->u.file.data_fork;
 #endif
 		} else {
 			continue;

@@ -125,6 +125,7 @@ static void sound_free_dmap(struct dma_buffparms *dmap)
 
 	free_pages((unsigned long) dmap->raw_buf, sz);
 	dmap->raw_buf = NULL;
+	/* Remember the buffer is deleted so we dont Oops later */
 	dmap->fragment_size = 0;
 }
 
@@ -832,12 +833,12 @@ int DMAbuf_move_wrpointer(int dev, int l)
 	dmap->user_counter += l;
 	dmap->flags |= DMA_DIRTY;
 
-	if (dmap->user_counter >= dmap->max_byte_counter) {
+	if (dmap->byte_counter >= dmap->max_byte_counter) {
 		/* Wrap the byte counters */
-		long decr = dmap->user_counter;
-		dmap->user_counter = (dmap->user_counter % dmap->bytes_in_use) + dmap->bytes_in_use;
-		decr -= dmap->user_counter;
-		dmap->byte_counter -= decr;
+		long decr = dmap->byte_counter;
+		dmap->byte_counter = (dmap->byte_counter % dmap->bytes_in_use);
+		decr -= dmap->byte_counter;
+		dmap->user_counter -= decr;
 	}
 	end_ptr = (dmap->user_counter / dmap->fragment_size) * dmap->fragment_size;
 
@@ -928,7 +929,7 @@ static void do_outputintr(int dev, int dummy)
 			dmap->byte_counter += dmap->bytes_in_use;
 			if (dmap->byte_counter >= dmap->max_byte_counter) {	/* Overflow */
 				long decr = dmap->byte_counter;
-				dmap->byte_counter = (dmap->byte_counter % dmap->bytes_in_use) + dmap->bytes_in_use;
+				dmap->byte_counter = (dmap->byte_counter % dmap->bytes_in_use);
 				decr -= dmap->byte_counter;
 				dmap->user_counter -= decr;
 			}
@@ -952,7 +953,7 @@ static void do_outputintr(int dev, int dummy)
 		dmap->byte_counter += dmap->bytes_in_use;
 		if (dmap->byte_counter >= dmap->max_byte_counter) {	/* Overflow */
 			long decr = dmap->byte_counter;
-			dmap->byte_counter = (dmap->byte_counter % dmap->bytes_in_use) + dmap->bytes_in_use;
+			dmap->byte_counter = (dmap->byte_counter % dmap->bytes_in_use);
 			decr -= dmap->byte_counter;
 			dmap->user_counter -= decr;
 		}

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.89 1998/03/11 07:12:51 davem Exp $
+ * Version:	$Id: tcp.c,v 1.94 1998/03/13 14:15:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -426,6 +426,7 @@ struct tcp_mib	tcp_statistics;
 
 kmem_cache_t *tcp_openreq_cachep;
 kmem_cache_t *tcp_bucket_cachep;
+kmem_cache_t *tcp_timewait_cachep;
 
 /*
  *	Find someone to 'accept'. Must be called with
@@ -477,20 +478,6 @@ static void tcp_close_pending (struct sock *sk)
 
 	tcp_synq_init(tp);
 }
-
-/*
- *	Enter the time wait state.
- */
-
-void tcp_time_wait(struct sock *sk)
-{
-	tcp_set_state(sk,TCP_TIME_WAIT);
-	sk->shutdown = SHUTDOWN_MASK;
-	if (!sk->dead)
-		sk->state_change(sk);
-	tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-}
-
 
 /*
  *	Walk down the receive queue counting readable data.
@@ -897,7 +884,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 
 			seglen -= copy;
 			tcp_build_header_data(skb->h.th, sk, seglen || iovlen);
-			/* FIXME: still need to think about SACK options here. */
 
 			if (flags & MSG_OOB) {
 				skb->h.th->urg = 1;
@@ -1055,11 +1041,10 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 
 	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
 
-  	/* We send a ACK if we can now advertise a non-zero window
+  	/* We send an ACK if we can now advertise a non-zero window
 	 * which has been raised "significantly".
   	 */
-	if(tcp_timer_is_set(sk, TIME_DACK) ||
-	   (copied >= tcp_receive_window(&sk->tp_pinfo.af_tcp)))
+	if(copied >= tcp_receive_window(&sk->tp_pinfo.af_tcp))
 		tcp_read_wakeup(sk);
 }
 
@@ -1334,8 +1319,7 @@ static int tcp_close_state(struct sock *sk, int dead)
 	 *	reset mistake.
 	 */
 	if(dead && ns==TCP_FIN_WAIT2) {
-		int timer_active=del_timer(&sk->timer);
-		if(timer_active)
+		if(sk->timer.prev && del_timer(&sk->timer))
 			add_timer(&sk->timer);
 		else
 			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
@@ -1418,7 +1402,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	/*  Timeout is not the same thing - however the code likes
 	 *  to send both the same way (sigh).
 	 */
-	if (tcp_close_state(sk,1)==1)
+	if (tcp_close_state(sk,1))
 		tcp_send_fin(sk);
 
 	if (timeout) {
@@ -1447,8 +1431,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 * we may need to set up a timer.
          */
 	if (sk->state==TCP_FIN_WAIT2) {
-		int timer_active=del_timer(&sk->timer);
-		if(timer_active)
+		if(sk->timer.prev && del_timer(&sk->timer))
 			add_timer(&sk->timer);
 		else
 			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
@@ -1632,4 +1615,11 @@ __initfunc(void tcp_init(void))
 					      NULL, NULL);
 	if(!tcp_bucket_cachep)
 		panic("tcp_init: Cannot alloc tcp_bind_bucket cache.");
+
+	tcp_timewait_cachep = kmem_cache_create("tcp_tw_bucket",
+						sizeof(struct tcp_tw_bucket),
+						0, SLAB_HWCACHE_ALIGN,
+						NULL, NULL);
+	if(!tcp_timewait_cachep)
+		panic("tcp_init: Cannot alloc tcp_tw_bucket cache.");
 }

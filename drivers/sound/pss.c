@@ -11,7 +11,8 @@
  * for more info.
  */
 /*
- * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Thomas Sailer	ioctl code reworked (vmalloc/vfree removed)
+ * Alan Cox		modularisation, clean up.
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -62,12 +63,12 @@ static int pss_synthLen = 0;
 #endif
 
 typedef struct pss_confdata
-  {
-	  int             base;
-	  int             irq;
-	  int             dma;
-	  int            *osp;
-  }
+{
+	int	base;
+	int	irq;
+	int	dma;
+	int	*osp;
+}
 
 pss_confdata;
 
@@ -77,12 +78,11 @@ static pss_confdata *devc = &pss_data;
 static int      pss_initialized = 0;
 static int      nonstandard_microcode = 0;
 
-static void
-pss_write(int data)
+static void pss_write(int data)
 {
-	int             i, limit;
+	int i, limit;
 
-	limit = jiffies + 10;	/* The timeout is 0.1 seconds */
+	limit = jiffies + HZ/10;	/* The timeout is 0.1 seconds */
 	/*
 	 * Note! the i<5000000 is an emergency exit. The dsp_command() is sometimes
 	 * called while interrupts are disabled. This means that the timer is
@@ -92,21 +92,20 @@ pss_write(int data)
 	 */
 
 	for (i = 0; i < 5000000 && jiffies < limit; i++)
-	  {
-		  if (inw(devc->base + PSS_STATUS) & PSS_WRITE_EMPTY)
-		    {
-			    outw(devc->base + PSS_DATA, data);
-			    return;
-		    }
-	  }
-	printk("PSS: DSP Command (%04x) Timeout.\n", data);
+	{
+		if (inw(devc->base + PSS_STATUS) & PSS_WRITE_EMPTY)
+		{
+			outw(devc->base + PSS_DATA, data);
+			return;
+		}
+	}
+	printk(KERN_ERR "PSS: DSP Command (%04x) Timeout.\n", data);
 }
 
-int
-probe_pss(struct address_info *hw_config)
+int probe_pss(struct address_info *hw_config)
 {
-	unsigned short  id;
-	int             irq, dma;
+	unsigned short id;
+	int irq, dma;
 
 	devc->base = hw_config->io_base;
 	irq = devc->irq = hw_config->irq;
@@ -129,8 +128,7 @@ probe_pss(struct address_info *hw_config)
 	return 1;
 }
 
-static int
-set_irq(pss_confdata * devc, int dev, int irq)
+static int set_irq(pss_confdata * devc, int dev, int irq)
 {
 	static unsigned short irq_bits[16] =
 	{
@@ -148,16 +146,15 @@ set_irq(pss_confdata * devc, int dev, int irq)
 	tmp = inw(REG(dev)) & ~0x38;	/* Load confreg, mask IRQ bits out */
 
 	if ((bits = irq_bits[irq]) == 0 && irq != 0)
-	  {
-		  printk("PSS: Invalid IRQ %d\n", irq);
-		  return 0;
-	  }
+	{
+		printk(KERN_ERR "PSS: Invalid IRQ %d\n", irq);
+		return 0;
+	}
 	outw(tmp | bits, REG(dev));
 	return 1;
 }
 
-static int
-set_io_base(pss_confdata * devc, int dev, int base)
+static int set_io_base(pss_confdata * devc, int dev, int base)
 {
 	unsigned short  tmp = inw(REG(dev)) & 0x003f;
 	unsigned short  bits = (base & 0x0ffc) << 4;
@@ -167,8 +164,7 @@ set_io_base(pss_confdata * devc, int dev, int base)
 	return 1;
 }
 
-static int
-set_dma(pss_confdata * devc, int dev, int dma)
+static int set_dma(pss_confdata * devc, int dev, int dma)
 {
 	static unsigned short dma_bits[8] =
 	{
@@ -184,150 +180,139 @@ set_dma(pss_confdata * devc, int dev, int dma)
 	tmp = inw(REG(dev)) & ~0x07;	/* Load confreg, mask DMA bits out */
 
 	if ((bits = dma_bits[dma]) == 0 && dma != 4)
-	  {
-		  printk("PSS: Invalid DMA %d\n", dma);
+	{
+		  printk(KERN_ERR "PSS: Invalid DMA %d\n", dma);
 		  return 0;
-	  }
+	}
 	outw(tmp | bits, REG(dev));
 	return 1;
 }
 
-static int
-pss_reset_dsp(pss_confdata * devc)
+static int pss_reset_dsp(pss_confdata * devc)
 {
-	unsigned long   i, limit = jiffies + 10;
+	unsigned long   i, limit = jiffies + HZ/10;
 
 	outw(0x2000, REG(PSS_CONTROL));
-
-	for (i = 0; i < 32768 && jiffies < limit; i++)
+	for (i = 0; i < 32768 && (limit-jiffies >= 0); i++)
 		inw(REG(PSS_CONTROL));
-
 	outw(0x0000, REG(PSS_CONTROL));
-
 	return 1;
 }
 
-static int
-pss_put_dspword(pss_confdata * devc, unsigned short word)
+static int pss_put_dspword(pss_confdata * devc, unsigned short word)
 {
-	int             i, val;
+	int i, val;
 
 	for (i = 0; i < 327680; i++)
-	  {
-		  val = inw(REG(PSS_STATUS));
-		  if (val & PSS_WRITE_EMPTY)
-		    {
-			    outw(word, REG(PSS_DATA));
-			    return 1;
-		    }
-	  }
+	{
+		val = inw(REG(PSS_STATUS));
+		if (val & PSS_WRITE_EMPTY)
+		{
+			outw(word, REG(PSS_DATA));
+			return 1;
+		}
+	}
 	return 0;
 }
 
-static int
-pss_get_dspword(pss_confdata * devc, unsigned short *word)
+static int pss_get_dspword(pss_confdata * devc, unsigned short *word)
 {
-	int             i, val;
+	int i, val;
 
 	for (i = 0; i < 327680; i++)
-	  {
-		  val = inw(REG(PSS_STATUS));
-		  if (val & PSS_READ_FULL)
-		    {
-			    *word = inw(REG(PSS_DATA));
-			    return 1;
-		    }
-	  }
-
+	{
+		val = inw(REG(PSS_STATUS));
+		if (val & PSS_READ_FULL)
+		{
+			*word = inw(REG(PSS_DATA));
+			return 1;
+		}
+	}
 	return 0;
 }
 
-static int
-pss_download_boot(pss_confdata * devc, unsigned char *block, int size, int flags)
+static int pss_download_boot(pss_confdata * devc, unsigned char *block, int size, int flags)
 {
-	int             i, limit, val, count;
+	int i, limit, val, count;
 
 	if (flags & CPF_FIRST)
-	  {
+	{
 /*_____ Warn DSP software that a boot is coming */
-		  outw(0x00fe, REG(PSS_DATA));
+		outw(0x00fe, REG(PSS_DATA));
 
-		  limit = jiffies + 10;
+		limit = jiffies + HZ/10;
+		for (i = 0; i < 32768 && jiffies < limit; i++)
+			if (inw(REG(PSS_DATA)) == 0x5500)
+				break;
 
-		  for (i = 0; i < 32768 && jiffies < limit; i++)
-			  if (inw(REG(PSS_DATA)) == 0x5500)
-				  break;
-
-		  outw(*block++, REG(PSS_DATA));
-
-		  pss_reset_dsp(devc);
-	  }
+		outw(*block++, REG(PSS_DATA));
+		pss_reset_dsp(devc);
+	}
 	count = 1;
 	while (1)
-	  {
-		  int             j;
+	{
+		int j;
 
-		  for (j = 0; j < 327670; j++)
-		    {
+		for (j = 0; j < 327670; j++)
+		{
 /*_____ Wait for BG to appear */
-			    if (inw(REG(PSS_STATUS)) & PSS_FLAG3)
-				    break;
-		    }
+			if (inw(REG(PSS_STATUS)) & PSS_FLAG3)
+				break;
+		}
 
-		  if (j == 327670)
-		    {
-			    /* It's ok we timed out when the file was empty */
-			    if (count >= size && flags & CPF_LAST)
-				    break;
-			    else
-			      {
-				      printk("\nPSS: Download timeout problems, byte %d=%d\n", count, size);
-				      return 0;
-			      }
-		    }
+		if (j == 327670)
+		{
+			/* It's ok we timed out when the file was empty */
+			if (count >= size && flags & CPF_LAST)
+				break;
+			else
+			{
+				printk("\nPSS: Download timeout problems, byte %d=%d\n", count, size);
+				return 0;
+			}
+		}
 /*_____ Send the next byte */
-		  outw(*block++, REG(PSS_DATA));
-		  count++;
-	  }
+		outw(*block++, REG(PSS_DATA));
+		count++;
+	}
 
 	if (flags & CPF_LAST)
-	  {
+	{
 /*_____ Why */
-		  outw(0, REG(PSS_DATA));
+		outw(0, REG(PSS_DATA));
 
-		  limit = jiffies + 10;
-		  for (i = 0; i < 32768 && jiffies < limit; i++)
-			  val = inw(REG(PSS_STATUS));
+		limit = jiffies + HZ/10;
+		for (i = 0; i < 32768 && (limit - jiffies >= 0); i++)
+			val = inw(REG(PSS_STATUS));
 
-		  limit = jiffies + 10;
-		  for (i = 0; i < 32768 && jiffies < limit; i++)
-		    {
-			    val = inw(REG(PSS_STATUS));
-			    if (val & 0x4000)
-				    break;
-		    }
+		limit = jiffies + HZ/10;
+		for (i = 0; i < 32768 && (limit-jiffies >= 0); i++)
+		{
+			val = inw(REG(PSS_STATUS));
+			if (val & 0x4000)
+				break;
+		}
 
-		  /* now read the version */
-		  for (i = 0; i < 32000; i++)
-		    {
-			    val = inw(REG(PSS_STATUS));
-			    if (val & PSS_READ_FULL)
-				    break;
-		    }
-		  if (i == 32000)
-			  return 0;
+		/* now read the version */
+		for (i = 0; i < 32000; i++)
+		{
+			val = inw(REG(PSS_STATUS));
+			if (val & PSS_READ_FULL)
+				break;
+		}
+		if (i == 32000)
+			return 0;
 
-		  val = inw(REG(PSS_DATA));
-		  /* printk( "<PSS: microcode version %d.%d loaded>",  val/16,  val % 16); */
-	  }
+		val = inw(REG(PSS_DATA));
+		/* printk( "<PSS: microcode version %d.%d loaded>",  val/16,  val % 16); */
+	}
 	return 1;
 }
 
-void
-attach_pss(struct address_info *hw_config)
+void attach_pss(struct address_info *hw_config)
 {
 	unsigned short  id;
-	char            tmp[100];
+	char tmp[100];
 
 	devc->base = hw_config->io_base;
 	devc->irq = hw_config->irq;
@@ -350,20 +335,20 @@ attach_pss(struct address_info *hw_config)
 
 #if YOU_REALLY_WANT_TO_ALLOCATE_THESE_RESOURCES
 	if (sound_alloc_dma(hw_config->dma, "PSS"))
-	  {
-		  printk("pss.c: Can't allocate DMA channel\n");
-		  return;
-	  }
+	{
+		printk("pss.c: Can't allocate DMA channel.\n");
+		return;
+	}
 	if (!set_irq(devc, CONF_PSS, devc->irq))
-	  {
-		  printk("PSS: IRQ error\n");
-		  return;
-	  }
+	{
+		printk("PSS: IRQ allocation error.\n");
+		return;
+	}
 	if (!set_dma(devc, CONF_PSS, devc->dma))
-	  {
-		  printk("PSS: DRQ error\n");
-		  return;
-	  }
+	{
+		printk(KERN_ERR "PSS: DMA allocation error\n");
+		return;
+	}
 #endif
 
 	pss_initialized = 1;
@@ -371,8 +356,7 @@ attach_pss(struct address_info *hw_config)
 	conf_printf(tmp, hw_config);
 }
 
-static void
-pss_init_speaker(void)
+static void pss_init_speaker(void)
 {
 /* Don't ask what are these commands. I really don't know */
 	pss_write(0x0010);
@@ -387,53 +371,52 @@ pss_init_speaker(void)
 	pss_write(0x0800 | 0x00ce);	/* Stereo switch? */
 }
 
-int
-probe_pss_mpu(struct address_info *hw_config)
+int probe_pss_mpu(struct address_info *hw_config)
 {
-	int             timeout;
+	int timeout;
 
 	if (!pss_initialized)
 		return 0;
 
 	if (check_region(hw_config->io_base, 2))
-	  {
-		  printk("PSS: MPU I/O port conflict\n");
-		  return 0;
-	  }
+	{
+		printk("PSS: MPU I/O port conflict\n");
+		return 0;
+	}
 	if (!set_io_base(devc, CONF_MIDI, hw_config->io_base))
-	  {
-		  printk("PSS: MIDI base error.\n");
+	{
+		  printk("PSS: MIDI base could not be set.\n");
 		  return 0;
-	  }
+	}
 	if (!set_irq(devc, CONF_MIDI, hw_config->irq))
-	  {
-		  printk("PSS: MIDI IRQ error.\n");
+	{
+		  printk("PSS: MIDI IRQ allocation error.\n");
 		  return 0;
-	  }
+	}
 	if (!pss_synthLen)
-	  {
-		  printk("PSS: Can't enable MPU. MIDI synth microcode not available.\n");
-		  return 0;
-	  }
+	{
+		printk(KERN_ERR "PSS: Can't enable MPU. MIDI synth microcode not available.\n");
+		return 0;
+	}
 	if (!pss_download_boot(devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
-	  {
-		  printk("PSS: Unable to load MIDI synth microcode to DSP.\n");
-		  return 0;
-	  }
+	{
+		printk(KERN_ERR "PSS: Unable to load MIDI synth microcode to DSP.\n");
+		return 0;
+	}
 	pss_init_speaker();
 
-/*
- * Finally wait until the DSP algorithm has initialized itself and
- * deactivates receive interrupt.
- */
+	/*
+	 * Finally wait until the DSP algorithm has initialized itself and
+	 * deactivates receive interrupt.
+	 */
 
 	for (timeout = 900000; timeout > 0; timeout--)
-	  {
-		  if ((inb(hw_config->io_base + 1) & 0x80) == 0)	/* Input data avail */
-			  inb(hw_config->io_base);	/* Discard it */
-		  else
-			  break;	/* No more input */
-	  }
+	{
+		if ((inb(hw_config->io_base + 1) & 0x80) == 0)	/* Input data avail */
+			inb(hw_config->io_base);	/* Discard it */
+		else
+			break;	/* No more input */
+	}
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	return probe_mpu401(hw_config);
@@ -442,62 +425,56 @@ probe_pss_mpu(struct address_info *hw_config)
 #endif
 }
 
-static int
-pss_coproc_open(void *dev_info, int sub_device)
+static int pss_coproc_open(void *dev_info, int sub_device)
 {
 	switch (sub_device)
-	  {
-	  case COPR_MIDI:
+	{
+		case COPR_MIDI:
+			if (pss_synthLen == 0)
+			{
+				printk(KERN_ERR "PSS: MIDI synth microcode not available.\n");
+				return -EIO;
+			}
+			if (nonstandard_microcode)
+				if (!pss_download_boot(devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
+			{
+				printk(KERN_ERR "PSS: Unable to load MIDI synth microcode to DSP.\n");
+				return -EIO;
+			}
+			nonstandard_microcode = 0;
+			break;
 
-		  if (pss_synthLen == 0)
-		    {
-			    printk("PSS: MIDI synth microcode not available.\n");
-			    return -EIO;
-		    }
-		  if (nonstandard_microcode)
-			  if (!pss_download_boot(devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
-			    {
-				    printk("PSS: Unable to load MIDI synth microcode to DSP.\n");
-				    return -EIO;
-			    }
-		  nonstandard_microcode = 0;
-		  break;
-
-	  default:;
-	  }
+		default:
+	}
 	return 0;
 }
 
-static void
-pss_coproc_close(void *dev_info, int sub_device)
+static void pss_coproc_close(void *dev_info, int sub_device)
 {
 	return;
 }
 
-static void
-pss_coproc_reset(void *dev_info)
+static void pss_coproc_reset(void *dev_info)
 {
 	if (pss_synthLen)
 		if (!pss_download_boot(devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
-		  {
-			  printk("PSS: Unable to load MIDI synth microcode to DSP.\n");
-		  }
+		{
+			printk(KERN_ERR "PSS: Unable to load MIDI synth microcode to DSP.\n");
+		}
 	nonstandard_microcode = 0;
 }
 
-static int
-download_boot_block(void *dev_info, copr_buffer * buf)
+static int download_boot_block(void *dev_info, copr_buffer * buf)
 {
 	if (buf->len <= 0 || buf->len > sizeof(buf->data))
 		return -EINVAL;
 
 	if (!pss_download_boot(devc, buf->data, buf->len, buf->flags))
-	  {
-		  printk("PSS: Unable to load microcode block to DSP.\n");
-		  return -EIO;
-	  }
+	{
+		printk(KERN_ERR "PSS: Unable to load microcode block to DSP.\n");
+		return -EIO;
+	}
 	nonstandard_microcode = 1;	/* The MIDI microcode has been overwritten */
-
 	return 0;
 }
 
@@ -512,169 +489,170 @@ static int pss_coproc_ioctl(void *dev_info, unsigned int cmd, caddr_t arg, int l
 	int i, err;
 	/* printk( "PSS coproc ioctl %x %x %d\n",  cmd,  arg,  local); */
 	
-	switch (cmd) {
-	case SNDCTL_COPR_RESET:
-		pss_coproc_reset(dev_info);
-		return 0;
+	switch (cmd) 
+	{
+		case SNDCTL_COPR_RESET:
+			pss_coproc_reset(dev_info);
+			return 0;
 
-	case SNDCTL_COPR_LOAD:
-		buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
-		if (buf == NULL)
-			return -ENOSPC;
-		if (__copy_from_user(buf, arg, sizeof(copr_buffer))) {
+		case SNDCTL_COPR_LOAD:
+			buf = (copr_buffer *) vmalloc(sizeof(copr_buffer));
+			if (buf == NULL)
+				return -ENOSPC;
+			if (copy_from_user(buf, arg, sizeof(copr_buffer))) {
+				vfree(buf);
+				return -EFAULT;
+			}
+			err = download_boot_block(dev_info, buf);
 			vfree(buf);
-			return -EFAULT;
-		}
-		err = download_boot_block(dev_info, buf);
-		vfree(buf);
-		return err;
+			return err;
 		
-	case SNDCTL_COPR_SENDMSG:
-		mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
-		if (mbuf == NULL)
-			return -ENOSPC;
-		if (__copy_from_user(mbuf, arg, sizeof(copr_msg))) {
-			vfree(mbuf);
-			return -EFAULT;
-		}
-		data = (unsigned short *)(mbuf->data);
-		save_flags(flags);
-		cli();
-		for (i = 0; i < mbuf->len; i++) {
-			if (!pss_put_dspword(devc, *data++)) {
-				restore_flags(flags);
-				mbuf->len = i;	/* feed back number of WORDs sent */
-				err = __copy_to_user(arg, mbuf, sizeof(copr_msg));
+		case SNDCTL_COPR_SENDMSG:
+			mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
+			if (mbuf == NULL)
+				return -ENOSPC;
+			if (copy_from_user(mbuf, arg, sizeof(copr_msg))) {
 				vfree(mbuf);
-				return err ? -EFAULT : -EIO;
+				return -EFAULT;
 			}
-		}
-		restore_flags(flags);
-		vfree(mbuf);
-		return 0;
-
-	case SNDCTL_COPR_RCVMSG:
-		err = 0;
-		mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
-		if (mbuf == NULL)
-			return -ENOSPC;
-		data = (unsigned short *)mbuf->data;
-		save_flags(flags);
-		cli();
-		for (i = 0; i < mbuf->len; i++) {
-			mbuf->len = i;	/* feed back number of WORDs read */
-			if (!pss_get_dspword(devc, data++)) {
-				if (i == 0)
-					err = -EIO;
-				break;
+			data = (unsigned short *)(mbuf->data);
+			save_flags(flags);
+			cli();
+			for (i = 0; i < mbuf->len; i++) {
+				if (!pss_put_dspword(devc, *data++)) {
+					restore_flags(flags);
+					mbuf->len = i;	/* feed back number of WORDs sent */
+					err = copy_to_user(arg, mbuf, sizeof(copr_msg));
+					vfree(mbuf);
+					return err ? -EFAULT : -EIO;
+				}
 			}
-		}
-		restore_flags(flags);
-		if (__copy_to_user(arg, mbuf, sizeof(copr_msg)))
-			err = -EFAULT;
-		vfree(mbuf);
-		return err;
-		
-	case SNDCTL_COPR_RDATA:
-		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
-			return -EFAULT;
-		save_flags(flags);
-		cli();
-		if (!pss_put_dspword(devc, 0x00d0)) {
 			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_get_dspword(devc, &tmp)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		dbuf.parm1 = tmp;
-		restore_flags(flags);
-		if (__copy_to_user(arg, &dbuf, sizeof(dbuf)))
-			return -EFAULT;
-		return 0;
-		
-	case SNDCTL_COPR_WDATA:
-		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
-			return -EFAULT;
-		save_flags(flags);
-		cli();
-		if (!pss_put_dspword(devc, 0x00d1)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_put_dspword(devc, (unsigned short) (dbuf.parm1 & 0xffff))) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		tmp = (unsigned int)dbuf.parm2 & 0xffff;
-		if (!pss_put_dspword(devc, tmp)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		restore_flags(flags);
-		return 0;
-		
-	case SNDCTL_COPR_WCODE:
-		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
-			return -EFAULT;
-		save_flags(flags);
-		cli();
-		if (!pss_put_dspword(devc, 0x00d3)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		tmp = (unsigned int)dbuf.parm2 & 0x00ff;
-		if (!pss_put_dspword(devc, tmp)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		tmp = ((unsigned int)dbuf.parm2 >> 8) & 0xffff;
-		if (!pss_put_dspword(devc, tmp)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		restore_flags(flags);
-		return 0;
-		
-	case SNDCTL_COPR_RCODE:
-		if (__copy_from_user(&dbuf, arg, sizeof(dbuf)))
-			return -EFAULT;
-		save_flags(flags);
-		cli();
-		if (!pss_put_dspword(devc, 0x00d2)) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
-			restore_flags(flags);
-			return -EIO;
-		}
-		if (!pss_get_dspword(devc, &tmp)) { /* Read MSB */
-			restore_flags(flags);
-			return -EIO;
-		}
-		dbuf.parm1 = tmp << 8;
-		if (!pss_get_dspword(devc, &tmp)) { /* Read LSB */
-			restore_flags(flags);
-			return -EIO;
-		}
-		dbuf.parm1 |= tmp & 0x00ff;
-		restore_flags(flags);
-		if (__copy_to_user(arg, &dbuf, sizeof(dbuf)))
-			return -EFAULT;
-		return 0;
+			vfree(mbuf);
+			return 0;
 
-	default:
-		return -EINVAL;
+		case SNDCTL_COPR_RCVMSG:
+			err = 0;
+			mbuf = (copr_msg *)vmalloc(sizeof(copr_msg));
+			if (mbuf == NULL)
+				return -ENOSPC;
+			data = (unsigned short *)mbuf->data;
+			save_flags(flags);
+			cli();
+			for (i = 0; i < mbuf->len; i++) {
+				mbuf->len = i;	/* feed back number of WORDs read */
+				if (!pss_get_dspword(devc, data++)) {
+					if (i == 0)
+						err = -EIO;
+					break;
+				}
+			}
+			restore_flags(flags);
+			if (copy_to_user(arg, mbuf, sizeof(copr_msg)))
+				err = -EFAULT;
+			vfree(mbuf);
+			return err;
+		
+		case SNDCTL_COPR_RDATA:
+			if (copy_from_user(&dbuf, arg, sizeof(dbuf)))
+				return -EFAULT;
+			save_flags(flags);
+			cli();
+			if (!pss_put_dspword(devc, 0x00d0)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_get_dspword(devc, &tmp)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			dbuf.parm1 = tmp;
+			restore_flags(flags);
+			if (copy_to_user(arg, &dbuf, sizeof(dbuf)))
+				return -EFAULT;
+			return 0;
+		
+		case SNDCTL_COPR_WDATA:
+			if (copy_from_user(&dbuf, arg, sizeof(dbuf)))
+				return -EFAULT;
+			save_flags(flags);
+			cli();
+			if (!pss_put_dspword(devc, 0x00d1)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_put_dspword(devc, (unsigned short) (dbuf.parm1 & 0xffff))) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			tmp = (unsigned int)dbuf.parm2 & 0xffff;
+			if (!pss_put_dspword(devc, tmp)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			restore_flags(flags);
+			return 0;
+		
+		case SNDCTL_COPR_WCODE:
+			if (copy_from_user(&dbuf, arg, sizeof(dbuf)))
+				return -EFAULT;
+			save_flags(flags);
+			cli();
+			if (!pss_put_dspword(devc, 0x00d3)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			tmp = (unsigned int)dbuf.parm2 & 0x00ff;
+			if (!pss_put_dspword(devc, tmp)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			tmp = ((unsigned int)dbuf.parm2 >> 8) & 0xffff;
+			if (!pss_put_dspword(devc, tmp)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			restore_flags(flags);
+			return 0;
+		
+		case SNDCTL_COPR_RCODE:
+			if (copy_from_user(&dbuf, arg, sizeof(dbuf)))
+				return -EFAULT;
+			save_flags(flags);
+			cli();
+			if (!pss_put_dspword(devc, 0x00d2)) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_put_dspword(devc, (unsigned short)(dbuf.parm1 & 0xffff))) {
+				restore_flags(flags);
+				return -EIO;
+			}
+			if (!pss_get_dspword(devc, &tmp)) { /* Read MSB */
+				restore_flags(flags);
+				return -EIO;
+			}
+			dbuf.parm1 = tmp << 8;
+			if (!pss_get_dspword(devc, &tmp)) { /* Read LSB */
+				restore_flags(flags);
+				return -EIO;
+			}
+			dbuf.parm1 |= tmp & 0x00ff;
+			restore_flags(flags);
+			if (copy_to_user(arg, &dbuf, sizeof(dbuf)))
+				return -EFAULT;
+			return 0;
+
+		default:
+			return -EINVAL;
 	}
 	return -EINVAL;
 }
@@ -689,52 +667,47 @@ static coproc_operations pss_coproc_operations =
 	&pss_data
 };
 
-void
-attach_pss_mpu(struct address_info *hw_config)
+void attach_pss_mpu(struct address_info *hw_config)
 {
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-	{
-		attach_mpu401(hw_config);	/* Slot 1 */
-
-		if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
-			midi_devs[hw_config->slots[1]]->coproc = &pss_coproc_operations;
-	}
+	attach_mpu401(hw_config);	/* Slot 1 */
+	if (hw_config->slots[1] != -1)	/* The MPU driver installed itself */
+		midi_devs[hw_config->slots[1]]->coproc = &pss_coproc_operations;
 #endif
 }
 
-int
-probe_pss_mss(struct address_info *hw_config)
+int probe_pss_mss(struct address_info *hw_config)
 {
-	volatile int    timeout;
+	volatile int timeout;
 
 	if (!pss_initialized)
 		return 0;
 
 	if (check_region(hw_config->io_base, 8))
-	  {
-		  printk("PSS: WSS I/O port conflict\n");
+	{
+		  printk(KERN_ERR "PSS: WSS I/O port conflicts.\n");
 		  return 0;
-	  }
+	}
 	if (!set_io_base(devc, CONF_WSS, hw_config->io_base))
-	  {
-		  printk("PSS: WSS base error.\n");
-		  return 0;
-	  }
+	{
+		printk("PSS: WSS base not settable.\n");
+		return 0;
+	}
 	if (!set_irq(devc, CONF_WSS, hw_config->irq))
-	  {
-		  printk("PSS: WSS IRQ error.\n");
-		  return 0;
-	  }
+	{
+		printk("PSS: WSS IRQ allocation error.\n");
+		return 0;
+	}
 	if (!set_dma(devc, CONF_WSS, hw_config->dma))
-	  {
-		  printk("PSS: WSS DRQ error\n");
-		  return 0;
-	  }
+	{
+		printk(KERN_ERR "PSS: WSS DMA allocation error\n");
+		return 0;
+	}
 	/*
-	   * For some reason the card returns 0xff in the WSS status register
-	   * immediately after boot. Probably MIDI+SB emulation algorithm
-	   * downloaded to the ADSP2115 spends some time initializing the card.
-	   * Let's try to wait until it finishes this task.
+	 * For some reason the card returns 0xff in the WSS status register
+	 * immediately after boot. Probably MIDI+SB emulation algorithm
+	 * downloaded to the ADSP2115 spends some time initializing the card.
+	 * Let's try to wait until it finishes this task.
 	 */
 	for (timeout = 0;
 	timeout < 100000 && (inb(hw_config->io_base + 3) & 0x3f) != 0x04;
@@ -748,8 +721,7 @@ probe_pss_mss(struct address_info *hw_config)
 	return probe_ms_sound(hw_config);
 }
 
-void
-attach_pss_mss(struct address_info *hw_config)
+void attach_pss_mss(struct address_info *hw_config)
 {
 	attach_ms_sound(hw_config);	/* Slot 0 */
 
@@ -757,34 +729,31 @@ attach_pss_mss(struct address_info *hw_config)
 		audio_devs[hw_config->slots[0]]->coproc = &pss_coproc_operations;
 }
 
-void
-unload_pss(struct address_info *hw_config)
+void unload_pss(struct address_info *hw_config)
 {
 }
 
-void
-unload_pss_mpu(struct address_info *hw_config)
+void unload_pss_mpu(struct address_info *hw_config)
 {
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 	unload_mpu401(hw_config);
 #endif
 }
 
-void
-unload_pss_mss(struct address_info *hw_config)
+void unload_pss_mss(struct address_info *hw_config)
 {
 	unload_ms_sound(hw_config);
 }
 
 #ifdef MODULE
 
-int pss_io = 0x220;
+int pss_io = -1;
 
-int mss_io = 0x530;
-int mss_irq = 11;
-int mss_dma = 1;
+int mss_io = -1;
+int mss_irq = -1;
+int mss_dma = -1;
 
-int mpu_io = 0x330;
+int mpu_io = -1;
 int mpu_irq = -1;
 
 struct address_info cfgpss = { 0 /* pss_io */, 0, -1, -1 };
@@ -798,22 +767,20 @@ MODULE_PARM(mss_dma, "i");
 MODULE_PARM(mpu_io, "i");
 MODULE_PARM(mpu_irq, "i");
 
-static int      fw_load = 0;
-static int      pssmpu = 0, pssmss = 0;
+static int fw_load = 0;
+static int pssmpu = 0, pssmss = 0;
 
 /*
  *    Load a PSS sound card module
  */
 
-int 
-init_module(void)
+int init_module(void)
 {
-#if 0
-	if (pss_io == -1 || irq == -1 || dma == -1) {
-		  printk("pss: dma, irq and io must be set.\n");
-		  return -EINVAL;
+	if (pss_io == -1 || mss_io == -1 || mss_irq == -1 || mss_dma == -1) {
+		printk(KERN_INFO "pss: mss_io, mss_dma, mss_irq and pss_io must be set.\n");
+		return -EINVAL;
 	}
-#endif
+
 	cfgpss.io_base = pss_io;
 
 	cfgmss.io_base = mss_io;
@@ -823,7 +790,8 @@ init_module(void)
 	cfgmpu.io_base = mpu_io;
 	cfgmpu.irq = mpu_irq;
 
-	if (!pss_synth) {
+	if (!pss_synth) 
+	{
 		fw_load = 1;
 		pss_synthLen = mod_firmware_load("/etc/sound/pss_synth", (void *) &pss_synth);
 	}
@@ -845,8 +813,7 @@ init_module(void)
 	return 0;
 }
 
-void 
-cleanup_module(void)
+void cleanup_module(void)
 {
 	if (fw_load && pss_synth)
 		kfree(pss_synth);

@@ -11,10 +11,10 @@
 #define _HFS_H
 
 #include <linux/hfs_sysdep.h>
-#include <linux/hfs_fs.h>
 
 #define HFS_NEW(X)	((X) = hfs_malloc(sizeof(*(X))))
-#define HFS_DELETE(X)	{ hfs_free((X), sizeof(*(X))); (X) = NULL; }
+#define HFS_DELETE(X)	do { hfs_free((X), sizeof(*(X))); (X) = NULL; } \
+                        while (0)
  
 /* offsets to various blocks */
 #define HFS_DD_BLK		0 /* Driver Descriptor block */
@@ -337,13 +337,12 @@ struct hfs_file {
  * This structure holds information about a
  * file or directory in an HFS filesystem.
  *
- * 'wait' must remain 1st and 'next' 2nd since we do some pointer arithmetic.
+ * 'wait' must remain 1st and 'hash' 2nd since we do some pointer arithmetic.
  */
 struct hfs_cat_entry {
 	hfs_wait_queue		wait;
         struct list_head        hash;
         struct list_head        list;
-        struct list_head        dirty;
 	struct hfs_mdb		*mdb;
 	hfs_sysentry		sys_entry;
 	struct hfs_cat_key	key;
@@ -366,7 +365,6 @@ struct hfs_cat_entry {
 #define HFS_KEYDIRTY     2
 #define HFS_LOCK         4
 #define HFS_DELETED      8
-#define HFS_SUPERBLK    16
 
 /* 
  * struct hfs_bnode_ref
@@ -486,13 +484,10 @@ extern void hfs_mdb_put(struct hfs_mdb *, int);
 extern int hfs_part_find(hfs_sysmdb, int, int, hfs_s32 *, hfs_s32 *);
 
 /* string.c */
-extern unsigned int hfs_strhash(const struct hfs_name *);
+extern unsigned long hfs_strhash(const struct hfs_name *);
 extern int hfs_strcmp(const struct hfs_name *, const struct hfs_name *);
 extern int hfs_streq(const struct hfs_name *, const struct hfs_name *);
 extern void hfs_tolower(unsigned char *, int);
-
-/* sysdep.c */
-extern void hfs_cat_prune(struct hfs_cat_entry *);
 
 extern __inline__ struct dentry 
 *hfs_lookup_dentry(const char *name, const int len, 

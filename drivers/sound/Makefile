@@ -117,22 +117,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_MPU401),y)
-LX_OBJS += mpu401.o
-else
-  ifeq ($(CONFIG_MPU401),m)
-  MX_OBJS += mpu401.o
-  else
-    ifeq ($(CONFIG_MPU_EMU),y)
-    LX_OBJS += mpu401.o
-    else
-      ifeq ($(CONFIG_MPU_EMU),m)
-      MX_OBJS += mpu401.o
-      endif
-    endif
-  endif
-endif
-
 ifeq ($(CONFIG_UART401),y)
 LX_OBJS += uart401.o
 else
@@ -159,9 +143,31 @@ endif
 
 ifeq ($(CONFIG_SSCAPE),y)
 L_OBJS += sscape.o
+LX_OBJS += ad1848.o
+CONFIG_MPU401 = y
 else
   ifeq ($(CONFIG_SSCAPE),m)
   M_OBJS += sscape.o
+  MX_OBJS += ad1848.o
+  ifneq ($(CONFIG_MPU401),y)
+    CONFIG_MPU401 = m
+  endif
+  endif
+endif
+
+ifeq ($(CONFIG_MPU401),y)
+LX_OBJS += mpu401.o
+else
+  ifeq ($(CONFIG_MPU401),m)
+  MX_OBJS += mpu401.o
+  else
+    ifeq ($(CONFIG_MPU_EMU),y)
+    LX_OBJS += mpu401.o
+    else
+      ifeq ($(CONFIG_MPU_EMU),m)
+      MX_OBJS += mpu401.o
+      endif
+    endif
   endif
 endif
 
@@ -265,7 +271,7 @@ CONFIG_MAUI_BOOT_FILE := $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE))
 maui.o: maui_boot.h
 
 maui_boot.h: $(CONFIG_MAUI_BOOT_FILE) bin2hex
-	bin2hex maui_os < "$(CONFIG_MAUI_BOOT_FILE)" > $@
+	bin2hex -i maui_os < "$(CONFIG_MAUI_BOOT_FILE)" > $@
 	@ ( \
 	    echo 'ifeq ($(strip $(CONFIG_MAUI_BOOT_FILE)),$$(strip $$(CONFIG_MAUI_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
@@ -297,7 +303,7 @@ CONFIG_TRIX_BOOT_FILE := $(patsubst "%", %, $(CONFIG_TRIX_BOOT_FILE))
 trix.o: trix_boot.h
 
 trix_boot.h: $(CONFIG_TRIX_BOOT_FILE) hex2hex
-	hex2hex trix_boot < "$(CONFIG_TRIX_BOOT_FILE)" > $@
+	hex2hex -i trix_boot < "$(CONFIG_TRIX_BOOT_FILE)" > $@
 	@ ( \
 	    echo 'ifeq ($(strip $(CONFIG_TRIX_BOOT_FILE)),$$(strip $$(CONFIG_TRIX_BOOT_FILE)))'; \
 	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \

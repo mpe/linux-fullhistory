@@ -12,7 +12,14 @@
  *      CS4232
  *      CS4236
  *      CS4236B
+ *
+ * Note: You will need a PnP config setup to initialise some CS4232 boards
+ * anyway.
+ *
+ * Changes
+ *	Alan Cox	Modularisation, Basic cleanups.
  */
+
 /*
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
@@ -20,6 +27,7 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -99,6 +107,8 @@ int probe_cs4232(struct address_info *hw_config)
 	 * just one CS4232 compatible device can exist on the system. Also this
 	 * method conflicts with possible PnP support in the OS. For this reason 
 	 * driver is just a temporary kludge.
+	 *
+	 * Also the Cirrus/Crystal method doesnt always work. Try ISAPnP first ;)
 	 */
 
 	/*
@@ -106,8 +116,8 @@ int probe_cs4232(struct address_info *hw_config)
 	 * first time.
 	 */
 
-	for (n = 0; n < 4; n++) {
-		
+	for (n = 0; n < 4; n++)
+	{	
 		/*
 		 *	Wake up the card by sending a 32 byte Crystal key to the key port.
 		 */
@@ -298,8 +308,7 @@ struct address_info cfg;
  *	loaded ready.
  */
 
-int
-init_module(void)
+int init_module(void)
 {
 	if (io == -1 || irq == -1 || dma == -1 || dma2 == -1)
 	{

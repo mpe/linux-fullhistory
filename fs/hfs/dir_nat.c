@@ -142,9 +142,10 @@ static int nat_lookup(struct inode * dir, struct dentry *dentry)
 	struct inode *inode = NULL;
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
-		goto done;
+		return -ENOENT;
 	}
 
+	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
 	dtype = HFS_ITYPE(dir->i_ino);
 
@@ -200,12 +201,11 @@ static int nat_lookup(struct inode * dir, struct dentry *dentry)
 	if (inode && (dtype == HFS_NAT_HDIR) &&
 	    (HFS_I(inode)->entry != entry) &&
 	    (HFS_I(inode)->entry->type == HFS_CDR_DIR)) {
-	        iput(inode);
+	        iput(inode); /* this does an hfs_cat_put */
 		inode = NULL;
 	}
 
 done:
-	dentry->d_op = &hfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }
@@ -241,7 +241,7 @@ static int nat_readdir(struct file * filp,
 		return -EBADF;
 	}
 
-        entry = HFS_I(dir)->entry;
+	entry = HFS_I(dir)->entry;
 	type = HFS_ITYPE(dir->i_ino);
 	skip_dirs = (type == HFS_NAT_HDIR);
 
@@ -329,7 +329,7 @@ static int nat_readdir(struct file * filp,
  * related calls (create, rename, and mknod). the directory calls
  * should be immune. the relevant calls in dir.c call drop_dentry 
  * upon successful completion. */
-void hfs_nat_drop_dentry(const ino_t type, struct dentry *dentry)
+void hfs_nat_drop_dentry(struct dentry *dentry, const ino_t type)
 {
   struct dentry *de;
   

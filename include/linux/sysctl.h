@@ -84,6 +84,7 @@ enum
 	VM_FREEPG,		/* struct: Set free page thresholds */
 	VM_BDFLUSH,		/* struct: Control buffer cache flushing */
 	VM_OVERCOMMIT_MEMORY,	/* Turn off the virtual memory safety limit */
+	VM_BUFFERMEM		/* struct: Set cache memory thresholds */
 };
 
 
@@ -148,8 +149,6 @@ enum
 	NET_IPV4_FIB_HASH = 19,
 
 	NET_IPV4_TCP_HOE_RETRANSMITS=32,
-	NET_IPV4_TCP_SACK,
-	NET_IPV4_TCP_TSACK,
 	NET_IPV4_TCP_TIMESTAMPS,
 	NET_IPV4_TCP_WINDOW_SCALING,
 	NET_IPV4_TCP_VEGAS_CONG_AVOID,
