@@ -7,6 +7,8 @@
  * Major cleanup by Martin Mares, May 1997
  */
 
+#include <linux/config.h>
+
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/tty.h>

@@ -688,7 +688,6 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 		return -ENODEV;
 
 	idx = MINOR(device) - driver->minor_start;
-	tty = driver->table[idx];
 
 	/* 
 	 * Check whether we need to acquire the tty semaphore to avoid
@@ -697,7 +696,8 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	down_tty_sem(idx);
 
 	/* check whether we're reopening an existing tty */
-	if(tty) goto fast_track;
+	tty = driver->table[idx];
+	if (tty) goto fast_track;
 
 	/*
 	 * First time open is complex, especially for PTY devices.

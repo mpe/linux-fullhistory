@@ -1672,20 +1672,62 @@ CONFIG_SCSI_AHA1740
   want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-Adaptec AHA274X/284X/294X support
+Adaptec AIC7xxx support (includes 274x/284x/294x)
 CONFIG_SCSI_AIC7XXX
   Information about this SCSI host adapter is contained in
   drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
-  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
-  doesn't work out of the box, you may have to change some settings in
-  drivers/scsi/aic7xxx.h. It has been reported that the "wide
-  negotiation" on these cards is not quite working and should be
-  disabled. Note that the AHA2920 SCSI host adapter is *not* supported
-  by this driver; choose "Future Domain 16xx SCSI support" instead. If
-  you want to compile this driver a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called aic7xxx.o.
+  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that
+  the AHA2920 SCSI host adapter is *not* supported by this driver; choose
+  "Future Domain 16xx SCSI support" instead. If you want to compile this
+  driver as module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read Documentation/
+  modules.txt. The module will be called aic7xxx.o.
+
+Enable tagged command queueing
+CONFIG_AIC7XXX_TAGGED_QUEUEING
+  This option allows you to enable tagged command queueing for this
+  driver.  Some scsi devices do not properly support this
+  feature.  Tagged command queueing will improve performance.
+
+Maximum number of commands per LUN
+  CONFIG_AIC7XXX_CMDS_PER_LUN
+  This option allows you to set the maximum number of commands queued
+  per LUN.  If tagged queueing is enabled, then you may want to try
+  increasing AIC7XXX_CMDS_PER_LUN to more than 2.  By default, we limit
+  the SCBs per LUN to 2 with or without tagged queueing enabled.  If
+  tagged queueing is disabled, the sequencer will keep the 2nd SCB in
+  the input queue until the first one completes - so it is OK to to have
+  more than 1 SCB queued.  If tagged queueing is enabled, then the
+  sequencer will attempt to send the 2nd SCB to the device while the
+  first SCB is executing and the device is disconnected.  For adapters
+  limited to 4 SCBs, you may want to actually decrease the commands per
+  LUN to 1, if you often have more than 2 devices active at the same
+  time.  This will allocate 1 SCB for each device and ensure that there
+  will always be a free SCB for up to 4 devices active at the same time.
+  When SCB paging is enabled, set the commands per LUN to 8 or higher
+  (see SCB paging support below).  Note that if AIC7XXX_CMDS_PER_LUN is
+  not defined and tagged queueing is enabled, the driver will attempt to
+  set the commands per LUN using its own heuristic based on the number
+  of available SCBs.
+
+Enable SCB paging
+CONFIG_AIC7XXX_PAGE_ENABLE
+  This option enables SCB paging.  This will increase performance when
+  tagged queueing is enabled.  Note that you should increase the
+  AIC7XXX_CMDS_PER_LUN to 8 as most tagged queueing devices allow at
+  least this many.  Note that EISA and VLB controllers do not support
+  SCB paging due to chip limitations; enabling it on these controllers
+  has no effect.
+
+Collect statistics to report in /proc
+CONFIG_AIC7XXX_PROC_STATS
+  This option enables collection of SCSI transfer statistics for the
+  /proc filesystem.  This does affect performance since it has to
+  maintain statistics.
+
+Delay in seconds after SCSI bus reset
+CONFIG_AIC7XXX_RESET_DELAY
+  This option sets the delay in seconds after a SCSI bus reset.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC

@@ -224,7 +224,6 @@ static void dispose_list(struct list_head * head)
 			break;
 		inode = list_entry(tmp, struct inode, i_list);
 		truncate_inode_pages(inode, 0);
-		list_del(&inode->i_list);
 	}
 
 	/* Add them all to the unused list in one fell swoop */
@@ -549,7 +548,22 @@ int fs_may_umount(struct super_block *sb, struct dentry * root)
 	return root->d_count == 1;
 }
 
+/* This belongs in file_table.c, not here... */
 int fs_may_remount_ro(struct super_block *sb)
 {
-	return 1;
+	struct file *file;
+	kdev_t dev = sb->s_dev;
+
+	/* Check that no files are currently opened for writing. */
+	for (file = inuse_filps; file; file = file->f_next) {
+		struct inode *inode;
+		if (!file->f_dentry)
+			continue;
+		inode = file->f_dentry->d_inode;
+		if (!inode || inode->i_dev != dev)
+			continue;
+		if (S_ISREG(inode->i_mode) && file->f_mode & FMODE_WRITE)
+			return 0;
+	}
+	return 1; /* Tis' cool bro. */
 }

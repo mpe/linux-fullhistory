@@ -210,22 +210,22 @@ static int ppa_sg = SG_ALL;	/* enable/disable scatter-gather. */
 #define w_fifo(x,y)     outb(y, PPA_BASE(x)+0x400)
 #define w_ecr(x,y)      outb(y, PPA_BASE(x)+0x402)
 
-int ppa_wakeup(void *ref)
+static void ppa_wakeup(void *ref)
 {
 	ppa_struct *ppa_dev = (ppa_struct *) ref;
 
 	if (!ppa_dev->ppa_wait_q)
-		return 1;	/* Wake up whom ? */
+		return;	/* Wake up whom ? */
 
 	/* Claim the Parport */
 	if (parport_claim(ppa_dev->dev))
-		return 1;	/* Shouldn't happen */
+		return;	/* Shouldn't happen */
 
 	wake_up(&ppa_dev->ppa_wait_q);
-	return 0;
+	return;
 }
 
-int ppa_release(struct Scsi_Host *host)
+static int ppa_release(struct Scsi_Host *host)
 {
 	int host_no = host->unique_id;
 

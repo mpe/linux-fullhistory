@@ -86,15 +86,15 @@ static long read_polled(struct parport *port, char *buf,
 
 static struct wait_queue *wait_q = NULL;
 
-static int wakeup(void *ref)
+static void wakeup(void *ref)
 {
 	struct pardevice **dev = (struct pardevice **)ref;
 	
 	if (!wait_q || parport_claim(*dev))
-		return 1;
+		return;
 
 	wake_up(&wait_q);
-	return 0;
+	return;
 }
 
 int parport_probe(struct parport *port, char *buffer, int len)

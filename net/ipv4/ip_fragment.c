@@ -358,6 +358,9 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 		fp = fp->next;
 	}
 
+	skb->pkt_type = qp->fragments->skb->pkt_type;
+	skb->protocol = qp->fragments->skb->protocol;
+
 	/* We glued together all fragments, so remove the queue entry. */
 	ip_free(qp);
 

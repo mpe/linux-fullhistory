@@ -417,6 +417,7 @@ static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 	if (!inode)
 		return -EACCES;
 
+	nfs_invalidate_dircache(dir);
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -456,6 +457,7 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	if (!inode)
 		return -EACCES;
 
+	nfs_invalidate_dircache(dir);
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -493,6 +495,7 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (!inode)
 		return -EACCES;
 
+	nfs_invalidate_dircache(dir);
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -516,6 +519,7 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (error)
 		return error;
 
+	nfs_invalidate_dircache(dir);
 	d_delete(dentry);
 	return 0;
 }
@@ -543,6 +547,7 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 	if (error)
 		return error;
 
+	nfs_invalidate_dircache(dir);
 	d_delete(dentry);
 	return 0;
 }
@@ -583,6 +588,7 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 	if (!inode)
 		return -EACCES;
 
+	nfs_invalidate_dircache(dir);
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -609,6 +615,7 @@ static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentr
 	if (error)
 		return error;
 
+	nfs_invalidate_dircache(dir);
 	inode->i_count++;
 	d_instantiate(dentry, inode);
 	return 0;
@@ -651,6 +658,9 @@ static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (error)
 		return error;
+
+	nfs_invalidate_dircache(old_dir);
+	nfs_invalidate_dircache(new_dir);
 
 	/* Update the dcache */
 	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);

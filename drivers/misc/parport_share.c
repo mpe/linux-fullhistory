@@ -88,6 +88,23 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	return tmp;
 }
 
+void parport_unregister_port(struct parport *port)
+{
+	struct parport *p;
+	kfree(port->name);
+	if (portlist == port) {
+		portlist = port->next;
+	} else {
+		for (p = portlist; (p != NULL) && (p->next != port); 
+		     p=p->next);
+		if (p) {
+			if ((p->next = port->next) == NULL)
+				portlist_tail = p;
+		}
+	}
+	kfree(port);
+}
+
 void parport_quiesce(struct parport *port)
 {
 	if (port->devices) {
@@ -106,7 +123,7 @@ void parport_quiesce(struct parport *port)
 }
 
 struct pardevice *parport_register_device(struct parport *port, const char *name,
-			  int (*pf)(void *), int (*kf)(void *),
+			  int (*pf)(void *), void (*kf)(void *),
 			  void (*irq_func)(int, void *, struct pt_regs *), 
 			  int flags, void *handle)
 {
@@ -223,7 +240,6 @@ int parport_claim(struct pardevice *dev)
 	pd1 = dev->port->cad;
 	if (dev->port->cad) {
 		if (dev->port->cad->preempt) {
-			/* Now try to preempt */
 			if (dev->port->cad->preempt(dev->port->cad->private))
 				return -EAGAIN;
 			dev->port->ops->save_state(dev->port, dev->state);
@@ -301,19 +317,10 @@ void parport_release(struct pardevice *dev)
 	}
 
 	/* Now give the lurker a chance.
-	 * There should be a wakeup callback because we checked for it
+	 * There must be a wakeup callback because we checked for it
 	 * at registration.
 	 */
 	if (dev->port->lurker && (dev->port->lurker != dev)) {
-		if (dev->port->lurker->wakeup) {
-			dev->port->lurker->wakeup(dev->port->lurker->private);
-		} 
-#ifdef PARPORT_PARANOID
-		else {  /* can't happen */
-			printk(KERN_DEBUG
-			  "%s (%s): lurker's wakeup callback went away!\n",
-			       dev->port->name, dev->name);
-		}
-#endif
+		dev->port->lurker->wakeup(dev->port->lurker->private);
 	}
 }

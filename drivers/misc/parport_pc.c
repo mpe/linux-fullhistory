@@ -10,6 +10,7 @@
  *              and Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/stddef.h>
 #include <linux/tasks.h>
 
 #include <asm/ptrace.h>
@@ -140,7 +141,7 @@ static void pc_enable_irq(struct parport *p)
 static void pc_release_resources(struct parport *p)
 {
 	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(p->irq, NULL);
+		free_irq(p->irq, p);
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
 		release_region(p->base+0x400, 3);
@@ -439,9 +440,10 @@ static int parport_SPP_supported(struct parport *pb)
  */
 static int parport_ECR_present(struct parport *pb)
 {
-	int r, octr = pc_read_control(pb), oecr = pc_read_econtrol(pb);
+	unsigned int r, octr = pc_read_control(pb), 
+	  oecr = pc_read_econtrol(pb);
 
-	r= pc_read_control(pb);	
+	r = pc_read_control(pb);	
 	if ((pc_read_econtrol(pb) & 0x03) == (r & 0x03)) {
 		pc_write_control(pb, r ^ 0x03 ); /* Toggle bits 0-1 */
 
@@ -820,7 +822,10 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	}
 	if (p->irq != PARPORT_IRQ_NONE)
 		printk(", irq %d", p->irq);
-	if (p->irq != PARPORT_DMA_NONE)
+	if (p->dma == PARPORT_DMA_AUTO)		
+		p->dma = (p->modes & PARPORT_MODE_PCECP)?
+			parport_dma_probe(p):PARPORT_DMA_NONE;
+	if (p->dma != PARPORT_DMA_NONE)
 		printk(", dma %d", p->dma);
 	printk(" [");
 #define printmode(x) {if(p->modes&PARPORT_MODE_PC##x){printk("%s%s",f?",":"",#x);f++;}}
@@ -835,6 +840,7 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	}
 #undef printmode
 	printk("]\n");
+	parport_proc_register(p);
 	return 1;
 }
 
@@ -868,7 +874,7 @@ MODULE_PARM(dma, "1-" __MODULE_STRING(PC_MAX_PORTS) "i");
 
 static int init_module(void)
 {	
-	return (parport_pc_init(NULL, NULL, NULL)?0:1);
+	return (parport_pc_init(io, irq, dma)?0:1);
 }
 
 static void cleanup_module(void)
@@ -878,6 +884,8 @@ static void cleanup_module(void)
 		if (p->modes & PARPORT_MODE_PCSPP) { 
 			if (!(p->flags & PARPORT_FLAG_COMA)) 
 				parport_quiesce(p);
+			parport_proc_unregister(p);
+			parport_unregister_port(p);
 		}
 		p = p->next;
 	}

@@ -1127,13 +1127,14 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	ino_t ino;
 	const char *name = dentry->d_name.name;
 	int len = dentry->d_name.len;
+	int retval;
 
 	/* In case of madness */
 
 	if (dir == 0)
 		return -ENOENT;
 	if (!S_ISDIR(dir->i_mode))
-		goto bail;
+		return -ENOENT;
 
 	/*
 	 * Read in the directory entry. "." is there under the name ^A^A .
@@ -1153,8 +1154,9 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 * This is not really a bailout, just means file not found.
 	 */
 
+	inode = NULL;
 	if (!de)
-		goto bail;
+		goto add_dentry;
 
 	/*
 	 * Get inode number, what we're after.
@@ -1169,8 +1171,9 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 * Go find or make an inode.
 	 */
 
+	retval = -EACCES;
 	if (!(inode = iget(dir->i_sb, ino)))
-		goto bail1;
+		goto free4;
 
 	/*
 	 * Fill in the info from the directory if this is a newly created
@@ -1195,24 +1198,16 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 		}
 	}
 
-	brelse4(&qbh);
-
 	/*
-	 * Made it.
+	 * Add the dentry, negative or otherwise.
 	 */
+      add_dentry:
+	d_add(dentry, inode);
+	retval = 0;
 
-	d_instantiate(dentry, inode);
-	iput(dir);
-	return 0;
-
-	/*
-	 * Didn't.
-	 */
- bail1:
+      free4:
 	brelse4(&qbh);
- bail:
-	iput(dir);
-	return -ENOENT;
+	return retval;
 }
 
 /*

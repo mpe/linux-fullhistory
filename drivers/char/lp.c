@@ -652,19 +652,18 @@ void lp_setup(char *str, int *ints)
 
 #endif
 
-int lp_wakeup(void *ref)
+void lp_wakeup(void *ref)
 {
 	struct lp_struct *lp_dev = (struct lp_struct *) ref;
 
 	if (!lp_dev->lp_wait_q)
-		return 1;	/* Wake up whom? */
+		return;	/* Wake up whom? */
 
 	/* Claim the Parport */
 	if (parport_claim(lp_dev->dev))
-		return 1;	/* Shouldn't happen */
+		return;	/* Shouldn't happen */
 
 	wake_up(&lp_dev->lp_wait_q);
-	return 0;
 }
 
 static int inline lp_searchfor(int list[], int a)

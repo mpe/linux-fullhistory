@@ -56,6 +56,7 @@ __initfunc(void parport_setup(char *str, int *ints))
 #ifdef MODULE
 int init_module(void)
 {
+	parport_proc_init();
 	return 0;
 }
 
@@ -79,7 +80,8 @@ __initfunc(int parport_init(void))
 {
 	struct parport *pb;
 
-	if (io[0] == PARPORT_DISABLE) return 1; 
+	if (io[0] == PARPORT_DISABLE) return 1;
+	parport_proc_init();
 #ifdef CONFIG_PARPORT_PC
 	parport_pc_init(io, irq, dma);
 #endif
@@ -92,12 +94,15 @@ __initfunc(int parport_init(void))
 EXPORT_SYMBOL(parport_claim);
 EXPORT_SYMBOL(parport_release);
 EXPORT_SYMBOL(parport_register_port);
+EXPORT_SYMBOL(parport_unregister_port);
 EXPORT_SYMBOL(parport_quiesce);
 EXPORT_SYMBOL(parport_register_device);
 EXPORT_SYMBOL(parport_unregister_device);
 EXPORT_SYMBOL(parport_enumerate);
 EXPORT_SYMBOL(parport_ieee1284_nibble_mode_ok);
 EXPORT_SYMBOL(parport_wait_peripheral);
+EXPORT_SYMBOL(parport_proc_register);
+EXPORT_SYMBOL(parport_proc_unregister);
 
 void inc_parport_count(void)
 {

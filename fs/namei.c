@@ -834,6 +834,10 @@ static inline int do_unlink(const char * name)
 
 	dir = lock_parent(dentry);
 
+	error = -ENOENT;
+	if (!dentry->d_inode)
+		goto exit_lock;
+
 	error = -EROFS;
 	if (IS_RDONLY(dir))
 		goto exit_lock;

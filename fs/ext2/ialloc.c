@@ -290,8 +290,18 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 	struct ext2_group_desc * tmp;
 	struct ext2_super_block * es;
 
-	if (!dir || !(inode = get_empty_inode ()))
+	/* Cannot create files in a deleted directory */
+	if (!dir || !dir->i_nlink) {
+		*err = -EPERM;
 		return NULL;
+	}
+
+	inode = get_empty_inode ();
+	if (!inode) {
+		*err = -ENOMEM;
+		return NULL;
+	}
+
 	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = sb->s_flags;

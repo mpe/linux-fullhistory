@@ -8,6 +8,7 @@
  *              and Philip Blundell <Philip.Blundell@pobox.com>
  */
 
+#include <linux/stddef.h>
 #include <linux/tasks.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
@@ -130,7 +131,10 @@ static int hardware_read_proc(char *page, char **start, off_t off,
 		len += sprintf(page+len, "irq:\tnone\n");
 	else
 		len += sprintf(page+len, "irq:\t%d\n",pp->irq);
-	len += sprintf(page+len, "dma:\t%d\n",pp->dma);
+	if (pp->dma == PARPORT_DMA_NONE)
+		len += sprintf(page+len, "dma:\tnone\n");
+	else
+		len += sprintf(page+len, "dma:\t%d\n",pp->dma);
 
 
 #if 0

@@ -1045,7 +1045,7 @@ plip_preempt(void *handle)
 	return 0;
 }
 
-static int
+static void
 plip_wakeup(void *handle)
 {
 	struct device *dev = (struct device *)handle;
@@ -1058,12 +1058,12 @@ plip_wakeup(void *handle)
 			/* bus_owner is already set (but why?) */
 			printk(KERN_DEBUG "%s: I'm broken.\n", dev->name);
 		else
-			return 1;
+			return;
 	}
 	
 	if (!(dev->flags & IFF_UP))
 		/* Don't need the port when the interface is down */
-		return 1;
+		return;
 
 	if (!parport_claim(nl->pardev)) {
 		nl->port_owner = 1;
@@ -1072,7 +1072,7 @@ plip_wakeup(void *handle)
 		outb (0x00, PAR_DATA(dev));
 	}
 
-	return 0;
+	return;
 }
 
 static struct net_device_stats *

@@ -384,33 +384,36 @@ extern spinlock_t pidhash_lock;
 extern __inline__ void hash_pid(struct task_struct *p)
 {
 	struct task_struct **htable = &pidhash[pid_hashfn(p->pid)];
+	unsigned long flags;
 
-	spin_lock(&pidhash_lock);
+	spin_lock_irqsave(&pidhash_lock, flags);
 	if((p->pidhash_next = *htable) != NULL)
 		(*htable)->pidhash_pprev = &p->pidhash_next;
 	*htable = p;
 	p->pidhash_pprev = htable;
-	spin_unlock(&pidhash_lock);
+	spin_unlock_irqrestore(&pidhash_lock, flags);
 }
 
 extern __inline__ void unhash_pid(struct task_struct *p)
 {
-	spin_lock(&pidhash_lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&pidhash_lock, flags);
 	if(p->pidhash_next)
 		p->pidhash_next->pidhash_pprev = p->pidhash_pprev;
 	*p->pidhash_pprev = p->pidhash_next;
-	spin_unlock(&pidhash_lock);
+	spin_unlock_irqrestore(&pidhash_lock, flags);
 }
 
 extern __inline__ struct task_struct *find_task_by_pid(int pid)
 {
-	struct task_struct **htable = &pidhash[pid_hashfn(pid)];
-	struct task_struct *p;
+	struct task_struct *p, **htable = &pidhash[pid_hashfn(pid)];
+	unsigned long flags;
 
-	spin_lock(&pidhash_lock);
+	spin_lock_irqsave(&pidhash_lock, flags);
 	for(p = *htable; p && p->pid != pid; p = p->pidhash_next)
 		;
-	spin_unlock(&pidhash_lock);
+	spin_unlock_irqrestore(&pidhash_lock, flags);
 
 	return p;
 }

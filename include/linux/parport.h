@@ -130,8 +130,7 @@ struct parport_device_info {
  *
  *  2) a wake-up function, called by the resource manager to tell drivers
  *     that the port is available to be claimed.  If a driver wants to use
- *     the port, it should call parport_claim() here.  The return value from
- *     this function is ignored.
+ *     the port, it should call parport_claim() here.
  */
 
 /* A parallel port device */
@@ -187,6 +186,9 @@ struct parport {
 struct parport *parport_register_port(unsigned long base, int irq, int dma,
 				      struct parport_operations *ops);
 
+/* Unregister a port. */
+void parport_unregister_port(struct parport *port);
+
 /* parport_in_use returns nonzero if there are devices attached to a port. */
 #define parport_in_use(x)  ((x)->devices != NULL)
 
@@ -209,7 +211,7 @@ struct parport *parport_enumerate(void);
  */
 struct pardevice *parport_register_device(struct parport *port, 
 			  const char *name,
-			  int (*pf)(void *), int (*kf)(void *),
+			  int (*pf)(void *), void (*kf)(void *),
 			  void (*irq_func)(int, void *, struct pt_regs *), 
 			  int flags, void *handle);
 
