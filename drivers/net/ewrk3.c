@@ -1409,7 +1409,6 @@ insert_device(struct net_device *dev, u_long iobase, int (*init) (struct net_dev
 		new->next = dev->next;
 		dev->next = new;
 		dev = dev->next;	/* point to the new device */
-		dev->name = (char *) (dev + 1);
 		if (num_eth > 9999) {
 			sprintf(dev->name, "eth????");	/* New device name */
 		} else {

@@ -1206,10 +1206,10 @@ static int ascii2utf (char *ascii, __u8 *utf, int utfmax)
  */
 int usb_root_hub_string (int id, int serial, char *type, __u8 *data, int len)
 {
-	char buf [20];
+	char buf [30];
 
 	// assert (len > (2 * (sizeof (buf) + 1)));
-	// assert (strlen (type) ~== 4);
+	// assert (strlen (type) <= 8);
 
 	// language ids
 	if (id == 0) {

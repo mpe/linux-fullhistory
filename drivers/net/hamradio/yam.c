@@ -116,7 +116,6 @@ struct yam_port {
 	int iobase;
 	int irq;
 	int dupmode;
-	char name[16];
 
 	struct net_device dev;
 
@@ -793,7 +792,7 @@ static int yam_net_get_info(char *buffer, char **start, off_t offset, int length
 	for (i = 0; i < NR_PORTS; i++) {
 		if (yam_ports[i].iobase == 0 || yam_ports[i].irq == 0)
 			continue;
-		len += sprintf(buffer + len, "Device %s\n", yam_ports[i].name);
+		len += sprintf(buffer + len, "Device yam%d\n", i);
 		len += sprintf(buffer + len, "  Up       %d\n", netif_running(&yam_ports[i].dev));
 		len += sprintf(buffer + len, "  Speed    %u\n", yam_ports[i].bitrate);
 		len += sprintf(buffer + len, "  IoBase   0x%x\n", yam_ports[i].iobase);
@@ -1148,7 +1147,7 @@ int __init yam_init(void)
 	memset(yam_ports, 0, sizeof(yam_ports));
 
 	for (i = 0; i < NR_PORTS; i++) {
-		sprintf(yam_ports[i].name, "yam%d", i);
+		sprintf(yam_ports[i].dev.name, "yam%d", i);
 		yam_ports[i].magic = YAM_MAGIC;
 		yam_ports[i].bitrate = DEFAULT_BITRATE;
 		yam_ports[i].baudrate = DEFAULT_BITRATE * 2;
@@ -1164,7 +1163,6 @@ int __init yam_init(void)
 		dev = &yam_ports[i].dev;
 
 		dev->priv = &yam_ports[i];
-		dev->name = yam_ports[i].name;
 		dev->base_addr = yam_ports[i].iobase;
 		dev->irq = yam_ports[i].irq;
 		dev->init = yam_probe;

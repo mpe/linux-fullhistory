@@ -139,7 +139,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 		 * down by the user
 		 */
 		mgr_event.event = EVENT_IRLAN_START;
-		sprintf(mgr_event.devname, "%s", self->ifname);
+		strcpy(mgr_event.devname, self->dev.name);
 		irmanager_notify(&mgr_event);
 		
 		/* 

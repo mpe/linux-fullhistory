@@ -323,7 +323,6 @@ hysdn_net_create(hysdn_card * card)
 	dev->base_addr = card->iobase;	/* IO address */
 	dev->irq = card->irq;	/* irq */
 	dev->init = net_init;	/* the init function of the device */
-	dev->name = ((struct net_local *) dev)->dev_name;	/* device name */
 	if ((i = register_netdev(dev))) {
 		printk(KERN_WARNING "HYSDN: unable to create network device\n");
 		kfree(dev);

@@ -189,7 +189,7 @@ struct net_device *ipmr_reg_vif(struct vifctl *v)
 	struct in_device *in_dev;
 	int size;
 
-	size = sizeof(*dev) + IFNAMSIZ + sizeof(struct net_device_stats);
+	size = sizeof(*dev) + sizeof(struct net_device_stats);
 	dev = kmalloc(size, GFP_KERNEL);
 	if (!dev)
 		return NULL;
@@ -197,7 +197,6 @@ struct net_device *ipmr_reg_vif(struct vifctl *v)
 	memset(dev, 0, size);
 
 	dev->priv = dev + 1;
-	dev->name = dev->priv + sizeof(struct net_device_stats);
 
 	strcpy(dev->name, "pimreg");
 

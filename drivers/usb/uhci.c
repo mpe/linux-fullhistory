@@ -1889,7 +1889,7 @@ static int rh_submit_urb(struct urb *urb)
 			OK(len);
 		case 0x03:	/* string descriptors */
 			len = usb_root_hub_string (wValue & 0xff,
-				uhci->io_addr, "UHCI",
+				uhci->io_addr, "UHCI-alt",
 				data, wLength);
 			if (len > 0) {
 				OK (min (leni, len));

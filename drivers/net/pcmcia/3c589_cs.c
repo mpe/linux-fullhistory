@@ -254,7 +254,7 @@ static dev_link_t *tc589_attach(void)
     dev->get_stats = &el3_get_stats;
     dev->set_multicast_list = &set_multicast_list;
     ether_setup(dev);
-    dev->name = lp->node.dev_name;
+    strcpy(dev->name, lp->node.dev_name);
     dev->init = &tc589_init;
     dev->open = &el3_open;
     dev->stop = &el3_close;

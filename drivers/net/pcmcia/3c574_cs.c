@@ -336,7 +336,7 @@ static dev_link_t *tc574_attach(void)
 	dev->do_ioctl = &el3_ioctl;
 	dev->set_multicast_list = &set_rx_mode;
 	ether_setup(dev);
-	dev->name = lp->node.dev_name;
+	strcpy(dev->name, lp->node.dev_name);
 	dev->init = &tc574_init;
 	dev->open = &el3_open;
 	dev->stop = &el3_close;

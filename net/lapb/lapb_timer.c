@@ -73,7 +73,7 @@ void lapb_stop_t2timer(lapb_cb *lapb)
 
 int lapb_t1timer_running(lapb_cb *lapb)
 {
-	return (lapb->t1timer.prev != NULL || lapb->t1timer.next != NULL);
+	return timer_pending(&lapb->t1timer);
 }
 
 static void lapb_t2timer_expiry(unsigned long param)

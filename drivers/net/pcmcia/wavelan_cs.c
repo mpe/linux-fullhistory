@@ -2926,7 +2926,7 @@ wv_packet_write(device *	dev,
   lp->stats.tx_bytes += length;
 
   /* If watchdog not already active, activate it... */
-  if(lp->watchdog.prev == (timer_list *) NULL)
+  if (!timer_pending(&lp->watchdog))
     {
       /* set timer to expire in WATCHDOG_JIFFIES */
       lp->watchdog.expires = jiffies + WATCHDOG_JIFFIES;
@@ -3655,7 +3655,7 @@ wv_hw_reset(device *	dev)
 #endif
 
   /* If watchdog was activated, kill it ! */
-  if(lp->watchdog.prev != (timer_list *) NULL)
+  if (timer_pending(&lp->watchdog))
     del_timer(&lp->watchdog);
 
   lp->nresets++;
@@ -4061,7 +4061,7 @@ wavelan_interrupt(int		irq,
 #endif
 
 	  /* If watchdog was activated, kill it ! */
-	  if(lp->watchdog.prev != (timer_list *) NULL)
+	  if(timer_pending(&lp->watchdog))
 	    del_timer(&lp->watchdog);
 
 	  /* Get transmission status */
@@ -4353,7 +4353,7 @@ wavelan_close(device *	dev)
 #endif	/* WAVELAN_ROAMING */
 
   /* If watchdog was activated, kill it ! */
-  if(lp->watchdog.prev != (timer_list *) NULL)
+  if(timer_pending(&lp->watchdog))
     del_timer(&lp->watchdog);
 
   link->open--;
@@ -4498,8 +4498,7 @@ wavelan_attach(void)
 #endif
 
   /* Other specific data */
-  /* Provide storage area for device name */
-  dev->name = ((net_local *)dev->priv)->node.dev_name;
+  strcpy(dev->name, ((net_local *)dev->priv)->node.dev_name);
   netif_start_queue (dev);
   dev->mtu = WAVELAN_MTU;
 

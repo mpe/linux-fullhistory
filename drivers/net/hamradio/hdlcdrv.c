@@ -217,8 +217,7 @@ static void hdlc_rx_flag(struct net_device *dev, struct hdlcdrv_state *s)
 		return;
 	pkt_len = s->hdlcrx.len - 2 + 1; /* KISS kludge */
 	if (!(skb = dev_alloc_skb(pkt_len))) {
-		printk("%s: memory squeeze, dropping packet\n", 
-		       s->ifname);
+		printk("%s: memory squeeze, dropping packet\n", dev->name);
 		s->stats.rx_dropped++;
 		return;
 	}
@@ -293,7 +292,7 @@ static void inline do_kiss_params(struct hdlcdrv_state *s,
 {
 
 #ifdef KISS_VERBOSE
-#define PKP(a,b) printk(KERN_INFO "%s: channel params: " a "\n", s->ifname, b)
+#define PKP(a,b) printk(KERN_INFO "hdlcdrv.c: channel params: " a "\n", b)
 #else /* KISS_VERBOSE */	      
 #define PKP(a,b) 
 #endif /* KISS_VERBOSE */	      
@@ -840,12 +839,11 @@ int hdlcdrv_register_hdlcdrv(struct net_device *dev, const struct hdlcdrv_ops *o
 	 */
 	memset(s, 0, privsize);
 	s->magic = HDLCDRV_MAGIC;
-	strncpy(s->ifname, ifname, sizeof(s->ifname));
+	strncpy(dev->name, ifname, sizeof(dev->name));
 	s->ops = ops;
 	/*
 	 * initialize part of the device struct
 	 */
-	dev->name = s->ifname;
 	dev->if_port = 0;
 	dev->init = hdlcdrv_probe;
 	dev->base_addr = baseaddr;
@@ -853,7 +851,7 @@ int hdlcdrv_register_hdlcdrv(struct net_device *dev, const struct hdlcdrv_ops *o
 	dev->dma = dma;
 	if (register_netdev(dev)) {
 		printk(KERN_WARNING "hdlcdrv: cannot register net "
-		       "device %s\n", s->ifname);
+		       "device %s\n", dev->name);
 		kfree(dev->priv);
 		return -ENXIO;
 	}

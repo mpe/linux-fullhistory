@@ -60,6 +60,10 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		goto out_failed;
 	}
 
+	/* Don't look at this page if it's in a zone that we're not interested in.. */
+	if (!page->zone->zone_wake_kswapd)
+		goto out_failed;
+
 	if (TryLockPage(page))
 		goto out_failed;
 
@@ -355,7 +359,7 @@ int swap_out(unsigned int priority, int gfp_mask)
 	 * Think of swap_cnt as a "shadow rss" - it tells us which process
 	 * we want to page out (always try largest first).
 	 */
-	counter = nr_threads / (priority+1);
+	counter = (nr_threads << 1) >> (priority >> 1);
 	if (counter < 1)
 		counter = 1;
 
@@ -499,10 +503,7 @@ DECLARE_WAIT_QUEUE_HEAD(kswapd_wait);
  */
 int kswapd(void *unused)
 {
-	int i;
 	struct task_struct *tsk = current;
-	pg_data_t *pgdat;
-	zone_t *zone;
 
 	tsk->session = 1;
 	tsk->pgrp = 1;
@@ -523,31 +524,30 @@ int kswapd(void *unused)
 	 */
 	tsk->flags |= PF_MEMALLOC;
 
-	while (1) {
-		/*
-		 * If we actually get into a low-memory situation,
-		 * the processes needing more memory will wake us
-		 * up on a more timely basis.
-		 */
+	for (;;) {
+		pg_data_t *pgdat;
+		int something_to_do = 0;
+
 		pgdat = pgdat_list;
-		while (pgdat) {
-			for (i = 0; i < MAX_NR_ZONES; i++) {
-				int count = SWAP_CLUSTER_MAX;
-				zone = pgdat->node_zones + i;
-				if ((!zone->size) || (!zone->zone_wake_kswapd))
+		do {
+			int i;
+			for(i = 0; i < MAX_NR_ZONES; i++) {
+				zone_t *zone = pgdat->node_zones+ i;
+				if (!zone->size || !zone->zone_wake_kswapd)
 					continue;
-				do {
-					if (tsk->need_resched)
-						schedule();
-					do_try_to_free_pages(GFP_KSWAPD, zone);
-		 		} while (zone->free_pages < zone->pages_low &&
-					   --count);
+				something_to_do = 1;
+				do_try_to_free_pages(GFP_KSWAPD, zone);
+				if (tsk->need_resched)
+					schedule();
 			}
+			run_task_queue(&tq_disk);
 			pgdat = pgdat->node_next;
+		} while (pgdat);
+
+		if (!something_to_do) {
+			tsk->state = TASK_INTERRUPTIBLE;
+			interruptible_sleep_on(&kswapd_wait);
 		}
-		run_task_queue(&tq_disk);
-		tsk->state = TASK_INTERRUPTIBLE;
-		interruptible_sleep_on(&kswapd_wait);
 	}
 }
 

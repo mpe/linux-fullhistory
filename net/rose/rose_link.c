@@ -76,12 +76,12 @@ void rose_stop_t0timer(struct rose_neigh *neigh)
 
 int rose_ftimer_running(struct rose_neigh *neigh)
 {
-	return (neigh->ftimer.prev != NULL || neigh->ftimer.next != NULL);
+	return timer_pending(&neigh->ftimer);
 }
 
 int rose_t0timer_running(struct rose_neigh *neigh)
 {
-	return (neigh->t0timer.prev != NULL || neigh->t0timer.next != NULL);
+	return timer_pending(&neigh->t0timer);
 }
 
 static void rose_ftimer_expiry(unsigned long param)

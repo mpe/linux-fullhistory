@@ -856,11 +856,6 @@ static struct net_device *lmc_probe1 (struct net_device *dev, unsigned long ioad
     /*
      *	Switch to common hdlc%d naming. We name by type not by vendor
      */
-#if LINUX_VERSION_CODE < 0x20363
-    dev->name = ((char *) (dev)) + sizeof (struct ppp_device);
-#else
-    dev->name = ((char *) (dev)) + sizeof (struct net_device);
-#endif
     
     dev_alloc_name(dev, "hdlc%d");
 #else
@@ -868,7 +863,6 @@ static struct net_device *lmc_probe1 (struct net_device *dev, unsigned long ioad
      * GCOM uses LMC vendor name so that clients can know which card
      * to attach to.
      */
-    dev->name = ((char *) (dev)) + sizeof (struct ppp_device);
     dev_alloc_name(dev, "lmc%d");
 #endif
 

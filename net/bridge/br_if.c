@@ -74,7 +74,7 @@ static struct net_bridge **__find_br(char *name)
 
 	b = &bridge_list;
 	while ((br = *b) != NULL) {
-		if (!strncmp(br->name, name, IFNAMSIZ))
+		if (!strncmp(br->dev.name, name, IFNAMSIZ))
 			return b;
 
 		b = &(br->next);
@@ -102,9 +102,8 @@ static struct net_bridge *new_nb(char *name)
 	memset(br, 0, sizeof(*br));
 	dev = &br->dev;
 
-	strncpy(br->name, name, IFNAMSIZ);
+	strncpy(dev->name, name, IFNAMSIZ);
 	dev->priv = br;
-	dev->name = br->name;
 	ether_setup(dev);
 	br_dev_setup(dev);
 

@@ -124,7 +124,7 @@ void irlan_watchdog_timer_expired(void *data)
 		IRDA_DEBUG(0, __FUNCTION__ 
 		      "(), notifying irmanager to stop irlan!\n");
 		mgr_event.event = EVENT_IRLAN_STOP;
-		sprintf(mgr_event.devname, "%s", self->ifname);
+		sprintf(mgr_event.devname, "%s", self->dev.name);
 		irmanager_notify(&mgr_event);
 
 		/*
@@ -234,10 +234,9 @@ int irlan_register_netdev(struct irlan_cb *self)
 	if (!eth) {
 		/* Get the first free irlan<x> name */
 		do {
-			sprintf(self->ifname, "%s%d", "irlan", i++);
-		} while (dev_get(self->ifname));
+			sprintf(self->dev.name, "%s%d", "irlan", i++);
+		} while (dev_get(self->dev.name));
 	}
-	self->dev.name = self->ifname;
 	
 	if (register_netdev(&self->dev) != 0) {
 		IRDA_DEBUG(2, __FUNCTION__ "(), register_netdev() failed!\n");
@@ -276,7 +275,7 @@ struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev)
 
 	ASSERT(irlan != NULL, return NULL;);
 	
-	sprintf(self->ifname, "%s", "unknown");
+	sprintf(self->dev.name, "%s", "unknown");
 
 	self->dev.priv = (void *) self;
 	self->dev.next = NULL;
@@ -1173,7 +1172,7 @@ static int irlan_proc_read(char *buf, char **start, off_t offset, int len)
 		/* Don't display the master server */
 		if (self->master == 0) {
 			len += sprintf(buf+len, "ifname: %s,\n",
-				       self->ifname);
+				       self->dev.name);
 			len += sprintf(buf+len, "client state: %s, ",
 				       irlan_state[ self->client.state]);
 			len += sprintf(buf+len, "provider state: %s,\n",

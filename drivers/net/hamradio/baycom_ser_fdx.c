@@ -621,8 +621,6 @@ static int __init init_baycomserfdx(void)
 	int i, j, found = 0;
 	char set_hw = 1;
 	struct baycom_state *bc;
-	char ifname[HDLCDRV_IFNAMELEN];
-
 
 	printk(bc_drvinfo);
 	/*
@@ -630,14 +628,14 @@ static int __init init_baycomserfdx(void)
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = baycom_device+i;
-		sprintf(ifname, "bcsf%d", i);
+		sprintf(dev->name, "bcsf%d", i);
 
 		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
 			iobase[i] = irq[i] = 0;
 		j = hdlcdrv_register_hdlcdrv(dev, &ser12_ops, sizeof(struct baycom_state),
-					     ifname, iobase[i], irq[i], 0);
+					     dev->name, iobase[i], irq[i], 0);
 		if (!j) {
 			bc = (struct baycom_state *)dev->priv;
 			if (set_hw && baycom_setmode(bc, mode[i]))

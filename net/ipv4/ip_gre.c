@@ -118,11 +118,11 @@ static int ipgre_tunnel_init(struct net_device *dev);
 static int ipgre_fb_tunnel_init(struct net_device *dev);
 
 static struct net_device ipgre_fb_tunnel_dev = {
-	NULL, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipgre_fb_tunnel_init,
+	"gre%d", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipgre_fb_tunnel_init,
 };
 
 static struct ip_tunnel ipgre_fb_tunnel = {
-	NULL, &ipgre_fb_tunnel_dev, {0, }, 0, 0, 0, 0, 0, 0, 0, {"gre0", }
+	NULL, &ipgre_fb_tunnel_dev, {0, }, 0, 0, 0, 0, 0, 0, 0, {"gre%d", }
 };
 
 /* Tunnel hash table */
@@ -268,7 +268,7 @@ static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int 
 	dev->priv = (void*)(dev+1);
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
-	dev->name = nt->parms.name;
+	strcpy(dev->name, nt->parms.name);
 	dev->init = ipgre_tunnel_init;
 	dev->new_style = 1;
 	memcpy(&nt->parms, parms, sizeof(*parms));
@@ -1226,7 +1226,6 @@ int __init ipgre_init(void)
 	printk(KERN_INFO "GRE over IPv4 tunneling driver\n");
 
 	ipgre_fb_tunnel_dev.priv = (void*)&ipgre_fb_tunnel;
-	ipgre_fb_tunnel_dev.name = ipgre_fb_tunnel.parms.name;
 #ifdef MODULE
 	register_netdev(&ipgre_fb_tunnel_dev);
 #else

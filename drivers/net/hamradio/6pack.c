@@ -51,7 +51,6 @@ typedef unsigned char byte;
 
 
 typedef struct sixpack_ctrl {
-	char		if_name[8];	/* "sp0\0" .. "sp99999\0"	*/
 	struct sixpack	ctrl;		/* 6pack things			*/
 	struct net_device	dev;		/* the device			*/
 } sixpack_ctrl_t;
@@ -107,8 +106,7 @@ sp_alloc(void)
 		/* Initialize channel control data */
 		set_bit(SIXPF_INUSE, &spp->ctrl.flags);
 		spp->ctrl.tty         = NULL;
-		sprintf(spp->if_name, "sp%d", i);
-		spp->dev.name         = spp->if_name;
+		sprintf(spp->dev.name, "sp%d", i);
 		spp->dev.base_addr    = i;
 		spp->dev.priv         = (void*)&(spp->ctrl);
 		spp->dev.next         = NULL;

@@ -716,8 +716,8 @@ xirc2ps_attach(void)
     dev->get_stats = &do_get_stats;
     dev->do_ioctl = &do_ioctl;
     dev->set_multicast_list = &set_multicast_list;
+    strcpy(dev->name, local->node.dev_name);
     ether_setup(dev);
-    dev->name = local->node.dev_name;
     dev->init = &do_init;
     dev->open = &do_open;
     dev->stop = &do_stop;

@@ -211,7 +211,6 @@ struct scc_hardware {
 };
 
 struct scc_priv {
-  char name[10];
   struct enet_statistics stats;
   struct scc_info *info;
   int channel;
@@ -553,7 +552,6 @@ int __init setup_adapter(int io, int h, int n)
   for (i = 0; i < 2; i++) {
     dev = &info->dev[i];
     priv = &info->priv[i];
-    sprintf(priv->name, "dmascc%i", 2*n+i);
     priv->info = info;
     priv->channel = i;
     priv->cmd = info->scc_base + (i ? SCCB_CMD : SCCA_CMD);
@@ -571,7 +569,7 @@ int __init setup_adapter(int io, int h, int n)
     priv->rx_task.routine = rx_bh;
     priv->rx_task.data = dev;
     dev->priv = priv;
-    dev->name = priv->name;
+    sprintf(dev->name, "dmascc%i", 2*n+i);
     dev->base_addr = io;
     dev->irq = irq;
     dev->open = scc_open;
@@ -593,7 +591,6 @@ int __init setup_adapter(int io, int h, int n)
     dev_init_buffers(dev);
     if (register_netdevice(dev)) {
       printk("dmascc: could not register %s\n", dev->name);
-      dev->name = NULL;
     }
   }
 

@@ -196,12 +196,12 @@ int lapb_getparms(void *token, struct lapb_parms_struct *parms)
 	parms->window  = lapb->window;
 	parms->mode    = lapb->mode;
 
-	if (lapb->t1timer.prev == NULL && lapb->t1timer.next == NULL)
+	if (!timer_pending(&lapb->t1timer))
 		parms->t1timer = 0;
 	else
 		parms->t1timer = (lapb->t1timer.expires - jiffies) / HZ;
 
-	if (lapb->t2timer.prev == NULL && lapb->t2timer.next == NULL)
+	if (!timer_pending(&lapb->t2timer))
 		parms->t2timer = 0;
 	else
 		parms->t2timer = (lapb->t2timer.expires - jiffies) / HZ;

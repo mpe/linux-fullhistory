@@ -238,7 +238,7 @@ int
 L3AddTimer(struct L3Timer *t,
 	   int millisec, int event)
 {
-	if (t->tl.next || t->tl.prev) {
+	if (timer_pending(&t->tl)) {
 		printk(KERN_WARNING "L3AddTimer: timer already active!\n");
 		return -1;
 	}

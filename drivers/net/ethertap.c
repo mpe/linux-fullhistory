@@ -339,11 +339,9 @@ static struct net_device_stats *ethertap_get_stats(struct net_device *dev)
 static int unit;
 MODULE_PARM(unit,"i");
 
-static char devicename[9] = { 0, };
-
 static struct net_device dev_ethertap =
 {
-	devicename,
+	" ",
 	0, 0, 0, 0,
 	1, 5,
 	0, 0, 0, NULL, ethertap_probe
@@ -352,10 +350,10 @@ static struct net_device dev_ethertap =
 int init_module(void)
 {
 	dev_ethertap.base_addr=unit+NETLINK_TAPBASE;
-	sprintf(devicename,"tap%d",unit);
-	if (dev_get(devicename))
+	sprintf(dev_ethertap.name,"tap%d",unit);
+	if (dev_get(dev_ethertap.name))
 	{
-		printk(KERN_INFO "%s already loaded.\n", devicename);
+		printk(KERN_INFO "%s already loaded.\n", dev_ethertap.name);
 		return -EBUSY;
 	}
 	if (register_netdev(&dev_ethertap) != 0)

@@ -315,8 +315,8 @@ static dev_link_t *fmvj18x_attach(void)
     dev->set_config = &fjn_config;
     dev->get_stats = &fjn_get_stats;
     dev->set_multicast_list = &set_rx_mode;
+    strcpy(dev->name, lp->node.dev_name);
     ether_setup(dev);
-    dev->name = lp->node.dev_name;
     dev->init = &fmvj18x_init;
     dev->open = &fjn_open;
     dev->stop = &fjn_close;

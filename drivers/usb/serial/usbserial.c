@@ -14,6 +14,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (05/03/2000) gkh
+ *	Added the Digi Acceleport driver from Al Borchers and Peter Berger.
+ *
  * (04/27/2000) Ryan VanderBijl
  * 	Put calls to *_paranoia_checks into one function.
  * 
@@ -284,6 +287,9 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 #endif
 #ifdef CONFIG_USB_SERIAL_OMNINET
 	&zyxel_omninet_device,
+#endif
+#ifdef CONFIG_USB_SERIAL_DIGI_ACCELEPORT
+	&digi_acceleport_device,
 #endif
 	NULL
 };

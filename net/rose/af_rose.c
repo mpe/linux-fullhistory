@@ -1453,12 +1453,6 @@ void __init rose_proto_init(struct net_proto *pro)
 	memset(dev_rose, 0x00, rose_ndevs * sizeof(struct net_device));
 
 	for (i = 0; i < rose_ndevs; i++) {
-		dev_rose[i].name = kmalloc(20, GFP_KERNEL);
-		if(dev_rose[i].name == NULL)
-		{
-			printk(KERN_ERR "Rose: unable to register ROSE devices.\n");
-			break;
-		}
 		sprintf(dev_rose[i].name, "rose%d", i);
 		dev_rose[i].init = rose_init;
 		register_netdev(&dev_rose[i]);

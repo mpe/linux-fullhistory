@@ -32,7 +32,6 @@
 #include "x25_asy.h"
 
 typedef struct x25_ctrl {
-	char		if_name[8];	/* "xasy0\0" .. "xasy99999\0"	*/
 	struct x25_asy	ctrl;		/* X.25 things			*/
 	struct net_device	dev;		/* the device			*/
 } x25_asy_ctrl_t;
@@ -82,8 +81,7 @@ static inline struct x25_asy *x25_asy_alloc(void)
 		/* Initialize channel control data */
 		set_bit(SLF_INUSE, &slp->ctrl.flags);
 		slp->ctrl.tty         = NULL;
-		sprintf(slp->if_name, "x25asy%d", i);
-		slp->dev.name         = slp->if_name;
+		sprintf(slp->dev.name, "x25asy%d", i);
 		slp->dev.base_addr    = i;
 		slp->dev.priv         = (void*)&(slp->ctrl);
 		slp->dev.next         = NULL;

@@ -501,7 +501,7 @@ static int new_if(wan_device_t *wandev, struct net_device *dev, wanif_conf_t *co
 
 
 	/* prepare network device data space for registration */
-	dev->name = card->u.p.if_name;
+	strcpy(dev->name, card->u.p.if_name);
 	dev->init = &if_init;
 	dev->priv = ppp_priv_area;
 

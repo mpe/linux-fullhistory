@@ -73,7 +73,6 @@ struct mkiss_channel {
 };
 
 typedef struct ax25_ctrl {
-	char if_name[8];	/* "ax0\0" .. "ax99999\0"	*/
 	struct ax_disp ctrl;	/* 				*/
 	struct net_device  dev;	/* the device			*/
 } ax25_ctrl_t;
@@ -200,9 +199,8 @@ static inline struct ax_disp *ax_alloc(void)
 
 		/* Initialize channel control data */
 		set_bit(AXF_INUSE, &axp->ctrl.flags);
-		sprintf(axp->if_name, "ax%d", i++);
+		sprintf(axp->dev.name, "ax%d", i++);
 		axp->ctrl.tty      = NULL;
-		axp->dev.name      = axp->if_name;
 		axp->dev.base_addr = i;
 		axp->dev.priv      = (void *)&axp->ctrl;
 		axp->dev.next      = NULL;

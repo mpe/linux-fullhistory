@@ -246,7 +246,7 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 	if (!zone)
 		BUG();
 
-	count = nr_lru_pages >> priority;
+	count = (nr_lru_pages << 1) >> priority;
 	if (!count)
 		return ret;
 

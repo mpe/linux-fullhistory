@@ -156,7 +156,7 @@ FsmAddTimer(struct FsmTimer *ft,
 			(long) ft, millisec, where);
 #endif
 
-	if (ft->tl.next || ft->tl.prev) {
+	if (timer_pending(&ft->tl)) {
 		printk(KERN_WARNING "FsmAddTimer: timer already active!\n");
 		ft->fi->printdebug(ft->fi, "FsmAddTimer already active!");
 		return -1;
@@ -180,7 +180,7 @@ FsmRestartTimer(struct FsmTimer *ft,
 			(long) ft, millisec, where);
 #endif
 
-	if (ft->tl.next || ft->tl.prev)
+	if (timer_pending(&ft->tl))
 		del_timer(&ft->tl);
 	init_timer(&ft->tl);
 	ft->event = event;

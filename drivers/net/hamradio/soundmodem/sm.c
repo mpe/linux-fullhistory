@@ -278,7 +278,7 @@ void sm_output_status(struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static void sm_output_open(struct sm_state *sm)
+static void sm_output_open(struct sm_state *sm, const char *ifname)
 {
 	enum uart u = c_uart_unknown;
 	struct parport *pp = NULL;
@@ -306,7 +306,7 @@ static void sm_output_open(struct sm_state *sm)
 		else if ((~pp->modes) & (PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT))
 			printk(KERN_WARNING "%s: parport at address 0x%x cannot be used\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
 		else {
-			sm->pardev = parport_register_device(pp, sm->hdrv.ifname, NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
+			sm->pardev = parport_register_device(pp, ifname, NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
 			if (!sm->pardev) {
 				pp = NULL;
 				printk(KERN_WARNING "%s: cannot register parport device (address 0x%x)\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
@@ -393,7 +393,7 @@ static int sm_open(struct net_device *dev)
 	err = sm->hwdrv->open(dev, sm);
 	if (err)
 		return err;
-	sm_output_open(sm);
+	sm_output_open(sm, dev->name);
 	MOD_INC_USE_COUNT;
 	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u dma2 %u\n",
 	       sm_drvname, sm->hwdrv->hw_name, sm->mode_tx->name,
@@ -641,7 +641,6 @@ static int __init init_soundmodem(void)
 	int i, j, found = 0;
 	char set_hw = 1;
 	struct sm_state *sm;
-	char ifname[HDLCDRV_IFNAMELEN];
 
 	printk(sm_drvinfo);
 	/*
@@ -649,7 +648,7 @@ static int __init init_soundmodem(void)
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = sm_device+i;
-		sprintf(ifname, "sm%d", i);
+		sprintf(dev->name, "sm%d", i);
 
 		if (!mode[i])
 			set_hw = 0;
@@ -672,7 +671,7 @@ static int __init init_soundmodem(void)
 		}
 		if (!set_hw)
 			iobase[i] = irq[i] = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), ifname, iobase[i], irq[i], dma[i]);
+		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), dev->name, iobase[i], irq[i], dma[i]);
 		if (!j) {
 			sm = (struct sm_state *)dev->priv;
 			sm->hdrv.ptt_out.dma2 = dma2[i];

@@ -465,8 +465,7 @@ static void plusb_disconnect (struct usb_device *usbdev, void *ptr)
 	if(!s->opened && s->net_dev.name) {
 		dbg("unregistering netdev: %s",s->net_dev.name);
 		unregister_netdev(&s->net_dev);
-		kfree(s->net_dev.name);
-		s->net_dev.name=NULL;
+		s->net_dev.name[0] = '\0';
 	}
 	
 	dbg("plusb_disconnect: finished");
@@ -524,22 +523,15 @@ static void *plusb_probe (struct usb_device *usbdev, unsigned int ifnum)
 		return NULL;
 	}
 
-	if(!s->net_dev.name) {
-		s->net_dev.name=kmalloc(16, GFP_KERNEL);
-
-		if(!s->net_dev.name || dev_alloc_name(&s->net_dev,"plusb%d")<0)	{
-			err("alloc name failed\n");
-			return NULL;
-		}
-
+	if(!s->net_dev.name[0]) {
+		strcpy(s->net_dev.name, "plusb%d");
 		s->net_dev.init=plusb_net_init;
 		s->net_dev.priv=s;
 		if(!register_netdev(&s->net_dev))
 			info("registered: %s", s->net_dev.name);
 		else {
 			err("register_netdev failed");
-			kfree(s->net_dev.name);
-			s->net_dev.name=NULL;
+			s->net_dev.name[0] = '\0';
 		}
 	}
 		
@@ -598,11 +590,9 @@ void __exit plusb_cleanup (void)
 	dbg("plusb_cleanup");
 	for (u = 0; u < NRPLUSB; u++) {
 		plusb_t *s = &plusb[u];
-		if(s->net_dev.name) {
+		if(s->net_dev.name[0]) {
 			dbg("unregistering netdev: %s",s->net_dev.name);
 			unregister_netdev(&s->net_dev);
-			kfree(s->net_dev.name);
-			s->net_dev.name=NULL;
 		}
 	}
 	usb_deregister (&plusb_driver);

@@ -82,7 +82,6 @@ struct net_bridge
 	struct net_bridge		*next;
 	rwlock_t			lock;
 	struct net_bridge_port		*port_list;
-	char				name[IFNAMSIZ];
 	struct net_device		dev;
 	struct net_device_stats		statistics;
 	rwlock_t			hash_lock;

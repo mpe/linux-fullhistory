@@ -164,7 +164,6 @@ struct irlan_cb {
 	queue_t q; /* Must be first */
 
 	int    magic;
-	char   ifname[9];
 	struct net_device dev;        /* Ethernet device structure*/
 	struct enet_statistics stats;
 

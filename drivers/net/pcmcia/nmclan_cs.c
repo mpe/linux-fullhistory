@@ -534,8 +534,8 @@ static dev_link_t *nmclan_attach(void)
     dev->set_config = &mace_config;
     dev->get_stats = &mace_get_stats;
     dev->set_multicast_list = &set_multicast_list;
+    strcpy(dev->name, lp->node.dev_name);
     ether_setup(dev);
-    dev->name = lp->node.dev_name;
     dev->init = &nmclan_init;
     dev->open = &mace_open;
     dev->stop = &mace_close;

@@ -496,7 +496,6 @@ static int bpq_get_info(char *buffer, char **start, off_t offset, int length)
 static int bpq_new_device(struct net_device *dev)
 {
 	int k;
-	unsigned char *buf;
 	struct bpqdev *bpq, *bpq2;
 
 	if ((bpq = kmalloc(sizeof(struct bpqdev), GFP_KERNEL)) == NULL)
@@ -513,14 +512,13 @@ static int bpq_new_device(struct net_device *dev)
 	memcpy(bpq->acpt_addr, bcast_addr, sizeof(bpq_eth_addr));
 
 	dev = &bpq->axdev;
-	buf = kmalloc(14, GFP_KERNEL);
 
 	for (k = 0; k < MAXBPQDEV; k++) {
 		struct net_device *odev;
 
-		sprintf(buf, "bpq%d", k);
+		sprintf(dev->name, "bpq%d", k);
 
-		if ((odev = __dev_get_by_name(buf)) == NULL || bpq_check_devices(odev))
+		if ((odev = __dev_get_by_name(dev->name)) == NULL || bpq_check_devices(odev))
 			break;
 	}
 
@@ -530,7 +528,6 @@ static int bpq_new_device(struct net_device *dev)
 	}
 
 	dev->priv = (void *)bpq;	/* pointer back */
-	dev->name = buf;
 	dev->init = bpq_dev_init;
 
 	/* We should be locked, call register_netdevice() directly. */

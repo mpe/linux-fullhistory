@@ -1554,7 +1554,6 @@ static void z8530_init(void)
 
 static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev)
 {
-	unsigned char *buf;
 	struct net_device *dev;
 
 	if (dev_get(name))
@@ -1569,13 +1568,8 @@ static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev
 	dev = scc->dev;
 	memset(dev, 0, sizeof(struct net_device));
 
-	if ((buf = (unsigned char *) kmalloc(10, GFP_KERNEL)) == NULL)
-		return -ENOMEM;
-
-	strcpy(buf, name);
-
+	strcpy(dev->name, name);
 	dev->priv = (void *) scc;
-	dev->name = buf;
 	dev->init = scc_net_init;
 
 	if ((addev? register_netdevice(dev) : register_netdev(dev)) != 0)

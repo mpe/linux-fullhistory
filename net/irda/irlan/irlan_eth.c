@@ -90,7 +90,7 @@ int irlan_eth_init(struct net_device *dev)
 	 * it, so it can be configured with network parameters
 	 */
 	mgr_event.event = EVENT_IRLAN_START;
-	sprintf(mgr_event.devname, "%s", self->ifname);
+	sprintf(mgr_event.devname, "%s", self->dev.name);
 	irmanager_notify(&mgr_event);
 
 	/* 

@@ -377,8 +377,8 @@ static dev_link_t *smc91c92_attach(void)
     dev->get_stats = &smc91c92_get_stats;
     dev->set_config = &s9k_config;
     dev->set_multicast_list = &set_rx_mode;
+    strcpy(dev->name, smc->node.dev_name);
     ether_setup(dev);
-    dev->name = smc->node.dev_name;
     dev->init = &smc91c92_init;
     dev->open = &smc91c92_open;
     dev->stop = &smc91c92_close;

@@ -223,9 +223,9 @@ static dev_link_t *awc_attach(void)
 	dev->get_stats = 		&awc_get_stats;
 //	dev->set_multicast_list = 	&awc_set_multicast_list;
 
-	ether_setup(dev);
+	strcpy(dev->name, ((struct awc_private *)dev->priv)->node.dev_name);
 
-	dev->name = ((struct awc_private *)dev->priv)->node.dev_name;
+	ether_setup(dev);
 
 	dev->init = &awc_pcmcia_init;
 	dev->open = &awc_pcmcia_open;

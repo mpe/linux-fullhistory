@@ -200,8 +200,6 @@ struct baycom_state {
 	unsigned int bitrate;
 	unsigned char stat;
 
-	char ifname[HDLCDRV_IFNAMELEN];
-
 	struct {
 		unsigned int intclk;
 		unsigned int fclk;
@@ -444,7 +442,7 @@ static void inline do_kiss_params(struct baycom_state *bc,
 {
 
 #ifdef KISS_VERBOSE
-#define PKP(a,b) printk(KERN_INFO "%s: channel params: " a "\n", bc->ifname, b)
+#define PKP(a,b) printk(KERN_INFO "baycomm_epp: channel params: " a "\n", b)
 #else /* KISS_VERBOSE */	      
 #define PKP(a,b) 
 #endif /* KISS_VERBOSE */	      
@@ -702,7 +700,7 @@ static void do_rxpacket(struct net_device *dev)
 		return;
 	pktlen = bc->hdlcrx.bufcnt-2+1; /* KISS kludge */
 	if (!(skb = dev_alloc_skb(pktlen))) {
-		printk("%s: memory squeeze, dropping packet\n", bc->ifname);
+		printk("%s: memory squeeze, dropping packet\n", dev->name);
 		bc->stats.rx_dropped++;
 		return;
 	}
@@ -1450,20 +1448,19 @@ static int __init init_baycomepp(void)
 		 */
 		memset(bc, 0, sizeof(struct baycom_state));
 		bc->magic = BAYCOM_MAGIC;
-		sprintf(bc->ifname, "bce%d", i);
+		sprintf(dev->name, "bce%d", i);
 		bc->cfg.fclk = 19666600;
 		bc->cfg.bps = 9600;
 		/*
 		 * initialize part of the device struct
 		 */
-		dev->name = bc->ifname;
 		dev->if_port = 0;
 		dev->init = baycom_probe;
 		dev->base_addr = iobase[i];
 		dev->irq = 0;
 		dev->dma = 0;
 		if (register_netdev(dev)) {
-			printk(KERN_WARNING "%s: cannot register net device %s\n", bc_drvname, bc->ifname);
+			printk(KERN_WARNING "%s: cannot register net device %s\n", bc_drvname, dev->name);
 			kfree(dev->priv);
 			return -ENXIO;
 		}

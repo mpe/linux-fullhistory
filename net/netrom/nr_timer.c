@@ -129,8 +129,7 @@ void nr_stop_heartbeat(struct sock *sk)
 
 int nr_t1timer_running(struct sock *sk)
 {
-	return (sk->protinfo.nr->t1timer.prev != NULL ||
-		sk->protinfo.nr->t1timer.next != NULL);
+	return timer_pending(&sk->protinfo.nr->t1timer);
 }
 
 static void nr_heartbeat_expiry(unsigned long param)

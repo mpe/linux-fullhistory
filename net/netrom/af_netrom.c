@@ -1281,12 +1281,6 @@ void __init nr_proto_init(struct net_proto *pro)
 	memset(dev_nr, 0x00, nr_ndevs * sizeof(struct net_device));
 
 	for (i = 0; i < nr_ndevs; i++) {
-		dev_nr[i].name = kmalloc(20, GFP_KERNEL);
-		if(dev_nr[i].name==NULL)
-		{
-			printk(KERN_ERR "Netrom: unable to register devices.\n");
-			break;
-		}
 		sprintf(dev_nr[i].name, "nr%d", i);
 		dev_nr[i].init = nr_init;
 		register_netdev(&dev_nr[i]);

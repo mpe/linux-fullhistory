@@ -502,7 +502,7 @@ static dev_link_t *netwave_attach(void)
     dev->do_ioctl = &netwave_ioctl;
 
     ether_setup(dev);
-    dev->name = priv->node.dev_name;
+    strcpy(dev->name, priv->node.dev_name)
     dev->init = &netwave_init;
     dev->open = &netwave_open;
     dev->stop = &netwave_close;
@@ -1224,8 +1224,7 @@ static int netwave_hw_xmit(unsigned char* data, int len,
     writeb(NETWAVE_CMD_EOC, ramBase + NETWAVE_EREG_CB + 3);
 	
     /* If watchdog not already active, activate it... */
-    if(priv->watchdog.prev == (struct timer_list *) NULL) {
-
+    if (!timer_pending(&priv->watchdog)) {
 	/* set timer to expire in WATCHDOG_JIFFIES */
 	priv->watchdog.expires = jiffies + WATCHDOG_JIFFIES;
 	add_timer(&priv->watchdog);

@@ -422,7 +422,7 @@ static int new_if (wan_device_t *wandev, struct net_device *dev,
 	}
 
 	/* prepare network device data space for registration */
-	dev->name = chan->name;
+	strcpy(dev->name, chan->name);
 	dev->init = if_init;
 	dev->priv = chan;
 

@@ -3255,8 +3255,7 @@ int init_module(void)
 		return -ENXIO;  
 	}  
 	// MOD_INC_USE_COUNT; 
-        ia_timer.next = NULL;
-       	ia_timer.prev = NULL;
+	init_timer(&ia_timer);
    	ia_timer.expires = jiffies + 3*HZ;
    	ia_timer.data = 0UL;
    	ia_timer.function = ia_led_timer;

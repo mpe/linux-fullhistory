@@ -130,8 +130,6 @@ static struct timer_list atp_timer = {NULL, NULL, 0, 0, atp_timed_checker};
 
 /* Index to functions, as function prototypes. */
 
-extern int atp_probe(struct net_device *dev);
-
 static int atp_probe1(struct net_device *dev, short ioaddr);
 static void get_node_ID(struct net_device *dev);
 static unsigned short eeprom_op(short ioaddr, unsigned int cmd);
@@ -751,7 +749,7 @@ static void set_multicast_list(struct net_device *dev)
 
 static int io = 0;
 static struct net_device atp_dev = {
-	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, atp_probe };
+	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, atp_init };
 	
 MODULE_PARM(io, "I/O port of the pocket adapter");
 

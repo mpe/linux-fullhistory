@@ -505,7 +505,6 @@ static int __init init_baycompar(void)
 	int i, j, found = 0;
 	char set_hw = 1;
 	struct baycom_state *bc;
-	char ifname[HDLCDRV_IFNAMELEN];
 
 	printk(bc_drvinfo);
 	/*
@@ -513,14 +512,14 @@ static int __init init_baycompar(void)
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		struct net_device *dev = baycom_device+i;
-		sprintf(ifname, "bcp%d", i);
+		sprintf(dev->name, "bcp%d", i);
 
 		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
 			iobase[i] = 0;
 		j = hdlcdrv_register_hdlcdrv(dev, &par96_ops, sizeof(struct baycom_state),
-					     ifname, iobase[i], 0, 0);
+					     dev->name, iobase[i], 0, 0);
 		if (!j) {
 			bc = (struct baycom_state *)dev->priv;
 			if (set_hw && baycom_setmode(bc, mode[i]))

@@ -111,8 +111,7 @@ void x25_stop_timer(struct sock *sk)
 
 unsigned long x25_display_timer(struct sock *sk)
 {
-	if (sk->protinfo.x25->timer.prev == NULL &&
-	    sk->protinfo.x25->timer.next == NULL)
+	if (!timer_pending(&sk->protinfo.x25->timer))
 		return 0;
 
 	return sk->protinfo.x25->timer.expires - jiffies;

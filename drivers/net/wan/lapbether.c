@@ -441,7 +441,7 @@ static int lapbeth_new_device(struct net_device *dev)
 	}
 	
 	dev->priv = (void *)lapbeth;	/* pointer back */
-	dev->name = buf;
+	strcpy(dev->name, buf);
 	dev->init = lapbeth_dev_init;
 
 	if (register_netdev(dev) != 0) {

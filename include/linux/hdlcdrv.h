@@ -109,7 +109,6 @@ struct hdlcdrv_ioctl {
 #include <linux/spinlock.h>
 
 #define HDLCDRV_MAGIC      0x5ac6e778
-#define HDLCDRV_IFNAMELEN    6
 #define HDLCDRV_HDLCBUFFER  32 /* should be a power of 2 for speed reasons */
 #define HDLCDRV_BITBUFFER  256 /* should be a power of 2 for speed reasons */
 #undef HDLCDRV_LOOPBACK  /* define for HDLC debugging purposes */
@@ -181,8 +180,6 @@ struct hdlcdrv_ops {
 
 struct hdlcdrv_state {
 	int magic;
-
-	char ifname[HDLCDRV_IFNAMELEN];
 
 	const struct hdlcdrv_ops *ops;
 

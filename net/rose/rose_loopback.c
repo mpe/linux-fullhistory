@@ -37,7 +37,7 @@ void rose_loopback_init(void)
 
 static int rose_loopback_running(void)
 {
-	return (loopback_timer.prev != NULL || loopback_timer.next != NULL);
+	return timer_pending(&loopback_timer);
 }
 
 int rose_loopback_queue(struct sk_buff *skb, struct rose_neigh *neigh)
