@@ -1,7 +1,7 @@
 /*
  * file_storage.c -- File-backed USB Storage Gadget, for USB development
  *
- * Copyright (C) 2003, 2004 Alan Stern
+ * Copyright (C) 2003-2005 Alan Stern
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -832,6 +832,8 @@ static void inline put_be32(u8 *buf, u32 val)
 #define STRING_MANUFACTURER	1
 #define STRING_PRODUCT		2
 #define STRING_SERIAL		3
+#define STRING_CONFIG		4
+#define STRING_INTERFACE	5
 
 /* There is only one configuration. */
 #define	CONFIG_VALUE		1
@@ -863,6 +865,7 @@ config_desc = {
 	/* wTotalLength computed by usb_gadget_config_buf() */
 	.bNumInterfaces =	1,
 	.bConfigurationValue =	CONFIG_VALUE,
+	.iConfiguration =	STRING_CONFIG,
 	.bmAttributes =		USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
 	.bMaxPower =		1,	// self-powered
 };
@@ -886,6 +889,7 @@ intf_desc = {
 	.bInterfaceClass =	USB_CLASS_MASS_STORAGE,
 	.bInterfaceSubClass =	USB_SC_SCSI,	// Adjusted during fsg_bind()
 	.bInterfaceProtocol =	USB_PR_BULK,	// Adjusted during fsg_bind()
+	.iInterface =		STRING_INTERFACE,
 };
 
 /* Three full-speed endpoint descriptors: bulk-in, bulk-out,
@@ -1009,7 +1013,7 @@ static const struct usb_descriptor_header *hs_function[] = {
 
 /* The CBI specification limits the serial string to 12 uppercase hexadecimal
  * characters. */
-static char				manufacturer[50];
+static char				manufacturer[64];
 static char				serial[13];
 
 /* Static strings, in UTF-8 (for simplicity we use only ASCII characters) */
@@ -1017,6 +1021,8 @@ static struct usb_string		strings[] = {
 	{STRING_MANUFACTURER,	manufacturer},
 	{STRING_PRODUCT,	longname},
 	{STRING_SERIAL,		serial},
+	{STRING_CONFIG,		"Self-powered"},
+	{STRING_INTERFACE,	"Mass Storage"},
 	{}
 };
 
