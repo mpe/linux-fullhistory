@@ -49,7 +49,7 @@
 
 #define FLUSH_BASE		0xdf000000
 
-#define VIDC_BASE		0xe0400000
+#define VIDC_BASE		(void __iomem *)0xe0400000
 #define IOMD_BASE		0xe0200000
 #define IOC_BASE		0xe0200000
 #define FLOPPYDMA_BASE		0xe002a000
