@@ -199,13 +199,13 @@ cifs_stats_read(char *buf, char **beginBuffer, off_t offset,
 	length += item_length;
 	buf += item_length;      
 	item_length = 
-		sprintf(buf,"SMB Request/Response Buffer: %d\n",
-			bufAllocCount.counter);
+		sprintf(buf,"SMB Request/Response Buffer: %d Pool size: %d\n",
+			bufAllocCount.counter,cifs_min_rcv + tcpSesAllocCount.counter);
 	length += item_length;
 	buf += item_length;
 	item_length = 
-		sprintf(buf,"SMB Small Req/Resp Buffer: %d\n",
-			smBufAllocCount.counter);
+		sprintf(buf,"SMB Small Req/Resp Buffer: %d Pool size: %d\n",
+			smBufAllocCount.counter,cifs_min_small);
 	length += item_length;
 	buf += item_length;
 	item_length = 

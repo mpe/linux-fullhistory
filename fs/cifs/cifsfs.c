@@ -661,7 +661,7 @@ cifs_init_request_bufs(void)
 		cifs_min_rcv = 1;
 	else if (cifs_min_rcv > 64) {
 		cifs_min_rcv = 64;
-		cFYI(1,("cifs_min_rcv set to maximum (64)"));
+		cERROR(1,("cifs_min_rcv set to maximum (64)"));
 	}
 
 	cifs_req_poolp = mempool_create(cifs_min_rcv,
