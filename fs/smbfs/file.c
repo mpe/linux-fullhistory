@@ -214,7 +214,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	if (status)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_file_read: %s/%s validation failed, error=%d\n",
+printk("smb_file_read: %s/%s validation failed, error=%Zd\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, status);
 #endif
 		goto out;
@@ -308,7 +308,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	if (result)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_file_write: %s/%s validation failed, error=%d\n",
+printk("smb_file_write: %s/%s validation failed, error=%Zd\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, result);
 #endif
 			goto out;

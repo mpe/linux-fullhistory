@@ -60,6 +60,7 @@ static int sync_block(struct inode *inode, unsigned short *block, int wait)
 	return 0;
 }
 
+#ifdef WTF
 static int sync_iblock(struct inode *inode, unsigned short *iblock,
 		       struct buffer_head **bh, int wait)
 {
@@ -83,6 +84,7 @@ static int sync_iblock(struct inode *inode, unsigned short *iblock,
 		return -1;
 	return 0;
 }
+#endif
 
 static int sync_direct(struct inode *inode, int wait)
 {
@@ -100,6 +102,7 @@ static int sync_direct(struct inode *inode, int wait)
 	return err;
 }
 
+#ifdef WTF
 static int sync_indirect(struct inode *inode, unsigned short *iblock, int wait)
 {
 	int i;
@@ -146,8 +149,9 @@ static int sync_dindirect(struct inode *inode, unsigned short *diblock,
 	brelse(dind_bh);
 	return err;
 }
+#endif
 
-int qnx4_sync_file(struct file *file, struct dentry *dentry)
+int qnx4_sync_file(struct file *file, struct dentry *dentry, int unused)
 {
         struct inode *inode = dentry->d_inode;
 	int wait, err = 0;

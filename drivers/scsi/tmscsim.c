@@ -165,6 +165,7 @@
 #include "constants.h"
 #include "sd.h"
 #include <linux/stat.h>
+#include <scsi/scsicam.h>
 
 #include "dc390.h"
 

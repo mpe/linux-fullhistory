@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.153 2000/06/26 23:20:24 davem Exp $
+/* $Id: sys_sparc32.c,v 1.154 2000/07/06 01:41:29 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

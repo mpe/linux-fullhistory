@@ -349,7 +349,7 @@ out:
  * The adfs-specific inode data has already been updated by
  * adfs_notify_change()
  */
-void adfs_write_inode(struct inode *inode)
+void adfs_write_inode(struct inode *inode, int unused)
 {
 	struct super_block *sb = inode->i_sb;
 	struct object_info obj;

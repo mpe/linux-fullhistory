@@ -310,7 +310,7 @@ static char  azt_auto_eject = AZT_AUTO_EJECT;
 
 static int AztTimeout, AztTries;
 static DECLARE_WAIT_QUEUE_HEAD(azt_waitq);
-static struct timer_list delay_timer = { NULL, NULL, 0, 0, NULL };
+static struct timer_list delay_timer = { {NULL, NULL}, 0, 0, NULL };
 
 static struct azt_DiskInfo DiskInfo;
 static struct azt_Toc Toc[MAX_TRACKS];

@@ -21,13 +21,9 @@
  * So we duplicate the msdos_inode_info, and add our own info at the
  * end.
  * 
- * For all file type (and directory) the inode has a reference to:
- * the directory which hold this entry: i_dir_owner
- * The EMD file of i_dir_owner: i_emd_owner
  * The offset in this EMD file of the entry: pos
  * 
- * For directory, we also have a reference to the inode of its
- * own EMD file. Also, we have dir_locking_info to help synchronise
+ * For directory, we have dir_locking_info to help synchronise
  * file creation and file lookup. See also msdos_fs_i.h for more 
  * information about msdos_inode_info.
  * 
@@ -56,11 +52,7 @@ struct umsdos_inode_info {
 	struct dir_locking_info dir_info;
 	int i_patched;			/* Inode has been patched */
 	int i_is_hlink;			/* Resolved hardlink inode? */
-	unsigned long i_emd_owner;	/* Is this the EMD file inode? */
 	off_t pos;			/* Entry offset in the emd_owner file */
-	/* The rest is used only if this inode describes a directory */
-	struct dentry *i_emd_dentry;	/* EMD dentry for this directory */
-	unsigned long i_emd_dir;	/* Inode of the EMD file */
 };
 
 #endif

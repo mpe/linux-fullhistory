@@ -144,8 +144,7 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 		  "=b" (*ebx),
 		  "=c" (*ecx),
 		  "=d" (*edx)
-		: "a" (op)
-		: "cc");
+		: "a" (op));
 }
 
 

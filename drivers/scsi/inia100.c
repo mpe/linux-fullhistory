@@ -228,7 +228,6 @@ int orc_ReturnNumberOfAdapters(void)
 		};
 
 		unsigned int dRegValue;
-		unsigned short command;
 		WORD wBIOS, wBASE;
 		BYTE bPCIBusNum, bInterrupt, bPCIDeviceNum;
 

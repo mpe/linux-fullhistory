@@ -587,10 +587,11 @@ void redraw_screen(int new_console, int is_switch)
 
 	if (redraw) {
 		set_origin(currcons);
-		set_palette(currcons);
-		if (sw->con_switch(vc_cons[currcons].d) && vcmode != KD_GRAPHICS)
+		if (sw->con_switch(vc_cons[currcons].d) && vcmode != KD_GRAPHICS) {
 			/* Update the screen contents */
+			set_palette(currcons);
 			do_update_region(currcons, origin, screenbuf_size/2);
+		}
 	}
 	set_cursor(currcons);
 	if (is_switch) {
@@ -2433,8 +2434,6 @@ void __init con_init(void)
 	 * kmalloc is not running yet - we use the bootmem allocator.
 	 */
 	for (currcons = 0; currcons < MIN_NR_CONSOLES; currcons++) {
-		int j, k ;
-
 		vc_cons[currcons].d = (struct vc_data *)
 				alloc_bootmem(sizeof(struct vc_data));
 		vt_cons[currcons] = (struct vt_struct *)
@@ -2444,11 +2443,6 @@ void __init con_init(void)
 		kmalloced = 0;
 		vc_init(currcons, video_num_lines, video_num_columns, 
 			currcons || !sw->con_save_screen);
-		for (j=k=0; j<16; j++) {
-			vc_cons[currcons].d->vc_palette[k++] = default_red[j] ;
-			vc_cons[currcons].d->vc_palette[k++] = default_grn[j] ;
-			vc_cons[currcons].d->vc_palette[k++] = default_blu[j] ;
-		}
 	}
 	currcons = fg_console = 0;
 	master_display_fg = vc_cons[currcons].d;

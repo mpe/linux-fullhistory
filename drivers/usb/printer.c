@@ -42,7 +42,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/lp.h>
-#define DEBUG
+#undef DEBUG
 #include <linux/usb.h>
 
 #define USBLP_BUF_SIZE		8192

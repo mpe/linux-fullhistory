@@ -75,7 +75,6 @@ int UMSDOS_ioctl_dir(struct inode *dir, struct file *filp, unsigned int cmd,
 	struct dentry *dentry = filp->f_dentry;
 	struct umsdos_ioctl *idata = (struct umsdos_ioctl *) data_ptr;
 	int ret;
-	struct file new_filp;
 	struct umsdos_ioctl data;
 
 Printk(("UMSDOS_ioctl_dir: %s/%s, cmd=%d, data=%08lx\n",
@@ -161,6 +160,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
 		 * Return > 0 if success.
 		 */
 		struct dentry *demd;
+		loff_t pos = filp->f_pos;
 
 		/* The absence of the EMD is simply seen as an EOF */
 		demd = umsdos_get_emd_dentry(dentry);
@@ -171,14 +171,12 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
 		if (!demd->d_inode)
 			goto read_dput;
 
-		fill_new_filp(&new_filp, demd);
-		new_filp.f_pos = filp->f_pos;
-		while (new_filp.f_pos < demd->d_inode->i_size) {
-			off_t f_pos = new_filp.f_pos;
+		while (pos < demd->d_inode->i_size) {
+			off_t f_pos = pos;
 			struct umsdos_dirent entry;
 			struct umsdos_info info;
 
-			ret = umsdos_emd_dir_readentry (&new_filp, &entry);
+			ret = umsdos_emd_dir_readentry (demd, &pos, &entry);
 			if (ret)
 				break;
 			if (entry.name_len <= 0)
@@ -199,7 +197,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
 			break;
 		}
 		/* update the original f_pos */
-		filp->f_pos = new_filp.f_pos;
+		filp->f_pos = pos;
 	read_dput:
 		d_drop(demd);
 		dput(demd);

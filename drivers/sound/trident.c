@@ -538,7 +538,7 @@ static struct trident_channel *ali_alloc_rec_pcm_channel(struct trident_card *ca
 }
 
 
-static void trident_free_pcm_channel(struct trident_card *card, int channel)
+static void trident_free_pcm_channel(struct trident_card *card, unsigned int channel)
 {
 	int bank;
 
@@ -551,7 +551,7 @@ static void trident_free_pcm_channel(struct trident_card *card, int channel)
 	card->banks[bank].bitmap &= ~(1 << (channel));
 }
 
-static void ali_free_pcm_channel(struct trident_card *card, int channel)
+static void ali_free_pcm_channel(struct trident_card *card, unsigned int channel)
 {
 	int bank;
 

@@ -177,7 +177,7 @@ extern int * max_sectors[MAX_BLKDEV];
 
 extern int * max_segments[MAX_BLKDEV];
 
-#define MAX_SECTORS 128
+#define MAX_SECTORS 254
 
 #define MAX_SEGMENTS MAX_SECTORS
 

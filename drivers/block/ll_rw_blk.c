@@ -37,6 +37,8 @@
 extern int mac_floppy_init(void);
 #endif
 
+extern int lvm_init(void);
+
 /*
  * For the allocated request tables
  */

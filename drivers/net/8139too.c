@@ -1332,7 +1332,6 @@ static void rtl8139_timer (unsigned long data)
 {
 	struct net_device *dev = (struct net_device *) data;
 	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
-	void *ioaddr = tp->mmio_addr;
 	int next_tick = 60 * HZ;
 	int mii_reg5;
 
@@ -1342,6 +1341,7 @@ static void rtl8139_timer (unsigned long data)
 
 #if 0
 	if (!tp->duplex_lock && mii_reg5 != 0xffff) {
+		void *ioaddr = tp->mmio_addr;
 		int duplex = (mii_reg5 & 0x0100)
 		    || (mii_reg5 & 0x01C0) == 0x0040;
 		if (tp->full_duplex != duplex) {

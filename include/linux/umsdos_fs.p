@@ -17,26 +17,10 @@ struct dentry *umsdos_covered(struct dentry *, char *, int);
 struct dentry *umsdos_solve_hlink (struct dentry *hlink);
 
 /* emd.c 22/06/95 00.22.04 */
-ssize_t umsdos_file_write_kmem_real (struct file *filp,
-				const char *buf,
-				size_t  count);
-
-ssize_t umsdos_file_read_kmem (struct file *filp,
-	 char *buf,
-	 size_t count);
-ssize_t umsdos_file_write_kmem (struct file *filp,
-	 const char *buf,
-	 size_t count);
-ssize_t umsdos_emd_dir_write (struct file *filp,
-	 char *buf,
-	 size_t count);
-ssize_t umsdos_emd_dir_read (struct file *filp,
-	 char *buf,
-	 size_t count);
 struct dentry *umsdos_get_emd_dentry(struct dentry *);
 int umsdos_have_emd(struct dentry *);
 int umsdos_make_emd(struct dentry *);
-int umsdos_emd_dir_readentry (struct file *, struct umsdos_dirent *);
+int umsdos_emd_dir_readentry (struct dentry *, loff_t *, struct umsdos_dirent *);
 int umsdos_newentry (struct dentry *, struct umsdos_info *);
 int umsdos_newhidden (struct dentry *, struct umsdos_info *);
 int umsdos_delentry (struct dentry *, struct umsdos_info *, int);

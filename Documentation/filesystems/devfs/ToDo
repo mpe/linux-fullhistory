@@ -2,7 +2,7 @@
 
 		Richard Gooch <rgooch@atnf.csiro.au>
 
-			      18-FEB-2000
+			      3-JUL-2000
 
 This is a list of things to be done for better devfs support in the
 Linux kernel. If you'd like to contribute to the devfs, please have a
@@ -17,8 +17,6 @@ list (preferably with your name attached to them:-).
 - Amiga floppy driver (drivers/block/amiflop.c)
 
 - Atari floppy driver (drivers/block/ataflop.c)
-
-- Network block device (drivers/block/nbd.c)
 
 - SWIM3 (Super Woz Integrated Machine 3) floppy driver (drivers/block/swim3.c)
 

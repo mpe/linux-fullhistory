@@ -73,7 +73,7 @@ static void qnx4_write_super(struct super_block *sb)
 	sb->s_dirt = 0;
 }
 
-static void qnx4_write_inode(struct inode *inode)
+static void qnx4_write_inode(struct inode *inode, int unused)
 {
 	struct qnx4_inode_entry *raw_inode;
 	int block, ino;

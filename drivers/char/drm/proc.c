@@ -225,7 +225,7 @@ static int _drm_queues_info(char *buf, char **start, off_t offset, int len,
 		atomic_inc(&q->use_count);
 		DRM_PROC_PRINT_RET(atomic_dec(&q->use_count),
 				   "%5d/0x%03x %5d %5d"
-				   " %5d/%c%c/%c%c%c %5d %10d %10d %10d\n",
+				   " %5d/%c%c/%c%c%c %5Zd %10d %10d %10d\n",
 				   i,
 				   q->flags,
 				   atomic_read(&q->use_count),

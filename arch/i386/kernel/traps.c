@@ -19,8 +19,6 @@
 #include <linux/ptrace.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
-#include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
@@ -75,68 +73,6 @@ static inline void console_verbose(void)
 {
 	if (console_loglevel)
 		console_loglevel = 15;
-}
-
-#define DO_ERROR(trapnr, signr, str, name, tsk) \
-asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
-{ \
-	tsk->thread.error_code = error_code; \
-	tsk->thread.trap_no = trapnr; \
-	die_if_no_fixup(str,regs,error_code); \
-	force_sig(signr, tsk); \
-}
-
-#define DO_ERROR_INFO(trapnr, signr, str, name, tsk, sicode, siaddr) \
-asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
-{ \
-	siginfo_t info; \
-	tsk->thread.error_code = error_code; \
-	tsk->thread.trap_no = trapnr; \
-	die_if_no_fixup(str,regs,error_code); \
-	info.si_signo = signr; \
-	info.si_errno = 0; \
-	info.si_code = sicode; \
-	info.si_addr = (void *)siaddr; \
-	force_sig_info(signr, &info, tsk); \
-}
-
-#define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \
-asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
-{ \
-	lock_kernel(); \
-	if (regs->eflags & VM_MASK) { \
-		if (!handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr)) \
-			goto out; \
-		/* else fall through */ \
-	} \
-	tsk->thread.error_code = error_code; \
-	tsk->thread.trap_no = trapnr; \
-	force_sig(signr, tsk); \
-	die_if_kernel(str,regs,error_code); \
-out: \
-	unlock_kernel(); \
-}
-
-#define DO_VM86_ERROR_INFO(trapnr, signr, str, name, tsk, sicode, siaddr) \
-asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
-{ \
-	siginfo_t info; \
-	lock_kernel(); \
-	if (regs->eflags & VM_MASK) { \
-		if (!handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr)) \
-			goto out; \
-		/* else fall through */ \
-	} \
-	tsk->thread.error_code = error_code; \
-	tsk->thread.trap_no = trapnr; \
-	info.si_signo = signr; \
-	info.si_errno = 0; \
-	info.si_code = sicode; \
-	info.si_addr = (void *)siaddr; \
-	force_sig_info(signr, &info, tsk); \
-	die_if_kernel(str,regs,error_code); \
-out: \
-	unlock_kernel(); \
 }
 
 asmlinkage void divide_error(void);
@@ -285,20 +221,6 @@ static inline void die_if_kernel(const char * str, struct pt_regs * regs, long e
 		die(str, regs, err);
 }
 
-static void die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
-{
-	if (!(regs->eflags & VM_MASK) && !(3 & regs->xcs))
-	{
-		unsigned long fixup;
-		fixup = search_exception_table(regs->eip);
-		if (fixup) {
-			regs->eip = fixup;
-			return;
-		}
-		die(str, regs, err);
-	}
-}
-
 static inline unsigned long get_cr2(void)
 {
 	unsigned long address;
@@ -308,19 +230,88 @@ static inline unsigned long get_cr2(void)
 	return address;
 }
 
-DO_VM86_ERROR_INFO( 0, SIGFPE,  "divide error", divide_error, current, FPE_INTDIV, regs->eip)
-DO_VM86_ERROR( 3, SIGTRAP, "int3", int3, current)
-DO_VM86_ERROR( 4, SIGSEGV, "overflow", overflow, current)
-DO_VM86_ERROR( 5, SIGSEGV, "bounds", bounds, current)
-DO_ERROR_INFO( 6, SIGILL,  "invalid operand", invalid_op, current, ILL_ILLOPN, regs->eip)
-DO_VM86_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
-DO_ERROR( 8, SIGSEGV, "double fault", double_fault, current)
-DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, current)
-DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
-DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
-DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
-DO_ERROR_INFO(17, SIGBUS, "alignment check", alignment_check, current, BUS_ADRALN, get_cr2())
-DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
+static void inline do_trap(int trapnr, int signr, char *str, int vm86,
+			   struct pt_regs * regs, long error_code, siginfo_t *info)
+{
+	if (vm86 && regs->eflags & VM_MASK)
+		goto vm86_trap;
+	if (!(regs->xcs & 3))
+		goto kernel_trap;
+
+	trap_signal: {
+		struct task_struct *tsk = current;
+		tsk->thread.error_code = error_code;
+		tsk->thread.trap_no = trapnr;
+		if (info)
+			force_sig_info(signr, info, tsk);
+		else
+			force_sig(signr, tsk);
+		return;
+	}
+
+	kernel_trap: {
+		unsigned long fixup = search_exception_table(regs->eip);
+		if (fixup)
+			regs->eip = fixup;
+		else	
+			die(str, regs, error_code);
+		return;
+	}
+
+	vm86_trap: {
+		int ret = handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, trapnr);
+		if (ret) goto trap_signal;
+		return;
+	}
+}
+
+#define DO_ERROR(trapnr, signr, str, name) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	do_trap(trapnr, signr, str, 0, regs, error_code, NULL); \
+}
+
+#define DO_ERROR_INFO(trapnr, signr, str, name, sicode, siaddr) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	siginfo_t info; \
+	info.si_signo = signr; \
+	info.si_errno = 0; \
+	info.si_code = sicode; \
+	info.si_addr = (void *)siaddr; \
+	do_trap(trapnr, signr, str, 0, regs, error_code, &info); \
+}
+
+#define DO_VM86_ERROR(trapnr, signr, str, name) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	do_trap(trapnr, signr, str, 1, regs, error_code, NULL); \
+}
+
+#define DO_VM86_ERROR_INFO(trapnr, signr, str, name, sicode, siaddr) \
+asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
+{ \
+	siginfo_t info; \
+	info.si_signo = signr; \
+	info.si_errno = 0; \
+	info.si_code = sicode; \
+	info.si_addr = (void *)siaddr; \
+	do_trap(trapnr, signr, str, 1, regs, error_code, &info); \
+}
+
+DO_VM86_ERROR_INFO( 0, SIGFPE,  "divide error", divide_error, FPE_INTDIV, regs->eip)
+DO_VM86_ERROR( 3, SIGTRAP, "int3", int3)
+DO_VM86_ERROR( 4, SIGSEGV, "overflow", overflow)
+DO_VM86_ERROR( 5, SIGSEGV, "bounds", bounds)
+DO_ERROR_INFO( 6, SIGILL,  "invalid operand", invalid_op, ILL_ILLOPN, regs->eip)
+DO_VM86_ERROR( 7, SIGSEGV, "device not available", device_not_available)
+DO_ERROR( 8, SIGSEGV, "double fault", double_fault)
+DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun)
+DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS)
+DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present)
+DO_ERROR(12, SIGBUS,  "stack segment", stack_segment)
+DO_ERROR_INFO(17, SIGBUS, "alignment check", alignment_check, BUS_ADRALN, get_cr2())
+DO_ERROR(18, SIGSEGV, "reserved", reserved)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -336,9 +327,7 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 	return;
 
 gp_in_vm86:
-	lock_kernel();
 	handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
-	unlock_kernel();
 	return;
 
 gp_in_kernel:
@@ -561,9 +550,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	return;
 
 debug_vm86:
-	lock_kernel();
 	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-	unlock_kernel();
 	return;
 
 clear_dr7:
@@ -752,12 +739,10 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 
 asmlinkage void math_emulate(long arg)
 {
-	lock_kernel();
 	printk("math-emulation not enabled and no coprocessor found.\n");
 	printk("killing %s.\n",current->comm);
 	force_sig(SIGFPE,current);
 	schedule();
-	unlock_kernel();
 }
 
 #endif /* CONFIG_MATH_EMULATION */

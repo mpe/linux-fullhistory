@@ -1112,6 +1112,15 @@ S: Alleenstrasse 27
 S: D-71679 Asperg
 S: Germany
 
+N: Jan Hubicka
+E: hubicka@freesoft.cz
+E: hubicka@suse.cz
+W: http://www.paru.cas.cz/~hubicka/
+D: Random kernel tweaks and fixes.
+S: Dukelskych bojovniku 1944
+S: Tabor 390 03
+S: Czech Republic
+
 N: Gareth Hughes
 E: gareth@valinux.com
 E: gareth@precisioninsight.com
@@ -2734,7 +2743,7 @@ S: USA
 
 N: Steven Whitehouse
 E: SteveW@ACM.org
-W: http://www-sigproc.eng.cam.ac.uk/~sjw44/
+W: http://www.chygwyn.com/~steve
 D: Linux DECnet project: http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html
 D: Minor debugging of other networking protocols.
 D: Misc bug fixes and filesystem development

@@ -693,7 +693,7 @@ static int fdomain_get_irq( int base )
 static int fdomain_isa_detect( int *irq, int *iobase )
 {
    int i, j;
-   int base;
+   int base = 0xdeadbeef;
    int flag = 0;
 
 #if DEBUG_DETECT

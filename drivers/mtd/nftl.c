@@ -1,10 +1,41 @@
 
 /* Linux driver for NAND Flash Translation Layer      */
 /* (c) 1999 Machine Vision Holdings, Inc.             */
-/* Author: David Woodhouse <dwmw2@infradead.org       */
-/* $Id: nftl.c,v 1.34 2000/06/07 14:48:52 dwmw2 Exp $ */
+/* Author: David Woodhouse <dwmw2@infradead.org>      */
+/* $Id: nftl.c,v 1.35 2000/07/06 14:35:01 dwmw2 Exp $ */
 
 /*
+  The contents of this file are distributed under the GNU Public
+  Licence version 2 ("GPL"). The legal note below refers only to the
+  _use_ of the code in some jurisdictions, and does not in any way
+  affect the copying, distribution and modification of this code,
+  which is permitted under the terms of the GPL.
+
+  Section 0 of the GPL says:
+
+ "Activities other than copying, distribution and modification are not
+  covered by this License; they are outside its scope."
+
+  You may copy, distribute and modify this code to your hearts'
+  content - it's just that in some jurisdictions, you may only _use_
+  it under the terms of the licence below. This puts it in a similar
+  situation to the ISDN code, which you may need telco approval to
+  use, and indeed any code which has uses that may be restricted in
+  law. For example, certain malicious uses of the networking stack
+  may be illegal, but that doesn't prevent the networking code from
+  being under GPL.
+
+  In fact the ISDN case is worse than this, because modification of
+  the code automatically invalidates its approval. Modificiation,
+  unlike usage, _is_ one of the rights which is protected by the
+  GPL. Happily, the law in those places where approval is required
+  doesn't actually prevent you from modifying the code - it's just
+  that you may not be allowed to _use_ it once you've done so - and
+  because usage isn't addressed by the GPL, that's just fine.
+
+  dwmw2@infradead.org
+  6/7/0
+
   LEGAL NOTE: The NFTL format is patented by M-Systems.  They have
   granted a licence for its use with their DiskOnChip products:
 
@@ -16,8 +47,7 @@
 
   A signed copy of this agreement from M-Systems is kept on file by
   Red Hat UK Limited. In the unlikely event that you need access to it,
-  please contact dwmw2@redhat.com for assistance.
-*/
+  please contact dwmw2@redhat.com for assistance.  */
 
 #define PRERELEASE
 
@@ -25,6 +55,7 @@
 #define DEBUGLVL debug
 #endif
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/errno.h>
@@ -1267,7 +1298,7 @@ int __init init_nftl(void)
 
 	printk(KERN_NOTICE "M-Systems NAND Flash Translation Layer driver. (C) 1999 MVHI\n");
 #ifdef PRERELEASE 
-	printk(KERN_INFO"$Id: nftl.c,v 1.34 2000/06/07 14:48:52 dwmw2 Exp $\n");
+	printk(KERN_INFO"$Id: nftl.c,v 1.35 2000/07/06 14:35:01 dwmw2 Exp $\n");
 #endif
 
 	if (register_blkdev(NFTL_MAJOR, "nftl", &nftl_fops)){

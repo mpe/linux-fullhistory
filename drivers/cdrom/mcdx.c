@@ -297,6 +297,7 @@ static struct cdrom_device_info mcdx_info = {
   &mcdx_dops,                    /* device operations */
   NULL,                         /* link */
   NULL,                         /* handle */
+  0,				/* de, devfs */
   0,		                /* dev */
   0,                            /* mask */
   2,                            /* maximum speed */

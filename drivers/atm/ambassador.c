@@ -376,13 +376,13 @@ static inline void dump_registers (const amb_dev * dev) {
     u32 * i;
     PRINTD (DBG_REGS, "reading PLX control: ");
     for (i = (u32 *) 0x00; i < (u32 *) 0x30; ++i)
-      rd_mem (dev, i);
+      rd_mem (dev, (size_t)i);
     PRINTD (DBG_REGS, "reading mailboxes: ");
     for (i = (u32 *) 0x40; i < (u32 *) 0x60; ++i)
-      rd_mem (dev, i);
+      rd_mem (dev, (size_t)i);
     PRINTD (DBG_REGS, "reading doorb irqev irqen reset:");
     for (i = (u32 *) 0x60; i < (u32 *) 0x70; ++i)
-      rd_mem (dev, i);
+      rd_mem (dev, (size_t)i);
   }
 #else
   (void) dev;

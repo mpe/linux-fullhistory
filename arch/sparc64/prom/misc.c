@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.18 2000/05/09 17:40:14 davem Exp $
+/* $Id: misc.c,v 1.19 2000/06/30 10:18:38 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -67,7 +67,7 @@ prom_cmdline(void)
 	irq_exit(smp_processor_id(), 0);
 	smp_capture();
 #else
-	local_irq_count--;
+	local_irq_count(smp_processor_id())--;
 #endif
 
 	p1275_cmd ("enter", P1275_INOUT(0,0));
@@ -77,7 +77,7 @@ prom_cmdline(void)
 	irq_enter(smp_processor_id(), 0);
 	spin_unlock_wait(&__br_write_locks[BR_GLOBALIRQ_LOCK].lock);
 #else
-	local_irq_count++;
+	local_irq_count(smp_processor_id())++;
 #endif
 
 #ifdef CONFIG_SUN_CONSOLE

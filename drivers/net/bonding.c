@@ -180,7 +180,7 @@ static int bond_release(struct net_device *master, struct net_device *dev)
 		}
 	}
 
-	return;
+	return 0;
 }
 
 /* It is pretty silly, SIOCSIFHWADDR exists to make this. */

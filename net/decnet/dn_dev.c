@@ -1172,8 +1172,8 @@ static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int len
 				dn_db->parms.blksize,
 				dn_db->parms.priority,
 				dn_db->parms.state, dn_db->parms.name,
-				dn_db->router ? dn_addr2asc(dn_eth2dn(dn_db->router->primary_key), router_buf) : "",
-				dn_db->peer ? dn_addr2asc(dn_eth2dn(dn_db->peer->primary_key), peer_buf) : "");
+				dn_db->router ? dn_addr2asc(dn_ntohs(*(dn_address *)dn_db->router->primary_key), router_buf) : "",
+				dn_db->peer ? dn_addr2asc(dn_ntohs(*(dn_address *)dn_db->peer->primary_key), peer_buf) : "");
 
 
                 pos = begin + len;

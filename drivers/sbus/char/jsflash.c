@@ -400,7 +400,7 @@ static int jsf_ioctl_program(unsigned long arg)
 	togo = abuf.size;
 	if ((togo & 3) || (p & 3)) return -EINVAL;
 
-	uptr = (char *) abuf.data;
+	uptr = (char *) (unsigned long) abuf.data;
 	if (verify_area(VERIFY_READ, uptr, togo))
 		return -EFAULT;
 	while (togo != 0) {

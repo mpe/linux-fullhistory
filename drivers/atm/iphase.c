@@ -2303,7 +2303,7 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 				dev->number,error);  
 		return -EINVAL;  
 	}  
-	IF_INIT(printk(DEV_LABEL "(itf %d): rev.%d,realbase=0x%x,irq=%d\n",  
+	IF_INIT(printk(DEV_LABEL "(itf %d): rev.%d,realbase=0x%lx,irq=%d\n",  
 			dev->number, revision, real_base, iadev->irq);)  
 	  
 	/* find mapping size of board */  
@@ -2342,7 +2342,7 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 			    dev->number);  
 		return error;  
 	}  
-	IF_INIT(printk(DEV_LABEL " (itf %d): rev.%d,base=0x%x,irq=%d\n",  
+	IF_INIT(printk(DEV_LABEL " (itf %d): rev.%d,base=0x%lx,irq=%d\n",  
 			dev->number, revision, base, iadev->irq);)  
 	  
 	/* filling the iphase dev structure */  

@@ -262,7 +262,7 @@ minix_find_first_zero_bit (const void *vaddr, unsigned size)
 }
 
 extern __inline__ int
-minix_set_bit (int nr, void *vaddr)
+minix_test_and_set_bit (int nr, void *vaddr)
 {
 	char retval;
 
@@ -272,8 +272,10 @@ minix_set_bit (int nr, void *vaddr)
 	return retval;
 }
 
+#define minix_set_bit(nr,addr)	((void)minix_test_and_set_bit(nr,addr))
+
 extern __inline__ int
-minix_clear_bit (int nr, void *vaddr)
+minix_test_and_clear_bit (int nr, void *vaddr)
 {
 	char retval;
 

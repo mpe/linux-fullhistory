@@ -12,11 +12,12 @@
 #include <linux/spinlock.h>
 
 #ifndef CONFIG_SMP
-extern unsigned int local_irq_count;
-#define irq_enter(cpu, irq)	(local_irq_count++)
-#define irq_exit(cpu, irq)	(local_irq_count--)
+extern unsigned int __local_irq_count;
+#define local_irq_count(cpu)	__local_irq_count
+#define irq_enter(cpu, irq)	(__local_irq_count++)
+#define irq_exit(cpu, irq)	(__local_irq_count--)
 #else
-#define local_irq_count		(__brlock_array[smp_processor_id()][BR_GLOBALIRQ_LOCK])
+#define local_irq_count(cpu)	(__brlock_array[cpu][BR_GLOBALIRQ_LOCK])
 #define irq_enter(cpu, irq)	br_read_lock(BR_GLOBALIRQ_LOCK)
 #define irq_exit(cpu, irq)	br_read_unlock(BR_GLOBALIRQ_LOCK)
 #endif
@@ -25,18 +26,19 @@ extern unsigned int local_irq_count;
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?  On any cpu?
  */
-#define in_interrupt() ((local_irq_count + local_bh_count) != 0)
+#define in_interrupt() ((local_irq_count(smp_processor_id()) + \
+		         local_bh_count(smp_processor_id())) != 0)
 
 /* This tests only the local processors hw IRQ context disposition.  */
-#define in_irq() (local_irq_count != 0)
+#define in_irq() (local_irq_count(smp_processor_id()) != 0)
 
 #ifndef CONFIG_SMP
 
-#define hardirq_trylock(cpu)	((void)(cpu), local_irq_count == 0)
+#define hardirq_trylock(cpu)	((void)(cpu), local_irq_count(smp_processor_id()) == 0)
 #define hardirq_endlock(cpu)	do { (void)(cpu); } while(0)
 
-#define hardirq_enter(cpu)	((void)(cpu), local_irq_count++)
-#define hardirq_exit(cpu)	((void)(cpu), local_irq_count--)
+#define hardirq_enter(cpu)	((void)(cpu), local_irq_count(smp_processor_id())++)
+#define hardirq_exit(cpu)	((void)(cpu), local_irq_count(smp_processor_id())--)
 
 #define synchronize_irq()	barrier()
 

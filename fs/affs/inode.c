@@ -191,7 +191,7 @@ affs_read_inode(struct inode *inode)
 }
 
 void
-affs_write_inode(struct inode *inode)
+affs_write_inode(struct inode *inode, int unused)
 {
 	struct buffer_head	*bh;
 	struct file_end		*file_end;

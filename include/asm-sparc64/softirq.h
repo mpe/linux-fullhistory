@@ -12,14 +12,15 @@
 #include <asm/system.h>		/* for membar() */
 
 #ifndef CONFIG_SMP
-extern unsigned int local_bh_count;
+extern unsigned int __local_bh_count;
+#define local_bh_count(cpu)	__local_bh_count
 #else
-#define local_bh_count		(cpu_data[smp_processor_id()].bh_count)
+#define local_bh_count(cpu)	(cpu_data[cpu].bh_count)
 #endif
 
-#define local_bh_disable()	(local_bh_count++)
-#define local_bh_enable()	(local_bh_count--)
+#define local_bh_disable()	(local_bh_count(smp_processor_id())++)
+#define local_bh_enable()	(local_bh_count(smp_processor_id())--)
 
-#define in_softirq() (local_bh_count != 0)
+#define in_softirq() (local_bh_count(smp_processor_id()) != 0)
 
 #endif /* !(__SPARC64_SOFTIRQ_H) */

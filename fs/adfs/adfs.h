@@ -73,7 +73,7 @@ int adfs_bmap(struct inode *inode, int block);
 #endif
 struct inode *adfs_iget(struct super_block *sb, struct object_info *obj);
 void adfs_read_inode(struct inode *inode);
-void adfs_write_inode(struct inode *inode);
+void adfs_write_inode(struct inode *inode,int unused);
 int adfs_notify_change(struct dentry *dentry, struct iattr *attr);
 
 /* map.c */

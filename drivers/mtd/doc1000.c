@@ -14,6 +14,7 @@
 ======================================================================*/
 
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <asm/uaccess.h>
 #include <linux/types.h>
@@ -91,7 +92,7 @@ static inline int check_write(volatile u_char *addr);
 static inline void block_erase (volatile u_char *addr);
 static inline int check_erase(volatile u_char *addr);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #warning This is definitely not SMP safe. Lock the paging mechanism.
 #endif
 

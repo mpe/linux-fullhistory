@@ -15,168 +15,24 @@
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 #include <linux/dcache.h>
-
-#include <asm/uaccess.h>
+#include <linux/pagemap.h>
 
 #include <asm/delay.h>
 
-
-/*
- *    Read a file into kernel space memory
- *      returns how many bytes read (from fat_file_read)
- */
-
-ssize_t umsdos_file_read_kmem (	struct file *filp,
-				char *buf,
-				size_t count)
+static void copy_entry(struct umsdos_dirent *p, struct umsdos_dirent *q)
 {
-	ssize_t ret;
-	mm_segment_t old_fs = get_fs ();
-
-	set_fs (KERNEL_DS);
-	ret = fat_file_read (filp, buf, count, &filp->f_pos);
-	set_fs (old_fs);
-	return ret;
+	p->name_len = q->name_len;
+	p->flags = q->flags;
+	p->nlink = le16_to_cpu (q->nlink);
+	/* FIXME -- 32bit UID/GID issues */
+	p->uid = le16_to_cpu (q->uid);
+	p->gid = le16_to_cpu (q->gid);
+	p->atime = le32_to_cpu (q->atime);
+	p->mtime = le32_to_cpu (q->mtime);
+	p->ctime = le32_to_cpu (q->ctime);
+	p->rdev = le16_to_cpu (q->rdev);
+	p->mode = le16_to_cpu (q->mode);
 }
-
-
-/*
- *    Write to file from kernel space. 
- *      Does the real job, assumes all structures are initialized!
- */
-
-
-ssize_t umsdos_file_write_kmem_real (struct file * filp,
-				     const char *buf,
-				     size_t count)
-{
-	mm_segment_t old_fs = get_fs ();
-	ssize_t ret;
-
-	set_fs (KERNEL_DS);
-	ret = fat_file_write (filp, buf, count, &filp->f_pos);
-	set_fs (old_fs);
-	if (ret < 0) {
-		printk(KERN_WARNING "umsdos_file_write: ret=%d\n", ret);
-		goto out;
-	}
-#ifdef UMSDOS_PARANOIA
-if (ret != count)
-printk(KERN_WARNING "umsdos_file_write: count=%u, ret=%u\n", count, ret);
-#endif
-out:
-	return ret;
-}
-
-
-/*
- *    Write to a file from kernel space.
- */
-
-ssize_t umsdos_file_write_kmem (struct file *filp,
-				const char *buf,
-				size_t count)
-{
-	ssize_t ret;
-
-	ret = umsdos_file_write_kmem_real (filp, buf, count);
-	return ret;
-}
-
-
-
-/*
- * Write a block of bytes into one EMD file.
- * The block of data is NOT in user space.
- * 
- * Return 0 if OK, a negative error code if not.
- *
- * Note: buffer is in kernel memory, not in user space.
- */
-
-ssize_t umsdos_emd_dir_write (	struct file *filp,
-				char *buf,	
-				size_t count)
-{
-	int written;
-
-#ifdef __BIG_ENDIAN
-	struct umsdos_dirent *d = (struct umsdos_dirent *) buf;
-
-	d->nlink = cpu_to_le16 (d->nlink);
-	d->uid = cpu_to_le16 (d->uid);
-	d->gid = cpu_to_le16 (d->gid);
-	d->atime = cpu_to_le32 (d->atime);
-	d->mtime = cpu_to_le32 (d->mtime);
-	d->ctime = cpu_to_le32 (d->ctime);
-	d->rdev = cpu_to_le16 (d->rdev);
-	d->mode = cpu_to_le16 (d->mode);
-#endif
-
-	filp->f_flags = 0;
-Printk (("umsdos_emd_dir_write /mn/: calling write_kmem with %p, %p, %d, %Ld\n",
-filp, buf, count, filp->f_pos));
-	written = umsdos_file_write_kmem (filp, buf, count);
-
-#ifdef __BIG_ENDIAN
-	d->nlink = le16_to_cpu (d->nlink);
-	d->uid = le16_to_cpu (d->uid);
-	d->gid = le16_to_cpu (d->gid);
-	d->atime = le32_to_cpu (d->atime);
-	d->mtime = le32_to_cpu (d->mtime);
-	d->ctime = le32_to_cpu (d->ctime);
-	d->rdev = le16_to_cpu (d->rdev);
-	d->mode = le16_to_cpu (d->mode);
-#endif
-
-#ifdef UMSDOS_PARANOIA
-if (written != count)
-printk(KERN_ERR "umsdos_emd_dir_write: ERROR: written (%d) != count (%d)\n",
-written, count);
-#endif
-
-	return (written != count) ? -EIO : 0;
-}
-
-
-
-/*
- *      Read a block of bytes from one EMD file.
- *      The block of data is NOT in user space.
- *      Return 0 if OK, -EIO if any error.
- */
-/* buffer in kernel memory, not in user space */
-
-ssize_t umsdos_emd_dir_read (struct file *filp, char *buf, size_t count)
-{
-	ssize_t sizeread, ret = 0;
-
-#ifdef __BIG_ENDIAN
-	struct umsdos_dirent *d = (struct umsdos_dirent *) buf;
-
-#endif
-
-	filp->f_flags = 0;
-	sizeread = umsdos_file_read_kmem (filp, buf, count);
-	if (sizeread != count) {
-		printk (KERN_WARNING 
-			"UMSDOS: EMD problem, pos=%Ld, count=%d, read=%d\n",
-			filp->f_pos, count, sizeread);
-		ret = -EIO;
-	}
-#ifdef __BIG_ENDIAN
-	d->nlink = le16_to_cpu (d->nlink);
-	d->uid = le16_to_cpu (d->uid);
-	d->gid = le16_to_cpu (d->gid);
-	d->atime = le32_to_cpu (d->atime);
-	d->mtime = le32_to_cpu (d->mtime);
-	d->ctime = le32_to_cpu (d->ctime);
-	d->rdev = le16_to_cpu (d->rdev);
-	d->mode = le16_to_cpu (d->mode);
-#endif
-	return ret;
-}
-
 
 /*
  * Lookup the EMD dentry for a directory.
@@ -256,33 +112,58 @@ out:
  * does not change {d,i}_count
  */
 
-int umsdos_emd_dir_readentry (struct file *filp, struct umsdos_dirent *entry)
+int umsdos_emd_dir_readentry (struct dentry *demd, loff_t *pos, struct umsdos_dirent *entry)
 {
-	int ret;
+	struct address_space *mapping = demd->d_inode->i_mapping;
+	struct page *page;
+	struct umsdos_dirent *p;
+	int offs = *pos & ~PAGE_CACHE_MASK;
+	int recsize;
 
-	Printk ((KERN_DEBUG "umsdos_emd_dir_readentry /mn/: entering.\n"));
-
-	ret = umsdos_emd_dir_read (filp, (char *) entry, UMSDOS_REC_SIZE);
-	if (ret == 0) {	/* if no error */
-		/* Variable size record. Maybe, we have to read some more */
-		int recsize = umsdos_evalrecsize (entry->name_len);
-
-		if (recsize > UMSDOS_REC_SIZE) {
-Printk ((KERN_DEBUG "umsdos_emd_dir_readentry /mn/: %d > %d!\n",
-recsize, UMSDOS_REC_SIZE));
-			ret = umsdos_emd_dir_read (filp, 
-					((char *) entry) + UMSDOS_REC_SIZE,
-					recsize - UMSDOS_REC_SIZE);
+	page = read_cache_page(mapping, *pos>>PAGE_CACHE_SHIFT,
+			(filler_t*)mapping->a_ops->readpage, NULL);
+	if (IS_ERR(page))
+		goto sync_fail;
+	wait_on_page(page);
+	if (!Page_Uptodate(page))
+		goto async_fail;
+	p = (struct umsdos_dirent*)((char*)kmap(page)+offs);
+	recsize = umsdos_evalrecsize(p->name_len);
+	if (offs + recsize > PAGE_CACHE_SIZE) {
+		struct page *page2;
+		int part = ((char*)page_address(page)+PAGE_CACHE_SIZE)-p->spare;
+		page2 = read_cache_page(mapping, 1+(*pos>>PAGE_CACHE_SHIFT),
+				(filler_t*)mapping->a_ops->readpage, NULL);
+		if (IS_ERR(page2)) {
+			kunmap(page);
+			page_cache_release(page);
+			page = page2;
+			goto sync_fail;
 		}
-	}
-	Printk (("umsdos_emd_dir_readentry /mn/: ret=%d.\n", ret));
-	if (entry && ret == 0) {
-Printk (("umsdos_emd_dir_readentry /mn/: returning len=%d,name=%.*s\n",
-(int) entry->name_len, (int) entry->name_len, entry->name));
-	}
-	return ret;
+		wait_on_page(page2);
+		if (!Page_Uptodate(page2)) {
+			kunmap(page);
+			page_cache_release(page2);
+			goto async_fail;
+		}
+		memcpy(entry->spare,p->spare,part);
+		memcpy(entry->spare+part,(char*)kmap(page2),
+				recsize+offs-PAGE_CACHE_SIZE);
+		kunmap(page2);
+		page_cache_release(page2);
+	} else
+		memcpy(entry->spare,p->spare,((char*)p+recsize)-p->spare);
+	copy_entry(entry, p);
+	kunmap(page);
+	page_cache_release(page);
+	*pos += recsize;
+	return 0;
+async_fail:
+	page_cache_release(page);
+	page = ERR_PTR(-EIO);
+sync_fail:
+	return PTR_ERR(page);
 }
-
 
 
 /*
@@ -298,8 +179,10 @@ static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 	struct umsdos_dirent *entry = &info->entry;
 	struct dentry *emd_dentry;
 	int ret;
-	struct umsdos_dirent entry0;
-	struct file filp;
+	struct umsdos_dirent entry0,*p;
+	struct address_space *mapping;
+	struct page *page, *page2 = NULL;
+	int offs;
 
 	emd_dentry = umsdos_get_emd_dentry(parent);
 	ret = PTR_ERR(emd_dentry);
@@ -335,75 +218,96 @@ static int umsdos_writeentry (struct dentry *parent, struct umsdos_info *info,
 		memset (entry->spare, 0, sizeof (entry->spare));
 	}
 
-	fill_new_filp (&filp, emd_dentry);
-	filp.f_pos = info->f_pos;
-	filp.f_reada = 0;
-	filp.f_flags = O_RDWR;
-
 	/* write the entry and update the parent timestamps */
-	ret = umsdos_emd_dir_write (&filp, (char *) entry, info->recsize);
-	if (!ret) {
-		dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-		mark_inode_dirty(dir);
-	} else
-		printk ("UMSDOS:  problem with EMD file:  can't write\n");
+	mapping = emd_dentry->d_inode->i_mapping;
+	offs = info->f_pos & ~PAGE_CACHE_MASK;
+	ret = -ENOMEM;
+	page = grab_cache_page(mapping, info->f_pos>>PAGE_CACHE_SHIFT);
+	if (!page)
+		goto out_dput;
+	p = (struct umsdos_dirent*)((char*)page_address(page)+offs);
+	if (offs + info->recsize > PAGE_CACHE_SIZE) {
+		ret = mapping->a_ops->prepare_write(NULL,page,offs,
+					PAGE_CACHE_SIZE);
+		if (ret)
+			goto out_unlock;
+		page2 = grab_cache_page(mapping,
+					(info->f_pos>>PAGE_CACHE_SHIFT)+1);
+		if (!page2)
+			goto out_unlock2;
+		ret = mapping->a_ops->prepare_write(NULL,page2,0,
+					offs+info->recsize-PAGE_CACHE_SIZE);
+		if (ret)
+			goto out_unlock3;
+		p->name_len = entry->name_len;
+		p->flags = entry->flags;
+		p->nlink = cpu_to_le16(entry->nlink);
+		p->uid = cpu_to_le16(entry->uid);
+		p->gid = cpu_to_le16(entry->gid);
+		p->atime = cpu_to_le32(entry->atime);
+		p->mtime = cpu_to_le32(entry->mtime);
+		p->ctime = cpu_to_le32(entry->ctime);
+		p->rdev = cpu_to_le16(entry->rdev);
+		p->mode = cpu_to_le16(entry->mode);
+		memcpy(p->name,entry->name,
+			((char*)page_address(page)+PAGE_CACHE_SIZE)-p->spare);
+		memcpy((char*)page_address(page2),
+				entry->spare+PAGE_CACHE_SIZE-offs,
+				offs+info->recsize-PAGE_CACHE_SIZE);
+		ret = mapping->a_ops->commit_write(NULL,page2,0,
+					offs+info->recsize-PAGE_CACHE_SIZE);
+		if (ret)
+			goto out_unlock3;
+		ret = mapping->a_ops->commit_write(NULL,page,offs,
+					PAGE_CACHE_SIZE);
+		UnlockPage(page2);
+		page_cache_release(page2);
+		if (ret)
+			goto out_unlock;
+	} else {
+		ret = mapping->a_ops->prepare_write(NULL,page,offs,
+					info->recsize);
+		if (ret)
+			goto out_unlock;
+		p->name_len = entry->name_len;
+		p->flags = entry->flags;
+		p->nlink = cpu_to_le16(entry->nlink);
+		p->uid = cpu_to_le16(entry->uid);
+		p->gid = cpu_to_le16(entry->gid);
+		p->atime = cpu_to_le32(entry->atime);
+		p->mtime = cpu_to_le32(entry->mtime);
+		p->ctime = cpu_to_le32(entry->ctime);
+		p->rdev = cpu_to_le16(entry->rdev);
+		p->mode = cpu_to_le16(entry->mode);
+		memcpy(p->spare,entry->spare,((char*)p+info->recsize)-p->spare);
+		ret = mapping->a_ops->commit_write(NULL,page,offs,
+					info->recsize);
+		if (ret)
+			goto out_unlock;
+	}
+	UnlockPage(page);
+	page_cache_release(page);
+		
+	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	mark_inode_dirty(dir);
 
 out_dput:
 	dput(emd_dentry);
 out:
 	Printk (("umsdos_writeentry /mn/: returning %d...\n", ret));
 	return ret;
+out_unlock3:
+	UnlockPage(page2);
+	page_cache_release(page2);
+out_unlock2:
+	ClearPageUptodate(page);
+	kunmap(page);
+out_unlock:
+	UnlockPage(page);
+	page_cache_release(page);
+	printk ("UMSDOS:  problem with EMD file:  can't write\n");
+	goto out_dput;
 }
-
-
-
-#define CHUNK_SIZE (8*UMSDOS_REC_SIZE)
-struct find_buffer {
-	char buffer[CHUNK_SIZE];
-	int pos;		/* read offset in buffer */
-	int size;		/* Current size of buffer */
-	struct file filp;
-};
-
-
-
-/*
- * Fill the read buffer and take care of the bytes remaining inside.
- * Unread bytes are simply moved to the beginning.
- * 
- * Return -ENOENT if EOF, 0 if OK, a negative error code if any problem.
- *
- * Note: the caller must hold a lock on the parent directory.
- */
-
-static int umsdos_fillbuf (struct find_buffer *buf)
-{
-	struct inode *inode = buf->filp.f_dentry->d_inode;
-	int mustmove = buf->size - buf->pos;
-	int mustread, remain;
-	int ret = -ENOENT;
-
-	if (mustmove > 0) {
-		memcpy (buf->buffer, buf->buffer + buf->pos, mustmove);
-	}
-	buf->pos = 0;
-	mustread = CHUNK_SIZE - mustmove;
-	remain = inode->i_size - buf->filp.f_pos;
-	if (remain < mustread)
-		mustread = remain;
-	if (mustread > 0) {
-		ret = umsdos_emd_dir_read (&buf->filp, buf->buffer + mustmove,
-					 mustread);
-		if (ret == 0)
-			buf->size = mustmove + mustread;
-	} else if (mustmove) {
-		buf->size = mustmove;
-		ret = 0;
-	}
-	return ret;
-}
-
-
 
 /*
  * General search, locate a name in the EMD file or an empty slot to
@@ -432,115 +336,144 @@ static int umsdos_fillbuf (struct find_buffer *buf)
  * record, multiple contiguous records are allocated.
  */
 
-static int umsdos_find (struct dentry *parent, struct umsdos_info *info)
+static int umsdos_find (struct dentry *demd, struct umsdos_info *info)
 {
 	struct umsdos_dirent *entry = &info->entry;
 	int recsize = info->recsize;
-	struct dentry *demd;
 	struct inode *emd_dir;
 	int ret = -ENOENT;
-	struct find_buffer buf;
 	struct {
 		off_t posok;	/* Position available to store the entry */
-		int found;	/* A valid empty position has been found. */
 		off_t one;	/* One empty position -> maybe <- large enough */
-		int onesize;	/* size of empty region starting at one */
 	} empty;
+	int found = 0;
+	int empty_size = 0;
+	struct address_space *mapping;
+	filler_t *readpage;
+	struct page *page = NULL;
+	int index = -1;
+	int offs = PAGE_CACHE_SIZE,max_offs = PAGE_CACHE_SIZE;
+	char *p = NULL;
+	loff_t pos = 0;
 
-Printk (("umsdos_find: locating %s in %s/%s\n",
-entry->name, parent->d_parent->d_name.name, parent->d_name.name));
-
-	/*
-	 * Lookup the EMD file in the parent directory.
-	 */
-	demd = umsdos_get_emd_dentry(parent);
-	ret = PTR_ERR(demd);
-	if (IS_ERR(demd))
-		goto out;
 	/* make sure there's an EMD file ... */
 	ret = -ENOENT;
 	emd_dir = demd->d_inode;
 	if (!emd_dir)
 		goto out_dput;
+	mapping = emd_dir->i_mapping;
+	readpage = (filler_t*)mapping->a_ops->readpage;
 
-Printk(("umsdos_find: found EMD file %s/%s, ino=%p\n",
-demd->d_parent->d_name.name, demd->d_name.name, emd_dir));
-
-	fill_new_filp (&buf.filp, demd);
-
-	buf.pos = 0;
-	buf.size = 0;
-
-	empty.found = 0;
 	empty.posok = emd_dir->i_size;
-	empty.onesize = 0;
 	while (1) {
-		struct umsdos_dirent *rentry = (struct umsdos_dirent *)
-						(buf.buffer + buf.pos);
-		int file_pos = buf.filp.f_pos - buf.size + buf.pos;
+		struct umsdos_dirent *rentry;
+		int entry_size;
 
-		if (buf.pos == buf.size) {
-			ret = umsdos_fillbuf (&buf);
-			if (ret < 0) {
-				/* Not found, so note where it can be added */
+		if (offs >= max_offs) {
+			if (page) {
+				kunmap(page);
+				page_cache_release(page);
+			}
+			if (pos >= emd_dir->i_size) {
 				info->f_pos = empty.posok;
 				break;
 			}
-		} else if (rentry->name_len == 0) {
+			if (++index == (emd_dir->i_size>>PAGE_CACHE_SHIFT))
+				max_offs = emd_dir->i_size & ~PAGE_CACHE_MASK;
+			offs -= PAGE_CACHE_SIZE;
+			page = read_cache_page(mapping,index,readpage,NULL);
+			if (IS_ERR(page))
+				goto sync_fail;
+			wait_on_page(page);
+			if (!Page_Uptodate(page))
+				goto async_fail;
+			p = (char*)kmap(page);
+		}
+
+		rentry = (struct umsdos_dirent *)(p+offs);
+
+		if (rentry->name_len == 0) {
 			/* We are looking for an empty section at least */
 			/* as large as recsize. */
 			if (entry->name_len == 0) {
-				info->f_pos = file_pos;
+				info->f_pos = pos;
 				ret = 0;
 				break;
-			} else if (!empty.found) {
-				if (empty.onesize == 0) {
-					/* This is the first empty record of a section. */
-					empty.one = file_pos;
-				}
-				/* grow the empty section */
-				empty.onesize += UMSDOS_REC_SIZE;
-				if (empty.onesize == recsize) {
-					/* Here is a large enough section. */
-					empty.posok = empty.one;
-					empty.found = 1;
-				}
 			}
-			buf.pos += UMSDOS_REC_SIZE;
-		} else {
-			int entry_size = umsdos_evalrecsize (rentry->name_len);
-
-			if (buf.pos + entry_size > buf.size) {
-				ret = umsdos_fillbuf (&buf);
-				if (ret < 0) {
-					/* Not found, so note where it can be added */
-					info->f_pos = empty.posok;
-					break;
-				}
-			} else {
-				empty.onesize = 0;	/* Reset the free slot search. */
-				if (entry->name_len == rentry->name_len
-				    && memcmp (entry->name, rentry->name, rentry->name_len) == 0) {
-					info->f_pos = file_pos;
-					*entry = *rentry;
-					ret = 0;
-					break;
-				} else {
-					buf.pos += entry_size;
-				}
+			offs += UMSDOS_REC_SIZE;
+			pos += UMSDOS_REC_SIZE;
+			if (found)
+				continue;
+			if (!empty_size)
+				empty.one = pos-UMSDOS_REC_SIZE;
+			empty_size += UMSDOS_REC_SIZE;
+			if (empty_size == recsize) {
+				/* Here is a large enough section. */
+				empty.posok = empty.one;
+				found = 1;
 			}
+			continue;
 		}
+
+		entry_size = umsdos_evalrecsize(rentry->name_len);
+		if (entry_size > PAGE_CACHE_SIZE)
+			goto async_fail;
+		empty_size = 0;
+		if (entry->name_len != rentry->name_len)
+			goto skip_it;
+
+		if (entry_size + offs > PAGE_CACHE_SIZE) {
+			/* Sucker spans the page boundary */
+			int len = (p+PAGE_CACHE_SIZE)-rentry->name;
+			struct page *next_page;
+			char *q;
+			next_page = read_cache_page(mapping,index+1,readpage,NULL);
+			if (IS_ERR(next_page)) {
+				page_cache_release(page);
+				page = next_page;
+				goto sync_fail;
+			}
+			wait_on_page(next_page);
+			if (!Page_Uptodate(next_page)) {
+				page_cache_release(page);
+				page = next_page;
+				goto async_fail;
+			}
+			q = (char*)kmap(next_page);
+			if (memcmp(entry->name, rentry->name, len) ||
+			    memcmp(entry->name+len, q, entry->name_len-len)) {
+				kunmap(next_page);
+				page_cache_release(next_page);
+				goto skip_it;
+			}
+			kunmap(next_page);
+			page_cache_release(next_page);
+		} else if (memcmp (entry->name, rentry->name, entry->name_len))
+			goto skip_it;
+
+		info->f_pos = pos;
+		copy_entry(entry, rentry);
+		ret = 0;
+		break;
+skip_it:
+		offs+=entry_size;
+		pos+=entry_size;
 	}
-Printk(("umsdos_find: ready to mangle %s, len=%d, pos=%ld\n",
-entry->name, entry->name_len, (long)info->f_pos));
+	if (page) {
+		kunmap(page);
+		page_cache_release(page);
+	}
 	umsdos_manglename (info);
 
 out_dput:
 	dput(demd);
-
-out:
-	Printk (("umsdos_find: returning %d\n", ret));
 	return ret;
+
+async_fail:
+	page_cache_release(page);
+	page = ERR_PTR(-EIO);
+sync_fail:
+	return PTR_ERR(page);
 }
 
 
@@ -557,12 +490,17 @@ out:
 int umsdos_newentry (struct dentry *parent, struct umsdos_info *info)
 {
 	int err, ret = -EEXIST;
+	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
-	err = umsdos_find (parent, info);
+	ret = PTR_ERR(demd);
+	if (IS_ERR(ret))
+		goto out;
+	err = umsdos_find (demd, info);
 	if (err && err == -ENOENT) {
 		ret = umsdos_writeentry (parent, info, 0);
 		Printk (("umsdos_writeentry EMD ret = %d\n", ret));
 	}
+out:
 	return ret;
 }
 
@@ -580,15 +518,20 @@ int umsdos_newentry (struct dentry *parent, struct umsdos_info *info)
 int umsdos_newhidden (struct dentry *parent, struct umsdos_info *info)
 {
 	int ret;
+	struct dentry *demd = umsdos_get_emd_dentry(parent);
+	ret = PTR_ERR(demd);
+	if (IS_ERR(ret))
+		goto out;
 
 	umsdos_parse ("..LINK", 6, info);
 	info->entry.name_len = 0;
-	ret = umsdos_find (parent, info);
+	ret = umsdos_find (demd, info);
 	if (ret == -ENOENT || ret == 0) {
 		info->entry.name_len = sprintf (info->entry.name,
 						"..LINK%ld", info->f_pos);
 		ret = 0;
 	}
+out:
 	return ret;
 }
 
@@ -603,8 +546,12 @@ int umsdos_newhidden (struct dentry *parent, struct umsdos_info *info)
 int umsdos_delentry (struct dentry *parent, struct umsdos_info *info, int isdir)
 {
 	int ret;
+	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
-	ret = umsdos_find (parent, info);
+	ret = PTR_ERR(demd);
+	if (IS_ERR(ret))
+		goto out;
+	ret = umsdos_find (demd, info);
 	if (ret)
 		goto out;
 	if (info->entry.name_len == 0)
@@ -637,7 +584,7 @@ int umsdos_isempty (struct dentry *dentry)
 {
 	struct dentry *demd;
 	int ret = 2;
-	struct file filp;
+	loff_t pos = 0;
 
 	demd = umsdos_get_emd_dentry(dentry);
 	if (IS_ERR(demd))
@@ -646,14 +593,11 @@ int umsdos_isempty (struct dentry *dentry)
 	if (!demd->d_inode)
 		goto out_dput;
 
-	fill_new_filp (&filp, demd);
-	filp.f_flags = O_RDONLY;
-
 	ret = 1;
-	while (filp.f_pos < demd->d_inode->i_size) {
+	while (pos < demd->d_inode->i_size) {
 		struct umsdos_dirent entry;
 
-		if (umsdos_emd_dir_readentry (&filp, &entry) != 0) {
+		if (umsdos_emd_dir_readentry (demd, &pos, &entry) != 0) {
 			ret = 0;
 			break;
 		}
@@ -666,9 +610,6 @@ int umsdos_isempty (struct dentry *dentry)
 out_dput:
 	dput(demd);
 out:
-Printk(("umsdos_isempty: checked %s/%s, empty=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, ret));
-
 	return ret;
 }
 
@@ -686,8 +627,12 @@ int umsdos_findentry (struct dentry *parent, struct umsdos_info *info,
 			int expect)
 {		
 	int ret;
+	struct dentry *demd = umsdos_get_emd_dentry(parent);
 
-	ret = umsdos_find (parent, info);
+	ret = PTR_ERR(demd);
+	if (IS_ERR(ret))
+		goto out;
+	ret = umsdos_find (demd, info);
 	if (ret)
 		goto out;
 

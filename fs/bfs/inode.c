@@ -84,7 +84,7 @@ static void bfs_read_inode(struct inode * inode)
 	brelse(bh);
 }
 
-static void bfs_write_inode(struct inode * inode)
+static void bfs_write_inode(struct inode * inode, int unused)
 {
 	unsigned long ino = inode->i_ino;
 	kdev_t dev = inode->i_dev;

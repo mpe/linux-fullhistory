@@ -83,10 +83,10 @@
 /*
  * Events that this OSM is interested in
  */
-#define I2OB_EVENT_MASK	I2O_EVT_IND_BSA_VOLUME_LOAD |	\
-				I2O_EVT_IND_BSA_VOLUME_UNLOAD | \
-				I2O_EVT_IND_BSA_VOLUME_UNLOAD_REQ | \
-				I2O_EVT_IND_BSA_CAPACITY_CHANGE
+#define I2OB_EVENT_MASK		(I2O_EVT_IND_BSA_VOLUME_LOAD |	\
+				 I2O_EVT_IND_BSA_VOLUME_UNLOAD | \
+				 I2O_EVT_IND_BSA_VOLUME_UNLOAD_REQ | \
+				 I2O_EVT_IND_BSA_CAPACITY_CHANGE)
 
 
 /*
@@ -147,7 +147,7 @@ struct i2ob_request
 	struct i2ob_request *next;
 	struct request *req;
 	int num;
-} __cacheline_aligned;
+};
 
 /*
  * Per IOP requst queue information

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.28 2000/03/27 10:38:56 davem Exp $
+/* $Id: bitops.h,v 1.29 2000/06/30 10:18:39 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -9,9 +9,9 @@
 
 #include <asm/byteorder.h>
 
-extern long __test_and_set_bit(unsigned long nr, void *addr);
-extern long __test_and_clear_bit(unsigned long nr, void *addr);
-extern long __test_and_change_bit(unsigned long nr, void *addr);
+extern long __test_and_set_bit(unsigned long nr, volatile void *addr);
+extern long __test_and_clear_bit(unsigned long nr, volatile void *addr);
+extern long __test_and_change_bit(unsigned long nr, volatile void *addr);
 
 #define test_and_set_bit(nr,addr)	(__test_and_set_bit(nr,addr)!=0)
 #define test_and_clear_bit(nr,addr)	(__test_and_clear_bit(nr,addr)!=0)
@@ -165,8 +165,8 @@ found_middle:
 #define find_first_zero_bit(addr, size) \
         find_next_zero_bit((addr), (size), 0)
 
-extern long __test_and_set_le_bit(int nr, void *addr);
-extern long __test_and_clear_le_bit(int nr, void *addr);
+extern long __test_and_set_le_bit(int nr, volatile void *addr);
+extern long __test_and_clear_le_bit(int nr, volatile void *addr);
 
 #define test_and_set_le_bit(nr,addr)	(__test_and_set_le_bit(nr,addr)!=0)
 #define test_and_clear_le_bit(nr,addr)	(__test_and_clear_le_bit(nr,addr)!=0)
@@ -230,8 +230,9 @@ found_middle:
 #define ext2_find_next_zero_bit		find_next_zero_le_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
+#define minix_test_and_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_set_bit(nr,addr) set_bit(nr,addr)
+#define minix_test_and_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

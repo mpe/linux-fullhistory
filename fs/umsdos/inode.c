@@ -18,6 +18,7 @@
 #include <linux/stat.h>
 #include <linux/umsdos_fs.h>
 #include <linux/list.h>
+#include <linux/pagemap.h>
 
 extern struct dentry_operations umsdos_dentry_operations;
 
@@ -26,23 +27,6 @@ struct inode *pseudo_root = NULL;	/* Useful to simulate the pseudo DOS */
 					/* directory. See UMSDOS_readdir_x() */
 
 static struct dentry *check_pseudo_root(struct super_block *);
-
-
-/*
- * Initialize a private filp
- */
-void fill_new_filp (struct file *filp, struct dentry *dentry)
-{
-	if (!dentry)
-		printk(KERN_ERR "fill_new_filp: NULL dentry!\n");
-
-	memset (filp, 0, sizeof (struct file));
-	filp->f_reada = 1;
-	filp->f_flags = O_RDWR;
-	filp->f_dentry = dentry;
-	filp->f_op = dentry->d_inode->i_fop;
-}
-
 
 
 void UMSDOS_put_inode (struct inode *inode)
@@ -200,9 +184,11 @@ int umsdos_notify_change_locked(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
 	struct dentry *demd;
+	struct address_space *mapping;
+	struct page *page;
 	int ret = 0;
-	struct file filp;
-	struct umsdos_dirent entry;
+	struct umsdos_dirent *entry;
+	int offs;
 
 Printk(("UMSDOS_notify_change: entering for %s/%s (%d)\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched));
@@ -235,52 +221,43 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->u.umsdos_i.i_patched)
 	 * See emd.c
 	 */
 
-	fill_new_filp (&filp, demd);
-	filp.f_pos = inode->u.umsdos_i.pos;
-Printk(("UMSDOS_notify_change: %s/%s reading at %d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp.f_pos));
-
 	/* Read only the start of the entry since we don't touch the name */
-	ret = umsdos_emd_dir_read (&filp, (char *) &entry, UMSDOS_REC_SIZE);
-	if (ret) {
-		printk(KERN_WARNING
-			"umsdos_notify_change: %s/%s EMD read error, ret=%d\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name,ret);
+	mapping = demd->d_inode->i_mapping;
+	offs = inode->u.umsdos_i.pos & ~PAGE_CACHE_MASK;
+	ret = -ENOMEM;
+	page=grab_cache_page(mapping,inode->u.umsdos_i.pos>>PAGE_CACHE_SHIFT);
+	if (!page)
 		goto out_dput;
-	}
+	ret=mapping->a_ops->prepare_write(NULL,page,offs,offs+UMSDOS_REC_SIZE);
+	if (ret)
+		goto out_unlock;
+	entry = (struct umsdos_dirent*)((char*)page_address(page)+offs);
 	if (attr->ia_valid & ATTR_UID)
-		entry.uid = attr->ia_uid;
+		entry->uid = cpu_to_le16(attr->ia_uid);
 	if (attr->ia_valid & ATTR_GID)
-		entry.gid = attr->ia_gid;
+		entry->gid = cpu_to_le16(attr->ia_gid);
 	if (attr->ia_valid & ATTR_MODE)
-		entry.mode = attr->ia_mode;
+		entry->mode = cpu_to_le16(attr->ia_mode);
 	if (attr->ia_valid & ATTR_ATIME)
-		entry.atime = attr->ia_atime;
+		entry->atime = cpu_to_le32(attr->ia_atime);
 	if (attr->ia_valid & ATTR_MTIME)
-		entry.mtime = attr->ia_mtime;
+		entry->mtime = cpu_to_le32(attr->ia_mtime);
 	if (attr->ia_valid & ATTR_CTIME)
-		entry.ctime = attr->ia_ctime;
-
-	entry.nlink = inode->i_nlink;
-	filp.f_pos = inode->u.umsdos_i.pos;
-	ret = umsdos_emd_dir_write (&filp, (char *) &entry, UMSDOS_REC_SIZE);
+		entry->ctime = cpu_to_le32(attr->ia_ctime);
+	entry->nlink = cpu_to_le16(inode->i_nlink);
+	ret=mapping->a_ops->commit_write(NULL,page,offs,offs+UMSDOS_REC_SIZE);
 	if (ret)
 		printk(KERN_WARNING
 			"umsdos_notify_change: %s/%s EMD write error, ret=%d\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name,ret);
 
-	Printk (("notify pos %lu ret %d nlink %d ",
-		inode->u.umsdos_i.pos, ret, entry.nlink));
 	/* #Specification: notify_change / msdos fs
 	 * notify_change operation are done only on the
 	 * EMD file. The msdos fs is not even called.
 	 */
-#ifdef UMSDOS_DEBUG_VERBOSE
-if (entry.flags & UMSDOS_HIDDEN)
-printk("umsdos_notify_change: %s/%s hidden, nlink=%d, ret=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, entry.nlink, ret);
-#endif
-
+out_unlock:
+	UnlockPage(page);
+	page_cache_release(page);
 out_dput:
 	dput(demd);
 out:

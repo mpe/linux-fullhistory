@@ -496,10 +496,6 @@ static int umsdos_symlink_x (struct inode *dir, struct dentry *dentry,
 			const char *symname, int mode, char flags)
 {
 	int ret, len;
-	struct file filp;
-
-Printk(("umsdos_symlink: %s/%s to %s\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, symname));
 
 	ret = umsdos_create_any (dir, dentry, mode, 0, flags);
 	if (ret) {
@@ -508,19 +504,13 @@ dentry->d_parent->d_name.name, dentry->d_name.name, symname));
 		goto out;
 	}
 
-	fill_new_filp (&filp, dentry);
 	len = strlen (symname);
-	ret = umsdos_file_write_kmem_real (&filp, symname, len);
+	ret = block_symlink(dentry->d_inode, symname, len);
 	if (ret < 0)
 		goto out_unlink;
-	if (ret != len)
-		goto out_error;
-	ret = 0;
 out:
 	return ret;
 
-out_error:
-	ret = -EIO;
 out_unlink:
 	printk(KERN_WARNING "umsdos_symlink: write failed, unlinking\n");
 	UMSDOS_unlink (dir, dentry);

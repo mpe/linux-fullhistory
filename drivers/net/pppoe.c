@@ -5,7 +5,9 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:	0.5.0
+ * Version:    0.5.1
+ *
+ * 030700 :     Fixed connect logic to allow for disconnect
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
  *
@@ -545,7 +547,7 @@ int pppoe_connect(struct socket *sock, struct sockaddr *uservaddr,
 		goto end;
 
 	error = -EBUSY;
-	if (sk->state & PPPOX_CONNECTED)
+	if ((sk->state & PPPOX_CONNECTED) && sp->sa_addr.pppoe.sid)
 		goto end;
 
 	dev = dev_get_by_name(sp->sa_addr.pppoe.dev);

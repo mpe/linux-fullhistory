@@ -21,7 +21,7 @@ choice 'Processor family' \
 	"386				CONFIG_M386 \
 	 486				CONFIG_M486 \
 	 586/K5/5x86/6x86/6x86MX	CONFIG_M586 \
-	 Pentium/Pentium-MMX		CONFIG_M586TSC \
+	 Pentium-Classic/Pentium-MMX	CONFIG_M586TSC \
 	 Pentium-Pro/Celeron/Pentium-II	CONFIG_M686 \
 	 Pentium-III			CONFIG_M686FXSR \
 	 K6/K6-II/K6-III		CONFIG_MK6 \
@@ -29,7 +29,7 @@ choice 'Processor family' \
 	 Crusoe				CONFIG_MCRUSOE \
 	 Winchip-C6			CONFIG_MWINCHIPC6 \
 	 Winchip-2			CONFIG_MWINCHIP2 \
-	 Winchip-2A/3			CONFIG_MWINCHIP3D" Pentium-Pro
+	 Winchip-2A/Winchip-3		CONFIG_MWINCHIP3D" Pentium-Pro
 #
 # Define implied options from the CPU selection here
 #
@@ -73,8 +73,6 @@ if [ "$CONFIG_M686FXSR" = "y" ]; then
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
    define_bool CONFIG_X86_FXSR y
    define_bool CONFIG_X86_XMM y
-else
-   define_bool CONFIG_X86_FXSR n
 fi
 if [ "$CONFIG_MK6" = "y" ]; then
    define_int  CONFIG_X86_L1_CACHE_BYTES 32
@@ -209,7 +207,7 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 bool 'Power Management support' CONFIG_PM
 
-bool '  ACPI support' CONFIG_ACPI $CONFIG_PM
+dep_bool '  ACPI support' CONFIG_ACPI $CONFIG_PM
 if [ "$CONFIG_ACPI" != "n" ]; then
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '    ACPI interpreter (EXPERIMENTAL)' CONFIG_ACPI_INTERPRETER

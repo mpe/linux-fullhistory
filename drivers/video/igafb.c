@@ -356,7 +356,7 @@ static int iga_setcolreg(unsigned regno, unsigned red, unsigned green,
 	pci_outb(info, green, DAC_DATA);
 	pci_outb(info, blue,  DAC_DATA);
 
-	if (regno < 16)
+	if (regno < 16) {
 		switch (default_var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB16
 		case 16:
@@ -372,11 +372,14 @@ static int iga_setcolreg(unsigned regno, unsigned red, unsigned green,
 #endif
 #ifdef FBCON_HAS_CFB32
 		case 32:
+			{ int i;
 			i = (regno << 8) | regno;
 			info->fbcon_cmap.cfb32[regno] = (i << 16) | i;
+			}
 			break;
 #endif
 		}
+	}
 	return 0;
 }
 
@@ -510,6 +513,8 @@ static void igafb_set_disp(int con, struct fb_info_iga *info)
                 break;
 #endif
         default:
+		printk(KERN_WARNING "igafb_set_disp: unknown resolution %d\n",
+		    default_var.bits_per_pixel);
                 return;
         }
         memcpy(&info->dispsw, sw, sizeof(*sw));

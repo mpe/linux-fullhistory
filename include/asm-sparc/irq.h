@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.29 2000/05/09 17:40:15 davem Exp $
+/* $Id: irq.h,v 1.30 2000/06/30 10:18:39 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -23,16 +23,16 @@ BTFIXUPDEF_CALL(char *, __irq_itoa, unsigned int)
 
 /* IRQ handler dispatch entry and exit. */
 #ifdef CONFIG_SMP
-extern unsigned int local_irq_count[NR_CPUS];
+extern unsigned int __local_irq_count[NR_CPUS];
 #define irq_enter(cpu, irq)                     \
 do {    hardirq_enter(cpu);                     \
         spin_unlock_wait(&global_irq_lock);     \
 	} while(0)
 #define irq_exit(cpu, irq)      hardirq_exit(cpu)
 #else
-extern unsigned int local_irq_count;
-#define irq_enter(cpu, irq)     (local_irq_count++)
-#define irq_exit(cpu, irq)      (local_irq_count--)
+extern unsigned int __local_irq_count;
+#define irq_enter(cpu, irq)     (__local_irq_count++)
+#define irq_exit(cpu, irq)      (__local_irq_count--)
 #endif
 
 /* Dave Redman (djhr@tadpole.co.uk)

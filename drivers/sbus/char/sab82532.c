@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.45 2000/05/08 22:23:08 ecd Exp $
+/* $Id: sab82532.c,v 1.46 2000/07/06 01:41:37 davem Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -2173,7 +2173,7 @@ static void __init sab82532_kgdb_hook(int line)
 
 static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.45 $";
+	char *revision = "$Revision: 1.46 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

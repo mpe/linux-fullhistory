@@ -2858,6 +2858,15 @@ int __init ide_setup (char *s)
 	const char max_drive = 'a' + ((MAX_HWIFS * MAX_DRIVES) - 1);
 	const char max_hwif  = '0' + (MAX_HWIFS - 1);
 
+	if (strncmp(s,"ide",3) &&
+	    strncmp(s,"idebus",6) &&
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+	    strncmp(s,"splitfifo",9) &&
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
+	    strncmp(s,"hdxlun",6) &&
+	    (strncmp(s,"hd",2) && s[2] != '='))
+		return 0;
+
 	printk("ide_setup: %s", s);
 	init_ide_data ();
 
@@ -2867,7 +2876,7 @@ int __init ide_setup (char *s)
 
 		printk(" : Enabled support for IDE doublers\n");
 		ide_doubler = 1;
-		return 0;
+		return 1;
 	}
 #endif /* CONFIG_BLK_DEV_IDEDOUBLER */
 
@@ -2875,7 +2884,7 @@ int __init ide_setup (char *s)
 	if (!strcmp(s, "ide=reverse")) {
 		ide_scan_direction = 1;
 		printk(" : Enabled support for IDE inverse scan order.\n");
-		return 0;
+		return 1;
 	}
 #endif /* CONFIG_BLK_DEV_IDEPCI */
 
@@ -3188,17 +3197,17 @@ int __init ide_setup (char *s)
 			case 0: goto bad_option;
 			default:
 				printk(" -- SUPPORT NOT CONFIGURED IN THIS KERNEL\n");
-				return 0;
+				return 1;
 		}
 	}
 bad_option:
 	printk(" -- BAD OPTION\n");
-	return 0;
+	return 1;
 bad_hwif:
 	printk("-- NOT SUPPORTED ON ide%d", hw);
 done:
 	printk("\n");
-	return 0;
+	return 1;
 }
 
 /*
@@ -3614,6 +3623,10 @@ int __init ide_init (void)
 	return 0;
 }
 
+#ifdef MODULE
+char *options = NULL;
+MODULE_PARM(options,"s");
+
 static void __init parse_options (char *line)
 {
 	char *next = line;
@@ -3623,20 +3636,10 @@ static void __init parse_options (char *line)
 	while ((line = next) != NULL) {
  		if ((next = strchr(line,' ')) != NULL)
 			*next++ = 0;
-		if (!strncmp(line,"ide",3) ||
-		    !strncmp(line,"idebus",6) ||
-#ifdef CONFIG_BLK_DEV_VIA82CXXX
-		    !strncmp(line,"splitfifo",9) ||
-#endif /* CONFIG_BLK_DEV_VIA82CXXX */
-		    !strncmp(line,"hdxlun",6) ||
-		    (!strncmp(line,"hd",2) && line[2] != '='))
-			(void) ide_setup(line);
+		if (!ide_setup(line))
+			printk ("Unknown option '%s'\n", line);
 	}
 }
-
-#ifdef MODULE
-char *options = NULL;
-MODULE_PARM(options,"s");
 
 int init_module (void)
 {
@@ -3664,12 +3667,6 @@ void cleanup_module (void)
 
 #else /* !MODULE */
 
-static int parse_ide_setup (char *line)
-{
-	parse_options(line);
-	/* We MUST return 0 as otherwise no subsequent __setup option works... */
-	return 0;
-}
-__setup("", parse_ide_setup);
+__setup("", ide_setup);
 
 #endif /* MODULE */

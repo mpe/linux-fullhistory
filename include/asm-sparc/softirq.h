@@ -16,20 +16,23 @@
 
 
 #ifdef CONFIG_SMP
-extern unsigned int local_bh_count[NR_CPUS];
+extern unsigned int __local_bh_count[NR_CPUS];
+#define local_bh_count(cpu)	__local_bh_count[cpu]
 
-#define local_bh_disable()	(local_bh_count[smp_processor_id()]++)
-#define local_bh_enable()	(local_bh_count[smp_processor_id()]--)
+#define local_bh_disable()	(local_bh_count(smp_processor_id())++)
+#define local_bh_enable()	(local_bh_count(smp_processor_id())--)
 
-#define in_softirq() (local_bh_count[smp_processor_id()] != 0)
+#define in_softirq() (local_bh_count(smp_processor_id()) != 0)
 
 #else
-extern unsigned int local_bh_count;
 
-#define local_bh_disable()	(local_bh_count++)
-#define local_bh_enable()	(local_bh_count--)
+extern unsigned int __local_bh_count;
+#define local_bh_count(cpu)	__local_bh_count
 
-#define in_softirq() (local_bh_count != 0)
+#define local_bh_disable()	(__local_bh_count++)
+#define local_bh_enable()	(__local_bh_count--)
+
+#define in_softirq() (__local_bh_count != 0)
 
 #endif	/* SMP */
 

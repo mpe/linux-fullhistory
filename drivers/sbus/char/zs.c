@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.57 2000/04/26 09:36:32 davem Exp $
+/* $Id: zs.c,v 1.58 2000/07/06 01:41:38 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -822,20 +822,6 @@ static void do_serial_hangup(void *private_)
 #endif
 
 	tty_hangup(tty);
-}
-
-
-/*
- * This subroutine is called when the RS_TIMER goes off.  It is used
- * by the serial driver to handle ports that do not have an interrupt
- * (irq=0).  This doesn't work at all for 16450's, as a sun has a Z8530.
- */
- 
-static void zs_timer(void)
-{
-	printk("zs_timer called\n");
-	prom_halt();
-	return;
 }
 
 static int startup(struct sun_serial * info)
@@ -1920,7 +1906,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.57 $";
+	char *revision = "$Revision: 1.58 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

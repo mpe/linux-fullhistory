@@ -441,7 +441,7 @@ static void ns_write_sram(ns_dev *card, u32 sram_address, u32 *value, int count)
 static int ns_init_card(int i, struct pci_dev *pcidev)
 {
    int j;
-   struct ns_dev *card;
+   struct ns_dev *card=NULL;
    unsigned short pci_command;
    unsigned char pci_latency;
    unsigned error;

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.85 2000/05/23 02:14:25 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.86 2000/06/30 10:18:38 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -85,7 +85,6 @@ extern int register_ioctl32_conversion(unsigned int cmd, int (*handler)(unsigned
 extern int unregister_ioctl32_conversion(unsigned int cmd);
 extern int io_remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot, int space);
                 
-extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -158,8 +157,8 @@ EXPORT_SYMBOL(_do_write_unlock);
 #endif
 
 #else
-EXPORT_SYMBOL(local_bh_count);
-EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(__local_bh_count);
+EXPORT_SYMBOL(__local_irq_count);
 #endif
 
 /* rw semaphores */
@@ -263,7 +262,6 @@ EXPORT_SYMBOL(__prom_getchild);
 EXPORT_SYMBOL(__prom_getsibling);
 
 /* sparc library symbols */
-EXPORT_SYMBOL(bcopy);
 EXPORT_SYMBOL(__strlen);
 #if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
 EXPORT_SYMBOL(strlen);

@@ -1635,7 +1635,8 @@ int get_cpuinfo(char * buffer)
 					x86_cap_flags[10] = "sep";
 				if (c->x86 < 6)
 					x86_cap_flags[16] = "fcmov";
-				x86_cap_flags[16] = "pat";
+				else
+					x86_cap_flags[16] = "pat";
 				x86_cap_flags[22] = "mmxext";
 				x86_cap_flags[24] = "fxsr";
 				x86_cap_flags[30] = "3dnowext";

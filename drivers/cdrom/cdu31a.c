@@ -3245,6 +3245,7 @@ static struct cdrom_device_info scd_info = {
   &scd_dops,                  /* device operations */
   NULL,                       /* link */
   NULL,                       /* handle */
+  0,			      /* devfs */
   0,			      /* dev */
   0,                          /* mask */
   2,                          /* maximum speed */

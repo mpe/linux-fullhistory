@@ -959,11 +959,11 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 #endif
 
 	if (pdev && vci->drv_flags & HAS_CB_FNS) {
-		u32 fn_st_addr;			/* Cardbus function status space */
+		unsigned long fn_st_addr;			/* Cardbus function status space */
 		fn_st_addr = pci_resource_start (pdev, 2);
 		if (fn_st_addr)
 			vp->cb_fn_base = ioremap(fn_st_addr, 128);
-		printk(KERN_INFO "%s: CardBus functions mapped %8.8x->%p\n",
+		printk(KERN_INFO "%s: CardBus functions mapped %8.8lx->%p\n",
 			   dev->name, fn_st_addr, vp->cb_fn_base);
 #if 1 /* AKPM: the 575_cb and 905B LEDs seem OK without this */
 		if (vortex_pci_tbl[chip_idx].device != 0x5257) {

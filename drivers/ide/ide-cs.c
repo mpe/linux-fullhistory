@@ -233,7 +233,7 @@ void ide_config(dev_link_t *link)
     config_info_t conf;
     cistpl_cftable_entry_t *cfg = &parse.cftable_entry;
     cistpl_cftable_entry_t dflt = { 0 };
-    int i, pass, last_ret, last_fn, hd, io_base, ctl_base;
+    int i, pass, last_ret, last_fn, hd=-1, io_base, ctl_base;
 
     DEBUG(0, "ide_config(0x%p)\n", link);
     

@@ -1592,3 +1592,24 @@ Changes for patch v174
 Work sponsored by SGI
 
 - Updated README from master HTML file
+===============================================================================
+Changes for patch v175
+
+Work sponsored by SGI
+
+- DocBook update for fs/devfs/base.c
+  Thanks to Tim Waugh <twaugh@redhat.com>
+
+- Removed stale fs/tunnel.c (was never used or completed)
+===============================================================================
+Changes for patch v176
+
+Work sponsored by SGI
+
+- Updated ToDo list
+
+- Removed sample modules.conf: now distributed with devfsd
+
+- Updated README from master HTML file
+
+- Ported to kernel 2.4.0-test3-pre4 (which had devfs-patch-v174)

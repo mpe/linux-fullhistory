@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.55 2000/05/27 00:49:35 davem Exp $
+# $Id: Makefile,v 1.56 2000/07/06 01:41:29 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -91,6 +91,7 @@ check_asm: dummy
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
 	@echo 'struct thread_struct _thread;' >> check_asm.c
+	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
 	$(SH) ./check_asm.sh task tmp.i check_asm.c
 	$(SH) ./check_asm.sh mm tmp.i check_asm.c
@@ -120,6 +121,7 @@ check_asm: dummy
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
 	@echo 'struct thread_struct _thread;' >> check_asm.c
+	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
 	$(SH) ./check_asm.sh task tmp.i check_asm.c
 	$(SH) ./check_asm.sh mm tmp.i check_asm.c
@@ -145,6 +147,7 @@ check_asm: dummy
 	@echo 'struct task_struct _task;' >> check_asm.c
 	@echo 'struct mm_struct _mm;' >> check_asm.c
 	@echo 'struct thread_struct _thread;' >> check_asm.c
+	@echo 'extern int printf(const char *fmt, ...);' >>check_asm.c
 	@echo 'int main(void) {' >> check_asm.c
 	$(SH) ./check_asm.sh task tmp.i check_asm.c
 	$(SH) ./check_asm.sh mm tmp.i check_asm.c

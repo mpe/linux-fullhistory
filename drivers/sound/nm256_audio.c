@@ -379,7 +379,7 @@ nm256_write_block (struct nm256_info *card, char *buffer, u32 amt)
 			      card->abuf1 + card->curPlayPos,
 			      rem);
 	if (amt > rem)
-	    nm256_writeBuffer8 (card, buffer, 1, card->abuf1,
+	    nm256_writeBuffer8 (card, buffer + rem, 1, card->abuf1,
 				  amt - rem);
     } 
     else

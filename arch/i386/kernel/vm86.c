@@ -69,7 +69,6 @@ struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 	struct pt_regs *ret;
 	unsigned long tmp;
 
-	lock_kernel();
 	if (!current->thread.vm86_info) {
 		printk("no vm86_info: BAD\n");
 		do_exit(SIGSEGV);
@@ -87,7 +86,6 @@ struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 	tss->esp0 = current->thread.esp0 = current->thread.saved_esp0;
 	current->thread.saved_esp0 = 0;
 	ret = KVM86->regs32;
-	unlock_kernel();
 	return ret;
 }
 
@@ -138,7 +136,6 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 	struct task_struct *tsk;
 	int tmp, ret = -EPERM;
 
-	lock_kernel();
 	tsk = current;
 	if (tsk->thread.saved_esp0)
 		goto out;
@@ -154,7 +151,6 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 	do_sys_vm86(&info, tsk);
 	ret = 0;	/* we never return here */
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -169,7 +165,6 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 	struct task_struct *tsk;
 	int tmp, ret;
 
-	lock_kernel();
 	tsk = current;
 	switch (subfunction) {
 		case VM86_REQUEST_IRQ:
@@ -204,7 +199,6 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 	do_sys_vm86(&info, tsk);
 	ret = 0;	/* we never return here */
 out:
-	unlock_kernel();
 	return ret;
 }
 
@@ -258,7 +252,6 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
 	tsk->thread.screen_bitmap = info->screen_bitmap;
 	if (info->flags & VM86_SCREEN_BITMAP)
 		mark_screen_rdonly(tsk);
-	unlock_kernel();
 	__asm__ __volatile__(
 		"xorl %%eax,%%eax; movl %%eax,%%fs; movl %%eax,%%gs\n\t"
 		"movl %0,%%esp\n\t"
@@ -274,7 +267,6 @@ static inline void return_to_32bit(struct kernel_vm86_regs * regs16, int retval)
 
 	regs32 = save_v86_state(regs16);
 	regs32->eax = retval;
-	unlock_kernel();
 	__asm__ __volatile__("movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
 		: : "r" (regs32), "b" (current));
@@ -432,7 +424,6 @@ cannot_handle:
 	return_to_32bit(regs, VM86_INTx + (i << 8));
 }
 
-/* This must be called with the kernel lock held. */
 int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno)
 {
 	if (VMPI.is_vm86pus) {
@@ -456,7 +447,6 @@ int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno
 	return 0;
 }
 
-/* This must be called with the kernel lock held. */
 void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 {
 	unsigned char *csp, *ssp;
@@ -586,7 +576,6 @@ static void irq_handler(int intno, void *dev_id, struct pt_regs * regs) {
 	int irq_bit;
 	unsigned long flags;
 	
-	lock_kernel();
 	save_flags(flags);
 	cli();
 	irq_bit = 1 << intno;
@@ -598,7 +587,6 @@ static void irq_handler(int intno, void *dev_id, struct pt_regs * regs) {
 	/* else user will poll for IRQs */
 out:
 	restore_flags(flags);
-	unlock_kernel();
 }
 
 static inline void free_vm86_irq(int irqnumber)

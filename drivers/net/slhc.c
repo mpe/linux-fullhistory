@@ -56,6 +56,7 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <net/slhc_vj.h>
 
 #ifdef CONFIG_INET
 /* Entire module is for IP only */
@@ -78,7 +79,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <net/checksum.h>
-#include <net/slhc_vj.h>
 #include <asm/unaligned.h>
 
 int last_retran;

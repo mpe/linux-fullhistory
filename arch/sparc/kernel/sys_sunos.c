@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.126 2000/06/26 23:20:24 davem Exp $
+/* $Id: sys_sunos.c,v 1.128 2000/07/06 01:41:29 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -651,6 +651,8 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	file = fget(fd);
 	if (!file)
 		goto out;
+
+	inode = file->f_dentry->d_inode;
 
 	socket = &inode->u.socket_i;
 	local.sin_family = AF_INET;

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.214 2000/06/22 01:28:44 anton Exp $
+/* $Id: srmmu.c,v 1.215 2000/06/30 13:25:28 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -125,7 +125,7 @@ int srmmu_cache_pagetables;
 void *srmmu_nocache_pool;
 void *srmmu_nocache_bitmap;
 int srmmu_nocache_low;
-unsigned long srmmu_nocache_used;
+int srmmu_nocache_used;
 spinlock_t srmmu_nocache_spinlock;
 
 /* This makes sense. Honest it does - Anton */
@@ -1266,8 +1266,8 @@ static int srmmu_mmu_info(char *buf)
 	return sprintf(buf, 
 		"MMU type\t: %s\n"
 		"contexts\t: %d\n"
-		"nocache total\t: %lu\n"
-		"nocache used\t: %lu\n"
+		"nocache total\t: %ld\n"
+		"nocache used\t: %d\n"
 		, srmmu_name,
 		num_contexts,
 		SRMMU_NOCACHE_SIZE,

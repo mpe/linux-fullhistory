@@ -312,7 +312,7 @@ done:
 EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 
-extern int (*do_nfsservctl)(int, void *, void *);
+extern long (*do_nfsservctl)(int, void *, void *);
 
 /*
  * Initialize the module

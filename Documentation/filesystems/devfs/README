@@ -3,7 +3,7 @@ Devfs (Device File System) FAQ
 
 Linux Devfs (Device File System) FAQ
 Richard Gooch
-25-JUN-2000
+3-JUL-2000
 
 -----------------------------------------------------------------------------
 
@@ -899,19 +899,18 @@ Note that newer versions of init create /dev/initctl
 automatically, so you don't have to worry about this.
 
 Module autoloading
-Another thing to note is that if you want to support module
-autoloading then you need to edit your /etc/modules.conf so
-that things work properly. You should include the sample
-modules.conf file in the
-Documentation/filesystems/devfs directory into your
-/etc/modules.conf to ensure correct operation.
-
-You will also need to configure devfsd to enable module
+You will need to configure devfsd to enable module
 autoloading. The following lines should be placed in your
-/etc/devfsd.conf:
+/etc/devfsd.conf file:
 
 LOOKUP	.*		MODLOAD
 
+
+As of devfsd-v1.3.10, a generic /etc/modules.devfs
+configuration file is installed, which is used by the MODLOAD
+action. This should be sufficient for most configurations. If you
+require further configuration, edit your /etc/modules.conf
+file.
 
 Mounting root off a devfs device
 If you wish to mount root off a devfs device when you pass the
@@ -924,7 +923,7 @@ append = "root=<device>"
 Surprised? Yep, so was I. It turns out if you have (as most people
 do):
 
-root = 
+root = <device>
 
 
 then LILO will determine the device number of  and will write
@@ -1540,8 +1539,17 @@ discusses the scsihosts= boot option
 
 Douglas Gilbert has written yet another useful document at
 
-http://www.torque.net/scsi/linux_scsi_24 which
+http://www.torque.net/scsi/linux_scsi_24/ which
 discusses the Linux SCSI subsystem in 2.4.
+
+
+Johannes Erdfelt has started a discussion paper on Linux and
+hot-swap devices, describing what the requirements are for a scalable
+solution and how and why he's used devfs+devfsd. Note that this is an
+early draft only, available in plain text form at:
+
+http://johannes.erdfelt.com/hotswap.txt.
+Johannes has promised a HTML version will follow.
 
 
 

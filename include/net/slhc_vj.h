@@ -80,6 +80,10 @@
  * means "IP packet".
  */
 
+
+#include <linux/ip.h>
+#include <linux/tcp.h>
+
 /* SLIP compression masks for len/vers byte */
 #define SL_TYPE_IP 0x40
 #define SL_TYPE_UNCOMPRESSED_TCP 0x70

@@ -11,6 +11,8 @@
  *		
  *	http://developer.intel.com/design/pentiumii/manuals/243192.htm
  *
+ *	For more information, go to http://www.urbanmyth.org/microcode
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -226,7 +228,7 @@ static void do_update_one(void *arg)
 				}
 
 				wrmsr(0x79, (unsigned int)(m->bits), 0);
-				__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx", "cc");
+				__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx");
 				rdmsr(0x8B, val[0], val[1]);
 
 				req->err = 0;

@@ -80,7 +80,7 @@ void minix_free_block(struct inode * inode, int block)
 		return;
 	}
 	bh = sb->u.minix_sb.s_zmap[zone];
-	if (!minix_clear_bit(bit,bh->b_data))
+	if (!minix_test_and_clear_bit(bit,bh->b_data))
 		printk("free_block (%s:%d): bit already cleared\n",
 		       kdevname(sb->s_dev), block);
 	else
@@ -112,7 +112,7 @@ repeat:
 	}
 	if (!bh || j >= 8192)
 		return 0;
-	if (minix_set_bit(j,bh->b_data)) {
+	if (minix_test_and_set_bit(j,bh->b_data)) {
 		printk("new_block: bit already set");
 		DQUOT_FREE_BLOCK(sb, inode, 1);
 		goto repeat;
@@ -221,7 +221,7 @@ void minix_free_inode(struct inode * inode)
 	bh = inode->i_sb->u.minix_sb.s_imap[ino >> 13];
 	minix_clear_inode(inode);
 	clear_inode(inode);
-	if (!minix_clear_bit(ino & 8191, bh->b_data))
+	if (!minix_test_and_clear_bit(ino & 8191, bh->b_data))
 		printk("free_inode: bit %lu already cleared.\n",ino);
 	mark_buffer_dirty(bh, 1);
 }
@@ -252,7 +252,7 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 		unlock_super(sb);
 		return NULL;
 	}
-	if (minix_set_bit(j,bh->b_data)) {	/* shouldn't happen */
+	if (minix_test_and_set_bit(j,bh->b_data)) {	/* shouldn't happen */
 		printk("new_inode: bit already set");
 		iput(inode);
 		unlock_super(sb);

@@ -73,8 +73,8 @@ typedef dma_addr_t dma64_addr_t;
 #define pci64_unmap_single(d,a,s,dir) pci_unmap_single((d),(a),(s),(dir))
 #define pci64_unmap_sg(d,s,n,dir) pci_unmap_sg((d),(s),(n),(dir))
 #if BITS_PER_LONG > 32
-#define pci64_dma_hi32(a) ((u32) (0xffffffff & (a>>32)))
-#define pci64_dma_lo32(a) ((u32) (0xffffffff & (a)))
+#define pci64_dma_hi32(a) ((u32) (0xffffffff & (((u64)(a))>>32)))
+#define pci64_dma_lo32(a) ((u32) (0xffffffff & (((u64)(a)))))
 #else
 #define pci64_dma_hi32(a) 0
 #define pci64_dma_lo32(a) (a)

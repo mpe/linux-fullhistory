@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.194 2000/06/05 06:08:45 anton Exp $
+/* $Id: sun4c.c,v 1.195 2000/06/30 13:25:28 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2360,8 +2360,11 @@ static int sun4c_check_pgt_cache(int low, int high)
 		do {
 			if (pgd_quicklist)
 				sun4c_free_pgd_slow(sun4c_get_pgd_fast()), freed++;
+	/* Only two level page tables at the moment, sun4 3 level mmu is not supported - Anton */
+#if 0
 			if (pmd_quicklist)
 				sun4c_free_pmd_slow(sun4c_get_pmd_fast()), freed++;
+#endif
 			if (pte_quicklist)
 				sun4c_free_pte_slow(sun4c_get_pte_fast()), freed++;
 		} while (pgtable_cache_size > low);

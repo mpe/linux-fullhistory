@@ -111,7 +111,7 @@ affs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 * we can jump directly to where we left off.
 		 */
 		if (filp->private_data && filp->f_version == inode->i_version) {
-			i = (s32)filp->private_data;
+			i = (s32)(unsigned long)filp->private_data;
 			j = 0;
 			pr_debug("AFFS: readdir() left off=%d\n",i);
 		}
@@ -137,7 +137,7 @@ affs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			filp->private_data = (void *)ino;
 			if (filldir(dirent,name,namelen,filp->f_pos,ino) < 0)
 				goto readdir_done;
-			filp->private_data = (void *)i;
+			filp->private_data = (void *)(unsigned long)i;
 			affs_brelse(fh_bh);
 			fh_bh = NULL;
 			stored++;

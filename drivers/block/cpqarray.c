@@ -169,7 +169,7 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 #else
 static void ida_procinit(int i) {}
 static int ida_proc_get_info(char *buffer, char **start, off_t offset,
-			     int length, int *eof, void *data) {}
+			     int length, int *eof, void *data) { return 0;}
 #endif
 
 static void ida_geninit(int ctlr)

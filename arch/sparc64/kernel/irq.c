@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.88 2000/06/26 19:40:27 davem Exp $
+/* $Id: irq.c,v 1.89 2000/06/30 10:18:38 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -552,8 +552,8 @@ out:
  * lives in the brlock table for cache reasons.
  */
 #ifndef CONFIG_SMP
-unsigned int local_irq_count;
-unsigned int local_bh_count;
+unsigned int __local_irq_count;
+unsigned int __local_bh_count;
 #else
 
 /* Who has global_irq_lock. */
@@ -605,14 +605,14 @@ again:
 		spinlock_t *lock;
 
 		if (!irqs_running() &&
-		    (local_bh_count || !spin_is_locked(&global_bh_lock)))
+		    (local_bh_count(smp_processor_id()) || !spin_is_locked(&global_bh_lock)))
 			break;
 
 		br_write_unlock(BR_GLOBALIRQ_LOCK);
 		lock = &__br_write_locks[BR_GLOBALIRQ_LOCK].lock;
 		while (irqs_running() ||
 		       spin_is_locked(lock) ||
-		       (!local_bh_count && spin_is_locked(&global_bh_lock))) {
+		       (!local_bh_count(smp_processor_id()) && spin_is_locked(&global_bh_lock))) {
 			if (!--count) {
 				show("wait_on_irq");
 				count = (~0 >> 1);
@@ -635,7 +635,7 @@ void __global_cli(void)
 	if(flags == 0) {
 		int cpu = smp_processor_id();
 		__cli();
-		if (! local_irq_count)
+		if (! local_irq_count(cpu))
 			get_irqlock(cpu);
 	}
 }
@@ -644,7 +644,7 @@ void __global_sti(void)
 {
 	int cpu = smp_processor_id();
 
-	if (! local_irq_count)
+	if (! local_irq_count(cpu))
 		release_irqlock(cpu);
 	__sti();
 }
@@ -656,7 +656,7 @@ unsigned long __global_save_flags(void)
 	__save_flags(flags);
 	local_enabled = ((flags == 0) ? 1 : 0);
 	retval = 2 + local_enabled;
-	if (! local_irq_count) {
+	if (! local_irq_count(smp_processor_id())) {
 		if (local_enabled)
 			retval = 1;
 		if (global_irq_holder == (unsigned char) smp_processor_id())

@@ -325,8 +325,9 @@ found_middle:
 }
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) ext2_set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) ext2_clear_bit(nr,addr)
+#define minix_test_and_set_bit(nr,addr) ext2_set_bit(nr,addr)
+#define minix_set_bit(nr,addr) ((void)ext2_set_bit(nr,addr))
+#define minix_test_and_clear_bit(nr,addr) ext2_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) ext2_test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) ext2_find_first_zero_bit(addr,size)
 

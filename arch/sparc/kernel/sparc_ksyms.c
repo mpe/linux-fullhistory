@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.97 2000/05/09 17:40:13 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.99 2000/06/30 10:18:38 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -41,6 +41,9 @@
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
+#endif
+#ifdef CONFIG_PCI
+#include <asm/pci.h>
 #endif
 #include <asm/a.out.h>
 #include <asm/io-unit.h>
@@ -143,8 +146,8 @@ EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_count);
 EXPORT_SYMBOL(synchronize_irq);
 #endif
-EXPORT_SYMBOL(local_irq_count);
-EXPORT_SYMBOL(local_bh_count);
+EXPORT_SYMBOL(__local_irq_count);
+EXPORT_SYMBOL(__local_bh_count);
 
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(mstk48t02_regs);
@@ -189,7 +192,17 @@ EXPORT_SYMBOL(sbus_iounmap);
 EXPORT_SYMBOL(sbus_ioremap);
 #endif
 #if CONFIG_PCI
-/* We do not have modular drivers for PCI devices yet. */
+/* Actually, ioremap/iounmap are not PCI specific. But it is ok for drivers. */
+EXPORT_SYMBOL(ioremap);
+EXPORT_SYMBOL(iounmap);
+
+EXPORT_SYMBOL(insl);
+EXPORT_SYMBOL(outsl);
+EXPORT_SYMBOL(pci_alloc_consistent);
+EXPORT_SYMBOL(pci_free_consistent);
+EXPORT_SYMBOL(pci_map_single);
+EXPORT_SYMBOL(pci_unmap_single);
+EXPORT_SYMBOL(pci_dma_sync_single);
 #endif
 
 /* Solaris/SunOS binary compatibility */
@@ -228,7 +241,7 @@ EXPORT_SYMBOL(__prom_getsibling);
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
 EXPORT_SYMBOL_NOVERS(memscan);
-EXPORT_SYMBOL(strlen);
+EXPORT_SYMBOL_NOVERS(strlen);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);

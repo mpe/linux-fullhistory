@@ -709,7 +709,7 @@ static void ntfs_read_inode(struct inode* inode)
 
 #ifdef CONFIG_NTFS_RW
 static void 
-ntfs_write_inode (struct inode *ino)
+ntfs_write_inode (struct inode *ino, int unused)
 {
 	ntfs_debug (DEBUG_LINUX, "ntfs:write inode %x\n", ino->i_ino);
 	ntfs_update_inode (NTFS_LINO2NINO (ino));

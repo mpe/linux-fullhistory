@@ -457,7 +457,7 @@ static void rif_check_expire(unsigned long dummy)
  */
  
 #ifndef CONFIG_PROC_FS
-static int rif_get_info(char *buffer,char **start, off_t offset, int length)  {}
+static int rif_get_info(char *buffer,char **start, off_t offset, int length)  { return 0;}
 #else
 static int rif_get_info(char *buffer,char **start, off_t offset, int length) 
 {

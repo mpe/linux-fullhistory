@@ -852,10 +852,10 @@ static void set_fdc(int drive)
 }
 
 /* locks the driver */
-static int lock_fdc(int drive, int interruptible)
+static int _lock_fdc(int drive, int interruptible, int line)
 {
 	if (!usage_count){
-		printk(KERN_ERR "Trying to lock fdc while usage count=0\n");
+		printk(KERN_ERR "Trying to lock fdc while usage count=0 at line %d\n", line);
 		return -1;
 	}
 	if(floppy_grab_irq_and_dma()==-1)
@@ -888,6 +888,8 @@ static int lock_fdc(int drive, int interruptible)
 	set_fdc(drive);
 	return 0;
 }
+
+#define lock_fdc(drive,interruptible) _lock_fdc(drive,interruptible, __LINE__)
 
 #define LOCK_FDC(drive,interruptible) \
 if (lock_fdc(drive,interruptible)) return -EINTR;
@@ -2601,6 +2603,11 @@ static int make_raw_rw_request(void)
 	int aligned_sector_t;
 	int max_sector, max_size, tracksize, ssize;
 
+	if(max_buffer_sectors == 0) {
+		printk("VFS: Block I/O scheduled on unopened device\n");
+		return 0;
+	}
+
 	set_fdc(DRIVE(CURRENT->rq_dev));
 
 	raw_cmd = &default_raw_cmd;
@@ -2955,6 +2962,11 @@ static void process_fd_request(void)
 
 static void do_fd_request(request_queue_t * q)
 {
+	if(max_buffer_sectors == 0) {
+		printk("VFS: do_fd_request called on non-open device\n");
+		return;
+	}
+
 	if (usage_count == 0) {
 		printk("warning: usage count=0, CURRENT=%p exiting\n", CURRENT);
 		printk("sect=%ld cmd=%d\n", CURRENT->sector, CURRENT->cmd);
@@ -3782,9 +3794,14 @@ static int check_floppy_change(kdev_t dev)
 		return 1;
 
 	if (UDP->checkfreq < (int)(jiffies - UDRS->last_checked)) {
+		if(floppy_grab_irq_and_dma()) {
+			return 1;
+		}
+
 		lock_fdc(drive,0);
 		poll_drive(0,0);
 		process_fd_request();
+		floppy_release_irq_and_dma();
 	}
 
 	if (UTESTF(FD_DISK_CHANGED) ||
@@ -3810,6 +3827,10 @@ static int floppy_revalidate(kdev_t dev)
 	    UTESTF(FD_VERIFY) ||
 	    test_bit(drive, &fake_change) ||
 	    NO_GEOM){
+		if(usage_count == 0) {
+			printk("VFS: revalidate called on non-open device.\n");
+			return -EFAULT;
+		}
 		lock_fdc(drive,0);
 		cf = UTESTF(FD_DISK_CHANGED) || UTESTF(FD_VERIFY);
 		if (!(cf || test_bit(drive, &fake_change) || NO_GEOM)){
@@ -3831,7 +3852,7 @@ static int floppy_revalidate(kdev_t dev)
 				size = 1024;
 			if (!(bh = getblk(dev,0,size))){
 				process_fd_request();
-				return 1;
+				return -ENXIO;
 			}
 			if (bh && !buffer_uptodate(bh))
 				ll_rw_block(READ, 1, &bh);

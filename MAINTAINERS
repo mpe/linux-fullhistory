@@ -282,7 +282,7 @@ DECnet NETWORK LAYER
 P:	Steven Whitehouse
 M:	SteveW@ACM.org
 W:	http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html
-L:	linux-decnet@dreamtime.org
+L:	linux-decnet-user@lists.sourceforge.net
 S:	Maintained
 
 DEVICE NUMBER REGISTRY

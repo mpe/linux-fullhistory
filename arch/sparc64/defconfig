@@ -125,6 +125,11 @@ CONFIG_SPARCAUDIO_CS4231=y
 # CONFIG_SPARCAUDIO_DUMMY is not set
 
 #
+# Memory Technology Devices (MTD)
+#
+# CONFIG_MTD is not set
+
+#
 # Block devices
 #
 CONFIG_BLK_DEV_FD=y
@@ -397,6 +402,7 @@ CONFIG_MSDOS_FS=m
 # CONFIG_UMSDOS_FS is not set
 CONFIG_VFAT_FS=m
 CONFIG_EFS_FS=m
+# CONFIG_JFFS_FS is not set
 CONFIG_CRAMFS=m
 CONFIG_RAMFS=m
 CONFIG_ISO9660_FS=m

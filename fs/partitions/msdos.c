@@ -36,6 +36,10 @@
 #include "check.h"
 #include "msdos.h"
 
+#if CONFIG_BLK_DEV_MD && CONFIG_AUTODETECT_RAID
+extern void md_autodetect_dev(kdev_t dev);
+#endif
+
 static int current_minor;
 
 /*

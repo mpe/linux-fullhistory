@@ -1090,7 +1090,7 @@ static void free_dentries (struct devfs_entry *de)
 
 /**
  *	is_devfsd_or_child - Test if the current process is devfsd or one of its children.
- *	fs_info: The filesystem information.
+ *	@fs_info: The filesystem information.
  *
  *	Returns %TRUE if devfsd or child, else %FALSE.
  */
@@ -1424,7 +1424,7 @@ static void unregister (struct devfs_entry *de)
 
 /**
  *	devfs_unregister - Unregister a device entry.
- *	de: A handle previously created by devfs_register() or returned from
+ *	@de: A handle previously created by devfs_register() or returned from
  *		devfs_find_handle(). If this is %NULL the routine does nothing.
  */
 
@@ -2295,7 +2295,7 @@ static void devfs_read_inode (struct inode *inode)
 #endif
 }   /*  End Function devfs_read_inode  */
 
-static void devfs_write_inode (struct inode *inode)
+static void devfs_write_inode (struct inode *inode, int wait)
 {
     int index;
     struct devfs_entry *de;
@@ -2368,8 +2368,8 @@ static struct super_operations devfs_sops =
 /**
  *	get_vfs_inode - Get a VFS inode.
  *	@sb: The super block.
- *	@di: The devfs inode.
- *	@dentry The dentry to register with the devfs inode.
+ *	@de: The devfs inode.
+ *	@dentry: The dentry to register with the devfs inode.
  *
  *	Returns the inode on success, else %NULL.
  */
@@ -2553,18 +2553,15 @@ static void devfs_d_iput (struct dentry *dentry, struct inode *inode)
 {
     struct devfs_entry *de;
 
-    lock_kernel();
+    lock_kernel ();
     de = get_devfs_entry_from_vfs_inode (inode);
 #ifdef CONFIG_DEVFS_DEBUG
     if (devfs_debug & DEBUG_D_IPUT)
 	printk ("%s: d_iput(): dentry: %p inode: %p de: %p  de->dentry: %p\n",
 		DEVFS_NAME, dentry, inode, de, de->inode.dentry);
 #endif
-    if (de->inode.dentry == dentry)
-    {
-	de->inode.dentry = NULL;
-    }
-    unlock_kernel();
+    if (de->inode.dentry == dentry) de->inode.dentry = NULL;
+    unlock_kernel ();
     iput (inode);
 }   /*  End Function devfs_d_iput  */
 
@@ -2589,7 +2586,7 @@ static struct dentry_operations devfs_wait_dops =
 
 /**
  *	devfs_d_delete - Callback for when all files for a dentry are closed.
- *	@detry: The dentry.
+ *	@dentry: The dentry.
  */
 
 static int devfs_d_delete (struct dentry *dentry)
@@ -2641,7 +2638,7 @@ static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
     struct inode *dir;
     struct fs_info *fs_info;
 
-    lock_kernel();
+    lock_kernel ();
     dir = dentry->d_parent->d_inode;
     fs_info = dir->i_sb->u.generic_sbp;
     if (!de || de->registered)
@@ -2689,7 +2686,7 @@ static int devfs_d_revalidate_wait (struct dentry *dentry, int flags)
     }
     if ( wait_for_devfsd_finished (fs_info) ) dentry->d_op = &devfs_dops;
 out:
-    unlock_kernel();
+    unlock_kernel ();
     return 1;
 }   /*  End Function devfs_d_revalidate_wait  */
 
@@ -3043,20 +3040,20 @@ static int devfs_mknod (struct inode *dir, struct dentry *dentry, int mode,
 static int devfs_readlink (struct dentry *dentry, char *buffer, int buflen)
 {
     struct devfs_entry *de;
-    lock_kernel();
-    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
-    unlock_kernel();
 
+    lock_kernel ();
+    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    unlock_kernel ();
     return vfs_readlink (dentry, buffer, buflen, de->u.symlink.linkname);
 }   /*  End Function devfs_readlink  */
 
 static int devfs_follow_link (struct dentry *dentry, struct nameidata *nd)
 {
     struct devfs_entry *de;
-    lock_kernel();
-    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
-    unlock_kernel();
 
+    lock_kernel ();
+    de = get_devfs_entry_from_vfs_inode (dentry->d_inode);
+    unlock_kernel ();
     return vfs_follow_link (nd, de->u.symlink.linkname);
 }   /*  End Function devfs_follow_link  */
 
