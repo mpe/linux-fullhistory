@@ -83,7 +83,9 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 			set_bit(PG_free_after, &page->flags);
 			set_bit(PG_decr_after, &page->flags);
 			set_bit(PG_swap_unlock_after, &page->flags);
-			page->swap_unlock_entry = entry;
+			/* swap-cache  shouldn't be set, but play safe */
+			PageClearSwapCache(page);
+			page->pg_swap_entry = entry;
 			atomic_inc(&nr_async_pages);
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);

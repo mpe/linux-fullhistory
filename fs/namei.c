@@ -384,10 +384,12 @@ static /*inline*/ int reserved_lookup(struct inode * dir, struct qstr * name,
 				error = 0;
 			}
 			else if(dir->i_dentry) {
-				*result = dir->i_dentry->d_parent->u.d_inode;
-				if(!*result)
-					panic("dcache parent directory is lost");
 				error = 0;
+				*result = dir->i_dentry->d_parent->u.d_inode;
+				if(!*result) {
+					printk("dcache parent directory is lost");
+					error = -ESTALE;	/* random error */
+				}
 			}
 		}
 		if(!error)
@@ -943,6 +945,7 @@ asmlinkage int sys_mkdir(const char * pathname, int mode)
 	return error;
 }
 
+#if 0 /* We need a "deletefs", someone please write it.  -DaveM */
 /* Perhaps this could be moved out into a new file. */
 static void basket_name(struct inode * dir, struct dentry * entry)
 {
@@ -975,6 +978,7 @@ static void basket_name(struct inode * dir, struct dentry * entry)
         vfs_unlock();
 	iput(inode);
 }
+#endif
 
 static inline int do_rmdir(const char * name)
 {
@@ -1034,20 +1038,27 @@ static inline int do_rmdir(const char * name)
 		dir->i_sb->dq_op->initialize(dir, -1);
 
         down(&dir->i_sem);
+#if 0
 	if(lastent && d_isbasket(lastent)) {
 		d_del(lastent, D_REMOVE);
 		error = 0;
 		goto exit_lock;
 	}
+#endif
 	atomic_inc(&dir->i_count);
 	error = dir->i_op->rmdir(dir, last.name, last.len);
 #ifdef CONFIG_OMIRR
 	if(!error)
 		omirr_print(lastent, NULL, NULL, " r %ld ", CURRENT_TIME);
 #endif
+#if 0
 	if(!error && lastent)
 		basket_name(dir, lastent);
 exit_lock:
+#else
+	if(!error && lastent)
+		d_del(lastent, D_REMOVE);
+#endif
         up(&dir->i_sem);
 exit_dir:
 	iput(inode);
@@ -1132,20 +1143,27 @@ static inline int do_unlink(const char * name)
 		       inode->i_ddir_count, inode->i_dent_count);
 	}
 #endif
+#if 0
 	if(lastent && d_isbasket(lastent)) {
 		d_del(lastent, D_REMOVE);
 		error = 0;
 		goto exit_lock;
 	}
+#endif
 	atomic_inc(&dir->i_count);
 	error = dir->i_op->unlink(dir, last.name, last.len);
 #ifdef CONFIG_OMIRR
 	if(!error)
 		omirr_print(lastent, NULL, NULL, " u %ld ", CURRENT_TIME);
 #endif
+#if 0
 	if(!error && lastent)
 		basket_name(dir, lastent);
 exit_lock:
+#else
+	if(!error && lastent)
+		d_del(lastent, D_REMOVE);
+#endif
         up(&dir->i_sem);
 exit_dir:
 	iput(inode);

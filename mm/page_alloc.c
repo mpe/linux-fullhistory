@@ -133,9 +133,8 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 void __free_page(struct page *page)
 {
 	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
-		unsigned long map_nr = page->map_nr;
-		delete_from_swap_cache(map_nr);
-		free_pages_ok(map_nr, 0);
+		delete_from_swap_cache(page);
+		free_pages_ok(page->map_nr, 0);
 	}
 }
 
@@ -148,7 +147,7 @@ void free_pages(unsigned long addr, unsigned long order)
 		if (PageReserved(map))
 			return;
 		if (atomic_dec_and_test(&map->count)) {
-			delete_from_swap_cache(map_nr);
+			delete_from_swap_cache(map);
 			free_pages_ok(map_nr, order);
 			return;
 		}
@@ -280,8 +279,7 @@ __initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long e
 	min_free_pages = i;
 	free_pages_low = i + (i>>1);
 	free_pages_high = i + i;
-	start_mem = init_swap_cache(start_mem, end_mem);
-	mem_map = (mem_map_t *) start_mem;
+	mem_map = (mem_map_t *) LONG_ALIGN(start_mem);
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);
 	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
@@ -336,7 +334,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	}
 	vma->vm_mm->rss++;
 	tsk->maj_flt++;
-	if (!write_access && add_to_swap_cache(MAP_NR(page), entry)) {
+	if (!write_access && add_to_swap_cache(&mem_map[MAP_NR(page)], entry)) {
 		/* keep swap page allocated for the moment (swap cache) */
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;

@@ -87,7 +87,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	/* Deal with page aging.  Pages age from being unused; they
 	 * rejuvenate on being accessed.  Only swap old pages (age==0
 	 * is oldest). */
-	if ((pte_dirty(pte) && delete_from_swap_cache(MAP_NR(page))) 
+	if ((pte_dirty(pte) && delete_from_swap_cache(page_map)) 
 	    || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
 		touch_page(page_map);
@@ -117,7 +117,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		free_page(page);
 		return 1;	/* we slept: the process may not exist any more */
 	}
-        if ((entry = find_in_swap_cache(MAP_NR(page))))  {
+        if ((entry = find_in_swap_cache(page_map)))  {
 		if (atomic_read(&page_map->count) != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");

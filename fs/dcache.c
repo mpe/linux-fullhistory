@@ -479,50 +479,6 @@ static inline struct dentry ** d_base_qstr(struct ddir * pdir,
 }
 
 
-static /*inline*/ blocking void recursive_clear(struct ddir * ddir, int flags)
-{
-	int i, retry = 0;
-
-	flags = (flags | D_RECURSIVE) & ~D_NO_CLEAR_INODE;
-again:
-	/* Clear those separately that are not in the hashtable. */
-	while(ddir->dd_zombielist)
-		d_del(ddir->dd_zombielist, flags);
-
-	if(!ddir->dd_hashed)
-		return; /* shortcut */
-
-	for(i=0; i < D_HASHSIZE; i++) {
-		struct dentry ** base = &ddir->dd_hashtable[i];
-		struct dentry * tmp;
-
-		while((tmp = *base)) {
-#ifdef DEBUG
-			TST("__clear",tmp);
-			if(!(tmp->d_flag & D_HASHED)) {
-				printk("VFS: dcache entry not hashed!\n");
-				printpath(*base); printk("\n");
-				printpath(tmp);
-			}
-#endif
-			/* printk("["); */
-			d_del(tmp, flags);
-			/* printk("]"); */
-		}
-	}
-
-	/* New entries may have been added during blocking. */
-	if(ddir->dd_hashed && ++retry < 10)
-		goto again;
-
-#ifdef DEBUG
-	if(ddir->dd_hashed || ddir->dd_true_hashed) {
-		printk("remained %d/%d in hashtable\n",
-		       ddir->dd_true_hashed, ddir->dd_hashed);
-	}
-#endif
-}
-
 static /*inline*/ blocking void _d_remove_from_parent(struct dentry * entry,
 						      struct ddir * pdir,
 						      struct inode * inode,
@@ -589,6 +545,11 @@ static /*inline*/ void _d_handle_zombie(struct dentry * entry,
 			entry->d_flag |= D_ZOMBIE;
 			insert_hash(&pdir->dd_zombielist, entry);
 
+			/* This condition is no longer a bug, with the removal
+			 * of recursive_clear() this happens naturally during
+			 * an unmount attempt of a filesystem which is busy.
+			 */
+#if 0
 			/* Not sure when this message should show up... */
 			if(!IS_ROOT(entry)) {
 				printk("VFS: clearing dcache directory "
@@ -602,6 +563,7 @@ static /*inline*/ void _d_handle_zombie(struct dentry * entry,
 				       ddir->dd_basketlist, ddir->dd_zombielist);
 #endif
 			}
+#endif
 		}
 	}
 }
@@ -638,26 +600,11 @@ static /*inline*/ blocking void _d_del(struct dentry * entry,
 
 	/* This may block, be careful! _d_remove_from_parent() is
 	 * thus called before.
-	 *
-	 * And there is also another problem, for FS_NO_DCACHE filesystems,
-	 * when a recursive_clear hits a directory and performs a dec_ddir()
-	 * on that parent (what 'entry' is right now) this could call __iput().
-	 * This is ok for the most part, but FS_NO_DCACHE will cause a
-	 * redundant call to d_del() for what is now 'entry'.  We do not want
-	 * this because this disturbs our state.  So we use a special flag
-	 * to notify __iput() of this situation.  -DaveM
 	 */
-	if(entry->d_flag & D_DIR) {
-		entry->d_flag |= D_DDELIP;
+	if(entry->d_flag & D_DIR)
 		ddir = d_dir(entry);
-		recursive_clear(ddir, flags);
-		entry->d_flag &= ~D_DDELIP;
-	}
 	if(IS_ROOT(entry))
 		return;
-
-	if(!has_true_sons(pdir))
-		dec_ddir(entry->d_parent, entry->d_parent->u.d_inode);
 
 	if(flags & D_NO_FREE) {
 		/* Make it re-d_add()able */
@@ -665,6 +612,11 @@ static /*inline*/ blocking void _d_del(struct dentry * entry,
 		entry->d_flag &= D_DIR;
 	} else
 		_d_handle_zombie(entry, ddir, pdir);
+
+	/* This dec_ddir() must occur after zombie handling. */
+	if(!has_true_sons(pdir))
+		dec_ddir(entry->d_parent, entry->d_parent->u.d_inode);
+
 	entry->u.d_inode = NULL;
 	if(inode) {
 		remove_alias(&inode->i_dentry, entry);
@@ -820,21 +772,8 @@ static /*inline*/ blocking void _d_insert_to_parent(struct dentry * entry,
 		pdir->dd_negs++;
 
 		/* Don't allow the negative list to grow too much ... */
-
-		/* XXX There is a bad bug here.  We remove the dentry from
-		 * XXX the alias list, but later on recursive_clear() and
-		 * XXX d_del() have no way of knowing this, they thus try
-		 * XXX to remove it again from the alias linked list and we
-		 * XXX get a crash.  -DaveM
-		 */
-#if 0 /* FIXME */
-		while(pdir->dd_negs > (pdir->dd_true_hashed >> 1) + 5) {
-			struct dentry *removal = pdir->dd_neglist->d_prev;
-
-			remove_alias(&pdir->dd_neglist, removal);
-			pdir->dd_negs--;
-		}
-#endif
+		while(pdir->dd_negs > (pdir->dd_true_hashed >> 1) + 5)
+			d_del(pdir->dd_neglist->d_prev, D_REMOVE);
 	}
 }
 

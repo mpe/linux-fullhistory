@@ -66,8 +66,7 @@ extern void swap_in(struct task_struct *, struct vm_area_struct *,
 
 /* linux/mm/swap_state.c */
 extern void show_swap_cache_info(void);
-extern int add_to_swap_cache(unsigned long, unsigned long);
-extern unsigned long init_swap_cache(unsigned long, unsigned long);
+extern int add_to_swap_cache(struct page *, unsigned long);
 extern void swap_duplicate(unsigned long);
 
 /* linux/mm/swapfile.c */
@@ -90,8 +89,6 @@ extern void swap_free(unsigned long);
 
 #define SWAP_CACHE_INFO
 
-extern unsigned long * swap_cache;
-
 #ifdef SWAP_CACHE_INFO
 extern unsigned long swap_cache_add_total;
 extern unsigned long swap_cache_add_success;
@@ -101,39 +98,37 @@ extern unsigned long swap_cache_find_total;
 extern unsigned long swap_cache_find_success;
 #endif
 
-extern inline unsigned long in_swap_cache(unsigned long index)
+extern inline unsigned long in_swap_cache(struct page *page)
 {
-	return swap_cache[index]; 
+	if (PageSwapCache(page))
+		return page->pg_swap_entry;
+	return 0;
 }
 
-extern inline long find_in_swap_cache(unsigned long index)
+extern inline long find_in_swap_cache(struct page *page)
 {
-	unsigned long entry;
-
 #ifdef SWAP_CACHE_INFO
 	swap_cache_find_total++;
 #endif
-	entry = xchg(swap_cache + index, 0);
+	if (PageTestandClearSwapCache(page))  {
 #ifdef SWAP_CACHE_INFO
-	if (entry)
 		swap_cache_find_success++;
 #endif	
-	return entry;
+		return page->pg_swap_entry;
+	}
+	return 0;
 }
 
-extern inline int delete_from_swap_cache(unsigned long index)
+extern inline int delete_from_swap_cache(struct page *page)
 {
-	unsigned long entry;
-	
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif	
-	entry = xchg(swap_cache + index, 0);
-	if (entry)  {
+	if (PageTestandClearSwapCache(page))  {
 #ifdef SWAP_CACHE_INFO
 		swap_cache_del_success++;
 #endif
-		swap_free(entry);
+		swap_free(page->pg_swap_entry);
 		return 1;
 	}
 	return 0;

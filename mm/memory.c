@@ -195,7 +195,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 	}
 	if (cow)
 		pte = pte_wrprotect(pte);
-	if (delete_from_swap_cache(page_nr))
+	if (delete_from_swap_cache(&mem_map[page_nr]))
 		pte = pte_mkdirty(pte);
 	set_pte(new_pte, pte_mkold(pte));
 	set_pte(old_pte, pte);

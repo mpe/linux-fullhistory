@@ -24,15 +24,6 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-/*
- * To save us from swapping out pages which have just been swapped in and
- * have not been modified since then, we keep in swap_cache[page>>PAGE_SHIFT]
- * the swap entry which was last used to fill the page, or zero if the
- * page does not currently correspond to a page in swap. PAGE_DIRTY makes
- * this info useless.
- */
-unsigned long *swap_cache;
-
 #ifdef SWAP_CACHE_INFO
 unsigned long swap_cache_add_total = 0;
 unsigned long swap_cache_add_success = 0;
@@ -50,7 +41,7 @@ void show_swap_cache_info(void)
 }
 #endif
 
-int add_to_swap_cache(unsigned long index, unsigned long entry)
+int add_to_swap_cache(struct page *page, unsigned long entry)
 {
 	struct swap_info_struct * p = &swap_info[SWP_TYPE(entry)];
 
@@ -58,28 +49,15 @@ int add_to_swap_cache(unsigned long index, unsigned long entry)
 	swap_cache_add_total++;
 #endif
 	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-		entry = xchg(swap_cache + index, entry);
-		if (entry)  {
-			printk("swap_cache: replacing non-NULL entry\n");
-		}
+		page->pg_swap_entry = entry;
+		if (PageTestandSetSwapCache(page))
+			printk("swap_cache: replacing non-empty entry\n");
 #ifdef SWAP_CACHE_INFO
 		swap_cache_add_success++;
 #endif
 		return 1;
 	}
 	return 0;
-}
-
-__initfunc(unsigned long init_swap_cache(unsigned long mem_start,
-					 unsigned long mem_end))
-{
-	unsigned long swap_cache_size;
-
-	mem_start = (mem_start + 15) & ~15;
-	swap_cache = (unsigned long *) mem_start;
-	swap_cache_size = MAP_NR(mem_end);
-	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
-	return (unsigned long) (swap_cache + swap_cache_size);
 }
 
 void swap_duplicate(unsigned long entry)

@@ -1,7 +1,7 @@
 #ifndef DALLOC_H
 #define DALLOC_H
 /*
- * $Id: dalloc.h,v 1.2 1997/06/12 08:02:42 davem Exp $
+ * $Id: dalloc.h,v 1.3 1997/06/13 04:39:34 davem Exp $
  *
  * include/linux/dalloc.h - alloc routines for dcache
  * alloc / free space for pathname strings
@@ -19,7 +19,6 @@
 
 /* public flags for d_flag */
 #define D_PRELOADED 8
-#define D_DDELIP    16	/* d_del() in progress, see __iput() for details... */
 
 /* public flags for d_del() */
 #define D_REMOVE         0

@@ -124,7 +124,7 @@ typedef struct page {
 	struct wait_queue *wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	unsigned long swap_unlock_entry;
+	unsigned long pg_swap_entry;
 	unsigned long map_nr;	/* page->map_nr == page - mem_map */
 } mem_map_t;
 
@@ -138,6 +138,7 @@ typedef struct page {
 #define PG_swap_unlock_after	 6
 #define PG_DMA			 7
 #define PG_Slab			 8
+#define PG_swap_cache		 9
 #define PG_reserved		31
 
 /* Make it prettier to test the above... */
@@ -151,10 +152,19 @@ typedef struct page {
 #define PageSwapUnlockAfter(page) (test_bit(PG_swap_unlock_after, &(page)->flags))
 #define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
 #define PageSlab(page)		(test_bit(PG_Slab, &(page)->flags))
+#define PageSwapCache(page)	(test_bit(PG_swap_cache, &(page)->flags))
 #define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
 
 #define PageSetSlab(page)	(set_bit(PG_Slab, &(page)->flags))
+#define PageSetSwapCache(page)	(set_bit(PG_swap_cache, &(page)->flags))
+#define PageTestandSetSwapCache(page)	\
+			(test_and_set_bit(PG_swap_cache, &(page)->flags))
+
 #define PageClearSlab(page)	(clear_bit(PG_Slab, &(page)->flags))
+#define PageClearSwapCache(page)(clear_bit(PG_swap_cache, &(page)->flags))
+
+#define PageTestandClearSwapCache(page)	\
+			(test_and_clear_bit(PG_swap_cache, &(page)->flags))
 
 /*
  * page->reserved denotes a page which must never be accessed (which

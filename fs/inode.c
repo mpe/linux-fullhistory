@@ -496,13 +496,10 @@ xcheck("_iput",inode);
 	}
 	if((sb = inode->i_sb)) {
 		if(sb->s_type && (sb->s_type->fs_flags & FS_NO_DCACHE)) {
-			/* See dcache.c:_d_del() for the details...  -DaveM */
-			if(inode->i_dentry && !(inode->i_dentry->d_flag & D_DDELIP)) {
-				while(inode->i_dentry)
-					d_del(inode->i_dentry, D_NO_CLEAR_INODE);
-				if(atomic_read(&inode->i_count) + inode->i_ddir_count)
-					goto done;
-			}
+			while(inode->i_dentry)
+				d_del(inode->i_dentry, D_NO_CLEAR_INODE);
+			if(atomic_read(&inode->i_count) + inode->i_ddir_count)
+				goto done;
 		}
 		if(sb->s_op) {
 			if(inode->i_nlink <= 0 && inode->i_dent_count &&

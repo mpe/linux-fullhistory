@@ -133,7 +133,7 @@ nfs_unlock_page(struct page *page)
 	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&page->count);
 	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
-		swap_after_unlock_page(page->swap_unlock_entry);
+		swap_after_unlock_page(page->pg_swap_entry);
 #endif
 }
 

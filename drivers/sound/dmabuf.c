@@ -802,6 +802,8 @@ DMAbuf_space_in_queue (int dev)
    */
 
   max = dmap->max_fragments;
+  if (max > dmap->nbufs)
+     max = dmap->nbufs;
   len = dmap->qlen;
 
   if (audio_devs[dev]->d->local_qlen)

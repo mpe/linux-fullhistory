@@ -1110,10 +1110,10 @@ static inline void after_unlock_page (struct page * page)
 {
 	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&nr_async_pages);
+	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
+		swap_after_unlock_page(page->pg_swap_entry);
 	if (test_and_clear_bit(PG_free_after, &page->flags))
 		__free_page(page);
-	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
-		swap_after_unlock_page(page->swap_unlock_entry);
 }
 
 /*

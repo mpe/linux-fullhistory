@@ -176,14 +176,16 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 	if (pte_none(pte))
 		return 0;
 	if (pte_present(pte)) {
+		struct page *pg;
 		unsigned long page_nr = MAP_NR(pte_page(pte));
 		if (page_nr >= max_mapnr)
 			return 0;
-		if (!in_swap_cache(page_nr))
+		pg = mem_map + page_nr;
+		if (!in_swap_cache(pg))
 			return 0;
-		if (SWP_TYPE(in_swap_cache(page_nr)) != type)
+		if (SWP_TYPE(in_swap_cache(pg)) != type)
 			return 0;
-		delete_from_swap_cache(page_nr);
+		delete_from_swap_cache(pg);
 		set_pte(dir, pte_mkdirty(pte));
 		return 0;
 	}
