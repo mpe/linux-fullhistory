@@ -228,7 +228,7 @@ static void ecard_init_pgtables(struct mm_struct *mm)
 	 */
 	pgd_t *src_pgd, *dst_pgd;
 
-	src_pgd = pgd_offset(mm, IO_BASE);
+	src_pgd = pgd_offset(mm, (unsigned long)IO_BASE);
 	dst_pgd = pgd_offset(mm, IO_START);
 
 	memcpy(dst_pgd, src_pgd, sizeof(pgd_t) * (IO_SIZE / PGDIR_SIZE));
