@@ -1653,6 +1653,8 @@ static int set_serial_info(struct async_struct * info,
 			return -EPERM;
 		state->flags = ((state->flags & ~ASYNC_USR_MASK) |
 			       (new_serial.flags & ASYNC_USR_MASK));
+		info->flags = ((state->flags & ~ASYNC_USR_MASK) |
+			       (info->flags & ASYNC_USR_MASK));
 		state->custom_divisor = new_serial.custom_divisor;
 		goto check_and_exit;
 	}
@@ -1660,8 +1662,9 @@ static int set_serial_info(struct async_struct * info,
 	new_serial.irq = irq_cannonicalize(new_serial.irq);
 
 	if ((new_serial.irq >= NR_IRQS) || (new_serial.port > 0xffff) ||
-	    (new_serial.type < PORT_UNKNOWN) ||
-	    (new_serial.type > PORT_MAX)) {
+	    (new_serial.baud_base == 0) || (new_serial.type < PORT_UNKNOWN) ||
+	    (new_serial.type > PORT_MAX) || (new_serial.type == PORT_CIRRUS) ||
+	    (new_serial.type == PORT_STARTECH)) {
 		return -EINVAL;
 	}
 

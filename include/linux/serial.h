@@ -42,11 +42,11 @@ struct serial_struct {
 #define PORT_16450	2
 #define PORT_16550	3
 #define PORT_16550A	4
-#define PORT_CIRRUS     5
+#define PORT_CIRRUS     5	/* usurped by cyclades.c */
 #define PORT_16650	6
 #define PORT_16650V2	7
 #define PORT_16750	8
-#define PORT_STARTECH	9
+#define PORT_STARTECH	9	/* usurped by cyclades.c */
 #define PORT_MAX	9
 
 struct serial_uart_config {
@@ -87,7 +87,7 @@ struct serial_uart_config {
 
 #define ASYNC_LOW_LATENCY 0x2000 /* Request low latency behaviour */
 
-#define ASYNC_FLAGS	0x2FFF	/* Possible legal async flags */
+#define ASYNC_FLAGS	0x3FFF	/* Possible legal async flags */
 #define ASYNC_USR_MASK	0x3430	/* Legal flags that non-privileged
 				 * users can set or reset */
 

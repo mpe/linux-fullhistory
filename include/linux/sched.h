@@ -23,8 +23,6 @@ extern unsigned long event;
 #include <linux/capability.h>
 #include <linux/securebits.h>
 
-#define JIFFIES_OFFSET	(-3600*HZ)
-
 /*
  * cloning flags:
  */

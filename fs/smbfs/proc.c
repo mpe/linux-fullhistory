@@ -520,9 +520,7 @@ server->conn_pid);
 	/*
 	 * Wait for the new connection.
 	 */
-	current->timeout = jiffies + 5*HZ;
-	interruptible_sleep_on(&server->wait);
-	current->timeout = 0;
+	interruptible_sleep_on_timeout(&server->wait,  5*HZ);
 	if (signal_pending(current))
 		printk("smb_retry: caught signal\n");
 
@@ -1602,10 +1600,8 @@ ff_dir_handle, ff_resume_key, ff_lastname, mask);
 				/* Windows 95 is not able to deliver answers
 				 * to FIND_NEXT fast enough, so sleep 0.2 sec
 				 */
-				current->timeout = jiffies + HZ / 5;
 				current->state = TASK_INTERRUPTIBLE;
-				schedule();
-				current->timeout = 0;
+				schedule_timeout(HZ/5);
 			}
 		}
 
