@@ -29,7 +29,7 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/zorro.h>
@@ -815,11 +815,11 @@ static int do_fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
          if (transp)
             *transp = htransp;
       } else {
-         put_fs_word(hred, red);
-         put_fs_word(hgreen, green);
-         put_fs_word(hblue, blue);
+         put_user(hred, red);
+         put_user(hgreen, green);
+         put_user(hblue, blue);
          if (transp)
-            put_fs_word(htransp, transp);
+            put_user(htransp, transp);
       }
       red++;
       green++;
@@ -853,10 +853,13 @@ static int do_fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
          hblue = *blue;
          htransp = transp ? *transp : 0;
       } else {
-         hred = get_fs_word(red);
-         hgreen = get_fs_word(green);
-         hblue = get_fs_word(blue);
-         htransp = transp ? get_fs_word(transp) : 0;
+         get_user(hred, red);
+         get_user(hgreen, green);
+         get_user(hblue, blue);
+	 if (transp)
+		 get_user(htransp, transp);
+	 else
+		 htransp = 0;
       }
       hred = CNVT_TOHW(hred, var->red.length);
       hgreen = CNVT_TOHW(hgreen, var->green.length);

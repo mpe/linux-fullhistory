@@ -211,6 +211,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AVANCE,		AVANCE_2302,	"ALG-2302"),
 	DEVICE( S3,		S3_ViRGE,	"ViRGE"),
 	DEVICE( S3,		S3_TRIO,	"Trio32/Trio64"),
+	DEVICE( S3,		S3_AURORA64VP,	"Aurora64V+"),
+	DEVICE( S3,		S3_TRIO64UVP,	"Trio64UV+"),
 	DEVICE( S3,		S3_ViRGE_VX,	"ViRGE/VX"),
 	DEVICE( S3,		S3_868,	"Vision 868"),
 	DEVICE( S3,		S3_928,		"Vision 928-P"),

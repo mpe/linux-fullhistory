@@ -147,16 +147,16 @@ M:	Marcio Saito <marcio@cyclades.com>
 W:	http://www.cyclades.com/
 S:	Supported
 
-EATA ISA/EISA SCSI DRIVER
+EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
-L:	linux-kernel@vger.rutgers.edu
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 U14-34F SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
-L:	linux-kernel@vger.rutgers.edu
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 EATA-DMA SCSI DRIVER

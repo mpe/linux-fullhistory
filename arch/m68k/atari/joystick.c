@@ -14,7 +14,7 @@
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
 #include <asm/atari_mouse.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define MAJOR_NR    JOYSTICK_MAJOR
 
@@ -79,14 +79,14 @@ static int open_joystick(struct inode *inode, struct file *file)
     return 0;
 }
 
-static int write_joystick(struct inode *inode, struct file *file,
-			  const char *buffer, int count)
+static long write_joystick(struct inode *inode, struct file *file,
+			   const char *buffer, unsigned long count)
 {
     return -EINVAL;
 }
 
-static int read_joystick(struct inode *inode, struct file *file,
-			 char *buffer, int count)
+static long read_joystick(struct inode *inode, struct file *file,
+			  char *buffer, unsigned long count)
 {
     int minor = DEVICE_NR(inode->i_rdev);
     int i;

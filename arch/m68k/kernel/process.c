@@ -21,7 +21,7 @@
 #include <linux/user.h>
 #include <linux/a.out.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/traps.h>
 #include <asm/machdep.h>
@@ -172,6 +172,8 @@ int dump_fpu (struct user_m68kfp_struct *fpu)
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
+	struct switch_stack *sw;
+
 /* changed the size calculations - should hopefully work better. lbt */
 	dump->magic = CMAGIC;
 	dump->start_code = 0;
@@ -186,8 +188,27 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
 
 	dump->u_ar0 = (struct pt_regs *)(((int)(&dump->regs)) -((int)(dump)));
-	dump->regs = *regs;
-	dump->regs2 = ((struct switch_stack *)regs)[-1];
+	sw = ((struct switch_stack *)regs) - 1;
+	dump->regs.d1 = regs->d1;
+	dump->regs.d2 = regs->d2;
+	dump->regs.d3 = regs->d3;
+	dump->regs.d4 = regs->d4;
+	dump->regs.d5 = regs->d5;
+	dump->regs.d6 = sw->d6;
+	dump->regs.d7 = sw->d7;
+	dump->regs.a0 = regs->a0;
+	dump->regs.a1 = regs->a1;
+	dump->regs.a2 = sw->a2;
+	dump->regs.a3 = sw->a3;
+	dump->regs.a4 = sw->a4;
+	dump->regs.a5 = sw->a5;
+	dump->regs.a6 = sw->a6;
+	dump->regs.d0 = regs->d0;
+	dump->regs.orig_d0 = regs->orig_d0;
+	dump->regs.stkadj = regs->stkadj;
+	dump->regs.sr = regs->sr;
+	dump->regs.pc = regs->pc;
+	dump->regs.fmtvec = (regs->format << 12) | regs->vector;
 	/* dump floating point stuff */
 	dump->u_fpvalid = dump_fpu (&dump->m68kfp);
 }

@@ -500,6 +500,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 #endif
 						(*conn->class->destructor)(conn);
 						tcp_dec_slow_timer(TCP_SLT_SYNACK);
+						sk->ack_backlog--;
 						kfree(conn);
 
 						if (!tp->syn_wait_queue)

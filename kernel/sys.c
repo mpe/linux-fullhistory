@@ -699,20 +699,15 @@ asmlinkage int sys_setsid(void)
 asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
 	int i;
-	int * groups;
 
 	if (gidsetsize < 0)
 		return -EINVAL;
-	groups = current->groups;
-	for (i = 0 ; i < NGROUPS ; i++) {
-		if (groups[i] == NOGROUP)
-			break;
-	}
+	i = current->ngroups;
 	if (gidsetsize) {
 		if (i > gidsetsize)
 		        return -EINVAL;
-		if (copy_to_user(grouplist, groups, sizeof(*groups)*i))
-				return -EFAULT;
+		if (copy_to_user(grouplist, current->groups, sizeof(gid_t)*i))
+			return -EFAULT;
 	}
 	return i;
 }
@@ -723,32 +718,34 @@ asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 
 	if (!suser())
 		return -EPERM;
-	if (gidsetsize > NGROUPS)
+	if ((unsigned) gidsetsize > NGROUPS)
 		return -EINVAL;
 	err = copy_from_user(current->groups, grouplist, gidsetsize * sizeof(gid_t));
 	if (err) {
-		gidsetsize = err/sizeof(gid_t); /* +1? */	
-        err = -EFAULT;
-    } 
-	if (gidsetsize < NGROUPS)
-		current->groups[gidsetsize] = NOGROUP;
+		gidsetsize = 0;
+		err = -EFAULT;
+	} 
+	current->ngroups = gidsetsize;
 	return err;
 }
 
 int in_group_p(gid_t grp)
 {
-	int	i;
-
-	if (grp == current->fsgid)
-		return 1;
-
-	for (i = 0; i < NGROUPS; i++) {
-		if (current->groups[i] == NOGROUP)
-			break;
-		if (current->groups[i] == grp)
-			return 1;
+	if (grp != current->fsgid) {
+		int i = current->ngroups;
+		if (i) {
+			gid_t *groups = current->groups;
+			do {
+				if (*groups == grp)
+					goto out;
+				groups++;
+				i--;
+			} while (i);
+		}
+		return 0;
 	}
-	return 0;
+out:
+	return 1;
 }
 
 asmlinkage int sys_newuname(struct new_utsname * name)

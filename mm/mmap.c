@@ -107,11 +107,11 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	/*
 	 * Ok, looks good - let it rip.
 	 */
-	mm->brk = brk;
-	do_mmap(NULL, oldbrk, newbrk-oldbrk,
+	if(do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		PROT_READ|PROT_WRITE|PROT_EXEC,
-		MAP_FIXED|MAP_PRIVATE, 0);
-	return brk;
+		   MAP_FIXED|MAP_PRIVATE, 0) != oldbrk)
+		return mm->brk;
+	return mm->brk = brk;
 }
 
 /*
@@ -252,6 +252,13 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_pte = 0;
 
 	do_munmap(addr, len);	/* Clear old maps */
+
+	/* Check against address space limit. */
+	if ((mm->total_vm << PAGE_SHIFT) + len
+	    > current->rlim[RLIMIT_AS].rlim_cur) {
+		kfree(vma);
+		return -ENOMEM;
+	}
 
 	/* Private writable mapping? Check memory availability.. */
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE) {

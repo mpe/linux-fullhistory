@@ -13,8 +13,8 @@ struct cdrom_device_info {
 /* specifications */
         kdev_t dev;	                /* device number */
 	int mask;                       /* mask of capability: disables them */
-	const int speed;                /* maximum speed for reading data */
-	const int capacity;             /* number of discs in jukebox */
+	int speed;			/* maximum speed for reading data */
+	int capacity;			/* number of discs in jukebox */
 /* device-related storage */
 	int options : 30;               /* options flags */
 	unsigned mc_flags : 2;          /* media change buffer flags */

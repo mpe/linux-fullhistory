@@ -319,8 +319,8 @@ LTSS_KSP	= 0
 LTSS_USP	= 4
 LTSS_SR		= 8
 LTSS_FS		= 10
-LTSS_CRP	= 20
-LTSS_FPCTXT	= 32
+LTSS_CRP	= 12
+LTSS_FPCTXT	= 24
 
 SYMBOL_NAME_LABEL(resume)
 	/*
@@ -401,7 +401,7 @@ SYMBOL_NAME_LABEL(resume)
 	movec	%cacr,%d0
 	oriw	#LFLUSH_I_AND_D,%d0
 	movec	%d0,%cacr
-
+	
 	/* switch the root pointer */
 	pmove	%a1@(LTSS_CRP),%crp
 #endif
@@ -643,4 +643,6 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
-	.space (NR_syscalls-163)*4
+	.long SYMBOL_NAME(sys_setresuid)
+	.long SYMBOL_NAME(sys_getresuid)
+	.space (NR_syscalls-165)*4

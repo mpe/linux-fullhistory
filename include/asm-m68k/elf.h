@@ -6,10 +6,11 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/user.h>
 
 typedef unsigned long elf_greg_t;
 
-#define ELF_NGREG 20 /* d1-d7/a0-a6/d0/usp/orig_d0/sr/pc/fmtvec */
+#define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t))
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
 typedef struct user_m68kfp_struct elf_fpregset_t;
@@ -45,9 +46,10 @@ typedef struct user_m68kfp_struct elf_fpregset_t;
 	pr_reg[8] = regs->a1;						\
 	pr_reg[14] = regs->d0;						\
 	pr_reg[15] = rdusp();						\
-	pr_reg[16] = 0; /* orig_d0 */					\
+	pr_reg[16] = regs->orig_d0;					\
 	pr_reg[17] = regs->sr;						\
 	pr_reg[18] = regs->pc;						\
+	pr_reg[19] = (regs->format << 12) | regs->vector;		\
 	{								\
 	  struct switch_stack *sw = ((struct switch_stack *)regs) - 1;	\
 	  pr_reg[5] = sw->d6;						\

@@ -1560,7 +1560,7 @@ static int *root_nfs_call(int *end)
  */
 static int *root_nfs_header(int proc, int program, int version)
 {
-	int groups[] = { 0, NOGROUP };
+	gid_t groups[] = { 0 };
 
 	if (rpc_packet == NULL) {
 		if (!(rpc_packet = kmalloc(nfs_data.wsize + 1024, GFP_NFS))) {
@@ -1568,7 +1568,7 @@ static int *root_nfs_header(int proc, int program, int version)
 			return NULL;
 		}
 	}
-	return rpc_header(rpc_packet, proc, program, version, 0, 0, groups);
+	return rpc_header(rpc_packet, proc, program, version, 0, 0, 1, groups);
 }
 
 

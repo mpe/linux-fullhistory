@@ -243,12 +243,12 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					ax25_clear_queues(ax25);
 					ax25->state = AX25_STATE_0;
 					if (ax25->sk != NULL) {
-						ax25->sk->state = TCP_CLOSE;
-						ax25->sk->err   = ECONNREFUSED;
+						ax25->sk->state     = TCP_CLOSE;
+						ax25->sk->err       = ECONNREFUSED;
 						ax25->sk->shutdown |= SEND_SHUTDOWN;
 						if (!ax25->sk->dead)
 							ax25->sk->state_change(ax25->sk);
-						ax25->sk->dead  = 1;
+						ax25->sk->dead      = 1;
 					}
 				} else {
 					ax25->modulus = MODULUS;
@@ -286,14 +286,13 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (ax25->dama_slave) {
 				ax25->state = AX25_STATE_0;
 				ax25_dama_off(ax25);
-
 				if (ax25->sk != NULL) {
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = 0;
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = 0;
 					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25->sk->dead      = 1;
 				}
 			}
 			break;
@@ -302,14 +301,13 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (pf) {
 				ax25->state = AX25_STATE_0;
 				ax25_dama_off(ax25);
-
 				if (ax25->sk != NULL) {
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = 0;
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = 0;
 					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25->sk->dead      = 1;
 				}
 			}
 			break;
@@ -318,14 +316,13 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			if (pf) {
 				ax25->state = AX25_STATE_0;
 				ax25_dama_off(ax25);
-					
 				if (ax25->sk != NULL) {
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = 0;
-					ax25->sk->shutdown|=SEND_SHUTDOWN;
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = 0;
+					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25->sk->dead      = 1;
 				}
 			}
 			break;
@@ -361,7 +358,6 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 	switch (frametype) {
 		case SABM:
 			if (dama) ax25_dama_on(ax25);
-				
 			ax25->modulus   = MODULUS;
 			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
@@ -377,7 +373,6 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case SABME:
 			if (dama) ax25_dama_on(ax25);
-				
 			ax25->modulus   = EMODULUS;
 			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_EWINDOW);
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
@@ -397,14 +392,13 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			
 			if (ax25->sk != NULL) {
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = 0;
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = 0;
+				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead  = 1;
-				ax25->sk->shutdown|=SEND_SHUTDOWN;
+				ax25->sk->dead      = 1;
 			}
 			break;
 
@@ -413,13 +407,13 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			if (ax25->sk) {
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = ECONNRESET;
+			if (ax25->sk != NULL) {
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = ECONNRESET;
 				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead         = 1;
+				ax25->sk->dead      = 1;
 			}
 			break;
 
@@ -556,7 +550,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 	switch (frametype) {
 		case SABM:
 			if (dama) ax25_dama_on(ax25);
-				
 			ax25->dama_slave = dama;
 			ax25->modulus   = MODULUS;
 			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
@@ -574,7 +567,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case SABME:
 			if (dama) ax25_dama_on(ax25);
-				
 			ax25->dama_slave = dama;
 			ax25->modulus   = EMODULUS;
 			ax25->window    = ax25_dev_get_value(ax25->device, AX25_VALUES_EWINDOW);
@@ -596,14 +588,13 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			
 			if (ax25->sk != NULL) {
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = 0;
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = 0;
 				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead  = 1;
+				ax25->sk->dead      = 1;
 			}
 			break;
 
@@ -612,14 +603,13 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			
 			if (ax25->sk != NULL) {
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = ECONNRESET;
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = ECONNRESET;
 				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead  = 1;
+				ax25->sk->dead      = 1;
 			}
 			break;
 
@@ -804,10 +794,8 @@ int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type, int dama
 		return queued;
 
 	if (ax25->state != AX25_STATE_1 && ax25->state != AX25_STATE_2 &&
-	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4) {
-		printk("ax25_process_rx_frame: frame received - state = %d\n", ax25->state);
+	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4)
 		return queued;
-	}
 
 	del_timer(&ax25->timer);
 

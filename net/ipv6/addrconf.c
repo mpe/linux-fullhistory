@@ -491,11 +491,11 @@ static void sit_route_add(struct device *dev)
 	}
 	else
 	{
-		rtmsg.rtmsg_prefixlen = 128;
+		rtmsg.rtmsg_prefixlen = 10;
 		rtmsg.rtmsg_dst.s6_addr32[0] = __constant_htonl(0xfe800000);
 		rtmsg.rtmsg_dst.s6_addr32[3] = dev->pa_dstaddr;
 		rtmsg.rtmsg_metric = 1;
-		rtmsg.rtmsg_flags = RTF_HOST|RTF_UP;
+		rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_UP;
 	}
 
 	strcpy(rtmsg.rtmsg_device, dev->name);

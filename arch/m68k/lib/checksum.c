@@ -124,7 +124,7 @@ csum_partial (const unsigned char *buff, int len, unsigned int sum)
 
 
 /*
- * copy from fs while checksumming, otherwise like csum_partial
+ * copy from user space while checksumming, otherwise like csum_partial
  */
 
 unsigned int
@@ -138,7 +138,8 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		"jgt 1f\n\t"
 		"addql #2,%1\n\t"	/* len was == 2, treat only rest */
 		"jra 4f\n"
-	     "1:\t"
+	     "1:\n"
+	     "10:\t"
 		"movesw %2@+,%4\n\t"	/* add first word to sum */
 		"addw %4,%0\n\t"
 		"movew %4,%3@+\n\t"
@@ -150,28 +151,36 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		"lsrl #5,%1\n\t"	/* len/32 */
 		"jeq 2f\n\t"		/* not enough... */
 		"subql #1,%1\n"
-	     "1:\t"
+	     "1:\n"
+	     "11:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "12:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "13:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "14:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "15:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "16:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "17:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
+	     "18:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
@@ -187,8 +196,9 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		"jeq 4f\n\t"
 		"lsrw #2,%4\n\t"
 		"subqw #1,%4\n"
-	     "3:\t"
+	     "3:\n"
 		/* loop for rest longs */
+	     "19:\t"
 		"movesl %2@+,%5\n\t"
 		"addxl %5,%0\n\t"
 		"movel %5,%3@+\n\t"
@@ -202,12 +212,14 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		"clrl %5\n\t"		/* clear tmp2 for rest bytes */
 		"subqw #2,%1\n\t"
 		"jlt 5f\n\t"
+	     "20:\t"
 		"movesw %2@+,%5\n\t"	/* have rest >= 2: get word */
 		"movew %5,%3@+\n\t"
 		"swap %5\n\t"		/* into bits 16..31 */
 		"tstw %1\n\t"		/* another byte? */
 		"jeq 6f\n"
-	     "5:\t"
+	     "5:\n"
+	     "21:\t"
 		"movesb %2@,%5\n\t"	/* have odd rest: get byte */
 		"moveb %5,%3@+\n\t"
 		"lslw #8,%5\n\t"	/* into bits 8..15; 16..31 untouched */
@@ -215,7 +227,21 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		"addl %5,%0\n\t"	/* now add rest long to sum */
 		"clrl %5\n\t"
 		"addxl %5,%0\n"		/* add X bit */
-	     "7:\t"
+	     "7:\n"
+		".section __ex_table,\"a\"\n"
+		".long 10b,7b\n"
+		".long 11b,7b\n"
+		".long 12b,7b\n"
+		".long 13b,7b\n"
+		".long 14b,7b\n"
+		".long 15b,7b\n"
+		".long 16b,7b\n"
+		".long 17b,7b\n"
+		".long 18b,7b\n"
+		".long 19b,7b\n"
+		".long 20b,7b\n"
+		".long 21b,7b\n"
+		".text"
 		: "=d" (sum), "=d" (len), "=a" (src), "=a" (dst),
 		  "=&d" (tmp1), "=&d" (tmp2)
 		: "0" (sum), "1" (len), "2" (src), "3" (dst)
@@ -223,7 +249,7 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 	return(sum);
 }
 /*
- * copy from ds while checksumming, otherwise like csum_partial
+ * copy from kernel space while checksumming, otherwise like csum_partial
  */
 
 unsigned int

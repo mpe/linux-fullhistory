@@ -30,7 +30,7 @@
 
 #include <asm/setup.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
@@ -96,7 +96,6 @@ void trap_init (void)
 		vectors[VEC_FPNAN] = snan_vec;
 		vectors[VEC_FPOE] = operr_vec;
 		vectors[VEC_FPBRUC] = bsun_vec;
-		vectors[VEC_FPBRUC] = bsun_vec;
 		vectors[VEC_LINE11] = fline_vec;
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 	}
@@ -159,7 +158,11 @@ char *vec_names[] = {
 	"SYSCALL", "TRAP #1", "TRAP #2", "TRAP #3",
 	"TRAP #4", "TRAP #5", "TRAP #6", "TRAP #7",
 	"TRAP #8", "TRAP #9", "TRAP #10", "TRAP #11",
-	"TRAP #12", "TRAP #13", "TRAP #14", "TRAP #15"
+	"TRAP #12", "TRAP #13", "TRAP #14", "TRAP #15",
+	"FPCP BSUN", "FPCP INEXACT", "FPCP DIV BY 0", "FPCP UNDERFLOW",
+	"FPCP OPERAND ERROR", "FPCP OVERFLOW", "FPCP SNAN",
+	"FPCP UNSUPPORTED OPERATION",
+	"MMU CONFIGUATION ERROR"
 	};
 
 char *space_names[] = {
@@ -205,7 +208,7 @@ static inline void access_error060 (struct frame *fp)
 #endif
 		if (fslw & MMU060_MA)
 			addr = PAGE_ALIGN(addr);
-		do_page_fault( (struct pt_regs *)fp, addr, errorcode );
+		do_page_fault(&fp->ptregs, addr, errorcode);
 	}
 	else {
 		printk( "68060 access error, fslw=%lx\n", fslw );
@@ -263,20 +266,20 @@ static void do_040writeback (unsigned short ssw,
 
 	mmusr = probe040 (1, wbs & WBTM_040,  wba);
 	errorcode = (mmusr & MMU_R_040) ? 3 : 2;
-	if (do_page_fault ((struct pt_regs *)fp, wba, errorcode))
+	if (do_page_fault (&fp->ptregs, wba, errorcode))
 	  /* just return if we can't perform the writeback */
 	  return;
 
 	set_fs (wbs & WBTM_040);
 	switch (wbs & WBSIZ_040) {
 	    case BA_SIZE_BYTE:
-		put_fs_byte (wbd & 0xff, (char *)wba);
+		put_user (wbd & 0xff, (char *)wba);
 		break;
 	    case BA_SIZE_WORD:
-		put_fs_word (wbd & 0xffff, (short *)wba);
+		put_user (wbd & 0xffff, (short *)wba);
 		break;
 	    case BA_SIZE_LONG:
-		put_fs_long (wbd, (int *)wba);
+		put_user (wbd, (int *)wba);
 		break;
 	}
 	set_fs (fs);
@@ -317,7 +320,7 @@ static inline void access_error040 (struct frame *fp)
 */
 		errorcode = ((mmusr & MMU_R_040) ? 1 : 0) |
 			((ssw & RW_040) ? 0 : 2);
-		do_page_fault ((struct pt_regs *)fp, addr, errorcode);
+		do_page_fault (&fp->ptregs, addr, errorcode);
 	} else {
 		printk ("68040 access error, ssw=%x\n", ssw);
 		trap_c (fp);
@@ -394,8 +397,8 @@ static inline void bus_error030 (struct frame *fp)
 			}
 			printk ("BAD KERNEL BUSERR\n");
 			die_if_kernel("Oops",&fp->ptregs,0);
-			force_sig(SIGSEGV, current);
-			user_space_fault = 0;
+			force_sig(SIGKILL, current);
+			return;
 		}
 	} else {
 		/* user fault */
@@ -442,9 +445,12 @@ static inline void bus_error030 (struct frame *fp)
 	    if (!(ssw & RW) || ssw & RM)
 		    errorcode |= 2;
 
-	    if (mmusr & (MMU_I | MMU_WP))
-		    do_page_fault ((struct pt_regs *)fp, addr, errorcode);
-	    else if (mmusr & (MMU_B|MMU_L|MMU_S)) {
+	    if (mmusr & (MMU_I | MMU_WP)) {
+		/* Don't try to do anything further if an exception was
+		   handled. */
+		if (do_page_fault (&fp->ptregs, addr, errorcode) < 0)
+			return;
+	    } else if (mmusr & (MMU_B|MMU_L|MMU_S)) {
 		    printk ("invalid %s access at %#lx from pc %#lx\n",
 			    !(ssw & RW) ? "write" : "read", addr,
 			    fp->ptregs.pc);
@@ -572,7 +578,7 @@ static inline void bus_error030 (struct frame *fp)
 #endif
 
 	if (mmusr & MMU_I)
-		do_page_fault ((struct pt_regs *)fp, addr, 0);
+		do_page_fault (&fp->ptregs, addr, 0);
 	else if (mmusr & (MMU_B|MMU_L|MMU_S)) {
 		printk ("invalid insn access at %#lx from pc %#lx\n",
 			addr, fp->ptregs.pc);
@@ -733,18 +739,18 @@ static void dump_stack(struct frame *fp)
 	stack = (unsigned long *)addr;
 	endstack = (unsigned long *)PAGE_ALIGN(addr);
 
-	printk("Stack from %08lx:\n       ", (unsigned long)stack);
+	printk("Stack from %08lx:", (unsigned long)stack);
 	for (i = 0; i < kstack_depth_to_print; i++) {
 		if (stack + 1 > endstack)
 			break;
-		if (i && ((i % 8) == 0))
+		if (i % 8 == 0)
 			printk("\n       ");
-		printk("%08lx ", *stack++);
+		printk(" %08lx", *stack++);
 	}
 
-	printk ("\nCall Trace: ");
+	printk ("\nCall Trace:");
 	stack = (unsigned long *) addr;
-	i = 1;
+	i = 0;
 	module_start = VMALLOC_START;
 	module_end = module_start + MODULE_RANGE;
 	while (stack + 1 <= endstack) {
@@ -760,9 +766,9 @@ static void dump_stack(struct frame *fp)
 		if (((addr >= (unsigned long) &_start) &&
 		     (addr <= (unsigned long) &_etext)) ||
 		    ((addr >= module_start) && (addr <= module_end))) {
-			if (i && ((i % 8) == 0))
+			if (i % 4 == 0)
 				printk("\n       ");
-			printk("[<%08lx>] ", addr);
+			printk(" [<%08lx>]", addr);
 			i++;
 		}
 	}
@@ -775,7 +781,7 @@ static void dump_stack(struct frame *fp)
 void bad_super_trap (struct frame *fp)
 {
 	console_verbose();
-	if ((fp->ptregs.vector) < 48*4)
+	if (fp->ptregs.vector < 4*sizeof(vec_names)/sizeof(vec_names[0]))
 		printk ("*** %s ***   FORMAT=%X\n",
 			vec_names[(fp->ptregs.vector) >> 2],
 			fp->ptregs.format);

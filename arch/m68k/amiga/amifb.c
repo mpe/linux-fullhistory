@@ -51,7 +51,7 @@
 #include <linux/config.h>
 #include <linux/interrupt.h>
 #include <asm/setup.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/amigahw.h>
@@ -144,7 +144,7 @@
       - hsstop:   End of horizontal synchronization pulse
       - htotal:   Last value on the line (i.e. line length = htotal+1)
       - vsstrt:   Start of vertical synchronization pulse
-      - vsstop:   Start of vertical synchronization pulse
+      - vsstop:   End of vertical synchronization pulse
       - vtotal:   Last line value (i.e. number of lines = vtotal+1)
       - hcenter:  Start of vertical retrace for interlace
 
@@ -154,7 +154,7 @@
       - hbstrt:   Start of horizontal blank
       - hbstop:   End of horizontal blank
       - vbstrt:   Start of vertical blank
-      - vbstop:   Start of vertical blank
+      - vbstop:   End of vertical blank
 
    Horizontal values are in color clock cycles (280 ns), vertical values are in
    scanlines.
@@ -1679,7 +1679,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(crsrfix));
 			if (!i) {
 				i = amiga_fb_get_fix_cursorinfo(&crsrfix, con);
-				memcpy_tofs((void *)arg, &crsrfix, sizeof(crsrfix));
+				copy_to_user((void *)arg, &crsrfix, sizeof(crsrfix));
 			}
 			return i;
 		}
@@ -1690,7 +1690,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			if (!i) {
 				i = amiga_fb_get_var_cursorinfo(&crsrvar,
 					((struct fb_var_cursorinfo *)arg)->data, con);
-				memcpy_tofs((void *)arg, &crsrvar, sizeof(crsrvar));
+				copy_to_user((void *)arg, &crsrvar, sizeof(crsrvar));
 			}
 			return i;
 		}
@@ -1699,7 +1699,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 
 			i = verify_area(VERIFY_READ, (void *)arg, sizeof(crsrvar));
 			if (!i) {
-				memcpy_fromfs(&crsrvar, (void *)arg, sizeof(crsrvar));
+				copy_from_user(&crsrvar, (void *)arg, sizeof(crsrvar));
 				i = amiga_fb_set_var_cursorinfo(&crsrvar,
 					((struct fb_var_cursorinfo *)arg)->data, con);
 			}
@@ -1711,7 +1711,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(crsrstate));
 			if (!i) {
 				i = amiga_fb_get_cursorstate(&crsrstate, con);
-				memcpy_tofs((void *)arg, &crsrstate, sizeof(crsrstate));
+				copy_to_user((void *)arg, &crsrstate, sizeof(crsrstate));
 			}
 			return i;
 		}
@@ -1720,7 +1720,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 
 			i = verify_area(VERIFY_READ, (void *)arg, sizeof(crsrstate));
 			if (!i) {
-				memcpy_fromfs(&crsrstate, (void *)arg, sizeof(crsrstate));
+				copy_from_user(&crsrstate, (void *)arg, sizeof(crsrstate));
 				i = amiga_fb_set_cursorstate(&crsrstate, con);
 			}
 			return i;
@@ -1732,7 +1732,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct amiga_fb_par));
 			if (!i) {
 				ami_get_par(&par);
-				memcpy_tofs((void *)arg, &par, sizeof(struct amiga_fb_par));
+				copy_to_user((void *)arg, &par, sizeof(struct amiga_fb_par));
 			}
 			return i;
 		}
@@ -1741,7 +1741,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 
 			i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct amiga_fb_par));
 			if (!i) {
-				memcpy_fromfs(&par, (void *)arg, sizeof(struct amiga_fb_par));
+				copy_from_user(&par, (void *)arg, sizeof(struct amiga_fb_par));
 				ami_set_par(&par);
 			}
 			return i;
@@ -2044,11 +2044,11 @@ static int do_fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
 			if (transp)
 				*transp = htransp;
 		} else {
-			put_fs_word(hred, red);
-			put_fs_word(hgreen, green);
-			put_fs_word(hblue, blue);
+			put_user(hred, red);
+			put_user(hgreen, green);
+			put_user(hblue, blue);
 			if (transp)
-				put_fs_word(htransp, transp);
+				put_user(htransp, transp);
 		}
 		red++;
 		green++;
@@ -2081,10 +2081,13 @@ static int do_fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
 			hblue = *blue;
 			htransp = transp ? *transp : 0;
 		} else {
-			hred = get_fs_word(red);
-			hgreen = get_fs_word(green);
-			hblue = get_fs_word(blue);
-			htransp = transp ? get_fs_word(transp) : 0;
+			get_user(hred, red);
+			get_user(hgreen, green);
+			get_user(hblue, blue);
+			if (transp)
+				get_user(htransp, transp);
+			else
+				htransp = 0;
 		}
 		hred = CNVT_TOHW(hred, var->red.length);
 		hgreen = CNVT_TOHW(hgreen, var->green.length);
@@ -2119,10 +2122,10 @@ static void memcpy_fs(int fsfromto, void *to, void *from, int len)
 			memcpy(to, from, len);
 			return;
 		case 1:
-			memcpy_fromfs(to, from, len);
+			copy_from_user(to, from, len);
 			return;
 		case 2:
-			memcpy_tofs(to, from, len);
+			copy_to_user(to, from, len);
 			return;
 	}
 }
@@ -2256,7 +2259,7 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 }
 
 	/*
-	 * Get a Video Modes
+	 * Get a Video Mode
 	 */
 
 static void get_video_mode(const char *name)
@@ -3212,7 +3215,7 @@ static int ami_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, i
 				"clrb %0 ; swap %1 ; lslw #1,%1 ; roxlb #1,%0 ; "
 				"swap %1 ; lslw #1,%1 ; roxlb #1,%0"
 				: "=d" (color), "=d" (datawords) : "1" (datawords));
-			put_fs_byte(color, data++);
+			put_user(color, data++);
 		}
 		if (bits > 0) {
 			--words; ++lspr;
@@ -3269,10 +3272,14 @@ static int ami_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, i
 	for (height = (short)var->height-1; height >= 0; height--) {
 		bits = 16; words = delta; datawords = 0;
 		for (width = (short)var->width-1; width >= 0; width--) {
+			unsigned long tdata = 0;
+			get_user(tdata, (char *)data);
+			data++;
 			asm volatile (
 				"lsrb #1,%2 ; roxlw #1,%0 ; swap %0 ; "
 				"lsrb #1,%2 ; roxlw #1,%0 ; swap %0"
-				: "=d" (datawords) : "0" (datawords), "d" ((u_long)(get_fs_byte(data++))));
+				: "=d" (datawords)
+				: "0" (datawords), "d" (tdata));
 			if (--bits == 0) {
 				bits = 16; --words;
 				asm volatile ("swap %2 ; movew %2,%0@(%3:w:2) ; swap %2 ; movew %2,%0@+"

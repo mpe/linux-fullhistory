@@ -67,6 +67,7 @@
 #include <asm/machdep.h>
 
 #include <asm/system.h>
+#include <asm/uaccess.h>
 
 #include "../../../drivers/char/vt_kern.h"   /* vt_cons and vc_resize_con() */
 
@@ -244,7 +245,7 @@ static int fbcon_blank(int blank);
     *    Internal routines
     */
 
-static void fbcon_setup(int con, int setcol, int cls);
+static void fbcon_setup(int con, int setcol, int init);
 static __inline__ void *mymemclear_small(void *s, size_t count);
 static __inline__ void *mymemclear(void *s, size_t count);
 static __inline__ void *mymemset(void *s, size_t count);
@@ -547,7 +548,7 @@ static void fbcon_init(struct vc_data *conp)
    if (unit)
       disp[unit] = disp[0];
    disp[unit].conp = conp;
-   fbcon_setup(unit, 1, 0);
+   fbcon_setup(unit, 1, 1);
 }
 
 
@@ -560,15 +561,16 @@ static int fbcon_deinit(struct vc_data *conp)
 
 static int fbcon_changevar(int con)
 {
-   fbcon_setup(con, 1, 1);
+   fbcon_setup(con, 1, 0);
    return(0);
 }
 
 
-static void fbcon_setup(int con, int setcol, int cls)
+static void fbcon_setup(int con, int setcol, int init)
 {
    struct display *p = &disp[con];
    struct vc_data *conp = p->conp;
+   int nr_rows, nr_cols;
 
    p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
 
@@ -588,8 +590,15 @@ static void fbcon_setup(int con, int setcol, int cls)
    else
       p->scrollmode = SCROLL_YMOVE;
 
-   conp->vc_cols = p->var.xres/p->fontwidth;
-   conp->vc_rows = p->var.yres/p->fontheight;
+   nr_cols = p->var.xres/p->fontwidth;
+   nr_rows = p->var.yres/p->fontheight;
+   /* ++guenther: console.c:vc_allocate() relies on initializing vc_{cols,rows},
+    * but we must not set those if we are only resizing the console.
+    */
+   if (init) {
+      conp->vc_cols = nr_cols;
+      conp->vc_rows = nr_rows;
+   }
    p->vrows = p->var.yres_virtual/p->fontheight;
    conp->vc_can_do_color = p->var.bits_per_pixel != 1;
 
@@ -701,8 +710,8 @@ fail:
       p->bgcol = 0;
    }
 
-   if (cls)
-      vc_resize_con(conp->vc_rows, conp->vc_cols, con);
+   if (!init)
+      vc_resize_con(nr_rows, nr_cols, con);
 }
 
 
@@ -1467,6 +1476,10 @@ static int fbcon_cursor(struct vc_data *conp, int mode)
    int unit = conp->vc_num;
    struct display *p = &disp[unit];
 
+   /* Avoid flickering if there's no real change. */
+   if (p->cursor_x == conp->vc_x && p->cursor_y == conp->vc_y &&
+       (mode == CM_ERASE) == !cursor_on)
+      return 0;
    if (CURSOR_UNDRAWN ())
       p->dispsw->rev_char(p, p->cursor_x, real_y(p, p->cursor_y));
    p->cursor_x = conp->vc_x;
@@ -1752,7 +1765,7 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 	   
 		if ((i = verify_area( VERIFY_READ, (void *)data, MAX_FONT_NAME )))
 			return i;
-		memcpy_fromfs( name, data, MAX_FONT_NAME );
+		copy_from_user( name, data, MAX_FONT_NAME );
 		name[sizeof(name)-1] = 0;
 		
 		if (!findsoftfont( name, &w, &h, (u_char **)&data ))

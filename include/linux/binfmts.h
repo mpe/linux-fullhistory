@@ -18,6 +18,7 @@ struct linux_binprm{
 	unsigned long page[MAX_ARG_PAGES];
 	unsigned long p;
 	int sh_bang;
+	int java;		/* Java binary, prevent recursive invocation */
 	struct inode * inode;
 	int e_uid, e_gid;
 	int argc, envc;

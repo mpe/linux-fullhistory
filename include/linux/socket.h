@@ -157,6 +157,7 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SOL_NETROM	259
 #define SOL_ROSE	260
 #define SOL_DECNET	261
+#define	SOL_X25		262
 #define SOL_TCP		6
 #define SOL_UDP		17
 

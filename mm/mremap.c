@@ -146,6 +146,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
 			do_munmap(addr, old_len);
+			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			return new_addr;
 		}
 		kfree(new_vma);
@@ -192,6 +193,9 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
 			return -EAGAIN;
 	}
+	if ((current->mm->total_vm << PAGE_SHIFT) + (new_len - old_len)
+	    > current->rlim[RLIMIT_AS].rlim_cur)
+		return -ENOMEM;
 
 	/* old_len exactly to the end of the area.. */
 	if (old_len == vma->vm_end - addr &&

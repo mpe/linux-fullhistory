@@ -17,7 +17,7 @@
 #endif
 
 #include <asm/setup.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -66,7 +66,7 @@ void show_mem(void)
     printk("\nMem-info:\n");
     show_free_areas();
     printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-    i = high_memory >> PAGE_SHIFT;
+    i = max_mapnr;
     while (i-- > 0) {
 	total++;
 	if (PageReserved(mem_map+i))
@@ -89,12 +89,14 @@ void show_mem(void)
 #endif
 }
 
+#ifndef mm_cachebits
 /*
  * Bits to add to page descriptors for "normal" caching mode.
  * For 68020/030 this is 0.
  * For 68040, this is _PAGE_CACHE040 (cachable, copyback)
  */
 unsigned long mm_cachebits = 0;
+#endif
 
 pte_t *kernel_page_table (unsigned long *memavailp)
 {
@@ -216,7 +218,8 @@ static unsigned long map_chunk (unsigned long addr,
 			 */
 			for (i = 0; i < 64; i++) {
 				pte_val(ktablep[i]) = physaddr | _PAGE_PRESENT
-					| _PAGE_CACHE040 | _PAGE_GLOBAL040;
+					| _PAGE_CACHE040 | _PAGE_GLOBAL040
+					| _PAGE_ACCESSED;
 				physaddr += PAGE_SIZE;
 			}
 			ktablep += 64;
@@ -227,7 +230,7 @@ static unsigned long map_chunk (unsigned long addr,
 			 * 64 entry section of the page table.
 			 */
 
-			kpointerp[pindex++] = ktable | _PAGE_TABLE;
+			kpointerp[pindex++] = ktable | _PAGE_TABLE | _PAGE_ACCESSED;
 		} else {
 			/*
 			 * 68030, use early termination page descriptors.
@@ -247,16 +250,16 @@ static unsigned long map_chunk (unsigned long addr,
 				
 				tbl = (unsigned long *)get_kpointer_table();
 
-				kpointerp[pindex++] = VTOP(tbl) | _PAGE_TABLE;
+				kpointerp[pindex++] = VTOP(tbl) | _PAGE_TABLE |_PAGE_ACCESSED;
 
 				for (i = 0; i < 64; i++, physaddr += PAGE_SIZE)
-					tbl[i] = physaddr | _PAGE_PRESENT;
+					tbl[i] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
 				
 				/* unmap the zero page */
 				tbl[0] = 0;
 			} else {
 				/* not the first 256K */
-				kpointerp[pindex++] = physaddr | _PAGE_PRESENT;
+				kpointerp[pindex++] = physaddr | _PAGE_PRESENT | _PAGE_ACCESSED;
 #ifdef DEBUG
 				printk ("%lx=%lx ", VTOP(&kpointerp[pindex-1]),
 					kpointerp[pindex-1]);
@@ -302,7 +305,9 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	/* Fix the cache mode in the page descriptors for the 680[46]0.  */
 	if (CPU_IS_040_OR_060) {
 		int i;
+#ifndef mm_cachebits
 		mm_cachebits = _PAGE_CACHE040;
+#endif
 		for (i = 0; i < 16; i++)
 			pgprot_val(protection_map[i]) |= _PAGE_CACHE040;
 	}
@@ -358,17 +363,15 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 
 	memset (swapper_pg_dir, 0, sizeof(pgd_t)*PTRS_PER_PGD);
-	task[0]->tss.pagedir_v = (unsigned long *)swapper_pg_dir;
-	task[0]->tss.pagedir_p = VTOP (swapper_pg_dir);
+
+	/* setup CPU root pointer for swapper task */
+	task[0]->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
+	task[0]->tss.crp[1] = VTOP (swapper_pg_dir);
 
 #ifdef DEBUG
 	printk ("task 0 pagedir at %p virt, %#lx phys\n",
-		task[0]->tss.pagedir_v, task[0]->tss.pagedir_p);
+		swapper_pg_dir, task[0]->tss.crp[1]);
 #endif
-
-	/* setup CPU root pointer for swapper task */
-	task[0]->tss.crp[0] = 0x80000000 | _PAGE_SHORT;
-	task[0]->tss.crp[1] = task[0]->tss.pagedir_p;
 
 	if (CPU_IS_040_OR_060)
 		asm __volatile__ ("movel %0,%/d0\n\t"
@@ -406,10 +409,11 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	extern int _etext;
 
 	end_mem &= PAGE_MASK;
-	high_memory = end_mem;
+	high_memory = (void *) end_mem;
+	max_mapnr = MAP_NR(end_mem);
 
 	start_mem = PAGE_ALIGN(start_mem);
-	while (start_mem < high_memory) {
+	while (start_mem < end_mem) {
 		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
 		start_mem += PAGE_SIZE;
 	}
@@ -445,9 +449,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	}
 	
 #endif
-#ifdef DEBUG
-	printk ("task[0] root table is %p\n", task[0]->tss.pagedir_v);
-#endif
 
 	for (tmp = 0 ; tmp < end_mem ; tmp += PAGE_SIZE) {
 		if (VTOP (tmp) >= mach_max_dma_address)
@@ -466,10 +467,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 			free_page(tmp);
 	}
-	tmp = nr_free_pages << PAGE_SHIFT;
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
-	       tmp >> 10,
-	       high_memory >> 10,
+	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
+	       max_mapnr << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10));
 }
@@ -478,7 +478,7 @@ void si_meminfo(struct sysinfo *val)
 {
     unsigned long i;
 
-    i = high_memory >> PAGE_SHIFT;
+    i = max_mapnr;
     val->totalram = 0;
     val->sharedram = 0;
     val->freeram = nr_free_pages << PAGE_SHIFT;

@@ -626,7 +626,7 @@ int atari_get_irq_list(char *buf)
 			for( p = (irq_node_t *)irq_handler[i].dev_id; p; p = p->next ) {
 				len += sprintf(buf+len, "%s\n", p->devname);
 				if (p->next)
-					len += sprintf( buf+len, "                  " );
+					len += sprintf( buf+len, "                    " );
 			}
 		}
 	}

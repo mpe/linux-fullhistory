@@ -106,7 +106,7 @@ sys_create_module(char *module_name, unsigned long size)
 		return -EPERM;
 	if (module_name == NULL || size == 0)
 		return -EINVAL;
-	if ((error = get_mod_name(module_name, name)) != 0)
+	if ((error = get_mod_name(module_name, name)) < 0)
 		return error;
 	if (find_module(name) != NULL) {
 		return -EEXIST;
@@ -168,7 +168,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		symtab = NULL;
 	}
 #endif
-	if ((error = get_mod_name(module_name, name)) != 0)
+	if ((error = get_mod_name(module_name, name)) < 0)
 		return error;
 	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
 		name, codesize, codesize);
@@ -292,7 +292,7 @@ sys_delete_module(char *module_name)
 		return -EPERM;
 	/* else */
 	if (module_name != NULL) {
-		if ((error = get_mod_name(module_name, name)) != 0)
+		if ((error = get_mod_name(module_name, name)) < 0)
 			return error;
 		if ((mp = find_module(name)) == NULL)
 			return -ENOENT;

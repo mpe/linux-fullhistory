@@ -140,6 +140,7 @@ static void rose_timer(unsigned long param)
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
 			sk->err                  = ETIMEDOUT;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead                 = 1;

@@ -20,8 +20,8 @@ struct semaphore {
 #define MUTEX ((struct semaphore) { 1, 0, NULL })
 #define MUTEX_LOCKED ((struct semaphore) { 0, 0, NULL })
 
-asmlinkage void down_failed(void /* special register calling convention */);
-asmlinkage void up_wakeup(void /* special register calling convention */);
+asmlinkage void __down_failed(void /* special register calling convention */);
+asmlinkage void __up_wakeup(void /* special register calling convention */);
 
 extern void __down(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
@@ -35,14 +35,14 @@ extern inline void down(struct semaphore * sem)
 {
 	register struct semaphore *sem1 __asm__ ("%a1") = sem;
 	__asm__ __volatile__(
-		"# atomic down operation\n"
-		"1:\n\t"
-		"lea %%pc@(1b),%%a0\n\t"
+		"| atomic down operation\n\t"
+		"lea %%pc@(1f),%%a0\n\t"
 		"subql #1,%0\n\t"
-		"jmi " SYMBOL_NAME_STR(down_failed)
+		"jmi " SYMBOL_NAME_STR(__down_failed) "\n"
+		"1:"
 		: /* no outputs */
 		: "m" (sem->count), "a" (sem1)
-		: "%a0", "%d0", "%d1", "memory");
+		: "%a0", "memory");
 }
 
 /*
@@ -55,14 +55,14 @@ extern inline void up(struct semaphore * sem)
 {
 	register struct semaphore *sem1 __asm__ ("%a1") = sem;
 	__asm__ __volatile__(
-		"# atomic up operation\n\t"
+		"| atomic up operation\n\t"
 		"lea %%pc@(1f),%%a0\n\t"
 		"addql #1,%0\n\t"
-		"jls " SYMBOL_NAME_STR(up_wakeup) "\n"
+		"jle " SYMBOL_NAME_STR(__up_wakeup) "\n"
 		"1:"
 		: /* no outputs */
 		: "m" (sem->count), "a" (sem1)
-		: "%a0", "%d0", "%d1", "memory");
+		: "%a0", "memory");
 }
 
 #endif

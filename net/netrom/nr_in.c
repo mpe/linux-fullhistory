@@ -123,6 +123,7 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
 			sk->err                = ECONNREFUSED;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead               = 1;
@@ -151,6 +152,7 @@ static int nr_state2_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
 			sk->err                = 0;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead               = 1;
@@ -191,6 +193,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
 			sk->err                = 0;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead               = 1;
@@ -201,6 +204,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
 			sk->err                = ECONNRESET;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead               = 1;

@@ -355,7 +355,7 @@
 #define PROD_BLIZZARD_1230_III (0x0D)	/* Blizzard 1230-III Turbo Board */
 #define PROD_BLIZZARD_1230_IV  (0x11)	/* Blizzard 1230-IV/1260 Turbo Board */
 #define PROD_BLIZZARD_2060SCSI (0x18)	/* Blizzard 2060 SCSI Controller */
-#define PROD_CYBERSTORM        (0x19)	/* CyberStorm */
+#define PROD_CYBERSTORM_II     (0x19)	/* CyberStorm Mk II */
 #define PROD_CYBERVISION       (0x22)	/* CyberVision64 Graphics Board */
 
 #define MANUF_DPS              (0x2169)	/* DPS */

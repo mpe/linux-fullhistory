@@ -1,6 +1,9 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      16 Nov 1996 rev. 2.20 for linux 2.1.10 and 2.0.25
+ *          Added multichannel support.
+ *
  *      27 Sep 1996 rev. 2.12 for linux 2.1.0
  *          Portability cleanups (virtual/bus addressing, little/big endian
  *          support).
@@ -202,6 +205,8 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #undef  DEBUG_STATISTICS
 #undef  DEBUG_RESET
 
+#define MAX_CHANNEL 1
+#define MAX_LUN 8
 #define MAX_TARGET 8
 #define MAX_IRQ 16
 #define MAX_BOARDS 4
@@ -253,9 +258,9 @@ struct mscp {
    unsigned char dcn: 1;                /* disable disconnect */
    unsigned char ca: 1;                 /* use cache (if available) */
    unsigned char sg: 1;                 /* scatter/gather operation */
-   unsigned char target: 3;             /* target SCSI id */
-   unsigned char ch_no: 2;              /* SCSI channel (always 0 for 14f) */
-   unsigned char lun: 3;                /* logical unit number */
+   unsigned char target: 3;             /* SCSI target id */
+   unsigned char channel: 2;            /* SCSI channel number */
+   unsigned char lun: 3;                /* SCSI logical unit number */
    unsigned int data_address PACKED;    /* transfer data pointer */
    unsigned int data_len PACKED;        /* length in bytes */
    unsigned int command_link PACKED;    /* for linking command chains */
@@ -288,8 +293,8 @@ struct hostdata {
    char board_name[16];                 /* Name of this board */
    char board_id[256];                  /* data from INQUIRY on this board */
    int in_reset;                        /* True if board is doing a reset */
-   int target_time_out[MAX_TARGET];     /* N. of timeout errors on target */
-   int target_reset[MAX_TARGET];        /* If TRUE redo operation on target */
+   int target_to[MAX_TARGET][MAX_CHANNEL]; /* N. of timeout errors on target */
+   int target_redo[MAX_TARGET][MAX_CHANNEL]; /* If TRUE redo i/o on target */
    unsigned int retries;                /* Number of internal retries */
    unsigned long last_retried_pid;      /* Pid of last retried command */
    unsigned char subversion;            /* Bus type, either ISA or ESA */
@@ -300,8 +305,8 @@ struct hostdata {
    unsigned char slot;
    };
 
-static struct Scsi_Host * sh[MAX_BOARDS + 1];
-static const char* driver_name = "Ux4F";
+static struct Scsi_Host *sh[MAX_BOARDS + 1];
+static const char *driver_name = "Ux4F";
 static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
@@ -324,7 +329,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 static void u14_34f_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 
-static inline unchar wait_on_busy(ushort iobase) {
+static inline int wait_on_busy(unsigned int iobase) {
    unsigned int loop = MAXLOOP;
 
    while (inb(iobase + REG_LCL_INTR) & BSY_ASSERTED)
@@ -376,9 +381,9 @@ static int board_inquiry(unsigned int j) {
    return FALSE;
 }
 
-static inline int port_detect(ushort *port_base, unsigned int j, 
-			      Scsi_Host_Template * tpnt) {
-   unsigned char irq, dma_channel, subversion;
+static inline int port_detect(unsigned int *port_base, unsigned int j, 
+			      Scsi_Host_Template *tpnt) {
+   unsigned char irq, dma_channel, subversion, c;
    unsigned char in_byte;
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
@@ -466,6 +471,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       }
 
    sh[j]->io_port = *port_base;
+   sh[j]->unique_id = *port_base;
    sh[j]->n_io_port = REGION_SIZE;
    sh[j]->base = bios_segment_table[config_1.bios_segment];
    sh[j]->irq = irq;
@@ -524,6 +530,10 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       enable_dma(dma_channel);
       }
 
+   sh[j]->max_channel = MAX_CHANNEL - 1;
+   sh[j]->max_id = MAX_TARGET;
+   sh[j]->max_lun = MAX_LUN;
+
    if (HD(j)->subversion == ISA && !board_inquiry(j)) {
       HD(j)->board_id[40] = 0;
 
@@ -538,21 +548,29 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, DMA %u, SG %d, "\
 	  "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
-	  (int)sh[j]->base, sh[j]->irq, 
-	  sh[j]->dma_channel, sh[j]->sg_tablesize, 
-	  sh[j]->can_queue, sh[j]->cmd_per_lun,
+	  (int)sh[j]->base, sh[j]->irq, sh[j]->dma_channel,
+          sh[j]->sg_tablesize, sh[j]->can_queue, sh[j]->cmd_per_lun,
 	  sh[j]->hostt->use_clustering);
+
+   if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
+      printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
+             BN(j), sh[j]->max_id, sh[j]->max_lun);
+
+   for (c = 0; c <= sh[j]->max_channel; c++)
+      printk("%s: SCSI channel %u enabled, host target ID %u.\n",
+             BN(j), c, sh[j]->this_id);
+
    return TRUE;
 }
 
-int u14_34f_detect (Scsi_Host_Template * tpnt) {
+int u14_34f_detect(Scsi_Host_Template *tpnt) {
    unsigned int j = 0, k, flags;
 
-   ushort io_port[] = {
+   unsigned int io_port[] = {
       0x330, 0x340, 0x230, 0x240, 0x210, 0x130, 0x140, 0x0
       };
 
-   ushort *port_base = io_port;
+   unsigned int *port_base = io_port;
 
    tpnt->proc_dir = &proc_scsi_u14_34f;
 
@@ -582,7 +600,7 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
 
 static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    unsigned int k, data_len = 0;
-   struct scatterlist * sgpnt;
+   struct scatterlist *sgpnt;
 
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
@@ -653,8 +671,9 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->index = i;
    SCpnt->host_scribble = (unsigned char *) &cpp->index;
 
-   if (do_trace) printk("%s: qcomm, mbox %d, target %d, pid %ld.\n",
-			BN(j), i, SCpnt->target, SCpnt->pid);
+   if (do_trace) printk("%s: qcomm, mbox %d, target %d.%d:%d, pid %ld.\n",
+			BN(j), i, SCpnt->channel, SCpnt->target, 
+                        SCpnt->lun, SCpnt->pid);
 
    cpp->xdir = DTD_IN;
 
@@ -665,6 +684,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 	}
 
    cpp->opcode = OP_SCSI;
+   cpp->channel = SCpnt->channel;
    cpp->target = SCpnt->target;
    cpp->lun = SCpnt->lun;
    cpp->SCpnt = SCpnt;
@@ -686,8 +706,9 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    if (wait_on_busy(sh[j]->io_port)) {
       SCpnt->result = DID_ERROR << 16;
       SCpnt->host_scribble = NULL;
-      printk("%s: qcomm, target %d, pid %ld, adapter busy, DID_ERROR, done.\n", 
-	     BN(j), SCpnt->target, SCpnt->pid);
+      printk("%s: qcomm, target %d.%d:%d, pid %ld, adapter busy, DID_ERROR,"\
+             " done.\n", BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun,
+             SCpnt->pid);
       restore_flags(flags);
       done(SCpnt);
       return 0;
@@ -712,15 +733,15 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
 
    if (SCarg->host_scribble == NULL) {
-      printk("%s: abort, target %d, pid %ld inactive.\n",
-	     BN(j), SCarg->target, SCarg->pid);
+      printk("%s: abort, target %d.%d:%d, pid %ld inactive.\n",
+	     BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
       restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
    i = *(unsigned int *)SCarg->host_scribble;
-   printk("%s: abort, mbox %d, target %d, pid %ld.\n",
-	  BN(j), i, SCarg->target, SCarg->pid);
+   printk("%s: abort, mbox %d, target %d.%d:%d, pid %ld.\n",
+	  BN(j), i, SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
 
    if (i >= sh[j]->can_queue)
       panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
@@ -763,16 +784,17 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
    panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
 
-int u14_34f_reset(Scsi_Cmnd * SCarg, unsigned int reset_flags) {
-   unsigned int i, j, flags, time, k, limit = 0;
+int u14_34f_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
+   unsigned int i, j, flags, time, k, c, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
 
    save_flags(flags);
    cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
-   printk("%s: reset, enter, target %d, pid %ld, reset_flags %u.\n", 
-	  BN(j), SCarg->target, SCarg->pid, reset_flags);
+   printk("%s: reset, enter, target %d.%d:%d, pid %ld, reset_flags %u.\n", 
+	  BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid,
+          reset_flags);
 
    if (SCarg->host_scribble == NULL)
       printk("%s: reset, pid %ld inactive.\n", BN(j), SCarg->pid);
@@ -791,9 +813,11 @@ int u14_34f_reset(Scsi_Cmnd * SCarg, unsigned int reset_flags) {
 
    HD(j)->retries = 0;
 
-   for (k = 0; k < MAX_TARGET; k++) HD(j)->target_reset[k] = TRUE;
-
-   for (k = 0; k < MAX_TARGET; k++) HD(j)->target_time_out[k] = 0;
+   for (c = 0; c <= sh[j]->max_channel; c++)
+      for (k = 0; k < sh[j]->max_id; k++) {
+         HD(j)->target_redo[k][c] = TRUE;
+         HD(j)->target_to[k][c] = 0;
+         }
 
    for (i = 0; i < sh[j]->can_queue; i++) {
 
@@ -878,7 +902,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg, unsigned int reset_flags) {
       }
 }
 
-int u14_34f_biosparam(Disk * disk, kdev_t dev, int * dkinfo) {
+int u14_34f_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
    unsigned int j = 0;
    int size = disk->capacity;
 
@@ -888,9 +912,10 @@ int u14_34f_biosparam(Disk * disk, kdev_t dev, int * dkinfo) {
    return 0;
 }
 
-static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * regs) {
+static void u14_34f_interrupt_handler(int irq, void *dev_id,
+                                      struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
-   unsigned int i, j, k, flags, status, tstatus, loops, total_loops = 0;
+   unsigned int i, j, k, c, flags, status, tstatus, loops, total_loops = 0;
    struct mscp *spp;
 
    save_flags(flags);
@@ -975,9 +1000,8 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 		  status = DID_ERROR << 16;
 
 	       /* If there was a bus reset, redo operation on each target */
-	       else if (tstatus != GOOD
-			&& SCpnt->device->type == TYPE_DISK
-			&& HD(j)->target_reset[SCpnt->target])
+	       else if (tstatus != GOOD && SCpnt->device->type == TYPE_DISK
+		        && HD(j)->target_redo[SCpnt->target][SCpnt->channel])
 		  status = DID_BUS_BUSY << 16;
 
 	       /* Works around a flaw in scsi.c */
@@ -990,26 +1014,27 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 		  status = DID_OK << 16;
 
 	       if (tstatus == GOOD)
-		  HD(j)->target_reset[SCpnt->target] = FALSE;
+		  HD(j)->target_redo[SCpnt->target][SCpnt->channel] = FALSE;
 
 	       if (spp->target_status && SCpnt->device->type == TYPE_DISK)
-		  printk("%s: ihdlr, target %d:%d, pid %ld, target_status "\
-			 "0x%x, sense key 0x%x.\n", BN(j), 
-			 SCpnt->target, SCpnt->lun, SCpnt->pid,
-			 spp->target_status, SCpnt->sense_buffer[2]);
+		  printk("%s: ihdlr, target %d.%d:%d, pid %ld, "\
+                         "target_status 0x%x, sense key 0x%x.\n", BN(j), 
+			 SCpnt->channel, SCpnt->target, SCpnt->lun,
+                         SCpnt->pid, spp->target_status,
+                         SCpnt->sense_buffer[2]);
 
-	       HD(j)->target_time_out[SCpnt->target] = 0;
+	       HD(j)->target_to[SCpnt->target][SCpnt->channel] = 0;
 
                if (HD(j)->last_retried_pid == SCpnt->pid) HD(j)->retries = 0;
 
 	       break;
 	    case ASST:     /* Selection Time Out */
 
-	       if (HD(j)->target_time_out[SCpnt->target] > 1)
+	       if (HD(j)->target_to[SCpnt->target][SCpnt->channel] > 1)
 		  status = DID_ERROR << 16;
 	       else {
 		  status = DID_TIME_OUT << 16;
-		  HD(j)->target_time_out[SCpnt->target]++;
+		  HD(j)->target_to[SCpnt->target][SCpnt->channel]++;
 		  }
 
 	       break;
@@ -1020,8 +1045,10 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 	    case 0x96:     /* Illegal SCSI command */
 	    case 0xa3:     /* SCSI bus reset error */
 
-	       for (k = 0; k < MAX_TARGET; k++) 
-		  HD(j)->target_reset[k] = TRUE;
+	       for (c = 0; c <= sh[j]->max_channel; c++) 
+	          for (k = 0; k < sh[j]->max_id; k++) 
+	             HD(j)->target_redo[k][c] = TRUE;
+   
 
 	    case 0x92:     /* Data over/under-run */
 
@@ -1061,9 +1088,10 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 	     do_trace)
 #endif
 	    printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
-		   " target %d:%d, pid %ld, count %d.\n",
+		   " target %d.%d:%d, pid %ld, count %d.\n",
 		   BN(j), i, spp->adapter_status, spp->target_status,
-		   SCpnt->target, SCpnt->lun, SCpnt->pid, HD(j)->iocount);
+		   SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid,
+                   HD(j)->iocount);
 
 	 /* Set the command state to inactive */
 	 SCpnt->host_scribble = NULL;

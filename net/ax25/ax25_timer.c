@@ -150,12 +150,12 @@ static void ax25_timer(unsigned long param)
 			if (ax25->sk != NULL) {
 				if (ax25->sk->debug)
 					printk(KERN_DEBUG "AX.25 T3 Timeout\n");
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = ETIMEDOUT;
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = ETIMEDOUT;
 				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead  = 1;
+				ax25->sk->dead      = 1;
 			}
 
 			ax25_reset_timer(ax25);
@@ -195,13 +195,13 @@ static void ax25_timer(unsigned long param)
 		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 
 		if (ax25->sk != NULL) {
-			ax25->sk->state = TCP_CLOSE;
-			ax25->sk->err = 0;
+			ax25->sk->state     = TCP_CLOSE;
+			ax25->sk->err       = 0;
 			ax25->sk->shutdown |= SEND_SHUTDOWN;
 			if (!ax25->sk->dead)
 				ax25->sk->state_change(ax25->sk);
-			ax25->sk->dead = 1;
-			ax25->sk->destroy = 1;
+			ax25->sk->dead      = 1;
+			ax25->sk->destroy   = 1;
 		}
 	}
 		                                                                                                                                                                                                                                                                                                                                        
@@ -239,12 +239,12 @@ void ax25_t1_timeout(ax25_cb * ax25)
 					ax25_clear_queues(ax25);
 					ax25->state = AX25_STATE_0;
 					if (ax25->sk != NULL) {
-						ax25->sk->state = TCP_CLOSE;
-						ax25->sk->err   = ETIMEDOUT;
+						ax25->sk->state     = TCP_CLOSE;
+						ax25->sk->err       = ETIMEDOUT;
 						ax25->sk->shutdown |= SEND_SHUTDOWN;
 						if (!ax25->sk->dead)
 							ax25->sk->state_change(ax25->sk);
-						ax25->sk->dead  = 1;
+						ax25->sk->dead      = 1;
 					}
 				} else {
 					ax25->modulus = MODULUS;
@@ -270,12 +270,12 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 				
 				if (ax25->sk != NULL) {
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = ETIMEDOUT;
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = ETIMEDOUT;
 					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25->sk->dead      = 1;
 				}
 			} else {
 				ax25->n2count++;
@@ -300,12 +300,12 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				if (ax25->sk != NULL) {
 					if (ax25->sk->debug)
 						printk(KERN_DEBUG "AX.25 link Failure\n");
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = ETIMEDOUT;
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = ETIMEDOUT;
 					ax25->sk->shutdown |= SEND_SHUTDOWN;
 					if (!ax25->sk->dead)
 						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25->sk->dead      = 1;
 				}
 			} else {
 				ax25->n2count++;

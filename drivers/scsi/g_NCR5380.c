@@ -386,14 +386,15 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	blocks--;
     }
 
+    if (blocks) {
 #if (NDEBUG & NDEBUG_C400_PREAD)
-    printk("53C400r: EXTRA: Waiting for buffer\n");
+	printk("53C400r: EXTRA: Waiting for buffer\n");
 #endif
-    while (NCR5380_read(C400_CONTROL_STATUS_REG) & CSR_HOST_BUF_NOT_RDY)
-	;
+	while (NCR5380_read(C400_CONTROL_STATUS_REG) & CSR_HOST_BUF_NOT_RDY)
+	    ;
 
 #if (NDEBUG & NDEBUG_C400_PREAD)
-    printk("53C400r: Transferring EXTRA 128 bytes\n");
+	printk("53C400r: Transferring EXTRA 128 bytes\n");
 #endif
 #ifdef CONFIG_SCSI_G_NCR5380_PORT
 	for (i=0; i<128; i++)
@@ -402,8 +403,13 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	/* implies CONFIG_SCSI_G_NCR5380_MEM */
 	memmove(dst+start,NCR53C400_host_buffer+NCR5380_map_name,128);
 #endif
-    start+=128;
-    blocks--;
+	start+=128;
+	blocks--;
+    }
+#if (NDEBUG & NDEBUG_C400_PREAD)
+    else
+	printk("53C400r: No EXTRA required\n");
+#endif
 
 #if (NDEBUG & NDEBUG_C400_PREAD)
     printk("53C400r: Final values: blocks=%d   start=%d\n", blocks, start);

@@ -122,6 +122,7 @@ static void nr_kill_by_device(struct device *dev)
 			s->protinfo.nr->device = NULL;
 			s->state               = TCP_CLOSE;
 			s->err                 = ENETUNREACH;
+			s->shutdown           |= SEND_SHUTDOWN;
 			s->state_change(s);
 			s->dead                = 1;
 		}
@@ -322,6 +323,7 @@ static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
 			sk->err                = ENETRESET;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead               = 1;
@@ -728,6 +730,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 
 		case NR_STATE_0:
 			sk->state     = TCP_CLOSE;
+			sk->shutdown |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead      = 1;
 			nr_destroy_socket(sk);
@@ -736,6 +739,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 		case NR_STATE_1:
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead               = 1;
 			nr_destroy_socket(sk);
@@ -745,6 +749,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			nr_write_internal(sk, NR_DISCACK);
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
+			sk->shutdown           = SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead               = 1;
 			nr_destroy_socket(sk);
@@ -759,6 +764,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			sk->protinfo.nr->t4timer = 0;
 			sk->protinfo.nr->state   = NR_STATE_2;
 			sk->state                = TCP_CLOSE;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead                 = 1;
 			sk->destroy              = 1;
@@ -1139,6 +1145,11 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	if (sk->zapped)
 		return -EADDRNOTAVAIL;
 
+	if (sk->shutdown & SEND_SHUTDOWN) {
+		send_sig(SIGPIPE, current, 0);
+		return -EPIPE;
+	}
+
 	if (sk->protinfo.nr->device == NULL)
 		return -ENETUNREACH;
 		
@@ -1253,11 +1264,12 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 	}
 
 	copied = skb->len;
-	if(copied>size)
-	{
-		copied=size;
-		msg->msg_flags|=MSG_TRUNC;
+
+	if (copied > size) {
+		copied = size;
+		msg->msg_flags |= MSG_TRUNC;
 	}
+
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax != NULL) {

@@ -477,7 +477,7 @@ BEGIN_PROD(PHASE5)
    PROD("Blizzard 1230-III Turbo Board", BLIZZARD_1230_III)
    PROD("Blizzard 1230-IV/1260 Turbo Board", BLIZZARD_1230_IV)
    PROD("Blizzard 2060 SCSI Controller", BLIZZARD_2060SCSI)
-   PROD("CyberStorm", CYBERSTORM)
+   PROD("CyberStorm Mk II", CYBERSTORM_II)
    PROD("CyberVision64 Graphics Board", CYBERVISION)
 END
 

@@ -66,7 +66,8 @@ static struct enet_statistics *	sit_get_stats(struct device *dev);
 static void			sit_err(int type, int code, 
 					unsigned char *buff, __u32 info,
 					__u32 daddr, __u32 saddr,
-					struct inet_protocol *protocol);
+					struct inet_protocol *protocol,
+					int len);
 
 static struct inet_protocol sit_protocol = {
 	sit_rcv,
@@ -349,7 +350,8 @@ void sit_cleanup(void)
  */
 
 static void sit_err(int type, int code, unsigned char *buff, __u32 info,
-		    __u32 daddr, __u32 saddr, struct inet_protocol *protocol)
+		    __u32 daddr, __u32 saddr, struct inet_protocol *protocol,
+		    int len)
 		    
 {
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)

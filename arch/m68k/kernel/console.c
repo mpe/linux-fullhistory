@@ -119,7 +119,7 @@
 #include <linux/ioport.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
@@ -1134,7 +1134,7 @@ static void set_mode(int currcons, int on_off)
 				if (on_off)
 					set_kbd(decckm);
 				else
-					clr_kbd(decckm); 
+					clr_kbd(decckm);
 				break;
 			case 3:	/* 80/132 mode switch unimplemented */
 				deccolm = on_off;
@@ -1371,7 +1371,7 @@ static void restore_cur(int currcons)
 	need_wrap = 0;
 }
 
-enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey, 
+enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey,
 	EShash, ESsetG0, ESsetG1, ESpercent, ESignore, ESnonstd,
 	ESpalette };
 
@@ -1457,8 +1457,18 @@ static void con_start(struct tty_struct *tty)
 	set_leds();
 }
 
-static int con_write(struct tty_struct * tty, int from_user,
-		     const unsigned char *buf, int count)
+static void con_flush_chars(struct tty_struct *tty)
+{
+	unsigned int currcons;
+	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
+
+	currcons = vt->vc_num;
+	if (vcmode != KD_GRAPHICS)
+		set_cursor(currcons);
+}	
+
+static int do_con_write(struct tty_struct * tty, int from_user,
+			const unsigned char *buf, int count)
 {
 	int c, tc, ok, n = 0;
 	unsigned int currcons;
@@ -1486,7 +1496,10 @@ static int con_write(struct tty_struct * tty, int from_user,
         disable_bh(CONSOLE_BH);
 	while (count) {
 		enable_bh(CONSOLE_BH);
-		c = from_user ? get_user(buf) : *buf;
+		if (from_user)
+			get_user(c, buf);
+		else
+			c = *buf;
 		buf++; n++; count--;
 		disable_bh(CONSOLE_BH);
 
@@ -1541,7 +1554,8 @@ static int con_write(struct tty_struct * tty, int from_user,
                 ok = tc && (c >= 32 ||
                             (!utf && !(((disp_ctrl ? CTRL_ALWAYS
                                          : CTRL_ACTION) >> c) & 1)))
-                        && (c != 127 || disp_ctrl);
+                        && (c != 127 || disp_ctrl)
+			&& (c != 128+27);
 
 		if (vc_state == ESnormal && ok) {
 			/* Now try to find out how to display it */
@@ -1561,7 +1575,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 				cr(currcons);
 				lf(currcons);
 			}
-			
+
 #if 1 /* XXX */
                         /* DPC: 1994-04-12
                          *   Speed up overstrike mode, using new putcs.
@@ -1581,7 +1595,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 
 				*p++ = tc;
 				*pos++ = tc | (attr << 8);
-				
+
 				if (nextx == cols) {
 					sw->con_putc(vc_cons[currcons].d,
 						     *putcs_buf, y, x);
@@ -1591,11 +1605,14 @@ static int con_write(struct tty_struct * tty, int from_user,
 				}
 				
 				/* TAB TAB TAB - Arghh!!!! */
-				
+
 				while (count)
 				{
 					enable_bh(CONSOLE_BH);
-					c = from_user ? get_user(buf) : *buf;
+					if (from_user)
+						get_user(c, buf);
+					else
+						c = *buf;
 					disable_bh(CONSOLE_BH);
 					tc = translate[toggle_meta ? (c|0x80) : c];
 					if (!tc ||
@@ -1655,6 +1672,8 @@ static int con_write(struct tty_struct * tty, int from_user,
 		 *  of an escape sequence.
 		 */
 		switch (c) {
+		    case 0:
+			continue;
 		    case 7:
 			if (bell_duration)
 			    kd_mksound(bell_pitch, bell_duration);
@@ -2000,10 +2019,24 @@ static int con_write(struct tty_struct * tty, int from_user,
 			vc_state = ESnormal;
 		}
 	}
-	if (vcmode != KD_GRAPHICS)
-		set_cursor(currcons);
 	enable_bh(CONSOLE_BH);
 	return n;
+}
+
+static int con_write(struct tty_struct * tty, int from_user,
+		     const unsigned char *buf, int count)
+{
+	int	retval;
+	
+	retval = do_con_write(tty, from_user, buf, count);
+	con_flush_chars(tty);
+	
+	return retval;
+}
+
+static void con_put_char(struct tty_struct *tty, unsigned char ch)
+{
+	do_con_write(tty, 0, &ch, 1);
 }
 
 static int con_write_room(struct tty_struct *tty)
@@ -2208,6 +2241,8 @@ unsigned long con_init(unsigned long kmem_start)
 	console_driver.open = con_open;
 	console_driver.write = con_write;
 	console_driver.write_room = con_write_room;
+	console_driver.put_char = con_put_char;
+	console_driver.flush_chars = con_flush_chars;
 	console_driver.chars_in_buffer = con_chars_in_buffer;
 	console_driver.ioctl = vt_ioctl;
 	console_driver.stop = con_stop;
@@ -2474,12 +2509,7 @@ static int set_get_font(char * arg, int set, int ch512)
 	int i, unit, size;
 	char *charmap;
 
-	if (arg){
-		i = verify_area(set ? VERIFY_READ : VERIFY_WRITE,
-				(void *)arg, ch512 ? 2*cmapsz : cmapsz);
-		if (i)
-			return i;
-	}else
+	if (!arg)
 		return -EINVAL;
 
 
@@ -2488,7 +2518,10 @@ static int set_get_font(char * arg, int set, int ch512)
 	charmap = (char *)kmalloc(size, GFP_USER);
 
 	if (set){
-		memcpy_fromfs(charmap, arg, size);
+		if (copy_from_user(charmap, arg, size)) {
+			kfree(charmap);
+			return -EFAULT;
+		}
 
 		for (unit = 32; unit > 0; unit--)
 			for (i = 0; i < (ch512 ? 512 : 256); i++)
@@ -2501,7 +2534,8 @@ static int set_get_font(char * arg, int set, int ch512)
 		memset(charmap, 0, size);
 		i = conswitchp->con_get_font(vc_cons[fg_console].d,
 					     &unit, &unit, charmap);
-		memcpy_tofs(arg, charmap, size);
+		if (i == 0 && copy_to_user(arg, charmap, size))
+			i = -EFAULT;
 	}
 	kfree(charmap);
 
@@ -2572,7 +2606,8 @@ int con_adjust_height(unsigned long fontheight)
 void set_vesa_blanking(int arg)
 {
 	char *argp = (char *)arg + 1;
-	unsigned int mode = get_fs_byte(argp);
+	unsigned int mode;
+	get_user(mode, argp);
 	vesa_blank_mode = (mode < 4) ? mode : 0;
 }
 

@@ -200,7 +200,8 @@ struct task_struct {
 	int session;
 	/* boolean value for session group leader */
 	int leader;
-	int	groups[NGROUPS];
+	int ngroups;
+	gid_t groups[NGROUPS];
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with 
@@ -290,7 +291,7 @@ struct task_struct {
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
-/* suppl grps*/ {NOGROUP,}, \
+/* suppl grps*/ 0, {0,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \

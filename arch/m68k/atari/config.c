@@ -514,7 +514,7 @@ mste_write(struct MSTE_RTC *val)
 void atari_mste_gettod (int *yearp, int *monp, int *dayp,
 			int *hourp, int *minp, int *secp)
 {
-    int hr24=0;
+    int hr24=0, hour;
     struct MSTE_RTC val;
 
     mste_rtc.mode=(mste_rtc.mode | 1);
@@ -524,13 +524,14 @@ void atari_mste_gettod (int *yearp, int *monp, int *dayp,
     mste_read(&val);
     *secp = val.sec_ones + val.sec_tens * 10;
     *minp = val.min_ones + val.min_tens * 10;
-    if (hr24)
-        *hourp = val.hr_ones + val.hr_tens * 10;
-    else {
-        *hourp = val.hr_ones + (val.hr_tens & 1) * 10;
-        if (val.hr_tens & 2)
-            *hourp += 12;
+    hour = val.hr_ones + val.hr_tens * 10;
+    if (!hr24) {
+        if (hour == 12 || hour == 12 + 20)
+	    hour -= 12;
+	if (hour >= 20)
+	    hour += 12 - 20;
     }
+    *hourp = hour;
     *dayp = val.day_ones + val.day_tens * 10;
     *monp = val.mon_ones + val.mon_tens * 10;
     *yearp = val.year_ones + val.year_tens * 10 + 80;	
@@ -542,33 +543,38 @@ void atari_gettod (int *yearp, int *monp, int *dayp,
 {
     unsigned char	ctrl;
     unsigned short tos_version;
-		
+    int hour, pm;
+
     while (!(RTC_READ(RTC_FREQ_SELECT) & RTC_UIP)) ;
     while (RTC_READ(RTC_FREQ_SELECT) & RTC_UIP) ;
 
     *secp  = RTC_READ(RTC_SECONDS);
     *minp  = RTC_READ(RTC_MINUTES);
-    *hourp = RTC_READ(RTC_HOURS);
+    hour = RTC_READ(RTC_HOURS);
     *dayp  = RTC_READ(RTC_DAY_OF_MONTH);
     *monp  = RTC_READ(RTC_MONTH);
     *yearp = RTC_READ(RTC_YEAR);
+    pm = hour & 0x80;
+    hour &= ~0x80;
 
     ctrl = RTC_READ(RTC_CONTROL); 
 
     if (!(ctrl & RTC_DM_BINARY)) {
         BCD_TO_BIN(*secp);
         BCD_TO_BIN(*minp);
-        BCD_TO_BIN(*hourp);
+        BCD_TO_BIN(hour);
         BCD_TO_BIN(*dayp);
         BCD_TO_BIN(*monp);
         BCD_TO_BIN(*yearp);
     }
     if (!(ctrl & RTC_24H)) {
-        if (*hourp & 0x80) {
-            *hourp &= ~0x80;
-            *hourp += 12;
-        }
+	if (!pm && hour == 12)
+	    hour = 0;
+	else if (pm && hour != 12)
+            hour += 12;
     }
+    *hourp = hour;
+
     /* Adjust values (let the setup valid) */
 
     /* Fetch tos version at Physical 2 */
@@ -603,13 +609,14 @@ int atari_mste_hwclk( int op, struct hwclk_time *t )
         val.min_ones = t->min % 10;
         val.min_tens = t->min / 10;
         hour = t->hour;
+        if (!hr24) {
+	    if (hour > 11)
+		hour += 20 - 12;
+	    if (hour == 0 || hour == 20)
+		hour += 12;
+        }
         val.hr_ones = hour % 10;
         val.hr_tens = hour / 10;
-        if (!hr24  && hour > 11) {
-            hour -= 12;
-            val.hr_ones = hour % 10;
-            val.hr_tens = (hour / 10) | 2;
-        }
         val.day_ones = t->day % 10;
         val.day_tens = t->day / 10;
         val.mon_ones = (t->mon+1) % 10;
@@ -627,13 +634,14 @@ int atari_mste_hwclk( int op, struct hwclk_time *t )
         mste_read(&val);
         t->sec = val.sec_ones + val.sec_tens * 10;
         t->min = val.min_ones + val.min_tens * 10;
-        if (hr24)
-            t->hour = val.hr_ones + val.hr_tens * 10;
-        else {
-            t->hour = val.hr_ones + (val.hr_tens & 1) * 10;
-            if (val.hr_tens & 2)
-                t->hour += 12;
+        hour = val.hr_ones + val.hr_tens * 10;
+	if (!hr24) {
+	    if (hour == 12 || hour == 12 + 20)
+		hour -= 12;
+	    if (hour >= 20)
+                hour += 12 - 20;
         }
+	t->hour = hour;
 	t->day = val.day_ones + val.day_tens * 10;
         t->mon = val.mon_ones + val.mon_tens * 10 - 1;
         t->year = val.year_ones + val.year_tens * 10 + 80;
@@ -648,6 +656,7 @@ int atari_hwclk( int op, struct hwclk_time *t )
     unsigned long 	flags;
     unsigned short	tos_version;
     unsigned char	ctrl;
+    int pm = 0;
 
     /* Tos version at Physical 2.  See above for explanation why we
        cannot use PTOV(2).  */
@@ -667,9 +676,14 @@ int atari_hwclk( int op, struct hwclk_time *t )
         year = t->year - ((tos_version < 0x306) ? 70 : 68);
         wday = t->wday + (t->wday >= 0);
         
-        if (!(ctrl & RTC_24H) && hour > 11) {
-            hour -= 12;
-            hour |= 0x80;
+        if (!(ctrl & RTC_24H)) {
+	    if (hour > 11) {
+		pm = 0x80;
+		if (hour != 12)
+		    hour -= 12;
+	    }
+	    else if (hour == 0)
+		hour = 12;
         }
         
         if (!(ctrl & RTC_DM_BINARY)) {
@@ -716,7 +730,7 @@ int atari_hwclk( int op, struct hwclk_time *t )
     else {
         RTC_WRITE( RTC_SECONDS, sec );
         RTC_WRITE( RTC_MINUTES, min );
-        RTC_WRITE( RTC_HOURS, hour );
+        RTC_WRITE( RTC_HOURS, hour + pm);
         RTC_WRITE( RTC_DAY_OF_MONTH, day );
         RTC_WRITE( RTC_MONTH, mon );
         RTC_WRITE( RTC_YEAR, year );
@@ -728,7 +742,12 @@ int atari_hwclk( int op, struct hwclk_time *t )
     if (!op) {
         /* read: adjust values */
         
-        if (!(ctrl & RTC_DM_BINARY)) {
+        if (hour & 0x80) {
+	    hour &= ~0x80;
+	    pm = 1;
+	}
+
+	if (!(ctrl & RTC_DM_BINARY)) {
             BCD_TO_BIN(sec);
             BCD_TO_BIN(min);
             BCD_TO_BIN(hour);
@@ -739,10 +758,10 @@ int atari_hwclk( int op, struct hwclk_time *t )
         }
 
         if (!(ctrl & RTC_24H)) {
-            if (hour & 0x80) {
-                hour &= ~0x80;
-                hour += 12;
-            }
+	    if (!pm && hour == 12)
+		hour = 0;
+	    else if (pm && hour != 12)
+		hour += 12;
         }
 
         t->sec  = sec;

@@ -139,6 +139,7 @@ static void rose_kill_by_device(struct device *dev)
 			s->protinfo.rose->device = NULL;
 			s->state                 = TCP_CLOSE;
 			s->err                   = ENETUNREACH;
+			s->shutdown             |= SEND_SHUTDOWN;
 			s->state_change(s);
 			s->dead                  = 1;
 		}
@@ -344,6 +345,7 @@ static int rose_ctl_ioctl(const unsigned int cmd, void *arg)
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
 			sk->err                  = ENETRESET;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			if (!sk->dead)
 				sk->state_change(sk);
 			sk->dead                 = 1;
@@ -716,6 +718,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 
 		case ROSE_STATE_0:
 			sk->state     = TCP_CLOSE;
+			sk->shutdown |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead      = 1;
 			rose_destroy_socket(sk);
@@ -724,6 +727,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 		case ROSE_STATE_1:
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead                 = 1;
 			rose_destroy_socket(sk);
@@ -732,6 +736,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 		case ROSE_STATE_2:
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead                 = 1;
 			rose_destroy_socket(sk);
@@ -744,6 +749,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 			sk->protinfo.rose->timer = sk->protinfo.rose->t3;
 			sk->protinfo.rose->state = ROSE_STATE_2;
 			sk->state                = TCP_CLOSE;
+			sk->shutdown            |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead                 = 1;
 			sk->destroy              = 1;
@@ -1077,6 +1083,11 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if (sk->zapped)
 		return -EADDRNOTAVAIL;
 
+	if (sk->shutdown & SEND_SHUTDOWN) {
+		send_sig(SIGPIPE, current, 0);
+		return -EPIPE;
+	}
+
 	if (sk->protinfo.rose->device == NULL)
 		return -ENETUNREACH;
 		
@@ -1202,10 +1213,9 @@ static int rose_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 	copied = skb->len;
 	
-	if(copied>size)
-	{
-		copied=size;
-		msg->msg_flags|=MSG_TRUNC;
+	if (copied > size) {
+		copied = size;
+		msg->msg_flags |= MSG_TRUNC;
 	}
 	
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);

@@ -15,7 +15,6 @@
 #include <linux/mm.h>
 
 #include <asm/machdep.h>
-#include <asm/segment.h>
 #include <asm/io.h>
 
 #include <linux/timex.h>

@@ -629,6 +629,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 		return retval;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
+	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
 	bprm.dont_iput = 0;

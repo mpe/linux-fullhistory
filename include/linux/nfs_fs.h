@@ -103,7 +103,7 @@ extern int nfs_proc_read_request(struct rpc_ioreq *, struct nfs_server *,
 				 unsigned long count, __u32 *buf);
 extern int nfs_proc_read_reply(struct rpc_ioreq *, struct nfs_fattr *);
 extern int *rpc_header(int *p, int procedure, int program, int version,
-				int uid, int gid, int *groups);
+				int uid, int gid, int ngroup, gid_t *groups);
 extern int *rpc_verify(int *p);
 
 /* linux/fs/nfs/sock.c */

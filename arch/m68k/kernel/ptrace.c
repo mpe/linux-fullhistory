@@ -18,7 +18,7 @@
 #include <linux/ptrace.h>
 #include <linux/user.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -140,7 +140,7 @@ repeat:
 	}
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page >= high_memory)
+	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
 	return *(unsigned long *) page;
@@ -196,7 +196,7 @@ repeat:
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page < high_memory) {
+	if (MAP_NR(page) < max_mapnr) {
 		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
 		flush_page_to_ram (page);
 	}
@@ -380,24 +380,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
 				return res;
-			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (!res)
-				put_user(tmp, (unsigned long *) data);
-			return res;
+			return put_user(tmp, (unsigned long *) data);
 		}
 
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
-			int res;
 			
 			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user))
 				return -EIO;
 			
-			res = verify_area(VERIFY_WRITE, (void *) data,
-					  sizeof(long));
-			if (res)
-				return res;
 			tmp = 0;  /* Default return condition */
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < 19) {
@@ -409,8 +401,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				tmp = child->tss.fp[addr - 21];
 			else
 				return -EIO;
-			put_user(tmp,(unsigned long *) data);
-			return 0;
+			return put_user(tmp,(unsigned long *) data);
 		}
 
       /* when I and D space are separate, this will have to be fixed. */

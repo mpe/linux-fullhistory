@@ -28,6 +28,9 @@ extern void inet6_proto_init(struct net_proto *pro);
 #include <net/p8022call.h>
 #include <net/p8022trcall.h>
 #endif
+#ifdef CONFIG_X25
+#include <net/x25call.h>
+#endif
 #ifdef CONFIG_AX25
 #include <net/ax25call.h>
 #ifdef CONFIG_NETROM

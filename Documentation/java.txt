@@ -1,4 +1,4 @@
-               Java(tm) Binary Kernel Support for Linux v1.01
+               Java(tm) Binary Kernel Support for Linux v1.02
                ----------------------------------------------
 
 Linux beats them ALL! While all other OS's are TALKING about direct
@@ -13,9 +13,9 @@ small details:
 
 		ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/Java-HOWTO
 
-	   If you install the JDK in a location other than the suggested
-	   directory of /usr/local/java, then you will need to tell the
-	   kernel where you put the Java interpreter.  
+	   If you install the JDK in a location other than /usr/bin/java,
+	   then you will need to tell the kernel where you put the Java
+	   interpreter.  
            There are two ways to do this.
            One, edit fs/binfmt_java.c file and make the needed change to 
 	   the _PATH_JAVA definition at the top of that file.  
@@ -35,6 +35,14 @@ small details:
 	4) Either compile your kernel with Java support builtin, or
 	   as a loadable module. If a module, load it with insmod or
 	   kerneld.
+
+	5) A caveat.  When executing a java file, the java interpreter is
+	   invoked only with the class name, not with the complete file path.
+	   Therefore it is possible that the file the shell finds with PATH
+	   is not the same file the java interpreter finds with CLASSPATH.
+	   The recommended solution is to make symbolic links from a directory
+	   in PATH to the actual class file in CLASSPATH, e.g.,
+	   /usr/local/bin/myapp -> /usr/local/java/classes/myapp.class.
 
 To test your new setup, enter in the following simple Java app, and name
 it "HelloWorld.java":
@@ -79,8 +87,8 @@ demo/Blink/example1.html file), and:
 	   Java Applet support, so the modified file can still be used
 	   with all known browsers.
 
-	2) If you install the JDK in a location other than the suggested
-	   directory of /usr/local/java, then you will need to tell the
+	2) If you install the applet viewer in a location other than
+	   /usr/bin/appletviewer, then you will need to tell the
 	   kernel where you put the Java appletviewer.  
            There are two ways to do this.
            One, edit fs/binfmt_java.c file and make the needed change to 

@@ -1,7 +1,7 @@
-#ifndef _ASMm68k_SIGCONTEXT_H
-#define _ASMm68k_SIGCONTEXT_H
+#ifndef _ASM_M68k_SIGCONTEXT_H
+#define _ASM_M68k_SIGCONTEXT_H
 
-struct sigcontext_struct {
+struct sigcontext {
 	unsigned long  sc_mask; 	/* old sigmask */
 	unsigned long  sc_usp;		/* old user stack pointer */
 	unsigned long  sc_d0;

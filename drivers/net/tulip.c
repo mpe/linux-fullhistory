@@ -1002,7 +1002,8 @@ tulip_rx(struct device *dev)
 			if (status & TRING_RxFIFO) lp->stats.rx_fifo_errors++;
 		} else {
 			/* Malloc up new buffer, compatible with net-2e. */
-			short pkt_len = lp->rx_ring[entry].status >> 16;
+			/* Omit the four octet CRC from the length. */
+			short pkt_len = (lp->rx_ring[entry].status >> 16) - 4;
 			struct sk_buff *skb;
 
 			skb = dev_alloc_skb(pkt_len + 2);

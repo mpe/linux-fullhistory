@@ -556,10 +556,10 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_CONMODE]   = AX25_DEF_CONMODE;
 	ax25_dev->values[AX25_VALUES_WINDOW]    = AX25_DEF_WINDOW;
 	ax25_dev->values[AX25_VALUES_EWINDOW]   = AX25_DEF_EWINDOW;
-	ax25_dev->values[AX25_VALUES_T1]        = AX25_DEF_T1 * PR_SLOWHZ;
-	ax25_dev->values[AX25_VALUES_T2]        = AX25_DEF_T2 * PR_SLOWHZ;
-	ax25_dev->values[AX25_VALUES_T3]        = AX25_DEF_T3 * PR_SLOWHZ;
-	ax25_dev->values[AX25_VALUES_IDLE]	= AX25_DEF_IDLE * PR_SLOWHZ * 60;
+	ax25_dev->values[AX25_VALUES_T1]        = AX25_DEF_T1;
+	ax25_dev->values[AX25_VALUES_T2]        = AX25_DEF_T2;
+	ax25_dev->values[AX25_VALUES_T3]        = AX25_DEF_T3;
+	ax25_dev->values[AX25_VALUES_IDLE]	= AX25_DEF_IDLE;
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
 	ax25_dev->values[AX25_VALUES_DIGI]      = AX25_DEF_DIGI;
 	ax25_dev->values[AX25_VALUES_PACLEN]	= AX25_DEF_PACLEN;

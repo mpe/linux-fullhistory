@@ -308,10 +308,12 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 	unsigned long grow;
 
 	address &= PAGE_MASK;
-	if (vma->vm_end - address
-	    > (unsigned long) current->rlim[RLIMIT_STACK].rlim_cur)
-		return -ENOMEM;
 	grow = vma->vm_start - address;
+	if (vma->vm_end - address
+	    > (unsigned long) current->rlim[RLIMIT_STACK].rlim_cur ||
+	    (vma->vm_mm->total_vm << PAGE_SHIFT) + grow
+	    > (unsigned long) current->rlim[RLIMIT_AS].rlim_cur)
+		return -ENOMEM;
 	vma->vm_start = address;
 	vma->vm_offset -= grow;
 	vma->vm_mm->total_vm += grow >> PAGE_SHIFT;

@@ -257,11 +257,12 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 
 	if (ax25->device == NULL) {
 		if (ax25->sk != NULL) {
-			ax25->sk->state = TCP_CLOSE;
-			ax25->sk->err   = ENETUNREACH;
+			ax25->sk->state     = TCP_CLOSE;
+			ax25->sk->err       = ENETUNREACH;
+			ax25->sk->shutdown |= SEND_SHUTDOWN;
 			if (!ax25->sk->dead)
 				ax25->sk->state_change(ax25->sk);
-			ax25->sk->dead  = 1;
+			ax25->sk->dead      = 1;
 		}
 		return;
 	}

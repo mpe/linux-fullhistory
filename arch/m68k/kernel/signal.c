@@ -32,7 +32,7 @@
 #include <linux/unistd.h>
 
 #include <asm/setup.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/traps.h>
 
@@ -45,7 +45,7 @@
 asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs);
 
-static const int extra_sizes[16] = {
+const int frame_extra_sizes[16] = {
   0,
   -1, /* sizeof(((struct frame *)0)->un.fmt1), */
   sizeof(((struct frame *)0)->un.fmt2),
@@ -86,7 +86,7 @@ static unsigned char fpu_version = 0;	/* version number of fpu, set by setup_fra
 
 asmlinkage int do_sigreturn(unsigned long __unused)
 {
-	struct sigcontext_struct context;
+	struct sigcontext context;
 	struct pt_regs *regs;
 	struct switch_stack *sw;
 	int fsize = 0;
@@ -103,10 +103,8 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	regs = (struct pt_regs *) (sw + 1);
 
 	/* get previous context (including pointer to possible extra junk) */
-        if (verify_area(VERIFY_READ, (void *)usp, sizeof(context)))
-                goto badframe;
-
-	memcpy_fromfs(&context,(void *)usp, sizeof(context));
+	if (copy_from_user(&context,(void *)usp, sizeof(context)))
+		goto badframe;
 
 	fp = usp + sizeof (context);
 
@@ -163,7 +161,7 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	  }
 	__asm__ volatile ("frestore %0" : : "m" (*context.sc_fpstate));
 
-	fsize = extra_sizes[regs->format];
+	fsize = frame_extra_sizes[regs->format];
 	if (fsize < 0) {
 		/*
 		 * user process trying to return with weird frame format
@@ -182,31 +180,37 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	 */
 
 	if (fsize) {
-		if (verify_area(VERIFY_READ, (void *)fp, fsize))
-                        goto badframe;
-
 #define frame_offset (sizeof(struct pt_regs)+sizeof(struct switch_stack))
 		__asm__ __volatile__
-			("movel %0,%/a0\n\t"
-			 "subl %1,%/a0\n\t"     /* make room on stack */
-			 "movel %/a0,%/sp\n\t"  /* set stack pointer */
+			("   movel %0,%/a0\n\t"
+			 "   subl %1,%/a0\n\t"     /* make room on stack */
+			 "   movel %/a0,%/sp\n\t"  /* set stack pointer */
 			 /* move switch_stack and pt_regs */
 			 "1: movel %0@+,%/a0@+\n\t"
 			 "   dbra %2,1b\n\t"
-			 "lea %/sp@(%c3),%/a0\n\t" /* add offset of fmt stuff */
-			 "lsrl  #2,%1\n\t"
-			 "subql #1,%1\n\t"
+			 "   lea %/sp@(%c3),%/a0\n\t" /* add offset of fmt */
+			 "   lsrl  #2,%1\n\t"
+			 "   subql #1,%1\n\t"
 			 "2: movesl %4@+,%2\n\t"
-			 "   movel %2,%/a0@+\n\t"
+			 "3: movel %2,%/a0@+\n\t"
 			 "   dbra %1,2b\n\t"
-			 "bral " SYMBOL_NAME_STR(ret_from_signal)
+			 "   bral " SYMBOL_NAME_STR(ret_from_signal) "\n"
+			 "4:\n"
+			 ".section __ex_table,\"a\"\n"
+			 "   .align 4\n"
+			 "   .long 2b,4b\n"
+			 "   .long 3b,4b\n"
+			 ".text"
 			 : /* no outputs, it doesn't ever return */
 			 : "a" (sw), "d" (fsize), "d" (frame_offset/4-1),
 			   "n" (frame_offset), "a" (fp)
 			 : "a0");
 #undef frame_offset
+		/*
+		 * If we ever get here an exception occured while
+		 * building the above stack-frame.
+		 */
 		goto badframe;
-		/* NOTREACHED */
 	}
 
 	return regs->d0;
@@ -255,14 +259,14 @@ badframe:
  * longwords for format "B".
  */
 
-#define UFRAME_SIZE(fs) (sizeof(struct sigcontext_struct)/4 + 6 + fs/4)
+#define UFRAME_SIZE(fs) (sizeof(struct sigcontext)/4 + 6 + fs/4)
 
 static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 			 int signr, unsigned long oldmask)
 {
-	struct sigcontext_struct context;
+	struct sigcontext context;
 	unsigned long *frame, *tframe;
-	int fsize = extra_sizes[regs->format];
+	int fsize = frame_extra_sizes[regs->format];
 
 	if (fsize < 0) {
 		printk ("setup_frame: Unknown frame format %#x\n",
@@ -277,10 +281,9 @@ static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 	}
 	frame -= UFRAME_SIZE(fsize);
 
-	if (verify_area(VERIFY_WRITE,frame,UFRAME_SIZE(fsize)*4))
-		do_exit(SIGSEGV);
 	if (fsize) {
-		memcpy_tofs (frame + UFRAME_SIZE(0), regs + 1, fsize);
+		if (copy_to_user (frame + UFRAME_SIZE(0), regs + 1, fsize))
+			do_exit(SIGSEGV);
 		regs->stkadj = fsize;
 	}
 
@@ -326,7 +329,8 @@ static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 				  "m" (*context.sc_fpcntl)
 				  : "memory");
 	}
-	memcpy_tofs (tframe, &context, sizeof(context));
+	if (copy_to_user (tframe, &context, sizeof(context)))
+		do_exit(SIGSEGV);
 
 	/*
 	 * no matter what frame format we were using before, we
@@ -440,7 +444,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 			       isn't restarted (only needed on the
 			       68030).  */
 			    if (regs->format == 10 || regs->format == 11) {
-				regs->stkadj = extra_sizes[regs->format];
+				regs->stkadj = frame_extra_sizes[regs->format];
 				regs->format = 0;
 			    }
 			    continue;

@@ -1395,14 +1395,14 @@ CONFIG_SCSI_EATA_PIO
 
 UltraStor 14F/34F support
 CONFIG_SCSI_U14_34F
-  This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
-  adaptor family. The source at drivers/scsi/u14-34f.c contains some
-  information about this hardware. If the driver doesn't work out of
-  the box, you may have to change some settings in
-  drivers/scsi/u14-34f.h. Read the SCSI-HOWTO, available via ftp
-  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note
-  that there is also another driver for the same hardware: "UltraStor
-  SCSI support", below. You should only enable one of them. This
+  This is support for the UltraStor 14F and 34F SCSI-2 host adapters.
+  The source at drivers/scsi/u14-34f.c contains some information about 
+  this hardware. If the driver doesn't work out of the box, you may have 
+  to change some settings in drivers/scsi/u14-34f.c.
+  Read the SCSI-HOWTO, available via ftp (user: anonymous) at 
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that there is also another
+  driver for the same hardware: "UltraStor SCSI support", below.
+  You should enable both only if you want 24F support as well. This
   driver is also available as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want). If you
   want to compile it as a module, say M here and read
@@ -1649,9 +1649,8 @@ CONFIG_SCSI_ULTRASTOR
   drivers/scsi/ultrastor.h. If you want to compile this as a module (
   = code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
-  Note that there is also another driver for the same hardware:
-  "UltraStor 14F/34F support", above. You should only enable one of
-  them.
+  Note that there is also another driver for UltraStor hardware:
+  "UltraStor 14F/34F support", above.
  
 7000FASST SCSI support
 CONFIG_SCSI_7000FASST
@@ -1662,12 +1661,16 @@ CONFIG_SCSI_7000FASST
   want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support
+EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support
 CONFIG_SCSI_EATA
-  This driver supports all the DPT SCSI host adapters, such as
-  PM2011B/9X, PM2021A/9X, PM2012A, PM1012B, PM2022A/9X, PM2122A/9X and
-  PM2322A/9X. Note that the PM2001 is not supported by this
-  driver. You want to read the start of drivers/scsi/eata.c and the
+  This driver supports all the EATA/DMA-compliant SCSI host adapters
+  and does not need any BIOS32 or PCI BIOS service.
+  Only ISA (0x1F0, 0x170, 0x230, 0x330) and EISA (0x1C88 through 0xFC88)
+  addresses are probed. In order to detect a generic EATA PCI board you
+  can force on it any unused EISA address.
+  Note that there is also another driver for the same hardware:
+  "EATA-DMA support". You should enable only one of them.
+  You want to read the start of drivers/scsi/eata.c and the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the

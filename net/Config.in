@@ -30,6 +30,7 @@ if [ "$CONFIG_AX25" != "n" ]; then
   dep_tristate 'Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+# tristate 'CCITT X.25 Packet Layer' CONFIG_X25
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
 fi
 endmenu

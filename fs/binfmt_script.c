@@ -13,7 +13,8 @@
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *interp, *i_name, *i_arg;
+	char *cp, *i_name, *i_arg;
+	char interp[128];
 	int retval;
 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang)) 
 		return -ENOEXEC;
@@ -38,9 +39,10 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 			break;
 	}
 	for (cp = bprm->buf+2; (*cp == ' ') || (*cp == '\t'); cp++);
-	if (!cp || *cp == '\0') 
+	if (cp == '\0') 
 		return -ENOEXEC; /* No interpreter name found */
-	interp = i_name = cp;
+	strcpy (interp, cp);
+	i_name = cp;
 	i_arg = 0;
 	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++) {
  		if (*cp == '/')
@@ -73,9 +75,8 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
-	 * Note that we use open_namei() as the name is now in kernel
-	 * space, and we don't need to copy it.
 	 */
+	bprm->filename = interp;
 	retval = open_namei(interp, 0, 0, &bprm->inode, NULL);
 	if (retval)
 		return retval;

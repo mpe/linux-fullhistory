@@ -55,7 +55,7 @@ unsigned char cia_set_irq(struct ciabase *base, unsigned char mask)
 		base->icr_data &= ~mask;
 	if (base->icr_data & base->icr_mask)
 		custom.intreq = IF_SETCLR | base->int_mask;
-	return (old & base->icr_mask);
+	return old & base->icr_mask;
 }
 
 /*
@@ -77,12 +77,14 @@ unsigned char cia_able_irq(struct ciabase *base, unsigned char mask)
 		base->icr_mask &= ~mask;
 	base->icr_mask &= CIA_ICR_ALL;
 	for (i = 0, tmp = 1; i < CIA_IRQS; i++, tmp <<= 1) {
-		if ((tmp & base->icr_mask) && !base->irq_list[i].handler)
+		if ((tmp & base->icr_mask) && !base->irq_list[i].handler) {
 			base->icr_mask &= ~tmp;
- 	}
+			base->cia->icr = tmp;
+		}
+	}
 	if (base->icr_data & base->icr_mask)
 		custom.intreq = IF_SETCLR | base->int_mask;
-	return (old);
+	return old;
 }
 
 int cia_request_irq(struct ciabase *base, unsigned int irq,

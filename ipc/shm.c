@@ -424,7 +424,11 @@ static int shm_map (struct vm_area_struct *shmd)
 	do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
 
 	/* add new mapping */
-	current->mm->total_vm += (shmd->vm_end - shmd->vm_start) >> PAGE_SHIFT;
+	tmp = shmd->vm_end - shmd->vm_start;
+	if((current->mm->total_vm << PAGE_SHIFT) + tmp
+	   > (unsigned long) current->rlim[RLIMIT_AS].rlim_cur)
+		return -ENOMEM;
+	current->mm->total_vm += tmp >> PAGE_SHIFT;
 	insert_vm_struct(current->mm, shmd);
 	merge_segments(current->mm, shmd->vm_start, shmd->vm_end);
 

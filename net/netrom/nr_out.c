@@ -227,11 +227,12 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 	if (!nr_route_frame(skb, NULL)) {
 		kfree_skb(skb, FREE_WRITE);
 
-		sk->state = TCP_CLOSE;
-		sk->err   = ENETUNREACH;
+		sk->state     = TCP_CLOSE;
+		sk->err       = ENETUNREACH;
+		sk->shutdown |= SEND_SHUTDOWN;
 		if (!sk->dead)
 			sk->state_change(sk);
-		sk->dead  = 1;
+		sk->dead      = 1;
 	}
 }
 

@@ -13,26 +13,23 @@
 # Copyright (C) 1994 by Hamish Macdonald
 #
 
-# override top level makefile
-ifdef CONFIG_KERNEL_ELF
-AS	= as -m68020
-LD	= ld -m m68kelf
-CC	:= $(CC)
-# set up for cross compiling
+# test for cross compiling
 COMPILE_ARCH = $(shell uname -m)
+
+# override top level makefile
+AS += -m68020
+ifdef CONFIG_KERNEL_ELF
+LD += -m m68kelf
 ifneq ($(COMPILE_ARCH),$(ARCH))
-	CROSSDIR=/usr/$(ARCH)-linux/bin
-	CC := $(CROSSDIR)/$(CC)
-	AS := $(CROSSDIR)/$(AS)
-	LD := $(CROSSDIR)/$(LD)
-	AR := $(CROSSDIR)/$(AR)
-	NM := $(CROSSDIR)/$(NM)
-	STRIP := $(CROSSDIR)/$(STRIP)
+	# prefix for cross-compiling binaries
+	CROSS_COMPILE = m68k-linux-
 endif
 else
-AS	= /usr/m68k-linuxaout/bin/as -m68020 
-CC	:= $(CC) -pipe -b m68k-linuxaout
-LD	= ld -m m68klinux
+LD += -m m68klinux
+ifneq ($(COMPILE_ARCH),$(ARCH))
+	# prefix for cross-compiling binaries
+	CROSS_COMPILE = m68k-linuxaout-
+endif
 endif
 
 #
@@ -55,6 +52,10 @@ CFLAGS := $(CFLAGS) -pipe
 
 ifdef CONFIG_OPTIMIZE_040
 CFLAGS := $(CFLAGS) -m68040
+endif
+
+ifdef CONFIG_OPTIMIZE_060
+CFLAGS := $(CFLAGS) -m68020-40 -Wa,-m68060
 endif
 
 HEAD := arch/m68k/kernel/head.o

@@ -271,23 +271,21 @@ void config_amiga(void)
   mach_gettimeoffset   = amiga_gettimeoffset;
   if (AMIGAHW_PRESENT(A3000_CLK)){
     mach_gettod  = a3000_gettod;
-    mach_max_dma_address = 0xffffffff; /*
-					* default MAX_DMA 0xffffffff
-					* on Z3 machines - we should
-					* consider adding something
-					* like a dma_mask in kmalloc
-					* later on, so people using Z2
-					* boards in Z3 machines won't
-					* get into trouble - Jes
-					*/
   }
   else{ /* if (AMIGAHW_PRESENT(A2000_CLK)) */
     mach_gettod  = a2000_gettod;
-    mach_max_dma_address = 0x00ffffff; /*
-					* default MAX_DMA 0x00ffffff
-					* on Z2 machines.
-					*/
   }
+
+  mach_max_dma_address = 0xffffffff; /*
+				      * default MAX_DMA=0xffffffff
+				      * on all machines. If we don't
+				      * do so, the SCSI code will not
+				      * be able to allocate any mem
+				      * for transfers, unless we are
+				      * dealing with a Z2 mem only
+				      * system.                  /Jes
+				      */
+
   mach_hwclk           = amiga_hwclk;
   mach_set_clock_mmss  = amiga_set_clock_mmss;
   mach_mksound         = amiga_mksound;
@@ -421,7 +419,7 @@ void a2000_gettod (int *yearp, int *monp, int *dayp,
 	*yearp = tod->year1       * 10 + tod->year2;
 
 	if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE))
-		if ((!tod->hour1 & TOD2000_HOUR1_PM) && *hourp == 12)
+		if (!(tod->hour1 & TOD2000_HOUR1_PM) && *hourp == 12)
 			*hourp = 0;
 		else if ((tod->hour1 & TOD2000_HOUR1_PM) && *hourp != 12)
 			*hourp += 12;
@@ -480,7 +478,7 @@ int amiga_hwclk(int op, struct hwclk_time *t)
 			t->year = tod->year1       * 10 + tod->year2;
 
 			if (!(tod->cntrl3 & TOD2000_CNTRL3_24HMODE))
-				if ((!tod->hour1 & TOD2000_HOUR1_PM) && t->hour == 12)
+				if (!(tod->hour1 & TOD2000_HOUR1_PM) && t->hour == 12)
 					t->hour = 0;
 				else if ((tod->hour1 & TOD2000_HOUR1_PM) && t->hour != 12)
 					t->hour += 12;

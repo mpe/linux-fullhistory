@@ -49,6 +49,9 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include <net/protocol.h>		/* struct inet_protocol */
+#if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
+#include <net/x25.h>
+#endif
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>
 #if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
@@ -426,6 +429,9 @@ struct sock
 #ifdef CONFIG_NUTCP		
 		struct tcp_opt		af_tcp;
 #endif		
+#endif
+#if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
+		x25_cb			*x25;
 #endif
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		ax25_cb			*ax25;

@@ -9,10 +9,14 @@
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
 
+#include <asm/setup.h>
+#include <asm/traps.h>
 #include <asm/system.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
 extern void die_if_kernel(char *, struct pt_regs *, long);
+extern const int frame_extra_sizes[]; /* in m68k/kernel/signal.c */
 
 /*
  * This routine handles page faults.  It determines the problem, and
@@ -28,14 +32,20 @@ extern void die_if_kernel(char *, struct pt_regs *, long);
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 			      unsigned long error_code)
 {
-	struct vm_area_struct * vma;
+	void (*handler)(struct task_struct *,
+			struct vm_area_struct *,
+			unsigned long,
+			int);
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
+	struct vm_area_struct * vma;
+	unsigned long fixup, fault_pc;
+	int write;
 
 #ifdef DEBUG
 	printk ("regs->sr=%#x, regs->pc=%#lx, address=%#lx, %ld, %p\n",
 		regs->sr, regs->pc, address, error_code,
-		tsk->tss.pagedir_v);
+		tsk->mm->pgd);
 #endif
 
 	down(&mm->mmap_sem);
@@ -62,25 +72,24 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
  * we can handle it..
  */
 good_area:
-	/*
-	 * was it a write?
-	 */
-	if (error_code & 2) {
-	  if (!(vma->vm_flags & VM_WRITE))
-	    goto bad_area;
-	} else {
-		/* read with protection fault? */
-	  if (error_code & 1)
-	    goto bad_area;
-	  if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
-	    goto bad_area;
+	write = 0;
+	handler = do_no_page;
+	switch (error_code & 3) {
+		default:	/* 3: write, present */
+			handler = do_wp_page;
+			/* fall through */
+		case 2:		/* write, not present */
+			if (!(vma->vm_flags & VM_WRITE))
+				goto bad_area;
+			write++;
+			break;
+		case 1:		/* read, present */
+			goto bad_area;
+		case 0:		/* read, not present */
+			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
+				goto bad_area;
 	}
-	if (error_code & 1) {
-		do_wp_page(tsk, vma, address, error_code & 2);
-		up(&mm->mmap_sem);
-		return 0;
-	}
-	do_no_page(tsk, vma, address, error_code & 2);
+	handler(tsk, vma, address, write);
 	up(&mm->mmap_sem);
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
@@ -96,6 +105,26 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
+
+	/* Are we prepared to handle this fault?  */
+	if (CPU_IS_060 && regs->format == 4)
+		fault_pc = ((struct frame *)regs)->un.fmt4.pc;
+	else
+		fault_pc = regs->pc;
+	if ((fixup = search_exception_table(fault_pc)) != 0) {
+		struct pt_regs *tregs;
+		printk("Exception at %lx (%lx)\n", fault_pc, fixup);
+		/* Create a new four word stack frame, discarding the old
+		   one.  */
+		regs->stkadj = frame_extra_sizes[regs->format];
+		tregs =	(struct pt_regs *)((ulong)regs + regs->stkadj);
+		tregs->vector = regs->vector;
+		tregs->format = 0;
+		tregs->pc = fixup;
+		tregs->sr = regs->sr;
+		return -1;
+	}
+
 	if (user_mode(regs)) {
 		/* User memory access */
 		force_sig (SIGSEGV, tsk);
@@ -116,4 +145,3 @@ bad_area:
 
 	return 1;
 }
-

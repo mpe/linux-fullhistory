@@ -387,7 +387,9 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 */
 
 	if (tot_len > dev->mtu)
+	{
 		goto fragment;
+	}
 
 	/*
 	 *	Add an IP checksum
@@ -478,6 +480,13 @@ no_device:
 	goto out;
 
 fragment:
+	if ((iph->frag_off & htons(IP_DF)))
+	{
+		printk(KERN_DEBUG "sending pkt_too_big to self\n");
+		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
+			  htonl(dev->mtu), dev);
+		goto out;
+	}
 	ip_fragment(sk,skb,dev,0);
 	goto out;
 }

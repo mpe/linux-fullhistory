@@ -209,7 +209,7 @@ int amiga_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
 	}
 
 	/* enable the interrupt */
-	if (irq < IRQ_IDX(IRQ_AMIGA_PORTS)) 
+	if (irq < IRQ_IDX(IRQ_AMIGA_PORTS) && !ami_ablecount[irq])
 		custom.intena = IF_SETCLR | ami_intena_vals[irq];
 
 	return 0;
@@ -264,7 +264,7 @@ void amiga_enable_irq(unsigned int irq)
 		return;
 	}
 
-	if (ami_ablecount[irq]++)
+	if (--ami_ablecount[irq])
 		return;
 
 	if (irq >= IRQ_IDX(IRQ_AMIGA_CIAB)) {
@@ -290,7 +290,7 @@ void amiga_disable_irq(unsigned int irq)
 		return;
 	}
 
-	if (--ami_ablecount[irq])
+	if (ami_ablecount[irq]++)
 		return;
 
 	if (irq >= IRQ_IDX(IRQ_AMIGA_CIAB)) {

@@ -68,7 +68,7 @@ D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
 N: Dario Ballabio
 E: dario@milano.europe.dg.com
 D: Author and maintainer of the Ultrastor 14F/34F SCSI driver
-D: Author and maintainer of the EATA ISA/EISA SCSI driver
+D: Author and maintainer of the EATA ISA/EISA/PCI SCSI driver
 S: Data General Corporation
 S: Milano
 S: Italy

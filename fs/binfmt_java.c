@@ -3,6 +3,9 @@
  *
  *  Copyright (C) 1996  Brian A. Lantz
  *  derived from binfmt_script.c
+ *
+ *  Simplified and modified to support binary java interpreters
+ *  by Tom May <ftom@netcom.com>.
  */
 
 #include <linux/module.h>
@@ -13,35 +16,50 @@
 
 #define _PATH_JAVA	"/usr/bin/java"
 #define _PATH_APPLET	"/usr/bin/appletviewer"
-#define _PATH_SH	"/bin/bash"
+
+/*  These paths can be modified with sysctl().  */
 
 char binfmt_java_interpreter[65] = _PATH_JAVA;
 char binfmt_java_appletviewer[65] = _PATH_APPLET;
 
-static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
+static int do_load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *interp, *i_name;
+	char *i_name;
+	int len;
 	int retval;
 	unsigned char *ucp = (unsigned char *) bprm->buf;
 	if ((ucp[0] != 0xca) || (ucp[1] != 0xfe) || (ucp[2] != 0xba) || (ucp[3] != 0xbe)) 
 		return -ENOEXEC;
 
+	/*
+	 * Fail if we're called recursively, e.g., the Java interpreter
+	 * is a java binary.
+	 */
+
+	if (bprm->java)
+		return -ENOEXEC;
+
+	bprm->java = 1;
+
 	iput(bprm->inode);
 	bprm->dont_iput=1;
 
 	/*
-	 * OK, we've set the interpreter name
-	 * Splice in (1) the interpreter's name for argv[0] (_PATH_SH)
-	 *           (2) the name of the java wrapper for argv[1] (_PATH_JAVA)
-	 *           (3) filename of Java class (replace argv[0])
-	 *               without leading path or trailing '.class'
+	 * Set args: [0] the name of the java interpreter
+	 *           [1] name of java class to execute, which is the
+	 *		 filename without the path and without trailing
+	 *		 ".class".  Note that the interpreter will use
+	 *		 its own way to found the class file (typically using
+	 *		 environment variable CLASSPATH), and may in fact
+	 *		 execute a different file from the one we want.
 	 *
 	 * This is done in reverse order, because of how the
 	 * user environment and arguments are stored.
 	 */
 	remove_arg_zero(bprm);
-	if ((cp = strstr (bprm->filename, ".class")) != NULL)
-		*cp = 0;
+	len = strlen (bprm->filename);
+	if (len >= 6 && !strcmp (bprm->filename + len - 6, ".class"))
+		bprm->filename[len - 6] = 0;
 	if ((i_name = strrchr (bprm->filename, '/')) != NULL)
 		i_name++;
 	else
@@ -49,27 +67,17 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
 
-	strcpy (bprm->buf, binfmt_java_interpreter);
-	cp = bprm->buf;
-	bprm->p = copy_strings(1, &cp, bprm->page, bprm->p, 2);
-	bprm->argc++;
-
-	strcpy (bprm->buf, _PATH_SH);
-	interp = bprm->buf;
-	if ((i_name = strrchr (bprm->buf, '/')) != NULL)
-		i_name++;
-	else
-		i_name = bprm->buf;
+	i_name = binfmt_java_interpreter;
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
+
 	if (!bprm->p) 
 		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
-	 * Note that we use open_namei() as the name is now in kernel
-	 * space, and we don't need to copy it.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode, NULL);
+	bprm->filename = binfmt_java_interpreter;
+	retval = open_namei(binfmt_java_interpreter, 0, 0, &bprm->inode, NULL);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;
@@ -82,7 +90,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 
 static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 {
-	char *cp, *interp, *i_name;
+	char *i_name;
 	int retval;
 	if (strncmp (bprm->buf, "<!--applet", 10))
 		return -ENOEXEC;
@@ -91,10 +99,8 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	bprm->dont_iput=1;
 
 	/*
-	 * OK, we've set the interpreter name
-	 * Splice in (1) the interpreter's name for argv[0] (_PATH_SH)
-	 *           (2) the name of the appletviewer wrapper for argv[1] (_PATH_APPLET)
-	 *           (3) filename of html file (replace argv[0])
+	 * Set args: [0] the name of the appletviewer
+	 *           [1] filename of html file
 	 *
 	 * This is done in reverse order, because of how the
 	 * user environment and arguments are stored.
@@ -104,27 +110,17 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
 
-	strcpy (bprm->buf, binfmt_java_appletviewer);
-	cp = bprm->buf;
-	bprm->p = copy_strings(1, &cp, bprm->page, bprm->p, 2);
-	bprm->argc++;
-
-	strcpy (bprm->buf, _PATH_SH);
-	interp = bprm->buf;
-	if ((i_name = strrchr (bprm->buf, '/')) != NULL)
-		i_name++;
-	else
-		i_name = bprm->buf;
+	i_name = binfmt_java_appletviewer;
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
+
 	if (!bprm->p) 
 		return -E2BIG;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
-	 * Note that we use open_namei() as the name is now in kernel
-	 * space, and we don't need to copy it.
 	 */
-	retval = open_namei(interp, 0, 0, &bprm->inode, NULL);
+	bprm->filename = binfmt_java_appletviewer;
+	retval = open_namei(binfmt_java_appletviewer, 0, 0, &bprm->inode, NULL);
 	if (retval)
 		return retval;
 	bprm->dont_iput=0;
@@ -135,20 +131,20 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	return search_binary_handler(bprm,regs);
 }
 
-static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
+static int load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	int retval;
 	MOD_INC_USE_COUNT;
-	retval = do_load_script(bprm,regs);
+	retval = do_load_java(bprm,regs);
 	MOD_DEC_USE_COUNT;
 	return retval;
 }
 
-struct linux_binfmt java_format = {
+static struct linux_binfmt java_format = {
 #ifndef MODULE
-	NULL, 0, load_script, NULL, NULL
+	NULL, 0, load_java, NULL, NULL
 #else
-	NULL, &mod_use_count_, load_script, NULL, NULL
+	NULL, &mod_use_count_, load_java, NULL, NULL
 #endif
 };
 
@@ -161,7 +157,7 @@ static int load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 	return retval;
 }
 
-struct linux_binfmt applet_format = {
+static struct linux_binfmt applet_format = {
 #ifndef MODULE
 	NULL, 0, load_applet, NULL, NULL
 #else
@@ -170,7 +166,6 @@ struct linux_binfmt applet_format = {
 };
 
 int init_java_binfmt(void) {
-	printk(KERN_INFO "JAVA Binary support v1.01 for Linux 1.3.98 (C)1996 Brian A. Lantz\n");
 	register_binfmt(&java_format);
 	return register_binfmt(&applet_format);
 }
@@ -182,7 +177,6 @@ int init_module(void)
 }
 
 void cleanup_module( void) {
-	printk(KERN_INFO "Removing JAVA Binary support...\n");
 	unregister_binfmt(&java_format);
 	unregister_binfmt(&applet_format);
 }

@@ -20,8 +20,9 @@
 #include <linux/module.h>
 
 #include <linux/md.h>
-#include <linux/linear.h>
 #include <linux/malloc.h>
+
+#include "linear.h"
 
 #define MAJOR_NR MD_MAJOR
 #define MD_DRIVER

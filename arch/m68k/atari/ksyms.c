@@ -7,6 +7,8 @@
 #include <asm/atari_joystick.h>
 #include <asm/atari_stdma.h>
 
+extern void atari_microwire_cmd( int cmd );
+
 static struct symbol_table mach_atari_symbol_table = {
 #include <linux/symtab_begin.h>
 
@@ -27,6 +29,8 @@ static struct symbol_table mach_atari_symbol_table = {
 	X(ikbd_mouse_rel_pos),
 	X(ikbd_mouse_disable),
 
+	X(atari_microwire_cmd),
+	
 #include <linux/symtab_end.h>
 };
 

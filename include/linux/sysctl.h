@@ -134,6 +134,11 @@ struct __sysctl_args {
 #define	NET_ROSE_ROUTING_CONTROL			6
 
 /* /proc/sys/net/x25 */
+#define	NET_X25_RESTART_REQUEST_TIMEOUT			1
+#define	NET_X25_CALL_REQUEST_TIMEOUT			2
+#define	NET_X25_RESET_REQUEST_TIMEOUT			3
+#define	NET_X25_CLEAR_REQUEST_TIMEOUT			4
+#define	NET_X25_ACK_HOLDBACK_TIMEOUT			5
 
 /* CTL_PROC names: */
 

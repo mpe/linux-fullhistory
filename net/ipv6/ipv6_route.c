@@ -11,6 +11,12 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+/*
+ *	Changes:
+ *
+ *	Masaki Hirabaru			:	Fix for /proc info > pagesize
+ *	<masaki@merit.edu>
+ */
 
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -101,7 +107,7 @@ typedef void (*f_pnode)(struct fib6_node *fn, void *);
 
 static void	rt6_walk_tree(f_pnode func, void * arg, int filter);
 static void	rt6_rt_timeout(struct fib6_node *fn, void *arg);
-static int	rt6_msgrcv(struct sk_buff *skb);
+static int	rt6_msgrcv(int unit, struct sk_buff *skb);
 
 struct rt6_statistics rt6_stats = {
 	1, 0, 1, 1, 0
@@ -205,7 +211,7 @@ static __inline__ int addr_match(struct in6_addr *a1, struct in6_addr *a2,
 			return 0;
 	}
 
-	return 1;	
+	return 1;
 }
 
 /*
@@ -374,7 +380,7 @@ static int fib6_add_1(struct rt6_info *rt)
 
 		if (addr_match(&fn->leaf->rt_dst, addr, fn->fn_bit))
 		{
-			if (pbit == fn->fn_bit &&
+			if (pbit == fn->fn_bit && pbit &&
 			    addr_bit_equal(addr, &fn->leaf->rt_dst,
 					   rt->rt_prefixlen))
 			{
@@ -396,7 +402,7 @@ static int fib6_add_1(struct rt6_info *rt)
 				return 0;
 			}
 
-			if (pbit > fn->fn_bit)
+			if (pbit > fn->fn_bit || pbit == 0)
 			{
 				/* walk down on tree */
 
@@ -625,6 +631,7 @@ static void fib6_del_3(struct fib6_node *fn)
 	if (children < 2)
 	{
 		struct fib6_node *child;
+		struct fib6_node *pn;
 
 		child = dir ? fn->right : fn->left;
 
@@ -642,18 +649,22 @@ static void fib6_del_3(struct fib6_node *fn)
 			child->parent = fn->parent;
 		}
 
-		/* 
+		/*
 		 *	try to collapse on top
-		 */			
-		if ((fn->parent->fn_flags & (RTN_BACKTRACK | RTN_ROOT)) == 0)
+		 */
+		pn = fn->parent;
+		fn->parent = NULL;
+		
+		if ((pn->fn_flags & (RTN_BACKTRACK | RTN_ROOT)) == 0)
 		{
-			if (fn->leaf)
+			if (pn->leaf)
 			{
-				rt_release(fn->leaf);
-				fn->leaf = NULL;
+				rt_release(pn->leaf);
+				pn->leaf = NULL;
 			}
-			fib6_del_3(fn->parent);
+			fib6_del_3(pn);
 		}
+
 		if (fn->fn_flags & RTN_BACKTRACK)
 		{
 			rt6_stats.fib_route_nodes--;
@@ -667,7 +678,9 @@ static void fib6_del_3(struct fib6_node *fn)
 	
 	fn->fn_bit = bit;
 	fn->fn_flags &= ~RTN_BACKTRACK;
+	
 	fn->leaf = fn->left->leaf;
+	atomic_inc(&fn->leaf->rt_ref);
 
 	rt6_stats.fib_route_nodes--;
 }
@@ -726,11 +739,12 @@ static struct fib6_node * fib6_del_2(struct in6_addr *addr, __u32 prefixlen,
 	return NULL;
 }
 
-static struct fib6_node * fib6_del_rt_2(struct in6_addr *addr, __u32 prefixlen,
-					struct rt6_info *rt)
+static struct fib6_node * fib6_del_rt_2(struct rt6_info *rt)
 {
 	struct fib6_node *fn;
-
+	struct in6_addr *addr = &rt->rt_dst;
+	int prefixlen = rt->rt_prefixlen;
+	
 	for (fn = &routing_table; fn;) 
 	{
 		int dir;
@@ -755,24 +769,24 @@ static struct fib6_node * fib6_del_rt_2(struct in6_addr *addr, __u32 prefixlen,
 
 	if (fn)
 	{
-		struct rt6_info *back = NULL;
+		struct rt6_info **back;
 		struct rt6_info *lf;
 
+		back = &fn->leaf;
+		
 		for(lf = fn->leaf; lf; lf=lf->next)
 		{
 			if (rt == lf)
 			{
-				/* delete this entry */
-				if (back == NULL)
-					fn->leaf = lf->next;
-				else
-					back->next = lf->next;
-
-				lf->fib_node = NULL;
+				/*
+				 *	delete this entry
+				 */
+				
+				*back = lf->next;
 				rt_release(lf);
 				return fn;
 			}
-			back = lf;
+			back = &lf->next;
 		}
 	}
 
@@ -801,7 +815,7 @@ int fib6_del_rt(struct rt6_info *rt)
 {
 	struct fib6_node *fn;
 
-	fn = fib6_del_rt_2(&rt->rt_dst, rt->rt_prefixlen, rt);
+	fn = fib6_del_rt_2(rt);
 
 	if (fn == NULL)
 		return -ENOENT;
@@ -859,6 +873,12 @@ int ipv6_route_add(struct in6_rtmsg *rtmsg)
 		
 	memcpy(&rt->rt_dst, &rtmsg->rtmsg_dst, sizeof(struct in6_addr));
 	rt->rt_prefixlen = rtmsg->rtmsg_prefixlen;
+
+	if (rt->rt_prefixlen == 0)
+	{
+		printk(KERN_DEBUG "ip6_fib: zero length route not allowed\n");
+		return -EINVAL;
+	}
 	
 	if (flags & (RTF_GATEWAY | RTF_NEXTHOP)) 
 	{
@@ -867,7 +887,7 @@ int ipv6_route_add(struct in6_rtmsg *rtmsg)
 		{
 			struct rt6_info *gw_rt;
 
-			gw_rt = fibv6_lookup(&rtmsg->rtmsg_gateway, NULL,
+			gw_rt = fibv6_lookup(&rtmsg->rtmsg_gateway, dev,
 					     RTI_GATEWAY);
 
 			if (gw_rt == NULL)
@@ -937,11 +957,44 @@ int ipv6_route_add(struct in6_rtmsg *rtmsg)
 int ipv6_route_del(struct in6_rtmsg *rtmsg)
 {
 	struct rt6_info * rt;
-
+	int res = -ENOENT;
+	
+	atomic_inc(&rt6_lock);
+	
 	rt = fib6_lookup_1(&rtmsg->rtmsg_dst, 0);
-	if (!rt || (rt && (rt->rt_prefixlen != rtmsg->rtmsg_prefixlen)))
-		return -ENOENT;
-	return fib6_del_rt(rt);
+	
+	if (rt && (rt->rt_prefixlen == rtmsg->rtmsg_prefixlen))
+	{
+		int test;
+		
+		start_bh_atomic();
+		
+		test = (rt6_lock == 1);
+		
+		if (test)
+		{
+			res = fib6_del_rt(rt);
+		}
+		end_bh_atomic();
+
+		if (!test)
+		{
+			/*
+			 *	This function is called from user
+			 *	context only (at the moment).
+			 *	As we don't sleep we should never see
+			 *	a lock count > 1.
+			 *
+			 *	If this assumptions becomes invalid we'll
+			 *	just have to had a del request to the
+			 *	queue in this case.
+			 */
+			res = -EBUSY;
+		}
+	}
+	
+	atomic_dec(&rt6_lock);
+	return res;
 }
 
 /*
@@ -954,6 +1007,8 @@ struct rt6_info * fibv6_lookup(struct in6_addr *addr, struct device *src_dev,
 {
 	struct rt6_info *rt;
 
+	atomic_inc(&rt6_lock);
+	
 	if ((rt = fib6_lookup_1(addr, flags)))
 	{
 		if (src_dev)
@@ -963,29 +1018,33 @@ struct rt6_info * fibv6_lookup(struct in6_addr *addr, struct device *src_dev,
 			for (sprt=rt; sprt; sprt=sprt->next)
 			{
 				if (sprt->rt_dev == src_dev)
-					return sprt;
+				{
+					rt = sprt;
+					goto out;
+				}
 			}
 			
 			if (flags & RTI_DEVRT)
 			{
-				return NULL;
+				rt = NULL;
 			}
 		}
 
-		return rt;
+		goto out;
 	}
 
 	if (!(flags & RTI_GATEWAY))
 	{
 		if ((rt = dflt_rt_lookup()))
 		{
-			return rt;
+			goto out;
 		}
 
-		return last_resort_rt;
+		rt = last_resort_rt;
 	}
-
-	return NULL;
+  out:
+	atomic_dec(&rt6_lock);
+	return rt;
 }
 
 /*
@@ -1713,11 +1772,12 @@ static void rt6_walk_tree(f_pnode func, void * arg, int filter)
 }
 
 #ifdef CONFIG_PROC_FS
-#define RT6_INFO_LEN (32 + 2 + 32 + 2 + 2 + 2 + 4 + 8 + 7)
+#define RT6_INFO_LEN (32 + 2 + 32 + 2 + 2 + 2 + 4 + 8 + 7 + 1)
 
 struct rt6_proc_arg {
 	char *buffer;
 	int offset;
+	int length;
 	int skip;
 	int len;
 };
@@ -1736,7 +1796,10 @@ static void rt6_info_node(struct fib6_node *fn, void *p_arg)
 			arg->skip++;
 			continue;
 		}
-	
+
+		if (arg->len >= arg->length)
+			return;
+		
 		for (i=0; i<16; i++)
 		{
 			sprintf(arg->buffer + arg->len, "%02x",
@@ -1775,6 +1838,7 @@ static int rt6_proc_info(char *buffer, char **start, off_t offset, int length,
 	struct fib6_node sfn;
 	arg.buffer = buffer;
 	arg.offset = offset;
+	arg.length = length;
 	arg.skip = 0;
 	arg.len = 0;
 
@@ -1865,7 +1929,7 @@ void ipv6_route_cleanup(void)
  *	routing socket moral equivalent
  */
 
-static int rt6_msgrcv(struct sk_buff *skb)
+static int rt6_msgrcv(int unit, struct sk_buff *skb)
 {
 	int count = 0;
 	struct in6_rtmsg *rtmsg;

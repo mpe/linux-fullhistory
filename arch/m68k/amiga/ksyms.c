@@ -2,6 +2,10 @@
 #include <asm/zorro.h>
 #include <asm/amigatypes.h>
 #include <asm/amigahw.h>
+#include <asm/amigatypes.h>
+
+extern volatile u_short amiga_audio_min_period;
+extern u_short amiga_audio_period;
 
 static struct symbol_table mach_amiga_symbol_table = {
 #include <linux/symtab_begin.h>
@@ -13,6 +17,8 @@ static struct symbol_table mach_amiga_symbol_table = {
   X(amiga_chip_alloc),
   X(amiga_chip_free),
   X(amiga_chip_avail),
+  X(amiga_audio_period),
+  X(amiga_audio_min_period),
 
   X(zorro_find),
   X(zorro_get_board),

@@ -60,9 +60,15 @@ extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 #endif
 
+extern char *skb_push_errstr;
+extern char *skb_put_errstr;
 
 static struct symbol_table net_syms = {
 #include <linux/symtab_begin.h>
+
+	/* Skbuff symbols. */
+	X(skb_push_errstr),
+	X(skb_put_errstr),
 
 	/* Socket layer registration */
 	X(sock_register),

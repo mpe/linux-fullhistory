@@ -40,12 +40,14 @@ static struct symbol_table arch_symbol_table = {
 	X(cache_clear),
 	X(mm_vtop),
 	X(mm_ptov),
+	X(mm_end_of_chunk),
 	X(m68k_debug_device),
 	X(request_irq),
 	X(free_irq),
 	X(dump_fpu),
 	X(dump_thread),
 	X(strnlen),
+	X(strrchr),
 
 	/* The following are special because they're not called
 	   explicitly (the C compiler generates them).  Fortunately,
@@ -55,8 +57,8 @@ static struct symbol_table arch_symbol_table = {
 	XNOVERS(memcpy),
 	XNOVERS(memset),
 
-	XNOVERS(down_failed),
-	XNOVERS(up_wakeup),
+	XNOVERS(__down_failed),
+	XNOVERS(__up_wakeup),
 
 #include <linux/symtab_end.h>
 };

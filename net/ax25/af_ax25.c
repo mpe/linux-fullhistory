@@ -279,8 +279,9 @@ static void ax25_kill_by_device(struct device *dev)
 			s->state  = AX25_STATE_0;
 			s->device = NULL;
 			if (s->sk != NULL) {
-				s->sk->state = TCP_CLOSE;
-				s->sk->err   = ENETUNREACH;
+				s->sk->state     = TCP_CLOSE;
+				s->sk->err       = ENETUNREACH;
+				s->sk->shutdown |= SEND_SHUTDOWN;
 				if (!s->sk->dead)
 					s->sk->state_change(s->sk);
 				s->sk->dead  = 1;
@@ -617,8 +618,9 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 				
 			ax25->state = AX25_STATE_0;
 			if (ax25->sk != NULL) {
-				ax25->sk->state = TCP_CLOSE;
-				ax25->sk->err   = ENETRESET;
+				ax25->sk->state     = TCP_CLOSE;
+				ax25->sk->err       = ENETRESET;
+				ax25->sk->shutdown |= SEND_SHUTDOWN;
 				if (!ax25->sk->dead)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;
@@ -1295,6 +1297,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 		switch (sk->protinfo.ax25->state) {
 			case AX25_STATE_0:
 				sk->state       = TCP_CLOSE;
+				sk->shutdown   |= SEND_SHUTDOWN;
 				sk->state_change(sk);
 				sk->dead        = 1;
 				ax25_destroy_socket(sk->protinfo.ax25);
@@ -1304,6 +1307,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				ax25_send_control(sk->protinfo.ax25, DISC, POLLON, C_COMMAND);
 				sk->protinfo.ax25->state = AX25_STATE_0;
 				sk->state                = TCP_CLOSE;
+				sk->shutdown            |= SEND_SHUTDOWN;
 				sk->state_change(sk);
 				sk->dead                 = 1;
 				ax25_destroy_socket(sk->protinfo.ax25);
@@ -1316,6 +1320,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 					ax25_send_control(sk->protinfo.ax25, DM, POLLON, C_RESPONSE);
 				sk->protinfo.ax25->state = AX25_STATE_0;
 				sk->state                = TCP_CLOSE;
+				sk->shutdown            |= SEND_SHUTDOWN;
 				sk->state_change(sk);
 				sk->dead                 = 1;
 				ax25_destroy_socket(sk->protinfo.ax25);
@@ -1334,6 +1339,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				sk->protinfo.ax25->t1timer = sk->protinfo.ax25->t1 = ax25_calculate_t1(sk->protinfo.ax25);
 				sk->protinfo.ax25->state   = AX25_STATE_2;
 				sk->state                  = TCP_CLOSE;
+				sk->shutdown              |= SEND_SHUTDOWN;
 				sk->state_change(sk);
 				sk->dead                   = 1;
 				sk->destroy                = 1;
@@ -1344,8 +1350,9 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 		}
 	} else {
 		sk->state       = TCP_CLOSE;
+		sk->shutdown   |= SEND_SHUTDOWN;
 		sk->state_change(sk);
-		sk->dead = 1;
+		sk->dead        = 1;
 		ax25_destroy_socket(sk->protinfo.ax25);
 	}
 
@@ -1965,8 +1972,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if (sk->zapped)
 		return -EADDRNOTAVAIL;
 		
-	if (sk->shutdown & SEND_SHUTDOWN)
-	{
+	if (sk->shutdown & SEND_SHUTDOWN) {
 		send_sig(SIGPIPE, current, 0);
 		return -EPIPE;
 	}
@@ -2122,12 +2128,13 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		skb->h.raw = skb->data;
 	}
 
-	copied=size;
-	if(copied>length)
-	{
-		copied = length;
-		msg->msg_flags|=MSG_TRUNC;
+	copied = length;
+
+	if (copied > size) {
+		copied = size;
+		msg->msg_flags |= MSG_TRUNC;
 	}		
+
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax) {

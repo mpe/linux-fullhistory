@@ -18,16 +18,8 @@
 /*
  * Bus types
  */
-#define EISA_bus__is_a_macro	1
 #define EISA_bus 0
-#define MCA_bus__is_a_macro	1
 #define MCA_bus 0
-
-/*
- * The m68k has no problems with write protection
- */
-#define wp_works_ok__is_a_macro	1
-#define wp_works_ok 1
 
 /* MAX floating point unit state size (FSAVE/FRESTORE) */
 #define FPSTATESIZE   (216/sizeof(unsigned char))
@@ -42,8 +34,6 @@ struct thread_struct {
 	unsigned long  usp;		/* user stack pointer */
 	unsigned short sr;		/* saved status register */
 	unsigned short fs;		/* saved fs (sfc, dfc) */
-	unsigned long  *pagedir_v;	/* root page table virtual addr */
-	unsigned long  pagedir_p;	/* root page table physaddr */
 	unsigned long  crp[2];		/* cpu root pointer */
 	unsigned long  esp0;		/* points to SR of stack frame */
 	unsigned long  fp[8*3];
@@ -56,7 +46,7 @@ struct thread_struct {
 #define INIT_TSS  { \
 	sizeof(init_kernel_stack) + (long) init_kernel_stack, 0, \
 	PS_S, KERNEL_DS, \
-	NULL, 0, {0, 0}, 0 \
+	{0, 0}, 0, {0,}, {0, 0, 0}, {0,}, \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)

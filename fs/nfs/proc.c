@@ -904,10 +904,10 @@ retry:
  */
 
 int *rpc_header(int *p, int procedure, int program, int version,
-					int uid, int gid, int *groups)
+					int uid, int gid,
+					int ngroup, gid_t *groups)
 {
-	int *p1, *p2;
-	int i;
+	int *p1;
 	static int xid = 0;
 	unsigned char *sys = (unsigned char *) system_utsname.nodename;
 
@@ -927,10 +927,14 @@ int *rpc_header(int *p, int procedure, int program, int version,
 	p = xdr_encode_string(p, (char *) sys);
 	*p++ = htonl(uid);
 	*p++ = htonl(gid);
-	p2 = p++;
-	for (i = 0; i < 16 && i < NGROUPS && groups[i] != NOGROUP; i++)
-		*p++ = htonl(groups[i]);
-	*p2 = htonl(i);
+	if (ngroup > 16)
+		ngroup = 16;
+	*p++ = htonl(ngroup);
+	while (ngroup) {
+		*p++ = htonl(*groups);
+		groups++;
+		ngroup--;
+	}
 	*p1 = htonl((p - (p1 + 1)) << 2);
 	*p++ = htonl(RPC_AUTH_NULL);
 	*p++ = htonl(0);
@@ -942,7 +946,7 @@ static int *nfs_rpc_header(int *p, int procedure, int ruid)
 {
 	return rpc_header(p, procedure, NFS_PROGRAM, NFS_VERSION,
 			(ruid ? current->uid : current->fsuid),
-			current->egid, current->groups);
+			current->egid, current->ngroups, current->groups);
 }
 
 

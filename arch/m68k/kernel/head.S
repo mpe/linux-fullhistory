@@ -319,7 +319,7 @@ ENTRY(_start)
 	lea	%pc@(SYMBOL_NAME(kpt)),%a1
 	movel	%a3,%a1@		/* save address of page table */
 	movel	%a3,%a1
-	addql	#_PAGE_TABLE,%a1	/* descriptor type */
+	addw	#_PAGE_TABLE+_PAGE_ACCESSED,%a1	/* descriptor type */
 	movel	#PAGE_TABLE_SIZE<<2,%d2 /* increment */
 
 2:	movel	%a1,%a0@+
@@ -341,7 +341,7 @@ ENTRY(_start)
 
 	movel	%a3,%a0
 	movel	%d5,%a1
-	addw	#_PAGE_GLOBAL040+_PAGE_CACHE040+_PAGE_PRESENT,%a1
+	addw	#_PAGE_GLOBAL040+_PAGE_CACHE040+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
 	movew	#(PAGE_TABLE_SIZE*TABLENR_4MB)-1,%d1
 	movel	#PAGESIZE,%d2
 1:	movel	%a1,%a0@+
@@ -404,7 +404,7 @@ Lnot040:
 
 	putc('I')
 
-	moveq	#_PAGE_NOCACHE030+_PAGE_PRESENT,%d0
+	movel	#_PAGE_NOCACHE030+_PAGE_PRESENT+_PAGE_ACCESSED,%d0
 	movel	%d0,%a5@(0x40<<2)
 
 	jra	Lmapphys
@@ -431,7 +431,7 @@ Lspami68040:
 	/* initialize the pointer table */
 	movel	%a4,%a0
 	movel	%a3,%a1
-	addql	#_PAGE_TABLE,%a1	/* base descriptor */
+	addw	#_PAGE_TABLE+_PAGE_ACCESSED,%a1	/* base descriptor */
 	movel	#PAGE_TABLE_SIZE<<2,%d2 /* increment */
 	moveq	#TABLENR_16MB-1,%d1
 
@@ -441,7 +441,7 @@ Lspami68040:
 
 	/* ensure that the root table points to the pointer table */
 	movel	%a4,%a0
-	addql	#_PAGE_TABLE,%a0
+	addw	#_PAGE_TABLE+_PAGE_ACCESSED,%a0
 	movel	%a0,%a5@(0x40<<2)
 
 	/*
@@ -449,7 +449,7 @@ Lspami68040:
 	 * descriptor bits include noncachable/serialized and global bits.
 	 */
 	movel	%a3,%a0
-	movew	#_PAGE_GLOBAL040+_PAGE_NOCACHE_S+_PAGE_PRESENT,%a1
+	movew	#_PAGE_GLOBAL040+_PAGE_NOCACHE_S+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
 	movel	#PAGESIZE,%d2
 	movew	#(PAGE_TABLE_SIZE*TABLENR_16MB)-1,%d1
 
@@ -518,7 +518,7 @@ Ltest_berr:
 	/* Let the root table point to the new pointer table */
 	lea	%a4@(PTR_TABLE_SIZE<<2),%a4
 	movel	%a4,%a0
-	addl	#_PAGE_TABLE,%a0
+	addw	#_PAGE_TABLE+_PAGE_ACCESSED,%a0
 	movel	%a0,%a5@(0x7f<<2)       /* 0xFE000000 - 0xFFFFFFFF */
 
 	/* clear lower half of the pointer table (0xfexxxxxx) */
@@ -534,7 +534,7 @@ Ltest_berr:
 	movel	#PAGE_TABLE_SIZE*PAGESIZE,%d1
 	movel	#(PTR_TABLE_SIZE/2)-1,%d2
 	movel	%d3,%d0
-	addl	#_PAGE_PRESENT,%d0
+	orw	#_PAGE_PRESENT+_PAGE_ACCESSED,%d0
 1:	movel	%d0,%a0@+
 	addl	%d1,%d0
 	dbra	%d2,1b
@@ -552,7 +552,7 @@ Lspata68040:
 
 	/* Initialize the upper half of the pointer table (a0 is still valid) */
 	movel	%a3,%a1
-	addql	#_PAGE_TABLE,%a1
+	addw	#_PAGE_TABLE+_PAGE_ACCESSED,%a1
 	movel	#PAGE_TABLE_SIZE<<2,%d2
 	moveq	#TABLENR_16MB-1,%d1
 1:	movel	%a1,%a0@+
@@ -562,7 +562,7 @@ Lspata68040:
 	/* Initialize the page tables as noncacheable/serialized! */
 	movel	%a3,%a0
 	movel	%d3,%a1
-	addw	#_PAGE_GLOBAL040+_PAGE_NOCACHE_S+_PAGE_PRESENT,%a1
+	addw	#_PAGE_GLOBAL040+_PAGE_NOCACHE_S+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
 	movel	#PAGESIZE,%d2
 	movew	#(PAGE_TABLE_SIZE*TABLENR_16MB)-1,%d1
 1:	movel	%a1,%a0@+
@@ -629,7 +629,7 @@ Lmapphys:
 	lsrl	%d2,%d0
 	movel	%d0,%d1
 	lsll	%d2,%d1
-	addql	#_PAGE_PRESENT,%d1
+	orw	#_PAGE_PRESENT+_PAGE_ACCESSED,%d1
 	lsll	#2,%d0
 	movel	%a5@(%d0:w),%d2
 	movel	%d1,%a5@(%d0:w)
@@ -722,7 +722,7 @@ Lmapphysnotamiga:
 	lsrl	%d0,%d1
 	lea	%a1@(%d1:l:4),%a1
 	movel	%d5,%d1
-	addql	#_PAGE_PRESENT,%d1
+	orw	#_PAGE_PRESENT+_PAGE_ACCESSED,%d1
 	movel	%a1@,%d2
 	movel	%d1,%a1@
 	lea	5f:w,%a0

@@ -116,7 +116,7 @@ typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
  * area for the same reason. ;)
  */
 #define VMALLOC_OFFSET	(8*1024*1024)
-#define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+#define VMALLOC_START (((unsigned long) high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 
 #endif /* __ASSEMBLY__ */
@@ -147,7 +147,18 @@ typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
 
 #ifndef __ASSEMBLY__
 
+/* This is the cache mode to be used for pages containing page descriptors for
+ * processors >= '040. It is in pte_mknocache(), and the variable is defined
+ * and initialized in head.S */
+extern int m68k_pgtable_cachemode;
+
+#if defined(CONFIG_M68040_OR_M68060_ONLY)
+#define mm_cachebits _PAGE_CACHE040
+#elif defined(CONFIG_M68020_OR_M68030_ONLY)
+#define mm_cachebits 0
+#else
 extern unsigned long mm_cachebits;
+#endif
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_RONLY | _PAGE_ACCESSED | mm_cachebits)
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | mm_cachebits)
@@ -215,8 +226,6 @@ extern pte_t * __bad_pagetable(void);
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-extern unsigned long high_memory;
-
 /* For virtual address to physical address conversion */
 extern unsigned long mm_vtop(unsigned long addr) __attribute__ ((const));
 extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
@@ -227,8 +236,10 @@ extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = VTOP(page) | pgprot_val(pgprot); return pte; }
+#define mk_pte(page, pgprot) \
+({ pte_t __pte; pte_val(__pte) = VTOP(page) + pgprot_val(pgprot); __pte; })
+#define mk_pte_phys(physpage, pgprot) \
+({ pte_t __pte; pte_val(__pte) = VTOP(physpage) + pgprot_val(pgprot); __pte; })
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
@@ -239,7 +250,7 @@ extern inline void pmd_set(pmd_t * pmdp, pte_t * ptep)
 
 	ptep = (pte_t *) VTOP(ptep);
 	for (i = 0; i < 16; i++, ptep += PTRS_PER_PTE/16)
-		pmdp->pmd[i] = _PAGE_TABLE | (unsigned long)ptep;
+		pmdp->pmd[i] = _PAGE_TABLE | _PAGE_ACCESSED | (unsigned long)ptep;
 }
 
 /* early termination version of the above */
@@ -249,11 +260,11 @@ extern inline void pmd_set_et(pmd_t * pmdp, pte_t * ptep)
 
 	ptep = (pte_t *) VTOP(ptep);
 	for (i = 0; i < 16; i++, ptep += PTRS_PER_PTE/16)
-		pmdp->pmd[i] = _PAGE_PRESENT | (unsigned long)ptep;
+		pmdp->pmd[i] = _PAGE_PRESENT | _PAGE_ACCESSED | (unsigned long)ptep;
 }
 
 extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
-{ pgd_val(*pgdp) = _PAGE_TABLE | VTOP(pmdp); }
+{ pgd_val(*pgdp) = _PAGE_TABLE | _PAGE_ACCESSED | VTOP(pmdp); }
 
 extern inline unsigned long pte_page(pte_t pte)
 { return PTOV(pte_val(pte) & PAGE_MASK); }
@@ -271,7 +282,7 @@ extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 
 extern inline int pmd_none2(pmd_t *pmd)		{ return !pmd_val(*pmd); }
 #define pmd_none(pmd) pmd_none2(&(pmd))
-extern inline int pmd_bad2(pmd_t *pmd)		{ return (pmd_val(*pmd) & _DESCTYPE_MASK) != _PAGE_TABLE || pmd_page(*pmd) > high_memory; }
+extern inline int pmd_bad2(pmd_t *pmd)		{ return (pmd_val(*pmd) & _DESCTYPE_MASK) != _PAGE_TABLE; }
 #define pmd_bad(pmd) pmd_bad2(&(pmd))
 extern inline int pmd_present2(pmd_t *pmd)	{ return pmd_val(*pmd) & _PAGE_TABLE; }
 #define pmd_present(pmd) pmd_present2(&(pmd))
@@ -284,7 +295,7 @@ extern inline void pmd_clear(pmd_t * pmdp)
 }
 
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
-extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & _DESCTYPE_MASK) != _PAGE_TABLE || pgd_page(pgd) > high_memory; }
+extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & _DESCTYPE_MASK) != _PAGE_TABLE; }
 extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_TABLE; }
 
 extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
@@ -319,10 +330,8 @@ extern inline pte_t pte_mkcache(pte_t pte)	{ pte_val(pte) = (pte_val(pte) & _CAC
 /* to set the page-dir */
 extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 {
-	tsk->tss.pagedir_v = (unsigned long *)pgdir;
-	tsk->tss.pagedir_p = VTOP(pgdir);
-	tsk->tss.crp[0] = 0x80000000 | _PAGE_SHORT;
-	tsk->tss.crp[1] = tsk->tss.pagedir_p;
+	tsk->tss.crp[0] = 0x80000000 | _PAGE_TABLE;
+	tsk->tss.crp[1] = VTOP(pgdir);
 	if (tsk == current) {
 		if (CPU_IS_040_OR_060)
 			__asm__ __volatile__ ("movel %0@,%/d0\n\t"
@@ -425,9 +434,10 @@ extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *)get_free_page(GFP_KERNEL);
+		pte_t * page = (pte_t *)__get_free_page(GFP_KERNEL);
 		if (pmd_none(*pmd)) {
 			if (page) {
+				memset((void *) page, 0, PAGE_SIZE);
 				nocache_page((unsigned long)page);
 				pmd_set(pmd,page);
 				return page + address;

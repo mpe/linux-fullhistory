@@ -408,7 +408,7 @@ clear_user(void *to, unsigned long n)
 		"	.align 4\n"					   \
 		"	.long 0b,3b\n"					   \
 		".text"							   \
-		: "=r"(res), "=r"(count)				   \
+		: "=d"(res), "=c"(count)				   \
 		: "i"(-EFAULT), "0"(count), "1"(count), "S"(src), "D"(dst) \
 		: "si", "di", "ax", "memory")
 
