@@ -68,7 +68,7 @@ static u_char *xd_bases[] = { (u_char *) 0xC8000,(u_char *) 0xCA000,(u_char *) 0
 static struct hd_struct xd[XD_MAXDRIVES << 6];
 static int xd_sizes[XD_MAXDRIVES << 6],xd_access[XD_MAXDRIVES] = { 0,0 };
 static struct gendisk xd_gendisk = { MAJOR_NR,"xd",6,1 << 6,XD_MAXDRIVES,xd_geninit,xd,xd_sizes,0,(void *) xd_info,NULL };
-static struct file_operations xd_fops = { NULL,block_read,block_write,NULL,NULL,xd_ioctl,NULL,xd_open,xd_release };
+static struct file_operations xd_fops = { NULL,block_read,block_write,NULL,NULL,xd_ioctl,NULL,xd_open,xd_release,block_fsync };
 
 static struct wait_queue *xd_wait_exclusive = NULL,*xd_wait_int = NULL,*xd_wait_open = NULL;
 static u_char xd_valid[XD_MAXDRIVES] = { 0,0 };

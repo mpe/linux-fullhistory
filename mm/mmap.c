@@ -78,13 +78,8 @@ int sys_mmap(unsigned long *buffer)
 	 * that it represents a valid section of the address space. we assume
 	 * that if PROT_EXEC is specified this should be in the code segment.
 	 */
-	if (prot & PROT_EXEC) {
-		base = get_base(current->ldt[1]);	/* cs */
-		limit = get_limit(0x0f);		/* cs limit */
-	} else {
-		base = get_base(current->ldt[2]);	/* ds */
-		limit = get_limit(0x17);		/* ds limit */
-	}
+	base = 0;
+	limit = TASK_SIZE;
 
 	if (flags & MAP_FIXED) {
 		/*
@@ -139,8 +134,8 @@ int sys_munmap(unsigned long addr, size_t len)
 {
 	unsigned long base, limit;
 
-	base = get_base(current->ldt[2]);	/* map into ds */
-	limit = get_limit(0x17);		/* ds limit */
+	base = 0;
+	limit = TASK_SIZE;
 
 	if ((addr & 0xfff) || addr > 0x7fffffff || addr == 0 ||
 	    addr + len > limit)

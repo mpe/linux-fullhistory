@@ -48,7 +48,7 @@ static struct file_operations ext2_file_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
-	NULL			/* fsync */
+	ext2_sync_file		/* fsync */
 };
 
 struct inode_operations ext2_file_inode_operations = {

@@ -6,12 +6,6 @@
  * Handbook", Sanches and Canton.
  */
 
-extern int ticks_to_floppy_on(unsigned int nr);
-extern void floppy_on(unsigned int nr);
-extern void floppy_off(unsigned int nr);
-extern void floppy_select(unsigned int nr);
-extern void floppy_deselect(unsigned int nr);
-
 /* Fd controller regs. S&C, about page 340 */
 #define FD_STATUS	0x3f4
 #define FD_DATA		0x3f5

@@ -54,16 +54,16 @@ struct pt_regs {
   long edi;
   long ebp;
   long eax;
-  long ds;
-  long es;
-  long fs;
-  long gs;
+  unsigned short ds, __dsu;
+  unsigned short es, __esu;
+  unsigned short fs, __fsu;
+  unsigned short gs, __gsu;
   long orig_eax;
   long eip;
-  long cs;
+  unsigned short cs, __csu;
   long eflags;
   long esp;
-  long ss;
+  unsigned short ss, __ssu;
 };
 
 #endif

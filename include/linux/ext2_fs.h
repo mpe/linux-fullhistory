@@ -28,14 +28,16 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_VERSION	"0.3, 93/04/22"
+#define EXT2FS_DATE	"93/06/06"
+#define EXT2FS_VERSION	"0.3a"
 
 /*
  * Special inodes numbers
  */
 #define	EXT2_BAD_INO		 1	/* Bad blocks inode */
 #define EXT2_ROOT_INO		 2	/* Root inode */
-#define EXT2_ACL_INO		 3	/* ACL inode */
+#define EXT2_ACL_IDX_INO	 3	/* ACL inode */
+#define EXT2_ACL_DATA_INO	 4	/* ACL inode */
 #define EXT2_FIRST_INO		11	/* First non reserved inode */
 
 /*
@@ -55,14 +57,14 @@
 #define EXT2_MIN_BLOCK_SIZE		1024
 #define	EXT2_MAX_BLOCK_SIZE		4096
 #define EXT2_MIN_BLOCK_LOG_SIZE		  10
-#ifdef KERNEL
+#ifdef __KERNEL__
 # define EXT2_BLOCK_SIZE(s)		((s)->s_blocksize)
 #else
 # define EXT2_BLOCK_SIZE(s)		(EXT2_MIN_BLOCK_SIZE << (s)->s_log_block_size)
 #endif
 #define EXT2_ACLE_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_acl_entry))
 #define	EXT2_ADDR_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (unsigned long))
-#ifdef KERNEL
+#ifdef __KERNEL__
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->u.ext2_sb.s_log_block_size + 10)
 #else
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_log_block_size + 10)
@@ -75,7 +77,7 @@
 #define EXT2_MIN_FRAG_SIZE		1024
 #define	EXT2_MAX_FRAG_SIZE		1024
 #define EXT2_MIN_FRAG_LOG_SIZE		  10
-#ifdef KERNEL
+#ifdef __KERNEL__
 # define EXT2_FRAG_SIZE(s)		((s)->u.ext2_sb.s_frag_size)
 # define EXT2_FRAGS_PER_BLOCK(s)	((s)->u.ext2_sb.s_frags_per_block)
 #else
@@ -86,22 +88,21 @@
 /*
  * ACL structures
  */
-
 struct ext2_acl_header	/* Header of Access Control Lists */
 {
+	unsigned long aclh_size;
 	unsigned long aclh_file_count;
 	unsigned long aclh_acle_count;
 	unsigned long aclh_first_acle;
-	unsigned long aclh_reserved;
 };
 
 struct ext2_acl_entry	/* Access Control List Entry */
 {
+	unsigned long acle_size;
 	unsigned short acle_perms;	/* Access permissions */
 	unsigned short acle_type;	/* Type of entry */
 	unsigned short acle_tag;	/* User or group identity */
 	unsigned short acle_pad1;
-	unsigned long acle_reserved;
 	unsigned long acle_next;	/* Pointer on next entry for the */
 					/* same inode or on next free entry */
 };
@@ -133,7 +134,7 @@ struct ext2_group_desc
 /*
  * Macro-instructions used to manage group descriptors
  */
-#ifdef KERNEL
+#ifdef __KERNEL__
 # define EXT2_BLOCKS_PER_GROUP(s)	((s)->u.ext2_sb.s_blocks_per_group)
 # define EXT2_DESC_PER_BLOCK(s)		((s)->u.ext2_sb.s_desc_per_block)
 # define EXT2_INODES_PER_GROUP(s)	((s)->u.ext2_sb.s_inodes_per_group)
@@ -259,6 +260,9 @@ extern int ext2_check_dir_entry (char *, struct inode *,
 extern int ext2_read (struct inode *, struct file *, char *, int);
 extern int ext2_write (struct inode *, struct file *, char *, int);
 
+/* fsync.c */
+extern int ext2_sync_file(struct inode *, struct file *);
+
 /* ialloc.c */
 extern struct inode * ext2_new_inode (const struct inode *, int);
 extern void ext2_free_inode (struct inode *);
@@ -272,11 +276,13 @@ extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
 extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
+extern int ext2_remount (struct super_block *, int *);
 extern struct super_block * ext2_read_super (struct super_block *,void *,int);
 extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
 extern void ext2_statfs (struct super_block *, struct statfs *);
+extern int ext2_sync_inode(struct inode *);
 
 /* ioctl.c */
 extern int ext2_ioctl (struct inode *, struct file *, unsigned int,

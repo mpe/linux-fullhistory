@@ -112,7 +112,8 @@ static struct file_operations sd_fops = {
 	sd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	sd_open,		/* open code */
-	sd_release		/* release */
+	sd_release,		/* release */
+	block_fsync		/* fsync */
 };
 
 static struct gendisk sd_gendisk = {

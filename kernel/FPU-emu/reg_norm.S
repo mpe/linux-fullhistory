@@ -1,13 +1,16 @@
 /*---------------------------------------------------------------------------+
  |  reg_norm.S                                                               |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Normalize the value in a FPU_REG.                                         |
  |                                                                           |
  | Call from C as:                                                           |
  |   void normalize(FPU_REG *n)                                              |
+ |                                                                           |
+ |   void normalize_nuo(FPU_REG *n)                                          |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -36,7 +39,7 @@ _normalize:
 	orl	%eax,%eax
 	jz	L_zero		// The contents are zero
 
-L_shift_32:
+// L_shift_32:
 	movl	%eax,%edx
 	xorl	%eax,%eax
 	subl	$32,EXP(%ebx)	// This can cause an underflow
@@ -82,3 +85,46 @@ L_overflow:
 	call	_arith_overflow
 	pop	%ebx
 	jmp	L_exit
+
+
+
+// Normalise without reporting underflow or overflow
+	.align 2,144
+.globl _normalize_nuo
+
+_normalize_nuo:
+	pushl	%ebp
+	movl	%esp,%ebp
+	pushl	%ebx
+
+	movl	PARAM1,%ebx
+
+	movl	SIGH(%ebx),%edx
+	movl	SIGL(%ebx),%eax
+
+	orl	%edx,%edx	// ms bits
+	js	L_exit		// Already normalized
+	jnz	L_nuo_shift_1	// Shift left 1 - 31 bits
+
+	orl	%eax,%eax
+	jz	L_zero		// The contents are zero
+
+// L_nuo_shift_32:
+	movl	%eax,%edx
+	xorl	%eax,%eax
+	subl	$32,EXP(%ebx)	// This can cause an underflow
+
+/* We need to shift left by 1 - 31 bits */
+L_nuo_shift_1:
+	bsrl	%edx,%ecx	/* get the required shift in %ecx */
+	subl	$31,%ecx
+	negl	%ecx
+	shld	%cl,%eax,%edx
+	shl	%cl,%eax
+	subl	%ecx,EXP(%ebx)	// This can cause an underflow
+
+	movl	%edx,SIGH(%ebx)
+	movl	%eax,SIGL(%ebx)
+	jmp	L_exit
+
+

@@ -10,7 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/mouse.h>
-#include <linux/soundcard.h>
 
 #include <linux/user.h>
 #include <linux/a.out.h>
@@ -18,6 +17,8 @@
 
 #include <asm/segment.h>
 #include <asm/io.h>
+
+extern long soundcard_init(long mem_start);
 
 static int read_ram(struct inode * inode, struct file * file,char * buf, int count)
 {

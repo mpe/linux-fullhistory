@@ -446,7 +446,7 @@ int wd7000_init(void)
 
     WAIT(ASC_STAT, STATMASK, CMD_RDY, 0);
     DEB(printk("wd7000_init: Power-on Diagnostics finished\n");)
-    if ((i=inb(INTR_STAT)) != 1) {
+    if (((i=inb(INTR_STAT)) != 1) && (i != 7)) {
 	panic("wd7000_init: Power-on Diagnostics error\n"); 
 	return 0;
     }

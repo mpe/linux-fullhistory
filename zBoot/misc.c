@@ -4,11 +4,13 @@
  * This is a collection of several routines from gzip-1.0.3 
  * adapted for Linux.
  *
- * malloc and printk by Hannu Savolainen 1993
+ * malloc and puts by Hannu Savolainen 1993
  */
 
 #include "gzip.h"
 #include "lzw.h"
+
+#include <linux/segment.h>
 
 /*
  * These are set up by the setup-routine at boot-time:
@@ -70,6 +72,8 @@ int hard_math = 0;
 void (*work)(int inf, int outf);
 void makecrc(void);
 
+local int get_method(int);
+
 char *vidmem = (char *)0xb8000;
 int vidp = 0;
 int lines, cols;
@@ -87,7 +91,7 @@ void *malloc(int size)
 
 	free_mem_ptr += size;
 
-	if (free_mem_ptr >= (640*1024)) error("\nOut of memory\n");
+	if (free_mem_ptr > 0x90000) error("\nOut of memory\n");
 
 	if (p == NULL) error("malloc = NULL\n");
 	return p;
@@ -97,10 +101,10 @@ void free(void *where)
 {	/* Don't care */
 }
 
-int printk(char *s)
+static void puts(char *s)
 {
 	int i,n;
-	n = strlen(s);
+	for (n = 0; s [n] != '\0'; n++);
 	if (!n) n = 10;
 
 	for (i=0;i<n;i++)
@@ -111,8 +115,6 @@ int printk(char *s)
 		vidmem[vidp] = s[i]; 
 		vidp = vidp + 2;
 	}
-
-	return 1;
 }
 
 __ptr_t memset(__ptr_t s, int c, size_t n)
@@ -255,9 +257,9 @@ makecrc(void)
 
 void error(char *x)
 {
-	printk("\n\n");
-	printk(x);
-	printk("\n\n -- System halted");
+	puts("\n\n");
+	puts(x);
+	puts("\n\n -- System halted");
 
 	while(1);	/* Halt */
 }
@@ -269,7 +271,7 @@ long user_stack [STACK_SIZE];
 struct {
 	long * a;
 	short b;
-	} stack_start = { & user_stack [STACK_SIZE] , 0x10 };
+	} stack_start = { & user_stack [STACK_SIZE] , KERNEL_DS };
 
 void decompress_kernel()
 {
@@ -296,15 +298,15 @@ void decompress_kernel()
 	clear_bufs();
 	makecrc();
 
-	printk("Uncompressing Linux...");
+	puts("Uncompressing Linux...");
 
 	method = get_method(0);
 
 	work(0, 0);
 
-	printk("done.\n\n");
+	puts("done.\n\n");
 
-	printk("Now booting the kernel\n");
+	puts("Now booting the kernel\n");
 }
 
 /* ========================================================================

@@ -23,11 +23,22 @@
 
 static void pty_close(struct tty_struct * tty, struct file * filp)
 {
-	if (!tty || (tty->count > 1))
+	if (!tty)
 		return;
+	if (IS_A_PTY_MASTER(tty->line)) {
+		if (tty->count > 1)
+			return;
+	} else {
+		if (tty->count > 2)
+			return;
+	}
+	wake_up_interruptible(&tty->secondary.proc_list);
 	wake_up_interruptible(&tty->read_q.proc_list);
+	wake_up_interruptible(&tty->write_q.proc_list);
 	if (!tty->link)
 		return;
+	wake_up_interruptible(&tty->link->secondary.proc_list);
+	wake_up_interruptible(&tty->link->read_q.proc_list);
 	wake_up_interruptible(&tty->link->write_q.proc_list);
 	if (IS_A_PTY_MASTER(tty->line)) {
 		tty_hangup(tty->link);
@@ -75,6 +86,10 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 {
 	if (!tty || !tty->link)
 		return -ENODEV;
+	if (IS_A_PTY_MASTER(tty->line))
+		clear_bit(TTY_SLAVE_OPENED, &tty->flags);
+	else
+		set_bit(TTY_SLAVE_OPENED, &tty->link->flags);
 	tty->write = tty->link->write = pty_write;
 	tty->close = tty->link->close = pty_close;
 	wake_up_interruptible(&tty->read_q.proc_list);

@@ -5,10 +5,15 @@ extern void exception(int n);
 extern void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
 extern void arith_invalid(FPU_REG *dest);
 extern void divide_by_zero(int sign, FPU_REG *dest);
+extern void set_precision_flag_up(void);
+extern void set_precision_flag_down(void);
+extern int denormal_operand(void);
 extern void arith_overflow(FPU_REG *dest);
 extern void arith_underflow(FPU_REG *dest);
 extern void stack_overflow(void);
 extern void stack_underflow(void);
+extern void stack_underflow_i(int i);
+extern void stack_underflow_pop(int i);
 /* fpu_arith.c */
 extern void fadd__(void);
 extern void fmul__(void);
@@ -29,6 +34,7 @@ extern void fsubp_(void);
 extern void fdivrp(void);
 extern void fdivp_(void);
 /* fpu_aux.c */
+extern void fclex(void);
 extern void finit(void);
 extern void finit_(void);
 extern void fstsw_(void);
@@ -64,15 +70,12 @@ extern int poly_l2p1(FPU_REG *arg, FPU_REG *result);
 extern void poly_sine(FPU_REG *arg, FPU_REG *result);
 /* poly_tan.c */
 extern void poly_tan(FPU_REG *arg, FPU_REG *y_reg);
-/* precision.c */
-extern int round_to_53_bits(FPU_REG *reg);
-extern int round_to_24_bits(FPU_REG *reg);
 /* reg_add_sub.c */
 extern void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
 extern void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
 /* reg_compare.c */
 extern int compare(FPU_REG *b);
-extern void compare_st_data(void);
+extern int compare_st_data(void);
 extern void fcom_st(void);
 extern void fcompst(void);
 extern void fcompp(void);
@@ -99,6 +102,7 @@ extern int reg_store_bcd(void);
 extern int round_to_int(FPU_REG *r);
 extern char *fldenv(void);
 extern void frstor(void);
+extern unsigned short tag_word(void);
 extern char *fstenv(void);
 extern void fsave(void);
 /* reg_mul.c */

@@ -18,13 +18,15 @@
 
 #define CW_RC		_Const_(0x0C00)	/* rounding control */
 #define CW_PC		_Const_(0x0300)	/* precision control */
-#define CW_PM		_Const_(0x0020)	/* precision mask */
-#define CW_UM		_Const_(0x0010)	/* underflow mask */
-#define CW_OM		_Const_(0x0008)	/* overflow mask */
-#define CW_ZM		_Const_(0x0004)	/* divide by zero mask */
-#define CW_DM		_Const_(0x0002)	/* denormalized operand mask */
-#define CW_IM		_Const_(0x0001)	/* invalid operation mask */
-#define CW_EXM		_Const_(0x007f)	/* all masks */
+
+#define CW_Precision	Const_(0x0020)	/* loss of precision mask */
+#define CW_Underflow	Const_(0x0010)	/* underflow mask */
+#define CW_Overflow	Const_(0x0008)	/* overflow mask */
+#define CW_ZeroDiv	Const_(0x0004)	/* divide by zero mask */
+#define CW_Denormal	Const_(0x0002)	/* denormalized operand mask */
+#define CW_Invalid	Const_(0x0001)	/* invalid operation mask */
+
+#define CW_Exceptions  	_Const_(0x003f)	/* all masks */
 
 #define RC_RND		_Const_(0x0000)
 #define RC_DOWN		_Const_(0x0400)
@@ -33,9 +35,10 @@
 
 /* p 15-5: Precision control bits affect only the following:
    ADD, SUB(R), MUL, DIV(R), and SQRT */
-#define FULL_PRECISION  (CW_PC | RC_RND)
 #define PR_24_BITS      _Const_(0x000)
 #define PR_53_BITS      _Const_(0x200)
 #define PR_64_BITS      _Const_(0x300)
+/* FULL_PRECISION simulates all exceptions masked */
+#define FULL_PRECISION  (PR_64_BITS | RC_RND | 0x3f)
 
 #endif _CONTROLW_H_

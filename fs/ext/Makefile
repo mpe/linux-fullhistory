@@ -15,7 +15,7 @@
 	$(AS) -o $*.o $<
 
 OBJS=	freelists.o truncate.o namei.o inode.o \
-	file.o dir.o symlink.o 
+	file.o dir.o symlink.o fsync.o
 
 ext.o: $(OBJS)
 	$(LD) -r -o ext.o $(OBJS)

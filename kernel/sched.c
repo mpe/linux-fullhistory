@@ -23,6 +23,7 @@
 #include <linux/errno.h>
 #include <linux/time.h>
 #include <linux/ptrace.h>
+#include <linux/segment.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -65,7 +66,7 @@ long user_stack [ PAGE_SIZE>>2 ] ;
 struct {
 	long * a;
 	short b;
-	} stack_start = { & user_stack [PAGE_SIZE>>2] , 0x10 };
+	} stack_start = { & user_stack [PAGE_SIZE>>2] , KERNEL_DS };
 /*
  *  'math_state_restore()' saves the current math information in the
  * old math state array, and gets the new ones from the current task
@@ -237,109 +238,47 @@ void sleep_on(struct wait_queue **p)
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
 
-/*
- * OK, here are some floppy things that shouldn't be in the kernel
- * proper. They are here because the floppy needs a timer, and this
- * was the easiest way of doing it.
- */
-static struct wait_queue * wait_motor[4] = {NULL,NULL,NULL,NULL};
-static int  mon_timer[4]={0,0,0,0};
-static int moff_timer[4]={0,0,0,0};
-unsigned char current_DOR = 0x0C;
-
-int ticks_to_floppy_on(unsigned int nr)
-{
-	extern unsigned char selected;
-	unsigned char mask = 0x10 << nr;
-
-	if (nr>3)
-		panic("floppy_on: nr>3");
-	moff_timer[nr]=10000;		/* 100 s = very big :-) */
-	cli();				/* use floppy_off to turn it off */
-	mask |= current_DOR;
-	if (!selected) {
-		mask &= 0xFC;
-		mask |= nr;
-	}
-	if (mask != current_DOR) {
-		outb(mask,FD_DOR);
-		if ((mask ^ current_DOR) & 0xf0)
-			mon_timer[nr] = HZ/2;
-		else if (mon_timer[nr] < 2)
-			mon_timer[nr] = 2;
-		current_DOR = mask;
-	}
-	sti();
-	return mon_timer[nr];
-}
-
-void floppy_off(unsigned int nr)
-{
-	moff_timer[nr]=3*HZ;
-}
-
-void do_floppy_timer(void)
-{
-	int i;
-	unsigned char mask = 0x10;
-
-	for (i=0 ; i<4 ; i++,mask <<= 1) {
-		if (!(mask & current_DOR))
-			continue;
-		if (mon_timer[i]) {
-			if (!--mon_timer[i])
-				wake_up(i+wait_motor);
-		} else if (!moff_timer[i]) {
-			current_DOR &= ~mask;
-			outb(current_DOR,FD_DOR);
-		} else
-			moff_timer[i]--;
-	}
-}
-
-#define TIME_REQUESTS 64
-
-static struct timer_list {
-	long jiffies;
-	void (*fn)(void);
-	struct timer_list * next;
-} timer_list[TIME_REQUESTS] = { { 0, NULL, NULL }, };
-
 static struct timer_list * next_timer = NULL;
 
-void add_timer(long jiffies, void (*fn)(void))
+void add_timer(struct timer_list * timer)
 {
-	struct timer_list * p;
 	unsigned long flags;
+	struct timer_list ** p;
 
-	if (!fn)
+	if (!timer)
 		return;
+	timer->next = NULL;
+	p = &next_timer;
 	save_flags(flags);
 	cli();
-	if (jiffies <= 0)
-		(fn)();
-	else {
-		for (p = timer_list ; p < timer_list + TIME_REQUESTS ; p++)
-			if (!p->fn)
-				break;
-		if (p >= timer_list + TIME_REQUESTS)
-			panic("No more time requests free");
-		p->fn = fn;
-		p->jiffies = jiffies;
-		p->next = next_timer;
-		next_timer = p;
-		while (p->next && p->next->jiffies < p->jiffies) {
-			p->jiffies -= p->next->jiffies;
-			fn = p->fn;
-			p->fn = p->next->fn;
-			p->next->fn = fn;
-			jiffies = p->jiffies;
-			p->jiffies = p->next->jiffies;
-			p->next->jiffies = jiffies;
-			p = p->next;
+	while (*p) {
+		if ((*p)->expires > timer->expires) {
+			(*p)->expires -= timer->expires;
+			timer->next = *p;
+			break;
 		}
-		if (p->next)
-			p->next->jiffies -= p->jiffies;
+		timer->expires -= (*p)->expires;
+		p = &(*p)->next;
+	}
+	*p = timer;
+	restore_flags(flags);
+}
+
+void del_timer(struct timer_list * timer)
+{
+	unsigned long flags;
+	struct timer_list **p;
+
+	p = &next_timer;
+	save_flags(flags);
+	cli();
+	while (*p) {
+		if (*p == timer) {
+			if ((*p = timer->next) != NULL)
+				(*p)->expires += timer->expires;
+			break;
+		}
+		p = &(*p)->next;
 	}
 	restore_flags(flags);
 }
@@ -443,19 +382,18 @@ static void do_timer(struct pt_regs * regs)
 		tp->fn();
 		sti();
 	}
-	if (next_timer) {
-		next_timer->jiffies--;
-		while (next_timer && next_timer->jiffies <= 0) {
-			void (*fn)(void);
-			
-			fn = next_timer->fn;
-			next_timer->fn = NULL;
-			next_timer = next_timer->next;
-			(fn)();
-		}
+	cli();
+	while (next_timer && next_timer->expires == 0) {
+		void (*fn)(unsigned long) = next_timer->function;
+		unsigned long data = next_timer->data;
+		next_timer = next_timer->next;
+		sti();
+		fn(data);
+		cli();
 	}
-	if (current_DOR & 0xf0)
-		do_floppy_timer();
+	if (next_timer)
+		next_timer->expires--;
+	sti();
 }
 
 int sys_alarm(long seconds)

@@ -69,7 +69,7 @@ static int pipe_write(struct inode * inode, struct file * filp, char * buf, int 
 			if (current->signal & ~current->blocked)
 				return written?written:-ERESTARTSYS;
 			if (filp->f_flags & O_NONBLOCK)
-				return -EAGAIN;
+				return written?written:-EAGAIN;
 			else
 				interruptible_sleep_on(&PIPE_WRITE_WAIT(*inode));
 		}

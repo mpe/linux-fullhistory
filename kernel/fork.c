@@ -17,12 +17,16 @@
 #include <linux/mm.h>
 #include <linux/stddef.h>
 #include <linux/unistd.h>
+#include <linux/segment.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
+extern void lcall7(void);
+
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
 
+extern int shm_fork (struct task_struct *, struct task_struct *);
 long last_pid=0;
 
 static int find_empty_process(void)
@@ -57,8 +61,30 @@ repeat:
 	return -EAGAIN;
 }
 
+static struct file * copy_fd(struct file * old)
+{
+	struct file * new = get_empty_filp();
+	int error;
+
+	if (new) {
+		memcpy(new,old,sizeof(*new));
+		new->f_count = 1;
+		if (new->f_inode)
+			new->f_inode->i_count++;
+		if (new->f_op && new->f_op->open) {
+			error = new->f_op->open(new->f_inode,new);
+			if (error) {
+				iput(new->f_inode);
+				new->f_count = 0;
+				new = NULL;
+			}
+		}
+	}
+	return new;
+}
+
 #define IS_CLONE (orig_eax == __NR_clone)
-#define copy_vm(p) (IS_CLONE?clone_page_tables:copy_page_tables)(p)	
+#define copy_vm(p) ((clone_flags & COPYVM)?copy_page_tables:clone_page_tables)(p)	
 
 /*
  *  Ok, this is the main fork-routine. It copies the system process
@@ -73,6 +99,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	struct task_struct *p;
 	int i,nr;
 	struct file *f;
+	unsigned long clone_flags = COPYVM | SIGCHLD;
 
 	p = (struct task_struct *) get_free_page(GFP_KERNEL);
 	if (!p)
@@ -103,7 +130,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->cmin_flt = p->cmaj_flt = 0;
 	p->start_time = jiffies;
 	p->tss.back_link = 0;
-	p->tss.ss0 = 0x10;
+	p->tss.ss0 = KERNEL_DS;
 	p->tss.eip = eip;
 	p->tss.eflags = eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
 	p->tss.eax = 0;
@@ -111,8 +138,14 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.edx = edx;
 	p->tss.ebx = ebx;
 	p->tss.esp = esp;
-	if (IS_CLONE)				/* clone() gets the new stack value */
-		p->tss.esp = ebx;
+	if (IS_CLONE) {
+		if (ebx)
+			p->tss.esp = ebx;
+		clone_flags = ecx;
+		if (p->tss.esp == current->tss.esp)
+			clone_flags |= COPYVM;
+	}
+	p->exit_signal = clone_flags & CSIGNAL;
 	p->tss.ebp = ebp;
 	p->tss.esi = esi;
 	p->tss.edi = edi;
@@ -124,12 +157,14 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.gs = gs & 0xffff;
 	p->tss.ldt = _LDT(nr);
 	p->tss.trace_bitmap = offsetof(struct tss_struct,io_bitmap) << 16;
+	set_call_gate(p->ldt+0,lcall7);
 	for (i = 0; i<IO_BITMAP_SIZE ; i++)
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	p->kernel_stack_page = get_free_page(GFP_KERNEL);
-	if (!p->kernel_stack_page || copy_vm(p)) {
+	p->semun = NULL; p->shm = NULL;
+	if (!p->kernel_stack_page || copy_vm(p) || shm_fork (current, p)) {
 		task[nr] = NULL;
 		REMOVE_LINKS(p);
 		free_page(p->kernel_stack_page);
@@ -137,9 +172,15 @@ int sys_fork(long ebx,long ecx,long edx,
 		return -EAGAIN;
 	}
 	p->tss.esp0 = PAGE_SIZE + p->kernel_stack_page;
-	for (i=0; i<NR_OPEN;i++)
-		if ((f = p->filp[i]) != NULL)
-			f->f_count++;
+	if (clone_flags & COPYFD) {
+		for (i=0; i<NR_OPEN;i++)
+			if ((f = p->filp[i]) != NULL)
+				p->filp[i] = copy_fd(f);
+	} else {
+		for (i=0; i<NR_OPEN;i++)
+			if ((f = p->filp[i]) != NULL)
+				f->f_count++;
+	}
 	if (current->pwd)
 		current->pwd->i_count++;
 	if (current->root)

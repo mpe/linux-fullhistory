@@ -25,7 +25,7 @@
 #define SWP_USED	1
 #define SWP_WRITEOK	3
 
-#define SWP_TYPE(entry) (((entry) & 0xffe) >> 1)
+#define SWP_TYPE(entry) (((entry) & 0xfe) >> 1)
 #define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << PAGE_SHIFT))
 
@@ -43,6 +43,7 @@ static struct swap_info_struct {
 } swap_info[MAX_SWAPFILES];
 
 extern unsigned long free_page_list;
+extern int shm_swap (int);
 
 /*
  * The following are used to make sure we don't thrash too much...
@@ -95,7 +96,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	wake_up(&lock_queue);
 }
 
-static unsigned int get_swap_page(void)
+unsigned int get_swap_page(void)
 {
 	struct swap_info_struct * p;
 	unsigned int offset, type;
@@ -126,6 +127,8 @@ unsigned long swap_duplicate(unsigned long entry)
 		return 0;
 	offset = SWP_OFFSET(entry);
 	type = SWP_TYPE(entry);
+	if (type == SHM_SWP_TYPE)
+		return entry;
 	if (type >= nr_swapfiles) {
 		printk("Trying to duplicate nonexistent swap-page\n");
 		return 0;
@@ -151,6 +154,8 @@ void swap_free(unsigned long entry)
 	if (!entry)
 		return;
 	type = SWP_TYPE(entry);
+	if (type == SHM_SWP_TYPE)
+		return;
 	if (type >= nr_swapfiles) {
 		printk("Trying to free nonexistent swap-page\n");
 		return;
@@ -194,6 +199,8 @@ void swap_in(unsigned long *table_ptr)
 		printk("No swap page in swap_in\n");
 		return;
 	}
+	if (SWP_TYPE(entry) == SHM_SWP_TYPE) 
+		return shm_no_page ((unsigned long *) table_ptr);
 	page = get_free_page(GFP_KERNEL);
 	if (!page) {
 		oom(current);
@@ -331,6 +338,8 @@ static int try_to_free_page(void)
 
 	while (i--) {
 		if (shrink_buffers(i))
+			return 1;
+		if (shm_swap(i))
 			return 1;
 		if (swap_out(i))
 			return 1;

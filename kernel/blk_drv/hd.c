@@ -99,12 +99,12 @@ unsigned long read_timer(void)
 	int i;
 
 	cli();
-    	outb_p(0xc2, 0x43);
-	t = jiffies * 11931 + (inb_p(0x40) & 0x80 ? 5966 : 11932);
+	t = jiffies * 11932;
+    	outb_p(0, 0x43);
 	i = inb_p(0x40);
 	i |= inb(0x40) << 8;
 	sti();
-	return(t - i / 2);
+	return(t - i);
 }
 #endif
 
@@ -700,7 +700,8 @@ static struct file_operations hd_fops = {
 	hd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	hd_open,		/* open */
-	hd_release		/* release */
+	hd_release,		/* release */
+	block_fsync		/* fsync */
 };
 
 unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)

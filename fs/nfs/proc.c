@@ -16,6 +16,7 @@
 #define NFS_PROC_DEBUG
 #endif
 
+#include <linux/config.h>
 #include <linux/param.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -23,8 +24,7 @@
 #include <linux/utsname.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-
-#include <netinet/in.h>
+#include <linux/in.h>
 
 #ifdef NFS_PROC_DEBUG
 static int proc_debug = 0;

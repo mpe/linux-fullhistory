@@ -32,7 +32,7 @@
 
 #include <asm/bitops.h>
 
-static inline int find_first_zero_bit(unsigned * addr, unsigned size)
+static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
 {
 	int res;
 	if (!size)
@@ -358,7 +358,8 @@ repeat:
 		if (!gdp) {
 			for (j = 0; j < sb->u.ext2_sb.s_groups_count; j++) {
 				tmp = get_group_desc(sb, j);
-				if (tmp->bg_free_inodes_count >= avefreei) {
+				if (tmp->bg_free_inodes_count &&
+					tmp->bg_free_inodes_count >= avefreei) {
 					if (!gdp || 
 					    (tmp->bg_free_inodes_count >
 					     gdp->bg_free_inodes_count)) {
@@ -405,6 +406,7 @@ repeat:
 	
 	if (!gdp) {
 		unlock_super (sb);
+		iput(inode);
 		return NULL;
 	}
 	bitmap_nr = load_inode_bitmap (sb, i);
@@ -456,6 +458,7 @@ repeat:
 	inode->u.ext2_i.i_dtime = 0;
 	inode->u.ext2_i.i_block_group = i;
 	inode->i_op = NULL;
+	insert_inode_hash(inode);
 	inc_inode_version (inode, gdp, mode);
 #ifdef EXT2FS_DEBUG
 	printk ("ext2_new_inode : allocating inode %d\n", inode->i_ino);

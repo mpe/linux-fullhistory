@@ -8,6 +8,8 @@
  *	- deadlock detection/avoidance (of dubious merit, but since it's in
  *	  the definition, I guess it should be provided eventually)
  *	- mandatory locks (requires lots of changes elsewhere)
+ *
+ *  Edited by Kai Petzke, wpp@marie.physik.tu-berlin.de
  */
 
 #include <asm/segment.h>
@@ -24,9 +26,8 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l);
 static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl);
 static int overlap(struct file_lock *fl1, struct file_lock *fl2);
 static int lock_it(struct file *filp, struct file_lock *caller);
-static int unlock_it(struct file *filp, struct file_lock *caller);
-static struct file_lock *alloc_lock(struct file *filp, struct file_lock *template);
-static void free_lock(struct file *filp, struct file_lock *fl);
+static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *template);
+static void free_lock(struct file_lock **fl);
 
 static struct file_lock file_lock_table[NR_FILE_LOCKS];
 static struct file_lock *file_lock_free_list;
@@ -130,36 +131,31 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	}
 
-	/*
-	 * F_UNLCK needs to be handled differently ...
-	 */
-
-	if (file_lock.fl_type == F_UNLCK)
-		return unlock_it(filp, &file_lock);
-
-	/*
-	 * Scan for a conflicting lock ...
-	 */
-
+  	/*
+  	 * Scan for a conflicting lock ...
+  	 */
+  
+	if (file_lock.fl_type != F_UNLCK) {
 repeat:
-	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
-		if (!conflict(&file_lock, fl))
-			continue;
-		/*
-		 * File is locked by another process. If this is F_SETLKW
-		 * wait for the lock to be released.
-		 * FIXME: We need to check for deadlocks here.
-		 */
-		if (cmd == F_SETLKW) {
-			if (current->signal & ~current->blocked)
-				return -ERESTARTSYS;
-			interruptible_sleep_on(&fl->fl_wait);
-			if (current->signal & ~current->blocked)
-				return -ERESTARTSYS;
-			goto repeat;
-		}
-		return -EAGAIN;
-	}
+		for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
+			if (!conflict(&file_lock, fl))
+				continue;
+			/*
+			 * File is locked by another process. If this is
+			 * F_SETLKW wait for the lock to be released.
+			 * FIXME: We need to check for deadlocks here.
+			 */
+			if (cmd == F_SETLKW) {
+				if (current->signal & ~current->blocked)
+					return -ERESTARTSYS;
+				interruptible_sleep_on(&fl->fl_wait);
+				if (current->signal & ~current->blocked)
+					return -ERESTARTSYS;
+				goto repeat;
+			}
+			return -EAGAIN;
+  		}
+  	}
 
 	/*
 	 * Lock doesn't conflict with any other lock ...
@@ -174,18 +170,19 @@ repeat:
 
 void fcntl_remove_locks(struct task_struct *task, struct file *filp)
 {
-	struct file_lock *fl,*next;
+	struct file_lock *fl;
+	struct file_lock **before;
 
-	for (fl = filp->f_inode->i_flock; fl != NULL; ) {
-		/*
-		 * If this one is freed, {fl_next} gets clobbered when the
-		 * entry is moved to the free list, so grab it now ...
-		 */
-		next = fl->fl_next;
-		if (fl->fl_owner == task)
-			free_lock(filp, fl);
-		fl = next;
-	}
+	/* Find first lock owned by caller ... */
+
+	before = &filp->f_inode->i_flock;
+	while ((fl = *before) && task != fl->fl_owner)
+		before = &fl->fl_next;
+
+	/* The list is sorted by owner ... */
+
+	while ((fl = *before) && task == fl->fl_owner)
+		free_lock(before);
 }
 
 /*
@@ -243,213 +240,181 @@ static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl)
 
 static int overlap(struct file_lock *fl1, struct file_lock *fl2)
 {
-	if (fl1->fl_start <= fl2->fl_start) {
-		return fl1->fl_end >= fl2->fl_start;
-	} else {
-		return fl2->fl_end >= fl1->fl_start;
-	}
+	return fl1->fl_end >= fl2->fl_start && fl2->fl_end >= fl1->fl_start;
 }
 
 /*
  * Add a lock to a file ...
  * Result is 0 for success or -ENOLCK.
  *
- * We try to be real clever here and always minimize the number of table
- * entries we use. For example we merge adjacent locks whenever possible. This
- * consumes a bit of cpu and code space, is it really worth it? Beats me.
- *
- * I've tried to keep the following as small and simple as possible. If you can
- * make it smaller or simpler, please do. /dje 92Aug11
+ * We merge adjacent locks whenever possible.
  *
  * WARNING: We assume the lock doesn't conflict with any other lock.
+ */
+  
+/*
+ * Rewritten by Kai Petzke:
+ * We sort the lock list first by owner, then by the starting address.
+ *
+ * To make freeing a lock much faster, we keep a pointer to the lock before the
+ * actual one. But the real gain of the new coding was, that lock_it() and
+ * unlock_it() became one function.
+ *
+ * To all purists: Yes, I use a few goto's. Just pass on to the next function.
  */
 
 static int lock_it(struct file *filp, struct file_lock *caller)
 {
-	struct file_lock *fl,*new;
+	struct file_lock *fl;
+	struct file_lock *left = 0;
+	struct file_lock *right = 0;
+	struct file_lock **before;
+	int added = 0;
 
 	/*
-	 * It's easier if we allocate a slot for the lock first, and then
-	 * release it later if we have to (IE: if it can be merged with
-	 * another). This way the for() loop always knows that {caller} is an
-	 * existing entry. This will cause the routine to fail unnecessarily
-	 * in rare cases, but perfection can be pushed too far. :-)
+	 * Find the first old lock with the same owner as the new lock.
 	 */
 
-	if ((caller = alloc_lock(filp, caller)) == NULL)
-		return -ENOLCK;
+	before = &filp->f_inode->i_flock;
+	while ((fl = *before) && caller->fl_owner != fl->fl_owner)
+		before = &fl->fl_next;
 
 	/*
-	 * First scan to see if we are changing/augmenting an existing lock ...
+	 * Look up all locks of this owner.
 	 */
 
-	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
-		if (caller->fl_owner != fl->fl_owner)
-			continue;
-		if (caller == fl)
-			continue;
-		if (!overlap(caller, fl)) {
+	while ((fl = *before) && caller->fl_owner == fl->fl_owner) {
+		/*
+		 * Detect adjacent or overlapping regions (if same lock type)
+		 */
+		if (caller->fl_type == fl->fl_type) {
+			if (fl->fl_end < caller->fl_start - 1)
+				goto next_lock;
 			/*
-			 * Detect adjacent regions (if same lock type) ...
+			 * If the next lock in the list has entirely bigger
+			 * addresses than the new one, insert the lock here.
 			 */
-			if (caller->fl_type != fl->fl_type)
-				continue;
-			if (caller->fl_end + 1 == fl->fl_start) {
+			if (fl->fl_start > caller->fl_end + 1)
+				break;
+
+			/*
+			 * If we come here, the new and old lock are of the
+			 * same type and adjacent or overlapping. Make one
+			 * lock yielding from the lower start address of both
+			 * locks to the higher end address.
+			 */
+			if (fl->fl_start > caller->fl_start)
 				fl->fl_start = caller->fl_start;
-				free_lock(filp, caller);
-				caller = fl;
-				/* must continue, may overlap others now */
-			} else if (caller->fl_start - 1 == fl->fl_end) {
+			else
+				caller->fl_start = fl->fl_start;
+			if (fl->fl_end < caller->fl_end)
 				fl->fl_end = caller->fl_end;
-				free_lock(filp, caller);
-				caller = fl;
-				/* must continue, may overlap others now */
+			else
+				caller->fl_end = fl->fl_end;
+			if (added) {
+				free_lock(before);
+				continue;
 			}
-			continue;
+			caller = fl;
+			added = 1;
+			goto next_lock;
 		}
 		/*
-		 * We've found an overlapping region. Is it a change of lock
-		 * type, or are we changing the size of the locked space?
+		 * Processing for different lock types is a bit more complex.
 		 */
-		if (caller->fl_type != fl->fl_type) {
-			if (caller->fl_start > fl->fl_start && caller->fl_end < fl->fl_end) {
-				/*
-				 * The new lock splits the old one in two ...
-				 * {fl} is the bottom piece, {caller} is the
-				 * new lock, and {new} is the top piece.
-				 */
-				if ((new = alloc_lock(filp, fl)) == NULL) {
-					free_lock(filp, caller);
-					return -ENOLCK;
-				}
-				fl->fl_end = caller->fl_start - 1;
-				new->fl_start = caller->fl_end + 1;
-				return 0;
-			}
-			if (caller->fl_start <= fl->fl_start && caller->fl_end >= fl->fl_end) {
-				/*
-				 * The new lock completely replaces old one ...
-				 */
-				free_lock(filp, fl);
-				return 0;
-			}
-			if (caller->fl_end < fl->fl_end) {
-				fl->fl_start = caller->fl_end + 1;
-				/* must continue, may be more overlaps */
-			} else if (caller->fl_start > fl->fl_start) {
-				fl->fl_end = caller->fl_start - 1;
-				/* must continue, may be more overlaps */
-			} else {
-				printk("VFS: lock_it: program bug: unanticipated overlap\n");
-				free_lock(filp, caller);
-				return -ENOLCK;
-			}
-		} else {	/* The new lock augments an existing lock ... */
-			int grew = 0;
-
-			if (caller->fl_start < fl->fl_start) {
-				fl->fl_start = caller->fl_start;
-				grew = 1;
-			}
-			if (caller->fl_end > fl->fl_end) {
-				fl->fl_end = caller->fl_end;
-				grew = 1;
-			}
-			free_lock(filp, caller);
-			caller = fl;
-			if (!grew)
-				return 0;
-			/* must continue, may be more overlaps */
+		if (fl->fl_end < caller->fl_start)
+			goto next_lock;
+		if (fl->fl_start > caller->fl_end)
+			break;
+		if (caller->fl_type == F_UNLCK)
+			added = 1;
+		if (fl->fl_start < caller->fl_start)
+			left = fl;
+		/*
+		 * If the next lock in the list has a higher end address than
+		 * the new one, insert the new one here.
+		 */
+		if (fl->fl_end > caller->fl_end) {
+			right = fl;
+			break;
 		}
+		if (fl->fl_start >= caller->fl_start) {
+			/*
+			 * The new lock completely replaces an old one (This may
+			 * happen several times).
+			 */
+			if (added) {
+				free_lock(before);
+				continue;
+			}
+			/*
+			 * Replace the old lock with the new one. Wake up
+			 * anybody waiting for the old one, as the change in
+			 * lock type migth satisfy his needs.
+			 */
+			wake_up(&fl->fl_wait);
+			fl->fl_start = caller->fl_start;
+			fl->fl_end   = caller->fl_end;
+			fl->fl_type  = caller->fl_type;
+			fl->fl_wait  = 0;
+			caller = fl;
+			added = 1;
+		}
+		/*
+		 * Go on to next lock.
+		 */
+next_lock:
+		before = &(*before)->fl_next;
 	}
 
-	/*
-	 * New lock doesn't overlap any regions ...
-	 * alloc_lock() has already been called, so we're done!
-	 */
-
+	if (! added) {
+		if (caller->fl_type == F_UNLCK)
+			return -EINVAL;
+		if (! (caller = alloc_lock(before, caller)))
+			return -ENOLCK;
+	}
+	if (right) {
+		if (left == right) {
+			/*
+			 * The new lock breaks the old one in two pieces, so we
+			 * have to allocate one more lock (in this case, even
+			 * F_UNLCK may fail!).
+			 */
+			if (! (left = alloc_lock(before, right))) {
+				if (! added)
+					free_lock(before);
+				return -ENOLCK;
+			}
+		}
+		right->fl_start = caller->fl_end + 1;
+	}
+	if (left)
+		left->fl_end = caller->fl_start - 1;
 	return 0;
 }
 
 /*
- * Handle F_UNLCK ...
- * Result is 0 for success, or -EINVAL or -ENOLCK.
- * ENOLCK can happen when a lock is split into two.
+ * File_lock() inserts a lock at the position pos of the linked list.
  */
 
-static int unlock_it(struct file *filp, struct file_lock *caller)
-{
-	int one_unlocked = 0;
-	struct file_lock *fl,*next;
-
-	for (fl = filp->f_inode->i_flock; fl != NULL; ) {
-		if (caller->fl_owner != fl->fl_owner || !overlap(caller, fl)) {
-			fl = fl->fl_next;
-			continue;
-		}
-		one_unlocked = 1;
-		if (caller->fl_start > fl->fl_start && caller->fl_end < fl->fl_end) {
-			/*
-			 * Lock is split in two ...
-			 * {fl} is the bottom piece, {next} is the top piece.
-			 */
-			if ((next = alloc_lock(filp, fl)) == NULL)
-				return -ENOLCK;
-			fl->fl_end = caller->fl_start - 1;
-			next->fl_start = caller->fl_end + 1;
-			return 0;
-		}
-		/*
-		 * At this point we know there is an overlap and we know the
-		 * lock isn't split into two ...
-		 *
-		 * Unless the lock table is broken, entries will not overlap.
-		 * IE: User X won't have an entry locking bytes 1-3 and another
-		 * entry locking bytes 3-5. Therefore, if the area being
-		 * unlocked is a subset of the total area, we don't need to
-		 * traverse any more of the list. The code is a tad more
-		 * complicated by this optimization. Perhaps it's not worth it.
-		 *
-		 * WARNING: We assume free_lock() does not alter
-		 *	{fl_start, fl_end}.
-		 *
-		 * {fl_next} gets clobbered when the entry is moved to
-		 * the free list, so grab it now ...
-		 */
-		next = fl->fl_next;
-		if (caller->fl_start <= fl->fl_start && caller->fl_end >= fl->fl_end) {
-			free_lock(filp, fl);
-		} else if (caller->fl_start > fl->fl_start) {
-			fl->fl_end = caller->fl_start - 1;
-		} else {
-			/* caller->fl_end < fl->fl_end */
-			fl->fl_start = caller->fl_end + 1;
-		}
-		if (caller->fl_start >= fl->fl_start && caller->fl_end <= fl->fl_end)
-			return 0;		/* no more to be found */
-		fl = next;
-		/* must continue, there may be more to unlock */
-	}
-
-	return one_unlocked ? 0 : -EINVAL;
-}
-
-static struct file_lock *alloc_lock(struct file *filp, struct file_lock *template)
+static struct file_lock *alloc_lock(struct file_lock **pos,
+				    struct file_lock *template)
 {
 	struct file_lock *new;
 
-	if (file_lock_free_list == NULL)
+	new = file_lock_free_list;
+	if (new == NULL)
 		return NULL;			/* no available entry */
-	if (file_lock_free_list->fl_owner != NULL)
-		panic("VFS: alloc_lock: broken free list\n");
+	if (new->fl_owner != NULL)
+		panic("alloc_lock: broken free list\n");
 
-	new = file_lock_free_list;		/* remove from free list */
-	file_lock_free_list = file_lock_free_list->fl_next;
+	/* remove from free list */
+	file_lock_free_list = new->fl_next;
 
 	*new = *template;
 
-	new->fl_next = filp->f_inode->i_flock;	/* insert into file's list */
-	filp->f_inode->i_flock = new;
+	new->fl_next = *pos;	/* insert into file's list */
+	*pos = new;
 
 	new->fl_owner = current;	/* FIXME: needed? */
 	new->fl_wait = NULL;
@@ -458,31 +423,17 @@ static struct file_lock *alloc_lock(struct file *filp, struct file_lock *templat
 
 /*
  * Add a lock to the free list ...
- *
- * WARNING: We must not alter {fl_start, fl_end}. See unlock_it().
  */
 
-static void free_lock(struct file *filp, struct file_lock *fl)
+static void free_lock(struct file_lock **fl_p)
 {
-	struct file_lock **fl_p;
+	struct file_lock *fl;
 
+	fl = *fl_p;
 	if (fl->fl_owner == NULL)	/* sanity check */
-		panic("VFS: free_lock: broken lock list\n");
+		panic("free_lock: broken lock list\n");
 
-	/*
-	 * We only use a singly linked list to save some memory space
-	 * (the only place we'd use a doubly linked list is here).
-	 */
-
-	for (fl_p = &filp->f_inode->i_flock; *fl_p != NULL; fl_p = &(*fl_p)->fl_next) {
-		if (*fl_p == fl)
-			break;
-	}
-	if (*fl_p == NULL) {
-		printk("VFS: free_lock: lock is not in file's lock list\n");
-	} else {
-		*fl_p = (*fl_p)->fl_next;
-	}
+	*fl_p = (*fl_p)->fl_next;
 
 	fl->fl_next = file_lock_free_list;	/* add to free list */
 	file_lock_free_list = fl;

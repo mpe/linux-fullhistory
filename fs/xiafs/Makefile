@@ -15,7 +15,7 @@
 	$(AS) -o $*.o $<
 
 OBJS=	bitmap.o truncate.o namei.o inode.o \
-	file.o dir.o symlink.o
+	file.o dir.o symlink.o fsync.o
 
 xiafs.o: $(OBJS)
 	$(LD) -r -o xiafs.o $(OBJS)

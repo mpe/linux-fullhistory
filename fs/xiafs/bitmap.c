@@ -332,6 +332,7 @@ struct inode * xiafs_new_inode(struct inode * dir)
     inode->i_op = NULL;
     inode->i_blocks = 0;
     inode->i_blksize = XIAFS_ZSIZE(inode->i_sb);
+    insert_inode_hash(inode);
     return inode;
 }
 

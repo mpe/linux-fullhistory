@@ -1211,7 +1211,8 @@ static struct file_operations st_fops = {
    st_ioctl,        /* ioctl */
    NULL,            /* mmap */
    scsi_tape_open,  /* open */
-   scsi_tape_close  /* release */
+   scsi_tape_close, /* release */
+   NULL		    /* fsync */
 };
 
 void st_attach(Scsi_Device * SDp){

@@ -74,7 +74,7 @@ struct bucket_desc {	/* 16 bytes */
 };
 
 struct _bucket_dir {	/* 8 bytes */
-	int			size;
+	unsigned int		size;
 	struct bucket_desc	*chain;
 };
 
@@ -114,19 +114,12 @@ static struct bucket_desc *free_bucket_desc = (struct bucket_desc *) 0;
 /* It assumes it is called with interrupts on. and will
    return that way.  It also can sleep if priority != GFP_ATOMIC. */
  
-static inline int init_bucket_desc(int priority)
+static inline void init_bucket_desc(unsigned long page)
 {
-	struct bucket_desc *bdesc, *first;
+	struct bucket_desc *bdesc;
 	int i;
-	/* this turns interrupt on, so we should be carefull. */
-	first = bdesc = (struct bucket_desc *) get_free_page(priority);
-	if (!bdesc)
-		return 1;
 
-	/* At this point it is possible that we have slept and 
-	   free has been called etc.  So we might not actually need
-	   this page anymore. */
-
+	bdesc = (struct bucket_desc *) page;
 	for (i = PAGE_SIZE/sizeof(struct bucket_desc); i > 1; i--) {
 		bdesc->next = bdesc+1;
 		bdesc++;
@@ -135,17 +128,21 @@ static inline int init_bucket_desc(int priority)
 	 * This is done last, to avoid race conditions in case
 	 * get_free_page() sleeps and this routine gets called again....
 	 */
-
 	cli();
 	bdesc->next = free_bucket_desc;
-	free_bucket_desc = first;
-	sti();
-	return (0);
+	free_bucket_desc = (struct bucket_desc *) page;
 }
 
+/*
+ * Re-organized some code to give cleaner assembly output for easier
+ * verification.. LBT
+ */
 void *
 kmalloc(unsigned int len, int priority)
 {
+	int i;
+	unsigned long		flags;
+	unsigned long		page;
 	struct _bucket_dir	*bdir;
 	struct bucket_desc	*bdesc;
 	void			*retval;
@@ -156,96 +153,86 @@ kmalloc(unsigned int len, int priority)
 	 */
 
 	/* The sizes are static so there is no reentry problem here. */
-	for (bdir = bucket_dir; bdir->size; bdir++)
-		if (bdir->size >= len)
-			break;
-
-	if (!bdir->size) {
-	       /* This should be changed for sizes > 1 page. */
-		printk("kmalloc called with impossibly large argument (%d)\n", len);
-		return NULL;
+	bdir = bucket_dir;
+	for (bdir = bucket_dir ; bdir->size < len ; bdir++) {
+		if (!bdir->size)
+			goto too_large;
 	}
 
 	/*
 	 * Now we search for a bucket descriptor which has free space
 	 */
-	cli();	/* Avoid race conditions */
+	save_flags(flags);
+	cli();			/* Avoid race conditions */
 	for (bdesc = bdir->chain; bdesc != NULL; bdesc = bdesc->next)
-		if (bdesc->freeptr != NULL || bdesc->page == NULL)
-			break;
+		if (bdesc->freeptr)
+			goto found_bdesc;
 	/*
 	 * If we didn't find a bucket with free space, then we'll
 	 * allocate a new one.
 	 */
-	if (!bdesc)
-	  {
-	    char *cp;
-	    int i;
-	    
-	    /* This must be a while because it is possible
-	       to get interrupted after init_bucket_desc
-	       and before cli.  The interrupt could steal
-	       our free_desc. */
-	    
-	    while (!free_bucket_desc)
-	      {
-		sti();  /* This might happen anyway, so we
-			   might as well make it explicit. */
-		if (init_bucket_desc(priority))
-		  {
-		    return NULL;
-		  }
-		cli(); /* Turn them back off. */
-	      }
-	    
-	    bdesc = free_bucket_desc;
-	    free_bucket_desc = bdesc->next;
+	
+	/*
+	 * Note that init_bucket_descriptor() does it's
+	 * own cli() before returning, and guarantees that
+	 * there is a bucket desc in the page.
+	 */
+	if (!free_bucket_desc) {
+		restore_flags(flags);
+		page = get_free_page(priority);
+		if (!page)
+			return NULL;
+		init_bucket_desc(page);
+	}
+	
+	bdesc = free_bucket_desc;
+	free_bucket_desc = bdesc->next;
+	restore_flags(flags);
 
-	    /* get_free_page will turn interrupts back
-	       on.  So we might as well do it
-	       ourselves. */
+	page = get_free_page(priority);
 
-	    sti();
-	    bdesc->refcnt = 0;
-	    bdesc->bucket_size = bdir->size;
-	    bdesc->page = bdesc->freeptr =
-	      (void *)cp = get_free_page(priority);
-	    
-	    if (!cp)
-	      {
-
-		/* put bdesc back on the free list. */
+	/*
+	 * Out of memory? Put the bucket descriptor back on the free list
+	 */
+	if (!page) {
 		cli();
 		bdesc->next = free_bucket_desc;
-		free_bucket_desc = bdesc->next;
-		sti();
-
+		free_bucket_desc = bdesc;
+		restore_flags(flags);
 		return NULL;
-	      }
-	    
-	    /* Set up the chain of free objects */
-	    for (i=PAGE_SIZE/bdir->size; i > 1; i--)
-	      {
-		*((char **) cp) = cp + bdir->size;
-		cp += bdir->size;
-	      }
-	    
-	    *((char **) cp) = 0;
+	}
+		
+	bdesc->refcnt = 0;
+	bdesc->bucket_size = bdir->size;
+	bdesc->page = bdesc->freeptr = (void *) page;
+	
+	/* Set up the chain of free objects */
+	for (i=PAGE_SIZE/bdir->size; i > 1 ; i--) {
+		*((void **) page) = (void *)(page + bdir->size);
+		page += bdir->size;
+	}
+	
+	*((void **) page) = NULL;
 
-	    /* turn interrupts back off for putting the
-	       thing onto the chain. */
-	    cli();
-	    /* remember bdir is not changed. */
-	    bdesc->next = bdir->chain; /* OK, link it in! */
-	    bdir->chain = bdesc;
+	/* turn interrupts back off for putting the
+	   thing onto the chain. */
+	cli();
+	/* remember bdir is not changed. */
+	bdesc->next = bdir->chain; /* OK, link it in! */
+	bdir->chain = bdesc;
 
-	  }
-
+found_bdesc:
 	retval = (void *) bdesc->freeptr;
 	bdesc->freeptr = *((void **) retval);
 	bdesc->refcnt++;
-	sti();	/* OK, we're safe again */
+	restore_flags(flags);	/* OK, we're safe again */
+	memset(retval, 0xf0, bdir->size);
 	return retval;
+
+too_large:
+       /* This should be changed for sizes > 1 page. */
+	printk("kmalloc called with impossibly large argument (%d)\n", len);
+	return NULL;
 }
 
 /*
@@ -257,20 +244,22 @@ kmalloc(unsigned int len, int priority)
  */
 void kfree_s(void *obj, int size)
 {
-	void		*page;
+	unsigned long		flags;
+	void			*page;
 	struct _bucket_dir	*bdir;
 	struct bucket_desc	*bdesc, *prev;
 
+	if (!obj)
+		return;
+	save_flags(flags);
 	/* Calculate what page this object lives in */
 	page = (void *)  ((unsigned long) obj & 0xfffff000);
 
 	/* Now search the buckets looking for that page */
-	for (bdir = bucket_dir; bdir->size; bdir++)
-	  {
+	for (bdir = bucket_dir; bdir->size; bdir++) {
 	    prev = 0;
 	    /* If size is zero then this conditional is always true */
-	    if (bdir->size >= size)
-	      {
+	    if (bdir->size >= size) {
 		/* We have to turn off interrupts here because
 		   we are descending the chain.  If something
 		   changes it in the middle we could suddenly
@@ -278,20 +267,21 @@ void kfree_s(void *obj, int size)
 		   I think this would only cause a memory
 		   leak, but better safe than sorry. */
 		cli(); /* To avoid race conditions */
-		for (bdesc = bdir->chain; bdesc; bdesc = bdesc->next)
-		  {
+		for (bdesc = bdir->chain; bdesc; bdesc = bdesc->next) {
 		    if (bdesc->page == page)
-		      goto found;
+			goto found;
 		    prev = bdesc;
-		  }
-	      }
-	  }
+		}
+	    }
+	}
 
+	restore_flags(flags);
 	printk("Bad address passed to kernel kfree_s(%X, %d)\n",obj, size);
-	sti();
+	printk("Offending eip: %08x\n",((unsigned long *) &obj)[-1]);
 	return;
 found:
 	/* interrupts are off here. */
+	memset(obj, 0xf8, bdir->size);
 	*((void **)obj) = bdesc->freeptr;
 	bdesc->freeptr = obj;
 	bdesc->refcnt--;
@@ -316,6 +306,6 @@ found:
 		free_bucket_desc = bdesc;
 		free_page((unsigned long) bdesc->page);
 	}
-	sti();
+	restore_flags(flags);
 	return;
 }

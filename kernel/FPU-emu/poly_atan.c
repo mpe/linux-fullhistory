@@ -58,7 +58,7 @@ void	poly_atan(FPU_REG *arg)
 
 #ifdef PARANOID
   if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
-    { arith_invalid(arg); return; }
+    { arith_invalid(arg); return; }  /* Need a positive number */
 #endif PARANOID
 
   exponent = arg->exp - EXP_BIAS;
@@ -164,7 +164,6 @@ void	poly_atan(FPU_REG *arg)
 
   /* The complete odd polynomial */
   reg_u_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
-  odd_poly.exp -= EXP_BIAS - 1;
 
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(even_poly.sign) = 0;

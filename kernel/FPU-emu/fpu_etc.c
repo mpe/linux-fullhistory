@@ -48,21 +48,26 @@ static void ftst_(void)
       setcc(SW_C3);
       break;
     case TW_Valid:
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       if (FPU_st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C0);
       break;
     case TW_NaN:
-      setcc(SW_C2);    /* Operand is not comparable */ 
+      setcc(SW_C0|SW_C2|SW_C3);   /* Operand is not comparable */ 
       EXCEPTION(EX_Invalid);
       break;
     case TW_Infinity:
       if (FPU_st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
-        setcc(SW_C3);
-      /*      setcc(SW_C0|SW_C2|SW_C3); */
+        setcc(SW_C0);
       EXCEPTION(EX_Invalid);
       break;
     case TW_Empty:
@@ -70,7 +75,7 @@ static void ftst_(void)
       EXCEPTION(EX_StackUnder);
       break;
     default:
-      setcc(SW_C2);    /* Operand is not comparable */ 
+      setcc(SW_C0|SW_C2|SW_C3);   /* Operand is not comparable */ 
       EXCEPTION(EX_INTERNAL|0x14);
       break;
     }
@@ -88,10 +93,11 @@ static void fxam(void)
       c = SW_C3;
       break;
     case TW_Valid:
-      if (FPU_st0_ptr->sigh & 0x80000000)
-        c = SW_C2;
+      /* This will need to be changed if TW_Denormal is ever used. */
+      if ( FPU_st0_ptr->exp <= EXP_UNDER )
+        c = SW_C2|SW_C3;  /* Denormal */
       else
-        c = SW_C3|SW_C2;
+        c = SW_C3;
       break;
     case TW_NaN:
       c = SW_C0;

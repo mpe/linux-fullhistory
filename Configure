@@ -1,27 +1,55 @@
 #! /bin/sh
+# Configure	This script is used to configure the Linux kernel.
 #
-# This script is used to configure the linux kernel.
-# It's a fast hack - feel free to do something better.
-CONFIG=.config~
-CONFIG_H=include/linux/autoconf.h
-> config.new
-echo "#" > $CONFIG
-echo "# Automatically generated make config: don't edit" >> $CONFIG
-echo "#" >> $CONFIG
+# Usage:	Configure [-pro]
+#
+# Version;	@(#)Configure	1.3	04/05/93
+#
+# Author:	Linus Torvalds, <torvalds@helsinki.fi>
+#
 
-echo "/*" > $CONFIG_H
-echo " * Automatically generated C config: don't edit" >> $CONFIG_H
-echo " */" >> $CONFIG_H
+  # Set variables to initial state.
+  OPTS=""
+  CONFIG=.config~
+  CONFIG_H=include/linux/autoconf.h
+  next="y"
+  old="y"
 
-next="y"
-old="y"
+  # Check commandline arguments.
+  >config.new
+  while [ $# != 0 ]
+  do
+	case $1 in
+		-pro)	OPTS="UTS_SYSNAME \"LINUX/Pro\""
+			;;
+		*)	echo "Usage: Configure [-pro]"
+			exit 1
+			;;
+	esac
+	shift
+  done
+ 	
+  echo "#" > $CONFIG
+  echo "# Automatically generated make config: don't edit" >> $CONFIG
+  echo "#" >> $CONFIG
 
-while read i
-do
+  echo "/*" > $CONFIG_H
+  echo " * Automatically generated C config: don't edit" >> $CONFIG_H
+  echo " */" >> $CONFIG_H
+
+  # First of all, emit the "special" features to <linux/autoconf.h>.
+  if [ "${OPTS}" ]
+  then
+	echo "#define ${OPTS}" >> $CONFIG_H
+  fi
+
+  # Read our standard input (which is the CONFIG.IN file).
+  while read i
+  do
 	echo $i >> config.new
-	echo >> $CONFIG
-	echo >> $CONFIG_H
-	echo
+  	echo >> $CONFIG
+  	echo >> $CONFIG_H
+  	echo
 	echo "#" >> $CONFIG
 	echo "/*" >> $CONFIG_H
 	echo "**"
@@ -69,15 +97,14 @@ do
 	then
 		next="n"
 	fi
-done
+  done
+  mv config.new config.in
 
-mv config.new config.in
+  echo
+  echo "The linux kernel is now hopefully configured for your setup."
+  echo "Check the top-level Makefile for additional configuration,"
+  echo "and do a 'make dep ; make clean' if you want to be sure all"
+  echo "the files are correctly re-made"
+  echo
 
-echo
-echo "The linux kernel is now hopefully configured for your setup."
-echo "Check the top-level Makefile for additional configuration,"
-echo "and do a 'make dep ; make clean' if you want to be sure all"
-echo "the files are correctly re-made"
-echo
-
-exit 0
+  exit 0

@@ -1,23 +1,25 @@
 #ifndef __ASM_SYSTEM_H
 #define __ASM_SYSTEM_H
 
+#include <linux/segment.h>
+
 #define move_to_user_mode() \
 __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
-	"pushl $0x17\n\t" \
+	"pushl %0\n\t" \
 	"pushl %%eax\n\t" \
 	"pushfl\n\t" \
-	"pushl $0x0f\n\t" \
+	"pushl %1\n\t" \
 	"pushl $1f\n\t" \
 	"iret\n" \
-	"1:\tmovl $0x17,%%eax\n\t" \
+	"1:\tmovl %0,%%eax\n\t" \
 	"mov %%ax,%%ds\n\t" \
 	"mov %%ax,%%es\n\t" \
 	"mov %%ax,%%fs\n\t" \
 	"mov %%ax,%%gs" \
-	:::"ax")
+	::"i" (USER_DS), "i" (USER_CS):"ax")
 
-#define sti() __asm__ __volatile__ ("sti"::)
-#define cli() __asm__ __volatile__ ("cli"::)
+#define sti() __asm__ __volatile__ ("sti":::"memory")
+#define cli() __asm__ __volatile__ ("cli":::"memory")
 #define nop() __asm__ __volatile__ ("nop"::)
 
 extern inline int tas(char * m)
@@ -29,22 +31,22 @@ extern inline int tas(char * m)
 }
 
 #define save_flags(x) \
-__asm__ __volatile__("pushfl ; popl %0":"=r" (x))
+__asm__ __volatile__("pushfl ; popl %0":"=r" (x)::"memory")
 
 #define restore_flags(x) \
-__asm__ __volatile__("pushl %0 ; popfl"::"r" (x))
+__asm__ __volatile__("pushl %0 ; popfl"::"r" (x):"memory")
 
-#define iret() __asm__ __volatile__ ("iret"::)
+#define iret() __asm__ __volatile__ ("iret":::"memory")
 
 #define _set_gate(gate_addr,type,dpl,addr) \
 __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
-	"movw %0,%%dx\n\t" \
-	"movl %%eax,%1\n\t" \
-	"movl %%edx,%2" \
-	:: "i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
-	"m" (*((char *) (gate_addr))), \
-	"m" (*(4+(char *) (gate_addr))), \
-	"d" ((char *) (addr)),"a" (0x00080000) \
+	"movw %2,%%dx\n\t" \
+	"movl %%eax,%0\n\t" \
+	"movl %%edx,%1" \
+	:"=m" (*((long *) (gate_addr))), \
+	 "=m" (*(1+(long *) (gate_addr))) \
+	:"i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
+	 "d" ((char *) (addr)),"a" (KERNEL_CS << 16) \
 	:"ax","dx")
 
 #define set_intr_gate(n,addr) \
@@ -55,6 +57,9 @@ __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
 
 #define set_system_gate(n,addr) \
 	_set_gate(&idt[n],15,3,addr)
+
+#define set_call_gate(a,addr) \
+	_set_gate(a,12,3,addr)
 
 #define _set_seg_desc(gate_addr,type,dpl,base,limit) {\
 	*(gate_addr) = ((base) & 0xff000000) | \

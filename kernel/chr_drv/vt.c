@@ -62,8 +62,8 @@ extern int vt_waitactive(void);
  * We also return immediately, which is what was implied within the X
  * comments - KDMKTONE doesn't put the process to sleep.
  */
-void
-kd_nosound(void)
+static void
+kd_nosound(unsigned long ignored)
 {
 	/* disable counter 2 */
 	outb(inb_p(0x61)&0xFC, 0x61);
@@ -73,8 +73,11 @@ kd_nosound(void)
 void
 kd_mksound(unsigned int count, unsigned int ticks)
 {
-	if (count)
-	{
+	static struct timer_list sound_timer = { NULL, 0, 0, kd_nosound };
+
+	cli();
+	del_timer(&sound_timer);
+	if (count) {
 		/* enable counter 2 */
 		outb_p(inb_p(0x61)|3, 0x61);
 		/* set command for counter 2, 2 byte write */
@@ -83,17 +86,13 @@ kd_mksound(unsigned int count, unsigned int ticks)
 		outb_p(count & 0xff, 0x42);
 		outb((count >> 8) & 0xff, 0x42);
 
-		if (ticks)
-		{
-			timer_table[BEEP_TIMER].expires = jiffies + ticks;
-			timer_table[BEEP_TIMER].fn = kd_nosound;
-			timer_active |= (1 << BEEP_TIMER);
+		if (ticks) {
+			sound_timer.expires = ticks;
+			add_timer(&sound_timer);
 		}
-	}
-
-	else
-		kd_nosound();
-
+	} else
+		kd_nosound(0);
+	sti();
 	return;
 }
 
@@ -129,7 +128,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 */
 		kd_mksound(arg & 0xffff, ticks);
 		if (ticks == 0)
-			kd_nosound();
+			kd_nosound(0);
 		return 0;
 	}
 
@@ -222,6 +221,41 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			put_fs_long(ucval ? K_RAW : K_XLATE, (unsigned long *) arg);
 		}
 		return i;
+
+	case KDGKBENT:
+	{
+		struct kbentry * const a = (struct kbentry *)arg;
+		u_char i;
+		u_char s;
+
+		verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
+		if ((i = get_fs_byte(&a->kb_index)) >= NR_KEYS)
+			return -EINVAL;
+		if ((s = get_fs_byte(&a->kb_table)) >= NR_KEYMAPS)
+			return -EINVAL;
+		put_fs_word(key_map[s][i], &a->kb_value);
+		return 0;
+	}
+
+	case KDSKBENT:
+	{
+		const struct kbentry * a = (struct kbentry *)arg;
+		u_char i;
+		u_char s;
+		u_short v;
+
+		verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
+		if ((i = get_fs_byte(&a->kb_index)) >= NR_KEYS)
+			return -EINVAL;
+		if ((s = get_fs_byte(&a->kb_table)) >= NR_KEYMAPS)
+			return -EINVAL;
+		if (KTYP(v = get_fs_word(&a->kb_value)) >= NR_TYPES)
+			return -EINVAL;
+		if (KVAL(v) > max_vals[KTYP(v)])
+			return -EINVAL;
+		key_map[s][i] = v;
+		return 0;
+	}
 
 	case KDGETLED:
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));

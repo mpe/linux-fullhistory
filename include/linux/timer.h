@@ -45,4 +45,27 @@ struct timer_struct {
 extern unsigned long timer_active;
 extern struct timer_struct timer_table[32];
 
+/*
+ * This is completely separate from the above, and is the
+ * "new and improved" way of handling timers more dynamically.
+ * Hopefully efficient and general enough for most things.
+ *
+ * The "hardcoded" timers above are still useful for well-
+ * defined problems, but the timer-list is probably better
+ * when you need multiple outstanding timers or similar.
+ *
+ * The "data" field is in case you want to use the same
+ * timeout function for several timeouts. You can use this
+ * to distinguish between the different invocations.
+ */
+struct timer_list {
+	struct timer_list *next;
+	unsigned long expires;
+	unsigned long data;
+	void (*function)(unsigned long);
+};
+
+extern void add_timer(struct timer_list * timer);
+extern void del_timer(struct timer_list * timer);
+
 #endif

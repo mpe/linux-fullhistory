@@ -29,7 +29,7 @@
 #include "scsi_ioctl.h"   /* For the door lock/unlock commands */
 
 #define MAX_RETRIES 1
-#define SR_TIMEOUT 250
+#define SR_TIMEOUT 500
 
 int NR_SR=0;
 int MAX_SR=0;
@@ -37,6 +37,7 @@ Scsi_CD * scsi_CDs;
 static int * sr_sizes;
 
 static int sr_open(struct inode *, struct file *);
+static void get_sectorsize(int);
 
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
@@ -59,7 +60,8 @@ static struct file_operations sr_fops =
 	sr_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	sr_open,       		/* no special open code */
-	sr_release		/* release */
+	sr_release,		/* release */
+	NULL			/* fsync */
 };
 
 /*
@@ -263,6 +265,15 @@ static int sr_open(struct inode * inode, struct file * filp)
 
 	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
 	  sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
+
+	/* If this device did not have media in the drive at boot time, then
+	   we would have been unable to get the sector size.  Check to see if
+	   this is the case, and try again.
+	   */
+
+	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
+	  get_sectorsize(MINOR(inode->i_rdev));
+
 	return 0;
 }
 
@@ -625,13 +636,69 @@ static void sr_init_done (Scsi_Cmnd * SCpnt)
   }
 }
 
+static void get_sectorsize(int i){
+  unsigned char cmd[10];
+  unsigned char buffer[513];
+  int the_result, retries;
+  Scsi_Cmnd * SCpnt;
+  
+  SCpnt = allocate_device(NULL, scsi_CDs[i].device->index, 1);
+
+  retries = 3;
+  do {
+    cmd[0] = READ_CAPACITY;
+    cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
+    memset ((void *) &cmd[2], 0, 8);
+    SCpnt->request.dev = 0xffff;  /* Mark as really busy */
+    
+    scsi_do_cmd (SCpnt,
+		 (void *) cmd, (void *) buffer,
+		 512, sr_init_done,  SR_TIMEOUT,
+		 MAX_RETRIES);
+    
+    if (current == task[0])
+      while(SCpnt->request.dev != 0xfffe);
+    else
+      if (SCpnt->request.dev != 0xfffe){
+	SCpnt->request.waiting = current;
+	current->state = TASK_UNINTERRUPTIBLE;
+	while (SCpnt->request.dev != 0xfffe) schedule();
+      };
+    
+    the_result = SCpnt->result;
+    retries--;
+    
+  } while(the_result && retries);
+  
+  SCpnt->request.dev = -1;  /* Mark as not busy */
+  
+  wake_up(&scsi_devices[SCpnt->index].device_wait); 
+
+  if (the_result) {
+    scsi_CDs[i].capacity = 0x1fffff;
+    scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
+    scsi_CDs[i].needs_sector_size = 1;
+  } else {
+    scsi_CDs[i].capacity = (buffer[0] << 24) |
+      (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+    scsi_CDs[i].sector_size = (buffer[4] << 24) |
+      (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
+    if(scsi_CDs[i].sector_size == 0) scsi_CDs[i].sector_size = 2048;
+    if(scsi_CDs[i].sector_size != 2048 && 
+       scsi_CDs[i].sector_size != 512) {
+      printk ("scd%d : unsupported sector size %d.\n",
+	      i, scsi_CDs[i].sector_size);
+      scsi_CDs[i].capacity = 0;
+    };
+    if(scsi_CDs[i].sector_size == 2048)
+      scsi_CDs[i].capacity *= 4;
+    scsi_CDs[i].needs_sector_size = 0;
+  };
+}
+
 unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
-	unsigned char cmd[10];
-	unsigned char buffer[513];
-	int the_result, retries;
-	Scsi_Cmnd * SCpnt;
 
 	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
 		printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
@@ -645,60 +712,12 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 
 	for (i = 0; i < NR_SR; ++i)
 		{
-		  SCpnt = allocate_device(NULL, scsi_CDs[i].device->index, 1);
-
-		  retries = 3;
-		  do {
-		    cmd[0] = READ_CAPACITY;
-		    cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
-		    memset ((void *) &cmd[2], 0, 8);
-		    SCpnt->request.dev = 0xffff;  /* Mark as really busy */
-		    
-		    scsi_do_cmd (SCpnt,
-				 (void *) cmd, (void *) buffer,
-				 512, sr_init_done,  SR_TIMEOUT,
-				 MAX_RETRIES);
-		    
-		    if (current == task[0])
-		      while(SCpnt->request.dev != 0xfffe);
-		    else
-		      if (SCpnt->request.dev != 0xfffe){
-			SCpnt->request.waiting = current;
-			current->state = TASK_UNINTERRUPTIBLE;
-			while (SCpnt->request.dev != 0xfffe) schedule();
-		      };
-		    
-		    the_result = SCpnt->result;
-		    retries--;
-		    
-		  } while(the_result && retries);
-		  
-		  SCpnt->request.dev = -1;  /* Mark as not busy */
-		  
-		  wake_up(&scsi_devices[SCpnt->index].device_wait); 
-		  if (the_result) {
-		    scsi_CDs[i].capacity = 0x1fffff;
-		    scsi_CDs[i].sector_size = 2048;
-		  } else {
-		    scsi_CDs[i].capacity = (buffer[0] << 24) |
-		      (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
-		    scsi_CDs[i].sector_size = (buffer[4] << 24) |
-		      (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
-		    if(scsi_CDs[i].sector_size != 2048 && 
-		       scsi_CDs[i].sector_size != 512) {
-		      printk ("scd%d : unsupported sector size %d.\n",
-			      i, scsi_CDs[i].sector_size);
-		      scsi_CDs[i].capacity = 0;
-		    };
-		    if(scsi_CDs[i].sector_size == 2048)
-		      scsi_CDs[i].capacity *= 4;
-		  };
-
+		  get_sectorsize(i);
 		  printk("Scd sectorsize = %d bytes\n", scsi_CDs[i].sector_size);
-		scsi_CDs[i].use = 1;
-		scsi_CDs[i].ten = 1;
-		scsi_CDs[i].remap = 1;
-		sr_sizes[i] = scsi_CDs[i].capacity;
+		  scsi_CDs[i].use = 1;
+		  scsi_CDs[i].ten = 1;
+		  scsi_CDs[i].remap = 1;
+		  sr_sizes[i] = scsi_CDs[i].capacity;
 		}
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;

@@ -19,6 +19,7 @@
 #include <stdarg.h>
  
 #include <linux/config.h>
+#include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -61,6 +62,7 @@ void __wait_on_buffer(struct buffer_head * bh)
 {
 	struct wait_queue wait = { current, NULL };
 
+	bh->b_count++;
 	add_wait_queue(&bh->b_wait, &wait);
 repeat:
 	current->state = TASK_UNINTERRUPTIBLE;
@@ -69,32 +71,86 @@ repeat:
 		goto repeat;
 	}
 	remove_wait_queue(&bh->b_wait, &wait);
+	bh->b_count--;
 	current->state = TASK_RUNNING;
 }
 
-static void sync_buffers(dev_t dev)
+/* Call sync_buffers with wait!=0 to ensure that the call does not
+   return until all buffer writes have completed.  Sync() may return
+   before the writes have finished; fsync() may not. */
+
+static int sync_buffers(dev_t dev, int wait)
 {
-	int i;
+	int i, retry, pass = 0, err = 0;
 	struct buffer_head * bh;
 
+	/* One pass for no-wait, three for wait:
+	   0) write out all dirty, unlocked buffers;
+	   1) write out all dirty buffers, waiting if locked;
+	   2) wait for completion by waiting for all buffers to unlock.
+	 */
+repeat:
+	retry = 0;
 	bh = free_list;
 	for (i = nr_buffers*2 ; i-- > 0 ; bh = bh->b_next_free) {
 		if (dev && bh->b_dev != dev)
 			continue;
+#ifdef 0 /* Disable bad-block debugging code */
+		if (bh->b_req && !bh->b_lock &&
+		    !bh->b_dirt && !bh->b_uptodate)
+			printk ("Warning (IO error) - orphaned block %08x on %04x\n",
+				bh->b_blocknr, bh->b_dev);
+#endif
 		if (bh->b_lock)
+		{
+			/* Buffer is locked; skip it unless wait is
+			   requested AND pass > 0. */
+			if (!wait || !pass) {
+				retry = 1;
+				continue;
+			}
+			wait_on_buffer (bh);
+		}
+		/* If an unlocked buffer is not uptodate, there has been 
+		   an IO error. Skip it. */
+		if (wait && bh->b_req && !bh->b_lock &&
+		    !bh->b_dirt && !bh->b_uptodate)
+		{
+			err = 1;
 			continue;
-		if (!bh->b_dirt)
+		}
+		/* Don't write clean buffers.  Don't write ANY buffers
+		   on the third pass. */
+		if (!bh->b_dirt || pass>=2)
 			continue;
+		bh->b_count++;
 		ll_rw_block(WRITE, 1, &bh);
+		bh->b_count--;
+		retry = 1;
 	}
+	/* If we are waiting for the sync to succeed, and if any dirty
+	   blocks were written, then repeat; on the second pass, only
+	   wait for buffers being written (do not pass to write any
+	   more buffers on the second pass). */
+	if (wait && retry && ++pass<=2)
+		goto repeat;
+	return err;
 }
 
 void sync_dev(dev_t dev)
 {
-	sync_buffers(dev);
+	sync_buffers(dev, 0);
 	sync_supers(dev);
 	sync_inodes(dev);
-	sync_buffers(dev);
+	sync_buffers(dev, 0);
+}
+
+int fsync_dev(dev_t dev)
+{
+	sync_buffers(dev, 0);
+	sync_supers(dev);
+	sync_inodes(dev);
+	return sync_buffers(dev, 1);
 }
 
 int sys_sync(void)
@@ -103,9 +159,23 @@ int sys_sync(void)
 	return 0;
 }
 
-int sys_fsync(int fd)
+int file_fsync (struct inode *inode, struct file *filp)
 {
-	return -ENOSYS;
+	return fsync_dev(inode->i_dev);
+}
+
+int sys_fsync(unsigned int fd)
+{
+	struct file * file;
+	struct inode * inode;
+
+	if (fd>=NR_OPEN || !(file=current->filp[fd]) || !(inode=file->f_inode))
+		return -EBADF;
+	if (!file->f_op || !file->f_op->fsync)
+		return -EINVAL;
+	if (file->f_op->fsync(inode,file))
+		return -EIO;
+	return 0;
 }
 
 void invalidate_buffers(dev_t dev)
@@ -119,7 +189,7 @@ void invalidate_buffers(dev_t dev)
 			continue;
 		wait_on_buffer(bh);
 		if (bh->b_dev == dev)
-			bh->b_uptodate = bh->b_dirt = 0;
+			bh->b_uptodate = bh->b_dirt = bh->b_req = 0;
 	}
 }
 
@@ -325,9 +395,7 @@ repeat:
 		return bh;
 	}
 	grow_size -= size;
-	if (nr_free_pages > min_free_pages &&
-	    buffermem < 6*1024*1024 &&
-	    grow_size <= 0) {
+	if (nr_free_pages > min_free_pages && grow_size <= 0) {
 		grow_buffers(size);
 		grow_size = 4096;
 	}
@@ -345,8 +413,11 @@ repeat:
 				break;
 		}
 #if 0
-		if (tmp->b_dirt)
+		if (tmp->b_dirt) {
+			tmp->b_count++;
 			ll_rw_block(WRITEA, 1, &tmp);
+			tmp->b_count--;
+		}
 #endif
 	}
 
@@ -364,7 +435,7 @@ repeat:
 	if (bh->b_count || bh->b_size != size)
 		goto repeat;
 	if (bh->b_dirt) {
-		sync_buffers(0);
+		sync_buffers(0,0);
 		goto repeat;
 	}
 /* NOTE!! While we slept waiting for this block, somebody else might */
@@ -376,6 +447,7 @@ repeat:
 	bh->b_count=1;
 	bh->b_dirt=0;
 	bh->b_uptodate=0;
+	bh->b_req=0;
 	remove_from_queues(bh);
 	bh->b_dev=dev;
 	bh->b_blocknr=block;
@@ -498,12 +570,185 @@ static struct buffer_head * get_unused_buffer_head(void)
 	bh->b_next_free = NULL;
 	bh->b_data = NULL;
 	bh->b_size = 0;
+	bh->b_req = 0;
 	return bh;
 }
 
-static inline unsigned long try_to_share_buffers(unsigned long address, dev_t dev, int b[], int size)
+/*
+ * Create the appropriate buffers when given a page for data area and
+ * the size of each buffer.. Use the bh->b_this_page linked list to
+ * follow the buffers created.  Return NULL if unable to create more
+ * buffers.
+ */
+static struct buffer_head * create_buffers(unsigned long page, unsigned long size)
 {
+	struct buffer_head *bh, *head;
+	unsigned long offset;
+
+	head = NULL;
+	offset = 4096;
+	while ((offset -= size) < 4096) {
+		bh = get_unused_buffer_head();
+		if (!bh)
+			goto no_grow;
+		bh->b_this_page = head;
+		head = bh;
+		bh->b_data = (char *) (page+offset);
+		bh->b_size = size;
+	}
+	return head;
+/*
+ * In case anything failed, we just free everything we got.
+ */
+no_grow:
+	bh = head;
+	while (bh) {
+		head = bh;
+		bh = bh->b_this_page;
+		put_unused_buffer_head(head);
+	}
+	return NULL;
+}
+
+static void read_buffers(struct buffer_head * bh[], int nrbuf)
+{
+	int i;
+	int bhnum = 0;
+	struct buffer_head * bhr[8];
+
+	for (i = 0 ; i < nrbuf ; i++) {
+		if (bh[i] && !bh[i]->b_uptodate)
+			bhr[bhnum++] = bh[i];
+	}
+	if (bhnum)
+		ll_rw_block(READ, bhnum, bhr);
+	for (i = 0 ; i < nrbuf ; i++) {
+		if (bh[i]) {
+			wait_on_buffer(bh[i]);
+		}
+	}
+}
+
+static unsigned long check_aligned(struct buffer_head * first, unsigned long address,
+	dev_t dev, int *b, int size)
+{
+	struct buffer_head * bh[8];
+	unsigned long page;
+	unsigned long offset;
+	int block;
+	int nrbuf;
+
+	page = (unsigned long) first->b_data;
+	if (page & 0xfff) {
+		brelse(first);
+		return 0;
+	}
+	mem_map[MAP_NR(page)]++;
+	bh[0] = first;
+	nrbuf = 1;
+	for (offset = size ; offset < 4096 ; offset += size) {
+		block = *++b;
+		if (!block)
+			goto no_go;
+		first = get_hash_table(dev, block, size);
+		if (!first)
+			goto no_go;
+		bh[nrbuf++] = first;
+		if (page+offset != (unsigned long) first->b_data)
+			goto no_go;
+	}
+	read_buffers(bh,nrbuf);		/* make sure they are actually read correctly */
+	while (nrbuf-- > 0)
+		brelse(bh[nrbuf]);
+	free_page(address);
+	++current->min_flt;
+	return page;
+no_go:
+	while (nrbuf-- > 0)
+		brelse(bh[nrbuf]);
+	free_page(page);
 	return 0;
+}
+
+static unsigned long try_to_load_aligned(unsigned long address,
+	dev_t dev, int b[], int size)
+{
+	struct buffer_head * bh, * tmp, * arr[8];
+	unsigned long offset;
+	int * p;
+	int block;
+
+	bh = create_buffers(address, size);
+	if (!bh)
+		return 0;
+	p = b;
+	for (offset = 0 ; offset < 4096 ; offset += size) {
+		block = *(p++);
+		if (!block)
+			goto not_aligned;
+		tmp = get_hash_table(dev, block, size);
+		if (tmp) {
+			brelse(tmp);
+			goto not_aligned;
+		}
+	}
+	tmp = bh;
+	p = b;
+	block = 0;
+	while (1) {
+		arr[block++] = bh;
+		bh->b_count = 1;
+		bh->b_dirt = 0;
+		bh->b_uptodate = 0;
+		bh->b_dev = dev;
+		bh->b_blocknr = *(p++);
+		nr_buffers++;
+		insert_into_queues(bh);
+		if (bh->b_this_page)
+			bh = bh->b_this_page;
+		else
+			break;
+	}
+	buffermem += 4096;
+	bh->b_this_page = tmp;
+	mem_map[MAP_NR(address)]++;
+	read_buffers(arr,block);
+	while (block-- > 0)
+		brelse(arr[block]);
+	++current->maj_flt;
+	return address;
+not_aligned:
+	while ((tmp = bh) != NULL) {
+		bh = bh->b_this_page;
+		put_unused_buffer_head(tmp);
+	}
+	return 0;
+}
+
+/*
+ * Try-to-share-buffers tries to minimize memory use by trying to keep
+ * both code pages and the buffer area in the same page. This is done by
+ * (a) checking if the buffers are already aligned correctly in memory and
+ * (b) if none of the buffer heads are in memory at all, trying to load
+ * them into memory the way we want them.
+ *
+ * This doesn't guarantee that the memory is shared, but should under most
+ * circumstances work very well indeed (ie >90% sharing of code pages on
+ * demand-loadable executables).
+ */
+static inline unsigned long try_to_share_buffers(unsigned long address,
+	dev_t dev, int *b, int size)
+{
+	struct buffer_head * bh;
+	int block;
+
+	block = b[0];
+	if (!block)
+		return 0;
+	bh = get_hash_table(dev, block, size);
+	if (bh)
+		return check_aligned(bh, address, dev, b, size);
+	return try_to_load_aligned(address, dev, b, size);
 }
 
 #define COPYBLK(from,to) \
@@ -516,14 +761,12 @@ __asm__ __volatile__("rep ; movsl" \
  * a function of its own, as there is some speed to be got by reading them
  * all at the same time, not waiting for one to be read, and then another
  * etc. This also allows us to optimize memory usage by sharing code pages
- * and filesystem buffers.. This is not yet implemented.
+ * and filesystem buffers..
  */
 unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int prot)
 {
-	struct buffer_head * bh[4];
-	struct buffer_head * bhr[4];
+	struct buffer_head * bh[8];
 	unsigned long where;
-	int bhnum = 0;
 	int i;
 
 	if (!(prot & PAGE_RW)) {
@@ -531,20 +774,16 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 		if (where)
 			return where;
 	}
+	++current->maj_flt;
 	for (i=0 ; i<4 ; i++) {
 		bh[i] = NULL;
-		if (b[i]) {
+		if (b[i])
 			bh[i] = getblk(dev, b[i], size);
-			if (bh[i] && !bh[i]->b_uptodate)
-				bhr[bhnum++] = bh[i];
-		}
 	}
-	if (bhnum)
-		ll_rw_block(READ, bhnum, bhr);
+	read_buffers(bh,4);
 	where = address;
 	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE) {
 		if (bh[i]) {
-			wait_on_buffer(bh[i]);
 			if (bh[i]->b_uptodate)
 				COPYBLK((unsigned long) bh[i]->b_data,address);
 			brelse(bh[i]);
@@ -562,7 +801,6 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 void grow_buffers(int size)
 {
 	unsigned long page;
-	int i;
 	struct buffer_head *bh, *tmp;
 
 	if ((size & 511) || (size > 4096)) {
@@ -572,16 +810,10 @@ void grow_buffers(int size)
 	page = get_free_page(GFP_BUFFER);
 	if (!page)
 		return;
-	tmp = NULL;
-	i = 0;
-	for (i = 0 ; i+size <= 4096 ; i += size) {
-		bh = get_unused_buffer_head();
-		if (!bh)
-			goto no_grow;
-		bh->b_this_page = tmp;
-		tmp = bh;
-		bh->b_data = (char * ) (page+i);
-		bh->b_size = size;
+	bh = create_buffers(page, size);
+	if (!bh) {
+		free_page(page);
+		return;
 	}
 	tmp = bh;
 	while (1) {
@@ -604,32 +836,20 @@ void grow_buffers(int size)
 	tmp->b_this_page = bh;
 	buffermem += 4096;
 	return;
-/*
- * In case anything failed, we just free everything we got.
- */
-no_grow:
-	bh = tmp;
-	while (bh) {
-		tmp = bh;
-		bh = bh->b_this_page;
-		put_unused_buffer_head(tmp);
-	}	
-	free_page(page);
 }
 
 /*
  * try_to_free() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
  */
-static int try_to_free(struct buffer_head * bh)
+static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 {
 	unsigned long page;
 	struct buffer_head * tmp, * p;
 
+	*bhp = bh;
 	page = (unsigned long) bh->b_data;
 	page &= 0xfffff000;
-	if (mem_map[MAP_NR(page)] != 1)
-		return 0;
 	tmp = bh;
 	do {
 		if (!tmp)
@@ -643,12 +863,14 @@ static int try_to_free(struct buffer_head * bh)
 		p = tmp;
 		tmp = tmp->b_this_page;
 		nr_buffers--;
+		if (p == *bhp)
+			*bhp = p->b_prev_free;
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
 	buffermem -= 4096;
 	free_page(page);
-	return 1;
+	return !mem_map[MAP_NR(page)];
 }
 
 /*
@@ -664,7 +886,7 @@ int shrink_buffers(unsigned int priority)
 	int i;
 
 	if (priority < 2)
-		sync_buffers(0);
+		sync_buffers(0,0);
 	bh = free_list;
 	i = nr_buffers >> priority;
 	for ( ; i-- > 0 ; bh = bh->b_next_free) {
@@ -676,10 +898,12 @@ int shrink_buffers(unsigned int priority)
 			else
 				wait_on_buffer(bh);
 		if (bh->b_dirt) {
+			bh->b_count++;
 			ll_rw_block(WRITEA, 1, &bh);
+			bh->b_count--;
 			continue;
 		}
-		if (try_to_free(bh))
+		if (try_to_free(bh, &bh))
 			return 1;
 	}
 	return 0;

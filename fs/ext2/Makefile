@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	acl.o balloc.o bitmap.o dcache.o dir.o file.o ialloc.o inode.o \
+OBJS=	acl.o balloc.o bitmap.o dcache.o dir.o file.o fsync.o ialloc.o inode.o \
 	ioctl.o namei.o symlink.o truncate.o
 
 ext2.o: $(OBJS)

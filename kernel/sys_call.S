@@ -40,6 +40,8 @@
  *	40(%esp) - %oldss
  */
 
+#include <linux/segment.h>
+
 EBX		= 0x00
 ECX		= 0x04
 EDX		= 0x08
@@ -76,7 +78,7 @@ errno		= 24
 
 ENOSYS = 38
 
-.globl _system_call,_sys_execve
+.globl _system_call,_sys_execve,_lcall7
 .globl _device_not_available, _coprocessor_error
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _double_fault,_coprocessor_segment_overrun
@@ -98,10 +100,10 @@ ENOSYS = 38
 	pushl %edx; \
 	pushl %ecx; \
 	pushl %ebx; \
-	movl $0x10,%edx; \
+	movl $KERNEL_DS,%edx; \
 	mov %dx,%ds; \
 	mov %dx,%es; \
-	movl $0x17,%edx; \
+	movl $USER_DS,%edx; \
 	mov %dx,%fs
 
 #define RESTORE_ALL \
@@ -120,6 +122,23 @@ ENOSYS = 38
 	iret
 
 .align 4
+_lcall7:
+	pushfl			# We get a different stack layout with call gates,
+	pushl %eax		# which has to be cleaned up later..
+	SAVE_ALL
+	movl EIP(%esp),%eax	# due to call gates, this is eflags, not eip..
+	movl CS(%esp),%edx	# this is eip..
+	movl EFLAGS(%esp),%ecx	# and this is cs..
+	movl %eax,EFLAGS(%esp)	#
+	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
+	movl %ecx,CS(%esp)	#
+	movl %esp,%eax
+	pushl %eax
+	call _iABI_emulate
+	popl %eax
+	jmp ret_from_sys_call
+
+.align 4
 reschedule:
 	pushl $ret_from_sys_call
 	jmp _schedule
@@ -134,40 +153,37 @@ _system_call:
 	movl $0,errno(%ebx)
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
 	testl $0x20,flags(%ebx)		# PF_TRACESYS
-	je 1f
-	pushl $0
-	pushl %ebx
-	pushl $5			# SIGTRAP
-	call _send_sig
-	addl $12,%esp
-	call _schedule
-	movl ORIG_EAX(%esp),%eax
-1:	call _sys_call_table(,%eax,4)
+	jne 1f
+	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	movl _current,%eax
 	movl errno(%eax),%edx
 	negl %edx
-	je 2f
+	je ret_from_sys_call
 	movl %edx,EAX(%esp)
 	orl $CF_MASK,EFLAGS(%esp)	# set carry to indicate error
-2:	testl $0x20,flags(%eax)		# PF_TRACESYS
-	je ret_from_sys_call
-	cmpl $0,signal(%eax)
-	jne ret_from_sys_call		# ptrace would clear signal
-	pushl $0
-	pushl %eax
-	pushl $5			# SIGTRAP
-	call _send_sig
-	addl $12,%esp
-	call _schedule
+	jmp ret_from_sys_call
+.align 4
+1:	call _syscall_trace
+	movl ORIG_EAX(%esp),%eax
+	call _sys_call_table(,%eax,4)
+	movl %eax,EAX(%esp)		# save the return value
+	movl _current,%eax
+	movl errno(%eax),%edx
+	negl %edx
+	je 1f
+	movl %edx,EAX(%esp)
+	orl $CF_MASK,EFLAGS(%esp)	# set carry to indicate error
+1:	call _syscall_trace
+
 	.align 4,0x90
 ret_from_sys_call:
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $VM_MASK,%eax		# different then
 	jne 1f
-	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
+	cmpw $USER_CS,CS(%esp)		# was old code segment supervisor ?
 	jne 2f
-	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
+	cmpw $USER_DS,OLDSS(%esp)	# was stack segment user segment ?
 	jne 2f
 1:	sti				# slow interrupts get here with interrupts disabled
 	orl $IF_MASK,%eax		# these just try to make sure
@@ -220,7 +236,7 @@ _sys_execve:
 
 .align 4
 _divide_error:
-	pushl $0 		# no error code
+	pushl $0		# no error code
 	pushl $_do_divide_error
 .align 4,0x90
 error_code:
@@ -241,12 +257,12 @@ error_code:
 	mov %gs,%bx			# get the lower order bits of gs
 	xchgl %ebx, GS(%esp)		# get the address and save gs.
 	pushl %eax			# push the error code
-	lea 52(%esp),%edx
+	lea 4(%esp),%edx
 	pushl %edx
-	movl $0x10,%edx
+	movl $KERNEL_DS,%edx
 	mov %dx,%ds
 	mov %dx,%es
-	movl $0x17,%edx
+	movl $USER_DS,%edx
 	mov %dx,%fs
 	call *%ebx
 	addl $8,%esp

@@ -7,12 +7,13 @@
  * the assembly version by Linus (with diacriticals added)
  *
  * Some additional features added by Christoph Niemann (ChN), March 1993
+ *
+ * Loadable keymaps by Risto Kankkunen, May 1993
  */
 
 #define KEYBOARD_IRQ 1
 
 #include <linux/sched.h>
-#include <linux/ctype.h>
 #include <linux/tty.h>
 #include <linux/mm.h>
 #include <linux/ptrace.h>
@@ -29,6 +30,11 @@
 #endif
 #endif
 
+#define SHIFT_KEYS	((1 << KG_LSHIFT) | (1 << KG_RSHIFT))
+#define CTRL_KEYS	((1 << KG_LCTRL)  | (1 << KG_RCTRL))
+#define ALT_KEYS	((1 << KG_LALT)   | (1 << KG_RALT))
+#define ALTGR_KEYS	((1 << KG_LALTGR) | (1 << KG_RALTGR))
+
 /*
  * The default IO slowdown is doing 'inb()'s from 0x61, which should be
  * safe. But as that is the keyboard controller chip address, we do our
@@ -43,6 +49,8 @@
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
 extern void change_console(unsigned int new_console);
+extern void scrollback(int);
+extern void scrollfront(int);
 
 #define fake_keyboard_interrupt() \
 __asm__ __volatile__("int $0x21")
@@ -53,7 +61,7 @@ unsigned long kbd_prev_dead_keys = 0;
 
 static int want_console = -1;
 static int last_console = 0;		/* last used VC */
-static unsigned char rep = 0xff;	/* last pressed key */
+static char rep = 0;			/* flag telling character repeat */
 struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
 static struct tty_struct * tty = NULL;
@@ -61,15 +69,36 @@ static struct tty_struct * tty = NULL;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
 
-typedef void (*fptr)(int);
+typedef unsigned short u_word;
+typedef void (*k_hand)(unsigned char value, char up_flag);
 
+static void do_self(unsigned char value, char up_flag);
+static void do_fn(unsigned char value, char up_flag);
+static void do_spec(unsigned char value, char up_flag);
+static void do_pad(unsigned char value, char up_flag);
+static void do_dead(unsigned char value, char up_flag);
+static void do_cons(unsigned char value, char up_flag);
+static void do_cur(unsigned char value, char up_flag);
+static void do_shift(unsigned char value, char up_flag);
+
+static k_hand key_handler[] = {
+	do_self, do_fn, do_spec, do_pad, do_dead, do_cons, do_cur, do_shift
+};
+
+/* maximum values each key_handler can handle */
+const u_char max_vals[] = {
+	255, 25, 13, 16, 4, 255, 3, 255
+};
+
+const int NR_TYPES = (sizeof(max_vals) / sizeof(u_char));
+
+#define E0_BASE 96
+
+static int shift_state = 0;
 static int diacr = -1;
 static int npadch = 0;
-fptr key_table[];
 
 static void put_queue(int);
-static void applkey(int);
-static void cur(int);
 static unsigned int handle_diacr(unsigned int);
 
 static struct pt_regs * pt_regs;
@@ -86,6 +115,7 @@ static inline void kb_wait(void)
 static void keyboard_interrupt(int int_pt_regs)
 {
 	unsigned char scancode;
+	static unsigned char prev_scancode = 0;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
 	kbd_prev_dead_keys |= kbd_dead_keys;
@@ -130,976 +160,269 @@ static void keyboard_interrupt(int int_pt_regs)
 	/*
 	 *  Repeat a key only if the input buffers are empty or the
 	 *  characters get echoed locally. This makes key repeat usable
-	 *  with slow applications and unders heavy loads.
+	 *  with slow applications and under heavy loads.
 	 */
-	if ((scancode != rep) || 
+	rep = scancode == prev_scancode;
+	prev_scancode = scancode;
+	if (!rep || 
 	    (vc_kbd_flag(kbd,VC_REPEAT) && tty &&
-	     (L_ECHO(tty) || (EMPTY(&tty->secondary) && EMPTY(&tty->read_q)))))
-		key_table[scancode](scancode);
-	rep = scancode;
+	     (L_ECHO(tty) || (EMPTY(&tty->secondary) && EMPTY(&tty->read_q))))) {
+	     	static unsigned char e0_keys[] = {
+			0x1c,	/* keypad enter */
+			0x1d,	/* right control */
+			0x35,	/* keypad slash */
+			0x37,	/* print screen */
+			0x38,	/* right alt */
+			0x46,	/* break (control-pause) */
+			0x47,	/* editpad home */
+			0x48,	/* editpad up */
+			0x49,	/* editpad pgup */
+			0x4b,	/* editpad left */
+			0x4d,	/* editpad right */
+			0x4f,	/* editpad end */
+			0x50,	/* editpad dn */
+			0x51,	/* editpad pgdn */
+			0x52,	/* editpad ins */
+			0x53	/* editpad del */
+		};
+		u_word key_code;
+		char break_flag = scancode > 0x7f;
+
+		scancode &= 0x7f;
+		if (scancode >= E0_BASE) {
+#if 0
+			printk("keyboard: scancode (%02x) not in range 00 - %2x\n", scancode, E0_BASE - 1);
+#endif
+			scancode = 0;
+		}
+
+		if (kbd_dead(KGD_E0)) {
+			int i;
+			for (i = 0; i < sizeof(e0_keys); i++)
+				if (scancode == e0_keys[i]) {
+					scancode = E0_BASE + i;
+					i = -1;
+					break;
+				}
+			if (i != -1)
+				printk("keyboard: unknown scancode e0 %02x\n", scancode);
+		}
+
+		key_code = key_map[shift_state][scancode];
+		(*key_handler[key_code >> 8])(key_code & 0xff, break_flag);
+	     }
 end_kbd_intr:
 }
 
 static void put_queue(int ch)
 {
 	struct tty_queue *qp;
-	unsigned long new_head;
 
 	wake_up(&keypress_wait);
 	if (!tty)
 		return;
 	qp = &tty->read_q;
 
-	qp->buf[qp->head]=ch;
-	if ((new_head=(qp->head+1)&(TTY_BUF_SIZE-1)) != qp->tail)
-		qp->head=new_head;
-	wake_up_interruptible(&qp->proc_list);
+	if (LEFT(qp)) {
+		qp->buf[qp->head] = ch;
+		INC(qp->head);
+		wake_up_interruptible(&qp->proc_list);
+	}
 }
 
 static void puts_queue(char *cp)
 {
 	struct tty_queue *qp;
-	unsigned long new_head;
 	char ch;
 
+	/* why interruptible here, plain wake_up above? */
 	wake_up_interruptible(&keypress_wait);
 	if (!tty)
 		return;
 	qp = &tty->read_q;
 
 	while ((ch = *(cp++)) != 0) {
-		qp->buf[qp->head]=ch;
-		if ((new_head=(qp->head+1)&(TTY_BUF_SIZE-1))
-				 != qp->tail)
-			qp->head=new_head;
+		if (LEFT(qp)) {
+			qp->buf[qp->head] = ch;
+			INC(qp->head);
+		}
 	}
 	wake_up_interruptible(&qp->proc_list);
 }
 
-static void ctrl(int sc)
+static void applkey(int key, char mode)
 {
-	if (kbd_dead(KGD_E0))
-		set_kbd_flag(KG_RCTRL);
-	else
-		set_kbd_flag(KG_LCTRL);
+	static char buf[] = { 0x1b, 'O', 0x00, 0x00 };
+
+	buf[1] = (mode ? 'O' : '[');
+	buf[2] = key;
+	puts_queue(buf);
 }
 
-static void alt(int sc)
+static void enter(void)
 {
-	if (kbd_dead(KGD_E0))
-		set_kbd_flag(KG_ALTGR);
-	else
-		set_kbd_flag(KG_ALT);
+	put_queue(13);
+	if (vc_kbd_flag(kbd,VC_CRLF))
+		put_queue(10);
 }
 
-static void unctrl(int sc)
+static void caps_toggle(void)
 {
-	if (kbd_dead(KGD_E0))
-		clr_kbd_flag(KG_RCTRL);
-	else
-		clr_kbd_flag(KG_LCTRL);
-}
-
-static void unalt(int sc)
-{
-	if (kbd_dead(KGD_E0))
-		clr_kbd_flag(KG_ALTGR);
-	else {
-		clr_kbd_flag(KG_ALT);
-		if (npadch != 0) {
-			put_queue(npadch);
-			npadch=0;
-		}
-	}
-}
-
-static void lshift(int sc)
-{
-	set_kbd_flag(KG_LSHIFT);
-}
-
-static void unlshift(int sc)
-{
-	clr_kbd_flag(KG_LSHIFT);
-}
-
-static void rshift(int sc)
-{
-	set_kbd_flag(KG_RSHIFT);
-}
-
-static void unrshift(int sc)
-{
-	clr_kbd_flag(KG_RSHIFT);
-}
-
-static void caps(int sc)
-{
-	if (kbd_flag(KG_CAPSLOCK))
-		return;		/* key already pressed: defeat repeat */
+	if (rep)
+		return;
 	set_kbd_flag(KG_CAPSLOCK);
 	chg_vc_kbd_flag(kbd,VC_CAPSLOCK);
-}
-
-static void uncaps(int sc)
-{
-	clr_kbd_flag(KG_CAPSLOCK);
 }
 
 static void show_ptregs(void)
 {
 	if (!pt_regs)
 		return;
-	printk("\nEIP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
+	printk("\n");
+	printk("EIP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
 	if (pt_regs->cs & 3)
 		printk(" ESP: %04x:%08x",0xffff & pt_regs->cs,pt_regs->eip);
-	printk(" EFLAGS: %08x",pt_regs->eflags);
-	printk("\nEAX: %08x EBX: %08x ECX: %08x EDX: %08x",
+	printk(" EFLAGS: %08x\n",pt_regs->eflags);
+	printk("EAX: %08x EBX: %08x ECX: %08x EDX: %08x\n",
 		pt_regs->orig_eax,pt_regs->ebx,pt_regs->ecx,pt_regs->edx);
-	printk("\nESI: %08x EDI: %08x EBP: %08x",
+	printk("ESI: %08x EDI: %08x EBP: %08x",
 		pt_regs->esi, pt_regs->edi, pt_regs->ebp);
 	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
 		0xffff & pt_regs->ds,0xffff & pt_regs->es,
 		0xffff & pt_regs->fs,0xffff & pt_regs->gs);
 }
 
-static void scroll(int sc)
+static void hold(void)
 {
-	if (kbd_dead(KGD_E0))
-		put_queue(INTR_CHAR(tty));
-	else if ( sc != rep ) 	/* no autorepeat for scroll lock, ChN */
-		if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))
-			show_mem();
-		else if (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))
-			show_ptregs();
-		else if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
-			show_state();
-		else {
-			if (vc_kbd_flag(kbd, VC_SCROLLOCK))
-				/* pressing srcoll lock 2nd time sends ^Q, ChN */
-				put_queue(START_CHAR(tty));
-			else
+	/* kludge, should have a control key table */
+	if (kbd_flags & CTRL_KEYS) {
+		show_state();
+		return;
+	}
 
-				/* pressing srcoll lock 1st time sends ^S, ChN */
-				put_queue(STOP_CHAR(tty));
-			chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
-		}
-	
+	if (rep || !tty)
+		return;
+	if (vc_kbd_flag(kbd, VC_SCROLLOCK))
+		/* pressing srcoll lock 2nd time sends ^Q, ChN */
+		put_queue(START_CHAR(tty));
+	else
+		/* pressing srcoll lock 1st time sends ^S, ChN */
+		put_queue(STOP_CHAR(tty));
+	chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
 }
 
-static void num(int sc)
+static void num(void)
 {
-	if (kbd_flag(KG_LCTRL))
+#if 0
+	if (kbd_flags & CTRL_KEYS) {
 		/* pause key pressed, sends E1 1D 45, ChN */
 		chg_vc_kbd_flag(kbd,VC_PAUSE);
-	else if (vc_kbd_flag(kbd,VC_APPLIC))
-		applkey(0x50);
-	else if ( rep != sc )	/* no autorepeat for numlock, ChN */
+		return;
+	}
+#endif
+	if (vc_kbd_flag(kbd,VC_APPLIC)) {
+		applkey('P', 1);
+		return;
+	}
+	if (!rep)	/* no autorepeat for numlock, ChN */
 		chg_vc_kbd_flag(kbd,VC_NUMLOCK);
 }
 
-static void applkey(int key)
-{
-	char buf[] = { 0x1b, 0x4f, 0x00, 0x00 };
-
-	buf[2] = key;
-	puts_queue(buf);
-}
-
-static void sysreq(int sc)
+static void lastcons(void)
 {
 	/* pressing alt-printscreen switches to the last used console, ChN */
-	if ( sc != rep)
-		want_console = last_console;
+	want_console = last_console;
 }
 
-#if defined KBD_FINNISH
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '+', '\'',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '}',    0,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  '|',
-	'{',    0,    0, '\'',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!', '\"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  ']',  '^',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L', '\\',
-	'[',    0,    0,  '*',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  163,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_FINNISH_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '+',  180,  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  229,  168,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  246,
-	228,  167,    0, '\'',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  197,  '^',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  214,
-	196,  189,    0,  '*',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  163,  '$',    0,    0,
-	'{',  '[',  ']',  '}', '\\',    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_US
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '-',  '=',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '[',  ']',   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',
-	'\'', '`',    0, '\\',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '/',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '@',  '#',  '$',  '%',  '^',
-	'&',  '*',  '(',  ')',  '_',  '+',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  '{',  '}',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',
-	'"',  '~',  '0',  '|',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  '<',  '>',  '?',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',    0,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_UK
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '-',  '=',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '[',  ']',   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',
-	'\'', '`',    0,  '#',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '/',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0, '\\',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '"',  163,  '$',  '%',  '^',
-	'&',  '*',  '(',  ')',  '_',  '+',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  '{',  '}',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',
-	'@',  '~',  '0',  '~',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  '<',  '>',  '?',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',    0,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_GR
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\\', '\'',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',  '@',  '+',   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  '[',
-	']',  '^',    0,  '#',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P', '\\',  '*',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  '{',
-	'}',  '~',    0, '\'',  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',    0,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_GR_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', 223,  180,  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',  252,  '+',   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l', 246,
-	228,   94,    0,  '#',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '"',  167,  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P',  220,  '*',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  214,
-	196,  176,    0, '\'',  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  178,  179,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  181,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_FR
-
-static unsigned char key_map[] = {
-	  0,   27,  '&',  '{',  '"', '\'',  '(',  '-',
-	'}',  '_',  '/',  '@',  ')',  '=',  127,    9,
-	'a',  'z',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '^',  '$',   13,    0,  'q',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  'm',
-	'|',  '`',    0,   42,  'w',  'x',  'c',  'v',
-	'b',  'n',  ',',  ';',  ':',  '!',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  ']',  '+',  127,    9,
-	'A',  'Z',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  '<',  '>',   13,    0,  'Q',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  'M',
-	'%',  '~',    0,  '#',  'W',  'X',  'C',  'V',
-	'B',  'N',  '?',  '.',  '/', '\\',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '~',  '#',  '{',  '[',  '|',
-	'`', '\\',   '^',  '@', ']',  '}',    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_FR_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '&',  233,  '"', '\'',  '(',  '-',
-	232,  '_',  231,  224,  ')',  '=',  127,    9,
-	'a',  'z',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '^',  '$',   13,    0,  'q',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  'm',
-	249,  178,    0,   42,  'w',  'x',  'c',  'v',
-	'b',  'n',  ',',  ';',  ':',  '!',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  176,  '+',  127,    9,
-	'A',  'Z',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  168,  163,   13,    0,  'Q',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  'M',
-	'%',    0,    0,  181,  'W',  'X',  'C',  'V',
-	'B',  'N',  '?',  '.',  '/',  167,    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '~',  '#',  '{',  '[',  '|',
-	'`', '\\',   '^',  '@', ']',  '}',    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  164,   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_DK
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '+', '\'',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  229,    0,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  230,
-	162,    0,    0, '\'',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!', '\"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  197,  '^',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  198,
-	165,    0,    0,  '*',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  163,  '$',    0,    0,
-	'{',   '[',  ']', '}',    0,  '|',    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '\\',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_DK_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '+',  180,  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  229,  168,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  230,
-	162,  189,    0, '\'',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!', '\"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  197,  '^',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  198,
-	165,  167,    0,  '*',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  163,  '$',    0,    0,
-	'{',   '[',  ']', '}',    0,  '|',    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0, '\\',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_DVORAK
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\\',  '=',  127,    9,
-	'\'', ',',  '.',  'p',  'y',  'f',  'g',  'c',
-	'r',  'l',  '/',  ']',   13,    0,  'a',  'o',
-	'e',  'u',  'i',  'd',  'h',  't',  'n',  's',
-	'-',  '`',    0,  '[',  ';',  'q',  'j',  'k',
-	'x',  'b',  'm',  'w',  'v',  'z',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!',  '@',  '#',  '$',  '%',  '^',
-	'&',  '*',  '(',  ')',  '|',  '+',  127,    9,
-	'"',  '<',  '>',  'P',  'Y',  'F',  'G',  'C',
-	'R',  'L',  '?',  '}',   13,    0,  'A',  'O',
-	'E',  'U',  'I',  'D',  'H',  'T',  'N',  'S',
-	'_',  '~',    0,  '{',  ':',  'Q',  'J',  'K',
-	'X',  'B',  'M',  'W',  'V',  'Z',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',    0,  '$',    0,    0,
-	'{',   '[',  ']', '}', '\\',    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '|',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_SG
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\'',  '^',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',    0,    0,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',    0,
-	  0,    0,    0,  '$',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '+',  '"',  '*',    0,  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P',    0,  '!',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',    0,
-	  0,    0,    0,    0,  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  '#',    0,    0,    0,
-	'|',    0,    0,    0, '\'',  '~',    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,   '[',  ']',  13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	'{',    0,    0,  '}',    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0, '\\',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_SG_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\'',  '^',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',  252,    0,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  246,
-	228,  167,    0,  '$',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '+',  '"',  '*',  231,  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P',  220,  '!',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  214,
-	196,  176,    0,  163,  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  '#',    0,    0,  172,
-	'|',  162,    0,    0, '\'',  '~',    0,    0,
-	'@',    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '[',  ']',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,  233,
-	'{',    0,    0,  '}',    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0, '\\',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_NO
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0',  '+', '\\',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',
-	'o',  'p',  '}',  '~',   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  '|',
-	'{',  '|',    0, '\'',  'z',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char shift_map[] = {
-	  0,   27,  '!', '\"',  '#',  '$',  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',
-	'O',  'P',  ']',  '^',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L', '\\',
-	'[',    0,    0,  '*',  'Z',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',    0,  '$',    0,    0,
-	'{',   '[',  ']', '}',    0, '\'',    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,  '~',   13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_SF
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\'',  '^',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',    0,    0,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',    0,
-	  0,    0,   0,   '$',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-static unsigned char shift_map[] = {
-	  0,   27,  '+',  '"',  '*',    0,  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P',    0,  '!',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',    0,
-	  0,    0,    0,    0,  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  '#',    0,    0,    0,
-	'|',    0,    0,    0,  '\'', '~',    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,   '[',  ']',  13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	 '{',   0,    0,   '}',   0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '\\',   0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-
-#elif defined KBD_SF_LATIN1
-
-static unsigned char key_map[] = {
-	  0,   27,  '1',  '2',  '3',  '4',  '5',  '6',
-	'7',  '8',  '9',  '0', '\'',  '^',  127,    9,
-	'q',  'w',  'e',  'r',  't',  'z',  'u',  'i',
-	'o',  'p',  232,  168,   13,    0,  'a',  's',
-	'd',  'f',  'g',  'h',  'j',  'k',  'l',  233,
-	224,  167,    0,  '$',  'y',  'x',  'c',  'v',
-	'b',  'n',  'm',  ',',  '.',  '-',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '<',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-static unsigned char shift_map[] = {
-	  0,   27,  '+',  '"',  '*',  231,  '%',  '&',
-	'/',  '(',  ')',  '=',  '?',  '`',  127,    9,
-	'Q',  'W',  'E',  'R',  'T',  'Z',  'U',  'I',
-	'O',  'P',  252,  '!',   13,    0,  'A',  'S',
-	'D',  'F',  'G',  'H',  'J',  'K',  'L',  246,
-	228,  176,    0,  163,  'Y',  'X',  'C',  'V',
-	'B',  'N',  'M',  ';',  ':',  '_',    0,  '*',
-	  0,   32,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,  '-',    0,    0,    0,  '+',    0,
-	  0,    0,    0,    0,    0,    0,  '>',    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-static unsigned char alt_map[] = {
-	  0,    0,    0,  '@',  '#',    0,    0,  172,
-	'|',   162,   0,    0,  180,  '~',    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,   '[',  ']',  13,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	 '{',   0,    0,   '}',   0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0,    0,    0,    0,    0,    0,  '\\',   0,
-	  0,    0,    0,    0,    0,    0,    0,    0,
-	  0 };
-#else
-#error "KBD-type not defined"
-#endif
-
-static void do_self(int sc)
+static void send_intr(void)
 {
-	unsigned char ch;
+	if (tty)
+		put_queue(INTR_CHAR(tty));
+}
 
-	if (kbd_flag(KG_ALTGR))
-		ch = alt_map[sc];
-	else if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT) ||
-		 kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
-		ch = shift_map[sc];
-	else
-		ch = key_map[sc];
+static void do_spec(unsigned char value, char up_flag)
+{
+	typedef void (*fnp)(void);
+	fnp fn_table[] = {
+		NULL,		enter,		show_ptregs,	show_mem,
+		show_state,	send_intr,	lastcons, 	caps_toggle,
+		num,		hold
+	};
 
-	if (ch == 0)
+	if (value >= sizeof(fn_table)/sizeof(fnp))
 		return;
-
-	if ((ch = handle_diacr(ch)) == 0)
+	if (up_flag)
 		return;
+	if (!fn_table[value])
+		return;
+	fn_table[value]();
+}
+  
+static void do_self(unsigned char value, char up_flag)
+{
+	if (up_flag)
+		return;		/* no action, if this is a key release */
 
-	if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL) ||
-	    vc_kbd_flag(kbd,VC_CAPSLOCK))	/* ctrl or caps */
-		if ((ch >= 'a' && ch <= 'z') || (ch >= 224 && ch <= 254))
-			ch -= 32;
-	if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))	/* ctrl */
-		ch &= 0x1f;
+	value = handle_diacr(value);
 
-	if (kbd_flag(KG_ALT))
+	/* kludge... */
+	if (vc_kbd_flag(kbd,VC_CAPSLOCK))
+		if ((value >= 'a' && value <= 'z')
+		    || (value >= 224 && value <= 254)) {
+			value -= 32;
+		}
+	/* kludge... */
+	if (kbd_flags & CTRL_KEYS) {
+		if (value >= 64 && value < 127)
+			value &= 0x1f;
+		else if (value == ' ' || value == '2')
+			value = 0;
+		else if (value >= '3' && value < '8')
+			value -= 24;
+		else if (value == '?' || value == '8' || value == '/')
+			value = 127;
+		else if (value == '-' || value == '_')
+			value = 0x1f;
+		else
+			return;
+	}
+
+	if (kbd_flags & ALT_KEYS)
 		if (vc_kbd_flag(kbd,VC_META)) {
 			put_queue('\033');
-			put_queue(ch);
+			put_queue(value);
 		} else
-			put_queue(ch|0x80);
+			put_queue(value|0x80);
 	else
-		put_queue(ch);
+		put_queue(value);
 }
 
-unsigned char accent_table[5][64] = {
+static unsigned char ret_diacr[] =
+	{'`', '\'', '^', '~', '"' };		/* Must not end with 0 */
+
+/* If a dead key pressed twice, output a character corresponding it,	*/
+/* otherwise just remember the dead key.				*/
+
+static void do_dead(unsigned char value, char up_flag)
+{
+	if (up_flag)
+		return;
+
+	if (diacr == value) {	/* pressed twice */
+		diacr = -1;
+		put_queue(ret_diacr[value]);
+		return;
+	}
+	diacr = value;
+}
+
+/* If no pending dead key, return the character unchanged. Otherwise,	*/
+/* if space if pressed, return a character corresponding the pending	*/
+/* dead key, otherwise try to combine the two.				*/
+
+unsigned int handle_diacr(unsigned int ch)
+{
+	static unsigned char accent_table[5][64] = {
 	" \300BCD\310FGH\314JKLMN\322PQRST\331VWXYZ[\\]^_"
 	"`\340bcd\350fgh\354jklmn\362pqrst\371vwxyz{|}~",   /* accent grave */
 
@@ -1114,220 +437,209 @@ unsigned char accent_table[5][64] = {
 
 	" \304BCD\313FGH\316JKLMN\326PQRST\334VWXYZ[\\]^_"
 	"`\344bcd\353fgh\357jklmn\366pqrst\374vwx\377z{|}~" /* dieresis */
-};
+	};
+	int d = diacr;
 
-/*
- * Check if dead key pressed. If so, check if same key pressed twice;
- * in that case return the char, otherwise store char and return 0.
- * If dead key not pressed, check if accented character pending. If
- * not: return the char, otherwise check if char is a space. If it is
- * a space return the diacritical. Else combine char with diacritical
- * mark and return.
- */
-
-unsigned int handle_diacr(unsigned int ch)
-{
-	static unsigned char diacr_table[] =
-		{'`', 180, '^', '~', 168, 0};		/* Must end with 0 */
-	static unsigned char ret_diacr[] =
-		{'`', '\'', '^', '~', '"' };		/* Must not end with 0 */
-	int i;
-
-	for(i=0; diacr_table[i]; i++)
-		if (ch==diacr_table[i] && ((1<<i)&kbd->kbd_flags)) {
-			if (diacr == i) {
-				diacr=-1;
-				return ret_diacr[i];	/* pressed twice */
-			} else {
-				diacr=i;		/* key is dead */
-				return 0;
-			}
-		}
 	if (diacr == -1)
 		return ch;
-	else if (ch == ' ') {
-		ch=ret_diacr[diacr];
-		diacr=-1;
+
+	diacr = -1;
+	if (ch == ' ')
+		return ret_diacr[d];
+
+	if (ch < 64 || ch > 122)
 		return ch;
-	} else if (ch<64 || ch>122) {
-		diacr=-1;
-		return ch;
-	} else {
-		ch=accent_table[diacr][ch-64];
-		diacr=-1;
-		return ch;
-	}
+
+	return accent_table[d][ch - 64];
 }
 
-#if defined KBD_FR || defined KBD_US || defined KBD_UK || defined KBD_FR_LATIN1
-static unsigned char num_table[] = "789-456+1230.";
-#else
-static unsigned char num_table[] = "789-456+1230,";
-#endif
-
-static unsigned char cur_table[] = "1A5-DGC+4B623";
-static unsigned int pad_table[] = { 7,8,9,0,4,5,6,0,1,2,3,0,0 };
-
-/*
-    Keypad /			35	B7	Q
-    Keypad *  (PrtSc)		37	B7	R
-    Keypad NumLock		45	??	P
-    Keypad 7  (Home)		47	C7	w
-    Keypad 8  (Up arrow)	48	C8	x
-    Keypad 9  (PgUp)		49	C9	y
-    Keypad -			4A	CA	S
-    Keypad 4  (Left arrow)	4B	CB	t
-    Keypad 5			4C	CC	u
-    Keypad 6  (Right arrow)	4D	CD	v
-    Keypad +			4E	CE	l
-    Keypad 1  (End)		4F	CF	q
-    Keypad 2  (Down arrow)	50	D0	r
-    Keypad 3  (PgDn)		51	D1	s
-    Keypad 0  (Ins)		52	D2	p
-    Keypad .  (Del)		53	D3	n
-*/
-
-static unsigned char appl_table[] = "wxyStuvlqrspn";
-
-/*
-  Set up keyboard to generate DEC VT200 F-keys.
-  DEC F1  - F5  not implemented (DEC HOLD, LOCAL PRINT, SETUP, SW SESS, BREAK)
-  DEC F6  - F10 are mapped to F6 - F10
-  DEC F11 - F20 are mapped to Shift-F1 - Shift-F10
-  DEC HELP and DEC DO are mapped to F11, F12 or Shift- F11, F12.
-  Regular (?) Linux F1-F5 remain the same.
-*/
-
-static char *func_table[2][12] = { /* DEC F1 - F10 */ {
-	"\033[[A",  "\033[[B",  "\033[[C",  "\033[[D",
-	"\033[[E",  "\033[17~", "\033[18~", "\033[19~",
-	"\033[20~", "\033[21~", "\033[28~", "\033[29~"
-}, /* DEC F11 - F20 */ {
-	"\033[23~", "\033[24~", "\033[25~", "\033[26~",
-	"\033[28~", "\033[29~", "\033[31~", "\033[32~",
-	"\033[33~", "\033[34~", "\033[28~", "\033[29~"
-}};
-
-static void cursor(int sc)
+static void do_cons(unsigned char value, char up_flag)
 {
-	if (sc < 0x47 || sc > 0x53)
+	if (up_flag)
 		return;
-	sc -= 0x47;
-	if (sc == 12 &&
-	    (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL)) &&
-	    (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))) {
+	want_console = value;
+}
+
+static char *func_table[] = {
+	"\033[[A",  "\033[[B",  "\033[[C",  "\033[[D",  "\033[[E", /* F1 -F5  */
+	"\033[17~", "\033[18~", "\033[19~", "\033[20~", "\033[21~",/* F6 -F10 */
+	"\033[23~", "\033[24~", "\033[25~", "\033[26~", "\033[28~",/* F11-F15 */
+	"\033[29~", "\033[31~", "\033[32~", "\033[33~", "\033[34~",/* F16-F20 */
+	"\033[1~",	/* Find */
+	"\033[2~",	/* Insert */
+	"\033[3~",	/* Remove */
+	"\033[4~",	/* Select */
+	"\033[5~",	/* Prev page */
+	"\033[6~"	/* Next page */
+};
+
+static void do_fn(unsigned char value, char up_flag)
+{
+	if (up_flag)
+		return;
+	if (kbd_flags & SHIFT_KEYS) {
+		if (value == KVAL(K_PGDN)) {
+			scrollfront(0);
+			return;
+		}
+		if (value == KVAL(K_PGUP)) {
+			scrollback(0);
+			return;
+		}
+	}
+	if (kbd_flags & ALT_KEYS) {
+		want_console = value;
+		return;
+	}
+	puts_queue(func_table[value]);
+}
+
+static void do_pad(unsigned char value, char up_flag)
+{
+	static char *pad_chars = "0123456789+-*/\015,.";
+	static char *app_map = "pqrstuvwxylSRQMnn";
+
+	if (up_flag)
+		return;		/* no action, if this is a key release */
+
+	if ((value == KVAL(K_PCOMMA) || value == KVAL(K_PDOT)) &&
+	    (kbd_flags & CTRL_KEYS) && (kbd_flags & (ALT_KEYS | ALTGR_KEYS))) {
 		ctrl_alt_del();
 		return;
 	}
-	if (kbd_dead(KGD_E0)) {
-		cur(sc);
+
+	if ((kbd_flags & ALT_KEYS) && value <= 9) {	/* Alt-numpad */
+		npadch = (npadch * 10 + value) % 1000;
 		return;
 	}
 
-	if (kbd_flag(KG_ALT) && sc != 12) {			/* Alt-numpad */
-		npadch=npadch*10+pad_table[sc];
+	/* kludge... shift forces cursor/number keys */
+	if (vc_kbd_flag(kbd,VC_APPLIC) && shift_state != 1) {
+		applkey(app_map[value], 1);
 		return;
 	}
 
-	if (vc_kbd_flag(kbd,VC_APPLIC) &&
-	    !kbd_flag(KG_LSHIFT) &&	/* shift forces cursor */
-	    !kbd_flag(KG_RSHIFT)) {
-		applkey(appl_table[sc]);
+	if (!vc_kbd_flag(kbd,VC_NUMLOCK))
+		switch (value) {
+			case KVAL(K_PCOMMA):
+			case KVAL(K_PDOT):
+				do_fn(KVAL(K_REMOVE), 0);
+				return;
+			case KVAL(K_P0):
+				do_fn(KVAL(K_INSERT), 0);
+				return;
+			case KVAL(K_P1):
+				do_fn(KVAL(K_SELECT), 0);
+				return;
+			case KVAL(K_P2):
+				do_cur(KVAL(K_DOWN), 0);
+				return;
+			case KVAL(K_P3):
+				do_fn(KVAL(K_PGDN), 0);
+				return;
+			case KVAL(K_P4):
+				do_cur(KVAL(K_LEFT), 0);
+				return;
+			case KVAL(K_P6):
+				do_cur(KVAL(K_RIGHT), 0);
+				return;
+			case KVAL(K_P7):
+				do_fn(KVAL(K_FIND), 0);
+				return;
+			case KVAL(K_P8):
+				do_cur(KVAL(K_UP), 0);
+				return;
+			case KVAL(K_P9):
+				do_fn(KVAL(K_PGUP), 0);
+				return;
+			case KVAL(K_P5):
+				applkey('G', vc_kbd_flag(kbd,VC_APPLIC));
+				return;
+		}
+
+	put_queue(pad_chars[value]);
+	if (value == KVAL(K_PENTER) && vc_kbd_flag(kbd,VC_CRLF))
+		put_queue(10);
+}
+
+static void do_cur(unsigned char value, char up_flag)
+{
+	static char *cur_chars = "BDCA";
+	if (up_flag)
 		return;
-	}
 
-	if (vc_kbd_flag(kbd,VC_NUMLOCK)) {
-		put_queue(num_table[sc]);
-	} else
-		cur(sc);
+	applkey(cur_chars[value], vc_kbd_flag(kbd,VC_CKMODE));
 }
 
-static void cur(int sc)
+static void do_shift(unsigned char value, char up_flag)
 {
-	char buf[] = { 0x1b, '[', 0, 0, 0 };		/* must not be static */
-
-	buf[2]=cur_table[sc];
-	if (buf[2] < '9')
-		buf[3]='~';
+	shift_state = 0;
+	if (up_flag)
+		clr_kbd_flag(value);
 	else
-		if ((buf[2] >= 'A' && buf[2] <= 'D') ?
-		    vc_kbd_flag(kbd,VC_CKMODE) :
-		    vc_kbd_flag(kbd,VC_APPLIC))
-			buf[1]='O';
-	puts_queue(buf);
-}
-
-static void func(int sc)
-{
-	if (sc < 0x3b)
-		return;
-	sc-=0x3b;
-	if (sc > 9) {
-		sc-=18;
-		if (sc < 10 || sc > 11)
-			return;
-	}
-	if (kbd_flag(KG_ALT))
-		want_console = sc;
-	else
-		if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))	/* DEC F11 - F20 */
-			puts_queue(func_table[1][sc]);
-		else					/* DEC F1 - F10 */
-			puts_queue(func_table[0][sc]);
-}
-
-static void slash(int sc)
-{
-	if (!kbd_dead(KGD_E0))
-		do_self(sc);
-	else if (vc_kbd_flag(kbd,VC_APPLIC))
-		applkey('Q');
-	else
-		put_queue('/');
-}
-
-static void star(int sc)
-{
-	if (kbd_dead(KGD_E0))
-		/* Print screen key sends E0 2A E0 37 and puts
-		   the VT100-ESC sequence ESC [ i into the queue, ChN */
-		puts_queue("\033\133\151");
-	else if (vc_kbd_flag(kbd,VC_APPLIC))
-		applkey('R');
-	else
-		do_self(sc);
-}
-
-static void enter(int sc)
-{
-	if (kbd_dead(KGD_E0) && vc_kbd_flag(kbd,VC_APPLIC))
-		applkey('M');
-	else {
-		put_queue(13);
-		if (vc_kbd_flag(kbd,VC_CRLF))
-			put_queue(10);
+		set_kbd_flag(value);
+	if (kbd_flags & SHIFT_KEYS)
+		shift_state = 1;
+	if (kbd_flags & ALTGR_KEYS)
+		shift_state = 2;
+	/* cludge */
+	if (up_flag && value == KG_LALT && npadch != 0) {
+		put_queue(npadch);
+		npadch=0;
 	}
 }
 
-static void minus(int sc)
-{
-	if (vc_kbd_flag(kbd,VC_APPLIC))
-		applkey('S');
-	else
-		do_self(sc);
-}
+#define C(x)		((KT_CONS<<8)|x)
 
-static void plus(int sc)
-{
-	if (vc_kbd_flag(kbd,VC_APPLIC))
-		applkey('l');
-	else
-		do_self(sc);
-}
-
-static void none(int sc)
-{
-}
+u_word key_map[NR_KEYMAPS][NR_KEYS] = {
+	{ /* unshifted keys */
+	K_HOLE,  27,      '1',     '2',     '3',     '4',     '5',     '6',
+	'7',     '8',     '9',     '0',     '-',     '=',     127,       9,
+	'q',     'w',     'e',     'r',     't',     'y',     'u',     'i',
+	'o',     'p',     '[',     ']', K_ENTER, K_LCTRL,     'a',     's',
+	'd',     'f',     'g',     'h',     'j',     'k',     'l',     ';',
+	'\'',    '`',  K_LSHIFT,  '\\',     'z',     'x',     'c',     'v',
+	'b',     'n',     'm',     ',',     '.',     '/',     K_RSHIFT, K_PSTAR,
+	K_ALT,   ' ',     K_CAPS,  K_F1,    K_F2,    K_F3,    K_F4,    K_F5,
+	K_F6,    K_F7,    K_F8,    K_F9,    K_F10,   K_NUM,   K_HOLD,  K_P7,
+	K_P8,    K_P9,    K_PMINUS, K_P4,   K_P5,    K_P6,    K_PPLUS, K_P1,
+	K_P2,    K_P3,    K_P0,    K_PDOT, K_CONS, K_HOLE,    '<',    K_F11,
+	K_F12,   K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	/* unshifted e0 keys */
+	K_PENTER, K_RCTRL, K_PSLASH,    28, K_ALTGR, K_BREAK,  K_FIND,    K_UP,
+	K_PGUP,   K_LEFT, K_RIGHT, K_SELECT, K_DOWN,  K_PGDN, K_INSERT, K_REMOVE },
+	{ /* shifted keys */
+	 K_HOLE,      27,     '!',     '@',     '#',     '$',     '%',     '^',
+	    '&',     '*',     '(',     ')',     '_',     '+',     127,       9,
+	    'Q',     'W',     'E',     'R',     'T',     'Y',     'U',     'I',
+	    'O',     'P',     '{',     '}', K_ENTER,  K_LCTRL,    'A',     'S',
+	    'D',     'F',     'G',     'H',     'J',     'K',     'L',     ':',
+	    '"',     '~', K_LSHIFT,    '|',     'Z',     'X',     'C',     'V',
+	    'B',     'N',     'M',     '<',     '>',     '?', K_RSHIFT, K_PSTAR,
+	  K_ALT,      32,  K_CAPS,   K_F11,   K_F12,   K_F13,   K_F14,   K_F15,
+	  K_F16,   K_F17,   K_F18,   K_F19,   K_F20,   K_NUM, K_SH_MEM,   K_P7,
+	   K_P8,    K_P9, K_PMINUS,   K_P4,    K_P5,    K_P6, K_PPLUS,    K_P1,
+	   K_P2,    K_P3,    K_P0,  K_PDOT,  K_CONS,  K_HOLE,     '>',   K_F11,
+	  K_F12,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	/* shifted e0 keys */
+	K_PENTER, K_RCTRL, K_PSLASH, K_HOLE, K_ALTGR, K_BREAK, K_FIND,  K_UP,
+	K_PGUP,   K_LEFT, K_RIGHT, K_SELECT, K_DOWN, K_PGDN, K_INSERT, K_REMOVE },
+	{ /* alted keys */
+	 K_HOLE,  K_HOLE,  K_HOLE,     '@',  K_HOLE,     '$',  K_HOLE,  K_HOLE,
+	    '{',     '[',     ']',     '}',    '\\',  K_HOLE,  K_HOLE,  K_HOLE,
+	 K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	 K_HOLE,  K_HOLE,  K_HOLE,     '~', K_ENTER, K_LCTRL,  K_HOLE,  K_HOLE,
+	 K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	 K_HOLE,  K_HOLE, K_LSHIFT, K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	 K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE, K_RSHIFT, K_HOLE,
+	  K_ALT,  K_HOLE,  K_CAPS,   C(12),   C(13),   C(14),   C(15),   C(16),
+	  C(17),   C(18),   C(19),   C(20),   C(21),   K_NUM, K_SH_REGS,  K_P7,
+	   K_P8,    K_P9, K_PMINUS,   K_P4,    K_P5,    K_P6, K_PPLUS,    K_P1,
+	   K_P2,    K_P3,    K_P0,  K_PDOT,  K_CONS,  K_HOLE,     '|',   C(22),
+	  C(23),  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,  K_HOLE,
+	/* alted e0 keys */
+	K_PENTER, K_RCTRL, K_PSLASH, K_HOLE, K_ALTGR, K_BREAK, K_FIND,    K_UP,
+	K_PGUP,   K_LEFT, K_RIGHT, K_SELECT, K_DOWN, K_PGDN, K_INSERT, K_REMOVE }};
 
 /*
  * send_data sends a character to the keyboard and waits
@@ -1421,73 +733,6 @@ void hard_reset_now(void)
 	}
 }
 
-static fptr key_table[] = {
-	none,do_self,do_self,do_self,		/* 00-03 s0 esc 1 2 */
-	do_self,do_self,do_self,do_self,	/* 04-07 3 4 5 6 */
-	do_self,do_self,do_self,do_self,	/* 08-0B 7 8 9 0 */
-	do_self,do_self,do_self,do_self,	/* 0C-0F + ' bs tab */
-	do_self,do_self,do_self,do_self,	/* 10-13 q w e r */
-	do_self,do_self,do_self,do_self,	/* 14-17 t y u i */
-	do_self,do_self,do_self,do_self,	/* 18-1B o p } ^ */
-	enter,ctrl,do_self,do_self,		/* 1C-1F enter ctrl a s */
-	do_self,do_self,do_self,do_self,	/* 20-23 d f g h */
-	do_self,do_self,do_self,do_self,	/* 24-27 j k l | */
-	do_self,do_self,lshift,do_self,		/* 28-2B { para lshift , */
-	do_self,do_self,do_self,do_self,	/* 2C-2F z x c v */
-	do_self,do_self,do_self,do_self,	/* 30-33 b n m , */
-	do_self,slash,rshift,star,		/* 34-37 . - rshift * */
-	alt,do_self,caps,func,			/* 38-3B alt sp caps f1 */
-	func,func,func,func,			/* 3C-3F f2 f3 f4 f5 */
-	func,func,func,func,			/* 40-43 f6 f7 f8 f9 */
-	func,num,scroll,cursor,			/* 44-47 f10 num scr home */
-	cursor,cursor,minus,cursor,		/* 48-4B up pgup - left */
-	cursor,cursor,plus,cursor,		/* 4C-4F n5 right + end */
-	cursor,cursor,cursor,cursor,		/* 50-53 dn pgdn ins del */
-	sysreq,none,do_self,func,			/* 54-57 sysreq ? < f11 */
-	func,none,none,none,			/* 58-5B f12 ? ? ? */
-	none,none,none,none,			/* 5C-5F ? ? ? ? */
-	none,none,none,none,			/* 60-63 ? ? ? ? */
-	none,none,none,none,			/* 64-67 ? ? ? ? */
-	none,none,none,none,			/* 68-6B ? ? ? ? */
-	none,none,none,none,			/* 6C-6F ? ? ? ? */
-	none,none,none,none,			/* 70-73 ? ? ? ? */
-	none,none,none,none,			/* 74-77 ? ? ? ? */
-	none,none,none,none,			/* 78-7B ? ? ? ? */
-	none,none,none,none,			/* 7C-7F ? ? ? ? */
-	none,none,none,none,			/* 80-83 ? br br br */
-	none,none,none,none,			/* 84-87 br br br br */
-	none,none,none,none,			/* 88-8B br br br br */
-	none,none,none,none,			/* 8C-8F br br br br */
-	none,none,none,none,			/* 90-93 br br br br */
-	none,none,none,none,			/* 94-97 br br br br */
-	none,none,none,none,			/* 98-9B br br br br */
-	none,unctrl,none,none,			/* 9C-9F br unctrl br br */
-	none,none,none,none,			/* A0-A3 br br br br */
-	none,none,none,none,			/* A4-A7 br br br br */
-	none,none,unlshift,none,		/* A8-AB br br unlshift br */
-	none,none,none,none,			/* AC-AF br br br br */
-	none,none,none,none,			/* B0-B3 br br br br */
-	none,none,unrshift,none,		/* B4-B7 br br unrshift br */
-	unalt,none,uncaps,none,			/* B8-BB unalt br uncaps br */
-	none,none,none,none,			/* BC-BF br br br br */
-	none,none,none,none,			/* C0-C3 br br br br */
-	none,none,none,none,			/* C4-C7 br br br br */
-	none,none,none,none,			/* C8-CB br br br br */
-	none,none,none,none,			/* CC-CF br br br br */
-	none,none,none,none,			/* D0-D3 br br br br */
-	none,none,none,none,			/* D4-D7 br br br br */
-	none,none,none,none,			/* D8-DB br ? ? ? */
-	none,none,none,none,			/* DC-DF ? ? ? ? */
-	none,none,none,none,			/* E0-E3 e0 e1 ? ? */
-	none,none,none,none,			/* E4-E7 ? ? ? ? */
-	none,none,none,none,			/* E8-EB ? ? ? ? */
-	none,none,none,none,			/* EC-EF ? ? ? ? */
-	none,none,none,none,			/* F0-F3 ? ? ? ? */
-	none,none,none,none,			/* F4-F7 ? ? ? ? */
-	none,none,none,none,			/* F8-FB ? ? ? ? */
-	none,none,none,none			/* FC-FF ? ? ? ? */
-};
-
 unsigned long kbd_init(unsigned long kmem_start)
 {
 	int i;
@@ -1497,7 +742,6 @@ unsigned long kbd_init(unsigned long kmem_start)
 	for (i = 0 ; i < NR_CONSOLES ; i++,kbd++) {
 		kbd->flags = KBD_DEFFLAGS;
 		kbd->default_flags = KBD_DEFFLAGS;
-		kbd->kbd_flags = KBDFLAGS;
 	}
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ,keyboard_interrupt);

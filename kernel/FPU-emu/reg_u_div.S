@@ -71,6 +71,27 @@ _reg_u_div:
 	movl	PARAM2,%ebx	/* pointer to denom */
 	movl	PARAM3,%edi	/* pointer to answer */
 
+#ifdef DENORM_OPERAND
+	movl	EXP(%esi),%eax
+	cmpl	EXP_UNDER,%eax
+	jg	xOp1_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp1_not_denorm:
+	movl	EXP(%ebx),%eax
+	cmpl	EXP_UNDER,%eax
+	jg	xOp2_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp2_not_denorm:
+#endif DENORM_OPERAND
+
 _divide_kernel:
 #ifdef PARANOID
 //	testl	$0x80000000, SIGH(%esi)	// Dividend

@@ -29,11 +29,13 @@
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
+#include <linux/segment.h>
 
 #include <asm/segment.h>
 
 extern int sys_exit(int exit_code);
 extern int sys_close(int fd);
+extern void shm_exit (void);
 
 /*
  * MAX_ARG_PAGES defines the number of pages allocated for arguments
@@ -80,8 +82,8 @@ int core_dump(long signr, struct pt_regs * regs)
 	if (current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE)
 		return 0;
 	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
-	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode,NULL)) {
+	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
+	if (open_namei("core",O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
 		inode = NULL;
 		goto end_coredump;
 	}
@@ -139,7 +141,7 @@ int core_dump(long signr, struct pt_regs * regs)
 		   convert it into standard 387 format first.. */
 		dump.u_fpvalid = 0;
 	}
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
 /* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));
 /* name of the executable */
@@ -147,7 +149,7 @@ int core_dump(long signr, struct pt_regs * regs)
 /* Now dump all of the user data.  Include malloced stuff as well */
 	DUMP_SEEK(PAGE_SIZE);
 /* now we start writing out the user space info */
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x17));
+	__asm__("mov %w0,%%fs"::"r" (USER_DS));
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
 		dump_start = dump.u_tsize << 12;
@@ -161,13 +163,13 @@ int core_dump(long signr, struct pt_regs * regs)
 		DUMP_WRITE(dump_start,dump_size);
 	};
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
+	__asm__("mov %w0,%%fs"::"r" (KERNEL_DS));
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
 end_coredump:
-	__asm__("mov %0,%%fs"::"r" (fs));
+	__asm__("mov %w0,%%fs"::"r" (fs));
 	iput(inode);
 	return has_dumped;
 }
@@ -187,7 +189,7 @@ int sys_uselib(const char * library)
 	unsigned long offset;
 	int error;
 
-	if (!library || get_limit(0x17) != TASK_SIZE)
+	if (!library || get_limit(USER_DS) != TASK_SIZE)
 		return -EINVAL;
 	if ((libnum >= MAX_SHARED_LIBS) || (libnum < 0))
 		return -EINVAL;
@@ -361,12 +363,6 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	data_limit = TASK_SIZE;
 	code_base = data_base = 0;
 	current->start_code = code_base;
-	set_base(current->ldt[1],code_base);
-	set_limit(current->ldt[1],code_limit);
-	set_base(current->ldt[2],data_base);
-	set_limit(current->ldt[2],data_limit);
-/* make sure fs points to the NEW data segment */
-	__asm__("pushl $0x17\n\tpop %%fs"::);
 	data_base += data_limit;
 	for (i=MAX_ARG_PAGES-1 ; i>=0 ; i--) {
 		data_base -= PAGE_SIZE;
@@ -435,7 +431,7 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
 	int ch;
 
-	if ((0xffff & eip[1]) != 0x000f)
+	if ((0xffff & eip[1]) != USER_CS)
 		panic("VFS: execve called from supervisor mode");
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		page[i]=0;
@@ -591,6 +587,8 @@ restart_interp:
 			if (i < 15)
 				current->comm[i++] = ch;
 	current->comm[i] = '\0';
+	if (current->shm)
+	        shm_exit();
 	if (current->executable) {
 		iput(current->executable);
 		current->executable = NULL;
@@ -604,7 +602,6 @@ restart_interp:
 	    !permission(inode,MAY_READ))
 		current->dumpable = 0;
 	current->numlibraries = 0;
-	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {
 		current->sigaction[i].sa_mask = 0;
 		current->sigaction[i].sa_flags = 0;

@@ -131,11 +131,6 @@ int sys_prof(void)
 	return -ENOSYS;
 }
 
-int sys_ipc(void)
-{
-	return -ENOSYS;
-}
-
 unsigned long save_v86_state(struct vm86_regs * regs)
 {
 	unsigned long stack;
@@ -320,6 +315,11 @@ int sys_mpx(void)
 }
 
 int sys_ulimit(void)
+{
+	return -ENOSYS;
+}
+
+int sys_old_syscall(void)
 {
 	return -ENOSYS;
 }
@@ -572,6 +572,27 @@ int sys_uname(struct old_utsname * name)
 	error = verify_area(VERIFY_WRITE, name,sizeof *name);
 	if (error)
 		return error;
+	memcpy_tofs(&name->sysname,&system_utsname.sysname,
+		sizeof (system_utsname.sysname));
+	memcpy_tofs(&name->nodename,&system_utsname.nodename,
+		sizeof (system_utsname.nodename));
+	memcpy_tofs(&name->release,&system_utsname.release,
+		sizeof (system_utsname.release));
+	memcpy_tofs(&name->version,&system_utsname.version,
+		sizeof (system_utsname.version));
+	memcpy_tofs(&name->machine,&system_utsname.machine,
+		sizeof (system_utsname.machine));
+	return 0;
+}
+
+int sys_olduname(struct oldold_utsname * name)
+{
+	int error;
+	if (!name)
+		return -EFAULT;
+	error = verify_area(VERIFY_WRITE, name,sizeof *name);
+	if (error)
+		return error;
 	memcpy_tofs(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
 	put_fs_byte(0,name->sysname+__OLD_UTS_LEN);
 	memcpy_tofs(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
@@ -601,6 +622,26 @@ int sys_sethostname(char *name, int len)
 			return 0;
 	}
 	system_utsname.nodename[i] = 0;
+	return 0;
+}
+
+/*
+ * Only setdomainname; getdomainname can be implemented by calling
+ * uname()
+ */
+int sys_setdomainname(char *name, int len)
+{
+	int	i;
+	
+	if (!suser())
+		return -EPERM;
+	if (len > __NEW_UTS_LEN)
+		return -EINVAL;
+	for (i=0; i < len; i++) {
+		if ((system_utsname.domainname[i] = get_fs_byte(name+i)) == 0)
+			return 0;
+	}
+	system_utsname.domainname[i] = 0;
 	return 0;
 }
 
@@ -699,7 +740,7 @@ int sys_getrusage(int who, struct rusage *ru)
 #define LATCH ((1193180 + HZ/2)/HZ)
 
 /*
- * This version of gettimeofday has near nanosecond resolution.
+ * This version of gettimeofday has near microsecond resolution.
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
  */
 static inline void do_gettimeofday(struct timeval *tv)
@@ -726,7 +767,7 @@ static inline void do_gettimeofday(struct timeval *tv)
 	}
 	nowtime += jiffies_offset;
 	tv->tv_sec = startup_time + CT_TO_SECS(nowtime);
-	/* the correction term is always in the range [0, 1 clocktick) */
+	/* the correction term is always in the range [0, 1) clocktick */
 	tv->tv_usec = CT_TO_USECS(nowtime)
 		+ ((LATCH - 1) - count)*(1000000/HZ)/LATCH;
 #else /* not __i386__ */

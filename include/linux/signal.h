@@ -51,6 +51,7 @@ typedef unsigned int sigset_t;		/* 32 bits */
 /*
 #define SIGLOST		29
 */
+#define SIGPWR		30
 
 /*
  * sa_flags values: SA_STACK is not currently supported, but will allow the

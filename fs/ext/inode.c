@@ -50,7 +50,8 @@ static struct super_operations ext_sops = {
 	ext_put_inode,
 	ext_put_super,
 	ext_write_super,
-	ext_statfs
+	ext_statfs,
+	NULL
 };
 
 struct super_block *ext_read_super(struct super_block *s,void *data, 
@@ -383,7 +384,7 @@ void ext_read_inode(struct inode * inode)
 		init_fifo(inode);
 }
 
-void ext_write_inode(struct inode * inode)
+static struct buffer_head * ext_update_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
 	struct ext_inode * raw_inode;
@@ -406,5 +407,36 @@ void ext_write_inode(struct inode * inode)
 		raw_inode->i_zone[block] = inode->u.ext_i.i_data[block];
 	bh->b_dirt=1;
 	inode->i_dirt=0;
+	return bh;
+}
+
+void ext_write_inode(struct inode * inode)
+{
+	struct buffer_head *bh;
+	bh = ext_update_inode (inode);
 	brelse(bh);
 }
+
+int ext_sync_inode (struct inode *inode)
+{
+	int err = 0;
+	struct buffer_head *bh;
+
+	bh = ext_update_inode(inode);
+	if (bh && bh->b_dirt)
+	{
+		ll_rw_block(WRITE, 1, &bh);
+		wait_on_buffer(bh);
+		if (bh->b_req && !bh->b_uptodate)
+		{
+			printk ("IO error syncing ext inode [%04x:%08x]\n",
+				inode->i_dev, inode->i_ino);
+			err = -1;
+		}
+	}
+	else if (!bh)
+		err = -1;
+	brelse (bh);
+	return err;
+}
+

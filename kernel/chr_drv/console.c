@@ -110,15 +110,13 @@ static struct {
 	unsigned long	vc_need_wrap	: 1;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
 	unsigned char	vc_kbdmode;
-	char *		vc_translate;
-	char *	 	vc_G0_charset;
-	char *	 	vc_G1_charset;
-	char *		vc_saved_G0;
-	char *		vc_saved_G1;
+	unsigned char * vc_translate;
+	unsigned char *	vc_G0_charset;
+	unsigned char *	vc_G1_charset;
+	unsigned char *	vc_saved_G0;
+	unsigned char *	vc_saved_G1;
 	/* additional information is in vt_kern.h */
 } vc_cons [NR_CONSOLES];
-
-#define MEM_BUFFER_SIZE (2*80*50*8) 
 
 unsigned short *vc_scrbuf[NR_CONSOLES];
 static unsigned short * vc_scrmembuf;
@@ -189,7 +187,7 @@ static int console_blanked = 0;
 int blankinterval = 10*60*HZ;
 static int screen_size = 0;
 
-static void sysbeep(void);
+extern void kd_mksound(int freq, int time);
 
 /*
  * this is what the terminal answers to a ESC-Z or csi0c query.
@@ -197,7 +195,7 @@ static void sysbeep(void);
 #define VT100ID "\033[?1;2c"
 #define VT102ID "\033[?6c"
 
-static char * translations[] = {
+static unsigned char * translations[] = {
 /* 8-bit Latin-1 mapped to the PC charater set: '\0' means non-printable */
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -227,7 +225,7 @@ static char * translations[] = {
 	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
 	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
-/* IBM grapgics: minimal translations (CR, LF, LL, SO, SI and ESC) */
+/* IBM graphics: minimal translations (CR, LF, LL, SO, SI and ESC) */
 	"\000\001\002\003\004\005\006\007\010\011\000\013\000\000\000\000"
 	"\020\021\022\023\024\025\026\027\030\031\032\000\034\035\036\037"
 	"\040\041\042\043\044\045\046\047\050\051\052\053\054\055\056\057"
@@ -285,17 +283,77 @@ static void gotoxy(int currcons, int new_x, int new_y)
 	need_wrap = 0;
 }
 
+/*
+ * *Very* limited hardware scrollback support..
+ */
+static unsigned short __real_origin;
+static unsigned short __origin;
+
+static inline void __set_origin(unsigned short offset)
+{
+	cli();
+	__origin = offset;
+	outb_p(12, video_port_reg);
+	outb_p(offset >> 8, video_port_val);
+	outb_p(13, video_port_reg);
+	outb_p(offset, video_port_val);
+	sti();
+}
+
+void scrollback(int lines)
+{
+	if (!lines)
+		lines = video_num_lines/2;
+	lines *= video_num_columns;
+	lines = __origin - lines;
+	if (lines < 0)
+		lines = 0;
+	__set_origin(lines);
+}
+
+void scrollfront(int lines)
+{
+	if (!lines)
+		lines = video_num_lines/2;
+	lines *= video_num_columns;
+	lines = __origin + lines;
+	if (lines > __real_origin)
+		lines = __real_origin;
+	__set_origin(lines);
+}
+
 static void set_origin(int currcons)
 {
 	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
 		return;
 	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
+	__real_origin = (origin-video_mem_base) >> 1;
+	__set_origin(__real_origin);
+}
+
+static inline void hide_cursor(int currcons)
+{
+	outb_p(14, video_port_reg);
+	outb_p(0xff&((scr_end-video_mem_base)>>9), video_port_val);
+	outb_p(15, video_port_reg);
+	outb_p(0xff&((scr_end-video_mem_base)>>1), video_port_val);
+}
+
+static inline void set_cursor(int currcons)
+{
+	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
+		return;
+	if (__real_origin != __origin)
+		set_origin(__real_origin);
 	cli();
-	outb_p(12, video_port_reg);
-	outb_p(0xff&((origin-video_mem_base)>>9), video_port_val);
-	outb_p(13, video_port_reg);
-	outb_p(0xff&((origin-video_mem_base)>>1), video_port_val);
+	if (deccm) {
+		outb_p(14, video_port_reg);
+		outb_p(0xff&((pos-video_mem_base)>>9), video_port_val);
+		outb_p(15, video_port_reg);
+		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
+	} else
+		hide_cursor(currcons);
 	sti();
 }
 
@@ -571,29 +629,6 @@ static void csi_m(int currcons)
 				break;
 		}
 	update_attr(currcons);
-}
-
-static inline void hide_cursor(int currcons)
-{
-	outb_p(14, video_port_reg);
-	outb_p(0xff&((scr_end-video_mem_base)>>9), video_port_val);
-	outb_p(15, video_port_reg);
-	outb_p(0xff&((scr_end-video_mem_base)>>1), video_port_val);
-}
-
-static inline void set_cursor(int currcons)
-{
-	if (currcons != fg_console || console_blanked)
-		return;
-	cli();
-	if (deccm) {
-		outb_p(14, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>9), video_port_val);
-		outb_p(15, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
-	} else
-		hide_cursor(currcons);
-	sti();
 }
 
 static void respond_string(char * p, int currcons, struct tty_struct * tty)
@@ -910,8 +945,7 @@ void con_write(struct tty_struct * tty)
 			if (decim)
 				insert_char(currcons);
 			c = translate[c];
-			*(char *) pos = c;
-			*(char *) (pos+1) = attr;
+			*(unsigned short *) pos = (attr << 8) + c;
 			if (x == video_num_columns - 1)
 				need_wrap = decawm;
 			else {
@@ -927,7 +961,7 @@ void con_write(struct tty_struct * tty)
 		 */
 		switch (c) {
 			case 7:
-				sysbeep();
+				kd_mksound(0x637, HZ/8);
 				continue;
 			case 8:
 				bs(currcons);
@@ -1410,34 +1444,13 @@ void update_screen(int new_console)
 	lock = 0;
 }
 
-/* from bsd-net-2: */
-
-static void sysbeepstop(void)
-{
-	/* disable counter 2 */
-	outb(inb_p(0x61)&0xFC, 0x61);
-}
-
-static void sysbeep(void)
-{
-	/* enable counter 2 */
-	outb_p(inb_p(0x61)|3, 0x61);
-	/* set command for counter 2, 2 byte write */
-	outb_p(0xB6, 0x43);
-	/* send 0x637 for 750 HZ */
-	outb_p(0x37, 0x42);
-	outb(0x06, 0x42);
-	/* 1/8 second */
-	timer_table[BEEP_TIMER].expires = jiffies + HZ/8;
-	timer_table[BEEP_TIMER].fn = sysbeepstop;
-	timer_active |= 1<<BEEP_TIMER;
-}
-
 int do_screendump(int arg)
 {
 	char *sptr, *buf = (char *)arg;
 	int currcons, l;
 
+	if (!suser())
+		return -EPERM;
 	l = verify_area(VERIFY_WRITE, buf,2+video_num_columns*video_num_lines);
 	if (l)
 		return l;
@@ -1456,7 +1469,7 @@ int do_screendump(int arg)
 void console_print(const char * b)
 {
 	int currcons = fg_console;
-	char c;
+	unsigned char c;
 
 	if (!printable || currcons<0 || currcons>=NR_CONSOLES)
 		return;
@@ -1468,8 +1481,7 @@ void console_print(const char * b)
 			if (c == 10 || c == 13)
 				continue;
 		}
-		*(char *) pos = c;
-		*(char *) (pos+1) = attr;
+		*(unsigned short *) pos = (attr << 8) + c;
 		if (x == video_num_columns - 1) {
 			need_wrap = 1;
 			continue;

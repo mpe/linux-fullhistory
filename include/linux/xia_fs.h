@@ -97,6 +97,8 @@ extern void xiafs_read_inode(struct inode *);
 extern void xiafs_write_inode(struct inode *);
 extern void xiafs_put_inode(struct inode *);
 extern void xiafs_statfs(struct super_block *, struct statfs *);
+extern int xiafs_sync_inode(struct inode *);
+extern int xiafs_sync_file(struct inode *, struct file *);
 
 extern struct inode_operations xiafs_file_inode_operations;
 extern struct inode_operations xiafs_dir_inode_operations;

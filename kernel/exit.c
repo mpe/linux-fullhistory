@@ -16,9 +16,32 @@
 #include <linux/tty.h>
 
 #include <asm/segment.h>
+extern void shm_exit (void);
+extern void sem_exit (void);
 
 int sys_close(int fd);
 int getrusage(struct task_struct *, int, struct rusage *);
+
+static int generate(unsigned long sig, struct task_struct * p)
+{
+	unsigned long mask = 1 << (sig-1);
+	struct sigaction * sa = sig + p->sigaction - 1;
+
+	/* always generate signals for traced processes ??? */
+	if (p->flags & PF_PTRACED) {
+		p->signal |= mask;
+		return 1;
+	}
+	/* don't bother with ignored signals (but SIGCHLD is special) */
+	if (sa->sa_handler == SIG_IGN && sig != SIGCHLD)
+		return 0;
+	/* some signals are ignored by default.. (but SIGCONT already did its deed) */
+	if ((sa->sa_handler == SIG_DFL) &&
+	    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH))
+		return 0;
+	p->signal |= mask;
+	return 1;
+}
 
 int send_sig(unsigned long sig,struct task_struct * p,int priv)
 {
@@ -35,25 +58,22 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 		p->exit_code = 0;
 		p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
 				(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
-	} 
+	}
 	/* Depends on order SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU */
 	if ((sig >= SIGSTOP) && (sig <= SIGTTOU)) 
 		p->signal &= ~(1<<(SIGCONT-1));
-	/* Actually deliver the signal */
-	p->signal |= (1<<(sig-1));
-	if (p->flags & PF_PTRACED) {
-		/* save the signal number for wait. */
-		p->exit_code = sig;
-
-		/* we have to make sure the parent process is awake. */
-		if (p->p_pptr != NULL && p->p_pptr->state == TASK_INTERRUPTIBLE)
-			p->p_pptr->state = TASK_RUNNING;
-
-		/* we have to make sure that the process stops. */
-		if (p->state == TASK_INTERRUPTIBLE || p->state == TASK_RUNNING)
-			p->state = TASK_STOPPED;
-	}
+	/* Actually generate the signal */
+	if (!generate(sig,p))
+		return 0;
 	return 0;
+}
+
+void notify_parent(struct task_struct * tsk)
+{
+	if (tsk->p_pptr == task[1])
+		tsk->exit_signal = SIGCHLD;
+	send_sig(tsk->exit_signal, tsk->p_pptr, 1);
+	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
 }
 
 void release(struct task_struct * p)
@@ -331,6 +351,10 @@ volatile void do_exit(long code)
 	int i;
 
 fake_volatile:
+	if (current->semun)
+		sem_exit();
+	if (current->shm)
+		shm_exit();
 	free_page_tables(current);
 	for (i=0 ; i<NR_OPEN ; i++)
 		if (current->filp[i])
@@ -366,7 +390,7 @@ fake_volatile:
 		kill_pg(current->pgrp,SIGCONT,1);
 	}
 	/* Let father know we died */
-	send_sig (SIGCHLD, current->p_pptr, 1);
+	notify_parent(current);
 	
 	/*
 	 * This loop does two things:
@@ -388,7 +412,7 @@ fake_volatile:
 		p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
-			send_sig(SIGCHLD,p->p_pptr,1);
+			notify_parent(p);
 		/*
 		 * process group orphan check
 		 * Case ii: Our child is in a different pgrp 
@@ -449,17 +473,17 @@ int sys_exit(int error_code)
 
 int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
 {
-	int flag;
+	int flag, retval;
+	struct wait_queue wait = { current, NULL };
 	struct task_struct *p;
-	unsigned long oldblocked;
 
 	if (stat_addr) {
 		flag = verify_area(VERIFY_WRITE, stat_addr, 4);
 		if (flag)
 			return flag;
 	}
+	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
-	current->signal &= ~(1<<(SIGCHLD-1));
 	flag=0;
  	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {
@@ -472,6 +496,10 @@ repeat:
 			if (p->pgrp != -pid)
 				continue;
 		}
+		/* wait for cloned processes iff the __WCLONE flag is set */
+		if ((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
+			continue;
+		flag = 1;
 		switch (p->state) {
 			case TASK_STOPPED:
 				if (!p->exit_code)
@@ -484,7 +512,8 @@ repeat:
 				p->exit_code = 0;
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);
-				return p->pid;
+				retval = p->pid;
+				goto end_wait4;
 			case TASK_ZOMBIE:
 				current->cutime += p->utime + p->cutime;
 				current->cstime += p->stime + p->cstime;
@@ -499,32 +528,34 @@ repeat:
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
-					send_sig(SIGCHLD,p->p_pptr,1);
+					notify_parent(p);
 				} else
 					release(p);
 #ifdef DEBUG_PROC_TREE
 				audit_ptree();
 #endif
-				return flag;
+				retval = flag;
+				goto end_wait4;
 			default:
-				flag=1;
 				continue;
 		}
 	}
 	if (flag) {
+		retval = 0;
 		if (options & WNOHANG)
-			return 0;
+			goto end_wait4;
 		current->state=TASK_INTERRUPTIBLE;
-		oldblocked = current->blocked;
-		current->blocked &= ~(1<<(SIGCHLD-1));
 		schedule();
-		current->blocked = oldblocked;
-		if (current->signal & ~(current->blocked | (1<<(SIGCHLD-1))))
-			return -ERESTARTSYS;
-		else
-			goto repeat;
+		current->signal &= ~(1<<(SIGCHLD-1));
+		retval = -ERESTARTSYS;
+		if (current->signal & ~current->blocked)
+			goto end_wait4;
+		goto repeat;
 	}
-	return -ECHILD;
+	retval = -ECHILD;
+end_wait4:
+	remove_wait_queue(&current->wait_chldexit,&wait);
+	return retval;
 }
 
 /*

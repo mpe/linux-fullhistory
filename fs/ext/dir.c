@@ -37,7 +37,7 @@ static struct file_operations ext_dir_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
-	NULL			/* fsync */
+	file_fsync		/* fsync */
 };
 
 /*

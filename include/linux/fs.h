@@ -21,12 +21,13 @@
  * recompiled to take full advantage of the new limits..
  */
 #undef NR_OPEN
-#define NR_OPEN 256	/* don't change - fd_set etc depend on this */
+#define NR_OPEN 256
 
-#define NR_INODE 256	/* this should be bigger than NR_FILE */
-#define NR_FILE 128	/* this can well be larger on a larger system */
-#define NR_SUPER 16
+#define NR_INODE 2048	/* this should be bigger than NR_FILE */
+#define NR_FILE 1024	/* this can well be larger on a larger system */
+#define NR_SUPER 32
 #define NR_HASH 997
+#define NR_IHASH 131
 #define NR_FILE_LOCKS 32
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
@@ -146,6 +147,7 @@ struct buffer_head {
 	unsigned char b_uptodate;
 	unsigned char b_dirt;		/* 0-clean,1-dirty */
 	unsigned char b_lock;		/* 0 - ok, 1 -locked */
+	unsigned char b_req;		/* 0 if the buffer has been invalidated */
 	struct wait_queue * b_wait;
 	struct buffer_head * b_prev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_next;
@@ -213,6 +215,7 @@ struct file {
 	unsigned short f_flags;
 	unsigned short f_count;
 	unsigned short f_reada;
+	struct file *f_next, *f_prev;
 	struct inode * f_inode;
 	struct file_operations * f_op;
 };
@@ -298,6 +301,7 @@ struct super_operations {
 	void (*put_super) (struct super_block *);
 	void (*write_super) (struct super_block *);
 	void (*statfs) (struct super_block *, struct statfs *);
+	int (*remount_fs) (struct super_block *, int *);
 };
 
 struct file_system_type {
@@ -325,8 +329,10 @@ extern struct file_system_type *get_fs_type(char *name);
 
 extern int fs_may_mount(dev_t dev);
 extern int fs_may_umount(dev_t dev, struct inode * mount_root);
+extern int fs_may_remount_ro(dev_t dev);
 
-extern struct file file_table[NR_FILE];
+extern struct file *first_file;
+extern int nr_files;
 extern struct super_block super_block[NR_SUPER];
 
 extern void grow_buffers(int size);
@@ -340,11 +346,9 @@ extern void check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
 extern void invalidate_buffers(dev_t dev);
 extern int floppy_change(struct buffer_head * first_block);
-extern int ticks_to_floppy_on(unsigned int dev);
-extern void floppy_on(unsigned int dev);
-extern void floppy_off(unsigned int dev);
 extern void sync_inodes(dev_t dev);
 extern void sync_dev(dev_t dev);
+extern int fsync_dev(dev_t dev);
 extern void sync_supers(dev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int notify_change(int flags, struct inode * inode);
@@ -357,6 +361,7 @@ extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern void iput(struct inode * inode);
 extern struct inode * iget(struct super_block * sb,int nr);
 extern struct inode * get_empty_inode(void);
+extern void insert_inode_hash(struct inode *);
 extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
 extern struct file * get_empty_filp(void);
@@ -380,5 +385,8 @@ extern int read_ahead[];
 
 extern int char_write(struct inode *, struct file *, char *, int);
 extern int block_write(struct inode *, struct file *, char *, int);
+
+extern int block_fsync(struct inode *, struct file *);
+extern int file_fsync(struct inode *, struct file *);
 
 #endif

@@ -33,7 +33,7 @@ static struct file_operations msdos_dir_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
-	NULL			/* fsync */
+	file_fsync		/* fsync */
 };
 
 struct inode_operations msdos_dir_inode_operations = {

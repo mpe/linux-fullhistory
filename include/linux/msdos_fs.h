@@ -133,7 +133,7 @@ extern int msdos_add_cluster(struct inode *inode);
 extern int date_dos2unix(unsigned short time,unsigned short date);
 extern void date_unix2dos(int unix_date,unsigned short *time,
     unsigned short *date);
-extern int msdos_get_entry(struct inode *dir,int *pos,struct buffer_head **bh,
+extern int msdos_get_entry(struct inode *dir,off_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de);
 extern int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de,int *ino);

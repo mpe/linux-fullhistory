@@ -89,23 +89,53 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 		}
 	    }
 	  else
-	    reg_move(b, dest);
+	    {
+#ifdef DENORM_OPERAND
+	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
+		  denormal_operand() )
+		return;
+#endif DENORM_OPERAND
+	      reg_move(b, dest);
+	    }
 	  return;
 	}
       else if (b->tag == TW_Zero)
-	{ reg_move(a, dest); return; }
+	{
+#ifdef DENORM_OPERAND
+	  if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
+	      denormal_operand() )
+	    return;
+#endif DENORM_OPERAND
+	  reg_move(a, dest); return;
+	}
       else if (a->tag == TW_Infinity)
 	{
 	  if (b->tag != TW_Infinity)
-	    { reg_move(a, dest); return; }
-	  /* They are both + or - infinity */
+	    {
+#ifdef DENORM_OPERAND
+	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
+		  denormal_operand() )
+		return;
+#endif DENORM_OPERAND
+	      reg_move(a, dest); return;
+	    }
 	  if (a->sign == b->sign)
-	    { reg_move(a, dest); return; }
-	  reg_move(&CONST_QNaN, dest);	/* inf - inf is undefined. */
+	    {
+	      /* They are both + or - infinity */
+	      reg_move(a, dest); return;
+	    }
+	  arith_invalid(dest);	/* Infinity-Infinity is undefined. */
 	  return;
 	}
       else if (b->tag == TW_Infinity)
-	{ reg_move(b, dest); return; }
+	{
+#ifdef DENORM_OPERAND
+	  if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
+	      denormal_operand() )
+	    return;
+#endif DENORM_OPERAND
+	  reg_move(b, dest); return;
+	}
     }
 #ifdef PARANOID
   EXCEPTION(EX_INTERNAL|0x101);
@@ -144,6 +174,11 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 	    }
 	  else if ( diff == 0 )
 	    {
+#ifdef DENORM_OPERAND
+	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
+		  denormal_operand() )
+		return;
+#endif DENORM_OPERAND
 	      reg_move(&CONST_Z, dest);
 	      /* sign depends upon rounding mode */
 	      dest->sign = ((control_w & CW_RC) != RC_DOWN)
@@ -184,11 +219,23 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 		}
 	    }
 	  else
-	    reg_move(a, dest);
+	    {
+#ifdef DENORM_OPERAND
+	      if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
+		  denormal_operand() )
+		return;
+#endif DENORM_OPERAND
+	      reg_move(a, dest);
+	    }
 	  return;
 	}
       else if (a->tag == TW_Zero)
 	{
+#ifdef DENORM_OPERAND
+	  if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
+	      denormal_operand() )
+	    return;
+#endif DENORM_OPERAND
 	  reg_move(b, dest);
 	  dest->sign ^= SIGN_POS^SIGN_NEG;
 	  return;
@@ -196,14 +243,30 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
       else if (a->tag == TW_Infinity)
 	{
 	  if (b->tag != TW_Infinity)
-	    { reg_move(a, dest); return; }
+	    {
+#ifdef DENORM_OPERAND
+	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
+		  denormal_operand() )
+		return;
+#endif DENORM_OPERAND
+	      reg_move(a, dest); return;
+	    }
+	  /* Both args are Infinity */
 	  if (a->sign == b->sign)
-	    { reg_move(&CONST_QNaN, dest); return; }
+	    {
+	      arith_invalid(dest);	/* Infinity-Infinity is undefined. */
+	      return;
+	    }
 	  reg_move(a, dest);
 	  return;
 	}
       else if (b->tag == TW_Infinity)
 	{
+#ifdef DENORM_OPERAND
+	  if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
+	      denormal_operand() )
+	    return;
+#endif DENORM_OPERAND
 	  reg_move(b, dest);
 	  dest->sign ^= SIGN_POS^SIGN_NEG;
 	  return;

@@ -23,7 +23,7 @@
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
-extern int end;
+extern char edata, end;
 extern char *linux_banner;
 
 /*
@@ -58,6 +58,7 @@ static inline pid_t wait(int * wait_stat)
 
 static char printbuf[1024];
 
+extern char empty_zero_page[4096];
 extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
@@ -70,6 +71,9 @@ extern long kernel_mktime(struct mktime * time);
 extern unsigned long simple_strtoul(const char *cp,char **endp,unsigned int
     base);
 
+#ifdef CONFIG_SYSVIPC
+extern void ipc_init(void);
+#endif
 #ifdef CONFIG_SCSI
 extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #endif
@@ -77,23 +81,21 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 /*
  * This is set up by the setup-routine at boot-time
  */
-#define EXT_MEM_K (*(unsigned short *)0x90002)
-#define DRIVE_INFO (*(struct drive_info *)0x90080)
-#define SCREEN_INFO (*(struct screen_info *)0x90000)
-#define MOUNT_ROOT_RDONLY (*(unsigned short *)0x901F2)
-#define RAMDISK_SIZE (*(unsigned short *)0x901F8)
-#define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
-#define AUX_DEVICE_INFO (*(unsigned char *)0x901FF)
+#define PARAM	empty_zero_page
+#define EXT_MEM_K (*(unsigned short *) (PARAM+2))
+#define DRIVE_INFO (*(struct drive_info *) (PARAM+0x80))
+#define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
+#define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
+#define RAMDISK_SIZE (*(unsigned short *) (PARAM+0x1F8))
+#define ORIG_ROOT_DEV (*(unsigned short *) (PARAM+0x1FC))
+#define AUX_DEVICE_INFO (*(unsigned char *) (PARAM+0x1FF))
 
 /*
  * Boot command-line arguments
  */
 #define MAX_INIT_ARGS 8
 #define MAX_INIT_ENVS 8
-#define CL_MAGIC_ADDR (*(unsigned short *) 0x90020)
-#define CL_MAGIC 0xa33f
-#define CL_BASE_ADDR ((char *) 0x90000)
-#define CL_OFFSET (*(unsigned short *) 0x90022)
+#define COMMAND_LINE ((char *) (PARAM+2048))
 
 /*
  * Yeah, yeah, it's ugly, but I cannot find how to do this correctly
@@ -249,6 +251,7 @@ void start_kernel(void)
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
 	ramdisk_size = RAMDISK_SIZE;
+	strcpy(command_line,COMMAND_LINE);
 #ifdef CONFIG_MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
@@ -265,8 +268,6 @@ void start_kernel(void)
 	low_memory_start += 0xfff;
 	low_memory_start &= 0xfffff000;
 	memory_start = paging_init(memory_start,memory_end);
-	if (CL_MAGIC_ADDR == CL_MAGIC)
-		strcpy(command_line,CL_BASE_ADDR+CL_OFFSET);
 	trap_init();
 	init_IRQ();
 	sched_init();
@@ -289,6 +290,9 @@ void start_kernel(void)
 	time_init();
 	floppy_init();
 	sock_init();
+#ifdef CONFIG_SYSVIPC
+	ipc_init();
+#endif
 	sti();
 	/*
 	 * check if exception 16 works correctly.. This is truly evil

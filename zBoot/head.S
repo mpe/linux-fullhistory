@@ -1,11 +1,11 @@
 /*
- *  linux/boot/head.s
+ *  linux/boot/head.S
  *
  *  Copyright (C) 1991, 1992, 1993  Linus Torvalds
  */
 
 /*
- *  head.s contains the 32-bit startup code.
+ *  head.S contains the 32-bit startup code.
  *
  * NOTE!!! Startup happens at absolute address 0x00000000, which is also where
  * the page directory will exist. The startup code will be overwritten by
@@ -13,10 +13,12 @@
  */
 .text
 
+#include <linux/segment.h>
+
 startup_32:
 	cld
 	cli
-	movl $0x10,%eax
+	movl $KERNEL_DS,%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -34,5 +36,18 @@ startup_32:
  */
 	pushl $0
 	popfl
+/*
+ * Clear BSS
+ */
+	xorl %eax,%eax
+	movl $__edata,%edi
+	movl $__end,%ecx
+	subl %edi,%ecx
+	cld
+	rep
+	stosb
+/*
+ * Do the decompression, and jump to the new kernel..
+ */
 	call _decompress_kernel
-	ljmp $0x08, $0x100000
+	ljmp $KERNEL_CS, $0x100000

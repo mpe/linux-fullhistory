@@ -6,25 +6,89 @@
 
 #include <linux/fs.h>
 #include <linux/string.h>
+#include <linux/mm.h>
 
-struct file file_table[NR_FILE];
+struct file * first_file;
+int nr_files = 0;
+
+static void insert_file_free(struct file *file)
+{
+	file->f_next = first_file;
+	file->f_prev = first_file->f_prev;
+	file->f_next->f_prev = file;
+	file->f_prev->f_next = file;
+	first_file = file;
+}
+
+static void remove_file_free(struct file *file)
+{
+	if (first_file == file)
+		first_file = first_file->f_next;
+	if (file->f_next)
+		file->f_next->f_prev = file->f_prev;
+	if (file->f_prev)
+		file->f_prev->f_next = file->f_next;
+	file->f_next = file->f_prev = NULL;
+}
+
+static void put_last_free(struct file *file)
+{
+	remove_file_free(file);
+	file->f_prev = first_file->f_prev;
+	file->f_prev->f_next = file;
+	file->f_next = first_file;
+	file->f_next->f_prev = file;
+}
+
+void grow_files(void)
+{
+	unsigned long page;
+	struct file * file;
+	int i;
+
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+		return;
+	file = (struct file *) page;
+	for (i=0; i < (PAGE_SIZE / sizeof(struct file)); i++, file++)
+	{
+		if (!first_file)
+		{
+			file->f_next = file;
+			file->f_prev = file;
+			first_file = file;
+		}
+		else
+			insert_file_free(file);
+	}
+	nr_files += i;
+}
 
 unsigned long file_table_init(unsigned long start, unsigned long end)
 {
-	memset(file_table,0,sizeof(file_table));
+	first_file = NULL;
 	return start;
 }
 
 struct file * get_empty_filp(void)
 {
 	int i;
-	struct file * f = file_table+0;
+	struct file * f;
 
-	for (i = 0; i++ < NR_FILE; f++)
+	if (!first_file)
+		grow_files();
+repeat:
+	for (f = first_file, i=0; i < nr_files; i++, f = f->f_next)
 		if (!f->f_count) {
+			remove_file_free(f);
 			memset(f,0,sizeof(*f));
+			put_last_free(f);
 			f->f_count = 1;
 			return f;
 		}
+	if (nr_files < NR_FILE) {
+		grow_files();
+		goto repeat;
+	}
 	return NULL;
 }

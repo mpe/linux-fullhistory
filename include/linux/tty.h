@@ -99,19 +99,22 @@ struct serial_struct {
 #define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
-#define ASYNC_SKIP_TEST 0x0008	/* Skip UART test on bootup */
 
 #define ASYNC_SPD_MASK	0x0030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
 #define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
 
-#define ASYNC_FLAGS	0x0037	/* Possible legal async flags */
+#define ASYNC_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
+#define ASYNC_AUTO_IRQ  0x0080 /* Do automatic IRQ during autoconfiguration */
+
+#define ASYNC_FLAGS	0x00F7	/* Possible legal async flags */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
 #define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
 #define ASYNC_CALLOUT_ACTIVE	0x40000000 /* Call out device is active */
 #define ASYNC_NORMAL_ACTIVE	0x20000000 /* Normal device is active */
+#define ASYNC_BOOT_AUTOCONF	0x10000000 /* Autoconfigure port on bootup */
 
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
@@ -174,10 +177,12 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define I_STRP(tty)	_I_FLAG((tty),ISTRIP)
 
 #define O_POST(tty)	_O_FLAG((tty),OPOST)
+#define O_LCUC(tty)	_O_FLAG((tty),OLCUC)
 #define O_NLCR(tty)	_O_FLAG((tty),ONLCR)
 #define O_CRNL(tty)	_O_FLAG((tty),OCRNL)
+#define O_NOCR(tty)	_O_FLAG((tty),ONOCR)
 #define O_NLRET(tty)	_O_FLAG((tty),ONLRET)
-#define O_LCUC(tty)	_O_FLAG((tty),OLCUC)
+#define O_TABDLY(tty)	_O_FLAG((tty),TABDLY)
 
 #define C_LOCAL(tty)	_C_FLAG((tty),CLOCAL)
 #define C_RTSCTS(tty)	_C_FLAG((tty),CRTSCTS)
@@ -209,6 +214,7 @@ struct tty_struct {
 	int disc;
 	int flags;
 	int count;
+	int column;
 	struct winsize winsize;
 	int  (*open)(struct tty_struct * tty, struct file * filp);
 	void (*close)(struct tty_struct * tty, struct file * filp);
@@ -226,7 +232,7 @@ struct tty_struct {
 	struct tty_queue read_q;
 	struct tty_queue write_q;
 	struct tty_queue secondary;
-	};
+};
 
 struct tty_ldisc {
 	int	flags;
@@ -294,6 +300,7 @@ struct tty_ldisc {
 #define TTY_SQ_THROTTLED 3
 #define TTY_RQ_THROTTLED 4
 #define TTY_IO_ERROR 5
+#define TTY_SLAVE_OPENED 6
 
 /*
  * When a break, frame error, or parity error happens, these codes are
@@ -340,6 +347,10 @@ extern void flush_output(struct tty_struct * tty);
 extern void wait_until_sent(struct tty_struct * tty);
 extern void copy_to_cooked(struct tty_struct * tty);
 extern int tty_register_ldisc(int disc, struct tty_ldisc *new);
+extern int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp,
+			     int buflen);
+extern int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
+			  void (*callback)(void * data), void * callarg);
 
 extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 extern int is_orphaned_pgrp(int pgrp);

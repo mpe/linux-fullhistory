@@ -2,6 +2,7 @@
 #define _BLK_H
 
 #include <linux/fs.h>
+#include <linux/locks.h>
 
 /*
  * NR_REQUEST is the number of entries in the request-queue.
@@ -103,6 +104,9 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
 
 #elif (MAJOR_NR == 2)
 /* floppy */
+static void floppy_on(unsigned int nr);
+static void floppy_off(unsigned int nr);
+
 #define DEVICE_NAME "floppy"
 #define DEVICE_INTR do_floppy
 #define DEVICE_REQUEST do_fd_request
@@ -195,14 +199,6 @@ else \
 
 #endif
 static void (DEVICE_REQUEST)(void);
-
-extern inline void unlock_buffer(struct buffer_head * bh)
-{
-	if (!bh->b_lock)
-		printk(DEVICE_NAME ": free buffer being unlocked\n");
-	bh->b_lock=0;
-	wake_up(&bh->b_wait);
-}
 
 /* SCSI devices have their own version */
 #if (MAJOR_NR != 8 && MAJOR_NR != 9 && MAJOR_NR != 11)

@@ -37,7 +37,8 @@ static struct super_operations proc_sops = {
 	proc_put_inode,
 	proc_put_super,
 	NULL,
-	proc_statfs
+	proc_statfs,
+	NULL
 };
 
 struct super_block *proc_read_super(struct super_block *s,void *data, 
@@ -100,12 +101,26 @@ void proc_read_inode(struct inode * inode)
 		inode->i_op = &proc_root_inode_operations;
 		return;
 	}
-	if (!pid) {
+	if ((ino >= 128) && (ino <= 160)) { /* files within /proc/net */
 		inode->i_mode = S_IFREG | 0444;
-		inode->i_op = &proc_array_inode_operations;
-		if (ino == 5) {
-			inode->i_mode = S_IFREG | 0400;
-			inode->i_op = &proc_kmsg_inode_operations;
+		inode->i_op = &proc_net_inode_operations;
+		return;
+	}
+	if (!pid) {
+		switch (ino) {
+			case 5:
+				inode->i_mode = S_IFREG | 0444;
+				inode->i_op = &proc_kmsg_inode_operations;
+				break;
+			case 8: /* for the net directory */
+				inode->i_mode = S_IFDIR | 0555;
+				inode->i_nlink = 2;
+				inode->i_op = &proc_net_inode_operations;
+				break;
+			default:
+				inode->i_mode = S_IFREG | 0444;
+				inode->i_op = &proc_array_inode_operations;
+				break;
 		}
 		return;
 	}

@@ -191,8 +191,6 @@ void ext2_dcache_invalidate (unsigned short dev)
 
 /*
  * Lookup a directory entry in the cache
- *
- * Note: the name is in the caller's address space
  */
 unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
 				  const char *name, int len)
@@ -243,8 +241,6 @@ unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
  *
  * This function is called by ext2_lookup(), ext2_readdir()
  * and the functions which create directory entries
- *
- * Note: the name is in the kernel address space
  */
 void ext2_dcache_add (unsigned short dev, unsigned long dir, const char *name,
 		      int len, int ino)
@@ -305,8 +301,6 @@ void ext2_dcache_add (unsigned short dev, unsigned long dir, const char *name,
  * Remove a directory from the cache
  *
  * This function is called by the functions which remove directory entries
- *
- * Note: the name is in the kernel address space
  */
 void ext2_dcache_remove (unsigned short dev, unsigned long dir,
 			 const char *name, int len)

@@ -58,7 +58,8 @@ static struct proc_dir_entry root_dir[] = {
 	{ 4,7,"meminfo" },
 	{ 5,4,"kmsg" },
 	{ 6,7,"version" },
-	{ 7,4,"self" }	/* will change inode # */
+	{ 7,4,"self" },	/* will change inode # */
+	{ 8,3,"net" }
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

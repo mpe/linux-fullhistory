@@ -316,7 +316,10 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	};
 	sti();
 	for (i=0;i<nr; i++)
-	  if (bh[i]) make_request(major, rw, bh[i]);
+	  if (bh[i]) {
+	    bh[i]->b_req = 1;
+	    make_request(major, rw, bh[i]);
+	}
 	if(plugged){
 	  cli();
 	  blk_dev[major].current_request = plug.next;

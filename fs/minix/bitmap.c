@@ -217,6 +217,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;
 	inode->i_blocks = inode->i_blksize = 0;
+	insert_inode_hash(inode);
 	return inode;
 }
 

@@ -1,16 +1,13 @@
 /*
- *  linux/boot/head.s
+ *  linux/boot/head.S
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
- *  head.s contains the 32-bit startup code.
- *
- * NOTE!!! Startup happens at absolute address 0x00000000, which is also where
- * the page directory will exist. The startup code will be overwritten by
- * the page directory.
+ *  head.S contains the 32-bit startup code.
  */
+
 .text
 .globl _idt,_gdt,
 .globl _swapper_pg_dir,_pg0
@@ -20,13 +17,19 @@
 .globl _tmp_floppy_area,_floppy_track_buffer
 
 #include <linux/tasks.h>
+#include <linux/segment.h>
+
+#define CL_MAGIC_ADDR	0x90020
+#define CL_MAGIC	0xA33F
+#define CL_BASE_ADDR	0x90000
+#define CL_OFFSET	0x90022
 
 /*
  * swapper_pg_dir is the main page directory, address 0x00001000
  */
 startup_32:
 	cld
-	movl $0x10,%eax
+	movl $KERNEL_DS,%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -45,6 +48,40 @@ startup_32:
  */
 	pushl $0
 	popfl
+/*
+ * Copy bootup parameters out of the way. First 2kB of
+ * _empty_zero_page is for boot parameters, second 2kB
+ * is for the command line.
+ */
+	movl $0x90000,%esi
+	movl $_empty_zero_page,%edi
+	movl $512,%ecx
+	cld
+	rep
+	movsl
+	xorl %eax,%eax
+	movl $512,%ecx
+	rep
+	stosl
+	cmpw $CL_MAGIC,CL_MAGIC_ADDR
+	jne 1f
+	movl $_empty_zero_page+2048,%edi
+	movzwl CL_OFFSET,%esi
+	addl $CL_BASE_ADDR,%esi
+	movl $2048,%ecx
+	rep
+	movsb
+1:
+/*
+ * Clear BSS
+ */
+	xorl %eax,%eax
+	movl $__edata,%edi
+	movl $__end,%ecx
+	subl %edi,%ecx
+	cld
+	rep
+	stosb
 /* check if it is 486 or 386. */
 /*
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
@@ -90,8 +127,8 @@ startup_32:
 	call setup_paging
 	lgdt gdt_descr
 	lidt idt_descr
-	ljmp $0x08,$1f
-1:	movl $0x10,%eax		# reload all the segment registers
+	ljmp $KERNEL_CS,$1f
+1:	movl $KERNEL_DS,%eax	# reload all the segment registers
 	mov %ax,%ds		# after changing gdt.
 	mov %ax,%es
 	mov %ax,%fs
@@ -132,13 +169,12 @@ check_x87:
  *  idt - that can be done only after paging has been enabled
  *  and the kernel moved to 0xC0000000. Interrupts
  *  are enabled elsewhere, when we can be relatively
- *  sure everything is ok. This routine will be over-
- *  written by the page tables.
+ *  sure everything is ok.
  */
 setup_idt:
 	lea ignore_int,%edx
-	movl $0x00080000,%eax
-	movw %dx,%ax		/* selector = 0x0008 = cs */
+	movl $(KERNEL_CS << 16),%eax
+	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
 	lea _idt,%edi
@@ -238,7 +274,7 @@ ignore_int:
 	push %ds
 	push %es
 	push %fs
-	movl $0x10,%eax
+	movl $KERNEL_DS,%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -266,13 +302,10 @@ idt_descr:
 _idt:
 	.fill 256,8,0		# idt is uninitialized
 
-/*
- * The real GDT is also 256 entries long - no real reason
- */
 .align 4
 .word 0
 gdt_descr:
-	.word (4+2*NR_TASKS)*8-1
+	.word (8+2*NR_TASKS)*8-1
 	.long 0xc0000000+_gdt
 
 /*
@@ -282,7 +315,11 @@ gdt_descr:
 .align 4
 _gdt:
 	.quad 0x0000000000000000	/* NULL descriptor */
-	.quad 0xc0c39a000000ffff	/* 1GB at 0xC0000000 */
-	.quad 0xc0c392000000ffff	/* 1GB */
-	.quad 0x0000000000000000	/* TEMPORARY - don't use */
+	.quad 0x0000000000000000	/* not used */
+	.quad 0xc0c39a000000ffff	/* 0x10 kernel 1GB code at 0xC0000000 */
+	.quad 0xc0c392000000ffff	/* 0x18 kernel 1GB data at 0xC0000000 */
+	.quad 0x00cbfa000000ffff	/* 0x23 user   3GB code at 0x00000000 */
+	.quad 0x00cbf2000000ffff	/* 0x2b user   3GB data at 0x00000000 */
+	.quad 0x0000000000000000	/* not used */
+	.quad 0x0000000000000000	/* not used */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */

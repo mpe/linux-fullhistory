@@ -19,15 +19,6 @@
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 
-#define	KSTK_EIP(stack)	(((unsigned long *)stack)[1019])
-#define	KSTK_ESP(stack)	(((unsigned long *)stack)[1022])
-
-#define	_SSIZE(stack)	(TASK_SIZE - KSTK_ESP(stack))
-#define	SSIZE(stack)	(KSTK_ESP(stack) ? _SSIZE(stack) : 0)
-
-#define	VSIZE(task,stack) ((task)->brk + 1023 + SSIZE(stack))
-
-
 static int get_loadavg(char * buffer)
 {
 	int a, b, c;
@@ -163,8 +154,10 @@ static unsigned long get_wchan(struct task_struct *p)
 
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
-	ebp = p->tss.ebp;
 	stack_page = p->kernel_stack_page;
+	if (!stack_page)
+		return 0;
+	ebp = p->tss.ebp;
 	do {
 		if (ebp < stack_page || ebp >= 4092+stack_page)
 			return 0;
@@ -177,10 +170,14 @@ static unsigned long get_wchan(struct task_struct *p)
 	return 0;
 }
 
+#define	KSTK_EIP(stack)	(((unsigned long *)stack)[1019])
+#define	KSTK_ESP(stack)	(((unsigned long *)stack)[1022])
+
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
 	unsigned long sigignore=0, sigcatch=0, bit=1, wchan;
+	unsigned long vsize, eip, esp;
 	int i,tty_pgrp;
 	char state;
 
@@ -190,6 +187,15 @@ static int get_stat(int pid, char * buffer)
 		state = '.';
 	else
 		state = "RSDZTD"[(*p)->state];
+	eip = esp = 0;
+	vsize = (*p)->kernel_stack_page;
+	if (vsize) {
+		eip = KSTK_EIP(vsize);
+		esp = KSTK_ESP(vsize);
+		vsize = (*p)->brk + 4095;
+		if (esp)
+			vsize += TASK_SIZE - esp;
+	}
 	wchan = get_wchan(*p);
 	for(i=0; i<32; ++i) {
 		switch((int) (*p)->sigaction[i].sa_handler) {
@@ -230,14 +236,14 @@ static int get_stat(int pid, char * buffer)
 		(*p)->timeout,
 		(*p)->it_real_value,
 		(*p)->start_time,
-		VSIZE((*p),(*p)->kernel_stack_page),
+		vsize,
 		(*p)->rss, /* you might want to shift this left 3 */
 		(*p)->rlim[RLIMIT_RSS].rlim_cur,
 		(*p)->start_code,
 		(*p)->end_code,
 		(*p)->start_stack,
-		KSTK_ESP((*p)->kernel_stack_page),
-		KSTK_EIP((*p)->kernel_stack_page),
+		esp,
+		eip,
 		(*p)->signal,
 		(*p)->blocked,
 		sigignore,

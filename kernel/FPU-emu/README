@@ -32,19 +32,21 @@ My target FPU for wm-FPU-emu is that described in the Intel486
 Programmer's Reference Manual (1992 edition). Numerous facets of the
 functioning of the FPU are not well covered in the Reference Manual;
 in the absence of clear details I have made guesses about the most
-reasonable behaviour.
+reasonable behaviour. Recently, this situation has improved because
+I now have some access to the results produced by a real 80486 FPU.
 
 wm-FPU-emu does not implement all of the behaviour of the 80486 FPU. 
 See "Limitations" later in this file for a partial list of some
 differences.  I believe that the missing features are never used by
 normal C or FORTRAN programs. 
 
+
 Please report bugs, etc to me at:
        apm233m@vaxc.cc.monash.edu.au
 
 
 --Bill Metzenthen
-  March 1993
+  May 1993
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -83,28 +85,27 @@ is confined to five files:
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version beta 1.3) and the 80486 FPU (apart from bugs). Some of the
+(version beta 1.4) and the 80486 FPU (apart from bugs). Some of the
 more important differences are listed below:
 
-Internal computations do not use de-normal numbers (but External
-de-normals ARE recognised and generated). The design of wm-FPU-emu
-allows a larger exponent range than the 80486 FPU for internal
-computations.
+All internal computations are performed at 64 bit or higher precision
+and rounded etc as required by the PC bits of the FPU control word.
+Under the crt0 version for Linux current at March 1993, the FPU PC
+bits specify 53 bits precision.
 
-All internal computations are performed at 64 bit or higher precision.
-The results of the basic arithmetic functions and sqrt are then
-rounded to the precision required by the PC bits of the FPU control
-word. Under the crt0 version for Linux current at March 1993, the FPU
-PC bits specify 53 bits precision.
-
-The precision flag (PE of the FPU status word) is not implemented.
-Does anyone write code which uses this feature?
-
-The Roundup flag (C1) is not implemented.
+The precision flag (PE of the FPU status word) and the Roundup flag
+(C1 of the status word) are now partially implemented. Does anyone
+write code which uses these features?
 
 The functions which load/store the FPU state are partially implemented,
 but the implementation should be sufficient for handling FPU errors etc
 in 32 bit protected mode.
+
+The implementation of the exception mechanism is flawed for unmasked
+interrupts.
+
+Detection of certain conditions, such as denormal operands, is not yet
+complete.
 
 ----------------------- Performance of wm-FPU-emu -----------------------
 
@@ -167,6 +168,11 @@ original Linux emulator with the 4.1 'soft' lib.
  exp()       619.3            4046.4
 
 
+These figures are now somewhat out-of-date. The emulator has become
+progressively slower for most functions as more of the 80486 features
+have been implemented.
+
+
 ----------------------- Accuracy of wm-FPU-emu -----------------------
 
 
@@ -200,4 +206,39 @@ arithmetic functions (+,-,*,/,and fsqrt), and they all now produce
 results which are exact to the 64th bit (unless there are any bugs
 left). To ensure this, it was necessary to effectively get information
 of up to about 128 bits precision. The emulator now passes the
-"paranoia" tests.
+"paranoia" tests (compiled with gcc 2.3.3) for 'float' variables (24
+bit precision numbers) when precision control is set to 24, 53 or 64
+bits, and for 'double' variables (53 bit precision numbers) when
+precision control is set to 53 bits (a properly performing FPU cannot
+pass the 'paranoia' tests for 'double' variables when precision
+control is set to 64 bits).
+
+------------------------- Contributors -------------------------------
+
+A number of people have contributed to the development of the
+emulator, often by just reporting bugs, sometimes with a suggested
+fix, and a few kind people have provided me with access in one way or
+another to an 80486 machine. Contributors include (to those people who
+I have forgotten, please excuse me):
+
+Linus Torvalds
+Tommy.Thorn@daimi.aau.dk
+Andrew.Tridgell@anu.edu.au
+Nick Holloway alfie@dcs.warwick.ac.uk
+Hermano Moura moura@dcs.gla.ac.uk
+Jon Jagger J.Jagger@scp.ac.uk
+Lennart Benschop
+Brian Gallew geek+@CMU.EDU
+Thomas Staniszewski ts3v+@andrew.cmu.edu
+Martin Howell mph@plasma.apana.org.au
+M Saggaf alsaggaf@athena.mit.edu
+Peter Barker PETER@socpsy.sci.fau.edu
+tom@vlsivie.tuwien.ac.at
+Dan Russel russed@rpi.edu
+Daniel Carosone danielce@ee.mu.oz.au
+cae@jpmorgan.com
+Hamish Coleman t933093@minyos.xx.rmit.oz.au
+
+...and numerous others who responded to my request for help with
+a real 80486.
+

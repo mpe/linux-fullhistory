@@ -45,7 +45,8 @@ static struct super_operations minix_sops = {
 	minix_put_inode,
 	minix_put_super,
 	NULL,
-	minix_statfs
+	minix_statfs,
+	NULL
 };
 
 struct super_block *minix_read_super(struct super_block *s,void *data, 
@@ -362,7 +363,7 @@ void minix_read_inode(struct inode * inode)
 		init_fifo(inode);
 }
 
-void minix_write_inode(struct inode * inode)
+static struct buffer_head * minix_update_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
 	struct minix_inode * raw_inode;
@@ -373,14 +374,14 @@ void minix_write_inode(struct inode * inode)
 		printk("Bad inode number on dev 0x%04x: %d is out of range\n",
 			inode->i_dev, ino);
 		inode->i_dirt = 0;
-		return;
+		return 0;
 	}
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
 		(ino-1)/MINIX_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE))) {
 		printk("unable to read i-node block\n");
 		inode->i_dirt = 0;
-		return;
+		return 0;
 	}
 	raw_inode = ((struct minix_inode *)bh->b_data) +
 		(ino-1)%MINIX_INODES_PER_BLOCK;
@@ -396,5 +397,35 @@ void minix_write_inode(struct inode * inode)
 		raw_inode->i_zone[block] = inode->u.minix_i.i_data[block];
 	inode->i_dirt=0;
 	bh->b_dirt=1;
+	return bh;
+}
+
+void minix_write_inode(struct inode * inode)
+{
+	struct buffer_head *bh;
+	bh = minix_update_inode(inode);
 	brelse(bh);
+}
+
+int minix_sync_inode(struct inode * inode)
+{
+	int err = 0;
+	struct buffer_head *bh;
+
+	bh = minix_update_inode(inode);
+	if (bh && bh->b_dirt)
+	{
+		ll_rw_block(WRITE, 1, &bh);
+		wait_on_buffer(bh);
+		if (bh->b_req && !bh->b_uptodate)
+		{
+			printk ("IO error syncing minix inode [%04x:%08x]\n",
+				inode->i_dev, inode->i_ino);
+			err = -1;
+		}
+	}
+	else if (!bh)
+		err = -1;
+	brelse (bh);
+	return err;
 }

@@ -58,6 +58,12 @@
  * floppy as the first thing after bootup.
  */
 
+/*
+ * 1993/4/29 -- Linus -- cleaned up the timer handling in the kernel, and
+ * this helped the floppy driver as well. Much cleaner, and still seems to
+ * work.
+ */
+
 #define REALLY_SLOW_IO
 #define FLOPPY_IRQ 6
 #define FLOPPY_DMA 2
@@ -87,7 +93,8 @@ static int reset = 0;
 static int recover = 0; /* recalibrate immediately after resetting */
 static int seek = 0;
 
-extern unsigned char current_DOR;
+static unsigned char current_DOR = 0x0C;
+static unsigned char running = 0;
 
 #define TYPE(x) ((x)>>2)
 #define DRIVE(x) ((x)&0x03)
@@ -280,15 +287,85 @@ static unsigned char seek_track = 0;
 static unsigned char current_track = NO_TRACK;
 static unsigned char command = 0;
 static unsigned char fdc_version = FDC_TYPE_STD;	/* FDC version code */
-unsigned char selected = 0;
-struct wait_queue * wait_on_floppy_select = NULL;
 
-void floppy_deselect(unsigned int nr)
+static void floppy_ready(void);
+
+static void select_callback(unsigned long unused)
 {
-	if (nr != (current_DOR & 3))
-		printk("floppy_deselect: drive not selected\n");
-	selected = 0;
-	wake_up(&wait_on_floppy_select);
+	floppy_ready();
+}
+
+static void floppy_select(unsigned int nr)
+{
+	static struct timer_list select = { NULL, 0, 0, select_callback };
+
+	if (current_drive == (current_DOR & 3)) {
+		floppy_ready();
+		return;
+	}
+	seek = 1;
+	current_track = NO_TRACK;
+	current_DOR &= 0xFC;
+	current_DOR |= current_drive;
+	outb(current_DOR,FD_DOR);
+	del_timer(&select);
+	select.expires = 2;
+	add_timer(&select);
+}
+
+static void motor_on_callback(unsigned long nr)
+{
+	running |= 0x10 << nr;
+	floppy_select(nr);
+}
+
+static struct timer_list motor_on_timer[4] = {
+	{ NULL, 0, 0, motor_on_callback },
+	{ NULL, 0, 1, motor_on_callback },
+	{ NULL, 0, 2, motor_on_callback },
+	{ NULL, 0, 3, motor_on_callback }
+};
+
+static void motor_off_callback(unsigned long nr)
+{
+	unsigned char mask = ~(0x10 << nr);
+	cli();
+	running &= mask;
+	current_DOR &= mask;
+	outb(current_DOR,FD_DOR);
+	sti();
+}
+
+static struct timer_list motor_off_timer[4] = {
+	{ NULL, 0, 0, motor_off_callback },
+	{ NULL, 0, 1, motor_off_callback },
+	{ NULL, 0, 2, motor_off_callback },
+	{ NULL, 0, 3, motor_off_callback }
+};
+
+static void floppy_on(unsigned int nr)
+{
+	unsigned char mask = 0x10 << nr;
+
+	del_timer(motor_off_timer + nr);
+	if (mask & running)
+		floppy_select(nr);
+	if (!(mask & current_DOR)) {
+		del_timer(motor_on_timer + nr);
+		motor_on_timer[nr].expires = HZ;
+		add_timer(motor_on_timer + nr);
+	}
+	current_DOR &= 0xFC;
+	current_DOR |= mask;
+	current_DOR |= nr;
+	outb(current_DOR,FD_DOR);
+}
+
+static void floppy_off(unsigned int nr)
+{
+	del_timer(motor_off_timer+nr);
+	motor_off_timer[nr].expires = 3*HZ;
+	add_timer(motor_off_timer+nr);
 }
 
 void request_done(int uptodate)
@@ -446,7 +523,6 @@ static void bad_flp_intr(void)
 	} else
 		errors = ++CURRENT->errors;
 	if (errors > MAX_ERRORS) {
-		floppy_deselect(current_drive);
 		request_done(0);
 	}
 	if (errors > MAX_ERRORS/2)
@@ -545,7 +621,6 @@ static void rw_interrupt(void)
 			bad = 1;
 			if (ST1 & ST1_WP) {
 				printk(DEVICE_NAME ": Drive %d is write protected\n", current_drive);
-				floppy_deselect(current_drive);
 				request_done(0);
 				bad = 0;
 			} else if (ST1 & ST1_OR) {
@@ -615,7 +690,6 @@ static void rw_interrupt(void)
 	} else if (command == FD_READ &&
 		(unsigned long)(CURRENT->buffer) >= LAST_DMA_ADDR)
 		copy_buffer(tmp_floppy_area,CURRENT->buffer);
-	floppy_deselect(current_drive);
 	request_done(1);
 	redo_fd_request();
 }
@@ -849,7 +923,7 @@ static void shake_one(void)
 	output_byte(1);
 }
 
-static void floppy_on_interrupt(void)
+static void floppy_ready(void)
 {
 	if (inb(FD_DIR) & 0x80) {
 		changed_floppies |= 1<<current_drive;
@@ -857,8 +931,7 @@ static void floppy_on_interrupt(void)
 		if (keep_data[current_drive]) {
 			if (keep_data[current_drive] > 0)
 				keep_data[current_drive]--;
-		}
-		else {
+		} else {
 			if (ftd_msg[current_drive] && current_type[current_drive] != NULL)
 				printk("Disk type is undefined after disk "
 				    "change in fd%d\n",current_drive);
@@ -884,17 +957,7 @@ static void floppy_on_interrupt(void)
 		recalibrate_floppy();
 		return;
 	}
-/* We cannot do a floppy-select, as that might sleep. We just force it */
-	selected = 1;
-	if (current_drive != (current_DOR & 3)) {
-		seek = 1;
-		current_track = NO_TRACK;
-		current_DOR &= 0xFC;
-		current_DOR |= current_drive;
-		outb(current_DOR,FD_DOR);
-		add_timer(2,&transfer);
-	} else
-		transfer();
+	transfer();
 }
 
 static void setup_format_params(void)
@@ -1018,7 +1081,8 @@ repeat:
 	if (seek_track != current_track)
 		seek = 1;
 	sector++;
-	add_timer(ticks_to_floppy_on(current_drive),&floppy_on_interrupt);
+	del_timer(motor_off_timer + current_drive);
+	floppy_on(current_drive);
 }
 
 void do_fd_request(void)
@@ -1224,7 +1288,8 @@ static struct file_operations floppy_fops = {
 	fd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	floppy_open,		/* open */
-	floppy_release		/* release */
+	floppy_release,		/* release */
+	block_fsync		/* fsync */
 };
 
 

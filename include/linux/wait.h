@@ -1,8 +1,10 @@
 #ifndef _LINUX_WAIT_H
 #define _LINUX_WAIT_H
 
-#define WNOHANG		1
-#define WUNTRACED	2
+#define WNOHANG		0x00000001
+#define WUNTRACED	0x00000002
+
+#define __WCLONE	0x80000000
 
 struct wait_queue {
 	struct task_struct * task;

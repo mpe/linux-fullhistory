@@ -20,6 +20,7 @@
 
 ! NOTE! These had better be the same as in bootsect.s!
 #include <linux/config.h>
+#include <linux/segment.h>
 
 #ifndef SVGA_MODE
 #define SVGA_MODE ASK_VGA
@@ -247,7 +248,7 @@ end_move:
 	lmsw	ax		! This is it!
 	jmp	flush_instr
 flush_instr:
-	jmpi	0,8		! jmp offset 0 of segment 8 (cs)
+	jmpi	0,KERNEL_CS	! jmp offset 0 of segment 0x10 (cs)
 
 ! This routine checks that the keyboard command queue is empty
 ! (after emptying the output buffers)
@@ -764,6 +765,8 @@ beep:	mov	al,#0x07
 	
 gdt:
 	.word	0,0,0,0		! dummy
+
+	.word	0,0,0,0		! unused
 
 	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
 	.word	0x0000		! base address=0

@@ -590,6 +590,8 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 
 static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 	{
+	int old_use_sg;
+
 	cli();
 	SCpnt->flags |= WAS_SENSE;
 	update_timeout(SCpnt, SENSE_TIMEOUT);
@@ -604,7 +606,10 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 
 	SCpnt->request_buffer = &SCpnt->sense_buffer;
 	SCpnt->request_bufflen = sizeof(SCpnt->sense_buffer);
+	old_use_sg = SCpnt->use_sg;
+	SCpnt->use_sg = 0;
 	internal_cmnd (SCpnt);
+	SCpnt->use_sg = old_use_sg;
 	}
 
 
@@ -739,8 +744,8 @@ static int check_sense (Scsi_Cmnd * SCpnt)
 			return 0;
 
 		case ABORTED_COMMAND:
-		case NOT_READY:
 			return SUGGEST_RETRY;	
+		case NOT_READY:
 		case UNIT_ATTENTION:
 			return SUGGEST_ABORT;
 
@@ -1182,7 +1187,7 @@ static void scsi_main_timeout(void)
 		for(host = 0; host < max_scsi_hosts; host++) {
 		  SCpnt = host_queue[host];
 		  while (SCpnt){
-		    if (SCpnt->timeout != 0 && SCpnt->timeout <= time_elapsed)
+		    if (SCpnt->timeout > 0 && SCpnt->timeout <= time_elapsed)
 		      {
 			sti();
 			SCpnt->timeout = 0;

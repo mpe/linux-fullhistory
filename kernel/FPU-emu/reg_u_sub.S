@@ -29,7 +29,6 @@
 #include "fpu_asm.h"
 #include "control_w.h"
 
-
 .text
 	.align 2,144
 .globl _reg_u_sub
@@ -42,6 +41,25 @@ _reg_u_sub:
 
 	movl	PARAM1,%esi	/* source 1 */
 	movl	PARAM2,%edi	/* source 2 */
+
+#ifdef DENORM_OPERAND
+	cmpl	EXP_UNDER,EXP(%esi)
+	jg	xOp1_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp1_not_denorm:
+	cmpl	EXP_UNDER,EXP(%edi)
+	jg	xOp2_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp2_not_denorm:
+#endif DENORM_OPERAND
 
 //	xorl	%ecx,%ecx
 	movl	EXP(%esi),%ecx

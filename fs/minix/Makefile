@@ -15,7 +15,7 @@
 	$(AS) -o $*.o $<
 
 OBJS=	bitmap.o truncate.o namei.o inode.o \
-	file.o dir.o symlink.o 
+	file.o dir.o symlink.o fsync.o
 
 minix.o: $(OBJS)
 	$(LD) -r -o minix.o $(OBJS)

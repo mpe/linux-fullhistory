@@ -124,6 +124,22 @@ extern int sys_sysinfo();
 extern int sys_ipc();
 extern int sys_fsync();
 extern int sys_sigreturn();
+extern int sys_setdomainname();
+extern int sys_olduname();
+extern int sys_old_syscall();
+
+/*
+ * These are system calls that will be removed at some time
+ * due to newer versions existing..
+ */
+#ifdef notdef
+#define sys_waitpid	sys_old_syscall	/* sys_wait4	*/
+#define sys_olduname	sys_old_syscall /* sys_newuname	*/
+#define sys_stat	sys_old_syscall /* sys_newstat	*/
+#define sys_fstat	sys_old_syscall	/* sys_newfstat	*/
+#define sys_lstat	sys_old_syscall /* sys_newlstat	*/
+#define sys_signal	sys_old_syscall	/* sys_sigaction */
+#endif
 
 fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
 sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
@@ -135,7 +151,7 @@ sys_nice, sys_ftime, sys_sync, sys_kill, sys_rename, sys_mkdir,
 sys_rmdir, sys_dup, sys_pipe, sys_times, sys_prof, sys_brk, sys_setgid,
 sys_getgid, sys_signal, sys_geteuid, sys_getegid, sys_acct, sys_phys,
 sys_lock, sys_ioctl, sys_fcntl, sys_mpx, sys_setpgid, sys_ulimit,
-sys_uname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,
+sys_olduname, sys_umask, sys_chroot, sys_ustat, sys_dup2, sys_getppid,
 sys_getpgrp, sys_setsid, sys_sigaction, sys_sgetmask, sys_ssetmask,
 sys_setreuid,sys_setregid, sys_sigsuspend, sys_sigpending,
 sys_sethostname, sys_setrlimit, sys_getrlimit, sys_getrusage,
@@ -145,9 +161,9 @@ sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap, sys_truncate,
 sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
 sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
 sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
-sys_newfstat, sys_newuname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
+sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
 sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
-sys_clone };
+sys_clone, sys_setdomainname, sys_newuname};
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

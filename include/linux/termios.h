@@ -44,6 +44,9 @@
 #define FIONCLEX	0x5450  /* these numbers need to be adjusted. */
 #define FIOCLEX		0x5451
 #define FIOASYNC	0x5452
+#define TIOCSERCONFIG	0x5453
+#define TIOCSERGWILD	0x5454
+#define TIOCSERSWILD	0x5455
 
 /* Used for packet mode */
 #define TIOCPKT_FLUSHREAD	 1

@@ -6,16 +6,16 @@
  *  low-level nfs remote procedure call interface
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <asm/segment.h>
+#include <linux/in.h>
+#include <linux/net.h>
 
-#include <netinet/in.h>
-
-#include "../../net/kern_sock.h"
 
 extern struct socket *socki_lookup(struct inode *inode);
 

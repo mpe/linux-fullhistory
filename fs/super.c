@@ -34,6 +34,8 @@ extern int root_mountflags;
 
 struct super_block super_block[NR_SUPER];
 
+static int do_remount_sb(struct super_block *sb, int flags);
+
 /* this is initialized in init/main.c */
 dev_t ROOT_DEV = 0;
 
@@ -198,9 +200,20 @@ static void put_unnamed_dev(dev_t dev)
 static int do_umount(dev_t dev)
 {
 	struct super_block * sb;
-
-	if (dev==ROOT_DEV)
-		return -EBUSY;
+	int retval;
+	
+	if (dev==ROOT_DEV) {
+		/* Special case for "unmounting" root.  We just try to remount
+		   it readonly, and sync() the device. */
+		if (!(sb=get_super(dev)))
+			return -ENOENT;
+		if (!(sb->s_flags & MS_RDONLY)) {
+			retval = do_remount_sb(sb, MS_RDONLY);
+			if (retval)
+				return retval;
+		}
+		return 0;
+	}
 	if (!(sb=get_super(dev)) || !(sb->s_covered))
 		return -ENOENT;
 	if (!sb->s_covered->i_mount)
@@ -267,7 +280,7 @@ int sys_umount(char * name)
 		iput(inode);
 		return -ENXIO;
 	}
-	if (!(retval = do_umount(dev))) {
+	if (!(retval = do_umount(dev)) && dev != ROOT_DEV) {
 		fops = blkdev_fops[MAJOR(dev)];
 		if (fops && fops->release)
 			fops->release(inode,NULL);
@@ -278,7 +291,7 @@ int sys_umount(char * name)
 		iput(inode);
 	if (retval)
 		return retval;
-	sync_dev(dev);
+	fsync_dev(dev);
 	return 0;
 }
 
@@ -329,6 +342,24 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
  * FS-specific mount options can't be altered by remounting.
  */
 
+static int do_remount_sb(struct super_block *sb, int flags)
+{
+	int retval;
+	
+	/* If we are remounting RDONLY, make sure there are no rw files open */
+	if ((flags & MS_RDONLY) && !(sb->s_flags & MS_RDONLY))
+		if (!fs_may_remount_ro(sb->s_dev))
+			return -EBUSY;
+	if (sb->s_op && sb->s_op->remount_fs) {
+		retval = sb->s_op->remount_fs(sb, &flags);
+		if (retval)
+			return retval;
+	}
+	sb->s_flags = (sb->s_flags & ~MS_RMT_MASK) |
+		(flags & MS_RMT_MASK);
+	return 0;
+}
+
 static int do_remount(const char *dir,int flags)
 {
 	struct inode *dir_i;
@@ -341,10 +372,9 @@ static int do_remount(const char *dir,int flags)
 		iput(dir_i);
 		return -EINVAL;
 	}
-	dir_i->i_sb->s_flags = (dir_i->i_sb->s_flags & ~MS_RMT_MASK) |
-		(flags & MS_RMT_MASK);
+	retval = do_remount_sb(dir_i->i_sb, flags);
 	iput(dir_i);
-	return 0;
+	return retval;
 }
 
 

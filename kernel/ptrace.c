@@ -114,7 +114,7 @@ repeat:
 static void put_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long data)
 {
-	unsigned long page;
+	unsigned long page, pte;
 
 repeat:
 	page = tsk->tss.cr3 + ((addr >> 20) & 0xffc);
@@ -122,8 +122,7 @@ repeat:
 	if (page & PAGE_PRESENT) {
 		page &= 0xfffff000;
 		page += (addr >> 10) & 0xffc;
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-		*(unsigned long *) page |= PAGE_DIRTY;
+		pte = page;
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
@@ -134,6 +133,8 @@ repeat:
 		do_wp_page(0,addr,tsk,0);
 		goto repeat;
 	}
+/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
+	*(unsigned long *) pte |= (PAGE_DIRTY|PAGE_COW);
 	page &= 0xfffff000;
 	page += addr & 0xfff;
 	*(unsigned long *) page = data;
@@ -234,8 +235,6 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	if (!(child = get_task(pid)))
 		return -ESRCH;
 	if (request == PTRACE_ATTACH) {
-		long tmp;
-
 		if (child == current)
 			return -EPERM;
 		if ((!child->dumpable || (current->uid != child->euid) ||
@@ -250,12 +249,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
-		tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) | TRAP_FLAG;
-		put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
-		if (child->state == TASK_INTERRUPTIBLE ||
-		    child->state == TASK_STOPPED)
-			child->state = TASK_RUNNING;
-		child->signal = 0;
+		send_sig(SIGSTOP, child, 1);
 		return 0;
 	}
 	if (!(child->flags & PF_PTRACED))
@@ -269,7 +263,8 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	/* when I and D space are seperate, these will need to be fixed. */
 		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 		case PTRACE_PEEKDATA: {
-			int tmp,res;
+			unsigned long tmp;
+			int res;
 
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
@@ -282,7 +277,9 @@ int sys_ptrace(long request, long pid, long addr, long data)
 
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
-			int tmp, res;
+			unsigned long tmp;
+			int res;
+
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < 0 || addr >= 17)
 				return -EIO;
@@ -317,13 +314,13 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_CONT: { /* restart after signal. */
 			long tmp;
 
+			if ((unsigned long) data > NSIG)
+				return -EIO;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
 			else
 				child->flags &= ~PF_TRACESYS;
-			child->signal = 0;
-			if (data > 0 && data <= NSIG)
-				child->signal = 1<<(data-1);
+			child->exit_code = data;
 			child->state = TASK_RUNNING;
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
@@ -340,7 +337,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			child->state = TASK_RUNNING;
-			child->signal = 1 << (SIGKILL-1);
+			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
 			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
@@ -350,13 +347,13 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
 			long tmp;
 
+			if ((unsigned long) data > NSIG)
+				return -EIO;
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) | TRAP_FLAG;
 			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
 			child->state = TASK_RUNNING;
-			child->signal = 0;
-			if (data > 0 && data <= NSIG)
-				child->signal= 1<<(data-1);
+			child->exit_code = data;
 	/* give it a chance to run. */
 			return 0;
 		}
@@ -364,9 +361,11 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_DETACH: { /* detach a process that was attached. */
 			long tmp;
 
+			if ((unsigned long) data > NSIG)
+				return -EIO;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			child->signal=0;
-			child->state = 0;
+			child->state = TASK_RUNNING;
+			child->exit_code = data;
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
@@ -379,4 +378,23 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		default:
 			return -EIO;
 	}
+}
+
+void syscall_trace(void)
+{
+	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
+			!= (PF_PTRACED|PF_TRACESYS))
+		return;
+	current->exit_code = SIGTRAP;
+	current->state = TASK_STOPPED;
+	notify_parent(current);
+	schedule();
+	/*
+	 * this isn't the same as continuing with a signal, but it will do
+	 * for normal use.  strace only continues with a signal if the
+	 * stopping signal is not SIGTRAP.  -brl
+	 */
+	if (current->exit_code)
+		current->signal |= (1 << (current->exit_code - 1));
+	current->exit_code = 0;
 }

@@ -1,5 +1,5 @@
 
-all:	Version Image
+all:	Version zImage
 
 .EXPORT_ALL_VARIABLES:
 
@@ -18,6 +18,13 @@ else
 CONFIGURATION = config
 endif
 
+#
+# This probably won't help at all...
+#
+ifndef CONFIG_CLUEFUL
+CONFIGURATION = config
+endif
+
 ifdef CONFIGURATION
 CONFIGURE = dummy
 endif
@@ -31,37 +38,6 @@ endif
 ROOT_DEV = CURRENT
 
 #
-# uncomment the correct keyboard:
-#
-# The value of KBDFLAGS should be or'ed together from the following
-# bits, depending on which features you want enabled.
-#
-# The least significant bits control if the following keys are "dead".
-# The key is dead by default if the bit is on.
-# 0x01 - backquote (`)
-# 0x02 - accent acute
-# 0x04 - circumflex (^)
-# 0x08 - tilde (~)
-# 0x10 - dieresis (umlaut)
-
-KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
-# KEYBOARD = -DKBD_FINNISH_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_US -DKBDFLAGS=0
-# KEYBOARD = -DKBD_GR -DKBDFLAGS=0
-# KEYBOARD = -DKBD_GR_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_FR -DKBDFLAGS=0
-# KEYBOARD = -DKBD_FR_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_UK -DKBDFLAGS=0
-# KEYBOARD = -DKBD_DK -DKBDFLAGS=0
-# KEYBOARD = -DKBD_DK_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_DVORAK -DKBDFLAGS=0
-# KEYBOARD = -DKBD_SG -DKBDFLAGS=0
-# KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_SF -DKBDFLAGS=0
-# KEYBOARD = -DKBD_SF_LATIN1 -DKBDFLAGS=0x1F
-# KEYBOARD = -DKBD_NO -DKBDFLAGS=0
-
-#
 # If you want to preset the SVGA mode, uncomment the next line and
 # set SVGA_MODE to whatever number you want.
 # Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
@@ -69,6 +45,9 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 #
 
 SVGA_MODE=	-DSVGA_MODE=3
+
+# Special options.
+#OPTS	= -pro
 
 #
 # standard CFLAGS
@@ -93,19 +72,20 @@ LD86	=ld86 -0
 AS	=as
 LD	=ld
 HOSTCC	=gcc
-CC	=gcc -DKERNEL
+CC	=gcc -D__KERNEL__
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar
 STRIP	=strip
 
-ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
+ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
-		 kernel/blk_drv/scsi/scsi.a kernel/chr_drv/sound/sound.a
+		 kernel/blk_drv/scsi/scsi.a kernel/chr_drv/sound/sound.a \
+		 ibcs/ibcs.o
 MATH		=kernel/FPU-emu/math.a
 LIBS		=lib/lib.a
-SUBDIRS		=kernel mm fs net lib
+SUBDIRS		=kernel mm fs net ipc ibcs lib
 
 KERNELHDRS	=/usr/src/linux/include
 
@@ -125,7 +105,7 @@ lilo: $(CONFIGURE) Image
 	/etc/lilo/install
 
 config:
-	sh Configure < config.in
+	sh Configure $(OPTS) < config.in
 	mv .config~ .config
 	$(MAKE) soundconf
 
@@ -139,11 +119,12 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl9-`cat .version`\" > tools/version.h
-	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.10\" > tools/version.h
+	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
+	@echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\" >> tools/version.h
 
 Image: $(CONFIGURE) boot/bootsect boot/setup tools/system tools/build
 	tools/build boot/bootsect boot/setup tools/system $(ROOT_DEV) > Image
@@ -200,6 +181,7 @@ zdisk: zImage
 	dd bs=8192 if=zImage of=/dev/fd0
 
 zlilo: $(CONFIGURE) zImage
+	if [ -f /vmlinuz ]; then mv /vmlinuz /vmlinuz.old; fi
 	cat zImage > /vmlinuz
 	/etc/lilo/install
 
@@ -249,7 +231,7 @@ depend dep:
 ifdef CONFIGURATION
 ..$(CONFIGURATION):
 	@echo
-	@echo "You have no" .$(CONFIGURATION) ": running 'make" $(CONFIGURATION)"'"
+	@echo "You have a bad or nonexistent" .$(CONFIGURATION) ": running 'make" $(CONFIGURATION)"'"
 	@echo
 	$(MAKE) $(CONFIGURATION)
 	@echo

@@ -38,22 +38,38 @@ _reg_div:
 
 	jne	L_div_special		// Not (both numbers TW_Valid)
 
+#ifdef DENORM_OPERAND
+// Check for denormals
+	cmpl	EXP_UNDER,EXP(%esi)
+	jg	xL_arg1_not_denormal
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xL_arg1_not_denormal:
+	cmpl	EXP_UNDER,EXP(%ebx)
+	jg	xL_arg2_not_denormal
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xL_arg2_not_denormal:
+#endif DENORM_OPERAND
 
 // Both arguments are TW_Valid
-	movl	EXP(%esi),%edx
-	movl	EXP(%ebx),%eax
-	subl	%eax,%edx
-	addl	EXP_BIAS,%edx
-	movl	%edx,EXP(%edi)
-
 	movb	TW_Valid,TAG(%edi)
 
 	movb	SIGN(%esi),%cl
 	cmpb	%cl,SIGN(%ebx)
 	setne	(%edi)	      // Set the sign, requires SIGN_NEG=1, SIGN_POS=0
 
-//	add	$SIGL_OFFSET,%ebx
-//	add	$SIGL_OFFSET,%esi
+	movl	EXP(%esi),%edx
+	movl	EXP(%ebx),%eax
+	subl	%eax,%edx
+	addl	EXP_BIAS,%edx
+	movl	%edx,EXP(%edi)
 
 	jmp	_divide_kernel
 
@@ -69,7 +85,7 @@ L_div_special:
 // Operations on NaNs
 L_arg1_NaN:
 L_arg2_NaN:
-	pushl	%edi
+	pushl	%edi			// Destination
 	pushl	%ebx
 	pushl	%esi
 	call	_real_2op_NaN
@@ -78,8 +94,8 @@ L_arg2_NaN:
 // Invalid operations
 L_zero_zero:
 L_inf_inf:
-	pushl	%esi
-	call	_arith_invalid
+	pushl	%edi			// Destination
+	call	_arith_invalid		// 0/0 or Infinity/Infinity
 	jmp	LDiv_exit
 
 L_no_NaN_arg:
@@ -89,7 +105,28 @@ L_no_NaN_arg:
 	cmpb	TW_Infinity,TAG(%ebx)
 	je	L_inf_inf		// invalid operation
 
+	cmpb	TW_Valid,TAG(%ebx)
+	je	L_inf_valid
+
+#ifdef PARANOID
+	// arg2 must be zero or valid
+	cmpb	TW_Zero,TAG(%ebx)
+	ja	L_unknown_tags
+#endif PARANOID
+
 	// Note that p16-9 says that infinity/0 returns infinity
+	jmp	L_copy_arg1		// Answer is Inf
+
+L_inf_valid:
+#ifdef DENORM_OPERAND
+	cmpl	EXP_UNDER,EXP(%ebx)
+	jg	L_copy_arg1		// Answer is Inf
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+#endif DENORM_OPERAND
+
 	jmp	L_copy_arg1		// Answer is Inf
 
 L_arg1_not_inf:
@@ -99,8 +136,14 @@ L_arg1_not_inf:
 	cmpb	TW_Zero,TAG(%esi)
 	je	L_zero_zero		// invalid operation
 
+#ifdef PARANOID
+	// arg1 must be valid
+	cmpb	TW_Valid,TAG(%esi)
+	ja	L_unknown_tags
+#endif PARANOID
+
 // Division by zero error
-	pushl	%esi
+	pushl	%edi			// destination
 	movb	SIGN(%esi),%al
 	xorb	SIGN(%ebx),%al
 	pushl	%eax			// lower 8 bits have the sign
@@ -111,11 +154,37 @@ L_arg2_not_zero:
 	cmpb	TW_Infinity,TAG(%ebx)
 	jne	L_arg2_not_inf
 
+#ifdef DENORM_OPERAND
+	cmpb	TW_Valid,TAG(%esi)
+	jne	L_return_zero
+
+	cmpl	EXP_UNDER,EXP(%esi)
+	jg	L_return_zero		// Answer is zero
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+#endif DENORM_OPERAND
+
 	jmp	L_return_zero		// Answer is zero
 
 L_arg2_not_inf:
+
+#ifdef PARANOID
 	cmpb	TW_Zero,TAG(%esi)
 	jne	L_unknown_tags
+#endif PARANOID
+
+	// arg1 is zero, arg2 is not Infinity or a NaN
+
+#ifdef DENORM_OPERAND
+	cmpl	EXP_UNDER,EXP(%ebx)
+	jg	L_copy_arg1		// Answer is zero
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+#endif DENORM_OPERAND
 
 L_copy_arg1:
 	movb	TAG(%esi),%ax
@@ -142,7 +211,6 @@ LDiv_set_result_sign:
 	movb	SIGN_POS,SIGN(%ebx)
 	jmp	LDiv_exit
 
-	.align 2,0x90
 LDiv_negative_result:
 	movb	SIGN_NEG,SIGN(%edi)
 
@@ -160,6 +228,7 @@ L_return_zero:
 	movb	TW_Zero,TAG(%edi)
 	jmp	LDiv_set_result_sign
 
+#ifdef PARANOID
 L_unknown_tags:
 	push	EX_INTERNAL | 0x208
 	call	EXCEPTION
@@ -172,3 +241,4 @@ L_unknown_tags:
 	movl	_CONST_QNaN+8,%eax
 	movl	%eax,SIGH(%edi)
 	jmp	LDiv_exit
+#endif PARANOID

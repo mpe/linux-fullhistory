@@ -7,6 +7,8 @@
  *        Use request_irq and request_dma to help prevent unexpected conflicts
  *        Set up on-board DMA controller, such that we do not have to
  *        have the bios enabled to use the aha1542.
+ *  Modified by David Gentzel
+ *	  Don't call request_dma if dma mask is 0 (for BusLogic BT-445S VL-Bus controller).
  */
 
 #include <linux/kernel.h>
@@ -576,9 +578,14 @@ static int aha1542_getconfig(int hostnum)
   case 0x20:
     dma_chan = 5;
     break;
-  case 1:
+  case 0x01:
     printk("DMA priority 0 not available for Adaptec driver\n");
     return -1;
+  case 0:
+    /* This means that the adapter, although Adaptec 1542 compatible, doesn't use a DMA channel.
+       Currently only aware of the BusLogic BT-445S VL-Bus adapter which needs this. */
+    dma_chan = 0xFF;
+    break;
   default:
     printk("Unable to determine Adaptec DMA priority.  Disabling board\n");
     return -1;
@@ -679,8 +686,10 @@ int aha1542_detect(int hostnum)
 
     if (aha1542_getconfig(hostnum) == -1) return 0;
     
-    printk("Configuring Adaptec at IO:%x, IRQ %d, DMA priority %d\n",base,
-	   irq_level, dma_chan);
+    printk("Configuring Adaptec at IO:%x, IRQ %d",base, irq_level);
+    if (dma_chan != 0xFF)
+	printk(", DMA priority %d", dma_chan);
+    printk("\n");
 
     DEB(aha1542_stat());
     setup_mailboxes();
@@ -690,20 +699,22 @@ int aha1542_detect(int hostnum)
     DEB(printk("aha1542_detect: enable interrupt channel %d\n", irq_level));
 
     if (request_irq(irq_level,aha1542_intr_handle)) {
-      printk("Unable to allocate IRQ for adaptec controller.\n");
-      return 0;
-    };
+	printk("Unable to allocate IRQ for adaptec controller.\n");
+	return 0;
+    }
 
-    if(request_dma(dma_chan)){
-      printk("Unable to allocate DMA channel for Adaptec.\n");
-      free_irq(irq_level);
-      return 0;
-    };
+    if (dma_chan != 0xFF) {
+	if (request_dma(dma_chan)) {
+	    printk("Unable to allocate DMA channel for Adaptec.\n");
+	    free_irq(irq_level);
+	    return 0;
+	}
 
-    if(dma_chan >= 5){
-      outb(((dma_chan - 4)|CASCADE),DMA_MODE_REG);
-      outb((dma_chan-4),DMA_MASK_REG);
-    };
+	if (dma_chan >= 5) {
+	    outb((dma_chan - 4) | CASCADE, DMA_MODE_REG);
+	    outb(dma_chan - 4, DMA_MASK_REG);
+	}
+    }
 
 #if 0
     DEB(printk(" *** READ CAPACITY ***\n"));

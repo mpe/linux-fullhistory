@@ -38,7 +38,7 @@
 		:"a" (0), "c" (size/4), "D" ((long) (addr)) \
 		:"cx", "di")
 
-static inline int find_first_zero_bit (unsigned *addr, unsigned size)
+static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
 {
 	int res;
 	if (!size)
@@ -63,9 +63,10 @@ static inline int find_first_zero_bit (unsigned *addr, unsigned size)
 	return res;
 }
 
-static inline int find_next_zero_bit (unsigned * addr, int size, int offset)
+static inline int find_next_zero_bit (unsigned long * addr, int size,
+				      int offset)
 {
-	unsigned *p = ((unsigned *) addr) + (offset >> 5);
+	unsigned long * p = ((unsigned long *) addr) + (offset >> 5);
 	int set = 0, bit = offset & 31, res;
 	
 	if (bit) {

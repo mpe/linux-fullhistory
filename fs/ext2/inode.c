@@ -26,7 +26,8 @@
 
 void ext2_put_inode (struct inode * inode)
 {
-	if (inode->i_nlink || inode->i_ino == EXT2_ACL_INO)
+	if (inode->i_nlink || inode->i_ino == EXT2_ACL_IDX_INO ||
+	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->i_size = 0;
 	if (inode->i_blocks)
@@ -67,7 +68,8 @@ static struct super_operations ext2_sops = {
 	ext2_put_inode,
 	ext2_put_super,
 	ext2_write_super,
-	ext2_statfs
+	ext2_statfs,
+	ext2_remount
 };
 
 #ifdef EXT2FS_PRE_02B_COMPAT
@@ -217,6 +219,13 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
 	bh_count = (s->u.ext2_sb.s_groups_count +
 		   EXT2_DESC_PER_BLOCK(s) - 1) /
 		   EXT2_DESC_PER_BLOCK(s);
+	if (bh_count >= EXT2_MAX_GROUP_DESC) {
+		s->s_dev = 0;
+		unlock_super (s);
+		brelse (bh);
+		printk ("EXT2-fs: Too big file system\n");
+		return NULL;
+	}
 	for (i = 0; i < bh_count; i++) {
 		s->u.ext2_sb.s_group_desc[i] = bread (dev, i + 2, s->s_blocksize);
 		if (!s->u.ext2_sb.s_group_desc[i]) {
@@ -263,9 +272,9 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
 		s->s_dirt = 1;
 	}
 #endif
-	printk ("[EXT II FS %s, bs=%d, fs=%d, gc=%d, bpg=%d, ipg=%d]\n",
-		EXT2FS_VERSION, s->s_blocksize, s->u.ext2_sb.s_frag_size,
-		s->u.ext2_sb.s_groups_count,
+	printk ("[EXT II FS %s, %s, bs=%d, fs=%d, gc=%d, bpg=%d, ipg=%d]\n",
+		EXT2FS_VERSION, EXT2FS_DATE, s->s_blocksize,
+		s->u.ext2_sb.s_frag_size, s->u.ext2_sb.s_groups_count,
 		EXT2_BLOCKS_PER_GROUP(s), EXT2_INODES_PER_GROUP(s));
 	return s;
 }
@@ -283,13 +292,53 @@ struct super_block * ext2_read_super (struct super_block * s, void * data,
  * Note that this function also writes backups of the super block and
  * of the group descriptors in each group.
  */
-void ext2_write_super (struct super_block * sb)
+
+static void ext2_commit_super (struct super_block *sb,
+			       struct ext2_super_block *es)
 {
-	struct ext2_super_block * es;
 	struct buffer_head * bh;
 	unsigned long block;
 	unsigned long bh_count;
 	int i, j;
+
+	es->s_wtime = CURRENT_TIME;
+	sb->u.ext2_sb.s_sbh->b_dirt = 1;
+	bh_count = (sb->u.ext2_sb.s_groups_count +
+		    EXT2_DESC_PER_BLOCK(sb) - 1) /
+		    EXT2_DESC_PER_BLOCK(sb);
+	for (i = 0; i < sb->u.ext2_sb.s_groups_count; i++) {
+		block = sb->u.ext2_sb.s_first_data_block +
+			i * sb->u.ext2_sb.s_blocks_per_group;
+		if (!(bh = bread (sb->s_dev, block, BLOCK_SIZE)))
+			printk ("ext2_commit_super: Unable to read backup super block for group %d\n", i);
+		else {
+#ifdef EXT2FS_DEBUG
+			printk ("ext2_commit_super: writing super block backup in group %d at block %d\n", i, block);
+#endif	
+			memcpy (bh->b_data, es, BLOCK_SIZE);
+			bh ->b_dirt = 1;
+			brelse (bh);
+		}
+		for (j = 0; j < bh_count; j++) {
+			block ++;
+#ifdef EXT2FS_DEBUG
+			printk ("ext2_commit_super: writing descriptors (block %d) backup in group %d at block %d\n", j, i, block);
+#endif	
+			if (!(bh = bread (sb->s_dev, block, sb->s_blocksize)))
+				printk ("ext2_commit_super: Unable to read backup descriptor for group %d\n", i);
+			else {
+				memcpy (bh->b_data, sb->u.ext2_sb.s_group_desc[j]->b_data, sb->s_blocksize);
+				bh ->b_dirt = 1;
+				brelse (bh);
+			}
+		}
+	}
+	sb->s_dirt = 0;
+}
+
+void ext2_write_super (struct super_block * sb)
+{
+	struct ext2_super_block * es;
 
 	if ((sb->s_flags & MS_RDONLY) == 0) {
 		es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
@@ -297,40 +346,35 @@ void ext2_write_super (struct super_block * sb)
 		printk ("ext2_write_super: setting valid to 0\n");
 #endif
 		es->s_valid = 0;
-		es->s_wtime = CURRENT_TIME;
-		sb->u.ext2_sb.s_sbh->b_dirt = 1;
-		bh_count = (sb->u.ext2_sb.s_groups_count +
-			    EXT2_DESC_PER_BLOCK(sb) - 1) /
-			    EXT2_DESC_PER_BLOCK(sb);
-		for (i = 0; i < sb->u.ext2_sb.s_groups_count; i++) {
-			block = sb->u.ext2_sb.s_first_data_block +
-				i * sb->u.ext2_sb.s_blocks_per_group;
-			if (!(bh = bread (sb->s_dev, block, BLOCK_SIZE)))
-				printk ("ext2_write_super: Unable to read backup super block for group %d\n", i);
-			else {
-#ifdef EXT2FS_DEBUG
-				printk ("ext2_write_super: writing super block backup in group %d at block %d\n", i, block);
-#endif	
-				memcpy (bh->b_data, es, BLOCK_SIZE);
-				bh ->b_dirt = 1;
-				brelse (bh);
-			}
-			for (j = 0; j < bh_count; j++) {
-				block ++;
-#ifdef EXT2FS_DEBUG
-				printk ("ext2_write_super: writing descriptors (block %d) backup in group %d at block %d\n", j, i, block);
-#endif	
-				if (!(bh = bread (sb->s_dev, block, sb->s_blocksize)))
-					printk ("ext2_write_super: Unable to read backup descriptor for group %d\n", i);
-				else {
-					memcpy (bh->b_data, sb->u.ext2_sb.s_group_desc[j]->b_data, sb->s_blocksize);
-					bh ->b_dirt = 1;
-					brelse (bh);
-				}
-			}
-		}
+		ext2_commit_super (sb, es);
 	}
 	sb->s_dirt = 0;
+}
+
+int ext2_remount(struct super_block *sb, int *flags)
+{
+	struct ext2_super_block * es;
+
+	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	if ((*flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
+		return 0;
+	if (*flags & MS_RDONLY) {
+		if (es->s_valid || !sb->u.ext2_sb.s_was_mounted_valid)
+			return 0;
+		/* OK, we are remounting a valid rw partition rdonly, so set
+		   the rdonly flag and then mark the partition as valid
+		   again. */
+		sb->s_flags |= MS_RDONLY;
+		es->s_valid = sb->u.ext2_sb.s_was_mounted_valid;
+		ext2_commit_super(sb, es);
+	}
+	else {
+		/* Mounting a RDONLY partition read-write, so reread and
+		   store the current valid flag.  (It may have been changed 
+		   by ext2fs since we originally mounted the partition.)  */
+		sb->u.ext2_sb.s_was_mounted_valid = es->s_valid;
+	}
+	return 0;
 }
 
 void ext2_statfs (struct super_block * sb, struct statfs * buf)
@@ -647,8 +691,8 @@ void ext2_read_inode (struct inode * inode)
 	unsigned long block;
 	struct ext2_group_desc * gdp;
 
-	if ((inode->i_ino != EXT2_ROOT_INO && inode->i_ino != EXT2_ACL_INO &&
-	     inode->i_ino < EXT2_FIRST_INO) ||
+	if ((inode->i_ino != EXT2_ROOT_INO && inode->i_ino != EXT2_ACL_IDX_INO &&
+	     inode->i_ino != EXT2_ACL_DATA_INO && inode->i_ino < EXT2_FIRST_INO) ||
 	    inode->i_ino > inode->i_sb->u.ext2_sb.s_inodes_count) {
 		printk ("ext2_read_inode: bad inode number of dev %0x04: %d\n",
 			inode->i_dev, inode->i_ino);
@@ -697,7 +741,8 @@ void ext2_read_inode (struct inode * inode)
 		inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
 	brelse (bh);
 	inode->i_op = NULL;
-	if (inode->i_ino == EXT2_ACL_INO)
+	if (inode->i_ino == EXT2_ACL_IDX_INO ||
+	    inode->i_ino == EXT2_ACL_DATA_INO)
 		/* Nothing to do */ ;
 	else if (S_ISREG(inode->i_mode))
 		inode->i_op = &ext2_file_inode_operations;
@@ -713,7 +758,7 @@ void ext2_read_inode (struct inode * inode)
 		init_fifo(inode);
 }
 
-void ext2_write_inode (struct inode * inode)
+static struct buffer_head * ext2_update_inode (struct inode * inode)
 {
 	struct buffer_head * bh;
 	struct ext2_inode * raw_inode;
@@ -727,7 +772,7 @@ void ext2_write_inode (struct inode * inode)
 	    inode->i_ino > inode->i_sb->u.ext2_sb.s_inodes_count) {
 		printk ("ext2_write_inode: bad inode number of dev %0x04: %d\n",
 			inode->i_dev, inode->i_ino);
-		return;
+		return 0;
 	}
 	block_group = (inode->i_ino - 1) / EXT2_INODES_PER_GROUP(inode->i_sb);
 	if (block_group >= inode->i_sb->u.ext2_sb.s_groups_count)
@@ -768,5 +813,35 @@ void ext2_write_inode (struct inode * inode)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
 	bh->b_dirt = 1;
 	inode->i_dirt = 0;
+	return bh;
+}
+
+void ext2_write_inode (struct inode * inode)
+{
+	struct buffer_head * bh;
+	bh = ext2_update_inode(inode);
 	brelse (bh);
+}
+
+int ext2_sync_inode (struct inode *inode)
+{
+	int err = 0;
+	struct buffer_head *bh;
+
+	bh = ext2_update_inode(inode);
+	if (bh && bh->b_dirt)
+	{
+		ll_rw_block(WRITE, 1, &bh);
+		wait_on_buffer(bh);
+		if (bh->b_req && !bh->b_uptodate)
+		{
+			printk ("IO error syncing ext2 inode [%04x:%08x]\n",
+				inode->i_dev, inode->i_ino);
+			err = -1;
+		}
+	}
+	else if (!bh)
+		err = -1;
+	brelse (bh);
+	return err;
 }

@@ -42,7 +42,26 @@ _reg_u_add:
 	movl	PARAM1,%esi		/* source 1 */
 	movl	PARAM2,%edi		/* source 2 */
 
-	xorl	%ecx,%ecx
+#ifdef DENORM_OPERAND
+	cmpl	EXP_UNDER,EXP(%esi)
+	jg	xOp1_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp1_not_denorm:
+	cmpl	EXP_UNDER,EXP(%edi)
+	jg	xOp2_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp2_not_denorm:
+#endif DENORM_OPERAND
+
+//	xorl	%ecx,%ecx
 	movl	EXP(%esi),%ecx
 	subl	EXP(%edi),%ecx		/* exp1 - exp2 */
 //	jnc	L_arg1_larger

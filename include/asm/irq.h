@@ -4,8 +4,12 @@
 /*
  *	linux/include/asm/irq.h
  *
- *	(C) 1992 Linus Torvalds
+ *	(C) 1992, 1993 Linus Torvalds
  */
+
+#include <linux/segment.h>
+#define __STR(x) #x
+#define STR(x) __STR(x)
  
 #define SAVE_ALL \
 	"cld\n\t" \
@@ -20,10 +24,10 @@
 	"pushl %edx\n\t" \
 	"pushl %ecx\n\t" \
 	"pushl %ebx\n\t" \
-	"movl $0x10,%edx\n\t" \
+	"movl $" STR(KERNEL_DS) ",%edx\n\t" \
 	"mov %dx,%ds\n\t" \
 	"mov %dx,%es\n\t" \
-	"movl $0x17,%edx\n\t" \
+	"movl $" STR(USER_DS) ",%edx\n\t" \
 	"mov %dx,%fs\n\t"
 
 /*
@@ -47,7 +51,7 @@
 	"pushl %eax\n\t" \
 	"pushl %edx\n\t" \
 	"pushl %ecx\n\t" \
-	"movl $0x10,%edx\n\t" \
+	"movl $" STR(KERNEL_DS) ",%edx\n\t" \
 	"mov %dx,%ds\n\t" \
 	"mov %dx,%es\n\t"
 

@@ -1,0 +1,142 @@
+/*
+ * INET		An implementation of the TCP/IP protocol suite for the LINUX
+ *		operating system.  INET is implemented using the  BSD Socket
+ *		interface as the means of communication with the user level.
+ *
+ *		Ethernet-type device handling.
+ *
+ * Version:	@(#)eth.c	1.0.7	05/25/93
+ *
+ * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
+ *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Mark Evans, <evansmp@uhura.aston.ac.uk>
+ *
+ *		This program is free software; you can redistribute it and/or
+ *		modify it under the terms of the GNU General Public License
+ *		as published by the Free Software Foundation; either version
+ *		2 of the License, or (at your option) any later version.
+ */
+#include <asm/segment.h>
+#include <asm/system.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/socket.h>
+#include <linux/in.h>
+#include "inet.h"
+#include "dev.h"
+#include "eth.h"
+#include "timer.h"
+#include "ip.h"
+#include "route.h"
+#include "protocol.h"
+#include "tcp.h"
+#include "skbuff.h"
+#include "sock.h"
+#include <linux/errno.h>
+#include "arp.h"
+
+
+/* Display an Ethernet address in readable format. */
+char *eth_print(unsigned char *ptr)
+{
+  static char buff[64];
+
+  if (ptr == NULL) return("[NONE]");
+  sprintf(buff, "%02X:%02X:%02X:%02X:%02X:%02X",
+	(ptr[0] & 255), (ptr[1] & 255), (ptr[2] & 255),
+	(ptr[3] & 255), (ptr[4] & 255), (ptr[5] & 255)
+  );
+  return(buff);
+}
+
+
+/* Display the contents of the Ethernet MAC header. */
+void
+eth_dump(struct ethhdr *eth)
+{
+  if (inet_debug != DBG_ETH) return;
+
+  printk("eth: SRC = %s ", eth_print(eth->h_source));
+  printk("DST = %s ", eth_print(eth->h_dest));
+  printk("TYPE = %04X\n", ntohs(eth->h_proto));
+}
+
+
+/* Create the Ethernet MAC header. */
+int
+eth_header(unsigned char *buff, struct device *dev, unsigned short type,
+	   unsigned long daddr, unsigned long saddr, unsigned len)
+{
+  struct ethhdr *eth;
+
+  DPRINTF((DBG_DEV, "ETH: header(%s, ", in_ntoa(saddr)));
+  DPRINTF((DBG_DEV, "%s, 0x%X)\n", in_ntoa(daddr), type));
+
+  /* Fill in the basic Ethernet MAC header. */
+  eth = (struct ethhdr *) buff;
+  eth->h_proto = ntohs(type);
+  memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
+
+  /* We don't ARP for the LOOPBACK device... */
+  if (dev->flags & IFF_LOOPBACK) {
+	DPRINTF((DBG_DEV, "ETH: No header for loopback\n"));
+	memset(eth->h_dest, 0, dev->addr_len);
+	return(dev->hard_header_len);
+  }
+
+  /* Check if we can use the MAC BROADCAST address. */
+  if (chk_addr(daddr) == IS_BROADCAST) {
+	DPRINTF((DBG_DEV, "ETH: Using MAC Broadcast\n"));
+	memcpy(eth->h_dest, dev->broadcast, dev->addr_len);
+	return(dev->hard_header_len);
+  }
+
+  /* No. Ask ARP to resolve the Ethernet address. */
+  if (arp_find(eth->h_dest, daddr, dev, saddr)) {
+	return(-dev->hard_header_len);
+  } else return(dev->hard_header_len);
+}
+
+
+/* Rebuild the Ethernet MAC header. */
+int
+eth_rebuild_header(void *buff, struct device *dev)
+{
+  struct ethhdr *eth;
+  unsigned long src, dst;
+
+  DPRINTF((DBG_DEV, "ETH: Using MAC Broadcast\n"));
+  eth = buff;
+  src = *(unsigned long *) eth->h_source;
+  dst = *(unsigned long *) eth->h_dest;
+  DPRINTF((DBG_DEV, "ETH: RebuildHeader: SRC=%s ", in_ntoa(src)));
+  DPRINTF((DBG_DEV, "DST=%s\n", in_ntoa(dst)));
+  if (arp_find(eth->h_dest, dst, dev, src)) return(1);
+  memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
+  return(0);
+}
+
+
+/* Add an ARP entry for a host on this interface. */
+void
+eth_add_arp(unsigned long addr, struct sk_buff *skb, struct device *dev)
+{
+  struct ethhdr *eth;
+
+  eth = (struct ethhdr *) (skb + 1);
+  arp_add(addr, eth->h_source, dev);
+}
+
+
+/* Determine the packet's protocol ID. */
+unsigned short
+eth_type_trans(struct sk_buff *skb, struct device *dev)
+{
+  struct ethhdr *eth;
+
+  eth = (struct ethhdr *) (skb + 1);
+  return(eth->h_proto);
+}

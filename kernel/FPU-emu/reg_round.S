@@ -8,15 +8,20 @@
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
- | Not callable from C.                                                      |
- | Must be entered by a jmp intruction.                                      |
+ | This code has four possible entry points.                                 |
+ | The following must be entered by a jmp intruction:                        |
+ |   FPU_round, FPU_round_sqrt, and FPU_Arith_exit.                          |
+ |                                                                           |
+ | The _round_reg entry point is intended to be used by C code.              |
+ | From C, call as:                                                          |
+ | void round_reg(FPU_REG *arg, unsigned int extent, unsigned int control_w) |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- | Two entry points.                                                         |
+ | Four entry points.                                                        |
  |                                                                           |
- | Needed by both entry points:                                              |
+ | Needed by both the FPU_round and FPU_round_sqrt entry points:             |
  |  %eax:%ebx  64 bit significand                                            |
  |  %edx       32 bit extension of the significand                           |
  |  %edi       pointer to an FPU_REG for the result to be stored             |
@@ -50,22 +55,74 @@
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------+
+ |  The code in this module has become quite complex, but it should handle   |
+ |  all of the FPU flags which are set at this stage of the basic arithmetic |
+ |  computations.                                                            |
+ |  There are a few rare cases where the results are not set identically to  |
+ |  a real FPU. These require a bit more thought because at this stage the   |
+ |  results of the code here appear to be more consistent...                 |
+ |  This may be changed in a future version.                                 |
+ +---------------------------------------------------------------------------*/
+
+
 #include "fpu_asm.h"
-#include "fpu_emu.h"
 #include "exception.h"
 #include "control_w.h"
 
+#define	LOST_DOWN	$1
+#define	LOST_UP		$2
+#define	DENORMAL	$1
+#define	UNMASKED_UNDERFLOW $2
+
+.data
+	.align 2,0
+FPU_bits_lost:
+	.byte	0
+FPU_denormal:
+	.byte	0
 
 .text
 	.align 2,144
 .globl FPU_round
 .globl FPU_round_sqrt
+.globl FPU_Arith_exit
+.globl _round_reg
 
-FPU_round:
-	/* Round the result */
+// Entry point when called from C
+_round_reg:
+	pushl	%ebp
+	movl	%esp,%ebp
+	pushl	%esi
+	pushl	%edi
+	pushl	%ebx
+
+	movl	PARAM1,%edi
+	movl	SIGH(%edi),%eax
+	movl	SIGL(%edi),%ebx
+	movl	PARAM2,%edx
+	movl	PARAM3,%ecx
+	jmp	FPU_round_sqrt
+
+FPU_round:		// Normal entry point
 	movl	PARAM4,%ecx
 
-FPU_round_sqrt:		// entry point from wm_sqrt.S
+FPU_round_sqrt:		// Entry point from wm_sqrt.S
+
+#ifdef PARANOID
+// Cannot use this here yet
+//	orl	%eax,%eax
+//	jns	L_entry_bugged
+#endif PARANOID
+
+	cmpl	EXP_UNDER,EXP(%edi)
+	jle	xMake_denorm			// The number is a de-normal
+
+	movb	$0,FPU_denormal			// 0 -> not a de-normal
+
+xDenorm_done:
+	movb	$0,FPU_bits_lost		// No bits yet lost in rounding
+
 	movl	%ecx,%esi
 	andl	CW_PC,%ecx
 	cmpl	PR_64_BITS,%ecx
@@ -82,6 +139,7 @@ FPU_round_sqrt:		// entry point from wm_sqrt.S
 #endif PARANOID
 
 
+// Round etc to 24 bit precision
 LRound_To_24:
 	movl	%esi,%ecx
 	andl	CW_RC,%ecx
@@ -89,7 +147,7 @@ LRound_To_24:
 	je	LRound_nearest_24
 
 	cmpl	RC_CHOP,%ecx
-	je	LTruncate_24
+	je	LCheck_truncate_24
 
 	cmpl	RC_UP,%ecx		// Towards +infinity
 	je	LUp_24
@@ -103,75 +161,65 @@ LRound_To_24:
 
 LUp_24:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LUp_24_pos
+	jne	LCheck_truncate_24	// If negative then  up==truncate
 
-	movl	%eax,%ecx
-	andl	$0x000000ff,%ecx
-	orl	%ebx,%ecx
-	orl	%edx,%ecx
-	jnz	LTruncate_24
-	jmp	L_store
-
-LUp_24_pos:
-	movl	%eax,%ecx
-	andl	$0x000000ff,%ecx
-	orl	%ebx,%ecx
-	orl	%edx,%ecx
-	jnz	LDo_24_round_up
-	jmp	L_store
+	jmp	LCheck_24_round_up
 
 LDown_24:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LDown_24_pos
+	je	LCheck_truncate_24	// If positive then  down==truncate
 
+LCheck_24_round_up:
 	movl	%eax,%ecx
 	andl	$0x000000ff,%ecx
 	orl	%ebx,%ecx
 	orl	%edx,%ecx
 	jnz	LDo_24_round_up
-	jmp	L_store
-
-LDown_24_pos:
-	movl	%eax,%ecx
-	andl	$0x000000ff,%ecx
-	orl	%ebx,%ecx
-	orl	%edx,%ecx
-	jnz	LTruncate_24
-	jmp	L_store
+	jmp	LRe_normalise
 
 LRound_nearest_24:
 	// Do rounding of the 24th bit if needed (nearest or even)
 	movl	%eax,%ecx
 	andl	$0x000000ff,%ecx
 	cmpl	$0x00000080,%ecx
-	jc	LTruncate_24		// less than half, no increment needed
+	jc	LCheck_truncate_24	// less than half, no increment needed
 
 	jne	LGreater_Half_24	// greater than half, increment needed
 
 	// Possibly half, we need to check the ls bits
 	orl	%ebx,%ebx
-	jne	LGreater_Half_24	// greater than half, increment needed
+	jnz	LGreater_Half_24	// greater than half, increment needed
 
 	orl	%edx,%edx
-	jne	LGreater_Half_24	// greater than half, increment needed
+	jnz	LGreater_Half_24	// greater than half, increment needed
 
 	// Exactly half, increment only if 24th bit is 1 (round to even)
 	testl	$0x00000100,%eax
-	jz	LTruncate_24
+	jz	LDo_truncate_24
 
 LGreater_Half_24:			// Rounding: increment at the 24th bit
 LDo_24_round_up:
 	andl	$0xffffff00,%eax	// Truncate to 24 bits
 	xorl	%ebx,%ebx
+	movb	LOST_UP,FPU_bits_lost
 	addl	$0x00000100,%eax
 	jmp	LCheck_Round_Overflow
 
-LTruncate_24:
+LCheck_truncate_24:
+	movl	%eax,%ecx
+	andl	$0x000000ff,%ecx
+	orl	%ebx,%ecx
+	orl	%edx,%ecx
+	jz	LRe_normalise			// No truncation needed
+
+LDo_truncate_24:
 	andl	$0xffffff00,%eax	// Truncate to 24 bits
 	xorl	%ebx,%ebx
-	jmp	L_store
+	movb	LOST_DOWN,FPU_bits_lost
+	jmp	LRe_normalise
 
 
+// Round etc to 53 bit precision
 LRound_To_53:
 	movl	%esi,%ecx
 	andl	CW_RC,%ecx
@@ -179,7 +227,7 @@ LRound_To_53:
 	je	LRound_nearest_53
 
 	cmpl	RC_CHOP,%ecx
-	je	LTruncate_53
+	je	LCheck_truncate_53
 
 	cmpl	RC_UP,%ecx		// Towards +infinity
 	je	LUp_53
@@ -193,50 +241,33 @@ LRound_To_53:
 
 LUp_53:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LUp_53_pos
+	jne	LCheck_truncate_53	// If negative then  up==truncate
 
-	movl	%ebx,%ecx
-	andl	$0x000007ff,%ecx
-	orl	%edx,%ecx
-	jnz	LTruncate_53
-	jmp	L_store
-
-LUp_53_pos:
-	movl	%ebx,%ecx
-	andl	$0x000007ff,%ecx
-	orl	%edx,%ecx
-	jnz	LDo_53_round_up
-	jmp	L_store
+	jmp	LCheck_53_round_up
 
 LDown_53:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LDown_53_pos
+	je	LCheck_truncate_53	// If positive then  down==truncate
 
+LCheck_53_round_up:
 	movl	%ebx,%ecx
 	andl	$0x000007ff,%ecx
 	orl	%edx,%ecx
 	jnz	LDo_53_round_up
-	jmp	L_store
-
-LDown_53_pos:
-	movl	%ebx,%ecx
-	andl	$0x000007ff,%ecx
-	orl	%edx,%ecx
-	jnz	LTruncate_53
-	jmp	L_store
+	jmp	LRe_normalise
 
 LRound_nearest_53:
 	// Do rounding of the 53rd bit if needed (nearest or even)
 	movl	%ebx,%ecx
 	andl	$0x000007ff,%ecx
 	cmpl	$0x00000400,%ecx
-	jc	LTruncate_53		// less than half, no increment needed
+	jc	LCheck_truncate_53	// less than half, no increment needed
 
-	jne	LGreater_Half_53	// greater than half, increment needed
+	jnz	LGreater_Half_53	// greater than half, increment needed
 
 	// Possibly half, we need to check the ls bits
 	orl	%edx,%edx
-	jne	LGreater_Half_53	// greater than half, increment needed
+	jnz	LGreater_Half_53	// greater than half, increment needed
 
 	// Exactly half, increment only if 53rd bit is 1 (round to even)
 	testl	$0x00000800,%ebx
@@ -244,16 +275,25 @@ LRound_nearest_53:
 
 LGreater_Half_53:			// Rounding: increment at the 53rd bit
 LDo_53_round_up:
+	movb	LOST_UP,FPU_bits_lost
 	andl	$0xfffff800,%ebx	// Truncate to 53 bits
 	addl	$0x00000800,%ebx
 	adcl	$0,%eax
 	jmp	LCheck_Round_Overflow
 
+LCheck_truncate_53:
+	movl	%ebx,%ecx
+	andl	$0x000007ff,%ecx
+	orl	%edx,%ecx
+	jz	LRe_normalise
+
 LTruncate_53:
+	movb	LOST_DOWN,FPU_bits_lost
 	andl	$0xfffff800,%ebx	// Truncate to 53 bits
-	jmp	L_store
+	jmp	LRe_normalise
 
 
+// Round etc to 64 bit precision
 LRound_To_64:
 	movl	%esi,%ecx
 	andl	CW_RC,%ecx
@@ -261,7 +301,7 @@ LRound_To_64:
 	je	LRound_nearest_64
 
 	cmpl	RC_CHOP,%ecx
-	je	LTruncate_64
+	je	LCheck_truncate_64
 
 	cmpl	RC_UP,%ecx		// Towards +infinity
 	je	LUp_64
@@ -275,68 +315,74 @@ LRound_To_64:
 
 LUp_64:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LUp_64_pos
+	jne	LCheck_truncate_64	// If negative then  up==truncate
 
-	orl	%edx,%edx
-	jnz	LTruncate_64
-	jmp	L_store
-
-LUp_64_pos:
 	orl	%edx,%edx
 	jnz	LDo_64_round_up
-	jmp	L_store
+	jmp	LRe_normalise
 
 LDown_64:
 	cmpb	SIGN_POS,SIGN(%edi)
-	je	LDown_64_pos
+	je	LCheck_truncate_64	// If positive then  down==truncate
 
 	orl	%edx,%edx
 	jnz	LDo_64_round_up
-	jmp	L_store
-
-LDown_64_pos:
-	orl	%edx,%edx
-	jnz	LTruncate_64
-	jmp	L_store
+	jmp	LRe_normalise
 
 LRound_nearest_64:
 	cmpl	$0x80000000,%edx
-	jc	LTruncate_64
+	jc	LCheck_truncate_64
 
 	jne	LDo_64_round_up
 
 	/* Now test for round-to-even */
 	testb	$1,%ebx
-	jz	LTruncate_64
+	jz	LCheck_truncate_64
 
 LDo_64_round_up:
+	movb	LOST_UP,FPU_bits_lost
 	addl	$1,%ebx
 	adcl	$0,%eax
 
 LCheck_Round_Overflow:
-	jnc	L_store		/* Rounding done, no overflow */
+	jnc	LRe_normalise		/* Rounding done, no overflow */
 
 	/* Overflow, adjust the result (to 1.0) */
 	rcrl	$1,%eax
 	rcrl	$1,%ebx
 	incl	EXP(%edi)
+	jmp	LRe_normalise
+
+LCheck_truncate_64:
+	orl	%edx,%edx
+	jz	LRe_normalise
 
 LTruncate_64:
-L_store:
-	/* store the result */
-	movl	%eax,SIGH(%edi)
-	movl	%ebx,SIGL(%edi)
+	movb	LOST_DOWN,FPU_bits_lost
 
-	movb	TW_Valid,TAG(%edi)		/* Set the tags to TW_Valid */
+LRe_normalise:
+	testb	$0xff,FPU_denormal
+	jnz	xNormalise_result
 
-	// The number may have overflowed
+xL_Normalised:
+	cmpb	LOST_UP,FPU_bits_lost
+	je	xL_precision_lost_up
+
+	cmpb	LOST_DOWN,FPU_bits_lost
+	je	xL_precision_lost_down
+
+xL_no_precision_loss:
 	cmpl	EXP_OVER,EXP(%edi)
 	jge	L_overflow
 
-	cmpl	EXP_UNDER,EXP(%edi)
-	jle	L_underflow
+	/* store the result */
+	movb	TW_Valid,TAG(%edi)
 
-L_exit:
+xL_Store_significand:
+	movl	%eax,SIGH(%edi)
+	movl	%ebx,SIGL(%edi)
+
+FPU_Arith_exit:
 	popl	%ebx
 	popl	%edi
 	popl	%esi
@@ -344,19 +390,193 @@ L_exit:
 	ret
 
 
-/* The operations resulted in a number too large to represent */
+// Set the FPU status flags to represent precision loss due to
+// round-up.
+xL_precision_lost_up:
+	push	%eax
+	call	_set_precision_flag_up
+	popl	%eax
+	jmp	xL_no_precision_loss
+
+// Set the FPU status flags to represent precision loss due to
+// truncation.
+xL_precision_lost_down:
+	push	%eax
+	call	_set_precision_flag_down
+	popl	%eax
+	jmp	xL_no_precision_loss
+
+
+// The number is a denormal (which might get rounded up to a normal)
+// Shift the number right the required number of bits, which will
+// have to be undone later...
+xMake_denorm:
+	// The action to be taken depends upon whether the underflow
+	// exception is masked
+	testb	CW_Underflow,%cl		// Underflow mask.
+	jz	xUnmasked_underflow		// Do not make a denormal.
+
+	movb	DENORMAL,FPU_denormal
+
+	pushl	%ecx		// Save
+	movl	EXP(%edi),%ecx
+	subl	EXP_UNDER+1,%ecx
+	negl	%ecx
+
+	cmpl	$64,%ecx	/* shrd only works for 0..31 bits */
+	jnc	xDenorm_shift_more_than_63
+
+	cmpl	$32,%ecx	/* shrd only works for 0..31 bits */
+	jnc	xDenorm_shift_more_than_32
+
+// We got here without jumps by assuming that the most common requirement
+//   is for a small de-normalising shift.
+// Shift by [1..31] bits
+	addl	%ecx,EXP(%edi)
+	orl	%edx,%edx	// extension
+	setne	%ch
+	xorl	%edx,%edx
+	shrd	%cl,%ebx,%edx
+	shrd	%cl,%eax,%ebx
+	shr	%cl,%eax
+	orb	%ch,%dl
+	popl	%ecx
+	jmp	xDenorm_done
+
+// Shift by [32..63] bits
+xDenorm_shift_more_than_32:
+	addl	%ecx,EXP(%edi)
+	subb	$32,%cl
+	orl	%edx,%edx
+	setne	%ch
+	orb	%ch,%bl
+	xorl	%edx,%edx
+	shrd	%cl,%ebx,%edx
+	shrd	%cl,%eax,%ebx
+	shr	%cl,%eax
+	orl	%edx,%edx		// test these 32 bits
+	setne	%cl
+	orb	%ch,%bl
+	orb	%cl,%bl
+	movl	%ebx,%edx
+	movl	%eax,%ebx
+	xorl	%eax,%eax
+	popl	%ecx
+	jmp	xDenorm_done
+
+// Shift by [64..) bits
+xDenorm_shift_more_than_63:
+	cmpl	$64,%ecx
+	jne	xDenorm_shift_more_than_64
+
+// Exactly 64 bit shift
+	addl	%ecx,EXP(%edi)
+	xorl	%ecx,%ecx
+	orl	%edx,%edx
+	setne	%cl
+	orl	%ebx,%ebx
+	setne	%ch
+	orb	%ch,%cl
+	orb	%cl,%al
+	movl	%eax,%edx
+	xorl	%eax,%eax
+	xorl	%ebx,%ebx
+	popl	%ecx
+	jmp	xDenorm_done
+
+xDenorm_shift_more_than_64:
+	movl	EXP_UNDER+1,EXP(%edi)
+// This is easy, %eax must be non-zero, so..
+	movl	$1,%edx
+	xorl	%eax,%eax
+	xorl	%ebx,%ebx
+	popl	%ecx
+	jmp	xDenorm_done
+
+
+xUnmasked_underflow:
+	// Increase the exponent by the magic number
+	addl	$(3*(1<<13)),EXP(%edi)
+	movb	UNMASKED_UNDERFLOW,FPU_denormal
+	jmp	xDenorm_done
+
+
+// Undo the de-normalisation.
+xNormalise_result:
+	cmpb	UNMASKED_UNDERFLOW,FPU_denormal
+	je	xSignal_underflow
+
+// The number must be a denormal if we got here.
+#ifdef PARANOID
+	// But check it... just in case.
+	cmpl	EXP_UNDER+1,EXP(%edi)
+	jne	L_norm_bugged
+#endif PARANOID
+
+	orl	%eax,%eax	// ms bits
+	jnz	LNormalise_shift_up_to_31	// Shift left 0 - 31 bits
+
+	orl	%ebx,%ebx
+	jz	L_underflow_to_zero	// The contents are zero
+
+// Shift left 32 - 63 bits
+	movl	%ebx,%eax
+	xorl	%ebx,%ebx
+	subl	$32,EXP(%edi)
+
+LNormalise_shift_up_to_31:
+	bsrl	%eax,%ecx	/* get the required shift in %ecx */
+	subl	$31,%ecx
+	negl	%ecx
+	shld	%cl,%ebx,%eax
+	shl	%cl,%ebx
+	subl	%ecx,EXP(%edi)
+
+LNormalise_shift_done:
+	testb	$0xff,FPU_bits_lost	// bits lost == underflow
+	jz	xL_Normalised
+
+	// There must be a masked underflow
+	push	%eax
+	pushl	EX_Underflow
+	call	_exception
+	popl	%eax
+	popl	%eax
+	jmp	xL_Normalised
+
+
+// The operations resulted in a number too small to represent.
+// Masked response.
+L_underflow_to_zero:
+	push	%eax
+	call	_set_precision_flag_down
+	popl	%eax
+
+	push	%eax
+	pushl	EX_Underflow
+	call	_exception
+	popl	%eax
+	popl	%eax
+
+	movb	TW_Zero,TAG(%edi)
+	jmp	xL_Store_significand
+
+
+// The operations resulted in a number too large to represent.
 L_overflow:
 	push	%edi
 	call	_arith_overflow
 	pop	%edi
-	jmp	L_exit
+	jmp	FPU_Arith_exit
 
-/* The operations resulted in a number too small to represent */
-L_underflow:
-	pushl	%edi
-	call	_arith_underflow
-	popl	%edi
-	jmp	L_exit
+
+xSignal_underflow:
+	push	%eax
+	pushl	EX_Underflow
+	call	EXCEPTION
+	popl	%eax
+	popl	%eax
+	jmp	xL_Normalised
 
 
 #ifdef PARANOID
@@ -364,6 +584,18 @@ L_underflow:
 L_bugged:
 	pushl	EX_INTERNAL|0x201
 	call	EXCEPTION
-	pop	%ebx
-	jmp	L_exit
+	popl	%ebx
+	jmp	FPU_Arith_exit
+
+L_norm_bugged:
+	pushl	EX_INTERNAL|0x216
+	call	EXCEPTION
+	popl	%ebx
+	jmp	FPU_Arith_exit
+
+L_entry_bugged:
+	pushl	EX_INTERNAL|0x217
+	call	EXCEPTION
+	popl	%ebx
+	jmp	FPU_Arith_exit
 #endif PARANOID

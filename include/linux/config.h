@@ -19,6 +19,10 @@
 #define UTS_MACHINE "i386"	/* hardware type */
 #endif
 
+#ifndef UTS_DOMAINNAME
+#define UTS_DOMAINNAME "(none)"	/* set by setdomainname() */
+#endif
+
 /*
  * The definitions for UTS_RELEASE and UTS_VERSION are now defined
  * in linux/version.h, and should only be used by linux/version.c

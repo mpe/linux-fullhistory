@@ -82,6 +82,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
 	    }
 #ifdef PARANOID
 	  EXCEPTION(EX_INTERNAL|0x104);	/* There must be a logic error */
+	  return;
 #endif PARANOID
 	}
       /* The argument is in the range  [0.5 .. 1.0) */
@@ -94,7 +95,7 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
 
 #ifdef PARANOID
   if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
-    { arith_invalid(y_reg); return; }
+    { arith_invalid(y_reg); return; }  /* Need a positive number */
 #endif PARANOID
 
   *(long long *)&arg_signif = *(long long *)&(arg->sigl);

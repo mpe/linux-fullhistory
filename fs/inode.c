@@ -12,18 +12,105 @@
 
 #include <asm/system.h>
 
-static struct inode * inode_table;
-static struct inode * last_inode;
+static struct inode * hash_table[NR_IHASH];
+static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
+static int nr_inodes = 0, nr_free_inodes = 0;
+
+static inline int const hashfn(dev_t dev, int i)
+{
+	return (dev ^ i) % NR_IHASH;
+}
+
+static inline struct inode ** const hash(dev_t dev, int i)
+{
+	return hash_table + hashfn(dev, i);
+}
+
+static void insert_inode_free(struct inode *inode)
+{
+	inode->i_next = first_inode;
+	inode->i_prev = first_inode->i_prev;
+	inode->i_next->i_prev = inode;
+	inode->i_prev->i_next = inode;
+	first_inode = inode;
+}
+
+static void remove_inode_free(struct inode *inode)
+{
+	if (first_inode == inode)
+		first_inode = first_inode->i_next;
+	if (inode->i_next)
+		inode->i_next->i_prev = inode->i_prev;
+	if (inode->i_prev)
+		inode->i_prev->i_next = inode->i_next;
+	inode->i_next = inode->i_prev = NULL;
+}
+
+void insert_inode_hash(struct inode *inode)
+{
+	struct inode **h;
+	h = hash(inode->i_dev, inode->i_ino);
+
+	inode->i_hash_next = *h;
+	inode->i_hash_prev = NULL;
+	if (inode->i_hash_next)
+		inode->i_hash_next->i_hash_prev = inode;
+	*h = inode;
+}
+
+static void remove_inode_hash(struct inode *inode)
+{
+	struct inode **h;
+	h = hash(inode->i_dev, inode->i_ino);
+
+	if (*h == inode)
+		*h = inode->i_hash_next;
+	if (inode->i_hash_next)
+		inode->i_hash_next->i_hash_prev = inode->i_hash_prev;
+	if (inode->i_hash_prev)
+		inode->i_hash_prev->i_hash_next = inode->i_hash_next;
+	inode->i_hash_prev = inode->i_hash_next = NULL;
+}
+
+static void put_last_free(struct inode *inode)
+{
+	remove_inode_free(inode);
+	inode->i_prev = first_inode->i_prev;
+	inode->i_prev->i_next = inode;
+	inode->i_next = first_inode;
+	inode->i_next->i_prev = inode;
+}
+
+void grow_inodes(void)
+{
+	unsigned long page;
+	struct inode * inode;
+	int i;
+
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+		return;
+	inode = (struct inode *) page;
+	for (i=0; i < (PAGE_SIZE / sizeof(struct inode)); i++, inode++)
+	{
+		if (!first_inode)
+		{
+			inode->i_next = inode;
+			inode->i_prev = inode;
+			first_inode = inode;
+		}
+		else
+			insert_inode_free(inode);
+	}
+	nr_inodes += i;
+	nr_free_inodes += i;
+}
 
 unsigned long inode_init(unsigned long start, unsigned long end)
 {
-	start += 0x0000000f;
-	start &= 0xfffffff0;
-	inode_table = (struct inode *) start;
-	last_inode = inode_table;
-	start = (unsigned long) (inode_table + NR_INODE);
-	memset(inode_table,0,NR_INODE*sizeof(struct inode));
+	memset(hash_table, 0, sizeof(hash_table));
+	first_inode = NULL;
 	return start;
 }
 
@@ -65,15 +152,21 @@ void clear_inode(struct inode * inode)
 
 	wait_on_inode(inode);
 	wait = ((volatile struct inode *) inode)->i_wait;
+	remove_inode_hash(inode);
+	remove_inode_free(inode);
+	if (inode->i_count)
+		nr_free_inodes++;
 	memset(inode,0,sizeof(*inode));
 	((volatile struct inode *) inode)->i_wait = wait;
+	insert_inode_free(inode);
 }
 
 int fs_may_mount(dev_t dev)
 {
 	struct inode * inode;
+	int i;
 
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
+	for (inode = first_inode, i=0; i<nr_inodes; i++, inode=inode->i_next) {
 		if (inode->i_dev != dev)
 			continue;
 		if (inode->i_count || inode->i_dirt || inode->i_lock)
@@ -86,13 +179,30 @@ int fs_may_mount(dev_t dev)
 int fs_may_umount(dev_t dev, struct inode * mount_root)
 {
 	struct inode * inode;
+	int i;
 
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
+	for (inode = first_inode, i=0; i<nr_inodes; i++, inode=inode->i_next) {
 		if (inode->i_dev==dev && inode->i_count)
 			if (inode == mount_root && inode->i_count == 1)
 				continue;
 			else
 				return 0;
+	}
+	return 1;
+}
+
+int fs_may_remount_ro(dev_t dev)
+{
+	struct file * file;
+	int i;
+
+	/* Check that no files are currently opened for writing. */
+	for (file = first_file, i=0; i<nr_files; i++, file=file->f_next) {
+		if (!file->f_count || !file->f_inode ||
+		    file->f_inode->i_dev != dev)
+			continue;
+		if (S_ISREG(file->f_inode->i_mode) && (file->f_mode & 2))
+			return 0;
 	}
 	return 1;
 }
@@ -159,8 +269,8 @@ void invalidate_inodes(dev_t dev)
 	int i;
 	struct inode * inode;
 
-	inode = 0+inode_table;
-	for(i=0 ; i<NR_INODE ; i++,inode++) {
+	inode = first_inode;
+	for(i = 0; i < nr_inodes*2; i++, inode = inode->i_next) {
 		wait_on_inode(inode);
 		if (inode->i_dev == dev) {
 			if (inode->i_count) {
@@ -175,9 +285,11 @@ void invalidate_inodes(dev_t dev)
 
 void sync_inodes(dev_t dev)
 {
+	int i;
 	struct inode * inode;
 
-	for(inode = 0+inode_table ; inode < NR_INODE+inode_table ; inode++) {
+	inode = first_inode;
+	for(i = 0; i < nr_inodes*2; i++, inode = inode->i_next) {
 		if (dev && inode->i_dev != dev)
 			continue;
 		wait_on_inode(inode);
@@ -224,25 +336,36 @@ repeat:
 		goto repeat;
 	}
 	inode->i_count--;
+	nr_free_inodes++;
 	return;
 }
 
 struct inode * get_empty_inode(void)
 {
-	struct inode * inode;
+	struct inode * inode, * best;
 	int i;
 
+	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 2))
+		grow_inodes();
 repeat:
-	inode = NULL;
-	for (i = NR_INODE; i ; i--) {
-		if (++last_inode >= inode_table + NR_INODE)
-			last_inode = inode_table;
-		if (!last_inode->i_count) {
-			inode = last_inode;
-			if (!inode->i_dirt && !inode->i_lock)
+	inode = first_inode;
+	best = NULL;
+	for (i = 0; i<nr_inodes; inode = inode->i_next, i++) {
+		if (!inode->i_count) {
+			if (!best)
+				best = inode;
+			if (!inode->i_dirt && !inode->i_lock) {
+				best = inode;
 				break;
+			}
 		}
 	}
+	if (!best || best->i_dirt || best->i_lock)
+		if (nr_inodes < NR_INODE) {
+			grow_inodes();
+			goto repeat;
+		}
+	inode = best;
 	if (!inode) {
 		printk("VFS: No free inodes - contact Linus\n");
 		sleep_on(&inode_wait);
@@ -261,6 +384,12 @@ repeat:
 	clear_inode(inode);
 	inode->i_count = 1;
 	inode->i_nlink = 1;
+	nr_free_inodes--;
+	if (nr_free_inodes < 0)
+	{
+		printk ("VFS: get_empty_inode: bad free inode count.\n");
+		nr_free_inodes = 0;
+	}
 	return inode;
 }
 
@@ -293,18 +422,19 @@ struct inode * iget(struct super_block * sb,int nr)
 
 	if (!sb)
 		panic("VFS: iget with sb==NULL");
+repeat:
 	empty = get_empty_inode();
-	inode = inode_table;
-	while (inode < NR_INODE+inode_table) {
+	inode = *(hash(sb->s_dev,nr));
+	while (inode) {
 		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
-			inode++;
+			inode = inode->i_hash_next;
 			continue;
 		}
 		wait_on_inode(inode);
-		if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
-			inode = inode_table;
-			continue;
-		}
+		if (inode->i_dev != sb->s_dev || inode->i_ino != nr)
+			goto repeat;
+		if (!inode->i_count)
+			nr_free_inodes--;
 		inode->i_count++;
 		if (inode->i_mount) {
 			int i;
@@ -314,14 +444,8 @@ struct inode * iget(struct super_block * sb,int nr)
 					break;
 			if (i >= NR_SUPER) {
 				printk("VFS: Mounted inode hasn't got sb\n");
-				if (empty) {
-					if (last_inode > inode_table)
-						--last_inode;
-					else
-						last_inode
-						= inode_table + NR_INODE;
+				if (empty)
 					iput(empty);
-				}
 				return inode;
 			}
 			iput(inode);
@@ -329,18 +453,14 @@ struct inode * iget(struct super_block * sb,int nr)
 				printk("VFS: Mounted device %d/%d has no rootinode\n",
 					MAJOR(inode->i_dev), MINOR(inode->i_dev));
 			else {
+				if (!inode->i_count)
+					nr_free_inodes--;
 				inode->i_count++;
 				wait_on_inode(inode);
 			}
 		}
-		if (empty) {
-			if (last_inode > inode_table)
-				--last_inode;
-			else
-				last_inode
-				= inode_table + NR_INODE;
+		if (empty)
 			iput(empty);
-		}
 		return inode;
 	}
 	if (!empty)
@@ -350,6 +470,8 @@ struct inode * iget(struct super_block * sb,int nr)
 	inode->i_dev = sb->s_dev;
 	inode->i_ino = nr;
 	inode->i_flags = sb->s_flags;
+	put_last_free(inode);
+	insert_inode_hash(inode);
 	read_inode(inode);
 	return inode;
 }

@@ -55,13 +55,13 @@ int	poly_2xm1(FPU_REG *arg, FPU_REG *result)
 
   if ( exponent >= 0 )	/* Can't hack a number >= 1.0 */
     {
-      arith_invalid(result);
+      arith_invalid(result);  /* Number too large */
       return 1;
     }
 
   if ( arg->sign != SIGN_POS )	/* Can't hack a number < 0.0 */
     {
-      arith_invalid(result);
+      arith_invalid(result);  /* Number negative */
       return 1;
     }
   

@@ -41,7 +41,7 @@ static struct file_operations ext2_dir_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
-	NULL			/* fsync */
+	file_fsync		/* fsync */
 };
 
 /*
@@ -77,13 +77,13 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 		error_msg = "rec_len % 4 != 0";
 	else if (de->rec_len < EXT2_DIR_REC_LEN(de->name_len))
 		error_msg = "rec_len is too small for name_len";
-	else if (((char *) de - bh->b_data) + de->rec_len >
+	else if (dir && ((char *) de - bh->b_data) + de->rec_len >
 		 dir->i_sb->s_blocksize)
-		error_msg = "directory entry accross blocks";
+		error_msg = "directory entry across blocks";
 
 	if (error_msg != NULL) {
 		printk ("%s: bad directory entry (dev %04x, dir %d): %s\n",
-			function, dir->i_dev, dir->i_ino, error_msg);
+			function, dir ? dir->i_dev : 0, dir->i_ino, error_msg);
 		printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
 			offset, de->inode, de->rec_len,	de->name_len);
 	}

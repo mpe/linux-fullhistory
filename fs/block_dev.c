@@ -176,3 +176,8 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	filp->f_reada = 1;
 	return read;
 }
+
+int block_fsync(struct inode *inode, struct file *filp)
+{
+	return fsync_dev (inode->i_rdev);
+}

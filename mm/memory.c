@@ -37,6 +37,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/ptrace.h>
 
 unsigned long high_memory = 0;
 
@@ -112,15 +113,33 @@ static void free_one_table(unsigned long * page_dir)
 void clear_page_tables(struct task_struct * tsk)
 {
 	int i;
+	unsigned long pg_dir;
 	unsigned long * page_dir;
 
 	if (!tsk)
 		return;
 	if (tsk == task[0])
 		panic("task[0] (swapper) doesn't support exec()\n");
-	page_dir = (unsigned long *) tsk->tss.cr3;
+	pg_dir = tsk->tss.cr3;
+	page_dir = (unsigned long *) pg_dir;
 	if (!page_dir || page_dir == swapper_pg_dir) {
 		printk("Trying to clear kernel page-directory: not good\n");
+		return;
+	}
+	if (mem_map[MAP_NR(pg_dir)] > 1) {
+		unsigned long page;
+		unsigned long * new;
+
+		page = get_free_page(GFP_KERNEL);
+		if (!page) {
+			oom(tsk);
+			return;
+		}
+		new = (unsigned long *) page;
+		for (i = 768 ; i < 1024 ; i++)
+			new[i] = page_dir[i];
+		free_page(pg_dir);
+		tsk->tss.cr3 = page;
 		return;
 	}
 	for (i = 0 ; i < 768 ; i++,page_dir++)
@@ -284,7 +303,9 @@ int unmap_page_range(unsigned long from, unsigned long size)
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (1 & page) {
-					--current->rss;
+					if (!(mem_map[MAP_NR(page)]
+					      & MAP_PAGE_RESERVED))
+						--current->rss;
 					free_page(0xfffff000 & page);
 				} else
 					swap_free(page);
@@ -341,13 +362,13 @@ int zeromap_page_range(unsigned long from, unsigned long size, int mask)
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (page & PAGE_PRESENT) {
-					--current->rss;
+					if (!(mem_map[MAP_NR(page)]
+					      & MAP_PAGE_RESERVED))
+						--current->rss;
 					free_page(0xfffff000 & page);
 				} else
 					swap_free(page);
 			}
-			if (mask)
-				++current->rss;
 			*page_table++ = mask;
 		}
 		pcnt = (size > 1024 ? 1024 : size);
@@ -402,7 +423,9 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (PAGE_PRESENT & page) {
-					--current->rss;
+					if (!(mem_map[MAP_NR(page)]
+					      & MAP_PAGE_RESERVED))
+						--current->rss;
 					free_page(0xfffff000 & page);
 				} else
 					swap_free(page);
@@ -418,10 +441,11 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 			if (!mask || to >= high_memory || !mem_map[MAP_NR(to)])
 				*page_table++ = 0;	/* not present */
 			else {
-				++current->rss;
 				*page_table++ = (to | mask);
-				if (!(mem_map[MAP_NR(to)] & MAP_PAGE_RESERVED))
+				if (!(mem_map[MAP_NR(to)] & MAP_PAGE_RESERVED)) {
+					++current->rss;
 					mem_map[MAP_NR(to)]++;
+				}
 			}
 			to += PAGE_SIZE;
 		}
@@ -440,17 +464,12 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 static unsigned long put_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address,int prot)
 {
-	unsigned long tmp, *page_table;
+	unsigned long *page_table;
 
 	if ((prot & 0xfffff001) != PAGE_PRESENT)
 		printk("put_page: prot = %08x\n",prot);
 	if (page >= high_memory) {
 		printk("put_page: trying to put page %p at %p\n",page,address);
-		return 0;
-	}
-	tmp = mem_map[MAP_NR(page)];
-	if (!(tmp & MAP_PAGE_RESERVED) && (tmp != 1)) {
-		printk("put_page: mem_map disagrees with %p at %p\n",page,address);
 		return 0;
 	}
 	page_table = (unsigned long *) (tsk->tss.cr3 + ((address>>20) & 0xffc));
@@ -550,6 +569,8 @@ static void __do_wp_page(unsigned long error_code, unsigned long address,
 	old_page &= 0xfffff000;
 	if (mem_map[MAP_NR(old_page)] != 1) {
 		if (new_page) {
+			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
+				++tsk->rss;
 			copy_page(old_page,new_page);
 			*(unsigned long *) pte = new_page | prot;
 			free_page(old_page);
@@ -841,7 +862,6 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		++tsk->min_flt;
 		return;
 	}
-	++tsk->maj_flt;
 	if (!page) {
 		oom(current);
 		put_page(tsk,BAD_PAGE,address,PAGE_PRIVATE);
@@ -876,24 +896,24 @@ void do_no_page(unsigned long error_code, unsigned long address,
  * and the problem, and then passes it off to one of the appropriate
  * routines.
  */
-void do_page_fault(unsigned long *esp, unsigned long error_code)
+void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
 	unsigned long address;
 	unsigned long user_esp = 0;
 	unsigned long stack_limit;
 	unsigned int bit;
-	extern void die_if_kernel(char *,long,long);
+	extern void die_if_kernel(char *,struct pt_regs *,long);
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 	if (address < TASK_SIZE) {
 		if (error_code & 4) {	/* user mode access? */
-			if (esp[2] & VM_MASK) {
+			if (regs->eflags & VM_MASK) {
 				bit = (address - 0xA0000) >> PAGE_SHIFT;
 				if (bit < 32)
 					current->screen_bitmap |= 1 << bit;
 			} else 
-				user_esp = esp[3];
+				user_esp = regs->esp;
 		}
 		if (error_code & 1)
 			do_wp_page(error_code, address, current, user_esp);
@@ -912,7 +932,7 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 		return;
 	}
 	printk("Unable to handle kernel paging request at address %08x\n",address);
-	die_if_kernel("Oops",(long)esp,error_code);
+	die_if_kernel("Oops", regs, error_code);
 	do_exit(SIGKILL);
 }
 
@@ -1014,14 +1034,15 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem += 4095;
 	start_mem &= 0xfffff000;
 	address = 0;
-	pg_dir = swapper_pg_dir + 768;		/* at virtual addr 0xC0000000 */
+	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
-		tmp = *pg_dir;
+		tmp = *(pg_dir + 768);		/* at virtual addr 0xC0000000 */
 		if (!tmp) {
-			tmp = start_mem;
-			*pg_dir = tmp | PAGE_TABLE;
+			tmp = start_mem | PAGE_TABLE;
+			*(pg_dir + 768) = tmp;
 			start_mem += 4096;
 		}
+		*pg_dir = tmp;			/* also map it in at 0x0000000 for init */
 		pg_dir++;
 		pg_table = (unsigned long *) (tmp & 0xfffff000);
 		for (tmp = 0 ; tmp < 1024 ; tmp++,pg_table++) {

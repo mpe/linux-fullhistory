@@ -166,7 +166,7 @@ typedef char scrnmap_t;
 struct kbentry {
 	u_char kb_table;
 	u_char kb_index;
-	u_char kb_value;
+	u_short kb_value;
 };
 #define		K_NORMTAB	0x00
 #define		K_SHIFTTAB	0x01

@@ -52,7 +52,8 @@ static struct super_operations xiafs_sops = {
     xiafs_put_inode,
     xiafs_put_super,
     NULL,
-    xiafs_statfs
+    xiafs_statfs,
+    NULL
 };
 
 struct super_block *xiafs_read_super(struct super_block *s, void *data,
@@ -402,7 +403,7 @@ void xiafs_read_inode(struct inode * inode)
     	init_fifo(inode);
 }
 
-void xiafs_write_inode(struct inode * inode)
+static struct buffer_head *  xiafs_update_inode(struct inode * inode)
 {
     struct buffer_head * bh;
     struct xiafs_inode * raw_inode;
@@ -412,14 +413,14 @@ void xiafs_write_inode(struct inode * inode)
     if (IS_RDONLY (inode)) {
 	printk("XIA-FS: write_inode on a read-only filesystem (%s %d)\n", WHERE_ERR);
 	inode->i_dirt = 0;
-	return;
+	return 0;
     }
 
     ino = inode->i_ino;
     if (!ino || ino > inode->i_sb->u.xiafs_sb.s_ninodes) {
     	printk("XIA-FS: bad inode number (%s %d)\n", WHERE_ERR);
     	inode->i_dirt=0;
-    	return;
+    	return 0;
     }
     zone = 1 + inode->i_sb->u.xiafs_sb.s_imap_zones + 
                 inode->i_sb->u.xiafs_sb.s_zmap_zones +
@@ -427,7 +428,7 @@ void xiafs_write_inode(struct inode * inode)
     if (!(bh=bread(inode->i_dev, zone, XIAFS_ZSIZE(inode->i_sb)))) {
         printk("XIA-FS: read i-node zone failed (%s %d)\n", WHERE_ERR);
 	inode->i_dirt=0;
-	return;
+	return 0;
     }
     raw_inode = ((struct xiafs_inode *)bh->b_data) +
                 ((ino-1) & (XIAFS_INODES_PER_Z(inode->i_sb) -1));
@@ -453,7 +454,36 @@ void xiafs_write_inode(struct inode * inode)
     }
     inode->i_dirt=0;
     bh->b_dirt=1;
-    brelse(bh);
+    return bh;
 }
 
 
+void xiafs_write_inode(struct inode * inode)
+{
+    struct buffer_head * bh;
+    bh = xiafs_update_inode(inode);
+    brelse (bh);
+}
+
+int xiafs_sync_inode (struct inode *inode)
+{
+    int err = 0;
+    struct buffer_head *bh;
+
+    bh = xiafs_update_inode(inode);
+    if (bh && bh->b_dirt)
+    {
+    	ll_rw_block(WRITE, 1, &bh);
+    	wait_on_buffer(bh);
+    	if (bh->b_req && !bh->b_uptodate)
+    	{
+    	    printk ("IO error syncing xiafs inode [%04x:%08x]\n",
+    	    	inode->i_dev, inode->i_ino);
+    	    err = -1;
+    	}
+    }
+    else if (!bh)
+    	err = -1;
+    brelse (bh);
+    return err;
+}

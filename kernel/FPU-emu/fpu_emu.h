@@ -11,6 +11,23 @@
 #ifndef _FPU_EMU_H_
 #define _FPU_EMU_H_
 
+/*
+ * Define DENORM_OPERAND to make the emulator detect denormals
+ * and use the denormal flag of the status word. Note: this only
+ * affects the flag and corresponding interrupt, the emulator
+ * will always generate denormals and operate upon them as required.
+ */
+#define DENORM_OPERAND
+
+/*
+ * Define PECULIAR_486 to get a closer approximation to 80486 behaviour,
+ * rather than behaviour which appears to be cleaner.
+ * This is a matter of opinion: for all I know, the 80486 may simply
+ * be complying with the IEEE spec. Maybe one day I'll get to see the
+ * spec...
+ */
+#define PECULIAR_486
+
 #ifdef __ASSEMBLER__
 #include "fpu_asm.h"
 #define	Const(x)	$##x
@@ -20,9 +37,7 @@
 
 #define EXP_BIAS	Const(0)
 #define EXP_OVER	Const(0x4000)    /* smallest invalid large exponent */
-/* #define EXP_MAX		Const(16384) */
 #define	EXP_UNDER	Const(-0x3fff)   /* largest invalid small exponent */
-/* #define	EXP_MIN		Const(-16384) */
 
 #define SIGN_POS	Const(0)
 #define SIGN_NEG	Const(1)
@@ -37,6 +52,7 @@
 
 #define TW_Empty	Const(7)	/* empty */
 
+/* #define TW_FPU_Interrupt Const(0x80) */    /* Signals an interrupt */
 
 
 #ifndef __ASSEMBLER__
@@ -92,6 +108,7 @@ extern void poly_div16(long long *x);
 extern void polynomial(unsigned accum[], unsigned x[],
 		       unsigned short terms[][4], int n);
 extern void normalize(FPU_REG *x);
+extern void normalize_nuo(FPU_REG *x);
 extern void reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		    unsigned int control_w);
 extern void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
@@ -106,6 +123,8 @@ extern void wm_sqrt(FPU_REG *n, unsigned int control_w);
 extern unsigned	shrx(void *l, unsigned x);
 extern unsigned	shrxs(void *v, unsigned x);
 extern unsigned long div_small(unsigned long long *x, unsigned long y);
+extern void round_reg(FPU_REG *arg, unsigned int extent,
+		      unsigned int control_w);
 
 #ifndef MAKING_PROTO
 #include "fpu_proto.h"

@@ -24,6 +24,7 @@
 #include "reg_constant.h"
 #include "fpu_emu.h"
 #include "control_w.h"
+#include "status_w.h"
 
 
 #define EXTENDED_Emax 0x3fff     /* largest valid exponent */
@@ -38,6 +39,8 @@
 #define SINGLE_Ebias 127
 #define SINGLE_Emin (-126)       /* smallest valid exponent */
 
+#define LOST_UP    (EX_Precision | SW_C1)
+#define LOST_DOWN  EX_Precision
 
 FPU_REG FPU_loaded_data;
 
@@ -71,8 +74,13 @@ void reg_load_extended(void)
 	  FPU_loaded_data.tag = TW_Zero;
 	  return;
 	}
-      /* The number is de-normal */
-      /* The default behaviour will take care of this */
+      /* The number is a de-normal or pseudodenormal. */
+      /* The 80486 doesn't regard pseudodenormals as denormals here. */
+      if ( !(FPU_loaded_data.sigh & 0x80000000) )
+	EXCEPTION(EX_Denormal);
+      FPU_loaded_data.exp++;
+
+      /* The default behaviour will now take care of it. */
     }
   else if ( FPU_loaded_data.exp == 0x7fff )
     {
@@ -83,9 +91,9 @@ void reg_load_extended(void)
 	  FPU_loaded_data.tag = TW_Infinity;
 	  return;
 	}
-      if ( !(FPU_loaded_data.sigh & 0x80000000) )
+      else if ( !(FPU_loaded_data.sigh & 0x80000000) )
 	{
-	  /* Unsupported data type */
+	  /* Unsupported NaN data type */
 	  EXCEPTION(EX_Invalid);
 	  FPU_loaded_data.tag = TW_NaN;
 	  return;
@@ -97,7 +105,12 @@ void reg_load_extended(void)
     + EXP_BIAS;
   FPU_loaded_data.tag = TW_Valid;
 
-  normalize(&FPU_loaded_data);
+  if ( !(sigh & 0x80000000) )
+    {
+      /* Unsupported data type */
+      EXCEPTION(EX_Invalid);
+      normalize_nuo(&FPU_loaded_data);
+    }
 }
 
 
@@ -154,12 +167,13 @@ void reg_load_double(void)
       else
 	{
 	  /* De-normal */
+	  EXCEPTION(EX_Denormal);
 	  FPU_loaded_data.exp = DOUBLE_Emin + EXP_BIAS;
 	  FPU_loaded_data.tag = TW_Valid;
 	  FPU_loaded_data.sigh = m64 << 11;
 	  FPU_loaded_data.sigh |= l64 >> 21;
 	  FPU_loaded_data.sigl = l64 << 11;
-	  normalize(&FPU_loaded_data);
+	  normalize_nuo(&FPU_loaded_data);
 	  return;
 	}
     }
@@ -204,11 +218,12 @@ void reg_load_single(void)
   if ( exp < SINGLE_Emin )
     {
       /* De-normals */
+      EXCEPTION(EX_Denormal);
       FPU_loaded_data.exp = SINGLE_Emin + EXP_BIAS;
       FPU_loaded_data.tag = TW_Valid;
       FPU_loaded_data.sigh = m32;
       FPU_loaded_data.sigl = 0;
-      normalize(&FPU_loaded_data);
+      normalize_nuo(&FPU_loaded_data);
       return;
     }
   else if ( exp > SINGLE_Emax )
@@ -268,7 +283,7 @@ void reg_load_int64(void)
   *((long long *)&FPU_loaded_data.sigl) = s;
   FPU_loaded_data.exp = e;
   FPU_loaded_data.tag = TW_Valid;
-  normalize(&FPU_loaded_data);
+  normalize_nuo(&FPU_loaded_data);
 }
 
 
@@ -299,7 +314,7 @@ void reg_load_int32(void)
   FPU_loaded_data.sigl = 0;
   FPU_loaded_data.exp = e;
   FPU_loaded_data.tag = TW_Valid;
-  normalize(&FPU_loaded_data);
+  normalize_nuo(&FPU_loaded_data);
 }
 
 
@@ -310,7 +325,8 @@ void reg_load_int16(void)
   int s, e;
 
   RE_ENTRANT_CHECK_OFF
-  s = (int)get_fs_word((unsigned short *) _s);
+  /* Cast as short to get the sign extended. */
+  s = (short)get_fs_word((unsigned short *) _s);
   RE_ENTRANT_CHECK_ON
 
   if (s == 0)
@@ -330,7 +346,7 @@ void reg_load_int16(void)
   FPU_loaded_data.sigl = 0;
   FPU_loaded_data.exp = e;
   FPU_loaded_data.tag = TW_Valid;
-  normalize(&FPU_loaded_data);
+  normalize_nuo(&FPU_loaded_data);
 }
 
 
@@ -372,7 +388,7 @@ void reg_load_bcd(void)
       *((long long *)&FPU_loaded_data.sigl) = l;
       FPU_loaded_data.exp = EXP_BIAS + 63;
       FPU_loaded_data.tag = TW_Valid;
-      normalize(&FPU_loaded_data);
+      normalize_nuo(&FPU_loaded_data);
     }
 }
 
@@ -405,26 +421,30 @@ int reg_store_extended(void)
 	}
       else if ( e <= 0 )
 	{
-	  if ( e == 0 )
+	  if ( e > -63 )
 	    {
-	      EXCEPTION(EX_Denormal);  /* Pseudo de-normal */
-	      ls = FPU_st0_ptr->sigl;
-	      ms = FPU_st0_ptr->sigh;
-	    }
-	  else if ( e > -64 )
-	    {
-	      /* Make a de-normal */
+	      /* Correctly format the de-normal */
+	      int precision_loss;
 	      FPU_REG tmp;
-	      EXCEPTION(EX_Denormal);  /* De-normal */
+
+	      EXCEPTION(EX_Denormal);
 	      reg_move(FPU_st0_ptr, &tmp);
-	      tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
-	      round_to_int(&tmp);
+	      tmp.exp += -EXTENDED_Emin + 63;  /* largest exp to be 62 */
+	      if ( (precision_loss = round_to_int(&tmp)) )
+		{
+		  EXCEPTION(EX_Underflow | precision_loss);
+		  /* This is a special case: see sec 16.2.5.1 of
+		     the 80486 book */
+		  if ( !(control_word & EX_Underflow) )
+		    return 0;
+		}
 	      e = 0;
 	      ls = tmp.sigl;
 	      ms = tmp.sigh;
 	    }
 	  else
 	    {
+	      /* ****** ??? This should not be possible */
 	      EXCEPTION(EX_Underflow);  /* Underflow */
 	      /* This is a special case: see sec 16.2.5.1 of the 80486 book */
 	      if ( control_word & EX_Underflow )
@@ -432,7 +452,7 @@ int reg_store_extended(void)
 		  /* Underflow to zero */
 		  ls = 0;
 		  ms = 0;
-		  e = 0;
+		  e = FPU_st0_ptr->sign == SIGN_POS ? 0x7fff : 0xffff;
 		}
 	      else
 		return 0;
@@ -509,113 +529,128 @@ int reg_store_double(void)
       FPU_REG tmp;
 
       reg_move(FPU_st0_ptr, &tmp);
+      exp = tmp.exp - EXP_BIAS;
 
-      if ( tmp.sigl & 0x000007ff )
+      if ( exp < DOUBLE_Emin )     /* It may be a denormal */
 	{
-	  unsigned long increment = 0;	/* avoid gcc warnings */
-	  
-	  switch (control_word & CW_RC)
-	    {
-	    case RC_RND:
-	      /* Rounding can get a little messy.. */
-	      increment = ((tmp.sigl & 0x7ff) > 0x400) |      /* nearest */
-		((tmp.sigl & 0xc00) == 0xc00);                /* odd -> even */
-	      break;
-	    case RC_DOWN:   /* towards -infinity */
-	      increment = (tmp.sign == SIGN_POS) ? 0 : tmp.sigl & 0x7ff;
-	      break;
-	    case RC_UP:     /* towards +infinity */
-	      increment = (tmp.sign == SIGN_POS) ? tmp.sigl & 0x7ff : 0;
-	      break;
-	    case RC_CHOP:
-	      increment = 0;
-	      break;
-	    }
-	  
-	  /* Truncate the mantissa */
-	  tmp.sigl &= 0xfffff800;
+	  /* Make a de-normal */
+	  int precision_loss;
 
-	  if ( increment )
+	  if ( exp <= -EXTENDED_Ebias )
+	    EXCEPTION(EX_Denormal);
+
+	  tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
+
+	  if ( (precision_loss = round_to_int(&tmp)) )
 	    {
-	      if ( tmp.sigl >= 0xfffff800 )
+#ifdef PECULIAR_486
+	      /* Did it round to a non-denormal ? */
+	      /* This behaviour might be regarded as peculiar, it appears
+		 that the 80486 rounds to the dest precision, then
+		 converts to decide underflow. */
+	      if ( (tmp.sigh == 0x00100000) && (tmp.sigl == 0) &&
+		  (FPU_st0_ptr->sigl & 0x000007ff) )
+		EXCEPTION(precision_loss);
+	      else
+#endif PECULIAR_486
 		{
-		  /* the sigl part overflows */
-		  if ( tmp.sigh == 0xffffffff )
+		  EXCEPTION(EX_Underflow | precision_loss);
+		  /* This is a special case: see sec 16.2.5.1 of
+		     the 80486 book */
+		  if ( !(control_word & EX_Underflow) )
+		    return 0;
+		}
+	    }
+	  l[0] = tmp.sigl;
+	  l[1] = tmp.sigh;
+	}
+      else
+	{
+	  if ( tmp.sigl & 0x000007ff )
+	    {
+	      unsigned long increment = 0;	/* avoid gcc warnings */
+	      
+	      switch (control_word & CW_RC)
+		{
+		case RC_RND:
+		  /* Rounding can get a little messy.. */
+		  increment = ((tmp.sigl & 0x7ff) > 0x400) |  /* nearest */
+		    ((tmp.sigl & 0xc00) == 0xc00);            /* odd -> even */
+		  break;
+		case RC_DOWN:   /* towards -infinity */
+		  increment = (tmp.sign == SIGN_POS) ? 0 : tmp.sigl & 0x7ff;
+		  break;
+		case RC_UP:     /* towards +infinity */
+		  increment = (tmp.sign == SIGN_POS) ? tmp.sigl & 0x7ff : 0;
+		  break;
+		case RC_CHOP:
+		  increment = 0;
+		  break;
+		}
+	  
+	      /* Truncate the mantissa */
+	      tmp.sigl &= 0xfffff800;
+	  
+	      if ( increment )
+		{
+		  set_precision_flag_up();
+
+		  if ( tmp.sigl >= 0xfffff800 )
 		    {
-		      /* The sigh part overflows */
-		      tmp.sigh = 0x80000000;
-		      tmp.exp++;
-		      if (tmp.exp >= EXP_OVER)
-			goto overflow;
+		      /* the sigl part overflows */
+		      if ( tmp.sigh == 0xffffffff )
+			{
+			  /* The sigh part overflows */
+			  tmp.sigh = 0x80000000;
+			  exp++;
+			  if (exp >= EXP_OVER)
+			    goto overflow;
+			}
+		      else
+			{
+			  tmp.sigh ++;
+			}
+		      tmp.sigl = 0x00000000;
 		    }
 		  else
 		    {
-		      tmp.sigh ++;
+		      /* We only need to increment sigl */
+		      tmp.sigl += 0x00000800;
 		    }
-		  tmp.sigl = 0x00000000;
 		}
 	      else
-		{
-		  /* We only need to increment sigl */
-		  tmp.sigl += 0x00000800;
-		}
+		set_precision_flag_down();
 	    }
-	}
+	  
+	  l[0] = (tmp.sigl >> 11) | (tmp.sigh << 21);
+	  l[1] = ((tmp.sigh >> 11) & 0xfffff);
 
-      l[0] = (tmp.sigl >> 11) | (tmp.sigh << 21);
-      l[1] = ((tmp.sigh >> 11) & 0xfffff);
-      exp = tmp.exp - EXP_BIAS;
-
-      if ( exp > DOUBLE_Emax )
-	{
-	overflow:
-	  EXCEPTION(EX_Overflow);
-	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
-	  if ( control_word & EX_Overflow )
+	  if ( exp > DOUBLE_Emax )
 	    {
-	      /* Overflow to infinity */
-	      l[0] = 0x00000000;	/* Set to */
-	      l[1] = 0x7ff00000;	/* + INF */
-	    }
-	  else
-	    return 0;
-	}
-      else if ( exp < DOUBLE_Emin )
-	{
-	  if ( exp > DOUBLE_Emin-53 )
-	    {
-	      /* Make a de-normal */
-	      FPU_REG tmp;
-	      EXCEPTION(EX_Denormal);
-	      reg_move(FPU_st0_ptr, &tmp);
-	      tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
-	      round_to_int(&tmp);
-	      l[0] = tmp.sigl;
-	      l[1] = tmp.sigh;
-	    }
-	  else
-	    {
-	      EXCEPTION(EX_Underflow);
+	    overflow:
+	      EXCEPTION(EX_Overflow);
 	      /* This is a special case: see sec 16.2.5.1 of the 80486 book */
-	      if ( control_word & EX_Underflow )
+	      if ( control_word & EX_Overflow )
 		{
-		  /* Underflow to zero */
-		  l[0] = l[1] = 0;
+		  /* Overflow to infinity */
+		  l[0] = 0x00000000;	/* Set to */
+		  l[1] = 0x7ff00000;	/* + INF */
 		}
 	      else
 		return 0;
 	    }
-	}
-      else
-	{
-	  /* Add the exponent */
-	  l[1] |= (((exp+DOUBLE_Ebias) & 0x7ff) << 20);
+	  else
+	    {
+	      /* Add the exponent */
+	      l[1] |= (((exp+DOUBLE_Ebias) & 0x7ff) << 20);
+	    }
 	}
     }
   else if (FPU_st0_tag == TW_Zero)
     {
       /* Number is zero */
-      l[0] = l[1] = 0;
+      l[0] = 0;
+      l[1] = 0;
     }
   else if (FPU_st0_tag == TW_Infinity)
     {
@@ -655,12 +690,14 @@ put_indefinite:
       else
 	return 0;
     }
+#if 0 /* TW_Denormal is not used yet, and probably won't be */
   else if (FPU_st0_tag == TW_Denormal)
     {
       /* Extended real -> double real will always underflow */
       l[0] = l[1] = 0;
       EXCEPTION(EX_Underflow);
     }
+#endif
   if (FPU_st0_ptr->sign)
     l[1] |= 0x80000000;
 
@@ -686,97 +723,114 @@ int reg_store_single(void)
       FPU_REG tmp;
 
       reg_move(FPU_st0_ptr, &tmp);
+      exp = tmp.exp - EXP_BIAS;
 
-      if ( tmp.sigl | (tmp.sigh & 0x000000ff) )
+      if ( exp < SINGLE_Emin )
 	{
-	  unsigned long increment = 0;		/* avoid gcc warnings */
-	  unsigned long sigh = tmp.sigh;
-	  unsigned long sigl = tmp.sigl;
-	  
-	  switch (control_word & CW_RC)
+	  /* Make a de-normal */
+	  int precision_loss;
+
+	  if ( exp <= -EXTENDED_Ebias )
+	    EXCEPTION(EX_Denormal);
+
+	  tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
+
+	  if ( (precision_loss = round_to_int(&tmp)) )
 	    {
-	    case RC_RND:
-	      increment = ((sigh & 0xff) > 0x80)           /* more than half */
-		|| (((sigh & 0xff) == 0x80) && sigl)       /* more than half */
-		  || ((sigh & 0x180) == 0x180);            /* round to even */
-	      break;
-	    case RC_DOWN:   /* towards -infinity */
-	      increment = (tmp.sign == SIGN_POS) ? 0 : (sigl | (sigh & 0xff));
-	      break;
-	    case RC_UP:     /* towards +infinity */
-	      increment = (tmp.sign == SIGN_POS) ? (sigl | (sigh & 0xff)) : 0;
-	      break;
-	    case RC_CHOP:
-	      increment = 0;
-	      break;
-	    }
-	  
-	  /* Truncate part of the mantissa */
-	  tmp.sigl = 0;
-	  
-	  if (increment)
-	    {
-	      if ( sigh >= 0xffffff00 )
+#ifdef PECULIAR_486
+	      /* Did it round to a non-denormal ? */
+	      /* This behaviour might be regarded as peculiar, it appears
+		 that the 80486 rounds to the dest precision, then
+		 converts to decide underflow. */
+	      if ( (tmp.sigl == 0x00800000) &&
+		  ((FPU_st0_ptr->sigh & 0x000000ff) || FPU_st0_ptr->sigl) )
+		EXCEPTION(precision_loss);
+	      else
+#endif PECULIAR_486
 		{
-		  /* The sigh part overflows */
-		  tmp.sigh = 0x80000000;
-		  tmp.exp++;
-		  if (tmp.exp >= EXP_OVER)
-		    goto overflow;
+		  EXCEPTION(EX_Underflow | precision_loss);
+		  /* This is a special case: see sec 16.2.5.1 of
+		     the 80486 book */
+		  if ( !(control_word & EX_Underflow) )
+		    return 0;
+		}
+	    }
+	  templ = tmp.sigl;
+	}
+      else
+	{
+	  if ( tmp.sigl | (tmp.sigh & 0x000000ff) )
+	    {
+	      unsigned long increment = 0;     	/* avoid gcc warnings */
+	      unsigned long sigh = tmp.sigh;
+	      unsigned long sigl = tmp.sigl;
+	      
+	      switch (control_word & CW_RC)
+		{
+		case RC_RND:
+		  increment = ((sigh & 0xff) > 0x80)       /* more than half */
+		    || (((sigh & 0xff) == 0x80) && sigl)   /* more than half */
+		      || ((sigh & 0x180) == 0x180);        /* round to even */
+		  break;
+		case RC_DOWN:   /* towards -infinity */
+		  increment = (tmp.sign == SIGN_POS)
+		              ? 0 : (sigl | (sigh & 0xff));
+		  break;
+		case RC_UP:     /* towards +infinity */
+		  increment = (tmp.sign == SIGN_POS)
+		              ? (sigl | (sigh & 0xff)) : 0;
+		  break;
+		case RC_CHOP:
+		  increment = 0;
+		  break;
+		}
+	  
+	      /* Truncate part of the mantissa */
+	      tmp.sigl = 0;
+	  
+	      if (increment)
+		{
+		  set_precision_flag_up();
+
+		  if ( sigh >= 0xffffff00 )
+		    {
+		      /* The sigh part overflows */
+		      tmp.sigh = 0x80000000;
+		      exp++;
+		      if ( exp >= EXP_OVER )
+			goto overflow;
+		    }
+		  else
+		    {
+		      tmp.sigh &= 0xffffff00;
+		      tmp.sigh += 0x100;
+		    }
 		}
 	      else
 		{
-		  tmp.sigh &= 0xffffff00;
-		  tmp.sigh += 0x100;
+		  set_precision_flag_down();
+		  tmp.sigh &= 0xffffff00;  /* Finish the truncation */
 		}
 	    }
-	  else
-	    tmp.sigh &= 0xffffff00;  /* Finish the truncation */
-	}
 
-      templ = (tmp.sigh >> 8) & 0x007fffff;
-      exp = tmp.exp - EXP_BIAS;
+	  templ = (tmp.sigh >> 8) & 0x007fffff;
 
-      if ( exp > SINGLE_Emax )
-	{
-	overflow:
-	  EXCEPTION(EX_Overflow);
-	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
-	  if ( control_word & EX_Overflow )
+	  if ( exp > SINGLE_Emax )
 	    {
-	      /* Overflow to infinity */
-	      templ = 0x7f800000;
-	    }
-	  else
-	    return 0;
-	}
-      else if ( exp < SINGLE_Emin )
-	{
-	  if ( exp > SINGLE_Emin-24 )
-	    {
-	      /* Make a de-normal */
-	      FPU_REG tmp;
-	      EXCEPTION(EX_Denormal);
-	      reg_move(FPU_st0_ptr, &tmp);
-	      tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
-	      round_to_int(&tmp);
-	      templ = tmp.sigl;
-	    }
-	  else
-	    {
-	      EXCEPTION(EX_Underflow);
+	    overflow:
+	      EXCEPTION(EX_Overflow);
 	      /* This is a special case: see sec 16.2.5.1 of the 80486 book */
-	      if ( control_word & EX_Underflow )
+	      if ( control_word & EX_Overflow )
 		{
-		  /* Underflow to zero */
-		  templ = 0;
+		  /* Overflow to infinity */
+		  templ = 0x7f800000;
 		}
 	      else
 		return 0;
 	    }
+	  else
+	    templ |= ((exp+SINGLE_Ebias) & 0xff) << 23;
 	}
-      else
-	templ |= ((exp+SINGLE_Ebias) & 0xff) << 23;
     }
   else if (FPU_st0_tag == TW_Zero)
     {
@@ -817,12 +871,14 @@ put_indefinite:
       else
 	return 0;
     }
+#if 0 /* TW_Denormal is not used yet, and probably won't be */
   else if (FPU_st0_tag == TW_Denormal)
     {
       /* Extended real -> real will always underflow */
       templ = 0;
       EXCEPTION(EX_Underflow);
     }
+#endif
 #ifdef PARANOID
   else
     {
@@ -1069,7 +1125,10 @@ put_indefinite:
 /*===========================================================================*/
 
 /* r gets mangled such that sig is int, sign: 
-   it is NOT normalized*/
+   it is NOT normalized */
+/* The return value (in eax) is zero if the result is exact,
+   if bits are changed due to rounding, truncation, etc, then
+   a non-zero value is returned */
 /* Overflow is signalled by a non-zero return value (in eax).
    In the case of overflow, the returned significand always has the
    the largest possible value */
@@ -1105,6 +1164,7 @@ int round_to_int(FPU_REG *r)
 	{
 	  if ( very_big ) return 1;        /* overflow */
 	  (*(long long *)(&r->sigl)) ++;
+	  return LOST_UP;
 	}
       break;
     case RC_DOWN:
@@ -1112,6 +1172,7 @@ int round_to_int(FPU_REG *r)
 	{
 	  if ( very_big ) return 1;        /* overflow */
 	  (*(long long *)(&r->sigl)) ++;
+	  return LOST_UP;
 	}
       break;
     case RC_UP:
@@ -1119,13 +1180,15 @@ int round_to_int(FPU_REG *r)
 	{
 	  if ( very_big ) return 1;        /* overflow */
 	  (*(long long *)(&r->sigl)) ++;
+	  return LOST_UP;
 	}
       break;
     case RC_CHOP:
       break;
     }
 
-  return 0;           /* o.k. */
+  return eax ? LOST_DOWN : 0;
+
 }
 
 /*===========================================================================*/
@@ -1147,11 +1210,12 @@ char *fldenv(void)
   operand_selector = get_fs_long((unsigned long *) (s+0x18));
   RE_ENTRANT_CHECK_ON
 
+  top = (status_word >> SW_Top_Shift) & 7;
 
-  for ( i = 7; i >= 0; i-- )
+  for ( i = 0; i < 8; i++ )
     {
       tag = tag_word & 3;
-      tag_word <<= 2;
+      tag_word >>= 2;
 
       switch ( tag )
 	{
@@ -1179,45 +1243,57 @@ char *fldenv(void)
 
 void frstor(void)
 {
-  int i;
+  int i, stnr;
   unsigned char tag;
-  FPU_REG *s = (FPU_REG *)fldenv();
+  unsigned short saved_status, saved_control;
+  char *s = (char *)fldenv();
 
+  saved_status = status_word;
+  saved_control = control_word;
+  control_word = 0x037f;      /* Mask all interrupts while we load. */
   for ( i = 0; i < 8; i++ )
     {
       /* load each register */
-      FPU_data_address = (void *)&(s[i]);
+      FPU_data_address = (void *)(s+i*10);
       reg_load_extended();
-      tag = regs[i].tag;
-      reg_move(&FPU_loaded_data, &regs[i]);
+      stnr = (i+top) & 7;
+      tag = regs[stnr].tag;    /* derived from the loaded tag word */
+      reg_move(&FPU_loaded_data, &regs[stnr]);
       if ( tag == TW_NaN )
 	{
-	  unsigned char t = regs[i].tag;
-	  if ( (t == TW_Valid) || (t == TW_Zero) )
-	    regs[i].tag = TW_NaN;
+	  /* The current data is a special, i.e. NaN, unsupported, infinity,
+	     or denormal */
+	  unsigned char t = regs[stnr].tag;  /* derived from the new data */
+	  if ( /* (t == TW_Valid) || ****/ (t == TW_Zero) )
+	    regs[stnr].tag = TW_NaN;
 	}
       else
-	regs[i].tag = tag;
+	regs[stnr].tag = tag;
     }
+  control_word = saved_control;
+  status_word = saved_status;
 
   FPU_data_address = (void *)data_operand_offset;  /* We want no net effect */
 }
 
 
-char *fstenv(void)
+unsigned short tag_word(void)
 {
-  char *d = (char *)FPU_data_address;
-  unsigned short tag_word = 0;
+  unsigned short word = 0;
   unsigned char tag;
   int i;
-
-  verify_area(VERIFY_WRITE,d,28);
 
   for ( i = 7; i >= 0; i-- )
     {
       switch ( tag = regs[i].tag )
 	{
+#if 0 /* TW_Denormal is not used yet, and probably won't be */
 	case TW_Denormal:
+#endif
+	case TW_Valid:
+	  if ( regs[i].exp <= (EXP_BIAS - EXTENDED_Ebias) )
+	    tag = 2;
+	  break;
 	case TW_Infinity:
 	case TW_NaN:
 	  tag = 2;
@@ -1227,18 +1303,29 @@ char *fstenv(void)
 	  break;
 	  /* TW_Valid and TW_Zero already have the correct value */
 	}
-      tag_word <<= 2;
-      tag_word |= tag;
+      word <<= 2;
+      word |= tag;
     }
+  return word;
+}
 
-  /* This is not what should be done ... but saves overheads. */
-  *(unsigned short *)&cs_selector = FPU_CS;
-  *(unsigned short *)&operand_selector = FPU_DS;
+
+char *fstenv(void)
+{
+  char *d = (char *)FPU_data_address;
+
+  verify_area(VERIFY_WRITE,d,28);
+
+#if 0 /****/
+  *(unsigned short *)&cs_selector = fpu_cs;
+  *(unsigned short *)&operand_selector = fpu_os;
+#endif /****/
 
   RE_ENTRANT_CHECK_OFF
   put_fs_word(control_word, (unsigned short *) d);
-  put_fs_word(status_word, (unsigned short *) (d+4));
-  put_fs_word(tag_word, (unsigned short *) (d+8));
+  put_fs_word((status_word & ~SW_Top) | ((top&7) << SW_Top_Shift),
+	      (unsigned short *) (d+4));
+  put_fs_word(tag_word(), (unsigned short *) (d+8));
   put_fs_long(ip_offset, (unsigned long *) (d+0x0c));
   put_fs_long(cs_selector, (unsigned long *) (d+0x10));
   put_fs_long(data_operand_offset, (unsigned long *) (d+0x14));
@@ -1260,8 +1347,8 @@ void fsave(void)
   verify_area(VERIFY_WRITE,d,80);
   for ( i = 0; i < 8; i++ )
     {
-      /* store each register */
-      rp = &regs[i];
+      /* Store each register in the order: st(0), st(1), ... */
+      rp = &regs[(top+i) & 7];
 
       e = rp->exp - EXP_BIAS + EXTENDED_Ebias;
 
@@ -1271,72 +1358,63 @@ void fsave(void)
 	    {
 	      /* Overflow to infinity */
 	      RE_ENTRANT_CHECK_OFF
-	      put_fs_long(0, (unsigned long *) (d+i*10+2));
-	      put_fs_long(0x80000000, (unsigned long *) (d+i*10+6));
+	      put_fs_long(0, (unsigned long *) (d+i*10));
+	      put_fs_long(0x80000000, (unsigned long *) (d+i*10+4));
 	      RE_ENTRANT_CHECK_ON
 	      e = 0x7fff;
 	    }
 	  else if ( e <= 0 )
 	    {
-	      if ( e == 0 )
-		{
-		  /* Pseudo de-normal */
-		  RE_ENTRANT_CHECK_OFF
-		  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
-		  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
-		  RE_ENTRANT_CHECK_ON
-		}
-	      else if ( e > -64 )
+	      if ( e > -63 )
 		{
 		  /* Make a de-normal */
 		  reg_move(rp, &tmp);
-		  tmp.exp += -EXTENDED_Emin + 64;  /* largest exp to be 63 */
+		  tmp.exp += -EXTENDED_Emin + 63;  /* largest exp to be 62 */
 		  round_to_int(&tmp);
-		  e = 0;
 		  RE_ENTRANT_CHECK_OFF
-		  put_fs_long(tmp.sigl, (unsigned long *) (d+i*10+2));
-		  put_fs_long(tmp.sigh, (unsigned long *) (d+i*10+6));
+		  put_fs_long(tmp.sigl, (unsigned long *) (d+i*10));
+		  put_fs_long(tmp.sigh, (unsigned long *) (d+i*10+4));
 		  RE_ENTRANT_CHECK_ON
 		}
 	      else
 		{
 		  /* Underflow to zero */
 		  RE_ENTRANT_CHECK_OFF
-		  put_fs_long(0, (unsigned long *) (d+i*10+2));
-		  put_fs_long(0, (unsigned long *) (d+i*10+6));
+		  put_fs_long(0, (unsigned long *) (d+i*10));
+		  put_fs_long(0, (unsigned long *) (d+i*10+4));
 		  RE_ENTRANT_CHECK_ON
-		  e = 0;
 		}
+	      e = 0;
 	    }
 	  else
 	    {
 	      RE_ENTRANT_CHECK_OFF
-	      put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
-	      put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	      put_fs_long(rp->sigl, (unsigned long *) (d+i*10));
+	      put_fs_long(rp->sigh, (unsigned long *) (d+i*10+4));
 	      RE_ENTRANT_CHECK_ON
 	    }
 	}
       else if ( rp->tag == TW_Zero )
 	{
 	  RE_ENTRANT_CHECK_OFF
-	  put_fs_long(0, (unsigned long *) (d+i*10+2));
-	  put_fs_long(0, (unsigned long *) (d+i*10+6));
+	  put_fs_long(0, (unsigned long *) (d+i*10));
+	  put_fs_long(0, (unsigned long *) (d+i*10+4));
 	  RE_ENTRANT_CHECK_ON
 	  e = 0;
 	}
       else if ( rp->tag == TW_Infinity )
 	{
 	  RE_ENTRANT_CHECK_OFF
-	  put_fs_long(0, (unsigned long *) (d+i*10+2));
-	  put_fs_long(0x80000000, (unsigned long *) (d+i*10+6));
+	  put_fs_long(0, (unsigned long *) (d+i*10));
+	  put_fs_long(0x80000000, (unsigned long *) (d+i*10+4));
 	  RE_ENTRANT_CHECK_ON
 	  e = 0x7fff;
 	}
       else if ( rp->tag == TW_NaN )
 	{
 	  RE_ENTRANT_CHECK_OFF
-	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
-	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10));
+	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+4));
 	  RE_ENTRANT_CHECK_ON
 	  e = 0x7fff;
 	}
@@ -1344,14 +1422,17 @@ void fsave(void)
 	{
 	  /* just copy the reg */
 	  RE_ENTRANT_CHECK_OFF
-	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10+2));
-	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+6));
+	  put_fs_long(rp->sigl, (unsigned long *) (d+i*10));
+	  put_fs_long(rp->sigh, (unsigned long *) (d+i*10+4));
 	  RE_ENTRANT_CHECK_ON
 	}
+      e |= rp->sign == SIGN_POS ? 0 : 0x8000;
       RE_ENTRANT_CHECK_OFF
-      put_fs_word(e, (unsigned short *) (d+i*10));
+      put_fs_word(e, (unsigned short *) (d+i*10+8));
       RE_ENTRANT_CHECK_ON
     }
+
+  finit();
 
 }
 

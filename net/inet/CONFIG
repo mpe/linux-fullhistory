@@ -1,0 +1,43 @@
+#
+# Set the address and IRQ here. The ne.c and 3c503 driver will autoprobe
+# if you set the address or IRQ to zero, so we do that by default.
+# Cards supportted:
+#
+#	WD80x3		The Western Digital (SMC) WD80x3 driver
+#	  WD_SHMEM=xxx	Forces the address of the shared memory
+#	  FORCE_8BIT	Force card into 8-bit mode (WD8003)
+#	NE2000		The Novell NE-2000 driver
+#	HPLAN		The HP-LAN driver
+#	EL1		The 3c501 EtherLink I driver (source missing?)
+#	EL2		The 3c503 EtherLink II driver
+#	  EL2_AUI	Selects the AUI port instead of the BNC port
+#	PLIP		The Crynwe PL/IP driver
+#	SLIP		The MicroWalt SLIP driver
+#	  SL_DUMP	Uses the "dump frame" debug code
+#	D_LINK		The D-Link DE-600 Portable Ethernet Adaptor.
+#	  D_LINK_IO	The D-Link I/O address (0x378 == default)
+#	  D_LINK_IRQ	The D-Link IRQ number to use (IRQ7 == default)
+#	  D_LINK_DEBUG	Enable or disable D-Link debugging
+#
+# Note: for most WD (SMC) cards, the AutoProbe doesn't work.  You have
+#	to force those cards into operation, by specifying the I/O add-
+#	ress (EI8390=xxx), the IRQ (EI8390_IRQ=xxx) and the address of
+#	the shared memory (WD_SHMEM=xxxx).  All other supported cards
+#	behave like they should, you can leave the values to 0. -FvK
+#
+CARDS		= -DSLIP -DPLIP -DWD80x3 -DNE2000 -DHPLAN -DEL2 -DD_LINK
+
+# For WD and SMC cards:
+OPTS		= -DEI8390=0x280 -DEI8390_IRQ=15
+WD_OPTS		= -DWD_SHMEM=0xCC000 -UFORCE_8BIT
+
+# For all other cards:
+#OPTS		= -DEI8390=0 -DEI8390_IRQ=0
+#WD_OPTS	= -DUD_SHMEM=0xCC000 -UFORCE_8BIT
+
+EL_OPTS		= -UEL2_AUI
+NE_OPTS		=
+HP_OPTS		=
+PLIP_OPTS	=
+SLIP_OPTS	= -DSL_DUMP
+DL_OPTS		= -DD_LINK_IO=0x378 -DD_LINK_IRQ=7 -UD_LINK_DEBUG

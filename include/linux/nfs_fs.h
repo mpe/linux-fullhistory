@@ -11,7 +11,7 @@
 
 #include <linux/nfs.h>
 
-#include <netinet/in.h>
+#include <linux/in.h>
 #include <linux/nfs_mount.h>
 
 /*

@@ -32,7 +32,8 @@ static struct super_operations nfs_sops = {
 	nfs_put_inode,		/* put inode */
 	nfs_put_super,		/* put superblock */
 	NULL,			/* write superblock */
-	nfs_statfs		/* stat filesystem */
+	nfs_statfs,		/* stat filesystem */
+	NULL
 };
 
 static void nfs_put_inode(struct inode * inode)

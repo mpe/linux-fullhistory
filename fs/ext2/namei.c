@@ -63,14 +63,10 @@ static int ext2_match (int len, const char * const name,
  * itself (as a parameter - res_dir). It does NOT read the inode of the
  * entry - you'll have to do that yourself if you want to.
  *
- * In the ext2 file system, this function also returns a pointer on the
- * previous directory entry because functions which remove directory
- * entries need it
  */
 static struct buffer_head * ext2_find_entry (struct inode * dir,
 					     const char * const name, int namelen,
-					     struct ext2_dir_entry ** res_dir,
-					     struct ext2_dir_entry ** prev_dir)
+					     struct ext2_dir_entry ** res_dir)
 {
 	long offset;
 	struct buffer_head * bh;
@@ -92,8 +88,6 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 	bh = ext2_bread (dir, 0, 0, &err);
 	if (!bh)
 		return NULL;
-	if (prev_dir)
-		*prev_dir = NULL;
 	offset = 0;
 	de = (struct ext2_dir_entry *) bh->b_data;
 	while (offset < dir->i_size) {
@@ -105,8 +99,6 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 				continue;
 			}
 			de = (struct ext2_dir_entry *) bh->b_data;
-			if (prev_dir)
-				*prev_dir = NULL;
 		}
 		if (! ext2_check_dir_entry ("ext2_find_entry", dir, de, bh,
 					    offset)) {
@@ -118,8 +110,6 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			return bh;
 		}
 		offset += de->rec_len;
-		if (prev_dir)
-			*prev_dir = de;
 		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
 	}
 	brelse (bh);
@@ -143,7 +133,7 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
 #ifndef DONT_USE_DCACHE
 	if (!(ino = ext2_dcache_lookup (dir->i_dev, dir->i_ino, name, len))) {
 #endif
-		if (!(bh = ext2_find_entry (dir, name, len, &de, NULL))) {
+		if (!(bh = ext2_find_entry (dir, name, len, &de))) {
 			iput (dir);
 			return -ENOENT;
 		}
@@ -200,6 +190,13 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 #endif
 	if (!namelen)
 		return NULL;
+	/* Is this a busy deleted directory?  Can't create new files 
+	   if so */
+	if (dir->i_size == 0)
+	{
+		*err = -ENOENT;
+		return NULL;
+	}
 	bh = ext2_bread (dir, 0, 0, err);
 	if (!bh)
 		return NULL;
@@ -215,6 +212,10 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			if (!bh)
 				return NULL;
 			if (dir->i_size <= offset) {
+				if (dir->i_size == 0) {
+					*err = -ENOENT;
+					return NULL;
+				}
 #ifdef EXT2FS_DEBUG
 				printk ("ext2_add_entry: creating next block\n");
 #endif
@@ -262,6 +263,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			bh->b_dirt = 1;
 			*res_dir = de;
+			*err = 0;
 			return bh;
 		}
 		offset += de->rec_len;
@@ -275,13 +277,31 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
  * ext2_delete_entry deletes a directory entry by merging it with the
  * previous entry
  */
-static void ext2_delete_entry (struct ext2_dir_entry * dir,
-			       struct ext2_dir_entry * prev_dir)
+static int ext2_delete_entry (struct ext2_dir_entry * dir,
+			      struct buffer_head *bh)
 {
-	if (prev_dir != NULL)
-		prev_dir->rec_len += dir->rec_len;
-	else
-		dir->inode = 0;
+	struct ext2_dir_entry * de, * pde;
+	int i;
+
+	i = 0;
+	pde = NULL;
+	de = (struct ext2_dir_entry *) bh->b_data;
+	while (i < bh->b_size) {
+		if (! ext2_check_dir_entry ("ext2_delete_entry", NULL, 
+					    de, bh, i))
+			return -EIO;
+		if (de == dir)  {
+			if (pde)
+				pde->rec_len += dir->rec_len;
+			else
+				dir->inode = 0;
+			return 0;
+		}
+		i += de->rec_len;
+		pde = de;
+		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+	}
+	return -ENOENT;
 }
 
 int ext2_create (struct inode * dir,const char * name, int len, int mode,
@@ -333,7 +353,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 
 	if (!dir)
 		return -ENOENT;
-	bh = ext2_find_entry (dir, name, len, &de, NULL);
+	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		brelse (bh);
 		iput (dir);
@@ -395,7 +415,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 
 	if (!dir)
 		return -ENOENT;
-	bh = ext2_find_entry (dir, name, len, &de, NULL);
+	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		brelse (bh);
 		iput (dir);
@@ -519,18 +539,26 @@ int ext2_rmdir (struct inode * dir, const char * name, int len)
 	int retval;
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de, * pde;
+	struct ext2_dir_entry * de;
 
+repeat:
 	if (!dir)
 		return -ENOENT;
 	inode = NULL;
-	bh = ext2_find_entry (dir, name, len, &de, &pde);
+	bh = ext2_find_entry (dir, name, len, &de);
 	retval = -ENOENT;
 	if (!bh)
 		goto end_rmdir;
 	retval = -EPERM;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_rmdir;
+	if (de->inode != inode->i_ino) {
+		iput(inode);
+		brelse(bh);
+		current->counter = 0;
+		schedule();
+		goto repeat;
+	}
 	if ((dir->i_mode & S_ISVTX) && current->euid &&
 	    inode->i_uid != current->euid)
 		goto end_rmdir;
@@ -546,23 +574,31 @@ int ext2_rmdir (struct inode * dir, const char * name, int len)
 		retval = -ENOTEMPTY;
 		goto end_rmdir;
 	}
-	if (inode->i_count > 1) {
-		retval = -EBUSY;
-		goto end_rmdir;
+	if (inode->i_count > 1 && inode->i_nlink <= 2) {
+		/* Are we deleting the last instance of a busy directory?
+		   Better clean up if so. */
+		/* Make directory empty (it will be truncated when finally
+		   dereferenced).  This also inhibits ext2_add_entry. */
+		inode->i_size = 0;
+#ifndef DONT_USE_DCACHE
+		ext2_dcache_remove(inode->i_dev, inode->i_ino, ".", 1);
+		ext2_dcache_remove(inode->i_dev, inode->i_ino, "..", 2);
+#endif
 	}
 	if (inode->i_nlink != 2)
 		printk ("empty  directory has nlink!=2 (%d)\n", inode->i_nlink);
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_remove (dir->i_dev, dir->i_ino, de->name, de->name_len);
 #endif
-	ext2_delete_entry (de, pde);
+	retval = ext2_delete_entry (de, bh);
+	if (retval)
+		goto end_rmdir;
 	bh->b_dirt = 1;
 	inode->i_nlink = 0;
 	inode->i_dirt = 1;
 	dir->i_nlink --;
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
-	retval = 0;
 end_rmdir:
 	iput (dir);
 	iput (inode);
@@ -575,17 +611,25 @@ int ext2_unlink (struct inode * dir, const char * name, int len)
 	int retval;
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de, * pde;
+	struct ext2_dir_entry * de;
 
+repeat:
 	if (!dir)
 		return -ENOENT;
 	retval = -ENOENT;
 	inode = NULL;
-	bh = ext2_find_entry (dir, name, len, &de, &pde);
+	bh = ext2_find_entry (dir, name, len, &de);
 	if (!bh)
 		goto end_unlink;
 	if (!(inode = iget (dir->i_sb, de->inode)))
 		goto end_unlink;
+	if (de->inode != inode->i_ino) {
+		iput(inode);
+		brelse(bh);
+		current->counter = 0;
+		schedule();
+		goto repeat;
+	}
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
@@ -601,7 +645,9 @@ int ext2_unlink (struct inode * dir, const char * name, int len)
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_remove (dir->i_dev, dir->i_ino, de->name, de->name_len);
 #endif
-	ext2_delete_entry (de, pde);
+	retval = ext2_delete_entry (de, bh);
+	if (retval)
+		goto end_unlink;
 	bh->b_dirt = 1;
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
@@ -665,7 +711,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	}
 	inode->i_size = i;
 	inode->i_dirt = 1;
-	bh = ext2_find_entry (dir, name, len, &de, NULL);
+	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		inode->i_nlink --;
 		inode->i_dirt = 1;
@@ -711,7 +757,7 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 		iput (dir);
 		return -EMLINK;
 	}
-	bh = ext2_find_entry (dir, name, len, &de, NULL);
+	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		brelse (bh);
 		iput (dir);
@@ -788,11 +834,13 @@ static int do_ext2_rename (struct inode * old_dir, const char * old_name,
 {
 	struct inode * old_inode, * new_inode;
 	struct buffer_head * old_bh, * new_bh, * dir_bh;
-	struct ext2_dir_entry * old_de, * new_de, * pde;
+	struct ext2_dir_entry * old_de, * new_de;
 	int retval;
 
 	goto start_up;
 try_again:
+	if (new_bh && new_de)
+		ext2_delete_entry(new_de, new_bh);
 	brelse (old_bh);
 	brelse (new_bh);
 	brelse (dir_bh);
@@ -803,7 +851,8 @@ try_again:
 start_up:
 	old_inode = new_inode = NULL;
 	old_bh = new_bh = dir_bh = NULL;
-	old_bh = ext2_find_entry (old_dir, old_name, old_len, &old_de, &pde);
+	new_de = NULL;
+	old_bh = ext2_find_entry (old_dir, old_name, old_len, &old_de);
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
@@ -815,7 +864,7 @@ start_up:
 	    current->euid != old_inode->i_uid &&
 	    current->euid != old_dir->i_uid && !suser())
 		goto end_rename;
-	new_bh = ext2_find_entry (new_dir, new_name, new_len, &new_de, NULL);
+	new_bh = ext2_find_entry (new_dir, new_name, new_len, &new_de);
 	if (new_bh) {
 		new_inode = iget (new_dir->i_sb, new_de->inode);
 		if (!new_inode) {
@@ -882,11 +931,11 @@ start_up:
 	ext2_dcache_add (new_dir->i_dev, new_dir->i_ino, new_de->name,
 			 new_de->name_len, new_de->inode);
 #endif
-	if (old_bh->b_blocknr == new_bh->b_blocknr &&
-	    ((char *) new_de) + new_de->rec_len == (char *) old_de)
-		new_de->rec_len += old_de->rec_len;
-	else
-		ext2_delete_entry (old_de, pde);
+	retval = ext2_delete_entry (old_de, old_bh);
+	if (retval == -ENOENT)
+		goto try_again;
+	if (retval)
+		goto end_rename;
 	if (new_inode) {
 		new_inode->i_nlink --;
 		new_inode->i_dirt = 1;

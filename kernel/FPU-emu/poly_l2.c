@@ -71,6 +71,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
       num.sigh = arg->sigh;
     }
 
+
   /* shift num left, lose the ms bit */
   num.sigh <<= 1;
   if ( num.sigl & 0x80000000 ) num.sigh |= 1;
@@ -130,7 +131,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	    {
 	      normalize(&num);
 	    }
-	  
+
 	  denom.tag = TW_Valid;	/* set the tags to Valid */
 	  denom.sign = SIGN_POS;	/* set the sign to positive */
 	  denom.exp = EXP_BIAS;
@@ -138,12 +139,12 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	  reg_div(&num, &denom, &lXx, FULL_PRECISION);
 
 	  reg_u_mul(&lXx, &accum, &accum, FULL_PRECISION);
-	  accum.exp += - EXP_BIAS + 1;
 
 	  reg_u_add(&lXx, &accum, result, FULL_PRECISION);
 	  
 	  normalize(result);
 	}
+
       result->sign = sign;
       return;
     }
@@ -276,7 +277,6 @@ int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
   normalize(&accum);
 
   reg_u_mul(&local_arg, &accum, &accum, FULL_PRECISION);
-  accum.exp -= EXP_BIAS - 1;
 
   reg_u_add(&local_arg, &accum, result, FULL_PRECISION);
 

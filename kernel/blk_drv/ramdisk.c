@@ -2,6 +2,9 @@
  *  linux/kernel/blk_drv/ramdisk.c
  *
  *  Written by Theodore Ts'o, 12/2/91
+ *
+ * Modifications by Fred N. van Kempen to allow for bootable root
+ * disks (which are used in LINUX/Pro).  Also some cleanups.  03/03/93
  */
 
 
@@ -14,8 +17,13 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#define MAJOR_NR 1
+#define MAJOR_RAMDISK	1		/* should be in <linux/major.h>	*/
+#define MAJOR_FLOPPY	2		/* should be in <linux/major.h>	*/
+#define MINOR_RAMDISK	1
+
+#define MAJOR_NR	MAJOR_RAMDISK	/* weird hack- FvK */
 #include "blk.h"
+
 
 char	*rd_start;
 int	rd_length = 0;
@@ -29,7 +37,8 @@ repeat:
 	INIT_REQUEST;
 	addr = rd_start + (CURRENT->sector << 9);
 	len = CURRENT->nr_sectors << 9;
-	if ((MINOR(CURRENT->dev) != 1) || (addr+len > rd_start+rd_length)) {
+	if ((MINOR(CURRENT->dev) != MINOR_RAMDISK) ||
+	    (addr+len > rd_start+rd_length)) {
 		end_request(0);
 		goto repeat;
 	}
@@ -42,7 +51,7 @@ repeat:
 			      addr,
 			      len);
 	} else
-		panic("unknown ramdisk-command");
+		panic("RAMDISK: unknown RAM disk command !\n");
 	end_request(1);
 	goto repeat;
 }
@@ -56,7 +65,8 @@ static struct file_operations rd_fops = {
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
-	NULL			/* no special release code */
+	NULL,			/* no special release code */
+	block_fsync		/* fsync */
 };
 
 /*
@@ -67,11 +77,11 @@ long rd_init(long mem_start, int length)
 	int	i;
 	char	*cp;
 
-	if (register_blkdev(MAJOR_NR,"rd",&rd_fops)) {
-		printk("Unable to get major %d for ramdisk\n",MAJOR_NR);
+	if (register_blkdev(MAJOR_RAMDISK,"rd",&rd_fops)) {
+		printk("RAMDISK: Unable to get major %d.\n", MAJOR_RAMDISK);
 		return 0;
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_dev[MAJOR_RAMDISK].request_fn = DEVICE_REQUEST;
 	rd_start = (char *) mem_start;
 	rd_length = length;
 	cp = rd_start;
@@ -81,62 +91,83 @@ long rd_init(long mem_start, int length)
 }
 
 /*
- * If the root device is the ram disk, try to load it.
+ * If the root device is the RAM disk, try to load it.
  * In order to do this, the root device is originally set to the
- * floppy, and we later change it to be ram disk.
+ * floppy, and we later change it to be RAM disk.
  */
 void rd_load(void)
 {
 	struct buffer_head *bh;
 	struct minix_super_block s;
-	int		block = 512;	/* Start at block 512 */
+	int		block, try;
 	int		i = 1;
 	int		nblocks;
-	char		*cp;		/* Move pointer */
-	
-	if (!rd_length)
-		return;
-	printk("Ram disk: %d bytes, starting at 0x%x\n", rd_length,
-		(int) rd_start);
-	if (MAJOR(ROOT_DEV) != 2)
-		return;
-	bh = breada(ROOT_DEV,block+1,block,block+2,-1);
-	if (!bh) {
-		printk("Disk error while looking for ramdisk!\n");
-		return;
-	}
-	*((struct minix_super_block *) &s) = *((struct minix_super_block *) bh->b_data);
-	brelse(bh);
-	if (s.s_magic != MINIX_SUPER_MAGIC)
-		/* No ram disk image present, assume normal floppy boot */
-		return;
-	nblocks = s.s_nzones << s.s_log_zone_size;
-	if (nblocks > (rd_length >> BLOCK_SIZE_BITS)) {
-		printk("Ram disk image too big!  (%d blocks, %d avail)\n", 
-			nblocks, rd_length >> BLOCK_SIZE_BITS);
-		return;
-	}
-	printk("Loading %d bytes into ram disk\n",
-		nblocks << BLOCK_SIZE_BITS);
-	cp = rd_start;
-	while (nblocks) {
-		if (nblocks > 2) 
-			bh = breada(ROOT_DEV, block, block+1, block+2, -1);
-		else
-			bh = bread(ROOT_DEV, block, BLOCK_SIZE);
+	char		*cp;
+
+	/* If no RAM disk specified, give up early. */
+	if (!rd_length) return;
+	printk("RAMDISK: %d bytes, starting at 0x%x\n",
+					rd_length, (int) rd_start);
+
+	/* If we are doing a diskette boot, we might have to pre-load it. */
+	if (MAJOR(ROOT_DEV) != MAJOR_FLOPPY) return;
+
+	/*
+	 * Check for a super block on the diskette.
+	 * The old-style boot/root diskettes had their RAM image
+	 * starting at block 512 of the boot diskette.  LINUX/Pro
+	 * uses the enire diskette as a file system, so in that
+	 * case, we have to look at block 0.  Be intelligent about
+	 * this, and check both... - FvK
+	 */
+	for (try = 0; try < 1000; try += 512) {
+		block = try;
+		bh = breada(ROOT_DEV,block+1,block,block+2,-1);
 		if (!bh) {
-			printk("I/O error on block %d, aborting load\n", 
-				block);
+			printk("RAMDISK: I/O error while looking for super block!\n");
 			return;
 		}
-		(void) memcpy(cp, bh->b_data, BLOCK_SIZE);
+
+		/* This is silly- why do we require it to be a MINIX FS? */
+		*((struct minix_super_block *) &s) =
+			*((struct minix_super_block *) bh->b_data);
 		brelse(bh);
-		if (!(nblocks-- & 15))
-			printk(".");
-		cp += BLOCK_SIZE;
-		block++;
-		i++;
+		nblocks = s.s_nzones << s.s_log_zone_size;
+		if (s.s_magic != MINIX_SUPER_MAGIC) {
+			printk("RAMDISK: trying old-style RAM image.\n");
+			continue;
+		}
+
+		if (nblocks > (rd_length >> BLOCK_SIZE_BITS)) {
+			printk("RAMDISK: image too big! (%d/%d blocks)\n",
+					nblocks, rd_length >> BLOCK_SIZE_BITS);
+			return;
+		}
+		printk("RAMDISK: Loading %d blocks into RAM disk", nblocks);
+
+		/* We found an image file system.  Load it into core! */
+		cp = rd_start;
+		while (nblocks) {
+			if (nblocks > 2) 
+				bh = breada(ROOT_DEV, block, block+1, block+2, -1);
+			else
+				bh = bread(ROOT_DEV, block, BLOCK_SIZE);
+			if (!bh) {
+				printk("RAMDISK: I/O error on block %d, aborting!\n", 
+				block);
+				return;
+			}
+			(void) memcpy(cp, bh->b_data, BLOCK_SIZE);
+			brelse(bh);
+			if (!(nblocks-- & 15)) printk(".");
+			cp += BLOCK_SIZE;
+			block++;
+			i++;
+		}
+		printk("\ndone\n");
+
+		/* We loaded the file system image.  Prepare for mounting it. */
+		ROOT_DEV = ((MAJOR_RAMDISK << 8) | MINOR_RAMDISK);
+		return;
 	}
-	printk("\ndone\n");
-	ROOT_DEV=0x0101;
 }

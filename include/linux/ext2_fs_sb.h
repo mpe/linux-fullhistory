@@ -1,7 +1,7 @@
 #ifndef _EXT2_FS_SB
 #define _EXT2_FS_SB
 
-#define EXT2_MAX_GROUP_DESC	4
+#define EXT2_MAX_GROUP_DESC	8
 #define EXT2_MAX_GROUP_LOADED	8
 
 /*

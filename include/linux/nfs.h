@@ -18,7 +18,7 @@
 #define NFSMODE_SOCK 0140000
 #define NFSMODE_FIFO 0010000
 
-#ifdef KERNEL	/* user programs should get these from the rpc header files */
+#ifdef __KERNEL__ /* user programs should get these from the rpc header files */
 
 #define RPC_VERSION 2
 
@@ -59,7 +59,7 @@ enum rpc_auth_stat {
 	RPC_AUTH_TOOWEAK = 5,
 };
 
-#endif /* KERNEL */
+#endif /* __KERNEL__ */
 	
 enum nfs_stat {
 	NFS_OK = 0,

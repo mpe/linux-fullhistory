@@ -34,7 +34,7 @@ static int msdos_format_name(char conv,const char *name,int len,char *res,
   int dot_dirs)
 {
 	char *walk,**reserved;
-	char c;
+	unsigned char c;
 	int space;
 
 	if (IS_FREE(name)) return -EINVAL;
@@ -295,7 +295,7 @@ mkdir_error:
 
 static int msdos_empty(struct inode *dir)
 {
-	int pos;
+	off_t pos;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 

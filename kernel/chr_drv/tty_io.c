@@ -28,6 +28,10 @@
  * NOTE: pay no attention to the line discpline code (yet); its
  * interface is still subject to change in this version...
  * -- TYT, 1/31/92
+ *
+ * Added functionality to the OPOST tty handling.  No delays, but all
+ * other bits should be there.
+ *	-- Nick Holloway <alfie@dcs.warwick.ac.uk>, 27th May 1993.
  */
 
 #include <linux/types.h>
@@ -52,8 +56,8 @@
 #define MAX_TTYS 256
 
 struct tty_struct *tty_table[MAX_TTYS];
-struct termios *tty_termios[MAX_TTYS]; /* We need to keep the termios state */
-				  /* around, even when a tty is closed */
+struct termios *tty_termios[MAX_TTYS];	/* We need to keep the termios state */
+				  	/* around, even when a tty is closed */
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 int tty_check_write[MAX_TTYS/32];	/* bitfield for the bh handler */
 
@@ -230,6 +234,7 @@ static struct file_operations vhung_up_tty_fops = {
 
 void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 {
+	int i;
 	struct file * filp;
 	struct task_struct **p;
 	int dev;
@@ -237,8 +242,7 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 	if (!tty)
 		return;
 	dev = 0x0400 + tty->line;
-	filp = file_table + NR_FILE;
-	while (filp-- > file_table) {
+	for (filp = first_file, i=0; i<nr_files; i++, filp = filp->f_next) {
 		if (!filp->f_count)
 			continue;
 		if (filp->f_rdev != dev)
@@ -369,8 +373,7 @@ void complete_change_console(unsigned int new_console)
 	{
 		if (vt_cons[new_console].vc_mode == KD_TEXT)
 			unblank_screen();
-		else
-		{
+		else {
 			timer_active &= ~(1<<BLANK_TIMER);
 			blank_screen();
 		}
@@ -510,10 +513,10 @@ void copy_to_cooked(struct tty_struct * tty)
 				if (I_IGNBRK(tty))
 					continue;
 				if (I_PARMRK(tty)) {
-					put_tty_queue(0377, &tty->secondary);
-					put_tty_queue(0, &tty->secondary);
+					put_tty_queue('\377', &tty->secondary);
+					put_tty_queue('\0', &tty->secondary);
 				}
-				put_tty_queue(0, &tty->secondary);
+				put_tty_queue('\0', &tty->secondary);
 				continue;
 			}
 			/* If not a break, then a parity or frame error */
@@ -522,17 +525,17 @@ void copy_to_cooked(struct tty_struct * tty)
 				continue;
 			}
 			if (I_PARMRK(tty)) {
-				put_tty_queue(0377, &tty->secondary);
-				put_tty_queue(0, &tty->secondary);
+				put_tty_queue('\377', &tty->secondary);
+				put_tty_queue('\0', &tty->secondary);
 				put_tty_queue(c, &tty->secondary);
 			} else
-				put_tty_queue(0, &tty->secondary);
+				put_tty_queue('\0', &tty->secondary);
 			continue;
 		}
 		if (I_STRP(tty))
 			c &= 0x7f;
-		else if (I_PARMRK(tty) && (c == 0377))
-			put_tty_queue(0377, &tty->secondary);
+		else if (I_PARMRK(tty) && (c == '\377'))
+			put_tty_queue('\377', &tty->secondary);
 		if (c==13) {
 			if (I_CRNL(tty))
 				c=10;
@@ -565,13 +568,13 @@ void copy_to_cooked(struct tty_struct * tty)
 					}
 					if (L_ECHO(tty)) {
 						if (c<32) {
-							put_tty_queue(8, &tty->write_q);
+							put_tty_queue('\b', &tty->write_q);
 							put_tty_queue(' ', &tty->write_q);
-							put_tty_queue(8,&tty->write_q);
+							put_tty_queue('\b',&tty->write_q);
 						}
-						put_tty_queue(8,&tty->write_q);
+						put_tty_queue('\b',&tty->write_q);
 						put_tty_queue(' ',&tty->write_q);
-						put_tty_queue(8,&tty->write_q);
+						put_tty_queue('\b',&tty->write_q);
 					}
 					DEC(tty->secondary.head);
 				}
@@ -585,13 +588,13 @@ void copy_to_cooked(struct tty_struct * tty)
 					continue;
 				if (L_ECHO(tty)) {
 					if (c<32) {
-						put_tty_queue(8,&tty->write_q);
+						put_tty_queue('\b',&tty->write_q);
 						put_tty_queue(' ',&tty->write_q);
-						put_tty_queue(8,&tty->write_q);
+						put_tty_queue('\b',&tty->write_q);
 					}
-					put_tty_queue(8,&tty->write_q);
-					put_tty_queue(32,&tty->write_q);
-					put_tty_queue(8,&tty->write_q);
+					put_tty_queue('\b',&tty->write_q);
+					put_tty_queue(' ',&tty->write_q);
+					put_tty_queue('\b',&tty->write_q);
 				}
 				DEC(tty->secondary.head);
 				continue;
@@ -600,7 +603,7 @@ void copy_to_cooked(struct tty_struct * tty)
 				tty->lnext = 1;
 				if (L_ECHO(tty)) {
 					put_tty_queue('^',&tty->write_q);
-					put_tty_queue(8,&tty->write_q);
+					put_tty_queue('\b',&tty->write_q);
 				}
 				continue;
 			}
@@ -651,16 +654,16 @@ void copy_to_cooked(struct tty_struct * tty)
 		    c==EOF_CHAR(tty)))
 			tty->secondary.data++;
 		if ((c==10) && (L_ECHO(tty) || (L_CANON(tty) && L_ECHONL(tty)))) {
-			put_tty_queue(10,&tty->write_q);
-			put_tty_queue(13,&tty->write_q);
+			put_tty_queue('\n',&tty->write_q);
+			put_tty_queue('\r',&tty->write_q);
 		} else if (L_ECHO(tty)) {
 			if (c<32 && L_ECHOCTL(tty)) {
 				put_tty_queue('^',&tty->write_q);
-				put_tty_queue(c+64, &tty->write_q);
+				put_tty_queue(c+'A'-1, &tty->write_q);
 				if (EOF_CHAR(tty) != __DISABLED_CHAR &&
 				    c==EOF_CHAR(tty) && !tty->lnext) {
-					put_tty_queue(8,&tty->write_q);
-					put_tty_queue(8,&tty->write_q);
+					put_tty_queue('\b',&tty->write_q);
+					put_tty_queue('\b',&tty->write_q);
 				}
 			} else
 				put_tty_queue(c, &tty->write_q);
@@ -724,10 +727,8 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 	}
 	if (file->f_flags & O_NONBLOCK) {
 		time = current->timeout = 0;
-		if (L_CANON(tty)) {
-			if (!available_canon_input(tty))
+		if (L_CANON(tty) && !available_canon_input(tty))
 				return -EAGAIN;
-		}
 	} else if (L_CANON(tty)) {
 		wait_for_canon_input(file, tty);
 		if (current->signal & ~current->blocked)
@@ -787,8 +788,16 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 			break;
 		if (current->signal & ~current->blocked) 
 			break;
-		if (tty->link && !tty->link->count)
-			break;
+		if (tty->link) {
+			if (IS_A_PTY_MASTER(tty->line)) {
+				if ((tty->flags & (1 << TTY_SLAVE_OPENED))
+				    && tty->link->count <= 1)
+					break;
+			} else {
+				if (!tty->link->count)
+					break;
+			}
+		}
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
 			TTY_WRITE_FLUSH(tty->link);
@@ -819,6 +828,8 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 		return -ERESTARTSYS;
 	if (file->f_flags & O_NONBLOCK)
 		return -EAGAIN;
+	if (IS_A_PTY_MASTER(tty->line))
+		return -EIO;
 	return 0;
 }
 
@@ -887,20 +898,54 @@ static int write_chan(struct tty_struct * tty, struct file * file, char * buf, i
 		while (nr>0 && !FULL(&tty->write_q)) {
 			c=get_fs_byte(b);
 			if (O_POST(tty)) {
-				if (c=='\r' && O_CRNL(tty))
-					c='\n';
-				else if (c=='\n' && O_NLRET(tty))
-					c='\r';
-				if (c=='\n' && O_NLCR(tty) &&
-				    !set_bit(TTY_CR_PENDING,&tty->flags)) {
-					put_tty_queue(13,&tty->write_q);
-					continue;
+				switch (c) {
+					case '\n':
+						if (O_NLRET(tty)) {
+							tty->column = 0;
+						}
+						if (O_NLCR(tty)) {
+							if (!set_bit(TTY_CR_PENDING,&tty->flags)) {
+								c = '\r';
+								tty->column = 0;
+								b--; nr++;
+							} else {
+								clear_bit(TTY_CR_PENDING,&tty->flags);
+							}
+						}
+						break;
+					case '\r':
+						if (O_NOCR(tty) && tty->column == 0) {
+							b++; nr--;
+							continue;
+						}
+						if (O_CRNL(tty)) {
+							c = '\n';
+							if (O_NLRET(tty))
+								tty->column = 0;
+							break;
+						}
+						tty->column = 0;
+						break;
+					case '\t':
+						if (O_TABDLY(tty) == XTABS) {
+							c = ' ';
+							tty->column++;
+							if (tty->column % 8 != 0) {
+								b--; nr++;
+							}
+						}
+						break;
+					case '\b':
+						tty->column--;
+						break;
+					default:
+						if (O_LCUC(tty))
+							c = toupper(c);
+						tty->column++;
+						break;
 				}
-				if (O_LCUC(tty))
-					c=toupper(c);
 			}
 			b++; nr--;
-			clear_bit(TTY_CR_PENDING,&tty->flags);
 			put_tty_queue(c,&tty->write_q);
 		}
 		if (need_resched)
@@ -1289,8 +1334,16 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 					return 1;
 			} else if (!EMPTY(&tty->secondary))
 				return 1;
-			if (tty->link && !tty->link->count)
-				return 1;
+			if (tty->link) {
+				if (IS_A_PTY_MASTER(tty->line)) {
+					if ((tty->flags & (1 << TTY_SLAVE_OPENED))
+					    && tty->link->count <= 1)
+						return 1;
+				} else {
+					if (!tty->link->count)
+						return 1;
+				}
+			}
 
 			/* see if the status byte can be read. */
 			if (tty->packet && tty->link &&
@@ -1305,8 +1358,16 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 			select_wait(&tty->write_q.proc_list, wait);
 			return 0;
 		case SEL_EX:
-			if (tty->link && !tty->link->count)
-				return 1;
+			if (tty->link) {
+				if (IS_A_PTY_MASTER(tty->line)) {
+					if ((tty->flags & (1 << TTY_SLAVE_OPENED))
+					    && tty->link->count <= 1)
+						return 1;
+				} else {
+					if (!tty->link->count)
+						return 1;
+				}
+			}
 			return 0;
 	}
 	return 0;
@@ -1391,6 +1452,7 @@ int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
 	while (count && VLEFT > 0) {
 		tty->write_q.buf[head++] = *p++;
 		head &= TTY_BUF_SIZE-1;
+		count--;
 	}
 	tty->write_q.head = head;
 	if (count) {
@@ -1400,6 +1462,7 @@ int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
 		tty->write_data_arg = callarg;
 	}
 	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	tty->write(tty);
 	return count;
 }
 
@@ -1437,6 +1500,7 @@ void tty_bh_routine(void * unused)
 				while (count && VLEFT > 0) {
 					tty->write_q.buf[head++] = *p++;
 					head &= TTY_BUF_SIZE-1;
+					count--;
 				}
 				tty->write_q.head = head;
 				tty->write_data_ptr = p;
@@ -1486,6 +1550,7 @@ static void initialize_termios(int line, struct termios * tp)
 			ECHOCTL | ECHOKE;
 	} else if (IS_A_SERIAL(line)) {
 		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL | CLOCAL;
+		tp->c_oflag = OPOST | ONLCR | XTABS;
 	} else if (IS_A_PTY_MASTER(line)) {
 		tp->c_cflag = B9600 | CS8 | CREAD;
 	} else if (IS_A_PTY_SLAVE(line)) {

@@ -190,8 +190,12 @@ int main(int argc, char ** argv)
 		die("Unable to read header of 'system'");
 	if (N_MAGIC(*ex) != ZMAGIC)
 		die("Non-GCC header of 'system'");
+	fprintf(stderr,"System is %d kB (%d kB code, %d kB data and %d kB bss)\n",
+		(ex->a_text+ex->a_data+ex->a_bss)/1024,
+		ex->a_text /1024,
+		ex->a_data /1024,
+		ex->a_bss  /1024);
 	sz = N_SYMOFF(*ex) - GCC_HEADER + 4;
-	fprintf(stderr,"System is %d bytes.\n", sz);
 	sys_size = (sz + 15) / 16;
 	if (sys_size > SYS_SIZE)
 		die("System is too big");

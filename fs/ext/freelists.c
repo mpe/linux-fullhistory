@@ -289,6 +289,7 @@ printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;
 	inode->i_blocks = inode->i_blksize = 0;
+	insert_inode_hash(inode);
 #ifdef EXTFS_DEBUG
 printk("ext_new_inode : allocating inode %d\n", inode->i_ino);
 #endif

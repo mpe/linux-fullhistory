@@ -17,9 +17,11 @@
 
 
 
-static void fclex(void)
+void fclex(void)
 {
-  status_word &= ~(SW_B|SW_ES|SW_SF|SW_PE|SW_UE|SW_OE|SW_ZE|SW_DE|SW_IE);
+  status_word &= ~(SW_Backward|SW_Summary|SW_Stack_Fault|SW_Precision|
+		   SW_Underflow|SW_Overflow|SW_Zero_Div|SW_Denorm_Op|
+		   SW_Invalid);
   FPU_entry_eip = ip_offset;               /* We want no net effect */
 }
 
@@ -27,18 +29,14 @@ static void fclex(void)
 void finit()
 {
   int r;
-  control_word = 0x037e;
+  control_word = 0x037f;
   status_word = 0;
-  top = 0;
+  top = 0;            /* We don't keep top in the status word internally. */
   for (r = 0; r < 8; r++)
     {
-      regs[r].sign = 0;
       regs[r].tag = TW_Empty;
-      regs[r].exp = 0;
-      regs[r].sigh = 0;
-      regs[r].sigl = 0;
     }
-  FPU_entry_eip = ip_offset;               /* We want no net effect */
+  FPU_entry_eip = ip_offset = 0;
 }
 
 static FUNC finit_table[] = {
@@ -54,8 +52,8 @@ void finit_()
 static void fstsw_ax(void)
 {
 
-  status_word &= ~SW_TOP;
-  status_word |= (top&7) << SW_TOPS;
+  status_word &= ~SW_Top;
+  status_word |= (top&7) << SW_Top_Shift;
 
   *(short *) &FPU_EAX = status_word;
 
@@ -116,6 +114,25 @@ void fxch_i()
   /* fxch st(i) */
   FPU_REG t;
   register FPU_REG *sti_ptr = &st(FPU_rm);
+
+  if ( FPU_st0_tag == TW_Empty )
+    {
+      if ( sti_ptr->tag == TW_Empty )
+	{
+	  stack_underflow();
+	  stack_underflow_i(FPU_rm);
+	  return;
+	}
+      reg_move(sti_ptr, FPU_st0_ptr);
+      stack_underflow_i(FPU_rm);
+      return;
+    }
+  if ( sti_ptr->tag == TW_Empty )
+    {
+      reg_move(FPU_st0_ptr, sti_ptr);
+      stack_underflow();
+      return;
+    }
   reg_move(FPU_st0_ptr, &t);
   reg_move(sti_ptr, FPU_st0_ptr);
   reg_move(&t, sti_ptr);

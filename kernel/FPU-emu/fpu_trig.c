@@ -101,6 +101,11 @@ static void f2xm1(void)
     case TW_Valid:
       {
 	FPU_REG rv, tmp;
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
 	
 	if ( FPU_st0_ptr->sign == SIGN_POS )
 	  {
@@ -151,6 +156,12 @@ static void fptan(void)
   switch ( FPU_st0_tag )
     {
     case TW_Valid:
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       FPU_st0_ptr->sign = SIGN_POS;
       if ( (q = trig_arg(FPU_st0_ptr)) != -1 )
 	{
@@ -177,8 +188,9 @@ static void fptan(void)
 	}
       break;
     case TW_Infinity:
-      arith_invalid(FPU_st0_ptr);
-      setcc(0);
+      /* Operand is out of range */
+      setcc(SW_C2);
+      FPU_st0_ptr->sign = arg_sign;         /* restore st(0) */
       return;
     case TW_Zero:
       push();
@@ -203,6 +215,11 @@ static void fxtract(void)
   if ( !(FPU_st0_tag ^ TW_Valid) )
     {
       long e;
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
 	  
       push();
       reg_move(st1_ptr, FPU_st0_ptr);
@@ -279,9 +296,14 @@ static void fsqrt_(void)
       
       if (FPU_st0_ptr->sign == SIGN_NEG)
 	{
-	  arith_invalid(FPU_st0_ptr);
+	  arith_invalid(FPU_st0_ptr);  /* sqrt(negative) is invalid */
 	  return;
 	}
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
 
       expon = FPU_st0_ptr->exp - EXP_BIAS;
       FPU_st0_ptr->exp = EXP_BIAS + (expon & 1);  /* make st(0) in  [1.0 .. 4.0) */
@@ -296,7 +318,7 @@ static void fsqrt_(void)
   else if ( FPU_st0_tag == TW_Infinity )
     {
       if ( FPU_st0_ptr->sign == SIGN_NEG )
-	arith_invalid(FPU_st0_ptr);
+	arith_invalid(FPU_st0_ptr);  /* sqrt(-Infinity) is invalid */
       return;
     }
   else
@@ -312,6 +334,11 @@ static void frndint_(void)
       if (FPU_st0_ptr->exp > EXP_BIAS+63)
 	return;
 
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       round_to_int(FPU_st0_ptr);  /* Fortunately, this can't overflow to 2^64 */
       FPU_st0_ptr->exp = EXP_BIAS + 63;
       normalize(FPU_st0_ptr);
@@ -326,11 +353,18 @@ static void frndint_(void)
 
 static void fsin(void)
 {
+  char arg_sign = FPU_st0_ptr->sign;
+
   if ( FPU_st0_tag == TW_Valid )
     {
       int q;
-      char arg_sign = FPU_st0_ptr->sign;
       FPU_st0_ptr->sign = SIGN_POS;
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       if ( (q = trig_arg(FPU_st0_ptr)) != -1 )
 	{
 	  FPU_REG rv;
@@ -349,6 +383,8 @@ static void fsin(void)
 	  if ( FPU_st0_ptr->exp <= EXP_UNDER )
 	    arith_underflow(FPU_st0_ptr);
 
+	  set_precision_flag_up();  /* We do not really know if up or down */
+
 	  return;
 	}
       else
@@ -356,7 +392,6 @@ static void fsin(void)
 	  /* Operand is out of range */
 	  setcc(SW_C2);
 	  FPU_st0_ptr->sign = arg_sign;         /* restore st(0) */
-	  EXCEPTION(EX_Invalid);
 	  return;
 	}
     }
@@ -367,8 +402,9 @@ static void fsin(void)
     }
   else if ( FPU_st0_tag == TW_Infinity )
     {
-      arith_invalid(FPU_st0_ptr);
-      setcc(0);
+      /* Operand is out of range */
+      setcc(SW_C2);
+      FPU_st0_ptr->sign = arg_sign;         /* restore st(0) */
       return;
     }
   else
@@ -378,10 +414,17 @@ static void fsin(void)
 
 static int f_cos(FPU_REG *arg)
 {
+  char arg_sign = arg->sign;
+
   if ( arg->tag == TW_Valid )
     {
       int q;
-      char arg_sign = arg->sign;
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return 1;
+#endif DENORM_OPERAND
+
       arg->sign = SIGN_POS;
       if ( (q = trig_arg(arg)) != -1 )
 	{
@@ -396,6 +439,8 @@ static int f_cos(FPU_REG *arg)
 	  if ((q+1) & 2)
 	    rv.sign ^= SIGN_POS ^ SIGN_NEG;
 	  reg_move(&rv, arg);
+
+	  set_precision_flag_up();  /* We do not really know if up or down */
 	  
 	  return 0;
 	}
@@ -404,7 +449,6 @@ static int f_cos(FPU_REG *arg)
 	  /* Operand is out of range */
 	  setcc(SW_C2);
 	  arg->sign = arg_sign;         /* restore st(0) */
-	  EXCEPTION(EX_Invalid);
 	  return 1;
 	}
     }
@@ -416,8 +460,9 @@ static int f_cos(FPU_REG *arg)
     }
   else if ( FPU_st0_tag == TW_Infinity )
     {
-      arith_invalid(FPU_st0_ptr);
-      setcc(0);
+      /* Operand is out of range */
+      setcc(SW_C2);
+      arg->sign = arg_sign;         /* restore st(0) */
       return 1;
     }
   else
@@ -468,6 +513,12 @@ static void fprem_kernel(int round)
       FPU_REG tmp;
       int old_cw = control_word;
       int expdif = FPU_st0_ptr->exp - (st1_ptr)->exp;
+
+#ifdef DENORM_OPERAND
+	  if ( ((FPU_st0_ptr->exp <= EXP_UNDER) ||
+		(st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
       
       control_word &= ~CW_RC;
       control_word |= round;
@@ -477,6 +528,7 @@ static void fprem_kernel(int round)
 	  /* This should be the most common case */
 	  long long q;
 	  int c = 0;
+
 	  reg_div(FPU_st0_ptr, st1_ptr, &tmp, FULL_PRECISION);
 	  
 	  round_to_int(&tmp);  /* Fortunately, this can't overflow to 2^64 */
@@ -524,20 +576,59 @@ static void fprem_kernel(int round)
     { stack_underflow(); return; }
   else if ( FPU_st0_tag == TW_Zero )
     {
-      if ( (st1_tag == TW_Valid) || (st1_tag == TW_Infinity) )
+      if ( st1_tag == TW_Valid )
+	{
+
+#ifdef DENORM_OPERAND
+	  if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  setcc(0); return;
+	}
+      else if ( st1_tag == TW_Zero )
+	{ arith_invalid(FPU_st0_ptr); return; } /* fprem(?,0) always invalid */
+      else if ( st1_tag == TW_Infinity )
 	{ setcc(0); return; }
+    }
+  else if ( FPU_st0_tag == TW_Valid )
+    {
       if ( st1_tag == TW_Zero )
-	{ arith_invalid(FPU_st0_ptr); return; }
+	{
+	  arith_invalid(FPU_st0_ptr); /* fprem(Valid,Zero) is invalid */
+	  return;
+	}
+      else if ( st1_tag != TW_NaN )
+	{
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  if ( st1_tag == TW_Infinity )
+	    {
+	      /* fprem(Valid,Infinity) is o.k. */
+	      setcc(0); return;
+	    }
+	}
+    }
+  else if ( FPU_st0_tag == TW_Infinity )
+    {
+      if ( st1_tag != TW_NaN )
+	{
+	  arith_invalid(FPU_st0_ptr); /* fprem(Infinity,?) is invalid */
+	  return;
+	}
     }
 
-  if ( (FPU_st0_tag == TW_NaN) | (st1_tag == TW_NaN) )
-    { real_2op_NaN(FPU_st0_ptr, st1_ptr, FPU_st0_ptr); return; }
-  else if ( FPU_st0_tag == TW_Infinity )
-    { arith_invalid(FPU_st0_ptr); return; }
+  /* One of the registers must contain a NaN is we got here. */
+
 #ifdef PARANOID
-  else
-    EXCEPTION(EX_INTERNAL | 0x118);
+  if ( (FPU_st0_tag != TW_NaN) && (st1_tag != TW_NaN) )
+      EXCEPTION(EX_INTERNAL | 0x118);
 #endif PARANOID
+
+  real_2op_NaN(FPU_st0_ptr, st1_ptr, FPU_st0_ptr);
 
 }
 
@@ -552,25 +643,44 @@ static void fyl2x(void)
     {
       if ( FPU_st0_ptr->sign == SIGN_POS )
 	{
+	  int saved_control, saved_status;
+
+#ifdef DENORM_OPERAND
+	  if ( ((FPU_st0_ptr->exp <= EXP_UNDER) ||
+		(st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  /* We use the general purpose arithmetic,
+	     so we need to save these. */
+	  saved_status = status_word;
+	  saved_control = control_word;
+	  control_word = FULL_PRECISION;
+
 	  poly_l2(FPU_st0_ptr, FPU_st0_ptr);
-	  
+
+	  /* Enough of the basic arithmetic is done now */
+	  control_word = saved_control;
+	  status_word = saved_status;
+
+	  /* Let the multiply set the flags */
 	  reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
+
 	  pop(); FPU_st0_ptr = &st(0);
-	  if ( FPU_st0_ptr->exp <= EXP_UNDER )
-	    { arith_underflow(FPU_st0_ptr); return; }
-	  else if ( FPU_st0_ptr->exp >= EXP_OVER )
-	    { arith_overflow(FPU_st0_ptr); return; }
 	}
       else
 	{
 	  /* negative	*/
 	  pop(); FPU_st0_ptr = &st(0);
-	  arith_invalid(FPU_st0_ptr);
+	  arith_invalid(FPU_st0_ptr);  /* st(0) cannot be negative */
 	  return;
 	}
     }
   else if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
-    { stack_underflow(); return; }
+    {
+      stack_underflow_pop(1);
+      return;
+    }
   else if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
     {
       real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
@@ -584,25 +694,42 @@ static void fyl2x(void)
 	{
 	  pop(); FPU_st0_ptr = &st(0);
 	  if ( FPU_st0_ptr->tag == TW_Zero )
-	    arith_invalid(FPU_st0_ptr);
+	    arith_invalid(FPU_st0_ptr);   /* Both args zero is invalid */
+#ifdef PECULIAR_486
+	  /* This case is not specifically covered in the manual,
+	     but divide-by-zero would seem to be the best response.
+	     However, a real 80486 does it this way... */
+	  else if ( FPU_st0_ptr->tag == TW_Infinity )
+	    {
+	      reg_move(&CONST_INF, FPU_st0_ptr);
+	      return;
+	    }
+#endif PECULIAR_486
 	  else
-	    divide_by_zero(st1_ptr->sign ^ SIGN_NEG, FPU_st0_ptr);
-	  return;
-	}
-      else if ( st1_ptr->sign == SIGN_POS )
-	{
-	  /* Zero is the valid answer */
-	  char sign = FPU_st0_ptr->sign;
-	  if ( FPU_st0_ptr->exp < EXP_BIAS ) sign ^= SIGN_NEG;
-	  pop(); FPU_st0_ptr = &st(0);
-	  reg_move(&CONST_Z, FPU_st0_ptr);
-	  FPU_st0_ptr->sign = sign;
+	    divide_by_zero(st1_ptr->sign^SIGN_NEG^SIGN_POS, FPU_st0_ptr);
 	  return;
 	}
       else
 	{
+	  /* st(1) contains zero, st(0) valid <> 0 */
+	  /* Zero is the valid answer */
+	  char sign = st1_ptr->sign;
+
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+	  if ( FPU_st0_ptr->sign == SIGN_NEG )
+	    {
+	      pop(); FPU_st0_ptr = &st(0);
+	      arith_invalid(FPU_st0_ptr);   /* log(negative) */
+	      return;
+	    }
+
+	  if ( FPU_st0_ptr->exp < EXP_BIAS ) sign ^= SIGN_NEG^SIGN_POS;
 	  pop(); FPU_st0_ptr = &st(0);
-	  arith_invalid(FPU_st0_ptr);
+	  reg_move(&CONST_Z, FPU_st0_ptr);
+	  FPU_st0_ptr->sign = sign;
 	  return;
 	}
     }
@@ -610,10 +737,18 @@ static void fyl2x(void)
   else if ( FPU_st0_tag == TW_Infinity )
     {
       if ( (FPU_st0_ptr->sign == SIGN_NEG) || (st1_tag == TW_Zero) )
-	{ pop(); FPU_st0_ptr = &st(0); arith_invalid(FPU_st0_ptr); return; }
+	{ pop(); FPU_st0_ptr = &st(0);
+	  arith_invalid(FPU_st0_ptr);  /* log(-infinity) or 0*log(infinity) */
+	  return; }
       else
 	{
 	  char sign = st1_ptr->sign;
+
+#ifdef DENORM_OPERAND
+	  if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
 	  pop(); FPU_st0_ptr = &st(0);
 	  reg_move(&CONST_INF, FPU_st0_ptr);
 	  FPU_st0_ptr->sign = sign;
@@ -629,24 +764,45 @@ static void fyl2x(void)
 	      (FPU_st0_ptr->sigh == 0x80000000) &&
 	      (FPU_st0_ptr->sigl == 0) )
 	    {
+	      /* st(0) holds 1.0 */
 	      pop(); FPU_st0_ptr = &st(0);
-	      arith_invalid(FPU_st0_ptr);
+	      arith_invalid(FPU_st0_ptr); /* infinity*log(1) */
 	      return;
 	    }
+	  /* st(0) is positive and > 1.0 */
 	  pop();
 	}
       else
 	{
-	  pop(); FPU_st0_ptr = &st(0);
-	  FPU_st0_ptr->sign ^= SIGN_NEG;
+	  /* st(0) is positive and < 1.0 */
+
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  st1_ptr->sign ^= SIGN_NEG;
+	  pop();
 	}
       return;
     }
   else
     {
       /* st(0) must be zero or negative */
-      pop(); FPU_st0_ptr = &st(0);
-      arith_invalid(FPU_st0_ptr);
+      if ( FPU_st0_ptr->tag == TW_Zero )
+	{
+	  pop(); FPU_st0_ptr = st1_ptr;
+	  st1_ptr->sign ^= SIGN_NEG^SIGN_POS;
+	  /* This should be invalid, but a real 80486 is happy with it. */
+#ifndef PECULIAR_486
+	  divide_by_zero(st1_ptr->sign, FPU_st0_ptr);
+#endif PECULIAR_486
+	}
+      else
+	{
+	  pop(); FPU_st0_ptr = st1_ptr;
+	  arith_invalid(FPU_st0_ptr);    /* log(negative) */
+	}
       return;
     }
 }
@@ -659,17 +815,30 @@ static void fpatan(void)
 
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
+      int saved_control, saved_status;
       FPU_REG sum;
       int quadrant = st1_ptr->sign | ((FPU_st0_ptr->sign)<<1);
+
+#ifdef DENORM_OPERAND
+      if ( ((FPU_st0_ptr->exp <= EXP_UNDER) ||
+	    (st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
+      /* We use the general purpose arithmetic so we need to save these. */
+      saved_status = status_word;
+      saved_control = control_word;
+      control_word = FULL_PRECISION;
+
       st1_ptr->sign = FPU_st0_ptr->sign = SIGN_POS;
-      if (compare(st1_ptr) == COMP_A_LT_B)
+      if ( compare(st1_ptr) == COMP_A_lt_B )
 	{
 	  quadrant |= 4;
 	  reg_div(FPU_st0_ptr, st1_ptr, &sum, FULL_PRECISION);
 	}
       else
 	reg_div(st1_ptr, FPU_st0_ptr, &sum, FULL_PRECISION);
-      
+
       poly_atan(&sum);
       
       if (quadrant & 4)
@@ -682,14 +851,18 @@ static void fpatan(void)
 	}
       if (quadrant & 1)
 	sum.sign ^= SIGN_POS^SIGN_NEG;
-      
+
+      /* All of the basic arithmetic is done now */
+      control_word = saved_control;
+      status_word = saved_status;
+
       reg_move(&sum, st1_ptr);
-      pop(); FPU_st0_ptr = &st(0);
-      if ( FPU_st0_ptr->exp <= EXP_UNDER )
-	{ arith_underflow(FPU_st0_ptr); return; }
     }
   else if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
-    { stack_underflow(); return; }
+    {
+      stack_underflow_pop(1);
+      return;
+    }
   else if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
     {
       real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
@@ -710,42 +883,66 @@ static void fpatan(void)
 	    }
 	  else
 	    {
+
+#ifdef DENORM_OPERAND
+	      if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+		return;
+#endif DENORM_OPERAND
+
 	      if ( FPU_st0_ptr->sign == SIGN_POS )
-		{ reg_move(&CONST_Z, st1_ptr); }
+		{ reg_move(&CONST_Z, st1_ptr); pop(); return; }
 	      else
 		reg_move(&CONST_PI, st1_ptr);
 	    }
 	}
       else
 	{
+	  /* st(1) is infinity, st(0) not infinity */
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
 	  reg_move(&CONST_PI2, st1_ptr);
 	}
       st1_ptr->sign = sign;
-      pop();
     }
   else if ( st1_tag == TW_Zero )
     {
-      char sign = st1_ptr->sign;
       /* st(0) must be valid or zero */
+      char sign = st1_ptr->sign;
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       if ( FPU_st0_ptr->sign == SIGN_POS )
-	{ reg_move(&CONST_Z, st1_ptr); }
+	{ reg_move(&CONST_Z, st1_ptr); pop(); return; }
       else
 	reg_move(&CONST_PI, st1_ptr);
       st1_ptr->sign = sign;
-      pop();
     }
   else if ( FPU_st0_tag == TW_Zero )
     {
-      char sign = st1_ptr->sign;
       /* st(1) must be TW_Valid here */
+      char sign = st1_ptr->sign;
+
+#ifdef DENORM_OPERAND
+      if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       reg_move(&CONST_PI2, st1_ptr);
       st1_ptr->sign = sign;
-      pop();
     }
 #ifdef PARANOID
   else
     EXCEPTION(EX_INTERNAL | 0x220);
 #endif PARANOID
+
+  pop();
+  set_precision_flag_up();  /* We do not really know if up or down */
 }
 
 
@@ -768,33 +965,63 @@ static void fyl2xp1(void)
 
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
+      int saved_control, saved_status;
+
+#ifdef DENORM_OPERAND
+      if ( ((FPU_st0_ptr->exp <= EXP_UNDER) ||
+	    (st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
+      /* We use the general purpose arithmetic so we need to save these. */
+      saved_status = status_word;
+      saved_control = control_word;
+      control_word = FULL_PRECISION;
+
       if ( poly_l2p1(FPU_st0_ptr, FPU_st0_ptr) )
 	{
-	  arith_invalid(st1_ptr); pop(); return;
+	  arith_invalid(st1_ptr);  /* poly_l2p1() returned invalid */
+	  pop(); return;
 	}
       
+      /* Enough of the basic arithmetic is done now */
+      control_word = saved_control;
+      status_word = saved_status;
+
+      /* Let the multiply set the flags */
       reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
+
       pop();
     }
   else if ( (FPU_st0_tag == TW_Empty) | (st1_tag == TW_Empty) )
-    { stack_underflow(); return; }
+    {
+      stack_underflow_pop(1);
+      return;
+    }
   else if ( FPU_st0_tag == TW_Zero )
     {
       if ( st1_tag <= TW_Zero )
 	{
+
+#ifdef DENORM_OPERAND
+	      if ( (st1_tag == TW_Valid) && (st1_ptr->exp <= EXP_UNDER) &&
+		  (denormal_operand()) )
+		return;
+#endif DENORM_OPERAND
+
 	  st1_ptr->sign ^= FPU_st0_ptr->sign;
 	  reg_move(FPU_st0_ptr, st1_ptr);
 	}
       else if ( st1_tag == TW_Infinity )
 	{
-	  arith_invalid(st1_ptr);
+	  arith_invalid(st1_ptr);  /* Infinity*log(1) */
+	  pop();
 	  return;
 	}
       else if ( st1_tag == TW_NaN )
 	{
-	  if ( !(st1_ptr->sigh & 0x40000000) )
-	    EXCEPTION(EX_Invalid);            /* signaling NaN */
-	  st1_ptr->sigh |= 0x40000000;     /* QNaN */
+	  real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
+	  pop();
 	  return;
 	}
 #ifdef PARANOID
@@ -804,7 +1031,64 @@ static void fyl2xp1(void)
 	  return;
 	}
 #endif PARANOID
-      pop();
+      pop(); return;
+    }
+  else if ( FPU_st0_tag == TW_Valid )
+    {
+      if ( st1_tag == TW_Zero )
+	{
+	  if ( FPU_st0_ptr->sign == SIGN_NEG )
+	    {
+	      if ( FPU_st0_ptr->exp >= EXP_BIAS )
+		{
+		  /* st(0) holds <= -1.0 */
+		  arith_invalid(st1_ptr); /* infinity*log(1) */
+		  pop(); return;
+		}
+#ifdef DENORM_OPERAND
+	      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+		return;
+#endif DENORM_OPERAND
+	      st1_ptr->sign ^= SIGN_POS^SIGN_NEG;
+	      pop(); return;
+	    }
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+	  pop(); return;
+	}
+      if ( st1_tag == TW_Infinity )
+	{
+	  if ( FPU_st0_ptr->sign == SIGN_NEG )
+	    {
+	      if ( (FPU_st0_ptr->exp >= EXP_BIAS) &&
+		  !((FPU_st0_ptr->sigh == 0x80000000) &&
+		    (FPU_st0_ptr->sigl == 0)) )
+		{
+		  /* st(0) holds < -1.0 */
+		  arith_invalid(st1_ptr);
+		  pop(); return;
+		}
+#ifdef DENORM_OPERAND
+	      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+		return;
+#endif DENORM_OPERAND
+	      st1_ptr->sign ^= SIGN_POS^SIGN_NEG;
+	      pop(); return;
+	    }
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+	  pop(); return;
+	}
+      if ( st1_tag == TW_NaN )
+	{
+	  real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
+	  pop();
+	  return;
+	}
     }
   else if ( FPU_st0_tag == TW_NaN )
     {
@@ -815,15 +1099,40 @@ static void fyl2xp1(void)
   else if ( FPU_st0_tag == TW_Infinity )
     {
       if ( st1_tag == TW_NaN )
-	real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
-      else
-	arith_invalid(st1_ptr);
+	{
+	  real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
+	  pop();
+	  return;
+	}
+      else if ( (FPU_st0_ptr->sign == SIGN_NEG) ||
+	       (st1_tag == TW_Zero) )
+	{
+	  arith_invalid(st1_ptr);  /* log(infinity) */
+	  pop();
+	  return;
+	}
+	
+      /* st(1) must be valid here. */
+
+#ifdef DENORM_OPERAND
+	  if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+      /* The Manual says that log(Infinity) is invalid, but a real
+	 80486 sensibly says that it is o.k. */
+      { char sign = st1_ptr->sign;
+	reg_move(&CONST_INF, st1_ptr);
+	st1_ptr->sign = sign;
+      }
       pop();
       return;
     }
 #ifdef PARANOID
   else
-    EXCEPTION(EX_INTERNAL | 0x117);
+    {
+      EXCEPTION(EX_INTERNAL | 0x117);
+    }
 #endif PARANOID
 }
 
@@ -832,49 +1141,76 @@ static void fscale(void)
 {
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
+  int old_cw = control_word;
 
   if ( !((FPU_st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       long scale;
       FPU_REG tmp;
 
-      /* 2^31 is far too large, 2^-31 is far too small */
+#ifdef DENORM_OPERAND
+      if ( ((FPU_st0_ptr->exp <= EXP_UNDER) ||
+	    (st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
+	return;
+#endif DENORM_OPERAND
+
       if ( st1_ptr->exp > EXP_BIAS + 30 )
 	{
+	  /* 2^31 is far too large, would require 2^(2^30) or 2^(-2^30) */
 	  char sign;
-	  EXCEPTION(EX_Overflow);
-	  sign = FPU_st0_ptr->sign;
-	  reg_move(&CONST_INF, FPU_st0_ptr);
-	  FPU_st0_ptr->sign = sign;
-	  return;
-	}
-      else if ( st1_ptr->exp < EXP_BIAS - 30 )
-	{
-	  EXCEPTION(EX_Underflow);
-	  reg_move(&CONST_Z, FPU_st0_ptr);
+
+	  if ( st1_ptr->sign == SIGN_POS )
+	    {
+	      EXCEPTION(EX_Overflow);
+	      sign = FPU_st0_ptr->sign;
+	      reg_move(&CONST_INF, FPU_st0_ptr);
+	      FPU_st0_ptr->sign = sign;
+	    }
+	  else
+	    {
+	      EXCEPTION(EX_Underflow);
+	      sign = FPU_st0_ptr->sign;
+	      reg_move(&CONST_Z, FPU_st0_ptr);
+	      FPU_st0_ptr->sign = sign;
+	    }
 	  return;
 	}
 
+      control_word &= ~CW_RC;
+      control_word |= RC_CHOP;
       reg_move(st1_ptr, &tmp);
       round_to_int(&tmp);               /* This can never overflow here */
+      control_word = old_cw;
       scale = st1_ptr->sign ? -tmp.sigl : tmp.sigl;
       scale += FPU_st0_ptr->exp;
       FPU_st0_ptr->exp = scale;
 
-      if ( scale <= EXP_UNDER )
-	{ arith_underflow(FPU_st0_ptr); return; }
-      else if ( scale >= EXP_OVER )
-	{ arith_overflow(FPU_st0_ptr); return; }
+      /* Use round_reg() to properly detect under/overflow etc */
+      round_reg(FPU_st0_ptr, 0, control_word);
 
       return;
     }
   else if ( FPU_st0_tag == TW_Valid )
     {
       if ( st1_tag == TW_Zero )
-	{ return; }
+	{
+
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  return;
+	}
       if ( st1_tag == TW_Infinity )
 	{
 	  char sign = st1_ptr->sign;
+
+#ifdef DENORM_OPERAND
+	  if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
 	  if ( sign == SIGN_POS )
 	    { reg_move(&CONST_INF, FPU_st0_ptr); }
 	  else
@@ -887,24 +1223,50 @@ static void fscale(void)
     }
   else if ( FPU_st0_tag == TW_Zero )
     {
-      if ( st1_tag <= TW_Zero ) { return; }
+      if ( st1_tag == TW_Valid )
+	{
+
+#ifdef DENORM_OPERAND
+	  if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  return;
+	}
+      else if ( st1_tag == TW_Zero ) { return; }
       else if ( st1_tag == TW_Infinity )
 	{
 	  if ( st1_ptr->sign == SIGN_NEG )
 	    return;
 	  else
-	    { arith_invalid(FPU_st0_ptr); return; }
+	    {
+	      arith_invalid(FPU_st0_ptr); /* Zero scaled by +Infinity */
+	      return;
+	    }
 	}
       else if ( st1_tag == TW_NaN )
 	{ real_2op_NaN(FPU_st0_ptr, st1_ptr, FPU_st0_ptr); return; }
     }
   else if ( FPU_st0_tag == TW_Infinity )
     {
+      if ( st1_tag == TW_Valid )
+	{
+
+#ifdef DENORM_OPERAND
+	  if ( (st1_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	    return;
+#endif DENORM_OPERAND
+
+	  return;
+	}
       if ( ((st1_tag == TW_Infinity) && (st1_ptr->sign == SIGN_POS))
-	  || (st1_tag <= TW_Zero) )
+	  || (st1_tag == TW_Zero) )
 	return;
       else if ( st1_tag == TW_Infinity )
-	{ arith_invalid(FPU_st0_ptr); return; }
+	{
+	  arith_invalid(FPU_st0_ptr); /* Infinity scaled by -Infinity */
+	  return;
+	}
       else if ( st1_tag == TW_NaN )
 	{ real_2op_NaN(FPU_st0_ptr, st1_ptr, FPU_st0_ptr); return; }
     }

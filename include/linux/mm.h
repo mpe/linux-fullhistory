@@ -106,7 +106,6 @@ extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 extern void mem_init(unsigned long low_start_mem,
 		     unsigned long start_mem, unsigned long end_mem);
 extern void show_mem(void);
-extern void do_page_fault(unsigned long *esp, unsigned long error_code);
 extern void oom(struct task_struct * task);
 extern void si_meminfo(struct sysinfo * val);
 
@@ -152,5 +151,10 @@ extern unsigned short * mem_map;
 #define GFP_ATOMIC	0x01
 #define GFP_USER	0x02
 #define GFP_KERNEL	0x03
+
+
+/* vm_ops not present page codes */
+#define SHM_SWP_TYPE 0x41        
+extern void shm_no_page (ulong *);
 
 #endif

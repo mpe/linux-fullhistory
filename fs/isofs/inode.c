@@ -45,7 +45,8 @@ static struct super_operations isofs_sops = {
 	NULL,			/* put_inode */
 	isofs_put_super,
 	NULL,			/* write_super */
-	isofs_statfs
+	isofs_statfs,
+	NULL
 };
 
 
@@ -317,7 +318,8 @@ void isofs_read_inode(struct inode * inode)
 
 	/* There are defective discs out there - we do this to protect
 	   ourselves.  A cdrom will never contain more than 700Mb */
-	if(inode->i_size < 0 || inode->i_size > 700000000) {
+	if((inode->i_size < 0 || inode->i_size > 700000000) &&
+	    inode->i_sb->u.isofs_sb.s_cruft == 'n') {
 	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	};

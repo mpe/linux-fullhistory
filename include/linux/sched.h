@@ -9,7 +9,6 @@
  *  #define DEBUG
  */
 
-
 #define HZ 100
 
 #include <linux/tasks.h>
@@ -154,7 +153,7 @@ struct task_struct {
 	struct sigaction sigaction[32];
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
-	int exit_code;
+	int exit_code, exit_signal;
 	int dumpable:1;
 	int swappable:1;
 	unsigned long start_code,end_code,end_data,brk,start_stack;
@@ -167,6 +166,7 @@ struct task_struct {
 	 * p->p_pptr->pid)
 	 */
 	struct task_struct *p_opptr,*p_pptr, *p_cptr, *p_ysptr, *p_osptr;
+	struct wait_queue *wait_chldexit;	/* for wait4() */
 	/*
 	 * For ease of programming... Normal sleeps don't need to
 	 * keep track of a wait-queue: every task has an entry of it's own
@@ -193,6 +193,8 @@ struct task_struct {
 	struct inode * root;
 	struct inode * executable;
 	struct vm_area_struct * mmap;
+	struct shm_desc *shm;
+	struct sem_undo *semun;
 	struct {
 		struct inode * library;
 		unsigned long start;
@@ -202,7 +204,7 @@ struct task_struct {
 	int numlibraries;
 	struct file * filp[NR_OPEN];
 	fd_set close_on_exec;
-/* ldt for this task 0 - zero 1 - cs 2 - ds&ss, rest unused */
+/* ldt for this task - not currently used */
 	struct desc_struct ldt[32];
 /* tss for this task */
 	struct tss_struct tss;
@@ -217,6 +219,13 @@ struct task_struct {
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
 
 /*
+ * cloning flags:
+ */
+#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
+#define COPYVM		0x00000100	/* set if VM copy desired (like normal fork()) */
+#define COPYFD		0x00000200	/* set if fd's should be copied, not shared (NI) */
+
+/*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
@@ -224,11 +233,11 @@ struct task_struct {
 /* state etc */	{ 0,15,15,0,0,0,0, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,0, \
-/* ec,brk... */	0,0,0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
-/* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
+/* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* min_flt */	0,0,0,0, \
@@ -240,18 +249,17 @@ struct task_struct {
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
+/* ipc */	NULL, NULL, \
 /* libraries */	{ { NULL, 0, 0, 0}, }, 0, \
 /* filp */	{NULL,}, \
 /* cloe */	{{ 0, }}, \
 		{ \
-			{0,0}, \
-/* ldt */		{0x1ff,0xc0c0fa00}, \
-			{0x1ff,0xc0c0f200}, \
+/* ldt */		{0,0}, \
 		}, \
 /*tss*/	{0,sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
-	 0x10,0,0,0,0,(long) &swapper_pg_dir,\
+	 KERNEL_DS,0,0,0,0,(long) &swapper_pg_dir,\
 	 0,0,0,0,0,0,0,0, \
-	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
+	 0,0,USER_DS,USER_DS,USER_DS,USER_DS,USER_DS,USER_DS, \
 	 _LDT(0),0x80000000,{0xffffffff}, \
 		{ { 0, }, } \
 	} \
@@ -269,13 +277,12 @@ extern int ignore_irq13;
 
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 
-extern void add_timer(long jiffies, void (*fn)(void));
-
 extern void sleep_on(struct wait_queue ** p);
 extern void interruptible_sleep_on(struct wait_queue ** p);
 extern void wake_up(struct wait_queue ** p);
 extern void wake_up_interruptible(struct wait_queue ** p);
 
+extern void notify_parent(struct task_struct * tsk);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
 
@@ -284,10 +291,19 @@ extern void free_irq(unsigned int irq);
 extern int irqaction(unsigned int irq,struct sigaction * new);
 
 /*
- * Entry into gdt where to find first TSS. 0-nul, 1-cs, 2-ds, 3-syscall
- * 4-TSS0, 5-LDT0, 6-TSS1 etc ...
+ * Entry into gdt where to find first TSS. GDT layout:
+ *   0 - nul
+ *   1 - kernel code segment
+ *   2 - kernel data segment
+ *   3 - user code segment
+ *   4 - user data segment
+ * ...
+ *   8 - TSS #0
+ *   9 - LDT #0
+ *  10 - TSS #1
+ *  11 - LDT #1
  */
-#define FIRST_TSS_ENTRY 4
+#define FIRST_TSS_ENTRY 8
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))

@@ -81,18 +81,22 @@ switch ( type )
   {
   case 000:       /* fld m32real */
     reg_load_single();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 001:      /* fild m32int */
     reg_load_int32();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 002:      /* fld m64real */
     reg_load_double();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 003:      /* fild m16int */
     reg_load_int16();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 010:      /* fst m32real */
@@ -135,6 +139,7 @@ switch ( type )
     break;
   case 023:     /* fbld m80dec */
     reg_load_bcd();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 024:     /* fldcw */
@@ -152,10 +157,12 @@ switch ( type )
     break;
   case 025:      /* fld m80real */
     reg_load_extended();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 027:      /* fild m64int */
     reg_load_int64();
+    setcc(0);     /* Clear the SW_C1 bit, "other bits undefined" */
     reg_move(&FPU_loaded_data, pop_ptr);
     break;
   case 030:     /* fstenv  m14/28byte */
@@ -187,8 +194,8 @@ switch ( type )
 		 (see the 80486 manual p16-28) */
     break;
   case 036:      /* fstsw m2byte */
-    status_word &= ~SW_TOP;
-    status_word |= (top&7) << SW_TOPS;
+    status_word &= ~SW_Top;
+    status_word |= (top&7) << SW_Top_Shift;
     RE_ENTRANT_CHECK_OFF
     verify_area(VERIFY_WRITE,FPU_data_address,2);
     put_fs_word(status_word,(short *) FPU_data_address);

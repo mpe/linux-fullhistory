@@ -26,6 +26,7 @@ typedef struct
 	Scsi_Device  	*device;		
 	unsigned char	sector_bit_size;	/* sector size = 2^sector_bit_size	*/
 	unsigned char	sector_bit_shift;	/* sectors/FS block = 2^sector_bit_shift*/
+	unsigned 	needs_sector_size:1;   	/* needs to get sector size */
 	unsigned 	ten:1;			/* support ten byte commands		*/
 	unsigned 	remap:1;		/* support remapping			*/
 	unsigned 	use:1;			/* is this device still supportable	*/

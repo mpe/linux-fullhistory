@@ -1,0 +1,9 @@
+
+	The files and directories in this directory are under
+	heavy construction, and are intended only for device
+	driver writers to see how they should redo their code
+	to make it fit into DDI.
+
+	    THESE DRIVERS ARE NOT YET OPERATIONAL !!!
+
+	Fred, 05/07/93

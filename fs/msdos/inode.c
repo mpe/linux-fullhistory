@@ -61,7 +61,8 @@ static struct super_operations msdos_sops = {
 	msdos_put_inode,
 	msdos_put_super,
 	NULL, /* added in 0.96c */
-	msdos_statfs
+	msdos_statfs,
+	NULL
 };
 
 

@@ -32,7 +32,7 @@ static struct file_operations xiafs_dir_operations = {
     NULL,		/* mmap */
     NULL,		/* no special open code */
     NULL,		/* no special release code */
-    NULL		/* default fsync */
+    file_fsync		/* default fsync */
 };
 
 /*

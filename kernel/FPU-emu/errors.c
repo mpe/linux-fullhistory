@@ -33,6 +33,7 @@
 #undef PRINT_MESSAGES
 /* */
 
+
 void Un_impl(void)
 {
   unsigned char byte1, FPU_modrm;
@@ -69,23 +70,23 @@ void emu_printall()
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
 
 #ifdef DEBUGGING
-if ( status_word & SW_B ) printk("SW: backward compatibility (=ES)\n");
-if ( status_word & SW_C3 ) printk("SW: condition bit 3\n");
-if ( status_word & SW_C2 ) printk("SW: condition bit 2\n");
-if ( status_word & SW_C1 ) printk("SW: condition bit 1\n");
-if ( status_word & SW_C0 ) printk("SW: condition bit 0\n");
-if ( status_word & SW_ES ) printk("SW: exception summary\n");
-if ( status_word & SW_SF ) printk("SW: stack fault\n");
-if ( status_word & SW_PE ) printk("SW: loss of precision\n");
-if ( status_word & SW_UE ) printk("SW: underflow\n");
-if ( status_word & SW_OE ) printk("SW: overflow\n");
-if ( status_word & SW_ZE ) printk("SW: divide by zero\n");
-if ( status_word & SW_DE ) printk("SW: denormalized operand\n");
-if ( status_word & SW_IE ) printk("SW: invalid operation\n");
+if ( status_word & SW_Backward )    printk("SW: backward compatibility\n");
+if ( status_word & SW_C3 )          printk("SW: condition bit 3\n");
+if ( status_word & SW_C2 )          printk("SW: condition bit 2\n");
+if ( status_word & SW_C1 )          printk("SW: condition bit 1\n");
+if ( status_word & SW_C0 )          printk("SW: condition bit 0\n");
+if ( status_word & SW_Summary )     printk("SW: exception summary\n");
+if ( status_word & SW_Stack_Fault ) printk("SW: stack fault\n");
+if ( status_word & SW_Precision )   printk("SW: loss of precision\n");
+if ( status_word & SW_Underflow )   printk("SW: underflow\n");
+if ( status_word & SW_Overflow )    printk("SW: overflow\n");
+if ( status_word & SW_Zero_Div )    printk("SW: divide by zero\n");
+if ( status_word & SW_Denorm_Op )   printk("SW: denormalized operand\n");
+if ( status_word & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
 
-  status_word = status_word & ~SW_TOP;
-  status_word |= (top&7) << SW_TOPS;
+  status_word = status_word & ~SW_Top;
+  status_word |= (top&7) << SW_Top_Shift;
 
   printk("At %p: %02x ", FPU_ORIG_EIP, byte1);
   if (FPU_modrm >= 0300)
@@ -101,18 +102,18 @@ if ( status_word & SW_IE ) printk("SW: invalid operation\n");
 	 status_word & 0x40 ? 1 : 0,     /* Stack flag */
 	 status_word & SW_C3?1:0, status_word & SW_C2?1:0, /* cc */
 	 status_word & SW_C1?1:0, status_word & SW_C0?1:0, /* cc */
-	 status_word & SW_PE?1:0, status_word & SW_UE?1:0, /* exception fl */
-	 status_word & SW_OE?1:0, status_word & SW_ZE?1:0, /* exception fl */
-	 status_word & SW_DE?1:0, status_word & SW_IE?1:0); /* exception fl */
+	 status_word & SW_Precision?1:0, status_word & SW_Underflow?1:0,
+	 status_word & SW_Overflow?1:0, status_word & SW_Zero_Div?1:0,
+	 status_word & SW_Denorm_Op?1:0, status_word & SW_Invalid?1:0);
   
 printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 	 control_word & 0x1000 ? 1 : 0,
 	 (control_word & 0x800) >> 11, (control_word & 0x400) >> 10,
 	 (control_word & 0x200) >> 9, (control_word & 0x100) >> 8,
 	 control_word & 0x80 ? 1 : 0,
-	 control_word & SW_PE?1:0, control_word & SW_UE?1:0, /* exception */
-	 control_word & SW_OE?1:0, control_word & SW_ZE?1:0, /* exception */
-	 control_word & SW_DE?1:0, control_word & SW_IE?1:0); /* exception */
+	 control_word & SW_Precision?1:0, control_word & SW_Underflow?1:0,
+	 control_word & SW_Overflow?1:0, control_word & SW_Zero_Div?1:0,
+	 control_word & SW_Denorm_Op?1:0, control_word & SW_Invalid?1:0);
 
   for ( i = 0; i < 8; i++ )
     {
@@ -216,6 +217,12 @@ static struct {
               0x210  in reg_u_sub.S
               0x211  in reg_u_sub.S
               0x212  in reg_u_sub.S
+	      0x213  in wm_sqrt.S
+	      0x214  in wm_sqrt.S
+	      0x215  in wm_sqrt.S
+	      0x216  in reg_round.S
+	      0x217  in reg_round.S
+	      0x218  in reg_round.S
  */
 
 void exception(int n)
@@ -228,19 +235,27 @@ void exception(int n)
       int_type = n - EX_INTERNAL;
       n = EX_INTERNAL;
       /* Set lots of exception bits! */
-      status_word |= (0x3f | EX_ErrorSummary | FPU_BUSY);
+      status_word |= (SW_Exc_Mask | SW_Summary | FPU_BUSY);
     }
   else
     {
+      /* Extract only the bits which we use to set the status word */
+      n &= (SW_Exc_Mask);
       /* Set the corresponding exception bit */
-      status_word |= (n | EX_ErrorSummary | FPU_BUSY);
-      if (n == EX_StackUnder)    /* Stack underflow */
-	/* This bit distinguishes over- from underflow */
-	status_word &= ~SW_C1;
+      status_word |= n;
+      if ( status_word & ~control_word & CW_Exceptions )
+	status_word |= SW_Summary;
+      if ( n & (SW_Stack_Fault | EX_Precision) )
+	{
+	  if ( !(n & SW_C1) )
+	    /* This bit distinguishes over- from underflow for a stack fault,
+	       and roundup from round-down for precision loss. */
+	    status_word &= ~SW_C1;
+	}
     }
 
   RE_ENTRANT_CHECK_OFF
-  if ( (~control_word & n & CW_EXM) || (n == EX_INTERNAL) )
+  if ( (~control_word & n & CW_Exceptions) || (n == EX_INTERNAL) )
     {
 #ifdef PRINT_MESSAGES
       /* My message from the sponsor */
@@ -249,7 +264,7 @@ void exception(int n)
       
       /* Get a name string for error reporting */
       for (i=0; exception_names[i].type; i++)
-	if (exception_names[i].type == n)
+	if ( (exception_names[i].type & n) == exception_names[i].type )
 	  break;
       
       if (exception_names[i].type)
@@ -271,7 +286,15 @@ void exception(int n)
 	emu_printall();
 #endif PRINT_MESSAGES
 
-      send_sig(SIGFPE, current, 1);
+      /*
+       * The 80486 generates an interrupt on the next non-control FPU
+       * instruction. So we need some means of flagging it.
+       * We use the ES (Error Summary) bit for this, assuming that
+       * this is the way a real FPU does it (until I can check it out),
+       * if not, then some method such as the following kludge might
+       * be needed.
+       */
+/*      regs[0].tag |= TW_FPU_Interrupt; */
     }
   RE_ENTRANT_CHECK_ON
 
@@ -279,8 +302,6 @@ void exception(int n)
   math_abort(FPU_info,SIGFPE);
 #endif __DEBUG__
 
-  /* Cause the look-ahead mechanism to terminate */
-  FPU_lookahead = 0;
 }
 
 
@@ -288,33 +309,54 @@ void exception(int n)
 void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   FPU_REG *x;
-  
+  int signalling;
+
   x = a;
   if (a->tag == TW_NaN)
     {
       if (b->tag == TW_NaN)
 	{
+	  signalling = !(a->sigh & b->sigh & 0x40000000);
 	  /* find the "larger" */
 	  if ( *(long long *)&(a->sigl) < *(long long *)&(b->sigl) )
 	    x = b;
 	}
-      /* else return the quiet version of the NaN in a */
+      else
+	{
+	  /* return the quiet version of the NaN in a */
+	  signalling = !(a->sigh & 0x40000000);
+	}
     }
-  else if (b->tag == TW_NaN)
+  else
+#ifdef PARANOID
+    if (b->tag == TW_NaN)
+#endif PARANOID
     {
+      signalling = !(b->sigh & 0x40000000);
       x = b;
     }
 #ifdef PARANOID
   else
     {
+      signalling = 0;
       EXCEPTION(EX_INTERNAL|0x113);
       x = &CONST_QNaN;
     }
 #endif PARANOID
-  
-  if ( control_word & EX_Invalid )
+
+  if ( !signalling )
+    {
+      if ( !(x->sigh & 0x80000000) )  /* pseudo-NaN ? */
+	x = &CONST_QNaN;
+      reg_move(x, dest);
+      return;
+    }
+
+  if ( control_word & CW_Invalid )
     {
       /* The masked response */
+      if ( !(x->sigh & 0x80000000) )  /* pseudo-NaN ? */
+	x = &CONST_QNaN;
       reg_move(x, dest);
       /* ensure a Quiet NaN */
       dest->sigh |= 0x40000000;
@@ -325,11 +367,11 @@ void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
   return;
 }
 
-/* Invalid arith operation on valid registers */
+/* Invalid arith operation on Valid registers */
 void arith_invalid(FPU_REG *dest)
 {
   
-  if ( control_word & EX_Invalid )
+  if ( control_word & CW_Invalid )
     {
       /* The masked response */
       reg_move(&CONST_QNaN, dest);
@@ -346,7 +388,7 @@ void arith_invalid(FPU_REG *dest)
 void divide_by_zero(int sign, FPU_REG *dest)
 {
 
-  if ( control_word & EX_ZeroDiv )
+  if ( control_word & CW_ZeroDiv )
     {
       /* The masked response */
       reg_move(&CONST_INF, dest);
@@ -360,13 +402,53 @@ void divide_by_zero(int sign, FPU_REG *dest)
 }
 
 
+/* This may be called often, so keep it lean */
+void set_precision_flag_up(void)
+{
+  if ( control_word & CW_Precision )
+    status_word |= (SW_Precision | SW_C1);   /* The masked response */
+  else
+    exception(EX_Precision | SW_C1);
+
+}
+
+
+/* This may be called often, so keep it lean */
+void set_precision_flag_down(void)
+{
+  if ( control_word & CW_Precision )
+    {   /* The masked response */
+      status_word &= ~SW_C1;
+      status_word |= SW_Precision;
+    }
+  else
+    exception(EX_Precision);
+}
+
+
+int denormal_operand(void)
+{
+  if ( control_word & CW_Denormal )
+    {   /* The masked response */
+      status_word |= SW_Denorm_Op;
+      return 0;
+    }
+  else
+    {
+      exception(EX_Denormal);
+      return 1;
+    }
+}
+
+
 void arith_overflow(FPU_REG *dest)
 {
 
-  if ( control_word & EX_Overflow )
+  if ( control_word & CW_Overflow )
     {
       char sign;
       /* The masked response */
+/* **** The response here depends upon the rounding mode */
       sign = dest->sign;
       reg_move(&CONST_INF, dest);
       dest->sign = sign;
@@ -377,7 +459,9 @@ void arith_overflow(FPU_REG *dest)
       dest->exp -= (3 * (1 << 13));
     }
 
-  EXCEPTION(EX_Overflow);
+  /* By definition, precision is lost.
+     It appears that the roundup bit (C1) is also set by convention. */
+  EXCEPTION(EX_Overflow | EX_Precision | SW_C1);
 
   return;
 
@@ -387,7 +471,7 @@ void arith_overflow(FPU_REG *dest)
 void arith_underflow(FPU_REG *dest)
 {
 
-  if ( control_word & EX_Underflow )
+  if ( control_word & CW_Underflow )
     {
       /* The masked response */
       if ( dest->exp <= EXP_UNDER - 63 )
@@ -408,7 +492,7 @@ void arith_underflow(FPU_REG *dest)
 void stack_overflow(void)
 {
 
- if ( control_word & EX_Invalid )
+ if ( control_word & CW_Invalid )
     {
       /* The masked response */
       top--;
@@ -425,10 +509,43 @@ void stack_overflow(void)
 void stack_underflow(void)
 {
 
- if ( control_word & EX_Invalid )
+ if ( control_word & CW_Invalid )
     {
       /* The masked response */
       reg_move(&CONST_QNaN, FPU_st0_ptr);
+    }
+
+  EXCEPTION(EX_StackUnder);
+
+  return;
+
+}
+
+
+void stack_underflow_i(int i)
+{
+
+ if ( control_word & CW_Invalid )
+    {
+      /* The masked response */
+      reg_move(&CONST_QNaN, &(st(i)));
+    }
+
+  EXCEPTION(EX_StackUnder);
+
+  return;
+
+}
+
+
+void stack_underflow_pop(int i)
+{
+
+ if ( control_word & CW_Invalid )
+    {
+      /* The masked response */
+      reg_move(&CONST_QNaN, &(st(i)));
+      pop();
     }
 
   EXCEPTION(EX_StackUnder);

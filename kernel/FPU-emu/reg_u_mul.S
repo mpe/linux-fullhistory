@@ -26,7 +26,6 @@
 #include "control_w.h"
 
 
-
 .data
 	.align 2,0
 accum_0:
@@ -56,6 +55,27 @@ _reg_u_mul:
 	jz	L_bugged
 #endif PARANOID
 
+#ifdef DENORM_OPERAND
+	movl	EXP(%esi),%eax
+	cmpl	EXP_UNDER,%eax
+	jg	xOp1_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp1_not_denorm:
+	movl	EXP(%edi),%eax
+	cmpl	EXP_UNDER,%eax
+	jg	xOp2_not_denorm
+
+	call	_denormal_operand
+	orl	%eax,%eax
+	jnz	FPU_Arith_exit
+
+xOp2_not_denorm:
+#endif DENORM_OPERAND
+
 	xorl	%ecx,%ecx
 	xorl	%ebx,%ebx
 
@@ -83,6 +103,7 @@ _reg_u_mul:
 
 	movl	EXP(%esi),%eax	/* Compute the exponent */
 	addl	EXP(%edi),%eax
+	subl	EXP_BIAS-1,%eax
 //  Have now finished with the sources
 	movl	PARAM3,%edi	// Point to the destination
 	movl	%eax,EXP(%edi)
