@@ -134,6 +134,13 @@ extern void bttv_init_card(struct bttv *btv);
 extern void tea5757_set_freq(struct bttv *btv, unsigned short freq);
 extern void bttv_hauppauge_boot_msp34xx(struct bttv *btv);
 
+/* kernel cmd line parse helper */
+extern int bttv_parse(char *str, int max, int *vals);
+
+/* extra tweaks for some chipsets */
+extern void bttv_check_chipset(void);
+extern int bttv_handle_chipset(struct bttv *btv);
+
 /* ---------------------------------------------------------- */
 /* exported by bttv-if.c                                      */
 /* interface for gpio access by other modules                 */

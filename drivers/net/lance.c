@@ -58,7 +58,7 @@ static const char *version = "lance.c:v1.15ac 1999/11/13 dplatt@3do.com, becker@
 
 static unsigned int lance_portlist[] __initdata = { 0x300, 0x320, 0x340, 0x360, 0};
 int lance_probe(struct net_device *dev);
-int lance_probe1(struct net_device *dev, int ioaddr, int irq, int options);
+static int lance_probe1(struct net_device *dev, int ioaddr, int irq, int options);
 
 #ifdef LANCE_DEBUG
 int lance_debug = LANCE_DEBUG;
@@ -287,20 +287,14 @@ static void lance_tx_timeout (struct net_device *dev);
 #ifdef MODULE
 #define MAX_CARDS		8	/* Max number of interfaces (cards) per module */
 
-static int io[MAX_CARDS] = { 0, };
-static int dma[MAX_CARDS] = { 0, };
-static int irq[MAX_CARDS]  = { 0, };
+static struct net_device dev_lance[MAX_CARDS];
+static int io[MAX_CARDS];
+static int dma[MAX_CARDS];
+static int irq[MAX_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_CARDS) "i");
 MODULE_PARM(dma, "1-" __MODULE_STRING(MAX_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_CARDS) "i");
-
-static struct net_device dev_lance[MAX_CARDS] =
-{{
-    "", /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, NULL}};
 
 int init_module(void)
 {
@@ -374,7 +368,7 @@ int lance_probe(struct net_device *dev)
 	return -ENODEV;
 }
 
-int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options)
+static int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options)
 {
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
@@ -437,6 +431,9 @@ int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options
 	/* We can't use init_etherdev() to allocate dev->priv because it must
 	   a ISA DMA-able region. */
 	dev = init_etherdev(dev, 0);
+	if (!dev)
+		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 	dev->open = lance_open_fail;
 	chipname = chip_table[lance_version].name;
 	printk("%s: %s at %#3x,", dev->name, chipname, ioaddr);
@@ -652,8 +649,6 @@ lance_open(struct net_device *dev)
 		request_irq(dev->irq, &lance_interrupt, 0, lp->name, dev)) {
 		return -EAGAIN;
 	}
-
-	MOD_INC_USE_COUNT;
 
 	/* We used to allocate DMA here, but that was silly.
 	   DMA lines can't be shared!  We now permanently allocate them. */
@@ -1143,7 +1138,6 @@ lance_close(struct net_device *dev)
 
 	lance_purge_ring(dev);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

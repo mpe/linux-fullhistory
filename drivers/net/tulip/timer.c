@@ -90,6 +90,7 @@ void tulip_timer(unsigned long data)
 	case DC21142:
 	case MX98713:
 	case COMPEX9881:
+	case DM910X:
 	default: {
 		struct medialeaf *mleaf;
 		unsigned char *p;

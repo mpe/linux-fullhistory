@@ -28,7 +28,7 @@
 #include <asm/unaligned.h>
 
 static char version[] __devinitdata =
-	"Linux Tulip driver version 0.9.11 (November 3, 2000)\n";
+	"Linux Tulip driver version 0.9.12 (December 17, 2000)\n";
 
 
 /* A few user-configurable values. */
@@ -147,6 +147,9 @@ struct tulip_chip_table tulip_tbl[] = {
   { "Intel DS21145 Tulip", 128, 0x0801fbff,
 	HAS_MII | HAS_MEDIA_TABLE | ALWAYS_CHECK_MII | HAS_ACPI | HAS_NWAY,
 	t21142_timer },
+  { "Davicom DM9102/DM9102A", 128, 0x0001ebef,
+	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM | HAS_ACPI,
+	tulip_timer },
   {0},
 };
 
@@ -171,8 +174,8 @@ static struct pci_device_id tulip_pci_tbl[] __devinitdata = {
 	{ 0x104A, 0x2774, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMET },
 	{ 0x11F6, 0x9881, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMPEX9881 },
 	{ 0x8086, 0x0039, PCI_ANY_ID, PCI_ANY_ID, 0, 0, I21145 },
-	{ 0x1282, 0x9100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
-	{ 0x1282, 0x9102, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
+	{ 0x1282, 0x9100, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DM910X },
+	{ 0x1282, 0x9102, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DM910X },
 	{ 0x1113, 0x1217, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98715 },
 	{0, }
 };
@@ -467,7 +470,8 @@ static void tulip_tx_timeout(struct net_device *dev)
 			tulip_select_media(dev, 0);
 		}
 	} else if (tp->chip_id == DC21140 || tp->chip_id == DC21142
-			   || tp->chip_id == MX98713 || tp->chip_id == COMPEX9881) {
+			   || tp->chip_id == MX98713 || tp->chip_id == COMPEX9881
+			   || tp->chip_id == DM910X) {
 		printk(KERN_WARNING "%s: 21140 transmit timed out, status %8.8x, "
 			   "SIA %8.8x %8.8x %8.8x %8.8x, resetting...\n",
 			   dev->name, inl(ioaddr + CSR5), inl(ioaddr + CSR12),
@@ -1355,6 +1359,7 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 		outl(0x00000004, ioaddr + CSR13);
 		break;
 	case DC21140:
+	case DM910X:
 	default:
 		if (tp->mtable)
 			outl(tp->mtable->csr12dir | 0x100, ioaddr + CSR12);

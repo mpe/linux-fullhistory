@@ -568,16 +568,16 @@ typedef struct {
 
 /******************************************************************************
 * 
-* The DAA Analog GAIN sets 2 parameters at one time, the recieve gain (AGRR), 
+* The DAA Analog GAIN sets 2 parameters at one time, the receive gain (AGRR), 
 * and the transmit gain (AGX).  OR together the components and pass them
 * as the parameter to IXJCTL_DAA_AGAIN.  The default setting is both at 0dB.
 * 
 ******************************************************************************/
 #define IXJCTL_DAA_AGAIN		_IOW ('q', 0xD2, int)
 
-#define AGRR00DB	0x00	// Analog gain in recieve direction 0dB
-#define AGRR3_5DB	0x10	// Analog gain in recieve direction 3.5dB
-#define AGRR06DB	0x30	// Analog gain in recieve direction 6dB
+#define AGRR00DB	0x00	// Analog gain in receive direction 0dB
+#define AGRR3_5DB	0x10	// Analog gain in receive direction 3.5dB
+#define AGRR06DB	0x30	// Analog gain in receive direction 6dB
 
 #define AGX00DB		0x00	// Analog gain in transmit direction 0dB
 #define AGX_6DB		0x04	// Analog gain in transmit direction -6dB

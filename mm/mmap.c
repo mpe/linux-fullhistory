@@ -732,9 +732,6 @@ int do_munmap(struct mm_struct *mm, unsigned long addr, size_t len)
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
 		size = end - st;
 
-		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
-			mpnt->vm_ops->unmap(mpnt, st, size);
-
 		if (mpnt->vm_flags & VM_DENYWRITE &&
 		    (st != mpnt->vm_start || end != mpnt->vm_end) &&
 		    (file = mpnt->vm_file) != NULL) {
@@ -878,6 +875,7 @@ void exit_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt;
 
+	release_segments(mm);
 	spin_lock(&mm->page_table_lock);
 	mpnt = mm->mmap;
 	mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
@@ -892,8 +890,6 @@ void exit_mmap(struct mm_struct * mm)
 		unsigned long size = end - start;
 
 		if (mpnt->vm_ops) {
-			if (mpnt->vm_ops->unmap)
-				mpnt->vm_ops->unmap(mpnt, start, size);
 			if (mpnt->vm_ops->close)
 				mpnt->vm_ops->close(mpnt);
 		}

@@ -74,7 +74,7 @@ static char *version =
 	"ni5010.c: v1.00 06/23/97 Jan-Pascal van Best and Andreas Mohr\n";
 	
 /* bufsize_rcv == 0 means autoprobing */
-unsigned int bufsize_rcv = 0;
+static unsigned int bufsize_rcv = 0;
 
 #define jumpered_interrupts	/* IRQ line jumpered on board */
 #undef jumpered_dma		/* No DMA used */
@@ -114,8 +114,8 @@ static void	reset_receiver(struct net_device *dev);
 
 static int	process_xmt_interrupt(struct net_device *dev);
 #define tx_done(dev) 1
-extern void	hardware_send_packet(struct net_device *dev, char *buf, int length);
-extern void 	chipset_init(struct net_device *dev, int startp);
+static void	hardware_send_packet(struct net_device *dev, char *buf, int length);
+static void 	chipset_init(struct net_device *dev, int startp);
 static void	dump_packet(void *buf, int len);
 static void 	show_registers(struct net_device *dev);
 
@@ -123,11 +123,12 @@ static void 	show_registers(struct net_device *dev);
 int __init ni5010_probe(struct net_device *dev)
 {
 	int *port;
-
-	int base_addr = dev ? dev->base_addr : 0;
+	int base_addr = dev->base_addr;
 
         PRINTK2((KERN_DEBUG "%s: Entering ni5010_probe\n", dev->name));
-        
+
+	SET_MODULE_OWNER(dev);
+
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return ni5010_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
@@ -158,7 +159,7 @@ static inline int rd_port(int ioaddr)
 	return inb(IE_SAPROM);
 }
 
-void __init trigger_irq(int ioaddr)
+static void __init trigger_irq(int ioaddr)
 {
 		outb(0x00, EDLC_RESET);	/* Clear EDLC hold RESET state */
 		outb(0x00, IE_RESET);	/* Board reset */
@@ -398,7 +399,6 @@ static int ni5010_open(struct net_device *dev)
 		
 	if (NI5010_DEBUG) show_registers(dev); 
 
-    	MOD_INC_USE_COUNT;
 	PRINTK((KERN_DEBUG "%s: open successful\n", dev->name));
      	return 0;
 }
@@ -612,7 +612,6 @@ static int ni5010_close(struct net_device *dev)
 
 	netif_stop_queue(dev);
 	
-	MOD_DEC_USE_COUNT;
 	PRINTK((KERN_DEBUG "%s: %s closed down\n", dev->name, boardname));
 	return 0;
 
@@ -662,7 +661,7 @@ static void ni5010_set_multicast_list(struct net_device *dev)
 	}
 }
 
-extern void hardware_send_packet(struct net_device *dev, char *buf, int length)
+static void hardware_send_packet(struct net_device *dev, char *buf, int length)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -713,7 +712,7 @@ extern void hardware_send_packet(struct net_device *dev, char *buf, int length)
 	if (NI5010_DEBUG) show_registers(dev);	
 }
 
-extern void chipset_init(struct net_device *dev, int startp)
+static void chipset_init(struct net_device *dev, int startp)
 {
 	/* FIXME: Move some stuff here */
 	PRINTK3((KERN_DEBUG "%s: doing NOTHING in chipset_init\n", dev->name));
@@ -733,7 +732,7 @@ static void show_registers(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_ni5010 = { init: ni5010_probe };
+static struct net_device dev_ni5010;
 static int io;
 static int irq;
 
@@ -759,6 +758,7 @@ int init_module(void)
 	PRINTK2((KERN_DEBUG "%s: init_module irq=%#2x, io=%#3x\n", boardname, irq, io));
         dev_ni5010.irq=irq;
         dev_ni5010.base_addr=io;
+	dev_ni5010.init=ni5010_probe;
         if ((result = register_netdev(&dev_ni5010)) != 0) {
         	PRINTK((KERN_WARNING "%s: register_netdev returned %d.\n", 
         		boardname, result));

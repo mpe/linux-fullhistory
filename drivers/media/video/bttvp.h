@@ -25,7 +25,7 @@
 #ifndef _BTTVP_H_
 #define _BTTVP_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,48)
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,50)
 
 
 #include <linux/types.h>
@@ -42,7 +42,7 @@
 /* ---------------------------------------------------------- */
 /* bttv-driver.c                                              */
 
-/* insmod options */
+/* insmod options / kernel args */
 extern unsigned int bttv_verbose;
 extern unsigned int bttv_debug;
 extern unsigned int bttv_gpio;

@@ -57,8 +57,23 @@ static void bt848_set_risc_jmps(struct bttv *btv, int state);
 int bttv_num;			/* number of Bt848s in use */
 struct bttv bttvs[BTTV_MAX];
 
-/* insmod args */
-MODULE_PARM(triton1,"i");
+/* configuration variables */
+#if defined(__sparc__) || defined(__powerpc__) || defined(__hppa__)
+static unsigned int bigendian=1;
+#else
+static unsigned int bigendian=0;
+#endif
+static unsigned int radio[BTTV_MAX];
+static unsigned int fieldnr = 0;
+static unsigned int irq_debug = 0;
+static unsigned int gbuffers = 2;
+static unsigned int gbufsize = BTTV_MAX_FBUF;
+static unsigned int combfilter = 0;
+unsigned int bttv_debug = 0;
+unsigned int bttv_verbose = 1;
+unsigned int bttv_gpio = 0;
+
+/* insmod options */
 MODULE_PARM(radio,"1-4i");
 MODULE_PARM_DESC(radio,"The TV card supports radio, default is 0 (no)");
 MODULE_PARM(bigendian,"i");
@@ -82,21 +97,11 @@ MODULE_PARM(combfilter,"i");
 MODULE_DESCRIPTION("bttv - v4l driver module for bt848/878 based cards");
 MODULE_AUTHOR("Ralph  Metzler & Marcus Metzler & Gerd Knorr");
 
-#if defined(__sparc__) || defined(__powerpc__)
-static unsigned int bigendian=1;
-#else
-static unsigned int bigendian=0;
+/* kernel args */
+#ifndef MODULE
+static int __init p_radio(char *str) { return bttv_parse(str,BTTV_MAX,radio); }
+__setup("bttv.radio=", p_radio);
 #endif
-static int triton1=0;
-static unsigned int radio[BTTV_MAX];
-static unsigned int fieldnr = 0;
-static unsigned int irq_debug = 0;
-static unsigned int gbuffers = 2;
-static unsigned int gbufsize = BTTV_MAX_FBUF;
-static unsigned int combfilter = 0;
-unsigned int bttv_debug = 0;
-unsigned int bttv_verbose = 1;
-unsigned int bttv_gpio = 0;
 
 #define I2C_TIMING (0x7<<4)
 #define I2C_DELAY   10
@@ -382,7 +387,8 @@ static int set_pll(struct bttv *btv)
                         /* printk ("bttv%d: PLL: is off\n",btv->nr); */
                         return 0;
                 }
-                printk ("bttv%d: PLL: switching off\n",btv->nr);
+		if (bttv_verbose)
+			printk ("bttv%d: PLL: switching off\n",btv->nr);
                 btwrite(0x00,BT848_TGCTRL);
                 btwrite(0x00,BT848_PLL_XCI);
                 btv->pll.pll_current = 0;
@@ -2341,44 +2347,6 @@ static struct video_device radio_template=
 };
 
 
-#define  TRITON_PCON	           0x50 
-#define  TRITON_BUS_CONCURRENCY   (1<<0)
-#define  TRITON_STREAMING	  (1<<1)
-#define  TRITON_WRITE_BURST	  (1<<2)
-#define  TRITON_PEER_CONCURRENCY  (1<<3)
-  
-
-static void __devinit handle_chipset(void)
-{
-	struct pci_dev *dev = NULL;
-  
-	/*	Just in case some nut set this to something dangerous */
-	if (triton1)
-		triton1=BT848_INT_ETBF;
-	
-	while ((dev = pci_find_device(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_496, dev))) 
-	{
-		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
-		printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
-	}			
-
-        while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL,
-				      PCI_DEVICE_ID_INTEL_82441, dev))) 
-        {
-                unsigned char b;
-                pci_read_config_byte(dev, 0x53, &b);
-                DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
-                DEBUG(printk("bufcon=0x%02x\n",b));
-        }
-
-	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437, dev))) 
-	{
-		printk(KERN_INFO "bttv: Host bridge 82437FX Triton PIIX\n");
-		triton1=BT848_INT_ETBF;
-	}
-}
-
-
 static void bt848_set_risc_jmps(struct bttv *btv, int flags)
 {
 	if (-1 == flags) {
@@ -2485,10 +2453,6 @@ static void bt848_set_risc_jmps(struct bttv *btv, int flags)
 
 static int __devinit init_video_dev(struct bttv *btv)
 {
-	memcpy(&btv->video_dev,&bttv_template, sizeof(bttv_template));
-	memcpy(&btv->vbi_dev,&vbi_template, sizeof(vbi_template));
-	memcpy(&btv->radio_dev,&radio_template,sizeof(radio_template));
-        
 	audio(btv, AUDIO_MUTE, 1);
         
 	if(video_register_device(&btv->video_dev,VFL_TYPE_GRABBER)<0)
@@ -2914,7 +2878,7 @@ static void __devexit bttv_remove(struct pci_dev *pci_dev)
 static int __devinit bttv_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 {
 	int result;
-	unsigned char command,lat;
+	unsigned char lat;
 	struct bttv *btv;
 #if defined(__powerpc__)
         unsigned int cmd;
@@ -2936,7 +2900,11 @@ static int __devinit bttv_probe(struct pci_dev *dev, const struct pci_device_id 
 	btv->s_lock = SPIN_LOCK_UNLOCKED;
 	init_waitqueue_head(&btv->gpioq);
 	btv->shutdown=0;
-
+	
+	memcpy(&btv->video_dev,&bttv_template, sizeof(bttv_template));
+	memcpy(&btv->vbi_dev,&vbi_template, sizeof(vbi_template));
+	memcpy(&btv->radio_dev,&radio_template,sizeof(radio_template));
+	
         btv->id=dev->device;
         btv->irq=dev->irq;
 	btv->bt848_adr=pci_resource_start(dev,0);
@@ -2985,36 +2953,22 @@ static int __devinit bttv_probe(struct pci_dev *dev, const struct pci_device_id 
         {
                 printk(KERN_ERR "bttv%d: Bad irq number or handler\n",
                        bttv_num);
-		goto fail;
+		goto fail1;
         }
         if (result==-EBUSY)
         {
                 printk(KERN_ERR "bttv%d: IRQ %d busy, change your PnP config in BIOS\n",bttv_num,btv->irq);
-		goto fail;
+		goto fail1;
         }
         if (result < 0) 
-		goto fail;
+		goto fail1;
         
+	if (0 != bttv_handle_chipset(btv)) {
+		result = -1;
+		goto fail2;
+	}
+	
         pci_set_master(dev);
-
-        btv->triton1=triton1 ? BT848_INT_ETBF : 0;
-        if (triton1 && btv->id >= 878) 
-        {
-                btv->triton1 = 0;
-                printk("bttv: Enabling 430FX compatibilty for bt878\n");
-                pci_read_config_byte(dev, BT878_DEVCTRL, &command);
-                command|=BT878_EN_TBFX;
-                pci_write_config_byte(dev, BT878_DEVCTRL, command);
-                pci_read_config_byte(dev, BT878_DEVCTRL, &command);
-                if (!(command&BT878_EN_TBFX)) 
-                {
-                        printk("bttv: 430FX compatibility could not be enabled\n");
-			free_irq(btv->irq,btv);
-			result = -1;
-			goto fail;
-                }
-        }
-
 	pci_set_drvdata(dev,btv);
 
 	if(init_bt848(btv) < 0) {
@@ -3024,8 +2978,10 @@ static int __devinit bttv_probe(struct pci_dev *dev, const struct pci_device_id 
 	bttv_num++;
 
         return 0;
-	
- fail:
+
+ fail2:
+        free_irq(btv->irq,btv);
+ fail1:
 	release_mem_region(pci_resource_start(btv->dev,0),
 			   pci_resource_len(btv->dev,0));
 	return result;
@@ -3068,7 +3024,7 @@ int bttv_init_module(void)
 		printk(KERN_INFO "bttv: using %d buffers with %dk (%dk total) for capture\n",
 		       gbuffers,gbufsize/1024,gbuffers*gbufsize/1024);
 
-	handle_chipset();
+	bttv_check_chipset();
 
 	return pci_module_init(&bttv_pci_driver);
 }
@@ -3081,24 +3037,6 @@ void bttv_cleanup_module(void)
 
 module_init(bttv_init_module);
 module_exit(bttv_cleanup_module);
-
-#ifndef MODULE
-
-static int __init bttv_radio_setup(char *str)
-{
-	int i,number,res = 2;
-
-	for (i = 0; res == 2 && i < BTTV_MAX; i++) {
-		res = get_option(&str,&number);
-		if (res)
-			radio[i] = number;
-	}
-	return 1;
-}
-
-__setup("bttv_radio=", bttv_radio_setup);
-
-#endif /* not MODULE */
 
 /*
  * Local variables:

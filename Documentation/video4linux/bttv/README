@@ -31,8 +31,9 @@ Compile bttv
 ------------
 
 If you are compiling the kernel version, just say 'm' if you are asked
-for bttv.  I /strongly/ suggest to compile bttv as module, because
-there are some insmod options for configuring the driver.
+for bttv.  I /strongly/ recommend to compile bttv as module, because
+there are some insmod options for configuring the driver.  Starting
+with 0.7.49 the most important ones are available as kernel args too.
 
 If you downloaded the separate bttv bundle:  You need configured kernel
 sources to compile the bttv driver.  The driver uses some Makefile

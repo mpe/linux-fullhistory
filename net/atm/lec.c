@@ -772,10 +772,10 @@ lecd_attach(struct atm_vcc *vcc, int arg)
                 size = sizeof(struct lec_priv);
 #ifdef CONFIG_TR
                 if (is_trdev)
-                        dev_lec[i] = prepare_trdev(NULL, size);
+                        dev_lec[i] = init_trdev(NULL, size);
                 else
 #endif
-                dev_lec[i] = prepare_etherdev(NULL, size);
+                dev_lec[i] = init_etherdev(NULL, size);
                 if (!dev_lec[i])
                         return -ENOMEM;
 
@@ -783,7 +783,6 @@ lecd_attach(struct atm_vcc *vcc, int arg)
                 priv->is_trdev = is_trdev;
                 sprintf(dev_lec[i]->name, "lec%d", i);
                 lec_init(dev_lec[i]);
-		publish_netdev(dev_lec[i]);
         } else {
                 priv = dev_lec[i]->priv;
                 if (priv->lecd)
@@ -858,7 +857,7 @@ void cleanup_module(void)
         for (i = 0; i < MAX_LEC_ITF; i++) {
                 if (dev_lec[i] != NULL) {
                         priv = (struct lec_priv *)dev_lec[i]->priv;
-                        unregister_netdev(dev_lec[i]);
+                        unregister_trdev(dev_lec[i]);
                         kfree(dev_lec[i]);
                         dev_lec[i] = NULL;
                 }

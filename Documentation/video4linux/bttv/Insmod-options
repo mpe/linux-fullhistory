@@ -4,6 +4,7 @@ bttv.o
 
 	insmod args:
 		card=n		card type, see CARDLIST for a list.
+		tuner=n		tuner type, see CARDLIST for a list.
 		radio=0/1	card supports radio
 		pll=0/1/2	pll settings
 			0: don't use PLL

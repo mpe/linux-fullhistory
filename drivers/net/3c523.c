@@ -158,15 +158,10 @@ sizeof(nop_cmd) = 8;
 
 /**************************************************************************/
 
-#define DELAY(x) {int i=jiffies; \
-                  if(loops_per_sec == 1) \
-                     while(time_after(i+(x), jiffies)); \
-                  else \
-                     __delay((loops_per_sec>>5)*x); \
-                 }
+#define DELAY(x) { mdelay(32 * x); }
 
 /* a much shorter delay: */
-#define DELAY_16(); { __delay( (loops_per_sec>>16)+1 ); }
+#define DELAY_16(); { udelay(16) ; }
 
 /* wait for command with timeout: */
 #define WAIT_4_SCB_CMD() { int i; \

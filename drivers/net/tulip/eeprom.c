@@ -198,12 +198,23 @@ subsequent_board:
 				if (p[1] == 0x05) {
 					mtable->has_reset = i;
 					leaf->media = p[2] & 0x0f;
+				} else if (tp->chip_id == DM910X && p[1] == 0x80) {
+					/* Hack to ignore Davicom delay period block */
+					mtable->leafcount--;
+					count--;
+					i--;
+					leaf->leafdata = p + 2;
+					p += (p[0] & 0x3f) + 1;
+					continue;
 				} else if (p[1] & 1) {
 					mtable->has_mii = 1;
 					leaf->media = 11;
 				} else {
 					mtable->has_nonmii = 1;
 					leaf->media = p[2] & 0x0f;
+					/* Davicom's media number for 100BaseTX is strange */
+					if (tp->chip_id == DM910X && leaf->media == 1)
+						leaf->media = 3;
 					switch (leaf->media) {
 					case 0: new_advertise |= 0x0020; break;
 					case 4: new_advertise |= 0x0040; break;

@@ -1,7 +1,8 @@
 /*
-    bttv-cards.c  --  this file has card-specific stuff
+    bttv-cards.c
 
-    bttv - Bt848 frame grabber driver
+    this file has configuration informations - card-specific stuff
+    like the big tvcards array for the most part
 
     Copyright (C) 1996,97,98 Ralph  Metzler (rjkm@thp.uni-koeln.de)
                            & Marcus Metzler (mocm@thp.uni-koeln.de)
@@ -50,28 +51,55 @@ static void avermedia_tvphone_audio(struct bttv *btv, struct video_audio *v,
 static void terratv_audio(struct bttv *btv, struct video_audio *v, int set);
 static void gvbctv3pci_audio(struct bttv *btv, struct video_audio *v, int set);
 
-MODULE_PARM(card,"1-4i");
-MODULE_PARM_DESC(card,"specify TV/grabber card model, see CARDLIST file for a list");
-MODULE_PARM(pll,"1-4i");
-MODULE_PARM_DESC(pll,"specify installed crystal (0=none, 28=28 MHz, 35=35 MHz)");
-MODULE_PARM(autoload,"i");
-MODULE_PARM_DESC(autoload,"automatically load i2c modules like tuner.o, default is 1 (yes)");
-
-static unsigned int card[4] = { -1, -1, -1, -1 };
-static unsigned int pll[4]  = { -1, -1, -1, -1 };
+/* config variables */
+static int triton1=0;
+static unsigned int card[4]  = { -1, -1, -1, -1 };
+static unsigned int pll[4]   = { -1, -1, -1, -1 };
+static unsigned int tuner[4] = { -1, -1, -1, -1 };
 #ifdef MODULE
 static unsigned int autoload = 1;
 #else
 static unsigned int autoload = 0;
 #endif
-
-MODULE_PARM(gpiomask,"i");
-MODULE_PARM(audioall,"i");
-MODULE_PARM(audiomux,"1-5i");
 static unsigned int gpiomask = -1;
 static unsigned int audioall = -1;
 static unsigned int audiomux[5] = { -1, -1, -1, -1, -1 };
 
+/* insmod options */
+MODULE_PARM(triton1,"i");
+MODULE_PARM(card,"1-4i");
+MODULE_PARM_DESC(card,"specify TV/grabber card model, see CARDLIST file for a list");
+MODULE_PARM(pll,"1-4i");
+MODULE_PARM_DESC(pll,"specify installed crystal (0=none, 28=28 MHz, 35=35 MHz)");
+MODULE_PARM(tuner,"1-4i");
+MODULE_PARM_DESC(tuner,"specify installed tuner type");
+MODULE_PARM(autoload,"i");
+MODULE_PARM_DESC(autoload,"automatically load i2c modules like tuner.o, default is 1 (yes)");
+MODULE_PARM(gpiomask,"i");
+MODULE_PARM(audioall,"i");
+MODULE_PARM(audiomux,"1-5i");
+
+/* kernel args */
+#ifndef MODULE
+static int __init p_card(char *str)  { return bttv_parse(str,BTTV_MAX,card);  }
+static int __init p_pll(char *str)   { return bttv_parse(str,BTTV_MAX,pll);   }
+static int __init p_tuner(char *str) { return bttv_parse(str,BTTV_MAX,tuner); }
+__setup("bttv.card=",  p_card);
+__setup("bttv.pll=",   p_pll);
+__setup("bttv.tuner=", p_tuner);
+
+int __init bttv_parse(char *str, int max, int *vals)
+{
+	int i,number,res = 2;
+	
+	for (i = 0; res == 2 && i < max; i++) {
+		res = get_option(&str,&number);
+		if (res)
+			vals[i] = number;
+	}
+	return 1;
+}
+#endif
 
 /* ----------------------------------------------------------------------- */
 /* list of card IDs for bt878+ cards                                       */
@@ -176,12 +204,12 @@ struct tvcard bttv_tvcards[] = {
 	tuner_type:	-1,
 },{
 	name:		"Diamond DTV2000",
-	video_inputs:	3,
+	video_inputs:	4,
 	audio_inputs:	1,
 	tuner:		0,
 	svhs:		2,
 	gpiomask:	3,
-	muxsel:		{ 2, 3, 1, 1},
+	muxsel:		{ 2, 3, 1, 0},
 	audiomux:	{ 0, 1, 0, 1, 3},
 	needs_tvaudio:	1,
 	tuner_type:	-1,
@@ -606,7 +634,7 @@ struct tvcard bttv_tvcards[] = {
 	audio_inputs:	4,
 	tuner:		0,
 	svhs:		2,
-	gpiomask:	4,
+	gpiomask:	12,
 	muxsel:		{ 2, 3, 1, 1},
 	audiomux:	{ 13, 14, 11, 7, 0, 0},
 	needs_tvaudio:	1,
@@ -907,9 +935,11 @@ void __devinit bttv_init_card(struct bttv *btv)
                 }
         }
 
-	/* tuner configuration */
+	/* tuner configuration (from card list / insmod option) */
  	if (-1 != bttv_tvcards[btv->type].tuner_type)
                 btv->tuner_type = bttv_tvcards[btv->type].tuner_type;
+	if (-1 != tuner[btv->nr])
+		btv->tuner_type = tuner[btv->nr];
 	if (btv->tuner_type != -1)
 		bttv_call_i2c_clients(btv,TUNER_SET_TYPE,&btv->tuner_type);
 
@@ -1296,7 +1326,26 @@ gvbctv3pci_audio(struct bttv *btv, struct video_audio *v, int set)
 static void
 avermedia_tvphone_audio(struct bttv *btv, struct video_audio *v, int set)
 {
-	/* TODO */
+#if 0 /* needs more testing -- might be we need two versions for PAL/NTSC */
+	int val = 0;
+
+	if (set) {
+		if (v->mode & VIDEO_SOUND_LANG1)   /* SAP */
+			val = 0xce;
+		if (v->mode & VIDEO_SOUND_STEREO)
+			val = 0xcd;
+		if (val) {
+			btaor(val, 0xff, BT848_GPIO_OUT_EN);
+			btaor(val, 0xff, BT848_GPIO_DATA);
+			if (bttv_gpio)
+				bttv_gpio_tracking(btv,"avermedia");
+		}
+	} else {
+		v->mode = VIDEO_SOUND_MONO | VIDEO_SOUND_STEREO |
+			VIDEO_SOUND_LANG1;
+		return;
+	}
+#endif
 }
 
 static void
@@ -1318,6 +1367,74 @@ terratv_audio(struct bttv *btv, struct video_audio *v, int set)
 			VIDEO_SOUND_LANG1 | VIDEO_SOUND_LANG2;
 	}
 }
+
+
+/* ----------------------------------------------------------------------- */
+/* motherboard chipset specific stuff                                      */
+
+static struct {
+	char            *name;
+	unsigned short  vendor;
+	unsigned short  device;
+} needs_etbf[] __devinitdata = {
+	{ "Intel 82437FX [Triton PIIX]",
+	  PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437  },
+	{ "VIA VT82C597 [Apollo VP3]",
+	  PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C597_0 },
+	{ NULL, 0, 0 }
+};
+
+void __devinit bttv_check_chipset(void)
+{
+	int i;
+	struct pci_dev *dev = NULL;
+
+	if(pci_pci_problems & PCIPCI_FAIL)
+		printk(KERN_WARNING "BT848 and your chipset may not work together.\n");
+
+        while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL,
+				      PCI_DEVICE_ID_INTEL_82441, dev))) {
+                unsigned char b;
+                pci_read_config_byte(dev, 0x53, &b);
+		if (bttv_debug)
+			printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "
+			       "bufcon=0x%02x\n",b);
+	}
+
+	if(pci_pci_problems & (PCIPCI_TRITON|PCIPCI_VIAETBF))
+	{
+		printk(KERN_INFO "bttv: Host bridge needs ETBF enabled.\n");
+		triton1=1;
+	}
+}
+
+int __devinit bttv_handle_chipset(struct bttv *btv)
+{
+ 	unsigned char command;
+
+	if (!triton1)
+		return 0;
+
+	if (bttv_verbose)
+		printk("bttv%d: enabling 430FX/VP3 compatibilty\n",btv->nr);
+
+	if (btv->id < 878) {
+		/* bt848 (mis)uses a bit in the irq mask */
+		btv->triton1 = BT848_INT_ETBF;
+	} else {
+		/* bt878 has a bit in the pci config space for it */
+                pci_read_config_byte(btv->dev, BT878_DEVCTRL, &command);
+                command |= BT878_EN_TBFX;
+                pci_write_config_byte(btv->dev, BT878_DEVCTRL, command);
+                pci_read_config_byte(btv->dev, BT878_DEVCTRL, &command);
+                if (!(command&BT878_EN_TBFX)) {
+                        printk("bttv: 430FX compatibility could not be enabled\n");
+			return -1;
+                }
+        }
+	return 0;
+}
+
 
 #ifndef MODULE
 

@@ -160,9 +160,9 @@ sizeof(nop_cmd) = 8;
 /**************************************************************************/
 
 /* different DELAYs */
-#define DELAY(x) __delay((loops_per_sec>>5)*(x));
-#define DELAY_16(); { __delay( (loops_per_sec>>16)+1 ); }
-#define DELAY_18(); { __delay( (loops_per_sec>>18)+1 ); }
+#define DELAY(x) mdelay(32 * x);
+#define DELAY_16(); { udelay(16); }
+#define DELAY_18(); { udelay(4); }
 
 /* wait for command with timeout: */
 #define WAIT_4_SCB_CMD() \
@@ -219,7 +219,8 @@ struct priv
 	struct net_device_stats stats;
 	unsigned long base;
 	char *memtop;
-	int lock,reseted;
+	long int lock;
+	int reseted;
 	volatile struct rfd_struct	*rfd_last,*rfd_top,*rfd_first;
 	volatile struct scp_struct	*scp;	/* volatile is important */
 	volatile struct iscp_struct	*iscp;	/* volatile is important */
@@ -246,7 +247,6 @@ static int ni52_close(struct net_device *dev)
 	ni_reset586(); /* the hard way to stop the receiver */
 
 	netif_stop_queue(dev);
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -256,20 +256,22 @@ static int ni52_close(struct net_device *dev)
  */
 static int ni52_open(struct net_device *dev)
 {
+	int ret;
+
 	ni_disint();
 	alloc586(dev);
 	init586(dev);
 	startrecv586(dev);
 	ni_enaint();
 
-	if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",dev))
+	ret = request_irq(dev->irq, &ni52_interrupt,0,dev->name,dev);
+	if (ret)
 	{
 		ni_reset586();
-		return -EAGAIN;
+		return ret;
 	}
 
 	netif_start_queue(dev);
-	MOD_INC_USE_COUNT;
 
 	return 0; /* most done by init */
 }
@@ -319,7 +321,7 @@ static int check586(struct net_device *dev,char *where,unsigned size)
 /******************************************************************
  * set iscp at the right place, called by ni52_probe1 and open586.
  */
-void alloc586(struct net_device *dev)
+static void alloc586(struct net_device *dev)
 {
 	struct priv *p =	(struct priv *) dev->priv;
 
@@ -362,6 +364,8 @@ int __init ni52_probe(struct net_device *dev)
 #endif
 	int base_addr = dev->base_addr;
 
+	SET_MODULE_OWNER(dev);
+
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return ni52_probe1(dev, base_addr);
 	else if (base_addr > 0)		/* Don't probe at all. */
@@ -393,8 +397,8 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 {
 	int i, size, retval;
 
-	if (!request_region(ioaddr, NI52_TOTAL_SIZE, "ni5210"))
-		return -ENODEV;
+	if (!request_region(ioaddr, NI52_TOTAL_SIZE, dev->name))
+		return -EBUSY;
 
 	if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
 	    !(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2)) {
@@ -1278,17 +1282,13 @@ static void set_multicast_list(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_ni52 = {
-	"",	/* device name inserted by net_init.c */
-	0, 0, 0, 0,
-	0x300, 9,	 /* I/O address, IRQ */
-	0, 0, 0, NULL, ni52_probe };
+static struct net_device dev_ni52;
 
 /* set: io,irq,memstart,memend or set it when calling insmod */
-int irq=9;
-int io=0x300;
-long memstart=0; /* e.g 0xd0000 */
-long memend=0;	 /* e.g 0xd4000 */
+static int irq=9;
+static int io=0x300;
+static long memstart=0; /* e.g 0xd0000 */
+static long memend=0;	 /* e.g 0xd4000 */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -1301,6 +1301,7 @@ int init_module(void)
 		printk("ni52: Autoprobing not allowed for modules.\nni52: Set symbols 'io' 'irq' 'memstart' and 'memend'\n");
 		return -ENODEV;
 	}
+	dev_ni52.init = ni52_probe;
 	dev_ni52.irq = irq;
 	dev_ni52.base_addr = io;
 	dev_ni52.mem_end = memend;

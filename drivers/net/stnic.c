@@ -95,18 +95,18 @@ STNIC_WRITE (int reg, byte val)
 
 int __init stnic_probe(void)
 {
-  struct net_device tmp, *dev = NULL;
+  struct net_device *dev;
   int i;
-
-  tmp.base_addr = 0x1000;
-  dev = &tmp;
 
   /* If we are not running on a SolutionEngine, give up now */
   if (! MACH_SE)
     return -ENODEV;
 
   /* New style probing API */
-  dev = init_etherdev (0, 0);
+  dev = init_etherdev (NULL, 0);
+  if (!dev)
+  	return -ENOMEM;
+  SET_MODULE_OWNER(dev);
   stnic_dev = dev;
 
   /* Allocate dev->priv and fill in 8390 specific dev fields. */
@@ -127,15 +127,16 @@ int __init stnic_probe(void)
 
   /* Snarf the interrupt now.  There's no point in waiting since we cannot
      share and the board will usually be enabled. */
-  if (request_irq (dev->irq, ei_interrupt, 0, "DP83902A", dev))
-    {
+  i = request_irq (dev->irq, ei_interrupt, 0, dev->name, dev);
+  if (i)  {
       printk (" unable to get IRQ %d.\n", dev->irq);
+      unregister_netdev(dev);
       kfree(dev->priv);
-      dev->priv = NULL;
-      return -EAGAIN;
+      kfree(dev);
+      return i;
     }
 
-  ei_status.name = "eth0";
+  ei_status.name = dev->name;
   ei_status.word16 = 1;
   ei_status.tx_start_page = START_PG;
   ei_status.rx_start_page = START_PG + TX_PAGES;
@@ -159,7 +160,6 @@ stnic_open (struct net_device *dev)
   printk ("stnic open\n");
 #endif
   ei_open (dev);
-  MOD_INC_USE_COUNT;
   return 0;
 }
 
@@ -167,7 +167,6 @@ static int
 stnic_close (struct net_device *dev)
 {
   ei_close (dev);
-  MOD_DEC_USE_COUNT;
   return 0;
 }
 

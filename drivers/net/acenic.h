@@ -83,9 +83,9 @@ struct ace_regs {
 	u32	Mb2Hi;
 	u32	TxPrd;
 	u32	Mb3Hi;
-	u32	RxStdPrd; /* RxStdPrd */
+	u32	RxStdPrd;
 	u32	Mb4Hi;
-	u32	RxJumboPrd; /* RxJumboPrd */
+	u32	RxJumboPrd;
 	u32	Mb5Hi;
 	u32	RxMiniPrd;
 	u32	Mb6Hi;
@@ -409,6 +409,7 @@ struct cmd {
 #define RCB_FLG_IP_SUM		0x02
 #define RCB_FLG_VLAN_ASSIST	0x10
 #define RCB_FLG_COAL_INT_ONLY	0x20
+#define RCB_FLG_TX_HOST_RING	0x40
 #define RCB_FLG_IEEE_SNAP_SUM	0x80
 #define RCB_FLG_EXT_RX_BD	0x100
 #define RCB_FLG_RNG_DISABLE	0x200
@@ -417,7 +418,7 @@ struct cmd {
 /*
  * TX ring
  */
-#define TX_RING_ENTRIES	128
+#define TX_RING_ENTRIES	256	
 #define TX_RING_SIZE	(TX_RING_ENTRIES * sizeof(struct tx_desc))
 #define TX_RING_BASE	0x3800
 
@@ -593,49 +594,56 @@ struct ace_skb
  */
 struct ace_private
 {
-	struct ace_skb		*skb;
-	struct ace_regs		*regs;		/* register base */
-	volatile int		fw_running;
-	int			version, fw_up, link;
-	int			promisc, mcast_all;
-	/*
-	 * The send ring is located in the shared memory window
-	 */
 	struct ace_info		*info;
-	struct tx_desc		*tx_ring;
-	dma_addr_t		info_dma;
+	struct ace_regs		*regs;		/* register base */
+	struct ace_skb		*skb;
+	dma_addr_t		info_dma;	/* 32/64 bit */
+
+	int			version, link;
+	int			promisc, mcast_all;
+
+	/*
+	 * TX elements
+	 */
+	struct tx_desc		*tx_ring
+				__attribute__ ((aligned (SMP_CACHE_BYTES)));
+	struct timer_list	timer;		/* used by TX handling only */
 	u32			tx_prd;
 	volatile u32		tx_full, tx_ret_csm;
-	struct timer_list	timer;
 
+	/*
+	 * RX elements
+	 */
 	unsigned long		std_refill_busy
 				__attribute__ ((aligned (SMP_CACHE_BYTES)));
 	unsigned long		mini_refill_busy, jumbo_refill_busy;
-	atomic_t		cur_rx_bufs,
-				cur_mini_bufs,
-				cur_jumbo_bufs;
+	atomic_t		cur_rx_bufs;
+	atomic_t		cur_mini_bufs;
+	atomic_t		cur_jumbo_bufs;
 	u32			rx_std_skbprd, rx_mini_skbprd, rx_jumbo_skbprd;
 	u32			cur_rx;
-	struct tq_struct	immediate;
-	int			bh_pending, jumbo;
-	/*
-	 * These elements are allocated using consistent PCI dma memory.
-	 */
+
 	struct rx_desc		*rx_std_ring;
 	struct rx_desc		*rx_jumbo_ring;
 	struct rx_desc		*rx_mini_ring;
 	struct rx_desc		*rx_return_ring;
-	dma_addr_t		rx_ring_base_dma;
+
+	int			tasklet_pending, jumbo;
+	struct tasklet_struct	ace_tasklet;
 
 	struct event		*evt_ring;
-	dma_addr_t		evt_ring_dma;
 
 	volatile u32		*evt_prd, *rx_ret_prd, *tx_csm;
+
+	dma_addr_t		tx_ring_dma;	/* 32/64 bit */
+	dma_addr_t		rx_ring_base_dma;
+	dma_addr_t		evt_ring_dma;
 	dma_addr_t		evt_prd_dma, rx_ret_prd_dma, tx_csm_dma;
 
 	unsigned char		*trace_buf;
 	struct pci_dev		*pdev;
 	struct net_device	*next;
+	volatile int		fw_running;
 	int			board_idx;
 	u16			pci_command;
 	u8			pci_latency;
@@ -652,7 +660,7 @@ struct ace_private
 static inline void set_aceaddr(aceaddr *aa, dma_addr_t addr)
 {
 	unsigned long baddr = (unsigned long) addr;
-#if (BITS_PER_LONG == 64)
+#ifdef ACE_64BIT_PTR
 	aa->addrlo = baddr & 0xffffffff;
 	aa->addrhi = baddr >> 32;
 #else
@@ -668,7 +676,7 @@ static inline void *get_aceaddr(aceaddr *aa)
 {
 	unsigned long addr;
 	mb();
-#if (BITS_PER_LONG == 64)
+#ifdef ACE_64BIT_PTR
 	addr = (u64)aa->addrhi << 32 | aa->addrlo;
 #else
 	addr = aa->addrlo;
@@ -710,7 +718,7 @@ static int ace_open(struct net_device *dev);
 static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static int ace_close(struct net_device *dev);
 static void ace_timer(unsigned long data);
-static void ace_bh(struct net_device *dev);
+static void ace_tasklet(unsigned long dev);
 static void ace_dump_trace(struct ace_private *ap);
 static void ace_set_multicast_list(struct net_device *dev);
 static int ace_change_mtu(struct net_device *dev, int new_mtu);

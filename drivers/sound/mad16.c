@@ -20,38 +20,6 @@
  * issues of the card, using the OTI-605 chip, have an MPU-401 compatable Midi
  * port. This port is configured differently to that of the OPTi audio chips.
  *
- * NOTE! If you want to set CD-ROM address and/or joystick enable, define
- *       MAD16_CONF in local.h as combination of the following bits:
- *
- *      0x01    - joystick disabled
- *
- *      CD-ROM type selection (select just one):
- *      0x00    - none
- *      0x02    - Sony 31A
- *      0x04    - Mitsumi
- *      0x06    - Panasonic (type "LaserMate", not "Sound Blaster")
- *      0x08    - Secondary IDE (address 0x170)
- *      0x0a    - Primary IDE (address 0x1F0)
- *      
- *      For example Mitsumi with joystick disabled = 0x04|0x01 = 0x05
- *      For example LaserMate (for use with sbpcd) plus joystick = 0x06
- *      
- *    MAD16_CDSEL:
- *      This defaults to CD I/O 0x340, no IRQ and DMA3 
- *      (DMA5 with Mitsumi or IDE). If you like to change these, define
- *      MAD16_CDSEL with the following bits:
- *
- *      CD-ROM port: 0x00=340, 0x40=330, 0x80=360 or 0xc0=320
- *      OPL4 select: 0x20=OPL4, 0x00=OPL3
- *      CD-ROM irq: 0x00=disabled, 0x04=IRQ5, 0x08=IRQ7, 0x0c=IRQ3, 0x10=IRQ9,
- *                  0x14=IRQ10 and 0x18=IRQ11.
- *
- *      CD-ROM DMA (Sony or Panasonic): 0x00=DMA3, 0x01=DMA2, 0x02=DMA1 or 0x03=disabled
- *   or
- *      CD-ROM DMA (Mitsumi or IDE):    0x00=DMA5, 0x01=DMA6, 0x02=DMA7 or 0x03=disabled
- *
- *      For use with sbpcd, address 0x340, set MAD16_CDSEL to 0x03 or 0x23.
- *
  *	Changes
  *	
  *	Alan Cox		Clean up, added module selections.
@@ -67,6 +35,8 @@
  *								25-Nov-1999
  *	Christoph Hellwig	Adapted to module_init/module_exit.
  *	Arnaldo C. de Melo	got rid of attach_uart401       21-Sep-2000
+ *
+ *	Pavel Rabel		Clean up                           Nov-2000
  */
 
 #include <linux/config.h>
@@ -395,10 +365,6 @@ static int __init init_c930(struct address_info *hw_config)
 {
 	unsigned char cfg = 0;
 
-#ifdef MAD16_CONF
-	cfg |= (0x0f & MAD16_CONF);
-#endif
-
 	if(c931_detected)
 	{
 		/* Bit 0 has reversd meaning. Bits 1 and 2 sese
@@ -435,14 +401,9 @@ static int __init init_c930(struct address_info *hw_config)
 	/* bit 2 of MC4 reverses it's meaning between the C930
 	   and the C931. */
 	cfg = c931_detected ? 0x04 : 0x00;
-#ifdef MAD16_CDSEL
-	if(MAD16_CDSEL & 0x20)
-		mad_write(MC4_PORT, 0x62|cfg);	/* opl4 */
-	else
-		mad_write(MC4_PORT, 0x52|cfg);	/* opl3 */
-#else
+
 	mad_write(MC4_PORT, 0x52|cfg);
-#endif
+
 	mad_write(MC5_PORT, 0x3C);	/* Init it into mode2 */
 	mad_write(MC6_PORT, 0x02);	/* Enable WSS, Disable MPU and SB */
 	mad_write(MC7_PORT, 0xCB);
@@ -590,20 +551,9 @@ static int __init probe_mad16(struct address_info *hw_config)
 	 */
 
 	tmp &= ~0x0f;
-#if defined(MAD16_CONF)
-	tmp |= ((MAD16_CONF) & 0x0f);	/* CD-ROM and joystick bits */
-#endif
 	mad_write(MC1_PORT, tmp);
 
-#if defined(MAD16_CONF) && defined(MAD16_CDSEL)
-	tmp = MAD16_CDSEL;
-#else
 	tmp = mad_read(MC2_PORT);
-#endif
-
-#ifdef MAD16_OPL4
-	tmp |= 0x20;		/* Enable OPL4 access */
-#endif
 
 	mad_write(MC2_PORT, tmp);
 	mad_write(MC3_PORT, 0xf0);	/* Disable SB */
@@ -718,13 +668,7 @@ static void __init attach_mad16(struct address_info *hw_config)
 static int __init probe_mad16_mpu(struct address_info *hw_config)
 {
 	static int mpu_attached = 0;
-	static int valid_ports[] = {
-		0x330, 0x320, 0x310, 0x300
-	};
-	
-	static short valid_irqs[] = {9, 10, 5, 7};
 	unsigned char tmp;
-	int i;				/* A variable with secret power */
 
 	if (!already_initialized)	/* The MSS port must be initialized first */
 		return 0;
@@ -737,7 +681,6 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 	{
 
 #ifdef CONFIG_MAD16_OLDCARD
-		unsigned char   tmp;
 
 		tmp = mad_read(MC3_PORT);
 
@@ -786,9 +729,6 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 		 * either 82C928 or Mozart. If so, following code attempts
 		 * to set MPU register. TODO - add probing
 		 */
-
-		
-		unsigned char tmp;
 
 		tmp = mad_read(MC8_PORT);
 
@@ -840,42 +780,50 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 	tmp = mad_read(MC6_PORT) & 0x83;
 	tmp |= 0x80;		/* MPU-401 enable */
 
-/*
- * Set the MPU base bits
- */
+	/* Set the MPU base bits */
 
-	for (i = 0; i < 5; i++)
+	switch (hw_config->io_base)
 	{
-		if (i > 3)	/* Out of array bounds */
-		{
-			printk(KERN_ERR "MAD16 / Mozart: Invalid MIDI port 0x%x\n", hw_config->io_base);
-			return 0;
-		}
-		if (valid_ports[i] == hw_config->io_base)
-		{
-			tmp |= i << 5;
+		case 0x300:
+			tmp |= 0x60;
 			break;
-		}
+		case 0x310:
+			tmp |= 0x40;
+			break;
+		case 0x320:
+			tmp |= 0x20;
+			break;
+		case 0x330:
+			tmp |= 0x00;
+			break;
+		default:
+			printk(KERN_ERR "MAD16: Invalid MIDI port 0x%x\n", hw_config->io_base);
+			return 0;
 	}
 
-/*
- * Set the MPU IRQ bits
- */
+	/* Set the MPU IRQ bits */
 
-	for (i = 0; i < 5; i++)
+	switch (hw_config->irq)
 	{
-		if (i > 3)	/* Out of array bounds */
-		{
-			printk(KERN_ERR "MAD16 / Mozart: Invalid MIDI IRQ %d\n", hw_config->irq);
-			return 0;
-		}
-		if (valid_irqs[i] == hw_config->irq)
-		{
-			tmp |= i << 3;
+		case 5:
+			tmp |= 0x10;
 			break;
-		}
+		case 7:
+			tmp |= 0x18;
+			break;
+		case 9:
+			tmp |= 0x00;
+			break;
+		case 10:
+			tmp |= 0x08;
+			break;
+		default:
+			printk(KERN_ERR "MAD16: Invalid MIDI IRQ %d\n", hw_config->irq);
+			break;
 	}
+			
 	mad_write(MC6_PORT, tmp);	/* Write MPU401 config */
+
 #ifndef CONFIG_MAD16_OLDCARD
 probe_401:
 #endif

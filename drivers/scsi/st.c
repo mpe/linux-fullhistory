@@ -175,7 +175,7 @@ static int update_partition(Scsi_Tape *);
 static int st_int_ioctl(Scsi_Tape *, unsigned int, unsigned long);
 
 
-/* #include "osst_detect.h" */
+#include "osst_detect.h"
 #ifndef SIGS_FROM_OSST
 #define SIGS_FROM_OSST \
 	{"OnStream", "SC-", "", "osst"}, \

@@ -1692,7 +1692,6 @@ int filemap_sync(struct vm_area_struct * vma, unsigned long address,
  * backing-store for swapping..
  */
 static struct vm_operations_struct file_shared_mmap = {
-	sync:		filemap_sync,
 	nopage:		filemap_nopage,
 };
 
@@ -1735,19 +1734,19 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 static int msync_interval(struct vm_area_struct * vma,
 	unsigned long start, unsigned long end, int flags)
 {
-	if (vma->vm_file && vma->vm_ops && vma->vm_ops->sync) {
+	struct file * file = vma->vm_file;
+	if (file && (vma->vm_flags & VM_SHARED)) {
 		int error;
-		error = vma->vm_ops->sync(vma, start, end-start, flags);
+		error = filemap_sync(vma, start, end-start, flags);
+
 		if (!error && (flags & MS_SYNC)) {
-			struct file * file = vma->vm_file;
-			if (file && file->f_op && file->f_op->fsync) {
-				struct inode * inode = file->f_dentry->d_inode;
-				down(&inode->i_sem);
-				filemap_fdatasync(inode->i_mapping);
+			struct inode * inode = file->f_dentry->d_inode;
+			down(&inode->i_sem);
+			filemap_fdatasync(inode->i_mapping);
+			if (file->f_op && file->f_op->fsync)
 				error = file->f_op->fsync(file, file->f_dentry, 1);
-				filemap_fdatawait(inode->i_mapping);
-				up(&inode->i_sem);
-			}
+			filemap_fdatawait(inode->i_mapping);
+			up(&inode->i_sem);
 		}
 		return error;
 	}

@@ -85,6 +85,19 @@ static void __init quirk_triton(struct pci_dev *dev)
 }
 
 /*
+ *	VIA Apollo VP3 needs ETBF on BT848/878
+ */
+ 
+static void __init quirk_viaetbf(struct pci_dev *dev)
+{
+	if((pci_pci_problems&PCIPCI_VIAETBF)==0)
+	{
+		printk(KERN_INFO "Limiting direct PCI/PCI transfers.\n");
+		pci_pci_problems|=PCIPCI_VIAETBF;
+	}
+}
+
+/*
  *	Natoma has some interesting boundary conditions with Zoran stuff
  *	at least
  */
@@ -262,6 +275,7 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_2, 	quirk_natoma },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0,	quirk_viaetbf },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C597_0,	quirk_vt82c598_id },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_3,	quirk_vt82c586_acpi },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C686_4,	quirk_vt82c686_acpi },

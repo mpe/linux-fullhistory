@@ -105,6 +105,8 @@ struct	mtget {
 #define MT_ISEVEREX_FT40A	0x32	/* Everex FT40A (QIC-40) */
 #define MT_ISDDS1		0x51	/* DDS device without partitions */
 #define MT_ISDDS2		0x52	/* DDS device with partitions */
+#define MT_ISONSTREAM_SC        0x61   /* OnStream SCSI tape drives (SC-x0)
+					  and SCSI emulated (DI, DP, USB) */
 #define MT_ISSCSI1		0x71	/* Generic ANSI SCSI-1 tape unit */
 #define MT_ISSCSI2		0x72	/* Generic ANSI SCSI-2 tape unit */
 
@@ -134,6 +136,7 @@ struct mt_tape_info {
 	{MT_ISWT5099EEN24,	"Wangtek 5099-een24, 60MB"}, \
 	{MT_ISTEAC_MT2ST,	"Teac MT-2ST 155mb data cassette drive"}, \
 	{MT_ISEVEREX_FT40A,	"Everex FT40A, QIC-40"}, \
+	{MT_ISONSTREAM_SC,      "OnStream SC-, DI-, DP-, or USB tape drive"}, \
 	{MT_ISSCSI1,		"Generic SCSI-1 tape"}, \
 	{MT_ISSCSI2,		"Generic SCSI-2 tape"}, \
 	{0, NULL} \

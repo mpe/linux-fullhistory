@@ -133,9 +133,11 @@ static void __init mace_probe1(struct device_node *mace)
 	}
 
 	dev = init_etherdev(0, PRIV_BYTES);
-	memset(dev->priv, 0, PRIV_BYTES);
+	if (!dev)
+		return;
+	SET_MODULE_OWNER(dev);
 
-	mp = (struct mace_data *) dev->priv;
+	mp = dev->priv;
 	dev->base_addr = mace->addrs[0].address;
 	mp->mace = (volatile struct mace *)
 		ioremap(mace->addrs[0].address, 0x1000);
@@ -353,7 +355,6 @@ static int mace_open(struct net_device *dev)
     /* enable all interrupts except receive interrupts */
     out_8(&mb->imr, RCVINT);
 
-    MOD_INC_USE_COUNT;
     return 0;
 }
 
@@ -391,8 +392,6 @@ static int mace_close(struct net_device *dev)
     st_le32(&td->control, (RUN|PAUSE|FLUSH|WAKE) << 16); /* clear run bit */
 
     mace_clean_rings(mp);
-
-    MOD_DEC_USE_COUNT;
 
     return 0;
 }

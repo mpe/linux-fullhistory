@@ -6,9 +6,11 @@
 #include <asm/atomic.h>
 #include <asm/pgalloc.h>
 
-/* Segment information */
-extern void destroy_context(struct mm_struct *);
-extern int init_new_context(struct task_struct *, struct mm_struct *);
+/*
+ * possibly do the LDT unload here?
+ */
+#define destroy_context(mm)		do { } while(0)
+#define init_new_context(tsk,mm)	0
 
 #ifdef CONFIG_SMP
 

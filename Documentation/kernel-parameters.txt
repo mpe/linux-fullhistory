@@ -43,6 +43,7 @@ restrictions referred to are that the relevant option is valid if:
 	SERIAL	Serial support is enabled.
 	SMP 	The kernel is an SMP kernel.
 	SOUND	Appropriate sound system support is enabled.
+	V4L	Video For Linux support is enabled.
 	VGA 	The VGA console has been enabled.
 	VT	Virtual terminal support is enabled.
 	XT	IBM PC/XT MFM hard disk support is enabled.
@@ -115,6 +116,11 @@ running once the system is up.
 			Duplex Mode.
 
 	bmouse=		[HW,MOUSE,PS2] Bus mouse.
+
+	bttv.card=	[HW,V4L] bttv (bt848 + bt878 based grabber cards), most
+	bttv.radio=	important insmod options are available as kernel args too.
+	bttv.pll=	see Documentation/video4linux/bttv/Insmod-options
+	bttv.tuner=	and Documentation/video4linux/bttv/CARDLIST
 
 	BusLogic=	[HW,SCSI]
 

@@ -1323,7 +1323,7 @@ static int arlan_open(struct net_device *dev)
 	priv->timer.function = &arlan_registration_timer;	/* timer handler */
 
 	arlan_command(dev, ARLAN_COMMAND_POWERUP | ARLAN_COMMAND_LONG_WAIT_NOW);
-	udelay(200000);
+	mdelay(200);
 	add_timer(&priv->timer);
 
 #ifdef CONFIG_PROC_FS

@@ -140,7 +140,7 @@ static int __init oaknet_init(void)
 		dev->base_addr = 0;
 
 		release_region(dev->base_addr, OAKNET_IO_SIZE);
-		return (ENODEV);
+		return (-ENODEV);
 	}
 
 	/*
@@ -148,7 +148,12 @@ static int __init oaknet_init(void)
 	 * our own device structure.
 	 */
 
-	dev = init_etherdev(0, 0);
+	dev = init_etherdev(NULL, 0);
+	if (!dev) {
+		release_region(dev->base_addr, OAKNET_IO_SIZE);
+		return (-ENOMEM);
+	}
+	SET_MODULE_OWNER(dev);
 	oaknet_devs = dev;
 
 	/*
@@ -238,7 +243,6 @@ static int
 oaknet_open(struct net_device *dev)
 {
 	int status = ei_open(dev);
-	MOD_INC_USE_COUNT;
 	return (status);
 }
 
@@ -265,7 +269,6 @@ static int
 oaknet_close(struct net_device *dev)
 {
 	int status = ei_close(dev);
-	MOD_DEC_USE_COUNT;
 	return (status);
 }
 

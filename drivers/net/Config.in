@@ -258,7 +258,7 @@ source drivers/net/tokenring/Config.in
 
 bool 'Fibre Channel driver support' CONFIG_NET_FC
 if [ "$CONFIG_NET_FC" = "y" ]; then
-   dep_tristate '  Interphase 5526 Tachyon chipset based adapter support' CONFIG_IPHASE5526 $CONFIG_SCSI
+   dep_tristate '  Interphase 5526 Tachyon chipset based adapter support' CONFIG_IPHASE5526 $CONFIG_SCSI $CONFIG_PCI
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

@@ -507,21 +507,19 @@ static void i810_rec_setup(struct i810_state *state)
 extern __inline__ unsigned i810_get_dma_addr(struct i810_state *state)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
-	u32 offset;
+	unsigned int civ, offset;
 	struct i810_channel *c = dmabuf->channel;
 	
 	if (!dmabuf->enable)
 		return 0;
-	offset = inb(state->card->iobase+c->port+OFF_CIV);
-	offset++;
-	offset&=31;
-	/* Offset has to compensate for the fact we finished the segment
-	   on the IRQ so we are at next_segment,0 */
-//	printk("BANK%d ", offset);
-	offset *= (dmabuf->dmasize/SG_LEN);
-//	printk("DMASZ=%d", dmabuf->dmasize);
-//	offset += 1024-(4*inw(state->card->iobase+c->port+OFF_PICB));
-//	printk("OFF%d ", offset);
+	do {
+		civ = inb(state->card->iobase+c->port+OFF_CIV);
+		offset = (civ + 1) * (dmabuf->dmasize/SG_LEN) -
+			      2 * inw(state->card->iobase+c->port+OFF_PICB);
+		/* CIV changed before we read PICB (very seldom) ?
+		 * then PICB was rubbish, so try again */
+	} while (civ != inb(state->card->iobase+c->port+OFF_CIV));
+		 
 	return offset;
 }
 
@@ -730,10 +728,13 @@ static int prog_dmabuf(struct i810_state *state, unsigned rec)
 		sg->control|=CON_IOC;
 		sg++;
 	}
+
 	spin_lock_irqsave(&state->card->lock, flags);
+	outb(2, state->card->iobase+dmabuf->channel->port+OFF_CR);   /* reset DMA machine */
 	outl(virt_to_bus(&dmabuf->channel->sg[0]), state->card->iobase+dmabuf->channel->port+OFF_BDBAR);
 	outb(16, state->card->iobase+dmabuf->channel->port+OFF_LVI);
 	outb(0, state->card->iobase+dmabuf->channel->port+OFF_CIV);
+
 	if (rec) {
 		i810_rec_setup(state);
 	} else {
@@ -753,14 +754,10 @@ static int prog_dmabuf(struct i810_state *state, unsigned rec)
 
 	return 0;
 }
-
-/* we are doing quantum mechanics here, the buffer can only be empty, half or full filled i.e.
-   |------------|------------|   or   |xxxxxxxxxxxx|------------|   or   |xxxxxxxxxxxx|xxxxxxxxxxxx|
-   but we almost always get this
-   |xxxxxx------|------------|   or   |xxxxxxxxxxxx|xxxxx-------|
-   so we have to clear the tail space to "silence"
-   |xxxxxx000000|------------|   or   |xxxxxxxxxxxx|xxxxxx000000|
-*/
+/*
+ * Clear the rest of the last i810 dma buffer, normally there is no rest
+ * because the OSS fragment size is the same as the size of this buffer.
+ */
 static void i810_clear_tail(struct i810_state *state)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
@@ -773,14 +770,8 @@ static void i810_clear_tail(struct i810_state *state)
 	swptr = dmabuf->swptr;
 	spin_unlock_irqrestore(&state->card->lock, flags);
 
-	if (swptr == 0 || swptr == dmabuf->dmasize / 2 || swptr == dmabuf->dmasize)
-		return;
-
-	if (swptr < dmabuf->dmasize/2)
-		len = dmabuf->dmasize/2 - swptr;
-	else
-		len = dmabuf->dmasize - swptr;
-
+	len = swptr % (dmabuf->dmasize/SG_LEN);
+	
 	memset(dmabuf->rawbuf + swptr, silence, len);
 
 	spin_lock_irqsave(&state->card->lock, flags);
@@ -1188,11 +1179,16 @@ static unsigned int i810_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned long flags;
 	unsigned int mask = 0;
 
-	if (file->f_mode & FMODE_WRITE)
+	if (file->f_mode & FMODE_WRITE) {
+		if (!dmabuf->ready && prog_dmabuf(state, 0))
+			return 0;
 		poll_wait(file, &dmabuf->wait, wait);
-	if (file->f_mode & FMODE_READ)
+	}
+	if (file->f_mode & FMODE_READ) {
+		if (!dmabuf->ready && prog_dmabuf(state, 1))
+			return 0;
 		poll_wait(file, &dmabuf->wait, wait);
-
+	}
 	spin_lock_irqsave(&state->card->lock, flags);
 	i810_update_ptr(state);
 	if (file->f_mode & FMODE_READ) {
@@ -1531,7 +1527,6 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 static int i810_open(struct inode *inode, struct file *file)
 {
 	int i = 0;
-	int minor = MINOR(inode->i_rdev);
 	struct i810_card *card = devs;
 	struct i810_state *state = NULL;
 	struct dmabuf *dmabuf = NULL;
@@ -1779,18 +1774,42 @@ static int __init i810_ac97_init(struct i810_card *card)
 		
 		card->ac97_features = eid;
 				
+		/* Now check the codec for useful features to make up for
+		   the dumbness of the 810 hardware engine */
+
 		if(!(eid&0x0001))
 			printk(KERN_WARNING "i810_audio: only 48Khz playback available.\n");
-			
+		else
+		{
+			/* Enable variable rate mode */
+			i810_ac97_set(codec, AC97_EXTENDED_STATUS, 9);
+			i810_ac97_set(codec,AC97_EXTENDED_STATUS,
+				i810_ac97_get(codec, AC97_EXTENDED_STATUS)|0xE800);
+			/* power up everything, modify this when implementing power saving */
+			i810_ac97_set(codec, AC97_POWER_CONTROL,
+				i810_ac97_get(codec, AC97_POWER_CONTROL) & ~0x7f00);
+			/* wait for analog ready */
+		        for (i=10;
+			     i && ((i810_ac97_get(codec, AC97_POWER_CONTROL) & 0xf) != 0xf);
+			     i--)
+			{
+				current->state = TASK_UNINTERRUPTIBLE;
+				schedule_timeout(HZ/20);
+			}
+
+			if(!(i810_ac97_get(codec, AC97_EXTENDED_STATUS)&1))
+			{
+				printk(KERN_WARNING "i810_audio: Codec refused to allow VRA, using 48Khz only.\n");
+					card->ac97_features&=~1;
+			}
+		}
+   		
 		if ((codec->dev_mixer = register_sound_mixer(&i810_mixer_fops, -1)) < 0) {
 			printk(KERN_ERR "i810_audio: couldn't register mixer!\n");
 			kfree(codec);
 			break;
 		}
 
-		/* Now check the codec for useful features to make up for 
-		   the dumbness of the 810 hardware engine */
-		   
 		card->ac97_codec[num_ac97] = codec;
 
 		/* if there is no secondary codec at all, don't probe any more */

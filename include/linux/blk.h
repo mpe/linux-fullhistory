@@ -163,6 +163,14 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_INTR do_st  
 #define DEVICE_NR(device) (MINOR(device) & 0x7f)
 
+#elif (MAJOR_NR == OSST_MAJOR)
+
+#define DEVICE_NAME "onstream" 
+#define DEVICE_INTR do_osst
+#define DEVICE_NR(device) (MINOR(device) & 0x7f) 
+#define DEVICE_ON(device) 
+#define DEVICE_OFF(device) 
+
 #elif (MAJOR_NR == SCSI_CDROM_MAJOR)
 
 #define DEVICE_NAME "CD-ROM"
@@ -328,7 +336,7 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_OFF(device) do {} while (0)
 #endif
 
-#if (MAJOR_NR != SCSI_TAPE_MAJOR)
+#if (MAJOR_NR != SCSI_TAPE_MAJOR) && (MAJOR_NR != OSST_MAJOR)
 #if !defined(IDE_DRIVER)
 
 #ifndef CURRENT

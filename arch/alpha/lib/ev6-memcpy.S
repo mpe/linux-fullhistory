@@ -76,7 +76,7 @@ $single_head_quad:
 
 $do_unroll:
 	addq	$16, 64, $7		# E : Initial (+1 trip) wh64 address
-	cmple	$18, 63, $1		# E : Can we go through the unrolled loop?
+	cmple	$18, 127, $1		# E : Can we go through the unrolled loop?
 	bne	$1, $tail_quads		# U : Nope
 	nop				# E : 
 

@@ -35,7 +35,7 @@ OBJS =	__divqu.o __remqu.o __divlu.o __remlu.o \
 	$(ev6)stxcpy.o \
 	$(ev6)stxncpy.o \
 	$(ev67)strchr.o \
-	strrchr.o \
+	$(ev67)strrchr.o \
 	$(ev6)memchr.o \
 	$(ev6)copy_user.o \
 	$(ev6)clear_user.o \

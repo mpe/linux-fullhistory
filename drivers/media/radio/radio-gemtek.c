@@ -265,7 +265,7 @@ static int __init gemtek_init(void)
 		return -EINVAL;
 	}
 
-	if (request_region(io, 4, "gemtek")) 
+	if (!request_region(io, 4, "gemtek")) 
 	{
 		printk(KERN_ERR "gemtek: port 0x%x already in use\n", io);
 		return -EBUSY;

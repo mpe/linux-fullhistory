@@ -154,6 +154,8 @@
 #define MSR_MAJOR		202
 #define CPUID_MAJOR		203
 
+#define OSST_MAJOR	206	/* OnStream-SCx0 SCSI tape */
+
 /*
  * Tests for SCSI devices.
  */

@@ -375,7 +375,7 @@ static int __init cops_irq (int ioaddr, int board)
         {
                 outb(0, ioaddr+DAYNA_RESET);
                 inb(ioaddr+DAYNA_RESET);
-                udelay(333333);
+                mdelay(333);
         }
         if(board==TANGENT)
         {
@@ -504,7 +504,7 @@ static void cops_reset(struct net_device *dev, int sleep)
                                 schedule();
                 }
                 else
-                        udelay(333333);
+                        mdelay(333);
         }
 	netif_wake_queue(dev);
 	return;

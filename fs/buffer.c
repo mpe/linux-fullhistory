@@ -122,16 +122,17 @@ union bdflush_param {
 				  when trying to refill buffers. */
 		int interval; /* jiffies delay between kupdate flushes */
 		int age_buffer;  /* Time for normal buffer to age before we flush it */
-		int dummy1;    /* unused, was age_super */
+		int nfract_sync; /* Percentage of buffer cache dirty to 
+				    activate bdflush synchronously */
 		int dummy2;    /* unused */
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 5*HZ, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 256, 5*HZ, 30*HZ, 80, 0, 0}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
-int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
-int bdflush_max[N_PARAM] = {100,50000, 20000, 20000,600*HZ, 6000*HZ, 6000*HZ, 2047, 5};
+int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   0, 0, 0};
+int bdflush_max[N_PARAM] = {100,50000, 20000, 20000,600*HZ, 6000*HZ, 100, 0, 0};
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -337,9 +338,10 @@ int file_fsync(struct file *filp, struct dentry *dentry, int datasync)
 
 	/* sync the superblock to buffers */
 	sb = inode->i_sb;
-	wait_on_super(sb);
+	lock_super(sb);
 	if (sb->s_op && sb->s_op->write_super)
 		sb->s_op->write_super(sb);
+	unlock_super(sb);
 
 	/* .. finally sync the buffers to disk */
 	dev = inode->i_dev;
@@ -1032,9 +1034,9 @@ int balance_dirty_state(kdev_t dev)
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
 	tot = nr_free_buffer_pages();
 
-	dirty *= 200;
+	dirty *= 100;
 	soft_dirty_limit = tot * bdf_prm.b_un.nfract;
-	hard_dirty_limit = soft_dirty_limit * 2;
+	hard_dirty_limit = tot * bdf_prm.b_un.nfract_sync;
 
 	/* First, check for the "real" dirty limit. */
 	if (dirty > soft_dirty_limit) {

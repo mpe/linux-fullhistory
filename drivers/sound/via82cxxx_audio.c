@@ -1727,18 +1727,18 @@ static struct page * via_mm_nopage (struct vm_area_struct * vma,
 }
 
 
-#ifndef VM_RESERVE
+#ifndef VM_RESERVED
 static int via_mm_swapout (struct page *page, struct file *filp)
 {
 	return 0;
 }
-#endif /* VM_RESERVE */
+#endif /* VM_RESERVED */
 
 
 struct vm_operations_struct via_mm_ops = {
 	nopage:		via_mm_nopage,
 
-#ifndef VM_RESERVE
+#ifndef VM_RESERVED
 	swapout:	via_mm_swapout,
 #endif
 };
@@ -1789,8 +1789,8 @@ static int via_dsp_mmap(struct file *file, struct vm_area_struct *vma)
 	vma->vm_ops = &via_mm_ops;
 	vma->vm_private_data = card;
 
-#ifdef VM_RESERVE
-	vma->vm_flags |= VM_RESERVE;
+#ifdef VM_RESERVED
+	vma->vm_flags |= VM_RESERVED;
 #endif
 
 	if (rd)

@@ -2,7 +2,7 @@
  * acenic.c: Linux driver for the Alteon AceNIC Gigabit Ethernet card
  *           and other Tigon based cards.
  *
- * Copyright 1998-2000 by Jes Sorensen, <Jes.Sorensen@cern.ch>.
+ * Copyright 1998-2000 by Jes Sorensen, <jes@linuxcare.com>.
  *
  * Thanks to Alteon and 3Com for providing hardware and documentation
  * enabling me to write this driver.
@@ -39,6 +39,11 @@
  *                                       where the driver would disable
  *                                       bus master mode if it had to disable
  *                                       write and invalidate.
+ *   Stephen Hack <stephen_hack@hp.com>: Fixed ace_set_mac_addr for little
+ *                                       endian systems.
+ *   Val Henson <vhenson@esscom.com>:    Reset Jumbo skb producer and
+ *                                       rx producer index when
+ *                                       flushing the Jumbo ring.
  */
 
 #include <linux/config.h>
@@ -55,10 +60,12 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
+#include <linux/sockios.h>
 
-#undef INDEX_DEBUG
-
+#ifdef SIOCETHTOOL
 #include <linux/ethtool.h>
+#endif
+
 #include <net/sock.h>
 #include <net/ip.h>
 
@@ -68,6 +75,9 @@
 #include <asm/byteorder.h>
 #include <asm/uaccess.h>
 
+
+#undef INDEX_DEBUG
+#define TX_HOST_RING	1
 
 #ifdef CONFIG_ACENIC_OMIT_TIGON_I
 #define ACE_IS_TIGON_I(ap)	0
@@ -93,6 +103,7 @@
 #define PCI_DEVICE_ID_NETGEAR_GA620T	0x630a
 #endif
 
+
 /*
  * Farallon used the DEC vendor ID by mistake and they seem not
  * to care - stinky!
@@ -107,6 +118,31 @@
 #define PCI_DEVICE_ID_SGI_ACENIC	0x0009
 #endif
 
+#if LINUX_VERSION_CODE >= 0x20400
+static struct pci_device_id acenic_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_ALTEON, PCI_DEVICE_ID_ALTEON_ACENIC_FIBRE,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ PCI_VENDOR_ID_ALTEON, PCI_DEVICE_ID_ALTEON_ACENIC_COPPER,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ PCI_VENDOR_ID_3COM, PCI_DEVICE_ID_3COM_3C985,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ PCI_VENDOR_ID_NETGEAR, PCI_DEVICE_ID_NETGEAR_GA620,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ PCI_VENDOR_ID_NETGEAR, PCI_DEVICE_ID_NETGEAR_GA620T,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	/*
+	 * Farallon used the DEC vendor ID on their cards incorrectly.
+	 */
+	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_FARALLON_PN9000SX,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ PCI_VENDOR_ID_SGI, PCI_DEVICE_ID_SGI_ACENIC,
+	  PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, },
+	{ }
+};
+MODULE_DEVICE_TABLE(pci, acenic_pci_tbl);
+#endif
+
+
 #ifndef wmb
 #define wmb()	mb()
 #endif
@@ -119,6 +155,19 @@
 #define SMP_CACHE_BYTES	L1_CACHE_BYTES
 #endif
 
+#if (BITS_PER_LONG == 64)
+#define ACE_64BIT_PTR	1
+#endif
+
+#ifndef SET_MODULE_OWNER
+#define SET_MODULE_OWNER(dev)		{do{} while(0);}
+#define ACE_MOD_INC_USE_COUNT		MOD_INC_USE_COUNT
+#define ACE_MOD_DEC_USE_COUNT		MOD_DEC_USE_COUNT
+#else
+#define ACE_MOD_INC_USE_COUNT		{do{} while(0);}
+#define ACE_MOD_DEC_USE_COUNT		{do{} while(0);}
+#endif
+
 
 #if (LINUX_VERSION_CODE < 0x02030d)
 #define pci_resource_start(dev, bar)	dev->base_address[bar]
@@ -128,10 +177,6 @@
 
 #if (LINUX_VERSION_CODE < 0x02030e)
 #define net_device device
-#endif
-
-#if (LINUX_VERSION_CODE >= 0x02031b)
-#define NEW_NETINIT
 #endif
 
 #if (LINUX_VERSION_CODE < 0x02032a)
@@ -154,10 +199,20 @@ static inline void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 #if (LINUX_VERSION_CODE < 0x02032b)
 /*
  * SoftNet
+ *
+ * For pre-softnet kernels we need to tell the upper layer not to
+ * re-enter start_xmit() while we are in there. However softnet
+ * guarantees not to enter while we are in there so there is no need
+ * to do the netif_stop_queue() dance unless the transmit queue really
+ * gets stuck. This should also improve performance according to tests
+ * done by Aman Singla.
  */
-#define dev_kfree_skb_irq(a)	dev_kfree_skb(a)
-#define netif_wake_queue(dev)	clear_bit(0, &dev->tbusy)
-#define netif_stop_queue(dev)	set_bit(0, &dev->tbusy)
+#define dev_kfree_skb_irq(a)			dev_kfree_skb(a)
+#define netif_wake_queue(dev)			clear_bit(0, &dev->tbusy)
+#define netif_stop_queue(dev)			set_bit(0, &dev->tbusy)
+#define late_stop_netif_stop_queue(dev)		{do{} while(0);}
+#define early_stop_netif_stop_queue(dev)	test_and_set_bit(0,&dev->tbusy)
+#define early_stop_netif_wake_queue(dev)	netif_wake_queue(dev)
 
 static inline void netif_start_queue(struct net_device *dev)
 {
@@ -166,16 +221,42 @@ static inline void netif_start_queue(struct net_device *dev)
 	dev->start = 1;
 }
 
-#define ace_mark_net_bh(foo)		mark_bh(foo)
-#define netif_queue_stopped(dev)	dev->tbusy
-#define netif_running(dev)		dev->start
-#define ace_if_down(dev)		{do{dev->start = 0;}while (0);}
+#define ace_mark_net_bh()			mark_bh(NET_BH)
+#define netif_queue_stopped(dev)		dev->tbusy
+#define netif_running(dev)			dev->start
+#define ace_if_down(dev)			{do{dev->start = 0;} while(0);}
+
+#define tasklet_struct				tq_struct
+static inline void tasklet_schedule(struct tasklet_struct *tasklet)
+{
+	queue_task(tasklet, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
+}
+
+static inline void tasklet_init(struct tasklet_struct *tasklet,
+				void (*func)(unsigned long),
+				unsigned long data)
+{
+	tasklet->next = NULL;
+	tasklet->sync = 0;
+	tasklet->routine = (void (*)(void *))func;
+	tasklet->data = (void *)data;
+}
+#define tasklet_kill(tasklet)			{do{} while(0);}
 #else
-#define NET_BH			0
-#define ace_mark_net_bh(foo)	{do{} while(0);}
-#define ace_if_down(dev)	{do{} while(0);}
+#define late_stop_netif_stop_queue(dev)		netif_stop_queue(dev)
+#define early_stop_netif_stop_queue(dev)	0
+#define early_stop_netif_wake_queue(dev)	{do{} while(0);}
+#define ace_mark_net_bh()			{do{} while(0);}
+#define ace_if_down(dev)			{do{} while(0);}
 #endif
 
+#if (LINUX_VERSION_CODE >= 0x02031b)
+#define NEW_NETINIT
+#define ACE_PROBE_ARG				void
+#else
+#define ACE_PROBE_ARG				struct net_device *dev
+#endif
 
 #define ACE_MAX_MOD_PARMS	8
 #define BOARD_IDX_STATIC	0
@@ -400,19 +481,15 @@ static int tx_ratio[ACE_MAX_MOD_PARMS];
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static char version[] __initdata = 
-  "acenic.c: v0.47 09/18/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.49 12/13/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
-static struct net_device *root_dev;
+static struct net_device *root_dev = NULL;
 
 static int probed __initdata = 0;
 
 
-#ifdef NEW_NETINIT
-int __init acenic_probe (void)
-#else
-int __init acenic_probe (struct net_device *dev)
-#endif
+int __init acenic_probe (ACE_PROBE_ARG)
 {
 #ifdef NEW_NETINIT
 	struct net_device *dev;
@@ -425,7 +502,7 @@ int __init acenic_probe (struct net_device *dev)
 
 	if (probed)
 		return -ENODEV;
-	probed ++;
+	probed++;
 
 	if (!pci_present())		/* is PCI support present? */
 		return -ENODEV;
@@ -436,7 +513,7 @@ int __init acenic_probe (struct net_device *dev)
 
 		if (!((pdev->vendor == PCI_VENDOR_ID_ALTEON) &&
 		      ((pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC_FIBRE) ||
-		       (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC_COPPER)) ) &&
+		       (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC_COPPER)))&&
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
 		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
@@ -459,6 +536,8 @@ int __init acenic_probe (struct net_device *dev)
 			       "net_device structure!\n");
 			break;
 		}
+
+		SET_MODULE_OWNER(dev);
 
 		if (!dev->priv)
 			dev->priv = kmalloc(sizeof(*ap), GFP_KERNEL);
@@ -615,7 +694,7 @@ int __init acenic_probe (struct net_device *dev)
 
 
 #ifdef MODULE
-MODULE_AUTHOR("Jes Sorensen <Jes.Sorensen@cern.ch>");
+MODULE_AUTHOR("Jes Sorensen <jes@linuxcare.com>");
 MODULE_DESCRIPTION("AceNIC/3C985/GA620 Gigabit Ethernet driver");
 MODULE_PARM(link, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(trace, "1-" __MODULE_STRING(8) "i");
@@ -634,8 +713,8 @@ void __exit ace_module_cleanup(void)
 	short i;
 
 	while (root_dev) {
-		next = ((struct ace_private *)root_dev->priv)->next;
 		ap = root_dev->priv;
+		next = ap->next;
 
 		regs = ap->regs;
 
@@ -730,8 +809,8 @@ int __init ace_module_init(void)
 }
 
 
-#ifdef MODULE
 #if (LINUX_VERSION_CODE < 0x02032a)
+#ifdef MODULE
 int init_module(void)
 {
 	return ace_module_init();
@@ -742,10 +821,10 @@ void cleanup_module(void)
 {
 	ace_module_cleanup();
 }
+#endif
 #else
 module_init(ace_module_init);
 module_exit(ace_module_cleanup);
-#endif
 #endif
 
 
@@ -815,10 +894,16 @@ static int ace_allocate_descriptors(struct net_device *dev)
 
 	size = (sizeof(struct event) * EVT_RING_ENTRIES);
 
-	ap->evt_ring = pci_alloc_consistent(ap->pdev, size,
-					    &ap->evt_ring_dma);
+	ap->evt_ring = pci_alloc_consistent(ap->pdev, size, &ap->evt_ring_dma);
 
 	if (ap->evt_ring == NULL)
+		goto fail;
+
+	size = (sizeof(struct tx_desc) * TX_RING_ENTRIES);
+
+	ap->tx_ring = pci_alloc_consistent(ap->pdev, size, &ap->tx_ring_dma);
+
+	if (ap->tx_ring == NULL)
 		goto fail;
 
 	ap->evt_prd = pci_alloc_consistent(ap->pdev, sizeof(u32),
@@ -1070,7 +1155,7 @@ static int __init ace_init(struct net_device *dev)
 		} else if (ap->pci_command & PCI_COMMAND_INVALIDATE) {
 			printk(KERN_INFO "  PCI memory write & invalidate "
 			       "enabled by BIOS, enabling counter measures\n");
-			
+
 			switch(SMP_CACHE_BYTES) {
 			case 16:
 				tmp |= DMA_WRITE_MAX_16;
@@ -1084,7 +1169,7 @@ static int __init ace_init(struct net_device *dev)
 			default:
 				printk(KERN_INFO "  Cache line size %i not "
 				       "supported, PCI write and invalidate "
-				       "disabled\n", L1_CACHE_BYTES);
+				       "disabled\n", SMP_CACHE_BYTES);
 				ap->pci_command &= ~PCI_COMMAND_INVALIDATE;
 				pci_write_config_word(ap->pdev, PCI_COMMAND,
 						      ap->pci_command);
@@ -1170,7 +1255,7 @@ static int __init ace_init(struct net_device *dev)
 	ap->fw_running = 0;
 
 	tmp_ptr = (unsigned long) ap->info_dma;
-#if (BITS_PER_LONG == 64)
+#ifdef ACE_64BIT_PTR
 	writel(tmp_ptr >> 32, &regs->InfoPtrHi);
 #else
 	writel(0, &regs->InfoPtrHi);
@@ -1269,18 +1354,19 @@ static int __init ace_init(struct net_device *dev)
 	*(ap->rx_ret_prd) = 0;
 
 	writel(TX_RING_BASE, &regs->WinBase);
-	ap->tx_ring = (struct tx_desc *)regs->Window;
-	for (i = 0; i < (TX_RING_ENTRIES * sizeof(struct tx_desc) / 4); i++) {
-		writel(0, (unsigned long)ap->tx_ring + i * 4);
-	}
+	memset(ap->tx_ring, 0, TX_RING_ENTRIES * sizeof(struct tx_desc));
 
-	set_aceaddr(&info->tx_ctrl.rngptr, TX_RING_BASE);
+	set_aceaddr(&info->tx_ctrl.rngptr, ap->tx_ring_dma);
+
 	info->tx_ctrl.max_len = TX_RING_ENTRIES;
+
+	tmp = 0;
 #if TX_COAL_INTS_ONLY
-	info->tx_ctrl.flags = RCB_FLG_COAL_INT_ONLY;
-#else
-	info->tx_ctrl.flags = 0;
+	tmp |= RCB_FLG_COAL_INT_ONLY;
 #endif
+	tmp |= RCB_FLG_TX_HOST_RING;
+
+	info->tx_ctrl.flags = tmp;
 
 	set_aceaddr(&info->tx_csm_ptr, ap->tx_csm_dma);
 
@@ -1524,9 +1610,9 @@ static void ace_timer(unsigned long data)
 }
 
 
-static void ace_bh(struct net_device *dev)
+static void ace_tasklet(unsigned long dev)
 {
-	struct ace_private *ap = dev->priv;
+	struct ace_private *ap = ((struct net_device *)dev)->priv;
 	int cur_size;
 
 	cur_size = atomic_read(&ap->cur_rx_bufs);
@@ -1558,7 +1644,7 @@ static void ace_bh(struct net_device *dev)
 #endif
 		ace_load_jumbo_rx_ring(ap, RX_JUMBO_SIZE - cur_size);
 	}
-	ap->bh_pending = 0;
+	ap->tasklet_pending = 0;
 }
 
 
@@ -1580,7 +1666,7 @@ static void ace_dump_trace(struct ace_private *ap)
  *
  * Loading rings is safe without holding the spin lock since this is
  * done only before the device is enabled, thus no interrupts are
- * generated and by the interrupt handler/bh handler.
+ * generated and by the interrupt handler/tasklet handler.
  */
 static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs)
 {
@@ -1838,7 +1924,20 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 					ap->skb->rx_jumbo_skbuff[i].skb = NULL;
 				}
 			}
+
+ 			if (ACE_IS_TIGON_I(ap)) {
+ 				struct cmd cmd;
+ 				cmd.evt = C_SET_RX_JUMBO_PRD_IDX;
+ 				cmd.code = 0;
+ 				cmd.idx = 0;
+ 				ace_issue_cmd(ap->regs, &cmd);
+ 			} else {
+ 				writel(0, &((ap->regs)->RxJumboPrd));
+ 				wmb();
+ 			}
+
 			ap->jumbo = 0;
+			ap->rx_jumbo_skbprd = 0;
 			printk(KERN_INFO "%s: Jumbo ring flushed\n",
 			       dev->name);
 			if (!ap->tx_full)
@@ -2048,11 +2147,11 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 			 * caused by the NIC actually trying to access
 			 * these incorrectly.
 			 */
-#if (BITS_PER_LONG == 64)
-			writel(0, &ap->tx_ring[idx].addr.addrhi);
+#ifdef ACE_64BIT_PTR
+			ap->tx_ring[idx].addr.addrhi = 0;
 #endif
-			writel(0, &ap->tx_ring[idx].addr.addrlo);
-			writel(0, &ap->tx_ring[idx].flagsize);
+			ap->tx_ring[idx].addr.addrlo = 0;
+			ap->tx_ring[idx].flagsize = 0;
 
 			idx = (idx + 1) % TX_RING_ENTRIES;
 		} while (idx != txcsm);
@@ -2069,7 +2168,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 			 * I've seen cases where it would fail otherwise ;-(
 			 */
 			netif_wake_queue(dev);
-			ace_mark_net_bh(NET_BH);
+			ace_mark_net_bh();
 
 			/*
 			 * TX ring is no longer full, aka the
@@ -2096,7 +2195,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	 */
 	if (netif_running(dev)) {
 		int cur_size;
-		int run_bh = 0;
+		int run_tasklet = 0;
 
 		cur_size = atomic_read(&ap->cur_rx_bufs);
 		if (cur_size < RX_LOW_STD_THRES) {
@@ -2108,7 +2207,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 				ace_load_std_rx_ring(ap,
 						     RX_RING_SIZE - cur_size);
 			} else
-				run_bh = 1;
+				run_tasklet = 1;
 		}
 
 		if (!ACE_IS_TIGON_I(ap)) {
@@ -2123,7 +2222,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 #endif
 					ace_load_mini_rx_ring(ap, RX_MINI_SIZE - cur_size);
 				} else
-					run_bh = 1;
+					run_tasklet = 1;
 			}
 		}
 
@@ -2139,13 +2238,12 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 #endif
 					ace_load_jumbo_rx_ring(ap, RX_JUMBO_SIZE - cur_size);
 				} else
-					run_bh = 1;
+					run_tasklet = 1;
 			}
 		}
-		if (run_bh && !ap->bh_pending) {
-			ap->bh_pending = 1;
-			queue_task(&ap->immediate, &tq_immediate);
-			mark_bh(IMMEDIATE_BH);
+		if (run_tasklet && !ap->tasklet_pending) {
+			ap->tasklet_pending = 1;
+			tasklet_schedule(&ap->ace_tasklet);
 		}
 	}
 
@@ -2211,7 +2309,7 @@ static int ace_open(struct net_device *dev)
 
 	netif_start_queue(dev);
 
-	MOD_INC_USE_COUNT;
+	ACE_MOD_INC_USE_COUNT;
 
 	/*
 	 * Setup the timer
@@ -2223,11 +2321,7 @@ static int ace_open(struct net_device *dev)
 	/*
 	 * Setup the bottom half rx ring refill handler
 	 */
-	INIT_LIST_HEAD(&ap->immediate.list);
-	ap->immediate.sync = 0;
-	ap->immediate.routine = (void *)(void *)ace_bh;
-	ap->immediate.data = dev;
-
+	tasklet_init(&ap->ace_tasklet, ace_tasklet, (unsigned long)dev);
 	return 0;
 }
 
@@ -2261,6 +2355,8 @@ static int ace_close(struct net_device *dev)
 	cmd.idx = 0;
 	ace_issue_cmd(regs, &cmd);
 
+	tasklet_kill(&ap->ace_tasklet);
+
 	/*
 	 * Make sure one CPU is not processing packets while
 	 * buffers are being released by another.
@@ -2275,9 +2371,7 @@ static int ace_close(struct net_device *dev)
 		skb = ap->skb->tx_skbuff[i].skb;
 		mapping = ap->skb->tx_skbuff[i].mapping;
 		if (skb) {
-			writel(0, &ap->tx_ring[i].addr.addrhi);
-			writel(0, &ap->tx_ring[i].addr.addrlo);
-			writel(0, &ap->tx_ring[i].flagsize);
+			memset(&ap->tx_ring[i].addr, 0, sizeof(struct tx_desc));
 			pci_unmap_single(ap->pdev, mapping, skb->len,
 					 PCI_DMA_TODEVICE);
 			dev_kfree_skb(skb);
@@ -2294,7 +2388,7 @@ static int ace_close(struct net_device *dev)
 
 	restore_flags(flags);
 
-	MOD_DEC_USE_COUNT;
+	ACE_MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -2307,14 +2401,10 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	u32 idx, flagsize;
 
 	/*
-	 * ARGH, there is just no pretty way to do this
+	 * This only happens with pre-softnet, ie. 2.2.x kernels.
 	 */
-#if (LINUX_VERSION_CODE < 0x02032b)
-	if (test_and_set_bit(0, &dev->tbusy))
+	if (early_stop_netif_stop_queue(dev))
 		return 1;
-#else
-	netif_stop_queue(dev);
-#endif
 
 	idx = ap->tx_prd;
 
@@ -2332,12 +2422,9 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		pci_map_single(ap->pdev, skb->data, skb->len,
 			       PCI_DMA_TODEVICE);
 	addr = (unsigned long) ap->skb->tx_skbuff[idx].mapping;
-#if (BITS_PER_LONG == 64)
-	writel(addr >> 32, &ap->tx_ring[idx].addr.addrhi);
-#endif
-	writel(addr & 0xffffffff, &ap->tx_ring[idx].addr.addrlo);
 	flagsize = (skb->len << 16) | (BD_FLG_END) ;
-	writel(flagsize, &ap->tx_ring[idx].flagsize);
+	set_aceaddr(&ap->tx_ring[idx].addr, addr);
+	ap->tx_ring[idx].flagsize = flagsize;
 	wmb();
 	idx = (idx + 1) % TX_RING_ENTRIES;
 
@@ -2358,7 +2445,8 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		 */
 		mod_timer(&ap->timer, jiffies + (3 * HZ));
 
-		/* The following check will fix a race between the interrupt
+		/*
+		 * The following check will fix a race between the interrupt
 		 * handler increasing the tx_ret_csm and testing for tx_full
 		 * and this tx routine's testing the tx_ret_csm and setting
 		 * the tx_full; note that this fix makes assumptions on the
@@ -2369,13 +2457,17 @@ static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (((idx + 2) % TX_RING_ENTRIES != ap->tx_ret_csm)
 			&& xchg(&ap->tx_full, 0)) {
 			del_timer(&ap->timer);
+			/*
+			 * We may not need this one in the post softnet era
+			 * in this case this can be changed to a
+			 * early_stop_netif_wake_queue(dev);
+			 */
 			netif_wake_queue(dev);
+		} else {
+			late_stop_netif_stop_queue(dev);
 		}
 	} else {
-		/*
-		 * No need for it to be atomic - seems it needs to be
-		 */
-		netif_wake_queue(dev);
+		early_stop_netif_wake_queue(dev);
 	}
 
 	dev->trans_start = jiffies;
@@ -2408,7 +2500,7 @@ static int ace_change_mtu(struct net_device *dev, int new_mtu)
 		while (test_and_set_bit(0, &ap->jumbo_refill_busy));
 		synchronize_irq();
 		ace_set_rxtx_parms(dev, 0);
-		if (ap->jumbo){
+		if (ap->jumbo) {
 			struct cmd cmd;
 
 			cmd.evt = C_RESET_JUMBO_RNG;
@@ -2424,6 +2516,7 @@ static int ace_change_mtu(struct net_device *dev, int new_mtu)
 
 static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
+#ifdef SIOCETHTOOL
 	struct ace_private *ap = dev->priv;
 	struct ace_regs *regs = ap->regs;
 	struct ethtool_cmd ecmd;
@@ -2483,7 +2576,11 @@ static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			ecmd.autoneg = AUTONEG_DISABLE;
 
 #if 0
+		/*
+		 * Current struct ethtool_cmd is insufficient
+		 */
 		ecmd.trace = readl(&regs->TuneTrace);
+
 		ecmd.txcoal = readl(&regs->TuneTxCoalTicks);
 		ecmd.rxcoal = readl(&regs->TuneRxCoalTicks);
 #endif
@@ -2551,6 +2648,7 @@ static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		}
 		return 0;
 	}
+#endif
 
 	return -EOPNOTSUPP;
 }
@@ -2563,7 +2661,7 @@ static int ace_set_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr=p;
 	struct ace_regs *regs;
-	u16 *da;
+	u8 *da;
 	struct cmd cmd;
 
 	if(netif_running(dev))
@@ -2571,11 +2669,11 @@ static int ace_set_mac_addr(struct net_device *dev, void *p)
 
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
 
-	da = (u16 *)dev->dev_addr;
+	da = (u8 *)dev->dev_addr;
 
 	regs = ((struct ace_private *)dev->priv)->regs;
-	writel(da[0], &regs->MacAddrHi);
-	writel((da[1] << 16) | da[2], &regs->MacAddrLo);
+	writel(da[0] << 8 | da[1], &regs->MacAddrHi);
+	writel((da[2] << 24) | (da[3] << 16) | (da[4] << 8) | da[5] , &regs->MacAddrLo);
 
 	cmd.evt = C_SET_MAC_ADDR;
 	cmd.code = 0;
@@ -3000,6 +3098,6 @@ static int __init read_eeprom_byte(struct net_device *dev,
 
 /*
  * Local variables:
- * compile-command: "gcc -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
+ * compile-command: "gcc -D__SMP__ -D__KERNEL__ -DMODULE -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include ../../include/linux/modversions.h   -c -o acenic.o acenic.c"
  * End:
  */

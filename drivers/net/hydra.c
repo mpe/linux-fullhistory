@@ -186,6 +186,7 @@ int __init hydra_probe(struct net_device *dev)
 		    	release_mem_region(board, 0x4000);
 			continue;
 		}
+		SET_MODULE_OWNER(dev);
 
 		for(j = 0; j < ETHER_ADDR_LEN; j++)
 			dev->dev_addr[j] = *((u8 *)ZTWO_VADDR(board + HYDRA_ADDRPROM + 2*j));
@@ -284,15 +285,11 @@ static int hydra_open(struct net_device *dev)
 	/* take interface out of loopback */
 	WRITE_REG(NIC_TCR, 0);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
     
-	if(request_irq(IRQ_AMIGA_PORTS, hydra_interrupt, SA_SHIRQ,
-		       "Hydra Ethernet", dev))
-		return(-EAGAIN);
-
-	MOD_INC_USE_COUNT;
+	i = request_irq(IRQ_AMIGA_PORTS, hydra_interrupt, SA_SHIRQ,
+		        dev->name, dev);
+	if (i) return i;
 
 	return(0);
 }
@@ -304,8 +301,7 @@ static int hydra_close(struct net_device *dev)
 	volatile u8 *nicbase = (u8 *)dev->base_addr;
 	int n = 5000;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 #ifdef HYDRA_DEBUG
 	printk("%s: Shutting down ethercard\n", dev->name);
@@ -318,8 +314,6 @@ static int hydra_close(struct net_device *dev)
 	while(((READ_REG(NIC_ISR) & ISR_RST) == 0) && --n);
     
 	free_irq(IRQ_AMIGA_PORTS, dev);
-
-	MOD_DEC_USE_COUNT;
 
 	return(0);
 }
@@ -668,20 +662,13 @@ static void set_multicast_list(struct net_device *dev, int num_addrs, void *addr
 
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-
-static struct net_device hydra_dev =
-{
-	devicename,			/* filled in by register_netdev() */
-	0, 0, 0, 0,			/* memory */
-	0, 0,				/* base, irq */
-	0, 0, 0, NULL, hydra_probe,
-};
+static struct net_device hydra_dev;
 
 int init_module(void)
 {
 	int err;
 
+	hydra_dev.init = hydra_probe;
 	if ((err = register_netdev(&hydra_dev))) {
 		if (err == -EIO)
 			printk("No Hydra board found. Module not loaded.\n");

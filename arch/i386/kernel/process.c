@@ -412,7 +412,7 @@ void show_regs(struct pt_regs * regs)
 /*
  * No need to lock the MM as we are the last user
  */
-void destroy_context(struct mm_struct *mm)
+void release_segments(struct mm_struct *mm)
 {
 	void * ldt = mm->context.segments;
 
@@ -493,7 +493,7 @@ void release_thread(struct task_struct *dead_task)
  * we do not have to muck with descriptors here, that is
  * done in switch_mm() as needed.
  */
-int init_new_context(struct task_struct *p, struct mm_struct *new_mm)
+void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
 {
 	struct mm_struct * old_mm;
 	void *old_ldt, *ldt;
@@ -506,11 +506,11 @@ int init_new_context(struct task_struct *p, struct mm_struct *new_mm)
 		 */
 		ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
 		if (!ldt)
-			return -ENOMEM;
-		memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
+			printk(KERN_WARNING "ldt allocation failed\n");
+		else
+			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
 	}
 	new_mm->context.segments = ldt;
-	return 0;
 }
 
 /*

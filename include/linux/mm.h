@@ -120,11 +120,7 @@ extern pgprot_t protection_map[16];
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
 	void (*close)(struct vm_area_struct * area);
-	void (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
-	void (*protect)(struct vm_area_struct *area, unsigned long, size_t, unsigned int newprot);
-	int (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
 	struct page * (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
-	struct page * (*wppage)(struct vm_area_struct * area, unsigned long address, struct page * page);
 };
 
 /*
