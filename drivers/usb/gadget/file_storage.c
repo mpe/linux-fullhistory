@@ -1276,6 +1276,8 @@ static int class_setup_req(struct fsg_dev *fsg,
 {
 	struct usb_request	*req = fsg->ep0req;
 	int			value = -EOPNOTSUPP;
+	u16			w_index = ctrl->wIndex;
+	u16			w_length = ctrl->wLength;
 
 	if (!fsg->config)
 		return value;
@@ -1288,7 +1290,7 @@ static int class_setup_req(struct fsg_dev *fsg,
 			if (ctrl->bRequestType != (USB_DIR_OUT |
 					USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 				break;
-			if (ctrl->wIndex != 0) {
+			if (w_index != 0) {
 				value = -EDOM;
 				break;
 			}
@@ -1304,13 +1306,13 @@ static int class_setup_req(struct fsg_dev *fsg,
 			if (ctrl->bRequestType != (USB_DIR_IN |
 					USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 				break;
-			if (ctrl->wIndex != 0) {
+			if (w_index != 0) {
 				value = -EDOM;
 				break;
 			}
 			VDBG(fsg, "get max LUN\n");
 			*(u8 *) req->buf = fsg->nluns - 1;
-			value = min(ctrl->wLength, (u16) 1);
+			value = min(w_length, (u16) 1);
 			break;
 		}
 	}
@@ -1323,15 +1325,15 @@ static int class_setup_req(struct fsg_dev *fsg,
 			if (ctrl->bRequestType != (USB_DIR_OUT |
 					USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 				break;
-			if (ctrl->wIndex != 0) {
+			if (w_index != 0) {
 				value = -EDOM;
 				break;
 			}
-			if (ctrl->wLength > MAX_COMMAND_SIZE) {
+			if (w_length > MAX_COMMAND_SIZE) {
 				value = -EOVERFLOW;
 				break;
 			}
-			value = ctrl->wLength;
+			value = w_length;
 			fsg->ep0req->context = received_cbi_adsc;
 			break;
 		}
@@ -1342,7 +1344,7 @@ static int class_setup_req(struct fsg_dev *fsg,
 			"unknown class-specific control req "
 			"%02x.%02x v%04x i%04x l%u\n",
 			ctrl->bRequestType, ctrl->bRequest,
-			ctrl->wValue, ctrl->wIndex, ctrl->wLength);
+			w_value, w_index, w_length);
 	return value;
 }
 
@@ -1356,6 +1358,9 @@ static int standard_setup_req(struct fsg_dev *fsg,
 {
 	struct usb_request	*req = fsg->ep0req;
 	int			value = -EOPNOTSUPP;
+	u16			w_index = ctrl->wIndex;
+	u16			w_value = ctrl->wValue;
+	u16			w_length = ctrl->wLength;
 
 	/* Usually this just stores reply data in the pre-allocated ep0 buffer,
 	 * but config change events will also reconfigure hardware. */
@@ -1365,11 +1370,11 @@ static int standard_setup_req(struct fsg_dev *fsg,
 		if (ctrl->bRequestType != (USB_DIR_IN | USB_TYPE_STANDARD |
 				USB_RECIP_DEVICE))
 			break;
-		switch (ctrl->wValue >> 8) {
+		switch (w_value >> 8) {
 
 		case USB_DT_DEVICE:
 			VDBG(fsg, "get device descriptor\n");
-			value = min(ctrl->wLength, (u16) sizeof device_desc);
+			value = min(w_length, (u16) sizeof device_desc);
 			memcpy(req->buf, &device_desc, value);
 			break;
 #ifdef CONFIG_USB_GADGET_DUALSPEED
@@ -1377,7 +1382,7 @@ static int standard_setup_req(struct fsg_dev *fsg,
 			VDBG(fsg, "get device qualifier\n");
 			if (!fsg->gadget->is_dualspeed)
 				break;
-			value = min(ctrl->wLength, (u16) sizeof dev_qualifier);
+			value = min(w_length, (u16) sizeof dev_qualifier);
 			memcpy(req->buf, &dev_qualifier, value);
 			break;
 
@@ -1394,10 +1399,10 @@ static int standard_setup_req(struct fsg_dev *fsg,
 #endif
 			value = populate_config_buf(fsg->gadget,
 					req->buf,
-					ctrl->wValue >> 8,
-					ctrl->wValue & 0xff);
+					w_value >> 8,
+					w_value & 0xff);
 			if (value >= 0)
-				value = min(ctrl->wLength, (u16) value);
+				value = min(w_length, (u16) value);
 			break;
 
 		case USB_DT_STRING:
@@ -1405,9 +1410,9 @@ static int standard_setup_req(struct fsg_dev *fsg,
 
 			/* wIndex == language code */
 			value = usb_gadget_get_string(&stringtab,
-					ctrl->wValue & 0xff, req->buf);
+					w_value & 0xff, req->buf);
 			if (value >= 0)
-				value = min(ctrl->wLength, (u16) value);
+				value = min(w_length, (u16) value);
 			break;
 		}
 		break;
@@ -1418,8 +1423,8 @@ static int standard_setup_req(struct fsg_dev *fsg,
 				USB_RECIP_DEVICE))
 			break;
 		VDBG(fsg, "set configuration\n");
-		if (ctrl->wValue == CONFIG_VALUE || ctrl->wValue == 0) {
-			fsg->new_config = ctrl->wValue;
+		if (w_value == CONFIG_VALUE || w_value == 0) {
+			fsg->new_config = w_value;
 
 			/* Raise an exception to wipe out previous transaction
 			 * state (queued bufs, etc) and set the new config. */
@@ -1433,14 +1438,14 @@ static int standard_setup_req(struct fsg_dev *fsg,
 			break;
 		VDBG(fsg, "get configuration\n");
 		*(u8 *) req->buf = fsg->config;
-		value = min(ctrl->wLength, (u16) 1);
+		value = min(w_length, (u16) 1);
 		break;
 
 	case USB_REQ_SET_INTERFACE:
 		if (ctrl->bRequestType != (USB_DIR_OUT| USB_TYPE_STANDARD |
 				USB_RECIP_INTERFACE))
 			break;
-		if (fsg->config && ctrl->wIndex == 0) {
+		if (fsg->config && w_index == 0) {
 
 			/* Raise an exception to wipe out previous transaction
 			 * state (queued bufs, etc) and install the new
@@ -1455,20 +1460,20 @@ static int standard_setup_req(struct fsg_dev *fsg,
 			break;
 		if (!fsg->config)
 			break;
-		if (ctrl->wIndex != 0) {
+		if (w_index != 0) {
 			value = -EDOM;
 			break;
 		}
 		VDBG(fsg, "get interface\n");
 		*(u8 *) req->buf = 0;
-		value = min(ctrl->wLength, (u16) 1);
+		value = min(w_length, (u16) 1);
 		break;
 
 	default:
 		VDBG(fsg,
 			"unknown control req %02x.%02x v%04x i%04x l%u\n",
 			ctrl->bRequestType, ctrl->bRequest,
-			ctrl->wValue, ctrl->wIndex, ctrl->wLength);
+			w_value, w_index, w_length);
 	}
 
 	return value;
