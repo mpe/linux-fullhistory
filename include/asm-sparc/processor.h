@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.75 2000/01/07 20:21:42 davem Exp $
+/* $Id: processor.h,v 1.76 2000/01/09 09:13:38 anton Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -22,6 +22,7 @@
 #include <asm/segment.h>
 #include <asm/btfixup.h>
 #include <asm/page.h>
+#include <asm/atomic.h>
 
 /*
  * Bus types
@@ -88,6 +89,7 @@ struct thread_struct {
 	mm_segment_t current_ds;
 	struct exec core_exec;     /* just what it says. */
 	int new_signal;
+	atomic_t refcount;	/* used for sun4c only */
 };
 
 #define SPARC_FLAG_KTHREAD      0x1    /* task is a kernel thread */
@@ -201,11 +203,11 @@ extern struct task_struct *last_task_used_math;
 /* Allocation and freeing of basic task resources. */
 BTFIXUPDEF_CALL(struct task_struct *, alloc_task_struct, void)
 BTFIXUPDEF_CALL(void, free_task_struct, struct task_struct *)
+BTFIXUPDEF_CALL(void, get_task_struct, struct task_struct *)
 
 #define alloc_task_struct() BTFIXUP_CALL(alloc_task_struct)()
 #define free_task_struct(tsk) BTFIXUP_CALL(free_task_struct)(tsk)
-
-/* XXX Anton, here is where you implement get_task_struct et al. */
+#define get_task_struct(tsk) BTFIXUP_CALL(get_task_struct)(tsk)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

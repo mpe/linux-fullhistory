@@ -220,7 +220,9 @@ void __init dc21285_init(void)
 #ifdef CONFIG_HOST_FOOTBRIDGE
 
 	csrio.flags = IORESOURCE_IO;
+	csrio.name  = "DC21285";
 	csrmem.flags = IORESOURCE_MEM;
+	csrmem.name  = "DC21285";
 
 	allocate_resource(&ioport_resource, &csrio, 128,
 			  0xff00, 0xffff, 128, NULL, NULL);
@@ -244,7 +246,7 @@ void __init dc21285_init(void)
 				(1 << 31) | (1 << 29) | (1 << 28) | (1 << 24);
 #endif
 
-	printk(KERN_DEBUG"PCI: DC21285 footbridge, revision %02lX\n",
+	printk(KERN_DEBUG "PCI: DC21285 footbridge, revision %02lX\n",
 		*CSR_CLASSREV & 0xff);
 
 	pci_scan_bus(0, &dc21285_ops, NULL);

@@ -523,7 +523,7 @@ static void shrink_fork(struct hfs_fork *fork, int ablocks)
  * Try to add enough allocation blocks to 'fork'
  * so that it is 'ablock' allocation blocks long. 
  */
-static void grow_fork(struct hfs_fork *fork, int ablocks)
+static int grow_fork(struct hfs_fork *fork, int ablocks)
 {
 	struct hfs_cat_entry *entry = fork->entry;
 	struct hfs_mdb *mdb = entry->mdb;
@@ -535,8 +535,8 @@ static void grow_fork(struct hfs_fork *fork, int ablocks)
 
 	blocks = fork->psize;
 	need = ablocks - blocks/ablksz;
-	if (need < 1) {
-		return;
+	if (need < 1) { /* no need to grow the fork */
+		return 0;
 	}
 
 	/* round up to clumpsize */
@@ -550,7 +550,7 @@ static void grow_fork(struct hfs_fork *fork, int ablocks)
 	/* find last extent record and try to extend it */
 	if (!(ext = find_ext(fork, blocks/ablksz - 1))) {
 		/* somehow we couldn't find the end of the file! */
-		return;
+		return -1;
 	}
 
 	/* determine which is the last used extent in the record */
@@ -574,7 +574,7 @@ static void grow_fork(struct hfs_fork *fork, int ablocks)
 		unlock_bitmap(mdb);
 		if (err) {
 			relse_ext(ext);
-			return;
+			return -1;
 		}
 	
 		zero_blocks(mdb, start, len);
@@ -600,7 +600,7 @@ more_extents:
 		unlock_bitmap(mdb);
 		if (!len || err) {
 			relse_ext(ext);
-			return;
+			return -1;
 		}
 		zero_blocks(mdb, start, len);
 
@@ -617,7 +617,7 @@ more_extents:
 				lock_bitmap(mdb);
 				hfs_clear_vbm_bits(mdb, start, len);
 				unlock_bitmap(mdb);
-				return;
+				return -1;
 			}
 		}
 		blocks = (fork->psize += len * ablksz);
@@ -625,7 +625,7 @@ more_extents:
 	}
 	set_cache(fork, ext);
 	relse_ext(ext);
-	return;
+	return 0;
 }
 
 /*================ Global functions ================*/
@@ -738,11 +738,8 @@ int hfs_extent_map(struct hfs_fork *fork, int block, int create)
 	ablock = block / ablksz;
 	
 	if (block >= fork->psize) {
-		if (create) {
-			grow_fork(fork, ablock + 1);
-		} else {
+		if (!create || (grow_fork(fork, ablock + 1) < 0))
 			return 0;
-		}
 	}
 
 #if defined(DEBUG_EXTENTS) || defined(DEBUG_ALL)

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.19 1999/12/15 17:51:25 jj Exp $
+/* $Id: misc.c,v 1.20 2000/01/12 02:59:26 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -399,18 +399,6 @@ asmlinkage int solaris_sysconf(int id)
 	case SOLARIS_CONFIG_TIMER_MAX:		return -EINVAL;
 	default: return -EINVAL;
 	}
-}
-
-asmlinkage int solaris_setreuid(s32 ruid, s32 euid)
-{
-	int (*sys_setreuid)(uid_t, uid_t) = (int (*)(uid_t, uid_t))SYS(setreuid);
-	return sys_setreuid(ruid, euid);
-}
-
-asmlinkage int solaris_setregid(s32 rgid, s32 egid)
-{
-	int (*sys_setregid)(gid_t, gid_t) = (int (*)(gid_t, gid_t))SYS(setregid);
-	return sys_setregid(rgid, egid);
 }
 
 asmlinkage int solaris_procids(int cmd, s32 pid, s32 pgid)

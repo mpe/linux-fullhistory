@@ -4,7 +4,7 @@
  * IP checksum routines
  *
  * Copyright (C) Original authors of ../asm-i386/checksum.h
- * Copyright (C) 1996,1997,1998 Russell King
+ * Copyright (C) 1996-1999 Russell King
  */
 #ifndef __ASM_ARM_CHECKSUM_H
 #define __ASM_ARM_CHECKSUM_H
@@ -37,37 +37,25 @@ csum_partial_copy_nocheck(const char *src, char *dst, int len, int sum);
 unsigned int
 csum_partial_copy_from_user(const char *src, char *dst, int len, int sum, int *err_ptr);
 
-#if 0
-/*
- * This combination is currently not used, but possible:
- */
-unsigned int
-csum_partial_copy_to_user(const char *src, char *dst, int len, int sum, int *err_ptr);
-#endif
-
 /*
  * These are the old (and unsafe) way of doing checksums, a warning message will be
  * printed if they are used and an exception occurs.
  *
  * these functions should go away after some time.
  */
-#define csum_partial_copy_fromuser csum_partial_copy
-unsigned int
-csum_partial_copy(const char *src, char *dst, int len, int sum);
+#define csum_partial_copy(src,dst,len,sum)	csum_partial_copy_nocheck(src,dst,len,sum)
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,
  *	which always checksum on 4 octet boundaries.
- *
- *	Converted and optimised for ARM by R. M. King.
  */
 static inline unsigned short
 ip_fast_csum(unsigned char * iph, unsigned int ihl)
 {
 	unsigned int sum, tmp1;
 
-    __asm__ __volatile__(
-	"sub	%2, %2, #5		@ ip_fast_csum 
+	__asm__ __volatile__(
+	"sub	%2, %2, #5		@ ip_fast_csum
 	ldr	%0, [%1], #4
 	ldr	%3, [%1], #4
 	adds	%0, %0, %3
@@ -86,10 +74,10 @@ ip_fast_csum(unsigned char * iph, unsigned int ihl)
 	mvn	%0, %0
 	mov	%0, %0, lsr #16
 	"
-	: "=&r" (sum), "=&r" (iph), "=&r" (ihl), "=&r" (tmp1)
+	: "=r" (sum), "=r" (iph), "=r" (ihl), "=r" (tmp1)
 	: "1" (iph), "2" (ihl)
 	: "cc");
-	return(sum);
+	return sum;
 }
 
 /*
@@ -130,7 +118,17 @@ static inline unsigned short int
 csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
 		  unsigned int proto, unsigned int sum)
 {
-	return csum_fold(csum_tcpudp_nofold(saddr, daddr, len, proto, sum));
+	__asm__(
+	"adds	%0, %1, %2		@ csum_tcpudp_magic
+	adcs	%0, %0, %3
+	adcs	%0, %0, %4
+	adcs	%0, %0, %5
+	adds	%0, %0, %0, lsl #16
+	addcs	%0, %0, #0x10000"
+	: "=&r"(sum)
+	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len) << 16), "Ir" (proto << 8)
+	: "cc");
+	return (~sum) >> 16;
 }
 
 

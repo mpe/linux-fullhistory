@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.60 2000/01/05 07:37:50 jj Exp $ */
+/* $Id: unistd.h,v 1.63 2000/01/12 11:47:40 anton Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -46,11 +46,11 @@
 #define __NR_sigaltstack	 28 /* Common					   */
 #define __NR_pause               29 /* Is sigblock(0)->sigpause() in SunOS         */
 #define __NR_utime               30 /* Implemented via utimes() under SunOS        */
-/* #define __NR_stty             31    Implemented via ioctl() under SunOS         */
-/* #define __NR_gtty             32    Implemented via ioctl() under SunOS         */
+#define __NR_lchown32            31 /* Linux sparc32 specific                      */
+#define __NR_fchown32            32 /* Linux sparc32 specific                      */
 #define __NR_access              33 /* Common                                      */
 #define __NR_nice                34 /* Implemented via get/setpriority() in SunOS  */
-/* #define __NR_ftime            35    Implemented via gettimeofday() in SunOS     */
+#define __NR_chown32             35 /* Linux sparc32 specific                      */
 #define __NR_sync                36 /* Common                                      */
 #define __NR_kill                37 /* Common                                      */
 #define __NR_stat                38 /* Common                                      */
@@ -59,7 +59,7 @@
 #define __NR_dup                 41 /* Common                                      */
 #define __NR_pipe                42 /* Common                                      */
 #define __NR_times               43 /* Implemented via getrusage() in SunOS        */
-/* #define __NR_profil           44    Common                                      */
+#define __NR_getuid32            44 /* Linux sparc32 specific                      */
 #define __NR_umount2             45 /* Linux Specific                              */
 #define __NR_setgid              46 /* Implemented via setregid() in SunOS         */
 #define __NR_getgid              47 /* Common                                      */
@@ -68,7 +68,7 @@
 #define __NR_getegid             50 /* SunOS calls getgid()                        */
 #define __NR_acct                51 /* Common                                      */
 /* #define __NR_ni_syscall	 52    ENOSYS under SunOS			   */
-/* #define __NR_mctl             53    SunOS specific                              */
+#define __NR_getgid32            53 /* Linux sparc32 specific                      */
 #define __NR_ioctl               54 /* Common                                      */
 #define __NR_reboot              55 /* Common                                      */
 #define __NR_mmap2		 56 /* Linux sparc32 Specific			   */
@@ -84,32 +84,32 @@
 #define __NR_vfork               66 /* Common                                      */
 #define __NR_pread               67 /* Linux Specific                              */
 #define __NR_pwrite              68 /* Linux Specific                              */
-/* #define __NR_sbrk             69    SunOS Specific                              */
-/* #define __NR_sstk             70    SunOS Specific                              */
+#define __NR_geteuid32           69 /* Linux sparc32, sbrk under SunOS             */
+#define __NR_getegid32           70 /* Linux sparc32, sstk under SunOS             */
 #define __NR_mmap                71 /* Common                                      */
-/* #define __NR_vadvise          72    SunOS Specific                              */
+#define __NR_setreuid32          72 /* Linux sparc32, vadvise under SunOS          */
 #define __NR_munmap              73 /* Common                                      */
 #define __NR_mprotect            74 /* Common                                      */
-/* #define __NR_madvise          75    SunOS Specific                              */
+#define __NR_setregid32          75 /* Linux sparc32, madvise under SunOS          */
 #define __NR_vhangup             76 /* Common                                      */
 #define __NR_truncate64		 77 /* Linux sparc32 Specific			   */
-/* #define __NR_mincore          78    SunOS Specific                              */
+#define __NR_getgroups32         78 /* Linux sparc32, mincore under SunOS          */
 #define __NR_getgroups           79 /* Common                                      */
 #define __NR_setgroups           80 /* Common                                      */
 #define __NR_getpgrp             81 /* Common                                      */
-/* #define __NR_setpgrp          82    setpgid, same difference...                 */
+#define __NR_setgroups32         82 /* Linux sparc32, setpgrp under SunOS          */
 #define __NR_setitimer           83 /* Common                                      */
 #define __NR_ftruncate64	 84 /* Linux sparc32 Specific			   */
 #define __NR_swapon              85 /* Common                                      */
 #define __NR_getitimer           86 /* Common                                      */
-/* #define __NR_gethostname      87    SunOS Specific                              */
+#define __NR_setuid32            87 /* Linux sparc32, gethostname under SunOS      */
 #define __NR_sethostname         88 /* Common                                      */
-/* #define __NR_getdtablesize    89    SunOS Specific                              */
+#define __NR_setgid32            89 /* Linux sparc32, getdtablesize under SunOS    */
 #define __NR_dup2                90 /* Common                                      */
-/* #define __NR_getdopt          91    SunOS Specific                              */
+#define __NR_setfsuid32          91 /* Linux sparc32, getdopt under SunOS          */
 #define __NR_fcntl               92 /* Common                                      */
 #define __NR_select              93 /* Common                                      */
-/* #define __NR_setdopt          94    SunOS Specific                              */
+#define __NR_setfsgid32          94 /* Linux sparc32, setdopt under SunOS          */
 #define __NR_fsync               95 /* Common                                      */
 #define __NR_setpriority         96 /* Common                                      */
 #define __NR_socket              97 /* Common                                      */
@@ -123,10 +123,10 @@
 #define __NR_rt_sigtimedwait    105 /* Linux Specific                              */
 #define __NR_rt_sigqueueinfo    106 /* Linux Specific                              */
 #define __NR_rt_sigsuspend      107 /* Linux Specific                              */
-/* #define __NR_sigvec          108    SunOS Specific                              */
-/* #define __NR_sigblock        109    SunOS Specific                              */
-/* #define __NR_sigsetmask      110    SunOS Specific                              */
-/* #define __NR_sigpause        111    SunOS Specific                              */
+#define __NR_setresuid32        108 /* Linux Specific, sigvec under SunOS	   */
+#define __NR_getresuid32        109 /* Linux Specific, sigblock under SunOS	   */
+#define __NR_setresgid32        110 /* Linux Specific, sigsetmask under SunOS	   */
+#define __NR_getresgid32        111 /* Linux Specific, sigpause under SunOS	   */
 /* #define __NR_sigstack        112    SunOS Specific                              */
 #define __NR_recvmsg            113 /* Common                                      */
 #define __NR_sendmsg            114 /* Common                                      */
@@ -225,7 +225,7 @@
 #define __NR_syslog             207 /* Linux Specific                              */
 /* #define __NR_olduname        208    Linux Specific                              */
 /* #define __NR_iopl            209    Linux Specific - i386 specific, unused      */
-#define __NR_idle               210 /* Linux Specific                              */
+/* #define __NR_idle            210    Linux Specific - was sys_idle, now unused   */
 /* #define __NR_vm86            211    Linux Specific - i386 specific, unused      */
 #define __NR_waitpid            212 /* Linux Specific                              */
 #define __NR_swapoff            213 /* Linux Specific                              */
@@ -416,7 +416,6 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static __inline__ _syscall0(int,idle)
 static __inline__ _syscall0(int,pause)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)

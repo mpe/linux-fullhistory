@@ -7,6 +7,8 @@ mainmenu_name "Linux Kernel Configuration"
 define_bool CONFIG_X86 y
 define_bool CONFIG_ISA y
 
+define_bool CONFIG_UID16 y
+
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
@@ -106,7 +108,7 @@ fi
 bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
 
 if [ "$CONFIG_HOTPLUG" = "y" ] ; then
-source drivers/pcmcia/Config.in
+   source drivers/pcmcia/Config.in
 fi
 
 bool 'System V IPC' CONFIG_SYSVIPC

@@ -743,7 +743,7 @@ static int alloc_io_space(socket_info_t *s, u_int attr, ioaddr_t *base,
 	else
 	    while (align && (align < num)) align <<= 1;
     }
-    if (*base & ~(align-1)) {
+    if (align && (*base & (align-1))) {
 	printk(KERN_INFO "odd IO request: base %04x align %04x\n",
 	       *base, align);
 	align = 0;

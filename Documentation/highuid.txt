@@ -17,11 +17,6 @@ What's left to be done for 32-bit UIDs on all Linux architectures:
   properly with huge UIDs. If it can deal with 64-bit file offsets on all 
   architectures, this should not be a problem.
 
-- Decide on a final layout for the new msqid64_ds, semid64_ds, and
-  shmid64_ds, and shminfo64 structures. The current ones leave pad space
-  for 64-bit time_t and 32-bit pid_t, as well as 4 extra machine words.
-  Perhaps more pad space should be left for future use?
-
 - Decide whether or not to keep backwards compatibility with the system
   accounting file, or if we should break it as the comments suggest
   (currently, the old 16-bit UID and GID are still written to disk, and
@@ -33,7 +28,7 @@ What's left to be done for 32-bit UIDs on all Linux architectures:
   uses the 32-bit UID system calls properly otherwise.
 
   This affects at least:
-	SunOS emulation - now fixed?
+	SunOS emulation
 	Solaris emulation
 	iBCS on Intel
 
@@ -62,8 +57,8 @@ What's left to be done for 32-bit UIDs on all Linux architectures:
 
   Other filesystems have not been checked yet.
 
-- The ncpfs and smpfs filesystems can not presently return 32-bit UIDs to
-  all ioctl()s. Some new ioctl()s have been added for 32-bit UIDs, but
+- The ncpfs and smpfs filesystems can not presently use 32-bit UIDs in
+  all ioctl()s. Some new ioctl()s have been added with 32-bit UIDs, but
   more are needed. (as well as new user<->kernel data structures)
 
 - The ELF core dump format only supports 16-bit UIDs on arm, i386, m68k,
@@ -76,3 +71,9 @@ What's left to be done for 32-bit UIDs on all Linux architectures:
 - make sure that the UID mapping feature of AX25 networking works properly
   (it should be safe because it's always used a 32-bit integer to
   communicate between user and kernel)
+
+
+Chris Wing
+wingc@umich.edu
+
+last updated: January 11, 2000

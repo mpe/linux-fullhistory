@@ -112,7 +112,7 @@ void do_gettimeofday(struct timeval *tv)
 
 	/*
 	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the tiemr bottom half hasnt executed yet.
+	 * nonzero if the timer bottom half hasnt executed yet.
 	 */
 	if (lost_ticks)
 		tv->tv_usec += USECS_PER_JIFFY;

@@ -24,4 +24,6 @@
 #define arch_do_idle()				\
 	outb(0, IOMD_SUSMODE)
 
+#define arch_power_off()	do { } while (0)
+
 #endif

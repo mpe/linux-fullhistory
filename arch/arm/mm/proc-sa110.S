@@ -16,6 +16,7 @@
  * is larger than this, then we flush the whole cache
  */
 #define MAX_AREA_SIZE	32768
+#define FLUSH_OFFSET	32768
 
 		.macro flush_110_dcache	rd, ra, re
 		add	\re, \ra, #16384		@ only necessary for 16k
@@ -56,7 +57,7 @@ cpu_sa110_flush_cache_all_r2:
 		ands	r1, r1, #1
 		eor	r1, r1, #1
 		str	r1, [r3]
-		addne	ip, ip, #32768
+		addne	ip, ip, #FLUSH_OFFSET
 		flush_110_dcache	r3, ip, r1
 		mov	ip, #0
 		teq	r2, #0
@@ -74,7 +75,7 @@ cpu_sa1100_flush_cache_all_r2:
 		ands	r1, r1, #1
 		eor	r1, r1, #1
 		str	r1, [r3]
-		addne	ip, ip, #32768
+		addne	ip, ip, #FLUSH_OFFSET
 		flush_1100_dcache	r3, ip, r1
 		mov	ip, #0
 		teq	r2, #0
@@ -321,7 +322,7 @@ ENTRY(cpu_sa110_set_pgd)
 		ands	r2, r2, #1
 		eor	r2, r2, #1
 		str	r2, [r3]
-		addne	ip, ip, #32768
+		addne	ip, ip, #FLUSH_OFFSET
 		flush_110_dcache	r3, ip, r1
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
@@ -338,7 +339,7 @@ ENTRY(cpu_sa1100_set_pgd)
 		ands	r2, r2, #1
 		eor	r2, r2, #1
 		str	r2, [r3]
-		addne	ip, ip, #32768
+		addne	ip, ip, #FLUSH_OFFSET
 		flush_1100_dcache	r3, ip, r1
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
@@ -430,8 +431,12 @@ ENTRY(cpu_sa110_do_idle)
 ENTRY(cpu_sa1100_do_idle)
 		mov	r0, #0
 		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
-							@ load from uncacheable loc?
-		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt
+		ldr	r1, =FLUSH_BASE+FLUSH_OFFSET*2	@ load from uncacheable loc
+		ldr	r1, [r1, #0]
+		b	1f
+
+		.align	5
+1:		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt
 		mcr	p15, 0, r0, c15, c1, 2		@ Enable clock switching
 		mov	pc, lr
 

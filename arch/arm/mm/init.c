@@ -168,7 +168,8 @@ void show_mem(void)
 void __init paging_init(void)
 {
 	void *zero_page, *bad_page, *bad_table;
-	unsigned int zone_size[3];
+	unsigned int zone_size[MAX_NR_ZONES];
+	int i;
 
 #ifdef CONFIG_CPU_32
 #define TABLE_OFFSET	(PTRS_PER_PTE)
@@ -193,7 +194,24 @@ void __init paging_init(void)
 	/*
 	 * Initialise the zones and mem_map
 	 */
-	zonesize_init(zone_size);
+	for (i = 0; i < MAX_NR_ZONES; i++)
+		zone_size[i] = 0;
+
+	/*
+	 * Calculate the size of the zones.  On ARM, we don't have
+	 * any problems with DMA or highmem, so all memory is
+	 * allocated to the DMA zone.
+	 */
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		if (meminfo.bank[i].size) {
+			unsigned int end;
+
+			end = (meminfo.bank[i].start - PHYS_OFFSET +
+			       meminfo.bank[i].size) >> PAGE_SHIFT;
+			if (zone_size[0] < end)
+				zone_size[0] = end;
+		}
+	}
 	free_area_init(zone_size);
 
 	/*
@@ -339,10 +357,11 @@ void free_initmem(void)
 #ifdef CONFIG_BLK_DEV_INITRD
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
-	for (; start < end; start += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(start));
-		set_page_count(mem_map+MAP_NR(start), 1);
-		free_page(start);
+	unsigned long addr;
+	for (addr = start; addr < end; addr += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(addr));
+		set_page_count(mem_map+MAP_NR(addr), 1);
+		free_page(addr);
 		totalram_pages++;
 	}
 	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);

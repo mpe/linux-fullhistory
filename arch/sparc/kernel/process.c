@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.142 1999/12/27 06:08:31 anton Exp $
+/*  $Id: process.c,v 1.143 2000/01/09 09:13:28 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -502,6 +502,9 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	p->thread.kpsr = current->thread.fork_kpsr;
 #endif
 	p->thread.kwim = current->thread.fork_kwim;
+
+	/* This is used for sun4c only */
+	atomic_set(&p->thread.refcount, 1);
 
 	if(regs->psr & PSR_PS) {
 		extern struct pt_regs fake_swapper_regs;

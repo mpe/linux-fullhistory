@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.7 1999/12/17 12:31:57 jj Exp $
+/* $Id: pci_psycho.c,v 1.9 2000/01/11 23:38:32 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1278,6 +1278,11 @@ static void __init psycho_iommu_init(struct pci_controller_info *p)
 	p->iommu.page_table = (iopte_t *)tsbbase;
 	p->iommu.page_table_sz_bits = 17;
 	p->iommu.page_table_map_base = 0xc0000000;
+#ifndef NEW_PCI_DMA_MAP
+	memset((char *)tsbbase, 0, PAGE_SIZE << 5);
+#else
+	memset((char *)tsbbase, 0, PAGE_SIZE << 7);
+#endif
 
 #ifndef NEW_PCI_DMA_MAP
 	iopte = (iopte_t *)tsbbase;

@@ -1,6 +1,6 @@
 /*
  * include/asm-arm/arch-sa1100/serial.h
- * (C) 1999 Nicolas Pitre <nico@visuaide.com>
+ * (C) 1999 Nicolas Pitre <nico@cam.org>
  *
  * All this is intended to be used with a 16550-like UART on the SA1100's 
  * PCMCIA bus.  It has nothing to do with the SA1100's internal serial ports.

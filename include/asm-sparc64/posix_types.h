@@ -29,6 +29,15 @@ typedef unsigned int           __kernel_nlink_t;
 typedef int                    __kernel_daddr_t;
 typedef long                   __kernel_off_t;
 typedef char *                 __kernel_caddr_t;
+typedef unsigned short	       __kernel_uid16_t;
+typedef unsigned short	       __kernel_gid16_t;
+typedef unsigned int	       __kernel_uid32_t;
+typedef unsigned int	       __kernel_gid32_t;
+#ifdef __KERNEL__
+#define UID16_COMPAT_NEEDED
+typedef unsigned short	       __kernel_old_uid_t;
+typedef unsigned short	       __kernel_old_gid_t;
+#endif /* __KERNEL__ */
 
 /* Note this piece of asymmetry from the v9 ABI.  */
 typedef int		       __kernel_suseconds_t;

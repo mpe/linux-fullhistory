@@ -321,11 +321,11 @@ CONFIG_PSMOUSE=y
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
 # CONFIG_DRM_TDFX is not set
+CONFIG_PCMCIA_SERIAL=y
 
 #
 # PCMCIA character device support
 #
-CONFIG_PCMCIA_SERIAL=y
 # CONFIG_PCMCIA_SERIAL_CS is not set
 
 #

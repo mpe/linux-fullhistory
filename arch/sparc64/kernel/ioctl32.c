@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.72 2000/01/04 15:43:45 davem Exp $
+/* $Id: ioctl32.c,v 1.73 2000/01/11 01:06:47 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -594,6 +594,8 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long ar
 			err |= __put_user(ifr.ifr_map.irq, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.irq));
 			err |= __put_user(ifr.ifr_map.dma, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.dma));
 			err |= __put_user(ifr.ifr_map.port, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.port));
+			if (err)
+				err = -EFAULT;
 			break;
 		}
 	}
@@ -667,7 +669,7 @@ static inline int hdio_getgeo(unsigned int fd, unsigned long arg)
 		err = copy_to_user ((struct hd_geometry32 *)arg, &geo, 4);
 		err |= __put_user (geo.start, &(((struct hd_geometry32 *)arg)->start));
 	}
-	return err;
+	return err ? -EFAULT : 0;
 }
 
 struct  fbcmap32 {
@@ -715,7 +717,7 @@ static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, unsigned lon
 		ret |= copy_to_user ((char *)A(g), green, f.count);
 		ret |= copy_to_user ((char *)A(b), blue, f.count);
 	}
-	return ret;
+	return ret ? -EFAULT : 0;
 }
 
 struct fbcursor32 {
@@ -826,8 +828,10 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		err |= __get_user(green, &((struct fb_cmap32 *)arg)->green);
 		err |= __get_user(blue, &((struct fb_cmap32 *)arg)->blue);
 		err |= __get_user(transp, &((struct fb_cmap32 *)arg)->transp);
-		if (err)
+		if (err) {
+			err = -EFAULT;
 			goto out;
+		}
 		err = -ENOMEM;
 		cmap.red = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
 		if (!cmap.red)
@@ -851,8 +855,10 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		err |= __copy_from_user(cmap.green, (char *)A(green), cmap.len * sizeof(__u16));
 		err |= __copy_from_user(cmap.blue, (char *)A(blue), cmap.len * sizeof(__u16));
 		if (cmap.transp) err |= __copy_from_user(cmap.transp, (char *)A(transp), cmap.len * sizeof(__u16));
-		if (err)
+		if (err) {
+			err = -EFAULT;
 			goto out;
+		}
 		break;
 	default:
 		do {
@@ -896,6 +902,9 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case FBIOPUTCMAP:
 		break;
 	}
+	if (err)
+		err = -EFAULT;
+
 out:	if (cmap.red) kfree(cmap.red);
 	if (cmap.green) kfree(cmap.green);
 	if (cmap.blue) kfree(cmap.blue);
@@ -1064,8 +1073,10 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err |= __get_user(f->spec1, &((struct floppy_struct32 *)arg)->spec1);
 			err |= __get_user(f->fmt_gap, &((struct floppy_struct32 *)arg)->fmt_gap);
 			err |= __get_user((u64)f->name, &((struct floppy_struct32 *)arg)->name);
-			if (err)
+			if (err) {
+				err = -EFAULT;
 				goto out;
+			}
 			break;
 		}
 		case FDSETDRVPRM32:
@@ -1097,8 +1108,10 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err |= __copy_from_user(f->autodetect, ((struct floppy_drive_params32 *)arg)->autodetect, sizeof(f->autodetect));
 			err |= __get_user(f->checkfreq, &((struct floppy_drive_params32 *)arg)->checkfreq);
 			err |= __get_user(f->native_format, &((struct floppy_drive_params32 *)arg)->native_format);
-			if (err)
+			if (err) {
+				err = -EFAULT;
 				goto out;
+			}
 			break;
 		}
 		case FDGETDRVSTAT32:
@@ -1221,6 +1234,9 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		default:
 			break;
 	}
+	if (err)
+		err = -EFAULT;
+
 out:	if (karg) kfree(karg);
 	return err;
 }
@@ -1396,8 +1412,7 @@ static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		return err;
 	switch (cmd) {
 	case MTIOCPOS32:
-		if (__put_user(pos.mt_blkno, &((struct mtpos32 *)arg)->mt_blkno))
-			return -EFAULT;
+		err = __put_user(pos.mt_blkno, &((struct mtpos32 *)arg)->mt_blkno);
 		break;
 	case MTIOCGET32:
 		err = __put_user(get.mt_type, &((struct mtget32 *)arg)->mt_type);
@@ -1422,7 +1437,7 @@ static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case MTIOCSETCONFIG32:
 		break;
 	}
-	return err;
+	return err ? -EFAULT: 0;
 }
 
 struct cdrom_read32 {
@@ -1438,11 +1453,21 @@ struct cdrom_read_audio32 {
 	__kernel_caddr_t32	buf;
 };
 
+struct cdrom_generic_command32 {
+	unsigned char		cmd[CDROM_PACKET_SIZE];
+	__kernel_caddr_t32	buffer;
+	unsigned int		buflen;
+	int			stat;
+	__kernel_caddr_t32	sense;
+	__kernel_caddr_t32	reserved[3];
+};
+
 static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct cdrom_read cdread;
 	struct cdrom_read_audio cdreadaudio;
+	struct cdrom_generic_command cgc;
 	__kernel_caddr_t32 addr;
 	char *data = 0;
 	void *karg;
@@ -1477,6 +1502,17 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long ar
 			return -ENOMEM;
 		cdreadaudio.buf = data;
 		break;
+	case CDROM_SEND_PACKET:
+		karg = &cgc;
+		err = copy_from_user(cgc.cmd, &((struct cdrom_generic_command32 *)arg)->cmd, sizeof(cgc.cmd));
+		err |= __get_user(addr, &((struct cdrom_generic_command32 *)arg)->buffer);
+		err |= __get_user(cgc.buflen, &((struct cdrom_generic_command32 *)arg)->buflen);
+		if (err)
+			return -EFAULT;
+		if ((data = kmalloc(cgc.buflen, GFP_KERNEL)) == NULL)
+			return -ENOMEM;
+		cgc.buffer = data;
+		break;
 	default:
 		do {
 			static int count = 0;
@@ -1502,11 +1538,15 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long ar
 	case CDROMREADAUDIO:
 		err = copy_to_user((char *)A(addr), data, cdreadaudio.nframes * 2352);
 		break;
+	case CDROM_SEND_PACKET:
+		err = copy_to_user((char *)A(addr), data, cgc.buflen);
+		break;
 	default:
 		break;
 	}
-out:	if (data) kfree(data);
-	return err;
+out:	if (data)
+		kfree(data);
+	return err ? -EFAULT : 0;
 }
 
 struct loop_info32 {
@@ -1558,7 +1598,7 @@ static int loop_status(unsigned int fd, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
-	return err;
+	return err ? -EFAULT : 0;
 }
 
 extern int tty_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg);
@@ -1835,6 +1875,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case CDROMREADCOOKED:
 	case CDROMREADAUDIO:
 	case CDROMREADALL:
+	case CDROM_SEND_PACKET:
 		error = cdrom_ioctl_trans(fd, cmd, arg);
 		goto out;
 		

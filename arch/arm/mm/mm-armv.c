@@ -46,6 +46,15 @@ static int __init nowrite_setup(char *__unused)
 	return 1;
 }
 
+static int __init noalign_setup(char *__unused)
+{
+	cr_alignment &= ~2;
+	cr_no_alignment &= ~2;
+	set_cr(cr_alignment);
+	return 1;
+}
+
+__setup("noalign", noalign_setup);
 __setup("nocache", nocache_setup);
 __setup("nowb", nowrite_setup);
 
@@ -218,7 +227,7 @@ alloc_init_page(unsigned long virt, unsigned long phys, int domain, int prot)
  * the clearance is done by the middle-level functions (pmd)
  * rather than the top-level (pgd) functions.
  */
-static inline void free_init_section(unsigned long virt)
+static inline void clear_mapping(unsigned long virt)
 {
 	pmd_clear(pmd_offset(pgd_offset_k(virt), virt));
 }
@@ -273,73 +282,76 @@ static void __init create_mapping(struct map_desc *md)
 	}
 }
 
-/*
- * Initial boot-time mapping.  This covers just the zero page, kernel and
- * the flush area.  NB: it must be sorted by virtual address, and no
- * virtual address overlaps.
- *  init_map[2..4] are for architectures with banked memory.
- */
-static struct map_desc init_map[] __initdata = {
-	{ 0, 0, PAGE_SIZE,  DOMAIN_USER,   0, 0, 1, 0 }, /* zero page     */
-	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 }, /* kernel memory */
-	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 }, /* (4 banks)	  */
-	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 },
-	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 },
-	{ 0, 0, PGDIR_SIZE, DOMAIN_KERNEL, 1, 0, 1, 1 }, /* cache flush 1 */
-	{ 0, 0, 0,          DOMAIN_KERNEL, 1, 0, 1, 0 }  /* cache flush 2 */
-};
-
-#define NR_INIT_MAPS (sizeof(init_map) / sizeof(init_map[0]))
-
-/*
- * Calculate the size of the DMA, normal and highmem zones.
- * On ARM, we don't have any problems with DMA, so all memory
- * is allocated to the DMA zone.  We also don't have any
- * highmem either.
- */
-void __init zonesize_init(unsigned int *zone_size)
-{
-	int i;
-
-	zone_size[0] = 0;
-	zone_size[1] = 0;
-	zone_size[2] = 0;
-
-	for (i = 0; i < meminfo.nr_banks; i++) {
-		if (meminfo.bank[i].size) {
-			unsigned int end;
-
-			end = (meminfo.bank[i].start - PHYS_OFFSET +
-				meminfo.bank[i].size) >> PAGE_SHIFT;
-			if (end > zone_size[0])
-				zone_size[0] = end;
-		}
-	}
-}
-
 void __init pagetable_init(void)
 {
+	struct map_desc *init_maps, *p;
 	unsigned long address = 0;
 	int i;
 
 	/*
-	 * Setup the above mappings
+	 * Setup initial mappings.  We use the page we allocated
+	 * for zero page to hold the mappings, which will get
+	 * overwritten by the vectors in traps_init().  The
+	 * mappings must be in virtual address order.
 	 */
-	init_map[0].physical = virt_to_phys(alloc_bootmem_low_pages(PAGE_SIZE));
-	init_map[5].physical = FLUSH_BASE_PHYS;
-	init_map[5].virtual  = FLUSH_BASE;
-#ifdef FLUSH_BASE_MINICACHE
-	init_map[6].physical = FLUSH_BASE_PHYS + PGDIR_SIZE;
-	init_map[6].virtual  = FLUSH_BASE_MINICACHE;
-	init_map[6].length   = PGDIR_SIZE;
-#endif
+	init_maps = p = alloc_bootmem_low_pages(PAGE_SIZE);
+
+	p->physical   = virt_to_phys(init_maps);
+	p->virtual    = 0;
+	p->length     = PAGE_SIZE;
+	p->domain     = DOMAIN_USER;
+	p->prot_read  = 0;
+	p->prot_write = 0;
+	p->cacheable  = 1;
+	p->bufferable = 0;
+
+	p ++;
 
 	for (i = 0; i < meminfo.nr_banks; i++) {
-		init_map[i+1].physical = meminfo.bank[i].start;
-		init_map[i+1].virtual  = meminfo.bank[i].start +
-					 PAGE_OFFSET - PHYS_OFFSET;
-		init_map[i+1].length   = meminfo.bank[i].size;
+		if (meminfo.bank[i].size == 0)
+			continue;
+
+		p->physical   = meminfo.bank[i].start;
+		p->virtual    = __phys_to_virt(p->physical);
+		p->length     = meminfo.bank[i].size;
+		p->domain     = DOMAIN_KERNEL;
+		p->prot_read  = 0;
+		p->prot_write = 1;
+		p->cacheable  = 1;
+		p->bufferable = 1;
+
+		p ++;
 	}
+
+	p->physical   = FLUSH_BASE_PHYS;
+	p->virtual    = FLUSH_BASE;
+	p->length     = PGDIR_SIZE;
+	p->domain     = DOMAIN_KERNEL;
+	p->prot_read  = 1;
+	p->prot_write = 0;
+	p->cacheable  = 1;
+	p->bufferable = 1;
+
+	p ++;
+
+#ifdef FLUSH_BASE_MINICACHE
+	p->physical   = FLUSH_BASE_PHYS + PGDIR_SIZE;
+	p->virtual    = FLUSH_BASE_MINICACHE;
+	p->length     = PGDIR_SIZE;
+	p->domain     = DOMAIN_KERNEL;
+	p->prot_read  = 1;
+	p->prot_write = 0;
+	p->cacheable  = 1;
+	p->bufferable = 0;
+
+	p ++;
+#endif
+
+	/*
+	 * We may have a mapping in virtual address 0.
+	 * Clear it out.
+	 */
+	clear_mapping(0);
 
 	/*
 	 * Go through the initial mappings, but clear out any
@@ -347,18 +359,16 @@ void __init pagetable_init(void)
 	 */
 	i = 0;
 	do {
-		if (address < init_map[i].virtual || i == NR_INIT_MAPS) {
-			free_init_section(address);
+		if (address < init_maps->virtual || init_maps == p) {
+			clear_mapping(address);
 			address += PGDIR_SIZE;
 		} else {
-			create_mapping(init_map + i);
+			create_mapping(init_maps);
 
-			address = init_map[i].virtual + init_map[i].length;
+			address = init_maps->virtual + init_maps->length;
 			address = (address + PGDIR_SIZE - 1) & PGDIR_MASK;
 
-			do {
-				i += 1;
-			} while (init_map[i].length == 0 && i < NR_INIT_MAPS);
+			init_maps ++;
 		}
 	} while (address != 0);
 
@@ -382,6 +392,7 @@ void __init create_memmap_holes(void)
 	unsigned int i;
 
 #define PFN(x)	(((x) - PHYS_OFFSET) >> PAGE_SHIFT)
+#define free_bootmem(s,sz)  free_bootmem(((s)<<PAGE_SHIFT)+PHYS_OFFSET, (sz)<<PAGE_SHIFT)
 
 	for (i = 0; i < meminfo.nr_banks; i++) {
 		if (meminfo.bank[i].size == 0)
@@ -409,7 +420,7 @@ void __init create_memmap_holes(void)
 
 		end_pfn = PFN(meminfo.bank[i].start + meminfo.bank[i].size);
 
-		if (end_pfn != meminfo.end >> PAGE_SHIFT)
+		if (end_pfn != PFN(meminfo.end))
 			pg = mem_map + end_pfn;
 	}
 

@@ -3161,27 +3161,20 @@ struct pci_driver tulip_ops = {
 	resume:		tulip_resume
 };
 
-#ifdef MODULE
-
-int module_init(void)
+int tulip_init(void)
 {
 	pci_register_driver(&tulip_ops);
 	return 0;
 }
 
-void module_cleanup(void)
+void tulip_exit(void)
 {
 	pci_unregister_driver(&tulip_ops);
 }
 
-#else
+module_init(tulip_init)
+module_exit(tulip_exit)
 
-void tulip_probe(void)
-{
-	pci_register_driver(&tulip_ops);
-}
-
-#endif
 
 /*
  * Local variables:

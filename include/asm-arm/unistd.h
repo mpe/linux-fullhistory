@@ -7,7 +7,6 @@
  * This file contains the system call numbers.
  */
 
-#define __NR_setup			(__NR_SYSCALL_BASE+  0)	/* used only by init, to get system going */
 #define __NR_exit			(__NR_SYSCALL_BASE+  1)
 #define __NR_fork			(__NR_SYSCALL_BASE+  2)
 #define __NR_read			(__NR_SYSCALL_BASE+  3)
@@ -25,7 +24,7 @@
 #define __NR_chmod			(__NR_SYSCALL_BASE+ 15)
 #define __NR_lchown			(__NR_SYSCALL_BASE+ 16)
 #define __NR_break			(__NR_SYSCALL_BASE+ 17)
-#define __NR_oldstat			(__NR_SYSCALL_BASE+ 18)
+
 #define __NR_lseek			(__NR_SYSCALL_BASE+ 19)
 #define __NR_getpid			(__NR_SYSCALL_BASE+ 20)
 #define __NR_mount			(__NR_SYSCALL_BASE+ 21)
@@ -35,7 +34,7 @@
 #define __NR_stime			(__NR_SYSCALL_BASE+ 25)
 #define __NR_ptrace			(__NR_SYSCALL_BASE+ 26)
 #define __NR_alarm			(__NR_SYSCALL_BASE+ 27)
-#define __NR_oldfstat			(__NR_SYSCALL_BASE+ 28)
+
 #define __NR_pause			(__NR_SYSCALL_BASE+ 29)
 #define __NR_utime			(__NR_SYSCALL_BASE+ 30)
 #define __NR_stty			(__NR_SYSCALL_BASE+ 31)
@@ -83,7 +82,7 @@
 #define __NR_sigpending			(__NR_SYSCALL_BASE+ 73)
 #define __NR_sethostname		(__NR_SYSCALL_BASE+ 74)
 #define __NR_setrlimit			(__NR_SYSCALL_BASE+ 75)
-#define __NR_old_getrlimit		(__NR_SYSCALL_BASE+ 76)
+#define __NR_old_getrlimit		(__NR_SYSCALL_BASE+ 76)	/* Back compat 2GB limited rlimit */
 #define __NR_getrusage			(__NR_SYSCALL_BASE+ 77)
 #define __NR_gettimeofday		(__NR_SYSCALL_BASE+ 78)
 #define __NR_settimeofday		(__NR_SYSCALL_BASE+ 79)
@@ -91,7 +90,7 @@
 #define __NR_setgroups			(__NR_SYSCALL_BASE+ 81)
 #define __NR_select			(__NR_SYSCALL_BASE+ 82)
 #define __NR_symlink			(__NR_SYSCALL_BASE+ 83)
-#define __NR_oldlstat			(__NR_SYSCALL_BASE+ 84)
+
 #define __NR_readlink			(__NR_SYSCALL_BASE+ 85)
 #define __NR_uselib			(__NR_SYSCALL_BASE+ 86)
 #define __NR_swapon			(__NR_SYSCALL_BASE+ 87)
@@ -198,7 +197,7 @@
 					/* 188 reserved */
 					/* 189 reserved */
 #define __NR_vfork			(__NR_SYSCALL_BASE+190)
-#define __NR_getrlimit			(__NR_SYSCALL_BASE+191)
+#define __NR_getrlimit			(__NR_SYSCALL_BASE+191)	/* SuS compliant getrlimit */
 #define __NR_mmap2			(__NR_SYSCALL_BASE+192)
 #define __NR_truncate64			(__NR_SYSCALL_BASE+193)
 #define __NR_ftruncate64		(__NR_SYSCALL_BASE+194)

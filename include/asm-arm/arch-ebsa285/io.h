@@ -16,7 +16,7 @@
  * Translation of various region addresses to virtual addresses
  */
 #define __io_pci(a)		(PCIO_BASE + (a))
-#if 0
+#if 1
 #define __mem_pci(a)		((unsigned long)(a))
 #define __mem_isa(a)		(PCIMEM_BASE + (unsigned long)(a))
 #else
@@ -91,7 +91,7 @@ extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 #define __arch_ioremap(off,size,nocache)			\
 ({								\
 	unsigned long _off = (off), _size = (size);		\
-	void *_ret = NULL;					\
+	void *_ret = (void *)0;					\
 	if (valid_ioaddr(_off, _size))				\
 		_ret = __ioremap(io_to_phys(_off), _size, 0);	\
 	_ret;							\

@@ -1,6 +1,10 @@
 #ifndef __ARCH_M68K_POSIX_TYPES_H
 #define __ARCH_M68K_POSIX_TYPES_H
 
+#if defined(__KERNEL__)
+#include <linux/config.h>
+#endif /* __KERNEL__ */
+
 /*
  * This file is generally used by user-level software, so you need to
  * be a little careful about namespace pollution etc.  Also, we cannot
@@ -29,8 +33,7 @@ typedef unsigned short	__kernel_gid16_t;
 typedef unsigned int	__kernel_uid32_t;
 typedef unsigned int	__kernel_gid32_t;
 
-#ifdef __KERNEL__
-#define UID16_COMPAT_NEEDED
+#if defined(__KERNEL__) && defined(CONFIG_UID16)
 typedef unsigned short	__kernel_old_uid_t;
 typedef unsigned short	__kernel_old_gid_t;
 #endif /* __KERNEL__ */

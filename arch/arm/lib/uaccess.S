@@ -12,21 +12,13 @@
 #include <asm/errno.h>
 
 		.text
-#ifdef ENTRY
+
 #define USER(x...)					\
 9999:		x;					\
 		.section __ex_table,"a";		\
 		.align	3;				\
 		.long	9999b,9001f;			\
 		.previous
-#else
-#define USER(x...)					\
-		x
-#define ENTRY(x...)					\
-		.globl	_##x;				\
-_##x:
-#define TESTING
-#endif
 
 #define PAGE_SHIFT 12
 
@@ -285,12 +277,10 @@ USER(		strgebt	r3, [r0], #1)			@ May fault
 USER(		strgtbt	r3, [r0], #1)			@ May fault
 		b	.c2u_finished
 
-#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
 		.previous
-#endif
 
 /* Prototype: unsigned long __arch_copy_from_user(void *to,const void *from,unsigned long n);
  * Purpose  : copy a block from user memory to kernel memory
@@ -546,7 +536,6 @@ USER(		ldrget	r3, [r1], #0)			@ May fault
 		strgtb	r3, [r0], #1
 		b	.cfu_finished
 
-#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 		/* We took an exception.  Zero out the buffer and pretend no
@@ -557,7 +546,6 @@ USER(		ldrget	r3, [r1], #0)			@ May fault
 		blne	SYMBOL_NAME(__memzero)
 		LOADREGS(fd,sp!, {r0, r4 - r7, pc})
 		.previous
-#endif
 
 /* Prototype: int __arch_clear_user(void *addr, size_t sz)
  * Purpose  : clear some user memory
@@ -592,7 +580,6 @@ USER(		strnebt	r2, [r0], #1)
 		mov	r0, #0
 		LOADREGS(fd,sp!, {r1, pc})
 
-#ifndef TESTING
 		.section .fixup,"ax"
 		.align	0
 9001:		LOADREGS(fd,sp!, {r0, pc})
@@ -656,5 +643,4 @@ USER(		ldrbt	r3, [r1], #1)
 		.previous
 
 		.align
-#endif
 

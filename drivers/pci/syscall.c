@@ -120,7 +120,7 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 		err = get_user(word, (u16 *)buf);
 		if (err)
 			break;
-		err = pci_write_config_byte(dev, off, word);
+		err = pci_write_config_word(dev, off, word);
 		if (err != PCIBIOS_SUCCESSFUL)
 			err = -EIO;
 		break;
@@ -129,7 +129,7 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 		err = get_user(dword, (u32 *)buf);
 		if (err)
 			break;
-		pci_write_config_byte(dev, off, dword);
+		err = pci_write_config_dword(dev, off, dword);
 		if (err != PCIBIOS_SUCCESSFUL)
 			err = -EIO;
 		break;

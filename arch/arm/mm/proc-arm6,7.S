@@ -134,14 +134,10 @@ ENTRY(cpu_arm7_data_abort)
 		b	Ldata_simple			@ ldc	rd, [rn, #m]
 		b	Ldata_unknown
 Ldata_unknown:	@ Part of jumptable
-		ldr	r3, [sp, #15 * 4]		@ Get PC
-		str	r3, [sp, #-4]!
-		mov	r1, r1, lsr #2
-		mov	r3, r4
-		mov	r2, r0
-		adr	r0, Lukabttxt
-		bl	SYMBOL_NAME(panic)
-Lstop:		b	Lstop
+		mov	r0, r1
+		mov	r1, r4
+		mov	r2, r3
+		b	baddataabort
 
 Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 		beq	Ldata_simple
@@ -468,7 +464,7 @@ ENTRY(arm6_processor_functions)
 		.word	cpu_arm6_cache_wback_area
 		.word	cpu_arm6_cache_purge_area
 		.word	cpu_arm6_flush_tlb_page
-		.word	cpu_arm7_do_idle
+		.word	cpu_arm6_do_idle
 		.size	arm6_processor_functions, . - arm6_processor_functions
 
 /*

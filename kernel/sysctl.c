@@ -247,12 +247,14 @@ static ctl_table kern_table[] = {
 	{KERN_MAX_THREADS, "threads-max", &max_threads, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{KERN_RANDOM, "random", NULL, 0, 0555, random_table},
+#ifdef CONFIG_UID16
 	{KERN_OVERFLOWUID, "overflowuid", &overflowuid, sizeof(int), 0644, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &minolduid, &maxolduid},
 	{KERN_OVERFLOWGID, "overflowgid", &overflowgid, sizeof(int), 0644, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &minolduid, &maxolduid},
+#endif /* CONFIG_UID16 */
 	{0}
 };
 

@@ -6,12 +6,12 @@ if [ "$CONFIG_SCSI_ACORNSCSI_3" != "n" ]; then
    bool '  Support SCSI 2 Tagged queueing' CONFIG_SCSI_ACORNSCSI_TAGGED_QUEUE
    bool '  Support SCSI 2 Synchronous Transfers' CONFIG_SCSI_ACORNSCSI_SYNC
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   dep_tristate 'ARXE SCSI support (EXPERIMENTAL)' CONFIG_SCSI_ARXESCSI $CONFIG_SCSI
-   dep_tristate 'CumanaSCSI II support (EXPERIMENTAL)' CONFIG_SCSI_CUMANA_2 $CONFIG_SCSI
-   dep_tristate 'EESOX support (EXPERIMENTAL)' CONFIG_SCSI_EESOXSCSI $CONFIG_SCSI
-   dep_tristate 'PowerTec support (EXPERIMENTAL)' CONFIG_SCSI_POWERTECSCSI $CONFIG_SCSI
+dep_tristate 'ARXE SCSI support' CONFIG_SCSI_ARXESCSI $CONFIG_SCSI
+dep_tristate 'CumanaSCSI II support' CONFIG_SCSI_CUMANA_2 $CONFIG_SCSI
+dep_tristate 'EESOX support' CONFIG_SCSI_EESOXSCSI $CONFIG_SCSI
+dep_tristate 'PowerTec support' CONFIG_SCSI_POWERTECSCSI $CONFIG_SCSI
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    comment 'The following drivers are not fully supported'
 
    dep_tristate 'CumanaSCSI I support' CONFIG_SCSI_CUMANA_1 $CONFIG_SCSI

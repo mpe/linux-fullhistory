@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-sa1100/system.h
  *
- * Copyright (c) 1999 Nicolas Pitre <nico@visuaide.com>
+ * Copyright (c) 1999 Nicolas Pitre <nico@cam.org>
  */
 #include <linux/config.h>
 
@@ -25,6 +25,9 @@
 #endif
 
 
+#if 0
+#define arch_do_idle()          cpu_do_idle()
+#else
 /* Enter SA1100 idle mode (see data sheet sec 9.5).
  * It seems that the wait-on-interrupt just hang the CPU forever if it's
  * on the end of a cache line.  Workaround: we force an explicit alignment
@@ -41,3 +44,7 @@
 "	mcr	p15, 0, %0, c15, c1, 2	@ Reenable clock switching \n" \
 	: : "r" (&ICIP) : "cc" ); \
 	} while (0)
+#endif
+
+#define arch_power_off()	do { } while (0)
+

@@ -144,7 +144,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		    && (current->uid != server->m.mounted_uid)) {
 			return -EACCES;
 		}
-		put_user(high2lowuid(server->m.mounted_uid), (old_uid_t *) arg);
+		put_user(NEW_TO_OLD_UID(server->m.mounted_uid), (old_uid_t *) arg);
 		return 0;
 
 	case NCP_IOC_GETMOUNTUID32:

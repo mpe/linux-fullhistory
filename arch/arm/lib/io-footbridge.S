@@ -6,7 +6,9 @@
 
 		.macro	ioaddr, rd,rn
 		add	\rd, \rn, #pcio_high
+		.if	pcio_low
 		add	\rd, \rd, #pcio_low
+		.endif
 		.endm
 
 ENTRY(insl)

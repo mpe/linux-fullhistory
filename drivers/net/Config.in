@@ -261,6 +261,6 @@ fi
 
 source drivers/net/wan/Config.in
 
-if [ "$CONFIG_PCMCIA" != "n" ]; then
+if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/net/pcmcia/Config.in
 fi

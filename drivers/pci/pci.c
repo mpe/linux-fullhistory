@@ -202,7 +202,7 @@ pci_enable_device(struct pci_dev *dev)
 
 static LIST_HEAD(pci_drivers);
 
-static struct pci_device_id *
+struct pci_device_id *
 pci_match_device(struct pci_device_id *ids, struct pci_dev *dev)
 {
 	while (ids->vendor || ids->subvendor || ids->class_mask) {

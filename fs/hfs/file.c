@@ -28,7 +28,7 @@ static hfs_rwret_t hfs_file_read(struct file *, char *, hfs_rwarg_t,
 static hfs_rwret_t hfs_file_write(struct file *, const char *, hfs_rwarg_t,
 				  loff_t *);
 static void hfs_file_truncate(struct inode *);
-static int hfs_bmap(struct inode *, int);
+static int hfs_get_block(struct inode *, long, struct buffer_head *, int);
 
 /*================ Global variables ================*/
 
@@ -61,7 +61,7 @@ struct inode_operations hfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	hfs_bmap,		/* get_block */
+	hfs_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
 	hfs_file_truncate,	/* truncate */
@@ -124,18 +124,36 @@ struct buffer_head *hfs_getblk(struct hfs_fork *fork, int block, int create)
 }
 
 /*
- * hfs_bmap()
+ * hfs_get_block
  *
- * This is the bmap() field in the inode_operations structure for
+ * This is the hfs_get_block() field in the inode_operations structure for
  * "regular" (non-header) files.  The purpose is to translate an inode
  * and a block number within the corresponding file into a physical
  * block number.  This function just calls hfs_extent_map() to do the
- * real work.
+ * real work and then stuffs the appropriate info into the buffer_head.
  */
-static int hfs_bmap(struct inode * inode, int block)
+int hfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_result, int create)
 {
-	return hfs_extent_map(HFS_I(inode)->fork, block, 0);
+	unsigned long phys;
+
+	phys = hfs_extent_map(HFS_I(inode)->fork, iblock, create);
+	if (phys) {
+		bh_result->b_dev = inode->i_dev;
+		bh_result->b_blocknr = phys;
+		bh_result->b_state |= (1UL << BH_Mapped);
+		if (create)
+			bh_result->b_state |= (1UL << BH_New);
+		return 0;
+	}
+
+	if (!create)
+		return 0;
+
+	/* we tried to add stuff, but we couldn't. send back an out-of-space
+	 * error. */
+	return -ENOSPC;
 }
+
 
 /*
  * hfs_file_read()
@@ -146,8 +164,7 @@ static int hfs_bmap(struct inode * inode, int block)
  * 'filp->offset' bytes into the file.	The data is transfered to
  * user-space at the address 'buf'.  Returns the number of bytes
  * successfully transfered.  This function checks the arguments, does
- * some setup and then calls hfs_do_read() to do the actual transfer.
- */
+ * some setup and then calls hfs_do_read() to do the actual transfer.  */
 static hfs_rwret_t hfs_file_read(struct file * filp, char * buf, 
 				 hfs_rwarg_t count, loff_t *ppos)
 {

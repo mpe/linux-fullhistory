@@ -780,16 +780,14 @@ asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 	char * tmp;
 	struct dentry * dentry;
 
-	lock_kernel();
-	error = -EPERM;
 	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_MKNOD)))
-		goto out;
+		return -EPERM;
 	tmp = getname(filename);
-	error = PTR_ERR(tmp);
 	if (IS_ERR(tmp))
-		goto out;
+		return PTR_ERR(tmp);
 
 	error = -EINVAL;
+	lock_kernel();
 	switch (mode & S_IFMT) {
 	case 0:
 		mode |= S_IFREG;	/* fallthrough */
@@ -815,10 +813,9 @@ asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 		}
 		break;
 	}
+	unlock_kernel();
 	putname(tmp);
 
-out:
-	unlock_kernel();
 	return error;
 }
 
@@ -870,14 +867,14 @@ asmlinkage long sys_mkdir(const char * pathname, int mode)
 	int error;
 	char * tmp;
 
-	lock_kernel();
 	tmp = getname(pathname);
-	error = PTR_ERR(tmp);
-	if (!IS_ERR(tmp)) {
-		error = do_mkdir(tmp,mode);
-		putname(tmp);
-	}
+	if(IS_ERR(tmp))
+		return PTR_ERR(tmp);
+	lock_kernel();
+	error = do_mkdir(tmp,mode);
 	unlock_kernel();
+	putname(tmp);
+
 	return error;
 }
 
@@ -965,14 +962,15 @@ asmlinkage long sys_rmdir(const char * pathname)
 	int error;
 	char * tmp;
 
-	lock_kernel();
 	tmp = getname(pathname);
-	error = PTR_ERR(tmp);
-	if (!IS_ERR(tmp)) {
-		error = do_rmdir(tmp);
-		putname(tmp);
-	}
+	if(IS_ERR(tmp))
+		return PTR_ERR(tmp);
+	lock_kernel();
+	error = do_rmdir(tmp);
 	unlock_kernel();
+
+	putname(tmp);
+
 	return error;
 }
 
@@ -1018,14 +1016,14 @@ asmlinkage long sys_unlink(const char * pathname)
 	int error;
 	char * tmp;
 
-	lock_kernel();
 	tmp = getname(pathname);
-	error = PTR_ERR(tmp);
-	if (!IS_ERR(tmp)) {
-		error = do_unlink(tmp);
-		putname(tmp);
-	}
+	if(IS_ERR(tmp))
+		return PTR_ERR(tmp);
+	lock_kernel();
+	error = do_unlink(tmp);
 	unlock_kernel();
+	putname(tmp);
+
 	return error;
 }
 
@@ -1068,21 +1066,20 @@ asmlinkage long sys_symlink(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;
+	char * to;
 
-	lock_kernel();
 	from = getname(oldname);
-	error = PTR_ERR(from);
-	if (!IS_ERR(from)) {
-		char * to;
-		to = getname(newname);
-		error = PTR_ERR(to);
-		if (!IS_ERR(to)) {
-			error = do_symlink(from,to);
-			putname(to);
-		}
-		putname(from);
+	if(IS_ERR(from))
+		return PTR_ERR(from);
+	to = getname(newname);
+	error = PTR_ERR(to);
+	if (!IS_ERR(to)) {
+		lock_kernel();
+		error = do_symlink(from,to);
+		unlock_kernel();
+		putname(to);
 	}
-	unlock_kernel();
+	putname(from);
 	return error;
 }
 
@@ -1156,21 +1153,21 @@ asmlinkage long sys_link(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;
-
-	lock_kernel();
-	from = getname(oldname);
-	error = PTR_ERR(from);
-	if (!IS_ERR(from)) {
 		char * to;
-		to = getname(newname);
-		error = PTR_ERR(to);
-		if (!IS_ERR(to)) {
-			error = do_link(from,to);
-			putname(to);
-		}
-		putname(from);
+
+	from = getname(oldname);
+	if(IS_ERR(from))
+		return PTR_ERR(from);
+	to = getname(newname);
+	error = PTR_ERR(to);
+	if (!IS_ERR(to)) {
+		lock_kernel();
+		error = do_link(from,to);
+		unlock_kernel();
+		putname(to);
 	}
-	unlock_kernel();
+	putname(from);
+
 	return error;
 }
 
@@ -1327,21 +1324,20 @@ asmlinkage long sys_rename(const char * oldname, const char * newname)
 {
 	int error;
 	char * from;
+	char * to;
 
-	lock_kernel();
 	from = getname(oldname);
-	error = PTR_ERR(from);
-	if (!IS_ERR(from)) {
-		char * to;
-		to = getname(newname);
-		error = PTR_ERR(to);
-		if (!IS_ERR(to)) {
-			error = do_rename(from,to);
-			putname(to);
-		}
-		putname(from);
+	if(IS_ERR(from))
+		return PTR_ERR(from);
+	to = getname(newname);
+	error = PTR_ERR(to);
+	if (!IS_ERR(to)) {
+		lock_kernel();
+		error = do_rename(from,to);
+		unlock_kernel();
+		putname(to);
 	}
-	unlock_kernel();
+	putname(from);
 	return error;
 }
 

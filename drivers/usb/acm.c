@@ -52,6 +52,14 @@
 #include "usb.h"
 
 /*
+ * CMSPAR, some architectures can't have space and mark parity.
+ */
+
+#ifndef CMSPAR
+#define CMSPAR			0
+#endif
+
+/*
  * Major and minor numbers.
  */
 
@@ -180,7 +188,7 @@ static void acm_ctrl_irq(struct urb *urb)
 
 		case ACM_IRQ_LINE_STATE:
 
-			newctrl = le16_to_cpup(data);
+			newctrl = le16_to_cpup((__u16 *) data);
 
 			if (acm->tty && !acm->clocal && (acm->ctrlin & ~newctrl & ACM_CTRL_DCD)) {
 				dbg("calling hangup");

@@ -30,6 +30,7 @@
 #ifndef _LINUX_TI113X_H
 #define _LINUX_TI113X_H
 
+#include <linux/config.h>
 
 /* Register definitions for TI 113X PCI-to-CardBus bridges */
 

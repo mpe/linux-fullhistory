@@ -429,7 +429,10 @@ __und_invalid:	sub	sp, sp, #S_FRAME_SIZE
 		and	r2, r6, #31			@ int mode
 		b	SYMBOL_NAME(bad_mode)
 
-
+#ifdef CONFIG_NWFPE
+		/* The FPE is always present */
+		.equ	fpe_not_present, 0
+#else
 wfs_mask_data:	.word	0x0e200110			@ WFS/RFS
 		.word	0x0fef0fff
 		.word	0x0d0d0100			@ LDF [sp]/STF [sp]
@@ -466,6 +469,7 @@ fpe_not_present:
 		add	r5, r5, r4, lsl #2
 		str	r5, [sp, r6, lsr #14]		@ Save reg
 		mov	pc, r9
+#endif
 
 /*
  * SVC mode handlers
@@ -685,11 +689,11 @@ ENTRY(__switch_to)
 		stmfd	sp!, {r4 - sl, fp, lr}		@ Store most regs on stack
 		mrs	ip, cpsr
 		stmfd	sp!, {ip}			@ Save cpsr_SVC
-		ldr	r2, [r1, #TSS_DOMAIN]
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		mcr	p15, 0, r2, c3, c0		@ Set domain register
+		ldr	r2, [r1, #TSS_DOMAIN]
 		ldmfd	sp!, {ip}
+		mcr	p15, 0, r2, c3, c0		@ Set domain register
 		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
 		ldmfd	sp!, {r4 - sl, fp, pc}^		@ Load all regs saved previously
 

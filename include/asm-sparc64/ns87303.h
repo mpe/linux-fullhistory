@@ -1,4 +1,4 @@
-/* $Id: ns87303.h,v 1.2 1998/09/13 15:38:50 ecd Exp $
+/* $Id: ns87303.h,v 1.3 2000/01/09 15:16:34 ecd Exp $
  * ns87303.h: Configuration Register Description for the
  *            National Semiconductor PC87303 (SuperIO).
  *
@@ -45,7 +45,7 @@
 #define FCR_LDE		0x10	/* Logical Drive Exchange                    */
 #define FCR_ZWS_ENA	0x20	/* Enable short host read/write in ECP/EPP   */
 
-/* Printer Controll Register (PCR) bits */
+/* Printer Control Register (PCR) bits */
 #define PCR_EPP_ENABLE	0x01
 #define PCR_EPP_IEEE	0x02	/* Enable EPP Version 1.9 (IEEE 1284)        */
 #define PCR_ECP_ENABLE	0x04
@@ -61,27 +61,51 @@
 #define ASC_LPT_IRQ7	0x01	/* Allways use IRQ7 for LPT                  */
 #define ASC_DRV2_SEL	0x02	/* Logical Drive Exchange controlled by TDR  */
 
+#define FER_RESERVED	0x00
+#define FAR_RESERVED	0x00
+#define PTR_RESERVED	0x73
+#define FCR_RESERVED	0xc4
+#define PCR_RESERVED	0x10
+#define KRR_RESERVED	0x00
+#define PMC_RESERVED	0x98
+#define TUP_RESERVED	0xfb
+#define SIP_RESERVED	0x00
+#define ASC_RESERVED	0x18
+#define CS0CF0_RESERVED	0x00
+#define CS0CF1_RESERVED	0x08
+#define CS1CF0_RESERVED	0x00
+#define CS1CF1_RESERVED	0x08
+
 #ifdef __KERNEL__
 
 #include <asm/system.h>
 #include <asm/io.h>
 
-static __inline__ void ns87303_writeb(unsigned long port, int index,
-				     unsigned char value)
+static __inline__ int ns87303_modify(unsigned long port, unsigned int index,
+				     unsigned char clr, unsigned char set)
 {
+	static unsigned char reserved[] = {
+		FER_RESERVED, FAR_RESERVED, PTR_RESERVED, FCR_RESERVED,
+		PCR_RESERVED, KRR_RESERVED, PMC_RESERVED, TUP_RESERVED,
+		SIP_RESERVED, ASC_RESERVED, CS0CF0_RESERVED, CS0CF1_RESERVED,
+		CS1CF0_RESERVED, CS1CF1_RESERVED
+	};
 	unsigned long flags;
+	unsigned char value;
+
+	if (index > 0x0d)
+		return -EINVAL;
 
 	save_flags(flags); cli();
 	outb(index, port);
+	value = inb(port + 1);
+	value &= ~(reserved[index] | clr);
+	value |= set;
 	outb(value, port + 1);
 	outb(value, port + 1);
 	restore_flags(flags);
-}
 
-static __inline__ unsigned char ns87303_readb(unsigned long port, int index)
-{
-	outb(index, port);
-	return inb(port + 1);
+	return 0;
 }
 
 #endif /* __KERNEL__ */

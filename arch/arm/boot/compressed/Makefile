@@ -44,9 +44,9 @@ ZTEXTADDR	 = 0x40200000
 ZRELADDR	 = 0x40008000
 endif
 
-ifeq ($(CONFIG_ARCH_SA110),y)
+ifeq ($(CONFIG_ARCH_SA1100),y)
+OBJS		+= head-sa1100.o
 ifeq ($(CONFIG_SA1100_VICTOR),y)
-HEAD		 = head-victor.o
 ZTEXTADDR	 = 0x00002000
 ZBSSADDR	 = 0xc0100000
 else
@@ -91,7 +91,7 @@ font.o:		$(FONTC)
 vmlinux.lds:	vmlinux.lds.in
 		@sed "$(SEDFLAGS)" < vmlinux.lds.in > $@
 
-clean:;		rm -f vmlinux core piggy*
+clean:;		rm -f vmlinux core piggy* vmlinux.lds
 
 .PHONY:	vmlinux.lds clean
 

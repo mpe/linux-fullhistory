@@ -535,7 +535,6 @@ Ldata_unknown:	@ Part of jumptable
 		mov	r0, r1
 		mov	r1, r4
 		mov	r2, r3
-	mov r3, lr
 		b	baddataabort
 
 Ldata_ldrstr_post:

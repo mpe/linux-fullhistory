@@ -7,13 +7,7 @@
  * assume GCC is being used.
  */
 
-/* When cross-compilation is no longer an issue, fix this. */
-#if defined(__svr4__) || defined(__ELF__)
 typedef unsigned int           __kernel_size_t;
-#else
-typedef long unsigned int      __kernel_size_t;
-#endif /* !(__svr4__ || __ELF__) */
-
 typedef int                    __kernel_ssize_t;
 typedef long int               __kernel_ptrdiff_t;
 typedef long                   __kernel_time_t;
@@ -31,6 +25,15 @@ typedef short                  __kernel_nlink_t;
 typedef long                   __kernel_daddr_t;
 typedef long                   __kernel_off_t;
 typedef char *                 __kernel_caddr_t;
+typedef unsigned short	       __kernel_uid16_t;
+typedef unsigned short	       __kernel_gid16_t;
+typedef unsigned int	       __kernel_uid32_t;
+typedef unsigned int	       __kernel_gid32_t;
+#ifdef __KERNEL__
+#define UID16_COMPAT_NEEDED
+typedef unsigned short	       __kernel_old_uid_t;
+typedef unsigned short	       __kernel_old_gid_t;
+#endif /* __KERNEL__ */
 
 #ifdef __GNUC__
 typedef long long	__kernel_loff_t;

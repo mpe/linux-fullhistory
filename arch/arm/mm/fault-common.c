@@ -6,7 +6,7 @@
  */
 #include <linux/config.h>
 
-extern void die(char *msg, struct pt_regs *regs, unsigned int err);
+extern void die(const char *msg, struct pt_regs *regs, unsigned int err);
 
 /*
  * This is useful to dump out the page tables associated with
@@ -79,7 +79,7 @@ kernel_page_fault(unsigned long addr, int write_access, struct pt_regs *regs,
 	do_exit(SIGKILL);
 }
 
-static void do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
+static int do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
 {
 	struct task_struct *tsk;
 	struct mm_struct *mm;
@@ -127,7 +127,7 @@ good_area:
 		goto do_sigbus;
 
 	up(&mm->mmap_sem);
-	return;
+	return 0;
 
 	/*
 	 * Something tried to access memory that isn't in our memory map..
@@ -138,6 +138,7 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (user_mode(regs)) {
+		tsk->thread.address = addr;
 		tsk->thread.error_code = mode;
 		tsk->thread.trap_no = 14;
 #ifdef CONFIG_DEBUG_USER
@@ -145,7 +146,7 @@ bad_area:
 			tsk->comm, regs->ARM_pc, regs->ARM_lr, addr, mode);
 #endif
 		force_sig(SIGSEGV, tsk);
-		return;
+		return 0;
 	}
 
 no_context:
@@ -156,11 +157,11 @@ no_context:
 			tsk->comm, regs->ARM_pc, addr, fixup);
 #endif
 		regs->ARM_pc = fixup;
-		return;
+		return 0;
 	}
 
 	kernel_page_fault(addr, mode, regs, tsk, mm);
-	return;
+	return 0;
 
 do_sigbus:
 	/*
@@ -173,6 +174,7 @@ do_sigbus:
 	 * Send a sigbus, regardless of whether we were in kernel
 	 * or user mode.
 	 */
+	tsk->thread.address = addr;
 	tsk->thread.error_code = mode;
 	tsk->thread.trap_no = 14;
 	force_sig(SIGBUS, tsk);
@@ -180,6 +182,7 @@ do_sigbus:
 	/* Kernel mode? Handle exceptions or die */
 	if (!user_mode(regs))
 		goto no_context;
+	return 0;
 }
 
 

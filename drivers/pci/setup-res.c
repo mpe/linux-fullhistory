@@ -69,7 +69,6 @@ pci_assign_resource(struct pci_dev *dev, int i)
 	}
 
 	min = (res->flags & IORESOURCE_IO ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM);
-	min += root->start;
 	size = res->end + 1;
 	DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
 	      root->start, root->end, min, size));

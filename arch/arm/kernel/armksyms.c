@@ -16,6 +16,7 @@
 #include <asm/dma.h>
 #include <asm/pgalloc.h>
 #include <asm/proc-fns.h>
+#include <asm/processor.h>
 #include <asm/semaphore.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -28,8 +29,6 @@ extern void outswb(unsigned int port, const void *to, int len);
 
 extern unsigned int local_bh_count[NR_CPUS];
 extern unsigned int local_irq_count[NR_CPUS];
-
-extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 /*
  * syscalls
@@ -125,7 +124,6 @@ EXPORT_SYMBOL(cpu_cache_purge_area);
 EXPORT_SYMBOL(__machine_arch_type);
 
 	/* networking */
-EXPORT_SYMBOL(csum_partial_copy);
 EXPORT_SYMBOL(csum_partial_copy_nocheck);
 EXPORT_SYMBOL(__csum_ipv6_magic);
 
@@ -172,8 +170,7 @@ EXPORT_SYMBOL_NOVERS(strpbrk);
 EXPORT_SYMBOL_NOVERS(strtok);
 EXPORT_SYMBOL_NOVERS(strrchr);
 EXPORT_SYMBOL_NOVERS(strstr);
-EXPORT_SYMBOL_NOVERS(__memset);
-EXPORT_SYMBOL_NOVERS(memset); /* needed for some versions of gcc */
+EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memmove);
 EXPORT_SYMBOL_NOVERS(memcmp);

@@ -560,12 +560,14 @@ mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 
 	switch (expected) {
 	case 0:
+	    {
 		/* FIXME: how do we figure out which hose the
 		   error was on?  */	
 		struct pci_controler *hose;
 		for (hose = hose_head; hose; hose = hose->next)
 			mcpcia_pci_clr_err(hose2mid(hose->index));
 		break;
+	    }
 	case 1:
 		mcpcia_pci_clr_err(mcheck_extra(cpu));
 		break;

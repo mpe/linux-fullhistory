@@ -50,13 +50,13 @@ void enable_hlt(void)
 static int __init nohlt_setup(char *__unused)
 {
 	hlt_counter = 1;
-	return 0;
+	return 1;
 }
 
 static int __init hlt_setup(char *__unused)
 {
 	hlt_counter = 0;
-	return 0;
+	return 1;
 }
 
 __setup("nohlt", nohlt_setup);
@@ -114,6 +114,7 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
+	arch_power_off();
 }
 
 void show_regs(struct pt_regs * regs)
@@ -284,7 +285,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
 {
 	if (current->used_math)
-		memcpy(fp, &current->thread.fpstate.soft, sizeof (fp));
+		memcpy(fp, &current->thread.fpstate.soft, sizeof (*fp));
 
 	return current->used_math;
 }

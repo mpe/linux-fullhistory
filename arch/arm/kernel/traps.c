@@ -187,10 +187,11 @@ void die(const char *str, struct pt_regs *regs, int err)
 		dump_instr(instruction_pointer(regs), 0);
 	}
 
-	spin_unlock_irq(&die_lock);	
+	spin_unlock_irq(&die_lock);
+	do_exit(SIGSEGV);
 }
 
-static void die_if_kernel(const char *str, struct pt_regs *regs, int err)
+void die_if_kernel(const char *str, struct pt_regs *regs, int err)
 {
 	if (user_mode(regs))
     		return;
@@ -241,11 +242,10 @@ asmlinkage void do_unexp_fiq (struct pt_regs *regs)
 }
 
 /*
- * bad_mode handles the impossible case in the vectors.
- * If you see one of these, then it's extremely serious,
- * and could mean you have buggy hardware.  It never
- * returns, and never tries to sync.  We hope that we
- * can dump out some state information...
+ * bad_mode handles the impossible case in the vectors.  If you see one of
+ * these, then it's extremely serious, and could mean you have buggy hardware.
+ * It never returns, and never tries to sync.  We hope that we can at least
+ * dump out some state information...
  */
 asmlinkage void bad_mode(struct pt_regs *regs, int reason, int proc_mode)
 {
@@ -255,7 +255,8 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, int proc_mode)
 		handler[reason], processor_modes[proc_mode]);
 
 	/*
-	 * Dump out the vectors and stub routines
+	 * Dump out the vectors and stub routines.  Maybe a better solution
+	 * would be to dump them out only if we detect that they are corrupted.
 	 */
 	printk(KERN_CRIT "Vectors:\n");
 	dump_mem(0, 0x40);
@@ -279,6 +280,9 @@ asmlinkage void math_state_restore (void)
 	current->used_math = 1;
 }
 
+/*
+ * Handle some more esoteric system calls
+ */
 asmlinkage int arm_syscall (int no, struct pt_regs *regs)
 {
 	switch (no) {
@@ -295,7 +299,7 @@ asmlinkage int arm_syscall (int no, struct pt_regs *regs)
 
 	case 2:	/* sys_cacheflush */
 #ifdef CONFIG_CPU_32
-		/* r0 = start, r1 = length, r2 = flags */
+		/* r0 = start, r1 = end, r2 = flags */
 		cpu_flush_cache_area(regs->ARM_r0, regs->ARM_r1, 1);
 #endif
 		break;
@@ -308,7 +312,7 @@ asmlinkage int arm_syscall (int no, struct pt_regs *regs)
 		if (no <= 0x7ff)
 			return -ENOSYS;
 #ifdef CONFIG_DEBUG_USER
-		/* experiance shows that these seem to indicate that
+		/* experience shows that these seem to indicate that
 		 * something catastrophic has happened
 		 */
 		printk("[%d] %s: arm syscall %d\n", current->pid, current->comm, no);
@@ -357,16 +361,19 @@ asmlinkage void arm_invalidptr(const char *function, int size)
 		function, __builtin_return_address(0), size);
 }
 
-#ifdef CONFIG_CPU_26
-asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs)
+/*
+ * A data abort trap was taken, but the instruction was not an instruction
+ * which should cause the trap to be taken.  Try to abort it.  Note that
+ * the while(1) is there because we cannot currently handle returning from
+ * this function.
+ */
+asmlinkage void
+baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 {
 	unsigned long phys, addr = instruction_pointer(regs);
 
 #ifdef CONFIG_DEBUG_ERRORS
-	printk("pid=%d\n", current->pid);
-
-	show_regs(regs);
-	dump_instr(instruction_pointer(regs), 1);
+	dump_instr(addr, 1);
 	{
 		pgd_t *pgd;
 
@@ -385,10 +392,10 @@ asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs
 		printk ("\n");
 	}
 #endif
-	panic("unknown data abort code %d [pc=%08lx *pc=%08lx lr=%08lx sp=%08lx]",
-		code, regs->ARM_pc, instr, regs->ARM_lr, regs->ARM_sp);
+	force_sig(SIGILL, current);
+	die_if_kernel("unknown data abort code", regs, instr);
+	while (1);
 }
-#endif
 
 void __bug(const char *file, int line, void *data)
 {
@@ -423,6 +430,19 @@ asmlinkage void __div0(void)
 {
 	printk("Division by zero in kernel.\n");
 	__backtrace();
+}
+
+void abort(void)
+{
+	void *lr = __builtin_return_address(0);
+
+	printk(KERN_CRIT "abort() called from %p!  (Please "
+	       "report to rmk@arm.linux.org.uk)\n", lr);
+
+	*(int *)0 = 0;
+
+	/* if that doesn't kill us, halt */
+	panic("Oops failed to kill thread");
 }
 
 void __init trap_init(void)

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.114 2000/01/09 02:19:43 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.116 2000/01/13 00:19:49 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1031,7 +1031,7 @@ void tcp_send_delayed_ack(struct sock *sk, int max_timeout)
 	unsigned long timeout;
 
 	/* Stay within the limit we were given */
-	timeout = tp->ato;
+	timeout = (tp->ato << 1) >> 1;
 	if (timeout > max_timeout)
 		timeout = max_timeout;
 	timeout += jiffies;
@@ -1070,10 +1070,14 @@ void tcp_send_ack(struct sock *sk)
 			 *
 			 * This is the one possible way that we can delay an
 			 * ACK and have tp->ato indicate that we are in
-			 * quick ack mode, so clear it.
+			 * quick ack mode, so clear it.  It is also the only
+			 * possible way for ato to be zero, when ACK'ing a
+			 * SYNACK because we've taken no ATO measurement yet.
 			 */
-			if(tcp_in_quickack_mode(tp))
+			if (tcp_in_quickack_mode(tp))
 				tcp_exit_quickack_mode(tp);
+			if (!tp->ato)
+				tp->ato = tp->rto;
 			tcp_send_delayed_ack(sk, HZ/2);
 			return;
 		}

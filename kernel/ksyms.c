@@ -42,6 +42,7 @@
 #include <linux/mmzone.h>
 #include <linux/mm.h>
 #include <linux/capability.h>
+#include <linux/highuid.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -429,6 +430,11 @@ EXPORT_SYMBOL(__down_interruptible);
 EXPORT_SYMBOL(__down_trylock);
 EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(brw_page);
+
+#ifdef CONFIG_UID16
+EXPORT_SYMBOL(fs_overflowuid);
+EXPORT_SYMBOL(fs_overflowgid);
+#endif
 
 /* all busmice */
 EXPORT_SYMBOL(add_mouse_randomness);

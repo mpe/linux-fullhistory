@@ -42,6 +42,7 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_LACIE_NAS	13
 #define MACH_TYPE_CLPS7500	14
 #define MACH_TYPE_SHARK		15
+#define MACH_TYPE_SA1100	16
 
 /*
  * Sort out a definition for machine_arch_type
@@ -122,6 +123,18 @@ extern unsigned int __machine_arch_type;
 # define machine_is_co285()	(machine_arch_type == MACH_TYPE_CO285)
 #else
 # define machine_is_co285()	(0)
+#endif
+
+#ifdef CONFIG_ARCH_SA1100
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_SA1100
+# endif
+# define machine_is_sa1100()	(machine_arch_type == MACH_TYPE_SA1100
+#else
+# define machine_is_sa1100()	(0)
 #endif
 
 #ifndef machine_arch_type

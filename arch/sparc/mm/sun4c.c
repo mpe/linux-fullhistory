@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.183 2000/01/08 16:38:20 anton Exp $
+/* $Id: sun4c.c,v 1.184 2000/01/09 09:13:34 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1148,21 +1148,23 @@ static void sun4c_free_task_struct_hw(struct task_struct *tsk)
 	unsigned long pages = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
 	int entry = BUCKET_NUM(tsaddr);
 
-	/* We are deleting a mapping, so the flush here is mandatory. */
-	sun4c_flush_page_hw(tsaddr);
+	if (atomic_dec_and_test(&(tsk)->thread.refcount)) {
+		/* We are deleting a mapping, so the flush here is mandatory. */
+		sun4c_flush_page_hw(tsaddr);
 #ifndef CONFIG_SUN4	
-	sun4c_flush_page_hw(tsaddr + PAGE_SIZE);
+		sun4c_flush_page_hw(tsaddr + PAGE_SIZE);
 #endif
-	sun4c_put_pte(tsaddr, 0);
+		sun4c_put_pte(tsaddr, 0);
 #ifndef CONFIG_SUN4	
-	sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
+		sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
 #endif
-	sun4c_bucket[entry] = BUCKET_EMPTY;
-	if (entry < sun4c_lowbucket_avail)
-		sun4c_lowbucket_avail = entry;
+		sun4c_bucket[entry] = BUCKET_EMPTY;
+		if (entry < sun4c_lowbucket_avail)
+			sun4c_lowbucket_avail = entry;
 
-	free_pages(pages, TASK_STRUCT_ORDER);
-	garbage_collect(entry);
+		free_pages(pages, TASK_STRUCT_ORDER);
+		garbage_collect(entry);
+	}
 }
 
 static void sun4c_free_task_struct_sw(struct task_struct *tsk)
@@ -1171,21 +1173,28 @@ static void sun4c_free_task_struct_sw(struct task_struct *tsk)
 	unsigned long pages = BUCKET_PTE_PAGE(sun4c_get_pte(tsaddr));
 	int entry = BUCKET_NUM(tsaddr);
 
-	/* We are deleting a mapping, so the flush here is mandatory. */
-	sun4c_flush_page_sw(tsaddr);
+	if (atomic_dec_and_test(&(tsk)->thread.refcount)) {
+		/* We are deleting a mapping, so the flush here is mandatory. */
+		sun4c_flush_page_sw(tsaddr);
 #ifndef CONFIG_SUN4	
-	sun4c_flush_page_sw(tsaddr + PAGE_SIZE);
+		sun4c_flush_page_sw(tsaddr + PAGE_SIZE);
 #endif
-	sun4c_put_pte(tsaddr, 0);
+		sun4c_put_pte(tsaddr, 0);
 #ifndef CONFIG_SUN4	
-	sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
+		sun4c_put_pte(tsaddr + PAGE_SIZE, 0);
 #endif
-	sun4c_bucket[entry] = BUCKET_EMPTY;
-	if (entry < sun4c_lowbucket_avail)
-		sun4c_lowbucket_avail = entry;
+		sun4c_bucket[entry] = BUCKET_EMPTY;
+		if (entry < sun4c_lowbucket_avail)
+			sun4c_lowbucket_avail = entry;
 
-	free_pages(pages, TASK_STRUCT_ORDER);
-	garbage_collect(entry);
+		free_pages(pages, TASK_STRUCT_ORDER);
+		garbage_collect(entry);
+	}
+}
+
+static void sun4c_get_task_struct(struct task_struct *tsk)
+{
+		atomic_inc(&(tsk)->thread.refcount);
 }
 
 static void __init sun4c_init_buckets(void)
@@ -2719,6 +2728,7 @@ void __init ld_mmu_sun4c(void)
 
 	/* Task struct and kernel stack allocating/freeing. */
 	BTFIXUPSET_CALL(alloc_task_struct, sun4c_alloc_task_struct, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(get_task_struct, sun4c_get_task_struct, BTFIXUPCALL_NORM);
 
 	BTFIXUPSET_CALL(quick_kernel_fault, sun4c_quick_kernel_fault, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(mmu_info, sun4c_mmu_info, BTFIXUPCALL_NORM);

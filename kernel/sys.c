@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/utsname.h>
 #include <linux/mman.h>
@@ -17,6 +18,8 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_UID16
+
 /*
  * this is where the system-wide overflow UID and GID are defined, for
  * architectures that now have 32-bit UID/GID but didn't in the past
@@ -24,6 +27,8 @@
 
 int overflowuid = DEFAULT_OVERFLOWUID;
 int overflowgid = DEFAULT_OVERFLOWGID;
+
+#endif /* CONFIG_UID16 */
 
 /*
  * the same as above, but for filesystems which can only store a 16-bit

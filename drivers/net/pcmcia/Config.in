@@ -31,12 +31,14 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
    fi
 fi
 
+endmenu
+
 if [ "$CONFIG_PCMCIA_3C589" = "y" -o "$CONFIG_PCMCIA_3C574" = "y" -o \
      "$CONFIG_PCMCIA_FMVJ18X" = "y" -o "$CONFIG_PCMCIA_PCNET" = "y" -o \
      "$CONFIG_PCMCIA_NMCLAN" = "y" -o "$CONFIG_PCMCIA_SMC91C92" = "y" -o \
      "$CONFIG_PCMCIA_XIRC2PS" = "y" -o "$CONFIG_PCMCIA_RAYCS" = "y" -o \
      "$CONFIG_PCMCIA_NETWAVE" = "y" -o "$CONFIG_PCMCIA_WAVELAN" = "y" ]; then
    define_bool CONFIG_PCMCIA_NETCARD y
+else
+   define_bool CONFIG_PCMCIA_NETCARD n
 fi
-
-endmenu

@@ -44,14 +44,18 @@ static void init_file_inode(struct inode *inode, hfs_u8 fork)
 	}
 
 	if (fork == HFS_FK_DATA) {
+#if 0 /* XXX: disable crlf translations for now */
 		hfs_u32 type = hfs_get_nl(entry->info.file.finfo.fdType);
 
-		fk = &entry->u.file.data_fork;
 		HFS_I(inode)->convert =
 			((HFS_SB(inode->i_sb)->s_conv == 't') ||
 			 ((HFS_SB(inode->i_sb)->s_conv == 'a') &&
 			  ((type == htonl(0x54455854)) ||   /* "TEXT" */
 			   (type == htonl(0x7474726f)))));  /* "ttro" */
+#else
+		HFS_I(inode)->convert = 0;
+#endif
+		fk = &entry->u.file.data_fork;
 	} else {
 		fk = &entry->u.file.rsrc_fork;
 		HFS_I(inode)->convert = 0;

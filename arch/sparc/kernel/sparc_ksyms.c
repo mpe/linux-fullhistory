@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.85 2000/01/08 16:38:18 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.86 2000/01/09 10:46:49 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -124,10 +124,6 @@ EXPORT_SYMBOL_NOVERS(___up_read);
 EXPORT_SYMBOL_NOVERS(___up_write);
 
 EXPORT_SYMBOL(sparc_valid_addr_bitmap);
-
-#ifndef CONFIG_SUN4
-EXPORT_SYMBOL(stack_top);
-#endif
 
 /* Atomic operations. */
 EXPORT_SYMBOL_PRIVATE(_atomic_add);

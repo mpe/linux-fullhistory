@@ -19,7 +19,6 @@ extern char * strchr(const char * s, int c);
 #define __HAVE_ARCH_MEMSET
 
 extern void __memzero(void *ptr, __kernel_size_t n);
-extern void __memset(void *ptr, int v, __kernel_size_t n);
 
 #define memset(p,v,n)							\
 	({								\
@@ -27,7 +26,7 @@ extern void __memset(void *ptr, int v, __kernel_size_t n);
 			if (__builtin_constant_p((v)) && (v) == 0)	\
 				__memzero((p),(n));			\
 			else						\
-				__memset((p),(v),(n));			\
+				memset((p),(v),(n));			\
 		}							\
 		(p);							\
 	})

@@ -11,7 +11,7 @@
 #define IOMD_KARTRX	__IOMD(0x004)
 #define IOMD_KCTRL	__IOMD(0x008)
 
-#ifdef CONFIG_ARCH_CL7500
+#ifdef CONFIG_ARCH_CLPS7500
 #define IOMD_IOLINES	__IOMD(0x00C)
 #endif
 
@@ -20,6 +20,10 @@
 #define IOMD_IRQCLRA	__IOMD(0x014)
 #define IOMD_IRQMASKA	__IOMD(0x018)
 
+#ifdef CONFIG_ARCH_CLPS7500
+#define IOMD_SUSMODE	__IOMD(0x01C)
+#endif
+
 #define IOMD_IRQSTATB	__IOMD(0x020)
 #define IOMD_IRQREQB	__IOMD(0x024)
 #define IOMD_IRQMASKB	__IOMD(0x028)
@@ -27,6 +31,10 @@
 #define IOMD_FIQSTAT	__IOMD(0x030)
 #define IOMD_FIQREQ	__IOMD(0x034)
 #define IOMD_FIQMASK	__IOMD(0x038)
+
+#ifdef CONFIG_ARCH_CLPS7500
+#define IOMD_CLKCTL	__IOMD(0x03C)
+#endif
 
 #define IOMD_T0CNTL	__IOMD(0x040)
 #define IOMD_T0LTCHL	__IOMD(0x040)
@@ -42,7 +50,7 @@
 #define IOMD_T1GO	__IOMD(0x058)
 #define IOMD_T1LATCH	__IOMD(0x05c)
 
-#ifdef CONFIG_ARCH_CL7500
+#ifdef CONFIG_ARCH_CLPS7500
 #define IOMD_IRQSTATC	__IOMD(0x060)
 #define IOMD_IRQREQC	__IOMD(0x064)
 #define IOMD_IRQMASKC	__IOMD(0x068)
@@ -59,7 +67,7 @@
 #ifdef CONFIG_ARCH_RPC
 #define IOMD_DRAMCR	__IOMD(0x088)
 #endif
-#define IOMD_VREFCR	__IOMD(0x08C)
+#define IOMD_REFCR	__IOMD(0x08C)
 
 #define IOMD_FSIZE	__IOMD(0x090)
 #define IOMD_ID0	__IOMD(0x094)
@@ -71,7 +79,7 @@
 #define IOMD_MOUSEY	__IOMD(0x0A4)
 #endif
 
-#ifdef CONFIG_ARCH_CL7500
+#ifdef CONFIG_ARCH_CLPS7500
 #define IOMD_MSEDAT	__IOMD(0x0A8)
 #define IOMD_MSECTL	__IOMD(0x0Ac)
 #endif
@@ -84,7 +92,7 @@
 #ifdef CONFIG_ARCH_RPC
 #define IOMD_DMAEXT	__IOMD(0x0CC)
 #endif
-#ifdef CONFIG_ARCH_CL7500
+#ifdef CONFIG_ARCH_CLPS7500
 #define IOMD_ASTCR	__IOMD(0x0CC)
 #define IOMD_DRAMCR	__IOMD(0x0D0)
 #define IOMD_SELFREF	__IOMD(0x0D4)

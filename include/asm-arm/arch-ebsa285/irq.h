@@ -44,8 +44,19 @@ static int isa_irq = -1;
 static inline int fixup_irq(unsigned int irq)
 {
 #ifdef CONFIG_HOST_FOOTBRIDGE
-	if (irq == isa_irq)
+	if (irq == isa_irq) {
 		irq = *(unsigned char *)PCIIACK_BASE;
+
+		/*
+		 * The NetWinder appears to randomly give wrong interrupt
+		 * numbers from time to time.  When it does, map them to
+		 * the unused IRQ 13
+		 */
+		if (irq >= NR_IRQS) {
+			printk(KERN_ERR "Strange interrupt %d?\n", irq);
+			irq = _ISA_IRQ(13);
+		}
+	}
 #endif
 
 	return irq;

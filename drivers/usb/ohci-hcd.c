@@ -47,6 +47,7 @@
 #include <asm/system.h>
 
 #undef DEBUG
+#define OHCI_USE_NPS
 
 #include "usb.h"
 #include "ohci-hcd.h"
@@ -154,8 +155,9 @@ void ep_print_int_eds (ohci_t * ohci, char * str) {
 		printk (KERN_DEBUG __FILE__ " %s branch int %2d(%2x):", str, i, i);
 		ed_p = &(ohci->hcca.int_table [i]);
 		while (*ed_p != 0 && j--) {
-			printk (" ed: %4x;", (((ed_t *) bus_to_virt (*ed_p))->hwINFO));
-			ed_p = &(((ed_t *) bus_to_virt (*ed_p))->hwNextED);
+			ed_t *ed = (ed_t *) bus_to_virt(le32_to_cpup(ed_p));
+			printk (" ed: %4x;", ed->hwINFO);
+			ed_p = &ed->hwNextED;
 		}
 		printk ("\n");
 	}
@@ -174,7 +176,7 @@ static int sohci_return_urb (urb_t * urb)
 {
 	urb_priv_t * urb_priv = urb->hcpriv;
 	urb_t * urbt;
-	unsigned int flags;
+	unsigned long flags;
 	int i;
 	
 	/* just to be sure */
@@ -245,7 +247,7 @@ static int sohci_submit_urb (urb_t * urb)
 	urb_priv_t * urb_priv;
 	unsigned int pipe = urb->pipe;
 	int i, size = 0;
-	unsigned int flags;
+	unsigned long flags;
 	
 	if (!urb->dev || !urb->dev->bus) return -EINVAL;
 	
@@ -346,7 +348,7 @@ static int sohci_submit_urb (urb_t * urb)
  
 static int sohci_unlink_urb (urb_t * urb)
 {
-	unsigned int flags;
+	unsigned long flags;
 	ohci_t * ohci;
 	DECLARE_WAITQUEUE (wait, current);
 	
@@ -412,7 +414,7 @@ static int sohci_alloc_dev (struct usb_device *usb_dev)
   
 static int sohci_free_dev (struct usb_device * usb_dev)
 {
-	unsigned int flags;
+	unsigned long flags;
 	int i, cnt = 0;
 	ed_t * ed;
 	DECLARE_WAITQUEUE (wait, current);
@@ -566,9 +568,9 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 		for (i = 0; i < ep_rev (6, interval); i += inter) {
 			inter = 1;
 			for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i) + int_branch]); 
-				(*ed_p != 0) && (((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->int_interval >= interval); 
-				ed_p = &(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->hwNextED)) 
-					inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->int_interval);
+				(*ed_p != 0) && (((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval >= interval); 
+				ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED)) 
+					inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval);
 			ed->hwNextED = *ed_p; 
 			*ed_p = cpu_to_le32 (virt_to_bus (ed));
 		}
@@ -588,8 +590,8 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 				inter = 1;
 				for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i)]); 
 					*ed_p != 0; 
-					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->hwNextED)) 
-						inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->int_interval);
+					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED)) 
+						inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval);
 				*ed_p = cpu_to_le32 (virt_to_bus (ed));	
 			}	
 			ed->ed_prev = NULL;
@@ -622,27 +624,27 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
 	switch (ed->type) {
 	case CTRL: 
 		if (ed->ed_prev == NULL) {
-			writel (le32_to_cpu (ed->hwNextED), &ohci->regs->ed_controlhead);
+			writel (le32_to_cpup (&ed->hwNextED), &ohci->regs->ed_controlhead);
 		} else {
 			ed->ed_prev->hwNextED = ed->hwNextED;
 		}
 		if(ohci->ed_controltail == ed) {
 			ohci->ed_controltail = ed->ed_prev;
 		} else {
-			((ed_t *) bus_to_virt (le32_to_cpu (ed->hwNextED)))->ed_prev = ed->ed_prev;
+			((ed_t *) bus_to_virt (le32_to_cpup (&ed->hwNextED)))->ed_prev = ed->ed_prev;
 		}
 		break;
       
 	case BULK: 
 		if (ed->ed_prev == NULL) {
-			writel (le32_to_cpu (ed->hwNextED), &ohci->regs->ed_bulkhead);
+			writel (le32_to_cpup (&ed->hwNextED), &ohci->regs->ed_bulkhead);
 		} else {
 			ed->ed_prev->hwNextED = ed->hwNextED;
 		}
 		if (ohci->ed_bulktail == ed) {
 			ohci->ed_bulktail = ed->ed_prev;
 		} else {
-			((ed_t *) bus_to_virt (le32_to_cpu (ed->hwNextED)))->ed_prev = ed->ed_prev;
+			((ed_t *) bus_to_virt (le32_to_cpup (&ed->hwNextED)))->ed_prev = ed->ed_prev;
 		}
 		break;
       
@@ -653,9 +655,9 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
 		for (i = 0; i < ep_rev (6, interval); i += inter) {
 			for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i) + int_branch]), inter = 1; 
 				(*ed_p != 0) && (*ed_p != ed->hwNextED); 
-				ed_p = &(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->hwNextED), 
-				inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->int_interval)) {				
-					if(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p))) == ed) {
+				ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED), 
+				inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval)) {				
+					if(((ed_t *) bus_to_virt (le32_to_cpup (ed_p))) == ed) {
 			  			*ed_p = ed->hwNextED;		
 			  			break;
 			  		}
@@ -670,7 +672,7 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
     	if (ohci->ed_isotail == ed)
 				ohci->ed_isotail = ed->ed_prev;
 		if (ed->hwNextED != 0) 
-				((ed_t *) bus_to_virt (le32_to_cpu (ed->hwNextED)))->ed_prev = ed->ed_prev;
+				((ed_t *) bus_to_virt (le32_to_cpup (&ed->hwNextED)))->ed_prev = ed->ed_prev;
 				
 		if (ed->ed_prev != NULL) {
 			ed->ed_prev->hwNextED = ed->hwNextED;
@@ -679,9 +681,9 @@ static int ep_unlink (ohci_t * ohci, ed_t * ed)
 				inter = 1;
 				for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i)]); 
 					*ed_p != 0; 
-					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->hwNextED)) {
-						inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpu (*ed_p)))->int_interval);
-						if(((ed_t *) bus_to_virt (le32_to_cpu (*ed_p))) == ed) {
+					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED)) {
+						inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval);
+						if(((ed_t *) bus_to_virt (le32_to_cpup (ed_p))) == ed) {
 			  				*ed_p = ed->hwNextED;		
 			  				break;
 			  			}
@@ -800,7 +802,7 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int t
 	
 	td_pt = urb_priv->td [index];
 	/* fill the old dummy TD */
-	td = (td_t *) bus_to_virt (le32_to_cpu (urb_priv->ed->hwTailP) & 0xfffffff0);
+	td = (td_t *) bus_to_virt (le32_to_cpup (&urb_priv->ed->hwTailP) & 0xfffffff0);
 	td->ed = urb_priv->ed;
 	td->index = index;
 	td->urb = urb; 
@@ -900,7 +902,7 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
 	td_t * td_rev = NULL;
 	td_t * td_list = NULL;
   	urb_priv_t * urb_priv = NULL;
-  	unsigned int flags;
+  	unsigned long flags;
   	
   	spin_lock_irqsave (&usb_ed_lock, flags);
   	
@@ -927,7 +929,7 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
 
 		td_list->next_dl_td = td_rev;	
 		td_rev = td_list;
-		td_list_hc = le32_to_cpu (td_list->hwNextTD) & 0xfffffff0;	
+		td_list_hc = le32_to_cpup (&td_list->hwNextTD) & 0xfffffff0;	
 	}	
 	spin_unlock_irqrestore (&usb_ed_lock, flags);
 	return td_list;
@@ -941,7 +943,7 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
  
 static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 {
-	unsigned int flags;
+	unsigned long flags;
 	ed_t * ed;
 	__u32 edINFO;
 	td_t * td = NULL, * td_next = NULL, * tdHeadP = NULL, * tdTailP;
@@ -951,16 +953,16 @@ static void dl_del_list (ohci_t  * ohci, unsigned int frame)
 	spin_lock_irqsave (&usb_ed_lock, flags);
 	for (ed = ohci->ed_rm_list[frame]; ed != NULL; ed = ed->ed_rm_list) {
 
-   	 	tdTailP = bus_to_virt (le32_to_cpu (ed->hwTailP) & 0xfffffff0);
-		tdHeadP = bus_to_virt (le32_to_cpu (ed->hwHeadP) & 0xfffffff0);
-		edINFO = le32_to_cpu (ed->hwINFO);
+   	 	tdTailP = bus_to_virt (le32_to_cpup (&ed->hwTailP) & 0xfffffff0);
+		tdHeadP = bus_to_virt (le32_to_cpup (&ed->hwHeadP) & 0xfffffff0);
+		edINFO = le32_to_cpup (&ed->hwINFO);
 		td_p = &ed->hwHeadP;
 			
 		for (td = tdHeadP; td != tdTailP; td = td_next) { 
 			urb_t * urb = td->urb;
 			urb_priv_t * urb_priv = td->urb->hcpriv;
 			
-			td_next = bus_to_virt (le32_to_cpu (td->hwNextTD) & 0xfffffff0);
+			td_next = bus_to_virt (le32_to_cpup (&td->hwNextTD) & 0xfffffff0);
 			if ((urb_priv->state == URB_DEL) || (ed->state & ED_DEL)) {
 				*td_p = td->hwNextTD | (*td_p & cpu_to_le32 (0x3));
 				if(++ (urb_priv->td_cnt) == urb_priv->length) 
@@ -1013,7 +1015,7 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
 	urb_priv_t * urb_priv;
  	__u32 tdINFO, tdBE, tdCBP, edHeadP, edTailP;
  	__u16 tdPSW;
- 	unsigned int flags;
+ 	unsigned long flags;
  	
   	while (td_list) {
    		td_list_next = td_list->next_dl_td;
@@ -1071,8 +1073,8 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
   		
   		spin_lock_irqsave (&usb_ed_lock, flags);
   		if (ed->state != ED_NEW) { 
-  			edHeadP = le32_to_cpu (ed->hwHeadP) & 0xfffffff0;
-  			edTailP = le32_to_cpu (ed->hwTailP);
+  			edHeadP = le32_to_cpup (&ed->hwHeadP) & 0xfffffff0;
+  			edTailP = le32_to_cpup (&ed->hwTailP);
 
      		if((edHeadP == edTailP) && (ed->state == ED_OPER)) 
      			ep_unlink (ohci, ed); /* unlink eds if they are not busy */
@@ -1185,9 +1187,9 @@ static int rh_send_irq (ohci_t * ohci, void * rh_data, int rh_len)
 	ret = *(__u8 *) data;
 
 	for ( i = 0; i < num_ports; i++) {
-		*(__u8 *) (data + i / 8) |= 
+		*(__u8 *) (data + (i + 1) / 8) |= 
 			((readl (&ohci->regs->roothub.portstatus[i]) & 0x001f0000) > 0? 1: 0) << ((i + 1) % 8);
-		ret += *(__u8 *) (data + i / 8);
+		ret += *(__u8 *) (data + (i + 1) / 8);
 	}
 	len = i/8 + 1;
   
@@ -1313,8 +1315,10 @@ static int rh_submit_urb (urb_t * urb)
 
 		case RH_CLEAR_FEATURE | RH_CLASS:
 			switch (wValue) {
+				case RH_C_HUB_LOCAL_POWER:
+					OK(0);
 				case (RH_C_HUB_OVER_CURRENT): 
-						WR_RH_STAT(RH_PS_OCIC); OK (0);
+						WR_RH_STAT(RH_HS_OCIC); OK (0);
 			}
 			break;
 		
@@ -1489,6 +1493,13 @@ static int hc_start (ohci_t * ohci)
 	writel (ohci->hc_control = 0xBF, &ohci->regs->control); /* USB Operational */
 	writel (mask, &ohci->regs->intrenable);
 	writel (mask, &ohci->regs->intrstatus);
+
+#ifdef OHCI_USE_NPS
+	writel ((readl(&ohci->regs->roothub.a) | 0x200) & ~0x100,
+		&ohci->regs->roothub.a);
+	writel (0x10000, &ohci->regs->roothub.status);
+	mdelay ((readl(&ohci->regs->roothub.a) >> 23) & 0x1fe);
+#endif /* OHCI_USE_NPS */
  
 	/* connect the virtual root hub */
 	
@@ -1516,7 +1527,7 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	struct ohci_regs * regs = ohci->regs;
  	int ints; 
 
-	if ((ohci->hcca.done_head != 0) && !(le32_to_cpu (ohci->hcca.done_head) & 0x01)) {
+	if ((ohci->hcca.done_head != 0) && !(le32_to_cpup (&ohci->hcca.done_head) & 0x01)) {
 		ints =  OHCI_INTR_WDH;
 	} else { 
  		if ((ints = (readl (&regs->intrstatus) & readl (&regs->intrenable))) == 0)
@@ -1578,7 +1589,7 @@ static ohci_t * hc_alloc_ohci (void * mem_base)
 
 	bus = usb_alloc_bus (&sohci_device_operations);
 	if (!bus) {
-		free_pages ((unsigned int) ohci, 1);
+		free_pages ((unsigned long) ohci, 1);
 		return NULL;
 	}
 
@@ -1614,7 +1625,7 @@ static void hc_release_ohci (ohci_t * ohci)
 	/* unmap the IO address space */
 	iounmap (ohci->regs);
        
-	free_pages ((unsigned int) ohci, 1);	
+	free_pages ((unsigned long) ohci, 1);	
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1625,7 +1636,7 @@ static void hc_release_ohci (ohci_t * ohci)
 static int hc_found_ohci (int irq, void * mem_base)
 {
 	ohci_t * ohci;
-	dbg("USB HC found: irq= %d membase= %x", irq, (int) mem_base);
+	dbg("USB HC found: irq= %d membase= %lx", irq, (unsigned long) mem_base);
     
 	ohci = hc_alloc_ohci (mem_base);
 	if (!ohci) {
@@ -1655,15 +1666,15 @@ static int hc_found_ohci (int irq, void * mem_base)
 static int hc_start_ohci (struct pci_dev * dev)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-	unsigned int mem_base = dev->resource[0].start;
+	unsigned long mem_base = dev->resource[0].start;
 #else
-	unsigned int mem_base = dev->base_address[0];
+	unsigned long mem_base = dev->base_address[0];
 	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO) return -ENODEV;
 	mem_base &= PCI_BASE_ADDRESS_MEM_MASK;
 #endif
 	
 	pci_set_master (dev);
-	mem_base = (unsigned int) ioremap_nocache (mem_base, 4096);
+	mem_base = (unsigned long) ioremap_nocache (mem_base, 4096);
 
 	if (!mem_base) {
 		err("Error mapping OHCI memory");

@@ -7,6 +7,7 @@
 #define __ASM_ARCH_SYSTEM_H
 
 #define arch_do_idle()		cpu_do_idle()
+#define arch_power_off()	do { } while (0)
 
 extern __inline__ void arch_reset(char mode)
 {

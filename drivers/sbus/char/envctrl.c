@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.13 1999/12/19 23:28:07 davem Exp $
+/* $Id: envctrl.c,v 1.14 2000/01/09 15:43:45 ecd Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -29,8 +29,8 @@
 #undef U450_SUPPORT		/* might fry you machine, careful here !!! */
 
 
-#define DEBUG		1
-#define DEBUG_BUS_SCAN	1
+#undef DEBUG
+#undef DEBUG_BUS_SCAN
 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,2,0)

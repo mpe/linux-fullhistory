@@ -216,7 +216,7 @@ if [ "$CONFIG_DRM" = "y" ]; then
   dep_tristate '  3dlabs GMX 2000' CONFIG_DRM_GAMMA m
 fi
 
-if [ "$CONFIG_PCMCIA" != "n" ]; then
+if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/char/pcmcia/Config.in
 fi
 

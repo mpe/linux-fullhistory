@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.15 2000/01/04 23:54:47 davem Exp $
+/* $Id: fs.c,v 1.16 2000/01/12 02:59:27 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -706,71 +706,6 @@ asmlinkage int solaris_ulimit(int cmd, int val)
 		return NR_OPEN;
 	}
 	return -EINVAL;
-}
-
-static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
-{
-	struct inode * inode;
-	struct iattr newattrs;
-	int error;
-
-	error = -ENOENT;
-	if (!(inode = dentry->d_inode)) {
-		printk("chown_common: NULL inode\n");
-		goto out;
-	}
-	error = -EROFS;
-	if (IS_RDONLY(inode))
-		goto out;
-	error = -EPERM;
-	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
-		goto out;
-	if (user == (uid_t) -1)
-		user = inode->i_uid;
-	if (group == (gid_t) -1)
-		group = inode->i_gid;
-	newattrs.ia_mode = inode->i_mode;
-	newattrs.ia_uid = user;
-	newattrs.ia_gid = group;
-	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
-	/*
-	 * If the owner has been changed, remove the setuid bit
-	 */
-	if (inode->i_mode & S_ISUID) {
-		newattrs.ia_mode &= ~S_ISUID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	/*
-	 * If the group has been changed, remove the setgid bit
-	 *
-	 * Don't remove the setgid bit if no group execute bit.
-	 * This is a file marked for mandatory locking.
-	 */
-	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
-		newattrs.ia_mode &= ~S_ISGID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	error = DQUOT_TRANSFER(dentry, &newattrs);
-out:
-	return error;
-}
-
-/* Linux chown works like Solaris lchown. Solaris chown does follow symlink */
-asmlinkage int solaris_chown(u32 filename, s32 user, s32 group)
-{
-	struct dentry * dentry;
-	int error;
-
-	lock_kernel();
-	dentry = namei((const char *)A(filename));
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = chown_common(dentry, user, group);
-		dput(dentry);
-	}
-	unlock_kernel();
-	return error;
 }
 
 /* At least at the time I'm writing this, Linux doesn't have ACLs, so we

@@ -85,31 +85,27 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 
-#include "whiteheat.h"
+#ifdef CONFIG_USB_SERIAL_WHITEHEAT
+#include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */
+#endif
 
 #define DEBUG
 
 #include "usb.h"
 
-/* different configuration options to cut down on code size if you wish */
-#define CONFIG_BELKIN_SERIAL
-#define CONFIG_PERACOM_SERIAL
-#define CONFIG_VISOR_SERIAL
-#define CONFIG_WHITEHEAT_SERIAL
-#define CONFIG_GENERIC_SERIAL
-
 /* Module information */
 MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/");
 MODULE_DESCRIPTION("USB Serial Driver");
 
-static __u16	vendor	= 0;
-static __u16	product	= 0;
+#ifdef CONFIG_USB_SERIAL_GENERIC
+static __u16	vendor	= 0x05f7;
+static __u16	product	= 0xffff;
 MODULE_PARM(vendor, "i");
 MODULE_PARM_DESC(vendor, "User specified USB idVendor");
 
 MODULE_PARM(product, "i");
 MODULE_PARM_DESC(product, "User specified USB idProduct");
-
+#endif
 
 /* USB Serial devices vendor ids and device ids that this driver supports */
 #define BELKIN_VENDOR_ID		0x056c
@@ -221,6 +217,7 @@ struct usb_serial_device_type {
 
 
 /* function prototypes for a "generic" type serial converter (no flow control, not all endpoints needed) */
+/* need to always compile these in, as some of the other devices use these functions as their own. */
 static int  generic_serial_open		(struct tty_struct *tty, struct file *filp);
 static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
 static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
@@ -228,6 +225,7 @@ static void generic_serial_put_char	(struct tty_struct *tty, unsigned char ch);
 static int  generic_write_room		(struct tty_struct *tty);
 static int  generic_chars_in_buffer	(struct tty_struct *tty);
 
+#ifdef CONFIG_USB_SERIAL_GENERIC
 /* All of the device info needed for the Generic Serial Converter */
 static struct usb_serial_device_type generic_device = {
 	name:			"Generic",
@@ -246,15 +244,15 @@ static struct usb_serial_device_type generic_device = {
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 };
+#endif
 
-
-#if defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL)
+#if defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM)
 /* function prototypes for the eTek type converters (this includes Belkin and Peracom) */
 static int  etek_serial_open		(struct tty_struct *tty, struct file *filp);
 static void etek_serial_close		(struct tty_struct *tty, struct file *filp);
 #endif
 
-#ifdef CONFIG_BELKIN_SERIAL
+#ifdef CONFIG_USB_SERIAL_BELKIN
 /* All of the device info needed for the Belkin Serial Converter */
 static __u16	belkin_vendor_id	= BELKIN_VENDOR_ID;
 static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER;
@@ -278,7 +276,7 @@ static struct usb_serial_device_type belkin_device = {
 #endif
 
 
-#ifdef CONFIG_PERACOM_SERIAL
+#ifdef CONFIG_USB_SERIAL_PERACOM
 /* All of the device info needed for the Peracom Serial Converter */
 static __u16	peracom_vendor_id	= PERACOM_VENDOR_ID;
 static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER;
@@ -302,7 +300,7 @@ static struct usb_serial_device_type peracom_device = {
 #endif
 
 
-#ifdef CONFIG_WHITEHEAT_SERIAL
+#ifdef CONFIG_USB_SERIAL_WHITEHEAT
 /* function prototypes for the Connect Tech WhiteHEAT serial converter */
 static int  whiteheat_serial_open	(struct tty_struct *tty, struct file *filp);
 static void whiteheat_serial_close	(struct tty_struct *tty, struct file *filp);
@@ -348,7 +346,7 @@ static struct usb_serial_device_type whiteheat_device = {
 #endif
 
 
-#ifdef CONFIG_VISOR_SERIAL
+#ifdef CONFIG_USB_SERIAL_VISOR
 /* function prototypes for a handspring visor */
 static int  visor_serial_open		(struct tty_struct *tty, struct file *filp);
 static void visor_serial_close		(struct tty_struct *tty, struct file *filp);
@@ -383,18 +381,20 @@ static struct usb_serial_device_type handspring_device = {
    structure for that device, and add it to this list, making sure that the last
    entry is NULL. */
 static struct usb_serial_device_type *usb_serial_devices[] = {
+#ifdef CONFIG_USB_SERIAL_GENERIC
 	&generic_device,
-#ifdef CONFIG_WHITEHEAT_SERIAL
+#endif
+#ifdef CONFIG_USB_SERIAL_WHITEHEAT
 	&whiteheat_fake_device,
 	&whiteheat_device,
 #endif
-#ifdef CONFIG_BELKIN_SERIAL
+#ifdef CONFIG_USB_SERIAL_BELKIN
 	&belkin_device,
 #endif
-#ifdef CONFIG_PERACOM_SERIAL
+#ifdef CONFIG_USB_SERIAL_PERACOM
 	&peracom_device,
 #endif
-#ifdef CONFIG_VISOR_SERIAL
+#ifdef CONFIG_USB_SERIAL_VISOR
 	&handspring_device,
 #endif
 	NULL
@@ -735,7 +735,7 @@ static void serial_unthrottle (struct tty_struct * tty)
 }
 
 
-#if defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL)
+#if defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM)
 /*****************************************************************************
  * eTek specific driver functions
  *****************************************************************************/
@@ -780,11 +780,11 @@ static void etek_serial_close(struct tty_struct *tty, struct file * filp)
 	usb_unlink_urb (&serial->read_urb);
 	serial->active = 0;
 }
-#endif	/* defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL) */
+#endif	/* defined(CONFIG_USB_SERIAL_BELKIN) || defined(CONFIG_USB_SERIAL_PERACOM) */
 
 
 
-#ifdef CONFIG_WHITEHEAT_SERIAL
+#ifdef CONFIG_USB_SERIAL_WHITEHEAT
 /*****************************************************************************
  * Connect Tech's White Heat specific driver functions
  *****************************************************************************/
@@ -947,10 +947,10 @@ static int  whiteheat_startup (struct usb_serial_state *serial)
 	/* we want this device to fail to have a driver assigned to it. */
 	return (1);
 }
-#endif	/* CONFIG_WHITEHEAT_SERIAL */
+#endif	/* CONFIG_USB_SERIAL_WHITEHEAT */
 
 
-#ifdef CONFIG_VISOR_SERIAL
+#ifdef CONFIG_USB_SERIAL_VISOR
 /******************************************************************************
  * Handspring Visor specific driver functions
  ******************************************************************************/
@@ -1014,7 +1014,7 @@ static void visor_unthrottle (struct tty_struct * tty)
 
 	return;
 }
-#endif	/* CONFIG_VISOR_SERIAL*/
+#endif	/* CONFIG_USB_SERIAL_VISOR*/
 
 
 /*****************************************************************************

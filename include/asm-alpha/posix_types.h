@@ -28,12 +28,17 @@ typedef char *		__kernel_caddr_t;
 typedef unsigned long	__kernel_sigset_t;	/* at least 32 bits */
 typedef unsigned short	__kernel_uid16_t;
 typedef unsigned short	__kernel_gid16_t;
-typedef unsigned int	__kernel_uid32_t;
-typedef unsigned int	__kernel_gid32_t;
 
 typedef struct {
 	int	val[2];
 } __kernel_fsid_t;
+
+#ifdef __KERNEL__
+typedef __kernel_uid_t __kernel_old_uid_t;
+typedef __kernel_gid_t __kernel_old_gid_t;
+typedef __kernel_uid_t __kernel_uid32_t;
+typedef __kernel_gid_t __kernel_gid32_t;
+#endif /* __KERNEL__ */
 
 #ifdef __KERNEL__
 

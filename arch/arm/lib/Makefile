@@ -5,8 +5,14 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o checksum.o delay.o \
-	    string.o system.o uaccess.o
+L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
+	    csumpartialcopyuser.o clearbit.o copy_page.o findbit.o \
+	    memchr.o memcpy.o memset.o memzero.o setbit.o strchr.o \
+	    strrchr.o testchangebit.o testclearbit.o testsetbit.o  \
+	    uaccess.o
+
+O_TARGET := lib.o
+O_OBJS   := backtrace.o delay.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
@@ -25,10 +31,18 @@ endif
 ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
 else
-  LX_OBJS += io.o
+  OX_OBJS += io.o
 endif
 
 ifeq ($(MACHINE),footbridge)
+  L_OBJS += io-footbridge.o
+endif
+
+#
+# SA1100 IO routines happen to be the
+# same as the footbridge routines
+#
+ifeq ($(MACHINE),sa1100)
   L_OBJS += io-footbridge.o
 endif
 
@@ -42,5 +56,3 @@ constants.h: getconsdata.o extractconstants.pl
 
 getconsdata.o: getconsdata.c
 	$(CC) $(CFLAGS) -c getconsdata.c
-
-checksum.o string.o: constants.h

@@ -1,4 +1,4 @@
-/* $Id: sunos_asm.S,v 1.14 1996/12/04 18:25:48 jj Exp $
+/* $Id: sunos_asm.S,v 1.15 2000/01/11 17:33:21 jj Exp $
  * sunos_asm.S: SunOS system calls which must have a low-level
  *              entry point to operate correctly.
  *
@@ -33,10 +33,10 @@ C_LABEL(sunos_getpid):
 	/* SunOS getuid() returns uid in %o0 and euid in %o1 */
 	.globl	C_LABEL(sunos_getuid)
 C_LABEL(sunos_getuid):
-	call	C_LABEL(sys_geteuid)
+	call	C_LABEL(sys_geteuid16)
 	 nop
 
-	call	C_LABEL(sys_getuid)
+	call	C_LABEL(sys_getuid16)
 	 st	%o0, [%sp + REGWIN_SZ + PT_I1]
 
 	b	C_LABEL(ret_sys_call)
@@ -45,10 +45,10 @@ C_LABEL(sunos_getuid):
 	/* SunOS getgid() returns gid in %o0 and egid in %o1 */
 	.globl	C_LABEL(sunos_getgid)
 C_LABEL(sunos_getgid):
-	call	C_LABEL(sys_getegid)
+	call	C_LABEL(sys_getegid16)
 	 nop
 
-	call	C_LABEL(sys_getgid)
+	call	C_LABEL(sys_getgid16)
 	 st	%o0, [%sp + REGWIN_SZ + PT_I1]
 
 	b	C_LABEL(ret_sys_call)

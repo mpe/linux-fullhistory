@@ -6,6 +6,8 @@ mainmenu_name "Linux Kernel Configuration"
 
 define_bool CONFIG_ARM y
 
+define_bool CONFIG_UID16 y
+
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
@@ -44,7 +46,6 @@ if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
 fi
 
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
-   define_bool CONFIG_CPU_SA1100 y
    choice 'SA1100 implementation' \
 	   "Brutus		CONFIG_SA1100_BRUTUS \
 	    Empeg		CONFIG_SA1100_EMPEG \
@@ -93,7 +94,11 @@ else
         "$CONFIG_FOOTBRIDGE" = "y" -o \
         "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
       define_bool CONFIG_CPU_32v4 y
-      define_bool CONFIG_CPU_SA110 y
+      if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+         define_bool CONFIG_CPU_SA1100 y
+      else
+         define_bool CONFIG_CPU_SA110 y
+      fi
    else
       if [ "$CONFIG_ARCH_RPC" = "y" ]; then
 	 define_bool CONFIG_CPU_32v3 y
@@ -110,7 +115,7 @@ fi
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
    define_bool CONFIG_PCI y
-   source drivers/pci/Config.h
+   source drivers/pci/Config.in
 fi
 
 #
@@ -123,8 +128,8 @@ else
    define_bool CONFIG_ISA_DMA n
 fi
 
-if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool 'Enable kernel-mode alignment trap handler (EXPERIMENTAL)' CONFIG_ALIGNMENT_TRAP
+if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+   bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
 fi
 #bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
 endmenu
@@ -273,11 +278,10 @@ bool 'Verbose user fault messages' CONFIG_DEBUG_USER
 bool 'Include debugging information in kernel binary' CONFIG_DEBUG_INFO
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+if [ "$CONFIG_CPU_26" = "y" ]; then
+   bool 'Disable pgtable cache' CONFIG_NO_PGT_CACHE
+fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   if [ "$CONFIG_CPU_26" = "y" ]; then
-      bool 'Disable pgtable cache (EXPERIMENTAL)' CONFIG_NO_PGT_CACHE
-   fi
-
    # These options are only for real kernel hackers
    # who want to get their hands dirty. 
    bool 'Kernel low-level debugging functions' CONFIG_DEBUG_LL

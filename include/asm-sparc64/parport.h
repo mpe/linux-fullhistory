@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.5 1999/08/30 10:14:52 davem Exp $
+/* $Id: parport.h,v 1.6 2000/01/09 15:16:34 ecd Exp $
  * parport.h: sparc64 specific parport initialization and dma.
  *
  * Copyright (C) 1999  Eddie C. Dost  (ecd@skynet.be)
@@ -19,8 +19,6 @@
 #define __maybe_initdata __initdata
 #endif
 
-#undef HAVE_SLOW_DEVICES
-
 #define PARPORT_PC_MAX_PORTS	PARPORT_MAX
 
 static struct linux_ebus_dma *sparc_ebus_dmas[PARPORT_PC_MAX_PORTS];
@@ -33,7 +31,7 @@ reset_dma(unsigned int dmanr)
 	writel(EBUS_DCSR_RESET, &sparc_ebus_dmas[dmanr]->dcsr);
 	udelay(1);
 	dcsr = EBUS_DCSR_BURST_SZ_16 | EBUS_DCSR_TCI_DIS |
-	       EBUS_DCSR_EN_CNT;
+	       EBUS_DCSR_EN_CNT | EBUS_DCSR_INT_EN;
 	writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 }
 
@@ -62,11 +60,8 @@ disable_dma(unsigned int dmanr)
 		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 
 		dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
-		if (dcsr & EBUS_DCSR_ERR_PEND) {
+		if (dcsr & EBUS_DCSR_ERR_PEND)
 			reset_dma(dmanr);
-			dcsr &= ~(EBUS_DCSR_ERR_PEND);
-		}
-		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
 	}
 }
 
@@ -105,15 +100,11 @@ set_dma_count(unsigned int dmanr, unsigned int count)
 static __inline__ int
 get_dma_residue(unsigned int dmanr)
 {
-	unsigned int dcsr;
 	int res;
 
 	res = readl(&sparc_ebus_dmas[dmanr]->dbcr);
-	if (res != 0) {
-		dcsr = readl(&sparc_ebus_dmas[dmanr]->dcsr);
+	if (res != 0)
 		reset_dma(dmanr);
-		writel(dcsr, &sparc_ebus_dmas[dmanr]->dcsr);
-	}
 	return res;
 }
 
@@ -136,36 +127,25 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 			if (!strcmp(edev->prom_name, "ecpp")) {
 				unsigned long base = edev->resource[0].start;
 				unsigned long config = edev->resource[1].start;
-				unsigned char cfg;
 
 				sparc_ebus_dmas[count] =
 						(struct linux_ebus_dma *)
 							edev->resource[2].start;
 				reset_dma(count);
 
+				/* Configure IRQ to Push Pull, Level Low */
 				/* Enable ECP, set bit 2 of the CTR first */
 				outb(0x04, base + 0x02);
-				cfg = ns87303_readb(config, PCR);
-				cfg |= (PCR_ECP_ENABLE | PCR_ECP_CLK_ENA);
-				ns87303_writeb(config, PCR, cfg);
+				ns87303_modify(config, PCR,
+					       PCR_EPP_ENABLE |
+					       PCR_IRQ_ODRAIN,
+					       PCR_ECP_ENABLE |
+					       PCR_ECP_CLK_ENA |
+					       PCR_IRQ_POLAR);
 
 				/* CTR bit 5 controls direction of port */
-				cfg = ns87303_readb(config, PTR);
-				cfg |= PTR_LPT_REG_DIR;
-				ns87303_writeb(config, PTR, cfg);
-
-				/* Configure IRQ to Push Pull, Level Low */
-				cfg = ns87303_readb(config, PCR);
-				cfg &= ~(PCR_IRQ_ODRAIN);
-				cfg |= PCR_IRQ_POLAR;
-				ns87303_writeb(config, PCR, cfg);
-
-#ifndef HAVE_SLOW_DEVICES
-				/* Enable Zero Wait State for ECP */
-				cfg = ns87303_readb(config, FCR);
-				cfg |= FCR_ZWS_ENA;
-				ns87303_writeb(config, FCR, cfg);
-#endif
+				ns87303_modify(config, PTR,
+					       0, PTR_LPT_REG_DIR);
 
 				if (parport_pc_probe_port(base, base + 0x400,
 							  edev->irqs[0],

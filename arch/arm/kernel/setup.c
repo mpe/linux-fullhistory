@@ -54,13 +54,13 @@ struct meminfo meminfo;
 struct machine_desc {
 	const char	*name;		/* architecture name	*/
 	unsigned int	param_offset;	/* parameter page	*/
+	unsigned int	video_start;	/* start of video RAM	*/
+	unsigned int	video_end;	/* end of video RAM	*/
 	unsigned int	reserve_lp0 :1;	/* never has lp0	*/
 	unsigned int	reserve_lp1 :1;	/* never has lp1	*/
 	unsigned int	reserve_lp2 :1;	/* never has lp2	*/
 	unsigned int	broken_hlt  :1;	/* hlt is broken	*/
 	unsigned int	soft_reboot :1;	/* soft reboot		*/
-	unsigned int	video_start;	/* start of video RAM	*/
-	unsigned int	video_end;	/* end of video RAM	*/
 	void		(*fixup)(struct machine_desc *,
 				 struct param_struct *, char **);
 };
@@ -201,7 +201,7 @@ parse_cmdline(char **cmdline_p, char *from)
 				meminfo.nr_banks = 0;
 			}
 
-			start = 0;
+			start = PHYS_OFFSET;
 			size  = memparse(from + 4, &from);
 			if (*from == '@')
 				start = memparse(from + 1, &from);
@@ -250,17 +250,18 @@ static void __init setup_initrd(unsigned int start, unsigned int size)
 }
 
 #define O_PFN_DOWN(x)	((x) >> PAGE_SHIFT)
-#define P_PFN_DOWN(x)	O_PFN_DOWN((x) - PHYS_OFFSET)
 #define V_PFN_DOWN(x)	O_PFN_DOWN(__pa(x))
 
 #define O_PFN_UP(x)	(PAGE_ALIGN(x) >> PAGE_SHIFT)
-#define P_PFN_UP(x)	O_PFN_UP((x) - PHYS_OFFSET)
 #define V_PFN_UP(x)	O_PFN_UP(__pa(x))
 
 #define PFN_SIZE(x)	((x) >> PAGE_SHIFT)
 #define PFN_RANGE(s,e)	PFN_SIZE(PAGE_ALIGN((unsigned long)(e)) - \
 				(((unsigned long)(s)) & PAGE_MASK))
 
+/*
+ * FIXME: These can be removed when Ingo's cleanup patch goes in
+ */
 #define free_bootmem(s,sz)	free_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
 #define reserve_bootmem(s,sz)	reserve_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
 
@@ -277,10 +278,10 @@ static unsigned int __init find_bootmap_pfn(unsigned int bootmap_pages)
 	 */
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start) {
-		if (__pa(initrd_end) > (meminfo.end + PHYS_OFFSET)) {
+		if (__pa(initrd_end) > meminfo.end) {
 			printk ("initrd extends beyond end of memory "
 				"(0x%08lx > 0x%08lx) - disabling initrd\n",
-				__pa(initrd_end), meminfo.end + PHYS_OFFSET);
+				__pa(initrd_end), meminfo.end);
 			initrd_start = 0;
 			initrd_end   = 0;
 		}
@@ -373,7 +374,7 @@ static void __init setup_bootmem(void)
 #endif
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start)
-		reserve_bootmem(O_PFN_DOWN(initrd_start),
+		reserve_bootmem(V_PFN_DOWN(initrd_start),
 				PFN_RANGE(initrd_start, initrd_end));
 #endif
 }
@@ -528,16 +529,66 @@ fixup_coebsa285(struct machine_desc *desc, struct param_struct *params,
 		char **cmdline)
 {
 #if 0
-	if (machine_is_co285()) {
-		extern unsigned long boot_memory_end;
-		extern char boot_command_line[];
+	extern unsigned long boot_memory_end;
+	extern char boot_command_line[];
 
-		meminfo.nr_banks      = 1;
-		meminfo.bank[0].start = PHYS_OFFSET;
-		meminfo.bank[0].size  = boot_memory_end;
+	meminfo.nr_banks      = 1;
+	meminfo.bank[0].start = PHYS_OFFSET;
+	meminfo.bank[0].size  = boot_memory_end;
 
-		*cmdline = boot_command_line;
+	*cmdline = boot_command_line;
+#endif
+}
+
+static void __init
+fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
+		char **cmdline)
+{
+#ifdef CONFIG_ARCH_SA1100
+	int i;
+	extern struct mem_desc {
+		unsigned long phys_start;
+		unsigned long length;
+	} mem_desc[];
+	extern unsigned int mem_desc_size;
+
+	for( i = 0; i < mem_desc_size; i++ ) {
+		if( i >= NR_BANKS ) {
+			printk( __FUNCTION__ 
+				": mem_desc too large for meminfo structure\n");
+			break;
+		}
+		meminfo.bank[i].start = mem_desc[i].phys_start;
+		meminfo.bank[i].size = mem_desc[i].length;
 	}
+	meminfo.nr_banks = i;
+
+#if defined(CONFIG_SA1100_BRUTUS)
+	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+	setup_ramdisk( 1, 0, 0, 8192 );
+	setup_initrd( __phys_to_virt(0xd8000000), 0x00400000 );
+#elif defined(CONFIG_SA1100_EMPEG)
+	ROOT_DEV = MKDEV( 3, 1 );  /* /dev/hda1 */
+	setup_ramdisk( 1, 0, 0, 4096 );
+	setup_initrd( 0xd0000000+((1024-320)*1024), (320*1024) );
+#elif defined(CONFIG_SA1100_TIFON)
+	ROOT_DEV = MKDEV(UNNAMED_MAJOR, 0);
+	setup_ramdisk(1, 0, 0, 4096);
+	setup_initrd( 0xd0000000 + 0x1100004, 0x140000 );
+#elif defined(CONFIG_SA1100_VICTOR)
+	ROOT_DEV = MKDEV( 60, 2 );
+
+	/* Get command line parameters passed from the loader (if any) */
+	if( *((char*)0xc0000000) )
+		strcpy( default_command_line, ((char *)0xc0000000) );
+
+	/* power off if any problem */
+	strcat( default_command_line, " panic=1" );
+#elif defined(CONFIG_SA1100_LART)
+	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+	setup_ramdisk(1, 0, 0, 8192);
+	setup_initrd(0xc0400000, 0x00400000);
+#endif
 #endif
 }
 
@@ -565,7 +616,7 @@ static struct machine_desc machine_desc[] __initdata = {
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, { "Nexus-FTV/PCI",	/* Philip Blundell	*/
+	}, { "FTV/PCI",		/* Philip Blundell	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
@@ -627,9 +678,15 @@ static struct machine_desc machine_desc[] __initdata = {
 		NULL
 	}, { "Shark",		/* Alexander Schulz	*/
 		NO_PARAMS,
-		NO_VIDEO,
+		/* do you really mean 0x200000? */
+		0x06000000, 0x06000000+0x00200000,
 		0, 0, 0, 0, 0,
 		NULL
+	}, { "SA1100-based",	/* Nicolas Pitre	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		fixup_sa1100
 	}
 };
 

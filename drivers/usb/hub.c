@@ -48,13 +48,11 @@ static int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size)
 		USB_DT_HUB << 8, 0, data, size, HZ);
 }
 
-#if 0
-static int usb_clear_hub_feature(struct usb_device *dev,  int feature)
+static int usb_clear_hub_feature(struct usb_device *dev, int feature)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_CLEAR_FEATURE, USB_RT_HUB, feature, 0 , NULL, 0, HZ);
+		USB_REQ_CLEAR_FEATURE, USB_RT_HUB, feature, 0, NULL, 0, HZ);
 }
-#endif
 
 static int usb_clear_port_feature(struct usb_device *dev, int port, int feature)
 {
@@ -359,7 +357,8 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 	}
 
 	if (tries==MAX_TRIES) {
-		err("can not enable port %i after %i retries, disabling port", port+1, MAX_TRIES);
+		err("Cannot enable port %i after %i retries, disabling port.", port+1, MAX_TRIES);
+		err("Maybe the USB cable is bad?");
 		return;
 	}
 	/* Allocate a new device struct for it */
@@ -392,6 +391,8 @@ static void usb_hub_events(void)
 	struct list_head *tmp;
 	struct usb_device *dev;
 	struct usb_hub *hub;
+	struct usb_hub_status hubsts;
+	unsigned short hubstatus, hubchange;
 
 	/*
 	 *  We restart the list everytime to avoid a deadlock with
@@ -444,14 +445,32 @@ static void usb_hub_events(void)
 			if (portchange & USB_PORT_STAT_C_SUSPEND)
 				dbg("port %d suspend change", i + 1);
 
-			if (portchange & USB_PORT_STAT_C_OVERCURRENT)
+			if (portchange & USB_PORT_STAT_C_OVERCURRENT) {
 				dbg("port %d over-current change", i + 1);
+				usb_clear_port_feature(dev, i + 1, USB_PORT_FEAT_C_OVER_CURRENT);
+			}
 
 			if (portchange & USB_PORT_STAT_C_RESET) {
 				dbg("port %d reset change", i + 1);
 				usb_clear_port_feature(dev, i + 1, USB_PORT_FEAT_C_RESET);
 			}
 		} /* end for i */
+
+		/* deal with hub status changes */
+		if (usb_get_hub_status(dev, &hubsts) < 0) {
+			err("get_hub_status failed");
+		} else {
+			hubstatus = le16_to_cpup(&hubsts.wHubStatus);
+			hubchange = le16_to_cpup(&hubsts.wHubChange);
+			if (hubchange & HUB_CHANGE_LOCAL_POWER) {
+				dbg("hub power change");
+				usb_clear_hub_feature(dev, C_HUB_LOCAL_POWER);
+			}
+			if (hubchange & HUB_CHANGE_OVERCURRENT) {
+				dbg("hub overcurrent change");
+				usb_clear_hub_feature(dev, C_HUB_OVER_CURRENT);
+			}
+		}
         } /* end while (1) */
 
 he_unlock:

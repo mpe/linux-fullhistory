@@ -112,7 +112,11 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 
 source drivers/pci/Config.in
 
-source drivers/pcmcia/Config.in
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+
+if [ "$CONFIG_HOTPLUG" = "y" ]; then
+   source drivers/pcmcia/Config.in
+fi
 
 source drivers/parport/Config.in
 

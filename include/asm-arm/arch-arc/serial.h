@@ -28,13 +28,13 @@
 #if defined(CONFIG_ARCH_A5K)
      /* UART CLK        PORT  IRQ     FLAGS        */
 
-#define STD_SERIAL_PORT_DEFNS
+#define STD_SERIAL_PORT_DEFNS						\
 	{ 0, BASE_BAUD, 0x3F8, 10, STD_COM_FLAGS },	/* ttyS0 */	\
 	{ 0, BASE_BAUD, 0x2F8, 10, STD_COM_FLAGS },	/* ttyS1 */
 
 #else
 
-#define STD_SERIAL_PORT_DEFNS
+#define STD_SERIAL_PORT_DEFNS						\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS0 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS1 */
 

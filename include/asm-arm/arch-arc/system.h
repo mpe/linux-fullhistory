@@ -20,7 +20,8 @@
 
 #endif
 
-#define arch_do_idle() do { } while (0)
+#define arch_do_idle()		do { } while (0)
+#define arch_power_off()	do { } while (0)
 
 extern __inline__ void arch_reset(char mode)
 {

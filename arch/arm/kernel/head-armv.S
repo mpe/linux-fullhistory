@@ -69,7 +69,7 @@ ENTRY(_stext)
  *  r1 contains the unique architecture number.  See
  * linux/arch/arm/kernel/setup.c machine_desc[] array for the complete
  * list.  If you require a new number, please follow the instructions
- * given in Documentation/ARM-README.
+ * given in Documentation/arm/README.
  */
 __entry:	teq	r0, #0
 		movne	r0, #'i'
@@ -83,7 +83,7 @@ __entry:	teq	r0, #0
 		moveq	r0, #'a'
 		beq	__error
 		bl	__create_page_tables
-		adr	lr, __aligned_call
+		adr	lr, __ret
 		add	pc, r10, #12			@ flush caches (returns ctrl reg)
 
 __switch_data:	.long	__mmap_switched
@@ -94,16 +94,11 @@ __switch_data:	.long	__mmap_switched
 		.long	SYMBOL_NAME(cr_alignment)
 		.long	SYMBOL_NAME(init_task_union)+8192
 
-		/*
-		 * This needs to be aligned to a cache line.
-		 */
-		.align	5
-__aligned_call:
-		ldr	lr, __switch_data
-#ifdef CONFIG_ALIGNMENT_TRAP
-		orr	r0, r0, #2			@ ...........A.
-#endif
+__ret:		ldr	lr, __switch_data
 		mcr	p15, 0, r0, c1, c0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
 		mov	pc, lr
 
 		/*
@@ -126,6 +121,9 @@ __mmap_switched:
 
 		str	r9, [r6]			@ Save processor ID
 		str	r1, [r7]			@ Save machine type
+#ifdef CONFIG_ALIGNMENT_TRAP
+		orr	r0, r0, #2			@ ...........A.
+#endif
 		bic	r2, r0, #2			@ Clear 'A' bit
 		stmia	r8, {r0, r2}			@ Save control register values
 		b	SYMBOL_NAME(start_kernel)
@@ -137,16 +135,16 @@ __mmap_switched:
  * amount which are required to get the kernel running, which
  * generally means mapping in the kernel code.
  *
- * We only map in 2MB of RAM, which should be sufficient in
+ * We only map in 4MB of RAM, which should be sufficient in
  * all cases.
  *
- * r4 = physical address of page tables
  * r5 = physical address of start of RAM
  * r6 = physical IO address
  * r7 = byte offset into page tables for IO
  * r8 = page table flags
  */
 __create_page_tables:
+		add	r4, r5, #SWAPPER_PGDIR_OFFSET
 		mov	r0, r4
 		mov	r3, #0
 		add	r2, r0, #0x4000			@ Clear page table
@@ -157,13 +155,22 @@ __create_page_tables:
 		teq	r0, r2
 		bne	1b
 		/*
-		 * map in two sections (2MB) for kernel.
+		 * Create identity mapping for first MB of kernel.
+		 * map in four sections (4MB) for kernel.
 		 * these are marked cacheable and bufferable.
+		 *
+		 * The identity mapping will be removed by  paging_init()
 		 */
-		add	r0, r4, #(TEXTADDR - 0x8000) >> 18
 		mov	r3, #0x0c
 		orr	r3, r3, r8
 		add	r3, r3, r5
+		add	r0, r4, r5, lsr #18
+		str	r3, [r0]
+		add	r0, r4, #(TEXTADDR - 0x8000) >> 18
+		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
+		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
 		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4
@@ -174,8 +181,11 @@ __create_page_tables:
 		 * via a serial before paging_init.
 		 */
 		add	r0, r4, r7
+		rsb	r3, r7, #0x4000	@ PTRS_PER_PGD*sizeof(long)
+		cmp	r3, #0x0800
+		addge	r2, r0, #0x0800
+		addlt	r2, r0, r3
 		orr	r3, r6, r8
-		add	r2, r0, #0x0800
 1:		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
 		teq	r0, r2
@@ -273,7 +283,7 @@ __lookup_processor_type:
  * Lookup machine architecture
  * r1 = machine architecture number
  * Returns:
- *  r4 = physical address of page tables
+ *  r4 = unused word
  *  r5 = physical start address of RAM
  *  r6 = physical address of IO
  *  r7 = byte offset into page tables for IO
@@ -284,7 +294,6 @@ __lookup_architecture_type:
 		adr	r4, __arch_types_start
 		add	r4, r4, r1, lsl #4
 		ldmia	r4, {r4, r5, r6, r7}
-		add	r4, r5, #SWAPPER_PGDIR_OFFSET
 		mov	r7, r7, lsr #18
 		mov	pc, lr
 1:		mov	r7, #0
@@ -330,20 +339,20 @@ __arch_types_start:
 		@ 0x04 - DEC EBSA285
 		.long	0
 		.long	0
-		.long	0x24000000			@ I/O base address (0x42000000 -> 0xfe000000)
-		.long	0xe0000000
+		.long	DC21285_ARMCSR_BASE
+		.long	0xfe000000
 
 		@ 0x05 - Rebel.com NetWinder
 		.long	0
 		.long	0
-		.long	0x24000000			@ I/O base address (0x42000000 -> 0xfe000000)
-		.long	0xe0000000
+		.long	DC21285_ARMCSR_BASE
+		.long	0xfe000000
 
 		@ 0x06 - CATS
 		.long	0
 		.long	0
-		.long	0x24000000			@ I/O base address (0x42000000 -> 0xfe000000)
-		.long	0xe0000000
+		.long	DC21285_ARMCSR_BASE
+		.long	0xfe000000
 
 		@ 0x07 - tbox
 		.long	0
@@ -398,9 +407,16 @@ __arch_types_start:
 		.long	0
 		.long	0
 		.long	0
-__arch_types_end:
-		@ unknown - SA1100
+
+		@ 0x10 - SA1100
 		.long	0
 		.long	0xc0000000
 		.long	0x80000000
-		.long	0xe0000000
+		.long	0xf8000000
+
+		/*
+		 * Don't add anything here unless you have an
+		 * architecture number allocated - see
+		 * Documentation/arm/README
+		 */
+__arch_types_end:

@@ -13,9 +13,13 @@
 O_TARGET := kernel.o
 O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o sys.o \
 	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
-	    sysctl.o acct.o capability.o ptrace.o timer.o uid16.o
+	    sysctl.o acct.o capability.o ptrace.o timer.o
 
 OX_OBJS  += signal.o
+
+ifeq ($(CONFIG_UID16),y)
+O_OBJS += uid16.o
+endif
 
 ifeq ($(CONFIG_KMOD),y)
 O_OBJS += kmod.o

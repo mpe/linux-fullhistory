@@ -42,10 +42,6 @@ extern void insl(unsigned int port, void *from, int len);
 
 #ifdef __KERNEL__
 
-#ifndef NULL
-#define NULL	((void *) 0)
-#endif
-
 #include <asm/arch/memory.h>
 
 extern __inline__ unsigned long virt_to_phys(volatile void *x)
@@ -85,6 +81,14 @@ extern void __readwrite_bug(const char *fn);
 extern void _memcpy_fromio(void *, unsigned long, unsigned long);
 extern void _memcpy_toio(unsigned long, const void *, unsigned long);
 extern void _memset_io(unsigned long, int, unsigned long);
+
+#define __raw_writeb(val,addr)		__arch_putb(val,addr)
+#define __raw_writew(val,addr)		__arch_putw(val,addr)
+#define __raw_writel(val,addr)		__arch_putl(val,addr)
+
+#define __raw_readb(addr)		__arch_getb(addr)
+#define __raw_readw(addr)		__arch_getw(addr)
+#define __raw_readl(addr)		__arch_getl(addr)
 
 /*
  * If this architecture has PCI memory IO, then define the read/write
@@ -151,11 +155,11 @@ out:
 #define isa_writew(val,addr)		__arch_putw(val,__mem_isa(addr))
 #define isa_writel(val,addr)		__arch_putl(val,__mem_isa(addr))
 #define isa_memset_io(a,b,c)		_memset_io(__mem_isa(a),(b),(c))
-#define isa_memcpy_fromio(a,b,c)	_memcpy_fromio((a),__mem_isa((b)),(c))
+#define isa_memcpy_fromio(a,b,c)	_memcpy_fromio((a),__mem_isa(b),(c))
 #define isa_memcpy_toio(a,b,c)		_memcpy_toio(__mem_isa((a)),(b),(c))
 
 #define isa_eth_io_copy_and_sum(a,b,c,d) \
-				eth_copy_and_sum((a),__mem_isa((b),(c),(d))
+				eth_copy_and_sum((a),__mem_isa(b),(c),(d))
 
 static inline int
 isa_check_signature(unsigned long io_addr, const unsigned char *signature,

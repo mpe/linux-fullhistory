@@ -908,7 +908,6 @@ static void __init map_kernel(void)
 				(phys>>12),
 				APMMU_CACHE|APMMU_PRIV|APMMU_VALID);
 	init_mm.mmap->vm_start = PAGE_OFFSET;
-	stack_top = PAGE_OFFSET - PAGE_SIZE;
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);

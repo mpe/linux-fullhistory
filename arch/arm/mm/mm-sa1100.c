@@ -6,11 +6,11 @@
  * Copyright (C) 1998-1999 Russell King
  * Copyright (C) 1999 Hugo Fiennes
  *
- * 1999/09/12 Nicolas Pitre <nico@visuaide.com>
- *	Specific RAM implementation details are in
- *	linux/include/asm/arch-sa1100/memory.h now.
- *	Allows for better macro optimisations when possible.
+ * 1999/12/04 Nicolas Pitre <nico@cam.org>
+ *	Converted memory definition for struct meminfo initialisations.
+ *	Memory is listed physically now.
  */
+
 #include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/init.h>
@@ -22,39 +22,44 @@
  
 #define SIZE(x) (sizeof(x) / sizeof(x[0]))
 
+
 /*
- * These are the memory size mappings for the
- * SA1100.  Note that LART is a special case -
- * it doesn't use physical address A23 on the
- * DRAM, so we effectively have 4 * 8MB in
- * two banks.
+ * These are the RAM memory mappings for SA1100 implementations.
+ * Note that LART is a special case - it doesn't use physical 
+ * address line A23 on the DRAM, so we effectively have 4 * 8MB
+ * in two banks.
  */
-struct mem_desc mem_desc[] __initdata = {
-	/* virt start virt end */
+struct mem_desc { 
+	unsigned long phys_start;
+	unsigned long length;
+} mem_desc[] __initdata = {
 #if defined(CONFIG_SA1100_BRUTUS)
-	{ 0xc0000000, 0xc0400000 },	/* 4MB */
-	{ 0xc1000000, 0xc1400000 },	/* 4MB */
-	{ 0xc2000000, 0xc2400000 },	/* 4MB */
-	{ 0xc3000000, 0xc3400000 }	/* 4MB */
+	{ 0xc0000000, 0x00400000 },	/* 4MB */
+	{ 0xc8000000, 0x00400000 },	/* 4MB */
+#if 0	/* only two banks until the bootmem stuff is fixed... */
+	{ 0xd0000000, 0x00400000 },	/* 4MB */
+	{ 0xd8000000, 0x00400000 }	/* 4MB */
+#endif
 #elif defined(CONFIG_SA1100_EMPEG)
-	{ 0xc0000000, 0xc0400000 },	/* 4MB */
-	{ 0xc1000000, 0xc1400000 }	/* 4MB */
+	{ 0xc0000000, 0x00400000 },	/* 4MB */
+	{ 0xc8000000, 0x00400000 }	/* 4MB */
 #elif defined(CONFIG_SA1100_LART)
-	{ 0xc0000000, 0xc0800000 },	/* 16MB */
-	{ 0xc1000000, 0xc1800000 },
-	{ 0xc2000000, 0xc2800000 },	/* 16MB */
-	{ 0xc3000000, 0xc3800000 }
+	{ 0xc0000000, 0x00800000 },	/* 8MB */
+	{ 0xc1000000, 0x00800000 },	/* 8MB */
+	{ 0xc8000000, 0x00800000 },	/* 8MB */
+	{ 0xc9000000, 0x00800000 }	/* 8MB */
 #elif defined(CONFIG_SA1100_VICTOR)
-	{ 0xc0000000, 0xc0400000 }	/* 4MB */
+	{ 0xc0000000, 0x00400000 }	/* 4MB */
 #elif defined(CONFIG_SA1100_TIFON)
-	{ 0xc0000000, 0xc1000000 },	/* 16MB */
-	{ 0xc1000000, 0xc2000000 }	/* 16MB */
+	{ 0xc0000000, 0x01000000 },	/* 16MB */
+	{ 0xc8000000, 0x01000000 }	/* 16MB */
 #else
 #error missing memory configuration
 #endif
 };
 
 unsigned int __initdata mem_desc_size = SIZE(mem_desc);
+
 
 struct map_desc io_desc[] __initdata = {
 	/* virtual           physical     length     domain    r  w  c  b */

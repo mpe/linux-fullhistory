@@ -788,13 +788,13 @@ void usb_show_device(struct usb_device *);
 void usb_show_string(struct usb_device *dev, char *id, int index);
 
 #ifdef DEBUG
-#define dbg(format, arg...) printk(KERN_DEBUG __FILE__ ": " format "\n", ## arg)
+#define dbg(format, arg...) printk(KERN_DEBUG __FILE__ ": " format "\n" , ## arg)
 #else
 #define dbg(format, arg...) do {} while (0)
 #endif
-#define err(format, arg...) printk(KERN_ERR __FILE__ ": " format "\n", ## arg)
-#define info(format, arg...) printk(KERN_INFO __FILE__ ": " format "\n", ## arg)
-#define warn(format, arg...) printk(KERN_WARNING __FILE__ ": " format "\n", ## arg)
+#define err(format, arg...) printk(KERN_ERR __FILE__ ": " format "\n" , ## arg)
+#define info(format, arg...) printk(KERN_INFO __FILE__ ": " format "\n" , ## arg)
+#define warn(format, arg...) printk(KERN_WARNING __FILE__ ": " format "\n" , ## arg)
 
 
 /*

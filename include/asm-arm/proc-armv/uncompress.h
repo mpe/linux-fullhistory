@@ -11,7 +11,7 @@ static inline void proc_decomp_setup (void)
 	eor	r0, r0, #0x44 << 24
 	eor	r0, r0, #0x01 << 16
 	eor	r0, r0, #0xA1 << 8
-	movs	r0, r0, lsr #4
+	movs	r0, r0, lsr #5
 	mcreq	p15, 0, r0, c7, c5, 0		@ flush I cache
 	mrceq	p15, 0, r0, c1, c0
 	orreq	r0, r0, #1 << 12

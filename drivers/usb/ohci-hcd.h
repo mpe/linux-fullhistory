@@ -314,6 +314,13 @@ struct virt_root_hub {
 #define RH_PS_OCIC           0x00080000    
 #define RH_PS_PRSC           0x00100000   
 
+/* Root hub status bits */
+#define RH_HS_LPS	     0x00000001
+#define RH_HS_OCI	     0x00000002
+#define RH_HS_DRWE	     0x00008000
+#define RH_HS_LPSC	     0x00010000
+#define RH_HS_OCIC	     0x00020000
+#define RH_HS_CRWE	     0x80000000
 
 #define min(a,b) (((a)<(b))?(a):(b))  
  

@@ -134,17 +134,24 @@
 #elif defined(CONFIG_ARCH_SA1100)
 		.macro	addruart,rx
 		mov	\rx, #0xf8000000
-		add	\rx, \rx, #0x00050000
+		add	\rx, \rx, #0x00050000	@ Ser3
+		@add	\rx, \rx, #0x00010000	@ Ser1
 		.endm
 
 		.macro	senduart,rd,rx
-		str	\rd, [\rx, #0x14]	@ UARTDR
+		str	\rd, [\rx, #0x14]	@ UTDR
+		.endm
+
+		.macro	waituart,rd,rx
+1001:		ldr	\rd, [\rx, #0x20]	@ UTSR1
+		tst	\rd, #1 << 2		@ UTSR1_TNF
+		beq	1001b
 		.endm
 
 		.macro	busyuart,rd,rx
 1001:		ldr	\rd, [\rx, #0x20]	@ UTSR1
-		tst	\rd, #1 << 2
-		beq	1001b
+		tst	\rd, #1 << 0		@ UTSR1_TBY
+		bne	1001b
 		.endm
 
 #else

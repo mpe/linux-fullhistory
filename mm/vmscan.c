@@ -503,7 +503,7 @@ int kswapd(void *unused)
 		do {
 			/* kswapd is critical to provide GFP_ATOMIC
 			   allocations (not GFP_HIGHMEM ones). */
-			if (nr_free_buffer_pages() >= freepages.high)
+			if (nr_free_pages() - nr_free_highpages() >= freepages.high)
 				break;
 			if (!do_try_to_free_pages(GFP_KSWAPD, 0))
 				break;

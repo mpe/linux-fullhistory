@@ -603,11 +603,11 @@ static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)
 	}
 
 	align = size = 4*1024*1024;
-	min = 0x10000000; max = ~0U;
+	min = PCIBIOS_MIN_MEM; max = ~0U;
 	if (type & IORESOURCE_IO) {
 		align = 1024;
 		size = 256;
-		min = 0x1000;
+		min = PCIBIOS_MIN_IO;
 		max = 0xffff;
 	}
 		

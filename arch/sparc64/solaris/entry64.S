@@ -1,4 +1,4 @@
-/* $Id: entry64.S,v 1.5 1998/03/26 08:46:15 jj Exp $
+/* $Id: entry64.S,v 1.6 2000/01/12 02:59:26 davem Exp $
  * entry64.S:  Solaris syscall emulation entry point.
  *
  * Copyright (C) 1996,1997,1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
@@ -183,15 +183,15 @@ solaris_getpid:
 
 	.globl	solaris_getuid
 solaris_getuid:
-	lduh		[%g6 + AOFF_task_euid], %o1
-	lduh		[%g6 + AOFF_task_uid], %o0
+	lduw		[%g6 + AOFF_task_euid], %o1
+	lduw		[%g6 + AOFF_task_uid], %o0
 	b,pt		%xcc, ret_from_solaris
 	 stx		%o1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 
 	.globl	solaris_getgid
 solaris_getgid:
-	lduh		[%g6 + AOFF_task_egid], %o1
-	lduh		[%g6 + AOFF_task_gid], %o0
+	lduw		[%g6 + AOFF_task_egid], %o1
+	lduw		[%g6 + AOFF_task_gid], %o0
 	b,pt		%xcc, ret_from_solaris
 	 stx		%o1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 

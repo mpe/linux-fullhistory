@@ -27,17 +27,17 @@
 /* 15 */	.long	SYMBOL_NAME(sys_chmod)
 		.long	SYMBOL_NAME(sys_lchown16)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_break */
-		.long	SYMBOL_NAME(sys_stat)
+		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_stat */
 		.long	SYMBOL_NAME(sys_lseek)
 /* 20 */	.long	SYMBOL_NAME(sys_getpid)
-		.long	SYMBOL_NAME(sys_mount_wrapper)
+		.long	SYMBOL_NAME(sys_mount)
 		.long	SYMBOL_NAME(sys_oldumount)
 		.long	SYMBOL_NAME(sys_setuid16)
 		.long	SYMBOL_NAME(sys_getuid16)
 /* 25 */	.long	SYMBOL_NAME(sys_stime)
 		.long	SYMBOL_NAME(sys_ptrace)
 		.long	SYMBOL_NAME(sys_alarm)
-		.long	SYMBOL_NAME(sys_fstat)
+		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_fstat */
 		.long	SYMBOL_NAME(sys_pause)
 /* 30 */	.long	SYMBOL_NAME(sys_utime)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_stty */
@@ -93,7 +93,7 @@
 		.long	SYMBOL_NAME(sys_setgroups16)
 		.long	SYMBOL_NAME(old_select)
 		.long	SYMBOL_NAME(sys_symlink)
-		.long	SYMBOL_NAME(sys_lstat)
+		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_lstat */
 /* 85 */	.long	SYMBOL_NAME(sys_readlink)
 		.long	SYMBOL_NAME(sys_uselib)
 		.long	SYMBOL_NAME(sys_swapon)
@@ -132,7 +132,7 @@
 /* 120 */	.long	SYMBOL_NAME(sys_clone_wapper)
 		.long	SYMBOL_NAME(sys_setdomainname)
 		.long	SYMBOL_NAME(sys_newuname)
-		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	SYMBOL_NAME(sys_modify_ldt) */
+		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_adjtimex)
 /* 125 */	.long	SYMBOL_NAME(sys_mprotect)
 		.long	SYMBOL_NAME(sys_sigprocmask)
@@ -149,7 +149,7 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	_sys_afs_syscall */
 		.long	SYMBOL_NAME(sys_setfsuid16)
 		.long	SYMBOL_NAME(sys_setfsgid16)
-/* 140 */	.long	SYMBOL_NAME(sys_llseek_wrapper)
+/* 140 */	.long	SYMBOL_NAME(sys_llseek)
 		.long	SYMBOL_NAME(sys_getdents)
 		.long	SYMBOL_NAME(sys_select)
 		.long	SYMBOL_NAME(sys_flock)

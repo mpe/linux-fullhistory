@@ -77,10 +77,10 @@ start:
 		cmp	r2, r3
 		blt	1b
 
-		eor	r1, r6, #0x44 << 24	@ SA-110?
+		eor	r1, r6, #0x44 << 24	@ SA-110 or SA-1100?
 		eor	r1, r1, #0x01 << 16
 		eor	r1, r1, #0xa1 << 8
-		movs	r1, r1, lsr #4
+		movs	r1, r1, lsr #5
 		mcreq	p15, 0, r1, c7, c7, 0	@ flush I & D-cache
 		mcreq	p15, 0, r1, c7, c10, 4	@ drain WB
 		add	pc, r5, r0		@ call relocation code
@@ -144,10 +144,10 @@ reloc_start:	add	r8, r5, r0
 	mov r0, r4
 	bl  memdump
 #endif
-		eor	r0, r6, #0x44 << 24	@ SA-110?
+		eor	r0, r6, #0x44 << 24	@ SA-110 or SA-1100?
 		eor	r0, r0, #0x01 << 16
 		eor	r0, r0, #0xa1 << 8
-		movs	r0, r0, lsr #4
+		movs	r0, r0, lsr #5
 		mcreq	p15, 0, r0, c7, c7, 0	@ flush I cache
 		mcreq	p15, 0, r1, c7, c10, 4	@ drain WB
 

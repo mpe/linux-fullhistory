@@ -33,8 +33,8 @@ void pcibios_report_device_errors(void)
 			continue;
 
 		pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
-		printk(KERN_DEBUG "PCI: status %04X on %s\n",
-			status, dev->name);
+		printk(KERN_DEBUG "PCI: %02X:%02X: status %04X on %s\n",
+			dev->bus->number, dev->devfn, status, dev->name);
 	}
 }
 
@@ -162,9 +162,10 @@ void __init pcibios_update_irq(struct pci_dev *dev, int irq)
  */
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
-	struct pci_dev *dev;
+	struct list_head *walk = &bus->devices;
 
-	for (dev = bus->devices; dev; dev = dev->sibling) {
+	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
+		struct pci_dev *dev = pci_dev_b(walk);
 		u16 cmd;
 
 		/*
@@ -220,6 +221,7 @@ static u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
 	return 0;
 }
 
+#ifdef CONFIG_FOOTBRIDGE
 /* ebsa285 host-specific stuff */
 static int irqmap_ebsa285[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
 
@@ -255,7 +257,7 @@ static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
 static int __init cats_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	if (dev->irq >= 128)
-		return 16 + (dev->irq & 0x1f);
+		return dev->irq & 0x1f;
 
 	if (dev->irq >= 1 && dev->irq <= 4)
 		return irqmap_cats[dev->irq - 1];
@@ -313,17 +315,53 @@ static struct hw_pci netwinder_pci __initdata = {
 	no_swizzle,
 	netwinder_map_irq
 };
+#endif
+
+#ifdef CONFIG_ARCH_NEXUSPCI
+/*
+ * Owing to a PCB cockup, issue A backplanes are wired thus:
+ *
+ * Slot 1    2    3    4    5   Bridge
+ * IRQ  D    C    B    A    A
+ *      A    D    C    B    B
+ *      B    A    D    C    C
+ *      C    B    A    D    D
+ *
+ * ID A31  A30  A29  A28  A27   A26
+ */
+
+static int irqmap_ftv[] __initdata = { IRQ_PCI_A, IRQ_PCI_B, IRQ_PCI_C, IRQ_PCI_D };
+
+static int __init ftv_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+{
+	return irqmap_ftv[(slot + pin) & 3];
+}
+
+/* ftv host-specific stuff */
+static struct hw_pci ftv_pci __initdata = {
+	plx90x0_init,
+	0x9000,
+	0x00100000,
+	no_swizzle,
+	ftv_map_irq
+};
+#endif
 
 void __init pcibios_init(void)
 {
 	struct hw_pci *hw_pci = NULL;
 
+#ifdef CONFIG_FOOTBRIDGE
 	if (machine_is_ebsa285())
 		hw_pci = &ebsa285_pci;
 	else if (machine_is_cats())
 		hw_pci = &cats_pci;
 	else if (machine_is_netwinder())
 		hw_pci = &netwinder_pci;
+#endif
+#ifdef CONFIG_ARCH_NEXUSPCI
+	hw_pci = &ftv_pci;
+#endif
 
 	if (hw_pci == NULL)
 		return;
@@ -346,12 +384,14 @@ void __init pcibios_init(void)
 	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);
 	pci_set_bus_ranges();
 
+#ifdef CONFIG_FOOTBRIDGE
 	/*
 	 * Initialise any other hardware after we've got the PCI bus
 	 * initialised.  We may need the PCI bus to talk to this other
 	 * hardware.
 	 */
 	hw_init();
+#endif
 }
 
 char * __init pcibios_setup(char *str)
@@ -363,7 +403,17 @@ char * __init pcibios_setup(char *str)
 	return str;
 }
 
-void __init
-pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+/*
+ * Assign new address to PCI resource.  We hope our resource information
+ * is complete.
+ *
+ * Expects start=0, end=size-1, flags=resource type.
+ */
+int pci_assign_resource(struct pci_dev *dev, int i)
+{
+	return 0;
+}
+
+void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
 }

@@ -34,6 +34,20 @@
 #define ndMapNode	0x02	/* Holds part of the bitmap of used nodes */
 #define ndLeafNode	0xFF	/* A leaf (ndNHeight==1) node */
 
+/*
+ * Legal values for the bthAtrb field of a (struct BTHdrRec)
+ *
+ * Reference: TN 1150
+ */
+#define bthBadClose     0x00000001  /* b-tree not closed properly. not
+                                       used by hfsplus. */
+#define bthBigKeys      0x00000002  /* key length is u16 instead of u8.
+				       used by hfsplus. */
+#define bthVarIndxKeys  0x00000004  /* variable key length instead of
+                                       max key length. use din catalog
+                                       b-tree but not in extents
+                                       b-tree (hfsplus). */
+
 /*================ Function-like macros ================*/
 
 /* Access the cache slot which should contain the desired node */
@@ -70,7 +84,12 @@ struct BTHdrRec {
 	hfs_word_t  bthKeyLen;	/* (F) The length of a key in an index node */
 	hfs_lword_t bthNNodes;	/* (V) The total number of nodes */
 	hfs_lword_t bthFree;	/* (V) The number of unused nodes */
-	hfs_byte_t  bthResv[76];	/* Reserved */
+        hfs_word_t  bthResv1;   /* reserved */
+        hfs_lword_t bthClpSiz;  /* (F) clump size. not usually used. */
+        hfs_byte_t  bthType;    /* (F) BTree type */
+        hfs_byte_t  bthResv2;   /* reserved */
+        hfs_lword_t bthAtrb;    /* (F) attributes */
+        hfs_lword_t bthResv3[16]; /* Reserved */
 };
 
 /*
@@ -129,6 +148,8 @@ struct hfs_bnode {
 					this node in-core (set for
 					root and head) */
 	hfs_u32		    node;    /* Node number */
+	hfs_u16             nodeSize; /* node size */
+        hfs_u16             keyLen;  /* key length */
 	/* locking related fields: */
 	hfs_wait_queue	    wqueue;  /* Wait queue for write access */
 	hfs_wait_queue	    rqueue;  /* Wait queue for read or reserve
@@ -176,6 +197,7 @@ struct hfs_btree {
 	int			lock;
 	hfs_wait_queue		wait;
 	int			dirt;
+	int                     keySize;   
 	/* Fields from the BTHdrRec in native byte-order: */
 	hfs_u32			bthRoot;
 	hfs_u32			bthNRecs;

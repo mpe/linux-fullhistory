@@ -3,6 +3,9 @@
  * All exits to user mode from the kernel go through this code.
  */
 
+#define S_OFF		8
+#define SYSCALL_REGS	r4, r5
+
 /*
  * Define to favour ARM8, ARM9 and StrongARM cpus.  This says that it is
  * cheaper to use two LDR instructions than a two-register LDM, if the
@@ -16,9 +19,9 @@
 
 		.align	5
 fast_syscall_return:
-		str	r0, [sp, #S_R0 + 4]		@ returned r0
+		str	r0, [sp, #S_R0 + S_OFF]		@ returned r0
 slow_syscall_return:
-		add	sp, sp, #4
+		add	sp, sp, #S_OFF
 ret_from_sys_call:
 #ifdef HARVARD_CACHE
 		ldr	r0, bh_data
@@ -74,65 +77,71 @@ ret_from_exception:
 /*=============================================================================
  * SWI handler
  *-----------------------------------------------------------------------------
- *
- * We now handle sys-call tracing, and the errno in the task structure.
- * Still have a problem with >4 arguments for functions.  Theres only
- * a couple of functions in the code that have 5 arguments, so Im not
- * too worried.
  */
+
+/*
+ * Create some aliases for some registers.  These should allow
+ * us to have in theory up to 7 arguments to a function.
+ */
+scno		.req	r9			@ syscall number
+tbl		.req	r8			@ syscall table pointer
+tip		.req	r7			@ temporary IP
 
 		.align	5
 vector_swi:	save_user_regs
 		mask_pc	lr, lr
 		mov	fp, #0
-		ldr	r6, [lr, #-4]		@ get SWI instruction
-		arm700_bug_check r6, r7
+		ldr	scno, [lr, #-4]		@ get SWI instruction
+		arm700_bug_check scno, ip
 #ifdef CONFIG_ALIGNMENT_TRAP
-		ldr	r7, .LCswi
-		ldr	r7, [r7]
-		mcr	p15, 0, r7, c1, c0
+		ldr	ip, .LCswi
+		ldr	ip, [ip]
+		mcr	p15, 0, ip, c1, c0
 #endif
-		enable_irqs r7
+		enable_irqs ip
 
-		str	r4, [sp, #-4]!		@ new style: (r0 = arg1, r4 = arg5)
+		stmdb	sp!, {SYSCALL_REGS}	@ new style: (r0 = arg1, r4 = arg5, r5 = arg6)
+						@ Note that we dont have to handle
+						@ sys_syscalls arg7 here
 		adrsvc	al, lr, fast_syscall_return
 
-		bic	r6, r6, #0xff000000	@ mask off SWI op-code
-		eor	r6, r6, #OS_NUMBER<<20	@ check OS number
-		cmp	r6, #NR_syscalls	@ check upper syscall limit
+		bic	scno, scno, #0xff000000	@ mask off SWI op-code
+		eor	scno, scno, #OS_NUMBER<<20	@ check OS number
+		cmp	scno, #NR_syscalls	@ check upper syscall limit
 		bcs	2f
 
-		get_current_task r7
-		ldr	ip, [r7, #TSK_FLAGS]	@ check for syscall tracing
-		adr	r5, SYMBOL_NAME(sys_call_table)
+		get_current_task ip
+		ldr	ip, [ip, #TSK_FLAGS]	@ check for syscall tracing
+		adr	tbl, SYMBOL_NAME(sys_call_table)
 		tst	ip, #PF_TRACESYS
-		ldreq	pc, [r5, r6, lsl #2]	@ call sys routine
+		ldreq	pc, [tbl, scno, lsl #2]	@ call sys routine
 
-		ldr	r7, [sp, #S_IP + 4]	@ save old IP
-		mov	r0, #0
-		str	r0, [sp, #S_IP + 4]	@ trace entry [IP = 0]
+		ldr	tip, [sp, #S_IP + S_OFF]	@ save old IP
+		mov	ip, #0
+		str	ip, [sp, #S_IP + S_OFF]	@ trace entry [IP = 0]
 		bl	SYMBOL_NAME(syscall_trace)
-		str	r7, [sp, #S_IP + 4]
+		str	tip, [sp, #S_IP + S_OFF]
 
-		ldmib	sp, {r0 - r3}		@ have to reload r0 - r3
+		add	ip, sp, #S_OFF
+		ldmia	ip, {r0 - r3}		@ have to reload r0 - r3
 		mov	lr, pc
-		ldr	pc, [r5, r6, lsl #2]	@ call sys routine
-		str	r0, [sp, #S_R0 + 4]	@ returned r0
+		ldr	pc, [tbl, scno, lsl #2]	@ call sys routine
+		str	r0, [sp, #S_R0 + S_OFF]	@ returned r0
 
-		mov	r0, #1
-		str	r0, [sp, #S_IP + 4]	@ trace exit [IP = 1]
+		mov	ip, #1
+		str	ip, [sp, #S_IP + S_OFF]	@ trace exit [IP = 1]
 		bl	SYMBOL_NAME(syscall_trace)
-		str	r7, [sp, #S_IP + 4]
+		str	tip, [sp, #S_IP + S_OFF]
 		b	slow_syscall_return
 
-2:		add	r1, sp, #4
-		tst	r6, #0x00f00000		@ is it a Unix SWI?
+2:		add	r1, sp, #S_OFF
+		tst	scno, #0x00f00000	@ is it a Unix SWI?
 		bne	3f
-		subs	r0, r6, #(KSWI_SYS_BASE - KSWI_BASE)
+		subs	r0, scno, #(KSWI_SYS_BASE - KSWI_BASE)
 		bcs	SYMBOL_NAME(arm_syscall)
 		b	SYMBOL_NAME(sys_ni_syscall) @ not private func
 
-3:		eor	r0, r6, #OS_NUMBER <<20	@ Put OS number back
+3:		eor	r0, scno, #OS_NUMBER <<20	@ Put OS number back
 		adrsvc	al, lr, slow_syscall_return
 		b	SYMBOL_NAME(deferred)
 
@@ -150,67 +159,49 @@ ENTRY(sys_call_table)
 @ r0 = syscall number
 @ r5 = syscall table
 SYMBOL_NAME(sys_syscall):
-		eor	r6, r0, #OS_NUMBER << 20
-		cmp	r6, #NR_syscalls	@ check range
-		add	ip, sp, #4
-		ldmleib	ip, {r0 - r4}		@ get our args
-		strle	r4, [sp]		@ Put our arg on the stack
-		ldrle	pc, [r5, r6, lsl #2]
+		eor	scno, r0, #OS_NUMBER << 20
+		cmp	scno, #NR_syscalls	@ check range
+		add	ip, sp, #S_OFF
+		ldmleib	ip, {r0 - r3, SYSCALL_REGS}	@ get our args
+		stmleia	sp, {SYSCALL_REGS}	@ Put our arg on the stack
+		ldrle	pc, [tbl, scno, lsl #2]
 		mov	r0, #-ENOSYS
-		mov	pc, lr
+		RETINSTR(mov,pc,lr)
 
 sys_fork_wrapper:
-		add	r0, sp, #4
+		add	r0, sp, #S_OFF
 		b	SYMBOL_NAME(sys_fork)
 
 sys_vfork_wrapper:
-		add	r0, sp, #4
+		add	r0, sp, #S_OFF
 		b	SYMBOL_NAME(sys_vfork)
 
 sys_execve_wrapper:
-		add	r3, sp, #4
+		add	r3, sp, #S_OFF
 		b	SYMBOL_NAME(sys_execve)
 
-sys_mount_wrapper:
-		mov	r6, lr
-		add	r5, sp, #4
-		str	r5, [sp]
-		str	r4, [sp, #-4]!
-		bl	SYMBOL_NAME(sys_compat_mount)
-		add	sp, sp, #4
-		RETINSTR(mov,pc,r6)
-
 sys_clone_wapper:
-		add	r2, sp, #4
+		add	r2, sp, #S_OFF
 		b	SYMBOL_NAME(sys_clone)
 
-sys_llseek_wrapper:
-		mov	r6, lr
-		add	r5, sp, #4
-		str	r5, [sp]
-		str	r4, [sp, #-4]!
-		bl	SYMBOL_NAME(sys_compat_llseek)
-		add	sp, sp, #4
-		RETINSTR(mov,pc,r6)
-
 sys_sigsuspend_wrapper:
-		add	r3, sp, #4
+		add	r3, sp, #S_OFF
 		b	SYMBOL_NAME(sys_sigsuspend)
 
 sys_rt_sigsuspend_wrapper:
-		add	r2, sp, #4
+		add	r2, sp, #S_OFF
 		b	SYMBOL_NAME(sys_rt_sigsuspend)
 
 sys_sigreturn_wrapper:
-		add	r0, sp, #4
+		add	r0, sp, #S_OFF
 		b	SYMBOL_NAME(sys_sigreturn)
 
 sys_rt_sigreturn_wrapper:
-		add	r0, sp, #4
+		add	r0, sp, #S_OFF
 		b	SYMBOL_NAME(sys_rt_sigreturn)
 
 sys_sigaltstack_wrapper:
-		ldr	r2, [sp, #4 + S_SP]
+		ldr	r2, [sp, #S_OFF + S_SP]
 		b	do_sigaltstack
 
 		.data

@@ -216,6 +216,8 @@ typedef struct kmem_bufctl_s {
 
 #endif	/* SLAB_DEBUG_SUPPORT */
 
+#define SLAB_CACHE_NAME_LEN	20	/* max name length for a slab cache */
+
 /* Cache struct - manages a cache.
  * First four members are commonly referenced during an alloc/free operation.
  */
@@ -241,7 +243,7 @@ struct kmem_cache_s {
 	size_t			  c_colour;	/* cache colouring range */
 	size_t			  c_colour_next;/* cache colouring */
 	unsigned long		  c_failures;
-	const char		 *c_name;
+	char			  c_name[SLAB_CACHE_NAME_LEN];
 	struct kmem_cache_s	 *c_nextp;
 	kmem_cache_t		 *c_index_cachep;
 #if	SLAB_STATS
@@ -667,7 +669,6 @@ kmem_cache_cal_waste(unsigned long gfporder, size_t size, size_t extra,
 /* Create a cache:
  * Returns a ptr to the cache on success, NULL on failure.
  * Cannot be called within a int, but can be interrupted.
- * NOTE: The 'name' is assumed to be memory that is _not_  going to disappear.
  */
 kmem_cache_t *
 kmem_cache_create(const char *name, size_t size, size_t offset,
@@ -685,6 +686,10 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 #if	SLAB_MGMT_CHECKS
 	if (!name) {
 		printk("%sNULL ptr\n", func_nm);
+		goto opps;
+	}
+	if (strlen(name) >= SLAB_CACHE_NAME_LEN) {
+		printk("%sname too long\n", func_nm);
 		goto opps;
 	}
 	if (in_interrupt()) {
@@ -948,7 +953,8 @@ printk("%s: Left_over:%d Align:%d Size:%d\n", name, left_over, offset, size);
 	cachep->c_ctor = ctor;
 	cachep->c_dtor = dtor;
 	cachep->c_magic = SLAB_C_MAGIC;
-	cachep->c_name = name;		/* Simply point to the name. */
+	/* Copy name over so we don't have problems with unloaded modules */
+	strcpy(cachep->c_name, name);
 	spin_lock_init(&cachep->c_spinlock);
 
 	/* Need the semaphore to access the chain. */
@@ -1026,12 +1032,7 @@ static int __kmem_cache_shrink(kmem_cache_t *cachep)
 }
 
 /* Shrink a cache.  Releases as many slabs as possible for a cache.
- * It is expected this function will be called by a module when it is
- * unloaded.  The cache is _not_ removed, this creates too many problems and
- * the cache-structure does not take up much room.  A module should keep its
- * cache pointer(s) in unloaded memory, so when reloaded it knows the cache
- * is available.  To help debugging, a zero exit status indicates all slabs
- * were released.
+ * To help debugging, a zero exit status indicates all slabs were released.
  */
 int
 kmem_cache_shrink(kmem_cache_t *cachep)
@@ -1049,6 +1050,12 @@ kmem_cache_shrink(kmem_cache_t *cachep)
 /*
  * Remove a kmem_cache_t object from the slab cache. When returns 0 it
  * completed succesfully. -arca
+ *
+ * It is expected this function will be called by a module when it is
+ * unloaded.  This will remove the cache completely, and avoid a duplicate
+ * cache being allocated each time a module is loaded and unloaded, if the
+ * module doesn't have persistent in-kernel storage across loads and unloads.
+ *
  */
 int kmem_cache_destroy(kmem_cache_t * cachep)
 {

@@ -115,6 +115,7 @@
 
 #define MAJOR_NR	MFM_ACORN_MAJOR
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -975,7 +976,7 @@ static void mfm_request(void)
 	DBG("mfm_request: Dropping out bottom\n");
 }
 
-static void do_mfm_request(void)
+static void do_mfm_request(request_queue_t *q)
 {
 	DBG("do_mfm_request: about to mfm_request\n");
 	mfm_request();
@@ -1210,24 +1211,6 @@ static int mfm_ioctl(struct inode *inode, struct file *file, u_int cmd, u_long a
 			return -EFAULT;
 		return 0;
 
-	case BLKFLSBUF:
-		if (!capable(CAP_SYS_ADMIN))
-			return -EACCES;
-		fsync_dev(dev);
-		invalidate_buffers(dev);
-		return 0;
-
-	case BLKRASET:
-		if (!capable(CAP_SYS_ADMIN))
-			return -EACCES;
-		if (arg > 0xff)
-			return -EINVAL;
-		read_ahead[major] = arg;
-		return 0;
-
-	case BLKRAGET:
-		return put_user(read_ahead[major], (long *)arg);
-
 	case BLKGETSIZE:
 		return put_user (mfm[minor].nr_sects, (long *)arg);
 
@@ -1248,7 +1231,13 @@ static int mfm_ioctl(struct inode *inode, struct file *file, u_int cmd, u_long a
 			return -EACCES;
 		return mfm_reread_partitions(dev);
 
-	RO_IOCTLS(dev, arg);
+	case BLKFLSBUF:
+	case BLKROSET:
+	case BLKROGET:
+	case BLKRASET:
+	case BLKRAGET:
+	case BLKPG:
+		return blk_ioctl(dev, cmd, arg);
 
 	default:
 		return -EINVAL;
@@ -1421,11 +1410,6 @@ int mfm_init (void)
 {
 	unsigned char irqmask;
 
-	if (register_blkdev(MAJOR_NR, "mfm", &mfm_fops)) {
-		printk("mfm_init: unable to get major number %d\n", MAJOR_NR);
-		return -1;
-	}
-
 	if (mfm_probecontroller(ONBOARD_MFM_ADDRESS)) {
 		mfm_addr	= ONBOARD_MFM_ADDRESS;
 		mfm_IRQPollLoc	= IOC_IRQSTATB;
@@ -1448,6 +1432,12 @@ int mfm_init (void)
 		ecard_claim(ecs);
 	}
 
+	if (register_blkdev(MAJOR_NR, "mfm", &mfm_fops)) {
+		printk("mfm_init: unable to get major number %d\n", MAJOR_NR);
+		ecard_release(ecs);
+		return -1;
+	}
+
 	printk("mfm: found at address %08X, interrupt %d\n", mfm_addr, mfm_irq);
 	request_region (mfm_addr, 10, "mfm");
 
@@ -1456,7 +1446,7 @@ int mfm_init (void)
 	hdc63463_irqpolladdress	= ioaddr(mfm_IRQPollLoc);
 	hdc63463_irqpollmask	= irqmask;
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB?) read ahread */
 
 #ifndef MODULE

@@ -7,3 +7,4 @@ struct hw_pci {
 };
 
 void __init dc21285_init(void);
+void __init plx90x0_init(void);

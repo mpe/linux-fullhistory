@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.32 2000/01/05 01:00:40 davem Exp $
+/* $Id: sys_sparc.c,v 1.33 2000/01/11 17:33:25 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -22,6 +22,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/malloc.h>
+#include <linux/ipc.h>
 
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
@@ -98,7 +99,7 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 			err = -EFAULT;
 			if(get_user(fourth.__pad, (void **)ptr))
 				goto out;
-			err = sys_semctl (first, second, (int)third, fourth);
+			err = sys_semctl (first, second | IPC_64, (int)third, fourth);
 			goto out;
 			}
 		default:
@@ -118,7 +119,7 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 			err = sys_msgget ((key_t) first, second);
 			goto out;
 		case MSGCTL:
-			err = sys_msgctl (first, second, (struct msqid_ds *) ptr);
+			err = sys_msgctl (first, second | IPC_64, (struct msqid_ds *) ptr);
 			goto out;
 		default:
 			err = -EINVAL;
@@ -136,7 +137,7 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 			err = sys_shmget (first, second, (int)third);
 			goto out;
 		case SHMCTL:
-			err = sys_shmctl (first, second, (struct shmid_ds *) ptr);
+			err = sys_shmctl (first, second | IPC_64, (struct shmid_ds *) ptr);
 			goto out;
 		default:
 			err = -EINVAL;

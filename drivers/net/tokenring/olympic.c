@@ -25,10 +25,11 @@
  *  8/18/99 - Updated driver for 2.3.13 kernel to use new pci
  *	      resource. Driver also reports the card name returned by
  *            the pci resource.
+ *  1/11/00 - Added spinlocks for smp
  *  
  *  To Do:
  *
- *  Sanitize for smp
+ *  IPv6 Multicast
  *
  *  If Problems do Occur
  *  Most problems can be rectified by either closing and opening the interface
@@ -69,6 +70,7 @@
 #include <linux/stddef.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/spinlock.h>
 #include <net/checksum.h>
 
 #include <asm/io.h>
@@ -86,7 +88,7 @@
  */
 
 static char *version = 
-"Olympic.c v0.3.0 8/18/99 - Peter De Schrijver & Mike Phillips" ; 
+"Olympic.c v0.3.1 1/11/00 - Peter De Schrijver & Mike Phillips" ; 
 
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
@@ -250,6 +252,8 @@ static int __init olympic_init(struct net_device *dev)
 			return -1;
 		}
 	}
+
+	spin_lock_init(&olympic_priv->olympic_lock) ; 
 
 #if OLYMPIC_DEBUG
 	printk("BCTL: %x\n",readl(olympic_mmio+BCTL));
@@ -757,6 +761,8 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (!(sisr & SISR_MI)) /* Interrupt isn't for us */ 
 		return ;
 
+	spin_lock(&olympic_priv->olympic_lock);
+
 	if (dev->interrupt) 
 		printk(KERN_WARNING "%s: Re-entering interrupt \n",dev->name) ; 
 
@@ -835,15 +841,20 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	dev->interrupt = 0 ;  
 
 	writel(SISR_MI,olympic_mmio+SISR_MASK_SUM);
-
+	
+	spin_unlock(&olympic_priv->olympic_lock) ; 
 }	
 
 static int olympic_xmit(struct sk_buff *skb, struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
-    __u8 *olympic_mmio=olympic_priv->olympic_mmio;
+	__u8 *olympic_mmio=olympic_priv->olympic_mmio;
+	unsigned long flags ; 
+
+	spin_lock_irqsave(&olympic_priv->olympic_lock, flags);
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
+		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags);
 		return 1;
 	}
 
@@ -860,10 +871,12 @@ static int olympic_xmit(struct sk_buff *skb, struct net_device *dev)
 		writew((((readw(olympic_mmio+TXENQ_1)) & 0x8000) ^ 0x8000) | 1,olympic_mmio+TXENQ_1);
 
 		dev->tbusy=0;		
-
+		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags);
 		return 0;
-	} else 
+	} else {
+		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags);
 		return 1;
+	} 
 
 }
 	

@@ -278,6 +278,7 @@ setup_sigcontext(struct sigcontext *sc, /*struct _fpstate *fpstate,*/
 
 	err |= __put_user (current->thread.trap_no, &sc->trap_no);
 	err |= __put_user (current->thread.error_code, &sc->error_code);
+	err |= __put_user (current->thread.address, &sc->fault_address);
 	err |= __put_user (mask, &sc->oldmask);
 
 	return err;

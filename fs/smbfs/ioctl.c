@@ -28,7 +28,7 @@ smb_ioctl(struct inode *inode, struct file *filp,
 	switch (cmd)
 	{
 	case SMB_IOC_GETMOUNTUID:
-		result = put_user(high2lowuid(server->mnt->mounted_uid), (old_uid_t *) arg);
+		result = put_user(NEW_TO_OLD_UID(server->mnt->mounted_uid), (old_uid_t *) arg);
 		break;
 	case SMB_IOC_GETMOUNTUID32:
 		result = put_user(server->mnt->mounted_uid, (uid_t *) arg);

@@ -108,13 +108,13 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 		res->flags |= PCI_ROM_ADDRESS_ENABLE;
 		reg = dev->rom_base_reg;
 	} else {
-		/* Bug?  */
+		/* Somebody might have asked allocation of a non-standard resource */
 		return;
 	}
 	
 	pci_write_config_dword(dev, reg, new);
 	pci_read_config_dword(dev, reg, &check);
-	if (new != check) {
+	if ((new ^ check) & ((new & PCI_BASE_ADDRESS_SPACE_IO) ? PCI_BASE_ADDRESS_IO_MASK : PCI_BASE_ADDRESS_MEM_MASK)) {
 		printk(KERN_ERR "PCI: Error while updating region "
 		       "%s/%d (%08x != %08x)\n", dev->slot_name, resource,
 		       new, check);

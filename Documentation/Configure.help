@@ -8002,7 +8002,7 @@ CONFIG_USB_ACM
   The module will be called acm.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB serial converter support
+USB Serial converter support
 CONFIG_USB_SERIAL
   Say Y here if you want to connect a Connect Tech WhiteHEAT 
   multi-port USB to serial converter; a Belkin, Peracom, or eTek
@@ -8013,6 +8013,33 @@ CONFIG_USB_SERIAL
   inserted in and removed from the running kernel whenever you want).
   The module will be called usb-serial.o. If you want to compile it 
   as a module, say M here and read Documentation/modules.txt.
+
+USB Generic Serial Driver
+CONFIG_USB_SERIAL_GENERIC
+  Say Y here if you want to use the generic USB serial driver.
+  Please read Documentation/usb/usb-serial.txt for more information
+  on using this driver. It is recommended that the USB Serial
+  Driver be compiled as a module for this driver to be used properly.
+
+USB ConnectTech WhiteHEAT Serial Driver
+CONFIG_USB_SERIAL_WHITEHEAT
+  Say Y here if you want to use a ConnectTech WhiteHEAT 4 port
+  USB to serial converter device.
+
+USB Handspring Visor Driver
+CONFIG_USB_SERIAL_VISOR
+  Say Y here if you want to connect to your HandSpring Visor through
+  its USB docking station.
+
+USB Belkin Single Port Serial Driver
+CONFIG_USB_SERIAL_BELKIN
+  Say Y here if you want to use a Belkin single port USB to serial 
+  converter device.
+  
+USB Peracom Single Port Serial Driver
+CONFIG_USB_SERIAL_PERACOM
+  Say Y here if you want to use a Peracom single port USB to serial 
+  converter device.
 
 USB Printer support
 CONFIG_USB_PRINTER

@@ -40,11 +40,7 @@ CONFIG_SYSVIPC=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
-
-#
-# PCMCIA/CardBus support
-#
-# CONFIG_PCMCIA is not set
+# CONFIG_HOTPLUG is not set
 # CONFIG_PARPORT is not set
 # CONFIG_VGA_CONSOLE is not set
 # CONFIG_FB is not set

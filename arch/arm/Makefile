@@ -136,7 +136,7 @@ MACHINE		 = nexuspci
 ARCHDIR		 = nexuspci
 endif
 
-ifeq ($(CONFIG_ARCH_SA1100),u)
+ifeq ($(CONFIG_ARCH_SA1100),y)
 MACHINE		 = sa1100
 ARCHDIR		 = sa1100
 endif
@@ -146,7 +146,7 @@ HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o \
 SUBDIRS		+= arch/arm/kernel arch/arm/mm arch/arm/lib \
 		   arch/arm/special arch/arm/nwfpe
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
-LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
+LIBS		:= arch/arm/lib/lib.o arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 DRIVERS		+= arch/arm/special/special.a
 
 ifeq ($(CONFIG_NWFPE),y)

@@ -79,12 +79,26 @@ out:
 	return error;
 }
 
+#define PGOFF_SHIFT (PAGE_SHIFT - 12)
+#define PGOFF_MASK  (~((1 << PGOFF_SHIFT) - 1))
+
 /*
- * Perform the select(nd, in, out, ex, tv) and mmap() system
- * calls. ARM Linux didn't use to be able to handle more than
- * 4 system call parameters, so these system calls used a memory
- * block for parameter passing..
+ * Note: off_4k is always units of 4K.  If we can't do the requested
+ * offset, we return EINVAL.
  */
+asmlinkage long
+sys_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
+	  unsigned long flags, unsigned long fd, unsigned long off_4k)
+{
+	unsigned long pgoff;
+
+	if (off_4k & ~PGOFF_MASK)
+		return -EINVAL;
+
+	pgoff = off_4k >> PGOFF_SHIFT;
+
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
+}
 
 struct mmap_arg_struct {
 	unsigned long addr;
@@ -112,6 +126,10 @@ out:
 	return error;
 }
 
+/*
+ * Perform the select(nd, in, out, ex, tv) and mmap() system
+ * calls.
+ */
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 
 struct sel_arg_struct {
@@ -251,48 +269,11 @@ out:
 	return error;
 }
 
-/*
- * Detect the old function calling standard
- */
-static inline unsigned long old_calling_standard (struct pt_regs  *regs)
-{
-	unsigned long instr, *pcv = (unsigned long *)(instruction_pointer(regs) - 8);
-	return (!get_user (instr, pcv) && instr == 0xe1a0300d);
-}
-
 /* Compatability functions - we used to pass 5 parameters as r0, r1, r2, *r3, *(r3+4)
  * We now use r0 - r4, and return an error if the old style calling standard is used.
  * Eventually these functions will disappear.
  */
-asmlinkage int
-sys_compat_llseek (unsigned int fd, unsigned long offset_high, unsigned long offset_low,
-		loff_t *result, unsigned int origin, struct pt_regs *regs)
-{
-	extern int sys_llseek (unsigned int, unsigned long, unsigned long, loff_t *, unsigned int);
-
-	if (old_calling_standard (regs)) {
-		printk (KERN_NOTICE "%s (%d): unsupported llseek call standard\n",
-			current->comm, current->pid);
-		return -EINVAL;
-	}
-	return sys_llseek (fd, offset_high, offset_low, result, origin);
-}
-
-asmlinkage int
-sys_compat_mount (char *devname, char *dirname, char *type, unsigned long flags, void *data,
-		  struct pt_regs *regs)
-{
-	extern int sys_mount (char *, char *, char *, unsigned long, void *);
-
-	if (old_calling_standard (regs)) {
-		printk (KERN_NOTICE "%s (%d): unsupported mount call standard\n",
-			current->comm, current->pid);
-		return -EINVAL;
-	}
-	return sys_mount (devname, dirname, type, flags, data);
-}
-
-asmlinkage int sys_uname (struct old_utsname * name)
+asmlinkage int sys_uname(struct old_utsname * name)
 {
 	static int warned = 0;
 	int err;
@@ -331,15 +312,15 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	down(&uts_sem);
 	
 	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	error -= __put_user(0,name->release+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	error -= __put_user(0,name->version+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	error -= __put_user(0,name->machine+__OLD_UTS_LEN);
+	error |= __put_user(0,name->sysname+__OLD_UTS_LEN);
+	error |= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	error |= __put_user(0,name->nodename+__OLD_UTS_LEN);
+	error |= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	error |= __put_user(0,name->release+__OLD_UTS_LEN);
+	error |= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	error |= __put_user(0,name->version+__OLD_UTS_LEN);
+	error |= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	error |= __put_user(0,name->machine+__OLD_UTS_LEN);
 	
 	up(&uts_sem);
 	
@@ -354,4 +335,3 @@ asmlinkage int sys_pause(void)
 	schedule();
 	return -ERESTARTNOHAND;
 }
-

@@ -740,7 +740,7 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 		printk (KERN_DEBUG "%s: FIFO is stuck\n", port->name);
 
 		/* Prevent further data transfer. */
-		frob_econtrol (port, 0xe0, ECR_TST);
+		frob_econtrol (port, 0xe0, ECR_TST << 5);
 
 		/* Adjust for the contents of the FIFO. */
 		for (written -= priv->fifo_depth; ; written++) {

@@ -509,8 +509,6 @@ struct pci_device_id {
 	unsigned long driver_data;		/* Data private to the driver */
 };
 
-#define PCI_ID(vendor,device) (((vendor)<<16) | (device))
-
 struct pci_driver {
 	struct list_head node;
 	char *name;
@@ -526,29 +524,7 @@ void pci_unregister_driver(struct pci_driver *);
 void pci_insert_device(struct pci_dev *, struct pci_bus *);
 void pci_remove_device(struct pci_dev *);
 struct pci_driver *pci_dev_driver(struct pci_dev *);
-
-/*
- * simple PCI probing for drivers (drivers/pci/helper.c)
- */
- 
-struct pci_simple_probe_entry;
-typedef int (*pci_simple_probe_callback) (struct pci_dev *dev, int match_num,
-				   	  const struct pci_simple_probe_entry *ent,
-					  void *drvr_data);
-
-struct pci_simple_probe_entry {
-	unsigned short vendor;	/* vendor id, PCI_ANY_ID, or 0 for last entry */
-	unsigned short device;	/* device id, PCI_ANY_ID, or 0 for last entry */
-	unsigned short subsys_vendor; /* subsystem vendor id, 0 for don't care */
-	unsigned short subsys_device; /* subsystem device id, 0 for don't care */
-	void *dev_data;		/* driver-private, entry-specific data */
-};
-
-int pci_simple_probe (const struct pci_simple_probe_entry *list,
-		      size_t match_limit, pci_simple_probe_callback cb,
-		      void *drvr_data);
-
-
+struct pci_device_id *pci_match_device(struct pci_device_id *ids, struct pci_dev *dev);
 
 /*
  *  If the system does not have PCI, clearly these return errors.  Define
@@ -584,10 +560,6 @@ unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from)
 
 extern inline void pci_set_master(struct pci_dev *dev) { }
 extern inline int pci_enable_device(struct pci_dev *dev) { return 0; }
-
-extern inline int pci_simple_probe (const struct pci_simple_probe_entry *list,
-	size_t match_limit, pci_simple_probe_callback cb, void *drvr_data)
-{ return 0; }
 
 #endif /* !CONFIG_PCI */
 

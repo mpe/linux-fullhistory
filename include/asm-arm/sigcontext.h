@@ -27,6 +27,7 @@ struct sigcontext {
 	unsigned long arm_lr;
 	unsigned long arm_pc;
 	unsigned long arm_cpsr;
+	unsigned long fault_address;
 };
 
 
