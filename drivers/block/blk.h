@@ -117,7 +117,7 @@ static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "scsitape"
 #define DEVICE_INTR do_st  
-#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_NR(device) (MINOR(device) & 0x7f)
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 

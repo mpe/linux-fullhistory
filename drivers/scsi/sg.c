@@ -274,7 +274,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   /* now issue command */
   SCpnt->request.dev=dev;
   SCpnt->sense_buffer[0]=0;
-  size=COMMAND_SIZE(get_fs_byte(buf));
+  opcode = get_fs_byte(buf);
   size=COMMAND_SIZE(opcode);
   if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
   SCpnt->cmd_len = size;

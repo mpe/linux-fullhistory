@@ -43,7 +43,9 @@
 #include "ipx.h"
 #endif
 
-#define SOCK_ARRAY_SIZE	64
+#include "igmp.h"
+
+#define SOCK_ARRAY_SIZE	256		/* Think big (also on some systems a byte is faster */
 
 
 /*
@@ -157,6 +159,12 @@ struct sock {
   int				ip_ttl;		/* TTL setting */
   int				ip_tos;		/* TOS */
   struct tcphdr			dummy_th;
+#ifdef CONFIG_IP_MULTICAST  
+  int				ip_mc_ttl;			/* Multicasting TTL */
+  int				ip_mc_loop;			/* Loopback (not implemented yet) */
+  char				ip_mc_name[MAX_ADDR_LEN];	/* Multicast device name */
+  struct ip_mc_socklist		*ip_mc_list;			/* Group array */
+#endif  
 
   /* This part is used for the timeout functions (timer.c). */
   int				timeout;	/* What are we waiting for? */
@@ -256,7 +264,12 @@ extern void			release_sock(struct sock *sk);
 extern struct sock		*get_sock(struct proto *, unsigned short,
 					  unsigned long, unsigned short,
 					  unsigned long);
-extern void			print_sk(struct sock *);
+extern struct sock		*get_sock_mcast(struct sock *, unsigned short,
+					  unsigned long, unsigned short,
+					  unsigned long);
+extern struct sock		*get_sock_raw(struct sock *, unsigned short,
+					  unsigned long, unsigned long);
+
 extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);

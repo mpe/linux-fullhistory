@@ -328,13 +328,14 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 	} /* (! controller_type) */
  
 	tpnt->this_id = (controller_type == SEAGATE) ? 7 : 6;
+	tpnt->name = (controller_type == SEAGATE) ? ST0X_ID_STR : FD_ID_STR;
 
 	if (base_address)
 		{
 		st0x_cr_sr =(void *) (((unsigned char *) base_address) + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
 		st0x_dr = (void *) (((unsigned char *) base_address ) + (controller_type == SEAGATE ? 0x1c00 : 0x1e00));
 #ifdef DEBUG
-		printk("ST0x detected. Base address = %x, cr = %x, dr = %x\n", base_address, st0x_cr_sr, st0x_dr);
+		printk("%s detected. Base address = %x, cr = %x, dr = %x\n", tpnt->name, base_address, st0x_cr_sr, st0x_dr);
 #endif
 /*
  *	At all times, we will use IRQ 5.  Should also check for IRQ3 if we 
@@ -382,8 +383,8 @@ const char *seagate_st0x_info(struct Scsi_Host * shpnt) {
 #ifdef LINKED
 " LINKED"
 #endif
-              "\n", hostno, (controller_type == SEAGATE) ? "seagate" : 
-              "FD TMC-8xx", irq, base_address);
+              "\n", hostno, (controller_type == SEAGATE) ? ST0X_ID_STR : 
+              FD_ID_STR, irq, base_address);
         return buffer;
 }
 

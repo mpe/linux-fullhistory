@@ -567,7 +567,7 @@ void ext2_read_inode (struct inode * inode)
 	else if (S_ISFIFO(inode->i_mode))
 		init_fifo(inode);
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
-		inode->i_flags |= MS_SYNC;
+		inode->i_flags |= MS_SYNCHRONOUS;
 	if (inode->u.ext2_i.i_flags & EXT2_APPEND_FL)
 		inode->i_flags |= S_APPEND;
 	if (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)

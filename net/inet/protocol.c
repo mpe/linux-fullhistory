@@ -31,6 +31,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/timer.h>
 #include "ip.h"
 #include "protocol.h"
 #include "tcp.h"
@@ -38,6 +39,7 @@
 #include "sock.h"
 #include "icmp.h"
 #include "udp.h"
+#include "igmp.h"
 
 
 static struct inet_protocol tcp_protocol = {
@@ -75,8 +77,23 @@ static struct inet_protocol icmp_protocol = {
   "ICMP"		/* name			*/
 };
 
-
+#ifndef CONFIG_IP_MULTICAST
 struct inet_protocol *inet_protocol_base = &icmp_protocol;
+#else
+static struct inet_protocol igmp_protocol = {
+  igmp_rcv,		/* IGMP handler		*/
+  NULL,			/* IGMP never fragments anyway */
+  NULL,			/* IGMP error control	*/
+  &icmp_protocol,	/* next			*/
+  IPPROTO_IGMP,		/* protocol ID		*/
+  0,			/* copy			*/
+  NULL,			/* data			*/
+  "IGMP"		/* name			*/
+};
+
+struct inet_protocol *inet_protocol_base = &igmp_protocol;
+#endif
+
 struct inet_protocol *inet_protos[MAX_INET_PROTOS] = {
   NULL
 };

@@ -129,6 +129,8 @@ extern volatile int seagate_st0x_timeout;
 #define SEAGATE 1	/* these determine the type of the controller */
 #define FD	2
 
+#define ST0X_ID_STR	"Seagate ST-01/ST-02"
+#define FD_ID_STR	"TMC-8XX/TMC-950"
 
 #endif
 

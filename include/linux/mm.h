@@ -33,8 +33,14 @@ struct vm_area_struct {
 	unsigned long vm_end;
 	unsigned short vm_page_prot;
 	unsigned short vm_flags;
-	struct vm_area_struct * vm_next;	/* linked list */
-	struct vm_area_struct * vm_share;	/* linked list */
+/* linked list of VM areas per task, sorted by address */
+	struct vm_area_struct * vm_next;
+/* for areas with inode, the circular list inode->i_mmap */
+/* for shm areas, the linked list of attaches */
+/* otherwise unused */
+	struct vm_area_struct * vm_next_share;
+	struct vm_area_struct * vm_prev_share;
+/* more */
 	struct vm_operations_struct * vm_ops;
 	unsigned long vm_offset;
 	struct inode * vm_inode;
@@ -64,21 +70,22 @@ struct vm_area_struct {
 #define VM_STACK_FLAGS	0x0177
 
 /*
- * These are the virtual MM functions - opening of an area, closing it (needed to
- * keep files on disk up-to-date etc), pointer to the functions called when a
- * no-page or a wp-page exception occurs, and the function which decides on sharing
- * of pages between different processes.
+ * These are the virtual MM functions - opening of an area, closing and
+ * unmapping it (needed to keep files on disk up-to-date etc), pointer
+ * to the functions called when a no-page or a wp-page exception occurs. 
  */
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
 	void (*close)(struct vm_area_struct * area);
+	void (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
+	void (*protect)(struct vm_area_struct *area, unsigned long, size_t, unsigned int newprot);
+	void (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
+	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
 	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page, int error_code);
 	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
 		unsigned long page);
-	int (*share)(struct vm_area_struct * from, struct vm_area_struct * to, unsigned long address);
-	int (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
-	void (*swapout)(struct vm_area_struct *,  unsigned long *);
+	void (*swapout)(struct vm_area_struct *,  unsigned long, unsigned long *);
 	unsigned long (*swapin)(struct vm_area_struct *,  unsigned long);
 };
 
@@ -136,6 +143,7 @@ extern unsigned char * free_area_map[NR_MEM_LISTS];
  */
 #define __get_free_page(priority) __get_free_pages((priority),0)
 extern unsigned long __get_free_pages(int priority, unsigned long gfporder);
+extern unsigned long __get_dma_pages(int priority, unsigned long gfporder);
 extern inline unsigned long get_free_page(int priority)
 {
 	unsigned long page;
@@ -197,6 +205,7 @@ extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
 extern void merge_segments(struct vm_area_struct *);
 extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
+extern void remove_shared_vm_struct(struct vm_area_struct *);
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long get_unmapped_area(unsigned long);
 

@@ -247,7 +247,7 @@ void ext2_free_inode (struct inode * inode)
 		set_inode_dtime (inode, gdp);
 	}
 	mark_buffer_dirty(bh, 1);
-	if (sb->s_flags & MS_SYNC) {
+	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
@@ -414,7 +414,7 @@ repeat:
 			goto repeat;
 		}
 		mark_buffer_dirty(bh, 1);
-		if (sb->s_flags & MS_SYNC) {
+		if (sb->s_flags & MS_SYNCHRONOUS) {
 			ll_rw_block (WRITE, 1, &bh);
 			wait_on_buffer (bh);
 		}
@@ -476,7 +476,7 @@ repeat:
 	inode->u.ext2_i.i_block_group = i;
 	inode->i_op = NULL;
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
-		inode->i_flags |= MS_SYNC;
+		inode->i_flags |= MS_SYNCHRONOUS;
 	insert_inode_hash(inode);
 	inc_inode_version (inode, gdp, mode);
 

@@ -24,7 +24,7 @@
 #define MAX_FIN_SIZE	40 + MAX_HEADER
 #define MAX_ACK_SIZE	40 + MAX_HEADER
 #define MAX_RESET_SIZE	40 + MAX_HEADER
-#define MAX_WINDOW	8192
+#define MAX_WINDOW	16384
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
 #define MIN_WRITE_SPACE	2048
@@ -77,19 +77,20 @@
  * The next routines deal with comparing 32 bit unsigned ints
  * and worry about wraparound (automatic with unsigned arithmetic).
  */
-static inline int before(unsigned long seq1, unsigned long seq2)
+
+extern __inline int before(unsigned long seq1, unsigned long seq2)
 {
         return (long)(seq1-seq2) < 0;
 }
 
-static inline int after(unsigned long seq1, unsigned long seq2)
+extern __inline int after(unsigned long seq1, unsigned long seq2)
 {
 	return (long)(seq1-seq2) > 0;
 }
 
 
 /* is s2<=s1<=s3 ? */
-static inline int between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
+extern __inline int between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
 {
 	return (after(seq1+1, seq2) && before(seq1, seq3+1));
 }
@@ -101,7 +102,7 @@ static inline int between(unsigned long seq1, unsigned long seq2, unsigned long 
  * convinced that this is the solution for the 'getpeername(2)'
  * problem. Thanks to Stephen A. Wood <saw@cebaf.gov>  -FvK
  */
-static inline const int
+extern __inline const int
 tcp_connected(const int state)
 {
   return(state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||

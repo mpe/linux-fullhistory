@@ -15,22 +15,14 @@
 int buslogic_detect(Scsi_Host_Template *);
 int buslogic_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int buslogic_abort(Scsi_Cmnd *);
-const char *buslogic_info(void);
+const char *buslogic_info(struct Scsi_Host *);
 int buslogic_reset(Scsi_Cmnd *);
 int buslogic_biosparam(Disk *, int, int *);
 
-#define BUSLOGIC_CMDLUN 1	/* Do not set this too high.  It sucks
-				   up lots of memory on ISA machines
-				   with > 16MB because of the huge number of
-				   bounce buffers that need to be allocated.
-				   For boards that use non-ISA bus, we can
-				   bump this in the board detect routine.  
-							10/8/94 ERY */
-
-#define BUSLOGIC { NULL,			\
+#define BUSLOGIC { NULL, NULL,			\
 		   "BusLogic",			\
 		   buslogic_detect,		\
-		   NULL,			\
+		   0,	/* no release func */	\
 		   buslogic_info,		\
 		   0,	/* no command func */	\
 		   buslogic_queuecommand,	\
@@ -41,7 +33,7 @@ int buslogic_biosparam(Disk *, int, int *);
 		   0,	/* set by driver */	\
 		   0,	/* set by driver */	\
 		   0,	/* set by driver */	\
-		   BUSLOGIC_CMDLUN,		\
+		   0,	/* set by driver */	\
 		   0,				\
 		   0,	/* set by driver */	\
 		   ENABLE_CLUSTERING		\

@@ -74,13 +74,18 @@ static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
 	}
 	return page;
 }
+
 struct vm_operations_struct nfs_file_mmap = {
 	NULL,			/* open */
 	NULL,			/* close */
+	NULL,			/* unmap */
+	NULL,			/* protect */
+	NULL,			/* sync */
+	NULL,			/* advise */
 	nfs_file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
-	NULL,			/* share */
-	NULL,			/* unmap */
+	NULL,			/* swapout */
+	NULL,			/* swapin */
 };
 
 

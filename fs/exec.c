@@ -326,7 +326,6 @@ unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 		mpnt->vm_end = TASK_SIZE;
 		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
 		mpnt->vm_flags = VM_STACK_FLAGS;
-		mpnt->vm_share = NULL;
 		mpnt->vm_ops = NULL;
 		mpnt->vm_offset = 0;
 		mpnt->vm_inode = NULL;
@@ -545,6 +544,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 		mpnt1 = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close)
 			mpnt->vm_ops->close(mpnt);
+		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
 		kfree(mpnt);

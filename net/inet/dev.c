@@ -22,6 +22,9 @@
  *					keep the queue safe.
  *		Alan Cox	:	Fixed double lock.
  *		Alan Cox	:	Fixed promisc NULL pointer trap
+ *		????????	:	Support the full private ioctl range
+ *		Alan Cox	:	Moved ioctl permission check into drivers
+ *		Tim Kordas	:	SIOCADDMULTI/SIOCDELMULTI
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -266,6 +269,12 @@ int dev_open(struct device *dev)
 	if (ret == 0) 
 		dev->flags |= (IFF_UP | IFF_RUNNING);
 	
+	/*
+	 *	Initialise multicasting status 
+	 */
+	 
+	dev_mc_upload(dev);
+
 	return(ret);
 }
 
@@ -304,6 +313,10 @@ int dev_close(struct device *dev)
 #ifdef CONFIG_IPX
 		ipxrtr_device_down(dev);
 #endif	
+		/*
+		 *	Flush the multicast chain
+		 */
+		dev_mc_discard(dev);
 		/*
 		 *	Blank the IP addresses
 		 */
@@ -360,9 +373,9 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		dev=dev->slave;
 	restore_flags(flags);
 #endif		
- 
+#ifdef CONFIG_SKB_CHECK 
 	IS_SKB(skb);
-    
+#endif    
 	skb->dev = dev;
 
 	/*
@@ -495,8 +508,9 @@ void netif_rx(struct sk_buff *skb)
 	/*
 	 *	Add it to the "backlog" queue. 
 	 */
-
+#ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
+#endif	
 	skb_queue_tail(&backlog,skb);
 	backlog_size++;
   
@@ -1070,15 +1084,21 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				dev->flags = ifr.ifr_flags & (
 					IFF_UP | IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
-					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER);
+					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER
+					| IFF_MULTICAST);
 #ifdef CONFIG_SLAVE_BALANCING				
 				if(!(dev->flags&IFF_MASTER) && dev->slave)
 				{
 					dev->slave->flags&=~IFF_SLAVE;
 					dev->slave=NULL;
 				}
-#endif				
+#endif
+				/*
+				 *	Load in the correct multicast list now the flags have changed.
+				 */				
 
+				dev_mc_upload(dev);
+#if 0
 				if( dev->set_multicast_list!=NULL)
 				{
 				
@@ -1096,7 +1116,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 					if ( (dev->flags & IFF_PROMISC) && ((old_flags & IFF_PROMISC) == 0))
 			  			dev->set_multicast_list(dev,-1,NULL);
 			  	}
-			  		
+#endif			  		
 			  	/*
 			  	 *	Have we downed the interface
 			  	 */
@@ -1340,6 +1360,22 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		}
 		break;
 #endif			
+
+		case SIOCADDMULTI:
+			if(dev->set_multicast_list==NULL)
+				return -EINVAL;
+			if(ifr.ifr_hwaddr.sa_family!=AF_UNSPEC)
+				return -EINVAL;
+			dev_mc_add(dev,ifr.ifr_hwaddr.sa_data, dev->addr_len, 1);
+			return 0;
+
+		case SIOCDELMULTI:
+			if(dev->set_multicast_list==NULL)
+				return -EINVAL;
+			if(ifr.ifr_hwaddr.sa_family!=AF_UNSPEC)
+				return -EINVAL;
+			dev_mc_delete(dev,ifr.ifr_hwaddr.sa_data,dev->addr_len, 1);
+			return 0;
 		/*
 		 *	Unknown or private ioctl
 		 */
@@ -1420,8 +1456,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		default:
 			if((cmd >= SIOCDEVPRIVATE) &&
 			   (cmd <= (SIOCDEVPRIVATE + 15))) {
-				if (!suser())
-					return -EPERM;
 				return dev_ifsioc(arg, cmd);
 			}
 			return -EINVAL;

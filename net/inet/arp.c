@@ -787,6 +787,10 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 {
 	struct arp_table *entry;
 	unsigned long hash;
+#ifdef CONFIG_IP_MULTICAST
+	unsigned long taddr;
+#endif	
+
 	switch (ip_chk_addr(paddr))
 	{
 		case IS_MYADDR:
@@ -794,6 +798,26 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 			memcpy(haddr, dev->dev_addr, dev->addr_len);
 			skb->arp = 1;
 			return 0;
+#ifdef CONFIG_IP_MULTICAST
+		case IS_MULTICAST:
+			if(dev->type==ARPHRD_ETHER || dev->type==ARPHRD_IEEE802)
+			{
+				haddr[0]=0x01;
+				haddr[1]=0x00;
+				haddr[2]=0x5e;
+				taddr=ntohl(paddr);
+				haddr[5]=taddr&0xff;
+				taddr=taddr>>8;
+				haddr[4]=taddr&0xff;
+				taddr=taddr>>8;
+				haddr[3]=taddr&0x7f;
+				return 0;
+			}
+		/*
+		 *	If a device does not support multicast broadcast the stuff (eg AX.25 for now)
+		 */
+#endif
+		
 		case IS_BROADCAST:
 			memcpy(haddr, dev->broadcast, dev->addr_len);
 			skb->arp = 1;

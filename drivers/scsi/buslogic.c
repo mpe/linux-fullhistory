@@ -24,7 +24,6 @@
  *	5. Allow multiple boards to share an IRQ if the bus allows (EISA, MCA,
  *	   and PCI).
  *	6. Avoid using the 445S workaround for board revs >= D.
- *	7. Get cmd_per_lun put in the Scsi_Host structure.
  */
 
 /*
@@ -130,7 +129,7 @@
    bump up this number. */
 #define BUSLOGIC_MAILBOXES 16
 
-#define BUSLOGIC_NONISA_CMDLUN 4	/* ??? Arbitrary (> 1) */
+#define BUSLOGIC_CMDLUN 4		/* ??? Arbitrary */
 
 /* BusLogic boards can be configured for quite a number of port addresses (six
    to be exact), but I generally do not want the driver poking around at
@@ -390,9 +389,10 @@ static unsigned int makecode(unsigned int haerr, unsigned int scsierr)
     return (hosterr << 16) | scsierr;
 }
 
-const char *buslogic_info(void)
+/* ??? this should really be "const struct Scsi_Host *" */
+const char *buslogic_info(struct Scsi_Host *shpnt)
 {
-    return "BusLogic SCSI driver version " BUSLOGIC_VERSION;
+    return "BusLogic SCSI driver " BUSLOGIC_VERSION;
 }
 
 /* A "high" level interrupt handler. */
@@ -613,7 +613,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 			target, *cmd, i, bufflen);
 	buslogic_stat(scpnt->host->io_port);
 	buslogic_printk("buslogic_queuecommand: dumping scsi cmd:");
-	for (i = 0; i < (COMMAND_SIZE(*cmd)); i++)
+	for (i = 0; i < scpnt->cmd_len; i++)
 	    printk(" %02X", cmd[i]);
 	printk("\n");
 	if (*cmd == WRITE_10 || *cmd == WRITE_6)
@@ -665,7 +665,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 
     memset(&ccb[mbo], 0, sizeof (struct ccb));
 
-    ccb[mbo].cdblen = COMMAND_SIZE(*cmd);	/* SCSI Command Descriptor
+    ccb[mbo].cdblen = scpnt->cmd_len;		/* SCSI Command Descriptor
 						   Block Length */
 
     direction = 0;
@@ -1229,13 +1229,8 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 #endif
 	    /* Have to keep cmd_per_lun at 1 for ISA machines otherwise lots
 	       of memory gets sucked up for bounce buffers.  */
-	    /* ??? Unfortunately, cmd_per_lun is only in the
-	       Scsi_Host_Template structure, not the Scsi_Host structure.
-	       Therefore, this could cause high memory consumption if a system
-	       has multiple BusLogic adapters which are a mix of ISA and
-	       non-ISA. */
-	    if (!shpnt->unchecked_isa_dma)
-		shpnt->hostt->cmd_per_lun = BUSLOGIC_NONISA_CMDLUN;
+	    shpnt->cmd_per_lun
+		= (shpnt->unchecked_isa_dma ? 1 : BUSLOGIC_CMDLUN);
 	    shpnt->sg_tablesize = max_sg;
 	    if (shpnt->sg_tablesize > BUSLOGIC_MAX_SG)
 		shpnt->sg_tablesize = BUSLOGIC_MAX_SG;

@@ -11,6 +11,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Richard Underwood
  *
  * Fixes:
  *		Alan Cox	:	Commented a couple of minor bits of surplus code
@@ -54,6 +55,9 @@
  *		Alan Cox	: 	IP options adjust sk->priority.
  *		Pedro Roque	:	Fix mtu/length error in ip_forward.
  *		Alan Cox	:	Avoid ip_chk_addr when possible.
+ *	Richard Underwood	:	IP multicasting.
+ *		Alan Cox	:	Cleaned up multicast handlers.
+ *		Alan Cox	:	RAW sockets demultiplex in the BSD style.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -64,6 +68,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
+
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/types.h>
@@ -86,6 +91,9 @@
 #include "sock.h"
 #include "arp.h"
 #include "icmp.h"
+#include "raw.h"
+#include "igmp.h"
+#include <linux/ip_fw.h>
 
 #define CONFIG_IP_DEFRAG
 
@@ -99,7 +107,17 @@ extern void sort_send(struct sock *sk);
  *	SNMP management statistics
  */
 
+#ifdef CONFIG_IP_FORWARDING
 struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
+#else
+struct ip_mib ip_statistics={1,64,};	/* Forwarding=No, Default TTL=64 */
+#endif
+
+#ifdef CONFIG_IP_MULTICAST
+
+struct ip_mc_list *ip_mc_head=NULL;
+
+#endif
 
 /*
  *	Handle the issuing of an ioctl() request
@@ -1259,6 +1277,16 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
 
+	/* 
+	 *	See if we are allowed to forward this.
+	 */
+
+#ifdef CONFIG_IP_FIREWALL
+	if(!ip_fw_chk(skb->h.iph, ip_fw_fwd_chain))
+	{
+		return;
+	}
+#endif
 	/*
 	 *	According to the RFC, we must first decrease the TTL field. If
 	 *	that reaches zero, we must reply an ICMP control message telling
@@ -1403,6 +1431,14 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 		}
 		else
 		{
+#ifdef CONFIG_IP_ACCT		
+			/*
+			 *	Count mapping we shortcut
+			 */
+			 
+			ip_acct_cnt(iph,ip_acct_chain,1);
+#endif			
+			
 			/*
 			 *	Map service types to priority. We lie about
 			 *	throughput being low priority, but its a good
@@ -1428,6 +1464,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct iphdr *iph = skb->h.iph;
+	struct sock *raw_sk=NULL;
 	unsigned char hash;
 	unsigned char flag = 0;
 	unsigned char opts_p = 0;	/* Set iff the packet has options. */
@@ -1436,7 +1473,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				take up stack space. */
 	int brd=IS_MYADDR;
 	int is_frag=0;
-
 
 	ip_statistics.IpInReceives++;
 
@@ -1461,7 +1497,21 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
+	
+	/*
+	 *	See if the firewall wants to dispose of the packet. 
+	 */
 
+#ifdef	CONFIG_IP_FIREWALL
+	
+	if(!LOOPBACK(iph->daddr) && !ip_fw_chk(iph,ip_fw_blk_chain))
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return 0;	
+	}
+
+#endif
+	
 	/*
 	 *	Our transport medium may have padded the buffer out. Now we know it
 	 *	is IP we can trim to the true length of the frame.
@@ -1543,6 +1593,14 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 	/*
+	 *	Account for the packet
+	 */
+	 
+#ifdef CONFIG_IP_ACCT
+	ip_acct_cnt(iph,ip_acct_chain,1);
+#endif	
+
+	/*
 	 * Reassemble IP fragments.
 	 */
 
@@ -1554,6 +1612,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			return 0;
 		iph=skb->h.iph;
 	}
+	
+		 
 
 	/*
 	 *	Point into the IP datagram, just past the header.
@@ -1561,7 +1621,39 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	skb->ip_hdr = iph;
 	skb->h.raw += iph->ihl*4;
-
+	
+	/*
+	 *	Deliver to raw sockets. This is fun as to avoid copies we want to make no surplus copies.
+	 */
+	 
+	hash = iph->protocol & (SOCK_ARRAY_SIZE-1);
+	
+	/* If there maybe a raw socket we must check - if not we don't care less */
+	if((raw_sk=raw_prot.sock_array[hash])!=NULL)
+	{
+		struct sock *sknext=NULL;
+		struct sk_buff *skb1;
+		raw_sk=get_sock_raw(raw_sk, hash,  iph->saddr, iph->daddr);
+		if(raw_sk)	/* Any raw sockets */
+		{
+			do
+			{
+				/* Find the next */
+				sknext=get_sock_raw(raw_sk->next, hash, iph->saddr, iph->daddr);
+				if(sknext)
+					skb1=skb_clone(skb, GFP_ATOMIC);
+				else
+					break;	/* One pending raw socket left */
+				if(skb1)
+					raw_rcv(raw_sk, skb1, dev, iph->saddr,iph->daddr);
+				raw_sk=sknext;
+			}
+			while(raw_sk!=NULL);
+			/* Here either raw_sk is the last raw socket, or NULL if none */
+			/* We deliver to the last raw socket AFTER the protocol checks as it avoids a surplus copy */
+		}
+	}
+	
 	/*
 	 *	skb->h.raw now points at the protocol beyond the IP header.
 	 */
@@ -1576,14 +1668,10 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
        /*
 	* 	See if we need to make a copy of it.  This will
 	* 	only be set if more than one protocol wants it.
-	* 	and then not for the last one.
-	*
-	* 	This is an artifact of poor upper protocol design.
-	*	Because the upper protocols damage the actual packet
-	*	we must do copying. In actual fact it's even worse
-	*	than this as TCP may hold on to the buffer.
+	* 	and then not for the last one. If there is a pending
+	*	raw delivery wait for that
 	*/
-		if (ipprot->copy)
+		if (ipprot->copy || raw_sk)
 		{
 			skb2 = skb_clone(skb, GFP_ATOMIC);
 			if(skb2==NULL)
@@ -1613,7 +1701,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 * ICMP reply messages get queued up for transmission...)
 	 */
 
-	if (!flag)
+	if(raw_sk!=NULL)	/* Shift to last raw user */
+		raw_rcv(raw_sk, skb, dev, iph->saddr, iph->daddr);
+	else if (!flag)		/* Free and report errors */
 	{
 		if (brd != IS_BROADCAST && brd!=IS_MULTICAST)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
@@ -1768,6 +1858,9 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	If the indicated interface is up and running, send the packet.
 	 */
 	ip_statistics.IpOutRequests++;
+#ifdef CONFIG_IP_ACCT
+	ip_acct_cnt(iph,ip_acct_chain,1);
+#endif	
 
 	if (dev->flags & IFF_UP)
 	{
@@ -1916,6 +2009,50 @@ void ip_retransmit(struct sock *sk, int all)
 	reset_timer(sk, TIME_WRITE, sk->rto);
 }
 
+#ifdef CONFIG_IP_MULTICAST
+
+/*
+ *	Write an multicast group list table for the IGMP daemon to
+ *	read.
+ */
+ 
+int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	off_t pos=0, begin=0;
+	struct ip_mc_list *im;
+	unsigned long flags;
+	int len=0;
+	
+	
+	len=sprintf(buffer,"Device    : Multicast\n");  
+	save_flags(flags);
+	cli();
+	
+	im=ip_mc_head;
+	
+	while(im!=NULL)
+	{
+		len+=sprintf(buffer+len,"%-10s: %08lX\n", im->interface->name, im->multiaddr);
+		pos=begin+len;
+		if(pos<offset)
+		{
+			len=0;
+			begin=pos;
+		}
+		if(pos>offset+length)
+			break;
+		im=im->next;
+	}
+	restore_flags(flags);
+	*start=buffer+(offset-begin);
+	len-=(offset-begin);
+	if(len>length)
+		len=length;	
+	return len;
+}
+
+
+#endif	
 /*
  *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
  *	an IP socket.
@@ -1928,7 +2065,9 @@ void ip_retransmit(struct sock *sk, int all)
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val,err;
-
+#if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
+	struct ip_fw tmp_fw;
+#endif	
 	if (optval == NULL)
 		return(-EINVAL);
 
@@ -1957,6 +2096,227 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -EINVAL;
 			sk->ip_ttl=val;
 			return 0;
+#ifdef CONFIG_IP_MULTICAST
+		case IP_MULTICAST_TTL: 
+		{
+			unsigned char ucval;
+
+			ucval=get_fs_byte((unsigned char *)optval);
+			printk("MC TTL %d\n", ucval);
+			if(ucval<1||ucval>255)
+                                return -EINVAL;
+			sk->ip_mc_ttl=(int)ucval;
+	                return 0;
+		}
+
+		case IP_MULTICAST_IF: 
+		{
+			/* Not fully tested */
+			struct in_addr addr;
+			struct device *dev=NULL;
+			
+			/*
+			 *	Check the arguments are allowable
+			 */
+
+			err=verify_area(VERIFY_READ, optval, sizeof(addr));
+			if(err)
+				return err;
+				
+			memcpy_fromfs(&addr,optval,sizeof(addr));
+			
+			printk("MC bind %s\n", in_ntoa(addr.s_addr));
+			
+			/*
+			 *	What address has been requested
+			 */
+			
+			if(addr.s_addr==INADDR_ANY)	/* Default */
+			{
+				sk->ip_mc_name[0]=0;
+				return 0;
+			}
+			
+			/*
+			 *	Find the device
+			 */
+			 
+			for(dev = dev_base; dev; dev = dev->next)
+			{
+				if((dev->flags&IFF_UP)&&(dev->flags&IFF_MULTICAST)&&
+					(dev->pa_addr==addr.s_addr))
+					break;
+			}
+			
+			/*
+			 *	Did we find one
+			 */
+			 
+			if(dev) 
+			{
+				strcpy(sk->ip_mc_name,dev->name);
+				return 0;
+			}
+			return -EADDRNOTAVAIL;
+		}
+		
+		case IP_ADD_MEMBERSHIP: 
+		{
+		
+/*
+ *	FIXME: Add/Del membership should have a semaphore protecting them from re-entry
+ */
+			struct ip_mreq mreq;
+			static struct options optmem;
+			unsigned long route_src;
+			struct rtable *rt;
+			struct ip_mc_list *l=NULL;
+			struct device *dev=NULL;
+			int ct=0;
+			
+			/*
+			 *	Check the arguments.
+			 */
+
+			err=verify_area(VERIFY_READ, optval, sizeof(mreq));
+			if(err)
+				return err;
+
+			memcpy_fromfs(&mreq,optval,sizeof(mreq));
+
+			/* 
+			 *	Get device for use later
+			 */
+
+			if(mreq.imr_interface.s_addr==INADDR_ANY) 
+			{
+				/*
+				 *	Not set so scan.
+				 */
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,&optmem, &route_src))!=NULL)
+				{
+					dev=rt->rt_dev;
+					rt->rt_use--;
+				}
+			}
+			else
+			{
+				/*
+				 *	Find a suitable device.
+				 */
+				for(dev = dev_base; dev; dev = dev->next)
+				{
+					if((dev->flags&IFF_UP)&&(dev->flags&IFF_MULTICAST)&&
+						(dev->pa_addr==mreq.imr_interface.s_addr))
+						break;
+				}
+			}
+			
+			/*
+			 *	No device, no cookies.
+			 */
+			 
+			if(!dev)
+				return -ENODEV;
+				
+			/*
+			 *	Join group.
+			 */
+			 
+			return ip_mc_join_group(sk,dev,mreq.imr_multiaddr.s_addr);
+		}
+		
+		case IP_DROP_MEMBERSHIP: 
+		{
+			struct ip_mreq mreq;
+			struct rtable *rt;
+			static struct options optmem;
+                        unsigned long route_src;
+			struct device *dev=NULL;
+
+			/*
+			 *	Check the arguments
+			 */
+			 
+			err=verify_area(VERIFY_READ, optval, sizeof(mreq));
+			if(err)
+				return err;
+
+			memcpy_fromfs(&mreq,optval,sizeof(mreq));
+
+			/*
+			 *	Get device for use later 
+			 */
+ 
+			if(mreq.imr_interface.s_addr==INADDR_ANY) 
+			{
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,&optmem, &route_src))!=NULL)
+			        {
+					dev=rt->rt_dev;
+					rt->rt_use--;
+				}
+			}
+			else 
+			{
+				for(dev = dev_base; dev; dev = dev->next)
+				{
+					if((dev->flags&IFF_UP)&& (dev->flags&IFF_MULTICAST)&&
+							(dev->pa_addr==mreq.imr_interface.s_addr))
+						break;
+				}
+			}
+			
+			/*
+			 *	Did we find a suitable device.
+			 */
+			 
+			if(!dev)
+				return -ENODEV;
+				
+			/*
+			 *	Leave group
+			 */
+			 
+			return ip_mc_leave_group(sk,dev,mreq.imr_multiaddr.s_addr);
+		}
+#endif			
+#ifdef CONFIG_IP_FIREWALL
+		case IP_FW_ADD_BLK:
+		case IP_FW_DEL_BLK:
+		case IP_FW_ADD_FWD:
+		case IP_FW_DEL_FWD:
+		case IP_FW_CHK_BLK:
+		case IP_FW_CHK_FWD:
+		case IP_FW_FLUSH:
+		case IP_FW_POLICY:
+			if(!suser())
+				return -EPERM;
+			if(optlen>sizeof(tmp_fw) || optlen<1)
+				return -EINVAL;
+			err=verify_area(VERIFY_READ,optval,optlen);
+			if(err)
+				return err;
+			memcpy_fromfs(&tmp_fw,optval,optlen);
+			err=ip_fw_ctl(optname, &tmp_fw,optlen);
+			return -err;	/* -0 is 0 after all */
+			
+#endif
+#ifdef CONFIG_IP_ACCT
+		case IP_ACCT_DEL:
+		case IP_ACCT_ADD:
+		case IP_ACCT_FLUSH:
+		case IP_ACCT_ZERO:
+			if(!suser())
+				return -EPERM;
+			if(optlen>sizeof(tmp_fw) || optlen<1)
+				return -EINVAL;
+			err=verify_area(VERIFY_READ,optval,optlen);
+			if(err)
+				return err;
+			memcpy_fromfs(&tmp_fw, optval,optlen);
+			err=ip_acct_ctl(optname, &tmp_fw,optlen);
+			return -err;	/* -0 is 0 after all */
+#endif
 		/* IP_OPTIONS and friends go here eventually */
 		default:
 			return(-ENOPROTOOPT);
@@ -1971,7 +2331,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen)
 {
 	int val,err;
-
+#ifdef CONFIG_IP_MULTICAST
+	int len;
+#endif
+	
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
 
@@ -1983,6 +2346,22 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		case IP_TTL:
 			val=sk->ip_ttl;
 			break;
+#ifdef CONFIG_IP_MULTICAST			
+		case IP_MULTICAST_TTL:
+			val=sk->ip_mc_ttl;
+			break;
+		case IP_MULTICAST_IF:
+			err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
+			if(err)
+  				return err;
+  			len=strlen(sk->ip_mc_name);
+  			err=verify_area(VERIFY_WRITE, optval, len);
+		  	if(err)
+  				return err;
+  			put_fs_long(len,(unsigned long *) optlen);
+			memcpy_tofs((void *)optval,sk->ip_mc_name, len);
+			return 0;
+#endif
 		default:
 			return(-ENOPROTOOPT);
 	}

@@ -20,6 +20,11 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
+
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
 static int check_bread = 0;
@@ -35,6 +40,9 @@ void isofs_put_super(struct super_block *sb)
 #endif
 	sb->s_dev = 0;
 	unlock_super(sb);
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 	return;
 }
 
@@ -301,7 +309,12 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 
-	if(!check_disk_change(s->s_dev)) return s;
+	if(!check_disk_change(s->s_dev)) {
+#ifdef MODULE
+	  MOD_INC_USE_COUNT;
+#endif
+	  return s;
+	}
  out: /* Kick out for various error conditions */
 	brelse(bh);
 	s->s_dev = 0;
@@ -705,3 +718,30 @@ void leak_check_brelse(struct buffer_head * bh){
 }
 
 #endif
+
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type iso9660_fs_type = {
+	isofs_read_super, "iso9660", 1, NULL
+};
+
+int init_module(void)
+{
+	register_filesystem(&iso9660_fs_type);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("ne: device busy, remove delayed\n");
+	else
+	{
+		unregister_filesystem(&iso9660_fs_type);
+	}
+}
+
+#endif
+

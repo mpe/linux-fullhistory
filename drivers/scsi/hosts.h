@@ -228,7 +228,7 @@ typedef struct  SHT
 	be two Scsi_Host entries, but only 1 Scsi_Host_Template entries.
 */
 
-#define SCSI_HOST_BLOCK 0x800
+#define SCSI_HOST_BLOCK 0x80
 
 struct Scsi_Host
 	{
@@ -259,6 +259,7 @@ struct Scsi_Host
 		
 		int this_id;
 		int can_queue;
+		short cmd_per_lun;
 		short unsigned int sg_tablesize;
 		unsigned unchecked_isa_dma:1;
 		/*

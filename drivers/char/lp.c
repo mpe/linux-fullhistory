@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/lp.h>
 #include <linux/malloc.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>

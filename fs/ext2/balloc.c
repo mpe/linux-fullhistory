@@ -232,7 +232,7 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 	mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 
 	mark_buffer_dirty(bh, 1);
-	if (sb->s_flags & MS_SYNC) {
+	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
@@ -441,7 +441,7 @@ got_block:
 	j = tmp;
 
 	mark_buffer_dirty(bh, 1);
-	if (sb->s_flags & MS_SYNC) {
+	if (sb->s_flags & MS_SYNCHRONOUS) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}

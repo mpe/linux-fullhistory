@@ -383,7 +383,9 @@ unsigned long sock_wspace(struct sock *sk)
 
 void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 {
+#ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
+#endif
 	kfree_skbmem(skb, size);
 	if (sk) 
 	{
@@ -398,7 +400,9 @@ void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 
 void sock_rfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 {
+#ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
+#endif	
 	kfree_skbmem(skb, size);
 	if (sk) 
 	{

@@ -652,6 +652,11 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->dummy_th.dest = 0;
 	sk->ip_tos=0;
 	sk->ip_ttl=64;
+#ifdef CONFIG_IP_MULTICAST
+	sk->ip_mc_loop=0;
+	sk->ip_mc_ttl=1;
+	*sk->ip_mc_name=0;
+#endif
   	
 	sk->state_change = def_callback1;
 	sk->data_ready = def_callback2;
@@ -1227,6 +1232,12 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFFLAGS:
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
+
+/* begin multicast support change */
+		case SIOCADDMULTI:
+		case SIOCDELMULTI:
+/* end multicast support change */
+		
 		case SIOCGIFDSTADDR:
 		case SIOCSIFDSTADDR:
 		case SIOCGIFBRDADDR:
@@ -1331,6 +1342,79 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
   	return result;
 }
 
+/*
+ *	Deliver a datagram to raw sockets.
+ */
+ 
+struct sock *get_sock_raw(struct sock *sk, 
+				unsigned short num,
+				unsigned long raddr,
+				unsigned long laddr)
+{
+	struct sock *s;
+
+	s=sk;
+
+	for(; s != NULL; s = s->next) 
+	{
+		if (s->num != num) 
+			continue;
+		if(s->dead && (s->state == TCP_CLOSE))
+			continue;
+		if(s->daddr && s->daddr!=raddr)
+			continue;
+ 		if(s->saddr  && s->saddr!=laddr)
+			continue;
+		return(s);
+  	}
+  	return(NULL);
+}
+
+#ifdef CONFIG_IP_MULTICAST
+/*
+ *	Deliver a datagram to broadcast/multicast sockets.
+ */
+ 
+struct sock *get_sock_mcast(struct sock *sk, 
+				unsigned short num,
+				unsigned long raddr,
+				unsigned short rnum, unsigned long laddr)
+{
+	struct sock *s;
+	unsigned short hnum;
+
+	hnum = ntohs(num);
+
+	/*
+	 * SOCK_ARRAY_SIZE must be a power of two.  This will work better
+	 * than a prime unless 3 or more sockets end up using the same
+	 * array entry.  This should not be a problem because most
+	 * well known sockets don't overlap that much, and for
+	 * the other ones, we can just be careful about picking our
+	 * socket number when we choose an arbitrary one.
+	 */
+	
+	s=sk;
+
+	for(; s != NULL; s = s->next) 
+	{
+		if (s->num != hnum) 
+			continue;
+		if(s->dead && (s->state == TCP_CLOSE))
+			continue;
+		if(s->daddr && s->daddr!=raddr)
+			continue;
+		if (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) 
+			continue;
+ 		if(s->saddr  && s->saddr!=laddr)
+			continue;
+		return(s);
+  	}
+  	return(NULL);
+}
+
+#endif
+
 static struct proto_ops inet_proto_ops = {
 	AF_INET,
 
@@ -1369,7 +1453,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.017\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.018\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

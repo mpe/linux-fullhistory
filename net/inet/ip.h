@@ -36,6 +36,13 @@
 
 #define IP_FRAG_TIME	(30 * HZ)		/* fragment lifetime	*/
 
+#ifdef CONFIG_IP_MULTICAST
+extern void		ip_mc_dropsocket(struct sock *);
+extern void		ip_mc_dropdevice(struct device *dev);
+extern int		ip_mc_procinfo(char *, char **, off_t, int);
+#define MULTICAST(x)	(IN_MULTICAST(htonl(x)))
+#endif
+ 
 
 /* Describe an IP fragment. */
 struct ipfrag {

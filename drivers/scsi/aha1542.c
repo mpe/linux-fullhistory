@@ -45,7 +45,7 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/aha
 /* The adaptec can be configured for quite a number of addresses, but
 I generally do not want the card poking around at random.  We allow
 two addresses - this allows people to use the Adaptec with a Midi
-card, which also used 0x330 -- can be overriden with LILO! */
+card, which also used 0x330 -- can be overridden with LILO! */
 
 #define MAXBOARDS 2	/* Increase this and the sizes of the
 			   arrays below, if you need more.. */

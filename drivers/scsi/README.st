@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Oct 16 19:20:03 1994 by root@kai.home
+Last modified: Wed Nov 30 20:34:03 1994 by root@kai.home
 
 BASICS
 
@@ -128,8 +128,8 @@ MTIOCGET Returns some status information.
         The current block size and the density code are stored in the field
         mt_dsreg (shifts for the subfields are MT_ST_BLKSIZE_SHIFT and
         MT_ST_DENSITY_SHIFT).
-	The WR_PROT, BOT, EOF, EOT, EOD, and D_[800,1600,6250]_BPI
-	status bits reflect the tape status. The other bits are not used.
+	The GMT_xxx status bits reflect the drive status. GMT_DR_OPEN
+	is set if there is no tape in the drive.
 
 
 MISCELLANEOUS COMPILE OPTIONS

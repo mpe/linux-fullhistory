@@ -59,6 +59,10 @@
 #define SIOCGIFHWADDR	0x8927		/* Get hardware address		*/
 #define SIOCGIFSLAVE	0x8929		/* Driver slaving support	*/
 #define SIOCSIFSLAVE	0x8930
+/* begin multicast support change */
+#define SIOCADDMULTI  0x8931
+#define SIOCDELMULTI  0x8932
+/* end multicast support change */
 
 /* Routing table calls (oldrtent - don't use) */
 #define SIOCADDRTOLD	0x8940		/* add routing table entry	*/

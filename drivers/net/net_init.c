@@ -165,7 +165,7 @@ void ether_setup(struct device *dev)
 	}
 
 	/* New-style flags. */
-	dev->flags		= IFF_BROADCAST;
+	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
 	dev->family		= AF_INET;
 	dev->pa_addr	= 0;
 	dev->pa_brdaddr = 0;

@@ -63,12 +63,12 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
  */
-#define MS_RDONLY    1 /* mount read-only */
-#define MS_NOSUID    2 /* ignore suid and sgid bits */
-#define MS_NODEV     4 /* disallow access to device special files */
-#define MS_NOEXEC    8 /* disallow program execution */
-#define MS_SYNC     16 /* writes are synced at once */
-#define	MS_REMOUNT  32 /* alter flags of a mounted FS */
+#define MS_RDONLY	 1 /* mount read-only */
+#define MS_NOSUID	 2 /* ignore suid and sgid bits */
+#define MS_NODEV	 4 /* disallow access to device special files */
+#define MS_NOEXEC	 8 /* disallow program execution */
+#define MS_SYNCHRONOUS	16 /* writes are synced at once */
+#define MS_REMOUNT	32 /* alter flags of a mounted FS */
 
 #define S_APPEND    256 /* append-only file */
 #define S_IMMUTABLE 512 /* immutable file */
@@ -96,7 +96,7 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
-#define IS_SYNC(inode) ((inode)->i_flags & MS_SYNC)
+#define IS_SYNC(inode) ((inode)->i_flags & MS_SYNCHRONOUS)
 
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)

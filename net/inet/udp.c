@@ -78,7 +78,7 @@
 struct udp_mib		udp_statistics;
 
 
-
+static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, struct device *dev, long saddr, long daddr, int len);
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -255,6 +255,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	unsigned char *buff;
 	unsigned long saddr;
 	int size, tmp;
+	int ttl;
   
 	/* 
 	 *	Allocate an sk_buff copy of the packet.
@@ -278,8 +279,14 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	buff = skb->data;
 	saddr = sk->saddr;
 	dev = NULL;
+	ttl = sk->ip_ttl;
+#ifdef CONFIG_IP_MULTICAST
+	if (MULTICAST(sin->sin_addr.s_addr))
+		ttl = sk->ip_mc_ttl;
+#endif
 	tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
-			&dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);
+			&dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,ttl);
+
 	skb->sk=sk;	/* So memory is freed correctly */
 	
 	/*
@@ -556,6 +563,10 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	struct sock *sk;
   	struct udphdr *uh;
 	unsigned short ulen;
+	int addr_type=IS_MYADDR;
+	
+	if(skb->dev->pa_addr!=daddr)
+		addr_type=ip_chk_addr(daddr);
 		
 	/*
 	 *	Get the header.
@@ -577,13 +588,54 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
+
+	if (uh->check && udp_check(uh, len, saddr, daddr)) 
+	{
+		printk("UDP: bad checksum.\n");
+		udp_statistics.UdpInErrors++;
+		kfree_skb(skb, FREE_WRITE);
+		return(0);
+	}
+
+
 	len=ulen;
 
+#ifdef CONFIG_IP_MULTICAST
+	if (addr_type!=IS_MYADDR)
+	{
+		/*
+		 *	Multicasts and broadcasts go to each listener.
+		 */
+		struct sock *sknext=NULL;
+		sk=get_sock_mcast(udp_prot.sock_array[ntohs(uh->dest)&(SOCK_ARRAY_SIZE-1)], uh->dest,
+				saddr, uh->source, daddr);
+		if(sk)
+		{		
+			do
+			{
+				struct sk_buff *skb1;
+
+				sknext=get_sock_mcast(sk->next, uh->dest, saddr, uh->source, daddr);
+				if(sknext)
+					skb1=skb_clone(skb,GFP_ATOMIC);
+				else
+					skb1=skb;
+				if(skb1)
+					udp_deliver(sk, uh, skb1,skb->dev,saddr,daddr,len);
+				sk=sknext;
+			}
+			while(sknext!=NULL);
+		}
+		else
+			kfree_skb(skb, FREE_READ);
+		return 0;
+	}	
+#endif
   	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
 	if (sk == NULL) 
   	{
   		udp_statistics.UdpNoPorts++;
-		if (ip_chk_addr(daddr) == IS_MYADDR) 
+		if (addr_type == IS_MYADDR) 
 		{
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
 		}
@@ -596,14 +648,11 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
   	}
 
-	if (uh->check && udp_check(uh, len, saddr, daddr)) 
-	{
-		printk("UDP: bad checksum.\n");
-		udp_statistics.UdpInErrors++;
-		kfree_skb(skb, FREE_WRITE);
-		return(0);
-	}
+	return udp_deliver(sk,uh,skb,skb->dev, saddr, daddr, len);
+}
 
+static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, struct device *dev, long saddr, long daddr, int len)
+{
 	skb->sk = sk;
 	skb->dev = dev;
 	skb->len = len;

@@ -93,7 +93,6 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 		mpnt->vm_flags = VM_GROWSDOWN;
 #  endif
 #endif
-		mpnt->vm_share = NULL;
 		mpnt->vm_inode = NULL;
 		mpnt->vm_offset = 0;
 		mpnt->vm_ops = NULL;

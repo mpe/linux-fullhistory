@@ -28,6 +28,8 @@ FS_SUBDIRS := $(FS_SUBDIRS) proc
 endif
 ifdef CONFIG_ISO9660_FS
 FS_SUBDIRS := $(FS_SUBDIRS) isofs
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) isofs
 endif
 ifdef CONFIG_NFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) nfs
@@ -50,7 +52,7 @@ endif
 ifdef CONFIG_BINFMT_ELF
 BINFMTS := $(BINFMTS) binfmt_elf.o
 else
-MODULES := $(MODULES) binfmt_elf.o
+MODULE_OBJS := $(MODULE_OBJS) binfmt_elf.o
 endif
 
 .c.s:

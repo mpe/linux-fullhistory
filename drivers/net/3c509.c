@@ -633,8 +633,13 @@ static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
-	if (el3_debug > 1)
-		printk("%s: Setting Rx mode to %d addresses.\n", dev->name, num_addrs);
+	if (el3_debug > 1) {
+		static int old = 0;
+		if (old != num_addrs) {
+			old = num_addrs;
+			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, num_addrs);
+		}
+	}
 	if (num_addrs > 0) {
 		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
 	} else if (num_addrs < 0) {

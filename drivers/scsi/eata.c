@@ -1,9 +1,13 @@
 /*
  *      eata.c - Low-level SCSI driver for EISA EATA SCSI controllers.
  *
+ *      30 Nov 1994 rev. 1.09 for linux 1.1.68
+ *          Redo i/o on target status CONDITION_GOOD for TYPE_DISK only.
+ *          Added optional support for using a single board at a time.
+ *
  *      18 Nov 1994 rev. 1.08 for linux 1.1.64
- *                  Forces sg_tablesize = 64 and can_queue = 64 if these
- *                  values are not correctly detected (DPT PM2012).
+ *          Forces sg_tablesize = 64 and can_queue = 64 if these
+ *          values are not correctly detected (DPT PM2012).
  *
  *      14 Nov 1994 rev. 1.07 for linux 1.1.63  Final BETA release.
  *      04 Aug 1994 rev. 1.00 for linux 1.1.39  First BETA release.
@@ -56,6 +60,7 @@
 #define NO_DEBUG_DETECT
 #define NO_DEBUG_INTERRUPT
 #define NO_DEBUG_STATISTICS
+#define NO_SINGLE_HOST_OPERATIONS
 
 #define MAX_TARGET 8
 #define MAX_IRQ 16
@@ -303,7 +308,7 @@ static inline int port_detect (ushort *port_base, unsigned int j,
    sh[j]->sg_tablesize = (ushort) ntohs(info.scatt_size);
    sh[j]->this_id = (ushort) ntohl(info.host_addr);
    sh[j]->can_queue = (ushort) ntohs(info.queue_size);
-   sh[j]->hostt->cmd_per_lun = MAX_CMD_PER_LUN;
+   sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
    sh[j]->unchecked_isa_dma = FALSE;
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->board_number = j;
@@ -313,7 +318,7 @@ static inline int port_detect (ushort *port_base, unsigned int j,
    printk("%s: SCSI ID %d, PORT 0x%03x, IRQ %u, SG %d, "\
           "Mbox %d, CmdLun %d.\n", BN(j), sh[j]->this_id, 
            sh[j]->io_port, sh[j]->irq, sh[j]->sg_tablesize, 
-           sh[j]->can_queue, sh[j]->hostt->cmd_per_lun);
+           sh[j]->can_queue, sh[j]->cmd_per_lun);
 
    /* DPT PM2012 does not allow to detect sg_tablesize correctly */
    if (sh[j]->sg_tablesize > MAX_SGLIST || sh[j]->sg_tablesize < 2) {
@@ -362,6 +367,16 @@ int eata_detect (Scsi_Host_Template * tpnt) {
 
       port_base++;
       }
+
+#if defined (SINGLE_HOST_OPERATIONS)
+   /* Create a circular linked list among the detected boards. */
+   if (j > 1) {
+
+      for (k = 0; k < (j - 1); k++) sh[k]->block = sh[k + 1];
+
+      sh[j - 1]->block = sh[0];
+      }
+#endif
 
    restore_flags(flags);
    return j;
@@ -764,7 +779,7 @@ static void eata_interrupt_handler(int irq) {
    
                   /* If there was a bus reset, redo operation on each target */
                   else if (spp->target_status == CONDITION_GOOD
-                                        && SCpnt->device->type != TYPE_TAPE
+                                        && SCpnt->device->type == TYPE_DISK
                                         && HD(j)->target_reset[SCpnt->target])
                      status = DID_BUS_BUSY << 16;
                   else

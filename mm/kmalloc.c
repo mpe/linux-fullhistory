@@ -84,6 +84,7 @@ struct page_descriptor {
  */
 struct size_descriptor {
 	struct page_descriptor *firstfree;
+	struct page_descriptor *dmafree; /* DMA-able memory */
 	int size;
 	int nblocks;
 
@@ -100,20 +101,20 @@ struct size_descriptor {
  */
 
 struct size_descriptor sizes[] = { 
-	{ NULL,  32,127, 0,0,0,0, 0},
-	{ NULL,  64, 63, 0,0,0,0, 0 },
-	{ NULL, 128, 31, 0,0,0,0, 0 },
-	{ NULL, 252, 16, 0,0,0,0, 0 },
-	{ NULL, 508,  8, 0,0,0,0, 0 },
-	{ NULL,1020,  4, 0,0,0,0, 0 },
-	{ NULL,2040,  2, 0,0,0,0, 0 },
-	{ NULL,4096-16,  1, 0,0,0,0, 0 },
-	{ NULL,8192-16,  1, 0,0,0,0, 1 },
-	{ NULL,16384-16,  1, 0,0,0,0, 2 },
-	{ NULL,32768-16,  1, 0,0,0,0, 3 },
-	{ NULL,65536-16,  1, 0,0,0,0, 4 },
-	{ NULL,131072-16,  1, 0,0,0,0, 5 },
-	{ NULL,   0,  0, 0,0,0,0, 0 }
+	{ NULL, NULL,  32,127, 0,0,0,0, 0},
+	{ NULL, NULL,  64, 63, 0,0,0,0, 0 },
+	{ NULL, NULL, 128, 31, 0,0,0,0, 0 },
+	{ NULL, NULL, 252, 16, 0,0,0,0, 0 },
+	{ NULL, NULL, 508,  8, 0,0,0,0, 0 },
+	{ NULL, NULL,1020,  4, 0,0,0,0, 0 },
+	{ NULL, NULL,2040,  2, 0,0,0,0, 0 },
+	{ NULL, NULL,4096-16,  1, 0,0,0,0, 0 },
+	{ NULL, NULL,8192-16,  1, 0,0,0,0, 1 },
+	{ NULL, NULL,16384-16,  1, 0,0,0,0, 2 },
+	{ NULL, NULL,32768-16,  1, 0,0,0,0, 3 },
+	{ NULL, NULL,65536-16,  1, 0,0,0,0, 4 },
+	{ NULL, NULL,131072-16,  1, 0,0,0,0, 5 },
+	{ NULL, NULL,   0,  0, 0,0,0,0, 0 }
 };
 
 
@@ -164,9 +165,13 @@ void * kmalloc (size_t size, int priority)
 {
 	unsigned long flags;
 	int order,tries,i,sz;
+	int dma_flag;
 	struct block_header *p;
 	struct page_descriptor *page;
 
+	dma_flag = (priority & GFP_DMA);
+	priority &= GFP_LEVEL_MASK;
+	  
 /* Sanity check... */
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
@@ -193,7 +198,7 @@ while (tries --)
     {
     /* Try to allocate a "recently" freed memory block */
     cli ();
-    if ((page = sizes[order].firstfree) &&
+    if ((page = (dma_flag ? sizes[order].dmafree : sizes[order].firstfree)) &&
         (p    =  page->firstfree))
         {
         if (p->bh_flags == MF_FREE)
@@ -224,7 +229,11 @@ while (tries --)
     sz = BLOCKSIZE(order); /* sz is the size of the blocks we're dealing with */
 
     /* This can be done with ints on: This is private to this invocation */
-    page = (struct page_descriptor *) __get_free_pages (priority & GFP_LEVEL_MASK, sizes[order].gfporder);
+    if (dma_flag)
+      page = (struct page_descriptor *) __get_dma_pages (priority & GFP_LEVEL_MASK, sizes[order].gfporder);
+    else
+      page = (struct page_descriptor *) __get_free_pages (priority & GFP_LEVEL_MASK, sizes[order].gfporder);
+
     if (!page) {
         static unsigned long last = 0;
         if (last + 10*HZ < jiffies) {
@@ -262,7 +271,10 @@ while (tries --)
      * here, but you never know.... 
      */
     page->next = sizes[order].firstfree;
-    sizes[order].firstfree = page;
+    if (dma_flag)
+      sizes[order].dmafree = page;
+    else
+      sizes[order].firstfree = page;
     restore_flags(flags);
     }
 
@@ -279,7 +291,6 @@ printk ("Hey. This is very funny. I tried %d times to allocate a whole\n"
                 size);
 return NULL;
 }
-
 
 void kfree_s (void *ptr,int size)
 {
@@ -315,7 +326,8 @@ page->firstfree = p;
 page->nfree ++;
 
 if (page->nfree == 1)
-   { /* Page went from full to one free block: put it on the freelist */
+   { /* Page went from full to one free block: put it on the freelist.  Do not bother
+      trying to put it on the DMA list. */
    if (page->next)
         {
         printk ("Page %p already on freelist dazed and confused....\n", page);
@@ -337,11 +349,20 @@ if (page->nfree == NBLOCKS (page->order))
         {
         sizes[order].firstfree = page->next;
         }
+    else if (sizes[order].dmafree == page)
+        {
+        sizes[order].dmafree = page->next;
+        }
     else
         {
         for (pg2=sizes[order].firstfree;
                 (pg2 != NULL) && (pg2->next != page);
                         pg2=pg2->next)
+            /* Nothing */;
+	if (!pg2)
+	  for (pg2=sizes[order].dmafree;
+	       (pg2 != NULL) && (pg2->next != page);
+	       pg2=pg2->next)
             /* Nothing */;
         if (pg2 != NULL)
             pg2->next = page->next;

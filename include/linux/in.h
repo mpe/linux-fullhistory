@@ -23,7 +23,7 @@
 enum {
   IPPROTO_IP = 0,		/* Dummy protocol for TCP		*/
   IPPROTO_ICMP = 1,		/* Internet Control Message Protocol	*/
-  IPPROTO_GGP = 2,		/* Gateway Protocol (deprecated)	*/
+  IPPROTO_IGMP = 2,		/* Internet Gateway Management Protocol */
   IPPROTO_TCP = 6,		/* Transmission Control Protocol	*/
   IPPROTO_EGP = 8,		/* Exterior Gateway Protocol		*/
   IPPROTO_PUP = 12,		/* PUP protocol				*/
@@ -38,6 +38,14 @@ enum {
 /* Internet address. */
 struct in_addr {
 	unsigned long int	s_addr;
+};
+
+/* Request struct for multicast socket ops */
+
+struct ip_mreq 
+{
+	struct in_addr imr_multiaddr;	/* IP multicast address of group */
+	struct in_addr imr_interface;	/* local IP address of interface */
 };
 
 
@@ -121,7 +129,7 @@ extern unsigned short int	ntohs(unsigned short int);
 extern unsigned long int	htonl(unsigned long int);
 extern unsigned short int	htons(unsigned short int);
 
-static __inline__ unsigned long int
+extern __inline__ unsigned long int
 __ntohl(unsigned long int x)
 {
 	__asm__("xchgb %b0,%h0\n\t"	/* swap lower bytes	*/
@@ -132,7 +140,7 @@ __ntohl(unsigned long int x)
 	return x;
 }
 
-static __inline__ unsigned long int
+extern __inline__ unsigned long int
 __constant_ntohl(unsigned long int x)
 {
 	return (((x & 0x000000ffU) << 24) |
@@ -141,7 +149,7 @@ __constant_ntohl(unsigned long int x)
 		((x & 0xff000000U) >> 24));
 }
 
-static __inline__ unsigned short int
+extern __inline__ unsigned short int
 __ntohs(unsigned short int x)
 {
 	__asm__("xchgb %b0,%h0"		/* swap bytes		*/
@@ -150,7 +158,7 @@ __ntohs(unsigned short int x)
 	return x;
 }
 
-static __inline__ unsigned short int
+extern __inline__ unsigned short int
 __constant_ntohs(unsigned short int x)
 {
 	return (((x & 0x00ff) << 8) |

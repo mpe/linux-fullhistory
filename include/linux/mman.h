@@ -16,4 +16,8 @@
 #define MAP_DENYWRITE	0x0800		/* ETXTBSY */
 #define MAP_EXECUTABLE	0x1000		/* mark it as a executable */
 
+#define MS_ASYNC	1	/* sync memory asynchronously */
+#define MS_INVALIDATE	2	/* invalidate the caches */
+#define MS_SYNC		4	/* synchronous memory sync */
+
 #endif /* _LINUX_MMAN_H */

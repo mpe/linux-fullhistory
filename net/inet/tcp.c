@@ -925,7 +925,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
  *	This routine builds a generic TCP header. 
  */
  
-static int tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
+extern __inline int tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
 {
 
 	/* FIXME: want to get rid of this. */
@@ -3041,8 +3041,13 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	       (((flag&2) && sk->retransmits) ||
 	       (sk->send_head->when + sk->rto < jiffies))) 
 	{
-		ip_do_retransmit(sk, 1);
-		reset_timer(sk, TIME_WRITE, sk->rto);
+		if(sk->send_head->when + sk->rto < jiffies)
+			tcp_retransmit(sk,0);	
+		else
+		{
+			ip_do_retransmit(sk, 1);
+			reset_timer(sk, TIME_WRITE, sk->rto);
+		}
 	}
 
 	return(1);
@@ -3352,7 +3357,6 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	}
 	else
 	{
-		/* We missed a packet.  Send an ack to try to resync things. */
 		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
 	}
 
@@ -3508,7 +3512,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th,
 			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			return(0);
 	}
-	sk->ack_backlog++;
+/*	sk->ack_backlog++;     tcp_data has already dealt with ACK's */
 
 	return(0);
 }
@@ -3866,7 +3870,6 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		}
 
 		skb->len = len;
-		skb->sk = sk;
 		skb->acked = 0;
 		skb->used = 0;
 		skb->free = 0;
@@ -3905,12 +3908,12 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
 	{
-		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 		release_sock(sk);
 		return(0);
 	}
 
+	skb->sk=sk;
 	sk->rmem_alloc += skb->mem_len;
 
 #ifdef TCP_FASTPATH
@@ -4042,24 +4045,22 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 			if (th->rst) 
 			{
-				tcp_statistics.TcpEstabResets++;
-				sk->zapped=1;
-				/* This means the thing should really be closed. */
-				sk->err = ECONNRESET;
-				if (sk->state == TCP_CLOSE_WAIT) 
+				if(sk->state!=TCP_TIME_WAIT)	/* RFC 1337 recommendation re RST in time wait */
 				{
-					sk->err = EPIPE;
-				}
-	
-				/*
-				 * A reset with a fin just means that
-				 * the data was not all read.
-				 */
-				tcp_set_state(sk,TCP_CLOSE);
-				sk->shutdown = SHUTDOWN_MASK;
-				if (!sk->dead) 
-				{
-					sk->state_change(sk);
+					tcp_statistics.TcpEstabResets++;
+					sk->zapped=1;
+					/* This means the thing should really be closed. */
+					sk->err = ECONNRESET;
+					if (sk->state == TCP_CLOSE_WAIT) 
+					{
+						sk->err = EPIPE;
+					}
+					tcp_set_state(sk,TCP_CLOSE);
+					sk->shutdown = SHUTDOWN_MASK;
+					if (!sk->dead) 
+					{
+						sk->state_change(sk);
+					}
 				}
 				kfree_skb(skb, FREE_READ);
 				release_sock(sk);

@@ -20,6 +20,9 @@ comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" "=" "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
+#bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
+#bool 'IP firewalling' CONFIG_IP_FIREWALL n
+#bool 'IP accounting' CONFIG_IP_ACCT n
 comment '(it is safe to leave these untouched)'
 bool 'PC/TCP compatibility mode' CONFIG_INET_PCTCP n
 bool 'Reverse ARP' CONFIG_INET_RARP n
@@ -95,6 +98,10 @@ if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
 	bool 'WD80*3 support' CONFIG_WD80x3 n
 	bool 'SMC Ultra support' CONFIG_ULTRA n
 fi
+bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE n
+if [ "$CONFIG_LANCE" = "y" ]; then
+	bool '   with PCnet/PCI support' CONFIG_PCI y
+fi
 bool '3COM cards' CONFIG_NET_VENDOR_3COM y
 if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	bool '3c501 support' CONFIG_EL1 n
@@ -107,32 +114,41 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 fi
 bool 'Other ISA cards' CONFIG_NET_ISA n
 if [ "$CONFIG_NET_ISA" = "y" ]; then
-	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
-	bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
+	bool 'Cabletron E21xx support' CONFIG_E2100 n
 	bool 'DEPCA support' CONFIG_DEPCA n
 	bool 'EtherWorks 3 support' CONFIG_EWRK3 n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
-		bool 'EtherExpress support' CONFIG_EEXPRESS n
+#		bool 'Arcnet support' CONFIG_ARCNET n
 		bool 'AT1700 support' CONFIG_AT1700 n
+#		bool 'EtherExpressPro support' CONFIG_EEXPRESS_PRO n
+		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'NI5210 support' CONFIG_NI52 n
 		bool 'NI6510 support' CONFIG_NI65 n
 	fi
-	bool 'HP PCLAN support' CONFIG_HPLAN n
-	bool 'HP PCLAN PLUS support' CONFIG_HPLAN_PLUS n
+	bool 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
+	bool 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
-bool 'EISA and on board controllers' CONFIG_NET_EISA n
+bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA n
+if [ "$CONFIG_NET_EISA" = "y" ]; then
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
+#	bool 'DEC 21040 PCI support' CONFIG_DEC_ELCP n
+#	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
+#	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n
+	bool 'Zenith Z-Note support' CONFIG_ZNET y
+fi
 bool 'Pocket and portable adaptors' CONFIG_NET_POCKET n
 if [ "$CONFIG_NET_POCKET" = "y" ]; then
+	bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
 	bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
 	bool 'D-Link DE620 pocket adaptor support' CONFIG_DE620 n
-	bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
-	bool 'Zenith Z-Note support' CONFIG_ZNET n
+#	bool 'Silicom pocket adaptor support' CONFIG_SILICOM_PEA n
+#	bool 'WaveLAN PCMCIA support' CONFIG_WaveLAN n
+#	bool '3 Com 3c589 PCMCIA support' CONFIG_3C589 n
 fi
 fi
 fi

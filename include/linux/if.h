@@ -31,12 +31,14 @@
 #define	IFF_NOTRAILERS	0x20		/* avoid use of trailers	*/
 #define	IFF_RUNNING	0x40		/* resources allocated		*/
 #define	IFF_NOARP	0x80		/* no ARP protocol		*/
-#define	IFF_PROMISC	0x100		/* recve all packets		*/
-/* These are not yet used: */
-#define	IFF_ALLMULTI	0x200		/* recve all multicast packets	*/
+#define	IFF_PROMISC	0x100		/* receive all packets		*/
+/* Not supported */
+#define	IFF_ALLMULTI	0x200		/* receive all multicast packets*/
 
 #define IFF_MASTER	0x400		/* master of a load balancer 	*/
 #define IFF_SLAVE	0x800		/* slave of a load balancer	*/
+
+#define IFF_MULTICAST	0x1000		/* Supports multicast		*/
 
 /*
  * The ifaddr structure contains information about one address
@@ -45,15 +47,18 @@
  * and are linked together so all addresses for an interface can
  * be located.
  */
-struct ifaddr {
-  struct sockaddr	ifa_addr;	/* address of interface		*/
-  union {
-	struct sockaddr	ifu_broadaddr;
-	struct sockaddr	ifu_dstaddr;
-  } ifa_ifu;
-  struct iface		*ifa_ifp;	/* back-pointer to interface	*/
-  struct ifaddr		*ifa_next;	/* next address for interface	*/
+ 
+struct ifaddr 
+{
+	struct sockaddr	ifa_addr;	/* address of interface		*/
+	union {
+		struct sockaddr	ifu_broadaddr;
+		struct sockaddr	ifu_dstaddr;
+	} ifa_ifu;
+	struct iface		*ifa_ifp;	/* back-pointer to interface	*/
+	struct ifaddr		*ifa_next;	/* next address for interface	*/
 };
+
 #define	ifa_broadaddr	ifa_ifu.ifu_broadaddr	/* broadcast address	*/
 #define	ifa_dstaddr	ifa_ifu.ifu_dstaddr	/* other end of link	*/
 
@@ -67,7 +72,8 @@ struct ifaddr {
  *	being very small might be worth keeping for clean configuration.
  */
 
-struct ifmap {
+struct ifmap 
+{
 	unsigned long mem_start;
 	unsigned long mem_end;
 	unsigned short base_addr; 
@@ -83,7 +89,9 @@ struct ifmap {
  * definitions which begin with ifr_name.  The
  * remainder may be interface specific.
  */
-struct ifreq {
+
+struct ifreq 
+{
 #define IFHWADDRLEN	6
 #define	IFNAMSIZ	16
 	union
@@ -127,9 +135,12 @@ struct ifreq {
  * for machine (useful for programs which
  * must know all networks accessible).
  */
-struct ifconf {
+
+struct ifconf 
+{
 	int	ifc_len;			/* size of buffer	*/
-	union {
+	union 
+	{
 		caddr_t	ifcu_buf;
 		struct	ifreq *ifcu_req;
 	} ifc_ifcu;

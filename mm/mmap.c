@@ -341,15 +341,16 @@ int do_munmap(unsigned long addr, size_t len)
 		mpnt = free;
 		free = free->vm_next;
 
+		remove_shared_vm_struct(mpnt);
+
 		st = addr < mpnt->vm_start ? mpnt->vm_start : addr;
 		end = addr+len;
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
 
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, end-st);
-		else
-			unmap_fixup(mpnt, st, end-st);
 
+		unmap_fixup(mpnt, st, end-st);
 		kfree(mpnt);
 	}
 
@@ -357,35 +358,14 @@ int do_munmap(unsigned long addr, size_t len)
 	return 0;
 }
 
-/* This is used for a general mmap of a disk file */
-int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
-{
-	extern struct vm_operations_struct file_mmap;
-
-	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported right now */
-		return -EINVAL;
-	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
-		return -EINVAL;
-	if (!inode->i_sb || !S_ISREG(inode->i_mode))
-		return -EACCES;
-	if (!inode->i_op || !inode->i_op->bmap)
-		return -ENOEXEC;
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-	vma->vm_inode = inode;
-	inode->i_count++;
-	vma->vm_ops = &file_mmap;
-	return 0;
-}
-
 /*
- * Insert vm structure into process list sorted by address.
+ * Insert vm structure into process list sorted by address
+ * and into the inode's i_mmap ring.
  */
 void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 {
-	struct vm_area_struct **p, *mpnt;
+	struct vm_area_struct **p, *mpnt, *share;
+	struct inode * inode;
 
 	p = &t->mm->mmap;
 	while ((mpnt = *p) != NULL) {
@@ -397,6 +377,43 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
 	}
 	vmp->vm_next = mpnt;
 	*p = vmp;
+
+	inode = vmp->vm_inode;
+	if (!inode)
+		return;
+
+	/* insert vmp into inode's circular share list */
+	if ((share = inode->i_mmap)) {
+		vmp->vm_next_share = share->vm_next_share;
+		vmp->vm_next_share->vm_prev_share = vmp;
+		share->vm_next_share = vmp;
+		vmp->vm_prev_share = share;
+	} else
+		inode->i_mmap = vmp->vm_next_share = vmp->vm_prev_share = vmp;
+}
+
+/*
+ * Remove one vm structure from the inode's i_mmap ring.
+ */
+void remove_shared_vm_struct(struct vm_area_struct *mpnt)
+{
+	struct inode * inode = mpnt->vm_inode;
+
+	if (!inode)
+		return;
+
+	if (mpnt->vm_next_share == mpnt) {
+		if (inode->i_mmap != mpnt)
+			printk("Inode i_mmap ring corrupted\n");
+		inode->i_mmap = NULL;
+		return;
+	}
+
+	if (inode->i_mmap == mpnt)
+		inode->i_mmap = mpnt->vm_next_share;
+
+	mpnt->vm_prev_share->vm_next_share = mpnt->vm_next_share;
+	mpnt->vm_next_share->vm_prev_share = mpnt->vm_prev_share;
 }
 
 /*
@@ -451,6 +468,7 @@ void merge_segments(struct vm_area_struct *mpnt)
 			mpnt->vm_start = mpnt->vm_end;
 			mpnt->vm_ops->close(mpnt);
 		}
+		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
 			mpnt->vm_inode->i_count--;
 		kfree_s(mpnt, sizeof(*mpnt));

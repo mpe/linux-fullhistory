@@ -1,3 +1,32 @@
+Tue Nov 29 10:21:09 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (tty_unregister_driver): Fix bug in
+		tty_unregister_driver where the pointer to the refcount is
+		tested, instead of the refcount itself.  This caused
+		tty_unregister_driver to always return EBUSY.
+
+Sat Nov 26 11:59:24 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (tty_ioctl): Add support for the new ioctl
+		TIOCTTYGSTRUCT, which allow a kernel debugging program
+		direct read access to the tty and tty_driver structures.
+
+Fri Nov 25 17:26:22 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_set_termios): Don't wake up processes blocked in
+		open when the CLOCAL flag changes, since a blocking
+		open only samples the CLOCAL flag once when it blocks,
+		and doesn't check it again.  (n.b.  FreeBSD has a
+		different behavior for blocking opens; it's not clear
+		whether Linux or FreeBSD's interpretation is correct.
+		POSIX doesn't give clear guidance on this issue, so
+		this may change in the future....)
+
+	* serial.c (block_til_ready): Use the correct termios structure to
+		check the CLOCAL flag.  If the cuaXX device is active,
+		then check the saved termios for the ttySXX device.
+		Otherwise, use the currently active termios structure.
+
 Sun Nov  6 21:05:44 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (change_speed): Add support for direct access of

@@ -1773,9 +1773,17 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		rs_start(tty);
 	}
 
+#if 0
+	/*
+	 * No need to wake up processes in open wait, since they
+	 * sample the CLOCAL flag once, and don't recheck it.
+	 * XXX  It's not clear whether the current behavior is correct
+	 * or not.  Hence, this may change.....
+	 */
 	if (!(old_termios->c_cflag & CLOCAL) &&
 	    (tty->termios->c_cflag & CLOCAL))
 		wake_up_interruptible(&info->open_wait);
+#endif
 }
 
 /*
@@ -1967,9 +1975,14 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		return 0;
 	}
 
-	if (info->normal_termios.c_cflag & CLOCAL)
-		do_clocal = 1;
-
+	if (info->flags & ASYNC_CALLOUT_ACTIVE) {
+		if (info->normal_termios.c_cflag & CLOCAL)
+			do_clocal = 1;
+	} else {
+		if (tty->termios->c_cflag & CLOCAL)
+			do_clocal = 1;
+	}
+	
 	/*
 	 * Block waiting for the carrier detect and the line to become
 	 * free (i.e., not in use by the callout).  While we are in

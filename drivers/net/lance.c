@@ -15,7 +15,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "lance.c:v1.05 9/23/94 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "lance.c:v1.06 11/29/94 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -26,6 +26,8 @@ static char *version = "lance.c:v1.05 9/23/94 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/pci.h>
+#include <linux/bios32.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -37,7 +39,7 @@ static char *version = "lance.c:v1.05 9/23/94 becker@cesdis.gsfc.nasa.gov\n";
 struct device *init_etherdev(struct device *dev, int sizeof_private,
 							 unsigned long *mem_startp);
 static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
-unsigned long lance_probe1(short ioaddr, unsigned long mem_start);
+unsigned long lance_probe1(int ioaddr, unsigned long mem_start);
 
 #ifdef HAVE_DEVLIST
 struct netdev_entry lance_drv =
@@ -72,7 +74,7 @@ have on-board buffer memory needed to support the slower shared memory mode.)
 Most ISA boards have jumpered settings for the I/O base, IRQ line, and DMA
 channel.  This driver probes the likely base addresses:
 {0x300, 0x320, 0x340, 0x360}.
-After the board is found it generates an DMA-timeout interrupt and uses
+After the board is found it generates a DMA-timeout interrupt and uses
 autoIRQ to find the IRQ line.  The DMA channel can be set with the low bits
 of the otherwise-unused dev->mem_start value (aka PARAM1).  If unset it is
 probed for by enabling each free DMA channel in turn and checking if
@@ -102,7 +104,7 @@ statically allocates full-sized (slightly oversized -- PKT_BUF_SZ) buffers to
 avoid the administrative overhead. For the Rx side this avoids dynamically
 allocating full-sized buffers "just in case", at the expense of a
 memory-to-memory data copy for each packet received.  For most systems this
-is an good tradeoff: the Rx buffer will always be in low memory, the copy
+is a good tradeoff: the Rx buffer will always be in low memory, the copy
 is inexpensive, and it primes the cache for later packet processing.  For Tx
 the buffers are only used when needed as low-memory bounce buffers.
 
@@ -218,11 +220,16 @@ static struct lance_chip_type {
 	{0x0003, "PCnet/ISA 79C960", 0},	/* 79C960 PCnet/ISA.  */
 	{0x2260, "PCnet/ISA+ 79C961", 0},	/* 79C961 PCnet/ISA+, Plug-n-Play.  */
 	{0x2420, "PCnet/PCI 79C970", 0},	/* 79C970 or 79C974 PCnet-SCSI, PCI. */
-	{0x2430, "PCnet/VLB 79C965", 0},	/* 79C965 PCnet for VL bus. */
+	/* Bug: the PCnet/PCI actually uses the PCnet/VLB ID number, so just call
+		it the PCnet32. */
+	{0x2430, "PCnet32", 0},				/* 79C965 PCnet for VL bus. */
 	{0x0, 	 "PCnet (unknown)", 0},
 };
 
 enum {OLD_LANCE = 0, PCNET_ISA=1, PCNET_ISAP=2, PCNET_PCI=3, PCNET_VLB=4, LANCE_UNKNOWN=5};
+
+/* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
+static unsigned char pci_irq_line = 0;
 
 static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
@@ -239,11 +246,40 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
 /* This lance probe is unlike the other board probes in 1.0.*.  The LANCE may
    have to allocate a contiguous low-memory region for bounce buffers.
-   This requirement is satisfied by having the lance initialization occur before the
-   memory management system is started, and thus well before the other probes. */
+   This requirement is satisfied by having the lance initialization occur
+   before the memory management system is started, and thus well before the
+   other probes. */
+
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {
 	int *port;
+
+#if defined(CONFIG_PCI)
+#define AMD_VENDOR_ID 0x1022
+#define AMD_DEVICE_ID 0x2000
+    if (pcibios_present()) {
+	    int pci_index;
+		printk("lance.c: PCI bios is present, checking for devices...\n");
+		for (pci_index = 0; pci_index < 8; pci_index++) {
+			unsigned char pci_bus, pci_device_fn;
+			unsigned long pci_ioaddr;
+		
+			if (pcibios_find_device (AMD_VENDOR_ID, AMD_DEVICE_ID, pci_index,
+									 &pci_bus, &pci_device_fn) != 0)
+				break;
+			pcibios_read_config_byte(pci_bus, pci_device_fn,
+									 PCI_INTERRUPT_LINE, &pci_irq_line);
+			pcibios_read_config_dword(pci_bus, pci_device_fn,
+									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+			/* Remove I/O space marker in bit 0. */
+			pci_ioaddr &= ~3;
+			printk("Found PCnet/PCI at %#lx, irq %d (mem_start is %#lx).\n",
+				   pci_ioaddr, pci_irq_line, mem_start);
+			mem_start = lance_probe1(pci_ioaddr, mem_start);
+			pci_irq_line = 0;
+		}
+	}
+#endif  /* defined(CONFIG_PCI) */
 
 	for (port = lance_portlist; *port; port++) {
 		int ioaddr = *port;
@@ -258,7 +294,7 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 	return mem_start;
 }
 
-unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
+unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 {
 	struct device *dev;
 	struct lance_private *lp;
@@ -365,7 +401,10 @@ unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
 	outw(0x0000, ioaddr+LANCE_ADDR);
 	inw(ioaddr+LANCE_ADDR);
 
-	if (hp_builtin) {
+	if (pci_irq_line) {
+		dev->dma = 4;			/* Native bus-master, no DMA channel needed. */
+		dev->irq = pci_irq_line;
+	} else if (hp_builtin) {
 		char dma_tbl[4] = {3, 5, 6, 0};
 		char irq_tbl[8] = {3, 4, 5, 9};
 		unsigned char port_val = inb(hp_builtin);
@@ -494,7 +533,8 @@ lance_open(struct device *dev)
 	int ioaddr = dev->base_addr;
 	int i;
 
-	if (request_irq(dev->irq, &lance_interrupt, 0, "lance")) {
+	if (dev->irq == 0 ||
+		request_irq(dev->irq, &lance_interrupt, 0, "lance")) {
 		return -EAGAIN;
 	}
 
@@ -840,7 +880,7 @@ lance_rx(struct device *dev)
 		int status = lp->rx_ring[entry].base >> 24;
 
 		if (status != 0x03) {			/* There was an error. */
-			/* There is an tricky error noted by John Murphy,
+			/* There is a tricky error noted by John Murphy,
 			   <murf@perftech.com> to Russ Nelson: Even with full-sized
 			   buffers it's possible for a jabber packet to use two
 			   buffers, with only the last correctly noting the error. */
@@ -971,6 +1011,8 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		}
 		outw(0x0000, ioaddr+LANCE_DATA); /* Unset promiscuous mode */
 	} else {
+		/* Log any net taps. */
+		printk("%s: Promiscuous mode enabled.\n", dev->name);
 		outw(0x8000, ioaddr+LANCE_DATA); /* Set promiscuous mode */
 	}
 

@@ -406,6 +406,11 @@ repeat:
 		goto repeat;
 	}
 	inode->i_count--;
+	if (inode->i_mmap) {
+		printk("iput: inode %lu on device %d/%d still has mappings.\n",
+			inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
+		inode->i_mmap = NULL;
+	}
 	nr_free_inodes++;
 	return;
 }

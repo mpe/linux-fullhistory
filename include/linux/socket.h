@@ -32,6 +32,7 @@ struct linger {
 #define AF_INET		2
 #define AF_AX25		3
 #define AF_IPX		4
+#define AF_APPLETALK	5
 
 #define AF_MAX		8	/* For now.. */
 
@@ -41,8 +42,10 @@ struct linger {
 #define PF_INET		AF_INET
 #define PF_AX25		AF_AX25
 #define PF_IPX		AF_IPX
+#define PF_APPLETALK	AF_APPLETALK
 
 #define PF_MAX		AF_MAX
+
 /* Flags we can use with send/ and recv. */
 #define MSG_OOB		1
 #define MSG_PEEK	2
@@ -70,6 +73,7 @@ struct linger {
 #define SO_NO_CHECK	11
 #define SO_PRIORITY	12
 #define SO_LINGER	13
+/* To add :#define SO_REUSEPORT 14 */
 
 /* IP options */
 #define IP_TOS		1
@@ -77,7 +81,21 @@ struct linger {
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
 #define IP_TTL		2
+#define IP_HRDINCL	3
+#define IP_OPTIONS	4
 
+#define IP_MULTICAST_IF			32
+#define IP_MULTICAST_TTL 		33
+#define IP_MULTICAST_LOOP 		34
+#define IP_ADD_MEMBERSHIP		35
+#define IP_DROP_MEMBERSHIP		36
+
+
+/* These need to appear somewhere around here */
+#define IP_DEFAULT_MULTICAST_TTL        1
+#define IP_DEFAULT_MULTICAST_LOOP       1
+#define IP_MAX_MEMBERSHIPS              20
+ 
 /* IPX options */
 #define IPX_TYPE	1
 

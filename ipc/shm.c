@@ -351,7 +351,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
  * shmd->vm_start	virt addr of attach, multiple of SHMLBA
  * shmd->vm_end		multiple of SHMLBA
  * shmd->vm_next	next attach for task
- * shmd->vm_share	next attach for segment
+ * shmd->vm_next_share	next attach for segment
  * shmd->vm_offset	offset into segment
  * shmd->vm_pte		signature for this attach
  */
@@ -359,10 +359,12 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 static struct vm_operations_struct shm_vm_ops = {
 	shm_open,		/* open */
 	shm_close,		/* close */
+	NULL,			/* unmap */
+	NULL,			/* protect */
+	NULL,			/* sync */
+	NULL,			/* advise */
 	NULL,			/* nopage (done with swapin) */
 	NULL,			/* wppage */
-	NULL,			/* share */
-	NULL,			/* unmap */
 	NULL,			/* swapout (hardcoded right now) */
 	shm_swap_in		/* swapin */
 };
@@ -438,7 +440,6 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
- * raddr is needed to return addresses above 2Gig.
  */
 int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
@@ -451,12 +452,6 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (shmid < 0) {
 		/* printk("shmat() -> EINVAL because shmid = %d < 0\n",shmid); */
 		return -EINVAL;
-	}
-
-	if (raddr) {
-		err = verify_area(VERIFY_WRITE, raddr, sizeof(ulong));
-		if (err)
-			return err;
 	}
 
 	shp = shm_segs[id = (unsigned int) shmid % SHMMNI];
@@ -510,7 +505,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
-	shmd->vm_share = NULL;
+	shmd->vm_next_share = NULL;
 	shmd->vm_inode = NULL;
 	shmd->vm_offset = 0;
 	shmd->vm_ops = &shm_vm_ops;
@@ -523,14 +518,12 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return err;
 	}
 
-	shmd->vm_share = shp->attaches;
+	shmd->vm_next_share = shp->attaches;
 	shp->attaches = shmd;
 	shp->shm_lpid = current->pid;
 	shp->shm_atime = CURRENT_TIME;
 
-	if (!raddr)
-		return addr;
-	put_fs_long (addr, raddr);
+	*raddr = addr;
 	return 0;
 }
 
@@ -546,7 +539,7 @@ static void shm_open (struct vm_area_struct *shmd)
 		printk("shm_open: unused id=%d PANIC\n", id);
 		return;
 	}
-	shmd->vm_share = shp->attaches;
+	shmd->vm_next_share = shp->attaches;
 	shp->attaches = shmd;
 	shp->shm_nattch++;
 	shp->shm_atime = CURRENT_TIME;
@@ -570,9 +563,9 @@ static void shm_close (struct vm_area_struct *shmd)
 	/* remove from the list of attaches of the shm segment */
 	id = (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK;
 	shp = shm_segs[id];
-	for (shmdp = &shp->attaches; *shmdp; shmdp = &(*shmdp)->vm_share)
+	for (shmdp = &shp->attaches; *shmdp; shmdp = &(*shmdp)->vm_next_share)
 		if (*shmdp == shmd) {
-			*shmdp = shmd->vm_share;
+			*shmdp = shmd->vm_next_share;
 			goto found;
 		}
 	printk("shm_close: shm segment (id=%d) attach list inconsistent\n",id);
@@ -714,7 +707,7 @@ int shm_swap (int prio)
 		swap_free (swap_nr);
 		return 0;
 	}
-	for (shmd = shp->attaches; shmd; shmd = shmd->vm_share) {
+	for (shmd = shp->attaches; shmd; shmd = shmd->vm_next_share) {
 		unsigned long tmp, *pte;
 		if ((shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK) != id) {
 			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n", id, shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK);

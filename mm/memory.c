@@ -84,7 +84,7 @@ unsigned short * mem_map = NULL;
  */
 void oom(struct task_struct * task)
 {
-	printk("\nOut of memory.\n");
+	printk("\nOut of memory for %s.\n", current->comm);
 	task->sigaction[SIGKILL-1].sa_handler = NULL;
 	task->blocked &= ~(1<<(SIGKILL-1));
 	send_sig(SIGKILL,task,1);
@@ -804,10 +804,10 @@ static int share_page(struct vm_area_struct * area, unsigned long address,
 	unsigned long error_code, unsigned long newpage)
 {
 	struct inode * inode;
-	struct task_struct ** p;
 	unsigned long offset;
 	unsigned long from_address;
 	unsigned long give_page;
+	struct vm_area_struct * mpnt;
 
 	if (!area || !(inode = area->vm_inode) || inode->i_count < 2)
 		return 0;
@@ -819,34 +819,29 @@ static int share_page(struct vm_area_struct * area, unsigned long address,
 		give_page = newpage;
 	}
 	offset = address - area->vm_start + area->vm_offset;
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		struct vm_area_struct * mpnt;
-		if (!*p)
-			continue;
-		if (area->vm_task == *p)
-			continue;
-		/* Now see if there is something in the VMM that
-		   we can share pages with */
-		for (mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
-			/* must be same inode */
-			if (mpnt->vm_inode != inode)
-				continue;
-			/* offsets must be mutually page-aligned */
-			if ((mpnt->vm_offset ^ area->vm_offset) & ~PAGE_MASK)
-				continue;
-			/* the other area must actually cover the wanted page.. */
-			from_address = offset + mpnt->vm_start - mpnt->vm_offset;
-			if (from_address < mpnt->vm_start || from_address >= mpnt->vm_end)
-				continue;
-			/* .. NOW we can actually try to use the same physical page */
-			if (!try_to_share(address, area, from_address, mpnt, give_page))
-				continue;
-			/* free newpage if we never used it.. */
-			if (give_page || !newpage)
-				return 1;
-			free_page(newpage);
-			return 1;
+	/* See if there is something in the VM we can share pages with. */
+	/* Traverse the entire circular i_mmap list, except `area' itself. */
+	for (mpnt = area->vm_next_share; mpnt != area; mpnt = mpnt->vm_next_share) {
+		/* must be same inode */
+		if (mpnt->vm_inode != inode) {
+			printk("Aiee! Corrupt vm_area_struct i_mmap ring\n");
+			break;	
 		}
+		/* offsets must be mutually page-aligned */
+		if ((mpnt->vm_offset ^ area->vm_offset) & ~PAGE_MASK)
+			continue;
+		/* the other area must actually cover the wanted page.. */
+		from_address = offset + mpnt->vm_start - mpnt->vm_offset;
+		if (from_address < mpnt->vm_start || from_address >= mpnt->vm_end)
+			continue;
+		/* .. NOW we can actually try to use the same physical page */
+		if (!try_to_share(address, area, from_address, mpnt, give_page))
+			continue;
+		/* free newpage if we never used it.. */
+		if (give_page || !newpage)
+			return 1;
+		free_page(newpage);
+		return 1;
 	}
 	return 0;
 }
@@ -1283,38 +1278,3 @@ void si_meminfo(struct sysinfo *val)
 	val->sharedram <<= PAGE_SHIFT;
 	return;
 }
-
-
-/*
- * This handles a generic mmap of a disk file.
- */
-static unsigned long file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
-	unsigned long page, int no_share)
-{
-	struct inode * inode = area->vm_inode;
-	unsigned int block;
-	int nr[8];
-	int i, *p;
-
-	address &= PAGE_MASK;
-	block = address - area->vm_start + area->vm_offset;
-	block >>= inode->i_sb->s_blocksize_bits;
-	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	p = nr;
-	do {
-		*p = bmap(inode,block);
-		i--;
-		block++;
-		p++;
-	} while (i > 0);
-	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
-}
-
-struct vm_operations_struct file_mmap = {
-	NULL,			/* open */
-	NULL,			/* close */
-	file_mmap_nopage,	/* nopage */
-	NULL,			/* wppage */
-	NULL,			/* share */
-	NULL,			/* unmap */
-};

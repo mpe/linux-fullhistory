@@ -18,7 +18,7 @@
 	Rework the board error reset
 	The statistics need to be updated correctly.
 
-        Modularized my Pauline Middelink <middelin@polyware.iaf.nl>
+        Modularized by Pauline Middelink <middelin@polyware.iaf.nl>
 */
 
 static char *version =
@@ -653,6 +653,9 @@ eexp_close(struct device *dev)
 	free_irq(dev->irq);
 
 	irq2dev_map[dev->irq] = 0;
+
+	/* release the ioport-region */
+	release_region(ioaddr, 16);
 
 	/* Update the statistics here. */
 

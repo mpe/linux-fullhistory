@@ -13,7 +13,7 @@
 #include <linux/stat.h>
 
 void ipc_init (void);
-asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr);
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth);
 
 #ifdef CONFIG_SYSVIPC
 
@@ -62,9 +62,13 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 	return 0;
 }
 
-asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
-	
+	int version;
+
+	version = call >> 16; /* hack for backward compatibility */
+	call &= 0xffff;
+
 	if (call <= SEMCTL)
 		switch (call) {
 		case SEMOP:
@@ -89,17 +93,21 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 		case MSGSND:
 			return sys_msgsnd (first, (struct msgbuf *) ptr, 
 					   second, third);
-		case MSGRCV: {
-			struct ipc_kludge tmp;
-			int err;
-			if (!ptr)
-				return -EINVAL;
-			if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
-				return err;
-			memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
-				       sizeof (tmp));
-			return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp,
-					 	third);
+		case MSGRCV:
+			switch (version) {
+			case 0: {
+				struct ipc_kludge tmp;
+				int err;
+				if (!ptr)
+					return -EINVAL;
+				if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
+					return err;
+				memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
+					       sizeof (tmp));
+				return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
+				}
+			case 1: default:
+				return sys_msgrcv (first, (struct msgbuf *) ptr, second, fifth, third);
 			}
 		case MSGGET:
 			return sys_msgget ((key_t) first, second);
@@ -111,8 +119,21 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 	if (call <= SHMCTL) 
 		switch (call) {
 		case SHMAT:
-			return sys_shmat (first, (char *) ptr, second, 
-							(ulong *) third);
+			switch (version) {
+			case 0: default: {
+				ulong raddr;
+				int err;
+				if ((err = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
+					return err;
+				err = sys_shmat (first, (char *) ptr, second, &raddr);
+				if (err)
+					return err;
+				put_fs_long (raddr, (ulong *) third);
+				return 0;
+				}
+			case 1:
+				return sys_shmat (first, (char *) ptr, second, (ulong *) third);
+			}
 		case SHMDT: 
 			return sys_shmdt ((char *)ptr);
 		case SHMGET:
@@ -127,7 +148,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
 
 #else /* not CONFIG_SYSVIPC */
 
-asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr) 
+asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth) 
 {
     return -ENOSYS;
 }

@@ -326,7 +326,6 @@ static void sr_photocd(struct inode *inode)
       frame = (unsigned long)buffer[17]/16*10 + (unsigned long)buffer[17]%16;
       sector = min*60*75 + sec*75 + frame;
       if (sector) {
-      	sector -= CD_BLOCK_OFFSET;
 	printk("sr_photocd: multisession PhotoCD detected\n");
       }
     }

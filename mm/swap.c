@@ -19,6 +19,7 @@
 #include <linux/stat.h>
 #include <linux/fs.h>
 
+#include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
 #include <asm/bitops.h>
 
@@ -287,7 +288,7 @@ unsigned long swap_in(unsigned long entry)
 	return page | PAGE_DIRTY | PAGE_PRESENT;
 }
 
-static inline int try_to_swap_out(unsigned long * table_ptr)
+static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, unsigned long * table_ptr)
 {
 	unsigned long page, entry;
 
@@ -311,13 +312,18 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 		page &= PAGE_MASK;
 		if (mem_map[MAP_NR(page)] != 1)
 			return 0;
-		if (!(entry = get_swap_page()))
-			return 0;
-		*table_ptr = entry;
-		invalidate();
-		write_swap_page(entry, (char *) page);
+		if (vma->vm_ops && vma->vm_ops->swapout)
+			vma->vm_ops->swapout(vma, offset, table_ptr);
+		else
+		{
+			if (!(entry = get_swap_page()))
+				return 0;
+			*table_ptr = entry;
+			invalidate();
+			write_swap_page(entry, (char *) page);
+		}
 		free_page(page);
-		return 1;
+		return 1 + mem_map[MAP_NR(page)];
 	}
         if ((entry = find_in_swap_cache(page)))  {
 		if (mem_map[MAP_NR(page)] != 1) {
@@ -370,11 +376,28 @@ static int swap_out_process(struct task_struct * p)
 	unsigned long offset;
 	unsigned long *pgdir;
 	unsigned long pg_table;
+	struct vm_area_struct* vma;
 
 	/*
 	 * Go through process' page directory.
 	 */
 	address = p->mm->swap_address;
+	p->mm->swap_address = 0;
+
+	/*
+	 * Find the proper vm-area
+	 */
+	vma = p->mm->mmap;
+	for (;;) {
+		if (!vma)
+			return 0;
+		if (address <= vma->vm_end)
+			break;
+		vma = vma->vm_next;
+	}
+	if (address < vma->vm_start)
+		address = vma->vm_start;
+
 	pgdir = (address >> PGDIR_SHIFT) + (unsigned long *) p->tss.cr3;
 	offset = address & ~PGDIR_MASK;
 	address &= PGDIR_MASK;
@@ -397,7 +420,18 @@ static int swap_out_process(struct task_struct * p)
 		 * Go through this page table.
 		 */
 		for( ; offset < ~PGDIR_MASK ; offset += PAGE_SIZE) {
-			switch(try_to_swap_out((unsigned long *) (pg_table + (offset >> 10)))) {
+			/*
+			 * Update vma again..
+			 */
+			for (;;) {
+				if (address+offset < vma->vm_end)
+					break;
+				vma = vma->vm_next;
+				if (!vma)
+					return 0;
+			}
+
+			switch(try_to_swap_out(vma, offset+address-vma->vm_start, (unsigned long *) (pg_table + (offset >> 10)))) {
 				case 0:
 					break;
 
@@ -415,9 +449,8 @@ static int swap_out_process(struct task_struct * p)
 	}
 	/*
 	 * Finish work with this process, if we reached the end of the page
-	 * directory.  Mark restart from the beginning the next time.
+	 * directory.
 	 */
-	p->mm->swap_address = 0;
 	return 0;
 }
 
@@ -647,10 +680,10 @@ repeat:
  */
 unsigned long __get_dma_pages(int priority, unsigned long order)
 {
-	unsigned long list = 0; 
+	unsigned long list = 0;
 	unsigned long result;
-	unsigned long limit = 16*1024*1024;
-	
+	unsigned long limit = MAX_DMA_ADDRESS;
+
 	/* if (EISA_bus) limit = ~0UL; */
 	if (priority != GFP_ATOMIC)
 		priority = GFP_BUFFER;

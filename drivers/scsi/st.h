@@ -27,6 +27,7 @@ typedef struct {
   Scsi_Device* device;
   unsigned char dirty;
   unsigned char rw;
+  unsigned char ready;
   unsigned char eof;
   unsigned char write_prot;
   unsigned char drv_write_prot;
@@ -46,6 +47,7 @@ typedef struct {
   int recover_count;
   int drv_block;	/* The block where the drive head is */
   unsigned char moves_after_eof;
+  unsigned char at_sm;
   struct mtget * mt_status;
   Scsi_Cmnd SCpnt;
 } Scsi_Tape;
@@ -61,6 +63,11 @@ typedef struct {
 #define	ST_IDLE		0
 #define	ST_READING	1
 #define	ST_WRITING	2
+
+/* Values of ready state */
+#define ST_READY	0
+#define ST_NOT_READY	1
+#define ST_NO_TAPE	2
 
 /* Positioning SCSI-commands for Tandberg, etc. drives */
 #define	QFA_REQUEST_BLOCK	0x02

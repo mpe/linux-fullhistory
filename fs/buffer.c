@@ -979,6 +979,22 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 	}
 }
 
+/*
+ * This actually gets enough info to try to align the stuff,
+ * but we don't bother yet.. We'll have to check that nobody
+ * else uses the buffers etc.
+ *
+ * "address" points to the new page we can use to move things
+ * around..
+ */
+static unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
+	unsigned long address)
+{
+	while (nrbuf-- > 0)
+		brelse(bh[nrbuf]);
+	return 0;
+}
+
 static unsigned long check_aligned(struct buffer_head * first, unsigned long address,
 	dev_t dev, int *b, int size)
 {
@@ -987,15 +1003,13 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 	unsigned long offset;
 	int block;
 	int nrbuf;
+	int aligned = 1;
 
-	page = (unsigned long) first->b_data;
-	if (page & ~PAGE_MASK) {
-		brelse(first);
-		return 0;
-	}
-	mem_map[MAP_NR(page)]++;
 	bh[0] = first;
 	nrbuf = 1;
+	page = (unsigned long) first->b_data;
+	if (page & ~PAGE_MASK)
+		aligned = 0;
 	for (offset = size ; offset < PAGE_SIZE ; offset += size) {
 		block = *++b;
 		if (!block)
@@ -1005,8 +1019,11 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 			goto no_go;
 		bh[nrbuf++] = first;
 		if (page+offset != (unsigned long) first->b_data)
-			goto no_go;
+			aligned = 0;
 	}
+	if (!aligned)
+		return try_to_align(bh, nrbuf, address);
+	mem_map[MAP_NR(page)]++;
 	read_buffers(bh,nrbuf);		/* make sure they are actually read correctly */
 	while (nrbuf-- > 0)
 		brelse(bh[nrbuf]);
@@ -1016,7 +1033,6 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 no_go:
 	while (nrbuf-- > 0)
 		brelse(bh[nrbuf]);
-	free_page(page);
 	return 0;
 }
 

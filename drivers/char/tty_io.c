@@ -1438,6 +1438,14 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				default: 
 					return -EINVAL;
 			}
+		case TIOCTTYGSTRUCT:
+			retval = verify_area(VERIFY_WRITE, (void *) arg,
+						sizeof(struct tty_struct));
+			if (retval)
+				return retval;
+			memcpy_tofs((struct tty_struct *) arg,
+				    tty, sizeof(struct tty_struct));
+			return 0;
 		default:
 			if (tty->driver.ioctl) {
 				retval = (tty->driver.ioctl)(tty, file,

@@ -40,6 +40,18 @@
 #define IS_MULTICAST	5		/* Multicast IP address */
 
 /*
+ *	We tag these structures with multicasts.
+ */
+ 
+struct dev_mc_list
+{	
+	struct dev_mc_list *next;
+	char dmi_addr[MAX_ADDR_LEN];
+	unsigned short dmi_addrlen;
+	unsigned short dmi_users;
+};
+
+/*
  * The DEVICE structure.
  * Actually, this whole structure is a big mistake.  It mixes I/O
  * data with strictly "high-level" data, and it has to know about
@@ -107,7 +119,12 @@ struct device
   unsigned long		  pa_dstaddr;	/* protocol P-P other side addr	*/
   unsigned long		  pa_mask;	/* protocol netmask		*/
   unsigned short	  pa_alen;	/* protocol address length	*/
+
+  struct dev_mc_list	 *mc_list;	/* Multicast mac addresses	*/
+  int			 mc_count;	/* Number of installed mcasts	*/
   
+  struct ip_mc_list	 *ip_mc_list;	/* IP multicast filter chain    */
+    
   /* For load balancing driver pair support */
   
   unsigned long		   pkt_queue;	/* Packets queued */
@@ -201,6 +218,13 @@ extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);
+
+/* Functions used for multicast support */
+
+extern void		dev_mc_upload(struct device *dev);
+extern void 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
+extern void		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
+extern void		dev_mc_discard(struct device *dev);
 
 #endif /* __KERNEL__ */
 

@@ -105,9 +105,12 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(set_blocksize),
 	X(getblk),
 	X(bread),
+	X(breada),
 	X(brelse),
 	X(ll_rw_block),
 	X(__wait_on_buffer),
+	X(dcache_lookup),
+	X(dcache_add),
 
 	/* device registration */
 	X(register_chrdev),

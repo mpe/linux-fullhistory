@@ -168,6 +168,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	  if (buf_needed > MAX_BUF) buf_needed = MAX_BUF;
 	  buf = (char *) scsi_malloc(buf_needed);
 	  if (!buf) return -ENOMEM;
+	  memset(buf, 0, buf_needed);
 	} else
 	  buf = NULL;
 

@@ -58,6 +58,8 @@ struct ipc_kludge {
 #define SHMGET 		23
 #define SHMCTL 		24
 
+#define IPCCALL(version,op)	((version)<<16 | (op))
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_IPC_H */

@@ -364,6 +364,7 @@ static void exit_mm(void)
 		struct vm_area_struct * next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close)
 			mpnt->vm_ops->close(mpnt);
+		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
 		kfree(mpnt);

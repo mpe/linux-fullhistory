@@ -149,13 +149,12 @@ int skb_check(struct sk_buff *skb, int head, int line, char *file)
 #endif
 
 
+#ifdef CONFIG_SKB_CHECK
 void skb_queue_head_init(struct sk_buff_head *list)
 {
 	list->prev = (struct sk_buff *)list;
 	list->next = (struct sk_buff *)list;
-#if CONFIG_SKB_CHECK
 	list->magic_debug_cookie = SK_HEAD_SKB;
-#endif
 }
 
 
@@ -170,12 +169,10 @@ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 	save_flags(flags);
 	cli();
 
-#if CONFIG_SKB_CHECK
 	IS_SKB(newsk);
 	IS_SKB_HEAD(list);
 	if (newsk->next || newsk->prev)
 		printk("Suspicious queue head: sk_buff on list!\n");
-#endif
 
 	newsk->next = list->next;
 	newsk->prev = list;
@@ -197,12 +194,10 @@ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 	save_flags(flags);
 	cli();
 
-#if CONFIG_SKB_CHECK
 	if (newsk->next || newsk->prev)
 		printk("Suspicious queue tail: sk_buff on list!\n");
 	IS_SKB(newsk);
 	IS_SKB_HEAD(list);
-#endif
 
 	newsk->next = list;
 	newsk->prev = list->prev;
@@ -254,7 +249,6 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-#if CONFIG_SKB_CHECK
 	IS_SKB(old);
 	IS_SKB(newsk);
 
@@ -262,7 +256,6 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 		printk("insert before unlisted item!\n");
 	if(newsk->next || newsk->prev)
 		printk("inserted item is already on a list.\n");
-#endif
 
 	save_flags(flags);
 	cli();
@@ -281,7 +274,6 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-#if CONFIG_SKB_CHECK
 	IS_SKB(old);
 	IS_SKB(newsk);
 
@@ -289,7 +281,6 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 		printk("append before unlisted item!\n");
 	if(newsk->next || newsk->prev)
 		printk("append item is already on a list.\n");
-#endif
 
 	save_flags(flags);
 	cli();
@@ -331,6 +322,8 @@ void skb_unlink(struct sk_buff *skb)
 	restore_flags(flags);
 }
 
+#endif
+
 /*
  *	Free an sk_buff. This still knows about things it should
  *	not need to like protocols and sockets.
@@ -344,7 +337,9 @@ void kfree_skb(struct sk_buff *skb, int rw)
 			__builtin_return_address(0));
 		return;
   	}
+#ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
+#endif
 	if (skb->lock)
 	{
 		skb->free = 3;    /* Free when unlocked */
@@ -456,6 +451,7 @@ void kfree_skbmem(struct sk_buff *skb,unsigned size)
 		skb->dev->pkt_queue--;
 	restore_flags(flags);
 #endif
+#ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
 	if(size!=skb->truesize)
 		printk("kfree_skbmem: size mismatch.\n");
@@ -473,6 +469,14 @@ void kfree_skbmem(struct sk_buff *skb,unsigned size)
 	}
 	else
 		printk("kfree_skbmem: bad magic cookie\n");
+#else
+	save_flags(flags);
+	cli();
+	kfree_s((void *)skb,size);
+	net_skbcount--;
+	net_memory -= size;
+	restore_flags(flags);
+#endif
 }
 
 /*

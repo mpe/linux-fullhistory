@@ -1,3 +1,203 @@
+Tue Nov 29 15:43:50 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.68 released.
+
+	Add support for 12 byte vendor specific commands in scsi-generics,
+	more (i.e. the last manditory) low-level changes to support
+	loadable modules, plus a few other changes people have requested
+	lately.  Changes by me (ERY) unless otherwise noted.  Spelling
+	changes appear from some unknown corner of the universe.
+
+	* Throughout: Change COMMAND_SIZE() to use SCpnt->cmd_len.
+
+	* Throughout: Change info() low level function to take a Scsi_Host
+	pointer.  This way the info function can return specific
+	information about the host in question, if desired.
+
+	* All low-level drivers: Add NULL in initializer for the
+	usage_count field added to Scsi_Host_Template.
+
+	* aha152x.[c,h]: Remove redundant info() function.
+
+	* aha1542.[c,h]: Likewise.
+
+	* aha1740.[c,h]: Likewise.
+
+	* aha274x.[c,h]: Likewise.
+
+	* eata.[c,h]: Likewise.
+
+	* pas16.[c,h]: Likewise.
+
+	* scsi_debug.[c,h]: Likewise.
+
+	* t128.[c,h]: Likewise.
+
+	* u14-34f.[c,h]: Likewise.
+
+	* ultrastor.[c,h]: Likewise.
+
+	* wd7000.[c,h]: Likewise.
+
+	* aha1542.c: Add support for command line options with lilo to set
+	DMA parameters, I/O port.  From Matt Aarnio.
+
+	* buslogic.[c,h]: New version (1.13) from Dave Gentzel.
+
+	* hosts.h: Add new field to Scsi_Hosts "block" to allow blocking
+	all I/O to certain other cards.  Helps prevent problems with some
+	ISA motherboards.
+
+	* hosts.h: Add usage_count to Scsi_Host_Template.
+
+	* hosts.h: Add n_io_port to Scsi_Host (used when releasing module).
+
+	* hosts.c: Initialize block field.
+	
+	* in2000.c: Remove "static" declarations from exported functions.
+
+	* in2000.h: Likewise.
+
+	* scsi.c: Correctly set cmd_len field as required.  Save and
+	change setting when doing a request_sense, restore when done.
+	Move abort timeout message.  Fix panic in request_queueable to
+	print correct function name.
+
+	* scsi.c: When incrementing usage count, walk block linked list
+	for host, and or in SCSI_HOST_BLOCK bit.  When decrementing usage
+	count to 0, clear this bit to allow usage to continue, wake up
+	processes waiting.
+
+
+	* scsi_ioctl.c: If we have an info() function, call it, otherwise
+	if we have a "name" field, use it, else do nothing.
+
+	* sd.c, sr.c: Clear cmd_len field prior to each command we
+	generate.
+
+	* sd.h: Add "has_part_table" bit to rscsi_disks.
+
+	* sg.[c,h]: Add support for vendor specific 12 byte commands (i.e.
+	override command length in COMMAND_SIZE).
+
+	* sr.c: Bugfix from Gerd in photocd code.
+
+	* sr.c: Bugfix in get_sectorsize - always use scsi_malloc buffer -
+	we cannot guarantee that the stack is < 16Mb.
+
+Tue Nov 22 15:40:46 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.67 released.
+
+	* sr.c: Change spelling of manufactor to manufacturer.
+
+	* scsi.h: Likewise.
+
+	* scsi.c: Likewise.
+
+	* qlogic.c: Spelling corrections.
+
+	* in2000.h: Spelling corrections.
+
+	* in2000.c: Update from Bill Earnest, change from
+	jshiffle@netcom.com.  Support new bios versions.
+
+	* README.qlogic: Spelling correction.
+
+Tue Nov 22 15:40:46 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.66 released.
+
+	* u14-34f.c: Spelling corrections.
+
+	* sr.[h,c]: Add support for multi-session CDs from Gerd Knorr.
+
+	* scsi.h: Add manufactor field for keeping track of device
+	manufacturer.
+
+	* scsi.c: More spelling corrections.
+
+	* qlogic.h, qlogic.c, README.qlogic: New driver from Tom Zerucha.
+
+	* in2000.c, in2000.h: New driver from Brad McLean/Bill Earnest.
+
+	* fdomain.c: Spelling correction.
+
+	* eata.c: Spelling correction.
+
+Fri Nov 18 15:22:44 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.65 released.
+
+	* eata.h: Update version string to 1.08.00.
+
+	* eata.c: Set sg_tablesize correctly for DPT PM2012 boards.
+
+	* aha274x.seq: Spell checking.
+
+	* README.st: Likewise.
+
+	* README.aha274x: Likewise.
+
+	* ChangeLog: Likewise.
+
+Tue Nov 15 15:35:08 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.64 released.
+
+	* u14-34f.h: Update version number to 1.10.01.
+
+	* u14-34f.c: Use Scsi_Host can_queue variable instead of one from template.
+
+	* eata.[c,h]: New driver for DPT boards from Dario Ballabio.
+
+	* buslogic.c: Use can_queue field.
+
+Wed Nov 30 12:09:09 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.63 released.
+
+	* sd.c: Give I/O error if we attempt 512 byte I/O to a disk with
+	1024 byte sectors.
+
+	* scsicam.c: Make sure we do read from whole disk (mask off
+	partition).
+
+	* scsi.c: Use can_queue in Scsi_Host structure.
+	Fix panic message about invalid host.
+
+	* hosts.c: Initialize can_queue from template.
+
+	* hosts.h: Add can_queue to Scsi_Host structure.
+
+	* aha1740.c: Print out warning about NULL ecbptr.
+
+Fri Nov  4 12:40:30 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.62 released.
+
+	* fdomain.c: Update to version 5.20. (From Rik Faith).  Support
+	BIOS version 3.5.
+
+	* st.h: Add ST_EOD symbol.
+
+	* st.c: Patches from Kai Makisara - support additional densities,
+	add support for MTFSS, MTBSS, MTWSM commands.
+
+	* README.st: Update to document new commands.
+
+	* scsi.c: Add Mediavision CDR-H93MV to blacklist.
+
+Sat Oct 29 20:57:36 1994  Eric Youngdale  (eric@andante.aib.com)
+
+	* Linux 1.1.60 released.
+
+	* u14-34f.[c,h]: New driver from Dario Ballabio.
+
+	* aic7770.c, aha274x_seq.h, aha274x.seq, aha274x.h, aha274x.c,
+	README.aha274x: New files, new driver from John Aycock.
+
+
 Tue Oct 11 08:47:39 1994  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.54 released.
@@ -5,6 +205,13 @@ Tue Oct 11 08:47:39 1994  Eric Youngdale  (eric@andante)
 	* Add third PCI chip id.  [Drew]
 
 	* buslogic.c: Set BUSLOGIC_CMDLUN back to 1 [Eric].
+
+	* ultrastor.c: Fix asm directives for new GCC.
+
+	* sr.c, sd.c: Use new end_scsi_request function.
+
+	* scsi.h(end_scsi_request): Return pointer to block if still
+	active, else return NULL if inactive.  Fixes race condition.
 
 Sun Oct  9 20:23:14 1994  Eric Youngdale  (eric@andante)
 
@@ -140,6 +347,140 @@ Thu Aug  4 08:47:27 1994  Eric Youngdale  (eric@andante)
 	* Makefile: Fix typo in NCR53C7xx.
 
 	* st.c: Print correct number for device.
+
+Tue Aug  2 11:29:14 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.38 released.
+
+	Lots of changes in 1.1.38.  All from Drew unless otherwise noted.
+
+	* 53c7,8xx.c: New file from Drew.  PCI driver.
+
+	* 53c7,8xx.h: Likewise.
+
+	* 53c7,8xx.scr: Likewise.
+
+	* 53c8xx_d.h, 53c8xx_u.h, script_asm.pl: Likewise.
+
+	* scsicam.c: New file from Drew.  Read block 0 on the disk and
+	read the partition table.  Attempt to deduce the geometry from
+	the partition table if possible.  Only used by 53c[7,8]xx right
+	now, but could be used by any device for which we have no way
+	of identifying the geometry.
+
+	* sd.c: Use device letters instead of sd%d in a lot of messages.
+
+	* seagate.c: Fix bug that resulted in lockups with some devices.
+
+	* sr.c (sr_open): Return -EROFS, not -EACCES if we attempt to open
+	device for write.
+
+	* hosts.c, Makefile: Update for new driver.
+
+	* NCR5380.c, NCR5380.h, g_NCR5380.h: Update from Drew to support
+	53C400 chip.
+
+	* constants.c: Define CONST_CMND and CONST_MSG.  Other minor
+	cleanups along the way.  Improve handling of CONST_MSG.
+
+	* fdomain.c, fdomain.h: New version from Rik Faith.  Update to
+	5.18.  Should now support TMC-3260 PCI card with 18C30 chip.
+
+	* pas16.c: Update with new irq initialization.
+
+	* t128.c: Update with minor cleanups.
+
+	* scsi.c (scsi_pid): New variable - gives each command a unique
+	id. Add Quantum LPS5235S to blacklist.  Change in_scan to
+	in_scan_scsis and make global.
+
+	* scsi.h: Add some defines for extended message handling,
+	INITIATE/RELEASE_RECOVERY.  Add a few new fields to support sync
+	transfers.
+
+	* scsi_ioctl.h: Add ioctl to request synchronous transfers.
+
+
+Tue Jul 26 21:36:58 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.37 released.
+
+	* aha1542.c: Always call aha1542_mbenable, use new udelay
+	mechanism so we do not wait a long time if the board does not
+	implement this command.
+
+	* g_NCR5380.c: Remove #include <linux/config.h> and #if
+	defined(CONFIG_SCSI_*).
+
+	* seagate.c: Likewise.
+
+	Next round of changes to support loadable modules.  Getting closer
+	now, still not possible to do anything remotely usable.
+
+	hosts.c: Create a linked list of detected high level devices.
+	(scsi_register_device): New function to insert into this list.
+	(scsi_init): Call scsi_register_device for each of the known high
+	level drivers.
+
+	hosts.h: Add prototype for linked list header.  Add structure
+	definition for device template structure which defines the linked
+	list.
+
+	scsi.c: (scan_scsis): Use linked list instead of knowledge about
+	existing high level device drivers.
+	(scsi_dev_init): Use init functions for drivers on linked list
+	instead of explicit list to initialize and attach devices to high
+	level drivers.
+
+	scsi.h: Add new field "attached" to scsi_device - count of number
+	of high level devices attached.
+
+	sd.c, sr.c, sg.c, st.c: Adjust init/attach functions to use new
+	scheme.
+
+Sat Jul 23 13:03:17 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.35 released.
+
+	* ultrastor.c: Change constraint on asm() operand so that it works
+	with gcc 2.6.0.
+
+Thu Jul 21 10:37:39 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.33 released.
+
+	* sr.c(sr_open): Do not allow opens with write access.
+
+Mon Jul 18 09:51:22 1994 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.31 released.
+
+	* sd.c: Increase SD_TIMEOUT from 300 to 600.
+
+	* sr.c: Remove stray task_struct* variable that was no longer
+	used.
+
+	* sr_ioctl.c: Fix typo in up() call.
+
+Sun Jul 17 16:25:29 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.30 released.
+
+	* scsi.c (scan_scsis): Fix detection of some Toshiba CDROM drives
+	that report themselves as disk drives.
+
+	* (Throughout): Use request.sem instead of request.waiting.
+	Should fix swap problem with fdomain.
+
+Thu Jul 14 10:51:42 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.29 released.
+
+	* scsi.c (scan_scsis): Add new devices to end of linked list, not
+	to the beginning.
+
+	* scsi.h (SCSI_SLEEP): Remove brain dead hack to try and save
+	the task state before sleeping.
 
 Sat Jul  9 15:01:03 1994  Eric Youngdale  (eric@esp22)
 

@@ -150,6 +150,7 @@ static struct blist blacklist[] =
 				     * controller, which causes SCSI code to reset bus.*/
    {"SEAGATE", "ST296","921"},   /* Responds to all lun */
    {"SONY","CD-ROM CDU-541","4.3d"},
+   {"SONY","CD-ROM CDU-55S","1.0i"},
    {"TANDBERG","TDC 3600","U07"},  /* Locks up if polled for lun != 0 */
    {"TEAC","CD-ROM","1.06"},	/* causes failed REQUEST SENSE on lun 1 for seagate
 				 * controller, which causes SCSI code to reset bus.*/
@@ -898,7 +899,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	      if (host->block) {
 		struct Scsi_Host * block;
 		for(block = host->block; block != host; block = block->block)
-		  block->host_busy |= ~SCSI_HOST_BLOCK;
+		  block->host_busy |= SCSI_HOST_BLOCK;
 	      }
 	      sti();
 	      break;
@@ -1810,7 +1811,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	    if(sdtpnt->attach) (*sdtpnt->attach)(SDpnt);
 	  if(SDpnt->type != -1){
-	    for(j=0;j<SDpnt->host->hostt->cmd_per_lun;j++){
+	    for(j=0;j<SDpnt->host->cmd_per_lun;j++){
 	      SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd));
 	      SCpnt->host = SDpnt->host;
 	      SCpnt->device = SDpnt;
@@ -1843,13 +1844,13 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  if(SDpnt->type != TYPE_TAPE)
 	    dma_sectors += ((host->sg_tablesize * 
 			     sizeof(struct scatterlist) + 511) >> 9) * 
-			       host->hostt->cmd_per_lun;
+			       host->cmd_per_lun;
 	  
 	  if(host->unchecked_isa_dma &&
 	     memory_end - 1 > ISA_DMA_THRESHOLD &&
 	     SDpnt->type != TYPE_TAPE) {
 	    dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
-	      host->hostt->cmd_per_lun;
+	      host->cmd_per_lun;
 	    need_isa_buffer++;
 	  };
 	};

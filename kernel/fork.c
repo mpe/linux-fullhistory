@@ -100,8 +100,13 @@ static int dup_mmap(struct task_struct * tsk)
 		*tmp = *mpnt;
 		tmp->vm_task = tsk;
 		tmp->vm_next = NULL;
-		if (tmp->vm_inode)
+		if (tmp->vm_inode) {
 			tmp->vm_inode->i_count++;
+			/* insert tmp into the share list, just after mpnt */
+			tmp->vm_next_share->vm_prev_share = tmp;
+			mpnt->vm_next_share = tmp;
+			tmp->vm_prev_share = mpnt;
+		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
 		*p = tmp;

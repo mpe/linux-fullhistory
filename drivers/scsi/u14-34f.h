@@ -10,13 +10,13 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_biosparam(Disk *, int, int *);
 
-#define U14_34F_VERSION "1.10.01"
+#define U14_34F_VERSION "1.11.01"
 
 #define ULTRASTOR_14_34F {                                            \
                 NULL,                                                 \
                 NULL,                                                 \
                 "UltraStor 14F/34F rev. " U14_34F_VERSION " by "      \
-                "Dario_Ballabio@milano.europe.dg.com.",\
+                "Dario_Ballabio@milano.europe.dg.com.",               \
                 u14_34f_detect,                                       \
                 NULL,                                                 \
                 NULL,		                                      \

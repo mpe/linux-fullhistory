@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994 Kai Makisara
 		 email makisara@vtinsx.ins.vtt.fi or Kai.Makisara@vtt.fi
 
-  Last modified: Tue Oct 25 19:37:33 1994 by root@kai.home
+  Last modified: Wed Nov 30 21:09:53 1994 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -348,6 +348,9 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
   STp = &(scsi_tapes[dev]);
   STbuffer = STp->buffer;
 
+  if (STp->ready != ST_READY)
+    return 0;
+
   if (STp->rw == ST_WRITING)  /* Writing */
     return flush_write_buffer(dev);
 
@@ -415,6 +418,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     STp->dirty = 0;
     STp->rw = ST_IDLE;
+    STp->ready = ST_READY;
     if (STp->eof != ST_EOD)  /* Save EOD across opens */
       STp->eof = ST_NOEOF;
     STp->eof_hit = 0;
@@ -459,14 +463,21 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	  (SCpnt->sense_buffer[2] & 0x0f) == NO_TAPE) {
         (STp->mt_status)->mt_fileno = STp->drv_block = 0 ;
 	printk("st%d: No tape.\n", dev);
+	STp->ready = ST_NO_TAPE;
       } else {
 	printk("st%d: Error %x.\n", dev, SCpnt->result);
         (STp->mt_status)->mt_fileno = STp->drv_block = (-1);
+	STp->ready = ST_NOT_READY;
       }
-      (STp->buffer)->in_use = 0;
-      STp->in_use = 0;
       SCpnt->request.dev = -1;  /* Mark as not busy */
-      return (-EIO);
+      (STp->buffer)->in_use = 0;
+      STp->buffer = NULL;
+      STp->density = 0;   /* Clear the errorneus "residue" */
+      STp->write_prot = 0;
+      STp->block_size = 0;
+      STp->eof = ST_NOEOF;
+      (STp->mt_status)->mt_fileno = STp->drv_block = 0;
+      return 0;
     }
 
     SCpnt->sense_buffer[0]=0;
@@ -533,10 +544,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	(STp->buffer)->b_data[10] * 256 + (STp->buffer)->b_data[11];
 #ifdef DEBUG
       if (debugging)
-	printk("st%d: Density %x, tape length: %x, blocksize: %d, drv buffer: %d\n",
+	printk("st%d: Density %x, tape length: %x, drv buffer: %d\n",
 	       dev, STp->density, (STp->buffer)->b_data[5] * 65536 +
 	       (STp->buffer)->b_data[6] * 256 + (STp->buffer)->b_data[7],
-	       STp->block_size, STp->drv_buffer);
+	       STp->drv_buffer);
 #endif
       if (STp->block_size > st_buffer_size) {
 	printk("st%d: Blocksize %d too large for buffer.\n", dev,
@@ -651,7 +662,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
     if (rewind)
       st_int_ioctl(inode, filp, MTREW, 1);
 
-    (STp->buffer)->in_use = 0;
+    if (STp->buffer != NULL)
+      (STp->buffer)->in_use = 0;
     STp->in_use = 0;
 
     return;
@@ -672,6 +684,8 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 
     dev = MINOR(inode->i_rdev) & 127;
     STp = &(scsi_tapes[dev]);
+    if (STp->ready != ST_READY)
+      return (-EIO);
 #ifdef DEBUG
     if (!STp->in_use) {
       printk("st%d: Incorrect device.\n", dev);
@@ -884,6 +898,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     else
       SCpnt->request.dev = -1;  /* Mark as not busy */
 
+    STp->at_sm &= (total != 0);
     return( total);
 }   
 
@@ -901,6 +916,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     dev = MINOR(inode->i_rdev) & 127;
     STp = &(scsi_tapes[dev]);
+    if (STp->ready != ST_READY)
+      return (-EIO);
 #ifdef DEBUG
     if (!STp->in_use) {
       printk("st%d: Incorrect device.\n", dev);
@@ -930,8 +947,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	     (STp->buffer)->buffer_bytes);
 #endif
     if (((STp->buffer)->buffer_bytes == 0) &&
-	STp->eof == ST_EOM_OK)  /* EOM or Blank Check */
-      return (-EIO);
+	(STp->eof == ST_EOM_OK || STp->eof == ST_EOD))
+      return (-EIO);  /* EOM or Blank Check */
 
     STp->rw = ST_READING;
 
@@ -975,6 +992,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	(STp->buffer)->read_pointer = 0;
 	STp->eof_hit = 0;
+	STp->at_sm = 0;
 
 	if ((STp->buffer)->last_result_fatal) {
 #ifdef DEBUG
@@ -1180,12 +1198,15 @@ st_int_ioctl(struct inode * inode,struct file * file,
    unsigned char cmd[10];
    Scsi_Cmnd * SCpnt;
    Scsi_Tape * STp;
-   int fileno, blkno, undone, datalen;
+   int fileno, blkno, at_sm, undone, datalen;
 
    dev = dev & 127;
    STp = &(scsi_tapes[dev]);
+   if (STp->ready != ST_READY)
+     return (-EIO);
    fileno = (STp->mt_status)->mt_fileno ;
    blkno = STp->drv_block;
+   at_sm = STp->at_sm;
 
    memset(cmd, 0, 10);
    datalen = 0;
@@ -1204,6 +1225,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        fileno += arg;
        blkno = 0;
+       at_sm &= (arg != 0);
        break; 
      case MTBSF:
      case MTBSFM:
@@ -1223,6 +1245,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        fileno -= arg;
        blkno = (-1);  /* We can't know the block number */
+       at_sm &= (arg != 0);
        break; 
       case MTFSR:
        cmd[0] = SPACE;
@@ -1237,6 +1260,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        if (blkno >= 0)
 	 blkno += arg;
+       at_sm &= (arg != 0);
        break; 
      case MTBSR:
        cmd[0] = SPACE;
@@ -1255,6 +1279,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        if (blkno >= 0)
 	 blkno -= arg;
+       at_sm &= (arg != 0);
        break; 
       case MTFSS:
        cmd[0] = SPACE;
@@ -1267,8 +1292,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Spacing tape forward %d setmarks.\n", dev,
 		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
 #endif
-       if (arg != 0)
+       if (arg != 0) {
 	 blkno = fileno = (-1);
+	 at_sm = 1;
+       }
        break; 
      case MTBSS:
        cmd[0] = SPACE;
@@ -1285,8 +1312,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Spacing tape backward %ld setmarks.\n", dev, (-ltmp));
        }
 #endif
-       if (arg != 0)
+       if (arg != 0) {
 	 blkno = fileno = (-1);
+	 at_sm = 1;
+       }
        break; 
      case MTWEOF:
      case MTWSM:
@@ -1311,6 +1340,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        fileno += arg;
        blkno = 0;
+       at_sm = (cmd_in == MTWSM);
        break; 
      case MTREW:
        cmd[0] = REZERO_UNIT;
@@ -1322,7 +1352,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (debugging)
 	 printk("st%d: Rewinding tape.\n", dev);
 #endif
-       fileno = blkno = 0 ;
+       fileno = blkno = at_sm = 0 ;
        break; 
      case MTOFFL:
        cmd[0] = START_STOP;
@@ -1334,7 +1364,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (debugging)
 	 printk("st%d: Unloading tape.\n", dev);
 #endif
-       fileno = blkno = 0 ;
+       fileno = blkno = at_sm = 0 ;
        break; 
      case MTNOP:
 #ifdef DEBUG
@@ -1354,7 +1384,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (debugging)
 	 printk("st%d: Retensioning tape.\n", dev);
 #endif
-       fileno = blkno = 0 ;
+       fileno = blkno = at_sm = 0;
        break; 
      case MTEOM:
        /* space to the end of tape */
@@ -1371,6 +1401,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Spacing to end of recorded medium.\n", dev);
 #endif
        blkno = (-1);
+       at_sm = 0;
        break; 
      case MTERASE:
        if (STp->write_prot)
@@ -1381,7 +1412,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (debugging)
 	 printk("st%d: Erasing tape.\n", dev);
 #endif
-       fileno = blkno = 0 ;
+       fileno = blkno = at_sm = 0 ;
        break;
      case MTSEEK:
        if ((STp->device)->scsi_level < SCSI_2) {
@@ -1408,6 +1439,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 printk("st%d: Seeking tape to block %ld.\n", dev, arg);
 #endif
        fileno = blkno = (-1);
+       at_sm = 0;
        break;
      case MTSETBLK:  /* Set block length */
      case MTSETDENSITY: /* Set tape density */
@@ -1481,9 +1513,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
      if (cmd_in != MTSEEK) {
        STp->drv_block = blkno;
        (STp->mt_status)->mt_fileno = fileno;
+       STp->at_sm = at_sm;
      }
-     else
+     else {
        STp->drv_block = (STp->mt_status)->mt_fileno = (-1);
+       STp->at_sm = 0;
+     }
      if (cmd_in == MTFSF)
        STp->moves_after_eof = 0;
      else
@@ -1642,6 +1677,12 @@ st_ioctl(struct inode * inode,struct file * file,
        (STp->mt_status)->mt_gstat |= GMT_D_1600(0xffffffff);
      else if (STp->density == 3)
        (STp->mt_status)->mt_gstat |= GMT_D_6250(0xffffffff);
+     if (STp->ready == ST_READY)
+       (STp->mt_status)->mt_gstat |= GMT_ONLINE(0xffffffff);
+     if (STp->ready == ST_NO_TAPE)
+       (STp->mt_status)->mt_gstat |= GMT_DR_OPEN(0xffffffff);
+     if (STp->at_sm)
+       (STp->mt_status)->mt_gstat |= GMT_SM(0xffffffff);
 
      memcpy_tofs((char *)arg, (char *)(STp->mt_status),
 		 sizeof(struct mtget));
@@ -1650,6 +1691,8 @@ st_ioctl(struct inode * inode,struct file * file,
      return 0;
    }
    else if (cmd == (MTIOCPOS & IOCCMD_MASK)) {
+     if (STp->ready != ST_READY)
+       return (-EIO);
 #ifdef DEBUG
      if (debugging)
        printk("st%d: get tape position.\n", dev);
@@ -1712,8 +1755,10 @@ st_ioctl(struct inode * inode,struct file * file,
      memcpy_tofs((char *)arg, (char *) (&mt_pos), sizeof(struct mtpos));
      return result;
    }
-   else
+   else if (STp->ready == ST_READY)
      return scsi_ioctl(STp->device, cmd_in, (void *) arg);
+   else
+     return (-EIO);
 }
 
 
@@ -1829,6 +1874,7 @@ static void st_init()
     STp->write_threshold = st_write_threshold;
     STp->drv_block = 0;
     STp->moves_after_eof = 1;
+    STp->at_sm = 0;
     STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget));
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));

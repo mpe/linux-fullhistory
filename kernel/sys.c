@@ -32,7 +32,7 @@ extern void adjust_clock(void);
 
 asmlinkage int sys_ni_syscall(void)
 {
-	return -EINVAL;
+	return -ENOSYS;
 }
 
 asmlinkage int sys_idle(void)
