@@ -1,5 +1,5 @@
 /*
- * $Id: ctcmain.c,v 1.69 2005/02/27 19:46:44 ptiedem Exp $
+ * $Id: ctcmain.c,v 1.72 2005/03/17 10:51:52 ptiedem Exp $
  *
  * CTC / ESCON network driver
  *
@@ -37,7 +37,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * RELEASE-TAG: CTC/ESCON network driver $Revision: 1.69 $
+ * RELEASE-TAG: CTC/ESCON network driver $Revision: 1.72 $
  *
  */
 
@@ -281,6 +281,8 @@ struct ctc_priv {
  	 */
  	fsm_timer               restart_timer;
 
+	int buffer_size;
+
 	struct channel *channel[2];
 };
 
@@ -321,7 +323,7 @@ static void
 print_banner(void)
 {
 	static int printed = 0;
-	char vbuf[] = "$Revision: 1.68 $";
+	char vbuf[] = "$Revision: 1.72 $";
 	char *version = vbuf;
 
 	if (printed)
@@ -2704,7 +2706,7 @@ buffer_show(struct device *dev, char *buf)
 	if (!priv)
 		return -ENODEV;
 	return sprintf(buf, "%d\n",
-		       priv->channel[READ]->max_bufsize);
+			priv->buffer_size);
 }
 
 static ssize_t
@@ -2731,6 +2733,7 @@ buffer_write(struct device *dev, const char *buf, size_t count)
 	if (bs1 < (576 + LL_HEADER_LENGTH + 2))
 		return -EINVAL;
 
+	priv->buffer_size = bs1;
 	priv->channel[READ]->max_bufsize =
 	    priv->channel[WRITE]->max_bufsize = bs1;
 	if (!(ndev->flags & IFF_RUNNING))
@@ -2926,7 +2929,8 @@ ctc_init_netdevice(struct net_device * dev, int alloc_device,
 	}
 	fsm_newstate(privptr->fsm, DEV_STATE_STOPPED);
 	fsm_settimer(privptr->fsm, &privptr->restart_timer);
-	dev->mtu = CTC_BUFSIZE_DEFAULT - LL_HEADER_LENGTH - 2;
+	if (dev->mtu == 0)
+		dev->mtu = CTC_BUFSIZE_DEFAULT - LL_HEADER_LENGTH - 2;
 	dev->hard_start_xmit = ctc_tx;
 	dev->open = ctc_open;
 	dev->stop = ctc_close;
@@ -3051,7 +3055,7 @@ ctc_probe_device(struct ccwgroup_device *cgdev)
 		put_device(&cgdev->dev);
 		return rc;
 	}
-
+	priv->buffer_size = CTC_BUFSIZE_DEFAULT;
 	cgdev->cdev[0]->handler = ctc_irq_handler;
 	cgdev->cdev[1]->handler = ctc_irq_handler;
 	cgdev->dev.driver_data = priv;
@@ -3132,7 +3136,7 @@ ctc_new_device(struct ccwgroup_device *cgdev)
 		}
 		privptr->channel[direction]->netdev = dev;
 		privptr->channel[direction]->protocol = privptr->protocol;
-		privptr->channel[direction]->max_bufsize = CTC_BUFSIZE_DEFAULT;
+		privptr->channel[direction]->max_bufsize = privptr->buffer_size;
 	}
 	/* sysfs magic */
 	SET_NETDEV_DEV(dev, &cgdev->dev);
