@@ -1,5 +1,5 @@
 /*
- * ti_pcilynx.c - Texas Instruments PCILynx driver
+ * pcilynx.c - Texas Instruments PCILynx driver
  * Copyright (C) 1999,2000 Andreas Bombe <andreas.bombe@munich.netsurf.de>,
  *                         Stephan Linz <linz@mazet.de>
  *                         Manfred Weihs <weihs@ict.tuwien.ac.at>
@@ -1952,7 +1952,7 @@ static int __init pcilynx_init(void)
         }
 #endif
 
-        ret = pci_module_init(&lynx_pci_driver);
+        ret = pci_register_driver(&lynx_pci_driver);
         if (ret < 0) {
                 PRINT_G(KERN_ERR, "PCI module init failed");
                 goto free_char_dev;
