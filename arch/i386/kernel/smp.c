@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <asm/i82489.h>
 #include <linux/smp.h>
+#include <asm/pgtable.h>
 #include <asm/bitops.h>
 #include <asm/smp.h>
 

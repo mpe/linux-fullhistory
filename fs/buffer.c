@@ -662,7 +662,7 @@ repeat0:
 					continue;
 				};
 				
-				if (bh->b_count || bh->b_size != size)
+				if (bh->b_count || buffer_protected(bh) || bh->b_size != size)
 					 continue;
 				
 				/* Buffers are written in the order they are
@@ -838,10 +838,6 @@ void __bforget(struct buffer_head * buf)
 	}
 	if (mem_map[MAP_NR(buf->b_data)].count != 1) {
 		printk("Aieee... bforget(): shared buffer\n");
-		return;
-	}
-	if (buffer_protected(buf)) {
-		printk("Aieee... bforget(): protected buffer\n");
 		return;
 	}
 	mark_buffer_clean(buf);

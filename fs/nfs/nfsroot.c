@@ -50,14 +50,14 @@
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_mount.h>
-#include <netinet/in.h>
+#include <linux/in.h>
 #include <net/route.h>
 
 
 /* Range of privileged ports */
-#define STARTPORT 600
-#define ENDPORT (IPPORT_RESERVED - 1)
-#define NPORTS	(ENDPORT - STARTPORT + 1)
+#define STARTPORT	600
+#define ENDPORT		1023
+#define NPORTS		(ENDPORT - STARTPORT + 1)
 
 
 

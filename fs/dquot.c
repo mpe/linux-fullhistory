@@ -33,7 +33,6 @@
 #include <linux/mount.h>
 
 #include <asm/segment.h>
-#include <sys/sysmacros.h>
 
 #define __DQUOT_VERSION__	"dquot_5.6.0"
 

@@ -41,7 +41,7 @@
  *
  *    -- Daniel M. Eischen, deischen@iworks.InterWorks.org, 04/03/95
  *
- *  $Id: aic7xxx.c,v 2.10 1995/11/10 10:49:14 deang Exp $
+ *  $Id: aic7xxx.c,v 2.15 1995/12/17 19:43:20 deang Exp $
  *-M*************************************************************************/
 
 #ifdef MODULE
@@ -73,7 +73,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
-#define AIC7XXX_C_VERSION  "$Revision: 2.10 $"
+#define AIC7XXX_C_VERSION  "$Revision: 2.15 $"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        ((a < b) ? a : b)
@@ -160,24 +160,42 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 /* #define AIC7XXX_PROC_STATS */
 
 /*
- * Define this to use polling rather than using kernel support for waking
- * up a waiting process.
+ * For debugging the abort/reset code.
  */
-#define AIC7XXX_POLL
+/* #define AIC7XXX_DEBUG_ABORT */
+
+/*
+ * For general debug messages
+ */
+#define AIC7XXX_DEBUG
 
 /*
  * Controller type and options
  */
 typedef enum {
   AIC_NONE,
-  AIC_274x,    /* EISA aic7770 */
-  AIC_284x,    /* VLB  aic7770 */
-  AIC_7870,    /* PCI  aic7870/aic7871 motherboard or 294x */
-  AIC_7850,    /* PCI  aic7850 */
-  AIC_7872,    /* PCI  aic7870 on 394x */
-  AIC_7880,    /* PCI  aic7880/aic7881 motherboard or 294x Ultra */
-  AIC_7882,    /* PCI  aic7870 on 394x Ultra */
+  AIC_7770,	/* EISA aic7770 on motherboard */
+  AIC_7771,	/* EISA aic7771 on 274x */
+  AIC_284x,	/* VLB  aic7770 on 284x */
+  AIC_7850,	/* PCI  aic7850 */
+  AIC_7870,	/* PCI  aic7870 on motherboard */
+  AIC_7871,	/* PCI  aic7871 on 294x */
+  AIC_7872,	/* PCI  aic7872 on 3940 */
+  AIC_7873,	/* PCI  aic7873 on 3985 */
+  AIC_7874,	/* PCI  aic7874 on 294x Differential */
+  AIC_7880,	/* PCI  aic7880 on motherboard */
+  AIC_7881,	/* PCI  aic7881 on 294x Ultra */
+  AIC_7882,	/* PCI  aic7882 on 3940 Ultra */
+  AIC_7883,	/* PCI  aic7883 on 3985 Ultra */
+  AIC_7884	/* PCI  aic7884 on 294x Ultra Differential */
 } aha_type;
+
+typedef enum {
+  AIC_777x,	/* AIC-7770 based */
+  AIC_785x,	/* AIC-7850 based */
+  AIC_787x,	/* AIC-7870 based */
+  AIC_788x	/* AIC-7880 based */
+} aha_chip_type;
 
 typedef enum {
   AIC_SINGLE,  /* Single Channel */
@@ -196,6 +214,34 @@ typedef enum {
   LIST_SECOND,
   LIST_TAIL
 } insert_type;
+
+typedef enum {
+  ABORT_RESET_INACTIVE,
+  ABORT_RESET_PENDING,
+  ABORT_RESET_SUCCESS
+} aha_abort_reset_type;
+
+/*
+ * Define an array of board names that can be indexed by aha_type.
+ * Don't forget to change this when changing the types!
+ */
+static const char * board_names[] = {
+  "<AIC-7xxx Unknown>",		/* AIC_NONE */
+  "AIC-7770",			/* AIC_7770 */
+  "AHA-2740",			/* AIC_7771 */
+  "AHA-2840",			/* AIC_284x */
+  "AIC-7850",			/* AIC_7850 */
+  "AIC-7870",			/* AIC_7870 */
+  "AHA-2940",			/* AIC_7871 */
+  "AHA-3940",			/* AIC_7872 */
+  "AHA-3985",			/* AIC_7873 */
+  "AHA-2940 Differential",	/* AIC_7874 */
+  "AIC-7880 Ultra",		/* AIC_7880 */
+  "AHA-2940 Ultra",		/* AIC_7881 */
+  "AHA-3940 Ultra",		/* AIC_7882 */
+  "AHA-3985 Ultra",		/* AIC_7883 */
+  "AHA-2940 Ultra Differential"	/* AIC_7884 */
+};
 
 /*
  * There should be a specific return value for this in scsi.h, but
@@ -753,7 +799,7 @@ struct seeprom_config {
 #define CFXFER		0x0007		/* synchronous transfer rate */
 #define CFSYNCH		0x0008		/* enable synchronous transfer */
 #define CFDISC		0x0010		/* enable disconnection */
-#define CFWIDEB		0x0020		/* wide bus device */
+#define CFWIDEB		0x0020		/* wide bus device (wide card) */
 /* UNUSED		0x00C0 */
 #define CFSTART		0x0100		/* send start unit SCSI command */
 #define CFINCBIOS	0x0200		/* include in BIOS scan */
@@ -769,7 +815,8 @@ struct seeprom_config {
 #define CFBIOSEN	0x0004		/* BIOS enabled */
 /* UNUSED		0x0008 */
 #define CFSM2DRV	0x0010		/* support more than two drives */
-/* UNUSED		0x0060 */
+#define CF284XEXTEND	0x0020		/* extended translation (284x cards) */
+/* UNUSED		0x0040 */
 #define CFEXTEND	0x0080		/* extended translation enabled */
 /* UNUSED		0xFF00 */
   unsigned short bios_control;		/* word 16 */
@@ -779,10 +826,12 @@ struct seeprom_config {
  */
 /* UNUSED               0x0001 */
 #define CFULTRAEN       0x0002          /* Ultra SCSI speed enable (Ultra cards) */
+#define CF284XSELTO     0x0003          /* Selection timeout (284x cards) */
+#define CF284XFIFO      0x000C          /* FIFO Threshold (284x cards) */
 #define CFSTERM         0x0004          /* SCSI low byte termination (non-wide cards) */
 #define CFWSTERM        0x0008          /* SCSI high byte termination (wide card) */
 #define CFSPARITY	0x0010		/* SCSI parity */
-/* UNUSED		0x0020 */
+#define CF284XSTERM	0x0020		/* SCSI low byte termination (284x cards) */
 #define CFRESETB	0x0040		/* reset SCSI bus at IC initialization */
 /* UNUSED		0xFF80 */
   unsigned short adapter_control;	/* word 17 */
@@ -806,9 +855,6 @@ struct seeprom_config {
   unsigned short checksum;		/* word 31 */
 
 };
-
-
-#define AIC7XXX_DEBUG
 
 /*
  * Pause the sequencer and wait for it to actually stop - this
@@ -968,15 +1014,6 @@ struct aic7xxx_scb {
 	struct scatterlist  sg;
 	struct scatterlist  sense_sg;
 	unsigned char       sense_cmd[6];   /* Allocate 6 characters for sense command */
-#define TIMER_ENABLED		0x01
-#define TIMER_EXPIRED		0x02
-#define TIMED_CMD_DONE		0x04
-        volatile unsigned char timer_status;
-#ifndef AIC7XXX_POLL
-	struct wait_queue   *waiting;       /* wait queue for device reset command */
-        struct wait_queue   waitq;          /* waiting points to this */
-	struct timer_list   timer;          /* timeout for device reset command */
-#endif
 };
 
 typedef void (*timeout_fn)(unsigned long);
@@ -1010,6 +1047,7 @@ struct aic7xxx_host {
   int                      numscb;           /* current number of scbs */
   int                      extended;         /* extended xlate? */
   aha_type                 type;             /* card type */
+  aha_chip_type            chip_type;        /* chip base type */
   int                      ultra_enabled;    /* Ultra SCSI speed enabled */
   int                      chan_num;         /* for 3940/3985, channel number */
   aha_bus_type             bus_type;         /* normal/twin/wide bus */
@@ -1066,6 +1104,7 @@ struct aic7xxx_host_config {
   int              busrtime;   /* bus release time */
   int              walk_scbs;  /* external SCB RAM detected; walk the scb array */
   aha_type         type;       /* card type */
+  aha_chip_type    chip_type;  /* chip base type */
   int              ultra_enabled;    /* Ultra SCSI speed enabled */
   int              chan_num;   /* for 3940/3985, channel number */
   aha_bus_type     bus_type;   /* normal/twin/wide bus */
@@ -1103,7 +1142,7 @@ static struct {
 static int num_aic7xxx_syncrates =
     sizeof(aic7xxx_syncrates) / sizeof(aic7xxx_syncrates[0]);
 
-static int number_of_3940s = 0;
+static int number_of_39xxs = 0;
 
 #ifdef AIC7XXX_DEBUG
 
@@ -1140,7 +1179,7 @@ debug_config(struct aic7xxx_host_config *p)
    * release time and data FIFO threshold from the scsi_conf and
    * host_conf registers respectively.
    */
-  if ((p->type == AIC_274x) || (p->type == AIC_284x))
+  if (p->chip_type == AIC_777x)
   {
     dfthresh = (host_conf >> 6);
   }
@@ -1157,36 +1196,33 @@ debug_config(struct aic7xxx_host_config *p)
 
   switch (p->type)
   {
-    case AIC_274x:
-      printk("AIC7770%s AT EISA SLOT %d:\n", BUSW[p->bus_type], p->base >> 12);
+    case AIC_7770:
+    case AIC_7771:
+      printk("%s%s AT EISA SLOT %d:\n", board_names[p->type], BUSW[p->bus_type],
+             p->base >> 12);
       break;
 
     case AIC_284x:
-      printk("AIC7770%s AT VLB SLOT %d:\n", BUSW[p->bus_type], p->base >> 12);
-      break;
-
-    case AIC_7870:
-      printk("AIC7870/7871%s (PCI-bus):\n", BUSW[p->bus_type]);
+      printk("%s%s AT VLB SLOT %d:\n", board_names[p->type], BUSW[p->bus_type],
+             p->base >> 12);
       break;
 
     case AIC_7850:
-      printk("AIC7850%s (PCI-bus):\n", BUSW[p->bus_type]);
-      break;
-
+    case AIC_7870:
+    case AIC_7871:
     case AIC_7872:
-      printk("AIC7872%s (PCI-bus):\n", BUSW[p->bus_type]);
-      break;
-
+    case AIC_7873:
+    case AIC_7874:
     case AIC_7880:
-      printk("AIC7880/7881%s (PCI-bus):\n", BUSW[p->bus_type]);
-      break;
-
+    case AIC_7881:
     case AIC_7882:
-      printk("AIC7882%s (PCI-bus):\n", BUSW[p->bus_type]);
+    case AIC_7883:
+    case AIC_7884:
+      printk("%s%s (PCI-bus):\n", board_names[p->type], BUSW[p->bus_type]);
       break;
 
     default:
-      panic("aic7xxx debug_config: internal error\n");
+      panic("aic7xxx: (debug_config) internal error.\n");
   }
 
   printk("    irq %d\n"
@@ -1204,7 +1240,7 @@ debug_config(struct aic7xxx_host_config *p)
 	 SST[(scsi_conf >> 3) & 0x03],
 	 (scsi_conf & 0x40) ? "en" : "dis");
 
-  if (((p->type == AIC_274x) || (p->type == AIC_284x)) && p->parity == AIC_UNKNOWN)
+  if ((p->chip_type == AIC_777x) && (p->parity == AIC_UNKNOWN))
   {
     /*
      * Set the parity for 7770 based cards.
@@ -1217,7 +1253,7 @@ debug_config(struct aic7xxx_host_config *p)
 	   (p->parity == AIC_ENABLED) ? "en" : "dis");
   }
 
-  if (p->type == AIC_274x)
+  if ((p->type == AIC_7770) || (p->type == AIC_7771))
   {
     p->low_term = (scsi_conf & 0x80) ? AIC_ENABLED : AIC_DISABLED;
   }
@@ -1398,109 +1434,6 @@ aic7xxx_delay(int seconds)
   }
 }
 
-#ifdef AIC7XXX_POLL
-/*+F*************************************************************************
- * Function:
- *   aic7xxx_poll_scb
- *
- * Description:
- *   Function to poll for command completion when in aborting an SCB.
- *-F*************************************************************************/
-static void
-aic7xxx_poll_scb(struct aic7xxx_host *p,
-                 struct aic7xxx_scb  *scb,
-                 unsigned long       timeout_ticks)
-{
-  unsigned long timer_expiration = jiffies + timeout_ticks;
-
-  while ((jiffies < timer_expiration) && !(scb->timer_status & TIMED_CMD_DONE))
-  {
-    udelay(1000);  /* delay for 1 msec. */
-  }
-}
-
-#else
-/*+F*************************************************************************
- * Function:
- *   aic7xxx_scb_timeout
- *
- * Description:
- *   Called when a SCB reset command times out.  The input is actually
- *   a pointer to the SCB.
- *-F*************************************************************************/
-static void
-aic7xxx_scb_timeout(unsigned long data)
-{
-  struct aic7xxx_scb *scb = (struct aic7xxx_scb *) data;
-
-  scb->timer_status |= TIMER_EXPIRED;
-  wake_up(&(scb->waiting));
-}
-
-/*+F*************************************************************************
- * Function:
- *   aic7xxx_scb_untimeout
- *
- * Description:
- *   This function clears the timeout and wakes up a waiting SCB.
- *-F*************************************************************************/
-static void
-aic7xxx_scb_untimeout(struct aic7xxx_scb *scb)
-{
-  if (scb->timer_status & TIMER_ENABLED)
-  {
-    scb->timer_status = TIMED_CMD_DONE;
-    wake_up(&(scb->waiting));
-  }
-}
-#endif
-
-/*+F*************************************************************************
- * Function:
- *   aic7xxx_scb_tsleep
- *
- * Description:
- *   Emulates a BSD tsleep where a process can sleep for a specified
- *   amount of time, but may be awakened before that.  Linux provides
- *   a sleep_on, wake_up, add_timer, and del_timer which can be used to
- *   emulate tsleep, but there's not enough information available on
- *   how to use them.  For now, we'll just poll for SCB completion.
- *
- *   The parameter ticks is the number of clock ticks
- *   to wait before a timeout.  A 0 is returned if the scb does not
- *   timeout, 1 is returned for a timeout.
- *-F*************************************************************************/
-static int
-aic7xxx_scb_tsleep(struct aic7xxx_host *p,
-                   struct aic7xxx_scb  *scb,
-                   unsigned long        ticks)
-{
-  scb->timer_status = TIMER_ENABLED;
-#ifdef AIC7XXX_POLL
-  UNPAUSE_SEQUENCER(p);
-  aic7xxx_poll_scb(p, scb, ticks);
-#else
-  scb->waiting = &(scb->waitq);
-  scb->timer.expires = jiffies + ticks;
-  scb->timer.data = (unsigned long) scb;
-  scb->timer.function = (timeout_fn) aic7xxx_scb_timeout;
-  add_timer(&scb->timer);
-  UNPAUSE_SEQUENCER(p);
-  sleep_on(&(scb->waiting));
-  del_timer(&scb->timer);
-#endif
-  if (!(scb->timer_status & TIMED_CMD_DONE))
-  {
-    scb->timer_status = 0x0;
-    return (1);
-  }
-  else
-  {
-    scb->timer_status = 0x0;
-    return (0);
-  }
-}
-
 /*+F*************************************************************************
  * Function:
  *   rcs_version
@@ -1633,9 +1566,9 @@ aic7xxx_scsirate(struct aic7xxx_host *p, unsigned char *scsirate,
        */
       if (p->ultra_enabled)
       {
-        if (! (aic7xxx_syncrates[i].rate & ULTRA_SXFR))
+        if (!(aic7xxx_syncrates[i].rate & ULTRA_SXFR))
         {
-          printk ("aic7xxx: target %d, channel %c, requests %sMB/s transfers, "
+          printk ("aic7xxx: Target %d, channel %c, requests %sMB/s transfers, "
                   "but adapter in Ultra mode can only sync at 10MB/s or "
                   "above.\n", target, channel, aic7xxx_syncrates[i].english);
           break;  /* Use asynchronous transfers. */
@@ -1658,18 +1591,18 @@ aic7xxx_scsirate(struct aic7xxx_host *p, unsigned char *scsirate,
         }
       }
       *scsirate = (aic7xxx_syncrates[i].rate) | (offset & 0x0F);
-      printk("aic7xxx: target %d, channel %c, now synchronous at %sMB/s, "
-             "offset = 0x%x\n",
+      printk("aic7xxx: Target %d, channel %c, now synchronous at %sMB/s, "
+             "offset(0x%x).\n",
 	     target, channel, aic7xxx_syncrates[i].english, offset);
       return;
     }
   }
 
   /*
-   * Default to asyncronous transfer
+   * Default to asynchronous transfer
    */
   *scsirate = 0;
-  printk("aic7xxx: target %d, channel %c, using asynchronous transfers\n",
+  printk("aic7xxx: Target %d, channel %c, using asynchronous transfers.\n",
          target, channel);
 }
 
@@ -1760,6 +1693,10 @@ aic7xxx_match_scb(struct aic7xxx_scb *scb, int target, char channel)
   int targ = (scb->target_channel_lun >> 4) & 0x0F;
   char chan = (scb->target_channel_lun & SELBUSB) ? 'B' : 'A';
 
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (match_scb) comparing target/channel %d/%c to scb %d/%c\n",
+          target, channel, targ, chan);
+#endif
   if (target == ALL_TARGETS)
   {
     return (chan == channel);
@@ -1783,6 +1720,10 @@ aic7xxx_unbusy_target(unsigned char target, char channel, int base)
   unsigned char active;
   unsigned long active_port = HA_ACTIVE0(base);
 
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (unbusy_target) target/channel %d/%c\n",
+          target, channel);
+#endif
   if ((target > 0x07) || (channel == 'B'))
   {
     /*
@@ -1809,36 +1750,29 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
   long flags;
   Scsi_Cmnd *cmd = scb->cmd;
 
-  if (scb->timer_status & TIMER_ENABLED)
-  {
-#ifdef AIC7XXX_POLL
-    scb->timer_status |= TIMED_CMD_DONE;
-#else
-    aic7xxx_scb_untimeout(scb);
+#ifdef 0
+  printk ("aic7xxx: (done) target/channel %d/%d\n",
+          cmd->target, cmd->channel);
 #endif
-  }
-  else
-  {
-    /*
-     * This is a critical section, since we don't want the
-     * queue routine mucking with the host data.
-     */
-    save_flags(flags);
-    cli();
+  /*
+   * This is a critical section, since we don't want the
+   * queue routine mucking with the host data.
+   */
+  save_flags(flags);
+  cli();
 
-    /*
-     * Process the command after marking the scb as free
-     * and adding it to the free list.
-     */
-    scb->state = SCB_FREE;
-    scb->next = p->free_scb;
-    p->free_scb = &(p->scb_array[scb->position]);
-    scb->cmd = NULL;
+  /*
+   * Process the command after marking the scb as free
+   * and adding it to the free list.
+   */
+  scb->state = SCB_FREE;
+  scb->next = p->free_scb;
+  p->free_scb = &(p->scb_array[scb->position]);
+  scb->cmd = NULL;
 
-    restore_flags(flags);
+  restore_flags(flags);
 
-    cmd->scsi_done(cmd);
-  }
+  cmd->scsi_done(cmd);
 }
 
 /*+F*************************************************************************
@@ -1980,6 +1914,10 @@ aic7xxx_abort_waiting_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb,
   scb->cmd->result = (DID_RESET << 16);
   aic7xxx_done(p, scb);
 
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (abort_waiting_scb) target/channel %d/%c, prev %d, "
+          "to_scb %d, next %d\n", target, channel, prev, timedout_scb, next);
+#endif
   return (next);
 }
 
@@ -2006,6 +1944,10 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel,
    */
   active_scb = inb(SCBPTR(base));
 
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (reset_device) target/channel %d/%c, to_scb %d, "
+          "active_scb %d\n", target, channel, timedout_scb, active_scb);
+#endif
   /*
    * Search the QINFIFO.
    */
@@ -2075,7 +2017,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel,
    * are other (most likely tagged) commands that
    * were disconnected when the reset occured.
    */
-  for(i = 0; i < p->numscb; i++)
+  for (i = 0; i < p->numscb; i++)
   {
     scb = &(p->scb_array[i]);
     if ((scb->state & SCB_ACTIVE) && aic7xxx_match_scb(scb, target, channel))
@@ -2107,6 +2049,9 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel,
 static void
 aic7xxx_reset_current_bus(int base)
 {
+#ifdef AIC7XXX_DEBUG_ABORT
+    printk ("aic7xxx: (reset_current_bus)\n");
+#endif
   outb(SCSIRSTO, SCSISEQ(base));
   udelay(1000);
   outb(0, SCSISEQ(base));
@@ -2129,6 +2074,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
   unsigned long offset, offset_max;
   int found;
 
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (reset_channel) channel %c, to_scb %d\n",
+          channel, timedout_scb);
+#endif
   /*
    * Clean up all the state information for the
    * pending transactions on this bus.
@@ -2189,6 +2138,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
   cur_channel = (sblkctl & SELBUSB) ? 'B' : 'A';
   if (cur_channel != channel)
   {
+#ifdef AIC7XXX_DEBUG_ABORT
+    printk ("aic7xxx: (reset_channel) Stealthily resetting channel %c\n",
+            channel);
+#endif
     /*
      * Stealthily reset the other bus without upsetting the current bus
      */
@@ -2203,6 +2156,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
    */
   else
   {
+#ifdef AIC7XXX_DEBUG_ABORT
+    printk ("aic7xxx: (reset_channel) Resetting current channel %c\n",
+            channel);
+#endif
     aic7xxx_reset_current_bus(base);
     RESTART_SEQUENCER(p);
   }
@@ -2260,7 +2217,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
     if (aic7xxx_spurious_count == 1)
     {
       aic7xxx_spurious_count = 2;
-      printk("aic7xxx_isr: Encountered spurious interrupt.\n");
+      printk("aic7xxx: (aic7xxx_isr) Encountered spurious interrupt.\n");
       return;
     }
     else
@@ -2286,7 +2243,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
      * It is sufficient that we check isr_count and not the spurious
      * interrupt count.
      */
-    printk("aic7xxx_isr: Encountered spurious interrupt.\n");
+    printk("aic7xxx: (aic7xxx_isr) Encountered spurious interrupt.\n");
     return;
   }
 
@@ -2302,7 +2259,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
     int i;
     unsigned char errno = inb(ERROR(base));
 
-    printk("aic7xxx_isr: brkadrint (0x%x):\n", errno);
+    printk("aic7xxx: (aic7xxx_isr) BRKADRINT error(0x%x):\n", errno);
     for (i = 0; i < NUMBER(hard_error); i++)
     {
       if (errno & hard_error[i].errno)
@@ -2311,7 +2268,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
       }
     }
 
-    panic("aic7xxx_isr: brkadrint, error = 0x%x, seqaddr = 0x%x\n",
+    panic("aic7xxx: (aic7xxx_isr) BRKADRINT, error(0x%x) seqaddr(0x%x).\n",
 	  inb(ERROR(base)), (inb(SEQADDR1(base)) << 8) | inb(SEQADDR0(base)));
   }
 
@@ -2337,21 +2294,21 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
     switch (intstat & SEQINT_MASK)
     {
       case BAD_PHASE:
-	panic("aic7xxx_isr: unknown scsi bus phase\n");
+	panic("aic7xxx: (aic7xxx_isr) Unknown scsi bus phase.\n");
 	break;
 
       case SEND_REJECT:
         rej_byte = inb(HA_REJBYTE(base));
         if (rej_byte != 0x20)
         {
-          debug("aic7xxx_isr warning: issuing message reject, 1st byte 0x%x\n",
+          debug("aic7xxx: Warning - Issuing message reject, 1st byte(0x%x)\n",
                 rej_byte);
         }
         else
         {
           scb_index = inb(SCBPTR(base));
           scb = &(p->scb_array[scb_index]);
-          printk("aic7xxx_isr warning: Tagged message rejected for target %d,"
+          printk("aic7xxx: Warning - Tagged message rejected for target %d,"
                  " channel %c.\n", scsi_id, channel);
           scb->cmd->device->tagged_supported = 0;
           scb->cmd->device->tagged_queue = 0;
@@ -2359,15 +2316,15 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	break;
 
       case NO_IDENT:
-	panic("aic7xxx_isr: Target %d, channel %c, did not send an IDENTIFY "
-	      "message.  SAVED_TCL = 0x%x\n",
+	panic("aic7xxx: Target %d, channel %c, did not send an IDENTIFY "
+	      "message. SAVED_TCL(0x%x).\n",
               scsi_id, channel, inb(SAVED_TCL(base)));
 	break;
 
       case NO_MATCH:
-	printk("aic7xxx_isr: No active SCB for reconnecting target %d, "
-	      "channel %c - issuing ABORT\n", scsi_id, channel);
-        printk("SAVED_TCL = 0x%x\n", inb(SAVED_TCL(base)));
+	printk("aic7xxx: No active SCB for reconnecting target %d, "
+	      "channel %c - Issuing ABORT. SAVED_TCL(0x%x).\n",
+              scsi_id, channel, inb(SAVED_TCL(base)));
         aic7xxx_unbusy_target(scsi_id, channel, base);
         outb(SCB_NEEDDMA, SCBARRAY(base));
 
@@ -2430,7 +2387,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	    /*
 	     * Send our own SDTR in reply.
 	     */
-	    printk("aic7xxx_isr: Sending SDTR!!\n");
+	    printk("aic7xxx: Sending SDTR!!\n");
 	    outb(SEND_SDTR, HA_RETURN_1(base));
 	  }
 	}
@@ -2450,8 +2407,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
       case MSG_WDTR:
       {
 	bus_width = inb(ACCUM(base));
-	printk("aic7xxx_isr: Received MSG_WDTR, scsi_id %d, channel %c "
-	       "needwdtr = 0x%x\n", scsi_id, channel, p->needwdtr);
+	printk("aic7xxx: Received MSG_WDTR, Target %d, channel %c "
+	       "needwdtr(0x%x).\n", scsi_id, channel, p->needwdtr);
 	scratch = inb(HA_TARG_SCRATCH(base) + scratch_offset);
 
 	if (p->wdtr_pending & target_mask)
@@ -2467,8 +2424,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      break;
 
 	    case BUS_16_BIT:
-	      printk("aic7xxx_isr: target %d, channel %c, using 16 bit transfers\n",
-		     scsi_id, channel);
+	      printk("aic7xxx: Target %d, channel %c, using 16 bit "
+                     "transfers.\n", scsi_id, channel);
 	      scratch |= 0x80;
 	      break;
 	  }
@@ -2478,7 +2435,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	  /*
 	   * Send our own WDTR in reply.
 	   */
-	  printk("aic7xxx_isr: Will send WDTR!!\n");
+	  printk("aic7xxx: Will send WDTR!!\n");
 	  switch (bus_width)
 	  {
 	    case BUS_8_BIT:
@@ -2493,8 +2450,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      /* Yes, we mean to fall thru here. */
 
 	    case BUS_16_BIT:
-	      printk("aic7xxx_isr: target %d, channel %c, using 16 bit transfers\n",
-		     scsi_id, channel);
+	      printk("aic7xxx: Target %d, channel %c, using 16 bit "
+                     "transfers.\n", scsi_id, channel);
 	      scratch |= 0x80;
 	      break;
 	  }
@@ -2527,8 +2484,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	  p->needwdtr &= ~target_mask;
 	  p->wdtr_pending &= ~target_mask;
 	  outb(scratch, HA_TARG_SCRATCH(base) + scratch_offset);
-	  printk("aic7xxx: target %d, channel %c, refusing WIDE negotiation. "
-                 "Using 8 bit transfers\n", scsi_id, channel);
+	  printk("aic7xxx: Target %d, channel %c, refusing WIDE negotiation. "
+                 "Using 8 bit transfers.\n", scsi_id, channel);
 	}
 	else
 	{
@@ -2541,8 +2498,9 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	    p->needsdtr &= ~target_mask;
 	    p->sdtr_pending &= ~target_mask;
 	    outb(scratch, HA_TARG_SCRATCH(base) + scratch_offset);
-	    printk("aic7xxx: target %d, channel %c, refusing syncronous negotiation. "
-                   "Using asyncronous transfers\n", scsi_id, channel);
+	    printk("aic7xxx: Target %d, channel %c, refusing synchronous "
+                   "negotiation. Using asynchronous transfers.\n",
+                   scsi_id, channel);
 	  }
 	  /*
 	   * Otherwise, we ignore it.
@@ -2559,8 +2517,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	outb(0, HA_RETURN_1(base));   /* CHECK_CONDITION may change this */
 	if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
 	{
-	  printk("aic7xxx_isr: referenced scb not valid "
-		 "during seqint 0x%x scb(%d) state(%x), cmd(%x)\n",
+	  printk("aic7xxx: Referenced SCB not valid during SEQINT(0x%x) "
+		 "scb(%d) state(0x%x) cmd(0x%x).\n",
 		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
 	}
 	else
@@ -2574,7 +2532,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	  switch (status_byte(scb->target_status))
 	  {
 	    case GOOD:
-              printk("aic7xxx_isr: Interrupted for status of 0???\n");
+              printk("aic7xxx: Interrupted for status of GOOD???\n");
 	      break;
 
 	    case CHECK_CONDITION:
@@ -2648,7 +2606,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      break;
 
 	    case BUSY:
-	      printk("aic7xxx_isr: Target busy\n");
+	      printk("aic7xxx: Target busy.\n");
 	      if (!aic7xxx_error(cmd))
 	      {
 		aic7xxx_error(cmd) = DID_BUS_BUSY;
@@ -2656,7 +2614,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      break;
 
 	    case QUEUE_FULL:
-	      printk("aic7xxx_isr: Queue full\n");
+	      printk("aic7xxx: Queue full.\n");
 	      if (!aic7xxx_error(cmd))
 	      {
 		aic7xxx_error(cmd) = DID_RETRY_COMMAND;
@@ -2664,7 +2622,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      break;
 
 	    default:
-	      printk("aic7xxx_isr: Unexpected target status 0x%x\n",
+	      printk("aic7xxx: Unexpected target status(0x%x).\n",
 		     scb->target_status);
 	      if (!aic7xxx_error(cmd))
 	      {
@@ -2680,8 +2638,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	scb = &(p->scb_array[scb_index]);
 	if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
 	{
-	  printk("aic7xxx_isr: referenced scb not valid "
-		 "during seqint 0x%x scb(%d) state(%x), cmd(%x)\n",
+	  printk("aic7xxx: Referenced SCB not valid during SEQINT(0x%x) "
+		 "scb(%d) state(0x%x) cmd(0x%x).\n",
 		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
 	}
 	else
@@ -2707,9 +2665,10 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 
 	    if (actual < cmd->underflow)
 	    {
-	      printk("aic7xxx: target %d underflow - "
-		     "wanted (at least) %u, got %u, count=%d\n",
-		     cmd->target, cmd->underflow, actual, inb(SCBARRAY(base + 18)));
+	      printk("aic7xxx: Target %d underflow - "
+		     "Wanted (at least) (%u) got(%u) count(%d).\n",
+		     cmd->target, cmd->underflow, actual,
+                     inb(SCBARRAY(base + 18)));
 	      aic7xxx_error(cmd) = DID_RETRY_COMMAND;
 	      aic7xxx_status(cmd) = scb->target_status;
 	    }
@@ -2722,20 +2681,20 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	scb = &(p->scb_array[scb_index]);
 	if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
 	{
-	  printk("aic7xxx_isr: referenced scb not valid "
-		 "during seqint 0x%x scb(%d) state(%x), cmd(%x)\n",
+	  printk("aic7xxx: Referenced SCB not valid during SEQINT(0x%x) "
+		 "scb(%d) state(0x%x) cmd(0x%x)\n",
 		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
 	}
 	else
 	{
 	  cmd = scb->cmd;
 	  /*
-	   * We didn't recieve a valid tag back from the target
+	   * We didn't receive a valid tag back from the target
 	   * on a reconnect.
 	   */
-	  printk("aic7xxx_isr: invalid tag recieved on channel %c "
-		 "target %d, lun %d -- sending ABORT_TAG\n",
-		  channel, scsi_id, cmd->lun & 0x07);
+	  printk("aic7xxx: Invalid tag received on target %d, channel %c, "
+                 "lun %d - Sending ABORT_TAG.\n",
+		  scsi_id, channel, cmd->lun & 0x07);
 
 	  cmd->result = (DID_RETRY_COMMAND << 16);
           aic7xxx_done(p, scb);
@@ -2747,8 +2706,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	scb = &(p->scb_array[scb_index]);
 	if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
 	{
-	  printk("aic7xxx_isr: referenced scb not valid "
-		 "during seqint 0x%x scb(%d) state(%x), cmd(%x)\n",
+	  printk("aic7xxx: Referenced SCB not valid during SEQINT(0x%x) "
+		 "scb(%d) state(0x%x) cmd(0x%x).\n",
 		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
 	}
 	else
@@ -2760,13 +2719,17 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	   */
 	   if (scb->state & SCB_DEVICE_RESET)
 	   {
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (isr) sending bus device reset to target %d\n",
+          scsi_id);
+#endif
 	     outb(MSG_BUS_DEVICE_RESET, HA_MSG_START(base));
 	     outb(1, HA_MSG_LEN(base));
 	   }
 	   else
 	   {
-	     panic("aic7xxx_isr: AWAITING_SCB for an SCB that does "
-		   "not have a waiting message");
+	     panic("aic7xxx: AWAITING_SCB for an SCB that does "
+		   "not have a waiting message.\n");
 	   }
 	}
 	break;
@@ -2774,6 +2737,10 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
       case IMMEDDONE:
         scb_index = inb(SCBPTR(base));
 	scb = &(p->scb_array[scb_index]);
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (isr) received IMMEDDONE for target %d, scb %d, state %d\n",
+          scsi_id, scb_index, scb->state);
+#endif
         if (scb->state & SCB_DEVICE_RESET)
         {
           int found;
@@ -2793,12 +2760,12 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
         }
         else
         {
-          panic("aic7xxx_isr: Immediate complete for unknown operation.\n");
+          panic("aic7xxx: Immediate complete for unknown operation.\n");
         }
         break;
 
       default:               /* unknown */
-	debug("aic7xxx_isr: seqint, intstat = 0x%x, scsisigi = 0x%x\n",
+	debug("aic7xxx: SEQINT, INTSTAT(0x%x) SCSISIGI(0x%x).\n",
 	      intstat, inb(SCSISIGI(base)));
 	break;
     }
@@ -2814,7 +2781,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
     scb = &(p->scb_array[scb_index]);
     if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
     {
-      printk("aic7xxx_isr: no command for scb (scsiint)\n");
+      printk("aic7xxx: No command for SCB (SCSIINT).\n");
       /*
        * Turn off the interrupt and set status
        * to zero, so that it falls through the
@@ -2900,7 +2867,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	RESTART_SEQUENCER(p);
         aic7xxx_done(p, scb);
 #if 0
-  printk("aic7xxx_isr: SELTO scb(%d) state(%x), cmd(%x)\n",
+  printk("aic7xxx: SELTO SCB(%d) state(0x%x) cmd(0x%x).\n",
 	 scb->position, scb->state, (unsigned int) scb->cmd);
 #endif
       }
@@ -2912,11 +2879,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	   * A parity error has occurred during a data
 	   * transfer phase. Flag it and continue.
 	   */
-	  printk("aic7xxx: parity error on target %d, "
-		 "channel %d, lun %d\n",
-		 cmd->target,
-		 cmd->channel & 0x01,
-		 cmd->lun & 0x07);
+	  printk("aic7xxx: Parity error on target %d, channel %d, lun %d.\n",
+		 cmd->target, cmd->channel & 0x01, cmd->lun & 0x07);
 	  aic7xxx_error(cmd) = DID_PARITY;
 
 	  /*
@@ -2936,7 +2900,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	      * We don't know what's going on. Turn off the
 	      * interrupt source and try to continue.
 	      */
-	     printk("aic7xxx_isr: sstat1 = 0x%x\n", status);
+	     printk("aic7xxx: SSTAT1(0x%x).\n", status);
 	     outb(status, CLRSINT1(base));
 	     UNPAUSE_SEQUENCER(p);
 	     outb(CLRSCSIINT, CLRINT(base));
@@ -2962,9 +2926,8 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
       scb = &(p->scb_array[complete]);
       if ((scb->state != SCB_ACTIVE) || (scb->cmd == NULL))
       {
-	printk("aic7xxx warning: "
-	       "no command for scb %d (cmdcmplt)\n"
-	       "QOUTCNT = %d, SCB state = 0x%x, CMD = 0x%x, pos = %d\n",
+	printk("aic7xxx: Warning - No command for SCB %d (CMDCMPLT).\n"
+	       "         QOUTCNT(%d) SCB state(0x%x) cmd(0x%x) pos(%d).\n",
 	       complete, inb(QOUTFIFO(base)),
 	       scb->state, (unsigned int) scb->cmd, scb->position);
 	outb(CLRCMDINT, CLRINT(base));
@@ -2981,7 +2944,7 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 	cmd->flags &= ASKED_FOR_SENSE;
       }
 #if 0
-      printk("aic7xxx_intr: (complete) state = %d, cmd = 0x%x, free = 0x%x\n",
+      printk("aic7xxx: (complete) State(%d) cmd(0x%x) free(0x%x).\n",
 	     scb->state, (unsigned int) scb->cmd, (unsigned int) p->free_scb);
 #endif
 
@@ -2999,9 +2962,9 @@ aic7xxx_isr(int irq, struct pt_regs * regs)
 #if 0
   if (scb != &p->scb_array[scb->position])
   {
-    printk("aic7xxx_isr: (complete) address mismatch, pos %d\n", scb->position);
+    printk("aic7xxx: (complete) Address mismatch, pos(%d).\n", scb->position);
   }
-  printk("aic7xxx_isr: (complete) state = %d, cmd = 0x%x, free = 0x%x\n",
+  printk("aic7xxx: (complete) State(%d) cmd(0x%x) free(0x%x).\n",
 	 scb->state, (unsigned int) scb->cmd, (unsigned int) p->free_scb);
 #endif
 
@@ -3084,8 +3047,8 @@ aic7xxx_probe(int slot, int base)
     unsigned char signature[sizeof(buf)];
     aha_type type;
   } AIC7xxx[] = {
-    { 4, { 0x04, 0x90, 0x77, 0x71 }, AIC_274x },  /* host adapter 274x */
-    { 4, { 0x04, 0x90, 0x77, 0x70 }, AIC_274x },  /* motherboard 274x  */
+    { 4, { 0x04, 0x90, 0x77, 0x71 }, AIC_7771 },  /* host adapter 274x */
+    { 4, { 0x04, 0x90, 0x77, 0x70 }, AIC_7770 },  /* motherboard 7770  */
     { 4, { 0x04, 0x90, 0x77, 0x56 }, AIC_284x },  /* 284x, BIOS enabled */
     { 4, { 0x04, 0x90, 0x77, 0x57 }, AIC_284x }   /* 284x, BIOS disabled */
   };
@@ -3112,7 +3075,7 @@ aic7xxx_probe(int slot, int base)
 	return (AIC7xxx[i].type);
       }
 
-      printk("aic7xxx disabled at slot %d, ignored\n", slot);
+      printk("aic7xxx: Disabled at slot %d, ignored.\n", slot);
     }
   }
 
@@ -3478,7 +3441,8 @@ detect_maxscb(aha_type type, int base, int walk_scbs)
 
   switch (type)
   {
-    case AIC_274x:
+    case AIC_7770:
+    case AIC_7771:
     case AIC_284x:
       /*
        * Check for Rev C or E boards. Rev E boards can supposedly have
@@ -3496,13 +3460,13 @@ detect_maxscb(aha_type type, int base, int walk_scbs)
         /*
          * We detected a Rev E board.
          */
-	printk("aic7770: Rev E and subsequent; using 4 SCB's\n");
+	printk("aic7770: Rev E and subsequent; using 4 SCB's.\n");
 	outb(sblkctl_reg ^ AUTOFLUSHDIS, SBLKCTL(base));
 	maxscb = 4;
       }
       else
       {
-	printk("aic7770: Rev C and previous; using 4 SCB's\n");
+	printk("aic7770: Rev C and previous; using 4 SCB's.\n");
 	maxscb = 4;
       }
       break;
@@ -3512,12 +3476,18 @@ detect_maxscb(aha_type type, int base, int walk_scbs)
       break;
 
     case AIC_7870:
+    case AIC_7871:
+    case AIC_7874:
     case AIC_7880:
+    case AIC_7881:
+    case AIC_7884:
       maxscb = 16;
       break;
 
     case AIC_7872:
+    case AIC_7873:
     case AIC_7882:
+    case AIC_7883:
       /*
        * Is suppose to have 255 SCBs, but we'll walk the SCBs
        * looking for more if external RAM is detected.
@@ -3549,7 +3519,7 @@ detect_maxscb(aha_type type, int base, int walk_scbs)
       }
       i++;
     }
-    maxscb = i;		
+    maxscb = i;
   }
 
   return (maxscb);
@@ -3566,8 +3536,6 @@ static int
 aic7xxx_register(Scsi_Host_Template *template,
                  struct aic7xxx_host_config *config)
 {
-  static const char * board_name[] = {"", "274x", "284x", "7870", "7850",
-                                      "7872", "7881"};
   int i;
   unsigned char sblkctl;
   int max_targets;
@@ -3589,10 +3557,8 @@ aic7xxx_register(Scsi_Host_Template *template,
 
   switch (config->type)
   {
-    case AIC_274x:
-#if 0
-      printk("aha274x: HCNTRL:0x%x\n", inb(HCNTRL(base)));
-#endif
+    case AIC_7770:
+    case AIC_7771:
       /*
        * For some 274x boards, we must clear the CHIPRST bit
        * and pause the sequencer. For some reason, this makes
@@ -3611,7 +3577,7 @@ aic7xxx_register(Scsi_Host_Template *template,
       aic7xxx_delay(1);
       if (inb(HCNTRL(base)) & CHIPRST)
       {
-	printk("aic7xxx_register: Chip reset not cleared; clearing manually.\n");
+	printk("aic7xxx: Chip reset not cleared; clearing manually.\n");
       }
       outb(config->pause, HCNTRL(base));
 
@@ -3634,14 +3600,11 @@ aic7xxx_register(Scsi_Host_Template *template,
       /*
        * A reminder until this can be detected automatically.
        */
-      printk("aha274x: Extended translation %sabled\n",
+      printk("aic7xxx: Extended translation %sabled.\n",
 	     config->extended ? "en" : "dis");
       break;
 
     case AIC_284x:
-#if 0
-      printk("aha284x: HCNTRL:0x%x\n", inb(HCNTRL(base)));
-#endif
       outb(CHIPRST, HCNTRL(base));
       config->unpause = UNPAUSE_284X;
       config->pause = REQ_PAUSE; /* DWG would like to be like the rest */
@@ -3656,22 +3619,28 @@ aic7xxx_register(Scsi_Host_Template *template,
       }
       host_conf = inb(HA_HOSTCONF(base));
 
-      printk("aha284x: Reading SEEPROM...");
+      printk("aic7xxx: Reading SEEPROM...");
       have_seeprom = read_2840_seeprom(base, &sc);
       if (!have_seeprom)
       {
-	printk("aha284x: Unable to read SEEPROM\n");
+	printk("aic7xxx: Unable to read SEEPROM.\n");
         config->busrtime = host_conf & 0x3C;
       }
       else
       {
 	printk("done.\n");
-	config->extended = ((sc.bios_control & CFEXTEND) >> 7);
+	config->extended = ((sc.bios_control & CF284XEXTEND) >> 5);
 	config->scsi_id = (sc.brtime_id & CFSCSIID);
 	config->parity = (sc.adapter_control & CFSPARITY) ?
 			 AIC_ENABLED : AIC_DISABLED;
-	config->low_term = (sc.adapter_control & CFSTERM) ?
+	config->low_term = (sc.adapter_control & CF284XSTERM) ?
 			      AIC_ENABLED : AIC_DISABLED;
+	/*
+	 * XXX - Adaptec *does* make 284x wide controllers, but the
+	 *       documents do not say where the high byte termination
+	 *       enable bit is located.  For now, we'll just assume
+	 *       that it's in the same place as for the 2940 card.
+	 */
 	config->high_term = (sc.adapter_control & CFWSTERM) ?
 			      AIC_ENABLED : AIC_DISABLED;
 	config->busrtime = ((sc.brtime_id & CFBRTIME) >> 8);
@@ -3681,19 +3650,21 @@ aic7xxx_register(Scsi_Host_Template *template,
       outb(host_conf & DFTHRSH, BUSSPD(base));
       outb((host_conf << 2) & BOFF, BUSTIME(base));
 
-      printk("aha284x: Extended translation %sabled\n",
+      printk("aic7xxx: Extended translation %sabled.\n",
 	     config->extended ? "en" : "dis");
       break;
 
     case AIC_7850:
     case AIC_7870:
+    case AIC_7871:
     case AIC_7872:
+    case AIC_7873:
+    case AIC_7874:
     case AIC_7880:
+    case AIC_7881:
     case AIC_7882:
-#if 0
-      printk("aic%s HCNTRL:0x%x\n", board_name[config->type], inb(HCNTRL(base)));
-#endif
-
+    case AIC_7883:
+    case AIC_7884:
       outb(CHIPRST, HCNTRL(base));
       config->unpause = UNPAUSE_294X;
       config->pause = config->unpause | PAUSE;
@@ -3703,11 +3674,11 @@ aic7xxx_register(Scsi_Host_Template *template,
       config->extended = aic7xxx_extended;
       config->scsi_id = 7;
 
-      printk("aic78xx: Reading SEEPROM...");
+      printk("aic7xxx: Reading SEEPROM...");
       have_seeprom = read_seeprom(base, config->chan_num * (sizeof(sc) / 2), &sc);
       if (!have_seeprom)
       {
-	printk("aic78xx: Unable to read SEEPROM\n");
+	printk("aic7xxx: Unable to read SEEPROM.\n");
       }
       else
       {
@@ -3721,7 +3692,8 @@ aic7xxx_register(Scsi_Host_Template *template,
 	config->high_term = (sc.adapter_control & CFWSTERM) ?
 			      AIC_ENABLED : AIC_DISABLED;
 	config->busrtime = ((sc.brtime_id & CFBRTIME) >> 8);
-        if (((config->type == AIC_7880) || (config->type == AIC_7882)) &&
+        if (((config->type == AIC_7880) || (config->type == AIC_7882) ||
+             (config->type == AIC_7883) || (config->type == AIC_7884)) &&
             (sc.adapter_control & CFULTRAEN))
         {
           printk ("aic7xxx: Enabling support for Ultra SCSI speed.\n");
@@ -3741,25 +3713,25 @@ aic7xxx_register(Scsi_Host_Template *template,
        */
       outb(config->scsi_id, (HA_SCSICONF(base) + 1));
 
-      printk("aic%s: Extended translation %sabled\n", board_name[config->type],
+      printk("aic7xxx: Extended translation %sabled.\n",
 	     config->extended ? "en" : "dis");
       break;
 
     default:
-      panic("aic7xxx_register: internal error\n");
+      panic("aic7xxx: (aic7xxx_register) Internal error.\n");
   }
 
   config->maxscb = detect_maxscb(config->type, base, config->walk_scbs);
 
-  if ((config->type == AIC_274x) || (config->type == AIC_284x))
+  if (config->chip_type == AIC_777x)
   {
     if (config->pause & IRQMS)
     {
-      printk("aic7xxx: Using Level Sensitive Interrupts\n");
+      printk("aic7xxx: Using level sensitive interrupts.\n");
     }
     else
     {
-      printk("aic7xxx: Using Edge Triggered Interrupts\n");
+      printk("aic7xxx: Using edge triggered interrupts.\n");
     }
   }
 
@@ -3779,8 +3751,8 @@ aic7xxx_register(Scsi_Host_Template *template,
     case SELWIDE:     /* Wide bus */
       config->scsi_id = inb(HA_SCSICONF(base) + 1) & 0x0F;
       config->bus_type = AIC_WIDE;
-      printk("aic7xxx: Enabling wide channel of %s-Wide\n",
-	     board_name[config->type]);
+      printk("aic7xxx: Enabling wide channel of %s-Wide.\n",
+	     board_names[config->type]);
       outb(WIDE_BUS, HA_FLAGS(base));
       break;
 
@@ -3789,19 +3761,19 @@ aic7xxx_register(Scsi_Host_Template *template,
 #ifdef AIC7XXX_TWIN_SUPPORT
       config->scsi_id_b = inb(HA_SCSICONF(base) + 1) & 0x07;
       config->bus_type = AIC_TWIN;
-      printk("aic7xxx: Enabled channel B of %s-Twin\n",
-	     board_name[config->type]);
+      printk("aic7xxx: Enabled channel B of %s-Twin.\n",
+	     board_names[config->type]);
       outb(TWIN_BUS, HA_FLAGS(base));
 #else
       config->bus_type = AIC_SINGLE;
-      printk("aic7xxx: Channel B of %s-Twin will be ignored\n",
-	     board_name[config->type]);
+      printk("aic7xxx: Channel B of %s-Twin will be ignored.\n",
+	     board_names[config->type]);
       outb(0, HA_FLAGS(base));
 #endif
       break;
 
     default:
-      printk("aic7xxx is an unsupported type 0x%x, please "
+      printk("aic7xxx: Unsupported type 0x%x, please "
 	     "mail deang@ims.com\n", inb(SBLKCTL(base)));
       outb(0, HA_FLAGS(base));
       return (0);
@@ -3822,12 +3794,11 @@ aic7xxx_register(Scsi_Host_Template *template,
    *     in the lower four bits; the ECU information shows the
    *     high bit being used as well. Which is correct?
    *
-   * The 294x cards (PCI) get their interrupt from PCI BIOS.
+   * The PCI cards get their interrupt from PCI BIOS.
    */
-  if (((config->type == AIC_274x) || (config->type == AIC_284x)) &&
-      (config->irq < 9 || config->irq > 15))
+  if ((config->chip_type == AIC_777x) && ((config->irq < 9) || (config->irq > 15)))
   {
-    printk("aic7xxx uses unsupported IRQ level, ignoring.\n");
+    printk("aic7xxx: Host adapter uses unsupported IRQ level, ignoring.\n");
     return (0);
   }
 
@@ -3841,7 +3812,7 @@ aic7xxx_register(Scsi_Host_Template *template,
 #ifndef AIC7XXX_SHARE_IRQS
    if (aic7xxx_boards[config->irq] != NULL)
    {
-     printk("aic7xxx_register: Sharing of IRQs is not configured.\n");
+     printk("aic7xxx: Sharing of IRQ's is not configured.\n");
      return (0);
    }
 #endif
@@ -3866,8 +3837,8 @@ aic7xxx_register(Scsi_Host_Template *template,
 
     if (SG_STRUCT_CHECK(sg))
     {
-      printk("aic7xxx warning: kernel scatter-gather "
-	     "structures changed, disabling it.\n");
+      printk("aic7xxx: Warning - Kernel scatter-gather structures changed, "
+             "disabling it.\n");
       template->sg_tablesize = SG_NONE;
     }
   }
@@ -3914,6 +3885,7 @@ aic7xxx_register(Scsi_Host_Template *template,
   p->numscb = 0;
   p->extended = config->extended;
   p->type = config->type;
+  p->chip_type = config->chip_type;
   p->ultra_enabled = config->ultra_enabled;
   p->chan_num = config->chan_num;
   p->bus_type = config->bus_type;
@@ -3941,7 +3913,7 @@ aic7xxx_register(Scsi_Host_Template *template,
      */
     if (request_irq(config->irq, aic7xxx_isr, SA_INTERRUPT, "aic7xxx"))
     {
-      printk("aic7xxx couldn't register irq %d, ignoring\n", config->irq);
+      printk("aic7xxx: Couldn't register IRQ %d, ignoring.\n", config->irq);
       aic7xxx_boards[config->irq] = NULL;
       return (0);
     }
@@ -3972,7 +3944,7 @@ aic7xxx_register(Scsi_Host_Template *template,
    */
   outb(FASTMODE, SEQCTL(base));
 
-  if ((p->type == AIC_274x) || (p->type == AIC_284x))
+  if (p->chip_type == AIC_777x)
   {
     outb(ENABLE, BCTL(base));
   }
@@ -4044,13 +4016,13 @@ aic7xxx_register(Scsi_Host_Template *template,
   {
     if (bios_disabled)
     {
-      printk("aic7xxx : Host Adapter Bios disabled. Using default SCSI "
-             "device parameters\n");
+      printk("aic7xxx : Host adapter BIOS disabled. Using default SCSI "
+             "device parameters.\n");
       p->discenable = 0xFFFF;
     }
     else
     {
-      p->discenable = ~((inb(HA_DISC_DSB(base + 1)) << 8) |
+      p->discenable = ~((inb(HA_DISC_DSB(base) + 1) << 8) |
           inb(HA_DISC_DSB(base)));
     }
   }
@@ -4194,7 +4166,6 @@ aic7xxx_register(Scsi_Host_Template *template,
 int
 aic7xxx_detect(Scsi_Host_Template *template)
 {
-  aha_type type = AIC_NONE;
   int found = 0, slot, base;
   unsigned char irq = 0;
   int i;
@@ -4236,25 +4207,20 @@ aic7xxx_detect(Scsi_Host_Template *template)
       continue;
     }
 
-    type = aic7xxx_probe(slot, HID0(base));
-    if (type != AIC_NONE)
+    config.type = aic7xxx_probe(slot, HID0(base));
+    if (config.type != AIC_NONE)
     {
       /*
        * We found a card, allow 1 spurious interrupt.
        */
       aic7xxx_spurious_count = 1;
 
-#if 0
-      printk("aic7xxx: HCNTRL:0x%x\n", inb(HCNTRL(base)));
-      outb(inb(HCNTRL(base)) | CHIPRST, HCNTRL(base));
-#endif
-
       /*
        * We "find" a AIC-7770 if we locate the card
        * signature and we can set it up and register
        * it with the kernel without incident.
        */
-      config.type = type;
+      config.chip_type = AIC_777x;
       config.base = base;
       config.irq = irq;
       config.parity = AIC_UNKNOWN;
@@ -4273,12 +4239,31 @@ aic7xxx_detect(Scsi_Host_Template *template)
   }
 
 #ifdef CONFIG_PCI
-
   /*
    * PCI-bus probe.
    */
   if (pcibios_present())
   {
+    struct
+    {
+      unsigned short vendor_id;
+      unsigned short device_id;
+      aha_type       card_type;
+      aha_chip_type  chip_type;
+    } const aic7xxx_pci_devices[] = {
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7850, AIC_7850, AIC_785x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7870, AIC_7870, AIC_787x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7871, AIC_7871, AIC_787x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7872, AIC_7872, AIC_787x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7873, AIC_7873, AIC_787x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7874, AIC_7874, AIC_787x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7880, AIC_7880, AIC_788x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7881, AIC_7881, AIC_788x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7882, AIC_7882, AIC_788x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7883, AIC_7883, AIC_788x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7884, AIC_7884, AIC_788x}
+    };
+
     int error;
     int done = 0;
     unsigned int io_port;
@@ -4287,146 +4272,132 @@ aic7xxx_detect(Scsi_Host_Template *template)
     unsigned char devrevid, devconfig, devstatus;
     char rev_id[] = {'B', 'C', 'D'};
 
-    while (!done)
+    for (i = 0; i < NUMBER(aic7xxx_pci_devices); i++)
     {
-      if ((!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				PCI_DEVICE_ID_ADAPTEC_7870,
-				index, &pci_bus, &pci_device_fn)) ||
-	   (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				PCI_DEVICE_ID_ADAPTEC_7871,
-				index, &pci_bus, &pci_device_fn)))
+      done = FALSE;
+      while (!done)
       {
-	type = AIC_7870;
-      }
-      else
-      {
-	if (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				PCI_DEVICE_ID_ADAPTEC_7850,
-				index, &pci_bus, &pci_device_fn))
-	{
-	  type = AIC_7850;
-	}
-	else
-	{
-	  if (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				  PCI_DEVICE_ID_ADAPTEC_7872,
-				  index, &pci_bus, &pci_device_fn))
-	  {
-	    type = AIC_7872;
-            config.chan_num = number_of_3940s & 0x1;
-            number_of_3940s++;
-	  }
-	  else
-	  {
-            if ((!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-                                     PCI_DEVICE_ID_ADAPTEC_7881,
-                                     index, &pci_bus, &pci_device_fn)) ||
-                (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-                                     PCI_DEVICE_ID_ADAPTEC_7880,
-                                     index, &pci_bus, &pci_device_fn)))
-	    {
-	      type = AIC_7880;
-	    }
-            else
-            {
-	      if (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				      PCI_DEVICE_ID_ADAPTEC_7882,
-				      index, &pci_bus, &pci_device_fn))
-	      {
-	        type = AIC_7882;
-              }
-              else
+        if (pcibios_find_device(aic7xxx_pci_devices[i].vendor_id,
+                                aic7xxx_pci_devices[i].device_id,
+                                index, &pci_bus, &pci_device_fn))
+        {
+          done = TRUE;
+        }
+        else  /* Found an Adaptec PCI device. */
+        {
+          config.type = aic7xxx_pci_devices[i].card_type;
+          config.chip_type = aic7xxx_pci_devices[i].chip_type;
+          switch (config.type)
+          {
+            case AIC_7872:  /* 3940 */
+            case AIC_7882:  /* 3940-Ultra */
+              config.chan_num = number_of_39xxs & 0x1;  /* Has 2 controllers */
+              number_of_39xxs++;
+              if (number_of_39xxs == 2)
               {
-	        type = AIC_NONE;
-	        done = 1;
+                number_of_39xxs = 0;  /* To be consistent with 3985. */
               }
-            }
+              break;
+
+            case AIC_7873:  /* 3985 */
+            case AIC_7883:  /* 3985-Ultra */
+              config.chan_num = number_of_39xxs & 0x3;  /* Has 3 controllers */
+              number_of_39xxs++;
+              if (number_of_39xxs == 3)
+              {
+                number_of_39xxs = 0;
+              }
+              break;
+
+            default:
+              break;
           }
-	}
-      }
 
-      if (!done)
-      {
-	/*
-	 * Read esundry information from PCI BIOS.
-	 */
-	error = pcibios_read_config_dword(pci_bus, pci_device_fn,
-					  PCI_BASE_ADDRESS_0, &io_port);
-	if (error)
-	{
-	  panic("aic7xxx_detect: error 0x%x reading i/o port.\n", error);
-	}
+	  /*
+	   * Read esundry information from PCI BIOS.
+	   */
+	  error = pcibios_read_config_dword(pci_bus, pci_device_fn,
+					    PCI_BASE_ADDRESS_0, &io_port);
+	  if (error)
+	  {
+	    panic("aic7xxx: (aic7xxx_detect) Error %d reading I/O port.\n",
+                  error);
+	  }
 
-	error = pcibios_read_config_byte(pci_bus, pci_device_fn,
-					 PCI_INTERRUPT_LINE, &irq);
-	if (error)
-	{
-	  panic("aic7xxx_detect: error %d reading irq.\n", error);
-	}
+	  error = pcibios_read_config_byte(pci_bus, pci_device_fn,
+					   PCI_INTERRUPT_LINE, &irq);
+	  if (error)
+	  {
+	    panic("aic7xxx: (aic7xxx_detect) Error %d reading IRQ.\n",
+                   error);
+	  }
 
-	error = pcibios_read_config_byte(pci_bus, pci_device_fn,
-					 DEVREVID, &devrevid);
-	if (error)
-	{
-	  panic("aic7xxx_detect: error %d reading device revision id.\n", error);
-	}
+	  error = pcibios_read_config_byte(pci_bus, pci_device_fn,
+					   DEVREVID, &devrevid);
+	  if (error)
+	  {
+	    panic("aic7xxx: (aic7xxx_detect) Error %d reading device "
+                  "revision ID.\n", error);
+	  }
 
-	if (devrevid < 3)
-	{
-	  printk("aic7xxx_detect: AIC-7870 Rev %c\n", rev_id[devrevid]);
-	}
+	  if (devrevid < 3)
+	  {
+	    printk("aic7xxx: %s Rev %c.\n", board_names[config.type],
+                   rev_id[devrevid]);
+	  }
 
-	error = pcibios_read_config_byte(pci_bus, pci_device_fn,
-					 DEVCONFIG, &devconfig);
-	if (error)
-	{
-	  panic("aic7xxx_detect: error %d reading device configuration.\n", error);
-	}
+	  error = pcibios_read_config_byte(pci_bus, pci_device_fn,
+					   DEVCONFIG, &devconfig);
+	  if (error)
+	  {
+	    panic("aic7xxx: (aic7xxx_detect) Error %d reading device "
+                  "configuration.\n", error);
+	  }
 
-	error = pcibios_read_config_byte(pci_bus, pci_device_fn,
-					 DEVSTATUS, &devstatus);
-	if (error)
-	{
-	  panic("aic7xxx_detect: error %d reading device status.\n", error);
-	}
+	  error = pcibios_read_config_byte(pci_bus, pci_device_fn,
+					   DEVSTATUS, &devstatus);
+	  if (error)
+	  {
+	    panic("aic7xxx: (aic7xxx_detect) Error %d reading device status.\n",
+                  error);
+	  }
 
-	printk("aic7xxx_detect: devconfig 0x%x, devstatus 0x%x\n",
-	       devconfig, devstatus);
+	  printk("aic7xxx: devconfig(0x%x) devstatus(0x%x).\n",
+	         devconfig, devstatus);
 
-	/*
-	 * Make the base I/O register look like EISA and VL-bus.
-	 */
-	base = io_port - 0xC01;
+	  /*
+	   * Make the base I/O register look like EISA and VL-bus.
+	   */
+	  base = io_port - 0xC01;
 
-	/*
-	 * I don't think we need to bother with allowing
-	 * spurious interrupts for the 787x/7850, but what
-	 * the hey.
-	 */
-	aic7xxx_spurious_count = 1;
+	  /*
+	   * I don't think we need to bother with allowing
+	   * spurious interrupts for the 787x/7850, but what
+	   * the hey.
+	   */
+	  aic7xxx_spurious_count = 1;
 
-        config.type = type;
-        config.base = base;
-        config.irq = irq;
-        config.parity = AIC_UNKNOWN;
-        config.low_term = AIC_UNKNOWN;
-        config.high_term = AIC_UNKNOWN;
-        config.busrtime = 0;
-        config.walk_scbs = FALSE;
-        config.ultra_enabled = FALSE;
-	if ((devstatus & RAMPSM) || (devconfig & SCBRAMSEL) ||
-            (type == AIC_7872))
-	{
-          config.walk_scbs = TRUE;
-	}
-	found += aic7xxx_register(template, &config);
+          config.base = base;
+          config.irq = irq;
+          config.parity = AIC_UNKNOWN;
+          config.low_term = AIC_UNKNOWN;
+          config.high_term = AIC_UNKNOWN;
+          config.busrtime = 0;
+          config.walk_scbs = FALSE;
+          config.ultra_enabled = FALSE;
+	  if ((devstatus & RAMPSM) || (devconfig & SCBRAMSEL))
+	  {
+            config.walk_scbs = TRUE;
+	  }
+	  found += aic7xxx_register(template, &config);
 
-	/*
-	 * Disable spurious interrupts.
-	 */
-	aic7xxx_spurious_count = 0;
+	  /*
+	   * Disable spurious interrupts.
+	   */
+	  aic7xxx_spurious_count = 0;
 
-	index++;
+	  index++;
+        }  /* Found an Adaptec PCI device. */
       }
     }
   }
@@ -4462,8 +4433,8 @@ aic7xxx_buildscb(struct aic7xxx_host *p,
   {
     if (cmd->device->tagged_queue == 0)
     {
-      printk("aic7xxx_buildscb: Enabling tagged queuing for target %d, "
-	     "channel %d\n", cmd->target, cmd->channel);
+      printk("aic7xxx: Enabling tagged queuing for target %d, "
+	     "channel %d.\n", cmd->target, cmd->channel);
       cmd->device->tagged_queue = 1;
       cmd->device->current_tag = 1;  /* enable tagging */
     }
@@ -4482,7 +4453,7 @@ aic7xxx_buildscb(struct aic7xxx_host *p,
     p->wdtr_pending |= mask;
     scb->control |= SCB_NEEDWDTR;
 #if 0
-    printk("Sending WDTR request to target %d.\n", cmd->target);
+    printk("aic7xxx: Sending WDTR request to target %d.\n", cmd->target);
 #endif
   }
   else
@@ -4492,13 +4463,14 @@ aic7xxx_buildscb(struct aic7xxx_host *p,
       p->sdtr_pending |= mask;
       scb->control |= SCB_NEEDSDTR;
 #if 0
-      printk("Sending SDTR request to target %d.\n", cmd->target);
+      printk("aic7xxx: Sending SDTR request to target %d.\n", cmd->target);
 #endif
     }
   }
 
 #if 0
-  printk("aic7xxx_queue: target %d, cmd 0x%x (size %u), wdtr 0x%x, mask 0x%x\n",
+  printk("aic7xxx: (build_scb) Target %d, cmd(0x%x) size(%u) wdtr(0x%x) "
+         "mask(0x%x).\n",
 	 cmd->target, cmd->cmnd[0], cmd->cmd_len, p->needwdtr, mask);
 #endif
   scb->target_channel_lun = ((cmd->target << 4) & 0xF0) |
@@ -4522,7 +4494,7 @@ aic7xxx_buildscb(struct aic7xxx_host *p,
   if (cmd->use_sg)
   {
 #if 0
-    debug("aic7xxx_buildscb: SG used, %d segments, length %u\n",
+    debug("aic7xxx: (build_scb) SG used, %d segments, length(%u).\n",
            cmd->use_sg, length);
 #endif
     scb->SG_segment_count = cmd->use_sg;
@@ -4537,7 +4509,7 @@ aic7xxx_buildscb(struct aic7xxx_host *p,
   else
   {
 #if 0
-  debug("aic7xxx_buildscb: Creating scatterlist, addr=0x%lx, length=%d.\n",
+  debug("aic7xxx: (build_scb) Creating scatterlist, addr(0x%lx) length(%d).\n",
 	(unsigned long) cmd->request_buffer, cmd->request_bufflen);
 #endif
     if (cmd->request_bufflen == 0)
@@ -4602,7 +4574,7 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
   }
 
 #if 0
-  debug("aic7xxx_queue: cmd 0x%x (size %u), target %d, channel %d, lun %d\n",
+  debug("aic7xxx_queue: cmd(0x%x) size(%u), target %d, channel %d, lun %d.\n",
 	cmd->cmnd[0], cmd->cmd_len, cmd->target, cmd->channel,
 	cmd->lun & 0x07);
 #endif
@@ -4645,7 +4617,7 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
   {
     if (p->numscb >= p->maxscb)
     {
-      panic("aic7xxx_queue: couldn't find a free scb\n");
+      panic("aic7xxx: (aic7xxx_queue) Couldn't find a free SCB.\n");
     }
     else
     {
@@ -4688,9 +4660,10 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 #if 0
   if (scb != &p->scb_array[scb->position])
   {
-    printk("aic7xxx_queue: address of scb by position does not match scb address\n");
+    printk("aic7xxx: (queue) Address of SCB by position does not match SCB "
+           "address.\n");
   }
-  printk("aic7xxx_queue: SCB pos=%d, cmdptr=0x%x, state=%d, freescb=0x%x\n",
+  printk("aic7xxx: (queue) SCB pos(%d) cmdptr(0x%x) state(%d) freescb(0x%x)\n",
 	 scb->position, (unsigned int) scb->cmd,
 	 scb->state, (unsigned int) p->free_scb);
 #endif
@@ -4719,13 +4692,12 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
   cmd->scsi_done = fn;
   aic7xxx_error(cmd) = DID_OK;
   aic7xxx_status(cmd) = 0;
-  scb->timer_status = 0x0;
   cmd->result = 0;
   memset(&cmd->sense_buffer, 0, sizeof(cmd->sense_buffer));
 
   UNPAUSE_SEQUENCER(p);
 #if 0
-  printk("aic7xxx_queue: After - cmd = 0x%lx, scb->cmd = 0x%lx, pos = %d\n",
+  printk("aic7xxx: (queue) After - cmd(0x%lx) scb->cmd(0x%lx) pos(%d).\n",
          (long) cmd, (long) scb->cmd, scb->position);
 #endif;
   restore_flags(flags);
@@ -4740,13 +4712,16 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
  *   Abort an scb.  If the scb has not previously been aborted, then
  *   we attempt to send a BUS_DEVICE_RESET message to the target.  If
  *   the scb has previously been unsuccessfully aborted, then we will
- *   reset the channel and have all devices renegotiate.
+ *   reset the channel and have all devices renegotiate.  Returns an
+ *   enumerated type that indicates the status of the operation.
  *-F*************************************************************************/
-static void
-aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
+static aha_abort_reset_type
+aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb,
+                  unsigned char errcode)
 {
   int base = p->base;
   int found = 0;
+  aha_abort_reset_type scb_status = ABORT_RESET_SUCCESS;
   char channel = scb->target_channel_lun & SELBUSB ? 'B': 'A';
 
   /*
@@ -4755,6 +4730,10 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
    */
   PAUSE_SEQUENCER(p);
 
+#ifdef AIC7XXX_DEBUG_ABORT 
+  printk ("aic7xxx: (abort_scb) scb %d, scb_aborted 0x%x\n",
+          scb->position, (scb->state & SCB_ABORTED));
+#endif
   /*
    * First, determine if we want to do a bus reset or simply a bus device
    * reset.  If this is the first time that a transaction has timed out,
@@ -4796,6 +4775,9 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
     outb(scb->position, SCBPTR(base));
     if (inb(SCBARRAY(base)) & SCB_DIS)
     {
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (abort_scb) scb %d is disconnected.\n", scb->position);
+#endif
       scb->state |= (SCB_DEVICE_RESET | SCB_ABORTED);
       scb->SG_segment_count = 0;
       memset(scb->SG_list_pointer, 0, sizeof(scb->SG_list_pointer));
@@ -4809,8 +4791,10 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
                    :"S" (scb), "c" (SCB_DOWNLOAD_SIZE), "d" (SCBARRAY(base))
                    :"si", "cx", "dx");
       outb(0, SCBCNT(base));
+      aic7xxx_error(scb->cmd) = errcode;
+      scb_status = ABORT_RESET_PENDING;
       aic7xxx_add_waiting_scb(base, scb, LIST_SECOND);
-      aic7xxx_scb_tsleep(p, scb, 2 * HZ);  /* unpauses the sequencer */
+      UNPAUSE_SEQUENCER(p);
     }
     else
     {
@@ -4822,6 +4806,10 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
         unsigned char flags = inb(HA_FLAGS(base));
         if (flags & ACTIVE_MSG)
         {
+#ifdef AIC7XXX_DEBUG_ABORT
+          printk ("aic7xxx: (abort_scb) scb is active, needs DMA, "
+                  "ha_flags active.\n");
+#endif
           /*
            * If we're in a message phase, tacking on another message
            * may confuse the target totally. The bus is probably wedged,
@@ -4832,6 +4820,10 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
         }
         else
         {
+#ifdef AIC7XXX_DEBUG_ABORT
+          printk ("aic7xxx: (abort_scb) scb is active, needs DMA, "
+                  "ha_flags inactive.\n");
+#endif
           /*
            * Load the message buffer and assert attention.
            */
@@ -4849,11 +4841,16 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
              */
             ;
           }
-          aic7xxx_scb_tsleep(p, active_scbp, 2 * HZ);
+          aic7xxx_error(scb->cmd) = errcode;
+          scb_status = ABORT_RESET_PENDING;
+          UNPAUSE_SEQUENCER(p);
         }
       }
       else
       {
+#ifdef AIC7XXX_DEBUG_ABORT
+          printk ("aic7xxx: (abort_scb) no active command.\n");
+#endif
         /*
          * No active command to single out, so reset
          * the bus for the timed out target.
@@ -4862,7 +4859,82 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
       }
     }
   }
+  return (scb_status);
 }
+
+/*+F*************************************************************************
+ * Function:
+ *   aic7xxx_abort_reset
+ *
+ * Description:
+ *   Abort or reset the current SCSI command(s).  Returns an enumerated
+ *   type that indicates the status of the operation.
+ *-F*************************************************************************/
+static aha_abort_reset_type
+aic7xxx_abort_reset(Scsi_Cmnd *cmd, unsigned char errcode)
+{
+  struct aic7xxx_scb  *scb;
+  struct aic7xxx_host *p;
+  long flags;
+  aha_abort_reset_type scb_status = ABORT_RESET_SUCCESS;
+
+  p = (struct aic7xxx_host *) cmd->host->hostdata;
+  scb = &(p->scb_array[aic7xxx_position(cmd)]);
+
+  save_flags(flags);
+  cli();
+
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (abort_reset) scb state 0x%x\n", scb->state);
+#endif
+
+  if (scb->state & SCB_ACTIVE)
+  {
+    if (scb->state & SCB_IMMED)
+    {
+      /*
+       * Don't know how set the number of retries to 0.
+       */
+      /* cmd->retries = 0; */
+      aic7xxx_error(cmd) = errcode;
+      aic7xxx_done (p, scb);
+    }
+    else
+    {
+      /*
+       * Abort the operation.
+       */
+      scb_status = aic7xxx_abort_scb(p, scb, errcode);
+    }
+  }
+  else
+  {
+    /*
+     * The scb is not active and must have completed after the timeout
+     * check in scsi.c and before we check the scb state above.  For
+     * this case we return SCSI_ABORT_NOT_RUNNING (if abort was called)
+     * or SCSI_RESET_SUCCESS (if reset was called).
+     */
+#ifdef AIC7XXX_DEBUG_ABORT
+    printk ("aic7xxx: (abort_reset) called with no active scb, errcode 0x%x\n",
+            errcode);
+#endif
+    scb_status = ABORT_RESET_INACTIVE;
+    /*
+     * According to the comments in scsi.h and Michael Neuffer, if we do not
+     * have an active command for abort or reset, we should not call the
+     * command done function.  Unfortunately, this hangs the system for me
+     * unless we *do* call the done function.
+     *
+     * XXX - Revisit this sometime!
+     */
+    cmd->result = errcode << 16;
+    cmd->scsi_done(cmd);
+  }
+  restore_flags(flags);
+  return (scb_status);
+}
+
 
 /*+F*************************************************************************
  * Function:
@@ -4874,36 +4946,23 @@ aic7xxx_abort_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
 int
 aic7xxx_abort(Scsi_Cmnd *cmd)
 {
-  struct aic7xxx_scb  *scb;
-  struct aic7xxx_host *p;
-  long flags;
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (abort) target/channel %d/%d\n", cmd->target, cmd->channel);
+#endif
 
-  p = (struct aic7xxx_host *) cmd->host->hostdata;
-  scb = &(p->scb_array[aic7xxx_position(cmd)]);
-
-  save_flags(flags);
-  cli();
-
-  if (scb->state & SCB_ACTIVE)
+  switch (aic7xxx_abort_reset(cmd, DID_ABORT))
   {
-    if (scb->state & SCB_IMMED)
-    {
-      /*
-       * Don't know how set the number of retries to 0.
-       */
-      /* cmd->retries = 0; */
-      aic7xxx_done (p, scb);
-    }
-    else
-    {
-      /*
-       * Abort the operation.
-       */
-      aic7xxx_abort_scb(p, scb);
-    }
+    case ABORT_RESET_INACTIVE:
+      return (SCSI_ABORT_NOT_RUNNING);
+      break;
+    case ABORT_RESET_PENDING:
+      return (SCSI_ABORT_PENDING);
+      break;
+    case ABORT_RESET_SUCCESS:
+    default:
+      return (SCSI_ABORT_SUCCESS);
+      break;
   }
-  restore_flags(flags);
-  return (0);
 }
 
 /*+F*************************************************************************
@@ -4919,7 +4978,21 @@ aic7xxx_abort(Scsi_Cmnd *cmd)
 int
 aic7xxx_reset(Scsi_Cmnd *cmd)
 {
-  return (aic7xxx_abort(cmd));
+#ifdef AIC7XXX_DEBUG_ABORT
+  printk ("aic7xxx: (reset) target/channel %d/%d\n", cmd->target, cmd->channel);
+#endif
+
+  switch (aic7xxx_abort_reset(cmd, DID_RESET))
+  {
+    case ABORT_RESET_PENDING:
+      return (SCSI_RESET_PENDING);
+      break;
+    case ABORT_RESET_INACTIVE:
+    case ABORT_RESET_SUCCESS:
+    default:
+      return (SCSI_RESET_SUCCESS);
+      break;
+  }
 }
 
 /*+F*************************************************************************

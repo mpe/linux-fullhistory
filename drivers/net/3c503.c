@@ -475,6 +475,7 @@ el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
     unsigned int i;
     unsigned long hdr_start = dev->mem_start + ((ring_page - EL2_MB1_START_PG)<<8);
+    unsigned long fifo_watchdog;
 
     if (dev->mem_start) {       /* Use the shared memory. */
 #ifdef notdef
@@ -492,7 +493,15 @@ el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);
 
-    /* Header is less than 8 bytes, so we can ignore the FIFO. */
+    /* Header is < 8 bytes, so only check the FIFO at the beginning. */
+    fifo_watchdog = jiffies;
+    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0) {
+	if (jiffies - fifo_watchdog > 2*HZ/100) {
+		printk("%s: FIFO blocked in el2_get_8390_hdr.\n", dev->name);
+		break;
+	}
+    }
+
     for(i = 0; i < sizeof(struct e8390_pkt_hdr); i++)
 	((char *)(hdr))[i] = inb_p(E33G_FIFOH);
 

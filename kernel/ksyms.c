@@ -36,6 +36,7 @@
 #include <linux/sem.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/random.h>
 
 #ifdef __alpha__
 # include <asm/io.h>
@@ -241,6 +242,7 @@ struct symbol_table symbol_table = {
 	X(dcache_lookup),
 	X(dcache_add),
 	X(aout_core_dump),
+	X(add_blkdev_randomness),
 
 	/* device registration */
 	X(register_chrdev),
@@ -388,6 +390,7 @@ struct symbol_table symbol_table = {
 	X(rarp_ioctl_hook),
 	X(init_etherdev),
 	X(ip_rt_route),
+	X(ip_rt_put),
 	X(arp_send),
 #ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
@@ -549,6 +552,8 @@ struct symbol_table symbol_table = {
 	X(generate_cluster),
 	X(proc_scsi),
 	X(proc_scsi_inode_operations),
+	X(proc_net_inode_operations),
+	X(proc_net),
 #endif
 	/********************************************************
 	 * Do not add anything below this line,

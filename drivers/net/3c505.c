@@ -10,7 +10,7 @@
  *		be here without 3C505 technical reference provided by
  *		3Com.
  *
- * Version:	@(#)3c505.c	0.8.3	12-Nov-95
+ * Version:	@(#)3c505.c	0.8.4	17-Dec-95
  *
  * Authors:	Linux 3c505 device driver by
  *			Craig Southeren, <craigs@ineluki.apana.org.au>
@@ -103,7 +103,7 @@ static int elp_debug = 0;
  *  3 = messages when interrupts received
  */
 
-#define	ELP_VERSION	"0.8.3"
+#define	ELP_VERSION	"0.8.4"
 
 /*****************************************************************
  *
@@ -1284,9 +1284,13 @@ elp_sense (struct device * dev)
 	int addr=dev->base_addr;
 	const char *name=dev->name;
 	long flags;
+	byte orig_HCR, orig_HSR;
 
-	byte orig_HCR=inb_control(addr),
-		orig_HSR=inb_status(addr);
+	if (check_region(addr, 0xf)) 
+	  return -1;  
+
+	orig_HCR=inb_control(addr);
+	orig_HSR=inb_status(addr);
 
 	if (elp_debug > 0)
 		printk(search_msg, name, addr);
@@ -1472,6 +1476,7 @@ elplus_probe (struct device *dev)
 	elp_init(dev);
 	return 0;
 }
+
 #ifdef MODULE
 static char devicename[9] = { 0, };
 static struct device dev_3c505 = {

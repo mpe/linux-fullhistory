@@ -24,7 +24,7 @@
  *
  *  Dean W. Gehnert, deang@ims.com, 08/30/95
  *
- *  $Id: aic7xxx_proc.c,v 2.2 1995/09/12 05:24:37 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 2.5 1995/12/16 23:11:55 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
@@ -82,7 +82,6 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   int   len = 0;
   off_t begin = 0;
   off_t pos = 0;
-  static char *board_name[] = {"None", "274x", "284x", "7870", "7850", "7872"};
   static char *bus_name[] = {"Single", "Twin", "Wide"};
 
   HBAptr = NULL;
@@ -158,22 +157,17 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #else
   size += sprintf(BLS, "  AIC7XXX_PROC_STATS     : Disabled\n");
 #endif
-#ifdef AIC7XXX_POLL
-  size += sprintf(BLS, "  AIC7XXX_POLL           : Enabled\n");
-#else
-  size += sprintf(BLS, "  AIC7XXX_POLL           : Disabled\n");
-#endif
   len += size; pos = begin + len; size = 0;
 
   size += sprintf(BLS, "\n");
   size += sprintf(BLS, "Adapter Configuration:\n");
-  size += sprintf(BLS, "          SCSI Adapter: %s\n", board_name[p->type]);
+  size += sprintf(BLS, "          SCSI Adapter: %s\n", board_names[p->type]);
   size += sprintf(BLS, "              Host Bus: %s\n", bus_name[p->bus_type]);
   size += sprintf(BLS, "               Base IO: %#.4x\n", p->base);
   size += sprintf(BLS, "                   IRQ: %d\n", HBAptr->irq);
   size += sprintf(BLS, "                   SCB: %d (%d)\n", p->numscb, p->maxscb);
   size += sprintf(BLS, "            Interrupts: %d", p->isr_count);
-  if ((p->type == AIC_274x) || (p->type == AIC_284x))
+  if (p->chip_type == AIC_777x)
   {
     size += sprintf(BLS, " %s\n",
         (p->pause & IRQMS) ? "(Level Sensitive)" : "(Edge Triggered)");
@@ -190,6 +184,8 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
       p->extended ? "En" : "Dis");
   size += sprintf(BLS, "        SCSI Bus Reset: %sabled\n",
       aic7xxx_no_reset ? "Dis" : "En");
+  size += sprintf(BLS, "            Ultra SCSI: %sabled\n",
+      p->ultra_enabled ? "En" : "Dis");
   len += size; pos = begin + len; size = 0;
 
 #ifdef AIC7XXX_PROC_STATS

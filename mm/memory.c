@@ -309,9 +309,10 @@ static inline void forget_pte(pte_t page)
 	if (pte_none(page))
 		return;
 	if (pte_present(page)) {
-		free_page(pte_page(page));
-		if (mem_map[MAP_NR(pte_page(page))].reserved)
+		unsigned long addr = pte_page(page);
+		if (addr >= high_memory || mem_map[MAP_NR(addr)].reserved)
 			return;
+		free_page(addr);
 		if (current->mm->rss <= 0)
 			return;
 		current->mm->rss--;

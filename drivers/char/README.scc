@@ -1,30 +1,3 @@
-// 950913: note -- I will upload the new version 1.9a to ftp.ucsd.edu
-//         as soon as possible... 
-//
-// ******
-// ****** The driver has a  n e w  MAJOR number (34) now! ******
-// ******
-//
-// please remake /dev/sc*:
-//
-// mknod /dev/scc0 c 34 0
-// mknod /dev/scc1 c 34 1
-// mknod /dev/scc2 c 34 2
-// mknod /dev/scc3 c 34 3
-//
-// (and so on...)
-//
-// If you want to use the old device naming scheme use:
-//
-// ln -f /dev/scc0 /dev/sc1
-// ln -f /dev/scc1 /dev/sc2
-// ln -f /dev/scc2 /dev/sc3
-// ln -f /dev/scc3 /dev/sc4
-//
-// (you get the idea...)
-//
-// -dl1bke-
-
 
 You will find subset of the documentation in
 
@@ -33,11 +6,11 @@ You will find subset of the documentation in
 
 To use this driver you MUST have the full package from
 
-ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-1.9a.dl1bke.tar.gz
+ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-2.01.dl1bke.real.tar.gz
 
 [
   if you can't find it there, try:
-  .../tcpip/linux/z8530drv-1.9a.dl1bke.tar.gz
+  .../tcpip/linux/z8530drv-2.01.dl1bke.tar.gz
 
 ]
 

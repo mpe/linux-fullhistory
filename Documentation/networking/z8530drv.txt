@@ -1,57 +1,18 @@
-// 950913: note -- I will upload the new version 1.9a to ftp.ucsd.edu
-//         as soon as possible...
-//
-// ******
-// ****** The driver has a  n e w  MAJOR number (34) now! ******
-// ******
-//
-// please remake /dev/sc*:
-//
-// mknod /dev/scc0 c 34 0
-// mknod /dev/scc1 c 34 1
-// mknod /dev/scc2 c 34 2
-// mknod /dev/scc3 c 34 3
-//
-// (and so on...)
-//
-// If you want to use the old device naming scheme use:
-//
-// ln -f /dev/scc0 /dev/sc1
-// ln -f /dev/scc1 /dev/sc2
-// ln -f /dev/scc2 /dev/sc3
-// ln -f /dev/scc3 /dev/sc4
-//
-// (you get the idea...)
-//
-// -dl1bke-
-
-
 This is a subset of the documentation. To use this driver you MUST have the
 full package from:
 
 Internet:
 =========
 
-ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-1.9.dl1bke.tar.gz
+ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-2.0.dl1bke.real.tar.gz
 
 [
   if you can't find it there, try:
-  .../tcpip/linux/z8530drv-1.9.dl1bke.tar.gz
+  .../tcpip/linux/z8530drv-2.0.dl1bke.tar.gz
 
 ]
 
 and various mirrors (i.e. nic.switch.ch)
-
-AX.25 BBS
-=========
-
-UNIX @ DB0ACH.#NRW.DEU.EU, subject: Z8530D19.Pxx/Pyy
-
-(AX.25 call: DB0ACH-8)
-
-and various BBS that received the file through AUTO7P or 7PSERV
-with the filename Z8530D19.TGZ
-
 
 ---------------------------------------------------------------------------
 
@@ -60,179 +21,198 @@ with the filename Z8530D19.TGZ
 
    ********************************************************************
 
-        (c) 1994 by Joerg Reuter DL1BKE
+        (c) 1993,1995 by Joerg Reuter DL1BKE
 
-        portions (c) 1994 Hans Alblas PE1AYX
-        and      (c) 1993 Guido ten Dolle PE1NNZ
+        portions (c) 1993 Guido ten Dolle PE1NNZ
 
         for the complete copyright notice see >> Copying.Z8530DRV <<
 
    ******************************************************************** 
 
 
-0. Installation of the package
-==============================
-
-Run SCC-Install. If one (or more) of the patches fails PLEASE consult 
-chapter 2 (and READ IT of course!)
-
-
-
-1. Initialization and attachment of the channels
-================================================
+1. Initialization of the driver
+===============================
 
 To use the driver, 3 steps must be performed:
 
-     1. Global initialization of the driver in the kernel
-     2. Setup of parameters with sccinit
-     2. Attachment of each channel in the packet software
-
-The global initialization is needed to reset all SCCs and to 
-install a common interrupt handler.  Also, the hardware addresses 
-of the chips are defined in this step.  In the second step, each 
-channel is set up for the intended use.
+     1. if compiled as module: loading the module
+     2. Setup of hardware, MODEM and KISS parameters with sccinit
+     3. Attachment of each channel in the packet software
 
 
+1.1 Loading the module
+======================
 
-1.1. Initialization
-===================
+(If you're going to compile the driver as a part of the kernel image,
+ skip this chapter and continue with 1.2)
 
-Initialization of the hardware is performed by setting the defines and
-variables in the file "/linux/drivers/char/scc_config.h". You can change 
-a number of parameters.
+Before you can use a module, you'll have to load it with
+
+	insmod scc.o
+
+please read 'man insmod' that comes with modutils.
+
+You should include the insmod in one of the /etc/rc.d/rc.* files,
+and don't forget to insert a call of sccinit after that. It
+will read  your
 
 
+1.2. /etc/z8530drv.rc
+=====================
 
-################################################################################################
-# For OptoSCC card e.g:
+To setup all parameters you must run /sbin/sccinit from one
+of your rc.*-files. This has to be done BEFORE the start of
+NET or axattach. Sccinit reads the file /etc/z8530drv.rc
+and sets the hardware, MODEM and KISS parameters. A sample file is
+delivered with this package. Change it to your needs.
+
+The file itself consists of two main sections.
+
+1.2.1 configuration of hardware parameters
+==========================================
+
+The hardware setup section defines the following parameters for each
+Z8530:
+
+chip    1
+data_a  0x300                   # data port A
+ctrl_a  0x304                   # control port A
+data_b  0x301                   # data port B
+ctrl_b  0x305                   # control port B
+irq     5                       # IRQ No. 5
+pclock  4915200                 # clock
+board   BAYCOM                  # hardware type
+escc    no                      # enhanced SCC chip? (8580/85180/85280)
+vector  0                       # latch for interrupt vector
+special no                      # address of special function register
+option  0                       # option to set via sfr
+
+
+chip	- this is just a delimiter to make sccinit a bit simplier to
+	  program. A parameter has no effect.
+
+data_a  - the address of the data port A of this Z8530 (needed)
+ctrl_a  - the address of the control port A (needed)
+data_b  - the address of the data port B (needed)
+ctrl_b  - the address of the control port B (needed)
+
+irq     - the used IRQ for this chip. Different chips can use different
+          IRQs or the same. If they share an interrupt, it needs to be
+	  specified within one chip-definition only.
+
+pclock  - the clock at the PCLK pin of the Z8530 (option, 4915200 is
+          default), measured in Hertz
+
+board   - the "type" of the board:
+
+	   SCC type                 value
+	   ---------------------------------
+	   PA0HZP SCC card          PA0HZP
+	   EAGLE card               EAGLE
+	   PC100 card               PC100
+	   PRIMUS-PC (DG9BL) card   PRIMUS
+	   BayCom (U)SCC card       BAYCOM
+
+escc    - if you want support for ESCC chips (8580, 85180, 85280), set
+          this to "yes" (option, defaults to "no")
+
+vector  - address of the vector latch (aka "intack port") for PA0HZP
+          cards. There can be only one vector latch for all chips!
+	  (option, defaults to 0)
+
+special - address of the special function register on several cards.
+          (option, defaults to 0)
+
+option  - The value you write into that register (option, default is 0)
+
+You can specify up to four chips (8 channels). If this is not enough,
+just change
+
+	#define MAXSCC 4
+
+to a higher value.
+
+Example for the BayCom USCC:
+----------------------------
+
+chip    1
+data_a  0x300                   # data port A
+ctrl_a  0x304                   # control port A
+data_b  0x301                   # data port B
+ctrl_b  0x305                   # control port B
+irq     5                       # IRQ No. 5 (#)
+board   BAYCOM                  # hardware type (*)
 #
-
-int     Nchips       = 2        ; /* number of chips */
-io_port Vector_Latch = 0x168    ; /* addr. of INTACK-Latch (0 for poll mode)
-*/
-int     Ivec         = 9        ; /* interrupt vector */
-long    Clock        = 4915200  ; /* frequency of the scc clock */
-char    Pclk         = 1        ; /* use PCLK (1) or RTxC (0) */
-char    Board        = PA0HZP   ; /* what type of SCC card do you use? */
-int     Option       = 0        ; /* command for extra hardware */
-io_port Special_Port = 0        ; /* port address for special hardware */
-                                  /* (for EAGLE, PC100, PRIMUS, DRSI) */
-
-                        /*      ^  never remove the semicolon !! */
-
-
-/*                      Channel    A      B         Chip        */
-/*                               ============     ========      */
-/* Control ports:                                               */
-
-io_port SCC_ctrl[MAXSCC * 2] =  {0x152, 0x150,  /* ...one...    */
-                                 0x156, 0x154,  /* ...two...    */
-                                     0,     0,  /* ...three...  */
-                                     0,     0}; /* ...four...   */
-			
-
-/* Data ports:							*/
-
-io_port SCC_data[MAXSCC * 2] =  {0x153, 0x151,	/* ...one...	*/
-				 0x157, 0x155,	/* ...two...	*/
-				     0,     0,	/* ...three...	*/
-				     0,     0};	/* ...four...	*/
-
-
-/* set to '1' if you have and want ESCC chip (8580/85180/85280) support */
-
-/*					      Chip	*/
-/*				            ========   	*/
-int SCC_Enhanced[MAXSCC] =	{0,	/* ...one...	*/
-				 0,  	/* ...two...	*/
-				 0,  	/* ...three...	*/
-				 0};	/* ...four...	*/
-
-/* some useful #defines. You might need them or not */
-
-#define VERBOSE_BOOTMSG 1
-#undef  SCC_DELAY		/* perhaps a 486DX2 is a *bit* too fast */
-#undef  SCC_LDELAY		/* slow it even a bit more down */
-#undef  DONT_CHECK		/* don't look if the SCCs you specified are available */
-
-
-/*********** END OF CONFIGURATION PARAMETERS ********************************************/
-
-
-
-
-################################################################################################
-# For Baycom (U)SCC card e.g:
+# SCC chip 2
 #
+chip    2
+data_a  0x302
+ctrl_a  0x306
+data_b  0x303
+ctrl_b  0x307
+board   BAYCOM
 
-int     Nchips	     = 2	; /* number of chips */
-io_port Vector_Latch = 0	; /* addr. of INTACK-Latch (0 for poll mode) */
-int     Ivec	     = 7	; /* interrupt vector */
-long    Clock	     = 4915200	; /* frequency of the scc clock */
-char	Board	     = BAYCOM	; /* what type of SCC card do you use? */
-int	Option	     = 0	; /* command for extra hardware */
-io_port Special_Port = 0	; /* port address for special hardware */
-				  /* (for EAGLE, PC100, PRIMUS, DRSI) */
+An example for a PA0HZP card:
+-----------------------------
 
-			/*      ^  never remove the semicolon !! */
-			
+chip 1
+data_a 0x153
+data_b 0x151
+ctrl_a 0x152
+ctrl_b 0x150
+irq 9
+pclock 4915200
+board PA0HZP
+vector 0x168
+escc no
+#
+#
+#
+chip 2
+data_a 0x157
+data_b 0x155
+ctrl_a 0x156
+ctrl_b 0x154
+irq 9
+pclock 4915200
+board PA0HZP
+vector 0x168
+escc no
 
+A DRSI would should probably work with this:
+--------------------------------------------
+(actually: two DRSI cards...)
 
-/* 			Channel    A      B	    Chip	*/
-/*			         ============	  ========	*/
-/* Control ports:						*/
+chip 1
+data_a 0x303
+data_b 0x301
+ctrl_a 0x302
+ctrl_b 0x300
+irq 7
+pclock 4915200
+board DRSI
+escc no
+#
+#
+#
+chip 2
+data_a 0x313
+data_b 0x311
+ctrl_a 0x312
+ctrl_b 0x310
+irq 7
+pclock 4915200
+board DRSI
+escc no
 
-io_port SCC_ctrl[MAXSCC * 2] = 	{0x304, 0x305,  /* ...one... 	*/
-				 0x306, 0x307,  /* ...two...	*/
-				     0,     0,  /* ...three...	*/
-				     0,     0}; /* ...four...	*/
+Note that you cannot use the on-board baudrate generator off DRSI
+cards. Use "mode dpll" for clock source (see below).
 
-/* Data ports:							*/
+This is based on information provided by Mike Bilow (and verified
+by Paul Helay)
 
-io_port SCC_data[MAXSCC * 2] =  {0x300, 0x301,	/* ...one...	*/
-				 0x302, 0x303,	/* ...two...	*/
-				     0,     0,	/* ...three...	*/
-				     0,     0};	/* ...four...	*/
-
-
-/* set to '1' if you have and want ESCC chip (8580/85180/85280) support */
-
-/*					      Chip	*/
-/*				            ========   	*/
-int SCC_Enhanced[MAXSCC] =	{0,	/* ...one...	*/
-				 0,  	/* ...two...	*/
-				 0,  	/* ...three...	*/
-				 0};	/* ...four...	*/
-
-/* some useful #defines. You might need them or not */
-
-#define VERBOSE_BOOTMSG 1
-#undef  SCC_DELAY		/* perhaps a 486DX2 is a *bit* too fast */
-#undef  SCC_LDELAY		/* slow it even a bit more down */
-#undef  DONT_CHECK		/* don't look if the SCCs you specified are available */
-
-After you changed a parameter you have to recompile a new kernel image file.
-
-The channel number ranges from 0 to (2 * Nchips) - 1,
-where Nchips is the number of chips.
-
-The crystal clock is specified as 4.9152 MHz.  Other frequencies 
-can be used, and this parameter should be adjusted accordingly.
-
-
-You can define your scc type with Board
-
-   SCC type                 value
-   ---------------------------------
-   PA0HZP SCC card          PA0HZP
-   EAGLE card               EAGLE
-   PC100 card               PC100
-   PRIMUS-PC (DG9BL) card   PRIMUS
-   BayCom (U)SCC card       BAYCOM
-
-
-NOTE:
-=====
+The utility "gencfg"
+--------------------
 
 If you only know the parameters for the PE1CHL driver for DOS,
 run gencfg. It will generate the correct port addresses (I hope).
@@ -242,8 +222,7 @@ not appear. Example:
 
 gencfg 2 0x150 4 2 0 1 0x168 9 4915200 
 
-will print a short form of scc_config.h for the OptoSCC to stdout. 
-("short" <=> few comments).
+will print a skeleton z8530drv.rc for the OptoSCC to stdout.
 
 gencfg 2 0x300 2 4 5 -4 0 7 4915200 0x10
 
@@ -251,24 +230,19 @@ does the same for the BayCom USCC card. I my opinion it is much easier
 to edit scc_config.h... 
 
 
-1.2 initializing the driver on bootup
-=====================================
+1.2.2 channel configuration
+===========================
 
+The channel definition is divided into three sub sections for each
+channel:
 
-To setup a number parameters you must run /sbin/sccinit from one
-of your rc.*-files. This has to be done BEFORE the start of
-NET or the ax25attach. Sccinit reads the file /etc/z8530drv.rc
-and sets the MODEM and KISS parameters. A sample file is
-delivered with this package. Change it to your needs:
-
-Each channel definition is divided into three sections. An
-example for /dev/scc0:
+An example for /dev/scc0:
 
 # DEVICE
 
-device /dev/scc0		# the device for the following params
+device /dev/scc0	# the device for the following params
 
-# MODEM
+# MODEM / BUFFERS
 
 speed 1200		# the default baudrate
 clock dpll		# clock source: 
@@ -279,6 +253,15 @@ clock dpll		# clock source:
 mode nrzi		# HDLC encoding mode
 			#	nrzi = 1k2 MODEM, G3RUH 9k6 MODEM
 			#	nrz  = DF9IC 9k6 MODEM
+			#
+rxbuffers 8		# number of rx buffers allocated
+			# 		(option, default is 4)
+txbuffers 16		# number of tx buffers allocatd
+			#		(option, default is 16)
+bufsize	384		# size of buffers. Note that this must include
+			# the AX.25 header, not only the data field!
+			# (optional, defaults to 384)
+
 # KISS (Layer 1)
 
 txdelay 36              # (see chapter 1.4)
@@ -311,8 +294,11 @@ Sccparam program or through KISS. Just to avoid securety holes...
     maxkey expires --- of course without sending anything (useful).
 
 
-1.3. Attach commands
-====================
+2. Attachment of a channel by your AX.25 software
+=================================================
+
+2.1 KA9Q NOS derivates
+======================
 
 When the linux has startup, the SCC driver has been initialized,
 you can attach the channels in your packet software. This is done
@@ -328,12 +314,12 @@ Example Wampes:
 # NOTE: Interfacename and the device must be the same!!
 # Usage: attach asy 0 0 slip|vjslip|ax25ui|ax25i|nrs|kissui <label> 0 <mtu> <speed> [ip_addr]
 #
-attach asy 0 0 kissi scc0 256 256 1200    # Attach SCC channel 1 in 1200 baud
-attach asy 0 0 kissi scc1 256 256 1200    # Attach SCC channel 2 in 1200 baud
+attach asy 0 0 kissi  scc0 256 256 1200   # Attach SCC channel 1 in 1200 baud
+attach asy 0 0 kissi  scc1 256 256 1200   # Attach SCC channel 2 in 1200 baud
 attach asy 0 0 kissui scc2 256 256 38400  # Attach SCC channel 3 in 38400 baud
 attach asy 0 0 kissui scc3 256 256 9600   # Attach SCC channel 4 in 9600 baud
-#                ^
-#                 for WAMPES 921229 use here: ax25
+#              ^^^^
+#              for WAMPES 921229 use here: ax25
 #
 
 Example JNOS:
@@ -341,10 +327,10 @@ Example JNOS:
 ############################################
 # JNOS device attach
 #
-#attach asy scc0 0 ax25 scc0 256 256 1200
-#attach asy scc1 0 ax25 scc1 256 256 1200
-#attach asy scc2 0 ax25 scc2 256 256 300
-#attach asy scc3 0 ax25 scc3 256 256 4800
+attach asy scc0 0 ax25 scc0 256 256 1200
+attach asy scc1 0 ax25 scc1 256 256 1200
+attach asy scc2 0 ax25 scc2 256 256 300
+attach asy scc3 0 ax25 scc3 256 256 4800
 #
 #
 
@@ -363,10 +349,22 @@ Such a divider is not necessary for normal CSMA packet radio
 operation, but interrupt overhead is slightly reduced if you 
 still install it.  
 
+2.2 Kernel AX.25
+================
+
+Well, as said before: The driver emulates a KISS TNC, so you
+can simply run
+
+	axattach -s 1200 /dev/scc0 DL1BKE
+
+to establish the link between kernel AX.25 and z8530drv.
 
 
-1.4. Displaying SCC Parameters:
-===============================
+3. Adjustment and Display of parameters
+=======================================
+
+3.1 Displaying SCC Parameters:
+==============================
 
 Once a SCC channel has been attached, the parameter settings and 
 some statistic information can be shown using the param program:
@@ -397,15 +395,15 @@ HDLC                  Z8530           Interrupts         Queues
 -----------------------------------------------------------------------
 Sent       :     273  RxOver :     0  RxInts :   125074  RxQueue :    0
 Received   :    1095  TxUnder:     0  TxInts :     4684  TxQueue :    0
-RxErrors   :    1591                  ExInts :    11776
-KissErrors :       0                  SpInts :     1503  NoSpace :    0
+RxErrors   :    1591                  ExInts :    11776  NoSpace :    0
+KissErrors :       0                  SpInts :     1503
 Tx State   :    idle
 
 Memory allocated:
 
-Total  :    1
-RxAlloc:    0
-TxAlloc:    1
+Buffer size:     384
+rx buffers :       4
+tx buffers :       8
 
 
 The status info shown is:
@@ -432,7 +430,7 @@ power of you computer. If "Space" errors occur, specify a higher
 number of buffers in the "scc.h" file.
 
 
-1.5 Setting Parameters
+3.2 Setting Parameters
 ======================
 
 
@@ -630,14 +628,8 @@ slip:
 
 
 
-2. Problems
+4. Problems 
 ===========
-
-
-[..]
-
-2.5 Other problems
-==================
 
 If you have tx-problems with your BayCom USCC card please check
 the manufacturer of the 8530. SGS chips have a slightly

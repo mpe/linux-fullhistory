@@ -1,4 +1,4 @@
-/* $Id: scc.h,v 1.11 1995/08/24 21:06:24 jreuter Exp jreuter $ */
+/* $Id: scc.h,v 1.15 1995/11/16 20:19:26 jreuter Exp jreuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
@@ -12,28 +12,22 @@
 #define DRSI		0x08	/* hardware type for DRSI PC*Packet card */
 #define BAYCOM		0x10	/* hardware type for BayCom (U)SCC */
 
-/* Constants */
-
-#define MAXSCC		4	/* number of max. supported chips */
-#define MAX_IBUFS	200	/* change this if you run out of memory */
-#define BUFSIZE	  	128	/* must not exceed 4096 */
-#define TPS		25	/* scc_timer():  Ticks Per Second */
-
-#define SCC_TIMER	3
+/* Paranoia check... */
 
 #define SCC_PARANOIA_CHECK	/* tell the user if something is going wrong */
 
 /* ioctl() commands */
 
-/* !!! NEW VALUES !!! */
+#define TIOCSCCCFG	0x2200		/* set hardware parameters */
+#define TIOCSCCINI	0x2201		/* init driver */
+#define TIOCCHANINI	0x2202		/* init channel */
 
-#define TIOCSCCINI	0x5470		/* init driver */
-#define TIOCCHANINI	0x5471		/* init channel */
+#define TIOCCHANMEM	0x2210		/* adjust buffer pools */
 
-#define TIOCGKISS	0x5472		/* get kiss parameter */
-#define TIOCSKISS	0x5473		/* set kiss parameter */
+#define TIOCGKISS	0x2282		/* get kiss parameter */
+#define TIOCSKISS	0x2283		/* set kiss parameter */
 
-#define TIOCSCCSTAT	0x5474		/* get scc status */
+#define TIOCSCCSTAT	0x2284		/* get scc status */
 
 
 /* magic number */
@@ -106,9 +100,6 @@
 #define BT_RECEIVE  1		/* buffer allocated by receive */
 #define BT_TRANSMIT 2		/* buffer allocated by transmit */
 
-#define QUEUE_THRES MAX_IBUFS/20	/* maximum amount of packets being queued */
-#define QUEUE_HYST  3			/* leave QUEUE_HYST packets untouched */
-
 #define NULLBUF  (struct mbuf *)0
 #define NULLBUFP (struct mbuf **)0
 
@@ -134,30 +125,15 @@ typedef unsigned short ioaddr;  /* old def */
 
 /* Basic message buffer structure */
 
-/* looks familiar? Hmm, yes... */
-
 struct mbuf {
-	struct mbuf *next;	/* Links mbufs belonging to single packets */
-	struct mbuf *anext;	/* Links packets on queues */
+	struct mbuf *next;	/* Link to next buffer */
+	struct mbuf *prev;	/* Link to previous buffer */
 	
-	char type;		/* who allocated this buffer? */
-	int  time_out;		/* unimplemented yet */
+	int cnt;		/* Number of bytes stored in buffer */
+	unsigned char *rw_ptr;	/* read-write pointer */
+	unsigned char data[0];	/* anchor for allocated buffer */
+};
 	
-	int size;		/* Size of associated data buffer */
-	int refcnt;		/* Reference count */
-	struct mbuf *dup;	/* Pointer to duplicated mbuf */
-	char data[BUFSIZE];	/* Active working pointers */
-	int cnt;
-	int in_use;
-};
-
-
-struct sccbuf {
-	struct mbuf *bp;
-        int inuse;
-};
-                                                                                                
-		
 /* SCC channel control structure for KISS */
 
 struct scc_kiss {
@@ -203,9 +179,9 @@ struct scc_stat {
 	int tx_queued;		/* tx frames enqueued */
 	int rx_queued; 		/* rx frames enqueued */
 	
-	unsigned int rx_alloc;	/* allocated rx_buffers */
-	unsigned int tx_alloc;	/* allocated tx_buffers */
-	unsigned int used_buf;	/* used buffers (should be rx_alloc+tx_alloc) */
+	unsigned int rxbuffers;	/* allocated rx_buffers */
+	unsigned int txbuffers;	/* allocated tx_buffers */
+	unsigned int bufsize;	/* used buffersize */
 };
 
 
@@ -220,6 +196,33 @@ struct ioctl_command {
 	unsigned param;		/* KISS-Param */
 };
 
+/* currently unused */
+
+struct scc_hw_config {
+	io_port data_a;		/* data port channel A */
+	io_port ctrl_a;		/* control port channel A */
+	io_port data_b;		/* data port channel B */
+	io_port ctrl_b;		/* control port channel B */
+	io_port vector_latch;	/* INTACK-Latch (#) */
+	io_port	special;	/* special function port */
+
+	int	irq;		/* irq */
+	long	clock;		/* clock */
+	char	option;		/* command for function port */
+	
+	char brand;		/* hardware type */
+	char escc;		/* use ext. features of a 8580/85180/85280 */
+};
+
+struct scc_mem_config {
+	unsigned int rxbuffers;
+	unsigned int txbuffers;
+	unsigned int bufsize;
+};
+
+/* (#) only one INTACK latch allowed. */
+	
+
 /* SCC channel structure */
 
 struct scc_channel {
@@ -227,10 +230,17 @@ struct scc_channel {
 	
 	int init;		/* channel exists? */
 	struct tty_struct *tty; /* link to tty control structure */
-	unsigned char tty_opened;
+	char tty_opened;	/* No. of open() calls... */
+	char throttled;		/* driver is throttled  */
+		
+	char brand;		/* manufacturer of the board */
+	long clock;		/* used clock */
 	
 	io_port ctrl;		/* I/O address of CONTROL register */
 	io_port	data;		/* I/O address of DATA register */
+	io_port special;	/* I/O address of special function port */
+	
+	char option;
 	char enhanced;		/* Enhanced SCC support */
 
 	unsigned char wreg[16]; /* Copy of last written value in WRx */
@@ -239,20 +249,25 @@ struct scc_channel {
         struct scc_kiss kiss;	/* control structure for KISS params */
         struct scc_stat stat;	/* statistical information */
         struct scc_modem modem; /* modem information */
-
-	struct mbuf *rbp;	/* rx: Head of mbuf chain being filled */
-	struct mbuf *rbp1;	/* rx: Pointer to mbuf currently being written */
-	struct mbuf *rcvq;	/* Pointer to mbuf packets currently received */
-	
-	struct mbuf *sndq;	/* tx: Packets awaiting transmission */
-	struct mbuf *tbp;	/* tx: Transmit mbuf being sent */
-
-	struct mbuf *sndq1;	/* Pointer to mbuf currently under construction */
-	struct mbuf *sndq2;	/* Pointer to mbuf currently under construction */
-
+        
+        struct mbuf *rx_buffer_pool; /* free buffers for rx/tx frames are */
+        struct mbuf *tx_buffer_pool; /* linked in these ring chains */
+        
+        struct mbuf *rx_queue;	/* chain of received frames */
+        struct mbuf *tx_queue;	/* chain of frames due to transmit */
+        struct mbuf *rx_bp;	/* pointer to frame currently received */
+        struct mbuf *tx_bp;	/* pointer to frame currently transmitted */
+        
+        struct mbuf *kiss_decode_bp; /* frame we are receiving from tty */
+        struct mbuf *kiss_encode_bp; /* frame we are sending to tty */
 	
 	/* Timer */
+	
+	struct timer_list tx_t;	/* tx timer for this channel */
+	struct timer_list rx_t; /* rx timer */
 
+	/* rx timer counters */
+	
 	unsigned int t_dwait;	/* wait time (DWAIT) */
 	unsigned int t_slot;	/* channel sample frequency */
 	unsigned int t_txdel;	/* TX delay */
@@ -261,14 +276,6 @@ struct scc_channel {
 	unsigned int t_min;	/* minimal key up */
 	unsigned int t_idle;	/* */
 	unsigned int t_mbusy;	/* time until defer if channel busy */	 	
-};
-
-/* some variables for scc_rx_timer() bound together in a struct */
-
-struct rx_timer_CB {
-			char		   lock;
-			unsigned long	   expires;
-			struct scc_channel *scc;
 };
 
 
@@ -557,4 +564,8 @@ struct rx_timer_CB {
 
 /* global functions */
 
+#ifdef PREV_LINUX_1_3_33
+extern long scc_init(long kmem_start);
+#else
 extern int scc_init(void);
+#endif

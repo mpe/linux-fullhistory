@@ -20,9 +20,13 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.11 1995/12/06 21:18:35 fischer Exp $
+ * $Id: aha152x.c,v 1.12 1995/12/16 12:26:07 fischer Exp fischer $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.12  1995/12/16  12:26:07  fischer
+ * - barrier()'s added
+ * - configurable RESET delay added
+ *
  * Revision 1.11  1995/12/06  21:18:35  fischer
  * - some minor updates
  *
@@ -170,16 +174,16 @@
  SKIP_BIOSTEST:
    Don't test for BIOS signature (AHA-1510 or disabled BIOS)
 
- SETUP0	{ IOPORT, IRQ, SCSI_ID, RECONNECT, PARITY, SYNCHRONOUS }:
+ SETUP0	{ IOPORT, IRQ, SCSI_ID, RECONNECT, PARITY, SYNCHRONOUS, DELAY }:
    override for the first controller
    
- SETUP1	{ IOPORT, IRQ, SCSI_ID, RECONNECT, PARITY, SYNCHRONOUS }:
+ SETUP1	{ IOPORT, IRQ, SCSI_ID, RECONNECT, PARITY, SYNCHRONOUS, DELAY }:
    override for the second controller
 
 
  LILO COMMAND LINE OPTIONS:
 
- aha152x=<IOPORT>[,<IRQ>[,<SCSI-ID>[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>]]]]]
+ aha152x=<IOPORT>[,<IRQ>[,<SCSI-ID>[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>[,<DELAY>]]]]]]
 
  The normal configuration can be overridden by specifying a command line.
  When you do this, the BIOS test is skipped. Entered values have to be
@@ -325,6 +329,7 @@ static struct aha152x_setup {
   int reconnect;
   int parity;
   int synchronous;
+  int delay;
 #ifdef DEBUG_AHA152X
   int debug;
 #endif
@@ -336,6 +341,7 @@ static struct Scsi_Host *aha152x_host[IRQS];
 #define CURRENT_SC	  (HOSTDATA(shpnt)->current_SC)
 #define ISSUE_SC	  (HOSTDATA(shpnt)->issue_SC)
 #define DISCONNECTED_SC	  (HOSTDATA(shpnt)->disconnected_SC)
+#define DELAY             (HOSTDATA(shpnt)->delay)
 #define SYNCRATE	  (HOSTDATA(shpnt)->syncrate[CURRENT_SC->target])
 #define MSG(i)            (HOSTDATA(shpnt)->message[i])
 #define MSGLEN            (HOSTDATA(shpnt)->message_len)
@@ -353,6 +359,7 @@ struct aha152x_hostdata {
   int           reconnect;
   int           parity;
   int           synchronous;
+  int           delay;
  
   unsigned char syncrate[8];
   
@@ -439,7 +446,7 @@ static void do_pause(unsigned amount) /* Pause for amount*10 milliseconds */
    unsigned long the_time = jiffies + amount; /* 0.01 seconds per jiffy */
 
    while (jiffies < the_time)
-     ;
+    barrier();
 }
 
 /*
@@ -497,7 +504,7 @@ static void make_acklow(struct Scsi_Host *shpnt)
   SETPORT(SXFRCTL0, CH1);
 
   while(TESTHI(SCSISIG, ACKI))
-    ;
+    barrier();
 }
 
 /*
@@ -519,7 +526,7 @@ static int getphase(struct Scsi_Host *shpnt)
       do
 	{
           while(!((sstat1 = GETPORT(SSTAT1)) & (BUSFREE|SCSIRSTI|REQINIT)))
-	    ;
+            barrier();
           if(sstat1 & BUSFREE)
 	    return P_BUSFREE;
           if(sstat1 & SCSIRSTI)
@@ -559,17 +566,18 @@ void aha152x_setup(char *str, int *ints)
   setup[setup_count].reconnect   = ints[0] >= 4 ? ints[4] : 1;
   setup[setup_count].parity      = ints[0] >= 5 ? ints[5] : 1;
   setup[setup_count].synchronous = ints[0] >= 6 ? ints[6] : 0 /* FIXME: 1 */;
+  setup[setup_count].delay       = ints[0] >= 7 ? ints[7] : 100;
 #ifdef DEBUG_AHA152X
-  setup[setup_count].debug       = ints[0] >= 7 ? ints[7] : DEBUG_DEFAULT;
-  if(ints[0]>7)
+  setup[setup_count].debug       = ints[0] >= 8 ? ints[8] : DEBUG_DEFAULT;
+  if(ints[0]>8)
     { 
-      printk("aha152x: usage: aha152x=<PORTBASE>[,<IRQ>[,<SCSI ID>"
- 	         "[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>,[,<DEBUG>]]]]]]\n");
+      printk("aha152x: usage: aha152x=<IOBASE>[,<IRQ>[,<SCSI ID>"
+ 	         "[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>[,<DELAY>[,<DEBUG>]]]]]]]\n");
 #else
-  if(ints[0]>6)
+  if(ints[0]>7)
     {
-      printk("aha152x: usage: aha152x=<PORTBASE>[,<IRQ>[,<SCSI ID>"
-             "[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>]]]]]\n");
+      printk("aha152x: usage: aha152x=<IOBASE>[,<IRQ>[,<SCSI ID>"
+             "[,<RECONNECT>[,<PARITY>[,<SYNCHRONOUS>[,<DELAY>]]]]]]\n");
 #endif
     }
   else 
@@ -665,13 +673,14 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       if(setup_count==0 || (override.io_port != setup[0].io_port))
         if(!aha152x_checksetup(&override))
 	{
-                printk("\naha152x: SETUP0 (0x%x, %d, %d, %d, %d, %d) invalid\n",
+                printk("\naha152x: SETUP0 (0x%x, %d, %d, %d, %d, %d, %d) invalid\n",
         	      override.io_port,
         	      override.irq,
         	      override.scsiid,
         	      override.reconnect,
         	      override.parity,
-        	      override.synchronous);
+        	      override.synchronous,
+        	      override.delay);
 	}
         else
           setup[setup_count++] = override;
@@ -686,13 +695,14 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       if(setup_count==0 || (override.io_port != setup[0].io_port))
         if(!aha152x_checksetup(&override))
 	{
-                printk("\naha152x: SETUP1 (0x%x, %d, %d, %d, %d, %d) invalid\n",
+                printk("\naha152x: SETUP1 (0x%x, %d, %d, %d, %d, %d, %d) invalid\n",
         	       override.io_port,
         	       override.irq,
         	       override.scsiid,
         	       override.reconnect,
         	       override.parity,
-        	       override.synchronous);
+        	       override.synchronous,
+        	       override.delay);
     }
   else
           setup[setup_count++] = override;
@@ -764,6 +774,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       HOSTDATA(shpnt)->reconnect         = setup[i].reconnect;
       HOSTDATA(shpnt)->parity            = setup[i].parity;
       HOSTDATA(shpnt)->synchronous       = setup[i].synchronous;
+      HOSTDATA(shpnt)->delay             = setup[i].delay;
       HOSTDATA(shpnt)->debug             = setup[i].debug;
 
       HOSTDATA(shpnt)->aborting          = 0;
@@ -809,19 +820,20 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       SETBITS(SCSISEQ, SCSIRSTO);
   do_pause(30);
       CLRBITS(SCSISEQ, SCSIRSTO);
-  do_pause(60);
+      do_pause(setup[i].delay);
 
       aha152x_reset_ports(shpnt);
       
       printk("aha152x%d: vital data: PORTBASE=0x%03x, IRQ=%d, SCSI ID=%d,"
-             " reconnect=%s, parity=%s, synchronous=%s\n",
+             " reconnect=%s, parity=%s, synchronous=%s, delay=%d\n",
       	     i,
              shpnt->io_port,
              shpnt->irq,
              shpnt->this_id,
              HOSTDATA(shpnt)->reconnect ? "enabled" : "disabled",
              HOSTDATA(shpnt)->parity ? "enabled" : "disabled",
-             HOSTDATA(shpnt)->synchronous ? "enabled" : "disabled");
+             HOSTDATA(shpnt)->synchronous ? "enabled" : "disabled",
+             HOSTDATA(shpnt)->delay);
 
       request_region(shpnt->io_port, IO_RANGE, "aha152x");  /* Register */
   
@@ -1162,7 +1174,7 @@ int aha152x_reset(Scsi_Cmnd *SCpnt)
        SETPORT(SCSISEQ, SCSIRSTO);
        do_pause(30);
        SETPORT(SCSISEQ, 0);
-       do_pause(60);
+       do_pause(DELAY);
 
        SETPORT(SIMODE0, DISCONNECTED_SC ? ENSELDI : 0);
        SETPORT(SIMODE1, ISSUE_SC ? ENBUSFREE : 0);
@@ -1251,7 +1263,7 @@ void aha152x_done(struct Scsi_Host *shpnt, int error)
 	printk("BUS FREE loop, ");
 #endif
       while(TESTLO(SSTAT1, BUSFREE))
-	;
+        barrier();
 #if defined(DEBUG_PHASES)
       if(HOSTDATA(shpnt)->debug & debug_phases)
 	printk("BUS FREE\n");
@@ -1308,8 +1320,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
   */
   if(TESTHI(SSTAT0, SELDI) &&
       DISCONNECTED_SC &&
-      (!CURRENT_SC || (CURRENT_SC->SCp.phase & in_selection))
-    )
+      (!CURRENT_SC || (CURRENT_SC->SCp.phase & in_selection)) )
     {
       int identify_msg, target, i;
 
@@ -1453,17 +1464,24 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 	  /* Enable SELECTION OUT sequence */
           SETBITS(SCSISEQ, ENSELO | ENAUTOATNO);
 	
+        }
+      else
+        {
+          /* No command we are busy with and no new to issue */
+          printk("aha152x: ignoring spurious interrupt, nothing to do\n");
+          if(TESTHI(DMACNTRL0, SWINT)) {
+            printk("aha152x: SWINT is set!  Why?\n");
+            CLRBITS(DMACNTRL0, SWINT);
+          }
+          show_queues(shpnt);
+        }
+
 #if defined(DEBUG_RACE)
 	  leave_driver("(selecting) intr");
 #endif
           SETBITS(DMACNTRL0, INTEN);
 	  return;
 	}
-
-      /* No command we are busy with and no new to issue */
-      printk("aha152x: ignoring spurious interrupt, nothing to do\n");
-      return;
-    }
 
   /* the bus is busy with something */
 
@@ -1630,7 +1648,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
         
         /* wait for data latch to become ready or a phase change */
         while(TESTLO(DMASTAT, INTSTAT))
-          ;
+          barrier();
         
 #if defined(DEBUG_MSGO)
         if(HOSTDATA(shpnt)->debug & debug_msgo)
@@ -1671,9 +1689,6 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 
         MSGLEN=0;
 
-        if(MSGLEN>0)
-          aha152x_panic(shpnt, "oops, MSGLEN>0 !?");
-
         if(identify)
           CURRENT_SC->SCp.phase |= sent_ident;
 
@@ -1712,7 +1727,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
   
           /* wait for data latch to become ready or a phase change */
           while(TESTLO(DMASTAT, INTSTAT))
-	    ;
+            barrier();
   
           for(i=0; i<CURRENT_SC->cmd_len && TESTLO(SSTAT1, PHASEMIS); i++)
 	  {
@@ -1868,7 +1883,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 		  }
         		else
 		  {
-        		    /* request SDTR is to slow, do it asynchronously */
+        		    /* requested SDTR is too slow, do it asynchronously */
         		    ADDMSG(MESSAGE_REJECT);
                             SYNCRATE = 0;
         		  } 
@@ -1996,7 +2011,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 #endif
 	    /* wait for PHASEMIS or full FIFO */
             while(TESTLO (DMASTAT, DFIFOFULL|INTSTAT))
-	      ;
+              barrier();
 
 #if defined(DEBUG_DATAI)
             if(HOSTDATA(shpnt)->debug & debug_datai)
@@ -2009,7 +2024,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 	      {
 		/* wait for SCSI fifo to get empty */
         	while(TESTLO(SSTAT2, SEMPTY))
-		  ;
+        	  barrier();
 
 		/* rest of data in FIFO */
 		fifodata=GETPORT(FIFOSTAT);
@@ -2126,7 +2141,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 	/* transfer can be considered ended, when SCSIEN reads back zero */
 	CLRBITS(SXFRCTL0, SCSIEN|DMAEN);
         while(TESTHI(SXFRCTL0, SCSIEN))
-	  ;
+          barrier();
         CLRBITS(DMACNTRL0, ENDMA);
 
 #if defined(DEBUG_DATAI) || defined(DEBUG_INTR)
@@ -2209,7 +2224,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 
 	    /* wait for FIFO to get empty */
             while(TESTLO(DMASTAT, DFIFOEMP|INTSTAT))
-	      ;
+              barrier();
 
 #if defined(DEBUG_DATAO)
             if(HOSTDATA(shpnt)->debug & debug_datao)
@@ -2263,7 +2278,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 #endif
 	    /* wait for SCSI fifo to get empty */
             while(TESTLO(SSTAT2, SEMPTY))
-	      ;
+              barrier();
 #if defined(DEBUG_DATAO)
             if(HOSTDATA(shpnt)->debug & debug_datao)
 	      printk("ok, left data (bytes=%d, buffers=%d) ",
@@ -2274,7 +2289,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 
 	    /* transfer can be considered ended, when SCSIEN reads back zero */
             while(TESTHI(SXFRCTL0, SCSIEN))
-	      ;
+              barrier();
 
 	    CLRBITS(DMACNTRL0, ENDMA);
 	  }

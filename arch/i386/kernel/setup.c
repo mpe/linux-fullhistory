@@ -175,7 +175,7 @@ void setup_arch(char **cmdline_p,
 static const char * i486model(unsigned int nr)
 {
 	static const char *model[] = {
-		"0", "DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4"
+		"0", "DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];
