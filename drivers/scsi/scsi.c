@@ -571,6 +571,8 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
 			else if (!strncmp(scsi_result+8,"SONY",4))
 			    SDpnt->manufacturer = SCSI_MAN_SONY;
+                        else if (!strncmp(scsi_result+8, "PIONEER", 7))
+                            SDpnt->manufacturer = SCSI_MAN_PIONEER;
 			else
 			    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 			
@@ -2269,6 +2271,7 @@ int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 void * scsi_init_malloc(unsigned int size, int priority)
 {
     unsigned long retval;
+    int order, a_size;
     
     /* Use the statically allocated memory instead of kmalloc  (DB) */
 #if defined(USE_STATIC_SCSI_MEMORY)
@@ -2281,10 +2284,17 @@ void * scsi_init_malloc(unsigned int size, int priority)
 	     * For buffers used by the DMA pool, we assume page aligned 
 	     * structures.
 	     */
-	    if(size == PAGE_SIZE)
-		retval = (unsigned long) __get_dma_pages(priority & GFP_LEVEL_MASK, 0);
-	    else
-		retval = (unsigned long) kmalloc(size, priority);
+            if ((size % PAGE_SIZE) == 0) {
+                for (order = 0, a_size = PAGE_SIZE;
+                     a_size < size; order++, a_size <<= 1)
+                    ;
+                retval =
+                    (unsigned long) __get_dma_pages(priority & GFP_LEVEL_MASK,
+                                                    order);
+            }
+            else
+                retval = (unsigned long) kmalloc(size, priority);
+
 	} else {
 	    /*
 	     * Keep all memory aligned on 16-byte boundaries. Some host 
@@ -2311,6 +2321,8 @@ void * scsi_init_malloc(unsigned int size, int priority)
 
 void scsi_init_free(char * ptr, unsigned int size)
 { 
+    int order, a_size;
+
     /* We need to compare addresses to see whether this was kmalloc'd or not */
     
     if((unsigned long) ptr >= scsi_init_memory_start ||
@@ -2320,10 +2332,14 @@ void scsi_init_free(char * ptr, unsigned int size)
 	 * page aligned data.  Besides, it is wasteful to allocate
 	 * page sized chunks with kmalloc.
 	 */
-	if(size == PAGE_SIZE)
-	    free_pages((unsigned long)ptr, 0);
-	else
-	    kfree(ptr);
+        if ((size % PAGE_SIZE) == 0) {
+            for (order = 0, a_size = PAGE_SIZE;
+                 a_size < size; order++, a_size <<= 1)
+                ;
+            free_pages((unsigned long)ptr, order);
+        }
+        else
+            kfree(ptr);
     } else {
 	/* Use the same alignment as scsi_init_malloc() */
 	size = (size + 15) & ~15;

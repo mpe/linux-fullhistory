@@ -27,6 +27,7 @@
 #include <linux/signal.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/random.h>
 
 #include <asm/bitops.h>
 
@@ -370,6 +371,9 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		prev_scancode = 0;
 		goto end_kbd_intr;
 	}
+#ifdef CONFIG_RANDOM
+	add_keyboard_randomness(scancode);
+#endif
 
 	tty = ttytab[fg_console];
  	kbd = kbd_table + fg_console;

@@ -167,6 +167,403 @@ struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
 struct ip_mib ip_statistics={2,64,};	/* Forwarding=No, Default TTL=64 */
 #endif
 
+/* 
+ * Write options to IP header, record destination address to
+ * source route option, address of outgoing interface
+ * (we should already know it, so that this  function is allowed be
+ * called only after routing decision) and timestamp,
+ * if we originate this datagram.
+ */
+
+static void ip_options_build(struct sk_buff * skb, struct options * opt,
+			    __u32 daddr, __u32 saddr,
+			    int is_frag) {
+	unsigned char * iph = (unsigned char*)skb->ip_hdr;
+
+	memcpy(skb->proto_priv, opt, sizeof(struct options));
+	memcpy(iph+sizeof(struct iphdr), opt->__data, opt->optlen);
+	opt = (struct options*)skb->proto_priv;
+	opt->is_data = 0;
+
+	if (opt->srr)
+	  memcpy(iph+opt->srr+iph[opt->srr+1]-4, &daddr, 4);
+
+	if (!is_frag) {
+		if (opt->rr_needaddr)
+		  memcpy(iph+opt->rr+iph[opt->rr+2]-5, &saddr, 4);
+		if (opt->ts_needaddr)
+		  memcpy(iph+opt->ts+iph[opt->ts+2]-9, &saddr, 4);
+		if (opt->ts_needtime) {
+			struct timeval tv;
+			__u32 midtime;
+			do_gettimeofday(&tv);
+			midtime = htonl((tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000);
+			memcpy(iph+opt->ts+iph[opt->ts+2]-5, &midtime, 4);
+		}
+		return;
+	}
+	if (opt->rr) {
+		memset(iph+opt->rr, IPOPT_NOP, iph[opt->rr+1]);
+		opt->rr = 0;
+		opt->rr_needaddr = 0;
+	}
+	if (opt->ts) {
+		memset(iph+opt->ts, IPOPT_NOP, iph[opt->ts+1]);
+		opt->ts = 0;
+		opt->ts_needaddr = opt->ts_needtime = 0;
+	}
+}
+
+int ip_options_echo(struct options * dopt, struct options * sopt,
+		     __u32 daddr, __u32 saddr,
+		     struct sk_buff * skb) {
+	unsigned char *sptr, *dptr;
+	int soffset, doffset;
+	int	optlen;
+
+	memset(dopt, 0, sizeof(struct options));
+
+	dopt->is_data = 1;
+
+	if (!sopt)
+	  sopt = (struct options*)skb->proto_priv;
+
+	if (sopt->optlen == 0) {
+		dopt->optlen = 0;
+		return 0;
+	}
+
+	sptr = (sopt->is_data ? sopt->__data - sizeof(struct iphdr) :
+		(unsigned char *)skb->ip_hdr);
+	dptr = dopt->__data;
+
+	if (sopt->rr) {
+		optlen  = sptr[sopt->rr+1];
+		soffset = sptr[sopt->rr+2];
+		dopt->rr = dopt->optlen + sizeof(struct iphdr);
+		memcpy(dptr, sptr+sopt->rr, optlen);
+		if (sopt->rr_needaddr && soffset <= optlen) {
+			if (soffset + 3 > optlen)
+			  return -EINVAL;
+			dptr[2] = soffset + 4;
+			dopt->rr_needaddr = 1;
+		}
+		dptr 	 += optlen;
+		dopt->optlen += optlen;
+	}
+	if (sopt->ts) {
+		optlen = sptr[sopt->ts+1];
+		soffset = sptr[sopt->ts+2];
+		dopt->ts = dopt->optlen + sizeof(struct iphdr);
+		memcpy(dptr, sptr+sopt->ts, optlen);
+		if (soffset <= optlen) {
+			if (dopt->ts_needaddr) {
+				if (soffset + 3 > optlen)
+				  return -EINVAL;
+				dopt->ts_needaddr = 1;
+				soffset += 4;
+			}
+			if (dopt->ts_needtime) {
+				if (soffset + 3 > optlen)
+				  return -EINVAL;
+				dopt->ts_needtime = 1;
+				soffset += 4;
+			}
+			if (((struct timestamp*)(dptr+1))->flags == IPOPT_TS_PRESPEC) {
+				__u32 addr;
+				memcpy(&addr, sptr+soffset-9, 4);
+				if (ip_chk_addr(addr) == 0) {
+					dopt->ts_needtime = 0;
+					dopt->ts_needaddr = 0;
+					soffset -= 8;
+				}
+			}
+			dptr[2] = soffset;
+		}
+		dptr += optlen;
+		dopt->optlen += optlen;
+	}
+	if (sopt->srr) {
+		unsigned char * start = sptr+sopt->srr;
+		__u32 faddr;
+
+		optlen  = start[1];
+		soffset = start[2];
+		doffset = 0;
+		if (soffset > optlen)
+		  soffset = optlen + 1;
+		soffset -= 4;
+		if (soffset > 3) {
+			memcpy(&faddr, &start[soffset-1], 4);
+			for (soffset-=4, doffset=4; soffset > 3; soffset-=4, doffset+=4)
+			  memcpy(&dptr[doffset-1], &start[soffset-1], 4);
+			/*
+			 * RFC1812 requires to fix illegal source routes.
+			 */
+			if (memcmp(&saddr, &start[soffset+3], 4) == 0)
+			  doffset -= 4;
+		}
+		if (doffset > 3) {
+			memcpy(&start[doffset-1], &daddr, 4);
+			dopt->faddr = faddr;
+			dptr[0] = start[0];
+			dptr[1] = doffset+3;
+			dptr[2] = 4;
+			dptr += doffset+3;
+			dopt->srr = dopt->optlen + sizeof(struct iphdr);
+			dopt->optlen += doffset+3;
+			dopt->is_strictroute = sopt->is_strictroute;
+		}
+	}
+	while (dopt->optlen & 3) {
+		*dptr++ = IPOPT_END;
+		dopt->optlen++;
+	}
+	return 0;
+}
+
+static void ip_options_fragment(struct sk_buff * skb) {
+	unsigned char * optptr = (unsigned char*)skb->ip_hdr;
+	struct options * opt = (struct options*)skb->proto_priv;
+	int  l = opt->optlen;
+	int  optlen;
+
+	while (l > 0) {
+		switch (*optptr) {
+		      case IPOPT_END:
+			return;
+		      case IPOPT_NOOP:
+			l--;
+			optptr++;
+			continue;
+		}
+		optlen = optptr[1];
+		if (l<2 || optlen>l)
+		  return;
+		if (!(*optptr & 0x80))
+		  memset(optptr, IPOPT_NOOP, optlen);
+		l -= optlen;
+		optptr += optlen;
+	}
+	opt->ts = 0;
+	opt->rr = 0;
+	opt->rr_needaddr = 0;
+	opt->ts_needaddr = 0;
+	opt->ts_needtime = 0;
+	return;
+}
+
+/*
+ * Verify options and fill pointers in struct optinos.
+ * Caller should clear *opt, and set opt->data.
+ * If opt == NULL, then skb->data should point to IP header.
+ */
+
+int ip_options_compile(struct options * opt, struct sk_buff * skb)
+{
+	int l;
+	unsigned char * iph;
+	unsigned char * optptr;
+	int optlen;
+	unsigned char * pp_ptr = NULL;
+
+	if (!opt) {
+		opt = (struct options*)skb->proto_priv;
+		memset(opt, 0, sizeof(struct options));
+		iph = (unsigned char*)skb->ip_hdr;
+		opt->optlen = ((struct iphdr *)iph)->ihl*4 - sizeof(struct iphdr);
+		optptr = iph + sizeof(struct iphdr);
+		opt->is_data = 0;
+	} else {
+		optptr = opt->is_data ? opt->__data : (unsigned char*)&skb->ip_hdr[1];
+		iph = optptr - sizeof(struct iphdr);
+	}
+
+	for (l = opt->optlen; l > 0; ) {
+		switch (*optptr) {
+		      case IPOPT_END:
+			for (optptr++, l--; l>0; l--) {
+				if (*optptr != IPOPT_END) {
+					*optptr = IPOPT_END;
+					opt->is_changed = 1;
+				}
+			}
+			goto eol;
+		      case IPOPT_NOOP:
+			l--;
+			optptr++;
+			continue;
+		}
+		optlen = optptr[1];
+		if (l<2 || optlen>l) {
+			pp_ptr = optptr;
+			break;
+		}
+		switch (*optptr) {
+		      case IPOPT_SSRR:
+		      case IPOPT_LSRR:
+			if (optlen < 3) {
+				pp_ptr = optptr + 1;
+				break;
+			}
+			if (optptr[2] < 4) {
+				pp_ptr = optptr + 2;
+				break;
+			}
+			/* NB: cf RFC-1812 5.2.4.1 */
+			if (opt->srr) {
+				pp_ptr = optptr;
+				break;
+			}
+			if (!skb) {
+				if (optptr[2] != 4 || optlen < 7 || ((optlen-3) & 3)) {
+					pp_ptr = optptr + 1;
+					break;
+				}
+				memcpy(&opt->faddr, &optptr[3], 4);
+				if (optlen > 7)
+				  memmove(&optptr[3], &optptr[7], optlen-7);
+			}
+			opt->is_strictroute = (optptr[0] == IPOPT_SSRR);
+			opt->srr = optptr - iph;
+			break;
+		      case IPOPT_RR:
+			if (opt->rr) {
+				pp_ptr = optptr;
+				break;
+			}
+			if (optlen < 3) {
+				pp_ptr = optptr + 1;
+				break;
+			}
+			if (optptr[2] < 4) {
+				pp_ptr = optptr + 2;
+				break;
+			}
+			if (optptr[2] <= optlen) {
+				if (optptr[2]+3 > optlen) {
+					pp_ptr = optptr + 2;
+					break;
+				}
+				if (skb) {
+					memcpy(&optptr[optptr[2]-1], &skb->dev->pa_addr, 4);
+					opt->is_changed = 1;
+				}
+				optptr[2] += 4;
+				opt->rr_needaddr = 1;
+			}
+			opt->rr = optptr - iph;
+			break;
+		      case IPOPT_TIMESTAMP:
+			if (opt->ts) {
+				pp_ptr = optptr;
+				break;
+			}
+			if (optlen < 4) {
+				pp_ptr = optptr + 1;
+				break;
+			}
+			if (optptr[2] < 5) {
+				pp_ptr = optptr + 2;
+				break;
+			}
+			if (optptr[2] <= optlen) {
+				struct timestamp * ts = (struct timestamp*)(optptr+1);
+				__u32 * timeptr = NULL;
+				if (ts->ptr+3 > ts->len) {
+					pp_ptr = optptr + 2;
+					break;
+				}
+				switch (ts->flags) {
+				      case IPOPT_TS_TSONLY:
+					opt->ts = optptr - iph;
+					if (skb) {
+						timeptr = (__u32*)&optptr[ts->ptr-1];
+						opt->is_changed = 1;
+					}
+					ts->ptr += 4;
+					break;
+				      case IPOPT_TS_TSANDADDR:
+					if (ts->ptr+7 > ts->len) {
+						pp_ptr = optptr + 2;
+						break;
+					}
+					opt->ts = optptr - iph;
+					if (skb) {
+						memcpy(&optptr[ts->ptr-1], &skb->dev->pa_addr, 4);
+						timeptr = (__u32*)&optptr[ts->ptr+3];
+					}
+					opt->ts_needaddr = 1;
+					opt->ts_needtime = 1;
+					ts->ptr += 8;
+					break;
+				      case IPOPT_TS_PRESPEC:
+					if (ts->ptr+7 > ts->len) {
+						pp_ptr = optptr + 2;
+						break;
+					}
+					opt->ts = optptr - iph;
+					{
+						__u32 addr;
+						memcpy(&addr, &optptr[ts->ptr-1], 4);
+						if (ip_chk_addr(addr) == 0)
+						  break;
+						if (skb)
+						  timeptr = (__u32*)&optptr[ts->ptr+3];
+					}
+					opt->ts_needaddr = 1;
+					opt->ts_needtime = 1;
+					ts->ptr += 8;
+					break;
+				      default:
+					pp_ptr = optptr + 3;
+					break;
+				}
+				if (timeptr) {
+					struct timeval tv;
+					__u32  midtime;
+					do_gettimeofday(&tv);
+					midtime = htonl((tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000);
+					memcpy(timeptr, &midtime, sizeof(__u32));
+					opt->is_changed = 1;
+				}
+			} else {
+				struct timestamp * ts = (struct timestamp*)(optptr+1);
+				if (ts->overflow == 15) {
+					pp_ptr = optptr + 3;
+					break;
+				}
+				opt->ts = optptr - iph;
+				if (skb) {
+					ts->overflow++;
+					opt->is_changed = 1;
+				}
+			}
+			break;
+		      case IPOPT_SEC:
+		      case IPOPT_SID:
+		      default:
+			if (!skb) {
+				pp_ptr = optptr;
+				break;
+			}
+			break;
+		}
+		l -= optlen;
+		optptr += optlen;
+	}
+
+eol:
+	if (!pp_ptr)
+	  return 0;
+
+	if (skb) {
+		icmp_send(skb, ICMP_PARAMETERPROB, 0, pp_ptr-iph, skb->dev);
+		kfree_skb(skb, FREE_READ);
+	}
+	return -EINVAL;
+}
+
 /*
  *	Handle the issuing of an ioctl() request
  *	for the ip device. This is scheduled to
@@ -247,6 +644,10 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	int tmp;
 	__u32 src;
 	struct iphdr *iph;
+	__u32 final_daddr = daddr;
+
+	if (opt && opt->srr)
+	  daddr = opt->faddr;
 
 	/*
 	 *	See if we need to look up the device.
@@ -324,8 +725,6 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 
 	skb->dev = *dev;
 	skb->saddr = saddr;
-	if (skb->sk)
-		skb->sk->saddr = saddr;
 
 	/*
 	 *	Now build the IP header.
@@ -343,7 +742,10 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	 *	Build the IP addresses
 	 */
 	 
-	iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
+	if (opt)
+	  iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr) + opt->optlen);
+	else
+	  iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
 
 	iph->version  = 4;
 	iph->ihl      = 5;
@@ -355,7 +757,15 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 	iph->protocol = type;
 	skb->ip_hdr   = iph;
 
-	return(20 + tmp);	/* IP header plus MAC header size */
+	if (!opt || !opt->optlen)
+	  return sizeof(struct iphdr) + tmp;
+	if (opt->is_strictroute && rt && rt->rt_gateway) {
+	  ip_statistics.IpOutNoRoutes++;
+	  return -ENETUNREACH;
+	}
+	iph->ihl += opt->optlen>>2;
+	ip_options_build(skb, opt, final_daddr, (*dev)->pa_addr, 0);
+	return iph->ihl*4 + tmp;
 }
 
 
@@ -368,6 +778,7 @@ void ip_send_check(struct iphdr *iph)
 	iph->check = 0;
 	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
+
 
 /************************ Fragment Handlers From NET2E **********************************/
 
@@ -704,6 +1115,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 	}
 
 	offset <<= 3;		/* offset is in 8-byte chunks */
+	ihl = iph->ihl * 4;
 
 	/*
 	 * If the queue already existed, keep restarting its timer as long
@@ -713,6 +1125,14 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 
 	if (qp != NULL)
 	{
+		/* ANK. If the first fragment is received,
+		 * we should remember the correct IP header (with options)
+		 */
+	        if (offset == 0)
+		{
+			qp->ihlen = ihl;
+			memcpy(qp->iph, iph, ihl+8);
+		}
 		del_timer(&qp->timer);
 		qp->timer.expires = jiffies + IP_FRAG_TIME;	/* about 30 seconds */
 		qp->timer.data = (unsigned long) qp;	/* pointer to queue */
@@ -737,7 +1157,6 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 	 *	Determine the position of this fragment.
 	 */
 
-	ihl = iph->ihl * 4;
 	end = offset + ntohs(iph->tot_len) - ihl;
 
 	/*
@@ -867,11 +1286,9 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  *
  *	Yes this is inefficient, feel free to submit a quicker one.
  *
- *	**Protocol Violation**
- *	We copy all the options to each fragment. !FIXME!
  */
  
-void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int is_frag)
+static void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int is_frag)
 {
 	struct iphdr *iph;
 	unsigned char *raw;
@@ -909,11 +1326,8 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 
 	if (ntohs(iph->frag_off) & IP_DF)
 	{
-		/*
-		 *	Reply giving the MTU of the failed hop.
-		 */
 		ip_statistics.IpFragFails++;
-		icmp_send(skb,ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev->mtu, dev);
+		printk("ip_queue_xmit: frag needed\n");
 		return;
 	}
 
@@ -1019,6 +1433,16 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		iph = (struct iphdr *)(skb2->h.raw/*+dev->hard_header_len*/);
 		iph->frag_off = htons((offset >> 3));
 		skb2->ip_hdr = iph;
+
+		/* ANK: dirty, but effective trick. Upgrade options only if
+		 * the segment to be fragmented was THE FIRST (otherwise,
+		 * options are already fixed) and make it ONCE
+		 * on the initial skb, so that all the following fragments
+		 * will inherit fixed options.
+		 */
+		if (offset == 0)
+		  ip_options_fragment(skb);
+
 		/*
 		 *	Added AC : If we are fragmenting a fragment thats not the
 		 *		   last fragment then keep MF on each bit
@@ -1047,7 +1471,8 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
  *	Forward an IP datagram to its next destination.
  */
 
-int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict)
+int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
+	       __u32 target_addr)
 {
 	struct device *dev2;	/* Output device */
 	struct iphdr *iph;	/* Our header */
@@ -1055,6 +1480,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	struct rtable *rt;	/* Route we use */
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
+	struct   options * opt	= (struct options*)skb->proto_priv;
 #ifdef CONFIG_IP_FIREWALL
 	int fw_res = 0;		/* Forwarding result */	
 #ifdef CONFIG_IP_MASQUERADE	
@@ -1148,8 +1574,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 		/*
 		 *	Strict routing permits no gatewaying
 		 */
-		
-		if(target_strict)
+
+	        if (opt->is_strictroute)
 		{
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
 			return -1;
@@ -1160,6 +1586,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 		 *	Gateways cannot in turn be gatewayed.
 		 */
 
+#if 0
 		rt = ip_rt_route(raddr, NULL, NULL);
 		if (rt == NULL)
 		{
@@ -1171,6 +1598,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 		}
 		if (rt->rt_gateway != 0)
 			raddr = rt->rt_gateway;
+#endif
 	}
 	else
 		raddr = target_addr;
@@ -1187,7 +1615,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	 *	we calculated.
 	 */
 #ifndef CONFIG_IP_NO_ICMP_REDIRECT
-	if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) && (rt->rt_flags&RTF_MODIFIED))
+	if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) &&
+	    (rt->rt_flags&RTF_MODIFIED) && !opt->srr)
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif		
 
@@ -1207,6 +1636,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 			ip_fw_masquerade(&skb, dev2);
 #endif
 		IS_SKB(skb);
+
+		if (skb->len > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
+		  ip_statistics.IpFragFails++;
+		  icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev2->mtu, dev);
+		  return -1;
+		}
 
 		if(skb_headroom(skb)<dev2->hard_header_len)
 		{
@@ -1243,6 +1678,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 			 *	Copy the packet data into the new buffer.
 			 */
 			memcpy(ptr, skb->h.raw, skb->len);
+			memcpy(skb2->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+			iph = skb2->ip_hdr = skb2->h.iph;
 		}
 		else
 		{
@@ -1261,6 +1698,51 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 			}
 			ip_statistics.IpForwDatagrams++;
 		}
+
+		if (opt->optlen) {
+			unsigned char * optptr;
+			if (opt->rr_needaddr) {
+				optptr = (unsigned char *)iph + opt->rr;
+				memcpy(&optptr[optptr[2]-5], &dev2->pa_addr, 4);
+				opt->is_changed = 1;
+			}
+			if (opt->srr_is_hit) {
+				int srrptr, srrspace;
+
+				optptr = (unsigned char *)iph + opt->srr;
+
+				for ( srrptr=optptr[2], srrspace = optptr[1];
+				      srrptr <= srrspace;
+				     srrptr += 4
+				    ) {
+					if (srrptr + 3 > srrspace)
+					  break;
+					if (memcmp(&target_addr, &optptr[srrptr-1], 4) == 0)
+					  break;
+				}
+				if (srrptr + 3 <= srrspace) {
+					opt->is_changed = 1;
+					memcpy(&optptr[srrptr-1], &dev2->pa_addr, 4);
+					iph->daddr = target_addr;
+					optptr[2] = srrptr+4;
+				} else
+				        printk("ip_forward(): Argh! Destination lost!\n");
+			}
+			if (opt->ts_needaddr) {
+				optptr = (unsigned char *)iph + opt->ts;
+				memcpy(&optptr[optptr[2]-9], &dev2->pa_addr, 4);
+				opt->is_changed = 1;
+			}
+			if (opt->is_changed) {
+				opt->is_changed = 0;
+				ip_send_check(iph);
+			}
+		}
+/*
+ * ANK:  this is point of "no return", we cannot send an ICMP,
+ *       because we changed SRR option.
+ */
+
 		/*
 		 *	See if it needs fragmenting. Note in ip_rcv we tagged
 		 *	the fragment type. This must be right so that
@@ -1322,6 +1804,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 
 #endif
 
+
 /*
  *	This function receives all incoming IP datagrams.
  *
@@ -1337,8 +1820,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char flag = 0;
 	struct inet_protocol *ipprot;
 	int brd=IS_MYADDR;
-	unsigned long target_addr;
-	int target_strict=0;
+	struct options * opt = NULL;
 	int is_frag=0;
 #ifdef CONFIG_IP_FIREWALL
 	int err;
@@ -1389,6 +1871,19 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 	skb_trim(skb,ntohs(iph->tot_len));
+
+	if (iph->ihl > 5) {
+		skb->ip_summed = 0;
+		if (ip_options_compile(NULL, skb))
+			return(0);
+		opt = (struct options*)skb->proto_priv;
+#ifdef CONFIG_IP_NOSR
+		if (opt->srr) {
+			kfree_skb(skb, FREE_READ);
+			return -EINVAL;
+		}
+#endif					
+	}
 	
 	/*
 	 *	See if the firewall wants to dispose of the packet. 
@@ -1406,113 +1901,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 #endif
 	
-
-	/*
-	 *	Next analyse the packet for options. Studies show under one packet in
-	 *	a thousand have options....
-	 */
-	 
-	target_addr = iph->daddr;
-
-	if (iph->ihl != 5)
-	{ 
-		/* Humph.. options. Lots of annoying fiddly bits */
-		
-		/*
-		 *	This is straight from the RFC. It might even be right ;)
-		 *
-		 * 	RFC 1122: 3.2.1.8 STREAMID option is obsolete and MUST be ignored.
-		 *	RFC 1122: 3.2.1.8 MUST NOT crash on a zero length option.
-		 *	RFC 1122: 3.2.1.8 MUST support acting as final destination of a source route.
-		 */
-		 
-		int opt_space=4*(iph->ihl-5);
-		int opt_size;
-		unsigned char *opt_ptr=skb->h.raw+sizeof(struct iphdr);
-	
-		skb->ip_summed=0;		/* Our free checksum is bogus for this case */
-			
-		while(opt_space>0)
-		{
-			if(*opt_ptr==IPOPT_NOOP)
-			{
-				opt_ptr++;
-				opt_space--;
-				continue;
-			}
-			if(*opt_ptr==IPOPT_END)
-				break;	/* Done */
-			if(opt_space<2 || (opt_size=opt_ptr[1])<2 || opt_ptr[1]>opt_space)
-			{
-				/*
-				 *	RFC 1122: 3.2.2.5  SHOULD send parameter problem reports.
-				 */
-				icmp_send(skb, ICMP_PARAMETERPROB, 0, 0, skb->dev);
-				kfree_skb(skb, FREE_READ);
-				return -EINVAL;
-			}
-			switch(opt_ptr[0])
-			{
-				case IPOPT_SEC:
-					/* Should we drop this ?? */
-					break;
-				case IPOPT_SSRR:	/* These work almost the same way */
-					target_strict=1;
-					/* Fall through */
-				case IPOPT_LSRR:
-#ifdef CONFIG_IP_NOSR
-					kfree_skb(skb, FREE_READ);
-					return -EINVAL;
-#endif					
-				case IPOPT_RR:
-				/*
-				 *	RFC 1122: 3.2.1.8 Support for RR is OPTIONAL.
-				 */
-					if (iph->daddr!=skb->dev->pa_addr && (brd = ip_chk_addr(iph->daddr)) == 0) 
-						break;
-					if((opt_size<3) || ( opt_ptr[0]==IPOPT_RR && opt_ptr[2] > opt_size-4 ))
-					{
-						if(ip_chk_addr(iph->daddr))
-							icmp_send(skb, ICMP_PARAMETERPROB, 0, 0, skb->dev);
-						kfree_skb(skb, FREE_READ);
-						return -EINVAL;
-					}
-					if(opt_ptr[2] > opt_size-4 )
-						break;
-					/* Bytes are [IPOPT_xxRR][Length][EntryPointer][Entry0][Entry1].... */
-					/* This isn't going to be too portable - FIXME */
-					if(opt_ptr[0]!=IPOPT_RR)
-					{
-						int t;
-						target_addr=*(u32 *)(&opt_ptr[opt_ptr[2]]);	/* Get hop */
-						t=ip_chk_addr(target_addr);
-						if(t==IS_MULTICAST||t==IS_BROADCAST)
-						{
-							if(ip_chk_addr(iph->daddr))
-								icmp_send(skb, ICMP_PARAMETERPROB, 0, 0, skb->dev);
-							kfree_skb(skb,FREE_READ);
-							return -EINVAL;						
-						}
-					}
-					*(u32 *)(&opt_ptr[opt_ptr[2]])=skb->dev->pa_addr;	/* Record hop */
-					break;
-				case IPOPT_TIMESTAMP:
-				/*
-				 *	RFC 1122: 3.2.1.8 The timestamp option is OPTIONAL but if implemented
-				 *	MUST meet various rules (read the spec).
-				 */
-					NETDEBUG(printk("ICMP: Someone finish the timestamp routine ;)\n"));
-					break;
-				default:
-					break;
-			}
-			opt_ptr+=opt_size;
-			opt_space-=opt_size;
-		}
-					
-	}
-
-
 	/*
 	 *	Remember if the frame is fragmented.
 	 */
@@ -1543,6 +1931,52 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
 	{
+	        if (opt && opt->srr) {
+			int srrspace, srrptr;
+			__u32 nexthop;
+			unsigned char * optptr = ((unsigned char *)iph) + opt->srr;
+
+			if (brd != IS_MYADDR || skb->pkt_type != PACKET_HOST) {
+				kfree_skb(skb, FREE_WRITE);
+				return 0;
+			}
+
+			for ( srrptr=optptr[2], srrspace = optptr[1];
+			      srrptr <= srrspace;
+			      srrptr += 4
+			     ) {
+				int brd2;
+				if (srrptr + 3 > srrspace) {
+					icmp_send(skb, ICMP_PARAMETERPROB, 0, opt->srr+2,
+						  skb->dev);
+					kfree_skb(skb, FREE_WRITE);
+					return 0;
+				}
+				memcpy(&nexthop, &optptr[srrptr-1], 4);
+				if ((brd2 = ip_chk_addr(nexthop)) == 0)
+				  break;
+				if (brd2 != IS_MYADDR) {
+/* ANK: should we implement weak tunneling of multicasts?
+ *	Are they obsolete? DVMRP specs (RFC-1075) is old enough...
+ */
+					kfree_skb(skb, FREE_WRITE);
+					return -EINVAL;
+				}
+			}
+			if (srrptr <= srrspace) {
+				opt->srr_is_hit = 1;
+				opt->is_changed = 1;
+#ifdef CONFIG_IP_FORWARD
+				if (ip_forward(skb, dev, is_frag, nexthop))
+				  kfree_skb(skb, FREE_WRITE);
+#else
+				ip_statistics.IpInAddrErrors++;
+				kfree_skb(skb, FREE_WRITE);
+#endif
+				return 0;
+			}
+		}
+
 #ifdef CONFIG_IP_MULTICAST	
 		if(!(dev->flags&IFF_ALLMULTI) && brd==IS_MULTICAST && iph->daddr!=IGMP_ALL_HOSTS && !(dev->flags&IFF_LOOPBACK))
 		{
@@ -1572,7 +2006,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (ip_fw_demasquerade(skb)) 
 		{
 			struct iphdr *iph=skb->h.iph;
-			if(ip_forward(skb, dev, is_frag|4, iph->daddr, 0))
+			if (ip_forward(skb, dev, is_frag|4, iph->daddr))
 				kfree_skb(skb, FREE_WRITE);
 			return(0);
 		}
@@ -1686,10 +2120,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			*	check the protocol handler's return values here...
 			*/
 
-			ipprot->handler(skb2, dev, NULL, iph->daddr,
+			ipprot->handler(skb2, dev, opt, iph->daddr,
 				(ntohs(iph->tot_len) - (iph->ihl * 4)),
 				iph->saddr, 0, ipprot);
-
 		}
 
 		/*
@@ -1730,7 +2163,12 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 #ifdef CONFIG_IP_FORWARD
-	if(ip_forward(skb, dev, is_frag, target_addr, target_strict))
+	if (opt && opt->is_strictroute) {
+	      icmp_send(skb, ICMP_PARAMETERPROB, 0, 16, skb->dev);
+	      kfree_skb(skb, FREE_WRITE);
+	      return -1;
+	}
+	if (ip_forward(skb, dev, is_frag, iph->daddr))
 		kfree_skb(skb, FREE_WRITE);
 #else
 /*	printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
@@ -1774,6 +2212,8 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	 *	Add the rest of the data space.	
 	 */
 	newskb->ip_hdr=(struct iphdr *)skb_put(newskb, len);
+	memcpy(newskb->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+
 	/*
 	 *	Copy the data
 	 */
@@ -2117,6 +2557,42 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	
 	switch(optname)
 	{
+		case IP_OPTIONS:
+	          {
+			  struct options * opt = NULL;
+			  struct options * old_opt;
+			  if (optlen > 40 || optlen < 0)
+			    return -EINVAL;
+			  err = verify_area(VERIFY_READ, optval, optlen);
+			  if (err)
+			    return err;
+			  opt = kmalloc(sizeof(struct options)+((optlen+3)&~3), GFP_KERNEL);
+			  if (!opt)
+			    return -ENOMEM;
+			  memset(opt, 0, sizeof(struct options));
+			  if (optlen)
+			    memcpy_fromfs(opt->__data, optval, optlen);
+			  while (optlen & 3)
+			    opt->__data[optlen++] = IPOPT_END;
+			  opt->optlen = optlen;
+			  opt->is_data = 1;
+			  opt->is_setbyuser = 1;
+			  if (optlen && ip_options_compile(opt, NULL)) {
+				  kfree_s(opt, sizeof(struct options) + optlen);
+				  return -EINVAL;
+			  }
+			  /*
+			   * ANK: I'm afraid that receive handler may change
+			   * options from under us.
+			   */
+			  cli();
+			  old_opt = sk->opt;
+			  sk->opt = opt;
+			  sti();
+			  if (old_opt)
+			    kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
+			  return 0;
+		  }
 		case IP_TOS:
 			if(val<0||val>255)
 				return -EINVAL;
@@ -2372,6 +2848,53 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 
 	switch(optname)
 	{
+		case IP_OPTIONS:
+			{
+				unsigned char optbuf[sizeof(struct options)+40];
+				struct options * opt = (struct options*)optbuf;
+				err = verify_area(VERIFY_WRITE, optlen, sizeof(int));
+				if (err)
+				  return err;
+				cli();
+				opt->optlen = 0;
+				if (sk->opt)
+				  memcpy(optbuf, sk->opt, sizeof(struct options)+sk->opt->optlen);
+				sti();
+				if (opt->optlen == 0) {
+					put_fs_long(0,(unsigned long *) optlen);
+					return 0;
+				}
+				err = verify_area(VERIFY_WRITE, optval, opt->optlen);
+				if (err)
+				  return err;
+/*
+ * Now we should undo all the changes done by ip_options_compile().
+ */
+				if (opt->srr) {
+					unsigned  char * optptr = opt->__data+opt->srr-sizeof(struct  iphdr);
+					memmove(optptr+7, optptr+4, optptr[1]-7);
+					memcpy(optptr+3, &opt->faddr, 4);
+				}
+				if (opt->rr_needaddr) {
+					unsigned  char * optptr = opt->__data+opt->rr-sizeof(struct  iphdr);
+					memset(&optptr[optptr[2]-1], 0, 4);
+					optptr[2] -= 4;
+				}
+				if (opt->ts) {
+					unsigned  char * optptr = opt->__data+opt->ts-sizeof(struct  iphdr);
+					if (opt->ts_needtime) {
+						memset(&optptr[optptr[2]-1], 0, 4);
+						optptr[2] -= 4;
+					}
+					if (opt->ts_needaddr) {
+						memset(&optptr[optptr[2]-1], 0, 4);
+						optptr[2] -= 4;
+					}
+				}
+				put_fs_long(opt->optlen, (unsigned long *) optlen);
+				memcpy_tofs(optval, opt->__data, opt->optlen);
+			}
+			return 0;
 		case IP_TOS:
 			val=sk->ip_tos;
 			break;
@@ -2445,6 +2968,8 @@ int ip_build_xmit(struct sock *sk,
 		   const void *frag,
 		   unsigned short int length,
 		   __u32 daddr,
+		   __u32 user_saddr,
+		   struct options * opt,
 		   int flags,
 		   int type) 
 {
@@ -2457,6 +2982,10 @@ int ip_build_xmit(struct sock *sk,
 	int local=0;
 	struct device *dev;
 	int nfrags=0;
+	__u32 true_daddr = daddr;
+
+	if (opt && opt->srr && !sk->ip_hdrincl)
+	  daddr = opt->faddr;
 	
 	ip_statistics.IpOutRequests++;
 
@@ -2490,7 +3019,9 @@ int ip_build_xmit(struct sock *sk,
 		 */
 	
 		saddr=sk->ip_route_saddr;	 
-		if(!rt || sk->ip_route_stamp != rt_stamp || daddr!=sk->ip_route_daddr || sk->ip_route_local!=local || sk->saddr!=sk->ip_route_saddr)
+		if(!rt || sk->ip_route_stamp != rt_stamp ||
+		   daddr!=sk->ip_route_daddr || sk->ip_route_local!=local ||
+		   (sk->saddr && sk->saddr != saddr))
 		{
 			if(local)
 				rt = ip_rt_local(daddr, NULL, &saddr);
@@ -2535,6 +3066,8 @@ int ip_build_xmit(struct sock *sk,
 #ifdef CONFIG_IP_MULTICAST
 	}
 #endif		
+	if (user_saddr)
+	  saddr = user_saddr;
 
 	/*
 	 *	Now compute the buffer space we require
@@ -2544,11 +3077,19 @@ int ip_build_xmit(struct sock *sk,
 	 *	Try the simple case first. This leaves broadcast, multicast, fragmented frames, and by
 	 *	choice RAW frames within 20 bytes of maximum size(rare) to the long path
 	 */
-	 
-	if(length+20 <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
+
+	length += 20;
+	if (!sk->ip_hdrincl && opt) {
+		length += opt->optlen;
+		if (opt->is_strictroute && rt && rt->rt_gateway) {
+			ip_statistics.IpOutNoRoutes++;
+			return -ENETUNREACH;
+		}
+	}
+	if(length <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
 	{	
 		int error;
-		struct sk_buff *skb=sock_alloc_send_skb(sk, length+20+15+dev->hard_header_len,0, 0,&error);
+		struct sk_buff *skb=sock_alloc_send_skb(sk, length+15+dev->hard_header_len,0, 0,&error);
 		if(skb==NULL)
 		{
 			ip_statistics.IpOutDiscards++;
@@ -2560,7 +3101,6 @@ int ip_build_xmit(struct sock *sk,
 		skb->sk=sk;
 		skb->arp=0;
 		skb->saddr=saddr;
-		length+=20;	/* We do this twice so the subtract once is quicker */
 		skb->raddr=(rt&&rt->rt_gateway)?rt->rt_gateway:daddr;
 		skb_reserve(skb,(dev->hard_header_len+15)&~15);
 		if(sk->ip_hcache_state>0)
@@ -2589,9 +3129,14 @@ int ip_build_xmit(struct sock *sk,
 			iph->protocol=type;
 			iph->saddr=saddr;
 			iph->daddr=daddr;
+			if (opt) {
+				iph->ihl += opt->optlen>>2;
+				ip_options_build(skb, opt,
+						 true_daddr, dev->pa_addr, 0);
+			}
 			iph->check=0;
 			iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
-			getfrag(frag,saddr,(void *)(iph+1),0, length-20);
+			getfrag(frag,saddr,((char *)iph)+iph->ihl*4,0, length-iph->ihl*4);
 		}
 		else
 			getfrag(frag,saddr,(void *)iph,0,length-20);
@@ -2615,18 +3160,23 @@ int ip_build_xmit(struct sock *sk,
 		}
 		return 0;
 	}
-			
-			
-	fragheaderlen = dev->hard_header_len;
-	if(!sk->ip_hdrincl)
-		fragheaderlen += 20;
+	length-=20;
+	if (sk && !sk->ip_hdrincl && opt) {
+		length -= opt->optlen;
+		fragheaderlen = dev->hard_header_len + sizeof(struct iphdr) + opt->optlen;
+		maxfraglen = ((dev->mtu-sizeof(struct iphdr)-opt->optlen) & ~7) + fragheaderlen;
+	} else {
+		fragheaderlen = dev->hard_header_len;
+		if(!sk->ip_hdrincl)
+		  fragheaderlen += 20;
 		
 	/*
 	 *	Fragheaderlen is the size of 'overhead' on each buffer. Now work
 	 *	out the size of the frames to send.
 	 */
 	 
-	maxfraglen = ((dev->mtu-20) & ~7) + fragheaderlen;
+		maxfraglen = ((dev->mtu-20) & ~7) + fragheaderlen;
+        }
 	
 	/*
 	 *	Start at the end of the frame by handling the remainder.
@@ -2745,6 +3295,11 @@ int ip_build_xmit(struct sock *sk,
 
 			iph->version = 4;
 			iph->ihl = 5; /* ugh */
+			if (opt) {
+				iph->ihl += opt->optlen>>2;
+				ip_options_build(skb, opt,
+						 true_daddr, dev->pa_addr, offset);
+			}
 			iph->tos = sk->ip_tos;
 			iph->tot_len = htons(fraglen - fragheaderlen + iph->ihl*4);
 			iph->id = id;

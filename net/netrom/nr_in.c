@@ -21,6 +21,8 @@
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_in.c
  *	NET/ROM 003	Jonathan(G4KLX)	Added NET/ROM fragment reception.
+ *			Darryl(G7LED)	Added missing INFO with NAK case, optimized
+ *					INFOACK handling, removed reconnect on error.
  */
 
 #include <linux/config.h>
@@ -144,7 +146,6 @@ static int nr_state2_machine(struct sock *sk, struct sk_buff *skb, int frametype
 
 		case NR_DISCREQ:
 			nr_write_internal(sk, NR_DISCACK);
-			break;
 
 		case NR_DISCACK:
 			sk->nr->state = NR_STATE_0;
@@ -182,14 +183,6 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 
 		case NR_CONNREQ:
 			nr_write_internal(sk, NR_CONNACK);
-			sk->nr->condition = 0x00;
-			sk->nr->t1timer   = 0;
-			sk->nr->t2timer   = 0;
-			sk->nr->t4timer   = 0;
-			sk->nr->vs        = 0;
-			sk->nr->va        = 0;
-			sk->nr->vr        = 0;
-			sk->nr->vl	  = 0;
 			break;
 
 		case NR_DISCREQ:
@@ -215,25 +208,6 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 
 		case NR_INFOACK:
 		case NR_INFOACK | NR_CHOKE_FLAG:
-			if (frametype & NR_CHOKE_FLAG) {
-				sk->nr->condition |= PEER_RX_BUSY_CONDITION;
-				sk->nr->t4timer = nr_default.busy_delay;
-			} else {
-				sk->nr->condition &= ~PEER_RX_BUSY_CONDITION;
-				sk->nr->t4timer = 0;
-			}
-			if (!nr_validate_nr(sk, nr)) {
-				nr_nr_error_recovery(sk);
-				sk->nr->state = NR_STATE_1;
-				break;
-			}
-			if (sk->nr->condition & PEER_RX_BUSY_CONDITION) {
-				nr_frames_acked(sk, nr);
-			} else {
-				nr_check_iframes_acked(sk, nr);
-			}
-			break;
-			
 		case NR_INFOACK | NR_NAK_FLAG:
 		case NR_INFOACK | NR_NAK_FLAG | NR_CHOKE_FLAG:
 			if (frametype & NR_CHOKE_FLAG) {
@@ -243,19 +217,29 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 				sk->nr->condition &= ~PEER_RX_BUSY_CONDITION;
 				sk->nr->t4timer = 0;
 			}
-			if (nr_validate_nr(sk, nr)) {
+			if (!nr_validate_nr(sk, nr)) {
+				break;
+			}
+			if (frametype & NR_NAK_FLAG) {
 				nr_frames_acked(sk, nr);
 				nr_send_nak_frame(sk);
 			} else {
-				nr_nr_error_recovery(sk);
-				sk->nr->state = NR_STATE_1;
+				if (sk->nr->condition & PEER_RX_BUSY_CONDITION) {
+					nr_frames_acked(sk, nr);
+				} else {
+					nr_check_iframes_acked(sk, nr);
+				}
 			}
 			break;
 			
 		case NR_INFO:
+		case NR_INFO | NR_NAK_FLAG:
 		case NR_INFO | NR_CHOKE_FLAG:
 		case NR_INFO | NR_MORE_FLAG:
+		case NR_INFO | NR_NAK_FLAG | NR_CHOKE_FLAG:
 		case NR_INFO | NR_CHOKE_FLAG | NR_MORE_FLAG:
+		case NR_INFO | NR_NAK_FLAG | NR_MORE_FLAG:
+		case NR_INFO | NR_NAK_FLAG | NR_CHOKE_FLAG | NR_MORE_FLAG:
 			if (frametype & NR_CHOKE_FLAG) {
 				sk->nr->condition |= PEER_RX_BUSY_CONDITION;
 				sk->nr->t4timer = nr_default.busy_delay;
@@ -263,15 +247,17 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 				sk->nr->condition &= ~PEER_RX_BUSY_CONDITION;
 				sk->nr->t4timer = 0;
 			}
-			if (!nr_validate_nr(sk, nr)) {
-				nr_nr_error_recovery(sk);
-				sk->nr->state = NR_STATE_1;
-				break;
-			}
-			if (sk->nr->condition & PEER_RX_BUSY_CONDITION) {
-				nr_frames_acked(sk, nr);
-			} else {
-				nr_check_iframes_acked(sk, nr);
+			if (nr_validate_nr(sk, nr)) {
+				if (frametype & NR_NAK_FLAG) {
+					nr_frames_acked(sk, nr);
+					nr_send_nak_frame(sk);
+				} else {
+					if (sk->nr->condition & PEER_RX_BUSY_CONDITION) {
+						nr_frames_acked(sk, nr);
+					} else {
+						nr_check_iframes_acked(sk, nr);
+					}
+				}
 			}
 			queued = 1;
 			skb_queue_head(&sk->nr->reseq_queue, skb);
@@ -324,6 +310,9 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype;
+	
+	if (sk->nr->state == NR_STATE_0 && sk->dead)
+		return queued;
 
 	if (sk->nr->state != NR_STATE_1 && sk->nr->state != NR_STATE_2 &&
 	    sk->nr->state != NR_STATE_3) {

@@ -44,7 +44,6 @@
 #include <linux/version.h>
 
 static char kernel_version[] = UTS_RELEASE;
-
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
@@ -84,6 +83,11 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	skb->h.iph=(struct iphdr *)skb->data;
 	skb->ip_hdr=(struct iphdr *)skb->data;
+	memset(skb->proto_priv, 0, sizeof(struct options));
+	if (skb->ip_hdr->ihl > 5) {
+	  if (ip_options_compile(NULL, skb))
+	    return 0;
+	}
 	
 #ifdef CONFIG_IP_FIREWALL
 	/*
@@ -110,7 +114,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Feed to IP forward.
 	 */
 	 
-	if(ip_forward(skb, dev, 0, daddr, 0))
+	if(ip_forward(skb, dev, 0, daddr))
 		kfree_skb(skb, FREE_READ);
 	MOD_DEC_USE_COUNT;
 	return(0);

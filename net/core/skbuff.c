@@ -545,6 +545,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->stamp.tv_sec=0;	/* No idea about time */
 	skb->localroute = 0;
 	skb->ip_summed = 0;
+	memset(skb->proto_priv, 0, sizeof(skb->proto_priv));
 	save_flags(flags);
 	cli();
 	net_skbcount++;
@@ -619,6 +620,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->daddr=skb->daddr;
 	n->raddr=skb->raddr;
 	n->acked=skb->acked;
+	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
 	n->used=skb->used;
 	n->free=1;
 	n->arp=skb->arp;

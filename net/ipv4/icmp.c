@@ -161,6 +161,8 @@ struct icmp_bxm
 	int data_len;
 	struct icmphdr icmph;
 	unsigned long csum;
+	struct options replyopts;
+	unsigned char  optbuf[40];
 };
 
 /*
@@ -224,16 +226,15 @@ static void icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int of
 /*
  *	Driving logic for building and sending ICMP messages.
  */
- 
+
 static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 daddr)
 {
 	struct sock *sk=icmp_socket.data;
-	sk->saddr=saddr;
 	icmp_param->icmph.checksum=0;
 	icmp_out_count(icmp_param->icmph.type);
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
-		daddr, 0, IPPROTO_ICMP);
+		daddr, saddr, &icmp_param->replyopts, 0, IPPROTO_ICMP);
 }
 
 
@@ -316,16 +317,16 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	
 	icmp_param.icmph.type=type;
 	icmp_param.icmph.code=code;
-	icmp_param.icmph.type=type;
-	icmp_param.icmph.un.gateway=0;
+	icmp_param.icmph.un.gateway = info;
 	icmp_param.data_ptr=iph;
 	icmp_param.data_len=(iph->ihl<<2)+8;	/* RFC says return header + 8 bytes */
 	
 	/*
 	 *	Set it to build.
 	 */
-	 
-	icmp_build_xmit(&icmp_param, saddr, iph->saddr);
+
+	if (ip_options_echo(&icmp_param.replyopts, NULL, saddr, iph->saddr, skb_in) == 0)
+	  icmp_build_xmit(&icmp_param, saddr, iph->saddr);
 }
 
 
@@ -506,7 +507,8 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	icmp_param.icmph.type=ICMP_ECHOREPLY;
 	icmp_param.data_ptr=(icmph+1);
 	icmp_param.data_len=len;
-	icmp_build_xmit(&icmp_param, daddr, saddr);
+	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
+	  icmp_build_xmit(&icmp_param, daddr, saddr);
 	kfree_skb(skb, FREE_READ);
 }
 
@@ -538,7 +540,11 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	 *	Fill in the current time as ms since midnight UT: 
 	 */
 	 
-	times[1] = htonl((xtime.tv_sec % 86400) * 1000 + xtime.tv_usec / 1000);
+	{
+	  struct timeval tv;
+	  do_gettimeofday(&tv);
+	  times[1] = htonl((tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000);
+	}
 	times[2] = times[1];
 	memcpy((void *)&times[0], icmph+1, 4);		/* Incoming stamp */
 	icmp_param.icmph=*icmph;
@@ -546,7 +552,8 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	icmp_param.icmph.code=0;
 	icmp_param.data_ptr=&times;
 	icmp_param.data_len=12;
-	icmp_build_xmit(&icmp_param, daddr,saddr);
+	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
+	  icmp_build_xmit(&icmp_param, daddr, saddr);
 	kfree_skb(skb,FREE_READ);
 }
 
@@ -574,7 +581,8 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	icmp_param.icmph.un.echo.sequence = icmph->un.echo.sequence;
 	icmp_param.data_ptr=&dev->pa_mask;
 	icmp_param.data_len=4;
-	icmp_build_xmit(&icmp_param, daddr, saddr);
+	if (ip_options_echo(&icmp_param.replyopts, NULL, daddr, saddr, skb)==0)
+	  icmp_build_xmit(&icmp_param, daddr, saddr);
 #endif	
 	kfree_skb(skb, FREE_READ);	
 }
@@ -696,5 +704,6 @@ void icmp_init(struct proto_ops *ops)
 		panic("Failed to create the ICMP control socket.\n");
 	sk=icmp_socket.data;
 	sk->allocation=GFP_ATOMIC;
+	sk->num = 256;			/* Don't receive any data */
 }
 

@@ -281,6 +281,7 @@ extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;
 extern struct timeval xtime;
 extern int need_resched;
+extern void do_timer(struct pt_regs *);
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;

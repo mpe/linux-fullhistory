@@ -19,9 +19,12 @@ typedef struct {
   int last_result;
   int last_result_fatal;
   unsigned char *b_data;
+  int orig_size;
+  unsigned char *orig_b_data;
 } ST_buffer;
 
 typedef struct {
+  kdev_t devt;
   unsigned capacity;
   struct wait_queue * waiting;
   Scsi_Device* device;

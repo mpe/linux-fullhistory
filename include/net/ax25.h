@@ -8,12 +8,20 @@
 #define _AX25_H 
 #include <linux/ax25.h>
 
+#define PR_SLOWHZ	10		/*  Run timing at 1/10 second - gives us better resolution for 56kbit links */
+
+#define	AX25_T1CLAMPLO  (1 * PR_SLOWHZ)	/* If defined, clamp at 1 second **/
+#define	AX25_T1CLAMPHI (30 * PR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
+
+#define	AX25_BROKEN_NETMAC
+
 #define	AX25_BPQ_HEADER_LEN	16
 #define	AX25_KISS_HEADER_LEN	1
 
-#define	AX25_MAX_HEADER_LEN	56
 #define	AX25_HEADER_LEN		17
 #define	AX25_ADDR_LEN		7
+#define	AX25_DIGI_HEADER_LEN	(AX25_MAX_DIGIS * AX25_ADDR_LEN)
+#define	AX25_MAX_HEADER_LEN	(AX25_HEADER_LEN + AX25_DIGI_HEADER_LEN)
  
 #define AX25_P_IP	0xCC
 #define AX25_P_ARP	0xCD
@@ -100,7 +108,6 @@
 #define AX25_STATE_3	3
 #define AX25_STATE_4	4
 
-#define PR_SLOWHZ	10			/*  Run timing at 1/10 second - gives us better resolution for 56kbit links */
 #define MODULUS 	8			/*  Standard AX.25 modulus */
 #define	EMODULUS	128			/*  Extended AX.25 modulus */
 
@@ -116,6 +123,7 @@
 #define	AX25_DEF_T2		3
 #define	AX25_DEF_T3		300
 #define	AX25_DEF_N2		10
+#define	AX25_DEF_DIGI		(AX25_DIGI_INBAND|AX25_DIGI_XBAND)
 
 typedef struct ax25_uid_assoc {
 	struct ax25_uid_assoc *next;
@@ -124,8 +132,8 @@ typedef struct ax25_uid_assoc {
 } ax25_uid_assoc;
 
 typedef struct {
-	ax25_address calls[6];
-	unsigned char repeated[6];
+	ax25_address calls[AX25_MAX_DIGIS];
+	unsigned char repeated[AX25_MAX_DIGIS];
 	unsigned char ndigi;
 	char lastrepeat;
 } ax25_digi;
@@ -199,6 +207,7 @@ extern int  ax25_dev_ioctl(unsigned int, void *);
 /* ax25_subr.c */
 extern void ax25_clear_queues(ax25_cb *);
 extern void ax25_frames_acked(ax25_cb *, unsigned short);
+extern void ax25_requeue_frames(ax25_cb *);
 extern int  ax25_validate_nr(ax25_cb *, unsigned short);
 extern int  ax25_decode(ax25_cb *, struct sk_buff *, int *, int *, int *);
 extern void ax25_send_control(ax25_cb *, int, int, int);

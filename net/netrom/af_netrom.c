@@ -19,9 +19,11 @@
  *			Alan(GW4PTS)	Trivial tweaks into new format.
  *	NET/ROM	003	Jonathan(G4KLX)	Added G8BPQ extensions.
  *					Added NET/ROM routing ioctl.
- *
- *	To do:
- *		Fix non-blocking connect failure.
+ *			Darryl(G7LED)	Fix autobinding (on connect).
+ *					Fixed nr_release(), set TCP_CLOSE, wakeup app
+ *					context, THEN make the sock dead.
+ *					Circuit ID check before allocating it on
+ *					a connection.
  */
   
 #include <linux/config.h>
@@ -55,7 +57,6 @@
 #include <net/ip.h>
 #include <net/arp.h>
 #include <linux/if_arp.h>
-#include <linux/proc_fs.h>
 
 /************************************************************************\
 *									*
@@ -420,23 +421,15 @@ static int nr_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	nr_cb *nr;
 
+	if (sock->type != SOCK_SEQPACKET || protocol != 0)
+		return -ESOCKTNOSUPPORT;
+
 	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
 		kfree_s(sk, sizeof(*sk));
 		return -ENOMEM;
-	}
-
-	sk->type = sock->type;
-
-	switch (sock->type) {
-		case SOCK_SEQPACKET:
-			break;
-		default:
-			kfree_s((void *)sk, sizeof(*sk));
-			kfree_s((void *)nr, sizeof(*nr));
-			return -ESOCKTNOSUPPORT;
 	}
 
 	skb_queue_head_init(&sk->receive_queue);
@@ -446,6 +439,7 @@ static int nr_create(struct socket *sock, int protocol)
 	init_timer(&sk->timer);
 
 	sk->socket        = sock;
+	sk->type          = sock->type;
 	sk->protocol      = protocol;
 	sk->dead          = 0;
 	sk->next          = NULL;
@@ -457,6 +451,7 @@ static int nr_create(struct socket *sock, int protocol)
 	sk->rmem_alloc    = 0;
 	sk->inuse         = 0;
 	sk->debug         = 0;
+	sk->destroy       = 0;
 	sk->prot          = NULL;	/* So we use default free mechanisms */
 	sk->err           = 0;
 	sk->localroute    = 0;
@@ -485,7 +480,7 @@ static int nr_create(struct socket *sock, int protocol)
 
 	nr->my_index = 0;
 	nr->my_id    = 0;
-	nr->rtt      = nr_default.timeout;
+	nr->rtt      = nr_default.timeout / 2;
 	nr->t1       = nr_default.timeout;
 	nr->t2       = nr_default.ack_delay;
 	nr->n2       = nr_default.tries;
@@ -527,6 +522,9 @@ static struct sock *nr_make_new(struct sock *osk)
 	struct sock *sk;
 	nr_cb *nr;
 
+	if (osk->type != SOCK_SEQPACKET)
+		return NULL;
+
 	if ((sk = (struct sock *)kmalloc(sizeof(*sk), GFP_ATOMIC)) == NULL)
 		return NULL;
 
@@ -535,24 +533,14 @@ static struct sock *nr_make_new(struct sock *osk)
 		return NULL;
 	}
 
-	sk->type   = osk->type;
-	sk->socket = osk->socket;
-
-	switch (osk->type) {
-		case SOCK_SEQPACKET:
-			break;
-		default:
-			kfree_s((void *)sk, sizeof(*sk));
-			kfree_s((void *)nr, sizeof(*nr));
-			return NULL;
-	}
-
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->back_log);
 
 	init_timer(&sk->timer);
 
+	sk->type        = osk->type;
+	sk->socket      = osk->socket;
 	sk->dead        = 0;
 	sk->next        = NULL;
 	sk->priority    = osk->priority;
@@ -564,6 +552,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	sk->rmem_alloc  = 0;
 	sk->inuse       = 0;
 	sk->ack_backlog = 0;
+	sk->destroy     = 0;
 	sk->prot        = NULL;	/* So we use default free mechanisms */
 	sk->err         = 0;
 	sk->localroute  = 0;
@@ -627,23 +616,26 @@ static int nr_release(struct socket *sock, struct socket *peer)
 	if (sk->type == SOCK_SEQPACKET) {
 		switch (sk->nr->state) {
 			case NR_STATE_0:
-				sk->dead      = 1;
+				sk->state     = TCP_CLOSE;
 				sk->state_change(sk);
+				sk->dead      = 1;
 				nr_destroy_socket(sk);
 				break;
 
 			case NR_STATE_1:
 				sk->nr->state = NR_STATE_0;
-				sk->dead      = 1;
+				sk->state     = TCP_CLOSE;
 				sk->state_change(sk);
+				sk->dead      = 1;
 				nr_destroy_socket(sk);
 				break;
 
 			case NR_STATE_2:
 				nr_write_internal(sk, NR_DISCACK);
 				sk->nr->state = NR_STATE_0;
-				sk->dead      = 1;
+				sk->state     = TCP_CLOSE;
 				sk->state_change(sk);
+				sk->dead      = 1;
 				nr_destroy_socket(sk);
 				break;			
 
@@ -655,20 +647,24 @@ static int nr_release(struct socket *sock, struct socket *peer)
 				sk->nr->t2timer = 0;
 				sk->nr->t4timer = 0;
 				sk->nr->state   = NR_STATE_2;
+				sk->state       = TCP_CLOSE;
 				sk->state_change(sk);
 				sk->dead        = 1;
+				sk->destroy     = 1;
 				break;
 
 			default:
 				break;
 		}
 	} else {
-		sk->dead = 1;
+		sk->state = TCP_CLOSE;
 		sk->state_change(sk);
+		sk->dead = 1;
 		nr_destroy_socket(sk);
 	}
 
 	sock->data = NULL;	
+	sk->socket = NULL;	/* Not used, but we should do this. **/
 
 	return 0;
 }
@@ -778,10 +774,15 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 		memcpy(&sk->nr->user_addr,   user,   sizeof(ax25_address));
 		memcpy(&sk->nr->source_addr, source, sizeof(ax25_address));
 
+		sk->nr->device = dev;
+
 		nr_insert_socket(sk);		/* Finish the bind */
 	}
-		
+
 	memcpy(&sk->nr->dest_addr, &addr->sax25_call, sizeof(ax25_address));
+
+	while (nr_find_socket((unsigned char)circuit / 256, (unsigned char)circuit % 256, SOCK_SEQPACKET) != NULL)
+		circuit++;
 
 	sk->nr->my_index = circuit / 256;
 	sk->nr->my_id    = circuit % 256;
@@ -959,12 +960,13 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 		
 	sk = nr_find_listener(dest, SOCK_SEQPACKET);
 
+	user   = (ax25_address *)(skb->data + 21);
+
 	if (sk == NULL || sk->ack_backlog == sk->max_ack_backlog || (make = nr_make_new(sk)) == NULL) {
 		nr_transmit_dm(skb);
 		return 0;
 	}
 
-	user   = (ax25_address *)(skb->data + 21);
 	window = skb->data[20];
 
 	skb->sk             = make;
@@ -974,7 +976,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	memcpy(&make->nr->source_addr, dest, sizeof(ax25_address));
 	memcpy(&make->nr->dest_addr,   src,  sizeof(ax25_address));
 	memcpy(&make->nr->user_addr,   user, sizeof(ax25_address));
-		
+
 	make->nr->your_index = circuit_index;
 	make->nr->your_id    = circuit_id;
 
@@ -1067,7 +1069,7 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	if (sk->debug)
 		printk("NET/ROM: sendto: building packet.\n");
 
-	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
+	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, 0, &err)) == NULL)
 		return err;
@@ -1130,14 +1132,16 @@ static int nr_sendto(struct socket *sock, const void *ubuf, int size, int nobloc
 {
 	struct iovec iov;
 	struct msghdr msg;
-	iov.iov_base=(void *)ubuf;
-	iov.iov_len=size;
-	msg.msg_name=(void *)sa;
-	msg.msg_namelen=addr_len;
-	msg.msg_accrights=NULL;
-	msg.msg_iov=&iov;
-	msg.msg_iovlen=1;
-	return nr_sendmsg(sock,&msg,size,noblock,flags);	
+
+	iov.iov_base = (void *)ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = addr_len;
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+	return nr_sendmsg(sock, &msg, size, noblock, flags);
 }
 
 static int nr_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
@@ -1210,16 +1214,19 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, u
 {
 	struct iovec iov;
 	struct msghdr msg;
-	iov.iov_base=ubuf;
-	iov.iov_len=size;
-	msg.msg_name=(void *)sa;
-	msg.msg_namelen=0;
+
+	iov.iov_base = ubuf;
+	iov.iov_len  = size;
+
+	msg.msg_name      = (void *)sa;
+	msg.msg_namelen   = 0;
 	if (addr_len)
 		msg.msg_namelen = *addr_len;
-	msg.msg_accrights=NULL;
-	msg.msg_iov=&iov;
-	msg.msg_iovlen=1;
-	return nr_recvmsg(sock,&msg,size,noblock,flags,addr_len);	
+	msg.msg_accrights = NULL;
+	msg.msg_iov       = &iov;
+	msg.msg_iovlen    = 1;
+
+	return nr_recvmsg(sock, &msg, size, noblock, flags, addr_len);
 }
 
 

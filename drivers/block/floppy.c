@@ -2034,7 +2034,7 @@ static void setup_format_params(void)
 	head_shift  = (F_SECT_PER_TRACK + 5) / 6;
 
 	/* a ``cylinder'' is two tracks plus a little stepping time */
-	track_shift = 2 * head_shift + 1;
+	track_shift = 2 * head_shift + 3;
 
 	/* position of logical sector 1 on this track */
 	n = (track_shift * format_req.track + head_shift * format_req.head )
@@ -3699,7 +3699,8 @@ static int floppy_grab_irq_and_dma(void)
 	}
 	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
 
-	if (request_irq(FLOPPY_IRQ, floppy_interrupt, SA_INTERRUPT, "floppy")) {
+	if (request_irq(FLOPPY_IRQ, floppy_interrupt,
+			SA_INTERRUPT|SA_SAMPLE_RANDOM, "floppy")) {
 		DPRINT1("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
 		return -1;

@@ -10,16 +10,23 @@
 O_TARGET := ipv4.o
 IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
-		   igmp.o ip_fw.o ipip.o ipmr.o
+		   igmp.o ip_fw.o ipmr.o
+
+MOD_LIST_NAME := IPV4_MODULES
+M_OBJS :=
 
 ifeq ($(CONFIG_INET_RARP),y)
-IPV4_OBJS := $(IPV4_OBJS) rarp.o
-else
-  ifeq ($(CONFIG_INET_RARP),m)
-    M_OBJS := rarp.o
-    MOD_LIST_NAME := IPV4_MODULES
-   endif
+IPV4_OBJS += rarp.o
+elifeq ($(CONFIG_INET_RARP),m)
+M_OBJS += rarp.o
 endif
+
+ifeq ($(CONFIG_NET_IPIP),y)
+IPV4_OBJS := $(IPV4_OBJS) ipip.o
+endif
+
+
+
 
 ifdef CONFIG_INET
 O_OBJS := $(IPV4_OBJS)

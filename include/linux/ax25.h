@@ -1,6 +1,6 @@
 #define PF_AX25		AF_AX25
 #define AX25_MTU	256
-#define AX25_MAX_DIGIS	8
+#define AX25_MAX_DIGIS	6
 
 typedef struct
 {
@@ -29,7 +29,7 @@ struct ax25_routes_struct
 	ax25_address port_addr;
 	ax25_address dest_addr;
 	unsigned char digi_count;
-	ax25_address digi_addr[AX25_MAX_DIGIS - 2];
+	ax25_address digi_addr[AX25_MAX_DIGIS];
 };
 
 #define AX25_WINDOW	1
@@ -45,12 +45,14 @@ struct ax25_routes_struct
 #define SIOCAX25ADDUID		(SIOCPROTOPRIVATE+1)
 #define SIOCAX25DELUID		(SIOCPROTOPRIVATE+2)
 #define SIOCAX25NOUID		(SIOCPROTOPRIVATE+3)
-#define	SIOCAX25DIGCTL		(SIOCPROTOPRIVATE+4)
 #define	SIOCAX25GETPARMS	(SIOCPROTOPRIVATE+5)
 #define	SIOCAX25SETPARMS	(SIOCPROTOPRIVATE+6)
 
 #define AX25_NOUID_DEFAULT	0
 #define AX25_NOUID_BLOCK	1
+
+#define	AX25_DIGI_INBAND	0x01	/* Allow digipeating within port **/
+#define	AX25_DIGI_XBAND		0x02	/* Allow digipeating across ports **/
 
 #define	AX25_VALUES_IPDEFMODE	0	/* 'D'=DG 'V'=VC */
 #define	AX25_VALUES_AXDEFMODE	1	/* 8=Normal 128=Extended Seq Nos */
@@ -64,6 +66,7 @@ struct ax25_routes_struct
 #define	AX25_VALUES_T2		9	/* Default T2 timeout value */
 #define	AX25_VALUES_T3		10	/* Default T3 timeout value */
 #define	AX25_VALUES_N2		11	/* Default N2 value */
+#define	AX25_VALUES_DIGI	12	/* Digipeat mode */
 #define	AX25_MAX_VALUES		20
 
 struct ax25_parms_struct

@@ -30,11 +30,13 @@ choice 'Alpha system type' \
 	 EB66+		CONFIG_ALPHA_EB66P		\
 	 EB64		CONFIG_ALPHA_EB64		\
 	 EB64+		CONFIG_ALPHA_EB64P" Cabriolet
-if [ "$CONFIG_ALPHA_NONAME" = "y" ]; then
+if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
+	-o "$CONFIG_ALPHA_EB66P" = "y" ]
+then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y
 fi
-if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
+if [ "$CONFIG_ALPHA_CABRIOLET" = "y" \
 	-o "$CONFIG_ALPHA_EB64" = "y" -o "$CONFIG_ALPHA_EB64P" = "y" ]
 then
 	define_bool CONFIG_PCI y

@@ -314,6 +314,8 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  * 19950704 operator@melchior.frmug.fr.net (Thomas Quinot)
  *
  *   - SONY:	Same as Nec.
+ *
+ *   - PIONEER: works with SONY code
  */
 
 static void sr_photocd(struct inode *inode)
@@ -471,8 +473,9 @@ static void sr_photocd(struct inode *inode)
 	break;
 
     case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.frmug.fr.net> */
+    case SCSI_MAN_PIONEER:
 #ifdef DEBUG
-        printk("sr_photocd: use SONY code\n");
+        printk("sr_photocd: use SONY/PIONEER code\n");
 #endif
         memset(buf,0,40);
         *((unsigned long*)buf)   = 0x0;   /* we send nothing...     */

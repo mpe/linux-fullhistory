@@ -90,9 +90,7 @@ struct msghdr
 #define	IPTOS_RELIABILITY	0x04
 #define IP_TTL		2
 #define IP_HDRINCL	3
-#ifdef V1_3_WILL_DO_THIS_FUNKY_STUFF
 #define IP_OPTIONS	4
-#endif
 
 #define IP_MULTICAST_IF			32
 #define IP_MULTICAST_TTL 		33

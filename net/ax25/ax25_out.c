@@ -61,7 +61,7 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 	
 	mtu = ax25->device->mtu;
 	
-	if (skb->len > mtu) {
+	if ((skb->len - 1) > mtu) {
 		mtu -= 2;		/* Allow for fragment control info */
 		
 		fragno = skb->len / mtu;
@@ -164,12 +164,13 @@ void ax25_kick(ax25_cb *ax25)
 		 * the window is full. Send a poll on the final I frame if
 		 * the window is filled.
 		 */
-		do {
-			/*
-			 * Dequeue the frame and copy it.
-			 */
-			skb  = skb_dequeue(&ax25->write_queue);
 
+		/*
+		 * Dequeue the frame and copy it.
+		 */
+		skb  = skb_dequeue(&ax25->write_queue);
+
+		do {
 			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 				skb_queue_head(&ax25->write_queue, skb);
 				return;
@@ -195,7 +196,7 @@ void ax25_kick(ax25_cb *ax25)
 #ifdef notdef
 		} while (!last);
 #else
-		} while (!last && skb_peek(&ax25->write_queue) != NULL);
+		} while (!last && (skb = skb_dequeue(&ax25->write_queue)) != NULL);
 #endif
 		ax25->condition &= ~ACK_PENDING_CONDITION;
 

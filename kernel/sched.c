@@ -32,8 +32,6 @@
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 
-#define TIMER_IRQ 0
-
 #include <linux/timex.h>
 
 /*
@@ -78,8 +76,6 @@ unsigned long prof_shift = 0;
 
 extern void mem_use(void);
 
-extern int timer_interrupt(void);
- 
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
@@ -633,20 +629,10 @@ void immediate_bh(void * unused)
 	run_task_queue(&tq_immediate);
 }
 
-/*
- * The int argument is really a (struct pt_regs *), in case the
- * interrupt wants to know from where it was called. The timer
- * irq uses this to decide if it should update the user or system
- * times.
- */
-static void do_timer(int irq, struct pt_regs * regs)
+void do_timer(struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp;
-	/* last time the cmos clock got updated */
-	static long last_rtc_update=0;
-	extern int set_rtc_mmss(unsigned long);
-
 	long ltemp, psecs;
 
 	/* Advance the phase, once it gets to one microsecond, then
@@ -694,18 +680,6 @@ static void do_timer(int irq, struct pt_regs * regs)
 	    xtime.tv_sec++;
 	    second_overflow();
 	}
-
-	/* If we have an externally synchronized Linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
-	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
-	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
-	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 
 	jiffies++;
 	calc_load();
@@ -904,8 +878,6 @@ void sched_init(void)
 	bh_base[TIMER_BH].routine = timer_bh;
 	bh_base[TQUEUE_BH].routine = tqueue_bh;
 	bh_base[IMMEDIATE_BH].routine = immediate_bh;
-	if (request_irq(TIMER_IRQ, do_timer, 0, "timer") != 0)
-		panic("Could not allocate timer IRQ!");
 	enable_bh(TIMER_BH);
 	enable_bh(TQUEUE_BH);
 	enable_bh(IMMEDIATE_BH);

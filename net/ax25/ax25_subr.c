@@ -23,6 +23,8 @@
  *					old BSD code.
  *	AX.25 030	Jonathan(G4KLX)	Added support for extended AX.25.
  *					Added fragmentation support.
+ *			Darryl(G7LED)	Added function ax25_requeue_frames() to split
+ *					it up from ax25_frames_acked().
  */
 
 #include <linux/config.h>
@@ -47,8 +49,6 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
-
-/* #define	NO_BACKOFF	*/
 
 /*
  *	This routine purges all the queues of frames.
@@ -83,7 +83,7 @@ void ax25_clear_queues(ax25_cb *ax25)
  */
 void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 {
-	struct sk_buff *skb, *skb_prev = NULL;
+	struct sk_buff *skb;
 
 	/*
 	 * Remove all the ack-ed frames from the ack queue.
@@ -96,6 +96,15 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 			ax25->va = (ax25->va + 1) % ax25->modulus;
 		}
 	}
+}
+
+/* Maybe this should be your ax25_invoke_retransmission(), which appears
+ * to be used but not do anything.  ax25_invoke_retransmission() used to
+ * be in AX 0.29, but has now gone in 0.30.
+ */
+void ax25_requeue_frames(ax25_cb *ax25)
+{
+        struct sk_buff *skb, *skb_prev = NULL;
 
 	/*
 	 * Requeue all the un-ack-ed frames on the output queue to be picked
@@ -271,7 +280,6 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
  */
 unsigned short ax25_calculate_t1(ax25_cb *ax25)
 {
-#ifndef NO_BACKOFF
 	int n, t = 2;
 
 	if (ax25->backoff) {
@@ -282,9 +290,6 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 	}
 
 	return t * ax25->rtt;
-#else
-	return 2 * ax25->rtt;
-#endif
 }
 
 /*
@@ -295,9 +300,19 @@ void ax25_calculate_rtt(ax25_cb *ax25)
 	if (ax25->t1timer > 0 && ax25->n2count == 0)
 		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
 
-	/* Don't go below one second */
-	if (ax25->rtt < 1 * PR_SLOWHZ)
-		ax25->rtt = 1 * PR_SLOWHZ;
+#ifdef	AX25_T1CLAMPLO
+	/* Don't go below one tenth of a second */
+	if (ax25->rtt < (AX25_T1CLAMPLO))
+		ax25->rtt = (AX25_T1CLAMPLO);
+#else	/* Failsafe - some people might have sub 1/10th RTTs :-) **/
+	if (ax25->rtt == 0)
+		ax25->rtt = PR_SLOWHZ;
+#endif
+#ifdef	AX25_T1CLAMPHI
+	/* OR above clamped seconds **/
+	if (ax25->rtt > (AX25_T1CLAMPHI))
+		ax25->rtt = (AX25_T1CLAMPHI);
+#endif
 }
 
 /*
@@ -336,7 +351,7 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	
 	while (!(buf[-1] & LAPB_E))
 	{
-		if (d >= 6)  return NULL;	/* Max of 6 digis */
+		if (d >= AX25_MAX_DIGIS)  return NULL;	/* Max of 6 digis */
 		if (len < 7) return NULL;	/* Short packet */
 
 		if (digi != NULL) {

@@ -4,6 +4,8 @@
 #ifndef ASSEMBLY
 
 #include <asm/i82489.h>
+#include <linux/tasks.h>
+#include <linux/ptrace.h>
 
 /*
  *	Support definitions for SMP machines following the intel multiprocessing
@@ -163,7 +165,7 @@ struct cpuinfo_x86
 };
 
 
-extern struct cpuinfo_x86 cpu_data[32];
+extern struct cpuinfo_x86 cpu_data[NR_PROCS];
 
 /*
  *	Private routines/data
@@ -172,7 +174,7 @@ extern struct cpuinfo_x86 cpu_data[32];
 extern void smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char *apic_reg;
-extern unsigned char *kernel_stacks[32];
+extern unsigned char *kernel_stacks[NR_PROCS];
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern void smp_invalidate(void);

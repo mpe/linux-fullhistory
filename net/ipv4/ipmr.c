@@ -8,6 +8,14 @@
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
+ *
+ *
+ *	Fixes:
+ *	Michael Chastain	:	Incorrect size of copying.
+ *
+ *
+ *	Status:
+ *		Tree building works. Cache manager to be added next.
  */
 
 #include <asm/system.h>
@@ -241,7 +249,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			err=verify_area(VERIFY_WRITE, (void *)arg, sizeof(vr));
 			if(err)
 				return err;
-			memcpy_fromfs(&vr,(void *)arg,sizeof(sr));
+			memcpy_fromfs(&vr,(void *)arg,sizeof(vr));
 			if(vr.vifi>=MAXVIFS)
 				return -EINVAL;
 			vif=&vif_table[vr.vifi];
@@ -251,7 +259,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				vr.ocount=vif->pkt_out;
 				vr.ibytes=vif->bytes_in;
 				vr.obytes=vif->bytes_out;
-				memcpy_tofs((void *)arg,&vr,sizeof(sr));
+				memcpy_tofs((void *)arg,&vr,sizeof(vr));
 				return 0;
 			}
 			return -EADDRNOTAVAIL;

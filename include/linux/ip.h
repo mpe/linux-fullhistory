@@ -33,7 +33,6 @@
 struct timestamp {
 	__u8	len;
 	__u8	ptr;
-	union {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8	flags:4,
 		overflow:4;
@@ -43,8 +42,6 @@ struct timestamp {
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif						
-	__u8	full_char;
-	} x;
 	__u32	data[9];
 };
 
@@ -57,19 +54,38 @@ struct route {
   unsigned long route[MAX_ROUTE];
 };
 
+#define IPOPT_OPTVAL 0
+#define IPOPT_OLEN   1
+#define IPOPT_OFFSET 2
+#define IPOPT_MINOFF 4
+#define MAX_IPOPTLEN 40
+#define IPOPT_NOP IPOPT_NOOP
+#define IPOPT_EOL IPOPT_END
+#define IPOPT_TS  IPOPT_TIMESTAMP
+
+#define	IPOPT_TS_TSONLY		0		/* timestamps only */
+#define	IPOPT_TS_TSANDADDR	1		/* timestamps and addresses */
+#define	IPOPT_TS_PRESPEC	2		/* specified modules only */
 
 struct options {
-  struct route		record_route;
-  struct route		loose_route;
-  struct route		strict_route;
-  struct timestamp	tstamp;
-  unsigned short	security;
-  unsigned short	compartment;
-  unsigned short	handling;
-  unsigned short	stream;
-  unsigned		tcc;
+  __u32		faddr;				/* Saved first hop address */
+  unsigned char	optlen;
+  unsigned char srr;
+  unsigned char rr;
+  unsigned char ts;
+  unsigned char is_setbyuser:1,			/* Set by setsockopt?			*/
+                is_data:1,			/* Options in __data, rather than skb	*/
+                is_strictroute:1,		/* Strict source route			*/
+                srr_is_hit:1,			/* Packet destination addr was our one	*/
+                is_changed:1,			/* IP checksum more not valid		*/	
+                rr_needaddr:1,			/* Need to record addr of outgoing dev	*/
+                ts_needtime:1,			/* Need to record timestamp		*/
+                ts_needaddr:1;			/* Need to record addr of outgoing dev  */
+  unsigned char __pad1;
+  unsigned char __pad2;
+  unsigned char __pad3;
+  unsigned char __data[0];
 };
-
 
 struct iphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)

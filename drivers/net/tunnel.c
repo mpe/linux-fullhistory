@@ -252,7 +252,7 @@ print_ip(iph);
 #ifdef TUNNEL_DEBUG
 	printk("tunnel: calling ip_forward()\n");
 #endif
-	if(ip_forward(skb2, dev, 0, iph->daddr, 0))
+	if(ip_forward(skb2, dev, 0, iph->daddr))
 		kfree_skb(skb2, FREE_WRITE);
 
  

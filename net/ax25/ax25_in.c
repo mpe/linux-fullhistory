@@ -130,8 +130,9 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 {
 	int queued = 0;
+	unsigned char pid = *skb->data;
 
-	switch (*skb->data) {
+	switch (pid) {
 #ifdef CONFIG_NETROM
 		case AX25_P_NETROM:
 			if (ax25_dev_get_value(ax25->device, AX25_VALUES_NETROM)) {
@@ -149,22 +150,19 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 			queued = 1;
 			break;
 #endif
-		case AX25_P_TEXT:
-			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT)) {
-				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
-					queued = 1;
-				} else {
-					ax25->condition |= OWN_RX_BUSY_CONDITION;
-				}
-			}
-			break;
-			
 		case AX25_P_SEGMENT:
 			skb_pull(skb, 1);	/* Remove PID */
 			queued = ax25_rx_fragment(ax25, skb);
 			break;
 
 		default:
+			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT) && ax25->sk->protocol == pid) {
+				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
+					queued = 1;
+				} else {
+					ax25->condition |= OWN_RX_BUSY_CONDITION;
+				}
+			}
 			break;
 	}
 
@@ -346,11 +344,6 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			}
 			break;
 
-		case UA:
-			ax25_establish_data_link(ax25);
-			ax25->state = AX25_STATE_1;
-			break;
-
 		case DM:
 			ax25_clear_queues(ax25);
 			ax25->t3timer = 0;
@@ -394,6 +387,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				ax25_calculate_rtt(ax25);
 				ax25->t1timer = 0;
 				ax25->t3timer = ax25->t3;
+				ax25_requeue_frames(ax25);
 			} else {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;
@@ -401,8 +395,10 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			break;
 			
 		case I:
+#ifndef AX25_BROKEN_NETMAC
 			if (type != C_COMMAND)
 				break;
+#endif
 			if (!ax25_validate_nr(ax25, nr)) {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;
@@ -509,11 +505,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			}
 			break;
 
-		case UA:
-			ax25_establish_data_link(ax25);
-			ax25->state = AX25_STATE_1;
-			break;
-
 		case DM:
 			ax25_clear_queues(ax25);
 			ax25->t3timer = 0;
@@ -564,6 +555,8 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 						ax25->t3timer = ax25->t3;
 						ax25->n2count = 0;
 						ax25->state   = AX25_STATE_3;
+					} else {
+						ax25_requeue_frames(ax25);
 					}
 				} else {
 					ax25_nr_error_recovery(ax25);
@@ -591,6 +584,8 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 						ax25->t3timer = ax25->t3;
 						ax25->n2count = 0;
 						ax25->state   = AX25_STATE_3;
+					} else {
+						ax25_requeue_frames(ax25);
 					}
 				} else {
 					ax25_nr_error_recovery(ax25);
@@ -602,6 +597,9 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				ax25_enquiry_response(ax25);
 			if (ax25_validate_nr(ax25, nr)) {
 				ax25_frames_acked(ax25, nr);
+				if(ax25->vs != ax25->va) {
+					ax25_requeue_frames(ax25);
+				}
 			} else {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;
@@ -609,8 +607,10 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			break;
 
 		case I:
+#ifndef	AX25_BROKEN_NETMAC
 			if (type != C_COMMAND)
 				break;
+#endif
 			if (!ax25_validate_nr(ax25, nr)) {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;
@@ -667,6 +667,9 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 {
 	int queued = 0, frametype, ns, nr, pf;
+	
+	if (ax25->sk != NULL && ax25->state == AX25_STATE_0 && ax25->sk->dead)
+		return queued;
 
 	if (ax25->state != AX25_STATE_1 && ax25->state != AX25_STATE_2 &&
 	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4) {

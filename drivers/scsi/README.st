@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Sep 10 13:19:02 1995 by root@kai.makisara.fi
+Last modified: Sun Sep 24 23:40:06 1995 by root@kai.makisara.fi
 
 BASICS
 
@@ -19,15 +19,16 @@ The compile options are defined in the file linux/drivers/scsi/st_options.h.
 
 BUFFERING
 
-The driver uses a buffer allocated at system initialization. The size
-of the buffer is selectable at compile and/or boot time. The buffer is
-used to store the data being transferred to/from the SCSI adapter. The
-following buffering options are selectable at compile time and/or at run
-time (via ioctl):
+The driver uses tape buffers allocated either at system initialization
+or at run-time when needed. One buffer is used for each open tape
+device. The size of the buffers is selectable at compile and/or boot
+time. The buffers are used to store the data being transferred to/from
+the SCSI adapter. The following buffering options are selectable at
+compile time and/or at run time (via ioctl):
 
-Buffering of data to be written across write calls for fixed block
-mode (define ST_BUFFER_WRITES). This should be disabled if reliable
-detection of end of media (EOM) for fixed block mode is desired.
+Buffering of data across write calls in fixed block mode (define
+ST_BUFFER_WRITES). This should be disabled if reliable detection of
+end of medium (EOM) for fixed block mode is desired.
 
 Asynchronous writing. Writing the buffer contents to the tape is
 started and the write call returns immediately. The status is checked
@@ -40,16 +41,27 @@ this read command. Should be disabled for those drives that don't like
 a filemark to truncate a read request or that don't like backspacing.
 
 The buffer size is defined (in 1024 byte units) by ST_BUFFER_BLOCKS or
-at boot time. The maximum number of buffers allocated is defined by
+at boot time. If this size is not enough, the driver tries to allocate
+a large enough temporary buffer that is released when the device is
+closed.
+
+The maximum number of buffers allocated at initialization is defined by
 ST_MAX_BUFFERS. One buffer is allocated for each drive detected when
 the driver is initialized up to the maximum. The minimum number of
 allocated buffers is ST_EXTRA_DEVS (in hosts.h). This ensures some
 functionality also for the drives found after tape driver
 initialization (a SCSI adapter driver is loaded as a module). The
-default for ST_EXTRA_DEVS is two. This is enough to enable tape copies.
+default for ST_EXTRA_DEVS is two. The driver tries to allocate new
+buffers at run-time if necessary.
 
-The threshold for triggering asynchronous write is defined by
-ST_WRITE_THRESHOLD.
+Allocation of the buffers can be postponed to run-time if
+(ST_RUNTIME_BUFFERS). The advantage is that memory is not wasted for
+buffers not being used. The disadvantage is that there may not be
+memory available at the time when a buffer is needed for the first
+time (once a buffer is allocated, it is not released).
+
+The threshold for triggering asynchronous write in fixed block mode
+is defined by ST_WRITE_THRESHOLD.
 
 
 BOOT TIME CONFIGURATION
@@ -148,6 +160,10 @@ MISCELLANEOUS COMPILE OPTIONS
 
 The recovered write errors are considered fatal if ST_RECOVERED_WRITE_FATAL
 is defined.
+
+The maximum number of tape devices is determined by the define
+ST_MAX_TAPES. If more tapes are detected at driver intialization, the
+maximum is adjusted accordingly.
 
 Immediate return from tape positioning SCSI commands can be enabled by
 defining ST_NOWAIT.

@@ -3200,8 +3200,8 @@ restart:
     	    	    hostdata->state = STATE_HALTED;
 		    /*
 		     * NCR53c700 and NCR53c700-66 change the current SCSI
-		     * process, hostdata->current, in the Linux driver so
-		     * cmd = hostdata->current.
+		     * process, hostdata->current_cmd, in the Linux driver so
+		     * cmd = hostdata->current_cmd.
 		     *
 		     * With other chips, we must look through the commands
 		     * executing and find the command structure which 
@@ -3209,7 +3209,7 @@ restart:
 		     */
 
 		    if (hostdata->options & OPTION_700) {
-			cmd = (struct NCR53c7x0_cmd *) hostdata->current;
+			cmd = (struct NCR53c7x0_cmd *) hostdata->current_cmd;
 		    } else {
 			dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
 			for (cmd = (struct NCR53c7x0_cmd *) 

@@ -91,7 +91,7 @@ static void nr_timer(unsigned long param)
 		case NR_STATE_0:
 			/* Magic here: If we listen() and a new link dies before it
 			   is accepted() it isnt 'dead' so doesnt get removed. */
-			if (sk->dead) {
+			if (sk->destroy || (sk->state == TCP_LISTEN && sk->dead)) {
 				del_timer(&sk->timer);
 				nr_destroy_socket(sk);
 				return;

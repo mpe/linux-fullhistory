@@ -13,6 +13,7 @@
 #include <linux/tty.h>
 
 #include <asm/unaligned.h>
+#include <asm/gentrap.h>
 
 void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
@@ -69,8 +70,45 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 		send_sig(SIGTRAP, current, 1);
 		break;
 
-	      case 1: /* bugcheck */
 	      case 2: /* gentrap */
+		/*
+		 * The translation from the gentrap error code into a
+		 * siginfo structure (see /usr/include/sys/siginfo.h)
+		 * is missing as Linux does not presently support the
+		 * siginfo argument that is normally passed to a
+		 * signal handler.
+		 */
+		switch ((long) regs.r16) {
+		      case GEN_INTOVF: case GEN_INTDIV: case GEN_FLTOVF:
+		      case GEN_FLTDIV: case GEN_FLTUND: case GEN_FLTINV:
+		      case GEN_FLTINE:
+			send_sig(SIGFPE, current, 1);
+			break;
+
+		      case GEN_DECOVF:
+		      case GEN_DECDIV:
+		      case GEN_DECINV:
+		      case GEN_ROPRAND:
+		      case GEN_ASSERTERR:
+		      case GEN_NULPTRERR:
+		      case GEN_STKOVF:
+		      case GEN_STRLENERR:
+		      case GEN_SUBSTRERR:
+		      case GEN_RANGERR:
+		      case GEN_SUBRNG:
+		      case GEN_SUBRNG1:
+		      case GEN_SUBRNG2:
+		      case GEN_SUBRNG3:
+		      case GEN_SUBRNG4:
+		      case GEN_SUBRNG5:
+		      case GEN_SUBRNG6:
+		      case GEN_SUBRNG7:
+			send_sig(SIGILL, current, 1);
+			break;
+		}
+		break;
+
+	      case 1: /* bugcheck */
 	      case 3: /* FEN fault */
 	      case 4: /* opDEC */
 		send_sig(SIGILL, current, 1);

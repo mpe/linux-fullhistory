@@ -2434,6 +2434,17 @@ static int set_get_font(char * arg, int set, int ch512)
 	else
 	  ch512 = 0;		/* Default font is always 256 */
 
+#ifdef BROKEN_GRAPHICS_PROGRAMS
+	/*
+	 * All fonts are loaded in slot 0 (0:1 for 512 ch)
+	 */
+
+	if (!arg)
+	  return -EINVAL;	/* Return to default font not supported */
+
+	video_font_is_default = 0;
+	font_select = ch512 ? 0x04 : 0x00;
+#else	
 	/*
 	 * The default font is kept in slot 0 and is never touched.
 	 * A custom font is loaded in slot 2 (256 ch) or 2:3 (512 ch)
@@ -2447,6 +2458,7 @@ static int set_get_font(char * arg, int set, int ch512)
 
 	if ( !video_font_is_default )
 	  charmap += 4*cmapsz;
+#endif
 
 	cli();
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */

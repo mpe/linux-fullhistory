@@ -235,6 +235,8 @@ struct symbol_table symbol_table = {
 	X(free_irq),
 	X(enable_irq),
 	X(disable_irq),
+	X(probe_irq_on),
+	X(probe_irq_off),
 	X(bh_active),
 	X(bh_mask),
 	X(bh_base),

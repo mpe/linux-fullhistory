@@ -52,8 +52,8 @@ static void ax25_timer(unsigned long);
  */
 void ax25_set_timer(ax25_cb *ax25)
 {
-	unsigned long flags;
-	
+	unsigned long flags;	
+
 	save_flags(flags);
 	cli();
 	del_timer(&ax25->timer);
@@ -96,7 +96,7 @@ static void ax25_timer(unsigned long param)
 		case AX25_STATE_0:
 			/* Magic here: If we listen() and a new link dies before it
 			   is accepted() it isnt 'dead' so doesnt get removed. */
-			if ((ax25->sk != NULL && ax25->sk->dead) || ax25->sk == NULL) {
+			if (ax25->sk == NULL || ax25->sk->destroy || (ax25->sk->state == TCP_LISTEN && ax25->sk->dead)) {
 				del_timer(&ax25->timer);
 				ax25_destroy_socket(ax25);
 				return;

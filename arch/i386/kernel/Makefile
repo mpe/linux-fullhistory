@@ -15,7 +15,7 @@
 all: kernel.o head.o
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
-            ptrace.o ioport.o ldt.o setup.o sys_i386.o
+            ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
 
 
 #head.o: head.s

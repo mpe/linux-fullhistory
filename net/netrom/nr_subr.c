@@ -133,15 +133,13 @@ int nr_validate_nr(struct sock *sk, unsigned short nr)
  */
 int nr_in_rx_window(struct sock *sk, unsigned short ns)
 {
-	unsigned short vc = sk->nr->vl;
+	unsigned short vc = sk->nr->vr;
 	unsigned short vt = (sk->nr->vl + sk->window) % NR_MODULUS;
 
 	while (vc != vt) {
 		if (ns == vc) return 1;
 		vc = (vc + 1) % NR_MODULUS;
 	}
-	
-	if (ns == vt) return 1;
 
 	return 0;
 }
@@ -156,7 +154,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 	unsigned char  *dptr;
 	int len, timeout;
 
-	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 	
 	switch (frametype & 0x0F) {
 		case NR_CONNREQ:
@@ -180,7 +178,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 	/*
 	 *	Space for AX.25 and NET/ROM network header
 	 */
-	skb_reserve(skb, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN);
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN);
 	
 	dptr = skb_put(skb, skb_tailroom(skb));
 
@@ -251,12 +249,12 @@ void nr_transmit_dm(struct sk_buff *skb)
 	unsigned char *dptr;
 	int len;
 
-	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN + 1;
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + NR_NETWORK_LEN + NR_TRANSPORT_LEN + 1;
 
 	if ((skbn = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
 
-	skb_reserve(skbn, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2);
+	skb_reserve(skbn, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN);
 
 	dptr = skb_put(skbn, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
 
@@ -311,9 +309,19 @@ void nr_calculate_rtt(struct sock *sk)
 	if (sk->nr->t1timer > 0 && sk->nr->n2count == 0)
 		sk->nr->rtt = (9 * sk->nr->rtt + sk->nr->t1 - sk->nr->t1timer) / 10;
 
-	/* Don't go below one second */
-	if (sk->nr->rtt < 1 * PR_SLOWHZ)
-		sk->nr->rtt = 1 * PR_SLOWHZ;
+#ifdef	NR_T1CLAMPLO
+	/* Don't go below one tenth of a second */
+	if (sk->nr->rtt < (NR_T1CLAMPLO))
+		sk->nr->rtt = (NR_T1CLAMPLO);
+#else   /* Failsafe - some people might have sub 1/10th RTTs :-) **/
+        if (sk->nr->rtt == 0)
+                sk->nr->rtt = PR_SLOWHZ;
+#endif
+#ifdef  NR_T1CLAMPHI
+        /* OR above clamped seconds **/
+        if (sk->nr->rtt > (NR_T1CLAMPHI))
+                sk->nr->rtt = (NR_T1CLAMPHI);
+#endif
 }
 
 #endif

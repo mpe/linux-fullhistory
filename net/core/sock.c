@@ -487,8 +487,22 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 				return NULL;
 			}
 			
+#if 1
 			if( tmp <= sk->wmem_alloc)
+#else
+			/* ANK: Line above seems either incorrect
+			 *	or useless. sk->wmem_alloc has a tiny chance to change
+			 *	between tmp = sk->w... and cli(),
+			 *	but it might(?) change earlier. In real life
+			 *	it does not (I never seen the message).
+			 *	In any case I'd delete this check at all, or
+			 *	change it to:
+			 */
+			if (sk->wmem_alloc + size >= sk->sndbuf) 
+#endif
 			{
+				if (sk->wmem_alloc <= 0)
+				  printk("sock.c: Look where I am %ld<%ld\n", tmp, sk->wmem_alloc);
 				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);
 				if (current->signal & ~current->blocked) 
@@ -539,7 +553,7 @@ void release_sock(struct sock *sk)
 	{
 		sk->blog = 1;
 		if (sk->prot->rcv) 
-			sk->prot->rcv(skb, skb->dev, sk->opt,
+			sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
 				 skb->saddr, skb->len, skb->daddr, 1,
 				/* Only used for/by raw sockets. */
 				(struct inet_protocol *)sk->pair); 

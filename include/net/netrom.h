@@ -8,6 +8,9 @@
 #define _NETROM_H 
 #include <linux/netrom.h>
 
+#define	NR_T1CLAMPLO   (1 * PR_SLOWHZ)	/* If defined, clamp at 1 second **/
+#define	NR_T1CLAMPHI (300 * PR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
+
 #define	NR_NETWORK_LEN		15
 #define	NR_TRANSPORT_LEN	5
  
@@ -32,8 +35,8 @@
 #define NR_STATE_2		2
 #define NR_STATE_3		3
 
-#define NR_DEFAULT_T1		(120 * PR_SLOWHZ)	/* Outstanding frames - 10 seconds */
-#define NR_DEFAULT_T2		(5   * PR_SLOWHZ)	/* Response delay     - 3 seconds */
+#define NR_DEFAULT_T1		(120 * PR_SLOWHZ)	/* Outstanding frames - 120 seconds */
+#define NR_DEFAULT_T2		(5   * PR_SLOWHZ)	/* Response delay     - 5 seconds */
 #define NR_DEFAULT_N2		3			/* Number of Retries */
 #define	NR_DEFAULT_T4		(180 * PR_SLOWHZ)	/* Transport Busy Delay */
 #define	NR_DEFAULT_WINDOW	4			/* Default Window Size	*/
@@ -90,7 +93,6 @@ struct nr_neigh {
 extern struct nr_parms_struct nr_default;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
 extern void nr_destroy_socket(struct sock *);
-/*extern int  nr_get_info(char *, char **, off_t, int, int);*/
 
 /* nr_dev.c */
 extern int  nr_rx_ip(struct sk_buff *, struct device *);
@@ -106,7 +108,6 @@ extern void nr_output(struct sock *, struct sk_buff *);
 extern void nr_send_nak_frame(struct sock *);
 extern void nr_kick(struct sock *);
 extern void nr_transmit_buffer(struct sock *, struct sk_buff *);
-extern void nr_nr_error_recovery(struct sock *);
 extern void nr_establish_data_link(struct sock *);
 extern void nr_enquiry_response(struct sock *);
 extern void nr_check_iframes_acked(struct sock *, unsigned short);

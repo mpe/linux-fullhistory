@@ -179,7 +179,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 			memcpy_fromfs(&route, arg, sizeof(route));
 			if ((dev = ax25rtr_get_dev(&route.port_addr)) == NULL)
 				return -EINVAL;
-			if (route.digi_count > 6)
+			if (route.digi_count > AX25_MAX_DIGIS)
 				return -EINVAL;
 			for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
 				if (ax25cmp(&ax25_rt->callsign, &route.dest_addr) == 0 && ax25_rt->dev == dev) {
@@ -292,7 +292,7 @@ int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length, int d
 				len += sprintf(buffer + len, "   dg");
 				break;
 			default:
-				len += sprintf(buffer + len, "     ");
+				len += sprintf(buffer + len, "    *");
 				break;
 		}
 
@@ -472,10 +472,11 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_CONMODE]   = AX25_DEF_CONMODE;
 	ax25_dev->values[AX25_VALUES_WINDOW]    = AX25_DEF_WINDOW;
 	ax25_dev->values[AX25_VALUES_EWINDOW]   = AX25_DEF_EWINDOW;
-	ax25_dev->values[AX25_VALUES_T1]        = (AX25_DEF_T1 * PR_SLOWHZ) / 2;
+	ax25_dev->values[AX25_VALUES_T1]        = AX25_DEF_T1 * PR_SLOWHZ;
 	ax25_dev->values[AX25_VALUES_T2]        = AX25_DEF_T2 * PR_SLOWHZ;
 	ax25_dev->values[AX25_VALUES_T3]        = AX25_DEF_T3 * PR_SLOWHZ;
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
+	ax25_dev->values[AX25_VALUES_DIGI]      = AX25_DEF_DIGI;
 
 	save_flags(flags);
 	cli();
@@ -562,8 +563,12 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			if (ax25_parms.values[AX25_VALUES_N2] < 1 ||
 			    ax25_parms.values[AX25_VALUES_N2] > 31)
 				return -EINVAL;
+			if ((ax25_parms.values[AX25_VALUES_DIGI] &
+			    ~(AX25_DIGI_INBAND | AX25_DIGI_XBAND)) != 0)
+				return -EINVAL;
 			memcpy(ax25_dev->values, ax25_parms.values, AX25_MAX_VALUES * sizeof(short));
-			ax25_dev->values[AX25_VALUES_T1] *= (PR_SLOWHZ / 2);
+			ax25_dev->values[AX25_VALUES_T1] *= PR_SLOWHZ;
+			ax25_dev->values[AX25_VALUES_T1] /= 2;
 			ax25_dev->values[AX25_VALUES_T2] *= PR_SLOWHZ;
 			ax25_dev->values[AX25_VALUES_T3] *= PR_SLOWHZ;
 			break;
@@ -577,7 +582,8 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL)
 				return -EINVAL;
 			memcpy(ax25_parms.values, ax25_dev->values, AX25_MAX_VALUES * sizeof(short));
-			ax25_parms.values[AX25_VALUES_T1] /= (PR_SLOWHZ * 2);
+			ax25_parms.values[AX25_VALUES_T1] *= 2;
+			ax25_parms.values[AX25_VALUES_T1] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_T2] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_T3] /= PR_SLOWHZ;
 			memcpy_tofs(arg, &ax25_parms, sizeof(ax25_parms));

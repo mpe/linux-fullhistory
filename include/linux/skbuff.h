@@ -68,6 +68,7 @@ struct sk_buff {
   unsigned long 		daddr;			/* IP target address				*/
   unsigned long			raddr;			/* IP next hop address				*/
   unsigned long			csum;			/* Checksum 					*/
+  unsigned char			proto_priv[16];	        /* Protocol private data			*/
   volatile char 		acked,			/* Are we acked ?				*/
 				used,			/* Are we in use ?				*/
 				free,			/* How to free this buffer			*/

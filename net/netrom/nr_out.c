@@ -15,6 +15,7 @@
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_out.c
  *	NET/ROM 003	Jonathan(G4KLX)	Added NET/ROM fragmentation.
+ *			Darryl(G7LED)	Fixed NAK, to give out correct reponse.
  */
 
 #include <linux/config.h>
@@ -124,7 +125,13 @@ void nr_send_nak_frame(struct sock *sk)
 	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL)
 		return;
 
-	nr_send_iframe(sk, skbn);
+	skbn->data[2] = sk->nr->va;
+	skbn->data[3] = sk->nr->vr;
+
+	if (sk->nr->condition & OWN_RX_BUSY_CONDITION)
+		skbn->data[4] |= NR_CHOKE_FLAG;
+
+	nr_transmit_buffer(sk, skbn);
 
 	sk->nr->condition &= ~ACK_PENDING_CONDITION;
 	sk->nr->vl      = sk->nr->vr;
@@ -152,12 +159,13 @@ void nr_kick(struct sock *sk)
 		 * Transmit data until either we're out of data to send or
 		 * the window is full.
 		 */
-		do {
-			/*
-			 * Dequeue the frame and copy it.
-			 */
-			skb  = skb_dequeue(&sk->write_queue);
 
+		/*
+		 * Dequeue the frame and copy it.
+		 */
+		skb  = skb_dequeue(&sk->write_queue);
+
+		do {
 			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 				skb_queue_head(&sk->write_queue, skb);
 				return;
@@ -178,7 +186,7 @@ void nr_kick(struct sock *sk)
 			 */
 			skb_queue_tail(&sk->nr->ack_queue, skb);
 
-		} while (!last && skb_peek(&sk->write_queue) != NULL);
+		} while (!last && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
 		sk->nr->vl = sk->nr->vr;
 		sk->nr->condition &= ~ACK_PENDING_CONDITION;
@@ -232,11 +240,6 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
  * Networking Conference paper, as is the whole state machine.
  */
 
-void nr_nr_error_recovery(struct sock *sk)
-{
-	nr_establish_data_link(sk);
-}
-
 void nr_establish_data_link(struct sock *sk)
 {
 	sk->nr->condition = 0x00;
@@ -273,14 +276,12 @@ void nr_check_iframes_acked(struct sock *sk, unsigned short nr)
 {
 	if (sk->nr->vs == nr) {
 		nr_frames_acked(sk, nr);
-		nr_requeue_frames(sk);
 		nr_calculate_rtt(sk);
 		sk->nr->t1timer = 0;
 		sk->nr->n2count = 0;
 	} else {
 		if (sk->nr->va != nr) {
 			nr_frames_acked(sk, nr);
-			nr_requeue_frames(sk);
 			sk->nr->t1timer = sk->nr->t1 = nr_calculate_t1(sk);
 		}
 	}

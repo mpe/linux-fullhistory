@@ -120,6 +120,7 @@ bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 n
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n $CONFIG_SCSI
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST n $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n $CONFIG_SCSI
+dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A n $CONFIG_SCSI
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG n $CONFIG_SCSI
 fi
 

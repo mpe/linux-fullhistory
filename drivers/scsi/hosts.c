@@ -123,6 +123,10 @@
 #include "eata.h"
 #endif
 
+#ifdef CONFIG_SCSI_NCR53C406A
+#include "NCR53c406a.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -190,6 +194,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
     GENERIC_NCR5380,
+#endif
+#ifdef CONFIG_SCSI_NCR53C406A	/* 53C406A should come before QLOGIC */
+    NCR53c406a,
 #endif
 #ifdef CONFIG_SCSI_QLOGIC
     QLOGIC,

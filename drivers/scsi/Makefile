@@ -232,6 +232,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_NCR53C406A),y)
+L_OBJS += NCR53c406a.o
+else
+  ifeq ($(CONFIG_SCSI_NCR53C406A),m)
+  M_OBJS += NCR53c406a.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 ifeq ($(CONFIG_SCSI),m)

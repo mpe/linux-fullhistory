@@ -2761,7 +2761,8 @@ static int init_irq (ide_hwif_t *hwif)
 	 */
 	save_flags(flags);
 	cli();
-	if (request_irq(hwif->irq, ide_intr, SA_INTERRUPT, hwif->name)) {
+	if (request_irq(hwif->irq, ide_intr,
+			SA_INTERRUPT|SA_SAMPLE_RANDOM, hwif->name)) {
 		restore_flags(flags);
 		printk(" -- FAILED!");
 		return 1;

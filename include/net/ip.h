@@ -86,7 +86,12 @@ extern int		ip_build_header(struct sk_buff *skb,
 /*extern unsigned short	ip_compute_csum(unsigned char * buff, int len);*/
 extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
 			       struct packet_type *pt);
-extern int		ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned long target_addr, int target_strict);			     
+extern int		ip_forward(struct sk_buff *skb, struct device *dev,
+				   int is_frag, __u32 target_addr);
+extern int		ip_options_echo(struct options * dopt, struct options * sopt,
+					__u32 daddr, __u32 saddr,
+					struct sk_buff * skb);
+extern int		ip_options_compile(struct options * opt, struct sk_buff * skb);
 extern void		ip_send_check(struct iphdr *ip);
 extern int		ip_id_count;			  
 extern void		ip_queue_xmit(struct sock *sk,
@@ -104,6 +109,8 @@ extern int		ip_build_xmit(struct sock *sk,
 				      const void *frag,
 				      unsigned short int length,
 				      __u32 daddr,
+				      __u32 saddr,
+				      struct options * opt,
 				      int flags,
 				      int type);
 

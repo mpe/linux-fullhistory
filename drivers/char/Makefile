@@ -17,7 +17,7 @@ FONTMAPFILE = cp437.uni
 L_TARGET := char.a
 M_OBJS   :=
 L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
-	tty_ioctl.o pty.o vt.o mem.o vc_screen.o \
+	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
 	defkeymap.o consolemap.o vesa_blank.o selection.o
 
 ifdef CONFIG_CYCLADES

@@ -985,6 +985,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
 			return -EINVAL;
 
+#ifdef BROKEN_GRAPHICS_PROGRAMS
+		/* With BROKEN_GRAPHICS_PROGRAMS defined, the default
+		   font is not saved. */
+		return -ENOSYS;
+#else
+
 		i = con_set_font(NULL, 0);	/* Set font to default */
 		if (i) return i;
 
@@ -993,6 +999,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		con_set_default_unimap();
 
 		return 0;
+#endif
 	}
 
 	case GIO_FONTX:

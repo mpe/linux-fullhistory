@@ -10,7 +10,7 @@
 O_TARGET := netrom.o
 O_OBJS	 := af_netrom.o
 
-ifdef CONFIG_AX25
+ifdef CONFIG_NETROM
 O_OBJS	+= nr_dev.o nr_in.o nr_out.o nr_route.o nr_subr.o nr_timer.o
 endif
 

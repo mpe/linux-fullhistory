@@ -23,6 +23,7 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
+#include <linux/random.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -188,6 +189,10 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
+#ifdef CONFIG_RANDOM
+	if (action->flags & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
+#endif
 	action->handler(irq, regs);
 }
 
@@ -201,6 +206,10 @@ asmlinkage void do_fast_IRQ(int irq)
 	struct irqaction * action = irq + irq_action;
 
 	kstat.interrupts[irq]++;
+#ifdef CONFIG_RANDOM
+	if (action->flags & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
+#endif
 	action->handler(irq, NULL);
 }
 

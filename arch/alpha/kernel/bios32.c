@@ -648,6 +648,8 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	noname_fixup();
 #elif defined(CONFIG_ALPHA_CABRIOLET)
 	cabriolet_fixup();
+#elif defined(CONFIG_ALPHA_EB66P)
+	eb66p_fixup();
 #elif defined(CONFIG_ALPHA_EB66)
 	eb66_and_eb64p_fixup();
 #elif defined(CONFIG_ALPHA_EB64P)

@@ -289,13 +289,17 @@ static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned in
 /*
  *	Send UDP frames.
  */
- 
+
 static int udp_send(struct sock *sk, struct sockaddr_in *sin,
-		      const unsigned char *from, int len, int rt) 
+		      const unsigned char *from, int len, int rt,
+		    __u32 saddr) 
 {
 	int ulen = len + sizeof(struct udphdr);
 	int a;
 	struct udpfakehdr ufh;
+	
+	if(ulen>65535-sizeof(struct iphdr))
+		return -EMSGSIZE;
 
 	ufh.uh.source = sk->dummy_th.source;
 	ufh.uh.dest = sin->sin_port;
@@ -318,10 +322,10 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 
 	if(sk->no_check)
 		a = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
-			sin->sin_addr.s_addr, rt, IPPROTO_UDP);
+			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP);
 	else
 		a = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
-			sin->sin_addr.s_addr, rt, IPPROTO_UDP);
+			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP);
 	if(a<0)
 		return a;
 	udp_statistics.UdpOutDatagrams++;
@@ -334,10 +338,12 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
 {
 	struct sockaddr_in sin;
 	int tmp;
+	__u32 saddr=0;
 
 	/* 
 	 *	Check the flags. We support no flags for UDP sending
 	 */
+
 	if (flags&~MSG_DONTROUTE) 
 	  	return(-EINVAL);
 	/*
@@ -387,7 +393,7 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
 	sk->inuse = 1;
 
 	/* Send the packet. */
-	tmp = udp_send(sk, usin, from, len, flags);
+	tmp = udp_send(sk, usin, from, len, flags, saddr);
 
 	/* The datagram has been sent off.  Release the socket. */
 	release_sock(sk);

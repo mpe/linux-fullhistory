@@ -63,6 +63,7 @@ extern void aha1542_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
 extern void buslogic_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
+extern void NCR53c406a_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
@@ -205,6 +206,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "buslogic=", buslogic_setup},
+#endif
+#ifdef CONFIG_SCSI_NCR53C406A
+	{ "ncr53c406a=", NCR53c406a_setup},
 #endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
@@ -426,6 +430,7 @@ asmlinkage void start_kernel(void)
 	trap_init();
 	init_IRQ();
 	sched_init();
+	time_init();
 	parse_options(command_line);
 	init_modules();
 #ifdef CONFIG_PROFILE
@@ -464,7 +469,6 @@ asmlinkage void start_kernel(void)
 	memory_start = name_cache_init(memory_start,memory_end);
 	mem_init(memory_start,memory_end);
 	buffer_init();
-	time_init();
 	sock_init();
 #ifdef CONFIG_SYSVIPC
 	ipc_init();

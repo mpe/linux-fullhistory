@@ -381,6 +381,13 @@ void destroy_sock(struct sock *sk)
 
 	if (sk->dead && sk->rmem_alloc == 0 && sk->wmem_alloc == 0) 
 	{
+		if(sk->opt)
+			kfree(sk->opt);
+		/*
+		 *	This one is pure paranoia. I'll take it out
+		 *	later once I know the bug is buried.
+		 */
+		tcp_cache_zap();
 		kfree_s((void *)sk,sizeof(*sk));
 	} 
 	else 
@@ -848,7 +855,13 @@ static int inet_release(struct socket *sock, struct socket *peer)
 
 	/* This will destroy it. */
 	sock->data = NULL;
+	/* 
+	 *	Nasty here. release_sock can cause more frames
+	 *	to be played through the socket. That can
+	 *	reinitialise the tcp cache after tcp_close();
+	 */
 	release_sock(sk);
+	tcp_cache_zap();	/* Kill the cache again. */
 	sk->socket = NULL;
 	return(0);
 }
@@ -1104,7 +1117,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk2->state != TCP_ESTABLISHED && sk2->err > 0) 
 	{
 		err = inet_error(sk2);
-		sk2->dead=1;			/* ANK */
+		sk2->dead=1;
 		destroy_sock(sk2);
 		newsock->data = NULL;
 		return err;

@@ -2926,6 +2926,23 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
+	newsk->opt = NULL;
+	if (opt && opt->optlen) {
+	  sk->opt = (struct options*)kmalloc(sizeof(struct options)+opt->optlen, GFP_ATOMIC);
+	  if (!sk->opt) {
+	        kfree_s(newsk, sizeof(struct sock));
+		tcp_statistics.TcpAttemptFails++;
+		kfree_skb(skb, FREE_READ);
+		return;
+	  }
+	  if (ip_options_echo(sk->opt, opt, daddr, saddr, skb)) {
+		kfree_s(sk->opt, sizeof(struct options)+opt->optlen);
+	        kfree_s(newsk, sizeof(struct sock));
+		tcp_statistics.TcpAttemptFails++;
+		kfree_skb(skb, FREE_READ);
+		return;
+	  }
+	}
 	skb_queue_head_init(&newsk->write_queue);
 	skb_queue_head_init(&newsk->receive_queue);
 	newsk->send_head = NULL;
@@ -4507,8 +4524,10 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 *	Put in the IP header and routing stuff. 
 	 */
 	 
-	rt=ip_rt_route(sk->daddr, NULL, NULL);
-	
+	if (sk->localroute)
+	  rt=ip_rt_local(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
+	else
+	  rt=ip_rt_route(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
 
 	/*
 	 *	We need to build the routing stuff from the things saved in skb. 
@@ -4719,7 +4738,14 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 */
 
 	if(saddr==th_cache_saddr && daddr==th_cache_daddr && th->dest==th_cache_dport && th->source==th_cache_sport)
+	{
 		sk=(struct sock *)th_cache_sk;
+		/*
+		 *	We think this is causing the bug so
+		 */
+		 if(sk!=get_sock(&tcp_prot,th->dest, saddr, th->source, daddr))
+		 	printk("Cache mismatch on TCP.\n");
+	}
 	else
 	{
 		sk = get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);

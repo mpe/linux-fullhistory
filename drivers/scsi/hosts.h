@@ -58,7 +58,7 @@ typedef struct	SHT
     struct SHT * next;
     
     /* Used with loadable modules so that we know when it is safe to unload */
-    int * usage_count;
+    long * usage_count;
     
     /* The pointer to the /proc/scsi directory entry */
     struct proc_dir_entry *proc_dir;
@@ -352,7 +352,7 @@ struct Scsi_Device_Template
     struct Scsi_Device_Template * next;
     const char * name;
     const char * tag;
-    int * usage_count;		  /* Used for loadable modules */
+    long * usage_count;		  /* Used for loadable modules */
     unsigned char scsi_type;
     unsigned char major;
     unsigned char nr_dev;	  /* Number currently attached */

@@ -15,6 +15,7 @@ struct timezone {
 
 #ifdef __KERNEL__
 void do_gettimeofday(struct timeval *tv);
+void do_settimeofday(struct timeval *tv);
 #endif
 
 #define FD_SETSIZE		__FD_SETSIZE

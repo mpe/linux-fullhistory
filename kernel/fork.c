@@ -191,11 +191,11 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		goto bad_fork;
 	new_stack = get_free_page(GFP_KERNEL);
 	if (!new_stack)
-		goto bad_fork_free;
+		goto bad_fork_free_p;
 	error = -EAGAIN;
 	nr = find_empty_process();
 	if (nr < 0)
-		goto bad_fork_free;
+		goto bad_fork_free_stack;
 
 	*p = *current;
 
@@ -263,8 +263,9 @@ bad_fork_cleanup:
 	task[nr] = NULL;
 	REMOVE_LINKS(p);
 	nr_tasks--;
-bad_fork_free:
+bad_fork_free_stack:
 	free_page(new_stack);
+bad_fork_free_p:
 	kfree(p);
 bad_fork:
 	return error;
